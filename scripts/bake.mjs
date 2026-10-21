@@ -23,6 +23,7 @@ import { PNG } from 'pngjs';
 import { CFG, AREAS, log, makeProjection, makeGrid } from './config.mjs';
 import { prefetchTerrarium, makeSampler } from './elevation.mjs';
 import { loadOsm } from './osm-extract.mjs';
+import { loadBathymetry } from './bathymetry.mjs';
 
 // ---------- CLI ---------------------------------------------------------------------
 
@@ -204,7 +205,7 @@ async function main() {
   const [latS, lonW] = proj.toLatLon(grid.originX, grid.originZ + H * cell);
   const [latN, lonE] = proj.toLatLon(grid.originX + W * cell, grid.originZ);
   const gridBox = { south: latS - 0.005, west: lonW - 0.01, north: latN + 0.005, east: lonE + 0.01 };
-  const [osm] = await Promise.all([loadOsm(gridBox), prefetchTerrarium(gridBox)]);
+  const [osm, bathy] = await Promise.all([loadOsm(gridBox), loadBathymetry(gridBox), prefetchTerrarium(gridBox)]);
   const sampler = makeSampler();
 
   // --- lakes in local metres, big first (small ponds and islands' inner lakes drawn later win)
@@ -447,6 +448,75 @@ async function main() {
     for (let k = 0; k < N; k++) if (lakeId[k] && isRiver[lakeId[k]]) sumL[lakeId[k]] += level[k] / 10;
     for (let id = 1; id <= nLakes; id++) if (isRiver[id] && lakeArea[id]) lakeLevel[id] = sumL[id] / lakeArea[id];
   }
+  // --- real depth where the DNR has mapped the lake: its contour lines are rasterized as known depths, the
+  //     shore ring is pinned at zero, and everything between is relaxed to a smooth surface (nearest known
+  //     depth as the start, then Gauss-Seidel sweeps). Lakes without a DNR map keep the synthetic ramp.
+  const depth = new Int16Array(N); // decimetres below the surface
+  const bathyLake = new Uint8Array(nLakes + 1);
+  {
+    const inDomain = new Uint8Array(N), known = new Uint8Array(N);
+    const bathyBasin = new Uint8Array(basins.length);
+    let contourCells = 0;
+    for (const c of bathy.contours) {
+      const dm = Math.round(c.depthFt * 0.3048 * 10);
+      for (const line of c.lines) {
+        const pts = line.map(([lat, lon]) => proj.toLocal(lat, lon));
+        for (let s2 = 1; s2 < pts.length; s2++) {
+          const [x1, z1] = pts[s2 - 1], [x2, z2] = pts[s2];
+          const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, z2 - z1) / (cell * 0.5)));
+          for (let q = 0; q <= steps; q++) {
+            const t = q / steps, i = grid.ci(x1 + (x2 - x1) * t), j = grid.cj(z1 + (z2 - z1) * t);
+            if (i < 0 || j < 0 || i >= W || j >= H) continue;
+            const k = j * W + i, id = lakeId[k];
+            if (!id || isRiver[id]) continue;
+            if (!known[k]) { known[k] = 1; contourCells++; depth[k] = dm; } else if (dm > depth[k]) depth[k] = dm;
+            bathyBasin[basin[k]] = 1;
+          }
+        }
+      }
+    }
+    // the domain: lake water of every basin that has a contour; the first ring of water cells is the shore
+    let domainCells = 0, knownCells = 0;
+    for (let k = 0; k < N; k++) {
+      const id = lakeId[k];
+      if (!id || isRiver[id] || !bathyBasin[basin[k]]) continue;
+      inDomain[k] = 1; domainCells++; bathyLake[id] = 1;
+      if (!known[k] && sdist[k] > -50) { known[k] = 1; depth[k] = 0; }
+      if (known[k]) knownCells++;
+    }
+    // start every cell from the nearest known depth
+    const queue = new Int32Array(domainCells);
+    const visited = new Uint8Array(N);
+    let head = 0, tail = 0;
+    for (let k = 0; k < N; k++) if (inDomain[k] && known[k]) { visited[k] = 1; queue[tail++] = k; }
+    while (head < tail) {
+      const k = queue[head++], x = k % W, d = depth[k];
+      const nb = [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W];
+      for (const q of nb) if (q >= 0 && q < N && inDomain[q] && !visited[q]) { visited[q] = 1; depth[q] = d; queue[tail++] = q; }
+    }
+    // relax the unknown cells toward the mean of their water neighbours; the start is already close, so a
+    // few dozen sweeps smooth the steps between contours
+    const unknown = new Int32Array(domainCells - knownCells);
+    let u = 0;
+    for (let k = 0; k < N; k++) if (inDomain[k] && !known[k]) unknown[u++] = k;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      const fwd = (sweep & 1) === 0;
+      for (let n = 0; n < unknown.length; n++) {
+        const k = unknown[fwd ? n : unknown.length - 1 - n], x = k % W;
+        let sum = 0, cnt = 0;
+        if (x > 0 && inDomain[k - 1]) { sum += depth[k - 1]; cnt++; }
+        if (x < W - 1 && inDomain[k + 1]) { sum += depth[k + 1]; cnt++; }
+        if (k >= W && inDomain[k - W]) { sum += depth[k - W]; cnt++; }
+        if (k + W < N && inDomain[k + W]) { sum += depth[k + W]; cnt++; }
+        if (cnt) depth[k] = Math.round(sum / cnt);
+      }
+    }
+    let nb = 0, deepest = 0;
+    for (let id = 1; id <= nLakes; id++) if (bathyLake[id]) nb++;
+    for (let k = 0; k < N; k++) if (depth[k] > deepest) deepest = depth[k];
+    log(`bathymetry: ${bathy.contours.length} DNR contours on ${contourCells} cells, ${nb} polygons with real depth over ${domainCells} cells, deepest ${(deepest / 10).toFixed(1)} m`);
+  }
+
   // a basin is named after its largest named polygon (channels and bays are often unnamed)
   lakes.forEach((l, i) => {
     const id = i + 1, b = basins[lakeBasin[id]];
@@ -542,8 +612,10 @@ async function main() {
           const k = o + i, id = lakeId[k], sd = sdist[k] / 10;
           let h = hraw[k] / 10;
           if (id) {
-            const dm = Math.max(0, 5 - sd);
-            h = Math.min(h, level[k] / 10 - Math.min(14, 0.6 + dm * 0.09));
+            const dm = Math.max(0, 5 - sd), ramp = 0.6 + dm * 0.09;
+            // mapped lakes take the DNR depth (never shallower than a short ramp off the beach); the rest a synthetic bed
+            if (bathyLake[id]) h = level[k] / 10 - Math.max(depth[k] / 10, Math.min(2, ramp));
+            else h = Math.min(h, level[k] / 10 - Math.min(14, ramp));
           }
           out[ow + i] = h;
         }
@@ -734,17 +806,19 @@ async function main() {
   }
 
   // --- index
+  const maxDepth = new Int16Array(nLakes + 1);
+  for (let k = 0; k < N; k++) if (lakeId[k] && depth[k] > maxDepth[lakeId[k]]) maxDepth[lakeId[k]] = depth[k];
   const lakeMeta = lakes.map((l, i) => {
     const id = i + 1;
     if (!lakeArea[id]) return null;
-    return { id, name: l.name, displayName: displayName[id], river: l.river || undefined, creek: l.creek || undefined, basin: lakeBasin[id], level: +lakeLevel[id].toFixed(2), cells: lakeArea[id],
+    return { id, name: l.name, displayName: displayName[id], river: l.river || undefined, creek: l.creek || undefined, basin: lakeBasin[id], level: +lakeLevel[id].toFixed(2), cells: lakeArea[id], maxDepth: bathyLake[id] ? +(maxDepth[id] / 10).toFixed(1) : undefined,
       cx: r1(grid.cx(sumI[id] / lakeArea[id])), cz: r1(grid.cz(sumJ[id] / lakeArea[id])), osm: l.osm };
   });
   const basinMeta = basins.map((b, i) => ({ id: i, name: b.name || null, level: +b.level.toFixed(2), cells: b.cells, river: b.river || undefined }));
   const index = {
     version: 3,
     fields: ['height', 'lake', 'sdist', 'level'],
-    source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extract)', baked: new Date().toISOString() },
+    source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extract)', bathymetry: 'Minnesota DNR Lake Bathymetric Contours (MN Geospatial Commons)', baked: new Date().toISOString() },
     bbox, area: opt.area,
     proj: { lat0: proj.lat0, lon0: proj.lon0, mPerDegLat: proj.mPerDegLat, mPerDegLon: proj.mPerDegLon },
     grid: { width: W, height: H, cell, originX: grid.originX, originZ: grid.originZ, tile: T, halo: HALO, ntx, nty,

@@ -6,6 +6,8 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
 
 - **Real elevation**: USGS 3DEP / SRTM heights via the public AWS Terrain Tiles (Terrarium encoding).
 - **Real lakes, portages, campsites and entry points**: OpenStreetMap, from an offline Geofabrik extract.
+- **Real depths** where the Minnesota DNR has mapped the lake: its bathymetric contours shape the bed
+  (85 lakes in the Boundary Waters, Snowbank at 43 m, Loon at 64 m); the HUD shows the depth under the canoe.
 - **Everything else is procedural**: terrain colouring, lake beds, six tree species with per-tree variation,
   shoreline boulders, campsites (fire grate, log, tent), portage trails and markers, the canoe, the paddler
   and the paddle stroke, the water, the sky and the clouds. No external assets.
@@ -79,9 +81,14 @@ walk the real trail with W/S. Portage lengths are shown in rods, as they are on 
    DEM says the way was drawn upstream), then spread across the river's width. Creeks that OSM maps only as
    lines are rasterized as channels about two cells wide so they exist as water. Unnamed channels and bays
    take the name of the nearest named lake reachable by water (one multi-source flood fill).
-6. **Shore shaping**: lake beds are carved below their level and shoreline land is lifted above it, in
+6. **Depth** (`scripts/bathymetry.mjs`): the DNR *Lake Bathymetric Contours* for the area are fetched once
+   through the Geospatial Commons REST service and cached. Each contour line is rasterized as a known depth,
+   the first ring of water cells is pinned at zero, every cell starts from its nearest known depth and sixty
+   Gauss-Seidel sweeps relax the rest into a smooth bed. Lakes without a DNR map keep a synthetic bed that
+   drops at about 9 % from the shore, capped at 14 m.
+7. **Shore shaping**: lake beds are carved below their level and shoreline land is lifted above it, in
    bands again, then the tiles are cut.
-7. **Output** in `public/data/`:
+8. **Output** in `public/data/`:
    - `index.json`: grid and projection, per-tile flags (has water, height range), the lake table (names,
      display names, levels, centroids), basins, every portage (polyline, rods, launch points), campsites,
      entry points and the start position.
@@ -136,6 +143,7 @@ scripts/config.mjs        areas, grid and tile layout, projection
 scripts/osmpbf.mjs        dependency-free OpenStreetMap PBF reader
 scripts/osm-extract.mjs   Geofabrik download, osmium cut, water / portage / campsite / POI extraction
 scripts/elevation.mjs     Terrarium tile prefetch and row sampler
+scripts/bathymetry.mjs    DNR lake depth contours from the Geospatial Commons REST service
 scripts/bake.mjs          the tiled bake: bands, basins, shores, tiles, far field, overview, index.json
 scripts/entrypoints.json  hand list of BWCA entry points
 src/world.js              index loading, tile slots, height / shore / lake / level queries, lat-lon conversion
@@ -157,10 +165,10 @@ src/geo.js                GPS broadcast to the extension and same-origin tabs
 extension/                Chrome/Edge MV3 extension that spoofs navigator.geolocation everywhere
 ```
 
-Known limits: lake depth is synthetic (the bed drops at about 9 % from the shore, capped at 14 m; the Minnesota
-DNR lake bathymetry would give real depths); river surfaces follow the DEM profile, so a rapid shows as a
-steady drop rather than a step; creeks are two cells (20 m) wide because of the 10 m grid; the Canadian side of
+Known limits: only the 85 lakes with a DNR depth map have real depth, the rest use the synthetic bed; river
+surfaces follow the DEM profile, so a rapid shows as a steady drop rather than a step; creeks are two cells (20 m) wide because of the 10 m grid; the Canadian side of
 the border lakes is only as complete as the Minnesota extract makes it (add `north-america/canada/ontario` to
 `CFG.extracts` in `scripts/config.mjs` for the Quetico shore).
 
 Map data © OpenStreetMap contributors (ODbL). Elevation: USGS 3DEP / NASA SRTM via Mapzen/AWS Terrain Tiles.
+Lake depths: Minnesota DNR Lake Bathymetric Contours, Minnesota Geospatial Commons.
