@@ -36,11 +36,18 @@ const glslWaves = /* glsl */ `
 // long waves interpolated from the 10 m lattice nodes (damped near shore, exactly as the far mesh
 // does it) plus short waves on top. Needs uShoreTex / uGrid / uGridSize bound.
 export const glslSurface = /* glsl */ `
-  uniform sampler2D uShoreTex;
+  uniform sampler2D uShoreTex, uHeightTex;
   uniform vec3 uGrid;      // originX, originZ, 1/cell
   uniform ivec2 uGridSize;
   ${glslWaves}
   float cellSample(sampler2D t, ivec2 c) { c = clamp(c, ivec2(0), uGridSize - 1); return texelFetch(t, c, 0).r; }
+  float bilinear(sampler2D t, vec2 w) {
+    vec2 f = (w - uGrid.xy) * uGrid.z - 0.5;
+    vec2 fi = floor(f), a = f - fi;
+    ivec2 c = ivec2(fi);
+    return mix(mix(cellSample(t, c), cellSample(t, c + ivec2(1, 0)), a.x), mix(cellSample(t, c + ivec2(0, 1)), cellSample(t, c + ivec2(1, 1)), a.x), a.y);
+  }
+  float terrainAt(vec2 w) { return bilinear(uHeightTex, w); }
   float nodeWave(ivec2 c, float t) {
     vec2 np = uGrid.xy + (vec2(c) + 0.5) / uGrid.z;
     return lowWave(np, t) * smoothstep(0.0, 25.0, -cellSample(uShoreTex, c));
@@ -64,6 +71,7 @@ const vertHead = /* glsl */ `
   uniform float uPatchHalf;
   varying vec3 vWorld;
   varying float vShore;
+  varying float vDepth;
   varying vec4 vReflectUv;
   #include <common>
   #include <fog_pars_vertex>
@@ -83,9 +91,11 @@ const vertTail = /* glsl */ `
 `;
 const vertFar = vertHead + glslWaves + /* glsl */ `
   attribute float aShore;
+  attribute float aDepth;
   void main() {
     vec3 p = (modelMatrix * vec4(position, 1.0)).xyz;
     vShore = aShore;
+    vDepth = aDepth;
     float flatY = p.y;
     p.y += lowWave(p.xz, uTime) * smoothstep(0.0, 25.0, -aShore);
 ` + vertTail;
@@ -100,17 +110,19 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     vShore = shore;
     float level = cellSample(uLevelTex, ivec2(floor((w - uGrid.xy) * uGrid.z)));
     float flatY = level;
+    vDepth = max(0.0, level - terrainAt(w));
     vec3 p = vec3(w.x, level + wave, w.y);
 ` + vertTail;
 
 const frag = /* glsl */ `
-  uniform float uTime, uReflOn;
-  uniform vec3 uSunDir, uWater, uReflect;
+  uniform float uTime, uReflOn, uClarity;
+  uniform vec3 uSunDir, uWater, uWaterDeep, uReflect, uFoam;
   uniform sampler2D uReflection;
   uniform vec2 uPatchCenter;
   uniform float uPatchHalf;
   varying vec3 vWorld;
   varying float vShore;
+  varying float vDepth;
   varying vec4 vReflectUv;
   #include <common>
   #include <packing>
@@ -135,7 +147,7 @@ const frag = /* glsl */ `
     // moving swell does not make facets pop between tones
     float d = dot(n, uSunDir) - uSunDir.y;
     float tone = smoothstep(0.006, 0.016, d) - smoothstep(0.006, 0.016, -d);   // -1 .. 1
-    vec3 col = mix(uWater, uReflect, 0.12) * (1.0 + 0.08 * tone);
+    vec3 col = mix(mix(uWater, uWaterDeep, smoothstep(0.0, 10.0, vDepth)), uReflect, 0.12) * (1.0 + 0.08 * tone);
     col *= 0.72 + 0.28 * shadow;
     // the canoe's reflection, nothing else
     vec4 r = texture2DProj(uReflection, vReflectUv);
@@ -148,8 +160,10 @@ const frag = /* glsl */ `
     float ripple = line * (1.0 - aastep(5.5, depth)) * aastep(0.45, breakup) * step(0.0, depth);
     float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
     float foam = max(ripple, waterline) * 0.85;
-    col = mix(col, vec3(0.95, 0.97, 0.97), foam);
-    float alpha = max(0.74, foam);
+    col = mix(col, uFoam, foam);
+    // the bed shows through shallow, clear water; tannin-stained lakes close up within a few metres
+    float alpha = clamp(1.0 - 0.92 * exp(-vDepth / uClarity), 0.1, 0.96);
+    alpha = max(alpha, foam);
     gl_FragColor = vec4(col, alpha);
     #include <fog_fragment>
     #include <tonemapping_fragment>
@@ -185,11 +199,19 @@ export class WaterSystem {
     shoreTex.minFilter = shoreTex.magFilter = THREE.NearestFilter; shoreTex.needsUpdate = true;
     const levelTex = new THREE.DataTexture(buildLevelGrid(world), W, H, THREE.RedFormat, THREE.FloatType);
     levelTex.minFilter = levelTex.magFilter = THREE.NearestFilter; levelTex.needsUpdate = true;
+    const heights = new Float32Array(W * H);
+    for (let k = 0; k < W * H; k++) heights[k] = world.h[k] * 0.1;
+    const heightTex = new THREE.DataTexture(heights, W, H, THREE.RedFormat, THREE.FloatType);
+    heightTex.minFilter = heightTex.magFilter = THREE.NearestFilter; heightTex.needsUpdate = true;
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, {
       uTime: { value: 0 },
       uSunDir: { value: sunDir.clone() },
       uWater: { value: new THREE.Color(palette.water) },
+      uWaterDeep: { value: new THREE.Color(palette.water).multiplyScalar(0.72) },
       uReflect: { value: new THREE.Color(palette.reflect) },
+      uFoam: { value: new THREE.Color(0xf2f6f6) },
+      uClarity: { value: 3.0 },
+      uHeightTex: { value: null },
       uReflection: { value: null },
       uReflOn: { value: 0 },
       uTextureMatrix: { value: new THREE.Matrix4() },
@@ -202,6 +224,7 @@ export class WaterSystem {
     }]);
     this.uniforms.uReflection.value = this.reflection.target.texture;
     this.uniforms.uShoreTex.value = shoreTex;
+    this.uniforms.uHeightTex.value = heightTex;
     this.uniforms.uLevelTex.value = levelTex;
     this.uniforms.uTextureMatrix.value = this.reflection.textureMatrix;
     const common = { fragmentShader: frag, uniforms: this.uniforms, transparent: true, depthWrite: true, fog: true, lights: true };
@@ -235,10 +258,14 @@ export class WaterSystem {
       const i0 = ci * CHUNK, j0 = cj * CHUNK, i1 = Math.min(W - 1, i0 + CHUNK), j1 = Math.min(H - 1, j0 + CHUNK);
       const w = i1 - i0 + 1;
       map.fill(-1);
-      const pos = [], shore = [], idx = [];
+      const pos = [], shore = [], depth = [], idx = [];
       const vid = (i, j) => {
         const m = (j - j0) * w + (i - i0);
-        if (map[m] < 0) { map[m] = pos.length / 3; pos.push(world.cellX(i), vertexLevel(i, j), world.cellZ(j)); shore.push(world.sdCell(i, j)); }
+        if (map[m] < 0) {
+          map[m] = pos.length / 3;
+          const lv = vertexLevel(i, j);
+          pos.push(world.cellX(i), lv, world.cellZ(j)); shore.push(world.sdCell(i, j)); depth.push(Math.max(0, lv - world.hCell(i, j)));
+        }
         return map[m];
       };
       for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
@@ -251,6 +278,7 @@ export class WaterSystem {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       geo.setAttribute('aShore', new THREE.Float32BufferAttribute(shore, 1));
+      geo.setAttribute('aDepth', new THREE.Float32BufferAttribute(depth, 1));
       geo.setIndex(idx);
       geo.computeBoundingSphere();
       geo.boundingSphere.radius += 0.5;
@@ -272,7 +300,7 @@ export class WaterSystem {
   waveAt(x, z) { return waveHeight(x, z, this.time, this.world); }
 
   // uniforms another material needs to ride the same surface (see wake.js)
-  surfaceUniforms() { const u = this.uniforms; return { uShoreTex: u.uShoreTex, uGrid: u.uGrid, uGridSize: u.uGridSize, uWaterTime: u.uTime }; }
+  surfaceUniforms() { const u = this.uniforms; return { uShoreTex: u.uShoreTex, uHeightTex: u.uHeightTex, uGrid: u.uGrid, uGridSize: u.uGridSize, uWaterTime: u.uTime }; }
 
   // Mirror only what is on REFLECT_LAYER (the canoe) into the reflection target.
   renderReflection(renderer, scene, camera, level) {

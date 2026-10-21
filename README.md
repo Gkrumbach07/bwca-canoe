@@ -10,6 +10,10 @@ the Lake One → Lake Two → Lake Three → Lake Four chain east of Ely, Minnes
   and the paddle stroke, the water, the sky and the clouds. No external assets.
 - **GPS simulation**: the canoe's real-world latitude/longitude is broadcast as the device location,
   so other tabs that ask for geolocation see you paddling (see *GPS simulator* below).
+- **A day in the Boundary Waters**: a 20-minute day/night cycle drives the sun, a sky-matched haze, the
+  clouds, the water, stars and moonlight, with dawn mist over the lakes. Lakes are clear in the shallows
+  (lily pads, reeds and weeds grow in sheltered water) and tannin-dark in the deep. Loons drift, dive and
+  call; wind, lapping water and paddle dips are synthesized, no samples.
 
 ## Run
 
@@ -37,7 +41,11 @@ Downloads are cached in `data-cache/`. The bake needs network access to `api.ope
 | Shift | hustle |
 | E | portage when near a landing, launch at the far end |
 | M | enlarge the map |
-| R | toggle water reflections (costs a second scene pass) |
+| V | switch between first-person and chase camera |
+| [ / ] | step the time of day back / forward an hour |
+| P | pause the clock |
+| N | mute / unmute the synthesized soundscape |
+| R | toggle the canoe's water reflection |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
 | mouse drag / wheel | look around / zoom |
 | click the minimap | teleport to the nearest open water |
@@ -62,6 +70,16 @@ companion extension in `extension/` that does it:
 The game also publishes the fix on a `BroadcastChannel` named `bwca-canoe-geo` and in `localStorage`
 (`bwca-canoe-geo`) for same-origin pages, and overrides `navigator.geolocation` on its own page.
 
+## Lake depth and clarity
+
+The bed is currently carved from the shoreline (about 9 % grade, capped at 14 m) and every lake uses the
+same clarity (`uClarity`, 3 m, a typical Secchi depth for these tannin-stained lakes). Real data exists
+and could replace both: the Minnesota DNR *Lake Bathymetric DEM* (5 m rasters for surveyed lakes) and
+contour shapefiles on the MN Geospatial Commons, and Secchi clarity readings per lake from the DNR
+LakeFinder / MPCA lake monitoring data. Both are free downloads; wiring them in means sampling the
+bathymetry raster in `scripts/bake.mjs` where the bed is carved and writing a per-lake `clarity` into
+`world.json`.
+
 ## Layout
 
 ```
@@ -77,6 +95,15 @@ src/player.js       paddling physics, shoreline collision, portage state machine
 src/camera.js       chase camera
 src/hud.js          HUD text, prompts, minimap
 src/geo.js          GPS broadcast to the extension and same-origin tabs
+src/fog.js          sky-matched fog, patched into three's fog shader chunks
+src/daycycle.js     time of day: sun, moon, stars, and every colour keyed on sun elevation
+src/post.js         colour grading pass (lift, split toning, saturation, vignette)
+src/aquatic.js      lily pads, reeds and submerged weeds in sheltered shallows
+src/groundcover.js  grass and fireweed on a camera-following patch
+src/loons.js        loons: drift, dive, resurface, flee, call
+src/mist.js         dawn mist sheets over the water
+src/audio.js        synthesized wind, lapping, paddle dips and loon calls
+src/floating.js     materials that ride the swell or sway on the bed
 extension/          Chrome/Edge MV3 extension that spoofs navigator.geolocation everywhere
 ```
 

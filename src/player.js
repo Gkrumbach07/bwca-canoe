@@ -159,6 +159,7 @@ export class Player {
       const prev = this.prevStroke, cur = st.stroke;
       const catchNow = prev > 0.85 && cur < 0.15, exitNow = prev < 0.5 && cur >= 0.5;
       if (catchNow || exitNow) {
+        if (catchNow && this.audio) this.audio.paddleDip();
         const b = st.blade.clone();
         this.canoe.rig.localToWorld(b);
         const n = catchNow ? 7 : 4;

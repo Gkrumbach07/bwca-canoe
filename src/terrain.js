@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { fbm, lerp, smoothstep } from './rng.js';
+import { clearingAt, burnAt } from './fields.js';
 
 const CHUNK = 64;        // cells per chunk edge
 const FINE_BAND = 25;    // metres either side of the shore that get 2x2 subdivision
@@ -16,6 +17,7 @@ const C = {
   forestLight: new THREE.Color(0x7b9360),
   forestDark: new THREE.Color(0x546b47),
   meadow: new THREE.Color(0x98a56a),
+  burn: new THREE.Color(0x9a8a5e),
 };
 
 export function groundColor(world, x, z, out, shade = 0) {
@@ -25,7 +27,8 @@ export function groundColor(world, x, z, out, shade = 0) {
   if (sd < 2.4) return out.copy(C.sand);
   if (slope > 0.55) return out.copy(C.rockDark);
   if (slope > 0.38) return out.copy(C.rock);
-  const clearing = fbm(x * 0.0035, z * 0.0035, 3, 21); // same field the forest uses
+  if (burnAt(x, z) > 0.5) return out.copy(C.burn);
+  const clearing = clearingAt(x, z); // same field the forest uses
   if (clearing > 0.68) return out.copy(C.meadow);
   if (shade > 0.55) return out.copy(C.forestDark);
   return out.copy(fbm(x * 0.012, z * 0.012, 3, 7) > 0.55 ? C.forestLight : C.forest);

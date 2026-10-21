@@ -294,5 +294,6 @@ export function buildCanoeRig() {
   return {
     rig, hull: hullPivot, paddler, paddle, state,
     update(dt) { if (state.mode === 'carry') poseCarry(dt); else poseSeated(dt); },
+    setFirstPerson(on) { parts.head.visible = !on; parts.hat.visible = !on; parts.crown.visible = !on; },
   };
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
+import { burnAt, clearingAt } from './fields.js';
 
 // ---------- species (full detail) ------------------------------------------------
 
@@ -61,6 +62,21 @@ function snag(rng) {
   }
   return g.build();
 }
+// old-growth pine: a long bare trunk with a small ragged crown and a few stub branches
+function tallPine(rng) {
+  const g = new GeoBuilder();
+  const h = 17 + rng() * 6;
+  const bark = vary(0x6b4a34, rng);
+  g.trunk(0, -0.5, 0, 0.42, 0.2, h * 0.92, 5, bark, rng, (rng() - 0.5) * 0.9);
+  for (let i = 0; i < 2 + Math.floor(rng() * 2); i++) {
+    const y = h * (0.55 + rng() * 0.3), a = rng() * 6.28, L = 1.2 + rng() * 1.6;
+    g.tube(g.ring(0, y, 0, 0.09, 4, rng), g.ring(Math.cos(a) * L, y + L * 0.25, Math.sin(a) * L, 0.04, 4, rng), bark, new THREE.Vector3(Math.cos(a) * L * 0.5, y, Math.sin(a) * L * 0.5));
+    g.blob(Math.cos(a) * L, y + L * 0.3, Math.sin(a) * L, 0.9 + rng() * 0.5, vary(0x3a6a40, rng), rng, 0.4, 1.3, 0.5, 1.3);
+  }
+  for (let i = 0; i < 2 + Math.floor(rng() * 2); i++) g.blob((rng() - 0.5) * 2.6, h * (0.9 + rng() * 0.08), (rng() - 0.5) * 2.6, 1.6 + rng() * 0.9, vary(0x3b6b42, rng), rng, 0.4, 1.3, 0.6, 1.3);
+  return g.build();
+}
+
 function boulder(rng) {
   const g = new GeoBuilder();
   const r = 0.7 + rng() * 1.4;
@@ -101,6 +117,7 @@ const LOW = {
   snag: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.5, 0, 0.3, 0.08, 7 + rng() * 5, 4, vary(0x9a9388, rng, 0.08), rng); return g.build(); },
   boulder,
   shrub,
+  tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x3b6b42, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x6b4a34, rng), rng); return g.build(); },
 };
 
 export const SPECIES = [
@@ -112,6 +129,7 @@ export const SPECIES = [
   { name: 'snag', make: snag, scale: [0.8, 1.2] },
   { name: 'boulder', make: boulder, scale: [0.6, 1.6] },
   { name: 'shrub', make: shrub, scale: [0.7, 1.5] },
+  { name: 'tallPine', make: tallPine, scale: [0.85, 1.25] },
 ];
 const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
@@ -167,13 +185,14 @@ export async function buildVegetation(world, { seed = 1, regionSize = 640, exclu
       if (sd < -4) continue;
       const cx = world.cellX(i), cz = world.cellZ(j);
       const slope = world.slopeAt(cx, cz);
-      const clearing = smoothstep(0.62, 0.78, fbm(cx * 0.0035, cz * 0.0035, 3, 21));
+      const clearing = smoothstep(0.62, 0.78, clearingAt(cx, cz));
+      const burn = burnAt(cx, cz);
       const segs = mask.get(k);
       // trails run through thick woods: more trees and brush right beside them
       const trailSide = segs && segs.some((g) => g[4] < 5) ? 2.6 : 1;
-      const e = sd < 0 ? 0 : treeDensity(sd, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide;
+      const e = sd < 0 ? 0 : treeDensity(sd, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - burn * 0.5);
       const trees = Math.floor(e) + (rng() < e - Math.floor(e) ? 1 : 0);
-      const eShrub = sd > 0.5 && sd < 35 ? (0.75 - smoothstep(10, 35, sd) * 0.5) * (1 - clearing * 0.5) * trailSide : (sd > 0 && trailSide > 1 ? 0.5 : 0);
+      const eShrub = (sd > 0.5 && sd < 35 ? (0.75 - smoothstep(10, 35, sd) * 0.5) * (1 - clearing * 0.5) * trailSide : (sd > 0 && trailSide > 1 ? 0.5 : 0)) + burn * 0.5;
       const shrubs = Math.floor(eShrub) + (rng() < eShrub - Math.floor(eShrub) ? 1 : 0);
       const rockP = sd < 8 && sd > -4 ? 0.1 + smoothstep(0.3, 0.6, slope) * 0.25 : 0;
       const rocks = rng() < rockP ? 1 : 0;
@@ -192,8 +211,11 @@ export async function buildVegetation(world, { seed = 1, regionSize = 640, exclu
           const h = world.heightAt(x, z);
           const patch = fbm(x * 0.0025 + 7, z * 0.0025, 3, 33);
           const r = rng();
-          // spruce-dominated boreal mix, birch in stands, cedar along the shore
-          if (s < 22 && r < 0.2) sp = 4;
+          // spruce-dominated boreal mix, birch in stands, cedar along the shore; burn scars are
+          // standing snags with young spruce coming up; old pines on rocky points and ridges
+          if (burn > 0.5) sp = r < 0.72 ? 5 : 1;
+          else if (s < 22 && r < 0.2) sp = 4;
+          else if (((s < 35 && slope > 0.15) || h > 496) && r < 0.3) sp = 8;
           else if (patch > 0.62 && r < 0.55) sp = 3;
           else if (r < 0.02) sp = 5;
           else if (h > 492 && r < 0.3) sp = 0;
@@ -203,6 +225,7 @@ export async function buildVegetation(world, { seed = 1, regionSize = 640, exclu
         const spec = SPECIES[sp];
         let scale = spec.scale[0] + rng() * (spec.scale[1] - spec.scale[0]);
         if (spec.giant && rng() < spec.giant) scale *= 1.45;
+        if (isTree && burn > 0.5) scale *= sp === 5 ? 1.25 : 0.45; // tall dead stems, small regrowth
         if (isRock && s > -2 && rng() < 0.08 + smoothstep(0.25, 0.5, slope) * 0.2) scale *= 2.6; // granite outcrop blocks
         if (isTree && s > 600) scale *= 1.15;
         binFor(region, sp).items.push(x, world.heightAt(x, z) - (isRock ? 0.4 : 0.35), z, rng() * Math.PI * 2, scale, 0.92 + rng() * 0.16, 0.9 + rng() * 0.2);

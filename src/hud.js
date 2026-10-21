@@ -63,14 +63,14 @@ export class Hud {
     return off;
   }
 
-  update(player, geo, timeScale) {
+  update(player, geo, timeScale, clock = '') {
     const w = this.world;
     const id = player.lakeId;
     const name = player.mode === 'carry' ? player.carry.trail.def.name : (w.lakeName(id) || 'Unnamed water');
     if (this.el.lake.textContent !== name) this.el.lake.textContent = name;
     const { lat, lon } = w.toLatLon(player.x, player.z);
     const kmh = (Math.abs(player.speed) * 3.6).toFixed(1);
-    this.el.sub.textContent = `${player.mode === 'carry' ? 'Portaging' : 'Paddling'} · ${kmh} km/h · ${lat.toFixed(5)}, ${lon.toFixed(5)} · ${player.altitude.toFixed(0)} m${timeScale > 1 ? ` · ${timeScale}× speed` : ''}`;
+    this.el.sub.textContent = `${clock ? clock + ' · ' : ''}${player.mode === 'carry' ? 'Portaging' : 'Paddling'} · ${kmh} km/h · ${lat.toFixed(5)}, ${lon.toFixed(5)} · ${player.altitude.toFixed(0)} m${timeScale > 1 ? ` · ${timeScale}× speed` : ''}`;
     const p = player.prompt;
     if (p) { this.el.prompt.innerHTML = (p.key ? `<kbd>${p.key}</kbd>` : '') + p.text; this.el.prompt.classList.add('show'); }
     else this.el.prompt.classList.remove('show');
