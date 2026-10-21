@@ -13,7 +13,7 @@ import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
 import { updateVegetationLOD } from './vegetation.js';
 
-const palette = { zenith: 0x6f9cc2, horizon: 0xdde5ea, ground: 0x97a38a, sun: 0xfff2dc, water: 0x7fb0c3, reflect: 0xc6d8df, fog: 0xd6dfe4 };
+const palette = { zenith: 0x5d93c6, horizon: 0xd3e3ee, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x86b8cf, reflect: 0xc9dde8, fog: 0xbcd2e2 };
 
 const loadingEl = document.getElementById('loading'), barEl = document.getElementById('loading-bar'), msgEl = document.getElementById('loading-msg');
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
@@ -26,24 +26,24 @@ async function main() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  renderer.toneMapping = THREE.NeutralToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
   renderer.domElement.className = 'game';
   document.getElementById('app').appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(palette.fog, 450, 4200);
+  scene.fog = new THREE.Fog(palette.fog, 120, 2600); // blue distance haze: far trees fall to silhouette
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.3, 9000);
 
-  const sunDir = new THREE.Vector3(-0.58, 0.46, 0.4).normalize();
-  const sun = new THREE.DirectionalLight(0xfff0d2, 1.5);
+  const sunDir = new THREE.Vector3(-0.62, 0.36, 0.46).normalize(); // late afternoon
+  const sun = new THREE.DirectionalLight(0xffdcb0, 1.7);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -150; sun.shadow.camera.right = 150; sun.shadow.camera.top = 150; sun.shadow.camera.bottom = -150;
   sun.shadow.camera.near = 50; sun.shadow.camera.far = 1400;
   sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.6; sun.shadow.intensity = 0.55;
   scene.add(sun, sun.target);
-  scene.add(new THREE.HemisphereLight(0xc3d6e2, 0x7f8f6c, 0.6));
+  scene.add(new THREE.HemisphereLight(0xa9c6e0, 0x6f7a60, 0.8)); // cool fill against the warm sun
 
   scene.background = new THREE.Color(palette.fog);
   const sky = buildSky(sunDir, palette);
@@ -60,7 +60,7 @@ async function main() {
   scene.add(water.group);
   progress(0.94, 'Clearing portages and campsites…'); await tick();
   scene.add(buildPortageTrails(world), buildCampsites(world));
-  const ripples = new Ripples();
+  const ripples = new Ripples(water);
   scene.add(ripples.mesh);
   progress(0.97, 'Launching the canoe…'); await tick();
 
@@ -91,7 +91,6 @@ async function main() {
     updateClouds(clouds, dt * player.timeScale);
     sky.position.copy(camera.position);
     sun.target.position.set(player.x, player.altitude, player.z);
-    water.setBoat(player.x, player.z, player.heading, player.speed, player.mode === 'paddle');
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 700);
     geo.update(player, world);
     hud.update(player, geo, player.timeScale);

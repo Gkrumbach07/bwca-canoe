@@ -10,13 +10,13 @@ import { smoothstep } from './rng.js';
 
 const CHUNK = 64;
 const PATCH_HALF = 160;   // metres; multiple of the 10 m lattice
-const PATCH_RES = 4;      // metres per vertex
+const PATCH_RES = 3.2;    // metres per vertex
 
 export function lowWave(x, z, t) {
-  return Math.sin(x * 0.14 + t * 0.6) * 0.1 + Math.sin((x * 0.6 + z * 0.8) * 0.09 - t * 0.5) * 0.1 + Math.sin(z * 0.11 - x * 0.05 + t * 0.45) * 0.08;
+  return Math.sin(x * 0.14 + t * 0.35) * 0.06 + Math.sin((x * 0.6 + z * 0.8) * 0.09 - t * 0.3) * 0.06 + Math.sin(z * 0.11 - x * 0.05 + t * 0.27) * 0.05;
 }
 export function highWave(x, z, t) {
-  return Math.sin(x * 0.7 + t * 1.4) * 0.2 + Math.sin(z * 1.05 - t * 1.2 + x * 0.3) * 0.11 + Math.sin((x + z) * 0.45 + t * 1.0) * 0.15;
+  return Math.sin(x * 0.7 + t * 1.1) * 0.18 + Math.sin(z * 1.05 - t * 0.95 + x * 0.3) * 0.1 + Math.sin((x + z) * 0.45 + t * 0.8) * 0.14;
 }
 // CPU twin of the patch vertex shader (used for canoe bobbing)
 export function waveHeight(x, z, t, world) {
@@ -28,8 +28,33 @@ export function waveHeight(x, z, t, world) {
 }
 
 const glslWaves = /* glsl */ `
-  float lowWave(vec2 p, float t) { return sin(p.x * 0.14 + t * 0.6) * 0.1 + sin((p.x * 0.6 + p.y * 0.8) * 0.09 - t * 0.5) * 0.1 + sin(p.y * 0.11 - p.x * 0.05 + t * 0.45) * 0.08; }
-  float highWave(vec2 p, float t) { return sin(p.x * 0.7 + t * 1.4) * 0.2 + sin(p.y * 1.05 - t * 1.2 + p.x * 0.3) * 0.11 + sin((p.x + p.y) * 0.45 + t * 1.0) * 0.15; }
+  float lowWave(vec2 p, float t) { return sin(p.x * 0.14 + t * 0.35) * 0.06 + sin((p.x * 0.6 + p.y * 0.8) * 0.09 - t * 0.3) * 0.06 + sin(p.y * 0.11 - p.x * 0.05 + t * 0.27) * 0.05; }
+  float highWave(vec2 p, float t) { return sin(p.x * 0.7 + t * 1.1) * 0.18 + sin(p.y * 1.05 - t * 0.95 + p.x * 0.3) * 0.1 + sin((p.x + p.y) * 0.45 + t * 0.8) * 0.14; }
+`;
+
+// Swell height at any world xz, shared by the near water patch and the surface particles:
+// long waves interpolated from the 10 m lattice nodes (damped near shore, exactly as the far mesh
+// does it) plus short waves on top. Needs uShoreTex / uGrid / uGridSize bound.
+export const glslSurface = /* glsl */ `
+  uniform sampler2D uShoreTex;
+  uniform vec3 uGrid;      // originX, originZ, 1/cell
+  uniform ivec2 uGridSize;
+  ${glslWaves}
+  float cellSample(sampler2D t, ivec2 c) { c = clamp(c, ivec2(0), uGridSize - 1); return texelFetch(t, c, 0).r; }
+  float nodeWave(ivec2 c, float t) {
+    vec2 np = uGrid.xy + (vec2(c) + 0.5) / uGrid.z;
+    return lowWave(np, t) * smoothstep(0.0, 25.0, -cellSample(uShoreTex, c));
+  }
+  float surfaceWave(vec2 w, float t, float border, out float shore) {
+    vec2 f = (w - uGrid.xy) * uGrid.z - 0.5;
+    vec2 fi = floor(f), a = f - fi;
+    ivec2 c = ivec2(fi);
+    float s00 = cellSample(uShoreTex, c), s10 = cellSample(uShoreTex, c + ivec2(1, 0));
+    float s01 = cellSample(uShoreTex, c + ivec2(0, 1)), s11 = cellSample(uShoreTex, c + ivec2(1, 1));
+    shore = mix(mix(s00, s10, a.x), mix(s01, s11, a.x), a.y);
+    float low = mix(mix(nodeWave(c, t), nodeWave(c + ivec2(1, 0), t), a.x), mix(nodeWave(c + ivec2(0, 1), t), nodeWave(c + ivec2(1, 1), t), a.x), a.y);
+    return low + highWave(w, t) * smoothstep(0.0, 8.0, -shore) * border;
+  }
 `;
 
 const vertHead = /* glsl */ `
@@ -43,7 +68,6 @@ const vertHead = /* glsl */ `
   #include <common>
   #include <fog_pars_vertex>
   #include <shadowmap_pars_vertex>
-  ${glslWaves}
 `;
 const vertTail = /* glsl */ `
     // shadows and the reflection are projected on the flat surface so the swell cannot break them up
@@ -57,7 +81,7 @@ const vertTail = /* glsl */ `
     #include <shadowmap_vertex>
   }
 `;
-const vertFar = vertHead + /* glsl */ `
+const vertFar = vertHead + glslWaves + /* glsl */ `
   attribute float aShore;
   void main() {
     vec3 p = (modelMatrix * vec4(position, 1.0)).xyz;
@@ -66,37 +90,22 @@ const vertFar = vertHead + /* glsl */ `
     p.y += lowWave(p.xz, uTime) * smoothstep(0.0, 25.0, -aShore);
 ` + vertTail;
 
-const vertPatch = vertHead + /* glsl */ `
-  uniform sampler2D uShoreTex, uLevelTex;
-  uniform vec3 uGrid;      // originX, originZ, 1/cell
-  uniform ivec2 uGridSize;
-  float cellSample(sampler2D t, ivec2 c) { c = clamp(c, ivec2(0), uGridSize - 1); return texelFetch(t, c, 0).r; }
-  // long swell at a lattice node, damped near shore exactly as the far mesh does it
-  float nodeWave(ivec2 c) {
-    vec2 np = uGrid.xy + (vec2(c) + 0.5) / uGrid.z;
-    return lowWave(np, uTime) * smoothstep(0.0, 25.0, -cellSample(uShoreTex, c));
-  }
+const vertPatch = vertHead + glslSurface + /* glsl */ `
+  uniform sampler2D uLevelTex;
   void main() {
     vec2 w = uPatchCenter + position.xz;
-    vec2 f = (w - uGrid.xy) * uGrid.z - 0.5;
-    vec2 fi = floor(f), a = f - fi;
-    ivec2 c = ivec2(fi);
-    float s00 = cellSample(uShoreTex, c), s10 = cellSample(uShoreTex, c + ivec2(1, 0));
-    float s01 = cellSample(uShoreTex, c + ivec2(0, 1)), s11 = cellSample(uShoreTex, c + ivec2(1, 1));
-    float shore = mix(mix(s00, s10, a.x), mix(s01, s11, a.x), a.y);
-    vShore = shore;
-    float low = mix(mix(nodeWave(c), nodeWave(c + ivec2(1, 0)), a.x), mix(nodeWave(c + ivec2(0, 1)), nodeWave(c + ivec2(1, 1)), a.x), a.y);
     float border = 1.0 - smoothstep(uPatchHalf - 40.0, uPatchHalf - 6.0, max(abs(position.x), abs(position.z)));
-    float high = highWave(w, uTime) * smoothstep(0.0, 8.0, -shore) * border;
+    float shore;
+    float wave = surfaceWave(w, uTime, border, shore);
+    vShore = shore;
     float level = cellSample(uLevelTex, ivec2(floor((w - uGrid.xy) * uGrid.z)));
     float flatY = level;
-    vec3 p = vec3(w.x, level + low + high, w.y);
+    vec3 p = vec3(w.x, level + wave, w.y);
 ` + vertTail;
 
 const frag = /* glsl */ `
-  uniform float uTime, uReflOn, uBoatSpeed;
+  uniform float uTime, uReflOn;
   uniform vec3 uSunDir, uWater, uReflect;
-  uniform vec4 uBoat; // x, z, cos(heading), sin(heading)
   uniform sampler2D uReflection;
   uniform vec2 uPatchCenter;
   uniform float uPatchHalf;
@@ -122,29 +131,15 @@ const frag = /* glsl */ `
     #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
       shadow = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
     #endif
-    // three flat tones: facets tilted toward the sun, level, and tilted away
-    float ndl = dot(n, uSunDir);
-    float tone = step(uSunDir.y + 0.012, ndl) - step(ndl, uSunDir.y - 0.012);   // -1, 0, 1
-    vec3 col = mix(uWater, uReflect, 0.12) * (1.0 + 0.085 * tone);
+    // three flat tones (facets tilted toward the sun, level, away), with a soft hand-off so the
+    // moving swell does not make facets pop between tones
+    float d = dot(n, uSunDir) - uSunDir.y;
+    float tone = smoothstep(0.006, 0.016, d) - smoothstep(0.006, 0.016, -d);   // -1 .. 1
+    vec3 col = mix(uWater, uReflect, 0.12) * (1.0 + 0.08 * tone);
     col *= 0.72 + 0.28 * shadow;
     // the canoe's reflection, nothing else
     vec4 r = texture2DProj(uReflection, vReflectUv);
     col = mix(col, r.rgb, r.a * 0.65 * uReflOn);
-    // ripple lines around the canoe, drawn like the shoreline ones: rings spreading from the hull
-    // and lines flanking the two wake arms behind the stern
-    vec2 rel = vWorld.xz - uBoat.xy;
-    float lx = dot(rel, vec2(uBoat.z, -uBoat.w));
-    float ly = dot(rel, vec2(uBoat.w, uBoat.z));
-    float dHull = length(vec2(max(abs(lx) - 2.3, 0.0), ly)) - 0.5;
-    float reach = 2.0 + 3.5 * uBoatSpeed;                  // two or three rings at most
-    float rp = fract(dHull * 0.45 - uTime * 0.5);
-    float rings = aastep(0.86, rp) * (1.0 - aastep(0.93, rp)) * (1.0 - smoothstep(reach * 0.5, reach, dHull)) * step(0.0, dHull);
-    float back = -lx - 2.3;
-    float armDist = abs(abs(ly) - (0.5 + 0.36 * back));
-    float dash = step(0.35, fract(back * 0.7 - uTime * 1.5));
-    float wakeLen = 10.0 * uBoatSpeed;
-    float arms = (1.0 - aastep(0.14, armDist)) * dash * step(0.0, back) * (1.0 - smoothstep(wakeLen * 0.5, wakeLen, back)) * smoothstep(0.05, 0.3, uBoatSpeed);
-    float boatLines = max(rings * (0.4 + 0.6 * uBoatSpeed), arms) * 0.75;
     // shoreline ripples: thin crisp lines parallel to the shore rolling in, broken up along the shore
     float along = vWorld.x * 0.31 + vWorld.z * 0.23;
     float breakup = 0.5 + 0.5 * sin(along * 0.7 + uTime * 0.25) * sin(along * 0.23 - uTime * 0.11);
@@ -152,7 +147,7 @@ const frag = /* glsl */ `
     float line = aastep(0.8, phase) * (1.0 - aastep(0.9, phase));
     float ripple = line * (1.0 - aastep(5.5, depth)) * aastep(0.45, breakup) * step(0.0, depth);
     float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
-    float foam = max(max(ripple, waterline) * 0.85, boatLines);
+    float foam = max(ripple, waterline) * 0.85;
     col = mix(col, vec3(0.95, 0.97, 0.97), foam);
     float alpha = max(0.74, foam);
     gl_FragColor = vec4(col, alpha);
@@ -199,8 +194,6 @@ export class WaterSystem {
       uReflOn: { value: 0 },
       uTextureMatrix: { value: new THREE.Matrix4() },
       uPatchCenter: { value: new THREE.Vector2(1e9, 1e9) },
-      uBoat: { value: new THREE.Vector4(1e9, 1e9, 1, 0) },
-      uBoatSpeed: { value: 0 },
       uPatchHalf: { value: PATCH_HALF },
       uShoreTex: { value: null },
       uLevelTex: { value: null },
@@ -278,11 +271,8 @@ export class WaterSystem {
 
   waveAt(x, z) { return waveHeight(x, z, this.time, this.world); }
 
-  setBoat(x, z, heading, speed, afloat) {
-    this.uniforms.uBoat.value.set(afloat ? x : 1e9, afloat ? z : 1e9, Math.cos(heading), Math.sin(heading));
-    const u = this.uniforms.uBoatSpeed;
-    u.value += (THREE.MathUtils.clamp(Math.abs(speed) / 2.4, 0, 1) - u.value) * 0.08;
-  }
+  // uniforms another material needs to ride the same surface (see wake.js)
+  surfaceUniforms() { const u = this.uniforms; return { uShoreTex: u.uShoreTex, uGrid: u.uGrid, uGridSize: u.uGridSize, uWaterTime: u.uTime }; }
 
   // Mirror only what is on REFLECT_LAYER (the canoe) into the reflection target.
   renderReflection(renderer, scene, camera, level) {

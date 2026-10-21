@@ -39,7 +39,7 @@ export class Player {
     this.carry = null; // { trail, dist, dir }
     this.landing = null; // auto-pilot toward a launch point
     this.ripples = null; this.wakeV = null; // set by main
-    this.wakeTimer = 0; this.prevStroke = 0; this.level = 0;
+    this.bubbleAcc = 0; this.prevStroke = 0; this.level = 0;
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
   }
@@ -138,7 +138,23 @@ export class Player {
   emitWater(dt) {
     if (!this.ripples) return;
     const sp = Math.abs(this.speed), f = this.forward, y = this.level + 0.04, st = this.canoe.state;
-    if (this.wakeV) this.wakeV.update(dt, this.x - f.x * 2.4, this.level + 0.03, this.z - f.z * 2.4, this.heading, sp, true);
+    // foam bubbles shed from the hull's waterline, most at the bow and stern, left behind as a trail
+    if (sp > 0.25) {
+      const r = { x: -f.z, z: f.x };
+      this.bubbleAcc += dt * (14 + 46 * Math.min(1, sp / 2.5)) * this.timeScale;
+      while (this.bubbleAcc >= 1) {
+        this.bubbleAcc -= 1;
+        let t = Math.random() * 2 - 1;
+        t = Math.sign(t) * Math.pow(Math.abs(t), 0.45);
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const hw = 0.42 * Math.pow(1 - Math.pow(Math.abs(t), 4), 0.6) + 0.1;
+        const along = t * 2.5;
+        const px = this.x + f.x * along + r.x * side * hw, pz = this.z + f.z * along + r.z * side * hw;
+        const out = 0.2 + Math.random() * 0.35, back = (0.05 + Math.random() * 0.2) * sp;
+        this.ripples.spawn(3, px, this.level + 0.03, pz, 0.06 + Math.random() * 0.08, 0.16 + Math.random() * 0.2, 1.3 + Math.random() * 1.5,
+          r.x * side * out - f.x * back, 0, r.z * side * out - f.z * back);
+      }
+    }
     if (st.power > 0.4) {
       const prev = this.prevStroke, cur = st.stroke;
       const catchNow = prev > 0.85 && cur < 0.15, exitNow = prev < 0.5 && cur >= 0.5;

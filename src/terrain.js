@@ -9,13 +9,13 @@ const SHAPE_BAND = 9;    // metres either side of the shore where height follows
 const C = {
   bedShallow: new THREE.Color(0xc4b894),
   bedDeep: new THREE.Color(0x5f7c70),
-  sand: new THREE.Color(0xcbbf9d),
+  sand: new THREE.Color(0xc8b88d),
   rock: new THREE.Color(0x8f8d85),
   rockDark: new THREE.Color(0x6f6d67),
-  forest: new THREE.Color(0x637f57),
-  forestLight: new THREE.Color(0x759264),
-  forestDark: new THREE.Color(0x536c49),
-  meadow: new THREE.Color(0x8c9d6a),
+  forest: new THREE.Color(0x667f52),
+  forestLight: new THREE.Color(0x7b9360),
+  forestDark: new THREE.Color(0x546b47),
+  meadow: new THREE.Color(0x98a56a),
 };
 
 export function groundColor(world, x, z, out, shade = 0) {
