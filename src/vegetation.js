@@ -80,16 +80,23 @@ function shrub(rng) {
 
 function lowConifer(rng, h, r, cols, trunkCol, lift = 0.2) {
   const g = new GeoBuilder();
-  g.trunk(0, -0.5, 0, 0.3, 0.15, h * lift + 0.5, 4, trunkCol, rng, 0);
   g.cone(0, h * lift, 0, r, h * (0.55 - lift), 5, cols[0], rng, 0.15);
   g.cone(0, h * 0.5, 0, r * 0.6, h * 0.5, 5, cols[1], rng, 0.15);
   return g.build();
 }
+// a diamond: two cones base to base, the cheapest round-ish canopy
+function lowBlob(rng, y, r, col) {
+  const g = new GeoBuilder();
+  const ring = g.ring(0, y, 0, r, 5, rng, 0.1);
+  g.fan(new THREE.Vector3(0, y + r * 0.9, 0), ring, col, new THREE.Vector3(0, y, 0));
+  g.fan(new THREE.Vector3(0, y - r * 0.8, 0), ring, col, new THREE.Vector3(0, y, 0));
+  return g;
+}
 const LOW = {
   whitePine: (rng) => lowConifer(rng, 14 + rng() * 5, 3.2, [vary(0x2f5a3a, rng), vary(0x356341, rng)], vary(0x5a4030, rng), 0.35),
   spruce: (rng) => lowConifer(rng, 10 + rng() * 6, 2.2, [vary(0x274a2f, rng), vary(0x3a6a3e, rng)], vary(0x4a3a2c, rng), 0.12),
-  redPine: (rng) => { const g = new GeoBuilder(); const h = 12 + rng() * 6; g.trunk(0, -0.5, 0, 0.4, 0.25, h, 4, vary(0x8a4a2e, rng), rng); g.blob(0, h, 0, 2.6, vary(0x3b6b36, rng), rng, 0.25, 1.2, 0.7, 1.2); return g.build(); },
-  birch: (rng) => { const g = new GeoBuilder(); const h = 8 + rng() * 5; g.trunk(0, -0.5, 0, 0.2, 0.1, h * 0.7, 4, vary(0xe6e2d6, rng, 0.04), rng); g.blob(0, h * 0.75, 0, 2.4, vary(0x7da84a, rng, 0.1), rng, 0.3, 1, 1.2, 1); return g.build(); },
+  redPine: (rng) => { const h = 12 + rng() * 6; const g = lowBlob(rng, h, 2.6, vary(0x3b6b36, rng)); g.trunk(0, -0.5, 0, 0.4, 0.25, h, 3, vary(0x8a4a2e, rng), rng); return g.build(); },
+  birch: (rng) => { const h = 8 + rng() * 5; const g = lowBlob(rng, h * 0.75, 2.4, vary(0x7da84a, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.1, h * 0.7, 3, vary(0xe6e2d6, rng, 0.04), rng); return g.build(); },
   cedar: (rng) => lowConifer(rng, 7 + rng() * 3, 2.3, [vary(0x2d5436, rng), vary(0x2d5436, rng)], vary(0x6b4a34, rng), 0.1),
   snag: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.5, 0, 0.3, 0.08, 7 + rng() * 5, 4, vary(0x9a9388, rng, 0.08), rng); return g.build(); },
   boulder,
@@ -97,17 +104,18 @@ const LOW = {
 };
 
 export const SPECIES = [
-  { name: 'whitePine', make: whitePine, scale: [0.9, 1.45], giant: 0.04 },
-  { name: 'spruce', make: spruce, scale: [0.85, 1.35] },
-  { name: 'redPine', make: redPine, scale: [0.8, 1.25] },
-  { name: 'birch', make: birch, scale: [0.75, 1.3] },
-  { name: 'cedar', make: cedar, scale: [0.8, 1.3] },
+  { name: 'whitePine', make: whitePine, scale: [0.85, 1.3], giant: 0.04 },
+  { name: 'spruce', make: spruce, scale: [0.75, 1.2] },
+  { name: 'redPine', make: redPine, scale: [0.75, 1.15] },
+  { name: 'birch', make: birch, scale: [0.7, 1.15] },
+  { name: 'cedar', make: cedar, scale: [0.75, 1.2] },
   { name: 'snag', make: snag, scale: [0.8, 1.2] },
   { name: 'boulder', make: boulder, scale: [0.6, 1.6] },
   { name: 'shrub', make: shrub, scale: [0.7, 1.5] },
 ];
 const VARIANTS = 4;
-const LOD_DISTANCE = 1500; // metres from the camera to a region centre before its low-detail twin is used
+const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
+const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
 
 // ---------- placement -------------------------------------------------------------
 
@@ -131,13 +139,13 @@ function segDist(px, pz, x1, z1, x2, z2) {
 
 export function treeDensity(sd, slope, clearing) {
   let d;
-  if (sd < 2) d = 0.12; else if (sd < 10) d = 1.25; else if (sd < 40) d = 1.0; else if (sd < 250) d = 0.42; else if (sd < 700) d = 0.2; else d = 0.12;
+  if (sd < 2) d = 0.1; else if (sd < 10) d = 1.5; else if (sd < 40) d = 1.4; else if (sd < 250) d = 0.95; else if (sd < 700) d = 0.5; else if (sd < 1500) d = 0.32; else d = 0.16;
   d *= 1 - smoothstep(0.45, 0.8, slope) * 0.85;
   d *= 1 - clearing * 0.85;
   return d;
 }
 
-export async function buildVegetation(world, { seed = 1, regionSize = 1280, exclusions = [], onProgress = () => {} } = {}) {
+export async function buildVegetation(world, { seed = 1, regionSize = 640, exclusions = [], onProgress = () => {} } = {}) {
   const rng = mulberry32(seed);
   const variants = SPECIES.map((s) => Array.from({ length: VARIANTS }, (_, v) => ({
     full: s.make(mulberry32(seed * 131 + v * 17 + s.name.length)),
@@ -184,11 +192,12 @@ export async function buildVegetation(world, { seed = 1, regionSize = 1280, excl
           const h = world.heightAt(x, z);
           const patch = fbm(x * 0.0025 + 7, z * 0.0025, 3, 33);
           const r = rng();
-          if (s < 22 && r < 0.3) sp = 4;
-          else if (patch > 0.58 && r < 0.75) sp = 3;
-          else if (r < 0.03) sp = 5;
-          else if (h > 492 && r < 0.45) sp = 0;
-          else if (r < 0.2) sp = 2; else if (r < 0.35) sp = 0; else if (r < 0.5) sp = 3; else sp = 1;
+          // spruce-dominated boreal mix, birch in stands, cedar along the shore
+          if (s < 22 && r < 0.2) sp = 4;
+          else if (patch > 0.62 && r < 0.55) sp = 3;
+          else if (r < 0.02) sp = 5;
+          else if (h > 492 && r < 0.3) sp = 0;
+          else if (r < 0.12) sp = 2; else if (r < 0.25) sp = 0; else if (r < 0.32) sp = 3; else sp = 1;
           shadeCount[k] += 1;
         }
         const spec = SPECIES[sp];
@@ -247,8 +256,9 @@ export function updateVegetationLOD(group, camPos) {
   for (const m of group.children) {
     const l = m.userData.lod;
     if (!l) continue;
-    const far = Math.hypot(l.cx - camPos.x, l.cz - camPos.z) > LOD_DISTANCE;
-    const want = far ? l.low : l.full;
+    const d = Math.hypot(l.cx - camPos.x, l.cz - camPos.z);
+    m.visible = d < CULL_DISTANCE;
+    const want = d > LOD_DISTANCE ? l.low : l.full;
     if (m.geometry !== want) m.geometry = want;
   }
 }

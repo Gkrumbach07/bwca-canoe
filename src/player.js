@@ -123,7 +123,7 @@ export class Player {
     const shore = w.shoreAt(this.x, this.z);
     const f = this.forward, r = { x: -f.z, z: f.x };
     const t = this.water ? this.water.time : this.time;
-    const wave = (dx, dz) => waveHeight(this.x + dx, this.z + dz, t, shore);
+    const wave = (dx, dz) => waveHeight(this.x + dx, this.z + dz, t, w);
     const hb = wave(f.x * 2, f.z * 2), hs = wave(-f.x * 2, -f.z * 2), hr = wave(r.x * 0.5, r.z * 0.5), hl = wave(-r.x * 0.5, -r.z * 0.5);
     rig.position.set(this.x, level + FLOAT_OFFSET + (hb + hs) * 0.5, this.z);
     const pitch = Math.atan2(hb - hs, 4) + this.speed * 0.012;
@@ -138,13 +138,6 @@ export class Player {
   emitWater(dt) {
     if (!this.ripples) return;
     const sp = Math.abs(this.speed), f = this.forward, y = this.level + 0.04, st = this.canoe.state;
-    this.wakeTimer -= dt;
-    if (sp > 0.45 && this.wakeTimer <= 0) {
-      this.wakeTimer = 0.6 / Math.max(1, sp / 1.8);
-      this.ripples.spawn(0, this.x - f.x * 2.6, y, this.z - f.z * 2.6, 0.8, 2.6 + sp * 0.4, 1.5);
-      this.ripples.spawn(2, this.x - f.x * 2.9, y, this.z - f.z * 2.9, 0.7, 1.6, 1.2);
-      this.ripples.spawn(0, this.x + f.x * 2.3, y, this.z + f.z * 2.3, 0.4, 1.5 + sp * 0.3, 0.8);
-    }
     if (this.wakeV) this.wakeV.update(dt, this.x - f.x * 2.4, this.level + 0.03, this.z - f.z * 2.4, this.heading, sp, true);
     if (st.power > 0.4) {
       const prev = this.prevStroke, cur = st.stroke;
@@ -152,8 +145,7 @@ export class Player {
       if (catchNow || exitNow) {
         const b = st.blade.clone();
         this.canoe.rig.localToWorld(b);
-        this.ripples.spawn(0, b.x, y, b.z, 0.3, catchNow ? 1.7 : 1.2, 0.8);
-        const n = catchNow ? 6 : 4;
+        const n = catchNow ? 7 : 4;
         for (let i = 0; i < n; i++) {
           const a = Math.random() * Math.PI * 2, r = 0.4 + Math.random() * 1.2;
           this.ripples.spawn(1, b.x, y + 0.05, b.z, 0.07 + Math.random() * 0.08, 0.05, 0.55 + Math.random() * 0.3,

@@ -150,6 +150,30 @@ export function buildCanoeRig() {
   const lid = new THREE.Mesh(lidG.build(), new THREE.MeshBasicMaterial({ colorWrite: false }));
   lid.renderOrder = 5;
   hullPivot.add(lid);
+  // a flat white foam line where the hull meets the water
+  const foamG = new GeoBuilder();
+  const foamCol = new THREE.Color(0xf2f6f6);
+  const yWater = -FLOAT_OFFSET;
+  const halfWidthAt = (u) => {
+    const { w, g: gw, b } = hullProfile(u);
+    if (yWater <= b) return 0;
+    let lo = 0, hi = 1; // find the side parameter where the hull passes the waterline
+    for (let it = 0; it < 18; it++) { const mid = (lo + hi) / 2; const y = b + (gw - b) * Math.pow(1 - Math.cos((mid * Math.PI) / 2), 0.75); if (y < yWater) lo = mid; else hi = mid; }
+    return w * Math.pow(Math.sin((lo * Math.PI) / 2), 0.85);
+  };
+  const foamN = 22;
+  for (let s = 0; s < foamN; s++) {
+    const u0 = (s / foamN) * 2 - 1, u1 = ((s + 1) / foamN) * 2 - 1;
+    const x0 = (u0 * LENGTH) / 2, x1 = (u1 * LENGTH) / 2;
+    const w0 = halfWidthAt(u0), w1 = halfWidthAt(u1);
+    for (const sgn of [-1, 1]) {
+      foamG.quad(V(x0, yWater + 0.03, sgn * (w0 + 0.03)), V(x1, yWater + 0.03, sgn * (w1 + 0.03)), V(x1, yWater + 0.03, sgn * (w1 + 0.2)), V(x0, yWater + 0.03, sgn * (w0 + 0.2)), foamCol, V(x0, -3, 0));
+    }
+  }
+  const foam = new THREE.Mesh(foamG.build(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }));
+  foam.renderOrder = 11;
+  hullPivot.add(foam);
+  rig.userData.foam = foam;
   rig.add(hullPivot);
 
   const paddler = new THREE.Group();
@@ -189,7 +213,7 @@ export function buildCanoeRig() {
   function poseSeated(dt) {
     paddler.position.set(-1.55, 0, 0);
     hullPivot.position.set(0, 0, 0); hullPivot.rotation.set(0, 0, 0);
-    paddle.visible = true;
+    paddle.visible = true; foam.visible = true;
     const t = state.stroke * Math.PI * 2;
     const lean = state.power * 0.12 * Math.cos(t);
     const twist = state.power * state.side * 0.12 * Math.sin(t);
@@ -244,7 +268,7 @@ export function buildCanoeRig() {
   function poseCarry(dt) {
     // standing figure with the canoe inverted on the shoulders; rig origin is at the feet
     paddler.position.set(0, 0, 0);
-    paddle.visible = false;
+    paddle.visible = false; foam.visible = false;
     const p = state.walk;
     const bob = 0.03 * Math.abs(Math.sin(p)) * state.walkSpeed;
     hullPivot.position.set(0.35, 1.78 + bob, 0);

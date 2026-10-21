@@ -1,44 +1,34 @@
 import * as THREE from 'three';
-import { fbm, clamp, lerp, smoothstep } from './rng.js';
+import { fbm, lerp, smoothstep } from './rng.js';
 
 const CHUNK = 64;        // cells per chunk edge
 const FINE_BAND = 25;    // metres either side of the shore that get 2x2 subdivision
 const SHAPE_BAND = 9;    // metres either side of the shore where height follows the distance field exactly
 
-// Clean, soft palette: a few flat colours in large regions.
+// A fixed palette; every face gets exactly one of these (no gradients).
 const C = {
   bedShallow: new THREE.Color(0xd3c39b),
-  bedDeep: new THREE.Color(0x587a6a),
-  sand: new THREE.Color(0xd9caa2),
+  bedDeep: new THREE.Color(0x5b7d6c),
+  sand: new THREE.Color(0xdccda6),
   rock: new THREE.Color(0xb4aea1),
   rockDark: new THREE.Color(0x8f8b82),
   forest: new THREE.Color(0x6e9450),
   forestLight: new THREE.Color(0x84a85c),
-  meadow: new THREE.Color(0x9fb566),
-  duff: new THREE.Color(0x6f7f4b),
+  forestDark: new THREE.Color(0x5a7f43),
+  meadow: new THREE.Color(0xa1b768),
 };
-const tmp = new THREE.Color();
 
 export function groundColor(world, x, z, out, shade = 0) {
   const sd = world.shoreAt(x, z);
   const slope = world.slopeAt(x, z);
-  if (sd < 0) {
-    out.copy(C.bedShallow).lerp(C.bedDeep, smoothstep(-1, -28, sd));
-    return out;
-  }
-  const n1 = fbm(x * 0.012, z * 0.012, 3, 7);
-  const clearing = smoothstep(0.62, 0.78, fbm(x * 0.0035, z * 0.0035, 3, 21)); // same field the forest uses
-  out.copy(C.forest).lerp(C.forestLight, smoothstep(0.4, 0.7, n1));
-  out.lerp(C.meadow, clearing * 0.8);
-  // a sand strip at the waterline, granite on the steep bits
-  out.lerp(C.sand, 1 - smoothstep(1.0, 3.2, sd));
-  const steep = smoothstep(0.26, 0.48, slope);
-  tmp.copy(C.rock).lerp(C.rockDark, smoothstep(0.4, 0.7, slope));
-  out.lerp(tmp, Math.max(steep, smoothstep(0.18, 0.4, slope) * (1 - smoothstep(4, 12, sd))));
-  // forest floor under the canopy
-  out.lerp(C.duff, shade * 0.3 * (1 - steep));
-  out.multiplyScalar(1 - 0.14 * shade);
-  return out;
+  if (sd < 0) return out.copy(sd > -7 ? C.bedShallow : C.bedDeep);
+  if (sd < 2.4) return out.copy(C.sand);
+  if (slope > 0.42) return out.copy(C.rockDark);
+  if (slope > 0.27 || (slope > 0.17 && sd < 10)) return out.copy(C.rock);
+  const clearing = fbm(x * 0.0035, z * 0.0035, 3, 21); // same field the forest uses
+  if (clearing > 0.68) return out.copy(C.meadow);
+  if (shade > 0.55) return out.copy(C.forestDark);
+  return out.copy(fbm(x * 0.012, z * 0.012, 3, 7) > 0.55 ? C.forestLight : C.forest);
 }
 
 // Height in the shore band follows the distance field, so the waterline, the ripple lines and the
@@ -58,8 +48,14 @@ function shoreBumps(x, z, sd) {
   return -Math.abs(n) * 1.0 * smoothstep(3, 8, -sd) * (1 - smoothstep(10, FINE_BAND, -sd));
 }
 
+// Lambert with flat-interpolated vertex colour: each triangle takes one vertex's colour, no blending.
 export function makeTerrainMaterial() {
-  return new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace('varying vec3 vColor;', 'flat varying vec3 vColor;');
+    shader.fragmentShader = shader.fragmentShader.replace('varying vec3 vColor;', 'flat varying vec3 vColor;');
+  };
+  return m;
 }
 
 export async function buildTerrain(world, shade, onProgress = () => {}) {

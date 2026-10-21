@@ -1,33 +1,35 @@
 import * as THREE from 'three';
+import { smoothstep } from './rng.js';
 
-// Water in two parts that share one shader:
-//  - far field: static 10 m chunks, flat, with a hole cut where the near patch sits
-//  - near patch: a 2.5 m grid that follows the canoe, carrying the faceted swell; it samples the
-//    same shore-distance field the terrain was shaped from, so the waterline matches exactly
-// Plus a planar reflection pass and shadow reception.
+// Water in two parts that share one fragment shader:
+//  - far field: static 10 m chunks carrying only the long swell, with a hole cut where the patch sits
+//  - near patch: a 4 m grid following the canoe. Its long swell is bilinearly interpolated from the
+//    same 10 m lattice nodes the far mesh uses (so the seam is exact) and short swell is added on top,
+//    fading out toward the patch edge. Shore distance comes from the same field the terrain uses.
+// Flat single-tone colour, per-facet lighting, crisp ripple lines, and a reflection of the canoe only.
 
 const CHUNK = 64;
-const PATCH_HALF = 150;   // metres
-const PATCH_RES = 2.5;    // metres per vertex
+const PATCH_HALF = 160;   // metres; multiple of the 10 m lattice
+const PATCH_RES = 4;      // metres per vertex
 
-export function waveHeight(x, z, t, shore = -50) {
-  let w = 0;
-  w += Math.sin(x * 0.35 + t * 1.3) * 0.05;
-  w += Math.sin(z * 0.42 - t * 1.1 + x * 0.18) * 0.045;
-  w += Math.sin((x + z) * 0.21 + t * 0.9) * 0.06;
-  w += Math.sin((x * 0.7 - z * 0.5) * 0.9 + t * 2.1) * 0.02;
-  return w * THREE.MathUtils.smoothstep(-shore, 0, 8);
+export function lowWave(x, z, t) {
+  return Math.sin(x * 0.14 + t * 0.6) * 0.1 + Math.sin((x * 0.6 + z * 0.8) * 0.09 - t * 0.5) * 0.1 + Math.sin(z * 0.11 - x * 0.05 + t * 0.45) * 0.08;
+}
+export function highWave(x, z, t) {
+  return Math.sin(x * 0.7 + t * 1.4) * 0.2 + Math.sin(z * 1.05 - t * 1.2 + x * 0.3) * 0.11 + Math.sin((x + z) * 0.45 + t * 1.0) * 0.15;
+}
+// CPU twin of the patch vertex shader (used for canoe bobbing)
+export function waveHeight(x, z, t, world) {
+  const fx = (x - world.originX) / world.cell - 0.5, fz = (z - world.originZ) / world.cell - 0.5;
+  const i = Math.floor(fx), j = Math.floor(fz), ax = fx - i, az = fz - j;
+  const corner = (ii, jj) => lowWave(world.cellX(ii), world.cellZ(jj), t) * smoothstep(0, 25, -world.sdCell(ii, jj));
+  const low = (corner(i, j) * (1 - ax) + corner(i + 1, j) * ax) * (1 - az) + (corner(i, j + 1) * (1 - ax) + corner(i + 1, j + 1) * ax) * az;
+  return low + highWave(x, z, t) * smoothstep(0, 8, -world.shoreAt(x, z));
 }
 
 const glslWaves = /* glsl */ `
-  float waves(vec2 p, float t) {
-    float w = 0.0;
-    w += sin(p.x * 0.35 + t * 1.3) * 0.05;
-    w += sin(p.y * 0.42 - t * 1.1 + p.x * 0.18) * 0.045;
-    w += sin((p.x + p.y) * 0.21 + t * 0.9) * 0.06;
-    w += sin((p.x * 0.7 - p.y * 0.5) * 0.9 + t * 2.1) * 0.02;
-    return w;
-  }
+  float lowWave(vec2 p, float t) { return sin(p.x * 0.14 + t * 0.6) * 0.1 + sin((p.x * 0.6 + p.y * 0.8) * 0.09 - t * 0.5) * 0.1 + sin(p.y * 0.11 - p.x * 0.05 + t * 0.45) * 0.08; }
+  float highWave(vec2 p, float t) { return sin(p.x * 0.7 + t * 1.4) * 0.2 + sin(p.y * 1.05 - t * 1.2 + p.x * 0.3) * 0.11 + sin((p.x + p.y) * 0.45 + t * 1.0) * 0.15; }
 `;
 
 const vertHead = /* glsl */ `
@@ -59,6 +61,7 @@ const vertFar = vertHead + /* glsl */ `
   void main() {
     vec3 p = (modelMatrix * vec4(position, 1.0)).xyz;
     vShore = aShore;
+    p.y += lowWave(p.xz, uTime) * smoothstep(0.0, 25.0, -aShore);
 ` + vertTail;
 
 const vertPatch = vertHead + /* glsl */ `
@@ -66,27 +69,30 @@ const vertPatch = vertHead + /* glsl */ `
   uniform vec3 uGrid;      // originX, originZ, 1/cell
   uniform ivec2 uGridSize;
   float cellSample(sampler2D t, ivec2 c) { c = clamp(c, ivec2(0), uGridSize - 1); return texelFetch(t, c, 0).r; }
-  float shoreAt(vec2 w) {
-    vec2 f = (w - uGrid.xy) * uGrid.z - 0.5;
-    vec2 i = floor(f), a = f - i;
-    ivec2 c = ivec2(i);
-    float s00 = cellSample(uShoreTex, c), s10 = cellSample(uShoreTex, c + ivec2(1, 0));
-    float s01 = cellSample(uShoreTex, c + ivec2(0, 1)), s11 = cellSample(uShoreTex, c + ivec2(1, 1));
-    return mix(mix(s00, s10, a.x), mix(s01, s11, a.x), a.y);
+  // long swell at a lattice node, damped near shore exactly as the far mesh does it
+  float nodeWave(ivec2 c) {
+    vec2 np = uGrid.xy + (vec2(c) + 0.5) / uGrid.z;
+    return lowWave(np, uTime) * smoothstep(0.0, 25.0, -cellSample(uShoreTex, c));
   }
   void main() {
     vec2 w = uPatchCenter + position.xz;
-    float level = cellSample(uLevelTex, ivec2(floor((w - uGrid.xy) * uGrid.z)));
-    float shore = shoreAt(w);
+    vec2 f = (w - uGrid.xy) * uGrid.z - 0.5;
+    vec2 fi = floor(f), a = f - fi;
+    ivec2 c = ivec2(fi);
+    float s00 = cellSample(uShoreTex, c), s10 = cellSample(uShoreTex, c + ivec2(1, 0));
+    float s01 = cellSample(uShoreTex, c + ivec2(0, 1)), s11 = cellSample(uShoreTex, c + ivec2(1, 1));
+    float shore = mix(mix(s00, s10, a.x), mix(s01, s11, a.x), a.y);
     vShore = shore;
-    float border = 1.0 - smoothstep(uPatchHalf - 30.0, uPatchHalf - 4.0, max(abs(position.x), abs(position.z)));
-    float damp = smoothstep(0.0, 8.0, -shore) * border;
-    vec3 p = vec3(w.x, level + waves(w, uTime) * damp, w.y);
+    float low = mix(mix(nodeWave(c), nodeWave(c + ivec2(1, 0)), a.x), mix(nodeWave(c + ivec2(0, 1)), nodeWave(c + ivec2(1, 1)), a.x), a.y);
+    float border = 1.0 - smoothstep(uPatchHalf - 40.0, uPatchHalf - 6.0, max(abs(position.x), abs(position.z)));
+    float high = highWave(w, uTime) * smoothstep(0.0, 8.0, -shore) * border;
+    float level = cellSample(uLevelTex, ivec2(floor((w - uGrid.xy) * uGrid.z)));
+    vec3 p = vec3(w.x, level + low + high, w.y);
 ` + vertTail;
 
 const frag = /* glsl */ `
   uniform float uTime, uReflOn;
-  uniform vec3 uSunDir, uDeep, uShallow, uReflect;
+  uniform vec3 uSunDir, uWater, uReflect;
   uniform sampler2D uReflection;
   uniform vec2 uPatchCenter;
   uniform float uPatchHalf;
@@ -97,6 +103,7 @@ const frag = /* glsl */ `
   #include <packing>
   #include <fog_pars_fragment>
   #include <shadowmap_pars_fragment>
+  float aastep(float edge, float x) { float w = fwidth(x) * 0.8; return smoothstep(edge - w, edge + w, x); }
   void main() {
     #ifdef FAR
       if (abs(vWorld.x - uPatchCenter.x) < uPatchHalf && abs(vWorld.z - uPatchCenter.y) < uPatchHalf) discard;
@@ -111,29 +118,31 @@ const frag = /* glsl */ `
     #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
       shadow = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
     #endif
-    vec3 base = mix(uShallow, uDeep, smoothstep(0.0, 30.0, depth));
-    float ndl = max(dot(n, uSunDir), 0.0);
-    vec3 col = base * (0.66 + 0.34 * ndl * shadow);
+    // three flat tones: facets tilted toward the sun, level, and tilted away
+    float ndl = dot(n, uSunDir);
+    float tone = step(uSunDir.y + 0.012, ndl) - step(ndl, uSunDir.y - 0.012);   // -1, 0, 1
+    vec3 col = uWater * (1.0 + 0.085 * tone);
     float fres = pow(1.0 - max(dot(n, v), 0.0), 3.0);
-    vec4 ruv = vReflectUv;
-    ruv.xy += n.xz * 0.35 * ruv.w;
-    vec3 refl = mix(uReflect, texture2DProj(uReflection, ruv).rgb, uReflOn);
-    col = mix(col, refl, 0.14 + 0.5 * fres);
+    col = mix(col, uReflect, 0.08 + 0.3 * fres);
     col *= 0.78 + 0.22 * shadow;
-    vec3 h = normalize(uSunDir + v);
-    float spec = pow(max(dot(n, h), 0.0), 500.0) * shadow;
-    col += vec3(1.0, 0.96, 0.85) * spec * 0.5;
-    // shoreline ripples: thin lines parallel to the shore rolling in, broken up along the shore
+    // the canoe's reflection, nothing else
+    vec4 ruv = vReflectUv;
+    ruv.xy += n.xz * 0.3 * ruv.w;
+    vec4 r = texture2DProj(uReflection, ruv);
+    col = mix(col, r.rgb, r.a * 0.7 * uReflOn);
+    // crisp sun sparkle on the facets that catch it
+    float spec = pow(max(dot(n, normalize(uSunDir + v)), 0.0), 260.0) * shadow;
+    col = mix(col, vec3(1.0, 0.98, 0.92), aastep(0.3, spec) * 0.5);
+    // shoreline ripples: thin crisp lines parallel to the shore rolling in, broken up along the shore
     float along = vWorld.x * 0.31 + vWorld.z * 0.23;
     float breakup = 0.5 + 0.5 * sin(along * 0.7 + uTime * 0.25) * sin(along * 0.23 - uTime * 0.11);
     float phase = fract(depth * 0.8 + uTime * 0.55 + 0.25 * sin(along * 1.3 + uTime * 0.4));
-    float line = smoothstep(0.78, 0.88, phase) * (1.0 - smoothstep(0.9, 0.98, phase));
-    float ripple = line * (1.0 - smoothstep(0.8, 5.5, depth)) * smoothstep(0.3, 0.6, breakup) * step(0.0, depth);
-    float waterline = (1.0 - smoothstep(0.0, 0.45, depth)) * step(0.0, depth);
-    float foam = max(ripple * 0.5, waterline * 0.3);
-    col = mix(col, vec3(0.93, 0.96, 0.96), foam);
-    float alpha = mix(0.6, 0.95, smoothstep(0.0, 14.0, depth));
-    alpha = max(alpha, foam * 0.9);
+    float line = aastep(0.8, phase) * (1.0 - aastep(0.9, phase));
+    float ripple = line * (1.0 - aastep(5.5, depth)) * aastep(0.45, breakup) * step(0.0, depth);
+    float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
+    float foam = max(ripple, waterline) * 0.85;
+    col = mix(col, vec3(0.95, 0.97, 0.97), foam);
+    float alpha = max(0.74, foam);
     gl_FragColor = vec4(col, alpha);
     #include <fog_fragment>
     #include <tonemapping_fragment>
@@ -142,7 +151,6 @@ const frag = /* glsl */ `
 `;
 
 function buildLevelGrid(world) {
-  // every cell gets the surface level of the nearest water (multi-source flood fill)
   const W = world.width, H = world.height, N = W * H;
   const level = new Float32Array(N).fill(-9999);
   const queue = new Int32Array(N);
@@ -157,23 +165,23 @@ function buildLevelGrid(world) {
   return level;
 }
 
+export const REFLECT_LAYER = 1;
+
 export class WaterSystem {
   constructor(world, sunDir, palette) {
     this.world = world;
     this.time = 0;
-    this.reflection = new WaterReflection(1024, 512);
+    this.reflection = new WaterReflection(768, 768);
     this.reflectionsOn = true;
     const W = world.width, H = world.height;
     const shoreTex = new THREE.DataTexture(world.sd, W, H, THREE.RedFormat, THREE.FloatType);
     shoreTex.minFilter = shoreTex.magFilter = THREE.NearestFilter; shoreTex.needsUpdate = true;
-    const levelGrid = buildLevelGrid(world);
-    const levelTex = new THREE.DataTexture(levelGrid, W, H, THREE.RedFormat, THREE.FloatType);
+    const levelTex = new THREE.DataTexture(buildLevelGrid(world), W, H, THREE.RedFormat, THREE.FloatType);
     levelTex.minFilter = levelTex.magFilter = THREE.NearestFilter; levelTex.needsUpdate = true;
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, {
       uTime: { value: 0 },
       uSunDir: { value: sunDir.clone() },
-      uDeep: { value: new THREE.Color(palette.deep) },
-      uShallow: { value: new THREE.Color(palette.shallow) },
+      uWater: { value: new THREE.Color(palette.water) },
       uReflect: { value: new THREE.Color(palette.reflect) },
       uReflection: { value: null },
       uReflOn: { value: 0 },
@@ -185,7 +193,6 @@ export class WaterSystem {
       uGrid: { value: new THREE.Vector3(world.originX, world.originZ, 1 / world.cell) },
       uGridSize: { value: new THREE.Vector2(W, H) },
     }]);
-    // merge() clones values; put the shared objects back
     this.uniforms.uReflection.value = this.reflection.target.texture;
     this.uniforms.uShoreTex.value = shoreTex;
     this.uniforms.uLevelTex.value = levelTex;
@@ -239,6 +246,7 @@ export class WaterSystem {
       geo.setAttribute('aShore', new THREE.Float32BufferAttribute(shore, 1));
       geo.setIndex(idx);
       geo.computeBoundingSphere();
+      geo.boundingSphere.radius += 0.5;
       const mesh = new THREE.Mesh(geo, this.farMaterial);
       mesh.matrixAutoUpdate = false;
       mesh.renderOrder = 10;
@@ -250,38 +258,37 @@ export class WaterSystem {
   update(dt, cx, cz) {
     this.time += dt;
     this.uniforms.uTime.value = this.time;
-    const s = PATCH_RES;
+    const s = this.world.cell; // snap to the lattice so the patch edge lies on far-mesh edges
     this.uniforms.uPatchCenter.value.set(Math.round(cx / s) * s, Math.round(cz / s) * s);
   }
 
-  waveAt(x, z, shore) { return waveHeight(x, z, this.time, shore); }
+  waveAt(x, z) { return waveHeight(x, z, this.time, this.world); }
 
-  renderReflection(renderer, scene, camera, level, hidden) {
+  // Mirror only what is on REFLECT_LAYER (the canoe) into the reflection target.
+  renderReflection(renderer, scene, camera, level) {
     if (!this.reflectionsOn) { this.uniforms.uReflOn.value = 0; return; }
-    const wasVisible = hidden.map((o) => o.visible);
-    hidden.forEach((o) => { o.visible = false; });
-    this.group.visible = false;
-    const ok = this.reflection.render(renderer, scene, camera, level);
-    this.group.visible = true;
-    hidden.forEach((o, i) => { o.visible = wasVisible[i]; });
+    const bg = scene.background;
+    scene.background = null;
+    const ok = this.reflection.render(renderer, scene, camera, level, REFLECT_LAYER);
+    scene.background = bg;
     this.uniforms.uReflOn.value = ok ? 1 : 0;
   }
 }
 
-// Mirror-camera render of the scene across the plane y = level (after three's Reflector).
 const _normal = new THREE.Vector3(0, 1, 0), _planePoint = new THREE.Vector3(), _camPos = new THREE.Vector3(), _view = new THREE.Vector3();
 const _look = new THREE.Vector3(), _target = new THREE.Vector3(), _rot = new THREE.Matrix4(), _plane = new THREE.Plane(), _clip = new THREE.Vector4(), _q = new THREE.Vector4();
+const _clear = new THREE.Color();
 export class WaterReflection {
   constructor(w, h) {
-    this.target = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true, type: THREE.HalfFloatType });
+    this.target = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true });
     this.camera = new THREE.PerspectiveCamera();
     this.textureMatrix = new THREE.Matrix4();
   }
-  render(renderer, scene, camera, level) {
+  render(renderer, scene, camera, level, layer) {
     const cam = this.camera;
     _planePoint.set(0, level, 0);
     camera.getWorldPosition(_camPos);
-    if (_camPos.y <= level + 0.05) return false; // camera under water: nothing sensible to mirror
+    if (_camPos.y <= level + 0.05) return false;
     _view.subVectors(_planePoint, _camPos).reflect(_normal).negate().add(_planePoint);
     _rot.extractRotation(camera.matrixWorld);
     _look.set(0, 0, -1).applyMatrix4(_rot).add(_camPos);
@@ -290,11 +297,11 @@ export class WaterReflection {
     cam.up.set(0, 1, 0).applyMatrix4(_rot).reflect(_normal);
     cam.lookAt(_target);
     cam.far = camera.far;
+    cam.layers.set(layer);
     cam.updateMatrixWorld();
     cam.projectionMatrix.copy(camera.projectionMatrix);
     this.textureMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
     this.textureMatrix.multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
-    // oblique near plane so nothing below the water surface ends up in the reflection
     _plane.setFromNormalAndCoplanarPoint(_normal, _planePoint).applyMatrix4(cam.matrixWorldInverse);
     _clip.set(_plane.normal.x, _plane.normal.y, _plane.normal.z, _plane.constant);
     const pm = cam.projectionMatrix;
@@ -303,13 +310,16 @@ export class WaterReflection {
     _q.z = -1.0;
     _q.w = (1.0 + pm.elements[10]) / pm.elements[14];
     _clip.multiplyScalar(2.0 / _clip.dot(_q));
-    pm.elements[2] = _clip.x; pm.elements[6] = _clip.y; pm.elements[10] = _clip.z + 1.0 - 0.0; pm.elements[14] = _clip.w;
+    pm.elements[2] = _clip.x; pm.elements[6] = _clip.y; pm.elements[10] = _clip.z + 1.0; pm.elements[14] = _clip.w;
     cam.projectionMatrixInverse.copy(pm).invert();
-    const prevTarget = renderer.getRenderTarget(), prevAuto = renderer.shadowMap.autoUpdate;
+    const prevTarget = renderer.getRenderTarget(), prevAuto = renderer.shadowMap.autoUpdate, prevAlpha = renderer.getClearAlpha();
+    renderer.getClearColor(_clear);
     renderer.shadowMap.autoUpdate = false;
     renderer.setRenderTarget(this.target);
+    renderer.setClearColor(0x000000, 0);
     renderer.clear();
     renderer.render(scene, cam);
+    renderer.setClearColor(_clear, prevAlpha);
     renderer.setRenderTarget(prevTarget);
     renderer.shadowMap.autoUpdate = prevAuto;
     return true;

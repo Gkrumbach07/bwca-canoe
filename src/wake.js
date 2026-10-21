@@ -116,13 +116,17 @@ const wakeFrag = /* glsl */ `
   void main() {
     float x = 1.0 - vUv.x;            // 0 at the stern, 1 at the far end
     float y = (vUv.y - 0.5) * 2.0;    // -1..1 across
-    float spread = 0.1 + 0.8 * x;
-    float arms = 1.0 - smoothstep(0.0, 0.07 + 0.05 * x, abs(abs(y) - spread));
-    float wash = 1.0 - smoothstep(0.0, 0.3 * (1.0 - x) + 0.04, abs(y));
-    float stripes = 0.55 + 0.45 * sin(x * 55.0 - uTime * 7.0 + y * 4.0);
-    float a = (arms * 0.5 + wash * 0.35 * stripes) * pow(1.0 - x, 1.4) * uSpeed;
-    if (a < 0.01) discard;
-    gl_FragColor = vec4(0.9, 0.96, 0.97, a);
+    float len = 0.35 + 0.65 * uSpeed;  // the wake only reaches as far as the speed earns
+    float spread = 0.08 + 0.75 * x;
+    float w = fwidth(y) * 1.5;
+    // two crisp arms, dashed so they read as moving water, plus a short churn triangle at the stern
+    // y is in half-widths (3.5 m), x in lengths (14 m): arms ~0.25 m thick, churn as wide as the hull
+    float arms = smoothstep(0.035 + w, 0.035 - w, abs(abs(y) - spread));
+    float dash = step(0.5, fract(x * 18.0 - uTime * 2.4));
+    float churn = step(abs(y), 0.12 * (1.0 - x / 0.16)) * step(x, 0.16);
+    float a = max(arms * dash, churn) * step(x, len) * uSpeed;
+    if (a < 0.2) discard;
+    gl_FragColor = vec4(0.94, 0.97, 0.97, 0.62);
     #include <fog_fragment>
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -147,10 +151,10 @@ export class WakeV {
     this.material = new THREE.ShaderMaterial({
       vertexShader: wakeVert, fragmentShader: wakeFrag,
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uSpeed: { value: 0 } }]),
-      transparent: true, depthWrite: false, fog: true,
+      transparent: true, depthWrite: false, depthTest: false, fog: true,
     });
     this.mesh = new THREE.Mesh(geo, this.material);
-    this.mesh.renderOrder = 11;
+    this.mesh.renderOrder = 13;
     this.mesh.frustumCulled = false;
   }
   update(dt, x, y, z, heading, speed, visible) {

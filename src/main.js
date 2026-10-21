@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { World } from './world.js';
 import { buildTerrain } from './terrain.js';
-import { WaterSystem } from './water.js';
+import { WaterSystem, REFLECT_LAYER } from './water.js';
 import { buildSky, buildClouds, updateClouds } from './sky.js';
 import { buildVegetation } from './vegetation.js';
 import { buildPortageTrails, buildCampsites, exclusionsFor } from './props.js';
@@ -13,7 +13,7 @@ import { GeoBridge } from './geo.js';
 import { Ripples, WakeV } from './wake.js';
 import { updateVegetationLOD } from './vegetation.js';
 
-const palette = { zenith: 0x4a8ccc, horizon: 0xdbe9ef, ground: 0x8aa07a, sun: 0xfff3d6, deep: 0x3b7ca6, shallow: 0x74b4cc, reflect: 0xbcdbe9, fog: 0xd3e3ea };
+const palette = { zenith: 0x4a8ccc, horizon: 0xdbe9ef, ground: 0x8aa07a, sun: 0xfff3d6, water: 0x7ab8d3, reflect: 0xc4dfeb, fog: 0xd3e3ea };
 
 const loadingEl = document.getElementById('loading'), barEl = document.getElementById('loading-bar'), msgEl = document.getElementById('loading-msg');
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
@@ -65,6 +65,7 @@ async function main() {
   progress(0.97, 'Launching the canoe…'); await tick();
 
   const canoe = buildCanoeRig();
+  canoe.rig.traverse((o) => o.layers.enable(REFLECT_LAYER));
   scene.add(canoe.rig);
   const input = new Input();
   const player = new Player(world, canoe, input);
@@ -97,7 +98,7 @@ async function main() {
   };
   // debug helper: advance the simulation by n fixed steps and draw once (used for automated testing)
   const draw = () => {
-    water.renderReflection(renderer, scene, camera, player.level || world.levelAt(player.x, player.z), [ripples.mesh, wake.mesh]);
+    water.renderReflection(renderer, scene, camera, player.level || world.levelAt(player.x, player.z));
     renderer.render(scene, camera);
   };
   window.__game.step = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); draw(); };
