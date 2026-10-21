@@ -1,0 +1,17 @@
+{
+  "name": "bwca-canoe",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bake": "node scripts/bake.mjs"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0",
+    "three": "^0.186.1",
+    "vite": "^8.3.5"
+  }
+}
