@@ -13,7 +13,7 @@ import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
 import { updateVegetationLOD } from './vegetation.js';
 
-const palette = { zenith: 0x6f9cc2, horizon: 0xdde5ea, ground: 0x97a38a, sun: 0xfff2dc, water: 0x86b4c5, reflect: 0xc6d8df, fog: 0xd6dfe4 };
+const palette = { zenith: 0x6f9cc2, horizon: 0xdde5ea, ground: 0x97a38a, sun: 0xfff2dc, water: 0x7fb0c3, reflect: 0xc6d8df, fog: 0xd6dfe4 };
 
 const loadingEl = document.getElementById('loading'), barEl = document.getElementById('loading-bar'), msgEl = document.getElementById('loading-msg');
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
@@ -27,7 +27,7 @@ async function main() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.NeutralToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.0;
   renderer.domElement.className = 'game';
   document.getElementById('app').appendChild(renderer.domElement);
 
@@ -36,14 +36,14 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.3, 9000);
 
   const sunDir = new THREE.Vector3(-0.58, 0.46, 0.4).normalize();
-  const sun = new THREE.DirectionalLight(0xfff0d2, 2.0);
+  const sun = new THREE.DirectionalLight(0xfff0d2, 1.5);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -150; sun.shadow.camera.right = 150; sun.shadow.camera.top = 150; sun.shadow.camera.bottom = -150;
   sun.shadow.camera.near = 50; sun.shadow.camera.far = 1400;
   sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.6; sun.shadow.intensity = 0.55;
   scene.add(sun, sun.target);
-  scene.add(new THREE.HemisphereLight(0xc3d6e2, 0x7f8f6c, 1.05));
+  scene.add(new THREE.HemisphereLight(0xc3d6e2, 0x7f8f6c, 0.6));
 
   scene.background = new THREE.Color(palette.fog);
   const sky = buildSky(sunDir, palette);

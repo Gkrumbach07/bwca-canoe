@@ -7,15 +7,15 @@ const SHAPE_BAND = 9;    // metres either side of the shore where height follows
 
 // A fixed palette; every face gets exactly one of these (no gradients).
 const C = {
-  bedShallow: new THREE.Color(0xcdc2a4),
-  bedDeep: new THREE.Color(0x6a877b),
-  sand: new THREE.Color(0xd4c9ab),
-  rock: new THREE.Color(0xaaa79f),
-  rockDark: new THREE.Color(0x8b8984),
-  forest: new THREE.Color(0x6d8a5f),
-  forestLight: new THREE.Color(0x809d6d),
-  forestDark: new THREE.Color(0x5d7752),
-  meadow: new THREE.Color(0x97a874),
+  bedShallow: new THREE.Color(0xc4b894),
+  bedDeep: new THREE.Color(0x5f7c70),
+  sand: new THREE.Color(0xcbbf9d),
+  rock: new THREE.Color(0x8f8d85),
+  rockDark: new THREE.Color(0x6f6d67),
+  forest: new THREE.Color(0x637f57),
+  forestLight: new THREE.Color(0x759264),
+  forestDark: new THREE.Color(0x536c49),
+  meadow: new THREE.Color(0x8c9d6a),
 };
 
 export function groundColor(world, x, z, out, shade = 0) {
@@ -23,8 +23,8 @@ export function groundColor(world, x, z, out, shade = 0) {
   const slope = world.slopeAt(x, z);
   if (sd < 0) return out.copy(sd > -7 ? C.bedShallow : C.bedDeep);
   if (sd < 2.4) return out.copy(C.sand);
-  if (slope > 0.42) return out.copy(C.rockDark);
-  if (slope > 0.27 || (slope > 0.17 && sd < 10)) return out.copy(C.rock);
+  if (slope > 0.55) return out.copy(C.rockDark);
+  if (slope > 0.38) return out.copy(C.rock);
   const clearing = fbm(x * 0.0035, z * 0.0035, 3, 21); // same field the forest uses
   if (clearing > 0.68) return out.copy(C.meadow);
   if (shade > 0.55) return out.copy(C.forestDark);
@@ -52,7 +52,8 @@ function shoreBumps(x, z, sd) {
 export function makeTerrainMaterial() {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   // onBeforeCompile sees the shader before its #includes are expanded, so replace the include itself
-  const decl = '#if defined( USE_COLOR_ALPHA )\n flat varying vec4 vColor;\n#elif defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR ) || defined( USE_BATCHING_COLOR )\n flat varying vec3 vColor;\n#endif';
+  // (three r186 declares vColor as a vec4 whenever any colour source is in use)
+  const decl = '#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA ) || defined( USE_INSTANCING_COLOR ) || defined( USE_BATCHING_COLOR )\n flat varying vec4 vColor;\n#endif';
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace('#include <color_pars_vertex>', decl);
     shader.fragmentShader = shader.fragmentShader.replace('#include <color_pars_fragment>', decl);
