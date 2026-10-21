@@ -1,23 +1,21 @@
 import * as THREE from 'three';
 import { World } from './world.js';
-import { buildTerrain } from './terrain.js';
+import { makeTerrainMaterial } from './terrain.js';
 import { WaterSystem, REFLECT_LAYER } from './water.js';
 import { buildSky, buildClouds, updateClouds } from './sky.js';
-import { buildVegetation } from './vegetation.js';
-import { buildPortageTrails, buildCampsites, exclusionsFor } from './props.js';
+import { makeVegetationKit } from './vegetation.js';
+import { TileManager } from './tiles.js';
 import { buildCanoeRig } from './canoe.js';
 import { Player, Input } from './player.js';
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
-import { updateVegetationLOD } from './vegetation.js';
 
 const palette = { zenith: 0x5d93c6, horizon: 0xd3e3ee, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x86b8cf, reflect: 0xc9dde8, fog: 0xbcd2e2 };
 
 const loadingEl = document.getElementById('loading'), barEl = document.getElementById('loading-bar'), msgEl = document.getElementById('loading-msg');
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
-const tick = () => new Promise((r) => setTimeout(r));
 
 async function main() {
   const world = await World.load(progress);
@@ -51,19 +49,20 @@ async function main() {
   const clouds = buildClouds(38, 7000);
   scene.add(clouds);
 
-  progress(0.25, 'Growing the forest…'); await tick();
-  const forest = await buildVegetation(world, { seed: 3, exclusions: exclusionsFor(world), onProgress: (f) => progress(0.25 + f * 0.35, `Growing the forest… ${Math.round(f * 100)}%`) });
-  scene.add(forest);
-  scene.add(await buildTerrain(world, forest.userData.shade, (f) => progress(0.6 + f * 0.3, `Shaping the Canadian Shield… ${Math.round(f * 100)}%`)));
-  progress(0.9, 'Filling the lakes…'); await tick();
+  // the streamed world: water first (tiles hand it their far meshes), then the tile manager
   const water = new WaterSystem(world, sunDir, palette);
   scene.add(water.group);
-  progress(0.94, 'Clearing portages and campsites…'); await tick();
-  scene.add(buildPortageTrails(world), buildCampsites(world));
+  const tiles = new TileManager(world, scene, { terrainMaterial: makeTerrainMaterial(), water, vegetation: makeVegetationKit(3), seed: 3 });
+  world.tiles = tiles;
+  const start = world.meta.start;
+  const setOrigin = (x, z) => { const [tx, ty] = world.tileOf(x, z); const [ox, oz] = world.tileOrigin(tx, ty); water.setOrigin(ox, oz); };
+  setOrigin(start.x, start.z);
+  progress(0.15, 'Loading the lakes around you…');
+  await tiles.prime(start.x, start.z, (f) => progress(0.15 + f * 0.8, `Loading the lakes around you… ${Math.round(f * 100)}%`));
+  progress(0.97, 'Launching the canoe…');
+
   const ripples = new Ripples(water);
   scene.add(ripples.mesh);
-  progress(0.97, 'Launching the canoe…'); await tick();
-
   const canoe = buildCanoeRig();
   canoe.rig.traverse((o) => o.layers.enable(REFLECT_LAYER));
   scene.add(canoe.rig);
@@ -73,22 +72,23 @@ async function main() {
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   const hud = new Hud(world, (x, z) => player.teleport(x, z));
   const geo = new GeoBridge();
-  window.addEventListener('keydown', (e) => { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn; });
+  window.addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'SELECT') return; if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn; });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, forest, chase, hud, geo, water };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
-  console.log(`BWCA Canoe ready: ${forest.userData.count} trees and rocks, ${world.portages.length} portages, ${world.campsites.length} campsites`);
+  console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   const frame = (dt) => {
     player.update(dt);
     canoe.update(dt * player.timeScale);
     chase.update(dt, player, player.mode === 'carry');
+    setOrigin(player.x, player.z);
+    tiles.update(player.x, player.z, camera.position);
     water.update(dt * player.timeScale, player.x, player.z);
     ripples.update(dt * player.timeScale);
-    updateVegetationLOD(forest, camera.position);
-    updateClouds(clouds, dt * player.timeScale);
+    updateClouds(clouds, dt * player.timeScale, camera.position.x, camera.position.z);
     sky.position.copy(camera.position);
     sun.target.position.set(player.x, player.altitude, player.z);
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 700);

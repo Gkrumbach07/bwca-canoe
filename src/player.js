@@ -1,13 +1,11 @@
-import * as THREE from 'three';
 import { FLOAT_OFFSET, LENGTH } from './canoe.js';
-import { waveHeight } from './water.js';
 import { resample } from './props.js';
 import { clamp, lerp } from './rng.js';
 
 export class Input {
   constructor() {
     this.down = new Set(); this.once = new Set();
-    window.addEventListener('keydown', (e) => { if (e.repeat) return; this.down.add(e.code); this.once.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); });
+    window.addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'SELECT') return; if (e.repeat) return; this.down.add(e.code); this.once.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); });
     window.addEventListener('keyup', (e) => this.down.delete(e.code));
     window.addEventListener('blur', () => this.down.clear());
   }
@@ -29,17 +27,12 @@ export class Player {
     this.strokeCount = 0;
     this.prompt = null;
     this.timeScale = 1;
-    // portage state
-    this.trails = world.portages.map((p) => {
-      const pts = resample(p.pts, 1.5);
-      const cum = [0];
-      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-      return { def: p, pts, cum, length: cum[cum.length - 1] };
-    });
+    this.trailCache = new Map(); // portage -> resampled trail, built on first use
     this.carry = null; // { trail, dist, dir }
     this.landing = null; // auto-pilot toward a launch point
-    this.ripples = null; this.wakeV = null; // set by main
+    this.ripples = null; this.water = null; // set by main
     this.bubbleAcc = 0; this.prevStroke = 0; this.level = 0;
+    this.teleporting = false;
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
   }
@@ -48,14 +41,28 @@ export class Player {
   get lakeId() { return this.world.lakeIdAt(this.x, this.z); }
   get altitude() { return this.mode === 'carry' ? this.world.heightAt(this.x, this.z) : this.world.levelAt(this.x, this.z); }
 
+  trailFor(p) {
+    let t = this.trailCache.get(p);
+    if (!t) {
+      const pts = resample(p.pts, 1.5);
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+      t = { def: p, pts, cum, length: cum[cum.length - 1] };
+      this.trailCache.set(p, t);
+    }
+    return t;
+  }
+
   nearestLanding() {
     let best = null;
-    for (const t of this.trails) {
-      t.def.launch.forEach((l, end) => {
+    for (const p of this.world.portages) {
+      for (let end = 0; end < 2; end++) {
+        const l = p.launch[end];
         const d = Math.hypot(l.x - this.x, l.z - this.z);
-        if (d < LANDING_RADIUS && (!best || d < best.d)) best = { trail: t, end, d, launch: l };
-      });
+        if (d < LANDING_RADIUS && (!best || d < best.d)) best = { def: p, end, d, launch: l };
+      }
     }
+    if (best) best.trail = this.trailFor(best.def);
     return best;
   }
 
@@ -63,6 +70,7 @@ export class Player {
     dt *= this.timeScale;
     this.time += dt;
     this.prompt = null;
+    if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); return; }
     if (this.landing) this.updateLanding(dt);
     else if (this.mode === 'carry') this.updateCarry(dt);
     else this.updatePaddle(dt);
@@ -93,10 +101,10 @@ export class Player {
     this.speed -= (this.speed * Math.abs(this.speed) * PADDLE.drag + this.speed * PADDLE.lin) * dt;
     const yawTarget = turn * PADDLE.yaw * (0.55 + 0.45 * clamp(Math.abs(this.speed) / 1.5, 0, 1)) * (this.speed < -0.2 ? -1 : 1);
     this.yawRate += (yawTarget - this.yawRate) * (1 - Math.exp(-dt * 3.5));
-    // the whole hull must stay in the water: centre, bow and stern are tested
+    // the whole hull must stay in the water (and on a tile that has finished streaming in): centre, bow and stern are tested
     const ok = (x, z, h) => {
       const fx = Math.cos(h), fz = -Math.sin(h);
-      return w.inBounds(x, z, 40) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5;
+      return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5;
     };
     const newHeading = this.heading + this.yawRate * dt;
     if (ok(this.x, this.z, newHeading) || !ok(this.x, this.z, this.heading)) this.heading = newHeading; else this.yawRate = 0;
@@ -105,12 +113,16 @@ export class Player {
     if (ok(nx, nz, this.heading)) { this.x = nx; this.z = nz; }
     else if (ok(nx, this.z, this.heading)) { this.x = nx; this.speed *= 0.7; }
     else if (ok(this.x, nz, this.heading)) { this.z = nz; this.speed *= 0.7; }
-    else { this.speed *= -0.15; if (!w.inBounds(nx, nz, 40)) this.prompt = { text: 'Edge of the map — turn back', key: null }; }
+    else {
+      this.speed *= -0.15;
+      if (!w.inBounds(nx, nz, 40)) this.prompt = { text: 'Edge of the map — turn back', key: null };
+      else if (!w.isReady(nx, nz)) this.prompt = { text: 'Loading the lake ahead…', key: null };
+    }
     this.placeOnWater();
     this.emitWater(dt);
     const land = this.nearestLanding();
     if (land) {
-      const p = land.trail.def;
+      const p = land.def;
       this.prompt = { key: 'E', text: `Portage: ${p.name} · ${p.rods} rods (${p.lengthM} m)` };
       if (this.input.pressed('KeyE')) this.landing = { land, t: 0 };
     }
@@ -120,10 +132,8 @@ export class Player {
     const w = this.world, rig = this.canoe.rig, st = this.canoe.state;
     const level = w.levelAt(this.x, this.z);
     this.level = level;
-    const shore = w.shoreAt(this.x, this.z);
     const f = this.forward, r = { x: -f.z, z: f.x };
-    const t = this.water ? this.water.time : this.time;
-    const wave = (dx, dz) => waveHeight(this.x + dx, this.z + dz, t, w);
+    const wave = (dx, dz) => (this.water ? this.water.waveAt(this.x + dx, this.z + dz) : 0);
     const hb = wave(f.x * 2, f.z * 2), hs = wave(-f.x * 2, -f.z * 2), hr = wave(r.x * 0.5, r.z * 0.5), hl = wave(-r.x * 0.5, -r.z * 0.5);
     rig.position.set(this.x, level + FLOAT_OFFSET + (hb + hs) * 0.5, this.z);
     const pitch = Math.atan2(hb - hs, 4) + this.speed * 0.012;
@@ -174,7 +184,7 @@ export class Player {
 
   updateLanding(dt) {
     // glide the canoe to the launch point, then shoulder it at the trail end
-    const L = this.landing, l = L.land.launch, trail = L.land.trail;
+    const L = this.landing, trail = L.land.trail;
     const end = trail.def.pts[L.land.end === 0 ? 0 : trail.def.pts.length - 1];
     const tx = end[0], tz = end[1];
     const dx = tx - this.x, dz = tz - this.z, d = Math.hypot(dx, dz);
@@ -227,7 +237,6 @@ export class Player {
     st.walkSpeed += ((Math.abs(this.speed) > 0.05 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
     st.walk += Math.abs(this.speed) * dt * 4.2;
     this.placeOnTrail();
-    if (this.wakeV) this.wakeV.mesh.visible = false;
     const atEnd = c.dir > 0 ? c.dist >= c.trail.length - 0.01 : c.dist <= 0.01;
     const atStart = c.dir > 0 ? c.dist <= 0.01 : c.dist >= c.trail.length - 0.01;
     const remaining = c.dir > 0 ? c.trail.length - c.dist : c.dist;
@@ -240,24 +249,31 @@ export class Player {
     }
   }
 
-  // jump to the nearest open water around a map point (minimap click)
-  teleport(x, z) {
+  // Jump to the nearest open water around a map point (minimap click, entry point). The tiles around the
+  // target stream in first; the canoe sits still until they are there.
+  async teleport(x, z) {
     const w = this.world;
-    let best = null;
-    for (let dz = -120; dz <= 120; dz += 5) for (let dx = -120; dx <= 120; dx += 5) {
-      const px = x + dx, pz = z + dz;
-      if (!w.inBounds(px, pz, 50) || w.shoreAt(px, pz) > -6) continue;
-      const d = Math.hypot(dx, dz);
-      if (!best || d < best.d) best = { x: px, z: pz, d };
-    }
-    if (!best) return false;
-    this.mode = 'paddle'; this.carry = null; this.landing = null;
-    this.x = best.x; this.z = best.z; this.speed = 0; this.yawRate = 0;
-    const dir = w.deeperDir(this.x, this.z);
-    this.heading = Math.atan2(-dir.z, dir.x);
-    this.canoe.state.stroke = 0; this.canoe.state.power = 0;
-    this.placeOnWater();
-    return true;
+    if (this.teleporting) return false;
+    this.teleporting = true;
+    try {
+      if (w.tiles) await w.tiles.ensure(x, z, 130);
+      let best = null;
+      for (let dz = -120; dz <= 120; dz += 5) for (let dx = -120; dx <= 120; dx += 5) {
+        const px = x + dx, pz = z + dz;
+        if (!w.inBounds(px, pz, 50) || !w.isReady(px, pz) || w.shoreAt(px, pz) > -6) continue;
+        const d = Math.hypot(dx, dz);
+        if (!best || d < best.d) best = { x: px, z: pz, d };
+      }
+      if (!best) return false;
+      this.mode = 'paddle'; this.carry = null; this.landing = null;
+      this.x = best.x; this.z = best.z; this.speed = 0; this.yawRate = 0;
+      if (w.tiles) await w.tiles.ensure(this.x, this.z, 20);
+      const dir = w.deeperDir(this.x, this.z);
+      this.heading = Math.atan2(-dir.z, dir.x);
+      this.canoe.state.stroke = 0; this.canoe.state.power = 0;
+      this.placeOnWater();
+      return true;
+    } finally { this.teleporting = false; }
   }
 
   launch(l) {

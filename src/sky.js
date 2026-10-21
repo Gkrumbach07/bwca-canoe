@@ -90,10 +90,14 @@ export function buildClouds(count, extent, seed = 5) {
   return group;
 }
 
-export function updateClouds(group, dt) {
+// Clouds drift east and wrap around the camera, so the sky is full wherever the canoe has got to.
+export function updateClouds(group, dt, cx = 0, cz = 0) {
   const e = group.userData.extent;
   for (const c of group.children) {
     c.position.x += c.userData.drift * dt;
-    if (c.position.x > e) c.position.x = -e;
+    if (c.position.x - cx > e) c.position.x -= 2 * e;
+    else if (c.position.x - cx < -e) c.position.x += 2 * e;
+    if (c.position.z - cz > e) c.position.z -= 2 * e;
+    else if (c.position.z - cz < -e) c.position.z += 2 * e;
   }
 }
