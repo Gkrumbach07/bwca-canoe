@@ -16,6 +16,7 @@ export const CFG = {
   overview: 8,             // overview image: one pixel per this many fine cells (80 m)
   zoom: 14,                // terrarium tile zoom (~6.4 m/px at this latitude)
   maxDist: 3000,           // metres, the signed shore distance is clamped to +-this
+  elevationFloor: 100,     // metres: DEM values below this are no-data (Lake Superior, 183 m, is the lowest surface near the BWCA)
   band: 1024,              // rows processed at once (4 tile rows)
   ua: 'bwca-canoe-game/0.2 (local bake script)',
   cacheDir: process.env.BWCA_CACHE || 'data-cache',

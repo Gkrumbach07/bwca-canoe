@@ -73,16 +73,19 @@ walk the real trail with W/S. Portage lengths are shown in rods, as they are on 
    (clamped at 3 km) and the shore smoothing run in 1024-row bands with a 320-row halo wider than the clamp,
    so every value equals a whole-grid computation and nothing changes across band or tile edges.
 5. **Basins, levels, names** on the full grid: connected lake water shares one level (a low percentile of
-   its interior DEM heights, robust to shoreline trees). River polygons keep their own level so rapids do
-   not merge lakes at different heights. Unnamed channels and bays take the name of the nearest named lake
-   reachable by water (one multi-source flood fill).
+   its interior DEM heights, robust to shoreline trees). Rivers and creeks get a **per-cell level** instead:
+   a monotone non-increasing profile is fitted along each OSM waterway line (a running low percentile of the
+   DEM, then pool-adjacent-violators, anchored to the lakes the line passes through and reversed when the
+   DEM says the way was drawn upstream), then spread across the river's width. Creeks that OSM maps only as
+   lines are rasterized as channels about two cells wide so they exist as water. Unnamed channels and bays
+   take the name of the nearest named lake reachable by water (one multi-source flood fill).
 6. **Shore shaping**: lake beds are carved below their level and shoreline land is lifted above it, in
    bands again, then the tiles are cut.
 7. **Output** in `public/data/`:
    - `index.json`: grid and projection, per-tile flags (has water, height range), the lake table (names,
      display names, levels, centroids), basins, every portage (polyline, rods, launch points), campsites,
      entry points and the start position.
-   - `tiles/{tx}_{ty}.bin`: gzip of `[height Int16 dm][lake id Uint16][shore distance Int16 dm]` for
+   - `tiles/{tx}_{ty}.bin`: gzip of `[height Int16 dm][lake id Uint16][shore distance Int16 dm][water level Int16 dm]` for
      268 x 268 cells: the 256-cell tile plus a 6-cell halo on every side, so a tile can be built (terrain,
      forest, props) from its own bytes alone, and shared edge vertices come out bit-identical on both sides.
    - `far/{fx}_{fy}.bin`: the same layout on an 80 m grid (block means; the deepest cell decides the lake id)
@@ -154,9 +157,10 @@ src/geo.js                GPS broadcast to the extension and same-origin tabs
 extension/                Chrome/Edge MV3 extension that spoofs navigator.geolocation everywhere
 ```
 
-Known limits: a river polygon gets one flat level for its whole length (a per-cell water level would fix
-rapids between lakes); lakes with no OSM polygon (small creeks) are not water; the Canadian side of the border
-lakes is only as complete as the Minnesota extract makes it (add `north-america/canada/ontario` to
+Known limits: lake depth is synthetic (the bed drops at about 9 % from the shore, capped at 14 m; the Minnesota
+DNR lake bathymetry would give real depths); river surfaces follow the DEM profile, so a rapid shows as a
+steady drop rather than a step; creeks are two cells (20 m) wide because of the 10 m grid; the Canadian side of
+the border lakes is only as complete as the Minnesota extract makes it (add `north-america/canada/ontario` to
 `CFG.extracts` in `scripts/config.mjs` for the Quetico shore).
 
 Map data © OpenStreetMap contributors (ODbL). Elevation: USGS 3DEP / NASA SRTM via Mapzen/AWS Terrain Tiles.

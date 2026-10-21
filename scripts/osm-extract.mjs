@@ -27,6 +27,8 @@ function hasOsmium() {
 
 const isWaterTags = (t) => !!t && ((t.natural === 'water' && t.water !== 'wetland') || t.waterway === 'riverbank' || t.landuse === 'reservoir');
 const isRiverTags = (t) => !!t && (['river', 'stream', 'canal', 'drain', 'ditch', 'rapids'].includes(t.water || '') || t.waterway === 'riverbank');
+// creeks and rivers mapped as lines (drawn downstream by OSM convention)
+const isWaterwayTags = (t) => !!t && ['river', 'stream', 'canal'].includes(t.waterway) && t.intermittent !== 'yes' && !t.tunnel;
 export const isPortageTags = (t) => !!t && (t.highway === 'portage' || t.canoe === 'portage' || ['designated', 'yes', 'permissive'].includes(t.portage));
 const isCampTags = (t) => !!t && t.tourism === 'camp_site';
 const entryRe = /entry\s*point|\bE\.?P\.?\s*#?\s*\d+|boat\s*(launch|landing|ramp)|canoe\s*(launch|landing)|public\s*access/i;
@@ -103,7 +105,7 @@ function chainPortages(ways) {
 export async function loadOsm(bbox, extracts = CFG.extracts) {
   await fsp.mkdir(osmDir(), { recursive: true });
   const key = `${bbox.south},${bbox.west},${bbox.north},${bbox.east}`;
-  const cacheFile = path.join(osmDir(), `extract-${key}.json`);
+  const cacheFile = path.join(osmDir(), `extract-v2-${key}.json`);
   try { return JSON.parse(await fsp.readFile(cacheFile, 'utf8')); } catch {}
 
   const margin = 0.02;
@@ -139,7 +141,7 @@ export async function loadOsm(bbox, extracts = CFG.extracts) {
   // pass 2: ways of interest
   const ways = new Map();
   for (const f of sources) readPbf(f, { way: (id, refs, tags) => {
-    if (memberWays.has(id) || isWaterTags(tags) || isPortageTags(tags) || isCampTags(tags) || isPoiTags(tags)) ways.set(id, { id, refs, tags });
+    if (memberWays.has(id) || isWaterTags(tags) || isWaterwayTags(tags) || isPortageTags(tags) || isCampTags(tags) || isPoiTags(tags)) ways.set(id, { id, refs, tags });
   } });
   const refList = [];
   for (const w of ways.values()) for (const r of w.refs) refList.push(r);
@@ -186,6 +188,15 @@ export async function loadOsm(bbox, extracts = CFG.extracts) {
   const area = (rg) => { let a = 0; for (let i = 0, n = rg.length; i < n; i++) { const [y1, x1] = rg[i], [y2, x2] = rg[(i + 1) % n]; a += x1 * y2 - x2 * y1; } return Math.abs(a) / 2; };
   lakes.sort((a, b) => b.rings.reduce((s, rg) => s + area(rg), 0) - a.rings.reduce((s, rg) => s + area(rg), 0));
 
+  // waterway centrelines: creeks that have no polygon become narrow channels, and every river line gives
+  // the bake a profile to fit the water level along
+  const waterways = [];
+  for (const w of ways.values()) {
+    if (!isWaterwayTags(w.tags)) continue;
+    const pts = wayCoords(w.refs);
+    if (pts.length >= 2 && pts.some(([a, b]) => inBox(a, b))) waterways.push({ id: w.id, name: w.tags.name || null, kind: w.tags.waterway, pts });
+  }
+
   // portage trails
   const portages = [];
   for (const c of chainPortages(ways)) {
@@ -215,8 +226,8 @@ export async function loadOsm(bbox, extracts = CFG.extracts) {
     if (inBox(la, lo)) pois.push({ lat: la, lon: lo, tags: w.tags });
   }
 
-  const out = { bbox, lakes, portages, campsites, pois, source: extracts, extracted: new Date().toISOString() };
-  log(`osm: ${lakes.length} water polygons, ${portages.length} portage trails, ${campsites.length} campsites, ${pois.length} POIs`);
+  const out = { bbox, lakes, waterways, portages, campsites, pois, source: extracts, extracted: new Date().toISOString() };
+  log(`osm: ${lakes.length} water polygons, ${waterways.length} waterway lines, ${portages.length} portage trails, ${campsites.length} campsites, ${pois.length} POIs`);
   await fsp.writeFile(cacheFile, JSON.stringify(out));
   return out;
 }

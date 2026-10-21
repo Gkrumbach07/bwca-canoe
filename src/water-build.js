@@ -6,10 +6,9 @@ export function buildWaterChunk(grid, i0, j0, n, originX, originZ) {
   const map = new Int32Array(w * w).fill(-1);
   const pos = [], shore = [], idx = [];
   const vertexLevel = (i, j) => {
-    const id = grid.lakeCell(i, j);
-    if (id) return grid.levelOf(id);
+    if (grid.lakeCell(i, j)) return grid.levelCell(i, j);
     let best = -Infinity;
-    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const nb = grid.lakeCell(i + di, j + dj); if (nb) best = Math.max(best, grid.levelOf(nb)); }
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (grid.lakeCell(i + di, j + dj)) best = Math.max(best, grid.levelCell(i + di, j + dj));
     return best;
   };
   const vid = (i, j) => {

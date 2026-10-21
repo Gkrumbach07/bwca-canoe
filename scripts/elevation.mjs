@@ -63,6 +63,36 @@ export async function prefetchTerrarium(bbox, z = CFG.zoom, concurrency = 16) {
   return total;
 }
 
+// Terrarium encodes no-data as black (-32768 m) and the odd pixel carries garbage; either would carve a pit, so
+// anything below the lowest real surface in the area is a hole, filled from its valid neighbours (growing
+// inward for larger voids).
+const NODATA = CFG.elevationFloor;
+function fillHoles(t) {
+  let holes = 0;
+  for (let i = 0; i < 65536; i++) if (t[i] < NODATA) holes++;
+  if (!holes) return;
+  const next = new Float32Array(t);
+  for (let pass = 0; pass < 64 && holes; pass++) {
+    let fixed = 0;
+    for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+      const i = y * 256 + x;
+      if (t[i] >= NODATA) continue;
+      let sum = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx > 255 || yy > 255) continue;
+        const v = t[yy * 256 + xx];
+        if (v >= NODATA) { sum += v; n++; }
+      }
+      if (n) { next[i] = sum / n; fixed++; }
+    }
+    t.set(next);
+    holes -= fixed;
+    if (!fixed) break;
+  }
+  if (holes) for (let i = 0; i < 65536; i++) if (t[i] < NODATA) t[i] = 0; // a wholly void tile: sea level
+}
+
 // Decoded-tile cache with LRU eviction, and a fast bilinear row sampler.
 export function makeSampler(z = CFG.zoom, maxTiles = 1500) {
   const tiles = new Map();
@@ -77,6 +107,7 @@ export function makeSampler(z = CFG.zoom, maxTiles = 1500) {
     const png = PNG.sync.read(fs.readFileSync(p));
     t = new Float32Array(256 * 256);
     for (let i = 0; i < 65536; i++) t[i] = png.data[i * 4] * 256 + png.data[i * 4 + 1] + png.data[i * 4 + 2] / 256 - 32768;
+    fillHoles(t);
     tiles.set(key, t);
     if (tiles.size > maxTiles) tiles.delete(tiles.keys().next().value);
     return t;

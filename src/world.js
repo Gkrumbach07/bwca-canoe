@@ -10,7 +10,7 @@ export class World extends GridQueries {
     const res = await fetch(base + 'index.json');
     if (!res.ok) throw new Error('no map data in public/data: run `npm run bake:all` (whole BWCA) or `npm run bake` (Lake One test area)');
     const index = await res.json();
-    if (index.version !== 2) throw new Error('map data is from an older bake: run `npm run bake:all`');
+    if (index.version !== 3) throw new Error('map data is from an older bake: run `npm run bake:all`');
     return new World(index, base);
   }
 
@@ -59,13 +59,13 @@ export class World extends GridQueries {
   isReady(x, z) { const [tx, ty] = this.tileOf(x, z); return this.hasTile(tx, ty); }
   setTile(tx, ty, buf) {
     const n = this.side * this.side;
-    this.slots[ty * this.ntx + tx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n) };
+    this.slots[ty * this.ntx + tx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n) };
   }
   clearTile(tx, ty) { this.slots[ty * this.ntx + tx] = null; }
   tileGrid(tx, ty) { const s = this.slots[ty * this.ntx + tx]; return s ? new TileGrid(this.gridDesc, tx, ty, s.buf, this.levelById) : null; }
   setFar(fx, fy, buf) {
     const n = this.farSide * this.farSide;
-    this.farSlots[fy * this.far.ntx + fx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n) };
+    this.farSlots[fy * this.far.ntx + fx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n) };
   }
   clearFar(fx, fy) { this.farSlots[fy * this.far.ntx + fx] = null; }
   hasFar(fx, fy) { return !!this.farSlots[fy * this.far.ntx + fx]; }
@@ -106,6 +106,15 @@ export class World extends GridQueries {
     if (t) return t.lake[((j % T) + this.halo) * this.side + (i % T) + this.halo];
     const f = this._farIndex(i, j);
     return f ? f.s.lake[f.m] : 0;
+  }
+  // water level of a water cell (per cell: rivers and creeks descend along their course)
+  levelCell(i, j) {
+    if (i < 0) i = 0; else if (i >= this.width) i = this.width - 1;
+    if (j < 0) j = 0; else if (j >= this.height) j = this.height - 1;
+    const T = this.tile, t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)];
+    if (t) return t.lvl[((j % T) + this.halo) * this.side + (i % T) + this.halo] * 0.1;
+    const f = this._farIndex(i, j);
+    return f ? f.s.lvl[f.m] * 0.1 : 0;
   }
   levelOf(id) { return this.levelById[id]; }
 
