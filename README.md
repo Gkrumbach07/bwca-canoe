@@ -1,13 +1,18 @@
 # BWCA Canoe
 
-A small low-poly canoeing game set on real terrain in the Boundary Waters Canoe Area Wilderness:
-the Lake One → Lake Two → Lake Three → Lake Four chain east of Ely, Minnesota (entry point 30).
+A small low-poly canoeing game set on real terrain in the Boundary Waters Canoe Area Wilderness: the whole
+wilderness, from Crane Lake to the Pigeon River, streamed in 2.56 km tiles as you paddle. You start at the
+Lake One landing (entry point 30) east of Ely, Minnesota.
 
 - **Real elevation**: USGS 3DEP / SRTM heights via the public AWS Terrain Tiles (Terrarium encoding).
-- **Real lakes, portages and campsites**: OpenStreetMap, pulled straight from the OSM API.
+- **Real lakes, portages, campsites and entry points**: OpenStreetMap, from an offline Geofabrik extract.
 - **Everything else is procedural**: terrain colouring, lake beds, six tree species with per-tree variation,
   shoreline boulders, campsites (fire grate, log, tent), portage trails and markers, the canoe, the paddler
   and the paddle stroke, the water, the sky and the clouds. No external assets.
+- **Streamed world**: a 10 m grid of 200 x 69 km (138 million cells) is baked into 2,106 tiles; the game keeps
+  the 5 x 5 tiles around the canoe built (terrain, water, forest, trails) in a pool of web workers, a coarse
+  80 m far field underneath, and lets the rest go. Memory stays around 400 MB and the frame cost near
+  3.5 M triangles, the same as the old single-area build.
 - **GPS simulation**: the canoe's real-world latitude/longitude is broadcast as the device location,
   so other tabs that ask for geolocation see you paddling (see *GPS simulator* below).
 
@@ -15,18 +20,23 @@ the Lake One → Lake Two → Lake Three → Lake Four chain east of Ely, Minnes
 
 ```bash
 npm install
+npm run bake:all
 npm run dev
 ```
 
-Open http://localhost:5173. The baked map data is already in `public/data/`. To re-bake (different area,
-resolution or fresh OSM data) edit `CFG` at the top of `scripts/bake.mjs` and run:
+Open http://localhost:5173. The baked map data lives in `public/data/` and is not committed (about 250 MB
+of tiles); the first bake downloads the Minnesota OpenStreetMap extract (290 MB) and about 5,800 elevation
+tiles (500 MB) into `data-cache/`, then bakes the whole wilderness in about a minute (3 GB of RAM). Re-bakes
+use the cache and finish in the same minute. For a quick test bake of the Lake One area only:
 
 ```bash
 npm run bake
 ```
 
-Downloads are cached in `data-cache/`. The bake needs network access to `api.openstreetmap.org` and
-`s3.amazonaws.com/elevation-tiles-prod`.
+Other areas: `node scripts/bake.mjs --bbox S,W,N,E` (degrees). The areas and the grid/tile layout are in
+`scripts/config.mjs`. If `osmium` is installed the extract is cut to the area first (seconds); without it the
+extract is scanned in Node (about 15 s). The bake needs network access to `download.geofabrik.de` and
+`s3.amazonaws.com/elevation-tiles-prod` the first time.
 
 ## Controls
 
@@ -36,14 +46,68 @@ Downloads are cached in `data-cache/`. The bake needs network access to `api.ope
 | A / D | turn (sweep strokes) |
 | Shift | hustle |
 | E | portage when near a landing, launch at the far end |
-| M | enlarge the map |
+| M | enlarge the map (three times the area) |
 | R | toggle water reflections (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
 | mouse drag / wheel | look around / zoom |
-| click the minimap | teleport to the nearest open water |
+| click the map | teleport to the nearest open water (anywhere in the wilderness) |
+| entry point list | teleport to one of the 55 BWCA entry point landings |
 
 Paddle up to a portage landing (the trail marker on shore) and press **E**: the canoe is shouldered and you
 walk the real trail with W/S. Portage lengths are shown in rods, as they are on every BWCA map.
+
+## Data pipeline
+
+`npm run bake:all` runs `scripts/bake.mjs --all`:
+
+1. **OpenStreetMap** (`scripts/osm-extract.mjs`, `scripts/osmpbf.mjs`): downloads the Geofabrik Minnesota
+   extract once, cuts it to the area (osmium when available), and reads water polygons (`natural=water`,
+   riverbanks, reservoirs; multipolygon relations are stitched), portage ways (`portage=*`, `canoe=portage`,
+   `highway=portage`), campsites (`tourism=camp_site`) and landing points of interest with a dependency-free
+   PBF reader. The result is cached as JSON per area.
+2. **Elevation** (`scripts/elevation.mjs`): Terrarium z14 tiles for the area are cached and sampled
+   bilinearly, row by row.
+3. **One global 10 m grid** in a local metres projection with a single origin at the area centre (x east,
+   z south; the ~1 % scale drift over 70 km of latitude is accepted). The grid is padded to whole tiles.
+4. **Bands with a halo**: elevation sampling, the exact Euclidean distance transform to the shoreline
+   (clamped at 3 km) and the shore smoothing run in 1024-row bands with a 320-row halo wider than the clamp,
+   so every value equals a whole-grid computation and nothing changes across band or tile edges.
+5. **Basins, levels, names** on the full grid: connected lake water shares one level (a low percentile of
+   its interior DEM heights, robust to shoreline trees). River polygons keep their own level so rapids do
+   not merge lakes at different heights. Unnamed channels and bays take the name of the nearest named lake
+   reachable by water (one multi-source flood fill).
+6. **Shore shaping**: lake beds are carved below their level and shoreline land is lifted above it, in
+   bands again, then the tiles are cut.
+7. **Output** in `public/data/`:
+   - `index.json`: grid and projection, per-tile flags (has water, height range), the lake table (names,
+     display names, levels, centroids), basins, every portage (polyline, rods, launch points), campsites,
+     entry points and the start position.
+   - `tiles/{tx}_{ty}.bin`: gzip of `[height Int16 dm][lake id Uint16][shore distance Int16 dm]` for
+     268 x 268 cells: the 256-cell tile plus a 6-cell halo on every side, so a tile can be built (terrain,
+     forest, props) from its own bytes alone, and shared edge vertices come out bit-identical on both sides.
+   - `far/{fx}_{fy}.bin`: the same layout on an 80 m grid (block means; the deepest cell decides the lake id)
+     in 256-cell far tiles for the far field.
+   - `overview.png`: an 80 m/px shaded map of the whole area for the minimap.
+
+Entry points come from OSM features named `… BWCA Entry Point` where they exist, otherwise from the hand
+list in `scripts/entrypoints.json` (number, name, the OSM lake name and an approximate position); edit that
+file to add or correct landings.
+
+## Runtime
+
+- `src/world.js` loads `index.json` and answers every spatial query (`heightAt`, `shoreAt`, `lakeIdAt`,
+  `levelAt`) through the loaded tiles, falling back to the far field and then to flat ground.
+- `src/tiles.js` (`TileManager`) keeps the 5 x 5 tiles around the canoe and 3 x 3 far tiles loaded. A pool of
+  workers (`src/tile-worker.js`) fetches and gunzips a tile, places the forest deterministically from the
+  global cell coordinates (`src/placement.js`), builds the terrain (`src/terrain-build.js`) and the water
+  mesh (`src/water-build.js`) as transferable typed arrays; the main thread wraps them into meshes, one tile
+  per frame, and builds the tile's trails and campsites (`src/props.js`). Tiles outside the neighbourhood
+  are dropped least-recently-wanted first; far chunks stand in wherever a fine tile is missing.
+- **Floating origin**: every tile's geometry and instance matrices are local to the tile corner, and the
+  water shaders work relative to the corner of the player's tile. All wave frequencies are rounded to whole
+  periods per 2,560 m (`src/waves.js`), so the origin can jump by a tile without the swell changing phase.
+- The water patch samples a sliding 256-cell atlas of shore distance and level around the canoe
+  (`src/water.js`); the minimap draws loaded tiles from their own cells over the baked overview (`src/hud.js`).
 
 ## GPS simulator
 
@@ -65,19 +129,34 @@ The game also publishes the fix on a `BroadcastChannel` named `bwca-canoe-geo` a
 ## Layout
 
 ```
-scripts/bake.mjs    data pipeline: OSM + elevation → public/data/{world.json,height.bin,lake.bin,sdist.bin}
-src/world.js        loads the bake, height / shore-distance / lake queries, lat-lon conversion
-src/terrain.js      chunked flat-shaded terrain with procedural colouring
-src/water.js        water shader (low-poly swell, depth tint, Fresnel, glitter, shoreline foam)
-src/sky.js          sky dome shader and low-poly clouds
-src/vegetation.js   tree and boulder generators, forest placement into regional instanced meshes
-src/props.js        portage trail ribbons, trail markers, campsites
-src/canoe.js        canoe hull loft, paddle, paddler rig, stroke and portage-carry animation
-src/player.js       paddling physics, shoreline collision, portage state machine
-src/camera.js       chase camera
-src/hud.js          HUD text, prompts, minimap
-src/geo.js          GPS broadcast to the extension and same-origin tabs
-extension/          Chrome/Edge MV3 extension that spoofs navigator.geolocation everywhere
+scripts/config.mjs        areas, grid and tile layout, projection
+scripts/osmpbf.mjs        dependency-free OpenStreetMap PBF reader
+scripts/osm-extract.mjs   Geofabrik download, osmium cut, water / portage / campsite / POI extraction
+scripts/elevation.mjs     Terrarium tile prefetch and row sampler
+scripts/bake.mjs          the tiled bake: bands, basins, shores, tiles, far field, overview, index.json
+scripts/entrypoints.json  hand list of BWCA entry points
+src/world.js              index loading, tile slots, height / shore / lake / level queries, lat-lon conversion
+src/grid.js               shared grid queries; TileGrid (one halo'd tile) for the worker and props
+src/tiles.js              TileManager: worker pool, neighbourhood, LRU, far field, visibility
+src/tile-worker.js        fetch + gunzip + build one tile off the main thread
+src/terrain-build.js      terrain geometry and ground colours (pure); src/terrain.js: material and mesh
+src/placement.js          deterministic forest placement (pure); src/vegetation.js: species geometry, instancing, LOD
+src/water-build.js        far water mesh (pure); src/water.js: shaders, floating origin, sliding atlas, reflection
+src/waves.js              swell constants shared by the shaders and the canoe
+src/sky.js                sky dome shader and low-poly clouds (wrap around the camera)
+src/props.js              per-tile portage trail ribbons, trail markers, campsites
+src/canoe.js              canoe hull loft, paddle, paddler rig, stroke and portage-carry animation
+src/player.js             paddling physics, shoreline collision, portage state machine, teleport
+src/camera.js             chase camera
+src/hud.js                HUD text, prompts, tiled minimap, entry point list
+src/wake.js               hull foam and paddle splash particles on the water surface
+src/geo.js                GPS broadcast to the extension and same-origin tabs
+extension/                Chrome/Edge MV3 extension that spoofs navigator.geolocation everywhere
 ```
+
+Known limits: a river polygon gets one flat level for its whole length (a per-cell water level would fix
+rapids between lakes); lakes with no OSM polygon (small creeks) are not water; the Canadian side of the border
+lakes is only as complete as the Minnesota extract makes it (add `north-america/canada/ontario` to
+`CFG.extracts` in `scripts/config.mjs` for the Quetico shore).
 
 Map data © OpenStreetMap contributors (ODbL). Elevation: USGS 3DEP / NASA SRTM via Mapzen/AWS Terrain Tiles.
