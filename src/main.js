@@ -10,10 +10,10 @@ import { Player, Input } from './player.js';
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
-import { Ripples, WakeV } from './wake.js';
+import { Ripples } from './wake.js';
 import { updateVegetationLOD } from './vegetation.js';
 
-const palette = { zenith: 0x4a8ccc, horizon: 0xdbe9ef, ground: 0x8aa07a, sun: 0xfff3d6, water: 0x7ab8d3, reflect: 0xc4dfeb, fog: 0xd3e3ea };
+const palette = { zenith: 0x6f9cc2, horizon: 0xdde5ea, ground: 0x97a38a, sun: 0xfff2dc, water: 0x86b4c5, reflect: 0xc6d8df, fog: 0xd6dfe4 };
 
 const loadingEl = document.getElementById('loading'), barEl = document.getElementById('loading-bar'), msgEl = document.getElementById('loading-msg');
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
@@ -25,7 +25,7 @@ async function main() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.VSMShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.domElement.className = 'game';
@@ -36,14 +36,14 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.3, 9000);
 
   const sunDir = new THREE.Vector3(-0.58, 0.46, 0.4).normalize();
-  const sun = new THREE.DirectionalLight(0xfff0d2, 2.3);
+  const sun = new THREE.DirectionalLight(0xfff0d2, 2.0);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -180; sun.shadow.camera.right = 180; sun.shadow.camera.top = 180; sun.shadow.camera.bottom = -180;
+  sun.shadow.camera.left = -150; sun.shadow.camera.right = 150; sun.shadow.camera.top = 150; sun.shadow.camera.bottom = -150;
   sun.shadow.camera.near = 50; sun.shadow.camera.far = 1400;
-  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.3; sun.shadow.radius = 3; sun.shadow.blurSamples = 8; sun.shadow.intensity = 0.75;
+  sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.6; sun.shadow.intensity = 0.55;
   scene.add(sun, sun.target);
-  scene.add(new THREE.HemisphereLight(0xbfdcf0, 0x6f8a55, 1.1));
+  scene.add(new THREE.HemisphereLight(0xc3d6e2, 0x7f8f6c, 1.05));
 
   scene.background = new THREE.Color(palette.fog);
   const sky = buildSky(sunDir, palette);
@@ -60,8 +60,8 @@ async function main() {
   scene.add(water.group);
   progress(0.94, 'Clearing portages and campsites…'); await tick();
   scene.add(buildPortageTrails(world), buildCampsites(world));
-  const ripples = new Ripples(), wake = new WakeV();
-  scene.add(ripples.mesh, wake.mesh);
+  const ripples = new Ripples();
+  scene.add(ripples.mesh);
   progress(0.97, 'Launching the canoe…'); await tick();
 
   const canoe = buildCanoeRig();
@@ -69,9 +69,9 @@ async function main() {
   scene.add(canoe.rig);
   const input = new Input();
   const player = new Player(world, canoe, input);
-  player.ripples = ripples; player.wakeV = wake; player.water = water;
+  player.ripples = ripples; player.water = water;
   const chase = new ChaseCamera(camera, renderer.domElement, world);
-  const hud = new Hud(world);
+  const hud = new Hud(world, (x, z) => player.teleport(x, z));
   const geo = new GeoBridge();
   window.addEventListener('keydown', (e) => { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn; });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
@@ -90,7 +90,8 @@ async function main() {
     updateVegetationLOD(forest, camera.position);
     updateClouds(clouds, dt * player.timeScale);
     sky.position.copy(camera.position);
-    sun.target.position.set(player.x, 0, player.z);
+    sun.target.position.set(player.x, player.altitude, player.z);
+    water.setBoat(player.x, player.z, player.heading, player.speed, player.mode === 'paddle');
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 700);
     geo.update(player, world);
     hud.update(player, geo, player.timeScale);

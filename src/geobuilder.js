@@ -63,6 +63,7 @@ export class GeoBuilder {
 }
 
 // colour helper: hex base with a small random HSL wobble so faces are not uniform
+const MUTE = 0.14; // saturation taken off every generated colour for a softer palette
 export function vary(hex, rng, dl = 0.06, ds = 0.05) {
-  return new THREE.Color(hex).offsetHSL((rng() - 0.5) * 0.02, (rng() - 0.5) * ds, (rng() - 0.5) * dl);
+  return new THREE.Color(hex).offsetHSL((rng() - 0.5) * 0.02, (rng() - 0.5) * ds - MUTE, (rng() - 0.5) * dl + 0.015);
 }

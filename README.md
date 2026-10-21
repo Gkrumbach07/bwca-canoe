@@ -40,6 +40,7 @@ Downloads are cached in `data-cache/`. The bake needs network access to `api.ope
 | R | toggle water reflections (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
 | mouse drag / wheel | look around / zoom |
+| click the minimap | teleport to the nearest open water |
 
 Paddle up to a portage landing (the trail marker on shore) and press **E**: the canoe is shouldered and you
 walk the real trail with W/S. Portage lengths are shown in rods, as they are on every BWCA map.

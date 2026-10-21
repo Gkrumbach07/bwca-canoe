@@ -1,13 +1,22 @@
 import { clamp } from './rng.js';
 
 export class Hud {
-  constructor(world) {
+  constructor(world, onTeleport = null) {
     this.world = world;
+    this.onTeleport = onTeleport;
     this.el = { lake: document.getElementById('lake'), sub: document.getElementById('sub'), prompt: document.getElementById('prompt'), gps: document.getElementById('gps'), gpsState: document.getElementById('gps-state'), gpsCoords: document.getElementById('gps-coords') };
     this.canvas = document.getElementById('minimap');
     this.ctx = this.canvas.getContext('2d');
     this.big = false;
     this.base = this.renderBase();
+    this.canvas.style.cursor = 'pointer';
+    this.canvas.addEventListener('click', (e) => {
+      if (!this.onTeleport) return;
+      const r = this.canvas.getBoundingClientRect();
+      const x = this.world.minX + ((e.clientX - r.left) / r.width) * this.world.sizeX;
+      const z = this.world.minZ + ((e.clientY - r.top) / r.height) * this.world.sizeZ;
+      this.onTeleport(x, z);
+    });
     window.addEventListener('keydown', (e) => { if (e.code === 'KeyM') { this.big = !this.big; this.canvas.style.width = this.big ? '780px' : '260px'; this.canvas.style.height = this.big ? '510px' : '170px'; this.el.gps.style.top = this.big ? '536px' : '196px'; } });
   }
 

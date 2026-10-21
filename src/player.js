@@ -224,6 +224,26 @@ export class Player {
     }
   }
 
+  // jump to the nearest open water around a map point (minimap click)
+  teleport(x, z) {
+    const w = this.world;
+    let best = null;
+    for (let dz = -120; dz <= 120; dz += 5) for (let dx = -120; dx <= 120; dx += 5) {
+      const px = x + dx, pz = z + dz;
+      if (!w.inBounds(px, pz, 50) || w.shoreAt(px, pz) > -6) continue;
+      const d = Math.hypot(dx, dz);
+      if (!best || d < best.d) best = { x: px, z: pz, d };
+    }
+    if (!best) return false;
+    this.mode = 'paddle'; this.carry = null; this.landing = null;
+    this.x = best.x; this.z = best.z; this.speed = 0; this.yawRate = 0;
+    const dir = w.deeperDir(this.x, this.z);
+    this.heading = Math.atan2(-dir.z, dir.x);
+    this.canoe.state.stroke = 0; this.canoe.state.power = 0;
+    this.placeOnWater();
+    return true;
+  }
+
   launch(l) {
     const dir = this.world.deeperDir(l.x, l.z);
     this.mode = 'paddle'; this.carry = null;

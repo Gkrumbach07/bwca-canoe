@@ -7,15 +7,15 @@ const SHAPE_BAND = 9;    // metres either side of the shore where height follows
 
 // A fixed palette; every face gets exactly one of these (no gradients).
 const C = {
-  bedShallow: new THREE.Color(0xd3c39b),
-  bedDeep: new THREE.Color(0x5b7d6c),
-  sand: new THREE.Color(0xdccda6),
-  rock: new THREE.Color(0xb4aea1),
-  rockDark: new THREE.Color(0x8f8b82),
-  forest: new THREE.Color(0x6e9450),
-  forestLight: new THREE.Color(0x84a85c),
-  forestDark: new THREE.Color(0x5a7f43),
-  meadow: new THREE.Color(0xa1b768),
+  bedShallow: new THREE.Color(0xcdc2a4),
+  bedDeep: new THREE.Color(0x6a877b),
+  sand: new THREE.Color(0xd4c9ab),
+  rock: new THREE.Color(0xaaa79f),
+  rockDark: new THREE.Color(0x8b8984),
+  forest: new THREE.Color(0x6d8a5f),
+  forestLight: new THREE.Color(0x809d6d),
+  forestDark: new THREE.Color(0x5d7752),
+  meadow: new THREE.Color(0x97a874),
 };
 
 export function groundColor(world, x, z, out, shade = 0) {
@@ -51,10 +51,13 @@ function shoreBumps(x, z, sd) {
 // Lambert with flat-interpolated vertex colour: each triangle takes one vertex's colour, no blending.
 export function makeTerrainMaterial() {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  // onBeforeCompile sees the shader before its #includes are expanded, so replace the include itself
+  const decl = '#if defined( USE_COLOR_ALPHA )\n flat varying vec4 vColor;\n#elif defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR ) || defined( USE_BATCHING_COLOR )\n flat varying vec3 vColor;\n#endif';
   m.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader.replace('varying vec3 vColor;', 'flat varying vec3 vColor;');
-    shader.fragmentShader = shader.fragmentShader.replace('varying vec3 vColor;', 'flat varying vec3 vColor;');
+    shader.vertexShader = shader.vertexShader.replace('#include <color_pars_vertex>', decl);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <color_pars_fragment>', decl);
   };
+  m.customProgramCacheKey = () => 'flat-vcolor';
   return m;
 }
 

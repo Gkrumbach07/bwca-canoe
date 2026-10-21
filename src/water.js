@@ -46,7 +46,8 @@ const vertHead = /* glsl */ `
   ${glslWaves}
 `;
 const vertTail = /* glsl */ `
-    vec4 worldPosition = vec4(p, 1.0);
+    // shadows and the reflection are projected on the flat surface so the swell cannot break them up
+    vec4 worldPosition = vec4(p.x, flatY, p.z, 1.0);
     vWorld = p;
     vReflectUv = uTextureMatrix * worldPosition;
     vec3 transformedNormal = normalMatrix * vec3(0.0, 1.0, 0.0);
@@ -61,6 +62,7 @@ const vertFar = vertHead + /* glsl */ `
   void main() {
     vec3 p = (modelMatrix * vec4(position, 1.0)).xyz;
     vShore = aShore;
+    float flatY = p.y;
     p.y += lowWave(p.xz, uTime) * smoothstep(0.0, 25.0, -aShore);
 ` + vertTail;
 
@@ -87,12 +89,14 @@ const vertPatch = vertHead + /* glsl */ `
     float border = 1.0 - smoothstep(uPatchHalf - 40.0, uPatchHalf - 6.0, max(abs(position.x), abs(position.z)));
     float high = highWave(w, uTime) * smoothstep(0.0, 8.0, -shore) * border;
     float level = cellSample(uLevelTex, ivec2(floor((w - uGrid.xy) * uGrid.z)));
+    float flatY = level;
     vec3 p = vec3(w.x, level + low + high, w.y);
 ` + vertTail;
 
 const frag = /* glsl */ `
-  uniform float uTime, uReflOn;
+  uniform float uTime, uReflOn, uBoatSpeed;
   uniform vec3 uSunDir, uWater, uReflect;
+  uniform vec4 uBoat; // x, z, cos(heading), sin(heading)
   uniform sampler2D uReflection;
   uniform vec2 uPatchCenter;
   uniform float uPatchHalf;
@@ -121,18 +125,26 @@ const frag = /* glsl */ `
     // three flat tones: facets tilted toward the sun, level, and tilted away
     float ndl = dot(n, uSunDir);
     float tone = step(uSunDir.y + 0.012, ndl) - step(ndl, uSunDir.y - 0.012);   // -1, 0, 1
-    vec3 col = uWater * (1.0 + 0.085 * tone);
-    float fres = pow(1.0 - max(dot(n, v), 0.0), 3.0);
-    col = mix(col, uReflect, 0.08 + 0.3 * fres);
-    col *= 0.78 + 0.22 * shadow;
+    vec3 col = mix(uWater, uReflect, 0.12) * (1.0 + 0.085 * tone);
+    col *= 0.72 + 0.28 * shadow;
     // the canoe's reflection, nothing else
-    vec4 ruv = vReflectUv;
-    ruv.xy += n.xz * 0.3 * ruv.w;
-    vec4 r = texture2DProj(uReflection, ruv);
-    col = mix(col, r.rgb, r.a * 0.7 * uReflOn);
-    // crisp sun sparkle on the facets that catch it
-    float spec = pow(max(dot(n, normalize(uSunDir + v)), 0.0), 260.0) * shadow;
-    col = mix(col, vec3(1.0, 0.98, 0.92), aastep(0.3, spec) * 0.5);
+    vec4 r = texture2DProj(uReflection, vReflectUv);
+    col = mix(col, r.rgb, r.a * 0.65 * uReflOn);
+    // ripple lines around the canoe, drawn like the shoreline ones: rings spreading from the hull
+    // and lines flanking the two wake arms behind the stern
+    vec2 rel = vWorld.xz - uBoat.xy;
+    float lx = dot(rel, vec2(uBoat.z, -uBoat.w));
+    float ly = dot(rel, vec2(uBoat.w, uBoat.z));
+    float dHull = length(vec2(max(abs(lx) - 2.3, 0.0), ly)) - 0.5;
+    float reach = 2.0 + 3.5 * uBoatSpeed;                  // two or three rings at most
+    float rp = fract(dHull * 0.45 - uTime * 0.5);
+    float rings = aastep(0.86, rp) * (1.0 - aastep(0.93, rp)) * (1.0 - smoothstep(reach * 0.5, reach, dHull)) * step(0.0, dHull);
+    float back = -lx - 2.3;
+    float armDist = abs(abs(ly) - (0.5 + 0.36 * back));
+    float dash = step(0.35, fract(back * 0.7 - uTime * 1.5));
+    float wakeLen = 10.0 * uBoatSpeed;
+    float arms = (1.0 - aastep(0.14, armDist)) * dash * step(0.0, back) * (1.0 - smoothstep(wakeLen * 0.5, wakeLen, back)) * smoothstep(0.05, 0.3, uBoatSpeed);
+    float boatLines = max(rings * (0.4 + 0.6 * uBoatSpeed), arms) * 0.75;
     // shoreline ripples: thin crisp lines parallel to the shore rolling in, broken up along the shore
     float along = vWorld.x * 0.31 + vWorld.z * 0.23;
     float breakup = 0.5 + 0.5 * sin(along * 0.7 + uTime * 0.25) * sin(along * 0.23 - uTime * 0.11);
@@ -140,7 +152,7 @@ const frag = /* glsl */ `
     float line = aastep(0.8, phase) * (1.0 - aastep(0.9, phase));
     float ripple = line * (1.0 - aastep(5.5, depth)) * aastep(0.45, breakup) * step(0.0, depth);
     float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
-    float foam = max(ripple, waterline) * 0.85;
+    float foam = max(max(ripple, waterline) * 0.85, boatLines);
     col = mix(col, vec3(0.95, 0.97, 0.97), foam);
     float alpha = max(0.74, foam);
     gl_FragColor = vec4(col, alpha);
@@ -187,6 +199,8 @@ export class WaterSystem {
       uReflOn: { value: 0 },
       uTextureMatrix: { value: new THREE.Matrix4() },
       uPatchCenter: { value: new THREE.Vector2(1e9, 1e9) },
+      uBoat: { value: new THREE.Vector4(1e9, 1e9, 1, 0) },
+      uBoatSpeed: { value: 0 },
       uPatchHalf: { value: PATCH_HALF },
       uShoreTex: { value: null },
       uLevelTex: { value: null },
@@ -263,6 +277,12 @@ export class WaterSystem {
   }
 
   waveAt(x, z) { return waveHeight(x, z, this.time, this.world); }
+
+  setBoat(x, z, heading, speed, afloat) {
+    this.uniforms.uBoat.value.set(afloat ? x : 1e9, afloat ? z : 1e9, Math.cos(heading), Math.sin(heading));
+    const u = this.uniforms.uBoatSpeed;
+    u.value += (THREE.MathUtils.clamp(Math.abs(speed) / 2.4, 0, 1) - u.value) * 0.08;
+  }
 
   // Mirror only what is on REFLECT_LAYER (the canoe) into the reflection target.
   renderReflection(renderer, scene, camera, level) {
