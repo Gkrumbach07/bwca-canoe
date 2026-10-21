@@ -21,6 +21,9 @@ export class ChaseCamera {
     dom.addEventListener('wheel', (e) => { this.distance = clamp(this.distance * Math.exp(e.deltaY * 0.0012), 4, 40); e.preventDefault(); }, { passive: false });
   }
 
+  // jump straight to the new spot (after a teleport) instead of gliding across the map
+  snap() { this.first = true; this.userYaw = 0; this.userPitch = 0; }
+
   setMode(mode) {
     this.mode = mode;
     this.userYaw = 0; this.userPitch = 0;

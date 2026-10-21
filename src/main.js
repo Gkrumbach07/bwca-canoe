@@ -91,7 +91,7 @@ async function main() {
   const player = new Player(world, canoe, input);
   player.ripples = ripples; player.water = water; player.audio = audio;
   const chase = new ChaseCamera(camera, renderer.domElement, world);
-  const hud = new Hud(world, (x, z) => player.teleport(x, z));
+  const hud = new Hud(world, async (x, z) => { if (await player.teleport(x, z)) chase.snap(); });
   const post = makePost(renderer, scene, camera);
   const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, grade: post.grade, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material });
   const geo = new GeoBridge();
