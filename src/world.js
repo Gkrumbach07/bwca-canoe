@@ -1,80 +1,124 @@
-// Loads the baked world (see scripts/bake.mjs) and answers spatial queries.
+// The streamed world: index.json plus whatever tiles are loaded right now. Spatial queries resolve through
+// the loaded fine tiles, fall back to the 80 m far field, and finally to a flat default, so nothing ever
+// has to wait for a tile to answer a question.
+import { GridQueries, TileGrid } from './grid.js';
 
-export class World {
+export class World extends GridQueries {
   static async load(onProgress = () => {}) {
     const base = import.meta.env.BASE_URL + 'data/';
-    const fetchBin = async (name, Ctor) => new Ctor(await (await fetch(base + name)).arrayBuffer());
     onProgress(0.05, 'Reading map data…');
-    const meta = await (await fetch(base + 'world.json')).json();
-    onProgress(0.15, 'Reading elevation…');
-    const [height, lake, sdist] = await Promise.all([
-      fetchBin('height.bin', Int16Array),
-      fetchBin('lake.bin', Uint16Array),
-      fetchBin('sdist.bin', Int16Array),
-    ]);
-    return new World(meta, height, lake, sdist);
+    const res = await fetch(base + 'index.json');
+    if (!res.ok) throw new Error('no map data in public/data: run `npm run bake:all` (whole BWCA) or `npm run bake` (Lake One test area)');
+    const index = await res.json();
+    if (index.version !== 2) throw new Error('map data is from an older bake: run `npm run bake:all`');
+    return new World(index, base);
   }
 
-  constructor(meta, height, lake, sdist) {
-    this.meta = meta;
-    const g = meta.grid;
-    this.width = g.width; this.height = g.height; this.cell = g.cell;
-    this.originX = g.originX; this.originZ = g.originZ;
+  constructor(index, base) {
+    super();
+    this.meta = index; this.base = base;
+    const g = index.grid;
+    this.cell = g.cell; this.originX = g.originX; this.originZ = g.originZ;
+    this.width = g.width; this.height = g.height;
+    this.tile = g.tile; this.halo = g.halo; this.side = g.tile + 2 * g.halo;
+    this.ntx = g.ntx; this.nty = g.nty;
+    this.tileMetres = g.tile * g.cell;
+    this.far = g.far; this.farSide = g.far.tile + 2 * g.far.halo;
     this.sizeX = g.width * g.cell; this.sizeZ = g.height * g.cell;
     this.minX = g.originX; this.maxX = g.originX + this.sizeX;
     this.minZ = g.originZ; this.maxZ = g.originZ + this.sizeZ;
-    this.h = height;     // decimetres
-    this.lake = lake;    // lake polygon id per cell, 0 = land
-    this.sd = Float32Array.from(sdist, (v) => v * 0.1); // metres, + land / - water (baked as decimetres)
-    this.lakes = meta.lakes;
-    this.basins = meta.basins;
-    this.portages = meta.portages;
-    this.campsites = meta.campsites;
-    this.levelById = new Float32Array(meta.lakes.length + 1);
-    for (const l of meta.lakes) if (l) this.levelById[l.id] = l.level;
+    this.slots = new Array(g.ntx * g.nty).fill(null);
+    this.farSlots = new Array(g.far.ntx * g.far.nty).fill(null);
+    this.lakes = index.lakes;
+    this.basins = index.basins;
+    this.portages = index.portages;
+    this.campsites = index.campsites;
+    this.entryPoints = index.entryPoints || [];
+    this.tileFlags = index.tiles;
+    this.levelById = new Float32Array(index.lakes.length + 1);
+    for (const l of index.lakes) if (l) this.levelById[l.id] = l.level;
+    for (const p of this.portages) {
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (const [x, z] of p.pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+      p.bbox = [x0, z0, x1, z1];
+    }
+    this.gridDesc = { cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo };
   }
 
-  // --- raw cell access -------------------------------------------------
-  idx(i, j) { return j * this.width + i; }
-  cellX(i) { return this.originX + (i + 0.5) * this.cell; }
-  cellZ(j) { return this.originZ + (j + 0.5) * this.cell; }
-  cellI(x) { return Math.floor((x - this.originX) / this.cell); }
-  cellJ(z) { return Math.floor((z - this.originZ) / this.cell); }
-  clampI(i) { return Math.min(this.width - 1, Math.max(0, i)); }
-  clampJ(j) { return Math.min(this.height - 1, Math.max(0, j)); }
-  hCell(i, j) { return this.h[this.idx(this.clampI(i), this.clampJ(j))] * 0.1; }
-  sdCell(i, j) { return this.sd[this.idx(this.clampI(i), this.clampJ(j))]; }
-  lakeCell(i, j) { return this.lake[this.idx(this.clampI(i), this.clampJ(j))]; }
+  // --- tiles ----------------------------------------------------------------
+  tileUrl(tx, ty) { return `${this.base}tiles/${tx}_${ty}.bin`; }
+  farUrl(fx, fy) { return `${this.base}far/${fx}_${fy}.bin`; }
+  tileOrigin(tx, ty) { return [this.originX + tx * this.tileMetres, this.originZ + ty * this.tileMetres]; }
+  tileOf(x, z) {
+    const tx = Math.min(this.ntx - 1, Math.max(0, Math.floor((x - this.originX) / this.tileMetres)));
+    const ty = Math.min(this.nty - 1, Math.max(0, Math.floor((z - this.originZ) / this.tileMetres)));
+    return [tx, ty];
+  }
+  tileHasWater(tx, ty) { const t = this.tileFlags[ty * this.ntx + tx]; return !!(t && t[0]); }
+  hasTile(tx, ty) { return !!this.slots[ty * this.ntx + tx]; }
+  isReady(x, z) { const [tx, ty] = this.tileOf(x, z); return this.hasTile(tx, ty); }
+  setTile(tx, ty, buf, cover = null) {
+    const n = this.side * this.side;
+    this.slots[ty * this.ntx + tx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), cover };
+  }
+  clearTile(tx, ty) { this.slots[ty * this.ntx + tx] = null; }
+  tileGrid(tx, ty) { const s = this.slots[ty * this.ntx + tx]; return s ? new TileGrid(this.gridDesc, tx, ty, s.buf, this.levelById) : null; }
+  setFar(fx, fy, buf) {
+    const n = this.farSide * this.farSide;
+    this.farSlots[fy * this.far.ntx + fx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n) };
+  }
+  clearFar(fx, fy) { this.farSlots[fy * this.far.ntx + fx] = null; }
+  hasFar(fx, fy) { return !!this.farSlots[fy * this.far.ntx + fx]; }
+
+  // --- raw cell access: fine tile, else far field, else a flat default ---------------------------
+  _fine(i, j) {
+    const T = this.tile;
+    const t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)];
+    if (!t) return -1;
+    return ((j % T) + this.halo) * this.side + (i % T) + this.halo;
+  }
+  _farIndex(i, j) {
+    const f = this.far, fi = (i / f.factor) | 0, fj = (j / f.factor) | 0;
+    const s = this.farSlots[((fj / f.tile) | 0) * f.ntx + ((fi / f.tile) | 0)];
+    if (!s) return null;
+    return { s, m: ((fj % f.tile) + f.halo) * this.farSide + (fi % f.tile) + f.halo };
+  }
+  hCell(i, j) {
+    if (i < 0) i = 0; else if (i >= this.width) i = this.width - 1;
+    if (j < 0) j = 0; else if (j >= this.height) j = this.height - 1;
+    const T = this.tile, t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)];
+    if (t) return t.h[((j % T) + this.halo) * this.side + (i % T) + this.halo] * 0.1;
+    const f = this._farIndex(i, j);
+    return f ? f.s.h[f.m] * 0.1 : 0;
+  }
+  sdCell(i, j) {
+    if (i < 0) i = 0; else if (i >= this.width) i = this.width - 1;
+    if (j < 0) j = 0; else if (j >= this.height) j = this.height - 1;
+    const T = this.tile, t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)];
+    if (t) return t.sd[((j % T) + this.halo) * this.side + (i % T) + this.halo] * 0.1;
+    const f = this._farIndex(i, j);
+    return f ? f.s.sd[f.m] * 0.1 : 3000;
+  }
+  lakeCell(i, j) {
+    if (i < 0) i = 0; else if (i >= this.width) i = this.width - 1;
+    if (j < 0) j = 0; else if (j >= this.height) j = this.height - 1;
+    const T = this.tile, t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)];
+    if (t) return t.lake[((j % T) + this.halo) * this.side + (i % T) + this.halo];
+    const f = this._farIndex(i, j);
+    return f ? f.s.lake[f.m] : 0;
+  }
+  // ground cover of a cell (r | g << 8, see placement.js coverField); 0 until the fine tile is in
+  coverCell(i, j) {
+    if (i < 0 || j < 0 || i >= this.width || j >= this.height) return 0;
+    const T = this.tile, t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)];
+    if (!t || !t.cover) return 0;
+    const k = (((j % T) + this.halo) * this.side + (i % T) + this.halo) * 2;
+    return t.cover[k] | (t.cover[k + 1] << 8);
+  }
+  levelOf(id) { return this.levelById[id]; }
 
   inBounds(x, z, margin = 0) {
     return x > this.minX + margin && x < this.maxX - margin && z > this.minZ + margin && z < this.maxZ - margin;
-  }
-
-  // Bilinear interpolation of a per-cell field sampled at cell centres.
-  _bilinear(get, x, z) {
-    const fx = (x - this.originX) / this.cell - 0.5, fz = (z - this.originZ) / this.cell - 0.5;
-    const i = Math.floor(fx), j = Math.floor(fz);
-    const ax = fx - i, az = fz - j;
-    const a = get(i, j), b = get(i + 1, j), c = get(i, j + 1), d = get(i + 1, j + 1);
-    return (a * (1 - ax) + b * ax) * (1 - az) + (c * (1 - ax) + d * ax) * az;
-  }
-
-  heightAt(x, z) { return this._bilinear((i, j) => this.hCell(i, j), x, z); }
-  shoreAt(x, z) { return this._bilinear((i, j) => this.sdCell(i, j), x, z); }
-  isWater(x, z) { return this.shoreAt(x, z) < 0; }
-  lakeIdAt(x, z) { return this.lakeCell(this.cellI(x), this.cellJ(z)); }
-
-  // Water surface level near (x,z): the level of the nearest water cell within r cells.
-  levelAt(x, z, r = 6) {
-    const ci = this.cellI(x), cj = this.cellJ(z);
-    let best = -1, bestD = Infinity;
-    for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
-      const id = this.lakeCell(ci + di, cj + dj);
-      if (!id) continue;
-      const d = di * di + dj * dj;
-      if (d < bestD) { bestD = d; best = id; }
-    }
-    return best > 0 ? this.levelById[best] : this.heightAt(x, z);
   }
 
   lakeName(id) {
@@ -83,33 +127,12 @@ export class World {
     return l.displayName || l.name || null;
   }
 
-  // Terrain surface normal (for placing props); cheap central differences.
-  normalAt(x, z, out) {
-    const e = this.cell * 0.5;
-    const hx = this.heightAt(x + e, z) - this.heightAt(x - e, z);
-    const hz = this.heightAt(x, z + e) - this.heightAt(x, z - e);
-    out.set(-hx, 2 * e, -hz).normalize();
-    return out;
-  }
-
-  slopeAt(x, z) {
-    const e = this.cell;
-    const hx = this.heightAt(x + e, z) - this.heightAt(x - e, z);
-    const hz = this.heightAt(x, z + e) - this.heightAt(x, z - e);
-    return Math.hypot(hx, hz) / (2 * e);
-  }
-
   toLatLon(x, z) {
     const p = this.meta.proj;
     return { lat: p.lat0 - z / p.mPerDegLat, lon: p.lon0 + x / p.mPerDegLon };
   }
-
-  // Direction (unit xz) from (x,z) toward deeper water: gradient of the shore distance.
-  deeperDir(x, z) {
-    const e = this.cell;
-    const gx = this.shoreAt(x + e, z) - this.shoreAt(x - e, z);
-    const gz = this.shoreAt(x, z + e) - this.shoreAt(x, z - e);
-    const L = Math.hypot(gx, gz) || 1;
-    return { x: -gx / L, z: -gz / L };
+  fromLatLon(lat, lon) {
+    const p = this.meta.proj;
+    return { x: (lon - p.lon0) * p.mPerDegLon, z: -(lat - p.lat0) * p.mPerDegLat };
   }
 }

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, lerp, clamp } from './rng.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeToonMaterial, smoothToon } from './rocks.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export const FLOAT_OFFSET = 0.15; // rig origin sits this far above the water surface
@@ -15,7 +17,7 @@ function hullProfile(u) {
 }
 
 function buildHull(rng) {
-  const g = new GeoBuilder();
+  const shell = new GeoBuilder(), g = new GeoBuilder(); // the shell is welded smooth; gunwales, seats and thwarts stay crisp
   const out = vary(0xd8b063, rng, 0.03), inn = vary(0xe4c67d, rng, 0.03), wood = vary(0x5b3b24, rng, 0.05);
   const stations = 15, side = 4;
   const loops = [];
@@ -36,8 +38,8 @@ function buildHull(rng) {
     const a = loops[s], b = loops[s + 1];
     const refOut = V((a[0].x + b[0].x) / 2, 0.1, 0), refIn = V((a[0].x + b[0].x) / 2, -6, 0);
     for (let k = 0; k < a.length - 1; k++) {
-      g.quad(a[k], a[k + 1], b[k + 1], b[k], out, refOut);
-      g.quad(a[k], a[k + 1], b[k + 1], b[k], inn, refIn);
+      shell.quad(a[k], a[k + 1], b[k + 1], b[k], out, refOut);
+      shell.quad(a[k], a[k + 1], b[k + 1], b[k], inn, refIn);
     }
   }
   // gunwales
@@ -63,7 +65,9 @@ function buildHull(rng) {
   box(-0.04, 0.04, 0.24, 0.29, -0.44, 0.44, wood);  // portage yoke
   box(0.86, 0.92, 0.26, 0.3, -0.4, 0.4, wood);
   box(-0.92, -0.86, 0.26, 0.3, -0.4, 0.4, wood);
-  return g.build();
+  const merged = mergeGeometries([smoothToon(shell.build()).toNonIndexed(), g.build()], false);
+  merged.computeBoundingSphere();
+  return merged;
 }
 
 function buildPaddle(rng) {
@@ -99,7 +103,7 @@ function boxGeo(w, h, d, col) {
 function blobGeo(r, col, sy = 1) {
   const g = new GeoBuilder();
   g.blob(0, 0, 0, r, col, mulberry32(9), 0.2, 1, sy, 1);
-  return g.build();
+  return smoothToon(g.build());
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -131,7 +135,7 @@ function solveJoint(s, h, l1, l2, pole, out) {
 
 export function buildCanoeRig() {
   const rng = mulberry32(11);
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const mat = makeToonMaterial(); // the same stepped ramp as the rocks and trees
   const rig = new THREE.Group();
   const hull = new THREE.Mesh(buildHull(rng), mat);
   hull.castShadow = true; hull.receiveShadow = true;

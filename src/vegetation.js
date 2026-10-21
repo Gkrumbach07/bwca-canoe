@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
-import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
-import { burnAt, clearingAt } from './fields.js';
-import { surfaceAt } from './terrain.js';
-import { smoothBoulder, makeRockMaterial } from './rocks.js';
+import { mulberry32, hash2 } from './rng.js';
+import { smoothBoulder, makeRockMaterial, makeToonMaterial, smoothToon } from './rocks.js';
+
+// Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
+// turns a tile's placement bins into instanced meshes in tile-local coordinates. Everything is welded smooth
+// and shaded with the stepped toon ramp (see rocks.js): low-poly silhouettes, soft painted volumes.
 
 // ---------- species (full detail) ------------------------------------------------
 
@@ -78,14 +80,6 @@ function tallPine(rng) {
   for (let i = 0; i < 2 + Math.floor(rng() * 2); i++) g.blob((rng() - 0.5) * 2.6, h * (0.9 + rng() * 0.08), (rng() - 0.5) * 2.6, 1.6 + rng() * 0.9, vary(0x3b6b42, rng), rng, 0.4, 1.3, 0.6, 1.3);
   return g.build();
 }
-
-function boulder(rng) {
-  const g = new GeoBuilder();
-  const r = 0.7 + rng() * 1.4;
-  g.blob(0, r * 0.25, 0, r, vary(0x8d8a80, rng, 0.1), rng, 0.45, 1 + rng() * 0.5, 0.6 + rng() * 0.3, 1 + rng() * 0.4);
-  if (rng() < 0.4) g.blob(r * 0.8, r * 0.15, (rng() - 0.5) * r, r * 0.5, vary(0x7d7a72, rng, 0.1), rng, 0.4, 1.2, 0.6, 1);
-  return g.build();
-}
 function shrub(rng) {
   const g = new GeoBuilder();
   const base = [0x5c8a3a, 0x6f9440, 0x4e7a34, 0x7f9a44][Math.floor(rng() * 4)];
@@ -122,171 +116,61 @@ const LOW = {
   tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x3b6b42, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x6b4a34, rng), rng); return g.build(); },
 };
 
+// index order must match placement.js SPECIES
 export const SPECIES = [
-  { name: 'whitePine', make: whitePine, scale: [0.85, 1.3], giant: 0.04 },
-  { name: 'spruce', make: spruce, scale: [0.75, 1.2] },
-  { name: 'redPine', make: redPine, scale: [0.75, 1.15] },
-  { name: 'birch', make: birch, scale: [0.7, 1.15] },
-  { name: 'cedar', make: cedar, scale: [0.75, 1.2] },
-  { name: 'snag', make: snag, scale: [0.8, 1.2] },
-  { name: 'boulder', make: (rng) => smoothBoulder(rng, rng() * 50), scale: [0.6, 1.8], rock: true },
-  { name: 'shrub', make: shrub, scale: [0.7, 1.5] },
-  { name: 'tallPine', make: tallPine, scale: [0.85, 1.25] },
+  { name: 'whitePine', make: whitePine },
+  { name: 'spruce', make: spruce },
+  { name: 'redPine', make: redPine },
+  { name: 'birch', make: birch },
+  { name: 'cedar', make: cedar },
+  { name: 'snag', make: snag },
+  { name: 'boulder', make: (rng) => smoothBoulder(rng, rng() * 50), rock: true },
+  { name: 'shrub', make: shrub },
+  { name: 'tallPine', make: tallPine },
 ];
 const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
 const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
 
-// ---------- placement -------------------------------------------------------------
-
-function trailMask(world, exclusions) {
-  const mask = new Map(); // cellIndex -> [[x1,z1,x2,z2,r], ...]
-  const add = (k, seg) => { const a = mask.get(k); if (a) a.push(seg); else mask.set(k, [seg]); };
-  for (const seg of exclusions) {
-    const [x1, z1, x2, z2, r] = seg;
-    const i0 = world.cellI(Math.min(x1, x2) - r) - 1, i1 = world.cellI(Math.max(x1, x2) + r) + 1;
-    const j0 = world.cellJ(Math.min(z1, z2) - r) - 1, j1 = world.cellJ(Math.max(z1, z2) + r) + 1;
-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (i >= 0 && j >= 0 && i < world.width && j < world.height) add(world.idx(i, j), seg);
-  }
-  return mask;
-}
-
-function segDist(px, pz, x1, z1, x2, z2) {
-  const dx = x2 - x1, dz = z2 - z1, L2 = dx * dx + dz * dz || 1;
-  const t = clamp(((px - x1) * dx + (pz - z1) * dz) / L2, 0, 1);
-  return Math.hypot(px - (x1 + dx * t), pz - (z1 + dz * t));
-}
-
-export function treeDensity(sd, slope, clearing) {
-  let d;
-  if (sd < 2) d = 0.1; else if (sd < 10) d = 1.5; else if (sd < 40) d = 1.4; else if (sd < 250) d = 0.95; else if (sd < 700) d = 0.5; else if (sd < 1500) d = 0.32; else d = 0.16;
-  d *= 1 - smoothstep(0.45, 0.8, slope) * 0.85;
-  d *= 1 - clearing * 0.85;
-  return d;
-}
-
-export async function buildVegetation(world, { seed = 1, regionSize = 640, exclusions = [], onProgress = () => {} } = {}) {
-  const rng = mulberry32(seed);
-  const variants = SPECIES.map((s) => Array.from({ length: VARIANTS }, (_, v) => ({
-    full: s.make(mulberry32(seed * 131 + v * 17 + s.name.length)),
-    low: LOW[s.name](mulberry32(seed * 131 + v * 17 + s.name.length)),
-  })));
-  const mask = trailMask(world, exclusions);
-  const W = world.width, H = world.height;
-  const rx = Math.ceil(world.sizeX / regionSize);
-  const bins = new Map();
-  const binFor = (r, s) => { const k = r * 16 + s; let b = bins.get(k); if (!b) { b = { r, s, items: [] }; bins.set(k, b); } return b; };
-  const shadeCount = new Float32Array(W * H);
-  let total = 0;
-  const color = new THREE.Color();
-  for (let j = 1; j < H - 1; j++) {
-    if ((j & 15) === 0) { onProgress(j / H); await new Promise((r) => setTimeout(r)); }
-    for (let i = 1; i < W - 1; i++) {
-      const k = world.idx(i, j);
-      const sd = world.sd[k];
-      if (sd < -4) continue;
-      const cx = world.cellX(i), cz = world.cellZ(j);
-      const slope = world.slopeAt(cx, cz);
-      const clearing = smoothstep(0.62, 0.78, clearingAt(cx, cz));
-      const burn = burnAt(cx, cz);
-      const segs = mask.get(k);
-      // trails run through thick woods: more trees and brush right beside them
-      const trailSide = segs && segs.some((g) => g[4] < 5) ? 2.6 : 1;
-      const e = sd < 0 ? 0 : treeDensity(sd, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - burn * 0.5);
-      const trees = Math.floor(e) + (rng() < e - Math.floor(e) ? 1 : 0);
-      const eShrub = (sd > 0.5 && sd < 35 ? (0.75 - smoothstep(10, 35, sd) * 0.5) * (1 - clearing * 0.5) * trailSide : (sd > 0 && trailSide > 1 ? 0.5 : 0)) + burn * 0.5;
-      const shrubs = Math.floor(eShrub) + (rng() < eShrub - Math.floor(eShrub) ? 1 : 0);
-      const rockP = sd < 8 && sd > -4 ? 0.1 + smoothstep(0.3, 0.6, slope) * 0.25 : 0;
-      const rocks = rng() < rockP ? 1 : 0;
-      const region = Math.floor((cz - world.minZ) / regionSize) * rx + Math.floor((cx - world.minX) / regionSize);
-      const n = trees + shrubs + rocks;
-      for (let q = 0; q < n; q++) {
-        const isTree = q < trees, isShrub = !isTree && q < trees + shrubs, isRock = !isTree && !isShrub;
-        const x = cx + (rng() - 0.5) * world.cell, z = cz + (rng() - 0.5) * world.cell;
-        const s = world.shoreAt(x, z);
-        if (isRock ? s < -3 || s > 9 : s < 0.6) continue;
-        if (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + (isRock ? 0.5 : isShrub ? 0.4 : 1.2))) continue;
-        let sp;
-        if (isRock) sp = 6;
-        else if (isShrub) sp = 7;
-        else {
-          const h = world.heightAt(x, z);
-          const patch = fbm(x * 0.0025 + 7, z * 0.0025, 3, 33);
-          const r = rng();
-          // spruce-dominated boreal mix, birch in stands, cedar along the shore; burn scars are
-          // standing snags with young spruce coming up; old pines on rocky points and ridges
-          if (burn > 0.5) sp = r < 0.72 ? 5 : 1;
-          else if (s < 22 && r < 0.2) sp = 4;
-          else if (((s < 35 && slope > 0.15) || h > 496) && r < 0.3) sp = 8;
-          else if (patch > 0.62 && r < 0.55) sp = 3;
-          else if (r < 0.02) sp = 5;
-          else if (h > 492 && r < 0.3) sp = 0;
-          else if (r < 0.12) sp = 2; else if (r < 0.25) sp = 0; else if (r < 0.32) sp = 3; else sp = 1;
-          shadeCount[k] += 1;
-        }
-        const spec = SPECIES[sp];
-        let scale = spec.scale[0] + rng() * (spec.scale[1] - spec.scale[0]);
-        if (spec.giant && rng() < spec.giant) scale *= 1.45;
-        if (isTree && burn > 0.5) scale *= sp === 5 ? 1.25 : 0.45; // tall dead stems, small regrowth
-        if (isRock && s > -2 && rng() < 0.08 + smoothstep(0.25, 0.5, slope) * 0.2) scale *= 2.6; // granite outcrop blocks
-        if (isTree && s > 600) scale *= 1.15;
-        // sink into the ground more on slopes so the downhill edge never hangs in the air
-        const sink = (isRock ? 0.4 : isShrub ? 0.45 : 0.35) + world.slopeAt(x, z) * (isRock ? 1.6 : isShrub ? 1.0 : 1.2) * scale;
-        binFor(region, sp).items.push(x, surfaceAt(world, x, z) - sink, z, rng() * Math.PI * 2, scale, 0.92 + rng() * 0.16, 0.9 + rng() * 0.2);
-        total++;
-      }
-    }
-  }
-  // canopy shade for the ground: tree count per cell, softened over the neighbours
-  const shade = new Float32Array(W * H);
-  for (let j = 1; j < H - 1; j++) for (let i = 1; i < W - 1; i++) {
-    let s = 0;
-    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) s += shadeCount[(j + dj) * W + i + di];
-    shade[j * W + i] = clamp(s / 7, 0, 1);
-  }
-  const group = new THREE.Group();
-  group.name = 'vegetation';
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+// Geometry variants (built once) and the shared materials.
+export function makeVegetationKit(seed = 3) {
+  const variants = SPECIES.map((s) => Array.from({ length: VARIANTS }, (_, v) => {
+    const full = s.make(mulberry32(seed * 131 + v * 17 + s.name.length));
+    const low = LOW[s.name](mulberry32(seed * 131 + v * 17 + s.name.length));
+    return s.rock ? { full, low } : { full: smoothToon(full), low: smoothToon(low) };
+  }));
+  const material = makeToonMaterial();
   const rockMaterial = makeRockMaterial();
-  const dummy = new THREE.Object3D();
-  for (const b of bins.values()) {
-    const count = b.items.length / 7;
-    const v = variants[b.s][Math.floor(hash2(b.r, b.s, 9) * VARIANTS)];
-    const mesh = new THREE.InstancedMesh(v.full, SPECIES[b.s].rock ? rockMaterial : material, count);
-    for (let n = 0; n < count; n++) {
-      const o = n * 7;
-      dummy.position.set(b.items[o], b.items[o + 1], b.items[o + 2]);
-      dummy.rotation.set(0, b.items[o + 3], 0);
-      const sc = b.items[o + 4];
-      dummy.scale.set(sc * b.items[o + 6], sc, sc * (2 - b.items[o + 6]));
-      dummy.updateMatrix();
-      mesh.setMatrixAt(n, dummy.matrix);
-      color.setRGB(b.items[o + 5], b.items[o + 5] * (0.97 + hash2(n, b.r, 2) * 0.06), b.items[o + 5]);
-      mesh.setColorAt(n, color);
-    }
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.instanceColor.needsUpdate = true;
+  return { variants, material, rockMaterial, seed };
+}
+
+// One instanced mesh per (region, species) bin, matrices and colours straight from the worker.
+export function makeVegetationMeshes(bins, kit) {
+  const meshes = [];
+  for (const b of bins) {
+    if (!b.count) continue;
+    const spec = SPECIES[b.sp];
+    const v = kit.variants[b.sp][Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 9) * VARIANTS)];
+    const mesh = new THREE.InstancedMesh(v.full, spec.rock ? kit.rockMaterial : kit.material, b.count);
+    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(b.matrices, 16);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(b.colors, 3);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.computeBoundingSphere(); // computed once with the full geometry, kept across LOD swaps
     mesh.matrixAutoUpdate = false;
-    const rxi = b.r % rx, rzi = (b.r - rxi) / rx;
-    mesh.userData.lod = { full: v.full, low: v.low, cx: world.minX + (rxi + 0.5) * regionSize, cz: world.minZ + (rzi + 0.5) * regionSize };
-    group.add(mesh);
+    mesh.userData.lod = { full: v.full, low: v.low, cx: b.cx, cz: b.cz, lod: LOD_DISTANCE, cull: CULL_DISTANCE };
+    meshes.push(mesh);
   }
-  onProgress(1);
-  group.userData.count = total;
-  group.userData.shade = shade;
-  return group;
+  return meshes;
 }
 
-export function updateVegetationLOD(group, camPos) {
-  for (const m of group.children) {
+// Distance-based LOD and culling for any mesh carrying userData.lod (trees, shrubs, rocks, lake vegetation).
+export function updateVegetationLOD(meshes, camPos) {
+  for (const m of meshes) {
     const l = m.userData.lod;
-    if (!l) continue;
     const d = Math.hypot(l.cx - camPos.x, l.cz - camPos.z);
-    m.visible = d < CULL_DISTANCE;
-    const want = d > LOD_DISTANCE ? l.low : l.full;
+    m.visible = d < l.cull;
+    const want = d > l.lod ? l.low : l.full;
     if (m.geometry !== want) m.geometry = want;
   }
 }

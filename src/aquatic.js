@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
-import { mulberry32, hash2, smoothstep } from './rng.js';
-import { calmAt } from './fields.js';
+import { mulberry32 } from './rng.js';
 import { makeFloatingMaterial, makeSwayMaterial } from './floating.js';
 
+// Lake vegetation geometry (lily pads, reeds, submerged weeds). Placement runs in the build worker
+// (placement.js placeAquatic); this file turns a tile's bins into instanced meshes in tile-local
+// coordinates that ride the rendered water surface.
+
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const CULL = 700;
 
 // lily pad: a flat seven-sided disc with a notch, sometimes a flower
 function lilyPad(rng, flower) {
@@ -49,75 +53,27 @@ function weed(rng) {
   return g.build();
 }
 
-const CULL = 700;
-
-export async function buildAquatic(world, water, { seed = 9, regionSize = 640, onProgress = () => {} } = {}) {
+// kinds: 0 pad, 1 reed, 2 weed (placement.js AQUATIC)
+export function makeAquaticKit(water, seed = 9) {
   const rng = mulberry32(seed);
-  const geos = { pad: [lilyPad(rng, false), lilyPad(rng, false), lilyPad(rng, true)], reed: [reeds(rng), reeds(rng), reeds(rng)], weed: [weed(rng), weed(rng)] };
-  const mats = { pad: makeFloatingMaterial(water), reed: makeFloatingMaterial(water), weed: makeSwayMaterial(water) };
-  const W = world.width, H = world.height, rx = Math.ceil(world.sizeX / regionSize);
-  const bins = new Map();
-  const binFor = (r, kind) => { const k = r + ':' + kind; let b = bins.get(k); if (!b) { b = { r, kind, items: [] }; bins.set(k, b); } return b; };
-  let total = 0;
-  for (let j = 1; j < H - 1; j++) {
-    if ((j & 31) === 0) { onProgress(j / H); await new Promise((r) => setTimeout(r)); }
-    for (let i = 1; i < W - 1; i++) {
-      const k = j * W + i, sd = world.sd[k];
-      if (sd < -32 || sd > 2) continue;
-      const cx = world.cellX(i), cz = world.cellZ(j);
-      const level = world.levelAt(cx, cz, 3);
-      const depth = level - world.hCell(i, j);
-      const calm = calmAt(cx, cz);
-      const region = Math.floor((cz - world.minZ) / regionSize) * rx + Math.floor((cx - world.minX) / regionSize);
-      const place = (kind, expected, test) => {
-        const n = Math.floor(expected) + (rng() < expected - Math.floor(expected) ? 1 : 0);
-        for (let q = 0; q < n; q++) {
-          const x = cx + (rng() - 0.5) * world.cell, z = cz + (rng() - 0.5) * world.cell;
-          const s = world.shoreAt(x, z), d = level - world.heightAt(x, z);
-          if (!test(s, d)) continue;
-          const y = kind === 'weed' ? world.heightAt(x, z) : level + 0.07;
-          binFor(region, kind).items.push(x, y, z, rng() * Math.PI * 2, kind === 'weed' ? Math.min(0.4 + d * 0.4 * rng() + 0.25, d * 0.8) : kind === 'pad' ? 0.17 + rng() * 0.2 : 0.8 + rng() * 0.5, kind === 'pad' && rng() < 0.12 ? 2 : Math.floor(rng() * 2));
-          total++;
-        }
-      };
-      if (sd < -1.0 && sd > -22 && depth < 3.0 && calm > 0.5) place('pad', 24 * smoothstep(0.5, 0.66, calm), (s, d) => s < -0.7 && d > 0.25 && d < 3.2);
-      if (sd > -6 && sd < 1.6 && calm > 0.5) place('reed', 2.6 * smoothstep(0.5, 0.68, calm), (s, d) => s < 1.8 && d < 1.4);
-      if (sd < -3 && sd > -30 && depth > 0.4 && depth < 3.4 && calm > 0.42) place('weed', 1.6, (s, d) => s < -2 && d > 0.35 && d < 3.6);
-    }
+  const geos = [[lilyPad(rng, false), lilyPad(rng, false), lilyPad(rng, true)], [reeds(rng), reeds(rng), reeds(rng)], [weed(rng), weed(rng)]];
+  const mats = [makeFloatingMaterial(water), makeFloatingMaterial(water), makeSwayMaterial(water)];
+  return { geos, mats };
+}
+
+export function makeAquaticMeshes(bins, kit) {
+  const meshes = [];
+  for (const b of bins) {
+    if (!b.count) continue;
+    const geo = kit.geos[b.kind][Math.min(b.variant, kit.geos[b.kind].length - 1)];
+    const mesh = new THREE.InstancedMesh(geo, kit.mats[b.kind], b.count);
+    mesh.instanceMatrix = new THREE.InstancedBufferAttribute(b.matrices, 16);
+    mesh.receiveShadow = b.kind !== 2;
+    mesh.computeBoundingSphere();
+    mesh.matrixAutoUpdate = false;
+    mesh.renderOrder = b.kind === 2 ? 0 : 11; // pads and reeds draw after the water so they sit on it
+    mesh.userData.lod = { full: geo, low: geo, cx: b.cx, cz: b.cz, lod: Infinity, cull: CULL };
+    meshes.push(mesh);
   }
-  const group = new THREE.Group();
-  group.name = 'aquatic';
-  const dummy = new THREE.Object3D();
-  for (const b of bins.values()) {
-    const count = b.items.length / 6;
-    // one mesh per variant so geometry can differ
-    const byVariant = new Map();
-    for (let n = 0; n < count; n++) { const v = b.items[n * 6 + 5]; if (!byVariant.has(v)) byVariant.set(v, []); byVariant.get(v).push(n); }
-    for (const [v, list] of byVariant) {
-      const geo = geos[b.kind][Math.min(v, geos[b.kind].length - 1)];
-      const mesh = new THREE.InstancedMesh(geo, mats[b.kind], list.length);
-      list.forEach((n, m) => {
-        const o = n * 6;
-        dummy.position.set(b.items[o], b.items[o + 1], b.items[o + 2]);
-        dummy.rotation.set(0, b.items[o + 3], 0);
-        const sc = b.items[o + 4];
-        dummy.scale.set(sc, sc, sc);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(m, dummy.matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.receiveShadow = b.kind !== 'weed';
-      mesh.computeBoundingSphere();
-      mesh.matrixAutoUpdate = false;
-      mesh.renderOrder = b.kind === 'weed' ? 0 : 11; // pads and reeds draw after the water so they sit on it
-      const rxi = b.r % rx, rzi = (b.r - rxi) / rx;
-      mesh.userData.center = [world.minX + (rxi + 0.5) * regionSize, world.minZ + (rzi + 0.5) * regionSize];
-      mesh.userData.kind = b.kind;
-      group.add(mesh);
-    }
-  }
-  group.userData.count = total;
-  group.userData.update = (camPos) => { for (const m of group.children) { const c = m.userData.center; m.visible = Math.hypot(c[0] - camPos.x, c[1] - camPos.z) < CULL; } };
-  onProgress(1);
-  return group;
+  return meshes;
 }

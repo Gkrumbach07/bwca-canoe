@@ -2,14 +2,33 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { fbm } from './rng.js';
 
-// Boulders in a different register from the faceted ground: smooth, rounded, sculpted volumes shaded
-// in three flat tones (a toon ramp) with a warm top and a cool underside, the way Firewatch paints rock.
+// The toon register: smooth, rounded volumes shaded in a few flat tones (a stepped ramp), the way
+// Firewatch paints rock, bark and canopy. The faceted ground stays Lambert for contrast.
 
-export function makeRockMaterial() {
-  const ramp = new THREE.DataTexture(new Uint8Array([60, 110, 170, 230, 255]), 5, 1, THREE.RedFormat, THREE.UnsignedByteType);
-  ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
-  ramp.needsUpdate = true;
-  return new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: ramp });
+let ramp = null;
+export function toonRamp() {
+  if (!ramp) {
+    ramp = new THREE.DataTexture(new Uint8Array([60, 110, 170, 230, 255]), 5, 1, THREE.RedFormat, THREE.UnsignedByteType);
+    ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
+    ramp.needsUpdate = true;
+  }
+  return ramp;
+}
+
+export function makeToonMaterial(opts = {}) {
+  return new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp(), ...opts });
+}
+export function makeRockMaterial() { return makeToonMaterial(); }
+
+// GeoBuilder output is flat: three unshared vertices per face. Weld the faces that share a position and a
+// colour and recompute the normals, so each coloured part (a canopy cone, a trunk, a hull) shades as one
+// smooth volume while the colour boundaries stay crisp.
+export function smoothToon(geo) {
+  geo.deleteAttribute('normal');
+  const g = mergeVertices(geo, 1e-4);
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return g;
 }
 
 export function smoothBoulder(rng, seed) {
