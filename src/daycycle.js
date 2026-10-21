@@ -109,6 +109,7 @@ export class DayCycle {
     wu.uWaterDeep.value.copy(wu.uWater.value).multiplyScalar(0.72);
     wu.uFoam.value.copy(this.lerpColor('foam', c));
     if (t.ripples) t.ripples.material.uniforms.uColor.value.copy(wu.uFoam.value);
+    if (t.hullFoam) t.hullFoam.color.copy(wu.uFoam.value);
     wu.uSunDir.value.copy(this.sunDir.y > 0.02 ? this.sunDir : t.moon.position.clone().normalize());
     if (t.grade) t.grade.uniforms.uGain.value = this.lerpNum('gain');
     if (t.mist) { t.mist.setAmount(this.mist); t.mist.setColor(this.lerpColor('fogHorizon', c).lerp(new THREE.Color(0xffffff), 0.55)); }

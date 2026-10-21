@@ -25,7 +25,7 @@ const INSTANCE_ORIGIN = /* glsl */ `
 
 export function makeFloatingMaterial(water, opts = {}) {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, ...opts });
-  withSurface(m, water, INSTANCE_ORIGIN + `{ float sh; transformed.y += surfaceWave(ip.xz, uWaterTime, 1.0, sh) / sy; }`);
+  withSurface(m, water, INSTANCE_ORIGIN + `{ transformed.y += renderedWave(ip.xz, uWaterTime) / sy; }`);
   m.customProgramCacheKey = () => 'floating';
   return m;
 }

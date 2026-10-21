@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
 import { burnAt, clearingAt } from './fields.js';
+import { surfaceAt } from './terrain.js';
+import { smoothBoulder, makeRockMaterial } from './rocks.js';
 
 // ---------- species (full detail) ------------------------------------------------
 
@@ -115,7 +117,7 @@ const LOW = {
   birch: (rng) => { const h = 8 + rng() * 5; const g = lowBlob(rng, h * 0.75, 2.4, vary(0x7da84a, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.1, h * 0.7, 3, vary(0xe6e2d6, rng, 0.04), rng); return g.build(); },
   cedar: (rng) => lowConifer(rng, 7 + rng() * 3, 2.3, [vary(0x2d5436, rng), vary(0x2d5436, rng)], vary(0x6b4a34, rng), 0.1),
   snag: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.5, 0, 0.3, 0.08, 7 + rng() * 5, 4, vary(0x9a9388, rng, 0.08), rng); return g.build(); },
-  boulder,
+  boulder: (rng) => smoothBoulder(rng, rng() * 50),
   shrub,
   tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x3b6b42, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x6b4a34, rng), rng); return g.build(); },
 };
@@ -127,7 +129,7 @@ export const SPECIES = [
   { name: 'birch', make: birch, scale: [0.7, 1.15] },
   { name: 'cedar', make: cedar, scale: [0.75, 1.2] },
   { name: 'snag', make: snag, scale: [0.8, 1.2] },
-  { name: 'boulder', make: boulder, scale: [0.6, 1.6] },
+  { name: 'boulder', make: (rng) => smoothBoulder(rng, rng() * 50), scale: [0.6, 1.8], rock: true },
   { name: 'shrub', make: shrub, scale: [0.7, 1.5] },
   { name: 'tallPine', make: tallPine, scale: [0.85, 1.25] },
 ];
@@ -228,7 +230,9 @@ export async function buildVegetation(world, { seed = 1, regionSize = 640, exclu
         if (isTree && burn > 0.5) scale *= sp === 5 ? 1.25 : 0.45; // tall dead stems, small regrowth
         if (isRock && s > -2 && rng() < 0.08 + smoothstep(0.25, 0.5, slope) * 0.2) scale *= 2.6; // granite outcrop blocks
         if (isTree && s > 600) scale *= 1.15;
-        binFor(region, sp).items.push(x, world.heightAt(x, z) - (isRock ? 0.4 : 0.35), z, rng() * Math.PI * 2, scale, 0.92 + rng() * 0.16, 0.9 + rng() * 0.2);
+        // sink into the ground more on slopes so the downhill edge never hangs in the air
+        const sink = (isRock ? 0.4 : isShrub ? 0.45 : 0.35) + world.slopeAt(x, z) * (isRock ? 1.6 : isShrub ? 1.0 : 1.2) * scale;
+        binFor(region, sp).items.push(x, surfaceAt(world, x, z) - sink, z, rng() * Math.PI * 2, scale, 0.92 + rng() * 0.16, 0.9 + rng() * 0.2);
         total++;
       }
     }
@@ -243,11 +247,12 @@ export async function buildVegetation(world, { seed = 1, regionSize = 640, exclu
   const group = new THREE.Group();
   group.name = 'vegetation';
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const rockMaterial = makeRockMaterial();
   const dummy = new THREE.Object3D();
   for (const b of bins.values()) {
     const count = b.items.length / 7;
     const v = variants[b.s][Math.floor(hash2(b.r, b.s, 9) * VARIANTS)];
-    const mesh = new THREE.InstancedMesh(v.full, material, count);
+    const mesh = new THREE.InstancedMesh(v.full, SPECIES[b.s].rock ? rockMaterial : material, count);
     for (let n = 0; n < count; n++) {
       const o = n * 7;
       dummy.position.set(b.items[o], b.items[o + 1], b.items[o + 2]);

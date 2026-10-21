@@ -23,7 +23,7 @@ const vert = /* glsl */ `
     float t = clamp(age / max(aData.y, 0.001), 0.0, 1.0);
     float alive = step(0.0, age) * step(age, aData.y);
     float shore;
-    float swell = surfaceWave(aPos.xz, uWaterTime, 1.0, shore);
+    float swell = renderedWave(aPos.xz, uWaterTime);
     vec3 p = aPos;
     vec3 world;
     if (aKind < 2.0) {
@@ -38,8 +38,7 @@ const vert = /* glsl */ `
       // bubble: drifts on the surface, swells a little, then fades
       float size = mix(aData.z, aData.w, sqrt(t)) * alive;
       p.xz += aVel.xz * age;
-      float s2;
-      p.y += surfaceWave(p.xz, uWaterTime, 1.0, s2);
+      p.y += renderedWave(p.xz, uWaterTime);
       world = p + vec3(position.x, 0.0, position.y) * size;
     }
     vUv = position.xy;

@@ -96,7 +96,7 @@ async function main() {
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   const hud = new Hud(world, (x, z) => player.teleport(x, z));
   const post = makePost(renderer, scene, camera);
-  const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, grade: post.grade, stars, mist, ripples });
+  const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, grade: post.grade, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material });
   player.audio = audio;
   const geo = new GeoBridge();
   window.addEventListener('keydown', (e) => { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn; if (e.code === 'KeyN') audio.toggle(); });
@@ -121,7 +121,7 @@ async function main() {
     sun.position.copy(sun.target.position).addScaledVector(day.sunDir, 700);
     canoe.setFirstPerson(chase.mode === 'first');
     aquatic.userData.update(camera.position);
-    cover.update(dt * player.timeScale, player.x, player.z, hemi);
+    cover.update(dt * player.timeScale, player.x, player.z, hemi, sun);
     mist.update(dt * player.timeScale, player.x, player.z);
     loons.update(dt * player.timeScale, player);
     audio.update(dt, world.shoreAt(player.x, player.z), player.speed, player.mode === 'paddle');

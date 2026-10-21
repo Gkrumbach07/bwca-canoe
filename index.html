@@ -16,7 +16,7 @@
     #prompt.show { opacity: 1; }
     #prompt kbd { background: #f4efe4; color: #16303a; border-radius: 5px; padding: 1px 7px; font-weight: 700; font-family: inherit; margin-right: 6px; }
     #help { right: 20px; bottom: 18px; font-size: 12px; opacity: .7; text-align: right; line-height: 1.6; }
-    #minimap { position: fixed; top: 18px; right: 20px; width: 260px; height: 170px; border-radius: 10px; border: 1px solid rgba(255,255,255,.2); background: #0b1a24; box-shadow: 0 4px 16px rgba(0,0,0,.4); image-rendering: auto; }
+    #minimap { position: fixed; top: 18px; right: 20px; width: 260px; height: 170px; border-radius: 6px; border: 3px solid #d8ccb0; background: #e9e1cc; box-shadow: 0 4px 16px rgba(0,0,0,.4); image-rendering: auto; }
     #gps { position: fixed; top: 196px; right: 20px; width: 260px; box-sizing: border-box; font-size: 12px; background: rgba(10, 24, 32, .55); border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
     #gps .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e0a030; margin-right: 6px; vertical-align: middle; }
     #gps.linked .dot { background: #58d66b; }
@@ -42,7 +42,7 @@
     <b>[ ]</b> time of day &nbsp; <b>P</b> pause time &nbsp; <b>N</b> sound<br/>
     drag to look &nbsp; wheel to zoom &nbsp; click the map to teleport
   </div>
-  <canvas id="minimap" width="520" height="340"></canvas>
+  <canvas id="minimap" width="1040" height="680"></canvas>
   <div id="gps"><span class="dot"></span><span id="gps-state">GPS sim: no extension</span><br/><b id="gps-coords">–</b></div>
   <div id="credit">Terrain: USGS 3DEP via AWS Terrain Tiles · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors</div>
   <div id="loading"><h1>Boundary Waters</h1><p id="loading-msg">Loading terrain…</p><div class="bar"><i id="loading-bar"></i></div></div>

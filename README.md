@@ -50,6 +50,11 @@ Downloads are cached in `data-cache/`. The bake needs network access to `api.ope
 | mouse drag / wheel | look around / zoom |
 | click the minimap | teleport to the nearest open water |
 
+The minimap is drawn as a paper topographic sheet in the spirit of the Fisher and McKenzie maps:
+hypsometric tints, 10 m contours, pale-blue lakes, red dashed portages with rod counts, red campsite
+dots and serif lake names. `M` opens it large. Boulders and campsite outcrops are smooth, rounded rock
+shaded in a five-step toon ramp, a deliberate contrast with the faceted ground.
+
 Paddle up to a portage landing (the trail marker on shore) and press **E**: the canoe is shouldered and you
 walk the real trail with W/S. Portage lengths are shown in rods, as they are on every BWCA map.
 

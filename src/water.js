@@ -13,10 +13,10 @@ const PATCH_HALF = 160;   // metres; multiple of the 10 m lattice
 const PATCH_RES = 3.2;    // metres per vertex
 
 export function lowWave(x, z, t) {
-  return Math.sin(x * 0.14 + t * 0.35) * 0.06 + Math.sin((x * 0.6 + z * 0.8) * 0.09 - t * 0.3) * 0.06 + Math.sin(z * 0.11 - x * 0.05 + t * 0.27) * 0.05;
+  return Math.sin(x * 0.14 + t * 0.35) * 0.04 + Math.sin((x * 0.6 + z * 0.8) * 0.09 - t * 0.3) * 0.04 + Math.sin(z * 0.11 - x * 0.05 + t * 0.27) * 0.03;
 }
 export function highWave(x, z, t) {
-  return Math.sin(x * 0.7 + t * 1.1) * 0.18 + Math.sin(z * 1.05 - t * 0.95 + x * 0.3) * 0.1 + Math.sin((x + z) * 0.45 + t * 0.8) * 0.14;
+  return Math.sin(x * 0.7 + t * 1.1) * 0.09 + Math.sin(z * 1.05 - t * 0.95 + x * 0.3) * 0.05 + Math.sin((x + z) * 0.45 + t * 0.8) * 0.07;
 }
 // CPU twin of the patch vertex shader (used for canoe bobbing)
 export function waveHeight(x, z, t, world) {
@@ -28,17 +28,19 @@ export function waveHeight(x, z, t, world) {
 }
 
 const glslWaves = /* glsl */ `
-  float lowWave(vec2 p, float t) { return sin(p.x * 0.14 + t * 0.35) * 0.06 + sin((p.x * 0.6 + p.y * 0.8) * 0.09 - t * 0.3) * 0.06 + sin(p.y * 0.11 - p.x * 0.05 + t * 0.27) * 0.05; }
-  float highWave(vec2 p, float t) { return sin(p.x * 0.7 + t * 1.1) * 0.18 + sin(p.y * 1.05 - t * 0.95 + p.x * 0.3) * 0.1 + sin((p.x + p.y) * 0.45 + t * 0.8) * 0.14; }
+  float lowWave(vec2 p, float t) { return sin(p.x * 0.14 + t * 0.35) * 0.04 + sin((p.x * 0.6 + p.y * 0.8) * 0.09 - t * 0.3) * 0.04 + sin(p.y * 0.11 - p.x * 0.05 + t * 0.27) * 0.03; }
+  float highWave(vec2 p, float t) { return sin(p.x * 0.7 + t * 1.1) * 0.09 + sin(p.y * 1.05 - t * 0.95 + p.x * 0.3) * 0.05 + sin((p.x + p.y) * 0.45 + t * 0.8) * 0.07; }
 `;
 
 // Swell height at any world xz, shared by the near water patch and the surface particles:
 // long waves interpolated from the 10 m lattice nodes (damped near shore, exactly as the far mesh
 // does it) plus short waves on top. Needs uShoreTex / uGrid / uGridSize bound.
 export const glslSurface = /* glsl */ `
-  uniform sampler2D uShoreTex, uHeightTex;
+  uniform sampler2D uShoreTex, uHeightTex, uLevelTex;
   uniform vec3 uGrid;      // originX, originZ, 1/cell
   uniform ivec2 uGridSize;
+  uniform vec2 uPatchCenter;
+  uniform float uPatchHalf, uPatchRes;
   ${glslWaves}
   float cellSample(sampler2D t, ivec2 c) { c = clamp(c, ivec2(0), uGridSize - 1); return texelFetch(t, c, 0).r; }
   float bilinear(sampler2D t, vec2 w) {
@@ -48,6 +50,16 @@ export const glslSurface = /* glsl */ `
     return mix(mix(cellSample(t, c), cellSample(t, c + ivec2(1, 0)), a.x), mix(cellSample(t, c + ivec2(0, 1)), cellSample(t, c + ivec2(1, 1)), a.x), a.y);
   }
   float terrainAt(vec2 w) { return bilinear(uHeightTex, w); }
+  float levelAt(vec2 w) { return cellSample(uLevelTex, ivec2(floor((w - uGrid.xy) * uGrid.z))); }
+  // the terrain mesh reshapes the shore band from the distance field (see terrain.js shoreShape)
+  float surfaceAt(vec2 w) {
+    float h = terrainAt(w), sd = bilinear(uShoreTex, w), a = abs(sd);
+    if (a >= 9.0) return h;
+    float target = levelAt(w) + (sd > 0.0 ? 0.16 * sd : 0.12 * sd);
+    return mix(h, target, 1.0 - smoothstep(4.5, 9.0, a));
+  }
+  // short swell exists only on the near patch; anything riding the water must fade it the same way
+  float patchBorder(vec2 w) { return 1.0 - smoothstep(uPatchHalf - 40.0, uPatchHalf - 6.0, max(abs(w.x - uPatchCenter.x), abs(w.y - uPatchCenter.y))); }
   float nodeWave(ivec2 c, float t) {
     vec2 np = uGrid.xy + (vec2(c) + 0.5) / uGrid.z;
     return lowWave(np, t) * smoothstep(0.0, 25.0, -cellSample(uShoreTex, c));
@@ -62,13 +74,24 @@ export const glslSurface = /* glsl */ `
     float low = mix(mix(nodeWave(c, t), nodeWave(c + ivec2(1, 0), t), a.x), mix(nodeWave(c + ivec2(0, 1), t), nodeWave(c + ivec2(1, 1), t), a.x), a.y);
     return low + highWave(w, t) * smoothstep(0.0, 8.0, -shore) * border;
   }
+  // the swell as the water patch actually renders it: evaluated at the patch's own grid vertices and
+  // interpolated between them, so floating things sit on the drawn surface, not the analytic one
+  float renderedWave(vec2 w, float t) {
+    vec2 origin = uPatchCenter - vec2(uPatchHalf);
+    vec2 f = (w - origin) / uPatchRes;
+    vec2 fi = floor(f), a = f - fi;
+    vec2 p00 = origin + fi * uPatchRes;
+    vec2 p10 = p00 + vec2(uPatchRes, 0.0), p01 = p00 + vec2(0.0, uPatchRes), p11 = p00 + vec2(uPatchRes);
+    float s;
+    float w00 = surfaceWave(p00, t, patchBorder(p00), s), w10 = surfaceWave(p10, t, patchBorder(p10), s);
+    float w01 = surfaceWave(p01, t, patchBorder(p01), s), w11 = surfaceWave(p11, t, patchBorder(p11), s);
+    return mix(mix(w00, w10, a.x), mix(w01, w11, a.x), a.y);
+  }
 `;
 
 const vertHead = /* glsl */ `
   uniform float uTime;
   uniform mat4 uTextureMatrix;
-  uniform vec2 uPatchCenter;
-  uniform float uPatchHalf;
   varying vec3 vWorld;
   varying float vShore;
   varying float vDepth;
@@ -90,6 +113,8 @@ const vertTail = /* glsl */ `
   }
 `;
 const vertFar = vertHead + glslWaves + /* glsl */ `
+  uniform vec2 uPatchCenter;
+  uniform float uPatchHalf;
   attribute float aShore;
   attribute float aDepth;
   void main() {
@@ -101,10 +126,9 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
 ` + vertTail;
 
 const vertPatch = vertHead + glslSurface + /* glsl */ `
-  uniform sampler2D uLevelTex;
   void main() {
     vec2 w = uPatchCenter + position.xz;
-    float border = 1.0 - smoothstep(uPatchHalf - 40.0, uPatchHalf - 6.0, max(abs(position.x), abs(position.z)));
+    float border = patchBorder(w);
     float shore;
     float wave = surfaceWave(w, uTime, border, shore);
     vShore = shore;
@@ -217,6 +241,7 @@ export class WaterSystem {
       uTextureMatrix: { value: new THREE.Matrix4() },
       uPatchCenter: { value: new THREE.Vector2(1e9, 1e9) },
       uPatchHalf: { value: PATCH_HALF },
+      uPatchRes: { value: PATCH_RES },
       uShoreTex: { value: null },
       uLevelTex: { value: null },
       uGrid: { value: new THREE.Vector3(world.originX, world.originZ, 1 / world.cell) },
@@ -300,7 +325,7 @@ export class WaterSystem {
   waveAt(x, z) { return waveHeight(x, z, this.time, this.world); }
 
   // uniforms another material needs to ride the same surface (see wake.js)
-  surfaceUniforms() { const u = this.uniforms; return { uShoreTex: u.uShoreTex, uHeightTex: u.uHeightTex, uGrid: u.uGrid, uGridSize: u.uGridSize, uWaterTime: u.uTime }; }
+  surfaceUniforms() { const u = this.uniforms; return { uShoreTex: u.uShoreTex, uHeightTex: u.uHeightTex, uLevelTex: u.uLevelTex, uGrid: u.uGrid, uGridSize: u.uGridSize, uPatchCenter: u.uPatchCenter, uPatchHalf: u.uPatchHalf, uPatchRes: u.uPatchRes, uWaterTime: u.uTime }; }
 
   // Mirror only what is on REFLECT_LAYER (the canoe) into the reflection target.
   renderReflection(renderer, scene, camera, level) {

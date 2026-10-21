@@ -75,12 +75,12 @@ export async function buildAquatic(world, water, { seed = 9, regionSize = 640, o
           const x = cx + (rng() - 0.5) * world.cell, z = cz + (rng() - 0.5) * world.cell;
           const s = world.shoreAt(x, z), d = level - world.heightAt(x, z);
           if (!test(s, d)) continue;
-          const y = kind === 'weed' ? world.heightAt(x, z) : level + 0.02;
-          binFor(region, kind).items.push(x, y, z, rng() * Math.PI * 2, kind === 'weed' ? Math.min(0.4 + d * 0.4 * rng() + 0.25, d * 0.8) : kind === 'pad' ? 0.24 + rng() * 0.26 : 0.8 + rng() * 0.5, kind === 'pad' && rng() < 0.12 ? 2 : Math.floor(rng() * 2));
+          const y = kind === 'weed' ? world.heightAt(x, z) : level + 0.07;
+          binFor(region, kind).items.push(x, y, z, rng() * Math.PI * 2, kind === 'weed' ? Math.min(0.4 + d * 0.4 * rng() + 0.25, d * 0.8) : kind === 'pad' ? 0.17 + rng() * 0.2 : 0.8 + rng() * 0.5, kind === 'pad' && rng() < 0.12 ? 2 : Math.floor(rng() * 2));
           total++;
         }
       };
-      if (sd < -1.2 && sd > -14 && depth < 2.4 && calm > 0.55) place('pad', 5 * smoothstep(0.55, 0.74, calm), (s, d) => s < -0.8 && d > 0.3 && d < 2.6);
+      if (sd < -1.0 && sd > -22 && depth < 3.0 && calm > 0.5) place('pad', 24 * smoothstep(0.5, 0.66, calm), (s, d) => s < -0.7 && d > 0.25 && d < 3.2);
       if (sd > -6 && sd < 1.6 && calm > 0.5) place('reed', 2.6 * smoothstep(0.5, 0.68, calm), (s, d) => s < 1.8 && d < 1.4);
       if (sd < -3 && sd > -30 && depth > 0.4 && depth < 3.4 && calm > 0.42) place('weed', 1.6, (s, d) => s < -2 && d > 0.35 && d < 3.6);
     }

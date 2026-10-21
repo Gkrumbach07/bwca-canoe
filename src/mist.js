@@ -11,10 +11,9 @@ const vert = /* glsl */ `
   #include <common>
   #include <fog_pars_vertex>
   ${glslSurface}
-  uniform sampler2D uLevelTex;
   void main() {
     vec2 w = uCenter + position.xz;
-    float level = cellSample(uLevelTex, ivec2(floor((w - uGrid.xy) * uGrid.z)));
+    float level = levelAt(w);
     vec3 p = vec3(w.x, level + uLift, w.y);
     vW = w; vWorld = p;
     vec4 mvPosition = viewMatrix * vec4(p, 1.0);
@@ -60,7 +59,7 @@ export class Mist {
       geo.rotateX(-Math.PI / 2);
       const mat = new THREE.ShaderMaterial({
         vertexShader: vert, fragmentShader: frag,
-        uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), ...su, uLevelTex: water.uniforms.uLevelTex, uShoreTex2: su.uShoreTex, uGrid2: su.uGrid, uGridSize2: su.uGridSize, uCenter: { value: new THREE.Vector2() }, uLift: { value: lift }, uDrift: { value: drift }, uAmount: { value: 0 }, uTime: { value: 0 }, uColor: { value: new THREE.Color(0xdfe7ec) } },
+        uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), ...su, uShoreTex2: su.uShoreTex, uGrid2: su.uGrid, uGridSize2: su.uGridSize, uCenter: { value: new THREE.Vector2() }, uLift: { value: lift }, uDrift: { value: drift }, uAmount: { value: 0 }, uTime: { value: 0 }, uColor: { value: new THREE.Color(0xdfe7ec) } },
         transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true,
       });
       const mesh = new THREE.Mesh(geo, mat);

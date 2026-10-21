@@ -106,7 +106,7 @@ export class Player {
     else if (ok(nx, this.z, this.heading)) { this.x = nx; this.speed *= 0.7; }
     else if (ok(this.x, nz, this.heading)) { this.z = nz; this.speed *= 0.7; }
     else { this.speed *= -0.15; if (!w.inBounds(nx, nz, 40)) this.prompt = { text: 'Edge of the map — turn back', key: null }; }
-    this.placeOnWater();
+    this.placeOnWater(dt);
     this.emitWater(dt);
     const land = this.nearestLanding();
     if (land) {
@@ -116,7 +116,7 @@ export class Player {
     }
   }
 
-  placeOnWater() {
+  placeOnWater(dt = 1 / 60) {
     const w = this.world, rig = this.canoe.rig, st = this.canoe.state;
     const level = w.levelAt(this.x, this.z);
     this.level = level;
@@ -124,13 +124,19 @@ export class Player {
     const f = this.forward, r = { x: -f.z, z: f.x };
     const t = this.water ? this.water.time : this.time;
     const wave = (dx, dz) => waveHeight(this.x + dx, this.z + dz, t, w);
-    const hb = wave(f.x * 2, f.z * 2), hs = wave(-f.x * 2, -f.z * 2), hr = wave(r.x * 0.5, r.z * 0.5), hl = wave(-r.x * 0.5, -r.z * 0.5);
-    rig.position.set(this.x, level + FLOAT_OFFSET + (hb + hs) * 0.5, this.z);
-    const pitch = Math.atan2(hb - hs, 4) + this.speed * 0.012;
-    const roll = Math.atan2(hr - hl, 1) + this.yawRate * 0.12 + st.side * st.power * 0.035 * Math.sin(st.stroke * Math.PI * 2);
+    // a hull averages the water under it: sample five points along the keel, pitch from the ends
+    const hb = wave(f.x * 2, f.z * 2), hs = wave(-f.x * 2, -f.z * 2), hm = wave(0, 0), h1 = wave(f.x, f.z), h2 = wave(-f.x, -f.z);
+    const hr = wave(r.x * 0.5, r.z * 0.5), hl = wave(-r.x * 0.5, -r.z * 0.5);
+    const y = level + FLOAT_OFFSET + (hb + hs + hm + h1 + h2) / 5;
+    const pitch = Math.atan2(hb - hs, 4) * 0.6 + this.speed * 0.012;
+    const roll = Math.atan2(hr - hl, 1) * 0.5 + this.yawRate * 0.12 + st.side * st.power * 0.035 * Math.sin(st.stroke * Math.PI * 2);
+    const k = 1 - Math.exp(-dt * 5);
+    if (!this.bob) this.bob = { y, pitch, roll };
+    this.bob.y += (y - this.bob.y) * k; this.bob.pitch += (pitch - this.bob.pitch) * k; this.bob.roll += (roll - this.bob.roll) * k;
+    rig.position.set(this.x, this.bob.y, this.z);
     rig.rotation.set(0, this.heading, 0);
-    rig.rotateZ(-pitch);
-    rig.rotateX(roll);
+    rig.rotateZ(-this.bob.pitch);
+    rig.rotateX(this.bob.roll);
     st.mode = 'paddle';
   }
 
@@ -186,7 +192,7 @@ export class Player {
     const f = this.forward;
     this.x += f.x * this.speed * dt; this.z += f.z * this.speed * dt;
     this.canoe.state.power = 0.5; this.canoe.state.stroke = (this.canoe.state.stroke + dt * 0.8) % 1;
-    this.placeOnWater();
+    this.placeOnWater(dt);
     this.emitWater(dt);
     this.prompt = { key: null, text: 'Landing…' };
     if (d < 4.5 || this.world.shoreAt(this.x, this.z) > -0.6 || (L.t += dt) > 8) {

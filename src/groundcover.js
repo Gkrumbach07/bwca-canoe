@@ -27,30 +27,33 @@ const vert = /* glsl */ `
     vec2 cv = texture2D(uCoverTex, (w - uGrid.xy) * uGrid.z / vec2(uGridSize)).rg; // cover, golden
     float edge = 1.0 - smoothstep(0.75, 1.0, max(abs(aOffset.x), abs(aOffset.y)) / uHalf);
     float present = step(h.x, cv.r) * edge;
-    float sc = present * (0.55 + 0.8 * h.y);
+    float sc = present * (0.45 + 1.0 * h.y * h.y);
     float yaw = h.z * 6.2832;
     vec3 p = position * sc;
     p.xz = mat2(cos(yaw), -sin(yaw), sin(yaw), cos(yaw)) * p.xz;
     float sway = sin(uTime * 1.6 + w.x * 0.35 + w.y * 0.25) * 0.08 * position.y;
     p.x += sway;
-    vec3 world = vec3(w.x + p.x, terrainAt(w) - 0.03 + p.y, w.y + p.z);
-    // colour: green grass, golden in burns and dry clearings; a few fireweed stalks
-    vec3 base = mix(color, color * vec3(1.25, 1.05, 0.6), cv.g);
+    vec3 world = vec3(w.x + p.x, surfaceAt(w) - 0.05 + p.y, w.y + p.z);
+    // colour: a spread of greens per tuft, golden in burns and dry clearings; a few fireweed stalks
+    vec3 h2 = hash3(mod(cell + 17.0, 4096.0));
+    vec3 tint = mix(vec3(0.78, 0.9, 0.62), vec3(1.12, 1.04, 0.72), h2.x);
+    vec3 base = color * tint;
+    base = mix(base, base * vec3(1.3, 1.08, 0.55), cv.g * (0.6 + 0.4 * h2.y));
     float flower = step(0.94, h.x) * cv.g * step(0.75, position.y);
     vColor = mix(base, vec3(0.95, 0.35, 0.6), flower);
-    vLight = 0.55 + 0.45 * position.y;
+    vLight = 0.45 + 0.55 * position.y;
     vec4 mvPosition = viewMatrix * vec4(world, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
   }
 `;
 const frag = /* glsl */ `
-  uniform vec3 uSky, uGround;
+  uniform vec3 uSky, uGround, uSun;
   varying vec3 vColor;
   varying float vLight;
   #include <fog_pars_fragment>
   void main() {
-    vec3 col = vColor * mix(uGround * 1.15, uSky, vLight);
+    vec3 col = vColor * (mix(uGround, uSky, vLight) * 0.7 + uSun * (0.25 + 0.35 * vLight));
     gl_FragColor = vec4(col, 1.0);
     #include <fog_fragment>
     #include <tonemapping_fragment>
@@ -61,13 +64,13 @@ const frag = /* glsl */ `
 function tuftGeometry() {
   // three narrow blades crossing at 60 degrees; colour darkens toward the base
   const pos = [], col = [];
-  const blades = 3, hgt = 0.5, half = 0.04;
+  const blades = 3, hgt = 0.5, half = 0.04, root = -0.18; // the root sits below ground so slopes never show a gap
   for (let i = 0; i < blades; i++) {
     const a = (i / blades) * Math.PI;
     const dx = Math.cos(a) * half, dz = Math.sin(a) * half;
     const tipX = -Math.sin(a) * 0.08, tipZ = Math.cos(a) * 0.08;
-    pos.push(-dx, 0, -dz, dx, 0, dz, tipX, hgt, tipZ);
-    col.push(0.42, 0.5, 0.26, 0.42, 0.5, 0.26, 0.66, 0.72, 0.35);
+    pos.push(-dx, root, -dz, dx, root, dz, tipX, hgt, tipZ);
+    col.push(0.3, 0.38, 0.18, 0.3, 0.38, 0.18, 0.58, 0.64, 0.3);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -98,7 +101,7 @@ export class GroundCover {
       if (sd > 2.6) {
         const x = world.cellX(i), z = world.cellZ(j);
         const slope = world.slopeAt(x, z), burn = burnAt(x, z), clearing = clearingAt(x, z);
-        c = slope > 0.38 ? 0.06 : 0.22;
+        c = slope > 0.38 ? 0.05 : 0.15;
         c *= 1 - (shade ? shade[k] : 0) * 0.75;
         if (clearing > 0.62) c = Math.max(c, 0.9);
         if (burn > 0.5) c = Math.max(c, 0.85);
@@ -122,15 +125,16 @@ export class GroundCover {
     geo.instanceCount = n * n;
     this.material = new THREE.ShaderMaterial({
       vertexShader: vert, fragmentShader: frag,
-      uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), ...water.surfaceUniforms(), uCenter: { value: new THREE.Vector2() }, uTime: { value: 0 }, uHalf: { value: SIZE / 2 }, uCoverTex: { value: coverTex }, uSky: { value: new THREE.Color(0xa9c6e0) }, uGround: { value: new THREE.Color(0x6f7a60) } },
+      uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), ...water.surfaceUniforms(), uCenter: { value: new THREE.Vector2() }, uTime: { value: 0 }, uHalf: { value: SIZE / 2 }, uCoverTex: { value: coverTex }, uSky: { value: new THREE.Color(0xa9c6e0) }, uGround: { value: new THREE.Color(0x6f7a60) }, uSun: { value: new THREE.Color(0xffe9c4) } },
       side: THREE.DoubleSide, fog: true,
     });
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;
   }
-  update(dt, x, z, hemi) {
+  update(dt, x, z, hemi, sun) {
     this.material.uniforms.uTime.value += dt;
     this.material.uniforms.uCenter.value.set(Math.round(x / SPACING) * SPACING, Math.round(z / SPACING) * SPACING);
     if (hemi) { this.material.uniforms.uSky.value.copy(hemi.color).multiplyScalar(hemi.intensity); this.material.uniforms.uGround.value.copy(hemi.groundColor).multiplyScalar(hemi.intensity); }
+    if (sun) this.material.uniforms.uSun.value.copy(sun.color).multiplyScalar(sun.intensity * 0.5);
   }
 }

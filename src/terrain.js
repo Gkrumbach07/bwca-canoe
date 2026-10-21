@@ -44,6 +44,13 @@ function shoreShape(hBase, sd, level) {
   return lerp(hBase, target, w);
 }
 
+// The height things should stand on: the DEM reshaped in the shore band exactly as the mesh is.
+export function surfaceAt(world, x, z) {
+  const h = world.heightAt(x, z), sd = world.shoreAt(x, z);
+  if (Math.abs(sd) >= SHAPE_BAND) return h;
+  return shoreShape(h, sd, world.levelAt(x, z, 4));
+}
+
 // Gentle rock bumps a little way from the waterline (never across it).
 function shoreBumps(x, z, sd) {
   const n = fbm(x * 0.07, z * 0.07, 2, 51) - 0.5;
