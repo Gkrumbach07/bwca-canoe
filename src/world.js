@@ -25,7 +25,7 @@ export class World {
     this.minZ = g.originZ; this.maxZ = g.originZ + this.sizeZ;
     this.h = height;     // decimetres
     this.lake = lake;    // lake polygon id per cell, 0 = land
-    this.sd = sdist;     // metres, + land / - water
+    this.sd = Float32Array.from(sdist, (v) => v * 0.1); // metres, + land / - water (baked as decimetres)
     this.lakes = meta.lakes;
     this.basins = meta.basins;
     this.portages = meta.portages;

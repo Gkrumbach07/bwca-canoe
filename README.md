@@ -37,6 +37,7 @@ Downloads are cached in `data-cache/`. The bake needs network access to `api.ope
 | Shift | hustle |
 | E | portage when near a landing, launch at the far end |
 | M | enlarge the map |
+| R | toggle water reflections (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
 | mouse drag / wheel | look around / zoom |
 

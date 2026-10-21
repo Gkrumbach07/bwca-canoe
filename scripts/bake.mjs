@@ -7,7 +7,7 @@
 //   world.json  metadata, lakes (name + level), portages, campsites, start position
 //   height.bin  Int16 terrain height in decimetres, row-major, row 0 = north edge
 //   lake.bin    Uint16 lake id per cell (0 = land)
-//   sdist.bin   Int16 signed distance to shore in metres (+ on land, - in water)
+//   sdist.bin   Int16 signed distance to shore in decimetres (+ on land, - in water)
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -209,7 +209,37 @@ function rasterizeLakes(lakes, grid, lakeId) {
   });
 }
 
-// Chamfer distance transform (1, sqrt2 weights) in cells to the nearest target cell.
+// Exact Euclidean distance transform (Felzenszwalb & Huttenlocher) in cells to the nearest target cell.
+function edt1d(f, d, n, v, z) {
+  let k = 0; v[0] = 0; z[0] = -Infinity; z[1] = Infinity;
+  for (let q = 1; q < n; q++) {
+    let s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    while (s <= z[k]) { k--; s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+    k++; v[k] = q; z[k] = s; z[k + 1] = Infinity;
+  }
+  k = 0;
+  for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
+}
+function edt(width, height, isTarget) {
+  const BIG = 1e12, n = Math.max(width, height);
+  const g = new Float64Array(width * height);
+  for (let i = 0; i < g.length; i++) g[i] = isTarget(i) ? 0 : BIG;
+  const f = new Float64Array(n), d = new Float64Array(n), v = new Int32Array(n), z = new Float64Array(n + 1);
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) f[y] = g[y * width + x];
+    edt1d(f, d, height, v, z);
+    for (let y = 0; y < height; y++) g[y * width + x] = d[y];
+  }
+  const out = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) f[x] = g[y * width + x];
+    edt1d(f, d, width, v, z);
+    for (let x = 0; x < width; x++) out[y * width + x] = Math.sqrt(d[x]);
+  }
+  return out;
+}
+
+// Chamfer distance transform (1, sqrt2 weights) in cells to the nearest target cell. (kept for reference)
 function chamfer(width, height, isTarget) {
   const INF = 1e9, SQ2 = Math.SQRT2;
   const d = new Float32Array(width * height);
@@ -341,7 +371,7 @@ function findLaunch(x, z, grid, lakeId, sdist, maxCells = 10) {
     if (i < 0 || j < 0 || i >= grid.width || j >= grid.height) continue;
     const k = j * grid.width + i;
     if (!lakeId[k]) continue;
-    const depth = -sdist[k]; // metres from shore, positive in water
+    const depth = -sdist[k] / 10; // metres from shore, positive in water (stored as decimetres)
     const d = Math.hypot(di, dj) * grid.cell;
     // want close to the trail end but at least ~1.5 cells from shore
     const score = d + Math.max(0, 15 - depth) * 3;
@@ -403,13 +433,24 @@ async function main() {
   log(`${basins.length} water basins`);
 
   // --- distance fields (in cells) then signed metres
-  const dToLand = chamfer(width, height, (k) => !lakeId[k]);   // for water cells
-  const dToWater = chamfer(width, height, (k) => !!lakeId[k]); // for land cells
+  const dToLand = edt(width, height, (k) => !lakeId[k]);   // for water cells
+  const dToWater = edt(width, height, (k) => !!lakeId[k]); // for land cells
+  // signed metres, lightly smoothed so the rasterized shoreline loses its staircase; stored in decimetres
+  const sraw = new Float32Array(N);
+  for (let k = 0; k < N; k++) sraw[k] = lakeId[k] ? -(dToLand[k] - 0.5) * CFG.cell : Math.min(CFG.maxLandDist, (dToWater[k] - 0.5) * CFG.cell);
   const sdist = new Int16Array(N);
   for (let k = 0; k < N; k++) {
-    const m = lakeId[k] ? -dToLand[k] * CFG.cell : Math.min(CFG.maxLandDist, dToWater[k] * CFG.cell);
-    sdist[k] = Math.round(Math.max(-32000, Math.min(32000, m)));
+    const x = k % width, y = (k - x) / width;
+    let acc = 0, wsum = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= width || yy >= height) continue;
+      const w = dx === 0 && dy === 0 ? 4 : (dx === 0 || dy === 0 ? 1 : 0.5);
+      acc += sraw[yy * width + xx] * w; wsum += w;
+    }
+    sdist[k] = Math.round(Math.max(-32000, Math.min(32000, (acc / wsum) * 10)));
   }
+  const sdM = (k) => sdist[k] / 10;
 
   // --- water level per basin: median of interior cells (robust to shoreline trees in the DEM)
   for (const b of basins) {
@@ -523,7 +564,7 @@ async function main() {
     const i = grid.ci(x), j = grid.cj(z);
     if (i < 1 || j < 1 || i >= width - 1 || j >= height - 1) continue;
     const k = j * width + i;
-    campsites.push({ x: +x.toFixed(1), z: +z.toFixed(1), name: n.tags.name || null, onWater: !!lakeId[k], shore: sdist[k] });
+    campsites.push({ x: +x.toFixed(1), z: +z.toFixed(1), name: n.tags.name || null, onWater: !!lakeId[k], shore: sdM(k) });
   }
   log(`${campsites.length} campsites`);
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { World } from './world.js';
 import { buildTerrain } from './terrain.js';
-import { makeWaterMaterial, buildWater } from './water.js';
+import { WaterSystem } from './water.js';
 import { buildSky, buildClouds, updateClouds } from './sky.js';
 import { buildVegetation } from './vegetation.js';
 import { buildPortageTrails, buildCampsites, exclusionsFor } from './props.js';
@@ -13,7 +13,7 @@ import { GeoBridge } from './geo.js';
 import { Ripples, WakeV } from './wake.js';
 import { updateVegetationLOD } from './vegetation.js';
 
-const palette = { zenith: 0x2f6fb8, horizon: 0xd6e6ee, ground: 0x7a8c66, sun: 0xfff1cc, deep: 0x14405e, shallow: 0x3a8d85, reflect: 0x6fa6cf, fog: 0xc6dbe4 };
+const palette = { zenith: 0x4a8ccc, horizon: 0xdbe9ef, ground: 0x8aa07a, sun: 0xfff3d6, deep: 0x3b7ca6, shallow: 0x74b4cc, reflect: 0xbcdbe9, fog: 0xd3e3ea };
 
 const loadingEl = document.getElementById('loading'), barEl = document.getElementById('loading-bar'), msgEl = document.getElementById('loading-msg');
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
@@ -25,7 +25,7 @@ async function main() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.VSMShadowMap;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.domElement.className = 'game';
@@ -36,14 +36,14 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.3, 9000);
 
   const sunDir = new THREE.Vector3(-0.58, 0.46, 0.4).normalize();
-  const sun = new THREE.DirectionalLight(0xfff0d2, 2.7);
+  const sun = new THREE.DirectionalLight(0xfff0d2, 2.3);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -180; sun.shadow.camera.right = 180; sun.shadow.camera.top = 180; sun.shadow.camera.bottom = -180;
   sun.shadow.camera.near = 50; sun.shadow.camera.far = 1400;
-  sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.4;
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.3; sun.shadow.radius = 3; sun.shadow.blurSamples = 8; sun.shadow.intensity = 0.75;
   scene.add(sun, sun.target);
-  scene.add(new THREE.HemisphereLight(0xa9cde8, 0x4f6239, 0.95));
+  scene.add(new THREE.HemisphereLight(0xbfdcf0, 0x6f8a55, 1.1));
 
   scene.background = new THREE.Color(palette.fog);
   const sky = buildSky(sunDir, palette);
@@ -56,8 +56,8 @@ async function main() {
   scene.add(forest);
   scene.add(await buildTerrain(world, forest.userData.shade, (f) => progress(0.6 + f * 0.3, `Shaping the Canadian Shield… ${Math.round(f * 100)}%`)));
   progress(0.9, 'Filling the lakes…'); await tick();
-  const waterMat = makeWaterMaterial(sunDir, palette);
-  scene.add(buildWater(world, waterMat));
+  const water = new WaterSystem(world, sunDir, palette);
+  scene.add(water.group);
   progress(0.94, 'Clearing portages and campsites…'); await tick();
   scene.add(buildPortageTrails(world), buildCampsites(world));
   const ripples = new Ripples(), wake = new WakeV();
@@ -68,14 +68,14 @@ async function main() {
   scene.add(canoe.rig);
   const input = new Input();
   const player = new Player(world, canoe, input);
-  player.ripples = ripples; player.wakeV = wake;
+  player.ripples = ripples; player.wakeV = wake; player.water = water;
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   const hud = new Hud(world);
   const geo = new GeoBridge();
-  window.addEventListener('keydown', (e) => { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; });
+  window.addEventListener('keydown', (e) => { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn; });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, forest, chase, hud, geo };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, forest, chase, hud, geo, water };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${forest.userData.count} trees and rocks, ${world.portages.length} portages, ${world.campsites.length} campsites`);
@@ -84,7 +84,7 @@ async function main() {
     player.update(dt);
     canoe.update(dt * player.timeScale);
     chase.update(dt, player, player.mode === 'carry');
-    waterMat.uniforms.uTime.value += dt * player.timeScale;
+    water.update(dt * player.timeScale, player.x, player.z);
     ripples.update(dt * player.timeScale);
     updateVegetationLOD(forest, camera.position);
     updateClouds(clouds, dt * player.timeScale);
@@ -96,12 +96,16 @@ async function main() {
     input.endFrame();
   };
   // debug helper: advance the simulation by n fixed steps and draw once (used for automated testing)
-  window.__game.step = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); renderer.render(scene, camera); };
+  const draw = () => {
+    water.renderReflection(renderer, scene, camera, player.level || world.levelAt(player.x, player.z), [ripples.mesh, wake.mesh]);
+    renderer.render(scene, camera);
+  };
+  window.__game.step = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); draw(); };
   let last = performance.now();
   renderer.setAnimationLoop((now) => {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     frame(dt);
-    renderer.render(scene, camera);
+    draw();
   });
 }
 

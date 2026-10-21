@@ -3,7 +3,7 @@ import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, lerp, clamp } from './rng.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-export const FLOAT_OFFSET = 0.18; // rig origin sits this far above the water surface
+export const FLOAT_OFFSET = 0.15; // rig origin sits this far above the water surface
 export const LENGTH = 5.2;
 
 // Canoe local frame: +x bow, +y up, +z starboard. Origin at the waterline amidships.

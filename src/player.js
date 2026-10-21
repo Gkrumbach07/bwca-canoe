@@ -122,7 +122,8 @@ export class Player {
     this.level = level;
     const shore = w.shoreAt(this.x, this.z);
     const f = this.forward, r = { x: -f.z, z: f.x };
-    const wave = (dx, dz) => waveHeight(this.x + dx, this.z + dz, this.time, shore);
+    const t = this.water ? this.water.time : this.time;
+    const wave = (dx, dz) => waveHeight(this.x + dx, this.z + dz, t, shore);
     const hb = wave(f.x * 2, f.z * 2), hs = wave(-f.x * 2, -f.z * 2), hr = wave(r.x * 0.5, r.z * 0.5), hl = wave(-r.x * 0.5, -r.z * 0.5);
     rig.position.set(this.x, level + FLOAT_OFFSET + (hb + hs) * 0.5, this.z);
     const pitch = Math.atan2(hb - hs, 4) + this.speed * 0.012;
