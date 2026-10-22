@@ -57,6 +57,18 @@
         "5178"
       ],
       "port": 5178
+    },
+    {
+      "name": "bwca-canoe-5179",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5179"
+      ],
+      "port": 5179
     }
   ]
 }

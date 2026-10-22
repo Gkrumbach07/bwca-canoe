@@ -71,7 +71,7 @@ function deadBranches(g, rng, at, count, t0, t1, L0, L1, bark) {
 
 function whitePine(rng, v) {
   const g = new GeoBuilder(), P = profile(v, rng);
-  const h = 16 * P.size, bark = vary(0x5a4030, rng), cols = crownColors(0x5f9a52, 0x2a4a34, rng);
+  const h = 16 * P.size, bark = vary(0x66503d, rng), cols = crownColors(0x5ead52, 0x2f5b46, rng);
   const T = g.stem(0, -0.5, 0, 0.45 * P.girth, 0.14 * P.girth, h * 0.84, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.45, shade: 0.32 });
   deadBranches(g, rng, T.at, 1 + Math.floor(rng() * 2), 0.28, 0.48, 0.9, 1.7, bark);
   // chunky plates of foliage stacked unevenly up the top half of the stem, overlapping, the upper ones
@@ -94,7 +94,7 @@ function whitePine(rng, v) {
 }
 function spruce(rng, v) {
   const g = new GeoBuilder(), P = profile(v, rng);
-  const h = 12.5 * P.size, bark = vary(0x4a3a2c, rng), cols = crownColors(0x3f7a48, 0x22402f, rng);
+  const h = 12.5 * P.size, bark = vary(0x55463a, rng), cols = crownColors(0x45924f, 0x2a5141, rng);
   const T = g.stem(0, -0.5, 0, 0.3 * P.girth, 0.05, h, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.35, shade: 0.3 });
   deadBranches(g, rng, T.at, 2 + Math.floor(rng() * 2), 0.1, 0.3, 0.7, 1.5, bark);
   // five to seven whorls, unevenly spaced, each a little off the axis, the lowest wide and the tip a spike
@@ -114,7 +114,7 @@ function spruce(rng, v) {
 }
 function redPine(rng, v) {
   const g = new GeoBuilder(), P = profile(v, rng);
-  const h = 15 * P.size, bark = vary(0x8a4a2e, rng), cols = crownColors(0x629a48, 0x2b4b30, rng);
+  const h = 15 * P.size, bark = vary(0x8d5235, rng), cols = crownColors(0x68a94c, 0x305a43, rng);
   const T = g.stem(0, -0.5, 0, 0.42 * P.girth, 0.18 * P.girth, h * 0.9, 5, bark, rng, { lean: leanOf(P, h), bow: [P.bow[0] * h * 0.5, P.bow[1] * h * 0.5], flare: 0.35, shade: 0.3 });
   deadBranches(g, rng, T.at, 2, 0.35, 0.6, 0.8, 1.4, bark);
   const R = (1.5 + rng() * 0.6) * (0.75 + P.size * 0.35), top = T.at(1);
@@ -130,7 +130,7 @@ function redPine(rng, v) {
 }
 function birch(rng, v) {
   const g = new GeoBuilder(), P = profile(v, rng);
-  const h = 10.5 * P.size, bark = vary(0xe6e2d6, rng, 0.04), cols = crownColors(0x8fb552, 0x2d5a3c, rng);
+  const h = 10.5 * P.size, bark = vary(0xe6e2d6, rng, 0.04), cols = crownColors(0x97bb58, 0x32674d, rng);
   const lean = leanOf(P, h * 1.3), forked = v % 4 === 1;
   const T = g.stem(0, -0.5, 0, 0.2 * P.girth, 0.06 * P.girth, h * 0.78, 5, bark, rng, { lean, bow: bowOf(P, h), flare: 0.3, shade: 0.28, ts: [0, 0.1, 0.5, 1] });
   // branch scars: dark lenses down the lower trunk, and one to three short stubs higher up
@@ -154,7 +154,7 @@ function birch(rng, v) {
 }
 function cedar(rng, v) {
   const g = new GeoBuilder(), P = profile(v, rng);
-  const h = 8 * P.size, bark = vary(0x6b4a34, rng), cols = crownColors(0x4f843e, 0x264330, rng);
+  const h = 8 * P.size, bark = vary(0x74563e, rng), cols = crownColors(0x5f9c49, 0x2e5644, rng);
   const T = g.stem(0, -0.5, 0, 0.36 * P.girth, 0.1, h * 0.55, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.5, shade: 0.3, ts: [0, 0.12, 1] });
   deadBranches(g, rng, T.at, 1 + Math.floor(rng() * 2), 0.2, 0.6, 0.6, 1.2, bark);
   const tiers = 3 + Math.floor(rng() * 2), R = (2.2 + rng() * 0.5) * (0.8 + P.size * 0.3);
@@ -178,7 +178,7 @@ function snag(rng, v) {
 // old-growth pine: a long bare trunk with a few stub branches and a small ragged crown swept to one side
 function tallPine(rng, v) {
   const g = new GeoBuilder(), P = profile(v, rng);
-  const h = 20 * P.size, bark = vary(0x6b4a34, rng), cols = crownColors(0x5a9650, 0x2a4a34, rng);
+  const h = 20 * P.size, bark = vary(0x74563e, rng), cols = crownColors(0x5ead52, 0x2f5b46, rng);
   const T = g.stem(0, -0.5, 0, 0.45 * P.girth, 0.16 * P.girth, h * 0.93, P.role === 'giant' ? 6 : 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.5, shade: 0.32 });
   const R = (1.7 + rng() * 0.6) * (0.75 + P.size * 0.35);
   for (let i = 0; i < 2 + Math.floor(rng() * 2); i++) {
@@ -194,7 +194,7 @@ function tallPine(rng, v) {
 // jack pine of the bare rock: short, crooked, a few limbs with ragged tufts
 function jackPine(rng, v) {
   const g = new GeoBuilder(), P = profile(v, rng);
-  const h = 6 * P.size, bark = vary(0x6a5038, rng), cols = crownColors(0x6f8e3a, 0x31492a, rng);
+  const h = 6 * P.size, bark = vary(0x705843, rng), cols = crownColors(0x82a145, 0x335b41, rng);
   const T = g.stem(0, -0.5, 0, 0.22 * P.girth, 0.05, h, 5, bark, rng, { lean: leanOf(P, h * 1.4), bow: [P.bow[0] * h * 3, P.bow[1] * h * 3], wig: 0.06, flare: 0.35, shade: 0.3 });
   const n = 3 + Math.floor(rng() * 2);
   for (let i = 0; i < n; i++) {
@@ -210,7 +210,7 @@ function jackPine(rng, v) {
 }
 function shrub(rng) {
   const g = new GeoBuilder();
-  const base = [0x5c8a3a, 0x6f9440, 0x4e7a34, 0x7f9a44][Math.floor(rng() * 4)], cols = crownColors(base, 0x2b4a28, rng);
+  const base = [0x6da145, 0x7ba54a, 0x5e9546, 0x91af4b][Math.floor(rng() * 4)], cols = crownColors(base, 0x305a41, rng);
   const n = 2 + (rng() < 0.5 ? 1 : 0);
   for (let i = 0; i < n; i++) { const shift = (rng() - 0.5) * 0.06; g.lump((rng() - 0.5) * 1.0, 0.5 + rng() * 0.3, (rng() - 0.5) * 1.0, 0.6 + rng() * 0.5, 5, rng, 0.4, 1.3, 0.75, 1.3, (p, tl) => cols.at(0.2 + 0.8 * tl, shift)); }
   return g.build();
@@ -234,22 +234,22 @@ function lowBlob(rng, y, r, col) {
 }
 function lowShrub(rng) {
   const g = new GeoBuilder();
-  const base = [0x5c8a3a, 0x6f9440, 0x4e7a34, 0x7f9a44][Math.floor(rng() * 4)];
+  const base = [0x6da145, 0x7ba54a, 0x5e9546, 0x91af4b][Math.floor(rng() * 4)];
   const n = 1 + (rng() < 0.5 ? 1 : 0);
   for (let i = 0; i < n; i++) g.blob((rng() - 0.5) * 0.9, 0.55 + rng() * 0.3, (rng() - 0.5) * 0.9, 0.7 + rng() * 0.6, vary(base, rng, 0.1), rng, 0.4, 1.3, 0.7, 1.2);
   return g.build();
 }
 const LOW = {
-  whitePine: (rng) => lowConifer(rng, 14 + rng() * 5, 3.2, [vary(0x2f5a3a, rng), vary(0x356341, rng)], vary(0x5a4030, rng), 0.35),
-  spruce: (rng) => lowConifer(rng, 10 + rng() * 6, 2.2, [vary(0x274a2f, rng), vary(0x3a6a3e, rng)], vary(0x4a3a2c, rng), 0.12),
-  redPine: (rng) => { const h = 12 + rng() * 6; const g = lowBlob(rng, h, 2.6, vary(0x3b6b36, rng)); g.trunk(0, -0.5, 0, 0.4, 0.25, h, 3, vary(0x8a4a2e, rng), rng); return g.build(); },
-  birch: (rng) => { const h = 8 + rng() * 5; const g = lowBlob(rng, h * 0.75, 2.4, vary(0x7da84a, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.1, h * 0.7, 3, vary(0xe6e2d6, rng, 0.04), rng); return g.build(); },
-  cedar: (rng) => lowConifer(rng, 7 + rng() * 3, 2.3, [vary(0x2d5436, rng), vary(0x2d5436, rng)], vary(0x6b4a34, rng), 0.1),
+  whitePine: (rng) => lowConifer(rng, 14 + rng() * 5, 3.2, [vary(0x377642, rng), vary(0x3e8447, rng)], vary(0x66503d, rng), 0.35),
+  spruce: (rng) => lowConifer(rng, 10 + rng() * 6, 2.2, [vary(0x2f603f, rng), vary(0x3b7d44, rng)], vary(0x55463a, rng), 0.12),
+  redPine: (rng) => { const h = 12 + rng() * 6; const g = lowBlob(rng, h, 2.6, vary(0x598d3f, rng)); g.trunk(0, -0.5, 0, 0.4, 0.25, h, 3, vary(0x8d5235, rng), rng); return g.build(); },
+  birch: (rng) => { const h = 8 + rng() * 5; const g = lowBlob(rng, h * 0.75, 2.4, vary(0x8eb54a, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.1, h * 0.7, 3, vary(0xe6e2d6, rng, 0.04), rng); return g.build(); },
+  cedar: (rng) => lowConifer(rng, 7 + rng() * 3, 2.3, [vary(0x376c45, rng), vary(0x376c45, rng)], vary(0x74563e, rng), 0.1),
   snag: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.5, 0, 0.3, 0.08, 7 + rng() * 5, 4, vary(0x9a9388, rng, 0.08), rng); return g.build(); },
   boulder: (rng) => angularRock(rng, 'block'),
   shrub: lowShrub,
-  tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x3b6b42, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x6b4a34, rng), rng); return g.build(); },
-  jackPine: (rng) => { const h = 4.5 + rng() * 3.5; const g = lowBlob(rng, h * 0.85, 1.5, vary(0x4a7438, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.08, h * 0.8, 3, vary(0x6a5038, rng), rng); return g.build(); },
+  tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x4e8b41, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x74563e, rng), rng); return g.build(); },
+  jackPine: (rng) => { const h = 4.5 + rng() * 3.5; const g = lowBlob(rng, h * 0.85, 1.5, vary(0x6c8d3f, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.08, h * 0.8, 3, vary(0x705843, rng), rng); return g.build(); },
 };
 
 // index order must match placement.js SPECIES. `leaves`: deciduous, with an autumn colour (linear rgb).

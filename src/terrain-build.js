@@ -15,13 +15,16 @@ const C = {
   // the lake bed by depth, seen through the water where it is clear: pale sand in the shallows, then
   // boulder-and-weed olive, then the dark green of a drop-off, then the near-black of a deep hole
   bedSand: hex(0xc4b894), bedShelf: hex(0x9fa478), bedWeed: hex(0x6f8a66), bedDeep: hex(0x4d6a63), bedHole: hex(0x3a5250),
-  rock: hex(0x968d84), rockDark: hex(0x6b655f), rockLichen: hex(0x9fa08a),
-  // the forest floor is needle duff, not grass: a calm orange-brown in the sun (forest), golden in the sunny
-  // stands (forestLight), a cooler, darker brown under a thick canopy (forestDark); moss comes in below
-  forest: hex(0xa67a4b), forestLight: hex(0xb58b58), forestDark: hex(0x72584a), meadow: hex(0x98a35e), burn: hex(0x9c8a58),
+  rock: hex(0x9e958a), rockDark: hex(0x666a70), rockLichen: hex(0xa4a58d),
+  // the forest floor is needle duff, not grass: a calm warm tan in the sun (forest), golden in the sunny
+  // stands (forestLight), a cool grey-brown under a thick canopy (forestDark); moss comes in below. The
+  // meadow is a light yellow-green, the burn tawny; each lit colour has a cooler shade partner (SHADE, MOSS)
+  forest: hex(0xa28a67), forestLight: hex(0xb09a6d), forestDark: hex(0x5c544e), meadow: hex(0xa6a857), burn: hex(0xb29a62),
 };
 // moss on the forest floor, lit and in the canopy's shade: the pair the duff's own lit/shade pair is mixed with
-const MOSS = { lit: hex(0x7c9650), shade: hex(0x56683e) };
+const MOSS = { lit: hex(0x87ad52), shade: hex(0x405f3a) };
+// the shade partner of the open ground classes (under a tree at the meadow's edge, say)
+const SHADE = { meadow: hex(0x697048), burn: hex(0x72664f) };
 // bed bands by water depth (metres); the depth carries a little grain so the bands are not rulers
 export const BED_STEPS = [1.4, 3.2, 6.5, 13];
 export const bedGrain = (x, z) => (fbm(x * 0.03, z * 0.03, 2, 61) - 0.5) * 1.2;
@@ -98,8 +101,14 @@ export const mossAt = (x, z) => smoothstep(0.48, 0.56, fbm(x * 0.05 + 13, z * 0.
 // the shade side, deeper the thicker the canopy; the sunny stands stay lit), then moss where mossAt says so.
 const FOREST = new Set(['forest', 'forestLight', 'forestDark']);
 export function floorColor(cls, x, z, shade, out) {
-  const base = GROUND_PALETTE[cls];
-  if (!FOREST.has(GROUND[cls])) { out[0] = base[0]; out[1] = base[1]; out[2] = base[2]; return out; }
+  const base = GROUND_PALETTE[cls], name = GROUND[cls];
+  if (!FOREST.has(name)) {
+    const sh = SHADE[name];
+    if (!sh) { out[0] = base[0]; out[1] = base[1]; out[2] = base[2]; return out; }
+    const s = 0.7 * smoothstep(0.1, 0.6, shade);
+    for (let k = 0; k < 3; k++) out[k] = lerp(base[k], sh[k], s);
+    return out;
+  }
   const lit = cls === I.forestDark ? C.forest : base, dark = C.forestDark;
   const s = cls === I.forestDark ? 0.6 + 0.4 * smoothstep(0.55, 1, shade) : cls === I.forestLight ? 0.2 * shade : 0.5 * smoothstep(0.1, 0.55, shade);
   const m = mossAt(x, z) * (cls === I.forestLight ? 0.4 : 1);

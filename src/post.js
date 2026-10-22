@@ -5,8 +5,9 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 
-// Colour grade in linear light before tone mapping: lifted blacks, teal shadows, warm highlights,
-// a touch less saturation and a soft vignette.
+// Colour grade in linear light before tone mapping: cool shadows against warm highlights (the tints are
+// normalised to their own luminance, so they turn the hue and leave the value alone), lifted blacks, a
+// little extra saturation and a soft vignette.
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -15,7 +16,7 @@ const GradeShader = {
     uShadowTint: { value: new THREE.Vector3(0.86, 0.97, 1.1) },
     uHighlightTint: { value: new THREE.Vector3(1.03, 1.0, 0.95) },
     uSplit: { value: 0.45 },
-    uSaturation: { value: 1.02 },
+    uSaturation: { value: 1.06 },
     uVignette: { value: 0.32 },
   },
   vertexShader: /* glsl */ `
@@ -29,9 +30,11 @@ const GradeShader = {
     varying vec2 vUv;
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
-      float lum = dot(c, vec3(0.299, 0.587, 0.114));
-      c = mix(c, c * uShadowTint, (1.0 - smoothstep(0.0, 0.45, lum)) * uSplit);
-      c = mix(c, c * uHighlightTint, smoothstep(0.25, 1.0, lum) * uSplit);
+      const vec3 W = vec3(0.299, 0.587, 0.114);
+      float lum = dot(c, W);
+      vec3 st = uShadowTint / max(dot(uShadowTint, W), 1e-3), ht = uHighlightTint / max(dot(uHighlightTint, W), 1e-3);
+      c = mix(c, c * st, (1.0 - smoothstep(0.0, 0.4, lum)) * uSplit);
+      c = mix(c, c * ht, smoothstep(0.3, 1.2, lum) * uSplit);
       c = c * uGain + uLift;
       float l2 = dot(c, vec3(0.299, 0.587, 0.114));
       c = mix(vec3(l2), c, uSaturation);

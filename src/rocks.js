@@ -64,7 +64,7 @@ export function smoothBoulder(rng, seed) {
   const geo = mergeVertices(new THREE.IcosahedronGeometry(1, 3));
   const pos = geo.getAttribute('position');
   const col = new Float32Array(pos.count * 3);
-  const top = new THREE.Color(0xa49d90), side = new THREE.Color(0x8a877f), under = new THREE.Color(0x6e7273), c = new THREE.Color();
+  const top = new THREE.Color(0xaea699), side = new THREE.Color(0x8e8b84), under = new THREE.Color(0x66707a), c = new THREE.Color();
   const v = new THREE.Vector3();
   const sx = 1 + rng() * 0.7, sy = 0.55 + rng() * 0.3, sz = 1 + rng() * 0.5;
   for (let i = 0; i < pos.count; i++) {
@@ -122,7 +122,7 @@ export function angularRock(rng, kind = 'block') {
   geo.computeVertexNormals(); // non-indexed: one normal per face, flat
   const nrm = geo.getAttribute('normal');
   const col = new Float32Array(pos.count * 3);
-  const top = new THREE.Color(0xa89e92), side = new THREE.Color(0x8c8880), under = new THREE.Color(0x6c7072), lichen = new THREE.Color(0x9ca68c), c = new THREE.Color();
+  const top = new THREE.Color(0xb2a89a), side = new THREE.Color(0x908c85), under = new THREE.Color(0x646e78), lichen = new THREE.Color(0xa4ae90), c = new THREE.Color();
   for (let f = 0; f < pos.count; f += 3) {
     const ny = (nrm.getY(f) + nrm.getY(f + 1) + nrm.getY(f + 2)) / 3;
     c.copy(under).lerp(side, THREE.MathUtils.smoothstep(ny, -0.6, 0.0)).lerp(top, THREE.MathUtils.smoothstep(ny, 0.25, 0.8));

@@ -10,19 +10,28 @@ import { seasonAt } from './season.js';
 const KEYS = [-15, -5, -1, 3, 10, 35];
 const T = {
   // the key and the fill: one warm sun, one cool sky. While the sun is up the key is strong and warm and the
-  // sky fill cool and dim, so lit and shaded surfaces split into two clear families; dawn and dusk keep their own
-  sunColor: [0x000000, 0x000000, 0xff6a2e, 0xffa054, 0xffc890, 0xffe8c0],
-  sunInt: [0, 0, 0.6, 1.6, 2.0, 2.2],
-  hemiSky: [0x121a2a, 0x263347, 0x9a6e62, 0xe8a070, 0x93a9c8, 0x8db4dc],
-  hemiGround: [0x0b0e12, 0x1a1d1a, 0x4e3d32, 0x8f6240, 0x66685a, 0x5f6b58],
-  hemiInt: [0.35, 0.4, 0.6, 0.9, 0.6, 0.55],
-  fogHorizon: [0x141c28, 0x2a3650, 0xe09a68, 0xe8b282, 0xd6ceb8, 0xc6dbe9],
-  fogSky: [0x070d18, 0x14223a, 0x3e5a86, 0x5b7fb0, 0x6b97c4, 0x6f9cc8],
-  fogSun: [0x000000, 0x1a1a2a, 0xff9a58, 0xffb878, 0xffd8a8, 0xffe9c4],
-  glowPow: [10, 10, 5, 6, 8, 10],
-  glowAmt: [0, 0.1, 0.85, 0.65, 0.4, 0.3],
-  zenith: [0x060c1a, 0x0f1f3a, 0x27476f, 0x3464a0, 0x3f7ac0, 0x4c8fd8],
-  horizon: [0x141c28, 0x2b3a55, 0xf0a46c, 0xf0c494, 0xead8b8, 0xd6e6f2],
+  // sky fill cool and dim, so lit and shaded surfaces split into two clear families (docs/look.md, rule 3):
+  // the fill stays blue right down to the horizon, with the golden hour in the key and the sky's own band
+  sunColor: [0x000000, 0x000000, 0xff7a3a, 0xffbc70, 0xffd098, 0xffeac4],
+  sunInt: [0, 0, 0.6, 2.0, 2.1, 2.2],
+  hemiSky: [0x121a2a, 0x263347, 0x7878a0, 0x7c94cc, 0x86a8d8, 0x82b0e2],
+  hemiGround: [0x0b0e12, 0x1a1d1a, 0x4a3e3a, 0x6a5a50, 0x66685a, 0x5f6b58],
+  hemiInt: [0.35, 0.4, 0.7, 0.8, 0.6, 0.55],
+  // the air: the haze's colour at the horizon and overhead, its warmth toward the sun, its reach (the
+  // distance at which it is two thirds of the picture) and the height over which it thins
+  fogHorizon: [0x141c28, 0x2a3650, 0xd0a0a0, 0xdcb4a4, 0xcacfd4, 0xbed6e8],
+  fogSky: [0x070d18, 0x14223a, 0x3e5a86, 0x5b7fb0, 0x6b97c4, 0x74a4d2],
+  fogSun: [0x000000, 0x1a1a2a, 0xff9a58, 0xffbc80, 0xffd8a8, 0xffe9c4],
+  glowPow: [10, 10, 4, 4, 6, 10],
+  glowAmt: [0, 0.1, 0.8, 0.7, 0.4, 0.25],
+  airDist: [1600, 1500, 1000, 850, 950, 1050],
+  airHeight: [60, 60, 70, 75, 90, 110],
+  // the dome in three stops: the warm band on the horizon, a pale middle, the blue overhead; a low sun glows
+  zenith: [0x060c1a, 0x0f1f3a, 0x24416e, 0x3464a8, 0x3878c2, 0x4288d8],
+  skyMid: [0x0a1224, 0x1c2d4c, 0x9a86a8, 0xc4cce0, 0xb4cce8, 0x8ab8e6],
+  horizon: [0x141c28, 0x2b3a55, 0xe8a070, 0xf2b88a, 0xe8d8bc, 0xcadfee],
+  skyGlowAmt: [0, 0.3, 0.6, 0.5, 0.2, 0.08],
+  skyGlowPow: [8, 3, 3, 4, 6, 8],
   skySun: [0x000000, 0x000000, 0xffa060, 0xffc890, 0xffe0b0, 0xfff2cc],
   ground: [0x0d1210, 0x1e241e, 0x5e5a4a, 0x80765a, 0x8e9a7e, 0x9aa58a],
   water: [0x0c141e, 0x172636, 0x2f5268, 0x37647c, 0x326f8c, 0x2d7694],   // clear-lake water: darker than the sky, a saturated teal by day
@@ -31,14 +40,15 @@ const T = {
   cloudBase: [0x101522, 0x1c2434, 0x6e5a74, 0x9a7d8c, 0x9fb0cc, 0xa6bfd9],
   moonInt: [0.3, 0.22, 0.08, 0, 0, 0],
   stars: [1, 0.6, 0.05, 0, 0, 0],
-  gain: [0.85, 0.9, 1.0, 1.05, 1.0, 1.0],
-  // the colour grade: cool violet shadows against warm highlights in the low sun, neutral at midday
-  shadowTint: [0x8ea0c8, 0x8ea0c8, 0x9a90c4, 0xa29ac6, 0xc0d0e6, 0xdbf7ff],
-  highlightTint: [0xfff4e6, 0xfff4e6, 0xffd8b0, 0xffdcb4, 0xffeedc, 0xfffff2],
-  split: [0.45, 0.45, 0.7, 0.7, 0.55, 0.45],
+  gain: [0.85, 0.9, 1.0, 1.05, 1.02, 1.02],
+  // the colour grade (post.js): the tints turn the hue of the shade and the lights without changing their
+  // value: violet shade under an orange light at the golden hour, blue shade under a cream light at midday
+  shadowTint: [0x9aa8c8, 0x9aa8c8, 0xa8a8d4, 0xb0b4dc, 0xb4c4e4, 0xbcd0ea],
+  highlightTint: [0xfff4e6, 0xfff4e6, 0xffd8b8, 0xffe0c0, 0xffecd4, 0xfff2e0],
+  split: [0.45, 0.45, 0.6, 0.6, 0.5, 0.45],
   foam: [0x2a3340, 0x3e4a5c, 0xe8c8a8, 0xf2dfc4, 0xf4efe4, 0xf2f6f6],
 };
-const NUMERIC = new Set(['sunInt', 'hemiInt', 'glowPow', 'glowAmt', 'moonInt', 'stars', 'gain', 'split']);
+const NUMERIC = new Set(['sunInt', 'hemiInt', 'glowPow', 'glowAmt', 'airDist', 'airHeight', 'skyGlowAmt', 'skyGlowPow', 'moonInt', 'stars', 'gain', 'split']);
 const colors = {};
 for (const k of Object.keys(T)) if (!NUMERIC.has(k)) colors[k] = T[k].map((h) => new THREE.Color(h));
 
@@ -142,11 +152,14 @@ export class DayCycle {
     setFogColor(fogState.sun, this.lerpColor('fogSun', c));
     fogState.sunDir[0] = this.sunDir.x; fogState.sunDir[1] = this.sunDir.y; fogState.sunDir[2] = this.sunDir.z;
     fogState.params[0] = this.lerpNum('glowPow'); fogState.params[1] = this.lerpNum('glowAmt');
+    fogState.air[0] = this.lerpNum('airDist'); fogState.air[1] = this.lerpNum('airHeight');
     t.scene.background.copy(t.scene.fog.color);
     // sky dome, sun disc, moon and clouds
     const su = t.sky.material.uniforms;
     su.uZenith.value.copy(this.lerpColor('zenith', c));
     su.uHorizon.value.copy(this.lerpColor('horizon', c));
+    if (su.uMid) su.uMid.value.copy(this.lerpColor('skyMid', c));
+    if (su.uGlow) su.uGlow.value.set(this.lerpNum('skyGlowAmt'), this.lerpNum('skyGlowPow'));
     su.uSunColor.value.copy(this.lerpColor('skySun', c));
     su.uGround.value.copy(this.lerpColor('ground', c));
     su.uSunDir.value.copy(this.sunDir);
