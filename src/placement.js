@@ -4,13 +4,14 @@
 // runs in the build worker.
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
 import { clearingAt, burnAt, calmAt, rockAt } from './fields.js';
-import { surfaceAt, groundClass, rockSlope } from './terrain-build.js';
+import { surfaceAt, groundClass, rockSlope, GROUND } from './terrain-build.js';
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
 export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9 };
 const SCALE = [[0.85, 1.3], [0.75, 1.2], [0.75, 1.15], [0.7, 1.15], [0.75, 1.2], [0.8, 1.2], [0.4, 2.2], [0.7, 1.5], [0.85, 1.25], [0.7, 1.1]];
 const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 export const AQUATIC = { pad: 0, reed: 1, weed: 2 };
+const G = Object.fromEntries(GROUND.map((k, i) => [k, i])); // ground class name -> index
 
 function segDist(px, pz, x1, z1, x2, z2) {
   const dx = x2 - x1, dz = z2 - z1, L2 = dx * dx + dz * dz || 1;
@@ -175,8 +176,10 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ }) {
 }
 
 // Ground cover per cell over the tile's local extent (core cells only), four bytes per cell: grass cover
-// 0..255 (none in water, on bare rock, trails and campsites; thin under dense canopy; thick in clearings
-// and burns), golden tint (burns and dry clearings), the ground class the grass takes its colour from, 0.
+// 0..255 by ground class (none in water, on bare rock, trails and campsites; a sparse fifth under the forest
+// and thinner still under a thick canopy; full on the meadows; most of a burn; a fringe up from the shore
+// whatever stands behind it), golden tint (burns and dry clearings), the ground class the grass takes its
+// colour from, 0.
 export function coverField(grid, i0, j0, n, shade, exclusions) {
   const side = grid.side;
   const cover = new Uint8Array(side * side * 4);
@@ -192,16 +195,21 @@ export function coverField(grid, i0, j0, n, shade, exclusions) {
       const k = grid.local(i, j);
       const sd = grid.sdCell(i, j);
       const x = grid.cellX(i), z = grid.cellZ(j);
-      cover[k * 4 + 2] = groundClass(grid, x, z, shade ? shade[k] : 0);
+      const canopy = shade ? shade[k] : 0;
+      const cls = groundClass(grid, x, z, canopy);
+      cover[k * 4 + 2] = cls;
       if (sd <= 2.6 || bare[k]) continue;
-      const slope = grid.slopeAt(x, z), burn = burnAt(x, z), clearing = clearingAt(x, z);
-      // grass carpets the forest floor and the meadows; it thins under a dense canopy and is gone on bare rock
+      const burn = burnAt(x, z), clearing = clearingAt(x, z);
+      // the forest floor is duff, not lawn: a few tufts, fewer under a thick canopy; the meadows are grass,
+      // the burns mostly, and a band of grass and sedge runs up from the water; bare rock grows nothing
       const rock = rockAt(rockSlope(grid, x, z), sd, x, z);
-      let c = 0.6 * (1 - smoothstep(0.3, 0.55, rock));
-      c *= 1 - (shade ? shade[k] : 0) * 0.4;
       const soil = 1 - smoothstep(0.4, 0.6, rock);
-      if (clearing > 0.62) c = Math.max(c, 1.0 * soil);
-      if (burn > 0.5) c = Math.max(c, 0.95 * soil);
+      let c = 0;
+      if (cls === G.meadow) c = 1;
+      else if (cls === G.burn) c = 0.6;
+      else if (cls === G.forest || cls === G.forestLight || cls === G.forestDark) c = 0.12 * (1 - 0.6 * canopy);
+      c = Math.max(c, 0.7 * (1 - smoothstep(9, 14, sd)));
+      c *= soil;
       const gold = Math.max(burn, clearing > 0.66 ? 0.6 : 0);
       cover[k * 4] = Math.round(Math.min(1, c) * 255);
       cover[k * 4 + 1] = Math.round(Math.min(1, gold) * 255);

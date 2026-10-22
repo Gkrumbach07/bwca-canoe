@@ -16,8 +16,12 @@ const C = {
   // boulder-and-weed olive, then the dark green of a drop-off, then the near-black of a deep hole
   bedSand: hex(0xc4b894), bedShelf: hex(0x9fa478), bedWeed: hex(0x6f8a66), bedDeep: hex(0x4d6a63), bedHole: hex(0x3a5250),
   rock: hex(0x968d84), rockDark: hex(0x6b655f), rockLichen: hex(0x9fa08a),
-  forest: hex(0x52704a), forestLight: hex(0x698c54), forestDark: hex(0x3f5c3c), meadow: hex(0x98a35e), burn: hex(0x9c8a58),
+  // the forest floor is needle duff, not grass: a calm orange-brown in the sun (forest), golden in the sunny
+  // stands (forestLight), a cooler, darker brown under a thick canopy (forestDark); moss comes in below
+  forest: hex(0xa67a4b), forestLight: hex(0xb58b58), forestDark: hex(0x72584a), meadow: hex(0x98a35e), burn: hex(0x9c8a58),
 };
+// moss on the forest floor, lit and in the canopy's shade: the pair the duff's own lit/shade pair is mixed with
+const MOSS = { lit: hex(0x7c9650), shade: hex(0x56683e) };
 // bed bands by water depth (metres); the depth carries a little grain so the bands are not rulers
 export const BED_STEPS = [1.4, 3.2, 6.5, 13];
 export const bedGrain = (x, z) => (fbm(x * 0.03, z * 0.03, 2, 61) - 0.5) * 1.2;
@@ -85,10 +89,26 @@ export function groundClass(grid, x, z, shade = 0) {
   return classify(grid, x, z, shade, _pre);
 }
 
-export function groundColor(grid, x, z, out, shade = 0) {
-  const c = GROUND_PALETTE[groundClass(grid, x, z, shade)];
-  out[0] = c[0]; out[1] = c[1]; out[2] = c[2];
+// Where the forest floor is moss rather than duff: patches 8–20 m across from a low-frequency field, with a
+// soft edge one vertex wide, so the floor is big calm patches of two colours and never a speckle.
+export const mossAt = (x, z) => smoothstep(0.48, 0.56, fbm(x * 0.05 + 13, z * 0.05, 2, 83));
+
+// The colour a point of ground is painted. Rock, meadow, burn and the bed take the palette entry outright.
+// The forest classes are the floor: the duff's lit/shade pair mixed by the canopy over it (the dark class is
+// the shade side, deeper the thicker the canopy; the sunny stands stay lit), then moss where mossAt says so.
+const FOREST = new Set(['forest', 'forestLight', 'forestDark']);
+export function floorColor(cls, x, z, shade, out) {
+  const base = GROUND_PALETTE[cls];
+  if (!FOREST.has(GROUND[cls])) { out[0] = base[0]; out[1] = base[1]; out[2] = base[2]; return out; }
+  const lit = cls === I.forestDark ? C.forest : base, dark = C.forestDark;
+  const s = cls === I.forestDark ? 0.6 + 0.4 * smoothstep(0.55, 1, shade) : cls === I.forestLight ? 0.2 * shade : 0.5 * smoothstep(0.1, 0.55, shade);
+  const m = mossAt(x, z) * (cls === I.forestLight ? 0.4 : 1);
+  for (let k = 0; k < 3; k++) out[k] = lerp(lerp(lit[k], dark[k], s), lerp(MOSS.lit[k], MOSS.shade[k], s), m);
   return out;
+}
+
+export function groundColor(grid, x, z, out, shade = 0) {
+  return floorColor(groundClass(grid, x, z, shade), x, z, shade, out);
 }
 
 // Height in the shore band follows the distance field, so the waterline, the ripple lines and the
@@ -140,6 +160,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   const shadeAt = (x, z) => (shade ? shade[grid.local(grid.cellI(x), grid.cellJ(z))] : 0);
   const pre = { sd: 0, slope: 0, rock: 0, depth: -1 };
   const fields = new Float32Array(NFIELDS);
+  const paint = [0, 0, 0];
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));
     let v = map[key];
@@ -164,7 +185,8 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     pos.push(x - originX, h, z - originZ);
     pre.sd = sd; pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z); pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z);
     pre.depth = sd < 0 ? Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h) + bedGrain(x, z) : -1;
-    const c = GROUND_PALETTE[classify(grid, x, z, shadeAt(x, z), pre, fields)];
+    const sh = shadeAt(x, z);
+    const c = floorColor(classify(grid, x, z, sh, pre, fields), x, z, sh, paint);
     col.push(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255));
     bed.push(sd < 0 ? 1 : 0);
     for (let f = 0; f < NFIELDS; f++) fv.push(fields[f]);
