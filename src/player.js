@@ -570,6 +570,17 @@ export class Player {
     else if (w.shoreAt(nx, nz) < WADE_SD) { nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade'; }
     const trees = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
     for (const t of trees) {
+      if (t.box) { // a dock, a shack, a tent: held off the nearest face, sliding along it
+        const px = nx - t.x, pz = nz - t.z, a = px * t.ux + pz * t.uz, b = -px * t.uz + pz * t.ux;
+        const ka = t.hx + 0.35, kb = t.hz + 0.35;
+        if (Math.abs(a) < ka && Math.abs(b) < kb) {
+          const da = ka - Math.abs(a), db = kb - Math.abs(b);
+          if (da < db) { const s = Math.sign(a) || 1; nx += t.ux * s * da; nz += t.uz * s * da; }
+          else { const s = Math.sign(b) || 1; nx += -t.uz * s * db; nz += t.ux * s * db; }
+          this.speed *= 0.8;
+        }
+        continue;
+      }
       const dx = nx - t.x, dz = nz - t.z, d = Math.hypot(dx, dz), keep = t.r + 0.35;
       if (d < keep && d > 1e-4) {
         // held off the trunk, and eased round it to whichever side you were already passing on
@@ -580,7 +591,7 @@ export class Player {
     }
     if (carrying) {
       for (const t of trees) {
-        if (t.rock) continue; // the hull rides above a boulder
+        if (t.rock || t.box) continue; // the hull rides above a boulder; a wall already holds the walker off
         // the hull overhead is a 5 m log from 2.2 m behind the walker to 3 m ahead
         const px = t.x - nx, pz = t.z - nz, along = px * f.x + pz * f.z;
         if (along < -2.2 || along > 3.0) continue;
