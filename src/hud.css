@@ -86,7 +86,7 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #catch .size { font-size: 18px; font-variant-numeric: tabular-nums; }
 #catch .meta { font-size: 11px; letter-spacing: .12em; color: var(--ink-soft); }
 
-/* bottom centre: the action line, and above it the balance arc, the tension line, the course gauge, the lure strip */
+/* bottom centre: the action line, and above it the balance arc, the tension line, the lure strip */
 #prompt { left: 50%; translate: -50% 0; bottom: 56px; display: flex; align-items: center; gap: 12px; font-size: 18px; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, .5); max-width: calc(100vw - 96px); }
 #prompt .hint { color: var(--cream-72); }
 #prompt .hint.feel { font: italic 18px/1.35 var(--serif); color: rgba(243, 236, 221, .75); }
@@ -115,13 +115,6 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #tension.hot .fill, #tension.hot .end { background-color: var(--ember); border-color: var(--ember); }
 #tension .label { display: flex; gap: 10px; color: rgba(243, 236, 221, .85); font-variant-numeric: tabular-nums; }
 #tension .label .run { color: var(--gold); }
-#rudder { left: 50%; translate: -50% 0; bottom: 100px; width: 180px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-#rudder .track { position: relative; width: 100%; height: 10px; }
-#rudder .track::before { content: ''; position: absolute; left: 0; right: 0; top: 4px; height: 2px; background: rgba(243, 236, 221, .35); }
-#rudder .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(243, 236, 221, .6); }
-#rudder .knob { position: absolute; top: 0; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--gold); border: 1px solid var(--ink); box-sizing: border-box; transition: left .08s linear; }
-#rudder .label { color: var(--cream-50); font-size: 11px; }
-#air.balance #rudder { bottom: 254px; }
 
 /* bottom right: the status marks */
 #marks { right: 40px; bottom: 28px; display: flex; align-items: center; gap: 14px; opacity: .5; font: 700 12px/1 var(--sans); letter-spacing: .08em; text-shadow: var(--air-shadow); }

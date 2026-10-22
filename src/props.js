@@ -45,6 +45,10 @@ export function buildTileProps(tg, world, tx, ty) {
   const H = (x, z) => surfaceAt(tg, x, z);
   const group = new THREE.Group();
   group.name = 'props';
+  // what the walker cannot pass, in world coordinates (tiles.js hands them to player.js with the trunks):
+  // circles { x, z, r } and boxes { x, z, ux, uz, hx, hz, box: true } with half extents hx along (ux, uz)
+  const obstacles = [];
+  group.userData.obstacles = obstacles;
   const rng = mulberry32(42 + tx * 1000 + ty);
   const g = new GeoBuilder(), signs = new GeoBuilder();
   const half = 0.85;
@@ -71,6 +75,7 @@ export function buildTileProps(tg, world, tx, ty) {
       const [x, z] = end;
       if (!inside(x, z)) continue;
       const y = H(x, z), lx = x - ox, lz = z - oz;
+      obstacles.push({ x, z, r: 0.1 });
       const post = vary(0x7a5a3a, rng, 0.08);
       signs.tube(signs.ring(lx, y - 0.2, lz, 0.07, 4, rng), signs.ring(lx, y + 1.5, lz, 0.06, 4, rng), post, new THREE.Vector3(lx, y + 0.6, lz));
       const a = hash2(Math.round(x), Math.round(z), 1) * 6.28;
@@ -82,7 +87,7 @@ export function buildTileProps(tg, world, tx, ty) {
   }
   if (g.p.length) { const trail = new THREE.Mesh(g.build(), propMaterial); trail.receiveShadow = true; trail.matrixAutoUpdate = false; group.add(trail); }
   // an outfitter at every entry point landing: a dock, a shack with the name over the door, a canoe rack
-  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) buildOutfitter(tg, ep, ox, oz, signs, rng, group);
+  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) buildOutfitter(tg, ep, ox, oz, signs, rng, group, obstacles);
   if (signs.p.length) { const sign = new THREE.Mesh(signs.build(), propMaterial); sign.castShadow = true; sign.receiveShadow = true; sign.matrixAutoUpdate = false; group.add(sign); }
 
   const cg = new GeoBuilder();
@@ -96,6 +101,7 @@ export function buildTileProps(tg, world, tx, ty) {
     const fx = c.x - dir.x * (c.shore < 4 ? 6 : 0), fz = c.z - dir.z * (c.shore < 4 ? 6 : 0);
     const fy = H(fx, fz);
     const lfx = fx - ox, lfz = fz - oz;
+    obstacles.push({ x: fx, z: fz, r: 1.0 });
     for (let i = 0; i < 9; i++) {
       const t = (i / 9) * 6.28;
       cg.blob(lfx + Math.cos(t) * 0.75, fy + 0.05, lfz + Math.sin(t) * 0.75, 0.22 + crng() * 0.1, vary(0x76736a, crng, 0.1), crng, 0.4, 1.2, 0.7, 1);
@@ -108,6 +114,7 @@ export function buildTileProps(tg, world, tx, ty) {
     // a couple of charred logs in the ring and a log bench
     cg.blob(lfx, fy + 0.1, lfz, 0.3, new THREE.Color(0x3b2a1e), crng, 0.3, 1.6, 0.5, 0.7);
     const bx = fx + Math.cos(a) * 2.6, bz = fz + Math.sin(a) * 2.6, by = H(bx, bz), lbx = bx - ox, lbz = bz - oz;
+    obstacles.push({ x: bx, z: bz, ux: -Math.sin(a), uz: Math.cos(a), hx: 1.2, hz: 0.25, box: true });
     cg.tube(cg.ring(lbx - Math.sin(a) * 1.2, by + 0.2, lbz + Math.cos(a) * 1.2, 0.2, 5, crng, 0.1), cg.ring(lbx + Math.sin(a) * 1.2, by + 0.2, lbz - Math.cos(a) * 1.2, 0.2, 5, crng, 0.1), vary(0x8a6a48, crng), new THREE.Vector3(lbx, by + 0.2, lbz));
     // granite outcrop between the fire ring and the water: smooth Shield rock slabs
     if (c.shore < 30) {
@@ -128,6 +135,7 @@ export function buildTileProps(tg, world, tx, ty) {
     const tc = vary([0xd9752e, 0x4f8a5a, 0x3f6fae][Math.floor(crng() * 3)], crng, 0.08);
     const ref = P(0, -3, 0);
     const h = 1.35, w = 1.15, l = 1.3;
+    obstacles.push({ x: tx_, z: tz_, ux: cx, uz: sx, hx: l, hz: w, box: true });
     cg.quad(P(-l, 0, -w), P(l, 0, -w), P(l, h, 0), P(-l, h, 0), tc, ref);
     cg.quad(P(-l, 0, w), P(l, 0, w), P(l, h, 0), P(-l, h, 0), tc, ref);
     cg.tri(P(l, 0, -w), P(l, 0, w), P(l, h, 0), tc.clone().offsetHSL(0, 0, -0.08), ref);
@@ -176,7 +184,7 @@ function signMaterial(name) {
 
 // A dock out from the landing, planks on piles; the shack nine metres back with its door to the lake and the
 // outfitter's name on a board above it; two canoes on a rack beside. All of it stands on the shaped surface.
-function buildOutfitter(tg, ep, ox, oz, g, rng, group) {
+function buildOutfitter(tg, ep, ox, oz, g, rng, group, obstacles) {
   const V = (x, y, z) => new THREE.Vector3(x - ox, y, z - oz);
   const H = (x, z) => surfaceAt(tg, x, z);
   // the shore: from the landing (usually a little way out on the water) up onto dry ground, then back to the edge
@@ -187,6 +195,7 @@ function buildOutfitter(tg, ep, ox, oz, g, rng, group) {
   const nx = -d.z, nz = d.x, level = tg.levelAt(x, z), deckY = level + 0.45;
   const pile = vary(0x5e4630, rng, 0.05), stringer = vary(0x6e5236, rng, 0.05);
   const hw = 0.85, back = -1.6, len = 10;
+  obstacles.push({ x: x + d.x * (back + len) / 2, z: z + d.z * (back + len) / 2, ux: d.x, uz: d.z, hx: (len - back) / 2, hz: hw, box: true });
   for (let s = back; s < len; s += 0.34) {
     const s1 = s + 0.27;
     g.quad(V(x + d.x * s + nx * hw, deckY, z + d.z * s + nz * hw), V(x + d.x * s1 + nx * hw, deckY, z + d.z * s1 + nz * hw),
@@ -208,6 +217,7 @@ function buildOutfitter(tg, ep, ox, oz, g, rng, group) {
   const sx = x - d.x * 9, sz = z - d.z * 9;
   const P = (a, y, b) => V(sx + d.x * b + nx * a, y, sz + d.z * b + nz * a);
   const W = 1.9, D = 1.5, wallH = 2.3, ov = 0.4;
+  obstacles.push({ x: sx, z: sz, ux: d.x, uz: d.z, hx: D, hz: W, box: true });
   const corners = [[-W, -D], [W, -D], [W, D], [-W, D]];
   let floor = -Infinity;
   for (const [a, b] of corners) floor = Math.max(floor, H(sx + d.x * b + nx * a, sz + d.z * b + nz * a));
@@ -236,6 +246,7 @@ function buildOutfitter(tg, ep, ox, oz, g, rng, group) {
   group.add(sign);
   // the canoe rack beside the shack: two trestles and two hulls
   const ra = W + 2.6, post = vary(0x6e5236, rng, 0.05);
+  obstacles.push({ x: sx + nx * ra, z: sz + nz * ra, ux: d.x, uz: d.z, hx: 2.4, hz: 0.7, box: true });
   for (const b of [-1.4, 1.4]) {
     const px = sx + d.x * b + nx * ra, pz = sz + d.z * b + nz * ra, py = H(px, pz);
     for (const side of [-0.55, 0.55]) g.tube(g.ring(px + nx * side - ox, py - 0.3, pz + nz * side - oz, 0.06, 4, rng), g.ring(px + nx * side - ox, py + 1.5, pz + nz * side - oz, 0.05, 4, rng), post, new THREE.Vector3(px - ox, py + 0.6, pz - oz));

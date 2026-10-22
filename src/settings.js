@@ -49,7 +49,7 @@ export const SECTIONS = [
   { id: 'controls', label: 'Controls', rows: [
     { key: 'sensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.3, max: 3, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
     { key: 'invertLook', label: 'Invert look', type: 'toggle' },
-    { key: 'cursorSteer', label: 'Steer the canoe toward the cursor', desc: 'While you hold W the bow seeks the cursor’s point on the water', type: 'toggle' },
+    { key: 'cursorSteer', label: 'Steer the canoe where you point', desc: 'While you hold W the bow turns toward the cursor’s point on the water, or toward the look in first person', type: 'toggle' },
     { key: 'speed', label: 'Game speed at the start of a trip', desc: '1 2 3 change it as you paddle', type: 'select', parse: Number, options: [[1, '1× · realistic'], [2, '2×'], [4, '4×']] },
     { key: 'camera', label: 'Camera at the start of a trip', desc: 'V switches as you paddle', type: 'select', options: [['third', 'Behind the canoe'], ['first', 'From the paddler’s seat']] },
   ] },

@@ -19,7 +19,6 @@ export class Input {
 
 const PADDLE = { accel: 3.4, hustle: 5.2, reverse: 1.6, drag: 0.15, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
 const WALK = { speed: 1.5, hustle: 2.2, carry: 1.2, carryHustle: 1.7, face: 7 }; // face: how fast the walker turns to where the keys point
-const RUDDER_RATE = 1.25;     // the course bias moves centre to full lock in 0.8 s of A or D
 const SWIM = { speed: 0.85, hustle: 1.25, turn: 1.6 };
 const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
 const LANDING_RADIUS = 28;
@@ -60,10 +59,8 @@ export class Player {
     this.suppressLanding = false; // at an outfitter's dock E is the outfitter's, not a portage's
     this.chase = null;            // set by main: the view's bearing (walking is read against it) and the cursor
     this.cursorSteer = false;     // settings: with W held the bow seeks the cursor's point on the water
-    // the course: A/D set a bias that holds, like a J-stroke kept on one side, with a stop in the middle;
-    // +1 is full left. rudderMoved keeps the gauge up a moment after a change
-    this.rudder = 0; this.rudderHold = false; this.rudderMoved = -10;
-    this.footLatch = { keys: 4, h: 0 }; // on foot: the bearing the held keys meant when they were pressed
+    this.assist = 0;              // the eased steering toward where you point, when that is on
+    this.footLatch = { keys: 4, h: 0 }; // on foot without mouse look: the bearing the held keys meant when pressed
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
   }
@@ -73,7 +70,6 @@ export class Player {
   get onFoot() { return this.mode === 'carry' || this.mode === 'walk'; }
   get altitude() { return this.onFoot ? this.groundAt(this.x, this.z) : this.world.levelAt(this.x, this.z); }
   get waveHeightHere() { return this.wind && this.water ? windHeight(this.wind.speed, this.water.fetchAt(this.x, this.z)) : 0.05; }
-  get rudderShown() { return this.mode === 'paddle' && (Math.abs(this.rudder) > 0.02 || this.time - this.rudderMoved < 1.5); }
   // where the canoe lies when it is not with you (beached or set down), for the map
   get hullDown() { return this.carry && this.carry.drop ? this.carry.drop : null; }
   get modeLabel() {
@@ -141,6 +137,37 @@ export class Player {
     return false;
   }
 
+  // The move keys as a vector in the view's frame: W into the screen, D to its right.
+  moveKeys() {
+    const inp = this.input;
+    const iy = (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
+    const ix = (inp.held('KeyD', 'ArrowRight') ? 1 : 0) - (inp.held('KeyA', 'ArrowLeft') ? 1 : 0);
+    return { ix, iy, keys: (ix + 1) * 3 + (iy + 1), moving: ix !== 0 || iy !== 0 };
+  }
+
+  // Which way to face and which way to go, from the keys. With mouse look (first person, and on foot in
+  // third person) the body faces the look at once and the keys move relative to it, A and D strafing.
+  // Otherwise (swimming in third person) the keys name a bearing relative to the view, fixed while they are
+  // held, and the body turns to face it at `face` rad/s and moves along its own heading.
+  steerOnFoot(dt, face) {
+    const { ix, iy, keys, moving } = this.moveKeys(), ch = this.chase, L = this.footLatch;
+    if (ch && ch.mouseLook) {
+      this.heading = ch.forwardYaw;
+      const f = this.forward, r = { x: -f.z, z: f.x };
+      const mx = f.x * iy + r.x * ix, mz = f.z * iy + r.z * ix, n = Math.hypot(mx, mz) || 1;
+      return { moving, mx: mx / n, mz: mz / n };
+    }
+    if (moving && (keys !== L.keys || !ch || ch.dragging)) {
+      const vy = ch ? ch.forwardYaw : this.heading;
+      const fx = Math.cos(vy), fz = -Math.sin(vy), rx = -fz, rz = fx;
+      L.h = Math.atan2(-(fz * iy + rz * ix), fx * iy + rx * ix);
+    }
+    L.keys = keys;
+    if (moving) { let dh = L.h - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); this.heading += clamp(dh, -face * dt, face * dt); }
+    const f = this.forward;
+    return { moving, mx: f.x, mz: f.z };
+  }
+
   // the lake whose water is nearest (x, z) within r cells, or 0; remembered per cell
   nearWater(x, z, r = 8) {
     const w = this.world, ci = w.cellI(x), cj = w.cellJ(z), pc = this.placeCache;
@@ -184,32 +211,27 @@ export class Player {
     const brace = !rodUp && inp.held('Space');           // a low brace steadies the hull but you cannot paddle
     if (brace) fwd = 0;
     const paddling = fwd !== 0 || turn !== 0;
-    // the course. A/D move a bias that holds once set, stopping at the middle on the way back (release and
-    // press again to go through). With cursor steering on, the bias is the cursor instead: while you paddle
-    // the bow turns toward its point on the water, A/D nudge while held, and nothing sticks.
-    let steer;
+    // A/D turn while held, as sweep strokes. With steering by where you point switched on (settings) and
+    // neither held, paddling forward brings the bow round toward the cursor's point on the water, or toward
+    // the look in first person; the assist eases so the hull swings, not snaps.
+    let steer = turn;
     if (this.cursorSteer) {
-      steer = turn;
+      let want = 0;
       if (turn === 0 && fwd > 0 && this.chase) {
-        const pt = this.chase.cursorOnPlane(this.level);
-        if (pt) {
-          let dh = Math.atan2(-(pt.z - this.z), pt.x - this.x) - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-          steer = Math.hypot(pt.x - this.x, pt.z - this.z) < 3 ? 0 : clamp(dh / 0.3, -1, 1);
+        if (this.chase.mode === 'first') { // from the seat there is no cursor: the bow seeks the look
+          const dh = this.chase.lookYaw;
+          want = Math.abs(dh) < 0.04 ? 0 : clamp(dh / 0.3, -1, 1);
+        } else {
+          const pt = this.chase.cursorOnPlane(this.level);
+          if (pt) {
+            let dh = Math.atan2(-(pt.z - this.z), pt.x - this.x) - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+            want = Math.hypot(pt.x - this.x, pt.z - this.z) < 3 ? 0 : clamp(dh / 0.3, -1, 1);
+          }
         }
       }
-      this.rudder += (steer - this.rudder) * (1 - Math.exp(-dt * 8));
-      if (turn !== 0 || fwd > 0) this.rudderMoved = this.time;
-      steer = this.rudder;
-    } else {
-      if (turn !== 0 && !this.rudderHold) {
-        const before = this.rudder, after = clamp(before + turn * RUDDER_RATE * dt, -1, 1);
-        if (before !== 0 && Math.sign(after) !== Math.sign(before)) { this.rudder = 0; this.rudderHold = true; }
-        else this.rudder = after;
-        this.rudderMoved = this.time;
-      }
-      if (turn === 0) this.rudderHold = false;
-      steer = this.rudder;
-    }
+      this.assist += (want - this.assist) * (1 - Math.exp(-dt * 8));
+      if (turn === 0) steer = this.assist;
+    } else this.assist = 0;
     // stroke cycle drives both the animation and the thrust pulses
     const rate = hustle ? PADDLE.hustleRate : PADDLE.strokeRate;
     const biased = Math.abs(steer) > 0.15; // the paddle stays on the side that holds the course
@@ -357,15 +379,12 @@ export class Player {
   updateSwim(dt) {
     const inp = this.input, w = this.world, sw = this.swim, st = this.canoe.state, rig = this.canoe.rig;
     sw.t += dt;
-    const fwd = (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
-    const turn = (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
-    this.heading += turn * SWIM.turn * dt;
-    this.speed += (fwd * (hustle ? SWIM.hustle : SWIM.speed) - this.speed) * (1 - Math.exp(-dt * 4));
-    const f = this.forward;
+    const { moving, mx, mz } = this.steerOnFoot(dt, SWIM.turn * 3);
+    this.speed += ((moving ? 1 : 0) * (hustle ? SWIM.hustle : SWIM.speed) - this.speed) * (1 - Math.exp(-dt * 4));
     const wd = this.wind ? this.wind.dir : { x: 0, z: 0 }, U = this.wind ? this.wind.speed : 0;
     const swimOk = (x, z) => w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -0.5;
-    const nx = this.x + (f.x * this.speed + wd.x * 0.01 * U) * dt, nz = this.z + (f.z * this.speed + wd.z * 0.01 * U) * dt;
+    const nx = this.x + (mx * this.speed + wd.x * 0.01 * U) * dt, nz = this.z + (mz * this.speed + wd.z * 0.01 * U) * dt;
     if (swimOk(nx, nz)) { this.x = nx; this.z = nz; } else this.speed = 0;
     // the empty hull drifts downwind faster than you swim, so do not dawdle
     const cx = sw.cx + wd.x * 0.035 * U * dt, cz = sw.cz + wd.z * 0.035 * U * dt;
@@ -518,25 +537,10 @@ export class Player {
   updateFoot(dt) {
     const inp = this.input, c = this.carry, st = this.canoe.state, w = this.world;
     const carrying = !c.drop;
-    const iy = (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
-    const ix = (inp.held('KeyD', 'ArrowRight') ? 1 : 0) - (inp.held('KeyA', 'ArrowLeft') ? 1 : 0);
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
     c.hitCooldown -= dt;
-    // The keys point relative to the view: W is into the screen, D to its right. The bearing they mean is
-    // fixed when the keys change (or while the view is being dragged, or in first person where the view is
-    // the head), so a view that drifts round behind the walker never bends their line.
-    const keys = (ix + 1) * 3 + (iy + 1), moving = keys !== 4, L = this.footLatch, ch = this.chase;
-    if (moving && (keys !== L.keys || !ch || ch.dragging || ch.mode === 'first')) {
-      const vy = ch ? ch.forwardYaw : this.heading;
-      const fx = Math.cos(vy), fz = -Math.sin(vy), rx = -fz, rz = fx;
-      L.h = Math.atan2(-(fz * iy + rz * ix), fx * iy + rx * ix);
-    }
-    L.keys = keys;
+    const { moving, mx, mz } = this.steerOnFoot(dt, WALK.face); // (mx, mz): the way the walker goes; f: the way the body faces
     const fwd = moving ? 1 : 0;
-    if (moving) {
-      let dh = L.h - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-      this.heading += clamp(dh, -WALK.face * dt, WALK.face * dt);
-    }
     const f = this.forward;
     const trail = this.nearestTrail(this.x, this.z), onTrail = !!trail && trail.dist < TRAIL_WIDTH;
     const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
@@ -554,7 +558,7 @@ export class Player {
     // the hill: the grade a step ahead in the direction of travel slows you and a 40° slope stops you; a
     // trail is graded, so half the penalty and never a wall
     const step = 1.5;
-    const grade = (this.groundAt(this.x + f.x * step, this.z + f.z * step) - this.groundAt(this.x, this.z)) / step;
+    const grade = (this.groundAt(this.x + mx * step, this.z + mz * step) - this.groundAt(this.x, this.z)) / step;
     let wall = null;
     if (!onTrail && grade > MAX_GRADE) wall = 'Too steep to climb here';
     else if (!onTrail && grade < -1.2) wall = 'A drop — find another way down';
@@ -565,23 +569,34 @@ export class Player {
     if (fwd !== 0 && wall) note = wall;
     const want = wall ? 0 : fwd * base * Math.max(0.3, going);
     this.speed += (want - this.speed) * (1 - Math.exp(-dt * 6));
-    let nx = this.x + f.x * this.speed * dt, nz = this.z + f.z * this.speed * dt;
+    let nx = this.x + mx * this.speed * dt, nz = this.z + mz * this.speed * dt;
     if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
     else if (!w.isReady(nx, nz)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Loading the land ahead…'; }
     else if (w.shoreAt(nx, nz) < WADE_SD) { nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade'; }
     const trees = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
     for (const t of trees) {
+      if (t.box) { // a dock, a shack, a tent: held off the nearest face, sliding along it
+        const px = nx - t.x, pz = nz - t.z, a = px * t.ux + pz * t.uz, b = -px * t.uz + pz * t.ux;
+        const ka = t.hx + 0.35, kb = t.hz + 0.35;
+        if (Math.abs(a) < ka && Math.abs(b) < kb) {
+          const da = ka - Math.abs(a), db = kb - Math.abs(b);
+          if (da < db) { const s = Math.sign(a) || 1; nx += t.ux * s * da; nz += t.uz * s * da; }
+          else { const s = Math.sign(b) || 1; nx += -t.uz * s * db; nz += t.ux * s * db; }
+          this.speed *= 0.8;
+        }
+        continue;
+      }
       const dx = nx - t.x, dz = nz - t.z, d = Math.hypot(dx, dz), keep = t.r + 0.35;
       if (d < keep && d > 1e-4) {
         // held off the trunk, and eased round it to whichever side you were already passing on
-        const side = Math.sign(dx * -f.z + dz * f.x) || 1;
-        nx = t.x + (dx / d) * keep - f.z * side * 0.02; nz = t.z + (dz / d) * keep + f.x * side * 0.02;
+        const side = Math.sign(dx * -mz + dz * mx) || 1;
+        nx = t.x + (dx / d) * keep - mz * side * 0.02; nz = t.z + (dz / d) * keep + mx * side * 0.02;
         this.speed *= 0.8;
       }
     }
     if (carrying) {
       for (const t of trees) {
-        if (t.rock) continue; // the hull rides above a boulder
+        if (t.rock || t.box) continue; // the hull rides above a boulder; a wall already holds the walker off
         // the hull overhead is a 5 m log from 2.2 m behind the walker to 3 m ahead
         const px = t.x - nx, pz = t.z - nz, along = px * f.x + pz * f.z;
         if (along < -2.2 || along > 3.0) continue;

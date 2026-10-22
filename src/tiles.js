@@ -196,7 +196,9 @@ export class TileManager {
     e.vegBins = r.veg; e.ox = ox; e.oz = oz; e.treeHash = null;
     if (this.aquatic) e.veg.push(...makeAquaticMeshes(r.aquatic, this.aquatic));
     for (const m of e.veg) group.add(m);
-    group.add(buildTileProps(w.tileGrid(e.tx, e.ty), w, e.tx, e.ty));
+    const props = buildTileProps(w.tileGrid(e.tx, e.ty), w, e.tx, e.ty);
+    group.add(props);
+    e.obstacles = props.userData.obstacles; // docks, shacks, tents and the like, in world coordinates
     this.scene.add(group);
     e.group = group; e.state = 'ready'; e.result = null;
     this.stats.built++; this.stats.trees += r.trees; this.stats.plants += r.plants;
@@ -275,6 +277,8 @@ export class TileManager {
 
   // Tree trunks within r metres of (x, z): [{ x, z, r }] in world metres. Built lazily per tile from the
   // instance matrices into a 10 m hash; boulders and shrubs are left out (they do not reach a canoe overhead).
+  // Everything the walker is held off within r metres: trunks and boulders as circles { x, z, r } (rock: true
+  // for a boulder), the props' footprints as circles or boxes { x, z, ux, uz, hx, hz, box: true }.
   treesNear(x, z, r) {
     const out = [], w = this.world, HASH = 10;
     const [tx0, ty0] = w.tileOf(x - r, z - r), [tx1, ty1] = w.tileOf(x + r, z + r);
@@ -302,6 +306,7 @@ export class TileManager {
         if (!a) continue;
         for (let i = 0; i < a.length; i += 4) if (Math.hypot(a[i] - x, a[i + 1] - z) <= r + a[i + 2]) out.push({ x: a[i], z: a[i + 1], r: a[i + 2], rock: a[i + 3] === 1 });
       }
+      if (e.obstacles) for (const o of e.obstacles) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o);
     }
     return out;
   }

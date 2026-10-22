@@ -71,7 +71,7 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | Key | Action |
 |---|---|
 | W / S | paddle forward / back; on land, walk into the view / toward it |
-| A / D | afloat: set the course, a bias that holds like a J-stroke kept on one side (it stops at the middle on the way back; release and press again to go through). On land: walk to the view's left / right |
+| A / D | afloat: turn the hull while held, as sweep strokes, in both views. On land: strafe left / right |
 | Shift | hustle (on foot, a jog) |
 | Space | brace (steadies the hull in a sea; you cannot paddle while bracing). The balance arc appears above the action line while the sea is working the hull |
 | E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter's counter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
@@ -93,8 +93,8 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | / | veer the wind 30° (debug) |
 | R | toggle the canoe's water reflection (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× (a ×2 mark bottom right while it is up) |
-| Esc | pause: the title screen with Paddle on / New trip / Settings / Controls (Esc again, or Enter, resumes); Controls shows this table in the game |
-| mouse | look around: in first person the view follows the cursor (right of centre looks right, up looks up), in third person drag to orbit (the view is yours: on foot it keeps its bearing while you turn, drifting round behind you only slowly as you walk); wheel zooms. *Settings → Steer the canoe toward the cursor*: while you hold W the bow turns toward the cursor's point on the water, A/D nudge, and nothing sticks |
+| Esc | frees the mouse when the look has taken it; otherwise pause: the title screen with Paddle on / New trip / Settings / Controls (Esc again, or Enter, resumes); Controls shows this table in the game |
+| mouse | look. In first person, and on land in third person, the mouse turns you the way it does in Minecraft: the first key or click takes the mouse, every movement turns the look at once, Esc frees the mouse (Esc again opens the menu). On land the body faces the look and WASD moves relative to it, A and D strafing; in third person the camera sits behind you and the mouse's tilt swings it up or down. Behind the canoe the cursor stays free: drag to orbit, wheel to zoom. *Settings → Steer the canoe where you point*: while you hold W the bow turns toward the cursor's point on the water, or toward the look in first person; A/D nudge, and nothing sticks |
 | the map sheet | click a spot to paddle in there (teleport to the nearest open water, anywhere in the wilderness) |
 | the title's entry points | the list beside *New trip* starts a trip at one of the BWCA entry point landings |
 

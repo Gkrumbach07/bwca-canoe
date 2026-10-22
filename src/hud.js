@@ -123,7 +123,7 @@ export class Hud {
       catch: $('catch'), catchFish: $('catch-fish'), catchName: $('catch-name'), catchSize: $('catch-size'), catchMeta: $('catch-meta'),
       balance: $('balance'), balanceDot: $('balance-dot'), balanceLabel: $('balance-label'),
       tension: $('tension'), tensionFill: $('tension-fill'), tensionEnd: $('tension-end'), tensionLabel: $('tension-label'),
-      rudder: $('rudder'), rudderKnob: $('rudder-knob'), lures: $('lures'), prompt: $('prompt'), marks: $('marks'),
+      lures: $('lures'), prompt: $('prompt'), marks: $('marks'),
       map: $('map'), mapBody: $('map-body'), mapTitle: $('map-title'), mapSpan: $('map-span'), mapLayers: $('map-layers'), mapClose: $('map-close'),
       mapScalebar: $('map-scalebar'), mapScale: $('map-scale'), pin: $('pin'), pinText: $('pin-text'), pinGo: $('pin-go'), pinCancel: $('pin-cancel'),
     };
@@ -627,7 +627,6 @@ export class Hud {
     this.updateTitles(ctx);
     this.updatePrompt(ctx);
     this.updateBalance(ctx);
-    this.updateRudder(ctx);
     this.updateFishing(ctx);
     this.updateMarks(ctx);
     if (this.tab.shown) this.renderReadout();
@@ -736,13 +735,6 @@ export class Hud {
     e.balance.querySelector('svg').setAttribute('aria-label', `Balance: ${b > 0.6 ? 'heeling hard' : b > 0.3 ? 'heeling' : 'steady'}`);
   }
 
-  // the course gauge: the bias A/D set, a knob left of the middle is a bias to port
-  updateRudder(ctx) {
-    const { player } = ctx, e = this.el;
-    const show = !!player.rudderShown;
-    e.rudder.classList.toggle('show', show);
-    if (show) e.rudderKnob.style.left = `${50 - player.rudder * 44}%`;
-  }
 
   // the status marks, bottom right at half strength: the time scale, the clock stopped, the GPS link, mute, tiles loading
   marksBuild() {

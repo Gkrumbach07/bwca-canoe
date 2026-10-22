@@ -16,13 +16,13 @@ const DRIFT_RADIUS = 23;    // metres, where there is water for it
 // the controls reference (the Controls item), by what you are doing
 const KEYMAP = [
   ['On the water', [
-    [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'set the course; it holds, bring it back to the middle to run straight'],
+    [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'turn the hull while held, as sweep strokes'],
     [['Shift'], 'hustle'], [['Space'], 'brace in a sea (you cannot paddle while bracing)'],
     [['E'], 'go ashore · portage at a landing · the outfitter at a dock · pick up a find'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
     [['G'], 'eat a meal, when the canoe is still'],
   ]],
   ['On foot', [
-    [['W', 'A', 'S', 'D'], 'walk where the view points'], [['Shift'], 'jog'],
+    [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'],
     [['E'], 'launch a canoe at the water’s edge · set a carried one down'], [['Q'], 'shoulder a canoe on the ground · set a carried one down where you could launch'],
   ]],
   ['Fishing', [
@@ -32,7 +32,7 @@ const KEYMAP = [
   ['Looking', [
     [['Tab'], 'hold for the readout: where, water, way, wind, light, pack, tasks'], [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in)'],
     [['J'], 'the journal: the trip, catches, tasks, lakes, gear (L opens it too)'], [['V'], 'from the paddler’s seat · behind the canoe'],
-    [['mouse'], 'look round; in third person drag to orbit, wheel to zoom'], [['Esc'], 'this menu'],
+    [['mouse'], 'look: in first person and on foot the first key or click takes the mouse and it turns you at once; behind the canoe, drag to orbit, wheel to zoom'], [['Esc'], 'frees the mouse when it is taken, otherwise this menu'],
   ]],
   ['The clock and the weather', [
     [['1', '2', '3'], 'game speed 1× 2× 4× (when the rod is down)'], [['[', ']'], 'time of day back, forward an hour'], [['-', '='], 'the date back, forward a day (Shift: a month)'],
