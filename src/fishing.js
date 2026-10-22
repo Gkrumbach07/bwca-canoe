@@ -476,7 +476,7 @@ export class Fishing {
   update(dt, timeScale = 1) {
     const p = this.player, inp = this.input;
     if (inp.pressed('KeyL')) this.logOpen = !this.logOpen;
-    const afloat = p.mode === 'paddle' && !p.landing && !p.teleporting;
+    const afloat = p.mode === 'paddle' && !p.landing && !p.ashore && !p.teleporting;
     if (!afloat && this.rodUp) this.stow();
     if (afloat && inp.pressed('KeyF')) {
       if (!this.rodUp) this.raise();

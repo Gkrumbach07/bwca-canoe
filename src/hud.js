@@ -424,15 +424,15 @@ export class Hud {
     const w = this.world;
     const fu = fishing ? fishing.ui : null;
     const id = player.lakeId;
-    const name = player.mode === 'carry' ? player.carry.trail.def.name : (w.lakeName(id) || 'Unnamed water');
+    const name = player.placeName || w.lakeName(id) || 'Unnamed water';
     if (this.el.lake.textContent !== name) this.el.lake.textContent = name;
     const { lat, lon } = w.toLatLon(player.x, player.z);
     const kmh = (Math.abs(player.speed) * 3.6).toFixed(1);
-    const deep = player.mode === 'carry' ? 0 : Math.max(0, player.level - w.heightAt(player.x, player.z));
+    const deep = player.onFoot ? 0 : Math.max(0, player.level - w.heightAt(player.x, player.z));
     const lakeRec = id > 0 ? w.lakes[id - 1] : null;
     const clar = lakeRec && lakeRec.secchi ? ` · ${lakeRec.secchi.toFixed(1)} m clarity${lakeRec.secchiMeasured ? '' : '*'}` : '';
     const depthTxt = deep > 0.05 ? ` · ${deep.toFixed(1)} m deep${lakeRec && lakeRec.maxDepth ? ` (max ${lakeRec.maxDepth} m)` : ''}${clar}` : '';
-    const modeTxt = player.mode === 'carry' ? 'Portaging' : player.mode === 'swim' ? 'Swimming' : fu && fu.rodUp ? 'Fishing' : 'Paddling';
+    const modeTxt = player.onFoot || player.mode === 'swim' ? player.modeLabel : fu && fu.rodUp ? 'Fishing' : 'Paddling';
     if (wind && this.el.wind) {
       const H = player.waveHeightHere;
       this.el.wind.textContent = `${wind.label} · ${wind.speed.toFixed(0)} m/s from the ${wind.compass}${player.mode === 'paddle' && H > 0.2 ? ` · waves ${H.toFixed(1)} m` : ''}${wind.override != null ? ' (set by hand)' : ''}`;
@@ -606,12 +606,26 @@ export class Hud {
       ctx.beginPath(); ctx.moveTo(a, b - 7 * k); ctx.lineTo(a + 6 * k, b + 4 * k); ctx.lineTo(a - 6 * k, b + 4 * k); ctx.closePath(); ctx.fill();
       if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 16 * k); }
     }
-    // the canoe
+    // the canoe where it was left (beached or set down), so you can find your way back to it
+    const hull = player.hullDown;
+    if (hull && inView(hull.x, hull.z, hull.x, hull.z)) {
+      const [a, b] = toPx(hull.x, hull.z);
+      ctx.save(); ctx.translate(a, b); ctx.rotate(-hull.heading + Math.PI / 2); ctx.scale(k, k);
+      ctx.fillStyle = '#e8562f'; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(0, -10); ctx.quadraticCurveTo(4.5, 0, 0, 10); ctx.quadraticCurveTo(-4.5, 0, 0, -10); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    // you: the canoe when it is with you, a walker's dot with a heading tick when it is not
     if (inView(player.x, player.z, player.x, player.z)) {
       const [a, b] = toPx(player.x, player.z);
       ctx.save(); ctx.translate(a, b); ctx.rotate(-player.heading + Math.PI / 2); ctx.scale(k, k);
       ctx.fillStyle = '#e8562f'; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(7, 8); ctx.lineTo(0, 4); ctx.lineTo(-7, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+      if (hull) {
+        ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, -4); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, 6.28); ctx.fill(); ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(7, 8); ctx.lineTo(0, 4); ctx.lineTo(-7, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
       ctx.restore();
     }
     // the pin waiting for a confirmation
