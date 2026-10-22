@@ -197,7 +197,9 @@ const frag = /* glsl */ `
     vec3 n = normalize(vWaveN);
     float depth = -vShore;
     float shadow = 1.0;
-    #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+    #if defined( USE_SHADOWMAP ) && NUM_SUN_LIGHT_SHADOWS > 0
+      shadow = getSunShadow(sunShadowMap[0], sunLightShadows[0], 0); // the sun's two cascades (sunlight.js)
+    #elif defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
       shadow = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
     #endif
     // three tones (surface tilted toward the sun, level, away) with a soft hand-off: on the smooth
