@@ -19,7 +19,6 @@ export class Input {
 
 const PADDLE = { accel: 3.4, hustle: 5.2, reverse: 1.6, drag: 0.15, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
 const WALK = { speed: 1.5, hustle: 2.2, carry: 1.2, carryHustle: 1.7, face: 7 }; // face: how fast the walker turns to where the keys point
-const RUDDER_RATE = 1.25;     // the course bias moves centre to full lock in 0.8 s of A or D
 const SWIM = { speed: 0.85, hustle: 1.25, turn: 1.6 };
 const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
 const LANDING_RADIUS = 28;
@@ -60,10 +59,8 @@ export class Player {
     this.suppressLanding = false; // at an outfitter's dock E is the outfitter's, not a portage's
     this.chase = null;            // set by main: the view's bearing (walking is read against it) and the cursor
     this.cursorSteer = false;     // settings: with W held the bow seeks the cursor's point on the water
-    // the course: A/D set a bias that holds, like a J-stroke kept on one side, with a stop in the middle;
-    // +1 is full left. rudderMoved keeps the gauge up a moment after a change
-    this.rudder = 0; this.rudderHold = false; this.rudderMoved = -10;
-    this.footLatch = { keys: 4, h: 0 }; // on foot: the bearing the held keys meant when they were pressed
+    this.assist = 0;              // the eased steering toward where you point, when that is on
+    this.footLatch = { keys: 4, h: 0 }; // on foot without mouse look: the bearing the held keys meant when pressed
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
   }
@@ -73,7 +70,6 @@ export class Player {
   get onFoot() { return this.mode === 'carry' || this.mode === 'walk'; }
   get altitude() { return this.onFoot ? this.groundAt(this.x, this.z) : this.world.levelAt(this.x, this.z); }
   get waveHeightHere() { return this.wind && this.water ? windHeight(this.wind.speed, this.water.fetchAt(this.x, this.z)) : 0.05; }
-  get rudderShown() { return this.mode === 'paddle' && (Math.abs(this.rudder) > 0.02 || this.time - this.rudderMoved < 1.5); }
   // where the canoe lies when it is not with you (beached or set down), for the map
   get hullDown() { return this.carry && this.carry.drop ? this.carry.drop : null; }
   get modeLabel() {
@@ -149,13 +145,13 @@ export class Player {
     return { ix, iy, keys: (ix + 1) * 3 + (iy + 1), moving: ix !== 0 || iy !== 0 };
   }
 
-  // Which way to face and which way to go, from the keys. First person: the body faces the look at once and
-  // the keys move relative to it (A and D strafe). Third person: the keys name a bearing relative to the view,
-  // fixed while they are held (or while the view is being dragged), and the body turns to face it at `face`
-  // rad/s and moves along its own heading, so a view drifting round behind never bends the line.
+  // Which way to face and which way to go, from the keys. With mouse look (first person, and on foot in
+  // third person) the body faces the look at once and the keys move relative to it, A and D strafing.
+  // Otherwise (swimming in third person) the keys name a bearing relative to the view, fixed while they are
+  // held, and the body turns to face it at `face` rad/s and moves along its own heading.
   steerOnFoot(dt, face) {
     const { ix, iy, keys, moving } = this.moveKeys(), ch = this.chase, L = this.footLatch;
-    if (ch && ch.mode === 'first') {
+    if (ch && ch.mouseLook) {
       this.heading = ch.forwardYaw;
       const f = this.forward, r = { x: -f.z, z: f.x };
       const mx = f.x * iy + r.x * ix, mz = f.z * iy + r.z * ix, n = Math.hypot(mx, mz) || 1;
@@ -215,38 +211,27 @@ export class Player {
     const brace = !rodUp && inp.held('Space');           // a low brace steadies the hull but you cannot paddle
     if (brace) fwd = 0;
     const paddling = fwd !== 0 || turn !== 0;
-    // the course. A/D move a bias that holds once set, stopping at the middle on the way back (release and
-    // press again to go through). With cursor steering on, the bias is the cursor instead: while you paddle
-    // the bow turns toward its point on the water, A/D nudge while held, and nothing sticks.
-    let steer;
+    // A/D turn while held, as sweep strokes. With steering by where you point switched on (settings) and
+    // neither held, paddling forward brings the bow round toward the cursor's point on the water, or toward
+    // the look in first person; the assist eases so the hull swings, not snaps.
+    let steer = turn;
     if (this.cursorSteer) {
-      steer = turn;
+      let want = 0;
       if (turn === 0 && fwd > 0 && this.chase) {
         if (this.chase.mode === 'first') { // from the seat there is no cursor: the bow seeks the look
           const dh = this.chase.lookYaw;
-          steer = Math.abs(dh) < 0.04 ? 0 : clamp(dh / 0.3, -1, 1);
+          want = Math.abs(dh) < 0.04 ? 0 : clamp(dh / 0.3, -1, 1);
         } else {
           const pt = this.chase.cursorOnPlane(this.level);
           if (pt) {
             let dh = Math.atan2(-(pt.z - this.z), pt.x - this.x) - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-            steer = Math.hypot(pt.x - this.x, pt.z - this.z) < 3 ? 0 : clamp(dh / 0.3, -1, 1);
+            want = Math.hypot(pt.x - this.x, pt.z - this.z) < 3 ? 0 : clamp(dh / 0.3, -1, 1);
           }
         }
       }
-      this.rudder += (steer - this.rudder) * (1 - Math.exp(-dt * 8));
-      if (Math.abs(this.rudder) < 0.01) this.rudder = 0; // dead centre, so the stop below never eats the next press
-      if (turn !== 0 || fwd > 0) this.rudderMoved = this.time;
-      steer = this.rudder;
-    } else {
-      if (turn !== 0 && !this.rudderHold) {
-        const before = this.rudder, after = clamp(before + turn * RUDDER_RATE * dt, -1, 1);
-        if (before !== 0 && Math.sign(after) !== Math.sign(before)) { this.rudder = 0; this.rudderHold = true; }
-        else this.rudder = after;
-        this.rudderMoved = this.time;
-      }
-      if (turn === 0) this.rudderHold = false;
-      steer = this.rudder;
-    }
+      this.assist += (want - this.assist) * (1 - Math.exp(-dt * 8));
+      if (turn === 0) steer = this.assist;
+    } else this.assist = 0;
     // stroke cycle drives both the animation and the thrust pulses
     const rate = hustle ? PADDLE.hustleRate : PADDLE.strokeRate;
     const biased = Math.abs(steer) > 0.15; // the paddle stays on the side that holds the course

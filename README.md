@@ -64,8 +64,8 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 
 | Key | Action |
 |---|---|
-| W / S | paddle forward / back; on land, walk into the view / toward it |
-| A / D | afloat: set the course, a bias that holds like a J-stroke kept on one side (it stops at the middle on the way back; release and press again to go through). On land: walk to the view's left / right |
+| W / S | paddle forward / back; on land, walk where you look / backward |
+| A / D | afloat: turn (sweep strokes); on land: strafe left / right of where you look |
 | Shift | hustle (on foot, a jog) |
 | Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
 | E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
@@ -87,14 +87,14 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | R | toggle the canoe's water reflection (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
 | Esc | pause: the title screen with Paddle on / New trip / Settings (Esc again, or Enter, resumes) |
-| mouse | look around. First person: click to capture the mouse and the look follows every movement at once (Esc frees the mouse; Esc again opens the menu); on foot and in the water the body faces the look and WASD moves relative to it, A and D strafing. Third person: drag to orbit (the view is yours: on foot it keeps its bearing while you turn, drifting round behind you only slowly as you walk); wheel zooms. *Settings → Steer the canoe where you point*: while you hold W the bow turns toward the cursor's point on the water, or toward the look in first person; A/D nudge, and nothing sticks |
+| mouse | look. In first person, and on land in third person, the mouse turns you the way it does in Minecraft: the first key or click takes the mouse, every movement turns the look at once, Esc frees the mouse (Esc again opens the menu). On land the body faces the look and WASD moves relative to it, A and D strafing; in third person the camera sits behind you and the mouse's tilt swings it up or down. Behind the canoe the cursor stays free: drag to orbit, wheel to zoom. *Settings → Steer the canoe where you point*: while you hold W the bow turns toward the cursor's point on the water, or toward the look in first person |
 | click the map | teleport to the nearest open water (anywhere in the wilderness) |
 | entry point list | teleport to one of the BWCA entry point landings |
 
 Paddle up to any bank and press **E**: the canoe noses in, you step out, and you choose to **E** shoulder
-it or **Q** leave it beached there, bow on the land. On foot WASD walks relative to the view (W into the
-screen, D to its right; the walker turns to face the way and goes), about 1.5 m/s (2.2 with Shift,
-slower with the canoe on your shoulders). A portage trail walks at full speed;
+it or **Q** leave it beached there, bow on the land. On foot you face where the mouse looks and WASD moves
+relative to that (A and D strafe), about 1.5 m/s (2.2 with Shift, slower with the canoe on your
+shoulders). A portage trail walks at full speed;
 off it the ground decides: open bedrock and meadows are easy, the forest is brush and deadfall, dark
 spruce and old burns are slow, and the alder and cedar along a shore slowest of all. Hills cost more
 still, a slope past 40° stops you, trunks block you, and water past your knees does. A canoe you have left

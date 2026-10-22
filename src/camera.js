@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { clamp } from './rng.js';
 
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
 export class ChaseCamera {
   constructor(camera, dom, world) {
     this.camera = camera; this.world = world;
@@ -11,30 +13,36 @@ export class ChaseCamera {
     this.sensitivity = 1; this.invert = false; // mouse look, set from the settings panel
     this.head = new THREE.Vector3();
     this.dom = dom;
-    // First person looks with the mouse the way Minecraft does: a click captures the pointer and every
-    // movement turns the look at once, no easing; Esc gives the pointer back. Without the capture (refused,
-    // or released) holding the button and dragging turns the look the same way. Third person orbits by
-    // dragging unless something (the rod) has locked the orbit. While the cursor is free it is kept in view
-    // coordinates for aiming; captured, there is no cursor and the rod aims down the middle of the view.
+    // The mouse looks the way it does in Minecraft wherever the body faces the look: in first person, and on
+    // foot in third person (the camera sits behind the walker, who turns with the mouse). The pointer is
+    // captured on the first key or click once the game is running, every movement turns the look at once,
+    // and Esc gives the pointer back (Esc again opens the menu). Without the capture (refused, or released)
+    // holding the button and dragging looks the same way. From behind the canoe the cursor stays free: a drag
+    // orbits unless something (the rod) has locked the orbit, and the cursor is kept in view coordinates for
+    // aiming and steering. Captured, there is no cursor and the rod aims down the middle of the view.
     this.orbitLocked = false;
     this.cursor = { x: 0, y: 0, inside: false };
     this.locked = false;
-    this.viewYaw = 0; this.viewPitch = 0; // first person: the bearing and tilt of the look, world space
-    this.lookYaw = 0; // first person: the look's bearing relative to the body (the bow seeks it when asked)
+    this.allowLock = false;  // main: the game is running, with no card, panel or big map up
+    this.footLook = false;   // third person on foot
+    this.viewYaw = 0; this.viewPitch = 0; // the look: bearing and tilt, world space
+    this.lookYaw = 0;        // the look's bearing relative to the body (the bow seeks it when asked)
     this.focus = null; // { pos, look } world vectors: a close-up that overrides the chase while it is set
-    this.forwardYaw = 0;    // the bearing straight into the view, for camera-relative walking (player.js)
-    this.lastHeading = null; // the player's heading last frame: on foot the view holds its bearing while the body turns
+    this.forwardYaw = 0;    // the bearing straight into the view: what W means (player.js)
+    this.lastHeading = null; // the player's heading last frame
     this.cursorSteer = false; // the canoe follows the cursor (settings): shown by the pointer
-    const lock = () => { try { const p = dom.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) { /* not allowed here; dragging looks instead */ } };
+    const lock = () => {
+      if (!this.wantsLock || this.locked) return;
+      try { const p = dom.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) { /* not allowed here; dragging looks instead */ }
+    };
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === dom; if (this.locked) this.cursor.inside = false; });
     window.addEventListener('keydown', (e) => {
-      if (e.code !== 'KeyV') return;
-      this.setMode(this.mode === 'third' ? 'first' : 'third');
-      if (this.mode === 'first') lock(); else if (this.locked) document.exitPointerLock();
+      if (e.code === 'KeyV') this.setMode(this.mode === 'third' ? 'first' : 'third');
+      lock(); // any key will do: the first W takes the mouse
     });
     let dragging = false, lx = 0, ly = 0;
     dom.addEventListener('pointerdown', (e) => {
-      if (this.mode === 'first') { if (!this.locked) lock(); dragging = true; return; }
+      if (this.mouseLook) { lock(); dragging = true; return; }
       if (this.orbitLocked) return;
       dragging = true; lx = e.clientX; ly = e.clientY;
       try { dom.setPointerCapture(e.pointerId); } catch (_) { /* a synthetic pointer has no capture */ }
@@ -42,9 +50,9 @@ export class ChaseCamera {
     dom.addEventListener('pointerup', () => { dragging = false; });
     dom.addEventListener('pointermove', (e) => {
       const s = this.sensitivity, inv = this.invert ? -1 : 1;
-      if (this.mode === 'first') {
+      if (this.mouseLook) {
         if (!this.locked && !dragging) { this.trackCursor(e); return; }
-        this.viewYaw -= e.movementX * 0.0022 * s;
+        this.viewYaw = wrap(this.viewYaw - e.movementX * 0.0022 * s);
         this.viewPitch = clamp(this.viewPitch - e.movementY * 0.0022 * s * inv, -1.25, 1.25);
         this.forwardYaw = this.viewYaw; // the body reads it this very frame
         this.lastInput = performance.now();
@@ -58,6 +66,9 @@ export class ChaseCamera {
     dom.addEventListener('pointerleave', () => { this.cursor.inside = false; });
     dom.addEventListener('wheel', (e) => { this.distance = clamp(this.distance * Math.exp(e.deltaY * 0.0012), 4, 40); e.preventDefault(); }, { passive: false });
   }
+
+  get mouseLook() { return this.mode === 'first' || this.footLook; }
+  get wantsLock() { return this.allowLock && this.mouseLook; }
 
   // jump straight to the new spot (after a teleport) instead of gliding across the map
   snap() { this.first = true; this.userYaw = 0; this.userPitch = 0; this.lastHeading = null; }
@@ -103,21 +114,31 @@ export class ChaseCamera {
       return;
     }
     const onFoot = carrying || player.mode === 'carry' || player.mode === 'walk';
-    if (this.first || this.lastHeading === null) this.lastHeading = player.heading;
-    let dh = player.heading - this.lastHeading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); this.lastHeading = player.heading;
+    const footLook = this.mode === 'third' && onFoot;
+    if (footLook && !this.footLook) { this.viewYaw = player.heading; this.viewPitch = 0; this.forwardYaw = player.heading; } // stepping out: look where the body faces
+    this.footLook = footLook;
+    if (this.locked && !this.wantsLock) { try { document.exitPointerLock(); } catch (_) { /* nothing to release */ } }
+    this.lastHeading = player.heading;
     if (this.mode === 'first') return this.updateFirst(dt, player, onFoot);
-    // The orbit is the player's. On foot the view keeps its bearing while the walker turns under it (the keys
-    // are read against the view, so a view that swung with every turn would change where W goes), drifting
-    // round behind only slowly while they walk on; afloat it eases back behind the hull once the drag is over.
-    if (onFoot) this.userYaw -= dh;
-    this.userYaw = Math.atan2(Math.sin(this.userYaw), Math.cos(this.userYaw));
-    if (performance.now() - this.lastInput > 2500 && Math.abs(player.speed) > 0.3) {
-      const k = 1 - Math.exp(-dt * (onFoot ? 0.25 : 0.8));
-      this.userYaw -= this.userYaw * k; this.userPitch -= this.userPitch * k;
+    let yaw, pitch;
+    if (footLook) {
+      // the camera sits behind the walker, who faces the look; the mouse's tilt swings the camera up or down
+      if (this.first) { this.viewYaw = player.heading; this.viewPitch = 0; }
+      this.userYaw = 0; this.userPitch = 0;
+      this.forwardYaw = this.viewYaw;
+      yaw = player.heading + Math.PI;
+      pitch = clamp(this.pitch - this.viewPitch * 0.6, -0.1, 1.1);
+    } else {
+      // behind the canoe: a drag orbits, and the view eases back behind the hull once the drag is over
+      this.userYaw = wrap(this.userYaw);
+      if (performance.now() - this.lastInput > 2500 && Math.abs(player.speed) > 0.3) {
+        const k = 1 - Math.exp(-dt * 0.8);
+        this.userYaw -= this.userYaw * k; this.userPitch -= this.userPitch * k;
+      }
+      yaw = player.heading + Math.PI + this.userYaw;
+      this.forwardYaw = player.heading + this.userYaw;
+      pitch = this.pitch + this.userPitch;
     }
-    const yaw = player.heading + Math.PI + this.userYaw; // behind the canoe
-    this.forwardYaw = player.heading + this.userYaw;
-    const pitch = this.pitch + this.userPitch;
     const dist = this.distance * (onFoot ? 0.8 : 1);
     const tx = player.x, tz = player.z;
     const ty = (onFoot ? player.altitude + 1.6 : this.world.levelAt(tx, tz) + 0.6);
@@ -131,9 +152,9 @@ export class ChaseCamera {
       const need = ty + (ground - ty) / s;
       if (py < need) py = need;
     }
-    const k = this.first ? 1 : 1 - Math.exp(-dt * 5);
+    const k = this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 12 : 5));
     this.pos.lerp(new THREE.Vector3(px, py, pz), k);
-    this.look.lerp(new THREE.Vector3(tx + player.forward.x * 2, ty + 0.4, tz + player.forward.z * 2), this.first ? 1 : 1 - Math.exp(-dt * 8));
+    this.look.lerp(new THREE.Vector3(tx + player.forward.x * 2, ty + 0.4, tz + player.forward.z * 2), this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
     this.first = false;
     this.camera.position.copy(this.pos);
     this.camera.lookAt(this.look);
@@ -147,8 +168,8 @@ export class ChaseCamera {
     if (player.mode === 'swim') this.head.set(player.x, this.world.levelAt(player.x, player.z) + 0.32, player.z);
     else { this.head.set(onFoot ? 0.08 : -1.56, onFoot ? 1.6 : 1.0, 0); rig.localToWorld(this.head); } // standing, the rig origin is at the feet
     if (this.first) { this.viewYaw = player.heading; this.viewPitch = 0; }
-    this.viewYaw = Math.atan2(Math.sin(this.viewYaw), Math.cos(this.viewYaw));
-    this.lookYaw = Math.atan2(Math.sin(this.viewYaw - player.heading), Math.cos(this.viewYaw - player.heading));
+    this.viewYaw = wrap(this.viewYaw);
+    this.lookYaw = wrap(this.viewYaw - player.heading);
     this.userYaw = this.lookYaw;
     const yaw = this.viewYaw;
     this.forwardYaw = yaw;

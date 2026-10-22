@@ -44,7 +44,6 @@ export class Hud {
     this.onTeleport = onTeleport;
     this.el = {
       lake: document.getElementById('lake'), sub: document.getElementById('sub'), prompt: document.getElementById('prompt'),
-      rudder: document.getElementById('rudder'), rudderKnob: document.querySelector('#rudder .knob'),
       gps: document.getElementById('gps'), gpsState: document.getElementById('gps-state'), gpsCoords: document.getElementById('gps-coords'),
       entry: document.getElementById('entry'), tiles: document.getElementById('tiles'),
       wind: document.getElementById('windtext'), windArrow: document.getElementById('windarrow'),
@@ -469,11 +468,6 @@ export class Hud {
       this.el.windArrow.style.transform = `rotate(${(wind.from + 180 - 90).toFixed(0)}deg)`;
     }
     this.el.sub.textContent = `${clock ? clock + ' · ' : ''}${modeTxt} · ${kmh} km/h · ${lat.toFixed(5)}, ${lon.toFixed(5)} · ${player.altitude.toFixed(0)} m${depthTxt}${timeScale > 1 ? ` · ${timeScale}× speed` : ''}`;
-    if (this.el.rudder) { // the course bias: knob left of centre is a bias to port
-      const show = player.rudderShown;
-      this.el.rudder.classList.toggle('show', show);
-      if (show) this.el.rudderKnob.style.left = `${50 - player.rudder * 44}%`;
-    }
     const p = player.prompt || (fu && fu.message ? { key: null, text: fu.message } : null);
     if (p) { const html = (p.key ? `<kbd>${p.key}</kbd>` : '') + p.text; if (this.el.prompt.innerHTML !== html) this.el.prompt.innerHTML = html; this.el.prompt.classList.add('show'); }
     else this.el.prompt.classList.remove('show');

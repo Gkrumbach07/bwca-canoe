@@ -173,6 +173,7 @@ async function main() {
       energy.update(dt * ts, wind, atCamp);
     }
     canoe.update(dt * ts);
+    chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
