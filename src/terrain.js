@@ -1,17 +1,18 @@
 import * as THREE from 'three';
 
-// Smooth light under flat paint: the terrain carries smooth per-vertex normals (terrain-build.js), so
-// hills shade continuously, while each triangle takes exactly one vertex's colour, so the palette stays
-// in crisp flat patches. Under water the sun's share of the light is stepped into three tones, the way the
-// rocks and trees are, so the carved bed reads as colour and depth rather than a jumble of facets.
+// Stepped light under flat paint: the terrain carries smooth per-vertex normals (terrain-build.js), each
+// triangle takes exactly one vertex's colour, and the sun's share of the light is quantised through the
+// same five-step ramp the trees and rocks use (rocks.js toonRamp), so ground, canopy and rock speak one
+// shading language. The sky fill and the shadows stay smooth, as they do on the toon material.
 export function makeTerrainMaterial() {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true });
   // onBeforeCompile sees the shader before its #includes are expanded, so the includes themselves are
   // replaced (three r186 declares vColor as a vec4 whenever any colour source is in use)
   const decl = '#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA ) || defined( USE_INSTANCING_COLOR ) || defined( USE_BATCHING_COLOR )\n flat varying vec4 vColor;\n#endif\nflat varying float vBed;';
+  // the toon ramp (60, 110, 170, 230, 255 over five equal bands), as MeshToonMaterial's nearest-texel lookup sees it
   const lambert = THREE.ShaderChunk.lights_lambert_pars_fragment.replace(
     'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );',
-    'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );\n\tif ( vBed > 0.5 ) dotNL = floor( dotNL * 3.0 + 0.5 ) / 3.0;',
+    'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );\n\t{ float b = min( floor( dotNL * 5.0 ), 4.0 ); dotNL = ( b < 0.5 ? 60.0 : b < 1.5 ? 110.0 : b < 2.5 ? 170.0 : b < 3.5 ? 230.0 : 255.0 ) / 255.0; }',
   );
   if (lambert === THREE.ShaderChunk.lights_lambert_pars_fragment) console.warn('terrain: lambert chunk changed, bed stepping not applied');
   m.onBeforeCompile = (shader) => {
@@ -22,7 +23,7 @@ export function makeTerrainMaterial() {
       .replace('#include <color_pars_fragment>', decl)
       .replace('#include <lights_lambert_pars_fragment>', lambert);
   };
-  m.customProgramCacheKey = () => 'flat-vcolor-smooth-bed';
+  m.customProgramCacheKey = () => 'flat-vcolor-stepped';
   return m;
 }
 

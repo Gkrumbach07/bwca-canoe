@@ -22,7 +22,7 @@ import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
 import { Fishing } from './fishing.js';
 
-const palette = { zenith: 0x4382c7, horizon: 0xc9dceb, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x3f7f9c, reflect: 0xc9dde8, fog: 0xbcd2e2, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
+const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x2d7694, reflect: 0xc9dde8, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
 const loadingEl = document.getElementById('loading'), barEl = document.getElementById('loading-bar'), msgEl = document.getElementById('loading-msg');
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };

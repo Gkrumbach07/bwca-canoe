@@ -14,16 +14,16 @@ const T = {
   hemiSky: [0x121a2a, 0x263347, 0x9a6e62, 0xe8a070, 0xbcc0cc, 0xa9c6e0],
   hemiGround: [0x0b0e12, 0x1a1d1a, 0x4e3d32, 0x8f6240, 0x74755a, 0x6f7a60],
   hemiInt: [0.35, 0.4, 0.6, 0.95, 0.8, 0.8],
-  fogHorizon: [0x141c28, 0x2a3650, 0xe09a68, 0xe8b282, 0xd4ccb6, 0xbcd2e2],
+  fogHorizon: [0x141c28, 0x2a3650, 0xe09a68, 0xe8b282, 0xd6ceb8, 0xc6dbe9],
   fogSky: [0x070d18, 0x14223a, 0x3e5a86, 0x5b7fb0, 0x6b97c4, 0x6f9cc8],
   fogSun: [0x000000, 0x1a1a2a, 0xff9a58, 0xffb878, 0xffd8a8, 0xffe9c4],
   glowPow: [10, 10, 5, 6, 8, 10],
   glowAmt: [0, 0.1, 0.85, 0.65, 0.4, 0.3],
-  zenith: [0x060c1a, 0x0f1f3a, 0x27476f, 0x3464a0, 0x3c73b2, 0x4382c7],
-  horizon: [0x141c28, 0x2b3a55, 0xf0a46c, 0xf0c494, 0xe6d4b2, 0xc9dceb],
+  zenith: [0x060c1a, 0x0f1f3a, 0x27476f, 0x3464a0, 0x3f7ac0, 0x4c8fd8],
+  horizon: [0x141c28, 0x2b3a55, 0xf0a46c, 0xf0c494, 0xead8b8, 0xd6e6f2],
   skySun: [0x000000, 0x000000, 0xffa060, 0xffc890, 0xffe0b0, 0xfff2cc],
   ground: [0x0d1210, 0x1e241e, 0x5e5a4a, 0x80765a, 0x8e9a7e, 0x9aa58a],
-  water: [0x0c141e, 0x172636, 0x355a70, 0x3f6e86, 0x3f7f9c, 0x3b85a4],   // clear-lake water: darker than the sky, a saturated teal by day
+  water: [0x0c141e, 0x172636, 0x2f5268, 0x37647c, 0x326f8c, 0x2d7694],   // clear-lake water: darker than the sky, a saturated teal by day
   reflect: [0x101828, 0x202d44, 0xe09a70, 0xe2b68a, 0xcbd3d8, 0xc9dde8],
   cloudTop: [0x1f2634, 0x2e3648, 0xffb080, 0xffcfa0, 0xfbe9d2, 0xfbf8f1],
   cloudBase: [0x101522, 0x1c2434, 0x6e5a74, 0x9a7d8c, 0x9fb0cc, 0xa6bfd9],
@@ -156,7 +156,7 @@ export class DayCycle {
     const wu = t.water.uniforms;
     wu.uWater.value.copy(this.lerpColor('water', c));
     wu.uReflect.value.copy(this.lerpColor('reflect', c));
-    wu.uWaterDeep.value.copy(wu.uWater.value).multiplyScalar(0.55);
+    wu.uWaterDeep.value.copy(wu.uWater.value).multiplyScalar(0.5);
     wu.uFoam.value.copy(this.lerpColor('foam', c));
     if (wu.uIce) wu.uIce.value = this.season.ice;
     if (t.ripples) t.ripples.material.uniforms.uColor.value.copy(wu.uFoam.value);

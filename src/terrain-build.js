@@ -15,8 +15,8 @@ const C = {
   // the lake bed by depth, seen through the water where it is clear: pale sand in the shallows, then
   // boulder-and-weed olive, then the dark green of a drop-off, then the near-black of a deep hole
   bedSand: hex(0xc4b894), bedShelf: hex(0x9fa478), bedWeed: hex(0x6f8a66), bedDeep: hex(0x4d6a63), bedHole: hex(0x3a5250),
-  rock: hex(0x8f8d85), rockDark: hex(0x6f6d67), rockLichen: hex(0x9c9d8c),
-  forest: hex(0x667f52), forestLight: hex(0x7b9360), forestDark: hex(0x546b47), meadow: hex(0x98a56a), burn: hex(0x9a8a5e),
+  rock: hex(0x968d84), rockDark: hex(0x6b655f), rockLichen: hex(0x9fa08a),
+  forest: hex(0x52704a), forestLight: hex(0x698c54), forestDark: hex(0x3f5c3c), meadow: hex(0x98a35e), burn: hex(0x9c8a58),
 };
 // bed bands by water depth (metres); the depth carries a little grain so the bands are not rulers
 export const BED_STEPS = [1.4, 3.2, 6.5, 13];
@@ -71,7 +71,7 @@ export function classify(grid, x, z, shade, pre, fields = null) {
   const dark = shade - 0.55;
   if (fields) fields[6] = dark;
   if (dark >= 0) return I.forestDark;
-  const light = fbm(x * 0.012, z * 0.012, 3, 7) - 0.55;
+  const light = fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few broad sunny stands, not a speckle of patches
   if (fields) fields[7] = light;
   return light >= 0 ? I.forestLight : I.forest;
 }
