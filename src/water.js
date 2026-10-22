@@ -21,7 +21,7 @@ const ATLAS_SLACK = 48;   // re-centre once the canoe gets this close to the atl
 // actually renders it. All positions are relative to the floating origin (uOrigin); world xz -> rel is
 // `w - uOrigin`. Needs the uniforms from WaterSystem.surfaceUniforms().
 export const glslSurface = /* glsl */ `
-  uniform sampler2D uShoreTex, uHeightTex, uLevelTex, uCoverTex;
+  uniform sampler2D uShoreTex, uHeightTex, uLevelTex, uCoverTex, uClarityTex;
   uniform vec4 uAtlas;      // atlas origin x, z (relative to the floating origin), 1/cell, cells per side
   uniform vec2 uOrigin;     // floating origin, world xz
   uniform vec2 uPatchLocal; // water patch centre relative to the origin
@@ -37,6 +37,7 @@ export const glslSurface = /* glsl */ `
   }
   float terrainAt(vec2 rel) { return bilinear(uHeightTex, rel); }
   float levelAt(vec2 rel) { return cellSample(uLevelTex, atlasCell(rel)); }
+  float clarityAt(vec2 rel) { return cellSample(uClarityTex, atlasCell(rel)); }
   float atlasLevel(vec2 rel) { return levelAt(rel); }
   float shoreAt(vec2 rel) { return bilinear(uShoreTex, rel); }
   // ground cover (r: grass cover, g: golden / burn) with its own bilinear filter; b holds the ground class
@@ -94,6 +95,7 @@ const vertHead = /* glsl */ `
   varying vec3 vWaveN;        // smooth surface normal from the swell itself, not from the triangle
   varying float vShore;
   varying float vDepth;
+  varying float vClarity;
   varying vec4 vReflectUv;
   #include <common>
   #include <fog_pars_vertex>
@@ -115,10 +117,12 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
   uniform vec2 uOrigin;
   attribute float aShore;
   attribute float aDepth;
+  attribute float aClarity;
   void main() {
     vec2 rel = position.xz + (modelMatrix[3].xz - uOrigin);   // both exact multiples of 10 m: no rounding
     vShore = aShore;
     vDepth = aDepth;
+    vClarity = aClarity;
     float damp = smoothstep(0.0, 25.0, -aShore);
     float wave = lowWave(rel, uTime) * damp;
     const float e = 5.0;
@@ -143,6 +147,7 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     vWaveN = normalize(vec3(hL - hR, 2.0 * e, hB - hF));
     float level = levelAt(rel);
     vDepth = max(0.0, level - terrainAt(rel));
+    vClarity = clarityAt(rel);
     vec3 objPos = vec3(position.x, level + wave, position.z);
     vec3 flatObj = vec3(position.x, level, position.z);
     vec3 local = vec3(rel.x, level + wave, rel.y);
@@ -151,6 +156,8 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
 const frag = /* glsl */ `
   uniform float uTime, uReflOn, uClarity;
   uniform vec3 uSunDir, uWater, uWaterDeep, uReflect, uFoam;
+  uniform vec3 uStain;        // tannin-stained water at unit luminance (the day cycle's brightness carries over)
+  uniform vec2 uOrigin;
   uniform sampler2D uReflection;
   uniform vec2 uPatchLocal;
   uniform float uPatchHalf;
@@ -158,6 +165,7 @@ const frag = /* glsl */ `
   varying vec3 vWaveN;
   varying float vShore;
   varying float vDepth;
+  varying float vClarity;
   varying vec4 vReflectUv;
   #include <common>
   #include <packing>
@@ -181,7 +189,17 @@ const frag = /* glsl */ `
     // normal they read as bands riding the swell rather than as triangles
     float d = dot(n, uSunDir) - uSunDir.y;
     float tone = smoothstep(0.004, 0.02, d) - smoothstep(0.004, 0.02, -d);   // -1 .. 1
-    vec3 col = mix(mix(uWater, uWaterDeep, smoothstep(0.0, 10.0, vDepth)), uReflect, 0.12) * (1.0 + 0.08 * tone);
+    // the lake's own colour: tea-stained bog water at a Secchi depth of a metre or two, blue-green past five
+    float clear = smoothstep(1.2, 6.0, vClarity);
+    float lum = dot(uWater, vec3(0.3, 0.5, 0.2));
+    vec3 water = mix(lum * uStain, uWater, clear);
+    vec3 deep = water * (uWaterDeep.g / max(uWater.g, 1e-4));
+    vec3 body = mix(water, deep, smoothstep(0.0, 4.0 + 1.5 * vClarity, vDepth));
+    // the sky shows in the surface only at grazing angles: dark looking down beside the canoe, silver toward the far shore
+    vec3 camRel = vec3(cameraPosition.x - uOrigin.x, cameraPosition.y, cameraPosition.z - uOrigin.y);
+    vec3 v = normalize(camRel - vLocal);
+    float fresnel = pow(1.0 - max(dot(n, v), 0.0), 5.0);   // Schlick: ~10 % at the chase camera's angle, ~45 % at the horizon
+    vec3 col = mix(body, uReflect, mix(0.04, 0.55, fresnel)) * (1.0 + 0.08 * tone);
     col *= 0.72 + 0.28 * shadow;
     // the canoe's reflection, nothing else
     vec4 r = texture2DProj(uReflection, vReflectUv);
@@ -197,8 +215,9 @@ const frag = /* glsl */ `
     float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
     float foam = max(ripple, waterline) * 0.85;
     col = mix(col, uFoam, foam);
-    // the bed shows through shallow, clear water; tannin-stained lakes close up within a few metres
-    float alpha = clamp(1.0 - 0.92 * exp(-vDepth / uClarity), 0.1, 0.96);
+    // the bed shows through shallow, clear water; tannin-stained lakes close up within a few metres.
+    // uClarity scales the lake's own Secchi depth (1 = as measured)
+    float alpha = clamp(1.0 - 0.92 * exp(-vDepth / max(0.3, vClarity * uClarity)), 0.1, 0.96);
     alpha = max(alpha, foam);
     gl_FragColor = vec4(col, alpha);
     #include <fog_fragment>
@@ -219,21 +238,24 @@ export class WaterSystem {
     this.shore = new Float32Array(ATLAS * ATLAS);
     this.level = new Float32Array(ATLAS * ATLAS);
     this.height = new Float32Array(ATLAS * ATLAS);
+    this.clarity = new Float32Array(ATLAS * ATLAS);
     this.cover = new Uint8Array(ATLAS * ATLAS * 4);
     this.atlasI = NaN; this.atlasJ = NaN; this.atlasDirty = true;
     const tex = (data, format, type) => { const t = new THREE.DataTexture(data, ATLAS, ATLAS, format, type); t.minFilter = t.magFilter = THREE.NearestFilter; return t; };
     this.shoreTex = tex(this.shore, THREE.RedFormat, THREE.FloatType);
     this.levelTex = tex(this.level, THREE.RedFormat, THREE.FloatType);
     this.heightTex = tex(this.height, THREE.RedFormat, THREE.FloatType);
+    this.clarityTex = tex(this.clarity, THREE.RedFormat, THREE.FloatType);
     this.coverTex = tex(this.cover, THREE.RGBAFormat, THREE.UnsignedByteType);
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, {
       uTime: { value: 0 },
       uSunDir: { value: sunDir.clone() },
       uWater: { value: new THREE.Color(palette.water) },
-      uWaterDeep: { value: new THREE.Color(palette.water).multiplyScalar(0.72) },
+      uWaterDeep: { value: new THREE.Color(palette.water).multiplyScalar(0.55) },
       uReflect: { value: new THREE.Color(palette.reflect) },
       uFoam: { value: new THREE.Color(0xf2f6f6) },
-      uClarity: { value: 3.0 },
+      uClarity: { value: 1.0 },
+      uStain: { value: new THREE.Color(1.0, 0.74, 0.4) },
       uReflection: { value: null },
       uReflOn: { value: 0 },
       uTextureMatrix: { value: new THREE.Matrix4() },
@@ -244,6 +266,7 @@ export class WaterSystem {
       uShoreTex: { value: null },
       uLevelTex: { value: null },
       uHeightTex: { value: null },
+      uClarityTex: { value: null },
       uCoverTex: { value: null },
       uAtlas: { value: new THREE.Vector4(0, 0, 1 / world.cell, ATLAS) },
     }]);
@@ -251,6 +274,7 @@ export class WaterSystem {
     this.uniforms.uShoreTex.value = this.shoreTex;
     this.uniforms.uLevelTex.value = this.levelTex;
     this.uniforms.uHeightTex.value = this.heightTex;
+    this.uniforms.uClarityTex.value = this.clarityTex;
     this.uniforms.uCoverTex.value = this.coverTex;
     this.uniforms.uTextureMatrix.value = this.reflection.textureMatrix;
     const common = { fragmentShader: frag, uniforms: this.uniforms, transparent: true, depthWrite: true, fog: true, lights: true };
@@ -274,6 +298,7 @@ export class WaterSystem {
     geo.setAttribute('position', new THREE.BufferAttribute(res.pos, 3));
     geo.setAttribute('aShore', new THREE.BufferAttribute(res.shore, 1));
     geo.setAttribute('aDepth', new THREE.BufferAttribute(res.depth, 1));
+    geo.setAttribute('aClarity', new THREE.BufferAttribute(res.clarity, 1));
     geo.setIndex(new THREE.BufferAttribute(res.idx, 1));
     geo.computeBoundingSphere();
     geo.boundingSphere.radius += 0.5;
@@ -311,7 +336,7 @@ export class WaterSystem {
     const w = this.world, A = ATLAS, N = A * A;
     const i0 = Math.max(0, Math.min(w.width - A, ci - A / 2)), j0 = Math.max(0, Math.min(w.height - A, cj - A / 2));
     this.atlasI = i0; this.atlasJ = j0; this.atlasDirty = false;
-    const shore = this.shore, level = this.level, height = this.height, cover = this.cover;
+    const shore = this.shore, level = this.level, height = this.height, cover = this.cover, clarity = this.clarity;
     const queue = this._queue || (this._queue = new Int32Array(N));
     let head = 0, tail = 0;
     for (let lj = 0; lj < A; lj++) for (let li = 0; li < A; li++) {
@@ -320,18 +345,21 @@ export class WaterSystem {
       height[k] = w.hCell(i, j);
       const cv = w.coverCell(i, j);
       cover[k * 4] = cv & 255; cover[k * 4 + 1] = (cv >> 8) & 255; cover[k * 4 + 2] = (cv >> 16) & 255; cover[k * 4 + 3] = 255;
-      if (w.lakeCell(i, j)) { level[k] = w.levelCell(i, j); queue[tail++] = k; } else level[k] = -9999;
+      const id = w.lakeCell(i, j);
+      if (id) { level[k] = w.levelCell(i, j); clarity[k] = w.clarityOf(id); queue[tail++] = k; } else level[k] = -9999;
     }
+    // land cells take the level and clarity of the nearest water, so the patch can rise over the beach
     while (head < tail) {
-      const k = queue[head++], x = k % A, y = (k - x) / A, L = level[k];
-      if (x > 0 && level[k - 1] === -9999) { level[k - 1] = L; queue[tail++] = k - 1; }
-      if (x < A - 1 && level[k + 1] === -9999) { level[k + 1] = L; queue[tail++] = k + 1; }
-      if (y > 0 && level[k - A] === -9999) { level[k - A] = L; queue[tail++] = k - A; }
-      if (y < A - 1 && level[k + A] === -9999) { level[k + A] = L; queue[tail++] = k + A; }
+      const k = queue[head++], x = k % A, y = (k - x) / A, L = level[k], C = clarity[k];
+      if (x > 0 && level[k - 1] === -9999) { level[k - 1] = L; clarity[k - 1] = C; queue[tail++] = k - 1; }
+      if (x < A - 1 && level[k + 1] === -9999) { level[k + 1] = L; clarity[k + 1] = C; queue[tail++] = k + 1; }
+      if (y > 0 && level[k - A] === -9999) { level[k - A] = L; clarity[k - A] = C; queue[tail++] = k - A; }
+      if (y < A - 1 && level[k + A] === -9999) { level[k + A] = L; clarity[k + A] = C; queue[tail++] = k + A; }
     }
     this.shoreTex.needsUpdate = true;
     this.levelTex.needsUpdate = true;
     this.heightTex.needsUpdate = true;
+    this.clarityTex.needsUpdate = true;
     this.coverTex.needsUpdate = true;
     this.uniforms.uAtlas.value.set(w.originX + i0 * w.cell - this.origin.x, w.originZ + j0 * w.cell - this.origin.z, 1 / w.cell, A);
   }
@@ -341,7 +369,7 @@ export class WaterSystem {
   // uniforms another material needs to ride or stand on the same surface (see floating.js, wake.js, groundcover.js)
   surfaceUniforms() {
     const u = this.uniforms;
-    return { uShoreTex: u.uShoreTex, uLevelTex: u.uLevelTex, uHeightTex: u.uHeightTex, uCoverTex: u.uCoverTex, uAtlas: u.uAtlas, uOrigin: u.uOrigin, uPatchLocal: u.uPatchLocal, uPatchHalf: u.uPatchHalf, uPatchRes: u.uPatchRes, uWaterTime: u.uTime };
+    return { uShoreTex: u.uShoreTex, uLevelTex: u.uLevelTex, uHeightTex: u.uHeightTex, uClarityTex: u.uClarityTex, uCoverTex: u.uCoverTex, uAtlas: u.uAtlas, uOrigin: u.uOrigin, uPatchLocal: u.uPatchLocal, uPatchHalf: u.uPatchHalf, uPatchRes: u.uPatchRes, uWaterTime: u.uTime };
   }
 
   // Mirror only what is on REFLECT_LAYER (the canoe) into the reflection target.

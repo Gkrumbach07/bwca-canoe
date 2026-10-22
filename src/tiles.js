@@ -35,7 +35,7 @@ export class TileManager {
     this.workers = Array.from({ length: n }, () => {
       const w = new Worker(new URL('./tile-worker.js', import.meta.url), { type: 'module' });
       w.onmessage = (e) => this.onMessage(e.data);
-      w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, exclusions, seed });
+      w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed });
       return { w, key: null };
     });
   }

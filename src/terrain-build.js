@@ -12,28 +12,36 @@ const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 const hex = (h) => [lin(((h >> 16) & 255) / 255), lin(((h >> 8) & 255) / 255), lin((h & 255) / 255)];
 // A fixed palette; every face gets exactly one of these (no gradients).
 const C = {
-  bedShallow: hex(0xc4b894), bedDeep: hex(0x5f7c70), sand: hex(0xc8b88d), rock: hex(0x8f8d85), rockDark: hex(0x6f6d67),
+  // the lake bed by depth, seen through the water where it is clear: pale sand in the shallows, then
+  // boulder-and-weed olive, then the dark green of a drop-off, then the near-black of a deep hole
+  bedSand: hex(0xc4b894), bedShelf: hex(0x9fa478), bedWeed: hex(0x6f8a66), bedDeep: hex(0x4d6a63), bedHole: hex(0x3a5250),
+  rock: hex(0x8f8d85), rockDark: hex(0x6f6d67), rockLichen: hex(0x9c9d8c),
   forest: hex(0x667f52), forestLight: hex(0x7b9360), forestDark: hex(0x546b47), meadow: hex(0x98a56a), burn: hex(0x9a8a5e),
-  rockLichen: hex(0x9c9d8c),
 };
+// bed bands by water depth (metres); the depth carries a little grain so the bands are not rulers
+export const BED_STEPS = [1.4, 3.2, 6.5, 13];
+export const bedGrain = (x, z) => (fbm(x * 0.03, z * 0.03, 2, 61) - 0.5) * 1.2;
 
 export const GROUND = Object.keys(C);                 // class index -> name
 export const GROUND_PALETTE = GROUND.map((k) => C[k]); // class index -> linear rgb
+const I = Object.fromEntries(GROUND.map((k, i) => [k, i]));
 
-// Which of the palette's classes a point of ground belongs to.
-// The bed is one pale tone: the water above it carries the depth (its colour deepens and it goes opaque
-// within a few metres), so a second bed colour only drew a staircase along the grid. Land runs rock or
-// forest straight to the waterline, as Shield shores do; the water's foam line marks the edge.
+// Which of the palette's classes a point of ground belongs to. pre: { sd, slope, rock, depth } when the
+// caller has them (depth = grained water depth over the bed, or -1 on land). Land runs rock or forest
+// straight to the waterline, as Shield shores do; the water's foam line marks the edge.
 export function groundClass(grid, x, z, shade = 0, pre = null) {
   const sd = pre ? pre.sd : grid.shoreAt(x, z);
-  if (sd < 0) return 0;
+  if (sd < 0) {
+    const d = pre ? pre.depth : Math.max(0, grid.levelAt(x, z, 3) - grid.heightAt(x, z)) + bedGrain(x, z);
+    return d < BED_STEPS[0] ? I.bedSand : d < BED_STEPS[1] ? I.bedShelf : d < BED_STEPS[2] ? I.bedWeed : d < BED_STEPS[3] ? I.bedDeep : I.bedHole;
+  }
   const slope = pre ? pre.slope : grid.slopeAt(x, z);
   const rock = pre ? pre.rock : rockAt(slope, sd, x, z);
-  if (rock >= 0.5) return slope > 0.55 ? 4 : fbm(x * 0.03, z * 0.03, 2, 91) > 0.58 ? 10 : 3;
-  if (burnAt(x, z) > 0.5) return 9;
-  if (clearingAt(x, z) > 0.68) return 8; // same field the forest uses for clearings
-  if (shade > 0.55) return 7;
-  return fbm(x * 0.012, z * 0.012, 3, 7) > 0.55 ? 6 : 5;
+  if (rock >= 0.5) return slope > 0.55 ? I.rockDark : fbm(x * 0.03, z * 0.03, 2, 91) > 0.58 ? I.rockLichen : I.rock;
+  if (burnAt(x, z) > 0.5) return I.burn;
+  if (clearingAt(x, z) > 0.68) return I.meadow; // same field the forest uses for clearings
+  if (shade > 0.55) return I.forestDark;
+  return fbm(x * 0.012, z * 0.012, 3, 7) > 0.55 ? I.forestLight : I.forest;
 }
 
 export function groundColor(grid, x, z, out, shade = 0) {
@@ -70,12 +78,13 @@ function shoreBumps(x, z, sd) {
 // fine=false (far field) skips the shore subdivision, shaping and bumps.
 // Normals are smooth (one per vertex, averaged over the faces around it), computed over a one-cell ring
 // beyond the chunk so the lighting is continuous across tile edges; the ring's triangles are then dropped.
-// Colour stays one flat tone per face: smooth light under flat paint. Where the bedrock field crosses a
-// cell, the cell is cut along the isoline (marching squares) so rock patches get real outlines instead of
-// the staircase of a grid classification; each part is coloured from one of its own corners.
+// Colour stays one flat tone per face: smooth light under flat paint. Where the bedrock field, or one of
+// the bed's depth bands, crosses a cell, the cell is cut along that isoline (marching squares) so the
+// patches get real outlines instead of the staircase of a grid classification; each part is coloured
+// from one of its own corners.
 export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, originX, originZ }) {
   const cell = grid.cell;
-  const pos = [], col = [], bed = [], rockVal = [], idx = [], idxAll = [];
+  const pos = [], col = [], bed = [], rockVal = [], depthVal = [], idx = [], idxAll = [];
   const stride = 2 * n + 7;
   const map = new Int32Array(stride * stride).fill(-1);
   const levelCache = fine ? new Float32Array(grid.side * grid.side).fill(NaN) : null;
@@ -87,7 +96,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   const fineCell = (i, j) => Math.abs(grid.sdCell(i, j)) <= FINE_BAND;
   const quadFine = (i, j) => fine && (fineCell(i, j) || fineCell(i + 1, j) || fineCell(i, j + 1) || fineCell(i + 1, j + 1));
   const shadeAt = (x, z) => (shade ? shade[grid.local(grid.cellI(x), grid.cellJ(z))] : 0);
-  const pre = { sd: 0, slope: 0, rock: 0 };
+  const pre = { sd: 0, slope: 0, rock: 0, depth: -1 };
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));
     let v = map[key];
@@ -111,26 +120,31 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     v = pos.length / 3;
     pos.push(x - originX, h, z - originZ);
     pre.sd = sd; pre.slope = grid.slopeAt(x, z); pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z);
+    pre.depth = sd < 0 ? Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h) + bedGrain(x, z) : -1;
     const c = GROUND_PALETTE[groundClass(grid, x, z, shadeAt(x, z), pre)];
     col.push(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255));
     bed.push(sd < 0 ? 1 : 0);
     rockVal.push(pre.rock - 0.5);
+    depthVal.push(pre.depth);
     map[key] = v;
     return v;
   };
-  // the point where the rock isoline crosses the edge v-w, shared by the cells on both sides
+  // the fields a cell may be cut along, each as a signed value per vertex (>= 0 inside): bedrock on land,
+  // then the bed's depth bands under water
+  const FIELDS = [(v) => rockVal[v], ...BED_STEPS.map((t) => (v) => (depthVal[v] < 0 ? -1 : depthVal[v] - t))];
+  // the point where field f's isoline crosses the edge v-w, shared by the cells on both sides
   const crossMap = new Map();
-  const crossing = (v, w) => {
-    const key = v < w ? v * 1048576 + w : w * 1048576 + v;
+  const crossing = (f, v, w) => {
+    const key = (v < w ? v * 1048576 + w : w * 1048576 + v) * 8 + f;
     let m = crossMap.get(key);
     if (m !== undefined) return m;
-    const rv = rockVal[v], rw = rockVal[w], t = rv / (rv - rw);
+    const rv = FIELDS[f](v), rw = FIELDS[f](w), t = rv / (rv - rw);
     m = pos.length / 3;
     pos.push(lerp(pos[v * 3], pos[w * 3], t), lerp(pos[v * 3 + 1], pos[w * 3 + 1], t), lerp(pos[v * 3 + 2], pos[w * 3 + 2], t));
-    const src = rv >= 0 ? w : v; // colour and bed from the soil side; the point is never a provoking vertex
+    const src = rv >= 0 ? w : v; // colour and flags from the outside end; the point is never a provoking vertex
     col.push(col[src * 3], col[src * 3 + 1], col[src * 3 + 2]);
     bed.push(bed[src]);
-    rockVal.push(0);
+    rockVal.push(-0.5); depthVal.push(-1);
     crossMap.set(key, m);
     return m;
   };
@@ -146,17 +160,24 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   };
   const quad = (a, b, c2, d, flip) => {
     const P = [a, c2, d, b]; // front-face order around the cell
-    let changes = 0;
-    for (let k = 0; k < 4; k++) if ((rockVal[P[k]] >= 0) !== (rockVal[P[(k + 1) % 4]] >= 0)) changes++;
-    if (changes !== 2) {
+    // the first field whose isoline crosses this cell cleanly (two sign changes) decides the cut
+    let f = -1;
+    for (let q = 0; q < FIELDS.length && f < 0; q++) {
+      const F = FIELDS[q];
+      let changes = 0;
+      for (let k = 0; k < 4; k++) if ((F(P[k]) >= 0) !== (F(P[(k + 1) % 4]) >= 0)) changes++;
+      if (changes === 2) f = q;
+    }
+    if (f < 0) {
       if (flip) { tri(a, c2, b); tri(b, c2, d); } else { tri(a, c2, d); tri(a, d, b); }
       return;
     }
+    const F = FIELDS[f];
     const inside = [], outside = [], corners = new Set(P);
     for (let k = 0; k < 4; k++) {
-      const v = P[k], w = P[(k + 1) % 4], vin = rockVal[v] >= 0;
+      const v = P[k], w = P[(k + 1) % 4], vin = F(v) >= 0;
       (vin ? inside : outside).push(v);
-      if (vin !== (rockVal[w] >= 0)) { const m = crossing(v, w); inside.push(m); outside.push(m); }
+      if (vin !== (F(w) >= 0)) { const m = crossing(f, v, w); inside.push(m); outside.push(m); }
     }
     fan(inside, corners); fan(outside, corners);
   };
