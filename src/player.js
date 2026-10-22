@@ -37,6 +37,7 @@ export class Player {
     this.balance = 0; this.extraRoll = 0; this.swim = null; // capsize meter and the swim after a capsize
     this.bubbleAcc = 0; this.prevStroke = 0; this.level = 0;
     this.teleporting = false;
+    this.fishing = null; // set by main: while its rod is up the paddle rests and W / Space / E belong to it
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
   }
@@ -84,10 +85,11 @@ export class Player {
 
   updatePaddle(dt) {
     const inp = this.input, w = this.world, st = this.canoe.state;
-    let fwd = (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
-    const turn = (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
+    const rodUp = !!(this.fishing && this.fishing.rodUp);
+    let fwd = rodUp ? 0 : (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
+    const turn = rodUp ? 0 : (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
-    const brace = inp.held('Space');                     // a low brace steadies the hull but you cannot paddle
+    const brace = !rodUp && inp.held('Space');           // a low brace steadies the hull but you cannot paddle
     if (brace) fwd = 0;
     const paddling = fwd !== 0 || turn !== 0;
     // stroke cycle drives both the animation and the thrust pulses
@@ -146,7 +148,7 @@ export class Player {
     this.emitWater(dt);
     if (this.balance >= 1) { this.capsize(); return; }
     if (this.balance > 0.25) this.prompt = { key: null, text: brace ? 'Bracing…' : 'Broadside to the waves — quarter them, or hold Space to brace' };
-    const land = this.nearestLanding();
+    const land = rodUp ? null : this.nearestLanding();
     if (land) {
       const p = land.def;
       this.prompt = { key: 'E', text: `Portage: ${p.name} · ${p.rods} rods (${p.lengthM} m)` };

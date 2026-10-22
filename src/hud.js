@@ -34,7 +34,10 @@ export class Hud {
       wind: document.getElementById('windtext'), windArrow: document.getElementById('windarrow'),
       dim: document.getElementById('mapdim'), tp: document.getElementById('tp'), tpText: document.getElementById('tp-text'),
       tpGo: document.getElementById('tp-go'), tpCancel: document.getElementById('tp-cancel'),
+      spot: document.getElementById('spot'), lures: document.getElementById('lures'), meter: document.getElementById('meter'),
+      meterFill: document.getElementById('meter-fill'), meterLabel: document.getElementById('meter-label'), catchlog: document.getElementById('catchlog'),
     };
+    this.fishUi = { lure: -1, logVersion: -1, logOpen: false };
     this.canvas = document.getElementById('minimap');
     this.ctx = this.canvas.getContext('2d');
     this.big = false;
@@ -355,9 +358,10 @@ export class Hud {
   }
 
   // --- per frame ------------------------------------------------------------------------------------------
-  update(player, geo, timeScale, clock = '', wind = null) {
+  update(player, geo, timeScale, clock = '', wind = null, fishing = null) {
     this.player = player;
     const w = this.world;
+    const fu = fishing ? fishing.ui : null;
     const id = player.lakeId;
     const name = player.mode === 'carry' ? player.carry.trail.def.name : (w.lakeName(id) || 'Unnamed water');
     if (this.el.lake.textContent !== name) this.el.lake.textContent = name;
@@ -367,16 +371,17 @@ export class Hud {
     const lakeRec = id > 0 ? w.lakes[id - 1] : null;
     const clar = lakeRec && lakeRec.secchi ? ` · ${lakeRec.secchi.toFixed(1)} m clarity${lakeRec.secchiMeasured ? '' : '*'}` : '';
     const depthTxt = deep > 0.05 ? ` · ${deep.toFixed(1)} m deep${lakeRec && lakeRec.maxDepth ? ` (max ${lakeRec.maxDepth} m)` : ''}${clar}` : '';
-    const modeTxt = player.mode === 'carry' ? 'Portaging' : player.mode === 'swim' ? 'Swimming' : 'Paddling';
+    const modeTxt = player.mode === 'carry' ? 'Portaging' : player.mode === 'swim' ? 'Swimming' : fu && fu.rodUp ? 'Fishing' : 'Paddling';
     if (wind && this.el.wind) {
       const H = player.waveHeightHere;
       this.el.wind.textContent = `${wind.label} · ${wind.speed.toFixed(0)} m/s from the ${wind.compass}${player.mode === 'paddle' && H > 0.2 ? ` · waves ${H.toFixed(1)} m` : ''}${wind.override != null ? ' (set by hand)' : ''}`;
       this.el.windArrow.style.transform = `rotate(${(wind.from + 180 - 90).toFixed(0)}deg)`;
     }
     this.el.sub.textContent = `${clock ? clock + ' · ' : ''}${modeTxt} · ${kmh} km/h · ${lat.toFixed(5)}, ${lon.toFixed(5)} · ${player.altitude.toFixed(0)} m${depthTxt}${timeScale > 1 ? ` · ${timeScale}× speed` : ''}`;
-    const p = player.prompt;
-    if (p) { this.el.prompt.innerHTML = (p.key ? `<kbd>${p.key}</kbd>` : '') + p.text; this.el.prompt.classList.add('show'); }
+    const p = player.prompt || (fu && fu.message ? { key: null, text: fu.message } : null);
+    if (p) { const html = (p.key ? `<kbd>${p.key}</kbd>` : '') + p.text; if (this.el.prompt.innerHTML !== html) this.el.prompt.innerHTML = html; this.el.prompt.classList.add('show'); }
     else this.el.prompt.classList.remove('show');
+    if (fu) this.drawFishing(fu);
     this.el.gps.classList.toggle('linked', geo.linked);
     this.el.gpsState.textContent = geo.linked ? (geo.enabled ? 'GPS sim: broadcasting to the extension' : 'GPS sim: extension installed, switched off') : 'GPS sim: extension not detected';
     this.el.gpsCoords.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}  ·  hdg ${((90 - (player.heading * 180) / Math.PI + 360) % 360).toFixed(0)}°`;
@@ -388,6 +393,48 @@ export class Hud {
     }
     if (!this.big) { this.view.cx = player.x; this.view.cz = player.z; this.view.span = SMALL_SPAN; }
     this.drawMap(player);
+  }
+
+  // --- fishing: the spot readout, the lure row, the cast / tension meter and the catch log -------------------
+  drawFishing(u) {
+    const e = this.el, f = this.fishUi;
+    if (!e.spot) return;
+    const showSpot = !!(u.rodUp && u.spot);
+    e.spot.classList.toggle('show', showSpot);
+    if (showSpot) { const txt = `${u.spot}${u.stringer ? ` · ${u.stringer} on the stringer` : ''}`; if (e.spot.textContent !== txt) e.spot.textContent = txt; }
+    e.lures.classList.toggle('show', !!u.rodUp && (u.state === 'ready' || u.state === 'charging'));
+    if (f.lure !== u.lure) { e.lures.innerHTML = u.lures.map((l, i) => `<span class="${i === u.lure ? 'on' : ''}"><b>${i + 1}</b>${l.name}</span>`).join(''); f.lure = u.lure; }
+    if (u.power != null) {
+      e.meter.classList.add('show', 'cast');
+      e.meterFill.style.width = `${(u.power * 100).toFixed(0)}%`; e.meterFill.style.background = '';
+      e.meterLabel.textContent = 'Loading the cast';
+    } else if (u.fight) {
+      e.meter.classList.add('show'); e.meter.classList.remove('cast');
+      e.meterFill.style.width = `${(u.fight.tension * 100).toFixed(0)}%`;
+      e.meterFill.style.background = u.fight.danger > 0.3 ? '#e0563a' : u.fight.slack > 0.8 ? '#8fb0c9' : '#e8c270';
+      e.meterLabel.textContent = `Tension · ${u.fight.line.toFixed(0)} m of line out${u.fight.run ? ' · it is running' : ''}`;
+    } else e.meter.classList.remove('show', 'cast');
+    e.catchlog.classList.toggle('show', !!u.logOpen);
+    if (u.logOpen && (f.logVersion !== u.logVersion || !f.logOpen)) { e.catchlog.innerHTML = this.renderLog(u); f.logVersion = u.logVersion; }
+    f.logOpen = !!u.logOpen;
+  }
+
+  renderLog(u) {
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const lb = (kg) => (kg * 2.2046).toFixed(1);
+    let html = `<h2>Catch log · ${u.log.length} fish</h2>`;
+    const bests = Object.values(u.bests || {}).sort((a, b) => b.length - a.length);
+    if (bests.length) html += `<div class="bests">${bests.map((b) => `<span><b>${esc(b.name || '')}</b> ${b.length} cm · ${b.weight} kg / ${lb(b.weight)} lb · ${esc(b.lake)}</span>`).join('')}</div>`;
+    if (!u.log.length) html += `<p class="empty">Nothing yet. Press F in the canoe to take up the rod, hold Space to cast.</p>`;
+    else {
+      const rows = u.log.slice(-60).reverse().map((c) => {
+        const d = new Date(c.at);
+        return `<tr><td>${esc(c.time)}</td><td class="${c.best ? 'best' : ''}">${esc(c.name)}${c.best ? ' ★' : ''}</td><td>${c.length} cm</td><td>${c.weight} kg / ${lb(c.weight)} lb</td><td>${esc(c.lake)}</td><td>${esc(c.lure)}</td><td>${c.kept ? 'kept' : 'released'}</td><td>${d.toLocaleDateString()}</td></tr>`;
+      }).join('');
+      html += `<table><thead><tr><th>Time</th><th>Species</th><th>Length</th><th>Weight</th><th>Lake</th><th>Lure</th><th></th><th>Day</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    html += `<p class="empty">★ personal best · L closes</p>`;
+    return html;
   }
 
   drawMap(player) {

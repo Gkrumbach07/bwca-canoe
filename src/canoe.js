@@ -209,6 +209,7 @@ export function buildCanoeRig() {
     walk: 0,             // walk cycle phase in carry mode
     walkSpeed: 0,
     gripT: V(0, 0, 0), bladeT: V(0, 0, 0), grip: V(0, 0.8, 0), blade: V(0, -0.2, 0.8),
+    fishing: null,       // { L, R }: hand targets in rig space while the rod is up (fishing.js); the paddle rests
   };
 
   // scratch
@@ -254,6 +255,13 @@ export function buildCanoeRig() {
     S.dir.subVectors(state.blade, state.grip).normalize();
     paddle.position.copy(state.grip);
     paddle.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), S.dir);
+    // with the rod up the paddle lies across the gunwales and the hands go where the rod (or the fish) is
+    const fz = state.fishing;
+    if (fz) {
+      S.hand.copy(fz.R).sub(paddler.position); armTo('R', S.hand, twist);
+      S.hand.copy(fz.L).sub(paddler.position); armTo('L', S.hand, twist);
+      return;
+    }
     // hands: top hand on the grip, lower hand 0.55 m down the shaft (paddler space)
     S.hand.copy(state.grip).sub(paddler.position);
     S.low.copy(state.grip).addScaledVector(S.dir, 0.58).sub(paddler.position);

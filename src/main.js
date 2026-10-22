@@ -20,6 +20,7 @@ import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
+import { Fishing } from './fishing.js';
 
 const palette = { zenith: 0x4382c7, horizon: 0xc9dceb, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x3f7f9c, reflect: 0xc9dde8, fog: 0xbcd2e2, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -98,16 +99,19 @@ async function main() {
   const geo = new GeoBridge();
   const wind = new Wind(11);
   player.wind = wind;
+  const fishing = new Fishing({ world, player, canoe, water, ripples, audio, chase, input, day, wind, scene });
+  player.fishing = fishing;
+  fishing.rod.traverse((o) => o.layers.enable(REFLECT_LAYER));
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release();
-    if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4;
+    if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-5 pick lures while the rod is up
     if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn;
     if (e.code === 'KeyN') audio.toggle();
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, fishing };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -117,6 +121,7 @@ async function main() {
     wind.update(dt * ts, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
     player.update(dt);
+    fishing.update(dt, ts);
     canoe.update(dt * ts);
     chase.update(dt, player, player.mode === 'carry');
     setOrigin(player.x, player.z);
@@ -134,7 +139,7 @@ async function main() {
     loons.update(dt * ts, player);
     audio.update(dt, world.shoreAt(player.x, player.z), player.speed, player.mode === 'paddle');
     geo.update(player, world);
-    hud.update(player, geo, ts, day.clock, wind);
+    hud.update(player, geo, ts, day.clock, wind, fishing);
     input.endFrame();
   };
   // debug helper: advance the simulation by n fixed steps and draw once (used for automated testing)

@@ -59,6 +59,11 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | Shift | hustle |
 | Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
 | E | portage when near a landing, launch at the far end |
+| F | take up the fishing rod / put it down (see *Fishing*) |
+| Space / mouse button | with the rod up: hold to load a cast and let go; set the hook on a bite; hold to reel in a fight |
+| 1 – 5 | with the rod up: jig, spinner, spoon, crankbait, leech under a bobber |
+| K / E | keep the landed fish on the stringer / let it go |
+| L | the catch log |
 | M | enlarge the map (three times the area) |
 | V | switch between first-person and chase camera |
 | [ / ] | step the time of day back / forward an hour |
@@ -88,6 +93,32 @@ small lake stays flat in a gale while the downwind shore of a big one builds whi
 downwind and its bow falls off the wind. Broadside to real waves the hull rolls; quarter the waves or hold
 **Space** to brace, or over you go: the hull floats upside down, drifting, and you swim to it (W/S, A/D) and
 press **E** to right it and climb back in. On a calm day the canoe cannot be tipped.
+
+## Fishing
+
+Fishing is the thing to do out here (`src/fishing.js`). Press **F** in the canoe and the paddle goes across the
+gunwales and the rod comes up; the line under the readout says what kind of water you are sitting in
+("Rocky point · 4 m, drop-off to 9 m · walleye and smallmouth water", "Weedy bay · 1.8 m · pike water"), read
+from the real bed, the shore distance, the weed beds and the bedrock shores around the canoe. Pick a lure with
+**1–5** (jig, spinner, spoon, crankbait, or a leech 2.4 m under a bobber), hold **Space** or the mouse button
+to load the cast and let go: the lure flies in the direction the canoe points (where you are looking, in first
+person), splashes down and sinks at its own rate, or the bobber rides the swell. **W** retrieves (Shift faster;
+a crankbait dives, a spinner runs shallow, a jig hops along the bottom, the leech is best left alone), and you
+can change lures again once it is back at the rod.
+
+Fish bite at a rate built from where the lure is, not from a timer: walleye on rocky points and drop-offs in
+3–11 m at dawn, dusk and night, by day more willing in tea-stained water and in a light chop; smallmouth off
+bedrock shores in clear water; northern pike in weedy bays; crappie and perch in the weeds; lake trout only
+deep, in lakes the DNR maps deeper than 20 m. The lure's depth, its action, the hour, the lake's Secchi depth
+and the wind all go in, and every factor is in the open (`window.__game.fishing.factors`, `TUNING`, `SPECIES`,
+`LURES`) for tuning. A bite is the bobber going down or the rod tip tapping with a short plop: press
+**Space** inside the window to set the hook. Then the tension bar: hold to reel (tension up, line in), let go
+when the fish runs (tension down, line out). A fish's runs come in pulses and weaken as it tires; bigger fish
+pull harder and longer. Red for too long parts the line and the fish keeps the lure (another is tied on, no
+other penalty); slack for too long and it throws the hook. A landed fish is held up for a look, with its
+length and weight, and **K** keeps it (it hangs on a stringer over the port gunwale) or **E** lets it go.
+**L** opens the catch log: species, length, weight, lake, time and lure for every fish, with personal bests,
+kept in the browser between sessions.
 
 The map is drawn as a paper topographic sheet in the spirit of the Fisher and McKenzie maps: hypsometric
 tints, 10 m contours, pale-blue lakes, red dashed portages with rod counts, red campsite dots and serif
