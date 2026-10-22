@@ -27,6 +27,8 @@ import { Outfitter } from './outfitter.js';
 import { Settings, FpsCounter } from './settings.js';
 import { TripSaver } from './save.js';
 import { Title } from './title.js';
+import { Journal } from './journal.js';
+import { TripStats } from './trip-stats.js';
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x2d7694, reflect: 0xc9dde8, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -105,7 +107,8 @@ async function main() {
   if (trip) { player.x = trip.x; player.z = trip.z; player.heading = trip.heading; }
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   player.chase = chase; // walking is read against the view; the cursor steers the canoe when asked
-  const hud = new Hud(world, async (x, z) => { if (await player.teleport(x, z)) chase.snap(); });
+  const settings = new Settings();
+  const hud = new Hud(world, { onTeleport: async (x, z) => { if (await player.teleport(x, z)) chase.snap(); }, settings, camera });
   const post = makePost(renderer, scene, camera);
   const { lat, lon } = world.toLatLon(start.x, start.z);
   const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, grade: post.grade, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material, moonDisc }, { lat, lon });
@@ -120,7 +123,9 @@ async function main() {
   const teleport = async (x, z) => { const ok = await player.teleport(x, z); if (ok) chase.snap(); return ok; };
   const energy = new Energy(player, day);
   const tasks = new Tasks(world, scene, player, { audio, water });
-  const outfitter = new Outfitter(world, player, { energy, tasks, hud, day, onTeleport: teleport });
+  const tripStats = new TripStats(world, player, day);
+  const outfitter = new Outfitter(world, player, { energy, tasks, hud, day, stats: tripStats, onTeleport: teleport });
+  const journal = new Journal({ hud, world, player, day, fishing, tasks, energy, outfitter, stats: tripStats, wind });
   energy.onNote = (t) => hud.note(t); tasks.onNote = (t) => hud.note(t, 6);
   energy.onEvac = () => outfitter.startEvac();
   tasks.onChange = () => outfitter.save();
@@ -137,16 +142,15 @@ async function main() {
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
-  const settings = new Settings();
-  const stats = new FpsCounter(document.getElementById('fps'), renderer);
-  settings.attach({ renderer, scene, sun, water, post, audio, chase, player, stats });
+  const fps = new FpsCounter(renderer);
+  settings.attach({ renderer, scene, sun, water, post, audio, chase, player, stats: fps, geo });
   const saver = new TripSaver(player, day, chase);
-  const title = new Title({ world, player, chase, camera, day, hud, settings, saver, trip });
+  const title = new Title({ world, player, chase, camera, day, hud, settings, saver, trip, outfitter });
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
   if (trip && (trip.mode !== 'paddle' || world.shoreAt(trip.x, trip.z) > -2)) player.teleport(trip.x, trip.z);
   title.open('title');
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -171,6 +175,8 @@ async function main() {
       tasks.update(dt * ts);
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
       energy.update(dt * ts, wind, atCamp);
+      tripStats.update(dt * ts, outfitter.trip.active);
+      journal.update(dt);
     }
     canoe.update(dt * ts);
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
@@ -193,13 +199,13 @@ async function main() {
     loons.update(dt * ts, player, day.season);
     audio.update(dt, world.shoreAt(player.x, player.z), player.speed, player.mode === 'paddle');
     geo.update(player, world);
-    hud.update(player, geo, ts, day.clock, wind, fishing, { energy, tasks, outfitter });
+    hud.update({ player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell });
     saver.update(dt);
     input.endFrame();
   };
   // debug helper: advance the simulation by n fixed steps and draw once (used for automated testing)
   const draw = () => {
-    stats.begin();
+    fps.begin();
     water.renderReflection(renderer, scene, camera, player.level || world.levelAt(player.x, player.z));
     post.render();
   };
@@ -209,7 +215,7 @@ async function main() {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     frame(dt);
     draw();
-    stats.end(dt);
+    fps.end(dt);
   });
   let booted = false; // the outfitter's start panel waits until the title card is away
 

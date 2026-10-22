@@ -1,19 +1,47 @@
 // The front door. After loading, the live scene (golden hour, the clock stopped, a camera drifting slowly
-// round the canoe) renders behind a card: the name, a line, and Paddle in / New trip / Settings. Esc during
-// play brings the same card back as a pause screen. Keyboard first: the arrows move between buttons, Enter
-// picks, Esc goes back. While the card is up it owns the keyboard (a capturing listener stops the game's
-// key handlers) and the HUD is hidden (body.shell-open, shell.css).
+// round the canoe) renders behind the card, set in Air on a flat deep band: the name, a line, and a plain-text
+// menu (Paddle in / New trip / Settings / Controls) with the entry points as a second column beside New trip.
+// Esc during play brings the same card back as a pause screen. Keyboard first: the arrows move between items
+// (← → between the two columns), Enter picks, Esc goes back. While the card is up it owns the keyboard (a
+// capturing listener stops the game's key handlers) and the HUD is hidden (body.shell-open, shell.css).
 import './shell.css';
 import * as THREE from 'three';
 import { SettingsPanel } from './settings.js';
-import { MONTHS, monthDay } from './astro.js';
+import { clock12, shortDate } from './hud.js';
 
 const $ = (id) => document.getElementById(id);
 const DRIFT_RATE = 0.045;   // rad/s round the canoe
 const DRIFT_RADIUS = 23;    // metres, where there is water for it
 
+// the controls reference (the Controls item), by what you are doing
+const KEYMAP = [
+  ['On the water', [
+    [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'set the course; it holds, bring it back to the middle to run straight'],
+    [['Shift'], 'hustle'], [['Space'], 'brace in a sea (you cannot paddle while bracing)'],
+    [['E'], 'go ashore · portage at a landing · the outfitter at a dock · pick up a find'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
+    [['G'], 'eat a meal, when the canoe is still'],
+  ]],
+  ['On foot', [
+    [['W', 'A', 'S', 'D'], 'walk where the view points'], [['Shift'], 'jog'],
+    [['E'], 'launch a canoe at the water’s edge · set a carried one down'], [['Q'], 'shoulder a canoe on the ground · set a carried one down where you could launch'],
+  ]],
+  ['Fishing', [
+    [['F'], 'take up the rod · put it down'], [['Space', 'click'], 'hold to load a cast where the cursor points, let go to cast · set the hook · hold to reel'],
+    [['1', '2', '3', '4', '5'], 'jig & twister, Mepps spinner, Daredevle spoon, jointed Rapala, bobber & leech'], [['E', 'K'], 'let the fish go · keep it on the stringer'],
+  ]],
+  ['Looking', [
+    [['Tab'], 'hold for the readout: where, water, way, wind, light, pack, tasks'], [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in)'],
+    [['J'], 'the journal: the trip, catches, tasks, lakes, gear (L opens it too)'], [['V'], 'from the paddler’s seat · behind the canoe'],
+    [['mouse'], 'look round; in third person drag to orbit, wheel to zoom'], [['Esc'], 'this menu'],
+  ]],
+  ['The clock and the weather', [
+    [['1', '2', '3'], 'game speed 1× 2× 4× (when the rod is down)'], [['[', ']'], 'time of day back, forward an hour'], [['-', '='], 'the date back, forward a day (Shift: a month)'],
+    [['P'], 'stop the clock'], [[',', '.'], 'less, more wind'], [['/'], 'veer the wind'], [[';'], 'let the weather be'], [['R'], 'the canoe’s reflection'], [['N'], 'sound'],
+  ]],
+];
+
 export class Title {
-  // targets: { world, player, chase, camera, day, hud, settings, saver, trip } — trip is the saved trip read at boot (or null)
+  // targets: { world, player, chase, camera, day, hud, settings, saver, trip, outfitter } — trip is the saved trip read at boot (or null)
   constructor(t) {
     Object.assign(this, t);
     this.state = 'game'; // 'title' | 'pause' | 'game'
@@ -21,13 +49,15 @@ export class Title {
     this.busy = false;
     this.pausedRunning = true;
     this.el = {
-      shell: $('shell'), menu: $('title-card'), entries: $('entry-card'), settingsCard: $('settings-card'),
-      kicker: $('title-kicker'), sub: $('title-sub'), go: $('btn-continue'), hint: $('continue-hint'), newTrip: $('btn-new'), settings: $('btn-settings'),
-      list: $('entry-list'), status: $('entry-status'), entryBack: $('btn-entry-back'), settingsBack: $('btn-settings-back'), form: $('settings-form'),
+      shell: $('shell'), menu: $('title-card'), settingsCard: $('settings-card'), controlsCard: $('controls-card'),
+      kicker: $('title-kicker'), go: $('btn-continue'), hint: $('continue-hint'), newTrip: $('btn-new'), settings: $('btn-settings'), controls: $('btn-controls'),
+      entries: $('entry-card'), list: $('entry-list'), status: $('entry-status'),
+      settingsKicker: $('settings-kicker'), controlsKicker: $('controls-kicker'), nav: $('settings-nav'), form: $('settings-form'), keymap: $('keymap'),
     };
-    this.panel = new SettingsPanel(this.settings, this.el.form);
+    this.panel = new SettingsPanel(this.settings, this.el.form, this.el.nav);
     this.drift = { angle: Math.random() * Math.PI * 2, t: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), fresh: true };
     this.buildEntries();
+    this.buildKeymap();
     this.bind();
   }
 
@@ -37,33 +67,41 @@ export class Title {
     list.textContent = '';
     const eps = [...this.world.entryPoints].sort((a, b) => a.ep - b.ep);
     for (const ep of eps) {
-      const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'listitem');
-      const n = document.createElement('b'); n.textContent = `#${ep.ep}`;
+      const li = document.createElement('li');
+      const b = document.createElement('button'); b.type = 'button';
+      const n = document.createElement('b'); n.textContent = String(ep.ep);
       b.append(n, document.createTextNode(ep.name));
-      if (Math.hypot(ep.x - start.x, ep.z - start.z) < 600) { const s = document.createElement('small'); s.textContent = 'the default start'; b.appendChild(s); }
+      if (Math.hypot(ep.x - start.x, ep.z - start.z) < 600) { b.classList.add('current'); const s = document.createElement('small'); s.textContent = ' · the default start'; b.appendChild(s); }
       b.addEventListener('click', () => this.newTrip(ep));
-      list.appendChild(b);
+      li.appendChild(b);
+      list.appendChild(li);
     }
+    this.el.entries.hidden = false;
+  }
+  buildKeymap() {
+    const k = this.el.keymap; if (!k) return;
+    k.innerHTML = KEYMAP.map(([title, rows]) => `<h3>${title}</h3>${rows.map(([keys, what]) => `<div class="k"><span class="keys">${keys.map((x) => `<kbd>${x}</kbd>`).join('')}</span><span>${what}</span></div>`).join('')}`).join('');
   }
 
   bind() {
     const e = this.el;
     e.go.addEventListener('click', () => (this.state === 'pause' ? this.resume() : this.continueTrip()));
-    e.newTrip.addEventListener('click', () => this.showCard('entries'));
+    e.newTrip.addEventListener('click', () => this.focusEntries());
     e.settings.addEventListener('click', () => this.showCard('settings'));
-    e.entryBack.addEventListener('click', () => this.showCard('menu'));
-    e.settingsBack.addEventListener('click', () => this.showCard('menu'));
+    e.controls.addEventListener('click', () => this.showCard('controls'));
     // capture phase: fires before every other key handler on the window and, while the card is up, ends the event there
     window.addEventListener('keydown', (ev) => {
       if (this.state === 'game') {
-        if (ev.code === 'Escape' && !this.hud.big && !this.hud.pin && !this.player.teleporting) { ev.preventDefault(); ev.stopImmediatePropagation(); this.open('pause'); }
+        if (ev.code === 'Escape' && !this.hud.paperOpen && !this.hud.big && !this.hud.pin && !this.player.teleporting) { ev.preventDefault(); ev.stopImmediatePropagation(); this.open('pause'); }
         return;
       }
       ev.stopImmediatePropagation();
       if (ev.code === 'Escape') { ev.preventDefault(); this.back(); return; }
       const tag = ev.target && ev.target.tagName;
-      if (tag === 'SELECT' || tag === 'INPUT') return; // the arrows belong to the control
+      if (ev.code === 'Tab') return; // the browser's own focus order, within the card
+      if (tag === 'SELECT' || tag === 'INPUT') { if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') { ev.preventDefault(); this.moveFocus(ev.code === 'ArrowDown' ? 1 : -1); } return; } // ← → belong to the control
       if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') { ev.preventDefault(); this.moveFocus(ev.code === 'ArrowDown' ? 1 : -1); }
+      else if (ev.code === 'ArrowRight' || ev.code === 'ArrowLeft') { if (this.card === 'menu') { ev.preventDefault(); this.switchColumn(ev.code === 'ArrowRight' ? 1 : -1); } }
       else if (ev.code === 'Home' || ev.code === 'End') { ev.preventDefault(); this.moveFocus(ev.code === 'Home' ? -Infinity : Infinity); }
       else if (ev.code === 'Space' && tag !== 'BUTTON') ev.preventDefault(); // no page scroll
     }, true);
@@ -71,11 +109,17 @@ export class Title {
 
   showCard(name) {
     this.card = name;
-    const { menu, entries, settingsCard } = this.el;
-    menu.hidden = name !== 'menu'; entries.hidden = name !== 'entries'; settingsCard.hidden = name !== 'settings';
-    if (name === 'entries') { const cur = this.el.list.querySelector('button'); if (cur) cur.focus(); }
-    else if (name === 'settings') { const first = this.el.form.querySelector('select, input'); if (first) first.focus(); }
+    const { menu, settingsCard, controlsCard, shell } = this.el;
+    menu.hidden = name !== 'menu'; settingsCard.hidden = name !== 'settings'; controlsCard.hidden = name !== 'controls';
+    shell.classList.toggle('wide', name === 'settings');
+    shell.classList.toggle('full', name === 'controls');
+    if (name === 'settings') { this.panel.show(this.panel.section); const first = this.el.nav.querySelector('button'); if (first) first.focus(); }
+    else if (name === 'controls') { const k = this.el.keymap; if (k) k.scrollTop = 0; }
     else this.el.go.focus();
+  }
+  focusEntries() {
+    const cur = this.el.list.querySelector('button.current') || this.el.list.querySelector('button');
+    if (cur) { cur.focus(); cur.scrollIntoView({ block: 'nearest' }); }
   }
 
   back() {
@@ -83,9 +127,20 @@ export class Title {
     if (this.state === 'pause') this.resume();
   }
 
+  // the two columns of the menu card: the menu items, and the entry points
+  columns() {
+    const items = [...this.el.menu.querySelectorAll('.menu .item:not([disabled])')];
+    const list = [...this.el.list.querySelectorAll('button:not([disabled])')];
+    return [items, list];
+  }
   focusables() {
-    const card = this.card === 'menu' ? this.el.menu : this.card === 'entries' ? this.el.entries : this.el.settingsCard;
-    return [...card.querySelectorAll('button:not([disabled]), select, input')].filter((n) => n.offsetParent !== null);
+    if (this.card === 'menu') {
+      const [items, list] = this.columns();
+      const inList = list.includes(document.activeElement);
+      return inList ? list : items;
+    }
+    const card = this.card === 'settings' ? this.el.settingsCard : this.el.controlsCard;
+    return [...card.querySelectorAll('button:not([disabled]), select, input:not([type=radio]), input[type=radio]:checked')].filter((n) => n.offsetParent !== null);
   }
   moveFocus(step) {
     const items = this.focusables(); if (!items.length) return;
@@ -94,6 +149,11 @@ export class Title {
     else i = i < 0 ? (step > 0 ? 0 : items.length - 1) : (i + step + items.length) % items.length;
     items[i].focus();
     if (items[i].scrollIntoView) items[i].scrollIntoView({ block: 'nearest' });
+  }
+  switchColumn(dir) {
+    const [items, list] = this.columns();
+    if (dir > 0 && items.includes(document.activeElement)) this.focusEntries();
+    else if (dir < 0 && list.includes(document.activeElement)) this.el.newTrip.focus();
   }
 
   // --- open / close -----------------------------------------------------------------------------
@@ -132,13 +192,18 @@ export class Title {
 
   refreshMenu() {
     const e = this.el, pause = this.state === 'pause', trip = this.trip;
-    const p = this.player, w = this.world;
-    const here = () => w.lakeName(w.lakeIdAt(p.x, p.z)) || 'open water';
-    e.kicker.textContent = pause ? 'Paused' : 'Boundary Waters Canoe Area Wilderness';
+    const p = this.player, w = this.world, o = this.outfitter;
+    const here = () => p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z)) || 'open water';
+    const tripDays = o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1} of a ${o.trip.days}-day trip` : '';
+    const kicker = pause ? `Paused · ${here()} · ${clock12(this.day.hours)}` : 'Boundary Waters Canoe Area Wilderness';
+    e.kicker.textContent = kicker;
+    e.settingsKicker.textContent = pause ? kicker : 'Boundary Waters';
+    e.controlsKicker.textContent = pause ? kicker : 'Boundary Waters';
     e.go.textContent = pause ? 'Paddle on' : 'Paddle in';
-    if (pause) e.hint.textContent = `${here()} · ${this.day.clock}`;
-    else if (trip) e.hint.textContent = `Continue on ${here()} · ${clockOf(trip)}`;
+    if (pause) e.hint.textContent = `${here()} · ${clock12(this.day.hours)}${tripDays}`;
+    else if (trip) e.hint.textContent = `Continue on ${here()} · ${shortDate(trip.year, trip.doy)} · ${clock12(trip.hours)}${tripDays}`;
     else { const s = w.meta.start; e.hint.textContent = `Start at ${w.lakeName(w.lakeIdAt(s.x, s.z)) || 'Lake One'}, the default landing`; }
+    e.newTrip.classList.toggle('current', !pause && !trip);
   }
 
   // --- the three ways out --------------------------------------------------------------------
@@ -169,7 +234,7 @@ export class Title {
     for (const b of buttons) b.disabled = false;
     this.busy = false;
     if (!ok) { this.el.status.textContent = `No open water near the ${ep.name} landing; try another.`; return; }
-    this.el.status.textContent = 'BWCA entry points, by permit number.';
+    this.el.status.textContent = '';
     const now = new Date();
     this.day.setClock(now.getFullYear(), dayOfYear(now), now.getHours() + now.getMinutes() / 60); this.day.running = true;
     this.player.timeScale = this.settings.get('speed');
@@ -200,8 +265,3 @@ export class Title {
 const _v = new THREE.Vector3();
 
 export function dayOfYear(date) { return Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000); }
-function clockOf(trip) {
-  const { month, day } = monthDay(trip.year, trip.doy);
-  const h = Math.floor(trip.hours), m = Math.floor((trip.hours - h) * 60);
-  return `${MONTHS[month]} ${day} · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}

@@ -28,7 +28,7 @@ const SPECIES = [
   { key: 'trout', label: 'a lake trout', deep: true },
 ];
 // placeholder rewards, in the order they come off the wall
-const UNLOCKS = [
+export const UNLOCKS = [
   { key: 'mepps', label: 'a Mepps Aglia spinner' }, { key: 'daredevle', label: 'a red-and-white Daredevle' }, { key: 'rapala', label: 'a jointed Rapala' },
   { key: 'kevlar', label: 'a Kevlar canoe (lighter on the portages)' }, { key: 'jig', label: 'a jig and twister tail' },
   { key: 'silverminnow', label: 'a Johnson Silver Minnow' }, { key: 'lazyike', label: 'a Lazy Ike' }, { key: 'fisher', label: 'the old Fisher map sheets' },

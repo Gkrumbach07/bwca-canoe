@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clock12 } from './hud.js';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, clamp, lerp, smoothstep, hash2 } from './rng.js';
 import { makeToonMaterial, smoothToon } from './rocks.js';
@@ -53,11 +54,11 @@ export function speedFor(dist, h) {
 // 'bottom' hops along the bed, 'float' hangs under the bobber. still / slow / fast: how well it fishes left
 // alone, worked slowly, or burned back.
 export const LURES = [
-  { id: 'jig', name: 'Jig', sink: 0.9, run: 'bottom', still: 0.7, slow: 1.0, fast: 0.5, colour: 0xd8b84a },
-  { id: 'spinner', name: 'Spinner', sink: 0.35, run: 1.0, still: 0.15, slow: 0.85, fast: 1.1, colour: 0xd9c38a },
-  { id: 'spoon', name: 'Spoon', sink: 0.6, run: 2.2, still: 0.25, slow: 1.0, fast: 1.0, colour: 0xe0c070 },
-  { id: 'crankbait', name: 'Crankbait', sink: -0.5, run: 3.4, still: 0.2, slow: 0.95, fast: 1.1, colour: 0x8fb07a },
-  { id: 'leech', name: 'Leech & bobber', sink: 0.5, run: 'float', still: 1.0, slow: 0.8, fast: 0.3, colour: 0x2e2a2a, bobber: true },
+  { id: 'jig', name: 'Jig & twister', short: 'jig', sink: 0.9, run: 'bottom', still: 0.7, slow: 1.0, fast: 0.5, colour: 0xd8b84a },
+  { id: 'spinner', name: 'Mepps spinner', short: 'spinner', sink: 0.35, run: 1.0, still: 0.15, slow: 0.85, fast: 1.1, colour: 0xd9c38a },
+  { id: 'spoon', name: 'Daredevle spoon', short: 'spoon', sink: 0.6, run: 2.2, still: 0.25, slow: 1.0, fast: 1.0, colour: 0xe0c070 },
+  { id: 'crankbait', name: 'Jointed Rapala', short: 'Rapala', sink: -0.5, run: 3.4, still: 0.2, slow: 0.95, fast: 1.1, colour: 0x8fb07a },
+  { id: 'leech', name: 'Bobber & leech', short: 'leech', sink: 0.5, run: 'float', still: 1.0, slow: 0.8, fast: 0.3, colour: 0x2e2a2a, bobber: true },
 ];
 
 // Species and where they feed. bed: preferred water depth at the spot; zone: preferred lure depth below the
@@ -228,6 +229,8 @@ export class Fishing {
     this._ndc = new THREE.Vector2();
     this.aimPoint = null;   // world xz the cast is aimed at (the cursor's spot on the water, or the view's), if in reach
     this.aimDist = 0;
+    this.aimWorld = null;   // where the ring sits on the water, for the HUD's reticle
+    this.screenReticle = true; // the HUD draws the reticle; the ring in the world stays hidden
     this.focus = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
 
     this.rodUp = false;
@@ -276,7 +279,7 @@ export class Fishing {
   }
   record(fish, kept) {
     const w = this.world, id = w.lakeIdAt(this.player.x, this.player.z);
-    const entry = { species: fish.species, name: SPECIES[fish.species].name, length: Math.round(fish.length), weight: Math.round(fish.weight * 100) / 100, lake: w.lakeName(id) || 'Unnamed water', time: this.day.clock, lure: LURES[fish.lure].name, kept, at: Date.now() };
+    const entry = { species: fish.species, name: SPECIES[fish.species].name, length: Math.round(fish.length), weight: Math.round(fish.weight * 100) / 100, lake: w.lakeName(id) || 'Unnamed water', time: this.day.clock, hours: this.day.hours, doy: this.day.doy, year: this.day.year, lure: LURES[fish.lure].name, lureShort: LURES[fish.lure].short, kept, at: Date.now() };
     this.log.push(entry);
     const b = this.bests[fish.species];
     entry.best = !b || entry.length > b.length;
@@ -366,7 +369,9 @@ export class Fishing {
     const who = top.length ? top.join(' and ') + ' water' : 'slow water';
     const L = lightAt(hours);
     const when = L.day > 0.7 && scored[0] && scored[0].id === 'walleye' && scored[0].s < 1.2 ? ', better at dusk' : '';
-    return `${place} · ${depthTxt} · ${who}${when}`;
+    const clarity = hab.secchi ? ` · ${hab.secchi < 1.8 ? 'stained' : hab.secchi < 3 ? 'fair' : 'clear'} water, ${hab.secchi.toFixed(1)} m` : '';
+    const whoLine = top.length ? `${who[0].toUpperCase()}${who.slice(1)}${when}.` : `Slow water${when}.`;
+    return { where: `${place} · ${depthTxt}${clarity}`, who: whoLine, text: `${place} · ${depthTxt} · ${who}${when}` };
   }
 
   // --- rod up / down -----------------------------------------------------------------------------------------------
@@ -425,14 +430,15 @@ export class Fishing {
   placeAimRing(reach) {
     const t = this.tipWorld(), s = this.state;
     const show = this.rodUp && (s === 'ready' || s === 'charging');
-    if (!show) { this.aimRing.visible = false; return; }
+    if (!show) { this.aimRing.visible = false; this.aimWorld = null; return; }
     let d = this.aimDist;
     if (s === 'charging') d = Math.min(d, rangeFor(lerp(TUNING.castSpeed[0], TUNING.castSpeed[1], this.power), this.tipHeight));
     const x = t.x + Math.cos(this.aim) * d, z = t.z - Math.sin(this.aim) * d;
     const water = this.world.shoreAt(x, z) < 0;
-    this.aimRing.visible = water;
+    this.aimRing.visible = water && !this.screenReticle;
+    this.aimWorld = water ? { x, y: this.surfaceAt(x, z) + 0.03, z, dist: d, inReach: !!this.aimPoint } : null;
     if (!water) return;
-    this.aimRing.position.set(x, this.surfaceAt(x, z) + 0.03, z);
+    this.aimRing.position.set(x, this.aimWorld.y, z);
     const sc = 1 + 0.5 * Math.max(0, 1 - d / Math.max(1, reach)); // a touch larger close in so it still reads
     this.aimRing.scale.setScalar(sc * (this.aimPoint ? 1 : 0.8));
     this.aimRing.material.opacity = this.aimPoint ? 0.6 : 0.35;
@@ -473,7 +479,6 @@ export class Fishing {
   // --- per frame -------------------------------------------------------------------------------------------------------
   update(dt, timeScale = 1) {
     const p = this.player, inp = this.input;
-    if (inp.pressed('KeyL')) this.logOpen = !this.logOpen;
     const afloat = p.mode === 'paddle' && !p.landing && !p.ashore && !p.teleporting;
     this.rod.visible = p.mode === 'paddle'; // it lies in the hull: not on your shoulders, on the bank or in the water
     if (!afloat && this.rodUp) this.stow();
@@ -488,7 +493,7 @@ export class Fishing {
     if (this.rodUp && (this.spot.t -= dt) <= 0) {
       this.spot.t = 0.5;
       this.spot.hab = this.habitatAt(p.x, p.z);
-      this.spot.text = this.describe(this.spot.hab, this.day.hours);
+      this.spot.parts = this.describe(this.spot.hab, this.day.hours); this.spot.text = this.spot.parts.text;
     }
     if (this.rodUp) {
       for (let k = 0; k < LURES.length; k++) if (inp.pressed(`Digit${k + 1}`)) {
@@ -513,12 +518,12 @@ export class Fishing {
     if (s === 'ready' || s === 'charging') { const reach = this.computeAim(); this.placeAimRing(reach); } else this.aimRing.visible = false;
     if (s === 'ready') {
       if (this.buttonPressed()) { this.state = 'charging'; this.charge = 0; this.power = 0; }
-      p.prompt = { key: 'Space', text: `Hold to load a cast where the cursor points · <b>${this.lureDef.name}</b> · 1-5 to change · F puts the rod down` };
+      p.prompt = { key: 'Space', text: 'Hold to load a cast where the cursor points · 1–5 change the lure · F puts the rod down' };
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
       if (!this.button) { this.state = 'swing'; this.swing = 0; this.pending = { power: this.power }; }
-      p.prompt = { key: null, text: 'Let go to cast' };
+      p.prompt = { key: null, text: 'Let go to cast · 1–5 change the lure · F puts the rod down' };
     } else if (s === 'swing') {
       this.swing += dt;
       if (this.pending && this.swing > 0.12) this.launch();
@@ -749,7 +754,7 @@ export class Fishing {
     mesh.scale.setScalar(f.length / 100);
     this.splash(f.x, this.surfaceAt(f.x, f.z), f.z, 12, 0.8 + Math.min(1.2, f.weight / 3));
     const lb = f.weight * 2.2046;
-    this.message = { text: `${sp.name} · ${Math.round(f.length)} cm · ${f.weight.toFixed(f.weight < 1 ? 2 : 1)} kg (${lb.toFixed(1)} lb)${entry.best ? ' · a personal best!' : ''}`, t: TUNING.holdUp };
+    this.message = null; void sp; void lb; // the catch card (hud.js) carries the fish
     this.lineOut = 0;
   }
 
@@ -766,7 +771,7 @@ export class Fishing {
     fx.pos.set(p.x + f.x * 1.5 + rx * 1.55, y + 1.25, p.z + f.z * 1.5 + rz * 1.55);
     fx.look.set(p.x - f.x * 1.2, y + 0.78, p.z - f.z * 1.2);
     this.chase.focus = fx;
-    p.prompt = { key: 'E', text: `Let it go · <kbd>K</kbd>keep it on the stringer` };
+    p.prompt = { key: 'E', text: 'Let it go · <kbd>K</kbd>Keep it on the stringer' };
   }
 
   release(keep) {
@@ -918,11 +923,14 @@ export class Fishing {
     const u = this.ui;
     u.rodUp = this.rodUp; u.state = this.state; u.lure = this.lureIndex; u.lures = LURES;
     u.power = this.state === 'charging' ? this.power : null;
-    u.spot = this.rodUp ? this.spot.text : '';
+    u.spot = this.rodUp && this.spot.parts ? this.spot.parts : null;
+    u.aim = this.rodUp && (this.state === 'ready' || this.state === 'charging') ? this.aimWorld : null;
+    const L = this.landed;
+    u.landed = L ? { key: L.entry.at, species: L.species, name: L.entry.name, length: L.entry.length, weight: L.entry.weight, best: !!L.entry.best, lake: L.entry.lake, lure: L.entry.lure, time: clock12(L.entry.hours), t: L.t } : null;
     u.fight = this.fish ? { tension: this.fish.tension, danger: this.fish.danger, slack: this.fish.slack, line: this.lineOut, run: this.fish.run > 0 } : null;
     u.message = this.message ? this.message.text : null;
     u.stringer = this.stringer.length;
-    u.log = this.log; u.bests = this.bests; u.logVersion = this.logVersion; u.logOpen = this.logOpen;
+    u.log = this.log; u.bests = this.bests; u.logVersion = this.logVersion;
     u.rate = this.rate;
     return u;
   }

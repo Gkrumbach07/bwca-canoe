@@ -1,17 +1,23 @@
+import * as THREE from 'three';
 import { clamp } from './rng.js';
+import { MONTHS, monthDay } from './astro.js';
+import { FRESH } from './wind.js';
+import './hud.css';
 
-// HUD text, prompts and the map. The map is a paper topographic sheet in the spirit of the Fisher and
-// McKenzie maps canoeists carry: cream paper, hypsometric tints, 10 m contours, pale-blue lakes with a
-// dark rim, red dashed portages with rod counts, red campsite dots and serif lake names. Loaded fine tiles
-// are drawn from their own cells, the 80 m far field fills in around them, and a recoloured bake overview
-// covers the whole wilderness beyond that.
-//
-// Small, in the corner, it follows the canoe. M (or a click on it) opens it large in the middle of the
-// screen: drag to pan, wheel to zoom, click to drop a pin; the pin asks before the canoe is moved. The
-// entry point list drops a pin the same way.
+// The HUD, in two materials (hud.css). Air: the compass top right, the readout top left while Tab is held,
+// the place title and the journal lines bottom left, one action line bottom centre with the balance arc,
+// the tension line and the lure strip above it, the status marks bottom right at half strength; while
+// fishing, the spot card, the reticle on the water and the catch card. Quiet by default: nothing is drawn
+// until it has something to say, and the density setting says how much (settings.js). Paper: the map, a
+// Fisher-style topographic sheet (cream paper, hypsometric tints, 10 m contours, pale-blue lakes with a dark
+// rim, red dashed portages with rod counts, red campsite dots, serif lake names): a glance that slides up
+// from the bottom right while M is held, the full sheet when M is pressed (drag to pan, wheel to zoom, click
+// to drop a pin; a pencil note asks before the canoe is moved), or a small corner sheet that stays up when
+// asked for. The journal (journal.js) and the outfitter's counter (outfitter.js) are paper too; one paper
+// object is up at a time, on a scrim, and the HUD keeps the register of which.
 
-const SMALL_SPAN = 12800;    // metres across the small map
-const BIG_SPAN = 25600;      // metres across the big map when it opens
+const GLANCE_SPAN = 5000;    // metres across the glance and the corner sheet
+const BIG_SPAN = 25600;      // metres across the sheet when it opens
 const MIN_SPAN = 2000, MAX_SPAN = 240000;
 const FINE_PX = 512;         // image pixels per fine tile edge (5 m per pixel)
 const FAR_PX = 256;          // image pixels per far tile edge (80 m per pixel)
@@ -22,6 +28,66 @@ const WATER = [184, 208, 216], RIM = [84, 118, 136];
 const TINT_LOW = [224, 216, 182], TINT_HIGH = [160, 166, 112];
 const BANDS = 14;
 const PAPER = '#e9e1cc';
+const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
+const PRESS = 300;           // ms: M let go sooner than this was a press, not a hold
+const HOLD_OFF = 300;        // ms: held keys hide this long after release
+const TITLE_HOLD = 4, NOTE_HOLD = 5, CATCH_HOLD = 8; // seconds
+const WAVE_MATTERS = 0.3;    // m: waves above this make the compass speak
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const COMPASS_LONG = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+
+// --- time and words ----------------------------------------------------------------------------------------
+export function clock12(hours) {
+  if (hours == null || !Number.isFinite(hours)) return '';
+  const h = Math.floor(hours) % 24, m = Math.floor((hours - Math.floor(hours)) * 60);
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+export function weekdayOf(year, doy) { const { month, day } = monthDay(year, doy); return DAYS[new Date(year, month, day).getDay()]; }
+export function longDate(year, doy) { const { month, day } = monthDay(year, doy); return `${weekdayOf(year, doy)}, ${MONTHS_LONG[month]} ${day}`; }
+export function shortDate(year, doy) { const { month, day } = monthDay(year, doy); return `${MONTHS[month]} ${day}`; }
+export const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+export const fmtKm = (km) => (km < 10 ? km.toFixed(1) : String(Math.round(km)));
+export const fmtDays = (d) => { if (d <= 0) return 'no'; const w = Math.floor(d + 1e-6), half = d - w >= 0.5 - 1e-6 && d - w < 0.99; return half ? `${w}½` : String(Math.round(d)); };
+export const plural = (n, one, many = `${one}s`) => (n === 1 ? one : many);
+export const bearingOf = (heading) => ((90 - (heading * 180) / Math.PI) % 360 + 360) % 360;
+export const compassLong = (deg) => COMPASS_LONG[Math.round(deg / 45) % 8];
+export const word = (n) => (n < WORDS.length ? WORDS[n] : String(n));
+// "an hour and forty", "two hours and a bit", "about 25 minutes"
+export function fmtDuration(hours) {
+  const m = Math.round(hours * 60);
+  if (m < 55) return `about ${Math.max(5, Math.round(m / 5) * 5)} minutes`;
+  const h = Math.floor(m / 60), rest = m - h * 60, hw = h === 1 ? 'an hour' : `${word(h)} hours`;
+  if (rest < 8) return hw;
+  if (rest < 23) return `${hw} and a bit`;
+  if (rest < 38) return `${hw} and a half`;
+  if (rest < 53) return `${hw} and forty`;
+  return h === 1 ? 'nearly two hours' : `nearly ${word(h + 1)} hours`;
+}
+// a lake in a few words: "the big water: 3,900 acres, sounded to 23 m"
+export function lakeWords(l) {
+  if (!l) return '';
+  const acres = (l.cells * 100) / 4046.86;
+  const size = acres > 2000 ? 'the big water' : acres > 400 ? 'a good-sized lake' : acres > 60 ? 'a small lake' : 'a pond';
+  const a = acres >= 100 ? Math.round(acres / 10) * 10 : Math.max(1, Math.round(acres));
+  return `${size}: ${a.toLocaleString('en-US')} ${plural(a, 'acre')}${l.maxDepth ? `, sounded to ${Math.round(l.maxDepth)} m` : ''}`;
+}
+// the Fisher-style sheet code for a point: letters east across the wilderness, numbers south
+export function sheetCode(world, x, z) {
+  const col = clamp(Math.floor((x - world.minX) / 20000), 0, 25), row = clamp(Math.floor((z - world.minZ) / 15000), 0, 98);
+  return `${String.fromCharCode(65 + col)}-${row + 1}`;
+}
+// an ink fish for the catch card, by species
+export function fishSilhouette(species) {
+  const body = {
+    pike: '8,28 30,14 80,12 100,22 108,28 100,34 80,44 30,42', smallmouth: '12,28 34,8 72,6 96,18 108,28 96,38 72,50 34,48',
+    laketrout: '10,28 32,12 78,10 100,22 108,28 100,34 78,46 32,44', crappie: '16,28 36,6 72,6 98,20 108,28 98,36 72,50 36,50',
+    perch: '14,28 36,10 74,8 98,20 108,28 98,36 74,48 36,46', walleye: '10,28 36,10 74,8 98,20 108,28 98,36 74,48 36,46',
+  }[species] || '10,28 36,10 74,8 98,20 108,28 98,36 74,48 36,46';
+  return `<polygon points="${body}" fill="#2a2016"/><polygon points="10,28 2,16 6,28 2,40" fill="#2a2016"/><polygon points="46,10 56,0 70,8" fill="#2a2016"/><polygon points="62,46 70,56 80,46" fill="#2a2016"/><circle cx="90" cy="24" r="3" fill="#ebe2cb"/>`;
+}
 
 // marching squares: the segments through a cell for a corner bitmask (1 top-left, 2 top-right, 4 bottom-right, 8 bottom-left)
 function msSegments(b, top, right, bottom, left) {
@@ -38,28 +104,46 @@ function msSegments(b, top, right, bottom, left) {
   }
 }
 
+const $ = (id) => document.getElementById(id);
+
 export class Hud {
-  constructor(world, onTeleport = null) {
+  // opts: { onTeleport(x, z), settings, camera }
+  constructor(world, opts = {}) {
     this.world = world;
-    this.onTeleport = onTeleport;
+    if (typeof opts === 'function') opts = { onTeleport: opts };
+    this.onTeleport = opts.onTeleport || null;
+    this.settings = opts.settings || null;
+    this.camera = opts.camera || null;
     this.el = {
-      lake: document.getElementById('lake'), sub: document.getElementById('sub'), prompt: document.getElementById('prompt'),
-      rudder: document.getElementById('rudder'), rudderKnob: document.querySelector('#rudder .knob'),
-      gps: document.getElementById('gps'), gpsState: document.getElementById('gps-state'), gpsCoords: document.getElementById('gps-coords'),
-      entry: document.getElementById('entry'), tiles: document.getElementById('tiles'),
-      wind: document.getElementById('windtext'), windArrow: document.getElementById('windarrow'),
-      dim: document.getElementById('mapdim'), tp: document.getElementById('tp'), tpText: document.getElementById('tp-text'),
-      tpGo: document.getElementById('tp-go'), tpCancel: document.getElementById('tp-cancel'),
-      spot: document.getElementById('spot'), lures: document.getElementById('lures'), meter: document.getElementById('meter'),
-      meterFill: document.getElementById('meter-fill'), meterLabel: document.getElementById('meter-label'), catchlog: document.getElementById('catchlog'),
-      note: document.getElementById('note'), trip: document.getElementById('trip'), tripFill: document.getElementById('trip-fill'), tripText: document.getElementById('trip-text'),
+      air: $('air'), compass: $('compass'), needle: $('compass-needle'), windArrow: $('compass-wind'), compassLabel: $('compass-label'), compassWaves: $('compass-waves'),
+      readout: $('readout'), spot: $('spot'), spotWhere: $('spot-where'), spotWho: $('spot-who'),
+      reticle: $('reticle'), reticleRing: $('reticle-ring'), reticleDist: $('reticle-dist'),
+      place: $('place'), placeKicker: $('place-kicker'), placeName: $('place-name'), placeSub: $('place-sub'),
+      lines: $('lines'), stringer: $('stringer'),
+      catch: $('catch'), catchFish: $('catch-fish'), catchName: $('catch-name'), catchSize: $('catch-size'), catchMeta: $('catch-meta'),
+      balance: $('balance'), balanceDot: $('balance-dot'), balanceLabel: $('balance-label'),
+      tension: $('tension'), tensionFill: $('tension-fill'), tensionEnd: $('tension-end'), tensionLabel: $('tension-label'),
+      rudder: $('rudder'), rudderKnob: $('rudder-knob'), lures: $('lures'), prompt: $('prompt'), marks: $('marks'),
+      map: $('map'), mapBody: $('map-body'), mapTitle: $('map-title'), mapSpan: $('map-span'), mapLayers: $('map-layers'), mapClose: $('map-close'),
+      mapScalebar: $('map-scalebar'), mapScale: $('map-scale'), pin: $('pin'), pinText: $('pin-text'), pinGo: $('pin-go'), pinCancel: $('pin-cancel'),
     };
-    this.fishUi = { lure: -1, logVersion: -1, logOpen: false };
-    this.noteTimer = null; this.trip = null;
-    this.canvas = document.getElementById('minimap');
-    this.ctx = this.canvas.getContext('2d');
-    this.big = false;
-    this.view = { cx: 0, cz: 0, span: SMALL_SPAN };
+    this.ctx = null;                 // the latest frame's inputs (update)
+    this.cache = {};                 // last strings written, to spare the DOM
+    this.fishUi = { lure: -1, catchKey: null, catchUntil: 0 };
+    // the paper register: which object is up, and how to put the others away
+    this.paper = null; this.papers = new Map();
+    // held keys
+    this.tab = { held: false, shown: false, timer: null };
+    this.mKey = { downAt: 0, held: false, timer: null };
+    // titles and lines
+    this.lastLakeId = null; this.titleTimer = null; this.pendingTitle = null; this.lastDawnDoy = null; this.lastHours = null;
+    this.lineTimers = new Set();
+    // the map
+    this.canvas = $('minimap');
+    this.mapCtx = this.canvas.getContext('2d');
+    this.mode = 'hidden';            // hidden | glance | sheet | corner
+    this.view = { cx: 0, cz: 0, span: GLANCE_SPAN };
+    this.layers = { lakes: true, portages: true, campsites: true, tasks: true, depths: true };
     this.pin = null;
     this.player = null;
     this.fineImages = new Map();
@@ -68,22 +152,73 @@ export class Hud {
     this.fetching = 0;
     this.tick = 0;
     this.overview = null;
+    this.scaleShown = '';
+    this._v = new THREE.Vector3();
     this.loadOverview();
-    this.sizeCanvas();
     this.bindMap();
-    if (this.el.entry) {
-      for (const ep of world.entryPoints) {
-        const o = document.createElement('option');
-        o.value = String(ep.ep); o.textContent = `${ep.ep} · ${ep.name}`;
-        this.el.entry.appendChild(o);
+    this.bindKeys();
+    this.marksBuild();
+    window.addEventListener('resize', () => { this.sizeCanvas(); this.placeConfirm(); });
+  }
+  // for the title screen: is anything of paper up (its Esc belongs to the paper, not the menu)
+  get big() { return this.mode === 'sheet'; }
+  get paperOpen() { return !!this.paper; }
+
+  // --- the paper register -----------------------------------------------------------------------------------
+  registerPaper(name, close) { this.papers.set(name, close); }
+  openPaper(name) {
+    if (this.paper && this.paper !== name) { const c = this.papers.get(this.paper); if (c) c(); }
+    this.paper = name;
+    document.body.classList.add('paper-open');
+  }
+  closePaper(name) {
+    if (this.paper !== name) return;
+    this.paper = null;
+    document.body.classList.remove('paper-open');
+  }
+
+  // --- keys: Tab for the readout, M for the map, Esc / Enter for the pin -------------------------------------
+  bindKeys() {
+    window.addEventListener('keydown', (e) => {
+      const tag = e.target && e.target.tagName;
+      if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (document.body.classList.contains('shell-open')) return; // the title card owns the keys
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        if (e.repeat || !this.settings) return;
+        const mode = this.settings.readoutMode;
+        if (mode === 'toggle') this.showReadout(!this.tab.shown);
+        else if (mode === 'hold') { this.tab.held = true; clearTimeout(this.tab.timer); this.showReadout(true, true); }
+      } else if (e.code === 'KeyM') {
+        if (e.repeat || this.paper === 'outfitter') return;
+        if (this.mode === 'sheet') { this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); return; }
+        this.mKey.downAt = performance.now(); this.mKey.held = true; clearTimeout(this.mKey.timer);
+        if (this.paper) { const c = this.papers.get(this.paper); if (c) c(); } // one paper object at a time
+        this.setMode('glance');
+      } else if (e.code === 'Escape') {
+        if (this.pin) this.clearPin(); else if (this.mode === 'sheet') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
+      } else if (e.code === 'Enter' && this.pin) this.confirm();
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Tab') {
+        this.tab.held = false;
+        if (this.settings && this.settings.readoutMode === 'hold') { clearTimeout(this.tab.timer); this.tab.timer = setTimeout(() => { if (!this.tab.held) this.showReadout(false); }, HOLD_OFF); }
+      } else if (e.code === 'KeyM' && this.mKey.held) {
+        this.mKey.held = false;
+        const press = performance.now() - this.mKey.downAt < PRESS;
+        if (press && this.mode === 'glance') this.setMode('sheet');
+        else if (this.mode === 'glance') { this.mKey.timer = setTimeout(() => { if (this.mode === 'glance' && !this.mKey.held) this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); }, HOLD_OFF); }
       }
-      this.el.entry.addEventListener('change', () => {
-        const ep = world.entryPoints.find((p) => String(p.ep) === this.el.entry.value);
-        this.el.entry.value = '';
-        this.el.entry.blur();
-        if (ep) this.propose(ep.x, ep.z, true);
-      });
-    }
+    });
+    window.addEventListener('blur', () => { this.tab.held = false; this.mKey.held = false; if (this.settings && this.settings.readoutMode === 'hold') this.showReadout(false); if (this.mode === 'glance') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); });
+  }
+  showReadout(on, now = false) {
+    this.tab.shown = on;
+    const el = this.el.readout;
+    el.classList.toggle('now', now);
+    el.classList.toggle('show', on);
+    this.el.air.classList.toggle('readout', on);
+    if (on) this.renderReadout(true);
   }
 
   // --- map interaction ------------------------------------------------------------------------------
@@ -96,10 +231,10 @@ export class Hud {
       const [px, py] = rectPx(e);
       drag = { px, py, cx: this.view.cx, cz: this.view.cz, moved: false, id: e.pointerId };
       try { c.setPointerCapture(e.pointerId); } catch { /* synthetic pointers have no capture */ }
-      if (this.big) c.classList.add('grabbing');
+      if (this.mode === 'sheet') c.classList.add('grabbing');
     });
     c.addEventListener('pointermove', (e) => {
-      if (!drag || !this.big) return;
+      if (!drag || this.mode !== 'sheet') return;
       const [px, py] = rectPx(e);
       const dx = px - drag.px, dy = py - drag.py;
       if (Math.hypot(dx, dy) > 4) drag.moved = true;
@@ -112,7 +247,7 @@ export class Hud {
       const d = drag; drag = null;
       c.classList.remove('grabbing');
       if (d.moved) return;
-      if (!this.big) { this.setBig(true); return; }
+      if (this.mode !== 'sheet') { this.setMode('sheet'); return; }
       const [px, py] = rectPx(e);
       const [x, z] = this.worldAt(px, py);
       this.propose(x, z, false);
@@ -121,7 +256,7 @@ export class Hud {
     c.addEventListener('pointercancel', () => { drag = null; c.classList.remove('grabbing'); });
     c.addEventListener('wheel', (e) => {
       e.preventDefault();
-      if (!this.big) return;
+      if (this.mode !== 'sheet') return;
       const [px, py] = rectPx(e);
       const [wx, wz] = this.worldAt(px, py);
       const span = clamp(this.view.span * Math.exp(e.deltaY * 0.0015), MIN_SPAN, MAX_SPAN);
@@ -130,16 +265,16 @@ export class Hud {
       this.view.span = span;
       this.setCentre(wx - (px - c.width / 2) * mPerPx, wz - (py - c.height / 2) * mPerPx);
     }, { passive: false });
-    window.addEventListener('keydown', (e) => {
-      if (e.target && e.target.tagName === 'SELECT') return;
-      if (e.code === 'KeyM') this.setBig(!this.big);
-      else if (e.code === 'Escape') { if (this.pin) this.clearPin(); else if (this.big) this.setBig(false); }
-      else if (e.code === 'Enter' && this.pin) this.confirm();
+    if (this.el.mapLayers) this.el.mapLayers.addEventListener('click', (e) => {
+      const b = e.target.closest('.layer'); if (!b) return;
+      const k = b.dataset.layer; this.layers[k] = !this.layers[k]; b.classList.toggle('off', !this.layers[k]);
     });
-    window.addEventListener('resize', () => { this.sizeCanvas(); this.placeConfirm(); });
-    if (this.el.dim) this.el.dim.addEventListener('click', () => this.setBig(false));
-    if (this.el.tpGo) this.el.tpGo.addEventListener('click', () => this.confirm());
-    if (this.el.tpCancel) this.el.tpCancel.addEventListener('click', () => this.clearPin());
+    if (this.el.mapClose) this.el.mapClose.addEventListener('click', () => this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'));
+    if (this.el.pinGo) this.el.pinGo.addEventListener('click', () => this.confirm());
+    if (this.el.pinCancel) this.el.pinCancel.addEventListener('click', () => this.clearPin());
+    const scrim = $('scrim');
+    if (scrim) scrim.addEventListener('click', () => { if (this.paper === 'map') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); else if (this.paper && this.paper !== 'outfitter') { const c = this.papers.get(this.paper); if (c) c(); } });
+    this.registerPaper('map', () => { if (this.mode === 'sheet') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); });
   }
 
   worldAt(px, py) {
@@ -154,69 +289,85 @@ export class Hud {
     this.placeConfirm();
   }
 
-  setBig(big) {
-    if (big === this.big) return;
-    this.big = big;
-    this.canvas.classList.toggle('big', big);
-    if (this.el.dim) this.el.dim.classList.toggle('show', big);
-    if (big) {
+  // hidden | glance (held M) | sheet (pressed M, on the scrim) | corner (a small sheet that stays up)
+  setMode(mode) {
+    if (mode === this.mode) return;
+    const was = this.mode;
+    this.mode = mode;
+    const m = this.el.map;
+    m.classList.toggle('glance', mode === 'glance'); m.classList.toggle('sheet', mode === 'sheet'); m.classList.toggle('corner', mode === 'corner');
+    m.classList.toggle('show', mode !== 'hidden');
+    if (mode === 'sheet') {
+      this.openPaper('map');
       this.view.span = BIG_SPAN;
       if (this.player) { this.view.cx = this.player.x; this.view.cz = this.player.z; }
     } else {
-      this.view.span = SMALL_SPAN;
+      if (was === 'sheet') this.closePaper('map');
+      this.view.span = GLANCE_SPAN;
       this.clearPin();
     }
     this.sizeCanvas();
+    requestAnimationFrame(() => this.sizeCanvas()); // once the sheet has its laid-out size
   }
+  // the old API: the big map on / off
+  setBig(big) { this.setMode(big ? 'sheet' : (this.settings && this.settings.cornerSheet ? 'corner' : 'hidden')); }
 
   // The backing store follows the displayed size (sharp on retina when the map fills the screen).
   sizeCanvas() {
     const c = this.canvas;
-    let cssW, cssH;
-    if (this.big) {
-      cssW = Math.min(window.innerWidth * 0.92, window.innerHeight * 0.88 * (1040 / 680));
-      cssH = cssW * (680 / 1040);
-      c.style.width = `${cssW}px`; c.style.height = `${cssH}px`;
-    } else {
-      cssW = 260; cssH = 170;
-      c.style.width = ''; c.style.height = '';
-    }
+    if (this.mode === 'hidden') return;
+    const r = c.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const W = this.big ? Math.round(cssW * dpr) : 1040, H = this.big ? Math.round(cssH * dpr) : 680;
+    const W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
     if (c.width !== W || c.height !== H || !this.grain) { c.width = W; c.height = H; this.grain = this.makeGrain(); }
   }
 
-  // --- the pin and its confirmation ----------------------------------------------------------------
+  // --- the pin and its pencil note ----------------------------------------------------------------
   propose(x, z, recentre) {
     if (!this.world.inBounds(x, z, 50)) return;
     this.pin = { x, z };
-    if (!this.big) this.setBig(true);
-    if (recentre || !this.big) { this.view.cx = x; this.view.cz = z; }
-    const w = this.world;
+    if (this.mode !== 'sheet') this.setMode('sheet');
+    if (recentre) { this.view.cx = x; this.view.cz = z; }
+    const w = this.world, p = this.player, ctx = this.ctx;
     const name = w.lakeName(w.lakeIdAt(x, z));
-    const km = this.player ? Math.hypot(x - this.player.x, z - this.player.z) / 1000 : 0;
-    if (this.el.tpText) this.el.tpText.textContent = `Paddle in at ${name || 'this spot'}?  ·  ${km < 10 ? km.toFixed(1) : Math.round(km)} km away`;
-    if (this.el.tp) this.el.tp.classList.add('show');
+    let text = 'Paddle in here?';
+    if (p) {
+      const km = Math.hypot(x - p.x, z - p.z) / 1000, dir = compassLong(bearingOf(Math.atan2(-(z - p.z), x - p.x)));
+      const wind = ctx && ctx.wind, kmh = wind && wind.fresh ? 3.6 : 4.5;
+      let hops = '';
+      const tasks = ctx && ctx.tasks;
+      if (tasks && typeof tasks.reach === 'function') {
+        const from = p.lakeId, to = w.lakeIdAt(x, z);
+        if (from > 0 && to > 0) {
+          const r = tasks.reach(from).get(tasks.basinOf(to));
+          hops = r ? (r.hops === 0 ? ' No portages.' : ` ${word(r.hops)[0].toUpperCase()}${word(r.hops).slice(1)} ${plural(r.hops, 'portage')}.`) : ' A long way round.';
+        }
+      }
+      text = `Paddle in here? ${name ? `${name}, ` : ''}about ${fmtKm(km)} km ${dir}, ${fmtDuration(km / kmh)}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
+    } else if (name) text = `Paddle in here? ${name}.`;
+    if (this.el.pinText) this.el.pinText.textContent = text;
+    if (this.el.pin) this.el.pin.classList.add('show');
     this.placeConfirm();
   }
   placeConfirm() {
-    const box = this.el.tp;
-    if (!box || !this.pin || !this.big) return;
-    const r = this.canvas.getBoundingClientRect(), mPerPx = this.view.span / this.canvas.width;
-    const sx = r.left + r.width / 2 + ((this.pin.x - this.view.cx) / mPerPx) * (r.width / this.canvas.width);
-    const sy = r.top + r.height / 2 + ((this.pin.z - this.view.cz) / mPerPx) * (r.height / this.canvas.height);
-    box.style.left = `${clamp(sx, r.left + 120, r.right - 120)}px`;
-    box.style.top = `${clamp(sy - 42, r.top + 10, r.bottom - 60)}px`;
+    const box = this.el.pin;
+    if (!box || !this.pin || this.mode !== 'sheet') return;
+    const r = this.canvas.getBoundingClientRect(), mPerPx = this.view.span / this.canvas.width, k = r.width / this.canvas.width;
+    const sx = r.width / 2 + ((this.pin.x - this.view.cx) / mPerPx) * k;
+    const sy = r.height / 2 + ((this.pin.z - this.view.cz) / mPerPx) * k;
+    box.style.left = `${clamp(sx, 160, r.width - 160)}px`;
+    box.style.top = `${clamp(sy - 40, 130, r.height - 12)}px`;
   }
   clearPin() {
     this.pin = null;
-    if (this.el.tp) this.el.tp.classList.remove('show');
+    if (this.el.pin) this.el.pin.classList.remove('show');
   }
   confirm() {
     if (!this.pin) return;
     const { x, z } = this.pin;
     this.clearPin();
-    this.setBig(false);
+    this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
     if (this.onTeleport) this.onTeleport(x, z);
   }
 
@@ -422,122 +573,335 @@ export class Hud {
     return c;
   }
 
-  // a line that shows for a few seconds (a meal, a find, a word from the outfitter)
-  note(text, seconds = 4.5) {
-    const el = this.el.note;
-    if (!el) return;
-    el.textContent = text; el.classList.add('show');
-    clearTimeout(this.noteTimer);
-    this.noteTimer = setTimeout(() => el.classList.remove('show'), seconds * 1000);
+  // --- the journal lines, the place title, the catch card -----------------------------------------------------
+  // a line that shows for a few seconds (a meal, a find, a word from the outfitter); two at most, the oldest goes
+  note(text, seconds = NOTE_HOLD) {
+    const box = this.el.lines;
+    if (!box || !text) return;
+    if (this.settings && !this.settings.showLines) return;
+    while (box.children.length >= 2) this.dropLine(box.firstElementChild);
+    const el = document.createElement('div'); el.className = 'line fade'; el.textContent = text;
+    box.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    const t = setTimeout(() => this.dropLine(el), seconds * 1000);
+    el._timer = t;
   }
-
-  // the trip line: the energy bar, the food, the tasks on the go
-  drawTrip(trip) {
-    const { energy, tasks, outfitter } = trip, el = this.el;
-    if (!el.trip) return;
-    const v = energy.value;
-    el.tripFill.style.width = `${Math.round(v * 100)}%`;
-    el.tripFill.style.background = v > 0.4 ? '#8fd38f' : v > 0.15 ? '#e8c270' : '#e8714f';
-    const food = energy.food, foodTxt = food <= 0 ? 'no food' : `${food % 1 ? `${Math.floor(food)}½` : food} day${food === 1 ? '' : 's'} of food`;
-    const open = tasks ? tasks.active.length : 0, done = tasks ? tasks.active.filter((t) => t.status === 'done').length : 0;
-    const taskTxt = open ? ` · ${open} task${open === 1 ? '' : 's'} on the go${done ? ` (${done} to turn in)` : ''}` : '';
-    const txt = outfitter && outfitter.trip.active ? `energy ${Math.round(v * 100)}% · ${foodTxt}${taskTxt}` : `energy ${Math.round(v * 100)}% · no trip under way`;
-    if (el.tripText.textContent !== txt) el.tripText.textContent = txt;
-    el.trip.classList.toggle('low', energy.warning);
+  dropLine(el) {
+    if (!el || !el.parentNode) return;
+    clearTimeout(el._timer);
+    el.classList.remove('show');
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 700);
+  }
+  // the place title: a kicker, the name large, a line under it
+  showPlace(kicker, name, sub, seconds = TITLE_HOLD) {
+    if (this.settings && !this.settings.showTitles) return;
+    if (this.paper) { this.pendingTitle = { kicker, name, sub, seconds }; return; }
+    this.pendingTitle = null;
+    const e = this.el;
+    e.placeKicker.textContent = kicker || ''; e.placeName.textContent = name || ''; e.placeSub.textContent = sub || '';
+    e.place.classList.add('show');
+    clearTimeout(this.titleTimer);
+    this.titleTimer = setTimeout(() => e.place.classList.remove('show'), seconds * 1000);
   }
 
   // --- per frame ------------------------------------------------------------------------------------------
-  update(player, geo, timeScale, clock = '', wind = null, fishing = null, trip = null) {
+  // ctx: { player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats, fps, shell }
+  update(ctx) {
+    this.ctx = ctx;
+    const { player, settings } = { player: ctx.player, settings: this.settings };
     this.player = player;
-    this.trip = trip;
-    if (trip) this.drawTrip(trip);
-    const w = this.world;
+    const air = this.el.air;
+    if (settings) {
+      air.classList.toggle('nohints', !settings.get('keyHints'));
+      air.classList.toggle('cb', !!settings.get('cbMarks'));
+      // the readout always on, or the corner sheet, as the density asks
+      if (settings.readoutMode === 'always') { if (!this.tab.shown) this.showReadout(true); }
+      else if (this.tab.shown && !this.tab.held && settings.readoutMode === 'hold') this.showReadout(false);
+      if (this.mode === 'hidden' && settings.cornerSheet) this.setMode('corner');
+      else if (this.mode === 'corner' && !settings.cornerSheet) this.setMode('hidden');
+      if (settings.readoutMode !== 'always' && this.tab.shown && !this.tab.held && settings.readoutMode !== 'toggle') this.showReadout(false);
+    }
+    if (!this.paper && this.pendingTitle) { const t = this.pendingTitle; this.showPlace(t.kicker, t.name, t.sub, t.seconds); }
+    this.updateCompass(ctx);
+    this.updateTitles(ctx);
+    this.updatePrompt(ctx);
+    this.updateBalance(ctx);
+    this.updateRudder(ctx);
+    this.updateFishing(ctx);
+    this.updateMarks(ctx);
+    if (this.tab.shown) this.renderReadout();
+    if (this.mode !== 'hidden' && !ctx.shell) {
+      if (this.mode !== 'sheet') { this.view.cx = player.x; this.view.cz = player.z; this.view.span = GLANCE_SPAN; }
+      if (!this.grain) this.sizeCanvas();
+      if (this.grain) { this.drawMap(player); this.updateMapChrome(); }
+    }
+  }
+
+  set(key, el, value, prop = 'textContent') { if (this.cache[key] !== value) { this.cache[key] = value; el[prop] = value; } }
+
+  // the compass: the needle is the canoe's heading, the gold arrow on the rim is where the wind is going;
+  // it speaks (label, waves, full strength) when the wind matters, and is faint or away otherwise
+  updateCompass(ctx) {
+    const { player, wind } = ctx, e = this.el, s = this.settings;
+    if (!wind) return;
+    const H = player.waveHeightHere || 0;
+    const matters = wind.fresh || H > WAVE_MATTERS;
+    const mode = s ? s.compassMode : 'always';
+    const show = mode === 'always' || (mode === 'wind' && matters);
+    e.compass.classList.toggle('show', show);
+    e.compass.classList.toggle('loud', matters);
+    if (!show) return;
+    const hdg = bearingOf(player.heading);
+    this.set('needle', e.needle, `rotate(${hdg.toFixed(1)}deg)`, 'style');
+    e.needle.style.transform = `rotate(${hdg.toFixed(1)}deg)`;
+    e.windArrow.style.transform = `rotate(${((wind.from + 180) % 360).toFixed(1)}deg)`;
+    e.compass.querySelector('svg').setAttribute('aria-label', `Compass: heading ${compassLong(hdg)}; ${wind.label.toLowerCase()} from the ${wind.compassLong}`);
+    if (matters) {
+      this.set('clabel', e.compassLabel, `${wind.label} · ${wind.speed.toFixed(0)} m/s`, 'innerHTML');
+      e.compassLabel.innerHTML = `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s<br>from the ${wind.compassLong}`;
+      const f = player.forward, wd = wind.dir, cosRel = f.x * wd.x + f.z * wd.z;
+      const aspect = player.mode !== 'paddle' ? '' : Math.abs(cosRel) < 0.5 ? ' · beam on' : cosRel < 0 ? ' · on the bow' : ' · astern';
+      this.set('cwaves', e.compassWaves, `waves ${H.toFixed(1)} m${aspect}${wind.override != null ? ' · set by hand' : ''}`);
+    }
+  }
+
+  // arriving on a named lake, and the day card at dawn
+  updateTitles(ctx) {
+    const { player, day, wind, stats, outfitter, energy } = ctx, w = this.world;
+    if (ctx.shell) return; // the title card is up: nothing has happened yet
+    const id = player.mode === 'paddle' && !player.teleporting ? player.lakeId : 0;
+    if (id > 0 && id !== this.lastLakeId) {
+      const name = w.lakeName(id);
+      if (name) {
+        const l = w.lakes[id - 1], trip = outfitter && outfitter.trip;
+        const dayN = trip && trip.active ? Math.floor(outfitter.daysOut) + 1 : 0;
+        const kicker = `${dayN ? `Day ${dayN} · ` : ''}${clock12(day.hours)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`;
+        const parts = [];
+        if (trip && trip.active && stats) parts.push(stats.portages ? `${word(stats.portages)[0].toUpperCase()}${word(stats.portages).slice(1)} ${plural(stats.portages, 'portage')} from ${trip.fromName || 'the landing'}` : `Out from ${trip.fromName || 'the landing'}`);
+        if (stats && stats.km > 0.05) parts.push(`${fmtKm(stats.km)} km paddled`);
+        parts.push(lakeWords(l));
+        this.showPlace(kicker, name, parts.join(' · '));
+      }
+      this.lastLakeId = id;
+    } else if (id > 0) this.lastLakeId = id;
+    // dawn: the clock crossed sunrise
+    if (day) {
+      const rise = day.sunriseSunset.rise, h = day.hours, prev = this.lastHours;
+      if (rise != null && prev != null && prev < rise && h >= rise && h - prev < 1 && this.lastDawnDoy !== day.doy) {
+        this.lastDawnDoy = day.doy;
+        const trip = outfitter && outfitter.trip, dayN = trip && trip.active ? Math.floor(outfitter.daysOut) + 1 : 0;
+        const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
+        const food = energy ? (energy.food > 0 ? `${fmtDays(energy.food)} ${plural(energy.food, 'day')} of food` : 'the food pack is empty') : '';
+        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
+        this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayN ? `Day ${dayN}` : 'A new day', sub);
+      }
+      this.lastHours = h;
+    }
+  }
+
+  // one action line: what the player (or the rod) is saying, the key outlined, the rest of the line dimmer
+  updatePrompt(ctx) {
+    const { player, fishing } = ctx, e = this.el;
     const fu = fishing ? fishing.ui : null;
-    const id = player.lakeId;
-    const name = player.placeName || w.lakeName(id) || 'Unnamed water';
-    if (this.el.lake.textContent !== name) this.el.lake.textContent = name;
-    const { lat, lon } = w.toLatLon(player.x, player.z);
-    const kmh = (Math.abs(player.speed) * 3.6).toFixed(1);
-    const deep = player.onFoot ? 0 : Math.max(0, player.level - w.heightAt(player.x, player.z));
-    const lakeRec = id > 0 ? w.lakes[id - 1] : null;
-    const clar = lakeRec && lakeRec.secchi ? ` · ${lakeRec.secchi.toFixed(1)} m clarity${lakeRec.secchiMeasured ? '' : '*'}` : '';
-    const depthTxt = deep > 0.05 ? ` · ${deep.toFixed(1)} m deep${lakeRec && lakeRec.maxDepth ? ` (max ${lakeRec.maxDepth} m)` : ''}${clar}` : '';
-    const modeTxt = player.onFoot || player.mode === 'swim' ? player.modeLabel : fu && fu.rodUp ? 'Fishing' : 'Paddling';
-    if (wind && this.el.wind) {
-      const H = player.waveHeightHere;
-      this.el.wind.textContent = `${wind.label} · ${wind.speed.toFixed(0)} m/s from the ${wind.compass}${player.mode === 'paddle' && H > 0.2 ? ` · waves ${H.toFixed(1)} m` : ''}${wind.override != null ? ' (set by hand)' : ''}`;
-      this.el.windArrow.style.transform = `rotate(${(wind.from + 180 - 90).toFixed(0)}deg)`;
-    }
-    this.el.sub.textContent = `${clock ? clock + ' · ' : ''}${modeTxt} · ${kmh} km/h · ${lat.toFixed(5)}, ${lon.toFixed(5)} · ${player.altitude.toFixed(0)} m${depthTxt}${timeScale > 1 ? ` · ${timeScale}× speed` : ''}`;
-    if (this.el.rudder) { // the course bias: knob left of centre is a bias to port
-      const show = player.rudderShown;
-      this.el.rudder.classList.toggle('show', show);
-      if (show) this.el.rudderKnob.style.left = `${50 - player.rudder * 44}%`;
-    }
     const p = player.prompt || (fu && fu.message ? { key: null, text: fu.message } : null);
-    if (p) { const html = (p.key ? `<kbd>${p.key}</kbd>` : '') + p.text; if (this.el.prompt.innerHTML !== html) this.el.prompt.innerHTML = html; this.el.prompt.classList.add('show'); }
-    else this.el.prompt.classList.remove('show');
-    if (fu) this.drawFishing(fu);
-    this.el.gps.classList.toggle('linked', geo.linked);
-    this.el.gpsState.textContent = geo.linked ? (geo.enabled ? 'GPS sim: broadcasting to the extension' : 'GPS sim: extension installed, switched off') : 'GPS sim: extension not detected';
-    this.el.gpsCoords.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}  ·  hdg ${((90 - (player.heading * 180) / Math.PI + 360) % 360).toFixed(0)}°`;
-    if (this.el.tiles && w.tiles) {
-      const t = w.tiles;
-      const loading = t.queue.length + t.pending.length + t.workers.filter((k) => k.key).length;
-      const txt = loading ? `${t.readyTiles().length} tiles · ${loading} loading` : '';
-      if (this.el.tiles.textContent !== txt) this.el.tiles.textContent = txt;
+    if (!p) { e.prompt.classList.remove('show'); return; }
+    const key = p.key ? `<kbd>${esc(p.key)}</kbd>` : '';
+    let text = String(p.text || ''), main = text, hint = p.hint || '';
+    if (!hint) {
+      const m = text.match(/\s*(?:&nbsp;)?\s·\s(?:&nbsp;)?\s*/) || text.match(/&nbsp;·&nbsp;/);
+      if (m && m.index > 0) { main = text.slice(0, m.index); hint = text.slice(m.index + m[0].length); }
     }
-    if (!this.big) { this.view.cx = player.x; this.view.cz = player.z; this.view.span = SMALL_SPAN; }
-    this.drawMap(player);
+    const feel = /^feels like/i.test(hint);
+    const alt = /<kbd>/i.test(hint);
+    const html = `${key}<span class="main">${main}</span>${hint ? `<span class="hint${feel ? ' feel' : ''}${alt ? ' alt' : ''}">${alt ? '' : '· '}${hint}</span>` : ''}`;
+    this.set('prompt', e.prompt, html, 'innerHTML');
+    e.prompt.classList.add('show');
   }
 
-  // --- fishing: the spot readout, the lure row, the cast / tension meter and the catch log -------------------
-  drawFishing(u) {
-    const e = this.el, f = this.fishUi;
-    if (!e.spot) return;
-    const showSpot = !!(u.rodUp && u.spot);
+  // the balance arc above the action line while the hull is being worked by a sea
+  updateBalance(ctx) {
+    const { player, wind } = ctx, e = this.el, b = player.balance || 0;
+    const show = player.mode === 'paddle' && b > 0.01;
+    e.balance.classList.toggle('show', show);
+    this.el.air.classList.toggle('balance', show);
+    if (!show) return;
+    const f = player.forward, wd = wind ? wind.dir : { x: 0, z: 1 };
+    const side = Math.sign(f.x * wd.z - f.z * wd.x) || 1; // which gunwale the sea is pushing down
+    const th = side * clamp(b, 0, 1) * (Math.PI / 2);
+    e.balanceDot.setAttribute('cx', (140 + 110 * Math.sin(th)).toFixed(1));
+    e.balanceDot.setAttribute('cy', (120 - 110 * Math.cos(th)).toFixed(1));
+    e.balance.classList.toggle('hot', b > 0.6);
+    e.balance.querySelector('svg').setAttribute('aria-label', `Balance: ${b > 0.6 ? 'heeling hard' : b > 0.3 ? 'heeling' : 'steady'}`);
+  }
+
+  // the course gauge: the bias A/D set, a knob left of the middle is a bias to port
+  updateRudder(ctx) {
+    const { player } = ctx, e = this.el;
+    const show = !!player.rudderShown;
+    e.rudder.classList.toggle('show', show);
+    if (show) e.rudderKnob.style.left = `${50 - player.rudder * 44}%`;
+  }
+
+  // the status marks, bottom right at half strength: the time scale, the clock stopped, the GPS link, mute, tiles loading
+  marksBuild() {
+    const m = this.el.marks; if (!m) return;
+    m.innerHTML = `<span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
+      + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
+      + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
+      + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
+    this.mk = { speed: $('mark-speed'), clock: $('mark-clock'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+  }
+  updateMarks(ctx) {
+    const { ts, geo, day } = ctx, mk = this.mk, w = this.world; if (!mk) return;
+    const sp = ts > 1 ? `×${ts}` : '';
+    this.set('mspeed', mk.speed, sp); mk.speed.classList.toggle('on', !!sp);
+    mk.clock.classList.toggle('on', !!(day && !day.running && !ctx.shell));
+    mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
+    mk.mute.classList.toggle('on', !!(this.settings && this.settings.get('mute')));
+    let loading = 0;
+    if (w.tiles) { const t = w.tiles; loading = t.queue.length + t.pending.length + t.workers.filter((k) => k.key).length; }
+    this.loading = loading;
+    mk.tiles.classList.toggle('on', loading > 0);
+  }
+
+  // --- fishing: the spot card, the reticle, the lure strip, the tension line, the catch card -----------------
+  updateFishing(ctx) {
+    const { fishing } = ctx, e = this.el, f = this.fishUi, air = this.el.air;
+    const u = fishing ? fishing.ui : null;
+    if (!u) return;
+    const rod = !!u.rodUp;
+    air.classList.toggle('rod', rod);
+    // the spot card, top left
+    const showSpot = rod && !!(u.spot && (u.spot.where || u.spot.who));
     e.spot.classList.toggle('show', showSpot);
-    if (showSpot) { const txt = `${u.spot}${u.stringer ? ` · ${u.stringer} on the stringer` : ''}`; if (e.spot.textContent !== txt) e.spot.textContent = txt; }
-    e.lures.classList.toggle('show', !!u.rodUp && (u.state === 'ready' || u.state === 'charging'));
-    if (u.lures && f.lure !== u.lure) { e.lures.innerHTML = u.lures.map((l, i) => `<span class="${i === u.lure ? 'on' : ''}"><b>${i + 1}</b>${l.name}</span>`).join(''); f.lure = u.lure; }
-    if (u.power != null) {
-      e.meter.classList.add('show', 'cast');
-      e.meterFill.style.width = `${(u.power * 100).toFixed(0)}%`; e.meterFill.style.background = '';
-      e.meterLabel.textContent = 'Loading the cast';
-    } else if (u.fight) {
-      e.meter.classList.add('show'); e.meter.classList.remove('cast');
-      e.meterFill.style.width = `${(u.fight.tension * 100).toFixed(0)}%`;
-      e.meterFill.style.background = u.fight.danger > 0.3 ? '#e0563a' : u.fight.slack > 0.8 ? '#8fb0c9' : '#e8c270';
-      e.meterLabel.textContent = `Tension · ${u.fight.line.toFixed(0)} m of line out${u.fight.run ? ' · it is running' : ''}`;
-    } else e.meter.classList.remove('show', 'cast');
-    e.catchlog.classList.toggle('show', !!u.logOpen);
-    if (u.logOpen && (f.logVersion !== u.logVersion || !f.logOpen)) { e.catchlog.innerHTML = this.renderLog(u); f.logVersion = u.logVersion; }
-    f.logOpen = !!u.logOpen;
-  }
-
-  renderLog(u) {
-    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    const lb = (kg) => (kg * 2.2046).toFixed(1);
-    let html = `<h2>Catch log · ${u.log.length} fish</h2>`;
-    const bests = Object.values(u.bests || {}).sort((a, b) => b.length - a.length);
-    if (bests.length) html += `<div class="bests">${bests.map((b) => `<span><b>${esc(b.name || '')}</b> ${b.length} cm · ${b.weight} kg / ${lb(b.weight)} lb · ${esc(b.lake)}</span>`).join('')}</div>`;
-    if (!u.log.length) html += `<p class="empty">Nothing yet. Press F in the canoe to take up the rod, hold Space to cast.</p>`;
-    else {
-      const rows = u.log.slice(-60).reverse().map((c) => {
-        const d = new Date(c.at);
-        return `<tr><td>${esc(c.time)}</td><td class="${c.best ? 'best' : ''}">${esc(c.name)}${c.best ? ' ★' : ''}</td><td>${c.length} cm</td><td>${c.weight} kg / ${lb(c.weight)} lb</td><td>${esc(c.lake)}</td><td>${esc(c.lure)}</td><td>${c.kept ? 'kept' : 'released'}</td><td>${d.toLocaleDateString()}</td></tr>`;
-      }).join('');
-      html += `<table><thead><tr><th>Time</th><th>Species</th><th>Length</th><th>Weight</th><th>Lake</th><th>Lure</th><th></th><th>Day</th></tr></thead><tbody>${rows}</tbody></table>`;
+    if (showSpot) { this.set('spotWhere', e.spotWhere, u.spot.where || ''); this.set('spotWho', e.spotWho, u.spot.who || ''); }
+    this.set('stringer', e.stringer, u.stringer ? `${u.stringer} on the stringer` : '');
+    e.stringer.classList.toggle('show', rod && u.stringer > 0 && !f.catchShown);
+    // the lure strip while the cast is ready or loading
+    const strip = rod && (u.state === 'ready' || u.state === 'charging');
+    e.lures.classList.toggle('show', strip);
+    if (u.lures && f.lure !== u.lure) { e.lures.innerHTML = u.lures.map((l, i) => `<span class="${i === u.lure ? 'on' : ''}"><b>${i + 1}</b>${esc(l.name)}</span>`).join(''); f.lure = u.lure; }
+    // the reticle on the water, the cast ring filling round it while the cast loads
+    const aim = strip && u.aim && this.camera ? u.aim : null;
+    let onScreen = false;
+    if (aim) {
+      const v = this._v.set(aim.x, aim.y, aim.z).project(this.camera);
+      onScreen = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      if (onScreen) {
+        const z = (this.settings && this.settings.get('hudScale')) || 1;
+        const sx = ((v.x + 1) / 2) * window.innerWidth / z, sy = ((1 - v.y) / 2) * window.innerHeight / z;
+        e.reticle.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px)`;
+        const C = 2 * Math.PI * 44, fill = u.power != null ? clamp(u.power, 0, 1) : 0;
+        e.reticleRing.setAttribute('stroke-dasharray', `${(C * fill).toFixed(1)} ${C.toFixed(1)}`);
+        this.set('rdist', e.reticleDist, aim.dist > 0 ? `about ${Math.round(aim.dist)} m` : '');
+        e.reticle.style.opacity = aim.inReach ? '1' : '.55';
+      }
     }
-    html += `<p class="empty">★ personal best · L closes</p>`;
-    return html;
+    e.reticle.classList.toggle('show', !!aim && onScreen);
+    // the tension line
+    const ft = u.fight;
+    e.tension.classList.toggle('show', !!ft);
+    if (ft) {
+      const pct = `${(clamp(ft.tension, 0, 1) * 100).toFixed(1)}%`;
+      e.tensionFill.style.width = pct; e.tensionEnd.style.width = pct;
+      e.tension.classList.toggle('hot', ft.danger > 0.3); e.tension.classList.toggle('slack', ft.danger <= 0.3 && ft.slack > 0.8);
+      const html = `<span>Tension</span><span class="dot">·</span><span>${ft.line.toFixed(0)} m of line out</span>${ft.run ? '<span class="dot">·</span><span class="run">it is running</span>' : ft.slack > 0.8 ? '<span class="dot">·</span><span class="run">slack</span>' : ''}`;
+      this.set('tlabel', e.tensionLabel, html, 'innerHTML');
+    }
+    // the catch card: on a landing, for the hold-up or 8 s, whichever is longer
+    const L = u.landed;
+    const now = performance.now();
+    if (L && f.catchKey !== L.key) {
+      f.catchKey = L.key; f.catchUntil = now + CATCH_HOLD * 1000;
+      e.catchFish.innerHTML = fishSilhouette(L.species);
+      e.catchName.textContent = L.name;
+      e.catchSize.textContent = `${L.length} cm · ${L.weight} kg / ${(L.weight * 2.2046).toFixed(1)} lb`;
+      e.catchMeta.textContent = `${L.lake} · ${String(L.lure).toLowerCase()} · ${L.time}`;
+      e.catch.classList.toggle('pb', !!L.best);
+    }
+    const showCatch = !!L || (f.catchKey != null && now < f.catchUntil);
+    if (!showCatch) f.catchKey = null;
+    f.catchShown = showCatch;
+    e.catch.classList.toggle('show', showCatch);
+    air.classList.toggle('catch', showCatch);
   }
 
+  // --- the readout: every number that left the screen, while Tab is held ---------------------------------------
+  renderReadout(force = false) {
+    const ctx = this.ctx; if (!ctx) return;
+    const now = performance.now();
+    if (!force && now - (this.readoutAt || 0) < 250) return;
+    this.readoutAt = now;
+    const { player, geo, ts, day, wind, energy, tasks, outfitter, stats, fps } = ctx, w = this.world, s = this.settings;
+    const id = player.lakeId, lake = id > 0 ? w.lakes[id - 1] : null;
+    const name = player.placeName || w.lakeName(id) || 'Open water';
+    const trip = outfitter && outfitter.trip, dayN = trip && trip.active ? Math.floor(outfitter.daysOut) + 1 : 0;
+    const { lat, lon } = w.toLatLon(player.x, player.z);
+    const rows = [];
+    const row = (lab, html, cls = '') => rows.push(`<div class="sc">${lab}</div><div class="${cls}">${html}</div>`);
+    row('Where', `${lat.toFixed(5)}, ${lon < 0 ? '−' : ''}${Math.abs(lon).toFixed(5)} · ${player.altitude.toFixed(0)} m above the sea`);
+    const deep = player.onFoot ? 0 : Math.max(0, player.level - w.heightAt(player.x, player.z));
+    if (deep > 0.05 || lake) {
+      const parts = [];
+      if (deep > 0.05) parts.push(`${deep.toFixed(1)} m deep here${lake && lake.maxDepth ? `, ${Math.round(lake.maxDepth)} m at most` : ''}`);
+      if (lake && lake.secchi) parts.push(`clarity ${lake.secchi.toFixed(1)} m${lake.secchiMeasured ? ', sounded by the DNR' : ', by the look of it'}`);
+      if (parts.length) row('Water', parts.join(' · '));
+    }
+    const hdg = bearingOf(player.heading), today = stats ? stats.today : null;
+    row('Way', `${(Math.abs(player.speed) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}${today ? ` · ${fmtKm(today.km)} km and ${today.portages} ${plural(today.portages, 'portage')} today` : ''}`);
+    if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · waves ${(player.waveHeightHere || 0).toFixed(1)} m${wind.override != null ? ' · set by hand' : ''}`);
+    if (day) {
+      const { rise, set } = day.sunriseSunset, h = day.hours;
+      const light = set != null && h < set && (rise == null || h >= rise) ? `Sunset ${clock12(set)} · dark by ${clock12(Math.min(23.99, set + 0.8))}` : rise != null ? `Sunrise ${clock12(h < (rise || 0) ? rise : rise)}${h >= (set || 24) ? ' tomorrow' : ''}` : 'No sun today';
+      row('Light', `${light} · clock ${day.running ? `at ×${ts}` : 'stopped'}`);
+    }
+    if (energy) {
+      const v = energy.value, food = energy.food;
+      const meal = food <= 0 ? 'the pack is empty' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn';
+      row('Pack', `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>energy ${Math.round(v * 100)} % · ${food > 0 ? `${fmtDays(food)} ${plural(food, 'day')} of food` : 'no food'} · ${meal}`);
+    }
+    if (tasks) {
+      const open = tasks.active.length, done = tasks.active.filter((t) => t.status === 'done').length;
+      row('Tasks', open ? `${open - done} on the go${done ? ` · ${done} done, to turn in at any outfitter` : ''}` : 'nothing on the go · the board is at any outfitter');
+    }
+    const dev = s && s.get('devRows'), showFps = s && s.get('fps');
+    if (dev && geo) row('GPS sim', `${geo.linked ? (geo.enabled ? 'broadcasting to the extension' : 'extension installed, switched off') : 'extension not detected · this tab only'} · hdg ${hdg.toFixed(0)}°`, 'soft');
+    if (dev || showFps) {
+      const parts = [];
+      if (dev && w.tiles) parts.push(`${w.tiles.readyTiles().length} tiles in${this.loading ? `, ${this.loading} loading` : ''}`);
+      if (showFps && fps) parts.push(fps.text || '…');
+      if (parts.length) row('World', `${parts.join(' · ')} <span class="dev">(Developer rows)</span>`, 'soft');
+    }
+    const mode = s ? s.readoutMode : 'hold';
+    const foot = mode === 'always' ? 'Always on · Settings › HUD' : mode === 'toggle' ? '<kbd>Tab</kbd> hides it · Full density keeps it up' : '<kbd>Tab</kbd> held · let go to hide · Full density keeps it up';
+    const html = `<div class="head"><div class="name">${esc(name)}</div><div class="sc date">${dayN ? `Day ${dayN} · ` : ''}${day ? `${longDate(day.year, day.doy)} · ${clock12(day.hours)}` : ''}</div></div><div class="grid">${rows.join('')}</div><div class="foot">${foot}</div>`;
+    this.set('readout', this.el.readout, html, 'innerHTML');
+  }
+
+  // --- the map's chrome: the header band, the layer toggles, the footer scale -----------------------------------
+  updateMapChrome() {
+    const e = this.el, w = this.world, v = this.view;
+    const id = this.mode === 'sheet' ? w.lakeIdAt(v.cx, v.cz) || (this.player ? this.player.lakeId : 0) : (this.player ? this.player.lakeId : 0);
+    const name = w.lakeName(id) || 'open country';
+    const code = sheetCode(w, v.cx, v.cz);
+    this.set('mtitle', e.mapTitle, this.mode === 'sheet' ? `Fisher map ${code} · ${name}` : `${code} · ${name}`);
+    this.set('mspan', e.mapSpan, `${v.span >= 10000 ? Math.round(v.span / 1000) : (v.span / 1000).toFixed(v.span < 5000 ? 1 : 0)} km across`);
+    if (this.mode === 'sheet' && this.scaleInfo) {
+      const { bar, cssPx } = this.scaleInfo, txt = `${bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}`;
+      if (this.scaleShown !== txt + cssPx) { this.scaleShown = txt + cssPx; e.mapScalebar.style.width = `${cssPx.toFixed(0)}px`; e.mapScale.textContent = txt; }
+      const far = v.span / this.canvas.width >= 7;
+      const d = e.mapLayers.querySelector('[data-layer=depths]'); if (d) d.classList.toggle('far', far);
+    }
+  }
+
+  // --- the sheet itself ------------------------------------------------------------------------------------------
   drawMap(player) {
-    const w = this.world, ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
+    const w = this.world, ctx = this.mapCtx, W = this.canvas.width, H = this.canvas.height;
+    if (!W || !H) return;
     const v = this.view, spanX = v.span, mPerPx = spanX / W, spanZ = mPerPx * H;
     const x0 = v.cx - spanX / 2, z0 = v.cz - spanZ / 2;
     const k = W / 1040; // stroke and type scale: the sheet is designed at 1040 px across
+    const sheet = this.mode === 'sheet', lay = this.layers;
     const toPx = (x, z) => [(x - x0) / mPerPx, (z - z0) / mPerPx];
     const inView = (ax, az, bx, bz) => !(bx < x0 || ax > x0 + spanX || bz < z0 || az > z0 + spanZ);
     ctx.fillStyle = PAPER;
@@ -585,7 +949,7 @@ export class Hud {
           const [ox, oz] = w.tileOrigin(tx, ty);
           const [a, b] = toPx(ox, oz);
           ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
-          if (mPerPx < 7 && img.labels) depthLabels.push(...img.labels);
+          if (mPerPx < 7 && img.labels && lay.depths) depthLabels.push(...img.labels);
         }
         this.pruneMapTiles();
       }
@@ -593,7 +957,7 @@ export class Hud {
     ctx.drawImage(this.grain, 0, 0);
     // depth figures on the sounded lakes, in metres, haloed in the water colour
     if (depthLabels.length) {
-      ctx.font = `600 ${11 * k}px Georgia, "Times New Roman", serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineWidth = 3 * k; ctx.strokeStyle = `rgb(${WATER.join(',')})`; ctx.fillStyle = '#2d4f66'; ctx.lineJoin = 'round';
       for (const [lvl, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeText(String(lvl), a, b); ctx.fillText(String(lvl), a, b); }
       ctx.textBaseline = 'alphabetic';
@@ -601,8 +965,8 @@ export class Hud {
     // portages: red dashed, with the rod count beside the middle of the trail when there is room
     const close = mPerPx < 16, mid = mPerPx < 60;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.font = `italic 600 ${13 * k}px Georgia, "Times New Roman", serif`;
-    for (const p of w.portages) {
+    ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
+    if (lay.portages) for (const p of w.portages) {
       const [bx0, bz0, bx1, bz1] = p.bbox;
       if (!inView(bx0, bz0, bx1, bz1)) continue;
       ctx.beginPath();
@@ -615,7 +979,7 @@ export class Hud {
       }
     }
     // campsites: red dots with a pale centre
-    if (mid) {
+    if (mid && lay.campsites) {
       const r = (close ? 4.2 : 2.6) * k;
       for (const c of w.campsites) {
         if (!inView(c.x, c.z, c.x, c.z)) continue;
@@ -625,7 +989,7 @@ export class Hud {
       }
     }
     // task areas: a soft circle around the lake, never the spot
-    const hints = this.trip && this.trip.tasks ? this.trip.tasks.hints() : [];
+    const hints = lay.tasks && this.ctx && this.ctx.tasks ? this.ctx.tasks.hints() : [];
     for (const h of hints) {
       if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
       const [a, b] = toPx(h.x, h.z), r = h.r / mPerPx;
@@ -634,15 +998,17 @@ export class Hud {
       ctx.setLineDash([6 * k, 5 * k]); ctx.strokeStyle = 'rgba(160, 45, 35, 0.6)'; ctx.lineWidth = 1.6 * k; ctx.stroke(); ctx.setLineDash([]);
     }
     // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
-    ctx.font = `italic 600 ${(close ? 17 : 14) * k}px Georgia, "Times New Roman", serif`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
-    const minCells = Math.max(600, (5 * mPerPx) ** 2);
-    for (const l of w.lakes) {
-      if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz)) continue;
-      const [a, b] = toPx(l.cx, l.cz);
-      ctx.fillText(l.name.toUpperCase().split('').join(String.fromCharCode(8202)), a, b + 6 * k);
+    if (lay.lakes) {
+      ctx.font = `italic 600 ${(close ? 17 : 14) * k}px ${SERIF}`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
+      const minCells = Math.max(600, (5 * mPerPx) ** 2);
+      for (const l of w.lakes) {
+        if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz)) continue;
+        const [a, b] = toPx(l.cx, l.cz);
+        ctx.fillText(l.name.toUpperCase().split('').join(String.fromCharCode(8202)), a, b + 6 * k);
+      }
     }
     // entry points: the outfitters' docks, a pier with a shack at its root
-    ctx.font = `600 ${11 * k}px Georgia, serif`;
+    ctx.font = `600 ${11 * k}px ${SERIF}`;
     for (const ep of w.entryPoints) {
       if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
       const [a, b] = toPx(ep.x, ep.z);
@@ -678,9 +1044,14 @@ export class Hud {
       }
       ctx.restore();
     }
-    // the pin waiting for a confirmation
-    if (this.pin && this.big) {
+    // the pin waiting for a confirmation, and the pencil line from the canoe to it
+    if (this.pin && sheet) {
       const [a, b] = toPx(this.pin.x, this.pin.z);
+      if (inView(player.x, player.z, player.x, player.z)) {
+        const [pa, pb] = toPx(player.x, player.z);
+        ctx.save(); ctx.strokeStyle = '#4a4036'; ctx.lineWidth = 1.4 * k; ctx.setLineDash([2 * k, 5 * k]); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(pa, pb); ctx.quadraticCurveTo((pa + a) / 2, Math.min(pb, b) - Math.abs(a - pa) * 0.25, a, b); ctx.stroke(); ctx.restore();
+      }
       ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
       ctx.fillStyle = 'rgba(40, 25, 10, 0.25)'; ctx.beginPath(); ctx.ellipse(2, 3, 7, 3.5, 0, 0, 6.28); ctx.fill();
       ctx.fillStyle = '#c0392b'; ctx.strokeStyle = '#f4e9d6'; ctx.lineWidth = 1.8;
@@ -688,22 +1059,21 @@ export class Hud {
       ctx.fillStyle = '#f4e9d6'; ctx.beginPath(); ctx.arc(0, -20, 4, 0, 6.28); ctx.fill();
       ctx.restore();
     }
-    // compass and scale bar
+    // the north arrow
     ctx.save(); ctx.translate(W - 44 * k, 44 * k); ctx.scale(k, k);
     ctx.strokeStyle = '#4a3b26'; ctx.fillStyle = '#4a3b26'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(0, 22); ctx.lineTo(0, -22); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(-6, -10); ctx.lineTo(6, -10); ctx.closePath(); ctx.fill();
-    ctx.font = '600 12px Georgia, serif'; ctx.textAlign = 'center'; ctx.fillText('N', 0, -30);
+    ctx.font = `600 12px ${SERIF}`; ctx.textAlign = 'center'; ctx.fillText('N', 0, -30);
     ctx.restore();
-    const want = 150 * k * mPerPx; // a round distance close to 150 px
-    const bar = [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].reduce((best, d) => (Math.abs(d - want) < Math.abs(best - want) ? d : best), 500);
+    // the scale: a round distance close to 150 px, drawn on the glance, carried by the footer band on the sheet
+    const want = (sheet ? 96 * (W / this.canvas.getBoundingClientRect().width || 1) : 150 * k) * mPerPx;
+    const bar = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].reduce((best, d) => (Math.abs(d - want) < Math.abs(best - want) ? d : best), 500);
     const bpx = bar / mPerPx;
-    ctx.fillStyle = '#4a3b26'; ctx.fillRect(24 * k, H - 28 * k, bpx, 3 * k); ctx.fillRect(24 * k, H - 34 * k, 2 * k, 9 * k); ctx.fillRect(24 * k + bpx - 2 * k, H - 34 * k, 2 * k, 9 * k);
-    ctx.font = `600 ${12 * k}px Georgia, serif`; ctx.textAlign = 'left'; ctx.fillText(`${bar / 1000} km`, 24 * k + bpx + 8 * k, H - 26 * k);
-    if (this.big) {
-      ctx.font = `italic ${12 * k}px Georgia, serif`; ctx.fillStyle = 'rgba(74, 59, 38, 0.75)'; ctx.textAlign = 'right';
-      ctx.fillText('drag to pan · wheel to zoom · click to pick a landing · M or Esc to close', W - 24 * k, H - 26 * k);
-      if (mPerPx < FINE_M_PER_PX) { ctx.textAlign = 'left'; ctx.fillText('lake depths in metres where the DNR has sounded the lake', 24 * k, H - 46 * k); }
+    if (sheet) this.scaleInfo = { bar, cssPx: bpx / (W / (this.canvas.getBoundingClientRect().width || W)) };
+    else {
+      ctx.fillStyle = '#4a3b26'; ctx.fillRect(24 * k, H - 28 * k, bpx, 3 * k); ctx.fillRect(24 * k, H - 34 * k, 2 * k, 9 * k); ctx.fillRect(24 * k + bpx - 2 * k, H - 34 * k, 2 * k, 9 * k);
+      ctx.font = `600 ${12 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.fillText(bar >= 1000 ? `${bar / 1000} km` : `${bar} m`, 24 * k + bpx + 8 * k, H - 26 * k);
     }
   }
 }

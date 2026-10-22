@@ -3,6 +3,10 @@ import { mulberry32, noise2, smoothstep, clamp } from './rng.js';
 // The day's wind. Each morning rolls a character for the day (a dead-calm day, a breezy one, a blow), the
 // breeze builds through the afternoon and eases at dusk, gusts ride on top, and the direction veers slowly.
 // Speed is in metres per second at the water; direction is the compass bearing the wind blows FROM.
+const POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const POINTS_LONG = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+export const FRESH = 8;        // m/s: a fresh breeze (Beaufort 5) and up is when the wind matters
+
 export class Wind {
   constructor(seed = 11) {
     this.rng = mulberry32(seed);
@@ -17,8 +21,12 @@ export class Wind {
 
   // unit vector the wind blows TOWARD, in world xz (x east, z south)
   get dir() { const a = ((this.from + 180) * Math.PI) / 180; return { x: Math.sin(a), z: -Math.cos(a) }; }
-  get compass() { return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(this.from / 45) % 8]; }
-  get label() { const s = this.speed; return s < 1 ? 'calm' : s < 3.5 ? 'light air' : s < 6.5 ? 'breezy' : s < 10 ? 'windy' : 'a blow'; }
+  get point() { return Math.round(this.from / 45) % 8; }
+  get compass() { return POINTS[this.point]; }
+  get compassLong() { return POINTS_LONG[this.point]; }
+  // the Beaufort name for the speed
+  get label() { const s = this.speed; return s < 0.5 ? 'Calm' : s < 1.6 ? 'Light air' : s < 3.4 ? 'Light breeze' : s < 5.5 ? 'Gentle breeze' : s < 8 ? 'Moderate breeze' : s < 10.8 ? 'Fresh breeze' : s < 13.9 ? 'Strong breeze' : 'Near gale'; }
+  get fresh() { return this.speed >= FRESH; }
 
   rollDay() { this.day = 0.2 + Math.pow(this.rng(), 1.4) * 1.6; this.from = (this.from + (this.rng() - 0.5) * 160 + 360) % 360; }
 

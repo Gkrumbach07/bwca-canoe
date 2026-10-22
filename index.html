@@ -4,177 +4,195 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BWCA Canoe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Alegreya+Sans+SC:wght@500;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
   <style>
-    :root { color-scheme: dark; }
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1a24; font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #f4efe4; }
+    /* The system (see docs: two materials). Air: cream type set straight on the scene, no boxes. Paper: a cream
+       sheet with an ink voice, over a scrim. Flat colours only. The HUD's own rules live in src/hud.css, the
+       title / settings / controls cards in src/shell.css. */
+    :root {
+      color-scheme: dark;
+      --deep: #0e1b22; --cream: #f3ecdd; --gold: #dcb469; --ember: #d9663f; --moss: #8fbf7a; --sky: #9fc4d8; --pencil: #4a4036;
+      --paper: #ebe2cb; --paper-deep: #ddd1b3; --paper-card: #f1e9d4; --paper-note: #f4ecd8; --edge: #c6b690; --edge-deep: #b7a784;
+      --ink: #2a2016; --ink-soft: #6a5a45; --ink-faint: #9a8a70; --map-red: #b4321f; --lake-blue: #2d4f66;
+      --cream-72: rgba(243, 236, 221, .72); --cream-50: rgba(243, 236, 221, .5); --cream-65: rgba(243, 236, 221, .65); --cream-86: rgba(243, 236, 221, .86);
+      --serif: Alegreya, Georgia, "Times New Roman", serif;
+      --sans: "Alegreya Sans", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      --sc: "Alegreya Sans SC", "Alegreya Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --pencil-font: Caveat, "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+      --air-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+      --hud: 1; /* HUD size (Settings › HUD) */
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--deep); font-family: var(--sans); color: var(--cream); }
     #app { position: fixed; inset: 0; }
     canvas.game { display: block; width: 100%; height: 100%; }
-    .hud { position: fixed; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
-    #lake { top: 18px; left: 20px; font-size: 26px; font-weight: 600; letter-spacing: .01em; }
-    #sub { top: 52px; left: 20px; font-size: 13px; opacity: .85; line-height: 1.5; }
-    #wind { top: 76px; left: 20px; font-size: 13px; opacity: .85; }
-    #windarrow { display: inline-block; margin-right: 7px; transition: transform .6s; }
-    #prompt { left: 50%; bottom: 60px; transform: translateX(-50%); font-size: 18px; white-space: nowrap; background: rgba(10, 24, 32, .6); padding: 10px 18px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); opacity: 0; transition: opacity .2s; }
-    #prompt.show { opacity: 1; }
-    #rudder { left: 50%; bottom: 132px; transform: translateX(-50%); width: 180px; opacity: 0; transition: opacity .25s; }
-    #rudder.show { opacity: 1; }
-    #rudder .track { position: relative; height: 10px; background: rgba(10, 24, 32, .6); border: 1px solid rgba(255,255,255,.25); border-radius: 6px; }
-    #rudder .mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.45); }
-    #rudder .knob { position: absolute; top: -3px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #f4efe4; box-shadow: 0 1px 2px rgba(0,0,0,.5); transition: left .08s linear; }
-    #rudder .label { position: absolute; left: 0; right: 0; top: -18px; text-align: center; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
-    #prompt kbd { background: #f4efe4; color: #16303a; border-radius: 5px; padding: 1px 7px; font-weight: 700; font-family: inherit; margin-right: 6px; }
-    #help { right: 20px; bottom: 18px; font-size: 12px; opacity: .7; text-align: right; line-height: 1.6; }
-    #minimap { position: fixed; top: 18px; right: 20px; width: 260px; height: 170px; border-radius: 6px; border: 3px solid #d8ccb0; background: #e9e1cc; box-shadow: 0 4px 16px rgba(0,0,0,.4); image-rendering: auto; cursor: pointer; z-index: 3; touch-action: none; }
-    #minimap.big { top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); border-width: 6px; border-radius: 4px; box-shadow: 0 18px 60px rgba(0,0,0,.55); cursor: grab; }
-    #minimap.big.grabbing { cursor: grabbing; }
-    #mapdim { position: fixed; inset: 0; background: rgba(6, 16, 24, .5); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 2; }
-    #mapdim.show { opacity: 1; pointer-events: auto; }
-    #tp { position: fixed; transform: translate(-50%, -100%); display: none; z-index: 4; font: 14px Georgia, "Times New Roman", serif; color: #2c2114; background: #f4ecd8; border: 1.5px solid #8a7250; border-radius: 6px; padding: 8px 10px 8px 12px; box-shadow: 0 6px 20px rgba(0,0,0,.35); white-space: nowrap; }
-    #tp.show { display: flex; align-items: center; gap: 10px; }
-    #tp::after { content: ''; position: absolute; left: 50%; bottom: -8px; width: 12px; height: 12px; background: #f4ecd8; border-right: 1.5px solid #8a7250; border-bottom: 1.5px solid #8a7250; transform: translateX(-50%) rotate(45deg); }
-    #tp button { font: 600 13px Georgia, serif; border-radius: 4px; padding: 4px 12px; cursor: pointer; border: 1.5px solid #8a7250; background: #e9e1cc; color: #2c2114; }
-    #tp button.go { background: #c0392b; border-color: #8e2a20; color: #fbf3e4; }
-    #tp button:hover { filter: brightness(1.06); }
-    #gps { position: fixed; top: 196px; right: 20px; width: 260px; box-sizing: border-box; font-size: 12px; background: rgba(10, 24, 32, .55); border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
-    #gps .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e0a030; margin-right: 6px; vertical-align: middle; }
-    #gps.linked .dot { background: #58d66b; }
-    #gps b { font-variant-numeric: tabular-nums; }
-    #tiles { position: fixed; top: 254px; right: 20px; width: 260px; box-sizing: border-box; font-size: 11px; opacity: .6; text-align: right; }
-    #entry { position: fixed; top: 96px; left: 20px; font: 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #f4efe4; background: rgba(10, 24, 32, .6); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 5px 8px; max-width: 260px; }
-    #entry:focus { outline: 1px solid #e8c270; }
-    #trip { top: 134px; left: 20px; font-size: 13px; opacity: .9; }
-    #trip-bar { display: inline-block; width: 92px; height: 7px; background: rgba(255,255,255,.18); border-radius: 4px; vertical-align: middle; margin-right: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,.18); }
-    #trip-fill { display: block; height: 100%; width: 100%; background: #8fd38f; transition: width .4s, background .4s; }
-    #trip.low #trip-text { color: #ffb08a; }
-    #note { left: 50%; bottom: 112px; transform: translateX(-50%); font: italic 16px Georgia, "Times New Roman", serif; color: #f4efe4; background: rgba(10, 24, 32, .55); padding: 7px 16px; border-radius: 8px; opacity: 0; transition: opacity .35s; white-space: nowrap; max-width: 90vw; }
-    #note.show { opacity: 1; }
-    #paneldim { position: fixed; inset: 0; background: rgba(6, 16, 24, .45); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 4; }
-    #paneldim.show { opacity: 1; pointer-events: auto; }
-    #outfitter { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(900px, 92vw); max-height: 86vh; overflow: auto; box-sizing: border-box; display: none; z-index: 5; font: 15px Georgia, "Times New Roman", serif; color: #2c2114; background: #f4ecd8; border: 2px solid #8a7250; border-radius: 6px; box-shadow: 0 18px 60px rgba(0,0,0,.55); padding: 18px 24px 20px; }
-    #outfitter.show { display: block; }
-    #outfitter h2 { margin: 0; font-size: 27px; font-weight: 600; letter-spacing: .01em; }
-    #outfitter .sub { opacity: .75; font-style: italic; margin-top: 3px; }
-    #outfitter .cols { display: grid; grid-template-columns: 1fr 1.35fr 1fr; gap: 22px; margin-top: 16px; }
-    #outfitter h3 { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 8px; border-bottom: 1px solid #c9b995; padding-bottom: 4px; font-weight: 600; }
-    #outfitter p { margin: 6px 0; line-height: 1.45; }
-    #outfitter button { font: 600 13px Georgia, "Times New Roman", serif; border-radius: 4px; padding: 5px 12px; cursor: pointer; border: 1.5px solid #8a7250; background: #e9e1cc; color: #2c2114; }
-    #outfitter button:hover { filter: brightness(1.06); }
-    #outfitter button.go { background: #c0392b; border-color: #8e2a20; color: #fbf3e4; }
-    #outfitter button.quiet { background: transparent; opacity: .85; }
-    #outfitter .close { position: absolute; top: 8px; right: 12px; border: none; background: none; font-size: 24px; color: #8a7250; padding: 2px 6px; }
-    #outfitter .days { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; }
-    #outfitter .days b { font-size: 24px; min-width: 1.4em; text-align: center; }
-    #outfitter .days button { width: 32px; padding: 3px 0; font-size: 16px; }
-    #outfitter .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
-    #outfitter .task { border: 1px solid #d5c6a4; border-radius: 5px; padding: 8px 10px; margin-bottom: 8px; background: rgba(255,255,255,.35); }
-    #outfitter .task.done { border-color: #7a9a5a; background: rgba(140, 180, 110, .18); }
-    #outfitter .task .kind, #outfitter .kind-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
-    #outfitter .kind-head { margin: 12px 0 6px; }
-    #outfitter .task .clue { margin: 4px 0 7px; line-height: 1.45; }
-    #outfitter .tag { font-size: 13px; font-style: italic; color: #3f5a2a; }
-    #outfitter .muted { opacity: .7; font-style: italic; }
-    #outfitter ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.5; }
-    #evac { position: fixed; inset: 0; background: #0b1a24; opacity: 0; pointer-events: none; transition: opacity 1.4s; z-index: 6; display: flex; align-items: center; justify-content: center; text-align: center; font: italic 19px Georgia, "Times New Roman", serif; color: #f4efe4; line-height: 1.7; padding: 0 10vw; }
-    #evac.show { opacity: 1; pointer-events: auto; }
-    #evac b { font-style: normal; font-size: 24px; }
-    @media (max-width: 760px) { #outfitter .cols { grid-template-columns: 1fr; } }
-    #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 30%, #1f4e5c, #0b1a24 70%); z-index: 10; transition: opacity .6s; }
-    #loading h1 { font-weight: 600; font-size: 34px; margin: 0 0 6px; }
-    #loading p { margin: 0; opacity: .8; font-size: 14px; }
-    #loading .bar { width: 260px; height: 6px; background: rgba(255,255,255,.15); border-radius: 3px; margin-top: 22px; overflow: hidden; }
-    #loading .bar i { display: block; height: 100%; width: 0; background: #e8c270; transition: width .2s; }
+    /* the loading card: flat deep, the name, a gold bar */
+    #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--deep); z-index: 10; transition: opacity .6s; }
+    #loading h1 { margin: 0 0 8px; font: 500 48px/1 var(--serif); letter-spacing: -.005em; }
+    #loading p { margin: 0; font-size: 15px; color: var(--cream-72); }
+    #loading .bar { width: 260px; height: 3px; background: rgba(243, 236, 221, .18); margin-top: 26px; overflow: hidden; }
+    #loading .bar i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .2s; }
     #loading.done { opacity: 0; pointer-events: none; }
-    #credit { position: fixed; left: 20px; bottom: 18px; font-size: 11px; opacity: .55; }
-    #credit a { color: inherit; }
-    /* fishing: the spot readout, the lure row, the cast / tension meter and the catch log */
-    #spot { top: 134px; left: 20px; font-size: 13px; opacity: .9; max-width: 440px; line-height: 1.5; display: none; }
-    #spot.show { display: block; }
-    #lures { left: 50%; bottom: 112px; transform: translateX(-50%); display: none; gap: 6px; font-size: 12px; white-space: nowrap; }
-    #lures.show { display: flex; }
-    #lures span { background: rgba(10, 24, 32, .55); border: 1px solid rgba(255,255,255,.15); border-radius: 7px; padding: 4px 9px; }
-    #lures span.on { background: #f4efe4; color: #16303a; font-weight: 600; }
-    #lures b { font-weight: 700; margin-right: 5px; opacity: .75; }
-    #meter { left: 50%; bottom: 150px; transform: translateX(-50%); width: 280px; display: none; }
-    #meter.show { display: block; }
-    #meter .track { position: relative; height: 10px; background: rgba(10, 24, 32, .6); border: 1px solid rgba(255,255,255,.2); border-radius: 6px; overflow: hidden; }
-    #meter .safe { position: absolute; left: 28%; width: 50%; top: 0; bottom: 0; background: rgba(120, 200, 120, .22); }
-    #meter .red { position: absolute; left: 80%; right: 0; top: 0; bottom: 0; background: rgba(220, 80, 60, .35); }
-    #meter.cast .safe, #meter.cast .red { display: none; }
-    #meter .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #e8c270; }
-    #meter.cast .fill { background: #8fc9e8; }
-    #meter .label { font-size: 12px; margin-top: 5px; text-align: center; opacity: .9; }
-    #catchlog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(760px, 92vw); max-height: 80vh; overflow: auto; background: #f4ecd8; color: #2c2114; border: 6px solid #d8ccb0; border-radius: 4px; box-shadow: 0 18px 60px rgba(0,0,0,.55); font: 14px Georgia, "Times New Roman", serif; padding: 18px 22px; display: none; z-index: 5; box-sizing: border-box; }
-    #catchlog.show { display: block; }
-    #catchlog h2 { margin: 0 0 10px; font-size: 20px; font-weight: 600; letter-spacing: .04em; }
-    #catchlog table { width: 100%; border-collapse: collapse; }
-    #catchlog th, #catchlog td { text-align: left; padding: 4px 6px; border-bottom: 1px solid rgba(90, 70, 40, .2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-    #catchlog th { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; font-weight: 600; }
-    #catchlog .best { color: #b4321f; font-weight: 600; }
-    #catchlog .bests { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 12px; font-size: 13px; }
-    #catchlog .bests b { color: #2d4f66; }
-    #catchlog .empty { opacity: .7; font-style: italic; margin: 8px 0 0; }
   </style>
 </head>
 <body>
   <div id="app"></div>
-  <div id="lake" class="hud">Lake One</div>
-  <div id="sub" class="hud"></div>
-  <div id="wind" class="hud"><span id="windarrow">➤</span><span id="windtext"></span></div>
-  <select id="entry" title="Teleport to a BWCA entry point"><option value="">Go to an entry point…</option></select>
-  <div id="spot" class="hud"></div>
-  <div id="meter" class="hud"><div class="track"><i class="safe"></i><i class="red"></i><i class="fill" id="meter-fill"></i></div><div class="label" id="meter-label"></div></div>
-  <div id="lures" class="hud"></div>
-  <div id="trip" class="hud"><span id="trip-bar"><i id="trip-fill"></i></span><span id="trip-text"></span></div>
-  <div id="note" class="hud"></div>
-  <div id="rudder" class="hud"><div class="track"><i class="mid"></i><i class="knob"></i><span class="label">course</span></div></div>
-  <div id="prompt" class="hud"></div>
-  <div id="catchlog"></div>
-  <div id="help" class="hud">
-    <b>W/S</b> paddle &nbsp; <b>A/D</b> set the course (it holds; bring it back to the middle to run straight) &nbsp; on foot <b>WASD</b> walks where the view points &nbsp; <b>Shift</b> hustle &nbsp; <b>Space</b> brace in waves<br/>
-    <b>F</b> fishing rod &nbsp; <b>Space / mouse</b> cast, set the hook, reel &nbsp; <b>1-5</b> lures &nbsp; <b>L</b> catch log &nbsp; <b>G</b> eat<br/>
-    <b>E</b> go ashore / launch / set the canoe down / outfitter / pick up &nbsp; <b>Q</b> shoulder it / leave it &nbsp; <b>M</b> map &nbsp; <b>V</b> view &nbsp; <b>1-3</b> game speed &nbsp; <b>R</b> reflections<br/>
-    <b>[ ]</b> time of day &nbsp; <b>- =</b> date &nbsp; <b>P</b> pause time &nbsp; <b>N</b> sound &nbsp; <b>, .</b> wind &nbsp; <b>/</b> veer &nbsp; <b>;</b> let the wind be &nbsp; <b>Esc</b> menu<br/>
-    mouse to look (first person: the view follows the cursor; third person: drag to orbit, and on foot the view stays where you left it) &nbsp; wheel to zoom &nbsp; settings: steer the canoe toward the cursor &nbsp; on the map: drag, wheel, click a spot to paddle in there
+
+  <!-- Air: the HUD, type set on the scene (src/hud.js, src/hud.css) -->
+  <div id="air">
+    <div id="compass" class="fade" aria-live="off">
+      <div class="sc n">N</div>
+      <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Compass">
+        <circle cx="48" cy="48" r="44" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M48 4v7M92 48h-7M48 92v-7M4 48h7" stroke="currentColor" stroke-width="1.5"/>
+        <g id="compass-needle"><polygon points="48,14 52,48 44,48" fill="currentColor"/><polygon points="48,82 52,48 44,48" fill="currentColor" fill-opacity="0.35"/></g>
+        <g id="compass-wind"><polygon points="48,0 42,9 54,9" fill="#dcb469"/><rect class="loud" x="46.5" y="11" width="3" height="10" fill="#dcb469"/><path class="loud" d="M30 9q4 -3 8 0t8 0t8 0t8 0" stroke="#dcb469" stroke-width="1.5" fill="none"/></g>
+      </svg>
+      <div class="sc wlabel" id="compass-label"></div>
+      <div class="waves" id="compass-waves"></div>
+    </div>
+    <div id="readout" class="fade"></div>
+    <div id="spot" class="fade">
+      <div class="sc dim">The spot</div>
+      <div class="where" id="spot-where"></div>
+      <div class="who" id="spot-who"></div>
+    </div>
+    <div id="reticle">
+      <svg width="112" height="112" viewBox="0 0 112 112" role="img" aria-label="Cast reticle">
+        <circle cx="56" cy="56" r="44" fill="none" stroke="#f3ecdd" stroke-opacity="0.3" stroke-width="3"/>
+        <circle id="reticle-ring" cx="56" cy="56" r="44" fill="none" stroke="#9fc4d8" stroke-width="3" stroke-dasharray="0 276.46" transform="rotate(-90 56 56)" stroke-linecap="round"/>
+        <circle cx="56" cy="56" r="4.5" fill="#f3ecdd"/>
+        <path d="M56 36v8M56 68v8M36 56h8M68 56h8" stroke="#f3ecdd" stroke-width="1.5"/>
+      </svg>
+      <div class="dist" id="reticle-dist"></div>
+    </div>
+    <div id="place" class="fade">
+      <div class="rule"></div>
+      <div class="sc kicker" id="place-kicker"></div>
+      <div class="name" id="place-name"></div>
+      <div class="sub" id="place-sub"></div>
+    </div>
+    <div id="lines"></div>
+    <div id="stringer" class="fade"></div>
+    <div id="catch" class="fade">
+      <svg id="catch-fish" width="112" height="56" viewBox="0 0 112 56" role="img" aria-label="The fish"></svg>
+      <div class="body">
+        <div class="head"><span class="name" id="catch-name"></span><span class="sc best" id="catch-best">★ Personal best</span></div>
+        <div class="size" id="catch-size"></div>
+        <div class="sc meta" id="catch-meta"></div>
+      </div>
+    </div>
+    <div id="balance" class="fade">
+      <svg width="280" height="130" viewBox="0 0 280 130" role="img" aria-label="Balance">
+        <path d="M30 120 A110 110 0 0 1 250 120" fill="none" stroke="#f3ecdd" stroke-opacity="0.55" stroke-width="2"/>
+        <path d="M30 120 A110 110 0 0 1 44.7 65" fill="none" stroke="#d9663f" stroke-width="4"/>
+        <path d="M235.3 65 A110 110 0 0 1 250 120" fill="none" stroke="#d9663f" stroke-width="4"/>
+        <path d="M140 10v10" stroke="#f3ecdd" stroke-width="2"/>
+        <g id="balance-cb" class="cb"><path d="M30 120 A110 110 0 0 1 44.7 65" fill="none" stroke="#f3ecdd" stroke-width="4" stroke-dasharray="3 5"/><path d="M235.3 65 A110 110 0 0 1 250 120" fill="none" stroke="#f3ecdd" stroke-width="4" stroke-dasharray="3 5"/></g>
+        <circle id="balance-dot" cx="140" cy="10" r="7" fill="#dcb469" stroke="#2a2016" stroke-width="1.2"/>
+      </svg>
+      <div class="sc label" id="balance-label">Balance</div>
+    </div>
+    <div id="tension" class="fade">
+      <div class="track">
+        <div class="base"></div><div class="safe"></div><div class="red"></div>
+        <div class="fill" id="tension-fill"></div><div class="end" id="tension-end"></div>
+      </div>
+      <div class="sc label" id="tension-label"></div>
+    </div>
+    <div id="rudder" class="fade"><div class="track"><i class="mid"></i><i class="knob" id="rudder-knob"></i></div><div class="sc label">Course</div></div>
+    <div id="lures" class="fade"></div>
+    <div id="prompt" class="fade"></div>
+    <div id="marks"></div>
   </div>
-  <div id="mapdim"></div>
-  <canvas id="minimap" width="1040" height="680"></canvas>
-  <div id="tp"><span id="tp-text">Paddle in here?</span><button id="tp-go" class="go" title="Enter">Paddle in</button><button id="tp-cancel" title="Esc">Cancel</button></div>
-  <div id="paneldim"></div>
-  <div id="outfitter">
-    <button class="close" data-act="close" title="Esc">×</button>
-    <h2 id="of-name">Outfitter</h2>
-    <div class="sub" id="of-sub"></div>
-    <div class="cols"><section id="of-trip"></section><section id="of-board"></section><section id="of-log"></section></div>
+
+  <!-- Paper: the map, the journal, the outfitter's counter (one at a time, on a scrim) -->
+  <div id="scrim"></div>
+  <div id="map" class="paper">
+    <div class="band head">
+      <span class="title" id="map-title"></span><span class="dot">·</span><span id="map-span"></span>
+      <span class="right" id="map-layers">
+        <button class="layer" data-layer="lakes" type="button"><i></i>Lakes</button>
+        <button class="layer" data-layer="portages" type="button"><i></i>Portages</button>
+        <button class="layer" data-layer="campsites" type="button"><i></i>Campsites</button>
+        <button class="layer" data-layer="tasks" type="button"><i></i>Tasks</button>
+        <button class="layer" data-layer="depths" type="button"><i></i>Depths</button>
+        <button class="stamp outline small" id="map-close" type="button" aria-label="Close the map (M or Esc)">Esc</button>
+      </span>
+      <span class="right glance-only" id="map-held"><kbd>M</kbd> held · press for the sheet</span>
+    </div>
+    <div class="body" id="map-body">
+      <canvas id="minimap" width="1040" height="680"></canvas>
+      <div id="pin">
+        <div class="pencil" id="pin-text">Paddle in here?</div>
+        <div class="row"><button class="stamp" id="pin-go" type="button">Paddle in</button><button class="stamp outline" id="pin-cancel" type="button">Not now</button><span class="sc keys">Enter · Esc</span></div>
+      </div>
+    </div>
+    <div class="band foot">
+      <span class="scale"><i id="map-scalebar"></i><span id="map-scale"></span></span>
+      <span class="leg"><i class="portage"></i>portage, rods</span>
+      <span class="leg"><i class="camp"></i>campsite</span>
+      <span class="leg"><i class="dock"></i>outfitter dock</span>
+      <span class="leg"><i class="task"></i>a task is somewhere in here</span>
+      <span class="leg"><i class="you"></i>you</span>
+      <span class="pencil hint">drag to pan · wheel to zoom · click a spot to paddle in · depths in metres where the DNR has sounded</span>
+    </div>
   </div>
-  <div id="evac"><div id="evac-text"></div></div>
-  <div id="gps"><span class="dot"></span><span id="gps-state">GPS sim: no extension</span><br/><b id="gps-coords">–</b></div>
-  <div id="tiles" class="hud"></div>
-  <div id="credit">Terrain: USGS 3DEP via AWS Terrain Tiles · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors</div>
-  <div id="fps" hidden></div>
-  <!-- the shell (src/title.js, src/settings.js, styles in src/shell.css): title / pause card, entry point list, settings -->
+  <div id="journal" class="paper spread" role="dialog" aria-label="Journal"></div>
+  <div id="outfitter" class="paper" role="dialog" aria-label="The outfitter's counter"></div>
+  <div id="evac">
+    <div class="card">
+      <div class="sc kicker" id="evac-kicker"></div>
+      <div class="rule"></div>
+      <p class="quote" id="evac-text"></p>
+      <p class="sub" id="evac-sub"></p>
+    </div>
+  </div>
+
+  <!-- the shell (src/title.js, src/settings.js, styles in src/shell.css): title / pause card, settings, controls -->
   <div id="shell" hidden>
     <section class="shell-card" id="title-card" aria-labelledby="title-name">
-      <h1 id="title-name"><small id="title-kicker">Boundary Waters Canoe Area Wilderness</small>Boundary Waters</h1>
-      <p class="shell-sub" id="title-sub">A quiet canoe trip across the real Boundary Waters: the lakes, the portages between them, the weather and the light of the day.</p>
-      <nav class="shell-menu" aria-label="Main menu">
-        <button id="btn-continue" class="primary" type="button">Paddle in</button>
-        <div class="shell-hint" id="continue-hint"></div>
-        <button id="btn-new" type="button">New trip</button>
-        <button id="btn-settings" type="button">Settings</button>
+      <div class="head">
+        <div class="sc kicker" id="title-kicker">Boundary Waters Canoe Area Wilderness</div>
+        <h1 id="title-name">Boundary<br>Waters</h1>
+        <div class="rule"></div>
+        <p class="sub" id="title-sub">A quiet canoe trip across the real Boundary Waters: the lakes, the portages between them, the weather and the light of the day.</p>
+      </div>
+      <nav class="menu" aria-label="Main menu">
+        <ul>
+          <li><button id="btn-continue" class="item" type="button">Paddle in</button><div class="hint" id="continue-hint"></div></li>
+          <li><button id="btn-new" class="item" type="button">New trip</button></li>
+          <li><button id="btn-settings" class="item" type="button">Settings</button></li>
+          <li><button id="btn-controls" class="item" type="button">Controls</button></li>
+        </ul>
+        <div class="entries" id="entry-card" hidden>
+          <div class="sc kicker">Where do you put in? · by permit number</div>
+          <p class="status" id="entry-status"></p>
+          <ul id="entry-list" role="list"></ul>
+        </div>
       </nav>
-      <p class="shell-keys"><kbd>↑</kbd><kbd>↓</kbd> choose &nbsp; <kbd>Enter</kbd> pick &nbsp; <kbd>Esc</kbd> back</p>
-      <p class="shell-credit">Terrain: USGS 3DEP via AWS Terrain Tiles · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors (ODbL) · Lake depths and clarity: Minnesota DNR · Everything else procedural, no assets. Your trip and settings are saved in this browser only.</p>
-    </section>
-    <section class="shell-card" id="entry-card" hidden aria-labelledby="entry-title">
-      <h2 id="entry-title">Where do you put in?</h2>
-      <p class="shell-status" id="entry-status">BWCA entry points, by permit number.</p>
-      <div class="shell-list" id="entry-list" role="list"></div>
-      <button class="shell-back" id="btn-entry-back" type="button">Back</button>
+      <p class="keys"><kbd>↑ ↓</kbd> choose <kbd>Enter</kbd> pick <kbd>Esc</kbd> back</p>
+      <p class="credit" id="title-credit">Terrain: USGS 3DEP via AWS Terrain Tiles · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors (ODbL) · Lake depths and clarity: Minnesota DNR · Everything else procedural, no assets. Your trip and settings are saved in this browser only.</p>
     </section>
     <section class="shell-card" id="settings-card" hidden aria-labelledby="settings-title">
-      <h2 id="settings-title">Settings</h2>
-      <form id="settings-form"></form>
-      <button class="shell-back" id="btn-settings-back" type="button">Back</button>
+      <div class="head">
+        <div class="sc kicker" id="settings-kicker">Boundary Waters</div>
+        <h1 id="settings-title">Settings</h1>
+      </div>
+      <div class="grid">
+        <nav class="snav" id="settings-nav" aria-label="Settings sections"></nav>
+        <form id="settings-form"></form>
+      </div>
+      <p class="keys"><kbd>↑ ↓</kbd> move <kbd>← →</kbd> change <kbd>Esc</kbd> back · settings apply as they change</p>
+    </section>
+    <section class="shell-card" id="controls-card" hidden aria-labelledby="controls-title">
+      <div class="head">
+        <div class="sc kicker" id="controls-kicker">Boundary Waters</div>
+        <h1 id="controls-title">Controls</h1>
+      </div>
+      <div class="keymap" id="keymap"></div>
+      <p class="keys"><kbd>Esc</kbd> back</p>
     </section>
   </div>
   <div id="loading"><h1>Boundary Waters</h1><p id="loading-msg">Loading terrain…</p><div class="bar"><i id="loading-bar"></i></div></div>

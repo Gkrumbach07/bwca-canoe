@@ -266,18 +266,19 @@ export class Player {
     this.placeOnWater(dt);
     this.emitWater(dt);
     if (this.balance >= 1) { this.capsize(); return; }
-    if (this.balance > 0.25) this.prompt = { key: null, text: brace ? 'Bracing…' : 'Broadside to the waves — quarter them, or hold Space to brace' };
+    const warning = this.balance > 0.25;
+    if (warning) this.prompt = brace ? { key: 'Space', text: 'Bracing… · hold it until the swell passes, or turn the bow into the waves' } : { key: 'Space', text: 'Brace · broadside to the swell: turn the bow into the waves, or hold still' };
     if (rodUp) return;
     // a portage landing takes the canoe to the trailhead; any other bank close enough lets you step out
     const land = this.suppressLanding ? null : this.nearestLanding();
     const gap = this.shoreGap();
     if (land) {
       const p = land.def;
-      this.prompt = { key: 'E', text: `Portage: ${p.name} · ${p.rods} rods (${p.lengthM} m)${gap ? ' &nbsp; <kbd>Q</kbd>Go ashore here' : ''}` };
+      if (!warning) this.prompt = { key: 'E', text: `Portage: ${p.name} · ${p.rods} rods (${p.lengthM} m)${gap ? ' &nbsp; <kbd>Q</kbd>Go ashore here' : ''}` }; // the sea's warning outranks the shore
       if (inp.pressed('KeyE')) this.landing = { land, t: 0 };
       else if (gap && inp.pressed('KeyQ')) this.goAshore(gap);
     } else if (gap) {
-      this.prompt = { key: 'E', text: 'Go ashore' };
+      if (!warning) this.prompt = { key: 'E', text: 'Go ashore' };
       if (inp.pressed('KeyE')) this.goAshore(gap);
     }
   }
@@ -696,6 +697,7 @@ export class Player {
     c.drop = { x, z, heading }; c.choice = false;
     this.restHull(x, z, heading, set ? 0 : 0.2);
     this.mode = 'walk'; this.canoe.state.mode = 'walk';
+    if (!set) this.dropCount = (this.dropCount || 0) + 1; // the journal counts the times the hull came down
     this.prompt = { key: null, text: set ? 'You set the canoe down' : 'The canoe came down' };
   }
 

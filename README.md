@@ -62,34 +62,51 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 
 ## Controls
 
+The HUD is quiet by default: the screen belongs to the lake, and nothing is drawn until it has something
+to say. Two materials: *Air* (cream type set straight on the scene: the compass top right, one action line
+bottom centre, the place title and the journal lines bottom left, the status marks bottom right at half
+strength) and *Paper* (cream sheets you take out and put back: the map, the journal, the outfitter's
+counter, one at a time on a scrim). The numbers live behind held keys.
+
 | Key | Action |
 |---|---|
 | W / S | paddle forward / back; on land, walk into the view / toward it |
 | A / D | afloat: set the course, a bias that holds like a J-stroke kept on one side (it stops at the middle on the way back; release and press again to go through). On land: walk to the view's left / right |
 | Shift | hustle (on foot, a jog) |
-| Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
-| E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
+| Space | brace (steadies the hull in a sea; you cannot paddle while bracing). The balance arc appears above the action line while the sea is working the hull |
+| E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter's counter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
 | Q | the second choice at a shore: go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it |
+| Tab | hold for the readout: where, water, way, wind, light, pack, tasks (Settings › HUD can make it a toggle, or keep it up; Developer adds the GPS sim, tiles, FPS and triangles) |
+| M | hold for a glance at the map (a half-sheet, 5 km across, slides up from the bottom right); press for the full sheet: drag to pan, wheel to zoom, click a spot and a pencil note asks before the canoe is moved; the header toggles the layers; M or Esc puts it away |
+| J | the journal: the trip (food, energy, kilometres, portages, lakes, nights, tasks on the go) on the left page, the tabs Catches / Tasks / Lakes / Gear on the right. L opens it too, for a while |
 | F | take up the fishing rod / put it down (see *Fishing*) |
 | G | eat a meal (when the canoe is still) |
-| Space / mouse button | with the rod up: hold to load a cast and let go (it goes where the cursor points); set the hook on a bite; hold to reel in a fight |
-| 1 – 5 | with the rod up: jig, spinner, spoon, crankbait, leech under a bobber |
-| K / E | keep the landed fish on the stringer / let it go |
-| L | the catch log |
-| M | enlarge the map (three times the area) |
+| Space / mouse button | with the rod up: hold to load a cast where the reticle sits on the water and let go; set the hook on a bite; hold to reel in a fight |
+| 1 – 5 | with the rod up: jig & twister, Mepps spinner, Daredevle spoon, jointed Rapala, bobber & leech (the strip above the action line) |
+| K / E | keep the landed fish on the stringer / let it go (the catch card bottom left carries the fish) |
 | V | switch between first-person and chase camera |
 | [ / ] | step the time of day back / forward an hour |
 | - / = | step the date back / forward a day (with Shift, a month) |
-| P | pause the clock |
+| P | pause the clock (a mark bottom right says so) |
 | N | mute / unmute the synthesized soundscape |
 | , / . | less / more wind (debug; `;` hands control back to the weather) |
 | / | veer the wind 30° (debug) |
 | R | toggle the canoe's water reflection (costs a second scene pass) |
-| 1 / 2 / 3 | game speed 1× / 2× / 4× |
-| Esc | pause: the title screen with Paddle on / New trip / Settings (Esc again, or Enter, resumes) |
+| 1 / 2 / 3 | game speed 1× / 2× / 4× (a ×2 mark bottom right while it is up) |
+| Esc | pause: the title screen with Paddle on / New trip / Settings / Controls (Esc again, or Enter, resumes); Controls shows this table in the game |
 | mouse | look around: in first person the view follows the cursor (right of centre looks right, up looks up), in third person drag to orbit (the view is yours: on foot it keeps its bearing while you turn, drifting round behind you only slowly as you walk); wheel zooms. *Settings → Steer the canoe toward the cursor*: while you hold W the bow turns toward the cursor's point on the water, A/D nudge, and nothing sticks |
-| click the map | teleport to the nearest open water (anywhere in the wilderness) |
-| entry point list | teleport to one of the BWCA entry point landings |
+| the map sheet | click a spot to paddle in there (teleport to the nearest open water, anywhere in the wilderness) |
+| the title's entry points | the list beside *New trip* starts a trip at one of the BWCA entry point landings |
+
+What the HUD says on its own: the compass sits at the top right at half strength, its gold arrow on the rim
+where the wind is going, and speaks (full strength, the Beaufort name, the speed, the waves) when the wind
+matters: a fresh breeze and up, or waves over 0.3 m. Arriving on a named lake puts its name up bottom left for
+four seconds with the day, the hour and the wind over it and the portages, kilometres and the lake's size
+under it; dawn puts the day up the same way. Notes (a meal, a find, a word from the outfitter) are journal
+lines bottom left, two at most, five seconds each. *Settings › HUD* has the density (Quiet: prompts and the
+balance arc only, the compass only when the wind matters; Standard; Full: the readout always on and a corner
+sheet of the map), and switches for the place titles, the compass, the readout, the corner sheet, the journal
+lines, the key hints, the HUD size and colour-blind marks.
 
 Paddle up to any bank and press **E**: the canoe noses in, you step out, and you choose to **E** shoulder
 it or **Q** leave it beached there, bow on the land. On foot WASD walks relative to the view (W into the
@@ -101,19 +118,20 @@ still, a slope past 40° stops you, trunks block you, and water past your knees 
 shows on the map; back within 3 m of it, **E** launches it (**Q** shoulders it instead), and if the water
 there is too shallow for a canoe the prompt says so. Carrying, **E** launches at any shore with a metre of
 water within reach, or sets the canoe down where there is none, and the hull overhead catches on trees
-and may come down. Walk into a campsite and the HUD names it.
+and may come down. Walk into a campsite and the readout names it.
 
 At a portage landing (the trail marker on shore) **E** instead takes the canoe to the trailhead and
-shoulders it, and the HUD counts the rods to go along the real trail; **Q** goes ashore there without
+shoulders it, and the action line counts the rods to go along the real trail; **Q** goes ashore there without
 portaging. Portage lengths are shown in rods, as on every BWCA map.
 
-The title and pause screens are keyboard-first: the arrows move between buttons, Enter picks, Esc goes
-back. Settings (`src/settings.js`): shadow map size (off / 1024 / 2048 / 4096), tree detail and cull
-distance, render scale (0.5–1 of the device pixel ratio), the canoe's water reflection, an FPS and
-triangle counter, volume and mute, mouse sensitivity and inverted look, and the game speed and camera a
-trip starts with. The canoe's position, heading, the day clock and the camera mode are saved every few
-seconds (`src/save.js`, one `localStorage` document per namespace under `bwca-canoe:`; other features
-keep their own namespace there) so **Paddle in** picks the trip up where it stopped.
+The title and pause screens are keyboard-first: the arrows move between items (← → between the menu and the
+entry points), Enter picks, Esc goes back. Settings (`src/settings.js`) come in sections: Display (shadow map
+size, tree detail and cull distance, render scale, the canoe's water reflection), Sound (volume, mute),
+Controls (mouse sensitivity, inverted look, cursor steering, the game speed and camera a trip starts with),
+HUD (above) and Developer (the GPS simulator's state, FPS and triangles and the tiles as rows of the readout).
+The canoe's position, heading, the day clock and the camera mode are saved every few seconds
+(`src/save.js`, one `localStorage` document per namespace under `bwca-canoe:`; the journal's trip tally
+is `stats`, the HUD settings `settings`) so **Paddle in** picks the trip up where it stopped.
 
 ## Wind and waves
 
@@ -150,9 +168,12 @@ and the wind all go in, and every factor is in the open (`window.__game.fishing.
 when the fish runs (tension down, line out). A fish's runs come in pulses and weaken as it tires; bigger fish
 pull harder and longer. Red for too long parts the line and the fish keeps the lure (another is tied on, no
 other penalty); slack for too long and it throws the hook. A landed fish is held up for a look (the camera comes round to the paddler's front for it), with its
-length and weight, and **K** keeps it (it hangs on a stringer over the port gunwale) or **E** lets it go.
-**L** opens the catch log: species, length, weight, lake, time and lure for every fish, with personal bests,
-kept in the browser between sessions.
+length and weight on a paper catch card bottom left, and **K** keeps it (it hangs on a stringer over the
+port gunwale) or **E** lets it go. The catch log lives in the journal (**J**, Catches tab): species, length,
+weight, lake, time and lure for every fish, with personal bests, kept in the browser between sessions. While
+the rod is up the spot card top left reads the water (the bed, the depth, the clarity, who lives there), the
+reticle sits where the cast will land and fills as the cast loads, and the lure strip sits above the action
+line.
 
 The map is drawn as a paper topographic sheet in the spirit of the Fisher and McKenzie maps: hypsometric
 tints, 10 m contours, pale-blue lakes with depth contours and figures where the DNR has sounded the lake
