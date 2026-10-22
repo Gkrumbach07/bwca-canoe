@@ -23,6 +23,7 @@ import { PNG } from 'pngjs';
 import { CFG, AREAS, log, makeProjection, makeGrid } from './config.mjs';
 import { prefetchTerrarium, makeSampler } from './elevation.mjs';
 import { loadOsm } from './osm-extract.mjs';
+import { loadBathymetry } from './bathymetry.mjs';
 
 // ---------- CLI ---------------------------------------------------------------------
 
@@ -43,12 +44,13 @@ function parseArgs(argv) {
 
 // ---------- rasterization -------------------------------------------------------------
 
-// Scanline rasterization with the even-odd rule across all rings of a polygon, rows [j0, j1).
+// Scanline rasterization with the even-odd rule across all rings of a polygon.
 function rasterizeLakes(lakes, grid, lakeId) {
   const { width, height, cell, originX, originZ } = grid;
   const xs = [];
-  lakes.forEach((lake, idx) => {
-    const id = idx + 1;
+  for (const lake of lakes) {
+    if (!lake.rings.length) continue;
+    const id = lake.id;
     const j0 = Math.max(0, Math.floor((lake.minZ - originZ) / cell)), j1 = Math.min(height - 1, Math.ceil((lake.maxZ - originZ) / cell));
     for (let j = j0; j <= j1; j++) {
       const zc = originZ + (j + 0.5) * cell;
@@ -67,7 +69,62 @@ function rasterizeLakes(lakes, grid, lakeId) {
         for (let i = ia; i <= ib; i++) lakeId[j * width + i] = id;
       }
     }
-  });
+  }
+}
+
+// Waterway centrelines become channels a few cells wide: every cell whose centre is within the half-width.
+function rasterizeCreeks(creeks, grid, lakeId) {
+  const { width, height } = grid;
+  for (const c of creeks) {
+    const hw = c.kind === 'stream' ? 7.5 : 11;
+    for (let s = 1; s < c.pts.length; s++) {
+      const [x1, z1] = c.pts[s - 1], [x2, z2] = c.pts[s];
+      const i0 = Math.max(0, grid.ci(Math.min(x1, x2) - hw)), i1 = Math.min(width - 1, grid.ci(Math.max(x1, x2) + hw));
+      const j0 = Math.max(0, grid.cj(Math.min(z1, z2) - hw)), j1 = Math.min(height - 1, grid.cj(Math.max(z1, z2) + hw));
+      const dx = x2 - x1, dz = z2 - z1, L2 = dx * dx + dz * dz || 1;
+      for (let j = j0; j <= j1; j++) {
+        const cz = grid.cz(j);
+        for (let i = i0; i <= i1; i++) {
+          const cx = grid.cx(i);
+          const t = Math.max(0, Math.min(1, ((cx - x1) * dx + (cz - z1) * dz) / L2));
+          const px = x1 + dx * t, pz = z1 + dz * t;
+          if ((cx - px) * (cx - px) + (cz - pz) * (cz - pz) <= hw * hw) lakeId[j * width + i] = c.id;
+        }
+      }
+    }
+  }
+}
+
+// Resample a polyline at roughly `step` metre spacing.
+function resample(pts, step) {
+  const out = [[pts[0][0], pts[0][1]]];
+  let carry = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, z0] = pts[i - 1], [x1, z1] = pts[i];
+    const L = Math.hypot(x1 - x0, z1 - z0);
+    let d = step - carry;
+    while (d <= L) { out.push([x0 + ((x1 - x0) * d) / L, z0 + ((z1 - z0) * d) / L]); d += step; }
+    carry = L - (d - step);
+  }
+  out.push([pts[pts.length - 1][0], pts[pts.length - 1][1]]);
+  return out;
+}
+
+// Weighted least-squares fit of a non-increasing sequence (pool adjacent violators).
+function monotoneDecreasing(v, w) {
+  const blocks = [];
+  for (let i = 0; i < v.length; i++) {
+    blocks.push({ sum: v[i] * w[i], w: w[i], n: 1 });
+    while (blocks.length > 1) {
+      const a = blocks[blocks.length - 2], b = blocks[blocks.length - 1];
+      if (a.sum / a.w >= b.sum / b.w) break;
+      blocks.pop(); a.sum += b.sum; a.w += b.w; a.n += b.n;
+    }
+  }
+  const out = new Float64Array(v.length);
+  let i = 0;
+  for (const b of blocks) { const m = b.sum / b.w; for (let q = 0; q < b.n; q++) out[i++] = m; }
+  return out;
 }
 
 // ---------- exact Euclidean distance transform (Felzenszwalb & Huttenlocher) ------------------
@@ -148,20 +205,35 @@ async function main() {
   const [latS, lonW] = proj.toLatLon(grid.originX, grid.originZ + H * cell);
   const [latN, lonE] = proj.toLatLon(grid.originX + W * cell, grid.originZ);
   const gridBox = { south: latS - 0.005, west: lonW - 0.01, north: latN + 0.005, east: lonE + 0.01 };
-  const [osm] = await Promise.all([loadOsm(gridBox), prefetchTerrarium(gridBox)]);
+  const [osm, bathy] = await Promise.all([loadOsm(gridBox), loadBathymetry(gridBox), prefetchTerrarium(gridBox)]);
   const sampler = makeSampler();
 
   // --- lakes in local metres, big first (small ponds and islands' inner lakes drawn later win)
   const lakes = [];
+  const inGrid = (minX, maxX, minZ, maxZ) => !(maxX < grid.originX || minX > grid.originX + W * cell || maxZ < grid.originZ || minZ > grid.originZ + H * cell);
   for (const l of osm.lakes) {
     const rings = l.rings.map((rg) => rg.map(([lat, lon]) => proj.toLocal(lat, lon)));
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     for (const rg of rings) for (const [x, z] of rg) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (z < minZ) minZ = z; if (z > maxZ) maxZ = z; }
-    if (maxX < grid.originX || minX > grid.originX + W * cell || maxZ < grid.originZ || minZ > grid.originZ + H * cell) continue;
+    if (!inGrid(minX, maxX, minZ, maxZ)) continue;
     lakes.push({ osm: l.osm, name: l.name, river: !!l.river, rings, minX, maxX, minZ, maxZ });
   }
+  // waterway centrelines: creeks and rivers mapped only as lines get a narrow channel of their own (rasterized
+  // first, so real polygons win wherever both exist); every line also carries the level profile below
+  const waterways = [];
+  for (const wway of osm.waterways || []) {
+    const pts = wway.pts.map(([lat, lon]) => proj.toLocal(lat, lon));
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const [x, z] of pts) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (z < minZ) minZ = z; if (z > maxZ) maxZ = z; }
+    if (!inGrid(minX, maxX, minZ, maxZ)) continue;
+    const c = { osm: `way/${wway.id}`, name: wway.name || null, kind: wway.kind, river: true, creek: true, rings: [], pts, minX, maxX, minZ, maxZ };
+    waterways.push(c);
+    lakes.push(c);
+  }
+  lakes.forEach((l, i) => { l.id = i + 1; });
   if (lakes.length >= 65535) throw new Error('too many water polygons for Uint16 ids');
   const lakeId = new Uint16Array(N);
+  rasterizeCreeks(waterways, grid, lakeId);
   rasterizeLakes(lakes, grid, lakeId);
   const nLakes = lakes.length;
   const lakeArea = new Uint32Array(nLakes + 1);
@@ -304,6 +376,147 @@ async function main() {
   }
   const lakeLevel = new Float32Array(nLakes + 1);
   for (let id = 1; id <= nLakes; id++) lakeLevel[id] = lakeBasin[id] >= 0 ? basins[lakeBasin[id]].level : 0;
+
+  // --- per-cell water level: lakes sit at their basin level; rivers and creeks follow a monotone profile
+  //     fitted along their OSM centreline (drawn downstream), robust to shoreline trees in the DEM and
+  //     anchored to the lakes they pass through, so rapids between lakes descend instead of terracing
+  const level = new Int16Array(N);
+  for (let k = 0; k < N; k++) if (lakeId[k]) level[k] = Math.round(lakeLevel[lakeId[k]] * 10);
+  {
+    const assigned = new Uint8Array(N);
+    const WIN = 15; // nodes (150 m) either side for the running low percentile
+    let fitted = 0, reversed = 0;
+    const win = [];
+    for (const wway of waterways) {
+      const pts = resample(wway.pts, cell);
+      const n = pts.length;
+      if (n < 2) continue;
+      let cells = new Int32Array(n), raw = new Float64Array(n), anchor = new Uint8Array(n);
+      let valid = 0;
+      for (let i = 0; i < n; i++) {
+        const ci = grid.ci(pts[i][0]), cj = grid.cj(pts[i][1]);
+        if (ci < 0 || cj < 0 || ci >= W || cj >= H) { cells[i] = -1; raw[i] = NaN; continue; }
+        const k = cj * W + ci; cells[i] = k; valid++;
+        const id = lakeId[k];
+        if (id && !isRiver[id]) { raw[i] = lakeLevel[id]; anchor[i] = 1; } else raw[i] = hraw[k] / 10;
+      }
+      if (valid < 2) continue;
+      let filt = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        if (anchor[i]) { filt[i] = raw[i]; continue; }
+        win.length = 0;
+        for (let j = Math.max(0, i - WIN); j <= Math.min(n - 1, i + WIN); j++) if (!Number.isNaN(raw[j])) win.push(raw[j]);
+        if (!win.length) { filt[i] = NaN; continue; }
+        win.sort((a, b) => a - b);
+        filt[i] = win[Math.floor(win.length * 0.2)];
+      }
+      // fill gaps outside the grid from the nearest fitted neighbour
+      for (let i = 0; i < n; i++) if (Number.isNaN(filt[i])) { let j = i - 1; while (j >= 0 && Number.isNaN(filt[j])) j--; if (j < 0) { j = i + 1; while (j < n && Number.isNaN(filt[j])) j++; } filt[i] = j >= 0 && j < n ? filt[j] : 0; }
+      // OSM ways should run downstream; when the DEM clearly climbs along the way, trust the DEM
+      const m = Math.max(3, Math.floor(n / 5));
+      let head = 0, tail = 0;
+      for (let i = 0; i < m; i++) { head += filt[i]; tail += filt[n - 1 - i]; }
+      if (tail > head + 1.5 * m) { cells = cells.reverse(); raw = raw.reverse(); anchor = anchor.reverse(); filt = filt.reverse(); reversed++; }
+      const w = new Float64Array(n);
+      for (let i = 0; i < n; i++) w[i] = anchor[i] ? 50 : 1;
+      const v = monotoneDecreasing(filt, w);
+      // never above the lake upstream nor below the lake downstream
+      let hi = Infinity;
+      for (let i = 0; i < n; i++) { if (anchor[i]) hi = raw[i]; else if (v[i] > hi) v[i] = hi; }
+      let lo = -Infinity;
+      for (let i = n - 1; i >= 0; i--) { if (anchor[i]) lo = raw[i]; else if (v[i] < lo) v[i] = lo; }
+      for (let i = 0; i < n; i++) {
+        const k = cells[i];
+        if (k >= 0 && lakeId[k] && isRiver[lakeId[k]]) { level[k] = Math.round(v[i] * 10); assigned[k] = 1; }
+      }
+      fitted++;
+    }
+    // spread the fitted levels across the river's width and along stretches without a line of their own
+    const queue = new Int32Array(waterCells);
+    let head = 0, tail = 0;
+    for (let k = 0; k < N; k++) if (assigned[k]) queue[tail++] = k;
+    while (head < tail) {
+      const k = queue[head++], x = k % W, y = (k - x) / W, L = level[k];
+      const nb = [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, y > 0 ? k - W : -1, y < H - 1 ? k + W : -1];
+      for (const q of nb) if (q >= 0 && !assigned[q] && lakeId[q] && isRiver[lakeId[q]]) { assigned[q] = 1; level[q] = L; queue[tail++] = q; }
+    }
+    log(`${fitted} waterway profiles fitted (${reversed} drawn upstream), ${tail} river cells levelled`);
+  }
+  // display level per polygon: lakes keep the basin level, rivers and creeks the mean of their cells
+  {
+    const sumL = new Float64Array(nLakes + 1);
+    for (let k = 0; k < N; k++) if (lakeId[k] && isRiver[lakeId[k]]) sumL[lakeId[k]] += level[k] / 10;
+    for (let id = 1; id <= nLakes; id++) if (isRiver[id] && lakeArea[id]) lakeLevel[id] = sumL[id] / lakeArea[id];
+  }
+  // --- real depth where the DNR has mapped the lake: its contour lines are rasterized as known depths, the
+  //     shore ring is pinned at zero, and everything between is relaxed to a smooth surface (nearest known
+  //     depth as the start, then Gauss-Seidel sweeps). Lakes without a DNR map keep the synthetic ramp.
+  const depth = new Int16Array(N); // decimetres below the surface
+  const bathyLake = new Uint8Array(nLakes + 1);
+  {
+    const inDomain = new Uint8Array(N), known = new Uint8Array(N);
+    const bathyBasin = new Uint8Array(basins.length);
+    let contourCells = 0;
+    for (const c of bathy.contours) {
+      const dm = Math.round(c.depthFt * 0.3048 * 10);
+      for (const line of c.lines) {
+        const pts = line.map(([lat, lon]) => proj.toLocal(lat, lon));
+        for (let s2 = 1; s2 < pts.length; s2++) {
+          const [x1, z1] = pts[s2 - 1], [x2, z2] = pts[s2];
+          const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, z2 - z1) / (cell * 0.5)));
+          for (let q = 0; q <= steps; q++) {
+            const t = q / steps, i = grid.ci(x1 + (x2 - x1) * t), j = grid.cj(z1 + (z2 - z1) * t);
+            if (i < 0 || j < 0 || i >= W || j >= H) continue;
+            const k = j * W + i, id = lakeId[k];
+            if (!id || isRiver[id]) continue;
+            if (!known[k]) { known[k] = 1; contourCells++; depth[k] = dm; } else if (dm > depth[k]) depth[k] = dm;
+            bathyBasin[basin[k]] = 1;
+          }
+        }
+      }
+    }
+    // the domain: lake water of every basin that has a contour; the first ring of water cells is the shore
+    let domainCells = 0, knownCells = 0;
+    for (let k = 0; k < N; k++) {
+      const id = lakeId[k];
+      if (!id || isRiver[id] || !bathyBasin[basin[k]]) continue;
+      inDomain[k] = 1; domainCells++; bathyLake[id] = 1;
+      if (!known[k] && sdist[k] > -50) { known[k] = 1; depth[k] = 0; }
+      if (known[k]) knownCells++;
+    }
+    // start every cell from the nearest known depth
+    const queue = new Int32Array(domainCells);
+    const visited = new Uint8Array(N);
+    let head = 0, tail = 0;
+    for (let k = 0; k < N; k++) if (inDomain[k] && known[k]) { visited[k] = 1; queue[tail++] = k; }
+    while (head < tail) {
+      const k = queue[head++], x = k % W, d = depth[k];
+      const nb = [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W];
+      for (const q of nb) if (q >= 0 && q < N && inDomain[q] && !visited[q]) { visited[q] = 1; depth[q] = d; queue[tail++] = q; }
+    }
+    // relax the unknown cells toward the mean of their water neighbours; the start is already close, so a
+    // few dozen sweeps smooth the steps between contours
+    const unknown = new Int32Array(domainCells - knownCells);
+    let u = 0;
+    for (let k = 0; k < N; k++) if (inDomain[k] && !known[k]) unknown[u++] = k;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      const fwd = (sweep & 1) === 0;
+      for (let n = 0; n < unknown.length; n++) {
+        const k = unknown[fwd ? n : unknown.length - 1 - n], x = k % W;
+        let sum = 0, cnt = 0;
+        if (x > 0 && inDomain[k - 1]) { sum += depth[k - 1]; cnt++; }
+        if (x < W - 1 && inDomain[k + 1]) { sum += depth[k + 1]; cnt++; }
+        if (k >= W && inDomain[k - W]) { sum += depth[k - W]; cnt++; }
+        if (k + W < N && inDomain[k + W]) { sum += depth[k + W]; cnt++; }
+        if (cnt) depth[k] = Math.round(sum / cnt);
+      }
+    }
+    let nb = 0, deepest = 0;
+    for (let id = 1; id <= nLakes; id++) if (bathyLake[id]) nb++;
+    for (let k = 0; k < N; k++) if (depth[k] > deepest) deepest = depth[k];
+    log(`bathymetry: ${bathy.contours.length} DNR contours on ${contourCells} cells, ${nb} polygons with real depth over ${domainCells} cells, deepest ${(deepest / 10).toFixed(1)} m`);
+  }
+
   // a basin is named after its largest named polygon (channels and bays are often unnamed)
   lakes.forEach((l, i) => {
     const id = i + 1, b = basins[lakeBasin[id]];
@@ -378,7 +591,7 @@ async function main() {
   // --- pass 2: shape lake beds and shores, write tiles, collect the far field and the overview
   const hq = new Int16Array(N); // final heights, decimetres (reuses nothing: hraw is still needed for the halo rows)
   const farW = W / FAR, farH = H / FAR;
-  const farHgt = new Int16Array(farW * farH), farLake = new Uint16Array(farW * farH), farSd = new Int16Array(farW * farH);
+  const farHgt = new Int16Array(farW * farH), farLake = new Uint16Array(farW * farH), farSd = new Int16Array(farW * farH), farLvl = new Int16Array(farW * farH);
   const ovW = W / OV, ovH = H / OV;
   const ovHgt = new Int16Array(ovW * ovH), ovSd = new Int16Array(ovW * ovH);
   const tileMeta = new Array(ntx * nty);
@@ -399,14 +612,16 @@ async function main() {
           const k = o + i, id = lakeId[k], sd = sdist[k] / 10;
           let h = hraw[k] / 10;
           if (id) {
-            const dm = Math.max(0, 5 - sd);
-            h = Math.min(h, lakeLevel[id] - Math.min(14, 0.6 + dm * 0.09));
+            const dm = Math.max(0, 5 - sd), ramp = 0.6 + dm * 0.09;
+            // mapped lakes take the DNR depth (never shallower than a short ramp off the beach); the rest a synthetic bed
+            if (bathyLake[id]) h = level[k] / 10 - Math.max(depth[k] / 10, Math.min(2, ramp));
+            else h = Math.min(h, level[k] / 10 - Math.min(14, ramp));
           }
           out[ow + i] = h;
         }
         for (let i = 0; i < W; i++) {
           let m = -Infinity;
-          if (Math.abs(sdist[o + i]) <= 1000) for (let di = -LIFT; di <= LIFT; di++) { const ii = i + di; if (ii >= 0 && ii < W && lakeId[o + ii]) { const L = lakeLevel[lakeId[o + ii]]; if (L > m) m = L; } }
+          if (Math.abs(sdist[o + i]) <= 1000) for (let di = -LIFT; di <= LIFT; di++) { const ii = i + di; if (ii >= 0 && ii < W && lakeId[o + ii]) { const L = level[o + ii] / 10; if (L > m) m = L; } }
           rowMax[ow + i] = m;
         }
       }
@@ -430,11 +645,12 @@ async function main() {
       }
       // far field (80 m): block mean height and shore distance, the deepest cell decides the lake id
       for (let fj = r0 / FAR; fj < r1_ / FAR; fj++) for (let fi = 0; fi < farW; fi++) {
-        let sh = 0, ss = 0, minSd = 32767, id = 0;
-        for (let dj = 0; dj < FAR; dj++) { const o = (fj * FAR + dj) * W + fi * FAR; for (let di = 0; di < FAR; di++) { const k = o + di; sh += hq[k]; ss += sdist[k]; if (sdist[k] < minSd) { minSd = sdist[k]; id = lakeId[k]; } } }
+        let sh = 0, ss = 0, minSd = 32767, id = 0, lv = 0;
+        for (let dj = 0; dj < FAR; dj++) { const o = (fj * FAR + dj) * W + fi * FAR; for (let di = 0; di < FAR; di++) { const k = o + di; sh += hq[k]; ss += sdist[k]; if (sdist[k] < minSd) { minSd = sdist[k]; id = lakeId[k]; lv = level[k]; } } }
         const f = fj * farW + fi;
         farHgt[f] = Math.round(sh / (FAR * FAR)); farSd[f] = Math.round(ss / (FAR * FAR));
         farLake[f] = minSd < 0 ? id : 0;
+        farLvl[f] = minSd < 0 ? lv : farHgt[f];
       }
       for (let oj = r0 / OV; oj < r1_ / OV; oj++) for (let oi = 0; oi < ovW; oi++) {
         const k = (oj * OV + OV / 2) * W + oi * OV + OV / 2;
@@ -446,10 +662,11 @@ async function main() {
   // tiles: (tile + 2 halo)^2 cells each, edges replicated beyond the grid
   {
     const tb = Date.now();
-    const buf = Buffer.alloc(SIDE * SIDE * 6);
+    const buf = Buffer.alloc(SIDE * SIDE * 8);
     const th = new Int16Array(buf.buffer, buf.byteOffset, SIDE * SIDE);
     const tl = new Uint16Array(buf.buffer, buf.byteOffset + SIDE * SIDE * 2, SIDE * SIDE);
     const ts = new Int16Array(buf.buffer, buf.byteOffset + SIDE * SIDE * 4, SIDE * SIDE);
+    const tv = new Int16Array(buf.buffer, buf.byteOffset + SIDE * SIDE * 6, SIDE * SIDE);
     let written = 0;
     for (let ty = 0; ty < nty; ty++) for (let tx = 0; tx < ntx; tx++) {
       let water = 0, mn = 32767, mx = -32768;
@@ -458,7 +675,7 @@ async function main() {
         for (let li = 0; li < SIDE; li++) {
           const i = Math.max(0, Math.min(W - 1, tx * T - HALO + li));
           const k = j * W + i, m = lj * SIDE + li;
-          th[m] = hq[k]; tl[m] = lakeId[k]; ts[m] = sdist[k];
+          th[m] = hq[k]; tl[m] = lakeId[k]; ts[m] = sdist[k]; tv[m] = lakeId[k] ? level[k] : hq[k];
           if (lj >= HALO && lj < HALO + T && li >= HALO && li < HALO + T) { if (lakeId[k]) water = 1; if (hq[k] < mn) mn = hq[k]; if (hq[k] > mx) mx = hq[k]; }
         }
       }
@@ -472,17 +689,18 @@ async function main() {
   const nfx = Math.ceil(farW / FT), nfy = Math.ceil(farH / FT);
   {
     const FS = FT + 2 * HALO;
-    const buf = Buffer.alloc(FS * FS * 6);
+    const buf = Buffer.alloc(FS * FS * 8);
     const th = new Int16Array(buf.buffer, buf.byteOffset, FS * FS);
     const tl = new Uint16Array(buf.buffer, buf.byteOffset + FS * FS * 2, FS * FS);
     const ts = new Int16Array(buf.buffer, buf.byteOffset + FS * FS * 4, FS * FS);
+    const tv = new Int16Array(buf.buffer, buf.byteOffset + FS * FS * 6, FS * FS);
     for (let fy = 0; fy < nfy; fy++) for (let fx = 0; fx < nfx; fx++) {
       for (let lj = 0; lj < FS; lj++) {
         const j = Math.max(0, Math.min(farH - 1, fy * FT - HALO + lj));
         for (let li = 0; li < FS; li++) {
           const i = Math.max(0, Math.min(farW - 1, fx * FT - HALO + li));
           const k = j * farW + i, m = lj * FS + li;
-          th[m] = farHgt[k]; tl[m] = farLake[k]; ts[m] = farSd[k];
+          th[m] = farHgt[k]; tl[m] = farLake[k]; ts[m] = farSd[k]; tv[m] = farLvl[k];
         }
       }
       fs.writeFileSync(path.join(opt.out, 'far', `${fx}_${fy}.bin`), zlib.gzipSync(buf, { level: 6 }));
@@ -588,16 +806,19 @@ async function main() {
   }
 
   // --- index
+  const maxDepth = new Int16Array(nLakes + 1);
+  for (let k = 0; k < N; k++) if (lakeId[k] && depth[k] > maxDepth[lakeId[k]]) maxDepth[lakeId[k]] = depth[k];
   const lakeMeta = lakes.map((l, i) => {
     const id = i + 1;
     if (!lakeArea[id]) return null;
-    return { id, name: l.name, displayName: displayName[id], river: l.river || undefined, basin: lakeBasin[id], level: +lakeLevel[id].toFixed(2), cells: lakeArea[id],
+    return { id, name: l.name, displayName: displayName[id], river: l.river || undefined, creek: l.creek || undefined, basin: lakeBasin[id], level: +lakeLevel[id].toFixed(2), cells: lakeArea[id], maxDepth: bathyLake[id] ? +(maxDepth[id] / 10).toFixed(1) : undefined,
       cx: r1(grid.cx(sumI[id] / lakeArea[id])), cz: r1(grid.cz(sumJ[id] / lakeArea[id])), osm: l.osm };
   });
   const basinMeta = basins.map((b, i) => ({ id: i, name: b.name || null, level: +b.level.toFixed(2), cells: b.cells, river: b.river || undefined }));
   const index = {
-    version: 2,
-    source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extract)', baked: new Date().toISOString() },
+    version: 3,
+    fields: ['height', 'lake', 'sdist', 'level'],
+    source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extract)', bathymetry: 'Minnesota DNR Lake Bathymetric Contours (MN Geospatial Commons)', baked: new Date().toISOString() },
     bbox, area: opt.area,
     proj: { lat0: proj.lat0, lon0: proj.lon0, mPerDegLat: proj.mPerDegLat, mPerDegLon: proj.mPerDegLon },
     grid: { width: W, height: H, cell, originX: grid.originX, originZ: grid.originZ, tile: T, halo: HALO, ntx, nty,
@@ -615,7 +836,7 @@ async function main() {
   await fsp.writeFile(path.join(opt.out, 'index.json'), JSON.stringify(index));
   // the old single-area files are superseded
   for (const f of ['world.json', 'height.bin', 'lake.bin', 'sdist.bin']) await fsp.rm(path.join(opt.out, f), { force: true });
-  log(`done in ${((Date.now() - t0) / 60000).toFixed(1)} min: ${ntx * nty} tiles, ${portages.length} portages, ${campsites.length} campsites, ${entryPoints.length} entry points; start at`, start.x, start.z, 'on', basinName(start.lake));
+  log(`done in ${((Date.now() - t0) / 60000).toFixed(1)} min: ${ntx * nty} tiles, ${waterways.length} waterways, ${portages.length} portages, ${campsites.length} campsites, ${entryPoints.length} entry points; start at`, start.x, start.z, 'on', basinName(start.lake));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

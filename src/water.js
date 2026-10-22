@@ -302,12 +302,12 @@ export class WaterSystem {
     const queue = this._queue || (this._queue = new Int32Array(N));
     let head = 0, tail = 0;
     for (let lj = 0; lj < A; lj++) for (let li = 0; li < A; li++) {
-      const k = lj * A + li, i = i0 + li, j = j0 + lj, id = w.lakeCell(i, j);
+      const k = lj * A + li, i = i0 + li, j = j0 + lj;
       shore[k] = w.sdCell(i, j);
       height[k] = w.hCell(i, j);
       const cv = w.coverCell(i, j);
       cover[k * 2] = cv & 255; cover[k * 2 + 1] = cv >> 8;
-      if (id) { level[k] = w.levelOf(id); queue[tail++] = k; } else level[k] = -9999;
+      if (w.lakeCell(i, j)) { level[k] = w.levelCell(i, j); queue[tail++] = k; } else level[k] = -9999;
     }
     while (head < tail) {
       const k = queue[head++], x = k % A, y = (k - x) / A, L = level[k];

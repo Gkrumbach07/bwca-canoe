@@ -26,14 +26,13 @@ export class GridQueries {
   // Water surface level near (x,z): the level of the nearest water cell within r cells.
   levelAt(x, z, r = 6) {
     const ci = this.cellI(x), cj = this.cellJ(z);
-    let best = -1, bestD = Infinity;
+    let bi = 0, bj = 0, bestD = Infinity;
     for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
-      const id = this.lakeCell(ci + di, cj + dj);
-      if (!id) continue;
+      if (!this.lakeCell(ci + di, cj + dj)) continue;
       const d = di * di + dj * dj;
-      if (d < bestD) { bestD = d; best = id; }
+      if (d < bestD) { bestD = d; bi = ci + di; bj = cj + dj; }
     }
-    return best > 0 ? this.levelOf(best) : this.heightAt(x, z);
+    return bestD < Infinity ? this.levelCell(bi, bj) : this.heightAt(x, z);
   }
 
   slopeAt(x, z) {
@@ -62,7 +61,7 @@ export class GridQueries {
   }
 }
 
-// One baked tile: (tile + 2 * halo)^2 cells of height / lake id / shore distance, addressed with global
+// One baked tile: (tile + 2 * halo)^2 cells of height / lake id / shore distance / water level, addressed with global
 // cell indices. Queries outside the halo clamp to its edge, which is why tiles carry a halo at all:
 // every build (terrain, forest, props) can run from this one buffer alone.
 export class TileGrid extends GridQueries {
@@ -76,6 +75,7 @@ export class TileGrid extends GridQueries {
     this.h = new Int16Array(buf, 0, n);
     this.lake = new Uint16Array(buf, n * 2, n);
     this.sd = new Int16Array(buf, n * 4, n);
+    this.lvl = new Int16Array(buf, n * 6, n);
     this.levelById = levelById;
   }
   local(i, j) {
@@ -88,5 +88,6 @@ export class TileGrid extends GridQueries {
   hCell(i, j) { return this.h[this.local(i, j)] * 0.1; }
   sdCell(i, j) { return this.sd[this.local(i, j)] * 0.1; }
   lakeCell(i, j) { return this.lake[this.local(i, j)]; }
+  levelCell(i, j) { return this.lvl[this.local(i, j)] * 0.1; }
   levelOf(id) { return this.levelById[id]; }
 }
