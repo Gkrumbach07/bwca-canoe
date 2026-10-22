@@ -43,7 +43,10 @@ npm run bake:all
 npm run dev
 ```
 
-Open http://localhost:5173. The baked map data lives in `public/data/` and is not committed (about 250 MB
+Open http://localhost:5173. The game opens on a title screen over the live lake: **Paddle in** continues the
+trip saved in this browser (or starts at Lake One), **New trip** picks any BWCA entry point, **Settings**
+has the quality, sound and control options (applied live, kept in `localStorage`). **Esc** brings the
+same screen up as a pause menu while playing. The baked map data lives in `public/data/` and is not committed (about 380 MB
 of tiles); the first bake downloads the Minnesota OpenStreetMap extract (290 MB) and about 5,800 elevation
 tiles (500 MB) into `data-cache/`, then bakes the whole wilderness in about a minute (3 GB of RAM). Re-bakes
 use the cache and finish in the same minute. For a quick test bake of the Lake One area only:
@@ -76,9 +79,18 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | / | veer the wind 30° (debug) |
 | R | toggle the canoe's water reflection (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
+| Esc | pause: the title screen with Paddle on / New trip / Settings (Esc again, or Enter, resumes) |
 | mouse drag / wheel | look around / zoom |
 | click the map | teleport to the nearest open water (anywhere in the wilderness) |
 | entry point list | teleport to one of the BWCA entry point landings |
+
+The title and pause screens are keyboard-first: the arrows move between buttons, Enter picks, Esc goes
+back. Settings (`src/settings.js`): shadow map size (off / 1024 / 2048 / 4096), tree detail and cull
+distance, render scale (0.5–1 of the device pixel ratio), the canoe's water reflection, an FPS and
+triangle counter, volume and mute, mouse sensitivity and inverted look, and the game speed and camera a
+trip starts with. The canoe's position, heading, the day clock and the camera mode are saved every few
+seconds (`src/save.js`, one `localStorage` document per namespace under `bwca-canoe:`; other features
+keep their own namespace there) so **Paddle in** picks the trip up where it stopped.
 
 Paddle up to a portage landing (the trail marker on shore) and press **E**: the canoe is shouldered and you
 walk the real trail with W/S, steering with A/D. Stay near the trail: the bush beside it is slow and past
@@ -201,12 +213,25 @@ creeks are two cells (20 m) wide because of the 10 m grid; the Canadian side of 
 complete as the Minnesota extract makes it (add `north-america/canada/ontario` to `CFG.extracts` in
 `scripts/config.mjs` for the Quetico shore).
 
+## Hosting
+
+The app is a static build (`npm run build` → `dist/`) and the data is fetched on demand from wherever
+`VITE_DATA_URL` points (default: `data/` next to the app, which is `public/data` in development). The
+recommended setup, with costs, is in [docs/HOSTING.md](docs/HOSTING.md): the app on GitHub Pages
+(`.github/workflows/pages.yml` deploys it on every push to `main`), the 380 MB tile set in a Cloudflare R2
+bucket behind the CDN (S3 + CloudFront as the alternative), uploaded with `npm run data:sync`. A Lake One
+bake (`npm run bake`, about 4 MB) can ship inside the app instead for a demo. `.env.example` lists the
+variables.
+
 ## Layout
 
 ```
-scripts/        bake pipeline (config, OSM extract, elevation, DNR bathymetry, bake)
+scripts/        bake pipeline (config, OSM extract, elevation, DNR bathymetry, bake) and data-sync.mjs
 src/            the game (three.js, ES modules; tile-worker.js runs in web workers)
+                title.js / settings.js / save.js: the title and pause screen, settings, saved trips
 extension/      the GPS simulator Chrome extension (MV3)
+docs/           screenshots and HOSTING.md
+.github/        the GitHub Pages workflow
 public/data/    baked tiles, not committed
 ```
 

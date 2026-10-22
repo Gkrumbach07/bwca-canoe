@@ -223,6 +223,7 @@ export class Hud {
     const ov = this.world.meta.overview;
     if (!ov) return;
     const img = new Image();
+    img.crossOrigin = 'anonymous'; // the data may live on another origin (VITE_DATA_URL); the pixels are read back below
     img.onload = () => {
       const c = document.createElement('canvas'); c.width = ov.width; c.height = ov.height;
       const ctx = c.getContext('2d');
