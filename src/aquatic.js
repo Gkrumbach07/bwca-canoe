@@ -57,8 +57,9 @@ function weed(rng) {
 export function makeAquaticKit(water, seed = 9) {
   const rng = mulberry32(seed);
   const geos = [[lilyPad(rng, false), lilyPad(rng, false), lilyPad(rng, true)], [reeds(rng), reeds(rng), reeds(rng)], [weed(rng), weed(rng)]];
-  const mats = [makeFloatingMaterial(water), makeFloatingMaterial(water), makeSwayMaterial(water)];
-  return { geos, mats };
+  const grow = { value: 1 };
+  const mats = [makeFloatingMaterial(water, {}, grow), makeFloatingMaterial(water), makeSwayMaterial(water)];
+  return { geos, mats, grow, setSeason: (s) => { grow.value = s.pads; } };
 }
 
 export function makeAquaticMeshes(bins, kit) {

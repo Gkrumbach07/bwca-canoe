@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt } from './terrain-build.js';
-import { smoothBoulder, makeRockMaterial, makeToonMaterial } from './rocks.js';
+import { angularRock, makeRockMaterial, makeToonMaterial } from './rocks.js';
 
 // Resample a polyline at roughly `step` metre spacing.
 export function resample(pts, step) {
@@ -29,7 +29,7 @@ export function exclusionsFor(world) {
 
 let propMaterial = null, rockMaterial = null, outcropGeo = null;
 function shared() {
-  if (!propMaterial) { propMaterial = makeToonMaterial(); rockMaterial = makeRockMaterial(); outcropGeo = smoothBoulder(mulberry32(11), 11); }
+  if (!propMaterial) { propMaterial = makeToonMaterial(); rockMaterial = makeRockMaterial(); outcropGeo = angularRock(mulberry32(11), 'slab'); }
 }
 
 // Portage trails, trail markers and campsites that fall inside tile (tx, ty), built in tile-local

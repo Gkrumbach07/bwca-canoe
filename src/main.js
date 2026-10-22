@@ -1,7 +1,7 @@
 import './fog.js'; // must come first: patches three's fog chunks before any material compiles
 import * as THREE from 'three';
 import { World } from './world.js';
-import { DayCycle, buildStars } from './daycycle.js';
+import { DayCycle, buildStars, buildMoon } from './daycycle.js';
 import { makePost } from './post.js';
 import { makeAquaticKit } from './aquatic.js';
 import { GroundCover } from './groundcover.js';
@@ -55,6 +55,7 @@ async function main() {
   scene.add(hemi);
   const moon = new THREE.DirectionalLight(0x8aa4cc, 0);
   moon.position.set(300, 600, -500);
+  moon.target = sun.target; // aimed at the player like the sun, not at the world origin
   scene.add(moon);
 
   scene.background = new THREE.Color(palette.fog);
@@ -62,6 +63,8 @@ async function main() {
   scene.add(sky);
   const stars = buildStars();
   sky.add(stars);
+  const moonDisc = buildMoon();
+  sky.add(moonDisc);
   const clouds = buildClouds(26, 7000, palette, sunDir);
   scene.add(clouds);
 
@@ -95,7 +98,9 @@ async function main() {
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   const hud = new Hud(world, async (x, z) => { if (await player.teleport(x, z)) chase.snap(); });
   const post = makePost(renderer, scene, camera);
-  const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, grade: post.grade, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material });
+  const { lat, lon } = world.toLatLon(start.x, start.z);
+  const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, grade: post.grade, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material, moonDisc }, { lat, lon });
+  player.season = day.season;
   const geo = new GeoBridge();
   const wind = new Wind(11);
   player.wind = wind;
@@ -133,10 +138,14 @@ async function main() {
     sky.position.copy(camera.position);
     sun.target.position.set(player.x, player.altitude, player.z);
     sun.position.copy(sun.target.position).addScaledVector(day.sunDir, 700);
+    moon.position.copy(sun.target.position).addScaledVector(day.moonDir, 700);
+    player.season = day.season;
+    tiles.setSeason(day.season);
+    cover.setSeason(day.season);
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
     cover.update(dt * ts, player.x, player.z, hemi, sun);
     mist.update(dt * ts, player.x, player.z);
-    loons.update(dt * ts, player);
+    loons.update(dt * ts, player, day.season);
     audio.update(dt, world.shoreAt(player.x, player.z), player.speed, player.mode === 'paddle');
     geo.update(player, world);
     hud.update(player, geo, ts, day.clock, wind, fishing);

@@ -1,36 +1,44 @@
 import * as THREE from 'three';
 import { fogState, setFogColor } from './fog.js';
 import { smoothstep } from './rng.js';
+import { MONTHS, monthDay, julianDay, utcOffsetHours, sunPosition, moonPosition, skyVector, daysInYear, sunTimes } from './astro.js';
+import { seasonAt } from './season.js';
 
-// Time of day. Everything that depends on light is keyed on sun elevation (degrees):
-// deep night, late dusk, horizon, golden hour, full day. Values are interpolated between keys.
-const KEYS = [-15, -4, 0, 8, 35];
+// Time of day and the calendar. The sun and moon stand where they really would over the Boundary Waters
+// for the date and the clock; everything that depends on light is keyed on sun elevation (degrees): deep
+// night, late dusk, the horizon, golden hour, morning, full day. Values are interpolated between keys.
+const KEYS = [-15, -5, -1, 3, 10, 35];
 const T = {
-  sunColor: [0x000000, 0x000000, 0xff8a4a, 0xffc890, 0xfff1dc],
-  sunInt: [0, 0, 0.55, 1.45, 1.7],
-  hemiSky: [0x121a2a, 0x263347, 0x6f7fa0, 0x9fb8d6, 0xa9c6e0],
-  hemiGround: [0x0b0e12, 0x1a1d1a, 0x5a5546, 0x6a7558, 0x6f7a60],
-  hemiInt: [0.35, 0.4, 0.6, 0.75, 0.8],
-  fogHorizon: [0x141c28, 0x2a3650, 0xe2a978, 0xd9c8ad, 0xbcd2e2],
-  fogSky: [0x070d18, 0x14223a, 0x4a6690, 0x6b97c4, 0x6f9cc8],
-  fogSun: [0x000000, 0x1a1a2a, 0xffa868, 0xffd3a0, 0xffe9c4],
-  glowPow: [10, 10, 5, 7, 10],
-  glowAmt: [0, 0.1, 0.8, 0.55, 0.3],
-  zenith: [0x060c1a, 0x0f1f3a, 0x2c5280, 0x3c73b2, 0x4382c7],
-  horizon: [0x141c28, 0x2b3a55, 0xf1b27a, 0xe6d4b2, 0xc9dceb],
-  skySun: [0x000000, 0x000000, 0xffb070, 0xffe0b0, 0xfff2cc],
-  ground: [0x0d1210, 0x1e241e, 0x6b6e5a, 0x8e9a7e, 0x9aa58a],
-  water: [0x0c141e, 0x172636, 0x3e6c84, 0x3f7f9c, 0x3b85a4],   // clear-lake water: darker than the sky, a saturated teal by day
-  reflect: [0x101828, 0x202d44, 0xcf9f7a, 0xcbd3d8, 0xc9dde8],
-  cloudTop: [0x1f2634, 0x2e3648, 0xffc29a, 0xfbe9d2, 0xfbf8f1],
-  cloudBase: [0x101522, 0x1c2434, 0x7d6f94, 0x9fb0cc, 0xa6bfd9],
-  moonInt: [0.3, 0.22, 0.05, 0, 0],
-  stars: [1, 0.6, 0, 0, 0],
-  gain: [0.85, 0.9, 1.0, 1.0, 1.0],
-  foam: [0x2a3340, 0x3e4a5c, 0xe8d6c4, 0xf4efe4, 0xf2f6f6],
+  sunColor: [0x000000, 0x000000, 0xff6a2e, 0xffa054, 0xffd0a0, 0xfff1dc],
+  sunInt: [0, 0, 0.6, 1.6, 1.65, 1.7],
+  hemiSky: [0x121a2a, 0x263347, 0x9a6e62, 0xe8a070, 0xbcc0cc, 0xa9c6e0],
+  hemiGround: [0x0b0e12, 0x1a1d1a, 0x4e3d32, 0x8f6240, 0x74755a, 0x6f7a60],
+  hemiInt: [0.35, 0.4, 0.6, 0.95, 0.8, 0.8],
+  fogHorizon: [0x141c28, 0x2a3650, 0xe09a68, 0xe8b282, 0xd4ccb6, 0xbcd2e2],
+  fogSky: [0x070d18, 0x14223a, 0x3e5a86, 0x5b7fb0, 0x6b97c4, 0x6f9cc8],
+  fogSun: [0x000000, 0x1a1a2a, 0xff9a58, 0xffb878, 0xffd8a8, 0xffe9c4],
+  glowPow: [10, 10, 5, 6, 8, 10],
+  glowAmt: [0, 0.1, 0.85, 0.65, 0.4, 0.3],
+  zenith: [0x060c1a, 0x0f1f3a, 0x27476f, 0x3464a0, 0x3c73b2, 0x4382c7],
+  horizon: [0x141c28, 0x2b3a55, 0xf0a46c, 0xf0c494, 0xe6d4b2, 0xc9dceb],
+  skySun: [0x000000, 0x000000, 0xffa060, 0xffc890, 0xffe0b0, 0xfff2cc],
+  ground: [0x0d1210, 0x1e241e, 0x5e5a4a, 0x80765a, 0x8e9a7e, 0x9aa58a],
+  water: [0x0c141e, 0x172636, 0x355a70, 0x3f6e86, 0x3f7f9c, 0x3b85a4],   // clear-lake water: darker than the sky, a saturated teal by day
+  reflect: [0x101828, 0x202d44, 0xe09a70, 0xe2b68a, 0xcbd3d8, 0xc9dde8],
+  cloudTop: [0x1f2634, 0x2e3648, 0xffb080, 0xffcfa0, 0xfbe9d2, 0xfbf8f1],
+  cloudBase: [0x101522, 0x1c2434, 0x6e5a74, 0x9a7d8c, 0x9fb0cc, 0xa6bfd9],
+  moonInt: [0.3, 0.22, 0.08, 0, 0, 0],
+  stars: [1, 0.6, 0.05, 0, 0, 0],
+  gain: [0.85, 0.9, 1.0, 1.05, 1.0, 1.0],
+  // the colour grade: cool violet shadows against warm highlights in the low sun, neutral at midday
+  shadowTint: [0x8ea0c8, 0x8ea0c8, 0x9a90c4, 0xa29ac6, 0xc0d0e6, 0xdbf7ff],
+  highlightTint: [0xfff4e6, 0xfff4e6, 0xffd8b0, 0xffdcb4, 0xffeedc, 0xfffff2],
+  split: [0.45, 0.45, 0.7, 0.7, 0.55, 0.45],
+  foam: [0x2a3340, 0x3e4a5c, 0xe8c8a8, 0xf2dfc4, 0xf4efe4, 0xf2f6f6],
 };
+const NUMERIC = new Set(['sunInt', 'hemiInt', 'glowPow', 'glowAmt', 'moonInt', 'stars', 'gain', 'split']);
 const colors = {};
-for (const k of Object.keys(T)) if (typeof T[k][0] === 'number' && k !== 'sunInt' && k !== 'hemiInt' && k !== 'glowPow' && k !== 'glowAmt' && k !== 'moonInt' && k !== 'stars' && k !== 'gain') colors[k] = T[k].map((h) => new THREE.Color(h));
+for (const k of Object.keys(T)) if (!NUMERIC.has(k)) colors[k] = T[k].map((h) => new THREE.Color(h));
 
 function segment(e) {
   if (e <= KEYS[0]) return [0, 0, 0];
@@ -41,25 +49,53 @@ function segment(e) {
 }
 
 export class DayCycle {
-  constructor(targets) {
-    this.t = targets; // { sun, hemi, moon, sky, clouds, water, grade, stars, mist }
-    this.hours = 17.4;        // start in golden hour
+  // targets: { scene, sun, hemi, moon, sky, clouds, water, grade, stars, mist, ripples, hullFoam, moonDisc }
+  // place: { lat, lon } where the sky is computed (the start of the trip; the difference across the area is tiny)
+  constructor(targets, place = { lat: 47.94, lon: -91.46 }, start = null) {
+    this.t = targets;
+    this.place = place;
+    const now = new Date();
+    this.year = start?.year ?? now.getFullYear();
+    this.doy = start?.doy ?? Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+    this.hours = start?.hours ?? now.getHours() + now.getMinutes() / 60;
     this.running = true;
     this.hoursPerSecond = 24 / (20 * 60); // a full day in 20 real minutes
     this.sunDir = new THREE.Vector3(0, 1, 0);
+    this.moonDir = new THREE.Vector3(0, 1, 0);
     this.elevation = 0;
+    this.season = seasonAt(this.doy);
     this._c = new THREE.Color();
+    this._times = null;
     window.addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'SELECT') return;
       if (e.code === 'BracketLeft') this.hours = (this.hours + 23) % 24;
       if (e.code === 'BracketRight') this.hours = (this.hours + 1) % 24;
+      if (e.code === 'Minus') this.stepDays(e.shiftKey ? -30 : -1);
+      if (e.code === 'Equal') this.stepDays(e.shiftKey ? 30 : 1);
       if (e.code === 'KeyP') this.running = !this.running;
     });
   }
 
-  get clock() { const h = Math.floor(this.hours), m = Math.floor((this.hours - h) * 60); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+  stepDays(n) {
+    this.doy += n;
+    while (this.doy > daysInYear(this.year)) { this.doy -= daysInYear(this.year); this.year++; }
+    while (this.doy < 1) { this.year--; this.doy += daysInYear(this.year); }
+    this._times = null;
+  }
 
-  // dawn mist: strongest around six in the morning
-  get mist() { return smoothstep(4.3, 5.8, this.hours) * (1 - smoothstep(6.3, 8.6, this.hours)); }
+  get date() { const { month, day } = monthDay(this.year, this.doy); return `${MONTHS[month]} ${day}`; }
+  get time() { const h = Math.floor(this.hours), m = Math.floor((this.hours - h) * 60); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+  get clock() { return `${this.date} · ${this.time}`; }
+  get sunriseSunset() {
+    if (!this._times) this._times = sunTimes(this.year, this.doy, this.place.lat, this.place.lon);
+    return this._times;
+  }
+
+  // dawn mist: strongest in the hour before sunrise, heavier on cold mornings
+  get mist() {
+    const rise = this.sunriseSunset.rise ?? 5.5;
+    return smoothstep(rise - 1.3, rise - 0.2, this.hours) * (1 - smoothstep(rise + 0.6, rise + 2.6, this.hours)) * (0.7 + 0.6 * this.season.cold);
+  }
 
   lerpColor(key, out) {
     const [a, b, t] = this._seg;
@@ -68,14 +104,21 @@ export class DayCycle {
   lerpNum(key) { const [a, b, t] = this._seg; return T[key][a] + (T[key][b] - T[key][a]) * t; }
 
   update(dt) {
-    if (this.running) this.hours = (this.hours + dt * this.hoursPerSecond) % 24;
-    // summer sun at 48 N: up about 05:10, down about 21:00, 65 degrees at noon
-    const f = (this.hours - 5.2) / 15.8;
-    const e = 65 * Math.sin(Math.PI * f);
-    const az = THREE.MathUtils.degToRad(65 + 230 * f), el = THREE.MathUtils.degToRad(e);
-    this.elevation = e;
-    this.sunDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
-    this._seg = segment(e);
+    if (this.running) {
+      this.hours += dt * this.hoursPerSecond;
+      if (this.hours >= 24) { this.hours -= 24; this.stepDays(1); }
+    }
+    this.season = seasonAt(this.doy);
+    // the real sky for this date and clock
+    const { month, day } = monthDay(this.year, this.doy);
+    const jd = julianDay(this.year, month + 1, day) + (this.hours - utcOffsetHours(this.year, this.doy)) / 24;
+    const sun = sunPosition(jd, this.place.lat, this.place.lon);
+    const moon = moonPosition(jd, this.place.lat, this.place.lon);
+    this.elevation = sun.elevation;
+    skyVector(sun.azimuth, sun.elevation, this.sunDir);
+    skyVector(moon.azimuth, moon.elevation, this.moonDir);
+    this.moonUp = moon.elevation > -2;
+    this._seg = segment(sun.elevation);
     const c = this._c, t = this.t;
     t.sun.color.copy(this.lerpColor('sunColor', c));
     t.sun.intensity = this.lerpNum('sunInt');
@@ -83,7 +126,7 @@ export class DayCycle {
     t.hemi.color.copy(this.lerpColor('hemiSky', c));
     t.hemi.groundColor.copy(this.lerpColor('hemiGround', c));
     t.hemi.intensity = this.lerpNum('hemiInt');
-    t.moon.intensity = this.lerpNum('moonInt');
+    t.moon.intensity = this.lerpNum('moonInt') * (this.moonUp ? 1 : 0);
     t.moon.visible = t.moon.intensity > 0.01;
     // fog
     t.scene.fog.color.copy(this.lerpColor('fogHorizon', c));
@@ -92,13 +135,20 @@ export class DayCycle {
     fogState.sunDir[0] = this.sunDir.x; fogState.sunDir[1] = this.sunDir.y; fogState.sunDir[2] = this.sunDir.z;
     fogState.params[0] = this.lerpNum('glowPow'); fogState.params[1] = this.lerpNum('glowAmt');
     t.scene.background.copy(t.scene.fog.color);
-    // sky dome and clouds
+    // sky dome, sun disc, moon and clouds
     const su = t.sky.material.uniforms;
     su.uZenith.value.copy(this.lerpColor('zenith', c));
     su.uHorizon.value.copy(this.lerpColor('horizon', c));
     su.uSunColor.value.copy(this.lerpColor('skySun', c));
     su.uGround.value.copy(this.lerpColor('ground', c));
     su.uSunDir.value.copy(this.sunDir);
+    if (t.moonDisc) {
+      const md = t.moonDisc;
+      md.position.copy(this.moonDir).multiplyScalar(6300);
+      md.visible = this.moonUp;
+      md.material.uniforms.uSunDir.value.copy(this.sunDir);
+      md.material.uniforms.uDaylight.value = smoothstep(-6, 6, sun.elevation);
+    }
     const cu = t.clouds.children[0]?.material.uniforms;
     if (cu) { cu.uTop.value.copy(this.lerpColor('cloudTop', c)); cu.uBase.value.copy(this.lerpColor('cloudBase', c)); cu.uSky.value.copy(su.uZenith.value); cu.uSunDir.value.copy(this.sunDir); }
     if (t.stars) t.stars.material.opacity = this.lerpNum('stars');
@@ -108,10 +158,17 @@ export class DayCycle {
     wu.uReflect.value.copy(this.lerpColor('reflect', c));
     wu.uWaterDeep.value.copy(wu.uWater.value).multiplyScalar(0.55);
     wu.uFoam.value.copy(this.lerpColor('foam', c));
+    if (wu.uIce) wu.uIce.value = this.season.ice;
     if (t.ripples) t.ripples.material.uniforms.uColor.value.copy(wu.uFoam.value);
     if (t.hullFoam) t.hullFoam.color.copy(wu.uFoam.value);
-    wu.uSunDir.value.copy(this.sunDir.y > 0.02 ? this.sunDir : t.moon.position.clone().normalize());
-    if (t.grade) t.grade.uniforms.uGain.value = this.lerpNum('gain');
+    wu.uSunDir.value.copy(this.sunDir.y > 0.02 ? this.sunDir : this.moonDir);
+    if (t.grade) {
+      const gu = t.grade.uniforms;
+      gu.uGain.value = this.lerpNum('gain');
+      gu.uSplit.value = this.lerpNum('split');
+      this.lerpColor('shadowTint', c); gu.uShadowTint.value.set(c.r, c.g, c.b);
+      this.lerpColor('highlightTint', c); gu.uHighlightTint.value.set(c.r, c.g, c.b);
+    }
     if (t.mist) { t.mist.setAmount(this.mist); t.mist.setColor(this.lerpColor('fogHorizon', c).lerp(new THREE.Color(0xffffff), 0.55)); }
   }
 }
@@ -134,4 +191,37 @@ export function buildStars(radius = 6400, count = 1800, seed = 3) {
   pts.frustumCulled = false;
   pts.renderOrder = -9;
   return pts;
+}
+
+// The moon: a small sphere on the sky dome lit by the real sun direction, so it shows the real phase.
+// Faint earthshine on the dark side, and it fades against daylight.
+export function buildMoon(radius = 105) {
+  const geo = new THREE.SphereGeometry(radius, 24, 16);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uDaylight: { value: 0 } },
+    vertexShader: /* glsl */ `
+      varying vec3 vN;
+      void main() { vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uSunDir;
+      uniform float uDaylight;
+      varying vec3 vN;
+      void main() {
+        float lit = smoothstep(-0.02, 0.12, dot(normalize(vN), uSunDir));
+        vec3 face = mix(vec3(0.05, 0.06, 0.08), vec3(0.93, 0.92, 0.86), lit);
+        // against a bright sky only the lit part shows, as a pale shape
+        if (uDaylight > 0.5 && lit < 0.5) discard;
+        float a = mix(1.0, 0.75, uDaylight);
+        gl_FragColor = vec4(face, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    transparent: true, depthWrite: false, fog: false,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = -8;
+  m.frustumCulled = false;
+  return m;
 }

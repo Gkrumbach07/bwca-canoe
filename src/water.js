@@ -91,7 +91,7 @@ export const glslSurface = /* glsl */ `
 `;
 
 const vertHead = /* glsl */ `
-  uniform float uTime;
+  uniform float uTime, uIce;
   uniform mat4 uTextureMatrix;
   varying vec3 vLocal;        // position relative to the floating origin
   varying vec3 vWaveN;        // smooth surface normal from the swell itself, not from the triangle
@@ -132,7 +132,7 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
     vec2 ac = (rel - uAtlas.xy) * uAtlas.z;
     bool inAtlas = ac.x >= 0.0 && ac.y >= 0.0 && ac.x < uAtlas.w && ac.y < uAtlas.w;
     float fetch = inAtlas ? texelFetch(uFetchTex, ivec2(ac), 0).r : 400.0;
-    float Hw = windHeight(fetch);
+    float Hw = windHeight(fetch) * (1.0 - uIce);
     float damp = smoothstep(0.0, 25.0, -aShore) * 0.5 * Hw;
     float wave = lowWave(rel, uTime) * damp;
     vCrest = vec2(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -aShore));
@@ -150,14 +150,15 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     vec2 rel = position.xz + uPatchLocal;
     float border = 1.0 - smoothstep(uPatchHalf - 40.0, uPatchHalf - 6.0, max(abs(position.x), abs(position.z)));
     float shore, s2;
-    float wave = surfaceWave(rel, uTime, border, shore);
+    border *= (1.0 - uIce);
+    float wave = surfaceWave(rel, uTime, border, shore) * (1.0 - uIce);
     vShore = shore;
-    float Hw = windHeight(bilinear(uFetchTex, rel));
+    float Hw = windHeight(bilinear(uFetchTex, rel)) * (1.0 - uIce);
     vCrest = vec2(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -shore));
     const float e = 1.6;
     float hL = surfaceWave(rel - vec2(e, 0.0), uTime, border, s2), hR = surfaceWave(rel + vec2(e, 0.0), uTime, border, s2);
     float hB = surfaceWave(rel - vec2(0.0, e), uTime, border, s2), hF = surfaceWave(rel + vec2(0.0, e), uTime, border, s2);
-    vWaveN = normalize(vec3(hL - hR, 2.0 * e, hB - hF));
+    vWaveN = normalize(vec3((hL - hR) * (1.0 - uIce), 2.0 * e, (hB - hF) * (1.0 - uIce)));
     float level = levelAt(rel);
     vDepth = max(0.0, level - terrainAt(rel));
     vClarity = clarityAt(rel);
@@ -167,7 +168,7 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
 ` + vertTail;
 
 const frag = /* glsl */ `
-  uniform float uTime, uReflOn, uClarity;
+  uniform float uTime, uReflOn, uClarity, uIce;
   uniform vec3 uSunDir, uWater, uWaterDeep, uReflect, uFoam;
   uniform vec3 uStain;        // tannin-stained water at unit luminance (the day cycle's brightness carries over)
   uniform vec2 uOrigin;
@@ -229,12 +230,16 @@ const frag = /* glsl */ `
     float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
     // whitecaps: once the wind has raised real waves, their crests break
     float cap = smoothstep(0.62, 0.8, vCrest.x) * smoothstep(0.35, 0.7, vCrest.y) * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7));
-    float foam = max(max(ripple, waterline) * 0.85, cap * 0.9);
+    float foam = max(max(ripple, waterline) * 0.85, cap * 0.9) * (1.0 - uIce);
     col = mix(col, uFoam, foam);
     // the bed shows through shallow, clear water; tannin-stained lakes close up within a few metres.
     // uClarity scales the lake's own Secchi depth (1 = as measured)
     float alpha = clamp(1.0 - 0.92 * exp(-vDepth / max(0.3, vClarity * uClarity)), 0.1, 0.96);
     alpha = max(alpha, foam);
+    // frozen over: a pale grey-white sheet, no swell, ripples or foam, nearly opaque
+    vec3 ice = vec3(0.74, 0.77, 0.78) * (0.7 + 0.3 * shadow);
+    col = mix(col, ice, uIce);
+    alpha = mix(alpha, 0.985, uIce);
     gl_FragColor = vec4(col, alpha);
     #include <fog_fragment>
     #include <tonemapping_fragment>
@@ -274,6 +279,7 @@ export class WaterSystem {
       uReflect: { value: new THREE.Color(palette.reflect) },
       uFoam: { value: new THREE.Color(0xf2f6f6) },
       uClarity: { value: 1.0 },
+      uIce: { value: 0 },
       uStain: { value: new THREE.Color(1.0, 0.74, 0.4) },
       uReflection: { value: null },
       uReflOn: { value: 0 },
