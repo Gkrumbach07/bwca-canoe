@@ -84,6 +84,13 @@ export class Player {
 
   updatePaddle(dt) {
     const inp = this.input, w = this.world, st = this.canoe.state;
+    if (this.season && this.season.ice > 0.5) {
+      // the lakes are frozen: nothing to paddle until ice-out in early May
+      this.speed *= 0.9; this.yawRate = 0; st.power *= 0.9;
+      this.placeOnWater(dt);
+      this.prompt = { key: null, text: 'Iced in: the lakes are frozen until ice-out in early May (= steps the date)' };
+      return;
+    }
     let fwd = (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
     const turn = (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
     const hustle = inp.held('ShiftLeft', 'ShiftRight');

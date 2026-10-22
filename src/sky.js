@@ -20,6 +20,9 @@ const skyFrag = /* glsl */ `
     col = mix(col, uGround, smoothstep(0.0, 0.12, -t));
     float sd = max(dot(d, uSunDir), 0.0);
     col += uSunColor * (pow(sd, 600.0) * 1.6 + pow(sd, 24.0) * 0.22 + pow(sd, 6.0) * 0.06);
+    // the disc itself: a little over half a degree across, soft-edged, brighter than anything else in the sky
+    float ang = acos(clamp(sd, -1.0, 1.0));
+    col += uSunColor * 2.5 * (1.0 - smoothstep(0.0062, 0.0085, ang)) * step(-0.02, uSunDir.y);
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>

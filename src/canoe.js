@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, lerp, clamp } from './rng.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeToonMaterial, smoothToon } from './rocks.js';
+import { makeToonMaterial, smoothToon, creasedToon } from './rocks.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export const FLOAT_OFFSET = 0.15; // rig origin sits this far above the water surface
@@ -65,7 +65,7 @@ function buildHull(rng) {
   box(-0.04, 0.04, 0.24, 0.29, -0.44, 0.44, wood);  // portage yoke
   box(0.86, 0.92, 0.26, 0.3, -0.4, 0.4, wood);
   box(-0.92, -0.86, 0.26, 0.3, -0.4, 0.4, wood);
-  const merged = mergeGeometries([smoothToon(shell.build()).toNonIndexed(), g.build()], false);
+  const merged = mergeGeometries([creasedToon(shell.build(), Math.PI * 0.32), g.build()], false); // smooth sides, a crisp keel and stem
   merged.computeBoundingSphere();
   return merged;
 }

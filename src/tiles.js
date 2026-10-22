@@ -42,6 +42,11 @@ export class TileManager {
 
   key(tx, ty) { return `${tx},${ty}`; }
 
+  setSeason(season) {
+    if (this.vegetation.setSeason) this.vegetation.setSeason(season);
+    if (this.aquatic && this.aquatic.setSeason) this.aquatic.setSeason(season);
+  }
+
   // --- requests ------------------------------------------------------------------
   request(tx, ty) {
     const key = this.key(tx, ty);

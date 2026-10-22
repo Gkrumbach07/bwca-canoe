@@ -46,8 +46,9 @@ export class Loons {
     return null;
   }
 
-  update(dt, player) {
+  update(dt, player, season = null) {
     const w = this.world;
+    if (season && season.loons < 0.5) { for (const l of this.loons) l.mesh.visible = false; return; }
     for (const l of this.loons) {
       const dPlayer = Math.hypot(l.x - player.x, l.z - player.z);
       if (!l.alive || dPlayer > 650) {

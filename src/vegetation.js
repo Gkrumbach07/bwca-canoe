@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, hash2 } from './rng.js';
-import { smoothBoulder, makeRockMaterial, makeToonMaterial, smoothToon } from './rocks.js';
+import { angularRock, makeRockMaterial, makeToonMaterial, smoothToon } from './rocks.js';
 
 // Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
 // turns a tile's placement bins into instanced meshes in tile-local coordinates. Everything is welded smooth
@@ -126,22 +126,24 @@ const LOW = {
   birch: (rng) => { const h = 8 + rng() * 5; const g = lowBlob(rng, h * 0.75, 2.4, vary(0x7da84a, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.1, h * 0.7, 3, vary(0xe6e2d6, rng, 0.04), rng); return g.build(); },
   cedar: (rng) => lowConifer(rng, 7 + rng() * 3, 2.3, [vary(0x2d5436, rng), vary(0x2d5436, rng)], vary(0x6b4a34, rng), 0.1),
   snag: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.5, 0, 0.3, 0.08, 7 + rng() * 5, 4, vary(0x9a9388, rng, 0.08), rng); return g.build(); },
-  boulder: (rng) => smoothBoulder(rng, rng() * 50),
+  boulder: (rng) => angularRock(rng, 'block'),
   shrub,
   tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x3b6b42, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x6b4a34, rng), rng); return g.build(); },
   jackPine: (rng) => { const h = 4.5 + rng() * 3.5; const g = lowBlob(rng, h * 0.85, 1.5, vary(0x4a7438, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.08, h * 0.8, 3, vary(0x6a5038, rng), rng); return g.build(); },
 };
 
 // index order must match placement.js SPECIES
+// index order must match placement.js SPECIES. `leaves`: deciduous, with an autumn colour (linear rgb).
+const ROCK_KINDS = ['slab', 'block', 'boulder'];
 export const SPECIES = [
   { name: 'whitePine', make: whitePine },
   { name: 'spruce', make: spruce },
   { name: 'redPine', make: redPine },
-  { name: 'birch', make: birch },
+  { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12] },
   { name: 'cedar', make: cedar },
   { name: 'snag', make: snag },
-  { name: 'boulder', make: (rng) => smoothBoulder(rng, rng() * 50), rock: true },
-  { name: 'shrub', make: shrub },
+  { name: 'boulder', make: (rng, v) => angularRock(rng, ROCK_KINDS[v % 3]), rock: true, variants: 9 },
+  { name: 'shrub', make: shrub, leaves: [0.72, 0.22, 0.08] },
   { name: 'tallPine', make: tallPine },
   { name: 'jackPine', make: jackPine },
 ];
@@ -149,16 +151,55 @@ const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
 const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
 
+// Marks foliage vertices (greens and yellows with some saturation; bark, snow-white birch and grey are not)
+// so the season can recolour and drop the leaves and leave the trunk alone.
+function tagLeaves(geo) {
+  const col = geo.getAttribute('color'), leaf = new Float32Array(col.count), c = new THREE.Color(), hsl = { h: 0, s: 0, l: 0 };
+  for (let i = 0; i < col.count; i++) {
+    c.setRGB(col.getX(i), col.getY(i), col.getZ(i)).getHSL(hsl);
+    leaf[i] = hsl.s > 0.2 && hsl.h > 0.1 && hsl.h < 0.47 ? 1 : 0;
+  }
+  geo.setAttribute('aLeaf', new THREE.BufferAttribute(leaf, 1));
+  return geo;
+}
+
+// The toon material for a deciduous species: leaves go gold or red in the fall, come in pale in spring, and
+// are gone between leaf-drop and leaf-out.
+function makeLeafMaterial(autumn) {
+  const m = makeToonMaterial();
+  const u = { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } };
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, u);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;')
+      .replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vLeaf;\nuniform float uLeafOn;')
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n if (vLeaf > 0.5 && uLeafOn < 0.5) discard;');
+  };
+  m.customProgramCacheKey = () => 'toon-leaves';
+  m.userData.u = u;
+  return m;
+}
+
 // Geometry variants (built once) and the shared materials.
 export function makeVegetationKit(seed = 3) {
-  const variants = SPECIES.map((s) => Array.from({ length: VARIANTS }, (_, v) => {
-    const full = s.make(mulberry32(seed * 131 + v * 17 + s.name.length));
+  const variants = SPECIES.map((s) => Array.from({ length: s.variants || VARIANTS }, (_, v) => {
+    const full = s.make(mulberry32(seed * 131 + v * 17 + s.name.length), v);
     const low = LOW[s.name](mulberry32(seed * 131 + v * 17 + s.name.length));
-    return s.rock ? { full, low } : { full: smoothToon(full), low: smoothToon(low) };
+    if (s.rock) return { full, low };
+    const out = { full: smoothToon(full), low: smoothToon(low) };
+    if (s.leaves) { tagLeaves(out.full); tagLeaves(out.low); }
+    return out;
   }));
   const material = makeToonMaterial();
   const rockMaterial = makeRockMaterial();
-  return { variants, material, rockMaterial, seed };
+  const leafMaterials = SPECIES.map((s) => (s.leaves ? makeLeafMaterial(s.leaves) : null));
+  const materialFor = (sp) => (SPECIES[sp].rock ? rockMaterial : leafMaterials[sp] || material);
+  const setSeason = (season) => {
+    for (const m of leafMaterials) if (m) { m.userData.u.uFall.value = season.fall; m.userData.u.uSpring.value = season.spring; m.userData.u.uLeafOn.value = season.leafOn; }
+  };
+  return { variants, material, rockMaterial, materialFor, setSeason, seed };
 }
 
 // One instanced mesh per (region, species) bin, matrices and colours straight from the worker.
@@ -166,9 +207,9 @@ export function makeVegetationMeshes(bins, kit) {
   const meshes = [];
   for (const b of bins) {
     if (!b.count) continue;
-    const spec = SPECIES[b.sp];
-    const v = kit.variants[b.sp][Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 9) * VARIANTS)];
-    const mesh = new THREE.InstancedMesh(v.full, spec.rock ? kit.rockMaterial : kit.material, b.count);
+    const vs = kit.variants[b.sp];
+    const v = vs[Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 9) * vs.length)];
+    const mesh = new THREE.InstancedMesh(v.full, kit.materialFor(b.sp), b.count);
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(b.matrices, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(b.colors, 3);
     mesh.castShadow = true;

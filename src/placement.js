@@ -8,7 +8,7 @@ import { surfaceAt, groundClass, rockSlope } from './terrain-build.js';
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
 export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9 };
-const SCALE = [[0.85, 1.3], [0.75, 1.2], [0.75, 1.15], [0.7, 1.15], [0.75, 1.2], [0.8, 1.2], [0.6, 1.8], [0.7, 1.5], [0.85, 1.25], [0.7, 1.1]];
+const SCALE = [[0.85, 1.3], [0.75, 1.2], [0.75, 1.15], [0.7, 1.15], [0.75, 1.2], [0.8, 1.2], [0.4, 2.2], [0.7, 1.5], [0.85, 1.25], [0.7, 1.1]];
 const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 export const AQUATIC = { pad: 0, reed: 1, weed: 2 };
 
@@ -72,7 +72,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const trees = Math.floor(e) + (rng() < e - Math.floor(e) ? 1 : 0);
       const eShrub = ((sd > 0.5 && sd < 35 ? (0.75 - smoothstep(10, 35, sd) * 0.5) * (1 - clearing * 0.5) * trailSide : (sd > 0 && trailSide > 1 ? 0.5 : 0)) + burn * 0.5) * (1 - rock * 0.8);
       const shrubs = Math.floor(eShrub) + (rng() < eShrub - Math.floor(eShrub) ? 1 : 0);
-      const eRock = (sd < 8 && sd > -4 ? 0.1 + smoothstep(0.3, 0.6, slope) * 0.25 : 0) + (bare ? 0.3 + rock * 0.2 : 0);
+      const eRock = (sd < 8 && sd > -4 ? 0.1 + smoothstep(0.3, 0.6, slope) * 0.25 : 0) + (bare ? 0.35 + rock * 0.25 : 0) + (sd > 8 && !bare ? 0.05 + smoothstep(0.2, 0.45, slope) * 0.15 : 0);
       const rocks = Math.floor(eRock) + (rng() < eRock - Math.floor(eRock) ? 1 : 0);
       const core = i >= i0 && i < i0 + n && j >= j0 && j < j0 + n;
       const cnt = trees + shrubs + rocks;
@@ -80,7 +80,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
         const isTree = q < trees, isShrub = !isTree && q < trees + shrubs, isRock = !isTree && !isShrub;
         const x = cx + (rng() - 0.5) * cell, z = cz + (rng() - 0.5) * cell;
         const s = grid.shoreAt(x, z);
-        if (isRock ? s < -3 || (s > 9 && !bare) : s < 0.6) continue;
+        if (isRock ? s < -3 : s < 0.6) continue;
         if (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + (isRock ? 0.5 : isShrub ? 0.4 : 1.2))) continue;
         let sp;
         if (isRock) sp = 6;
@@ -101,7 +101,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           else if (r < 0.12) sp = 2; else if (r < 0.25) sp = 0; else if (r < 0.32) sp = 3; else sp = 1;
           shadeCount[k] += 1;
         }
-        let scale = SCALE[sp][0] + rng() * (SCALE[sp][1] - SCALE[sp][0]);
+        let scale = SCALE[sp][0] + (isRock ? rng() ** 1.7 : rng()) * (SCALE[sp][1] - SCALE[sp][0]); // rocks: many small, a few big
         if (GIANT[sp] && rng() < GIANT[sp]) scale *= 1.45;
         if (isTree && burn > 0.5) scale *= sp === 5 ? 1.25 : 0.45; // tall dead stems, small regrowth
         if (isTree && bare && sp !== 9) scale *= 0.7;              // stunted on the rock

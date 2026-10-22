@@ -21,8 +21,15 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
   workers, a coarse 80 m far field underneath, and lets the rest go.
 - **GPS simulation**: the canoe's real-world latitude/longitude is broadcast as the device location,
   so other tabs that ask for geolocation see you paddling (see *GPS simulator* below).
-- **A day in the Boundary Waters**: a 20-minute day/night cycle drives the sun, a sky-matched haze, the
-  clouds, the water, stars and moonlight, with dawn mist over the lakes. Lakes are clear in the shallows
+- **A day in the Boundary Waters**: a 20-minute day/night cycle with the real sun and moon for the date and
+  the clock (`src/astro.js`: sunrise and sunset shift through the year, the moon shows its phase), a
+  sky-matched haze, golden light at the ends of the day, the clouds, the water, stars, with dawn mist over
+  the lakes. The game starts on today's date at the current time.
+- **Seasons** (`src/season.js`, from the day of the year): the lakes are frozen until ice-out in early May and
+  again from late November; birch and aspen leaf out pale green in mid-May, turn gold in the last half of
+  September and drop by the end of October, shrubs go red; grass goes tawny in the fall; lily pads are on the
+  water from June to late September, fireweed blooms in high summer, loons are on the lakes from May to
+  October, and cold mornings bring heavier mist. `day.season` carries all of it for anything else to use. Lakes are clear in the shallows
   (lily pads, reeds and weeds grow in sheltered water) and tannin-dark in the deep. Loons drift, dive and
   call; wind, lapping water and paddle dips are synthesized, no samples.
 - **The look**: flat categorical colours on a faceted ground; trees, shrubs, rocks and the canoe are welded
@@ -62,6 +69,7 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | M | enlarge the map (three times the area) |
 | V | switch between first-person and chase camera |
 | [ / ] | step the time of day back / forward an hour |
+| - / = | step the date back / forward a day (with Shift, a month) |
 | P | pause the clock |
 | N | mute / unmute the synthesized soundscape |
 | , / . | less / more wind (debug; `;` hands control back to the weather) |

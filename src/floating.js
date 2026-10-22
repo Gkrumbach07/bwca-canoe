@@ -3,12 +3,12 @@ import { glslSurface } from './water.js';
 
 // Lambert materials that ride the water swell (instanced or not) or sway on the lake bed. The swell is
 // sampled exactly as the water patch renders it, relative to the water's floating origin.
-function withSurface(material, water, bodyReplace) {
+function withSurface(material, water, bodyReplace, extra = {}, decl = '') {
   const su = water.surfaceUniforms();
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, su);
+    Object.assign(shader.uniforms, su, extra);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\n' + glslSurface + '\nuniform float uWaterTime;')
+      .replace('#include <common>', '#include <common>\n' + glslSurface + '\nuniform float uWaterTime;\n' + decl)
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + bodyReplace);
   };
   return material;
@@ -25,10 +25,13 @@ const INSTANCE_ORIGIN = /* glsl */ `
   vec2 ipRel = ip.xz - uOrigin;
 `;
 
-export function makeFloatingMaterial(water, opts = {}) {
+// grow: a { value } uniform scaling the geometry about the instance origin (0 hides it), for things that
+// come and go with the season
+export function makeFloatingMaterial(water, opts = {}, grow = null) {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, ...opts });
-  withSurface(m, water, INSTANCE_ORIGIN + `{ transformed.y += renderedWave(ipRel, uWaterTime) / sy; }`);
-  m.customProgramCacheKey = () => 'floating';
+  const scale = grow ? 'transformed *= uGrow; ' : '';
+  withSurface(m, water, INSTANCE_ORIGIN + `{ ${scale}transformed.y += renderedWave(ipRel, uWaterTime) / sy; }`, grow ? { uGrow: grow } : {}, grow ? 'uniform float uGrow;' : '');
+  m.customProgramCacheKey = () => (grow ? 'floating-grow' : 'floating');
   return m;
 }
 
