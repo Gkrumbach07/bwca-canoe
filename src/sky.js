@@ -13,6 +13,7 @@ const skyVert = /* glsl */ `
 const skyFrag = /* glsl */ `
   uniform vec3 uZenith, uHorizon, uMid, uGround, uSunDir, uSunColor;
   uniform vec2 uGlow; // the low sun's glow: amount, power
+  uniform vec3 uDisc; // the sun disc: angular radius (radians), brightness, halo brightness
   varying vec3 vDir;
   void main() {
     vec3 d = normalize(vDir);
@@ -21,13 +22,17 @@ const skyFrag = /* glsl */ `
     vec3 col = mix(mix(uHorizon, uMid, smoothstep(0.0, 0.1, t)), uZenith, smoothstep(0.06, 0.45, t));
     col = mix(col, uGround, smoothstep(0.0, 0.12, -t));
     float sd = max(dot(d, uSunDir), 0.0);
-    col += uSunColor * (pow(sd, 600.0) * 1.6 + pow(sd, 24.0) * 0.22 + pow(sd, 6.0) * 0.06);
     // the low sun's glow: a broad warm bloom about the sun and a band along the horizon either side of it
     float band = 1.0 - smoothstep(0.0, 0.3, abs(t));
+    col += uSunColor * (pow(sd, 24.0) * 0.18 + pow(sd, 6.0) * 0.05);
     col += uSunColor * uGlow.x * (pow(sd, uGlow.y) + 0.6 * pow(sd, 2.0) * band);
-    // the disc itself: a little over half a degree across, soft-edged, brighter than anything else in the sky
-    float ang = acos(clamp(sd, -1.0, 1.0));
-    col += uSunColor * 2.5 * (1.0 - smoothstep(0.0062, 0.0085, ang)) * step(-0.02, uSunDir.y);
+    // the sun: a crisp disc (the chord to the sun's centre is the angle to it, without acos's loss of precision
+    // near 1), much brighter than anything else so the tone map burns it white at the core, in a soft halo
+    float ang = length(d - uSunDir);
+    float aa = max(fwidth(ang), 1e-5);
+    float disc = 1.0 - smoothstep(uDisc.x - aa, uDisc.x + aa, ang);
+    float halo = exp(-ang / (uDisc.x * 2.2)) * 0.55 + exp(-ang / (uDisc.x * 9.0)) * 0.12;
+    col += uSunColor * (uDisc.y * disc + uDisc.z * halo) * smoothstep(-0.03, 0.0, uSunDir.y);
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -47,6 +52,7 @@ export function buildSky(sunDir, palette) {
       uSunDir: { value: sunDir.clone() },
       uSunColor: { value: new THREE.Color(palette.sun) },
       uGlow: { value: new THREE.Vector2(0.1, 8) },
+      uDisc: { value: new THREE.Vector3(0.0085, 24, 3) },
     },
     side: THREE.BackSide,
     depthWrite: false,
