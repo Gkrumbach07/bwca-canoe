@@ -19,7 +19,7 @@ const TAU = Math.PI * 2;
 
 export const TUNING = {
   base: 1 / 80,          // bites per second for one species at every factor 1.0
-  castSpeed: [6, 21],    // lure speed off the tip at zero and full power, m/s
+  castSpeed: [3, 21],    // lure speed off the tip at zero and full power, m/s
   castAngle: 0.66,       // radians above the horizon
   floatDepth: 2.4,       // metres of line under the bobber
   retrieve: [1.3, 2.2],  // lure speed when reeling with W, with Shift
@@ -28,8 +28,25 @@ export const TUNING = {
   snapDanger: 1.0,       // seconds-ish of tension above the red line before the line parts
   slackLimit: 3.5,       // seconds of slack line before the fish throws the hook
   landAt: 1.7,           // metres of line left when the fish is at the hull
-  holdUp: 9,             // seconds the fish is held up before it is let go on its own
+  holdUp: 12,            // seconds the fish is held up before it is let go on its own
+  rodArc: 1.4,           // radians either side of the bow the rod can be swung to cast
 };
+
+// How far a lure flies off a tip `h` metres above the water at `speed`, with the flight's own drag; and the
+// speed that lands it `dist` out, so a cast can be dropped on the spot the player is pointing at.
+export function rangeFor(speed, h) {
+  const a = TUNING.castAngle, dt = 0.02;
+  let x = 0, y = h, vx = Math.cos(a) * speed, vy = Math.sin(a) * speed;
+  for (let i = 0; i < 500; i++) { vy -= 9.81 * dt; const d = 1 - 0.08 * dt; vx *= d; vy *= d; x += vx * dt; y += vy * dt; if (y <= 0) break; }
+  return x;
+}
+export function speedFor(dist, h) {
+  let lo = TUNING.castSpeed[0], hi = TUNING.castSpeed[1];
+  if (rangeFor(hi, h) <= dist) return hi;
+  if (rangeFor(lo, h) >= dist) return lo;
+  for (let i = 0; i < 16; i++) { const m = (lo + hi) / 2; if (rangeFor(m, h) < dist) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
 
 // ---------------------------------------------------------------------------------------------------------------
 // Tackle. sink: fall rate at rest (negative floats up). run: depth it swims at when retrieved at a walking pace,
@@ -201,6 +218,17 @@ export class Fishing {
     this.line.visible = false;
     this.line.renderOrder = 13;
     scene.add(this.line);
+    // where the cast will land: a pale ring on the water while the rod is ready or loading
+    this.aimRing = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.58, 28), new THREE.MeshBasicMaterial({ color: 0xf4f1e8, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
+    this.aimRing.rotation.x = -Math.PI / 2;
+    this.aimRing.renderOrder = 12;
+    this.aimRing.visible = false;
+    scene.add(this.aimRing);
+    this.raycaster = new THREE.Raycaster();
+    this._ndc = new THREE.Vector2();
+    this.aimPoint = null;   // world xz the cast is aimed at (the cursor's spot on the water, or the view's), if in reach
+    this.aimDist = 0;
+    this.focus = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
 
     this.rodUp = false;
     this.state = 'stowed';     // stowed | ready | charging | swing | flying | inwater | bite | fight | landed
@@ -233,8 +261,10 @@ export class Fishing {
   }
 
   get lureDef() { return LURES[this.lureIndex]; }
-  get button() { return this.input.held('Space') || this.mouse.down; }
-  buttonPressed() { const p = this.input.pressed('Space') || this.mouse.pressed; return p; }
+  // in first person the first click only captures the pointer for looking around; it is not a cast
+  get mouseOk() { const c = this.chase; return c.mode !== 'first' || c.locked || c.lockDenied; }
+  get button() { return this.input.held('Space') || (this.mouse.down && this.mouseOk); }
+  buttonPressed() { return this.input.pressed('Space') || (this.mouse.pressed && this.mouseOk); }
 
   // --- catch log ----------------------------------------------------------------------------------------------------
   loadLog() {
@@ -352,7 +382,8 @@ export class Fishing {
     if (this.state === 'landed') this.release(false);
     this.rodUp = false; this.state = 'stowed'; this.lineOut = 0; this.power = 0;
     this.bite = null; this.fish = null; this.pending = null;
-    this.bobber.visible = false; this.line.visible = false;
+    this.bobber.visible = false; this.line.visible = false; this.aimRing.visible = false;
+    this.chase.orbitLocked = false; this.chase.focus = null;
     for (const m of this.lureMeshes) m.visible = false;
     for (const id of SPECIES_IDS) if (this.fishMeshes[id] !== this.heldFish) this.fishMeshes[id].visible = false;
     this.canoe.state.fishing = null;
@@ -360,13 +391,66 @@ export class Fishing {
   }
 
   // --- the cast ------------------------------------------------------------------------------------------------------
+  // Where the player is pointing: the view's centre in first person, the cursor in third. Where that ray meets
+  // the water inside the rod's reach, the cast is aimed at the spot and will not fly past it.
+  computeAim() {
+    const p = this.player, ch = this.chase, cam = ch.camera, t = this.tipWorld();
+    const level = p.level || this.world.levelAt(p.x, p.z);
+    let ox, oy, oz, dx, dy, dz;
+    if (ch.mode === 'first' || !ch.cursor.inside) {
+      cam.getWorldDirection(this._v2);
+      ox = cam.position.x; oy = cam.position.y; oz = cam.position.z; dx = this._v2.x; dy = this._v2.y; dz = this._v2.z;
+      if (ch.mode !== 'first') { ox = t.x; oy = t.y; oz = t.z; dx = p.forward.x; dz = p.forward.z; dy = -0.05; } // no cursor: dead ahead
+    } else {
+      this.raycaster.setFromCamera(this._ndc.set(ch.cursor.x, ch.cursor.y), cam);
+      const r = this.raycaster.ray;
+      ox = r.origin.x; oy = r.origin.y; oz = r.origin.z; dx = r.direction.x; dy = r.direction.y; dz = r.direction.z;
+    }
+    const h = Math.max(0.3, t.y - level), reach = rangeFor(TUNING.castSpeed[1], h);
+    let yaw = null, point = null, dist = reach;
+    if (dy < -1e-3) {
+      const s = (level - oy) / dy, px = ox + dx * s, pz = oz + dz * s;
+      const D = Math.hypot(px - t.x, pz - t.z);
+      if (D > 1.5) { yaw = Math.atan2(-(pz - t.z), px - t.x); if (D <= reach + 2) { point = { x: px, z: pz }; dist = Math.min(D, reach); } }
+    }
+    if (yaw == null) yaw = Math.hypot(dx, dz) > 1e-3 ? Math.atan2(-dz, dx) : p.heading;
+    let rel = yaw - p.heading; rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+    const inArc = Math.abs(rel) <= TUNING.rodArc;
+    this.aim = p.heading + clamp(rel, -TUNING.rodArc, TUNING.rodArc);
+    this.aimPoint = inArc ? point : null;
+    this.aimDist = inArc ? dist : reach;
+    this.tipHeight = h;
+    return reach;
+  }
+
+  // the ring on the water: the spot aimed at when the rod is ready, the spot this much power reaches while loading
+  placeAimRing(reach) {
+    const t = this.tipWorld(), s = this.state;
+    const show = this.rodUp && (s === 'ready' || s === 'charging');
+    if (!show) { this.aimRing.visible = false; return; }
+    let d = this.aimDist;
+    if (s === 'charging') d = Math.min(d, rangeFor(lerp(TUNING.castSpeed[0], TUNING.castSpeed[1], this.power), this.tipHeight));
+    const x = t.x + Math.cos(this.aim) * d, z = t.z - Math.sin(this.aim) * d;
+    const water = this.world.shoreAt(x, z) < 0;
+    this.aimRing.visible = water;
+    if (!water) return;
+    this.aimRing.position.set(x, this.surfaceAt(x, z) + 0.03, z);
+    const sc = 1 + 0.5 * Math.max(0, 1 - d / Math.max(1, reach)); // a touch larger close in so it still reads
+    this.aimRing.scale.setScalar(sc * (this.aimPoint ? 1 : 0.8));
+    this.aimRing.material.opacity = this.aimPoint ? 0.6 : 0.35;
+  }
+
   launch() {
     const p = this.pending; this.pending = null;
     const t = this.tipWorld();
-    const sp = lerp(TUNING.castSpeed[0], TUNING.castSpeed[1], p.power), a = TUNING.castAngle;
+    const level = this.player.level || this.world.levelAt(this.player.x, this.player.z), h = Math.max(0.3, t.y - level);
+    let sp = lerp(TUNING.castSpeed[0], TUNING.castSpeed[1], p.power), yaw = this.aim;
+    const ap = this.aimPoint;
+    if (ap) { const D = Math.hypot(ap.x - t.x, ap.z - t.z); if (D > 1.5) { yaw = Math.atan2(-(ap.z - t.z), ap.x - t.x); sp = Math.min(sp, speedFor(D, h)); } }
+    const a = TUNING.castAngle;
     const l = this.lure;
     l.x = t.x; l.y = t.y; l.z = t.z;
-    l.vx = Math.cos(this.aim) * Math.cos(a) * sp; l.vz = -Math.sin(this.aim) * Math.cos(a) * sp; l.vy = Math.sin(a) * sp;
+    l.vx = Math.cos(yaw) * Math.cos(a) * sp; l.vz = -Math.sin(yaw) * Math.cos(a) * sp; l.vy = Math.sin(a) * sp;
     l.depth = 0; l.onLand = false; l.speed = 0;
     this.state = 'flying'; this.sinceCast = 0;
     if (this.audio) this.audio.reelClick(1.4);
@@ -425,12 +509,13 @@ export class Fishing {
 
   updateRodUp(dt, ts) {
     const p = this.player, l = this.lure, w = this.world;
-    const first = this.chase.mode === 'first';
-    this.aim = first ? p.heading + clamp(this.chase.userYaw, -1.4, 1.4) : p.heading;
+    this.chase.orbitLocked = this.chase.mode === 'third'; // a click casts; it does not swing the camera
     const s = this.state;
+    if (s === 'ready' || s === 'charging') { const reach = this.computeAim(); this.placeAimRing(reach); } else this.aimRing.visible = false;
     if (s === 'ready') {
       if (this.buttonPressed()) { this.state = 'charging'; this.charge = 0; this.power = 0; }
-      p.prompt = { key: 'Space', text: `Hold to load a cast · <b>${this.lureDef.name}</b> · 1-5 to change · F puts the rod down` };
+      const where = this.chase.mode === 'first' ? 'where you look' : 'where the cursor points';
+      p.prompt = { key: 'Space', text: `Hold to load a cast ${where} · <b>${this.lureDef.name}</b> · 1-5 to change · F puts the rod down` };
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
@@ -670,18 +755,26 @@ export class Fishing {
     this.lineOut = 0;
   }
 
+  // The fish is held up for a look: the camera comes round to the paddler's front quarter until it is kept
+  // or let go (E or K; a stray click does not end it), or the hold-up time runs out.
   updateLanded(dt) {
     const L = this.landed, p = this.player;
     L.t += dt;
-    const keep = this.input.pressed('KeyK'), rel = this.input.pressed('KeyE') || this.buttonPressed();
+    const keep = this.input.pressed('KeyK'), rel = this.input.pressed('KeyE');
     if (keep && L.t > 0.4) return this.release(true);
     if ((rel && L.t > 0.4) || L.t > TUNING.holdUp) return this.release(false);
+    const f = p.forward, rx = -f.z, rz = f.x, y = this.canoe.rig.position.y;
+    const fx = this.focus;
+    fx.pos.set(p.x + f.x * 1.5 + rx * 1.55, y + 1.25, p.z + f.z * 1.5 + rz * 1.55);
+    fx.look.set(p.x - f.x * 1.2, y + 0.78, p.z - f.z * 1.2);
+    this.chase.focus = fx;
     p.prompt = { key: 'E', text: `Let it go · <kbd>K</kbd>keep it on the stringer` };
   }
 
   release(keep) {
     const L = this.landed;
     this.landed = null;
+    this.chase.focus = null;
     const mesh = this.heldFish;
     this.heldFish = null;
     if (mesh) { this.canoe.paddler.remove(mesh); this.scene.add(mesh); mesh.visible = false; mesh.scale.setScalar(1); }
@@ -706,7 +799,7 @@ export class Fishing {
     } else {
       grip = V(-1.22, 0.62, 0.08);
       let relYaw = this.aim - p.heading; relYaw = Math.atan2(Math.sin(relYaw), Math.cos(relYaw));
-      yaw = clamp(relYaw, -1.4, 1.4);
+      yaw = clamp(relYaw, -TUNING.rodArc, TUNING.rodArc);
       if (s === 'ready') pitch = 0.45;
       else if (s === 'charging') { pitch = lerp(0.5, 1.75, this.power); grip.x -= 0.1 * this.power; grip.y += 0.1 * this.power; }
       else if (s === 'swing') { const u = clamp(this.swing / 0.3, 0, 1); pitch = lerp(1.75, 0.3, 1 - (1 - u) * (1 - u)); bend = -0.6 * Math.sin(u * Math.PI); k = 1 - Math.exp(-dt * 30); }

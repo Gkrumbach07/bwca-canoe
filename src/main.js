@@ -133,7 +133,7 @@ async function main() {
     sky.position.copy(camera.position);
     sun.target.position.set(player.x, player.altitude, player.z);
     sun.position.copy(sun.target.position).addScaledVector(day.sunDir, 700);
-    canoe.setFirstPerson(chase.mode === 'first');
+    canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
     cover.update(dt * ts, player.x, player.z, hemi, sun);
     mist.update(dt * ts, player.x, player.z);
     loons.update(dt * ts, player);

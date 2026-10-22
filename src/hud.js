@@ -23,6 +23,21 @@ const TINT_LOW = [224, 216, 182], TINT_HIGH = [160, 166, 112];
 const BANDS = 14;
 const PAPER = '#e9e1cc';
 
+// marching squares: the segments through a cell for a corner bitmask (1 top-left, 2 top-right, 4 bottom-right, 8 bottom-left)
+function msSegments(b, top, right, bottom, left) {
+  switch (b) {
+    case 1: case 14: return [left, top];
+    case 2: case 13: return [top, right];
+    case 3: case 12: return [left, right];
+    case 4: case 11: return [right, bottom];
+    case 5: return [left, top, right, bottom];
+    case 6: case 9: return [top, bottom];
+    case 7: case 8: return [left, bottom];
+    case 10: return [top, right, bottom, left];
+    default: return [];
+  }
+}
+
 export class Hud {
   constructor(world, onTeleport = null) {
     this.world = world;
@@ -288,7 +303,7 @@ export class Hud {
         const lerp = (a, c) => (lvl - a) / (c - a || 1e-6);
         const top = [x0 + (x1 - x0) * lerp(h00, h10), y0], right = [x1, y0 + (y1 - y0) * lerp(h10, h11)];
         const bottom = [x0 + (x1 - x0) * lerp(h01, h11), y1], left = [x0, y0 + (y1 - y0) * lerp(h00, h01)];
-        const segs = { 1: [left, top], 2: [top, right], 3: [left, right], 4: [right, bottom], 5: [left, top, right, bottom], 6: [top, bottom], 7: [left, bottom], 8: [bottom, left], 9: [top, bottom], 10: [top, right, bottom, left], 11: [right, bottom], 12: [right, left], 13: [top, right], 14: [left, top] }[b];
+        const segs = msSegments(b, top, right, bottom, left);
         for (let q = 0; q < segs.length; q += 2) { ctx.moveTo(segs[q][0], segs[q][1]); ctx.lineTo(segs[q + 1][0], segs[q + 1][1]); }
       }
       const index = lvl % 50 === 0;
@@ -296,6 +311,51 @@ export class Hud {
       ctx.lineWidth = index ? 2.0 : 1.1;
       ctx.stroke();
     }
+  }
+
+  // Depth contours on the lakes the DNR has sounded (the lake table carries a maxDepth for them; lakes with a
+  // synthetic bed get none): every 2 m to 10 m, every 5 m to 30 m, every 10 m beyond, heavier every 10 m, on
+  // the full 10 m grid. Returns label spots [level, x, z] in world metres for drawMap to letter up close.
+  paintDepthContours(ctx, s, side, halo, pxPerCell, tx, ty) {
+    const w = this.world, n = Math.round(FINE_PX / pxPerCell), N = n + 1, lakes = w.lakes;
+    const mapped = new Map();
+    const isMapped = (id) => { let m = mapped.get(id); if (m === undefined) { const l = id > 0 ? lakes[id - 1] : null; m = !!(l && l.maxDepth); mapped.set(id, m); } return m; };
+    const depth = new Float32Array(N * N);
+    let maxD = 0;
+    for (let gj = 0; gj < N; gj++) for (let gi = 0; gi < N; gi++) {
+      const k = (halo + gj) * side + halo + gi, id = s.lake[k];
+      if (!id || !isMapped(id)) continue;
+      const d = (s.lvl[k] - s.h[k]) * 0.1;
+      if (d > 0) { depth[gj * N + gi] = d; if (d > maxD) maxD = d; }
+    }
+    if (maxD < 2) return [];
+    const levels = [];
+    for (let d = 2; d <= maxD; d += d < 10 ? 2 : d < 30 ? 5 : 10) levels.push(d);
+    const px = (g) => (g + 0.5) * pxPerCell;
+    const [ox, oz] = w.tileOrigin(tx, ty), mPerPx = w.tileMetres / FINE_PX;
+    const labels = [];
+    for (const lvl of levels) {
+      const segs = [];
+      for (let gj = 0; gj < N - 1; gj++) for (let gi = 0; gi < N - 1; gi++) {
+        const h00 = depth[gj * N + gi], h10 = depth[gj * N + gi + 1], h11 = depth[(gj + 1) * N + gi + 1], h01 = depth[(gj + 1) * N + gi];
+        const b = (h00 >= lvl ? 1 : 0) | (h10 >= lvl ? 2 : 0) | (h11 >= lvl ? 4 : 0) | (h01 >= lvl ? 8 : 0);
+        if (b === 0 || b === 15) continue;
+        const x0 = px(gi), y0 = px(gj), x1 = px(gi + 1), y1 = px(gj + 1);
+        const t = (a, c) => (lvl - a) / (c - a || 1e-6);
+        const top = [x0 + (x1 - x0) * t(h00, h10), y0], right = [x1, y0 + (y1 - y0) * t(h10, h11)];
+        const bottom = [x0 + (x1 - x0) * t(h01, h11), y1], left = [x0, y0 + (y1 - y0) * t(h00, h01)];
+        segs.push(...msSegments(b, top, right, bottom, left));
+      }
+      if (!segs.length) continue;
+      ctx.beginPath();
+      for (let q = 0; q < segs.length; q += 2) { ctx.moveTo(segs[q][0], segs[q][1]); ctx.lineTo(segs[q + 1][0], segs[q + 1][1]); }
+      const index = lvl % 10 === 0;
+      ctx.strokeStyle = index ? 'rgba(52, 92, 122, 0.9)' : 'rgba(70, 112, 142, 0.7)';
+      ctx.lineWidth = index ? 1.7 : 1.0;
+      ctx.stroke();
+      if (segs.length >= 40) { const m = segs[Math.floor(segs.length / 8) * 2]; labels.push([lvl, ox + m[0] * mPerPx, oz + m[1] * mPerPx]); }
+    }
+    return labels;
   }
 
   // one image per loaded fine tile, from the tile's own cells, with contours
@@ -322,7 +382,7 @@ export class Hud {
     this.fetching++;
     fetch(this.world.tileUrl(tx, ty))
       .then((r) => { if (!r.ok) throw new Error(r.status); return new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(); })
-      .then((buf) => { const n = this.world.side * this.world.side; t.slot = { h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n) }; })
+      .then((buf) => { const n = this.world.side * this.world.side; t.slot = { h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n) }; })
       .catch(() => this.mapTiles.delete(key))
       .finally(() => { this.fetching--; });
     return null;
@@ -337,6 +397,7 @@ export class Hud {
     let hmin = f ? f[1] * 0.1 : Infinity, hmax = f ? f[2] * 0.1 : -Infinity;
     if (!Number.isFinite(hmin) || !Number.isFinite(hmax)) { for (let k = 0; k < s.h.length; k++) { const h = s.h[k] * 0.1; if (h < hmin) hmin = h; if (h > hmax) hmax = h; } }
     this.paintContours(ctx, s, w.side, w.halo, hmin, hmax, pxPerCell);
+    c.labels = s.lvl ? this.paintDepthContours(ctx, s, w.side, w.halo, pxPerCell, tx, ty) : [];
     return c;
   }
   pruneMapTiles() {
@@ -447,6 +508,7 @@ export class Hud {
     ctx.fillStyle = PAPER;
     ctx.fillRect(0, 0, W, H);
     ctx.imageSmoothingEnabled = true;
+    const depthLabels = []; // [level, x, z] from the fine tiles in view, lettered once the view is close
     // the whole wilderness underneath
     if (this.overview) {
       const mpp = w.meta.overview.cellsPerPx * w.cell;
@@ -488,11 +550,19 @@ export class Hud {
           const [ox, oz] = w.tileOrigin(tx, ty);
           const [a, b] = toPx(ox, oz);
           ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
+          if (mPerPx < 7 && img.labels) depthLabels.push(...img.labels);
         }
         this.pruneMapTiles();
       }
     }
     ctx.drawImage(this.grain, 0, 0);
+    // depth figures on the sounded lakes, in metres, haloed in the water colour
+    if (depthLabels.length) {
+      ctx.font = `600 ${11 * k}px Georgia, "Times New Roman", serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3 * k; ctx.strokeStyle = `rgb(${WATER.join(',')})`; ctx.fillStyle = '#2d4f66'; ctx.lineJoin = 'round';
+      for (const [lvl, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeText(String(lvl), a, b); ctx.fillText(String(lvl), a, b); }
+      ctx.textBaseline = 'alphabetic';
+    }
     // portages: red dashed, with the rod count beside the middle of the trail when there is room
     const close = mPerPx < 16, mid = mPerPx < 60;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -569,6 +639,7 @@ export class Hud {
     if (this.big) {
       ctx.font = `italic ${12 * k}px Georgia, serif`; ctx.fillStyle = 'rgba(74, 59, 38, 0.75)'; ctx.textAlign = 'right';
       ctx.fillText('drag to pan · wheel to zoom · click to pick a landing · M or Esc to close', W - 24 * k, H - 26 * k);
+      if (mPerPx < FINE_M_PER_PX) { ctx.textAlign = 'left'; ctx.fillText('lake depths in metres where the DNR has sounded the lake', 24 * k, H - 46 * k); }
     }
   }
 }

@@ -60,7 +60,7 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
 | E | portage when near a landing, launch at the far end |
 | F | take up the fishing rod / put it down (see *Fishing*) |
-| Space / mouse button | with the rod up: hold to load a cast and let go; set the hook on a bite; hold to reel in a fight |
+| Space / mouse button | with the rod up: hold to load a cast and let go (it goes where you look, or where the cursor points in third person); set the hook on a bite; hold to reel in a fight |
 | 1 – 5 | with the rod up: jig, spinner, spoon, crankbait, leech under a bobber |
 | K / E | keep the landed fish on the stringer / let it go |
 | L | the catch log |
@@ -73,7 +73,7 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | / | veer the wind 30° (debug) |
 | R | toggle the canoe's water reflection (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
-| mouse drag / wheel | look around / zoom |
+| mouse | look around: in first person a click captures the pointer and the mouse itself looks (Esc frees it), in third person drag; wheel zooms |
 | click the map | teleport to the nearest open water (anywhere in the wilderness) |
 | entry point list | teleport to one of the BWCA entry point landings |
 
@@ -101,8 +101,9 @@ gunwales and the rod comes up; the line under the readout says what kind of wate
 ("Rocky point · 4 m, drop-off to 9 m · walleye and smallmouth water", "Weedy bay · 1.8 m · pike water"), read
 from the real bed, the shore distance, the weed beds and the bedrock shores around the canoe. Pick a lure with
 **1–5** (jig, spinner, spoon, crankbait, or a leech 2.4 m under a bobber), hold **Space** or the mouse button
-to load the cast and let go: the lure flies in the direction the canoe points (where you are looking, in first
-person), splashes down and sinks at its own rate, or the bobber rides the swell. **W** retrieves (Shift faster;
+to load the cast and let go: the lure flies to where the cursor points (where you are looking, in first person);
+a pale ring on the water marks the spot, a full load drops the lure on it and a short one falls short. It
+splashes down and sinks at its own rate, or the bobber rides the swell. **W** retrieves (Shift faster;
 a crankbait dives, a spinner runs shallow, a jig hops along the bottom, the leech is best left alone), and you
 can change lures again once it is back at the rod.
 
@@ -115,14 +116,15 @@ and the wind all go in, and every factor is in the open (`window.__game.fishing.
 **Space** inside the window to set the hook. Then the tension bar: hold to reel (tension up, line in), let go
 when the fish runs (tension down, line out). A fish's runs come in pulses and weaken as it tires; bigger fish
 pull harder and longer. Red for too long parts the line and the fish keeps the lure (another is tied on, no
-other penalty); slack for too long and it throws the hook. A landed fish is held up for a look, with its
+other penalty); slack for too long and it throws the hook. A landed fish is held up for a look (the camera comes round to the paddler's front for it), with its
 length and weight, and **K** keeps it (it hangs on a stringer over the port gunwale) or **E** lets it go.
 **L** opens the catch log: species, length, weight, lake, time and lure for every fish, with personal bests,
 kept in the browser between sessions.
 
 The map is drawn as a paper topographic sheet in the spirit of the Fisher and McKenzie maps: hypsometric
-tints, 10 m contours, pale-blue lakes, red dashed portages with rod counts, red campsite dots and serif
-lake names. It is a window around the canoe: loaded tiles are drawn from their own cells, the 80 m far
+tints, 10 m contours, pale-blue lakes with depth contours and figures where the DNR has sounded the lake
+(every 2 m to 10 m, then every 5 m and 10 m), red dashed portages with rod counts, red campsite dots and
+serif lake names. It is a window around the canoe: loaded tiles are drawn from their own cells, the 80 m far
 field fills in beyond them. `M` opens it wide.
 
 ## Data pipeline
