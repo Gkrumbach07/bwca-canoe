@@ -154,7 +154,6 @@ async function main() {
     const ts = player.timeScale;
     wind.update(dt * ts, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
-    outfitter.update(dt * ts);
     const shell = title.state !== 'game';
     if (shell) { // the card is up: no input, the canoe rides the water but stays put, the camera drifts
       input.down.clear(); input.once.clear();
@@ -163,6 +162,7 @@ async function main() {
       if (!player.teleporting) { player.x = fx; player.z = fz; player.heading = fh; }
       fishing.update(dt, ts); // its HUD state must exist even behind the card; the cleared input keeps the rod still
     } else {
+      outfitter.update(dt * ts); // the outfitter's panel waits until the title card is away
       player.update(dt);
       fishing.update(dt, ts);
       outfitter.prompt();
