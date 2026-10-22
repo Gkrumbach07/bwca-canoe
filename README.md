@@ -57,12 +57,15 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | W / S | paddle forward / back |
 | A / D | turn (sweep strokes) |
 | Shift | hustle |
+| Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
 | E | portage when near a landing, launch at the far end |
 | M | enlarge the map (three times the area) |
 | V | switch between first-person and chase camera |
 | [ / ] | step the time of day back / forward an hour |
 | P | pause the clock |
 | N | mute / unmute the synthesized soundscape |
+| , / . | less / more wind (debug; `;` hands control back to the weather) |
+| / | veer the wind 30° (debug) |
 | R | toggle the canoe's water reflection (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
 | mouse drag / wheel | look around / zoom |
@@ -70,7 +73,21 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | entry point list | teleport to one of the BWCA entry point landings |
 
 Paddle up to a portage landing (the trail marker on shore) and press **E**: the canoe is shouldered and you
-walk the real trail with W/S. Portage lengths are shown in rods, as they are on every BWCA map.
+walk the real trail with W/S, steering with A/D. Stay near the trail: the bush beside it is slow and past
+14 m it turns you back. Trunks block you, and the hull overhead catches on trees; a caught hull may come down,
+and then you walk back and shoulder it again with **E**. Portage lengths are shown in rods, as on every BWCA map.
+
+## Wind and waves
+
+Every day has its own wind (`src/wind.js`): a character rolled at midnight from glassy to a blow, a breeze that
+builds through the afternoon and dies at dusk, gusts, and a direction that veers slowly. Waves are built from
+it (`src/waves.js`): eight fixed wave directions each carry a 26 m swell and a 6.5 m chop, the wind sets how much
+each direction carries and how tall the waves are from the wind speed and the **fetch**, the open water upwind
+of each spot (marched across the water's surface atlas whenever the wind moves to a new 15° bucket). So a
+small lake stays flat in a gale while the downwind shore of a big one builds whitecaps. The canoe drifts
+downwind and its bow falls off the wind. Broadside to real waves the hull rolls; quarter the waves or hold
+**Space** to brace, or over you go: the hull floats upside down, drifting, and you swim to it (W/S, A/D) and
+press **E** to right it and climb back in. On a calm day the canoe cannot be tipped.
 
 The map is drawn as a paper topographic sheet in the spirit of the Fisher and McKenzie maps: hypsometric
 tints, 10 m contours, pale-blue lakes, red dashed portages with rod counts, red campsite dots and serif

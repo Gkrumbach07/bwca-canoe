@@ -188,6 +188,7 @@ export class TileManager {
     group.add(makeTerrainMesh(r.terrain, this.terrainMaterial));
     if (r.water) group.add(this.water.makeFarMesh(r.water));
     e.veg = makeVegetationMeshes(r.veg, this.vegetation);
+    e.vegBins = r.veg; e.ox = ox; e.oz = oz; e.treeHash = null;
     if (this.aquatic) e.veg.push(...makeAquaticMeshes(r.aquatic, this.aquatic));
     for (const m of e.veg) group.add(m);
     group.add(buildTileProps(w.tileGrid(e.tx, e.ty), w, e.tx, e.ty));
@@ -266,5 +267,36 @@ export class TileManager {
 
   // for the HUD: ready tiles with their data (minimap drawing)
   readyTiles() { return [...this.tiles.values()].filter((e) => e.state === 'ready'); }
+
+  // Tree trunks within r metres of (x, z): [{ x, z, r }] in world metres. Built lazily per tile from the
+  // instance matrices into a 10 m hash; boulders and shrubs are left out (they do not reach a canoe overhead).
+  treesNear(x, z, r) {
+    const out = [], w = this.world, HASH = 10;
+    const [tx0, ty0] = w.tileOf(x - r, z - r), [tx1, ty1] = w.tileOf(x + r, z + r);
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      const e = this.tiles.get(this.key(tx, ty));
+      if (!e || e.state !== 'ready' || !e.vegBins) continue;
+      if (!e.treeHash) {
+        const h = new Map();
+        for (const b of e.vegBins) {
+          if (!b.count || b.sp === 6 || b.sp === 7) continue;
+          const m = b.matrices;
+          for (let i = 0; i < b.count; i++) {
+            const px = m[i * 16 + 12] + e.ox, pz = m[i * 16 + 14] + e.oz, sx = Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2]);
+            const key = Math.floor(px / HASH) * 65536 + Math.floor(pz / HASH);
+            let a = h.get(key); if (!a) { a = []; h.set(key, a); }
+            a.push(px, pz, 0.12 + 0.14 * sx);
+          }
+        }
+        e.treeHash = h;
+      }
+      for (let cz = Math.floor((z - r) / HASH); cz <= Math.floor((z + r) / HASH); cz++) for (let cx = Math.floor((x - r) / HASH); cx <= Math.floor((x + r) / HASH); cx++) {
+        const a = e.treeHash.get(cx * 65536 + cz);
+        if (!a) continue;
+        for (let i = 0; i < a.length; i += 3) if (Math.hypot(a[i] - x, a[i + 1] - z) <= r) out.push({ x: a[i], z: a[i + 1], r: a[i + 2] });
+      }
+    }
+    return out;
+  }
   readyFarTiles() { return [...this.farTiles.values()].filter((e) => e.state === 'ready'); }
 }

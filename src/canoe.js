@@ -202,7 +202,7 @@ export function buildCanoeRig() {
   rig.add(paddle);
 
   const state = {
-    mode: 'paddle',      // 'paddle' | 'carry'
+    mode: 'paddle',      // 'paddle' | 'carry' | 'walk' (portaging without the hull) | 'swim' (capsized)
     stroke: 0,           // 0..1 phase
     side: 1,             // +1 starboard, -1 port
     power: 0,            // 0..1 how hard we are paddling (blends toward rest pose)
@@ -214,10 +214,14 @@ export function buildCanoeRig() {
   // scratch
   const S = { shL: V(), shR: V(), hipL: V(), hipR: V(), knee: V(), foot: V(), elbow: V(), hand: V(), pole: V(), low: V(), dir: V() };
 
+  const swimmer = new THREE.Vector3();
+  state.swimHeading = 0;
+
   function poseSeated(dt) {
-    paddler.position.set(-1.55, 0, 0);
+    paddler.position.set(-1.55, 0, 0); paddler.rotation.y = 0;
     hullPivot.position.set(0, 0, 0); hullPivot.rotation.set(0, 0, 0);
     paddle.visible = true; foam.visible = true;
+    for (const m of Object.values(parts)) m.visible = true;
     const t = state.stroke * Math.PI * 2;
     const lean = state.power * 0.12 * Math.cos(t);
     const twist = state.power * state.side * 0.12 * Math.sin(t);
@@ -269,14 +273,8 @@ export function buildCanoeRig() {
     parts['hand' + which].position.copy(S.hand);
   }
 
-  function poseCarry(dt) {
-    // standing figure with the canoe inverted on the shoulders; rig origin is at the feet
-    paddler.position.set(0, 0, 0);
-    paddle.visible = false; foam.visible = false;
-    const p = state.walk;
-    const bob = 0.03 * Math.abs(Math.sin(p)) * state.walkSpeed;
-    hullPivot.position.set(0.35, 1.78 + bob, 0);
-    hullPivot.rotation.set(Math.PI, 0, 0.02 * Math.sin(p) * state.walkSpeed);
+  // the standing figure's legs and body, shared by carrying and walking free
+  function poseStanding(p, bob) {
     parts.hips.position.set(0, 0.9 + bob, 0);
     parts.torso.position.set(0.03, 1.22 + bob, 0); parts.torso.rotation.set(0, 0, -0.06);
     parts.head.position.set(0.05, 1.55 + bob, 0); parts.head.rotation.set(0, 0, 0);
@@ -291,13 +289,79 @@ export function buildCanoeRig() {
       limb(sgn < 0 ? parts.thighL : parts.thighR, S.hipL, S.knee);
       limb(sgn < 0 ? parts.shinL : parts.shinR, S.knee, S.foot);
     }
+  }
+
+  // walking the trail without the canoe (it came down): arms swing
+  function poseWalk() {
+    paddler.position.set(0, 0, 0);
+    paddle.visible = false;
+    for (const m of Object.values(parts)) m.visible = true;
+    const p = state.walk, bob = 0.03 * Math.abs(Math.sin(p)) * state.walkSpeed;
+    poseStanding(p, bob);
+    for (const sgn of [-1, 1]) {
+      const sw = Math.sin(p + (sgn < 0 ? 0 : Math.PI)) * 0.4 * state.walkSpeed;
+      S.hand.set(Math.sin(sw) * 0.5, 0.85 + bob + (1 - Math.cos(sw)) * 0.3, sgn * 0.26);
+      armTo(sgn < 0 ? 'L' : 'R', S.hand, 0);
+    }
+  }
+
+  // in the water beside the overturned hull: head, hat and sweeping arms above the surface
+  function poseSwim(dt) {
+    paddle.visible = false; foam.visible = false;
+    hullPivot.position.set(0, -0.32, 0);
+    hullPivot.rotation.set(Math.PI, 0, 0.06 * Math.sin(state.walk * 0.7));
+    // the paddler is wherever the swimmer is, in rig space
+    paddler.position.copy(rig.worldToLocal(swimmer.clone()));
+    paddler.rotation.y = state.swimHeading - rig.rotation.y;
+    for (const m of Object.values(parts)) m.visible = true;
+    parts.hips.visible = false; parts.torso.visible = false;
+    parts.thighL.visible = parts.thighR.visible = parts.shinL.visible = parts.shinR.visible = false;
+    const p = state.walk;
+    parts.head.position.set(0, 0.22 + 0.04 * Math.sin(p * 2), 0); parts.head.rotation.set(0, 0, 0);
+    parts.hat.position.set(0, 0.33 + 0.04 * Math.sin(p * 2), 0); parts.crown.position.set(0, 0.39 + 0.04 * Math.sin(p * 2), 0);
+    for (const sgn of [-1, 1]) {
+      const sw = 0.5 + 0.5 * Math.sin(p * 2 + (sgn < 0 ? 0 : 0.6));
+      S.hand.set(0.2 + sw * 0.45, 0.02 + sw * 0.1, sgn * (0.3 + sw * 0.25));
+      S.shL.set(0.0, 0.05, sgn * 0.21); S.pole.set(-0.3, 0.4, sgn * 0.6).add(S.shL);
+      solveJoint(S.shL, S.hand, 0.31, 0.31, S.pole, S.elbow);
+      limb(parts[sgn < 0 ? 'upperL' : 'upperR'], S.shL, S.elbow);
+      limb(parts[sgn < 0 ? 'foreL' : 'foreR'], S.elbow, S.hand);
+      parts[sgn < 0 ? 'handL' : 'handR'].position.copy(S.hand);
+    }
+  }
+
+  function poseCarry(dt) {
+    // standing figure with the canoe inverted on the shoulders; rig origin is at the feet
+    paddler.position.set(0, 0, 0); paddler.rotation.y = 0;
+    paddle.visible = false; foam.visible = false;
+    for (const m of Object.values(parts)) m.visible = true;
+    const p = state.walk;
+    const bob = 0.03 * Math.abs(Math.sin(p)) * state.walkSpeed;
+    hullPivot.position.set(0.35, 1.78 + bob, 0);
+    hullPivot.rotation.set(Math.PI, 0, 0.02 * Math.sin(p) * state.walkSpeed);
+    poseStanding(p, bob);
     S.hand.set(0.55, 1.46 + bob, -0.4); armTo('L', S.hand, 0);
     S.hand.set(0.55, 1.46 + bob, 0.4); armTo('R', S.hand, 0);
   }
 
+  let firstPerson = false;
   return {
-    rig, hull: hullPivot, paddler, paddle, state,
-    update(dt) { if (state.mode === 'carry') poseCarry(dt); else poseSeated(dt); },
-    setFirstPerson(on) { parts.head.visible = !on; parts.hat.visible = !on; parts.crown.visible = !on; },
+    rig, hull: hullPivot, paddler, paddle, state, swimmer,
+    update(dt) {
+      if (state.mode === 'carry') poseCarry(dt);
+      else if (state.mode === 'walk') poseWalk();
+      else if (state.mode === 'swim') poseSwim(dt);
+      else poseSeated(dt);
+      if (firstPerson) { parts.head.visible = false; parts.hat.visible = false; parts.crown.visible = false; }
+    },
+    setFirstPerson(on) { firstPerson = on; },
+    // the hull comes off the shoulders and lies on the ground where it fell; it stays put while the paddler walks on
+    dropHull(x, y, z, heading) {
+      rig.parent.attach(hullPivot);
+      hullPivot.position.set(x, y + 0.3, z);
+      hullPivot.rotation.set(0, heading, 0.2);
+      hullPivot.updateMatrixWorld();
+    },
+    pickUpHull() { rig.attach(hullPivot); },
   };
 }

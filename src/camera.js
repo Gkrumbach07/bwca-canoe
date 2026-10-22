@@ -59,8 +59,8 @@ export class ChaseCamera {
   // from the paddler's eyes; drag looks around, and the view drifts back ahead while moving
   updateFirst(dt, player, carrying) {
     const rig = player.canoe.rig;
-    this.head.set(carrying ? 0.08 : -1.56, carrying ? 1.6 : 1.0, 0);
-    rig.localToWorld(this.head);
+    if (player.mode === 'swim') this.head.set(player.x, this.world.levelAt(player.x, player.z) + 0.32, player.z);
+    else { this.head.set(carrying ? 0.08 : -1.56, carrying ? 1.6 : 1.0, 0); rig.localToWorld(this.head); }
     if (performance.now() - this.lastInput > 2500 && Math.abs(player.speed) > 0.3) {
       const k = 1 - Math.exp(-dt * 0.8);
       this.userYaw -= this.userYaw * k; this.userPitch -= this.userPitch * k;

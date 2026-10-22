@@ -19,6 +19,7 @@ import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
+import { Wind } from './wind.js';
 
 const palette = { zenith: 0x4382c7, horizon: 0xc9dceb, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x3f7f9c, reflect: 0xc9dde8, fog: 0xbcd2e2, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -95,21 +96,26 @@ async function main() {
   const post = makePost(renderer, scene, camera);
   const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, grade: post.grade, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material });
   const geo = new GeoBridge();
+  const wind = new Wind(11);
+  player.wind = wind;
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
+    if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release();
     if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4;
     if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn;
     if (e.code === 'KeyN') audio.toggle();
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   const frame = (dt) => {
     const ts = player.timeScale;
+    wind.update(dt * ts, day.hours);
+    water.setWind(wind.dir.x, wind.dir.z, wind.speed);
     player.update(dt);
     canoe.update(dt * ts);
     chase.update(dt, player, player.mode === 'carry');
@@ -128,7 +134,7 @@ async function main() {
     loons.update(dt * ts, player);
     audio.update(dt, world.shoreAt(player.x, player.z), player.speed, player.mode === 'paddle');
     geo.update(player, world);
-    hud.update(player, geo, ts, day.clock);
+    hud.update(player, geo, ts, day.clock, wind);
     input.endFrame();
   };
   // debug helper: advance the simulation by n fixed steps and draw once (used for automated testing)

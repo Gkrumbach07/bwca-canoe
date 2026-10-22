@@ -31,6 +31,7 @@ export class Hud {
       lake: document.getElementById('lake'), sub: document.getElementById('sub'), prompt: document.getElementById('prompt'),
       gps: document.getElementById('gps'), gpsState: document.getElementById('gps-state'), gpsCoords: document.getElementById('gps-coords'),
       entry: document.getElementById('entry'), tiles: document.getElementById('tiles'),
+      wind: document.getElementById('windtext'), windArrow: document.getElementById('windarrow'),
       dim: document.getElementById('mapdim'), tp: document.getElementById('tp'), tpText: document.getElementById('tp-text'),
       tpGo: document.getElementById('tp-go'), tpCancel: document.getElementById('tp-cancel'),
     };
@@ -354,7 +355,7 @@ export class Hud {
   }
 
   // --- per frame ------------------------------------------------------------------------------------------
-  update(player, geo, timeScale, clock = '') {
+  update(player, geo, timeScale, clock = '', wind = null) {
     this.player = player;
     const w = this.world;
     const id = player.lakeId;
@@ -366,7 +367,13 @@ export class Hud {
     const lakeRec = id > 0 ? w.lakes[id - 1] : null;
     const clar = lakeRec && lakeRec.secchi ? ` · ${lakeRec.secchi.toFixed(1)} m clarity${lakeRec.secchiMeasured ? '' : '*'}` : '';
     const depthTxt = deep > 0.05 ? ` · ${deep.toFixed(1)} m deep${lakeRec && lakeRec.maxDepth ? ` (max ${lakeRec.maxDepth} m)` : ''}${clar}` : '';
-    this.el.sub.textContent = `${clock ? clock + ' · ' : ''}${player.mode === 'carry' ? 'Portaging' : 'Paddling'} · ${kmh} km/h · ${lat.toFixed(5)}, ${lon.toFixed(5)} · ${player.altitude.toFixed(0)} m${depthTxt}${timeScale > 1 ? ` · ${timeScale}× speed` : ''}`;
+    const modeTxt = player.mode === 'carry' ? 'Portaging' : player.mode === 'swim' ? 'Swimming' : 'Paddling';
+    if (wind && this.el.wind) {
+      const H = player.waveHeightHere;
+      this.el.wind.textContent = `${wind.label} · ${wind.speed.toFixed(0)} m/s from the ${wind.compass}${player.mode === 'paddle' && H > 0.2 ? ` · waves ${H.toFixed(1)} m` : ''}${wind.override != null ? ' (set by hand)' : ''}`;
+      this.el.windArrow.style.transform = `rotate(${(wind.from + 180 - 90).toFixed(0)}deg)`;
+    }
+    this.el.sub.textContent = `${clock ? clock + ' · ' : ''}${modeTxt} · ${kmh} km/h · ${lat.toFixed(5)}, ${lon.toFixed(5)} · ${player.altitude.toFixed(0)} m${depthTxt}${timeScale > 1 ? ` · ${timeScale}× speed` : ''}`;
     const p = player.prompt;
     if (p) { this.el.prompt.innerHTML = (p.key ? `<kbd>${p.key}</kbd>` : '') + p.text; this.el.prompt.classList.add('show'); }
     else this.el.prompt.classList.remove('show');

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { glslWaves, glslRipples, waveHeight } from './waves.js';
+import { glslWaves, glslRipples, waveHeight, windWeights, N as WAVE_DIRS } from './waves.js';
 
 // Water in two parts that share one fragment shader:
 //  - far field: static 10 m meshes, one per tile, carrying only the long swell, with a hole cut where the patch sits
@@ -21,7 +21,7 @@ const ATLAS_SLACK = 48;   // re-centre once the canoe gets this close to the atl
 // actually renders it. All positions are relative to the floating origin (uOrigin); world xz -> rel is
 // `w - uOrigin`. Needs the uniforms from WaterSystem.surfaceUniforms().
 export const glslSurface = /* glsl */ `
-  uniform sampler2D uShoreTex, uHeightTex, uLevelTex, uCoverTex, uClarityTex;
+  uniform sampler2D uShoreTex, uHeightTex, uLevelTex, uCoverTex, uClarityTex, uFetchTex;
   uniform vec4 uAtlas;      // atlas origin x, z (relative to the floating origin), 1/cell, cells per side
   uniform vec2 uOrigin;     // floating origin, world xz
   uniform vec2 uPatchLocal; // water patch centre relative to the origin
@@ -59,9 +59,10 @@ export const glslSurface = /* glsl */ `
   }
   // short swell exists only on the near patch; anything riding the water must fade it the same way
   float patchBorder(vec2 rel) { return 1.0 - smoothstep(uPatchHalf - 40.0, uPatchHalf - 6.0, max(abs(rel.x - uPatchLocal.x), abs(rel.y - uPatchLocal.y))); }
+  // long swell at a lattice node: its height comes from the wind and the fetch (open water upwind) at that node
   float nodeWave(ivec2 c, float t) {
     vec2 np = uAtlas.xy + (vec2(c) + 0.5) / uAtlas.z;
-    return lowWave(np, t) * smoothstep(0.0, 25.0, -cellSample(uShoreTex, c));
+    return lowWave(np, t) * 0.5 * windHeight(cellSample(uFetchTex, c)) * smoothstep(0.0, 25.0, -cellSample(uShoreTex, c));
   }
   float surfaceWave(vec2 rel, float t, float border, out float shore) {
     vec2 f = (rel - uAtlas.xy) * uAtlas.z - 0.5;
@@ -71,7 +72,8 @@ export const glslSurface = /* glsl */ `
     float s01 = cellSample(uShoreTex, c + ivec2(0, 1)), s11 = cellSample(uShoreTex, c + ivec2(1, 1));
     shore = mix(mix(s00, s10, a.x), mix(s01, s11, a.x), a.y);
     float low = mix(mix(nodeWave(c, t), nodeWave(c + ivec2(1, 0), t), a.x), mix(nodeWave(c + ivec2(0, 1), t), nodeWave(c + ivec2(1, 1), t), a.x), a.y);
-    return low + highWave(rel, t) * smoothstep(0.0, 8.0, -shore) * border;
+    float chop = (0.03 + 0.2 * windHeight(bilinear(uFetchTex, rel))) * highWave(rel, t) + calmWave(rel, t);
+    return low + chop * smoothstep(0.0, 8.0, -shore) * border;
   }
   // the swell as the water patch actually renders it: evaluated at the patch's own grid vertices and
   // interpolated between them, so floating things sit on the drawn surface, not the analytic one
@@ -97,6 +99,7 @@ const vertHead = /* glsl */ `
   varying float vDepth;
   varying float vClarity;
   varying vec4 vReflectUv;
+  varying vec2 vCrest;        // x: wave height over the local wind-wave height, y: that height
   #include <common>
   #include <fog_pars_vertex>
   #include <shadowmap_pars_vertex>
@@ -115,6 +118,8 @@ const vertTail = /* glsl */ `
 `;
 const vertFar = vertHead + glslWaves + /* glsl */ `
   uniform vec2 uOrigin;
+  uniform sampler2D uFetchTex;
+  uniform vec4 uAtlas;
   attribute float aShore;
   attribute float aDepth;
   attribute float aClarity;
@@ -123,8 +128,14 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
     vShore = aShore;
     vDepth = aDepth;
     vClarity = aClarity;
-    float damp = smoothstep(0.0, 25.0, -aShore);
+    // fetch from the atlas where it covers this vertex (exactly what the patch's lattice nodes use), a middling default beyond
+    vec2 ac = (rel - uAtlas.xy) * uAtlas.z;
+    bool inAtlas = ac.x >= 0.0 && ac.y >= 0.0 && ac.x < uAtlas.w && ac.y < uAtlas.w;
+    float fetch = inAtlas ? texelFetch(uFetchTex, ivec2(ac), 0).r : 400.0;
+    float Hw = windHeight(fetch);
+    float damp = smoothstep(0.0, 25.0, -aShore) * 0.5 * Hw;
     float wave = lowWave(rel, uTime) * damp;
+    vCrest = vec2(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -aShore));
     const float e = 5.0;
     float hL = lowWave(rel - vec2(e, 0.0), uTime) * damp, hR = lowWave(rel + vec2(e, 0.0), uTime) * damp;
     float hB = lowWave(rel - vec2(0.0, e), uTime) * damp, hF = lowWave(rel + vec2(0.0, e), uTime) * damp;
@@ -141,6 +152,8 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     float shore, s2;
     float wave = surfaceWave(rel, uTime, border, shore);
     vShore = shore;
+    float Hw = windHeight(bilinear(uFetchTex, rel));
+    vCrest = vec2(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -shore));
     const float e = 1.6;
     float hL = surfaceWave(rel - vec2(e, 0.0), uTime, border, s2), hR = surfaceWave(rel + vec2(e, 0.0), uTime, border, s2);
     float hB = surfaceWave(rel - vec2(0.0, e), uTime, border, s2), hF = surfaceWave(rel + vec2(0.0, e), uTime, border, s2);
@@ -167,6 +180,7 @@ const frag = /* glsl */ `
   varying float vDepth;
   varying float vClarity;
   varying vec4 vReflectUv;
+  varying vec2 vCrest;
   #include <common>
   #include <packing>
   #include <fog_pars_fragment>
@@ -213,7 +227,9 @@ const frag = /* glsl */ `
     float line = aastep(0.8, phase) * (1.0 - aastep(0.9, phase));
     float ripple = line * (1.0 - aastep(5.5, depth)) * smoothstep(0.3, 0.6, breakup) * step(0.0, depth);
     float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
-    float foam = max(ripple, waterline) * 0.85;
+    // whitecaps: once the wind has raised real waves, their crests break
+    float cap = smoothstep(0.62, 0.8, vCrest.x) * smoothstep(0.35, 0.7, vCrest.y) * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7));
+    float foam = max(max(ripple, waterline) * 0.85, cap * 0.9);
     col = mix(col, uFoam, foam);
     // the bed shows through shallow, clear water; tannin-stained lakes close up within a few metres.
     // uClarity scales the lake's own Secchi depth (1 = as measured)
@@ -239,13 +255,16 @@ export class WaterSystem {
     this.level = new Float32Array(ATLAS * ATLAS);
     this.height = new Float32Array(ATLAS * ATLAS);
     this.clarity = new Float32Array(ATLAS * ATLAS);
+    this.fetch = new Float32Array(ATLAS * ATLAS);
     this.cover = new Uint8Array(ATLAS * ATLAS * 4);
+    this.wind = { x: 0, z: 1, speed: 2.5, bucket: -1, w: windWeights(0, 1) };
     this.atlasI = NaN; this.atlasJ = NaN; this.atlasDirty = true;
     const tex = (data, format, type) => { const t = new THREE.DataTexture(data, ATLAS, ATLAS, format, type); t.minFilter = t.magFilter = THREE.NearestFilter; return t; };
     this.shoreTex = tex(this.shore, THREE.RedFormat, THREE.FloatType);
     this.levelTex = tex(this.level, THREE.RedFormat, THREE.FloatType);
     this.heightTex = tex(this.height, THREE.RedFormat, THREE.FloatType);
     this.clarityTex = tex(this.clarity, THREE.RedFormat, THREE.FloatType);
+    this.fetchTex = tex(this.fetch, THREE.RedFormat, THREE.FloatType);
     this.coverTex = tex(this.cover, THREE.RGBAFormat, THREE.UnsignedByteType);
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, {
       uTime: { value: 0 },
@@ -268,6 +287,9 @@ export class WaterSystem {
       uHeightTex: { value: null },
       uClarityTex: { value: null },
       uCoverTex: { value: null },
+      uFetchTex: { value: null },
+      uDirW: { value: new Float32Array(WAVE_DIRS) },
+      uWindSpeed: { value: 2.5 },
       uAtlas: { value: new THREE.Vector4(0, 0, 1 / world.cell, ATLAS) },
     }]);
     this.uniforms.uReflection.value = this.reflection.target.texture;
@@ -276,6 +298,8 @@ export class WaterSystem {
     this.uniforms.uHeightTex.value = this.heightTex;
     this.uniforms.uClarityTex.value = this.clarityTex;
     this.uniforms.uCoverTex.value = this.coverTex;
+    this.uniforms.uFetchTex.value = this.fetchTex;
+    this.uniforms.uDirW.value.set(this.wind.w);
     this.uniforms.uTextureMatrix.value = this.reflection.textureMatrix;
     const common = { fragmentShader: frag, uniforms: this.uniforms, transparent: true, depthWrite: true, fog: true, lights: true };
     this.farMaterial = new THREE.ShaderMaterial({ ...common, vertexShader: vertFar, defines: { FAR: 1 } });
@@ -362,14 +386,56 @@ export class WaterSystem {
     this.clarityTex.needsUpdate = true;
     this.coverTex.needsUpdate = true;
     this.uniforms.uAtlas.value.set(w.originX + i0 * w.cell - this.origin.x, w.originZ + j0 * w.cell - this.origin.z, 1 / w.cell, A);
+    this.rebuildFetch();
   }
 
-  waveAt(x, z) { return waveHeight(x, z, this.time, this.world, this.origin.x, this.origin.z); }
+  // The wind: direction it blows toward (unit xz) and speed. The fetch map is re-marched when the
+  // direction moves to a new 15-degree bucket.
+  setWind(dirX, dirZ, speed) {
+    const w = this.wind;
+    w.x = dirX; w.z = dirZ; w.speed = speed;
+    this.uniforms.uWindSpeed.value = speed;
+    windWeights(dirX, dirZ, w.w);
+    this.uniforms.uDirW.value.set(w.w);
+    const bucket = Math.round(Math.atan2(dirZ, dirX) / (Math.PI / 12));
+    if (bucket !== w.bucket) { w.bucket = bucket; if (!Number.isNaN(this.atlasI)) this.rebuildFetch(); }
+  }
+
+  // Fetch: how far open water extends upwind of each water cell in the atlas, in metres (capped at the atlas).
+  rebuildFetch() {
+    const A = ATLAS, shore = this.shore, fetch = this.fetch, w = this.wind, cell = this.world.cell;
+    const ux = -w.x, uz = -w.z; // upwind
+    for (let lj = 0; lj < A; lj++) for (let li = 0; li < A; li++) {
+      const k = lj * A + li;
+      if (shore[k] >= 0) { fetch[k] = 0; continue; }
+      let x = li + 0.5, y = lj + 0.5, steps = 0;
+      while (steps < 300) {
+        x += ux; y += uz; steps++;
+        if (x < 0 || y < 0 || x >= A || y >= A) break;
+        if (shore[(y | 0) * A + (x | 0)] >= 0) break;
+      }
+      fetch[k] = steps * cell;
+    }
+    this.fetchTex.needsUpdate = true;
+  }
+
+  fetchAt(x, z) {
+    const w = this.world, A = ATLAS;
+    if (Number.isNaN(this.atlasI)) return 400; // no atlas yet (first frames)
+    const li = w.cellI(x) - this.atlasI, lj = w.cellJ(z) - this.atlasJ;
+    if (!(li >= 0 && lj >= 0 && li < A && lj < A)) return 400;
+    return this.fetch[lj * A + li];
+  }
+
+  waveAt(x, z) {
+    if (!this._cpuWind) { const self = this; this._cpuWind = { get w() { return self.wind.w; }, get speed() { return self.wind.speed; }, fetch: (px, pz) => self.fetchAt(px, pz) }; }
+    return waveHeight(x, z, this.time, this.world, this.origin.x, this.origin.z, this._cpuWind);
+  }
 
   // uniforms another material needs to ride or stand on the same surface (see floating.js, wake.js, groundcover.js)
   surfaceUniforms() {
     const u = this.uniforms;
-    return { uShoreTex: u.uShoreTex, uLevelTex: u.uLevelTex, uHeightTex: u.uHeightTex, uClarityTex: u.uClarityTex, uCoverTex: u.uCoverTex, uAtlas: u.uAtlas, uOrigin: u.uOrigin, uPatchLocal: u.uPatchLocal, uPatchHalf: u.uPatchHalf, uPatchRes: u.uPatchRes, uWaterTime: u.uTime };
+    return { uShoreTex: u.uShoreTex, uLevelTex: u.uLevelTex, uHeightTex: u.uHeightTex, uClarityTex: u.uClarityTex, uCoverTex: u.uCoverTex, uFetchTex: u.uFetchTex, uDirW: u.uDirW, uWindSpeed: u.uWindSpeed, uAtlas: u.uAtlas, uOrigin: u.uOrigin, uPatchLocal: u.uPatchLocal, uPatchHalf: u.uPatchHalf, uPatchRes: u.uPatchRes, uWaterTime: u.uTime };
   }
 
   // Mirror only what is on REFLECT_LAYER (the canoe) into the reflection target.
