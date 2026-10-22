@@ -64,7 +64,7 @@ export function fmtDuration(hours) {
   if (rest < 23) return `${hw} and a bit`;
   if (rest < 38) return `${hw} and a half`;
   if (rest < 53) return `${hw} and forty`;
-  return h === 1 ? 'nearly two hours' : `nearly ${word(h + 1)} hours`;
+  return h === 0 ? 'nearly an hour' : h === 1 ? 'nearly two hours' : `nearly ${word(h + 1)} hours`;
 }
 // a lake in a few words: "the big water: 3,900 acres, sounded to 23 m"
 export function lakeWords(l) {
