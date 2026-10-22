@@ -25,6 +25,9 @@ export const groundUniforms = {
   // z: the blend noise's size (m), w: how far the slow field pushes it about (m)
   uSplat: { value: new THREE.Vector4(1.0, 0.2, 4.5, 6) },
   uMottle: { value: new THREE.Vector3(0.14, 0.09, 0.07) },   // contrast of the 20 m, 3 m and 0.3 m mottle
+  // the crisp break inside a band (pivot pass 2): x how far a 0.45–0.7 m noise pushes the blended weights
+  // about, y how soft the edge it cuts is (weight units; widened to stay a pixel or two wide), z strength
+  uSplatEdge: { value: new THREE.Vector3(0.38, 0.03, 1) },
   uRelief: { value: 0.22 },  // how far the fine relief tilts the shading normal
 };
 export function setGroundTint(r, g, b) { groundUniforms.uGroundTint.value.set(r, g, b); }
@@ -44,6 +47,7 @@ uniform vec4 uBedSteps;
 uniform vec3 uGroundTint;
 uniform vec4 uSplat;
 uniform vec3 uMottle;
+uniform vec3 uSplatEdge;
 // each material's noise is a turn of the two shared fields (golden-angle steps), so any two neighbours
 // meet along a noisy line
 const vec4 SPLAT_CA = vec4(1.0000, -0.7374, 0.0874, 0.6084), SPLAT_SA = vec4(0.0000, 0.6755, -0.9962, 0.7936);
@@ -89,6 +93,22 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 fl, float px) {
     bA *= bA; bB *= bB;
     float sum = dot(bA, vec4(1.0)) + dot(bB, vec4(1.0));
     bA /= sum; bB /= sum;
+    // Up close the soft band is cut again on a fine noise (0.45 and 0.7 m), so two materials meet along a
+    // sharp ragged edge, the way a painted transition does, while how much of each shows still follows the
+    // 2–6 m band. Only the materials already in the blend take part; the edge widens with the pixel so it
+    // never aliases, and the whole thing fades back to the soft blend before the noise could shimmer.
+    float ef = lookFade(0.45, px) * uSplatEdge.z;
+    if (ef > 0.0) {
+      float f1 = lookFbm(p / 0.7 + vec2(3.1, 7.7), 19u, 2) - 0.5, f2 = lookFbm(mat2(0.6, 0.8, -0.8, 0.6) * p / 0.45 + vec2(-5.3, 1.9), 20u, 2) - 0.5;
+      vec4 cA = bA + uSplatEdge.x * (f1 * SPLAT_CA + f2 * SPLAT_SA) * step(0.02, bA);
+      vec4 cB = bB + uSplatEdge.x * (f1 * SPLAT_CB + f2 * SPLAT_SB) * step(0.02, bB);
+      float t2 = max(max(max(cA.x, cA.y), max(cA.z, cA.w)), max(max(cB.x, cB.y), max(cB.z, cB.w)));
+      float e = max(uSplatEdge.y, 0.75 * px);
+      vec4 eA = max(cA - t2 + e, 0.0), eB = max(cB - t2 + e, 0.0);
+      eA *= eA; eB *= eB;
+      float es = dot(eA, vec4(1.0)) + dot(eB, vec4(1.0));
+      bA = mix(bA, eA / es, ef); bB = mix(bB, eB / es, ef);
+    }
     // the canopy's shade and the sunny stands: soft-edged patches out of the noise rather than ramps, so no
     // gradient follows the triangles the values were interpolated over
     float s = smoothstep(0.32, 0.68, fl.x + 0.4 * n2 * fb);
