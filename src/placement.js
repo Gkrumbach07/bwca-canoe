@@ -3,13 +3,13 @@
 // neighbour is loaded first and the seams between tiles are invisible. Pure data (no three.js), so it
 // runs in the build worker.
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
-import { clearingAt, burnAt, calmAt } from './fields.js';
-import { surfaceAt } from './terrain-build.js';
+import { clearingAt, burnAt, calmAt, rockAt } from './fields.js';
+import { surfaceAt, groundClass } from './terrain-build.js';
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
-export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8 };
-const SCALE = [[0.85, 1.3], [0.75, 1.2], [0.75, 1.15], [0.7, 1.15], [0.75, 1.2], [0.8, 1.2], [0.6, 1.8], [0.7, 1.5], [0.85, 1.25]];
-const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0];
+export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9 };
+const SCALE = [[0.85, 1.3], [0.75, 1.2], [0.75, 1.15], [0.7, 1.15], [0.75, 1.2], [0.8, 1.2], [0.6, 1.8], [0.7, 1.5], [0.85, 1.25], [0.7, 1.1]];
+const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 export const AQUATIC = { pad: 0, reed: 1, weed: 2 };
 
 function segDist(px, pz, x1, z1, x2, z2) {
@@ -63,22 +63,24 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const slope = grid.slopeAt(cx, cz);
       const clearing = smoothstep(0.62, 0.78, clearingAt(cx, cz));
       const burn = burnAt(cx, cz);
+      const rock = sd > 0 ? rockAt(slope, sd, cx, cz) : 0;   // bare bedrock: few stunted trees, no grass, boulders
+      const bare = rock > 0.5;
       const segs = mask.get(k);
       // trails run through thick woods: more trees and brush right beside them
       const trailSide = segs && segs.some((g) => g[5] < 5) ? 2.6 : 1;
-      const e = sd < 0 ? 0 : treeDensity(sd, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - burn * 0.5);
+      const e = sd < 0 ? 0 : treeDensity(sd, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - burn * 0.5) * (1 - smoothstep(0.3, 0.6, rock) * 0.88);
       const trees = Math.floor(e) + (rng() < e - Math.floor(e) ? 1 : 0);
-      const eShrub = (sd > 0.5 && sd < 35 ? (0.75 - smoothstep(10, 35, sd) * 0.5) * (1 - clearing * 0.5) * trailSide : (sd > 0 && trailSide > 1 ? 0.5 : 0)) + burn * 0.5;
+      const eShrub = ((sd > 0.5 && sd < 35 ? (0.75 - smoothstep(10, 35, sd) * 0.5) * (1 - clearing * 0.5) * trailSide : (sd > 0 && trailSide > 1 ? 0.5 : 0)) + burn * 0.5) * (1 - rock * 0.8);
       const shrubs = Math.floor(eShrub) + (rng() < eShrub - Math.floor(eShrub) ? 1 : 0);
-      const rockP = sd < 8 && sd > -4 ? 0.1 + smoothstep(0.3, 0.6, slope) * 0.25 : 0;
-      const rocks = rng() < rockP ? 1 : 0;
+      const eRock = (sd < 8 && sd > -4 ? 0.1 + smoothstep(0.3, 0.6, slope) * 0.25 : 0) + (bare ? 0.3 + rock * 0.2 : 0);
+      const rocks = Math.floor(eRock) + (rng() < eRock - Math.floor(eRock) ? 1 : 0);
       const core = i >= i0 && i < i0 + n && j >= j0 && j < j0 + n;
       const cnt = trees + shrubs + rocks;
       for (let q = 0; q < cnt; q++) {
         const isTree = q < trees, isShrub = !isTree && q < trees + shrubs, isRock = !isTree && !isShrub;
         const x = cx + (rng() - 0.5) * cell, z = cz + (rng() - 0.5) * cell;
         const s = grid.shoreAt(x, z);
-        if (isRock ? s < -3 || s > 9 : s < 0.6) continue;
+        if (isRock ? s < -3 || (s > 9 && !bare) : s < 0.6) continue;
         if (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + (isRock ? 0.5 : isShrub ? 0.4 : 1.2))) continue;
         let sp;
         if (isRock) sp = 6;
@@ -89,7 +91,8 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           const r = rng();
           // spruce-dominated boreal mix, birch in stands, cedar along the shore; burn scars are
           // standing snags with young spruce coming up; old pines on rocky points and ridges
-          if (burn > 0.5) sp = r < 0.72 ? 5 : 1;
+          if (bare) sp = r < 0.6 ? 9 : r < 0.78 ? 5 : r < 0.9 ? 1 : 0;   // jack pine in the cracks, a dead stem or two
+          else if (burn > 0.5) sp = r < 0.72 ? 5 : 1;
           else if (s < 22 && r < 0.2) sp = 4;
           else if (((s < 35 && slope > 0.15) || ridge > 0.66) && r < 0.3) sp = 8;
           else if (patch > 0.62 && r < 0.55) sp = 3;
@@ -101,12 +104,16 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
         let scale = SCALE[sp][0] + rng() * (SCALE[sp][1] - SCALE[sp][0]);
         if (GIANT[sp] && rng() < GIANT[sp]) scale *= 1.45;
         if (isTree && burn > 0.5) scale *= sp === 5 ? 1.25 : 0.45; // tall dead stems, small regrowth
+        if (isTree && bare && sp !== 9) scale *= 0.7;              // stunted on the rock
         if (isRock && s > -2 && rng() < 0.08 + smoothstep(0.25, 0.5, slope) * 0.2) scale *= 2.6; // granite outcrop blocks
+        else if (isRock && bare && rng() < 0.3) scale *= 2.2 + rng() * 1.6;                      // slabs breaking the surface
         if (isTree && s > 600) scale *= 1.15;
         const yaw = rng() * Math.PI * 2, tint = 0.92 + rng() * 0.16, squash = 0.9 + rng() * 0.2;
         if (!core) continue;
-        // sink into the ground more on slopes so the downhill edge never hangs in the air
-        const sink = (isRock ? 0.4 : isShrub ? 0.45 : 0.35) + grid.slopeAt(x, z) * (isRock ? 1.6 : isShrub ? 1.0 : 1.2) * scale;
+        const slopeHere = grid.slopeAt(x, z);
+        // sink into the ground more on slopes so the downhill edge never hangs in the air; a boulder is
+        // only as tall as its scale, so its sink is capped or steep slopes would swallow it whole
+        const sink = isRock ? scale * Math.min(0.5, 0.15 + slopeHere * 0.7) : (isShrub ? 0.45 : 0.35) + slopeHere * (isShrub ? 1.0 : 1.2) * scale;
         const rx = Math.floor((x - grid.originX) / REGION), rz = Math.floor((z - grid.originZ) / REGION);
         const key = (rx * 4096 + rz) * 16 + sp;
         let b = bins.get(key);
@@ -167,12 +174,12 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ }) {
   return { bins: [...bins.values()].map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, items: new Float32Array(b.items) })), total };
 }
 
-// Ground cover per cell over the tile's local extent (core cells only): r = grass cover 0..255 (none in
-// water, on bare rock, trails and campsites; thin under dense canopy; thick in clearings and burns),
-// g = golden tint (burns and dry clearings).
+// Ground cover per cell over the tile's local extent (core cells only), four bytes per cell: grass cover
+// 0..255 (none in water, on bare rock, trails and campsites; thin under dense canopy; thick in clearings
+// and burns), golden tint (burns and dry clearings), the ground class the grass takes its colour from, 0.
 export function coverField(grid, i0, j0, n, shade, exclusions) {
   const side = grid.side;
-  const cover = new Uint8Array(side * side * 2);
+  const cover = new Uint8Array(side * side * 4);
   const bare = new Uint8Array(side * side);
   const mask = tileSegments(grid, i0, j0, n, exclusions, 3.5);
   for (const [k, segs] of mask) {
@@ -184,17 +191,19 @@ export function coverField(grid, i0, j0, n, shade, exclusions) {
     for (let i = i0; i < i0 + n; i++) {
       const k = grid.local(i, j);
       const sd = grid.sdCell(i, j);
-      if (sd <= 2.6 || bare[k]) continue;
       const x = grid.cellX(i), z = grid.cellZ(j);
+      cover[k * 4 + 2] = groundClass(grid, x, z, shade ? shade[k] : 0);
+      if (sd <= 2.6 || bare[k]) continue;
       const slope = grid.slopeAt(x, z), burn = burnAt(x, z), clearing = clearingAt(x, z);
-      // grass carpets the forest floor and the meadows; it thins under a dense canopy and on steep rock
-      let c = slope > 0.55 ? 0.05 : slope > 0.38 ? 0.2 : 0.6;
+      // grass carpets the forest floor and the meadows; it thins under a dense canopy and is gone on bare rock
+      let c = 0.6 * (1 - smoothstep(0.3, 0.55, rockAt(slope, sd, x, z)));
       c *= 1 - (shade ? shade[k] : 0) * 0.4;
-      if (clearing > 0.62) c = Math.max(c, 1.0);
-      if (burn > 0.5) c = Math.max(c, 0.95);
+      const soil = 1 - smoothstep(0.4, 0.6, rockAt(slope, sd, x, z));
+      if (clearing > 0.62) c = Math.max(c, 1.0 * soil);
+      if (burn > 0.5) c = Math.max(c, 0.95 * soil);
       const gold = Math.max(burn, clearing > 0.66 ? 0.6 : 0);
-      cover[k * 2] = Math.round(Math.min(1, c) * 255);
-      cover[k * 2 + 1] = Math.round(Math.min(1, gold) * 255);
+      cover[k * 4] = Math.round(Math.min(1, c) * 255);
+      cover[k * 4 + 1] = Math.round(Math.min(1, gold) * 255);
     }
   }
   return cover;

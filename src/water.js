@@ -39,7 +39,7 @@ export const glslSurface = /* glsl */ `
   float levelAt(vec2 rel) { return cellSample(uLevelTex, atlasCell(rel)); }
   float atlasLevel(vec2 rel) { return levelAt(rel); }
   float shoreAt(vec2 rel) { return bilinear(uShoreTex, rel); }
-  // ground cover (r: grass cover, g: golden / burn) with its own bilinear filter
+  // ground cover (r: grass cover, g: golden / burn) with its own bilinear filter; b holds the ground class
   vec2 coverAt(vec2 rel) {
     vec2 f = (rel - uAtlas.xy) * uAtlas.z - 0.5;
     vec2 fi = floor(f), a = f - fi;
@@ -48,6 +48,7 @@ export const glslSurface = /* glsl */ `
     vec2 c01 = texelFetch(uCoverTex, clamp(c + ivec2(0, 1), ivec2(0), m), 0).rg, c11 = texelFetch(uCoverTex, clamp(c + ivec2(1, 1), ivec2(0), m), 0).rg;
     return mix(mix(c00, c10, a.x), mix(c01, c11, a.x), a.y);
   }
+  int groundClassAt(vec2 rel) { return int(texelFetch(uCoverTex, atlasCell(rel), 0).b * 255.0 + 0.5); }
   // the terrain mesh reshapes the shore band from the distance field (see terrain-build.js shoreShape)
   float surfaceAt(vec2 rel) {
     float h = terrainAt(rel), sd = shoreAt(rel), a = abs(sd);
@@ -175,12 +176,14 @@ const frag = /* glsl */ `
     // the canoe's reflection, nothing else
     vec4 r = texture2DProj(uReflection, vReflectUv);
     col = mix(col, r.rgb, r.a * 0.65 * uReflOn);
-    // shoreline ripples: thin crisp lines parallel to the shore rolling in, broken up along the shore
+    // shoreline ripples: thin crisp lines parallel to the shore rolling in. Each line breaks into its own
+    // wavelets (the pattern is shifted per line) and the ends taper instead of stopping dead.
     vec2 p = vLocal.xz;
-    float breakup = 0.5 + 0.5 * sin(dot(p, RIP1) + uTime * 0.25) * sin(dot(p, RIP2) - uTime * 0.11);
-    float phase = fract(depth * 0.8 + uTime * 0.55 + 0.25 * sin(dot(p, RIP3) + uTime * 0.4));
+    float cycle = depth * 0.8 + uTime * 0.55 + 0.25 * sin(dot(p, RIP3) + uTime * 0.4);
+    float phase = fract(cycle), band = floor(cycle);
+    float breakup = 0.5 + 0.5 * sin(dot(p, RIP1) + uTime * 0.25 + band * 2.4) * sin(dot(p, RIP2) - uTime * 0.11 + band * 0.9);
     float line = aastep(0.8, phase) * (1.0 - aastep(0.9, phase));
-    float ripple = line * (1.0 - aastep(5.5, depth)) * aastep(0.45, breakup) * step(0.0, depth);
+    float ripple = line * (1.0 - aastep(5.5, depth)) * smoothstep(0.3, 0.6, breakup) * step(0.0, depth);
     float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
     float foam = max(ripple, waterline) * 0.85;
     col = mix(col, uFoam, foam);
@@ -206,13 +209,13 @@ export class WaterSystem {
     this.shore = new Float32Array(ATLAS * ATLAS);
     this.level = new Float32Array(ATLAS * ATLAS);
     this.height = new Float32Array(ATLAS * ATLAS);
-    this.cover = new Uint8Array(ATLAS * ATLAS * 2);
+    this.cover = new Uint8Array(ATLAS * ATLAS * 4);
     this.atlasI = NaN; this.atlasJ = NaN; this.atlasDirty = true;
     const tex = (data, format, type) => { const t = new THREE.DataTexture(data, ATLAS, ATLAS, format, type); t.minFilter = t.magFilter = THREE.NearestFilter; return t; };
     this.shoreTex = tex(this.shore, THREE.RedFormat, THREE.FloatType);
     this.levelTex = tex(this.level, THREE.RedFormat, THREE.FloatType);
     this.heightTex = tex(this.height, THREE.RedFormat, THREE.FloatType);
-    this.coverTex = tex(this.cover, THREE.RGFormat, THREE.UnsignedByteType);
+    this.coverTex = tex(this.cover, THREE.RGBAFormat, THREE.UnsignedByteType);
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, {
       uTime: { value: 0 },
       uSunDir: { value: sunDir.clone() },
@@ -306,7 +309,7 @@ export class WaterSystem {
       shore[k] = w.sdCell(i, j);
       height[k] = w.hCell(i, j);
       const cv = w.coverCell(i, j);
-      cover[k * 2] = cv & 255; cover[k * 2 + 1] = cv >> 8;
+      cover[k * 4] = cv & 255; cover[k * 4 + 1] = (cv >> 8) & 255; cover[k * 4 + 2] = (cv >> 16) & 255; cover[k * 4 + 3] = 255;
       if (w.lakeCell(i, j)) { level[k] = w.levelCell(i, j); queue[tail++] = k; } else level[k] = -9999;
     }
     while (head < tail) {

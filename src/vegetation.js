@@ -80,6 +80,21 @@ function tallPine(rng) {
   for (let i = 0; i < 2 + Math.floor(rng() * 2); i++) g.blob((rng() - 0.5) * 2.6, h * (0.9 + rng() * 0.08), (rng() - 0.5) * 2.6, 1.6 + rng() * 0.9, vary(0x3b6b42, rng), rng, 0.4, 1.3, 0.6, 1.3);
   return g.build();
 }
+// jack pine of the bare rock: short, crooked, a few limbs with ragged tufts
+function jackPine(rng) {
+  const g = new GeoBuilder();
+  const h = 4.5 + rng() * 3.5, lean = (rng() - 0.5) * 1.6;
+  const bark = vary(0x6a5038, rng);
+  g.trunk(0, -0.5, 0, 0.22, 0.08, h, 5, bark, rng, lean);
+  const n = 2 + Math.floor(rng() * 3);
+  for (let i = 0; i < n; i++) {
+    const t = 0.4 + rng() * 0.5, y = h * t, a = rng() * 6.28, L = 0.8 + rng() * 1.2, bx = lean * t;
+    g.tube(g.ring(bx, y, 0, 0.07, 4, rng), g.ring(bx + Math.cos(a) * L, y + L * 0.35, Math.sin(a) * L, 0.03, 4, rng), bark, new THREE.Vector3(bx + Math.cos(a) * L * 0.5, y, Math.sin(a) * L * 0.5));
+    g.blob(bx + Math.cos(a) * L, y + L * 0.4, Math.sin(a) * L, 0.7 + rng() * 0.5, vary(0x4f7a3c, rng, 0.1), rng, 0.45, 1.4, 0.55, 1.2);
+  }
+  g.blob(lean, h + 0.2, 0, 0.9 + rng() * 0.5, vary(0x4a7438, rng, 0.1), rng, 0.45, 1.3, 0.7, 1.2);
+  return g.build();
+}
 function shrub(rng) {
   const g = new GeoBuilder();
   const base = [0x5c8a3a, 0x6f9440, 0x4e7a34, 0x7f9a44][Math.floor(rng() * 4)];
@@ -114,6 +129,7 @@ const LOW = {
   boulder: (rng) => smoothBoulder(rng, rng() * 50),
   shrub,
   tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x3b6b42, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x6b4a34, rng), rng); return g.build(); },
+  jackPine: (rng) => { const h = 4.5 + rng() * 3.5; const g = lowBlob(rng, h * 0.85, 1.5, vary(0x4a7438, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.08, h * 0.8, 3, vary(0x6a5038, rng), rng); return g.build(); },
 };
 
 // index order must match placement.js SPECIES
@@ -127,6 +143,7 @@ export const SPECIES = [
   { name: 'boulder', make: (rng) => smoothBoulder(rng, rng() * 50), rock: true },
   { name: 'shrub', make: shrub },
   { name: 'tallPine', make: tallPine },
+  { name: 'jackPine', make: jackPine },
 ];
 const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used

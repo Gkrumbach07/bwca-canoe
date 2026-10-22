@@ -49,7 +49,7 @@ async function buildFine(m) {
   const binCentre = (b) => ({ cx: g.originX + (b.rx + 0.5) * REGION, cz: g.originZ + (b.rz + 0.5) * REGION });
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, ...binCentre(b), ...instanceData(b.items, 7, b.rx, b.rz) }));
   const abins = aquatic.bins.map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, ...binCentre(b), ...instanceData(b.items, 5, b.rx, b.rz) }));
-  const transfer = [buf, cover.buffer, terrain.pos.buffer, terrain.col.buffer, terrain.idx.buffer];
+  const transfer = [buf, cover.buffer, terrain.pos.buffer, terrain.col.buffer, terrain.nrm.buffer, terrain.bed.buffer, terrain.idx.buffer];
   if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.idx.buffer);
   for (const b of bins) transfer.push(b.matrices.buffer, b.colors.buffer);
   for (const b of abins) transfer.push(b.matrices.buffer);
@@ -73,7 +73,7 @@ async function buildFar(m) {
     const terrain = buildTerrainChunk(grid, i0, j0, per, { fine: false, originX: ox, originZ: oz });
     const water = buildWaterChunk(grid, i0, j0, per, ox, oz);
     chunks.push({ tx, ty, terrain, water });
-    transfer.push(terrain.pos.buffer, terrain.col.buffer, terrain.idx.buffer);
+    transfer.push(terrain.pos.buffer, terrain.col.buffer, terrain.nrm.buffer, terrain.bed.buffer, terrain.idx.buffer);
     if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.idx.buffer);
   }
   return { msg: { type: 'built', key: m.key, level: 'far', fx: m.fx, fy: m.fy, data: buf, chunks }, transfer };

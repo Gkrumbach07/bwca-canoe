@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { glslSurface } from './water.js';
+import { GROUND_PALETTE } from './terrain-build.js';
 
 // Grass tufts and fireweed on a camera-following patch. Each tuft belongs to a world cell (so it stays put
 // as the patch slides) but sits at a hashed offset inside it, so no lattice shows; presence, size and
@@ -11,6 +12,7 @@ const SIZE = 128, SPACING = 0.5;
 const vert = /* glsl */ `
   uniform vec2 uCenterLocal;   // patch centre relative to the floating origin, snapped to the lattice
   uniform float uTime, uHalf;
+  uniform vec3 uGroundPalette[${GROUND_PALETTE.length}];
   attribute vec2 aOffset;
   attribute vec3 color;
   varying vec3 vColor;
@@ -36,9 +38,11 @@ const vert = /* glsl */ `
     float sway = sin(uTime * 1.6 + rel.x * 0.35 + rel.y * 0.25) * 0.08 * position.y;
     p.x += sway;
     vec3 local = vec3(rel.x + p.x, surfaceAt(rel) - 0.05 + p.y, rel.y + p.z);
-    // colour: a spread of greens per tuft, golden in burns and dry clearings; a few fireweed stalks
-    vec3 tint = mix(vec3(0.78, 0.9, 0.62), vec3(1.12, 1.04, 0.72), h2.x);
-    vec3 base = color * tint;
+    // colour: the ground's own colour, a little lighter and warmer toward the tips, with a spread per
+    // tuft; golden in burns and dry clearings; a few fireweed stalks
+    vec3 ground = uGroundPalette[clamp(groundClassAt(rel), 0, ${GROUND_PALETTE.length - 1})];
+    vec3 tint = mix(vec3(1.0, 1.08, 0.86), vec3(1.3, 1.22, 0.9), h2.x);
+    vec3 base = ground * color * tint;
     base = mix(base, base * vec3(1.3, 1.08, 0.55), cv.g * (0.6 + 0.4 * h2.y));
     float flower = step(0.94, h.x) * cv.g * step(0.75, position.y);
     vColor = mix(base, vec3(0.95, 0.35, 0.6), flower);
@@ -72,7 +76,7 @@ function tuftGeometry() {
     const lean = i % 2 ? 0.16 : -0.12;
     const tipX = -Math.sin(a) * lean, tipZ = Math.cos(a) * lean;
     pos.push(-dx, root, -dz, dx, root, dz, tipX, hgt * (0.85 + 0.15 * (i % 3)), tipZ);
-    col.push(0.3, 0.38, 0.18, 0.3, 0.38, 0.18, 0.58, 0.64, 0.3);
+    col.push(0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 1.15, 1.15, 1.15); // brightness only: the hue is the ground's
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -95,7 +99,7 @@ export class GroundCover {
     geo.instanceCount = n * n;
     this.material = new THREE.ShaderMaterial({
       vertexShader: vert, fragmentShader: frag,
-      uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), ...water.surfaceUniforms(), uCenterLocal: { value: new THREE.Vector2() }, uTime: { value: 0 }, uHalf: { value: SIZE / 2 }, uSky: { value: new THREE.Color(0xa9c6e0) }, uGround: { value: new THREE.Color(0x6f7a60) }, uSun: { value: new THREE.Color(0xffe9c4) } },
+      uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), ...water.surfaceUniforms(), uCenterLocal: { value: new THREE.Vector2() }, uTime: { value: 0 }, uHalf: { value: SIZE / 2 }, uGroundPalette: { value: GROUND_PALETTE.map((c) => new THREE.Vector3(c[0], c[1], c[2])) }, uSky: { value: new THREE.Color(0xa9c6e0) }, uGround: { value: new THREE.Color(0x6f7a60) }, uSun: { value: new THREE.Color(0xffe9c4) } },
       side: THREE.DoubleSide, fog: true,
     });
     this.mesh = new THREE.Mesh(geo, this.material);

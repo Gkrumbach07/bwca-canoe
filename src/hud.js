@@ -15,6 +15,9 @@ const BIG_SPAN = 25600;      // metres across the big map when it opens
 const MIN_SPAN = 2000, MAX_SPAN = 240000;
 const FINE_PX = 512;         // image pixels per fine tile edge (5 m per pixel)
 const FAR_PX = 256;          // image pixels per far tile edge (80 m per pixel)
+const FINE_M_PER_PX = 20;    // draw tiles at full detail once the view is this close
+const MAP_TILES_MAX = 96;    // map-only tile images kept (about 1 MB each)
+const MAP_FETCHES = 4;       // map-only tile downloads in flight
 const WATER = [184, 208, 216], RIM = [84, 118, 136];
 const TINT_LOW = [224, 216, 182], TINT_HIGH = [160, 166, 112];
 const BANDS = 14;
@@ -39,6 +42,9 @@ export class Hud {
     this.player = null;
     this.fineImages = new Map();
     this.farImages = new Map();
+    this.mapTiles = new Map();   // tiles fetched for the map alone, beyond the streamed neighbourhood
+    this.fetching = 0;
+    this.tick = 0;
     this.overview = null;
     this.loadOverview();
     this.sizeCanvas();
@@ -294,16 +300,45 @@ export class Hud {
     if (img) return img;
     const w = this.world, s = w.slots[e.ty * w.ntx + e.tx];
     if (!s) return null;
+    const c = this.paintSlot(s, e.tx, e.ty);
+    this.fineImages.set(e.key, c);
+    this.mapTiles.delete(e.key); // the streamed copy supersedes a map-only one
+    return c;
+  }
+
+  // A tile the 3D world has not streamed, fetched for the map alone: the same bytes, decoded here and
+  // painted once. Downloads are limited and images are let go least recently drawn first.
+  mapTile(tx, ty) {
+    const key = `${tx},${ty}`;
+    let t = this.mapTiles.get(key);
+    if (t) { t.used = this.tick; if (t.slot && !t.img) { t.img = this.paintSlot(t.slot, tx, ty); t.slot = null; } return t.img; }
+    if (this.fetching >= MAP_FETCHES) return null;
+    t = { used: this.tick, img: null, slot: null };
+    this.mapTiles.set(key, t);
+    this.fetching++;
+    fetch(this.world.tileUrl(tx, ty))
+      .then((r) => { if (!r.ok) throw new Error(r.status); return new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(); })
+      .then((buf) => { const n = this.world.side * this.world.side; t.slot = { h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n) }; })
+      .catch(() => this.mapTiles.delete(key))
+      .finally(() => { this.fetching--; });
+    return null;
+  }
+  paintSlot(s, tx, ty) {
+    const w = this.world;
     const c = document.createElement('canvas'); c.width = FINE_PX; c.height = FINE_PX;
     const ctx = c.getContext('2d');
     const pxPerCell = FINE_PX / w.tile;
     this.paintCells(ctx, s, w.side, w.halo, FINE_PX, 1 / pxPerCell);
-    const f = w.tileFlags[e.ty * w.ntx + e.tx];
+    const f = w.tileFlags[ty * w.ntx + tx];
     let hmin = f ? f[1] * 0.1 : Infinity, hmax = f ? f[2] * 0.1 : -Infinity;
     if (!Number.isFinite(hmin) || !Number.isFinite(hmax)) { for (let k = 0; k < s.h.length; k++) { const h = s.h[k] * 0.1; if (h < hmin) hmin = h; if (h > hmax) hmax = h; } }
     this.paintContours(ctx, s, w.side, w.halo, hmin, hmax, pxPerCell);
-    this.fineImages.set(e.key, c);
     return c;
+  }
+  pruneMapTiles() {
+    if (this.mapTiles.size <= MAP_TILES_MAX) return;
+    const old = [...this.mapTiles.entries()].filter(([, t]) => t.img || t.slot).sort((a, b) => a[1].used - b[1].used);
+    for (let i = 0; i < old.length && this.mapTiles.size > MAP_TILES_MAX; i++) this.mapTiles.delete(old[i][0]);
   }
 
   // one image per loaded far tile (80 m cells), tints and water only
@@ -377,20 +412,30 @@ export class Hud {
         ctx.drawImage(img, a, b, farMetres / mPerPx + 0.5, farMetres / mPerPx + 0.5);
       }
       for (const key of this.farImages.keys()) if (!aliveFar.has(key)) this.farImages.delete(key);
-      // loaded tiles at full detail once the view is close enough for contours to read
-      const alive = new Set();
-      const fine = mPerPx < 30;
-      for (const e of w.tiles.readyTiles()) {
-        alive.add(e.key);
-        if (!fine) continue;
-        const [ox, oz] = w.tileOrigin(e.tx, e.ty);
-        if (!inView(ox, oz, ox + w.tileMetres, oz + w.tileMetres)) continue;
-        const img = this.fineImage(e);
-        if (!img) continue;
-        const [a, b] = toPx(ox, oz);
-        ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
+      // every tile in view at full detail once the view is close enough for contours to read: streamed
+      // tiles from their own cells, the rest fetched for the map alone
+      const live = new Map(w.tiles.readyTiles().map((e) => [e.key, e]));
+      for (const key of this.fineImages.keys()) if (!live.has(key)) this.fineImages.delete(key);
+      if (mPerPx < FINE_M_PER_PX) {
+        this.tick++;
+        const [tx0, ty0] = w.tileOf(x0, z0), [tx1, ty1] = w.tileOf(x0 + spanX, z0 + spanZ);
+        // nearest the centre first, so the middle of the view sharpens before the edges
+        const order = [];
+        for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) order.push([tx, ty, Math.hypot(tx + 0.5 - (v.cx - w.originX) / w.tileMetres, ty + 0.5 - (v.cz - w.originZ) / w.tileMetres)]);
+        order.sort((p, q) => p[2] - q[2]);
+        let painted = 0;
+        for (const [tx, ty] of order) {
+          const key = `${tx},${ty}`, e = live.get(key);
+          let img;
+          if (e) img = this.fineImage(e);
+          else if (painted < 2 || this.mapTiles.get(key)?.img) { const had = this.mapTiles.get(key)?.img; img = this.mapTile(tx, ty); if (img && !had) painted++; }
+          if (!img) continue;
+          const [ox, oz] = w.tileOrigin(tx, ty);
+          const [a, b] = toPx(ox, oz);
+          ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
+        }
+        this.pruneMapTiles();
       }
-      for (const key of this.fineImages.keys()) if (!alive.has(key)) this.fineImages.delete(key);
     }
     ctx.drawImage(this.grain, 0, 0);
     // portages: red dashed, with the rod count beside the middle of the trail when there is room
