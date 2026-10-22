@@ -59,14 +59,21 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #reticle .dist { position: absolute; left: -60px; top: 64px; width: 120px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; color: rgba(243, 236, 221, .9); text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
 
 /* bottom left: the place title, the journal lines, the stringer line, the catch card */
-#place { left: 64px; bottom: 128px; display: flex; flex-direction: column; gap: 12px; text-shadow: 0 1px 3px rgba(0, 0, 0, .45); max-width: calc(100vw - 128px); }
+#place { left: 64px; bottom: 128px; display: flex; flex-direction: column; gap: 12px; text-shadow: 0 1px 3px rgba(0, 0, 0, .45); max-width: calc(100vw - 128px); transition: bottom .24s ease-out; }
 #place .kicker { font-size: 13px; letter-spacing: .16em; color: rgba(243, 236, 221, .88); }
 #place .name { font: 500 68px/1 var(--serif); letter-spacing: -.005em; }
 #place .sub { font-size: 17px; color: rgba(243, 236, 221, .8); }
-#lines { left: 64px; bottom: 60px; display: flex; flex-direction: column; gap: 8px; text-shadow: 0 1px 2px rgba(0, 0, 0, .5); max-width: min(720px, calc(100vw - 128px)); transition: bottom .24s ease-out; }
+/* the journal lines sit on the bottom row only while nothing is being said; the action line owns that row, so
+   with a prompt up they lift clear of it and keep to the left 40 % of the frame (narrower still under the balance
+   arc), above the lure strip while the rod is up, above the catch card while it is out */
+#lines { left: 64px; bottom: 60px; display: flex; flex-direction: column; gap: 8px; text-shadow: 0 1px 2px rgba(0, 0, 0, .5); max-width: min(720px, calc(100vw - 128px)); transition: bottom .24s ease-out, max-width .24s ease-out; }
 #lines .line { font: italic 19px/1.3 var(--serif); color: rgba(243, 236, 221, .92); }
-#air.rod #lines { bottom: 92px; }
-#air.catch #lines { bottom: 168px; }
+#air.prompt #lines { bottom: 96px; max-width: 40vw; }
+#air.balance #lines { max-width: 30vw; }
+#air.rod #lines { bottom: 160px; max-width: 40vw; }
+#air.catch #lines { bottom: 184px; max-width: 40vw; } /* the card is 116 px tall above its 56 px */
+#air.lines #place { bottom: 220px; } /* the place title sits above live journal lines (two, wrapped: up to 107 px from 96) */
+#air.rod #place { visibility: hidden; } /* the spot card and the catch card own the left while fishing */
 #air.catch #place { visibility: hidden; }
 #stringer { left: 64px; bottom: 60px; font-size: 14px; color: rgba(243, 236, 221, .8); text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
 #catch { left: 64px; bottom: 56px; width: 400px; box-sizing: border-box; padding: 16px 20px 16px 18px; background: var(--paper); border: 2px solid var(--edge); border-radius: 3px; color: var(--ink); font-family: var(--serif); box-shadow: 0 16px 40px rgba(0, 0, 0, .4); display: flex; gap: 16px; align-items: center; text-shadow: none; }

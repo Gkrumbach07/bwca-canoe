@@ -579,7 +579,7 @@ export class Hud {
     const box = this.el.lines;
     if (!box || !text) return;
     if (this.settings && !this.settings.showLines) return;
-    while (box.children.length >= 2) this.dropLine(box.firstElementChild);
+    while (box.children.length >= 2) { const c = box.firstElementChild; clearTimeout(c._timer); c.remove(); } // the oldest goes at once: two at most
     const el = document.createElement('div'); el.className = 'line fade'; el.textContent = text;
     box.appendChild(el);
     requestAnimationFrame(() => el.classList.add('show'));
@@ -622,6 +622,7 @@ export class Hud {
       if (settings.readoutMode !== 'always' && this.tab.shown && !this.tab.held && settings.readoutMode !== 'toggle') this.showReadout(false);
     }
     if (!this.paper && this.pendingTitle) { const t = this.pendingTitle; this.showPlace(t.kicker, t.name, t.sub, t.seconds); }
+    air.classList.toggle('lines', this.el.lines.children.length > 0); // the place title keeps above live lines
     this.updateCompass(ctx);
     this.updateTitles(ctx);
     this.updatePrompt(ctx);
@@ -704,6 +705,7 @@ export class Hud {
     const { player, fishing } = ctx, e = this.el;
     const fu = fishing ? fishing.ui : null;
     const p = player.prompt || (fu && fu.message ? { key: null, text: fu.message } : null);
+    this.el.air.classList.toggle('prompt', !!p); // the action line owns the bottom row: the journal lines lift
     if (!p) { e.prompt.classList.remove('show'); return; }
     const key = p.key ? `<kbd>${esc(p.key)}</kbd>` : '';
     let text = String(p.text || ''), main = text, hint = p.hint || '';
