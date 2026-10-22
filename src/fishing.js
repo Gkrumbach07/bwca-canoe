@@ -261,10 +261,8 @@ export class Fishing {
   }
 
   get lureDef() { return LURES[this.lureIndex]; }
-  // in first person the first click only captures the pointer for looking around; it is not a cast
-  get mouseOk() { const c = this.chase; return c.mode !== 'first' || c.locked || c.lockDenied; }
-  get button() { return this.input.held('Space') || (this.mouse.down && this.mouseOk); }
-  buttonPressed() { return this.input.pressed('Space') || (this.mouse.pressed && this.mouseOk); }
+  get button() { return this.input.held('Space') || this.mouse.down; }
+  buttonPressed() { return this.input.pressed('Space') || this.mouse.pressed; }
 
   // --- catch log ----------------------------------------------------------------------------------------------------
   loadLog() {
@@ -391,16 +389,16 @@ export class Fishing {
   }
 
   // --- the cast ------------------------------------------------------------------------------------------------------
-  // Where the player is pointing: the view's centre in first person, the cursor in third. Where that ray meets
-  // the water inside the rod's reach, the cast is aimed at the spot and will not fly past it.
+  // Where the player is pointing: the ray through the cursor in either view (the view's own centre when the
+  // cursor is off the page). Where it meets the water inside the rod's reach, the cast is aimed at the spot
+  // and will not fly past it.
   computeAim() {
     const p = this.player, ch = this.chase, cam = ch.camera, t = this.tipWorld();
     const level = p.level || this.world.levelAt(p.x, p.z);
     let ox, oy, oz, dx, dy, dz;
-    if (ch.mode === 'first' || !ch.cursor.inside) {
+    if (!ch.cursor.inside) {
       cam.getWorldDirection(this._v2);
       ox = cam.position.x; oy = cam.position.y; oz = cam.position.z; dx = this._v2.x; dy = this._v2.y; dz = this._v2.z;
-      if (ch.mode !== 'first') { ox = t.x; oy = t.y; oz = t.z; dx = p.forward.x; dz = p.forward.z; dy = -0.05; } // no cursor: dead ahead
     } else {
       this.raycaster.setFromCamera(this._ndc.set(ch.cursor.x, ch.cursor.y), cam);
       const r = this.raycaster.ray;
@@ -514,8 +512,7 @@ export class Fishing {
     if (s === 'ready' || s === 'charging') { const reach = this.computeAim(); this.placeAimRing(reach); } else this.aimRing.visible = false;
     if (s === 'ready') {
       if (this.buttonPressed()) { this.state = 'charging'; this.charge = 0; this.power = 0; }
-      const where = this.chase.mode === 'first' ? 'where you look' : 'where the cursor points';
-      p.prompt = { key: 'Space', text: `Hold to load a cast ${where} · <b>${this.lureDef.name}</b> · 1-5 to change · F puts the rod down` };
+      p.prompt = { key: 'Space', text: `Hold to load a cast where the cursor points · <b>${this.lureDef.name}</b> · 1-5 to change · F puts the rod down` };
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
