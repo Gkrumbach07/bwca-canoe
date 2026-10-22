@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--port", "5174"],
       "port": 5174
+    },
+    {
+      "name": "bwca-canoe-5177",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5177"],
+      "port": 5177
     }
   ]
 }

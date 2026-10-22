@@ -363,11 +363,12 @@ export function buildCanoeRig() {
       if (firstPerson) { parts.head.visible = false; parts.hat.visible = false; parts.crown.visible = false; }
     },
     setFirstPerson(on) { firstPerson = on; },
-    // the hull comes off the shoulders and lies on the ground where it fell; it stays put while the paddler walks on
-    dropHull(x, y, z, heading) {
+    // the hull comes off the shoulders and lies on the ground where it was put; it stays put while the paddler
+    // walks on. pitch (about the beam) follows the ground under it, or noses a beached hull up the bank.
+    dropHull(x, y, z, heading, pitch = 0.2) {
       rig.parent.attach(hullPivot);
       hullPivot.position.set(x, y + 0.3, z);
-      hullPivot.rotation.set(0, heading, 0.2);
+      hullPivot.rotation.set(0, heading, pitch);
       hullPivot.updateMatrixWorld();
     },
     pickUpHull() { rig.attach(hullPivot); },

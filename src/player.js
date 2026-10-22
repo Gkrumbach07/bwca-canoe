@@ -2,6 +2,7 @@ import { FLOAT_OFFSET, LENGTH } from './canoe.js';
 import { resample } from './props.js';
 import { clamp, lerp } from './rng.js';
 import { windHeight } from './waves.js';
+import { GROUND, surfaceAt } from './terrain-build.js';
 
 export class Input {
   constructor() {
@@ -16,23 +17,37 @@ export class Input {
 }
 
 const PADDLE = { accel: 3.4, hustle: 5.2, reverse: 1.6, drag: 0.15, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
-const WALK = { speed: 1.35, hustle: 2.1, turn: 1.7 };
+const WALK = { speed: 1.4, hustle: 2.1, carry: 1.1, carryHustle: 1.6, turn: 1.7 };
 const SWIM = { speed: 0.85, hustle: 1.25, turn: 1.6 };
 const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
 const LANDING_RADIUS = 28;
+const ASHORE_RADIUS = 6;      // metres of water between the hull and a shore within which you can step out
+const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like the trail
+const HULL_REACH = 3;         // metres from a canoe on the ground within which you can shoulder or launch it
+const FLOAT_SD = -3.5;        // shoreAt where a canoe floats clear (the paddle wants 1.2 m under the middle and 0.5 m under the ends)
+const WADE_SD = -2.5;         // shoreAt beyond which the water is too deep to wade
+const MAX_GRADE = Math.tan((40 * Math.PI) / 180);
+const RODS = 5.0292;
+// how the bush walks compared with a trail, by ground class (terrain-build GROUND): open bedrock and a
+// meadow are easy, the forest is brush and deadfall, dark spruce is a thicket, a burn a tangle of fallen snags
+const GOING = { rock: 0.9, rockDark: 0.8, rockLichen: 0.9, forest: 0.7, forestLight: 0.75, forestDark: 0.55, meadow: 0.85, burn: 0.6 };
+const LAND = { rock: 'Bare rock', rockDark: 'A rock face', rockLichen: 'Bare rock', meadow: 'A clearing', burn: 'Old burn', forest: 'The woods', forestLight: 'The woods', forestDark: 'Dark spruce' };
 
 export class Player {
   constructor(world, canoe, input) {
     this.world = world; this.canoe = canoe; this.input = input;
-    this.mode = 'paddle';
+    this.mode = 'paddle'; // 'paddle' | 'carry' (the canoe on your shoulders) | 'walk' (on foot, the canoe on the ground somewhere) | 'swim'
     this.x = world.meta.start.x; this.z = world.meta.start.z;
     this.heading = 0; this.speed = 0; this.yawRate = 0; this.time = 0;
     this.strokeCount = 0;
     this.prompt = null;
     this.timeScale = 1;
     this.trailCache = new Map(); // portage -> resampled trail, built on first use
-    this.carry = null; // { trail, dist, dir }
-    this.landing = null; // auto-pilot toward a launch point
+    this.carry = null; // on foot: { trail, drop: { x, z, heading } | null, hitCooldown, from: { x, z } | null, choice }
+    this.landing = null; // auto-pilot toward a portage launch point
+    this.ashore = null;  // auto-pilot nosing in to a bank: { sx, sz, t }
+    this.placeName = null; this.campsite = null; this.onTrail = false; // where you are on foot, for the HUD
+    this.placeCache = { ci: NaN, cj: NaN, id: 0 };
     this.ripples = null; this.water = null; this.audio = null; this.wind = null; // set by main
     this.balance = 0; this.extraRoll = 0; this.swim = null; // capsize meter and the swim after a capsize
     this.bubbleAcc = 0; this.prevStroke = 0; this.level = 0;
@@ -44,8 +59,18 @@ export class Player {
 
   get forward() { return { x: Math.cos(this.heading), z: -Math.sin(this.heading) }; }
   get lakeId() { return this.world.lakeIdAt(this.x, this.z); }
-  get altitude() { return this.mode === 'carry' ? this.world.heightAt(this.x, this.z) : this.world.levelAt(this.x, this.z); }
+  get onFoot() { return this.mode === 'carry' || this.mode === 'walk'; }
+  get altitude() { return this.onFoot ? this.groundAt(this.x, this.z) : this.world.levelAt(this.x, this.z); }
   get waveHeightHere() { return this.wind && this.water ? windHeight(this.wind.speed, this.water.fetchAt(this.x, this.z)) : 0.05; }
+  // where the canoe lies when it is not with you (beached or set down), for the map
+  get hullDown() { return this.carry && this.carry.drop ? this.carry.drop : null; }
+  get modeLabel() {
+    if (this.mode === 'carry') return this.onTrail ? 'Portaging' : 'Carrying the canoe';
+    if (this.mode === 'walk') return 'On foot';
+    return this.mode === 'swim' ? 'Swimming' : 'Paddling';
+  }
+  // the height things stand on: the terrain as the mesh is built (reshaped in the shore band)
+  groundAt(x, z) { return surfaceAt(this.world, x, z); }
 
   trailFor(p) {
     let t = this.trailCache.get(p);
@@ -72,13 +97,52 @@ export class Player {
     return best;
   }
 
+  // the portage trail nearest (x, z) within r metres: { def, trail, dist, along } or null
+  nearestTrail(x, z, r = 30) {
+    let best = null;
+    for (const p of this.world.portages) {
+      const b = p.bbox;
+      if (x < b[0] - r || x > b[2] + r || z < b[1] - r || z > b[3] + r) continue;
+      const trail = this.trailFor(p), n = this.nearestOnTrail(trail, x, z);
+      if (n.dist < r && (!best || n.dist < best.dist)) best = { def: p, trail, dist: n.dist, along: n.along };
+    }
+    return best;
+  }
+
+  nearCampsite(x, z, r = 10) {
+    let best = null;
+    for (const c of this.world.campsites) {
+      const dx = c.x - x, dz = c.z - z;
+      if (dx > r || dx < -r || dz > r || dz < -r) continue;
+      const d = Math.hypot(dx, dz);
+      if (d < r && (!best || d < best.d)) best = { site: c, d };
+    }
+    return best ? best.site : null;
+  }
+
+  // the lake whose water is nearest (x, z) within r cells, or 0; remembered per cell
+  nearWater(x, z, r = 8) {
+    const w = this.world, ci = w.cellI(x), cj = w.cellJ(z), pc = this.placeCache;
+    if (pc.ci === ci && pc.cj === cj && pc.r === r) return pc.id;
+    let best = 0, bd = Infinity;
+    for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+      const id = w.lakeCell(ci + di, cj + dj);
+      if (!id) continue;
+      const d = di * di + dj * dj;
+      if (d < bd) { bd = d; best = id; }
+    }
+    pc.ci = ci; pc.cj = cj; pc.r = r; pc.id = best;
+    return best;
+  }
+
   update(dt) {
     dt *= this.timeScale;
     this.time += dt;
-    this.prompt = null;
+    this.prompt = null; this.placeName = null; this.campsite = null; this.onTrail = false;
     if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); return; }
     if (this.landing) this.updateLanding(dt);
-    else if (this.mode === 'carry') this.updateCarry(dt);
+    else if (this.ashore) this.updateAshore(dt);
+    else if (this.onFoot) this.updateFoot(dt);
     else if (this.mode === 'swim') this.updateSwim(dt);
     else this.updatePaddle(dt);
   }
@@ -155,12 +219,76 @@ export class Player {
     this.emitWater(dt);
     if (this.balance >= 1) { this.capsize(); return; }
     if (this.balance > 0.25) this.prompt = { key: null, text: brace ? 'Bracing…' : 'Broadside to the waves — quarter them, or hold Space to brace' };
-    const land = rodUp ? null : this.nearestLanding();
+    if (rodUp) return;
+    // a portage landing takes the canoe to the trailhead; any other bank close enough lets you step out
+    const land = this.nearestLanding();
+    const gap = this.shoreGap();
     if (land) {
       const p = land.def;
-      this.prompt = { key: 'E', text: `Portage: ${p.name} · ${p.rods} rods (${p.lengthM} m)` };
-      if (this.input.pressed('KeyE')) this.landing = { land, t: 0 };
+      this.prompt = { key: 'E', text: `Portage: ${p.name} · ${p.rods} rods (${p.lengthM} m)${gap ? ' &nbsp; <kbd>Q</kbd>Go ashore here' : ''}` };
+      if (inp.pressed('KeyE')) this.landing = { land, t: 0 };
+      else if (gap && inp.pressed('KeyQ')) this.goAshore(gap);
+    } else if (gap) {
+      this.prompt = { key: 'E', text: 'Go ashore' };
+      if (inp.pressed('KeyE')) this.goAshore(gap);
     }
+  }
+
+  // The nearest shore to the hull (middle, bow and stern are tried): { x, z, sd } of the closest sample, or
+  // null when there is more than ASHORE_RADIUS metres of water between.
+  shoreGap() {
+    const w = this.world, f = this.forward;
+    let best = null;
+    for (const t of [0, 2.4, -2.4]) {
+      const px = this.x + f.x * t, pz = this.z + f.z * t, sd = w.shoreAt(px, pz);
+      if (-sd < ASHORE_RADIUS && (!best || sd > best.sd)) best = { x: px, z: pz, sd };
+    }
+    return best;
+  }
+
+  // Nose in: steer for the point of the shoreline nearest the hull, then step out there.
+  goAshore(at) {
+    const g = this.world.deeperDir(at.x, at.z);
+    this.ashore = { sx: at.x + g.x * at.sd, sz: at.z + g.z * at.sd, t: 0 };
+  }
+
+  updateAshore(dt) {
+    const A = this.ashore, w = this.world, st = this.canoe.state;
+    A.t += dt;
+    const dx = A.sx - this.x, dz = A.sz - this.z, d = Math.hypot(dx, dz);
+    const target = Math.atan2(-dz, dx);
+    let dh = target - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    this.heading += dh * (1 - Math.exp(-dt * 2.5));
+    this.speed = lerp(this.speed, 1.2, 1 - Math.exp(-dt * 2));
+    const f = this.forward;
+    this.x += f.x * this.speed * dt; this.z += f.z * this.speed * dt;
+    st.power = 0.5; st.stroke = (st.stroke + dt * 0.8) % 1;
+    this.placeOnWater(dt);
+    this.emitWater(dt);
+    this.prompt = { key: null, text: 'Nosing in…' };
+    const bowSd = w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6);
+    if (bowSd > 0.6 || d < 1.0 || A.t > 8) this.stepOut();
+  }
+
+  // The bow grounds: the hull is beached with its nose up the bank and its stern afloat, and you stand beside
+  // it on the land with the choice of shouldering it or leaving it there.
+  stepOut() {
+    const w = this.world;
+    let sx = this.x, sz = this.z, sd = w.shoreAt(sx, sz);
+    for (let i = 0; i < 12 && Math.abs(sd) > 0.15; i++) { const g = w.deeperDir(sx, sz); sx += g.x * sd; sz += g.z * sd; sd = w.shoreAt(sx, sz); } // walk the distance field onto the waterline
+    const g = w.deeperDir(sx, sz), lx = -g.x, lz = -g.z; // landward
+    const heading = Math.atan2(-lz, lx);
+    const hx = sx + lx * 0.8, hz = sz + lz * 0.8;
+    const side = this.canoe.state.side || 1, rx = -lz, rz = lx;
+    let px = sx + lx * 2.2 + rx * side * 1.3, pz = sz + lz * 2.2 + rz * side * 1.3;
+    if (w.shoreAt(px, pz) < 0.3 || !w.isReady(px, pz)) { px = sx + lx * 3.0; pz = sz + lz * 3.0; }
+    this.x = px; this.z = pz; this.heading = heading; this.speed = 0; this.yawRate = 0;
+    this.mode = 'walk'; this.ashore = null; this.balance = 0; this.extraRoll = 0; this.bob = null;
+    this.carry = { trail: null, drop: { x: hx, z: hz, heading }, hitCooldown: 0, from: null, choice: true };
+    this.canoe.state.stroke = 0; this.canoe.state.power = 0;
+    this.restHull(hx, hz, heading);
+    this.placeOnGround();
+    if (this.audio) this.audio.paddleDip();
   }
 
   // Over you go. The hull floats upside down and drifts downwind; you are in the water beside it.
@@ -295,11 +423,11 @@ export class Player {
       this.mode = 'carry';
       const dir = L.land.end === 0 ? 1 : -1;
       const p = this.trailPoint(trail, L.land.end === 0 ? 0 : trail.length);
-      this.carry = { trail, dir, drop: null, hitCooldown: 0, startEnd: L.land.end, leftStart: false };
+      this.carry = { trail, drop: null, hitCooldown: 0, from: { x: p.x, z: p.z }, choice: false };
       this.x = p.x; this.z = p.z;
       this.heading = Math.atan2(-p.tz * dir, p.tx * dir);
-      this.landing = null; this.speed = 0; this.yawRate = 0;
-      this.placeOnTrail();
+      this.landing = null; this.speed = 0; this.yawRate = 0; this.bob = null;
+      this.placeOnGround();
     }
   }
 
@@ -314,9 +442,9 @@ export class Player {
     return { x, z, tx: tx / L, tz: tz / L };
   }
 
-  placeOnTrail() {
+  placeOnGround() {
     const rig = this.canoe.rig;
-    rig.position.set(this.x, this.world.heightAt(this.x, this.z) + 0.1, this.z);
+    rig.position.set(this.x, this.groundAt(this.x, this.z) + 0.1, this.z);
     rig.rotation.set(0, this.heading, 0);
     this.canoe.state.mode = this.carry && this.carry.drop ? 'walk' : 'carry';
   }
@@ -335,30 +463,58 @@ export class Player {
     return best;
   }
 
-  // Portaging is walked, not ridden: steer with A/D, stay near the trail (the bush beside it is slow, and
-  // past 14 m it turns you back), trunks block you, and the hull overhead catches on trees. A caught hull
-  // may come down; then you walk back and shoulder it again.
-  updateCarry(dt) {
-    const inp = this.input, c = this.carry, st = this.canoe.state, w = this.world, trail = c.trail;
+  // On foot, with or without the canoe, anywhere on the land. Steer with A/D. A portage trail walks at full
+  // speed; off it the ground says how thick the bush is and a hill costs more, with a 40° slope a wall. Trunks
+  // block you, and with the hull overhead it catches on trees and may come down. Water past the knees stops you.
+  updateFoot(dt) {
+    const inp = this.input, c = this.carry, st = this.canoe.state, w = this.world;
+    const carrying = !c.drop;
     const fwd = (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
     const turn = (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
-    const dropped = !!c.drop;
+    c.hitCooldown -= dt;
     this.heading += turn * WALK.turn * dt * (this.speed < -0.1 ? -1 : 1);
-    this.speed += (fwd * (hustle ? WALK.hustle : WALK.speed) * (dropped ? 1.2 : 1) - this.speed) * (1 - Math.exp(-dt * 6));
     const f = this.forward;
-    let nx = this.x + f.x * this.speed * dt, nz = this.z + f.z * this.speed * dt;
+    const trail = this.nearestTrail(this.x, this.z), onTrail = !!trail && trail.dist < TRAIL_WIDTH;
+    const camp = this.nearCampsite(this.x, this.z);
+    this.onTrail = onTrail; this.campsite = camp;
     let note = null;
-    const near = this.nearestOnTrail(trail, nx, nz);
-    if (near.dist > 14) { nx = this.x; nz = this.z; this.speed *= 0.5; note = 'Thick brush — back to the trail'; }
-    else if (near.dist > 6) { this.speed *= 0.5; note = 'Bushwhacking…'; }
+    // the going: a trail and a campsite are cleared; elsewhere the ground class says how thick the bush is,
+    // and the cedar and alder along a shore are thicker still
+    const cls = GROUND[(w.coverCell(w.cellI(this.x), w.cellJ(this.z)) >> 16) & 255];
+    let going = 1;
+    if (!onTrail && !camp) {
+      const sd = w.shoreAt(this.x, this.z);
+      going = (GOING[cls] ?? 0.7) * (sd < 25 ? 0.8 + 0.2 * clamp((sd - 5) / 20, 0, 1) : 1);
+    }
+    // the hill: the grade a step ahead in the direction of travel slows you and a 40° slope stops you; a
+    // trail is graded, so half the penalty and never a wall
+    const dir = fwd < 0 ? -1 : 1, step = 1.5;
+    const grade = (this.groundAt(this.x + f.x * dir * step, this.z + f.z * dir * step) - this.groundAt(this.x, this.z)) / step;
+    let wall = null;
+    if (!onTrail && grade > MAX_GRADE) wall = 'Too steep to climb here';
+    else if (!onTrail && grade < -1.2) wall = 'A drop — find another way down';
+    else if (grade > 0) going *= 1 - (onTrail ? 0.45 : 0.85) * Math.pow(Math.min(1, grade / MAX_GRADE), 1.3);
+    else going *= 1 - (onTrail ? 0.2 : 0.45) * Math.min(1, -grade / MAX_GRADE);
+    const base = carrying ? (hustle ? WALK.carryHustle : WALK.carry) : (hustle ? WALK.hustle : WALK.speed);
+    if (fwd !== 0 && wall) note = wall;
+    const want = wall ? 0 : fwd * base * Math.max(0.12, going);
+    this.speed += (want - this.speed) * (1 - Math.exp(-dt * 6));
+    let nx = this.x + f.x * this.speed * dt, nz = this.z + f.z * this.speed * dt;
+    if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
+    else if (!w.isReady(nx, nz)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Loading the land ahead…'; }
+    else if (w.shoreAt(nx, nz) < WADE_SD) { nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade'; }
     const trees = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
     for (const t of trees) {
-      const d = Math.hypot(t.x - nx, t.z - nz), keep = t.r + 0.35;
-      if (d < keep && d > 1e-4) { nx = t.x + ((nx - t.x) / d) * keep; nz = t.z + ((nz - t.z) / d) * keep; this.speed *= 0.3; }
+      const dx = nx - t.x, dz = nz - t.z, d = Math.hypot(dx, dz), keep = t.r + 0.35;
+      if (d < keep && d > 1e-4) {
+        // held off the trunk, and eased round it to whichever side you were already passing on
+        const side = Math.sign(dx * -f.z + dz * f.x) || 1;
+        nx = t.x + (dx / d) * keep - f.z * side * 0.02; nz = t.z + (dz / d) * keep + f.x * side * 0.02;
+        this.speed *= 0.8;
+      }
     }
-    if (!dropped) {
-      c.hitCooldown -= dt;
+    if (carrying) {
       for (const t of trees) {
         // the hull overhead is a 5 m log from 2.2 m behind the walker to 3 m ahead
         const px = t.x - nx, pz = t.z - nz, along = px * f.x + pz * f.z;
@@ -369,7 +525,7 @@ export class Player {
           c.hitCooldown = 1.3;
           nx = this.x; nz = this.z; this.speed = -0.25;
           if (this.audio) this.audio.paddleDip();
-          if (Math.random() < 0.45) this.dropHull(); else note = 'The canoe caught a tree';
+          if (Math.random() < 0.45) { this.dropHull(); note = 'The canoe came down'; } else note = 'The canoe caught a tree';
           break;
         }
       }
@@ -377,40 +533,112 @@ export class Player {
     this.x = nx; this.z = nz;
     st.walkSpeed += ((Math.abs(this.speed) > 0.05 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
     st.walk += Math.abs(this.speed) * dt * 4.2;
-    this.placeOnTrail();
-    if (dropped) {
-      const dd = Math.hypot(c.drop.x - this.x, c.drop.z - this.z);
-      if (dd < 2.6) { this.prompt = { key: 'E', text: 'Shoulder the canoe' }; if (inp.pressed('KeyE')) this.pickUpHull(); }
-      else this.prompt = { key: null, text: `The canoe is on the ground ${dd.toFixed(0)} m back` };
+    this.placeOnGround();
+    if (!note && !onTrail && !camp && fwd !== 0 && going < 0.6) note = going < 0.42 ? 'Thick brush…' : 'Bushwhacking…';
+    // where you are, for the HUD header
+    if (camp) { const id = this.nearWater(camp.x, camp.z, 6); this.placeName = camp.name ? `${camp.name} campsite` : `Campsite${id ? ' · ' + (w.lakeName(id) || 'unnamed water') : ''}`; }
+    else if (onTrail) this.placeName = trail.def.name;
+    else { const id = this.nearWater(this.x, this.z, 8); this.placeName = id ? `${w.lakeName(id) || 'Unnamed water'} shore` : LAND[cls] || 'The woods'; }
+    let trailText = null;
+    if (onTrail) {
+      const p = this.trailPoint(trail.trail, trail.along);
+      const remaining = p.tx * f.x + p.tz * f.z >= 0 ? trail.trail.length - trail.along : trail.along;
+      trailText = `${trail.def.name} · ${Math.round(remaining / RODS)} rods to go`;
+    }
+    this.footPrompts(c, trail, note, trailText);
+  }
+
+  // one prompt line: a note or where you are, then the keys that do something here
+  say(info, ...acts) {
+    const keys = acts.filter(Boolean).map(([k, t]) => `<kbd>${k}</kbd>${t}`).join(' &nbsp; ');
+    const text = info ? (keys ? `${info} &nbsp;·&nbsp; ${keys}` : info) : keys;
+    this.prompt = text ? { key: null, text } : null;
+  }
+
+  footPrompts(c, trail, note, trailText) {
+    const inp = this.input, w = this.world;
+    const lakeOf = (id) => w.lakeName(id) || 'the water';
+    if (c.drop) {
+      const d = c.drop, dd = Math.hypot(d.x - this.x, d.z - this.z);
+      if (dd > HULL_REACH) c.choice = false;
+      if (dd <= HULL_REACH) {
+        if (c.choice) { // just stepped out: take it along, or leave it beached here
+          this.say(note, ['E', 'Shoulder the canoe'], ['Q', 'Leave it here']);
+          if (inp.pressed('KeyE')) this.pickUpHull(); else if (inp.pressed('KeyQ')) c.choice = false;
+          return;
+        }
+        const L = this.launchFrom(d.x, d.z, 8); // a canoe lying at the water's edge; one further up the bank is carried
+        if (L && L.deep) {
+          this.say(note, ['E', `Launch onto ${lakeOf(L.lake)}`], ['Q', 'Shoulder the canoe']);
+          if (inp.pressed('KeyE')) this.launch(L); else if (inp.pressed('KeyQ')) this.pickUpHull();
+        } else {
+          this.say(note || (L ? 'Too shallow to launch here' : null), ['E', 'Shoulder the canoe']);
+          if (inp.pressed('KeyE')) this.pickUpHull();
+        }
+        return;
+      }
+      this.say(note || trailText || `The canoe is ${dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`} away`);
       return;
     }
-    const pts = trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
-    const d0 = Math.hypot(e0[0] - this.x, e0[1] - this.z), d1 = Math.hypot(e1[0] - this.x, e1[1] - this.z);
-    if ((c.startEnd === 0 ? d0 : d1) > 9) c.leftStart = true; // you can turn back and launch where you landed, once you have walked away
-    const canLaunch = (end) => end !== c.startEnd || c.leftStart;
-    if ((d0 < 5 && canLaunch(0)) || (d1 < 5 && canLaunch(1))) {
-      const endIdx = d1 < d0 && canLaunch(1) ? 1 : 0;
-      this.prompt = { key: 'E', text: `Launch onto ${w.lakeName(trail.def.launch[endIdx].lake) || 'the water'}` };
-      if (inp.pressed('KeyE')) this.launch(trail.def.launch[endIdx]);
+    // carrying: launch at a trail end where the map says, or at any shore with a metre of water within reach,
+    // once you have walked a few steps from where you shouldered it (so E does not put it straight back in);
+    // otherwise set it down
+    if (c.from && Math.hypot(c.from.x - this.x, c.from.z - this.z) > 6) c.from = null;
+    const away = !c.from;
+    let L = null;
+    if (trail && trail.dist < 12) {
+      const pts = trail.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
+      const d0 = Math.hypot(e0[0] - this.x, e0[1] - this.z), d1 = Math.hypot(e1[0] - this.x, e1[1] - this.z);
+      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; L = { x: l.x, z: l.z, lake: l.lake, deep: true }; }
+    }
+    if (!L && w.shoreAt(this.x, this.z) < 8) L = this.launchFrom(this.x, this.z, 12);
+    if (L && L.deep && away) {
+      this.say(note || trailText, ['E', `Launch onto ${lakeOf(L.lake)}`], ['Q', 'Set the canoe down']);
+      if (inp.pressed('KeyE')) this.launch(L); else if (inp.pressed('KeyQ')) this.dropHull(true);
     } else {
-      const remaining = c.dir > 0 ? trail.length - near.along : near.along;
-      this.prompt = { key: null, text: note || `${trail.def.name} · ${Math.round(remaining / 5.0292)} rods to go` };
+      this.say(note || trailText || (L && !L.deep ? 'Too shallow to launch here' : null), ['E', 'Set the canoe down']);
+      if (inp.pressed('KeyE')) this.dropHull(true);
     }
   }
 
-  dropHull() {
+  // March from (x, z) toward deeper water: the first point where a canoe floats clear of the shore, and whether
+  // a metre of depth lies within reach beyond it. null when no open water is within `reach` metres.
+  launchFrom(x, z, reach = 14) {
+    const w = this.world;
+    let px = x, pz = z, sd = w.shoreAt(px, pz);
+    for (let i = 0; i < reach && sd > FLOAT_SD; i++) { const g = w.deeperDir(px, pz); px += g.x; pz += g.z; sd = w.shoreAt(px, pz); }
+    if (sd > FLOAT_SD || !w.isReady(px, pz) || !w.inBounds(px, pz, 40)) return null;
+    const lx = px, lz = pz;
+    let deep = false;
+    for (let i = 0; i < 14 && !deep; i++) {
+      if (w.levelAt(px, pz) - w.heightAt(px, pz) >= 1) deep = true;
+      else { const g = w.deeperDir(px, pz); px += g.x; pz += g.z; }
+    }
+    return { x: lx, z: lz, deep, lake: w.lakeIdAt(lx, lz) };
+  }
+
+  // Lay the hull on the ground at (x, z): it follows the slope under its ends, and floats where an end is in the water.
+  restHull(x, z, heading, pitchExtra = 0) {
+    const w = this.world, f = { x: Math.cos(heading), z: -Math.sin(heading) };
+    const under = (px, pz) => { const s = this.groundAt(px, pz); return w.shoreAt(px, pz) < 0 ? Math.max(s, w.levelAt(px, pz)) : s; };
+    const hb = under(x + f.x * 2.2, z + f.z * 2.2), hs = under(x - f.x * 2.2, z - f.z * 2.2);
+    this.canoe.dropHull(x, Math.max(under(x, z), (hb + hs) / 2), z, heading, Math.atan2(hb - hs, 4.4) + pitchExtra);
+  }
+
+  dropHull(set = false) {
     const c = this.carry, f = this.forward;
-    const x = this.x + f.x * 0.9, z = this.z + f.z * 0.9, heading = this.heading + (Math.random() - 0.5) * 0.8;
-    c.drop = { x, z, heading };
-    this.canoe.dropHull(x, this.world.heightAt(x, z), z, heading);
-    this.canoe.state.mode = 'walk';
-    this.prompt = { key: null, text: 'The canoe came down' };
+    const x = this.x + f.x * (set ? 1.4 : 0.9), z = this.z + f.z * (set ? 1.4 : 0.9), heading = this.heading + (set ? 0 : (Math.random() - 0.5) * 0.8);
+    c.drop = { x, z, heading }; c.choice = false;
+    this.restHull(x, z, heading, set ? 0 : 0.2);
+    this.mode = 'walk'; this.canoe.state.mode = 'walk';
+    this.prompt = { key: null, text: set ? 'You set the canoe down' : 'The canoe came down' };
   }
 
   pickUpHull() {
     this.canoe.pickUpHull();
-    this.carry.drop = null; this.carry.hitCooldown = 1.0;
-    this.canoe.state.mode = 'carry';
+    const c = this.carry;
+    c.drop = null; c.hitCooldown = 1.0; c.choice = false; c.from = { x: this.x, z: this.z };
+    this.mode = 'carry'; this.canoe.state.mode = 'carry';
   }
 
   // Jump to the nearest open water around a map point (minimap click, entry point). The tiles around the
@@ -429,25 +657,29 @@ export class Player {
         if (!best || d < best.d) best = { x: px, z: pz, d };
       }
       if (!best) return false;
-      this.mode = 'paddle'; this.carry = null; this.landing = null;
+      if (this.carry && this.carry.drop) this.canoe.pickUpHull(); // the canoe comes along
+      this.mode = 'paddle'; this.carry = null; this.landing = null; this.ashore = null; this.swim = null;
       this.x = best.x; this.z = best.z; this.speed = 0; this.yawRate = 0;
       if (w.tiles) await w.tiles.ensure(this.x, this.z, 20);
       const dir = w.deeperDir(this.x, this.z);
       this.heading = Math.atan2(-dir.z, dir.x);
-      this.canoe.state.stroke = 0; this.canoe.state.power = 0;
+      this.canoe.state.stroke = 0; this.canoe.state.power = 0; this.canoe.state.mode = 'paddle';
       this.bob = null;
       this.placeOnWater();
       return true;
     } finally { this.teleporting = false; }
   }
 
+  // Back in the canoe at l (a portage launch point or a spot found by launchFrom), pushed off toward deeper water.
   launch(l) {
+    if (this.carry && this.carry.drop) this.canoe.pickUpHull();
     const dir = this.world.deeperDir(l.x, l.z);
-    this.mode = 'paddle'; this.carry = null; this.balance = 0; this.extraRoll = 0;
+    this.mode = 'paddle'; this.carry = null; this.ashore = null; this.balance = 0; this.extraRoll = 0;
     this.x = l.x; this.z = l.z;
     this.heading = Math.atan2(-dir.z, dir.x);
     this.speed = 0.8; this.yawRate = 0;
-    this.canoe.state.stroke = 0; this.canoe.state.power = 0;
+    this.canoe.state.stroke = 0; this.canoe.state.power = 0; this.canoe.state.mode = 'paddle';
+    this.bob = null;
     this.placeOnWater();
   }
 }
