@@ -1,0 +1,59 @@
+/* The shell: title / pause screen, the entry point list, the settings panel and the FPS counter.
+   The live scene renders behind it; the HUD is hidden while it is up. */
+#shell { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; padding: 0 0 0 7vw; box-sizing: border-box;
+  background: linear-gradient(90deg, rgba(6, 16, 24, .78) 0%, rgba(6, 16, 24, .55) 38%, rgba(6, 16, 24, .12) 68%, rgba(6, 16, 24, 0) 100%);
+  color: #f4efe4; font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; opacity: 1; transition: opacity .35s; }
+#shell[hidden] { display: none; }
+#shell.closing { opacity: 0; pointer-events: none; }
+body.shell-open .hud, body.shell-open #minimap, body.shell-open #gps, body.shell-open #entry, body.shell-open #credit, body.shell-open #tiles, body.shell-open #mapdim, body.shell-open #tp { display: none !important; }
+
+.shell-card { width: min(460px, 86vw); max-height: 88vh; display: flex; flex-direction: column; }
+.shell-card[hidden] { display: none; }
+.shell-card h1 { font: 600 clamp(40px, 6vw, 62px)/1 Georgia, "Times New Roman", serif; letter-spacing: .005em; margin: 0 0 10px; text-shadow: 0 2px 18px rgba(0, 0, 0, .45); }
+.shell-card h1 small { display: block; font: 500 13px/1 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: .22em; text-transform: uppercase; opacity: .8; margin-bottom: 14px; }
+.shell-card h2 { font: 600 30px/1.1 Georgia, "Times New Roman", serif; margin: 0 0 14px; }
+.shell-sub { margin: 0 0 30px; font-size: 15px; line-height: 1.5; opacity: .9; max-width: 400px; }
+.shell-menu { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.shell-menu button, .shell-list button, .shell-back, .set-reset { appearance: none; font: 500 17px/1.2 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #f4efe4;
+  background: rgba(244, 239, 228, .07); border: 1px solid rgba(244, 239, 228, .25); border-radius: 8px; padding: 11px 18px; min-width: 220px; text-align: left; cursor: pointer;
+  transition: background .12s, border-color .12s, transform .12s; }
+.shell-menu button:hover, .shell-list button:hover, .shell-back:hover, .set-reset:hover { background: rgba(244, 239, 228, .16); border-color: rgba(244, 239, 228, .5); }
+.shell-menu button:focus-visible, .shell-list button:focus-visible, .shell-back:focus-visible, .set-reset:focus-visible, #settings-form select:focus-visible, #settings-form input:focus-visible { outline: 2px solid #e8c270; outline-offset: 2px; }
+.shell-menu button.primary { background: #e8c270; border-color: #e8c270; color: #1f2a16; font-weight: 600; }
+.shell-menu button.primary:hover { background: #f0cf85; }
+.shell-menu button:disabled { opacity: .5; cursor: default; }
+.shell-menu .shell-hint { font-size: 12.5px; opacity: .72; margin: -4px 0 6px 2px; min-height: 1em; }
+.shell-credit { margin: 36px 0 0; font-size: 11.5px; line-height: 1.6; opacity: .62; max-width: 420px; }
+.shell-credit a { color: inherit; }
+.shell-keys { margin: 10px 0 0; font-size: 11.5px; opacity: .55; }
+.shell-keys kbd, .set-name kbd { font: 600 10.5px/1 inherit; background: rgba(244, 239, 228, .18); border-radius: 4px; padding: 2px 6px; margin: 0 2px; }
+
+.shell-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; padding: 2px 6px 2px 2px; margin: 0 0 14px; max-height: calc(88vh - 150px); scrollbar-width: thin; }
+.shell-list button { min-width: 0; width: 100%; padding: 8px 14px; font-size: 15px; display: flex; gap: 12px; align-items: baseline; }
+.shell-list button b { font-variant-numeric: tabular-nums; font-weight: 600; opacity: .85; min-width: 2.2em; }
+.shell-list button.current { border-color: #e8c270; }
+.shell-list button small { margin-left: auto; opacity: .6; font-size: 12px; }
+.shell-back { min-width: 0; align-self: flex-start; }
+.shell-status { font-size: 13px; opacity: .8; margin: 0 0 12px; min-height: 1.2em; }
+
+#settings-form { overflow-y: auto; padding-right: 10px; margin: 0 0 14px; max-height: calc(88vh - 150px); scrollbar-width: thin; }
+#settings-form h3 { font: 600 11.5px/1 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: .18em; text-transform: uppercase; opacity: .6; margin: 18px 0 8px; }
+#settings-form h3:first-child { margin-top: 0; }
+.set-row { display: grid; grid-template-columns: 1fr 150px 54px; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(244, 239, 228, .08); font-size: 14px; }
+.set-row.set-toggle { grid-template-columns: 1fr 150px 54px; }
+.set-name { line-height: 1.3; }
+.set-row select { font: 14px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #f4efe4; background: rgba(10, 24, 32, .75); border: 1px solid rgba(244, 239, 228, .25); border-radius: 6px; padding: 5px 8px; grid-column: 2 / 4; width: 100%; }
+.set-row input[type=range] { width: 100%; accent-color: #e8c270; }
+.set-row input[type=checkbox] { width: 20px; height: 20px; accent-color: #e8c270; justify-self: end; grid-column: 2 / 4; margin: 0; }
+.set-value { font-variant-numeric: tabular-nums; font-size: 12.5px; opacity: .8; text-align: right; }
+.set-reset { min-width: 0; font-size: 13px; padding: 7px 12px; margin-top: 14px; }
+
+#fps { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); font: 12px/1 ui-monospace, Menlo, Consolas, monospace; color: #f4efe4; background: rgba(10, 24, 32, .55); border: 1px solid rgba(255, 255, 255, .15); border-radius: 6px; padding: 5px 9px; z-index: 5; pointer-events: none; }
+#fps[hidden] { display: none; }
+
+@media (max-width: 640px) {
+  #shell { padding: 0 16px; align-items: flex-end; background: linear-gradient(0deg, rgba(6, 16, 24, .85) 0%, rgba(6, 16, 24, .55) 60%, rgba(6, 16, 24, .1) 100%); }
+  .shell-card { width: 100%; max-height: 92vh; padding-bottom: 20px; }
+  .shell-menu button { min-width: 0; width: 100%; }
+  .set-row { grid-template-columns: 1fr 110px 50px; }
+}

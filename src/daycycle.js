@@ -76,6 +76,12 @@ export class DayCycle {
     });
   }
 
+  // set the calendar and the clock outright (a saved trip, a new one starting now)
+  setClock(year, doy, hours) {
+    this.year = year; this.doy = doy; this.hours = ((hours % 24) + 24) % 24; this._times = null;
+    this.stepDays(0);
+  }
+
   stepDays(n) {
     this.doy += n;
     while (this.doy > daysInYear(this.year)) { this.doy -= daysInYear(this.year); this.year++; }

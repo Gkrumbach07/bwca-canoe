@@ -2,13 +2,13 @@
 // No samples; everything is noise and oscillators. Starts on the first key press (browser policy).
 export class Ambient {
   constructor() {
-    this.enabled = true; this.ctx = null; this.master = null;
+    this.enabled = true; this.volume = 1; this.ctx = null; this.master = null; // volume 0..1 scales the 0.4 master level
     const start = () => { if (!this.ctx) this.init(); window.removeEventListener('keydown', start); window.removeEventListener('pointerdown', start); };
     window.addEventListener('keydown', start); window.addEventListener('pointerdown', start);
   }
   init() {
     const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.master = ctx.createGain(); this.master.gain.value = this.enabled ? 0.4 : 0; this.master.connect(ctx.destination);
+    this.master = ctx.createGain(); this.master.gain.value = this.level; this.master.connect(ctx.destination);
     const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = noise.getChannelData(0);
     let b0 = 0, b1 = 0, b2 = 0;
@@ -30,7 +30,11 @@ export class Ambient {
     src.connect(f); f.connect(g); g.connect(this.master); src.start();
     return { src, filter: f, gain: g };
   }
-  toggle() { this.enabled = !this.enabled; if (this.master) this.master.gain.setTargetAtTime(this.enabled ? 0.4 : 0, this.ctx.currentTime, 0.1); return this.enabled; }
+  get level() { return this.enabled ? 0.4 * this.volume : 0; }
+  applyLevel() { if (this.master) this.master.gain.setTargetAtTime(this.level, this.ctx.currentTime, 0.1); }
+  toggle() { return this.setEnabled(!this.enabled); }
+  setEnabled(on) { this.enabled = !!on; this.applyLevel(); return this.enabled; }
+  setVolume(v) { this.volume = Math.max(0, Math.min(1, v)); this.applyLevel(); }
   update(dt, shoreDist, speed, afloat) {
     if (!this.ctx) return;
     this.lapLevel = afloat ? Math.max(0, 1 - Math.abs(shoreDist) / 35) * 0.5 + Math.min(1, speed / 2.5) * 0.12 : 0.05;

@@ -20,6 +20,9 @@ import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
+import { Settings, FpsCounter } from './settings.js';
+import { TripSaver } from './save.js';
+import { Title } from './title.js';
 
 const palette = { zenith: 0x4382c7, horizon: 0xc9dceb, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x3f7f9c, reflect: 0xc9dde8, fog: 0xbcd2e2, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -72,7 +75,8 @@ async function main() {
   scene.add(water.group);
   const tiles = new TileManager(world, scene, { terrainMaterial: makeTerrainMaterial(), water, vegetation: makeVegetationKit(3), aquatic: makeAquaticKit(water, 9), seed: 3 });
   world.tiles = tiles;
-  const start = world.meta.start;
+  const trip = TripSaver.read(); // a saved trip: the title shows that spot, and Paddle in continues it
+  const start = trip ? { x: trip.x, z: trip.z } : world.meta.start;
   const setOrigin = (x, z) => { const [tx, ty] = world.tileOf(x, z); const [ox, oz] = world.tileOrigin(tx, ty); water.setOrigin(ox, oz); };
   setOrigin(start.x, start.z);
   progress(0.15, 'Loading the lakes around you…');
@@ -94,6 +98,7 @@ async function main() {
   const input = new Input();
   const player = new Player(world, canoe, input);
   player.ripples = ripples; player.water = water; player.audio = audio;
+  if (trip) { player.x = trip.x; player.z = trip.z; player.heading = trip.heading; }
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   const hud = new Hud(world, async (x, z) => { if (await player.teleport(x, z)) chase.snap(); });
   const post = makePost(renderer, scene, camera);
@@ -107,12 +112,22 @@ async function main() {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release();
     if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4;
-    if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn;
-    if (e.code === 'KeyN') audio.toggle();
+    if (e.code === 'KeyR') settings.toggle('reflections');
+    if (e.code === 'KeyN') settings.toggle('mute');
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind };
+  // the shell: settings (applied now and live), the trip saver, the title / pause screen
+  const settings = new Settings();
+  const stats = new FpsCounter(document.getElementById('fps'), renderer);
+  settings.attach({ renderer, scene, sun, water, post, audio, chase, player, stats });
+  const saver = new TripSaver(player, day, chase);
+  const title = new Title({ world, player, chase, camera, day, hud, settings, saver, trip });
+  // a trip saved on a trail or in the water comes back afloat at the nearest open water
+  if (trip && (trip.mode !== 'paddle' || world.shoreAt(trip.x, trip.z) > -2)) player.teleport(trip.x, trip.z);
+  title.open('title');
+
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, settings, title, saver, stats };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -121,9 +136,15 @@ async function main() {
     const ts = player.timeScale;
     wind.update(dt * ts, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
-    player.update(dt);
+    const shell = title.state !== 'game';
+    if (shell) { // the card is up: no input, the canoe rides the water but stays put, the camera drifts
+      input.down.clear(); input.once.clear();
+      const fx = player.x, fz = player.z, fh = player.heading;
+      player.update(dt);
+      if (!player.teleporting) { player.x = fx; player.z = fz; player.heading = fh; }
+    } else player.update(dt);
     canoe.update(dt * ts);
-    chase.update(dt, player, player.mode === 'carry');
+    if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
     water.update(dt * ts, player.x, player.z);
@@ -144,10 +165,12 @@ async function main() {
     audio.update(dt, world.shoreAt(player.x, player.z), player.speed, player.mode === 'paddle');
     geo.update(player, world);
     hud.update(player, geo, ts, day.clock, wind);
+    saver.update(dt);
     input.endFrame();
   };
   // debug helper: advance the simulation by n fixed steps and draw once (used for automated testing)
   const draw = () => {
+    stats.begin();
     water.renderReflection(renderer, scene, camera, player.level || world.levelAt(player.x, player.z));
     post.render();
   };
@@ -157,6 +180,7 @@ async function main() {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     frame(dt);
     draw();
+    stats.end(dt);
   });
 }
 

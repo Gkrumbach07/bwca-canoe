@@ -8,6 +8,7 @@ export class ChaseCamera {
     this.pos = new THREE.Vector3(); this.look = new THREE.Vector3(); this.first = true;
     this.lastInput = 0;
     this.mode = 'third';
+    this.sensitivity = 1; this.invert = false; // mouse look, set from the settings panel
     this.head = new THREE.Vector3();
     window.addEventListener('keydown', (e) => { if (e.code === 'KeyV') this.setMode(this.mode === 'third' ? 'first' : 'third'); });
     let dragging = false, lx = 0, ly = 0;
@@ -15,7 +16,8 @@ export class ChaseCamera {
     dom.addEventListener('pointerup', () => { dragging = false; });
     dom.addEventListener('pointermove', (e) => {
       if (!dragging) return;
-      this.userYaw -= (e.clientX - lx) * 0.006; this.userPitch = clamp(this.userPitch - (e.clientY - ly) * 0.004, -0.25, 0.9);
+      const s = this.sensitivity, inv = this.invert ? -1 : 1;
+      this.userYaw -= (e.clientX - lx) * 0.006 * s; this.userPitch = clamp(this.userPitch - (e.clientY - ly) * 0.004 * s * inv, -0.25, 0.9);
       lx = e.clientX; ly = e.clientY; this.lastInput = performance.now();
     });
     dom.addEventListener('wheel', (e) => { this.distance = clamp(this.distance * Math.exp(e.deltaY * 0.0012), 4, 40); e.preventDefault(); }, { passive: false });

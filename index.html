@@ -56,7 +56,7 @@
   <div id="help" class="hud">
     <b>W/S</b> paddle &nbsp; <b>A/D</b> turn &nbsp; <b>Shift</b> hustle &nbsp; <b>Space</b> brace in waves<br/>
     <b>E</b> portage / launch &nbsp; <b>M</b> map &nbsp; <b>V</b> view &nbsp; <b>1-3</b> game speed &nbsp; <b>R</b> reflections<br/>
-    <b>[ ]</b> time of day &nbsp; <b>P</b> pause time &nbsp; <b>N</b> sound &nbsp; <b>, .</b> wind &nbsp; <b>/</b> veer &nbsp; <b>;</b> let the wind be<br/>
+    <b>[ ]</b> time of day &nbsp; <b>P</b> pause time &nbsp; <b>N</b> sound &nbsp; <b>, .</b> wind &nbsp; <b>/</b> veer &nbsp; <b>;</b> let the wind be &nbsp; <b>Esc</b> menu<br/>
     drag to look &nbsp; wheel to zoom &nbsp; on the map: drag, wheel, click a spot to paddle in there
   </div>
   <div id="mapdim"></div>
@@ -65,6 +65,33 @@
   <div id="gps"><span class="dot"></span><span id="gps-state">GPS sim: no extension</span><br/><b id="gps-coords">–</b></div>
   <div id="tiles" class="hud"></div>
   <div id="credit">Terrain: USGS 3DEP via AWS Terrain Tiles · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors</div>
+  <div id="fps" hidden></div>
+  <!-- the shell (src/title.js, src/settings.js, styles in src/shell.css): title / pause card, entry point list, settings -->
+  <div id="shell" hidden>
+    <section class="shell-card" id="title-card" aria-labelledby="title-name">
+      <h1 id="title-name"><small id="title-kicker">Boundary Waters Canoe Area Wilderness</small>Boundary Waters</h1>
+      <p class="shell-sub" id="title-sub">A quiet canoe trip across the real Boundary Waters: the lakes, the portages between them, the weather and the light of the day.</p>
+      <nav class="shell-menu" aria-label="Main menu">
+        <button id="btn-continue" class="primary" type="button">Paddle in</button>
+        <div class="shell-hint" id="continue-hint"></div>
+        <button id="btn-new" type="button">New trip</button>
+        <button id="btn-settings" type="button">Settings</button>
+      </nav>
+      <p class="shell-keys"><kbd>↑</kbd><kbd>↓</kbd> choose &nbsp; <kbd>Enter</kbd> pick &nbsp; <kbd>Esc</kbd> back</p>
+      <p class="shell-credit">Terrain: USGS 3DEP via AWS Terrain Tiles · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors (ODbL) · Lake depths and clarity: Minnesota DNR · Everything else procedural, no assets. Your trip and settings are saved in this browser only.</p>
+    </section>
+    <section class="shell-card" id="entry-card" hidden aria-labelledby="entry-title">
+      <h2 id="entry-title">Where do you put in?</h2>
+      <p class="shell-status" id="entry-status">BWCA entry points, by permit number.</p>
+      <div class="shell-list" id="entry-list" role="list"></div>
+      <button class="shell-back" id="btn-entry-back" type="button">Back</button>
+    </section>
+    <section class="shell-card" id="settings-card" hidden aria-labelledby="settings-title">
+      <h2 id="settings-title">Settings</h2>
+      <form id="settings-form"></form>
+      <button class="shell-back" id="btn-settings-back" type="button">Back</button>
+    </section>
+  </div>
   <div id="loading"><h1>Boundary Waters</h1><p id="loading-msg">Loading terrain…</p><div class="bar"><i id="loading-bar"></i></div></div>
   <script type="module" src="/src/main.js"></script>
 </body>
