@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, hash2 } from './rng.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { angularRock, makeRockMaterial, makeToonMaterial, smoothToon, setToonSun } from './rocks.js';
+import { REGION } from './placement.js';
 
 // Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
 // turns a tile's placement bins into instanced meshes in tile-local coordinates. Everything is welded smooth
@@ -10,9 +12,12 @@ import { angularRock, makeRockMaterial, makeToonMaterial, smoothToon, setToonSun
 // The near variants (docs/look.md, pass 4): trunks in two or three segments with a bend, a base flare and a
 // shade side baked into the vertex colour; crowns as six to twelve clusters offset to one side, lit on top
 // and dark and cool underneath; spruce as uneven whorls with a ragged tip; twelve variants per species that
-// spread height 0.6–1.6 with leaners, a giant and a runt. One variant serves a whole 640 m region
-// (makeVegetationMeshes picks it by region), so the variety within a stand comes from yaw, scale, squash
-// and tint. The far twins (LOW) are untouched: they draw the forest at distance and must stay cheap.
+// spread height 0.6–1.6 with leaners, a giant and a runt. Near the camera a stand draws three variants of
+// each species (makeVegetationMeshes, pass 5), further out one per region. The far twins (LOW) draw the
+// forest at distance and must stay cheap.
+//
+// Pass 5 adds the understory (hazel, alder, a young fir, bracken) and the deadfall (logs, stumps) and the
+// granite outcrops, appended to SPECIES.
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const DEAD = 0x4a3f36;  // a dead lower branch
@@ -216,6 +221,128 @@ function shrub(rng) {
   return g.build();
 }
 
+// ---------- the understory and the deadfall (docs/look.md, pass 5) --------------
+// Cheap shapes: a few thin stems and a handful of small clusters, 25–60 triangles each, because there are as
+// many of them as there are trees. Leaf colours sit in tagLeaves's band (hue 0.1–0.47, saturated) so the
+// deciduous ones turn and drop with the season; the sapling is a young fir and keeps its needles.
+
+// beaked hazel: three or four stems fanning out of one root, hidden in round clusters that overlap into one
+// loose vase-shaped mass from knee height to the top
+function hazel(rng) {
+  const g = new GeoBuilder(), size = 0.8 + rng() * 0.45, h = 2.2 * size;
+  const bark = vary(0x6a5440, rng, 0.06), cols = crownColors(0x78a24c, 0x37552f, rng);
+  const stems = 3 + Math.floor(rng() * 2), a0 = rng() * 6.28;
+  for (let i = 0; i < stems; i++) {
+    const a = a0 + (i / stems) * 6.28 + (rng() - 0.5) * 0.7, out = h * (0.2 + rng() * 0.15), shift = (rng() - 0.5) * 0.07;
+    const tip = V(Math.cos(a) * out, h * (0.62 + rng() * 0.22), Math.sin(a) * out);
+    g.limb(V(Math.cos(a) * 0.05, -0.2, Math.sin(a) * 0.05), tip, 0.035 * size, 0.014, 3, bark, rng);
+    g.lump(tip.x, tip.y, tip.z, (0.6 + rng() * 0.2) * size, 4, rng, 0.4, 1.15, 0.95, 1.15, (p, tl) => cols.at(0.25 + 0.7 * tl, shift));
+    if (rng() < 0.6) g.lump(tip.x * 0.55, tip.y * 0.5, tip.z * 0.55, (0.45 + rng() * 0.15) * size, 4, rng, 0.4, 1.2, 0.9, 1.2, (p, tl) => cols.at(0.1 + 0.55 * tl, shift));
+  }
+  g.lump(SPREAD(rng) * 0.2, h * 0.88, SPREAD(rng) * 0.2, 0.55 * size, 4, rng, 0.4, 1.1, 1.0, 1.1, (p, tl) => cols.at(0.45 + 0.55 * tl));
+  return g.build();
+}
+// speckled alder: a sprawling clump of grey stems leaning out from the wet ground, round clusters of dark
+// leaves along their upper half
+function alder(rng) {
+  const g = new GeoBuilder(), size = 0.85 + rng() * 0.4, h = 2.8 * size;
+  const bark = vary(0x75706a, rng, 0.06), cols = crownColors(0x5f8c44, 0x2e4c2d, rng);
+  const stems = 3 + Math.floor(rng() * 2), a0 = rng() * 6.28;
+  for (let i = 0; i < stems; i++) {
+    const a = a0 + (i / stems) * 6.28 + (rng() - 0.5) * 0.8, lean = 0.3 + rng() * 0.35, L = h * (0.8 + rng() * 0.3), shift = (rng() - 0.5) * 0.06;
+    const tip = V(Math.cos(a) * Math.sin(lean) * L, Math.cos(lean) * L, Math.sin(a) * Math.sin(lean) * L);
+    g.limb(V(0, -0.2, 0), tip, 0.05 * size, 0.02, 3, bark, rng);
+    g.lump(tip.x * 0.9, tip.y * 0.92, tip.z * 0.9, (0.68 + rng() * 0.2) * size, 4, rng, 0.4, 1.2, 0.95, 1.2, (p, tl) => cols.at(0.25 + 0.7 * tl, shift));
+    g.lump(tip.x * 0.55, tip.y * 0.58, tip.z * 0.55, (0.52 + rng() * 0.15) * size, 4, rng, 0.4, 1.2, 0.9, 1.2, (p, tl) => cols.at(0.1 + 0.6 * tl, shift));
+  }
+  return g.build();
+}
+// a young balsam fir coming up in the gaps: a thin stem and three or four tiers, the lowest widest
+function sapling(rng) {
+  const g = new GeoBuilder(), size = 0.7 + rng() * 0.5, h = 2.6 * size;
+  const cols = crownColors(0x4b8a52, 0x24452f, rng), lean = [SPREAD(rng) * 0.12 * h, SPREAD(rng) * 0.12 * h];
+  g.limb(V(0, -0.2, 0), V(lean[0], h, lean[1]), 0.045 * size, 0.012, 3, vary(0x5a4a38, rng, 0.06), rng);
+  const tiers = 3 + Math.floor(rng() * 2), R = (0.62 + rng() * 0.2) * size;
+  for (let i = 0; i < tiers; i++) {
+    const t = 0.18 + (i / tiers) * 0.62, rr = R * (1.05 - (i / tiers) * 0.7), ch = h * (0.34 - i * 0.03), shift = (rng() - 0.5) * 0.06;
+    const y = h * t;
+    g.cone(lean[0] * t + SPREAD(rng) * 0.08, y, lean[1] * t + SPREAD(rng) * 0.08, rr, ch, 5, (p) => cols.at(0.15 + 0.85 * (p.y - y) / ch, shift), rng, 0.35);
+  }
+  return g.build();
+}
+// bracken: five to seven fronds arching out of the ground, each folded along its midrib so the lit top shows
+function fern(rng) {
+  const g = new GeoBuilder(), cols = crownColors(0x8aac4c, 0x46632f, rng);
+  const fronds = 5 + Math.floor(rng() * 3), R = 0.75 + rng() * 0.3, a0 = rng() * 6.28, down = V(0, -3, 0);
+  for (let i = 0; i < fronds; i++) {
+    const a = a0 + (i / fronds) * 6.28 + (rng() - 0.5) * 0.6, L = R * (0.75 + rng() * 0.45), rise = (0.45 + rng() * 0.35) * L;
+    const cx = Math.cos(a), cz = Math.sin(a), px = -cz, pz = cx, w = L * (0.16 + rng() * 0.06), top = rise * 1.05, shift = (rng() - 0.5) * 0.08;
+    const base = V(cx * 0.05, 0.0, cz * 0.05), mid = V(cx * L * 0.5, rise, cz * L * 0.5), tip = V(cx * L, rise * 0.35, cz * L);
+    const left = V(mid.x + px * w, rise - w * 0.45, mid.z + pz * w), right = V(mid.x - px * w, rise - w * 0.45, mid.z - pz * w);
+    const col = (p) => cols.at(0.25 + 0.75 * Math.max(0, p.y) / top, shift);
+    g.tri(base, left, mid, col, down); g.tri(base, mid, right, col, down);
+    g.tri(mid, left, tip, col, down); g.tri(mid, tip, right, col, down);
+  }
+  return g.build();
+}
+// A fallen trunk lying along local x on the ground, about 6.8 m: bark weathered silver-brown, a few broken
+// stubs, a root plate torn up at one end (+x) or a broken butt; one in three is a birch, whose bark outlasts
+// its wood. props.js holds the walker off it with a box 3.4 m by 0.36 m at the instance's scale.
+function log(rng, v) {
+  const g = new GeoBuilder(), L = 6.4 + rng() * 0.8, r = 0.28 + rng() * 0.08, birchLog = v % 3 === 2;
+  const bark = birchLog ? vary(0xd9d3c5, rng, 0.04) : vary(v % 2 ? 0x8a7a66 : 0x7d6a55, rng, 0.07);
+  // built standing up the y axis from the butt, then laid down: the lit +x side of the stem ends up on top
+  const T = g.stem(0, 0, 0, r, r * 0.55, L, 5, bark, rng, { lean: [SPREAD(rng) * 0.15, SPREAD(rng) * 0.15], bow: [0, SPREAD(rng) * 0.12], flare: 0.35, shade: 0.4, ts: [0, 0.12, 0.6, 1], jag: 0.25, cap: true });
+  if (birchLog) for (let i = 0; i < 3; i++) { const t = 0.15 + rng() * 0.7; g.scar(T.at, t, rng() * 6.28, r * 0.9, r * 0.6, new THREE.Color(SCAR)); }
+  for (let i = 0; i < 1 + Math.floor(rng() * 3); i++) {
+    const t = 0.3 + rng() * 0.6, a = (rng() - 0.5) * 2.4, s = T.at(t), len = 0.4 + rng() * 0.6;
+    g.limb(V(s.x + Math.cos(a) * s.r * 0.6, s.y, s.z + Math.sin(a) * s.r * 0.6), V(s.x + Math.cos(a) * len, s.y + len * 0.4, s.z + Math.sin(a) * len), 0.06, 0.02, 3, vary(DEAD, rng, 0.08), rng);
+  }
+  const b = T.at(0);
+  if (v % 2 === 0) {
+    // the root plate: a ragged disc of earth and roots standing on edge
+    const R = 0.9 + rng() * 0.4, soil = vary(0x5b4838, rng, 0.06), dark = soil.clone().offsetHSL(0, 0, -0.08);
+    g.lump(b.x, b.y + 0.05, b.z, R, 6, rng, 0.35, 1, 0.2, 1, (p, tl) => (tl > 0.5 ? soil : dark));
+  } else {
+    // a broken butt: close the open end with a short splintered cone
+    const ring = g.ring(b.x, b.y + 0.02, b.z, b.r * 1.02, 5, rng, 0.2);
+    g.fan(V(b.x, b.y - 0.18, b.z), ring, vary(0x8a7354, rng, 0.06), V(b.x, b.y + 0.4, b.z));
+  }
+  const geo = g.build();
+  geo.translate(0, -L / 2, 0);
+  geo.rotateZ(Math.PI / 2); // y (the stem) -> -x, x (the lit side) -> +y; the butt ends up at +x
+  geo.translate(0, r * 0.9, 0);
+  return geo;
+}
+// a stump: a short flared stem with a broken or rotted top and two or three roots running into the ground
+function stump(rng, v) {
+  const g = new GeoBuilder(), h = 0.5 + rng() * 0.5, r = 0.25 + rng() * 0.07;
+  const bark = vary(v % 2 ? 0x6b5444 : 0x5e4b3c, rng, 0.06);
+  g.stem(0, -0.4, 0, r, r * 0.85, h + 0.4, 6, bark, rng, { flare: 0.55, shade: 0.3, ts: [0, 0.35, 1], jag: 0.2 + rng() * 0.25, cap: true });
+  for (let i = 0; i < 2 + Math.floor(rng() * 2); i++) {
+    const a = rng() * 6.28, len = 0.5 + rng() * 0.4;
+    g.limb(V(Math.cos(a) * r * 0.6, 0.12, Math.sin(a) * r * 0.6), V(Math.cos(a) * (r + len), -0.12, Math.sin(a) * (r + len)), 0.09, 0.03, 3, bark, rng);
+  }
+  return g.build();
+}
+// A granite outcrop breaking the floor: two to four slabs and blocks of the Shield rock pushed together into a
+// low ledge about two units across (placement.js scales it 2.6–5 and sinks it, props.js holds the walker off
+// it with a circle of the instance's scale).
+function outcrop(rng) {
+  const parts = [], n = 2 + Math.floor(rng() * 3);
+  for (let i = 0; i < n; i++) {
+    const geo = angularRock(rng, i === 0 || rng() < 0.6 ? 'slab' : 'block');
+    const s = i === 0 ? 0.85 : 0.4 + rng() * 0.3, a = rng() * 6.28, d = i === 0 ? 0 : 0.35 + rng() * 0.45;
+    geo.scale(s, s * (i === 0 ? 0.85 : 1), s);
+    geo.rotateY(rng() * 6.28);
+    geo.translate(Math.cos(a) * d, i === 0 ? 0 : -0.05 * rng(), Math.sin(a) * d);
+    parts.push(geo);
+  }
+  const geo = mergeGeometries(parts);
+  geo.computeBoundingSphere();
+  return geo;
+}
+
 // ---------- low-detail twins for distant regions ---------------------------------
 
 function lowConifer(rng, h, r, cols, trunkCol, lift = 0.2) {
@@ -250,6 +377,13 @@ const LOW = {
   shrub: lowShrub,
   tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x3b6b42, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x6b4a34, rng), rng); return g.build(); },
   jackPine: (rng) => { const h = 4.5 + rng() * 3.5; const g = lowBlob(rng, h * 0.85, 1.5, vary(0x4a7438, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.08, h * 0.8, 3, vary(0x6a5038, rng), rng); return g.build(); },
+  hazel: (rng) => lowBlob(rng, 1.5, 1.1, vary(0x6a9446, rng, 0.08)).build(),
+  alder: (rng) => lowBlob(rng, 1.9, 1.35, vary(0x557f3e, rng, 0.08)).build(),
+  sapling: (rng) => new GeoBuilder().cone(0, 0, 0, 0.65, 2.3, 4, vary(0x356640, rng), rng, 0.15).build(),
+  fern: (rng) => lowBlob(rng, 0.25, 0.55, vary(0x7d9e48, rng, 0.08)).build(),
+  log: (rng) => { const g = new GeoBuilder(); g.trunk(0, -3.4, 0, 0.32, 0.2, 6.8, 3, vary(0x857360, rng, 0.07), rng); const geo = g.build(); geo.rotateZ(Math.PI / 2); geo.translate(0, 0.26, 0); return geo; },
+  stump: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.4, 0, 0.32, 0.26, 1.1, 4, vary(0x625040, rng, 0.06), rng); return g.build(); },
+  outcrop: (rng) => { const geo = angularRock(rng, 'slab'); geo.scale(0.85, 0.7, 0.85); return geo; },
 };
 
 // index order must match placement.js SPECIES. `leaves`: deciduous, with an autumn colour (linear rgb).
@@ -267,10 +401,30 @@ export const SPECIES = [
   { name: 'shrub', make: shrub, leaves: [0.72, 0.22, 0.08], variants: 6 },
   { name: 'tallPine', make: tallPine, variants: TREE_VARIANTS },
   { name: 'jackPine', make: jackPine, variants: TREE_VARIANTS },
+  // the understory and the deadfall: small, so binned in 320 m regions (placement.js) and drawn only near the
+  // camera, the low twin past `lod` metres to the region centre and nothing past `cull`; `shadow: false`
+  // for the ferns, whose shadow is lost in the ambient occlusion anyway
+  { name: 'hazel', make: hazel, leaves: [0.8, 0.58, 0.1], variants: 6, lod: 380, cull: 620 },
+  { name: 'alder', make: alder, leaves: [0.42, 0.4, 0.1], variants: 6, lod: 380, cull: 620 },
+  { name: 'sapling', make: sapling, variants: 6, lod: 380, cull: 620 },
+  { name: 'fern', make: fern, leaves: [0.6, 0.26, 0.05], variants: 4, lod: 300, cull: 460, shadow: false },
+  { name: 'log', make: log, variants: 6, lod: 380, cull: 620 },
+  { name: 'stump', make: stump, variants: 4, lod: 300, cull: 520 },
+  { name: 'outcrop', make: outcrop, rock: true, variants: 6 },
 ];
 const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
 const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
+// The understory is walked through, and the fallen logs, stumps and outcrops are held off by their own
+// footprints (props.js reads them from the meshes; a carried canoe rides over a stump as over a boulder), so
+// none of them are trunks for the collision in tiles.js.
+const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16]);
+const NORMS = [...Array(TREE_VARIANTS).keys()].filter((v) => ROLES[v % ROLES.length] === 'norm');
+// A bin's variant groups are drawn apart while the camera is within NEAR_GROUPS metres of the bin's region
+// (its nearest edge, not its centre, so the region underfoot always is); further out one mesh draws them all.
+// Nothing casts a shadow from a region more than SHADOW_REACH metres away: the far cascade ends at 300 m.
+const NEAR_GROUPS = 220;
+const SHADOW_REACH = 330;
 export const LOD_SCALE = { value: 1 }; // the settings panel scales both distances (0.5 = half, 2 = double)
 
 // Marks foliage vertices (greens and yellows with some saturation; bark, snow-white birch and grey are not)
@@ -328,33 +482,105 @@ export function makeVegetationKit(seed = 3) {
   return { variants, material, rockMaterial, materialFor, setSeason, setSun, seed };
 }
 
-// One instanced mesh per (region, species) bin, matrices and colours straight from the worker.
+// Which geometry variant each variant group of a (region, species) bin draws. The groups get different
+// variants; for the trees the two big groups take ordinary trees and the small third group any variant, so a
+// leaner, a giant or a runt turns up now and then rather than filling a whole region; the rocks step through
+// the kinds (slab, block, boulder) in turn.
+function variantsFor(b, nv, ng) {
+  const h = hash2(b.rx * 7919 + b.rz, b.sp, 9);
+  if (nv === TREE_VARIANTS && ng === 3) {
+    const i = Math.floor(h * NORMS.length), j = (i + 1 + Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 10) * (NORMS.length - 1))) % NORMS.length;
+    let k = Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 11) * nv);
+    while (k === NORMS[i] || k === NORMS[j]) k = (k + 1) % nv;
+    return [NORMS[i], NORMS[j], k];
+  }
+  const base = Math.floor(h * nv), step = SPECIES[b.sp].rock ? 1 : Math.max(1, Math.floor(nv / ng));
+  return Array.from({ length: ng }, (_, g) => (base + g * step) % nv);
+}
+
+// Instanced meshes for one tile's placement bins, matrices and colours straight from the worker: one mesh per
+// bin, a bin being one (region, species), the region 640 m or 320 m for the small species. A bin's instances come sorted into variant groups (b.groups:
+// the count in each). Far off, the bin's mesh draws all of them with one variant (the low twin past the LOD
+// distance), so the forest beyond costs one draw call per bin as before. In and beside the region underfoot
+// the mesh draws only its first group, and the other groups are drawn by meshes of their own, each with its
+// own variant, so a stand shows several trees of a kind; those are made the first time they are wanted
+// (updateVegetationLOD) and share the bin's instance arrays.
+// The collision (tiles.js treesNear) reads the same list of bins for trunks and boulders, so the bins of the
+// shrubs, the understory, the deadfall and the outcrops leave it once drawn (see NOT_TRUNKS).
 export function makeVegetationMeshes(bins, kit) {
   const meshes = [];
   for (const b of bins) {
     if (!b.count) continue;
-    const vs = kit.variants[b.sp];
-    const v = vs[Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 9) * vs.length)];
-    const mesh = new THREE.InstancedMesh(v.full, kit.materialFor(b.sp), b.count);
+    const S = SPECIES[b.sp], vs = kit.variants[b.sp], material = kit.materialFor(b.sp);
+    const groups = b.groups && b.groups.filter(Boolean).length > 1 ? b.groups : null;
+    const picks = variantsFor(b, vs.length, groups ? groups.length : 1), v = vs[picks[0]];
+    const mesh = new THREE.InstancedMesh(v.full, material, b.count);
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(b.matrices, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(b.colors, 3);
-    mesh.castShadow = true;
+    mesh.castShadow = S.shadow !== false;
     mesh.receiveShadow = true;
-    mesh.computeBoundingSphere(); // computed once with the full geometry, kept across LOD swaps
+    mesh.computeBoundingSphere(); // over every instance, with the full geometry; kept across LOD swaps
+    // A tile never moves once installed, so the world matrix is set once, by updateVegetationLOD the first
+    // time it sees the mesh in its tile group, and the scene's per-render update leaves it alone (there are
+    // hundreds of these per tile, and the update ran twice a frame).
     mesh.matrixAutoUpdate = false;
-    mesh.userData.lod = { full: v.full, low: v.low, cx: b.cx, cz: b.cz, lod: LOD_DISTANCE, cull: CULL_DISTANCE };
+    mesh.matrixWorldAutoUpdate = false;
+    mesh.userData.sp = b.sp;
+    mesh.userData.lod = {
+      full: v.full, low: v.low, cx: b.cx, cz: b.cz, half: (b.size || REGION) / 2, total: b.count,
+      lod: S.lod || LOD_DISTANCE, cull: S.cull || CULL_DISTANCE, shadow: S.shadow !== false,
+      groups: groups ? { counts: groups, geos: picks.map((i) => vs[i].full), meshes: null } : null,
+    };
     meshes.push(mesh);
   }
+  for (let i = bins.length - 1; i >= 0; i--) if (NOT_TRUNKS.has(bins[i].sp)) bins.splice(i, 1);
   return meshes;
 }
 
+// The meshes for a bin's variant groups after the first, made on first use beside the bin's own mesh (in its
+// tile group, so the tile's disposal takes them too).
+function groupMeshes(m) {
+  const G = m.userData.lod.groups, out = [];
+  for (let g = 1, start = G.counts[0]; g < G.counts.length; start += G.counts[g], g++) {
+    const n = G.counts[g];
+    if (!n) continue;
+    const k = new THREE.InstancedMesh(G.geos[g], m.material, n);
+    k.instanceMatrix = new THREE.InstancedBufferAttribute(m.instanceMatrix.array.subarray(start * 16, (start + n) * 16), 16);
+    k.instanceColor = new THREE.InstancedBufferAttribute(m.instanceColor.array.subarray(start * 3, (start + n) * 3), 3);
+    k.receiveShadow = true;
+    k.computeBoundingSphere();
+    k.matrixAutoUpdate = false; k.matrixWorldAutoUpdate = false;
+    k.matrix.copy(m.matrix); k.matrixWorld.copy(m.matrixWorld);
+    m.parent.add(k);
+    out.push(k);
+  }
+  return out;
+}
+
 // Distance-based LOD and culling for any mesh carrying userData.lod (trees, shrubs, rocks, lake vegetation).
+// A bin with variant groups draws them apart while the camera is within NEAR_GROUPS of its region (the
+// nearest edge, so the region underfoot always does), and all together with one variant beyond. Shadows only
+// from regions within SHADOW_REACH (for the meshes that carry a region and cast at all).
 export function updateVegetationLOD(meshes, camPos) {
+  const s = LOD_SCALE.value;
   for (const m of meshes) {
     const l = m.userData.lod;
-    const d = Math.hypot(l.cx - camPos.x, l.cz - camPos.z), s = LOD_SCALE.value;
+    if (!m.matrixWorldAutoUpdate && !l.placed && m.parent) { m.parent.updateWorldMatrix(true, false); m.matrixWorld.multiplyMatrices(m.parent.matrixWorld, m.matrix); l.placed = true; }
+    const d = Math.hypot(l.cx - camPos.x, l.cz - camPos.z);
     m.visible = d < l.cull * s;
-    const want = d > l.lod * s ? l.low : l.full;
+    let want = d > l.lod * s ? l.low : l.full;
+    if (l.half) {
+      const de = Math.hypot(Math.max(0, Math.abs(camPos.x - l.cx) - l.half), Math.max(0, Math.abs(camPos.z - l.cz) - l.half));
+      m.castShadow = l.shadow && de < SHADOW_REACH;
+      const G = l.groups;
+      if (G) {
+        const near = m.visible && de < NEAR_GROUPS * s;
+        if (near && !G.meshes && m.parent) G.meshes = groupMeshes(m);
+        if (G.meshes) for (const k of G.meshes) { k.visible = near; k.castShadow = m.castShadow; }
+        m.count = near && G.meshes ? G.counts[0] : l.total;
+        if (near) want = l.full;
+      }
+    }
     if (m.geometry !== want) m.geometry = want;
   }
 }
