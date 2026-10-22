@@ -842,7 +842,7 @@ export class Hud {
       if (parts.length) row('Water', parts.join(' · '));
     }
     const hdg = bearingOf(player.heading), today = stats ? stats.today : null;
-    row('Way', `${(Math.abs(player.speed) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}${today ? ` · ${fmtKm(today.km)} km and ${today.portages} ${plural(today.portages, 'portage')} today` : ''}`);
+    row('Way', `${((player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}${today ? ` · ${fmtKm(today.km)} km and ${today.portages} ${plural(today.portages, 'portage')} today` : ''}`);
     if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · waves ${(player.waveHeightHere || 0).toFixed(1)} m${wind.override != null ? ' · set by hand' : ''}`);
     if (day) {
       const { rise, set } = day.sunriseSunset, h = day.hours;

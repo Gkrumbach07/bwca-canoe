@@ -110,11 +110,12 @@ lines, the key hints, the HUD size and colour-blind marks.
 
 Paddle up to any bank and press **E**: the canoe noses in, you step out, and you choose to **E** shoulder
 it or **Q** leave it beached there, bow on the land. On foot WASD walks relative to the view (W into the
-screen, D to its right; the walker turns to face the way and goes), about 1.5 m/s (2.2 with Shift,
-slower with the canoe on your shoulders). A portage trail walks at full speed;
-off it the ground decides: open bedrock and meadows are easy, the forest is brush and deadfall, dark
-spruce and old burns are slow, and the alder and cedar along a shore slowest of all. Hills cost more
-still, a slope past 40° stops you, trunks block you, and water past your knees does. A canoe you have left
+screen, D to its right; the walker turns to face the way and goes), about 2.2 m/s (3.2 with Shift, 1.8
+with the canoe on your shoulders): a brisk game pace rather than a measured walk, since the canoe runs
+quick too. The woods walk at the same pace as a portage trail; only the hills cost, less on a graded trail,
+and a slope past 40° stops you. Trunks and walls hold you off and you slide round them, and water past
+your knees stops you. The readout's km/h is the ground you actually make good, so it falls to nothing while
+something holds you. A canoe you have left
 shows on the map; back within 3 m of it, **E** launches it (**Q** shoulders it instead), and if the water
 there is too shallow for a canoe the prompt says so. Carrying, **E** launches at any shore with a metre of
 water within reach, or sets the canoe down where there is none, and the hull overhead catches on trees

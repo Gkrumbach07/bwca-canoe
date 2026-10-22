@@ -34,7 +34,7 @@ export class TripStats {
     const p = this.player, w = this.world;
     if (p.teleporting) { this.lastMode = p.mode; return; }
     if (p.mode === 'paddle') {
-      const m = Math.abs(p.speed) * dt;
+      const m = (p.groundSpeed ?? Math.abs(p.speed)) * dt; // the ground made good, not the paddle's intent
       if (m > 0) { this.km += m / 1000; this.touch((d) => { d.km += m / 1000; }); }
     }
     if (p.mode === 'carry') {

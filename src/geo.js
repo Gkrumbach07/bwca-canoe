@@ -24,7 +24,7 @@ export class GeoBridge {
     const fix = {
       lat, lon, alt: player.altitude, accuracy: 4,
       heading: (90 - (player.heading * 180) / Math.PI + 360) % 360,
-      speed: Math.abs(player.speed), timestamp: Date.now(), mode: player.mode,
+      speed: player.groundSpeed ?? Math.abs(player.speed), timestamp: Date.now(), mode: player.mode,
     };
     this.last = fix;
     window.postMessage({ source: 'bwca-canoe', type: 'geo', fix }, '*');

@@ -18,7 +18,8 @@ export class Input {
 }
 
 const PADDLE = { accel: 3.4, hustle: 5.2, reverse: 1.6, drag: 0.15, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
-const WALK = { speed: 1.5, hustle: 2.2, carry: 1.2, carryHustle: 1.7, face: 7 }; // face: how fast the walker turns to where the keys point
+const WALK = { speed: 2.2, hustle: 3.2, carry: 1.8, carryHustle: 2.5, face: 7 }; // m/s: a brisk game pace, not a measured walk (the canoe runs at about 1.5x life too); face: how fast the walker turns to where the keys point
+const RUB = 4;                // per second: a trunk or a wall you rub along bleeds your speed at this rate (about 0.6 of the walk stays)
 const SWIM = { speed: 0.85, hustle: 1.25, turn: 1.6 };
 const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
 const LANDING_RADIUS = 28;
@@ -30,9 +31,6 @@ const FLOAT_SD = -3.5;        // shoreAt where a canoe floats clear (the paddle 
 const WADE_SD = -2.5;         // shoreAt beyond which the water is too deep to wade
 const MAX_GRADE = Math.tan((40 * Math.PI) / 180);
 const RODS = 5.0292;
-// how the bush walks compared with a trail, by ground class (terrain-build GROUND): open bedrock and a
-// meadow are easy, the forest is brush and deadfall, dark spruce is a thicket, a burn a tangle of fallen snags
-const GOING = { rock: 1.0, rockDark: 0.85, rockLichen: 1.0, forest: 0.8, forestLight: 0.9, forestDark: 0.65, meadow: 0.95, burn: 0.7 };
 const LAND = { rock: 'Bare rock', rockDark: 'A rock face', rockLichen: 'Bare rock', meadow: 'A clearing', burn: 'Old burn', forest: 'The woods', forestLight: 'The woods', forestDark: 'Dark spruce' };
 
 export class Player {
@@ -40,7 +38,7 @@ export class Player {
     this.world = world; this.canoe = canoe; this.input = input;
     this.mode = 'paddle'; // 'paddle' | 'carry' (the canoe on your shoulders) | 'walk' (on foot, the canoe on the ground somewhere) | 'swim'
     this.x = world.meta.start.x; this.z = world.meta.start.z;
-    this.heading = 0; this.speed = 0; this.yawRate = 0; this.time = 0;
+    this.heading = 0; this.speed = 0; this.groundSpeed = 0; this.yawRate = 0; this.time = 0;
     this.strokeCount = 0;
     this.prompt = null;
     this.timeScale = 1;
@@ -187,12 +185,18 @@ export class Player {
     dt *= this.timeScale;
     this.time += dt;
     this.prompt = null; this.placeName = null; this.campsite = null; this.onTrail = false;
-    if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); return; }
+    if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); this.groundSpeed = 0; return; }
+    const x0 = this.x, z0 = this.z;
     if (this.landing) this.updateLanding(dt);
     else if (this.ashore) this.updateAshore(dt);
     else if (this.onFoot) this.updateFoot(dt);
     else if (this.mode === 'swim') this.updateSwim(dt);
     else this.updatePaddle(dt);
+    // the speed made good over the ground, for the readout, the GPS fix and the tally: what was actually
+    // covered this frame, not what the legs or the paddle asked for (a trunk, a wall or deep water holds you
+    // while `speed` still says you are walking); a jump across the map is not a speed
+    const d = Math.hypot(this.x - x0, this.z - z0);
+    if (dt > 0 && d < 2) this.groundSpeed += (d / dt - this.groundSpeed) * (1 - Math.exp(-dt * 8));
   }
 
   updatePaddle(dt) {
@@ -532,7 +536,7 @@ export class Player {
   }
 
   // On foot, with or without the canoe, anywhere on the land. Steer with A/D. A portage trail walks at full
-  // speed; off it the ground says how thick the bush is and a hill costs more, with a 40° slope a wall. Trunks
+  // speed and so do the woods: the bush does not slow you, only a hill does, with a 40° slope a wall. Trunks
   // block you, and with the hull overhead it catches on trees and may come down. Water past the knees stops you.
   updateFoot(dt) {
     const inp = this.input, c = this.carry, st = this.canoe.state, w = this.world;
@@ -546,15 +550,11 @@ export class Player {
     const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
     this.onTrail = onTrail; this.campsite = camp;
     let note = null;
-    // the going: a trail, a campsite and an outfitter's yard are cleared; elsewhere the ground class says how
-    // thick the bush is, and the first metres of cedar and alder up from a shore are thicker still
+    // the going: the woods walk at the same pace as a trail (a bushwhacking crawl is no fun); a trail, a
+    // campsite and an outfitter's yard are graded, so the hill costs them less
     const cls = GROUND[(w.coverCell(w.cellI(this.x), w.cellJ(this.z)) >> 16) & 255];
     const cleared = onTrail || !!camp || yard;
     let going = 1;
-    if (!cleared) {
-      const sd = w.shoreAt(this.x, this.z);
-      going = (GOING[cls] ?? 0.8) * (sd < 12 ? 0.85 + 0.15 * clamp((sd - 3) / 9, 0, 1) : 1);
-    }
     // the hill: the grade a step ahead in the direction of travel slows you and a 40° slope stops you; a
     // trail is graded, so half the penalty and never a wall
     const step = 1.5;
@@ -567,7 +567,7 @@ export class Player {
     // a heavy pack (the trip's food, the canoe's weight) is a slower walk
     const base = (carrying ? (hustle ? WALK.carryHustle : WALK.carry) : (hustle ? WALK.hustle : WALK.speed)) / Math.pow(Math.max(1, this.loadFactor), 0.6);
     if (fwd !== 0 && wall) note = wall;
-    const want = wall ? 0 : fwd * base * Math.max(0.3, going);
+    const want = wall ? 0 : fwd * base * Math.max(0.55, going);
     this.speed += (want - this.speed) * (1 - Math.exp(-dt * 6));
     let nx = this.x + mx * this.speed * dt, nz = this.z + mz * this.speed * dt;
     if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
@@ -582,7 +582,7 @@ export class Player {
           const da = ka - Math.abs(a), db = kb - Math.abs(b);
           if (da < db) { const s = Math.sign(a) || 1; nx += t.ux * s * da; nz += t.uz * s * da; }
           else { const s = Math.sign(b) || 1; nx += -t.uz * s * db; nz += t.ux * s * db; }
-          this.speed *= 0.8;
+          this.speed *= Math.exp(-dt * RUB);
         }
         continue;
       }
@@ -590,8 +590,8 @@ export class Player {
       if (d < keep && d > 1e-4) {
         // held off the trunk, and eased round it to whichever side you were already passing on
         const side = Math.sign(dx * -mz + dz * mx) || 1;
-        nx = t.x + (dx / d) * keep - mz * side * 0.02; nz = t.z + (dz / d) * keep + mx * side * 0.02;
-        this.speed *= 0.8;
+        nx = t.x + (dx / d) * keep - mz * side * 1.2 * dt; nz = t.z + (dz / d) * keep + mx * side * 1.2 * dt;
+        this.speed *= Math.exp(-dt * RUB);
       }
     }
     if (carrying) {
@@ -615,7 +615,6 @@ export class Player {
     st.walkSpeed += ((Math.abs(this.speed) > 0.05 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
     st.walk += Math.abs(this.speed) * dt * 4.2;
     this.placeOnGround();
-    if (!note && !cleared && fwd !== 0 && going < 0.6) note = going < 0.42 ? 'Thick brush…' : 'Bushwhacking…';
     // where you are, for the HUD header
     if (camp) { const id = this.nearWater(camp.x, camp.z, 6); this.placeName = camp.name ? `${camp.name} campsite` : `Campsite${id ? ' · ' + (w.lakeName(id) || 'unnamed water') : ''}`; }
     else if (onTrail) this.placeName = trail.def.name;
