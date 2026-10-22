@@ -161,6 +161,7 @@ async function main() {
       const fx = player.x, fz = player.z, fh = player.heading;
       player.update(dt);
       if (!player.teleporting) { player.x = fx; player.z = fz; player.heading = fh; }
+      fishing.update(dt, ts); // its HUD state must exist even behind the card; the cleared input keeps the rod still
     } else {
       player.update(dt);
       fishing.update(dt, ts);

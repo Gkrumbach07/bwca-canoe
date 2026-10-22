@@ -493,7 +493,7 @@ export class Hud {
     e.spot.classList.toggle('show', showSpot);
     if (showSpot) { const txt = `${u.spot}${u.stringer ? ` · ${u.stringer} on the stringer` : ''}`; if (e.spot.textContent !== txt) e.spot.textContent = txt; }
     e.lures.classList.toggle('show', !!u.rodUp && (u.state === 'ready' || u.state === 'charging'));
-    if (f.lure !== u.lure) { e.lures.innerHTML = u.lures.map((l, i) => `<span class="${i === u.lure ? 'on' : ''}"><b>${i + 1}</b>${l.name}</span>`).join(''); f.lure = u.lure; }
+    if (u.lures && f.lure !== u.lure) { e.lures.innerHTML = u.lures.map((l, i) => `<span class="${i === u.lure ? 'on' : ''}"><b>${i + 1}</b>${l.name}</span>`).join(''); f.lure = u.lure; }
     if (u.power != null) {
       e.meter.classList.add('show', 'cast');
       e.meterFill.style.width = `${(u.power * 100).toFixed(0)}%`; e.meterFill.style.background = '';
