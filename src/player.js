@@ -18,20 +18,21 @@ export class Input {
 }
 
 const PADDLE = { accel: 3.4, hustle: 5.2, reverse: 1.6, drag: 0.15, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
-const WALK = { speed: 1.4, hustle: 2.1, carry: 1.1, carryHustle: 1.6, turn: 1.7 };
+const WALK = { speed: 1.5, hustle: 2.2, carry: 1.2, carryHustle: 1.7, turn: 1.7 };
 const SWIM = { speed: 0.85, hustle: 1.25, turn: 1.6 };
 const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
 const LANDING_RADIUS = 28;
 const ASHORE_RADIUS = 6;      // metres of water between the hull and a shore within which you can step out
 const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like the trail
 const HULL_REACH = 3;         // metres from a canoe on the ground within which you can shoulder or launch it
+const GROUNDS = 40;           // metres around an outfitter's landing that are its cleared yard and dock
 const FLOAT_SD = -3.5;        // shoreAt where a canoe floats clear (the paddle wants 1.2 m under the middle and 0.5 m under the ends)
 const WADE_SD = -2.5;         // shoreAt beyond which the water is too deep to wade
 const MAX_GRADE = Math.tan((40 * Math.PI) / 180);
 const RODS = 5.0292;
 // how the bush walks compared with a trail, by ground class (terrain-build GROUND): open bedrock and a
 // meadow are easy, the forest is brush and deadfall, dark spruce is a thicket, a burn a tangle of fallen snags
-const GOING = { rock: 0.9, rockDark: 0.8, rockLichen: 0.9, forest: 0.7, forestLight: 0.75, forestDark: 0.55, meadow: 0.85, burn: 0.6 };
+const GOING = { rock: 1.0, rockDark: 0.85, rockLichen: 1.0, forest: 0.8, forestLight: 0.9, forestDark: 0.65, meadow: 0.95, burn: 0.7 };
 const LAND = { rock: 'Bare rock', rockDark: 'A rock face', rockLichen: 'Bare rock', meadow: 'A clearing', burn: 'Old burn', forest: 'The woods', forestLight: 'The woods', forestDark: 'Dark spruce' };
 
 export class Player {
@@ -121,6 +122,15 @@ export class Player {
       if (d < r && (!best || d < best.d)) best = { site: c, d };
     }
     return best ? best.site : null;
+  }
+
+  // an outfitter's landing within r metres: its yard and dock are cleared ground
+  nearEntry(x, z, r) {
+    for (const e of this.world.entryPoints) {
+      const dx = e.x - x, dz = e.z - z;
+      if (dx < r && dx > -r && dz < r && dz > -r && dx * dx + dz * dz < r * r) return true;
+    }
+    return false;
   }
 
   // the lake whose water is nearest (x, z) within r cells, or 0; remembered per cell
@@ -477,20 +487,19 @@ export class Player {
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
     c.hitCooldown -= dt;
     this.heading += turn * WALK.turn * dt * (this.speed < -0.1 ? -1 : 1);
-    const pace = (hustle ? WALK.hustle : WALK.speed) / Math.pow(Math.max(1, this.loadFactor), 0.6); // a heavy pack is a slower, longer walk
-    this.speed += (fwd * pace * (dropped ? 1.2 : 1) - this.speed) * (1 - Math.exp(-dt * 6));
     const f = this.forward;
     const trail = this.nearestTrail(this.x, this.z), onTrail = !!trail && trail.dist < TRAIL_WIDTH;
-    const camp = this.nearCampsite(this.x, this.z);
+    const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
     this.onTrail = onTrail; this.campsite = camp;
     let note = null;
-    // the going: a trail and a campsite are cleared; elsewhere the ground class says how thick the bush is,
-    // and the cedar and alder along a shore are thicker still
+    // the going: a trail, a campsite and an outfitter's yard are cleared; elsewhere the ground class says how
+    // thick the bush is, and the first metres of cedar and alder up from a shore are thicker still
     const cls = GROUND[(w.coverCell(w.cellI(this.x), w.cellJ(this.z)) >> 16) & 255];
+    const cleared = onTrail || !!camp || yard;
     let going = 1;
-    if (!onTrail && !camp) {
+    if (!cleared) {
       const sd = w.shoreAt(this.x, this.z);
-      going = (GOING[cls] ?? 0.7) * (sd < 25 ? 0.8 + 0.2 * clamp((sd - 5) / 20, 0, 1) : 1);
+      going = (GOING[cls] ?? 0.8) * (sd < 12 ? 0.85 + 0.15 * clamp((sd - 3) / 9, 0, 1) : 1);
     }
     // the hill: the grade a step ahead in the direction of travel slows you and a 40° slope stops you; a
     // trail is graded, so half the penalty and never a wall
@@ -499,11 +508,12 @@ export class Player {
     let wall = null;
     if (!onTrail && grade > MAX_GRADE) wall = 'Too steep to climb here';
     else if (!onTrail && grade < -1.2) wall = 'A drop — find another way down';
-    else if (grade > 0) going *= 1 - (onTrail ? 0.45 : 0.85) * Math.pow(Math.min(1, grade / MAX_GRADE), 1.3);
-    else going *= 1 - (onTrail ? 0.2 : 0.45) * Math.min(1, -grade / MAX_GRADE);
-    const base = carrying ? (hustle ? WALK.carryHustle : WALK.carry) : (hustle ? WALK.hustle : WALK.speed);
+    else if (grade > 0) going *= 1 - (cleared ? 0.45 : 0.7) * Math.pow(Math.min(1, grade / MAX_GRADE), 1.3);
+    else going *= 1 - (cleared ? 0.2 : 0.4) * Math.min(1, -grade / MAX_GRADE);
+    // a heavy pack (the trip's food, the canoe's weight) is a slower walk
+    const base = (carrying ? (hustle ? WALK.carryHustle : WALK.carry) : (hustle ? WALK.hustle : WALK.speed)) / Math.pow(Math.max(1, this.loadFactor), 0.6);
     if (fwd !== 0 && wall) note = wall;
-    const want = wall ? 0 : fwd * base * Math.max(0.12, going);
+    const want = wall ? 0 : fwd * base * Math.max(0.3, going);
     this.speed += (want - this.speed) * (1 - Math.exp(-dt * 6));
     let nx = this.x + f.x * this.speed * dt, nz = this.z + f.z * this.speed * dt;
     if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
@@ -539,7 +549,7 @@ export class Player {
     st.walkSpeed += ((Math.abs(this.speed) > 0.05 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
     st.walk += Math.abs(this.speed) * dt * 4.2;
     this.placeOnGround();
-    if (!note && !onTrail && !camp && fwd !== 0 && going < 0.6) note = going < 0.42 ? 'Thick brush…' : 'Bushwhacking…';
+    if (!note && !cleared && fwd !== 0 && going < 0.6) note = going < 0.42 ? 'Thick brush…' : 'Bushwhacking…';
     // where you are, for the HUD header
     if (camp) { const id = this.nearWater(camp.x, camp.z, 6); this.placeName = camp.name ? `${camp.name} campsite` : `Campsite${id ? ' · ' + (w.lakeName(id) || 'unnamed water') : ''}`; }
     else if (onTrail) this.placeName = trail.def.name;
