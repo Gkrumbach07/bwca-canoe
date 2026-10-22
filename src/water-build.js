@@ -5,7 +5,7 @@
 export function buildWaterChunk(grid, i0, j0, n, originX, originZ) {
   const w = n + 1;
   const map = new Int32Array(w * w).fill(-1);
-  const pos = [], shore = [], depth = [], idx = [];
+  const pos = [], shore = [], depth = [], clarity = [], idx = [];
   const vertexLevel = (i, j) => {
     if (grid.lakeCell(i, j)) return grid.levelCell(i, j);
     let best = -Infinity;
@@ -20,6 +20,10 @@ export function buildWaterChunk(grid, i0, j0, n, originX, originZ) {
       pos.push(grid.cellX(i) - originX, lv, grid.cellZ(j) - originZ);
       shore.push(grid.sdCell(i, j));
       depth.push(Math.max(0, lv - grid.hCell(i, j)));
+      // the clarity of the water at this corner: its own cell's lake, else the deepest-set neighbour's
+      let cid = grid.lakeCell(i, j);
+      if (!cid) for (let dj = -1; dj <= 1 && !cid; dj++) for (let di = -1; di <= 1 && !cid; di++) cid = grid.lakeCell(i + di, j + dj);
+      clarity.push(grid.clarityOf(cid));
     }
     return map[m];
   };
@@ -29,5 +33,5 @@ export function buildWaterChunk(grid, i0, j0, n, originX, originZ) {
     if (((i + j) & 1) === 0) idx.push(a, c, b, b, c, d); else idx.push(a, c, d, a, d, b);
   }
   if (!idx.length) return null;
-  return { pos: new Float32Array(pos), shore: new Float32Array(shore), depth: new Float32Array(depth), idx: new Uint32Array(idx) };
+  return { pos: new Float32Array(pos), shore: new Float32Array(shore), depth: new Float32Array(depth), clarity: new Float32Array(clarity), idx: new Uint32Array(idx) };
 }

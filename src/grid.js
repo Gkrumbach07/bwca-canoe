@@ -65,7 +65,7 @@ export class GridQueries {
 // cell indices. Queries outside the halo clamp to its edge, which is why tiles carry a halo at all:
 // every build (terrain, forest, props) can run from this one buffer alone.
 export class TileGrid extends GridQueries {
-  constructor(desc, tx, ty, buf, levelById) {
+  constructor(desc, tx, ty, buf, levelById, clarityById = null) {
     super();
     this.cell = desc.cell; this.originX = desc.originX; this.originZ = desc.originZ;
     this.tileSize = desc.tile; this.halo = desc.halo;
@@ -77,6 +77,7 @@ export class TileGrid extends GridQueries {
     this.sd = new Int16Array(buf, n * 4, n);
     this.lvl = new Int16Array(buf, n * 6, n);
     this.levelById = levelById;
+    this.clarityById = clarityById;
   }
   local(i, j) {
     let li = i - this.i0, lj = j - this.j0;
@@ -90,4 +91,5 @@ export class TileGrid extends GridQueries {
   lakeCell(i, j) { return this.lake[this.local(i, j)]; }
   levelCell(i, j) { return this.lvl[this.local(i, j)] * 0.1; }
   levelOf(id) { return this.levelById[id]; }
+  clarityOf(id) { return this.clarityById ? this.clarityById[id] || 2.6 : 2.6; }
 }

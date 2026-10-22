@@ -24,6 +24,7 @@ import { CFG, AREAS, log, makeProjection, makeGrid } from './config.mjs';
 import { prefetchTerrarium, makeSampler } from './elevation.mjs';
 import { loadOsm } from './osm-extract.mjs';
 import { loadBathymetry } from './bathymetry.mjs';
+import { loadClarity } from './clarity.mjs';
 
 // ---------- CLI ---------------------------------------------------------------------
 
@@ -205,7 +206,7 @@ async function main() {
   const [latS, lonW] = proj.toLatLon(grid.originX, grid.originZ + H * cell);
   const [latN, lonE] = proj.toLatLon(grid.originX + W * cell, grid.originZ);
   const gridBox = { south: latS - 0.005, west: lonW - 0.01, north: latN + 0.005, east: lonE + 0.01 };
-  const [osm, bathy] = await Promise.all([loadOsm(gridBox), loadBathymetry(gridBox), prefetchTerrarium(gridBox)]);
+  const [osm, bathy, clarityData] = await Promise.all([loadOsm(gridBox), loadBathymetry(gridBox), loadClarity(gridBox), prefetchTerrarium(gridBox)]);
   const sampler = makeSampler();
 
   // --- lakes in local metres, big first (small ponds and islands' inner lakes drawn later win)
@@ -517,6 +518,66 @@ async function main() {
     log(`bathymetry: ${bathy.contours.length} DNR contours on ${contourCells} cells, ${nb} polygons with real depth over ${domainCells} cells, deepest ${(deepest / 10).toFixed(1)} m`);
   }
 
+  // --- clarity: each DNR lake polygon (with its mean Secchi depth) is sampled on a coarse lattice and its
+  //     reading goes to every OSM polygon that holds a fair share of those samples. Lakes the DNR has not
+  //     measured take a distance-weighted mean of measured lakes nearby; rivers and creeks run a little more
+  //     stained than the lakes they drain.
+  const secchi = new Float32Array(nLakes + 1);
+  const secchiSrc = new Uint8Array(nLakes + 1); // 1 measured, 2 estimated from neighbours
+  const tpById = new Float32Array(nLakes + 1);
+  {
+    const STEP = 4; // cells between samples
+    const tally = new Map(); // lake id -> Map(dow -> count)
+    const measured = [];
+    for (const dl of clarityData.lakes) {
+      const rings = dl.rings.map((rg) => rg.map(([lat, lon]) => proj.toLocal(lat, lon)));
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const rg of rings) for (const [x, z] of rg) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (z < minZ) minZ = z; if (z > maxZ) maxZ = z; }
+      if (!inGrid(minX, maxX, minZ, maxZ)) continue;
+      const counts = new Map();
+      let total = 0, sx = 0, sz = 0;
+      const j0 = Math.max(0, grid.cj(minZ)), j1 = Math.min(H - 1, grid.cj(maxZ)), i0 = Math.max(0, grid.ci(minX)), i1 = Math.min(W - 1, grid.ci(maxX));
+      const xs = [];
+      for (let j = j0; j <= j1; j += STEP) {
+        const zc = grid.cz(j);
+        xs.length = 0;
+        for (const rg of rings) for (let a = 0, n = rg.length; a < n; a++) { const [x1, z1] = rg[a], [x2, z2] = rg[(a + 1) % n]; if ((z1 <= zc) !== (z2 <= zc)) xs.push(x1 + ((zc - z1) * (x2 - x1)) / (z2 - z1)); }
+        if (xs.length < 2) continue;
+        xs.sort((a, b) => a - b);
+        for (let q = 0; q + 1 < xs.length; q += 2) {
+          const ia = Math.max(i0, Math.ceil((xs[q] - grid.originX) / cell - 0.5)), ib = Math.min(i1, Math.floor((xs[q + 1] - grid.originX) / cell - 0.5));
+          for (let i = ia; i <= ib; i += STEP) { const id = lakeId[j * W + i]; total++; sx += grid.cx(i); sz += grid.cz(j); if (id && !isRiver[id]) counts.set(id, (counts.get(id) || 0) + 1); }
+        }
+      }
+      if (!total) continue;
+      measured.push({ x: sx / total, z: sz / total, secchi: dl.secchi });
+      for (const [id, n] of counts) {
+        if (n < total * 0.15 && n < lakeArea[id] / (STEP * STEP) * 0.5) continue; // a sliver of a neighbour
+        let m = tally.get(id); if (!m) { m = new Map(); tally.set(id, m); }
+        m.set(dl.dow, (m.get(dl.dow) || 0) + n);
+      }
+      for (const [id] of counts) if (!tpById[id] && dl.tp) tpById[id] = dl.tp;
+    }
+    const byDow = new Map(clarityData.lakes.map((l) => [l.dow, l]));
+    for (const [id, m] of tally) {
+      let best = null; for (const [dow, n] of m) if (!best || n > best.n) best = { dow, n };
+      secchi[id] = byDow.get(best.dow).secchi; secchiSrc[id] = 1;
+    }
+    // unmeasured lakes: inverse-distance mean of measured lakes within 15 km, else the regional default
+    const DEFAULT = 2.6;
+    for (let id = 1; id <= nLakes; id++) {
+      if (secchiSrc[id] || !lakeArea[id]) continue;
+      const cx = grid.cx(sumI[id] / lakeArea[id]), cz = grid.cz(sumJ[id] / lakeArea[id]);
+      let ws = 0, wsum = 0;
+      for (const mz of measured) { const d = Math.hypot(mz.x - cx, mz.z - cz); if (d < 15000) { const wgt = 1 / (1000 + d); ws += wgt * mz.secchi; wsum += wgt; } }
+      secchi[id] = wsum ? ws / wsum : DEFAULT;
+      if (isRiver[id]) secchi[id] *= 0.8;
+      secchiSrc[id] = 2;
+    }
+    let nm = 0; for (let id = 1; id <= nLakes; id++) if (secchiSrc[id] === 1) nm++;
+    log(`clarity: ${clarityData.lakes.length} DNR lakes with Secchi, ${nm} polygons measured, the rest estimated from neighbours`);
+  }
+
   // a basin is named after its largest named polygon (channels and bays are often unnamed)
   lakes.forEach((l, i) => {
     const id = i + 1, b = basins[lakeBasin[id]];
@@ -812,13 +873,14 @@ async function main() {
     const id = i + 1;
     if (!lakeArea[id]) return null;
     return { id, name: l.name, displayName: displayName[id], river: l.river || undefined, creek: l.creek || undefined, basin: lakeBasin[id], level: +lakeLevel[id].toFixed(2), cells: lakeArea[id], maxDepth: bathyLake[id] ? +(maxDepth[id] / 10).toFixed(1) : undefined,
+      secchi: +secchi[id].toFixed(2), secchiMeasured: secchiSrc[id] === 1 || undefined, tp: tpById[id] ? +tpById[id].toFixed(1) : undefined,
       cx: r1(grid.cx(sumI[id] / lakeArea[id])), cz: r1(grid.cz(sumJ[id] / lakeArea[id])), osm: l.osm };
   });
   const basinMeta = basins.map((b, i) => ({ id: i, name: b.name || null, level: +b.level.toFixed(2), cells: b.cells, river: b.river || undefined }));
   const index = {
     version: 3,
     fields: ['height', 'lake', 'sdist', 'level'],
-    source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extract)', bathymetry: 'Minnesota DNR Lake Bathymetric Contours (MN Geospatial Commons)', baked: new Date().toISOString() },
+    source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extract)', bathymetry: 'Minnesota DNR Lake Bathymetric Contours (MN Geospatial Commons)', clarity: 'Minnesota DNR Lakes of Phosphorus Sensitivity / Watershed Health lake scores (mean Secchi depth)', baked: new Date().toISOString() },
     bbox, area: opt.area,
     proj: { lat0: proj.lat0, lon0: proj.lon0, mPerDegLat: proj.mPerDegLat, mPerDegLon: proj.mPerDegLon },
     grid: { width: W, height: H, cell, originX: grid.originX, originZ: grid.originZ, tile: T, halo: HALO, ntx, nty,

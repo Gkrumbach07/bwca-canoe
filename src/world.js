@@ -36,7 +36,8 @@ export class World extends GridQueries {
     this.entryPoints = index.entryPoints || [];
     this.tileFlags = index.tiles;
     this.levelById = new Float32Array(index.lakes.length + 1);
-    for (const l of index.lakes) if (l) this.levelById[l.id] = l.level;
+    this.clarityById = new Float32Array(index.lakes.length + 1).fill(2.6); // Secchi depth, metres
+    for (const l of index.lakes) if (l) { this.levelById[l.id] = l.level; if (l.secchi) this.clarityById[l.id] = l.secchi; }
     for (const p of this.portages) {
       let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
       for (const [x, z] of p.pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
@@ -125,6 +126,14 @@ export class World extends GridQueries {
     return t.cover[k] | (t.cover[k + 1] << 8);
   }
   levelOf(id) { return this.levelById[id]; }
+  clarityOf(id) { return this.clarityById[id] || 2.6; }
+  // water clarity (Secchi depth) at a point: that of the water cell there, or the nearest within r cells
+  clarityAt(x, z, r = 3) {
+    const ci = this.cellI(x), cj = this.cellJ(z);
+    let bestD = Infinity, best = 0;
+    for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const id = this.lakeCell(ci + di, cj + dj); if (!id) continue; const d = di * di + dj * dj; if (d < bestD) { bestD = d; best = id; } }
+    return this.clarityOf(best);
+  }
 
   inBounds(x, z, margin = 0) {
     return x > this.minX + margin && x < this.maxX - margin && z > this.minZ + margin && z < this.maxZ - margin;

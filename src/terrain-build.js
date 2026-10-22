@@ -12,14 +12,28 @@ const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 const hex = (h) => [lin(((h >> 16) & 255) / 255), lin(((h >> 8) & 255) / 255), lin((h & 255) / 255)];
 // A fixed palette; every face gets exactly one of these (no gradients).
 const C = {
-  bedShallow: hex(0xc4b894), bedDeep: hex(0x5f7c70), sand: hex(0xc8b88d), rock: hex(0x8f8d85), rockDark: hex(0x6f6d67),
+  // the lake bed by depth, seen through the water where it is clear: pale sand in the shallows, then
+  // boulder-and-weed olive, then the dark green of a drop-off, then the near-black of a deep hole
+  bedSand: hex(0xc4b894), bedShelf: hex(0x9fa478), bedWeed: hex(0x6f8a66), bedDeep: hex(0x4d6a63), bedHole: hex(0x3a5250),
+  sand: hex(0xc8b88d), rock: hex(0x8f8d85), rockDark: hex(0x6f6d67),
   forest: hex(0x667f52), forestLight: hex(0x7b9360), forestDark: hex(0x546b47), meadow: hex(0x98a56a), burn: hex(0x9a8a5e),
 };
 
-export function groundColor(grid, x, z, out, shade = 0) {
+// Lake bed colour from the depth of water over it (metres), with a little grain so the bands are not rulers.
+export function bedColor(depth, x, z) {
+  const g = (fbm(x * 0.03, z * 0.03, 2, 61) - 0.5) * 1.2; // +- 0.6 m of wobble on the band edges
+  const d = depth + g;
+  if (d < 1.4) return C.bedSand;
+  if (d < 3.2) return C.bedShelf;
+  if (d < 6.5) return C.bedWeed;
+  if (d < 13) return C.bedDeep;
+  return C.bedHole;
+}
+
+export function groundColor(grid, x, z, out, shade = 0, depth = -1) {
   const sd = grid.shoreAt(x, z);
   let c;
-  if (sd < 0) c = sd > -7 ? C.bedShallow : C.bedDeep;
+  if (sd < 0) c = bedColor(depth >= 0 ? depth : Math.max(0, grid.levelAt(x, z, 3) - grid.heightAt(x, z)), x, z);
   else if (sd < 2.4) c = C.sand;
   else {
     const slope = grid.slopeAt(x, z);
@@ -97,7 +111,8 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     }
     v = pos.length / 3;
     pos.push(x - originX, h, z - originZ);
-    groundColor(grid, x, z, c, shadeAt(x, z));
+    const sdv = fine ? grid.shoreAt(x, z) : grid.sdCell(i, j);
+    groundColor(grid, x, z, c, shadeAt(x, z), sdv < 0 ? Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h) : -1);
     col.push(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255));
     map[key] = v;
     return v;

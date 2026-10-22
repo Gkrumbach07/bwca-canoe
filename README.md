@@ -9,6 +9,10 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
   Creeks that OSM maps only as lines are water too, and rivers descend between lakes.
 - **Real depths** where the Minnesota DNR has mapped the lake: its bathymetric contours shape the bed
   (85 lakes in the Boundary Waters, Snowbank at 43 m, Loon at 64 m); the HUD shows the depth under the canoe.
+- **Real clarity**: every lake carries its mean Secchi depth from the DNR's lake data (272 measured lakes in the
+  area, from 0.6 m bog water to 8.9 m at Clearwater; the rest estimated from their neighbours). Clear lakes
+  are blue-green and show the bed far out; tea-stained lakes go olive-brown and close up within a few metres.
+  The bed itself is coloured by depth: sand, shelf, weed, drop-off, hole.
 - **Everything else is procedural**: terrain colouring, lake beds, nine tree species with per-tree variation,
   shoreline boulders, campsites (fire grate, log, tent), portage trails and markers, the canoe, the paddler
   and the paddle stroke, the water, the sky and the clouds. No external assets.
@@ -101,9 +105,14 @@ field fills in beyond them. `M` opens it wide.
    the first ring of water cells is pinned at zero, every cell starts from its nearest known depth and sixty
    Gauss-Seidel sweeps relax the rest into a smooth bed. Lakes without a DNR map keep a synthetic bed that
    drops at about 9 % from the shore, capped at 14 m.
-7. **Shore shaping**: lake beds are carved below their level and shoreline land is lifted above it, in
+7. **Clarity** (`scripts/clarity.mjs`): the DNR *Lakes of Phosphorus Sensitivity* polygons (mean Secchi depth
+   and total phosphorus) and the *Watershed Health* lake scores (mean water clarity) are fetched for the area and
+   cached; each DNR polygon is sampled on a lattice and its reading goes to the OSM polygons it covers. Lakes
+   without a reading take a distance-weighted mean of measured lakes within 15 km. The lake table carries
+   `secchi` (and `secchiMeasured`); the runtime hands it to the water shader per vertex and through the atlas.
+8. **Shore shaping**: lake beds are carved below their level and shoreline land is lifted above it, in
    bands again, then the tiles are cut.
-8. **Output** in `public/data/`:
+9. **Output** in `public/data/`:
    - `index.json`: grid and projection, per-tile flags (has water, height range), the lake table (names,
      display names, levels, centroids), basins, every portage (polyline, rods, launch points), campsites,
      entry points and the start position.
@@ -177,4 +186,5 @@ public/data/    baked tiles, not committed
 ```
 
 Map data © OpenStreetMap contributors (ODbL). Elevation: USGS 3DEP / NASA SRTM via Mapzen/AWS Terrain Tiles.
-Lake depths: Minnesota DNR Lake Bathymetric Contours, Minnesota Geospatial Commons.
+Lake depths: Minnesota DNR Lake Bathymetric Contours; clarity: Minnesota DNR lake phosphorus sensitivity and
+watershed health data, all via the Minnesota Geospatial Commons.
