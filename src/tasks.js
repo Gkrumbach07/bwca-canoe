@@ -160,7 +160,8 @@ export class Tasks {
       const feature = siteFeature(tg, cand.c.x, cand.c.z), lake = this.lakeRec(lakeId);
       const name = this.lakeName(lakeId) || (lake && lake.cells < 400 ? 'a little pond' : 'an unnamed lake');
       const site = { island: 'the island site', point: 'the site out on a point', bay: 'the site tucked into a bay', shore: 'the site on the shore' }[feature];
-      const dir = lake && lake.cells >= 2500 && feature !== 'island' ? ` on the ${compass(cand.c.x - lake.cx, cand.c.z - lake.cz)} side of the lake` : lake && lake.cells >= 2500 ? ` toward the ${compass(cand.c.x - lake.cx, cand.c.z - lake.cz)} end` : '';
+      const body = /river|creek/i.test(name) ? 'the river' : 'the lake';
+      const dir = lake && lake.cells >= 2500 && feature !== 'island' ? ` on the ${compass(cand.c.x - lake.cx, cand.c.z - lake.cz)} side of ${body}` : lake && lake.cells >= 2500 ? ` toward the ${compass(cand.c.x - lake.cx, cand.c.z - lake.cz)} end` : '';
       const clue = `${item.story} on ${name}${this.hopsText(r.hops)}. Look for ${site}${dir}; it should be ${item.where}.`;
       return { kind: 'item', key: cand.i, item: kind, label: item.label, site: cand.i, lakeId, spot, clue, hint: this.hintFor(lakeId, cand.c) };
     }
