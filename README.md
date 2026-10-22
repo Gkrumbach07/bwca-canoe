@@ -61,11 +61,12 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 
 | Key | Action |
 |---|---|
-| W / S | paddle forward / back |
-| A / D | turn (sweep strokes) |
-| Shift | hustle |
+| W / S | paddle forward / back; walk forward / back on land |
+| A / D | turn (sweep strokes; steering on foot) |
+| Shift | hustle (on foot, a jog) |
 | Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
-| E | portage when near a landing, launch at the far end |
+| E | go ashore when the canoe is close to a bank; portage when near a landing; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
+| Q | the second choice at a shore: go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it |
 | F | take up the fishing rod / put it down (see *Fishing*) |
 | Space / mouse button | with the rod up: hold to load a cast and let go (it goes where you look, or where the cursor points in third person); set the hook on a bite; hold to reel in a fight |
 | 1 – 5 | with the rod up: jig, spinner, spoon, crankbait, leech under a bobber |
@@ -85,10 +86,20 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | click the map | teleport to the nearest open water (anywhere in the wilderness) |
 | entry point list | teleport to one of the BWCA entry point landings |
 
-Paddle up to a portage landing (the trail marker on shore) and press **E**: the canoe is shouldered and you
-walk the real trail with W/S, steering with A/D. Stay near the trail: the bush beside it is slow and past
-14 m it turns you back. Trunks block you, and the hull overhead catches on trees; a caught hull may come down,
-and then you walk back and shoulder it again with **E**. Portage lengths are shown in rods, as on every BWCA map.
+Paddle up to any bank and press **E**: the canoe noses in, you step out, and you choose to **E** shoulder
+it or **Q** leave it beached there, bow on the land. On foot you walk with W/S and steer with A/D, about
+1.4 m/s (2.1 with Shift, slower with the canoe on your shoulders). A portage trail walks at full speed;
+off it the ground decides: open bedrock and meadows are easy, the forest is brush and deadfall, dark
+spruce and old burns are slow, and the alder and cedar along a shore slowest of all. Hills cost more
+still, a slope past 40° stops you, trunks block you, and water past your knees does. A canoe you have left
+shows on the map; back within 3 m of it, **E** launches it (**Q** shoulders it instead), and if the water
+there is too shallow for a canoe the prompt says so. Carrying, **E** launches at any shore with a metre of
+water within reach, or sets the canoe down where there is none, and the hull overhead catches on trees
+and may come down. Walk into a campsite and the HUD names it.
+
+At a portage landing (the trail marker on shore) **E** instead takes the canoe to the trailhead and
+shoulders it, and the HUD counts the rods to go along the real trail; **Q** goes ashore there without
+portaging. Portage lengths are shown in rods, as on every BWCA map.
 
 ## Wind and waves
 
