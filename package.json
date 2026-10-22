@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "bake": "node --max-old-space-size=8192 scripts/bake.mjs",
-    "bake:all": "node --max-old-space-size=8192 scripts/bake.mjs --all"
+    "bake:all": "node --max-old-space-size=8192 scripts/bake.mjs --all",
+    "data:sync": "node scripts/data-sync.mjs"
   },
   "dependencies": {
     "pngjs": "^7.0.0",

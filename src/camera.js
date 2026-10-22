@@ -8,6 +8,7 @@ export class ChaseCamera {
     this.pos = new THREE.Vector3(); this.look = new THREE.Vector3(); this.first = true;
     this.lastInput = 0;
     this.mode = 'third';
+    this.sensitivity = 1; this.invert = false; // mouse look, set from the settings panel
     this.head = new THREE.Vector3();
     this.dom = dom;
     // First person looks where the mouse is: the cursor's offset from the middle of the view turns the head
@@ -29,7 +30,8 @@ export class ChaseCamera {
       const r = dom.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) { this.cursor.x = ((e.clientX - r.left) / r.width) * 2 - 1; this.cursor.y = -((e.clientY - r.top) / r.height) * 2 + 1; this.cursor.inside = true; }
       if (!dragging) return;
-      this.userYaw -= (e.clientX - lx) * 0.006; this.userPitch = clamp(this.userPitch - (e.clientY - ly) * 0.004, -0.25, 0.9);
+      const s = this.sensitivity, inv = this.invert ? -1 : 1;
+      this.userYaw -= (e.clientX - lx) * 0.006 * s; this.userPitch = clamp(this.userPitch - (e.clientY - ly) * 0.004 * s * inv, -0.25, 0.9);
       lx = e.clientX; ly = e.clientY; this.lastInput = performance.now();
     });
     dom.addEventListener('pointerleave', () => { this.cursor.inside = false; });

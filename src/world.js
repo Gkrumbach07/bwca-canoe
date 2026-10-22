@@ -3,12 +3,20 @@
 // has to wait for a tile to answer a question.
 import { GridQueries, TileGrid } from './grid.js';
 
+// Where the baked data lives: VITE_DATA_URL (a bucket behind a CDN, see docs/HOSTING.md), else `data/`
+// under the app's own base path (public/data in development). Always ends in a slash.
+export const DATA_URL = (() => {
+  const u = import.meta.env.VITE_DATA_URL || import.meta.env.BASE_URL + 'data/';
+  return u.endsWith('/') ? u : u + '/';
+})();
+
 export class World extends GridQueries {
-  static async load(onProgress = () => {}) {
-    const base = import.meta.env.BASE_URL + 'data/';
+  static async load(onProgress = () => {}, base = DATA_URL) {
     onProgress(0.05, 'Reading map data…');
-    const res = await fetch(base + 'index.json');
-    if (!res.ok) throw new Error('no map data in public/data: run `npm run bake:all` (whole BWCA) or `npm run bake` (Lake One test area)');
+    const res = await fetch(base + 'index.json').catch((e) => { throw new Error(`cannot reach ${base}index.json (${e.message})`); });
+    if (!res.ok) throw new Error(base.startsWith('/') || base.startsWith(location.origin)
+      ? 'no map data in public/data: run `npm run bake:all` (whole BWCA) or `npm run bake` (Lake One test area)'
+      : `${res.status} fetching ${base}index.json: check VITE_DATA_URL and the bucket's CORS policy (docs/HOSTING.md)`);
     const index = await res.json();
     if (index.version !== 3) throw new Error('map data is from an older bake: run `npm run bake:all`');
     return new World(index, base);

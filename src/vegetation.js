@@ -150,6 +150,7 @@ export const SPECIES = [
 const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
 const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
+export const LOD_SCALE = { value: 1 }; // the settings panel scales both distances (0.5 = half, 2 = double)
 
 // Marks foliage vertices (greens and yellows with some saturation; bark, snow-white birch and grey are not)
 // so the season can recolour and drop the leaves and leave the trunk alone.
@@ -226,9 +227,9 @@ export function makeVegetationMeshes(bins, kit) {
 export function updateVegetationLOD(meshes, camPos) {
   for (const m of meshes) {
     const l = m.userData.lod;
-    const d = Math.hypot(l.cx - camPos.x, l.cz - camPos.z);
-    m.visible = d < l.cull;
-    const want = d > l.lod ? l.low : l.full;
+    const d = Math.hypot(l.cx - camPos.x, l.cz - camPos.z), s = LOD_SCALE.value;
+    m.visible = d < l.cull * s;
+    const want = d > l.lod * s ? l.low : l.full;
     if (m.geometry !== want) m.geometry = want;
   }
 }
