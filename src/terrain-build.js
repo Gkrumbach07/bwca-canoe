@@ -24,11 +24,12 @@ export const GROUND_PALETTE = GROUND.map((k) => C[k]); // class index -> linear 
 // The bed is one pale tone: the water above it carries the depth (its colour deepens and it goes opaque
 // within a few metres), so a second bed colour only drew a staircase along the grid. Land runs rock or
 // forest straight to the waterline, as Shield shores do; the water's foam line marks the edge.
-export function groundClass(grid, x, z, shade = 0) {
-  const sd = grid.shoreAt(x, z);
+export function groundClass(grid, x, z, shade = 0, pre = null) {
+  const sd = pre ? pre.sd : grid.shoreAt(x, z);
   if (sd < 0) return 0;
-  const slope = grid.slopeAt(x, z);
-  if (rockAt(slope, sd, x, z) > 0.5) return slope > 0.55 ? 4 : fbm(x * 0.03, z * 0.03, 2, 91) > 0.58 ? 10 : 3;
+  const slope = pre ? pre.slope : grid.slopeAt(x, z);
+  const rock = pre ? pre.rock : rockAt(slope, sd, x, z);
+  if (rock >= 0.5) return slope > 0.55 ? 4 : fbm(x * 0.03, z * 0.03, 2, 91) > 0.58 ? 10 : 3;
   if (burnAt(x, z) > 0.5) return 9;
   if (clearingAt(x, z) > 0.68) return 8; // same field the forest uses for clearings
   if (shade > 0.55) return 7;
@@ -69,10 +70,12 @@ function shoreBumps(x, z, sd) {
 // fine=false (far field) skips the shore subdivision, shaping and bumps.
 // Normals are smooth (one per vertex, averaged over the faces around it), computed over a one-cell ring
 // beyond the chunk so the lighting is continuous across tile edges; the ring's triangles are then dropped.
-// Colour stays one flat tone per face: smooth light under flat paint.
+// Colour stays one flat tone per face: smooth light under flat paint. Where the bedrock field crosses a
+// cell, the cell is cut along the isoline (marching squares) so rock patches get real outlines instead of
+// the staircase of a grid classification; each part is coloured from one of its own corners.
 export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, originX, originZ }) {
   const cell = grid.cell;
-  const pos = [], col = [], bed = [], idx = [], idxAll = [];
+  const pos = [], col = [], bed = [], rockVal = [], idx = [], idxAll = [];
   const stride = 2 * n + 7;
   const map = new Int32Array(stride * stride).fill(-1);
   const levelCache = fine ? new Float32Array(grid.side * grid.side).fill(NaN) : null;
@@ -84,7 +87,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   const fineCell = (i, j) => Math.abs(grid.sdCell(i, j)) <= FINE_BAND;
   const quadFine = (i, j) => fine && (fineCell(i, j) || fineCell(i + 1, j) || fineCell(i, j + 1) || fineCell(i + 1, j + 1));
   const shadeAt = (x, z) => (shade ? shade[grid.local(grid.cellI(x), grid.cellJ(z))] : 0);
-  const c = [0, 0, 0];
+  const pre = { sd: 0, slope: 0, rock: 0 };
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));
     let v = map[key];
@@ -107,16 +110,55 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     }
     v = pos.length / 3;
     pos.push(x - originX, h, z - originZ);
-    groundColor(grid, x, z, c, shadeAt(x, z));
+    pre.sd = sd; pre.slope = grid.slopeAt(x, z); pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z);
+    const c = GROUND_PALETTE[groundClass(grid, x, z, shadeAt(x, z), pre)];
     col.push(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255));
     bed.push(sd < 0 ? 1 : 0);
+    rockVal.push(pre.rock - 0.5);
     map[key] = v;
     return v;
   };
+  // the point where the rock isoline crosses the edge v-w, shared by the cells on both sides
+  const crossMap = new Map();
+  const crossing = (v, w) => {
+    const key = v < w ? v * 1048576 + w : w * 1048576 + v;
+    let m = crossMap.get(key);
+    if (m !== undefined) return m;
+    const rv = rockVal[v], rw = rockVal[w], t = rv / (rv - rw);
+    m = pos.length / 3;
+    pos.push(lerp(pos[v * 3], pos[w * 3], t), lerp(pos[v * 3 + 1], pos[w * 3 + 1], t), lerp(pos[v * 3 + 2], pos[w * 3 + 2], t));
+    const src = rv >= 0 ? w : v; // colour and bed from the soil side; the point is never a provoking vertex
+    col.push(col[src * 3], col[src * 3 + 1], col[src * 3 + 2]);
+    bed.push(bed[src]);
+    rockVal.push(0);
+    crossMap.set(key, m);
+    return m;
+  };
   let core = true;
+  const tri = (a, b, c) => { idxAll.push(a, b, c); if (core) idx.push(a, b, c); };
+  // fan a polygon (in front-face order) from one of its own corners, which the flat colour is taken from
+  const fan = (poly, corners) => {
+    const L = poly.length;
+    let piv = 0;
+    for (let k = 0; k < L; k++) if (corners.has(poly[k])) { piv = k; break; }
+    const p0 = poly[piv];
+    for (let k = 1; k < L - 1; k++) tri(poly[(piv + k) % L], poly[(piv + k + 1) % L], p0);
+  };
   const quad = (a, b, c2, d, flip) => {
-    if (flip) idxAll.push(a, c2, b, b, c2, d); else idxAll.push(a, c2, d, a, d, b);
-    if (core) { if (flip) idx.push(a, c2, b, b, c2, d); else idx.push(a, c2, d, a, d, b); }
+    const P = [a, c2, d, b]; // front-face order around the cell
+    let changes = 0;
+    for (let k = 0; k < 4; k++) if ((rockVal[P[k]] >= 0) !== (rockVal[P[(k + 1) % 4]] >= 0)) changes++;
+    if (changes !== 2) {
+      if (flip) { tri(a, c2, b); tri(b, c2, d); } else { tri(a, c2, d); tri(a, d, b); }
+      return;
+    }
+    const inside = [], outside = [], corners = new Set(P);
+    for (let k = 0; k < 4; k++) {
+      const v = P[k], w = P[(k + 1) % 4], vin = rockVal[v] >= 0;
+      (vin ? inside : outside).push(v);
+      if (vin !== (rockVal[w] >= 0)) { const m = crossing(v, w); inside.push(m); outside.push(m); }
+    }
+    fan(inside, corners); fan(outside, corners);
   };
   for (let j = j0 - 1; j < j0 + n + 1; j++) {
     for (let i = i0 - 1; i < i0 + n + 1; i++) {
@@ -142,7 +184,9 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     const vx = pos[d * 3] - ax, vy = pos[d * 3 + 1] - ay, vz = pos[d * 3 + 2] - az;
     let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
     if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
-    for (const k of [a, b, d]) { acc[k * 3] += nx; acc[k * 3 + 1] += ny; acc[k * 3 + 2] += nz; }
+    acc[a * 3] += nx; acc[a * 3 + 1] += ny; acc[a * 3 + 2] += nz;
+    acc[b * 3] += nx; acc[b * 3 + 1] += ny; acc[b * 3 + 2] += nz;
+    acc[d * 3] += nx; acc[d * 3 + 1] += ny; acc[d * 3 + 2] += nz;
   }
   const nrm = new Int8Array(nv * 3);
   for (let k = 0; k < nv; k++) {

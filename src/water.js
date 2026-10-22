@@ -91,6 +91,7 @@ const vertHead = /* glsl */ `
   uniform float uTime;
   uniform mat4 uTextureMatrix;
   varying vec3 vLocal;        // position relative to the floating origin
+  varying vec3 vWaveN;        // smooth surface normal from the swell itself, not from the triangle
   varying float vShore;
   varying float vDepth;
   varying vec4 vReflectUv;
@@ -118,7 +119,12 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
     vec2 rel = position.xz + (modelMatrix[3].xz - uOrigin);   // both exact multiples of 10 m: no rounding
     vShore = aShore;
     vDepth = aDepth;
-    float wave = lowWave(rel, uTime) * smoothstep(0.0, 25.0, -aShore);
+    float damp = smoothstep(0.0, 25.0, -aShore);
+    float wave = lowWave(rel, uTime) * damp;
+    const float e = 5.0;
+    float hL = lowWave(rel - vec2(e, 0.0), uTime) * damp, hR = lowWave(rel + vec2(e, 0.0), uTime) * damp;
+    float hB = lowWave(rel - vec2(0.0, e), uTime) * damp, hF = lowWave(rel + vec2(0.0, e), uTime) * damp;
+    vWaveN = normalize(vec3(hL - hR, 2.0 * e, hB - hF));
     vec3 objPos = vec3(position.x, position.y + wave, position.z);
     vec3 flatObj = position;
     vec3 local = vec3(rel.x, position.y + wave, rel.y);
@@ -128,9 +134,13 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
   void main() {
     vec2 rel = position.xz + uPatchLocal;
     float border = 1.0 - smoothstep(uPatchHalf - 40.0, uPatchHalf - 6.0, max(abs(position.x), abs(position.z)));
-    float shore;
+    float shore, s2;
     float wave = surfaceWave(rel, uTime, border, shore);
     vShore = shore;
+    const float e = 1.6;
+    float hL = surfaceWave(rel - vec2(e, 0.0), uTime, border, s2), hR = surfaceWave(rel + vec2(e, 0.0), uTime, border, s2);
+    float hB = surfaceWave(rel - vec2(0.0, e), uTime, border, s2), hF = surfaceWave(rel + vec2(0.0, e), uTime, border, s2);
+    vWaveN = normalize(vec3(hL - hR, 2.0 * e, hB - hF));
     float level = levelAt(rel);
     vDepth = max(0.0, level - terrainAt(rel));
     vec3 objPos = vec3(position.x, level + wave, position.z);
@@ -145,6 +155,7 @@ const frag = /* glsl */ `
   uniform vec2 uPatchLocal;
   uniform float uPatchHalf;
   varying vec3 vLocal;
+  varying vec3 vWaveN;
   varying float vShore;
   varying float vDepth;
   varying vec4 vReflectUv;
@@ -160,17 +171,16 @@ const frag = /* glsl */ `
     #else
       if (vShore > 0.6) discard;
     #endif
-    vec3 n = normalize(cross(dFdx(vLocal), dFdy(vLocal)));
-    if (n.y < 0.0) n = -n;
+    vec3 n = normalize(vWaveN);
     float depth = -vShore;
     float shadow = 1.0;
     #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
       shadow = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
     #endif
-    // three flat tones (facets tilted toward the sun, level, away), with a soft hand-off so the
-    // moving swell does not make facets pop between tones
+    // three tones (surface tilted toward the sun, level, away) with a soft hand-off: on the smooth
+    // normal they read as bands riding the swell rather than as triangles
     float d = dot(n, uSunDir) - uSunDir.y;
-    float tone = smoothstep(0.006, 0.016, d) - smoothstep(0.006, 0.016, -d);   // -1 .. 1
+    float tone = smoothstep(0.004, 0.02, d) - smoothstep(0.004, 0.02, -d);   // -1 .. 1
     vec3 col = mix(mix(uWater, uWaterDeep, smoothstep(0.0, 10.0, vDepth)), uReflect, 0.12) * (1.0 + 0.08 * tone);
     col *= 0.72 + 0.28 * shadow;
     // the canoe's reflection, nothing else
