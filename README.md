@@ -67,7 +67,7 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
 | E | portage when near a landing, launch at the far end |
 | F | take up the fishing rod / put it down (see *Fishing*) |
-| Space / mouse button | with the rod up: hold to load a cast and let go (it goes where you look, or where the cursor points in third person); set the hook on a bite; hold to reel in a fight |
+| Space / mouse button | with the rod up: hold to load a cast and let go (it goes where the cursor points); set the hook on a bite; hold to reel in a fight |
 | 1 – 5 | with the rod up: jig, spinner, spoon, crankbait, leech under a bobber |
 | K / E | keep the landed fish on the stringer / let it go |
 | L | the catch log |
@@ -81,7 +81,7 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | / | veer the wind 30° (debug) |
 | R | toggle the canoe's water reflection (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
-| mouse | look around: in first person a click captures the pointer and the mouse itself looks (Esc frees it), in third person drag; wheel zooms |
+| mouse | look around: in first person the view follows the cursor (right of centre looks right, up looks up), in third person drag to orbit; wheel zooms |
 | click the map | teleport to the nearest open water (anywhere in the wilderness) |
 | entry point list | teleport to one of the BWCA entry point landings |
 
@@ -109,8 +109,8 @@ gunwales and the rod comes up; the line under the readout says what kind of wate
 ("Rocky point · 4 m, drop-off to 9 m · walleye and smallmouth water", "Weedy bay · 1.8 m · pike water"), read
 from the real bed, the shore distance, the weed beds and the bedrock shores around the canoe. Pick a lure with
 **1–5** (jig, spinner, spoon, crankbait, or a leech 2.4 m under a bobber), hold **Space** or the mouse button
-to load the cast and let go: the lure flies to where the cursor points (where you are looking, in first person);
-a pale ring on the water marks the spot, a full load drops the lure on it and a short one falls short. It
+to load the cast and let go: the lure flies to where the cursor points (in first person the view itself follows
+the cursor); a pale ring on the water marks the spot, a full load drops the lure on it and a short one falls short. It
 splashes down and sinks at its own rate, or the bobber rides the swell. **W** retrieves (Shift faster;
 a crankbait dives, a spinner runs shallow, a jig hops along the bottom, the leech is best left alone), and you
 can change lures again once it is back at the rod.
