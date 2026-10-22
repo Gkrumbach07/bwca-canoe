@@ -15,8 +15,10 @@ const T = {
   sunColor: [0x000000, 0x000000, 0xff7a3a, 0xffbc70, 0xffd098, 0xffeac4],
   sunInt: [0, 0, 0.6, 2.0, 2.1, 2.2],
   hemiSky: [0x121a2a, 0x263347, 0x7878a0, 0x7c94cc, 0x86a8d8, 0x82b0e2],
-  hemiGround: [0x0b0e12, 0x1a1d1a, 0x4a3e3a, 0x6a5a50, 0x66685a, 0x5f6b58],
-  hemiInt: [0.35, 0.4, 0.7, 0.8, 0.6, 0.55],
+  hemiGround: [0x0b0e12, 0x1a1d1a, 0x4a3e3a, 0x6a5a50, 0x7a7462, 0x847e68], // by day the bounce off sunlit ground is warm and not small
+  // the fill carries every shaded side by itself now the toon ramp's floor (a quarter of the key on any face
+  // turned from the sun) is gone: about a third of the key on flat ground by day (pass 1, smooth light)
+  hemiInt: [0.35, 0.45, 0.85, 1.0, 1.1, 1.2],
   // the air: the haze's colour at the horizon and overhead, its warmth toward the sun, its reach (the
   // distance at which it is two thirds of the picture) and the height over which it thins
   fogHorizon: [0x141c28, 0x2a3650, 0xd0a0a0, 0xdcb4a4, 0xcacfd4, 0xbed6e8],

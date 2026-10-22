@@ -10,7 +10,7 @@ export const SHAPE_BAND = 9;    // metres either side of the shore where height 
 // sRGB hex -> linear rgb, the same conversion THREE.Color applies to hex colours
 const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 const hex = (h) => [lin(((h >> 16) & 255) / 255), lin(((h >> 8) & 255) / 255), lin((h & 255) / 255)];
-// A fixed palette; every face gets exactly one of these (no gradients).
+// The palette (the palette pass's values): the splat below blends these, the classes still name them.
 const C = {
   // the lake bed by depth, seen through the water where it is clear: pale sand in the shallows, then
   // boulder-and-weed olive, then the dark green of a drop-off, then the near-black of a deep hole
@@ -42,7 +42,8 @@ export const GROUND_PALETTE = GROUND.map((k) => C[k]); // class index -> linear 
 const I = Object.fromEntries(GROUND.map((k, i) => [k, i]));
 
 // Every class boundary is the zero crossing of a signed field (>= 0 inside), in this priority order. The
-// terrain mesh is cut along whichever of them crosses a cell, so the patches have real outlines.
+// classes are what the ground cover, the footsteps and the cover atlas read (one class per cell); the
+// terrain itself blends the same fields into material weights (splatAt) and cuts only along the shoreline.
 //   0 shoreline (land inside)   1 bedrock   2 dark rock (steep)   3 lichen rock   4 burn   5 meadow
 //   6 dark forest (canopy shade)   7 light forest   8.. the bed's depth bands
 export const NFIELDS = 8 + BED_STEPS.length;
@@ -65,7 +66,7 @@ export function classify(grid, x, z, shade, pre, fields = null) {
     const dark = slope - 0.55;
     if (fields) fields[2] = dark;
     if (dark >= 0) return I.rockDark;
-    const lichen = fbm(x * 0.03, z * 0.03, 2, 91) - 0.58;
+    const lichen = lichenField(x, z);
     if (fields) fields[3] = lichen;
     return lichen >= 0 ? I.rockLichen : I.rock;
   }
@@ -78,10 +79,12 @@ export function classify(grid, x, z, shade, pre, fields = null) {
   const dark = shade - 0.55;
   if (fields) fields[6] = dark;
   if (dark >= 0) return I.forestDark;
-  const light = fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few broad sunny stands, not a speckle of patches
+  const light = sunnyField(x, z);
   if (fields) fields[7] = light;
   return light >= 0 ? I.forestLight : I.forest;
 }
+const lichenField = (x, z) => fbm(x * 0.03, z * 0.03, 2, 91) - 0.58;
+const sunnyField = (x, z) => fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few broad sunny stands, not a speckle of patches
 
 const _pre = { sd: 0, slope: 0, rock: 0, depth: -1 };
 export function groundClass(grid, x, z, shade = 0) {
@@ -92,32 +95,67 @@ export function groundClass(grid, x, z, shade = 0) {
   return classify(grid, x, z, shade, _pre);
 }
 
-// Where the forest floor is moss rather than duff: patches 8–20 m across from a low-frequency field, with a
-// soft edge one vertex wide, so the floor is big calm patches of two colours and never a speckle.
-export const mossAt = (x, z) => smoothstep(0.48, 0.56, fbm(x * 0.05 + 13, z * 0.05, 2, 83));
+// Where the forest floor is moss rather than duff: patches 8–20 m across from a low-frequency field. The
+// terrain blends it in over a few metres (the shader's noise does the rest), so it is a weight, not a cut.
+export const mossAt = (x, z) => smoothstep(0.44, 0.6, fbm(x * 0.05 + 13, z * 0.05, 2, 83));
 
-// The colour a point of ground is painted. Rock, meadow, burn and the bed take the palette entry outright.
-// The forest classes are the floor: the duff's lit/shade pair mixed by the canopy over it (the dark class is
-// the shade side, deeper the thicker the canopy; the sunny stands stay lit), then moss where mossAt says so.
-const FOREST = new Set(['forest', 'forestLight', 'forestDark']);
-export function floorColor(cls, x, z, shade, out) {
-  const base = GROUND_PALETTE[cls], name = GROUND[cls];
-  if (!FOREST.has(name)) {
-    const sh = SHADE[name];
-    if (!sh) { out[0] = base[0]; out[1] = base[1]; out[2] = base[2]; return out; }
-    const s = 0.7 * smoothstep(0.1, 0.6, shade);
-    for (let k = 0; k < 3; k++) out[k] = lerp(base[k], sh[k], s);
-    return out;
+// ---- the splat ------------------------------------------------------------------------------------------
+// The ground is painted from eight materials, each a lit colour and the colour it takes under a thick canopy
+// (the floor pass's lit/shade pairs). The terrain carries their weights per vertex as two vec4s
+// (aSplatA = duff, moss, meadow, burn; aSplatB = rock, dark rock, lichen rock, shore) and the shader blends
+// them through a world-space noise (terrain.js), so a transition is a soft irregular band a few metres wide.
+// `shadeK` is how far each goes toward its shade colour under a full canopy.
+const SHORE = { lit: hex(0x8e8670), shade: hex(0x66604f) }; // the damp margin a soil shore has at the waterline
+export const SPLAT = [
+  // the duff's shade partner a step lighter than forestDark: the trees' real shadows now fall on it as well,
+  // with no toon floor to lift them, and together they went to charcoal
+  { name: 'duff', lit: C.forest, shade: hex(0x6a5f55), shadeK: 0.9 },
+  { name: 'moss', lit: MOSS.lit, shade: MOSS.shade, shadeK: 1 },
+  { name: 'meadow', lit: C.meadow, shade: SHADE.meadow, shadeK: 0.7 },
+  { name: 'burn', lit: C.burn, shade: SHADE.burn, shadeK: 0.7 },
+  { name: 'rock', lit: C.rock, shade: hex(0x77736e), shadeK: 0.6 },
+  { name: 'rockDark', lit: C.rockDark, shade: hex(0x52565c), shadeK: 0.6 },
+  { name: 'rockLichen', lit: C.rockLichen, shade: hex(0x7c7d6c), shadeK: 0.6 },
+  { name: 'shore', lit: SHORE.lit, shade: SHORE.shade, shadeK: 0.5 },
+];
+export const SPLAT_SUNNY = C.forestLight; // the duff's lit colour in the broad sunny stands
+export const BED_PALETTE = [C.bedSand, C.bedShelf, C.bedWeed, C.bedDeep, C.bedHole];
+export const BED_DEPTH_SCALE = 16; // aFloor.w is the bed depth over this many metres
+
+// what each ground class reads as in the splat (the ground cover has only the class map to go on):
+// [eight weights, canopy shade, sunny stand]
+export const CLASS_SPLAT = GROUND.map((name) => {
+  const w = new Array(8).fill(0);
+  const slot = { forest: 0, forestLight: 0, forestDark: 0, meadow: 2, burn: 3, rock: 4, rockDark: 5, rockLichen: 6 }[name];
+  w[slot === undefined ? 7 : slot] = 1;
+  return { w, shade: name === 'forestDark' ? 0.8 : name === 'forest' ? 0.3 : 0, sunny: name === 'forestLight' ? 1 : 0 };
+});
+
+// smoothstep across a threshold: 0 below v = -w, 1 above v = w
+const across = (v, w) => smoothstep(-w, w, v);
+
+// The splat at one point: the same fields and the same priority as classify, each threshold widened into
+// a blend. wA, wB: the eight weights (sum 1); fl: [canopy shade, sunny stand, bed, bed depth / BED_DEPTH_SCALE].
+export function splatAt(x, z, shade, pre, wA, wB, fl) {
+  if (pre.sd < 0) {
+    wA[0] = wA[1] = wA[2] = wA[3] = 0; wB[0] = wB[1] = wB[2] = wB[3] = 0;
+    fl[0] = 0; fl[1] = 0; fl[2] = 1; fl[3] = Math.min(1, Math.max(0, pre.depth) / BED_DEPTH_SCALE);
+    return;
   }
-  const lit = cls === I.forestDark ? C.forest : base, dark = C.forestDark;
-  const s = cls === I.forestDark ? 0.6 + 0.4 * smoothstep(0.55, 1, shade) : cls === I.forestLight ? 0.2 * shade : 0.5 * smoothstep(0.1, 0.55, shade);
-  const m = mossAt(x, z) * (cls === I.forestLight ? 0.4 : 1);
-  for (let k = 0; k < 3; k++) out[k] = lerp(lerp(lit[k], dark[k], s), lerp(MOSS.lit[k], MOSS.shade[k], s), m);
-  return out;
-}
-
-export function groundColor(grid, x, z, out, shade = 0) {
-  return floorColor(groundClass(grid, x, z, shade), x, z, shade, out);
+  const rock = across(pre.rock - 0.5, 0.12);
+  const dark = across(pre.slope - 0.55, 0.08);
+  const lichen = across(lichenField(x, z), 0.05) * (1 - dark);
+  const soil = 1 - rock;
+  const burn = across(burnAt(x, z) - 0.5, 0.25);
+  const meadow = across(clearingAt(x, z) - 0.68, 0.025) * (1 - burn);
+  const forest = 1 - burn - meadow;
+  const sunny = across(sunnyField(x, z), 0.03);
+  const moss = mossAt(x, z) * (1 - 0.6 * sunny);
+  const shore = (1 - smoothstep(0.3, 2.4, pre.sd)) * 0.9;
+  const ground = soil * (1 - shore);
+  wA[0] = ground * forest * (1 - moss); wA[1] = ground * forest * moss; wA[2] = ground * meadow; wA[3] = ground * burn;
+  wB[0] = rock * (1 - dark - lichen); wB[1] = rock * dark; wB[2] = rock * lichen; wB[3] = soil * shore;
+  fl[0] = shade * (1 - 0.8 * sunny); fl[1] = sunny; fl[2] = 0; fl[3] = 0;
 }
 
 // Height in the shore band follows the distance field, so the waterline, the ripple lines and the
@@ -148,14 +186,16 @@ function shoreBumps(x, z, sd) {
 // fine=false (far field) skips the shore subdivision, shaping and bumps.
 // Normals are smooth (one per vertex, averaged over the faces around it), computed over a one-cell ring
 // beyond the chunk so the lighting is continuous across tile edges; the ring's triangles are then dropped.
-// Colour stays one flat tone per face: smooth light under flat paint. Where a class boundary (the
-// shoreline, bedrock, a forest or bed band, see classify) crosses a cell, the cell is cut along that
-// isoline (marching squares) so the patches get real outlines instead of the staircase of a grid
-// classification; each part is coloured from one of its own corners. The shore cut puts an edge
-// exactly on the waterline.
+// The ground is a splat: every vertex carries the weights of the eight ground materials (splatAt), the
+// canopy shade and the bed depth, all interpolated, and the shader paints the blend (terrain.js). Only the
+// shoreline cuts the mesh: where it crosses a cell, the cell is cut along it (marching squares) so an edge
+// lies exactly on the waterline, and the crossing point is two vertices, one painted as land and one as
+// lake bed, so neither side bleeds into the other. Every other transition is a blend.
 export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, originX, originZ }) {
   const cell = grid.cell;
-  const pos = [], col = [], bed = [], fv = [], idx = [], idxAll = [];
+  const pos = [], sa = [], sb = [], fl = [], sdv = [], idx = [], idxAll = [];
+  const twins = []; // [land, bed] vertex pairs at the waterline: they share one normal
+  const tees = [];  // [mid, end, end]: a subdivided cell's mid-edge vertex against an undivided neighbour
   const stride = 2 * n + 7;
   const map = new Int32Array(stride * stride).fill(-1);
   const levelCache = fine ? new Float32Array(grid.side * grid.side).fill(NaN) : null;
@@ -168,8 +208,15 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   const quadFine = (i, j) => fine && (fineCell(i, j) || fineCell(i + 1, j) || fineCell(i, j + 1) || fineCell(i + 1, j + 1));
   const shadeAt = (x, z) => (shade ? shade[grid.local(grid.cellI(x), grid.cellJ(z))] : 0);
   const pre = { sd: 0, slope: 0, rock: 0, depth: -1 };
-  const fields = new Float32Array(NFIELDS);
-  const paint = [0, 0, 0];
+  const wA = [0, 0, 0, 0], wB = [0, 0, 0, 0], wf = [0, 0, 0, 0];
+  const q8 = (v) => Math.round(Math.min(1, Math.max(0, v)) * 255);
+  // the splat of a point: sd is the shore distance it is painted with (a waterline twin forces its side)
+  const paint = (x, z, h, sd) => {
+    pre.sd = sd; pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z); pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z);
+    pre.depth = sd < 0 ? Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h) + bedGrain(x, z) : -1;
+    splatAt(x, z, shadeAt(x, z), pre, wA, wB, wf);
+    for (let k = 0; k < 4; k++) { sa.push(q8(wA[k])); sb.push(q8(wB[k])); fl.push(q8(wf[k])); }
+  };
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));
     let v = map[key];
@@ -188,67 +235,63 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
         // bumps only where every quad sharing this vertex is subdivided, so band edges stay watertight
         const interior = a && b ? quadFine(i, j) : a ? quadFine(i, j) && quadFine(i, j - 1) : quadFine(i, j) && quadFine(i - 1, j);
         if (interior) h += shoreBumps(x, z, sd);
+        else tees.push(pos.length / 3, a ? ii - 1 : ii, a ? jj : jj - 1, a ? ii + 1 : ii, a ? jj : jj + 1); // its index, then its two ends' lattice keys
       }
     }
     v = pos.length / 3;
     pos.push(x - originX, h, z - originZ);
-    pre.sd = sd; pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z); pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z);
-    pre.depth = sd < 0 ? Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h) + bedGrain(x, z) : -1;
-    const sh = shadeAt(x, z);
-    const c = floorColor(classify(grid, x, z, sh, pre, fields), x, z, sh, paint);
-    col.push(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255));
-    bed.push(sd < 0 ? 1 : 0);
-    for (let f = 0; f < NFIELDS; f++) fv.push(fields[f]);
+    sdv.push(sd);
+    paint(x, z, h, sd);
     map[key] = v;
     return v;
   };
-  const field = (f, v) => fv[v * NFIELDS + f];
-  // the point where field f's isoline crosses the edge v-w, shared by the cells on both sides
+  // the point where the shoreline crosses the edge v-w, shared by the cells on both sides: a land vertex
+  // and a bed vertex at the same place
   const crossMap = new Map();
-  const crossing = (f, v, w) => {
-    const key = (v < w ? v * 1048576 + w : w * 1048576 + v) * 16 + f;
+  const crossing = (v, w) => {
+    const key = v < w ? v * 1048576 + w : w * 1048576 + v;
     let m = crossMap.get(key);
     if (m !== undefined) return m;
-    const rv = field(f, v), rw = field(f, w), t = rv / (rv - rw);
-    m = pos.length / 3;
-    pos.push(lerp(pos[v * 3], pos[w * 3], t), lerp(pos[v * 3 + 1], pos[w * 3 + 1], t), lerp(pos[v * 3 + 2], pos[w * 3 + 2], t));
-    const src = rv >= 0 ? w : v; // colour and flags from the outside end; the point is never a provoking vertex
-    col.push(col[src * 3], col[src * 3 + 1], col[src * 3 + 2]);
-    bed.push(bed[src]);
-    for (let q = 0; q < NFIELDS; q++) fv.push(-1); // never read: crossings are not cell corners
+    const rv = sdv[v], rw = sdv[w], t = rv / (rv - rw);
+    const px = lerp(pos[v * 3], pos[w * 3], t), py = lerp(pos[v * 3 + 1], pos[w * 3 + 1], t), pz = lerp(pos[v * 3 + 2], pos[w * 3 + 2], t);
+    const land = pos.length / 3;
+    pos.push(px, py, pz); sdv.push(0); paint(px + originX, pz + originZ, py, 0);
+    const bedV = pos.length / 3;
+    pos.push(px, py, pz); sdv.push(-1e-3); paint(px + originX, pz + originZ, py, -1e-3);
+    m = { land, bed: bedV };
+    twins.push(land, bedV);
     crossMap.set(key, m);
     return m;
   };
+  // A T-junction: the undivided neighbour sees only the edge's two ends, so the mid-edge vertex must carry
+  // exactly their average or the paint and the light step along the band's edge (its height already is)
+  const teeEnds = (k) => [vert(tees[k + 1], tees[k + 2]), vert(tees[k + 3], tees[k + 4])];
+  const evenTees = () => {
+    for (let k = 0; k < tees.length; k += 5) {
+      const m = tees[k], [e0, e1] = teeEnds(k);
+      for (let c = 0; c < 4; c++) {
+        sa[m * 4 + c] = (sa[e0 * 4 + c] + sa[e1 * 4 + c]) >> 1; sb[m * 4 + c] = (sb[e0 * 4 + c] + sb[e1 * 4 + c]) >> 1; fl[m * 4 + c] = (fl[e0 * 4 + c] + fl[e1 * 4 + c]) >> 1;
+      }
+    }
+  };
   let core = true;
   const tri = (a, b, c) => { idxAll.push(a, b, c); if (core) idx.push(a, b, c); };
-  // fan a polygon (in front-face order) from one of its own corners, which the flat colour is taken from
-  const fan = (poly, corners) => {
-    const L = poly.length;
-    let piv = 0;
-    for (let k = 0; k < L; k++) if (corners.has(poly[k])) { piv = k; break; }
-    const p0 = poly[piv];
-    for (let k = 1; k < L - 1; k++) tri(poly[(piv + k) % L], poly[(piv + k + 1) % L], p0);
-  };
+  const fan = (poly) => { for (let k = 1; k < poly.length - 1; k++) tri(poly[k], poly[k + 1], poly[0]); };
   const quad = (a, b, c2, d, flip) => {
     const P = [a, c2, d, b]; // front-face order around the cell
-    // the first field whose isoline crosses this cell cleanly (two sign changes) decides the cut
-    let f = -1;
-    for (let q = 0; q < NFIELDS && f < 0; q++) {
-      let changes = 0;
-      for (let k = 0; k < 4; k++) if ((field(q, P[k]) >= 0) !== (field(q, P[(k + 1) % 4]) >= 0)) changes++;
-      if (changes === 2) f = q;
-    }
-    if (f < 0) {
+    let changes = 0;
+    for (let k = 0; k < 4; k++) if ((sdv[P[k]] >= 0) !== (sdv[P[(k + 1) % 4]] >= 0)) changes++;
+    if (changes !== 2) { // no shoreline here (or a saddle): two plain triangles
       if (flip) { tri(a, c2, b); tri(b, c2, d); } else { tri(a, c2, d); tri(a, d, b); }
       return;
     }
-    const inside = [], outside = [], corners = new Set(P);
+    const inside = [], outside = [];
     for (let k = 0; k < 4; k++) {
-      const v = P[k], w = P[(k + 1) % 4], vin = field(f, v) >= 0;
+      const v = P[k], w = P[(k + 1) % 4], vin = sdv[v] >= 0;
       (vin ? inside : outside).push(v);
-      if (vin !== (field(f, w) >= 0)) { const m = crossing(f, v, w); inside.push(m); outside.push(m); }
+      if (vin !== (sdv[w] >= 0)) { const m = crossing(v, w); inside.push(m.land); outside.push(m.bed); }
     }
-    fan(inside, corners); fan(outside, corners);
+    fan(inside); fan(outside);
   };
   for (let j = j0 - 1; j < j0 + n + 1; j++) {
     for (let i = i0 - 1; i < i0 + n + 1; i++) {
@@ -264,6 +307,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
       }
     }
   }
+  evenTees();
   // smooth normals: every face around a vertex votes, weighted by its area (the unnormalised cross product)
   const nv = pos.length / 3;
   const acc = new Float32Array(nv * 3);
@@ -278,10 +322,37 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     acc[b * 3] += nx; acc[b * 3 + 1] += ny; acc[b * 3 + 2] += nz;
     acc[d * 3] += nx; acc[d * 3 + 1] += ny; acc[d * 3 + 2] += nz;
   }
-  const nrm = new Int8Array(nv * 3);
-  for (let k = 0; k < nv; k++) {
-    const x = acc[k * 3], y = acc[k * 3 + 1], z = acc[k * 3 + 2], L = Math.hypot(x, y, z) || 1;
-    nrm[k * 3] = Math.round((x / L) * 127); nrm[k * 3 + 1] = Math.round((y / L) * 127); nrm[k * 3 + 2] = Math.round((z / L) * 127);
+  // the two halves of a waterline vertex each saw only their own side's faces: give both the sum
+  const joinTwins = (a3) => {
+    for (let k = 0; k < twins.length; k += 2) {
+      const a = twins[k] * 3, b = twins[k + 1] * 3;
+      for (let c = 0; c < 3; c++) { const s = a3[a + c] + a3[b + c]; a3[a + c] = s; a3[b + c] = s; }
+    }
+  };
+  joinTwins(acc);
+  const unit = (a3) => { for (let k = 0; k < nv; k++) { const x = a3[k * 3], y = a3[k * 3 + 1], z = a3[k * 3 + 2], L = Math.hypot(x, y, z) || 1; a3[k * 3] = x / L; a3[k * 3 + 1] = y / L; a3[k * 3 + 2] = z / L; } };
+  unit(acc);
+  // Then smoothed twice over the faces around each vertex. The DEM is noisy at the 10 m cell, so the raw
+  // normals of neighbouring vertices disagree and the smooth light kinked at every triangle edge, which drew
+  // the mesh on the ground; smoothed, the light follows the landform, not the cells (the shader adds its own
+  // fine relief, terrain.js). Ledges and the shore stay readable: the kernel is one ring wide, kept twice.
+  let cur = acc, nxt = new Float32Array(nv * 3);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let k = 0; k < nv * 3; k++) nxt[k] = cur[k] * 2;
+    for (let t = 0; t < idxAll.length; t += 3) {
+      const a = idxAll[t] * 3, b = idxAll[t + 1] * 3, d = idxAll[t + 2] * 3;
+      for (let c = 0; c < 3; c++) { const sum = cur[a + c] + cur[b + c] + cur[d + c]; nxt[a + c] += sum; nxt[b + c] += sum; nxt[d + c] += sum; }
+    }
+    joinTwins(nxt); unit(nxt);
+    const tmp = cur; cur = nxt; nxt = tmp;
   }
-  return { pos: new Float32Array(pos), col: new Uint8Array(col), nrm, bed: new Uint8Array(bed), idx: new Uint32Array(idx) };
+  for (let k = 0; k < tees.length; k += 5) {
+    const m = tees[k] * 3, [e0, e1] = teeEnds(k);
+    let x = cur[e0 * 3] + cur[e1 * 3], y = cur[e0 * 3 + 1] + cur[e1 * 3 + 1], z = cur[e0 * 3 + 2] + cur[e1 * 3 + 2];
+    const L = Math.hypot(x, y, z) || 1; x /= L; y /= L; z /= L;
+    cur[m] = x; cur[m + 1] = y; cur[m + 2] = z;
+  }
+  const nrm = new Int8Array(nv * 3);
+  for (let k = 0; k < nv * 3; k++) nrm[k] = Math.round(cur[k] * 127);
+  return { pos: new Float32Array(pos), nrm, splatA: new Uint8Array(sa), splatB: new Uint8Array(sb), floor: new Uint8Array(fl), idx: new Uint32Array(idx) };
 }

@@ -69,3 +69,26 @@ baked lightmaps, no PBR, no external assets.
 - `npx -y eslint@8 --no-eslintrc --env browser,es2022,worker --parser-options=ecmaVersion:2023,sourceType:module --rule 'no-undef: error' src/` before committing.
 - Shader uniforms added through `onBeforeCompile` go in the declarations, not the body; `vColor` is a vec4
   in r186; alpha-tested cards cast shadows only when the material sets `alphaTest` so the depth pass sees it.
+
+## The shared light (from pass 1)
+
+- Every lit material composes `src/shading.js`: start from a `MeshLambertMaterial`, call `applyLook(shader, { wrap })`
+  first in `onBeforeCompile`, then patch; or use `makeLookMaterial(params, { wrap, name, compile })`. Give each
+  variant its own `name` (it keys the program cache). `wrap`: 0 for ground, rock, bark and props; 0.667 for
+  foliage (`dotNL * 0.6 + 0.4`); `'varying'` reads `attribute float aWrap` per vertex (vegetation: `smoothToon`
+  in `rocks.js` tags leaves 0.667 and bark 0). `lookSky` (fragment float, default 1) scales the hemisphere fill
+  for a point that sees less sky. `lookHash`, `lookNoise`, `lookFbm`, `lookFade` are world-space noise in both
+  stages (integer-lattice hashes: exact at any coordinate, no seams).
+- The fog hook: `lookFog.pars` is declared after `<fog_pars_fragment>` and `lookFog.fragment` replaces
+  `<fog_fragment>` in every composed material. Today it is fog.js's haze. Pass 4 sets the two strings before
+  materials compile.
+- Occlusion is baked per vertex into the colour (`src/occlusion.js` `bakeOcclusion(geo, { rays, reach, ground,
+  floor })`): `smoothToon`, `creasedToon` and `angularRock` call it, so every tree, shrub, boulder, outcrop and
+  the hull carry it. New geometry for passes 2 and 3 should go through the same call. There is no screen-space
+  AO pass any more.
+- Shadows: `sunlight.js` replaces three's per-pixel-rotated PCF disc with a fixed 5 x 5 tent of hardware taps,
+  `shadow.radius / 2` texels apart, so penumbrae are smooth and do not crawl when the view turns.
+- The ground: `terrain-build.js` `splatAt` writes eight material weights (`aSplatA` duff, moss, meadow, burn;
+  `aSplatB` rock, dark rock, lichen rock, shore) and `aFloor` (canopy shade, sunny stand, bed, bed depth); the
+  shader (`terrain.js` `glslGround`, uniforms `groundUniforms`) blends them. The ground cover evaluates the same
+  `groundColor` from the class map plus the cover atlas's fourth byte (moss and shade nibbles).
