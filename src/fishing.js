@@ -477,6 +477,7 @@ export class Fishing {
     const p = this.player, inp = this.input;
     if (inp.pressed('KeyL')) this.logOpen = !this.logOpen;
     const afloat = p.mode === 'paddle' && !p.landing && !p.ashore && !p.teleporting;
+    this.rod.visible = p.mode === 'paddle'; // it lies in the hull: not on your shoulders, on the bank or in the water
     if (!afloat && this.rodUp) this.stow();
     if (afloat && inp.pressed('KeyF')) {
       if (!this.rodUp) this.raise();
