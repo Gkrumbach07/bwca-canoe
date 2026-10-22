@@ -614,6 +614,10 @@ export class Player {
     this.x = nx; this.z = nz;
     st.walkSpeed += ((Math.abs(this.speed) > 0.05 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
     st.walk += Math.abs(this.speed) * dt * 4.2;
+    // which way the legs are going, in the body's frame, for the rig: ahead (1) or back (-1), and across to
+    // the right (1) or left (-1); the pose blends a stride, a back-step and a side-step from these
+    const goF = moving ? mx * f.x + mz * f.z : 0, goL = moving ? mx * -f.z + mz * f.x : 0, kd = 1 - Math.exp(-dt * 10);
+    st.moveFwd += (goF - st.moveFwd) * kd; st.moveLat += (goL - st.moveLat) * kd;
     this.placeOnGround();
     // where you are, for the HUD header
     if (camp) { const id = this.nearWater(camp.x, camp.z, 6); this.placeName = camp.name ? `${camp.name} campsite` : `Campsite${id ? ' · ' + (w.lakeName(id) || 'unnamed water') : ''}`; }

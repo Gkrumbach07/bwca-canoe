@@ -206,8 +206,10 @@ export function buildCanoeRig() {
     stroke: 0,           // 0..1 phase
     side: 1,             // +1 starboard, -1 port
     power: 0,            // 0..1 how hard we are paddling (blends toward rest pose)
-    walk: 0,             // walk cycle phase in carry mode
-    walkSpeed: 0,
+    walk: 0,             // walk cycle phase on foot
+    walkSpeed: 0,        // 0..1: moving or not, eased
+    moveFwd: 0,          // -1..1: the legs go ahead (1) or back (-1), in the body's frame (player.js, on foot)
+    moveLat: 0,          // -1..1: the legs go to the right (1) or the left (-1); a side-step
     gripT: V(0, 0, 0), bladeT: V(0, 0, 0), grip: V(0, 0.8, 0), blade: V(0, -0.2, 0.8),
     fishing: null,       // { L, R }: hand targets in rig space while the rod is up (fishing.js); the paddle rests
   };
@@ -282,22 +284,31 @@ export function buildCanoeRig() {
     parts['hand' + which].position.copy(S.hand);
   }
 
-  // the standing figure's legs and body, shared by carrying and walking free: a little lean and a hip sway
-  // that grow with the pace, knees never quite locked
+  // the standing figure's legs and body, shared by carrying and walking free: a stride ahead, a back-step
+  // (the same stride run the other way, leaning back a little) or a side-step (the feet shift across the body
+  // together as the weight moves between them, the lifted foot clearing the ground, the body leaning into
+  // the step), blended by the way the legs are going; a little lean and a hip sway grow with the pace, knees
+  // never quite locked
   const SHOULDER_Y = 1.42;
   function poseStanding(p, bob) {
-    const ws = state.walkSpeed, lean = 0.06 + 0.1 * ws, sway = Math.sin(p) * ws;
-    parts.hips.position.set(0, 0.9 + bob, 0); parts.hips.rotation.set(0, 0.1 * sway, 0);
-    parts.torso.position.set(0.03 + lean * 0.2, 1.22 + bob, 0); parts.torso.rotation.set(0, -0.06 * sway, -lean);
-    parts.head.position.set(0.05 + lean * 0.4, 1.55 + bob, 0); parts.head.rotation.set(0, 0, 0);
-    parts.hat.position.set(0.05 + lean * 0.4, 1.66 + bob, 0); parts.crown.position.set(0.05 + lean * 0.4, 1.72 + bob, 0);
+    const ws = state.walkSpeed, mf = state.moveFwd, ml = state.moveLat;
+    const fs = mf < 0 ? -1 : 1, fAmp = ws * Math.min(1, Math.abs(mf) + 0.25 * (1 - Math.abs(ml))); // the stride and its direction
+    const dir = ml < 0 ? -1 : 1, lAmp = ws * Math.abs(ml);                                           // the side-step and its direction
+    const lean = 0.06 + 0.1 * ws * fs, sway = Math.sin(p) * fAmp;
+    const tilt = 0.12 * lAmp * dir, shift = 0.05 * lAmp * dir; // into the side-step: rolling about x tips the body toward +z, the figure's right
+    parts.hips.position.set(0, 0.9 + bob, shift * 0.4); parts.hips.rotation.set(tilt * 0.5, 0.1 * sway, 0);
+    parts.torso.position.set(0.03 + lean * 0.2, 1.22 + bob, shift); parts.torso.rotation.set(tilt, -0.06 * sway, -lean);
+    parts.head.position.set(0.05 + lean * 0.4, 1.55 + bob, shift * 1.4); parts.head.rotation.set(tilt * 0.5, 0, 0);
+    parts.hat.position.set(0.05 + lean * 0.4, 1.66 + bob, shift * 1.4); parts.crown.position.set(0.05 + lean * 0.4, 1.72 + bob, shift * 1.4);
     for (const sgn of [-1, 1]) {
       const ph = p + (sgn < 0 ? Math.PI : 0);
-      const th = Math.sin(ph) * 0.55 * ws + 0.05;                               // thigh fore and aft
-      const sh = th - Math.max(0, Math.sin(ph + 0.6)) * 0.8 * ws - 0.1;        // the knee bends as the leg comes through
+      const th = Math.sin(ph) * 0.55 * fAmp * fs + 0.05;                               // thigh fore and aft, the other way on a back-step
+      const sh = th - Math.max(0, Math.sin(ph + 0.6) * fs) * 0.8 * fAmp - 0.1;        // the knee bends as the leg comes through
+      const off = 0.26 * lAmp * dir * Math.sin(p);                                      // both feet across the body together
+      const lift = 0.14 * lAmp * Math.max(0, (sgn === dir ? 1 : -1) * Math.cos(p));    // the leading foot reaching out, the trailing one closing
       S.hipL.set(0, 0.9 + bob, sgn * 0.11);
-      S.knee.set(Math.sin(th) * 0.44, 0.9 + bob - Math.cos(th) * 0.44, sgn * 0.12);
-      S.foot.set(S.knee.x + Math.sin(sh) * 0.44, Math.max(0.03, S.knee.y - Math.cos(sh) * 0.44), sgn * 0.13);
+      S.knee.set(Math.sin(th) * 0.44, 0.9 + bob - Math.cos(th) * 0.44 - lift * 0.35, sgn * 0.12 + off * 0.55 + sgn * lift * 0.4);
+      S.foot.set(S.knee.x + Math.sin(sh) * 0.44, Math.max(0.03 + lift, S.knee.y - Math.cos(sh) * 0.44), sgn * 0.13 + off);
       limb(sgn < 0 ? parts.thighL : parts.thighR, S.hipL, S.knee);
       limb(sgn < 0 ? parts.shinL : parts.shinR, S.knee, S.foot);
     }
@@ -311,8 +322,9 @@ export function buildCanoeRig() {
     const p = state.walk, bob = 0.03 * Math.abs(Math.sin(p)) * state.walkSpeed;
     poseStanding(p, bob);
     for (const sgn of [-1, 1]) {
-      const sw = Math.sin(p + (sgn < 0 ? 0 : Math.PI)) * 0.45 * state.walkSpeed; // opposite the leg on that side
-      S.hand.set(0.04 + Math.sin(sw) * 0.5, SHOULDER_Y + bob - Math.cos(sw) * 0.58, sgn * 0.27);
+      const swing = state.walkSpeed * Math.max(0.2, Math.abs(state.moveFwd)); // the arms swing with the stride, hang on a side-step
+      const sw = Math.sin(p + (sgn < 0 ? 0 : Math.PI)) * 0.45 * swing; // opposite the leg on that side
+      S.hand.set(0.04 + Math.sin(sw) * 0.5, SHOULDER_Y + bob - Math.cos(sw) * 0.58, sgn * 0.27 + 0.05 * state.moveLat * state.walkSpeed);
       armTo(sgn < 0 ? 'L' : 'R', S.hand, 0, SHOULDER_Y + bob);
     }
   }

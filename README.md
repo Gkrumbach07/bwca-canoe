@@ -110,7 +110,8 @@ lines, the key hints, the HUD size and colour-blind marks.
 
 Paddle up to any bank and press **E**: the canoe noses in, you step out, and you choose to **E** shoulder
 it or **Q** leave it beached there, bow on the land. On foot WASD walks relative to the view (W into the
-screen, D to its right; the walker turns to face the way and goes), about 2.2 m/s (3.2 with Shift, 1.8
+screen, D to its right; with the mouse look the body faces the look and the walker strides, backs up or side-steps
+as the keys say), about 2.2 m/s (3.2 with Shift, 1.8
 with the canoe on your shoulders): a brisk game pace rather than a measured walk, since the canoe runs
 quick too. The woods walk at the same pace as a portage trail; only the hills cost, less on a graded trail,
 and a slope past 40° stops you. Trunks and walls hold you off and you slide round them, and water past
