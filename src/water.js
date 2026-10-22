@@ -145,7 +145,8 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
 const frag = /* glsl */ `
   uniform float uTime, uReflOn, uClarity;
   uniform vec3 uSunDir, uWater, uWaterDeep, uReflect, uFoam;
-  uniform vec3 uStain;        // multiplier that turns clear-lake water into tannin-stained water
+  uniform vec3 uStain;        // tannin-stained water at unit luminance (the day cycle's brightness carries over)
+  uniform vec2 uOrigin;
   uniform sampler2D uReflection;
   uniform vec2 uPatchLocal;
   uniform float uPatchHalf;
@@ -179,9 +180,15 @@ const frag = /* glsl */ `
     float tone = smoothstep(0.006, 0.016, d) - smoothstep(0.006, 0.016, -d);   // -1 .. 1
     // the lake's own colour: tea-stained bog water at a Secchi depth of a metre or two, blue-green past five
     float clear = smoothstep(1.2, 6.0, vClarity);
-    vec3 tint = mix(uStain, vec3(1.0), clear);
-    vec3 water = uWater * tint, deep = uWaterDeep * tint;
-    vec3 col = mix(mix(water, deep, smoothstep(0.0, 4.0 + 1.5 * vClarity, vDepth)), uReflect, 0.12 * (0.6 + 0.4 * clear)) * (1.0 + 0.08 * tone);
+    float lum = dot(uWater, vec3(0.3, 0.5, 0.2));
+    vec3 water = mix(lum * uStain, uWater, clear);
+    vec3 deep = water * (uWaterDeep.g / max(uWater.g, 1e-4));
+    vec3 body = mix(water, deep, smoothstep(0.0, 4.0 + 1.5 * vClarity, vDepth));
+    // the sky shows in the surface only at grazing angles: dark looking down beside the canoe, silver toward the far shore
+    vec3 camRel = vec3(cameraPosition.x - uOrigin.x, cameraPosition.y, cameraPosition.z - uOrigin.y);
+    vec3 v = normalize(camRel - vLocal);
+    float fresnel = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+    vec3 col = mix(body, uReflect, mix(0.04, 0.55, fresnel)) * (1.0 + 0.08 * tone);
     col *= 0.72 + 0.28 * shadow;
     // the canoe's reflection, nothing else
     vec4 r = texture2DProj(uReflection, vReflectUv);
@@ -231,11 +238,11 @@ export class WaterSystem {
       uTime: { value: 0 },
       uSunDir: { value: sunDir.clone() },
       uWater: { value: new THREE.Color(palette.water) },
-      uWaterDeep: { value: new THREE.Color(palette.water).multiplyScalar(0.72) },
+      uWaterDeep: { value: new THREE.Color(palette.water).multiplyScalar(0.55) },
       uReflect: { value: new THREE.Color(palette.reflect) },
       uFoam: { value: new THREE.Color(0xf2f6f6) },
       uClarity: { value: 1.0 },
-      uStain: { value: new THREE.Color(0.86, 0.74, 0.42) },
+      uStain: { value: new THREE.Color(1.0, 0.74, 0.4) },
       uReflection: { value: null },
       uReflOn: { value: 0 },
       uTextureMatrix: { value: new THREE.Matrix4() },

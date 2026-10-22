@@ -20,7 +20,7 @@ const T = {
   horizon: [0x141c28, 0x2b3a55, 0xf1b27a, 0xe6d4b2, 0xc9dceb],
   skySun: [0x000000, 0x000000, 0xffb070, 0xffe0b0, 0xfff2cc],
   ground: [0x0d1210, 0x1e241e, 0x6b6e5a, 0x8e9a7e, 0x9aa58a],
-  water: [0x101a26, 0x1b2b3c, 0x6a8aa4, 0x7fafc6, 0x86b8cf],
+  water: [0x0c141e, 0x172636, 0x3e6c84, 0x3f7f9c, 0x3b85a4],   // clear-lake water: darker than the sky, a saturated teal by day
   reflect: [0x101828, 0x202d44, 0xcf9f7a, 0xcbd3d8, 0xc9dde8],
   cloudTop: [0x1f2634, 0x2e3648, 0xffc29a, 0xfbe9d2, 0xfbf8f1],
   cloudBase: [0x101522, 0x1c2434, 0x7d6f94, 0x9fb0cc, 0xa6bfd9],
@@ -106,7 +106,7 @@ export class DayCycle {
     const wu = t.water.uniforms;
     wu.uWater.value.copy(this.lerpColor('water', c));
     wu.uReflect.value.copy(this.lerpColor('reflect', c));
-    wu.uWaterDeep.value.copy(wu.uWater.value).multiplyScalar(0.72);
+    wu.uWaterDeep.value.copy(wu.uWater.value).multiplyScalar(0.55);
     wu.uFoam.value.copy(this.lerpColor('foam', c));
     if (t.ripples) t.ripples.material.uniforms.uColor.value.copy(wu.uFoam.value);
     if (t.hullFoam) t.hullFoam.color.copy(wu.uFoam.value);
