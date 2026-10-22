@@ -4,6 +4,7 @@ import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt } from './terrain-build.js';
 import { angularRock, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
+import { SPECIES as SP } from './placement.js';
 
 // Resample a polyline at roughly `step` metre spacing.
 export function resample(pts, step) {
@@ -20,12 +21,13 @@ export function resample(pts, step) {
   return out;
 }
 
-// Vegetation exclusion segments: [x1,z1,x2,z2,radius]
+// Vegetation exclusion segments: [x1,z1,x2,z2,radius]. A negative radius is a lawn (placement.js): the
+// trees and brush stay off it but the grass grows through.
 export function exclusionsFor(world) {
   const segs = [];
   for (const p of world.portages) for (let i = 1; i < p.pts.length; i++) segs.push([p.pts[i - 1][0], p.pts[i - 1][1], p.pts[i][0], p.pts[i][1], 2.2]);
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
-  for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, 36]); // the cleared ground around an outfitter's dock
+  for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, -36]); // the mown yard around an outfitter's dock
   return segs;
 }
 
@@ -159,6 +161,23 @@ export function buildTileProps(tg, world, tx, ty) {
     rocks.computeBoundingSphere();
     rocks.matrixAutoUpdate = false;
     group.add(rocks);
+  }
+  // The fallen trunks, stumps and granite outcrops the worker placed with the trees (placement.js) hold the
+  // walker off too: a trunk as a box along its length (vegetation.js builds it 6.4–7.2 m along local x), a
+  // stump and an outcrop as circles of their scale that a carried canoe rides over (rock). They are read from
+  // the tile's vegetation meshes (one per bin, holding all of its instances), which tiles.js makes before it
+  // builds the props.
+  const entry = world.tiles && world.tiles.tiles && world.tiles.tiles.get(`${tx},${ty}`);
+  if (entry && entry.veg) for (const mesh of entry.veg) {
+    const sp = mesh.userData.sp;
+    if (sp !== SP.log && sp !== SP.stump && sp !== SP.outcrop) continue;
+    const m = mesh.instanceMatrix.array, log = sp === SP.log, foot = sp === SP.stump ? 0.3 : 0.95;
+    for (let i = 0; i < mesh.instanceMatrix.count; i++) {
+      const o = i * 16, sx = Math.hypot(m[o], m[o + 1], m[o + 2]), sz = Math.hypot(m[o + 8], m[o + 9], m[o + 10]);
+      const x = m[o + 12] + ox, z = m[o + 14] + oz;
+      if (log) obstacles.push({ x, z, ux: m[o] / sx, uz: m[o + 2] / sx, hx: 3.4 * sx, hz: 0.36 * sz, box: true });
+      else obstacles.push({ x, z, r: foot * sx, rock: true });
+    }
   }
   return group;
 }
