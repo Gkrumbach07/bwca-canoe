@@ -15,8 +15,37 @@ export function toonRamp() {
   return ramp;
 }
 
+// The backlit rim: where the sun is behind a surface and the eye looks toward it, the silhouette gets a
+// thin warm edge (a Fresnel term gated by the view-sun angle). The uniforms are shared by every toon
+// material, so setToonSun moves them all at once; main.js feeds it the day's sun direction.
+const SUN = { uSunDir: { value: new THREE.Vector3(-0.62, 0.36, 0.46).normalize() }, uRim: { value: new THREE.Color(0xffe0b4) }, uRimAmt: { value: 0.5 } };
+export function setToonSun(dir, amount = 1) {
+  SUN.uSunDir.value.copy(dir).normalize();
+  SUN.uRimAmt.value = 0.5 * amount * THREE.MathUtils.smoothstep(dir.y, -0.02, 0.14);
+}
+// Patches a toon shader with the rim. New uniforms go in the declarations (after <common>), not the body.
+export function rimCompile(shader) {
+  Object.assign(shader.uniforms, SUN);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec3 uSunDir;\nuniform vec3 uRim;\nuniform float uRimAmt;')
+    .replace('#include <opaque_fragment>', [
+      '{',
+      '  vec3 rimV = normalize(vViewPosition);',
+      '  vec3 rimL = normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz);',
+      '  float rimF = smoothstep(0.6, 1.0, 1.0 - saturate(dot(normal, rimV)));', // the silhouette band
+      '  float rimB = smoothstep(0.35, 0.85, dot(-rimV, rimL));',                 // the sun behind the surface, toward the eye
+      '  float rimS = smoothstep(-0.3, 0.4, dot(normal, rimL));',                 // on the edge that faces the sun
+      '  outgoingLight += uRim * mix(diffuseColor.rgb, vec3(1.0), 0.5) * (uRimAmt * rimF * rimB * rimS);',
+      '}',
+      '#include <opaque_fragment>',
+    ].join('\n'));
+}
+
 export function makeToonMaterial(opts = {}) {
-  return new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp(), ...opts });
+  const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp(), ...opts });
+  m.onBeforeCompile = rimCompile;
+  m.customProgramCacheKey = () => 'toon-rim';
+  return m;
 }
 export function makeRockMaterial() { return makeToonMaterial(); }
 
