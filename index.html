@@ -36,6 +36,42 @@
     #tiles { position: fixed; top: 254px; right: 20px; width: 260px; box-sizing: border-box; font-size: 11px; opacity: .6; text-align: right; }
     #entry { position: fixed; top: 96px; left: 20px; font: 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #f4efe4; background: rgba(10, 24, 32, .6); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 5px 8px; max-width: 260px; }
     #entry:focus { outline: 1px solid #e8c270; }
+    #trip { top: 134px; left: 20px; font-size: 13px; opacity: .9; }
+    #trip-bar { display: inline-block; width: 92px; height: 7px; background: rgba(255,255,255,.18); border-radius: 4px; vertical-align: middle; margin-right: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,.18); }
+    #trip-fill { display: block; height: 100%; width: 100%; background: #8fd38f; transition: width .4s, background .4s; }
+    #trip.low #trip-text { color: #ffb08a; }
+    #note { left: 50%; bottom: 112px; transform: translateX(-50%); font: italic 16px Georgia, "Times New Roman", serif; color: #f4efe4; background: rgba(10, 24, 32, .55); padding: 7px 16px; border-radius: 8px; opacity: 0; transition: opacity .35s; white-space: nowrap; max-width: 90vw; }
+    #note.show { opacity: 1; }
+    #paneldim { position: fixed; inset: 0; background: rgba(6, 16, 24, .45); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 4; }
+    #paneldim.show { opacity: 1; pointer-events: auto; }
+    #outfitter { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(900px, 92vw); max-height: 86vh; overflow: auto; box-sizing: border-box; display: none; z-index: 5; font: 15px Georgia, "Times New Roman", serif; color: #2c2114; background: #f4ecd8; border: 2px solid #8a7250; border-radius: 6px; box-shadow: 0 18px 60px rgba(0,0,0,.55); padding: 18px 24px 20px; }
+    #outfitter.show { display: block; }
+    #outfitter h2 { margin: 0; font-size: 27px; font-weight: 600; letter-spacing: .01em; }
+    #outfitter .sub { opacity: .75; font-style: italic; margin-top: 3px; }
+    #outfitter .cols { display: grid; grid-template-columns: 1fr 1.35fr 1fr; gap: 22px; margin-top: 16px; }
+    #outfitter h3 { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 8px; border-bottom: 1px solid #c9b995; padding-bottom: 4px; font-weight: 600; }
+    #outfitter p { margin: 6px 0; line-height: 1.45; }
+    #outfitter button { font: 600 13px Georgia, "Times New Roman", serif; border-radius: 4px; padding: 5px 12px; cursor: pointer; border: 1.5px solid #8a7250; background: #e9e1cc; color: #2c2114; }
+    #outfitter button:hover { filter: brightness(1.06); }
+    #outfitter button.go { background: #c0392b; border-color: #8e2a20; color: #fbf3e4; }
+    #outfitter button.quiet { background: transparent; opacity: .85; }
+    #outfitter .close { position: absolute; top: 8px; right: 12px; border: none; background: none; font-size: 24px; color: #8a7250; padding: 2px 6px; }
+    #outfitter .days { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; }
+    #outfitter .days b { font-size: 24px; min-width: 1.4em; text-align: center; }
+    #outfitter .days button { width: 32px; padding: 3px 0; font-size: 16px; }
+    #outfitter .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+    #outfitter .task { border: 1px solid #d5c6a4; border-radius: 5px; padding: 8px 10px; margin-bottom: 8px; background: rgba(255,255,255,.35); }
+    #outfitter .task.done { border-color: #7a9a5a; background: rgba(140, 180, 110, .18); }
+    #outfitter .task .kind, #outfitter .kind-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
+    #outfitter .kind-head { margin: 12px 0 6px; }
+    #outfitter .task .clue { margin: 4px 0 7px; line-height: 1.45; }
+    #outfitter .tag { font-size: 13px; font-style: italic; color: #3f5a2a; }
+    #outfitter .muted { opacity: .7; font-style: italic; }
+    #outfitter ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.5; }
+    #evac { position: fixed; inset: 0; background: #0b1a24; opacity: 0; pointer-events: none; transition: opacity 1.4s; z-index: 6; display: flex; align-items: center; justify-content: center; text-align: center; font: italic 19px Georgia, "Times New Roman", serif; color: #f4efe4; line-height: 1.7; padding: 0 10vw; }
+    #evac.show { opacity: 1; pointer-events: auto; }
+    #evac b { font-style: normal; font-size: 24px; }
+    @media (max-width: 760px) { #outfitter .cols { grid-template-columns: 1fr; } }
     #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 30%, #1f4e5c, #0b1a24 70%); z-index: 10; transition: opacity .6s; }
     #loading h1 { font-weight: 600; font-size: 34px; margin: 0 0 6px; }
     #loading p { margin: 0; opacity: .8; font-size: 14px; }
@@ -82,18 +118,28 @@
   <div id="spot" class="hud"></div>
   <div id="meter" class="hud"><div class="track"><i class="safe"></i><i class="red"></i><i class="fill" id="meter-fill"></i></div><div class="label" id="meter-label"></div></div>
   <div id="lures" class="hud"></div>
+  <div id="trip" class="hud"><span id="trip-bar"><i id="trip-fill"></i></span><span id="trip-text"></span></div>
+  <div id="note" class="hud"></div>
   <div id="prompt" class="hud"></div>
   <div id="catchlog"></div>
   <div id="help" class="hud">
     <b>W/S</b> paddle &nbsp; <b>A/D</b> turn &nbsp; <b>Shift</b> hustle &nbsp; <b>Space</b> brace in waves<br/>
-    <b>F</b> fishing rod &nbsp; <b>Space / mouse</b> cast, set the hook, reel &nbsp; <b>1-5</b> lures &nbsp; <b>L</b> catch log<br/>
-    <b>E</b> go ashore / launch / set the canoe down &nbsp; <b>Q</b> shoulder it / leave it &nbsp; <b>M</b> map &nbsp; <b>V</b> view &nbsp; <b>1-3</b> game speed &nbsp; <b>R</b> reflections<br/>
+    <b>F</b> fishing rod &nbsp; <b>Space / mouse</b> cast, set the hook, reel &nbsp; <b>1-5</b> lures &nbsp; <b>L</b> catch log &nbsp; <b>G</b> eat<br/>
+    <b>E</b> go ashore / launch / set the canoe down / outfitter / pick up &nbsp; <b>Q</b> shoulder it / leave it &nbsp; <b>M</b> map &nbsp; <b>V</b> view &nbsp; <b>1-3</b> game speed &nbsp; <b>R</b> reflections<br/>
     <b>[ ]</b> time of day &nbsp; <b>P</b> pause time &nbsp; <b>N</b> sound &nbsp; <b>, .</b> wind &nbsp; <b>/</b> veer &nbsp; <b>;</b> let the wind be<br/>
     mouse to look (first person: the view follows the cursor; third person: drag to orbit) &nbsp; wheel to zoom &nbsp; on the map: drag, wheel, click a spot to paddle in there
   </div>
   <div id="mapdim"></div>
   <canvas id="minimap" width="1040" height="680"></canvas>
   <div id="tp"><span id="tp-text">Paddle in here?</span><button id="tp-go" class="go" title="Enter">Paddle in</button><button id="tp-cancel" title="Esc">Cancel</button></div>
+  <div id="paneldim"></div>
+  <div id="outfitter">
+    <button class="close" data-act="close" title="Esc">×</button>
+    <h2 id="of-name">Outfitter</h2>
+    <div class="sub" id="of-sub"></div>
+    <div class="cols"><section id="of-trip"></section><section id="of-board"></section><section id="of-log"></section></div>
+  </div>
+  <div id="evac"><div id="evac-text"></div></div>
   <div id="gps"><span class="dot"></span><span id="gps-state">GPS sim: no extension</span><br/><b id="gps-coords">–</b></div>
   <div id="tiles" class="hud"></div>
   <div id="credit">Terrain: USGS 3DEP via AWS Terrain Tiles · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors</div>

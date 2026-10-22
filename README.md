@@ -65,9 +65,10 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | A / D | turn (sweep strokes; steering on foot) |
 | Shift | hustle (on foot, a jog) |
 | Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
-| E | go ashore when the canoe is close to a bank; portage when near a landing; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
+| E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
 | Q | the second choice at a shore: go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it |
 | F | take up the fishing rod / put it down (see *Fishing*) |
+| G | eat a meal (when the canoe is still) |
 | Space / mouse button | with the rod up: hold to load a cast and let go (it goes where the cursor points); set the hook on a bite; hold to reel in a fight |
 | 1 – 5 | with the rod up: jig, spinner, spoon, crankbait, leech under a bobber |
 | K / E | keep the landed fish on the stringer / let it go |
@@ -145,6 +146,39 @@ tints, 10 m contours, pale-blue lakes with depth contours and figures where the 
 (every 2 m to 10 m, then every 5 m and 10 m), red dashed portages with rod counts, red campsite dots and
 serif lake names. It is a window around the canoe: loaded tiles are drawn from their own cells, the 80 m far
 field fills in beyond them. `M` opens it wide.
+
+## Trips and tasks
+
+Every BWCA entry point landing has an outfitter: a dock, a shack with the name over the door (the Ely,
+Sawbill and Gunflint outfitters where they are well known, plausible ones elsewhere; the list is in
+`src/outfitter.js`) and a canoe rack. The game opens at the Lake One landing with the outfitter's panel up;
+within 25 m of any landing **E** opens it again. The panel has three parts:
+
+- **The trip.** Choose 2 to 7 days of food and push off. Food is the only supply for now: a day of food is a
+  meal at dawn and one at dusk, and a little weight on the portages (`player.loadFactor`, which slows the walk a
+  little and so lengthens it). At any landing you can repack to a new number of days or **end the trip** there.
+- **The task board.** Two or three tasks written from the real map (`src/tasks.js`), each with a clue that
+  names the lake, how many portages in it lies, the rod count, which side of the lake, and whether the
+  campsite is on an island, a point or in a bay (read off the tile's own cells). Three kinds: a *lost item*
+  at a campsite a few portages from the landing (a paddle, a locket or a dry bag appears where the canoes
+  pull up below the site; **E** within a few metres picks it up), a *survey* (walk a portage to its far landing,
+  or paddle to a lake and find the put-in of a named portage), and a *fish* from a named lake (completed through
+  `tasks.onCatch(species, lakeId, lengthCm)`, which the fishing code calls; the kind is hidden while
+  `window.__game.fishing` is absent). Take one or several; a finished task is turned in at **any** outfitter.
+- **Your log.** A tally of tasks turned in and the gear they unlocked: placeholder lures by name, and a Kevlar
+  canoe that takes some weight off the portages. **New trip** forgets the trip, the log and the gear.
+
+**Energy** (`src/energy.js`) is the bar under the entry point list. It drains slowly with the clock, with the
+paddle (speed, hustle, a wind on the bow) and on the portages (more with a heavy pack); it comes back when you
+sit still, three times as fast at a campsite and twice as fast after a meal. Meals happen on their own at
+sunrise and sunset while there is food, or with **F** when the canoe is still. With the pack empty and the bar
+under 15 % the HUD says so, gently; at zero the outfitter sends a boat: a short fade, a line, and you are back
+at the nearest landing with a fresh pack. Nothing else is lost. The big map (**M**) shows each task on the go as
+a soft circle around its lake, never the spot, and the outfitters as docks.
+
+The trip (food, energy, position, tasks taken and done, the tally and the gear) is kept in `localStorage`
+(`bwca-canoe-trip`) and resumes where you left it. The board is there if you want it; the lake is there if you
+don't.
 
 ## Data pipeline
 

@@ -7,12 +7,13 @@ import { GROUND, surfaceAt } from './terrain-build.js';
 export class Input {
   constructor() {
     this.down = new Set(); this.once = new Set();
+    this.paused = false; // a panel is open: keys are not the paddle's
     window.addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'SELECT') return; if (e.repeat) return; this.down.add(e.code); this.once.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); });
     window.addEventListener('keyup', (e) => this.down.delete(e.code));
     window.addEventListener('blur', () => this.down.clear());
   }
-  held(...codes) { return codes.some((c) => this.down.has(c)); }
-  pressed(code) { const p = this.once.has(code); this.once.delete(code); return p; }
+  held(...codes) { return !this.paused && codes.some((c) => this.down.has(c)); }
+  pressed(code) { const p = this.once.has(code); this.once.delete(code); return p && !this.paused; }
   endFrame() { this.once.clear(); }
 }
 
@@ -53,6 +54,8 @@ export class Player {
     this.bubbleAcc = 0; this.prevStroke = 0; this.level = 0;
     this.teleporting = false;
     this.fishing = null; // set by main: while its rod is up the paddle rests and W / Space / E belong to it
+    this.loadFactor = 1;          // the pack's weight on the portages: 1 empty, set by the trip (food, the canoe)
+    this.suppressLanding = false; // at an outfitter's dock E is the outfitter's, not a portage's
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
   }
@@ -221,7 +224,7 @@ export class Player {
     if (this.balance > 0.25) this.prompt = { key: null, text: brace ? 'Bracing…' : 'Broadside to the waves — quarter them, or hold Space to brace' };
     if (rodUp) return;
     // a portage landing takes the canoe to the trailhead; any other bank close enough lets you step out
-    const land = this.nearestLanding();
+    const land = this.suppressLanding ? null : this.nearestLanding();
     const gap = this.shoreGap();
     if (land) {
       const p = land.def;
@@ -474,6 +477,8 @@ export class Player {
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
     c.hitCooldown -= dt;
     this.heading += turn * WALK.turn * dt * (this.speed < -0.1 ? -1 : 1);
+    const pace = (hustle ? WALK.hustle : WALK.speed) / Math.pow(Math.max(1, this.loadFactor), 0.6); // a heavy pack is a slower, longer walk
+    this.speed += (fwd * pace * (dropped ? 1.2 : 1) - this.speed) * (1 - Math.exp(-dt * 6));
     const f = this.forward;
     const trail = this.nearestTrail(this.x, this.z), onTrail = !!trail && trail.dist < TRAIL_WIDTH;
     const camp = this.nearCampsite(this.x, this.z);

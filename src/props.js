@@ -3,6 +3,7 @@ import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt } from './terrain-build.js';
 import { angularRock, makeRockMaterial, makeToonMaterial } from './rocks.js';
+import { outfitterName } from './outfitter.js';
 
 // Resample a polyline at roughly `step` metre spacing.
 export function resample(pts, step) {
@@ -24,6 +25,7 @@ export function exclusionsFor(world) {
   const segs = [];
   for (const p of world.portages) for (let i = 1; i < p.pts.length; i++) segs.push([p.pts[i - 1][0], p.pts[i - 1][1], p.pts[i][0], p.pts[i][1], 2.2]);
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
+  for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, 36]); // the cleared ground around an outfitter's dock
   return segs;
 }
 
@@ -79,7 +81,9 @@ export function buildTileProps(tg, world, tx, ty) {
     }
   }
   if (g.p.length) { const trail = new THREE.Mesh(g.build(), propMaterial); trail.receiveShadow = true; trail.matrixAutoUpdate = false; group.add(trail); }
-  if (signs.p.length) { const sign = new THREE.Mesh(signs.build(), propMaterial); sign.castShadow = true; sign.matrixAutoUpdate = false; group.add(sign); }
+  // an outfitter at every entry point landing: a dock, a shack with the name over the door, a canoe rack
+  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) buildOutfitter(tg, ep, ox, oz, signs, rng, group);
+  if (signs.p.length) { const sign = new THREE.Mesh(signs.build(), propMaterial); sign.castShadow = true; sign.receiveShadow = true; sign.matrixAutoUpdate = false; group.add(sign); }
 
   const cg = new GeoBuilder();
   const crng = mulberry32(7 + tx * 1000 + ty);
@@ -149,4 +153,136 @@ export function buildTileProps(tg, world, tx, ty) {
     group.add(rocks);
   }
   return group;
+}
+
+// --- outfitters ------------------------------------------------------------------------------------------------
+const signCache = new Map();
+function signMaterial(name) {
+  let m = signCache.get(name);
+  if (m) return m;
+  const c = document.createElement('canvas'); c.width = 512; c.height = 112;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#efe3c6'; ctx.fillRect(0, 0, 512, 112);
+  ctx.strokeStyle = '#6b4f2e'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, 500, 100);
+  ctx.fillStyle = '#3a2a1a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  let size = 46; ctx.font = `600 ${size}px Georgia, "Times New Roman", serif`;
+  while (ctx.measureText(name).width > 468 && size > 18) { size -= 2; ctx.font = `600 ${size}px Georgia, "Times New Roman", serif`; }
+  ctx.fillText(name, 256, 58);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  m = makeToonMaterial({ vertexColors: false, map: tex, side: THREE.DoubleSide });
+  signCache.set(name, m);
+  return m;
+}
+
+// A dock out from the landing, planks on piles; the shack nine metres back with its door to the lake and the
+// outfitter's name on a board above it; two canoes on a rack beside. All of it stands on the shaped surface.
+function buildOutfitter(tg, ep, ox, oz, g, rng, group) {
+  const V = (x, y, z) => new THREE.Vector3(x - ox, y, z - oz);
+  const H = (x, z) => surfaceAt(tg, x, z);
+  // the shore: from the landing (usually a little way out on the water) up onto dry ground, then back to the edge
+  let x = ep.x, z = ep.z, d = tg.deeperDir(x, z);
+  for (let i = 0; i < 300 && tg.shoreAt(x, z) < 1.0; i++) { x -= d.x * 0.5; z -= d.z * 0.5; if (i % 10 === 9) d = tg.deeperDir(x, z); }
+  for (let i = 0; i < 300 && tg.shoreAt(x, z) > 1.2; i++) { x += d.x * 0.5; z += d.z * 0.5; if (i % 10 === 9) d = tg.deeperDir(x, z); }
+  d = tg.deeperDir(x, z);
+  const nx = -d.z, nz = d.x, level = tg.levelAt(x, z), deckY = level + 0.45;
+  const pile = vary(0x5e4630, rng, 0.05), stringer = vary(0x6e5236, rng, 0.05);
+  const hw = 0.85, back = -1.6, len = 10;
+  for (let s = back; s < len; s += 0.34) {
+    const s1 = s + 0.27;
+    g.quad(V(x + d.x * s + nx * hw, deckY, z + d.z * s + nz * hw), V(x + d.x * s1 + nx * hw, deckY, z + d.z * s1 + nz * hw),
+      V(x + d.x * s1 - nx * hw, deckY, z + d.z * s1 - nz * hw), V(x + d.x * s - nx * hw, deckY, z + d.z * s - nz * hw), vary(0x8c6b47, rng, 0.09), V(x + d.x * s, deckY - 3, z + d.z * s));
+  }
+  for (const side of [-1, 1]) {
+    const a = hw - 0.16, b = hw - 0.04;
+    const Q = (s, t, y) => V(x + d.x * s + nx * side * t, y, z + d.z * s + nz * side * t);
+    const ref = V(x + d.x * (len / 2), deckY - 0.1, z + d.z * (len / 2));
+    g.quad(Q(back, a, deckY - 0.2), Q(len, a, deckY - 0.2), Q(len, a, deckY - 0.02), Q(back, a, deckY - 0.02), stringer, ref);
+    g.quad(Q(back, b, deckY - 0.2), Q(len, b, deckY - 0.2), Q(len, b, deckY - 0.02), Q(back, b, deckY - 0.02), stringer, ref);
+    for (let s = back + 0.6; s < len; s += 2.4) {
+      const px = x + d.x * s + nx * side * (hw - 0.1), pz = z + d.z * s + nz * side * (hw - 0.1);
+      const bed = Math.min(H(px, pz), level - 0.2) - 0.3;
+      g.tube(g.ring(px - ox, bed, pz - oz, 0.09, 5, rng), g.ring(px - ox, deckY + 0.12, pz - oz, 0.08, 5, rng), pile, new THREE.Vector3(px - ox, deckY - 1, pz - oz));
+    }
+  }
+  // the shack
+  const sx = x - d.x * 9, sz = z - d.z * 9;
+  const P = (a, y, b) => V(sx + d.x * b + nx * a, y, sz + d.z * b + nz * a);
+  const W = 1.9, D = 1.5, wallH = 2.3, ov = 0.4;
+  const corners = [[-W, -D], [W, -D], [W, D], [-W, D]];
+  let floor = -Infinity;
+  for (const [a, b] of corners) floor = Math.max(floor, H(sx + d.x * b + nx * a, sz + d.z * b + nz * a));
+  floor += 0.08;
+  const y0 = floor - 0.9, y1 = floor + wallH, yr = y1 + 1.15;
+  const wall = vary(0x7a5636, rng, 0.05), wall2 = wall.clone().offsetHSL(0, 0, -0.05), roof = vary(0x4b5a44, rng, 0.05), trim = vary(0xe9dcbf, rng, 0.03);
+  const door = new THREE.Color(0x3c2a1c), glass = new THREE.Color(0x9fb8c4), ref = P(0, floor + 1, 0);
+  for (let i = 0; i < 4; i++) { const [a0, b0] = corners[i], [a1, b1] = corners[(i + 1) % 4]; g.quad(P(a0, y0, b0), P(a1, y0, b1), P(a1, y1, b1), P(a0, y1, b0), i % 2 ? wall2 : wall, ref); }
+  g.tri(P(-W, y1, D), P(W, y1, D), P(0, yr, D), trim, ref);
+  g.tri(P(-W, y1, -D), P(W, y1, -D), P(0, yr, -D), trim, ref);
+  const eave = y1 - (yr - y1) * (ov / W), refRoof = P(0, floor, 0);
+  g.quad(P(-W - ov, eave, D + ov), P(0, yr + 0.02, D + ov), P(0, yr + 0.02, -D - ov), P(-W - ov, eave, -D - ov), roof, refRoof);
+  g.quad(P(W + ov, eave, D + ov), P(0, yr + 0.02, D + ov), P(0, yr + 0.02, -D - ov), P(W + ov, eave, -D - ov), roof, refRoof);
+  g.quad(P(-0.45, floor, D + 0.02), P(0.45, floor, D + 0.02), P(0.45, floor + 1.95, D + 0.02), P(-0.45, floor + 1.95, D + 0.02), door, ref);
+  g.quad(P(-1.55, floor + 1.1, D + 0.02), P(-0.85, floor + 1.1, D + 0.02), P(-0.85, floor + 1.7, D + 0.02), P(-1.55, floor + 1.7, D + 0.02), glass, ref);
+  g.quad(P(0.85, floor + 1.1, D + 0.02), P(1.55, floor + 1.1, D + 0.02), P(1.55, floor + 1.7, D + 0.02), P(0.85, floor + 1.7, D + 0.02), glass, ref);
+  // the stoop
+  const stoop = vary(0x8c6b47, rng, 0.06), refS = P(0, floor - 1, D + 0.6);
+  g.quad(P(-0.8, floor - 0.02, D), P(0.8, floor - 0.02, D), P(0.8, floor - 0.02, D + 1.1), P(-0.8, floor - 0.02, D + 1.1), stoop, refS);
+  g.quad(P(-0.8, floor - 0.35, D + 1.1), P(0.8, floor - 0.35, D + 1.1), P(0.8, floor - 0.02, D + 1.1), P(-0.8, floor - 0.02, D + 1.1), stoop.clone().offsetHSL(0, 0, -0.06), refS);
+  // the name over the door
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.57), signMaterial(outfitterName(ep)));
+  sign.position.set(sx + d.x * (D + 0.06) - ox, y1 - 0.42, sz + d.z * (D + 0.06) - oz);
+  sign.rotation.y = Math.atan2(d.x, d.z);
+  sign.matrixAutoUpdate = false; sign.updateMatrix();
+  group.add(sign);
+  // the canoe rack beside the shack: two trestles and two hulls
+  const ra = W + 2.6, post = vary(0x6e5236, rng, 0.05);
+  for (const b of [-1.4, 1.4]) {
+    const px = sx + d.x * b + nx * ra, pz = sz + d.z * b + nz * ra, py = H(px, pz);
+    for (const side of [-0.55, 0.55]) g.tube(g.ring(px + nx * side - ox, py - 0.3, pz + nz * side - oz, 0.06, 4, rng), g.ring(px + nx * side - ox, py + 1.5, pz + nz * side - oz, 0.05, 4, rng), post, new THREE.Vector3(px - ox, py + 0.6, pz - oz));
+    for (const h of [0.7, 1.4]) g.tube(g.ring(px - nx * 0.7 - ox, py + h, pz - nz * 0.7 - oz, 0.045, 4, rng), g.ring(px + nx * 0.7 - ox, py + h, pz + nz * 0.7 - oz, 0.045, 4, rng), post, new THREE.Vector3(px - ox, py + h - 1, pz - oz));
+  }
+  const cx = sx + nx * ra, cz = sz + nz * ra, cy = H(cx, cz);
+  for (const [h, col] of [[0.92, 0xd8b063], [1.62, 0x4f8a5a]]) {
+    // the hull: a stretched blob turned to lie along the rack, built in a local frame and rotated by hand
+    const hull = new GeoBuilder();
+    hull.blob(0, 0, 0, 0.5, vary(col, rng, 0.04), rng, 0.08, 4.8, 0.5, 1.0);
+    const yaw = Math.atan2(-d.z, d.x);
+    for (let i = 0; i < hull.p.length; i += 3) {
+      const lx = hull.p[i], lz = hull.p[i + 2];
+      hull.p[i] = cx - ox + lx * Math.cos(yaw) + lz * Math.sin(yaw); hull.p[i + 1] += cy + h; hull.p[i + 2] = cz - oz - lx * Math.sin(yaw) + lz * Math.cos(yaw);
+      const nx_ = hull.n[i], nz_ = hull.n[i + 2];
+      hull.n[i] = nx_ * Math.cos(yaw) + nz_ * Math.sin(yaw); hull.n[i + 2] = -nx_ * Math.sin(yaw) + nz_ * Math.cos(yaw);
+    }
+    g.p.push(...hull.p); g.n.push(...hull.n); g.c.push(...hull.c);
+  }
+}
+
+// --- lost-and-found items for the task board: small, flat-coloured, sitting on y = 0 ------------------------------
+export function buildItemProp(kind, seed = 1) {
+  shared();
+  const rng = mulberry32(100 + seed), g = new GeoBuilder();
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  if (kind === 'paddle') {
+    // a paddle lying across the rocks, grip up on a stone, blade down at the water
+    const wood = vary(0xb98a52, rng, 0.05), grip = vary(0x3a2a1e, rng, 0.05), blade = vary(0xd9c27a, rng, 0.05);
+    g.tube(g.ring(-0.75, 0.16, 0, 0.022, 5, rng), g.ring(0.55, 0.05, 0, 0.022, 5, rng), wood, V(0, 0.1, 0));
+    g.blob(-0.78, 0.16, 0, 0.05, grip, rng, 0.1, 1, 0.7, 1.7);
+    const b0 = V(0.55, 0.05, -0.09), b1 = V(0.55, 0.05, 0.09), b2 = V(1.0, 0.02, 0.11), b3 = V(1.0, 0.02, -0.11);
+    g.quad(b0, b1, b2, b3, blade, V(0.8, -1, 0)); g.quad(b0, b1, b2, b3, blade, V(0.8, 1, 0));
+  } else if (kind === 'locket') {
+    // a gold locket and a loop of chain on the rock
+    const gold = new THREE.Color(0xe8be4c), chain = new THREE.Color(0xcfa93e);
+    g.blob(0, 0.05, 0, 0.07, gold, rng, 0.12, 1, 0.5, 1);
+    for (let i = 0; i < 14; i++) { const a = (i / 14) * 6.28; g.blob(Math.cos(a) * 0.13, 0.012, Math.sin(a) * 0.13 + 0.07, 0.013, chain, rng, 0.2); }
+  } else {
+    // a roll-top dry bag
+    const bag = vary(0x2f6fb8, rng, 0.05), top = new THREE.Color(0x1f1f24), buckle = new THREE.Color(0x9fa3a8), ref = V(0, 0.25, 0);
+    const r0 = g.ring(0, 0, 0, 0.2, 8, rng, 0.05), r1 = g.ring(0, 0.3, 0, 0.21, 8, rng, 0.05), r2 = g.ring(0, 0.46, 0, 0.17, 8, rng, 0.05), r3 = g.ring(0, 0.52, 0, 0.09, 8, rng, 0.05);
+    g.tube(r0, r1, bag, ref); g.tube(r1, r2, bag, ref); g.tube(r2, r3, top, ref);
+    g.fan(V(0, 0.54, 0), r3, top, ref); g.fan(V(0, -0.02, 0), r0, bag, ref);
+    g.blob(0, 0.5, 0.1, 0.03, buckle, rng, 0.1, 1.6, 0.6, 1);
+  }
+  const m = new THREE.Mesh(g.build(), propMaterial);
+  m.castShadow = true; m.name = `item ${kind}`;
+  return m;
 }

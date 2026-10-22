@@ -21,6 +21,9 @@ import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
 import { Fishing } from './fishing.js';
+import { Energy } from './energy.js';
+import { Tasks } from './tasks.js';
+import { Outfitter } from './outfitter.js';
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x2d7694, reflect: 0xc9dde8, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -107,8 +110,19 @@ async function main() {
   const fishing = new Fishing({ world, player, canoe, water, ripples, audio, chase, input, day, wind, scene });
   player.fishing = fishing;
   fishing.rod.traverse((o) => o.layers.enable(REFLECT_LAYER));
+  // the trip: outfitters at the landings, the food and the energy, the task board
+  const teleport = async (x, z) => { const ok = await player.teleport(x, z); if (ok) chase.snap(); return ok; };
+  const energy = new Energy(player, day);
+  const tasks = new Tasks(world, scene, player, { audio, water });
+  const outfitter = new Outfitter(world, player, { energy, tasks, hud, day, onTeleport: teleport });
+  energy.onNote = (t) => hud.note(t); tasks.onNote = (t) => hud.note(t, 6);
+  energy.onEvac = () => outfitter.startEvac();
+  tasks.onChange = () => outfitter.save();
+  const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
+  let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
+    if (e.code === 'KeyG' && !player.input.paused) energy.manualEat(); // F is the fishing rod
     if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release();
     if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-5 pick lures while the rod is up
     if (e.code === 'KeyR') water.reflectionsOn = !water.reflectionsOn;
@@ -116,7 +130,7 @@ async function main() {
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, fishing };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, fishing, energy, tasks, outfitter };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -125,8 +139,13 @@ async function main() {
     const ts = player.timeScale;
     wind.update(dt * ts, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
+    outfitter.update(dt * ts);
     player.update(dt);
     fishing.update(dt, ts);
+    outfitter.prompt();
+    tasks.update(dt * ts);
+    if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
+    energy.update(dt * ts, wind, atCamp);
     canoe.update(dt * ts);
     chase.update(dt, player, player.mode === 'carry');
     setOrigin(player.x, player.z);
@@ -148,7 +167,7 @@ async function main() {
     loons.update(dt * ts, player, day.season);
     audio.update(dt, world.shoreAt(player.x, player.z), player.speed, player.mode === 'paddle');
     geo.update(player, world);
-    hud.update(player, geo, ts, day.clock, wind, fishing);
+    hud.update(player, geo, ts, day.clock, wind, fishing, { energy, tasks, outfitter });
     input.endFrame();
   };
   // debug helper: advance the simulation by n fixed steps and draw once (used for automated testing)
@@ -163,6 +182,7 @@ async function main() {
     frame(dt);
     draw();
   });
+  outfitter.boot(); // resume the saved trip, or open the outfitter's panel at the landing
 }
 
 main().catch((e) => { console.error(e); msgEl.textContent = 'Failed to load: ' + e.message; });
