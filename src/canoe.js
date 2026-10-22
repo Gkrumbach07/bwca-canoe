@@ -270,9 +270,10 @@ export function buildCanoeRig() {
     armTo(topIsLeft ? 'R' : 'L', S.low, twist);
   }
 
-  function armTo(which, target, twist) {
+  // an arm from the shoulder (at height shY: seated or standing) to a hand target, elbow out and back
+  function armTo(which, target, twist, shY = 0.64) {
     const sgn = which === 'L' ? -1 : 1;
-    S.shL.set(0.02 - sgn * Math.sin(twist) * 0.2, 0.64, sgn * 0.21);
+    S.shL.set(0.02 - sgn * Math.sin(twist) * 0.2, shY, sgn * 0.21);
     S.pole.set(-0.6, -0.4, sgn * 0.9).add(S.shL);
     S.hand.copy(target);
     solveJoint(S.shL, S.hand, 0.31, 0.31, S.pole, S.elbow);
@@ -281,19 +282,22 @@ export function buildCanoeRig() {
     parts['hand' + which].position.copy(S.hand);
   }
 
-  // the standing figure's legs and body, shared by carrying and walking free
+  // the standing figure's legs and body, shared by carrying and walking free: a little lean and a hip sway
+  // that grow with the pace, knees never quite locked
+  const SHOULDER_Y = 1.42;
   function poseStanding(p, bob) {
-    parts.hips.position.set(0, 0.9 + bob, 0);
-    parts.torso.position.set(0.03, 1.22 + bob, 0); parts.torso.rotation.set(0, 0, -0.06);
-    parts.head.position.set(0.05, 1.55 + bob, 0); parts.head.rotation.set(0, 0, 0);
-    parts.hat.position.set(0.05, 1.66 + bob, 0); parts.crown.position.set(0.05, 1.72 + bob, 0);
+    const ws = state.walkSpeed, lean = 0.06 + 0.1 * ws, sway = Math.sin(p) * ws;
+    parts.hips.position.set(0, 0.9 + bob, 0); parts.hips.rotation.set(0, 0.1 * sway, 0);
+    parts.torso.position.set(0.03 + lean * 0.2, 1.22 + bob, 0); parts.torso.rotation.set(0, -0.06 * sway, -lean);
+    parts.head.position.set(0.05 + lean * 0.4, 1.55 + bob, 0); parts.head.rotation.set(0, 0, 0);
+    parts.hat.position.set(0.05 + lean * 0.4, 1.66 + bob, 0); parts.crown.position.set(0.05 + lean * 0.4, 1.72 + bob, 0);
     for (const sgn of [-1, 1]) {
       const ph = p + (sgn < 0 ? Math.PI : 0);
-      const th = Math.sin(ph) * 0.55 * state.walkSpeed;
-      const sh = th - Math.max(0, Math.sin(ph + 0.6)) * 0.8 * state.walkSpeed;
+      const th = Math.sin(ph) * 0.55 * ws + 0.05;                               // thigh fore and aft
+      const sh = th - Math.max(0, Math.sin(ph + 0.6)) * 0.8 * ws - 0.1;        // the knee bends as the leg comes through
       S.hipL.set(0, 0.9 + bob, sgn * 0.11);
-      S.knee.set(Math.sin(th) * 0.44, 0.9 + bob - Math.cos(th) * 0.44, sgn * 0.11);
-      S.foot.set(S.knee.x + Math.sin(sh) * 0.44, Math.max(0.03, S.knee.y - Math.cos(sh) * 0.44), sgn * 0.11);
+      S.knee.set(Math.sin(th) * 0.44, 0.9 + bob - Math.cos(th) * 0.44, sgn * 0.12);
+      S.foot.set(S.knee.x + Math.sin(sh) * 0.44, Math.max(0.03, S.knee.y - Math.cos(sh) * 0.44), sgn * 0.13);
       limb(sgn < 0 ? parts.thighL : parts.thighR, S.hipL, S.knee);
       limb(sgn < 0 ? parts.shinL : parts.shinR, S.knee, S.foot);
     }
@@ -307,9 +311,9 @@ export function buildCanoeRig() {
     const p = state.walk, bob = 0.03 * Math.abs(Math.sin(p)) * state.walkSpeed;
     poseStanding(p, bob);
     for (const sgn of [-1, 1]) {
-      const sw = Math.sin(p + (sgn < 0 ? 0 : Math.PI)) * 0.4 * state.walkSpeed;
-      S.hand.set(Math.sin(sw) * 0.5, 0.85 + bob + (1 - Math.cos(sw)) * 0.3, sgn * 0.26);
-      armTo(sgn < 0 ? 'L' : 'R', S.hand, 0);
+      const sw = Math.sin(p + (sgn < 0 ? 0 : Math.PI)) * 0.45 * state.walkSpeed; // opposite the leg on that side
+      S.hand.set(0.04 + Math.sin(sw) * 0.5, SHOULDER_Y + bob - Math.cos(sw) * 0.58, sgn * 0.27);
+      armTo(sgn < 0 ? 'L' : 'R', S.hand, 0, SHOULDER_Y + bob);
     }
   }
 
@@ -348,8 +352,8 @@ export function buildCanoeRig() {
     hullPivot.position.set(0.35, 1.78 + bob, 0);
     hullPivot.rotation.set(Math.PI, 0, 0.02 * Math.sin(p) * state.walkSpeed);
     poseStanding(p, bob);
-    S.hand.set(0.55, 1.46 + bob, -0.4); armTo('L', S.hand, 0);
-    S.hand.set(0.55, 1.46 + bob, 0.4); armTo('R', S.hand, 0);
+    S.hand.set(0.55, 1.46 + bob, -0.4); armTo('L', S.hand, 0, SHOULDER_Y + bob);
+    S.hand.set(0.55, 1.46 + bob, 0.4); armTo('R', S.hand, 0, SHOULDER_Y + bob);
   }
 
   let firstPerson = false;
