@@ -199,6 +199,7 @@ async function main() {
     moon.position.copy(moonTarget.position).addScaledVector(day.moonDir, 700);
     player.season = day.season;
     tiles.setSeason(day.season);
+    if (tiles.vegetation.setSun) tiles.vegetation.setSun(day.sunDir); // the backlit rim on the foliage follows the sun
     cover.setSeason(day.season);
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
     cover.update(dt * ts, player.x, player.z, hemi, sun);
