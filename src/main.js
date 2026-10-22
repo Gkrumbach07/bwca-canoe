@@ -162,7 +162,8 @@ async function main() {
       if (!player.teleporting) { player.x = fx; player.z = fz; player.heading = fh; }
       fishing.update(dt, ts); // its HUD state must exist even behind the card; the cleared input keeps the rod still
     } else {
-      outfitter.update(dt * ts); // the outfitter's panel waits until the title card is away
+      if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
+      outfitter.update(dt * ts);
       player.update(dt);
       fishing.update(dt, ts);
       outfitter.prompt();
@@ -209,7 +210,8 @@ async function main() {
     draw();
     stats.end(dt);
   });
-  outfitter.boot(); // resume the saved trip, or open the outfitter's panel at the landing
+  let booted = false; // the outfitter's start panel waits until the title card is away
+
 }
 
 main().catch((e) => { console.error(e); msgEl.textContent = 'Failed to load: ' + e.message; });
