@@ -34,7 +34,9 @@ export class Hud {
       wind: document.getElementById('windtext'), windArrow: document.getElementById('windarrow'),
       dim: document.getElementById('mapdim'), tp: document.getElementById('tp'), tpText: document.getElementById('tp-text'),
       tpGo: document.getElementById('tp-go'), tpCancel: document.getElementById('tp-cancel'),
+      note: document.getElementById('note'), trip: document.getElementById('trip'), tripFill: document.getElementById('trip-fill'), tripText: document.getElementById('trip-text'),
     };
+    this.noteTimer = null; this.trip = null;
     this.canvas = document.getElementById('minimap');
     this.ctx = this.canvas.getContext('2d');
     this.big = false;
@@ -354,9 +356,35 @@ export class Hud {
     return c;
   }
 
+  // a line that shows for a few seconds (a meal, a find, a word from the outfitter)
+  note(text, seconds = 4.5) {
+    const el = this.el.note;
+    if (!el) return;
+    el.textContent = text; el.classList.add('show');
+    clearTimeout(this.noteTimer);
+    this.noteTimer = setTimeout(() => el.classList.remove('show'), seconds * 1000);
+  }
+
+  // the trip line: the energy bar, the food, the tasks on the go
+  drawTrip(trip) {
+    const { energy, tasks, outfitter } = trip, el = this.el;
+    if (!el.trip) return;
+    const v = energy.value;
+    el.tripFill.style.width = `${Math.round(v * 100)}%`;
+    el.tripFill.style.background = v > 0.4 ? '#8fd38f' : v > 0.15 ? '#e8c270' : '#e8714f';
+    const food = energy.food, foodTxt = food <= 0 ? 'no food' : `${food % 1 ? `${Math.floor(food)}½` : food} day${food === 1 ? '' : 's'} of food`;
+    const open = tasks ? tasks.active.length : 0, done = tasks ? tasks.active.filter((t) => t.status === 'done').length : 0;
+    const taskTxt = open ? ` · ${open} task${open === 1 ? '' : 's'} on the go${done ? ` (${done} to turn in)` : ''}` : '';
+    const txt = outfitter && outfitter.trip.active ? `energy ${Math.round(v * 100)}% · ${foodTxt}${taskTxt}` : `energy ${Math.round(v * 100)}% · no trip under way`;
+    if (el.tripText.textContent !== txt) el.tripText.textContent = txt;
+    el.trip.classList.toggle('low', energy.warning);
+  }
+
   // --- per frame ------------------------------------------------------------------------------------------
-  update(player, geo, timeScale, clock = '', wind = null) {
+  update(player, geo, timeScale, clock = '', wind = null, trip = null) {
     this.player = player;
+    this.trip = trip;
+    if (trip) this.drawTrip(trip);
     const w = this.world;
     const id = player.lakeId;
     const name = player.mode === 'carry' ? player.carry.trail.def.name : (w.lakeName(id) || 'Unnamed water');
@@ -472,6 +500,15 @@ export class Hud {
         if (close) { ctx.beginPath(); ctx.arc(a, b, r * 0.38, 0, 6.28); ctx.fillStyle = '#f4e9d6'; ctx.fill(); }
       }
     }
+    // task areas: a soft circle around the lake, never the spot
+    const hints = this.trip && this.trip.tasks ? this.trip.tasks.hints() : [];
+    for (const h of hints) {
+      if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
+      const [a, b] = toPx(h.x, h.z), r = h.r / mPerPx;
+      ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28);
+      ctx.fillStyle = 'rgba(192, 57, 43, 0.13)'; ctx.fill();
+      ctx.setLineDash([6 * k, 5 * k]); ctx.strokeStyle = 'rgba(160, 45, 35, 0.6)'; ctx.lineWidth = 1.6 * k; ctx.stroke(); ctx.setLineDash([]);
+    }
     // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
     ctx.font = `italic 600 ${(close ? 17 : 14) * k}px Georgia, "Times New Roman", serif`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
     const minCells = Math.max(600, (5 * mPerPx) ** 2);
@@ -480,14 +517,20 @@ export class Hud {
       const [a, b] = toPx(l.cx, l.cz);
       ctx.fillText(l.name.toUpperCase().split('').join(String.fromCharCode(8202)), a, b + 6 * k);
     }
-    // entry points
+    // entry points: the outfitters' docks, a pier with a shack at its root
     ctx.font = `600 ${11 * k}px Georgia, serif`;
     for (const ep of w.entryPoints) {
       if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
       const [a, b] = toPx(ep.x, ep.z);
+      ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
+      ctx.fillStyle = '#5e4630';
+      ctx.fillRect(-1.6, -9, 3.2, 12);
+      for (const y of [-7, -3, 1]) ctx.fillRect(-3.2, y, 6.4, 1.4);
       ctx.fillStyle = '#b4321f';
-      ctx.beginPath(); ctx.moveTo(a, b - 7 * k); ctx.lineTo(a + 6 * k, b + 4 * k); ctx.lineTo(a - 6 * k, b + 4 * k); ctx.closePath(); ctx.fill();
-      if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 16 * k); }
+      ctx.fillRect(-4.5, 3, 9, 5);
+      ctx.beginPath(); ctx.moveTo(-5.5, 3); ctx.lineTo(0, -1.5); ctx.lineTo(5.5, 3); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
     }
     // the canoe
     if (inView(player.x, player.z, player.x, player.z)) {
