@@ -531,6 +531,7 @@ export class Player {
     }
     if (carrying) {
       for (const t of trees) {
+        if (t.rock) continue; // the hull rides above a boulder
         // the hull overhead is a 5 m log from 2.2 m behind the walker to 3 m ahead
         const px = t.x - nx, pz = t.z - nz, along = px * f.x + pz * f.z;
         if (along < -2.2 || along > 3.0) continue;
