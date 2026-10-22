@@ -34,7 +34,7 @@ export const SCHEMA = [
   { group: 'Controls' },
   { key: 'sensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.3, max: 3, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
   { key: 'invertLook', label: 'Invert look', type: 'toggle' },
-  { key: 'cursorSteer', label: 'Steer the canoe toward the cursor (hold W)', type: 'toggle' },
+  { key: 'cursorSteer', label: 'Steer the canoe where you point (hold W): the cursor, or the look in first person', type: 'toggle' },
   { key: 'speed', label: 'Game speed at the start of a trip', type: 'select', parse: Number, options: [[1, '1× · realistic'], [2, '2×'], [4, '4×']], hint: '1 2 3' },
   { key: 'camera', label: 'Camera at the start of a trip', type: 'select', options: [['third', 'Behind the canoe'], ['first', 'From the paddler’s seat']], hint: 'V' },
 ];

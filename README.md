@@ -87,7 +87,7 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | R | toggle the canoe's water reflection (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
 | Esc | pause: the title screen with Paddle on / New trip / Settings (Esc again, or Enter, resumes) |
-| mouse | look around: in first person the view follows the cursor (right of centre looks right, up looks up), in third person drag to orbit (the view is yours: on foot it keeps its bearing while you turn, drifting round behind you only slowly as you walk); wheel zooms. *Settings → Steer the canoe toward the cursor*: while you hold W the bow turns toward the cursor's point on the water, A/D nudge, and nothing sticks |
+| mouse | look around. First person: click to capture the mouse and the look follows every movement at once (Esc frees the mouse; Esc again opens the menu); on foot and in the water the body faces the look and WASD moves relative to it, A and D strafing. Third person: drag to orbit (the view is yours: on foot it keeps its bearing while you turn, drifting round behind you only slowly as you walk); wheel zooms. *Settings → Steer the canoe where you point*: while you hold W the bow turns toward the cursor's point on the water, or toward the look in first person; A/D nudge, and nothing sticks |
 | click the map | teleport to the nearest open water (anywhere in the wilderness) |
 | entry point list | teleport to one of the BWCA entry point landings |
 

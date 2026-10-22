@@ -11,30 +11,47 @@ export class ChaseCamera {
     this.sensitivity = 1; this.invert = false; // mouse look, set from the settings panel
     this.head = new THREE.Vector3();
     this.dom = dom;
-    // First person looks where the mouse is: the cursor's offset from the middle of the view turns the head
-    // (right of centre looks right, up looks up), no click or capture needed, so the button is free for the
-    // rod. Third person orbits by dragging unless something (the rod) has locked the orbit. The cursor is
-    // kept in view coordinates for aiming.
+    // First person looks with the mouse the way Minecraft does: a click captures the pointer and every
+    // movement turns the look at once, no easing; Esc gives the pointer back. Without the capture (refused,
+    // or released) holding the button and dragging turns the look the same way. Third person orbits by
+    // dragging unless something (the rod) has locked the orbit. While the cursor is free it is kept in view
+    // coordinates for aiming; captured, there is no cursor and the rod aims down the middle of the view.
     this.orbitLocked = false;
     this.cursor = { x: 0, y: 0, inside: false };
-    this.lookYaw = 0; this.lookPitch = 0; // first person, eased toward where the cursor is
+    this.locked = false;
+    this.viewYaw = 0; this.viewPitch = 0; // first person: the bearing and tilt of the look, world space
+    this.lookYaw = 0; // first person: the look's bearing relative to the body (the bow seeks it when asked)
     this.focus = null; // { pos, look } world vectors: a close-up that overrides the chase while it is set
     this.forwardYaw = 0;    // the bearing straight into the view, for camera-relative walking (player.js)
     this.lastHeading = null; // the player's heading last frame: on foot the view holds its bearing while the body turns
     this.cursorSteer = false; // the canoe follows the cursor (settings): shown by the pointer
-    window.addEventListener('keydown', (e) => { if (e.code === 'KeyV') this.setMode(this.mode === 'third' ? 'first' : 'third'); });
+    const lock = () => { try { const p = dom.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) { /* not allowed here; dragging looks instead */ } };
+    document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === dom; if (this.locked) this.cursor.inside = false; });
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'KeyV') return;
+      this.setMode(this.mode === 'third' ? 'first' : 'third');
+      if (this.mode === 'first') lock(); else if (this.locked) document.exitPointerLock();
+    });
     let dragging = false, lx = 0, ly = 0;
     dom.addEventListener('pointerdown', (e) => {
-      if (this.mode === 'first' || this.orbitLocked) return;
+      if (this.mode === 'first') { if (!this.locked) lock(); dragging = true; return; }
+      if (this.orbitLocked) return;
       dragging = true; lx = e.clientX; ly = e.clientY;
       try { dom.setPointerCapture(e.pointerId); } catch (_) { /* a synthetic pointer has no capture */ }
     });
     dom.addEventListener('pointerup', () => { dragging = false; });
     dom.addEventListener('pointermove', (e) => {
-      const r = dom.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) { this.cursor.x = ((e.clientX - r.left) / r.width) * 2 - 1; this.cursor.y = -((e.clientY - r.top) / r.height) * 2 + 1; this.cursor.inside = true; }
-      if (!dragging) return;
       const s = this.sensitivity, inv = this.invert ? -1 : 1;
+      if (this.mode === 'first') {
+        if (!this.locked && !dragging) { this.trackCursor(e); return; }
+        this.viewYaw -= e.movementX * 0.0022 * s;
+        this.viewPitch = clamp(this.viewPitch - e.movementY * 0.0022 * s * inv, -1.25, 1.25);
+        this.forwardYaw = this.viewYaw; // the body reads it this very frame
+        this.lastInput = performance.now();
+        return;
+      }
+      this.trackCursor(e);
+      if (!dragging) return;
       this.userYaw -= (e.clientX - lx) * 0.006 * s; this.userPitch = clamp(this.userPitch - (e.clientY - ly) * 0.004 * s * inv, -0.25, 0.9);
       lx = e.clientX; ly = e.clientY; this.lastInput = performance.now();
     });
@@ -46,6 +63,11 @@ export class ChaseCamera {
   snap() { this.first = true; this.userYaw = 0; this.userPitch = 0; this.lastHeading = null; }
 
   get dragging() { return performance.now() - this.lastInput < 200; }
+
+  trackCursor(e) {
+    const r = this.dom.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) { this.cursor.x = ((e.clientX - r.left) / r.width) * 2 - 1; this.cursor.y = -((e.clientY - r.top) / r.height) * 2 + 1; this.cursor.inside = true; }
+  }
 
   setCursorSteer(on) { this.cursorSteer = on; this.dom.style.cursor = on ? 'crosshair' : ''; }
 
@@ -65,6 +87,7 @@ export class ChaseCamera {
   setMode(mode) {
     this.mode = mode;
     this.userYaw = 0; this.userPitch = 0;
+    if (this.lastHeading !== null) this.forwardYaw = this.lastHeading; // straight ahead until the first frame
     this.camera.fov = mode === 'first' ? 72 : 60;
     this.camera.updateProjectionMatrix();
     this.first = true;
@@ -80,12 +103,12 @@ export class ChaseCamera {
       return;
     }
     const onFoot = carrying || player.mode === 'carry' || player.mode === 'walk';
+    if (this.first || this.lastHeading === null) this.lastHeading = player.heading;
+    let dh = player.heading - this.lastHeading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); this.lastHeading = player.heading;
     if (this.mode === 'first') return this.updateFirst(dt, player, onFoot);
     // The orbit is the player's. On foot the view keeps its bearing while the walker turns under it (the keys
     // are read against the view, so a view that swung with every turn would change where W goes), drifting
     // round behind only slowly while they walk on; afloat it eases back behind the hull once the drag is over.
-    if (this.first || this.lastHeading === null) this.lastHeading = player.heading;
-    let dh = player.heading - this.lastHeading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); this.lastHeading = player.heading;
     if (onFoot) this.userYaw -= dh;
     this.userYaw = Math.atan2(Math.sin(this.userYaw), Math.cos(this.userYaw));
     if (performance.now() - this.lastInput > 2500 && Math.abs(player.speed) > 0.3) {
@@ -116,22 +139,20 @@ export class ChaseCamera {
     this.camera.lookAt(this.look);
   }
 
-  // From the paddler's eyes. The head turns toward the cursor: a small dead zone in the middle keeps the view
-  // steady ahead, the edges of the view look about 95 degrees round and 35 degrees up or down.
+  // From the paddler's eyes. The look is the mouse's, at once, and fixed in the world: on foot and swimming
+  // the body faces it (player.js reads forwardYaw); seated, the hull turns under it, and with steering by
+  // the look the bow comes round to where you are looking. Entering the view (or a snap) looks straight ahead.
   updateFirst(dt, player, onFoot) {
     const rig = player.canoe.rig;
     if (player.mode === 'swim') this.head.set(player.x, this.world.levelAt(player.x, player.z) + 0.32, player.z);
     else { this.head.set(onFoot ? 0.08 : -1.56, onFoot ? 1.6 : 1.0, 0); rig.localToWorld(this.head); } // standing, the rig origin is at the feet
-    if (this.cursor.inside) {
-      const dz = 0.06, shape = (v) => { const a = Math.abs(v); return a <= dz ? 0 : Math.sign(v) * Math.min(1, Math.pow((a - dz) / (1 - dz), 1.25)); };
-      const ke = this.first ? 1 : 1 - Math.exp(-dt * 9);
-      this.lookYaw += (-shape(this.cursor.x) * 1.65 - this.lookYaw) * ke;
-      this.lookPitch += (shape(this.cursor.y) * 0.6 - this.lookPitch) * ke;
-    }
+    if (this.first) { this.viewYaw = player.heading; this.viewPitch = 0; }
+    this.viewYaw = Math.atan2(Math.sin(this.viewYaw), Math.cos(this.viewYaw));
+    this.lookYaw = Math.atan2(Math.sin(this.viewYaw - player.heading), Math.cos(this.viewYaw - player.heading));
     this.userYaw = this.lookYaw;
-    const yaw = player.heading + this.lookYaw;
+    const yaw = this.viewYaw;
     this.forwardYaw = yaw;
-    const pitch = clamp(this.lookPitch, -0.7, 0.7);
+    const pitch = this.viewPitch;
     const k = this.first ? 1 : 1 - Math.exp(-dt * 14);
     this.pos.lerp(this.head, k);
     this.look.set(this.pos.x + Math.cos(yaw) * Math.cos(pitch), this.pos.y + Math.sin(pitch), this.pos.z - Math.sin(yaw) * Math.cos(pitch));
