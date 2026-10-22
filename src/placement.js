@@ -4,7 +4,7 @@
 // runs in the build worker.
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
 import { clearingAt, burnAt, calmAt, rockAt } from './fields.js';
-import { surfaceAt, groundClass } from './terrain-build.js';
+import { surfaceAt, groundClass, rockSlope } from './terrain-build.js';
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
 export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9 };
@@ -63,7 +63,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const slope = grid.slopeAt(cx, cz);
       const clearing = smoothstep(0.62, 0.78, clearingAt(cx, cz));
       const burn = burnAt(cx, cz);
-      const rock = sd > 0 ? rockAt(slope, sd, cx, cz) : 0;   // bare bedrock: few stunted trees, no grass, boulders
+      const rock = sd > 0 ? rockAt(rockSlope(grid, cx, cz), sd, cx, cz) : 0;   // bare bedrock: few stunted trees, no grass, boulders
       const bare = rock > 0.5;
       const segs = mask.get(k);
       // trails run through thick woods: more trees and brush right beside them
@@ -196,9 +196,10 @@ export function coverField(grid, i0, j0, n, shade, exclusions) {
       if (sd <= 2.6 || bare[k]) continue;
       const slope = grid.slopeAt(x, z), burn = burnAt(x, z), clearing = clearingAt(x, z);
       // grass carpets the forest floor and the meadows; it thins under a dense canopy and is gone on bare rock
-      let c = 0.6 * (1 - smoothstep(0.3, 0.55, rockAt(slope, sd, x, z)));
+      const rock = rockAt(rockSlope(grid, x, z), sd, x, z);
+      let c = 0.6 * (1 - smoothstep(0.3, 0.55, rock));
       c *= 1 - (shade ? shade[k] : 0) * 0.4;
-      const soil = 1 - smoothstep(0.4, 0.6, rockAt(slope, sd, x, z));
+      const soil = 1 - smoothstep(0.4, 0.6, rock);
       if (clearing > 0.62) c = Math.max(c, 1.0 * soil);
       if (burn > 0.5) c = Math.max(c, 0.95 * soil);
       const gold = Math.max(burn, clearing > 0.66 ? 0.6 : 0);
