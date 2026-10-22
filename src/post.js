@@ -3,7 +3,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 
 // Colour grade in linear light before tone mapping: cool shadows against warm highlights (the tints are
 // normalised to their own luminance, so they turn the hue and leave the value alone), lifted blacks, a
@@ -45,76 +44,27 @@ const GradeShader = {
   `,
 };
 
-// Ambient occlusion at half resolution, read from the depth the render pass already wrote: no second pass
-// over the scene, and normals come from the depth, which suits flat-shaded geometry. Occlusion at the scale of
-// a trunk, a boot or a beached hull (the radius is in metres), fading out with distance so the far field
-// stays clean air. The composer's buffers alternate as the scene target from frame to frame, so the depth
-// texture is picked up from the read buffer at render time.
-class HalfResAO extends GTAOPass {
-  constructor(scene, camera, width, height) {
-    super(scene, camera, Math.ceil(width / 2), Math.ceil(height / 2));
-    this.normalRenderTarget.dispose(); this.normalRenderTarget = null; // the G-buffer is the render pass's depth
-    this._renderGBuffer = false; this.normalTexture = null; this._depth = null;
-    for (const m of [this.gtaoMaterial, this.pdMaterial]) {
-      m.defines.NORMAL_VECTOR_TYPE = 0; m.defines.DEPTH_SWIZZLING = 'x';
-      m.uniforms.tNormal.value = null; m.needsUpdate = true;
-    }
-    this.updateGtaoMaterial({ radius: 1.0, distanceExponent: 1, thickness: 0.8, distanceFallOff: 1, scale: 1, samples: 8, screenSpaceRadius: false });
-    this.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 2, rings: 2, samples: 8 });
-    this.blendIntensity = 0.85;
-    const m = this.gtaoMaterial;
-    m.uniforms.uFadeNear = { value: 60 }; m.uniforms.uFadeFar = { value: 140 };
-    const decl = 'uniform float scale;', tail = 'ao = pow(ao, scale);';
-    if (!m.fragmentShader.includes(decl) || !m.fragmentShader.includes(tail)) console.warn('post: the GTAO shader changed, distance fade not applied');
-    m.fragmentShader = m.fragmentShader
-      .replace(decl, decl + '\n\t\tuniform float uFadeNear;\n\t\tuniform float uFadeFar;')
-      .replace(tail, tail + '\n\t\t\tao = mix(ao, 1.0, smoothstep(uFadeNear, uFadeFar, -viewPos.z));');
-    m.needsUpdate = true;
-  }
-  setSize(width, height) {
-    const w = Math.ceil(width / 2), h = Math.ceil(height / 2);
-    this.width = w; this.height = h;
-    this.gtaoRenderTarget.setSize(w, h);
-    this.pdRenderTarget.setSize(w, h);
-    this.gtaoMaterial.uniforms.resolution.value.set(w, h);
-    this.pdMaterial.uniforms.resolution.value.set(w, h);
-  }
-  render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
-    const depth = readBuffer.depthTexture;
-    if (depth !== this._depth) {
-      this._depth = depth; this.depthTexture = depth;
-      this.gtaoMaterial.uniforms.tDepth.value = depth;
-      this.pdMaterial.uniforms.tDepth.value = depth;
-      this.depthRenderMaterial.uniforms.tDepth.value = depth;
-    }
-    super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
-  }
-  dispose() {
-    this.gtaoNoiseTexture.dispose(); this.pdNoiseTexture.dispose();
-    this.gtaoRenderTarget.dispose(); this.pdRenderTarget.dispose();
-    this.normalMaterial.dispose(); this.pdMaterial.dispose(); this.copyMaterial.dispose(); this.depthRenderMaterial.dispose();
-    this._fsQuad.dispose();
-  }
-}
-
+// The chain: the scene, the grade, the output transform. There is no screen-space occlusion pass any more
+// (pass 1): the half-resolution GTAO that sat after the render was judged at the lodge, filtered (a depth-aware
+// box over its noise period and a joint-bilateral upsample) and still swam at the walker's feet and along the
+// tree line when the view turned, while adding next to nothing a screenshot could see; the occlusion baked
+// into every tree, shrub, rock and hull (occlusion.js) carries the grounding instead. Both buffers keep a
+// depth texture (the render pass writes whichever is the read buffer that frame) for a later depth-reading
+// pass, such as pass 4's god rays.
 export function makePost(renderer, scene, camera) {
   const size = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
   const pw = Math.floor(size.width * pr), ph = Math.floor(size.height * pr);
-  // both buffers carry a depth texture: the render pass writes whichever is the read buffer that frame, and
-  // the AO pass must never sample the buffer it is writing
   const depthTexture = () => new THREE.DepthTexture(pw, ph, THREE.FloatType);
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType, depthTexture: depthTexture() }));
   composer.renderTarget2.depthTexture = depthTexture();
   composer.setSize(size.width, size.height); // the composer keeps the CSS size and applies the pixel ratio itself
   composer.addPass(new RenderPass(scene, camera));
-  const ao = new HalfResAO(scene, camera, pw, ph);
-  composer.addPass(ao);
   const grade = new ShaderPass(GradeShader);
   grade.material.depthTest = false; grade.material.depthWrite = false;
   composer.addPass(grade);
   composer.addPass(new OutputPass());
   return {
-    composer, grade, ao,
+    composer, grade,
     render() { composer.render(); },
     resize(w, h) { composer.setSize(w, h); },
   };

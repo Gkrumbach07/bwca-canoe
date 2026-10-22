@@ -40,7 +40,8 @@ export const glslSurface = /* glsl */ `
   float clarityAt(vec2 rel) { return cellSample(uClarityTex, atlasCell(rel)); }
   float atlasLevel(vec2 rel) { return levelAt(rel); }
   float shoreAt(vec2 rel) { return bilinear(uShoreTex, rel); }
-  // ground cover (r: grass cover, g: golden / burn) with its own bilinear filter; b holds the ground class
+  // ground cover (r: grass cover, g: golden / burn) with its own bilinear filter; b holds the ground class,
+  // a the moss weight (high nibble) and canopy shade (low nibble) the terrain's splat uses (groundcover.js reads it)
   vec2 coverAt(vec2 rel) {
     vec2 f = (rel - uAtlas.xy) * uAtlas.z - 0.5;
     vec2 fi = floor(f), a = f - fi;
@@ -376,7 +377,7 @@ export class WaterSystem {
       shore[k] = w.sdCell(i, j);
       height[k] = w.hCell(i, j);
       const cv = w.coverCell(i, j);
-      cover[k * 4] = cv & 255; cover[k * 4 + 1] = (cv >> 8) & 255; cover[k * 4 + 2] = (cv >> 16) & 255; cover[k * 4 + 3] = 255;
+      cover[k * 4] = cv & 255; cover[k * 4 + 1] = (cv >> 8) & 255; cover[k * 4 + 2] = (cv >> 16) & 255; cover[k * 4 + 3] = (cv >>> 24) & 255;
       const id = w.lakeCell(i, j);
       if (id) { level[k] = w.levelCell(i, j); clarity[k] = w.clarityOf(id); queue[tail++] = k; } else level[k] = -9999;
     }

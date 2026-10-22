@@ -135,7 +135,7 @@ function solveJoint(s, h, l1, l2, pole, out) {
 
 export function buildCanoeRig() {
   const rng = mulberry32(11);
-  const mat = makeToonMaterial(); // the same stepped ramp as the rocks and trees
+  const mat = makeToonMaterial(); // the same smooth light as the rocks and trees (shading.js)
   const rig = new THREE.Group();
   const hull = new THREE.Mesh(buildHull(rng), mat);
   hull.castShadow = true; hull.receiveShadow = true;

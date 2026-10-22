@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, hash2 } from './rng.js';
-import { angularRock, makeRockMaterial, makeToonMaterial, smoothToon, setToonSun } from './rocks.js';
+import { angularRock, makeRockMaterial, makeFoliageMaterial, smoothToon } from './rocks.js';
 
 // Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
 // turns a tile's placement bins into instanced meshes in tile-local coordinates. Everything is welded smooth
-// and shaded with the stepped toon ramp (see rocks.js): low-poly silhouettes, soft painted volumes.
+// and shaded with the look's smooth light, wrapped on the leaves, occlusion baked in (rocks.js smoothToon).
 //
 // The near variants (docs/look.md, pass 4): trunks in two or three segments with a bend, a base flare and a
 // shade side baked into the vertex colour; crowns as six to twelve clusters offset to one side, lit on top
@@ -285,14 +285,11 @@ function tagLeaves(geo) {
   return geo;
 }
 
-// The toon material for a deciduous species: leaves go gold or red in the fall, come in pale in spring, and
-// are gone between leaf-drop and leaf-out. The backlit rim of the plain toon material carries over.
+// The foliage material for a deciduous species (the look's wrapped Lambert, rocks.js): leaves go gold or red
+// in the fall, come in pale in spring, and are gone between leaf-drop and leaf-out.
 function makeLeafMaterial(autumn) {
-  const m = makeToonMaterial();
   const u = { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } };
-  const rim = m.onBeforeCompile;
-  m.onBeforeCompile = (shader) => {
-    rim(shader);
+  const m = makeFoliageMaterial({}, (shader) => {
     Object.assign(shader.uniforms, u);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;')
@@ -300,14 +297,12 @@ function makeLeafMaterial(autumn) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vLeaf;\nuniform float uLeafOn;')
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n if (vLeaf > 0.5 && uLeafOn < 0.5) discard;');
-  };
-  m.customProgramCacheKey = () => 'toon-leaves';
+  }, 'look-leaves');
   m.userData.u = u;
   return m;
 }
 
-// Geometry variants (built once) and the shared materials. `setSun(dir, amount)` points the backlit rim of
-// every toon material at the sun (world-space direction toward it); main.js calls it with the day's sunDir.
+// Geometry variants (built once) and the shared materials.
 export function makeVegetationKit(seed = 3) {
   const variants = SPECIES.map((s) => Array.from({ length: s.variants || VARIANTS }, (_, v) => {
     const full = s.make(mulberry32(seed * 131 + v * 17 + s.name.length), v);
@@ -317,15 +312,14 @@ export function makeVegetationKit(seed = 3) {
     if (s.leaves) { tagLeaves(out.full); tagLeaves(out.low); }
     return out;
   }));
-  const material = makeToonMaterial();
+  const material = makeFoliageMaterial();
   const rockMaterial = makeRockMaterial();
   const leafMaterials = SPECIES.map((s) => (s.leaves ? makeLeafMaterial(s.leaves) : null));
   const materialFor = (sp) => (SPECIES[sp].rock ? rockMaterial : leafMaterials[sp] || material);
   const setSeason = (season) => {
     for (const m of leafMaterials) if (m) { m.userData.u.uFall.value = season.fall; m.userData.u.uSpring.value = season.spring; m.userData.u.uLeafOn.value = season.leafOn; }
   };
-  const setSun = (dir, amount = 1) => setToonSun(dir, amount);
-  return { variants, material, rockMaterial, materialFor, setSeason, setSun, seed };
+  return { variants, material, rockMaterial, materialFor, setSeason, seed };
 }
 
 // One instanced mesh per (region, species) bin, matrices and colours straight from the worker.

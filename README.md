@@ -32,8 +32,10 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
   October, and cold mornings bring heavier mist. `day.season` carries all of it for anything else to use. Lakes are clear in the shallows
   (lily pads, reeds and weeds grow in sheltered water) and tannin-dark in the deep. Loons drift, dive and
   call; wind, lapping water and paddle dips are synthesized, no samples.
-- **The look**: flat categorical colours on a faceted ground; trees, shrubs, rocks and the canoe are welded
-  smooth and shaded with a stepped toon ramp, after Firewatch; grass tufts and fireweed near the camera.
+- **The look** (`docs/look.md`, after Firewatch): the ground is a painted splat of eight materials blended
+  through world-space noise, so transitions are soft bands and never polygon edges; one smooth light model
+  for everything (`src/shading.js`: Lambert, wrapped on the leaves, the sky as a hemisphere fill, soft
+  stable shadows), with occlusion baked into every tree, rock and hull; grass tufts and fireweed near the camera.
 
 ## Run
 

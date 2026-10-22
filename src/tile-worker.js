@@ -2,7 +2,7 @@
 // placement and its ground-cover map as transferable typed arrays. The main thread only wraps them into
 // three.js objects.
 import { TileGrid } from './grid.js';
-import { buildTerrainChunk } from './terrain-build.js';
+import { buildTerrainChunk, mossAt } from './terrain-build.js';
 import { buildWaterChunk } from './water-build.js';
 import { placeVegetation, placeAquatic, coverField, REGION } from './placement.js';
 import { hash2 } from './rng.js';
@@ -35,6 +35,19 @@ function instanceData(items, stride, rx, rz) {
   return { count, matrices: m, colors: c };
 }
 
+// the typed arrays of a terrain chunk (terrain-build.js), handed over rather than copied
+const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.floor.buffer, t.idx.buffer];
+
+// The cover map's spare fourth byte carries what the ground cover needs to match the terrain's splat under
+// a tuft (groundcover.js): the moss weight in the high nibble and the canopy shade in the low one, per cell.
+function packFloor(grid, i0, j0, n, shade, cover) {
+  for (let j = j0; j < j0 + n; j++) for (let i = i0; i < i0 + n; i++) {
+    const k = grid.local(i, j);
+    const moss = mossAt(grid.cellX(i), grid.cellZ(j)), sh = shade ? shade[k] : 0;
+    cover[k * 4 + 3] = (Math.round(Math.min(1, moss) * 15) << 4) | Math.round(Math.min(1, Math.max(0, sh)) * 15);
+  }
+}
+
 async function buildFine(m) {
   const g = cfg.grid;
   const buf = await fetchTile(m.url);
@@ -44,12 +57,13 @@ async function buildFine(m) {
   const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz });
   const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz });
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions);
+  packFloor(grid, i0, j0, g.tile, veg.shade, cover);
   const terrain = buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz });
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b) => ({ cx: g.originX + (b.rx + 0.5) * REGION, cz: g.originZ + (b.rz + 0.5) * REGION });
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, ...binCentre(b), ...instanceData(b.items, 7, b.rx, b.rz) }));
   const abins = aquatic.bins.map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, ...binCentre(b), ...instanceData(b.items, 5, b.rx, b.rz) }));
-  const transfer = [buf, cover.buffer, terrain.pos.buffer, terrain.col.buffer, terrain.nrm.buffer, terrain.bed.buffer, terrain.idx.buffer];
+  const transfer = [buf, cover.buffer, ...terrainBuffers(terrain)];
   if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.idx.buffer);
   for (const b of bins) transfer.push(b.matrices.buffer, b.colors.buffer);
   for (const b of abins) transfer.push(b.matrices.buffer);
@@ -73,7 +87,7 @@ async function buildFar(m) {
     const terrain = buildTerrainChunk(grid, i0, j0, per, { fine: false, originX: ox, originZ: oz });
     const water = buildWaterChunk(grid, i0, j0, per, ox, oz);
     chunks.push({ tx, ty, terrain, water });
-    transfer.push(terrain.pos.buffer, terrain.col.buffer, terrain.nrm.buffer, terrain.bed.buffer, terrain.idx.buffer);
+    transfer.push(...terrainBuffers(terrain));
     if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.idx.buffer);
   }
   return { msg: { type: 'built', key: m.key, level: 'far', fx: m.fx, fy: m.fy, data: buf, chunks }, transfer };

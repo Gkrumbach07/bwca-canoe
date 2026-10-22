@@ -91,6 +91,37 @@ export class SunLight extends THREE.Light {
   dispose() { super.dispose(); this.shadow.dispose(); }
 }
 
+// Soft, stable penumbrae. three's PCF takes five hardware-filtered taps on a Vogel disc turned per pixel by a
+// screen-space noise: the dither is locked to the screen, so when the camera turns it slides over the
+// shadow edges and they crawl. Here every pixel takes the same 5 x 5 grid of taps, tent-weighted, spaced
+// shadow.radius / 2 texels apart in each axis of the atlas (the sun's map size is the atlas size), each tap
+// itself a bilinear 2 x 2 compare: a smooth ramp about shadow.radius + 1 texels each side of an edge (2.5
+// at the radius of 1.5 main.js sets), fixed to the shadow map's texels, which the cascade fit snaps to the
+// world. Nothing in it depends on the pixel, so nothing moves when the view does.
+{
+  const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
+  const at = chunk.indexOf('float getShadow( sampler2DShadow shadowMap');
+  const from = chunk.indexOf('vec2 texelSize = vec2( 1.0 ) / shadowMapSize;', at);
+  const to = chunk.indexOf(') * 0.2;', from);
+  if (at >= 0 && from > at && to > from) {
+    const stable = [
+      'vec2 texelSize = vec2( 1.0 ) / shadowMapSize;',
+      '				vec2 tapStep = texelSize * shadowRadius * 0.5;',
+      '				shadow = 0.0;',
+      '				for ( int j = -2; j <= 2; j ++ ) {',
+      '					for ( int i = -2; i <= 2; i ++ ) {',
+      '						float w = float( 3 - abs( i ) ) * float( 3 - abs( j ) );',
+      '						shadow += w * texture( shadowMap, vec3( shadowCoord.xy + vec2( float( i ), float( j ) ) * tapStep, shadowCoord.z ) );',
+      '					}',
+      '				}',
+      '				shadow *= 1.0 / 81.0;',
+    ].join('\n');
+    THREE.ShaderChunk.shadowmap_pars_fragment = chunk.slice(0, from) + stable + chunk.slice(to + ') * 0.2;'.length);
+  } else {
+    console.warn('sunlight: the PCF chunk changed, shadows keep the per-pixel disc');
+  }
+}
+
 // Per-cascade bias: three applies one bias and one normal bias to both cascades, but the far one has texels
 // several times coarser and needs more to stay free of acne on the terrain, while the near one wants as little
 // as possible so the walker's feet and the beached hull stay in contact with their shadows. The unused fourth
