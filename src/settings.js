@@ -7,7 +7,7 @@ import { save } from './save.js';
 import { LOD_SCALE } from './vegetation.js';
 
 export const DEFAULTS = {
-  shadows: '2048',      // 'off' | '1024' | '2048' | '4096'
+  shadows: '2048',      // 'off' | '1024' | '2048' | '4096': the sun's shadow map size per cascade (sunlight.js)
   lod: 1,               // tree LOD and cull distance scale
   reflections: true,    // the canoe's mirror pass on the water
   renderScale: 1,       // 0.5..1 of the device pixel ratio (capped at 2)
@@ -37,7 +37,7 @@ const pct = (v) => `${Math.round(v * 100)} %`;
 // the sections of the settings card: one row per setting (type select | range | toggle | radio | status)
 export const SECTIONS = [
   { id: 'display', label: 'Display', rows: [
-    { key: 'shadows', label: 'Shadows', type: 'select', options: [['off', 'Off'], ['1024', 'Soft (1024)'], ['2048', 'Standard (2048)'], ['4096', 'Sharp (4096)']] },
+    { key: 'shadows', label: 'Shadows', desc: 'Two cascades: near and far · the size of each', type: 'select', options: [['off', 'Off'], ['1024', 'Soft (1024)'], ['2048', 'Standard (2048)'], ['4096', 'Sharp (4096)']] },
     { key: 'lod', label: 'Tree detail distance', type: 'range', min: 0.5, max: 2, step: 0.25, format: (v) => `${v}×` },
     { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1, step: 0.05, format: pct },
     { key: 'reflections', label: 'Canoe reflection on the water', desc: 'R toggles it · a second pass over the scene', type: 'toggle' },
@@ -114,7 +114,7 @@ export class Settings {
         const on = v !== 'off', size = on ? parseInt(v, 10) : 0;
         t.renderer.shadowMap.enabled = on;
         t.sun.castShadow = on;
-        if (on) t.sun.shadow.mapSize.set(size, size); // the shadow pass resizes its target when this differs
+        if (on) t.sun.shadow.mapSize.set(size, size); // per cascade; the shadow pass resizes its atlas when this differs
         if (!initial) refreshMaterials(t.scene); // programs with/without shadow sampling
         break;
       }

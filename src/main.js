@@ -1,4 +1,5 @@
 import './fog.js'; // must come first: patches three's fog chunks before any material compiles
+import { SunLight } from './sunlight.js'; // patches the sun shadow chunk, also before any material compiles
 import * as THREE from 'three';
 import { World } from './world.js';
 import { DayCycle, buildStars, buildMoon } from './daycycle.js';
@@ -41,7 +42,7 @@ async function main() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // r186: hardware-compared, five-tap Vogel disc; shadow.radius sets the softness in texels
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.domElement.className = 'game';
@@ -52,19 +53,24 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.3, 9000);
 
   const sunDir = new THREE.Vector3(-0.62, 0.36, 0.46).normalize(); // initial; the day cycle drives it
-  const sun = new THREE.DirectionalLight(0xffdcb0, 1.7);
+  // The key: a sun with two cascaded shadow maps fitted to the view (sunlight.js). The near cascade covers
+  // the first ~45 m at a couple of centimetres a texel, at nearly full strength, with the bias kept tight so
+  // feet and hulls touch their shadows; the far one reaches 300 m with a coarser texel and a scaled bias.
+  const sun = new SunLight(0xffe8c0, 2.2);
+  sun.position.copy(sunDir); // the direction the light comes from; the day cycle moves it
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -150; sun.shadow.camera.right = 150; sun.shadow.camera.top = 150; sun.shadow.camera.bottom = -150;
-  sun.shadow.camera.near = 50; sun.shadow.camera.far = 1400;
-  sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.6; sun.shadow.intensity = 0.55;
-  scene.add(sun, sun.target);
-  const hemi = new THREE.HemisphereLight(0xa9c6e0, 0x6f7a60, 0.8); // cool fill against the warm sun
+  sun.shadow.mapSize.set(2048, 2048); // per cascade; the settings panel changes it
+  sun.shadow.camera.far = 300;        // how far shadows reach from the camera
+  sun.shadow.split = 0.15; sun.shadow.fade = 0.25; sun.shadow.margin = 320; sun.shadow.farBiasScale = 4;
+  sun.shadow.bias = -0.00006; sun.shadow.normalBias = 0.05; sun.shadow.radius = 1.5; sun.shadow.intensity = 0.85;
+  scene.add(sun);
+  const hemi = new THREE.HemisphereLight(0x8db4dc, 0x5f6b58, 0.55); // the fill: cool sky, dim, against the warm key
   scene.add(hemi);
   const moon = new THREE.DirectionalLight(0x8aa4cc, 0);
   moon.position.set(300, 600, -500);
-  moon.target = sun.target; // aimed at the player like the sun, not at the world origin
-  scene.add(moon);
+  const moonTarget = new THREE.Object3D(); // aimed at the player, not at the world origin
+  moon.target = moonTarget;
+  scene.add(moon, moonTarget);
 
   scene.background = new THREE.Color(palette.fog);
   const sky = buildSky(sunDir, palette);
@@ -150,7 +156,7 @@ async function main() {
   if (trip && (trip.mode !== 'paddle' || world.shoreAt(trip.x, trip.z) > -2)) player.teleport(trip.x, trip.z);
   title.open('title');
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -188,9 +194,9 @@ async function main() {
     updateClouds(clouds, dt * ts, camera.position.x, camera.position.z);
     day.update(dt * ts);
     sky.position.copy(camera.position);
-    sun.target.position.set(player.x, player.altitude, player.z);
-    sun.position.copy(sun.target.position).addScaledVector(day.sunDir, 700);
-    moon.position.copy(sun.target.position).addScaledVector(day.moonDir, 700);
+    sun.position.copy(day.sunDir);
+    moonTarget.position.set(player.x, player.altitude, player.z);
+    moon.position.copy(moonTarget.position).addScaledVector(day.moonDir, 700);
     player.season = day.season;
     tiles.setSeason(day.season);
     cover.setSeason(day.season);

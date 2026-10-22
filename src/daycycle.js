@@ -9,11 +9,13 @@ import { seasonAt } from './season.js';
 // night, late dusk, the horizon, golden hour, morning, full day. Values are interpolated between keys.
 const KEYS = [-15, -5, -1, 3, 10, 35];
 const T = {
-  sunColor: [0x000000, 0x000000, 0xff6a2e, 0xffa054, 0xffd0a0, 0xfff1dc],
-  sunInt: [0, 0, 0.6, 1.6, 1.65, 1.7],
-  hemiSky: [0x121a2a, 0x263347, 0x9a6e62, 0xe8a070, 0xbcc0cc, 0xa9c6e0],
-  hemiGround: [0x0b0e12, 0x1a1d1a, 0x4e3d32, 0x8f6240, 0x74755a, 0x6f7a60],
-  hemiInt: [0.35, 0.4, 0.6, 0.95, 0.8, 0.8],
+  // the key and the fill: one warm sun, one cool sky. While the sun is up the key is strong and warm and the
+  // sky fill cool and dim, so lit and shaded surfaces split into two clear families; dawn and dusk keep their own
+  sunColor: [0x000000, 0x000000, 0xff6a2e, 0xffa054, 0xffc890, 0xffe8c0],
+  sunInt: [0, 0, 0.6, 1.6, 2.0, 2.2],
+  hemiSky: [0x121a2a, 0x263347, 0x9a6e62, 0xe8a070, 0x93a9c8, 0x8db4dc],
+  hemiGround: [0x0b0e12, 0x1a1d1a, 0x4e3d32, 0x8f6240, 0x66685a, 0x5f6b58],
+  hemiInt: [0.35, 0.4, 0.6, 0.9, 0.6, 0.55],
   fogHorizon: [0x141c28, 0x2a3650, 0xe09a68, 0xe8b282, 0xd6ceb8, 0xc6dbe9],
   fogSky: [0x070d18, 0x14223a, 0x3e5a86, 0x5b7fb0, 0x6b97c4, 0x6f9cc8],
   fogSun: [0x000000, 0x1a1a2a, 0xff9a58, 0xffb878, 0xffd8a8, 0xffe9c4],
