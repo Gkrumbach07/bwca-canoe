@@ -104,6 +104,7 @@ async function main() {
   player.ripples = ripples; player.water = water; player.audio = audio;
   if (trip) { player.x = trip.x; player.z = trip.z; player.heading = trip.heading; }
   const chase = new ChaseCamera(camera, renderer.domElement, world);
+  player.chase = chase; // walking is read against the view; the cursor steers the canoe when asked
   const hud = new Hud(world, async (x, z) => { if (await player.teleport(x, z)) chase.snap(); });
   const post = makePost(renderer, scene, camera);
   const { lat, lon } = world.toLatLon(start.x, start.z);

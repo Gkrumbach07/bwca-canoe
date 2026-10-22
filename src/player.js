@@ -18,7 +18,8 @@ export class Input {
 }
 
 const PADDLE = { accel: 3.4, hustle: 5.2, reverse: 1.6, drag: 0.15, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
-const WALK = { speed: 1.5, hustle: 2.2, carry: 1.2, carryHustle: 1.7, turn: 1.7 };
+const WALK = { speed: 1.5, hustle: 2.2, carry: 1.2, carryHustle: 1.7, face: 7 }; // face: how fast the walker turns to where the keys point
+const RUDDER_RATE = 1.25;     // the course bias moves centre to full lock in 0.8 s of A or D
 const SWIM = { speed: 0.85, hustle: 1.25, turn: 1.6 };
 const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
 const LANDING_RADIUS = 28;
@@ -57,6 +58,12 @@ export class Player {
     this.fishing = null; // set by main: while its rod is up the paddle rests and W / Space / E belong to it
     this.loadFactor = 1;          // the pack's weight on the portages: 1 empty, set by the trip (food, the canoe)
     this.suppressLanding = false; // at an outfitter's dock E is the outfitter's, not a portage's
+    this.chase = null;            // set by main: the view's bearing (walking is read against it) and the cursor
+    this.cursorSteer = false;     // settings: with W held the bow seeks the cursor's point on the water
+    // the course: A/D set a bias that holds, like a J-stroke kept on one side, with a stop in the middle;
+    // +1 is full left. rudderMoved keeps the gauge up a moment after a change
+    this.rudder = 0; this.rudderHold = false; this.rudderMoved = -10;
+    this.footLatch = { keys: 4, h: 0 }; // on foot: the bearing the held keys meant when they were pressed
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
   }
@@ -66,6 +73,7 @@ export class Player {
   get onFoot() { return this.mode === 'carry' || this.mode === 'walk'; }
   get altitude() { return this.onFoot ? this.groundAt(this.x, this.z) : this.world.levelAt(this.x, this.z); }
   get waveHeightHere() { return this.wind && this.water ? windHeight(this.wind.speed, this.water.fetchAt(this.x, this.z)) : 0.05; }
+  get rudderShown() { return this.mode === 'paddle' && (Math.abs(this.rudder) > 0.02 || this.time - this.rudderMoved < 1.5); }
   // where the canoe lies when it is not with you (beached or set down), for the map
   get hullDown() { return this.carry && this.carry.drop ? this.carry.drop : null; }
   get modeLabel() {
@@ -176,15 +184,42 @@ export class Player {
     const brace = !rodUp && inp.held('Space');           // a low brace steadies the hull but you cannot paddle
     if (brace) fwd = 0;
     const paddling = fwd !== 0 || turn !== 0;
+    // the course. A/D move a bias that holds once set, stopping at the middle on the way back (release and
+    // press again to go through). With cursor steering on, the bias is the cursor instead: while you paddle
+    // the bow turns toward its point on the water, A/D nudge while held, and nothing sticks.
+    let steer;
+    if (this.cursorSteer) {
+      steer = turn;
+      if (turn === 0 && fwd > 0 && this.chase) {
+        const pt = this.chase.cursorOnPlane(this.level);
+        if (pt) {
+          let dh = Math.atan2(-(pt.z - this.z), pt.x - this.x) - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+          steer = Math.hypot(pt.x - this.x, pt.z - this.z) < 3 ? 0 : clamp(dh / 0.3, -1, 1);
+        }
+      }
+      this.rudder += (steer - this.rudder) * (1 - Math.exp(-dt * 8));
+      if (turn !== 0 || fwd > 0) this.rudderMoved = this.time;
+      steer = this.rudder;
+    } else {
+      if (turn !== 0 && !this.rudderHold) {
+        const before = this.rudder, after = clamp(before + turn * RUDDER_RATE * dt, -1, 1);
+        if (before !== 0 && Math.sign(after) !== Math.sign(before)) { this.rudder = 0; this.rudderHold = true; }
+        else this.rudder = after;
+        this.rudderMoved = this.time;
+      }
+      if (turn === 0) this.rudderHold = false;
+      steer = this.rudder;
+    }
     // stroke cycle drives both the animation and the thrust pulses
     const rate = hustle ? PADDLE.hustleRate : PADDLE.strokeRate;
+    const biased = Math.abs(steer) > 0.15; // the paddle stays on the side that holds the course
     if (paddling || st.stroke > 0.02) {
       const prev = st.stroke;
       st.stroke = (st.stroke + dt * rate * (fwd < 0 ? 0.8 : 1)) % 1;
-      if (st.stroke < prev) { this.strokeCount++; if (turn === 0 && this.strokeCount % 7 === 0) st.side *= -1; }
+      if (st.stroke < prev) { this.strokeCount++; if (!biased && this.strokeCount % 7 === 0) st.side *= -1; }
       if (!paddling && st.stroke < prev) st.stroke = 0;
     }
-    if (turn !== 0) st.side = turn > 0 ? 1 : -1;
+    if (biased) st.side = steer > 0 ? 1 : -1;
     st.power += ((paddling ? 1 : 0) - st.power) * (1 - Math.exp(-dt * 6));
     const pulse = st.stroke < 0.5 ? Math.sin((st.stroke / 0.5) * Math.PI) : 0;
     let a = 0;
@@ -193,7 +228,7 @@ export class Player {
     else if (turn !== 0) a = 0.6 * pulse; // sweep strokes still push a little
     this.speed += a * dt;
     this.speed -= (this.speed * Math.abs(this.speed) * PADDLE.drag + this.speed * PADDLE.lin) * dt;
-    const yawTarget = turn * PADDLE.yaw * (0.55 + 0.45 * clamp(Math.abs(this.speed) / 1.5, 0, 1)) * (this.speed < -0.2 ? -1 : 1);
+    const yawTarget = steer * PADDLE.yaw * (0.55 + 0.45 * clamp(Math.abs(this.speed) / 1.5, 0, 1)) * (this.speed < -0.2 ? -1 : 1);
     this.yawRate += (yawTarget - this.yawRate) * (1 - Math.exp(-dt * 3.5));
     // the whole hull must stay in the water (and on a tile that has finished streaming in): centre, bow and stern are tested
     const ok = (x, z, h) => {
@@ -482,11 +517,25 @@ export class Player {
   updateFoot(dt) {
     const inp = this.input, c = this.carry, st = this.canoe.state, w = this.world;
     const carrying = !c.drop;
-    const fwd = (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
-    const turn = (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
+    const iy = (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
+    const ix = (inp.held('KeyD', 'ArrowRight') ? 1 : 0) - (inp.held('KeyA', 'ArrowLeft') ? 1 : 0);
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
     c.hitCooldown -= dt;
-    this.heading += turn * WALK.turn * dt * (this.speed < -0.1 ? -1 : 1);
+    // The keys point relative to the view: W is into the screen, D to its right. The bearing they mean is
+    // fixed when the keys change (or while the view is being dragged, or in first person where the view is
+    // the head), so a view that drifts round behind the walker never bends their line.
+    const keys = (ix + 1) * 3 + (iy + 1), moving = keys !== 4, L = this.footLatch, ch = this.chase;
+    if (moving && (keys !== L.keys || !ch || ch.dragging || ch.mode === 'first')) {
+      const vy = ch ? ch.forwardYaw : this.heading;
+      const fx = Math.cos(vy), fz = -Math.sin(vy), rx = -fz, rz = fx;
+      L.h = Math.atan2(-(fz * iy + rz * ix), fx * iy + rx * ix);
+    }
+    L.keys = keys;
+    const fwd = moving ? 1 : 0;
+    if (moving) {
+      let dh = L.h - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+      this.heading += clamp(dh, -WALK.face * dt, WALK.face * dt);
+    }
     const f = this.forward;
     const trail = this.nearestTrail(this.x, this.z), onTrail = !!trail && trail.dist < TRAIL_WIDTH;
     const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
@@ -503,8 +552,8 @@ export class Player {
     }
     // the hill: the grade a step ahead in the direction of travel slows you and a 40° slope stops you; a
     // trail is graded, so half the penalty and never a wall
-    const dir = fwd < 0 ? -1 : 1, step = 1.5;
-    const grade = (this.groundAt(this.x + f.x * dir * step, this.z + f.z * dir * step) - this.groundAt(this.x, this.z)) / step;
+    const step = 1.5;
+    const grade = (this.groundAt(this.x + f.x * step, this.z + f.z * step) - this.groundAt(this.x, this.z)) / step;
     let wall = null;
     if (!onTrail && grade > MAX_GRADE) wall = 'Too steep to climb here';
     else if (!onTrail && grade < -1.2) wall = 'A drop — find another way down';

@@ -64,8 +64,8 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 
 | Key | Action |
 |---|---|
-| W / S | paddle forward / back; walk forward / back on land |
-| A / D | turn (sweep strokes; steering on foot) |
+| W / S | paddle forward / back; on land, walk into the view / toward it |
+| A / D | afloat: set the course, a bias that holds like a J-stroke kept on one side (it stops at the middle on the way back; release and press again to go through). On land: walk to the view's left / right |
 | Shift | hustle (on foot, a jog) |
 | Space | brace (steadies the hull in a sea; you cannot paddle while bracing) |
 | E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
@@ -87,13 +87,14 @@ extract is scanned in Node (about 15 s). The bake needs network access to `downl
 | R | toggle the canoe's water reflection (costs a second scene pass) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× |
 | Esc | pause: the title screen with Paddle on / New trip / Settings (Esc again, or Enter, resumes) |
-| mouse | look around: in first person the view follows the cursor (right of centre looks right, up looks up), in third person drag to orbit; wheel zooms |
+| mouse | look around: in first person the view follows the cursor (right of centre looks right, up looks up), in third person drag to orbit (the view is yours: on foot it keeps its bearing while you turn, drifting round behind you only slowly as you walk); wheel zooms. *Settings → Steer the canoe toward the cursor*: while you hold W the bow turns toward the cursor's point on the water, A/D nudge, and nothing sticks |
 | click the map | teleport to the nearest open water (anywhere in the wilderness) |
 | entry point list | teleport to one of the BWCA entry point landings |
 
 Paddle up to any bank and press **E**: the canoe noses in, you step out, and you choose to **E** shoulder
-it or **Q** leave it beached there, bow on the land. On foot you walk with W/S and steer with A/D, about
-1.4 m/s (2.1 with Shift, slower with the canoe on your shoulders). A portage trail walks at full speed;
+it or **Q** leave it beached there, bow on the land. On foot WASD walks relative to the view (W into the
+screen, D to its right; the walker turns to face the way and goes), about 1.5 m/s (2.2 with Shift,
+slower with the canoe on your shoulders). A portage trail walks at full speed;
 off it the ground decides: open bedrock and meadows are easy, the forest is brush and deadfall, dark
 spruce and old burns are slow, and the alder and cedar along a shore slowest of all. Hills cost more
 still, a slope past 40° stops you, trunks block you, and water past your knees does. A canoe you have left

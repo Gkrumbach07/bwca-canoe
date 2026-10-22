@@ -19,11 +19,15 @@ export class ChaseCamera {
     this.cursor = { x: 0, y: 0, inside: false };
     this.lookYaw = 0; this.lookPitch = 0; // first person, eased toward where the cursor is
     this.focus = null; // { pos, look } world vectors: a close-up that overrides the chase while it is set
+    this.forwardYaw = 0;    // the bearing straight into the view, for camera-relative walking (player.js)
+    this.lastHeading = null; // the player's heading last frame: on foot the view holds its bearing while the body turns
+    this.cursorSteer = false; // the canoe follows the cursor (settings): shown by the pointer
     window.addEventListener('keydown', (e) => { if (e.code === 'KeyV') this.setMode(this.mode === 'third' ? 'first' : 'third'); });
     let dragging = false, lx = 0, ly = 0;
     dom.addEventListener('pointerdown', (e) => {
       if (this.mode === 'first' || this.orbitLocked) return;
-      dragging = true; lx = e.clientX; ly = e.clientY; dom.setPointerCapture(e.pointerId);
+      dragging = true; lx = e.clientX; ly = e.clientY;
+      try { dom.setPointerCapture(e.pointerId); } catch (_) { /* a synthetic pointer has no capture */ }
     });
     dom.addEventListener('pointerup', () => { dragging = false; });
     dom.addEventListener('pointermove', (e) => {
@@ -39,7 +43,24 @@ export class ChaseCamera {
   }
 
   // jump straight to the new spot (after a teleport) instead of gliding across the map
-  snap() { this.first = true; this.userYaw = 0; this.userPitch = 0; }
+  snap() { this.first = true; this.userYaw = 0; this.userPitch = 0; this.lastHeading = null; }
+
+  get dragging() { return performance.now() - this.lastInput < 200; }
+
+  setCursorSteer(on) { this.cursorSteer = on; this.dom.style.cursor = on ? 'crosshair' : ''; }
+
+  // Where the ray through the cursor meets the horizontal plane at height y: { x, z } in world space, or null
+  // when the cursor is off the page, above the horizon or too far out.
+  cursorOnPlane(y) {
+    if (!this.cursor.inside) return null;
+    const p = new THREE.Vector3(this.cursor.x, this.cursor.y, 0.5).unproject(this.camera);
+    const o = this.camera.position, d = p.sub(o);
+    if (d.y >= -1e-4) return null;
+    const t = (y - o.y) / d.y;
+    if (!(t >= 0 && t <= 600)) return null; // also catches a NaN projection (a zero-sized view)
+    const x = o.x + d.x * t, z = o.z + d.z * t;
+    return Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null;
+  }
 
   setMode(mode) {
     this.mode = mode;
@@ -60,12 +81,19 @@ export class ChaseCamera {
     }
     const onFoot = carrying || player.mode === 'carry' || player.mode === 'walk';
     if (this.mode === 'first') return this.updateFirst(dt, player, onFoot);
-    // ease the user's orbit back behind the canoe once they stop dragging and start moving
+    // The orbit is the player's. On foot the view keeps its bearing while the walker turns under it (the keys
+    // are read against the view, so a view that swung with every turn would change where W goes), drifting
+    // round behind only slowly while they walk on; afloat it eases back behind the hull once the drag is over.
+    if (this.first || this.lastHeading === null) this.lastHeading = player.heading;
+    let dh = player.heading - this.lastHeading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); this.lastHeading = player.heading;
+    if (onFoot) this.userYaw -= dh;
+    this.userYaw = Math.atan2(Math.sin(this.userYaw), Math.cos(this.userYaw));
     if (performance.now() - this.lastInput > 2500 && Math.abs(player.speed) > 0.3) {
-      const k = 1 - Math.exp(-dt * 0.8);
+      const k = 1 - Math.exp(-dt * (onFoot ? 0.25 : 0.8));
       this.userYaw -= this.userYaw * k; this.userPitch -= this.userPitch * k;
     }
     const yaw = player.heading + Math.PI + this.userYaw; // behind the canoe
+    this.forwardYaw = player.heading + this.userYaw;
     const pitch = this.pitch + this.userPitch;
     const dist = this.distance * (onFoot ? 0.8 : 1);
     const tx = player.x, tz = player.z;
@@ -102,6 +130,7 @@ export class ChaseCamera {
     }
     this.userYaw = this.lookYaw;
     const yaw = player.heading + this.lookYaw;
+    this.forwardYaw = yaw;
     const pitch = clamp(this.lookPitch, -0.7, 0.7);
     const k = this.first ? 1 : 1 - Math.exp(-dt * 14);
     this.pos.lerp(this.head, k);

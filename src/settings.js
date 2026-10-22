@@ -15,6 +15,7 @@ export const DEFAULTS = {
   mute: false,
   invertLook: false,
   sensitivity: 1,       // mouse look, 0.3..3
+  cursorSteer: false,   // the bow seeks the cursor's point on the water while you paddle
   speed: 1,             // default game speed 1 | 2 | 4
   camera: 'third',      // default camera 'third' | 'first'
 };
@@ -33,6 +34,7 @@ export const SCHEMA = [
   { group: 'Controls' },
   { key: 'sensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.3, max: 3, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
   { key: 'invertLook', label: 'Invert look', type: 'toggle' },
+  { key: 'cursorSteer', label: 'Steer the canoe toward the cursor (hold W)', type: 'toggle' },
   { key: 'speed', label: 'Game speed at the start of a trip', type: 'select', parse: Number, options: [[1, '1× · realistic'], [2, '2×'], [4, '4×']], hint: '1 2 3' },
   { key: 'camera', label: 'Camera at the start of a trip', type: 'select', options: [['third', 'Behind the canoe'], ['first', 'From the paddler’s seat']], hint: 'V' },
 ];
@@ -88,6 +90,7 @@ export class Settings {
       case 'mute': t.audio.setEnabled(!v); break;
       case 'invertLook': t.chase.invert = v; break;
       case 'sensitivity': t.chase.sensitivity = v; break;
+      case 'cursorSteer': t.player.cursorSteer = v; t.chase.setCursorSteer(v); break;
       case 'speed': if (initial) t.player.timeScale = v; break;
       case 'camera': if (initial && t.chase.mode !== v) t.chase.setMode(v); break;
       default: break;
