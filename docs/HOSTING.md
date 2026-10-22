@@ -143,6 +143,9 @@ egress and 10 million requests a month; past it, $0.085 per GB and $0.01 per 10,
 3. Push. The site appears at `https://<you>.github.io/<repo>/` (the workflow sets the base path from
    the Pages configuration, so a custom domain or a user site works unchanged).
 
+With `VITE_DATA_URL` set the build leaves `public/data` out of `dist/` (it is the only thing under
+`public/`); without it, a local build copies the whole bake in, which is what the demo below wants.
+
 The app costs nothing to host: Pages is free for public repositories, with a soft limit of 100 GB of
 bandwidth a month, and a visit downloads about 300 KB of app. The GPS extension is not part of the site.
 

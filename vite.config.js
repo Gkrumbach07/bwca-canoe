@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: env.BASE_PATH || '/',
     server: { port: 5173, strictPort: true, watch: { usePolling: true, interval: 300 } },
-    build: { target: 'es2022', chunkSizeWarningLimit: 1200 },
+    // public/ holds only the baked data: when the app fetches it from a bucket, do not copy 380 MB into dist/
+    build: { target: 'es2022', chunkSizeWarningLimit: 1200, copyPublicDir: !env.VITE_DATA_URL },
   };
 });
