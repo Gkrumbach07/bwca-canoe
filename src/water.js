@@ -187,7 +187,7 @@ const frag = /* glsl */ `
     // the sky shows in the surface only at grazing angles: dark looking down beside the canoe, silver toward the far shore
     vec3 camRel = vec3(cameraPosition.x - uOrigin.x, cameraPosition.y, cameraPosition.z - uOrigin.y);
     vec3 v = normalize(camRel - vLocal);
-    float fresnel = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+    float fresnel = pow(1.0 - max(dot(n, v), 0.0), 5.0);   // Schlick: ~10 % at the chase camera's angle, ~45 % at the horizon
     vec3 col = mix(body, uReflect, mix(0.04, 0.55, fresnel)) * (1.0 + 0.08 * tone);
     col *= 0.72 + 0.28 * shadow;
     // the canoe's reflection, nothing else
