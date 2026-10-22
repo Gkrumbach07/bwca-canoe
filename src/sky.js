@@ -11,15 +11,20 @@ const skyVert = /* glsl */ `
   }
 `;
 const skyFrag = /* glsl */ `
-  uniform vec3 uZenith, uHorizon, uGround, uSunDir, uSunColor;
+  uniform vec3 uZenith, uHorizon, uMid, uGround, uSunDir, uSunColor;
+  uniform vec2 uGlow; // the low sun's glow: amount, power
   varying vec3 vDir;
   void main() {
     vec3 d = normalize(vDir);
     float t = d.y;
-    vec3 col = mix(uHorizon, uZenith, pow(clamp(t, 0.0, 1.0), 0.38));
+    // three stops: the horizon band, a pale middle six to ten degrees up, the blue by twenty degrees
+    vec3 col = mix(mix(uHorizon, uMid, smoothstep(0.0, 0.1, t)), uZenith, smoothstep(0.06, 0.45, t));
     col = mix(col, uGround, smoothstep(0.0, 0.12, -t));
     float sd = max(dot(d, uSunDir), 0.0);
     col += uSunColor * (pow(sd, 600.0) * 1.6 + pow(sd, 24.0) * 0.22 + pow(sd, 6.0) * 0.06);
+    // the low sun's glow: a broad warm bloom about the sun and a band along the horizon either side of it
+    float band = 1.0 - smoothstep(0.0, 0.3, abs(t));
+    col += uSunColor * uGlow.x * (pow(sd, uGlow.y) + 0.6 * pow(sd, 2.0) * band);
     // the disc itself: a little over half a degree across, soft-edged, brighter than anything else in the sky
     float ang = acos(clamp(sd, -1.0, 1.0));
     col += uSunColor * 2.5 * (1.0 - smoothstep(0.0062, 0.0085, ang)) * step(-0.02, uSunDir.y);
@@ -37,9 +42,11 @@ export function buildSky(sunDir, palette) {
     uniforms: {
       uZenith: { value: new THREE.Color(palette.zenith) },
       uHorizon: { value: new THREE.Color(palette.horizon) },
+      uMid: { value: new THREE.Color(palette.mid ?? palette.horizon).lerp(new THREE.Color(palette.zenith), palette.mid ? 0 : 0.5) },
       uGround: { value: new THREE.Color(palette.ground) },
       uSunDir: { value: sunDir.clone() },
       uSunColor: { value: new THREE.Color(palette.sun) },
+      uGlow: { value: new THREE.Vector2(0.1, 8) },
     },
     side: THREE.BackSide,
     depthWrite: false,
