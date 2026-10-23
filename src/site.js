@@ -18,7 +18,20 @@
 // the same test finds it.
 import { smoothstep, clamp, fbm } from './rng.js';
 import { surfaceAt } from './terrain-build.js';
-import { burnAt } from './fields.js';
+import { burnAt, knobAt, sandAt } from './fields.js';
+
+// The shore's rock (the shoreline pass). In the Boundary Waters the forest runs to the water almost everywhere; the
+// rock shows as a ledge or a boulder band a few metres wide at the foot of the trees (the paint draws that from the
+// vertex's own shore distance, finer than a cell: terrain-build.js splatAt), as a bare rim on the points and
+// headlands that face open water, as the odd low granite shelf where the knobs stand highest, and as the open
+// shelf of a campsite. `open` measures the point: the share of water on two rings round a cell, OPEN.rings metres
+// out (from a cell one past the core that is five cells: inside the halo, so both tiles agree); a point stands over
+// OPEN.point, a cove under OPEN.cove.
+export const OPEN = { rings: [20, 40], point: [0.5, 0.68], cove: [0.3, 0.45] };
+// A campsite's shelf: bare granite from the site down to its landing, SHELF.r metres round that line (the cleared
+// sites are the exclusions' points with a positive radius: props.js exclusionsFor), when the site lies within
+// SHELF.shore metres of the water. The forest keeps off it (placement.js), so the landing is open from the water.
+export const SHELF = { r: [7, 13], shore: 32 };
 
 const tan = (deg) => Math.tan((deg * Math.PI) / 180);
 // steep: the drawn steepness (rise over run of the steepest five metres) that starts and completes a cliff;
@@ -41,16 +54,22 @@ export const CLIFF_MODULE = { ledge: 0.42, ledgeZ: [0.08, 0.12], benchX: [-0.3, 
 //   talus  0..1, scree: the cliff's own foot and the cell or two under it, as far as the cliff is tall
 //   wet    0..1, flat low ground: a hollow, a bog, the flats along a quiet shore
 //   soil   0..1, how deep the soil is: thin on rock, ridges and steep ground, deep in hollows and on the flats
-//   bare   0..1, bare bedrock (the glaciated knobs on the shores and the ridge tops), over 0.5 is bare
+//   bare   0..1, bare bedrock (the points and headlands, the odd granite shelf on a shore, the ridge tops, a
+//          campsite's shelf), over 0.5 is bare
 //   sun    -1..1, the lie toward the sun: + a dry warm south face, - a cool moist north face (0 on the flat)
+//   open   0..1, the share of open water round a cell within OPEN.rings (from 15 m out in the lake to 45 m inland)
+//   beach  0..1, a sand beach: a sheltered cove, gentle ground, the sandy field (the shore cells only)
+//   camp   0..1, a campsite's open shelf (SHELF): bare, and kept clear of trees and brush (placement.js)
+// exclusions: the cleared ground (props.js exclusionsFor, flat [x1, z1, x2, z2, radius] segments), for the campsites'
+// shelves; without it no shelf is drawn.
 export class Site {
-  constructor(grid) {
+  constructor(grid, exclusions = null) {
     const n = grid.side, N = n * n, cell = grid.cell;
     this.grid = grid; this.n = n; this.cell = cell;
     const A = () => new Float32Array(N);
     const H = A(), S = A(), dx = A(), dz = A(), tpi = A(), ux = A(), uz = A(), steep = A(), rise = A(), cliff = A(), talus = A();
-    const wet = A(), soil = A(), bare = A(), sun = A(), sd = A();
-    Object.assign(this, { H, S, dx, dz, tpi, ux, uz, steep, rise, cliff, talus, wet, soil, bare, sun, sd });
+    const wet = A(), soil = A(), bare = A(), sun = A(), sd = A(), open = A(), beach = A(), camp = A();
+    Object.assign(this, { H, S, dx, dz, tpi, ux, uz, steep, rise, cliff, talus, wet, soil, bare, sun, sd, open, beach, camp });
     const at = (li, lj) => clamp(lj, 0, n - 1) * n + clamp(li, 0, n - 1);
     for (let k = 0; k < N; k++) { H[k] = grid.h[k] * 0.1; sd[k] = grid.sd[k] * 0.1; }
 
@@ -127,17 +146,60 @@ export class Site {
       talus[k] = t;
     }
 
+    // how open to the lake each cell near a shore stands (points and coves), and the sand beaches in the coves
+    const [r1, r2] = OPEN.rings;
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li, d = sd[k];
+      if (d < -15 || d > 45) continue;
+      const x = grid.cellX(grid.i0 + li), z = grid.cellZ(grid.j0 + lj);
+      let w = 0;
+      for (let q = 0; q < 12; q++) { const a = (q / 12) * Math.PI * 2; if (grid.shoreAt(x + Math.cos(a) * r1, z + Math.sin(a) * r1) < 0) w += 1; }
+      for (let q = 0; q < 16; q++) { const a = ((q + 0.5) / 16) * Math.PI * 2; if (grid.shoreAt(x + Math.cos(a) * r2, z + Math.sin(a) * r2) < 0) w += 1.5; }
+      open[k] = w / 36;
+      if (d > 0 && d < 20) {
+        // gentle: the land's own rise from the lake (the data's slope there also holds the drop into the lake)
+        const cove = 1 - smoothstep(OPEN.cove[0], OPEN.cove[1], open[k]), rise = (H[k] - grid.levelAt(x, z, 4)) / Math.max(d, 4);
+        beach[k] = cove * (1 - smoothstep(0.06, 0.12, rise)) * smoothstep(0.66, 0.74, sandAt(x, z));
+      }
+    }
+    // the campsites near the water this tile can see
+    const camps = [];
+    if (exclusions) {
+      const x0 = grid.cellX(grid.i0) - 20, x1 = grid.cellX(grid.i0 + n - 1) + 20, z0 = grid.cellZ(grid.j0) - 20, z1 = grid.cellZ(grid.j0 + n - 1) + 20;
+      for (let s = 0; s < exclusions.length; s += 5) {
+        const cx = exclusions[s], cz = exclusions[s + 1];
+        if (exclusions[s + 4] <= 0 || cx !== exclusions[s + 2] || cz !== exclusions[s + 3]) continue;
+        if (cx < x0 || cx > x1 || cz < z0 || cz > z1) continue;
+        const cs = grid.shoreAt(cx, cz);
+        if (cs <= -2 || cs >= SHELF.shore) continue;
+        // its landing: straight down to the water from the site (as props.js lays the ledge and the fire ring)
+        const dir = grid.deeperDir(cx, cz), reach = Math.max(0, cs) + 2;
+        camps.push(cx, cz, cx + dir.x * reach, cz + dir.z * reach, cs);
+      }
+    }
+
     // the habitat fields
     for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
       const k = lj * n + li, x = grid.cellX(grid.i0 + li), z = grid.cellZ(grid.j0 + lj), s = S[k], d = sd[k];
       const ridge = smoothstep(0.6, 3.2, tpi[k]), hollow = smoothstep(0.4, 2.6, -tpi[k]);
       const flat = 1 - smoothstep(0.035, 0.12, s);
-      // the glaciated knobs the old rock field made, kept on the shores and the ridge tops and off the slopes
-      // and hollows; the bare shelf at the foot of a bluff; partly bare on steep ground that is not a cliff
-      const knob = smoothstep(0.64, 0.76, fbm(x * 0.007 + 5, z * 0.007, 3, 73));
-      const nearShore = 1 - smoothstep(25, 90, d);
-      const b = Math.max(knob * Math.max(nearShore * (1 - 0.7 * hollow), ridge * (1 - smoothstep(0.35, 0.6, s))), 0.42 * smoothstep(0.5, 0.95, s));
-      bare[k] = d < 0 ? 0 : Math.max(b, talus[k] * 0.5);
+      // the bare Shield: on a shore, a rim on the points and headlands that face open water (deeper and barer where
+      // the knob field stands up) and a low granite shelf on gentle ground where the knobs stand highest, both within
+      // a cell or so of the water (the waterline's ledge itself is the paint's); the knobs on the ridge tops inland,
+      // off the slopes; partly bare on steep ground that is not a cliff; the scree; a campsite's shelf
+      const kv = knobAt(x, z), knob = smoothstep(0.64, 0.76, kv);
+      const point = smoothstep(OPEN.point[0], OPEN.point[1], open[k]);
+      const shelf = smoothstep(0.76, 0.86, kv) * (1 - smoothstep(0.08, 0.22, s));
+      const rim = (1 - smoothstep(5, 16, d)) * Math.max(point * (0.55 + 0.45 * knob), 0.9 * shelf * (1 - 0.6 * hollow));
+      const top = knob * ridge * (1 - smoothstep(0.35, 0.6, s)) * smoothstep(20, 45, d);
+      let b = Math.max(rim, top, 0.42 * smoothstep(0.5, 0.95, s));
+      for (let c = 0; c < camps.length; c += 5) {
+        // from the site down to its landing, SHELF.r round that line, fading uphill of the site
+        const ax = camps[c], az = camps[c + 1], ex = camps[c + 2] - ax, ez = camps[c + 3] - az, L2 = ex * ex + ez * ez || 1;
+        const t = clamp(((x - ax) * ex + (z - az) * ez) / L2, 0, 1), dist = Math.hypot(x - ax - ex * t, z - az - ez * t);
+        if (dist < SHELF.r[1]) camp[k] = Math.max(camp[k], (1 - smoothstep(SHELF.r[0], SHELF.r[1], dist)) * (1 - smoothstep(camps[c + 4] + 2, camps[c + 4] + 9, d)));
+      }
+      bare[k] = d < 0 ? 0 : Math.max(b, camp[k], talus[k] * 0.5);
       // the lie toward the sun, on ground steep enough for it to matter
       sun[k] = dz[k] * smoothstep(0.04, 0.3, s);
       // wet: flat ground in a hollow, flat ground in the broad lowland patches a bog field marks out (the 10 m
@@ -157,6 +219,21 @@ export class Site {
       // soil: thin on rock, ridges and steep ground, deep in the hollows and the wet flats (peat)
       soil[k] = d < 0 ? 0 : clamp(0.6 + 0.3 * hollow + 0.2 * wet[k] - 0.45 * ridge - 0.9 * smoothstep(0.2, 0.75, s) - bare[k], 0, 1);
     }
+    // the lake's own cells beside a shore carry the wetness and the bare rock of the land beside them (the mean of
+    // their land neighbours), so what reads these bilinearly at the waterline (the paint, the lake plants) sees the
+    // shore's ground, not the lake's (wet 1, bare 0); further out wet stays 1
+    const wet0 = Float32Array.from(wet), bare0 = Float32Array.from(bare), beach0 = Float32Array.from(beach), camp0 = Float32Array.from(camp);
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li;
+      if (sd[k] >= 0 || sd[k] < -15) continue;
+      let cnt = 0, sw = 0, sb = 0, ss = 0, sc = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const q = at(li + di, lj + dj);
+        if (sd[q] < 0) continue;
+        cnt++; sw += wet0[q]; sb += bare0[q]; ss += beach0[q]; sc += camp0[q];
+      }
+      if (cnt) { wet[k] = sw / cnt; bare[k] = sb / cnt; beach[k] = ss / cnt; camp[k] = sc / cnt; }
+    }
   }
 
   // local cell index of world (x, z), clamped to the tile's extent
@@ -175,7 +252,7 @@ export class Site {
   }
   // everything at a point for the forest (bilinear), into `o`
   sample(x, z, o = {}) {
-    for (const key of ['S', 'tpi', 'cliff', 'talus', 'wet', 'soil', 'bare', 'sun', 'steep']) o[key] = this.at(this[key], x, z);
+    for (const key of ['S', 'tpi', 'cliff', 'talus', 'wet', 'soil', 'bare', 'sun', 'steep', 'open', 'beach']) o[key] = this.at(this[key], x, z);
     o.burn = burnAt(x, z);
     return o;
   }

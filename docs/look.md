@@ -196,6 +196,37 @@ baked lightmaps, no PBR, no external assets.
   family's base is y = 0 inside `FOOT`; placement.js's `ROCK_FOOT` holds the same outlines: change one, change
   the other. `seatRock(ground, foot, …)` sinks a rock until its whole outline is under the ground it is given.
 
+## Shorelines
+
+In the Boundary Waters the forest runs to the water almost everywhere: a dark wall of cedar, fir, spruce, birch and
+pine from the waterline back, shrubs and alder at the edge, rock only as a narrow ledge or a boulder band at the foot
+of the trees. Open rock belongs to campsites and some points and ledges, not to long slopes.
+
+- **Bare shore rock is only three things** (site.js `bare`): a rim on the points and headlands that face open water,
+  the odd low granite shelf where the knob field (fields.js `knobAt`) is highest, and a campsite's shelf. Ridge tops,
+  steep ground, cliff bands, scree and burns are as before. `rockAt` (the far terrain, the fishing, the lake plants)
+  keeps the knobs to a ledge within about 9 m of the water. Do not bring back a near-shore knob term.
+- **New site fields** (site.js, per cell, inside the halo): `open`, the share of water on rings 20 and 40 m out
+  (`OPEN`: a point is over 0.5–0.68, a cove under 0.3–0.45); `beach`, a sand beach (a cove, gentle land rise, the
+  `sandAt` field); `camp`, a campsite's shelf from the site down to its landing (`SHELF`). `new Site(grid, exclusions)`:
+  the campsites are the exclusions' point segments with a positive radius (props.js `exclusionsFor`). The lake's cells
+  beside a shore carry their land neighbours' `wet`, `bare`, `beach` and `camp`, so bilinear reads at the waterline
+  see the shore.
+- **The waterline band** (terrain-build.js `splatAt`): the land side is a thin dark band under the crowns, the new
+  `margin` material (wet duff and roots) or dark wet granite (`ledgeAt`: knobs, points, steeper shores, a noise, none
+  on wet ground). The new `sand` material is only on beaches. `aSplatC` is cliff, scree, sand, margin; `aSplatB`'s
+  `shore` weight is no longer painted (the trail decal still mixes its soil from that colour). No sunny stands within
+  about 20 m of the water.
+- **Openings**: `meadowAt(x, z, sd, wet)` (fields.js) is the one meadow field for the paint, the forest and the
+  grass: fens and beaver meadows on wet flats, the odd dry opening well inland, none on an upland shore.
+  `gladeAt` (placement.js) is rare and small; `gladeShore(sd, wet)` keeps glades off upland shores.
+- **The forest edge** (placement.js): shore cells, even those whose centre is in the water, take `SHORE_TREES.row`;
+  each kind has its own closest distance to the water (`SHORE_MIN`); young fir, spruce and cedar fill the edge
+  (`EDGE`); the first rows lean out over the water (`LEAN`; the tree bins carry the rocks' 10-float stride for
+  azimuth and tilt). Campsite shelves and beaches are kept clear of trees and brush.
+- **The pale strip at the waterline** seen from out on the lake is the shallow bed's sand colour (`bedSand`) through
+  the water, not the land: the water side owns it.
+
 ## The ground things stand on
 
 - The terrain mesh is not the height field: the shore band's rock bumps and the flat triangles between vertices

@@ -1,8 +1,8 @@
 // Terrain geometry for one tile (or one far-field chunk), built from a TileGrid. Pure data in, typed arrays
 // out, so it runs in the build worker. Positions are relative to (originX, originZ), the tile corner, which
 // keeps every vertex small enough for float32 however far the tile sits from the world origin.
-import { fbm, lerp, smoothstep } from './rng.js';
-import { clearingAt, burnAt, rockAt } from './fields.js';
+import { fbm, lerp, smoothstep, clamp } from './rng.js';
+import { burnAt, rockAt, meadowAt, knobAt } from './fields.js';
 
 // the cliff band strength (site.js CLIFF.band) a cell needs to be a cliff
 const CLIFF_BAND = 0.45, TALUS_MIN = 0.4;
@@ -72,7 +72,7 @@ export function classify(grid, x, z, shade, pre) {
     return lichenField(x, z) >= 0 ? I.rockLichen : I.rock;
   }
   if (burnAt(x, z) >= 0.5) return I.burn;
-  if (clearingAt(x, z) >= 0.68) return I.meadow; // same field the forest uses for clearings
+  if (meadowAt(x, z, sd, pre.wet || 0) >= 0.5) return I.meadow; // same field the forest uses for its openings
   if (shade >= 0.55) return I.forestDark;
   return sunnyField(x, z) >= 0 ? I.forestLight : I.forest;
 }
@@ -86,10 +86,11 @@ const sunnyField = (x, z) => fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few b
 export function groundPre(grid, x, z, sd, site, pre) {
   pre.sd = sd;
   pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z);
-  pre.wall = 0; pre.brink = 0; pre.bog = 0;
+  pre.wall = 0; pre.brink = 0; pre.bog = 0; pre.wet = 0; pre.open = 0; pre.beach = 0;
   if (sd >= 0 && site) {
     pre.rock = site.at(site.bare, x, z); pre.cliff = site.at(site.cliff, x, z); pre.talus = site.at(site.talus, x, z);
-    pre.bog = bogMoss(site.at(site.wet, x, z));
+    pre.wet = site.at(site.wet, x, z); pre.bog = bogMoss(pre.wet);
+    if (sd < 25) { pre.open = site.at(site.open, x, z); pre.beach = site.at(site.beach, x, z); }
     if (site.at(site.steep, x, z) > 0.55) {
       const e = 2.5, gx = surfaceAt(grid, x + e, z) - surfaceAt(grid, x - e, z), gz = surfaceAt(grid, x, z + e) - surfaceAt(grid, x, z - e), d = Math.hypot(gx, gz) / (2 * e);
       pre.wall = smoothstep(0.95, 1.25, d); pre.brink = smoothstep(0.55, 0.85, d);
@@ -97,7 +98,7 @@ export function groundPre(grid, x, z, sd, site, pre) {
   } else { pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z); pre.cliff = 0; pre.talus = 0; }
   return pre;
 }
-const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, depth: -1 };
+const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1 };
 // the wet ground's moss: a bog's floor is sphagnum, not needle duff (the ground cover reads it too, tile-worker.js)
 export const bogMoss = (wet) => 0.8 * smoothstep(0.55, 0.9, wet);
 export function groundClass(grid, x, z, shade = 0, site = null) {
@@ -111,14 +112,16 @@ export function groundClass(grid, x, z, shade = 0, site = null) {
 export const mossAt = (x, z) => smoothstep(0.44, 0.6, fbm(x * 0.05 + 13, z * 0.05, 2, 83));
 
 // ---- the splat ------------------------------------------------------------------------------------------
-// The ground is painted from ten materials, each a lit colour and the colour it takes under a thick canopy
+// The ground is painted from twelve materials, each a lit colour and the colour it takes under a thick canopy
 // (the floor pass's lit/shade pairs). The terrain carries their weights per vertex as three vec4s
-// (aSplatA = duff, moss, meadow, burn; aSplatB = rock, dark rock, lichen rock, shore; aSplatC = cliff, scree and
-// two spare) and the shader blends them through a world-space noise (terrain.js), so a transition is a soft
+// (aSplatA = duff, moss, meadow, burn; aSplatB = rock, dark rock, lichen rock, shore; aSplatC = cliff, scree, sand,
+// margin) and the shader blends them through a world-space noise (terrain.js), so a transition is a soft
 // irregular band a few metres wide. The cliff and the scree carry their own pattern there (streaks and lichen
 // on the one, small blocks on the other).
 // `shadeK` is how far each goes toward its shade colour under a full canopy.
-const SHORE = { lit: hex(0x8e8670), shade: hex(0x66604f) }; // the damp margin a soil shore has at the waterline
+// `shore` is the old damp grey-brown margin: the terrain no longer paints it (the waterline is the margin, the ledge
+// or the sand below), but the trail decal still mixes its packed soil from it (prop-kit.js trailMaterial).
+const SHORE = { lit: hex(0x8e8670), shade: hex(0x66604f) };
 export const SPLAT = [
   // the duff's shade partner a step lighter than forestDark: the trees' real shadows now fall on it as well,
   // with no toon floor to lift them, and together they went to charcoal
@@ -132,6 +135,10 @@ export const SPLAT = [
   { name: 'shore', lit: SHORE.lit, shade: SHORE.shade, shadeK: 0.5 },
   { name: 'cliff', lit: C.cliff, shade: hex(0x484d47), shadeK: 0.5 },
   { name: 'talus', lit: C.talus, shade: hex(0x51514d), shadeK: 0.5 },
+  // the shoreline pass: the sand of the few real beaches (a little warmer and darker than the bed's sand, dry), and
+  // the wet margin under the trees at the waterline, dark duff and roots
+  { name: 'sand', lit: hex(0xbaa784), shade: hex(0x857a63), shadeK: 0.5 },
+  { name: 'margin', lit: hex(0x5b4c3c), shade: hex(0x3a3129), shadeK: 0.6 },
 ];
 export const SPLAT_SUNNY = C.forestLight; // the duff's lit colour in the broad sunny stands
 export const BED_PALETTE = [C.bedSand, C.bedShelf, C.bedWeed, C.bedDeep, C.bedHole];
@@ -168,15 +175,34 @@ export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
   const lichen = across(lichenField(x, z), 0.05) * (1 - dark);
   const soil = left - rock;
   const burn = across(burnAt(x, z) - 0.5, 0.25);
-  const meadow = across(clearingAt(x, z) - 0.68, 0.025) * (1 - burn);
+  const meadow = across(meadowAt(x, z, pre.sd, pre.wet || 0) - 0.5, 0.15) * (1 - burn);
   const forest = 1 - burn - meadow;
-  const sunny = across(sunnyField(x, z), 0.03);
+  // (no sunny stand along the water: the forest's edge there is the dark wall the shoreline pass wants)
+  const sunny = across(sunnyField(x, z), 0.03) * smoothstep(8, 22, pre.sd);
   const moss = Math.max(mossAt(x, z), pre.bog || 0) * (1 - 0.6 * sunny);
-  const shore = (1 - smoothstep(0.3, 2.4, pre.sd)) * 0.9;
-  const ground = soil * (1 - shore);
+  // The waterline (the shoreline pass): the forest runs to the water, so the land side of the shore is a thin band
+  // at the foot of the trees, under their crowns: dark wet duff and roots (the margin), or a ledge of dark wet
+  // granite where the shore is rocky (ledgeAt); on the few real beaches (a sheltered, gentle, sandy cove: site.js
+  // beach) sand a few metres up the shore instead. No light strip.
+  const sand = soil * across((pre.beach || 0) - 0.5, 0.15) * (1 - smoothstep(2.5, 7, pre.sd));
+  const rim = (1 - smoothstep(0.4, 2.8, pre.sd)) * 0.95 * (soil - sand);
+  const ledge = rim * ledgeAt(x, z, pre), margin = rim - ledge;
+  const ground = soil - sand - rim;
   wA[0] = ground * forest * (1 - moss); wA[1] = ground * forest * moss; wA[2] = ground * meadow; wA[3] = ground * burn;
-  wB[0] = rock * (1 - dark - lichen); wB[1] = rock * dark; wB[2] = rock * lichen; wB[3] = soil * shore;
-  fl[0] = shade * (1 - 0.8 * sunny); fl[1] = sunny; fl[2] = 0; fl[3] = 0;
+  wB[0] = rock * (1 - dark - lichen); wB[1] = rock * dark + ledge; wB[2] = rock * lichen; wB[3] = 0;
+  wC[2] = sand; wC[3] = margin;
+  // the band lies in the shade of the crowns that lean out over it (a beach is open to the sky)
+  const under = (1 - smoothstep(0.6, 3.2, pre.sd)) * (1 - across((pre.beach || 0) - 0.5, 0.15));
+  fl[0] = Math.max(shade * (1 - 0.8 * sunny), 0.85 * under); fl[1] = sunny * (1 - under); fl[2] = 0; fl[3] = 0;
+}
+// How much of the waterline band is a granite ledge (0..1) rather than wet duff: more on the knobs, the points that
+// face open water and the steeper shores, broken along the rest by a noise some tens of metres across; none on the
+// wet ground (a fen's margin is sphagnum and sedge) and little in a cove.
+const ledgeNoise = (x, z) => fbm(x * 0.022 + 9, z * 0.022, 2, 239);
+export function ledgeAt(x, z, pre) {
+  const knob = smoothstep(0.58, 0.76, knobAt(x, z)), point = smoothstep(0.42, 0.66, pre.open || 0), cove = 1 - smoothstep(0.24, 0.4, pre.open || 0);
+  const v = 0.2 + 0.55 * knob + 0.45 * point + 0.4 * smoothstep(0.08, 0.3, pre.slope) + 1.4 * (ledgeNoise(x, z) - 0.5) - 0.35 * cove - 0.9 * (pre.wet || 0);
+  return smoothstep(0.3, 0.7, clamp(v, 0, 1));
 }
 
 // Height in the shore band follows the distance field, so the waterline, the ripple lines and the
@@ -196,10 +222,11 @@ export function surfaceAt(grid, x, z) {
   return shoreShape(h, sd, grid.levelAt(x, z, 4));
 }
 
-// Gentle rock bumps a little way from the waterline (never across it).
+// Gentle bumps a little way from the waterline (never across it): hummocks and roots under the shore's trees, low
+// (they were rock knobs 1.6 m high when the shores were bare; under a forest they read as dunes).
 function shoreBumps(x, z, sd) {
   const n = fbm(x * 0.07, z * 0.07, 2, 51) - 0.5;
-  if (sd > 0) return Math.max(0, n) * 1.6 * smoothstep(3, 8, sd) * (1 - smoothstep(10, FINE_BAND, sd));
+  if (sd > 0) return Math.max(0, n) * 0.75 * smoothstep(3, 8, sd) * (1 - smoothstep(10, FINE_BAND, sd));
   return -Math.abs(n) * 0.5 * smoothstep(3, 8, -sd) * (1 - smoothstep(10, FINE_BAND, -sd));
 }
 

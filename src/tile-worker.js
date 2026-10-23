@@ -53,7 +53,7 @@ async function buildFine(m) {
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
   // what the ground is like at every cell (cliffs, scree, ridges, wet ground, soil): the paint, the forest, the
   // rocks and the cliffs all read it
-  const site = new Site(grid);
+  const site = new Site(grid, cfg.exclusions);
   const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz, site });
   const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site });
   // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the

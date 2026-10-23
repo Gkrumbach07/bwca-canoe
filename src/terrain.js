@@ -3,8 +3,9 @@ import { applyLook } from './shading.js';
 import { applyWet } from './weather.js';
 import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE } from './terrain-build.js';
 
-// The ground as a painted splat (docs/look.md, pass 1). Every vertex carries the weights of ten ground
-// materials (the bluff pass added the cliff and the scree), the canopy shade over it and, under water, the depth of the bed (terrain-build.js splatAt);
+// The ground as a painted splat (docs/look.md, pass 1). Every vertex carries the weights of twelve ground
+// materials (the bluff pass added the cliff and the scree, the shoreline pass a beach's sand and the wet margin at the
+// waterline), the canopy shade over it and, under water, the depth of the bed (terrain-build.js splatAt);
 // the fragment shader blends the materials through a warped world-space noise, so a transition is a soft
 // irregular band a few metres wide and never a polygon edge, then mottles the result at three scales and
 // darkens it under the canopy. The light is the shared smooth Lambert (shading.js).
@@ -122,8 +123,8 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     vec4 hA = wA + amp * (n1 * SPLAT_CA + n2 * SPLAT_SA) * smoothstep(0.0, 0.15, wA);
     vec4 hB = wB + amp * (n1 * SPLAT_CB + n2 * SPLAT_SB) * smoothstep(0.0, 0.15, wB);
     vec4 hC = wC + amp * (n1 * SPLAT_CC + n2 * SPLAT_SC) * smoothstep(0.0, 0.15, wC);
-    vec4 onC = step(0.002, wC); // the cliff and the scree only where the vertices carry them (and never the spares)
-    float top = max(max(max(max(hA.x, hA.y), max(hA.z, hA.w)), max(max(hB.x, hB.y), max(hB.z, hB.w))), max(hC.x, hC.y));
+    vec4 onC = step(0.002, wC); // the cliff, the scree, the sand and the margin only where the vertices carry them
+    float top = max(max(max(max(hA.x, hA.y), max(hA.z, hA.w)), max(max(hB.x, hB.y), max(hB.z, hB.w))), max(max(hC.x, hC.y), max(hC.z, hC.w)));
     float soft = mix(1.0, uSplat.y, fb);
     vec4 bA = max(hA - top + soft, 0.0), bB = max(hB - top + soft, 0.0), bC = max(hC - top + soft, 0.0) * onC;
     bA *= bA; bB *= bB; bC *= bC;
@@ -157,6 +158,7 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
       + bA.y * groundShaded(1, uGroundLit[1], s) + bA.z * groundShaded(2, uGroundLit[2], s) + bA.w * groundShaded(3, uGroundLit[3], s)
       + bB.x * groundShaded(4, uGroundLit[4], s) + bB.y * groundShaded(5, uGroundLit[5], s) + bB.z * groundShaded(6, uGroundLit[6], s) + bB.w * groundShaded(7, uGroundLit[7], s);
     if (bC.x + bC.y > 0.0) c += bC.x * groundShaded(8, uGroundLit[8] * cliffTone(p, px), s) + bC.y * groundShaded(9, uGroundLit[9] * screeTone(p, px), s);
+    if (bC.z + bC.w > 0.0) c += bC.z * groundShaded(10, uGroundLit[10], s) + bC.w * groundShaded(11, uGroundLit[11], s);
   }
   c *= mottle;
   c *= vec3(1.0 + 0.06 * m20, 1.0, 1.0 - 0.06 * m20); // the slow mottle drifts a touch warm and cool too
