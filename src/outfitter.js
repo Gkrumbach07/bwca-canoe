@@ -102,7 +102,7 @@ const iconOf = (id) => {
 export const gearIcon = (id, faint = false) => `<span style="color:${faint ? '#9a8a70' : '#2a2016'}; display:inline-flex"><svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true">${ICON[iconOf(id)] || ICON.jig}</svg></span>`;
 const STANDING = ['new', 'a familiar face', 'a regular', 'a friend of the house', 'an old hand', 'one of the family'];
 
-const NEAR = 25;                 // metres from the landing within which E opens the counter
+const NEAR = 25;                 // metres from the landing (its dock, once built: distTo) within which E opens the counter
 const SAVE_KEY = 'bwca-canoe-trip';
 const DEFAULT_BUY = 3;           // days of food the stepper offers first
 const SANDBOX_DAYS = 4;          // Sandbox: the food pack's days (they only set its weight)
@@ -111,9 +111,9 @@ const EVAC_FADE = 1.4;           // seconds of fade before the move (the old eva
 const SPOT_R = 1.5;              // metres from a store hotspot's floor spot within which E is its
 const SPOT_FACE = Math.cos((80 * Math.PI) / 180); // and how squarely you must face it
 const DOOR_R = 3;                // metres from the door, outside, within which the door says it is open
-const VISIT_FAR = 90;            // metres from the landing at which a visit is over (a ride, a teleport, a walk away)
+const VISIT_FAR = 90;            // metres from the store and its dock (distTo) at which a visit is over (a ride, a teleport, a walk away)
 const ARRIVAL_WAIT = 20;         // game seconds an arrival waits for the landing's store to be built before it gives up
-const ARRIVAL_FAR = 250;         // metres from the landing within which an arrival still goes in (a teleport finds water up to 120 m out)
+const ARRIVAL_FAR = 250;         // metres from the landing (distTo) within which an arrival still goes in (a teleport finds water up to 120 m out)
 const TABS = [['counter', 'The counter'], ['board', 'The board'], ['shelves', 'The shelves'], ['wall', 'The lure wall']];
 const SPOT_WORDS = { counter: 'The counter', board: 'The board', wall: 'The lure wall', food: 'The provisions shelf · food and water', tackle: 'The tackle shelf · the rod and the bait', gear: 'The gear shelf · paddles, packs and tents' };
 const SLOTS = [['canoe', 'Canoe'], ['paddle', 'Paddle'], ['tent', 'Tent'], ['filter', 'Water']];
@@ -173,10 +173,20 @@ export class Outfitter {
 
   get shop() { return this._shop; }
   set shop(s) { this._shop = s; if (s) s.outfitter = this; }
+  // the nearest landing to (x, z), by distTo
   nearest(x, z) {
     let best = null;
-    for (const l of this.landings) { const d = Math.hypot(l.x - x, l.z - z); if (!best || d < best.d) best = { l, d }; }
+    for (const l of this.landings) { const d = this.distTo(l, x, z); if (!best || d < best.d) best = { l, d }; }
     return best;
+  }
+  // How far (x, z) is from landing l: from its store or the dock it was built with, once its tile has them (a visit
+  // belongs to the store's layout: some entry points' own spots lie far out on the lake, Moose Lake's 125 m, and the
+  // dock and the store stand at the shore in from it), else from the landing's own spot
+  distTo(l, x, z) {
+    const L = this.layout(l.ep);
+    if (!L) return Math.hypot(l.x - x, l.z - z);
+    const ds = L.dockSide || L.dockLand || L.door, c = L.centre || L.door;
+    return Math.min(Math.hypot(ds.x - x, ds.z - z), Math.hypot(c.x - x, c.z - z));
   }
   landing(ep) { return this.landings.find((l) => l.ep === ep) || null; }
   get adventure() { return !!(this.core && this.core.adventure); }
@@ -269,8 +279,9 @@ export class Outfitter {
       return;
     }
     this.arrival = null;
-    if (Math.hypot(l.x - p.x, l.z - p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) { if (a.why === 'season' || a.pending) this.pendingShow = true; return; }
-    this.tieUp(l, L, a.why === 'reload');
+    if (this.distTo(l, p.x, p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) { if (a.why === 'season' || a.pending) this.pendingShow = true; return; }
+    this.tieUp(l, L, a.why === 'reload' || a.why === 'ride');
+    if (a.why === 'ride') this.hud.note(`The truck leaves you at ${l.name}: the canoe at the dock, the door open.`, 5);
     const v = this.visit;
     if (a.why === 'reload') {
       const d = this.day; this.greeted[a.ep] = `${d.year}-${d.doy}`; // the keeper said hello before the reload
@@ -296,7 +307,7 @@ export class Outfitter {
       const L = this.layout(n.l.ep); if (!L || !L.inside(p.x, p.z)) return;
       v = this.visit = { ep: n.l.ep, landing: n.l, L, inside: false, switched: false, settled: false, bye: false };
     }
-    const far = Math.hypot(v.landing.x - p.x, v.landing.z - p.z) > VISIT_FAR;
+    const far = this.distTo(v.landing, p.x, p.z) > VISIT_FAR;
     if (!p.onFoot || far) { this.endVisit(p.mode === 'paddle' && !p.teleporting && !far); return; }
     const L = this.layout(v.ep) || v.L; v.L = L;
     const inside = !!L.inside(p.x, p.z);
@@ -308,8 +319,13 @@ export class Outfitter {
     const d = this.day, today = `${d.year}-${d.doy}`;
     if (this.greeted[v.ep] !== today) {
       this.greeted[v.ep] = today;
-      const kind = this.lineKind === 'season' ? 'season' : 'hello'; // a season begun here: the forty dollars, said as you come in
-      if (kind === 'season') this.lineKind = 'welcome';
+      // a season begun here: the forty dollars, said as you come in; off a truck (rides.js) after a bunk night, good
+      // morning; a store new to you, a stranger's welcome; off the truck, the road's word; else hello
+      const fresh = !!(this.core && this.core.fresh === v.ep);
+      const kind = this.lineKind === 'season' ? 'season' : this.arrivedBy === 'bunk' ? 'morning' : fresh ? 'stranger' : this.arrivedBy === 'ride' ? 'ride' : 'hello';
+      if (kind === 'season' || this.arrivedBy) this.lineKind = 'welcome';
+      this.arrivedBy = null;
+      if (fresh) this.core.fresh = null;
       const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, kind);
       this.heard(v.ep, words);
       this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7);
@@ -898,7 +914,7 @@ export class Outfitter {
     const moved = pr && pr.migrated;
     if (moved) pr.forgetMigration();
     // the page went away in a store: back on its floor once it is built (updateArrival)
-    const vis = d && d.visit && this.landing(d.visit.ep) && Math.hypot(this.landing(d.visit.ep).x - this.player.x, this.landing(d.visit.ep).z - this.player.z) < ARRIVAL_FAR ? d.visit : null;
+    const vis = d && d.visit && this.landing(d.visit.ep) && this.distTo(this.landing(d.visit.ep), this.player.x, this.player.z) < ARRIVAL_FAR ? d.visit : null;
     if (vis) this.arrival = { why: 'reload', ep: vis.ep, x: vis.x, z: vis.z, heading: vis.heading, inside: vis.inside, switched: vis.switched, t: 0, pending: !(d.trip && d.trip.active) };
     if (d && d.trip && d.trip.active) {
       this.trip = { ...this.trip, ...d.trip, days: this.foodRoom };
