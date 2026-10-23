@@ -16,8 +16,8 @@ const $ = (id) => document.getElementById(id);
 const DRIFT_RATE = 0.045;   // rad/s round the canoe
 const DRIFT_RADIUS = 23;    // metres, where there is water for it
 const MODES = {
-  adventure: 'Open trips: food to buy, adverts to take, real rules.',
-  sandbox: 'The same lakes, with no limits and no dates.',
+  adventure: 'Open trips: buy food, take notices.',
+  sandbox: 'The same lakes, with no limits.',
 };
 
 // the controls reference (the Controls item), by what you are doing
@@ -249,6 +249,7 @@ export class Title {
       let tag = b.querySelector('small.home');
       if (isHome && !tag) { tag = document.createElement('small'); tag.className = 'home'; tag.textContent = ' · home'; b.appendChild(tag); }
       else if (!isHome && tag) tag.remove();
+      for (const s of b.querySelectorAll('small:not(.home)')) s.hidden = season; // 'the default start' says nothing once home is set
     }
   }
 

@@ -34,7 +34,7 @@
 .menu .item:focus-visible, .menu .item.current, .menu .item:hover { color: var(--gold); outline: none; }
 .menu .item:focus-visible::before, .menu .item.current::before { background: var(--gold); }
 .menu .item:disabled { color: var(--cream-50); cursor: default; }
-.menu .hint { font-size: 13.5px; color: var(--cream-72); padding-left: 28px; min-height: 1em; }
+.menu .hint { font-size: 13.5px; color: var(--cream-72); padding-left: 28px; min-height: 1em; max-width: 200px; line-height: 1.4; } /* wraps, so the entry points keep their column inside the band */
 .entries { display: flex; flex-direction: column; gap: 10px; padding-bottom: 2px; }
 .entries[hidden] { display: none; }
 .entries .kicker { font-size: 12px; letter-spacing: .16em; color: rgba(243, 236, 221, .7); }
