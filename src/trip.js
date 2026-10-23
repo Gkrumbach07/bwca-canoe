@@ -73,8 +73,9 @@ export class Trip {
   get active() { return !!this.state.active; }
   get permit() { return this.state.permit; }
   get today() { const a = this.asOf || this.day; return absDay(a.year, a.doy); } // asOf: a saved date the words are for
-  // the day of the trip, by the calendar: the put-in day is day 1
-  get dayN() { const p = this.permit; return this.active && p && p.entry ? this.today - absDay(p.entry.year, p.entry.doy) + 1 : 0; }
+  // the day of the trip, by the calendar: the put-in day is day 1, and never less (Sandbox's clock keys, or an old
+  // save, can set the date back before the put-in)
+  get dayN() { const p = this.permit; return this.active && p && p.entry ? Math.max(1, this.today - absDay(p.entry.year, p.entry.doy) + 1) : 0; }
   // the days the permit runs (the put-in day to the out-by day); 0 without dates
   get days() { const p = this.permit; return this.active && this.adventure && p && p.nights != null ? p.nights + 1 : 0; }
   // days left to "out by": 0 on the day, 1 the day before, negative once past it; null without dates
