@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clock12 } from './hud.js';
+import { clock12, esc } from './hud.js';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, clamp, lerp, smoothstep, hash2 } from './rng.js';
 import { makeToonMaterial, smoothToon } from './rocks.js';
@@ -722,7 +722,8 @@ export class Fishing {
     fx.pos.set(p.x + f.x * 0.9 + rx * 1.6, y + 1.05, p.z + f.z * 0.9 + rz * 1.6);
     fx.look.set(p.x - f.x * 1.25, y + 0.5, p.z - f.z * 1.25);
     this.chase.focus = fx;
-    p.prompt = { key: 'E', text: 'Let it go · <kbd>K</kbd>Keep it on the stringer' };
+    const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.world.lakeIdAt(p.x, p.z), L.length) : null; // hubs 1C: a notice taken on wants it
+    p.prompt = { key: 'E', text: `Let it go · <kbd>K</kbd>${want ? `Keep it for “${esc(want.title)}”` : 'Keep it on the stringer'}` };
   }
 
   release(keep) {
@@ -734,7 +735,9 @@ export class Fishing {
     if (mesh) { this.canoe.paddler.remove(mesh); this.scene.add(mesh); mesh.visible = false; mesh.scale.setScalar(1); }
     if (L) {
       L.entry.kept = keep; this.logVersion++; this.saveLog();
-      if (keep) { this.stringer.push({ species: L.species, length: L.length }); this.message = { text: `On the stringer · ${this.stringer.length} fish`, t: 2 }; }
+      const cooler = this.tasks ? this.tasks.onCatch(L.species, this.world.lakeIdAt(this.player.x, this.player.z), L.length, keep) : null; // hubs 1C: a notice taken on wants it
+      if (keep && cooler) this.message = { text: cooler, t: 3 }; // into that notice's cooler, not the stringer
+      else if (keep) { this.stringer.push({ species: L.species, length: L.length }); this.message = { text: `On the stringer · ${this.stringer.length} fish`, t: 2 }; }
       else { const r = this.canoe.rig, f = this.player.forward; const x = r.position.x - f.z * 1.2, z = r.position.z + f.x * 1.2; this.splash(x, this.surfaceAt(x, z), z, 7, 0.7); this.message = { text: 'Released', t: 1.5 }; }
     }
     this.state = 'ready';

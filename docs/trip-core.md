@@ -1,284 +1,291 @@
 # The trip core
 
-The first phase of the game loop: two ways to travel, a permit, packs and the double portage, camping and sleep, the
-headlamp, a calm evacuation, and the logbook. Read this before touching `trip.js`, `packs.js`, `camp.js`, `energy.js`
-or the clock in `daycycle.js`. It was built in three streams: A (permit and rules), B (packs and portages) and C (camp
-and night). They were joined on `claude/trip-core` and played through end to end.
+How a trip plays: two ways to travel, the season and its money, open trips from push-off to "Call it a trip", the
+single energy bar with its three needs, the water bottle, packs and portages, camping at the designated sites, the
+headlamp, a calm evacuation and the logbook. Read this before touching `trip.js`, `profile.js`, `energy.js`,
+`camp.js`, `packs.js`, `outfitter.js` or the clock in `daycycle.js`.
 
-## The owner's decisions (2026-10-23)
+It was built twice. The first pass (three streams: permit and rules, packs and portages, camp and night) gave a strict
+permit with nights and a date to be out by. The owner then asked for open trips and an outfitter hub at every entry
+point ([game-vision.md](game-vision.md)); the hubs plan ([hubs.md](hubs.md)) rebuilt the core in its phase 1 (three
+streams again: the season and open trips, the needs, the board), joined on `claude/hubs-1` and played through.
+
+## The decisions
+
+From the owner (2026-10-23):
 
 - **Pace: about 5 km a day.** The clock runs a day in 20 real minutes, and the 1×/2×/4× speed scales movement and
   clock together. In Adventure the clock runs at a third while you paddle, carry or walk a portage trail, and at full
-  speed otherwise (in camp, standing, fishing). Sleep jumps the night.
-- **No death screen.** A calm evacuation ends the trip when any of three things happens: no food and no energy, about
-  36 hours awake, or two days past "out by". You lose the trip's completion, the tasks under way and the stringer. You
-  keep the lakes, campsites and portages seen, the catches and the gear.
-- **Campsites.** The tent no longer stands pre-pitched at every site: you pitch your own. NPC parties will later pitch
-  theirs, and a site with someone's tent on it is taken.
-- **Old saves** load as Sandbox.
-- **The headlamp and the fire lights** are always in the scene, at intensity 0 when off, so the light count never
-  changes (a light coming or going recompiles every lit material: the sunset frame drop). Each stays under 0.3 ms a
-  frame at 1080p High.
-- **Style.** Zen, with real BWCA rules: permits, designated sites with a grate and a latrine, double portaging. No
-  inventory grid, no RPG stats, no upgrades. The HUD adds as little as it can (Air and Paper, `docs/look.md`).
-- **Next (2026-10-23).** The next pass makes trips open-ended: no fixed exit date or exit place, and a resupply at any
-  outfitter. The permit's exit date and exit entry point, and the overdue evacuation, are due to be loosened then. They
-  work today, and nothing else is built on them.
+  speed otherwise (in camp, standing, fishing, at a counter). Sleep jumps the night.
+- **Open trips.** No nights, no "out by", no exit place. Live out there as long as you can; come in when you need to,
+  at any outfitter.
+- **A season.** A new save starts at the entry point you pick (home), with $40 and the starting kit.
+- **Money:** plain dollars in small numbers ($40 to start, $6 for a day of food, notices pay $8–60).
+- **Outfitters you know:** only home at first; another becomes known when you reach its landing.
+- **Camping in Adventure:** at the designated sites only. No bivouac and no fire ring off a site ("that's not
+  allowed, so not even camp"). Sandbox camps anywhere.
+- **Evacuation:** no fee. You keep your notices and money, and lose the stringer and the rest of the day.
+- **No death screen**, and old saves load (a trip-core save migrates; one from before it comes back as Sandbox).
+- **The lights:** the headlamp and the fire lights are always in the scene, at intensity 0 when off, so the light
+  count never changes (a light coming or going recompiles every lit material).
+- **Style:** zen, with real BWCA rules (permits, designated sites with a grate, portages), few keys, and as little HUD
+  as possible (Air and Paper, `docs/look.md`).
 
-## Playing a trip
+## Playing a season
 
-### Adventure and Sandbox
+### The title
 
-The title card picks the way a new trip travels, above the list of entry points:
+**New season**, then the way to travel (**Adventure** or **Sandbox**, above the list), then home: the entry point
+picked. Over a season under way it asks twice ("A new season at Lake One forgets the $34, the gear and 2 outfitters
+known. Pick it again to begin."). **Continue** picks the saved trip up where it stopped and shows the money; Esc
+during play brings the same card back as a pause screen.
 
-- **Adventure** (the default): a permit, a food pack and a date to be out by. The clock and wind keys and the map's
-  "Paddle in here" are off.
-- **Sandbox**: the same lakes and toys with no limits. Food never runs down, energy never forces anything, there are no
-  dates, a tent goes up anywhere flat and dry, and the clock keys (`[ ] - = P`), the wind keys (`, . / ;`) and the map
-  pin all work.
+- **Adventure:** open trips with real rules. The clock and wind keys and the map's "Paddle in here" are off.
+- **Sandbox:** the same lakes with no limits. Food never runs down, the needs stay full, nothing is forced, a tent goes
+  up anywhere flat and dry, the counter does not charge, and the clock keys (`[ ] - = P`), the wind keys (`, . / ;`)
+  and the map pin all work.
 
-Picking an entry point ends any trip under way (logged as abandoned) and paddles you in to that outfitter's dock, where
-the counter opens. *Paddle in* continues the saved trip where it stopped.
+### The counter
 
-### The permit
+E within 25 m of a landing (or the counter opening by itself at the start of a season, after a bunk night or an
+evacuation) puts up the outfitter's paper counter:
 
-The counter (Paper) writes the permit:
+- **The header:** the outfitter, the keeper's line and the money in hand. The keeper's line also carries a claim's
+  answer: the thanks and the pay, or where a notice from another board is paid.
+- **The season permit (left):** its number, home and the day it was stamped ("good all season"). Before the first
+  push-off of a season the date can still move (a day either way, a month with Shift), and the thaw is offered when
+  the lakes are iced. Below it the canoe, the packs, and **the food**: what is in the pack, the room left, a stepper
+  and *Buy 3 days · $18*. A day of food is $6 (two meals, 0.9 kg), up to what the packs hold (a Duluth pack 7 days).
+- **The way on:** between trips, *Push off* (leaving the counter pushes off too). During a trip, *Resupply · carry
+  on* (the trip goes on) and *Call it a trip* (logged as came in, a bunk night, and you wake at 7:00 rested, fed and
+  watered, at the counter).
+- **The board (middle):** four notices pinned by the door, *Take it on*, *Let it go*, *Claim · $12*, and the notices
+  taken from other boards (see [hubs.md](hubs.md) for the kinds and the pay). A notice is paid only at the counter
+  that posted it; tried elsewhere, the keeper says where.
+- **Your kit (right):** what you own, what is in use, the season's earnings, the outfitters known and your standing
+  here.
 
-- **Put in**: today. The stepper moves the date (Shift: a month at a time), and offers the thaw date when the lakes are
-  iced.
-- **Nights**: 2 to 7. This sets "out by" and the food, which is two meals a day for each day plus a spare day.
-- **Exit**: back here, or one of the six nearest entry points, where the outfitter meets you with the car.
-- **Packs**: one (travel light, always one carry) or two (food and gear, two carries).
-- **Canoe**: aluminium (34 kg), or Kevlar (20 kg) once earned on the task board.
+Any counter fills the bottle at the tap, free and drinkable at once.
 
-*Push off*, or leaving the counter, starts the trip. Leaving it after *End the trip here* starts the next trip on the
-default permit, until trips become open-ended. The permit goes up as a title over the water: "Permit No. 30-0620 · out
-by Tuesday · two packs, 3 days of food". In Adventure a dock is a way out, not a restock: any counter offers *End the
-trip here*. On the day it is logged "as planned". Late, early or at another entry point, it is still completed, with a
-note.
+### Packs and portages
 
-### Packs and the double portage
+The starting kit is one Duluth pack: the gear and the food in one, a single carry with the canoe overhead (the
+aluminium canoe is 34 kg, the pack 16 kg plus 0.9 kg a day of food: about 55 kg with five days). A second pack
+(phase 2) brings back the double portage:
 
-The packs are Duluth packs. With two, there is a gear pack (16 kg) and a food pack (2 kg plus 0.9 kg a day of food).
-They ride in the hull, one or two, and on your back and chest on the trails. The readout's Pack row says where they
-are.
+1. **At the landing.** *E Portage* takes the canoe to the trail head. With two packs the gear pack is set down there
+   and you shoulder the canoe with the food pack; *Q* beside the gear pack takes it too, for one heavy trip.
+2. **The far end.** With everything on you, *E Launch*. With a pack back at the trail head, *E Set the canoe down ·
+   walk back for the gear pack*.
+3. **Walk back**, or *Q Fetch it (about 35 min)*: a fade, the clock moves on by the walk and the second carry, and
+   the walk's energy is spent.
+4. **Load up.** *E Load up and launch*. A canoe set down at a trail end (to fill the bottle, say) launches from the
+   trail's own launch point: *E Launch · Q Shoulder the canoe*.
 
-1. **At the landing.** *E Portage* takes the canoe to the trail head. The gear pack is set down there and you shoulder
-   the canoe with the food pack (about 39 kg with three days of food). *Q* beside the gear pack takes it too, for one
-   heavy trip (about 53 kg): a slower walk and a heavier drain.
-2. **The far end.** *E Set the canoe down · walk back for the gear pack*. The canoe goes down with the food pack in it.
-3. **Walk back.** Walk it yourself (E picks the pack up, then carry it over), or *Q Fetch it (about 35 min)*. Q fades
-   out, moves the clock on by the walk back and the second carry at the travel rate, spends the walk's energy, and
-   stands the pack by the canoe.
-4. **Load up.** With everything together, *E Load up and launch*. A launch is refused while a pack is still back up the
-   trail.
-
-A trip with one pack always single-portages. Afloat, every pack is in the hull. The portage counts in the journal, and
-in the logbook's portages seen, when you launch at the far end, from your shoulders or from the ground.
+The portage counts in the journal and the logbook when you launch at the far end.
 
 ### Camping and sleep
 
-Campsites are the designated ones, each with a steel grate and a tent pad, and only within about 22 m of a site's fire
+Campsites are the designated ones, each with a steel grate and a tent pad; only within about 22 m of a site's fire
 ring do its prompts apply. On foot at a free site:
 
-- **E Pitch the tent** (at the pad): claims the site, sets the packs out by the door, and takes a quarter hour.
-- **E Light the fire** (at the grate): a fire burns three game hours and its embers glow for 45 minutes more. *Add
-  wood* when it burns low.
-- **E Cook supper / breakfast** at a burning fire, in the evening or the morning window: a hot meal (+0.45). It takes
-  the place of the cold meal eaten on the clock at sunset or sunrise. With a fish on the stringer it cooks the fish,
-  and the ration stays in the pack.
-- **E Sleep** at the tent, from an hour and a half before sunset. A night card fades in with the night's weather from
-  the forecast, the clock goes to a quarter hour after sunrise, and you wake rested (full, or 0.8 in wet gear). The
-  breakfast is eaten on the clock, and the *Day N* card comes up once.
-- **Rest** at a site recovers three times as fast, four times by a burning fire. Half a game hour by a fire dries wet
-  gear.
-- **Leaving.** Launching strikes the tent, drowns the fires you lit and frees the site.
-- **One supper.** A cooked meal blocks the next for four hours. The fire reads the saved meal for this too, so a
-  reload does not offer supper twice.
+- **E Pitch the tent** (at the pad): claims the site, sets the pack out by the door, and takes a quarter hour.
+- **E Light the fire** (at the grate): it burns three game hours; *Add wood* when it burns low. Half an hour by a
+  fire dries wet gear.
+- **E Cook supper / breakfast** at a burning fire, in the evening or the morning: a hot meal. Within three hours of
+  the cold meal eaten on the clock it takes that meal's place (no second ration); a fish off the stringer cooks first
+  and saves the ration.
+- **E Sleep** at the tent, from an hour and a half before sunset. A night card, and you wake a quarter hour after
+  sunrise. Turned in before sunset, supper is eaten at bedtime. Turned in so late that first light is under five
+  hours off, you sleep seven hours, up by 9:00 at the latest. Done in by day (the *tired* mark up), the tent takes
+  you anyway: *Sleep · worn out*, seven hours by day.
+- **Rest** at a site recovers three times as fast, four times by a burning fire.
+- **Leaving:** launching strikes the tent, drowns the fires you lit and frees the site.
 
-An hour before sunset, if you have not camped, a note names the nearest free site. After dark off a site in Adventure,
-E offers a **bivouac** under the canoe. It is not allowed in the BWCA: you wake at 0.7, and a ranger has a word in the
-morning. In Sandbox a tent goes up anywhere flat and dry. A site another party holds reads *Taken*.
+An hour before sunset, if you have not camped, a note names the nearest free site. Off a site in Adventure there is
+nothing to pitch and no bivouac: find a site, paddle on by headlamp, or come in to a counter. In Sandbox a tent goes
+up anywhere flat and dry once you stand still a moment. A site another party holds reads *Taken*.
 
 ### The headlamp
 
-**H**, afloat or on foot. It is one soft warm-white cone from the hat band that lights the path and the camp a few
-metres ahead and fades past about ten, with no shadow. In third person it points along your heading and a little down,
-and a small bead and glow show it from behind. In first person it points along the look. It goes off by itself in full
-daylight and when you sleep, and a note suggests it once each evening when the sun is below −3°. The water takes no
-point or spot light, so afloat it lights the hull and the shore, not the lake.
+**H**, afloat or on foot: one soft warm-white cone from the hat band that lights the path and the camp a few metres
+ahead. It goes off by itself in full daylight and when you sleep, and a note suggests it once each evening.
 
-### Food, energy and the day
+### The single bar, the needs and water
 
-The energy meter drains slowly with the clock and with effort: the paddle (speed, hustle, a headwind), the load on a
-portage, and travel after dark (×1.3, by headlamp). It recovers when you stop, faster at a campsite, by a fire and after
-a meal. In Adventure:
+One energy bar, pulled down by three needs (Adventure, while a trip is under way; each 0 to 1):
 
-- **Food**: two meals a day, on the clock at sunrise and sunset, or by hand with **G** when you are still. Each costs
-  half a day of food. A cooked supper or breakfast is hot (+0.45, a cold one +0.3), and a cooked fish saves the ration.
-  With the meter run out and food in the pack, you stop and eat.
-- **The ceiling**: rest brings the meter back only to a ceiling that falls the longer you are awake (1 for the first
-  couple of hours, about 0.6 by evening). Only sleep fills it.
-- **A capsize** costs 0.25 energy (0.5 in cold water), spoils half a day of food, and leaves the gear wet until a fire
-  dries it (the *gear wet* mark).
-- **The marks** (bottom right, Air) show only when they matter: *1 day of food*, *out tomorrow*, *gear wet*.
+- **Rest:** what the last night gave (the tent's quality × hours slept / 7; the starting A-frame is 0.85, wet gear
+  ×0.8), falling the longer you are awake (whole for the first couple of hours, about half by sixteen). Only sleep
+  brings it back.
+- **Food:** falls from full to empty over 24 game hours awake (a third as fast asleep). The meals come on the clock at
+  sunrise and sunset while there is food (half a day each), or with **G** when you are still. A cold meal gives +0.5,
+  a hot one or a fish +0.6.
+- **Water:** a 2 L bottle you drink from on your own. A litre lasts 6 game hours, 4 when paddling hard, carrying 30 kg
+  or more, or on a sunny July or August afternoon. The need only falls once the bottle is dry (to empty in 8 hours,
+  5⅓ hard). On foot at the water's edge, **E Fill the bottle** (tablets: drinkable in half an hour); any counter
+  fills it free at once.
 
-The effort is paid per second of the clock, as the base is. While you travel the clock runs at a third, so a game
-day of travel costs what it always did. See *Balance* for the numbers.
+How they pull the bar: it recovers only up to the ceiling, min(rest, 0.4 + 0.6 × food, 0.4 + 0.6 × water), and a bar
+above the ceiling is pulled down to it; a need below 0.3 drains the bar 1.5× and shows its mark (*tired*, *hungry* or
+*thirsty*, bottom right); a need at 0 stops recovery. The readout says what holds the bar down: "Energy 64 % · held
+down by thirst · up 11 h · 1.2 L in the bottle". At 0 with food in the pack and hunger part of it, you stop and eat.
+
+The effort is paid per second of the clock, as the base is, so a game day of travel costs the same at either clock
+rate: the paddle (speed, hustle, a headwind), the load on a portage, and travel after dark (×1.3, by headlamp).
+
+**A capsize** (broadside to a big sea; **Space** braces) costs 0.25 energy (0.5 in cold water), spoils up to half a
+day of food, and leaves the gear wet until a fire dries it (the *gear wet* mark).
 
 ### Evacuation
 
-There are three triggers: no food and no energy, about 36 hours awake, two days past "out by". The screen fades and a
-line comes from the outfitter (food) or a Forest Service ranger (the others). You wake at 7:30 at the nearest landing.
-The trip is logged as evacuated with the reason, the tent comes down, every pack is back in the hull, and the counter
-opens. Tired notes come first, at 18 and 30 hours awake, and a gentle word when the pack is empty and the meter low.
-Sandbox never evacuates.
+An empty bar ends the trip, as the owner put it: "if it goes all the way down, obviously, you're done". The bar
+warns as it nears empty ("Nearly spent") and again at 0 ("Spent. Stop now: eat, drink or rest"). You then have one
+hour of the clock to put it right: stop and eat, fill the bottle and drink, rest, or sleep at a site. Still at 0
+after that hour, the screen fades, a line comes from the outfitter, and you wake at 7:30 the next morning at the
+nearest outfitter **you know** (home when nothing else is). The trip is logged as brought in, with the need that ran
+you down: "spent, after too long awake", "spent, and gone hungry" or "spent, and gone without water". The stringer and the rest of the day stay out there;
+the notices, the money and the gear are kept, and there is no fee. The counter opens. Sandbox never evacuates.
 
 ### The logbook
 
-Every trip that ends is logged (`bwca-canoe:logbook`): completed (as planned, or late, early or elsewhere, with a note),
-evacuated (with the reason) or abandoned (a new trip begun). Each entry keeps the dates, the days, the km, the
-portages, the lakes, the nights out, the fish and the off-site nights. Kept across trips: the lakes, campsites,
-portages and landings seen, which is the hook for the achievements to come. The journal's **Trips** tab shows it.
+Every trip that ends is logged (`bwca-canoe:logbook`): came in (called at a counter, with where), brought in (an
+evacuation, with the reason) or left off (a new season begun). Each entry keeps the dates, the days, the km, the
+portages, the lakes, the nights out, the fish and the resupplies. Kept across trips and seasons: the lakes, campsites,
+portages and landings seen. The journal's **Trips** tab shows it, with the outfitters known.
 
 ## Keys
 
 | Key | Where | What |
 |---|---|---|
-| E | afloat | go ashore · portage at a landing ("two trips with the packs") · the counter at a dock |
-| E | portage trail | set the canoe down (at the far end: "walk back for the gear pack") · pick up a pack · shoulder the canoe · load up and launch |
-| E | campsite, on foot | pitch the tent (pad) · light the fire, add wood, cook (grate) · sleep (tent, from 1½ h before sunset) |
-| E | off a site, after dark | bivouac under the canoe (Adventure; not allowed in the BWCA) |
-| Q | portage trail | take the gear pack too, one heavy trip (canoe overhead, by a pack) · fetch the pack left at the trail head (walking back) · shoulder the canoe |
+| E | afloat | go ashore · portage at a landing · the counter at a dock · pick up a lost item in reach |
+| E | portage trail | set the canoe down · pick up a pack · shoulder the canoe · launch / load up and launch |
+| E | on foot at the water's edge | fill the bottle (when it is down a little and no other prompt holds E) |
+| E | campsite, on foot | pitch the tent (pad) · light the fire, add wood, cook (grate) · sleep (tent) |
+| Q | portage trail | take the gear pack too · fetch the pack left at the trail head · shoulder the canoe |
 | Q | shore | go ashore at a landing without portaging · leave a beached canoe |
+| K / E | a fish held up | keep it (into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
 | H | anywhere | the headlamp |
 | G | still | eat a meal by hand |
-| Space, Shift | on foot | hop, jog (with the canoe overhead you only stagger) |
+| Space, Shift | afloat / on foot | brace / hop · hustle / jog |
 | `[ ] - = P` · `, . / ;` | Sandbox | the clock and the date · the wind |
 
-E belongs to the most specific context. On foot, a portage's or a pack's prompt comes first, then the canoe within
-3 m, then the campsite's, then a bivouac. Afloat, the dock's E outranks a landing's. The camp offers its E only when no
-other prompt holds a key, so the walk back's *Q Fetch it* is never hidden behind a bivouac.
+E belongs to the most specific context. Afloat, a lost item in reach comes first (tasks.before takes E ahead of "Go
+ashore"), then the dock's counter, then a landing's portage, then the bank. On foot, a portage's or a pack's prompt
+comes first, then the canoe within 3 m, then the water's edge (the bottle), then the campsite's.
 
 ## The contract
 
-Each module reads the others by feature detection, so each one also builds alone.
+Each module reads the others by feature detection.
+
+### profile.js (`Profile`, save namespace `profile`)
+
+```js
+profile.money, earn(n, why), spend(n, why) → bool, has(id), give(id), kit { canoe, paddle, tent, filter, packs },
+profile.knows(ep), learn(ep), known, home, outfitter(ep) → { rep }, raise(ep, d), onChange(fn) → off
+profile.started, mode, permit, foodRoom, sleepQ, begin({ home, mode }), stamp(permit), use(slot, id), ledger, earned
+```
 
 ### trip.js (`Trip`)
 
 ```js
-trip.mode ('adventure' | 'sandbox'), trip.adventure, trip.sandbox, trip.active, trip.permit, trip.dayN, trip.dueIn
-trip.state            // the saved core: { v: 2, id, mode, active, permit, packs, camp, wet, offsite, log, outcome }
-trip.state.packs      // { count: 1 | 2, canoe: 'aluminium' | 'kevlar', foodDays }
-trip.log(kind, data)  // kinds: start lake portage fetch camp sleep capsize offsite evac exit
-trip.on(kind, fn)     // → off; '*' hears every kind
-trip.evacuate(why)    // 'food' | 'awake' | 'overdue'
-trip.start(permit), trip.finish(ep), trip.abandon(), trip.reset(mode), trip.capsize()
+trip.mode, trip.adventure, trip.sandbox, trip.active, trip.dayN, trip.permit   // { no, ep, entry }
+trip.state             // the saved core: { v: 3, id, mode, active, permit, since, from, packs, camp, wet, offsite, log, outcome }
+trip.state.packs       // { count: 1 | 2 (from what you own), canoe, foodDays }
+trip.log(kind, data)   // kinds: start lake portage camp sleep capsize offsite resupply known evac exit
+trip.on(kind, fn)      // → off; '*' hears every kind
+trip.start(f), trip.callIt(ep), trip.resupply(ep), trip.evacuate(why), trip.nearestKnownOutfitter(x, z), trip.learn(ep)
 ```
 
-Each frame, `trip.update` sets `day.rate` (a third while travelling in Adventure), `day.locked`, and watches for the
-evacuations, new lakes and portages. `trip.log('camp', { key })` marks a site as seen, and `trip.log('offsite')` counts
-a bivouac.
+Each frame `trip.update` sets `day.rate` (a third while travelling in Adventure) and `day.locked`, and watches for a
+capsize, new lakes, portages, campsites and landings (within 30 m of one its outfitter becomes known, with a note).
 
-### daycycle.js
+### energy.js (`Energy`)
 
-`day.rate` multiplies the clock alone. `day.advance(h)` jumps it forward across midnight (a night slept, a walk back
-fetched) and counts `day.jumps`, so the HUD's dawn card skips the jump and camp.js shows its own. `day.locked` turns the
-clock keys off.
+```js
+energy.value, energy.needs { rest, food, water } (live: needs.food = 1 feeds you), energy.ceiling, energy.low,
+energy.heldBy, energy.bottle, energy.fill(litres, waitHours), energy.bottleWords(), energy.meal('cold' | 'hot' | 'fish'),
+energy.sleep(q, hours), energy.fresh(), energy.rescued(), energy.spend(x), energy.restBoost, energy.food (ration days),
+energy.awake, energy.onEvac, energy.atCounter
+```
 
-### energy.js
-
-`energy.meal('hot' | 'cold' | 'fish')`, `energy.sleep(q)`, `energy.spend(x)`, `energy.restBoost` (camp.js sets 3 at a
-site and 4 by a fire), `energy.awake`, `energy.ceiling`, `energy.onEvac`. The carry drain reads `player.loadKg`.
-`restore()` resets the meal clock to the restored hour, so a reload eats nothing.
-
-### packs.js (`Packs`)
-
-`packs.list` (`{ kind, where: 'hull' | 'back' | 'chest' | 'ground', at }`), `packs.summary` (the readout's line),
-`packs.left` (packs on the ground away from you), `packs.unload({ x, z, heading })` (camp.js, at the tent),
-`packs.restow()`, and the two player.js hooks `footPrompts` and `beforeLaunch`. After `player.update` each frame it
-writes `player.loadKg` and `player.loadFactor = max(1, kg / 40)`. Nothing about the packs is saved: a reload finds them
-in the hull, and a camp that comes back up sets them out again.
+main.js hooks `trip.on('start')` to `energy.fresh()` (a trip puts in with the needs full) and `trip.on('evac')` to
+`energy.rescued()` (whoever comes out brings food and water); the bunk night sets the needs and the bottle itself.
 
 ### camp.js (`Camp`, `CampRegistry`)
 
-The registry is keyed `Math.round(x):Math.round(z)` and offers `claim`, `release`, `holder`, `isFree`, `nearestFree`
-and `onChange`. Only the player's camp is saved, in `trip.state.camp`. It comes back up once its tile has built,
-quietly struck if you are afloat more than 500 m away. `trip.on('exit' | 'evac')` takes the camp down. The tent's box
-goes in `tiles.dynamic` for the walker. `camp.before()` holds the walker still while the tent goes up.
+The registry is keyed `Math.round(x):Math.round(z)` (`claim`, `release`, `holder`, `isFree`, `nearestFree`). Only the
+player's camp is saved, in `trip.state.camp`; it comes back up once its tile has built, and is struck quietly when you
+are afloat more than 500 m from it. `camp.profileOf()` gives the tent's quality (`profile.sleepQ`) and the filter.
 
-### veil.js
+### daycycle.js
 
-`veil.card({ kicker, text, sub, fadeIn, hold, fadeOut, onDark }) → Promise`. It is driven per frame (so `__game.step`
-drives it). `onDark` may return a promise, the card holds until it settles, and cards queue. While a card is up the
-outfitter holds the input.
+`day.rate` multiplies the clock alone. `day.advance(h)` jumps it forward (a night, a fetch) and counts `day.jumps`, so
+the HUD's dawn card skips the jump. `setClock` and `advance` set `day.elevation` at once. `day.locked` turns the clock
+keys off.
 
 ### main.js: the order of a frame
 
-`outfitter.update` → `camp.before` → `player.update` → `packs.update` (load, prompts) → `fishing` →
-`outfitter.prompt` → `camp.update` (camp prompts, H, the strike on launch) → `tasks` → `energy.update` →
-`tripStats` → `trip.update` (rate, rules) → `veil.update` (behind the title card too).
+`outfitter.update` → `camp.before` → `tasks.before` → `player.update` → `packs.update` → `fishing` →
+`outfitter.prompt` → `camp.update` → `tasks.update` → `energy.update` → `tripStats` → `trip.update` → `veil.update`.
 
 ### What is saved where
 
 | Key | What |
 |---|---|
-| `bwca-canoe-trip` | the outfitter's document: the old trip fields, `pos`, `energy` (with `awakeSince`), `tasks`, and the trip core as `core` |
+| `bwca-canoe:profile` | the season: money and its ledger, gear owned and in use, outfitters known, standing, home, the permit |
+| `bwca-canoe-trip` | the outfitter's document: `pos`, `energy` (the needs, the bottle and its tablet timer, the meal clock), `tasks` (the boards and the notices with their coolers), `stringer`, and the trip core as `core` |
 | `bwca-canoe:trip` | the spot (save.js `TripSaver`): position, mode, the beached canoe when on foot, clock, camera, speed |
 | `bwca-canoe:logbook` | every trip's outcome, and what has been seen |
-| `bwca-canoe:stats` | the journal's tally (km, portages, lakes, nights) and the day it last saw |
-| `bwca-canoe:tripMode` | the mode a new trip travels in |
+| `bwca-canoe:stats` | the journal's tally |
+| `bwca-canoe:tripMode` | the mode the title offers first |
 
-On a reload with *Paddle in*, you come back where you were. On foot with the canoe set down (at a camp, say), you stand
-beside it. On a trail with the canoe overhead, or in the water, you come back afloat at the nearest open water. The
-camp, its fire, the packs by the tent, the permit, the food and the energy all come back.
+The trip's document is written every eight seconds of play, on every change that matters, and when the page goes
+away (pagehide, a hidden tab), so a reload and **Continue** bring back the money, the notices and coolers, the needs,
+the bottle and its tablet timer, the stringer and the spot. On foot with the canoe set down you come back beside it;
+on a trail or in the water, afloat at the nearest open water.
 
 ## Balance
 
-These are measured in the headless playthrough of a two-night Adventure. It put in on June 20 at 7:51 from Lake One
-(entry point 30), aluminium canoe, two packs. Day 1 crossed both portages to the Kawishiwi River with a capsize on
-the way. Day 2 went west over a third portage, and day 3 came back out at the lodge.
+Measured in the joined playthrough of hubs phase 1 (2026-10-23): a season from Lake One (entry point 30) on July 8,
+aluminium canoe, one pack, $40, played headlessly through the real keys at 4×. Out by the Kawishiwi River (portages of
+23, 34 and 214 rods, then 13 and 10 rods onto Farm Lake) to Canoe Country Outfitters at Farm Lake (entry point 31).
 
 | What | Clock | Energy |
 |---|---|---|
-| 1 km at cruise (W, about 2.5 m/s) | 2.7 to 3 game hours (the clock at a third) | about 0.11 to 0.13, the base included |
-| A double portage of 106 to 169 m, by hand or with Q (landing to launch) | 1 h 20 to 2 h | 0.01 to 0.03 |
-| One heavy trip of 169 m (53 kg) | about 55 min | about 0.03 |
-| A night of sitting up (base drain, standing) | | 0.009 per game hour |
-| A capsize in cold water (June water is about 10 °C in season.js) | | −0.5, plus half a day of food |
-| A hot supper at the fire, a cold meal on the clock | | +0.45, +0.3 |
+| 1 km at cruise (the autopilot: W and A/D along a route) | 3 to 3.3 game hours | about 0.1, the base included |
+| A 23 or 34 rod portage, one carry of 55 kg | 35 to 55 min, landing to launch | 0.02 to 0.05 |
+| The 214-rod North Kaw portage, one carry of 55 kg | about 5 hours | about 0.17 |
+| 2 L of water on a sunny July day | dry about 9 hours after a full fill | |
+| A full night in the A-frame (7 h or more) | | the rest need starts the day at 0.85 |
+| Supper by the fire, a cold meal on the clock | | +0.45, +0.3 (up to the ceiling) |
 
-- **A day.** Day 1 was 2.7 km and two double portages from 7:51 to 20:51, and cost 0.38 besides the capsize. Day 2
-  was 3.1 km and a portage from 6:03 to 16:18, and cost 0.41. Each night's supper brought the meter back to about 0.7
-  to 1, and sleep filled it.
-- **Five km.** A 5 km day with two double portages costs about 0.65, which leaves a sensible paddler near 0.35 before
-  supper. Hustling (×1.25 effort at a higher speed) and a headwind (up to ×1.8) cost more. Run the meter out with
-  food in the pack and you stop and eat, which spends the spare day.
-- **Food.** Three days for two nights came out with half a day to spare, after the capsize spoiled half a day. Without
-  the capsize there is a whole spare day.
-- **Pace against daylight.** A km takes about 2.7 game hours at cruise, so 5 km is about 14 hours of paddling. That
-  fits a June day (sunrise 5:08, sunset 21:04) but not late October, which has 10.4 hours of light: there a
-  sensible day is about 3 km and a double portage, or paddling on into the dark by headlamp (×1.3).
-- **The evacuations.** Sitting up at a pitched camp from 13:15 brought the ranger at 19:00 the next day (36 h awake),
-  after the tired notes at 18 and 30 hours. With no food and the meter at 0.05, standing at the far end of a double
-  portage, the outfitter came about 5½ game hours later. Both end at 7:30 at the nearest landing with the tent down,
-  every pack in the hull and the counter open.
-
-How the meter was tuned at the join (2026-10-23):
-- The effort is paid per second of the clock, so a game day of travel costs what it did before the clock slowed to a
-  third.
-- The paddle's reference speed is the cruise W actually holds (2.5 m/s), not 2 m/s.
-
-Before the join, the first kilometre from the lodge cost 0.46 of the meter. At that rate the meter runs out after
-about two kilometres, so the first day was already eating the spare food and the last day would start hungry.
+- **A day.** From 0.85 at 06:00, a day of paddling and a short portage ends at camp near 0.35 to 0.55 with two meals
+  and the bottle filled twice; a day with the 214-rod portage ended near 0.28. A sensible player who fills the bottle
+  at every portage end and camps by dusk stays above 0.3 by supper.
+- **Pace.** With rain and wind waited out ashore, bottle stops and camp chores, the playthrough made 3 to 4 km a game
+  day (5 km is the most a long July day of paddling gives).
+- **Water.** One fill a day is not enough in July: the bottle is dry by mid-afternoon. A portage end or a bank at
+  lunch is the natural stop.
+- **Money and food.** $40 buys five days ($30) with $10 over. The two notices (a perch, $12; a landing report, $18)
+  paid $30 at home; Farm Lake's own perch paid $12 there. The nearest other outfitter by water from Lake One is about
+  20 km and five portages away: six to seven game days each way at the measured pace, more food than the start money
+  buys. That trip was made hungry (the pack empty from day 5, the bar held at 0.4 by hunger and at 0 by evening), and
+  twice the bar ran out with the bottle dry on the way and the evacuation came: to Lake One (Farm Lake not yet known,
+  though 2 km off) and later to Farm Lake (known, and nearer than home). The first trips are meant to be local (the
+  plan's first session: three days of food, a notice off the dock, back the next day); phase 2's rides are what join
+  the outfitters.
 
 ## Working notes
 
-- The headless playthrough drives the cached Chromium with playwright-core (`--use-angle=metal`, 1440×900). It holds
-  the animation loop and steps frames with `__game.step` and `__game.advance`. Every action goes through key events on
-  `window` or clicks on the real buttons. Long stretches run at 4× (the 3 key) with 1/30 s frames, an autopilot holding
-  W and tapping A and D along an A* route over `world.shoreAt`.
-- A trip saved on a reload is resumed from the page's own clock: `energy.restore` and the stats' `lastDoy` exist so the
-  jump from the page-load time to the saved time is not read as a dusk crossed (a meal) or a midnight (a night).
+- The headless playthrough drives the cached Chromium with playwright-core (`--use-angle=metal`, 1440×900, a
+  persistent profile so the saves survive a crashed page). It holds the animation loop and steps frames with
+  `__game.step` and `__game.advance`. Every action goes through key events on `window` or clicks on the real buttons;
+  long stretches run at 4× (the 3 key) with 1/30 s frames, walking in camp at 1× (a stuck walk at 4× burns an hour).
+- The water route for the autopilot: a BFS over the lake mask (`world.lakeCell`) for the way, and an A* over
+  `world.shoreAt` between waypoints. The lake mask joins waters that a portage joins in the game: the Kawishiwi River
+  meets Farm Lake by a 13-rod portage and Farm Lake's two arms by a 10-rod one, which the mask shows as open water.
+- The fishing reticle follows the mouse; headless, set `chase.cursor` ({ inside: true, x: 0, y: 0.3 } is about 20 m
+  off) or the cast lands at the bow. A cast and retrieve costs about an hour of game time at the clock's full rate.
 - The lights: 5 in the scene, always. Check `renderer.info.programs.length` before and after `lamp.toggle()` and after
   lighting a fire: it must not change.

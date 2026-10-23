@@ -711,8 +711,7 @@ export class Hud {
         const dayW = this.dayWords(ctx);
         const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
         const food = energy && !(core && core.sandbox) ? (energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : '';
-        const out = core && core.active && core.dueIn != null ? `out by ${core.outBy('day')}` : '';
-        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food, out].filter(Boolean).join(' · ');
+        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
         this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayW || 'A new day', sub);
       }
       this.lastHours = h;
@@ -757,15 +756,15 @@ export class Hud {
 
 
   // the status marks, bottom right at half strength: the time scale, the clock stopped, the trip's when it matters (the
-  // food down to a day, out by tomorrow, the gear wet), the GPS link, mute, tiles loading
+  // food down to a day, the gear wet, a need run low: tired, hungry or thirsty), the GPS link, mute, tiles loading
   marksBuild() {
     const m = this.el.marks; if (!m) return;
     m.innerHTML = `<span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
-      + '<span id="mark-food" class="sc"></span><span id="mark-out" class="sc"></span><span id="mark-wet" class="sc">gear wet</span>'
+      + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span><span id="mark-need" class="sc"></span>'
       + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
       + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
       + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
-    this.mk = { speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), out: $('mark-out'), wet: $('mark-wet'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+    this.mk = { speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), need: $('mark-need'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
   }
   updateMarks(ctx) {
     const { ts, geo, day, trip, energy } = ctx, mk = this.mk, w = this.world; if (!mk) return;
@@ -775,10 +774,10 @@ export class Hud {
     const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
     const food = adv && energy && energy.food <= 1 ? (energy.food <= 0 ? 'no food' : `${foodWords(energy.food)} of food`) : '';
     this.set('mfood', mk.food, food); mk.food.classList.toggle('on', !!food);
-    const due = adv ? trip.dueIn : null;
-    const out = due == null || due > 1 ? '' : due === 1 ? 'out tomorrow' : due === 0 ? 'out today' : 'overdue';
-    this.set('mout', mk.out, out); mk.out.classList.toggle('on', !!out);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
+    // hubs 1B: one need mark, only while a need is under 0.3 (energy.low: 'tired', 'hungry' or 'thirsty')
+    const need = adv && energy && energy.low ? energy.low : '';
+    this.set('mneed', mk.need, need); mk.need.classList.toggle('on', !!need);
     mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
     mk.mute.classList.toggle('on', !!(this.settings && this.settings.get('mute')));
     let loading = 0;
@@ -847,6 +846,10 @@ export class Hud {
     f.catchShown = showCatch;
     e.catch.classList.toggle('show', showCatch);
     air.classList.toggle('catch', showCatch);
+    // the journal lines clear the card by its real height: a long lake or lure wraps its meta line, and the cooler's
+    // note ("A 24 cm yellow perch into the cooler for …") came up behind it
+    const lift = showCatch && e.catch.offsetHeight ? `${e.catch.offsetHeight + 68}px` : '';
+    if (e.lines && e.lines.style.bottom !== lift) e.lines.style.bottom = lift;
   }
 
   // --- the readout: every number that left the screen, while Tab is held ---------------------------------------
@@ -879,18 +882,24 @@ export class Hud {
       const rate = day.rate != null && day.rate < 0.99 ? `at a third while you travel${ts > 1 ? `, ×${ts}` : ''}` : `at ×${ts}`;
       row('Light', `${light} · clock ${day.running ? rate : 'stopped'}`);
     }
-    // the trip: the permit (its number, the day of it, out by when and where), then the energy, then the pack
-    if (core && core.active) {
-      const p = core.permit, due = core.dueIn, ex = core.exitWords();
-      const no = p && p.no ? `${p.no} · ` : '';
-      const when = due == null ? '' : due < 0 ? ` · ${word(-due)} ${plural(-due, 'day')} past the permit` : ` · out by ${core.outBy('day')}${ex ? `, ${esc(ex)}` : ''}`;
-      row('Permit', core.sandbox ? `Sandbox · ${esc(core.dayWords())} · no dates` : `${esc(no)}${esc(core.dayWords())}${when}`);
+    // the trip: the season's paper (its number, home, the day of the trip) and the money, then the energy, then the pack
+    if (core && (core.active || (core.profile && core.profile.started))) { // hubs 1A
+      const p = core.permit, pr = core.profile, home = pr && pr.home != null ? core.placeOf(pr.home) : '';
+      const bits = [core.sandbox ? 'Sandbox' : p && p.no ? p.no : 'not yet stamped', home ? `home ${home}` : '', core.active ? core.dayWords() : 'between trips', pr ? `$${pr.money} in hand` : ''];
+      row('Permit', esc(bits.filter(Boolean).join(' · ')));
     }
     if (energy) {
+      // hubs 1B: "Energy 64 % · held down by thirst": the bar, what holds it down (or where rest brings it), the hours
+      // up, and the bottle
       const v = energy.value, cap = energy.ceiling, awake = energy.awake, adv = !!(core && core.adventure && core.active);
+      const held = adv ? energy.heldBy || '' : '', low = adv && !!energy.low;
       const up = adv ? ` · up ${awake < 1 ? 'less than an hour' : `${Math.round(awake)} h`}` : '';
-      const rest = cap > 0.995 || v > 0.97 ? '' : v < cap - 0.01 ? ` · rest brings it to ${Math.round(cap * 100)} %` : ' · only sleep brings it higher';
-      row('Energy', `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>${Math.round(v * 100)} %${up}${rest}`);
+      let why = '';
+      if (v < cap - 0.01 && cap <= 0.995) why = ` · rest brings it to ${Math.round(cap * 100)} %${low ? `, ${held}` : ''}`;
+      else if (low || (held && cap <= 0.995 && v <= 0.97)) why = ` · ${held}`;
+      else if (cap <= 0.995 && v <= 0.97) why = ' · only sleep brings it higher';
+      const water = adv && energy.bottleWords ? ` · ${energy.bottleWords()}` : '';
+      row('Energy', `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>${Math.round(v * 100)} %${why}${up}${water}`);
       const food = energy.food, sand = !!(core && core.sandbox);
       const meal = !sand && food <= 0 ? '' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn';
       const pk = core ? core.state.packs : null;
@@ -898,10 +907,8 @@ export class Hud {
       const foodW = sand ? 'food that keeps' : food > 0 ? `${foodWords(food)} of food` : 'the food pack is empty';
       row('Pack', [packs, foodW, meal, core && core.state.wet ? 'the gear is wet' : ''].filter(Boolean).join(' · '));
     }
-    if (tasks) {
-      const open = tasks.active.length, done = tasks.active.filter((t) => t.status === 'done').length;
-      row('Tasks', open ? `${open - done} on the go${done ? ` · ${done} done, to turn in at any outfitter` : ''}` : 'nothing on the go · the board is at any outfitter');
-    }
+    // the notices taken on, and where the finished ones are paid (tasks.js)
+    if (tasks) row('Tasks', esc(tasks.readout));
     const dev = s && s.get('devRows'), showFps = s && s.get('fps');
     if (dev && geo) row('GPS sim', `${geo.linked ? (geo.enabled ? 'broadcasting to the extension' : 'extension installed, switched off') : 'extension not detected · this tab only'} · hdg ${hdg.toFixed(0)}°`, 'soft');
     if (dev || showFps) {

@@ -1,11 +1,14 @@
 // The journal (J; L still opens it for a while): a two-page paper spread. The left page is the trip: the food
 // cells, the energy bar, the distances, portages, lakes and nights, the tasks on the go, a pencil note. The
-// right page has tabs: Catches (the log, with personal bests), Tasks (on the go, done, on offer, the tally),
-// Lakes (where you have been), Trips (the logbook: every trip and how it ended), Gear (what came off the outfitter's
-// wall). Data comes from the fishing code (log, bests), the tasks, the energy, the outfitter's trip record, the trip's
-// permit and logbook (trip.js, reached through the outfitter) and the trip tally (trip-stats.js).
+// right page has tabs: Catches (the log, with personal bests), Tasks (the notices taken on, where each is paid, the
+// season's earnings), Lakes (where you have been), Trips (the logbook: every trip and how it ended), Gear (the kit you
+// own, from the season's profile). Data comes from the fishing code (log, bests), the tasks, the energy, the
+// outfitter's trip record, the trip's permit and logbook (trip.js, reached through the outfitter), the profile
+// (profile.js) and the trip tally (trip-stats.js).
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { UNLOCKS } from './tasks.js';
+import { ITEMS } from './profile.js';
+import { gearIcon as kitIcon } from './outfitter.js';
 
 const ROWS = 8;        // catches per page
 const PENCIL = [
@@ -85,8 +88,6 @@ export class Journal {
   pencilNote() {
     const w = this.wind, d = this.day, en = this.energy, h = d.hours, set = d.sunriseSunset.set, c = this.core;
     const adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
-    if (adv && c.dueIn != null && c.dueIn < 0) return 'past the permit. make for the nearest landing';
-    if (adv && c.dueIn === 0) return `out by today${c.exitWords() ? `, ${c.exitWords()}` : ''}`;
     if (!sand && en && en.food < 1 && en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter';
     if (!sand && en && en.food <= 0 && this.trip && this.trip.active) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
     if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
@@ -122,7 +123,6 @@ export class Journal {
     const outfitterName = active && o ? (o.landings.find((l) => l.ep === trip.ep) || {}).name : '';
     let pushed = '';
     if (active) pushed = trip.startDoy != null ? `pushed off ${sand ? '' : `${longDate(trip.startYear, trip.startDoy)}, `}${clock12(trip.startHours)}` : `pushed off ${esc(trip.started || '')}`;
-    if (adv && c.permit && c.permit.exitBy) pushed += ` · out by ${longDate(c.permit.exitBy.year, c.permit.exitBy.doy)}${c.exitWords() ? `, ${esc(c.exitWords())}` : ''}`;
     // food: a cell a day, the half days as half cells, what is eaten left empty
     const total = active ? Math.max(trip.days || 0, Math.ceil(en.food)) : 0, left = en ? en.food : 0;
     let cells = '';
@@ -144,11 +144,12 @@ export class Journal {
     const nightTxt = nights.length ? `${nights.length} · ${esc(nights[nights.length - 1].where)}` : 'none yet';
     const daysOn = st ? st.daysOnWater : 0;
     const active_tasks = ts ? ts.active : [];
-    const todo = active_tasks.length ? active_tasks.map((t) => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span>${esc(t.clue)}${t.status === 'done' ? ' <span class="soft">Done; turn it in at any outfitter.</span>' : ''}</span></div>`).join('')
-      : '<div class="empty">Nothing on the go. The board is up at any outfitter.</div>';
+    const paidAt = (t) => { const l = ts && ts.landing ? ts.landing(t.from) : null; return l ? `${l.name}, entry point ${t.from}` : `entry point ${t.from}`; };
+    const todo = active_tasks.length ? active_tasks.map((t) => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span>${esc(t.clue)}${t.status === 'done' ? ` <span class="soft">Done; claim it at ${esc(paidAt(t))}.</span>` : ''}</span></div>`).join('')
+      : '<div class="empty">Nothing on the go. Every outfitter pins notices by the door, paid at its own counter.</div>';
     return `<section class="page left" aria-labelledby="trip-h">
       <div class="sc kicker">${active ? `The trip · ${c ? `${c.adventure ? 'Adventure' : 'Sandbox'} · ${esc(c.dayWords())}` : `day ${dayN}`}` : `The trip${c ? ` · ${c.adventure ? 'Adventure' : 'Sandbox'}` : ''}`}</div>
-      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Any outfitter’s counter writes a permit.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
+      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Food at any counter; push off when you like.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
       <div class="grid">
         <div class="lab">Food</div><div class="with"><span class="cells" aria-hidden="true">${cells}</span><span>${foodTxt}</span></div>
         <div class="lab">Energy</div><div class="with"><span class="ebar"><i style="width:${ev}%"></i></span><span>${ev} % · ${energyTxt}</span></div>
@@ -186,15 +187,23 @@ export class Journal {
   tasksTab() {
     const ts = this.tasks;
     if (!ts) return { html: '<div class="lede"><h2 id="right-h">Tasks</h2></div><div class="empty">No board on this trip.</div>', foot: '' };
-    const open = ts.active.filter((t) => t.status !== 'done'), done = ts.active.filter((t) => t.status === 'done');
-    const tally = ts.tally, total = tally.item + tally.survey + tally.fish;
-    const kind = { item: 'Lost and found', survey: 'Survey', fish: 'Fishing' };
-    const card = (t) => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${kind[t.kind]} · posted at ${esc(t.fromName || '')}</span><br>${esc(t.clue)}${t.status === 'done' ? ' <span class="soft">Done; turn it in at any outfitter.</span>' : ''}</span></div>`;
-    const offer = ts.board.length ? `<div class="lab">On offer at ${esc(ts.board[0].fromName || 'the outfitter')}</div>${ts.board.map((t) => `<div class="todo"><i aria-hidden="true" style="border-style:dashed"></i><span>${esc(t.clue)}</span></div>`).join('')}` : '';
-    const html = `<div class="lede"><h2 id="right-h">${open.length ? `${word(open.length)[0].toUpperCase()}${word(open.length).slice(1)} on the go` : 'Nothing on the go'}${done.length ? `, ${word(done.length)} to turn in` : ''}</h2>
-      <div class="sub">${total ? `${total} ${plural(total, 'task')} turned in this season: ${tally.item} found, ${tally.survey} surveyed, ${tally.fish ? tally.fish : 'none'} fished${tally.fish ? '' : ' yet'}.` : 'Nothing turned in yet. Finished tasks go back to any outfitter for a line of gear.'}</div></div>
-      <div class="scroll" style="display:flex;flex-direction:column;gap:10px">${ts.active.map(card).join('') || '<div class="empty">Take something on at the outfitter’s board.</div>'}${offer}</div>`;
-    return { html, foot: 'E at an outfitter’s dock opens the board' };
+    const all = ts.active, open = all.filter((t) => t.status !== 'done'), done = all.filter((t) => t.status === 'done');
+    const at = (ep) => { const l = ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
+    const kinds = { item: 'Lost and found', survey: 'Portage crew', fish: 'Fish wanted' };
+    // the notices taken on, the finished ones first, each with where it is paid
+    const card = (t) => {
+      const state = t.status === 'done' ? `Done · claim it at ${esc(at(t.from))}, entry point ${t.from}.` : `On the go · ${esc(ts.progressOf ? ts.progressOf(t) : '')}`;
+      return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${kinds[t.kind] || esc(t.kind)} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft">${state}</span></span></div>`;
+    };
+    const list = [...done, ...open].map(card).join('');
+    const paid = (ts.claimed || []).slice(-5).reverse();
+    const claimed = paid.length ? `<div class="lab">Claimed lately</div>${paid.map((c) => `<div class="todo done"><i aria-hidden="true"></i><span>$${c.pay} · ${esc(c.title)} · <span class="soft">${esc(at(c.from))}</span></span></div>`).join('')}` : '';
+    const n = (ts.claimed || []).length, earned = ts.earned || 0;
+    const head = open.length || done.length ? `${open.length ? `${word(open.length)[0].toUpperCase()}${word(open.length).slice(1)} on the go` : 'Nothing on the go'}${done.length ? `, ${word(done.length)} to claim` : ''}` : 'Nothing on the go';
+    const sub = earned ? `$${earned} from the boards this season, ${n} ${plural(n, 'notice')} claimed. Each is paid only at the counter that posted it.` : 'Every outfitter pins four notices by the door. Each is paid only at the counter that posted it.';
+    const html = `<div class="lede"><h2 id="right-h">${head}</h2><div class="sub">${sub}</div></div>
+      <div class="scroll notice-list">${list || '<div class="empty">Take something on at an outfitter’s board.</div>'}${claimed}</div>`;
+    return { html, foot: 'E at an outfitter’s dock opens its board' };
   }
   lakesTab() {
     const st = this.stats, w = this.world, lakes = st ? st.lakes : [];
@@ -208,28 +217,37 @@ export class Journal {
       ${lakes.length ? `<div class="scroll"><table><thead><tr><th>Lake</th><th>First paddled</th><th>What it is</th><th>Clarity</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Push off and they will be written here.</div>'}`;
     return { html, foot: 'clarity: Secchi depth, from the DNR where it has one' };
   }
-  // the logbook: every trip, newest first, and how it ended; what has been seen across them
+  // the logbook: every trip, newest first, and how it ended; what has been seen across them, and the outfitters known
   tripsTab() {
-    const c = this.core, book = c.book, trips = book.trips.slice().reverse(), seen = book.seen, o = this.outfitter;
+    const c = this.core, book = c.book, trips = book.trips.slice().reverse(), seen = book.seen, o = this.outfitter, pr = c.profile || (o && o.profile) || null;
     const place = (ep) => { const l = o && ep != null ? o.landings.find((x) => x.ep === ep) : null; return l ? l.place : '—'; };
-    const how = { completed: 'completed', late: 'completed late', evacuated: 'evacuated', abandoned: 'left off' };
+    // how it ended: came in (an open trip called at a counter), brought in (an evacuation), or the trip core's words
+    const how = (t) => {
+      if (t.k === 'completed' && t.why === 'came in') return `came in${t.to != null ? ` at ${esc(place(t.to))}` : ''}`;
+      if (t.k === 'evacuated') return `brought in${t.why ? `: ${esc(t.why)}` : ''}`;
+      if (t.k === 'abandoned') return 'left off';
+      const note = t.why && t.why !== 'sandbox' && t.why !== 'as planned' ? `: ${esc(t.why)}` : t.why === 'as planned' ? ', as planned' : '';
+      return `${t.k === 'late' ? 'completed late' : 'completed'}${note}`;
+    };
     const pages = Math.max(1, Math.ceil(trips.length / ROWS));
     this.page = Math.min(this.page, pages - 1);
     const rows = trips.slice(this.page * ROWS, this.page * ROWS + ROWS).map((t) => {
       const e = t.entry || {}, when = e.year ? shortDate(e.year, e.doy) : '';
-      const days = t.mode === 'adventure' && t.nights != null ? `${t.days} of ${t.nights + 1}` : String(t.days || '—');
-      const note = t.why && t.why !== 'sandbox' && t.why !== 'as planned' ? `: ${esc(t.why)}` : t.why === 'as planned' ? ', as planned' : '';
-      return `<tr><td>${when}</td><td>${esc(place(t.from))}${t.to != null && t.to !== t.from ? ` → ${esc(place(t.to))}` : ''}</td><td>${days}</td><td>${fmtKm(t.km || 0)} km</td><td class="${t.k === 'evacuated' ? 'best' : ''}">${how[t.k] || t.k}${note}</td><td class="soft">${t.mode === 'sandbox' ? 'sandbox' : ''}</td></tr>`;
+      const rs = t.resupplies ? ` · ${t.resupplies} ${plural(t.resupplies, 'resupply', 'resupplies')}` : '';
+      return `<tr><td>${when}</td><td>${esc(place(t.from))}</td><td>${t.days || '—'}</td><td>${fmtKm(t.km || 0)} km${rs}</td><td class="${t.k === 'evacuated' ? 'best' : ''}">${how(t)}</td><td class="soft">${t.mode === 'sandbox' ? 'sandbox' : ''}</td></tr>`;
     }).join('');
-    const counts = `${seen.lakes.length} ${plural(seen.lakes.length, 'lake')}, ${seen.camps.length} ${plural(seen.camps.length, 'campsite')}, ${seen.portages.length} ${plural(seen.portages.length, 'portage')} and ${seen.eps.length} ${plural(seen.eps.length, 'landing')} seen.`;
-    const done = book.trips.filter((t) => t.k === 'completed' || t.k === 'late').length;
-    const html = `<div class="lede"><h2 id="right-h">${book.trips.length ? `${book.trips.length} ${plural(book.trips.length, 'trip')}, ${done ? word(done) : 'none'} completed` : 'No trips logged yet'}</h2><div class="sub">${counts}</div></div>
-      ${trips.length ? `<div class="scroll"><table><thead><tr><th>Put in</th><th>From</th><th>Days</th><th>Paddled</th><th>How it ended</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">A trip is logged when it ends: at a counter, or when someone comes out for you.</div>'}`;
+    const all = o ? o.landings.length : 0, known = pr ? pr.known.length : 0;
+    const counts = `${seen.lakes.length} ${plural(seen.lakes.length, 'lake')}, ${seen.camps.length} ${plural(seen.camps.length, 'campsite')} and ${seen.portages.length} ${plural(seen.portages.length, 'portage')} seen${pr ? `; ${known} of ${all} outfitters known` : `, ${seen.eps.length} ${plural(seen.eps.length, 'landing')}`}.`;
+    const inN = book.trips.filter((t) => t.k === 'completed' || t.k === 'late').length;
+    const html = `<div class="lede"><h2 id="right-h">${book.trips.length ? `${book.trips.length} ${plural(book.trips.length, 'trip')}, ${inN ? word(inN) : 'none'} came in` : 'No trips logged yet'}</h2><div class="sub">${counts}</div></div>
+      ${trips.length ? `<div class="scroll"><table><thead><tr><th>Pushed off</th><th>From</th><th>Days</th><th>Paddled</th><th>How it ended</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">A trip is logged when you call it at a counter, or when someone brings you in.</div>'}`;
     const more = trips.length - (this.page + 1) * ROWS;
     const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'what you have seen stays seen';
     return { html, foot };
   }
   gearTab() {
+    const pr = this.outfitter ? this.outfitter.profile : null;
+    if (pr) return this.kitTab(pr);
     const ts = this.tasks, have = ts ? ts.unlocks : [], left = UNLOCKS.filter((u) => !have.some((h) => h.key === u.key));
     const canoe = ts && ts.has('kevlar') ? 'A Kevlar canoe, 17 ft: lighter on the portages.' : 'An aluminium canoe, 17 ft. The Kevlar one is still on the wall.';
     const html = `<div class="lede"><h2 id="right-h">${have.length ? `${have.length} ${plural(have.length, 'thing')} off the wall` : 'Nothing off the wall yet'}</h2><div class="sub">${canoe}</div></div>
@@ -238,6 +256,15 @@ export class Journal {
         <div class="lab">Still on the wall</div><div class="wall">${left.map((u) => gearIcon(u.key, true)).join('')}</div>
         <p class="empty">${left.length ? `${left.map((u) => u.label.replace(/ \(.*\)$/, '')).map((s, i) => (i === 0 ? s[0].toUpperCase() + s.slice(1) : s)).join(', ')} ${left.length === 1 ? 'comes' : 'come'} down for tasks turned in.` : 'The wall is bare: you have the lot.'}</p>
       </div>`;
+    return { html, foot: 'five lures in the box: 1–5 with the rod up' };
+  }
+  // the kit you own this season (profile.js), what is in use, and the money
+  kitTab(pr) {
+    const kit = pr.kit, owned = pr.owned, ids = Object.keys(ITEMS).filter((id) => owned.includes(id));
+    const li = (id) => { const it = ITEMS[id], spare = it.slot && kit[it.slot] !== id; return `<li>${kitIcon(id, spare)}${esc(it.label)}${it.note ? ` <span class="soft">· ${esc(it.note)}</span>` : ''}${spare ? ' <span class="soft">· on the rack</span>' : ''}</li>`; };
+    const canoe = ITEMS[kit.canoe] ? ITEMS[kit.canoe].label : 'An aluminium canoe';
+    const html = `<div class="lede"><h2 id="right-h">${ids.length} ${plural(ids.length, 'thing')} in the kit</h2><div class="sub">${esc(canoe)} · ${kit.packs === 2 ? 'two Duluth packs' : 'one Duluth pack'} · $${pr.money} in hand</div></div>
+      <div class="scroll"><ul class="plain">${ids.map(li).join('')}</ul></div>`;
     return { html, foot: 'five lures in the box: 1–5 with the rod up' };
   }
 }

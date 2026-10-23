@@ -1,14 +1,18 @@
 import * as THREE from 'three';
 import { buildTentMesh, tentPose, TENT_COLOURS } from './props.js';
 import { save } from './save.js';
-import { clock12, longDate, plural, fmtDays, compassLong } from './hud.js';
+import { clock12, longDate, plural, fmtDays, compassLong, word } from './hud.js';
 import { SPECIES } from './fishing.js';
 import { daysInYear } from './astro.js';
 
 // Camp and night (the trip core, stream C). On foot at a campsite: pitch your tent at the site's pad (props.js
 // c.layout), light a fire in the grate (fire.js), cook a hot meal on it, sleep in the tent to morning under a night
-// card; launching strikes the tent and drowns the fire. Off a site after dark, in Adventure, a bivouac under the
-// canoe (not allowed in the BWCA: a ranger's note in the morning); in sandbox a tent goes up anywhere flat and dry.
+// card; launching strikes the tent and drowns the fire. In Adventure you camp at the designated sites only: off a site
+// there is no tent and no bivouac (hubs phase 1: "that's not allowed, so not even camp"); in Sandbox a tent goes up
+// anywhere flat and dry. The night gives the bar its rest by the tent (profile.sleepQ: 0.85 for the starting A-frame;
+// without it the kit's tent, a dome or a four-season 1, a pad +0.05; damp gear x0.8) and by the hours slept
+// (energy.sleep(q, hours)). On foot at the water's edge E fills the bottle (energy.fill: tablets, drinkable in half an
+// hour) when no other prompt holds E.
 // An hour before sunset, in Adventure, a note names the nearest free site; once it is dark a note suggests the
 // headlamp (headlamp.js, H).
 //
@@ -18,8 +22,10 @@ import { daysInYear } from './astro.js';
 // otherwise under its own key (save.js 'camp').
 //
 // What it reads from the other streams, feature-detected: trip (null: sandbox rules), trip.adventure, trip.state
-// (.camp, .wet), trip.log; day.advance(hours) (else setClock with the midnight rollover); energy.sleep(q),
-// energy.meal(kind), energy.restBoost; packs.unload({ x, z, heading }); veil.card({ kicker, text, sub, onDark }).
+// (.camp, .wet), trip.log; day.advance(hours) (else setClock with the midnight rollover); energy.sleep(q, hours),
+// energy.meal(kind), energy.restBoost, energy.fill(litres, waitHours), energy.bottle, energy.live; packs.unload({ x, z,
+// heading }); veil.card({ kicker, text, sub, onDark }); the profile (stream A: profile.sleepQ, profile.kit.tent and
+// .filter, profile.has) through camp.profileOf (main.js), trip.profile or __game.profile, else the starting kit.
 
 export const PLAYER = 'player';
 export const campKey = (c) => `${Math.round(c.x)}:${Math.round(c.z)}`;
@@ -31,7 +37,17 @@ const HULL_REACH = 3;       // player.js: within this of the canoe on the ground
 const PITCH = { seconds: 1.6, hours: 0.25 }; // the tent goes up over 1.6 s while a quarter of an hour passes
 const SLEEP_FROM = 1.5;     // hours before sunset the tent will take you
 const WAKE_AT = 0.25;       // hours after sunrise you wake
-const QUALITY = { tent: 1, wet: 0.8, bivouac: 0.7 };
+const LATE_NIGHT = 5;       // turning in with fewer hours than this to first light, you sleep in instead:
+const SLEEP_IN = 7;         // this many hours,
+const SLEEP_IN_BY = 9;      // and up by this hour at the latest (a site reached after midnight still gives a night)
+const WORN_OUT = 0.3;       // a rest need under this (the 'tired' mark) lets the tent take you by day too, for SLEEP_IN hours
+const TENTS = { aframe: 0.85, 'a-frame': 0.85, dome: 1, fourseason: 1, 'four-season': 1, '4season': 1 }; // sleep quality by the profile's kit.tent
+const START_TENT = 0.85;    // the starting kit's A-frame, when there is no profile to ask
+const PAD = 0.05;           // a sleeping pad adds this
+const WET = 0.8;            // a night in damp gear sleeps this much as well
+const FILTERS = { tablets: 0.5, pump: 5 / 60, gravity: 5 / 60 }; // game hours before the water is drinkable, by kit.filter
+const AT_WATER = 2.5;       // metres from the waterline (world.shoreAt) within which E fills the bottle
+const BOTTLE_ASK = 1.8;     // litres: the bottle is offered a fill below this
 const DRY_HOURS = 0.5;      // game hours by a fire that dry wet gear
 const STRIKE_AFAR = 500;    // metres afloat from a pitched tent at which it is struck (a reload afloat, a teleport)
 const REST_SITE = 40;       // metres from a site's centre that count as at a campsite for resting
@@ -131,7 +147,8 @@ export class Camp {
     this.card = null;         // the fallback night card (NightCard), made on first use
     this.lastMode = null; this.booted = false; this.pending = null;
     this.cookedAt = -Infinity; this.still = 0; this.dry = 0; this.lastNow = null;
-    this.nudged = null; this.lampHinted = null; this.ranger = false;
+    this.nudged = null; this.lampHinted = null;
+    this.profileOf = null;    // () => the profile (stream A), set by main.js
     this.restT = 0; this.atSite = false;
     this.lit = new Set();     // the fires the player lit (keys): drowned when the player pushes off
   }
@@ -254,9 +271,50 @@ export class Camp {
     if (drop && Math.hypot(drop.x - p.x, drop.z - p.z) <= HULL_REACH) return; // the canoe's E (player.js)
     if (p.prompt && (p.prompt.key || /<kbd>/.test(p.prompt.text || ''))) return; // a pack's, a dock's, a portage's (its Q too: the walk back for a pack)
     const site = this.nearestSite(p.x, p.z, SITE_R, true);
+    if (this.bottlePrompt(site)) return; // at the water's edge the water's E comes before the site's
     if (site) this.atSitePrompts(site);
     else this.offSitePrompts();
   }
+
+  // --- the bottle (hubs 1B) --------------------------------------------------------------------------------------
+  // On foot at the water's edge, on an Adventure under way, with the bottle down a little: E fills it. At a site the
+  // grate's and the tent's own E stay theirs.
+  bottlePrompt(site) {
+    const p = this.player, e = this.energy, w = this.world;
+    if (!e || !e.fill || !e.live || e.bottle > BOTTLE_ASK) return false;
+    const f = p.forward, edge = w.shoreAt(p.x, p.z) <= AT_WATER || w.shoreAt(p.x + f.x * 1.6, p.z + f.z * 1.6) < 0;
+    if (!edge) return false;
+    if (site && site.layout) {
+      const L = site.layout;
+      if (Math.hypot(L.fire.x - p.x, L.fire.z - p.z) < AT_GRATE) return false;
+      if (this.camp && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) < AT_TENT) return false;
+    }
+    const wait = this.filterWait(), left = e.bottle <= 0.02 ? 'dry' : `${e.bottle.toFixed(1)} L left`;
+    this.offer('Fill the bottle', `${left} · ${wait >= 0.25 ? 'a tablet: drinkable in half an hour' : 'through the filter, a few minutes'}`, () => this.fillBottle(wait));
+    return true;
+  }
+  fillBottle(wait = this.filterWait()) {
+    const got = this.energy.fill(2, wait);
+    if (this.audio && this.audio.paddleDip) this.audio.paddleDip();
+    if (got <= 0) { this.note('The bottle is full.'); return; }
+    this.note(wait >= 0.25 ? 'You fill the bottle and drop in a tablet. Drinkable in half an hour.' : 'You pump the bottle full. Drinkable in a few minutes.');
+  }
+  // the profile (stream A), wherever it is to be had
+  get profile() {
+    const f = this.profileOf, g = typeof window !== 'undefined' ? window.__game : null;
+    return (f && f()) || (this.trip && this.trip.profile) || (g && g.profile) || null;
+  }
+  kitOf(slot) { const pr = this.profile, k = pr && pr.kit ? pr.kit[slot] : null; return k ? String(k).toLowerCase() : ''; }
+  // how well the tent sleeps (0 to 1): the profile's own word for it (profile.sleepQ), else the kit's tent and a pad
+  tentQuality() {
+    const k = this.kitOf('tent'), pr = this.profile;
+    if (pr && Number.isFinite(pr.sleepQ)) return Math.max(0, Math.min(1, pr.sleepQ));
+    let q = k ? (TENTS[k] ?? (/four|dome/.test(k) ? 1 : START_TENT)) : START_TENT;
+    if (pr && pr.has && (pr.has('pad') || pr.has('sleeping-pad'))) q += PAD;
+    return Math.min(1, q);
+  }
+  // game hours before the water just filled is drinkable: tablets half an hour, a filter a few minutes
+  filterWait() { const k = this.kitOf('filter'); return FILTERS[k] ?? (/pump|gravity|filter/.test(k) ? FILTERS.pump : FILTERS.tablets); }
 
   atSitePrompts(site) {
     const p = this.player, key = campKey(site), L = site.layout, holder = this.registry.holder(key);
@@ -285,17 +343,17 @@ export class Camp {
   tentPrompts() {
     const d = this.day, { rise, set } = d.sunriseSunset, h = d.hours;
     const from = (set ?? 19) - SLEEP_FROM;
-    if (h >= from || h < (rise ?? 6)) this.offer('Sleep', `until morning, about ${clock12(((rise ?? 6) + WAKE_AT) % 24)}`, () => this.sleep('tent'));
+    if (h >= from || h < (rise ?? 6)) this.offer('Sleep', `until morning, about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
+    else if (this.wornOut) this.offer('Sleep', `worn out: until about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
     else this.say(`Your tent · you can turn in from ${clock12(from)}`);
   }
+  // done in by day (a site reached at dawn after a night on the water): the tent takes you anyway
+  get wornOut() { const e = this.energy; return !!(e && e.live && e.needs && e.needs.rest < WORN_OUT); }
 
   offSitePrompts() {
     const p = this.player;
     if (this.camp) { if (!this.camp.key && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) < AT_TENT) this.tentPrompts(); return; }
-    if (this.adventure) {
-      if (this.dark) this.offer('Bivouac here', 'off-site: not allowed in the BWCA', () => this.sleep('bivouac'));
-      return;
-    }
+    if (this.adventure) return; // designated sites only: no tent and no bivouac off a site
     // sandbox: a tent anywhere flat and dry, once you stand still a moment
     if (this.still > 1.2) { const spot = this.spotAhead(); if (spot) this.offer('Pitch the tent here', null, () => this.pitchAt(spot)); }
   }
@@ -457,41 +515,54 @@ export class Camp {
   }
 
   // --- the night ----------------------------------------------------------------------------------------------
+  // when a night begun now ends: a quarter hour after sunrise, or, turned in so late that first light is under five
+  // hours off, seven hours on and no later than 9:00. { at: the hour, hours: how long }
+  wakeTime() {
+    const d = this.day, { rise: r, set } = d.sunriseSunset, rise = r ?? 6;
+    if (d.hours >= rise && d.hours < (set ?? 19) - SLEEP_FROM) { const at = Math.min(23.5, d.hours + SLEEP_IN); return { at, hours: at - d.hours, day: true }; } // a sleep by day, worn out
+    let at = (rise + WAKE_AT) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
+    if (hours < LATE_NIGHT && d.hours < 12) { at = Math.max(at, Math.min(SLEEP_IN_BY, d.hours + SLEEP_IN)); hours = at - d.hours; }
+    return { at, hours };
+  }
   sleep(kind) {
-    const d = this.day, p = this.player, rise = d.sunriseSunset.rise ?? 6;
-    const hours = ((rise + WAKE_AT - d.hours) % 24 + 24) % 24 || 24;
-    const q = kind === 'bivouac' ? QUALITY.bivouac : this.wet ? QUALITY.wet : QUALITY.tent;
+    const d = this.day, p = this.player, set = d.sunriseSunset.set, e = this.energy;
+    // turning in before sunset: the night's jump would carry the clock past the dusk meal (energy.js eats only the
+    // breakfast of a jump), so supper is eaten now, unless one was had in the last few hours (a cooked one, say)
+    const { at: wakeAt, hours, day: byDay } = this.wakeTime();
+    if (!byDay && set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
+    const q = this.tentQuality() * (this.wet ? WET : 1);
     const fc = this.weather && this.weather.forecast ? this.weather.forecast(Math.max(1, Math.ceil(hours))) : [];
-    const n = this.tripDay(d.hours < 12 ? d.doy - 1 : d.doy); // the night of the evening's day
-    const where = kind === 'bivouac' ? 'Under the canoe, off-site' : this.camp && this.camp.site ? this.siteName(this.camp.site) : (p.placeName || 'Camp');
+    const n = this.tripDay(!byDay && d.hours < 12 ? d.doy - 1 : d.doy); // the night of the evening's day (a sleep by day: today)
+    const where = this.camp && this.camp.site ? this.siteName(this.camp.site) : (p.placeName || 'Camp');
+    const hh = Math.max(1, Math.floor(hours + 0.01)); // a short night is under seven hours: six and a half is 'six'
+    const night = byDay ? `${word(hh)} ${plural(hh, 'hour')} by day${this.wet ? ' in wet gear' : ''}` : hours >= 7 ? (this.wet ? 'a damp night in wet gear' : 'a full night\'s sleep') : `a short night, ${word(hh)} ${plural(hh, 'hour')}${this.wet ? ' in wet gear' : ''}`;
     const card = {
-      kicker: `${n ? `Night ${n} · ` : ''}${where}`,
-      text: nightLine(fc, d.season, kind),
-      sub: `${clock12(d.hours)} to ${clock12((rise + WAKE_AT) % 24)} · ${kind === 'bivouac' ? 'a cold, cramped night on the ground' : this.wet ? 'a damp night in wet gear' : 'a full night\'s sleep'}`,
+      kicker: `${n ? `${byDay ? 'Day' : 'Night'} ${n} · ` : ''}${where}`,
+      text: byDay ? 'Out like a light in the middle of the day, the fly zipped against the sun.' : nightLine(fc, d.season),
+      sub: `${clock12(d.hours)} to ${clock12(wakeAt)} · ${night}`,
     };
-    this.night = { kind, q, hours, x: p.x, z: p.z };
+    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z };
     const onDark = () => this.wake();
     const done = () => this.morning();
     if (this.veil && this.veil.card) this.veil.card({ ...card, onDark }).then(done, done);
     else { if (!this.card) this.card = new NightCard(); this.card.show({ ...card, onDark }).then(done, done); }
   }
-  // at full dark: the clock to sunrise + a quarter hour, the energy back, the lamp off, the fire burned out
+  // at full dark: the clock to the waking hour (sunrise + a quarter hour, or later after a late night), the energy
+  // back, the lamp off, the fire burned out
   wake() {
     const n = this.night, d = this.day;
     if (!n) return;
     if (this.lamp) this.lamp.toggle(false);
     this.jump(n.hours);
-    const r = d.sunriseSunset.rise;
-    if (r != null) d.setClock(d.year, d.doy, r + WAKE_AT);
+    if (Number.isFinite(n.wakeAt)) d.setClock(d.year, d.doy, n.wakeAt);
     const e = this.energy;
-    if (e.sleep) e.sleep(n.q); else e.value = Math.max(e.value, n.q);
+    if (e.sleep) e.sleep(n.q, n.hours); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
     if (this.camp && this.camp.key && this.fires) this.fires.douse(this.camp.key);
     this.cookedAt = -Infinity;
-    this.log('sleep', { kind: n.kind, key: this.camp ? this.camp.key : null, q: n.q, hours: Math.round(n.hours * 10) / 10 });
-    if (n.kind === 'bivouac') { this.log('offsite', { x: Math.round(n.x), z: Math.round(n.z) }); this.ranger = true; }
+    this.log('sleep', { kind: n.kind, key: this.camp ? this.camp.key : null, q: +n.q.toFixed(2), hours: Math.round(n.hours * 10) / 10 });
     this.persist();
   }
-  // after the card: the day's card (the HUD skips jumps), and after a bivouac the ranger's word
+  // after the card: the day's card (the HUD skips jumps)
   morning() {
     this.night = null;
     const d = this.day, h = this.hud, p = this.player, w = this.world, e = this.energy;
@@ -501,10 +572,6 @@ export class Camp {
     if (h && h.showPlace) {
       h.showPlace(`${longDate(d.year, d.doy)}${rise != null ? ` · sunrise ${clock12(rise)}` : ''}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayN ? `Day ${dayN}` : 'A new day', [here, food].filter(Boolean).join(' · '));
       h.lastDawnDoy = d.doy;
-    }
-    if (this.ranger) {
-      this.ranger = false;
-      this.note('A ranger paddling by at first light: “Morning. Next time use one of the designated sites, with the grate and the latrine. It keeps the shore wild.”', 11);
     }
   }
 
@@ -551,15 +618,15 @@ export class Camp {
 }
 
 // The night's weather, in a line, from the forecast for the hours slept (weather.js forecast: one entry per change)
-function nightLine(fc, season, kind) {
+function nightLine(fc, season) {
   const st = fc.map((f) => f.state), has = (k) => st.includes(k), first = st[0], last = st[st.length - 1];
-  const cold = season && season.cold > 0.6, under = kind === 'bivouac' ? 'on the hull' : 'on the fly';
-  if (has('storm')) return `Thunder walked down the lake in the night. The ${kind === 'bivouac' ? 'canoe' : 'fly'} held.`;
+  const cold = season && season.cold > 0.6, under = 'on the fly';
+  if (has('storm')) return 'Thunder walked down the lake in the night. The fly held.';
   if (has('rain')) return last === 'rain' ? `Rain ${under} all night.` : `Rain ${under} in the small hours, easing by first light.`;
   if (has('light-rain')) return `A light rain came and went ${under}.`;
   if (last === 'fog') return 'A still night. Fog on the water by first light.';
   if (first === 'overcast' && last === 'overcast') return 'A grey, quiet night under low cloud.';
   if (first === 'overcast') return 'The cloud broke up after midnight: stars, then a cold dawn.';
-  if (cold) return `A clear, cold night. Frost ${kind === 'bivouac' ? 'on the hull' : 'on the fly'} at dawn.`;
+  if (cold) return 'A clear, cold night. Frost on the fly at dawn.';
   return 'A clear night, the stars down to the treeline. Loons out on the lake.';
 }

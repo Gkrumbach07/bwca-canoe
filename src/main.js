@@ -41,6 +41,7 @@ import { Veil } from './veil.js'; // trip core A
 import { Camp, CampRegistry } from './camp.js'; // trip core C
 import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
+import { Profile } from './profile.js'; // hubs 1A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -152,10 +153,18 @@ async function main() {
   const veil = new Veil();
   const trip = new Trip({ world, player, day, energy, hud, veil, tasks, fishing, stats: tripStats });
   const outfitter = new Outfitter(world, player, { energy, tasks, hud, day, stats: tripStats, onTeleport: teleport, trip, veil });
+  // hubs 1A: the season (profile.js): money, the gear owned, the outfitters you know, home and the season's permit,
+  // read (or built once from the trip core's saves) before anything boots; the trip's packs and canoe follow it
+  const profile = new Profile();
+  trip.useProfile(profile); outfitter.profile = profile;
   const journal = new Journal({ hud, world, player, day, fishing, tasks, energy, outfitter, stats: tripStats, wind });
   energy.onNote = (t) => hud.note(t); tasks.onNote = (t) => hud.note(t, 6);
   energy.onEvac = (why) => trip.evacuate(why); // trip core A: no food and no energy ends an Adventure in an evacuation
   tasks.onChange = () => outfitter.save();
+  // hubs 1C: a board per outfitter (tasks.js): the day turns its notices, kept fish go in a notice's cooler, money is
+  // claimed where it was posted. Until stream A's counter renders tasks.boardSection itself, a stub swaps it in.
+  tasks.attach({ day, fishing, outfitter }); fishing.tasks = tasks;
+  tasks.onBoard = () => { if (outfitter.open) outfitter.render(); };
   // trip core C: camp and night. The campfires (one light, always in the scene), the headlamp (likewise), who holds
   // each campsite, and the camp itself; the trip, the veil and the packs are looked up on the first frame (whichever
   // of them exist: `typeof` keeps this safe in any build, and before they are declared).
@@ -165,6 +174,12 @@ async function main() {
   const campsites = new CampRegistry(world);
   const camp = new Camp({ world, player, day, energy, hud, scene, tiles, fires, lamp, audio, weather, wind, fishing, outfitter, registry: campsites,
     links: () => ({ trip, veil, packs }) });
+  // hubs 1B: the single bar. Any outfitter's counter fills the bottle (free, drinkable at once); a trip put in starts
+  // with the needs full; whoever comes out on an evacuation brings food and water; the camp asks stream A's profile,
+  // when there is one, how well the tent sleeps and what filter there is.
+  energy.atCounter = () => !!outfitter.open;
+  if (trip.on) { trip.on('start', () => energy.fresh()); trip.on('evac', () => energy.rescued()); }
+  camp.profileOf = () => profile;
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
@@ -200,6 +215,7 @@ async function main() {
 
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
+  window.__game.profile = profile; // hubs 1A
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
   loadingEl.classList.add('done');
@@ -221,6 +237,7 @@ async function main() {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       outfitter.update(dt * ts);
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
+      tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
       player.update(dt);
       packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
       fishing.update(dt, ts);

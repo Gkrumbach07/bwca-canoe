@@ -1,32 +1,84 @@
 import { clamp } from './rng.js';
+import { monthDay } from './astro.js';
 
-// Energy: a meter from 0 to 1. It drains slowly with the clock, faster with the paddle (speed, hustle, a wind on
-// the bow), on the portages (by the load on your back, player.loadKg, when the packs set it) and after dark; it comes
-// back when you sit or stand still, faster at a campsite (restBoost) and after a meal. Meals happen on their own at
-// dawn and dusk while there is food, or by hand with G when the canoe is still; a supper cooked at camp (meal('hot'))
-// takes the place of the one at sunset. In Adventure (trip.js) rest refills the meter only up to a ceiling that falls
-// the longer you have been awake, and only sleep fills it; with the pack empty and the meter run out the trip ends in
-// an evacuation (onEvac). In Sandbox the food never runs down. With no trip at all (energy.trip null) it behaves as it
-// always did: the food runs down and an empty meter calls onEvac.
+// Energy: one bar from 0 to 1, and in Adventure three needs that pull it down (rest, food, water), the way Wild n
+// Chill's single bar works. The bar drains slowly with the clock, faster with the paddle (speed, hustle, a wind on the
+// bow), on the portages (by the load on your back, player.loadKg, when the packs set it) and after dark; it comes back
+// when you sit or stand still, faster at a campsite (restBoost) and after a meal. Meals happen on their own at dawn and
+// dusk while there is food, or by hand with G when the canoe is still; a supper cooked at camp (meal('hot')) takes the
+// place of the one at sunset.
+//
+// The needs (Adventure, while a trip is under way; each 0 to 1):
+// - rest: what the last night gave (the tent's quality × min(1, hours slept / 7)), falling the longer you are awake;
+//   only sleep brings it back.
+// - food: falls from full to empty over 24 game hours awake (a third as fast asleep). A cold meal gives +0.5, a hot one
+//   or a fish +0.6. (The plan said 16 h: a June day is 16 h from the dawn meal to the dusk one, so two meals a day left
+//   every June evening hungry and each day starting lower; at 24 h two meals keep you fed in any month, and an empty
+//   pack still has you hungry by the next afternoon.)
+// - water: a 2 L bottle drunk on its own: a litre lasts 6 game hours, 4 when paddling hard or carrying a heavy load,
+//   or on a July or August afternoon. The need only falls once the bottle is dry (8 h to empty, 5⅓ h hard), and a
+//   parched need takes up to 1⅓ L to drink back. On foot at the shore E fills it (camp.js), with tablets drinkable
+//   after half an hour; at any outfitter's counter you drink at the tap and the bottle is filled, free and at once.
+// How they pull the bar: it recovers only up to the ceiling, min(rest, 0.4 + 0.6 × food, 0.4 + 0.6 × water), and a bar
+// standing above the ceiling is pulled down to it (0.06 a game hour); a need below 0.3 drains it 1.5 times as fast; a
+// need at 0 stops its recovery. An empty bar ends an Adventure, as the owner put it ("if it goes all the way down,
+// you're done"): an hour of the clock at 0 to stop and eat, drink or rest, then an evacuation (onEvac) named for the
+// need that ran you down. In Sandbox the needs stay full, the food keeps and nothing is forced; with no trip at all (energy.trip
+// null) it behaves as it always did: the food runs down and an empty bar calls onEvac.
+// Balance (hubs phase 1): the paddle costs 0.0005 (it was 0.0007) because the starting A-frame wakes you at 85 % and the
+// needs add their own drain: a June day of 5 km with two portages, the bottle filled at a portage and at camp and a hot
+// supper, ends near 0.4 at supper with rest about 0.45 (the model and the headless log are in the hubs phase-1 notes).
+//
+// The contract (streams A and C read these):
+//   energy.value, energy.needs { rest, food, water }, energy.ceiling, energy.low ('tired' | 'hungry' | 'thirsty' | null),
+//   energy.heldBy ("held down by thirst", or ''), energy.bottle (litres, 0–2), energy.drinkable, energy.treating,
+//   energy.fill(litres, waitHours) (→ litres added; waitHours 0: drinkable now, as at a counter), energy.bottleWords(),
+//   energy.meal(kind), energy.sleep(q, hours) (after the clock has jumped; without hours: a night in a bunk, with
+//   breakfast and a full bottle), energy.bunk(), energy.fresh() (a trip put in), energy.rescued() (an evacuation's
+//   food and water), energy.spend(x), energy.restBoost, energy.food (days of rations), energy.awake, energy.onEvac,
+//   energy.atCounter, and the meal clock energy.lastHours, energy.lastMealAbs, energy.lastMealKind. energy.needs is
+//   live: energy.needs.food = 1 feeds you, energy.needs.water = 1 waters you.
 
-const BASE = 0.00018;      // per second of the clock at its full rate: a day of doing nothing costs about a fifth of the meter
+const BASE = 0.00018;      // per second of the clock at its full rate: a day of doing nothing costs about a fifth of the bar
 // the efforts, like the base, are per second of the clock at its full rate: while you travel in Adventure the clock
 // runs at a third (trip.js), and so does what the effort costs, so a game day of travel costs the same in either mode
-const PADDLE = 0.0007;     // at a cruise in calm air
+const PADDLE = 0.0005;     // at a cruise in calm air
 const CRUISE = 2.5;        // m/s: what W holds in calm air (player.js); hustling past it costs more, drifting less
 const CARRY = 0.0004;      // walking a portage with one day of food (no load known), or with 40 kg on you
 const LOAD_REF = 40;       // kg: the carry drain scales with player.loadKg / LOAD_REF
 const SWIM = 0.0009;
 const REST = 0.0006;       // per second of the clock at its full rate, sitting still; x restBoost at camp, x2 after a meal
-const MEALS = { cold: 0.3, hot: 0.45, fish: 0.45 }; // what a meal gives back; a fish counts as hot and saves a ration
+const MEALS = { cold: 0.3, hot: 0.45, fish: 0.45 }; // what a meal gives the bar back (up to the ceiling); a fish counts as hot and saves a ration
+const FEED = { cold: 0.5, hot: 0.6, fish: 0.6 };    // and what it gives the food need
 const FED_HOURS = 2;       // game hours a meal keeps the recovery doubled
 const SLOT_HOURS = 3;      // a meal had this recently takes the place of the next one at dawn or dusk
 const WARN_AT = 0.15;
 const DARK_ELEV = -6;      // degrees: past civil dusk, travel costs NIGHT times as much
 const NIGHT = 1.3;
-// Adventure: the most that rest brings the meter back to, by hours awake (1 for the first couple of hours, about
-// 0.6 by evening, a quarter after a day and a night); only sleep resets it
-export const restCeiling = (awake) => clamp(1.05 - awake / 30, 0.15, 1);
+// the needs
+const LOW = 0.3;           // a need under this drains the bar LOW_DRAIN times as fast, and shows its mark
+const LOW_DRAIN = 1.5;
+const PULL = 0.0012;       // per second of the clock at its full rate (0.06 a game hour): a bar above the ceiling is pulled down to it
+const EMPTY = 0.005;       // a need this low stops the bar's recovery
+const SPENT_GRACE = 1;     // game hours at an empty bar before someone comes out for you (Adventure)
+const NEARLY = 0.08;      // a word, once, as the bar nears empty
+const FOOD_HOURS = 24;     // game hours awake from a full food need to an empty one
+const ASLEEP = 1 / 3;      // the needs fall at this rate asleep (and across any jump of the clock longer than JUMP)
+const JUMP = 2;            // game hours: a longer jump of the clock is a night, not a stretch of the day
+export const BOTTLE = 2;   // litres
+const USE = 1 / 6, USE_HARD = 1 / 4; // litres a game hour: a litre lasts 6 h, 4 h paddling hard, carrying heavy or on a hot afternoon
+const BODY = 4 / 3;        // litres from an empty water need to a full one: with the bottle dry the need lasts 8 h (5⅓ h hard)
+const SIP = 2;             // the water need drunk back up at most this much a game hour
+const NIGHT_HOURS = 7;     // a night this long gives the tent's whole quality
+const WAKE_WINDOW = 0.1;   // game hours after waking in which the bar rises to the ceiling (needs set just after a sleep count)
+export const TABLETS = 0.5; // game hours before water treated with a tablet is drinkable
+const HARD_EFFORT = 1.15;  // paddle effort (1 at a calm cruise) from which it counts as hard
+const HEAVY_KG = 30;       // a carry at least this heavy counts as hard
+// the rest need, by hours awake, before the night's quality scales it: whole for the first couple of hours, about half
+// by a long day's end (16 h), a third after 20 h, empty after 31½ h; only sleep resets it
+export const restCeiling = (awake) => clamp(1.05 - awake / 30, 0, 1);
+const NEED_WORD = { rest: 'tired', food: 'hungry', water: 'thirsty' };
+const HELD_WORD = { rest: 'tiredness', food: 'hunger', water: 'thirst' };
 
 export class Energy {
   constructor(player, day) {
@@ -38,17 +90,70 @@ export class Energy {
     this.exertion = 0;      // what the paddle cost this frame, for the HUD
     this.awakeSince = this.now;
     this.lastMealAbs = -1e9; this.lastMealKind = null; this.lastMealAuto = false;
-    this.tired = 0;         // the tiredness notes given since the last sleep
     this._boost = 1; this.boostSet = false;
+    // the needs: rest0 is what the last night gave, the rest need falls from it with the hours awake
+    this.rest0 = 1; this.need = { food: 1, water: 1 };
+    this.drinkable = BOTTLE; this.treating = 0; this.readyAt = -1e9; // the bottle: litres drinkable, litres under a tablet, when they will be
+    this.lastNow = this.now; this.hard = false;
+    this.wokeAt = -1e9;     // when the last sleep ended: for a few minutes after, the bar comes up to whatever the needs allow
+    this.noted = { rest: false, food: false, water: false, dry: false, spent: false };
+    this.atCounter = null;  // () => true at an outfitter's counter, where the bottle is filled free (main.js)
+    // energy.needs: read 0 to 1 (all 1 in Sandbox and between trips); written through, so energy.needs.food = 1 feeds you
+    // and energy.needs.rest = x sets the night's rest so that the need is x now
+    const self = this;
+    this._needs = Object.defineProperties({}, {
+      rest: { enumerable: true, get() { return self.live ? self.restNeed : 1; }, set(v) { const c = restCeiling(self.awake); self.rest0 = clamp(c > 0.01 ? (+v || 0) / c : +v || 0, 0, 1); } },
+      food: { enumerable: true, get() { return self.live ? self.need.food : 1; }, set(v) { self.need.food = clamp(+v || 0, 0, 1); } },
+      water: { enumerable: true, get() { return self.live ? self.need.water : 1; }, set(v) { self.need.water = clamp(+v || 0, 0, 1); } },
+    });
   }
   get now() { return this.day.doy * 24 + this.day.hours; }
   // hours since the last sleep (across a new year too)
   get awake() { let a = this.now - this.awakeSince; if (a < -1000) a += 365 * 24; return Math.max(0, a); }
   get adventure() { const t = this.trip; return !!(t && t.adventure && t.active); }
   get sandbox() { const t = this.trip; return !!(t && t.sandbox); }
+  get live() { return this.adventure; } // the needs fall only on an Adventure under way
   get hasFood() { return this.sandbox || this.food >= 0.5; }
-  // what rest can bring the meter back to now
-  get ceiling() { return this.adventure ? restCeiling(this.awake) : 1; }
+  // the three needs, 0 to 1 (full in Sandbox and between trips)
+  get needs() { return this._needs; }
+  // the need that ran the bar down, for the evacuation's words: 'awake' (rest), 'food' or 'water'
+  spentWhy() {
+    const r = this.restNeed, f = this.need.food, w = this.need.water;
+    return w <= f && w <= r ? 'water' : f <= r ? 'food' : 'awake';
+  }
+  get restNeed() { return clamp(this.rest0 * restCeiling(this.awake), 0, 1); }
+  // what rest can bring the bar back to now
+  get ceiling() {
+    if (!this.live) return 1;
+    const n = this.needs;
+    return Math.min(n.rest, 0.4 + 0.6 * n.food, 0.4 + 0.6 * n.water);
+  }
+  // the lowest need, when it is under LOW: its key ('rest' | 'food' | 'water') and its word
+  get lowKey() {
+    if (!this.live) return null;
+    const n = this.needs; let k = null;
+    for (const key of ['rest', 'food', 'water']) if (n[key] < LOW && (!k || n[key] < n[k])) k = key;
+    return k;
+  }
+  get low() { const k = this.lowKey; return k ? NEED_WORD[k] : null; }
+  // the need that holds the bar down, in words for the readout ('' when nothing does)
+  get heldBy() {
+    if (!this.live) return '';
+    let k = this.lowKey;
+    if (!k) {
+      const n = this.needs, t = { rest: n.rest, food: 0.4 + 0.6 * n.food, water: 0.4 + 0.6 * n.water };
+      k = 'rest'; for (const key of ['food', 'water']) if (t[key] < t[k]) k = key;
+      if (t[k] >= 0.97) return '';
+      if (k === 'rest' && this.awake < 4) return 'held down by last night'; // the tent's quality, or the hours slept
+    }
+    return `held down by ${HELD_WORD[k]}`;
+  }
+  get bottle() { return this.drinkable + this.treating; }
+  // a hot afternoon: July and August, noon to six, under the sun (not under cloud, fog or rain: weather.js)
+  get hot() {
+    const { month } = monthDay(this.day.year, this.day.doy), h = this.day.hours, w = this.day.weather;
+    return (month === 6 || month === 7) && h >= 12 && h < 18 && !(w && /overcast|fog|rain|storm/.test(w.state || ''));
+  }
   get warning() { return !this.hasFood && this.value < WARN_AT; }
   get still() { const p = this.player; return (p.mode === 'paddle' || p.mode === 'carry' || p.mode === 'walk') && !p.landing && Math.abs(p.speed) < 0.25; }
   // the rest multiplier: the camp sets it (3 at a site, 4 by a lit fire); until anything does, a campsite nearby gives 3
@@ -56,16 +161,53 @@ export class Energy {
   set restBoost(v) { this._boost = Number.isFinite(v) ? Math.max(0, v) : 1; this.boostSet = true; }
 
   note(t) { if (this.onNote) this.onNote(t); }
-  reset() { this.value = 1; this.food = 0; this.fedUntil = -1; this.warned = false; this.awakeSince = this.now; this.lastMealAbs = -1e9; this.tired = 0; }
+  reset() { this.value = 1; this.food = 0; this.fedUntil = -1; this.warned = false; this.awakeSince = this.now; this.lastMealAbs = -1e9; this.fresh(); }
+  // the needs full and the bottle filled (a trip put in, a new season)
+  fresh() {
+    this.rest0 = 1; this.need.food = 1; this.need.water = 1;
+    this.drinkable = BOTTLE; this.treating = 0; this.readyAt = -1e9;
+    this.lastNow = this.now; this.unnote();
+  }
+  unnote() { for (const k in this.noted) this.noted[k] = false; }
+  // fetched in by an evacuation: whoever came out brought hot food and water (main.js, on the trip's 'evac')
+  rescued() { this.need.food = 1; this.need.water = 1; this.fill(BOTTLE, 0); this.unnote(); }
 
+  // --- the bottle ----------------------------------------------------------------------------------------------
+  // Fill it: up to `litres` more, to the 2 L it holds. waitHours: how long the water takes to be drinkable (tablets
+  // half an hour); 0 for water that is drinkable now (an outfitter's tap), which also clears what was being treated.
+  // Returns the litres added.
+  fill(litres = BOTTLE, waitHours = TABLETS) {
+    const add = Math.min(Math.max(0, litres), BOTTLE - this.bottle);
+    if (waitHours > 0) {
+      if (add <= 0.001) return 0;
+      this.treating += add; this.readyAt = this.now + waitHours;
+    } else {
+      this.drinkable = Math.min(BOTTLE, this.drinkable + this.treating + Math.max(0, add));
+      this.treating = 0;
+    }
+    this.noted.dry = false;
+    return Math.max(0, add);
+  }
+  // "1.4 L in the bottle", "2 L in the bottle, drinkable in 20 min", "the bottle is dry"
+  bottleWords() {
+    const l = (x) => `${x >= 1.95 ? '2' : x.toFixed(1)} L`;
+    if (this.bottle <= 0.02) return 'the bottle is dry';
+    if (this.treating > 0.001) {
+      const min = Math.max(1, Math.ceil(((this.readyAt - this.now) * 60) / 5) * 5);
+      return `${l(this.bottle)} in the bottle${this.drinkable > 0.05 ? ` (${l(this.treating)} drinkable in ${min} min)` : `, drinkable in ${min} min`}`;
+    }
+    return `${l(this.drinkable)} in the bottle`;
+  }
+
+  // --- meals ---------------------------------------------------------------------------------------------------
   // A meal: 'cold' (a ration), 'hot' (cooked at camp) or 'fish' (cooked, and no ration spent). It counts as the
   // meal of the hour: had within SLOT_HOURS of the next dawn or dusk it takes that one's place, and a cooked one just
   // after a cold one had on the clock makes that one hot instead of being a second. False when the pack is empty.
   meal(kind = 'cold', when = null) {
-    const gain = MEALS[kind] ?? MEALS.cold, ration = kind !== 'fish', now = this.now;
+    const gain = MEALS[kind] ?? MEALS.cold, feed = FEED[kind] ?? FEED.cold, ration = kind !== 'fish', now = this.now;
     const recent = now >= this.lastMealAbs && now - this.lastMealAbs < SLOT_HOURS;
     if (recent && this.lastMealAuto && this.lastMealKind === 'cold' && gain > MEALS.cold) {
-      this.value = Math.min(1, this.value + gain - MEALS.cold);
+      this.feed(feed - FEED.cold); this.lift(gain - MEALS.cold);
       if (!ration && !this.sandbox) this.food += 0.5; // the fish was the meal: the ration goes back in the pack
       this.lastMealKind = kind; this.lastMealAuto = false; this.fedUntil = now + FED_HOURS;
       if (when) this.note(`${when}: ${this.foodLeft()}.`);
@@ -73,11 +215,14 @@ export class Energy {
     }
     if (ration && !this.hasFood) return false;
     if (ration && !this.sandbox) this.food = Math.max(0, this.food - 0.5);
-    this.value = Math.min(1, this.value + gain);
+    this.feed(feed); this.lift(gain);
     this.fedUntil = now + FED_HOURS; this.lastMealAbs = now; this.lastMealKind = kind; this.lastMealAuto = false;
     if (when) this.note(`${when}${this.player.mode === 'carry' ? ' on the trail' : this.atCamp ? ' at the campsite' : this.player.mode === 'walk' ? '' : ' in the canoe'}: ${this.foodLeft()}.`);
     return true;
   }
+  feed(x) { this.need.food = clamp(this.need.food + x, 0, 1); }
+  // the bar up by x, but not past the ceiling (unless it already stood above it)
+  lift(x) { const cap = Math.max(this.value, this.ceiling); this.value = Math.min(cap, this.value + x); }
   foodLeft() {
     if (this.sandbox) return 'the pack keeps';
     return this.food <= 0 ? 'the pack is empty' : `${this.food % 1 ? `${Math.floor(this.food) || ''}½` : this.food} day${this.food <= 1 ? '' : 's'} of food left`;
@@ -95,75 +240,162 @@ export class Energy {
     if (!this.still) { this.note('Hold still to eat.'); return; }
     if (!this.meal('cold', 'You eat')) this.note(this.adventure ? 'The food pack is empty.' : 'The food pack is empty. Any outfitter will fill it.');
   }
-  // a night's sleep (camp.js): the meter back to at least q, and the awake clock starts again
-  sleep(q = 1) {
-    this.value = Math.max(this.value, clamp(q, 0, 1));
-    this.awakeSince = this.now; this.tired = 0; this.warned = false; this.warnTimer = 0;
+
+  // --- sleep -----------------------------------------------------------------------------------------------------
+  // A night's sleep (camp.js, after the clock has jumped to the morning): q is the tent's quality (0–1) and hours the
+  // hours slept. The rest need starts the day at q × min(1, hours / 7), the needs have fallen over the night at a third
+  // of their waking rate, and the bar is back up to the ceiling. Without hours it is a night in a bunk at an outfitter
+  // (an evacuation, or the end of a trip): a full night, then breakfast and a full bottle.
+  sleep(q = 1, hours = null) {
+    const bunk = !Number.isFinite(hours);
+    q = clamp(q, 0, 1);
+    if (this.live) this.passNeeds(Math.max(0, this.now - this.lastNow), true, false);
+    this.lastNow = this.now;
+    this.rest0 = q * Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS);
+    if (bunk) { this.need.food = 1; this.need.water = 1; this.fill(BOTTLE, 0); }
+    this.awakeSince = this.now; this.warned = false; this.warnTimer = 0;
+    this.unnote();
+    this.value = Math.max(this.value, this.live ? this.ceiling : q);
+    this.wokeAt = this.now;
   }
+  bunk() { this.sleep(1); }
   // an effort paid at once (a capsize, a walk back fetched)
   spend(amount) { this.value = clamp(this.value - amount, 0, 1); }
 
+  // the needs over dh game hours: the food falls, the bottle is drunk (and the water need falls once it is dry),
+  // tablets finish their work. asleep: at a third of the rate, and no drinking until you wake.
+  passNeeds(dh, asleep = false, hard = false) {
+    if (this.treating > 0 && this.now >= this.readyAt) { this.drinkable = Math.min(BOTTLE, this.drinkable + this.treating); this.treating = 0; }
+    if (!(dh > 0)) return;
+    const k = asleep ? ASLEEP : 1;
+    this.need.food = Math.max(0, this.need.food - (k * dh) / FOOD_HOURS);
+    const use = (hard ? USE_HARD : USE) * k * dh;
+    this.need.water = Math.max(0, this.need.water - use / BODY);
+    if (this.need.water < 1 && this.drinkable > 0) {
+      const g = Math.min(1 - this.need.water, asleep ? Infinity : SIP * dh, this.drinkable / BODY);
+      this.need.water += g; this.drinkable = Math.max(0, this.drinkable - g * BODY);
+    }
+  }
+  // a word, once, when the bottle runs dry or a need runs low (again once it has come back)
+  needNotes() {
+    const n = this.needs, o = this.noted;
+    if (this.bottle <= 0.001 && !o.dry) { o.dry = true; this.note('The bottle is dry. Fill it at the shore: E, on foot at the water.'); }
+    for (const k of ['water', 'food', 'rest']) {
+      if (n[k] > LOW + 0.1) { o[k] = false; continue; }
+      if (n[k] >= LOW || o[k]) continue;
+      o[k] = true;
+      if (k === 'water') this.note(this.bottle > 0.001 ? 'Thirsty. The bottle is treating; half an hour.' : 'Thirsty, and the bottle is dry. Fill it at the shore.');
+      else if (k === 'food') this.note(this.hasFood ? 'Hungry. G for a meal from the pack, when you are still.' : 'Hungry, and the food pack is empty.');
+      else this.note('Tired. Only a night’s sleep brings it back now: a campsite, or an outfitter’s bunk.');
+    }
+    if (n.rest <= EMPTY && !o.spent) { o.spent = true; this.note('Done in. Nothing brings you back now but a night’s sleep.'); }
+    else if (n.rest > LOW) o.spent = false;
+  }
+
   update(dt, wind = null, atCamp = false) {
-    const p = this.player, day = this.day, rate = day.rate ?? 1;
+    const p = this.player, day = this.day, rate = day.rate ?? 1, now = this.now;
     this.atCamp = atCamp;
     // meals at sunrise and sunset, if there is food
     const { rise, set } = day.sunriseSunset, h = day.hours, prev = this.lastHours;
     const crossed = (t) => t != null && (prev <= h ? prev < t && h >= t : t > prev || t <= h);
     if (crossed(rise)) this.autoMeal('Breakfast'); else if (crossed(set)) this.autoMeal('Supper');
     this.lastHours = h;
+    // an outfitter's counter: a drink at the tap, and the bottle filled, free and drinkable at once
+    if (this.atCounter && this.atCounter()) {
+      if (this.bottle < BOTTLE - 0.001 || this.treating > 0) this.fill(BOTTLE, 0);
+      if (this.live) this.need.water = 1;
+    }
     // the drain: the clock's share at the clock's own rate, the effort's per second of effort
-    let travel = 0, recover = 0;
+    let travel = 0, recover = 0, hard = false;
     const moving = Math.abs(p.speed) > 0.1;
     if (p.mode === 'paddle' && !p.landing && !p.teleporting) {
       const v = Math.abs(p.speed), power = p.canoe.state.power;
       if (power > 0.1 && v > 0.1) {
         let head = 0;
         if (wind) { const f = p.forward, wd = wind.dir; head = Math.max(0, -(f.x * wd.x + f.z * wd.z)) * wind.speed / 6; }
-        const effort = Math.pow(v / CRUISE, 1.5) * (p.input.held('ShiftLeft', 'ShiftRight') ? 1.25 : 1);
-        travel = PADDLE * effort * (1 + 0.8 * head) * power;
+        const effort = Math.pow(v / CRUISE, 1.5) * (p.input.held('ShiftLeft', 'ShiftRight') ? 1.25 : 1) * (1 + 0.8 * head);
+        travel = PADDLE * effort * power;
+        hard = effort * power >= HARD_EFFORT;
       } else if (v < 0.3) recover = REST;
     } else if (p.mode === 'carry' || p.mode === 'walk') {
       const kg = p.loadKg || 0;
       if (moving) {
         if (kg > 0) travel = CARRY * (kg / LOAD_REF);
         else if (p.mode === 'carry') travel = CARRY * (p.loadFactor || 1);
+        hard = kg >= HEAVY_KG;
       } else recover = REST;
-    } else if (p.mode === 'swim') travel = SWIM;
+    } else if (p.mode === 'swim') { travel = SWIM; hard = true; }
     if (travel && day.elevation < DARK_ELEV) travel *= NIGHT; // after dark, by headlamp
+    this.hard = hard;
+    // the needs, over the game hours since the last frame (a jump of the clock longer than JUMP counts as a night)
+    let dh = now - this.lastNow; this.lastNow = now;
+    if (!(dh > 0) || dh > 24 * 3) dh = 0; // the clock set back (Sandbox), or a reload's leap
+    if (this.live) {
+      const jump = dh > JUMP;
+      this.passNeeds(dh, jump, !jump && (hard || this.hot));
+      this.needNotes();
+    } else if (dh > 0) this.passNeeds(0); // tablets still finish between trips
+    const n = this.needs, lowest = Math.min(n.rest, n.food, n.water);
+    // just woken: the bar is up to what the needs allow (a bunk night's breakfast, written just after sleep(), counts)
+    if (this.live && now >= this.wokeAt && now - this.wokeAt < WAKE_WINDOW) this.value = Math.max(this.value, this.ceiling);
     if (recover) {
       recover *= rate * (this.boostSet ? this._boost : atCamp ? 3 : 1);
       if (this.now < this.fedUntil) recover *= 2;
-      if (this.warning) recover = 0; // an empty pack: rest no longer brings it back
+      if (this.live ? lowest <= EMPTY : this.warning) recover = 0; // a need run out (or, outside a trip, an empty pack): rest no longer brings it back
     }
-    const drain = (BASE + travel) * rate; // per second of the clock: in Adventure a day's travel costs what a day's travel always did
+    let drain = (BASE + travel) * rate; // per second of the clock: in Adventure a day's travel costs what a day's travel always did
+    if (lowest < LOW) drain *= LOW_DRAIN;
     this.exertion = travel;
     let v = this.value - drain * dt;
-    if (recover) { const cap = this.ceiling; if (v < cap) v = Math.min(cap, v + recover * dt); }
+    const cap = this.ceiling;
+    if (recover && v < cap) v = Math.min(cap, v + recover * dt);
+    else if (this.live && v > cap) v = Math.max(cap, v - PULL * rate * dt); // the needs pull it down to what they allow
     this.value = clamp(v, 0, 1);
-    if (this.value <= 0) {
+    if (this.live) {
+      // The owner's rule: "if it goes all the way down, you're done". Spent, you have an hour of the clock to stop and
+      // put it right (eat, drink, rest, or sleep at a site); still at 0 after it, someone comes out for you, for
+      // whichever need ran you down. Nearly spent, a word first.
+      if (this.value <= 0) {
+        if (this.spentAt == null) { this.spentAt = now; this.note('Spent. Stop now: eat, drink or rest, or someone will come out for you.'); }
+        else if (now - this.spentAt >= SPENT_GRACE && this.onEvac) { this.spentAt = null; this.onEvac(this.spentWhy()); }
+      } else {
+        if (this.spentAt != null && this.value > 0.02) this.spentAt = null;
+        if (this.value < NEARLY && !this.noted.nearly) { this.noted.nearly = true; this.note('Nearly spent. Rest, eat or drink soon, or make for a site.'); }
+        else if (this.value > NEARLY + 0.15) this.noted.nearly = false;
+      }
+    } else if (this.value <= 0) {
       if (this.hasFood) this.meal('cold', 'You stop and eat');
       else if (this.onEvac) this.onEvac('food');
     }
-    // a gentle word when the pack is empty and the meter low, not more than once a while
+    // a gentle word when the pack is empty and the bar low: once, and again only after a while (once a game day on an
+    // Adventure, where the bar can sit at 0 for as long as the bottle has water)
     this.warnTimer -= dt;
-    if (this.warning && this.warnTimer <= 0) {
-      this.warnTimer = 90;
-      this.note(this.adventure ? 'No food and not much left in you. Make for a landing, or sit a while.' : 'No food and not much left in you. Any outfitter will set you up again, or sit a while.');
-    }
-    // Adventure: a word when the day has gone on too long
-    if (this.adventure) {
-      const a = this.awake;
-      if (a > 18 && this.tired < 1) { this.tired = 1; this.note('Up since yesterday. Resting only goes so far now: you need a night’s sleep.'); }
-      if (a > 30 && this.tired < 2) { this.tired = 2; this.note('Thirty hours on your feet. Sleep soon, or someone will come out for you.'); }
+    if (!this.warning) this.warnTimer = Math.min(this.warnTimer, 0);
+    else if (this.warnTimer <= 0) {
+      this.warnTimer = this.live ? 1200 : 90; // seconds of play (x the game speed): 1200 is a game day at the clock's full rate
+      this.note(this.adventure ? 'No food and not much left in you. Make for an outfitter, or sit a while.' : 'No food and not much left in you. Any outfitter will set you up again, or sit a while.');
     }
   }
 
-  serialize() { return { value: this.value, food: this.food, fedUntil: this.fedUntil, awakeSince: this.awakeSince, lastMealAbs: this.lastMealAbs, lastMealKind: this.lastMealKind }; }
+  serialize() {
+    return {
+      value: this.value, food: this.food, fedUntil: this.fedUntil, awakeSince: this.awakeSince, lastMealAbs: this.lastMealAbs, lastMealKind: this.lastMealKind, lastMealAuto: this.lastMealAuto,
+      rest0: this.rest0, need: { ...this.need }, drinkable: this.drinkable, treating: this.treating, readyIn: this.treating > 0 ? Math.max(0, this.readyAt - this.now) : 0,
+    };
+  }
   restore(d) {
     this.value = clamp(d.value ?? 1, 0, 1); this.food = Math.max(0, d.food ?? 0); this.fedUntil = d.fedUntil ?? -1;
     this.awakeSince = Number.isFinite(d.awakeSince) ? d.awakeSince : this.now;
     this.lastMealAbs = Number.isFinite(d.lastMealAbs) ? d.lastMealAbs : -1e9; this.lastMealKind = d.lastMealKind || null;
-    this.tired = this.awake > 30 ? 2 : this.awake > 18 ? 1 : 0;
+    this.lastMealAuto = !!d.lastMealAuto; // a cold meal at dawn or dusk that a cooked one may still take the place of
+    // the needs (a save from before them comes back with them full)
+    const num = (x, dflt) => (Number.isFinite(x) ? x : dflt);
+    this.rest0 = clamp(num(d.rest0, 1), 0, 1);
+    this.need = { food: clamp(num(d.need && d.need.food, 1), 0, 1), water: clamp(num(d.need && d.need.water, 1), 0, 1) };
+    this.drinkable = clamp(num(d.drinkable, BOTTLE), 0, BOTTLE); this.treating = clamp(num(d.treating, 0), 0, BOTTLE - this.drinkable);
+    this.readyAt = this.now + num(d.readyIn, 0);
+    this.unnote(); const n = this.needs; for (const k of ['rest', 'food', 'water']) this.noted[k] = n[k] < LOW; this.noted.dry = this.bottle <= 0.001;
     this.lastHours = this.day.hours; // the saved clock is back: no dawn or dusk crossed by the reload, no meal
+    this.lastNow = this.now;         // and no hours of need passed
   }
 }
