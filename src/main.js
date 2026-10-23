@@ -9,6 +9,7 @@ import { GroundCover } from './groundcover.js';
 import { Loons } from './loons.js';
 import { Fauna } from './fauna.js';
 import { Weather } from './weather.js';
+import { occlusionCacheReady } from './occlusion.js';
 import { Mist } from './mist.js';
 import { Ambient } from './audio.js';
 import { makeTerrainMaterial } from './terrain.js';
@@ -41,6 +42,7 @@ const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if
 
 async function main() {
   const world = await World.load(progress);
+  await occlusionCacheReady; // the occlusion bakes cached by the last start (occlusion.js), read while the world loaded
   // no multisampling on the canvas: the scene renders into the post chain's multisampled target (post.js) and the
   // canvas only ever takes the grade's full-screen quad
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
