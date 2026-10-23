@@ -8,13 +8,14 @@ import { save } from './save.js';
 // for magazine", "take a really cool picture of a moose".
 //
 // C raises the camera when you own one (the $25 35 mm on the shelves, shop.js 'camera') or have the disposable the
-// first photo notice of a season lends you (three pictures). The view goes to the eye with the field of view halved,
-// under a thin Air frame that marks the print's 16:9; the mouse aims (or the arrows and WASD, Shift for a fine hand),
+// first photo notice of a season lends you (three pictures). The view goes to the eye through a normal lens, under a
+// thin Air frame that marks the print's 16:9; the mouse aims (or the arrows and WASD, Shift for a fine hand), the wheel
+// (or Q and E held) zooms out to a long lens (LENS: 50 to 300 mm on 35 mm film, the print cut across the frame's width),
 // Space or a click takes the picture, C or Esc lowers it. While it is up the paddle and the feet rest and the pace is
-// life's (pace.js 'real': no time-lapse, not even Trip's floor of twice life, and the clock 1:1), at 1×.
+// life's (pace.js 'life': no time-lapse, not even the floor of twice life both paces keep, and the clock 1:1), at 1×.
 //
-// A subject counts when it is near the middle of the print (within ZONE of the half field of view, an ellipse on the
-// 16:9), close enough (REACH: a moose 120 m, a beaver or a loon 60 m, a gull or a raven 30 m) and not hidden by the
+// A subject counts when it is near the middle of the print (within ZONE of the half field of view as the lens is set
+// at the moment, an ellipse on the 16:9: zoomed in, the middle narrows with it), close enough (REACH: a moose 120 m, a beaver or a loon 60 m, a gull or a raven 30 m) and not hidden by the
 // land (world.heightAt sampled along the line of sight). The animals come from fauna.subjects(); places (an island
 // campsite, the far end of a long portage, a sunset over a named lake) count by where you stand and which way you face.
 //
@@ -30,7 +31,9 @@ import { save } from './save.js';
 //   photo.raise() / lower() / shoot(); photo.raised; photo.prints(); photo.survey() (what the frame holds now)
 
 const ZONE = 0.6;                 // of the half field of view, from the middle: where a subject counts
-const FOV_K = 0.5;                // the field of view while the camera is up, of the eye's
+// the lens: its focal length in mm on 35 mm film (36 mm across), the print cut across the frame's width; a normal lens
+// to begin with, zoomed with the wheel (or Q / E held) to a long one, where a moose at 40 m stands most of the print high
+const LENS = { film: 36, normal: 50, long: 300, wheel: 0.0015, keys: 1.4 }; // wheel: per pixel of scroll; keys: per second
 const ASPECT = 16 / 9;            // the print
 const PRINT = { w: 240, h: 135 }; // px
 const KEEP = 24;                  // prints kept
@@ -41,7 +44,7 @@ const VALUE = { moose: 6, beaver: 4, eagle: 3, loon: 2, gull: 1, raven: 1 }; // 
 const AIM = { yaw: 0.55, pitch: 0.38, fine: 0.3 }; // rad/s with the keys; Shift: × fine
 const WIND = { film: 0.7, disposable: 1.1 };        // seconds before the next picture (the lever, the thumbwheel)
 // keys the paddle and the feet do not get while the camera is up (the aim reads them itself)
-const STILL = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'Space']);
+const STILL = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'Space', 'KeyQ', 'KeyE']);
 const PAY = { bird: 10, loon: 12, eagle: 12, beaver: 15, moose: 35, place: 12 };
 const PLACE_KM = 1.5, PAY_MAX = 60;    // a place is paid for the way out as a lost item is (tasks.js KM_PAY)
 const HOPS = { local: [0, 1], medium: [1, 2], far: [2, 4] };
@@ -233,7 +236,7 @@ const _inv = new THREE.Matrix4(), _eye = new THREE.Vector3(), _q = new THREE.Vec
 export class PhotoCamera {
   constructor({ world, player, chase, camera, renderer, fauna = null, day = null, hud = null, tasks = null, outfitter = null, profile = null, audio = null, veil = null, fishing = null, camp = null }) {
     Object.assign(this, { world, player, chase, camera, renderer, fauna, day, hud, tasks, outfitter, profile, audio, veil, fishing, camp });
-    this.raised = false; this.prev = null; this.baseFov = 72;
+    this.raised = false; this.prev = null; this.baseFov = 72; this.focal = LENS.normal;
     this.pending = false; this.wind = 0; this.clicked = false; this.hadLock = false; this.lowerIn = 0;
     this.look = { counts: [], far: [], edge: [], places: [] }; this.lookT = 0; this.sayKey = '';
     this.version = 0;       // bumps when a print comes or goes (the journal re-renders)
@@ -271,6 +274,13 @@ export class PhotoCamera {
       if (locked) this.hadLock = true; else if (this.hadLock) this.lower();
     });
     renderer.domElement.addEventListener('pointerdown', (e) => { if (this.raised && e.button === 0 && chase.locked) this.clicked = true; });
+    // the wheel turns the zoom ring while it is up (ahead of the chase camera's own wheel, which sets its distance)
+    window.addEventListener('wheel', (e) => {
+      if (!this.raised) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+      this.zoom(Math.exp(-px * LENS.wheel));
+    }, { capture: true, passive: false });
     window.addEventListener('resize', () => { if (this.raised) this.placeFrame(); });
     // the page going away lowers it first, so the trip's spot is saved with the view it had (save.js reads chase.mode)
     window.addEventListener('pagehide', () => this.lower());
@@ -283,7 +293,7 @@ export class PhotoCamera {
   get shotsLeft() { return this.owned ? Infinity : this.state.disposable; }
   note(t, s = 5) { if (t && this.hud) this.hud.note(t, s); }
   write() { save.write('photos', this.state); }
-  hint() { this.state.hinted = true; this.write(); this.note('C raises the camera, Space takes the picture, and C or Esc lowers it.', 7); }
+  hint() { this.state.hinted = true; this.write(); this.note('C raises the camera, the wheel zooms, Space takes the picture, and C or Esc lowers it.', 7); }
   get noCamera() {
     return this.state.lentEver ? 'The disposable is used up. A 35 mm camera is $25 on the shelves at any outfitter.'
       : 'No camera. A 35 mm is $25 on the shelves at any outfitter, and a photo notice comes with a disposable on loan.';
@@ -295,7 +305,7 @@ export class PhotoCamera {
     const o = this.outfitter, shop = o && o.shop, who = shop && typeof shop.keeperName === 'function' ? shop.keeperName(t.from) : null;
     const words = 'No camera? Take this disposable. Three pictures on it: bring me back the one I asked for, and buy yourself a real one when you can.';
     if (o && o.open && o.at && o.at.ep === t.from) { o.greeting = words; o.render(); }
-    this.note(`${who || 'The keeper'} lends you a disposable camera: three pictures. C raises it, Space takes the picture.`, 8);
+    this.note(`${who || 'The keeper'} lends you a disposable camera: three pictures. C raises it, the wheel zooms, Space takes the picture.`, 8);
   }
 
   // --- up and down ---------------------------------------------------------------------------------------------
@@ -319,8 +329,8 @@ export class PhotoCamera {
     if (!first) c.setMode('first');
     this.baseFov = cam.fov;
     if (!first) { const yaw = Math.atan2(-_dir.z, _dir.x); c.viewYaw = yaw; c.forwardYaw = yaw; c.viewPitch = 0; c.first = false; } // up to the eye where the view was
-    c.sensitivity = (this.prev.sens || 1) * FOV_K;
-    p.timeScale = 1; p.pace = 'real'; p.boost = 1; // life: no time-lapse (not even the Trip pace's floor of twice life), the clock 1:1
+    this.lens();
+    p.timeScale = 1; p.pace = 'life'; p.boost = 1; // life (pace.js 'life'): no time-lapse, not even either pace's floor of twice life; the clock 1:1
     this.raised = true; this.hadLock = c.locked; this.wind = 0.25; this.pending = false; this.lookT = 0; this.sayKey = '';
     document.body.classList.add('photo-up');
     this.placeFrame(); this.paintFrame();
@@ -341,6 +351,16 @@ export class PhotoCamera {
     return true;
   }
   shoot() { if (!this.raised || this.wind > 0 || this.pending) return false; this.pending = true; return true; }
+  // the zoom ring: the focal length times k, between the normal lens and the long one
+  zoom(k) { this.focal = Math.max(LENS.normal, Math.min(LENS.long, this.focal * k)); this.sayKey = ''; return this.focal; }
+  // the field of view (vertical, degrees, the eye's camera) that gives the lens its print: the print's half width over
+  // the focal length is the tangent of its half angle across, and the print is the canvas's width, or its height × 16:9
+  fovFor(focal = this.focal) {
+    const tanH = LENS.film / 2 / focal, A = this.camera.aspect || ASPECT;
+    return THREE.MathUtils.radToDeg(2 * Math.atan(tanH / Math.min(A, ASPECT)));
+  }
+  // the look goes as far round for a mouse's move or a key's hold as the view is wide (the eye's own at 72°)
+  lens() { const c = this.chase, k = this.camera.fov / this.baseFov; c.sensitivity = ((this.prev && this.prev.sens) || 1) * k; return k; }
 
   // --- the frame -----------------------------------------------------------------------------------------------
   // in the frame, first (before anything reads E or Space): what takes the camera down, the keys it keeps, the aim,
@@ -354,18 +374,21 @@ export class PhotoCamera {
       || (this.veil && this.veil.active) || (this.camp && this.camp.busy) || (this.fishing && this.fishing.rodUp) || p.mode !== this.prev.pmode) { this.lower(); return; }
     for (const k of ['KeyE', 'KeyQ', 'KeyF', 'KeyK']) inp.once.delete(k); // the camera's hands are full
     if (p.timeScale !== 1) { this.prev.ts = p.timeScale; p.timeScale = 1; } // 1 2 3 wait until it is down
-    if (p.pace !== 'real') { this.prev.pace = p.pace; p.pace = 'real'; }
+    if (p.pace !== 'life') { this.prev.pace = p.pace; p.pace = 'life'; } // a setting changed meanwhile is kept for the lowering
+    // the zoom ring held (Q out, E in), and the lens comes round to it over a quarter second
+    const d = inp.down, zk = (d.has('KeyE') ? 1 : 0) - (d.has('KeyQ') ? 1 : 0);
+    if (zk) this.zoom(Math.exp(zk * LENS.keys * dt));
+    const want = this.fovFor(), cam = this.camera;
+    if (Math.abs(cam.fov - want) > 0.01) { cam.fov += (want - cam.fov) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.fov - want) < 0.02) cam.fov = want; cam.updateProjectionMatrix(); }
+    const wide = this.lens(); // the mouse, and the keys below, turn the view in step with how wide it is
     // the aim with the keys: A D or ← → turn, W S or ↑ ↓ tilt, Shift for a fine hand
-    const d = inp.down, k = d.has('ShiftLeft') || d.has('ShiftRight') ? AIM.fine : 1;
+    const k = (d.has('ShiftLeft') || d.has('ShiftRight') ? AIM.fine : 1) * wide * 2;
     const yawIn = (d.has('KeyA') || d.has('ArrowLeft') ? 1 : 0) - (d.has('KeyD') || d.has('ArrowRight') ? 1 : 0);
     const pitchIn = (d.has('KeyW') || d.has('ArrowUp') ? 1 : 0) - (d.has('KeyS') || d.has('ArrowDown') ? 1 : 0);
     if (yawIn || pitchIn) {
       c.viewYaw += yawIn * AIM.yaw * k * dt; c.forwardYaw = c.viewYaw;
       c.viewPitch = Math.max(-1.2, Math.min(1.2, c.viewPitch + pitchIn * AIM.pitch * k * dt));
     }
-    // the lens comes in over a quarter second
-    const want = this.baseFov * FOV_K, cam = this.camera;
-    if (Math.abs(cam.fov - want) > 0.01) { cam.fov += (want - cam.fov) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.fov - want) < 0.05) cam.fov = want; cam.updateProjectionMatrix(); }
     if (this.wind > 0) this.wind -= dt;
     const press = inp.pressed('Space') || this.clicked;
     this.clicked = false;
@@ -567,7 +590,7 @@ export class PhotoCamera {
     const el = this.el = document.createElement('div');
     el.id = 'photo'; el.setAttribute('aria-hidden', 'true');
     el.innerHTML = '<div class="crop"><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><i class="mid"></i>'
-      + '<div class="say"></div><div class="meta sc"></div><div class="keys"><kbd>Space</kbd> take it &nbsp;·&nbsp; <kbd>C</kbd> lower</div></div><div class="flash"></div>';
+      + '<div class="say"></div><div class="meta sc"></div><div class="keys"><kbd>Space</kbd> take it &nbsp;·&nbsp; <kbd>wheel</kbd> zoom &nbsp;·&nbsp; <kbd>C</kbd> lower</div></div><div class="flash"></div>';
     document.body.appendChild(el);
     this.crop = el.querySelector('.crop'); this.sayEl = el.querySelector('.say'); this.metaEl = el.querySelector('.meta'); this.flashEl = el.querySelector('.flash');
     const pr = this.printEl = document.createElement('div');
@@ -590,7 +613,8 @@ export class PhotoCamera {
     else if (t && t.want === 'place') say = `${esc(placeWords(t.target))}${forT}`;
     else if (L.far[0]) { say = `${esc(L.far[0].label)}, a long way off · ${Math.round(L.far[0].d)} m`; cls = 'dim'; }
     else if (L.edge[0]) { say = `${esc(L.edge[0].label)}, off to the side`; cls = 'dim'; }
-    const meta = this.film === 'disposable' ? `Disposable · ${word(this.state.disposable)} left` : `35 mm · ${this.state.list.length} ${this.state.list.length === 1 ? 'print' : 'prints'}`;
+    const lens = `${Math.round(this.focal / 5) * 5} mm lens`;
+    const meta = this.film === 'disposable' ? `Disposable · ${word(this.state.disposable)} left · ${lens}` : `35 mm · ${lens} · ${this.state.list.length} ${this.state.list.length === 1 ? 'print' : 'prints'}`;
     const key = `${say}|${cls}|${meta}`;
     if (key === this.sayKey) return;
     this.sayKey = key;

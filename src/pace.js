@@ -21,13 +21,15 @@
 // (1×, 2×, 4×) multiply all of it.
 //
 //   paceOf(name) → { water, trail, floor, idle }: the time-lapse on open water, at most on foot, at least while you
-//     travel, and the clock's when idle
+//     travel, and the clock's when idle ('life', below either pace, is the camera's hold while it is up: photo.js)
 //   LIFE: the paces at life, m/s; SEEN: the speed the walker is seen at, m/s (his time-lapse is SEEN / the pace at life,
 //     from 1 up to the pace's trail T)
 //   lifeKmh(gear): the canoe's cruise at life in km an hour, with the gear's cruise (shop.js player.gear)
 export const PACES = {
   trip: { water: 6, trail: 3, floor: 2, idle: 12, label: 'Trip' },
   real: { water: 2, trail: 2, floor: 2, idle: 1, label: 'Real' },
+  // not a setting: the camera's (photo.js) while it is raised: life itself, no floor, the clock 1:1
+  life: { water: 1, trail: 1, floor: 1, idle: 1, label: 'Life' },
 };
 export const paceOf = (name) => PACES[name] || PACES.trip;
 
