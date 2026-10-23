@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32, hash2 } from './rng.js';
-import { surfaceAt } from './terrain-build.js';
+import { surfaceAt, meshHeightAt } from './terrain-build.js';
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
-import { SPECIES as SP, bedding } from './placement.js';
+import { SPECIES as SP, bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone } from './prop-kit.js';
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
@@ -759,7 +759,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
   occlude(geo, occ, { ground: localGround(ctx), rays: 8, reach: 0.6, floor: 0.4, bury: 0.15 });
   pieces.push(geo);
   // a granite ledge between the fire ring and the water
-  if (c.shore < 30) campLedge(tg, c, fx, fz, dir, ox, oz, H, ledges, ctx.obstacles);
+  if (c.shore < 30) campLedge(tg, c, fx, fz, dir, ox, oz, ledges, ctx.obstacles);
   // the tent on the flattest clear spot nearby (off the ledge rocks, on dry ground), door to the fire, pitched
   // on the slope of the ground under it
   const rocks = [...ledges[0], ...ledges[1]].map((m) => ({ x: m.elements[12] + ox, z: m.elements[14] + oz, r: Math.hypot(m.elements[0], m.elements[1], m.elements[2]) }));
@@ -782,37 +782,40 @@ function buildCampsite(ctx, c, pieces, ledges) {
 }
 
 // The granite ledge of a campsite, between the fire ring (fx, fz) and the water (dir points out to it): two or
-// three stacks of layered flats lying along the slope, or now and then a group of slanted rocks at one tilt
-// standing off to one side so the way from the landing to the fire stays open (those hold the walker off, the
-// low flats are walked over). Matrices go to ledges[0] (flats) and ledges[1] (slanted), tile-local.
-function campLedge(tg, c, fx, fz, dir, ox, oz, H, ledges, obstacles) {
+// three stacks of layered flats lying along the slope, one big and the others smaller, or now and then a group
+// of slanted rocks at one tilt (one big shard, the rest smaller) standing off to one side so the way from the
+// landing to the fire stays open (those hold the walker off, the low flats are walked over). Every rock is
+// seated on the terrain mesh as placement.js seats the rocks of the woods. Matrices go to ledges[0] (flats) and
+// ledges[1] (slanted), tile-local.
+function campLedge(tg, c, fx, fz, dir, ox, oz, ledges, obstacles) {
   const r = mulberry32((hash2(Math.round(c.x), Math.round(c.z), 13) * 4294967296) >>> 0);
-  const m4 = (x, y, z, az, tilt, spin, s, sq = 1) => new THREE.Matrix4().makeRotationY(az)
-    .multiply(new THREE.Matrix4().makeRotationZ(tilt)).multiply(new THREE.Matrix4().makeRotationY(spin))
-    .scale(new THREE.Vector3(s * sq, s, s * (2 - sq))).setPosition(x - ox, y, z - oz);
+  const ground = (x, z) => meshHeightAt(tg, x, z);
+  const place = (kind, x, z, az, tilt, spin, s, sq, tall) => {
+    const y = seatRock(ground, ROCK_FOOT[kind], x, z, s, sq, tall, spin, az, tilt, tg.slopeAt(x, z));
+    return new THREE.Matrix4().makeRotationY(az).multiply(new THREE.Matrix4().makeRotationZ(tilt)).multiply(new THREE.Matrix4().makeRotationY(spin))
+      .scale(new THREE.Vector3(s * sq, s * tall, s * (2 - sq))).setPosition(x - ox, y, z - oz);
+  };
   const kx = -dir.z, kz = dir.x; // along the shore
   if (r() < 0.25) {
-    const az = r() * Math.PI * 2, tilt = 0.3 + r() * 0.35, side = r() < 0.5 ? -1 : 1, n = 3 + Math.floor(r() * 3);
-    const bury = Math.max(0.05, 0.6 * Math.cos(tilt) - 0.9 * Math.sin(tilt) + 0.05);
+    const az = r() * Math.PI * 2, tilt = 0.32 + r() * 0.3, side = r() < 0.5 ? -1 : 1, n = 2 + Math.floor(r() * 4);
     let o = 3 + r() * 1.5;
     for (let i = 0; i < n; i++) {
-      const s = i === 0 ? 1.2 + r() * 0.7 : 0.6 + r() * 0.7, t = 3.5 + r() * 2;
+      const s = i === 0 ? 1.5 + r() * 0.8 : 0.45 + r() * 0.6, t = 3.5 + r() * 2;
       const x = fx + dir.x * t + kx * side * o, z = fz + dir.z * t + kz * side * o;
-      o += s * (1.1 + r() * 0.5);
+      o += s * (1.0 + r() * 0.5);
       if (tg.shoreAt(x, z) < -1.5) continue;
-      ledges[1].push(m4(x, H(x, z) - s * bury, z, az, tilt, (r() - 0.5) * 0.12, s, 0.85 + r() * 0.3));
+      ledges[1].push(place(ROCK_KIND.block, x, z, az, tilt, (r() - 0.5) * 0.5, s, 0.85 + r() * 0.3, 0.85 + r() * 0.3));
       if (s > 0.75) obstacles.push({ x, z, r: 0.8 * s, rock: true });
     }
     return;
   }
   const n = 2 + Math.floor(r() * 2);
   for (let i = 0; i < n; i++) {
-    const t = 2.5 + i * 2.8 + r() * 1.5, side = (r() - 0.5) * 7, s = 1.1 + r() * 1.0;
+    const t = 2.5 + i * 2.8 + r() * 1.5, side = (r() - 0.5) * 7, s = i === 0 ? 1.4 + r() * 0.8 : 0.7 + r() * 0.7;
     const x = fx + dir.x * t + kx * side, z = fz + dir.z * t + kz * side;
     if (tg.shoreAt(x, z) < -1.5) continue;
     const bed = bedding(tg, x, z), tilt = Math.min(0.4, bed.angle * 0.85);
-    const sink = s * (0.03 + Math.max(0, Math.tan(bed.angle) - Math.tan(tilt)) * 1.1);
-    ledges[0].push(m4(x, H(x, z) - sink, z, bed.angle < 0.04 ? r() * Math.PI * 2 : bed.az, tilt, r() * Math.PI * 2, s, 0.85 + r() * 0.3));
+    ledges[0].push(place(ROCK_KIND.slab, x, z, bed.angle < 0.04 ? r() * Math.PI * 2 : bed.az, tilt, r() * Math.PI * 2, s, 0.85 + r() * 0.3, 0.8 + r() * 0.3));
   }
 }
 
