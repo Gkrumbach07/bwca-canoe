@@ -187,7 +187,9 @@ async function main() {
   const saver = new TripSaver(player, day, chase);
   const title = new Title({ world, player, chase, camera, day, hud, settings, saver, saved, trip, outfitter });
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
-  if (saved && (saved.mode !== 'paddle' || world.shoreAt(saved.x, saved.z) > -2)) player.teleport(saved.x, saved.z);
+  // (on foot with the canoe set down somewhere, at a camp say, you come back on foot beside it)
+  if (saved && saved.mode === 'walk' && player.standAt(saved)) chase.snap();
+  else if (saved && (saved.mode !== 'paddle' || world.shoreAt(saved.x, saved.z) > -2)) player.teleport(saved.x, saved.z);
   title.open('title');
   // Compile every material the scene holds now, hidden ones too (the rise rings, the rain, the cloud deck and the
   // anvils, the fish and the lures, the wildlife's parts), behind the title card and off the main thread where the

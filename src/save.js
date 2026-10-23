@@ -43,8 +43,8 @@ export class TripSaver {
     return t && Number.isFinite(t.x) && Number.isFinite(t.z) ? t : null;
   }
   snapshot() {
-    const p = this.player, d = this.day;
-    return { v: 1, x: p.x, z: p.z, heading: p.heading, mode: p.mode, year: d.year, doy: d.doy, hours: d.hours, running: d.running, camera: this.chase.mode, timeScale: p.timeScale, savedAt: Date.now() };
+    const p = this.player, d = this.day, drop = p.mode === 'walk' && p.carry && p.carry.drop; // on foot: where the canoe lies
+    return { v: 1, x: p.x, z: p.z, heading: p.heading, mode: p.mode, drop: drop ? { x: drop.x, z: drop.z, heading: drop.heading } : null, year: d.year, doy: d.doy, hours: d.hours, running: d.running, camera: this.chase.mode, timeScale: p.timeScale, savedAt: Date.now() };
   }
   write() { if (!this.player.teleporting) save.write('trip', this.snapshot()); }
   clear() { save.clear('trip'); }

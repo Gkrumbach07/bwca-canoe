@@ -368,13 +368,16 @@ export class Camp {
     this.raise(c);
     this.setRise(c, 0);
     this.busy = { t: 0, passed: 0 };
-    // the packs out by the door, fronts to the fire
-    if (this.packs && this.packs.unload) {
-      const sx = -c.fdz, sz = c.fdx;
-      this.packs.unload({ x: c.x + c.fdx * 1.75 + sx * 1.0, z: c.z + c.fdz * 1.75 + sz * 1.0, heading: Math.atan2(-c.fdz, c.fdx) });
-    }
+    this.layOut(c);
     this.log('camp', { key: c.key, x: Math.round(c.x), z: Math.round(c.z), offsite: !c.key });
     this.persist();
+  }
+  // the packs out by the door, fronts to the fire (the packs keep nothing in a save: a camp that comes back up after
+  // a reload sets them out again, while you are ashore)
+  layOut(c) {
+    if (!this.packs || !this.packs.unload || this.player.mode !== 'walk') return;
+    const sx = -c.fdz, sz = c.fdx;
+    this.packs.unload({ x: c.x + c.fdx * 1.75 + sx * 1.0, z: c.z + c.fdz * 1.75 + sz * 1.0, heading: Math.atan2(-c.fdz, c.fdx) });
   }
   // the quarter hour of pitching, over a second and a half
   pitching(dt) {
@@ -542,6 +545,7 @@ export class Camp {
     c.since = s.since ?? this.now;
     this.camp = c;
     this.raise(c);
+    this.layOut(c);
   }
 }
 

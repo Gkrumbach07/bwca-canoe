@@ -473,7 +473,7 @@ export class Outfitter {
       this.pendingShow = false;
       if (d.pos && Math.hypot(d.pos.x - this.player.x, d.pos.z - this.player.z) > 40 && this.onTeleport) await this.onTeleport(d.pos.x, d.pos.z);
       const core = this.core, dw = core && core.active ? core.dayWords() : '';
-      this.hud.note(`Back on the water${dw ? `, ${dw}` : ''}: ${fmtDaysWords(this.energy.food)} of food, energy ${Math.round(this.energy.value * 100)} %.`);
+      this.hud.note(`${this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${fmtDaysWords(this.energy.food)} of food, energy ${Math.round(this.energy.value * 100)} %.`);
       return;
     }
     this.pendingShow = false;

@@ -835,6 +835,19 @@ export class Player {
     this.prompt = { key: null, text: set ? 'You set the canoe down' : 'The canoe came down' };
   }
 
+  // Back on foot where a save left you (main.js, on load): at (x, z), the canoe on the ground where it lay. False when
+  // either spot is not on land with its tile in (then the canoe goes back on the water, as for a trail or a carry).
+  standAt({ x, z, heading = 0, drop }) {
+    const w = this.world, land = (px, pz) => w.isReady(px, pz) && w.inBounds(px, pz, 40) && w.shoreAt(px, pz) > 0.3;
+    if (!drop || !land(x, z) || !land(drop.x, drop.z)) return false;
+    this.mode = 'walk'; this.x = x; this.z = z; this.heading = heading; this.speed = 0; this.yawRate = 0; this.foot = null;
+    this.landing = null; this.ashore = null; this.swim = null; this.bob = null;
+    this.carry = { trail: null, drop: { x: drop.x, z: drop.z, heading: drop.heading }, hitCooldown: 0, from: null, choice: false };
+    this.restHull(drop.x, drop.z, drop.heading);
+    this.placeOnGround();
+    return true;
+  }
+
   pickUpHull() {
     this.canoe.pickUpHull();
     const c = this.carry;
