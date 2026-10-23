@@ -253,7 +253,9 @@ export class Camp {
         this.note(`An hour of light left. The nearest free campsite is ${far} ${compassLong(deg)}${lake ? `, on ${lake}` : ''}.`, 9);
       } else this.note('An hour of light left, and no free campsite on your map near here. Find one before dark.', 9);
     }
-    if (this.lamp && !this.lamp.on && this.dark && this.lampHinted !== evening) {
+    // (not under the store's lamp: the word waits until you step back out of the door)
+    const indoors = !!(this.outfitter && this.outfitter.visit && this.outfitter.visit.inside);
+    if (this.lamp && !this.lamp.on && this.dark && !indoors && this.lampHinted !== evening) {
       this.lampHinted = evening;
       this.note('Dark now. H for the headlamp.', 6);
     }
