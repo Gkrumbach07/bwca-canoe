@@ -448,7 +448,7 @@ export class Camp {
       line = `You fry the ${Math.round(f.length)} cm ${name} on the grate. A ration saved.`;
     } else {
       ok = e.meal ? e.meal('hot') : e.eat(meal.supper ? 'Supper' : 'Breakfast');
-      const left = e.food <= 0 ? 'the pack is empty' : `${fmtDays(e.food)} ${plural(e.food, 'day')} of food left`;
+      const left = e.food <= 0 ? 'the pack is empty' : `${fmtDays(e.food)} ${plural(e.food <= 1 ? 1 : 2, 'day')} of food left`;
       line = `A hot ${meal.supper ? 'supper' : 'breakfast'} by the fire${this.sandbox ? '' : `: ${left}`}.`;
     }
     if (!ok) { this.note('The food pack is empty.'); return; }
@@ -497,7 +497,7 @@ export class Camp {
     const d = this.day, h = this.hud, p = this.player, w = this.world, e = this.energy;
     const rise = d.sunriseSunset.rise, wind = this.wind, dayN = this.tripDay(d.doy);
     const here = p.placeName || w.lakeName(p.lakeId) || 'Open country';
-    const food = this.sandbox ? '' : e.food > 0 ? `${fmtDays(e.food)} ${plural(e.food, 'day')} of food` : 'the food pack is empty';
+    const food = this.sandbox ? '' : e.food > 0 ? `${fmtDays(e.food)} ${plural(e.food <= 1 ? 1 : 2, 'day')} of food` : 'the food pack is empty';
     if (h && h.showPlace) {
       h.showPlace(`${longDate(d.year, d.doy)}${rise != null ? ` · sunrise ${clock12(rise)}` : ''}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayN ? `Day ${dayN}` : 'A new day', [here, food].filter(Boolean).join(' · '));
       h.lastDawnDoy = d.doy;
