@@ -469,12 +469,12 @@ export class Fishing {
     if (s === 'ready' || s === 'charging') { const reach = this.computeAim(); this.placeAimRing(reach); } else this.aimRing.visible = false;
     if (s === 'ready') {
       if (this.buttonPressed()) { this.state = 'charging'; this.charge = 0; this.power = 0; }
-      p.prompt = { key: 'Space', text: 'Hold to load a cast where the cursor points · 1–5 change the lure · F puts the rod down' };
+      p.prompt = { key: 'Space', text: `Hold to load a cast where the cursor points · 1–${LURES.length} change the lure · F puts the rod down` };
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
       if (!this.button) { this.state = 'swing'; this.swing = 0; this.pending = { power: this.power }; }
-      p.prompt = { key: null, text: 'Let go to cast · 1–5 change the lure · F puts the rod down' };
+      p.prompt = { key: null, text: `Let go to cast · 1–${LURES.length} change the lure · F puts the rod down` };
     } else if (s === 'swing') {
       this.swing += dt;
       if (this.pending && this.swing > 0.12) this.launch();

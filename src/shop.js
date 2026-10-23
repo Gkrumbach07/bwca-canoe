@@ -233,9 +233,11 @@ export class Shop {
     const rep = this.profile && ep != null ? this.profile.outfitter(ep).rep : 0;
     return m * (rep >= STANDING_DEAL ? DEAL : 1);
   }
-  priceOf(it, ep) { return it.price > 0 ? Math.max(1, Math.round(it.price * this.priceMul(ep))) : 0; }
+  // Sandbox has no limits: the shelves are free there, as its food and its rides are
+  get free() { const o = this.outfitter, t = o && o.core; return !!(t && t.sandbox); }
+  priceOf(it, ep) { return it.price > 0 && !this.free ? Math.max(1, Math.round(it.price * this.priceMul(ep))) : 0; }
   price(id, ep) {
-    if (String(id).startsWith('sheet:')) return Math.max(1, Math.round(SHEET_PRICE * this.priceMul(ep)));
+    if (String(id).startsWith('sheet:')) return this.free ? 0 : Math.max(1, Math.round(SHEET_PRICE * this.priceMul(ep)));
     const it = itemOf(id) || (this.signature(ep) && this.signature(ep).id === id ? this.signature(ep) : null);
     return it ? this.priceOf(it, ep) : 0;
   }
@@ -247,7 +249,7 @@ export class Shop {
     const pr = this.profile, kit = pr ? pr.kit : {}, money = this.money;
     const out = [];
     const add = (it) => {
-      const price = it.price > 0 ? this.priceOf(it, ep) : 0;
+      const price = this.priceOf(it, ep);
       const owned = !it.use && !!(pr && pr.has(it.id));
       const count = it.use === 'supper' ? this.suppers : it.use === 'bait' ? this.leeches : undefined;
       out.push({ ...it, price, owned, inUse: !!(owned && it.slot && kit[it.slot] === it.id), afford: price <= money, count });
@@ -298,13 +300,14 @@ export class Shop {
     if (it.use === 'bait' && this.leeches >= DOZEN) return { ok: false, why: 'owned', words: 'The leech bucket is full.' };
     const where = this.landing(ep), at = where ? ` at ${where.name}` : '';
     if (!pr.spend(it.price, `${it.name}${at}`)) return { ok: false, why: 'short', words: `Not enough in hand: ${it.name}, $${it.price}.` };
-    if (it.use === 'supper') { this.s.suppers = this.suppers + 1; this.write(); return { ok: true, words: `A freeze-dried supper, $${it.price}: ${this.suppers === 1 ? 'one' : this.suppers} in the pack.` }; }
-    if (it.use === 'bait') { this.s.leeches = DOZEN; this.write(); pr.give('leeches'); return { ok: true, words: `A dozen leeches, $${it.price}, in the bucket.` }; }
+    const paid = it.price ? `, $${it.price}` : '';
+    if (it.use === 'supper') { this.s.suppers = this.suppers + 1; this.write(); return { ok: true, words: `A freeze-dried supper${paid}: ${this.suppers === 1 ? 'one' : this.suppers} in the pack.` }; }
+    if (it.use === 'bait') { this.s.leeches = DOZEN; this.write(); pr.give('leeches'); return { ok: true, words: `A dozen leeches${paid}, in the bucket.` }; }
     if (!ITEMS[it.id]) register(it);
     pr.give(it.id);
     if (it.slot) pr.use(it.slot, it.id);
     this.apply();
-    return { ok: true, words: `${it.name}, $${it.price}${it.slot ? ': in use now' : ''}. $${pr.money} in hand.` };
+    return { ok: true, words: `${it.name}${paid}${it.slot ? ': in use now' : ''}. $${pr.money} in hand.` };
   }
   // put an owned canoe, paddle, tent or filter into use (and the one it replaces back on the rack)
   equip(id) {

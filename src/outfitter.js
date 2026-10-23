@@ -557,8 +557,8 @@ export class Outfitter {
     </section>`;
   }
   sheetRow(s) {
-    const btn = s.owned ? '<span class="mark">yours</span>' : `<button type="button" class="stamp small" data-act="shop" data-id="${esc(s.id)}" ${s.afford ? '' : 'disabled'}>$${s.price}</button>`;
-    return `<div class="sheet${s.afford || s.owned ? '' : ' dear'}">${gearIcon(s.id, !s.owned)}<span><b>${esc(s.name)}</b>${s.here ? ' <span class="soft">· this landing</span>' : ''}</span>${btn}</div>`;
+    const btn = s.owned ? '<span class="mark">yours</span>' : `<button type="button" class="stamp small" data-act="shop" data-id="${esc(s.id)}" ${s.afford ? '' : 'disabled'}>${s.price ? `$${s.price}` : 'Take it'}</button>`;
+    return `<div class="mapsheet${s.afford || s.owned ? '' : ' dear'}">${gearIcon(s.id, !s.owned)}<span class="nm"><b>${esc(s.name)}</b>${s.here ? ' <span class="soft">· this landing</span>' : ''}</span>${btn}</div>`;
   }
   // the board: the tasks' own section (tasks.js), or a quiet card until there is one
   boardSection(a) {
@@ -596,15 +596,15 @@ export class Outfitter {
   }
   // one thing on a shelf: what it is, the keeper's words, the price and the weight; yours marked, the dear ones quiet
   card(it) {
-    const priceTxt = it.price ? `$${it.price}` : '';
+    const priceTxt = it.price ? `$${it.price}` : '', buyTxt = it.price ? `Buy · ${priceTxt}` : 'Take it';
     let foot;
     if (it.use === 'food') {
       const room = this.room, short = !this.sandbox && it.price > this.money;
-      foot = `<span class="soft">${room > 0 ? `room for ${room} more` : 'the pack is full'}</span><button type="button" class="stamp small" data-act="food1" ${room <= 0 || short ? 'disabled' : ''}>Buy a day · ${priceTxt}</button>`;
-    } else if (it.use === 'supper') foot = `<span class="soft">${it.count ? `${it.count} in the pack` : 'none in the pack'}</span><button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>Buy · ${priceTxt}</button>`;
-    else if (it.use === 'bait') foot = `<span class="soft">${it.count ? `${it.count} in the bucket` : 'the bucket is empty'}</span>${it.count >= 12 ? '<span class="mark">a full dozen</span>' : `<button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>${it.count ? 'Top up' : 'Buy'} · ${priceTxt}</button>`}`;
+      foot = `<span class="soft">${room > 0 ? `room for ${room} more` : 'the pack is full'}</span><button type="button" class="stamp small" data-act="food1" ${room <= 0 || short || this.sandbox ? 'disabled' : ''}>${this.sandbox ? 'Free here' : `Buy a day · ${priceTxt}`}</button>`;
+    } else if (it.use === 'supper') foot = `<span class="soft">${it.count ? `${it.count} in the pack` : 'none in the pack'}</span><button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>${buyTxt}</button>`;
+    else if (it.use === 'bait') foot = `<span class="soft">${it.count ? `${it.count} in the bucket` : 'the bucket is empty'}</span>${it.count >= 12 ? '<span class="mark">a full dozen</span>' : `<button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>${it.count ? 'Top up' : 'Buy'}${priceTxt ? ` · ${priceTxt}` : ''}</button>`}`;
     else if (it.owned) foot = `<span class="soft">${it.kg ? `${fmtKg(it.kg)}` : ''}</span>${it.slot ? (it.inUse ? '<span class="mark">yours · in use</span>' : `<button type="button" class="stamp small outline" data-act="use" data-id="${esc(it.id)}">Use this one</button>`) : `<span class="mark">${it.kind === 'lure' ? 'in the box' : 'yours'}</span>`}`;
-    else foot = `<span class="soft">${it.kg ? fmtKg(it.kg) : ''}</span><button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>Buy · ${priceTxt}</button>`;
+    else foot = `<span class="soft">${it.kg ? fmtKg(it.kg) : ''}</span><button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>${buyTxt}</button>`;
     const quiet = !it.owned && !it.afford && it.use !== 'food';
     return `<div class="item${it.owned ? ' yours' : ''}${quiet ? ' dear' : ''}${it.signature ? ' sig' : ''}">
       <div class="head">${gearIcon(it.id, quiet)}<b>${esc(it.name)}</b><span class="price">${priceTxt}</span></div>
@@ -617,7 +617,7 @@ export class Outfitter {
   shelvesTab(a) {
     const stock = this.shop ? this.shop.stock(a.ep) : [];
     const cols = SHELVES.map((sh) => {
-      const items = stock.filter((it) => it.kind === sh.kind);
+      const items = stock.filter((it) => it.kind === sh.kind).sort((x, y) => (y.signature ? 1 : 0) - (x.signature ? 1 : 0)); // what is made here first
       return `<section class="shelf${this.focus === sh.kind ? ' here' : ''}" aria-label="${esc(sh.name)}">
         <div class="top"><h3>${esc(sh.name)}</h3><span class="sum">${this.focus === sh.kind ? 'you are at this shelf' : esc(sh.sub)}</span></div>
         <div class="items">${items.map((it) => this.card(it)).join('')}</div>
@@ -627,7 +627,7 @@ export class Outfitter {
   }
   // the lure wall: a pegboard of lures, what is in your box marked
   wallTab(a) {
-    const stock = this.shop ? this.shop.stock(a.ep).filter((it) => it.kind === 'lure') : [];
+    const stock = this.shop ? this.shop.stock(a.ep).filter((it) => it.kind === 'lure').sort((x, y) => (y.signature ? 1 : 0) - (x.signature ? 1 : 0)) : [];
     const box = this.shop ? [...this.shop.box()].filter((l) => l !== 'leech') : [];
     return `<section class="pegboard" aria-label="The lure wall">
       <div class="top"><h3>The lure wall</h3><span class="sum">${box.length ? `${box.length} in your box · a snapped line loses the lure` : 'nothing in the box'} · 1–${LURES.length} with the rod up</span></div>
@@ -650,7 +650,7 @@ export class Outfitter {
     else if (this.tab === 'wall') body = this.wallTab(a);
     else body = `<div class="counter">${this.permitSection(a)}${this.deskSection(a)}${this.wallSection(a)}</div>`;
     this.el.panel.innerHTML = `<header>
-      <div class="lede"><div class="sc kicker">Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && op.kind ? ` · ${esc(op.kind)}` : ''}</div><h2>${esc(a.name)}</h2><div class="say">“${esc(this.greeting)}”${this.who ? ` <span class="who">— ${esc(this.who)}</span>` : ''}</div></div>
+      <div class="lede"><div class="sc kicker">Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && (op.kindWords || op.kind) ? ` · ${esc(op.kindWords || op.kind)}` : ''}</div><h2>${esc(a.name)}</h2><div class="say">“${esc(this.greeting)}”${this.who ? ` <span class="who">— ${esc(this.who)}</span>` : ''}</div></div>
       ${purse}<button type="button" class="stamp outline" data-act="close" aria-label="Leave the counter (E or Esc)">${leave}</button>
     </header>${nav}${body}`;
     const now = this.el.panel.querySelector('.permit, .items, .pegs');
@@ -876,9 +876,9 @@ const CSS = `
 #outfitter .desk .word p { font-size: 16px; line-height: 1.45; font-style: italic; }
 #outfitter .desk .word p.soft, #outfitter .desk .soft { color: var(--ink-soft); font-style: italic; }
 #outfitter .desk .maps { display: flex; flex-direction: column; gap: 6px; }
-#outfitter .desk .sheet { display: flex; align-items: center; gap: 10px; font-size: 15px; }
-#outfitter .desk .sheet > span { flex: 1 1 auto; }
-#outfitter .desk .sheet .stamp { flex: none; }
+#outfitter .desk .mapsheet { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+#outfitter .desk .mapsheet .nm { flex: 1 1 auto; min-width: 0; }
+#outfitter .desk .mapsheet .stamp, #outfitter .desk .mapsheet .mark { flex: none; }
 #outfitter .desk .bunkrow { display: flex; align-items: center; gap: 12px; font-size: 15px; border-top: 1px solid var(--edge); padding-top: 12px; }
 #outfitter .desk .top + .bunkrow { border-top: none; padding-top: 0; }
 #outfitter .desk .bunkrow > div { flex: 1 1 auto; }
