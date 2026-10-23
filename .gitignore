@@ -5,3 +5,7 @@ public/data
 .DS_Store
 .env.local
 .env.*.local
+
+# agent and session worktrees, and their screenshot folders
+.claude/worktrees
+shots/

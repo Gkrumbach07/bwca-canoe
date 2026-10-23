@@ -12,6 +12,27 @@ under `far/`, 381 MB in all. The two have different needs, so they live in diffe
 The app finds the data through one build-time variable, `VITE_DATA_URL` (default `data/` next to the
 app). Everything below is about filling that in.
 
+## What is live now: GitHub Pages with the data from a release
+
+The public site is the `main` branch built by `.github/workflows/pages.yml` and served by GitHub Pages. The
+data rides along with it: the bake is attached as one archive, `bwca-data-v3.tar`, to the GitHub release
+`data-v3`, and the workflow unpacks it into `dist/data/` next to the app, so the app reads `data/` from its own
+origin (no `DATA_URL`, no CORS, no bucket). The site is about 450 MB, inside Pages' 1 GB limit; Pages' soft
+limit of 100 GB of bandwidth a month covers about 5,000 visits of 20 MB.
+
+A new bake: pack it, attach it to a new release, point the workflow at it, and redeploy:
+
+```bash
+npm run bake:all
+COPYFILE_DISABLE=1 tar --no-mac-metadata -C public/data -cf bwca-data-v4.tar .
+gh release create data-v4 bwca-data-v4.tar --title "Map data v4" --notes "Bake of $(date +%F)"
+gh variable set DATA_RELEASE --body data-v4
+gh workflow run pages.yml
+```
+
+Move to a bucket (below) when the bandwidth outgrows Pages: set the `DATA_URL` variable and the workflow
+stops unpacking the release.
+
 ## How the data is fetched
 
 - On load: `index.json` (5.6 MB, 1.1 MB compressed), `overview.png` (3.7 MB), the 3 × 3 fine tiles

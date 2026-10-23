@@ -1,8 +1,8 @@
-# Builds the app and deploys it to GitHub Pages on every push to main. The map data is not part of this:
-# it is uploaded to a bucket with `npm run data:sync` and the app fetches it from the DATA_URL repository
-# variable (Settings → Secrets and variables → Actions → Variables). Without that variable the app looks
-# for data/ next to itself, which only works when a small bake is committed under public/data.
-# See docs/HOSTING.md.
+# Builds the app and deploys it to GitHub Pages on every push to main. The map data (381 MB, gitignored) is
+# not in the repository. By default it comes from a GitHub release: the archive attached to the release named
+# by the DATA_RELEASE repository variable (default data-v3) is unpacked into dist/data, next to the app, which
+# is where the app looks when no DATA_URL is set. Set the DATA_URL variable instead to serve the data from a
+# bucket (then nothing is unpacked). See docs/HOSTING.md.
 name: Deploy to GitHub Pages
 
 on:
@@ -37,6 +37,16 @@ jobs:
           # '/<repo>/' for a project site, '/' for a user site or a custom domain
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
           VITE_DATA_URL: ${{ vars.DATA_URL }}
+      - name: Fetch the map data from the release
+        if: ${{ !vars.DATA_URL }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATA_RELEASE: ${{ vars.DATA_RELEASE || 'data-v3' }}
+        run: |
+          mkdir -p dist/data
+          gh release download "$DATA_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern 'bwca-data-*.tar' --output - | tar -x -C dist/data
+          test -f dist/data/index.json
+          du -sh dist/data
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
