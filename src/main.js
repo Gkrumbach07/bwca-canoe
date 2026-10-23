@@ -46,6 +46,7 @@ import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from 
 import { outfitterProfile, boardLean, speakAtCounter } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
 import { sheets } from './sheets.js'; // hubs 2D
+import { Shop } from './shop.js'; // hubs 2B
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -195,6 +196,11 @@ async function main() {
   onStore((L, ep) => { fires.steady(`store:${ep}`, L && L.lamp); if (L) storeBoard(L); });
   // once the sun is down the glass goes, so the lit store shows through its windows
   setInterval(() => { const up = day.sunDir.y > 0.035; for (const L of storeLayouts()) { storeBoard(L); L.glass.visible = up; } }, 2000);
+  // hubs 2B: the shop (shop.js): what each outfitter sells, at its prices, and what the gear does (player.gear, read in
+  // one line each by the paddle, the energy, the packs, the camp and the rod); the counter's tabs sell through it, and
+  // the store you walk into (outfitter.js, on stream A's props.storeLayout) opens the counter at the shelf you stand at
+  const shop = new Shop({ world, player, profile, energy, fishing, day, hud, camp });
+  outfitter.shop = shop;
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
@@ -240,6 +246,7 @@ async function main() {
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
   window.__game.profile = profile; // hubs 1A
   window.__game.props = { storeLayout, onStore, storeLayouts, setStoreNotices, stats: storeStats }; // hubs 2A
+  window.__game.shop = shop; // hubs 2B
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
@@ -269,6 +276,7 @@ async function main() {
       player.update(dt);
       packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
       fishing.update(dt, ts);
+      shop.update(); // hubs 2B: the tackle box (a lure not in it is refused), the supper, the leeches, the gravity bag
       outfitter.prompt();
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
       tasks.update(dt * ts);

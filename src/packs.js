@@ -55,7 +55,7 @@ export class Packs {
   get count() { const t = this.trip, pr = t && t.profile; if (pr) return pr.has('pack2') ? 2 : 1; const s = this.setup; return s && s.count === 1 ? 1 : 2; } // hubs 1A: what you own
   get canoeKind() { const s = this.setup; return s && s.canoe === 'kevlar' ? 'kevlar' : 'aluminium'; }
   get adventure() { const t = this.trip; return !!(t && t.adventure); }
-  get canoeKg() { return WEIGHTS[this.canoeKind]; }
+  get canoeKg() { const g = this.player.gear; return g && g.canoeKg > 0 ? g.canoeKg : WEIGHTS[this.canoeKind]; } // hubs 2B: the canoe in use (shop.js player.gear)
   // days of food in the food pack: what the trip has left (energy.js), else what it set out with
   get foodDays() {
     if (this.energy && Number.isFinite(this.energy.food)) return Math.max(0, this.energy.food);

@@ -307,7 +307,8 @@ export class Camp {
   kitOf(slot) { const pr = this.profile, k = pr && pr.kit ? pr.kit[slot] : null; return k ? String(k).toLowerCase() : ''; }
   // how well the tent sleeps (0 to 1): the profile's own word for it (profile.sleepQ), else the kit's tent and a pad
   tentQuality() {
-    const k = this.kitOf('tent'), pr = this.profile;
+    const k = this.kitOf('tent'), pr = this.profile, g = this.player.gear;
+    if (g && Number.isFinite(g.sleep)) return Math.max(0, Math.min(1, g.sleep)); // hubs 2B: the tent and the pad (shop.js player.gear)
     if (pr && Number.isFinite(pr.sleepQ)) return Math.max(0, Math.min(1, pr.sleepQ));
     let q = k ? (TENTS[k] ?? (/four|dome/.test(k) ? 1 : START_TENT)) : START_TENT;
     if (pr && pr.has && (pr.has('pad') || pr.has('sleeping-pad'))) q += PAD;
@@ -558,6 +559,7 @@ export class Camp {
     const e = this.energy;
     if (e.sleep) e.sleep(n.q, n.hours); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
     if (this.camp && this.camp.key && this.fires) this.fires.douse(this.camp.key);
+    if (this.wet && this.player.gear && this.player.gear.sleepDry) { this.state.wet = false; this.note('The gear dried overnight in the vestibule.'); } // hubs 2B: the four-season tent
     this.cookedAt = -Infinity;
     this.log('sleep', { kind: n.kind, key: this.camp ? this.camp.key : null, q: +n.q.toFixed(2), hours: Math.round(n.hours * 10) / 10 });
     this.persist();

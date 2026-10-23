@@ -303,7 +303,7 @@ export class Player {
     else if (fwd < 0) a = -PADDLE.reverse * pulse;
     else if (turn !== 0) a = 0.6 * pulse; // sweep strokes still push a little
     this.speed += a * dt;
-    this.speed -= (this.speed * Math.abs(this.speed) * PADDLE.drag + this.speed * PADDLE.lin) * dt;
+    const cruise = this.gear ? this.gear.cruise : 1; this.speed -= ((this.speed * Math.abs(this.speed) * PADDLE.drag) / cruise + this.speed * PADDLE.lin) / cruise * dt; // hubs 2B: the paddle and the hull's cruise (shop.js player.gear)
     const yawTarget = steer * PADDLE.yaw * (0.55 + 0.45 * clamp(Math.abs(this.speed) / 1.5, 0, 1)) * (this.speed < -0.2 ? -1 : 1);
     this.yawRate += (yawTarget - this.yawRate) * (1 - Math.exp(-dt * 3.5));
     // the whole hull must stay in the water (and on a tile that has finished streaming in): centre, bow and stern are tested
@@ -337,7 +337,7 @@ export class Player {
     const wd = this.wind ? this.wind.dir : { x: 0, z: 1 };
     const cosRel = f.x * wd.x + f.z * wd.z, broadside = Math.sqrt(Math.max(0, 1 - cosRel * cosRel));
     const risk = H * Math.pow(broadside, 1.2) * (brace ? 0.4 : 1);
-    this.balance = clamp(this.balance + (risk > CAPSIZE.threshold ? (risk - CAPSIZE.threshold) * CAPSIZE.build : -CAPSIZE.recover) * dt, 0, 1);
+    const steady = CAPSIZE.threshold * (this.gear ? this.gear.stability : 1); this.balance = clamp(this.balance + (risk > steady ? (risk - steady) * CAPSIZE.build : -CAPSIZE.recover) * dt, 0, 1); // hubs 2B: a steadier hull takes more sea
     this.extraRoll = this.balance * 0.4 * Math.sin(this.time * 3.1) * (brace ? 0.5 : 1);
     this.placeOnWater(dt);
     this.emitWater(dt);
@@ -634,7 +634,7 @@ export class Player {
     let nx = this.x + mx * this.speed * dt, nz = this.z + mz * this.speed * dt;
     if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
     else if (!w.isReady(nx, nz)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Loading the land ahead…'; }
-    else if (w.shoreAt(nx, nz) < WADE_SD) { nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade'; }
+    else if (w.shoreAt(nx, nz) < WADE_SD && !(ft.near && this.supportAt(nx, nz, ft.y + STEP_UP, ft.near) > w.levelAt(nx, nz) + 0.2)) { nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade'; } // hubs 2B: a dock's deck (a box with a top over the water) walks out past wading depth
     const trees = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
     ft.near = trees;
     const reach = ft.y + STEP_UP;
