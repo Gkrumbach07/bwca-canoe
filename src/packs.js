@@ -259,12 +259,14 @@ export class Packs {
       }
       return false;
     }
-    // everything together, but not all of it in the canoe yet: E loads up and launches (from the trail's own launch
-    // point when the canoe lies at a trail end)
-    if (dd <= HULL_REACH && this.list.some((k) => k.where !== 'hull')) {
-      const L = this.dropLaunch(d);
+    // everything together: E loads up (when a pack is not in the canoe yet) and launches, from the trail's own launch
+    // point when the canoe lies at a trail end. With every pack in the hull this is a canoe set down at a trail end
+    // (one pack, set down to fill the bottle, say): player.js alone would find no water within reach of it up the bank
+    // and offer only to shoulder it, and E overhead would set it straight down again.
+    if (dd <= HULL_REACH) {
+      const L = this.dropLaunch(d), load = this.list.some((k) => k.where !== 'hull');
       if (L && L.deep) {
-        p.say(note, ['E', `Load up and launch onto ${lakeOf(L.lake)}`], ['Q', 'Shoulder the canoe']);
+        p.say(note, ['E', `${load ? 'Load up and launch' : 'Launch'} onto ${lakeOf(L.lake)}`], ['Q', 'Shoulder the canoe']);
         if (inp.pressed('KeyE')) p.launch(L);
         else if (inp.pressed('KeyQ')) p.pickUpHull();
         return true;
