@@ -139,7 +139,11 @@ distance i can travel in a real day in bwca" be the game's, by making the game f
 with the slow parts (walking around, fishing) kept slow. So a game hour of paddling is 4 km with the starting kit and
 4.5 with the Kevlar and the carbon blade, and a travel day of 6 to 8 game hours with a few portages is 20 to 25 km
 (measured: 23–24 km in 6.5 game hours, four portages). At Trip pace that hour is about ten real minutes on the water;
-at Real pace an hour. Gear still buys game time: the Kevlar and the carbon shorten a 24 km day by about 40 minutes. The
+at Real pace an hour. The same evening the owner found life too slow on screen ("you say its 4.8 but it feels like
+2.4"; the 2× key "feels more correct") and the slow-down near a shore unwelcome: so nothing that travels is shown below
+twice life at Trip pace (the clock in step), the boost no longer fades along a shore or at a landing (only in the last
+few metres before a bank dead ahead), and the frame loop now runs a slow frame as several steps, since a 50 ms cap had
+put the game in slow motion below 20 fps (Ultra on the owner's 3440 x 1440 screen measured about 18). Gear still buys game time: the Kevlar and the carbon shorten a 24 km day by about 40 minutes. The
 second Duluth pack takes the food room from 7 days to 17 and brings back the double portage (the gear pack waits at
 the trail head; Q fetches it, about 5 minutes on a 23-rod carry, the walks' own time at life).
 

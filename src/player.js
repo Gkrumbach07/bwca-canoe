@@ -26,13 +26,13 @@ export class Input {
 // a bump on the shore, the loons, the clock's "under way") reads the speed at life.
 const PADDLE = { accel: 1.63, hustle: 2.5, reverse: 0.77, drag: 0.31, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
 // m/s at life (pace.js LIFE): a walk, Shift a jog, and a carry before the load slows it; face: how fast the walker turns
-// to where the keys point. On a portage trail the walker is time-lapsed as the canoe is on the water (SEEN, below).
+// to where the keys point. At Trip pace the walker is time-lapsed so he is seen at SEEN (pace.js), on a trail or off it.
 const WALK = { speed: LIFE.walk, hustle: LIFE.jog, carry: LIFE.carry, carryHustle: LIFE.carryHustle, face: 7 };
-// The boost on the water fades out (to life) where control matters: the shore ahead (metres along the bow, from AHEAD[0]
-// none to AHEAD[1] all), the water to either side (SIDE: a narrow creek is paddled at life), a landing or an outfitter's
-// dock nearby (NEAR_LANDING), a slow stroke (the speed at life over the cruise, CRUISING) and a hard turn (the yaw rate
-// over the paddle's, TURNING). It comes up over about a second and goes in a third of one.
-const BOOST = { ahead: [15, 65], reach: 150, side: [2.5, 9], landing: [30, 80], cruising: [0.35, 0.85], turning: [0.35, 0.9], up: 1.1, down: 3.5 };
+// The boost on the water (pace.js) eases back to the pace's floor only where the hull needs it: a bank dead ahead (AHEAD:
+// the metres of open water along the bow, from AHEAD[0] none to AHEAD[1] all, so it does not hit the shore at speed), a
+// slow stroke (the speed at life over the cruise, CRUISING) and a hard turn (the yaw rate over the paddle's, TURNING).
+// A shore alongside, a creek, a landing or a dock leave it alone. It comes up over about a second and goes in a third.
+const BOOST = { ahead: [5, 16], reach: 30, cruising: [0.35, 0.85], turning: [0.35, 0.9], up: 1.1, down: 3.5 };
 // On foot the walker has a height of his own (this.foot): the drawn ground, or the top of a rock, a log or a stump he
 // has stepped or hopped onto. STEP_UP is how high a step he takes without a hop (a low slab, a small rock, a log on
 // its side); BODY_R the body's reach round its centre, which a rock's outline holds off; Space hops about HOP metres.
@@ -75,7 +75,6 @@ export class Player {
     this.pace = 'trip';
     this.boost = 1; this.lapseT = 1;
     this.paceSpeed = 0;          // the speed made good per hour of the game's clock while travelling (the readout's km/h)
-    this.landingD = Infinity; this.landingT = 0; // metres to the nearest landing or dock, refreshed a few times a second
     this.trailCache = new Map(); // portage -> resampled trail, built on first use
     this.carry = null; // on foot: { trail, drop: { x, z, heading } | null, hitCooldown, from: { x, z } | null, choice }
     this.landing = null; // auto-pilot toward a portage launch point
@@ -277,10 +276,10 @@ export class Player {
     this.boost += (want - this.boost) * (1 - Math.exp(-dt * k));
     if (Math.abs(this.boost - want) < 0.002) this.boost = want;
   }
-  // How clear the water is for the boost (0 to 1): the shore ahead along the bow (marched along the shore distance
-  // field; a tile not yet in counts as shore, so the canoe never runs at speed into the edge of what has loaded), the
-  // water to either side, and the nearest landing or dock.
-  clearAhead(dt) {
+  // How clear the water is for the boost (0 to 1): the bank dead ahead along the bow (marched along the shore distance
+  // field; a tile not yet in counts as shore, so the canoe never runs at speed into the edge of what has loaded). Only
+  // the last few metres count: a shore alongside, a landing or a dock leave the speed alone.
+  clearAhead() {
     const w = this.world, f = this.forward, dir = this.speed < 0 ? -1 : 1;
     let t = 2.5, hit = BOOST.reach;
     for (let i = 0; i < 16 && t < BOOST.reach; i++) {
@@ -289,23 +288,7 @@ export class Player {
       if (sd > -2) { hit = t; break; }
       t += Math.max(3, -sd - 2);
     }
-    if ((this.landingT -= dt) <= 0) { this.landingT = 0.25; this.landingD = this.nearestLandingD(); }
-    return smoothstep(BOOST.ahead[0], BOOST.ahead[1], hit) * smoothstep(BOOST.side[0], BOOST.side[1], -w.shoreAt(this.x, this.z))
-      * smoothstep(BOOST.landing[0], BOOST.landing[1], this.landingD);
-  }
-  // metres to the nearest portage landing or outfitter's dock (out to 200 m)
-  nearestLandingD() {
-    let best = 200;
-    const R = best;
-    for (const p of this.world.portages) for (const l of p.launch) {
-      const dx = l.x - this.x, dz = l.z - this.z;
-      if (dx < R && dx > -R && dz < R && dz > -R) best = Math.min(best, Math.hypot(dx, dz));
-    }
-    for (const e of this.world.entryPoints) {
-      const dx = e.x - this.x, dz = e.z - this.z;
-      if (dx < R && dx > -R && dz < R && dz > -R) best = Math.min(best, Math.hypot(dx, dz));
-    }
-    return best;
+    return smoothstep(BOOST.ahead[0], BOOST.ahead[1], hit);
   }
 
   updatePaddle(dt) {
@@ -375,17 +358,18 @@ export class Player {
     }
     const yawTarget = steer * PADDLE.yaw * (0.55 + 0.45 * clamp(Math.abs(this.speed) / 0.72, 0, 1)) * (this.speed < -0.1 ? -1 : 1);
     this.yawRate += (yawTarget - this.yawRate) * (1 - Math.exp(-dt * 3.5));
-    // the pace (pace.js): under way on a forward stroke the hull is time-lapsed by the pace's T on open water, faded out
-    // by a slow stroke, a hard turn, a shore ahead or to the side and a landing near; at life otherwise (and at Real)
-    const P = this.paceTable;
-    let boostWant = 1;
+    // the pace (pace.js): the hull is never shown below the pace's floor (twice life at Trip), and under way on a forward
+    // stroke it is time-lapsed up to the pace's T on open water, eased off by a slow stroke, a hard turn and the last
+    // few metres of a bank dead ahead (not by a shore alongside or a landing: the owner did not like it slowing there)
+    const P = this.paceTable, B = P.floor || 1;
+    let boostWant = B;
     this.lapseT = P.water; // the pace's own time-lapse here (the HUD's "trip ×6")
-    if (P.water > 1 && fwd > 0 && !idleHands) {
+    if (P.water > B && fwd > 0 && !idleHands) {
       const cruise = LIFE.cruise * (this.gear ? this.gear.cruise : 1);
       const k = smoothstep(BOOST.cruising[0], BOOST.cruising[1], this.speed / cruise)
         * (1 - 0.85 * smoothstep(BOOST.turning[0], BOOST.turning[1], Math.abs(this.yawRate) / PADDLE.yaw))
-        * this.clearAhead(dt);
-      boostWant = 1 + (P.water - 1) * k;
+        * this.clearAhead();
+      boostWant = B + (P.water - B) * k;
     }
     this.easeBoost(boostWant, dt);
     const vb = this.speed * this.boost; // the speed the hull is moved at
@@ -717,11 +701,11 @@ export class Player {
     if (fwd !== 0 && wall) note = wall;
     const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going);
     this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
-    // the pace on a portage trail (pace.js): the walker time-lapsed so he is seen at about SEEN (a carry at 2.5 m/s, a
-    // walk at 2.3), up to the pace's trail T; off a trail, at a campsite or in a yard he walks at life
+    // the pace (pace.js): the walker time-lapsed so he is seen at SEEN (a walk at 2.7 m/s, twice life; a carry at 2.5), up
+    // to the pace's trail T, on a trail or off it (life read too slow: the owner, 2026-10-23); at life at Real
     const P = this.paceTable;
     let boostWant = 1;
-    if (onTrail && P.trail > 1 && fwd) {
+    if (P.trail > 1 && fwd) {
       const seen = carrying ? (hustle ? SEEN.carryHustle : SEEN.carry) : (hustle ? SEEN.jog : SEEN.walk);
       boostWant = clamp(seen / Math.max(0.1, base), 1, P.trail);
     }

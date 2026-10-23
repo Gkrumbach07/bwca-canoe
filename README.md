@@ -32,10 +32,13 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
 - **The pace** (`src/pace.js`): a game day covers a real BWCA day's distance. Everything moves at life pace (a loaded
   canoe at 4 km an hour, a portage carry at 3), and while you travel the canoe and the clock are time-lapsed together:
   at **Trip** pace (the default; Settings › Controls › Pace) ×6 on open water, a game hour of paddling in about ten
-  real minutes, and up to ×3 on a portage trail, so a travel day of 6 to 8 game hours covers 20 to 25 km. The boost
-  fades to life near a shore, a landing or a dock, on a slow stroke and in a hard turn; camp, chores, fishing and
-  walking off a trail stay at life with the clock at 12×. **Real** pace is 1:1 throughout. A "trip ×6" mark sits
-  bottom right while the boost carries you, and the readout (Tab) gives the clock's rate and the km an hour.
+  real minutes, and up to ×3 on a portage trail, so a travel day of 6 to 8 game hours covers 20 to 25 km. Nothing that
+  travels is shown below twice life (life reads too slow on a screen): the canoe from its first stroke, the walker
+  anywhere (about 2.7 m/s), with the clock in step so the readout's km an hour stays true. The canoe's boost eases off
+  on a slow stroke, in a hard turn and in the last few metres before a bank dead ahead, but not along a shore or into a
+  dock. Camp, chores and fishing run on a 12× clock. **Real** pace is 1:1 throughout. A "trip ×6" mark sits bottom
+  right while the boost carries you, and the readout (Tab) gives the clock's rate and the km an hour. The game keeps
+  to the wall clock at any frame rate (a slow frame runs as several steps), so 4 km an hour is 4 km an hour.
 - **A day in the Boundary Waters**: a day/night cycle on the pace's clock with the real sun and moon for the date and
   the clock (`src/astro.js`: sunrise and sunset shift through the year, the moon shows its phase), a
   sky-matched haze, golden light at the ends of the day, the clouds, the water, stars, with dawn mist over
