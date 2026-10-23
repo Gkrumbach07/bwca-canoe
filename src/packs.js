@@ -85,7 +85,10 @@ export class Packs {
     if (p.mode === 'carry') s = `The canoe${on.length ? ' and ' + names(on) : ''} · ${kg} kg`;
     else if (on.length) s = `${cap(names(on))} on your back · ${kg} kg`;
     else if (this.list.every((k) => k.where === 'hull')) s = this.n === 1 ? 'One pack in the canoe' : 'Two packs in the canoe';
-    else s = this.list.some((k) => k.where === 'ground' && k.at.camp) ? 'Packs out at camp' : 'Packs by the canoe';
+    else {
+      const hull = this.list.filter((k) => k.where === 'hull');
+      s = this.list.some((k) => k.where === 'ground' && k.at.camp) ? 'Packs out at camp' : hull.length && left.length ? `${cap(names(hull))} in the canoe` : 'Packs by the canoe';
+    }
     if (left.length) s += ` · ${names(left)} ${metres(left[0].d)} back`;
     return s;
   }
