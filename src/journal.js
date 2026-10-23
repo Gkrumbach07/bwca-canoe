@@ -278,7 +278,7 @@ export class Journal {
     const film = ph.film, n = list.length;
     const sub = film === '35mm' ? 'The 35 mm: C raises it, Space takes the picture. The last 24 are kept; the oldest goes first.'
       : film === 'disposable' ? `The disposable has ${word(ph.shotsLeft)} ${plural(ph.shotsLeft, 'picture')} left. C raises it, Space takes the picture.`
-        : 'No camera. A 35 mm is $25 on the shelves at any outfitter; a photo notice comes with a disposable on loan.';
+        : ph.noCamera;
     const html = `<div class="lede"><h2 id="right-h">${n ? `${n} ${plural(n, 'print')}` : 'No pictures yet'}</h2><div class="sub">${sub}</div></div>
       ${n ? `<div class="prints">${cards}</div>` : '<div class="empty">A picture you take comes back as a print, here.</div>'}`;
     const more = n - (this.page + 1) * per;

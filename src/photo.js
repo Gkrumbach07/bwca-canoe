@@ -10,8 +10,8 @@ import { save } from './save.js';
 // C raises the camera when you own one (the $25 35 mm on the shelves, shop.js 'camera') or have the disposable the
 // first photo notice of a season lends you (three pictures). The view goes to the eye with the field of view halved,
 // under a thin Air frame that marks the print's 16:9; the mouse aims (or the arrows and WASD, Shift for a fine hand),
-// Space or a click takes the picture, C or Esc lowers it. While it is up the paddle and the feet rest, so there is no
-// travel boost (pace.js) and the game runs at 1×.
+// Space or a click takes the picture, C or Esc lowers it. While it is up the paddle and the feet rest and the pace is
+// life's (pace.js 'real': no time-lapse, not even Trip's floor of twice life, and the clock 1:1), at 1×.
 //
 // A subject counts when it is near the middle of the print (within ZONE of the half field of view, an ellipse on the
 // 16:9), close enough (REACH: a moose 120 m, a beaver or a loon 60 m, a gull or a raven 30 m) and not hidden by the
@@ -284,6 +284,10 @@ export class PhotoCamera {
   note(t, s = 5) { if (t && this.hud) this.hud.note(t, s); }
   write() { save.write('photos', this.state); }
   hint() { this.state.hinted = true; this.write(); this.note('C raises the camera, Space takes the picture, and C or Esc lowers it.', 7); }
+  get noCamera() {
+    return this.state.lentEver ? 'The disposable is used up. A 35 mm camera is $25 on the shelves at any outfitter.'
+      : 'No camera. A 35 mm is $25 on the shelves at any outfitter, and a photo notice comes with a disposable on loan.';
+  }
   // the keeper lends the disposable for the first photo notice of the season taken on without a camera
   lendFor(t) {
     if (this.owned || this.state.lentEver) return;
@@ -301,8 +305,7 @@ export class PhotoCamera {
     if (document.body.classList.contains('shell-open') || (h && (h.paperOpen || h.big || h.pin))) return '';
     if (p.input.paused || p.teleporting || p.landing || p.ashore || c.focus || (this.veil && this.veil.active) || (this.camp && this.camp.busy)) return '';
     if (p.mode === 'swim') return '';
-    if (!this.film) return this.state.lentEver ? 'The disposable is used up. A 35 mm camera is $25 on the shelves at any outfitter.'
-      : 'No camera. A 35 mm is $25 on the shelves at any outfitter, and a photo notice comes with a disposable on loan.';
+    if (!this.film) return this.noCamera;
     if (this.fishing && this.fishing.rodUp) return 'Lay the rod down first (F).';
     if (p.mode === 'carry') return 'Set the canoe down first.';
     return null;
@@ -312,12 +315,12 @@ export class PhotoCamera {
     const c = this.chase, cam = this.camera, p = this.player;
     cam.getWorldDirection(_dir);
     const first = c.mode === 'first';
-    this.prev = { mode: c.mode, sens: c.sensitivity, ts: p.timeScale, pmode: p.mode };
+    this.prev = { mode: c.mode, sens: c.sensitivity, ts: p.timeScale, pace: p.pace, pmode: p.mode };
     if (!first) c.setMode('first');
     this.baseFov = cam.fov;
     if (!first) { const yaw = Math.atan2(-_dir.z, _dir.x); c.viewYaw = yaw; c.forwardYaw = yaw; c.viewPitch = 0; c.first = false; } // up to the eye where the view was
     c.sensitivity = (this.prev.sens || 1) * FOV_K;
-    p.timeScale = 1;
+    p.timeScale = 1; p.pace = 'real'; p.boost = 1; // life: no time-lapse (not even the Trip pace's floor of twice life), the clock 1:1
     this.raised = true; this.hadLock = c.locked; this.wind = 0.25; this.pending = false; this.lookT = 0; this.sayKey = '';
     document.body.classList.add('photo-up');
     this.placeFrame(); this.paintFrame();
@@ -332,6 +335,7 @@ export class PhotoCamera {
     else { cam.fov = this.baseFov; cam.updateProjectionMatrix(); }
     c.sensitivity = pr.sens || c.sensitivity;
     if (pr.ts) p.timeScale = pr.ts;
+    if (pr.pace) p.pace = pr.pace;
     document.body.classList.remove('photo-up');
     this.el.classList.remove('show');
     return true;
@@ -350,6 +354,7 @@ export class PhotoCamera {
       || (this.veil && this.veil.active) || (this.camp && this.camp.busy) || (this.fishing && this.fishing.rodUp) || p.mode !== this.prev.pmode) { this.lower(); return; }
     for (const k of ['KeyE', 'KeyQ', 'KeyF', 'KeyK']) inp.once.delete(k); // the camera's hands are full
     if (p.timeScale !== 1) { this.prev.ts = p.timeScale; p.timeScale = 1; } // 1 2 3 wait until it is down
+    if (p.pace !== 'real') { this.prev.pace = p.pace; p.pace = 'real'; }
     // the aim with the keys: A D or ← → turn, W S or ↑ ↓ tilt, Shift for a fine hand
     const d = inp.down, k = d.has('ShiftLeft') || d.has('ShiftRight') ? AIM.fine : 1;
     const yawIn = (d.has('KeyA') || d.has('ArrowLeft') ? 1 : 0) - (d.has('KeyD') || d.has('ArrowRight') ? 1 : 0);
@@ -651,7 +656,7 @@ const CSS = `
 body.photo-up #air > div:not(#lines) { visibility: hidden; }
 body.photo-up #lines { bottom: 118px; }
 body.photo-up #photo-print { bottom: 118px; }
-body.shell-open #photo, body.shell-open #photo-print { display: none; }
+body.shell-open #photo, body.shell-open #photo-print, body.paper-open #photo-print { display: none; }
 #photo-print { position: fixed; right: 46px; bottom: 70px; z-index: 4; pointer-events: none; box-sizing: border-box; width: 258px; padding: 9px 9px 10px; background: #f6f1e4;
   border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .42); color: var(--ink); opacity: 0; transform: rotate(1.8deg) translateY(18px);
   transition: opacity .7s ease-out, transform .5s ease-out; }
