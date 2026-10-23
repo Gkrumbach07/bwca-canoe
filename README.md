@@ -84,29 +84,30 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | A / D | afloat: turn the hull while held, as sweep strokes, in both views. On land: strafe left / right |
 | Shift | hustle (on foot, a jog: a longer stride with both feet off the ground between steps) |
 | Space | afloat: brace (steadies the hull in a sea; you cannot paddle while bracing). The balance arc appears above the action line while the sea is working the hull. On foot: hop, about 0.4 m, onto a low rock or a log or over it (with the canoe on your shoulders you only stagger) |
-| E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter's counter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down |
-| Q | the second choice at a shore: go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it |
+| E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter's counter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down. On a double portage: set the canoe down at the far end, pick up the pack left at the trail head, load up and launch. At a campsite: pitch the tent, light the fire, cook, sleep (see [docs/trip-core.md](docs/trip-core.md)) |
+| Q | the second choice at a shore: go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it. On a portage: take the gear pack too (one heavy trip), or fetch the pack left at the trail head (a short fade while the walk back and the second carry pass) |
 | Tab | hold for the readout: where, water, way, wind, light, pack, tasks (Settings › HUD can make it a toggle, or keep it up; Developer adds the GPS sim, tiles, FPS and triangles) |
 | M | hold for a glance at the map (a half-sheet, 5 km across, slides up from the bottom right); press for the full sheet: drag to pan, wheel to zoom, click a spot and a pencil note asks before the canoe is moved; the header toggles the layers; M or Esc puts it away |
 | J | the journal: the trip (food, energy, kilometres, portages, lakes, nights, tasks on the go) on the left page, the tabs Catches / Tasks / Lakes / Gear on the right. L opens it too, for a while |
 | F | take up the fishing rod / put it down (see *Fishing*) |
-| G | eat a meal (when the canoe is still) |
+| G | eat a meal (when you are still: in the canoe or on foot) |
+| H | the headlamp, afloat or on foot (it goes off on its own in full daylight and when you sleep) |
 | Space / mouse button | with the rod up: hold to load a cast where the reticle sits on the water and let go; set the hook on a bite; hold to reel in a fight |
 | 1 – 5 | with the rod up: jig & twister, Mepps spinner, Daredevle spoon, jointed Rapala, bobber & leech (the strip above the action line) |
 | K / E | keep the landed fish on the stringer / let it go (the catch card bottom left carries the fish) |
 | V | switch between first-person and chase camera |
-| [ / ] | step the time of day back / forward an hour |
-| - / = | step the date back / forward a day (with Shift, a month) |
-| P | pause the clock (a mark bottom right says so) |
+| [ / ] | step the time of day back / forward an hour (Sandbox) |
+| - / = | step the date back / forward a day (with Shift, a month) (Sandbox) |
+| P | pause the clock (a mark bottom right says so) (Sandbox) |
 | N | mute / unmute the synthesized soundscape |
-| , / . | less / more wind (debug; `;` hands control back to the weather) |
-| / | veer the wind 30° (debug) |
+| , / . | less / more wind (Sandbox; `;` hands control back to the weather) |
+| / | veer the wind 30° (Sandbox) |
 | R | toggle the shore, its trees and the canoe mirrored in the water (a second scene pass; off, the water mirrors the sky alone) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× (a ×2 mark bottom right while it is up) |
 | Esc | frees the mouse when the look has taken it; otherwise pause: the title screen with Paddle on / New trip / Settings / Controls (Esc again, or Enter, resumes); Controls shows this table in the game |
 | mouse | look. In first person, and on land in third person, the mouse turns you the way it does in Minecraft: the first key or click takes the mouse, every movement turns the look at once, Esc frees the mouse (Esc again opens the menu). On land the body faces the look and WASD moves relative to it, A and D strafing; in third person the camera sits behind you and the mouse's tilt swings it up or down. Behind the canoe the cursor stays free: drag to orbit, wheel to zoom. *Settings → Steer the canoe where you point*: while you hold W the bow turns toward the cursor's point on the water, or toward the look in first person; A/D nudge, and nothing sticks |
-| the map sheet | click a spot to paddle in there (teleport to the nearest open water, anywhere in the wilderness) |
-| the title's entry points | the list beside *New trip* starts a trip at one of the BWCA entry point landings |
+| the map sheet | click a spot to paddle in there (teleport to the nearest open water, anywhere in the wilderness; Sandbox) |
+| the title's entry points | the list beside *New trip* starts a trip at one of the BWCA entry point landings, travelling the way picked above it: *Adventure* (a permit, a food pack, a date to be out by) or *Sandbox* (no limits) |
 
 What the HUD says on its own: the compass sits at the top right at half strength, its gold arrow on the rim
 where the wind is going, and speaks (full strength, the Beaufort name, the speed, the waves) when the wind
@@ -196,6 +197,11 @@ field fills in beyond them. `M` opens it wide.
 
 ## Trips and tasks
 
+A trip travels one of two ways, picked on the title card: **Adventure** (a permit written at the counter, a food
+pack, a date to be out by, two packs and the double portage, your own tent at a designated site, a calm evacuation
+when the food, the sleep or the days run out) or **Sandbox** (the same lakes with no limits). The trip core is
+described in [docs/trip-core.md](docs/trip-core.md); what follows is the outfitter and the task board.
+
 Every BWCA entry point landing has an outfitter: a dock, a shack with the name over the door (the Ely,
 Sawbill and Gunflint outfitters where they are well known, plausible ones elsewhere; the list is in
 `src/outfitter.js`) and a canoe rack. The game opens at the Lake One landing with the outfitter's panel up;
@@ -218,9 +224,9 @@ within 25 m of any landing **E** opens it again. The panel has three parts:
 **Energy** (`src/energy.js`) is the bar under the entry point list. It drains slowly with the clock, with the
 paddle (speed, hustle, a wind on the bow) and on the portages (more with a heavy pack); it comes back when you
 sit still, three times as fast at a campsite and twice as fast after a meal. Meals happen on their own at
-sunrise and sunset while there is food, or with **F** when the canoe is still. With the pack empty and the bar
-under 15 % the HUD says so, gently; at zero the outfitter sends a boat: a short fade, a line, and you are back
-at the nearest landing with a fresh pack. Nothing else is lost. The big map (**M**) shows each task on the go as
+sunrise and sunset while there is food, or with **G** when you are still. With the pack empty and the bar
+under 15 % the HUD says so, gently; at zero, in Adventure, the trip ends in a calm evacuation (a fade, a line,
+and you wake at the nearest landing; see [docs/trip-core.md](docs/trip-core.md)). Sandbox never runs out. The big map (**M**) shows each task on the go as
 a soft circle around its lake, never the spot, and the outfitters as docks.
 
 The trip (food, energy, position, tasks taken and done, the tally and the gear) is kept in `localStorage`
