@@ -12,7 +12,7 @@
 //
 //   profile.money, earn(n, why), spend(n, why) → bool, has(id), give(id), kit { canoe, paddle, tent, filter, packs },
 //   knows(ep), learn(ep), known, home, outfitter(ep) → { rep }, raise(ep, d), onChange(fn) → off
-//   (and: started, mode, permit, foodRoom, sleepQ, begin({ home, mode }), stamp(permit), use(slot, id))
+//   (and: started, mode, permit, foodRoom, sleepQ, begin({ home, mode }), stamp(permit), use(slot, id), told, tell(ep, i))
 import { save } from './save.js';
 
 const NS = 'profile';
@@ -49,7 +49,7 @@ const UNLOCK_ITEM = { kevlar: 'kevlar', mepps: 'lure:mepps', daredevle: 'lure:da
 const FOOD_ROOM = { pack: 7, pack2: 10, barrel: 14 }; // days of food each holds
 
 function blank() {
-  return { v: 1, started: false, mode: 'adventure', home: null, permit: null, money: 0, earned: 0, spent: 0, owned: [], kit: { ...KIT0 }, known: [], rep: {}, ledger: [], migrated: null };
+  return { v: 1, started: false, mode: 'adventure', home: null, permit: null, money: 0, earned: 0, spent: 0, owned: [], kit: { ...KIT0 }, known: [], rep: {}, ledger: [], migrated: null, told: [] };
 }
 function readDoc() { try { const s = localStorage.getItem(DOC_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 const dollars = (n) => Math.max(0, Math.round(Number(n) || 0));
@@ -58,7 +58,7 @@ export class Profile {
   constructor() {
     this.handlers = new Set();
     const s = save.read(NS);
-    if (s && s.v === 1) this.s = { ...blank(), ...s, kit: { ...KIT0, ...(s.kit || {}) }, rep: { ...(s.rep || {}) } };
+    if (s && s.v === 1) this.s = { ...blank(), ...s, kit: { ...KIT0, ...(s.kit || {}) }, rep: { ...(s.rep || {}) }, told: Array.isArray(s.told) ? s.told.slice() : [] };
     else {
       const doc = readDoc();
       this.s = doc ? Profile.migrate(doc, save.read('logbook')) : blank();
@@ -160,6 +160,15 @@ export class Profile {
   get known() { return this.s.known.slice(); }
   knows(ep) { return this.s.known.includes(Number(ep)); }
   learn(ep) { const n = Number(ep); if (!Number.isFinite(n) || this.knows(n)) return false; this.s.known.push(n); this.changed('known'); return true; }
+  // the keepers' insider words you have been told this season, as "ep:i" (the i-th of that outfitter's hints,
+  // outfitters.js): the map rings each one (hud.js)
+  get told() { return this.s.told.slice(); }
+  tell(ep, i) {
+    const k = `${Number(ep)}:${Number(i)}`;
+    if (!Number.isFinite(Number(ep)) || !Number.isFinite(Number(i)) || this.s.told.includes(k)) return false;
+    this.s.told.push(k); this.changed('hints');
+    return true;
+  }
   // standing with an outfitter, 0–5
   outfitter(ep) { return { rep: this.s.rep[Number(ep)] || 0 }; }
   raise(ep, d = 1) {

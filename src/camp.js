@@ -4,6 +4,7 @@ import { save } from './save.js';
 import { clock12, longDate, plural, fmtDays, compassLong, word } from './hud.js';
 import { SPECIES } from './fishing.js';
 import { daysInYear } from './astro.js';
+import { sheets } from './sheets.js'; // hubs 2D: the dusk word names only a site your map shows
 
 // Camp and night (the trip core, stream C). On foot at a campsite: pitch your tent at the site's pad (props.js
 // c.layout), light a fire in the grate (fire.js), cook a hot meal on it, sleep in the tent to morning under a night
@@ -84,13 +85,14 @@ export class CampRegistry {
   holder(key) { return this.holders.get(key) ?? null; }
   isFree(key) { return !this.holders.has(key); }
   // the nearest site no one holds within r metres: { site, key, d } or null
-  nearestFree(x, z, r = Infinity) {
+  // (ok(site): only the sites it passes, such as the ones the map shows)
+  nearestFree(x, z, r = Infinity, ok = null) {
     let best = null;
     for (const c of this.world.campsites) {
       const dx = c.x - x, dz = c.z - z;
       if (dx > r || dx < -r || dz > r || dz < -r) continue;
       const d = Math.hypot(dx, dz);
-      if (d < r && (!best || d < best.d)) { const key = campKey(c); if (this.isFree(key)) best = { site: c, key, d }; }
+      if (d < r && (!best || d < best.d)) { const key = campKey(c); if (this.isFree(key) && (!ok || ok(c))) best = { site: c, key, d }; }
     }
     return best;
   }
@@ -236,21 +238,24 @@ export class Camp {
     } else if (!this.wet) this.dry = 0;
   }
 
-  // an hour before sunset in Adventure: the nearest free site; once dark: the headlamp
+  // an hour before sunset in Adventure: the nearest free site your map shows (a sheet you own, or near where you have
+  // been: sheets.js), never one off it; once dark: the headlamp
   notes() {
     const d = this.day, p = this.player, { set } = d.sunriseSunset;
     const stamp = d.year * 1000 + d.doy, evening = d.hours >= 12 ? stamp : stamp - 1;
     if (this.adventure && !this.camp && set != null && d.hours >= set - 1 && d.hours < set && this.nudged !== stamp && !this.atSite) {
       this.nudged = stamp;
-      const n = this.registry.nearestFree(p.x, p.z, 6000);
+      const n = this.registry.nearestFree(p.x, p.z, 6000, (c) => sheets.showsDetail(c.x, c.z));
       if (n) {
         const dx = n.site.x - p.x, dz = n.site.z - p.z, deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
         const far = n.d < 1000 ? `${Math.max(50, Math.round(n.d / 50) * 50)} m` : `${(n.d / 1000).toFixed(1)} km`;
         const id = p.nearWater ? p.nearWater(n.site.x, n.site.z, 8) : 0, lake = id ? this.world.lakeName(id) : null;
         this.note(`An hour of light left. The nearest free campsite is ${far} ${compassLong(deg)}${lake ? `, on ${lake}` : ''}.`, 9);
-      } else this.note('An hour of light left, and no free campsite near. Find one before dark.', 9);
+      } else this.note('An hour of light left, and no free campsite on your map near here. Find one before dark.', 9);
     }
-    if (this.lamp && !this.lamp.on && this.dark && this.lampHinted !== evening) {
+    // (not under the store's lamp: the word waits until you step back out of the door)
+    const indoors = !!(this.outfitter && this.outfitter.visit && this.outfitter.visit.inside);
+    if (this.lamp && !this.lamp.on && this.dark && !indoors && this.lampHinted !== evening) {
       this.lampHinted = evening;
       this.note('Dark now. H for the headlamp.', 6);
     }
@@ -307,7 +312,8 @@ export class Camp {
   kitOf(slot) { const pr = this.profile, k = pr && pr.kit ? pr.kit[slot] : null; return k ? String(k).toLowerCase() : ''; }
   // how well the tent sleeps (0 to 1): the profile's own word for it (profile.sleepQ), else the kit's tent and a pad
   tentQuality() {
-    const k = this.kitOf('tent'), pr = this.profile;
+    const k = this.kitOf('tent'), pr = this.profile, g = this.player.gear;
+    if (g && Number.isFinite(g.sleep)) return Math.max(0, Math.min(1, g.sleep)); // hubs 2B: the tent and the pad (shop.js player.gear)
     if (pr && Number.isFinite(pr.sleepQ)) return Math.max(0, Math.min(1, pr.sleepQ));
     let q = k ? (TENTS[k] ?? (/four|dome/.test(k) ? 1 : START_TENT)) : START_TENT;
     if (pr && pr.has && (pr.has('pad') || pr.has('sleeping-pad'))) q += PAD;
@@ -558,6 +564,7 @@ export class Camp {
     const e = this.energy;
     if (e.sleep) e.sleep(n.q, n.hours); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
     if (this.camp && this.camp.key && this.fires) this.fires.douse(this.camp.key);
+    if (this.wet && this.player.gear && this.player.gear.sleepDry) { this.state.wet = false; this.note('The gear dried overnight in the vestibule.'); } // hubs 2B: the four-season tent
     this.cookedAt = -Infinity;
     this.log('sleep', { kind: n.kind, key: this.camp ? this.camp.key : null, q: +n.q.toFixed(2), hours: Math.round(n.hours * 10) / 10 });
     this.persist();

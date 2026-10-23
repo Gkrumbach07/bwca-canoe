@@ -469,12 +469,12 @@ export class Fishing {
     if (s === 'ready' || s === 'charging') { const reach = this.computeAim(); this.placeAimRing(reach); } else this.aimRing.visible = false;
     if (s === 'ready') {
       if (this.buttonPressed()) { this.state = 'charging'; this.charge = 0; this.power = 0; }
-      p.prompt = { key: 'Space', text: 'Hold to load a cast where the cursor points · 1–5 change the lure · F puts the rod down' };
+      p.prompt = { key: 'Space', text: `Hold to load a cast where the cursor points · 1–${LURES.length} change the lure · F puts the rod down` };
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
       if (!this.button) { this.state = 'swing'; this.swing = 0; this.pending = { power: this.power }; }
-      p.prompt = { key: null, text: 'Let go to cast · 1–5 change the lure · F puts the rod down' };
+      p.prompt = { key: null, text: `Let go to cast · 1–${LURES.length} change the lure · F puts the rod down` };
     } else if (s === 'swing') {
       this.swing += dt;
       if (this.pending && this.swing > 0.12) this.launch();
@@ -638,7 +638,7 @@ export class Fishing {
     f.tension += (target - f.tension) * (1 - Math.exp(-dt * 2.8));
     if (f.tension > 0.8) f.danger += (f.tension - 0.8) * dt * 7; else f.danger = Math.max(0, f.danger - dt * 0.45);
     if (f.tension < 0.1) f.slack += dt; else f.slack = 0;
-    if (f.danger > TUNING.snapDanger) return this.endFight('snap');
+    if (f.danger > TUNING.snapDanger * (p.gear ? p.gear.snap : 1)) { this.endFight('snap'); if (this.onSnap) this.onSnap(this.lureDef, f); return; } // hubs 2B: the rod (shop.js player.gear); the lure is lost (shop.js onSnap)
     if (f.slack > TUNING.slackLimit) return this.endFight('thrown');
     // line: in against the reel, out with the run
     let dLine = 0;

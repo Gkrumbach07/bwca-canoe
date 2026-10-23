@@ -4,19 +4,19 @@ The second pass of the game loop, after the [trip core](trip-core.md). It turns 
 every entry point's outfitter into a hub: food and gear to buy, a board of paid notices, keepers and visitors to talk
 to. The owner's own words are in [game-vision.md](game-vision.md); where this plan and they differ, they win.
 
-It is built in four phases. Phase 1 is on `claude/hubs-1`; phases 2 to 4 are planned.
+It is built in four phases. Phase 1 is on main; phase 2 is joined on `claude/hubs-2`; phases 3 and 4 are planned.
 
 ## The owner's decisions (2026-10-23)
 
 1. **Money.** Plain dollars in small numbers: $40 to start, $6 for a day of food, notices pay $8 to $60, the Kevlar
    canoe is $240.
 2. **Outfitters you know.** At first only the one you start at (home). Another becomes known when you paddle to its
-   landing. Each counter will also sell a paid ride up the road to the nearest one you don't know (phase 2), since
-   about half the entry points are not joined by water.
+   landing. Each counter also sells a paid ride up the road to the nearest one you don't know, since about half the
+   entry points are not joined by water.
 3. **Camping in Adventure.** Designated campsites only: no fire rings and no bivouac off a site ("that's not allowed,
    so not even camp"). Sandbox can still camp anywhere, since it has no rules.
 4. **Maps.** Lakes always show. Campsites, portage rods and depths show only on the map sheets you own, or within
-   1 km of where you have been (phase 2).
+   1 km of where you have been.
 5. **Evacuation.** No fee. You keep your notices, and lose the stringer and the rest of the day.
 6. **The camera.** A $25 item of its own; the first photo notice lends you a disposable (phase 3).
 
@@ -24,9 +24,11 @@ So the plan's off-site fire ring chore is dropped.
 
 ## The loop
 
-**A first session.** New season → Adventure → an entry point (home). You land at the dock and the counter opens: the
-keeper hands you $40 and points at the board. You buy three days of food ($18), take "a walleye for the café", push
-off, fish, camp and sleep, paddle back the next day with the fish in the notice's cooler and claim it.
+**A first session.** New season → Adventure → an entry point (home). You start tied up at the home store's dock,
+standing at its door; step in and the keeper hands you $40 and points at the board. At the counter you buy three days
+of food ($18) and perhaps the map sheet of home ($8); at the cork board you take "a smallmouth for the café"; you walk
+out and launch, and that pushes the trip off. You fish, bring the fish back in the notice's cooler and claim it, camp
+and sleep. A bent-shaft paddle is a few days of notices off, the second pack a few more, the Kevlar about two weeks.
 
 **Later.** The Kevlar and a better paddle, notices on the go from two outfitters, a week out fishing and picking
 berries, a resupply at whichever outfitter is near, and the long paddle back to the one that posted the moose photo.
@@ -78,6 +80,13 @@ count never changes). At the dock E is *Tie up and go in*; Q still opens the cou
 the view is first person, and E at the counter, the board, the shelves or the lure wall opens the paper counter at that
 tab. The board is a texture drawn from the live notices.
 
+**Map sheets.** 39 Fisher sheets, F-1 to F-39, about 20 × 17 km each and named for their lakes (Lake One's is
+F-24 · Lake One · Snowbank · Moose). Each outfitter sells its own sheet and its neighbours' at $8. In Adventure the map
+draws campsites, portage rods and soundings only on the sheets you own and in a soft corridor about a kilometre either
+side of where you have been (250 m cells; each known outfitter adds 2 km of home water); lakes and their names always
+show, and Sandbox shows everything. The words follow the map: the dusk word names only a campsite your map shows, and
+a click on the map counts the portages only when every one on the way is on your map.
+
 ## The economy
 
 | Item | $ | What it does |
@@ -104,24 +113,47 @@ tab. The board is a texture drawn from the live notices.
 | Camera (35 mm) | 25 | C to frame a photo |
 | Bunk night | 8 | full rest and breakfast |
 
-Phase 1 sells only food. A snapped line loses that lure: a small, fair reason to spend.
+Phase 2 sells the lot, at each outfitter's prices (×0.9 to ×1.25) and 10 % less at standing 3, with each outfitter's
+signature item ("made here · sold only at this counter"); Sandbox's shelves are free. Buying a canoe, a paddle, a tent
+or a filter puts it in use, and the kit can swap back. A snapped line loses that lure (never the last jig): a small,
+fair reason to spend. What the gear does, measured in the phase 2 join with the wind stilled on Lake One:
+
+| Kit | Cruise | Paddle effort | On the portages |
+|---|---|---|---|
+| Aluminium + ash (the start) | 2.29 m/s (8.3 km/h) | 1 | 34 kg |
+| Aluminium + bent-shaft | 2.41 m/s (+5 %) | −5 % | 34 kg |
+| Kevlar + bent-shaft | 2.51 m/s (+9 %) | −5 % | 20 kg (the canoe and a pack: 36 kg) |
+| Kevlar + carbon (stream B) | 2.60 m/s | −10 % | 20 kg |
+| Royalex (stream B) | 2.22 m/s | 1 | 29 kg; held 30 s broadside in a 0.42 m sea where the others went over at 15 s |
+
+In Adventure the clock runs at a third while you travel, so a kilometre of paddling is about 2.9 hours on the clock
+with the starting kit and 2.6 with the Kevlar and the bent-shaft: a long day's paddle shortens by about an hour. The
+second Duluth pack takes the food room from 7 days to 17 and brings back the double portage (the gear pack waits at
+the trail head; Q fetches it, about 40 minutes on a 23-rod carry).
 
 **The board.** Four notices per outfitter (two close by, one a day out, one far). One changes each game day, and
 nothing taken on expires. A notice is paid only at the outfitter that posted it.
 
 | Notice | Checked by | Pays |
 |---|---|---|
-| Fish for the café (any, a species, a size) | the catch, kept in the notice's cooler | any $8; a species $12–18; +$10 for the size; lake trout $30+ |
+| Fish for the café (any, a species, a size) | the catch, kept in the notice's cooler | any $8; a species $12–18; +$10 for the size; lake trout $30 + $2 a km to its lake (up to $60) |
 | Photo of a bird / beaver / moose / a place | the camera: the subject near the centre, close enough, not hidden by the land | $10 / $15 / $35 / $12 |
-| Lost item at a place | E at the item | $15 + $5 a portage |
+| Lost item at a place | E at the item | $15 + $5 a portage + $4 a km out (up to $60) |
 | Fetch from another outfitter | arriving at that dock | $15 + $1 a km, up to $50 |
-| Survey a portage | reaching its far landing | $10 + rods/25 |
+| Survey a portage | reaching its far landing | $10 + rods/25 + $5 a km out (up to $60) |
 | Berries or firewood | counted at the claim | $10 a pint, $6 an armful |
 
-**Talk and standing.** Standing (0 to 5) rises with each claim (+0.25 in phase 1), and a little with the first chat of
-the day. At 2 the keeper shares insider hints with a soft circle on the map; at 3 prices drop 10 %. Hints come from the
-data: walleye on a stained lake's drop-off at dusk, trout down deep, pike in weedy bays, moose in sheltered bays at
-dawn.
+The km is the straight line from the landing to the notice's spot. It came in the phase 2 join: a canoe makes about 4
+to 5 km a game day on open water, and a survey 8 km out had paid $12 for three or four days and $18–24 of food. Sampled over 35
+boards the notices now average $16 local, $29 medium and $45 far (they were $13, $18 and $26); local fish are as they
+were.
+
+**Talk and standing.** Standing (0 to 5) rises with each claim (+0.25), and a little with the first chat of the day
+(phase 3). At 2 the keeper shares insider hints: one a day across the counter (they turn with the date), and now and
+then as the hello. A hint you are told is kept for the season and pencilled on the map as a ring round the water it
+means, labelled in the pencil hand ("walleye at dusk", "lakers, deep"), with *a keeper's word* in the legend. At 3
+prices drop 10 %. Hints come from the data: walleye on a stained lake's drop-off at dusk, trout down deep, pike in weedy
+bays, moose in sheltered bays at dawn. The keepers' lines keep to the hour: no "Morning!" after noon.
 
 ## Camp chores and the single bar
 
@@ -185,11 +217,57 @@ outfitter" is gone, and the journal's Gear tab lists the season's kit.
 
 How it plays, what it costs and what was found in the joined playthrough is in [trip-core.md](trip-core.md).
 
-## What phases 2 to 4 will do
+## What phase 2 delivered
 
-- **Phase 2.** The walk-in store (A); its prompts, the shop and what the gear does (B); 55 outfitters from the data and
-  the rides between them (C). Rides matter: the nearest other outfitters by water from Lake One (Farm Lake, entry point
-  31; South Kawishiwi River, 32) are about 20 km and three to five portages away, six or seven game days at the pace
-  the playthrough made, more food than the season's $40 buys.
-- **Phase 3.** The camp chores (A), the camera and photo notices (B), and people in the outfitters (C).
+Four streams joined on `claude/hubs-2`:
+
+- **The store building** (A, `src/props.js`, `src/fire.js`): an 8 × 6 m store at every entry point landing, in its
+  own cleared yard on the flattest dry spot behind or beside the dock (on fieldstone with railed porch posts on a steep
+  bank), coloured by the outfitter's `look`; `props.storeLayout(ep)` and `onStore`; the lamp borrows the campfires' one
+  light (`Fires.steady`), and after sunset the glass goes so the store glows through its windows.
+- **Walking in and the shop** (B, `src/shop.js`, `src/outfitter.js`): *Tie up and go in*, first person inside, the
+  hotspots, the counter in four tabs (the counter, the board, the shelves, the lure wall), the full catalogue,
+  `player.gear` read in one line each by the paddle, the energy, the packs, the camp and the rod; the tackle box (a
+  lure not in it is refused), the freeze-dried supper, the leeches, the gravity bag.
+- **55 outfitters and the rides** (C, `src/outfitters.js`, `src/rides.js`): 13 lodges, 15 river posts, 16 trout camps
+  and 11 bait shops, six written by hand (30 Ruth Aho, 25 Gus Lindgren, 38 Bev Kangas, 54 Arvid Strand, 55 Lise
+  Thibodeau, 14 Leon Zupancic); the keepers' lines and hints, the board's lean, the signature items; rides to the
+  outfitters you know and up the road to the nearest one you don't.
+- **Map sheets** (D, `src/sheets.js`, `src/hud.js`): the 39 sheets, the corridor of where you have been, the owned
+  sheets' neatlines, "in your map case" in the header.
+
+**The join** played a season of 16 game days from Lake One through the real keys and buttons (New season, the dock,
+the door, every hotspot, the shelves, the board, the cooler, a lost item, a survey, campsites, two evacuations, both
+rides from inside a store, the bent-shaft and the second pack bought, the double portage, reloads at camp and on the
+store floor). Its fixes:
+
+- A new season begins tied up at the home store's door, and the keeper's forty dollars come as you step in; the trip
+  pushes off when you launch (before, the counter opened from the water and leaving it pushed the trip off with no
+  food, so the walk-in came after the trip had begun).
+- A page reloaded inside a store comes back on its floor, in first person, the canoe tied at the dock (before: afloat,
+  and still in first person).
+- The map leaks: the dusk word and the map click's portage count follow what your map shows. The click's hours by the
+  clock are the game's own (about 2.9 h a km in Adventure; they had been about four times too short).
+- The keepers' insider hints are pencilled on the map; the keepers keep "Morning!" to the morning.
+- A Royalex is a Royalex on the trip and in the readout (trip.js and packs.js knew only two canoes).
+- The journal counts the lures in the tackle box (1–7 with the rod up); the headlamp's word waits until you step out of
+  a store.
+- Notices pay for the way out (above).
+
+**Seen in the playthrough.**
+- Programs (88) and lights (5) do not change going in or out; frames ran 4.8 ms inside and 5.0 ms at the door at
+  1440×900 (stream A measured the store at +0.2 ms from the water, +0.4 ms inside). No console errors in 16 days.
+- The pace is the trip core's: 2 to 4 km a game day with portages and wind stops, so a notice two portages in is two
+  days there and back. The progression, played: the bent-shaft on day 5 and the second pack on day 14 (with two
+  evacuations on the way back from Lake Two, the autopilot's slowness more than the game's). At the new pay a sensible
+  player clears about $15–20 a day after food: the bent-shaft in about three days, the second pack in four or five, the
+  Kevlar in about two weeks of game days.
+
+## What phases 3 and 4 will do
+
+- **Phase 3.** The camp chores (A: firewood, the fire, the latrine, berries, the wake time, the saw), the camera and
+  the photo notices (B: the $25 camera, a disposable lent for the first one, the journal's Photos tab), and people in
+  the outfitters (C: the keeper standing behind the counter, visitors in their months, the first chat of the day for
+  standing). Notes for it from the join: hulls could look like what they are (the Kevlar's gold, the Royalex's
+  colour); a lit, sleeping keeper figure would make the counter less empty; the rides' late-night bunk is free.
 - **Phase 4.** Balance across a season played on autopilot, ten game days without an evacuation, and the docs.

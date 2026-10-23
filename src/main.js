@@ -42,6 +42,11 @@ import { Camp, CampRegistry } from './camp.js'; // trip core C
 import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
 import { Profile } from './profile.js'; // hubs 1A
+import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
+import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
+import { Rides } from './rides.js'; // hubs 2C
+import { sheets } from './sheets.js'; // hubs 2D
+import { Shop } from './shop.js'; // hubs 2B
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -180,13 +185,29 @@ async function main() {
   energy.atCounter = () => !!outfitter.open;
   if (trip.on) { trip.on('start', () => energy.fresh()); trip.on('evac', () => energy.rescued()); }
   camp.profileOf = () => profile;
+  // hubs 2A: the outfitters' stores (props.js): each store's lamp borrows the campfires' one light while it is the lit
+  // thing nearest the eye (fire.js steady), and its cork board shows that outfitter's notices once its board is up
+  // (tasks.js), redrawn when they change; window.__game.props for the walk-in and the tests
+  const storeBoard = (L) => {
+    if (!tasks.boards || !tasks.boards[L.ep]) return;
+    const list = tasks.board(L.ep), sig = list.map((t) => (t ? `${t.id}:${t.status}` : '-')).join(',');
+    if (sig !== L.boardSig) { L.boardSig = sig; setStoreNotices(L.ep, list); }
+  };
+  onStore((L, ep) => { fires.steady(`store:${ep}`, L && L.lamp); if (L) storeBoard(L); });
+  // once the sun is down the glass goes, so the lit store shows through its windows
+  setInterval(() => { const up = day.sunDir.y > 0.035; for (const L of storeLayouts()) { storeBoard(L); L.glass.visible = up; } }, 2000);
+  // hubs 2B: the shop (shop.js): what each outfitter sells, at its prices, and what the gear does (player.gear, read in
+  // one line each by the paddle, the energy, the packs, the camp and the rod); the counter's tabs sell through it, and
+  // the store you walk into (outfitter.js, on stream A's props.storeLayout) opens the counter at the shelf you stand at
+  const shop = new Shop({ world, player, profile, energy, fishing, day, hud, camp });
+  outfitter.shop = shop;
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (e.code === 'KeyG' && !player.input.paused) energy.manualEat(); // F is the fishing rod
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
-    if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-5 pick lures while the rod is up
+    if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-7 pick lures while the rod is up
     if (e.code === 'KeyR') settings.toggle('reflections');
     if (e.code === 'KeyN') settings.toggle('mute');
   });
@@ -195,6 +216,14 @@ async function main() {
   const packs = new Packs({ world, player, canoe, day, energy, hud, trip });
   packs.veil = veil; // the fetch fades through the same card as the evacuation and the night
   player.packs = packs;
+  // hubs 2C: every outfitter its own (outfitters.js: the kind, the keeper and their hints, the prices, the signature
+  // item, the board's lean, the building's look, all read from the place) and the rides up the road between them
+  // (rides.js). The counter renders rides.section where it has a place for it; the phase-1 counter gets it in its wall
+  // column, and the keeper's voice in its header, until the shop's counter speaks for itself (outfitter.keeperVoice).
+  const rides = new Rides({ world, outfitter, day, veil, hud, energy, tasks, teleport });
+  outfitter.rides = rides;
+  tasks.leanOf = (ep) => boardLean(ep, world);
+  outfitter.keeperVoice = true; // the shop's counter (2B) renders the keeper, the signature and the rides itself, so 2C's stand-ins stay off
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -216,8 +245,14 @@ async function main() {
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
   window.__game.profile = profile; // hubs 1A
+  window.__game.props = { storeLayout, onStore, storeLayouts, setStoreNotices, stats: storeStats }; // hubs 2A
+  window.__game.shop = shop; // hubs 2B
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
+  Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
+  // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
+  // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
+  sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -241,9 +276,11 @@ async function main() {
       player.update(dt);
       packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
       fishing.update(dt, ts);
+      shop.update(); // hubs 2B: the tackle box (a lure not in it is refused), the supper, the leeches, the gravity bag
       outfitter.prompt();
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
       tasks.update(dt * ts);
+      sheets.update(player); // hubs 2D: the cells around you as you go
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
       energy.update(dt * ts, wind, atCamp);
       tripStats.update(dt * ts, outfitter.trip.active);
