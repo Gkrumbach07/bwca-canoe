@@ -204,6 +204,7 @@ export class Outfitter {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
       const r = this.tasks.act(id, this.at.ep);
       if (r && r.words && /^claim/.test(String(id))) this.greeting = r.words;
+      if (this.buyN < 1 && !this.sandbox) this.buyN = Math.min(DEFAULT_BUY, this.buyMax()); // money just paid: the stepper offers food again
       this.save(); this.render();
     }
   }
