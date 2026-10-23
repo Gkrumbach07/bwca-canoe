@@ -342,11 +342,17 @@ async function main() {
   window.__game.step = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); draw(); };
   window.__game.advance = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); }; // the simulation only, no drawing
   let last = performance.now();
+  // The simulation keeps to the wall clock however slow the frame: a frame longer than STEP runs as several even steps
+  // of at most STEP each, up to MAX_LAG in all (a longer one, a hitch or a tab come back from hiding, is not caught up).
+  // A single step capped at 50 ms put the whole game in slow motion below 20 fps (Ultra on a 3440 x 1440 screen runs
+  // at about 18) while the readout still said 4.8 km/h: the owner felt 2.4 (2026-10-23).
+  const STEP = 0.05, MAX_LAG = 0.25;
   const tick = (now) => {
-    const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    frame(dt);
+    const real = Math.min(MAX_LAG, (now - last) / 1000); last = now;
+    const n = Math.max(1, Math.ceil(real / STEP - 1e-6));
+    for (let i = 0; i < n; i++) frame(real / n);
     draw();
-    fps.end(dt);
+    fps.end(real);
   };
   renderer.setAnimationLoop(tick);
   // the look board (lookboard.js): a contact sheet of fixed spots and hours; the loop is held while it runs
