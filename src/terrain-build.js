@@ -182,6 +182,46 @@ function shoreBumps(x, z, sd) {
   return -Math.abs(n) * 0.5 * smoothstep(3, 8, -sd) * (1 - smoothstep(10, FINE_BAND, -sd));
 }
 
+// The height of the fine terrain mesh itself (buildTerrainChunk's vertices and triangles) at a point. surfaceAt
+// is the bilinear surface through the cell corners; the mesh is two triangles per cell (four quads with the
+// shore bumps on their mid vertices in the shore band) and departs from it by up to a metre on rough ground,
+// so a rock seated on surfaceAt can hang over a dip in the mesh. Placement seats the rocks on this. (A cell
+// the waterline cuts is fanned along the cut; there this is the plain split, a few centimetres off.)
+// `cache`: an optional Map of vertex heights by lattice index, for many queries close together.
+export function meshHeightAt(grid, x, z, cache = null) {
+  const cell = grid.cell;
+  const fx = (x - grid.originX) / cell - 0.5, fz = (z - grid.originZ) / cell - 0.5;
+  const i = Math.floor(fx), j = Math.floor(fz);
+  let u = fx - i, w = fz - j;
+  const fineCell = (ci, cj) => Math.abs(grid.sdCell(ci, cj)) <= FINE_BAND;
+  const quadFine = (ci, cj) => fineCell(ci, cj) || fineCell(ci + 1, cj) || fineCell(ci, cj + 1) || fineCell(ci + 1, cj + 1);
+  // a vertex of the half-cell lattice, as buildTerrainChunk's vert() makes it
+  const vh = (ii, jj) => {
+    const key = ii * 1048576 + jj;
+    if (cache && cache.has(key)) return cache.get(key);
+    const ci = ii >> 1, cj = jj >> 1, a = ii & 1, b = jj & 1;
+    const vx = grid.cellX(ci) + (a * cell) / 2, vz = grid.cellZ(cj) + (b * cell) / 2;
+    let h;
+    if (!a && !b) h = grid.hCell(ci, cj);
+    else h = a && b ? (grid.hCell(ci, cj) + grid.hCell(ci + 1, cj) + grid.hCell(ci, cj + 1) + grid.hCell(ci + 1, cj + 1)) / 4
+      : a ? (grid.hCell(ci, cj) + grid.hCell(ci + 1, cj)) / 2 : (grid.hCell(ci, cj) + grid.hCell(ci, cj + 1)) / 2;
+    const sd = grid.shoreAt(vx, vz);
+    if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(h, sd, grid.levelAt(grid.cellX(grid.cellI(vx)), grid.cellZ(grid.cellJ(vz)), 4));
+    if ((a || b) && (a && b ? quadFine(ci, cj) : a ? quadFine(ci, cj) && quadFine(ci, cj - 1) : quadFine(ci, cj) && quadFine(ci - 1, cj))) h += shoreBumps(vx, vz, sd);
+    if (cache) cache.set(key, h);
+    return h;
+  };
+  let flip = ((i + j) & 1) === 0, ii = 2 * i, jj = 2 * j, step = 2;
+  if (quadFine(i, j)) {
+    const a = u >= 0.5 ? 1 : 0, b = w >= 0.5 ? 1 : 0;
+    ii += a; jj += b; u = u * 2 - a; w = w * 2 - b; step = 1;
+    flip = flip !== (((a + b) & 1) === 1);
+  }
+  const h00 = vh(ii, jj), h10 = vh(ii + step, jj), h01 = vh(ii, jj + step), h11 = vh(ii + step, jj + step);
+  if (flip) return u + w <= 1 ? h00 + (h10 - h00) * u + (h01 - h00) * w : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - w);
+  return u >= w ? h00 + (h10 - h00) * u + (h11 - h10) * w : h00 + (h01 - h00) * w + (h11 - h01) * u;
+}
+
 // Quads [i0, i0+n) x [j0, j0+n) of cells. shade: Float32Array over the grid's local extent or null.
 // fine=false (far field) skips the shore subdivision, shaping and bumps.
 // Normals are smooth (one per vertex, averaged over the faces around it), computed over a one-cell ring

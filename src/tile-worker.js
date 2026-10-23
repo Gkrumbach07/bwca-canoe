@@ -16,17 +16,18 @@ async function fetchTile(url) {
   return new Response(body).arrayBuffer();
 }
 
-// stride floats per instance (x, y, z, yaw, scale[, tint, squash[, azimuth, tilt]], placement.js STRIDE) -> a
-// 4x4 column-major matrix per instance, T * Ry(azimuth) * Rz(tilt) * Ry(yaw) * S (the rocks lean: a slanted
-// group shares one azimuth and tilt, the flats follow the slope), plus an rgb tint when the stride carries one.
-// Every column keeps its axis's scale as its length (tiles.js and props.js read the footprint from it).
+// stride floats per instance (x, y, z, yaw, scale[, tint, squash[, azimuth, tilt, tall]], placement.js STRIDE)
+// -> a 4x4 column-major matrix per instance, T * Ry(azimuth) * Rz(tilt) * Ry(yaw) * S (the rocks lean: a slanted
+// group shares one azimuth and tilt, the flats follow the slope; a rock's height is its scale times `tall`),
+// plus an rgb tint when the stride carries one. Every column keeps its axis's scale as its length (tiles.js
+// and props.js read the footprint from it).
 function instanceData(items, stride, rx, rz) {
   const count = items.length / stride;
   const m = new Float32Array(count * 16), c = stride > 5 ? new Float32Array(count * 3) : null;
   for (let n = 0; n < count; n++) {
     const o = n * stride, x = items[o], y = items[o + 1], z = items[o + 2], yaw = items[o + 3], sc = items[o + 4];
-    const sq = stride > 6 ? items[o + 6] : 1, az = stride > 8 ? items[o + 7] : 0, tl = stride > 8 ? items[o + 8] : 0;
-    const sx = sc * sq, sy = sc, sz = sc * (2 - sq), cy = Math.cos(yaw), sny = Math.sin(yaw);
+    const sq = stride > 6 ? items[o + 6] : 1, az = stride > 8 ? items[o + 7] : 0, tl = stride > 8 ? items[o + 8] : 0, tall = stride > 9 ? items[o + 9] : 1;
+    const sx = sc * sq, sy = sc * tall, sz = sc * (2 - sq), cy = Math.cos(yaw), sny = Math.sin(yaw);
     const ca = Math.cos(az), sa = Math.sin(az), ct = Math.cos(tl), st = Math.sin(tl);
     // A = Ry(az) * Rz(tl), rows; R = A * Ry(yaw)
     const a00 = ca * ct, a01 = -ca * st, a02 = sa, a10 = st, a11 = ct, a20 = -sa * ct, a21 = sa * st, a22 = ca;

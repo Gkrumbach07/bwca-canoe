@@ -88,16 +88,19 @@ export function creasedToon(geo, angle = Math.PI / 3) {
 //
 // Every rock is one or more convex blocks cut from planes, the way granite breaks along its joints: a block
 // is the intersection of half-spaces, its faces are big flat planes with one normal each (so nothing of the
-// tessellation shows in the light), and its edges and corners are chamfered by a narrow bevel whose vertices
-// carry the normals of the faces on either side, so an edge reads as a crisp, slightly rounded line that
-// catches the sun. The families (docs/look.md, pass 3):
-//   slanted   a wedge-like block whose top is one big plane; placement tilts a group of them to one angle
-//   flats     two to four slabs stacked, each smaller, offset and turned a little: the Shield's sheet jointing
-//   erratic   one rounded block of many cuts with a frost crack through it and a divot or two in its faces
-// Small rocks and pebbles are the slanted and flat kinds at a small scale. Colour: a nearly flat pink-grey,
-// lighter along the edges (the drybrush, by how sharp the edge is), soft pale lichen blotches on the faces
-// that look up, then the occlusion baked in against a ground plane at y = 0, where the rock meets the ground
-// on the flat (placement sinks it further on a slope).
+// tessellation shows in the light), and its edges and corners are chamfered by bevels of uneven width (none on
+// some edges, narrow on the sharp ridges, wide on the exposed ones) whose vertices carry the normals of the
+// faces on either side, so an edge reads as a crisp or a weathered line that catches the sun. No box: no two
+// faces parallel, the sides leaning in, the big faces made of two or three planes at shallow ridges so they
+// are slightly convex. The families (docs/look.md, pass 3):
+//   slanted   a shard, broader at its foot than its crest; placement tilts a group of them to one angle
+//   flats     two to four slabs of irregular outline stacked, each smaller, stepped off unevenly and turned
+//   erratic   a softened block: a round mass with two or three broad flat facets, a frost crack and divots
+// Small rocks and pebbles are the slanted and flat kinds at a small scale. Every family stands on its base, the
+// plane y = 0, inside FOOT, and placement seats it so that whole base is under the terrain mesh. Colour: a
+// nearly flat pink-grey, lighter along the edges (the drybrush, by how sharp the edge is), soft pale lichen
+// blotches on the faces that look up, then the occlusion baked in against a ground plane where the rock meets
+// the ground (the faces running into it darken there).
 
 const V3 = THREE.Vector3;
 const smooth = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -119,7 +122,8 @@ function noise3(x, y, z, s) {
 }
 
 // The convex block bounded by planes { n (unit), h }: n·p <= h. Returns its corners and, for every plane that
-// makes a face, the face's corners counter-clockwise seen from outside, or null if the planes bound nothing.
+// makes a face, the face's corners counter-clockwise seen from outside (and the plane, with whatever tags the
+// caller put on it), or null if the planes bound nothing.
 function polytope(planes) {
   const verts = [], on = [];
   const t1 = new V3(), t2 = new V3(), t3 = new V3();
@@ -151,7 +155,7 @@ function polytope(planes) {
     let area = 0;
     for (let k = 1; k + 1 < ids.length; k++) area += t1.subVectors(verts[ids[k]], verts[ids[0]]).cross(t2.subVectors(verts[ids[k + 1]], verts[ids[0]])).dot(n) / 2;
     if (area < 1e-5) continue; // the plane only touches an edge or a corner
-    faces.push({ n: n.clone(), ids, area, centroid: c.clone() });
+    faces.push({ n: n.clone(), ids, area, centroid: c.clone(), plane: planes[i] });
   }
   if (faces.length < 4) return null;
   return { verts, faces };
@@ -168,90 +172,123 @@ class RockBuilder {
     const pa = this.p[a], e1 = new V3().subVectors(this.p[b], pa), e2 = new V3().subVectors(this.p[c], pa);
     if (e1.cross(e2).dot(ref) < 0) this.idx.push(a, c, b); else this.idx.push(a, b, c);
   }
+  // a polygon (its corners in order round it, not necessarily flat) fanned, wound as a whole to face `ref`:
+  // its slivers keep the winding of the polygon rather than each guessing its own
+  poly(ids, ref) {
+    const n = new V3();
+    for (let i = 0; i < ids.length; i++) {
+      const a = this.p[ids[i]], b = this.p[ids[(i + 1) % ids.length]];
+      n.x += (a.y - b.y) * (a.z + b.z); n.y += (a.z - b.z) * (a.x + b.x); n.z += (a.x - b.x) * (a.y + b.y);
+    }
+    const o = n.dot(ref) < 0 ? [...ids].reverse() : ids;
+    for (let i = 1; i + 1 < o.length; i++) this.idx.push(o[0], o[i], o[i + 1]);
+  }
   transform(from, m) {
     const nm = new THREE.Matrix3().getNormalMatrix(m);
     for (let i = from; i < this.p.length; i++) { this.p[i].applyMatrix4(m); this.n[i].applyMatrix3(nm).normalize(); }
   }
 }
 
-// Adds one chamfered convex block. o.bevel: the chamfer's width; o.seg: edges longer than this are split so the
-// colour has vertices to vary on; o.dimples: how many divots to press into its biggest faces; rng for those.
-// Returns false (and adds nothing) if the planes make no usable block.
+// Adds one chamfered convex block. Every edge of the block bounded by `planes` gets a chamfer of its own width:
+// o.bevel times o.edgeW(nf, ng, pa, pb, rng, planeF, planeG), from its two faces (normals, planes) and its ends (0 leaves the edge a crisp
+// crease with no chamfer, so one rock has sharp ridges, broad rounded edges where it is exposed and none at its
+// foot). The chamfer is a plane of the block itself, cutting the edge back by that width along both faces, so
+// the corners where chamfers and faces meet come out of the plane intersection and the surface is closed
+// whatever the widths. Its vertices carry the normals of the faces on either side, so a chamfer shades as a
+// rounded edge. o.seg: edges longer than this are split so the colour has vertices to vary on; o.dimples: how
+// many divots to press into its biggest faces; o.soft(face) true for a face whose normals follow
+// o.softNormal(p) instead of its own (a boulder's small facets shade as one round mass, and the edges between two
+// of them need no chamfer at all); rng for those. Returns false (and adds nothing) if the planes make no block.
 function addBlock(B, planes, o, rng) {
-  const poly = polytope(planes);
+  const plain = polytope(planes);
+  if (!plain) return false;
+  const isSoft = (p) => !p.chamfer && !!(o.soft && o.soft({ plane: p }));
+  // the plain block's edges and their chamfer planes: the bisector of the two faces, through the lines `w` in
+  // from the edge along each face
+  const edges = new Map(), chamfers = [];
+  const key = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
+  plain.faces.forEach((f, fi) => f.ids.forEach((a, k) => {
+    const b = f.ids[(k + 1) % f.ids.length], kk = key(a, b), e = edges.get(kk);
+    if (!e) edges.set(kk, { a, b, f: fi, g: -1 }); else e.g = fi;
+  }));
+  for (const e of edges.values()) {
+    if (e.g < 0) return false; // not closed: a degenerate block
+    const F = plain.faces[e.f], G = plain.faces[e.g], pa = plain.verts[e.a], pb = plain.verts[e.b];
+    if (isSoft(F.plane) && isSoft(G.plane)) continue;
+    const w = Math.min(pa.distanceTo(pb) * 0.3, o.bevel * (o.edgeW ? o.edgeW(F.n, G.n, pa, pb, rng, F.plane, G.plane) : 1));
+    if (w < 0.004) continue;
+    const d = new V3().subVectors(pb, pa).normalize(), m = new V3().crossVectors(d, F.n);
+    if (m.dot(new V3().subVectors(F.centroid, pa)) < 0) m.negate(); // into face F
+    const n = new V3().addVectors(F.n, G.n).normalize();
+    chamfers.push({ n, h: n.dot(pa.clone().addScaledVector(m, w)), chamfer: { f: F.plane, g: G.plane, sharp: Math.acos(Math.min(1, F.n.dot(G.n))) } });
+  }
+  const poly = polytope([...planes, ...chamfers]);
   if (!poly) return false;
   const { verts, faces } = poly;
-  // the edges, each seen from its two faces
-  const edges = new Map();
-  let minEdge = Infinity;
-  faces.forEach((f, fi) => f.ids.forEach((a, k) => {
-    const b = f.ids[(k + 1) % f.ids.length], key = a < b ? `${a},${b}` : `${b},${a}`;
-    let e = edges.get(key);
-    if (!e) { e = { a, b, f: fi, g: -1, len: verts[a].distanceTo(verts[b]) }; edges.set(key, e); minEdge = Math.min(minEdge, e.len); }
-    else e.g = fi;
-  }));
-  for (const e of edges.values()) if (e.g < 0) return false; // not closed: a degenerate block
-  // each face's corners pushed in along the face by the bevel width (the polygon offset), checked for folding
-  let bevel = Math.min(o.bevel, minEdge * 0.3);
-  let inset = null;
-  for (let attempt = 0; attempt < 4 && !inset; attempt++, bevel *= 0.5) {
-    inset = faces.map((f) => {
-      const k = f.ids.length;
-      return f.ids.map((q, i) => {
-        const v = verts[q], pv = verts[f.ids[(i + k - 1) % k]], nv = verts[f.ids[(i + 1) % k]];
-        const m1 = new V3().subVectors(v, pv).cross(f.n).negate().normalize(); // n x e: into the face
-        const m2 = new V3().subVectors(nv, v).cross(f.n).negate().normalize();
-        return v.clone().addScaledVector(m1.clone().add(m2), bevel / (1 + m1.dot(m2)));
-      });
-    });
-    const folded = faces.some((f, fi) => f.ids.some((q, i) => {
-      const j = (i + 1) % f.ids.length;
-      return new V3().subVectors(inset[fi][j], inset[fi][i]).dot(new V3().subVectors(verts[f.ids[j]], verts[q])) <= 0;
-    }));
-    if (folded) inset = null;
-  }
-  if (!inset || bevel < 0.004) return false;
+  const onPlane = (p, pl) => Math.abs(pl.n.dot(p) - pl.h) < 1e-5;
+  const softAt = (pl, n, p) => (isSoft(pl) ? n.clone().lerp(o.softNormal(p), 0.85).normalize() : n);
+  // which face lies across each edge of each face
+  const across = new Map();
+  faces.forEach((f, fi) => f.ids.forEach((a, k) => { const b = f.ids[(k + 1) % f.ids.length]; across.set(`${a}>${b}`, fi); }));
+  const other = (a, b) => faces[across.get(`${b}>${a}`)];
+  // how sharp an edge between two faces is, for the drybrush: a chamfer's is its edge's; a crease's its own,
+  // unless both faces are soft (no edge at all)
+  const sharpOf = (F, G) => {
+    if (!G) return 0;
+    if (F.plane.chamfer) return F.plane.chamfer.sharp;
+    if (G.plane.chamfer) return G.plane.chamfer.sharp;
+    if (isSoft(F.plane) && isSoft(G.plane)) return 0;
+    return Math.acos(Math.min(1, Math.max(-1, F.n.dot(G.n))));
+  };
   const segs = (len) => (len > o.seg * 1.5 ? 2 : 1);
-  const sharpOf = (fi, gi) => Math.acos(Math.min(1, Math.max(-1, faces[fi].n.dot(faces[gi].n))));
+  // a face's outline with its long edges split (every face splits a shared edge alike, so they meet exactly)
+  const outline = (f) => {
+    const out = [];
+    f.ids.forEach((a, k) => {
+      const b = f.ids[(k + 1) % f.ids.length], s = segs(verts[a].distanceTo(verts[b])), G = other(a, b);
+      for (let t = 0; t < s; t++) out.push({ p: verts[a].clone().lerp(verts[b], t / s), corner: t === 0, sharp: sharpOf(f, G), a });
+    });
+    // a corner takes the sharper of its two edges
+    for (let i = 0; i < out.length; i++) if (out[i].corner) out[i].sharp = Math.max(out[i].sharp, out[(i + out.length - 1) % out.length].sharp);
+    return out;
+  };
   const from = B.count;
-  // the faces: the rim (the inset polygon, its long edges split), an inner ring on the big faces (the drybrush
-  // fades out between the two), a mid ring on those that look up (room for a lichen blotch), a centre
-  const rims = [], dimpled = new Set();
+  const dimpled = new Set();
   if (o.dimples) {
-    const order = faces.map((f, i) => i).filter((i) => faces[i].n.y > -0.3 && faces[i].area > 0.25).sort((a, b) => faces[b].area - faces[a].area);
+    const order = faces.map((f, i) => i).filter((i) => !faces[i].plane.chamfer && !isSoft(faces[i].plane) && faces[i].n.y > -0.3 && faces[i].area > 0.25).sort((a, b) => faces[b].area - faces[a].area);
     for (let i = 0; i < Math.min(o.dimples, order.length); i++) dimpled.add(order[Math.floor(rng() * Math.min(order.length, 4))]);
   }
   faces.forEach((f, fi) => {
-    const k = f.ids.length, rim = [], start = [], rimSharp = [], edgeSharp = [];
-    for (let i = 0; i < k; i++) {
-      const j = (i + 1) % k, e = edges.get(f.ids[i] < f.ids[j] ? `${f.ids[i]},${f.ids[j]}` : `${f.ids[j]},${f.ids[i]}`);
-      edgeSharp.push(sharpOf(e.f, e.g));
-      start.push(rim.length);
-      const m = segs(e.len);
-      for (let t = 0; t < m; t++) { rim.push(inset[fi][i].clone().lerp(inset[fi][j], t / m)); rimSharp.push(edgeSharp[i]); }
+    const rim = outline(f), ch = f.plane.chamfer;
+    if (ch) {
+      // a chamfer: its points on either face take that face's normal, its corner points its own
+      const ids = rim.map(({ p }) => {
+        const n = onPlane(p, ch.f) ? softAt(ch.f, ch.f.n, p) : onPlane(p, ch.g) ? softAt(ch.g, ch.g.n, p) : f.n;
+        return B.vert(p, n, 2, ch.sharp);
+      });
+      B.poly(ids, f.n);
+      return;
     }
-    // a rim corner takes the sharper of its two edges
-    for (let i = 0; i < k; i++) rimSharp[start[i]] = Math.max(edgeSharp[i], edgeSharp[(i + k - 1) % k]);
-    rims.push({ rim, start });
-    const big = f.area > 0.45, up = f.n.y > 0.3 && f.area > 0.6;
-    const centre = rim.reduce((a, p) => a.add(p), new V3()).divideScalar(rim.length);
-    if (dimpled.has(fi)) centre.lerp(rim[Math.floor(rng() * rim.length)], 0.3);
+    // a face: the rim, an inner ring on the faces that look up (room for a lichen blotch, and the drybrush
+    // fades out between the two), a centre
+    const pts = rim.map((r) => r.p);
+    const big = f.area > 0.45, up = f.n.y > 0.3 && f.area > 0.6, soft = isSoft(f.plane);
+    const centre = pts.reduce((a, p) => a.add(p), new V3()).divideScalar(pts.length);
+    if (dimpled.has(fi)) centre.lerp(pts[Math.floor(rng() * pts.length)], 0.3);
     const rings = [0];
-    if (up || dimpled.has(fi)) rings.push(0.5);
+    if ((up && !soft) || dimpled.has(fi)) rings.push(0.5);
     const ringT = new Map();
-    const ringIdx = rings.map((t) => rim.map((p, j) => { const v = B.vert(p.clone().lerp(centre, t), f.n, t === 0 ? 1 : 0, t === 0 ? rimSharp[j] : 0); ringT.set(v, t); return v; }));
+    const ringIdx = rings.map((t) => pts.map((p, j) => { const q = p.clone().lerp(centre, t), v = B.vert(q, softAt(f.plane, f.n, q), t === 0 ? 1 : 0, t === 0 ? rim[j].sharp : 0); ringT.set(v, t); return v; }));
     const t0 = B.idx.length;
-    for (let r = 0; r + 1 < rings.length; r++) for (let j = 0; j < rim.length; j++) {
-      const j1 = (j + 1) % rim.length, A = ringIdx[r], C = ringIdx[r + 1];
+    for (let r = 0; r + 1 < rings.length; r++) for (let j = 0; j < pts.length; j++) {
+      const j1 = (j + 1) % pts.length, A = ringIdx[r], C = ringIdx[r + 1];
       B.tri(A[j], A[j1], C[j1], f.n); B.tri(A[j], C[j1], C[j], f.n);
     }
     const last = ringIdx[ringIdx.length - 1];
-    if (big || rim.length > 5 || dimpled.has(fi)) {
-      const ci = B.vert(centre, f.n, 0);
-      for (let j = 0; j < rim.length; j++) B.tri(last[j], last[(j + 1) % rim.length], ci, f.n);
-    } else {
-      for (let j = 1; j + 1 < rim.length; j++) B.tri(last[0], last[j], last[j + 1], f.n);
-    }
+    if (big || pts.length > 5 || dimpled.has(fi)) {
+      const ci = B.vert(centre, softAt(f.plane, f.n, centre), 0);
+      for (let j = 0; j < pts.length; j++) B.tri(last[j], last[(j + 1) % pts.length], ci, f.n);
+    } else B.poly(last, f.n);
     if (dimpled.has(fi)) {
       // a divot: the inside of the face pressed in, deepest at the centre, its normals from the new shape
       const depth = (0.04 + rng() * 0.05) * Math.sqrt(f.area), inner = new Set();
@@ -265,33 +302,6 @@ function addBlock(B, planes, o, rng) {
       }
       for (const [v, s] of acc) if (s.lengthSq() > 0) B.n[v].copy(s.normalize());
     }
-  });
-  // the bevels: a strip along every edge between the two rims
-  for (const e of edges.values()) {
-    const rimOf = (fi, a, b) => {
-      const f = faces[fi], k = f.ids.length, i = f.ids.indexOf(a), R = rims[fi];
-      const j = (i + 1) % k;
-      if (f.ids[j] === b) { const out = []; const end = j === 0 ? R.rim.length : R.start[j]; for (let s = R.start[i]; s <= end; s++) out.push(R.rim[s % R.rim.length]); return out; }
-      return rimOf(fi, b, a).reverse(); // the edge runs the other way round this face
-    };
-    const P = rimOf(e.f, e.a, e.b), Q = rimOf(e.g, e.a, e.b), s = sharpOf(e.f, e.g);
-    const nf = faces[e.f].n, ng = faces[e.g].n, ref = new V3().addVectors(nf, ng);
-    const pi = P.map((p) => B.vert(p, nf, 2, s)), qi = Q.map((p) => B.vert(p, ng, 2, s));
-    for (let t = 0; t + 1 < pi.length; t++) { B.tri(pi[t], pi[t + 1], qi[t + 1], ref); B.tri(pi[t], qi[t + 1], qi[t], ref); }
-  }
-  // the corners: where three or more faces meet, a small polygon between their bevels
-  verts.forEach((v, q) => {
-    const fs = [];
-    faces.forEach((f, fi) => { const i = f.ids.indexOf(q); if (i >= 0) fs.push([fi, i]); });
-    if (fs.length < 3) return;
-    const ref = fs.reduce((a, [fi]) => a.add(faces[fi].n), new V3()).normalize();
-    const u = new V3(Math.abs(ref.x) < 0.9 ? 1 : 0, Math.abs(ref.x) < 0.9 ? 0 : 1, 0).cross(ref).normalize(), w = new V3().crossVectors(ref, u);
-    const pts = fs.map(([fi, i]) => ({ p: inset[fi][i], n: faces[fi].n })), c = pts.reduce((a, x) => a.add(x.p), new V3()).divideScalar(pts.length);
-    pts.sort((A, Bp) => Math.atan2(new V3().subVectors(A.p, c).dot(w), new V3().subVectors(A.p, c).dot(u)) - Math.atan2(new V3().subVectors(Bp.p, c).dot(w), new V3().subVectors(Bp.p, c).dot(u)));
-    let sharp = 0;
-    for (let i = 0; i < pts.length; i++) sharp = Math.max(sharp, Math.acos(Math.min(1, pts[i].n.dot(pts[(i + 1) % pts.length].n))));
-    const ids = pts.map((x) => B.vert(x.p, x.n, 2, sharp));
-    for (let i = 1; i + 1 < ids.length; i++) B.tri(ids[0], ids[i], ids[i + 1], ref);
   });
   if (o.matrix) B.transform(from, o.matrix);
   return true;
@@ -352,26 +362,81 @@ function finish(B, rng, { ground = 0, reach = 0.9, bakeTilt = 0, lichen = 1 } = 
   return geo;
 }
 
-// (a) A slanted rock: a wedge-like block, its top one big plane, longer than wide, the head end cut back at an
-// angle and a corner or two knocked off. Built flat: x runs from the tail (-a) to the head (+b), the bottom
-// rises a little toward the head (the wedge), the origin is where the bottom meets the ground. Placement
-// tilts it about z by the group's angle (the head up, the tail into the ground) and turns the group about y.
+// A plane with normal along (x, y, z) through the point (px, py, pz)
+const through = (x, y, z, px, py, pz) => { const n = new V3(x, y, z).normalize(); return { n, h: n.x * px + n.y * py + n.z * pz }; };
+// Every family stands on its base, the plane y = 0, inside FOOT (unit scale): placement.js seats a rock by
+// that outline (its ROCK_FOOT holds the same numbers), so a rock that reached past it could show its foot.
+export const FOOT = { block: { x0: -1.6, x1: 1.05, z: 0.85 }, slab: { x: 1.18, z: 0.98 }, boulder: { x: 1.0, z: 0.92 } };
+const inFoot = (B, from, f) => {
+  for (let i = from; i < B.count; i++) {
+    const p = B.p[i];
+    if (p.y > 0.02) continue;
+    if (f.x0 !== undefined ? p.x < f.x0 || p.x > f.x1 || Math.abs(p.z) > f.z : (p.x / f.x) ** 2 + (p.z / f.z) ** 2 > 1) return false;
+  }
+  return true;
+};
+// How wide a chamfer an edge gets (a factor on the block's bevel), from its two faces and its ends: none along
+// the foot (it is in the ground) nor on the shallow ridges between two planes of one slightly convex face (they
+// read by the turn of the light alone); otherwise now and then none (a crisp crease), mostly a narrow one (a
+// sharp ridge that still catches the drybrush), and a wide, weathered one on some of the edges that stand up
+// into the weather (high on the rock, between faces that look up).
+function edgeWidth(nf, ng, pa, pb, rng, { foot = 0.02, plain = 0.22, wideP = 0.12, wideK = 0.4, wide = 1.2 } = {}) {
+  if (pa.y < foot && pb.y < foot) return 0;
+  if (nf.dot(ng) > Math.cos(0.3)) return 0;
+  const exposed = smooth(-0.3, 0.8, (nf.y + ng.y) / 2) * smooth(0.1, 0.6, (pa.y + pb.y) / 2);
+  const r = rng(), w = rng();
+  if (r < plain) return 0;
+  if (r < plain + wideP + wideK * exposed) return wide * (1 + w * 0.75);
+  return 0.3 + w * 0.35;
+}
+
+// (a) A slanted rock: a shard of the jointed granite, the way it breaks out of the ground along its bedding.
+// Built along x from the tail (-x, which placement's tilt puts in the ground) to the head (+x, which it lifts):
+// the base on y = 0; the dip face on top, one big plane or two or three meeting at shallow ridges, so the face
+// is slightly convex and rises a little toward the head; a steep head face (it leans back once tilted, so the
+// shard is broader at its foot than at its crest); two sides at different angles that lean in toward the top
+// (no two faces parallel) and narrow the shard toward one end; a tail sloped over so steeply that no tilt
+// turns it to face down; then two to four cuts at varied angles that knock off corners and edges, so the crest
+// is a few sharp ridges and facets, not a box's edge. No face looks down at any tilt placement gives it, so
+// nothing overhangs the ground. Tilted 18–38° by placement and seated so the whole base is under the ground, a
+// shard shows a long dip face rising out of the ground to the crest and its head face dropping back into it.
+// Untilted (the far twin of every rock, the pieces of an outcrop) it is a wedge resting on its base.
+const SHARD_TILT = 0.48; // the tilt the occlusion is baked at, the middle of placement's
 function slantedRock(rng) {
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const a = 0.8 + rng() * 0.25, b = 0.95 + rng() * 0.3, w = 0.42 + rng() * 0.25, t = 0.45 + rng() * 0.3, wedge = 0.08 + rng() * 0.2;
-    let planes = [
-      plane(1, -0.2 + rng() * 1.0, (rng() - 0.5) * 0.5, b), plane(-1, rng() * 0.3, (rng() - 0.5) * 0.3, a),
-      plane((rng() - 0.5) * 0.14, 0, 1, w * (0.85 + rng() * 0.3)), plane((rng() - 0.5) * 0.14, 0, -1, w * (0.85 + rng() * 0.3)),
-      plane(0, 1, 0, t), plane(wedge, -1, 0, 0),
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const A = 1.2 + rng() * 0.25, Bh = 0.7 + rng() * 0.15, W = 0.42 + rng() * 0.14, T = 0.55 + rng() * 0.25, k = 0.03 + rng() * 0.07;
+    const side = () => 0.12 + rng() * 0.2;
+    const planes = [
+      plane(0, -1, 0, 0), // the base
+      through((rng() - 0.5) * 0.2, side(), -1, 0, 0, -W * (0.85 + rng() * 0.3)),
+      through((rng() - 0.5) * 0.2, side(), 1, 0, 0, W * (0.85 + rng() * 0.3)),
+      through(1, -0.06 + rng() * 0.2, (rng() - 0.5) * 0.55, Bh, 0, 0),            // the head, steep once tilted
+      through(-1, 0.8 + rng() * 0.5, (rng() - 0.5) * 0.4, -A, 0, 0),            // the tail, sloping (never facing down)
     ];
-    const cuts = 1 + Math.floor(rng() * 2.5);
-    for (let i = 0; i < cuts; i++) {
-      const sx = rng() < 0.7 ? 1 : -1, sz = rng() < 0.5 ? 1 : -1;
-      planes = cut(planes, new V3(sx * (0.3 + rng()), 0.3 + rng() * 0.9, sz * (0.2 + rng() * 0.9)), (0.1 + rng() * 0.18) * (0.6 + t));
+    // the dip face: one plane rising toward the head, a second making a shallow ridge along it (more often
+    // than not), a third bending it over toward the crest now and then
+    const c1 = (rng() < 0.5 ? -1 : 1) * (0.03 + rng() * 0.07);
+    planes.push(through(-k, 1, c1, 0, T, 0));
+    if (rng() < 0.65) { const zr = (rng() - 0.5) * 0.5, c2 = -Math.sign(c1) * (0.12 + rng() * 0.14); planes.push(through(-k * (0.6 + rng() * 0.8), 1, c2, 0, T - c1 * zr, zr)); }
+    if (rng() < 0.4) { const xr = 0.15 + rng() * 0.35; planes.push(through(-k + 0.18 + rng() * 0.2, 1, (rng() - 0.5) * 0.1, xr, T + k * xr, 0)); }
+    // the cuts: corners off the crest, a narrow facet along a top edge, a corner of the head
+    let cut3 = planes;
+    const n = 2 + Math.floor(rng() * 3);
+    for (let i = 0; i < n; i++) {
+      const r = rng(), sz = rng() < 0.5 ? 1 : -1;
+      let d, depth;
+      if (r < 0.4) { d = new V3(0.5 + rng() * 0.6, 0.5 + rng() * 0.6, sz * (0.3 + rng() * 0.7)); depth = 0.1 + rng() * 0.18; }
+      else if (r < 0.7) { d = new V3((rng() - 0.5) * 0.5, 0.7 + rng() * 0.4, sz * (0.8 + rng() * 0.4)); depth = 0.06 + rng() * 0.12; }
+      else if (r < 0.85) { d = new V3(1, 0.6 + rng() * 0.8, (rng() - 0.5) * 0.4); depth = 0.07 + rng() * 0.13; }
+      else { d = new V3(0.4 + rng() * 0.5, rng() * 0.3, sz); depth = 0.08 + rng() * 0.12; }
+      cut3 = cut(cut3, d, depth * (0.8 + T * 0.3));
     }
     const B = new RockBuilder();
-    if (!addBlock(B, planes, { bevel: 0.045 + rng() * 0.02, seg: 1.0 }, rng)) continue;
-    return finish(B, rng, { ground: 0.05, reach: 0.8, bakeTilt: 0.45 });
+    // sharp ridges: a weathered, wide chamfer on only a few of the exposed edges
+    if (!addBlock(B, cut3, { bevel: 0.035 + rng() * 0.02, seg: 1.0, edgeW: (n1, n2, pa, pb, r) => edgeWidth(n1, n2, pa, pb, r, { wideP: 0.05, wideK: 0.22 }) }, rng)) continue;
+    if (!inFoot(B, 0, FOOT.block)) continue;
+    // the bake sees it tilted as it stands, the ground through its head's foot
+    return finish(B, rng, { ground: Bh * Math.sin(SHARD_TILT) - 0.03, reach: 0.8, bakeTilt: SHARD_TILT });
   }
   return fallbackRock(rng);
 }
@@ -391,47 +456,65 @@ function roundPlanes(rng, n, rx, ry, rz, cy, minY = -1, jitter = 0.08) {
   return out;
 }
 
-// One slab of a stack. Granite joints run in two sets about square to each other plus the sheet joints that
-// part it horizontally, so a slab is a rough rectangle: four sides about a right angle apart, some upright
-// and some sloping in toward the top, a corner or two cut off, a nearly flat top, its bottom on y = 0.
-// X, Z: half sizes; t: thickness.
+// One slab of a stack: an irregular outline of five to eight sides at uneven angles (the joints of the Shield
+// granite never quite square), some upright and some sloping in toward the top, the top tilted against the base
+// so the slab thins toward one end (and often bent down from a shallow ridge), a top edge chamfered off now
+// and then; its base on y = 0. X, Z: half sizes of the outline; t: the thickness at its middle. Returns the
+// planes and the top plane (the next slab rests on it).
 function slabPlanes(rng, X, Z, t) {
-  const turn = (rng() - 0.5) * 0.3;
+  const m = 5 + Math.floor(rng() * 4), turn = rng() * Math.PI * 2;
   let planes = [];
-  for (let k = 0; k < 4; k++) {
-    const a = turn + (k * Math.PI) / 2 + (rng() - 0.5) * 0.25, c = Math.cos(a), s = Math.sin(a);
-    const n = new V3(c, rng() < 0.5 ? rng() * 0.08 : 0.12 + rng() * 0.3, s).normalize();
-    planes.push({ n, h: (k % 2 ? Z : X) * (0.9 + rng() * 0.15) * Math.hypot(n.x, n.z) + n.y * t * 0.5 });
+  for (let i = 0; i < m; i++) {
+    const a = turn + ((i + (rng() - 0.5) * 0.55) * Math.PI * 2) / m, c = Math.cos(a), s = Math.sin(a);
+    const reach = Math.hypot(X * c, Z * s) * (0.8 + rng() * 0.18);
+    planes.push(through(c, rng() < 0.55 ? rng() * 0.08 : 0.12 + rng() * 0.26, s, c * reach, 0, s * reach));
   }
-  planes.push(plane((rng() - 0.5) * 0.08, 1, (rng() - 0.5) * 0.08, t), plane(0, -1, 0, 0));
-  const cuts = 1 + Math.floor(rng() * 2.6);
-  for (let i = 0; i < cuts; i++) {
-    const a = turn + Math.PI / 4 + Math.floor(rng() * 4) * (Math.PI / 2) + (rng() - 0.5) * 0.7;
-    planes = cut(planes, new V3(Math.cos(a), rng() * 0.3, Math.sin(a)), (0.15 + rng() * 0.35) * Math.min(X, Z));
+  const g = rng() * Math.PI * 2, gm = 0.05 + rng() * 0.1;
+  const top = through(-Math.cos(g) * gm, 1, -Math.sin(g) * gm, 0, t, 0);
+  planes.push(top, plane(0, -1, 0, 0));
+  // more often than not a second plane falling the other way from a shallow ridge across the top, so the slab
+  // is thickest along the ridge and its top slightly convex
+  if (rng() < 0.6) {
+    const a = g + Math.PI + (rng() - 0.5) * 1.2, am = 0.06 + rng() * 0.08, d = (rng() - 0.3) * 0.5 * X;
+    const px = Math.cos(g) * d, pz = Math.sin(g) * d;
+    planes.push(through(-Math.cos(a) * am, 1, -Math.sin(a) * am, px, (top.h - top.n.x * px - top.n.z * pz) / top.n.y, pz));
   }
-  if (rng() < 0.35) { const a = rng() * Math.PI * 2; planes = cut(planes, new V3(Math.cos(a), 1 + rng(), Math.sin(a)), t * (0.3 + rng() * 0.3)); }
-  return planes;
+  if (rng() < 0.4) { const a = rng() * Math.PI * 2; planes = cut(planes, new V3(Math.cos(a), 0.9 + rng() * 0.8, Math.sin(a)), t * (0.25 + rng() * 0.3)); }
+  return { planes, top };
 }
 
-// (b) Layered flats: two to four slabs stacked, the bottom one thick and partly in the ground, each one above
-// it smaller, pushed the same way and turned a little, like the sheet jointing of the Shield granite.
+// (b) Layered flats: two to four slabs stacked, the bottom one the biggest and thickest, each one above it
+// smaller, stepped off its lower neighbour by an uneven amount in a direction that wanders, turned a little, and
+// lying on its top (which is tilted, so the stack leans a degree or two more with every slab), like the sheet
+// jointing of the Shield granite. The base on y = 0 inside FOOT.slab.
 function layeredFlats(rng) {
-  for (let attempt = 0; attempt < 8; attempt++) {
+  for (let attempt = 0; attempt < 10; attempt++) {
     const B = new RockBuilder();
-    const n = rng() < 0.55 ? 2 : rng() < 0.8 ? 3 : 4;
-    let X = 1.0 + rng() * 0.2, Z = 0.7 + rng() * 0.25, y = -0.08 - rng() * 0.08, ox = 0, oz = 0, yaw = 0;
-    const drift = rng() * Math.PI * 2;
-    let ok = true;
+    const n = rng() < 0.45 ? 2 : rng() < 0.65 ? 3 : 4;
+    let X = 1.0 + rng() * 0.12, Z = 0.68 + rng() * 0.22;
+    let frame = new THREE.Matrix4(); // the lower slab's frame
+    let drift = rng() * Math.PI * 2, ok = true;
     for (let i = 0; i < n && ok; i++) {
-      const t = i === 0 ? 0.3 + rng() * 0.14 : 0.16 + rng() * 0.16;
-      const m = new THREE.Matrix4().makeRotationY(yaw).setPosition(ox, y, oz);
-      ok = addBlock(B, slabPlanes(rng, X, Z, t), { bevel: 0.035 + rng() * 0.015, seg: 1.4, matrix: m }, rng);
-      y += t * 0.95;
-      // the next one smaller and stepped off toward one side (now and then hanging over the edge)
-      const sh = 0.55 + rng() * 0.3;
-      const step = X * (1 - sh) * (0.8 + rng() * 0.6);
-      ox += Math.cos(drift + (rng() - 0.5) * 0.6) * step; oz += Math.sin(drift + (rng() - 0.5) * 0.6) * step;
-      X *= sh; Z *= 0.6 + rng() * 0.35; yaw += (rng() - 0.5) * 0.6;
+      const t = i === 0 ? 0.22 + rng() * 0.14 : 0.11 + rng() * 0.14;
+      const { planes, top } = slabPlanes(rng, X, Z, t);
+      const m = frame.clone().multiply(new THREE.Matrix4().makeRotationY(i === 0 ? 0 : (rng() - 0.5) * 1.0));
+      const from = B.count;
+      ok = addBlock(B, planes, { bevel: 0.025 + rng() * 0.015, seg: 1.4, matrix: m, edgeW: (nf, ng, pa, pb, r) => (i > 0 && pa.y < 0.02 && pb.y < 0.02 ? 0.6 : edgeWidth(nf, ng, pa, pb, r, { plain: 0.3, wideP: 0.06, wideK: 0.25, wide: 1.0 })) }, rng);
+      if (ok && i === 0) ok = inFoot(B, from, FOOT.slab);
+      if (!ok) break;
+      // the next slab: smaller, its centre stepped off this one's toward one side by part of the room there is
+      // that way (so it reaches this one's edge there, and seldom hangs far over it), lying on this one's top,
+      // sunk a hair into it so no light shows between
+      const sh = 0.55 + rng() * 0.33;
+      drift += (rng() - 0.5) * 1.2;
+      let Xn = X * sh, Zn = Z * (0.55 + rng() * 0.35);
+      if (Zn > Xn) [Xn, Zn] = [Zn, Xn];
+      const room = 0.85 * Math.hypot(X * Math.cos(drift), Z * Math.sin(drift)) - (Xn + Zn) / 2;
+      const step = Math.max(0, room) * (0.5 + rng() * 0.45);
+      const ox = Math.cos(drift) * step, oz = Math.sin(drift) * step, y = (top.h - top.n.x * ox - top.n.z * oz) / top.n.y - 0.015;
+      const onTop = new THREE.Matrix4().makeTranslation(ox, y, oz).multiply(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), top.n)));
+      frame = m.clone().multiply(onTop);
+      X = Xn; Z = Zn;
     }
     if (!ok) continue;
     return finish(B, rng, { ground: 0, reach: 0.6 });
@@ -439,28 +522,42 @@ function layeredFlats(rng) {
   return fallbackRock(rng);
 }
 
-// (c) A glacial erratic: one rounded block of a dozen or so big facets, wider than tall, its base flat and in
-// the ground, a frost crack through it more often than not (the two halves opened a hair at the top) and two
-// or three divots in all.
+// (c) A glacial erratic: a softened block, not a cube. A rounded mass of twenty-odd tangent planes whose normals
+// follow the ellipsoid (so it shades as one round shape and its edges need no chamfer), cut by two or three broad
+// flat facets that keep their own normals and crisp drybrushed edges; wider than tall, its base flat on y = 0
+// at its widest girth (so nothing of it overhangs the ground). A frost crack through it more often than not
+// (the two halves opened a hair at the top) and two or three divots pressed into its facets.
 function erratic(rng) {
-  for (let attempt = 0; attempt < 8; attempt++) {
+  for (let attempt = 0; attempt < 10; attempt++) {
     // its outline at the ground about the 0.8 x scale circle tiles.js holds the walker off with
-    const X = 0.86 + rng() * 0.14, Z = 0.74 + rng() * 0.16, top = 0.7 + rng() * 0.32, low = -0.3;
-    const ry = (top - low) / 2, cy = (top + low) / 2;
-    const planes = [...roundPlanes(rng, 13 + Math.floor(rng() * 5), X, ry, Z, cy, -0.55, 0.1), plane(0, -1, 0, -low)];
-    const B = new RockBuilder(), bevel = 0.09 + rng() * 0.04;
-    const crack = rng() < 0.6, divots = crack ? 1 + Math.floor(rng() * 2) : 2 + Math.floor(rng() * 2);
+    const X = 0.82 + rng() * 0.1, Z = 0.7 + rng() * 0.13, top = 0.6 + rng() * 0.26, cy = 0.01 + rng() * 0.03;
+    const ry = top - cy;
+    const planes = roundPlanes(rng, 20 + Math.floor(rng() * 7), X, ry, Z, cy, -0.12, 0.05);
+    // the broad facets: deep cuts at the side and the shoulder
+    const nf = 2 + (rng() < 0.45 ? 1 : 0), a0 = rng() * Math.PI * 2;
+    for (let i = 0; i < nf; i++) {
+      const a = a0 + (i * Math.PI * 2) / nf + (rng() - 0.5) * 1.2, y = -0.05 + rng() * (i === 0 ? 0.9 : 0.6), r = Math.sqrt(Math.max(0, 1 - y * y));
+      const d = new V3(r * Math.cos(a), y, r * Math.sin(a)).normalize();
+      const p = { n: d, h: (Math.sqrt((X * d.x) ** 2 + (ry * d.y) ** 2 + (Z * d.z) ** 2) + d.y * cy) * (0.8 + rng() * 0.08), flat: true };
+      planes.push(p);
+    }
+    planes.push({ ...plane(0, -1, 0, 0), flat: true });
+    const softNormal = (p) => new V3(p.x / (X * X), (p.y - cy) / (ry * ry), p.z / (Z * Z)).normalize();
+    // the crack's lips only a narrow chamfer
+    const o = { bevel: 0.07 + rng() * 0.04, seg: 1.4, soft: (f) => !f.plane.flat, softNormal, edgeW: (n1, n2, pa, pb, r, P, Q) => (P.crack || Q.crack ? 0.3 : edgeWidth(n1, n2, pa, pb, r, { plain: 0.1 })) };
+    const B = new RockBuilder();
+    const crack = rng() < 0.55, divots = crack ? 1 + Math.floor(rng() * 2) : 2 + Math.floor(rng() * 2);
     let ok;
     if (crack) {
-      const a = rng() * Math.PI * 2, n = new V3(Math.cos(a), (rng() - 0.5) * 0.3, Math.sin(a)).normalize(), h = (rng() - 0.5) * 0.6, gap = 0.006 + rng() * 0.008;
+      const a = rng() * Math.PI * 2, n = new V3(Math.cos(a), (rng() - 0.5) * 0.3, Math.sin(a)).normalize(), h = (rng() - 0.5) * 0.5, gap = 0.006 + rng() * 0.008;
       // each half leans away from the crack about a line along its foot
-      const axis = new V3(0, 1, 0).cross(n).normalize(), foot = n.clone().multiplyScalar(h).setY(low), open = 0.008 + rng() * 0.012;
+      const axis = new V3(0, 1, 0).cross(n).normalize(), foot = n.clone().multiplyScalar(h).setY(0), open = 0.008 + rng() * 0.012;
       const lean = (sgn) => new THREE.Matrix4().makeTranslation(foot.x, foot.y, foot.z).multiply(new THREE.Matrix4().makeRotationAxis(axis, sgn * open)).multiply(new THREE.Matrix4().makeTranslation(-foot.x, -foot.y, -foot.z));
       const half1 = Math.round(divots / 2);
-      ok = addBlock(B, [...planes, { n: n.clone(), h: h - gap }], { bevel, seg: 1.4, dimples: half1, matrix: lean(-1) }, rng)
-        && addBlock(B, [...planes, { n: n.clone().negate(), h: -h - gap }], { bevel, seg: 1.4, dimples: divots - half1, matrix: lean(1) }, rng);
-    } else ok = addBlock(B, planes, { bevel, seg: 1.4, dimples: divots }, rng);
-    if (!ok) continue;
+      ok = addBlock(B, [...planes, { n: n.clone(), h: h - gap, flat: true, crack: true }], { ...o, dimples: half1, matrix: lean(-1) }, rng)
+        && addBlock(B, [...planes, { n: n.clone().negate(), h: -h - gap, flat: true, crack: true }], { ...o, dimples: divots - half1, matrix: lean(1) }, rng);
+    } else ok = addBlock(B, planes, { ...o, dimples: divots }, rng);
+    if (!ok || !inFoot(B, 0, FOOT.boulder)) continue;
     return finish(B, rng, { ground: 0, reach: 0.9, lichen: 1.2 });
   }
   return fallbackRock(rng);
@@ -468,14 +565,14 @@ function erratic(rng) {
 
 function fallbackRock(rng) {
   const B = new RockBuilder();
-  addBlock(B, [plane(1, 0, 0, 1), plane(-1, 0, 0, 1), plane(0, 0, 1, 0.7), plane(0, 0, -1, 0.7), plane(0, 1, 0, 0.6), plane(0, -1, 0, 0.1)], { bevel: 0.05, seg: 1.0 }, rng);
+  addBlock(B, [plane(1, 0.1, 0.05, 0.9), plane(-1, 0.2, 0, 1), plane(0.1, 0.3, 1, 0.55), plane(-0.1, 0.25, -1, 0.55), plane(-0.1, 1, 0, 0.6), plane(0, -1, 0, 0)], { bevel: 0.05, seg: 1.0, edgeW: edgeWidth }, rng);
   return finish(B, rng);
 }
 
 // The families by the names vegetation.js asks for: 'slab' the layered flats, 'block' the slanted rock (the
 // cheapest, so it is also every rock's far twin), 'boulder' the erratic. All are about two units across and
-// stand on y = 0 (the slanted rock's tail goes below it once tilted); tiles.js holds the walker off a rock
-// with a circle of 0.8 x its scale, props.js off an outcrop with 0.95 x.
+// stand on their base at y = 0 inside FOOT (the slanted rock's tail goes deep below the ground once tilted);
+// tiles.js holds the walker off a rock with a circle of 0.8 x its scale, props.js off an outcrop with 0.95 x.
 export const ROCK_FAMILIES = { slab: layeredFlats, block: slantedRock, boulder: erratic };
 export function angularRock(rng, kind = 'block') {
   return (ROCK_FAMILIES[kind] || slantedRock)(rng);
