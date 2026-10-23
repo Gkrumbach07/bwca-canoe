@@ -43,7 +43,7 @@ import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
 import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
-import { outfitterProfile, boardLean, speakAtCounter } from './outfitters.js'; // hubs 2C
+import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
 import { sheets } from './sheets.js'; // hubs 2D
 import { Shop } from './shop.js'; // hubs 2B
@@ -223,7 +223,7 @@ async function main() {
   const rides = new Rides({ world, outfitter, day, veil, hud, energy, tasks, teleport });
   outfitter.rides = rides;
   tasks.leanOf = (ep) => boardLean(ep, world);
-  speakAtCounter(outfitter, world); rides.attachCounter();
+  outfitter.keeperVoice = true; // the shop's counter (2B) renders the keeper, the signature and the rides itself, so 2C's stand-ins stay off
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
