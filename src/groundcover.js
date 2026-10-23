@@ -3,8 +3,9 @@ import { glslSurface } from './water.js';
 import { CLASS_SPLAT } from './terrain-build.js';
 import { groundUniforms, glslGround } from './terrain.js';
 import { applyLook } from './shading.js';
+import { foliageAtlas, spriteUV } from './textures.js';
 
-// Grass tufts and fireweed on a camera-following patch. Each tuft belongs to a world cell (so it stays put
+// Grass clumps and fireweed on a camera-following patch. Each tuft belongs to a world cell (so it stays put
 // as the patch slides) but sits at a hashed offset inside it, so no lattice shows; presence, size and
 // colour come from the cell hash, a clump field and the per-cell cover map baked into the water atlas
 // (none in water, on bare rock, trails or campsites; a sparse few under the forest; thick on the meadows,
@@ -13,8 +14,11 @@ import { applyLook } from './shading.js';
 // normal, so a tuft takes the same sun, sky and shadows as the ground it stands on and darkens with it at
 // dusk; its colour is the ground's own at the root (the terrain's splat, glslGround, evaluated under the
 // tuft from the class map), lighter and warmer toward the tip, never darker than the ground under it.
+// A clump is two cards crossed on its root from the grass sprite (textures.js, pivot pass 2), alpha-tested,
+// the cutoff easing with distance as the blades thin out in the mipmaps.
 
 const SIZE = 128, SPACING = 0.87;   // one tuft slot per 0.76 m²: a third of the old half-metre lattice
+const WID = 0.72, HGT = 0.58, ROOT = -0.12; // a clump's cards: width, height, the root below the ground
 const N = CLASS_SPLAT.length;
 
 const decl = /* glsl */ `
@@ -25,6 +29,8 @@ const decl = /* glsl */ `
   uniform vec4 uClassB[${N}];
   uniform float uClassSunny[${N}];
   attribute vec2 aOffset;
+  varying vec2 vGrassUv;
+  varying float vGrassDist, vGrassH, vGrassFlower;
   ${glslSurface}
   ${glslGround}
   // The terrain's splat under a point, rebuilt from the cover atlas: the four cells around it, each class
@@ -68,7 +74,7 @@ const body = /* glsl */ `
   // clumps: a 3 m noise gates the cover, full at a clump's heart and empty between (the gain keeps the mean)
   float clump = vnoise(mod(rel + uOrigin, 4096.0) / 3.2);
   float heart = smoothstep(0.3, 0.7, clump);
-  float present = step(h.x, cv.r * heart * 2.0) * edge;
+  float present = step(h.x, cv.r * heart * 1.25) * edge;  // a card clump is fuller than the old three blades
   float sc = present * (0.6 + 0.8 * h.y * h.y + 0.25 * heart);
   float yaw = h.z * 6.2832;
   vec3 p = position * sc;
@@ -83,8 +89,19 @@ const body = /* glsl */ `
   vec3 tint = mix(vec3(1.0, 1.02, 0.94), vec3(1.08, 1.12, 0.92), h2.x) * uGrassTint;
   vec3 base = ground * tint;
   base = mix(base, base * vec3(1.3, 1.08, 0.55), cv.g * (0.6 + 0.4 * h2.y));
-  float flower = step(0.94, h.x) * cv.g * step(0.75, position.y) * uFlower;
-  vColor.rgb *= mix(base, vec3(0.95, 0.35, 0.6), flower);
+  vGrassFlower = step(0.95, h.x / max(1e-3, cv.r * heart * 1.25)) * cv.g * uFlower;
+  vColor.rgb *= base;
+  vGrassUv = uv;
+  vGrassH = (position.y - ${ROOT.toFixed(2)}) / ${(HGT - ROOT).toFixed(2)};
+  vGrassDist = distance((modelMatrix * vec4(transformed, 1.0)).xyz, cameraPosition);
+`;
+// the card: the sprite's value lifts the ground colour from the root (never darker than the ground) to a
+// lit tip; fireweed's pink on the top of a few clumps in high summer
+const frag = /* glsl */ `
+  vec4 grass = texture2D(uGrassMap, vGrassUv);
+  if (grass.a < mix(0.5, 0.22, smoothstep(5.0, 45.0, vGrassDist))) discard;
+  diffuseColor.rgb *= mix(1.0, 1.42, smoothstep(0.35, 1.0, grass.r));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.35, 0.6) * grass.r, vGrassFlower * step(0.72, vGrassH));
 `;
 
 // A blade is lit as the ground under it from either side: three flips the normal on a back face of a
@@ -94,30 +111,24 @@ const body = /* glsl */ `
 const noFlip = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
 if (noFlip === THREE.ShaderChunk.normal_fragment_begin) console.warn('groundcover: normal chunk changed, blades seen from behind will go dark');
 
+// Two cards crossed on the clump's root, the grass sprite on both, the root a little below the ground so a
+// slope never shows a gap; normals straight up, so a clump is lit as the ground under it.
 function tuftGeometry() {
-  // three broad blades fanned at 60 degrees, each a bent strip that narrows to a blunt tip and leans out;
-  // the vertex colour runs from the ground's own tone at the root to a warm, lit tip
-  const pos = [], col = [], nrm = [];
-  const blades = 3, hgt = 0.5, half = 0.12, root = -0.15; // the root sits below ground so slopes never show a gap
-  const leans = [0.16, -0.11, 0.2];
-  const push = (x, y, z, c) => { pos.push(x, y, z); col.push(c[0], c[1], c[2]); nrm.push(0, 1, 0); }; // lit like the ground under it
-  const cRoot = [1.0, 1.0, 1.0], cMid = [1.12, 1.1, 1.02], cTip = [1.38, 1.3, 1.0];
-  for (let i = 0; i < blades; i++) {
-    const a = (i / blades) * Math.PI;
-    const dx = Math.cos(a) * half, dz = Math.sin(a) * half;
-    const lx = -Math.sin(a) * leans[i], lz = Math.cos(a) * leans[i];
-    const midH = hgt * 0.5, tipH = hgt * (0.8 + 0.2 * (i % 2));
-    const bl = [-dx, root, -dz], br = [dx, root, dz];
-    const ml = [-dx * 0.75 + lx * 0.35, midH, -dz * 0.75 + lz * 0.35], mr = [dx * 0.75 + lx * 0.35, midH, dz * 0.75 + lz * 0.35];
-    const tip = [lx, tipH, lz];
-    push(...bl, cRoot); push(...br, cRoot); push(...mr, cMid);
-    push(...bl, cRoot); push(...mr, cMid); push(...ml, cMid);
-    push(...ml, cMid); push(...mr, cMid); push(...tip, cTip);
+  const pos = [], uv = [], col = [], nrm = [], idx = [];
+  for (const a of [0, Math.PI / 2]) {
+    const dx = Math.cos(a) * WID / 2, dz = Math.sin(a) * WID / 2, b = pos.length / 3;
+    for (const [s, t] of [[0, 0], [1, 0], [1, 1], [0, 1]]) {
+      pos.push((s * 2 - 1) * dx, t ? HGT : ROOT, (s * 2 - 1) * dz);
+      uv.push(...spriteUV('grass', s, t)); col.push(1, 1, 1); nrm.push(0, 1, 0);
+    }
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
   return g;
 }
 
@@ -133,13 +144,15 @@ export class GroundCover {
     geo.setAttribute('position', base.getAttribute('position'));
     geo.setAttribute('normal', base.getAttribute('normal'));
     geo.setAttribute('color', base.getAttribute('color'));
+    geo.setAttribute('uv', base.getAttribute('uv'));
+    geo.setIndex(base.getIndex());
     geo.setAttribute('aOffset', new THREE.InstancedBufferAttribute(offsets, 2));
     geo.instanceCount = n * n;
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
     this.u = {
       ...water.surfaceUniforms(),
       uCenterLocal: { value: new THREE.Vector2() }, uTime: { value: 0 }, uHalf: { value: SIZE / 2 },
-      uFlower: { value: 1 }, uGrassTint: { value: new THREE.Vector3(1, 1, 1) },
+      uFlower: { value: 1 }, uGrassTint: { value: new THREE.Vector3(1, 1, 1) }, uGrassMap: { value: foliageAtlas() },
       ...groundUniforms,
       uClassA: { value: CLASS_SPLAT.map((c) => new THREE.Vector4(c.w[0], c.w[1], c.w[2], c.w[3])) },
       uClassB: { value: CLASS_SPLAT.map((c) => new THREE.Vector4(c.w[4], c.w[5], c.w[6], c.w[7])) },
@@ -153,6 +166,8 @@ export class GroundCover {
         .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\n' + decl)
         .replace('#include <begin_vertex>', body);
       shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower;')
+        .replace('#include <map_fragment>', '#include <map_fragment>\n' + frag)
         .replace('#include <normal_fragment_begin>', noFlip);
     };
     this.material.customProgramCacheKey = () => 'look-grass';

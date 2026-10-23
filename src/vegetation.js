@@ -1,25 +1,37 @@
 import * as THREE from 'three';
-import { GeoBuilder, vary } from './geobuilder.js';
+import { GeoBuilder, CardBuilder, vary } from './geobuilder.js';
 import { mulberry32, hash2 } from './rng.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { angularRock, makeRockMaterial, makeFoliageMaterial, smoothToon } from './rocks.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { angularRock, makeRockMaterial, smoothToon } from './rocks.js';
+import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
+import { bakeOcclusion } from './occlusion.js';
+import { foliageAtlas } from './textures.js';
 import { REGION } from './placement.js';
 
 // Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
-// turns a tile's placement bins into instanced meshes in tile-local coordinates. Everything is welded smooth
-// and shaded with the look's smooth light, wrapped on the leaves, occlusion baked in (rocks.js smoothToon).
+// turns a tile's placement bins into instanced meshes in tile-local coordinates.
 //
-// The near variants (docs/look.md, pass 4): trunks in two or three segments with a bend, a base flare and a
-// shade side baked into the vertex colour; crowns as six to twelve clusters offset to one side, lit on top
-// and dark and cool underneath; spruce as uneven whorls with a ragged tip; twelve variants per species that
-// spread height 0.6–1.6 with leaners, a giant and a runt. Near the camera a stand draws three variants of
-// each species (makeVegetationMeshes, pass 5), further out one per region. The far twins (LOW) draw the
-// forest at distance and must stay cheap.
+// Foliage as cards on branches (docs/look.md, pivot pass 2). A tree is a mesh trunk (segmented, bent, flared,
+// scarred, the tree pass's work), a skeleton of branches off it and, hung on the branches, alpha-tested cards
+// that sample painted sprites from the foliage atlas (textures.js): leaf clusters where a broadleaf's twigs end,
+// needle sprays crossed along a conifer's whorl branches, brushes of long needles on a pine's branchlets. Every
+// card's anchor sits on a branch, so nothing floats. The cards' shading normals point away from the crown (a
+// spruce's out from its stem and up), so the crown shades as one soft volume under the smooth light, and the
+// occlusion bake (occlusion.js) darkens the inside of it. The material (makeCardMaterial) lowers the alpha
+// cutoff with distance: near, the leaf edges show; far, every card fills out to its sprite's halo and the
+// crown reads as one flat shape. Bark and cards share one geometry and one material per species, so the draw
+// calls stay one per bin; the bark is told apart by its uv (-1, -1) and its zero wrap.
 //
-// Pass 5 adds the understory (hazel, alder, a young fir, bracken) and the deadfall (logs, stumps) and the
-// granite outcrops, appended to SPECIES.
+// Twelve variants per tree species spread height 0.6–1.6 with leaners, a giant and a runt (profile). Near the
+// camera a stand draws three variants of each species (makeVegetationMeshes, pass 5), further out one per
+// region, and past the LOD distance the far twin: two big cards crossed on the crown in a far sprite, sized
+// and coloured from its own near variant so the swap keeps the silhouette (farTwin).
+//
+// Pass 5 added the understory (hazel, alder, a young fir, bracken), the deadfall (logs, stumps) and the
+// granite outcrops; the deadfall and the rocks are solid geometry (rocks.js) and stay so.
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const UP = V(0, 1, 0);
 const DEAD = 0x4a3f36;  // a dead lower branch
 const SCAR = 0x2a221d;  // a birch's branch scar
 const sm = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
@@ -47,21 +59,9 @@ function crownColors(topHex, underHex, rng) {
   const top = vary(topHex, rng, 0.04).offsetHSL(drift, 0, dl), under = vary(underHex, rng, 0.04).offsetHSL(drift * 0.6, 0, dl * 0.5);
   return { top, under, at: (t, shift = 0) => under.clone().lerp(top, sm(t)).offsetHSL(0, 0, shift) };
 }
-// A crown of `count` clusters around (cx, cy, cz) within an ellipsoid (rx, ry, rz), pushed to one side by
-// `bias` (a fraction of rx along a random bearing): bigger near the heart, smaller and lower at the fringe.
-// Each cluster's colour runs from the crown's underside to its top, plus its own position in the crown.
-function clusters(g, rng, cx, cy, cz, rx, ry, rz, count, lumpR, cols, o = {}) {
-  const { n = 5, sy = 0.8, jitter = 0.35, bias = 0.4, flat = 1 } = o;
-  const ba = rng() * 6.28, bx = Math.cos(ba) * bias * rx, bz = Math.sin(ba) * bias * rz;
-  const y0 = cy - ry - lumpR * sy, y1 = cy + ry + lumpR * sy;
-  for (let i = 0; i < count; i++) {
-    const heart = i < Math.ceil(count * 0.4);
-    const ox = SPREAD(rng) * rx * (heart ? 0.55 : 1), oy = SPREAD(rng) * ry * (heart ? 0.6 : 1) * flat, oz = SPREAD(rng) * rz * (heart ? 0.55 : 1);
-    const r = lumpR * (heart ? 1 + rng() * 0.35 : 0.65 + rng() * 0.45), shift = (rng() - 0.5) * 0.07;
-    const x = cx + bx + ox, y = cy + oy, z = cz + bz + oz;
-    g.lump(x, y, z, r, heart ? n : Math.max(4, n - 1), rng, jitter, 1 + (rng() - 0.5) * 0.4, sy, 1 + (rng() - 0.5) * 0.4, (p, tl) => cols.at(0.55 * (p.y - y0) / (y1 - y0) + 0.45 * tl, shift));
-  }
-}
+// a card colour from the crown's gradient by height between y0 and y1, with the cluster's own small shift
+const shade = (cols, y0, y1, rng, lo = 0.25) => { const shift = (rng() - 0.5) * 0.06; return (p) => cols.at(lo + (1 - lo) * (p.y - y0) / (y1 - y0), shift); };
+
 // A few dead lower branches: thin drooping tubes off the stem between heights t0 and t1.
 function deadBranches(g, rng, at, count, t0, t1, L0, L1, bark) {
   const col = vary(DEAD, rng, 0.08);
@@ -72,103 +72,238 @@ function deadBranches(g, rng, at, count, t0, t1, L0, L1, bark) {
   }
 }
 
+// ---------- the skeleton and the cards ----------------------------------------------
+
+const dirAt = (az, el) => V(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el));
+const perp = (d) => (Math.abs(d.y) < 0.9 ? V(0, 1, 0) : V(1, 0, 0)).cross(d).normalize();
+const vec = (s) => V(s.x, s.y, s.z);
+// Card shading normals. away: from the centre c of an ellipsoid (rx, ry, rz), the crown of a broadleaf or a
+// pine's tuft of branches. outward: from the stem's axis at the corner's height, tipped up by `up`, the cone
+// of a conifer's whorls. mix: a blend of two.
+const away = (c, rx, ry, rz) => (p) => V((p.x - c.x) / (rx * rx), (p.y - c.y) / (ry * ry), (p.z - c.z) / (rz * rz)).normalize();
+const outward = (T, base, H, up) => (p) => {
+  const a = T.at(Math.min(1, Math.max(0, (p.y - base) / H))), v = V(p.x - a.x, 0, p.z - a.z), L = v.length();
+  return (L > 1e-3 ? v.divideScalar(L) : v.set(0, 0, 0)).addScaledVector(UP, up).normalize();
+};
+const mix = (a, b, k) => (p) => a(p).multiplyScalar(1 - k).addScaledVector(b(p), k).normalize();
+
+// A leaf cluster where a twig ends: two cards crossed about a line leaning out of the crown (`out`), so it
+// is never seen edge-on, or one card facing out (`single`), size metres across, centred on the twig.
+function leafy(cards, slot, p, out, size, nrm, col, rng, single = false) {
+  if (single) {
+    const ax = perp(out).applyAxisAngle(out, rng() * 6.28), ay = out.clone().cross(ax).normalize();
+    cards.card(slot, p, ax, ay, size, size, nrm, col);
+    return;
+  }
+  const a = out.clone().add(V(SPREAD(rng), SPREAD(rng), SPREAD(rng)).multiplyScalar(0.9)).normalize();
+  cards.cross(slot, p, a, perp(a).applyAxisAngle(a, rng() * 6.28), size, size, nrm, col);
+}
+// Needles along a conifer branch from o in direction d: two spray (or tuft) cards crossed on it, the first
+// lying in the branch's own tilt and the second standing, rolled a little at random, `len` from the anchor out
+// and `wid` across.
+function needles(cards, slot, o, d, len, wid, nrm, col, rng) {
+  const flat = UP.clone().cross(d);
+  if (flat.lengthSq() < 1e-6) flat.set(1, 0, 0);
+  flat.normalize().applyAxisAngle(d, SPREAD(rng) * 0.35);
+  cards.cross(slot, o, d, flat, len, wid, nrm, col, 0.5); // anchored at the stem end: swell it about half as far
+}
+
+// The tree's two parts into one geometry: the bark welded and smoothed (one smooth volume per coloured part,
+// as rocks.js smoothToon does), the cards with their own normals; uv (-1, -1) and no wrap on the bark, the
+// foliage wrap on the cards; then the occlusion bake over both, against a ground plane at y 0.3 (placement
+// sinks trees about that far), so the inner crown and the trunk under it go dark. The cards count as solid
+// in the bake although half of each is cut away, so the floor is kept high.
+const BAKE = { rays: 12, floor: 0.5 };
+function finish(g, cards, { ground = 0.3, reach = null, bake = true } = {}) {
+  const parts = [];
+  if (g && g.p.length) {
+    const raw = g.build();
+    raw.deleteAttribute('normal');
+    const b = mergeVertices(raw, 1e-4);
+    b.computeVertexNormals();
+    const n = b.getAttribute('position').count;
+    b.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2).fill(-1), 2));
+    b.setAttribute('aWrap', new THREE.Float32BufferAttribute(new Float32Array(n), 1));
+    b.setAttribute('aGrow', new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3));
+    parts.push(b);
+  }
+  if (cards && cards.count) {
+    const c = cards.build(), n = c.getAttribute('position').count;
+    c.setAttribute('aWrap', new THREE.Float32BufferAttribute(new Float32Array(n).fill(FOLIAGE_WRAP), 1));
+    parts.push(c);
+  }
+  const geo = parts.length > 1 ? mergeGeometries(parts) : parts[0];
+  if (bake) bakeOcclusion(geo, { ...BAKE, ground, reach });
+  geo.computeBoundingSphere();
+  return geo;
+}
+// Solid geometry (the deadfall, a snag's far twin) for the same material: rocks.js smoothToon, and the bark's uv.
+function solid(geo) {
+  if (geo.getAttribute('uv')) return geo;
+  const g = smoothToon(geo), n = g.getAttribute('position').count;
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2).fill(-1), 2));
+  g.setAttribute('aGrow', new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3));
+  return g;
+}
+
+// A broadleaf crown off a stem: `n` branches between the stem's t0 and t1, turned by the golden angle, rising
+// at rise[0] low down to rise[1] at the top and drooping at the ends, longest low; each with a side branch
+// from its outer half; leaf clusters at every twig end and along the outer half. The crown is the ellipsoid
+// (C, R, ry) the cards' normals point away from.
+function broadCrown(g, cards, rng, S, o) {
+  const { t0, t1, n, R, C, ry, size, slot, twig, cols, y0, y1, rise = [0.55, 1.05], droop = 0.4, side = 1 } = o;
+  const nrm = away(C, R * 1.15, ry, R * 1.15), az0 = rng() * 6.28;
+  const outOf = (p) => p.clone().sub(C).normalize();
+  for (let i = 0; i < n; i++) {
+    const f = (i + 0.5) / n, t = t0 + (t1 - t0) * f + SPREAD(rng) * 0.03, s = S.at(t);
+    const az = az0 + i * 2.4 + SPREAD(rng) * 0.5, el = rise[0] + (rise[1] - rise[0]) * f + SPREAD(rng) * 0.15;
+    const L = R * (1.2 - 0.6 * f) * (0.8 + rng() * 0.35);
+    const p0 = vec(s), p1 = p0.clone().addScaledVector(dirAt(az, el), L * 0.5), p2 = p1.clone().addScaledVector(dirAt(az + SPREAD(rng) * 0.3, el - droop), L * 0.5);
+    const B = g.branch([p0, p1, p2], Math.max(0.025, s.r * 0.5), 0.012, 3, twig, rng);
+    for (const [u, single] of [[1, false], [0.62, true]]) {
+      if (u < 1 && L < R * 0.6) continue;
+      const q = B.at(u).p;
+      leafy(cards, slot, q, outOf(q), size * (0.85 + rng() * 0.3) * (u < 1 ? 0.85 : 1), nrm, shade(cols, y0, y1, rng), rng, single);
+    }
+    if (rng() < side) {
+      const q = B.at(0.4 + rng() * 0.25), sd = perp(q.d).applyAxisAngle(q.d, rng() * 6.28);
+      const d3 = q.d.clone().addScaledVector(sd, 0.9).addScaledVector(UP, 0.15).normalize();
+      const e = q.p.clone().addScaledVector(d3, L * (0.4 + rng() * 0.2));
+      g.branch([q.p, e], Math.max(0.012, q.r * 0.8), 0.008, 3, twig, rng);
+      leafy(cards, slot, e, outOf(e), size * (0.8 + rng() * 0.3), nrm, shade(cols, y0, y1, rng), rng);
+    }
+  }
+}
+
+// A conifer's whorls up a stem: `whorls` levels between t0 and t1, unevenly spaced, `nb(f)` branches each
+// (f 0 at the lowest whorl, 1 at the top), spread R(f) wide and drooping by droop(f) radians; each branch two
+// crossed sprays from the stem out past its tip, and a bark tube on the branches where `tube(f)`.
+function whorls(g, cards, rng, T, o) {
+  const { t0, t1, count, nb, R, droop, tube, nrm, cols, y0, y1, bark, slot = 'spray', wid = 0.6, rise = 0 } = o;
+  const gaps = []; for (let i = 0; i < count - 1; i++) gaps.push(0.6 + rng() * 0.9);
+  const sum = gaps.reduce((a, b) => a + b, 0) || 1;
+  let t = t0;
+  for (let i = 0; i < count; i++) {
+    const f = i / Math.max(1, count - 1), s = T.at(t), k = nb(f), az0 = rng() * 6.28, p0 = vec(s);
+    for (let j = 0; j < k; j++) {
+      const az = az0 + (j / k) * 6.28 + SPREAD(rng) * 0.5, L = R(f) * (0.85 + rng() * 0.3);
+      const d = dirAt(az, rise - droop(f) + SPREAD(rng) * 0.1);
+      if (tube(f)) g.branch([p0, p0.clone().addScaledVector(d, L * 0.92)], 0.02 + s.r * 0.25, 0.01, 3, bark, rng);
+      needles(cards, slot, p0, d, L * 1.12, L * wid, nrm, shade(cols, y0, y1, rng, 0.2), rng);
+    }
+    if (i < count - 1) t += (gaps[i] / sum) * (t1 - t0);
+  }
+}
+
+// Pine branches carrying brushes of long needles: `n` branches between the stem's t0 and t1, each out at
+// elevation el(f) and bending up at the end; tufts (crossed tuft cards pointing out and up) at the tip and
+// along the outer part. Normals away from the branch's own plate (a centre under its outer half) blended
+// with the crown's.
+function pineBranches(g, cards, rng, T, o) {
+  const { t0, t1, n, L: Lf, el, tufts = 3, crown, cols, y0, y1, bark, size, segs = 2, swing = 0, bias = 0, crooked = 0 } = o;
+  const az0 = rng() * 6.28;
+  for (let i = 0; i < n; i++) {
+    const f = (i + 0.5) / n, t = t0 + (t1 - t0) * f + SPREAD(rng) * 0.03, s = T.at(t);
+    const az = az0 + i * 2.4 + SPREAD(rng) * 0.6, L = Lf(f) * (1 + bias * Math.cos(az - swing)) * (0.8 + rng() * 0.35);
+    const e = el(f) + SPREAD(rng) * 0.12, p0 = vec(s), pts = [p0];
+    if (segs > 1) {
+      const p1 = p0.clone().addScaledVector(dirAt(az + SPREAD(rng) * crooked, e), L * 0.55);
+      pts.push(p1, p1.clone().addScaledVector(dirAt(az + SPREAD(rng) * (0.25 + crooked), e + 0.3 + SPREAD(rng) * crooked), L * 0.45));
+    } else pts.push(p0.clone().addScaledVector(dirAt(az, e), L));
+    const B = g.branch(pts, 0.03 + s.r * 0.3, 0.012, 3, bark, rng);
+    const plate = B.at(0.65).p.addScaledVector(UP, -0.7), nrm = mix(crown, away(plate, L * 0.7, 0.9, L * 0.7), 0.5);
+    for (let k = 0; k < tufts; k++) {
+      const u = k === 0 ? 1 : 1 - k * 0.3 - rng() * 0.08, q = B.at(u);
+      const d = q.d.clone().addScaledVector(UP, 0.4 + rng() * 0.4).addScaledVector(perp(q.d), SPREAD(rng) * 0.8).normalize();
+      const w = size * (0.8 + rng() * 0.35) * (k === 0 ? 1 : 0.85);
+      needles(cards, 'tuft', q.p, d, w, w * 0.55, nrm, shade(cols, y0, y1, rng, 0.2), rng);
+    }
+  }
+}
+
 // ---------- species (full detail) ------------------------------------------------
 
+// Eastern white pine: a tall trunk, four or five uneven tiers of long level branches swept to one side,
+// upturned at the ends, soft brushes of needles on them that read as plates; a ragged leader.
 function whitePine(rng, v) {
-  const g = new GeoBuilder(), P = profile(v, rng);
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
   const h = 16 * P.size, bark = vary(0x66503d, rng), cols = crownColors(0x5ead52, 0x2f5b46, rng);
-  const T = g.stem(0, -0.5, 0, 0.45 * P.girth, 0.14 * P.girth, h * 0.84, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.45, shade: 0.32 });
-  deadBranches(g, rng, T.at, 1 + Math.floor(rng() * 2), 0.28, 0.48, 0.9, 1.7, bark);
-  // chunky plates of foliage stacked unevenly up the top half of the stem, overlapping, the upper ones
-  // swept to one side; a rounded leader on top
-  const ba = rng() * 6.28, bias = 0.3 + rng() * 0.3, R = (2.2 + rng() * 0.6) * (0.75 + P.size * 0.35);
-  const plates = 4 + Math.floor(rng() * 2), y0 = h * 0.42, y1 = h * 1.02;
-  const gaps = []; for (let i = 0; i < plates - 1; i++) gaps.push(0.6 + rng() * 0.9);
-  const sum = gaps.reduce((a, b) => a + b, 0);
-  let t = 0.48 + rng() * 0.05;
-  for (let i = 0; i < plates; i++) {
-    const f = (t - 0.48) / 0.5, s = T.at(Math.min(1, t)), rr = R * (1.1 - f * 0.5) * (0.8 + rng() * 0.4);
-    const sw = bias * R * f, x = s.x + Math.cos(ba) * sw + SPREAD(rng) * R * 0.45, y = s.y + rr * 0.15, z = s.z + Math.sin(ba) * sw + SPREAD(rng) * R * 0.45;
-    const shift = (rng() - 0.5) * 0.06;
-    g.lump(x, y, z, rr, i < 2 ? 5 : 4, rng, 0.4, 1 + (rng() - 0.5) * 0.4, 0.6 + rng() * 0.2, 1 + (rng() - 0.5) * 0.4, (p, tl) => cols.at(0.6 * (p.y - y0) / (y1 - y0) + 0.4 * tl, shift));
-    if (i < plates - 1) t += (gaps[i] / sum) * 0.5;
-  }
-  const top = T.at(1);
-  g.lump(top.x + SPREAD(rng) * 0.5, h * 0.96, top.z + SPREAD(rng) * 0.5, R * 0.45, 4, rng, 0.45, 0.9, 1.1, 0.9, (p, tl) => cols.at(0.7 + 0.3 * tl));
-  return g.build();
+  const T = g.stem(0, -0.5, 0, 0.45 * P.girth, 0.07, h * 0.98, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.45, shade: 0.32, ts: [0, 0.1, 0.45, 0.75, 1] });
+  deadBranches(g, rng, T.at, 1 + Math.floor(rng() * 2), 0.25, 0.4, 0.9, 1.7, bark);
+  const R = (2.2 + rng() * 0.6) * (0.75 + P.size * 0.35), top = T.at(0.8), C = V(top.x, h * 0.72, top.z);
+  const y0 = h * 0.42, y1 = h, crown = away(C, R * 1.2, h * 0.35, R * 1.2);
+  pineBranches(g, cards, rng, T, { t0: 0.44, t1: 0.9, n: 8 + Math.floor(rng() * 2), L: (f) => R * (1.15 - f * 0.55), el: (f) => 0.05 + f * 0.25, tufts: 3, crown, cols, y0, y1, bark, size: 2.9 * (0.75 + P.size * 0.25), swing: rng() * 6.28, bias: 0.3 });
+  const tp = T.at(1), lead = vec(tp);
+  needles(cards, 'tuft', lead.clone().addScaledVector(UP, -1.6), UP.clone().addScaledVector(perp(UP).applyAxisAngle(UP, rng() * 6.28), 0.5).normalize(), 2.6, 1.5, crown, shade(cols, y0, y1, rng), rng);
+  return finish(g, cards);
 }
+// White spruce: a straight stem in a narrow cone of seven or eight whorls, the branches drooping, longest low,
+// a spire on top; bark on the lower branches (the upper ones are needle sprays crossed on their twig).
 function spruce(rng, v) {
-  const g = new GeoBuilder(), P = profile(v, rng);
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
   const h = 12.5 * P.size, bark = vary(0x55463a, rng), cols = crownColors(0x45924f, 0x2a5141, rng);
-  const T = g.stem(0, -0.5, 0, 0.3 * P.girth, 0.05, h, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.35, shade: 0.3 });
-  deadBranches(g, rng, T.at, 2 + Math.floor(rng() * 2), 0.1, 0.3, 0.7, 1.5, bark);
-  // five to seven whorls, unevenly spaced, each a little off the axis, the lowest wide and the tip a spike
-  const whorls = 5 + Math.floor(rng() * 2), R = (2.1 + rng() * 0.5) * (0.8 + P.size * 0.3);
-  let t = 0.14 + rng() * 0.06;
-  const gaps = []; for (let i = 0; i < whorls - 1; i++) gaps.push(0.6 + rng() * 0.9);
-  const sum = gaps.reduce((a, b) => a + b, 0), span = 0.82 - t;
-  for (let i = 0; i < whorls; i++) {
-    const s = T.at(t), f = (t - 0.14) / 0.72, rr = R * (1.05 - f * 0.78) * (0.8 + rng() * 0.4), ch = (2 + rng() * 1.2) * (0.7 + P.size * 0.35);
-    const x = s.x + SPREAD(rng) * 0.35, z = s.z + SPREAD(rng) * 0.35, y = s.y - ch * 0.15, shift = (rng() - 0.5) * 0.06;
-    g.cone(x, y, z, rr, ch, 5, (p) => cols.at(0.15 + 0.85 * (p.y - y) / ch, shift), rng, 0.3);
-    if (i < whorls - 1) t += (gaps[i] / sum) * span;
-  }
-  const top = T.at(1);
-  g.cone(top.x + SPREAD(rng) * 0.2, h * 0.86, top.z + SPREAD(rng) * 0.2, R * 0.22, h * 0.2, 4, (p) => cols.at(0.4 + 0.6 * (p.y - h * 0.86) / (h * 0.2)), rng, 0.3);
-  return g.build();
+  const T = g.stem(0, -0.5, 0, 0.3 * P.girth, 0.04, h, 4, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.35, shade: 0.3 });
+  deadBranches(g, rng, T.at, Math.floor(rng() * 2), 0.05, 0.12, 0.6, 1.2, bark);
+  const R = (2.0 + rng() * 0.5) * (0.8 + P.size * 0.3), nrm = outward(T, -0.5, h, 0.55);
+  whorls(g, cards, rng, T, { t0: 0.1, t1: 0.82, count: 7 + Math.floor(rng() * 2), nb: (f) => (f < 0.5 ? 4 : 3), R: (f) => R * (1 - f * 0.75) + 0.25, droop: (f) => 0.2 + 0.32 * (1 - f), tube: (f) => f < 0.15, nrm, cols, y0: 0, y1: h, bark, wid: 1.0 });
+  const a = T.at(0.84), b = T.at(1), d = vec(b).sub(vec(a)), L = d.length();
+  needles(cards, 'spray', vec(a), d.normalize(), L * 1.25, 0.55, nrm, shade(cols, 0, h, rng), rng);
+  return finish(g, cards);
 }
+// Red pine: a long straight reddish trunk and a rounded crown of upswept branches ending in dense tufts.
 function redPine(rng, v) {
-  const g = new GeoBuilder(), P = profile(v, rng);
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
   const h = 15 * P.size, bark = vary(0x8d5235, rng), cols = crownColors(0x68a94c, 0x305a43, rng);
-  const T = g.stem(0, -0.5, 0, 0.42 * P.girth, 0.18 * P.girth, h * 0.9, 5, bark, rng, { lean: leanOf(P, h), bow: [P.bow[0] * h * 0.5, P.bow[1] * h * 0.5], flare: 0.35, shade: 0.3 });
-  deadBranches(g, rng, T.at, 2, 0.35, 0.6, 0.8, 1.4, bark);
-  const R = (1.5 + rng() * 0.6) * (0.75 + P.size * 0.35), top = T.at(1);
-  // a rounded tufted crown about the top of the stem, and one or two tufts on short limbs below it
-  clusters(g, rng, top.x, h * 0.9, top.z, R * 1.1, R * 0.7, R * 1.1, 5 + Math.floor(rng() * 2), R * 0.66, cols, { n: 5, sy: 0.85, bias: 0.35 });
-  for (let i = 0; i < 1; i++) {
-    const t = 0.62 + rng() * 0.18, a = rng() * 6.28, L = 1 + rng() * 1.2, s = T.at(t), shift = (rng() - 0.5) * 0.06;
-    const tip = V(s.x + Math.cos(a) * L, s.y + L * 0.3, s.z + Math.sin(a) * L);
-    g.limb(V(s.x, s.y, s.z), tip, 0.08, 0.03, 3, bark, rng);
-    g.lump(tip.x, tip.y + 0.3, tip.z, R * 0.45, 4, rng, 0.4, 1.2, 0.7, 1.2, (p, tl) => cols.at(0.25 + 0.5 * tl, shift));
-  }
-  return g.build();
+  const T = g.stem(0, -0.5, 0, 0.42 * P.girth, 0.08, h * 0.97, 5, bark, rng, { lean: leanOf(P, h), bow: [P.bow[0] * h * 0.5, P.bow[1] * h * 0.5], flare: 0.35, shade: 0.3, ts: [0, 0.1, 0.5, 0.8, 1] });
+  deadBranches(g, rng, T.at, 2, 0.35, 0.55, 0.8, 1.4, bark);
+  const R = (1.5 + rng() * 0.6) * (0.75 + P.size * 0.35), tp = T.at(0.85), C = V(tp.x, h * 0.83, tp.z);
+  const y0 = h * 0.6, y1 = h * 1.05, crown = away(C, R * 1.25, R * 0.9, R * 1.25);
+  pineBranches(g, cards, rng, T, { t0: 0.62, t1: 0.93, n: 7 + Math.floor(rng() * 2), L: (f) => R * (1.1 - f * 0.45), el: (f) => 0.45 + f * 0.5, tufts: 3, segs: 1, crown, cols, y0, y1, bark, size: 2.6 * (0.75 + P.size * 0.25) });
+  needles(cards, 'tuft', vec(T.at(0.94)), UP.clone().addScaledVector(perp(UP).applyAxisAngle(UP, rng() * 6.28), 0.4).normalize(), 2.4, 1.4, crown, shade(cols, y0, y1, rng), rng);
+  return finish(g, cards);
 }
+// Paper birch: a white trunk running up into the crown as the leader, branches climbing off it, drooping at
+// the ends, side branches, small-leaved clusters at every twig end; one in four forks low.
 function birch(rng, v) {
-  const g = new GeoBuilder(), P = profile(v, rng);
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
   const h = 10.5 * P.size, bark = vary(0xe6e2d6, rng, 0.04), cols = crownColors(0x97bb58, 0x32674d, rng);
-  const lean = leanOf(P, h * 1.3), forked = v % 4 === 1;
-  const T = g.stem(0, -0.5, 0, 0.2 * P.girth, 0.06 * P.girth, h * 0.78, 5, bark, rng, { lean, bow: bowOf(P, h), flare: 0.3, shade: 0.28, ts: [0, 0.1, 0.5, 1] });
-  // branch scars: dark lenses down the lower trunk, and one to three short stubs higher up
+  const lean = leanOf(P, h * 1.3), forked = v % 4 === 1, twig = bark.clone().lerp(new THREE.Color(0x4f3d32), 0.62);
+  const T = g.stem(0, -0.5, 0, 0.2 * P.girth, 0.035, h * 0.96, 5, bark, rng, { lean, bow: bowOf(P, h), flare: 0.3, shade: 0.28, ts: [0, 0.1, 0.55, 1] });
+  // branch scars: dark lenses down the lower trunk, and one to three short dead stubs below the crown
   const scars = 4 + Math.floor(rng() * 3);
-  for (let i = 0; i < scars; i++) { const t = 0.08 + rng() * 0.62, s = T.at(t); g.scar(T.at, t, rng() * 6.28, s.r * (0.9 + rng() * 0.5), s.r * (0.6 + rng() * 0.4), new THREE.Color(SCAR)); }
+  for (let i = 0; i < scars; i++) { const t = 0.08 + rng() * 0.5, s = T.at(t); g.scar(T.at, t, rng() * 6.28, s.r * (0.9 + rng() * 0.5), s.r * (0.6 + rng() * 0.4), new THREE.Color(SCAR)); }
   const stubCol = bark.clone().lerp(new THREE.Color(DEAD), 0.55);
   for (let i = 0; i < 1 + Math.floor(rng() * 3); i++) {
-    const t = 0.4 + rng() * 0.4, a = rng() * 6.28, L = 0.45 + rng() * 0.5, s = T.at(t);
+    const t = 0.3 + rng() * 0.18, a = rng() * 6.28, L = 0.45 + rng() * 0.5, s = T.at(t);
     g.limb(V(s.x + Math.cos(a) * s.r * 0.7, s.y, s.z + Math.sin(a) * s.r * 0.7), V(s.x + Math.cos(a) * L, s.y + L * (0.4 + rng() * 0.5), s.z + Math.sin(a) * L), 0.035 + s.r * 0.25, 0.015, 3, stubCol, rng);
   }
-  const top = T.at(1), R = (1.5 + rng() * 0.6) * (0.75 + P.size * 0.35);
-  let fork = null;
+  const R = (1.5 + rng() * 0.6) * (0.75 + P.size * 0.35), c = T.at(0.72), C = V(c.x, c.y, c.z), ry = h * 0.3;
+  const y0 = C.y - ry, y1 = C.y + ry * 1.2, size = 2.1 * (0.8 + P.size * 0.2);
+  const o = { R: R * (forked ? 0.85 : 1), C, ry, size, slot: 'leaf', twig, cols, y0, y1 };
+  broadCrown(g, cards, rng, T, { ...o, t0: 0.46, t1: 0.9, n: (forked ? 4 : 5) + Math.floor(rng() * 2) });
   if (forked) {
-    const s = T.at(0.22), a = rng() * 6.28, L = h * (0.5 + rng() * 0.15), fl = [Math.cos(a) * h * 0.28 + lean[0] * 0.5, Math.sin(a) * h * 0.28 + lean[1] * 0.5];
-    fork = g.stem(s.x, s.y, s.z, s.r * 0.72, 0.05, L, 5, bark, rng, { lean: fl, bow: [0, 0], flare: 0, shade: 0.28, ts: [0, 0.5, 1] });
-    const f = fork.at(1);
-    clusters(g, rng, f.x, f.y + R * 0.4, f.z, R * 0.85, R * 0.9, R * 0.85, 4, R * 0.55, cols, { n: 4, sy: 1.05, bias: 0.3 });
+    const s = T.at(0.22), a = rng() * 6.28, L = h * (0.55 + rng() * 0.12), fl = [Math.cos(a) * h * 0.28 + lean[0] * 0.5, Math.sin(a) * h * 0.28 + lean[1] * 0.5];
+    const F = g.stem(s.x, s.y, s.z, s.r * 0.72, 0.03, L, 5, bark, rng, { lean: fl, bow: [0, 0], flare: 0, shade: 0.28, ts: [0, 0.5, 1] });
+    const fc = F.at(0.75);
+    broadCrown(g, cards, rng, F, { ...o, C: V(fc.x, fc.y, fc.z), R: R * 0.8, t0: 0.5, t1: 0.9, n: 3 + Math.floor(rng() * 2) });
+    leafy(cards, 'leaf', vec(F.at(1)), UP, size, away(C, R * 1.15, ry, R * 1.15), shade(cols, y0, y1, rng), rng);
   }
-  clusters(g, rng, top.x, h * 0.78 + R * 0.5, top.z, R * (forked ? 0.85 : 1.05), R * 1.15, R * (forked ? 0.85 : 1.05), forked ? 5 : 6 + Math.floor(rng() * 2), R * 0.62, cols, { n: 5, sy: 1.05, bias: 0.35 });
-  return g.build();
+  const nrm = away(C, R * 1.15, ry, R * 1.15);
+  leafy(cards, 'leaf', vec(T.at(1)), UP, size, nrm, shade(cols, y0, y1, rng), rng);
+  leafy(cards, 'leaf', vec(T.at(0.9)), perp(UP).applyAxisAngle(UP, rng() * 6.28).addScaledVector(UP, 0.6).normalize(), size * 0.9, nrm, shade(cols, y0, y1, rng), rng, true);
+  return finish(g, cards);
 }
+// Northern white cedar: a short stout trunk in a narrow cone of upswept branches thick with flat sprays.
 function cedar(rng, v) {
-  const g = new GeoBuilder(), P = profile(v, rng);
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
   const h = 8 * P.size, bark = vary(0x74563e, rng), cols = crownColors(0x5f9c49, 0x2e5644, rng);
-  const T = g.stem(0, -0.5, 0, 0.36 * P.girth, 0.1, h * 0.55, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.5, shade: 0.3, ts: [0, 0.12, 1] });
-  deadBranches(g, rng, T.at, 1 + Math.floor(rng() * 2), 0.2, 0.6, 0.6, 1.2, bark);
-  const tiers = 3 + Math.floor(rng() * 2), R = (2.2 + rng() * 0.5) * (0.8 + P.size * 0.3);
-  for (let i = 0; i < tiers; i++) {
-    const t = i / tiers, s = T.at(Math.min(1, t * 1.6)), rr = R * (1 - t * 0.5) * (0.85 + rng() * 0.3), ch = (2.8 + rng()) * (0.75 + P.size * 0.3);
-    const x = s.x + SPREAD(rng) * 0.4, z = s.z + SPREAD(rng) * 0.4, y = h * (0.08 + t * 0.62), shift = (rng() - 0.5) * 0.06;
-    g.cone(x, y, z, rr, ch, 5, (p) => cols.at(0.1 + 0.9 * (p.y - y) / ch, shift), rng, 0.4);
-  }
-  return g.build();
+  const T = g.stem(0, -0.5, 0, 0.36 * P.girth, 0.05, h * 0.95, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.5, shade: 0.3, ts: [0, 0.12, 0.6, 1] });
+  deadBranches(g, rng, T.at, 1 + Math.floor(rng() * 2), 0.08, 0.2, 0.6, 1.2, bark);
+  const R = (1.8 + rng() * 0.5) * (0.8 + P.size * 0.3), nrm = outward(T, -0.5, h * 0.95, 0.45);
+  whorls(g, cards, rng, T, { t0: 0.1, t1: 0.86, count: 5, nb: () => 3, R: (f) => R * (1 - f * 0.65) + 0.25, droop: (f) => -0.15 - 0.2 * f, tube: (f) => f < 0.2, nrm, cols, y0: 0, y1: h, bark, wid: 0.9 });
+  const a = T.at(0.86), b = T.at(1), d = vec(b).sub(vec(a));
+  needles(cards, 'spray', vec(a), d.clone().normalize(), d.length() * 1.5, 0.6, nrm, shade(cols, 0, h, rng), rng);
+  return finish(g, cards);
 }
 function snag(rng, v) {
   const g = new GeoBuilder(), P = profile(v, rng);
@@ -178,113 +313,115 @@ function snag(rng, v) {
     const t = 0.35 + rng() * 0.5, a = rng() * 6.28, L = 0.6 + rng() * 1.6, s = T.at(t);
     g.limb(V(s.x, s.y, s.z), V(s.x + Math.cos(a) * L, s.y + L * (0.1 + rng() * 0.4), s.z + Math.sin(a) * L), 0.04 + s.r * 0.25, 0.02, 3, col, rng);
   }
-  return g.build();
+  return finish(g, null);
 }
 // old-growth pine: a long bare trunk with a few stub branches and a small ragged crown swept to one side
 function tallPine(rng, v) {
-  const g = new GeoBuilder(), P = profile(v, rng);
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
   const h = 20 * P.size, bark = vary(0x74563e, rng), cols = crownColors(0x5ead52, 0x2f5b46, rng);
-  const T = g.stem(0, -0.5, 0, 0.45 * P.girth, 0.16 * P.girth, h * 0.93, P.role === 'giant' ? 6 : 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.5, shade: 0.32 });
-  const R = (1.7 + rng() * 0.6) * (0.75 + P.size * 0.35);
-  for (let i = 0; i < 2 + Math.floor(rng() * 2); i++) {
-    const t = 0.5 + rng() * 0.32, a = rng() * 6.28, L = 1.2 + rng() * 1.6, s = T.at(t), shift = (rng() - 0.5) * 0.06;
-    const tip = V(s.x + Math.cos(a) * L, s.y + L * (0.15 + rng() * 0.2), s.z + Math.sin(a) * L);
-    g.limb(V(s.x, s.y, s.z), tip, 0.05 + s.r * 0.2, 0.03, 3, bark, rng);
-    if (rng() < 0.65) g.lump(tip.x, tip.y + 0.3, tip.z, R * 0.42, 4, rng, 0.45, 1.3, 0.65, 1.3, (p, tl) => cols.at(0.2 + 0.6 * tl, shift));
-  }
-  const top = T.at(1);
-  clusters(g, rng, top.x, h * 0.93, top.z, R * 1.2, R * 0.4, R * 1.2, 5 + Math.floor(rng() * 2), R * 0.62, cols, { n: 5, sy: 0.7, bias: 0.6 });
-  return g.build();
+  const T = g.stem(0, -0.5, 0, 0.45 * P.girth, 0.08, h * 0.97, P.role === 'giant' ? 6 : 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.5, shade: 0.32, ts: [0, 0.1, 0.5, 0.8, 1] });
+  deadBranches(g, rng, T.at, 2 + Math.floor(rng() * 2), 0.4, 0.68, 0.7, 1.5, bark);
+  const R = (1.7 + rng() * 0.6) * (0.75 + P.size * 0.35), tp = T.at(0.88), C = V(tp.x, h * 0.86, tp.z);
+  const y0 = h * 0.7, y1 = h * 1.02, crown = away(C, R * 1.3, R * 0.6, R * 1.3);
+  pineBranches(g, cards, rng, T, { t0: 0.72, t1: 0.95, n: 5 + Math.floor(rng() * 2), L: (f) => R * (1.2 - f * 0.5), el: (f) => 0.1 + f * 0.35, tufts: 3, crown, cols, y0, y1, bark, size: 2.9 * (0.75 + P.size * 0.25), swing: rng() * 6.28, bias: 0.55 });
+  needles(cards, 'tuft', vec(T.at(0.95)), UP.clone().addScaledVector(perp(UP).applyAxisAngle(UP, rng() * 6.28), 0.6).normalize(), 2.6, 1.5, crown, shade(cols, y0, y1, rng), rng);
+  return finish(g, cards);
 }
-// jack pine of the bare rock: short, crooked, a few limbs with ragged tufts
+// jack pine of the bare rock: short, crooked, sparse scraggly limbs with a few ragged tufts
 function jackPine(rng, v) {
-  const g = new GeoBuilder(), P = profile(v, rng);
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
   const h = 6 * P.size, bark = vary(0x705843, rng), cols = crownColors(0x82a145, 0x335b41, rng);
-  const T = g.stem(0, -0.5, 0, 0.22 * P.girth, 0.05, h, 5, bark, rng, { lean: leanOf(P, h * 1.4), bow: [P.bow[0] * h * 3, P.bow[1] * h * 3], wig: 0.06, flare: 0.35, shade: 0.3 });
-  const n = 3 + Math.floor(rng() * 2);
-  for (let i = 0; i < n; i++) {
-    const t = 0.35 + rng() * 0.55, a = rng() * 6.28, L = 0.9 + rng() * 1.1, s = T.at(t), shift = (rng() - 0.5) * 0.07;
-    const tip = V(s.x + Math.cos(a) * L, s.y + L * (0.1 + rng() * 0.5), s.z + Math.sin(a) * L);
-    g.limb(V(s.x, s.y, s.z), tip, 0.04 + s.r * 0.25, 0.02, 3, bark, rng);
-    g.lump(tip.x, tip.y + 0.25, tip.z, 0.55 + rng() * 0.45, 4, rng, 0.55, 1.3, 0.6, 1.3, (p, tl) => cols.at(0.2 + 0.6 * tl, shift));
-    if (rng() < 0.4) g.lump(tip.x + SPREAD(rng) * 0.7, tip.y + 0.5, tip.z + SPREAD(rng) * 0.7, 0.4 + rng() * 0.3, 4, rng, 0.55, 1.1, 0.7, 1.1, (p, tl) => cols.at(0.35 + 0.6 * tl, shift));
-  }
-  const top = T.at(1);
-  g.lump(top.x, h + 0.1, top.z, 0.7 + rng() * 0.4, 4, rng, 0.5, 1.2, 0.75, 1.2, (p, tl) => cols.at(0.45 + 0.55 * tl));
-  return g.build();
+  const T = g.stem(0, -0.5, 0, 0.22 * P.girth, 0.04, h, 5, bark, rng, { lean: leanOf(P, h * 1.4), bow: [P.bow[0] * h * 3, P.bow[1] * h * 3], wig: 0.06, flare: 0.35, shade: 0.3 });
+  deadBranches(g, rng, T.at, 1 + Math.floor(rng() * 2), 0.2, 0.45, 0.5, 1.0, bark);
+  const R = (1.3 + rng() * 0.5) * (0.8 + P.size * 0.3), tp = T.at(0.75), C = V(tp.x, tp.y, tp.z);
+  const y0 = h * 0.3, y1 = h * 1.1, crown = away(C, R * 1.3, h * 0.45, R * 1.3);
+  pineBranches(g, cards, rng, T, { t0: 0.35, t1: 0.92, n: 5 + Math.floor(rng() * 2), L: (f) => R * (1.15 - f * 0.4), el: (f) => 0.15 + f * 0.45, tufts: 2, crown, cols, y0, y1, bark, size: 1.9, crooked: 0.6 });
+  needles(cards, 'tuft', vec(T.at(0.95)), UP.clone().addScaledVector(perp(UP).applyAxisAngle(UP, rng() * 6.28), 0.7).normalize(), 1.3, 0.75, crown, shade(cols, y0, y1, rng), rng);
+  return finish(g, cards);
 }
+// a low leafy shrub: two or three stems from one root with round-leaved clusters on them
 function shrub(rng) {
-  const g = new GeoBuilder();
-  const base = [0x6da145, 0x7ba54a, 0x5e9546, 0x91af4b][Math.floor(rng() * 4)], cols = crownColors(base, 0x305a41, rng);
-  const n = 2 + (rng() < 0.5 ? 1 : 0);
-  for (let i = 0; i < n; i++) { const shift = (rng() - 0.5) * 0.06; g.lump((rng() - 0.5) * 1.0, 0.5 + rng() * 0.3, (rng() - 0.5) * 1.0, 0.6 + rng() * 0.5, 5, rng, 0.4, 1.3, 0.75, 1.3, (p, tl) => cols.at(0.2 + 0.8 * tl, shift)); }
-  return g.build();
+  const g = new GeoBuilder(), cards = new CardBuilder(), size = 0.8 + rng() * 0.35;
+  const base = [0x6da145, 0x7ba54a, 0x5e9546, 0x91af4b][Math.floor(rng() * 4)], cols = crownColors(base, 0x305a41, rng), bark = vary(0x5e4b3c, rng, 0.06);
+  const C = V(0, 0.55 * size, 0), nrm = away(C, 0.9 * size, 0.6 * size, 0.9 * size);
+  const stems = 2 + (rng() < 0.5 ? 1 : 0), a0 = rng() * 6.28;
+  for (let i = 0; i < stems; i++) {
+    const a = a0 + (i / stems) * 6.28 + SPREAD(rng) * 0.6, tip = V(Math.cos(a) * 0.45 * size, (0.75 + rng() * 0.3) * size, Math.sin(a) * 0.45 * size);
+    g.branch([V(0, -0.15, 0), tip], 0.025 * size, 0.01, 3, bark, rng);
+    leafy(cards, 'leafRound', tip, tip.clone().sub(C).normalize(), 0.95 * size, nrm, shade(cols, 0, size, rng), rng);
+    if (rng() < 0.6) leafy(cards, 'leafRound', tip.clone().multiplyScalar(0.55), tip.clone().sub(C).setY(0).normalize(), 0.8 * size, nrm, shade(cols, 0, size, rng), rng, true);
+  }
+  return finish(g, cards, { ground: 0 });
 }
 
-// ---------- the understory and the deadfall (docs/look.md, pass 5) --------------
-// Cheap shapes: a few thin stems and a handful of small clusters, 25–60 triangles each, because there are as
-// many of them as there are trees. Leaf colours sit in tagLeaves's band (hue 0.1–0.47, saturated) so the
-// deciduous ones turn and drop with the season; the sapling is a young fir and keeps its needles.
+// ---------- the understory (docs/look.md, pass 5) --------------------------------
+// As many of them as there are trees, so cheap: a few stems, a handful of cards. Leaf colours sit in
+// tagLeaves's band (hue 0.1–0.47, saturated) so the deciduous ones turn and drop with the season; the
+// sapling is a young fir and keeps its needles.
 
-// beaked hazel: three or four stems fanning out of one root, hidden in round clusters that overlap into one
-// loose vase-shaped mass from knee height to the top
+// A multi-stemmed shrub: `stems` stems fanning out of one root, each curving out (lean radians off plumb),
+// round-leaved clusters on the upper half and at the tip, a side shoot on some.
+function clump(rng, o) {
+  const { h, size, stems, lean, bark, cols, side = 0.5 } = o;
+  const g = new GeoBuilder(), cards = new CardBuilder(), C = V(0, h * 0.6, 0), nrm = away(C, h * 0.6, h * 0.45, h * 0.6);
+  const a0 = rng() * 6.28;
+  for (let i = 0; i < stems; i++) {
+    const a = a0 + (i / stems) * 6.28 + SPREAD(rng) * 0.7, ln = lean[0] + rng() * (lean[1] - lean[0]), L = h * (0.85 + rng() * 0.3);
+    const d1 = dirAt(a, Math.PI / 2 - ln * 0.75), d2 = dirAt(a + SPREAD(rng) * 0.25, Math.PI / 2 - ln * 1.15);
+    const p0 = V(Math.cos(a) * 0.05, -0.2, Math.sin(a) * 0.05), p1 = p0.clone().addScaledVector(d1, L * 0.5), p2 = p1.clone().addScaledVector(d2, L * 0.55);
+    const B = g.branch([p0, p1, p2], 0.035 * size, 0.012, 3, bark, rng);
+    for (const [u, single] of [[1, false], [0.72, true], [0.48, true]]) {
+      const q = B.at(u).p, out = q.clone().sub(C).normalize();
+      leafy(cards, 'leafRound', q, out, size * (0.8 + rng() * 0.3) * (u < 1 ? 0.85 : 1), nrm, shade(cols, 0, h * 1.1, rng, 0.15), rng, single);
+    }
+    if (rng() < side) {
+      const q = B.at(0.45), e = q.p.clone().addScaledVector(q.d.clone().addScaledVector(perp(q.d), 0.9).normalize(), L * 0.35);
+      g.branch([q.p, e], 0.015 * size, 0.008, 3, bark, rng);
+      leafy(cards, 'leafRound', e, e.clone().sub(C).normalize(), size * 0.75, nrm, shade(cols, 0, h * 1.1, rng, 0.15), rng, true);
+    }
+  }
+  return finish(g, cards, { reach: h * 0.6 });
+}
+// beaked hazel: three or four stems fanning up out of one root into a loose vase of broad leaves
 function hazel(rng) {
-  const g = new GeoBuilder(), size = 0.8 + rng() * 0.45, h = 2.2 * size;
-  const bark = vary(0x6a5440, rng, 0.06), cols = crownColors(0x78a24c, 0x37552f, rng);
-  const stems = 3 + Math.floor(rng() * 2), a0 = rng() * 6.28;
-  for (let i = 0; i < stems; i++) {
-    const a = a0 + (i / stems) * 6.28 + (rng() - 0.5) * 0.7, out = h * (0.2 + rng() * 0.15), shift = (rng() - 0.5) * 0.07;
-    const tip = V(Math.cos(a) * out, h * (0.62 + rng() * 0.22), Math.sin(a) * out);
-    g.limb(V(Math.cos(a) * 0.05, -0.2, Math.sin(a) * 0.05), tip, 0.035 * size, 0.014, 3, bark, rng);
-    g.lump(tip.x, tip.y, tip.z, (0.6 + rng() * 0.2) * size, 4, rng, 0.4, 1.15, 0.95, 1.15, (p, tl) => cols.at(0.25 + 0.7 * tl, shift));
-    if (rng() < 0.6) g.lump(tip.x * 0.55, tip.y * 0.5, tip.z * 0.55, (0.45 + rng() * 0.15) * size, 4, rng, 0.4, 1.2, 0.9, 1.2, (p, tl) => cols.at(0.1 + 0.55 * tl, shift));
-  }
-  g.lump(SPREAD(rng) * 0.2, h * 0.88, SPREAD(rng) * 0.2, 0.55 * size, 4, rng, 0.4, 1.1, 1.0, 1.1, (p, tl) => cols.at(0.45 + 0.55 * tl));
-  return g.build();
+  const size = 0.8 + rng() * 0.45;
+  return clump(rng, { h: 2.2 * size, size: 1.1 * size, stems: 3 + Math.floor(rng() * 2), lean: [0.25, 0.5], bark: vary(0x6a5440, rng, 0.06), cols: crownColors(0x78a24c, 0x37552f, rng) });
 }
-// speckled alder: a sprawling clump of grey stems leaning out from the wet ground, round clusters of dark
-// leaves along their upper half
+// speckled alder: a sprawling clump of grey stems leaning out from the wet ground, dark leaves on their upper half
 function alder(rng) {
-  const g = new GeoBuilder(), size = 0.85 + rng() * 0.4, h = 2.8 * size;
-  const bark = vary(0x75706a, rng, 0.06), cols = crownColors(0x5f8c44, 0x2e4c2d, rng);
-  const stems = 3 + Math.floor(rng() * 2), a0 = rng() * 6.28;
-  for (let i = 0; i < stems; i++) {
-    const a = a0 + (i / stems) * 6.28 + (rng() - 0.5) * 0.8, lean = 0.3 + rng() * 0.35, L = h * (0.8 + rng() * 0.3), shift = (rng() - 0.5) * 0.06;
-    const tip = V(Math.cos(a) * Math.sin(lean) * L, Math.cos(lean) * L, Math.sin(a) * Math.sin(lean) * L);
-    g.limb(V(0, -0.2, 0), tip, 0.05 * size, 0.02, 3, bark, rng);
-    g.lump(tip.x * 0.9, tip.y * 0.92, tip.z * 0.9, (0.68 + rng() * 0.2) * size, 4, rng, 0.4, 1.2, 0.95, 1.2, (p, tl) => cols.at(0.25 + 0.7 * tl, shift));
-    g.lump(tip.x * 0.55, tip.y * 0.58, tip.z * 0.55, (0.52 + rng() * 0.15) * size, 4, rng, 0.4, 1.2, 0.9, 1.2, (p, tl) => cols.at(0.1 + 0.6 * tl, shift));
-  }
-  return g.build();
+  const size = 0.85 + rng() * 0.4;
+  return clump(rng, { h: 2.6 * size, size: 1.15 * size, stems: 3 + Math.floor(rng() * 2), lean: [0.35, 0.7], bark: vary(0x75706a, rng, 0.06), cols: crownColors(0x5f8c44, 0x2e4c2d, rng), side: 0.35 });
 }
-// a young balsam fir coming up in the gaps: a thin stem and three or four tiers, the lowest widest
+// a young balsam fir coming up in the gaps: a thin stem, three or four whorls of level sprays, the lowest widest
 function sapling(rng) {
-  const g = new GeoBuilder(), size = 0.7 + rng() * 0.5, h = 2.6 * size;
-  const cols = crownColors(0x4b8a52, 0x24452f, rng), lean = [SPREAD(rng) * 0.12 * h, SPREAD(rng) * 0.12 * h];
-  g.limb(V(0, -0.2, 0), V(lean[0], h, lean[1]), 0.045 * size, 0.012, 3, vary(0x5a4a38, rng, 0.06), rng);
-  const tiers = 3 + Math.floor(rng() * 2), R = (0.62 + rng() * 0.2) * size;
-  for (let i = 0; i < tiers; i++) {
-    const t = 0.18 + (i / tiers) * 0.62, rr = R * (1.05 - (i / tiers) * 0.7), ch = h * (0.34 - i * 0.03), shift = (rng() - 0.5) * 0.06;
-    const y = h * t;
-    g.cone(lean[0] * t + SPREAD(rng) * 0.08, y, lean[1] * t + SPREAD(rng) * 0.08, rr, ch, 5, (p) => cols.at(0.15 + 0.85 * (p.y - y) / ch, shift), rng, 0.35);
-  }
-  return g.build();
+  const g = new GeoBuilder(), cards = new CardBuilder(), size = 0.7 + rng() * 0.5, h = 2.6 * size;
+  const cols = crownColors(0x4b8a52, 0x24452f, rng), bark = vary(0x5a4a38, rng, 0.06);
+  const T = g.stem(0, -0.2, 0, 0.045 * size, 0.012, h + 0.2, 3, bark, rng, { lean: [SPREAD(rng) * 0.12 * h, SPREAD(rng) * 0.12 * h], flare: 0, shade: 0.2, ts: [0, 0.5, 1] });
+  const R = (0.62 + rng() * 0.2) * size, nrm = outward(T, -0.2, h + 0.2, 0.5);
+  whorls(g, cards, rng, T, { t0: 0.2, t1: 0.82, count: 3 + Math.floor(rng() * 2), nb: () => 3, R: (f) => R * (1.05 - f * 0.6), droop: () => 0.05, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 0.65 });
+  const a = T.at(0.82), b = T.at(1), d = vec(b).sub(vec(a));
+  needles(cards, 'spray', vec(a), d.clone().normalize(), d.length() * 1.3, 0.3 * size, nrm, shade(cols, 0, h, rng), rng);
+  return finish(g, cards, { reach: h * 0.4 });
 }
-// bracken: five to seven fronds arching out of the ground, each folded along its midrib so the lit top shows
+// bracken: five to seven fronds on their stalks, arching out of the ground and leaning back up at the tips
 function fern(rng) {
-  const g = new GeoBuilder(), cols = crownColors(0x8aac4c, 0x46632f, rng);
-  const fronds = 5 + Math.floor(rng() * 3), R = 0.75 + rng() * 0.3, a0 = rng() * 6.28, down = V(0, -3, 0);
+  const cards = new CardBuilder(), cols = crownColors(0x8aac4c, 0x46632f, rng);
+  const fronds = 7 + Math.floor(rng() * 3), R = 0.95 + rng() * 0.35, a0 = rng() * 6.28;
   for (let i = 0; i < fronds; i++) {
-    const a = a0 + (i / fronds) * 6.28 + (rng() - 0.5) * 0.6, L = R * (0.75 + rng() * 0.45), rise = (0.45 + rng() * 0.35) * L;
-    const cx = Math.cos(a), cz = Math.sin(a), px = -cz, pz = cx, w = L * (0.16 + rng() * 0.06), top = rise * 1.05, shift = (rng() - 0.5) * 0.08;
-    const base = V(cx * 0.05, 0.0, cz * 0.05), mid = V(cx * L * 0.5, rise, cz * L * 0.5), tip = V(cx * L, rise * 0.35, cz * L);
-    const left = V(mid.x + px * w, rise - w * 0.45, mid.z + pz * w), right = V(mid.x - px * w, rise - w * 0.45, mid.z - pz * w);
-    const col = (p) => cols.at(0.25 + 0.75 * Math.max(0, p.y) / top, shift);
-    g.tri(base, left, mid, col, down); g.tri(base, mid, right, col, down);
-    g.tri(mid, left, tip, col, down); g.tri(mid, tip, right, col, down);
+    const a = a0 + (i / fronds) * 6.28 + SPREAD(rng) * 0.5, L = R * (0.8 + rng() * 0.45), tilt = 0.55 + rng() * 0.4;
+    const out = V(Math.cos(a), 0, Math.sin(a)), dir = out.clone().multiplyScalar(Math.sin(tilt)).addScaledVector(UP, Math.cos(tilt)).normalize();
+    const across = UP.clone().cross(out).normalize().applyAxisAngle(dir, SPREAD(rng) * 0.3);
+    // the frond faces up (whichever way round the card is wound) and a little out
+    const face = across.clone().cross(dir).normalize();
+    if (face.y < 0) face.negate();
+    const n = face.addScaledVector(out, 0.35).normalize(), nrm = () => n.clone();
+    cards.card('frond', V(out.x * 0.04, -0.05, out.z * 0.04), across, dir, L * 0.62, L, nrm, shade(cols, 0, L, rng, 0.3));
   }
-  return g.build();
+  return finish(null, cards, { ground: 0, reach: 0.5 });
 }
+
+// ---------- the deadfall and the outcrops (pass 5; solid, see solid()) ----------------
+
 // A fallen trunk lying along local x on the ground, about 6.8 m: bark weathered silver-brown, a few broken
 // stubs, a root plate torn up at one end (+x) or a broken butt; one in three is a birch, whose bark outlasts
 // its wood. props.js holds the walker off it with a box 3.4 m by 0.36 m at the instance's scale.
@@ -343,21 +480,58 @@ function outcrop(rng) {
   return geo;
 }
 
-// ---------- low-detail twins for distant regions ---------------------------------
 
-function lowConifer(rng, h, r, cols, trunkCol, lift = 0.2) {
-  const g = new GeoBuilder();
-  g.cone(0, h * lift, 0, r, h * (0.55 - lift), 5, cols[0], rng, 0.15);
-  g.cone(0, h * 0.5, 0, r * 0.6, h * 0.5, 5, cols[1], rng, 0.15);
-  return g.build();
+// ---------- far twins for distant regions -----------------------------------------
+// Past the LOD distance a tree is two big cards crossed on its crown in a far sprite (textures.js farCone,
+// farPine, farOval, composed from the near sprites), sized from its own near variant's cards and coloured
+// their mean colour (the occlusion included), over two crossed bark quads where the trunk shows. The cards'
+// normals run out from the axis across each card and tip up toward the top, so the far crown still shades
+// round. Four to eight triangles, about half what the old cone and diamond twins cost.
+
+// What a near variant's crown spans: the cards' height range, centre and reach, their mean colour, the bark's.
+// The cards are taken swollen as far as the material swells them at the LOD distance, so the twin that
+// replaces the tree there has the silhouette the tree had.
+function crownInfo(geo, grow = CARD.uCardGrow.value.x) {
+  const raw = geo.getAttribute('position'), gr = geo.getAttribute('aGrow'), uv = geo.getAttribute('uv'), col = geo.getAttribute('color');
+  const pos = raw.clone();
+  if (gr) for (let i = 0; i < pos.count; i++) pos.setXYZ(i, raw.getX(i) + gr.getX(i) * grow, raw.getY(i) + gr.getY(i) * grow, raw.getZ(i) + gr.getZ(i) * grow);
+  const I = { y0: Infinity, y1: -Infinity, cx: 0, cz: 0, r: 0, n: 0, leaf: new THREE.Color(0, 0, 0), bark: new THREE.Color(0, 0, 0), trunkR: 0.1 };
+  let nb = 0;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (uv.getX(i) >= 0) {
+      I.y0 = Math.min(I.y0, y); I.y1 = Math.max(I.y1, y); I.cx += pos.getX(i); I.cz += pos.getZ(i); I.n++;
+      I.leaf.r += col.getX(i); I.leaf.g += col.getY(i); I.leaf.b += col.getZ(i);
+    } else {
+      I.bark.r += col.getX(i); I.bark.g += col.getY(i); I.bark.b += col.getZ(i); nb++;
+      if (y > 1 && y < 2) I.trunkR = Math.max(I.trunkR, Math.hypot(pos.getX(i), pos.getZ(i)));
+    }
+  }
+  if (I.n) { I.cx /= I.n; I.cz /= I.n; I.leaf.multiplyScalar(1 / I.n); }
+  if (nb) I.bark.multiplyScalar(1 / nb);
+  // the reach and the lower edge as percentiles of the card corners: a card's corners overshoot its leaves,
+  // and at the LOD distance the near tree reads by its mass, not its extremes
+  const d = [], ys = [];
+  for (let i = 0; i < pos.count; i++) if (uv.getX(i) >= 0) { d.push(Math.hypot(pos.getX(i) - I.cx, pos.getZ(i) - I.cz)); ys.push(pos.getY(i)); }
+  d.sort((a, b) => a - b); ys.sort((a, b) => a - b);
+  if (d.length) { I.r = d[Math.floor(d.length * 0.7)]; I.y0 = ys[Math.floor(ys.length * 0.08)]; } else I.r = 1;
+  return I;
 }
-// a diamond: two cones base to base, the cheapest round-ish canopy
-function lowBlob(rng, y, r, col) {
-  const g = new GeoBuilder();
-  const ring = g.ring(0, y, 0, r, 5, rng, 0.1);
-  g.fan(new THREE.Vector3(0, y + r * 0.9, 0), ring, col, new THREE.Vector3(0, y, 0));
-  g.fan(new THREE.Vector3(0, y - r * 0.8, 0), ring, col, new THREE.Vector3(0, y, 0));
-  return g;
+// `slot` the far sprite; `trunk` how far up the crown the bark quads reach (0: none); `widen` scales the width
+function farTwin(I, slot, rng, { trunk = 0, widen = 1, lift = 0 } = {}) {
+  const cards = new CardBuilder({ grow: false }), g = new GeoBuilder();
+  const yaw = rng() * 6.28, a = V(Math.cos(yaw), 0, Math.sin(yaw)), b = V(-Math.sin(yaw), 0, Math.cos(yaw));
+  const y0 = I.y0 + (I.y1 - I.y0) * lift, H = I.y1 - y0, W = I.r * 2 * widen, o = V(I.cx, y0, I.cz);
+  const low = I.leaf.clone().multiplyScalar(0.82), high = I.leaf.clone().multiplyScalar(1.1);
+  const col = (p) => low.clone().lerp(high, sm((p.y - y0) / H));
+  const nrm = (ax) => (p) => ax.clone().multiplyScalar(p.clone().sub(o).dot(ax) / (W / 2)).addScaledVector(UP, 0.5 + 0.5 * (p.y - y0) / H).normalize();
+  cards.card(slot, o, a, UP, W, H, nrm(a), col);
+  cards.card(slot, o, b, UP, W, H, nrm(b), col);
+  if (trunk > 0) {
+    const top = V(I.cx, y0 + H * trunk, I.cz), w = I.trunkR * 1.2;
+    for (const ax of [a, b]) g.quad(V(-ax.x * w, -0.5, -ax.z * w), V(ax.x * w, -0.5, ax.z * w), top.clone().addScaledVector(ax, w * 0.5), top.clone().addScaledVector(ax, -w * 0.5), I.bark, V(ax.z, 0, -ax.x));
+  }
+  return finish(g, cards, { bake: false });
 }
 function lowShrub(rng) {
   const g = new GeoBuilder();
@@ -366,21 +540,22 @@ function lowShrub(rng) {
   for (let i = 0; i < n; i++) g.blob((rng() - 0.5) * 0.9, 0.55 + rng() * 0.3, (rng() - 0.5) * 0.9, 0.7 + rng() * 0.6, vary(base, rng, 0.1), rng, 0.4, 1.3, 0.7, 1.2);
   return g.build();
 }
+// (rng, crownInfo of the near variant) -> geometry
 const LOW = {
-  whitePine: (rng) => lowConifer(rng, 14 + rng() * 5, 3.2, [vary(0x377642, rng), vary(0x3e8447, rng)], vary(0x66503d, rng), 0.35),
-  spruce: (rng) => lowConifer(rng, 10 + rng() * 6, 2.2, [vary(0x2f603f, rng), vary(0x3b7d44, rng)], vary(0x55463a, rng), 0.12),
-  redPine: (rng) => { const h = 12 + rng() * 6; const g = lowBlob(rng, h, 2.6, vary(0x598d3f, rng)); g.trunk(0, -0.5, 0, 0.4, 0.25, h, 3, vary(0x8d5235, rng), rng); return g.build(); },
-  birch: (rng) => { const h = 8 + rng() * 5; const g = lowBlob(rng, h * 0.75, 2.4, vary(0x8eb54a, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.1, h * 0.7, 3, vary(0xe6e2d6, rng, 0.04), rng); return g.build(); },
-  cedar: (rng) => lowConifer(rng, 7 + rng() * 3, 2.3, [vary(0x376c45, rng), vary(0x376c45, rng)], vary(0x74563e, rng), 0.1),
+  whitePine: (rng, I) => farTwin(I, 'farPine', rng, { trunk: 0.3, widen: 0.85 }),
+  spruce: (rng, I) => farTwin(I, 'farCone', rng, { widen: 1.05 }),
+  redPine: (rng, I) => farTwin(I, 'farPine', rng, { trunk: 0.35, widen: 0.85 }),
+  birch: (rng, I) => farTwin(I, 'farOval', rng, { trunk: 0.35, widen: 0.9 }),
+  cedar: (rng, I) => farTwin(I, 'farCone', rng, { widen: 1.05 }),
   snag: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.5, 0, 0.3, 0.08, 7 + rng() * 5, 4, vary(0x9a9388, rng, 0.08), rng); return g.build(); },
   boulder: (rng) => angularRock(rng, 'block'),
-  shrub: lowShrub,
-  tallPine: (rng) => { const h = 17 + rng() * 6; const g = lowBlob(rng, h * 0.93, 2.4, vary(0x4e8b41, rng)); g.trunk(0, -0.5, 0, 0.4, 0.2, h * 0.9, 3, vary(0x74563e, rng), rng); return g.build(); },
-  jackPine: (rng) => { const h = 4.5 + rng() * 3.5; const g = lowBlob(rng, h * 0.85, 1.5, vary(0x6c8d3f, rng, 0.1)); g.trunk(0, -0.5, 0, 0.2, 0.08, h * 0.8, 3, vary(0x705843, rng), rng); return g.build(); },
-  hazel: (rng) => lowBlob(rng, 1.5, 1.1, vary(0x6a9446, rng, 0.08)).build(),
-  alder: (rng) => lowBlob(rng, 1.9, 1.35, vary(0x557f3e, rng, 0.08)).build(),
-  sapling: (rng) => new GeoBuilder().cone(0, 0, 0, 0.65, 2.3, 4, vary(0x356640, rng), rng, 0.15).build(),
-  fern: (rng) => lowBlob(rng, 0.25, 0.55, vary(0x7d9e48, rng, 0.08)).build(),
+  shrub: (rng, I) => (I.n ? farTwin(I, 'farOval', rng, { widen: 1.1 }) : lowShrub(rng)),
+  tallPine: (rng, I) => farTwin(I, 'farPine', rng, { trunk: 0.4, widen: 0.85 }),
+  jackPine: (rng, I) => farTwin(I, 'farPine', rng, { trunk: 0.3, widen: 0.85 }),
+  hazel: (rng, I) => farTwin(I, 'farOval', rng, { widen: 1.1 }),
+  alder: (rng, I) => farTwin(I, 'farOval', rng, { widen: 1.1 }),
+  sapling: (rng, I) => farTwin(I, 'farCone', rng, { widen: 1.1 }),
+  fern: (rng, I) => farTwin(I, 'frond', rng, { widen: 0.7 }),
   log: (rng) => { const g = new GeoBuilder(); g.trunk(0, -3.4, 0, 0.32, 0.2, 6.8, 3, vary(0x857360, rng, 0.07), rng); const geo = g.build(); geo.rotateZ(Math.PI / 2); geo.translate(0, 0.26, 0); return geo; },
   stump: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.4, 0, 0.32, 0.26, 1.1, 4, vary(0x625040, rng, 0.06), rng); return g.build(); },
   outcrop: (rng) => { const geo = angularRock(rng, 'slab'); geo.scale(0.85, 0.7, 0.85); return geo; },
@@ -439,41 +614,103 @@ function tagLeaves(geo) {
   return geo;
 }
 
-// The foliage material for a deciduous species (the look's wrapped Lambert, rocks.js): leaves go gold or red
-// in the fall, come in pale in spring, and are gone between leaf-drop and leaf-out.
-function makeLeafMaterial(autumn) {
-  const u = { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } };
-  const m = makeFoliageMaterial({}, (shader) => {
-    Object.assign(shader.uniforms, u);
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;')
-      .replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vLeaf;\nuniform float uLeafOn;')
-      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n if (vLeaf > 0.5 && uLeafOn < 0.5) discard;');
-  }, 'look-leaves');
+// ---------- the foliage material ---------------------------------------------------
+// One material for a species' bark and cards: the look's Lambert (shading.js), the wrap read per vertex (the
+// cards wrap the light past the terminator, dotNL * 0.6 + 0.4; bark does not), double-sided without three's
+// back-face normal flip (a card seen from behind keeps its outward normal instead of being lit from below).
+// A card fragment samples its sprite and is cut where the sprite's alpha falls under the cutoff, which falls
+// with distance from the eye: uCardCut = (near cutoff, far cutoff, distance where it starts to fall, where it
+// reaches the far one). The near cutoff sits above the sprites' halo (textures.js), so the leaf and needle
+// edges show; the far one under it, so the cards fill out to flat shapes. The deciduous species add the
+// season: gold or red in the fall, pale in spring, gone between leaf-drop and leaf-out.
+// The depth material (makeCardDepth) cuts the same way, so the cards cast leaf-shaped shadows and bare
+// branches cast bare shadows; it reads the eye from uEye (in the shadow pass the camera is the sun's).
+export const CARD = {
+  uCardMap: { value: null },
+  uCardCut: { value: new THREE.Vector4(0.5, 0.12, 6, 60) },
+  // the swell: x how much a card grows about its anchor at full distance (0.6 = 60 % bigger), y and z the
+  // distances it starts and finishes growing over; up close a card is exactly where its branch put it
+  uCardGrow: { value: new THREE.Vector3(0.7, 35, 250) },
+  uEye: { value: new THREE.Vector3() },
+};
+const noFlip = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
+if (noFlip === THREE.ShaderChunk.normal_fragment_begin) console.warn('vegetation: normal chunk changed, cards seen from behind will go dark');
+const cardVarying = 'varying vec2 vCardUv;\nvarying float vCardDist;';
+const cardPars = 'attribute vec3 aGrow;\nuniform vec3 uCardGrow;\n' + cardVarying;
+// replaces <begin_vertex>: the distance from the eye, and the card swollen about its anchor by it
+const cardBegin = (eye) => `
+  vec3 transformed = vec3( position );
+  vCardUv = uv;
+  { vec4 cw = vec4( transformed, 1.0 );
+  #ifdef USE_INSTANCING
+    cw = instanceMatrix * cw;
+  #endif
+    vCardDist = distance( ( modelMatrix * cw ).xyz, ${eye} ); }
+  transformed += aGrow * uCardGrow.x * smoothstep( uCardGrow.y, uCardGrow.z, vCardDist );`;
+const cardCut = `
+  vec4 cardTex = texture2D( uCardMap, max( vCardUv, 0.0 ) );
+  float cardCut = mix( uCardCut.x, uCardCut.y, smoothstep( uCardCut.z, uCardCut.w, vCardDist ) );
+  if ( vCardUv.x >= 0.0 && cardTex.a < cardCut ) discard;`;
+
+function makeCardMaterial(autumn) {
+  const u = autumn ? { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } } : {};
+  const m = makeLookMaterial({ side: THREE.DoubleSide }, {
+    wrap: 'varying', name: autumn ? 'look-cards-leaves' : 'look-cards',
+    compile: (shader) => {
+      Object.assign(shader.uniforms, CARD, u);
+      let vs = shader.vertexShader.replace('#include <common>', '#include <common>\n' + cardPars + (autumn ? '\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;' : ''))
+        .replace('#include <begin_vertex>', cardBegin('cameraPosition'));
+      if (autumn) vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
+      shader.vertexShader = vs;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\n' + cardVarying + (autumn ? '\nvarying float vLeaf;\nuniform float uLeafOn;' : ''))
+        .replace('#include <map_fragment>', '#include <map_fragment>\n' + cardCut + (autumn ? '\n  if (vLeaf > 0.5 && uLeafOn < 0.5) discard;' : '') + '\n  if ( vCardUv.x >= 0.0 ) diffuseColor.rgb *= cardTex.rgb;')
+        .replace('#include <normal_fragment_begin>', noFlip);
+    },
+  });
   m.userData.u = u;
+  m.userData.depth = makeCardDepth(u.uLeafOn || null);
+  return m;
+}
+function makeCardDepth(leafOn) {
+  const m = new THREE.MeshDepthMaterial();
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, CARD, leafOn ? { uLeafOn: leafOn } : {});
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uEye;\n' + cardPars + (leafOn ? '\nattribute float aLeaf;\nvarying float vLeaf;' : ''))
+      .replace('#include <begin_vertex>', cardBegin('uEye') + (leafOn ? '\n  vLeaf = aLeaf;' : ''));
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\n' + cardVarying + (leafOn ? '\nuniform float uLeafOn;\nvarying float vLeaf;' : ''))
+      // the bark draws only its back faces into the shadow map, as a one-sided material would, so the lit
+      // side of a trunk does not shadow itself
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n' + cardCut + '\n  if ( vCardUv.x < 0.0 && gl_FrontFacing ) discard;' + (leafOn ? '\n  if ( vLeaf > 0.5 && uLeafOn < 0.5 ) discard;' : ''));
+  };
+  m.customProgramCacheKey = () => (leafOn ? 'card-depth-leaves' : 'card-depth');
   return m;
 }
 
 // Geometry variants (built once) and the shared materials.
 export function makeVegetationKit(seed = 3) {
+  CARD.uCardMap.value = foliageAtlas();
+  const t0 = performance.now();
   const variants = SPECIES.map((s) => Array.from({ length: s.variants || VARIANTS }, (_, v) => {
-    const full = s.make(mulberry32(seed * 131 + v * 17 + s.name.length), v);
-    const low = LOW[s.name](mulberry32(seed * 131 + v * 17 + s.name.length));
-    if (s.rock) return { full, low };
-    const out = { full: smoothToon(full), low: smoothToon(low) };
-    if (s.leaves) { tagLeaves(out.full); tagLeaves(out.low); }
-    return out;
+    const rs = seed * 131 + v * 17 + s.name.length;
+    if (s.rock) return { full: s.make(mulberry32(rs), v), low: LOW[s.name](mulberry32(rs)) };
+    const full = solid(s.make(mulberry32(rs), v));
+    const low = solid(LOW[s.name](mulberry32(rs + 7), crownInfo(full)));
+    if (s.leaves) { tagLeaves(full); tagLeaves(low); }
+    return { full, low };
   }));
-  const material = makeFoliageMaterial();
+  const material = makeCardMaterial(null);
   const rockMaterial = makeRockMaterial();
-  const leafMaterials = SPECIES.map((s) => (s.leaves ? makeLeafMaterial(s.leaves) : null));
+  const leafMaterials = SPECIES.map((s) => (s.leaves ? makeCardMaterial(s.leaves) : null));
   const materialFor = (sp) => (SPECIES[sp].rock ? rockMaterial : leafMaterials[sp] || material);
+  const depthFor = (sp) => (SPECIES[sp].rock ? undefined : materialFor(sp).userData.depth);
   const setSeason = (season) => {
     for (const m of leafMaterials) if (m) { m.userData.u.uFall.value = season.fall; m.userData.u.uSpring.value = season.spring; m.userData.u.uLeafOn.value = season.leafOn; }
   };
-  return { variants, material, rockMaterial, materialFor, setSeason, seed };
+  const ms = performance.now() - t0;
+  return { variants, material, rockMaterial, materialFor, depthFor, setSeason, seed, ms };
 }
 
 // Which geometry variant each variant group of a (region, species) bin draws. The groups get different
@@ -513,6 +750,7 @@ export function makeVegetationMeshes(bins, kit) {
     mesh.instanceColor = new THREE.InstancedBufferAttribute(b.colors, 3);
     mesh.castShadow = S.shadow !== false;
     mesh.receiveShadow = true;
+    mesh.customDepthMaterial = kit.depthFor(b.sp); // the cards' alpha in the shadow pass
     mesh.computeBoundingSphere(); // over every instance, with the full geometry; kept across LOD swaps
     // A tile never moves once installed, so the world matrix is set once, by updateVegetationLOD the first
     // time it sees the mesh in its tile group, and the scene's per-render update leaves it alone (there are
@@ -542,6 +780,7 @@ function groupMeshes(m) {
     k.instanceMatrix = new THREE.InstancedBufferAttribute(m.instanceMatrix.array.subarray(start * 16, (start + n) * 16), 16);
     k.instanceColor = new THREE.InstancedBufferAttribute(m.instanceColor.array.subarray(start * 3, (start + n) * 3), 3);
     k.receiveShadow = true;
+    k.customDepthMaterial = m.customDepthMaterial;
     k.computeBoundingSphere();
     k.matrixAutoUpdate = false; k.matrixWorldAutoUpdate = false;
     k.matrix.copy(m.matrix); k.matrixWorld.copy(m.matrixWorld);
@@ -557,6 +796,7 @@ function groupMeshes(m) {
 // from regions within SHADOW_REACH (for the meshes that carry a region and cast at all).
 export function updateVegetationLOD(meshes, camPos) {
   const s = LOD_SCALE.value;
+  CARD.uEye.value.copy(camPos); // where the shadow pass measures the cards' distance from
   for (const m of meshes) {
     const l = m.userData.lod;
     if (!m.matrixWorldAutoUpdate && !l.placed && m.parent) { m.parent.updateWorldMatrix(true, false); m.matrixWorld.multiplyMatrices(m.parent.matrixWorld, m.matrix); l.placed = true; }
