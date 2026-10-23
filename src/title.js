@@ -22,7 +22,7 @@ const KEYMAP = [
     [['G'], 'eat a meal, when the canoe is still'],
   ]],
   ['On foot', [
-    [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'],
+    [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'], [['Space'], 'hop (onto a low rock or a log); with the canoe overhead you only stagger'],
     [['E'], 'launch a canoe at the water’s edge · set a carried one down'], [['Q'], 'shoulder a canoe on the ground · set a carried one down where you could launch'],
   ]],
   ['Fishing', [

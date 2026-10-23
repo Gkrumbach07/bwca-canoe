@@ -166,7 +166,8 @@ const vertHead = /* glsl */ `
   varying float vDepth;
   varying float vClarity;
   varying vec4 vReflectUv;
-  varying vec2 vCrest;        // x: wave height over the local wind-wave height, y: that height
+  varying vec3 vCrest;        // x: wave height over the local wind-wave height, y: that height (damped near the shore),
+                              // z: the wind-wave height the shore here takes (the most exposed water round it)
   #include <common>
   #include <fog_pars_vertex>
   #include <shadowmap_pars_vertex>
@@ -202,7 +203,14 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
     float Hw = windHeight(fetch) * (1.0 - uIce);
     float damp = smoothstep(0.0, 25.0, -aShore) * 0.5 * Hw;
     float wave = lowWave(rel, uTime) * damp;
-    vCrest = vec2(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -aShore));
+    // the shore's exposure: the fetch of the most open water beside it (a land vertex has none of its own)
+    float reach = fetch;
+    if (inAtlas) {
+      ivec2 c = ivec2(ac), m = ivec2(int(uAtlas.w) - 1);
+      reach = max(max(texelFetch(uFetchTex, clamp(c + ivec2(1, 0), ivec2(0), m), 0).r, texelFetch(uFetchTex, clamp(c - ivec2(1, 0), ivec2(0), m), 0).r),
+        max(max(texelFetch(uFetchTex, clamp(c + ivec2(0, 1), ivec2(0), m), 0).r, texelFetch(uFetchTex, clamp(c - ivec2(0, 1), ivec2(0), m), 0).r), fetch));
+    }
+    vCrest = vec3(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -aShore), windHeight(reach) * (1.0 - uIce));
     const float e = 5.0;
     float hL = lowWave(rel - vec2(e, 0.0), uTime) * damp, hR = lowWave(rel + vec2(e, 0.0), uTime) * damp;
     float hB = lowWave(rel - vec2(0.0, e), uTime) * damp, hF = lowWave(rel + vec2(0.0, e), uTime) * damp;
@@ -221,7 +229,10 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     float wave = surfaceWave(rel, uTime, border, shore) * (1.0 - uIce);
     vShore = shore;
     float Hw = windHeight(bilinear(uFetchTex, rel)) * (1.0 - uIce);
-    vCrest = vec2(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -shore));
+    // the shore's exposure: the fetch of the most open water within a cell (a land vertex has none of its own)
+    ivec2 fc = atlasCell(rel);
+    float reach = max(max(max(cellSample(uFetchTex, fc), cellSample(uFetchTex, fc + ivec2(1, 0))), max(cellSample(uFetchTex, fc - ivec2(1, 0)), cellSample(uFetchTex, fc + ivec2(0, 1)))), cellSample(uFetchTex, fc - ivec2(0, 1)));
+    vCrest = vec3(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -shore), windHeight(reach) * (1.0 - uIce));
     const float e = 1.6;
     float hL = surfaceWave(rel - vec2(e, 0.0), uTime, border, s2), hR = surfaceWave(rel + vec2(e, 0.0), uTime, border, s2);
     float hB = surfaceWave(rel - vec2(0.0, e), uTime, border, s2), hF = surfaceWave(rel + vec2(0.0, e), uTime, border, s2);
@@ -294,6 +305,8 @@ const frag = /* glsl */ `
   uniform float uTime, uReflOn, uClarity, uIce, uRippleAmt, uRain, uGlint;
   uniform vec3 uSunDir, uFoam, uSunLight, uSkyLight;
   uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyIce;
+  const vec3 FOAM_ALBEDO = vec3(0.86, 0.9, 0.92);   // the white of the foam; FOAM_GAIN as wake.js glslFoamLight has it
+  const float FOAM_GAIN = 2.0;
   ${glslColumn}
   uniform vec3 uSkyZenith, uSkyMid, uSkyHorizon, uSkySun, uSkySunDir;
   #ifdef SKY_LIFT
@@ -312,7 +325,7 @@ const frag = /* glsl */ `
   varying float vDepth;
   varying float vClarity;
   varying vec4 vReflectUv;
-  varying vec2 vCrest;
+  varying vec3 vCrest;
   #include <common>
   #include <packing>
   #include <fog_pars_fragment>
@@ -459,9 +472,13 @@ const frag = /* glsl */ `
       rest = fogApply(rest, vFogDir);
     #endif
     vec3 col = mix(rest, mirrored, wObj / max(A, 1e-4));
-    // the shore: a soft pale band where the water thins over the beach and the rock, its width breathing with
-    // the lap and broken by a slow noise, and thin ripple lines rolling in that fade under a pixel and with distance
+    // the shore: where the wind raises a lap, a pale broken line where it runs up the beach and the rock, its width
+    // breathing with the lap, and thin ripple lines rolling in that fade under a pixel and with distance. Both come
+    // with the wind-waves this shore takes (vCrest.z, from the wind and the fetch of the water beside it): nothing on
+    // calm water or a sheltered shore (no white rim on a still lake), a broken lap line on a windward shore in a
+    // breeze, a fuller one in a blow.
     vec2 p = vLocal.xz;
+    float expose = smoothstep(0.08, 0.5, vCrest.z);
     float edgeA = 0.0, lineA = 0.0;
     float cycle = shore * 0.8 + uTime * 0.55 + 0.25 * sin(dot(p, RIP3) + uTime * 0.4);
     float fw = max(fwidth(cycle), 1e-4);   // outside the branch: derivatives want every pixel of the quad
@@ -470,11 +487,13 @@ const frag = /* glsl */ `
     vec2 ex = dFdx(vLocal.xz), ey = dFdy(vLocal.xz);
     float sx = dFdx(shore), sy = dFdy(shore), det = ex.x * ey.y - ex.y * ey.x;
     float slope = abs(det) > 1e-9 ? length(vec2(sx * ey.y - sy * ex.y, sy * ex.x - sx * ey.x) / det) : 1.0;
-    if (shore < 3.5) {
+    if (shore < 3.5 && expose > 0.002) {
       float edgeN = lookNoise(pw * 0.45 + uTime * 0.04, 11u);
       float lap = 0.5 + 0.5 * sin(uTime * 0.8 + dot(p, RIP3) * 0.5);
-      float edge = 1.0 - smoothstep(0.0, 0.5 + 0.8 * edgeN + 0.35 * lap, shore);
-      edgeA = edge * edge * 0.42;
+      float edge = 1.0 - smoothstep(0.0, (0.2 + 0.6 * edgeN + 0.35 * lap) * (0.35 + 0.9 * expose), shore);
+      // broken along the shore by a slow drifting noise, closing up as the wind rises
+      float broken = smoothstep(0.62 - 0.45 * expose, 0.78 - 0.3 * expose, lookNoise(pw * vec2(0.23, 0.31) + vec2(uTime * 0.07, -uTime * 0.05), 29u));
+      edgeA = edge * edge * 0.42 * expose * broken;
       // The ripple lines: contours of the shore distance rolling in, each broken into short dashes a metre or three
       // long (a noise a couple of metres across, its own for each line, so a dash keeps its length as it rolls in
       // and dies at the beach), only in the last few metres of water, fading out away from the shore and the eye.
@@ -487,12 +506,14 @@ const frag = /* glsl */ `
       // a crest about 8 cm across (0.065 of a cycle), its edges a pixel soft; it fades as it narrows under a pixel
       float line = smoothstep(0.85 - fw, 0.85 + fw, phase) * (1.0 - smoothstep(0.915 - fw, 0.915 + fw, phase));
       lineA = line * 0.34 * dash * smoothstep(0.55, 0.85, slope) * smoothstep(0.6, 1.6, 0.065 / fw) * (1.0 - smoothstep(9.0, 30.0, dist))
-        * smoothstep(0.1, 0.5, shore) * (1.0 - smoothstep(1.0, 2.8, shore)) * (1.0 - smoothstep(0.8, 2.0, vDepth));
+        * smoothstep(0.1, 0.5, shore) * (1.0 - smoothstep(1.0, 2.8, shore)) * (1.0 - smoothstep(0.8, 2.0, vDepth)) * smoothstep(0.15, 0.7, expose);
     }
     // whitecaps: once the wind has raised real waves, their crests break
     float cap = smoothstep(0.62, 0.8, vCrest.x) * smoothstep(0.35, 0.7, vCrest.y) * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.75;
     float foam = max(max(edgeA, lineA), cap) * live;
-    vec3 foamC = uFoam * (0.82 + 0.18 * shadow);
+    // white water lit as the splashes and the rise rings are (wake.js foamLight): the key by its height in the sun's
+    // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white
+    vec3 foamC = FOAM_ALBEDO * lit * FOAM_GAIN;
     #ifdef USE_FOG
       if (foam > 0.002) foamC = fogApply(foamC, vFogDir);
     #endif
@@ -661,7 +682,12 @@ export class WaterSystem {
     this.atlasDirty = true;
   }
 
-  invalidateAtlas() { this.atlasDirty = true; }
+  // The atlas is built again on the next update; given a block of cells (i0, j0, n on a side: a tile coming or going),
+  // only if the block lies inside it (a tile streaming in at the edge of the neighbourhood is beyond it).
+  invalidateAtlas(i0, j0, n) {
+    if (n === undefined || Number.isNaN(this.atlasI)) { this.atlasDirty = true; return; }
+    if (i0 < this.atlasI + ATLAS && i0 + n > this.atlasI && j0 < this.atlasJ + ATLAS && j0 + n > this.atlasJ) this.atlasDirty = true;
+  }
 
   update(dt, cx, cz) {
     this.time += dt;
@@ -717,14 +743,34 @@ export class WaterSystem {
     const shore = this.shore, level = this.level, height = this.height, cover = this.cover, clarity = this.clarity;
     const queue = this._queue || (this._queue = new Int32Array(N));
     let head = 0, tail = 0;
-    for (let lj = 0; lj < A; lj++) for (let li = 0; li < A; li++) {
-      const k = lj * A + li, i = i0 + li, j = j0 + lj;
-      shore[k] = w.sdCell(i, j);
-      height[k] = w.hCell(i, j);
-      const cv = w.coverCell(i, j);
-      cover[k * 4] = cv & 255; cover[k * 4 + 1] = (cv >> 8) & 255; cover[k * 4 + 2] = (cv >> 16) & 255; cover[k * 4 + 3] = (cv >>> 24) & 255;
-      const id = w.lakeCell(i, j);
-      if (id) { level[k] = w.levelCell(i, j); clarity[k] = w.clarityOf(id); queue[tail++] = k; } else level[k] = -9999;
+    // a row at a time, a fine tile's span of it read straight from the tile's arrays (the cell accessors cost a
+    // division and a lookup a call, six calls a cell: 15-50 ms a rebuild); cells with no fine tile through them
+    const T = w.tile, halo = w.halo, side = w.side;
+    for (let lj = 0; lj < A; lj++) {
+      const j = j0 + lj, tj = (j / T) | 0, row = ((j % T) + halo) * side + halo;
+      for (let li = 0; li < A;) {
+        const i = i0 + li, ti = (i / T) | 0, span = Math.min(A - li, (ti + 1) * T - i), t = w.slots[tj * w.ntx + ti];
+        for (let q = 0, m = row + (i % T), k = lj * A + li; q < span; q++, m++, k++) {
+          let id;
+          if (t) {
+            shore[k] = t.sd[m] * 0.1; height[k] = t.h[m] * 0.1;
+            const cv = t.cover;
+            if (cv) { cover[k * 4] = cv[m * 4]; cover[k * 4 + 1] = cv[m * 4 + 1]; cover[k * 4 + 2] = cv[m * 4 + 2]; cover[k * 4 + 3] = cv[m * 4 + 3]; }
+            else { cover[k * 4] = 0; cover[k * 4 + 1] = 0; cover[k * 4 + 2] = 0; cover[k * 4 + 3] = 0; }
+            id = t.lake[m];
+            if (id) level[k] = t.lvl[m] * 0.1;
+          } else {
+            const ci2 = i + q;
+            shore[k] = w.sdCell(ci2, j); height[k] = w.hCell(ci2, j);
+            const cv = w.coverCell(ci2, j);
+            cover[k * 4] = cv & 255; cover[k * 4 + 1] = (cv >> 8) & 255; cover[k * 4 + 2] = (cv >> 16) & 255; cover[k * 4 + 3] = (cv >>> 24) & 255;
+            id = w.lakeCell(ci2, j);
+            if (id) level[k] = w.levelCell(ci2, j);
+          }
+          if (id) { clarity[k] = w.clarityOf(id); queue[tail++] = k; } else level[k] = -9999;
+        }
+        li += span;
+      }
     }
     // land cells take the level and clarity of the nearest water, so the patch can rise over the beach
     while (head < tail) {

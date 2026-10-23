@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { fogState, setFogColor, sampleRamp, FOG_REACH } from './fog.js';
 import { CURVE_STEPS } from './post.js';
 import { smoothstep } from './rng.js';
-import { MONTHS, monthDay, julianDay, utcOffsetHours, sunPosition, moonPosition, skyVector, daysInYear, sunTimes } from './astro.js';
+import { MONTHS, monthDay, julianDay, utcOffsetHours, sunPosition, moonPosition, skyVector, daysInYear, sunTimes, siderealDeg } from './astro.js';
+import { orientStars } from './stars.js';
 import { seasonAt } from './season.js';
 
 // Time of day and the calendar. The sun and moon stand where they really would over the Boundary Waters
@@ -225,17 +226,26 @@ export class DayCycle {
     skyVector(sun.azimuth, sun.elevation, this.sunDir);
     skyVector(moon.azimuth, moon.elevation, this.moonDir);
     this.moonUp = moon.elevation > -2;
+    // the stars turn with the sky about the pole (stars.js), set for the real date, clock and longitude
+    if (this.t.stars) orientStars(this.t.stars, this.place.lat, siderealDeg(jd, this.place.lon));
     this._seg = segment(sun.elevation);
     const W = this.weather ? this.weather.update(dt, this) : null; // the weather's look for this frame (weather.js)
     const c = this._c, t = this.t;
     t.sun.color.copy(this.lerpColor('sunColor', c));
+    // The lights never come and go: the sun, the fill and the moon stay in the scene with their intensity driven to
+    // zero, because a change in the number of lights (or of shadow casters) recompiles every lit material at once,
+    // which is what dropped the frame rate at sunset, sunrise, moonrise and moonset. With the sun down its shadows
+    // fade out (so the moonlit water is not masked by a stale map) and main.js stops redrawing the map.
     t.sun.intensity = this.lerpNum('sunInt');
-    t.sun.visible = t.sun.intensity > 0.01;
+    t.sun.visible = true;
+    const sh = this._shadow || (this._shadow = { intensity: t.sun.shadow.intensity, radius: t.sun.shadow.radius });
+    t.sun.shadow.intensity = sh.intensity * smoothstep(0.0, 0.05, t.sun.intensity);
+    t.sun.shadow.radius = sh.radius;
     t.hemi.color.copy(this.lerpColor('hemiSky', c));
     t.hemi.groundColor.copy(this.lerpColor('hemiGround', c));
     t.hemi.intensity = this.lerpNum('hemiInt');
-    t.moon.intensity = this.lerpNum('moonInt') * (this.moonUp ? 1 : 0);
-    t.moon.visible = t.moon.intensity > 0.01;
+    t.moon.intensity = this.lerpNum('moonInt') * smoothstep(-2, 1, moon.elevation);
+    t.moon.visible = true;
     // the air: the two ramps, the sun-ward blend, the haze overhead, its height
     this.lerpArray(RAMPS.away, fogState.away);
     this.lerpArray(RAMPS.sunward, fogState.sunward);
@@ -263,12 +273,12 @@ export class DayCycle {
     }
     const cu = (t.clouds.userData.material || t.clouds.children[0]?.material)?.uniforms;
     if (cu) { cu.uTop.value.copy(this.lerpColor('cloudTop', c)); cu.uBase.value.copy(this.lerpColor('cloudBase', c)); cu.uSky.value.copy(su.uZenith.value); cu.uSunDir.value.copy(this.sunDir); }
-    if (t.stars) t.stars.material.opacity = this.lerpNum('stars');
-    // water: the foam, the ice and the sun's glint (its colour is the sky dome and the shore it mirrors, water.js)
+    if (t.stars) t.stars.material.uniforms.uOpacity.value = this.lerpNum('stars');
+    // water: the foam, the ice and the sun's glint (its colour is the sky dome and the shore it mirrors, water.js); the
+    // wake's and the fish's rings take the water's light themselves (wake.js foamLight)
     const wu = t.water.uniforms;
     wu.uFoam.value.copy(this.lerpColor('foam', c));
     if (wu.uIce) wu.uIce.value = this.season.ice;
-    if (t.ripples) t.ripples.material.uniforms.uColor.value.copy(wu.uFoam.value);
     if (t.hullFoam) t.hullFoam.color.copy(wu.uFoam.value);
     wu.uSunDir.value.copy(this.sunDir.y > 0.02 ? this.sunDir : this.moonDir);
     // the grade and the god rays (post.js)
@@ -301,15 +311,13 @@ export class DayCycle {
     // the light: the sun's share, its shadows fainter and softer under cloud, none in rain; the sky fill brighter,
     // greyer, and the bounce off the ground dimmer without the sun on it
     t.sun.intensity *= W.sun;
-    t.sun.visible = t.sun.intensity > 0.01;
-    const sh = this._shadow || (this._shadow = { intensity: t.sun.shadow.intensity, radius: t.sun.shadow.radius });
-    t.sun.shadow.intensity = sh.intensity * W.shadow;
+    const sh = this._shadow;
+    t.sun.shadow.intensity *= W.shadow;
     t.sun.shadow.radius = sh.radius * (1 + 2.5 * W.soft);
     t.hemi.intensity *= W.fill;
     toGrey(t.hemi.color, grey * 0.75, 1);
     t.hemi.groundColor.multiplyScalar(1 - 0.4 * hide * grey);
     t.moon.intensity *= 1 - 0.8 * deck;
-    t.moon.visible = t.moon.intensity > 0.01;
     // the cloud's own colour
     const DC = toGrey(_dc.copy(colors.cloudBase[this._seg[0]]).lerp(colors.cloudBase[this._seg[1]], this._seg[2]), 1, 1.05 * bright);
     // the air: the ramps closed in (reach) and greyed, the sun's side of them fading as the sun goes in, more of what
@@ -375,7 +383,7 @@ export class DayCycle {
     cw.cover = W.cover; cw.deck = deck; cw.dark = W.dark; cw.anvil = W.anvil * (1 - 0.95 * deck); cw.base = W.level;
     if (W.snap) { cw.snap = true; W.snap = false; }
     if (wind) { const d = wind.dir; cw.windX = d.x; cw.windZ = d.z; cw.windSpeed = wind.speed; } else { cw.windX = 1; cw.windZ = 0; cw.windSpeed = 2; }
-    if (t.stars) t.stars.material.opacity *= (1 - deck) * (1 - 0.8 * fog);
+    if (t.stars) t.stars.material.uniforms.uOpacity.value *= (1 - deck) * (1 - 0.8 * fog);
     if (t.moonDisc && deck > 0.6) t.moonDisc.visible = false;   // the deck's rim fades out low in the sky; the moon goes behind it
     // the grade: greyer, a cool cast (every channel toward green's curve, then blue a little over it and red under:
     // cyan-blue, never violet), a touch more exposure; no god rays behind cloud
@@ -409,26 +417,6 @@ const _white = new THREE.Color(1, 1, 1), _dc = new THREE.Color(), _far = new THR
 function toGrey(col, k, bright = 1) {
   const l = (0.2126 * col.r + 0.7152 * col.g + 0.0722 * col.b) * bright;
   return col.lerp(_g.setRGB(l * 0.95, l * 0.99, l * 1.06), k);
-}
-
-export function buildStars(radius = 6400, count = 1800, seed = 3) {
-  const pos = new Float32Array(count * 3);
-  let s = seed;
-  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-  for (let i = 0; i < count; i++) {
-    const u = rnd(), v = rnd();
-    const th = u * Math.PI * 2, ph = Math.acos(1 - v * 0.95); // mostly above the horizon
-    pos[i * 3] = Math.sin(ph) * Math.cos(th) * radius;
-    pos[i * 3 + 1] = Math.cos(ph) * radius;
-    pos[i * 3 + 2] = Math.sin(ph) * Math.sin(th) * radius;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const mat = new THREE.PointsMaterial({ color: 0xe8eef8, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false });
-  const pts = new THREE.Points(geo, mat);
-  pts.frustumCulled = false;
-  pts.renderOrder = -9;
-  return pts;
 }
 
 // The moon: a small sphere on the sky dome lit by the real sun direction, so it shows the real phase.

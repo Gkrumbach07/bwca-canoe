@@ -39,10 +39,23 @@ export function utcOffsetHours(year, doy) {
   return doy >= start && doy < end ? -5 : -6;
 }
 
-// local sidereal time in degrees for a Julian day (UT) and an east longitude
-function siderealDeg(jd, lon) {
+// local sidereal time in degrees for a Julian day (UT) and an east longitude: the right ascension on the meridian
+export function siderealDeg(jd, lon) {
   const d = jd - J2000;
   return (((280.16 + 360.9856235 * d) % 360) + 360 + lon) % 360;
+}
+
+// The rotation that carries a direction on the celestial sphere (equatorial, J2000: x toward the March equinox,
+// y toward right ascension 6h, z the north celestial pole) to the world's (x east, y up, z south) at latitude lat
+// and local sidereal time lst (degrees), as a row-major 3 x 3 array: so the pole stands at the latitude due north
+// and the sky turns about it once a sidereal day.
+export function equatorialToWorld(latDeg, lstDeg, out = new Array(9)) {
+  const L = lstDeg * RAD, p = latDeg * RAD, cL = Math.cos(L), sL = Math.sin(L), cp = Math.cos(p), sp = Math.sin(p);
+  // rows: east, up, south (minus north)
+  out[0] = -sL; out[1] = cL; out[2] = 0;
+  out[3] = cp * cL; out[4] = cp * sL; out[5] = sp;
+  out[6] = sp * cL; out[7] = sp * sL; out[8] = -cp;
+  return out;
 }
 function toHorizon(raDeg, decDeg, latDeg, lstDeg) {
   const H = ((lstDeg - raDeg + 540) % 360) - 180;

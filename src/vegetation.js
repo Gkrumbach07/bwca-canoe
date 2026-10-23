@@ -1151,7 +1151,11 @@ export function makeVegetationMeshes(bins, kit) {
     mesh.castShadow = S.shadow !== false;
     mesh.receiveShadow = true;
     mesh.customDepthMaterial = kit.depthFor(b.sp); // the cards' alpha in the shadow pass
-    mesh.computeBoundingSphere(); // over every instance, with the full geometry; kept across LOD swaps
+    // over every instance, with the full geometry and the far twin; kept across LOD swaps. From the worker's extent
+    // of the instances and their largest scale when it sent them (a little loose, and no walk over 30 000 instances
+    // in the frame the tile comes in), else three's own walk
+    if (b.bounds && b.count) mesh.boundingSphere = binSphere(b.bounds, [v.full, v.low]);
+    else mesh.computeBoundingSphere();
     // A tile never moves once installed, so the world matrix is set once, by updateVegetationLOD the first
     // time it sees the mesh in its tile group, and the scene's per-render update leaves it alone (there are
     // hundreds of these per tile, and the update ran twice a frame).
@@ -1169,6 +1173,14 @@ export function makeVegetationMeshes(bins, kit) {
   return meshes;
 }
 
+// A sphere round instances whose origins lie in the box (x0, y0, z0)-(x1, y1, z1), none scaled more than s, drawn with
+// any of geos
+function binSphere([x0, y0, z0, x1, y1, z1, s], geos) {
+  let r = 0;
+  for (const g of geos) { if (!g.boundingSphere) g.computeBoundingSphere(); const q = g.boundingSphere; r = Math.max(r, (q.center.length() + q.radius) * s); }
+  return new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2 + r);
+}
+
 // The meshes for a bin's variant groups after the first, made on first use beside the bin's own mesh (in its
 // tile group, so the tile's disposal takes them too).
 function groupMeshes(m) {
@@ -1181,7 +1193,7 @@ function groupMeshes(m) {
     k.instanceColor = new THREE.InstancedBufferAttribute(m.instanceColor.array.subarray(start * 3, (start + n) * 3), 3);
     k.receiveShadow = true;
     k.customDepthMaterial = m.customDepthMaterial;
-    k.computeBoundingSphere();
+    k.boundingSphere = m.boundingSphere.clone(); // the bin's holds its groups' (a group's own would walk its instances)
     k.matrixAutoUpdate = false; k.matrixWorldAutoUpdate = false;
     k.matrix.copy(m.matrix); k.matrixWorld.copy(m.matrixWorld);
     m.parent.add(k);
