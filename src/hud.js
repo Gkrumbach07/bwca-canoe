@@ -846,6 +846,10 @@ export class Hud {
     f.catchShown = showCatch;
     e.catch.classList.toggle('show', showCatch);
     air.classList.toggle('catch', showCatch);
+    // the journal lines clear the card by its real height: a long lake or lure wraps its meta line, and the cooler's
+    // note ("A 24 cm yellow perch into the cooler for …") came up behind it
+    const lift = showCatch && e.catch.offsetHeight ? `${e.catch.offsetHeight + 68}px` : '';
+    if (e.lines && e.lines.style.bottom !== lift) e.lines.style.bottom = lift;
   }
 
   // --- the readout: every number that left the screen, while Tab is held ---------------------------------------
