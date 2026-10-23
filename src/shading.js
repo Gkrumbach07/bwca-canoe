@@ -26,12 +26,16 @@ import * as THREE from 'three';
 //   lookHash / lookNoise / lookFbm   world-space value noise in both stages (see glslNoise below): integer
 //             lattice hashes, so they are exact at any world coordinate and never seam.
 //   the fog hook   lookFog.pars is declared after <fog_pars_fragment> and lookFog.fragment runs where
-//             <fog_fragment> was. Today that is fog.js's aerial haze, unchanged. Pass 4 fills the hook
-//             (fog as a colour ramp by distance, a second ramp toward the sun) by setting these two
-//             strings before the materials compile; every material that composes the look follows.
+//             <fog_fragment> was. Both resolve to the one fog every material shares (fog.js, pass 4): two
+//             colour ramps by distance, away from the sun and into it, blended by the angle to the sun.
+//             The fog's functions are there for a material's own use, inside #ifdef USE_FOG:
+//               fogAt(vFogDir)            vec4: the haze's colour (rgb) and how much it covers (a, 0..1)
+//               fogApply(colour, vFogDir) the haze laid over a colour (what the hook does to gl_FragColor)
+//             so foliage cards can, say, raise their alpha cutoff as fogAt(vFogDir).a grows, and puff into
+//             flat shapes exactly where the haze flattens them. Set the strings before materials compile.
 //
-// Occlusion is not in the chunk: it is baked per vertex into the colour (occlusion.js) and, on screen,
-// by the AO pass in post.js. Shadows are three's sun shadows, softened and made stable in sunlight.js.
+// Occlusion is not in the chunk: it is baked per vertex into the colour (occlusion.js). There is no
+// screen-space pass. Shadows are three's sun shadows, softened and made stable in sunlight.js.
 
 export const lookFog = {
   pars: '',

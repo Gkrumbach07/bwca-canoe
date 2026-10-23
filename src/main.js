@@ -38,7 +38,9 @@ const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if
 
 async function main() {
   const world = await World.load(progress);
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  // no multisampling on the canvas: the scene renders into the post chain's multisampled target (post.js) and the
+  // canvas only ever takes the grade's full-screen quad
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -49,7 +51,7 @@ async function main() {
   document.getElementById('app').appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(palette.fog, 260, 3000); // blue distance haze: far trees fall to silhouette
+  scene.fog = new THREE.Fog(palette.fog, 260, 3000); // switches fog on; the haze itself is fog.js's ramps, set by the day cycle
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.3, 9000);
 
   const sunDir = new THREE.Vector3(-0.62, 0.36, 0.46).normalize(); // initial; the day cycle drives it
@@ -117,7 +119,7 @@ async function main() {
   const hud = new Hud(world, { onTeleport: async (x, z) => { if (await player.teleport(x, z)) chase.snap(); }, settings, camera });
   const post = makePost(renderer, scene, camera);
   const { lat, lon } = world.toLatLon(start.x, start.z);
-  const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, grade: post.grade, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material, moonDisc }, { lat, lon });
+  const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, post, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material, moonDisc }, { lat, lon });
   player.season = day.season;
   const geo = new GeoBridge();
   const wind = new Wind(11);
@@ -199,7 +201,6 @@ async function main() {
     moon.position.copy(moonTarget.position).addScaledVector(day.moonDir, 700);
     player.season = day.season;
     tiles.setSeason(day.season);
-    if (tiles.vegetation.setSun) tiles.vegetation.setSun(day.sunDir); // the backlit rim on the foliage follows the sun
     cover.setSeason(day.season);
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
     cover.update(dt * ts, player.x, player.z, hemi, sun);
