@@ -20,13 +20,15 @@ export class Input {
   endFrame() { this.once.clear(); }
 }
 
-// The paddle at life pace (pace.js LIFE): a steady stroke holds 1.11 m/s (4 km an hour) with the aluminium canoe and the
-// ash paddle, Shift 1.41; the stroke stays near a life rate. While you travel at Trip pace each stroke glides farther:
-// the hull is moved at `speed` times the boost (updatePaddle), and everything that reads `speed` (the energy, a capsize,
-// a bump on the shore, the loons, the clock's "under way") reads the speed at life.
-const PADDLE = { accel: 1.63, hustle: 2.5, reverse: 0.77, drag: 0.31, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
+// The paddle at life pace (pace.js LIFE): a steady stroke holds 1.6 m/s (5.8 km an hour, a tripper's steady cruise)
+// with the aluminium canoe and the ash paddle, Shift 2.0; about 57 strokes a minute of 1.6 m each. (It had been 1.11 m/s,
+// a dawdle of 1.2 m strokes, the owner, 2026-10-23.) The thrust is pulsed over the first half of each stroke, so its mean
+// is accel / pi, and the cruise is where that meets the drag: 0.31 v^2 + 0.12 v. While you travel at Trip pace each
+// stroke glides farther: the hull is moved at `speed` times the boost (updatePaddle), and everything that reads `speed`
+// (the energy, a capsize, a bump on the shore, the loons, the clock's "under way") reads the speed at life.
+const PADDLE = { accel: 3.1, hustle: 4.65, reverse: 1.35, drag: 0.31, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
 // m/s at life (pace.js LIFE): a walk, Shift a jog, and a carry before the load slows it; face: how fast the walker turns
-// to where the keys point. At Trip pace the walker is time-lapsed so he is seen at SEEN (pace.js), on a trail or off it.
+// to where the keys point. On a portage trail the walker is time-lapsed as the canoe is on the water (SEEN, pace.js).
 const WALK = { speed: LIFE.walk, hustle: LIFE.jog, carry: LIFE.carry, carryHustle: LIFE.carryHustle, face: 7 };
 // The boost on the water (pace.js) eases back to the pace's floor only where the hull needs it: a bank dead ahead (AHEAD:
 // the metres of open water along the bow, from AHEAD[0] none to AHEAD[1] all, so it does not hit the shore at speed), a
@@ -266,7 +268,9 @@ export class Player {
     if (dt > 0 && d < 4) {
       const k = 1 - Math.exp(-dt * 8);
       this.groundSpeed += (d / dt - this.groundSpeed) * k;
-      this.paceSpeed += (d / dt / Math.max(1, this.boost) - this.paceSpeed) * k;
+      // the readout's is averaged over about a second and a half, so it gives the pace the strokes or the steps make good
+      // rather than the surge and the glide inside each one
+      this.paceSpeed += (d / dt / Math.max(1, this.boost) - this.paceSpeed) * (1 - Math.exp(-dt * 0.7));
     }
   }
 
@@ -358,9 +362,9 @@ export class Player {
     }
     const yawTarget = steer * PADDLE.yaw * (0.55 + 0.45 * clamp(Math.abs(this.speed) / 0.72, 0, 1)) * (this.speed < -0.1 ? -1 : 1);
     this.yawRate += (yawTarget - this.yawRate) * (1 - Math.exp(-dt * 3.5));
-    // the pace (pace.js): the hull is never shown below the pace's floor (twice life at Trip), and under way on a forward
-    // stroke it is time-lapsed up to the pace's T on open water, eased off by a slow stroke, a hard turn and the last
-    // few metres of a bank dead ahead (not by a shore alongside or a landing: the owner did not like it slowing there)
+    // the pace (pace.js): under way on a forward stroke the hull is time-lapsed up to the pace's T on open water (from its
+    // floor, life), eased off by a slow stroke, a hard turn and the last few metres of a bank dead ahead (not by a shore
+    // alongside or a landing: the owner did not like it slowing there)
     const P = this.paceTable, B = P.floor || 1;
     let boostWant = B;
     this.lapseT = P.water; // the pace's own time-lapse here (the HUD's "trip ×6")
@@ -701,11 +705,11 @@ export class Player {
     if (fwd !== 0 && wall) note = wall;
     const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going);
     this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
-    // the pace (pace.js): the walker time-lapsed so he is seen at SEEN (a walk at 2.7 m/s, twice life; a carry at 2.5), up
-    // to the pace's trail T, on a trail or off it (life read too slow: the owner, 2026-10-23); at life at Real
+    // the pace on a portage trail (pace.js): the walker time-lapsed so he is seen at about SEEN (a carry at 2.5 m/s, a
+    // walk at 2.3), up to the pace's trail T; off a trail, at a campsite or in a yard he walks at life
     const P = this.paceTable;
     let boostWant = 1;
-    if (P.trail > 1 && fwd) {
+    if (onTrail && P.trail > 1 && fwd) {
       const seen = carrying ? (hustle ? SEEN.carryHustle : SEEN.carry) : (hustle ? SEEN.jog : SEEN.walk);
       boostWant = clamp(seen / Math.max(0.1, base), 1, P.trail);
     }

@@ -69,7 +69,7 @@ export const SECTIONS = [
     { key: 'sensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.3, max: 3, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
     { key: 'invertLook', label: 'Invert look', type: 'toggle' },
     { key: 'cursorSteer', label: 'Steer the canoe where you point', desc: 'While you hold W the bow turns toward the cursor’s point on the water, or toward the look in first person', type: 'toggle' },
-    { key: 'pace', label: 'Pace', desc: 'Both move you at twice life, which reads right on a screen, the clock in step so the km an hour stays true · Trip: travel goes faster still, the clock with it, so a day covers a real day’s 20 km; camp and fishing on a quick clock · Real: no more than that, the clock 1:1 when you stop', type: 'radio', options: [['trip', 'Trip'], ['real', 'Real']] },
+    { key: 'pace', label: 'Pace', desc: 'Trip: travel goes faster, the clock with it, so a day covers a real day’s 20 km; camp, fishing and walking about stay at life · Real: life, the clock 1:1', type: 'radio', options: [['trip', 'Trip'], ['real', 'Real']] },
     { key: 'speed', label: 'Game speed at the start of a trip', desc: '1 2 3 change it as you paddle, on top of the pace', type: 'select', parse: Number, options: [[1, '1×'], [2, '2×'], [4, '4×']] },
     { key: 'camera', label: 'Camera at the start of a trip', desc: 'V switches as you paddle', type: 'select', options: [['third', 'Behind the canoe'], ['first', 'From the paddler’s seat']] },
   ] },

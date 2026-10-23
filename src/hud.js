@@ -360,7 +360,7 @@ export class Hud {
           hops = !r ? ' A long way round.' : r.hops === 0 ? ' No portages.' : known ? ` ${word(r.hops)[0].toUpperCase()}${word(r.hops).slice(1)} ${plural(r.hops, 'portage')}.` : ' The way there runs off your map.';
         }
       }
-      // the hours on the game's own clock, which follows the way at life pace (pace.js): the canoe's cruise at life (4 km
+      // the hours on the game's own clock, which follows the way at life pace (pace.js): the canoe's cruise at life (5.8 km
       // an hour with an aluminium hull and an ash paddle, times the gear's cruise: shop.js), less with a fresh wind
       const hours = km / (lifeKmh(p.gear) * (wind && wind.fresh ? 0.8 : 1));
       text = `${walk ? '' : 'Paddle in here? '}${name ? `${name}, ` : ''}about ${fmtKm(km)} km ${dir}, ${fmtDuration(hours)}${walk ? ' by the clock' : ''}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
@@ -787,7 +787,7 @@ export class Hud {
   }
 
 
-  // the status marks, bottom right at half strength: the pace while it time-lapses the travel ("trip ×6", pace.js), the
+  // the status marks, bottom right at half strength: the pace while it time-lapses the travel ("trip ×4", pace.js), the
   // time scale, the clock stopped, the trip's when it matters (the food down to a day, the gear wet, a need run low:
   // tired, hungry or thirsty), the GPS link, mute, tiles loading
   marksBuild() {
@@ -922,7 +922,7 @@ export class Hud {
     if (day) {
       const { rise, set } = day.sunriseSunset, h = day.hours;
       const light = set != null && h < set && (rise == null || h >= rise) ? `Sunset ${clock12(set)} · dark by ${clock12(Math.min(23.99, set + 0.8))}` : rise != null ? `Sunrise ${clock12(h < (rise || 0) ? rise : rise)}${h >= (set || 24) ? ' tomorrow' : ''}` : 'No sun today';
-      // the clock's time-lapse now (the pace's, times the game speed): "clock ×6 while you travel · Trip pace"
+      // the clock's time-lapse now (the pace's, times the game speed): "clock ×4 while you travel · Trip pace"
       const x = (day.rate ?? 1) * ts, P = player.paceTable;
       const rate = `×${x >= 2 ? Math.round(x) : +x.toFixed(1)} ${core && core.travel ? 'while you travel' : 'at rest'}${P ? ` · ${P.label} pace` : ''}`;
       row('Light', `${light} · clock ${day.running ? rate : 'stopped'}`);

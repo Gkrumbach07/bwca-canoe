@@ -140,12 +140,14 @@ with the slow parts (walking around, fishing) kept slow. So a game hour of paddl
 4.5 with the Kevlar and the carbon blade, and a travel day of 6 to 8 game hours with a few portages is 20 to 25 km
 (measured: 23–24 km in 6.5 game hours, four portages). At Trip pace that hour is about ten real minutes on the water;
 at Real pace an hour. The same evening the owner found life too slow on screen ("you say its 4.8 but it feels like
-2.4"; the 2× key "feels more correct") and the slow-down near a shore unwelcome: so nothing that travels is shown below
-twice life at Trip pace (the clock in step), the boost no longer fades along a shore or at a landing (only in the last
-few metres before a bank dead ahead), and the frame loop now runs a slow frame as several steps, since a 50 ms cap had
-put the game in slow motion below 20 fps (Ultra on the owner's 3440 x 1440 screen measured about 18). At 60 fps the
-owner still found Real pace slow ("the x2 feels more like the 1:1 should be"), so Real pace has the same twice-life
-base (no time-lapse above it). Gear still buys game time: the Kevlar and the carbon shorten a 24 km day by about 40 minutes. The
+2.4"; "the x2 feels like 1:1"). The world's scale was right (true metres, a 1.78 m paddler, trees 12 to 22 m); two
+numbers were not. The walker stepped about 1.6 times too often, so a 3 mph walk came out in 0.45 m steps and read as a
+shuffle (canoe.js now steps as people do: about 110 a minute of 0.7 m at a walk, 166 of a metre at a jog), and the
+canoe cruised at a dawdling 4 km an hour in 1.2 m strokes (now a tripper's 5.8, 60 strokes a minute of 1.6 m; Trip's
+water time-lapse went from ×6 to ×4 to keep the canoe seen at about 6.3 m/s). A twice-life floor stood in for a day
+(96b3c81, ce8a1e8) and is gone again, so Real is 1:1. Also: the boost no longer fades along a shore or at a landing
+(only in the last few metres before a bank dead ahead), and the frame loop runs a slow frame as several steps, since a
+50 ms cap had put the game in slow motion below 20 fps (Ultra on the owner's 3440 x 1440 screen measured about 18). Gear still buys game time: the Kevlar and the carbon shorten a 24 km day by about 40 minutes. The
 second Duluth pack takes the food room from 7 days to 17 and brings back the double portage (the gear pack waits at
 the trail head; Q fetches it, about 5 minutes on a 23-rod carry, the walks' own time at life).
 

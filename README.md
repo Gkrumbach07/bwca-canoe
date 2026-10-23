@@ -29,17 +29,16 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
   workers, a coarse 80 m far field underneath, and lets the rest go.
 - **GPS simulation**: the canoe's real-world latitude/longitude is broadcast as the device location,
   so other tabs that ask for geolocation see you paddling (see *GPS simulator* below).
-- **The pace** (`src/pace.js`): a game day covers a real BWCA day's distance. Everything moves at life pace (a loaded
-  canoe at 4 km an hour, a portage carry at 3), and while you travel the canoe and the clock are time-lapsed together:
-  at **Trip** pace (the default; Settings › Controls › Pace) ×6 on open water, a game hour of paddling in about ten
-  real minutes, and up to ×3 on a portage trail, so a travel day of 6 to 8 game hours covers 20 to 25 km. Nothing that
-  travels is shown below twice life (life reads too slow on a screen): the canoe from its first stroke, the walker
-  anywhere (about 2.7 m/s), with the clock in step so the readout's km an hour stays true. The canoe's boost eases off
-  on a slow stroke, in a hard turn and in the last few metres before a bank dead ahead, but not along a shore or into a
-  dock. Camp, chores and fishing run on a 12× clock. **Real** pace is that twice-life base and nothing more (no
-  time-lapse on the water, the clock 1:1 when you stop). A "trip ×6" mark sits bottom right while the time-lapse
-  carries you above the base, and the readout (Tab) gives the clock's rate and the km an hour. The game keeps
-  to the wall clock at any frame rate (a slow frame runs as several steps), so 4 km an hour is 4 km an hour.
+- **The pace** (`src/pace.js`): a game day covers a real BWCA day's distance. Everything moves at life pace (a solo
+  canoe at a tripper's 5.8 km an hour in strokes of about 1.6 m, a 3 mph walk in steps of about 0.7 m, a portage carry
+  at 3 km an hour), and while you travel the canoe and the clock are time-lapsed together: at **Trip** pace (the
+  default; Settings › Controls › Pace) ×4 on open water, a game hour of paddling in about fifteen real minutes, and up
+  to ×3 on a portage trail, so a travel day of 4 to 6 game hours covers 20 to 25 km. The canoe's boost builds once the
+  stroke is steady and eases off on a slow stroke, in a hard turn and in the last few metres before a bank dead ahead,
+  but not along a shore or into a dock. Camp, chores, fishing and walking off a trail stay at life with the clock at
+  12×. **Real** pace is 1:1 throughout. A "trip ×4" mark sits bottom right while the boost carries you, and the
+  readout (Tab) gives the clock's rate and the km an hour, averaged over a stroke or two. The game keeps to the wall
+  clock at any frame rate (a slow frame runs as several steps), so 5.8 km an hour is 5.8 km an hour.
 - **A day in the Boundary Waters**: a day/night cycle on the pace's clock with the real sun and moon for the date and
   the clock (`src/astro.js`: sunrise and sunset shift through the year, the moon shows its phase), a
   sky-matched haze, golden light at the ends of the day, the clouds, the water, stars, with dawn mist over

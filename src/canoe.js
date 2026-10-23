@@ -465,10 +465,14 @@ export function buildCanoeRig({ water = null } = {}) {
     // the jog, from the walk by speed: the stride lengthens rather than the step quickening, and the stance shortens
     // under half the cycle, so between one foot's push-off and the other's landing both are off the ground
     const jog = carry || backF ? 0 : smooth(2.35, 2.85, v) * (1 - Math.abs(mz) * 0.7);
+    // c: gait cycles a second (two steps each), as people walk: a 3 mph walk (1.35 m/s) is about 110 steps a minute of
+    // 0.73 m, a jog at 2.9 m/s about 170 of a metre, a canoe carry about 100 short ones. (These had been about 1.6
+    // times too quick, so every step came out some 0.45 m long and a 4.8 km/h walk read as a shuffle at half that:
+    // the owner, 2026-10-23, "you say its 4.8 but it feels like 2.4".)
     let c, fs, clear;
-    if (carry) { c = 1.15 + 0.36 * v; fs = 0.6; clear = 0.05 + 0.02 * sp; }
+    if (carry) { c = 0.55 + 0.3 * v; fs = 0.6; clear = 0.05 + 0.02 * sp; }
     else {
-      c = lerp(1.0 + 0.33 * v, 1.5 + 0.09 * v, jog);
+      c = lerp(0.6 + 0.24 * v, 1.2 + 0.08 * v, jog);
       fs = lerp(lerp(0.58, 0.5, hustle), 0.32, jog);
       clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.26, jog);
     }
