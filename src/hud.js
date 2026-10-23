@@ -3,6 +3,7 @@ import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
 import { sheets, sheetAt } from './sheets.js'; // hubs 2D: the map sheets you own and where you have been
+import { lifeKmh } from './pace.js';
 import './hud.css';
 
 // The HUD, in two materials (hud.css). Air: the compass top right, the readout top left while Tab is held,
@@ -116,8 +117,6 @@ function msSegments(b, top, right, bottom, left) {
 
 const $ = (id) => document.getElementById(id);
 
-const PIN_CRUISE = 2.3;          // m/s: the aluminium canoe and the ash paddle at a steady stroke (shop.js measured 2.29)
-const PIN_TRAVEL_RATE = 1 / 3;   // the clock while you travel in Adventure (trip.js TRAVEL_RATE)
 
 export class Hud {
   // opts: { onTeleport(x, z), settings, camera }
@@ -337,7 +336,6 @@ export class Hud {
   }
 
   // --- the pin and its pencil note ----------------------------------------------------------------
-  // (PIN_CRUISE and PIN_TRAVEL_RATE, above the class: the canoe's cruise and the clock's rate while you travel)
   propose(x, z, recentre) {
     if (!this.world.inBounds(x, z, 50)) return;
     this.pin = { x, z };
@@ -349,7 +347,7 @@ export class Hud {
     let text = 'Paddle in here?';
     if (p) {
       const km = Math.hypot(x - p.x, z - p.z) / 1000, dir = compassLong(bearingOf(Math.atan2(-(z - p.z), x - p.x)));
-      const wind = ctx && ctx.wind, kmh = wind && wind.fresh ? 3.6 : 4.5;
+      const wind = ctx && ctx.wind;
       let hops = '';
       const tasks = ctx && ctx.tasks;
       if (tasks && typeof tasks.reach === 'function') {
@@ -362,12 +360,9 @@ export class Hud {
           hops = !r ? ' A long way round.' : r.hops === 0 ? ' No portages.' : known ? ` ${word(r.hops)[0].toUpperCase()}${word(r.hops).slice(1)} ${plural(r.hops, 'portage')}.` : ' The way there runs off your map.';
         }
       }
-      // Adventure: the hours on the game's own clock, from the canoe's cruise (an aluminium hull and an ash paddle make
-      // 2.3 m/s, times the gear's cruise: shop.js) and the clock while you travel (a third of its rate: trip.js), about
-      // 2.9 hours a kilometre, less with a fresh wind against you. Sandbox: a paddler's hours, at 4.5 km an hour.
-      const day = ctx && ctx.day, hps = day && day.hoursPerSecond ? day.hoursPerSecond : 24 / 1200;
-      const mps = PIN_CRUISE * ((p.gear && p.gear.cruise) || 1) * (wind && wind.fresh ? 0.8 : 1);
-      const hours = walk ? ((km * 1000) / mps) * hps * PIN_TRAVEL_RATE : km / kmh;
+      // the hours on the game's own clock, which follows the way at life pace (pace.js): the canoe's cruise at life (4 km
+      // an hour with an aluminium hull and an ash paddle, times the gear's cruise: shop.js), less with a fresh wind
+      const hours = km / (lifeKmh(p.gear) * (wind && wind.fresh ? 0.8 : 1));
       text = `${walk ? '' : 'Paddle in here? '}${name ? `${name}, ` : ''}about ${fmtKm(km)} km ${dir}, ${fmtDuration(hours)}${walk ? ' by the clock' : ''}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
       if (walk) text = text[0].toUpperCase() + text.slice(1);
     } else if (name) text = `${walk ? '' : 'Paddle in here? '}${name}.`;
@@ -792,19 +787,29 @@ export class Hud {
   }
 
 
-  // the status marks, bottom right at half strength: the time scale, the clock stopped, the trip's when it matters (the
-  // food down to a day, the gear wet, a need run low: tired, hungry or thirsty), the GPS link, mute, tiles loading
+  // the status marks, bottom right at half strength: the pace while it time-lapses the travel ("trip ×6", pace.js), the
+  // time scale, the clock stopped, the trip's when it matters (the food down to a day, the gear wet, a need run low:
+  // tired, hungry or thirsty), the GPS link, mute, tiles loading
   marksBuild() {
     const m = this.el.marks; if (!m) return;
-    m.innerHTML = `<span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
+    m.innerHTML = `<span id="mark-pace" class="sc"></span><span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
       + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span><span id="mark-need" class="sc"></span>'
       + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
       + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
       + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
-    this.mk = { speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), need: $('mark-need'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+    this.mk = { pace: $('mark-pace'), speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), need: $('mark-need'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
   }
   updateMarks(ctx) {
-    const { ts, geo, day, trip, energy } = ctx, mk = this.mk, w = this.world; if (!mk) return;
+    const { ts, geo, day, trip, energy, player } = ctx, mk = this.mk, w = this.world; if (!mk) return;
+    // the pace, while it carries you: up once the boost passes 1.6, away again under 1.3 (no flicker as it fades near a
+    // shore); the number is the pace's own for where you are (6 on open water at Trip, the trail's on a portage)
+    const P = player && player.paceTable;
+    let pace = '';
+    if (P && P.water > 1 && !ctx.shell && mk.pace) {
+      this.paceUp = this.paceUp ? player.boost > 1.3 : player.boost > 1.6;
+      if (this.paceUp) pace = `${P.label.toLowerCase()} ×${Math.round(player.lapseT || player.boost)}`;
+    }
+    if (mk.pace) { this.set('mpace', mk.pace, pace); mk.pace.classList.toggle('on', !!pace); }
     const sp = ts > 1 ? `×${ts}` : '';
     this.set('mspeed', mk.speed, sp); mk.speed.classList.toggle('on', !!sp);
     mk.clock.classList.toggle('on', !!(day && !day.running && !ctx.shell));
@@ -911,12 +916,14 @@ export class Hud {
       if (parts.length) row('Water', parts.join(' · '));
     }
     const hdg = bearingOf(player.heading), today = stats ? stats.today : null;
-    row('Way', `${((player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}${today ? ` · ${fmtKm(today.km)} km and ${today.portages} ${plural(today.portages, 'portage')} today` : ''}`);
+    row('Way', `${((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}${today ? ` · ${fmtKm(today.km)} km and ${today.portages} ${plural(today.portages, 'portage')} today` : ''}`);
     if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · waves ${(player.waveHeightHere || 0).toFixed(1)} m${wind.override != null ? ' · set by hand' : ''}`);
     if (day) {
       const { rise, set } = day.sunriseSunset, h = day.hours;
       const light = set != null && h < set && (rise == null || h >= rise) ? `Sunset ${clock12(set)} · dark by ${clock12(Math.min(23.99, set + 0.8))}` : rise != null ? `Sunrise ${clock12(h < (rise || 0) ? rise : rise)}${h >= (set || 24) ? ' tomorrow' : ''}` : 'No sun today';
-      const rate = day.rate != null && day.rate < 0.99 ? `at a third while you travel${ts > 1 ? `, ×${ts}` : ''}` : `at ×${ts}`;
+      // the clock's time-lapse now (the pace's, times the game speed): "clock ×6 while you travel · Trip pace"
+      const x = (day.rate ?? 1) * ts, P = player.paceTable;
+      const rate = `×${x >= 2 ? Math.round(x) : +x.toFixed(1)} ${core && core.travel ? 'while you travel' : 'at rest'}${P ? ` · ${P.label} pace` : ''}`;
       row('Light', `${light} · clock ${day.running ? rate : 'stopped'}`);
     }
     // the trip: the season's paper (its number, home, the day of the trip) and the money, then the energy, then the pack

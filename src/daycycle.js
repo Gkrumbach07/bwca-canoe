@@ -155,11 +155,13 @@ export class DayCycle {
     this.doy = start?.doy ?? Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
     this.hours = start?.hours ?? now.getHours() + now.getMinutes() / 60;
     this.running = true;
-    this.hoursPerSecond = 24 / (20 * 60); // a full day in 20 real minutes
-    // trip core: `rate` scales the clock alone (the trip sets 1/3 while you travel in Adventure, trip.js); `jumps` counts
-    // the moves of the clock made by advance() (a night slept, a walk back fetched), so the HUD's dawn card can skip them;
-    // `locked` (Adventure) turns the clock keys off
-    this.rate = 1;
+    this.hoursPerSecond = 1 / 3600; // the clock at life: an hour an hour
+    // the pace (pace.js): `rate` is the clock's time-lapse, set by the trip every frame (trip.js): while you travel the
+    // time-lapse the canoe or the walker moves at (about 6 on open water at Trip pace), otherwise the pace's idle rate
+    // (12 at Trip, 1 at Real); the 1/2/3 keys multiply it through dt. `jumps` counts the moves of the clock made by
+    // advance() (a night slept, a walk back fetched), so the HUD's dawn card can skip them; `locked` (Adventure) turns the
+    // clock keys off
+    this.rate = 12;
     this.jumps = 0;
     this.locked = false;
     this.sunDir = new THREE.Vector3(0, 1, 0);
@@ -213,6 +215,8 @@ export class DayCycle {
     this._times = null;
   }
 
+  // game hours that pass in a second of dt (dt already carries the 1/2/3 keys' speed), while the clock runs
+  get hoursPerTick() { return this.running ? this.hoursPerSecond * this.rate : 0; }
   get date() { const { month, day } = monthDay(this.year, this.doy); return `${MONTHS[month]} ${day}`; }
   get time() { const h = Math.floor(this.hours), m = Math.floor((this.hours - h) * 60); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
   get clock() { return `${this.date} · ${this.time}`; }

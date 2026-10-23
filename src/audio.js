@@ -200,7 +200,7 @@ export class Ambient {
     S.jump = Math.abs(x - S.x) + Math.abs(z - S.z) > 120; S.x = x; S.z = z; // jump: a teleport, not a step
     S.mode = p && p.mode ? p.mode : c.afloat === false ? 'walk' : 'paddle';
     S.afloat = S.mode === 'paddle'; S.onFoot = S.mode === 'walk' || S.mode === 'carry';
-    S.heading = p ? p.heading || 0 : 0; S.speed = Math.abs(p ? p.speed || 0 : c.speed || 0);
+    S.heading = p ? p.heading || 0 : 0; S.speed = Math.abs(p ? (p.feltSpeed ?? p.speed) || 0 : c.speed || 0); // the wash as the water line shows it (player.js feltSpeed: the pace's time-lapse)
     S.st = this.player ? p.canoe.state : null; S.onTrail = !!(p && p.onTrail);
     if (this.world) {
       S.sd = w.shoreAt(x, z); S.ground = w.heightAt(x, z);
