@@ -166,7 +166,7 @@ export class Camp {
     if (!t || !t.active || t.startDoy == null) return 0;
     let n = doy - t.startDoy;
     if (n < -180) n += daysInYear(t.startYear || this.day.year);
-    return n + 1;
+    return Math.max(1, n + 1); // never before the put-in (Sandbox can set the date back)
   }
   siteName(site) {
     const id = this.player.nearWater ? this.player.nearWater(site.x, site.z, 6) : 0;

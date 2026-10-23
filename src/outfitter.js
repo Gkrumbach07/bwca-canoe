@@ -106,7 +106,7 @@ export class Outfitter {
     const canoe = this.core ? this.core.state.packs.canoe === 'kevlar' : this.kevlar;
     return (1 + 0.06 * (this.energy ? this.energy.food : 0)) * (canoe ? 0.85 : 1);
   }
-  get daysOut() { return this.trip.active ? (this.day.doy * 24 + this.day.hours - this.trip.startAbs) / 24 : 0; }
+  get daysOut() { return this.trip.active ? Math.max(0, (this.day.doy * 24 + this.day.hours - this.trip.startAbs) / 24) : 0; } // never before the put-in
   lakeOf(l) { return this.world.lakeName(l.lake) || l.place; }
 
   // Before the player moves: who is nearby, E at the dock, and the counter (or a fade, or the journal) holds the paddle still.
