@@ -372,7 +372,8 @@ export class PhotoCamera {
     if (this.lowerIn > 0 && (this.lowerIn -= dt) <= 0) { this.lower(); return; }
     if (document.body.classList.contains('shell-open') || (h && (h.paperOpen || h.big || h.pin)) || inp.paused || p.teleporting || c.mode !== 'first' || c.focus
       || (this.veil && this.veil.active) || (this.camp && this.camp.busy) || (this.fishing && this.fishing.rodUp) || p.mode !== this.prev.pmode) { this.lower(); return; }
-    for (const k of ['KeyE', 'KeyQ', 'KeyF', 'KeyK']) inp.once.delete(k); // the camera's hands are full
+    // the camera's hands are full (and the arrows aim it: at the tent ← → would open the wake-time card, chores.js)
+    for (const k of ['KeyE', 'KeyQ', 'KeyF', 'KeyK', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) inp.once.delete(k);
     if (p.timeScale !== 1) { this.prev.ts = p.timeScale; p.timeScale = 1; } // 1 2 3 wait until it is down
     if (p.pace !== 'life') { this.prev.pace = p.pace; p.pace = 'life'; } // a setting changed meanwhile is kept for the lowering
     // the zoom ring held (Q out, E in), and the lens comes round to it over a quarter second
