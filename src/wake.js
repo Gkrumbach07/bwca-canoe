@@ -18,6 +18,8 @@ const vert = /* glsl */ `
   varying vec2 vUv;
   varying float vFade;
   varying float vKind;
+  varying float vAge;
+  varying float vSeed;
   #include <fog_pars_vertex>
   ${glslSurface}
   void main() {
@@ -43,30 +45,70 @@ const vert = /* glsl */ `
       local = p + vec3(position.x, 0.0, position.y) * size;
     }
     vUv = position.xy;
-    vFade = (aKind < 2.0 ? (1.0 - t) : (1.0 - smoothstep(0.55, 1.0, t))) * alive;
+    vFade = (aKind < 2.0 ? (1.0 - t) : (1.0 - smoothstep(0.25, 1.0, t)) * smoothstep(0.0, 0.08, t)) * alive;
     vKind = aKind;
+    vAge = t;
+    vSeed = fract(aData.x * 7.31 + aPos.x * 0.37);
     vec4 mvPosition = modelViewMatrix * vec4(local, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
   }
 `;
 
+// Soft white, thin and fading, like the shore's lines (water.js): a droplet is a small soft dot; a bubble left by
+// the hull is a thin ring that widens and thins as it drifts, with a faint wash inside, gone in a second or two,
+// so the wake reads as lace on the water rather than a trail of white discs.
 const frag = /* glsl */ `
   uniform vec3 uColor;
   varying vec2 vUv;
   varying float vFade;
   varying float vKind;
+  varying float vAge;
+  varying float vSeed;
   #include <fog_pars_fragment>
   void main() {
     float r = length(vUv) * 2.0;
-    float a = (vKind < 2.0 ? 1.0 - smoothstep(0.55, 1.0, r) : 1.0 - smoothstep(0.6, 1.0, r)) * vFade;
-    if (a < 0.02) discard;
-    gl_FragColor = vec4(uColor, a * 0.85);
+    float a;
+    if (vKind < 2.0) a = (1.0 - smoothstep(0.2, 1.0, r)) * 0.7;
+    else {
+      float w = mix(0.22, 0.08, vAge), c = mix(0.6, 0.86, vAge), aa = fwidth(r);
+      float ring = smoothstep(c - w - aa, c - w * 0.3, r) * (1.0 - smoothstep(c + w * 0.3, c + w + aa, r));
+      // broken round its circumference, differently for each bubble, so the trail is lace and not a row of rings
+      float ang = atan(vUv.y, vUv.x);
+      ring *= smoothstep(0.15, 0.7, 0.5 + 0.5 * sin(ang * 2.0 + vSeed * 40.0) * sin(ang * 3.0 - vSeed * 23.0 + 1.3));
+      a = (ring * 0.34 + (1.0 - smoothstep(0.0, c, r)) * 0.06) * (1.0 - smoothstep(0.9, 1.0, r));
+    }
+    a *= vFade;
+    if (a < 0.01) discard;
+    gl_FragColor = vec4(uColor, a);
     #include <fog_fragment>
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `;
+
+// The canoe's waterline foam (canoe.js draws it as a flat white band either side of the hull): faded from the
+// hull outward and kept faint, so it is a soft line where the hull meets the water and not a white V at the bow.
+// The band's vertices pair up along the hull; the one nearer the centreline is its inner edge.
+export function softenHullFoam(mesh) {
+  if (!mesh || !mesh.geometry) return;
+  const g = mesh.geometry, pos = g.getAttribute('position'), n = pos.count;
+  const key = (i) => `${pos.getX(i).toFixed(3)}|${Math.sign(pos.getZ(i))}`;
+  const span = new Map();
+  for (let i = 0; i < n; i++) {
+    const k = key(i), z = Math.abs(pos.getZ(i)), r = span.get(k) || [Infinity, -Infinity];
+    r[0] = Math.min(r[0], z); r[1] = Math.max(r[1], z); span.set(k, r);
+  }
+  const col = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const [lo, hi] = span.get(key(i)), t = hi > lo ? (Math.abs(pos.getZ(i)) - lo) / (hi - lo) : 0;
+    col[i * 4] = col[i * 4 + 1] = col[i * 4 + 2] = 1;
+    col[i * 4 + 3] = 0.22 * (1 - t) * (1 - t);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 4));
+  mesh.material.opacity = 1;
+  mesh.material.needsUpdate = true;
+}
 
 export class Ripples {
   constructor(water) {

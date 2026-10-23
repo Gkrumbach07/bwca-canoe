@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { glslWaves, glslRipples, waveHeight, windWeights, N as WAVE_DIRS } from './waves.js';
+import { glslNoise } from './shading.js';
+import * as Sky from './sky.js';
 
 // Water in two parts that share one fragment shader:
 //  - far field: static 10 m meshes, one per tile, carrying only the long swell, with a hole cut where the patch sits
@@ -9,12 +11,35 @@ import { glslWaves, glslRipples, waveHeight, windWeights, N as WAVE_DIRS } from 
 //    from a sliding 256-cell atlas of the loaded tiles around the canoe.
 // All shader arithmetic happens relative to a floating origin (the corner of the player's tile) so the
 // sin() noise and the facet normals stay precise a hundred kilometres from the world origin.
-// Flat colour in three tones, clear shallows over the bed, crisp ripple lines, and a reflection of the canoe only.
+//
+// The look (docs/look.md; Firewatch's and The Witness's lakes): a deep clean colour graded by the real depth
+// and the lake's clarity, lit by the same sun and sky as everything else; the sky mirrored by the angle of the
+// reflected ray (the dome's own colours, read from the sky material), and with the reflections setting on the
+// shore, the trees and the canoe mirrored from a quarter-resolution pass, blurred a little and broken by the
+// wind ripples; a sun glint that sparkles at a low sun; a soft pale line and thin fading ripples where the
+// water meets the land; the shared fog ramps over all of it, so the far water goes pale and flat with the far
+// shore. Calm water is a smooth surface with the wind's ripples as fine normal detail, not visible geometry.
 
 const PATCH_HALF = 160;   // metres; multiple of the 10 m lattice
 const PATCH_RES = 3.2;    // metres per vertex
 const ATLAS = 256;        // cells (2.56 km) of shore distance, level, height and cover around the canoe
 const ATLAS_SLACK = 48;   // re-centre once the canoe gets this close to the atlas edge
+// The mirror pass (tunable live): its size as a fraction of the drawing buffer, how far out it draws trees (metres
+// from the camera to the nearest edge of a bin's region; the fog has the far shore by then), and inside what
+// distance a bin keeps its full geometry (beyond, the mirror draws the trees' far twin: a few big cards, which is
+// all a blurred reflection can show)
+export const REFLECTION = { scale: 0.25, reach: 1400, full: 120 };
+// vegetation.js SPECIES indices that stand tall enough to mirror: the trees, the snags and the outcrops
+const MIRRORED = new Set([0, 1, 2, 3, 4, 5, 8, 9, 16]);
+// the body of the water, linear albedo: the bed seen through a short column, the open water in a clear lake, the
+// deep blue-green, and the tea of a tannin-stained bog lake. The light (the sun and the sky fill) multiplies it.
+export const WATER_LOOK = {
+  shallow: new THREE.Color(0x80c0a2),
+  mid: new THREE.Color(0x34a48c),
+  deep: new THREE.Color(0x1c8278),
+  stain: new THREE.Color(0x7a5a2c),
+  ice: new THREE.Color(0xf2f6fa),
+};
 
 // Everything that rides or stands on the surface shares this: the atlas lookups, the terrain surface
 // (shaped in the shore band exactly as the terrain mesh is), the swell, and the swell as the water patch
@@ -168,11 +193,31 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     vec3 local = vec3(rel.x, level + wave, rel.y);
 ` + vertTail;
 
+// sky.js's sky by direction (skyGradient, skyGlow), or the same formula where sky.js does not export it
+const SKY_GLSL = Sky.glslSky || /* glsl */ `
+  vec3 skyGradient(vec3 d, vec3 zenith, vec3 mid, vec3 horizon, vec3 sunDir, float lift) {
+    float s = max(dot(d, sunDir), 0.0);
+    float y = d.y / (1.0 + lift * s * s * s);
+    return mix(mix(horizon, mid, smoothstep(0.0, 0.1, y)), zenith, smoothstep(0.06, 0.45, y));
+  }
+  vec3 skyGlow(vec3 d, vec3 sunDir, vec3 sunColor, vec2 glow) {
+    float sd = max(dot(d, sunDir), 0.0);
+    float band = 1.0 - smoothstep(0.0, 0.3, abs(d.y));
+    return sunColor * (pow(sd, 24.0) * 0.18 + pow(sd, 6.0) * 0.05 + glow.x * (pow(sd, glow.y) + 0.6 * pow(sd, 2.0) * band));
+  }
+`;
+
 const frag = /* glsl */ `
-  uniform float uTime, uReflOn, uClarity, uIce;
-  uniform vec3 uSunDir, uWater, uWaterDeep, uReflect, uFoam;
-  uniform vec3 uStain;        // tannin-stained water at unit luminance (the day cycle's brightness carries over)
-  uniform vec2 uOrigin;
+  uniform float uTime, uReflOn, uClarity, uIce, uRippleAmt;
+  uniform vec3 uSunDir, uFoam, uSunLight, uSkyLight;
+  uniform vec3 uBodyShallow, uBodyMid, uBodyDeep, uBodyStain, uBodyIce;
+  uniform vec3 uSkyZenith, uSkyMid, uSkyHorizon, uSkySun, uSkySunDir;
+  #ifdef SKY_LIFT
+    uniform vec3 uSkyGlow;   // amount, power, how far the warm bands rise toward the sun
+  #else
+    uniform vec2 uSkyGlow;
+  #endif
+  uniform vec2 uOrigin, uWindDir, uReflTexel;
   uniform sampler2D uReflection;
   uniform vec2 uPatchLocal;
   uniform float uPatchHalf;
@@ -188,63 +233,149 @@ const frag = /* glsl */ `
   #include <fog_pars_fragment>
   #include <shadowmap_pars_fragment>
   ${glslRipples}
-  float aastep(float edge, float x) { float w = fwidth(x) * 0.8; return smoothstep(edge - w, edge + w, x); }
+  ${glslNoise}
+  // The sky the surface mirrors, by the reflected ray: the dome's own stops and the low sun's glow, with sky.js's
+  // own functions where it exports them (glslSky), else the same formula here
+  ${SKY_GLSL}
+  vec3 skyAt(vec3 d) {
+    d.y = max(d.y, 0.0);
+    #ifdef SKY_LIFT
+      return skyGradient(d, uSkyZenith, uSkyMid, uSkyHorizon, uSkySunDir, uSkyGlow.z) + skyGlow(d, uSkySunDir, uSkySun, uSkyGlow.xy);
+    #else
+      return skyGradient(d, uSkyZenith, uSkyMid, uSkyHorizon, uSkySunDir, 0.0) + skyGlow(d, uSkySunDir, uSkySun, uSkyGlow.xy);
+    #endif
+  }
+  // The wind's ripples as a tilt of the normal (x, z): six short waves, 0.1 to 0.85 m long, fanned about the wind
+  // and drifting with it, their crests wandered by a slow warp; each fades out before it would alias (px: metres
+  // per pixel). rough: a slow field drifting downwind, the cat's paws where a gust touches the water.
+  vec2 windRipples(vec2 p, float t, float px, out float rough) {
+    rough = smoothstep(0.36, 0.68, lookFbm((p - uWindDir * t * 1.6) * 0.03, 5u, 2));
+    vec2 tilt = vec2(0.0);
+    if (lookFade(0.84, px) <= 0.0) return tilt;   // too far for the longest of them
+    float warp = 5.0 * lookNoise(p * 0.37, 7u);
+    vec2 wp = vec2(-uWindDir.y, uWindDir.x);
+    for (int i = 5; i >= 0; i--) {
+      float fi = float(i);
+      float L = 0.11 * pow(1.5, fi);
+      float fade = lookFade(L, px);
+      if (fade <= 0.0) break;   // the shorter ones are gone too
+      float a = (fract(fi * 0.618 + 0.2) - 0.5) * 1.9;
+      vec2 d = cos(a) * uWindDir + sin(a) * wp;
+      float k = 6.2831853 / L;
+      float w = sqrt(9.81 * k + 7.4e-5 * k * k * k);
+      tilt += d * (0.07 * cos(k * dot(p, d) - w * t + fi * 1.7 + warp * (0.6 + 0.25 * fi)) * fade);
+    }
+    return tilt;
+  }
   void main() {
     #ifdef FAR
       if (abs(vLocal.x - uPatchLocal.x) < uPatchHalf && abs(vLocal.z - uPatchLocal.y) < uPatchHalf) discard;
     #else
       if (vShore > 0.6) discard;
     #endif
-    vec3 n = normalize(vWaveN);
-    float depth = -vShore;
+    float shore = -vShore;   // metres out from the shore
+    float live = 1.0 - uIce;
+    vec3 camRel = vec3(cameraPosition.x - uOrigin.x, cameraPosition.y, cameraPosition.z - uOrigin.y);
+    vec3 toEye = camRel - vLocal;
+    float dist = max(length(toEye), 1e-3);
+    vec3 v = toEye / dist;
+    float px = max(max(fwidth(vLocal.x), fwidth(vLocal.z)), 1e-4);
     float shadow = 1.0;
     #if defined( USE_SHADOWMAP ) && NUM_SUN_LIGHT_SHADOWS > 0
       shadow = getSunShadow(sunShadowMap[0], sunLightShadows[0], 0); // the sun's two cascades (sunlight.js)
     #elif defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
       shadow = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
     #endif
-    // three tones (surface tilted toward the sun, level, away) with a soft hand-off: on the smooth
-    // normal they read as bands riding the swell rather than as triangles
-    float d = dot(n, uSunDir) - uSunDir.y;
-    float tone = smoothstep(0.004, 0.02, d) - smoothstep(0.004, 0.02, -d);   // -1 .. 1
-    // the lake's own colour: tea-stained bog water at a Secchi depth of a metre or two, blue-green past five
+    // the normal: the swell's own (smooth, from the vertices), tilted by the wind's fine ripples
+    float rough;
+    vec2 tilt = windRipples(vLocal.xz, uTime, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore);
+    vec3 n0 = normalize(vWaveN);
+    vec3 n = normalize(n0 - vec3(tilt.x, 0.0, tilt.y));
+    float F = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);   // Schlick: a fifth looking down beside the canoe, nearly all at the far shore
+    // the body: the light the water column sends back, from the bed's colour through a short clear column to the
+    // open water's teal and the deep blue-green (a stained lake's tea), graded by the real depth over the lake's
+    // own Secchi depth, lit by the sun (in the shadows' shade) and the sky fill like any lit surface
+    float secchi = max(0.3, vClarity * uClarity);
     float clear = smoothstep(1.2, 6.0, vClarity);
-    float lum = dot(uWater, vec3(0.3, 0.5, 0.2));
-    vec3 water = mix(lum * uStain, uWater, clear);
-    vec3 deep = water * (uWaterDeep.g / max(uWater.g, 1e-4));
-    vec3 body = mix(water, deep, smoothstep(0.0, 4.0 + 1.5 * vClarity, vDepth));
-    // the sky shows in the surface only at grazing angles: dark looking down beside the canoe, silver toward the far shore
-    vec3 camRel = vec3(cameraPosition.x - uOrigin.x, cameraPosition.y, cameraPosition.z - uOrigin.y);
-    vec3 v = normalize(camRel - vLocal);
-    float fresnel = pow(1.0 - max(dot(n, v), 0.0), 5.0);   // Schlick: ~10 % at the chase camera's angle, ~45 % at the horizon
-    vec3 col = mix(body, uReflect, mix(0.04, 0.55, fresnel)) * (1.0 + 0.08 * tone);
-    col *= 0.72 + 0.28 * shadow;
-    // the canoe's reflection, nothing else
-    vec4 r = texture2DProj(uReflection, vReflectUv);
-    col = mix(col, r.rgb, r.a * 0.65 * uReflOn);
-    // shoreline ripples: thin crisp lines parallel to the shore rolling in. Each line breaks into its own
-    // wavelets (the pattern is shifted per line) and the ends taper instead of stopping dead.
+    vec3 body = mix(uBodyShallow, mix(uBodyStain, uBodyMid, clear), smoothstep(0.0, 0.6 * secchi, vDepth));
+    body = mix(body, mix(uBodyStain * 0.4, uBodyDeep, clear), smoothstep(0.4 * secchi, 2.4 * secchi, vDepth));
+    vec3 lit = uSunLight * max(uSunDir.y, 0.0) * shadow + uSkyLight;
+    body *= lit * 1.9;   // light reaches the column from the whole sky and the sun, not one direction
+    float ab = clamp(1.0 - exp(-vDepth * 1.7 / secchi), 0.0, 0.97);   // how much of the bed the column hides
+    // the mirror: the sky by the reflected ray, and over it what the reflection pass drew (shore, trees, canoe),
+    // pushed about by the ripples, smeared up and down where the surface is rough, a little blurred
+    vec3 R = reflect(-v, n);
+    R.y = abs(R.y);
+    vec3 sky = skyAt(normalize(R));
+    vec4 refl = vec4(0.0);
+    if (uReflOn > 0.5) {
+      vec2 uv = vReflectUv.xy / vReflectUv.w + (n.xz - n0.xz * 0.5) * (0.012 + 1.2 / dist);
+      // the roughness the ripples no longer resolve far off still smears the image: a breeze blurs the far
+      // shore's reflection into a soft band, a blow all but wipes it
+      float unresolved = uRippleAmt * (1.0 - lookFade(0.84, px));
+      vec2 tx = uReflTexel * vec2(1.0 + 3.0 * unresolved, 1.0 + 10.0 * length(tilt) + 9.0 * unresolved);
+      refl = texture2D(uReflection, uv) * 0.36
+        + texture2D(uReflection, uv + tx * vec2(1.1, 0.7)) * 0.16 + texture2D(uReflection, uv - tx * vec2(1.1, 0.7)) * 0.16
+        + texture2D(uReflection, uv + tx * vec2(-0.6, 2.0)) * 0.16 + texture2D(uReflection, uv - tx * vec2(-0.6, 2.0)) * 0.16;
+    }
+    float ra = refl.a;
+    vec3 mirrored = refl.rgb / max(ra, 1e-3);   // the pass clears to transparent black: its colour comes premultiplied
+    // the sun's glint, wherever a ripple mirrors the sun into the eye: at a low sun a path of sparkles across the
+    // water toward it with a soft sheen under them, at noon a faint sheen; never where the shore hides the sun
+    vec3 H = normalize(uSunDir + v);
+    float nh = max(dot(n, H), 0.0);
+    float low = 1.0 - smoothstep(0.1, 0.6, uSunDir.y);
+    float glint = (pow(nh, 1200.0) * 30.0 * smoothstep(0.0, 0.6, length(tilt) * 8.0) + pow(nh, 120.0) * 0.5 * low) * mix(0.05, 1.0, low) * step(0.0, uSunDir.y);
+    vec3 G = uSunLight * 3.14159 * glint * shadow * live * (1.0 - ra);
+    // the surface: what the mirror shows (F) over what comes out of the water (1 - F); the bed shows through what
+    // the column lets by. Composed for plain alpha blending over the bed the terrain drew: colour / A, alpha A.
+    // The fog lies over all of it except the mirrored shore, which its own pass already hazed along the whole path.
+    float A = F + (1.0 - F) * ab;
+    float wObj = F * ra;
+    vec3 rest = (F * (1.0 - ra) * sky + (1.0 - F) * ab * body + G) / max(A - wObj, 1e-4);
+    #ifdef USE_FOG
+      rest = fogApply(rest, vFogDir);
+    #endif
+    vec3 col = mix(rest, mirrored, wObj / max(A, 1e-4));
+    // the shore: a soft pale band where the water thins over the beach and the rock, its width breathing with
+    // the lap and broken by a slow noise, and thin ripple lines rolling in that fade under a pixel and with distance
     vec2 p = vLocal.xz;
-    float cycle = depth * 0.8 + uTime * 0.55 + 0.25 * sin(dot(p, RIP3) + uTime * 0.4);
-    float phase = fract(cycle), band = floor(cycle);
-    float breakup = 0.5 + 0.5 * sin(dot(p, RIP1) + uTime * 0.25 + band * 2.4) * sin(dot(p, RIP2) - uTime * 0.11 + band * 0.9);
-    float line = aastep(0.8, phase) * (1.0 - aastep(0.9, phase));
-    float ripple = line * (1.0 - aastep(5.5, depth)) * smoothstep(0.3, 0.6, breakup) * step(0.0, depth);
-    float waterline = (1.0 - aastep(0.4, depth)) * step(0.0, depth);
+    float edgeA = 0.0, lineA = 0.0;
+    float cycle = shore * 0.8 + uTime * 0.55 + 0.25 * sin(dot(p, RIP3) + uTime * 0.4);
+    float fw = max(fwidth(cycle), 1e-4);   // outside the branch: derivatives want every pixel of the quad
+    // the shore distance's slope (1 by a real shore): where it flattens (the middle of a narrow channel) a contour
+    // line would smear into a broad stripe, so the lines give out there
+    vec2 ex = dFdx(vLocal.xz), ey = dFdy(vLocal.xz);
+    float sx = dFdx(shore), sy = dFdy(shore), det = ex.x * ey.y - ex.y * ey.x;
+    float slope = abs(det) > 1e-9 ? length(vec2(sx * ey.y - sy * ex.y, sy * ex.x - sx * ey.x) / det) : 1.0;
+    if (shore < 5.0) {
+      float edgeN = lookNoise(p * 0.45 + uTime * 0.04, 11u);
+      float lap = 0.5 + 0.5 * sin(uTime * 0.8 + dot(p, RIP3) * 0.5);
+      float edge = 1.0 - smoothstep(0.0, 0.5 + 0.8 * edgeN + 0.35 * lap, shore);
+      edgeA = edge * edge * 0.42;
+      float phase = fract(cycle), lineNo = floor(cycle);
+      float breakup = 0.5 + 0.5 * sin(dot(p, RIP1) + uTime * 0.25 + lineNo * 2.4) * sin(dot(p, RIP2) - uTime * 0.11 + lineNo * 0.9);
+      float line = smoothstep(0.865 - fw, 0.865 + fw, phase) * (1.0 - smoothstep(0.895 - fw, 0.895 + fw, phase));
+      lineA = line * 0.32 * smoothstep(0.45, 0.8, slope) * smoothstep(0.6, 2.0, 0.03 / fw) * (1.0 - smoothstep(14.0, 45.0, dist)) * (1.0 - smoothstep(1.0, 5.0, shore)) * smoothstep(0.3, 0.65, breakup) * step(0.0, shore);
+    }
     // whitecaps: once the wind has raised real waves, their crests break
-    float cap = smoothstep(0.62, 0.8, vCrest.x) * smoothstep(0.35, 0.7, vCrest.y) * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7));
-    float foam = max(max(ripple, waterline) * 0.85, cap * 0.9) * (1.0 - uIce);
-    col = mix(col, uFoam, foam);
-    // the bed shows through shallow, clear water; tannin-stained lakes close up within a few metres.
-    // uClarity scales the lake's own Secchi depth (1 = as measured)
-    float alpha = clamp(1.0 - 0.92 * exp(-vDepth / max(0.3, vClarity * uClarity)), 0.1, 0.96);
-    alpha = max(alpha, foam);
-    // frozen over: a pale grey-white sheet, no swell, ripples or foam, nearly opaque
-    vec3 ice = vec3(0.74, 0.77, 0.78) * (0.7 + 0.3 * shadow);
-    col = mix(col, ice, uIce);
-    alpha = mix(alpha, 0.985, uIce);
-    gl_FragColor = vec4(col, alpha);
-    #include <fog_fragment>
+    float cap = smoothstep(0.62, 0.8, vCrest.x) * smoothstep(0.35, 0.7, vCrest.y) * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.75;
+    float foam = max(max(edgeA, lineA), cap) * live;
+    vec3 foamC = uFoam * (0.82 + 0.18 * shadow);
+    #ifdef USE_FOG
+      if (foam > 0.002) foamC = fogApply(foamC, vFogDir);
+    #endif
+    float outA = foam + A * (1.0 - foam);
+    vec3 outC = (foamC * foam + col * A * (1.0 - foam)) / max(outA, 1e-4);
+    // frozen over: a pale sheet lit like the snow, a little of the sky in it, no swell, ripples or foam
+    if (uIce > 0.0) {
+      vec3 ice = mix(uBodyIce * (uSunLight * max(uSunDir.y, 0.0) * shadow + uSkyLight) * 1.2, sky, F * 0.4);
+      #ifdef USE_FOG
+        ice = fogApply(ice, vFogDir);
+      #endif
+      outC = mix(outC, ice, uIce); outA = mix(outA, 0.985, uIce);
+    }
+    gl_FragColor = vec4(outC, outA);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -252,13 +383,22 @@ const frag = /* glsl */ `
 
 export const REFLECT_LAYER = 1;
 
+export const REFLECT_SHORE_LAYER = 2; // terrain, trees and outcrops, put on it as their tiles come in (tagTiles)
+
 export class WaterSystem {
-  constructor(world, sunDir, palette) {
+  // env: what the water reads by reference every frame, so whatever drives them flows through: the sky dome's
+  // uniforms (its stops, glow and sun, mirrored by the reflected ray), the sun, the sky fill and the moon (the
+  // light the water column sends back). Without them the water falls back to the palette and a fixed light.
+  constructor(world, sunDir, palette, env = {}) {
     this.world = world;
     this.time = 0;
     this.origin = { x: world.originX, z: world.originZ };
-    this.reflection = new WaterReflection(768, 768);
+    this.reflection = new WaterReflection(4, 4);
     this.reflectionsOn = true;
+    this.env = env;
+    this._mirrored = [];   // tree and outcrop meshes on the shore layer, for the mirror pass's LOD
+    this._saved = [];
+    this._sweep = 0;
     this.shore = new Float32Array(ATLAS * ATLAS);
     this.level = new Float32Array(ATLAS * ATLAS);
     this.height = new Float32Array(ATLAS * ATLAS);
@@ -300,7 +440,32 @@ export class WaterSystem {
       uDirW: { value: new Float32Array(WAVE_DIRS) },
       uWindSpeed: { value: 2.5 },
       uAtlas: { value: new THREE.Vector4(0, 0, 1 / world.cell, ATLAS) },
+      uRippleAmt: { value: 0.3 },
+      uWindDir: { value: new THREE.Vector2(0, 1) },
+      uReflTexel: { value: new THREE.Vector2(1 / 4, 1 / 4) },
+      uSunLight: { value: new THREE.Color(0.6, 0.55, 0.45) },
+      uSkyLight: { value: new THREE.Color(0.15, 0.2, 0.28) },
+      uBodyShallow: { value: WATER_LOOK.shallow },
+      uBodyMid: { value: WATER_LOOK.mid },
+      uBodyDeep: { value: WATER_LOOK.deep },
+      uBodyStain: { value: WATER_LOOK.stain },
+      uBodyIce: { value: WATER_LOOK.ice },
+      uSkyZenith: { value: new THREE.Color(palette.zenith) },
+      uSkyMid: { value: new THREE.Color(palette.horizon).lerp(new THREE.Color(palette.zenith), 0.5) },
+      uSkyHorizon: { value: new THREE.Color(palette.horizon) },
+      uSkySun: { value: new THREE.Color(palette.sun) },
+      uSkyGlow: { value: new THREE.Vector2(0.1, 8) },
+      uSkySunDir: { value: sunDir.clone() },
     }]);
+    // the dome's uniforms by reference (the same objects the day cycle writes): the reflected sky is the sky
+    const su = env.sky;
+    if (su) {
+      const bind = { uSkyZenith: 'uZenith', uSkyMid: 'uMid', uSkyHorizon: 'uHorizon', uSkySun: 'uSunColor', uSkyGlow: 'uGlow', uSkySunDir: 'uSunDir' };
+      for (const [mine, theirs] of Object.entries(bind)) if (su[theirs]) this.uniforms[mine] = su[theirs];
+    }
+    // the look's colours are shared objects too, so WATER_LOOK can be tuned live
+    const look = { uBodyShallow: 'shallow', uBodyMid: 'mid', uBodyDeep: 'deep', uBodyStain: 'stain', uBodyIce: 'ice' };
+    for (const [k, name] of Object.entries(look)) this.uniforms[k].value = WATER_LOOK[name];
     this.uniforms.uReflection.value = this.reflection.target.texture;
     this.uniforms.uShoreTex.value = this.shoreTex;
     this.uniforms.uLevelTex.value = this.levelTex;
@@ -310,9 +475,10 @@ export class WaterSystem {
     this.uniforms.uFetchTex.value = this.fetchTex;
     this.uniforms.uDirW.value.set(this.wind.w);
     this.uniforms.uTextureMatrix.value = this.reflection.textureMatrix;
+    const lift = this.uniforms.uSkyGlow.value.isVector3 ? { SKY_LIFT: 1 } : {};
     const common = { fragmentShader: frag, uniforms: this.uniforms, transparent: true, depthWrite: true, fog: true, lights: true };
-    this.farMaterial = new THREE.ShaderMaterial({ ...common, vertexShader: vertFar, defines: { FAR: 1 } });
-    this.patchMaterial = new THREE.ShaderMaterial({ ...common, vertexShader: vertPatch });
+    this.farMaterial = new THREE.ShaderMaterial({ ...common, vertexShader: vertFar, defines: { FAR: 1, ...lift } });
+    this.patchMaterial = new THREE.ShaderMaterial({ ...common, vertexShader: vertPatch, defines: { ...lift } });
     this.group = new THREE.Group();
     this.group.name = 'water';
     const n = Math.round((PATCH_HALF * 2) / PATCH_RES);
@@ -360,6 +526,15 @@ export class WaterSystem {
     this.uniforms.uPatchLocal.value.set(px - this.origin.x, pz - this.origin.z);
     const ci = w.cellI(cx), cj = w.cellJ(cz);
     if (this.atlasDirty || Math.abs(ci - (this.atlasI + ATLAS / 2)) > ATLAS / 2 - ATLAS_SLACK || Math.abs(cj - (this.atlasJ + ATLAS / 2)) > ATLAS / 2 - ATLAS_SLACK) this.rebuildAtlas(ci, cj);
+    // the light the water column sends back: the key (the sun, or the moon at night) and the sky fill as they
+    // stand this frame, over pi as three's Lambert has them, so the water is lit like everything round it
+    const { sun, hemi, moon } = this.env, u = this.uniforms;
+    if (sun && hemi) {
+      const k = u.uSunLight.value.setRGB(0, 0, 0), add = (c, s) => { k.r += c.r * s; k.g += c.g * s; k.b += c.b * s; };
+      if (sun.visible) add(sun.color, sun.intensity / Math.PI);
+      if (moon && moon.visible) add(moon.color, moon.intensity / Math.PI);
+      u.uSkyLight.value.copy(hemi.color).multiplyScalar(hemi.intensity / Math.PI);
+    }
   }
 
   // Shore distance, terrain height, ground cover and water level for the cells around the canoe; the
@@ -404,6 +579,10 @@ export class WaterSystem {
     const w = this.wind;
     w.x = dirX; w.z = dirZ; w.speed = speed;
     this.uniforms.uWindSpeed.value = speed;
+    // the fine ripples: a faint texture on a still day, a full roughness from a fresh breeze up
+    this.uniforms.uRippleAmt.value = 0.1 + 0.9 * Math.min(1, Math.max(0, (speed - 0.5) / 9));
+    const l = Math.hypot(dirX, dirZ) || 1;
+    this.uniforms.uWindDir.value.set(dirX / l, dirZ / l);
     windWeights(dirX, dirZ, w.w);
     this.uniforms.uDirW.value.set(w.w);
     const bucket = Math.round(Math.atan2(dirZ, dirX) / (Math.PI / 12));
@@ -447,27 +626,80 @@ export class WaterSystem {
     return { uShoreTex: u.uShoreTex, uLevelTex: u.uLevelTex, uHeightTex: u.uHeightTex, uClarityTex: u.uClarityTex, uCoverTex: u.uCoverTex, uFetchTex: u.uFetchTex, uDirW: u.uDirW, uWindSpeed: u.uWindSpeed, uAtlas: u.uAtlas, uOrigin: u.uOrigin, uPatchLocal: u.uPatchLocal, uPatchHalf: u.uPatchHalf, uPatchRes: u.uPatchRes, uWaterTime: u.uTime };
   }
 
-  // Mirror only what is on REFLECT_LAYER (the canoe) into the reflection target.
+  // Puts each tile's terrain, trees and outcrops on the shore layer as the tiles come in (the fine tiles and the
+  // far chunks under them) and lists the tree meshes for the mirror pass. A tile group is looked at again when its
+  // child count moves (the vegetation LOD adds a stand's variant meshes later; those stay off the layer, the
+  // mirror draws every instance of a bin with the bin's own mesh).
+  tagTiles() {
+    const tm = this.world.tiles;
+    if (!tm) return;
+    const terrain = tm.terrainMaterial, mirrored = this._mirrored;
+    const tag = (g) => {
+      if (g.userData.mirrorTag === g.children.length) return;
+      g.userData.mirrorTag = g.children.length;
+      for (const o of g.children) {
+        if (o.layers.isEnabled(REFLECT_SHORE_LAYER)) continue;
+        if (o.material === terrain) o.layers.enable(REFLECT_SHORE_LAYER);
+        else if (o.userData.lod && MIRRORED.has(o.userData.sp)) { o.layers.enable(REFLECT_SHORE_LAYER); mirrored.push(o); }
+      }
+    };
+    for (const e of tm.tiles.values()) if (e.group) tag(e.group);
+    for (const g of tm.farChunks.values()) tag(g);
+    if (++this._sweep % 240 === 0) this._mirrored = mirrored.filter((m) => m.parent); // tiles that have gone
+  }
+
+  // The mirror pass, at a quarter of the drawing buffer each way: the canoe and the rod (REFLECT_LAYER) and, on the
+  // shore layer, the terrain, the trees and the outcrops, seen from under the surface. The trees as a blurred
+  // reflection wants them: every instance of a bin drawn with one geometry, the far twin past REFLECTION.full,
+  // nothing past REFLECTION.reach; put back as the main view had them after. The world matrices
+  // are the main pass's from the last frame (a frame-old canoe is well inside a mirror's blur), which spares the
+  // scene a second walk. Off (the reflections setting), or well inland, there is no pass and the water mirrors the
+  // sky alone.
   renderReflection(renderer, scene, camera, level) {
-    if (!this.reflectionsOn) { this.uniforms.uReflOn.value = 0; return; }
-    const bg = scene.background;
+    const u = this.uniforms, R = this.reflection;
+    if (!this.reflectionsOn) { u.uReflOn.value = 0; return; }
+    renderer.getDrawingBufferSize(_size);
+    const w = Math.max(16, Math.round(_size.x * REFLECTION.scale)), h = Math.max(16, Math.round(_size.y * REFLECTION.scale));
+    if (R.target.width !== w || R.target.height !== h) { R.target.setSize(w, h); u.uReflTexel.value.set(1 / w, 1 / h); }
+    camera.getWorldPosition(_camPos);
+    // walking well inland there is no water in view to mirror into
+    if (this.world.shoreAt(_camPos.x, _camPos.z) > 150) { u.uReflOn.value = 0; return; }
+    this.tagTiles();
+    const saved = this._saved;
+    saved.length = 0;
+    for (const m of this._mirrored) {
+      if (!m.visible || !m.parent) continue;
+      const l = m.userData.lod, half = l.half || 320;
+      const d = Math.hypot(Math.max(0, Math.abs(_camPos.x - l.cx) - half), Math.max(0, Math.abs(_camPos.z - l.cz) - half));
+      saved.push(m, m.geometry, m.count);
+      if (d > REFLECTION.reach) { m.visible = false; continue; }
+      m.geometry = d > REFLECTION.full ? l.low : l.full;
+      if (l.total) m.count = l.total;
+    }
+    const bg = scene.background, auto = scene.matrixWorldAutoUpdate;
     scene.background = null;
-    const ok = this.reflection.render(renderer, scene, camera, level, REFLECT_LAYER);
+    scene.matrixWorldAutoUpdate = false;
+    const ok = R.render(renderer, scene, camera, level, (1 << REFLECT_LAYER) | (1 << REFLECT_SHORE_LAYER));
     scene.background = bg;
-    this.uniforms.uReflOn.value = ok ? 1 : 0;
+    scene.matrixWorldAutoUpdate = auto;
+    for (let i = 0; i < saved.length; i += 3) { const m = saved[i]; m.visible = true; m.geometry = saved[i + 1]; m.count = saved[i + 2]; }
+    u.uReflOn.value = ok ? 1 : 0;
   }
 }
 
+const _size = new THREE.Vector2();
 const _normal = new THREE.Vector3(0, 1, 0), _planePoint = new THREE.Vector3(), _camPos = new THREE.Vector3(), _view = new THREE.Vector3();
 const _look = new THREE.Vector3(), _target = new THREE.Vector3(), _rot = new THREE.Matrix4(), _plane = new THREE.Plane(), _clip = new THREE.Vector4(), _q = new THREE.Vector4();
 const _clear = new THREE.Color();
 export class WaterReflection {
   constructor(w, h) {
-    this.target = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true });
+    // linear light, as the scene pass is: the shore's lit tops and the sun on the hull run past 1
+    this.target = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: true, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
     this.camera = new THREE.PerspectiveCamera();
     this.textureMatrix = new THREE.Matrix4();
   }
-  render(renderer, scene, camera, level, layer) {
+  // mask: the layers the mirror sees (a bit mask, as Layers.mask)
+  render(renderer, scene, camera, level, mask) {
     const cam = this.camera;
     _planePoint.set(0, level, 0);
     camera.getWorldPosition(_camPos);
@@ -480,7 +712,7 @@ export class WaterReflection {
     cam.up.set(0, 1, 0).applyMatrix4(_rot).reflect(_normal);
     cam.lookAt(_target);
     cam.far = camera.far;
-    cam.layers.set(layer);
+    cam.layers.mask = mask;
     cam.updateMatrixWorld();
     cam.projectionMatrix.copy(camera.projectionMatrix);
     this.textureMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);

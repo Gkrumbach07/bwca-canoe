@@ -19,7 +19,7 @@ import { Player, Input } from './player.js';
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
-import { Ripples } from './wake.js';
+import { Ripples, softenHullFoam } from './wake.js';
 import { Wind } from './wind.js';
 import { Fishing } from './fishing.js';
 import { Energy } from './energy.js';
@@ -85,7 +85,7 @@ async function main() {
   scene.add(clouds);
 
   // the streamed world: water first (tiles hand it their far meshes and it owns the surface atlas), then the tiles
-  const water = new WaterSystem(world, sunDir, palette);
+  const water = new WaterSystem(world, sunDir, palette, { sky: sky.material.uniforms, sun, hemi, moon }); // the mirrored sky and the light, by reference
   scene.add(water.group);
   const tiles = new TileManager(world, scene, { terrainMaterial: makeTerrainMaterial(), water, vegetation: makeVegetationKit(3), aquatic: makeAquaticKit(water, 9), seed: 3 });
   world.tiles = tiles;
@@ -108,6 +108,7 @@ async function main() {
 
   const canoe = buildCanoeRig();
   canoe.rig.traverse((o) => o.layers.enable(REFLECT_LAYER));
+  softenHullFoam(canoe.rig.userData.foam); // a soft line at the waterline, in the wake's style
   scene.add(canoe.rig);
   const input = new Input();
   const player = new Player(world, canoe, input);
