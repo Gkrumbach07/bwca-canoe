@@ -171,9 +171,11 @@ export class GeoBuilder {
 // soft volume). The caller hangs every card on a branch: `o` is where the sprite's anchor (the end of its
 // twig) sits. Each corner also carries its offset from the anchor (aGrow), so the material can swell the
 // cards about their anchors with distance and a far crown fills into one mass; `grow: false` writes zeros.
+// `pair[k]` is, for the second card of a crossed pair, the index of the first (-1 otherwise): the two hang in
+// the same place, so a bake can do one and give the other its values (vegetation.js finish).
 const CORNERS = [[0, 0], [1, 0], [1, 1], [0, 1]];
 export class CardBuilder {
-  constructor({ grow = true } = {}) { this.p = []; this.n = []; this.c = []; this.uv = []; this.gr = []; this.ix = []; this.grow = grow; }
+  constructor({ grow = true } = {}) { this.p = []; this.n = []; this.c = []; this.uv = []; this.gr = []; this.ix = []; this.pair = []; this.grow = grow; }
   get count() { return this.p.length / 12; }
   // One card: sprite `slot`, its anchor at `o`, its s axis along the unit vector `ax` for `w` metres and its
   // t axis along `ay` for `h` metres. `nrm(p)` -> a unit Vector3 per corner; `col` a Color or col(p);
@@ -188,25 +190,39 @@ export class CardBuilder {
       this.gr.push((p.x - o.x) * gk, (p.y - o.y) * gk, (p.z - o.z) * gk);
     }
     this.ix.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    this.pair.push(-1);
     return this;
   }
   // Two cards crossed on a shared s axis (`axis`): the first card's t axis is `side`, the second's is square
   // to both. For a sprite anchored at one end (a spray, a tuft) the shared axis is its twig, so the twig
   // painted on both cards draws one line in space, a branchlet seen from any side.
   cross(slot, o, axis, side, w, h, nrm, col, k = 1) {
-    const s2 = axis.clone().cross(side).normalize();
+    const s2 = axis.clone().cross(side).normalize(), first = this.count;
     this.card(slot, o, axis, side, w, h, nrm, col, k);
     this.card(slot, o, axis, s2, w, h, nrm, col, k);
+    this.pair[first + 1] = first;
     return this;
   }
-  build() {
+  // The geometry; `keep(k)`, if given, picks which cards go in (in order, four corners each).
+  build(keep = null) {
+    let { p, n, c, uv, gr, ix } = this;
+    if (keep) {
+      p = []; n = []; c = []; uv = []; gr = []; ix = [];
+      for (let k = 0, m = 0; k < this.count; k++) {
+        if (!keep(k)) continue;
+        for (let i = k * 12; i < k * 12 + 12; i++) { p.push(this.p[i]); n.push(this.n[i]); c.push(this.c[i]); gr.push(this.gr[i]); }
+        for (let i = k * 8; i < k * 8 + 8; i++) uv.push(this.uv[i]);
+        const b = m++ * 4;
+        ix.push(b, b + 1, b + 2, b, b + 2, b + 3);
+      }
+    }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
-    g.setAttribute('aGrow', new THREE.Float32BufferAttribute(this.gr, 3));
-    g.setIndex(this.ix);
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(n, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setAttribute('aGrow', new THREE.Float32BufferAttribute(gr, 3));
+    g.setIndex(ix);
     return g;
   }
 }
