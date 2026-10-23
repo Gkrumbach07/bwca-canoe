@@ -143,7 +143,9 @@ at Real pace an hour. The same evening the owner found life too slow on screen (
 2.4"; the 2× key "feels more correct") and the slow-down near a shore unwelcome: so nothing that travels is shown below
 twice life at Trip pace (the clock in step), the boost no longer fades along a shore or at a landing (only in the last
 few metres before a bank dead ahead), and the frame loop now runs a slow frame as several steps, since a 50 ms cap had
-put the game in slow motion below 20 fps (Ultra on the owner's 3440 x 1440 screen measured about 18). Gear still buys game time: the Kevlar and the carbon shorten a 24 km day by about 40 minutes. The
+put the game in slow motion below 20 fps (Ultra on the owner's 3440 x 1440 screen measured about 18). At 60 fps the
+owner still found Real pace slow ("the x2 feels more like the 1:1 should be"), so Real pace has the same twice-life
+base (no time-lapse above it). Gear still buys game time: the Kevlar and the carbon shorten a 24 km day by about 40 minutes. The
 second Duluth pack takes the food room from 7 days to 17 and brings back the double portage (the gear pack waits at
 the trail head; Q fetches it, about 5 minutes on a 23-rod carry, the walks' own time at life).
 

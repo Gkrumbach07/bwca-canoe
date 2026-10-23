@@ -36,8 +36,9 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
   travels is shown below twice life (life reads too slow on a screen): the canoe from its first stroke, the walker
   anywhere (about 2.7 m/s), with the clock in step so the readout's km an hour stays true. The canoe's boost eases off
   on a slow stroke, in a hard turn and in the last few metres before a bank dead ahead, but not along a shore or into a
-  dock. Camp, chores and fishing run on a 12× clock. **Real** pace is 1:1 throughout. A "trip ×6" mark sits bottom
-  right while the boost carries you, and the readout (Tab) gives the clock's rate and the km an hour. The game keeps
+  dock. Camp, chores and fishing run on a 12× clock. **Real** pace is that twice-life base and nothing more (no
+  time-lapse on the water, the clock 1:1 when you stop). A "trip ×6" mark sits bottom right while the time-lapse
+  carries you above the base, and the readout (Tab) gives the clock's rate and the km an hour. The game keeps
   to the wall clock at any frame rate (a slow frame runs as several steps), so 4 km an hour is 4 km an hour.
 - **A day in the Boundary Waters**: a day/night cycle on the pace's clock with the real sun and moon for the date and
   the clock (`src/astro.js`: sunrise and sunset shift through the year, the moon shows its phase), a
