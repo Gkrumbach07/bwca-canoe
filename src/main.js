@@ -48,6 +48,7 @@ import { Rides } from './rides.js'; // hubs 2C
 import { sheets } from './sheets.js'; // hubs 2D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
+import { People } from './npcs.js'; // hubs 3C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -231,6 +232,13 @@ async function main() {
   // so its Esc lowers the camera ahead of the pause card.
   const photo = new PhotoCamera({ world, player, chase, camera, renderer, fauna, day, hud, tasks, outfitter, profile, audio, veil, fishing, camp });
   journal.photos = photo;
+  // hubs 3C: people in the outfitters (npcs.js): the keeper behind every counter and the season's visitors, three figures
+  // at most on the paddler's own model and material (no new program, no new light). E gives a visitor's line (Q at the
+  // counter is a word with the keeper), a second E their one task (the fetch and npc kinds, registered there); the store's
+  // hotspots leave E to a visitor you face (outfitter.people). Updated after the outfitter's prompt, in the frame below.
+  const npcs = new People({ world, scene, player, day, hud, tasks, outfitter, profile, weather, registry: campsites, mat: canoe.rig.getObjectByProperty('isSkinnedMesh', true).material });
+  outfitter.people = npcs;
+  npcs.quiet = () => photo.raised; // the people say nothing while the camera is up (3B)
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -261,6 +269,7 @@ async function main() {
   // latrine, blueberries in season, the wake-time card; its berries and firewood notices read the board's notices
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
+  window.__game.npcs = npcs; // hubs 3C
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
@@ -290,6 +299,7 @@ async function main() {
       fishing.update(dt, ts);
       shop.update(); // hubs 2B: the tackle box (a lure not in it is refused), the supper, the leeches, the gravity bag
       outfitter.prompt();
+      npcs.update(dt); // hubs 3C: who is drawn and how they stand, the talk prompt and its E / Q, after the store's own prompt
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
       tasks.update(dt * ts);
       sheets.update(player); // hubs 2D: the cells around you as you go

@@ -137,6 +137,7 @@ export class Outfitter {
     this._shop = null;
     this.rides = null;               // stream C: rides.section(ep) → HTML, rides.act(id)
     this.keeperVoice = true;         // the header speaks in the keeper's own words (stream C's fallback steps aside)
+    this.people = null;              // hubs 3C: npcs.js, the people in the store; a visitor you face takes E from the hotspot (people.claimsE)
     if (trip) trip.outfitter = this;
     this.landings = world.entryPoints.map((ep) => ({ ep: ep.ep, name: outfitterName(ep), place: ep.name, x: ep.x, z: ep.z, lake: ep.lake }));
     this.trip = { active: false, ep: null, days: 0, started: null, startAbs: 0, turnedIn: 0 };
@@ -390,7 +391,7 @@ export class Outfitter {
         else if (p.input.pressed(L ? 'KeyQ' : 'KeyE')) this.show(this.near);
       } else if (this.visit && this.visit.inside) {
         const s = this.spot();
-        if (s && p.input.pressed('KeyE')) { this.staged = { tab: s.tab, focus: s.focus || null }; this.show(this.visit.landing, s.tab, s.focus || null); }
+        if (s && !(this.people && this.people.claimsE) && p.input.pressed('KeyE')) { this.staged = { tab: s.tab, focus: s.focus || null }; this.show(this.visit.landing, s.tab, s.focus || null); }
       }
     }
     if (this.evac) this.updateEvac(dt);
