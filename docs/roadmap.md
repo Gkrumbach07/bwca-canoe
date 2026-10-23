@@ -42,7 +42,8 @@ and checked on the look board. Agreed with the owner on 2026-10-22; phase 3 take
 - **Wildlife:** loons (exist), a beaver and its lodge, a moose at a shore, eagles, fish rising at dusk,
   dragonflies over the reeds in summer.
 
-## Phase 4: share it
+## Phase 4: share it (live 2026-10-23 at https://gkrumbach07.github.io/bwca-canoe/; public repository
+github.com/Gkrumbach07/bwca-canoe; data from the data-v3 release; desktop-first, with a note on touch-only devices)
 
 A public build (GitHub Pages workflow and the external data URL exist), a short trailer from the look board's
 spots, and a decision on touch and mobile. Nothing is published without the owner's go-ahead.

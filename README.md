@@ -1,6 +1,9 @@
 # BWCA Canoe
 
-A small low-poly canoeing game set on real terrain in the Boundary Waters Canoe Area Wilderness: the whole
+**Play it: https://gkrumbach07.github.io/bwca-canoe/** (a computer with a keyboard and mouse; about 20 MB
+of map data streams in as you paddle).
+
+A quiet canoeing game set on real terrain in the Boundary Waters Canoe Area Wilderness: the whole
 wilderness, from Crane Lake to the Pigeon River, streamed in 2.56 km tiles as you paddle. You start at the
 Lake One landing (entry point 30) east of Ely, Minnesota.
 
