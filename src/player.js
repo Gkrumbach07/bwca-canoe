@@ -728,7 +728,8 @@ export class Player {
     if (onTrail) {
       const p = this.trailPoint(trail.trail, trail.along);
       const remaining = p.tx * f.x + p.tz * f.z >= 0 ? trail.trail.length - trail.along : trail.along;
-      trailText = `${trail.def.name} · ${Math.round(remaining / RODS)} rods to go`;
+      const rods = Math.round(remaining / RODS);
+      trailText = `${trail.def.name} · ${rods} ${rods === 1 ? 'rod' : 'rods'} to go`;
     }
     this.footPrompts(c, trail, note, trailText);
   }
@@ -741,6 +742,7 @@ export class Player {
   }
 
   footPrompts(c, trail, note, trailText) {
+    if (this.packs && this.packs.footPrompts(c, trail, note, trailText)) return; // trip core B: the packs take over the portage prompts where they change them (packs.js)
     const inp = this.input, w = this.world;
     const lakeOf = (id) => w.lakeName(id) || 'the water';
     if (c.drop) {
@@ -834,6 +836,19 @@ export class Player {
     this.prompt = { key: null, text: set ? 'You set the canoe down' : 'The canoe came down' };
   }
 
+  // Back on foot where a save left you (main.js, on load): at (x, z), the canoe on the ground where it lay. False when
+  // either spot is not on land with its tile in (then the canoe goes back on the water, as for a trail or a carry).
+  standAt({ x, z, heading = 0, drop }) {
+    const w = this.world, land = (px, pz) => w.isReady(px, pz) && w.inBounds(px, pz, 40) && w.shoreAt(px, pz) > 0.3;
+    if (!drop || !land(x, z) || !land(drop.x, drop.z)) return false;
+    this.mode = 'walk'; this.x = x; this.z = z; this.heading = heading; this.speed = 0; this.yawRate = 0; this.foot = null;
+    this.landing = null; this.ashore = null; this.swim = null; this.bob = null;
+    this.carry = { trail: null, drop: { x: drop.x, z: drop.z, heading: drop.heading }, hitCooldown: 0, from: null, choice: false };
+    this.restHull(drop.x, drop.z, drop.heading);
+    this.placeOnGround();
+    return true;
+  }
+
   pickUpHull() {
     this.canoe.pickUpHull();
     const c = this.carry;
@@ -884,6 +899,7 @@ export class Player {
 
   // Back in the canoe at l (a portage launch point or a spot found by launchFrom), pushed off toward deeper water.
   launch(l) {
+    if (this.packs && this.packs.beforeLaunch(l) === false) return; // trip core B: the packs load up first, unless one is still back up the trail (packs.js)
     if (this.carry && this.carry.drop) this.canoe.pickUpHull();
     const dir = this.world.deeperDir(l.x, l.z);
     this.mode = 'paddle'; this.carry = null; this.ashore = null; this.balance = 0; this.extraRoll = 0;

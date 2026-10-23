@@ -20,6 +20,7 @@ import { makeVegetationKit } from './vegetation.js';
 import { TileManager } from './tiles.js';
 import { buildCanoeRig } from './canoe.js';
 import { Player, Input } from './player.js';
+import { Packs } from './packs.js'; // trip core B
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
@@ -35,6 +36,11 @@ import { Title } from './title.js';
 import { Journal } from './journal.js';
 import { TripStats } from './trip-stats.js';
 import { lookboard } from './lookboard.js';
+import { Trip } from './trip.js'; // trip core A
+import { Veil } from './veil.js'; // trip core A
+import { Camp, CampRegistry } from './camp.js'; // trip core C
+import { Fires } from './fire.js'; // trip core C
+import { Headlamp } from './headlamp.js'; // trip core C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -95,8 +101,8 @@ async function main() {
   scene.add(water.group);
   const tiles = new TileManager(world, scene, { terrainMaterial: makeTerrainMaterial(), water, vegetation: makeVegetationKit(3), aquatic: makeAquaticKit(water, 9), seed: 3 });
   world.tiles = tiles;
-  const trip = TripSaver.read(); // a saved trip: the title shows that spot, and Paddle in continues it
-  const start = trip ? { x: trip.x, z: trip.z } : world.meta.start;
+  const saved = TripSaver.read(); // the spot saved at the last stop: the title shows it, and Paddle in continues there
+  const start = saved ? { x: saved.x, z: saved.z } : world.meta.start;
   const setOrigin = (x, z) => { const [tx, ty] = world.tileOf(x, z); const [ox, oz] = world.tileOrigin(tx, ty); water.setOrigin(ox, oz); };
   setOrigin(start.x, start.z);
   progress(0.15, 'Loading the lakes around you…');
@@ -120,11 +126,11 @@ async function main() {
   const input = new Input();
   const player = new Player(world, canoe, input);
   player.ripples = ripples; player.water = water; player.audio = audio;
-  if (trip) { player.x = trip.x; player.z = trip.z; player.heading = trip.heading; }
+  if (saved) { player.x = saved.x; player.z = saved.z; player.heading = saved.heading; }
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   player.chase = chase; // walking is read against the view; the cursor steers the canoe when asked
   const settings = new Settings();
-  const hud = new Hud(world, { onTeleport: async (x, z) => { if (await player.teleport(x, z)) chase.snap(); }, settings, camera });
+  const hud = new Hud(world, { onTeleport: async (x, z) => { if (trip && trip.adventure) return; if (await player.teleport(x, z)) chase.snap(); }, settings, camera }); // trip core A: the map moves you in Sandbox only
   const post = makePost(renderer, scene, camera);
   const { lat, lon } = world.toLatLon(start.x, start.z);
   const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, post, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material, moonDisc }, { lat, lon });
@@ -142,30 +148,48 @@ async function main() {
   const energy = new Energy(player, day);
   const tasks = new Tasks(world, scene, player, { audio, water });
   const tripStats = new TripStats(world, player, day);
-  const outfitter = new Outfitter(world, player, { energy, tasks, hud, day, stats: tripStats, onTeleport: teleport });
+  // trip core A: the veil (fade cards stepped per frame) and the trip (the mode, the permit, the rules), before the outfitter
+  const veil = new Veil();
+  const trip = new Trip({ world, player, day, energy, hud, veil, tasks, fishing, stats: tripStats });
+  const outfitter = new Outfitter(world, player, { energy, tasks, hud, day, stats: tripStats, onTeleport: teleport, trip, veil });
   const journal = new Journal({ hud, world, player, day, fishing, tasks, energy, outfitter, stats: tripStats, wind });
   energy.onNote = (t) => hud.note(t); tasks.onNote = (t) => hud.note(t, 6);
-  energy.onEvac = () => outfitter.startEvac();
+  energy.onEvac = (why) => trip.evacuate(why); // trip core A: no food and no energy ends an Adventure in an evacuation
   tasks.onChange = () => outfitter.save();
+  // trip core C: camp and night. The campfires (one light, always in the scene), the headlamp (likewise), who holds
+  // each campsite, and the camp itself; the trip, the veil and the packs are looked up on the first frame (whichever
+  // of them exist: `typeof` keeps this safe in any build, and before they are declared).
+  const fires = new Fires({ scene, wind, hemi, sun });
+  audio.fires = fires;
+  const lamp = new Headlamp({ scene, canoe, chase, camera, player, day });
+  const campsites = new CampRegistry(world);
+  const camp = new Camp({ world, player, day, energy, hud, scene, tiles, fires, lamp, audio, weather, wind, fishing, outfitter, registry: campsites,
+    links: () => ({ trip, veil, packs }) });
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (e.code === 'KeyG' && !player.input.paused) energy.manualEat(); // F is the fishing rod
-    if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release();
+    if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
     if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-5 pick lures while the rod is up
     if (e.code === 'KeyR') settings.toggle('reflections');
     if (e.code === 'KeyN') settings.toggle('mute');
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
+  // trip core B: the packs and the portages (packs.js): where each pack is, the load you carry, the double portage
+  const packs = new Packs({ world, player, canoe, day, energy, hud, trip });
+  packs.veil = veil; // the fetch fades through the same card as the evacuation and the night
+  player.packs = packs;
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
   settings.attach({ renderer, scene, sun, water, post, audio, chase, player, stats: fps, geo });
   const saver = new TripSaver(player, day, chase);
-  const title = new Title({ world, player, chase, camera, day, hud, settings, saver, trip, outfitter });
+  const title = new Title({ world, player, chase, camera, day, hud, settings, saver, saved, trip, outfitter });
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
-  if (trip && (trip.mode !== 'paddle' || world.shoreAt(trip.x, trip.z) > -2)) player.teleport(trip.x, trip.z);
+  // (on foot with the canoe set down somewhere, at a camp say, you come back on foot beside it)
+  if (saved && saved.mode === 'walk' && player.standAt(saved)) chase.snap();
+  else if (saved && (saved.mode !== 'paddle' || world.shoreAt(saved.x, saved.z) > -2)) player.teleport(saved.x, saved.z);
   title.open('title');
   // Compile every material the scene holds now, hidden ones too (the rise rings, the rain, the cloud deck and the
   // anvils, the fish and the lures, the wildlife's parts), behind the title card and off the main thread where the
@@ -175,6 +199,9 @@ async function main() {
   renderer.compileAsync(tiles.prewarmGroup(), camera, scene).catch(() => {}); // and every species the tiles may bring
 
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
+  window.__game.trip = trip; window.__game.veil = veil; // trip core A
+  window.__game.packs = packs; // trip core B
+  Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -193,15 +220,20 @@ async function main() {
     } else {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       outfitter.update(dt * ts);
+      camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
       player.update(dt);
+      packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
       fishing.update(dt, ts);
       outfitter.prompt();
+      camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
       tasks.update(dt * ts);
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
       energy.update(dt * ts, wind, atCamp);
       tripStats.update(dt * ts, outfitter.trip.active);
+      trip.update(dt * ts); // trip core A: the clock's rate, the rules, the log
       journal.update(dt);
     }
+    veil.update(dt); // trip core A: the fade cards, behind the title card too
     canoe.update(dt * ts);
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
@@ -220,13 +252,14 @@ async function main() {
     wind.updateSway(dt * ts); // trees, understory, grass and reeds sway with the wind the water reads
     cover.setSeason(day.season);
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
+    fires.update(dt, day.doy * 24 + day.hours, camera.position); lamp.update(dt); // trip core C: the fires burn on the clock, the lamp rides the head
     cover.update(dt * ts, player.x, player.z, hemi, sun);
     mist.update(dt * ts, player.x, player.z);
     loons.update(dt * ts, player, day.season, faunaCtx);
     fauna.update(dt * ts, faunaCtx);
     audio.tick(dt, { player, world, wind, day, season: day.season, camera, weather }); // the soundscape reads the whole scene
     geo.update(player, world);
-    hud.update({ player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell });
+    hud.update({ player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell, trip }); // trip core A: trip
     saver.update(dt);
     input.endFrame();
   };

@@ -38,8 +38,17 @@
 .entries { display: flex; flex-direction: column; gap: 10px; padding-bottom: 2px; }
 .entries[hidden] { display: none; }
 .entries .kicker { font-size: 12px; letter-spacing: .16em; color: rgba(243, 236, 221, .7); }
+/* the way to travel, above the entry points: two words, the picked one gold with the marker under it */
+.mode-pick { display: flex; align-items: baseline; gap: 12px; font-size: 19px; margin-bottom: 4px; }
+.mode-pick .dot { color: var(--cream-50); }
+.mode-pick button { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; padding: 0 0 2px; margin: 0; color: rgba(243, 236, 221, .72); font: inherit; cursor: pointer; text-shadow: inherit; }
+.mode-pick button.on { color: var(--gold); border-bottom-color: var(--gold); }
+.mode-pick button:hover, .mode-pick button:focus-visible { color: var(--gold); outline: none; }
+.entries .status:empty { display: none; }
+.entries .status:not(:empty) + .note { display: none; }
+.entries .note { margin: -6px 0 8px; font-size: 13.5px; line-height: 1.4; color: var(--cream-72); white-space: nowrap; }
 .entries .status { margin: 0; font-size: 13px; color: var(--cream-72); min-height: 1.2em; }
-.entries ul { margin: 0; padding: 0 12px 0 0; list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 17px; font-variant-numeric: tabular-nums; max-height: max(120px, min(420px, calc(100vh - 600px))); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .35) transparent; }
+.entries ul { margin: -8px 0 0; padding: 0 12px 0 0; list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 17px; font-variant-numeric: tabular-nums; max-height: max(120px, min(400px, calc(100vh - 655px))); -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%); padding-top: 10px; padding-bottom: 14px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .35) transparent; }
 .entries button { appearance: none; background: none; border: none; padding: 0; margin: 0; display: flex; gap: 14px; align-items: baseline; color: rgba(243, 236, 221, .9); font: inherit; cursor: pointer; text-align: left; text-shadow: inherit; }
 .entries button b { min-width: 36px; font-weight: 700; color: rgba(243, 236, 221, .6); }
 .entries button small { font-size: inherit; font-weight: 400; color: var(--cream-72); }

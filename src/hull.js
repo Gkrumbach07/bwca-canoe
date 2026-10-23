@@ -6,7 +6,7 @@ import { paddleMesher } from './gear.js';
 // A 17 ft Kevlar tandem tripper, the kind every BWCA outfitter rents: symmetric, a touch of rocker, a flat
 // shallow-arch bottom turning through a firm bilge into sides with a little tumblehome, a sheer that sweeps
 // up to rounded stems, ash gunwales, small walnut deck plates, an ash yoke with pads, a stern-quarter thwart
-// and two caned seats on hangers. A Duluth pack lies in front of the yoke and a spare paddle along the port
+// and two caned seats on hangers. The Duluth packs lie in front of and behind the yoke and a spare paddle along the port
 // side. Canoe frame: +x bow, +y up, +z starboard; the origin sits FLOAT_OFFSET above the water at rest.
 
 export const HULL = {
@@ -19,7 +19,7 @@ export const HULL = {
   stemU: 0.80,     // where the keel starts up into the stems
   skin: 0.006,
 };
-export const HULL_COLORS = { out: 0x305542, in: 0x274533, ash: 0xc8a46f, ashDark: 0xa98757, deck: 0x6e4528, cane: 0xcbae74, caneDark: 0xa38650, pad: 0x2b2e2c, canvas: 0x7e7352, canvasDark: 0x6a6044, leather: 0x4e3322, buckle: 0x9a9890 };
+export const HULL_COLORS = { out: 0x305542, in: 0x274533, ash: 0xc8a46f, ashDark: 0xa98757, deck: 0x6e4528, cane: 0xcbae74, caneDark: 0xa38650, pad: 0x2b2e2c };
 export const SEATS = { stern: { x: -1.66, depth: 0.27 }, bow: { x: 1.58, depth: 0.25 }, drop: 0.115 };
 export const YOKE_X = 0.0, THWART_X = -0.92, BOW_THWART_X = 1.05;
 
@@ -216,23 +216,134 @@ function seat(m, sx, depth, cols) {
   return { y, zi };
 }
 
-// a Duluth pack: a soft canvas box, its flap, two leather straps round it and the shoulder straps on its
-// back panel (+y). Built lying down, centred on its own origin: length along x, thickness y, width z.
-function pack(m, cx, cols, cy = 0) {
-  const canvas = C(cols.canvas), dark = C(cols.canvasDark), leather = C(cols.leather);
+// Duluth packs: the canvas portage pack of the Boundary Waters. A tall, flat bag of waxed canvas, fuller
+// low on the front and flat on the back panel, its top rolled shut under a big flap that comes down over
+// the top half of the front; two leather straps run down the flap to buckles on short tabs sewn to the bag,
+// and two leather shoulder straps on the back panel run from the top down to the bottom corners, with a
+// carry handle between them at the top. The gear pack is the big one; the food pack is a size smaller and
+// a lighter canvas. Built standing on its own origin's middle: height along x (top +x), thickness along y
+// (the back panel, which goes against the wearer's back, +y), width along z.
+export const PACKS = {
+  gear: { H: 0.62, W: 0.5, D: 0.22, canvas: 0x7a6f4d, flap: 0x655b3e },
+  food: { H: 0.5, W: 0.42, D: 0.19, canvas: 0x96875f, flap: 0x7f7250 },
+};
+const PACK_LEATHER = 0x4e3322, PACK_LEATHER_DARK = 0x3d281b, PACK_BUCKLE = 0x9a9890;
+const PACK_SHAPE = 3.0; // the bag's section: a soft rounded box
+
+// The bag's surface. s: 0 at the bottom, 1 at the top; side +1 the back panel, -1 the front. The section at s
+// is a superellipse rz(s) wide and ryBack / ryFront deep; at width z the face lies `depth` off the middle.
+function packBody(P) {
+  const smooth = smooth01;
+  const end = (s) => (s < 0.015 ? 0.72 : s < 0.05 ? 0.93 : 1) * (s > 0.995 ? 0.8 : 1);           // the rounded bottom and the top's roll
+  const top = (s) => 1 - 0.5 * smooth(0.8, 1, s);                                                 // the top is rolled shut, thinner
+  const ryB = (s) => P.D * 0.36 * end(s) * top(s);
+  const ryF = (s) => P.D * 0.64 * end(s) * top(s) * (0.86 + 0.14 * Math.sin(Math.PI * Math.min(1, s / 0.85) ** 0.8)); // fuller low on the front
+  const rz = (s) => (P.W / 2) * end(s) * (1 - 0.05 * smooth(0.8, 1, s));
+  const x = (s) => -P.H / 2 + s * P.H;
+  const depth = (s, z, side) => { const r = side > 0 ? ryB(s) : ryF(s), w = rz(s), u = Math.min(1, Math.abs(z) / w); return r * Math.pow(Math.max(0, 1 - Math.pow(u, PACK_SHAPE)), 1 / PACK_SHAPE); };
+  const at = (s, z, side, out = V3()) => out.set(x(s), side * depth(s, z, side), z);
+  // the outward normal there, by differences
+  const normal = (s, z, side, out = V3()) => {
+    const e = 0.004, a = at(s - e, z, side), b = at(s + e, z, side), c = at(s, z - e, side), d = at(s, z + e, side);
+    out.crossVectors(b.sub(a), d.sub(c)).normalize();
+    if (out.y * side < 0) out.negate();
+    return out;
+  };
+  return { ryB, ryF, rz, x, depth, at, normal };
+}
+
+// a leather strap along a path on a surface: pts the path, ns the outward normals; w wide, t thick
+function strapAlong(m, pts, ns, w, t, col, { lift = 0.002 } = {}) {
   const rings = [];
-  const xs = [-0.22, -0.2, -0.15, -0.09, -0.06, -0.05, 0.04, 0.05, 0.08, 0.14, 0.19, 0.21];
-  for (const dx of xs) {
-    const e = Math.abs(dx) > 0.205 ? 0.78 : Math.abs(dx) > 0.185 ? 0.94 : 1;
-    const strap = Math.abs(dx + 0.055) < 0.008 || Math.abs(dx - 0.045) < 0.008;
-    const col = strap ? leather : dx > 0.1 ? dark : canvas;
-    const bulge = strap ? 1.012 : 1;
-    rings.push(ringPts(V3(cx + dx, cy, 0), V3(0, 1, 0), V3(0, 0, 1), 16, [0.112 * e * bulge, 0.25 * e * bulge], { shape: 3.4, col }));
+  for (let i = 0; i < pts.length; i++) {
+    const T = V3().subVectors(pts[Math.min(pts.length - 1, i + 1)], pts[Math.max(0, i - 1)]).normalize();
+    const N = ns[i].clone().addScaledVector(T, -ns[i].dot(T)).normalize();
+    const A = V3().crossVectors(N, T).normalize();
+    const c = pts[i].clone().addScaledVector(N, lift + t / 2);
+    rings.push(ringPts(c, A, N, 8, [w / 2, t / 2], { shape: 4, col }));
   }
   loft(m, rings, { capStart: true, capEnd: true });
-  // the shoulder straps lying on top
-  for (const sg of [-1, 1]) bar(m, V3(cx - 0.17, cy + 0.112, sg * 0.1), V3(cx + 0.17, cy + 0.112, sg * 0.1), V3(0, 0, 1), 0.045, 0.012, leather, { steps: 3, off: (s) => V3(0, 0.01 * Math.sin(s * Math.PI), 0) });
 }
+
+function pack(m, P) {
+  const canvas = C(P.canvas), flapC = C(P.flap), leather = C(PACK_LEATHER), leatherDark = C(PACK_LEATHER_DARK), buckle = C(PACK_BUCKLE);
+  const B = packBody(P);
+  // the bag: rings up its height, each a soft box fuller on the front (-y) than on the back panel (+y)
+  const ss = [0, 0.012, 0.04, 0.09, 0.17, 0.26, 0.36, 0.46, 0.56, 0.66, 0.75, 0.82, 0.88, 0.93, 0.97, 0.99, 1];
+  const rings = ss.map((s) => ringPts(V3(B.x(s), 0, 0), V3(0, 0, 1), V3(0, 1, 0), 28, (th) => [B.rz(s), Math.sin(th) < 0 ? B.ryF(s) : B.ryB(s)], { shape: PACK_SHAPE, col: canvas }));
+  loft(m, rings, { capStart: true, capEnd: true });
+
+  // The flap: one thick sheet of canvas from high on the back panel over the top and down the front to its edge,
+  // lofted across the width. It lies on the bag's surface (taken a little in from the sides, so it stays flat
+  // and overhangs the rounded corners the way stiff canvas does) and its lower corners are rounded up.
+  const sEdge = P.H > 0.55 ? 0.5 : 0.46, gap = 0.004, thick = 0.009;
+  const flapProfile = (z, outer) => {
+    const zz = Math.min(Math.abs(z), 0.8 * P.W / 2) * Math.sign(z);
+    const u = Math.abs(z) / (P.W / 2), se = sEdge + 0.07 * Math.pow(Math.min(1, u), 5);
+    const pts = [];
+    const push = (s, side) => { const p = B.at(s, zz, side), n = B.normal(Math.min(0.996, s), zz, side); pts.push({ p: p.addScaledVector(n, gap + (outer ? thick : 0)), z }); };
+    for (const s of [0.86, 0.92, 0.96, 0.985]) push(s, 1);
+    // over the top: the roll, from the back panel's edge to the front's
+    const yb = B.depth(1, zz, 1), yf = B.depth(1, zz, -1), xt = P.H / 2 + gap + (outer ? thick : 0) + 0.004;
+    for (const k of [0.6, 0.2, -0.2, -0.6]) pts.push({ p: V3(xt + 0.006 * (1 - k * k), k > 0 ? k * yb : k * yf, zz), z });
+    const n = 9;
+    for (let i = 0; i < n; i++) { const s = 0.985 - (0.985 - se) * (i / (n - 1)); push(s, -1); }
+    for (const q of pts) q.p.z = q.z;
+    return pts.map((q) => q.p);
+  };
+  const flapRings = [];
+  const zs = [-1, -0.97, -0.88, -0.7, -0.45, -0.2, 0, 0.2, 0.45, 0.7, 0.88, 0.97, 1].map((k) => k * P.W / 2 * 1.03);
+  for (const z of zs) {
+    const out = flapProfile(z, true), inn = flapProfile(z, false).reverse();
+    flapRings.push([...out, ...inn].map((p) => ({ p, c: flapC })));
+  }
+  loft(m, flapRings, { capStart: true, capEnd: true });
+  // the flap's straps: down the flap from over the top to buckles on short tabs sewn to the front
+  const flapAt = (s, z) => { // a point on the flap's outer face (front, s >= the edge) and its normal
+    const p = B.at(s, z, -1), n = B.normal(s, z, -1);
+    return { p: p.addScaledVector(n, gap + thick), n };
+  };
+  const sBuckle = sEdge - 0.13;
+  for (const sg of [-1, 1]) {
+    const z = sg * P.W * 0.21;
+    const pts = [], ns = [];
+    // over the top, then down the front of the flap and past its edge onto the bag
+    for (const k of [0.5, 0, -0.5]) { const yb = B.depth(1, z, 1), yf = B.depth(1, z, -1); pts.push(V3(P.H / 2 + gap + thick + 0.01 - 0.004 * Math.abs(k), k > 0 ? k * yb : k * yf, z)); ns.push(V3(1, 0, 0)); }
+    for (let i = 0; i <= 8; i++) { const s = 0.97 - (0.97 - (sEdge + 0.012)) * (i / 8); const q = flapAt(s, z); pts.push(q.p); ns.push(q.n); }
+    for (const s of [sEdge - 0.02, sEdge - 0.06, sBuckle + 0.02]) { const p = B.at(s, z, -1), n = B.normal(s, z, -1); pts.push(p.addScaledVector(n, 0.004)); ns.push(n); }
+    strapAlong(m, pts, ns, P.W * 0.075, 0.006, leather);
+    // the buckle: a small square frame where the strap meets its tab
+    const bp = B.at(sBuckle, z, -1), bn = B.normal(sBuckle, z, -1);
+    const T = V3(1, 0, 0).addScaledVector(bn, -bn.x).normalize(), A = V3().crossVectors(bn, T).normalize();
+    for (const [dx, dz, w, h] of [[0.016, 0, 0.006, P.W * 0.1], [-0.016, 0, 0.006, P.W * 0.1], [0, P.W * 0.045, 0.034, 0.006], [0, -P.W * 0.045, 0.034, 0.006]]) {
+      const c = bp.clone().addScaledVector(T, dx).addScaledVector(A, dz).addScaledVector(bn, 0.012);
+      bar(m, c.clone().addScaledVector(bn, -0.005), c.clone().addScaledVector(bn, 0.003), T, w, h, buckle, { steps: 1, n: 6, shape: 4 });
+    }
+    // the tab below it, sewn to the bag
+    const tp = [], tn = [];
+    for (const s of [sBuckle - 0.012, sBuckle - 0.06, sBuckle - 0.11]) { const p = B.at(s, z, -1), n = B.normal(s, z, -1); tp.push(p); tn.push(n); }
+    strapAlong(m, tp, tn, P.W * 0.08, 0.005, leatherDark, { lift: 0.001 });
+  }
+  // the shoulder straps on the back panel: from near the top, side by side, out and down to the bottom corners,
+  // standing a little off the panel in the middle where the padding is
+  for (const sg of [-1, 1]) {
+    const pts = [], ns = [];
+    const n = 12;
+    for (let i = 0; i <= n; i++) {
+      const u = i / n, s = lerpN(0.9, 0.05, u), z = sg * lerpN(0.05, 0.36, Math.pow(u, 1.6)) * P.W;
+      const p = B.at(s, z, 1), nn = B.normal(Math.max(0.02, s), z, 1);
+      pts.push(p.addScaledVector(nn, 0.012 * Math.sin(Math.PI * Math.min(1, u * 1.15)))); ns.push(nn);
+    }
+    strapAlong(m, pts, ns, 0.052, 0.011, leather);
+  }
+  // the carry handle at the top of the back panel
+  {
+    const pts = [], ns = [];
+    for (let i = 0; i <= 6; i++) { const u = i / 6, z = lerpN(-0.055, 0.055, u); const p = B.at(0.965, z, 1), nn = B.normal(0.965, z, 1); pts.push(p.addScaledVector(nn, 0.026 * Math.sin(Math.PI * u))); ns.push(nn); }
+    strapAlong(m, pts, ns, 0.03, 0.008, leatherDark);
+  }
+}
+const lerpN = (a, b, t) => a + (b - a) * t;
 
 // The coarse proxy the occlusion is cast against: low-res skins and boxes for the fittings.
 function proxyTris(parts) {
@@ -284,11 +395,15 @@ export function buildHullGeometry(cols = HULL_COLORS) {
   return geo;
 }
 
-// the pack on its own, and where it lies in the hull (in front of the yoke, straps up)
-export const PACK_AT = { x: 0.76, lift: 0.116 };
-export function buildPackGeometry(cols = HULL_COLORS) {
+// A pack on its own (PACKS.gear or PACKS.food), and where they lie in the hull: flat, the flap and its buckles
+// up, the top toward the bow; the gear pack in front of the yoke, the food pack behind it, over the spare paddles
+// (the solo paddler kneels at the stern seat, so the weight goes forward of him). lift: the pack's middle above
+// the floor there.
+export const PACK_AT = { x: 0.74, lift: 0.098 };
+export const PACK2_AT = { x: -0.5, lift: 0.094 };
+export function buildPackGeometry(kind = 'gear') {
   const m = new Mesher();
-  pack(m, 0, cols, 0);
+  pack(m, PACKS[kind] || PACKS.gear);
   const g = m.geometry();
   // a little occlusion of its own: under the straps and the flap
   bakeLater(() => ({ geo: g, tris: trianglesOf(g), opts: { rays: 6, reach: 0.05, floor: 0.6 }, apply: (k) => applyAO(g, k) }));

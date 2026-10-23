@@ -11,8 +11,9 @@ export class TripStats {
   constructor(world, player, day) {
     this.world = world; this.player = player; this.day = day;
     this.reset(false);
+    this.lastDoy = day.doy; // the day the tally last saw (restored with it: the page opens on today's date, not the trip's)
     this.restore(save.read('stats'));
-    this.lastMode = player.mode; this.lastDoy = day.doy; this.lastDrops = player.dropCount || 0;
+    this.lastMode = player.mode; this.lastDrops = player.dropCount || 0;
     this.carried = null;   // the portage under the hull while it is on your shoulders: { name, rods }
     this.t = 0; this.saveT = 0; this.dirty = false;
     window.addEventListener('pagehide', () => this.write());
@@ -38,9 +39,12 @@ export class TripStats {
       if (m > 0) { this.km += m / 1000; this.touch((d) => { d.km += m / 1000; }); }
     }
     if (p.mode === 'carry') {
-      if ((this.t -= dt) <= 0) { this.t = 0.5; const tr = p.nearestTrail(p.x, p.z, 12); if (tr && tr.dist < 6) this.carried = { name: tr.def.name, rods: tr.def.rods }; }
+      if ((this.t -= dt) <= 0) { this.t = 0.5; const tr = p.nearestTrail(p.x, p.z, 12); if (tr && tr.dist < 6) this.carried = { name: tr.def.name, rods: tr.def.rods, def: tr.def }; }
     }
-    if (this.lastMode === 'carry' && p.mode === 'paddle' && this.carried) { // a portage walked end to end
+    // a portage walked end to end: launched off your shoulders, or (a double portage) from the far end's ground, at
+    // one of the trail's own ends (not afloat at a landing after an evacuation)
+    const atEnd = (c) => !c.def || c.def.launch.some((l) => Math.abs(l.x - p.x) < 40 && Math.abs(l.z - p.z) < 40);
+    if ((this.lastMode === 'carry' || this.lastMode === 'walk') && p.mode === 'paddle' && this.carried && atEnd(this.carried)) {
       this.portages++; this.rods += this.carried.rods; this.touch((d) => { d.portages++; }); this.carried = null;
     }
     if (p.mode !== 'carry' && p.mode !== 'walk') this.carried = null;
@@ -73,11 +77,12 @@ export class TripStats {
     return p.placeName ? `on ${p.placeName}` : 'in the woods';
   }
 
-  serialize() { return { v: 1, km: this.km, rods: this.rods, portages: this.portages, drops: this.drops, lakes: this.lakes, nights: this.nights, days: this.days }; }
+  serialize() { return { v: 1, km: this.km, rods: this.rods, portages: this.portages, drops: this.drops, lakes: this.lakes, nights: this.nights, days: this.days, lastDoy: this.lastDoy }; }
   restore(d) {
     if (!d) return;
     this.km = d.km || 0; this.rods = d.rods || 0; this.portages = d.portages || 0; this.drops = d.drops || 0;
     this.lakes = Array.isArray(d.lakes) ? d.lakes : []; this.nights = Array.isArray(d.nights) ? d.nights : []; this.days = d.days && typeof d.days === 'object' ? d.days : {};
+    if (Number.isFinite(d.lastDoy)) this.lastDoy = d.lastDoy; // a reload's Continue sets the clock back to the trip's day: no night in that
   }
   write() { this.dirty = false; save.write('stats', this.serialize()); }
 }

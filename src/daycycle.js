@@ -156,6 +156,12 @@ export class DayCycle {
     this.hours = start?.hours ?? now.getHours() + now.getMinutes() / 60;
     this.running = true;
     this.hoursPerSecond = 24 / (20 * 60); // a full day in 20 real minutes
+    // trip core: `rate` scales the clock alone (the trip sets 1/3 while you travel in Adventure, trip.js); `jumps` counts
+    // the moves of the clock made by advance() (a night slept, a walk back fetched), so the HUD's dawn card can skip them;
+    // `locked` (Adventure) turns the clock keys off
+    this.rate = 1;
+    this.jumps = 0;
+    this.locked = false;
     this.sunDir = new THREE.Vector3(0, 1, 0);
     this.moonDir = new THREE.Vector3(0, 1, 0);
     this.elevation = 0;
@@ -164,6 +170,7 @@ export class DayCycle {
     this._times = null;
     window.addEventListener('keydown', (e) => {
       if (e.target && e.target.tagName === 'SELECT') return;
+      if (this.locked) return; // Adventure: the clock is the trip's
       if (e.code === 'BracketLeft') this.hours = (this.hours + 23) % 24;
       if (e.code === 'BracketRight') this.hours = (this.hours + 1) % 24;
       if (e.code === 'Minus') this.stepDays(e.shiftKey ? -30 : -1);
@@ -176,6 +183,18 @@ export class DayCycle {
   setClock(year, doy, hours) {
     this.year = year; this.doy = doy; this.hours = ((hours % 24) + 24) % 24; this._times = null;
     this.stepDays(0);
+  }
+
+  // Move the clock forward by `hours` (a night slept, an hour's walk fetched): across midnight into the next day (and
+  // the next year), with the season following. Counted as a jump, not a passing of the clock.
+  advance(hours) {
+    if (!(hours > 0)) return;
+    this.hours += hours;
+    const days = Math.floor(this.hours / 24);
+    if (days) { this.hours -= days * 24; this.stepDays(days); }
+    this.season = seasonAt(this.doy);
+    this._times = null;
+    this.jumps++;
   }
 
   stepDays(n) {
@@ -213,7 +232,7 @@ export class DayCycle {
 
   update(dt) {
     if (this.running) {
-      this.hours += dt * this.hoursPerSecond;
+      this.hours += dt * this.hoursPerSecond * this.rate;
       if (this.hours >= 24) { this.hours -= 24; this.stepDays(1); }
     }
     this.season = seasonAt(this.doy);

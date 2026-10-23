@@ -1,9 +1,9 @@
 // The beds: the sounds that always run and only change level. Wind on the open water, needles hissing and
 // leaves rustling in the trees, water slapping the hull and washing on the shore, the faint far wash of an open
-// lake, the frog and cricket choruses, and rain when the weather has any. Built once against the engine's shared
+// lake, the frog and cricket choruses, rain when the weather has any, and a campfire's crackle once one is lit. Built once against the engine's shared
 // noise; update() only moves parameters (throttled to 15 Hz), and the rhythmic ones (slaps, waves, peeps,
 // chirps) are scheduled a fifth of a second ahead on the same persistent gains, so a bed never creates a node.
-import { clamp01, smooth, swell, shaperCurve, setPos, peeperSeason, cricketSeason } from './audio-kit.js';
+import { clamp01, smooth, swell, grains, shaperCurve, setPos, peeperSeason, cricketSeason } from './audio-kit.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -14,7 +14,7 @@ export class Beds {
     const G = this.G = (v, to) => { const g = au.mk(ctx.createGain()); g.gain.value = v; if (to) g.connect(to); return g; };
     const F = this.F = (type, f, Q = 0.7, from) => { const b = au.mk(ctx.createBiquadFilter()); b.type = type; b.frequency.value = f; b.Q.value = Q; if (from) from.connect(b); return b; };
     // a panner for a bed that comes from somewhere; roll 0 pans without the distance law (the level is set here)
-    const P = (ref, roll, to) => { const p = au.mk(ctx.createPanner()); p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = ref; p.rolloffFactor = roll; p.maxDistance = 20000; setPos(p, 0, 0, -ref); p.connect(to); return p; };
+    const P = this.P = (ref, roll, to) => { const p = au.mk(ctx.createPanner()); p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = ref; p.rolloffFactor = roll; p.maxDistance = 20000; setPos(p, 0, 0, -ref); p.connect(to); return p; };
     const { white, pink, brown, flutter } = au.src;
     const wet = this.wet = G(0.14, au.reverbIn); // the beds' share of the room
 
@@ -72,6 +72,18 @@ export class Beds {
       o.frequency.value = c.f; sp.pan.value = c.pan; o.connect(g); g.connect(sp); sp.connect(this.crickBus); o.start();
       return { ...c, o, g, t: 0 };
     });
+  }
+
+  // the campfire, built the first time one is lit: the low roar of the burning, a hiss of sap, and the crackle (a few
+  // clicks at a time through a bright band) with now and then a pop, placed at the fire with the distance law
+  buildFire() {
+    const { G, F, P, au } = this, { white, brown, pink } = au.src;
+    const pan = P(2.5, 1.2, au.bus); pan.connect(this.wet);
+    const roarLP = F('lowpass', 360, 0.6, brown), roar = G(0, pan); roarLP.connect(roar);
+    const hissBP = F('bandpass', 1900, 0.5, pink), hiss = G(0, pan); hissBP.connect(hiss);
+    const crackHP = F('highpass', 2400, 0.7, white), crack = G(0, pan); crackHP.connect(crack);
+    const popBP = F('bandpass', 950, 1.3, white), pop = G(0, pan); popBP.connect(pop);
+    this.fire = { pan, roar, hiss, crack, pop, t: 0, heat: 0 };
   }
 
   // rain is built the first time the weather has any (the game has no weather yet)
@@ -133,6 +145,15 @@ export class Beds {
     for (let i = 0; i < 3; i++) { const sp = S.shallow[i] || S.shallow[0]; if (sp) au.place(this.peeps[i].p, { x: sp.x, y: S.level, z: sp.z }); }
     lv.crickets = cricketSeason(S.doy) * Math.max(S.night, 0.5 * S.dusk) * (1 - 0.6 * S.open) * (1 - 0.6 * smooth(6, 12, w)) * (1 - ice);
     T(this.crickBus.gain, 0.05 * lv.crickets, 1.5);
+    // a campfire near: its roar and hiss by how hard it burns, the embers a faint breath
+    if (S.fire || this.fire) {
+      if (!this.fire) this.buildFire();
+      const f = S.fire, fb = this.fire, heat = f ? f.heat : 0, emb = f ? f.embers || 0 : 0;
+      fb.heat = heat;
+      T(fb.roar.gain, 0.16 * heat + 0.025 * emb * (1 - heat), 0.5); T(fb.hiss.gain, 0.025 * heat, 0.6);
+      if (f) au.place(fb.pan, { x: f.x, y: f.y + 0.4, z: f.z });
+      lv.fire = heat;
+    }
     // rain on the water and the ground, drumming on the hull or pattering in the leaves
     if (S.rain > 0.001 || this.rain) {
       if (!this.rain) this.buildRain();
@@ -168,6 +189,18 @@ export class Beds {
         if (h > 0.2) swell(this.boom.gain, t, a * 0.9 * clamp01((h - 0.15) / 0.6), 0.04, 0.02, 0.5);
         this.waveT += (1.4 + 2.2 * R()) * (0.8 + 0.5 * clamp01(h / 0.8));
         lv.wave = a; this.au.count('shore-wave');
+      }
+    }
+    // the fire's crackle: clusters of clicks, quicker the harder it burns, and a pop now and then
+    const fb = this.fire;
+    if (fb && fb.heat > 0.03) {
+      if (fb.t < now) fb.t = now + R() * 0.1;
+      while (fb.t < ahead) {
+        const t = fb.t, h = fb.heat;
+        grains(fb.crack.gain, t, 1 + Math.floor(R() * 3), 0.025, 0.55 * h * (0.35 + R() * 0.65), 0.01, R);
+        if (R() < 0.1) swell(fb.pop.gain, t + 0.01, 0.7 * h * (0.5 + R() * 0.5), 0.002, 0.003, 0.05);
+        fb.t += (0.04 + R() * R() * 0.55) / (0.45 + h);
+        this.au.count('fire-crackle');
       }
     }
     // peepers: denser as the chorus builds
