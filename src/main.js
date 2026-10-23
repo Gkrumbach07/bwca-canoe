@@ -42,6 +42,7 @@ import { Camp, CampRegistry } from './camp.js'; // trip core C
 import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
 import { Profile } from './profile.js'; // hubs 1A
+import { sheets } from './sheets.js'; // hubs 2D
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -218,6 +219,9 @@ async function main() {
   window.__game.profile = profile; // hubs 1A
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
+  // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
+  // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
+  sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -244,6 +248,7 @@ async function main() {
       outfitter.prompt();
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
       tasks.update(dt * ts);
+      sheets.update(player); // hubs 2D: the cells around you as you go
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
       energy.update(dt * ts, wind, atCamp);
       tripStats.update(dt * ts, outfitter.trip.active);
