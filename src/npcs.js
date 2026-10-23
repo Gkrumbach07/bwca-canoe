@@ -594,7 +594,7 @@ const HINTS = {
   leeches() { return { text: 'There’s leeches under the flat rocks by the dock. I got eleven. One got in my sock.' }; },
 };
 const OPENERS = {
-  guide: ['Morning.', 'Hey there.', 'Heading out?'], ranger: ['Afternoon.', 'Hello.', 'Good to see you.'], photographer: ['Oh, hello.', 'Hi.', 'Good light out there today.'],
+  guide: ['Morning.', 'Hey there.', 'Heading out?'], ranger: ['Afternoon.', 'Hello.', 'Good to see you.'], photographer: ['Oh, hello.', 'Hi.', 'Hello there.'],
   family: ['Hi!', 'Hello there.', 'Oh, hi.'], oldtimer: ['Sit down a minute.', 'Well, now.', 'Afternoon.'], crew: ['Hey.', 'Afternoon.', 'How’s it going.'],
   birder: ['Shh. Oh, it’s gone. Hello.', 'Hello!', 'Hi there.'], cook: ['Hi, hon.', 'Hello, dear.', 'Oh, hi.'], mail: ['Morning.', 'Afternoon.', 'Hey.'],
   trippers: ['Hey!', 'Hi.', 'Hey, how’s it going.'], fishguide: ['Morning.', 'Yep.', 'Hey.'], kid: ['Hi!', 'Hey! Hey!', 'Want to see my leeches?'],
@@ -1004,7 +1004,7 @@ export class People {
   toldHints() { return this.s.told.filter((h) => Number.isFinite(h.x) && Number.isFinite(h.z)); }
 
   // --- their task ---------------------------------------------------------------------------------------------------
-  taskOf(v) { const id = this.s.tasks[v.key]; return id != null && this.tasks ? this.tasks.ads.get(id) || null : null; }
+  taskOf(v) { const id = this.s.tasks[v.key]; const t = id != null && this.tasks ? this.tasks.ads.get(id) || null : null; return t && t.status !== 'offered' ? t : null; }
   ctxFor(v) {
     const T = this.tasks, landing = T.landing(v.ep);
     return { ep: v.ep, band: 'medium', rng: seeded(v.ep, this.week, 0xa5c), landing, reach: T.reach(landing.lake), board: [] };
@@ -1025,6 +1025,7 @@ export class People {
     const r = job.result;
     if (!r) { v.hasTask = false; return null; }
     const T = this.tasks, k = KINDS[r.kind];
+    T.board(v.ep); // the board kept first, so this is not pinned on it as an old save's notice would be
     if (!k) { v.hasTask = false; return null; }
     const t = { id: T.nextId++, kind: r.kind, from: v.ep, fromName: T.landing(v.ep).name, band: 'medium', status: 'open', posted: T.today(), taken: T.today(), npc: v.key, npcName: v.name, ...r.fields };
     if (!t.sign) t.sign = v.name;
@@ -1073,7 +1074,7 @@ export class People {
   checkTasks() {
     const T = this.tasks; if (!T) return;
     for (const [key, id] of Object.entries(this.s.tasks)) {
-      if (T.ads.has(id)) continue;
+      { const t = T.ads.get(id); if (t && t.status !== 'offered') continue; }
       if ((T.claimed || []).some((c) => c.id === id)) this.paid({ key, first: this.s.names[key] || 'They' }, null); // paid at the counter
       else { delete this.s.tasks[key]; delete this.s.gifts[key]; this.write(); } // let go at the counter: they will ask again
     }
