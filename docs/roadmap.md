@@ -3,7 +3,7 @@
 Where the game goes after the look overhaul (`docs/look.md`). Each phase ends with its work merged on main
 and checked on the look board. Agreed with the owner on 2026-10-22; phase 3 takes the "alive" track first.
 
-## Phase 1: integrate and lock it in
+## Phase 1: integrate and lock it in (done 2026-10-23)
 
 - **Done:** the pivot (ground and light, foliage cards, rocks, atmosphere) and the six look branches (grade,
   water and lake plants, crowns, rocks, built props, canoe and paddler) are merged.
@@ -20,7 +20,7 @@ and checked on the look board. Agreed with the owner on 2026-10-22; phase 3 take
   pine on dry ridges and old shores, black spruce and tamarack in wet lowlands, cedar along shores and wet
   ground, balsam fir and white spruce in moist mixed forest, birch and aspen on slopes, talus edges and burns.
 
-## Phase 2: performance and the look's leftovers
+## Phase 2: performance and the look's leftovers (done 2026-10-23; on-screen fps still to read)
 
 - **Performance, done** (`docs/look.md`, Performance and quality): per-instance culling for the view and each
   shadow cascade, quality presets Low to Ultra with Auto, the occlusion bakes cached in IndexedDB. Ultra is the old
@@ -31,7 +31,7 @@ and checked on the look board. Agreed with the owner on 2026-10-22; phase 3 take
   transitions; alpha-to-coverage on the cards.
 - The biggest single gain left: hand-painted leaf and needle sprites dropped into `src/textures.js`'s slots.
 
-## Phase 3: alive
+## Phase 3: alive (done 2026-10-23: weather, wind in the trees, sound, wildlife, and the follow-ups)
 
 - **Weather:** clear, broken cloud, overcast, morning fog on the water, rain (on the water, the ground and the
   hull), a passing storm with wind, lightning and thunder, all keyed through the day cycle and the fog ramps.

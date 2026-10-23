@@ -100,9 +100,9 @@ baked lightmaps, no PBR, no external assets.
   the default board has a July storm at 15:00 and a fog morning. Add a spot by adding an entry; keep spots within
   a few kilometres of the lodge so the tiles stay loaded. The full sheet (60 frames) takes 3–6 s once the tiles
   are in.
-- A worktree under `.claude/worktrees/` is outside the shared Vite config's watcher (it ignores `**/.claude/**`),
-  so edits there reach the page only after the dev server restarts; or run Vite with a config of your own that
-  imports `vite.config.js` and sets `server.watch.ignored` without that pattern.
+- The dev server's watcher skips `.claude/` (worktrees), `public/data`, `data-cache`, `node_modules` and `dist`,
+  matched relative to the folder it serves, so the main checkout ignores worktree edits while a server started
+  inside a worktree still reloads on its own edits. `strictPort` is on: pass a free `--port`.
 - The hidden pane leaves the canvas 0 × 0, so the camera's projection is NaN: anything that unprojects fails
   and frustum culling is off (draw calls and triangles read about 4x high). Force a size first
   (`camera.aspect`, `renderer.setSize`, `post.resize`), and dispatch a window `resize` event afterwards to put
