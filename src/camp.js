@@ -187,6 +187,8 @@ export class Camp {
     if (!this.booted) {
       this.booted = true; this.lastMode = p.mode;
       if (this.links) { const l = this.links() || {}; this.trip = l.trip || null; this.veil = l.veil || null; this.packs = l.packs || null; }
+      // a trip that ends (an evacuation, the end at a counter, abandoned) takes the camp down with it, quietly
+      if (this.trip && this.trip.on) for (const k of ['exit', 'evac']) this.trip.on(k, () => this.leave({ quiet: true }));
       this.restore();
     }
     if (this.card) this.card.update(dt);
@@ -397,14 +399,14 @@ export class Camp {
     this.persist();
     if (!quiet) this.note('You strike the tent and pack up.');
   }
-  // pushing off: strike the tent, drown the fires you lit
-  leave() {
+  // pushing off: strike the tent, drown the fires you lit (quiet: without a word, as when a trip ends)
+  leave({ quiet = false } = {}) {
     const F = this.fires;
     let drowned = false;
     if (F) for (const key of this.lit) if (F.get(key)) { F.douse(key); drowned = true; }
     this.lit.clear();
-    if (this.camp) { const had = this.camp; this.strike({ quiet: true }); this.note(had.key ? `You strike the tent${drowned ? ' and drown the fire' : ''}. The site is free again.` : 'You strike the tent.'); }
-    else if (drowned) this.note('You drown the fire before you push off.');
+    if (this.camp) { const had = this.camp; this.strike({ quiet: true }); if (!quiet) this.note(had.key ? `You strike the tent${drowned ? ' and drown the fire' : ''}. The site is free again.` : 'You strike the tent.'); }
+    else if (drowned && !quiet) this.note('You drown the fire before you push off.');
     this.persist();
   }
 
