@@ -4,8 +4,9 @@
 // the same road while there is one, else the nearest anywhere); arriving makes that one known. No rides from the wild.
 //
 // A ride costs money and game time: the road is about 1.4 × the straight line, the time 0.5 h + km / 40, the price
-// $5 + $0.50 a km, rounded to $5. The canoe rides on the roof and the packs in the back: you arrive afloat at the
-// landing with everything (the same teleport as an evacuation), and that counter opens. A ride that would get in
+// $5 + $0.50 a km, rounded to $5. The canoe rides on the roof and the packs in the back: you arrive with everything
+// (the same teleport as an evacuation) tied up at that store's dock, standing at its door (outfitter.js arrival, as a
+// season begins; where the store is not built yet, afloat at the landing with its counter open). A ride that would get in
 // after 21:00 (or before 5:00) ends in a bunk night there, with breakfast, and you are up at 7:30. During a trip the
 // trip goes on; between trips you push off from where the truck left you. Sandbox: free and instant.
 //
@@ -146,8 +147,11 @@ export class Rides {
     if (core && typeof core.log === 'function') core.log('ride', { from: from.ep, to: to.ep, km: r.km, hours: r.hours, price: r.price, night });
     if (this.tasks && typeof this.tasks.onEvent === 'function') this.tasks.onEvent({ type: 'arrive', ep: to.ep, by: 'ride' }); // a fetch notice (later) hears it
     this.last = { from: from.ep, to: to.ep, ...r, night, at: d ? { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) } : null };
-    // the counter there opens, the keeper greeting you off the truck (or at breakfast)
-    o.lineKind = night ? 'morning' : 'welcome'; o.arrivedBy = night ? 'bunk' : 'ride'; o.pendingShow = true;
+    // in at the store's door, the canoe tied at its dock, and the keeper's word for the road (or breakfast) as you go in
+    // (outfitter.js updateArrival, as a season begins); where the landing has no store yet, the counter opens as before
+    o.lineKind = night ? 'morning' : 'welcome'; o.arrivedBy = night ? 'bunk' : 'ride';
+    if (typeof o.layout === 'function' && typeof o.updateArrival === 'function') o.arrival = { why: 'ride', ep: to.ep, t: 0, pending: true };
+    else o.pendingShow = true;
     if (typeof o.save === 'function') o.save();
     return true;
   }

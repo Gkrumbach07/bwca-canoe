@@ -5,6 +5,8 @@ import { clock12, longDate, plural, fmtDays, compassLong, word } from './hud.js'
 import { SPECIES } from './fishing.js';
 import { daysInYear } from './astro.js';
 import { sheets } from './sheets.js'; // hubs 2D: the dusk word names only a site your map shows
+import { Chores } from './chores.js'; // hubs 3A: firewood, the latrine, blueberries, the wake-time card
+import { FIRE } from './fire.js';
 
 // Camp and night (the trip core, stream C). On foot at a campsite: pitch your tent at the site's pad (props.js
 // c.layout), light a fire in the grate (fire.js), cook a hot meal on it, sleep in the tent to morning under a night
@@ -16,6 +18,10 @@ import { sheets } from './sheets.js'; // hubs 2D: the dusk word names only a sit
 // hour) when no other prompt holds E.
 // An hour before sunset, in Adventure, a note names the nearest free site; once it is dark a note suggests the
 // headlamp (headlamp.js, H).
+// Hubs phase 3 (stream A) made camp "a bunch of little tasks" (chores.js): gather an armful of firewood near the trees,
+// stacked by the ring as a woodpile; the fire takes an armful to light and another to feed, and burns down without
+// (fire.js); the latrine box once a day; blueberries in season; and E at the tent opens a card to pick the wake time
+// (first light, 7:00 or 9:00) before you turn in. Each is one E and passes its life length on the clock.
 //
 // The registry says who holds each site: keys are `Math.round(x):Math.round(z)` (the index's sites have no ids). The
 // player holds with 'player'; later the parties met on the water hold with their own ids, and the player's prompt at
@@ -42,9 +48,16 @@ const CHORES = {
   pitch: { seconds: 1.6, hours: 0.25, say: 'Pitching the tent…' },
   fire: { seconds: 1.4, hours: 20 / 60, say: 'Laying the fire and lighting it…' },
   rekindle: { seconds: 0.8, hours: 5 / 60, say: 'Building the fire up again…' },
+  feed: { seconds: 0.6, hours: 5 / 60, say: 'Laying on another armful…' },
   cook: { seconds: 1.4, hours: 0.5, say: 'Cooking on the grate…' },
   fill: { seconds: 0.7, hours: 5 / 60, say: 'Filling the bottle…' },
+  // hubs 3A (chores.js): an armful of firewood (the folding saw makes it quicker), the latrine, a pint of blueberries
+  gather: { seconds: 1.6, hours: 25 / 60, say: 'Gathering dead and down wood…' },
+  saw: { seconds: 1.0, hours: 10 / 60, say: 'Sawing a dead spruce into lengths…' },
+  latrine: { seconds: 0.9, hours: 10 / 60, say: 'A quiet few minutes back in the trees…' },
+  pick: { seconds: 1.4, hours: 20 / 60, say: 'Picking blueberries…' },
 };
+const LOW_CHORES = new Set(['fire', 'rekindle', 'feed', 'cook', 'fill', 'gather', 'saw', 'pick']); // done crouched (canoe.js state.crouch)
 const SLEEP_FROM = 1.5;     // hours before sunset the tent will take you
 const WAKE_AT = 0.25;       // hours after sunrise you wake
 const LATE_NIGHT = 5;       // turning in with fewer hours than this to first light, you sleep in instead:
@@ -162,6 +175,7 @@ export class Camp {
     this.profileOf = null;    // () => the profile (stream A), set by main.js
     this.restT = 0; this.atSite = false;
     this.lit = new Set();     // the fires the player lit (keys): drowned when the player pushes off
+    this.chores = new Chores(this); // hubs 3A: the wood, the latrine, the berries, the wake-time card (main.js sets .tasks)
   }
 
   // --- what the other streams give, or the sandbox -----------------------------------------------------------
@@ -202,9 +216,12 @@ export class Camp {
   }
 
   // --- the frame ----------------------------------------------------------------------------------------------
-  // before player.update: the walker holds still while the tent goes up or the night card is up
+  // before player.update: the walker holds still while the tent goes up, the night card or the wake-time card is up
+  // (← → at the tent open that card: chores.before)
   before() {
-    if (this.busy || (this.card && this.card.active)) this.player.input.paused = true;
+    const ch = this.chores;
+    if (ch && !this.busy && !this.night) ch.before();
+    if (this.busy || (this.card && this.card.active) || (ch && ch.card.open)) this.player.input.paused = true;
   }
 
   // after player.update (and the outfitter's prompt): the camp's keys and prompts. dt: real seconds.
@@ -228,8 +245,12 @@ export class Camp {
     if (this.camp && p.mode === 'paddle' && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) > STRIKE_AFAR) this.strike({ quiet: true });
     if (this.lamp && this.player.input.pressed('KeyH')) this.lamp.toggle();
     this.rest(dt, dh);
+    if (this.chores) this.chores.update(dt); // hubs 3A: the wood set down at a ring, the woodpile and the berries drawn
+    const cs = p.canoe && p.canoe.state; // down on your heels for the low chores (canoe.js state.crouch)
+    if (cs) cs.crouch = this.busy && LOW_CHORES.has(this.busy.kind) && p.mode === 'walk' ? 1 : 0;
     if (this.busy) { this.working(dt); return; }
     if (this.night) return;
+    if (this.chores && this.chores.card.open) { p.prompt = null; return; } // the wake-time card holds the keys
     this.notes();
     this.still = Math.abs(p.speed) < 0.15 ? this.still + dt : 0;
     this.prompts();
@@ -335,35 +356,54 @@ export class Camp {
   // game hours before the water just filled is drinkable: tablets half an hour, a filter a few minutes
   filterWait() { const k = this.kitOf('filter'); return FILTERS[k] ?? (/pump|gravity|filter/.test(k) ? FILTERS.pump : FILTERS.tablets); }
 
+  // At a site E belongs to the nearest thing that wants it: the grate, your tent, the latrine box or the blueberries
+  // (hubs 3A), then the pad while it is free, the trees (an armful of firewood), and anywhere else on a free site, the pad.
   atSitePrompts(site) {
-    const p = this.player, key = campKey(site), L = site.layout, holder = this.registry.holder(key);
+    const p = this.player, key = campKey(site), L = site.layout, holder = this.registry.holder(key), ch = this.chores;
     const name = this.siteName(site);
     if (holder && holder !== PLAYER) { this.say(`${name} · Taken: another party is camped here`); return; }
     const mine = !!(this.camp && this.camp.key === key);
     if (Math.hypot(L.fire.x - p.x, L.fire.z - p.z) < AT_GRATE && this.firePrompts(site, key)) return;
-    if (mine) { if (Math.hypot(this.camp.x - p.x, this.camp.z - p.z) < AT_TENT) this.tentPrompts(); return; }
-    this.offer('Pitch the tent', `${name}, free`, () => this.pitch(site));
+    if (mine && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) < AT_TENT) { this.tentPrompts(site); return; }
+    if (ch && ch.spotPrompts(site)) return;
+    const pitch = () => this.offer('Pitch the tent', `${name}, free`, () => this.pitch(site));
+    if (!mine && Math.hypot(L.pad.x - p.x, L.pad.z - p.z) < 7) { pitch(); return; }
+    if (ch && ch.gatherPrompt(site)) return;
+    if (!mine) pitch();
   }
 
+  // the grate: light the fire with an armful (or gather one first), cook what is due, feed it another armful
   firePrompts(site, key) {
-    const F = this.fires, now = this.now;
+    const F = this.fires, now = this.now, ch = this.chores;
     if (!F) return false;
+    const wood = ch ? ch.woodHere(key) : 1;
     if (!F.isLit(key, now)) {
       const f = F.get(key);
-      this.offer(f ? 'Build the fire up again' : 'Light the fire', f ? 'the embers are still warm' : null, () => this.lightFire(site));
+      if (wood < 1) {
+        if (ch && ch.gatherPrompt(site)) return true;
+        this.say(`The fire ring · ${f ? 'the embers are still warm, and ' : ''}no wood: an armful from the trees first`);
+        return true;
+      }
+      this.offer(f ? 'Build the fire up again' : 'Light the fire', f ? `the embers are still warm · ${ch ? ch.woodWords(key) : ''}` : (ch ? ch.woodWords(key) : null), () => this.lightFire(site));
       return true;
     }
     const meal = this.mealHere();
     if (meal) { this.offer(meal.label, meal.hint, () => this.cook(meal)); return true; }
-    if (F.left(key, now) < 1) { this.offer('Add wood', 'the fire is burning low', () => { F.feed(key, now); this.persist(); }); return true; }
+    const left = F.left(key, now);
+    if (wood >= 1 && left < FIRE.burn - 0.25) { this.offer('Add wood', `${left < FIRE.low ? 'the fire is burning down' : `about ${Math.max(1, Math.round(left))} ${left < 1.5 ? 'hour' : 'hours'} of wood left`} · ${ch ? ch.woodWords(key) : 'an armful'}`, () => this.feedFire(site)); return true; }
+    if (left < FIRE.low && ch && ch.gatherPrompt(site)) return true;
     return false;
   }
 
-  tentPrompts() {
+  // at your tent: E opens the wake-time card (chores.js), ← → too; by day, worn out, you sleep at once
+  tentPrompts(site = null) {
     const d = this.day, { rise, set } = d.sunriseSunset, h = d.hours;
     const from = (set ?? 19) - SLEEP_FROM;
-    if (h >= from || h < (rise ?? 6)) this.offer('Sleep', `until morning, about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
-    else if (this.wornOut) this.offer('Sleep', `worn out: until about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
+    if (h >= from || h < (rise ?? 6)) {
+      const ch = this.chores;
+      if (ch) { ch.offered(site); this.offer('Sleep', `until first light, about ${clock12(this.wakeTime('first').at)} · <kbd>←</kbd><kbd>→</kbd> later`, () => ch.openWake(site, 0)); }
+      else this.offer('Sleep', `until morning, about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
+    } else if (this.wornOut) this.offer('Sleep', `worn out: until about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
     else this.say(`Your tent · you can turn in from ${clock12(from)}`);
   }
   // done in by day (a site reached at dawn after a night on the water): the tent takes you anyway
@@ -371,10 +411,13 @@ export class Camp {
 
   offSitePrompts() {
     const p = this.player;
-    if (this.camp) { if (!this.camp.key && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) < AT_TENT) this.tentPrompts(); return; }
-    if (this.adventure) return; // designated sites only: no tent and no bivouac off a site
-    // sandbox: a tent anywhere flat and dry, once you stand still a moment
-    if (this.still > 1.2) { const spot = this.spotAhead(); if (spot) this.offer('Pitch the tent here', null, () => this.pitchAt(spot)); }
+    if (this.camp && !this.camp.key && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) < AT_TENT) { this.tentPrompts(); return; }
+    // sandbox: a tent anywhere flat and dry, once you stand still a moment (Adventure: designated sites only, no tent
+    // and no bivouac off a site)
+    if (!this.camp && this.sandbox && this.still > 1.2) { const spot = this.spotAhead(); if (spot) { this.offer('Pitch the tent here', null, () => this.pitchAt(spot)); return; } }
+    // hubs 3A: off a site, an armful of firewood once you stand by the trees a moment (a notice's stove, a site ahead);
+    // not about an outfitter's store (its yard, the dock, the door: outfitter.visit), whose wood a notice pays for
+    if (this.still > 1 && this.chores && !(this.outfitter && this.outfitter.visit)) this.chores.gatherPrompt(null);
   }
 
   // the nearest site (within r of its fire ring, or of its centre with layout false) whose tile has built it
@@ -487,20 +530,30 @@ export class Camp {
     let drowned = false;
     if (F) for (const key of this.lit) if (F.get(key)) { F.douse(key); drowned = true; }
     this.lit.clear();
-    if (this.camp) { const had = this.camp; this.strike({ quiet: true }); if (!quiet) this.note(had.key ? `You strike the tent${drowned ? ' and drown the fire' : ''}. The site is free again.` : 'You strike the tent.'); }
-    else if (drowned && !quiet) this.note('You drown the fire before you push off.');
+    const stowed = this.chores ? this.chores.onLaunch() : 0, wood = stowed ? ` The wood goes in the canoe: ${word(stowed)} ${plural(stowed, 'armful')}.` : ''; // hubs 3A
+    if (this.camp) { const had = this.camp; this.strike({ quiet: true }); if (!quiet) this.note(had.key ? `You strike the tent${drowned ? ' and drown the fire' : ''}. The site is free again.${wood}` : `You strike the tent.${wood}`); }
+    else if (drowned && !quiet) this.note(`You drown the fire before you push off.${wood}`);
+    else if (wood && !quiet) this.note(wood.trim());
     this.persist();
   }
 
   // --- the fire and the pot -----------------------------------------------------------------------------------
+  // an armful laid and lit (or on the warm embers); hubs 3A: the armful comes off the stack by the ring or your arms
   lightFire(site) {
-    const key = campKey(site), F = this.fires;
+    const key = campKey(site), F = this.fires, ch = this.chores;
+    if (ch && !ch.useWood(key)) { this.note('No wood to hand: an armful from the trees first.'); return; }
     this.chore(F.get(key) ? 'rekindle' : 'fire', () => {
       const now = this.now;
       if (F.get(key)) F.feed(key, now); else F.kindle(key, site.layout.fire, now);
       this.lit.add(key);
       this.persist();
     });
+  }
+  // another armful on a fire that burns: three more hours, up to five in the ring (fire.js FIRE.most)
+  feedFire(site) {
+    const key = campKey(site), F = this.fires, ch = this.chores;
+    if (ch && !ch.useWood(key)) return;
+    this.chore('feed', () => { F.feed(key, this.now); this.lit.add(key); this.persist(); });
   }
   // what E at a burning fire cooks now: the best fish on the stringer at any hour, else supper in the evening or
   // breakfast in the morning while there is food; null when nothing is due
@@ -545,18 +598,21 @@ export class Camp {
   // --- the night ----------------------------------------------------------------------------------------------
   // when a night begun now ends: a quarter hour after sunrise, or, turned in so late that first light is under five
   // hours off, seven hours on and no later than 9:00. { at: the hour, hours: how long }
-  wakeTime() {
+  // choice (hubs 3A, the wake-time card): 'first' (that), or an hour of the clock to wake at (7 or 9): the next time
+  // it comes round
+  wakeTime(choice = 'first') {
     const d = this.day, { rise: r, set } = d.sunriseSunset, rise = r ?? 6;
     if (d.hours >= rise && d.hours < (set ?? 19) - SLEEP_FROM) { const at = Math.min(23.5, d.hours + SLEEP_IN); return { at, hours: at - d.hours, day: true }; } // a sleep by day, worn out
+    if (Number.isFinite(choice)) { const at = choice % 24; return { at, hours: ((at - d.hours) % 24 + 24) % 24 || 24 }; }
     let at = (rise + WAKE_AT) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
     if (hours < LATE_NIGHT && d.hours < 12) { at = Math.max(at, Math.min(SLEEP_IN_BY, d.hours + SLEEP_IN)); hours = at - d.hours; }
     return { at, hours };
   }
-  sleep(kind) {
+  sleep(kind, choice = 'first') {
     const d = this.day, p = this.player, set = d.sunriseSunset.set, e = this.energy;
     // turning in before sunset: the night's jump would carry the clock past the dusk meal (energy.js eats only the
     // breakfast of a jump), so supper is eaten now, unless one was had in the last few hours (a cooked one, say)
-    const { at: wakeAt, hours, day: byDay } = this.wakeTime();
+    const { at: wakeAt, hours, day: byDay } = this.wakeTime(choice);
     if (!byDay && set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
     const q = this.tentQuality() * (this.wet ? WET : 1);
     const fc = this.weather && this.weather.forecast ? this.weather.forecast(Math.max(1, Math.ceil(hours))) : [];

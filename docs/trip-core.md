@@ -99,19 +99,37 @@ Campsites are the designated ones, each with a steel grate and a tent pad; only 
 ring do its prompts apply. On foot at a free site:
 
 - **E Pitch the tent** (at the pad): claims the site, sets the pack out by the door, and takes a quarter hour.
-- **E Light the fire** (at the grate): laying and lighting it takes twenty minutes (building it up again five); it
-  burns three game hours; *Add wood* when it burns low. Half an hour by a fire dries wet gear.
+- **E Gather firewood** (hubs phase 3), within about 10 m of a tree or a log on the ground: an armful of dead and down
+  in 25 minutes (10 with the folding saw), up to three to hand. Walking up to the ring stacks what you carry there, a
+  woodpile of crossed split lengths, a layer an armful; pushing off takes the stack along in the canoe (for the next
+  site, or a firewood notice).
+- **E Light the fire** (at the grate): it takes an armful (off the stack, or the one you carry); laying and lighting
+  it takes twenty minutes (building it up on warm embers five). An armful burns three game hours, full until about an
+  hour and a half is left, then the flames shorten, the light dims to a quarter and the lengths in the ring char and
+  sink into brightening coals; the embers glow three quarters of an hour more. *Add wood* (another armful, five
+  minutes) gives three hours more, up to five in the ring. With no wood to hand the ring says so, and near the trees
+  E gathers some. Half an hour by a fire dries wet gear.
 - **E Cook supper / breakfast** at a burning fire, in the evening or the morning: half an hour on the grate, then a
   hot meal. (Every chore passes its life length on the clock over a second or so on the screen, the walker holding
   still; filling the bottle takes five minutes.) Within three hours of
   the cold meal eaten on the clock it takes that meal's place (no second ration); a fish off the stringer cooks first
   and saves the ration.
-- **E Sleep** at the tent, from an hour and a half before sunset. A night card, and you wake a quarter hour after
-  sunrise. Turned in before sunset, supper is eaten at bedtime. Turned in so late that first light is under five
-  hours off, you sleep seven hours, up by 9:00 at the latest. Done in by day (the *tired* mark up), the tent takes
-  you anyway: *Sleep · worn out*, seven hours by day.
+- **E Use the latrine** at the box back in the trees (about 15 m behind the ring): ten minutes, rest +0.05 (an hour and
+  a half less awake, as far as the night's rest allows), once a day.
+- **E Pick blueberries**, July 10 to August 20, at a site with a patch on the burn or the lichen rock at its edge
+  (the tile's ground class; about half the sites near Lake One): a pint in 20 minutes, three pints a site a day, the
+  bushes thinning a third a pint and full again the next day. A pint a berries notice still wants goes in the tin for
+  it; any other is eaten as you pick (food +0.15). Out of season there is no patch and no prompt.
+- **E Sleep** at the tent, from an hour and a half before sunset: a small paper card, *Up at* first light (its time
+  shown, chosen to begin with), 7:00 or 9:00, with the hours of sleep each gives; ← → chooses, E turns in, Esc (or a
+  step away) lets it be. Standing still at the tent, ← → opens the card with the time already moved. A night card,
+  and you wake at the time chosen: first light is a quarter hour after sunrise, or, turned in so late that it is under
+  five hours off, seven hours on and up by 9:00 at the latest. Turned in before sunset, supper is eaten at bedtime.
+  Done in by day (the *tired* mark up), the tent takes you at once: *Sleep · worn out*, seven hours by day.
 - **Rest** at a site recovers three times as fast, four times by a burning fire.
-- **Leaving:** launching strikes the tent, drowns the fires you lit and frees the site.
+- **Leaving:** launching strikes the tent, drowns the fires you lit, frees the site and takes the woodpile along.
+
+A whole evening is eight keys: E ashore, E pitch, E an armful, E light, E supper, E the latrine, → at the tent, E.
 
 An hour before sunset, if you have not camped, a note names the nearest free site. Off a site in Adventure there is
 nothing to pitch and no bivouac: find a site, paddle on by headlamp, or come in to a counter. In Sandbox a tent goes
@@ -173,7 +191,8 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 | E | afloat | go ashore · portage at a landing · the counter at a dock · pick up a lost item in reach |
 | E | portage trail | set the canoe down · pick up a pack · shoulder the canoe · launch / load up and launch |
 | E | on foot at the water's edge | fill the bottle (when it is down a little and no other prompt holds E) |
-| E | campsite, on foot | pitch the tent (pad) · light the fire, add wood, cook (grate) · sleep (tent) |
+| E | campsite, on foot | pitch the tent (pad) · light the fire, add wood, cook (grate) · sleep, the wake-time card (tent) · the latrine · pick blueberries · gather firewood (near the trees) |
+| ← → | at your tent, still / the wake-time card | open the card with the time moved / choose first light, 7:00 or 9:00 |
 | Q | portage trail | take the gear pack too · fetch the pack left at the trail head · shoulder the canoe |
 | Q | shore | go ashore at a landing without portaging · leave a beached canoe |
 | K / E | a fish held up | keep it (into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
@@ -231,6 +250,14 @@ main.js hooks `trip.on('start')` to `energy.fresh()` (a trip puts in with the ne
 The registry is keyed `Math.round(x):Math.round(z)` (`claim`, `release`, `holder`, `isFree`, `nearestFree`). Only the
 player's camp is saved, in `trip.state.camp`; it comes back up once its tile has built, and is struck quietly when you
 are afloat more than 500 m from it. `camp.profileOf()` gives the tent's quality (`profile.sleepQ`) and the filter.
+`camp.wakeTime(choice)` and `camp.sleep(kind, choice)` take the card's choice ('first', 7 or 9).
+
+`camp.chores` (chores.js, hubs phase 3; main.js sets `.tasks`, and `__game.chores` is it): `wood`, `arms`, `pile`
+({ key, n }: the stack at a site's ring), `pints`, `woodHere(key)`, `useWood(key)`, `patchFor(site)` (the blueberry
+patch, or null), `pileSpot(site)`, `openWake(site, i)`, `card` (open, choice), `onLaunch()`. Saved in
+`trip.state.chores` (or its own key with no trip): the armfuls, the stack, the pints, the day of the latrine and the
+day's picking. The props record `c.layout.latrine` ({ x, z }) where they set the box. fire.js: `FIRE.most` (hours of
+wood a ring holds), `FIRE.low` and `FIRE.floor` (the burn-down), `fires.wood(f)` (the lengths' scale).
 
 ### daycycle.js
 

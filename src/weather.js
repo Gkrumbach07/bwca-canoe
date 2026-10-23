@@ -385,7 +385,9 @@ export class Weather {
       if (hemi) light.copy(hemi.color).multiplyScalar(0.4 * hemi.intensity + 0.08); else light.setRGB(0.5, 0.52, 0.56);
       light.lerp(_white, 0.35 * L.snow).add(_tmp.copy(this.flashColor).multiplyScalar(L.flash * 0.6));
       const d = this.wind.dir;
-      this.precip.update(dt, { amount, snow: L.snow, windX: d.x, windZ: d.z, windSpeed: this.wind.speed, eye: this.camera.position, light });
+      // under a roof (an outfitter's store: main.js sets indoors) the drops round the camera would fall through it
+      const under = typeof this.indoors === 'function' && this.indoors();
+      this.precip.update(dt, { amount: under ? 0 : amount, snow: L.snow, windX: d.x, windZ: d.z, windSpeed: this.wind.speed, eye: this.camera.position, light });
     }
     const wu = this.water && this.water.uniforms;
     if (wu && wu.uRain) { wu.uRain.value = amount * (1 - L.snow) * (1 - ice); wu.uGlint.value = L.sun * L.sun; }

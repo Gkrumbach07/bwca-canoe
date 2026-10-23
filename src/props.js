@@ -1867,7 +1867,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
   c.layout = { fire: { x: fx, z: fz, y: fy, a: ga }, pad: { x: tx, z: tz, fdx, fdz }, bench: { x: bx, z: bz, ax, az } };
   // the latrine back in the trees, away from the water
   const la = Math.atan2(backZ, backX) + (crng() - 0.5) * 1.2, lx = fx + Math.cos(la) * 15, lz = fz + Math.sin(la) * 15;
-  if (tg.shoreAt(lx, lz) > 3) pieces.push(latrine(ctx, lx, lz, la, crng));
+  if (tg.shoreAt(lx, lz) > 3) { pieces.push(latrine(ctx, lx, lz, la, crng)); c.layout.latrine = { x: lx, z: lz }; } // hubs 3A: E at the box (camp.js)
 }
 
 // The granite ledge of a campsite, between the fire ring (fx, fz) and the water (dir points out to it): two or

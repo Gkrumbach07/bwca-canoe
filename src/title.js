@@ -32,6 +32,18 @@ const KEYMAP = [
     [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'], [['Space'], 'hop (onto a low rock or a log); with the canoe overhead you only stagger'],
     [['E'], 'launch a canoe at the water’s edge · set a carried one down'], [['Q'], 'shoulder a canoe on the ground · set a carried one down where you could launch'],
   ]],
+  ['At an outfitter', [
+    [['E'], 'at the dock: tie up and go in · inside: the counter, the board, a shelf or the lure wall you face · talk to someone you face (again: their task)'],
+    [['Q'], 'at the dock: the counter straight from the water · at the counter: a word with the keeper'],
+  ]],
+  ['At camp', [
+    [['E'], 'pitch the tent, gather wood, light and feed the fire, cook, the latrine, pick berries in season, fill the bottle, sleep'],
+    [['←', '→'], 'standing at the tent in the evening: when to wake (first light, 7:00, 9:00); E turns in, Esc not yet'],
+  ]],
+  ['The camera', [
+    [['C'], 'raise it (the $25 35 mm, or the disposable a photo notice lends) · C or Esc lowers it'], [['wheel'], 'zoom from a normal lens to a long one (Q and E held too)'],
+    [['Space', 'click'], 'take the picture: a subject near the middle, near enough and in sight counts'], [['mouse'], 'aim (the arrows and WASD too, Shift for a fine hand)'],
+  ]],
   ['Fishing', [
     [['F'], 'take up the rod · put it down'], [['Space', 'click'], 'hold to load a cast where the cursor points, let go to cast · set the hook · hold to reel'],
     [['1', '2', '3', '4', '5'], 'jig & twister, Mepps spinner, Daredevle spoon, jointed Rapala, bobber & leech'], [['E', 'K'], 'let the fish go · keep it on the stringer'],
