@@ -4,6 +4,10 @@ import { mulberry32, noise2, smoothstep, clamp } from './rng.js';
 // The day's wind. Each morning rolls a character for the day (a dead-calm day, a breezy one, a blow), the
 // breeze builds through the afternoon and eases at dusk, gusts ride on top, and the direction veers slowly.
 // Speed is in metres per second at the water; direction is the compass bearing the wind blows FROM.
+// The weather (weather.js, when it is attached as wind.weather) bends all of it through its windTarget: a floor under
+// the speed (a front's steady blow, a storm's), a gain on the day's breeze (a calm foggy dawn), bigger and quicker
+// gusts (a storm's, the gusty north-west wind behind a front), and a bearing the wind is steered toward (backing to
+// the south-east ahead of a front, the north-west behind it). The debug override still wins.
 const POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const POINTS_LONG = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 export const FRESH = 8;        // m/s: a fresh breeze (Beaufort 5) and up is when the wind matters
@@ -61,7 +65,9 @@ export class Wind {
     this.t = 0;
     this.lastHours = -1;
     this.gust = 0;
+    this.gustPhase = 0;        // the quick gusts' phase, integrated so a change of pace never jumps it
     this.sway = { x: 0, z: 0, t: 0 }; // the gust field's drift and the sway clock (see SWAY)
+    this.weather = null;       // weather.js attaches itself here; its windTarget bends the day's wind
   }
 
   // unit vector the wind blows TOWARD, in world xz (x east, z south)
@@ -78,14 +84,28 @@ export class Wind {
   update(dt, hours) {
     this.t += dt;
     if (this.lastHours >= 0 && hours < this.lastHours - 12) this.rollDay(); // the clock wrapped past midnight
+    const dh = this.lastHours >= 0 ? Math.max(0, ((hours - this.lastHours + 36) % 24) - 12) : 0; // game hours this frame
     this.lastHours = hours;
     // the diurnal shape: still at dawn, building late morning, strongest mid-afternoon, dying at dusk
     const diurnal = 0.25 + 0.75 * smoothstep(8.5, 14.5, hours) * (1 - smoothstep(16.5, 21, hours));
-    const base = 1.2 + 7.5 * this.day * diurnal;
-    this.gust = (noise2(this.t * 0.07, 3.1, 5) - 0.5) * 0.5 + (noise2(this.t * 0.6, 7.7, 8) - 0.5) * 0.25;
-    const target = this.override ?? Math.max(0, base * (1 + this.gust));
-    this.speed += (target - this.speed) * (1 - Math.exp(-dt * 0.4));
+    const wx = this.weather ? this.weather.windTarget : null;
+    // under a weather the day's own character is held to a breeze at most: the blows come from the weather's floor
+    let base = 1.2 + 7.5 * (wx ? Math.min(this.day, 1.1) : this.day) * diurnal;
+    if (wx) base = Math.max(wx.min, base * wx.mul);
+    const g = wx ? wx.gust : 1, stormy = smoothstep(1.2, 2.2, g);
+    // a storm's gusts come quicker too (the second octave's phase runs faster), and its lulls never drop it below half
+    this.gustPhase += dt * (0.6 + 0.5 * stormy);
+    this.gust = ((noise2(this.t * 0.07, 3.1, 5) - 0.5) * 0.5 + (noise2(this.gustPhase, 7.7, 8) - 0.5) * 0.25) * g;
+    if (this.gust < -0.45) this.gust = -0.45;
+    const target = this.override ?? Math.min(22, Math.max(0, base * (1 + this.gust)));
+    this.speed += (target - this.speed) * (1 - Math.exp(-dt * (0.4 + 0.8 * stormy)));
     this.from = (this.from + (noise2(this.t * 0.01, 1.5, 13) - 0.5) * 6 * dt + 360) % 360;
+    // the weather's bearing: turn toward it the short way round, at up to 40 degrees a game hour (or a degree a
+    // second, whichever is more: a jump of the clock or a debug set comes round in a minute)
+    if (wx && Number.isFinite(wx.from) && this.override === null) {
+      const d = ((wx.from - this.from + 540) % 360) - 180;
+      this.from = (this.from + Math.sign(d) * Math.min(Math.abs(d), Math.max(dt, 40 * dh)) + 360) % 360;
+    }
   }
 
   // Hands the wind to everything that sways (SWAY): its direction, speed and gusts, the gust field carried

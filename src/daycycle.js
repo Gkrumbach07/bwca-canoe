@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { fogState, setFogColor, sampleRamp } from './fog.js';
+import { fogState, setFogColor, sampleRamp, FOG_REACH } from './fog.js';
 import { CURVE_STEPS } from './post.js';
 import { smoothstep } from './rng.js';
 import { MONTHS, monthDay, julianDay, utcOffsetHours, sunPosition, moonPosition, skyVector, daysInYear, sunTimes } from './astro.js';
@@ -10,6 +10,10 @@ import { seasonAt } from './season.js';
 // night, late dusk, the horizon, golden hour, morning, full day. Values are interpolated between keys, all
 // in update(): the light, the sky, both fog ramps, the god rays and the grade's curves share the keys and the
 // one blend, so a change of hour moves them together (Campo Santo's interpolation manager, docs/look.md).
+// The weather (weather.js, attached as day.weather) runs inside the same update and its look is laid over what the
+// tables set (applyWeather), so the sun's share, the fill, the fog, the sky, the clouds and the grade under cloud,
+// rain or fog are keyed by the sun's height like everything else (the wx* rows say how much of the weather's grade
+// each key takes).
 const KEYS = [-15, -5, -1, 3, 10, 35];
 const T = {
   // the key and the fill: one warm sun, one cool sky. While the sun is up the key is strong and warm and the
@@ -21,7 +25,9 @@ const T = {
   hemiGround: [0x0b0e12, 0x1a1d1a, 0x4a3e3a, 0x6a5a50, 0x7a7462, 0x847e68], // by day the bounce off sunlit ground is warm and not small
   // the fill carries every shaded side by itself now the toon ramp's floor (a quarter of the key on any face
   // turned from the sun) is gone: about a third of the key on flat ground by day (pass 1, smooth light)
-  hemiInt: [0.35, 0.45, 0.85, 1.0, 1.1, 1.2],
+  // the golden-hour keys (3 and 10 degrees) carry a little more fill than the light alone would, so ground in full
+  // shade at 16:30-17:30 in October reads as cool shade, not a hole, while the key's warm side keeps its contrast
+  hemiInt: [0.35, 0.45, 0.85, 1.2, 1.3, 1.2],
   // the air (fog.js): two colour ramps by distance, one looking away from the sun and one looking into it. Each
   // key gives each ramp a mid colour (the band a few hundred metres out, where the haze starts to take things)
   // and a far colour (where the far shore goes flat); the amount follows AMOUNT below with its distances
@@ -61,18 +67,25 @@ const T = {
   // lights: by day the shade lifts blue (blue most, green a little above red, so it stays between 200 and 225
   // degrees and never goes violet) under mids and lights warmed orange-yellow (red, then green, over blue); at the
   // golden hour and dusk the reds lift further through the mids; blue hour and night lean blue-violet as before.
+  // At the golden-hour keys (3 and 10 degrees) the toe is lifted evenly in all three channels (+0.008 at black, about
+  // +0.022 at a quarter), with the fill above, so full shade stays a readable cool value under the warm lights.
   // A curve that holds green below both red and blue anywhere turns every grey there magenta; at the black point
   // green lifts as much as blue, or dim warm browns (lit ground at a low sun) pass through magenta on their way.
   gain: [0.95, 0.95, 1.0, 1.05, 1.02, 1.02],
   saturation: [0.9, 0.95, 1.08, 1.12, 1.08, 1.08],
-  curveR: [[0.025, 0.255, 0.49, 0.735, 0.97], [0.035, 0.27, 0.505, 0.748, 0.985], [0.035, 0.262, 0.55, 0.79, 1], [0.03, 0.258, 0.55, 0.79, 1], [0.03, 0.255, 0.525, 0.77, 1], [0.03, 0.258, 0.512, 0.762, 1]],
-  curveG: [[0.03, 0.262, 0.5, 0.745, 0.98], [0.032, 0.26, 0.495, 0.742, 0.985], [0.052, 0.268, 0.51, 0.755, 0.985], [0.05, 0.267, 0.52, 0.765, 0.99], [0.048, 0.262, 0.51, 0.758, 0.995], [0.046, 0.265, 0.508, 0.756, 1]],
-  curveB: [[0.06, 0.295, 0.535, 0.775, 1], [0.065, 0.305, 0.54, 0.77, 1], [0.052, 0.295, 0.5, 0.72, 0.95], [0.05, 0.29, 0.49, 0.715, 0.95], [0.048, 0.283, 0.5, 0.735, 0.97], [0.046, 0.28, 0.5, 0.742, 0.985]],
+  curveR: [[0.025, 0.255, 0.49, 0.735, 0.97], [0.035, 0.27, 0.505, 0.748, 0.985], [0.035, 0.262, 0.55, 0.79, 1], [0.038, 0.28, 0.55, 0.79, 1], [0.038, 0.277, 0.525, 0.77, 1], [0.03, 0.258, 0.512, 0.762, 1]],
+  curveG: [[0.03, 0.262, 0.5, 0.745, 0.98], [0.032, 0.26, 0.495, 0.742, 0.985], [0.052, 0.268, 0.51, 0.755, 0.985], [0.058, 0.289, 0.52, 0.765, 0.99], [0.056, 0.284, 0.51, 0.758, 0.995], [0.046, 0.265, 0.508, 0.756, 1]],
+  curveB: [[0.06, 0.295, 0.535, 0.775, 1], [0.065, 0.305, 0.54, 0.77, 1], [0.052, 0.295, 0.5, 0.72, 0.95], [0.058, 0.312, 0.49, 0.715, 0.95], [0.056, 0.305, 0.5, 0.735, 0.97], [0.046, 0.28, 0.5, 0.742, 0.985]],
   // god rays from the sun disc through whatever stands in front of it (post.js): none once the sun is down
   rays: [0, 0, 0.35, 1.0, 0.8, 0.35],
   foam: [0x2a3340, 0x3e4a5c, 0xe8c8a8, 0xf2dfc4, 0xf4efe4, 0xf2f6f6],
+  // the weather's grade (applyWeather): how much of its desaturation and of its cool cast each key takes (little of
+  // the cooling at night, which is blue already), and the exposure under a full grey sky (a camera opens up a little)
+  wxDesat: [0.3, 0.5, 0.8, 1, 1, 1],
+  wxCool: [0.1, 0.25, 0.55, 0.9, 1, 1],
+  wxGain: [1, 1, 1.02, 1.05, 1.07, 1.08],
 };
-const NUMERIC = new Set(['sunInt', 'hemiInt', 'fogReach', 'fogDesat', 'sunwardPow', 'sunwardAmt', 'airHeight', 'skyGlowAmt', 'skyGlowPow', 'skyLift', 'moonInt', 'stars', 'gain', 'saturation', 'rays']);
+const NUMERIC = new Set(['sunInt', 'hemiInt', 'fogReach', 'fogDesat', 'sunwardPow', 'sunwardAmt', 'airHeight', 'skyGlowAmt', 'skyGlowPow', 'skyLift', 'moonInt', 'stars', 'gain', 'saturation', 'rays', 'wxDesat', 'wxCool', 'wxGain']);
 const CURVES = new Set(['curveR', 'curveG', 'curveB']);
 const colors = {};
 
@@ -213,6 +226,7 @@ export class DayCycle {
     skyVector(moon.azimuth, moon.elevation, this.moonDir);
     this.moonUp = moon.elevation > -2;
     this._seg = segment(sun.elevation);
+    const W = this.weather ? this.weather.update(dt, this) : null; // the weather's look for this frame (weather.js)
     const c = this._c, t = this.t;
     t.sun.color.copy(this.lerpColor('sunColor', c));
     t.sun.intensity = this.lerpNum('sunInt');
@@ -247,7 +261,7 @@ export class DayCycle {
       md.material.uniforms.uSunDir.value.copy(this.sunDir);
       md.material.uniforms.uDaylight.value = smoothstep(-6, 6, sun.elevation);
     }
-    const cu = t.clouds.children[0]?.material.uniforms;
+    const cu = (t.clouds.userData.material || t.clouds.children[0]?.material)?.uniforms;
     if (cu) { cu.uTop.value.copy(this.lerpColor('cloudTop', c)); cu.uBase.value.copy(this.lerpColor('cloudBase', c)); cu.uSky.value.copy(su.uZenith.value); cu.uSunDir.value.copy(this.sunDir); }
     if (t.stars) t.stars.material.opacity = this.lerpNum('stars');
     // water: the foam, the ice and the sun's glint (its colour is the sky dome and the shore it mirrors, water.js)
@@ -267,8 +281,132 @@ export class DayCycle {
       L.rayColor.copy(su.uSunColor.value);
       L.sunDir.copy(this.sunDir);
     }
-    if (t.mist) { t.mist.setAmount(this.mist); t.mist.setColor(this.lerpColor('fogFar', c).lerp(new THREE.Color(0xffffff), 0.55)); }
+    if (t.mist) { t.mist.setAmount(this.mist); t.mist.setColor(this.lerpColor('fogFar', c).lerp(_white, 0.55)); }
+    fogState.air[0] = FOG_REACH;
+    fogState.layer[3] = 0;
+    if (W) this.applyWeather(W);
   }
+
+  // The weather's look (weather.js) laid over what the tables set this frame. Everything is set afresh each frame, so
+  // nothing accumulates. hide is how much of the sun the cloud takes; grey how far the fill, the fog and the sky go
+  // to a neutral grey (the deck's colour, DC, is the table's cloud underside greyed, so it is keyed with the sun: pale
+  // grey at noon, warm-grey at a low sun, near black at night); fog the low layer on the water.
+  applyWeather(W) {
+    const t = this.t, c = this._c, su = t.sky.material.uniforms, wx = this.weather;
+    const hide = 1 - W.sun, grey = W.grey, deck = W.deck, fog = W.fog, f = W.flash, fc = wx.flashColor;
+    // by night the cloud's darkness counts for less (an overcast night is darker than a clear one, not black), and a
+    // flash counts for more (lightning lights a dark night like day for an instant)
+    const night = 1 - smoothstep(-8, 4, this.elevation);
+    const bright = W.bright + (1 - W.bright) * night * 0.7;
+    // the light: the sun's share, its shadows fainter and softer under cloud, none in rain; the sky fill brighter,
+    // greyer, and the bounce off the ground dimmer without the sun on it
+    t.sun.intensity *= W.sun;
+    t.sun.visible = t.sun.intensity > 0.01;
+    const sh = this._shadow || (this._shadow = { intensity: t.sun.shadow.intensity, radius: t.sun.shadow.radius });
+    t.sun.shadow.intensity = sh.intensity * W.shadow;
+    t.sun.shadow.radius = sh.radius * (1 + 2.5 * W.soft);
+    t.hemi.intensity *= W.fill;
+    toGrey(t.hemi.color, grey * 0.75, 1);
+    t.hemi.groundColor.multiplyScalar(1 - 0.4 * hide * grey);
+    t.moon.intensity *= 1 - 0.8 * deck;
+    t.moon.visible = t.moon.intensity > 0.01;
+    // the cloud's own colour
+    const DC = toGrey(_dc.copy(colors.cloudBase[this._seg[0]]).lerp(colors.cloudBase[this._seg[1]], this._seg[2]), 1, 1.05 * bright);
+    // the air: the ramps closed in (reach) and greyed, the sun's side of them fading as the sun goes in, more of what
+    // the haze covers greyed; the haze overhead toward the deck
+    fogState.air[0] = FOG_REACH * W.reach;
+    fogState.params[1] *= 1 - 0.9 * hide * (1 - 0.6 * fog);
+    fogState.params[2] += (0.85 - fogState.params[2]) * grey * 0.6;
+    for (const ramp of [fogState.away, fogState.sunward]) {
+      for (let i = 0; i < ramp.length; i += 4) {
+        const l = (0.2126 * ramp[i] + 0.7152 * ramp[i + 1] + 0.0722 * ramp[i + 2]) * bright;
+        ramp[i] += (l * 0.95 - ramp[i]) * grey + fc.r * f * 0.12;
+        ramp[i + 1] += (l * 0.99 - ramp[i + 1]) * grey + fc.g * f * 0.12;
+        ramp[i + 2] += (l * 1.06 - ramp[i + 2]) * grey + fc.b * f * 0.12;
+      }
+    }
+    const far = _far.setRGB(fogState.away[60], fogState.away[61], fogState.away[62]);
+    setFogColor(fogState.sky, c.setRGB(fogState.sky[0], fogState.sky[1], fogState.sky[2]).lerp(DC, deck * 0.8));
+    t.scene.fog.color.copy(far); t.scene.background.copy(far);
+    // the low layer on the water: thick at dawn, thinning and rising as the sun climbs; lit like the far haze (a step
+    // paler and greyer), with a glow toward the sun
+    const layer = toGrey(_layer.copy(far), 0.35, 1.1);
+    if (fog > 0.01) {
+      fogState.layer[0] = 0.026 * Math.pow(fog, 1.3);
+      fogState.layer[1] = W.level - 1;
+      fogState.layer[2] = 5 + 10 * (1 - fog);
+      fogState.layer[3] = 1;
+      setFogColor(fogState.layerColor, layer);
+      setFogColor(fogState.layerSun, c.copy(su.uSunColor.value).multiplyScalar(0.4 * fog * (1 - 0.7 * hide)));
+    }
+    // the dome: the deck's grey overhead and the haze's far colour on the horizon, so the far shore and the deck's rim
+    // dissolve into it; the low sun's glow and the disc go in with the sun
+    su.uZenith.value.lerp(c.copy(DC).multiplyScalar(0.9), deck);
+    su.uMid.value.lerp(DC, deck).lerp(layer, fog * 0.4);
+    su.uHorizon.value.lerp(c.copy(far).multiplyScalar(1.04), Math.max(deck * 0.9, grey * 0.5)).lerp(layer, fog * 0.9);
+    su.uGlow.value.x *= 1 - hide;
+    su.uSunColor.value.multiplyScalar(1 - 0.85 * hide);
+    const disc = this._disc || (this._disc = su.uDisc.value.clone());
+    su.uDisc.value.set(disc.x, disc.y * (1 - hide) * (1 - hide), disc.z * (1 - 0.8 * hide));
+    if (f > 0) {
+      t.hemi.intensity += f * (2.2 + 2.5 * night);
+      t.hemi.color.lerp(fc, Math.min(1, f * 0.5));
+      for (const u of [su.uZenith, su.uMid, su.uHorizon]) u.value.add(c.copy(fc).multiplyScalar(f * 0.3));
+    }
+    // the clouds: the cumulus greyed and darkened toward the deck, a storm's nearly black underneath; the deck; the
+    // cover, the wind and the water level for updateClouds (sky.js)
+    const cd = t.clouds.userData, cu = cd.material.uniforms, du = cd.deckMat.uniforms;
+    cu.uTop.value.lerp(c.copy(DC).multiplyScalar(1.15), grey * 0.85).multiplyScalar(1 - 0.5 * W.dark);
+    cu.uBase.value.lerp(c.copy(DC).multiplyScalar(0.75), grey).multiplyScalar(1 - 0.62 * W.dark);
+    cu.uSky.value.copy(su.uZenith.value);
+    cu.uFlash.value.copy(fc).multiplyScalar(f * 0.5);
+    const au = cd.anvilMaterial.uniforms;   // a thunderhead: its top lit as a cloud top is, its base dark slate
+    au.uTop.value.copy(this.lerpColor('cloudTop', _anvil)).lerp(c.copy(DC).multiplyScalar(1.1), 0.35 + grey * 0.4);
+    au.uBase.value.copy(DC).multiplyScalar(0.3);
+    au.uSky.value.copy(su.uZenith.value); au.uSunDir.value.copy(this.sunDir); au.uFlash.value.copy(cu.uFlash.value);
+    du.uLit.value.copy(DC).multiplyScalar(1.08);
+    du.uDark.value.copy(DC).multiplyScalar(0.62 - 0.3 * W.dark);
+    du.uSunDir.value.copy(this.sunDir);
+    du.uSunColor.value.copy(su.uSunColor.value);
+    du.uFlash.value.copy(fc).multiplyScalar(f * 0.6);
+    const wind = wx.wind, cw = cd.weather || (cd.weather = {});
+    cw.cover = W.cover; cw.deck = deck; cw.dark = W.dark; cw.anvil = W.anvil * (1 - 0.95 * deck); cw.base = W.level;
+    if (W.snap) { cw.snap = true; W.snap = false; }
+    if (wind) { const d = wind.dir; cw.windX = d.x; cw.windZ = d.z; cw.windSpeed = wind.speed; } else { cw.windX = 1; cw.windZ = 0; cw.windSpeed = 2; }
+    if (t.stars) t.stars.material.opacity *= (1 - deck) * (1 - 0.8 * fog);
+    if (t.moonDisc && deck > 0.6) t.moonDisc.visible = false;   // the deck's rim fades out low in the sky; the moon goes behind it
+    // the grade: greyer, a cool cast (every channel toward green's curve, then blue a little over it and red under:
+    // cyan-blue, never violet), a touch more exposure; no god rays behind cloud
+    if (t.post) {
+      const L = t.post.look;
+      L.saturation *= 1 - 0.75 * W.desat * this.lerpNum('wxDesat');
+      L.exposure *= 1 + (this.lerpNum('wxGain') - 1) * grey;
+      L.rays *= (1 - hide) * (1 - hide);
+      const k = W.cool * this.lerpNum('wxCool'), cv = L.curve, n = cv.length / 3;
+      if (k > 0.001) for (let i = 0; i < n; i++) {
+        const x = i / (n - 1), bump = 4 * x * (1 - x), g = cv[i * 3 + 1];
+        cv[i * 3] += (g - 0.012 * bump - cv[i * 3]) * k;
+        cv[i * 3 + 1] += 0.002 * bump * k;
+        cv[i * 3 + 2] += (g + 0.02 * bump - cv[i * 3 + 2]) * k;
+      }
+    }
+    // the mist sheets on the water (mist.js): the dawn's wisps go in the rain; in the fog they thicken and rise as
+    // it lifts
+    if (t.mist) {
+      const m = t.mist, base = this._mistLift || (this._mistLift = m.layers.map((l) => l.uniforms.uLift.value));
+      m.setAmount(Math.max(this.mist * (1 - Math.min(1, W.rain * 3 + deck * 0.5)), fog));
+      m.layers.forEach((l, i) => { l.uniforms.uLift.value = base[i] + (fog > 0.02 ? (1 - fog) * 5 : 0); });
+      if (fog > 0.01) m.setColor(c.copy(layer).multiplyScalar(1.1));
+      else if (grey > 0.01) m.layers.forEach((l) => l.uniforms.uColor.value.multiplyScalar(1 - 0.5 * grey));   // no sun on the wisps under cloud
+    }
+  }
+}
+
+const _white = new THREE.Color(1, 1, 1), _dc = new THREE.Color(), _far = new THREE.Color(), _layer = new THREE.Color(), _g = new THREE.Color(), _anvil = new THREE.Color();
+// a colour toward the neutral (a breath of blue in it) of its own luminance times bright, by k
+function toGrey(col, k, bright = 1) {
+  const l = (0.2126 * col.r + 0.7152 * col.g + 0.0722 * col.b) * bright;
+  return col.lerp(_g.setRGB(l * 0.95, l * 0.99, l * 1.06), k);
 }
 
 export function buildStars(radius = 6400, count = 1800, seed = 3) {

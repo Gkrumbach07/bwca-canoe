@@ -15,6 +15,11 @@ import * as THREE from 'three';
 //                  blended by the angle between the view ray and the sun (fogParams: power, amount): into a
 //                  low sun the distance goes warm and bright, away from it cool.
 //   looking up     the haze takes the overhead sky's colour (fogSkyColor), so the clouds sit in the blue.
+//   the low layer  fog lying on the water (weather.js: morning fog): a density that falls off exponentially with
+//                  height above a base altitude (fogLayer: density per metre at the base, the base's world y, the
+//                  scale height, on/off), integrated along the ray in closed form, so from the canoe the far shore
+//                  is gone while the sky overhead stays blue, and from a ridge the bank lies below in the valley.
+//                  Its colour is the lit fog (fogLayerColor) plus a glow toward the sun (fogLayerSun).
 //
 // The day cycle (daycycle.js) builds a pair of ramps per sun-altitude key and interpolates them with the light
 // and the grade. The uniforms are shared typed arrays, so one update reaches every material. Import this module
@@ -30,6 +35,9 @@ export const fogState = {
   sunDir: new Float32Array([0, 1, 0]),
   params: new Float32Array([8, 0.4, 0.5, 0]), // sun-ward power, sun-ward amount, mid-band desaturation, (spare)
   air: new Float32Array([FOG_REACH, 90, 0]),  // the ramp's half-way distance (m), the height scale (m), (spare)
+  layer: new Float32Array([0, 0, 10, 0]),      // the low layer: density /m at the base, base world y (m), scale height (m), on (1) or off (0)
+  layerColor: new Float32Array([0.8, 0.82, 0.85]),
+  layerSun: new Float32Array([0, 0, 0]),       // the layer's glow looking toward the sun
 };
 // a plain grey ramp until the day cycle runs
 for (let i = 0; i < FOG_STEPS; i++) {
@@ -45,6 +53,9 @@ const extras = {
   fogSunDir: { value: fogState.sunDir },
   fogParams: { value: fogState.params },
   fogAir: { value: fogState.air },
+  fogLayer: { value: fogState.layer },
+  fogLayerColor: { value: fogState.layerColor },
+  fogLayerSun: { value: fogState.layerSun },
 };
 Object.assign(THREE.UniformsLib.fog, extras);
 for (const name of Object.keys(THREE.ShaderLib)) {
@@ -75,6 +86,8 @@ THREE.ShaderChunk.fog_pars_fragment = /* glsl */ `
 	uniform vec3 fogSunDir;
 	uniform vec4 fogParams;
 	uniform vec3 fogAir;
+	uniform vec4 fogLayer;
+	uniform vec3 fogLayerColor, fogLayerSun;
 	varying float vFogDepth;
 	varying vec3 vFogDir;
 	#ifdef FOG_EXP2
@@ -96,6 +109,20 @@ THREE.ShaderChunk.fog_pars_fragment = /* glsl */ `
 		vec4 sunward = mix( fogRampSun[ i ], fogRampSun[ i + 1 ], t );
 		vec4 haze = mix( away, sunward, fogParams.y * pow( max( dot( dir, fogSunDir ), 0.0 ), fogParams.x ) );
 		haze.rgb = mix( haze.rgb, fogSkyColor, smoothstep( 0.02, 0.45, dir.y ) );
+		if ( fogLayer.w > 0.0 ) {
+			// the low layer: optical depth of rho0 * exp( -( y - base ) / H ) along the ray, in closed form
+			float H = fogLayer.z;
+			float ya = max( cameraPosition.y - fogLayer.y, 0.0 ), yb = max( cameraPosition.y + ray.y - fogLayer.y, 0.0 );
+			float dy = ( yb - ya ) / H;
+			float ea = exp( - ya / H );
+			float tau = fogLayer.x * dist * ( abs( dy ) > 1e-3 ? ( ea - exp( - yb / H ) ) / dy : ea );
+			float a = 1.0 - exp( - tau );
+			vec3 lc = fogLayerColor + fogLayerSun * pow( max( dot( dir, fogSunDir ), 0.0 ), 5.0 );
+			// the layer lies nearer than the ramp's haze: mix( mix( c, ramp, ramp.a ), layer, a ) as one haze
+			float A = 1.0 - ( 1.0 - haze.a ) * ( 1.0 - a );
+			haze.rgb = ( haze.rgb * haze.a * ( 1.0 - a ) + lc * a ) / max( A, 1e-4 );
+			haze.a = A;
+		}
 		return haze;
 	}
 	vec3 fogApply( vec3 col, vec3 ray ) {
