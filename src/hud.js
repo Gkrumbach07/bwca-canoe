@@ -801,12 +801,13 @@ export class Hud {
   }
   updateMarks(ctx) {
     const { ts, geo, day, trip, energy, player } = ctx, mk = this.mk, w = this.world; if (!mk) return;
-    // the pace, while it carries you: up once the boost passes 1.6, away again under 1.3 (no flicker as it fades near a
-    // shore); the number is the pace's own for where you are (6 on open water at Trip, the trail's on a portage)
-    const P = player && player.paceTable;
+    // the pace, while its time-lapse carries you above the base (pace.js floor, twice life): up once the boost is 0.6
+    // past the floor, away again under 0.3 past it (no flicker as it eases); the number is the pace's own for where you
+    // are (6 on open water at Trip, the trail's on a portage)
+    const P = player && player.paceTable, base = (P && P.floor) || 1;
     let pace = '';
-    if (P && P.water > 1 && !ctx.shell && mk.pace) {
-      this.paceUp = this.paceUp ? player.boost > 1.3 : player.boost > 1.6;
+    if (P && P.water > base && !ctx.shell && mk.pace) {
+      this.paceUp = this.paceUp ? player.boost > base + 0.3 : player.boost > base + 0.6;
       if (this.paceUp) pace = `${P.label.toLowerCase()} ×${Math.round(player.lapseT || player.boost)}`;
     }
     if (mk.pace) { this.set('mpace', mk.pace, pace); mk.pace.classList.toggle('on', !!pace); }
