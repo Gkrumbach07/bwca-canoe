@@ -19,7 +19,7 @@ import { Player, Input } from './player.js';
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
-import { Ripples, softenHullFoam } from './wake.js';
+import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
 import { Fishing } from './fishing.js';
 import { Energy } from './energy.js';
@@ -106,9 +106,9 @@ async function main() {
   const audio = new Ambient();
   const loons = new Loons(world, water, scene, 6, audio);
 
-  const canoe = buildCanoeRig();
+  const canoe = buildCanoeRig({ water }); // the hull's water line rides the water's own swell
   canoe.rig.traverse((o) => o.layers.enable(REFLECT_LAYER));
-  softenHullFoam(canoe.rig.userData.foam); // a soft line at the waterline, in the wake's style
+  canoe.rig.userData.foam.layers.disable(REFLECT_LAYER); // the line on the water is not mirrored in it
   scene.add(canoe.rig);
   const input = new Input();
   const player = new Player(world, canoe, input);

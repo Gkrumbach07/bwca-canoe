@@ -61,6 +61,7 @@ export class Player {
     this.footLatch = { keys: 4, h: 0 }; // on foot without mouse look: the bearing the held keys meant when pressed
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
+    canoe.ground = (x, z) => this.groundAt(x, z); // the walker's feet find the ground under each foot
   }
 
   get forward() { return { x: Math.cos(this.heading), z: -Math.sin(this.heading) }; }
@@ -209,12 +210,15 @@ export class Player {
       return;
     }
     const rodUp = !!(this.fishing && this.fishing.rodUp);
-    let fwd = rodUp ? 0 : (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
-    const turn = rodUp ? 0 : (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
+    const climbing = st.climb > 0; // still hauling yourself back in after a capsize
+    const idleHands = rodUp || climbing;
+    let fwd = idleHands ? 0 : (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
+    const turn = idleHands ? 0 : (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
     const brace = !rodUp && inp.held('Space');           // a low brace steadies the hull but you cannot paddle
     if (brace) fwd = 0;
     const paddling = fwd !== 0 || turn !== 0;
+    st.drive = fwd; st.hustle = hustle;
     // A/D turn while held, as sweep strokes. With steering by where you point switched on (settings) and
     // neither held, paddling forward brings the bow round toward the cursor's point on the water, or toward
     // the look in first person; the assist eases so the hull swings, not snaps.
@@ -242,10 +246,13 @@ export class Player {
     if (paddling || st.stroke > 0.02) {
       const prev = st.stroke;
       st.stroke = (st.stroke + dt * rate * (fwd < 0 ? 0.8 : 1)) % 1;
-      if (st.stroke < prev) { this.strokeCount++; if (!biased && this.strokeCount % 7 === 0) st.side *= -1; }
+      // every seventh stroke the paddle changes sides: decided at the exit, so the recovery carries it across
+      if (prev < 0.5 && st.stroke >= 0.5 && !biased && (this.strokeCount + 1) % 7 === 0) st.side *= -1;
+      if (st.stroke < prev) this.strokeCount++;
       if (!paddling && st.stroke < prev) st.stroke = 0;
     }
     if (biased) st.side = steer > 0 ? 1 : -1;
+    st.turn = steer;
     st.power += ((paddling ? 1 : 0) - st.power) * (1 - Math.exp(-dt * 6));
     const pulse = st.stroke < 0.5 ? Math.sin((st.stroke / 0.5) * Math.PI) : 0;
     let a = 0;
@@ -294,6 +301,7 @@ export class Player {
     if (this.balance >= 1) { this.capsize(); return; }
     const warning = this.balance > 0.25;
     if (warning) this.prompt = brace ? { key: 'Space', text: 'Bracing… · hold it until the swell passes, or turn the bow into the waves' } : { key: 'Space', text: 'Brace · broadside to the swell: turn the bow into the waves, or hold still' };
+    if (climbing) { this.prompt = { key: null, text: 'Climbing back in…' }; return; }
     if (rodUp) return;
     // a portage landing takes the canoe to the trailhead; any other bank close enough lets you step out
     const land = this.suppressLanding ? null : this.nearestLanding();
@@ -337,7 +345,7 @@ export class Player {
     this.speed = lerp(this.speed, 1.2, 1 - Math.exp(-dt * 2));
     const f = this.forward;
     this.x += f.x * this.speed * dt; this.z += f.z * this.speed * dt;
-    st.power = 0.5; st.stroke = (st.stroke + dt * 0.8) % 1;
+    st.power = 0.5; st.stroke = (st.stroke + dt * 0.8) % 1; st.drive = 1; st.turn = 0;
     this.placeOnWater(dt);
     this.emitWater(dt);
     this.prompt = { key: null, text: 'Nosing in…' };
@@ -372,7 +380,7 @@ export class Player {
     this.swim = { cx: this.x, cz: this.z, heading: this.heading, t: 0 };
     this.x += r.x * side * 1.1; this.z += r.z * side * 1.1;
     this.mode = 'swim'; this.speed = 0; this.yawRate = 0; this.balance = 0; this.extraRoll = 0;
-    this.canoe.state.mode = 'swim'; this.canoe.state.swimHeading = this.heading; this.canoe.state.power = 0;
+    this.canoe.state.mode = 'swim'; this.canoe.state.swimHeading = this.heading; this.canoe.state.power = 0; this.canoe.state.swimSide = side;
     if (this.audio) { this.audio.paddleDip(); this.audio.paddleDip(); }
     if (this.ripples) for (let i = 0; i < 40; i++) {
       const a = Math.random() * Math.PI * 2, rr = 0.5 + Math.random() * 2.5;
@@ -406,8 +414,12 @@ export class Player {
     if (d < 2.4) {
       this.prompt = { key: 'E', text: 'Right the canoe and climb back in' };
       if (inp.pressed('KeyE')) {
+        // which side of the hull you are on: the canoe rights itself and you haul in over that gunwale
+        const rx = Math.sin(sw.heading), rz = Math.cos(sw.heading);
+        st.climbSide = (this.x - sw.cx) * rx + (this.z - sw.cz) * rz >= 0 ? 1 : -1;
+        st.climb = 1.4; // seconds of righting the hull and climbing in (canoe.js counts it down)
         this.mode = 'paddle'; this.x = sw.cx; this.z = sw.cz; this.heading = sw.heading; this.speed = 0; this.yawRate = 0;
-        this.swim = null; st.mode = 'paddle'; st.stroke = 0; this.bob = null; this.balance = 0;
+        this.swim = null; st.mode = 'paddle'; st.stroke = 0; st.power = 0; this.bob = null; this.balance = 0;
         this.placeOnWater();
       }
     } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${d.toFixed(0)} m)` };
@@ -433,27 +445,28 @@ export class Player {
     rig.rotation.set(0, this.heading, 0);
     rig.rotateZ(-this.bob.pitch);
     rig.rotateX(this.bob.roll);
-    st.mode = 'paddle';
+    st.mode = 'paddle'; st.speed = this.speed;
   }
 
   // wake rings behind the stern, a bow ripple, and splashes where the paddle bites
   emitWater(dt) {
     if (!this.ripples) return;
     const sp = Math.abs(this.speed), f = this.forward, y = this.level + 0.04, st = this.canoe.state;
-    // foam bubbles shed from the hull's waterline, most at the bow and stern, left behind as a trail
-    if (sp > 0.25) {
+    // a few soft flecks shed from the bow wave and the stern eddy, left behind as a thin trail (the line round
+    // the hull itself is canoe.js's water line)
+    if (sp > 0.35) {
       const r = { x: -f.z, z: f.x };
-      this.bubbleAcc += dt * (14 + 46 * Math.min(1, sp / 2.5)) * this.timeScale;
+      this.bubbleAcc += dt * (5 + 17 * Math.min(1, sp / 2.5)) * this.timeScale;
       while (this.bubbleAcc >= 1) {
         this.bubbleAcc -= 1;
         let t = Math.random() * 2 - 1;
-        t = Math.sign(t) * Math.pow(Math.abs(t), 0.45);
+        t = Math.sign(t) * Math.pow(Math.abs(t), 0.3);
         const side = Math.random() < 0.5 ? -1 : 1;
         const hw = 0.42 * Math.pow(1 - Math.pow(Math.abs(t), 4), 0.6) + 0.1;
         const along = t * 2.5;
         const px = this.x + f.x * along + r.x * side * hw, pz = this.z + f.z * along + r.z * side * hw;
         const out = 0.2 + Math.random() * 0.35, back = (0.05 + Math.random() * 0.2) * sp;
-        this.ripples.spawn(3, px, this.level + 0.03, pz, 0.06 + Math.random() * 0.08, 0.16 + Math.random() * 0.2, 1.3 + Math.random() * 1.5,
+        this.ripples.spawn(3, px, this.level + 0.03, pz, 0.03 + Math.random() * 0.04, 0.07 + Math.random() * 0.08, 1.0 + Math.random() * 1.2,
           r.x * side * out - f.x * back, 0, r.z * side * out - f.z * back);
       }
     }
@@ -487,7 +500,7 @@ export class Player {
     this.speed = lerp(this.speed, 1.4, 1 - Math.exp(-dt * 2));
     const f = this.forward;
     this.x += f.x * this.speed * dt; this.z += f.z * this.speed * dt;
-    this.canoe.state.power = 0.5; this.canoe.state.stroke = (this.canoe.state.stroke + dt * 0.8) % 1;
+    this.canoe.state.power = 0.5; this.canoe.state.stroke = (this.canoe.state.stroke + dt * 0.8) % 1; this.canoe.state.drive = 1; this.canoe.state.turn = 0;
     this.placeOnWater(dt);
     this.emitWater(dt);
     this.prompt = { key: null, text: 'Landing…' };
@@ -614,6 +627,11 @@ export class Player {
     this.x = nx; this.z = nz;
     st.walkSpeed += ((Math.abs(this.speed) > 0.05 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
     st.walk += Math.abs(this.speed) * dt * 4.2;
+    // the speed the feet actually cover over the ground (a trunk or a wall holds you while `speed` still walks)
+    const moved = Math.hypot(this.x - (this._fx ?? this.x), this.z - (this._fz ?? this.z));
+    const raw = dt > 0 && moved < 1 ? Math.min(5, moved / dt) : 0;
+    st.speed += (raw - st.speed) * (1 - Math.exp(-dt * 12));
+    this._fx = this.x; this._fz = this.z; st.hustle = hustle;
     // which way the legs are going, in the body's frame, for the rig: ahead (1) or back (-1), and across to
     // the right (1) or left (-1); the pose blends a stride, a back-step and a side-step from these
     const goF = moving ? mx * f.x + mz * f.z : 0, goL = moving ? mx * -f.z + mz * f.x : 0, kd = 1 - Math.exp(-dt * 10);
