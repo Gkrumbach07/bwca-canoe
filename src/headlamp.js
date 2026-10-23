@@ -11,12 +11,12 @@ import { smoothstep } from './rng.js';
 //   off on sleep (camp.js) and once the sun is well up.
 export const LAMP = {
   color: 0xfff0dc,   // a warm LED white
-  intensity: 7,      // candela at full: about the ground's daylight share at 4 m, falling off past 10
+  intensity: 32,     // candela at full: the path clear for a few metres ahead and the camp round you, soft past ten
   distance: 30,      // where the light stops
-  decay: 1.6,
-  angle: 0.55,       // the cone's half angle (rad)
-  penumbra: 0.85,    // most of the cone is its soft edge: a brighter middle and a wide spill
-  pitchFoot: -0.32,  // the beam's tilt below the heading on foot (third person), radians
+  decay: 1.25,       // gentler than physical, so the pool reaches up the trail instead of pooling at your feet
+  angle: 0.5,        // the cone's half angle (rad)
+  penumbra: 0.8,     // most of the cone is its soft edge: a brighter middle and a wide spill
+  pitchFoot: -0.24,  // the beam's tilt below the heading on foot (third person), radians: it lands about 7 m ahead
   pitchBoat: -0.16,  // and seated in the canoe
   ease: 6,           // per second: how fast it comes up and goes down
   offAt: 5,          // sun elevation (deg) above which it switches itself off
