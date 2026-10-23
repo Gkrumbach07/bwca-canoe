@@ -801,6 +801,7 @@ const SWAY_BY = {
   shrub: [0.08, 0.06, 0.8, 3.0, 1.0],
   tallPine: [0.028, 0.03, 0.22, 2.0, 20],
   jackPine: [0.032, 0.035, 0.36, 2.4, 6],
+  tamarack: [0.034, 0.04, 0.3, 2.6, 14], // a supple conifer: softer than the spruce, stiffer than the birch
   hazel: [0.09, 0.07, 0.7, 3.2, 2.2],
   alder: [0.09, 0.065, 0.65, 3.0, 2.6],
   sapling: [0.07, 0.025, 0.8, 2.6, 2.6],
