@@ -711,8 +711,7 @@ export class Hud {
         const dayW = this.dayWords(ctx);
         const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
         const food = energy && !(core && core.sandbox) ? (energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : '';
-        const out = core && core.active && core.dueIn != null ? `out by ${core.outBy('day')}` : '';
-        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food, out].filter(Boolean).join(' · ');
+        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
         this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayW || 'A new day', sub);
       }
       this.lastHours = h;
@@ -757,16 +756,15 @@ export class Hud {
 
 
   // the status marks, bottom right at half strength: the time scale, the clock stopped, the trip's when it matters (the
-  // food down to a day, out by tomorrow, the gear wet, a need run low: tired, hungry or thirsty), the GPS link, mute,
-  // tiles loading
+  // food down to a day, the gear wet, a need run low: tired, hungry or thirsty), the GPS link, mute, tiles loading
   marksBuild() {
     const m = this.el.marks; if (!m) return;
     m.innerHTML = `<span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
-      + '<span id="mark-food" class="sc"></span><span id="mark-out" class="sc"></span><span id="mark-wet" class="sc">gear wet</span><span id="mark-need" class="sc"></span>'
+      + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span><span id="mark-need" class="sc"></span>'
       + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
       + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
       + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
-    this.mk = { speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), out: $('mark-out'), wet: $('mark-wet'), need: $('mark-need'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+    this.mk = { speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), need: $('mark-need'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
   }
   updateMarks(ctx) {
     const { ts, geo, day, trip, energy } = ctx, mk = this.mk, w = this.world; if (!mk) return;
@@ -776,9 +774,6 @@ export class Hud {
     const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
     const food = adv && energy && energy.food <= 1 ? (energy.food <= 0 ? 'no food' : `${foodWords(energy.food)} of food`) : '';
     this.set('mfood', mk.food, food); mk.food.classList.toggle('on', !!food);
-    const due = adv ? trip.dueIn : null;
-    const out = due == null || due > 1 ? '' : due === 1 ? 'out tomorrow' : due === 0 ? 'out today' : 'overdue';
-    this.set('mout', mk.out, out); mk.out.classList.toggle('on', !!out);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
     // hubs 1B: one need mark, only while a need is under 0.3 (energy.low: 'tired', 'hungry' or 'thirsty')
     const need = adv && energy && energy.low ? energy.low : '';
@@ -908,10 +903,8 @@ export class Hud {
       const foodW = sand ? 'food that keeps' : food > 0 ? `${foodWords(food)} of food` : 'the food pack is empty';
       row('Pack', [packs, foodW, meal, core && core.state.wet ? 'the gear is wet' : ''].filter(Boolean).join(' · '));
     }
-    if (tasks) {
-      const open = tasks.active.length, done = tasks.active.filter((t) => t.status === 'done').length;
-      row('Tasks', open ? `${open - done} on the go${done ? ` · ${done} done, to turn in at any outfitter` : ''}` : 'nothing on the go · the board is at any outfitter');
-    }
+    // the notices taken on, and where the finished ones are paid (tasks.js)
+    if (tasks) row('Tasks', esc(tasks.readout));
     const dev = s && s.get('devRows'), showFps = s && s.get('fps');
     if (dev && geo) row('GPS sim', `${geo.linked ? (geo.enabled ? 'broadcasting to the extension' : 'extension installed, switched off') : 'extension not detected · this tab only'} · hdg ${hdg.toFixed(0)}°`, 'soft');
     if (dev || showFps) {

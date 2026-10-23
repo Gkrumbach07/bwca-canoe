@@ -1,11 +1,14 @@
 // The journal (J; L still opens it for a while): a two-page paper spread. The left page is the trip: the food
 // cells, the energy bar, the distances, portages, lakes and nights, the tasks on the go, a pencil note. The
-// right page has tabs: Catches (the log, with personal bests), Tasks (on the go, done, on offer, the tally),
-// Lakes (where you have been), Trips (the logbook: every trip and how it ended), Gear (what came off the outfitter's
-// wall). Data comes from the fishing code (log, bests), the tasks, the energy, the outfitter's trip record, the trip's
-// permit and logbook (trip.js, reached through the outfitter) and the trip tally (trip-stats.js).
+// right page has tabs: Catches (the log, with personal bests), Tasks (the notices taken on, where each is paid, the
+// season's earnings), Lakes (where you have been), Trips (the logbook: every trip and how it ended), Gear (the kit you
+// own, from the season's profile). Data comes from the fishing code (log, bests), the tasks, the energy, the
+// outfitter's trip record, the trip's permit and logbook (trip.js, reached through the outfitter), the profile
+// (profile.js) and the trip tally (trip-stats.js).
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { UNLOCKS } from './tasks.js';
+import { ITEMS } from './profile.js';
+import { gearIcon as kitIcon } from './outfitter.js';
 
 const ROWS = 8;        // catches per page
 const PENCIL = [
@@ -85,8 +88,6 @@ export class Journal {
   pencilNote() {
     const w = this.wind, d = this.day, en = this.energy, h = d.hours, set = d.sunriseSunset.set, c = this.core;
     const adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
-    if (adv && c.dueIn != null && c.dueIn < 0) return 'past the permit. make for the nearest landing';
-    if (adv && c.dueIn === 0) return `out by today${c.exitWords() ? `, ${c.exitWords()}` : ''}`;
     if (!sand && en && en.food < 1 && en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter';
     if (!sand && en && en.food <= 0 && this.trip && this.trip.active) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
     if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
@@ -122,7 +123,6 @@ export class Journal {
     const outfitterName = active && o ? (o.landings.find((l) => l.ep === trip.ep) || {}).name : '';
     let pushed = '';
     if (active) pushed = trip.startDoy != null ? `pushed off ${sand ? '' : `${longDate(trip.startYear, trip.startDoy)}, `}${clock12(trip.startHours)}` : `pushed off ${esc(trip.started || '')}`;
-    if (adv && c.permit && c.permit.exitBy) pushed += ` · out by ${longDate(c.permit.exitBy.year, c.permit.exitBy.doy)}${c.exitWords() ? `, ${esc(c.exitWords())}` : ''}`;
     // food: a cell a day, the half days as half cells, what is eaten left empty
     const total = active ? Math.max(trip.days || 0, Math.ceil(en.food)) : 0, left = en ? en.food : 0;
     let cells = '';
@@ -144,11 +144,12 @@ export class Journal {
     const nightTxt = nights.length ? `${nights.length} · ${esc(nights[nights.length - 1].where)}` : 'none yet';
     const daysOn = st ? st.daysOnWater : 0;
     const active_tasks = ts ? ts.active : [];
-    const todo = active_tasks.length ? active_tasks.map((t) => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span>${esc(t.clue)}${t.status === 'done' ? ' <span class="soft">Done; turn it in at any outfitter.</span>' : ''}</span></div>`).join('')
-      : '<div class="empty">Nothing on the go. The board is up at any outfitter.</div>';
+    const paidAt = (t) => { const l = ts && ts.landing ? ts.landing(t.from) : null; return l ? `${l.name}, entry point ${t.from}` : `entry point ${t.from}`; };
+    const todo = active_tasks.length ? active_tasks.map((t) => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span>${esc(t.clue)}${t.status === 'done' ? ` <span class="soft">Done; claim it at ${esc(paidAt(t))}.</span>` : ''}</span></div>`).join('')
+      : '<div class="empty">Nothing on the go. Every outfitter pins notices by the door, paid at its own counter.</div>';
     return `<section class="page left" aria-labelledby="trip-h">
       <div class="sc kicker">${active ? `The trip · ${c ? `${c.adventure ? 'Adventure' : 'Sandbox'} · ${esc(c.dayWords())}` : `day ${dayN}`}` : `The trip${c ? ` · ${c.adventure ? 'Adventure' : 'Sandbox'}` : ''}`}</div>
-      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Any outfitter’s counter writes a permit.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
+      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Food at any counter; push off when you like.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
       <div class="grid">
         <div class="lab">Food</div><div class="with"><span class="cells" aria-hidden="true">${cells}</span><span>${foodTxt}</span></div>
         <div class="lab">Energy</div><div class="with"><span class="ebar"><i style="width:${ev}%"></i></span><span>${ev} % · ${energyTxt}</span></div>
@@ -245,6 +246,8 @@ export class Journal {
     return { html, foot };
   }
   gearTab() {
+    const pr = this.outfitter ? this.outfitter.profile : null;
+    if (pr) return this.kitTab(pr);
     const ts = this.tasks, have = ts ? ts.unlocks : [], left = UNLOCKS.filter((u) => !have.some((h) => h.key === u.key));
     const canoe = ts && ts.has('kevlar') ? 'A Kevlar canoe, 17 ft: lighter on the portages.' : 'An aluminium canoe, 17 ft. The Kevlar one is still on the wall.';
     const html = `<div class="lede"><h2 id="right-h">${have.length ? `${have.length} ${plural(have.length, 'thing')} off the wall` : 'Nothing off the wall yet'}</h2><div class="sub">${canoe}</div></div>
@@ -253,6 +256,15 @@ export class Journal {
         <div class="lab">Still on the wall</div><div class="wall">${left.map((u) => gearIcon(u.key, true)).join('')}</div>
         <p class="empty">${left.length ? `${left.map((u) => u.label.replace(/ \(.*\)$/, '')).map((s, i) => (i === 0 ? s[0].toUpperCase() + s.slice(1) : s)).join(', ')} ${left.length === 1 ? 'comes' : 'come'} down for tasks turned in.` : 'The wall is bare: you have the lot.'}</p>
       </div>`;
+    return { html, foot: 'five lures in the box: 1–5 with the rod up' };
+  }
+  // the kit you own this season (profile.js), what is in use, and the money
+  kitTab(pr) {
+    const kit = pr.kit, owned = pr.owned, ids = Object.keys(ITEMS).filter((id) => owned.includes(id));
+    const li = (id) => { const it = ITEMS[id], spare = it.slot && kit[it.slot] !== id; return `<li>${kitIcon(id, spare)}${esc(it.label)}${it.note ? ` <span class="soft">· ${esc(it.note)}</span>` : ''}${spare ? ' <span class="soft">· on the rack</span>' : ''}</li>`; };
+    const canoe = ITEMS[kit.canoe] ? ITEMS[kit.canoe].label : 'An aluminium canoe';
+    const html = `<div class="lede"><h2 id="right-h">${ids.length} ${plural(ids.length, 'thing')} in the kit</h2><div class="sub">${esc(canoe)} · ${kit.packs === 2 ? 'two Duluth packs' : 'one Duluth pack'} · $${pr.money} in hand</div></div>
+      <div class="scroll"><ul class="plain">${ids.map(li).join('')}</ul></div>`;
     return { html, foot: 'five lures in the box: 1–5 with the rod up' };
   }
 }

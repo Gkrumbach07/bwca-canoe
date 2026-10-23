@@ -63,7 +63,7 @@ const ICON = {
   map: '<path d="M3 3 L 10 1 L 18 3 L 25 1 V 12 L 18 14 L 10 12 L 3 14 Z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10 1 V 12 M18 3 V 14" stroke="currentColor" stroke-width="1"/>',
 };
 const iconOf = (id) => ({ aluminium: 'canoe', kevlar: 'canoe', ash: 'paddle', pack: 'pack', pack2: 'pack', barrel: 'barrel', aframe: 'tent', tablets: 'tablets', leeches: 'leeches', 'maps:fisher': 'map' }[id] || (id.startsWith('lure:') ? id.slice(5) : 'jig'));
-const gearIcon = (id, faint = false) => `<span style="color:${faint ? '#9a8a70' : '#2a2016'}; display:inline-flex"><svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true">${ICON[iconOf(id)] || ICON.jig}</svg></span>`;
+export const gearIcon = (id, faint = false) => `<span style="color:${faint ? '#9a8a70' : '#2a2016'}; display:inline-flex"><svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true">${ICON[iconOf(id)] || ICON.jig}</svg></span>`;
 const STANDING = ['new', 'a familiar face', 'a regular', 'a friend of the house', 'an old hand', 'one of the family'];
 
 const NEAR = 25;                 // metres from the landing within which E opens the counter
@@ -89,7 +89,6 @@ export class Outfitter {
     this.onTeleport = onTeleport;
     this.core = trip; this.veil = veil;
     this.profile = null;
-    this.tasksBoard = true;          // the board column is the tasks' own (tasks.js boardSection)
     if (trip) trip.outfitter = this;
     this.landings = world.entryPoints.map((ep) => ({ ep: ep.ep, name: outfitterName(ep), place: ep.name, x: ep.x, z: ep.z, lake: ep.lake }));
     this.trip = { active: false, ep: null, days: 0, started: null, startAbs: 0, turnedIn: 0 };

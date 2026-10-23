@@ -227,7 +227,7 @@ export class Title {
   refreshMenu() {
     const e = this.el, pause = this.state === 'pause', trip = this.saved, core = this.trip, pr = this.profile;
     const p = this.player, w = this.world, o = this.outfitter;
-    const here = () => p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z)) || 'open water';
+    const here = () => p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z) || (p.nearWater ? p.nearWater(p.x, p.z, 12) : 0)) || (p.mode === 'paddle' ? 'open water' : 'ashore'); // on foot: the water beside you
     // "Adventure · day 2 · $22", or the old words without a trip core
     const money = pr && pr.started ? ` · $${pr.money}` : '';
     const tripDays = (core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : pr && pr.started ? ' · between trips' : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1}` : '') + money;
