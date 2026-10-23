@@ -23,7 +23,7 @@ const HULL_REACH = 3;       // m from the canoe within which its prompts apply (
 const LOAD_REACH = 10;      // m from the canoe within which a pack on the ground goes in at the launch
 const WALK_PACE = 2.2;      // m/s: player.js WALK.speed, the walk back and the carry with a pack
 const TRAVEL_RATE = 1 / 3;  // the clock's rate in Adventure while walking a portage (daycycle.js day.rate)
-const BASE_DRAIN = 0.00018, CARRY_DRAIN = 0.0004; // energy.js, per second: the base, and the carry's scaled by loadKg / 40
+const BASE_DRAIN = 0.00018, CARRY_DRAIN = 0.0004; // energy.js, per second of the clock: the base, and the carry's scaled by loadKg / 40
 const NAMES = { gear: 'the gear pack', food: 'the food pack', pack: 'the pack' };
 const SHORT = { gear: 'gear pack', food: 'food pack', pack: 'pack' };
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -318,7 +318,7 @@ export class Packs {
     const back = Math.abs(you.along - a.along) + you.dist + a.dist, over = Math.abs(a.along - b.along) + a.dist + b.dist;
     const seconds = (back + over) / WALK_PACE, carrying = over / WALK_PACE;
     const rate = this.adventure ? TRAVEL_RATE : 1;
-    return { back, over, seconds, rate, hours: seconds * this.day.hoursPerSecond * rate, cost: BASE_DRAIN * seconds + CARRY_DRAIN * (this.weightOf(k) / 40) * carrying, trail: k.at.trail.name };
+    return { back, over, seconds, rate, hours: seconds * this.day.hoursPerSecond * rate, cost: (BASE_DRAIN * seconds + CARRY_DRAIN * (this.weightOf(k) / 40) * carrying) * rate, trail: k.at.trail.name };
   }
 
   fetch(k, plan) {

@@ -10,8 +10,10 @@ import { clamp } from './rng.js';
 // always did: the food runs down and an empty meter calls onEvac.
 
 const BASE = 0.00018;      // per second of the clock at its full rate: a day of doing nothing costs about a fifth of the meter
-const PADDLE = 0.0007;     // per second at a cruising 2 m/s in calm air
-const CARRY = 0.0004;      // per second walking a portage with one day of food (no load known), or with 40 kg on you
+// the efforts, like the base, are per second of the clock at its full rate: while you travel in Adventure the clock
+// runs at a third (trip.js), and so does what the effort costs, so a game day of travel costs the same in either mode
+const PADDLE = 0.0007;     // at a cruising 2 m/s in calm air
+const CARRY = 0.0004;      // walking a portage with one day of food (no load known), or with 40 kg on you
 const LOAD_REF = 40;       // kg: the carry drain scales with player.loadKg / LOAD_REF
 const SWIM = 0.0009;
 const REST = 0.0006;       // per second of the clock at its full rate, sitting still; x restBoost at camp, x2 after a meal
@@ -132,7 +134,7 @@ export class Energy {
       if (this.now < this.fedUntil) recover *= 2;
       if (this.warning) recover = 0; // an empty pack: rest no longer brings it back
     }
-    const drain = BASE * rate + travel;
+    const drain = (BASE + travel) * rate; // per second of the clock: in Adventure a day's travel costs what a day's travel always did
     this.exertion = travel;
     let v = this.value - drain * dt;
     if (recover) { const cap = this.ceiling; if (v < cap) v = Math.min(cap, v + recover * dt); }
