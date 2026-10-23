@@ -183,6 +183,14 @@ export class DayCycle {
   setClock(year, doy, hours) {
     this.year = year; this.doy = doy; this.hours = ((hours % 24) + 24) % 24; this._times = null;
     this.stepDays(0);
+    this.elevation = this.sunElevation();
+  }
+  // the sun's elevation for the calendar and the clock as they stand: a jump (setClock, advance) sets it at once, so
+  // nothing read before the next update (the camp's "Dark now" note, the night's travel cost) sees the last frame's sky
+  sunElevation() {
+    const { month, day } = monthDay(this.year, this.doy);
+    const jd = julianDay(this.year, month + 1, day) + (this.hours - utcOffsetHours(this.year, this.doy)) / 24;
+    return sunPosition(jd, this.place.lat, this.place.lon).elevation;
   }
 
   // Move the clock forward by `hours` (a night slept, an hour's walk fetched): across midnight into the next day (and
@@ -194,6 +202,7 @@ export class DayCycle {
     if (days) { this.hours -= days * 24; this.stepDays(days); }
     this.season = seasonAt(this.doy);
     this._times = null;
+    this.elevation = this.sunElevation();
     this.jumps++;
   }
 
