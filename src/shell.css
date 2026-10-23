@@ -17,6 +17,9 @@
 .shell-card .kicker { color: rgba(243, 236, 221, .82); }
 .shell-card h1 { margin: 0; font: 500 clamp(56px, 8vw, 92px)/.98 var(--serif); letter-spacing: -.01em; }
 .shell-card p.sub { margin: 0; max-width: 400px; font-size: 17px; line-height: 1.5; color: var(--cream-86); }
+/* shown only where the only pointer is a finger: the game has no touch controls yet */
+.shell-card p.sub.touch-note { display: none; font-size: 14px; color: rgba(243, 236, 221, .72); border-left: 2px solid rgba(243, 236, 221, .45); padding-left: 10px; }
+@media (pointer: coarse) and (hover: none) { .shell-card p.sub.touch-note { display: block; max-width: 300px; } }
 .shell-card .keys { position: absolute; left: 96px; bottom: 40px; margin: 0; display: flex; align-items: center; gap: 10px; font-size: 12px; color: rgba(243, 236, 221, .6); text-shadow: 0 1px 2px rgba(0, 0, 0, .45); }
 .shell-card .keys kbd { font-size: 11px; padding: 1px 6px; border-color: rgba(243, 236, 221, .5); margin-left: 10px; }
 .shell-card .keys kbd:first-child { margin-left: 0; }
