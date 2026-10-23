@@ -142,8 +142,11 @@ export class Energy {
     return `held down by ${HELD_WORD[k]}`;
   }
   get bottle() { return this.drinkable + this.treating; }
-  // a hot afternoon: July and August, noon to six
-  get hot() { const { month } = monthDay(this.day.year, this.day.doy), h = this.day.hours; return (month === 6 || month === 7) && h >= 12 && h < 18; }
+  // a hot afternoon: July and August, noon to six, under the sun (not under cloud, fog or rain: weather.js)
+  get hot() {
+    const { month } = monthDay(this.day.year, this.day.doy), h = this.day.hours, w = this.day.weather;
+    return (month === 6 || month === 7) && h >= 12 && h < 18 && !(w && /overcast|fog|rain|storm/.test(w.state || ''));
+  }
   get warning() { return !this.hasFood && this.value < WARN_AT; }
   get still() { const p = this.player; return (p.mode === 'paddle' || p.mode === 'carry' || p.mode === 'walk') && !p.landing && Math.abs(p.speed) < 0.25; }
   // the rest multiplier: the camp sets it (3 at a site, 4 by a lit fire); until anything does, a campsite nearby gives 3
