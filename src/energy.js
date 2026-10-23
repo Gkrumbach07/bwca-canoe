@@ -1,5 +1,6 @@
 import { clamp } from './rng.js';
 import { monthDay } from './astro.js';
+import { LIFE } from './pace.js';
 
 // Energy: one bar from 0 to 1, and in Adventure three needs that pull it down (rest, food, water), the way Wild n
 // Chill's single bar works. The bar drains slowly with the clock, faster with the paddle (speed, hustle, a wind on the
@@ -25,9 +26,10 @@ import { monthDay } from './astro.js';
 // you're done"): an hour of the clock at 0 to stop and eat, drink or rest, then an evacuation (onEvac) named for the
 // need that ran you down. In Sandbox the needs stay full, the food keeps and nothing is forced; with no trip at all (energy.trip
 // null) it behaves as it always did: the food runs down and an empty bar calls onEvac.
-// Balance (hubs phase 1): the paddle costs 0.0005 (it was 0.0007) because the starting A-frame wakes you at 85 % and the
-// needs add their own drain: a June day of 5 km with two portages, the bottle filled at a portage and at camp and a hot
-// supper, ends near 0.4 at supper with rest about 0.45 (the model and the headless log are in the hubs phase-1 notes).
+// Balance (the pace, 2026-10-23; docs/trip-core.md): every rate is per game hour. A July day of 23 km and four portages
+// (6.5 game hours of travel at Trip pace) took the bar from 0.85 after a night in the A-frame to about 0.4 by the end of
+// the paddle, and a first day from 1.0 to 0.55; the camp's rest then brings it up to what the rest need allows by supper
+// (about 0.55 to 0.6). A long day of 10 hours or more runs it near empty.
 //
 // The contract (streams A and C read these):
 //   energy.value, energy.needs { rest, food, water }, energy.ceiling, energy.low ('tired' | 'hungry' | 'thirsty' | null),
@@ -39,15 +41,18 @@ import { monthDay } from './astro.js';
 //   energy.atCounter, and the meal clock energy.lastHours, energy.lastMealAbs, energy.lastMealKind. energy.needs is
 //   live: energy.needs.food = 1 feeds you, energy.needs.water = 1 waters you.
 
-const BASE = 0.00018;      // per second of the clock at its full rate: a day of doing nothing costs about a fifth of the bar
-// the efforts, like the base, are per second of the clock at its full rate: while you travel in Adventure the clock
-// runs at a third (trip.js), and so does what the effort costs, so a game day of travel costs the same in either mode
-const PADDLE = 0.0005;     // at a cruise in calm air
-const CRUISE = 2.5;        // m/s: what W holds in calm air (player.js); hustling past it costs more, drifting less
-const CARRY = 0.0004;      // walking a portage with one day of food (no load known), or with 40 kg on you
+// Every rate is per game hour, paid on the hours the clock passes (day.hoursPerTick: the pace's time-lapse, pace.js), so
+// what a stretch of travel costs follows the game hours it takes, whichever the pace and the game speed.
+// Balance (the pace, 2026-10-23): a day of travel is now 6 to 8 game hours for 20 to 25 km (it was 12 to 14 for 4 or 5),
+// so an hour of it costs about twice what it did, and a day of it still ends tired: 0.4 to 0.5 by the end of the paddle
+// from the 0.85 an A-frame gives, the camp's rest bringing it back up to what the rest need allows by supper.
+export const BASE_H = 0.009;   // a game hour of doing nothing: a day of it costs about a fifth of the bar
+const PADDLE_H = 0.045;    // a game hour at a cruise in calm air
+const CRUISE = LIFE.cruise; // m/s at life: what W holds in calm air (player.js); hustling past it costs more, drifting less
+export const CARRY_H = 0.055; // a game hour walking a portage with 40 kg on you (or one day of food, no load known)
 const LOAD_REF = 40;       // kg: the carry drain scales with player.loadKg / LOAD_REF
-const SWIM = 0.0009;
-const REST = 0.0006;       // per second of the clock at its full rate, sitting still; x restBoost at camp, x2 after a meal
+const SWIM_H = 0.045;
+const REST_H = 0.03;       // a game hour sitting still; x restBoost at camp, x2 after a meal
 const MEALS = { cold: 0.3, hot: 0.45, fish: 0.45 }; // what a meal gives the bar back (up to the ceiling); a fish counts as hot and saves a ration
 const FEED = { cold: 0.5, hot: 0.6, fish: 0.6 };    // and what it gives the food need
 const FED_HOURS = 2;       // game hours a meal keeps the recovery doubled
@@ -58,7 +63,7 @@ const NIGHT = 1.3;
 // the needs
 const LOW = 0.3;           // a need under this drains the bar LOW_DRAIN times as fast, and shows its mark
 const LOW_DRAIN = 1.5;
-const PULL = 0.0012;       // per second of the clock at its full rate (0.06 a game hour): a bar above the ceiling is pulled down to it
+const PULL_H = 0.06;       // a game hour: a bar above the ceiling is pulled down to it
 const EMPTY = 0.005;       // a need this low stops the bar's recovery
 const SPENT_GRACE = 1;     // game hours at an empty bar before someone comes out for you (Adventure)
 const NEARLY = 0.08;      // a word, once, as the bar nears empty
@@ -293,7 +298,8 @@ export class Energy {
   }
 
   update(dt, wind = null, atCamp = false) {
-    const p = this.player, day = this.day, rate = day.rate ?? 1, now = this.now;
+    const p = this.player, day = this.day, now = this.now;
+    const gh = dt * (day.hoursPerTick ?? day.hoursPerSecond * (day.rate ?? 1)); // the game hours this frame: what every rate is paid on
     this.atCamp = atCamp;
     // meals at sunrise and sunset, if there is food
     const { rise, set } = day.sunriseSunset, h = day.hours, prev = this.lastHours;
@@ -314,17 +320,17 @@ export class Energy {
         let head = 0;
         if (wind) { const f = p.forward, wd = wind.dir; head = Math.max(0, -(f.x * wd.x + f.z * wd.z)) * wind.speed / 6; }
         const g = p.gear, effort = Math.pow(v / (CRUISE * (g ? g.cruise : 1)), 1.5) * (p.input.held('ShiftLeft', 'ShiftRight') ? 1.25 : 1) * (1 + 0.8 * head) * (g ? g.effort : 1); // hubs 2B: a better paddle
-        travel = PADDLE * effort * power;
+        travel = PADDLE_H * effort * power;
         hard = effort * power >= HARD_EFFORT;
-      } else if (v < 0.3) recover = REST;
+      } else if (v < 0.3) recover = REST_H;
     } else if (p.mode === 'carry' || p.mode === 'walk') {
       const kg = p.loadKg || 0;
       if (moving) {
-        if (kg > 0) travel = CARRY * (kg / LOAD_REF) * (p.mode === 'carry' && p.gear ? p.gear.carry : 1); // hubs 2B: yoke pads under the canoe
-        else if (p.mode === 'carry') travel = CARRY * (p.loadFactor || 1);
+        if (kg > 0) travel = CARRY_H * (kg / LOAD_REF) * (p.mode === 'carry' && p.gear ? p.gear.carry : 1); // hubs 2B: yoke pads under the canoe
+        else if (p.mode === 'carry') travel = CARRY_H * (p.loadFactor || 1);
         hard = kg >= HEAVY_KG;
-      } else recover = REST;
-    } else if (p.mode === 'swim') { travel = SWIM; hard = true; }
+      } else recover = REST_H;
+    } else if (p.mode === 'swim') { travel = SWIM_H; hard = true; }
     if (travel && day.elevation < DARK_ELEV) travel *= NIGHT; // after dark, by headlamp
     this.hard = hard;
     // the needs, over the game hours since the last frame (a jump of the clock longer than JUMP counts as a night)
@@ -339,17 +345,17 @@ export class Energy {
     // just woken: the bar is up to what the needs allow (a bunk night's breakfast, written just after sleep(), counts)
     if (this.live && now >= this.wokeAt && now - this.wokeAt < WAKE_WINDOW) this.value = Math.max(this.value, this.ceiling);
     if (recover) {
-      recover *= rate * (this.boostSet ? this._boost : atCamp ? 3 : 1);
+      recover *= this.boostSet ? this._boost : atCamp ? 3 : 1;
       if (this.now < this.fedUntil) recover *= 2;
       if (this.live ? lowest <= EMPTY : this.warning) recover = 0; // a need run out (or, outside a trip, an empty pack): rest no longer brings it back
     }
-    let drain = (BASE + travel) * rate; // per second of the clock: in Adventure a day's travel costs what a day's travel always did
+    let drain = BASE_H + travel; // a game hour: a day's travel costs what its hours cost, at any pace
     if (lowest < LOW) drain *= LOW_DRAIN;
     this.exertion = travel;
-    let v = this.value - drain * dt;
+    let v = this.value - drain * gh;
     const cap = this.ceiling;
-    if (recover && v < cap) v = Math.min(cap, v + recover * dt);
-    else if (this.live && v > cap) v = Math.max(cap, v - PULL * rate * dt); // the needs pull it down to what they allow
+    if (recover && v < cap) v = Math.min(cap, v + recover * gh);
+    else if (this.live && v > cap) v = Math.max(cap, v - PULL_H * gh); // the needs pull it down to what they allow
     this.value = clamp(v, 0, 1);
     if (this.live) {
       // The owner's rule: "if it goes all the way down, you're done". Spent, you have an hour of the clock to stop and
@@ -369,10 +375,10 @@ export class Energy {
     }
     // a gentle word when the pack is empty and the bar low: once, and again only after a while (once a game day on an
     // Adventure, where the bar can sit at 0 for as long as the bottle has water)
-    this.warnTimer -= dt;
+    this.warnTimer -= gh;
     if (!this.warning) this.warnTimer = Math.min(this.warnTimer, 0);
     else if (this.warnTimer <= 0) {
-      this.warnTimer = this.live ? 1200 : 90; // seconds of play (x the game speed): 1200 is a game day at the clock's full rate
+      this.warnTimer = this.live ? 24 : 1.8; // game hours: a day on an Adventure
       this.note(this.adventure ? 'No food and not much left in you. Make for an outfitter, or sit a while.' : 'No food and not much left in you. Any outfitter will set you up again, or sit a while.');
     }
   }
