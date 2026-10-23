@@ -127,7 +127,7 @@ function berry(b, p, r, col) {
 // coordinates less the patch's centre (the mesh is placed at x, gy(x, z), z).
 function berryGeometry(x0, z0, gy, seed) {
   const rng = mulberry32(seed), lv = new PropBuilder(), bs = [new PropBuilder(), new PropBuilder(), new PropBuilder()];
-  const greens = [0x5e8139, 0x6e9042, 0x527235, 0x7f9b4a, 0x63863f], bronze = 0x7d6a3c, blues = [0x5b78b2, 0x6a86bd, 0x4d669b], y0 = gy(x0, z0);
+  const greens = [0x5e8139, 0x6e9042, 0x527235, 0x7f9b4a, 0x63863f], bronze = 0x7d6a3c, blues = [0x44599e, 0x5268ac, 0x3a4c8a, 0x5864a2], y0 = gy(x0, z0);
   const bushes = 24 + Math.floor(rng() * 6);
   let nb = 0;
   for (let i = 0; i < bushes; i++) {
@@ -142,17 +142,20 @@ function berryGeometry(x0, z0, gy, seed) {
       mound(lv, rng, mx, my, mz, rx, ry, rx * (0.8 + rng() * 0.35), rng() < 0.03 ? [bronze] : greens);
       tops.push([mx, my, mz, rx, ry]);
     }
-    // the berries: little clusters on the clumps' shoulders, where they show from a few steps off
+    // the berries: small blue clusters sitting proud on the clumps' tops and shoulders, a few berries a cluster drawn a
+    // little bigger than life (a real one is a centimetre across: life-size, they vanish two steps off), where they show
+    // from the camp
     for (const [mx, my, mz, rx, ry] of tops) {
-      const clusters = 1 + Math.floor(rng() * 2.6);
+      const clusters = 1 + Math.floor(rng() * 1.8);
       for (let k = 0; k < clusters; k++) {
-        const t = rng() * 6.28, u = 0.4 + rng() * 0.45, ct = Math.cos(t), st = Math.sin(t);
-        const many = 3 + Math.floor(rng() * 4), col = tone(pickR(rng, blues), rng, 0.07, 0.01);
+        const t = rng() * 6.28, u = 0.15 + rng() * 0.55, ct = Math.cos(t), st = Math.sin(t), col = tone(pickR(rng, blues), rng, 0.08, 0.012);
+        const cx = mx + ct * rx * u * 1.12, cz = mz + st * rx * u * 1.12, cy = my + ry * Math.sqrt(Math.max(0, 1 - u * u)) * 1.1;
+        const many = 4 + Math.floor(rng() * 4);
         for (let q = 0; q < many; q++) {
-          const uu = Math.min(0.95, u + (rng() - 0.5) * 0.2), tt = (rng() - 0.5) * 0.5, r = 0.0125 + rng() * 0.004;
-          const dx = ct * Math.cos(tt) - st * Math.sin(tt), dz = st * Math.cos(tt) + ct * Math.sin(tt);
-          berry(bs[nb++ % 3], V(mx + dx * rx * uu * 1.06, my + ry * Math.sqrt(Math.max(0, 1 - uu * uu)) + r * 0.5, mz + dz * rx * uu * 1.06), r, col);
+          const a2 = (q / many) * 6.28 + rng() * 0.6, d2 = q ? 0.022 + rng() * 0.016 : 0, r = 0.019 + rng() * 0.007;
+          berry(bs[nb % 3], V(cx + Math.cos(a2) * d2, cy + r * 0.6 + (q ? -rng() * 0.012 : 0.008), cz + Math.sin(a2) * d2), r, q % 3 === 2 ? col.clone().offsetHSL(0, 0, 0.06) : col);
         }
+        nb++;
       }
     }
   }
