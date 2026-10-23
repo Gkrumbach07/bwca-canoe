@@ -38,8 +38,8 @@ const LABELS = ['Clear', 'Fair, broken cumulus', 'Overcast', 'Fog on the water',
 const SNOW_LABELS = { 4: 'Snow flurries', 5: 'Snow', 6: 'Snow squall' };
 
 // Global uniforms for any material: how wet the world is (0 dry .. 1 soaked: rises in minutes of rain, dries over an
-// hour or three after it, faster in sun and wind). The look materials can read it to darken and deepen porous
-// surfaces (glslWet below); nothing reads it yet.
+// hour or three after it, faster in sun and wind). The look materials read it through applyWet (below): the ground,
+// the trees, the rocks, the cliffs and the props darken by their porosity and take a faint sheen.
 export const WEATHER = {
   uWetness: { value: 0 },
 };
@@ -53,6 +53,41 @@ export const glslWet = /* glsl */ `
     return mix(c, max(mix(vec3(l), c, 1.2), 0.0) * 0.52, k);
   }
 `;
+// wetSheen(normal, toward the eye, gloss): the film of water on a wet surface mirrors the sky: a few per cent face on,
+// more at a grazing angle (Schlick, water's 2 %), in the sky fill's own colour, less under a canopy (lookSky). The
+// film lies on what faces up (a slope or a wall sheds it), so the sheen is a dull shine on the ground, the rock tops
+// and the boards, never a rim round a trunk or a crown. View space, as the Lambert chunk has them. Declared after the
+// lights (it reads the hemisphere light and the look's lookSky); gloss 0..1 per material.
+export const glslWetSheen = /* glsl */ `
+  vec3 wetSheen(vec3 n, vec3 v, float gloss) {
+    float k = uWetness * gloss;
+    if (k <= 0.0) return vec3(0.0);
+    #if NUM_HEMI_LIGHTS > 0
+      vec3 up = hemisphereLights[0].direction;
+      float lying = smoothstep(0.35, 0.95, dot(n, up));
+      float f = 0.02 + 0.98 * pow(1.0 - saturate(dot(n, v)), 5.0);
+      float sky = smoothstep(-0.1, 0.4, dot(reflect(-v, n), up));
+      return mix(hemisphereLights[0].groundColor, hemisphereLights[0].skyColor, sky) * (f * lying * k * lookSky * 0.3);
+    #else
+      return vec3(0.0);
+    #endif
+  }
+`;
+// Lays the wet look on a look material (shading.js): call in onBeforeCompile after applyLook and the material's own
+// colour patches. porosity and gloss are GLSL expressions (constants, or a material's own variables in scope in main);
+// the albedo is darkened just after the colour is final (before <alphamap_fragment>), the sheen added to the light
+// before <opaque_fragment>. The uniform goes in the declarations, as every look uniform does.
+export function applyWet(shader, { porosity = '1.0', gloss = '0.5' } = {}) {
+  shader.uniforms.uWetness = WEATHER.uWetness;
+  let fs = shader.fragmentShader;
+  const swap = (from, to) => { if (fs.includes(from)) fs = fs.replace(from, to); else console.warn(`weather: ${from} not found, no wet look there`); };
+  swap('#include <common>', '#include <common>\n' + glslWet);
+  swap('#include <shadowmap_pars_fragment>', glslWetSheen + '\n#include <shadowmap_pars_fragment>');
+  swap('#include <alphamap_fragment>', `diffuseColor.rgb = wetAlbedo( diffuseColor.rgb, ${porosity} );\n\t#include <alphamap_fragment>`);
+  swap('#include <opaque_fragment>', `outgoingLight += wetSheen( normal, normalize( vViewPosition ), ${gloss} );\n\t#include <opaque_fragment>`);
+  shader.fragmentShader = fs;
+  return shader;
+}
 
 // The look of each state. cover: the cumulus share; deck: the overcast layer; dark: how dark the cloud is; anvil: a
 // storm's towers; sun: the sun's share of its light; fill: the sky fill's gain; shadow, soft: the shadows' strength

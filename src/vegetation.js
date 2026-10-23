@@ -10,6 +10,7 @@ import { bakeOcclusion } from './occlusion.js';
 import { foliageAtlas, registerFarPainter, paintFarSprite, ATLAS_SIZE, FAR_MARGIN } from './textures.js';
 import { REGION } from './placement.js';
 import { SWAY, glslSway } from './wind.js';
+import { applyWet } from './weather.js';
 
 // Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
 // turns a tile's placement bins into instanced meshes in tile-local coordinates.
@@ -1015,6 +1016,9 @@ function makeCardMaterial(autumn, species = null) {
         .replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n' + glowPars)
         .replace('#include <map_fragment>', '#include <map_fragment>\n' + cardCut + (autumn ? '\n  if (vLeaf > 0.5 && uLeafOn < 0.5) discard;' : '') + '\n  if ( vCardUv.x >= 0.0 ) diffuseColor.rgb *= cardTex.rgb;\n  #ifdef ALPHA_TO_COVERAGE\n    diffuseColor.a = cardCover;\n  #endif' + glowAt)
         .replace('#include <normal_fragment_begin>', noFlip);
+      // rain (weather.js): bark soaks it up and darkens (porosity 1), the leaves and needles shed it (0.3) and take
+      // a faint sheen
+      applyWet(shader, { porosity: '( vCardUv.x >= 0.0 || vLookWrap > 0.3 ) ? 0.3 : 1.0', gloss: '( vCardUv.x >= 0.0 || vLookWrap > 0.3 ) ? 0.08 : 0.3' });
     },
   });
   m.onBeforeRender = coverFor;

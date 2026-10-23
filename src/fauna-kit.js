@@ -3,6 +3,7 @@ import { makeLookMaterial } from './shading.js';
 import { addSurface, INSTANCE_ORIGIN } from './floating.js';
 import { makeAO, trianglesOf } from './loft.js';
 import { REFLECT_LAYER } from './water.js';
+import { foliageAtlas, ATLAS_SIZE } from './textures.js';
 
 // The kit the wildlife is made from (loons.js, fauna.js, fauna-models.js): one material in the look's smooth
 // light with a small plumage hook, an indexed geometry builder with the occlusion bake folded in, pools of
@@ -10,7 +11,8 @@ import { REFLECT_LAYER } from './water.js';
 //
 // The plumage hook. A loon's checkered back or its striped necklace would take thousands of triangles as
 // geometry; instead each vertex carries aPat = (kind, u, v, occlusion) and the fragment draws the marks:
-//   kind 1  white spots in staggered rows, one per unit cell of (u, v) (bigger cells: bigger squares)
+//   kind 1  white spots in staggered, wandering rows, one per unit cell of (u, v) (bigger cells: bigger squares),
+//           each nudged about its cell and sized by a hash, now and then missing
 //   kind 2  white stripes across u inside the band 0 < v < 1 (a necklace)
 // The marks are antialiased by their own derivatives and fade to their mean tone once a cell gets near a
 // pixel, so a far loon is a dark shape and never shimmers. The occlusion (w) darkens the white the way the
@@ -26,12 +28,19 @@ const glslPatFragment = /* glsl */ `
   vec2 uv = vPat.yz, fw = max(fwidth(uv), vec2(1e-4));
   float mark = 0.0, mean = 0.0, px = max(fw.x, fw.y);
   if (kind > 0.5 && kind < 1.5) {
+    // staggered rows, but no two spots alike: each nudged about its cell, a little bigger or smaller, one in eight
+    // missing, and the rows wandering, so a mid-distance loon reads as speckled, not as a printed grid
     vec2 c = uv;
-    c.x += 0.5 * mod(floor(c.y), 2.0);
-    vec2 f = abs(fract(c) - 0.5);
-    float d = max(f.x, f.y * 1.2);
-    mark = 1.0 - smoothstep(0.19 - px * 0.7, 0.19 + px * 0.7, d);
-    mean = 0.12;
+    c.y += 0.18 * sin(c.x * 0.9 + floor(c.y) * 1.7);
+    float row = floor(c.y);
+    c.x += 0.5 * mod(row, 2.0) + 0.2 * sin(row * 2.3);
+    ivec2 id = ivec2(floor(c));
+    float h1 = lookHash(id, 61u), h2 = lookHash(id, 62u), h3 = lookHash(id, 63u);
+    vec2 f = abs(fract(c) - 0.5 - (vec2(h1, h2) - 0.5) * 0.34);
+    float d = max(f.x, f.y * (1.0 + 0.4 * h1));
+    float size = (0.13 + 0.11 * h3) * step(0.12, fract(h1 * 7.13 + h2 * 3.7));
+    mark = 1.0 - smoothstep(size - px * 0.7, size + px * 0.7, d);
+    mean = 0.11;
   } else if (kind > 1.5 && kind < 2.5) {
     float band = smoothstep(-fw.y, fw.y, uv.y) * (1.0 - smoothstep(1.0 - fw.y, 1.0 + fw.y, uv.y));
     float s = abs(fract(uv.x) - 0.5);
@@ -338,3 +347,208 @@ export function topOf(world, x, z, near = 1.2, crown = false) {
   }
   return best;
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// The streamed forest as the birds' and the beavers' searches read it, gathered a slice at a time. tiles.js
+// treesNear builds a tile's whole hash of trunks in one go (a few milliseconds a tile), and a search that crossed
+// a few fresh tiles, raycasting the trees it found, cost 5-12 ms in one frame. Here each ready tile's trunks and
+// boulders by the water go into a cache in slices against a deadline (Stands.deadline, set by Search.step), and
+// the searches are generators that wait on it. Per tile entry, kept while the tile is in:
+//   trees   { x, z, r: trunk radius, sp, s: shore distance, mesh, i: instance } within 25 m of the water (props'
+//           obstacles too, sp -1), hashed by 10 m cell
+//   rocks   { x, z, r, mesh, i } the boulders by or in the water
+
+export class Stands {
+  constructor(world) { this.world = world; this.recs = new Map(); this.deadline = Infinity; }
+  _rec(tx, ty) {
+    const tm = this.world.tiles;
+    if (!tm) return null;
+    const e = tm.tiles.get(tm.key(tx, ty));
+    if (!e || e.state !== 'ready' || !e.vegBins) return null;
+    let r = this.recs.get(e);
+    if (!r) {
+      if (this.recs.size > 40) for (const [k, v] of this.recs) if (v.e.state !== 'ready' || tm.tiles.get(tm.key(v.tx, v.ty)) !== v.e) this.recs.delete(k);
+      r = { e, tx, ty, bins: e.vegBins.slice(), bin: 0, i: 0, done: false, hash: new Map(), rocks: [], meshOf: null };
+      this.recs.set(e, r);
+    }
+    return r;
+  }
+  // gathers more of a tile until the deadline; true once it is all in
+  _gather(r) {
+    const e = r.e, w = this.world;
+    if (!r.meshOf) { r.meshOf = new Map(); for (const m of e.veg || []) if (m.isInstancedMesh) r.meshOf.set(m.instanceMatrix.array, m); }
+    while (r.bin < r.bins.length) {
+      const b = r.bins[r.bin];
+      if (!b.count || b.sp === 7) { r.bin++; r.i = 0; continue; } // shrubs: nothing sits on them
+      const M = b.matrices, rock = b.sp === 6, mesh = r.meshOf.get(M) || null;
+      for (; r.i < b.count; r.i++) {
+        if ((r.i & 127) === 0 && performance.now() > this.deadline) return false;
+        const o = r.i * 16, x = M[o + 12] + e.ox, z = M[o + 14] + e.oz, sx = Math.hypot(M[o], M[o + 1], M[o + 2]), s = w.shoreAt(x, z);
+        if (rock) { if (sx >= 0.6 && s > -8 && s < 14) r.rocks.push({ x, z, r: 0.8 * sx, mesh, i: r.i }); }
+        else if (s < 25) this._put(r, { x, z, r: 0.12 + 0.14 * sx, sp: b.sp, s, mesh, i: r.i });
+      }
+      r.bin++; r.i = 0;
+    }
+    if (e.obstacles) for (const o of e.obstacles) if (w.shoreAt(o.x, o.z) < 25) this._put(r, { x: o.x, z: o.z, r: o.box ? Math.hypot(o.hx, o.hz) : o.r, sp: -1, s: 0, mesh: null, i: 0 });
+    r.done = true;
+    return true;
+  }
+  _put(r, t) {
+    const key = Math.floor(t.x / 10) * 65536 + Math.floor(t.z / 10);
+    let a = r.hash.get(key);
+    if (!a) r.hash.set(key, (a = []));
+    a.push(t);
+  }
+  _each(x, z, rad, fn) {
+    const w = this.world, [tx0, ty0] = w.tileOf(x - rad, z - rad), [tx1, ty1] = w.tileOf(x + rad, z + rad);
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { const r = this._rec(tx, ty); if (r && fn(r) === false) return false; }
+    return true;
+  }
+  // true once every ready tile touching the square (x +- rad, z +- rad) is gathered; gathers more until the deadline
+  warm(x, z, rad) { return this._each(x, z, rad, (r) => r.done || this._gather(r)); }
+  // the gathered trees (and obstacles) whose trunk is within rad of (x, z)
+  trees(x, z, rad, out = []) {
+    this._each(x, z, rad, (r) => {
+      if (!r.done) return;
+      for (let cz = Math.floor((z - rad) / 10); cz <= Math.floor((z + rad) / 10); cz++) for (let cx = Math.floor((x - rad) / 10); cx <= Math.floor((x + rad) / 10); cx++) {
+        const a = r.hash.get(cx * 65536 + cz);
+        if (a) for (const t of a) if (Math.hypot(t.x - x, t.z - z) <= rad + t.r) out.push(t);
+      }
+    });
+    return out;
+  }
+  rocks(x, z, rad, out = []) {
+    this._each(x, z, rad, (r) => { if (r.done) for (const t of r.rocks) if (Math.abs(t.x - x) <= rad && Math.abs(t.z - z) <= rad) out.push(t); });
+    return out;
+  }
+}
+
+// A search spread over frames: a generator yielding between pieces of work, stepped each frame until `budget` ms are
+// spent; `then` gets what it returns. runNow runs one to its end at once (the debug summons).
+export class Search {
+  constructor(stands) { this.stands = stands; this.it = null; this.then = null; }
+  get busy() { return this.it !== null; }
+  start(it, then) { this.it = it; this.then = then; }
+  step(budget = 0.5) {
+    if (!this.it) return;
+    const S = this.stands;
+    S.deadline = performance.now() + budget;
+    try {
+      for (;;) {
+        const r = this.it.next();
+        if (r.done) { const then = this.then; this.it = null; this.then = null; if (then) then(r.value); return; }
+        if (performance.now() >= S.deadline) return;
+      }
+    } finally { S.deadline = Infinity; }
+  }
+}
+export function runNow(it, stands) {
+  stands.deadline = Infinity;
+  for (;;) { const r = it.next(); if (r.done) return r.value; }
+}
+
+// The top of a tree as it is drawn, from a height grid per geometry: over its own xz in half-metre cells, the
+// highest point where something shows, the bark to its tip (a snag's broken top, a dead leader) and a card only
+// where its sprite is solid (the foliage atlas's alpha, sampled on a grid over the card), never its clear margin, so a
+// bird sits on the leaves and not on air over them. Built once per geometry, read through the instance's matrix.
+// Each cell keeps how far its point lies above its card's anchor (grow, for the swell: vegetation.js CARD.uCardGrow
+// grows the cards about their anchors far off, and a bird on top has to rise with them).
+const _tw = new THREE.Vector3(), _tm = new THREE.Matrix4(), _tt = new THREE.Matrix4(), _ti = new THREE.Matrix4();
+const SOLID = 0.4 * 255;   // the sprite's alpha that counts as leaf (the cards cut at 0.5 near, lower far off)
+const CELL = 0.5;
+function solidGrid(geo) {
+  if (geo.userData.solidGrid) return geo.userData.solidGrid;
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  const bb = geo.boundingBox, x0 = bb.min.x, z0 = bb.min.z;
+  const nx = Math.max(1, Math.ceil((bb.max.x - x0) / CELL) + 1), nz = Math.max(1, Math.ceil((bb.max.z - z0) / CELL) + 1);
+  const H = { x0, z0, nx, nz, h: new Float32Array(nx * nz).fill(-Infinity), px: new Float32Array(nx * nz), pz: new Float32Array(nx * nz), grow: new Float32Array(nx * nz), top: -1 };
+  const put = (x, y, z, grow) => {
+    const j = Math.min(nz - 1, Math.max(0, Math.floor((z - z0) / CELL))) * nx + Math.min(nx - 1, Math.max(0, Math.floor((x - x0) / CELL)));
+    if (y > H.h[j]) { H.h[j] = y; H.px[j] = x; H.pz[j] = z; H.grow[j] = grow; }
+  };
+  const P = geo.getAttribute('position'), UV = geo.getAttribute('uv'), G = geo.getAttribute('aGrow');
+  const lerp4 = (A, i, c, s, t) => { const a = A.getComponent(i, c), b = A.getComponent(i + 1, c), d = A.getComponent(i + 2, c), e = A.getComponent(i + 3, c); return (a + (b - a) * s) * (1 - t) + (e + (d - e) * s) * t; };
+  let img = null;
+  const N = 6;
+  for (let i = 0; i < P.count; i++) {
+    if (!(UV && G && UV.getX(i) >= 0)) { put(P.getX(i), P.getY(i), P.getZ(i), 0); continue; }
+    // a card: its corners come four at a time (geobuilder.js CardBuilder: s, t = 00, 10, 11, 01)
+    if (i + 3 >= P.count) break;
+    img = img || foliageAtlas().image;
+    for (let a = 0; a < N; a++) for (let b = 0; b < N; b++) {
+      const s = a / (N - 1), t = b / (N - 1), u = lerp4(UV, i, 0, s, t), v = lerp4(UV, i, 1, s, t);
+      const px = Math.min(ATLAS_SIZE - 1, Math.max(0, Math.floor(u * ATLAS_SIZE))), py = Math.min(ATLAS_SIZE - 1, Math.max(0, Math.floor(v * ATLAS_SIZE)));
+      if (img.data[(py * ATLAS_SIZE + px) * 4 + 3] >= SOLID) put(lerp4(P, i, 0, s, t), lerp4(P, i, 1, s, t), lerp4(P, i, 2, s, t), Math.max(0, lerp4(G, i, 1, s, t)));
+    }
+    i += 3;
+  }
+  for (let j = 0; j < H.h.length; j++) if (H.top < 0 || H.h[j] > H.h[H.top]) H.top = j;
+  return (geo.userData.solidGrid = H);
+}
+function instanceWorld(m, i, out) {
+  _tm.fromArray(m.instanceMatrix.array, i * 16);
+  m.parent.updateWorldMatrix(true, false);
+  return out.multiplyMatrices(m.parent.matrixWorld, m.matrix).multiply(_tm);
+}
+// the geometry instance i of a vegetation mesh is drawn with right now (vegetation.js updateVegetationLOD): near
+// the camera its variant group's own (a mesh per group), else the bin's mesh draws every instance with its full or,
+// far off, its low (far twin) geometry. They differ by metres at the top, so a perch is read from the one drawn.
+function drawnVariant(m, i) {
+  const l = m.userData.lod;
+  if (!l) return m.geometry;
+  const G = l.groups;
+  if (!G || !G.meshes || !G.meshes.length || !G.meshes[0].visible) return m.geometry;
+  let g = 0, start = 0;
+  while (g < G.counts.length - 1 && i >= start + G.counts[g]) { start += G.counts[g]; g++; }
+  return G.geos[g] || l.full;
+}
+// a Stands tree item -> its crown's top in world space as it is drawn now, or null (cheap after the first call per
+// geometry: the perched eagle reads it every frame, so it moves with the tree when its detail level changes)
+export function crownTop(t) {
+  const m = t.mesh;
+  if (!m || !m.parent) return null;
+  const H = solidGrid(drawnVariant(m, t.i)), j = H.top;
+  if (j < 0 || !(H.h[j] > -Infinity)) return null;
+  const W = instanceWorld(m, t.i, _tt), e = W.elements;
+  _tw.set(H.px[j], H.h[j], H.pz[j]).applyMatrix4(W);
+  return { x: _tw.x, y: _tw.y, z: _tw.z, sp: m.userData.sp, grow: H.grow[j] * Math.hypot(e[4], e[5], e[6]) };
+}
+// the highest solid point of a Stands tree item within about `r` metres of world (x, z), as drawn now (-Infinity if
+// none there): whether a neighbour's crown reaches over a perch
+export function solidAt(t, x, z, r = 0.5) {
+  const m = t.mesh;
+  if (!m || !m.parent) return -Infinity;
+  const H = solidGrid(drawnVariant(m, t.i)), W = instanceWorld(m, t.i, _tt);
+  _ti.copy(W).invert();
+  let best = -Infinity;
+  for (const [ox, oz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) {
+    _tw.set(x + ox, W.elements[13], z + oz).applyMatrix4(_ti);
+    const i = Math.floor((_tw.x - H.x0) / CELL), k = Math.floor((_tw.z - H.z0) / CELL);
+    if (i < 0 || k < 0 || i >= H.nx || k >= H.nz) continue;
+    const j = k * H.nx + i, h = H.h[j];
+    if (!(h > -Infinity)) continue;
+    _tw.set(H.px[j], h, H.pz[j]).applyMatrix4(W);
+    if (_tw.y > best) best = _tw.y;
+  }
+  return best;
+}
+// a Stands rock item -> the top of the boulder (a few rays down round its centre), or null; rockAt: its surface
+// under one point (a gull's feet), or NaN off it
+function rockRays(t, pts) {
+  const m = t.mesh;
+  if (!m || !m.parent) return null;
+  const geo = drawnVariant(m, t.i);
+  if (!geo.boundingSphere) geo.computeBoundingSphere();
+  _mesh.geometry = geo; _mesh.matrixWorld.copy(instanceWorld(m, t.i, _tt));
+  let best = null;
+  for (const [x, z] of pts) {
+    _from.set(x, _mesh.matrixWorld.elements[13] + 60, z);
+    _ray.set(_from, _down); _ray.far = 120;
+    _hits.length = 0;
+    _mesh.raycast(_ray, _hits);
+    for (const h of _hits) if (!best || h.point.y > best.y) best = { x: t.x, z: t.z, y: h.point.y };
+  }
+  return best;
+}
+export function rockTop(t) { return rockRays(t, AXIS.map(([ox, oz]) => [t.x + ox, t.z + oz])); }
+export function rockAt(t, x, z) { const h = rockRays(t, [[x, z]]); return h ? h.y : NaN; }

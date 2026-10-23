@@ -94,9 +94,15 @@ baked lightmaps, no PBR, no external assets.
 - The look board: `await __game.lookboard()` renders every spot of `SPOTS` at every hour of `SETS`
   (lookboard.js) into one labelled sheet and returns `{ url, frames, … }` (a PNG data URL; downloaded too when
   the page is visible). `{ spots: ['Lake One bluff'], sets: ['22 Oct 17:30'] }` takes a subset, `{ type:
-  'image/jpeg' }` a smaller file. It holds the animation loop, the clock and the wind while it runs and puts
-  them, the player and the canvas size back after. Add a spot by adding an entry; keep spots within a few
-  kilometres of the lodge so the tiles stay loaded. The full sheet (40 frames) takes 2–5 s once the tiles are in.
+  'image/jpeg' }` a smaller file. It holds the animation loop, the clock, the weather and the wind while it runs
+  and puts them, the player and the canvas size back after. A set may carry its own `weather` (a weather.js state,
+  held for the frame; without it the forecast's own) and `wind` (m/s, 2 when not given) and `from` (bearing);
+  the default board has a July storm at 15:00 and a fog morning. Add a spot by adding an entry; keep spots within
+  a few kilometres of the lodge so the tiles stay loaded. The full sheet (60 frames) takes 3–6 s once the tiles
+  are in.
+- A worktree under `.claude/worktrees/` is outside the shared Vite config's watcher (it ignores `**/.claude/**`),
+  so edits there reach the page only after the dev server restarts; or run Vite with a config of your own that
+  imports `vite.config.js` and sets `server.watch.ignored` without that pattern.
 - The hidden pane leaves the canvas 0 × 0, so the camera's projection is NaN: anything that unprojects fails
   and frustum culling is off (draw calls and triangles read about 4x high). Force a size first
   (`camera.aspect`, `renderer.setSize`, `post.resize`), and dispatch a window `resize` event afterwards to put
@@ -156,6 +162,12 @@ baked lightmaps, no PBR, no external assets.
   same way for the shadows); coverage on them is untried (roadmap, phase 2).
 - The water's colour comes from the lake and the light, not the day tables: the table keeps only `foam`, and
   the day cycle writes the water's `uFoam`, `uIce` and `uSunDir`.
+- Rain wets the world: `applyWet(shader, { porosity, gloss })` (weather.js) after a look material's own colour
+  patches darkens the albedo by `WEATHER.uWetness` times the porosity (ground 1, rock and cliff 0.5, bark and
+  wood 1, leaves 0.3) and adds a faint sky sheen on what faces up. The terrain, the grass, the cards, the rocks,
+  the cliffs, the props and the trail decal compose it; a new look material should too.
+- A building storm's anvils (sky.js) stand 6.5–7.6 km upwind, sheared across the line of sight; the cumulus within
+  60 degrees of upwind goes while they show, so they stand clear over it.
 
 ## Foliage (pass 2, crowns)
 
@@ -172,6 +184,9 @@ baked lightmaps, no PBR, no external assets.
   depth; `REFLECTION = { scale, reach, full }` sets the mirror pass. Terrain, trees, snags and outcrops go on
   `REFLECT_SHORE_LAYER` as tiles come in; the canoe and the rod on `REFLECT_LAYER`. The setting (R) turns the
   pass off and the water mirrors the sky alone; the pass also stops 150 m inland.
+- The shore's ripple lines are contours of the shore distance (a 10 m lattice, interpolated), so they are kept to
+  the last 2.8 m of water and broken into dashes a metre or three long; further out its contours would run on as
+  long strings across a bay.
 - `aquatic.js`: kinds 0 pads, 1 reeds, 2 pondweed, 3 wild rice; the `AQUA` uniforms `uGrow` (pads on the surface
   June to mid-September), `uBloom`, `uTan`, `uIceHide` come from the season.
 

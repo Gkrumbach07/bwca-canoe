@@ -395,15 +395,24 @@ const frag = /* glsl */ `
     vec2 ex = dFdx(vLocal.xz), ey = dFdy(vLocal.xz);
     float sx = dFdx(shore), sy = dFdy(shore), det = ex.x * ey.y - ex.y * ey.x;
     float slope = abs(det) > 1e-9 ? length(vec2(sx * ey.y - sy * ex.y, sy * ex.x - sx * ey.x) / det) : 1.0;
-    if (shore < 5.0) {
+    if (shore < 3.5) {
       float edgeN = lookNoise(pw * 0.45 + uTime * 0.04, 11u);
       float lap = 0.5 + 0.5 * sin(uTime * 0.8 + dot(p, RIP3) * 0.5);
       float edge = 1.0 - smoothstep(0.0, 0.5 + 0.8 * edgeN + 0.35 * lap, shore);
       edgeA = edge * edge * 0.42;
+      // The ripple lines: contours of the shore distance rolling in, each broken into short dashes a metre or three
+      // long (a noise a couple of metres across, its own for each line, so a dash keeps its length as it rolls in
+      // and dies at the beach), only in the last few metres of water, fading out away from the shore and the eye.
+      // The distance field is a 10 m lattice interpolated: a few metres out its contours run on as long strings
+      // past the waterline, so the lines stop there; and where its slope falls off a true distance (a channel's
+      // middle, a lattice cell's flat) they give out too.
       float phase = fract(cycle), lineNo = floor(cycle);
-      float breakup = 0.5 + 0.5 * sin(dot(p, RIP1) + uTime * 0.25 + lineNo * 2.4) * sin(dot(p, RIP2) - uTime * 0.11 + lineNo * 0.9);
-      float line = smoothstep(0.865 - fw, 0.865 + fw, phase) * (1.0 - smoothstep(0.895 - fw, 0.895 + fw, phase));
-      lineA = line * 0.32 * smoothstep(0.45, 0.8, slope) * smoothstep(0.6, 2.0, 0.03 / fw) * (1.0 - smoothstep(14.0, 45.0, dist)) * (1.0 - smoothstep(1.0, 5.0, shore)) * smoothstep(0.3, 0.65, breakup) * step(0.0, shore);
+      float dash = lookNoise(pw * 0.6 + vec2(lineNo * 7.31, lineNo * 3.17), 23u);
+      dash = smoothstep(0.57, 0.69, dash) * (0.75 + 0.25 * sin(dot(p, RIP1) * 0.7 + uTime * 0.25 + lineNo * 2.4));
+      // a crest about 8 cm across (0.065 of a cycle), its edges a pixel soft; it fades as it narrows under a pixel
+      float line = smoothstep(0.85 - fw, 0.85 + fw, phase) * (1.0 - smoothstep(0.915 - fw, 0.915 + fw, phase));
+      lineA = line * 0.34 * dash * smoothstep(0.55, 0.85, slope) * smoothstep(0.6, 1.6, 0.065 / fw) * (1.0 - smoothstep(9.0, 30.0, dist))
+        * smoothstep(0.1, 0.5, shore) * (1.0 - smoothstep(1.0, 2.8, shore)) * (1.0 - smoothstep(0.8, 2.0, vDepth));
     }
     // whitecaps: once the wind has raised real waves, their crests break
     float cap = smoothstep(0.62, 0.8, vCrest.x) * smoothstep(0.35, 0.7, vCrest.y) * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.75;

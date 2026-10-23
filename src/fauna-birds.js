@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { eagleModels, gullModels, ravenModels } from './fauna-models.js';
-import { Parts, frameMatrix, partMatrix, topOf, smooth, clamp, wrapAngle, turnToward, headingOf } from './fauna-kit.js';
+import { eagleModels, gullModels, ravenModels, legLength } from './fauna-models.js';
+import { Parts, frameMatrix, partMatrix, Search, runNow, crownTop, solidAt, rockTop, rockAt, smooth, clamp, wrapAngle, turnToward, headingOf } from './fauna-kit.js';
+import { CARD } from './vegetation.js';
 
 // The birds of the open sky over the lakes (fauna.js drives them): a bald eagle that sits on a tall pine or a
 // snag at the shore, soars in wide circles over the lake and now and then swoops to the water for a fish;
@@ -10,14 +11,17 @@ import { Parts, frameMatrix, partMatrix, topOf, smooth, clamp, wrapAngle, turnTo
 //   glide   straight toward a point, flapping when it has to climb (the eagle's swoop, the climb out, the
 //           approach to a perch or a rock, the raven's crossing)
 //   perch / stand   on a tree top, a rock or the ice, wings folded along the flanks
-// Each bird is three instanced parts, its body and its two wings; a folded wing is the wing turned back along
-// the flank and shortened (see fold()).
+// Each bird is four instanced parts, its body, its two wings and, while it sits, its legs; a folded wing is the
+// wing turned back along the flank and shortened (see fold()). Where they sit comes from searches spread over
+// frames (fauna-kit.js Stands and Search): a perch or a rock is looked for a slice at a time, never in one long
+// frame, and the bird comes when one is found.
 
 const KINDS = {
-  //            wing root (x, y, |z|), folded z, cruise m/s, flap Hz, flap amplitude, how often it flaps, call
-  eagle: { root: [0.03, 0.04, 0.1], foldZ: 0.115, speed: 10, hz: 2.2, amp: 0.55, flappy: 0.08, perchPitch: 0.75, perchUp: 0.36, call: 'eagle-call', fingers: true },
-  gull: { root: [0.02, 0.035, 0.07], foldZ: 0.085, speed: 8, hz: 3.2, amp: 0.6, flappy: 0.35, perchPitch: 0.18, perchUp: 0.07, call: null },
-  raven: { root: [0.02, 0.035, 0.08], foldZ: 0.09, speed: 9, hz: 3.0, amp: 0.65, flappy: 0.6, perchPitch: 0.22, perchUp: 0.075, call: null, fingers: true },
+  //            wing root (x, y, |z|), folded z, cruise m/s, flap Hz, flap amplitude, how often it flaps, call;
+  //            perchPitch, perchUp: its pitch and its body's height over its feet sitting; hip: where its legs hang
+  eagle: { root: [0.03, 0.04, 0.1], foldZ: 0.115, speed: 10, hz: 2.2, amp: 0.55, flappy: 0.08, perchPitch: 0.75, perchUp: 0.3, hip: [0.02, -0.06], call: 'eagle-call', fingers: true },
+  gull: { root: [0.02, 0.035, 0.07], foldZ: 0.085, speed: 8, hz: 3.2, amp: 0.6, flappy: 0.35, perchPitch: 0.18, perchUp: 0.15, hip: [0.0, -0.03], call: null },
+  raven: { root: [0.02, 0.035, 0.08], foldZ: 0.09, speed: 9, hz: 3.0, amp: 0.65, flappy: 0.6, perchPitch: 0.22, perchUp: 0.14, hip: [0.0, -0.03], call: null, fingers: true },
 };
 const _m = new THREE.Matrix4(), _w = new THREE.Matrix4(), _v = new THREE.Vector3();
 // what an eagle would rather sit on (vegetation.js SPECIES): a snag, a big pine; a spruce will do; a birch hardly
@@ -39,8 +43,15 @@ export class Birds {
       body: new Parts(scene, geo.body, mats.solid, n, { name: `${kind} body`, reflect: false }),
       wingR: new Parts(scene, geo.wingR, mats.solid, n, { name: `${kind} wing`, reflect: false }),
       wingL: new Parts(scene, geo.wingL, mats.solid, n, { name: `${kind} wing`, reflect: false }),
+      legs: new Parts(scene, geo.legs, mats.solid, n, { name: `${kind} legs`, reflect: false }),
     });
-    this.parts = { eagle: mk(eagleModels(), 'eagle', 2), gull: mk(gullModels(), 'gull', 5), raven: mk(ravenModels(), 'raven', 1) };
+    this.parts = {
+      eagle: mk(eagleModels(legLength(KINDS.eagle)), 'eagle', 2),
+      gull: mk(gullModels(legLength(KINDS.gull)), 'gull', 5),
+      raven: mk(ravenModels(legLength(KINDS.raven)), 'raven', 1),
+    };
+    this.perchSearch = new Search(fauna.stands); // one search at a time each, stepped a slice a frame
+    this.rockSearch = new Search(fauna.stands);
     this.eagles = [makeBird('eagle', 0), makeBird('eagle', 1)];
     this.gulls = [0, 1, 2, 3, 4].map((i) => makeBird('gull', i));
     this.raven = makeBird('raven', 0);
@@ -52,11 +63,13 @@ export class Birds {
   }
 
   // ---- where they sit ---------------------------------------------------------------------------------------
-  // A tall pine or a snag right at the shore, 120-600 m from (x, z), preferring the view: of the biggest trunks
-  // within a stone's throw of the water along a few bearings, the tallest drawn tree, a snag or a white or red
-  // pine first, the nearer the water the better.
-  findPerch(x, z, near = 120, far = 600, dir = null) {
-    const w = this.f.world, rng = this.f.rng;
+  // A tall pine or a snag right at the shore, `near`-`far` m from (x, z), preferring the view: of the biggest trunks
+  // within a stone's throw of the water along a few bearings, the tallest drawn tree, a snag or a white or red pine
+  // first, the nearer the water the better. The bird sits on the very top of the crown as drawn (fauna-kit.js
+  // crownTop: the highest leaves or the bare leader over the whole crown), so no clump of the crown rises round it.
+  // A generator: it yields between bearings and while the tiles there are still being gathered (Search steps it).
+  *perchGen(x, z, near = 120, far = 600, dir = null) {
+    const f = this.f, w = f.world, rng = f.rng, S = f.stands;
     let best = null, tried = 0;
     for (let k = 0; k < 24 && tried < 6; k++) {
       let a = rng() * Math.PI * 2;
@@ -64,48 +77,59 @@ export class Birds {
       // walk out to the nearest shore along this bearing
       let px = NaN, pz = NaN;
       for (let d = near; d < far; d += 8) { const qx = x + Math.cos(a) * d, qz = z + Math.sin(a) * d, s = w.shoreAt(qx, qz); if (s > 0 && s < 10 && w.isReady(qx, qz)) { px = qx; pz = qz; break; } }
-      if (Number.isNaN(px) || !w.tiles) continue;
+      if (Number.isNaN(px) || !w.tiles) { yield; continue; }
       tried++;
-      const trunks = w.tiles.treesNear(px, pz, 20).filter((t) => !t.rock && !t.box && t.r > 0.18 && w.shoreAt(t.x, t.z) < 12).sort((p, q) => q.r - p.r).slice(0, 4);
+      while (!S.warm(px, pz, 20)) yield;
+      const trunks = S.trees(px, pz, 20).filter((t) => t.sp >= 0 && t.r > 0.18 && t.s < 12).sort((p, q) => q.r - p.r).slice(0, 4);
       for (const t of trunks) {
-        const top = topOf(w, t.x, t.z, 0.6), ground = w.heightAt(t.x, t.z);
+        const top = crownTop(t), ground = w.heightAt(t.x, t.z);
         if (!top || top.y - ground < 8) continue;
-        const score = top.y - ground + (PERCH_BONUS[top.sp] ?? -8) - 0.4 * w.shoreAt(t.x, t.z);
-        if (!best || score > best.score) best = { x: top.x, z: top.z, y: top.y, sp: top.sp, score };
+        // a neighbour's crown reaching over the top would hide the bird from that side: not a perch
+        if (S.trees(top.x, top.z, 6).some((n) => n !== t && n.sp >= 0 && solidAt(n, top.x, top.z, 0.6) > top.y - 0.1)) continue;
+        const score = top.y - ground + (PERCH_BONUS[top.sp] ?? -8) - 0.4 * t.s;
+        if (!best || score > best.score) best = { x: top.x, z: top.z, y: top.y, sp: top.sp, grow: top.grow, score, item: t };
       }
+      yield;
     }
-    // the winner's crown, all of it: the bird sits on its highest point
-    if (best) { const top = topOf(w, best.x, best.z, 0.3, true); if (top) { best.x = top.x; best.z = top.z; best.y = top.y; } }
     return best;
   }
+  findPerch(x, z, near, far, dir) { return runNow(this.perchGen(x, z, near, far, dir), this.f.stands); }
   // A rock out in the lake for the gulls: a boulder standing out of the water or a bare islet, with open water
-  // round most of it (the more the better) and no trees on it.
-  findRock(x, z, dir = null, near = 60, far = 500) {
-    const w = this.f.world, rng = this.f.rng;
-    let best = null;
-    for (let k = 0; k < 220; k++) {
+  // round most of it (the more the better) and no trees on it. A generator, as perchGen.
+  *rockGen(x, z, dir = null, near = 60, far = 500) {
+    const f = this.f, w = f.world, rng = f.rng, S = f.stands;
+    while (!S.warm(x, z, far)) yield;
+    let best = null, n = 0;
+    const open = (qx, qz) => { let wet = 0; for (let j = 0; j < 8; j++) { const b = (j / 8) * Math.PI * 2; if (w.shoreAt(qx + Math.cos(b) * 25, qz + Math.sin(b) * 25) < -2) wet++; } return wet; };
+    const treed = (qx, qz) => S.trees(qx, qz, 8).length > 0;
+    const view = (qx, qz) => (dir && Math.cos(Math.atan2(qz - z, qx - x) - Math.atan2(dir.z, dir.x)) > 0.7 ? 0.5 : 0);
+    // the boulders standing out of the water
+    for (const b of S.rocks(x, z, far)) {
+      const d = Math.hypot(b.x - x, b.z - z), s = w.shoreAt(b.x, b.z);
+      if (d < near || d > far || s < -6 || s > 12 || !w.isReady(b.x, b.z)) continue;
+      if (++n % 6 === 0) yield;
+      const wet = open(b.x, b.z);
+      if (wet < 5 || (best && wet + 1 < best.wet) || treed(b.x, b.z)) continue;
+      const top = rockTop(b), lv = w.levelAt(b.x, b.z);
+      if (!top || top.y < lv + 0.3) continue;
+      const rock = { x: b.x, z: b.z, y: top.y, r: Math.max(0.4, b.r * 0.5), wet, score: wet + Math.min(1.5, top.y - lv) + view(b.x, b.z), item: b };
+      if (!best || rock.score > best.score) best = rock;
+    }
+    // bare islets and points
+    for (let k = 0; k < 120; k++) {
+      if (k % 12 === 11) yield;
       let a = rng() * Math.PI * 2;
-      if (dir && k < 110) a = Math.atan2(dir.z, dir.x) + (rng() - 0.5) * 1.6;
-      const d = near + rng() * (far - near), qx = x + Math.cos(a) * d, qz = z + Math.sin(a) * d;
-      if (!w.isReady(qx, qz)) continue;
-      const s = w.shoreAt(qx, qz);
-      if (s < -6 || s > 12) continue;
-      let wet = 0;
-      for (let j = 0; j < 8; j++) { const b = (j / 8) * Math.PI * 2; if (w.shoreAt(qx + Math.cos(b) * 25, qz + Math.sin(b) * 25) < -2) wet++; }
-      if (wet < 5 || (best && wet + 1 < best.wet)) continue;
-      const near8 = w.tiles ? w.tiles.treesNear(qx, qz, 8) : [];
-      if (near8.some((t) => !t.rock)) continue; // trees on it: not a gulls' rock
-      const boulder = near8.filter((t) => t.rock).sort((p, q) => q.r - p.r)[0];
-      let rock = null;
-      if (boulder) {
-        const top = topOf(w, boulder.x, boulder.z, 0.5), lv = w.levelAt(qx, qz);
-        if (top && top.y > lv + 0.3) rock = { x: boulder.x, z: boulder.z, y: top.y, r: Math.max(0.4, boulder.r * 0.5), wet, score: wet + Math.min(1.5, top.y - lv) };
-      } else if (s > 0.5) rock = { x: qx, z: qz, y: w.heightAt(qx, qz), r: Math.min(3, s * 0.5), ground: true, wet, score: wet + 0.5 };
-      if (rock && (!best || rock.score > best.score)) best = rock;
-      if (best && best.wet >= 7) break;
+      if (dir && k < 60) a = Math.atan2(dir.z, dir.x) + (rng() - 0.5) * 1.6;
+      const d = near + rng() * (far - near), qx = x + Math.cos(a) * d, qz = z + Math.sin(a) * d, s = w.shoreAt(qx, qz);
+      if (s <= 0.5 || s > 12 || !w.isReady(qx, qz)) continue;
+      const wet = open(qx, qz);
+      if (wet < 5 || (best && wet + 1 < best.wet) || treed(qx, qz)) continue;
+      const rock = { x: qx, z: qz, y: w.heightAt(qx, qz), r: Math.min(3, s * 0.5), ground: true, wet, score: wet + 0.5 + view(qx, qz) };
+      if (!best || rock.score > best.score) best = rock;
     }
     return best;
   }
+  findRock(x, z, dir, near, far) { return runNow(this.rockGen(x, z, dir, near, far), this.f.stands); }
 
   // ---- flight ------------------------------------------------------------------------------------------------
   soar(b, cx, cz, R, alt) {
@@ -215,11 +239,29 @@ export class Birds {
     b.cx = cx; b.cz = cz; b.alt = alt; b.plan = true;
   }
 
+  // an eagle comes, now its perch search is done: on the perch, or soaring over the lake
+  spawnEagle(b, p) {
+    const f = this.f, rng = f.rng, G = f.gates, px = f.px, pz = f.pz;
+    if (b.alive || !G.eagle || (b.i === 1 && !G.eaglePair)) return;
+    if (p) this.perches[b.i] = p;
+    const per = this.perches[b.i];
+    b.alive = true; b.t = 0; b.fold = 0;
+    if (per && rng() < 0.5) { Object.assign(b, { x: per.x, y: per.y + b.k.perchUp, z: per.z, tx: per.x, tz: per.z, state: 'perch', perchY: per.y + b.k.perchUp, holdT: 30 + rng() * 90, heading: rng() * 6.28, fold: 1 }); }
+    else {
+      const a = rng() * 6.28, R = 50 + rng() * 40;
+      b.x = px + Math.cos(a) * 300; b.z = pz + Math.sin(a) * 300; b.y = f.levelRef + 70; b.heading = rng() * 6.28;
+      this.soar(b, f.openNear(px, pz, 220).x, f._open.z, R, 55 + rng() * 50);
+    }
+  }
+
   // ---- the day's birds ---------------------------------------------------------------------------------------
   update(dt, gates) {
     const f = this.f, rng = f.rng;
     for (const k in this.parts) for (const p in this.parts[k]) { const q = this.parts[k][p]; q.begin(); q.shadow = false; }
     const px = f.px, pz = f.pz;
+    // the searches in flight, a slice each (a bird found a place comes in their callbacks)
+    this.perchSearch.step(0.5);
+    this.rockSearch.step(0.5);
 
     // eagles: the season the lakes are open, by daylight
     const eagleOn = gates.eagle;
@@ -227,20 +269,20 @@ export class Birds {
     for (const b of this.eagles) {
       if (b.i === 1 && !gates.eaglePair) { b.alive = false; continue; }
       if (b.alive && Math.hypot(b.x - px, b.z - pz) > 1600) b.alive = false;
-      if (!b.alive && eagleOn && this.eagleT <= 0) {
+      if (!b.alive && eagleOn && this.eagleT <= 0 && !this.perchSearch.busy) {
         this.eagleT = 5;
-        const p = this.findPerch(px, pz, 150, 600, f.view);
-        if (p) this.perches[b.i] = p;
-        const per = this.perches[b.i];
-        b.alive = true; b.t = 0; b.fold = 0;
-        if (per && rng() < 0.5) { Object.assign(b, { x: per.x, y: per.y + b.k.perchUp, z: per.z, tx: per.x, tz: per.z, state: 'perch', perchY: per.y + b.k.perchUp, holdT: 30 + rng() * 90, heading: rng() * 6.28, fold: 1 }); }
-        else {
-          const a = rng() * 6.28, R = 50 + rng() * 40;
-          b.x = px + Math.cos(a) * 300; b.z = pz + Math.sin(a) * 300; b.y = f.levelRef + 70; b.heading = rng() * 6.28;
-          this.soar(b, f.openNear(px, pz, 220).x, f._open.z, R, 55 + rng() * 50);
-        }
+        this.perchSearch.start(this.perchGen(px, pz, 150, 600, f.view), (p) => this.spawnEagle(b, p));
       }
       if (!b.alive) continue;
+      // the perch as its tree is drawn now (the tree's detail changes with the distance, and its top with it)
+      const per = this.perches[b.i];
+      if (per && per.item && (b.state === 'perch' || (b.state === 'glide' && b.next === 'perch'))) {
+        const top = crownTop(per.item);
+        if (top) {
+          per.x = top.x; per.y = top.y; per.z = top.z; per.grow = top.grow;
+          if (b.state === 'perch') { b.tx = top.x; b.tz = top.z; b.perchY = top.y + b.k.perchUp; } else { b.tx = top.x; b.ty = top.y + b.k.perchUp; b.tz = top.z; }
+        }
+      }
       if (!eagleOn && b.state !== 'glide') { const fx = Math.cos(b.heading), fz = -Math.sin(b.heading); this.glide(b, b.x + fx * 1500, b.y + 80, b.z + fz * 1500, 'away'); }
       // what it does next
       if (b.state === 'perch' && b.holdT <= 0) { const o = f.openNear(b.x, b.z, 200); this.takeOff(b, o.x, o.z, 50 + rng() * 50); }
@@ -260,10 +302,11 @@ export class Birds {
 
     // gulls: on their rock out in the lake, a couple soaring; gone when the lakes freeze
     this.rockT -= dt;
-    if (gates.gull && (!this.rock || Math.hypot(this.rock.x - px, this.rock.z - pz) > 900) && this.rockT <= 0) {
+    if (gates.gull && (!this.rock || Math.hypot(this.rock.x - px, this.rock.z - pz) > 900) && this.rockT <= 0 && !this.rockSearch.busy) {
       this.rockT = 8;
-      const r = this.findRock(px, pz, f.view);
-      if (r) { this.rock = r; for (const g of this.gulls) if (Math.hypot(g.x - f.cx, g.z - f.cz) > 300) g.alive = false; } // the ones in sight fly there in their own time
+      this.rockSearch.start(this.rockGen(px, pz, f.view), (r) => {
+        if (r) { this.rock = r; for (const g of this.gulls) if (Math.hypot(g.x - f.cx, g.z - f.cz) > 300) g.alive = false; } // the ones in sight fly there in their own time
+      });
     }
     for (const g of this.gulls) {
       if (!gates.gull) { if (g.alive && g.state !== 'glide') { const fx = Math.cos(g.heading), fz = -Math.sin(g.heading); this.glide(g, g.x + fx * 900, g.y + 40, g.z + fz * 900, 'away'); } if (!g.alive) continue; }
@@ -327,12 +370,13 @@ export class Birds {
   }
 
   // how many gulls the rock has room for (a body length apart), and a gull's place on it: the first on the
-  // top, the others round it a little lower down the rock's shoulders
+  // top, the others round it on the rock's shoulders, each standing on the rock's own surface there
   room(rock) { return rock.ground ? 3 : rock.r < 0.55 ? 1 : rock.r < 1.0 ? 2 : 3; }
   standSpot(g, rock) {
-    const k = g.i % 3, a = k * 2.3 + 0.4, d = k === 0 ? 0 : Math.max(0.36, rock.r * 0.55);
+    const k = g.i % 3, a = k * 2.3 + 0.4, d = k === 0 ? 0 : Math.max(0.5, rock.r * 0.6);
     _v.set(rock.x + Math.cos(a) * d, 0, rock.z + Math.sin(a) * d);
-    _v.y = (rock.ground ? this.f.world.heightAt(_v.x, _v.z) : rock.y - 0.12 * k) + g.k.perchUp;
+    const on = rock.ground ? this.f.world.heightAt(_v.x, _v.z) : rock.item ? rockAt(rock.item, _v.x, _v.z) : NaN;
+    _v.y = (Number.isFinite(on) ? on : rock.y - 0.12 * k) + g.k.perchUp;
     return _v;
   }
   place(g, rock) {
@@ -344,11 +388,21 @@ export class Birds {
   draw(P, b, scale) {
     const d = Math.hypot(b.x - this.f.cx, b.z - this.f.cz);
     if (!b.alive || d > 1500) return;
+    const sitting = b.fold > 0.5;
     // a bird sitting near the camera grounds itself with its shadow on the rock, the ice or the crown under it
-    if (b.fold > 0.5 && d < 70) P.body.shadow = P.wingR.shadow = P.wingL.shadow = true;
-    frameMatrix(_m, b.x, b.y, b.z, b.heading, b.pitch, b.roll, scale);
+    if (sitting && d < 70) P.body.shadow = P.wingR.shadow = P.wingL.shadow = P.legs.shadow = true;
+    // on a tree top, as far off as the crown's cards swell about their anchors (vegetation.js CARD) the top rises,
+    // and the eagle with it, so it stays on the crown rather than sinking into it
+    let y = b.y;
+    if (b.state === 'perch' && b.kind === 'eagle' && this.perches[b.i]) {
+      const G = CARD.uCardGrow.value, D = Math.hypot(d, b.y - this.f.camY);
+      y += G.x * smooth(G.y, G.z, D) * (this.perches[b.i].grow || 0);
+    }
+    frameMatrix(_m, b.x, y, b.z, b.heading, b.pitch, b.roll, scale);
     P.body.push(_m);
     this.wings(P, b, scale);
+    // its legs, upright under it whatever its pitch, its feet on what it sits on
+    if (sitting) P.legs.push(partMatrix(_w, _m, b.k.hip[0] * scale, b.k.hip[1] * scale, 0, 0, 0, -b.pitch, 'XYZ'));
   }
 
   // debug: an eagle soaring over the lake in view, on its perch, or swooping; the gulls on their rock; a raven

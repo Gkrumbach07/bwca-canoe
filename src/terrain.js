@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { applyLook } from './shading.js';
+import { applyWet } from './weather.js';
 import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE } from './terrain-build.js';
 
 // The ground as a painted splat (docs/look.md, pass 1). Every vertex carries the weights of ten ground
@@ -50,6 +51,10 @@ uniform vec3 uGroundTint;
 uniform vec4 uSplat;
 uniform vec3 uMottle;
 uniform vec3 uSplatEdge;
+// what groundColor leaves for the wet look (weather.js applyWet): how porous the ground that shows is (the duff, the
+// moss, the meadow, the burn and the shore's soil soak the rain up, 1; the rock, the cliff and the scree half as
+// much; the lake bed is under water already, 0), how much of it is rock, and the canopy's shade over it
+float groundPorosity = 1.0, groundRock = 0.0, groundCanopy = 0.0;
 // each material's noise is a turn of the two shared fields (golden-angle steps), so any two neighbours
 // meet along a noisy line
 const vec4 SPLAT_CA = vec4(1.0000, -0.7374, 0.0874, 0.6084), SPLAT_SA = vec4(0.0000, 0.6755, -0.9962, 0.7936);
@@ -109,6 +114,7 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     c = mix(c, uBedPalette[2], smoothstep(uBedSteps.y - 0.6, uBedSteps.y + 0.6, d));
     c = mix(c, uBedPalette[3], smoothstep(uBedSteps.z - 1.0, uBedSteps.z + 1.0, d));
     c = mix(c, uBedPalette[4], smoothstep(uBedSteps.w - 2.0, uBedSteps.w + 2.0, d));
+    groundPorosity = 0.0; groundRock = 0.0;
   } else {
     // each material's weight lifted or lowered by its noise; those within a band's softness of the top
     // share the pixel. Far away the noise fades and the band widens to the plain weighted blend.
@@ -144,6 +150,9 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     // gradient follows the triangles the values were interpolated over
     float s = smoothstep(0.32, 0.68, fl.x + 0.4 * n2 * fb);
     float sunny = smoothstep(0.3, 0.7, fl.y + 0.35 * n1 * fb);
+    groundRock = bB.x + bB.y + bB.z + bC.x + bC.y;
+    groundPorosity = 1.0 - 0.5 * groundRock;
+    groundCanopy = s;
     c = bA.x * groundShaded(0, mix(uGroundLit[0], uGroundSunny, sunny), s)
       + bA.y * groundShaded(1, uGroundLit[1], s) + bA.z * groundShaded(2, uGroundLit[2], s) + bA.w * groundShaded(3, uGroundLit[3], s)
       + bB.x * groundShaded(4, uGroundLit[4], s) + bB.y * groundShaded(5, uGroundLit[5], s) + bB.z * groundShaded(6, uGroundLit[6], s) + bB.w * groundShaded(7, uGroundLit[7], s);
@@ -169,6 +178,8 @@ export function makeTerrainMaterial() {
       .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n' + vary + '\n' + glslGround)
       .replace('#include <color_fragment>', '\tfloat lookPx = length( fwidth( vLookWorld.xz ) );\n\tdiffuseColor.rgb *= groundColor( vLookWorld.xz, vSplatA, vSplatB, vSplatC, vFloor, lookPx );')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); }');
+    // rain: the soil darkens most, the rock half as much and shines a little more; less sheen under the canopy
+    applyWet(shader, { porosity: 'groundPorosity', gloss: '( 0.3 + 0.4 * groundRock ) * ( 1.0 - 0.7 * groundCanopy ) * ( 1.0 - vFloor.z )' });
   };
   m.customProgramCacheKey = () => 'look-terrain';
   return m;

@@ -91,14 +91,22 @@ export function buildSky(sunDir, palette) {
 //             drifting with the wind. The cover thresholds the noise, so it comes in as broken stratocumulus and
 //             closes to a flat grey sheet, a little darker where thick and silver at thin edges toward the sun, and
 //             fades out toward its rim into the dome's horizon (which the day cycle greys to match).
-//   anvils    a storm's cumulonimbus: dark towers with a spread flat top, standing 5-7 km upwind.
+//   anvils    a building storm's cumulonimbus on the upwind horizon, 6.5-7.6 km out: a dark tower on a rain-dark
+//             base under a wide flat-topped anvil sheared off to one side (seen side on, the way the shape reads),
+//             its top and dome lit, the cumulus between cleared away so the towers stand clear over them.
 export const CLOUD_COUNT = 220;
 export const DECK_HEIGHT = 1000;   // metres over the water under the camera
 const cloudVert = /* glsl */ `
   varying vec3 vN;
   varying vec3 vW;
+  #ifdef ANVIL_HEIGHT
+    varying float vH;   // height in the cloud's own frame (the base at 0), whatever its scale
+  #endif
   #include <fog_pars_vertex>
   void main() {
+    #ifdef ANVIL_HEIGHT
+      vH = position.y;
+    #endif
     mat4 m = modelMatrix;
     #ifdef USE_INSTANCING
       m = m * instanceMatrix;
@@ -113,24 +121,33 @@ const cloudVert = /* glsl */ `
 `;
 const cloudFrag = /* glsl */ `
   uniform vec3 uTop, uBase, uSky, uSunDir, uFlash;
-  uniform float uAnvilBase;   // the anvils' base, world y
   varying vec3 vN;
   varying vec3 vW;
+  #ifdef ANVIL_HEIGHT
+    varying float vH;
+  #endif
   #include <fog_pars_fragment>
   void main() {
     vec3 n = normalize(vN);
     float lit = n.y * 0.75 + dot(n, uSunDir) * 0.45;
     #ifdef ANVIL_HEIGHT
-      // a thunderhead reads as one mass: smooth light over it, dark slate low (the rain under it), bright up top
-      float t = smoothstep(-0.7, 0.9, lit);
-      vec3 col = mix(uBase, uTop, t) * mix(0.45, 1.1, smoothstep(0.1, 0.85, (vW.y - uAnvilBase) / ANVIL_HEIGHT));
+      // a thunderhead reads as one dark mass: the tower in its own shadow, slate (uBase) with only its sunward
+      // flank lifted, darker still toward the rain under its base; the anvil and the dome over the tower are thin
+      // ice lit through by the sun (uTop), bright even from underneath and brightest on their sunward faces
+      float hf = clamp(vH / ANVIL_HEIGHT, 0.0, 1.0);
+      float top = smoothstep(0.6, 0.88, hf);
+      float sun = smoothstep(-0.35, 0.85, lit);
+      float t = mix(0.14 * sun, 0.45 + 0.55 * sun, top);
+      vec3 col = mix(uBase, uTop, clamp(t, 0.0, 1.0)) * mix(0.62, 1.0, smoothstep(0.0, 0.35, hf));
+      const float rimK = 0.06;
     #else
       float t = smoothstep(-0.25, -0.05, lit) * 0.45 + smoothstep(0.2, 0.45, lit) * 0.55;
       vec3 col = mix(uBase, uTop, t);
+      const float rimK = 0.22;
     #endif
     vec3 v = normalize(cameraPosition - vW);
     float rim = pow(1.0 - abs(dot(n, v)), 2.5);
-    col = mix(col, uSky, rim * 0.22);
+    col = mix(col, uSky, rim * rimK);
     col += uFlash * (0.6 + 0.4 * t);   // lightning inside the cloud
     gl_FragColor = vec4(col, 1.0);
     #ifdef USE_FOG
@@ -211,27 +228,38 @@ function makeCloudGeometry(rng) {
   return merged;
 }
 
-// A cumulonimbus: a cauliflower tower of puffs, broad at the base and narrowing upward, under a wide flat anvil
-// sheared downwind (+x) with a dome overshooting its top; base at y = 0, about 3 km tall, 4 km across the top.
-function makeAnvilGeometry(rng) {
+// A cumulonimbus, ANVIL_H tall with its base at y = 0: a broad flat base, a cauliflower tower of puffs round a solid
+// core (so no sky shows through it), narrowing and leaning a little downshear (+x) as it climbs, and over it the
+// anvil: wide flattened lobes whose tops all reach one height (the flat top at the tropopause), thick over the tower
+// and thinning downshear, so the underside slopes up to a thin edge; a dome overshooting the top. `mature` widens
+// the anvil (a young storm is mostly tower and dome).
+const ANVIL_H = 3500;
+function makeAnvilGeometry(rng, mature = 1) {
   const parts = [];
-  const puff = (r, x, y, z, sy = 1) => { const g = new THREE.SphereGeometry(r, 12, 8); g.scale(1, sy, 1); g.translate(x, y, z); parts.push(g); };
-  // the tower: puffs scattered through a cone that narrows upward, each a little taller than wide
-  const top = 2300;
-  for (let i = 0; i < 34; i++) {
-    const v = Math.pow(rng(), 0.8), y = v * top, w = 900 - 450 * v;
-    const r = (300 + rng() * 260) * (1 - 0.35 * v), a = rng() * Math.PI * 2, d = w * Math.sqrt(rng()) * 0.6;
-    puff(r, Math.cos(a) * d + v * 180, y + r * 0.4, Math.sin(a) * d, 1.15);
+  const blob = (rx, ry, rz, x, y, z, seg = 12) => { const g = new THREE.SphereGeometry(1, seg, Math.max(6, seg >> 1)); g.scale(rx, ry, rz); g.translate(x, y, z); parts.push(g); };
+  const H = ANVIL_H, topY = 0.93 * H, towerTop = 0.8 * H;
+  // the base: the tower's foot, a little wider than the tower, flat underneath
+  for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + rng(); blob(620 + rng() * 180, 260, 560 + rng() * 160, Math.cos(a) * 320, 230, Math.sin(a) * 280); }
+  // the core: a column of big ellipsoids up the axis
+  for (let k = 0; k < 6; k++) { const v = k / 5; blob(820 - 330 * v, 520, 760 - 300 * v, v * 220, 300 + v * (towerTop - 500), 0); }
+  // the cauliflower over it, narrowing as it climbs, then flaring into the anvil
+  for (let i = 0; i < 70; i++) {
+    const v = Math.pow(rng(), 0.85), y = 250 + v * (towerTop - 250);
+    const w = 1050 - 420 * v + 650 * Math.max(0, (v - 0.78) / 0.22) ** 2;
+    const r = (210 + rng() * 190) * (1 - 0.3 * v), a = rng() * Math.PI * 2, d = w * (0.55 + 0.45 * Math.sqrt(rng())) * 0.72;
+    blob(r, r * 1.08, r, Math.cos(a) * d + v * 220 + Math.max(0, v - 0.78) * 1400, y, Math.sin(a) * d * 0.9, 10);
   }
-  const y = top;
-  puff(760, 160, y - 120, 0, 0.5);   // the tower's shoulders under the anvil
-  for (let k = 0; k < 7; k++) {
-    const g = new THREE.SphereGeometry(1, 16, 8);
-    g.scale(1000 + rng() * 600, 150 + rng() * 70, 800 + rng() * 400);
-    g.translate(250 + k * 230 + (rng() - 0.5) * 300, y + 220 + rng() * 90, (rng() - 0.5) * 600);
-    parts.push(g);
+  // the anvil: lobes with their tops at topY, thickest where they spring from the tower and thinning downshear to a
+  // thin edge (the underside sloping up), a short overhang upshear
+  const n = 14;
+  for (let k = 0; k < n; k++) {
+    const f = k / (n - 1), x = -350 + f * (2300 + 1700 * mature), thick = 70 + 300 * (1 - f) ** 1.5;
+    const rx = 750 + 300 * rng() + 250 * mature, rz = (850 + 300 * rng()) * (0.7 + 0.4 * mature) * (1 - 0.3 * f);
+    blob(rx, thick, rz, x, topY - thick + 20 * (rng() - 0.5), (rng() - 0.5) * 400, 16);
   }
-  puff(420, 80, y + 300, 0, 0.8);   // the overshooting top
+  // the overshooting dome over the tower
+  blob(520, 330, 480, 160, topY + 40, 0);
+  blob(330, 230, 300, 360, topY + 180, 120);
   const merged = mergeVertices(mergeGeometries(parts, false), 1);
   merged.computeVertexNormals();
   return merged;
@@ -249,7 +277,6 @@ export function buildClouds(count, extent, palette, sunDir, seed = 5) {
       uSky: { value: new THREE.Color(palette.zenith) },
       uSunDir: { value: sunDir.clone() },
       uFlash: { value: new THREE.Color(0, 0, 0) },
-      uAnvilBase: { value: 0 },
     }]),
     defines: { FOG_SCALE: '1.0' },
     fog: true,
@@ -291,16 +318,25 @@ export function buildClouds(count, extent, palette, sunDir, seed = 5) {
   deck.renderOrder = -7;   // after the dome, the stars and the moon; before anything else see-through
   deck.visible = false;
   group.add(deck);
-  // the anvils
-  // the anvils have their own colours (a lit top over a dark base, set by the day cycle) on the same shaders
+  // the anvils: their own colours (a lit top over a dark base, set by the day cycle) on the same shaders, two shapes
+  // (a mature storm with a wide anvil, a younger one mostly tower and dome), each placed by its bearing from upwind,
+  // its distance and its scale, the anvil sheared across the line of sight (all the same way, as one wind aloft
+  // would), so it is seen side on: the silhouette that says "storm"
   const anvilMat = mat.clone();
-  anvilMat.defines = { FOG_SCALE: '0.4', ANVIL_HEIGHT: '3600.0' };   // a strong shape against the sky: hazed as if nearer than it is
-  const anvil = new THREE.InstancedMesh(makeAnvilGeometry(rng), anvilMat, 3);
-  anvil.count = 0; anvil.frustumCulled = false; anvil.name = 'anvils';
-  group.add(anvil);
-  const anvils = [{ bearing: -0.35, dist: 6200, scale: 1.25 }, { bearing: 0.4, dist: 5400, scale: 1.0 }, { bearing: 0.05, dist: 7300, scale: 1.4 }];
+  anvilMat.defines = { FOG_SCALE: '0.07', ANVIL_HEIGHT: `${ANVIL_H}.0` };   // a strong shape against the sky: hazed as if much nearer than it is
+  const anvilMeshes = [makeAnvilGeometry(rng, 1), makeAnvilGeometry(rng, 0.3)].map((g) => {
+    const m = new THREE.InstancedMesh(g, anvilMat, 2);
+    m.count = 0; m.frustumCulled = false; m.name = 'anvils';
+    group.add(m);
+    return m;
+  });
+  const anvils = [
+    { bearing: -0.3, dist: 7300, scale: 1.0, shape: 0, turn: 0.1 },
+    { bearing: 0.33, dist: 6500, scale: 0.78, shape: 1, turn: -0.15 },
+    { bearing: -0.78, dist: 7700, scale: 0.72, shape: 0, turn: 0.25 },
+  ];
   group.userData = {
-    extent, puffs, meshes, deck, deckMat, anvil, anvils, material: mat, anvilMaterial: anvilMat, presence: 0, anvilShown: 0,
+    extent, puffs, meshes, deck, deckMat, anvilMeshes, anvils, material: mat, anvilMaterial: anvilMat, presence: 0, anvilShown: 0, anvilHead: NaN,
     drift: { x: 0, z: 0 }, base: 446, clearCover: count / total,
     weather: null, // { cover, deck, dark, anvil, windX, windZ, windSpeed, base, snap }: written by the day cycle
   };
@@ -320,12 +356,24 @@ export function updateClouds(group, dt, cx = 0, cz = 0) {
   const ease = !(dt > 0) || (w && w.snap) ? 1 : 1 - Math.exp(-dt / 12);
   if (w) w.snap = false;
   for (const m of u.meshes) m.userData.n = 0;
+  // the anvils stand upwind: their bearing turns with the wind, slowly (at once when the weather jumped)
+  const head = Math.atan2(-dz, -dx);
+  if (!Number.isFinite(u.anvilHead) || ease === 1) u.anvilHead = head;
+  else { const dh = Math.atan2(Math.sin(head - u.anvilHead), Math.cos(head - u.anvilHead)); u.anvilHead += Math.sign(dh) * Math.min(Math.abs(dh), 0.01 * dt); }
+  u.anvilShown += ((w ? w.anvil : 0) - u.anvilShown) * ease;
+  // while they show, the cumulus between them and the eye goes (a sector of the sky upwind, past the near puffs
+  // overhead), so the towers stand clear on the horizon over the fair-weather clouds
+  const clear = u.anvilShown > 0.25;
   for (const c of u.puffs) {
     const v = c.drift / 3.75 * speed;
     c.x += dx * v * dt; c.z += dz * v * dt;
     if (c.x - cx > e) c.x -= 2 * e; else if (c.x - cx < -e) c.x += 2 * e;
     if (c.z - cz > e) c.z -= 2 * e; else if (c.z - cz < -e) c.z += 2 * e;
-    const want = c.rank < cover ? 1 : 0;
+    let want = c.rank < cover ? 1 : 0;
+    if (want && clear) {
+      const ox = c.x - cx, oz = c.z - cz, rel = Math.atan2(oz, ox) - u.anvilHead;
+      if (ox * ox + oz * oz > 150 * 150 && Math.cos(rel) > 0.5) want = 0;   // within 60 degrees of upwind
+    }
     c.shown += (want - c.shown) * ease;
     if (c.shown < 0.02) continue;
     const grow = Math.sqrt(c.shown) * (w ? 1 + 0.35 * w.dark : 1);   // storm cloud bases are bigger and darker
@@ -343,19 +391,19 @@ export function updateClouds(group, dt, cx = 0, cz = 0) {
     d.position.set(cx, (w ? w.base : u.base) + DECK_HEIGHT, cz);
     u.deckMat.uniforms.uDeck.value.set(deck, w.dark, u.drift.x, u.drift.z);
   }
-  // the anvils: a storm's towers, upwind of the camera, rising with the storm
-  const a = w ? w.anvil : 0;
-  u.anvilShown += (a - u.anvilShown) * ease;
-  const an = u.anvil;
+  // the anvils: a storm's towers on the upwind horizon, rising with the storm
+  for (const m of u.anvilMeshes) m.count = 0;
   if (u.anvilShown > 0.02) {
-    const head = Math.atan2(-dz, -dx);   // upwind
-    u.anvils.forEach((s, i) => {
-      const h = head + s.bearing, k = Math.sqrt(u.anvilShown) * s.scale;
-      _q.setFromAxisAngle(_up, -Math.atan2(dz, dx));   // the anvil's top sheared downwind
-      _m.compose(_p.set(cx + Math.cos(h) * s.dist, (w ? w.base : u.base) + 250, cz + Math.sin(h) * s.dist), _q, _s.set(k, k, k));
-      u.anvilMaterial.uniforms.uAnvilBase.value = (w ? w.base : u.base) + 250;
-      an.setMatrixAt(i, _m);
-    });
-    an.count = u.anvils.length; an.instanceMatrix.needsUpdate = true;
-  } else an.count = 0;
+    const base = (w ? w.base : u.base) + 250, grow = Math.sqrt(u.anvilShown);
+    for (const s of u.anvils) {
+      const h = u.anvilHead + s.bearing, m = u.anvilMeshes[s.shape];
+      // the shear: square to the line of sight, to its right, turned a little away from the eye
+      const sx = -Math.sin(h) * 0.95 + Math.cos(h) * 0.3, sz = Math.cos(h) * 0.95 + Math.sin(h) * 0.3;
+      _q.setFromAxisAngle(_up, Math.atan2(-sz, sx) + s.turn);
+      const k = grow * s.scale;
+      _m.compose(_p.set(cx + Math.cos(h) * s.dist, base, cz + Math.sin(h) * s.dist), _q, _s.set(k, k * (0.6 + 0.4 * grow), k));
+      m.setMatrixAt(m.count++, _m);
+    }
+    for (const m of u.anvilMeshes) if (m.count) m.instanceMatrix.needsUpdate = true;
+  }
 }
