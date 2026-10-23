@@ -33,6 +33,8 @@ and checked on the look board. Agreed with the owner on 2026-10-22; phase 3 take
 
 - **Weather:** clear, broken cloud, overcast, morning fog on the water, rain (on the water, the ground and the
   hull), a passing storm with wind, lightning and thunder, all keyed through the day cycle and the fog ramps.
+- **Wind in the trees:** crowns sway and leaf cards flutter with the wind's speed and gusts (aspen and birch
+  most, pines least), the understory and reeds bending, all from the same wind the water reads.
 - **Sound:** loon calls across the lake, wind in the pines and birches, paddle drips and strokes, footsteps by
   ground, rain on the hull, thunder rolling down the lake, quiet nights with frogs in summer.
 - **Wildlife:** loons (exist), a beaver and its lodge, a moose at a shore, eagles, fish rising at dusk,
