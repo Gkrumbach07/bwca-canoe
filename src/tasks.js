@@ -455,7 +455,7 @@ export class Tasks {
     const board = b.slots.map((id) => (id == null ? null : this.ads.get(id)));
     const count = (k) => board.filter((t) => t && t.kind === k).length;
     const kinds = Object.values(KINDS).filter((k) => (k.weight[band] || 0) > 0 && count(k.key) < 2);
-    const wt = (k) => k.weight[band] * (count(k.key) ? 0.35 : 1);
+    const lean = (this.leanOf && this.leanOf(ep)) || {}, wt = (k) => k.weight[band] * (count(k.key) ? 0.35 : 1) * (lean[k.key] ?? 1); // hubs 2C: each outfitter's board leans its own way (outfitters.js boardLean)
     const order = [];
     while (kinds.length) {
       let r = rng() * kinds.reduce((s, k) => s + wt(k), 0), j = 0;

@@ -43,6 +43,8 @@ import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
 import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
+import { outfitterProfile, boardLean, speakAtCounter } from './outfitters.js'; // hubs 2C
+import { Rides } from './rides.js'; // hubs 2C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -207,6 +209,14 @@ async function main() {
   const packs = new Packs({ world, player, canoe, day, energy, hud, trip });
   packs.veil = veil; // the fetch fades through the same card as the evacuation and the night
   player.packs = packs;
+  // hubs 2C: every outfitter its own (outfitters.js: the kind, the keeper and their hints, the prices, the signature
+  // item, the board's lean, the building's look, all read from the place) and the rides up the road between them
+  // (rides.js). The counter renders rides.section where it has a place for it; the phase-1 counter gets it in its wall
+  // column, and the keeper's voice in its header, until the shop's counter speaks for itself (outfitter.keeperVoice).
+  const rides = new Rides({ world, outfitter, day, veil, hud, energy, tasks, teleport });
+  outfitter.rides = rides;
+  tasks.leanOf = (ep) => boardLean(ep, world);
+  speakAtCounter(outfitter, world); rides.attachCounter();
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -231,6 +241,7 @@ async function main() {
   window.__game.props = { storeLayout, onStore, storeLayouts, setStoreNotices, stats: storeStats }; // hubs 2A
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
+  Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
