@@ -16,7 +16,8 @@
 // signed with the keeper's name, on the first visit of a day. Closing the counter inside leaves you in the store;
 // the trip pushes off (or carries on) when you launch from the dock, or from the counter's own stamps, which take
 // you straight out to the canoe. Without a store (its tile not built yet, or no stream A) E opens the counter as
-// before.
+// before. A new season begins tied up at the home store's door (the keeper's forty dollars as you step in), and the
+// trip pushes off when you launch from its dock; a page reloaded in a store comes back on its floor (updateArrival).
 import { longDate, shortDate, esc, plural } from './hud.js';
 import { seasonAt } from './season.js';
 import { absDay, dateOfAbs } from './trip.js';
@@ -111,6 +112,8 @@ const SPOT_R = 1.5;              // metres from a store hotspot's floor spot wit
 const SPOT_FACE = Math.cos((80 * Math.PI) / 180); // and how squarely you must face it
 const DOOR_R = 3;                // metres from the door, outside, within which the door says it is open
 const VISIT_FAR = 90;            // metres from the landing at which a visit is over (a ride, a teleport, a walk away)
+const ARRIVAL_WAIT = 20;         // game seconds an arrival waits for the landing's store to be built before it gives up
+const ARRIVAL_FAR = 250;         // metres from the landing within which an arrival still goes in (a teleport finds water up to 120 m out)
 const TABS = [['counter', 'The counter'], ['board', 'The board'], ['shelves', 'The shelves'], ['wall', 'The lure wall']];
 const SPOT_WORDS = { counter: 'The counter', board: 'The board', wall: 'The lure wall', food: 'The provisions shelf · food and water', tackle: 'The tackle shelf · the rod and the bait', gear: 'The gear shelf · paddles, packs and tents' };
 const SLOTS = [['canoe', 'Canoe'], ['paddle', 'Paddle'], ['tent', 'Tent'], ['filter', 'Water']];
@@ -140,6 +143,7 @@ export class Outfitter {
     this.open = false; this.at = null; this.near = null; this.buyN = DEFAULT_BUY;
     this.tab = 'counter'; this.focus = null; this.receipt = null;
     this.visit = null;               // in or about a store: { ep, landing, L, inside, switched, settled }
+    this.arrival = null;             // a season begun, or a page reloaded in a store: in at the store once it is built
     this.leftFrom = null;            // a store walked away from before the season's first push-off
     this.greeted = {};               // ep → the day its keeper last said hello
     this.stubStore = false;          // tests: an invisible store beside the shack when props.js has no storeLayout
@@ -161,7 +165,7 @@ export class Outfitter {
     if (hud && hud.registerPaper) hud.registerPaper('outfitter', () => this.close());
     // the page going away (a reload, a closed tab): the trip's document now, not at the next eight-second save, so a
     // bottle just filled, a meal just eaten or a fish just kept comes back with the spot the shell saves alongside
-    const flush = () => { if (this.trip.active) this.save(); };
+    const flush = () => { if (this.trip.active || this.visit) this.save(); };
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   }
@@ -232,7 +236,7 @@ export class Outfitter {
   }
   // E at the dock afloat: the canoe tied alongside the dock (a hull set down on the water, as player.js sets one down
   // on the ground), and you on the stoop at the door, facing in
-  tieUp(l, L) {
+  tieUp(l, L, quiet = false) {
     const p = this.player, w = this.world, ds = L.dockSide || L.dockLand || L.door;
     const dd = w.deeperDir(ds.x, ds.z), hh = Math.atan2(-dd.z, dd.x);
     p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.yawRate = 0; p.bob = null; p.balance = 0; p.extraRoll = 0;
@@ -248,7 +252,37 @@ export class Outfitter {
     if (ch) { ch.viewYaw = p.heading; ch.forwardYaw = p.heading; ch.viewPitch = 0; ch.snap(); }
     this.visit = { ep: l.ep, landing: l, L, inside: false, switched: false, settled: false, bye: false };
     if (this.core) this.core.learn(l.ep); else if (this.profile) this.profile.learn(l.ep);
-    this.hud.note(`Tied up at the ${l.name} dock. The door is open.`, 4);
+    if (!quiet) this.hud.note(`Tied up at the ${l.name} dock. The door is open.`, 4);
+  }
+  // A season begun at a landing with a store, or a page reloaded in one (boot): once the store is built (its tile
+  // streams in), the canoe is tied up at its dock and you stand at the door, or back where you were on the floor.
+  // With no store by ARRIVAL_WAIT, a season's counter opens from the water as it always did.
+  updateArrival(dt) {
+    const a = this.arrival, p = this.player, l = this.landing(a.ep), L = l ? this.layout(a.ep) : null;
+    a.t += dt;
+    if (!L) {
+      if (a.t < ARRIVAL_WAIT && l) return;
+      this.arrival = null;
+      if (a.why === 'season' || a.pending) this.pendingShow = true;
+      if (a.switched && p.chase && p.chase.mode === 'first') p.chase.setMode('third'); // the store's first person, saved without the store
+      return;
+    }
+    this.arrival = null;
+    if (Math.hypot(l.x - p.x, l.z - p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) { if (a.why === 'season' || a.pending) this.pendingShow = true; return; }
+    this.tieUp(l, L, a.why === 'reload');
+    const v = this.visit;
+    if (a.why === 'reload') {
+      const d = this.day; this.greeted[a.ep] = `${d.year}-${d.doy}`; // the keeper said hello before the reload
+      if (a.inside && L.inside(a.x, a.z)) {
+        p.x = a.x; p.z = a.z; p.heading = Number.isFinite(a.heading) ? a.heading : p.heading;
+        p.foot = { y: L.floorY, vy: 0, air: false, t: 0, land: 0, near: null };
+        p.placeOnGround();
+        if (p.chase) { p.chase.viewYaw = p.heading; p.chase.forwardYaw = p.heading; p.chase.snap(); }
+      }
+      if (v) v.switched = !!a.switched || v.switched;
+      this.hud.note(`Back ${a.inside ? 'in the store' : 'at the door'} at ${l.name}.`, 4);
+      if (a.pending) this.pendingShow = true;
+    }
   }
   // a visit begins at a tie-up or on walking in, and ends afloat again or far off: a launch from it pushes off (or
   // carries on) unless the counter's stamps already did
@@ -273,7 +307,9 @@ export class Outfitter {
     const d = this.day, today = `${d.year}-${d.doy}`;
     if (this.greeted[v.ep] !== today) {
       this.greeted[v.ep] = today;
-      const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, 'hello');
+      const kind = this.lineKind === 'season' ? 'season' : 'hello'; // a season begun here: the forty dollars, said as you come in
+      if (kind === 'season') this.lineKind = 'welcome';
+      const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, kind);
       this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7);
     }
   }
@@ -341,7 +377,8 @@ export class Outfitter {
     p.input.paused = this.open || !!this.evac || veil || this.bunking || (this.hud && this.hud.paper === 'journal');
     if (!p.packs) p.loadFactor = this.loadFactor; // the packs (packs.js) set it from the load once they are there
     const free = !this.open && !this.evac && !veil && !this.bunking && !(this.hud && this.hud.paper);
-    if (this.pendingShow && !p.teleporting && free) { this.pendingShow = false; this.show(this.visit ? this.visit.landing : this.nearest(p.x, p.z).l); }
+    if (this.arrival && !p.teleporting && !veil) this.updateArrival(dt);
+    if (this.pendingShow && !p.teleporting && free && !this.arrival) { this.pendingShow = false; this.show(this.visit ? this.visit.landing : this.nearest(p.x, p.z).l); }
     this.updateVisit();
     if (this.leftFrom && p.mode === 'paddle' && !p.teleporting) { const l = this.leftFrom; this.leftFrom = null; if (!this.trip.active && !veil) { this.at = l; this.start(); } }
     if (free && this.open === false) {
@@ -765,13 +802,16 @@ export class Outfitter {
     if (core) core.reset(mode); // after the profile: the packs and the canoe are the new season's
     if (this.open) this.hide();
     this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
-    this.summary = null; this.draft = null; this.evac = null; this.bunking = false; this.leftFrom = null; this.greeted = {};
+    this.summary = null; this.draft = null; this.evac = null; this.bunking = false; this.leftFrom = null; this.greeted = {}; this.arrival = null;
     if (this.visit) this.endVisit(false);
     if (this.energy) { this.energy.reset(); this.energy.food = 0; }
     if (this.tasks && this.tasks.reset) this.tasks.reset();
     if (this.stats) this.stats.reset();
     this.lineKind = 'season';
-    this.pendingShow = true;
+    // in at the store's door once it is built (updateArrival), the keeper's forty dollars as you step in; a landing
+    // with no store opens the counter from the water
+    this.arrival = { why: 'season', ep: home, t: 0 };
+    this.pendingShow = false;
     this.save();
   }
   // the old title's call: a new season at the landing nearest the canoe
@@ -812,6 +852,9 @@ export class Outfitter {
     const p = this.player;
     const data = { v: 3, trip: this.trip, pos: { x: p.x, z: p.z, heading: p.heading }, energy: this.energy.serialize(), tasks: this.tasks ? this.tasks.serialize() : null };
     if (this.core) data.core = this.core.serialize();
+    // in or about a store: where on its floor, so a reload puts you back there (boot, updateArrival)
+    const v = this.visit;
+    if (v && p.onFoot) data.visit = { ep: v.ep, inside: !!v.inside, x: +p.x.toFixed(2), z: +p.z.toFixed(2), heading: +p.heading.toFixed(3), switched: !!v.switched };
     const f = p.fishing;
     if (f && Array.isArray(f.stringer)) data.stringer = f.stringer.map((s) => ({ species: s.species, length: s.length })); // the fish kept for supper
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage full or private mode */ }
@@ -829,6 +872,9 @@ export class Outfitter {
     if (d && d.energy) this.energy.restore(d.energy);
     const moved = pr && pr.migrated;
     if (moved) pr.forgetMigration();
+    // the page went away in a store: back on its floor once it is built (updateArrival)
+    const vis = d && d.visit && this.landing(d.visit.ep) && Math.hypot(this.landing(d.visit.ep).x - this.player.x, this.landing(d.visit.ep).z - this.player.z) < ARRIVAL_FAR ? d.visit : null;
+    if (vis) this.arrival = { why: 'reload', ep: vis.ep, x: vis.x, z: vis.z, heading: vis.heading, inside: vis.inside, switched: vis.switched, t: 0, pending: !(d.trip && d.trip.active) };
     if (d && d.trip && d.trip.active) {
       this.trip = { ...this.trip, ...d.trip, days: this.foodRoom };
       const f = this.player.fishing;
@@ -838,10 +884,11 @@ export class Outfitter {
       const core = this.core, dw = core && core.active ? core.dayWords() : '';
       if (moved === 'v2') this.hud.note('The permit is a season’s paper now: no dates and no exit. Come in when you like; any counter sells food.', 8);
       else if (moved === 'v1') this.hud.note('An older trip, back as Sandbox: the same lakes with no limits.', 7);
-      else this.hud.note(`${this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${fmtDaysWords(this.energy.food)} of food, energy ${Math.round(this.energy.value * 100)} %${pr ? `, $${pr.money} in hand` : ''}.`);
+      else this.hud.note(`${vis ? 'Back at the outfitter' : this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${fmtDaysWords(this.energy.food)} of food, energy ${Math.round(this.energy.value * 100)} %${pr ? `, $${pr.money} in hand` : ''}.`);
       return;
     }
     this.pendingShow = false;
+    if (vis || this.arrival) return; // the counter opens in the store once you are back in it; a season begun goes in at the door
     const n = this.nearest(this.player.x, this.player.z);
     this.show(n.l);
   }
