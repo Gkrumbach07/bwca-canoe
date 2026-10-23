@@ -249,6 +249,9 @@ async function main() {
   window.__game.shop = shop; // hubs 2B
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
+  // hubs 3A: camp chores (chores.js, run by the camp): firewood stacked by the ring, the fire fed and burning down, the
+  // latrine, blueberries in season, the wake-time card; its berries and firewood notices read the board's notices
+  camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.

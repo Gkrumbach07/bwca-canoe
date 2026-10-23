@@ -186,10 +186,15 @@ The bar recovers only up to the lowest of rest, 0.4 + 0.6 × food and 0.4 + 0.6 
 1.5× and shows its mark (*tired*, *hungry* or *thirsty*); a need at 0 stops its recovery. The readout says what holds
 the bar down: "Energy 64 % · held down by thirst".
 
-**Chores** (phase 3; pitching, the fire, cooking, sleep and filling the bottle are already in): gather firewood at a
-tree (25 min an armful, 10 with the saw, up to 3 carried), light the fire with an armful and feed it, refill the bottle
-by filter, use the latrine (rest +0.05), pick berries in season (3 pints a site a day), and sleep with a chosen wake
-time (first light, 7:00 or 9:00).
+**Chores** (phase 3, stream A: `src/chores.js`, run by the camp; each one E and its life length on the clock): gather
+firewood near a tree (25 min an armful, 10 with the saw, up to 3 to hand, stacked by the ring as a woodpile and taken
+along in the canoe), light the fire with an armful and feed it another (it burns down without: fire.js), use the
+latrine (rest +0.05, once a day), pick blueberries July 10 to August 20 at a site's patch (3 pints a site a day; a
+snack, food +0.15, or into the tin for a notice), and turn in from a small card that picks the wake time (first light,
+7:00 or 9:00). A whole evening is eight keys (ashore, pitch, an armful, light, supper, the latrine, → at the tent, E).
+The berries notice ("Blueberries for pies", $10 a pint, in season) and the firewood one ("Wood for the sauna", $6 an
+armful) are registered from chores.js; what they want is handed over on foot at the posting store and claimed at its
+counter. The details are in [trip-core.md](trip-core.md), "Camping and sleep".
 
 ## People (phase 3)
 

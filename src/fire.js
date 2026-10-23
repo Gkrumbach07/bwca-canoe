@@ -11,11 +11,16 @@ import { smoothstep } from './rng.js';
 // layer 0 with the sun, the fill and the moon (the mirror pass draws with no lights); the flames are on the mirror's
 // layer, so a fire by the water shows in it.
 //
-// A fire burns FIRE.burn game hours from when it was lit or fed, dies down over the last half hour, and leaves
-// embers glowing for FIRE.embers more; then it is out. Times are absolute game hours (day.doy * 24 + day.hours, as
-// energy.js keeps them).
+// A fire burns FIRE.burn game hours on an armful of wood (hubs 3A: camp.js lights it with one and feeds it another),
+// up to FIRE.most hours of wood at once. It burns full while there is plenty left, then burns down over the last
+// FIRE.low hours: the flames shorten, the light dims to FIRE.floor of itself, the split lengths in the ring char and sink
+// and the bed of coals under them brightens. Out of wood, the embers glow for FIRE.embers more; then it is out. Times
+// are absolute game hours (day.doy * 24 + day.hours, as energy.js keeps them).
 export const FIRE = {
   burn: 3,            // game hours a fire burns on one armful of wood
+  most: 5,            // game hours of wood a fire holds at once (about two armfuls)
+  low: 1.6,           // game hours left under which it burns down
+  floor: 0.25,        // how hard it still burns (the flames, the light) just before the wood is gone
   embers: 0.75,       // game hours the embers glow after
   color: 0xff8a3d,
   intensity: 9,       // candela at full heat
@@ -261,13 +266,21 @@ export class Fires {
   }
 
   get(key) { return this.fires.get(key) || null; }
-  // 0..1 how hard it burns at abs hour `now` (0 once only embers are left), and how bright the embers are
+  // 0..1 how hard it burns at abs hour `now` (0 once only embers are left): full while the wood lasts, down to
+  // FIRE.floor over the last FIRE.low hours (the flames and the light both follow it)
   heat(f, now = this.now) {
-    if (!f) return 0;
-    const catchUp = smoothstep(f.lit, f.lit + 0.06, now), down = 1 - 0.7 * smoothstep(f.until - 0.5, f.until, now);
-    return now >= f.until ? 0 : catchUp * down;
+    if (!f || now >= f.until) return 0;
+    const catchUp = smoothstep(f.lit, f.lit + 0.06, now), left = f.until - now;
+    return catchUp * (FIRE.floor + (1 - FIRE.floor) * smoothstep(0, FIRE.low, left));
   }
-  embers(f, now = this.now) { return !f ? 0 : now < f.until ? 0.55 + 0.45 * smoothstep(f.lit, f.lit + 0.3, now) : 1 - smoothstep(f.until, f.until + FIRE.embers, now); }
+  // how bright the bed of coals is: it grows as the wood burns down, then fades once it is gone
+  embers(f, now = this.now) {
+    if (!f) return 0;
+    if (now >= f.until) return 1 - smoothstep(f.until, f.until + FIRE.embers, now);
+    return (0.5 + 0.5 * (1 - smoothstep(0.2, FIRE.low, f.until - now))) * (0.6 + 0.4 * smoothstep(f.lit, f.lit + 0.3, now));
+  }
+  // how much of the wood in the ring is left to look at (1: fresh lengths, about 0.4: charred stubs in the coals)
+  wood(f, now = this.now) { return !f ? 0 : 0.4 + 0.6 * smoothstep(0, FIRE.burn, Math.max(0, f.until - now)); }
   isLit(key, now = this.now) { const f = this.fires.get(key); return !!f && now < f.until; }
   // hours of burning left (0 when out or only embers)
   left(key, now = this.now) { const f = this.fires.get(key); return f ? Math.max(0, f.until - now) : 0; }
@@ -285,8 +298,15 @@ export class Fires {
     f.lit = now; f.until = now + hours;
     return f;
   }
-  // more wood on a fire that burns: it goes another full span from now
-  feed(key, now, hours = FIRE.burn) { const f = this.fires.get(key); if (f && now < f.until + FIRE.embers) { if (now >= f.until) f.lit = now; f.until = now + hours; } return f; }
+  // an armful on a fire that burns (or on its embers): another span of burning on top of what is left, up to
+  // FIRE.most hours of wood in the ring
+  feed(key, now, hours = FIRE.burn) {
+    const f = this.fires.get(key);
+    if (f && now < f.until + FIRE.embers) {
+      if (now >= f.until) { f.lit = now; f.until = now + hours; } else f.until = Math.min(now + FIRE.most, f.until + hours);
+    }
+    return f;
+  }
   douse(key) {
     const f = this.fires.get(key);
     if (!f) return;
@@ -318,6 +338,9 @@ export class Fires {
       const h = this.heat(f, now), e = this.embers(f, now);
       if (h <= 0 && e <= 0.001) { this.douse(f.key); continue; }
       f.h = h; f.e = e;
+      // the lengths in the ring burn down with the wood: smaller and sunk into the coals
+      const s = this.wood(f, now), wd = f.look.wood;
+      if (Math.abs(wd.scale.y - s) > 0.004) { wd.scale.set(0.75 + 0.25 * s, s, 0.75 + 0.25 * s); wd.position.y = -0.03 * (1 - s); wd.updateMatrixWorld(); }
       const d = eye ? Math.hypot(f.at.x - eye.x, f.at.z - eye.z) : 0;
       if (d < bd) { bd = d; best = f; }
     }
