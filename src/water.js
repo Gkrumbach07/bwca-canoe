@@ -19,6 +19,8 @@ import * as Sky from './sky.js';
 // wind ripples; a sun glint that sparkles at a low sun; a soft pale line and thin fading ripples where the
 // water meets the land; the shared fog ramps over all of it, so the far water goes pale and flat with the far
 // shore. Calm water is a smooth surface with the wind's ripples as fine normal detail, not visible geometry.
+// In rain (uRain, from weather.js) drops ring the surface: expanding rings drawn as a tilt of the normal, two offset
+// lattices of cells each with its own drop clock, so they break the mirror up near the canoe and roughen it further out.
 
 const PATCH_HALF = 160;   // metres; multiple of the 10 m lattice
 const PATCH_RES = 3.2;    // metres per vertex
@@ -221,7 +223,7 @@ const SKY_GLSL = Sky.glslSky || /* glsl */ `
 `;
 
 const frag = /* glsl */ `
-  uniform float uTime, uReflOn, uClarity, uIce, uRippleAmt;
+  uniform float uTime, uReflOn, uClarity, uIce, uRippleAmt, uRain, uGlint;
   uniform vec3 uSunDir, uFoam, uSunLight, uSkyLight;
   uniform vec3 uBodyShallow, uBodyMid, uBodyDeep, uBodyStain, uBodyIce;
   uniform vec3 uSkyZenith, uSkyMid, uSkyHorizon, uSkySun, uSkySunDir;
@@ -282,6 +284,33 @@ const frag = /* glsl */ `
     }
     return tilt;
   }
+  // Rain on the water: each cell of a lattice (two of them, offset and of different sizes) holds one drop at a time,
+  // landing at a random place in the cell on its own clock; its ring runs outward and dies. Returned as a tilt of the
+  // normal (x, z) like windRipples; amount 0..1 thins the drops (a cell sits out a cycle when its hash is over it).
+  vec2 rainRings(vec2 pw, float px, float amount) {
+    vec2 tilt = vec2(0.0);
+    for (int k = 0; k < 2; k++) {
+      float cell = k == 0 ? 0.55 : 0.8;
+      float fade = lookFade(cell * 0.35, px);
+      if (fade <= 0.0) continue;
+      vec2 g = pw / cell + (k == 0 ? vec2(0.0) : vec2(0.37, 0.71));
+      vec2 id = floor(g), f = g - id - 0.5;
+      ivec2 c = ivec2(id);
+      float rate = k == 0 ? 1.45 : 1.1;
+      float clock = uTime * rate + lookHash(c, 31u + uint(k));
+      float t = fract(clock);
+      uint cyc = uint(mod(floor(clock), 4096.0));
+      float h = lookHash(c + ivec2(int(cyc), 0), 57u + uint(k));
+      if (h > amount) continue;
+      vec2 at = vec2(lookHash(c + ivec2(int(cyc), 7), 3u), lookHash(c + ivec2(int(cyc), 13), 5u)) - 0.5;
+      vec2 d = f - at * 0.36;
+      float r = length(d);
+      float x = (r - t * 0.34) / 0.045;   // across the ring, in ring widths
+      float wave = -x * exp(-x * x);      // the slope of a crest
+      tilt += d / max(r, 1e-4) * wave * (1.0 - t) * (1.0 - t) * fade * 0.55;
+    }
+    return tilt;
+  }
   void main() {
     #ifdef FAR
       if (abs(vLocal.x - uPatchLocal.x) < uPatchHalf && abs(vLocal.z - uPatchLocal.y) < uPatchHalf) discard;
@@ -305,6 +334,7 @@ const frag = /* glsl */ `
     float rough;
     vec2 pw = vLocal.xz + uOrigin;   // world xz, for the noise (a lattice relative to the origin would jump with it)
     vec2 tilt = windRipples(vLocal.xz, pw, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore);
+    if (uRain > 0.0) tilt += rainRings(pw, px, uRain) * live;
     vec3 n0 = normalize(vWaveN);
     vec3 n = normalize(n0 - vec3(tilt.x, 0.0, tilt.y));
     float F = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);   // Schlick: a fifth looking down beside the canoe, nearly all at the far shore
@@ -328,7 +358,7 @@ const frag = /* glsl */ `
       vec2 uv = vReflectUv.xy / vReflectUv.w + (n.xz - n0.xz * 0.5) * (0.012 + 1.2 / dist);
       // the roughness the ripples no longer resolve far off still smears the image: a breeze blurs the far
       // shore's reflection into a soft band, a blow all but wipes it
-      float unresolved = uRippleAmt * (1.0 - lookFade(0.84, px));
+      float unresolved = min(1.0, uRippleAmt + uRain * 0.6) * (1.0 - lookFade(0.84, px));
       vec2 tx = uReflTexel * vec2(1.0 + 3.0 * unresolved, 1.0 + 10.0 * length(tilt) + 9.0 * unresolved);
       refl = texture2D(uReflection, uv) * 0.36
         + texture2D(uReflection, uv + tx * vec2(1.1, 0.7)) * 0.16 + texture2D(uReflection, uv - tx * vec2(1.1, 0.7)) * 0.16
@@ -342,7 +372,7 @@ const frag = /* glsl */ `
     float nh = max(dot(n, H), 0.0);
     float low = 1.0 - smoothstep(0.1, 0.6, uSunDir.y);
     float glint = (pow(nh, 1200.0) * 30.0 * smoothstep(0.0, 0.6, length(tilt) * 8.0) + pow(nh, 120.0) * 0.5 * low) * mix(0.05, 1.0, low) * step(0.0, uSunDir.y);
-    vec3 G = uSunLight * 3.14159 * glint * shadow * live * (1.0 - ra);
+    vec3 G = uSunLight * 3.14159 * glint * shadow * live * (1.0 - ra) * uGlint;
     // the surface: what the mirror shows (F) over what comes out of the water (1 - F); the bed shows through what
     // the column lets by. Composed for plain alpha blending over the bed the terrain drew: colour / A, alpha A.
     // The fog lies over all of it except the mirrored shore, which its own pass already hazed along the whole path.
@@ -455,6 +485,8 @@ export class WaterSystem {
       uWindSpeed: { value: 2.5 },
       uAtlas: { value: new THREE.Vector4(0, 0, 1 / world.cell, ATLAS) },
       uRippleAmt: { value: 0.3 },
+      uRain: { value: 0 },   // drops on the surface, 0..1 (weather.js)
+      uGlint: { value: 1 },  // the sun's glint, 0..1: cloud over the sun takes it (weather.js)
       uWindDir: { value: new THREE.Vector2(0, 1) },
       uRip: { value: new Float32Array(RIPPLES * 2 * 4) },
       uGustOff: { value: new THREE.Vector2(this.origin.x, this.origin.z) },
