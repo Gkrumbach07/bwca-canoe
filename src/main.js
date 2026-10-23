@@ -41,6 +41,7 @@ import { Veil } from './veil.js'; // trip core A
 import { Camp, CampRegistry } from './camp.js'; // trip core C
 import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
+import { Profile } from './profile.js'; // hubs 1A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -152,6 +153,10 @@ async function main() {
   const veil = new Veil();
   const trip = new Trip({ world, player, day, energy, hud, veil, tasks, fishing, stats: tripStats });
   const outfitter = new Outfitter(world, player, { energy, tasks, hud, day, stats: tripStats, onTeleport: teleport, trip, veil });
+  // hubs 1A: the season (profile.js): money, the gear owned, the outfitters you know, home and the season's permit,
+  // read (or built once from the trip core's saves) before anything boots; the trip's packs and canoe follow it
+  const profile = new Profile();
+  trip.useProfile(profile); outfitter.profile = profile;
   const journal = new Journal({ hud, world, player, day, fishing, tasks, energy, outfitter, stats: tripStats, wind });
   energy.onNote = (t) => hud.note(t); tasks.onNote = (t) => hud.note(t, 6);
   energy.onEvac = (why) => trip.evacuate(why); // trip core A: no food and no energy ends an Adventure in an evacuation
@@ -200,6 +205,7 @@ async function main() {
 
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
+  window.__game.profile = profile; // hubs 1A
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
   loadingEl.classList.add('done');

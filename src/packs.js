@@ -52,7 +52,7 @@ export class Packs {
   get trip() { const t = this._trip; return t && typeof t.log === 'function' ? t : null; }
   set trip(t) { this._trip = t; }
   get setup() { const t = this.trip; return (t && t.state && t.state.packs) || null; }
-  get count() { const s = this.setup; return s && s.count === 1 ? 1 : 2; }
+  get count() { const t = this.trip, pr = t && t.profile; if (pr) return pr.has('pack2') ? 2 : 1; const s = this.setup; return s && s.count === 1 ? 1 : 2; } // hubs 1A: what you own
   get canoeKind() { const s = this.setup; return s && s.canoe === 'kevlar' ? 'kevlar' : 'aluminium'; }
   get adventure() { const t = this.trip; return !!(t && t.adventure); }
   get canoeKg() { return WEIGHTS[this.canoeKind]; }
