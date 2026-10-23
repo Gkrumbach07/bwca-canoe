@@ -36,7 +36,7 @@ const KEYMAP = [
   ]],
   ['The clock and the weather', [
     [['1', '2', '3'], 'game speed 1× 2× 4× (when the rod is down)'], [['[', ']'], 'time of day back, forward an hour'], [['-', '='], 'the date back, forward a day (Shift: a month)'],
-    [['P'], 'stop the clock'], [[',', '.'], 'less, more wind'], [['/'], 'veer the wind'], [[';'], 'let the weather be'], [['R'], 'the canoe’s reflection'], [['N'], 'sound'],
+    [['P'], 'stop the clock'], [[',', '.'], 'less, more wind'], [['/'], 'veer the wind'], [[';'], 'let the weather be'], [['R'], 'the shore in the water'], [['N'], 'sound'],
   ]],
 ];
 

@@ -556,33 +556,48 @@ export function bakeSelf(geo, opts) {
 }
 
 // --- the terrain's own height ----------------------------------------------------------------------------------
-// The props stand on the terrain mesh as drawn, not on the smooth field it was built from: near the shore the
+// Things stand on the terrain mesh as drawn, not on the smooth field it was built from: near the shore the
 // mesh carries rock bumps at its mid-cell vertices (terrain-build.js shoreBumps) that the field does not, up
-// to half a metre at the lodge, and between vertices the mesh is flat triangles where the field is bilinear.
-// So a prop placed on the field floats or sinks. This reads the tile's own triangles (tile-local positions
-// and index, as the build worker produced them): every triangle lies inside one 10 m lattice cell, so they
-// are bucketed by cell once and a lookup tests the few in its cell.
+// to a metre at the lodge, and between vertices the mesh is flat triangles where the field is bilinear. So
+// anything placed on the field floats or sinks. This reads a fine tile's own triangles (tile-local positions
+// and index, as the build worker produced them): every triangle lies inside one 10 m lattice cell (the quad
+// between four cell centres; quad i spans tile-local x from (i + 0.5) to (i + 1.5) cells, so the first half
+// cell of a tile belongs to its neighbour's mesh), so they are bucketed by cell once and a lookup tests the
+// few in its cell. tiles.js keeps one per installed fine tile (`TileManager.groundAt`, the game's ground).
 export class MeshGround {
   constructor(t, cell, n) {
     this.t = t; this.cell = cell; this.n = n;
     const P = t.pos, I = t.idx, nt = I.length / 3, nn = n * n;
     const start = new Int32Array(nn + 1), of = new Int32Array(nt);
+    let sorted = true, prev = -1;
     for (let k = 0; k < nt; k++) {
       const a = I[k * 3] * 3, b = I[k * 3 + 1] * 3, c = I[k * 3 + 2] * 3;
       const i = Math.floor((P[a] + P[b] + P[c]) / 3 / cell - 0.5), j = Math.floor((P[a + 2] + P[b + 2] + P[c + 2]) / 3 / cell - 0.5);
-      const q = i >= 0 && i < n && j >= 0 && j < n ? j * n + i : -1;
+      let q = i >= 0 && i < n && j >= 0 && j < n ? j * n + i : -1;
+      // a sliver of no area (the waterline cut through a cell corner) can sit on a quad's edge; no lookup ever
+      // lands in it (scan skips it), so it stays with the quad before it
+      if (prev >= 0 && Math.abs((P[b] - P[a]) * (P[c + 2] - P[a + 2]) - (P[c] - P[a]) * (P[b + 2] - P[a + 2])) < 1e-9) q = prev;
       of[k] = q; if (q >= 0) start[q + 1]++;
+      if (q < prev) sorted = false; else prev = q;
     }
     for (let q = 0; q < nn; q++) start[q + 1] += start[q];
-    const fill = start.slice(0, nn), list = new Int32Array(start[nn]);
-    for (let k = 0; k < nt; k++) if (of[k] >= 0) list[fill[of[k]]++] = k;
+    // buildTerrainChunk emits each quad's triangles together, row by row: then the bucket list is the identity
+    // and is not kept (a megabyte a tile)
+    let list = null;
+    if (!sorted || start[nn] !== nt) {
+      const fill = start.slice(0, nn);
+      list = new Int32Array(start[nn]);
+      for (let k = 0; k < nt; k++) if (of[k] >= 0) list[fill[of[k]]++] = k;
+    }
     this.start = start; this.list = list;
     this.hit = { tri: -1, w0: 0, w1: 0, w2: 0 };
+    this.best = { k: -1, e: -Infinity, w0: 0, w1: 0, w2: 0 };
   }
   // the triangle under tile-local (x, z) and its barycentric weights, or null
   locate(x, z) {
     const ci = Math.floor(x / this.cell - 0.5), cj = Math.floor(z / this.cell - 0.5);
-    const best = { k: -1, e: -Infinity, w0: 0, w1: 0, w2: 0 };
+    const best = this.best;
+    best.k = -1; best.e = -Infinity;
     this.scan(ci, cj, x, z, best);
     if (best.e < -1e-6) for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (di || dj) this.scan(ci + di, cj + dj, x, z, best);
     if (best.k < 0 || best.e < -0.02) return null;
@@ -592,9 +607,9 @@ export class MeshGround {
   scan(i, j, x, z, best) {
     const n = this.n;
     if (i < 0 || j < 0 || i >= n || j >= n) return;
-    const P = this.t.pos, I = this.t.idx, q = j * n + i;
+    const P = this.t.pos, I = this.t.idx, L = this.list, q = j * n + i;
     for (let s = this.start[q]; s < this.start[q + 1]; s++) {
-      const k = this.list[s], a = I[k * 3] * 3, b = I[k * 3 + 1] * 3, c = I[k * 3 + 2] * 3;
+      const k = L ? L[s] : s, a = I[k * 3] * 3, b = I[k * 3 + 1] * 3, c = I[k * 3 + 2] * 3;
       const ax = P[a], az = P[a + 2], bx = P[b], bz = P[b + 2], cx = P[c], cz = P[c + 2];
       const det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
       if (Math.abs(det) < 1e-9) continue;
@@ -604,6 +619,7 @@ export class MeshGround {
       if (e >= -1e-7) return;
     }
   }
+  // the drawn ground's height at tile-local (x, z), or NaN off this tile's mesh
   height(x, z) {
     const h = this.locate(x, z);
     if (!h) return NaN;

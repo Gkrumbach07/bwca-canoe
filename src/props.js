@@ -12,7 +12,7 @@ import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf,
 // they would be built (planks with gaps on stringers and caps on piles, a shack with a roof over its walls
 // and frames round its openings, a split log on two rounds), worn (boards out of line, paint back to grey
 // wood, a dark band on the piles at the waterline), on one material from prop-kit.js and grounded by
-// occlusion baked into them. Everything stands on the terrain mesh as it is drawn (prop-kit.js MeshGround).
+// occlusion baked into them. Everything stands on the terrain mesh as it is drawn (tiles.js groundAt).
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
@@ -53,17 +53,10 @@ function shared() {
   }
 }
 
-// The height of the drawn ground at world (x, z): the tile's props keep a lookup into its terrain mesh
-// (tasks.js sets the lost items on it); off a built tile it falls back to the smooth field.
+// The height of the drawn ground at world (x, z) (tasks.js sets the lost items on it): the game's ground query,
+// tiles.js TileManager.groundAt; without the tiles, the smooth field.
 export function groundAt(world, x, z) {
-  const tiles = world.tiles && world.tiles.tiles;
-  if (tiles && world.tileOf) {
-    const [tx, ty] = world.tileOf(x, z), e = tiles.get(`${tx},${ty}`);
-    const props = e && e.group && e.group.children.find((c) => c.name === 'props');
-    const f = props && props.userData.ground;
-    if (f) { const y = f(x, z); if (Number.isFinite(y)) return y; }
-  }
-  return surfaceAt(world, x, z);
+  return world.tiles && world.tiles.groundAt ? world.tiles.groundAt(x, z) : surfaceAt(world, x, z);
 }
 
 // One mesh of the props' material from the baked pieces.
@@ -87,14 +80,27 @@ export function buildTileProps(tg, world, tx, ty) {
   // circles { x, z, r } and boxes { x, z, ux, uz, hx, hz, box: true } with half extents hx along (ux, uz)
   const obstacles = [];
   group.userData.obstacles = obstacles;
-  // the drawn ground (the tile's terrain mesh, still in the build result while tiles.js installs the tile)
-  const entry = world.tiles && world.tiles.tiles && world.tiles.tiles.get(`${tx},${ty}`);
-  const terrain = entry && entry.result && entry.result.terrain;
-  let mg = null, mgTried = false;
-  const mesh = () => { if (!mgTried) { mgTried = true; if (terrain && terrain.pos && terrain.idx) mg = new MeshGround(terrain, tg.cell, tg.tileSize); } return mg; };
-  const H = (x, z) => { const m = mesh(); if (m) { const y = m.height(x - ox, z - oz); if (Number.isFinite(y)) return y; } return surfaceAt(tg, x, z); };
-  group.userData.ground = H;
-  const ctx = { tg, world, ox, oz, H, mesh, obstacles, inside };
+  // The drawn ground: tiles.js registers this tile's terrain mesh (entry.ground) before it builds the props, so
+  // the game's ground query reads it, the neighbour's mesh where a piece reaches over the seam (the first half
+  // cell of a tile is its neighbour's last quad), and this tile's grid (meshHeightAt) where that is not in yet.
+  const tiles = world.tiles && world.tiles.groundAt ? world.tiles : null;
+  const entry = tiles && tiles.tiles.get(`${tx},${ty}`);
+  let mg = entry && entry.ground ? entry.ground : null, mgTried = !!mg;
+  const mesh = () => {
+    if (!mgTried) { mgTried = true; const t = entry && entry.result && entry.result.terrain; if (t && t.pos && t.idx) mg = new MeshGround(t, tg.cell, tg.tileSize); }
+    return mg;
+  };
+  const H = tiles ? (x, z) => tiles.groundAt(x, z, tg) : (x, z) => {
+    const m = mesh(); if (m) { const y = m.height(x - ox, z - oz); if (y === y) return y; }
+    return meshHeightAt(tg, x, z);
+  };
+  // the terrain triangle under world (x, z), on whichever installed tile draws it: { mesh, hit } or null
+  const locate = (x, z) => {
+    const g = tiles ? tiles.locate(x, z) : mesh() && { mesh: mg, ox, oz };
+    const hit = g && g.mesh.locate(x - g.ox, z - g.oz);
+    return hit ? { mesh: g.mesh, hit } : null;
+  };
+  const ctx = { tg, world, ox, oz, H, locate, obstacles, inside };
   const pieces = [];
   const rng = mulberry32(42 + tx * 1000 + ty);
 
@@ -176,12 +182,13 @@ class TrailDecal {
   constructor() { this.p = []; this.n = []; this.sa = []; this.sb = []; this.fl = []; this.tr = []; this.ix = []; this.rows = 0; }
   // a row: centre (world x, z), unit normal (nx, nz), half width, fade, wear; returns its row index
   row(ctx, x, z, nx, nz, hw, fade, wear) {
-    const m = ctx.mesh(), f4 = [0, 0, 0, 0], n3 = [0, 1, 0], p3 = [0, 0, 0];
+    const f4 = [0, 0, 0, 0], n3 = [0, 1, 0], p3 = [0, 0, 0];
     for (const t of ACROSS) {
       const px = x + nx * t * hw, pz = z + nz * t * hw, lx = px - ctx.ox, lz = pz - ctx.oz;
-      const hit = m && m.locate(lx, lz);
+      const at = ctx.locate(px, pz); // this tile's mesh, or the neighbour's over the seam
       let y;
-      if (hit) {
+      if (at) {
+        const m = at.mesh;
         y = m.interp(m.t.pos, 3, p3)[1];
         m.interp(m.t.nrm, 3, n3, 1 / 127); this.n.push(n3[0], n3[1], n3[2]);
         m.interp(m.t.splatA, 4, f4, 1 / 255); this.sa.push(...f4);
@@ -189,7 +196,7 @@ class TrailDecal {
         m.interp(m.t.floor, 4, f4, 1 / 255); this.fl.push(...f4);
         y += 0.02;
       } else {
-        y = surfaceAt(ctx.tg, px, pz) + 0.05;
+        y = ctx.H(px, pz) + 0.03;
         this.n.push(0, 1, 0); this.sa.push(1, 0, 0, 0); this.sb.push(0, 0, 0, 0); this.fl.push(0, 0, 0, 0);
       }
       this.p.push(lx, y, lz);
@@ -205,8 +212,8 @@ class TrailDecal {
   // bumps fold the mesh every 5 m): every triangle is tested at its edge midpoints and centre, and its corners
   // raised by however far the ground pokes through, twice over.
   lift(ctx) {
-    const m = ctx.mesh(), P = this.p, I = this.ix;
-    if (!m) return;
+    const P = this.p, I = this.ix, ox = ctx.ox, oz = ctx.oz;
+    if (!I.length) return;
     const y = (i) => P[i * 3 + 1];
     for (let pass = 0; pass < 2; pass++) {
       const up = new Float32Array(P.length / 3);
@@ -215,7 +222,7 @@ class TrailDecal {
         let need = 0;
         for (const [wa, wb, wc] of [[0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [1 / 3, 1 / 3, 1 / 3]]) {
           const x = P[a * 3] * wa + P[b * 3] * wb + P[c * 3] * wc, z = P[a * 3 + 2] * wa + P[b * 3 + 2] * wb + P[c * 3 + 2] * wc;
-          const g = m.height(x, z);
+          const g = ctx.H(x + ox, z + oz);
           if (Number.isFinite(g)) need = Math.max(need, g + 0.015 - (y(a) * wa + y(b) * wb + y(c) * wc));
         }
         if (need > 0) for (const v of [a, b, c]) up[v] = Math.max(up[v], need);
@@ -759,7 +766,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
   occlude(geo, occ, { ground: localGround(ctx), rays: 8, reach: 0.6, floor: 0.4, bury: 0.15 });
   pieces.push(geo);
   // a granite ledge between the fire ring and the water
-  if (c.shore < 30) campLedge(tg, c, fx, fz, dir, ox, oz, ledges, ctx.obstacles);
+  if (c.shore < 30) campLedge(tg, c, fx, fz, dir, ox, oz, ledges, ctx.obstacles, H);
   // the tent on the flattest clear spot nearby (off the ledge rocks, on dry ground), door to the fire, pitched
   // on the slope of the ground under it
   const rocks = [...ledges[0], ...ledges[1]].map((m) => ({ x: m.elements[12] + ox, z: m.elements[14] + oz, r: Math.hypot(m.elements[0], m.elements[1], m.elements[2]) }));
@@ -785,11 +792,11 @@ function buildCampsite(ctx, c, pieces, ledges) {
 // three stacks of layered flats lying along the slope, one big and the others smaller, or now and then a group
 // of slanted rocks at one tilt (one big shard, the rest smaller) standing off to one side so the way from the
 // landing to the fire stays open (those hold the walker off, the low flats are walked over). Every rock is
-// seated on the terrain mesh as placement.js seats the rocks of the woods. Matrices go to ledges[0] (flats) and
-// ledges[1] (slanted), tile-local.
-function campLedge(tg, c, fx, fz, dir, ox, oz, ledges, obstacles) {
+// seated on the drawn ground (H, the game's ground query) as placement.js seats the rocks of the woods on the
+// mesh. Matrices go to ledges[0] (flats) and ledges[1] (slanted), tile-local.
+function campLedge(tg, c, fx, fz, dir, ox, oz, ledges, obstacles, H = null) {
   const r = mulberry32((hash2(Math.round(c.x), Math.round(c.z), 13) * 4294967296) >>> 0);
-  const ground = (x, z) => meshHeightAt(tg, x, z);
+  const ground = H || ((x, z) => meshHeightAt(tg, x, z));
   const place = (kind, x, z, az, tilt, spin, s, sq, tall) => {
     const y = seatRock(ground, ROCK_FOOT[kind], x, z, s, sq, tall, spin, az, tilt, tg.slopeAt(x, z));
     return new THREE.Matrix4().makeRotationY(az).multiply(new THREE.Matrix4().makeRotationZ(tilt)).multiply(new THREE.Matrix4().makeRotationY(spin))

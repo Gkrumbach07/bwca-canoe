@@ -52,8 +52,6 @@ const T = {
   skyLift: [0, 0.6, 1.0, 0.9, 0.5, 0.1], // how much higher the warm bands reach looking toward the sun (sky.js)
   skySun: [0x000000, 0x5a3a48, 0xff9858, 0xffd080, 0xffe4b4, 0xfff2cc],
   ground: [0x0d1210, 0x1e241e, 0x5e5a4a, 0x80765a, 0x8e9a7e, 0x9aa58a],
-  water: [0x0c141e, 0x172636, 0x2f5268, 0x37647c, 0x326f8c, 0x2d7694],   // clear-lake water: darker than the sky, a saturated teal by day
-  reflect: [0x101828, 0x202d44, 0xa89c8c, 0xbcb098, 0xbcc8d8, 0xc9dde8], // the sky the far water mirrors: the warm horizon at a low sun, never lilac
   cloudTop: [0x1f2634, 0x2e3648, 0xffb080, 0xffcfa0, 0xfbe9d2, 0xfbf8f1],
   cloudBase: [0x101522, 0x1c2434, 0x7c6a6c, 0x8c96a8, 0x9fb0cc, 0xa6bfd9],
   moonInt: [0.3, 0.22, 0.08, 0, 0, 0],
@@ -252,11 +250,8 @@ export class DayCycle {
     const cu = t.clouds.children[0]?.material.uniforms;
     if (cu) { cu.uTop.value.copy(this.lerpColor('cloudTop', c)); cu.uBase.value.copy(this.lerpColor('cloudBase', c)); cu.uSky.value.copy(su.uZenith.value); cu.uSunDir.value.copy(this.sunDir); }
     if (t.stars) t.stars.material.opacity = this.lerpNum('stars');
-    // water
+    // water: the foam, the ice and the sun's glint (its colour is the sky dome and the shore it mirrors, water.js)
     const wu = t.water.uniforms;
-    wu.uWater.value.copy(this.lerpColor('water', c));
-    wu.uReflect.value.copy(this.lerpColor('reflect', c));
-    wu.uWaterDeep.value.copy(wu.uWater.value).multiplyScalar(0.5);
     wu.uFoam.value.copy(this.lerpColor('foam', c));
     if (wu.uIce) wu.uIce.value = this.season.ice;
     if (t.ripples) t.ripples.material.uniforms.uColor.value.copy(wu.uFoam.value);

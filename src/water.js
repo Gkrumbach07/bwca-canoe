@@ -417,9 +417,6 @@ export class WaterSystem {
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, {
       uTime: { value: 0 },
       uSunDir: { value: sunDir.clone() },
-      uWater: { value: new THREE.Color(palette.water) },
-      uWaterDeep: { value: new THREE.Color(palette.water).multiplyScalar(0.55) },
-      uReflect: { value: new THREE.Color(palette.reflect) },
       uFoam: { value: new THREE.Color(0xf2f6f6) },
       uClarity: { value: 1.0 },
       uIce: { value: 0 },

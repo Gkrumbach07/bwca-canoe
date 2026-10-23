@@ -93,7 +93,7 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | N | mute / unmute the synthesized soundscape |
 | , / . | less / more wind (debug; `;` hands control back to the weather) |
 | / | veer the wind 30° (debug) |
-| R | toggle the canoe's water reflection (costs a second scene pass) |
+| R | toggle the shore, its trees and the canoe mirrored in the water (a second scene pass; off, the water mirrors the sky alone) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× (a ×2 mark bottom right while it is up) |
 | Esc | frees the mouse when the look has taken it; otherwise pause: the title screen with Paddle on / New trip / Settings / Controls (Esc again, or Enter, resumes); Controls shows this table in the game |
 | mouse | look. In first person, and on land in third person, the mouse turns you the way it does in Minecraft: the first key or click takes the mouse, every movement turns the look at once, Esc frees the mouse (Esc again opens the menu). On land the body faces the look and WASD moves relative to it, A and D strafing; in third person the camera sits behind you and the mouse's tilt swings it up or down. Behind the canoe the cursor stays free: drag to orbit, wheel to zoom. *Settings → Steer the canoe where you point*: while you hold W the bow turns toward the cursor's point on the water, or toward the look in first person; A/D nudge, and nothing sticks |
@@ -130,7 +130,7 @@ portaging. Portage lengths are shown in rods, as on every BWCA map.
 
 The title and pause screens are keyboard-first: the arrows move between items (← → between the menu and the
 entry points), Enter picks, Esc goes back. Settings (`src/settings.js`) come in sections: Display (shadow map
-size, tree detail and cull distance, render scale, the canoe's water reflection), Sound (volume, mute),
+size, tree detail and cull distance, render scale, the shore and sky in the water), Sound (volume, mute),
 Controls (mouse sensitivity, inverted look, cursor steering, the game speed and camera a trip starts with),
 HUD (above) and Developer (the GPS simulator's state, FPS and triangles and the tiles as rows of the readout).
 The canoe's position, heading, the day clock and the camera mode are saved every few seconds
