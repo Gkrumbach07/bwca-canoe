@@ -3,6 +3,7 @@ import { mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeomet
 import { mulberry32 } from './rng.js';
 import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
+import { applyWet } from './weather.js';
 
 // The solid register: smooth, rounded volumes under the look's smooth Lambert (shading.js), with occlusion
 // baked into the vertex colour (occlusion.js), the way Firewatch paints rock, bark and canopy: the colour
@@ -27,6 +28,7 @@ export function makeRockMaterial() {
         .replace('void RE_IndirectDiffuse_Look(', 'uniform vec2 uRockFill;\nvoid RE_IndirectDiffuse_Look(')
         .replace('reflectedLight.indirectDiffuse += irradiance * lookSky',
           'vec3 rockIrr = mix( vec3( dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) ) ), irradiance, uRockFill.x ) * uRockFill.y;\n  reflectedLight.indirectDiffuse += rockIrr * lookSky');
+      applyWet(shader, { porosity: '0.5', gloss: '0.7' }); // rain: granite darkens a little and shines
     },
   });
   m.userData.u = u;

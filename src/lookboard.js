@@ -41,12 +41,17 @@ export const SPOTS = [
     mode: 'walk', x: -19590, z: 16772, heading: Math.PI, canoe: [6, -9], hold: 'KeyW', frames: 32, view: { yaw: 1.75, dist: 4.2, height: 1.15, fov: 50 } },
 ];
 
-// The dates and hours, one column each. Dusk on 22 October is 18:24, the sun 3.7 degrees down.
+// The dates and hours, one column each. Dusk on 22 October is 18:24, the sun 3.7 degrees down. A set may carry its own
+// weather and wind: weather (a state of weather.js, held for the frame: 'clear', 'fair', 'overcast', 'fog', 'light-rain',
+// 'rain', 'storm', 'building', 'snow'; without it the forecast's own for that hour), wind (m/s, 2 when not given: a
+// light breeze) and from (the bearing the wind comes from, degrees; the day's own when not given).
 export const SETS = [
   { label: '22 Oct 12:00', doy: 295, hours: 12 },
   { label: '22 Oct 17:30', doy: 295, hours: 17.5 },
   { label: '22 Oct dusk 18:24', doy: 295, hours: 18.4 },
   { label: '15 Jul 20:00', doy: 196, hours: 20 },
+  { label: '15 Jul 15:00 storm', doy: 196, hours: 15, weather: 'storm', wind: 14, from: 290 },
+  { label: '22 Oct 8:00 fog', doy: 295, hours: 8, weather: 'fog', wind: 0.5 },
 ];
 
 const STEP = 1 / 60;
@@ -59,12 +64,13 @@ const pick = (list, want, key) => (want ? want.map((w) => (typeof w === 'string'
 // type ('image/png' or 'image/jpeg'), label (for the title line), spots, sets, download, log.
 export async function lookboard(game, opts = {}, loop = {}) {
   const o = { width: 960, height: 600, scale: 0.5, settle: 45, type: 'image/png', label: '', spots: null, sets: null, download: document.visibilityState === 'visible', log: true, ...opts };
-  const { renderer, camera, post, player, chase, day, wind } = game;
+  const { renderer, camera, post, player, chase, day, wind, weather } = game;
   const list = pick(SPOTS, o.spots, 'name'), sets = pick(SETS, o.sets, 'label');
   const t0 = performance.now();
   const saved = {
     pixelRatio: renderer.getPixelRatio(), camMode: chase.mode, distance: chase.distance, pitch: chase.pitch,
-    clock: [day.year, day.doy, day.hours], running: day.running, windOverride: wind.override, windSpeed: wind.speed,
+    clock: [day.year, day.doy, day.hours], running: day.running, windOverride: wind.override, windSpeed: wind.speed, windFrom: wind.from,
+    weather: weather ? weather.forced : null, strikeIn: weather ? weather._strikeIn : 0,
     timeScale: player.timeScale, saver: game.saver ? game.saver.enabled : null,
     body: { mode: player.mode, x: player.x, z: player.z, heading: player.heading, drop: player.carry && player.carry.drop ? { ...player.carry.drop } : null },
   };
@@ -78,7 +84,6 @@ export async function lookboard(game, opts = {}, loop = {}) {
     post.resize(o.width, o.height);
     camera.aspect = o.width / o.height; camera.updateProjectionMatrix();
     day.running = false; player.timeScale = 1;
-    wind.override = 2; wind.speed = 2; // a light breeze on every frame
     const cw = Math.round(o.width * o.scale), ch = Math.round(o.height * o.scale);
     const sheet = makeSheet(list, sets, cw, ch, o);
     const frames = [];
@@ -90,6 +95,11 @@ export async function lookboard(game, opts = {}, loop = {}) {
       for (let k = 0; k < sets.length; k++) {
         const set = sets[k];
         day.setClock(set.year || 2026, set.doy, set.hours);
+        // the set's weather held (or the forecast's), its wind (a light breeze unless it says), no lightning flashing
+        // at random into the frame
+        if (weather) { if (set.weather) weather.set(set.weather); else weather.release(); weather._strikeIn = 1e9; weather._strikes.length = 0; }
+        wind.override = set.wind ?? 2; wind.speed = wind.override;
+        if (Number.isFinite(set.from)) wind.from = set.from;
         place(game, spot); // every frame starts the same way: the canoe drifts and the walker strides between them
         chase.setMode(spot.mode === 'first' ? 'first' : 'third'); // also puts back the field of view a fixed view changed
         chase.distance = spot.distance || saved.distance;
@@ -119,7 +129,8 @@ export async function lookboard(game, opts = {}, loop = {}) {
     player.input.down.clear();
     chase.setMode(saved.camMode); chase.distance = saved.distance; chase.pitch = saved.pitch;
     day.setClock(saved.clock[0], saved.clock[1], saved.clock[2]); day.running = saved.running;
-    wind.override = saved.windOverride; wind.speed = saved.windSpeed;
+    wind.override = saved.windOverride; wind.speed = saved.windSpeed; wind.from = saved.windFrom;
+    if (weather) { weather.release(); if (saved.weather) weather.forced = saved.weather; weather._strikeIn = saved.strikeIn; }
     player.timeScale = saved.timeScale;
     const b = saved.body;
     try {

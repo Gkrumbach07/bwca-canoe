@@ -3,6 +3,7 @@ import { glslSurface } from './water.js';
 import { CELL_SPLAT } from './terrain-build.js';
 import { groundUniforms, glslGround } from './terrain.js';
 import { applyLook } from './shading.js';
+import { applyWet } from './weather.js';
 import { foliageAtlas, spriteUV } from './textures.js';
 import { SWAY, glslSway } from './wind.js';
 
@@ -193,6 +194,8 @@ export class GroundCover {
         .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower;')
         .replace('#include <map_fragment>', '#include <map_fragment>\n' + frag)
         .replace('#include <normal_fragment_begin>', noFlip);
+      // rain (weather.js): the root wets as the ground under it does, the blade tips a little less
+      applyWet(shader, { porosity: 'mix( 1.0, 0.6, vGrassH )', gloss: '0.2' });
     };
     this.material.customProgramCacheKey = () => 'look-grass';
     this.mesh = new THREE.Mesh(geo, this.material);

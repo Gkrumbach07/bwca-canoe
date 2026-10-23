@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mulberry32, hash2 } from './rng.js';
 import { beaverModels, lodgeModel, mooseModels, fishModel, insectModels, MOOSE } from './fauna-models.js';
-import { makeFaunaMaterials, Parts, frameMatrix, partMatrix, deeper, depthAt, shelterAt, waterRun, smooth, clamp, wrapAngle, turnToward, headingOf, lightOf, emit } from './fauna-kit.js';
+import { makeFaunaMaterials, Parts, frameMatrix, partMatrix, deeper, depthAt, shelterAt, waterRun, smooth, clamp, wrapAngle, turnToward, headingOf, lightOf, emit, Stands, Search, runNow } from './fauna-kit.js';
 import { Birds } from './fauna-birds.js';
 import { RiseRings } from './fauna-rings.js';
 
@@ -32,6 +32,7 @@ export class Fauna {
     this.world = world; this.water = water; this.scene = scene; this.loons = loons;
     this.rng = mulberry32(77);
     const mats = this.materials = materials || (loons && loons.materials) || makeFaunaMaterials(water);
+    this.stands = new Stands(world); // the trunks and boulders by the water, gathered a slice at a time for the searches
     this.beavers = new Beavers(this, scene, mats);
     this.moose = new Moose(this, scene, mats);
     this.birds = new Birds(this, scene, mats);
@@ -42,7 +43,7 @@ export class Fauna {
     this.forced = { beaver: 0, moose: 0, fish: 0, insects: 0 };
     this.view = { x: 1, z: 0 };
     this._open = { x: 0, z: 0, ok: false };
-    this.px = 0; this.pz = 0; this.cx = 0; this.cz = 0; this.levelRef = 0;
+    this.px = 0; this.pz = 0; this.cx = 0; this.cz = 0; this.camY = 0; this.levelRef = 0;
   }
 
   // ---- shared helpers ------------------------------------------------------------------------------------------
@@ -83,9 +84,10 @@ export class Fauna {
     if (camera) {
       camera.getWorldDirection(_v);
       const n = Math.hypot(_v.x, _v.z) || 1;
-      this.view.x = _v.x / n; this.view.z = _v.z / n; this.cx = camera.position.x; this.cz = camera.position.z;
-    } else { this.view.x = Math.cos(player.heading); this.view.z = -Math.sin(player.heading); this.cx = player.x; this.cz = player.z; }
+      this.view.x = _v.x / n; this.view.z = _v.z / n; this.cx = camera.position.x; this.cz = camera.position.z; this.camY = camera.position.y;
+    } else { this.view.x = Math.cos(player.heading); this.view.z = -Math.sin(player.heading); this.cx = player.x; this.cz = player.z; this.camY = NaN; }
     this.levelRef = this.levelAt(player.x, player.z);
+    if (!(this.camY === this.camY)) this.camY = this.levelRef + 2;
     this.afloat = player.mode === 'paddle' || player.mode === 'swim';
     const L = lightOf(day, this.light), s = day.season, doy = s.doy, open = s.ice < 0.5;
     this.dayDoy = doy;
@@ -156,14 +158,17 @@ class Beavers {
     this.near = [];
     this.list = [0, 1].map((i) => ({ i, lodge: null, state: 'home', t: 0, wait: 10, x: 0, z: 0, heading: 0, speed: 0, y: -0.4, pitch: 0, tail: 0, tx: 0, tz: 0, legs: 0, wake: 0, cool: 0, under: 0, slapped: false }));
     this.scanT = 0;
+    this.search = new Search(f.stands);
   }
 
-  // the cell's lodge: { x, z, yaw, level } or null (none here) or undefined (its tiles are not in yet)
-  evaluate(ci, cj, forced = false) {
+  // the cell's lodge: { x, z, yaw, level } or null (none here) or undefined (its tiles are not in yet). A generator,
+  // yielding every few candidates, so the scan spreads it over frames (evaluate runs it at once, for force()).
+  *lodgeGen(ci, cj, forced = false) {
     const w = this.f.world, rng = mulberry32((hash2(ci, cj, 41) * 4294967296) >>> 0);
     if (!forced && rng() > 0.6) return null;
     const cands = [];
     for (let k = 0; k < 40; k++) {
+      if (k % 8 === 7) yield;
       const x = w.originX + (ci + rng()) * LODGE_CELL, z = w.originZ + (cj + rng()) * LODGE_CELL;
       if (!w.isReady(x, z)) { if (!forced) return undefined; continue; }
       const s = w.shoreAt(x, z);
@@ -175,6 +180,7 @@ class Beavers {
       cands.push({ x, z, score: sh + rng() * 0.2 });
     }
     cands.sort((a, b) => b.score - a.score);
+    yield;
     for (const c of cands) {
       // not by a campsite, a landing or a portage
       if (w.campsites.some((p) => Math.abs(p.x - c.x) < 120 && Math.abs(p.z - c.z) < 120)) continue;
@@ -189,18 +195,23 @@ class Beavers {
     }
     return null;
   }
+  evaluate(ci, cj, forced = false) { return runNow(this.lodgeGen(ci, cj, forced), this.f.stands); }
 
+  // the next cell round the player not looked at yet (the player's own first) goes into the search; the search runs
+  // a slice a frame (update), and its lodge, if any, joins the near ones when it is done
   scan() {
     const f = this.f, w = f.world;
+    if (this.search.busy) return;
     const ci = Math.floor((f.px - w.originX) / LODGE_CELL), cj = Math.floor((f.pz - w.originZ) / LODGE_CELL);
-    // one new cell a scan, the player's first
     for (let r = 0; r <= 1; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
       if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
       const key = (ci + di) * 100000 + (cj + dj);
       if (this.cells.has(key)) continue;
-      const v = this.evaluate(ci + di, cj + dj);
-      if (v !== undefined) { this.cells.set(key, v); if (this.cells.size > 200) this.cells.delete(this.cells.keys().next().value); }
-      r = 2; break;
+      this.search.start(this.lodgeGen(ci + di, cj + dj), (v) => {
+        if (v !== undefined && !this.cells.has(key)) { this.cells.set(key, v); if (this.cells.size > 200) this.cells.delete(this.cells.keys().next().value); } // (force() may have filled it meanwhile)
+        this.pickNear();
+      });
+      return;
     }
     this.pickNear();
   }
@@ -257,6 +268,7 @@ class Beavers {
     for (const p of this.pools) p.begin();
     this.scanT -= dt;
     if (this.scanT <= 0) { this.scanT = 1.5; this.scan(); }
+    this.search.step(0.4);
     for (const L of this.near) if (Math.hypot(L.x - f.cx, L.z - f.cz) < 1200) this.lodge.push(frameMatrix(_m, L.x, L.level, L.z, L.yaw));
     // each beaver keeps its lodge while that lodge is among the near ones; a lodge left free goes to a beaver
     // without one

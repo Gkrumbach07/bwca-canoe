@@ -194,21 +194,55 @@ export function mooseModels() {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// Birds of the open sky, one builder: a body lofted from tail to bill, a tail fan, and two wings (separate, so
-// they flap and fold; a folded wing is the same wing turned back along the flank and shortened).
+// Birds of the open sky, one builder: a body lofted from tail to bill, a tail fan, two wings (separate, so they
+// flap and fold; a folded wing is the same wing turned back along the flank and shortened) and the legs they stand on.
 
-function bird({ rows, colourAt, bill, billColour, tail, tailColour, wingRows, wingOpts, s = 1 }) {
+function bird({ rows, colourAt, bill, billColour, tail, tailColour, wingRows, wingOpts, legs = null, s = 1 }) {
   const b = new Shape();
   body(b, rows.map((r) => [r[0] * s, r[1] * s, r[2] * s, r[3] * s]), 12, (th, p) => [colourAt(p.x / s, Math.sin(th))]);
   body(b, bill.rows.map((r) => [r[0] * s, r[1] * s, r[2] * s, r[3] * s]), 8, () => [billColour], { capStart: true, tipEnd: bill.tip.clone().multiplyScalar(s) });
   body(b, tail.map((r) => [r[0] * s, r[1] * s, r[2] * s, r[3] * s]), 6, () => [tailColour], { capStart: true, capEnd: true });
   const w = wing(wingRows.map((r) => r.map((v) => v * s)), { ...wingOpts, fingerLen: (wingOpts.fingerLen || 0.2) * s, fingerW: (wingOpts.fingerW || 0.03) * s, tip: wingOpts.tip ? wingOpts.tip.clone().multiplyScalar(s) : null, tipFrom: (wingOpts.tipFrom ?? Infinity) * s });
-  return { body: done(b, { reach: 0.1 * s }), wingR: done(w, { reach: 0.08 * s }), wingL: done(w.mirrorZ(), { reach: 0.08 * s }) };
+  const out = { body: done(b, { reach: 0.1 * s }), wingR: done(w, { reach: 0.08 * s }), wingL: done(w.mirrorZ(), { reach: 0.08 * s }) };
+  if (legs) out.legs = done(birdLegs(legs), { reach: 0.03, ground: -legs.len, floor: 0.6 });
+  return out;
 }
 
-export function eagleModels() {
+// A sitting bird's legs and feet as one part, its origin between the hips: two legs straight down to the feet `len`
+// below, which lie flat, three toes forward (a gull's webbed between them) and, but for a gull, one back; an eagle's
+// legs feathered down most of the way. fauna-birds.js draws them only while the bird sits, turned against its pitch
+// so they stand upright, and sets the bird that much higher, so it stands on them instead of lying on its belly.
+function birdLegs({ len, apart, thick, colour, toe, web = false, back = true, feathered = null, featherLen = 0 }) {
+  const s = new Shape(), c = col(colour), fc = feathered === null ? null : col(feathered);
+  for (const side of [-1, 1]) {
+    const z = side * apart, fy = -len + thick * 0.7;
+    if (fc) s.tube([[V3(0, 0.02, z), thick * 2.6, thick * 2.6], [V3(0.004, -featherLen * 0.6, z), thick * 2.4, thick * 2.4], [V3(0.008, -featherLen, z), thick * 1.5, thick * 1.5]], X, 7, () => [fc], { capStart: true, capEnd: true });
+    s.tube([[V3(0, fc ? -featherLen * 0.85 : 0.01, z), thick, thick], [V3(0.006, fy, z), thick * 0.85, thick * 0.85]], X, 5, () => [c], { capStart: true, capEnd: true });
+    for (const a of [-0.5, 0, 0.5]) {
+      const dx = Math.cos(a) * toe, dz = Math.sin(a) * toe * side;
+      s.tube([[V3(0.004, fy, z), thick * 0.8, thick * 0.55], [V3(dx * 0.85, fy - thick * 0.15, z + dz * 0.85), thick * 0.5, thick * 0.38]], Y, 4, () => [c], { capStart: true, tipEnd: V3(dx, fy - thick * 0.3, z + dz) });
+    }
+    if (back) s.tube([[V3(0, fy, z), thick * 0.65, thick * 0.5], [V3(-toe * 0.38, fy - thick * 0.15, z), thick * 0.42, thick * 0.32]], Y, 4, () => [c], { capStart: true, tipEnd: V3(-toe * 0.5, fy - thick * 0.3, z) });
+    if (web) {
+      // the web: a thin fan between the front toes, its own vertices above and below so each side shades as itself
+      const y = fy - thick * 0.2, pts = [-0.5, -0.25, 0, 0.25, 0.5].map((a) => V3(Math.cos(a) * toe * 0.9, y, z + Math.sin(a) * toe * 0.9 * side));
+      for (const up of [true, false]) {
+        const o = s.vert(V3(0.004, y, z), c), ring = pts.map((p) => s.vert(p, c));
+        for (let k = 0; k < ring.length - 1; k++) { const a = ring[k], b = ring[k + 1]; if ((side > 0) === up) s.tri(o, b, a); else s.tri(o, a, b); }
+      }
+    }
+  }
+  return s;
+}
+
+// the length of a bird's legs from its hips to its soles: what puts its feet `perchUp` below its body's origin when
+// it sits pitched by `perchPitch` (fauna-birds.js KINDS)
+export const legLength = (k) => k.perchUp + k.hip[0] * Math.sin(k.perchPitch) + k.hip[1] * Math.cos(k.perchPitch);
+
+export function eagleModels(legLen = 0.27) {
   const brown = col(0x3a291c), white = col(0xece8df);
   return bird({
+    legs: { len: legLen, apart: 0.05, thick: 0.011, colour: 0xd9a520, toe: 0.07, feathered: 0x3a291c, featherLen: 0.13 },
     rows: [[-0.2, 0, 0.05, 0.045], [-0.1, 0.005, 0.11, 0.1], [0.04, 0.012, 0.13, 0.12], [0.15, 0.03, 0.1, 0.1], [0.22, 0.05, 0.068, 0.072], [0.28, 0.06, 0.064, 0.068], [0.335, 0.058, 0.05, 0.05], [0.37, 0.05, 0.032, 0.034]],
     colourAt: (x) => brown.clone().lerp(white, smooth(0.17, 0.215, x)),
     bill: { rows: [[0.36, 0.048, 0.028, 0.03], [0.405, 0.042, 0.019, 0.022]], tip: V3(0.44, 0.018, 0) }, billColour: col(0xd8a21c),
@@ -218,9 +252,10 @@ export function eagleModels() {
   });
 }
 
-export function gullModels() {
+export function gullModels(legLen = 0.12) {
   const white = col(0xf0efea), grey = col(0x96a0a8);
   return bird({
+    legs: { len: legLen, apart: 0.028, thick: 0.0055, colour: 0xd8a598, toe: 0.045, web: true, back: false },
     rows: [[-0.17, 0.01, 0.035, 0.03], [-0.09, 0.01, 0.075, 0.07], [0.03, 0.015, 0.09, 0.085], [0.12, 0.03, 0.07, 0.07], [0.17, 0.05, 0.048, 0.052], [0.215, 0.056, 0.045, 0.048], [0.25, 0.052, 0.03, 0.032]],
     colourAt: (x, up) => white.clone().lerp(grey, smooth(0.25, 0.6, up) * smooth(-0.15, -0.08, x) * (1 - smooth(0.1, 0.15, x))),
     bill: { rows: [[0.245, 0.05, 0.016, 0.02], [0.28, 0.045, 0.011, 0.014]], tip: V3(0.305, 0.036, 0) }, billColour: col(0xdcc23a),
@@ -230,9 +265,10 @@ export function gullModels() {
   });
 }
 
-export function ravenModels() {
+export function ravenModels(legLen = 0.11) {
   const black = col(0x0e1013);
   return bird({
+    legs: { len: legLen, apart: 0.03, thick: 0.0062, colour: 0x17191c, toe: 0.042 },
     rows: [[-0.16, 0.0, 0.04, 0.035], [-0.08, 0.005, 0.08, 0.075], [0.04, 0.012, 0.095, 0.09], [0.13, 0.03, 0.075, 0.075], [0.19, 0.05, 0.055, 0.058], [0.24, 0.056, 0.052, 0.054], [0.28, 0.052, 0.036, 0.038]],
     colourAt: () => black,
     bill: { rows: [[0.27, 0.05, 0.026, 0.03], [0.32, 0.044, 0.017, 0.02]], tip: V3(0.355, 0.03, 0) }, billColour: col(0x111214),

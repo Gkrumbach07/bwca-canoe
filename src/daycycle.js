@@ -360,9 +360,11 @@ export class DayCycle {
     cu.uBase.value.lerp(c.copy(DC).multiplyScalar(0.75), grey).multiplyScalar(1 - 0.62 * W.dark);
     cu.uSky.value.copy(su.uZenith.value);
     cu.uFlash.value.copy(fc).multiplyScalar(f * 0.5);
-    const au = cd.anvilMaterial.uniforms;   // a thunderhead: its top lit as a cloud top is, its base dark slate
-    au.uTop.value.copy(this.lerpColor('cloudTop', _anvil)).lerp(c.copy(DC).multiplyScalar(1.1), 0.35 + grey * 0.4);
-    au.uBase.value.copy(DC).multiplyScalar(0.3);
+    // a thunderhead: its anvil lit as a cloud top is (greyed only as the sky greys), its tower and base a dark slate,
+    // the cloud's grey turned a little toward the sky's blue (cyan-blue, never violet)
+    const au = cd.anvilMaterial.uniforms;
+    au.uTop.value.copy(this.lerpColor('cloudTop', _anvil)).lerp(c.copy(DC).multiplyScalar(1.1), 0.12 + grey * 0.5);
+    au.uBase.value.copy(DC).lerp(su.uZenith.value, 0.25).multiplyScalar(0.2);
     au.uSky.value.copy(su.uZenith.value); au.uSunDir.value.copy(this.sunDir); au.uFlash.value.copy(cu.uFlash.value);
     du.uLit.value.copy(DC).multiplyScalar(1.08);
     du.uDark.value.copy(DC).multiplyScalar(0.62 - 0.3 * W.dark);

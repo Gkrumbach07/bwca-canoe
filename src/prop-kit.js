@@ -3,6 +3,7 @@ import { makeLookMaterial } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
 import { groundUniforms, glslGround } from './terrain.js';
 import { SPLAT } from './terrain-build.js';
+import { applyWet } from './weather.js';
 
 // The kit the built things are made from (props.js): generated textures, one material, a geometry builder
 // with texture coordinates, a cheap occlusion bake against a few boxes, the terrain mesh's exact height, a
@@ -260,6 +261,8 @@ float propRock = 0.0;`)
 	}`)
         .replace('reflectedLight.indirectDiffuse += irradiance * lookSky',
           'vec3 propIrr = mix( irradiance, mix( vec3( dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) ) ), irradiance, uPropFill.x ) * uPropFill.y, propRock );\n  reflectedLight.indirectDiffuse += propIrr * lookSky');
+      // rain: the wood soaks it up (porosity 1), a rock half as much and shines more
+      applyWet(shader, { porosity: 'mix( 1.0, 0.5, propRock )', gloss: 'mix( 0.35, 0.7, propRock )' });
     },
   });
   material.userData.u = u;
@@ -757,6 +760,7 @@ export function trailMaterial() {
 	diffuseColor.rgb = col;
 	diffuseColor.a = worn * vTrail.z;`)
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); }');
+      applyWet(shader, { porosity: '1.0', gloss: '0.3 * ( 1.0 - 0.7 * groundCanopy )' }); // the packed soil wets as the ground round it does
     },
   });
   return trailMat;
