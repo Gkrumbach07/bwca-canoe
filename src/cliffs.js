@@ -9,7 +9,10 @@ import { CLIFF_MODULE } from './site.js';
 // proud of it, and gives it a vertical face of jointed Shield rock: columns and blocks split by vertical and
 // horizontal joints, a bench across it two fifths of the way up (small trees root there), an upper tier set back
 // over it, a ragged top whose blocks fall away into the hill, the outer columns lower so a run of modules steps
-// down at its ends. Built as the shape sheet's rocks are (rocks.js: convex blocks from planes, crisp edges with
+// down at its ends. No two columns alike: their widths run from slivers to broad blocks, each stands to its own
+// height and as far back as it likes, turned and leaning its own way; here and there an undercut column with the
+// rock above jutting over it, a thin ledge standing proud, a notch in the top line where a block has gone or a
+// column standing above it, and loose blocks on the ledges and at the foot. Built as the shape sheet's rocks are (rocks.js: convex blocks from planes, crisp edges with
 // narrow chamfers, drybrushed light along the edges, the occlusion baked in, so the joints go dark), in the
 // cliff's dark green-grey; the material adds the water streaks, the lichen and the odd rust stain in world space
 // (so neighbouring modules run on into each other).
@@ -32,9 +35,10 @@ const onBench = (a, b) => b > BENCH[0] && a < BENCH[1];
 const ROCK = [0x7f857a, 0x787e72, 0x85887e, 0x737a70, 0x7c8076].map((h) => new THREE.Color(h));
 const EDGE = new THREE.Color(0xb4b7a8), LICHEN = new THREE.Color(0x98a387), TRIPE = new THREE.Color(0x484b44);
 
-// [a, b] cut into n pieces of uneven width (none under half the mean)
+// [a, b] cut into n pieces of uneven width: most middling, a few slivers and a few broad columns (from about a
+// third of the mean to twice it), so the joints never fall at a beat
 function splits(rng, a, b, n) {
-  const w = Array.from({ length: n }, () => 0.5 + rng());
+  const w = Array.from({ length: n }, () => 0.3 + 1.7 * rng() ** 1.6);
   const sum = w.reduce((s, v) => s + v, 0), out = [a];
   let x = a;
   for (const v of w) { x += ((b - a) * v) / sum; out.push(x); }
@@ -44,23 +48,24 @@ function splits(rng, a, b, n) {
 
 // A block of the face: between x0 and x1 (its sides leaning a degree or two), from y0 to its top yT (which falls
 // away toward the back by `fall` per metre and leans across by `roll`), its front through zF, turned `turn`
-// radians about the vertical (so neighbouring blocks catch the light differently) and leaning back by `lean`,
-// back to the module's back; optionally a corner knocked off its top front (`chip` metres deep). Each block gets
-// a tone of its own (B.tones).
-function block(B, rng, { x0, x1, y0, yT, zF, turn = 0, lean = 0, fall = 0.06, roll = 0, chip = 0, far = false }) {
+// radians about the vertical (so neighbouring blocks catch the light differently) and leaning back by `lean`
+// (forward, an overhang, when negative), back to `back` (the module's back unless given: a loose block has its
+// own); optionally a corner knocked off its top front (`chip` metres deep). Each block gets a tone of its own
+// (B.tones).
+function block(B, rng, { x0, x1, y0, yT, zF, turn = 0, lean = 0, fall = 0.06, roll = 0, chip = 0, far = false, back = D0 * 1.02 }) {
   const j = () => (rng() - 0.5) * 0.05, xm = (x0 + x1) / 2;
   let planes = [
     plane(0, -1, 0, -y0),
     through(-1, j(), j(), x0, 0, 0), through(1, j(), j(), x1, 0, 0),
     through(Math.sin(turn), lean, -Math.cos(turn), xm, (y0 + yT) / 2, zF),
-    through(0, 0, 1, 0, 0, D0 * 1.02),
+    through(0, 0, 1, 0, 0, back),
     through(roll, 1, fall, xm, yT, zF),
   ];
   if (chip > 0) planes = cut(planes, new V3((rng() - 0.5) * 1.6, 0.6 + rng() * 0.7, -1), chip);
   // chamfers: none along the buried foot, the back and the hidden sides; narrow on the joints; now and then a
   // wide weathered one along a top front edge
   const edgeW = (nf, ng, pa, pb, r) => {
-    if ((pa.y < y0 + 0.05 && pb.y < y0 + 0.05) || (pa.z > D0 * 0.9 && pb.z > D0 * 0.9)) return 0;
+    if ((pa.y < y0 + 0.05 && pb.y < y0 + 0.05) || (pa.z > back - D0 * 0.1 && pb.z > back - D0 * 0.1)) return 0;
     if (nf.dot(ng) > Math.cos(0.3)) return 0;
     const top = Math.max(nf.y, ng.y) > 0.6, front = Math.min(nf.z, ng.z) < -0.6;
     if (top && front) return r() < 0.35 ? 2.2 + r() : 0.8 + r() * 0.6;
@@ -73,48 +78,81 @@ function block(B, rng, { x0, x1, y0, yT, zF, turn = 0, lean = 0, fall = 0.06, ro
 
 // One module's blocks. style 'columns': narrower columns, long vertical joints, few cross joints; 'blocks':
 // wider blocks, more cross joints and steps. far: a few big blocks, no chips, no chamfers (the far twin). The
-// lower tier keeps its front within 0.4 m of z = 0 and turns little, and the upper tier's front stays behind
-// 1.2 m, so the bench between them is there in every variant (site.js CLIFF_MODULE).
+// columns differ in width (splits), in height and in how far each stands back, so no two read as the same slab;
+// off the bench a lower column is now and then undercut (set well back) with the upper tier jutting out over it
+// as an overhang, now and then a thin ledge stands proud across one, and the top line is broken by notches where
+// a block has fallen out of it and the odd column standing above the rest. Loose blocks lie on the lower tier's
+// tops and at the foot. The lower tier keeps its front within 0.4 m of z = 0 and turns little where the bench is,
+// and the upper tier's front stays behind 1.2 m there, so the bench is there in every variant (site.js
+// CLIFF_MODULE); the loose blocks stay off it.
 function buildBlocks(B, rng, style, far = false) {
   const cols = style === 'columns';
-  const yBase = -0.14 * H0;
+  const yBase = -0.14 * H0, X0 = -0.52 * W0, X1 = 0.52 * W0;
   B.tones = [];
-  const nl = far ? 2 : cols ? 3 + Math.floor(rng() * 2) : 2 + Math.floor(rng() * 2);
-  const xl = splits(rng, -0.52 * W0, 0.52 * W0, nl), tops = [];
+  const nl = far ? 2 + (rng() < 0.5 ? 1 : 0) : cols ? 3 + Math.floor(rng() * 3) : 2 + Math.floor(rng() * 3);
+  const xl = splits(rng, X0, X1, nl), tops = [], fronts = [], under = [];
   for (let c = 0; c < nl; c++) {
-    const bench = onBench(xl[c], xl[c + 1]);
-    const zF = rng() * 0.03 * D0, top = bench || far ? LEDGE + (rng() - 0.5) * 0.02 * H0 : LEDGE * (0.7 + rng() * 0.6), turn = (rng() - 0.5) * 0.1;
-    tops.push(top);
-    // a cross joint now and then: the piece above it set back a little (a step, not the bench)
-    if (!far && rng() < (cols ? 0.25 : 0.45)) {
-      const yj = yBase + (top - yBase) * (0.4 + rng() * 0.35), step = 0.1 + rng() * 0.15;
-      block(B, rng, { x0: xl[c], x1: xl[c + 1], y0: yBase, yT: yj, zF, turn, lean: rng() * 0.03, fall: 0.02 });
-      block(B, rng, { x0: xl[c] + 0.04, x1: xl[c + 1] - 0.04, y0: yj, yT: top, zF: zF + step, turn: turn + (rng() - 0.5) * 0.06, lean: rng() * 0.05, fall: 0.03 });
-    } else block(B, rng, { x0: xl[c], x1: xl[c + 1], y0: yBase, yT: top, zF, turn, lean: rng() * 0.04, fall: 0.03, far });
+    const bench = onBench(xl[c], xl[c + 1]), undercut = !bench && !far && rng() < 0.3;
+    const zF = (bench ? rng() * 0.04 : undercut ? 0.07 + rng() * 0.06 : rng() * 0.08) * D0;
+    const top = bench || far ? LEDGE + (rng() - 0.5) * 0.02 * H0 : LEDGE * (0.55 + rng() * 0.8), turn = (rng() - 0.5) * (bench ? 0.1 : 0.34);
+    const lean = bench || far ? rng() * 0.04 : -0.02 + rng() * 0.12, chip = !far && !bench && rng() < 0.35 ? 0.3 + rng() * 0.6 : 0;
+    tops.push(top); fronts.push(zF); under.push(undercut);
+    // off the bench a column may be split down its height into two, the second standing a little back and
+    // to its own height
+    const xs = !far && !bench && xl[c + 1] - xl[c] > 2.2 && rng() < 0.35 ? [xl[c], xl[c] + (xl[c + 1] - xl[c]) * (0.35 + rng() * 0.3), xl[c + 1]] : [xl[c], xl[c + 1]];
+    for (let s = 0; s + 1 < xs.length; s++) {
+      const zs = zF + (s ? 0.15 + rng() * 0.3 : 0), ts = s ? Math.max(LEDGE * 0.5, top + (rng() - 0.5) * 1.4) : top, ts0 = s ? turn + (rng() - 0.5) * 0.2 : turn;
+      // a cross joint now and then: the piece above it set back a little (a step, not the bench)
+      if (!far && rng() < (cols ? 0.28 : 0.48)) {
+        const yj = yBase + (ts - yBase) * (0.4 + rng() * 0.35), step = 0.1 + rng() * 0.3;
+        block(B, rng, { x0: xs[s], x1: xs[s + 1], y0: yBase, yT: yj, zF: zs, turn: ts0, lean: rng() * 0.03, fall: 0.02 });
+        block(B, rng, { x0: xs[s] + 0.04, x1: xs[s + 1] - 0.04, y0: yj, yT: ts, zF: zs + step, turn: ts0 + (rng() - 0.5) * 0.12, lean, fall: 0.03, chip });
+      } else block(B, rng, { x0: xs[s], x1: xs[s + 1], y0: yBase, yT: ts, zF: zs, turn: ts0, lean, fall: 0.03, chip, far });
+    }
+    // a thin ledge standing proud across the column, now and then running on over the next
+    if (!far && !bench && rng() < 0.22) {
+      const yL = yBase + (top - yBase) * (0.35 + rng() * 0.45), x1 = c + 1 < nl && rng() < 0.4 ? Math.min(X1, xl[c + 1] + (xl[c + 2] - xl[c + 1]) * 0.6) : xl[c + 1] - 0.1;
+      if (!onBench(xl[c] + 0.1, x1)) block(B, rng, { x0: xl[c] + 0.1, x1, y0: yL, yT: yL + 0.5 + rng() * 0.5, zF: zF - 0.35 - rng() * 0.55, turn: turn + (rng() - 0.5) * 0.1, fall: 0.04, roll: (rng() - 0.5) * 0.08 });
+    }
   }
   // the upper tier: set back over the bench, its own joints (they do not line up with the ones below), each
   // block turned and leaning its own way, ragged on top (corners knocked off, tops at different heights and
-  // falling away into the hill), the outer ones lower and further back
-  const nu = far ? 3 : cols ? 4 + Math.floor(rng() * 3) : 2 + Math.floor(rng() * 3);
-  const xu = splits(rng, -0.52 * W0, 0.52 * W0, nu);
+  // falling away into the hill), the outer ones lower and further back; over an undercut column it juts out
+  const nu = far ? 3 : cols ? 4 + Math.floor(rng() * 4) : 2 + Math.floor(rng() * 3);
+  const xu = splits(rng, X0, X1, nu);
   for (let c = 0; c < nu; c++) {
     const mid = (xu[c] + xu[c + 1]) / 2, end = smooth(0.3, 0.5, Math.abs(mid) / W0), bench = far || onBench(xu[c], xu[c + 1]);
     // off the bench a block may come forward over the lower tier, standing on whatever is below it
-    let y0 = LEDGE - 0.05;
-    if (!bench) for (let k = 0; k < nl; k++) if (xl[k + 1] > xu[c] && xl[k] < xu[c + 1]) y0 = Math.min(y0, tops[k] - 0.3);
-    const zF = (bench ? 0.19 + rng() * 0.08 : rng() < 0.5 ? 0.05 + rng() * 0.12 : 0.15 + rng() * 0.12) * D0 + end * (0.3 + rng() * 0.8);
-    const yT = H0 * (0.86 + rng() * 0.16 - end * (0.14 + rng() * 0.16));
-    const turn = (rng() - 0.5) * 0.36, lean = -0.03 + rng() * 0.13, fall = 0.1 + rng() * 0.25, roll = (rng() - 0.5) * 0.18;
+    let y0 = LEDGE - 0.05, over = false;
+    if (!bench) for (let k = 0; k < nl; k++) if (xl[k + 1] > xu[c] && xl[k] < xu[c + 1]) { y0 = Math.min(y0, tops[k] - 0.3); over = over || (under[k] && (xl[k + 1] - xu[c]) > 0.6 && (xu[c + 1] - xl[k]) > 0.6); }
+    let zF = (bench ? 0.19 + rng() * 0.08 : over ? rng() * 0.03 : rng() < 0.5 ? 0.04 + rng() * 0.14 : 0.15 + rng() * 0.15) * D0 + (over ? 0 : end * (0.3 + rng() * 0.8));
+    let yT = H0 * (0.84 + rng() * 0.2 - end * (0.14 + rng() * 0.16));
+    // the broken top line: a notch where a block has gone (lower, and back into the hill), or a column standing proud
+    const r = rng();
+    if (!far && !over && r < 0.3) { yT -= H0 * (0.1 + rng() * 0.14); zF += (0.06 + rng() * 0.1) * D0; } else if (!far && r > 0.88) yT += H0 * (0.04 + rng() * 0.05);
+    const turn = (rng() - 0.5) * 0.44, lean = over ? -(0.06 + rng() * 0.1) : -0.03 + rng() * 0.15, fall = 0.1 + rng() * 0.25, roll = (rng() - 0.5) * 0.18;
     const chip = !far && rng() < 0.5 ? 0.4 + rng() * 1.0 : 0;
     if (!far && rng() < (cols ? 0.25 : 0.45)) {
       // a cross joint in the upper tier too, the piece above stepped back or jutting a little
-      const yj = LEDGE + (yT - LEDGE) * (0.35 + rng() * 0.35);
+      const yj = y0 + (yT - y0) * (0.35 + rng() * 0.35);
       block(B, rng, { x0: xu[c] + 0.03, x1: xu[c + 1] - 0.03, y0, yT: yj, zF, turn, lean, fall: 0.03 });
       block(B, rng, { x0: xu[c] + 0.06, x1: xu[c + 1] - 0.06, y0: yj, yT, zF: zF + (rng() - 0.3) * 0.6, turn: turn + (rng() - 0.5) * 0.2, lean, fall, roll, chip });
     } else block(B, rng, { x0: xu[c] + 0.03, x1: xu[c + 1] - 0.03, y0, yT, zF, turn, lean, fall, roll, chip, far });
   }
+  if (far) return;
+  // loose blocks: one or two come to rest on the lower tier's tops (off the bench, clear of its trees), and one
+  // or two lie half buried at the foot, in front of the face
+  for (let n = rng() < 0.6 ? 1 + (rng() < 0.4 ? 1 : 0) : 0; n > 0; n--) {
+    const c = Math.floor(rng() * nl), s = 0.7 + rng() * 0.9, xm = xl[c] + (xl[c + 1] - xl[c]) * (0.2 + rng() * 0.6);
+    if (onBench(xm - s, xm + s)) continue;
+    const z = fronts[c] + 0.15 + rng() * 0.5;
+    block(B, rng, { x0: xm - s / 2, x1: xm + s / 2, y0: tops[c] - 0.15, yT: tops[c] + s * (0.55 + rng() * 0.4), zF: z, back: z + s * (0.8 + rng() * 0.5), turn: (rng() - 0.5) * 1.2, lean: (rng() - 0.5) * 0.3, fall: (rng() - 0.5) * 0.3, roll: (rng() - 0.5) * 0.3, chip: 0.2 + rng() * 0.3 });
+  }
+  for (let n = 1 + (rng() < 0.5 ? 1 : 0); n > 0; n--) {
+    const s = 1.1 + rng() * 1.2, xm = X0 + s + rng() * (X1 - X0 - 2 * s), z = -(0.5 + rng() * 1.3);
+    block(B, rng, { x0: xm - s / 2, x1: xm + s / 2, y0: yBase, yT: (0.09 + rng() * 0.07) * H0, zF: z, back: z + s * (0.9 + rng() * 0.5), turn: (rng() - 0.5) * 1.0, lean: (rng() - 0.5) * 0.25, fall: (rng() - 0.5) * 0.4, roll: (rng() - 0.5) * 0.35, chip: 0.3 + rng() * 0.4 });
+  }
 }
-
 // Colour per vertex (the block's tone, darker and damper toward the foot, the drybrush on the edges, lichen on
 // what looks up), the occlusion bake against the module's own blocks and the ground at its foot, then the frame
 // scaled to unit.

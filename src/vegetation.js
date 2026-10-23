@@ -7,7 +7,7 @@ import { cliffModule, cliffModuleFar, makeCliffMaterial } from './cliffs.js';
 import { GROUPS } from './placement.js';
 import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
-import { foliageAtlas } from './textures.js';
+import { foliageAtlas, registerFarPainter, paintFarSprite, ATLAS_SIZE, FAR_MARGIN } from './textures.js';
 import { REGION } from './placement.js';
 import { SWAY, glslSway } from './wind.js';
 
@@ -139,6 +139,7 @@ function needles(cards, slot, o, d, len, wid, nrm, col, rng) {
 // half the time.
 const BAKE = { rays: 12, floor: 0.5 };
 const CARD_AO = 0.55;
+let bakeOn = true; // off while the far sprites' stand-in crowns are built (paintFarSprites): they need no bake
 const withWrap = (geo, w) => geo.setAttribute('aWrap', new THREE.Float32BufferAttribute(new Float32Array(geo.getAttribute('position').count).fill(w), 1));
 function finish(g, cards, { ground = 0.3, reach = null, bake = true } = {}) {
   const parts = [];
@@ -158,7 +159,7 @@ function finish(g, cards, { ground = 0.3, reach = null, bake = true } = {}) {
   if (nc) parts.push(withWrap(cards.build(), FOLIAGE_WRAP));
   const geo = parts.length > 1 ? mergeGeometries(parts) : parts[0];
   const n = geo.getAttribute('position').count, open = new Float32Array(n).fill(1);
-  if (bake) {
+  if (bake && bakeOn) {
     const lead = nc ? withWrap(cards.build((k) => cards.pair[k] < 0), FOLIAGE_WRAP) : null;
     const proxy = lead && bark ? mergeGeometries([bark, lead]) : lead || bark.clone();
     const pc = proxy.getAttribute('color').array, was = pc.slice();
@@ -596,59 +597,121 @@ function outcrop(rng) {
 
 
 // ---------- far twins for distant regions -----------------------------------------
-// Past the LOD distance a tree is two big cards crossed on its crown in a far sprite (textures.js farCone,
-// farPine, farOval, composed from the near sprites), sized from its own near variant's cards and coloured
-// their mean colour (the occlusion included), over two crossed bark quads where the trunk shows. The cards'
-// normals run out from the axis across each card and tip up toward the top, so the far crown still shades
-// round. Four to eight triangles, about half what the old cone and diamond twins cost.
+// Past the LOD distance a tree is two big cards crossed on its crown in its species' far sprite (textures.js
+// far*: the species' own crown as it stands out there, see the far sprites below), sized from its own near
+// variant's cards and coloured their mean colour (the occlusion included), over two crossed bark quads where the
+// trunk shows. The cards' normals run out from the axis across each card and tip up toward the top, so the far
+// crown still shades round. Four to eight triangles, about half what the old cone and diamond twins cost.
 
-// What a near variant's crown spans: the cards' height range, centre and reach, their mean colour, the bark's.
-// The cards are taken swollen as far as the material swells them at the LOD distance, so the twin that
-// replaces the tree there has the silhouette the tree had. The mean colour leans to the open cards (aOcc),
-// the outer ones that make up what a far crown shows, not the dim ones inside it.
-function crownInfo(geo, grow = CARD.uCardGrow.value.x) {
-  const raw = geo.getAttribute('position'), gr = geo.getAttribute('aGrow'), uv = geo.getAttribute('uv'), col = geo.getAttribute('color'), occ = geo.getAttribute('aOcc');
-  const pos = raw.clone();
-  if (gr) for (let i = 0; i < pos.count; i++) pos.setXYZ(i, raw.getX(i) + gr.getX(i) * grow, raw.getY(i) + gr.getY(i) * grow, raw.getZ(i) + gr.getZ(i) * grow);
-  const I = { y0: Infinity, y1: -Infinity, cx: 0, cz: 0, r: 0, n: 0, leaf: new THREE.Color(0, 0, 0), bark: new THREE.Color(0, 0, 0), trunkR: 0.1 };
-  let nb = 0, wl = 0;
+// The cards of a crown as the material draws them at the LOD distance: each corner swollen about its anchor as
+// far as uCardGrow takes it there. Calls back (i, x, y, z) per card corner, i the vertex.
+function swollenCorners(geo, grow, fn) {
+  const pos = geo.getAttribute('position'), gr = geo.getAttribute('aGrow'), uv = geo.getAttribute('uv');
   for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i);
-    if (uv.getX(i) >= 0) {
-      I.y0 = Math.min(I.y0, y); I.y1 = Math.max(I.y1, y); I.cx += pos.getX(i); I.cz += pos.getZ(i); I.n++;
-      const w = 0.2 + (occ ? occ.getX(i) : 1);
-      I.leaf.r += col.getX(i) * w; I.leaf.g += col.getY(i) * w; I.leaf.b += col.getZ(i) * w; wl += w;
-    } else {
-      I.bark.r += col.getX(i); I.bark.g += col.getY(i); I.bark.b += col.getZ(i); nb++;
-      if (y > 1 && y < 2) I.trunkR = Math.max(I.trunkR, Math.hypot(pos.getX(i), pos.getZ(i)));
-    }
+    if (uv.getX(i) < 0) continue;
+    const k = gr ? grow : 0;
+    fn(i, pos.getX(i) + (gr ? gr.getX(i) : 0) * k, pos.getY(i) + (gr ? gr.getY(i) : 0) * k, pos.getZ(i) + (gr ? gr.getZ(i) : 0) * k);
   }
-  if (I.n) { I.cx /= I.n; I.cz /= I.n; I.leaf.multiplyScalar(1 / wl); }
+}
+const quantile = (a, q) => a[Math.min(a.length - 1, Math.max(0, Math.floor(a.length * q)))];
+// What a near variant's crown spans: the cards' centre, their reach and height range (percentiles of the
+// swollen corners: a lone long branch should not set the size), their mean colour, the bark's. The far sprite is
+// framed the same way (farCards), so a twin draws its tree's silhouette at the tree's size. The mean colour
+// leans to the open cards (aOcc), the outer ones that make up what a far crown shows, not the dim ones inside.
+function crownInfo(geo, grow = CARD.uCardGrow.value.x) {
+  const pos = geo.getAttribute('position'), uv = geo.getAttribute('uv'), col = geo.getAttribute('color'), occ = geo.getAttribute('aOcc');
+  const I = { y0: 0, y1: 1, cx: 0, cz: 0, r: 1, n: 0, leaf: new THREE.Color(0, 0, 0), bark: new THREE.Color(0, 0, 0), trunkR: 0.1 };
+  let nb = 0, wl = 0;
+  const xs = [], ys = [], zs = [];
+  swollenCorners(geo, grow, (i, x, y, z) => {
+    xs.push(x); ys.push(y); zs.push(z); I.cx += x; I.cz += z; I.n++;
+    const w = 0.2 + (occ ? occ.getX(i) : 1);
+    I.leaf.r += col.getX(i) * w; I.leaf.g += col.getY(i) * w; I.leaf.b += col.getZ(i) * w; wl += w;
+  });
+  for (let i = 0; i < pos.count; i++) {
+    if (uv.getX(i) >= 0) continue;
+    I.bark.r += col.getX(i); I.bark.g += col.getY(i); I.bark.b += col.getZ(i); nb++;
+    const y = pos.getY(i);
+    if (y > 1 && y < 2) I.trunkR = Math.max(I.trunkR, Math.hypot(pos.getX(i), pos.getZ(i)));
+  }
   if (nb) I.bark.multiplyScalar(1 / nb);
-  // the reach and the lower edge as percentiles of the card corners: a card's corners overshoot its leaves,
-  // and at the LOD distance the near tree reads by its mass, not its extremes
-  const d = [], ys = [];
-  for (let i = 0; i < pos.count; i++) if (uv.getX(i) >= 0) { d.push(Math.hypot(pos.getX(i) - I.cx, pos.getZ(i) - I.cz)); ys.push(pos.getY(i)); }
-  d.sort((a, b) => a - b); ys.sort((a, b) => a - b);
-  if (d.length) { I.r = d[Math.floor(d.length * 0.7)]; I.y0 = ys[Math.floor(ys.length * 0.08)]; I.y1 = ys[Math.floor(ys.length * 0.97)]; } else I.r = 1;
+  if (!I.n) return I;
+  I.cx /= I.n; I.cz /= I.n; I.leaf.multiplyScalar(1 / wl);
+  const d = xs.map((x, k) => Math.hypot(x - I.cx, zs[k] - I.cz)).sort((a, b) => a - b);
+  ys.sort((a, b) => a - b);
+  I.r = quantile(d, 0.97); I.y0 = quantile(ys, 0.01); I.y1 = quantile(ys, 0.995);
   return I;
 }
-// `slot` the far sprite; `trunk` how far up the crown the bark quads reach (0: none); `widen` scales the width
-function farTwin(I, slot, rng, { trunk = 0, widen = 1, lift = 0 } = {}) {
+// `slot` the far sprite; `trunk` how far up the crown the bark quads reach (0: none)
+function farTwin(I, slot, rng, { trunk = 0 } = {}) {
   const cards = new CardBuilder({ grow: false }), g = new GeoBuilder();
   const yaw = rng() * 6.28, a = V(Math.cos(yaw), 0, Math.sin(yaw)), b = V(-Math.sin(yaw), 0, Math.cos(yaw));
-  const y0 = I.y0 + (I.y1 - I.y0) * lift, H = I.y1 - y0, W = I.r * 2 * widen, o = V(I.cx, y0, I.cz);
-  const low = I.leaf.clone().multiplyScalar(0.82), high = I.leaf.clone().multiplyScalar(1.1);
+  // the sprite's crown fills it but for FAR_MARGIN on every side: the card reaches as much further
+  const k = 1 / (1 - 2 * FAR_MARGIN), H = (I.y1 - I.y0) * k, W = I.r * 2 * k, y0 = I.y0 - FAR_MARGIN * H, o = V(I.cx, y0, I.cz);
+  // the sprite carries the crown's own shading (farCards); the colour only leans a little darker low down
+  const low = I.leaf.clone().multiplyScalar(0.94), high = I.leaf.clone().multiplyScalar(1.04);
   const col = (p) => low.clone().lerp(high, sm((p.y - y0) / H));
   const nrm = (ax) => (p) => ax.clone().multiplyScalar(p.clone().sub(o).dot(ax) / (W / 2)).addScaledVector(UP, 0.5 + 0.5 * (p.y - y0) / H).normalize();
   cards.card(slot, o, a, UP, W, H, nrm(a), col);
   cards.card(slot, o, b, UP, W, H, nrm(b), col);
   if (trunk > 0) {
-    const top = V(I.cx, y0 + H * trunk, I.cz), w = I.trunkR * 1.2;
+    const top = V(I.cx, I.y0 + (I.y1 - I.y0) * trunk, I.cz), w = I.trunkR * 1.2;
     for (const ax of [a, b]) g.quad(V(-ax.x * w, -0.5, -ax.z * w), V(ax.x * w, -0.5, ax.z * w), top.clone().addScaledVector(ax, w * 0.5), top.clone().addScaledVector(ax, -w * 0.5), I.bark, V(ax.z, 0, -ax.x));
   }
   return finish(g, cards, { bake: false });
 }
+
+// ---------- the far sprites --------------------------------------------------------
+// Each species' far sprite is its own crown as the card material draws it past the LOD distance: one ordinary
+// variant (the kit's first, built again without its occlusion bake), every card swollen as far as the material
+// swells it out there, seen from the side, and rasterised into the slot from the near sprites cut at the far
+// cutoff (textures.js paintFarSprite). So the far crown keeps the near one's puffs, its ragged edge and its gaps,
+// where the old composed sprites, blurred into a halo, filled out into columns. Each card is shaded as the light
+// and the bake leave a near crown: by its colour on the crown's gradient (the top lighter), darker behind the
+// stem and toward the inside. One sprite serves both of a twin's crossed cards.
+const FAR_SPRITES = [
+  ['farSpruce', 'spruce', spruce], ['farBlackSpruce', 'blackSpruce', blackSpruce], ['farCedar', 'cedar', cedar],
+  ['farTamarack', 'tamarack', tamarack], ['farWhitePine', 'whitePine', whitePine], ['farRedPine', 'redPine', redPine],
+  ['farTallPine', 'tallPine', tallPine], ['farJackPine', 'jackPine', jackPine], ['farBirch', 'birch', birch],
+  ['farAspen', 'aspen', aspen], ['farShrub', 'shrub', shrub], ['farClump', 'hazel', hazel],
+];
+const KIT_SEED = 3; // makeVegetationKit's default: the stand-in is the kit's own first variant
+// cut: where the near sprites are cut for the far ones, a little above the material's far cutoff (CARD
+// uCardCut.y, 0.12): each of a twin's two crossed cards carries the whole silhouette, so each is drawn a little
+// thinner than the crown and together they keep its gaps (textures.repaintFar() after a change)
+export const FAR_LOOK = { cut: 0.2 };
+// the cards of a crown framed for its far sprite, back to front (paintFarSprite's input)
+function farCards(geo) {
+  const I = crownInfo(geo), grow = CARD.uCardGrow.value.x, col = geo.getAttribute('color'), uv = geo.getAttribute('uv');
+  const M = FAR_MARGIN, lum = (i) => col.getX(i) * 0.3 + col.getY(i) * 0.5 + col.getZ(i) * 0.2;
+  const corner = new Map();
+  swollenCorners(geo, grow, (i, x, y, z) => corner.set(i, [x, y, z]));
+  let lsum = 0;
+  for (const i of corner.keys()) lsum += lum(i);
+  const lmean = lsum / Math.max(1, corner.size), H = Math.max(1e-3, I.y1 - I.y0), out = [], first = Math.min(...corner.keys());
+  const toSlot = ([x, y]) => [M + (1 - 2 * M) * ((x - I.cx) / (2 * I.r) + 0.5), M + (1 - 2 * M) * ((y - I.y0) / H)];
+  const toAtlas = (i) => [uv.getX(i) * ATLAS_SIZE, uv.getY(i) * ATLAS_SIZE];
+  for (const i of corner.keys()) {
+    if ((i - first) % 4 || !corner.has(i + 3)) continue; // the first corner of each card (four in a row, after the bark)
+    const A = corner.get(i), B = corner.get(i + 1), D = corner.get(i + 3);
+    const cz = (A[2] + B[2] + corner.get(i + 2)[2] + D[2]) / 4, cx = (A[0] + B[0] + corner.get(i + 2)[0] + D[0]) / 4;
+    const radial = Math.hypot(cx - I.cx, cz - I.cz) / Math.max(1e-3, I.r);
+    const l = (lum(i) + lum(i + 1) + lum(i + 2) + lum(i + 3)) / 4;
+    const behind = sm((cz - I.cz) / I.r * 0.8 + 0.5); // 0 at the back of the crown, 1 at the front
+    const shade = Math.min(1.25, Math.max(0.72, l / lmean)) * (0.8 + 0.2 * behind) * (0.86 + 0.14 * Math.min(1, radial / 0.6));
+    out.push({ z: cz, shade, uv: [toAtlas(i), toAtlas(i + 1), toAtlas(i + 3)], p: [toSlot(A), toSlot(B), toSlot(D)] });
+  }
+  const mean = out.reduce((s, c) => s + c.shade, 0) / Math.max(1, out.length);
+  for (const c of out) c.shade /= mean;
+  return out.sort((p, q) => p.z - q.z);
+}
+function paintFarSprites() {
+  bakeOn = false;
+  try {
+    for (const [slot, name, make] of FAR_SPRITES) paintFarSprite(slot, farCards(make(mulberry32(KIT_SEED * 131 + name.length), 0)), { cut: FAR_LOOK.cut });
+  } finally { bakeOn = true; }
+}
+
 function lowShrub(rng) {
   const g = new GeoBuilder();
   const base = [0x6da145, 0x7ba54a, 0x5e9546, 0x91af4b][Math.floor(rng() * 4)];
@@ -658,26 +721,26 @@ function lowShrub(rng) {
 }
 // (rng, crownInfo of the near variant) -> geometry
 const LOW = {
-  whitePine: (rng, I) => farTwin(I, 'farPine', rng, { trunk: 0.3, widen: 0.95, lift: 0.08 }),
-  spruce: (rng, I) => farTwin(I, 'farCone', rng, { widen: 1.05 }),
-  redPine: (rng, I) => farTwin(I, 'farPine', rng, { trunk: 0.35, widen: 0.95, lift: 0.05 }),
-  birch: (rng, I) => farTwin(I, 'farOval', rng, { trunk: 0.35, widen: 0.9 }),
-  cedar: (rng, I) => farTwin(I, 'farCone', rng, { widen: 1.05 }),
+  whitePine: (rng, I) => farTwin(I, 'farWhitePine', rng, { trunk: 0.3 }),
+  spruce: (rng, I) => farTwin(I, 'farSpruce', rng),
+  redPine: (rng, I) => farTwin(I, 'farRedPine', rng, { trunk: 0.35 }),
+  birch: (rng, I) => farTwin(I, 'farBirch', rng, { trunk: 0.35 }),
+  cedar: (rng, I) => farTwin(I, 'farCedar', rng),
   snag: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.5, 0, 0.3, 0.08, 7 + rng() * 5, 4, vary(0x9a9388, rng, 0.08), rng); return g.build(); },
   boulder: (rng) => angularRock(rng, 'block'),
-  shrub: (rng, I) => (I.n ? farTwin(I, 'farOval', rng, { widen: 1.1 }) : lowShrub(rng)),
-  tallPine: (rng, I) => farTwin(I, 'farPine', rng, { trunk: 0.4, widen: 0.95, lift: 0.05 }),
-  jackPine: (rng, I) => farTwin(I, 'farPine', rng, { trunk: 0.3, widen: 0.85 }),
-  hazel: (rng, I) => farTwin(I, 'farOval', rng, { widen: 1.1 }),
-  alder: (rng, I) => farTwin(I, 'farOval', rng, { widen: 1.1 }),
-  sapling: (rng, I) => farTwin(I, 'farCone', rng, { widen: 1.1 }),
-  fern: (rng, I) => farTwin(I, 'frond', rng, { widen: 0.7 }),
+  shrub: (rng, I) => (I.n ? farTwin(I, 'farShrub', rng) : lowShrub(rng)),
+  tallPine: (rng, I) => farTwin(I, 'farTallPine', rng, { trunk: 0.4 }),
+  jackPine: (rng, I) => farTwin(I, 'farJackPine', rng, { trunk: 0.3 }),
+  hazel: (rng, I) => farTwin(I, 'farClump', rng),
+  alder: (rng, I) => farTwin(I, 'farClump', rng),
+  sapling: (rng, I) => farTwin(I, 'farSpruce', rng),
+  fern: (rng, I) => farTwin(I, 'frond', rng),
   log: (rng) => { const g = new GeoBuilder(); g.trunk(0, -3.4, 0, 0.32, 0.2, 6.8, 3, vary(0x857360, rng, 0.07), rng); const geo = g.build(); geo.rotateZ(Math.PI / 2); geo.translate(0, 0.26, 0); return geo; },
   stump: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.4, 0, 0.32, 0.26, 1.1, 4, vary(0x625040, rng, 0.06), rng); return g.build(); },
   outcrop: (rng) => { const geo = angularRock(rng, 'slab'); geo.scale(0.85, 0.7, 0.85); return geo; },
-  tamarack: (rng, I) => farTwin(I, 'farCone', rng, { trunk: 0.25, widen: 0.95 }),
-  aspen: (rng, I) => farTwin(I, 'farOval', rng, { trunk: 0.45, widen: 0.85 }),
-  blackSpruce: (rng, I) => farTwin(I, 'farCone', rng, { widen: 0.9 }),
+  tamarack: (rng, I) => farTwin(I, 'farTamarack', rng, { trunk: 0.25 }),
+  aspen: (rng, I) => farTwin(I, 'farAspen', rng, { trunk: 0.45 }),
+  blackSpruce: (rng, I) => farTwin(I, 'farBlackSpruce', rng),
   talus: (rng) => screeBlock(rng),
   cliff: (rng) => cliffModuleFar(rng),
 };
@@ -765,6 +828,14 @@ function tagLeaves(geo) {
 // reaches, glow, and the ones on the near side of a thick crown, which it does not, stay dim; the open cards
 // (aOcc) let more through than the ones deep inside, and the thin edges of the sprite a little more than its
 // middle. Past the shadows' reach every leaf would glow as if at the edge, so it falls to 40 % out there.
+// In a low warm sun lit leaves glow orange, not olive (the warm lift, uLeafWarm): a green leaf times an orange
+// sun is olive, so the share of a card's light that comes straight from the sun is taken on a leaf colour moved
+// toward orange of the same luminance, as far as the sun's own colour is warm. It rides on the key unwrapped, so
+// only the sun-facing side of a crown warms and its shade, lit by the sky and the wrap, stays green and cool; the
+// noon sun is too white to start it (the grade is the day cycle's: this is the leaf's own response to the light).
+// The cards cut with alpha to coverage where the scene target is multisampled (post.js, 4 samples): the edge
+// of the cut becomes a coverage ramp a pixel wide, so a needle or a leaf edge is smooth instead of stair-stepped
+// and does not crawl. Into a target without samples the same material takes the plain cut (uCardCover).
 export const CARD = {
   uCardMap: { value: null },
   uCardCut: { value: new THREE.Vector4(0.5, 0.12, 6, 60) },
@@ -775,6 +846,15 @@ export const CARD = {
   // the glow: x how strong (against the sun's direct light on a leaf facing it), y the lobe's sharpness (a
   // power of how straight the sun is behind the card), z and w the distances it fades to 40 % over
   uLeafGlow: { value: new THREE.Vector4(1.2, 4, 150, 400) },
+  // the warm lift (see glowPars): x how far the sun-lit share of a leaf goes toward uLeafWarmTint at full warmth,
+  // y and z the sun's warmth ((r - b) / r of its colour) where the lift starts and where it is full: the noon sun
+  // is about 0.53 (no lift), 15:00 in October 0.6, 16:30 0.75, 17:30 0.87 (lit crowns there: hue 118° at noon as
+  // before, about 45° at 16:30 and 31° at 17:30 where they were 100° and 77°)
+  uLeafWarm: { value: new THREE.Vector3(0.75, 0.56, 0.82) },
+  // the orange a lit leaf turns toward, as multiples of its own luminance (so a dark leaf stays dark)
+  uLeafWarmTint: { value: new THREE.Vector3(2.0, 0.92, 0.26) },
+  // 1 while the pass draws into a multisampled target (the cards' alpha to coverage), 0 into one without samples
+  uCardCover: { value: 1 },
 };
 const noFlip = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
 if (noFlip === THREE.ShaderChunk.normal_fragment_begin) console.warn('vegetation: normal chunk changed, cards seen from behind will go dark');
@@ -862,18 +942,42 @@ const cardBegin = (eye) => `
     vCardDist = distance( ( modelMatrix * cw ).xyz, ${eye} ); }
   transformed += aGrow * uCardGrow.x * smoothstep( uCardGrow.y, uCardGrow.z, vCardDist );
   transformed += treeSway( transformed, position - aGrow, aGrow, vCardDist );`;
+// the cut; with alpha to coverage (three defines ALPHA_TO_COVERAGE) the alpha is sharpened to a ramp one pixel
+// wide about the cutoff and kept as cardCover for the fragment's alpha, so the samples it covers follow the edge.
+// Into a target with no samples (the water's mirror pass, or a preset without MSAA) the coverage would be dithered
+// or cut at half by the driver, so there uCardCover is 0 and the card cuts at the middle of the ramp, opaque.
 const cardCut = `
   vec4 cardTex = texture2D( uCardMap, max( vCardUv, 0.0 ) );
   float cardCut = mix( uCardCut.x, uCardCut.y, smoothstep( uCardCut.z, uCardCut.w, vCardDist ) );
-  if ( vCardUv.x >= 0.0 && cardTex.a < cardCut ) discard;`;
+  #ifdef ALPHA_TO_COVERAGE
+    float cardAw = max( fwidth( cardTex.a ), 1e-4 );
+    float cardCover = vCardUv.x >= 0.0 ? clamp( ( cardTex.a - cardCut ) / cardAw + 0.5, 0.0, 1.0 ) : 1.0;
+    if ( cardCover <= 0.0 || ( uCardCover < 0.5 && cardCover < 0.5 ) ) discard;
+    cardCover = mix( 1.0, cardCover, uCardCover );
+  #else
+    if ( vCardUv.x >= 0.0 && cardTex.a < cardCut ) discard;
+  #endif`;
 // the glow (see CARD): declared after the light chunk (it needs LambertMaterial), it wraps RE_Direct, whatever
 // the look named it, so the sun's light reaches it with its shadow already applied
 const glowPars = `
 uniform vec4 uLeafGlow;
+uniform vec3 uLeafWarm, uLeafWarmTint;
 varying float vCardOpen;
-float leafGlow = 0.0;
+float leafGlow = 0.0, leafCard = 0.0;
 void RE_Direct_Leaf( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in LambertMaterial material, inout ReflectedLight reflectedLight ) {
   RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  if ( leafCard > 0.0 ) {
+    // the warm lift: the sun's share of the leaf's light taken on a leaf colour moved toward orange of its own
+    // luminance, as far as the sun is warm; on the key unwrapped, so only the side facing the sun warms and the
+    // light the wrap carries round past it stays green
+    vec3 sc = directLight.color;
+    float warm = uLeafWarm.x * smoothstep( uLeafWarm.y, uLeafWarm.z, ( sc.r - sc.b ) / max( sc.r, 1e-4 ) );
+    if ( warm > 0.0 ) {
+      float k = saturate( dot( geometryNormal, directLight.direction ) );
+      vec3 t = material.diffuseColor, w = dot( t, vec3( 0.3, 0.5, 0.2 ) ) * uLeafWarmTint;
+      reflectedLight.directDiffuse += k * warm * sc * BRDF_Lambert( w - t );
+    }
+  }
   if ( leafGlow > 0.0 ) {
     float back = saturate( -dot( geometryViewDir, directLight.direction ) );
     vec3 t = material.diffuseColor;
@@ -886,13 +990,19 @@ void RE_Direct_Leaf( const in IncidentLight directLight, const in vec3 geometryP
 `;
 // in main, once the sprite is read: how much this leaf lets through
 const glowAt = `
+  if ( vCardUv.x >= 0.0 ) leafCard = 1.0;
   if ( vCardUv.x >= 0.0 ) leafGlow = mix( 0.2, 1.0, vCardOpen ) * ( 0.4 + 0.6 * ( 1.0 - smoothstep( cardCut, 1.0, cardTex.a ) ) ) * mix( 1.0, 0.4, smoothstep( uLeafGlow.z, uLeafGlow.w, vCardDist ) );`;
+
+// Every pass says whether the target it draws into has samples (uCardCover, see cardCut): set as each card mesh is
+// drawn, before three uploads the material's uniforms (they are uploaded again whenever the camera or the target
+// changes, so once per pass).
+const coverFor = (renderer) => { const t = renderer.getRenderTarget(); CARD.uCardCover.value = t && t.samples > 0 ? 1 : 0; };
 
 // `species` names the sway (SWAY_BY): one material per species, all sharing one program
 function makeCardMaterial(autumn, species = null) {
   const u = autumn ? { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } } : {};
   const sw = swayUniforms(species);
-  const m = makeLookMaterial({ side: THREE.DoubleSide }, {
+  const m = makeLookMaterial({ side: THREE.DoubleSide, alphaToCoverage: true }, {
     wrap: 'varying', name: autumn ? 'look-cards-leaves' : 'look-cards',
     compile: (shader) => {
       Object.assign(shader.uniforms, CARD, u, SWAY, sw);
@@ -901,12 +1011,13 @@ function makeCardMaterial(autumn, species = null) {
       if (autumn) vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
       shader.vertexShader = vs;
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\n' + cardVarying + (autumn ? '\nvarying float vLeaf;\nuniform float uLeafOn;' : ''))
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\nuniform float uCardCover;\n' + cardVarying + (autumn ? '\nvarying float vLeaf;\nuniform float uLeafOn;' : ''))
         .replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n' + glowPars)
-        .replace('#include <map_fragment>', '#include <map_fragment>\n' + cardCut + (autumn ? '\n  if (vLeaf > 0.5 && uLeafOn < 0.5) discard;' : '') + '\n  if ( vCardUv.x >= 0.0 ) diffuseColor.rgb *= cardTex.rgb;' + glowAt)
+        .replace('#include <map_fragment>', '#include <map_fragment>\n' + cardCut + (autumn ? '\n  if (vLeaf > 0.5 && uLeafOn < 0.5) discard;' : '') + '\n  if ( vCardUv.x >= 0.0 ) diffuseColor.rgb *= cardTex.rgb;\n  #ifdef ALPHA_TO_COVERAGE\n    diffuseColor.a = cardCover;\n  #endif' + glowAt)
         .replace('#include <normal_fragment_begin>', noFlip);
     },
   });
+  m.onBeforeRender = coverFor;
   m.userData.u = u;
   m.userData.sway = sw;
   m.userData.depth = makeCardDepth(u.uLeafOn || null, sw);
@@ -944,6 +1055,9 @@ function tamarackSeason(s) {
   const d = s.doy, bare = smoothstep(300, 312, d);
   return { fall: smoothstep(268, 284, d) * (1 - smoothstep(301, 312, d)), spring: s.spring, leafOn: s.leaf > 0.5 && bare < 0.5 ? 1 : 0 };
 }
+
+// the far sprites are painted with the atlas (registered here, once CARD exists: the painter reads it)
+registerFarPainter(paintFarSprites);
 
 // Geometry variants (built once) and the shared materials.
 export function makeVegetationKit(seed = 3) {

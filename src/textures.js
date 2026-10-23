@@ -12,8 +12,13 @@ import { mulberry32 } from './rng.js';
 // Geometry bakes atlas UVs from the slot (spriteUV), so a slot never moves. To drop a hand-painted sprite
 // in, paint it to the slot's size (straight alpha; the halo is added unless { halo: 0 }) and call
 //   setSprite('leaf', imageOrCanvas)      or      await loadSprite('leaf', '/sprites/leaf.png')
-// The far sprites (farCone, farOval, farPine) are composed from the near ones when the atlas is first
-// painted; a replaced near sprite does not repaint them, so replace those too.
+//
+// The far sprites (far*, one per species: the far twins' cards, vegetation.js farTwin) are not painted here.
+// Each is the species' own crown as it stands past the LOD distance: vegetation.js registers a painter
+// (registerFarPainter) that builds one variant of every species, and paintFarSprite rasterises its cards into
+// the slot from the near sprites already in the atlas, each card swollen and cut at the far cutoff as the card
+// material draws it out there. So a far crown has the near one's ragged edge and its gaps, and no halo of its
+// own to fill them. A replaced near sprite does not repaint them: call repaintFar() after setSprite.
 //
 //   foliageAtlas()        -> the THREE.Texture (painted on first call; sRGB, mipmapped)
 //   spriteUV(name, s, t)  -> [u, v] in the atlas for sprite coordinates (s, t)
@@ -24,13 +29,26 @@ export const SLOTS = Object.freeze({
   leaf: { x: 0, y: 0, w: 512, h: 512, anchor: [0.5, 0.5], halo: 0.36 },        // a birch's leaf cluster: twigs from the centre
   leafRound: { x: 512, y: 0, w: 256, h: 256, anchor: [0.5, 0.5], halo: 0.36 }, // broad round leaves: hazel, alder, shrubs
   grass: { x: 768, y: 0, w: 256, h: 256, anchor: [0.5, 0], halo: 0.22 },       // a clump of blades from one root
-  farOval: { x: 512, y: 256, w: 256, h: 256, anchor: [0.5, 0], halo: 0.42 },   // a far broadleaf crown
-  farCone: { x: 768, y: 256, w: 256, h: 512, anchor: [0.5, 0], halo: 0.42 },   // a far spruce, fir or cedar
   spray: { x: 0, y: 512, w: 512, h: 256, anchor: [0, 0.5], halo: 0.38 },       // a conifer spray: twig along s from the trunk
   tuft: { x: 0, y: 768, w: 512, h: 256, anchor: [0, 0.5], halo: 0.36 },        // a pine branchlet ending in a brush of long needles
   frond: { x: 512, y: 512, w: 256, h: 512, anchor: [0.5, 0], halo: 0.3 },      // a bracken frond, stalk at the bottom
-  farPine: { x: 768, y: 768, w: 256, h: 256, anchor: [0.5, 0], halo: 0.42 },   // a far pine crown, flat-topped and ragged
+  // the far crowns (vegetation.js FAR_SPRITES paints them): the conifers' cones tall, the rest square
+  farSpruce: { x: 768, y: 256, w: 128, h: 256, anchor: [0.5, 0], halo: 0 },     // white spruce and balsam fir (and the young fir)
+  farBlackSpruce: { x: 896, y: 256, w: 128, h: 256, anchor: [0.5, 0], halo: 0 },
+  farCedar: { x: 768, y: 512, w: 128, h: 256, anchor: [0.5, 0], halo: 0 },
+  farTamarack: { x: 896, y: 512, w: 128, h: 256, anchor: [0.5, 0], halo: 0 },
+  farWhitePine: { x: 512, y: 256, w: 128, h: 128, anchor: [0.5, 0], halo: 0 },
+  farRedPine: { x: 640, y: 256, w: 128, h: 128, anchor: [0.5, 0], halo: 0 },
+  farTallPine: { x: 512, y: 384, w: 128, h: 128, anchor: [0.5, 0], halo: 0 },
+  farJackPine: { x: 640, y: 384, w: 128, h: 128, anchor: [0.5, 0], halo: 0 },
+  farBirch: { x: 768, y: 768, w: 128, h: 128, anchor: [0.5, 0], halo: 0 },
+  farAspen: { x: 896, y: 768, w: 128, h: 128, anchor: [0.5, 0], halo: 0 },
+  farShrub: { x: 768, y: 896, w: 128, h: 128, anchor: [0.5, 0], halo: 0 },
+  farClump: { x: 896, y: 896, w: 128, h: 128, anchor: [0.5, 0], halo: 0 },      // hazel and alder
 });
+// the share of a far sprite left clear on each side, so a ragged edge is never cut by the slot (farTwin
+// widens its card by as much)
+export const FAR_MARGIN = 0.05;
 
 const INSET = 2.5; // pixels kept off the slot's edge so neighbours do not bleed in
 export function spriteUV(name, s, t) {
@@ -41,6 +59,7 @@ export function spriteUV(name, s, t) {
 
 let atlas = null;
 const canvases = {};
+const farPainters = [];
 
 export function foliageAtlas() {
   if (atlas) return atlas;
@@ -54,14 +73,78 @@ export function foliageAtlas() {
   atlas.anisotropy = 4;
   atlas.flipY = false;
   atlas.name = 'foliage-atlas';
-  for (const name of ['leaf', 'leafRound', 'grass', 'spray', 'tuft', 'frond', 'farOval', 'farCone', 'farPine']) {
+  for (const name of ['leaf', 'leafRound', 'grass', 'spray', 'tuft', 'frond']) {
     const S = SLOTS[name], cv = canvas(S.w, S.h);
     PAINT[name](cv.getContext('2d'), S.w, S.h, mulberry32(9000 + name.length * 31 + name.charCodeAt(0)));
     canvases[name] = cv;
     blit(name, cv, S.halo);
   }
+  repaintFar();
   atlas.needsUpdate = true;
   return atlas;
+}
+
+// The far sprites' painter (vegetation.js): run once the near sprites are in, and again by repaintFar().
+export function registerFarPainter(fn) {
+  farPainters.push(fn);
+  if (atlas) { fn(); atlas.needsUpdate = true; }
+}
+export function repaintFar() {
+  if (!atlas) return;
+  for (const fn of farPainters) fn();
+  atlas.needsUpdate = true;
+}
+
+// A far sprite from a crown's cards, rasterised from the near sprites in the atlas. `cards`: back to front,
+// each { uv: [a, b, d], p: [a, b, d], shade } with uv the card's corners (s, t) = (0, 0), (1, 0), (0, 1) in atlas
+// pixels and p the same corners in the slot (0..1, x right, y up). Each card samples its sprite as the card
+// material draws it at a distance: the sprite and its halo cut at `cut` (the far cutoff), so a card is the
+// puff it is out there; `shade` multiplies its value. The cards are laid over each other with no halo after.
+export function paintFarSprite(name, cards, { cut = 0.12 } = {}) {
+  const S = SLOTS[name], w = S.w, h = S.h, D = atlas.image.data, A = ATLAS_SIZE;
+  const acc = new Float32Array(w * h * 2); // premultiplied value, alpha
+  const sample = (x, y, o) => { // bilinear, atlas pixels: alpha in [0], value in [1]
+    x -= 0.5; y -= 0.5;
+    const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j;
+    let a = 0, v = 0;
+    for (let q = 0; q < 4; q++) {
+      const ii = Math.min(A - 1, Math.max(0, i + (q & 1))), jj = Math.min(A - 1, Math.max(0, j + (q >> 1)));
+      const wq = (q & 1 ? fx : 1 - fx) * (q >> 1 ? fy : 1 - fy), k = (jj * A + ii) * 4;
+      a += D[k + 3] * wq; v += D[k] * wq;
+    }
+    o[0] = a / 255; o[1] = v / 255;
+  };
+  const s = [0, 0];
+  for (const c of cards) {
+    const [ua, ub, ud] = c.uv, toPx = (p) => [INSET + p[0] * (w - 2 * INSET), INSET + (1 - p[1]) * (h - 2 * INSET)]; // as spriteUV reads it
+    const pa = toPx(c.p[0]), pb = toPx(c.p[1]), pd = toPx(c.p[2]);
+    const ex = pb[0] - pa[0], ey = pb[1] - pa[1], fx = pd[0] - pa[0], fy = pd[1] - pa[1], det = ex * fy - ey * fx;
+    if (Math.abs(det) < 0.25) continue; // edge-on: no area
+    const x0 = Math.max(0, Math.floor(Math.min(pa[0], pb[0], pd[0], pb[0] + fx))), x1 = Math.min(w - 1, Math.ceil(Math.max(pa[0], pb[0], pd[0], pb[0] + fx)));
+    const y0 = Math.max(0, Math.floor(Math.min(pa[1], pb[1], pd[1], pb[1] + fy))), y1 = Math.min(h - 1, Math.ceil(Math.max(pa[1], pb[1], pd[1], pb[1] + fy)));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const rx = x + 0.5 - pa[0], ry = y + 0.5 - pa[1];
+      const sg = (rx * fy - ry * fx) / det, tg = (ex * ry - ey * rx) / det;
+      if (sg < 0 || sg > 1 || tg < 0 || tg > 1) continue;
+      sample(ua[0] + sg * (ub[0] - ua[0]), ua[1] + tg * (ud[1] - ua[1]), s);
+      const al = smooth(cut - 0.035, cut + 0.035, s[0]);
+      if (al <= 0) continue;
+      const k = (y * w + x) * 2;
+      acc[k] = s[1] * c.shade * al + acc[k] * (1 - al);
+      acc[k + 1] = al + acc[k + 1] * (1 - al);
+    }
+  }
+  // into the slot: straight alpha, the mean value carried into the clear texels (no dark fringe in the mips)
+  let sv = 0, sa = 0;
+  for (let i = 0; i < w * h; i++) { sv += acc[i * 2]; sa += acc[i * 2 + 1]; }
+  const mean = sa ? sv / sa : 0.8;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x, a = acc[i * 2 + 1], v = a > 1e-4 ? acc[i * 2] / a : mean, o = ((S.y + y) * A + S.x + x) * 4;
+    const g = Math.round(255 * Math.min(1, mean + (v - mean) * Math.min(1, a * 4)));
+    D[o] = D[o + 1] = D[o + 2] = g;
+    D[o + 3] = Math.round(255 * a);
+  }
+  atlas.needsUpdate = true;
 }
 
 // A hand-painted (or any) image into a slot. The image is scaled to the slot.
@@ -181,13 +264,6 @@ function curve(x, y, a, L, curl, n = 8) {
   return pts;
 }
 const along = (pts, t) => { const f = t * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(f)), k = f - i; return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k, Math.atan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0])]; };
-// a needle: a short stroke from (x, y) at angle a, darker at the root and light at the tip
-function needle(ctx, x, y, a, L, w, v0, v1) {
-  const ex = x + Math.cos(a) * L, ey = y + Math.sin(a) * L, mx = (x + ex) / 2, my = (y + ey) / 2;
-  ctx.lineWidth = w; ctx.lineCap = 'round';
-  ctx.strokeStyle = grey(v0); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(mx, my); ctx.stroke();
-  ctx.strokeStyle = grey(v1); ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(ex, ey); ctx.stroke();
-}
 
 // A cluster of leaves on twigs radiating from the centre, each twig with side twigs, the leaves alternate
 // along all of them and crowd toward the ends; back leaves darker than front ones.
@@ -226,30 +302,75 @@ const PAINT = {
   leaf(ctx, w, h, rng) { paintCluster(ctx, w, h, rng, { twigs: 9, subs: 3, leaves: 230, len: w * 0.085, wid: 0.42, shape: [0.6, 0.95], teeth: 0.07, reach: w * 0.36 }); },
   // hazel and alder: broad round leaves, fewer and larger
   leafRound(ctx, w, h, rng) { paintCluster(ctx, w, h, rng, { twigs: 6, subs: 2, leaves: 52, len: w * 0.15, wid: 0.5, shape: [0.45, 0.6], teeth: 0.05, reach: w * 0.3 }); },
-  // a conifer spray: a twig along s from the trunk end (left), side twigs of uneven length swept forward and
-  // drooping, some forked, short needles bristling all round every twig (a bottle brush, not a fern)
+  // a conifer spray as a spruce or fir branch end hangs: the twig out from the trunk end (left), sagging toward
+  // its tip; branchlets off both sides, the lower ones longer and hanging, the upper ones arching over, each with
+  // side shoots of its own, so the spray is a layered mass of shoots with gaps between; every shoot a brush of
+  // short needles round a darker body, a bottle brush in depth rather than a fern's flat rows. The layers behind,
+  // the inside near the twig and the underside are darker; the outer tips light.
   spray(ctx, w, h, rng) {
-    const cy = h / 2, axis = curve(w * 0.012, cy, SPREAD(rng) * 0.04, w * 0.96, SPREAD(rng) * 0.12, 16);
-    const env = (u) => h * 0.45 * Math.min(1, 1.7 * u ** 0.5 * (1 - u) ** 0.35);
-    const twigs = [];
-    let side = 1;
-    for (let u = 0.06; u < 0.95; u += 0.022 + rng() * 0.016) {
-      const [x, y, a] = along(axis, u), L = env(u) * (0.55 + rng() * 0.5) / 0.85;
-      const t = curve(x, y, a + side * (0.55 + rng() * 0.6), L, -side * (0.2 + rng() * 0.4) + 0.15, 5);
-      twigs.push(t);
-      if (rng() < 0.45) { const [x2, y2, a2] = along(t, 0.4 + rng() * 0.3); twigs.push(curve(x2, y2, a2 + side * 0.6, L * 0.45, 0.2, 3)); }
-      if (rng() < 0.75) side = -side;
-    }
-    for (const t of twigs) twig(ctx, t, w * 0.006, w * 0.003, 0.46);
-    twig(ctx, axis, w * 0.014, w * 0.005, 0.44);
-    const needles = (pts, scale) => {
-      for (let u = 0.03; u <= 1; u += 0.02 / scale) {
-        const [x, y, a] = along(pts, u), L = h * (0.05 + rng() * 0.045) * (1.1 - 0.3 * u) * scale, out = Math.min(1, Math.abs(y - cy) / (h * 0.42));
-        for (let k = 0; k < 4; k++) needle(ctx, x, y, a + (rng() < 0.5 ? -1 : 1) * (0.35 + rng() * 1.9), L * (0.75 + rng() * 0.4), Math.max(1.6, w * 0.0042), 0.62 + 0.1 * out + rng() * 0.1, 0.84 + 0.1 * out + rng() * 0.06);
+    const S = w / 512, cy = h * 0.4, top = h * 0.04, bottom = h * 0.96;
+    const axis = curve(w * 0.01, cy, -0.08 + SPREAD(rng) * 0.04, w * 0.93, 0.32 + SPREAD(rng) * 0.08, 18);
+    // the spray's half-width along the twig: narrow at the trunk, fullest past the middle, tapering to the tip
+    const env = (u) => h * 0.44 * Math.min(1, 1.9 * u ** 0.55 * (1 - u) ** 0.45);
+    // a shoot from (x, y) at angle a, length L, sagging by curl, shortened until it stays clear of the slot's edge
+    const shoot = (x, y, a, L, curl, n) => {
+      let pts = null;
+      for (let k = 0; k < 5; k++, L *= 0.82) {
+        pts = curve(x, y, a, L, curl, n);
+        if (pts.every(([px, py]) => py > top && py < bottom && px < w * 0.97)) break;
       }
+      return pts;
     };
-    needles(axis, 0.7);
-    for (const t of twigs) needles(t, 1);
+    // a branchlet and its shoots share a layer (z); `inner` 0 at the twig, 1 at the spray's edge
+    const shoots = [{ pts: axis, z: -0.4, body: 8 * S, nl: 0.8, inner: 0 }];
+    let side = rng() < 0.5 ? 1 : -1;
+    for (let u = 0.05; u < 0.94; u += 0.022 + rng() * 0.018) {
+      const [x, y, a] = along(axis, u), down = side > 0; // the canvas's y runs down: +1 is the lower side
+      const off = down ? 0.6 + rng() * 0.75 : 0.5 + rng() * 0.45;
+      const L = env(u) * (down ? 0.85 + rng() * 0.55 : 0.6 + rng() * 0.4) / Math.sin(off);
+      // every branchlet sags: a lower one hangs, an upper one arches over (a turn toward +y either way)
+      const pts = shoot(x, y, a + side * off, L, down ? SPREAD(rng) * 0.35 + 0.2 : 0.35 + rng() * 0.5, 8), z = rng() - (down ? 0.15 : 0);
+      shoots.push({ pts, z, body: 6 * S, nl: 1, inner: 0.25 });
+      // its side shoots, alternating, forward and sagging, shorter toward its tip
+      for (let k = 0, n = 2 + Math.floor(rng() * 3); k < n; k++) {
+        const t = 0.18 + (k + rng() * 0.6) * (0.7 / n), [x2, y2, a2] = along(pts, t), sd = k % 2 ? 1 : -1;
+        shoots.push({ pts: shoot(x2, y2, a2 + sd * (0.55 + rng() * 0.35), L * (0.42 - 0.22 * t) * (0.8 + rng() * 0.4), 0.35, 5), z: z + (rng() - 0.5) * 0.12, body: 4.5 * S, nl: 0.9, inner: 0.5 + 0.5 * t });
+      }
+      if (rng() < 0.8) side = -side;
+    }
+    shoots.sort((p, q) => p.z - q.z);
+    ctx.lineJoin = 'round';
+    for (const t of shoots) {
+      // the shoot's value: the layers behind darker, the inside of the spray darker, its outer half lighter
+      const v = 0.5 + 0.2 * Math.min(1, Math.max(0, t.z)) + 0.16 * t.inner;
+      // the body: the brush's dark middle, a stroke as wide as its needles reach (from a little way out, so
+      // its end does not dot the twig it springs from)
+      const body = new Path2D(), [bx, by] = along(t.pts, t.inner ? 0.1 : 0);
+      body.moveTo(bx, by);
+      for (let i = 1; i < t.pts.length; i++) if ((i / (t.pts.length - 1)) > (t.inner ? 0.1 : 0)) body.lineTo(...t.pts[i]);
+      ctx.lineCap = 'butt'; ctx.lineWidth = t.body; ctx.strokeStyle = grey(v * 0.72); ctx.stroke(body);
+      ctx.lineCap = 'round';
+      // needles: six round every step of the shoot, pointing forward and out, short; three bands along it (its
+      // inner end darker), the root halves and the tip halves of a band each drawn as one stroke
+      let len = 0;
+      for (let i = 1; i < t.pts.length; i++) len += Math.hypot(t.pts[i][0] - t.pts[i - 1][0], t.pts[i][1] - t.pts[i - 1][1]);
+      const bands = [0, 1, 2].map(() => [new Path2D(), new Path2D()]);
+      for (let u = 0.02; u <= 1; u += (1.7 * S) / Math.max(len, 1)) {
+        const [x, y, a] = along(t.pts, u), b = bands[Math.min(2, Math.floor(u * 3))];
+        const L0 = S * (6 + 4 * rng()) * t.nl * (1 - 0.35 * u);
+        for (let k = 0; k < 6; k++) {
+          const sd = rng() < 0.5 ? -1 : 1, an = a + sd * (k === 0 ? rng() * 0.3 : 0.35 + rng() * 0.9), L = L0 * (0.7 + rng() * 0.5);
+          const ex = x + Math.cos(an) * L, ey = y + Math.sin(an) * L, mx = (x + ex) / 2, my = (y + ey) / 2;
+          b[0].moveTo(x, y); b[0].lineTo(mx, my); b[1].moveTo(mx, my); b[1].lineTo(ex, ey);
+        }
+      }
+      ctx.lineWidth = Math.max(1.4, 1.7 * S);
+      bands.forEach(([root, tip], i) => {
+        const vb = v + 0.07 * i;
+        ctx.strokeStyle = grey(vb * 0.84); ctx.stroke(root);
+        ctx.strokeStyle = grey(Math.min(1, vb * 1.2 + 0.05)); ctx.stroke(tip);
+      });
+    }
   },
   // a pine branch end: a twig out from the branch forking into three to five branchlets, each ending in a
   // brush of long needles fanned forward; the brushes overlap into one clumpy mass
@@ -318,43 +439,4 @@ const PAINT = {
       }
     }
   },
-  // far sprites, stamped from the near ones so the far tree reads as the same stuff
-  farCone(ctx, w, h, rng) {
-    twig(ctx, [[w / 2, h], [w / 2, h * 0.06]], w * 0.03, w * 0.008, 0.5);
-    const tiers = 15;
-    for (let i = 0; i < tiers; i++) {
-      const s = i / tiers, y = h * (0.96 - 0.8 * s), hw = w * 0.4 * (1 - s) ** 0.9 + w * 0.05;
-      for (const sd of [-1, 1]) stamp(ctx, canvases.spray, w / 2, y, sd, 0.25 + SPREAD(rng) * 0.1, hw * (0.85 + rng() * 0.2), hw * 0.55);
-    }
-    stamp(ctx, canvases.spray, w / 2, h * 0.2, 1, -Math.PI / 2, h * 0.14, w * 0.12);
-  },
-  farOval(ctx, w, h, rng) {
-    for (let i = 0; i < 4; i++) twig(ctx, curve(w / 2, h, -Math.PI / 2 + SPREAD(rng) * 0.7, h * 0.55, SPREAD(rng) * 0.4, 5), w * 0.02, w * 0.006, 0.55);
-    for (let i = 0; i < 40; i++) {
-      const a = rng() * 6.28, r = i < 6 ? 0.3 * rng() : Math.sqrt(rng()), x = w / 2 + Math.cos(a) * r * w * 0.34, y = h * 0.45 + Math.sin(a) * r * h * 0.32, s = w * (0.26 + rng() * 0.12);
-      ctx.drawImage(canvases.leaf, x - s / 2, y - s / 2, s, s);
-    }
-  },
-  // a pine's crown from afar: a ragged ovoid of needle brushes up the top of a trunk, taller than wide
-  farPine(ctx, w, h, rng) {
-    twig(ctx, [[w / 2, h], [w / 2, h * 0.12]], w * 0.03, w * 0.012, 0.5);
-    const arms = 13;
-    for (let i = 0; i < arms; i++) {
-      const sd = i % 2 ? 1 : -1, up = (i + 0.5) / arms, a = -Math.PI / 2 + sd * (0.35 + (1 - up) * 0.75), L = w * (0.2 + 0.18 * Math.sin(Math.PI * Math.min(1, up * 1.3))) * (0.8 + rng() * 0.4);
-      const pts = curve(w / 2 + SPREAD(rng) * w * 0.03, h * (0.92 - up * 0.72), a, L, sd * 0.25, 4);
-      twig(ctx, pts, w * 0.009, w * 0.004, 0.62);
-      const [x, y, ang] = along(pts, 1);
-      stamp(ctx, canvases.tuft, x - Math.cos(ang) * L * 0.55, y - Math.sin(ang) * L * 0.55, 1, ang, w * 0.36, h * 0.2);
-    }
-    stamp(ctx, canvases.tuft, w / 2, h * 0.3, 1, -Math.PI / 2, h * 0.28, w * 0.22);
-  },
 };
-// a sprite drawn with its anchor (left middle) at (x, y), pointing at angle `a` (mirrored for sd = -1)
-function stamp(ctx, img, x, y, sd, a, len, wid) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(sd, 1);
-  ctx.rotate(a);
-  ctx.drawImage(img, 0, -wid / 2, len, wid);
-  ctx.restore();
-}
