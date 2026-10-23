@@ -183,14 +183,15 @@ export class Rides {
     if (!o || o.ridesShim) return;
     o.ridesShim = true;
     const render = o.render.bind(o);
-    o.render = () => {
-      render();
+    o.render = (...args) => {
+      const out = render(...args);
       const el = o.el && o.el.panel;
-      if (!o.open || !o.at || !el || el.querySelector('.rides')) return;
-      const wall = el.querySelector('.wall'); if (!wall) return;
+      if (!o.open || !o.at || !el || el.querySelector('.rides')) return out;
+      const wall = el.querySelector('.wall'); if (!wall) return out;
       const box = document.createElement('div');
       box.innerHTML = this.section(o.at.ep, { shim: true });
       wall.appendChild(box.firstElementChild);
+      return out;
     };
     const panel = o.el && o.el.panel;
     if (panel) panel.addEventListener('click', (e) => {

@@ -583,23 +583,24 @@ export function speakAtCounter(outfitter, world) {
   if (!outfitter || outfitter.speaksForKeeper) return;
   outfitter.speaksForKeeper = true;
   const show = outfitter.show.bind(outfitter), render = outfitter.render.bind(outfitter);
-  outfitter.show = (landing) => {
-    if (outfitter.keeperVoice || !landing) return show(landing);
+  // every argument is passed on (the shop's counter opens at a tab: show(landing, tab, focus))
+  outfitter.show = (landing, ...rest) => {
+    if (outfitter.keeperVoice || !landing) return show(landing, ...rest);
     const pr = outfitter.profile, core = outfitter.core;
     const stranger = (pr && !pr.knows(landing.ep)) || (core && core.fresh === landing.ep);
     const lk = outfitter.lineKind || 'welcome', by = outfitter.arrivedBy; // rides.js: off the truck ('ride') or up from its bunk ('bunk')
     outfitter.arrivedBy = null;
     const moment = lk === 'welcome' ? (stranger ? 'stranger' : by === 'ride' ? 'ride' : outfitter.trip && outfitter.trip.active ? 'passing' : 'hello') : lk;
-    const r = show(landing);
+    const r = show(landing, ...rest);
     const p = outfitterProfile(landing.ep, world);
     if (p) { outfitter.greeting = keeperLine(p, moment, { rep: pr ? pr.outfitter(landing.ep).rep : 0, doy: outfitter.day ? outfitter.day.doy : 0 }); outfitter.render(); }
     return r;
   };
-  outfitter.render = () => {
-    render();
-    if (outfitter.keeperVoice || !outfitter.open || !outfitter.at || typeof document === 'undefined') return;
+  outfitter.render = (...args) => {
+    const out = render(...args);
+    if (outfitter.keeperVoice || !outfitter.open || !outfitter.at || typeof document === 'undefined') return out;
     const p = outfitterProfile(outfitter.at.ep, world), el = outfitter.el && outfitter.el.panel;
-    if (!p || !el) return;
+    if (!p || !el) return out;
     const kick = el.querySelector('header .kicker'), say = el.querySelector('header .say');
     if (kick && !kick.dataset.kind) { kick.dataset.kind = '1'; kick.textContent = `Entry point ${p.ep} · ${p.lake} · ${p.kindWords} · ${p.area}`; }
     if (say && !say.textContent.includes(p.keeper.name)) {
@@ -613,5 +614,6 @@ export function speakAtCounter(outfitter, world) {
       note.dataset.sig = '1';
       note.textContent = `Only here: the ${sig.name}, $${Math.round(sig.price * p.priceMul)}. “${sig.words}”`;
     }
+    return out;
   };
 }
