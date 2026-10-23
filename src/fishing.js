@@ -3,6 +3,9 @@ import { clock12 } from './hud.js';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, clamp, lerp, smoothstep, hash2 } from './rng.js';
 import { makeToonMaterial, smoothToon } from './rocks.js';
+import { makeLookMaterial } from './shading.js';
+import { buildRod } from './gear.js';
+import { SEATS, sheerY, floorAt } from './hull.js';
 import { calmAt, rockAt } from './fields.js';
 import { rockSlope } from './terrain-build.js';
 import { windHeight } from './waves.js';
@@ -91,62 +94,8 @@ export function lightAt(hours) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Geometry. The rod is a chain of segments so it can bend under a fish; the fish are one blob body with fins,
-// built at a length of one metre along +x and scaled to the catch.
-function unitTube(r0, r1, len, col, rng) {
-  const g = new GeoBuilder();
-  g.tube(g.ring(0, 0, 0, r0, 6, rng), g.ring(0, len, 0, r1, 6, rng), col, V(0, len / 2, 0));
-  return g.build();
-}
-
-function buildRod(rng, mat) {
-  // built along +y (GeoBuilder rings lie in xz), then turned so the rod runs along +x: pitch is a z rotation
-  const root = new THREE.Group();
-  const turn = new THREE.Group();
-  turn.rotation.z = -Math.PI / 2;
-  root.add(turn);
-  const blank = vary(0x3a352f, rng, 0.03), cork = vary(0xc8a872, rng, 0.04), reelC = vary(0x4b5058, rng, 0.03), spool = vary(0xb9bcc0, rng, 0.03);
-  const butt = new THREE.Mesh(unitTube(0.017, 0.015, 0.34, cork, rng), mat);
-  butt.position.y = -0.34;
-  turn.add(butt);
-  const fore = new THREE.Mesh(unitTube(0.015, 0.012, 0.16, cork, rng), mat);
-  turn.add(fore);
-  const g = new GeoBuilder();
-  g.blob(0.065, 0.1, 0, 0.034, reelC, rng, 0.1, 0.8, 1.1, 1.3);     // the reel, hanging under the rod ahead of the hand
-  g.blob(0.075, 0.1, 0.055, 0.024, spool, rng, 0.1, 0.9, 1, 0.6);  // its spool
-  g.tube(g.ring(0.03, 0.04, 0, 0.006, 4, rng), g.ring(0.065, 0.1, 0, 0.006, 4, rng), reelC, V(0.05, 0.07, 0));
-  const reel = new THREE.Mesh(smoothToon(g.build()), mat);
-  turn.add(reel);
-  const crank = new THREE.Group();   // the handle, spun about the spool's axle while reeling
-  crank.position.set(0.075, 0.1, 0.075);
-  const handle = new THREE.Mesh(unitTube(0.005, 0.005, 0.035, spool, rng), mat);
-  handle.rotation.x = Math.PI / 2; handle.position.set(0.03, 0, 0);
-  const knob = new THREE.Mesh(unitTube(0.004, 0.004, 0.03, reelC, rng), mat);
-  knob.position.set(0, 0, 0.0);
-  knob.rotation.z = -Math.PI / 2;
-  crank.add(knob, handle);
-  turn.add(crank);
-  // the blank: eight tapering segments, each a child of the last, so a bend accumulates toward the tip
-  const segs = [];
-  let parent = turn, y = 0.16;
-  const N = 8, segLen = 0.22;
-  for (let i = 0; i < N; i++) {
-    const r0 = lerp(0.011, 0.0035, i / N), r1 = lerp(0.011, 0.0035, (i + 1) / N);
-    const seg = new THREE.Group();
-    seg.position.y = y;
-    const m = new THREE.Mesh(unitTube(r0, r1, segLen, blank, rng), mat);
-    seg.add(m);
-    parent.add(seg);
-    segs.push(seg);
-    parent = seg; y = segLen;
-  }
-  const tip = new THREE.Object3D();
-  tip.position.y = segLen;
-  parent.add(tip);
-  root.traverse((o) => { o.castShadow = true; });
-  return { root, segs, tip, crank };
-}
-
+// Geometry. The rod (blank, cork, reel, guides) is gear.js's; the fish are one blob body with fins, built at a
+// length of one metre along +x and scaled to the catch.
 function buildBobber(rng, mat) {
   const g = new GeoBuilder();
   g.blob(0, 0.035, 0, 0.065, vary(0xd94c2c, rng, 0.03), rng, 0.1, 1, 0.75, 1);
@@ -198,7 +147,7 @@ export class Fishing {
     this.tuning = TUNING; this.species = SPECIES; this.lures = LURES;
     const rng = mulberry32(17);
     const mat = makeToonMaterial();
-    this.rodParts = buildRod(rng, mat);
+    this.rodParts = buildRod(makeLookMaterial({}, { wrap: 0, name: 'look-solid' }));
     this.rod = this.rodParts.root;
     canoe.rig.add(this.rod);
     this.bobber = buildBobber(rng, mat);
@@ -259,7 +208,9 @@ export class Fishing {
     this.ui = {};
     this._tip = new THREE.Vector3(); this._v = new THREE.Vector3(); this._v2 = new THREE.Vector3();
     this._grip = new THREE.Vector3(); this._dir = new THREE.Vector3(); this._up = new THREE.Vector3(); this._side = new THREE.Vector3();
-    this.hands = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+    // for the paddler's arms (canoe.js): the right fist round the cork (the rod's axis and its up for the palm),
+    // the left on the crank knob (its axle) or the butt; the rod's yaw, how far to lean, where to look
+    this.hands = { L: new THREE.Vector3(), R: new THREE.Vector3(), dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0), knobAxis: new THREE.Vector3(0, 0, -1), yaw: 0, lean: 0, look: 0 };
     this.wanderSeed = 0;
   }
 
@@ -479,7 +430,7 @@ export class Fishing {
   // --- per frame -------------------------------------------------------------------------------------------------------
   update(dt, timeScale = 1) {
     const p = this.player, inp = this.input;
-    const afloat = p.mode === 'paddle' && !p.landing && !p.ashore && !p.teleporting;
+    const afloat = p.mode === 'paddle' && !p.landing && !p.ashore && !p.teleporting && !(this.canoe.state.climb > 0);
     this.rod.visible = p.mode === 'paddle'; // it lies in the hull: not on your shoulders, on the bank or in the water
     if (!afloat && this.rodUp) this.stow();
     if (afloat && inp.pressed('KeyF')) {
@@ -768,8 +719,8 @@ export class Fishing {
     if ((rel && L.t > 0.4) || L.t > TUNING.holdUp) return this.release(false);
     const f = p.forward, rx = -f.z, rz = f.x, y = this.canoe.rig.position.y;
     const fx = this.focus;
-    fx.pos.set(p.x + f.x * 1.5 + rx * 1.55, y + 1.25, p.z + f.z * 1.5 + rz * 1.55);
-    fx.look.set(p.x - f.x * 1.2, y + 0.78, p.z - f.z * 1.2);
+    fx.pos.set(p.x + f.x * 0.9 + rx * 1.6, y + 1.05, p.z + f.z * 0.9 + rz * 1.6);
+    fx.look.set(p.x - f.x * 1.25, y + 0.5, p.z - f.z * 1.25);
     this.chase.focus = fx;
     p.prompt = { key: 'E', text: 'Let it go · <kbd>K</kbd>Keep it on the stringer' };
   }
@@ -790,25 +741,27 @@ export class Fishing {
   }
 
   // --- posing ------------------------------------------------------------------------------------------------------------
-  // The rod in rig space (+x bow, +z starboard): held in the right hand ahead of the hip, pointing where the cast goes.
+  // The rod in rig space (+x bow, +z starboard): held in the right hand in front of the kneeling paddler's
+  // stomach, pointing where the cast goes; the left hand on the crank knob, or on the butt for the cast.
   poseRod(dt) {
     const rod = this.rod, parts = this.rodParts, s = this.state, p = this.player;
-    let grip, yaw, pitch, bend = 0.02, k = 1 - Math.exp(-dt * 10);
+    const sx = SEATS.stern.x;
+    let grip, yaw, pitch, bend = 0.02, k = 1 - Math.exp(-dt * 10), lean = 0, look = 0;
     if (!this.rodUp || s === 'landed') {
-      // laid along the hull floor on the starboard side (or across the gunwales while the fish is held up)
-      grip = s === 'landed' ? V(-0.95, 0.36, -0.6) : V(-1.05, 0.1, 0.24);
-      yaw = s === 'landed' ? -Math.PI / 2 : 0.02; pitch = s === 'landed' ? 0 : 0.02;
+      // laid along the starboard bilge (or across the gunwales while the fish is held up)
+      grip = s === 'landed' ? V(sx + 0.66, sheerY(sx + 0.66) + 0.022, -0.5) : V(-0.82, floorAt(-0.82) + 0.05, 0.26);
+      yaw = s === 'landed' ? -Math.PI / 2 : 0.045; pitch = s === 'landed' ? 0.02 : 0.03;
       k = this.rodUp ? k : 1;
     } else {
-      grip = V(-1.22, 0.62, 0.08);
+      grip = V(sx + 0.47, 0.31, 0.11);
       let relYaw = this.aim - p.heading; relYaw = Math.atan2(Math.sin(relYaw), Math.cos(relYaw));
       yaw = clamp(relYaw, -TUNING.rodArc, TUNING.rodArc);
       if (s === 'ready') pitch = 0.45;
-      else if (s === 'charging') { pitch = lerp(0.5, 1.75, this.power); grip.x -= 0.1 * this.power; grip.y += 0.1 * this.power; }
-      else if (s === 'swing') { const u = clamp(this.swing / 0.3, 0, 1); pitch = lerp(1.75, 0.3, 1 - (1 - u) * (1 - u)); bend = -0.6 * Math.sin(u * Math.PI); k = 1 - Math.exp(-dt * 30); }
-      else if (s === 'flying') pitch = 0.35;
-      else if (s === 'inwater' || s === 'bite') { pitch = 0.4 + (this.lure.speed > 0.1 ? 0.05 * Math.sin(this.crank * 0.8) : 0); bend = 0.03 + (s === 'bite' && !this.lureDef.bobber ? 0.12 * Math.abs(Math.sin(this.bite.t * 14)) : 0) + 0.02 * this.lure.speed; }
-      else if (s === 'fight') { const f = this.fish; pitch = 0.75 + 0.35 * f.tension; bend = 0.15 + 1.0 * f.tension + 0.04 * Math.sin(f.t * 9) * (f.run > 0 ? 1 : 0.2); grip.y += 0.08 * f.tension; }
+      else if (s === 'charging') { pitch = lerp(0.5, 1.75, this.power); grip.x -= 0.14 * this.power; grip.y += 0.24 * this.power; grip.z += 0.04 * this.power; lean = -0.12 * this.power; }
+      else if (s === 'swing') { const u = clamp(this.swing / 0.3, 0, 1); pitch = lerp(1.75, 0.3, 1 - (1 - u) * (1 - u)); bend = -0.6 * Math.sin(u * Math.PI); k = 1 - Math.exp(-dt * 30); lean = 0.12 * Math.sin(u * Math.PI); grip.x += 0.08 * u; }
+      else if (s === 'flying') { pitch = 0.35; lean = 0.05; }
+      else if (s === 'inwater' || s === 'bite') { pitch = 0.4 + (this.lure.speed > 0.1 ? 0.05 * Math.sin(this.crank * 0.8) : 0); bend = 0.03 + (s === 'bite' && !this.lureDef.bobber ? 0.12 * Math.abs(Math.sin(this.bite.t * 14)) : 0) + 0.02 * this.lure.speed; look = 0.3; }
+      else if (s === 'fight') { const f = this.fish; pitch = 0.75 + 0.35 * f.tension; bend = 0.15 + 1.0 * f.tension + 0.04 * Math.sin(f.t * 9) * (f.run > 0 ? 1 : 0.2); grip.y += 0.12 * f.tension; grip.x -= 0.04 * f.tension; lean = -0.1 * f.tension; look = 0.4; }
       else pitch = 0.4;
     }
     this._grip.lerp(grip, k);
@@ -819,23 +772,29 @@ export class Fishing {
     for (let i = 0; i < N; i++) parts.segs[i].rotation.z = -this.bend * ((i + 1) / N) * 0.42;
     parts.crank.rotation.z = this.crank;
     this.canoe.rig.updateMatrixWorld(true); // the tip's world position is read this frame, before the render
-    // hands for the paddler rig: right hand behind the reel, left on the crank (or on the fish)
+    // hands for the paddler rig (rig space): the right fist round the cork behind the reel, the left on the
+    // crank knob, the butt while casting, or the fish
     const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     this._dir.set(cp * cy, sp, -cp * sy);
     this._up.set(-sp * cy, cp, sp * sy);
     this._side.crossVectors(this._dir, this._up);
     const H = this.hands;
+    H.dir.copy(this._dir); H.up.copy(this._up); H.yaw = this.yaw; H.lean = lean; H.look = look;
     if (s === 'landed' && this.heldFish) {
       const L = Math.min(0.42, this.landed.length / 100 * 0.38);
-      this.heldFish.position.set(0.44, 0.74 + 0.05 * Math.sin(this.landed.t * 2), 0);
+      this.heldFish.position.set(0.52, 0.5 + 0.04 * Math.sin(this.landed.t * 2), 0);
       this.heldFish.rotation.set(0.25, Math.PI / 2, 0.08 * Math.sin(this.landed.t * 3));
-      H.L.set(0.42, 0.7, -L).add(this.canoe.paddler.position); H.R.set(0.42, 0.7, L).add(this.canoe.paddler.position);
+      H.L.set(0.5, 0.47, -L).add(this.canoe.paddler.position); H.R.set(0.5, 0.47, L).add(this.canoe.paddler.position);
+      H.dir.set(0, 0, 1); H.up.set(0, 1, 0); H.knobAxis.set(0, 0, 1); H.yaw = 0; H.lean = 0.05; H.look = 0.6;
     } else if (this.rodUp) {
-      H.R.copy(this._grip).addScaledVector(this._dir, -0.05).addScaledVector(this._up, -0.015);
-      const reeling = (s === 'inwater' && this.lure.speed > 0.1) || (s === 'fight' && (this.button || this.input.held('KeyW', 'ArrowUp')));
-      if (reeling || s === 'fight') {
-        H.L.copy(this._grip).addScaledVector(this._dir, 0.1 + 0.045 * Math.sin(this.crank)).addScaledVector(this._up, -0.1 + 0.045 * Math.cos(this.crank)).addScaledVector(this._side, 0.06);
-      } else H.L.copy(this._grip).addScaledVector(this._dir, 0.3).addScaledVector(this._up, -0.01).addScaledVector(this._side, -0.02);
+      H.R.copy(parts.hand).applyMatrix4(rod.matrix);
+      if (s === 'charging' || s === 'swing') {
+        H.L.copy(this._grip).addScaledVector(this._dir, -0.3);
+        H.knobAxis.copy(this._dir);
+      } else {
+        parts.knob.getWorldPosition(H.L); this.canoe.rig.worldToLocal(H.L);
+        H.knobAxis.copy(this._side).negate();
+      }
     }
   }
 
@@ -913,7 +872,7 @@ export class Fishing {
     for (let i = 0; i < n; i++) {
       const s = this.stringer[i], m = this.stringerMeshes[i], L = s.length / 100;
       m.scale.setScalar(L);
-      m.position.set(-0.85 + i * 0.3, 0.3 - L / 2, -0.56);
+      m.position.set(-0.9 + i * 0.28, sheerY(-0.9 + i * 0.28) - 0.02 - L / 2, -0.47);
       m.rotation.set(0.2, 0, -Math.PI / 2 + 0.06 * Math.sin(this.player.time * 1.5 + i));
       m.visible = this.player.mode === 'paddle';
     }

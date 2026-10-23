@@ -100,6 +100,8 @@ export class ChaseCamera {
     this.userYaw = 0; this.userPitch = 0;
     if (this.lastHeading !== null) this.forwardYaw = this.lastHeading; // straight ahead until the first frame
     this.camera.fov = mode === 'first' ? 72 : 60;
+    // from the eyes the hands, the paddle and the rod come within a few centimetres: a near plane close in
+    this.camera.near = mode === 'first' ? 0.05 : 0.3;
     this.camera.updateProjectionMatrix();
     this.first = true;
   }
@@ -119,7 +121,7 @@ export class ChaseCamera {
     this.footLook = footLook;
     if (this.locked && !this.wantsLock) { try { document.exitPointerLock(); } catch (_) { /* nothing to release */ } }
     this.lastHeading = player.heading;
-    if (this.mode === 'first') return this.updateFirst(dt, player, onFoot);
+    if (this.mode === 'first') return this.updateFirst(dt, player);
     let yaw, pitch;
     if (footLook) {
       // the camera sits behind the walker, who faces the look; the mouse's tilt swings the camera up or down
@@ -163,10 +165,9 @@ export class ChaseCamera {
   // From the paddler's eyes. The look is the mouse's, at once, and fixed in the world: on foot and swimming
   // the body faces it (player.js reads forwardYaw); seated, the hull turns under it, and with steering by
   // the look the bow comes round to where you are looking. Entering the view (or a snap) looks straight ahead.
-  updateFirst(dt, player, onFoot) {
-    const rig = player.canoe.rig;
-    if (player.mode === 'swim') this.head.set(player.x, this.world.levelAt(player.x, player.z) + 0.32, player.z);
-    else { this.head.set(onFoot ? 0.08 : -1.56, onFoot ? 1.6 : 1.0, 0); rig.localToWorld(this.head); } // standing, the rig origin is at the feet
+  // The eye is the rig's (canoe.js eye): just ahead of the face in the direction of the look, carried with
+  // the body exactly (no lag behind a moving body), so no angle looks into the body.
+  updateFirst(dt, player) {
     if (this.first) { this.viewYaw = player.heading; this.viewPitch = 0; }
     this.viewYaw = wrap(this.viewYaw);
     this.lookYaw = wrap(this.viewYaw - player.heading);
@@ -174,8 +175,8 @@ export class ChaseCamera {
     const yaw = this.viewYaw;
     this.forwardYaw = yaw;
     const pitch = this.viewPitch;
-    const k = this.first ? 1 : 1 - Math.exp(-dt * 14);
-    this.pos.lerp(this.head, k);
+    player.canoe.eye(this.head, wrap(yaw - player.heading), pitch, dt);
+    this.pos.copy(this.head);
     this.look.set(this.pos.x + Math.cos(yaw) * Math.cos(pitch), this.pos.y + Math.sin(pitch), this.pos.z - Math.sin(yaw) * Math.cos(pitch));
     this.first = false;
     this.camera.position.copy(this.pos);
