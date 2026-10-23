@@ -310,6 +310,7 @@ export class Outfitter {
       const kind = this.lineKind === 'season' ? 'season' : 'hello'; // a season begun here: the forty dollars, said as you come in
       if (kind === 'season') this.lineKind = 'welcome';
       const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, kind);
+      this.heard(v.ep, words);
       this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7);
     }
   }
@@ -424,6 +425,7 @@ export class Outfitter {
     const rode = this.arrivedBy === 'ride'; this.arrivedBy = null; // stream C's rides: the keeper's words for one come up the road
     const kind = this.lineKind === 'welcome' ? (stranger ? 'stranger' : rode ? 'ride' : this.trip.active ? 'passing' : 'welcome') : this.lineKind;
     this.greeting = this.say(landing.ep, kind);
+    this.heard(landing.ep, this.greeting);
     this.who = this.shop ? this.shop.keeperName(landing.ep) : null;
     this.lineKind = 'welcome';
     this.today = { year: this.day.year, doy: this.day.doy };
@@ -577,7 +579,12 @@ export class Outfitter {
     const shop = this.shop, pr = this.profile;
     const op = shop ? shop.outfitterProfile(a.ep) : null, keeper = op && op.keeper, rep = pr ? pr.outfitter(a.ep).rep : 0;
     let hint = '';
-    if (keeper && typeof keeper.hint === 'function' && rep >= 2) { try { hint = keeper.hint(this.world, op) || ''; } catch { hint = ''; } }
+    // a friend of the house (standing 2) hears one of the keeper's insider words a day, and it goes on the map (toldHints)
+    if (keeper && typeof keeper.hint === 'function' && rep >= 2) {
+      const hs = op.hints || [], n = hs.length ? this.day.doy % hs.length : 0;
+      try { hint = keeper.hint(this.world, op, n) || ''; } catch { hint = ''; }
+      if (hint) this.heard(a.ep, hint);
+    }
     const parts = [];
     if (hint) parts.push(`<div class="word"><div class="lab">${esc(keeper.name || 'The keeper')}, leaning on the counter</div><p>“${esc(hint)}”</p></div>`);
     else if (keeper && keeper.name) parts.push(`<div class="word"><div class="lab">${esc(keeper.name)}${keeper.manner ? ` · ${esc(keeper.manner)}` : ''}</div><p class="soft">${rep >= 2 ? 'Nothing much to tell today.' : 'Friendly enough. Keeps the good spots to the regulars.'}</p></div>`);
@@ -592,6 +599,23 @@ export class Outfitter {
       <div class="top"><h3 id="desk-h">At the counter</h3></div>
       ${parts.join('')}${rides || ''}
     </section>`;
+  }
+  // a keeper's words that are one of their insider hints (outfitters.js profile.hints) are told: the map rings the water
+  heard(ep, words) {
+    const pr = this.profile, op = this.shop ? this.shop.outfitterProfile(ep) : null;
+    if (!pr || typeof pr.tell !== 'function' || !op || !Array.isArray(op.hints) || !words) return;
+    const i = op.hints.findIndex((h) => h && h.text === words);
+    if (i >= 0) pr.tell(ep, i);
+  }
+  // the hints you have been told, with the water each one means: { kind, text, lake, x, z, r, ep } (hud.js rings them)
+  toldHints() {
+    const pr = this.profile; if (!pr || !this.shop || !Array.isArray(pr.told)) return [];
+    const out = [];
+    for (const k of pr.told) {
+      const [ep, i] = String(k).split(':').map(Number), op = this.shop.outfitterProfile(ep), h = op && Array.isArray(op.hints) ? op.hints[i] : null;
+      if (h && Number.isFinite(h.x) && Number.isFinite(h.z)) out.push({ ...h, ep });
+    }
+    return out;
   }
   sheetRow(s) {
     const btn = s.owned ? '<span class="mark">yours</span>' : `<button type="button" class="stamp small" data-act="shop" data-id="${esc(s.id)}" ${s.afford ? '' : 'disabled'}>${s.price ? `$${s.price}` : 'Take it'}</button>`;

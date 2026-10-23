@@ -34,6 +34,9 @@ const PAPER = '#e9e1cc';
 const WASH = 0.22;           // the paper laid over country you know nothing of (Adventure)
 const NEAT = 'rgba(74, 59, 38, 0.55)', FOLD = 'rgba(74, 59, 38, 0.4)'; // an owned sheet's neatline, and where two of yours meet
 const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
+const PENCIL = 'Caveat, "Bradley Hand", "Segoe Print", cursive'; // the pencil hand (index.html --pencil-font)
+// what a keeper's ring on the map is for, in the pencil hand (outfitters.js hint kinds)
+const HINT_LABEL = { laketrout: 'lakers, deep', walleye: 'walleye at dusk', pike: 'pike in the weeds', smallmouth: 'smallmouth, rocky points', crappie: 'crappie at dusk', perch: 'perch', moose: 'moose at dawn', carry: 'a long carry' };
 const PRESS = 300;           // ms: M let go sooner than this was a press, not a hold
 const HOLD_OFF = 300;        // ms: held keys hide this long after release
 const TITLE_HOLD = 4, NOTE_HOLD = 5, CATCH_HOLD = 8; // seconds
@@ -971,6 +974,18 @@ export class Hud {
     this.chromeEl = { own, ownDot, leg };
     return this.chromeEl;
   }
+  // the legend's "a keeper's word", once one has been told (drawMap)
+  hintLegend(on) {
+    if (this.hintLeg) { if (this.hintLegOn !== on) { this.hintLegOn = on; this.hintLeg.style.display = on ? '' : 'none'; } return; }
+    if (!on) return;
+    this.hintLegOn = true;
+    const leg = document.createElement('span');
+    leg.className = 'leg';
+    leg.innerHTML = '<i style="width: 16px; height: 15px; border-radius: 50%; border: 1.6px solid rgba(74, 64, 54, .62); background: rgba(74, 64, 54, .07)"></i>a keeper’s word';
+    const you = this.el.map && this.el.map.querySelector('.band.foot .leg .you');
+    if (you) you.parentNode.before(leg); else if (this.el.mapHint) this.el.mapHint.before(leg);
+    this.hintLeg = leg;
+  }
   updateMapChrome() {
     const e = this.el, w = this.world, v = this.view;
     const id = this.mode === 'sheet' ? w.lakeIdAt(v.cx, v.cz) || (this.player ? this.player.lakeId : 0) : (this.player ? this.player.lakeId : 0);
@@ -1190,6 +1205,27 @@ export class Hud {
       ctx.fillStyle = 'rgba(192, 57, 43, 0.13)'; ctx.fill();
       ctx.setLineDash([6 * k, 5 * k]); ctx.strokeStyle = 'rgba(160, 45, 35, 0.6)'; ctx.lineWidth = 1.6 * k; ctx.stroke(); ctx.setLineDash([]);
     }
+    // the keepers' words (outfitter.js toldHints): a ring pencilled round the water they meant, as a keeper marks your
+    // map across the counter, and what for in the same hand
+    const told = lay.tasks && this.ctx && this.ctx.outfitter && typeof this.ctx.outfitter.toldHints === 'function' ? this.ctx.outfitter.toldHints() : [];
+    for (const h of told) {
+      if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
+      const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
+      ctx.beginPath(); ctx.ellipse(a, b, r * 1.04, r * 0.97, 0.3, 0, 6.28);
+      ctx.fillStyle = 'rgba(74, 64, 54, 0.07)'; ctx.fill();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(74, 64, 54, 0.62)'; ctx.lineWidth = 1.7 * k; ctx.stroke();
+      // a second, lighter pass a hair off the first, the way a pencil goes round twice
+      ctx.beginPath(); ctx.ellipse(a + 1.5 * k, b - 1 * k, r * 1.01, r * 1.0, 0.9, 0.4, 5.9);
+      ctx.strokeStyle = 'rgba(74, 64, 54, 0.3)'; ctx.lineWidth = 1.1 * k; ctx.stroke();
+      if (mid || r > 30 * k) {
+        // what for, just inside the top of the ring (kept on the sheet when the top runs off it)
+        ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
+        const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
+        ctx.fillText(HINT_LABEL[h.kind] || 'a keeper’s word', tx, ty);
+      }
+    }
+    this.hintLegend(told.length > 0);
     // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
     if (lay.lakes) {
       ctx.font = `italic 600 ${(close ? 17 : 14) * k}px ${SERIF}`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
