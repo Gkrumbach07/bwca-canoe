@@ -638,7 +638,7 @@ export class Fishing {
     f.tension += (target - f.tension) * (1 - Math.exp(-dt * 2.8));
     if (f.tension > 0.8) f.danger += (f.tension - 0.8) * dt * 7; else f.danger = Math.max(0, f.danger - dt * 0.45);
     if (f.tension < 0.1) f.slack += dt; else f.slack = 0;
-    if (f.danger > TUNING.snapDanger) return this.endFight('snap');
+    if (f.danger > TUNING.snapDanger * (p.gear ? p.gear.snap : 1)) { this.endFight('snap'); if (this.onSnap) this.onSnap(this.lureDef, f); return; } // hubs 2B: the rod (shop.js player.gear); the lure is lost (shop.js onSnap)
     if (f.slack > TUNING.slackLimit) return this.endFight('thrown');
     // line: in against the reel, out with the run
     let dLine = 0;

@@ -313,14 +313,14 @@ export class Energy {
       if (power > 0.1 && v > 0.1) {
         let head = 0;
         if (wind) { const f = p.forward, wd = wind.dir; head = Math.max(0, -(f.x * wd.x + f.z * wd.z)) * wind.speed / 6; }
-        const effort = Math.pow(v / CRUISE, 1.5) * (p.input.held('ShiftLeft', 'ShiftRight') ? 1.25 : 1) * (1 + 0.8 * head);
+        const g = p.gear, effort = Math.pow(v / (CRUISE * (g ? g.cruise : 1)), 1.5) * (p.input.held('ShiftLeft', 'ShiftRight') ? 1.25 : 1) * (1 + 0.8 * head) * (g ? g.effort : 1); // hubs 2B: a better paddle
         travel = PADDLE * effort * power;
         hard = effort * power >= HARD_EFFORT;
       } else if (v < 0.3) recover = REST;
     } else if (p.mode === 'carry' || p.mode === 'walk') {
       const kg = p.loadKg || 0;
       if (moving) {
-        if (kg > 0) travel = CARRY * (kg / LOAD_REF);
+        if (kg > 0) travel = CARRY * (kg / LOAD_REF) * (p.mode === 'carry' && p.gear ? p.gear.carry : 1); // hubs 2B: yoke pads under the canoe
         else if (p.mode === 'carry') travel = CARRY * (p.loadFactor || 1);
         hard = kg >= HEAVY_KG;
       } else recover = REST;
