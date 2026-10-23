@@ -634,7 +634,7 @@ export class Player {
     let nx = this.x + mx * this.speed * dt, nz = this.z + mz * this.speed * dt;
     if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
     else if (!w.isReady(nx, nz)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Loading the land ahead…'; }
-    else if (w.shoreAt(nx, nz) < WADE_SD) { nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade'; }
+    else if (w.shoreAt(nx, nz) < WADE_SD && !(ft.near && this.supportAt(nx, nz, ft.y + STEP_UP, ft.near) > w.levelAt(nx, nz) + 0.2)) { nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade'; } // hubs 2B: a dock's deck (a box with a top over the water) walks out past wading depth
     const trees = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
     ft.near = trees;
     const reach = ft.y + STEP_UP;
