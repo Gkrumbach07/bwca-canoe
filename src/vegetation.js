@@ -4,10 +4,11 @@ import { mulberry32, hash2, smoothstep } from './rng.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { angularRock, makeRockMaterial, smoothToon, screeBlock } from './rocks.js';
 import { cliffModule, cliffModuleFar, makeCliffMaterial } from './cliffs.js';
+import { GROUPS } from './placement.js';
 import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
 import { foliageAtlas } from './textures.js';
-import { REGION, GROUPS } from './placement.js';
+import { REGION } from './placement.js';
 
 // Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
 // turns a tile's placement bins into instanced meshes in tile-local coordinates.
@@ -686,13 +687,13 @@ const ROCK_KINDS = ['slab', 'block', 'boulder'];
 const TREE_VARIANTS = 12;
 // Guests (placement.js GUEST): the old white pine, the black spruce and the aspen are drawn in the white pine's,
 // the spruce's and the birch's bins, so they cost no draw calls of their own far off. Their variants follow the
-// host's, made the host's height (`fit`); the aspen's leaves are a second class in the birch's material, with
-// their own gold. Their own slots below hold no variants.
+// host's, made the host's height (`fit`), and they take the host's material (the aspen's leaves turn with the
+// birch's gold). Their own slots below hold no variants.
 export const SPECIES = [
   { name: 'whitePine', make: whitePine, variants: TREE_VARIANTS, guest: { name: 'tallPine', make: tallPine, variants: TREE_VARIANTS, fit: 16 / 20 } },
   { name: 'spruce', make: spruce, variants: TREE_VARIANTS, guest: { name: 'blackSpruce', make: blackSpruce, variants: 6, fit: 12.5 / 11 } },
   { name: 'redPine', make: redPine, variants: TREE_VARIANTS },
-  { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS, guest: { name: 'aspen', make: aspen, variants: 6, leaves: [0.95, 0.74, 0.12], fit: 10.5 / 13 } },
+  { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS, guest: { name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 } },
   { name: 'cedar', make: cedar, variants: TREE_VARIANTS },
   { name: 'snag', make: snag, variants: TREE_VARIANTS },
   { name: 'boulder', make: (rng, v) => angularRock(rng, ROCK_KINDS[v % 3]), rock: true, variants: 9 },
@@ -736,12 +737,11 @@ export const LOD_SCALE = { value: 1 }; // the settings panel scales both distanc
 
 // Marks foliage vertices (greens and yellows with some saturation; bark, snow-white birch and grey are not)
 // so the season can recolour and drop the leaves and leave the trunk alone.
-// `cls`: 1 for the species' own leaves, 2 for a guest's (their own autumn colour in the host's material).
-function tagLeaves(geo, cls = 1) {
+function tagLeaves(geo) {
   const col = geo.getAttribute('color'), leaf = new Float32Array(col.count), c = new THREE.Color(), hsl = { h: 0, s: 0, l: 0 };
   for (let i = 0; i < col.count; i++) {
     c.setRGB(col.getX(i), col.getY(i), col.getZ(i)).getHSL(hsl);
-    leaf[i] = hsl.s > 0.2 && hsl.h > 0.1 && hsl.h < 0.47 ? cls : 0;
+    leaf[i] = hsl.s > 0.2 && hsl.h > 0.1 && hsl.h < 0.47 ? 1 : 0;
   }
   geo.setAttribute('aLeaf', new THREE.BufferAttribute(leaf, 1));
   return geo;
@@ -815,15 +815,15 @@ void RE_Direct_Leaf( const in IncidentLight directLight, const in vec3 geometryP
 const glowAt = `
   if ( vCardUv.x >= 0.0 ) leafGlow = mix( 0.2, 1.0, vCardOpen ) * ( 0.4 + 0.6 * ( 1.0 - smoothstep( cardCut, 1.0, cardTex.a ) ) ) * mix( 1.0, 0.4, smoothstep( uLeafGlow.z, uLeafGlow.w, vCardDist ) );`;
 
-function makeCardMaterial(autumn, autumn2 = autumn) {
-  const u = autumn ? { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) }, uAutumn2: { value: new THREE.Vector3(autumn2[0], autumn2[1], autumn2[2]) } } : {};
+function makeCardMaterial(autumn) {
+  const u = autumn ? { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } } : {};
   const m = makeLookMaterial({ side: THREE.DoubleSide }, {
     wrap: 'varying', name: autumn ? 'look-cards-leaves' : 'look-cards',
     compile: (shader) => {
       Object.assign(shader.uniforms, CARD, u);
-      let vs = shader.vertexShader.replace('#include <common>', '#include <common>\n' + cardPars + '\nattribute float aOcc;\nvarying float vCardOpen;' + (autumn ? '\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn, uAutumn2;' : ''))
+      let vs = shader.vertexShader.replace('#include <common>', '#include <common>\n' + cardPars + '\nattribute float aOcc;\nvarying float vCardOpen;' + (autumn ? '\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;' : ''))
         .replace('#include <begin_vertex>', cardBegin('cameraPosition') + '\n  vCardOpen = aOcc;');
-      if (autumn) vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, (aLeaf > 1.5 ? uAutumn2 : uAutumn) * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
+      if (autumn) vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
       shader.vertexShader = vs;
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\n' + cardVarying + (autumn ? '\nvarying float vLeaf;\nuniform float uLeafOn;' : ''))
@@ -873,25 +873,26 @@ function tamarackSeason(s) {
 export function makeVegetationKit(seed = 3) {
   CARD.uCardMap.value = foliageAtlas();
   const t0 = performance.now();
-  const build = (s, v, cls = 1) => {
+  const build = (s, v) => {
     const rs = seed * 131 + v * 17 + s.name.length;
     if (s.rock) return { full: s.make(mulberry32(rs), v), low: LOW[s.name](mulberry32(rs)) };
     const full = solid(s.make(mulberry32(rs), v));
     const low = solid(LOW[s.name](mulberry32(rs + 7), crownInfo(full)));
-    if (s.leaves) { tagLeaves(full, cls); tagLeaves(low, cls); }
+    if (s.leaves) { tagLeaves(full); tagLeaves(low); }
     if (s.fit) for (const geo of [full, low]) fitGuest(geo, s.fit);
     return { full, low };
   };
   // a host's own variants, then its guest's; a guest's own slot holds none (it is never binned)
   const variants = SPECIES.map((s) => (s.guestOf !== undefined ? [] : [
     ...Array.from({ length: s.variants || VARIANTS }, (_, v) => build(s, v)),
-    ...(s.guest ? Array.from({ length: s.guest.variants }, (_, v) => build(s.guest, v, 2)) : []),
+    ...(s.guest ? Array.from({ length: s.guest.variants }, (_, v) => build(s.guest, v)) : []),
   ]));
   const material = makeCardMaterial(null);
-  const rockMaterial = makeRockMaterial(), cliffMaterial = makeCliffMaterial();
-  const leafMaterials = SPECIES.map((s) => (s.leaves ? makeCardMaterial(s.leaves, s.guest && s.guest.leaves) : null));
-  const materialFor = (sp) => (SPECIES[sp].cliff ? cliffMaterial : SPECIES[sp].rock ? rockMaterial : leafMaterials[sp] || material);
+  const rockMaterial = makeRockMaterial();
+  const leafMaterials = SPECIES.map((s) => (s.leaves ? makeCardMaterial(s.leaves) : null));
+  const materialFor = (sp) => (SPECIES[sp].rock ? rockMaterial : leafMaterials[sp] || material);
   const depthFor = (sp) => (SPECIES[sp].rock ? undefined : materialFor(sp).userData.depth);
+  const cliffMaterial = makeCliffMaterial(); // the cliff modules' own (makeVegetationMeshes picks it)
   const setSeason = (season) => {
     leafMaterials.forEach((m, sp) => {
       if (!m) return;
@@ -944,7 +945,7 @@ export function makeVegetationMeshes(bins, kit) {
   const meshes = [];
   for (const b of bins) {
     if (!b.count) continue;
-    const S = SPECIES[b.sp], vs = kit.variants[b.sp], material = kit.materialFor(b.sp);
+    const S = SPECIES[b.sp], vs = kit.variants[b.sp], material = S.cliff ? kit.cliffMaterial : kit.materialFor(b.sp);
     const groups = b.groups && b.groups.filter(Boolean).length > 1 ? b.groups : null;
     // a bin with one group in it draws that group's variant (a guest's alone, say)
     const only = !groups && b.groups ? b.groups.findIndex(Boolean) : 0;
