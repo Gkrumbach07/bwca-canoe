@@ -37,6 +37,9 @@ const HULL_REACH = 3;       // player.js: within this of the canoe on the ground
 const PITCH = { seconds: 1.6, hours: 0.25 }; // the tent goes up over 1.6 s while a quarter of an hour passes
 const SLEEP_FROM = 1.5;     // hours before sunset the tent will take you
 const WAKE_AT = 0.25;       // hours after sunrise you wake
+const LATE_NIGHT = 5;       // turning in with fewer hours than this to first light, you sleep in instead:
+const SLEEP_IN = 7;         // this many hours,
+const SLEEP_IN_BY = 9;      // and up by this hour at the latest (a site reached after midnight still gives a night)
 const TENTS = { aframe: 0.85, 'a-frame': 0.85, dome: 1, fourseason: 1, 'four-season': 1, '4season': 1 }; // sleep quality by the profile's kit.tent
 const START_TENT = 0.85;    // the starting kit's A-frame, when there is no profile to ask
 const PAD = 0.05;           // a sleeping pad adds this
@@ -339,7 +342,7 @@ export class Camp {
   tentPrompts() {
     const d = this.day, { rise, set } = d.sunriseSunset, h = d.hours;
     const from = (set ?? 19) - SLEEP_FROM;
-    if (h >= from || h < (rise ?? 6)) this.offer('Sleep', `until morning, about ${clock12(((rise ?? 6) + WAKE_AT) % 24)}`, () => this.sleep('tent'));
+    if (h >= from || h < (rise ?? 6)) this.offer('Sleep', `until morning, about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
     else this.say(`Your tent · you can turn in from ${clock12(from)}`);
   }
 
@@ -508,34 +511,45 @@ export class Camp {
   }
 
   // --- the night ----------------------------------------------------------------------------------------------
+  // when a night begun now ends: a quarter hour after sunrise, or, turned in so late that first light is under five
+  // hours off, seven hours on and no later than 9:00. { at: the hour, hours: how long }
+  wakeTime() {
+    const d = this.day, rise = d.sunriseSunset.rise ?? 6;
+    let at = (rise + WAKE_AT) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
+    if (hours < LATE_NIGHT && d.hours < 12) { at = Math.max(at, Math.min(SLEEP_IN_BY, d.hours + SLEEP_IN)); hours = at - d.hours; }
+    return { at, hours };
+  }
   sleep(kind) {
-    const d = this.day, p = this.player, rise = d.sunriseSunset.rise ?? 6;
-    const hours = ((rise + WAKE_AT - d.hours) % 24 + 24) % 24 || 24;
+    const d = this.day, p = this.player, set = d.sunriseSunset.set, e = this.energy;
+    // turning in before sunset: the night's jump would carry the clock past the dusk meal (energy.js eats only the
+    // breakfast of a jump), so supper is eaten now, unless one was had in the last few hours (a cooked one, say)
+    if (set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
+    const { at: wakeAt, hours } = this.wakeTime();
     const q = this.tentQuality() * (this.wet ? WET : 1);
     const fc = this.weather && this.weather.forecast ? this.weather.forecast(Math.max(1, Math.ceil(hours))) : [];
     const n = this.tripDay(d.hours < 12 ? d.doy - 1 : d.doy); // the night of the evening's day
     const where = this.camp && this.camp.site ? this.siteName(this.camp.site) : (p.placeName || 'Camp');
-    const hh = Math.max(1, Math.round(hours));
+    const hh = Math.max(1, Math.floor(hours)); // a short night is under seven hours: six and a half is 'six'
     const night = hours >= 7 ? (this.wet ? 'a damp night in wet gear' : 'a full night\'s sleep') : `a short night, ${word(hh)} ${plural(hh, 'hour')}${this.wet ? ' in wet gear' : ''}`;
     const card = {
       kicker: `${n ? `Night ${n} · ` : ''}${where}`,
       text: nightLine(fc, d.season),
-      sub: `${clock12(d.hours)} to ${clock12((rise + WAKE_AT) % 24)} · ${night}`,
+      sub: `${clock12(d.hours)} to ${clock12(wakeAt)} · ${night}`,
     };
-    this.night = { kind, q, hours, x: p.x, z: p.z };
+    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z };
     const onDark = () => this.wake();
     const done = () => this.morning();
     if (this.veil && this.veil.card) this.veil.card({ ...card, onDark }).then(done, done);
     else { if (!this.card) this.card = new NightCard(); this.card.show({ ...card, onDark }).then(done, done); }
   }
-  // at full dark: the clock to sunrise + a quarter hour, the energy back, the lamp off, the fire burned out
+  // at full dark: the clock to the waking hour (sunrise + a quarter hour, or later after a late night), the energy
+  // back, the lamp off, the fire burned out
   wake() {
     const n = this.night, d = this.day;
     if (!n) return;
     if (this.lamp) this.lamp.toggle(false);
     this.jump(n.hours);
-    const r = d.sunriseSunset.rise;
-    if (r != null) d.setClock(d.year, d.doy, r + WAKE_AT);
+    if (Number.isFinite(n.wakeAt)) d.setClock(d.year, d.doy, n.wakeAt);
     const e = this.energy;
     if (e.sleep) e.sleep(n.q, n.hours); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
     if (this.camp && this.camp.key && this.fires) this.fires.douse(this.camp.key);
