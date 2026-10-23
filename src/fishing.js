@@ -734,7 +734,9 @@ export class Fishing {
     if (mesh) { this.canoe.paddler.remove(mesh); this.scene.add(mesh); mesh.visible = false; mesh.scale.setScalar(1); }
     if (L) {
       L.entry.kept = keep; this.logVersion++; this.saveLog();
-      if (keep) { this.stringer.push({ species: L.species, length: L.length }); this.message = { text: `On the stringer · ${this.stringer.length} fish`, t: 2 }; }
+      const cooler = this.tasks ? this.tasks.onCatch(L.species, this.world.lakeIdAt(this.player.x, this.player.z), L.length, keep) : null; // hubs 1C: a notice taken on wants it
+      if (keep && cooler) this.message = { text: cooler, t: 3 }; // into that notice's cooler, not the stringer
+      else if (keep) { this.stringer.push({ species: L.species, length: L.length }); this.message = { text: `On the stringer · ${this.stringer.length} fish`, t: 2 }; }
       else { const r = this.canoe.rig, f = this.player.forward; const x = r.position.x - f.z * 1.2, z = r.position.z + f.x * 1.2; this.splash(x, this.surfaceAt(x, z), z, 7, 0.7); this.message = { text: 'Released', t: 1.5 }; }
     }
     this.state = 'ready';

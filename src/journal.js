@@ -186,15 +186,23 @@ export class Journal {
   tasksTab() {
     const ts = this.tasks;
     if (!ts) return { html: '<div class="lede"><h2 id="right-h">Tasks</h2></div><div class="empty">No board on this trip.</div>', foot: '' };
-    const open = ts.active.filter((t) => t.status !== 'done'), done = ts.active.filter((t) => t.status === 'done');
-    const tally = ts.tally, total = tally.item + tally.survey + tally.fish;
-    const kind = { item: 'Lost and found', survey: 'Survey', fish: 'Fishing' };
-    const card = (t) => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${kind[t.kind]} · posted at ${esc(t.fromName || '')}</span><br>${esc(t.clue)}${t.status === 'done' ? ' <span class="soft">Done; turn it in at any outfitter.</span>' : ''}</span></div>`;
-    const offer = ts.board.length ? `<div class="lab">On offer at ${esc(ts.board[0].fromName || 'the outfitter')}</div>${ts.board.map((t) => `<div class="todo"><i aria-hidden="true" style="border-style:dashed"></i><span>${esc(t.clue)}</span></div>`).join('')}` : '';
-    const html = `<div class="lede"><h2 id="right-h">${open.length ? `${word(open.length)[0].toUpperCase()}${word(open.length).slice(1)} on the go` : 'Nothing on the go'}${done.length ? `, ${word(done.length)} to turn in` : ''}</h2>
-      <div class="sub">${total ? `${total} ${plural(total, 'task')} turned in this season: ${tally.item} found, ${tally.survey} surveyed, ${tally.fish ? tally.fish : 'none'} fished${tally.fish ? '' : ' yet'}.` : 'Nothing turned in yet. Finished tasks go back to any outfitter for a line of gear.'}</div></div>
-      <div class="scroll" style="display:flex;flex-direction:column;gap:10px">${ts.active.map(card).join('') || '<div class="empty">Take something on at the outfitter’s board.</div>'}${offer}</div>`;
-    return { html, foot: 'E at an outfitter’s dock opens the board' };
+    const all = ts.active, open = all.filter((t) => t.status !== 'done'), done = all.filter((t) => t.status === 'done');
+    const at = (ep) => { const l = ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
+    const kinds = { item: 'Lost and found', survey: 'Portage crew', fish: 'Fish wanted' };
+    // the notices taken on, the finished ones first, each with where it is paid
+    const card = (t) => {
+      const state = t.status === 'done' ? `Done · claim it at ${esc(at(t.from))}, entry point ${t.from}.` : `On the go · ${esc(ts.progressOf ? ts.progressOf(t) : '')}`;
+      return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${kinds[t.kind] || esc(t.kind)} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft">${state}</span></span></div>`;
+    };
+    const list = [...done, ...open].map(card).join('');
+    const paid = (ts.claimed || []).slice(-5).reverse();
+    const claimed = paid.length ? `<div class="lab">Claimed lately</div>${paid.map((c) => `<div class="todo done"><i aria-hidden="true"></i><span>$${c.pay} · ${esc(c.title)} · <span class="soft">${esc(at(c.from))}</span></span></div>`).join('')}` : '';
+    const n = (ts.claimed || []).length, earned = ts.earned || 0;
+    const head = open.length || done.length ? `${open.length ? `${word(open.length)[0].toUpperCase()}${word(open.length).slice(1)} on the go` : 'Nothing on the go'}${done.length ? `, ${word(done.length)} to claim` : ''}` : 'Nothing on the go';
+    const sub = earned ? `$${earned} from the boards this season, ${n} ${plural(n, 'notice')} claimed. Each is paid only at the counter that posted it.` : 'Every outfitter pins four notices by the door. Each is paid only at the counter that posted it.';
+    const html = `<div class="lede"><h2 id="right-h">${head}</h2><div class="sub">${sub}</div></div>
+      <div class="scroll notice-list">${list || '<div class="empty">Take something on at an outfitter’s board.</div>'}${claimed}</div>`;
+    return { html, foot: 'E at an outfitter’s dock opens its board' };
   }
   lakesTab() {
     const st = this.stats, w = this.world, lakes = st ? st.lakes : [];
