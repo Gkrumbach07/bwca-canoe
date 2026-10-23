@@ -236,13 +236,29 @@ body.paper-open #scrim { opacity: .55; pointer-events: auto; }
 #outfitter header h2 { font-size: 40px; line-height: 1; }
 #outfitter header .say { font-size: 18px; font-style: italic; color: var(--ink-soft); }
 #outfitter header .stamp { margin-left: auto; flex: none; }
-#outfitter .counter { display: grid; grid-template-columns: clamp(250px, 26%, 330px) minmax(0, 1fr) clamp(210px, 23%, 300px); gap: clamp(16px, 2.2%, 28px); flex: 1 1 auto; min-height: 0; }
+#outfitter .counter { display: grid; grid-template-columns: clamp(270px, 29%, 370px) minmax(0, 1fr) clamp(200px, 21%, 290px); gap: clamp(16px, 2.2%, 28px); flex: 1 1 auto; min-height: 0; }
 #outfitter .permit { box-sizing: border-box; padding: 20px 22px; background: var(--paper-deep); border: 1px solid var(--edge); border-radius: 3px; display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: auto; scrollbar-width: thin; }
 #outfitter .permit .top { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--edge-deep); padding-bottom: 8px; }
 #outfitter .permit .no { font-size: 11px; letter-spacing: .12em; }
-#outfitter .permit .grid { display: grid; grid-template-columns: 80px 1fr; gap: 6px 12px; font-size: 15px; }
-#outfitter .permit .grid .lab { padding-top: 3px; letter-spacing: .12em; }
+#outfitter .permit .grid { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px 12px; font-size: 15px; align-items: baseline; }
+#outfitter .permit .grid .lab { letter-spacing: .12em; }
 #outfitter .permit .soft { color: var(--ink-soft); font-style: italic; }
+/* the permit's choices: the put-in date's arrows, the exit list, one of two set in ink */
+#outfitter .permit .when { display: flex; flex-direction: column; gap: 2px; }
+#outfitter .permit .when .date { display: flex; align-items: center; gap: 6px; margin-left: -4px; }
+#outfitter .step.small { width: 22px; height: 22px; font-size: 16px; line-height: 1; border: none; padding: 0; }
+#outfitter .step.small:hover:not(:disabled) { color: var(--map-red); }
+#outfitter .pencil-btn { appearance: none; background: none; border: none; padding: 0; text-align: left; cursor: pointer; font: 500 19px/1.1 var(--pencil-font); color: var(--map-red); }
+#outfitter select.ink { appearance: none; width: 100%; min-width: 0; text-overflow: ellipsis; font: 15px/1.3 var(--serif); color: var(--ink); background: transparent; border: none; border-bottom: 1px solid var(--ink-soft); border-radius: 0; padding: 0 18px 1px 0; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-soft) 50%), linear-gradient(-45deg, transparent 50%, var(--ink-soft) 50%); background-position: right 6px top 55%, right 1px top 55%; background-size: 5px 5px; background-repeat: no-repeat; }
+#outfitter select.ink:focus-visible { outline: 2px solid var(--map-red); outline-offset: 2px; }
+#outfitter .permit .choose { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+#outfitter .opt { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; padding: 0 0 1px; font: 700 12px/1.4 var(--sc); letter-spacing: .12em; color: var(--ink-soft); cursor: pointer; }
+#outfitter .opt.on { color: var(--ink); border-bottom-color: var(--ink); }
+#outfitter .opt:disabled { color: var(--ink-faint); cursor: default; }
+#outfitter .opt:hover:not(:disabled):not(.on) { color: var(--ink); }
+#outfitter .permit .choose .soft { font-size: 13.5px; }
+#outfitter .permit .left { font-size: 16px; }
 #outfitter .pack { border-top: 1px solid var(--edge-deep); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
 #outfitter .stepper { display: flex; align-items: center; gap: 14px; }
 #outfitter .step { width: 34px; height: 34px; font: 600 20px/1 var(--serif); color: var(--ink); background: transparent; border: 1.5px solid var(--ink-soft); border-radius: 3px; cursor: pointer; }
@@ -283,13 +299,15 @@ body.paper-open #scrim { opacity: .55; pointer-events: auto; }
 #outfitter .wall .ends { margin-top: auto; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; padding-top: 10px; }
 #outfitter .wall .ends .stamp { font-size: 11px; padding: 7px 12px; }
 
-/* the evac: deep, a line from the outfitter */
-#evac { position: fixed; inset: 0; background: var(--deep); opacity: 0; pointer-events: none; transition: opacity 2.2s; z-index: 7; display: flex; align-items: center; justify-content: center; color: var(--cream); font-family: var(--sans); text-align: center; padding: 0 8vw; }
-#evac.show { opacity: 1; pointer-events: auto; transition: opacity 1.4s; }
-#evac .card { display: flex; flex-direction: column; align-items: center; gap: 22px; max-width: 760px; }
-#evac .kicker { font-size: 13px; letter-spacing: .22em; color: var(--cream-72); }
-#evac .quote { font: italic 30px/1.45 var(--serif); }
-#evac .sub { margin-top: 8px; font-size: 16px; color: rgba(243, 236, 221, .66); }
+/* the veil (veil.js): deep, with a card on it; its opacity is set per frame, so no transition here */
+#veil { position: fixed; inset: 0; background: var(--deep); opacity: 0; pointer-events: none; visibility: hidden; z-index: 7; display: flex; align-items: center; justify-content: center; color: var(--cream); font-family: var(--sans); text-align: center; padding: 0 8vw; }
+#veil.show { pointer-events: auto; visibility: visible; }
+#veil .card { display: flex; flex-direction: column; align-items: center; gap: 22px; max-width: 760px; }
+#veil.bare .card { display: none; }
+#veil .kicker { font-size: 13px; letter-spacing: .22em; color: var(--cream-72); }
+#veil .kicker:empty, #veil .quote:empty, #veil .sub:empty { display: none; }
+#veil .quote { margin: 0; font: italic 30px/1.45 var(--serif); }
+#veil .sub { margin: 8px 0 0; font-size: 16px; line-height: 1.55; color: rgba(243, 236, 221, .66); max-width: 620px; }
 
 @media (max-width: 900px) {
   #readout, #spot, #place, #lines, #stringer, #catch { left: 24px; }

@@ -135,17 +135,18 @@
       <span class="leg"><i class="dock"></i>outfitter dock</span>
       <span class="leg"><i class="task"></i>a task is somewhere in here</span>
       <span class="leg"><i class="you"></i>you</span>
-      <span class="pencil hint">drag to pan · wheel to zoom · click a spot to paddle in · depths in metres where the DNR has sounded</span>
+      <span class="pencil hint" id="map-hint">drag to pan · wheel to zoom · click a spot to paddle in · depths in metres where the DNR has sounded</span>
     </div>
   </div>
   <div id="journal" class="paper spread" role="dialog" aria-label="Journal"></div>
   <div id="outfitter" class="paper" role="dialog" aria-label="The outfitter's counter"></div>
-  <div id="evac">
+  <!-- the veil (src/veil.js): a fade to deep with a card on it, for an evacuation, a night slept, a walk fetched -->
+  <div id="veil" aria-live="polite">
     <div class="card">
-      <div class="sc kicker" id="evac-kicker"></div>
+      <div class="sc kicker" id="veil-kicker"></div>
       <div class="rule"></div>
-      <p class="quote" id="evac-text"></p>
-      <p class="sub" id="evac-sub"></p>
+      <p class="quote" id="veil-text"></p>
+      <p class="sub" id="veil-sub"></p>
     </div>
   </div>
 
@@ -167,8 +168,10 @@
           <li><button id="btn-controls" class="item" type="button">Controls</button></li>
         </ul>
         <div class="entries" id="entry-card" hidden>
-          <div class="sc kicker">Where do you put in? · by permit number</div>
+          <div class="mode-pick" id="mode-pick" role="radiogroup" aria-label="How you travel"><button type="button" data-mode="adventure" role="radio" aria-checked="true">Adventure</button><span class="dot" aria-hidden="true">·</span><button type="button" data-mode="sandbox" role="radio" aria-checked="false">Sandbox</button></div>
           <p class="status" id="entry-status"></p>
+          <p class="note" id="mode-note"></p>
+          <div class="sc kicker">Where do you put in? · by permit number</div>
           <ul id="entry-list" role="list"></ul>
         </div>
       </nav>

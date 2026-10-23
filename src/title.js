@@ -1,6 +1,7 @@
 // The front door. After loading, the live scene (golden hour, the clock stopped, a camera drifting slowly
 // round the canoe) renders behind the card, set in Air on a flat deep band: the name, a line, and a plain-text
-// menu (Paddle in / New trip / Settings / Controls) with the entry points as a second column beside New trip.
+// menu (Paddle in / New trip / Settings / Controls) with the entry points as a second column beside New trip, and
+// above them the way to travel (Adventure, with a permit and a date to be out by; or Sandbox, no limits).
 // Esc during play brings the same card back as a pause screen. Keyboard first: the arrows move between items
 // (← → between the two columns), Enter picks, Esc goes back. While the card is up it owns the keyboard (a
 // capturing listener stops the game's key handlers) and the HUD is hidden (body.shell-open, shell.css).
@@ -8,10 +9,15 @@ import './shell.css';
 import * as THREE from 'three';
 import { SettingsPanel } from './settings.js';
 import { clock12, shortDate } from './hud.js';
+import { save } from './save.js';
 
 const $ = (id) => document.getElementById(id);
 const DRIFT_RATE = 0.045;   // rad/s round the canoe
 const DRIFT_RADIUS = 23;    // metres, where there is water for it
+const MODES = {
+  adventure: 'A permit, a food pack, a date to be out by.',
+  sandbox: 'The same lakes, with no limits and no dates.',
+};
 
 // the controls reference (the Controls item), by what you are doing
 const KEYMAP = [
@@ -19,7 +25,7 @@ const KEYMAP = [
     [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'turn the hull while held, as sweep strokes'],
     [['Shift'], 'hustle'], [['Space'], 'brace in a sea (you cannot paddle while bracing)'],
     [['E'], 'go ashore · portage at a landing · the outfitter at a dock · pick up a find'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
-    [['G'], 'eat a meal, when the canoe is still'],
+    [['G'], 'eat a meal, when you are still'], [['H'], 'the headlamp (afloat or on foot)'],
   ]],
   ['On foot', [
     [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'], [['Space'], 'hop (onto a low rock or a log); with the canoe overhead you only stagger'],
@@ -35,15 +41,17 @@ const KEYMAP = [
     [['mouse'], 'look: in first person and on foot the first key or click takes the mouse and it turns you at once; behind the canoe, drag to orbit, wheel to zoom'], [['Esc'], 'frees the mouse when it is taken, otherwise this menu'],
   ]],
   ['The clock and the weather', [
-    [['1', '2', '3'], 'game speed 1× 2× 4× (when the rod is down)'], [['[', ']'], 'time of day back, forward an hour'], [['-', '='], 'the date back, forward a day (Shift: a month)'],
-    [['P'], 'stop the clock'], [[',', '.'], 'less, more wind'], [['/'], 'veer the wind'], [[';'], 'let the weather be'], [['R'], 'the shore in the water'], [['N'], 'sound'],
+    [['1', '2', '3'], 'game speed 1× 2× 4× (when the rod is down)'], [['[', ']'], 'time of day back, forward an hour (Sandbox)'], [['-', '='], 'the date back, forward a day, Shift a month (Sandbox)'],
+    [['P'], 'stop the clock (Sandbox)'], [[',', '.'], 'less, more wind (Sandbox)'], [['/'], 'veer the wind (Sandbox)'], [[';'], 'let the weather be (Sandbox)'], [['R'], 'the shore in the water'], [['N'], 'sound'],
   ]],
 ];
 
 export class Title {
-  // targets: { world, player, chase, camera, day, hud, settings, saver, trip, outfitter } — trip is the saved trip read at boot (or null)
+  // targets: { world, player, chase, camera, day, hud, settings, saver, saved, trip, outfitter } — saved is the spot saved
+  // at the last stop (save.js TripSaver, or null), trip the trip's rules (trip.js)
   constructor(t) {
     Object.assign(this, t);
+    this.modePick = save.read('tripMode') === 'sandbox' ? 'sandbox' : 'adventure'; // the way a new trip travels
     this.state = 'game'; // 'title' | 'pause' | 'game'
     this.card = 'menu';
     this.busy = false;
@@ -51,7 +59,7 @@ export class Title {
     this.el = {
       shell: $('shell'), menu: $('title-card'), settingsCard: $('settings-card'), controlsCard: $('controls-card'),
       kicker: $('title-kicker'), go: $('btn-continue'), hint: $('continue-hint'), newTrip: $('btn-new'), settings: $('btn-settings'), controls: $('btn-controls'),
-      entries: $('entry-card'), list: $('entry-list'), status: $('entry-status'),
+      entries: $('entry-card'), list: $('entry-list'), status: $('entry-status'), modePick: $('mode-pick'), modeNote: $('mode-note'),
       settingsKicker: $('settings-kicker'), controlsKicker: $('controls-kicker'), nav: $('settings-nav'), form: $('settings-form'), keymap: $('keymap'),
     };
     this.panel = new SettingsPanel(this.settings, this.el.form, this.el.nav);
@@ -77,6 +85,19 @@ export class Title {
       list.appendChild(li);
     }
     this.el.entries.hidden = false;
+    // the way to travel: Adventure or Sandbox, for the trip New trip begins
+    const pick = this.el.modePick;
+    if (pick) {
+      for (const b of pick.querySelectorAll('button[data-mode]')) b.addEventListener('click', () => this.setPick(b.dataset.mode));
+      this.setPick(this.modePick);
+    }
+  }
+  modeButtons() { return this.el.modePick ? [...this.el.modePick.querySelectorAll('button[data-mode]')] : []; }
+  setPick(mode) {
+    this.modePick = mode === 'sandbox' ? 'sandbox' : 'adventure';
+    save.write('tripMode', this.modePick);
+    for (const b of this.modeButtons()) { const on = b.dataset.mode === this.modePick; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
+    if (this.el.modeNote) this.el.modeNote.textContent = MODES[this.modePick];
   }
   buildKeymap() {
     const k = this.el.keymap; if (!k) return;
@@ -101,7 +122,13 @@ export class Title {
       if (ev.code === 'Tab') return; // the browser's own focus order, within the card
       if (tag === 'SELECT' || tag === 'INPUT') { if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') { ev.preventDefault(); this.moveFocus(ev.code === 'ArrowDown' ? 1 : -1); } return; } // ← → belong to the control
       if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') { ev.preventDefault(); this.moveFocus(ev.code === 'ArrowDown' ? 1 : -1); }
-      else if (ev.code === 'ArrowRight' || ev.code === 'ArrowLeft') { if (this.card === 'menu') { ev.preventDefault(); this.switchColumn(ev.code === 'ArrowRight' ? 1 : -1); } }
+      else if (ev.code === 'ArrowRight' || ev.code === 'ArrowLeft') {
+        if (this.card !== 'menu') return;
+        ev.preventDefault();
+        const modes = this.modeButtons(), i = modes.indexOf(document.activeElement);
+        if (i >= 0 && (ev.code === 'ArrowRight' ? i < modes.length - 1 : i > 0)) { const b = modes[i + (ev.code === 'ArrowRight' ? 1 : -1)]; this.setPick(b.dataset.mode); b.focus(); } // along the pick
+        else this.switchColumn(ev.code === 'ArrowRight' ? 1 : -1);
+      }
       else if (ev.code === 'Home' || ev.code === 'End') { ev.preventDefault(); this.moveFocus(ev.code === 'Home' ? -Infinity : Infinity); }
       else if (ev.code === 'Space' && tag !== 'BUTTON') ev.preventDefault(); // no page scroll
     }, true);
@@ -130,13 +157,14 @@ export class Title {
   // the two columns of the menu card: the menu items, and the entry points
   columns() {
     const items = [...this.el.menu.querySelectorAll('.menu .item:not([disabled])')];
-    const list = [...this.el.list.querySelectorAll('button:not([disabled])')];
+    const pick = this.modeButtons().filter((b) => b.classList.contains('on'));
+    const list = [...pick, ...this.el.list.querySelectorAll('button:not([disabled])')];
     return [items, list];
   }
   focusables() {
     if (this.card === 'menu') {
       const [items, list] = this.columns();
-      const inList = list.includes(document.activeElement);
+      const inList = list.includes(document.activeElement) || this.modeButtons().includes(document.activeElement);
       return inList ? list : items;
     }
     const card = this.card === 'settings' ? this.el.settingsCard : this.el.controlsCard;
@@ -153,7 +181,7 @@ export class Title {
   switchColumn(dir) {
     const [items, list] = this.columns();
     if (dir > 0 && items.includes(document.activeElement)) this.focusEntries();
-    else if (dir < 0 && list.includes(document.activeElement)) this.el.newTrip.focus();
+    else if (dir < 0 && (list.includes(document.activeElement) || this.modeButtons().includes(document.activeElement))) this.el.newTrip.focus();
   }
 
   // --- open / close -----------------------------------------------------------------------------
@@ -191,10 +219,11 @@ export class Title {
   }
 
   refreshMenu() {
-    const e = this.el, pause = this.state === 'pause', trip = this.trip;
+    const e = this.el, pause = this.state === 'pause', trip = this.saved, core = this.trip;
     const p = this.player, w = this.world, o = this.outfitter;
     const here = () => p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z)) || 'open water';
-    const tripDays = o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1} of a ${o.trip.days}-day trip` : '';
+    // "Adventure · day 2 of 5 · out by Fri", or the old words without a trip core
+    const tripDays = core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1} of a ${o.trip.days}-day trip` : '';
     const kicker = pause ? `Paused · ${here()} · ${clock12(this.day.hours)}` : 'Boundary Waters Canoe Area Wilderness';
     e.kicker.textContent = kicker;
     e.settingsKicker.textContent = pause ? kicker : 'Boundary Waters';
@@ -208,7 +237,8 @@ export class Title {
 
   // --- the three ways out --------------------------------------------------------------------
   continueTrip() {
-    const t = this.trip, day = this.day;
+    const t = this.saved, day = this.day;
+    if (this.trip && !this.trip.active && !(this.outfitter && this.outfitter.load())) this.trip.setMode(this.modePick); // a first trip travels the way picked
     if (t) {
       day.setClock(t.year, t.doy, t.hours); day.running = t.running !== false;
       if (t.camera && t.camera !== this.chase.mode) this.chase.setMode(t.camera);
@@ -229,7 +259,11 @@ export class Title {
     const buttons = [...this.el.list.querySelectorAll('button')];
     for (const b of buttons) b.disabled = true;
     this.el.status.textContent = `Paddling in at ${ep.name}…`;
-    this.saver.clear(); this.trip = null;
+    // whatever trip was under way ends here (a stale active save would otherwise call the canoe back on boot), and the
+    // new one travels the way picked; the counter opens at the landing
+    if (this.outfitter && this.outfitter.abandon) this.outfitter.abandon(this.modePick);
+    else if (this.trip) this.trip.setMode(this.modePick);
+    this.saver.clear(); this.saved = null;
     const ok = await this.player.teleport(ep.x, ep.z);
     for (const b of buttons) b.disabled = false;
     this.busy = false;
