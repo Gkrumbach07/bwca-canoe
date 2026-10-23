@@ -42,6 +42,7 @@ import { Camp, CampRegistry } from './camp.js'; // trip core C
 import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
 import { Profile } from './profile.js'; // hubs 1A
+import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -180,6 +181,17 @@ async function main() {
   energy.atCounter = () => !!outfitter.open;
   if (trip.on) { trip.on('start', () => energy.fresh()); trip.on('evac', () => energy.rescued()); }
   camp.profileOf = () => profile;
+  // hubs 2A: the outfitters' stores (props.js): each store's lamp borrows the campfires' one light while it is the lit
+  // thing nearest the eye (fire.js steady), and its cork board shows that outfitter's notices once its board is up
+  // (tasks.js), redrawn when they change; window.__game.props for the walk-in and the tests
+  const storeBoard = (L) => {
+    if (!tasks.boards || !tasks.boards[L.ep]) return;
+    const list = tasks.board(L.ep), sig = list.map((t) => (t ? `${t.id}:${t.status}` : '-')).join(',');
+    if (sig !== L.boardSig) { L.boardSig = sig; setStoreNotices(L.ep, list); }
+  };
+  onStore((L, ep) => { fires.steady(`store:${ep}`, L && L.lamp); if (L) storeBoard(L); });
+  // once the sun is down the glass goes, so the lit store shows through its windows
+  setInterval(() => { const up = day.sunDir.y > 0.035; for (const L of storeLayouts()) { storeBoard(L); L.glass.visible = up; } }, 2000);
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
@@ -216,6 +228,7 @@ async function main() {
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
   window.__game.profile = profile; // hubs 1A
+  window.__game.props = { storeLayout, onStore, storeLayouts, setStoreNotices, stats: storeStats }; // hubs 2A
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
   loadingEl.classList.add('done');
