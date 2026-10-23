@@ -361,14 +361,14 @@ registerKind('npc', {
     const p = T.player;
     let there = false;
     if (t.to != null) there = arrivedAt(T, t.to);
-    else if (t.site) there = Math.hypot(t.site.x - p.x, t.site.z - p.z) < ARRIVE_SITE;
+    else if (t.site) there = !!p.onFoot && Math.hypot(t.site.x - p.x, t.site.z - p.z) < ARRIVE_SITE; // ashore at the site
     if (!there) return;
     t.status = 'done';
     const L = T.landing(t.from);
     T.note(`${t.left || `You hand over ${t.thing}.`} Back to ${L ? L.name : 'the outfitter'}, entry point ${t.from}, to say so.`);
     T.changed(); T.boardChanged();
   },
-  progress(t) { return t.to != null ? `${t.short || 'it'} for ${t.toPlace}` : `${t.short || 'it'} for ${t.site && t.site.lake ? t.site.lake : 'a campsite'}`; },
+  progress(t) { return t.to != null ? `${t.short || 'it'} for ${t.toPlace}` : `${t.short || 'it'} for the site on ${t.site && t.site.lake ? t.site.lake : 'a lake'}: land there`; },
 });
 
 // --- what visitors tell you: hints from the place ----------------------------------------------------------------------
@@ -1059,6 +1059,7 @@ export class People {
     const pr = this.profile; if (!pr) return;
     if (id === 'leeches') {
       const shop = this.outfitter && this.outfitter.shop;
+      if (shop && pr.has('leeches') && shop.leeches >= 12) return; // the bucket is full already
       if (shop && shop.s) { shop.s.leeches = 12; if (typeof shop.write === 'function') shop.write(); }
       pr.give('leeches');
       if (this.hud) this.hud.note(`${first} fills your bait bucket: a dozen leeches.`, 6);
