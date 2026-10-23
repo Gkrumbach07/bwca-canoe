@@ -4,6 +4,7 @@ import { save } from './save.js';
 import { clock12, longDate, plural, fmtDays, compassLong, word } from './hud.js';
 import { SPECIES } from './fishing.js';
 import { daysInYear } from './astro.js';
+import { sheets } from './sheets.js'; // hubs 2D: the dusk word names only a site your map shows
 
 // Camp and night (the trip core, stream C). On foot at a campsite: pitch your tent at the site's pad (props.js
 // c.layout), light a fire in the grate (fire.js), cook a hot meal on it, sleep in the tent to morning under a night
@@ -84,13 +85,14 @@ export class CampRegistry {
   holder(key) { return this.holders.get(key) ?? null; }
   isFree(key) { return !this.holders.has(key); }
   // the nearest site no one holds within r metres: { site, key, d } or null
-  nearestFree(x, z, r = Infinity) {
+  // (ok(site): only the sites it passes, such as the ones the map shows)
+  nearestFree(x, z, r = Infinity, ok = null) {
     let best = null;
     for (const c of this.world.campsites) {
       const dx = c.x - x, dz = c.z - z;
       if (dx > r || dx < -r || dz > r || dz < -r) continue;
       const d = Math.hypot(dx, dz);
-      if (d < r && (!best || d < best.d)) { const key = campKey(c); if (this.isFree(key)) best = { site: c, key, d }; }
+      if (d < r && (!best || d < best.d)) { const key = campKey(c); if (this.isFree(key) && (!ok || ok(c))) best = { site: c, key, d }; }
     }
     return best;
   }
@@ -236,19 +238,20 @@ export class Camp {
     } else if (!this.wet) this.dry = 0;
   }
 
-  // an hour before sunset in Adventure: the nearest free site; once dark: the headlamp
+  // an hour before sunset in Adventure: the nearest free site your map shows (a sheet you own, or near where you have
+  // been: sheets.js), never one off it; once dark: the headlamp
   notes() {
     const d = this.day, p = this.player, { set } = d.sunriseSunset;
     const stamp = d.year * 1000 + d.doy, evening = d.hours >= 12 ? stamp : stamp - 1;
     if (this.adventure && !this.camp && set != null && d.hours >= set - 1 && d.hours < set && this.nudged !== stamp && !this.atSite) {
       this.nudged = stamp;
-      const n = this.registry.nearestFree(p.x, p.z, 6000);
+      const n = this.registry.nearestFree(p.x, p.z, 6000, (c) => sheets.showsDetail(c.x, c.z));
       if (n) {
         const dx = n.site.x - p.x, dz = n.site.z - p.z, deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
         const far = n.d < 1000 ? `${Math.max(50, Math.round(n.d / 50) * 50)} m` : `${(n.d / 1000).toFixed(1)} km`;
         const id = p.nearWater ? p.nearWater(n.site.x, n.site.z, 8) : 0, lake = id ? this.world.lakeName(id) : null;
         this.note(`An hour of light left. The nearest free campsite is ${far} ${compassLong(deg)}${lake ? `, on ${lake}` : ''}.`, 9);
-      } else this.note('An hour of light left, and no free campsite near. Find one before dark.', 9);
+      } else this.note('An hour of light left, and no free campsite on your map near here. Find one before dark.', 9);
     }
     if (this.lamp && !this.lamp.on && this.dark && this.lampHinted !== evening) {
       this.lampHinted = evening;
