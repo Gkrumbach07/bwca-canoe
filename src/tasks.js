@@ -7,7 +7,7 @@ import { esc, word, plural, fmtKm, shortDate } from './hud.js';
 
 // The board: notices pinned up at each outfitter, the tasks they set, and the money they pay.
 //
-// Every outfitter keeps its own cork board of four notices: two close by, one a day out, one far. One notice changes
+// Every outfitter keeps its own cork board of four notices: two close by, one a day trip out, one far. One notice changes
 // each game day (a bare pin is filled first, else the oldest notice nobody took comes down), and nothing you take on
 // ever expires. A notice is one of the kinds in KINDS, a registry of { make, update, onEvent, pay }:
 // - fish for the café: any fish, a species, or a species of a size (lake trout only from water 18 m deep or more);
@@ -25,7 +25,7 @@ const PICKUP = 4;            // metres within which E picks an item up
 const ARRIVE = 28;           // metres within which a survey point counts as reached
 const SLOTS = ['local', 'local', 'medium', 'far']; // the four pins on every board
 const BAND_HOPS = { item: { local: [0, 1], medium: [1, 2], far: [2, 4] }, survey: { local: [0, 1], medium: [1, 2], far: [2, 3] } };
-const BAND_WORDS = { local: 'close by', medium: 'a day out', far: 'far' };
+const BAND_WORDS = { local: 'close by', medium: 'a day trip', far: 'far' }; // at the pace (pace.js) a medium notice, 5 km out or so, is there and back in a morning or an afternoon
 const DEEP = 18;             // lake trout only count from a lake at least this deep (m)
 const TROUT_WATER = 20;      // fishing.js bites lake trout only in lakes this deep, so a trout notice names one
 const LENGTH_SKEW = 1.7;     // fishing.js startBite: length = lerp(smallest, largest, random ^ 1.7)
@@ -33,10 +33,12 @@ const SIZE_PCT = [0.6, 0.75]; // a size notice asks for a fish between these per
 const STANDING = 0.25;       // standing with an outfitter for each notice claimed there (profile.raise)
 const SPECIES_PAY = { perch: 12, crappie: 13, smallmouth: 14, pike: 15, walleye: 18, laketrout: 30 };
 const SIZE_PAY = 10;
-// The way out is paid as well as the work (hubs 2 join): a canoe makes about 4–5 km a game day here, and a day of food
-// is $6, so a notice 8 km out (three or four days there and back) that paid $12 cost more than it paid. Lost items and
-// surveys add this much a kilometre of the straight line from the landing, a far laker a little; nothing past PAY_MAX.
-const KM_PAY = { item: 4, survey: 5, laketrout: 2 };
+// The way out is paid as well as the work: lost items and surveys add this much a kilometre of the straight line from
+// the landing, a far laker a little; nothing past PAY_MAX. The hubs 2 join set $4, $5 and $2 when a canoe made 4–5 km
+// a game day (a notice 8 km out was three or four days and $18–24 of food); at the pace a day covers 20–25 km (pace.js),
+// so 8 km out is half a day there and back and $3 of food, and the km pay is cut to about a third (sampled over 144
+// notices from 24 boards: $16 local, $25 medium, $40 far, from $19, $29 and $50).
+const KM_PAY = { item: 1.5, survey: 2, laketrout: 1 };
 const PAY_MAX = 60;
 const kmFrom = (L, x, z) => +(Math.hypot(x - L.x, z - L.z) / 1000).toFixed(1);
 
