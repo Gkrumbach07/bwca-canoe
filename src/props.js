@@ -725,8 +725,11 @@ function buildRack(ctx, F, rng, ra, rb) {
 
 // --- campsites -------------------------------------------------------------------------------------------------
 // A BWCA site: the steel fire grate on its legs in a ring of rocks, higher at the back, ash and charred ends
-// in it; a split-log bench on two rounds; a dome tent with its fly, guyed out and staked; the latrine box
-// back in the woods; the granite ledge down to the water.
+// in it; a split-log bench on two rounds; the latrine box back in the woods; the granite ledge down to the water.
+// No tent: you pitch your own (camp.js), on the flattest clear spot by the ring, which the site keeps as
+// c.layout = { fire: { x, z, y, a }, pad: { x, z, fdx, fdz }, bench: { x, z, ax, az } } in world metres (fire.a:
+// the grate's bearing; pad.fd: the way the door faces, to the fire; bench.a: along the log). Recorded when the
+// site's tile builds its props (the same every time: the search reads the drawn ground).
 function buildCampsite(ctx, c, pieces, ledges) {
   const { tg, ox, oz, H } = ctx;
   const crng = mulberry32(7 + Math.round(c.x) * 31 + Math.round(c.z) * 17);
@@ -781,8 +784,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
   pieces.push(geo);
   // a granite ledge between the fire ring and the water
   if (c.shore < 30) campLedge(tg, c, fx, fz, dir, ox, oz, ledges, ctx.obstacles, H);
-  // the tent on the flattest clear spot nearby (off the ledge rocks, on dry ground), door to the fire, pitched
-  // on the slope of the ground under it
+  // the tent pad: the flattest clear spot nearby (off the ledge rocks, on dry ground), door to the fire
   const rocks = [...ledges[0], ...ledges[1]].map((m) => ({ x: m.elements[12] + ox, z: m.elements[14] + oz, r: Math.hypot(m.elements[0], m.elements[1], m.elements[2]) }));
   let best = null;
   for (let k = 0; k < 10; k++) {
@@ -796,7 +798,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
   }
   const tx = best ? best.x : fx + Math.cos(a + 2.2) * 6, tz = best ? best.z : fz + Math.sin(a + 2.2) * 6;
   let fdx = fx - tx, fdz = fz - tz; const fl = Math.hypot(fdx, fdz) || 1; fdx /= fl; fdz /= fl;
-  pieces.push(placeTent(ctx, tx, tz, fdx, fdz, crng));
+  c.layout = { fire: { x: fx, z: fz, y: fy, a: ga }, pad: { x: tx, z: tz, fdx, fdz }, bench: { x: bx, z: bz, ax, az } };
   // the latrine back in the trees, away from the water
   const la = Math.atan2(backZ, backX) + (crng() - 0.5) * 1.2, lx = fx + Math.cos(la) * 15, lz = fz + Math.sin(la) * 15;
   if (tg.shoreAt(lx, lz) > 3) pieces.push(latrine(ctx, lx, lz, la, crng));
@@ -847,11 +849,13 @@ function ledgeRock(obstacles, k, m, ox, oz, reach) {
   return m;
 }
 
-// The dome tent, built once in its own frame (x along it, z across, the door at +z, y up from the ground):
-// a rounded-rectangle dome for the fly, the vestibule bulging out over the door, the inner tent showing under
-// the fly's hem, guy lines out to stakes; its occlusion baked once. Placed per site on the slope under it.
-const TENT_COLOURS = [0xb26a3e, 0x5c7a55, 0x56708a, 0xa8925f, 0x8d4f45];
+// The dome tent, a two-person one, built in its own frame (x along it, z across, the door at +z, y up from the
+// ground): a rounded-rectangle dome for the fly, the vestibule bulging out over the door, the inner tent showing
+// under the fly's hem, guy lines out to stakes; its occlusion baked once. Pitched by camp.js (buildTentMesh,
+// tentPose) on the slope of the drawn ground where it stands. The flies come in muted colours.
+export const TENT_COLOURS = [0xa8693f, 0x5c7a55, 0x56708a, 0xa8925f, 0x8d4f45];
 const TA = 1.15, TB = 0.82, TH = 1.12;
+export const TENT_SIZE = { a: TA, b: TB, h: TH }; // half length, half width, height (m)
 let tentOcc = null;
 function tentBuild(fly, inner, line, peg) {
   const b = new PropBuilder(), S = 16, K = 5;
@@ -906,22 +910,33 @@ function tentBuild(fly, inner, line, peg) {
   }
   return b;
 }
-function placeTent(ctx, x, z, fdx, fdz, rng) {
-  const fly = tone(TENT_COLOURS[Math.floor(rng() * TENT_COLOURS.length)], rng, 0.05), inner = tone(0xcfc7ad, rng, 0.04);
+// A tent with a fly of `colour` (a hex or a THREE.Color), in its own frame (the door at +z, the ground at y = 0):
+// one mesh of the props' material, its occlusion baked against itself and the ground under it. camp.js keeps a
+// few and stands them where they are pitched (tentPose).
+export function buildTentMesh(colour = TENT_COLOURS[0]) {
+  shared();
+  const fly = new THREE.Color(colour), inner = C(0xcfc7ad);
   const g = tentBuild(fly, inner, C(0xc8c2b0), C(0x8f8c86)).build();
   if (!tentOcc) { const W = C(0xffffff), w = tentBuild(W, W, W, W).build(); bakeSelf(w, { rays: 10, reach: 0.9, ground: 0, floor: 0.35 }); tentOcc = w.getAttribute('aOcc').array.slice(); }
   g.getAttribute('aOcc').array.set(tentOcc);
-  // the ground's slope under the footprint, from its four corners
+  occlude(g, [], { ground: 0, rays: 6, reach: 0.4, floor: 0.6, bury: 0.08 });
+  g.computeBoundingSphere();
+  const m = new THREE.Mesh(g, propMaterial());
+  m.castShadow = true; m.receiveShadow = true; m.name = 'tent';
+  return m;
+}
+// Where a tent pitched at world (x, z) with its door facing (fdx, fdz) stands: on the slope of the ground under its
+// footprint (ground(x, z): the drawn ground, tiles.js groundAt), its hem a little into it. Returns the world matrix
+// and what it is to the walker, a box { x, z, ux, uz, hx, hz, box: true } (tiles.js treesNear, player.js).
+export function tentPose(ground, x, z, fdx, fdz) {
   const Zf = V(fdx, 0, fdz), Xf = V(-fdz, 0, fdx);
-  const at = (u, w) => { const px = x + Xf.x * u + Zf.x * w, pz = z + Xf.z * u + Zf.z * w; return V(px, ctx.H(px, pz), pz); };
+  const at = (u, w) => { const px = x + Xf.x * u + Zf.x * w, pz = z + Xf.z * u + Zf.z * w; return V(px, ground(px, pz), pz); };
   const c00 = at(-TA, -TB), c11 = at(TA, TB), c01 = at(-TA, TB), c10 = at(TA, -TB);
   const up = c11.clone().sub(c00).cross(c01.clone().sub(c10)).normalize(); if (up.y < 0) up.negate();
   const Zt = Zf.clone().addScaledVector(up, -Zf.dot(up)).normalize(), Xt = up.clone().cross(Zt).normalize();
   const y = (c00.y + c11.y + c01.y + c10.y) / 4 - 0.03;
-  g.applyMatrix4(new THREE.Matrix4().makeBasis(Xt, up, Zt).setPosition(x - ctx.ox, y, z - ctx.oz));
-  ctx.obstacles.push({ x: x + Zf.x * 0.15, z: z + Zf.z * 0.15, ux: Xf.x, uz: Xf.z, hx: TA + 0.1, hz: TB + 0.3, box: true });
-  occlude(g, [], { ground: localGround(ctx), rays: 6, reach: 0.4, floor: 0.6, bury: 0.08 });
-  return g;
+  const matrix = new THREE.Matrix4().makeBasis(Xt, up, Zt).setPosition(x, y, z);
+  return { matrix, y, obstacle: { x: x + Zf.x * 0.15, z: z + Zf.z * 0.15, ux: Xf.x, uz: Xf.z, hx: TA + 0.1, hz: TB + 0.3, box: true, tent: true } };
 }
 // The latrine: a fibreglass box with its lid down, set into the ground.
 function latrine(ctx, x, z, ang, rng) {
