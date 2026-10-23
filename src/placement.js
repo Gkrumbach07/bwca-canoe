@@ -30,7 +30,7 @@
 // thinning out away from it.
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
 import { clearingAt, burnAt, calmAt, rockAt } from './fields.js';
-import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND, CELL_SPLAT } from './terrain-build.js';
+import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND, CELL_SPLAT, bedPre } from './terrain-build.js';
 import { CLIFF, CLIFF_MODULE } from './site.js';
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
@@ -410,6 +410,67 @@ function cliffFeatures(grid, site, k, i, j, rng, ctx) {
   }
 }
 
+// ---- the lake bed (the lake pass) -----------------------------------------------------------------------------
+// What lies on the bed of one water cell, from what the bed is made of there (terrain-build.js bedPre, the same the
+// paint reads): stones and boulders off a rocky shore and on the stony shelves, in groups of a big one and a few small
+// round it, seated whole on the drawn bed: the big one a rounded erratic (the boulder species, so it throws its shadow
+// on the sunlit bed), the small ones scree blocks (the cheap rock: no shadow, no collision), each its own shade; sunken
+// logs off the wooded shores, lying along the contour and half in the silt; and in the soft shallows of a quiet bay a
+// waterlogged log lying awash, its back just out of the water. The water's tint pass colours all of them as it does
+// the bed (water.js). The cobble and the gravel are the bed's own paint (terrain.js bedCobble).
+// ctx: { emit, ground, blocked, cx, cz, cell, sd, level }.
+const _bed = {};
+function bedFeatures(grid, site, rr, ctx) {
+  const { cx, cz, cell, sd, level } = ctx, ground = ctx.ground;
+  const depth = level - ground(cx, cz);
+  if (!(depth > 0.15) || depth > 9) return;
+  const b = bedPre(grid, cx, cz, sd, depth, site, _bed);
+  const shallow = 1 - smoothstep(3.5, 7, depth);
+  // stones: a group of one big one and a few small, more off a rocky shore
+  const eRock = (0.35 * b.cobble + 1.8 * b.rock * (b.cobble + b.bedrock)) * shallow * (1 - b.silt);
+  for (let n = Math.floor(eRock) + (rr() < eRock % 1 ? 1 : 0); n > 0; n--) {
+    const gx = cx + (rr() - 0.5) * cell, gz = cz + (rr() - 0.5) * cell;
+    if (grid.shoreAt(gx, gz) > -0.6) continue;
+    const big = rr() < 0.3 + 0.3 * b.rock, lead = big ? 0.6 + rr() * 0.55 : 0.28 + rr() * 0.27;
+    const k = 1 + Math.floor(rr() * (big ? 4 : 3));
+    for (let q = 0; q < k; q++) {
+      const s = q === 0 ? lead : lead * (0.3 + rr() * 0.4), a = rr() * Math.PI * 2, d = q === 0 ? 0 : lead * (0.9 + rr() * 1.2);
+      const x = gx + Math.cos(a) * d, z = gz + Math.sin(a) * d;
+      if (grid.shoreAt(x, z) > -0.4 || ctx.blocked(x, z, s)) continue;
+      const yaw = rr() * Math.PI * 2, az = rr() * Math.PI * 2, tilt = rr() * 0.3, squash = 0.8 + rr() * 0.4, tall = 0.7 + rr() * 0.5;
+      const tint = 0.62 + rr() * 0.42;
+      if (q === 0 && big) {
+        // the group's boulder: a rounded erratic (the boulder species: it casts its shadow on the bed)
+        const bs = s * 0.8, bt = tall * 0.85;
+        ctx.emit(SPECIES.boulder, ROCK_KIND.boulder, x, seatRock(ground, ROCK_FOOT[ROCK_KIND.boulder], x, z, bs, squash, bt, yaw, az, tilt * 0.5, grid.slopeAt(x, z)), z, yaw, bs, tint, squash, az, tilt * 0.5, bt);
+        continue;
+      }
+      const y = seatRock(ground, TALUS_FOOT, x, z, s, squash, tall, yaw, az, tilt, grid.slopeAt(x, z));
+      ctx.emit(SPECIES.talus, rr() < 0.5 ? 0 : 1, x, y, z, yaw, s, tint, squash, az, tilt, tall);
+    }
+  }
+  // a sunken log off a wooded shore (not off the bare rock or the open muskeg), lying along the contour
+  const wooded = (1 - b.rock) * (1 - smoothstep(0.5, 0.9, b.soft)) * (1 - smoothstep(4, 6, depth)) * smoothstep(-26, -6, sd);
+  if (rr() < 0.05 * wooded) {
+    const x = cx + (rr() - 0.5) * cell, z = cz + (rr() - 0.5) * cell, dd = grid.deeperDir(x, z);
+    const yaw = Math.atan2(dd.x, dd.z) + (rr() - 0.5) * 0.8, scale = 0.8 + rr() * 0.5;
+    const ux = Math.cos(yaw) * 3.4 * scale, uz = -Math.sin(yaw) * 3.4 * scale;
+    if (grid.shoreAt(x + ux, z + uz) < -0.8 && grid.shoreAt(x - ux, z - uz) < -0.8 && !ctx.blocked(x, z, 4)) {
+      const y = Math.min(ground(x + ux, z + uz), ground(x - ux, z - uz), ground(x, z)) - 0.12 * scale;
+      ctx.emit(SPECIES.log, rr() < 0.6 ? 0 : 1, x, y, z, yaw, scale, 0.55 + rr() * 0.12, 1);
+    }
+  }
+  // a waterlogged log awash in a quiet soft shallow, its back just out of the water
+  if (depth < 1.1 && rr() < 0.035 * b.soft * (1 - b.rock)) {
+    const x = cx + (rr() - 0.5) * cell, z = cz + (rr() - 0.5) * cell, yaw = rr() * Math.PI * 2, scale = 0.7 + rr() * 0.4;
+    const ux = Math.cos(yaw) * 3.4 * scale, uz = -Math.sin(yaw) * 3.4 * scale;
+    if (grid.shoreAt(x + ux, z + uz) < -0.3 && grid.shoreAt(x - ux, z - uz) < -0.3 && !ctx.blocked(x, z, 4)) {
+      const y = Math.max(Math.min(ground(x + ux, z + uz), ground(x - ux, z - uz)) - 0.15, level - 0.4 * scale);
+      ctx.emit(SPECIES.log, 0, x, y, z, yaw, scale, 0.58 + rr() * 0.1, 1);
+    }
+  }
+}
+
 // Returns bins of instances (`stride` floats each, see STRIDE), one per region (640 m, or 320 m for the small
 // species) and species, the instances sorted into variant groups with the count in each (`groups`), and the
 // canopy shade over the tile's local extent (used to darken the ground under thick forest).
@@ -470,6 +531,11 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
     for (let i = i0 - 1; i < i0 + n + 1; i++) {
       const k = grid.local(i, j);
       const sd = grid.sdCell(i, j);
+      // the lake bed's stones and logs (bedFeatures), core cells only, a stream of their own
+      if (sd < 0 && i >= i0 && i < i0 + n && j >= j0 && j < j0 + n) {
+        const bx = grid.cellX(i), bz = grid.cellZ(j);
+        bedFeatures(grid, site, mulberry32((hash2(i, j, seed + 307) * 4294967296) >>> 0), { emit, ground, blocked, cx: bx, cz: bz, cell, sd, level: grid.levelAt(bx, bz, 3) });
+      }
       if (sd < -4) continue;
       const rng = mulberry32((hash2(i, j, seed) * 4294967296) >>> 0);
       const cx = grid.cellX(i), cz = grid.cellZ(j);
@@ -602,15 +668,29 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
   return { bins: out, shade, total };
 }
 
-// Lily pads, reeds and submerged weeds in sheltered shallows. Bins of 5 floats per instance
-// (x, y, z relative to the tile corner, yaw, scale), keyed by region, kind and geometry variant.
+// The lake plants (docs/look.md, the lake pass). Bins of 5 floats per instance (x, y, z relative to the tile corner,
+// yaw, scale), keyed by region, kind and geometry variant (aquatic.js draws a bin with one geometry). Each grows where
+// it grows in the Boundary Waters, read from the bed (terrain-build.js bedPre: soft silt and sand root plants, cobble and
+// bedrock hardly any), the shore behind (wet ground or bare rock: site.js) and how sheltered the water is:
+//   pads (kind 0)    rafts of yellow pond lily (spatterdock: big pads, some standing out of the water, yellow
+//                    flowers) in the shallow mucky water, white water lily a little deeper, small plain pads among
+//                    them; dense in the sheltered soft-bottomed bays and the inlets, 0.4-3 m, in patches 30-60 m across
+//   reeds (kind 1)   sedge tussocks along the marshy shores, standing out of the water at its edge (variant 3); cattail
+//                    in the shallow muck of a sheltered marshy shore (2); bulrush out to a metre and a half on the
+//                    soft bottoms, sheltered or not (0); reed and grass at the edge (1)
+//   weed (kind 2)    pondweed and milfoil on the soft bed, 0.4-3.6 m, in the beds the bed's paint marks (bedPre weed)
+//   rice (kind 3)    wild rice in the shallow soft bays where water runs in or out (an inlet, a river mouth), and in
+//                    the quiet shallows of the stained lakes, 0.3-1.4 m
+// Nothing roots off a bare rocky shore or on a cobble bed in the open; all of it is thicker where the water is calm.
+// The season (aquatic.js) grows and browns them.
+const _bedA = {};
 export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site = null }) {
-  // The lake plants follow the water they need (docs/look.md, the lake pass): rafts of lily pads in sheltered
-  // shallow water, reeds, rushes and cattails along soft shores, wild rice in beds in the shallow bays, pondweed on
-  // the bed; none on a rocky exposed shore. Kind 3 is the wild rice (aquatic.js), beside placement's AQUATIC kinds.
-  const cell = grid.cell, RICE = 3;
+  const cell = grid.cell, RICE = 3, SEDGE = 3;
   const bins = new Map();
   let total = 0;
+  // depths are to the drawn bed (the shore band reshaped: the raw cells under an unmapped lake's shallows sit a metre
+  // down right at the waterline); the weed is seated on the mesh itself
+  const meshCache = new Map(), bedAt = (x, z) => surfaceAt(grid, x, z);
   // how sheltered a spot is: of eight rays 48 m out over the water (sphere-traced on the shore distance, inside the
   // tile's halo so a neighbour places the same), the share that reach land
   const shelterAt = (x, z) => {
@@ -621,33 +701,50 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
     }
     return hits / 8;
   };
+  // water running in or out nearby: another water polygon (a river, a creek, the next lake through a narrows) within 55 m
+  const inletAt = (x, z, id) => {
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + 0.4, dx = Math.cos(a), dz = Math.sin(a);
+      for (const t of [22, 40, 55]) { const o = grid.lakeIdAt(x + dx * t, z + dz * t); if (o && o !== id) return 1 - t / 80; }
+    }
+    return 0;
+  };
   for (let j = j0; j < j0 + n; j++) {
     for (let i = i0; i < i0 + n; i++) {
       const sd = grid.sdCell(i, j);
-      if (sd < -32 || sd > 2) continue;
+      if (sd < -40 || sd > 2) continue;
       const cx = grid.cellX(i), cz = grid.cellZ(j);
       const level = grid.levelAt(cx, cz, 3);
-      const depth = level - grid.hCell(i, j);
-      // the shore this water faces: bare rock (exposed, steep, nothing roots) or soft ground
-      let soft = 1;
-      if (sd > -24) {
+      const depth = level - bedAt(cx, cz);
+      // the shore this water faces: bare rock, a cliff or its scree (nothing roots off it), or wet ground (a marsh)
+      let rockS = 0, wet = 0;
+      {
         const dd = grid.deeperDir(cx, cz), back = Math.max(0, -sd) + 4, lx = cx - dd.x * back, lz = cz - dd.z * back;
-        soft = 1 - smoothstep(0.35, 0.6, rockAt(rockSlope(grid, lx, lz), grid.shoreAt(lx, lz), lx, lz));
-        if (site) soft = Math.min(soft, 1 - smoothstep(0.2, 0.5, Math.max(site.at(site.cliff, lx, lz), site.at(site.talus, lx, lz), site.at(site.bare, lx, lz))));
+        rockS = smoothstep(0.35, 0.6, rockAt(rockSlope(grid, lx, lz), grid.shoreAt(lx, lz), lx, lz));
+        if (site) {
+          rockS = Math.max(rockS, smoothstep(0.2, 0.5, Math.max(site.at(site.cliff, lx, lz), site.at(site.talus, lx, lz), site.at(site.bare, lx, lz))));
+          if (grid.shoreAt(lx, lz) > 0) wet = smoothstep(0.3, 0.8, site.at(site.wet, lx, lz));
+        }
       }
-      if (soft < 0.05 && sd > -24) continue;
+      if (rockS > 0.95 && sd > -24) continue;
+      // the bottom (bedPre, as the bed is painted): soft silt and sand root plants, cobble and bedrock hardly any
+      const bed = bedPre(grid, cx, cz, Math.min(sd, -0.01), Math.max(depth, 0), site, _bedA);
+      const rooting = Math.min(1, bed.silt + 0.7 * bed.sand + 0.25 * bed.cobble) * (1 - 0.9 * rockS);
       // sheltered: a cove round it, or the calm field's quiet water that the shape test misses
       const calm = calmAt(cx, cz), shelter = shelterAt(cx, cz);
       const shelt = clamp(smoothstep(0.15, 0.6, shelter) * 0.75 + smoothstep(0.45, 0.66, calm) * 0.5, 0, 1);
+      const id = grid.lakeIdAt(cx, cz) || grid.lakeIdAt(cx - 10, cz) || grid.lakeIdAt(cx + 10, cz);
+      const inlet = sd < -1 && depth < 2 ? inletAt(cx, cz, id) : 0;
+      const stained = 1 - smoothstep(1.4, 3.0, bed.clarity);
       const rng = mulberry32((hash2(i, j, seed + 1) * 4294967296) >>> 0);
       const rx = Math.floor((cx - grid.originX) / REGION), rz = Math.floor((cz - grid.originZ) / REGION);
       const place = (kind, expected, pick, test, lift, scaleOf) => {
         const cnt = Math.floor(expected) + (rng() < expected - Math.floor(expected) ? 1 : 0);
         for (let q = 0; q < cnt; q++) {
           const x = cx + (rng() - 0.5) * cell, z = cz + (rng() - 0.5) * cell;
-          const s = grid.shoreAt(x, z), d = level - grid.heightAt(x, z);
+          const s = grid.shoreAt(x, z), d = level - bedAt(x, z);
           if (!test(s, d)) continue;
-          const y = kind === AQUATIC.weed ? grid.heightAt(x, z) : level + lift;
+          const y = kind === AQUATIC.weed ? meshHeightAt(grid, x, z, meshCache) : level + lift;
           const variant = pick(d), key = ((rx * 4096 + rz) * 4 + kind) * 4 + variant;
           let b = bins.get(key);
           if (!b) { b = { rx, rz, kind, variant, items: [] }; bins.set(key, b); }
@@ -655,22 +752,33 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
           total++;
         }
       };
-      // beds of wild rice: 50-100 m fields in the sheltered shallows
-      const bed = smoothstep(0.45, 0.58, fbm(cx * 0.012 + 7, cz * 0.012, 2, 113)) * smoothstep(0.3, 0.7, shelt) * soft;
-      if (bed > 0.01 && sd < -2.5 && depth > 0.25 && depth < 1.6)
-        place(RICE, 4.2 * bed, () => (rng() < 0.5 ? 0 : 1), (s, d) => s < -2 && d > 0.25 && d < 1.6, 0.07, () => 0.85 + rng() * 0.35);
-      // rafts of lily pads: loose, gathered into patches 20-40 m across, thinner inside a rice bed
-      const raft = smoothstep(0.36, 0.56, fbm(cx * 0.03 + 3, cz * 0.03, 2, 77)) * smoothstep(0.2, 0.6, shelt) * soft * (1 - 0.7 * bed);
-      if (raft > 0.01 && sd < -1 && sd > -26 && depth > 0.3 && depth < 2.8)
-        place(AQUATIC.pad, 4.5 * raft, () => { const r = rng(); return r < 0.13 ? 2 : r < 0.21 ? 3 : r < 0.6 ? 0 : 1; }, (s, d) => s < -0.8 && d > 0.3 && d < 2.8, 0.035, () => 0.8 + rng() * 0.45);
-      // reeds along soft shores, in stands: cattails in the marshy shallows of a cove, bulrush out to a metre, reed
-      // and sedge at the edge
-      const stand = smoothstep(0.38, 0.56, fbm(cx * 0.05 + 11, cz * 0.05, 2, 91)) * smoothstep(0.1, 0.45, shelt) * soft;
-      if (stand > 0.01 && sd > -8 && sd < 1.2)
-        place(AQUATIC.reed, 4.5 * stand, (d) => (d > 0.6 ? 0 : d < 0.35 && shelt > 0.55 ? 2 : rng() < 0.6 ? 1 : 0), (s, d) => s < 1.0 && d > -0.05 && d < 1.2, 0.07, () => 0.8 + rng() * 0.45);
-      // pondweed on the bed, more where it is sheltered
-      if (sd < -3 && sd > -30 && depth > 0.4 && depth < 3.4)
-        place(AQUATIC.weed, 1.2 * (0.4 + 0.6 * shelt), () => Math.floor(rng() * 2), (s, d) => s < -2 && d > 0.35 && d < 3.6, 0, (d) => Math.min(0.4 + d * 0.4 * rng() + 0.25, d * 0.8));
+      // beds of wild rice: 50-100 m fields in the soft shallows where water runs through, and in the quiet stained bays
+      const riceField = smoothstep(0.42, 0.56, fbm(cx * 0.012 + 7, cz * 0.012, 2, 113));
+      const bedR = clamp(Math.max(1.4 * inlet, riceField * smoothstep(0.3, 0.7, shelt) * (0.45 + 0.55 * stained)), 0, 1) * rooting;
+      if (bedR > 0.01 && sd < -1.5 && depth > 0.2 && depth < 1.6)
+        place(RICE, 7 * bedR, () => (rng() < 0.5 ? 0 : 1), (s, d) => s < -1.2 && d > 0.25 && d < 1.5, 0.07, () => 0.85 + rng() * 0.4);
+      // rafts of lily pads, gathered into patches 30-60 m across, dense in the quiet soft bays and the inlets, thinner
+      // inside a rice bed: spatterdock in the shallow muck, white lilies a little deeper, small plain pads among them
+      const raft = smoothstep(0.26, 0.48, fbm(cx * 0.025 + 3, cz * 0.025, 2, 77)) ** 0.7 * clamp(smoothstep(0.1, 0.5, shelt) + 0.8 * inlet, 0, 1) * (0.3 + 0.7 * rooting) * (1 - 0.6 * bedR) * (1 - 0.9 * rockS);
+      if (raft > 0.01 && sd < -0.8 && sd > -32 && depth > 0.3 && depth < 3.0)
+        place(AQUATIC.pad, 18 * raft, (d) => { const r = rng(); return d < 1.6 && r < 0.38 + 0.25 * stained ? 1 : d > 0.9 && r < 0.6 ? 2 : r < 0.75 ? 0 : 3; },
+          (s, d) => s < -0.6 && d > 0.3 && d < 3.0, 0.035, () => 0.8 + rng() * 0.5);
+      // the emergent plants, in stands along the soft shores
+      const stand = smoothstep(0.32, 0.52, fbm(cx * 0.05 + 11, cz * 0.05, 2, 91));
+      const marsh = Math.max(wet, 0.6 * smoothstep(0.4, 0.8, bed.soft)) * (1 - rockS);
+      // sedge tussocks along a marshy shore, out of the water at its very edge
+      const sedgy = Math.max(marsh, 0.5 * (1 - rockS) * (0.4 + 0.6 * shelt) * rooting);
+      if (sedgy > 0.05 && sd > -6 && sd < 1.6)
+        place(AQUATIC.reed, 16 * sedgy * (0.3 + 0.7 * stand), () => SEDGE, (s, d) => s < 1.4 && d > -0.08 && d < 0.55, 0.05, () => 0.75 + rng() * 0.5);
+      // cattail in the shallow muck of a sheltered marshy shore
+      if (marsh > 0.05 && sd > -9 && sd < 1)
+        place(AQUATIC.reed, 4 * marsh * shelt * stand, () => 2, (s, d) => s < 0.8 && d > 0 && d < 0.75, 0.07, () => 0.8 + rng() * 0.4);
+      // bulrush out to a metre and a half on the soft bottoms, and reed and grass at the edge
+      if (sd > -16 && sd < 1)
+        place(AQUATIC.reed, 4.5 * stand * rooting * (0.4 + 0.6 * shelt), (d) => (d > 0.5 ? 0 : rng() < 0.55 ? 1 : 0), (s, d) => s < 0.9 && d > -0.04 && d < 1.5, 0.07, () => 0.8 + rng() * 0.45);
+      // pondweed and milfoil on the soft bed, in the weed beds
+      if (sd < -2 && sd > -38 && depth > 0.4 && depth < 3.8)
+        place(AQUATIC.weed, (0.8 + 7 * bed.weed) * rooting * (0.5 + 0.5 * shelt), () => Math.floor(rng() * 2), (s, d) => s < -1.5 && d > 0.35 && d < 3.8, 0, (d) => Math.min(0.45 + d * 0.45 * rng() + 0.25, d * 0.8));
     }
   }
   return { bins: [...bins.values()].map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, items: new Float32Array(b.items) })), total };

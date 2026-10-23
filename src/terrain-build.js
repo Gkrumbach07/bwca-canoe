@@ -2,7 +2,7 @@
 // out, so it runs in the build worker. Positions are relative to (originX, originZ), the tile corner, which
 // keeps every vertex small enough for float32 however far the tile sits from the world origin.
 import { fbm, lerp, smoothstep } from './rng.js';
-import { clearingAt, burnAt, rockAt } from './fields.js';
+import { clearingAt, burnAt, rockAt, calmAt } from './fields.js';
 
 // the cliff band strength (site.js CLIFF.band) a cell needs to be a cliff
 const CLIFF_BAND = 0.45, TALUS_MIN = 0.4;
@@ -137,6 +137,57 @@ export const SPLAT_SUNNY = C.forestLight; // the duff's lit colour in the broad 
 export const BED_PALETTE = [C.bedSand, C.bedShelf, C.bedWeed, C.bedDeep, C.bedHole];
 export const BED_DEPTH_SCALE = 16; // aFloor.w is the bed depth over this many metres
 
+// ---- the lake bed (the lake pass) ---------------------------------------------------------------------------------
+// Under water the splat's slots carry the bed's own materials (the land's never reach there): aSplatA = sand, cobble,
+// silt, bedrock (summing to 1) and aSplatB.x a weed bed over them; aFloor = (the lake's Secchi depth / 10, 0, 1, the
+// true water depth / BED_DEPTH_SCALE). Their colours, linear, as the bed would look wet in the sun; the water column
+// (water.js) tints and veils them by depth and clarity, so they carry no depth darkening of their own beyond the
+// organic ooze of the deep holes (terrain.js). The shader gives each its pattern: ripples in the sand, a stone per
+// cell for the cobble, soft mottle in the silt, joints in the bedrock, ragged dark tufts for the weed.
+export const BED_MATS = [hex(0xb3a27c), hex(0x786e5d), hex(0x584833), hex(0x625d55), hex(0x41562e), hex(0x3d3528)]; // ..., ooze
+// What the bed is made of at a point under water, from the shore it lies off (sd < 0, depth the true water depth):
+//   cobble   off a rocky shore (bare rock, a cliff or its scree, a steep bank behind it), and in patches on any shelf
+//            (the till the ice left: the Shield's lakes are stony in the shallows wherever the waves reach)
+//   bedrock  the granite ledge of a rocky shore running on down under the water from the waterline
+//   silt     brown silt and muck between the till, off the wet and boggy shores and in the quiet bays, and everywhere
+//            in the deep (organic ooze)
+//   sand     only in the odd sandy cove (the site's beaches, else a sparse slow field): the shallows are dark
+//   weed     a bed of pondweed and milfoil over the soft bottom from half a metre to three or four
+// The rocks and logs placement puts on the bed read the same (placement.js placeVegetation, bedFeatures).
+export function bedPre(grid, x, z, sd, depth, site, out = {}) {
+  out.clarity = grid.clarityOf ? grid.clarityOf(grid.lakeIdAt(x, z)) : 2.6;
+  if (depth > 14) { out.sand = 0; out.cobble = 0; out.silt = 1; out.bedrock = 0; out.weed = 0; out.rock = 0; out.soft = 1; return out; }
+  let rock = 0.3, wet = 0, beach = 0;
+  if (site) {
+    // the land behind: along the way up out of the water, a few metres past the waterline
+    const dd = grid.deeperDir(x, z), back = Math.min(30, -sd + 6), lx = x - dd.x * back, lz = z - dd.z * back;
+    rock = Math.max(smoothstep(0.2, 0.55, Math.max(site.at(site.bare, lx, lz), site.at(site.cliff, lx, lz), site.at(site.talus, lx, lz))),
+      0.8 * smoothstep(0.22, 0.5, site.at(site.S, lx, lz)));
+    wet = grid.shoreAt(lx, lz) > 0 ? smoothstep(0.35, 0.8, site.at(site.wet, lx, lz)) : 0.4;
+    if (site.beach) beach = smoothstep(0.2, 0.6, site.at(site.beach, lx, lz)); // the shoreline pass's sandy beaches
+  }
+  const calm = smoothstep(0.45, 0.62, calmAt(x, z));
+  const till = smoothstep(0.38, 0.62, fbm(x * 0.022 + 9, z * 0.022, 2, 141));
+  // a clear lake is a lean rocky one: its shallows stony, the ooze only in the deep; a stained one is mucky
+  const clearL = smoothstep(2.5, 5.5, out.clarity);
+  const soft = Math.max(wet, 0.7 * calm) * (1 - rock) * (1 - 0.55 * clearL);
+  const deep = smoothstep(4 + 3 * clearL, 10 + 3 * clearL, depth);
+  // The Shield's shallows are dark: granite ledge and boulders off the rocky shores, cobble where the ice left its till,
+  // brown silt and muck between and off the soft shores, varying along the shore. Pale sand only in the odd sandy cove:
+  // the beaches the site marks, else a sparse slow field off the gentler shores.
+  const cove = Math.max(beach, smoothstep(0.66, 0.76, fbm(x * 0.006 + 31, z * 0.006, 2, 151)) * (1 - rock)) * (1 - deep);
+  const silt = Math.max(deep, soft * (1 - 0.8 * till * (1 - wet)), 0.75 * (1 - rock) * (1 - till) * (1 - 0.6 * clearL));
+  const cobble = (1 - silt) * clamp01(Math.max(0.8 * rock, 0.25 + 0.75 * till));
+  const bedrock = (1 - silt) * rock * smoothstep(0.1, 0.8, depth) * smoothstep(0.3, 0.6, fbm(x * 0.045 + 2, z * 0.045, 2, 143));
+  const rest = silt + cobble + bedrock || 1, k = (1 - cove) / rest;
+  out.sand = cove; out.cobble = cobble * k; out.silt = silt * k; out.bedrock = bedrock * k;
+  out.weed = (1 - 0.85 * rock) * smoothstep(0.35, 0.9, depth) * (1 - smoothstep(2.8, 4.4, depth)) * (0.3 + 0.7 * Math.max(wet, calm, soft))
+    * smoothstep(0.4, 0.58, fbm(x * 0.04 + 3, z * 0.04, 2, 147));
+  out.rock = rock; out.soft = soft;
+  return out;
+}
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
 // A cell's splat as the cover map carries it (buildTerrainChunk cellSplat, placement.js coverField): twelve bytes,
 // duff, moss, meadow, burn | rock, dark rock, lichen rock, shore | cliff, scree, canopy shade, sunny stand, each
 // 0..255, the weights and the floor of the terrain vertex at the cell's centre.
@@ -151,8 +202,12 @@ const across = (v, w) => smoothstep(-w, w, v);
 export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
   wC[0] = wC[1] = wC[2] = wC[3] = 0;
   if (pre.sd < 0) {
-    wA[0] = wA[1] = wA[2] = wA[3] = 0; wB[0] = wB[1] = wB[2] = wB[3] = 0;
-    fl[0] = 0; fl[1] = 0; fl[2] = 1; fl[3] = Math.min(1, Math.max(0, pre.depth) / BED_DEPTH_SCALE);
+    // the bed (bedPre): its four materials and the weed bed, the lake's clarity and the true depth
+    const b = pre.bed;
+    if (b) { wA[0] = b.sand; wA[1] = b.cobble; wA[2] = b.silt; wA[3] = b.bedrock; wB[0] = b.weed; } else { wA[0] = 1; wA[1] = wA[2] = wA[3] = 0; wB[0] = 0; }
+    wB[1] = wB[2] = wB[3] = 0;
+    fl[0] = b ? Math.min(1, b.clarity / 10) : 0.26; fl[1] = 0; fl[2] = 1;
+    fl[3] = Math.min(1, Math.max(0, pre.bedDepth ?? pre.depth) / BED_DEPTH_SCALE);
     return;
   }
   // the cliff's face (where the band's ground is a wall, and any other wall: a step too low for a cliff of its
@@ -271,13 +326,17 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   const fineCell = (i, j) => Math.abs(grid.sdCell(i, j)) <= FINE_BAND;
   const quadFine = (i, j) => fine && (fineCell(i, j) || fineCell(i + 1, j) || fineCell(i, j + 1) || fineCell(i + 1, j + 1));
   const shadeAt = (x, z) => (shade ? shade[grid.local(grid.cellI(x), grid.cellJ(z))] : 0);
-  const pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, depth: -1 };
+  const pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, depth: -1, bedDepth: 0, bed: {} };
   const wA = [0, 0, 0, 0], wB = [0, 0, 0, 0], wC = [0, 0, 0, 0], wf = [0, 0, 0, 0];
   const q8 = (v) => Math.round(Math.min(1, Math.max(0, v)) * 255);
   // the splat of a point: sd is the shore distance it is painted with (a waterline twin forces its side)
   const paint = (x, z, h, sd) => {
     groundPre(grid, x, z, sd, site, pre);
-    pre.depth = sd < 0 ? Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h) + bedGrain(x, z) : -1;
+    if (sd < 0) {
+      pre.bedDepth = Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h);
+      pre.depth = pre.bedDepth + bedGrain(x, z);
+      bedPre(grid, x, z, sd, pre.bedDepth, site, pre.bed);
+    } else pre.depth = -1;
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
     for (let k = 0; k < 4; k++) { sa.push(q8(wA[k])); sb.push(q8(wB[k])); sc.push(q8(wC[k])); fl.push(q8(wf[k])); }
   };

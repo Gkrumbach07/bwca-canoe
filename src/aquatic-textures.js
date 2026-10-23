@@ -25,6 +25,10 @@ export const AQUA_SLOTS = Object.freeze({
   cattail: { x: 256, y: 256, w: 256, h: 512 }, // cattail: broad blades and brown heads on stalks
   rice: { x: 512, y: 256, w: 256, h: 512 },    // wild rice: thin stems with drooping seed heads
   weed: { x: 768, y: 512, w: 256, h: 512 },    // pondweed under the water: wavy stems with small leaves
+  // the lake pass, in the strip left along the bottom
+  sedge: { x: 0, y: 768, w: 256, h: 256 },     // a sedge tussock: a fountain of fine arching blades, the tips yellowing
+  spatter: { x: 256, y: 768, w: 256, h: 256 }, // a yellow pond lily's pad: a long heart, the notch to the right, pinnate veins
+  milfoil: { x: 512, y: 768, w: 256, h: 256 }, // a milfoil and coontail clump under the water: bushy whorls, dense and dark
 });
 
 const INSET = 1.5;
@@ -345,6 +349,75 @@ function paintWeed(ctx, w, h, rng) {
   }
 }
 
+// A yellow pond lily's pad (spatterdock): a long heart, deep notch at the stem end (to the right), thick and leathery,
+// a dark yellow-green with a paler midrib and pinnate veins, the rim a little bronze
+function paintSpatter(ctx, w, h, rng) {
+  const cx = w / 2, cy = h / 2, R = w * 0.47, ry = 0.74, notch = 0.2;
+  const outline = () => {
+    ctx.beginPath();
+    ctx.moveTo(cx + R * 0.12, cy);
+    for (let i = 0; i <= 96; i++) {
+      const a = notch + (i / 96) * (Math.PI * 2 - 2 * notch), k = 1 + 0.02 * Math.sin(a * 7 + 0.3);
+      ctx.lineTo(cx + Math.cos(a) * R * k, cy + Math.sin(a) * R * ry * k);
+    }
+    ctx.closePath();
+  };
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  g.addColorStop(0, rgb(112, 140, 60)); g.addColorStop(0.7, rgb(92, 122, 48)); g.addColorStop(0.95, rgb(104, 116, 50)); g.addColorStop(1, rgb(132, 112, 58));
+  outline(); ctx.fillStyle = g; ctx.fill();
+  ctx.save(); outline(); ctx.clip();
+  for (let i = 0; i < 6; i++) {
+    const x = cx + (rng() - 0.5) * R * 1.4, y = cy + (rng() - 0.5) * R, sz = R * (0.15 + rng() * 0.2);
+    const bg = ctx.createRadialGradient(x, y, 0, x, y, sz);
+    bg.addColorStop(0, rgb(70, 96, 40, 0.3)); bg.addColorStop(1, rgb(70, 96, 40, 0));
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  }
+  // the midrib from the notch across, the veins running off it to the rim
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = rgb(150, 170, 92, 0.55); ctx.lineWidth = 2.6;
+  ctx.beginPath(); ctx.moveTo(cx + R * 0.1, cy); ctx.lineTo(cx - R * 0.95, cy); ctx.stroke();
+  ctx.lineWidth = 1.3; ctx.strokeStyle = rgb(146, 166, 90, 0.38);
+  for (let i = 0; i < 11; i++) {
+    const t = (i + 0.5) / 11, x0 = cx + R * 0.05 - t * R * 0.95;
+    for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x0, cy); ctx.quadraticCurveTo(x0 - R * 0.12, cy + side * R * ry * 0.4, x0 - R * 0.2, cy + side * R * ry * 0.92); ctx.stroke(); }
+  }
+  const sh = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.25, 0, cx - R * 0.3, cy - R * 0.25, R * 0.7);
+  sh.addColorStop(0, rgb(255, 255, 220, 0.14)); sh.addColorStop(1, rgb(255, 255, 220, 0));
+  ctx.fillStyle = sh; ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
+
+// A sedge tussock: many fine blades from one base, arching out and over, dark green at the base and yellowing to the tips
+function paintSedge(ctx, w, h, rng) {
+  for (let i = 0; i < 46; i++) {
+    const side = rng() < 0.5 ? -1 : 1, x0 = w / 2 + (rng() - 0.5) * w * 0.12;
+    const lean = side * (0.02 + rng() * 0.5), len = h * (0.5 + rng() * 0.46), wid = 2.2 + rng() * 2.4;
+    const c0 = mixc([58, 88, 42], [84, 112, 50], rng()), c1 = mixc([150, 160, 82], [186, 176, 98], rng());
+    const g = vgrad(ctx, h, [[0, rgb(...mixc(c0, [36, 54, 30], 0.4))], [0.45, rgb(...c0)], [1, rgb(...c1)]]);
+    blade(ctx, x0, h - 1, -Math.PI / 2 + lean, len, wid, side * (0.3 + rng() * 0.9), g, 0.15);
+  }
+}
+
+// Milfoil and coontail under the water: a dense dark clump of stems with feathery whorls all the way up
+function paintMilfoil(ctx, w, h, rng) {
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 11; i++) {
+    let x = w / 2 + (rng() - 0.5) * w * 0.3, y = h - 1, a = -Math.PI / 2 + (rng() - 0.5) * 0.7;
+    const len = h * (0.5 + rng() * 0.45), steps = 26;
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps, nx = x + Math.cos(a) * len / steps, ny = y + Math.sin(a) * len / steps;
+      const col = mixc([30, 52, 32], [82, 112, 56], t * 0.7 + rng() * 0.2);
+      ctx.strokeStyle = rgb(...col); ctx.lineWidth = 2.2 - t; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(nx, ny); ctx.stroke();
+      if (s % 2 === 0) {
+        const L = (1 - t * 0.5) * (12 + rng() * 8);
+        ctx.lineWidth = 1.1; ctx.strokeStyle = rgb(...mixc(col, [104, 136, 70], 0.3), 0.85);
+        for (let q = 0; q < 6; q++) { const la = (q / 6) * Math.PI * 2 + rng() * 0.4; ctx.beginPath(); ctx.moveTo(nx, ny); ctx.lineTo(nx + Math.cos(la) * L, ny + Math.sin(la) * L * 0.6 - L * 0.2); ctx.stroke(); }
+      }
+      x = nx; y = ny; a += (rng() - 0.5) * 0.12 + (-Math.PI / 2 - a) * 0.05;
+    }
+  }
+}
+
 const PAINT = {
   pad: (ctx, w, h, rng) => paintPad(ctx, w, h, rng, false),
   padB: (ctx, w, h, rng) => paintPad(ctx, w, h, rng, true),
@@ -357,4 +430,7 @@ const PAINT = {
   cattail: paintCattail,
   rice: paintRice,
   weed: paintWeed,
+  sedge: paintSedge,
+  spatter: paintSpatter,
+  milfoil: paintMilfoil,
 };

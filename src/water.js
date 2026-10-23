@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { glslWaves, glslRipples, waveHeight, windWeights, N as WAVE_DIRS } from './waves.js';
 import { glslNoise } from './shading.js';
 import * as Sky from './sky.js';
+import { groundUniforms } from './terrain.js';
 
 // Water in two parts that share one fragment shader:
 //  - far field: static 10 m meshes, one per tile, carrying only the long swell, with a hole cut where the patch sits
@@ -46,14 +47,38 @@ const RIP = Array.from({ length: RIPPLES }, (_, i) => {
 // each fixed direction's own phase, so no two line up
 const RIP_PH = Float64Array.from({ length: RIPPLES * RIP_DIRS }, (_, n) => { const s = Math.sin(n * 12.9898 + 4.1) * 43758.5453; return (s - Math.floor(s)) * TAU; });
 const GUST_DRIFT = 1.6;   // m/s: the cat's paws drift downwind this fast
-// the body of the water, linear albedo: the bed seen through a short column, the open water in a clear lake, the
-// deep blue-green, and the tea of a tannin-stained bog lake. The light (the sun and the sky fill) multiplies it.
+// The water column (the lake pass; docs/look.md). What comes up out of the water is two things: the bed (and the
+// rocks, logs and weed on it), seen through the column, and the light the water itself scatters back, the veil.
+//   the bed's tint  the light that reaches the bed and comes back up loses each colour at its own rate: red to the
+//                   water itself, blue to the tannins a bog lake carries. Per metre of path (down to the bed and back
+//                   up along the refracted view) each channel keeps exp(-K), K = 1.7 / Secchi x the lake's spectral
+//                   shape (clear: green passes most, so the bed goes golden then green; stained: red passes most, so
+//                   it goes amber then tea-brown) + the water's own red. Drawn as a multiply over what the opaque
+//                   pass drew under the near patch (tintMaterial), so the cobbles, the logs and the weed take it too;
+//                   the far water, past 160 m, folds its brightness into the veil instead.
+//   the veil        how much of the bed the column hides: little in the first half of the Secchi depth, about half at
+//                   it, nearly all by twice it (1 - exp(-veil x (path / Secchi)^veilPow), the path the refracted view's
+//                   own); it shows the body colour, the colour deep water has looking straight down: a dark clean
+//                   blue-green in a clear lake (deeper still where the column is many Secchi depths thick), tea in a
+//                   stained one, lit by the sun and the sky fill like any surface.
+// So in a clear lake the cobbles read through two or three metres of water and fade past the Secchi depth, and in a
+// stained one the bed goes brown within a metre. Over all of it the surface mirrors the sky by Fresnel, so grazing
+// views still mirror the shore and the far water still goes flat and pale with the fog.
+// WATER_LOOK: the body colours (linear albedo; the light multiplies them) and the ice.
 export const WATER_LOOK = {
-  shallow: new THREE.Color(0x80c0a2),
-  mid: new THREE.Color(0x34a48c),
-  deep: new THREE.Color(0x1c8278),
-  stain: new THREE.Color(0x7a5a2c),
+  clear: new THREE.Color().setRGB(0.02, 0.078, 0.07),
+  deep: new THREE.Color().setRGB(0.012, 0.054, 0.056),
+  stain: new THREE.Color().setRGB(0.066, 0.05, 0.012),
   ice: new THREE.Color(0xf2f6fa),
+};
+// The column's shape (tunable live): transmit scales the bed's path (1 is the physical round trip; less keeps a
+// shallow bed brighter under the game's fixed exposure), veil and veilPow shape the veil; the spectral shapes are
+// K over its mean per channel, for a clear and for a stained lake, and the water's own absorption per metre.
+export const COLUMN = {
+  transmit: 0.32, veil: 0.75, veilPow: 1.5,
+  clearSpec: new THREE.Vector3(1.1, 0.74, 1.16),
+  stainSpec: new THREE.Vector3(0.5, 0.92, 1.58),
+  waterAbs: new THREE.Vector3(0.25, 0.04, 0.01),
 };
 
 // Everything that rides or stands on the surface shares this: the atlas lookups, the terrain surface
@@ -202,7 +227,7 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     float hB = surfaceWave(rel - vec2(0.0, e), uTime, border, s2), hF = surfaceWave(rel + vec2(0.0, e), uTime, border, s2);
     vWaveN = normalize(vec3((hL - hR) * (1.0 - uIce), 2.0 * e, (hB - hF) * (1.0 - uIce)));
     float level = levelAt(rel);
-    vDepth = max(0.0, level - terrainAt(rel));
+    vDepth = max(0.0, level - surfaceAt(rel));   // the bed as the terrain mesh draws it (the shore band reshaped)
     vClarity = clarityAt(rel);
     vec3 objPos = vec3(position.x, level + wave, position.z);
     vec3 flatObj = vec3(position.x, level, position.z);
@@ -223,10 +248,53 @@ const SKY_GLSL = Sky.glslSky || /* glsl */ `
   }
 `;
 
+// The column (see WATER_LOOK above), shared by the surface and the tint pass. secchi: the lake's Secchi depth (m);
+// cosI: the view's cosine off the surface normal.
+const glslColumn = /* glsl */ `
+  uniform vec3 uColumn;   // transmit, veil, veilPow
+  uniform vec3 uSpecClear, uSpecStain, uWaterAbs;
+  // the refracted view's path through a column depth metres deep
+  float columnPath(float depth, float cosI) {
+    float s2 = (1.0 - cosI * cosI) / 1.7769;   // sin^2 of the refracted ray (n = 1.333)
+    return depth / sqrt(max(1.0 - s2, 0.3));
+  }
+  // what the column passes of the bed's light, per channel: down to the bed and back up along the view
+  vec3 columnTint(float depth, float path, float secchi) {
+    vec3 K = (1.7 / secchi) * mix(uSpecStain, uSpecClear, smoothstep(1.5, 5.0, secchi)) + uWaterAbs;
+    return exp(-K * (depth + path) * uColumn.x);
+  }
+  // how much of the bed the column hides
+  float columnVeil(float path, float secchi) { return clamp(1.0 - exp(-uColumn.y * pow(path / secchi, uColumn.z)), 0.0, 0.985); }
+  // the tint pass covers the near patch and gives out over its last 40 m (where the surface folds it into the veil)
+  float tintReach(vec3 local, vec2 centre, float halfSize) { return 1.0 - smoothstep(halfSize - 40.0, halfSize - 6.0, max(abs(local.x - centre.x), abs(local.z - centre.y))); }
+`;
+
+// The tint pass: the column's per-channel transmission multiplied over the bed (and whatever else the opaque pass drew
+// under the water) before the surface is laid over it; the near patch only.
+const fragTint = /* glsl */ `
+  uniform float uClarity, uIce, uPatchHalf;
+  uniform vec2 uOrigin, uPatchLocal;
+  varying vec3 vLocal;
+  varying vec3 vWaveN;
+  varying float vShore;
+  varying float vDepth;
+  varying float vClarity;
+  ${glslColumn}
+  void main() {
+    if (vShore > 0.6) discard;
+    vec3 camRel = vec3(cameraPosition.x - uOrigin.x, cameraPosition.y, cameraPosition.z - uOrigin.y);
+    vec3 v = normalize(camRel - vLocal);
+    float secchi = max(0.3, vClarity * uClarity);
+    vec3 T = columnTint(vDepth, columnPath(vDepth, max(dot(normalize(vWaveN), v), 0.05)), secchi);
+    gl_FragColor = vec4(mix(vec3(1.0), T, tintReach(vLocal, uPatchLocal, uPatchHalf) * (1.0 - uIce)), 1.0);
+  }
+`;
+
 const frag = /* glsl */ `
   uniform float uTime, uReflOn, uClarity, uIce, uRippleAmt, uRain, uGlint;
   uniform vec3 uSunDir, uFoam, uSunLight, uSkyLight;
-  uniform vec3 uBodyShallow, uBodyMid, uBodyDeep, uBodyStain, uBodyIce;
+  uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyIce;
+  ${glslColumn}
   uniform vec3 uSkyZenith, uSkyMid, uSkyHorizon, uSkySun, uSkySunDir;
   #ifdef SKY_LIFT
     uniform vec3 uSkyGlow;   // amount, power, how far the warm bands rise toward the sun
@@ -339,16 +407,23 @@ const frag = /* glsl */ `
     vec3 n0 = normalize(vWaveN);
     vec3 n = normalize(n0 - vec3(tilt.x, 0.0, tilt.y));
     float F = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);   // Schlick: a fifth looking down beside the canoe, nearly all at the far shore
-    // the body: the light the water column sends back, from the bed's colour through a short clear column to the
-    // open water's teal and the deep blue-green (a stained lake's tea), graded by the real depth over the lake's
-    // own Secchi depth, lit by the sun (in the shadows' shade) and the sky fill like any lit surface
+    // the column (WATER_LOOK): the veil over the bed along the refracted view, and the body colour it shows, from the
+    // lake's own Secchi depth; lit by the sun (in the shadows' shade) and the sky fill like any lit surface. The tint
+    // pass has already multiplied the column's colour into the bed under the near patch; past it (and over the patch's
+    // last metres, where that pass gives out) the column's darkening of the bed is folded into the veil instead.
     float secchi = max(0.3, vClarity * uClarity);
-    float clear = smoothstep(1.2, 6.0, vClarity);
-    vec3 body = mix(uBodyShallow, mix(uBodyStain, uBodyMid, clear), smoothstep(0.0, 0.6 * secchi, vDepth));
-    body = mix(body, mix(uBodyStain * 0.4, uBodyDeep, clear), smoothstep(0.4 * secchi, 2.4 * secchi, vDepth));
+    float clear = smoothstep(1.5, 5.0, secchi);
+    float path = columnPath(vDepth, max(dot(n0, v), 0.05));
+    float ab = columnVeil(path, secchi);
+    #ifdef FAR
+      float folded = 1.0;
+    #else
+      float folded = 1.0 - tintReach(vLocal, uPatchLocal, uPatchHalf);
+    #endif
+    if (folded > 0.0) ab = 1.0 - (1.0 - ab) * mix(1.0, dot(columnTint(vDepth, path, secchi), vec3(0.3, 0.5, 0.2)), folded);
+    vec3 body = mix(uBodyStain, mix(uBodyClear, uBodyDeep, smoothstep(0.8, 3.0, vDepth / secchi)), clear);
     vec3 lit = uSunLight * max(uSunDir.y, 0.0) * shadow + uSkyLight;
     body *= lit * 1.9;   // light reaches the column from the whole sky and the sun, not one direction
-    float ab = clamp(1.0 - exp(-vDepth * 1.7 / secchi), 0.0, 0.97);   // how much of the bed the column hides
     // the mirror: the sky by the reflected ray, and over it what the reflection pass drew (shore, trees, canoe),
     // pushed about by the ripples, smeared up and down where the surface is rough, a little blurred
     vec3 R = reflect(-v, n);
@@ -503,8 +578,7 @@ export class WaterSystem {
       uReflTexel: { value: new THREE.Vector2(1 / 4, 1 / 4) },
       uSunLight: { value: new THREE.Color(0.6, 0.55, 0.45) },
       uSkyLight: { value: new THREE.Color(0.15, 0.2, 0.28) },
-      uBodyShallow: { value: WATER_LOOK.shallow },
-      uBodyMid: { value: WATER_LOOK.mid },
+      uBodyClear: { value: WATER_LOOK.clear },
       uBodyDeep: { value: WATER_LOOK.deep },
       uBodyStain: { value: WATER_LOOK.stain },
       uBodyIce: { value: WATER_LOOK.ice },
@@ -522,8 +596,13 @@ export class WaterSystem {
       for (const [mine, theirs] of Object.entries(bind)) if (su[theirs]) this.uniforms[mine] = su[theirs];
     }
     // the look's colours are shared objects too, so WATER_LOOK can be tuned live
-    const look = { uBodyShallow: 'shallow', uBodyMid: 'mid', uBodyDeep: 'deep', uBodyStain: 'stain', uBodyIce: 'ice' };
+    const look = { uBodyClear: 'clear', uBodyDeep: 'deep', uBodyStain: 'stain', uBodyIce: 'ice' };
     for (const [k, name] of Object.entries(look)) this.uniforms[k].value = WATER_LOOK[name];
+    // and the column's shape (COLUMN), the same way
+    this.uniforms.uColumn = { value: new THREE.Vector3(COLUMN.transmit, COLUMN.veil, COLUMN.veilPow) };
+    this.uniforms.uSpecClear = { value: COLUMN.clearSpec };
+    this.uniforms.uSpecStain = { value: COLUMN.stainSpec };
+    this.uniforms.uWaterAbs = { value: COLUMN.waterAbs };
     this.uniforms.uReflection.value = this.reflection.target.texture;
     this.uniforms.uShoreTex.value = this.shoreTex;
     this.uniforms.uLevelTex.value = this.levelTex;
@@ -547,6 +626,15 @@ export class WaterSystem {
     this.patch.renderOrder = 10;
     this.patch.receiveShadow = true;
     this.group.add(this.patch);
+    // the tint pass (glslColumn): the same patch, drawn just before it, multiplying the column's colour into what the
+    // opaque pass left under the water; it rides with the patch as its child
+    this.tintMaterial = new THREE.ShaderMaterial({ ...common, vertexShader: vertPatch, fragmentShader: fragTint, defines: { ...lift },
+      depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
+      blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor });
+    this.tint = new THREE.Mesh(geo, this.tintMaterial);
+    this.tint.frustumCulled = false;
+    this.tint.renderOrder = 9;
+    this.patch.add(this.tint);
   }
 
   // A tile's far water mesh (see water-build.js), in tile-local coordinates.
@@ -578,6 +666,10 @@ export class WaterSystem {
   update(dt, cx, cz) {
     this.time += dt;
     this.uniforms.uTime.value = this.time;
+    this.uniforms.uColumn.value.set(COLUMN.transmit, COLUMN.veil, COLUMN.veilPow);
+    // the bed's caustics (terrain.js) run on the water's clock and the sun the day cycle gives the water
+    groundUniforms.uBedTime.value = this.time;
+    groundUniforms.uBedSun.value.copy(this.uniforms.uSunDir.value);
     const w = this.world, s = w.cell; // snap to the lattice so the patch edge lies on far-mesh edges
     const px = Math.round(cx / s) * s, pz = Math.round(cz / s) * s;
     this.patch.position.set(px, 0, pz);

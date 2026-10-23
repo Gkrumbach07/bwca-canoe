@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { applyLook } from './shading.js';
 import { applyWet } from './weather.js';
-import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE } from './terrain-build.js';
+import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE, BED_MATS } from './terrain-build.js';
 
 // The ground as a painted splat (docs/look.md, pass 1). Every vertex carries the weights of ten ground
 // materials (the bluff pass added the cliff and the scree), the canopy shade over it and, under water, the depth of the bed (terrain-build.js splatAt);
@@ -21,6 +21,13 @@ export const groundUniforms = {
   uGroundSunny: { value: v3(SPLAT_SUNNY) },
   uBedPalette: { value: BED_PALETTE.map(v3) },
   uBedSteps: { value: new THREE.Vector4(...BED_STEPS) },
+  // the lake bed's materials (terrain-build.js BED_MATS: sand, cobble, silt, bedrock, weed, the deep ooze), and the
+  // water's clock and sun for the caustics (water.js writes both each frame); uBedLook: x the caustics' strength,
+  // y the stones' contrast, z the ripples' and the joints' contrast
+  uBedMats: { value: BED_MATS.map(v3) },
+  uBedTime: { value: 0 },
+  uBedSun: { value: new THREE.Vector3(0, 1, 0) },
+  uBedLook: { value: new THREE.Vector3(0.55, 1, 1) },
   uGroundTint: { value: new THREE.Vector3(1, 1, 1) },
   // x: the blend noise's reach (in weight units), y: how soft a band is (weight units; smaller is crisper),
   // z: the blend noise's size (m), w: how far the slow field pushes it about (m)
@@ -47,6 +54,9 @@ uniform float uGroundShadeK[${NM}];
 uniform vec3 uGroundSunny;
 uniform vec3 uBedPalette[5];
 uniform vec4 uBedSteps;
+uniform vec3 uBedMats[6];
+uniform float uBedTime;
+uniform vec3 uBedSun, uBedLook;
 uniform vec3 uGroundTint;
 uniform vec4 uSplat;
 uniform vec3 uMottle;
@@ -86,6 +96,66 @@ vec3 screeTone(vec2 p, float px) {
   float gap = 1.0 - smoothstep(0.0, 0.09, min(e1, e2));
   return vec3(mix(1.0, (0.86 + 0.28 * v) * (1.0 - 0.22 * gap), f));
 }
+// ---- the lake bed (terrain-build.js bedPre, BED_MATS) ----
+// Cobble: rounded stones on a jittered lattice, each its own size, squash and turn, its own grey, brown, rust or olive,
+// domed (lighter at its crown, dark at its foot), over a matrix of gravel made the same way a third the size and dark
+// between the pebbles. Fades to its mean before it could shimmer. A multiplier on the cobble's colour.
+vec3 stoneTint(float h) {
+  return h < 0.42 ? mix(vec3(0.86, 0.87, 0.9), vec3(1.1, 1.08, 1.05), h / 0.42)
+    : h < 0.74 ? mix(vec3(1.08, 0.96, 0.82), vec3(0.84, 0.74, 0.6), (h - 0.42) / 0.32)
+    : h < 0.87 ? vec3(1.14, 0.86, 0.62) : vec3(0.84, 0.88, 0.66);
+}
+// the stone nearest p on a lattice of cells size metres across: its cover (0..1), its colour's hash and its dome shading
+float bedStone(vec2 p, float size, uint seed, out float hue, out float shade) {
+  vec2 q = p / size, i = floor(q), r0 = q - i;
+  float best = 9.0; hue = 0.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    ivec2 c = ivec2(i) + ivec2(x, y);
+    vec2 o = vec2(float(x), float(y)) + vec2(lookHash(c, seed), lookHash(c, seed + 1u)) * 0.7 + 0.15 - r0;
+    float a = lookHash(c, seed + 2u) * 6.2831853, ca = cos(a), sa = sin(a);
+    float r = 0.36 + 0.2 * lookHash(c, seed + 4u);
+    vec2 e = vec2(ca * o.x + sa * o.y, (-sa * o.x + ca * o.y) * 1.4) / r;
+    float dn = length(e);
+    if (dn < best) { best = dn; hue = lookHash(c, seed + 3u); }
+  }
+  shade = mix(0.62, 1.12, sqrt(max(0.0, 1.0 - min(best, 1.0) * min(best, 1.0))));
+  return 1.0 - smoothstep(0.86, 1.0, best);
+}
+vec3 bedCobble(vec2 p, float px) {
+  float F = lookFade(0.32, px);
+  if (F <= 0.0) return vec3(0.9);
+  float h2, s2, h1, s1;
+  float g = bedStone(p + vec2(0.37, 0.11), 0.11, 41u, h2, s2) * lookFade(0.11, px);
+  vec3 grav = mix(vec3(0.58), stoneTint(h2) * s2 * 0.92, g);
+  float m = bedStone(p, 0.3, 37u, h1, s1);
+  vec3 c = mix(grav, stoneTint(h1) * s1, m);
+  return mix(vec3(0.9), mix(vec3(0.9), c, uBedLook.y), F);
+}
+// The sand's ripples: low crests ten centimetres apart along a wandering direction, a little lighter on one flank
+float bedRipples(vec2 p, float px) {
+  float f = lookFade(0.12, px);
+  if (f <= 0.0) return 1.0;
+  float w = lookFbm(p / 3.0, 31u, 2);
+  vec2 dir = vec2(cos(w * 3.0), sin(w * 3.0));
+  float ph = dot(p, dir) * 52.0 + 6.0 * lookNoise(p * 0.8, 32u);
+  return 1.0 + 0.09 * uBedLook.z * sin(ph) * f;
+}
+// The bedrock's joints and the dark stains in its hollows
+float bedJoints(vec2 p, float px) {
+  float f = lookFade(0.6, px);
+  float j = abs(lookFbm(p / 1.6, 33u, 2) - 0.5);
+  return 1.0 - 0.35 * uBedLook.z * (1.0 - smoothstep(0.012, 0.035, j)) * f - 0.12 * smoothstep(0.55, 0.75, lookFbm(p / 4.0, 34u, 2));
+}
+// The caustics: the bright net the ripples focus on a shallow bed in the sun, drifting; nothing at depth, in a stained
+// lake, at a low sun or too far off to resolve
+float bedCaustic(vec2 p, float depth, float secchi, float px) {
+  float f = lookFade(0.5, px) * (1.0 - smoothstep(0.6, 3.5, depth)) * smoothstep(1.5, 4.0, secchi) * smoothstep(0.15, 0.5, uBedSun.y);
+  if (f <= 0.0) return 0.0;
+  float t = uBedTime;
+  float a = lookFbm(p / 0.85 + vec2(t * 0.21, t * 0.13), 35u, 2), b = lookFbm(p / 0.65 - vec2(t * 0.16, -t * 0.19), 36u, 2);
+  float c = 1.0 - abs(a - b) * 5.0;
+  return pow(clamp(c, 0.0, 1.0), 5.0) * f;
+}
 uniform float uRelief;
 vec2 groundRelief(vec2 p, float px) {
   const float e = 0.35;
@@ -107,13 +177,27 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
   float mottle = 1.0 + uMottle.x * m20 + uMottle.y * m3 * lookFade(3.0, px) + uMottle.z * m03 * lookFade(0.3, px);
   vec3 c;
   if (fl.z > 0.5) {
-    // the lake bed: its depth bands blended, wider the deeper they lie, the depth wobbling with the field
-    float d = fl.w * ${BED_DEPTH_SCALE.toFixed(1)} + 0.9 * n1 * fb;
-    c = uBedPalette[0];
-    c = mix(c, uBedPalette[1], smoothstep(uBedSteps.x - 0.35, uBedSteps.x + 0.35, d));
-    c = mix(c, uBedPalette[2], smoothstep(uBedSteps.y - 0.6, uBedSteps.y + 0.6, d));
-    c = mix(c, uBedPalette[3], smoothstep(uBedSteps.z - 1.0, uBedSteps.z + 1.0, d));
-    c = mix(c, uBedPalette[4], smoothstep(uBedSteps.w - 2.0, uBedSteps.w + 2.0, d));
+    // the lake bed: sand, cobble, silt and bedrock blended through the same noise as the land's materials, each with
+    // its own pattern, a weed bed over them in ragged tufts, the deep holes going to the dark organic ooze, and the
+    // caustics on a shallow bed in the sun. Its colour is the dry bed's: the water column tints and veils it (water.js).
+    float d = fl.w * ${BED_DEPTH_SCALE.toFixed(1)};
+    vec4 bw = wA;
+    if (dot(bw, vec4(1.0)) < 0.01) bw = vec4(1.0, 0.0, 0.0, 0.0);
+    vec4 hb = bw + uSplat.x * fb * (n1 * SPLAT_CA + n2 * SPLAT_SA) * smoothstep(0.0, 0.15, bw);
+    float tb = max(max(hb.x, hb.y), max(hb.z, hb.w));
+    vec4 kb = max(hb - tb + mix(1.0, 0.25, fb), 0.0);
+    kb *= kb; kb /= dot(kb, vec4(1.0));
+    vec3 sandC = uBedMats[0] * bedRipples(p, px);
+    vec3 cobC = uBedMats[1] * (kb.y > 0.01 ? bedCobble(p, px) : vec3(0.9));
+    vec3 siltC = uBedMats[2] * (1.0 + 0.12 * (lookFbm(p / 1.4, 38u, 2) - 0.5) * lookFade(1.4, px));
+    vec3 rockC = uBedMats[3] * bedJoints(p, px);
+    c = kb.x * sandC + kb.y * cobC + kb.z * siltC + kb.w * rockC;
+    // the weed bed: ragged dark tufts half a metre or so across, thicker where the weights carry more
+    float tuft = lookFbm(p / 0.55 + vec2(1.7, 4.1), 39u, 2) * 0.7 + lookFbm(p / 0.18, 40u, 2) * 0.3 * lookFade(0.18, px);
+    float wd = smoothstep(0.62 - 0.45 * wB.x, 0.78 - 0.45 * wB.x, tuft + 0.35 * n2 * fb) * step(0.02, wB.x);
+    c = mix(c, uBedMats[4] * (0.8 + 0.4 * tuft), wd * 0.9);
+    c = mix(c, uBedMats[5], smoothstep(5.0, 13.0, d + 1.2 * n1) * 0.8);
+    c *= 1.0 + uBedLook.x * bedCaustic(p, d, fl.x * 10.0, px);
     groundPorosity = 0.0; groundRock = 0.0;
   } else {
     // each material's weight lifted or lowered by its noise; those within a band's softness of the top
