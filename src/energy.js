@@ -21,9 +21,9 @@ import { monthDay } from './astro.js';
 //   after half an hour; at any outfitter's counter you drink at the tap and the bottle is filled, free and at once.
 // How they pull the bar: it recovers only up to the ceiling, min(rest, 0.4 + 0.6 × food, 0.4 + 0.6 × water), and a bar
 // standing above the ceiling is pulled down to it (0.06 a game hour); a need below 0.3 drains it 1.5 times as fast; a
-// need at 0 stops its recovery. With the bar at 0 and nothing left to eat or drink, the trip ends in an evacuation
-// (onEvac); with food in the pack you stop and eat, and with water but no food the bar can sit at 0 while you make for an
-// outfitter. In Sandbox the needs stay full, the food keeps and nothing is forced; with no trip at all (energy.trip
+// need at 0 stops its recovery. An empty bar ends an Adventure, as the owner put it ("if it goes all the way down,
+// you're done"): an hour of the clock at 0 to stop and eat, drink or rest, then an evacuation (onEvac) named for the
+// need that ran you down. In Sandbox the needs stay full, the food keeps and nothing is forced; with no trip at all (energy.trip
 // null) it behaves as it always did: the food runs down and an empty bar calls onEvac.
 // Balance (hubs phase 1): the paddle costs 0.0005 (it was 0.0007) because the starting A-frame wakes you at 85 % and the
 // needs add their own drain: a June day of 5 km with two portages, the bottle filled at a portage and at camp and a hot
@@ -60,6 +60,8 @@ const LOW = 0.3;           // a need under this drains the bar LOW_DRAIN times a
 const LOW_DRAIN = 1.5;
 const PULL = 0.0012;       // per second of the clock at its full rate (0.06 a game hour): a bar above the ceiling is pulled down to it
 const EMPTY = 0.005;       // a need this low stops the bar's recovery
+const SPENT_GRACE = 1;     // game hours at an empty bar before someone comes out for you (Adventure)
+const NEARLY = 0.08;      // a word, once, as the bar nears empty
 const FOOD_HOURS = 24;     // game hours awake from a full food need to an empty one
 const ASLEEP = 1 / 3;      // the needs fall at this rate asleep (and across any jump of the clock longer than JUMP)
 const JUMP = 2;            // game hours: a longer jump of the clock is a night, not a stretch of the day
@@ -114,6 +116,11 @@ export class Energy {
   get hasFood() { return this.sandbox || this.food >= 0.5; }
   // the three needs, 0 to 1 (full in Sandbox and between trips)
   get needs() { return this._needs; }
+  // the need that ran the bar down, for the evacuation's words: 'awake' (rest), 'food' or 'water'
+  spentWhy() {
+    const r = this.restNeed, f = this.need.food, w = this.need.water;
+    return w <= f && w <= r ? 'water' : f <= r ? 'food' : 'awake';
+  }
   get restNeed() { return clamp(this.rest0 * restCeiling(this.awake), 0, 1); }
   // what rest can bring the bar back to now
   get ceiling() {
@@ -344,15 +351,20 @@ export class Energy {
     if (recover && v < cap) v = Math.min(cap, v + recover * dt);
     else if (this.live && v > cap) v = Math.max(cap, v - PULL * rate * dt); // the needs pull it down to what they allow
     this.value = clamp(v, 0, 1);
-    if (this.value <= 0) {
-      if (this.live) {
-        // spent: eat if hunger is part of it (the food need is low, or it is what holds the ceiling down; a bar held at
-        // 0 by tiredness alone is not fed, or it ate a ration every five hours until the pack was empty); with nothing
-        // to eat or drink, someone comes out for you
-        const nd = this.need, hunger = nd.food < 0.5 || 0.4 + 0.6 * nd.food <= Math.min(this.restNeed, 0.4 + 0.6 * nd.water) + 1e-6;
-        if (this.hasFood && hunger && now - this.lastMealAbs > 1) this.meal('cold', 'You stop and eat');
-        else if (!this.hasFood && this.bottle <= 0.001 && this.onEvac) this.onEvac('spent');
-      } else if (this.hasFood) this.meal('cold', 'You stop and eat');
+    if (this.live) {
+      // The owner's rule: "if it goes all the way down, you're done". Spent, you have an hour of the clock to stop and
+      // put it right (eat, drink, rest, or sleep at a site); still at 0 after it, someone comes out for you, for
+      // whichever need ran you down. Nearly spent, a word first.
+      if (this.value <= 0) {
+        if (this.spentAt == null) { this.spentAt = now; this.note('Spent. Stop now: eat, drink or rest, or someone will come out for you.'); }
+        else if (now - this.spentAt >= SPENT_GRACE && this.onEvac) { this.spentAt = null; this.onEvac(this.spentWhy()); }
+      } else {
+        if (this.spentAt != null && this.value > 0.02) this.spentAt = null;
+        if (this.value < NEARLY && !this.noted.nearly) { this.noted.nearly = true; this.note('Nearly spent. Rest, eat or drink soon, or make for a site.'); }
+        else if (this.value > NEARLY + 0.15) this.noted.nearly = false;
+      }
+    } else if (this.value <= 0) {
+      if (this.hasFood) this.meal('cold', 'You stop and eat');
       else if (this.onEvac) this.onEvac('food');
     }
     // a gentle word when the pack is empty and the bar low: once, and again only after a while (once a game day on an

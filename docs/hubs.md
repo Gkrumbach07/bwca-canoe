@@ -43,8 +43,9 @@ logbook.
   bunk night and wake fully rested and fed at 7:00. *Resupply · carry on* keeps the trip going.
 - **What limits you** is food (a Duluth pack holds 7 days), the single energy bar, the weather (a capsize), daylight
   (travel after dark costs ×1.3, and you want a site before dark) and weight.
-- **Evacuation** comes only when the bar is at 0 with nothing left to eat or drink: the same calm card, and you wake
-  at 7:30 at the nearest outfitter you know. The stringer and the rest of the day are lost; the notices, the money and
+- **Evacuation** comes when the bar has sat at 0 for an hour of the clock (the owner: "if it goes all the way down,
+  you're done"); the hour is the chance to stop and eat, drink or rest. The same calm card, named for the need that
+  ran you down, and you wake at 7:30 at the nearest outfitter you know. The stringer and the rest of the day are lost; the notices, the money and
   the gear are kept.
 - **Saves.** The `profile` save holds the money, the gear owned, the outfitters known and your standing with each.
   Older saves migrate: the Kevlar and the lure unlocks become owned items, money is $10 a task turned in (never less
@@ -178,7 +179,7 @@ Each phase runs as three parallel streams, joined and played through before it g
 broke: the trip's document is saved when the page goes away (a bottle filled before a reload came back dry), the
 stringer is saved, a canoe set down at a trail end launches from there, supper is eaten before an early bedtime, a
 late night sleeps in and a paddler done in by day can sleep, a bar held at 0 by tiredness no longer eats the pack, the
-evacuation says "nothing left to eat or drink", a claim tried at the wrong counter gets the keeper's answer, the
+evacuation names the need that ran you down, a claim tried at the wrong counter gets the keeper's answer, the
 catch's prompt names the notice a fish would go to, the cooler's note clears the catch card, every "turn it in at any
 outfitter" is gone, and the journal's Gear tab lists the season's kit.
 

@@ -200,7 +200,7 @@ field fills in beyond them. `M` opens it wide.
 
 A season travels one of two ways, picked on the title card: **Adventure** (open trips from push-off until you call
 it at a counter, food bought with money, one energy bar pulled down by rest, food and water, camping at the designated
-sites only, a calm evacuation when the bar is spent with nothing left to eat or drink) or **Sandbox** (the same lakes
+sites only, a calm evacuation when the bar runs empty) or **Sandbox** (the same lakes
 with no limits). A new season starts at the entry point you pick, home, with $40 and the starting kit. The trip core is
 described in [docs/trip-core.md](docs/trip-core.md), and the outfitter hubs it is growing into in
 [docs/hubs.md](docs/hubs.md) (the owner's own words are in [docs/game-vision.md](docs/game-vision.md)).

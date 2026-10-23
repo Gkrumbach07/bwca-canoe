@@ -139,9 +139,12 @@ day of food, and leaves the gear wet until a fire dries it (the *gear wet* mark)
 
 ### Evacuation
 
-Only when the bar is at 0 with nothing left to eat or drink. The screen fades, a line comes from the outfitter, and
-you wake at 7:30 the next morning at the nearest outfitter **you know** (home when nothing else is): the trip is
-logged as brought in, "spent, with nothing left to eat or drink". The stringer and the rest of the day stay out there;
+An empty bar ends the trip, as the owner put it: "if it goes all the way down, obviously, you're done". The bar
+warns as it nears empty ("Nearly spent") and again at 0 ("Spent. Stop now: eat, drink or rest"). You then have one
+hour of the clock to put it right: stop and eat, fill the bottle and drink, rest, or sleep at a site. Still at 0
+after that hour, the screen fades, a line comes from the outfitter, and you wake at 7:30 the next morning at the
+nearest outfitter **you know** (home when nothing else is). The trip is logged as brought in, with the need that ran
+you down: "spent, after too long awake", "spent, and gone hungry" or "spent, and gone without water". The stringer and the rest of the day stay out there;
 the notices, the money and the gear are kept, and there is no fee. The counter opens. Sandbox never evacuates.
 
 ### The logbook
