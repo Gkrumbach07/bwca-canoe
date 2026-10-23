@@ -170,6 +170,12 @@ async function main() {
   const campsites = new CampRegistry(world);
   const camp = new Camp({ world, player, day, energy, hud, scene, tiles, fires, lamp, audio, weather, wind, fishing, outfitter, registry: campsites,
     links: () => ({ trip, veil, packs }) });
+  // hubs 1B: the single bar. Any outfitter's counter fills the bottle (free, drinkable at once); a trip put in starts
+  // with the needs full; whoever comes out on an evacuation brings food and water; the camp asks stream A's profile,
+  // when there is one, how well the tent sleeps and what filter there is.
+  energy.atCounter = () => !!outfitter.open;
+  if (trip.on) { trip.on('start', () => energy.fresh()); trip.on('evac', () => energy.rescued()); }
+  camp.profileOf = () => (typeof profile !== 'undefined' ? profile : null); // eslint-disable-line no-undef -- stream A's, once joined
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
