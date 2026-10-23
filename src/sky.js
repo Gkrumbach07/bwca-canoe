@@ -10,22 +10,38 @@ const skyVert = /* glsl */ `
     gl_Position = projectionMatrix * mv;
   }
 `;
+// The sky's colour along a direction, without the sun disc. Exported so another material can take the sky's colour
+// by direction (a reflection along the mirrored ray, say) with the dome's own stops and glow.
+//   skyGradient   three stops: the horizon band, a pale middle six to ten degrees up, the blue by twenty degrees.
+//                 Toward a low sun the warm bands reach higher (lift: 1 doubles their height looking at the sun), so
+//                 the sky about the sun is the horizon's warmth fading into the blue, never the blue with orange
+//                 added on top (which goes violet where the two meet)
+//   skyGlow       the low sun's glow: a broad warm bloom about the sun and a band along the horizon either side
+//                 of it (glow: amount, power)
+export const glslSky = /* glsl */ `
+  vec3 skyGradient(vec3 d, vec3 zenith, vec3 mid, vec3 horizon, vec3 sunDir, float lift) {
+    float s = max(dot(d, sunDir), 0.0);
+    float y = d.y / (1.0 + lift * s * s * s);
+    return mix(mix(horizon, mid, smoothstep(0.0, 0.1, y)), zenith, smoothstep(0.06, 0.45, y));
+  }
+  vec3 skyGlow(vec3 d, vec3 sunDir, vec3 sunColor, vec2 glow) {
+    float sd = max(dot(d, sunDir), 0.0);
+    float band = 1.0 - smoothstep(0.0, 0.3, abs(d.y));
+    return sunColor * (pow(sd, 24.0) * 0.18 + pow(sd, 6.0) * 0.05 + glow.x * (pow(sd, glow.y) + 0.6 * pow(sd, 2.0) * band));
+  }
+`;
+
 const skyFrag = /* glsl */ `
   uniform vec3 uZenith, uHorizon, uMid, uGround, uSunDir, uSunColor;
-  uniform vec2 uGlow; // the low sun's glow: amount, power
+  uniform vec3 uGlow; // the low sun's glow: amount, power, and how far the warm bands rise toward it
   uniform vec3 uDisc; // the sun disc: angular radius (radians), brightness, halo brightness
   varying vec3 vDir;
+  ${glslSky}
   void main() {
     vec3 d = normalize(vDir);
-    float t = d.y;
-    // three stops: the horizon band, a pale middle six to ten degrees up, the blue by twenty degrees
-    vec3 col = mix(mix(uHorizon, uMid, smoothstep(0.0, 0.1, t)), uZenith, smoothstep(0.06, 0.45, t));
-    col = mix(col, uGround, smoothstep(0.0, 0.12, -t));
-    float sd = max(dot(d, uSunDir), 0.0);
-    // the low sun's glow: a broad warm bloom about the sun and a band along the horizon either side of it
-    float band = 1.0 - smoothstep(0.0, 0.3, abs(t));
-    col += uSunColor * (pow(sd, 24.0) * 0.18 + pow(sd, 6.0) * 0.05);
-    col += uSunColor * uGlow.x * (pow(sd, uGlow.y) + 0.6 * pow(sd, 2.0) * band);
+    vec3 col = skyGradient(d, uZenith, uMid, uHorizon, uSunDir, uGlow.z);
+    col = mix(col, uGround, smoothstep(0.0, 0.12, -d.y));
+    col += skyGlow(d, uSunDir, uSunColor, uGlow.xy);
     // the sun: a crisp disc (the chord to the sun's centre is the angle to it, without acos's loss of precision
     // near 1), much brighter than anything else so the tone map burns it white at the core, in a soft halo
     float ang = length(d - uSunDir);
@@ -51,7 +67,7 @@ export function buildSky(sunDir, palette) {
       uGround: { value: new THREE.Color(palette.ground) },
       uSunDir: { value: sunDir.clone() },
       uSunColor: { value: new THREE.Color(palette.sun) },
-      uGlow: { value: new THREE.Vector2(0.1, 8) },
+      uGlow: { value: new THREE.Vector3(0.1, 8, 0) },
       uDisc: { value: new THREE.Vector3(0.0085, 24, 3) },
     },
     side: THREE.BackSide,

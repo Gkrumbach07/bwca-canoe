@@ -15,9 +15,9 @@ const T = {
   // the key and the fill: one warm sun, one cool sky. While the sun is up the key is strong and warm and the
   // sky fill cool and dim, so lit and shaded surfaces split into two clear families (docs/look.md, rule 3):
   // the fill stays blue right down to the horizon, with the golden hour in the key and the sky's own band
-  sunColor: [0x000000, 0x000000, 0xff7a3a, 0xffbc70, 0xffd098, 0xffeac4],
+  sunColor: [0x000000, 0x000000, 0xff7a3a, 0xffb05c, 0xffc884, 0xffe6bc],
   sunInt: [0, 0, 0.6, 2.0, 2.1, 2.2],
-  hemiSky: [0x121a2a, 0x263347, 0x7878a0, 0x7c94cc, 0x86a8d8, 0x82b0e2],
+  hemiSky: [0x121a2a, 0x263347, 0x7088ac, 0x7898c4, 0x84a8d4, 0x82b0e2],
   hemiGround: [0x0b0e12, 0x1a1d1a, 0x4a3e3a, 0x6a5a50, 0x7a7462, 0x847e68], // by day the bounce off sunlit ground is warm and not small
   // the fill carries every shaded side by itself now the toon ramp's floor (a quarter of the key on any face
   // turned from the sun) is gone: about a third of the key on flat ground by day (pass 1, smooth light)
@@ -25,13 +25,14 @@ const T = {
   // the air (fog.js): two colour ramps by distance, one looking away from the sun and one looking into it. Each
   // key gives each ramp a mid colour (the band a few hundred metres out, where the haze starts to take things)
   // and a far colour (where the far shore goes flat); the amount follows AMOUNT below with its distances
-  // scaled by fogReach (under 1 the air is thicker). Away from the sun the far shore goes cool and pale, into
-  // a low sun warm and bright. The far colours sit a step darker than the sky's horizon so the far shore
-  // stays a shape against it. fogSky is the haze looking up; fogDesat how much the mid band greys what it covers.
-  fogMid: [0x131a2a, 0x26314e, 0x7c7ca8, 0x9c9cc4, 0xa4b0cc, 0x9fb8d0],
-  fogFar: [0x1b2639, 0x283450, 0x9a90b4, 0xc0b0c8, 0xc0c4d8, 0xb4cce0],
-  fogSunMid: [0x131a2a, 0x3a3858, 0xd09078, 0xf0b080, 0xe0c8a8, 0xc4ccd0],
-  fogSunFar: [0x1b2639, 0x4e4462, 0xe8a888, 0xffd0a0, 0xf0dcc0, 0xd8e0e4],
+  // scaled by fogReach (under 1 the air is thicker). Away from the sun the far shore goes cool and pale (a pale
+  // blue, never lilac), into a low sun warm (orange-yellow) and bright. The far colours sit a step darker than
+  // the sky's horizon so the far shore stays a shape against it. fogSky is the haze looking up; fogDesat how
+  // much the mid band greys what it covers.
+  fogMid: [0x131a2a, 0x26314e, 0x7688aa, 0x94a8c6, 0xa0b4cc, 0x9fb8d0],
+  fogFar: [0x1b2639, 0x283450, 0x94a2bc, 0xbcc6d4, 0xbccad8, 0xb4cce0],
+  fogSunMid: [0x131a2a, 0x3a3858, 0xd09078, 0xf0b878, 0xe4cca0, 0xc4ccd0],
+  fogSunFar: [0x1b2639, 0x4e4462, 0xe8a888, 0xffd498, 0xf2dcb8, 0xd8e0e4],
   fogSky: [0x070d18, 0x14223a, 0x3e5a86, 0x5b7fb0, 0x6b97c4, 0x74a4d2],
   fogReach: [1.25, 1.1, 0.9, 0.85, 0.95, 1.0],
   fogDesat: [0.3, 0.4, 0.5, 0.5, 0.55, 0.6],
@@ -39,34 +40,41 @@ const T = {
   sunwardPow: [4, 3, 3, 3, 4, 6],
   sunwardAmt: [0, 0.4, 0.9, 1.0, 0.9, 0.6],
   airHeight: [60, 60, 70, 75, 90, 110],
-  // the dome in three stops: the warm band on the horizon, a pale middle, the blue overhead; a low sun glows
-  zenith: [0x060c1a, 0x0f1f3a, 0x2a4278, 0x3a5ea8, 0x3878c2, 0x4288d8],
-  skyMid: [0x0a1224, 0x1c2d4c, 0xa888a8, 0xccb4c4, 0xb4cce8, 0x8ab8e6],
-  horizon: [0x222f46, 0x2e3d58, 0xe49464, 0xeeac7c, 0xe8d8bc, 0xcadfee],
-  skyGlowAmt: [0, 0.3, 0.6, 0.42, 0.2, 0.08],
+  // the dome in three stops: the warm band on the horizon, a pale middle, the blue overhead; a low sun glows,
+  // and toward it the warm bands reach higher (skyLift). By day every warm stop is yellow-orange (green well above
+  // blue) and every cool one cyan-blue (green above red), so no blend between them can go violet; pink and violet
+  // are the sky's at dusk and night only (keys -5 and -1)
+  zenith: [0x060c1a, 0x0f1f3a, 0x2a4278, 0x3468b4, 0x3878c2, 0x2f80dc],
+  skyMid: [0x0a1224, 0x1c2d4c, 0xc49a94, 0xdcd6b4, 0xbcd2e6, 0x8cbcec],
+  horizon: [0x222f46, 0x2e3d58, 0xe49464, 0xf2bc7c, 0xeedcb8, 0xe6e4d8],
+  skyGlowAmt: [0, 0.3, 0.6, 0.3, 0.14, 0.08],
   skyGlowPow: [8, 3, 3, 4, 6, 8],
-  skySun: [0x000000, 0x5a3a48, 0xff9858, 0xffb878, 0xffe0b0, 0xfff2cc],
+  skyLift: [0, 0.6, 1.0, 0.9, 0.5, 0.1], // how much higher the warm bands reach looking toward the sun (sky.js)
+  skySun: [0x000000, 0x5a3a48, 0xff9858, 0xffd080, 0xffe4b4, 0xfff2cc],
   ground: [0x0d1210, 0x1e241e, 0x5e5a4a, 0x80765a, 0x8e9a7e, 0x9aa58a],
   water: [0x0c141e, 0x172636, 0x2f5268, 0x37647c, 0x326f8c, 0x2d7694],   // clear-lake water: darker than the sky, a saturated teal by day
-  reflect: [0x101828, 0x202d44, 0xa890a8, 0xb4a8c0, 0xbcc8d8, 0xc9dde8], // the sky the far water mirrors: lilac at a low sun, not the sun's own warmth
+  reflect: [0x101828, 0x202d44, 0xa89c8c, 0xbcb098, 0xbcc8d8, 0xc9dde8], // the sky the far water mirrors: the warm horizon at a low sun, never lilac
   cloudTop: [0x1f2634, 0x2e3648, 0xffb080, 0xffcfa0, 0xfbe9d2, 0xfbf8f1],
-  cloudBase: [0x101522, 0x1c2434, 0x6e5a74, 0x9a7d8c, 0x9fb0cc, 0xa6bfd9],
+  cloudBase: [0x101522, 0x1c2434, 0x7c6a6c, 0x8c96a8, 0x9fb0cc, 0xa6bfd9],
   moonInt: [0.3, 0.22, 0.08, 0, 0, 0],
   stars: [1, 0.6, 0.05, 0, 0, 0],
   // the grade (post.js), in display values after the tone map: exposure, saturation, and a five-point curve
   // per channel (out at in = 0, 1/4, 1/2, 3/4, 1). Lifting a channel's low end tints the shade, its top end the
-  // lights: blue shade under cream light by day; at the golden hour and dusk the reds lift through the mids
-  // and the shade goes violet (red and blue lifted at the bottom, green held); blue hour and night lean blue.
+  // lights: by day the shade lifts blue (blue most, green a little above red, so it stays between 200 and 225
+  // degrees and never goes violet) under mids and lights warmed orange-yellow (red, then green, over blue); at the
+  // golden hour and dusk the reds lift further through the mids; blue hour and night lean blue-violet as before.
+  // A curve that holds green below both red and blue anywhere turns every grey there magenta; at the black point
+  // green lifts as much as blue, or dim warm browns (lit ground at a low sun) pass through magenta on their way.
   gain: [0.95, 0.95, 1.0, 1.05, 1.02, 1.02],
-  saturation: [0.9, 0.95, 1.08, 1.12, 1.08, 1.05],
-  curveR: [[0.025, 0.255, 0.49, 0.735, 0.97], [0.035, 0.27, 0.505, 0.748, 0.985], [0.065, 0.305, 0.56, 0.79, 1], [0.06, 0.3, 0.55, 0.785, 1], [0.045, 0.272, 0.515, 0.762, 1], [0.04, 0.265, 0.505, 0.755, 1]],
-  curveG: [[0.03, 0.262, 0.5, 0.745, 0.98], [0.032, 0.26, 0.495, 0.742, 0.985], [0.04, 0.255, 0.49, 0.74, 0.985], [0.042, 0.262, 0.497, 0.748, 0.99], [0.042, 0.265, 0.503, 0.752, 0.995], [0.042, 0.268, 0.505, 0.752, 1]],
-  curveB: [[0.06, 0.295, 0.535, 0.775, 1], [0.065, 0.305, 0.54, 0.77, 1], [0.08, 0.295, 0.5, 0.72, 0.955], [0.075, 0.29, 0.49, 0.715, 0.95], [0.06, 0.28, 0.505, 0.735, 0.97], [0.055, 0.28, 0.512, 0.745, 0.985]],
+  saturation: [0.9, 0.95, 1.08, 1.12, 1.08, 1.08],
+  curveR: [[0.025, 0.255, 0.49, 0.735, 0.97], [0.035, 0.27, 0.505, 0.748, 0.985], [0.035, 0.262, 0.55, 0.79, 1], [0.03, 0.258, 0.55, 0.79, 1], [0.03, 0.255, 0.525, 0.77, 1], [0.03, 0.258, 0.512, 0.762, 1]],
+  curveG: [[0.03, 0.262, 0.5, 0.745, 0.98], [0.032, 0.26, 0.495, 0.742, 0.985], [0.052, 0.268, 0.51, 0.755, 0.985], [0.05, 0.267, 0.52, 0.765, 0.99], [0.048, 0.262, 0.51, 0.758, 0.995], [0.046, 0.265, 0.508, 0.756, 1]],
+  curveB: [[0.06, 0.295, 0.535, 0.775, 1], [0.065, 0.305, 0.54, 0.77, 1], [0.052, 0.295, 0.5, 0.72, 0.95], [0.05, 0.29, 0.49, 0.715, 0.95], [0.048, 0.283, 0.5, 0.735, 0.97], [0.046, 0.28, 0.5, 0.742, 0.985]],
   // god rays from the sun disc through whatever stands in front of it (post.js): none once the sun is down
   rays: [0, 0, 0.35, 1.0, 0.8, 0.35],
   foam: [0x2a3340, 0x3e4a5c, 0xe8c8a8, 0xf2dfc4, 0xf4efe4, 0xf2f6f6],
 };
-const NUMERIC = new Set(['sunInt', 'hemiInt', 'fogReach', 'fogDesat', 'sunwardPow', 'sunwardAmt', 'airHeight', 'skyGlowAmt', 'skyGlowPow', 'moonInt', 'stars', 'gain', 'saturation', 'rays']);
+const NUMERIC = new Set(['sunInt', 'hemiInt', 'fogReach', 'fogDesat', 'sunwardPow', 'sunwardAmt', 'airHeight', 'skyGlowAmt', 'skyGlowPow', 'skyLift', 'moonInt', 'stars', 'gain', 'saturation', 'rays']);
 const CURVES = new Set(['curveR', 'curveG', 'curveB']);
 const colors = {};
 
@@ -230,7 +238,7 @@ export class DayCycle {
     su.uZenith.value.copy(this.lerpColor('zenith', c));
     su.uHorizon.value.copy(this.lerpColor('horizon', c));
     if (su.uMid) su.uMid.value.copy(this.lerpColor('skyMid', c));
-    if (su.uGlow) su.uGlow.value.set(this.lerpNum('skyGlowAmt'), this.lerpNum('skyGlowPow'));
+    if (su.uGlow) su.uGlow.value.set(this.lerpNum('skyGlowAmt'), this.lerpNum('skyGlowPow'), this.lerpNum('skyLift'));
     su.uSunColor.value.copy(this.lerpColor('skySun', c));
     su.uGround.value.copy(this.lerpColor('ground', c));
     su.uSunDir.value.copy(this.sunDir);
