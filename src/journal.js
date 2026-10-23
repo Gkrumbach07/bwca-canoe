@@ -208,23 +208,30 @@ export class Journal {
       ${lakes.length ? `<div class="scroll"><table><thead><tr><th>Lake</th><th>First paddled</th><th>What it is</th><th>Clarity</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Push off and they will be written here.</div>'}`;
     return { html, foot: 'clarity: Secchi depth, from the DNR where it has one' };
   }
-  // the logbook: every trip, newest first, and how it ended; what has been seen across them
+  // the logbook: every trip, newest first, and how it ended; what has been seen across them, and the outfitters known
   tripsTab() {
-    const c = this.core, book = c.book, trips = book.trips.slice().reverse(), seen = book.seen, o = this.outfitter;
+    const c = this.core, book = c.book, trips = book.trips.slice().reverse(), seen = book.seen, o = this.outfitter, pr = c.profile || (o && o.profile) || null;
     const place = (ep) => { const l = o && ep != null ? o.landings.find((x) => x.ep === ep) : null; return l ? l.place : '—'; };
-    const how = { completed: 'completed', late: 'completed late', evacuated: 'evacuated', abandoned: 'left off' };
+    // how it ended: came in (an open trip called at a counter), brought in (an evacuation), or the trip core's words
+    const how = (t) => {
+      if (t.k === 'completed' && t.why === 'came in') return `came in${t.to != null ? ` at ${esc(place(t.to))}` : ''}`;
+      if (t.k === 'evacuated') return `brought in${t.why ? `: ${esc(t.why)}` : ''}`;
+      if (t.k === 'abandoned') return 'left off';
+      const note = t.why && t.why !== 'sandbox' && t.why !== 'as planned' ? `: ${esc(t.why)}` : t.why === 'as planned' ? ', as planned' : '';
+      return `${t.k === 'late' ? 'completed late' : 'completed'}${note}`;
+    };
     const pages = Math.max(1, Math.ceil(trips.length / ROWS));
     this.page = Math.min(this.page, pages - 1);
     const rows = trips.slice(this.page * ROWS, this.page * ROWS + ROWS).map((t) => {
       const e = t.entry || {}, when = e.year ? shortDate(e.year, e.doy) : '';
-      const days = t.mode === 'adventure' && t.nights != null ? `${t.days} of ${t.nights + 1}` : String(t.days || '—');
-      const note = t.why && t.why !== 'sandbox' && t.why !== 'as planned' ? `: ${esc(t.why)}` : t.why === 'as planned' ? ', as planned' : '';
-      return `<tr><td>${when}</td><td>${esc(place(t.from))}${t.to != null && t.to !== t.from ? ` → ${esc(place(t.to))}` : ''}</td><td>${days}</td><td>${fmtKm(t.km || 0)} km</td><td class="${t.k === 'evacuated' ? 'best' : ''}">${how[t.k] || t.k}${note}</td><td class="soft">${t.mode === 'sandbox' ? 'sandbox' : ''}</td></tr>`;
+      const rs = t.resupplies ? ` · ${t.resupplies} ${plural(t.resupplies, 'resupply', 'resupplies')}` : '';
+      return `<tr><td>${when}</td><td>${esc(place(t.from))}</td><td>${t.days || '—'}</td><td>${fmtKm(t.km || 0)} km${rs}</td><td class="${t.k === 'evacuated' ? 'best' : ''}">${how(t)}</td><td class="soft">${t.mode === 'sandbox' ? 'sandbox' : ''}</td></tr>`;
     }).join('');
-    const counts = `${seen.lakes.length} ${plural(seen.lakes.length, 'lake')}, ${seen.camps.length} ${plural(seen.camps.length, 'campsite')}, ${seen.portages.length} ${plural(seen.portages.length, 'portage')} and ${seen.eps.length} ${plural(seen.eps.length, 'landing')} seen.`;
-    const done = book.trips.filter((t) => t.k === 'completed' || t.k === 'late').length;
-    const html = `<div class="lede"><h2 id="right-h">${book.trips.length ? `${book.trips.length} ${plural(book.trips.length, 'trip')}, ${done ? word(done) : 'none'} completed` : 'No trips logged yet'}</h2><div class="sub">${counts}</div></div>
-      ${trips.length ? `<div class="scroll"><table><thead><tr><th>Put in</th><th>From</th><th>Days</th><th>Paddled</th><th>How it ended</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">A trip is logged when it ends: at a counter, or when someone comes out for you.</div>'}`;
+    const all = o ? o.landings.length : 0, known = pr ? pr.known.length : 0;
+    const counts = `${seen.lakes.length} ${plural(seen.lakes.length, 'lake')}, ${seen.camps.length} ${plural(seen.camps.length, 'campsite')} and ${seen.portages.length} ${plural(seen.portages.length, 'portage')} seen${pr ? `; ${known} of ${all} outfitters known` : `, ${seen.eps.length} ${plural(seen.eps.length, 'landing')}`}.`;
+    const inN = book.trips.filter((t) => t.k === 'completed' || t.k === 'late').length;
+    const html = `<div class="lede"><h2 id="right-h">${book.trips.length ? `${book.trips.length} ${plural(book.trips.length, 'trip')}, ${inN ? word(inN) : 'none'} came in` : 'No trips logged yet'}</h2><div class="sub">${counts}</div></div>
+      ${trips.length ? `<div class="scroll"><table><thead><tr><th>Pushed off</th><th>From</th><th>Days</th><th>Paddled</th><th>How it ended</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">A trip is logged when you call it at a counter, or when someone brings you in.</div>'}`;
     const more = trips.length - (this.page + 1) * ROWS;
     const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'what you have seen stays seen';
     return { html, foot };

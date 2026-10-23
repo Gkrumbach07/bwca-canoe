@@ -1,7 +1,8 @@
 // The front door. After loading, the live scene (golden hour, the clock stopped, a camera drifting slowly
 // round the canoe) renders behind the card, set in Air on a flat deep band: the name, a line, and a plain-text
-// menu (Paddle in / New trip / Settings / Controls) with the entry points as a second column beside New trip, and
-// above them the way to travel (Adventure, with a permit and a date to be out by; or Sandbox, no limits).
+// menu (Continue / New season / Settings / Controls) with the entry points as a second column beside New season, and
+// above them the way to travel (Adventure, a season of open trips; or Sandbox, no limits). A new season is the mode,
+// then home: the entry point picked, where you start with $40 and the starting kit (profile.js).
 // Esc during play brings the same card back as a pause screen. Keyboard first: the arrows move between items
 // (← → between the two columns), Enter picks, Esc goes back. While the card is up it owns the keyboard (a
 // capturing listener stops the game's key handlers) and the HUD is hidden (body.shell-open, shell.css).
@@ -15,7 +16,7 @@ const $ = (id) => document.getElementById(id);
 const DRIFT_RATE = 0.045;   // rad/s round the canoe
 const DRIFT_RADIUS = 23;    // metres, where there is water for it
 const MODES = {
-  adventure: 'A permit, a food pack, a date to be out by.',
+  adventure: 'Open trips: food to buy, adverts to take, real rules.',
   sandbox: 'The same lakes, with no limits and no dates.',
 };
 
@@ -64,6 +65,8 @@ export class Title {
     };
     this.panel = new SettingsPanel(this.settings, this.el.form, this.el.nav);
     this.drift = { angle: Math.random() * Math.PI * 2, t: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), fresh: true };
+    this.confirmEp = null;  // a new season over one under way asks twice
+    this.el.newTrip.textContent = 'New season';
     this.buildEntries();
     this.buildKeymap();
     this.bind();
@@ -80,12 +83,12 @@ export class Title {
       const n = document.createElement('b'); n.textContent = String(ep.ep);
       b.append(n, document.createTextNode(ep.name));
       if (Math.hypot(ep.x - start.x, ep.z - start.z) < 600) { b.classList.add('current'); const s = document.createElement('small'); s.textContent = ' · the default start'; b.appendChild(s); }
-      b.addEventListener('click', () => this.newTrip(ep));
+      b.addEventListener('click', () => this.newSeason(ep));
       li.appendChild(b);
       list.appendChild(li);
     }
     this.el.entries.hidden = false;
-    // the way to travel: Adventure or Sandbox, for the trip New trip begins
+    // the way to travel: Adventure or Sandbox, for the season New season begins
     const pick = this.el.modePick;
     if (pick) {
       for (const b of pick.querySelectorAll('button[data-mode]')) b.addEventListener('click', () => this.setPick(b.dataset.mode));
@@ -95,6 +98,7 @@ export class Title {
   modeButtons() { return this.el.modePick ? [...this.el.modePick.querySelectorAll('button[data-mode]')] : []; }
   setPick(mode) {
     this.modePick = mode === 'sandbox' ? 'sandbox' : 'adventure';
+    this.confirmEp = null; if (this.el.status && /new season/i.test(this.el.status.textContent)) this.el.status.textContent = '';
     save.write('tripMode', this.modePick);
     for (const b of this.modeButtons()) { const on = b.dataset.mode === this.modePick; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
     if (this.el.modeNote) this.el.modeNote.textContent = MODES[this.modePick];
@@ -145,7 +149,8 @@ export class Title {
     else this.el.go.focus();
   }
   focusEntries() {
-    const cur = this.el.list.querySelector('button.current') || this.el.list.querySelector('button');
+    const home = this.el.list.querySelector('small.home');
+    const cur = (home && home.parentElement) || this.el.list.querySelector('button.current') || this.el.list.querySelector('button');
     if (cur) { cur.focus(); cur.scrollIntoView({ block: 'nearest' }); }
   }
 
@@ -218,27 +223,41 @@ export class Title {
     return set != null ? Math.max(0, set - 0.65) : 18.5;
   }
 
+  get profile() { return this.outfitter ? this.outfitter.profile : null; }
   refreshMenu() {
-    const e = this.el, pause = this.state === 'pause', trip = this.saved, core = this.trip;
+    const e = this.el, pause = this.state === 'pause', trip = this.saved, core = this.trip, pr = this.profile;
     const p = this.player, w = this.world, o = this.outfitter;
     const here = () => p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z)) || 'open water';
-    // "Adventure · day 2 of 5 · out by Fri", or the old words without a trip core
-    const tripDays = core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1} of a ${o.trip.days}-day trip` : '';
+    // "Adventure · day 2 · $22", or the old words without a trip core
+    const money = pr && pr.started ? ` · $${pr.money}` : '';
+    const tripDays = (core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : pr && pr.started ? ' · between trips' : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1}` : '') + money;
+    this.confirmEp = null; e.status.textContent = '';
     const kicker = pause ? `Paused · ${here()} · ${clock12(this.day.hours)}` : 'Boundary Waters Canoe Area Wilderness';
     e.kicker.textContent = kicker;
     e.settingsKicker.textContent = pause ? kicker : 'Boundary Waters';
     e.controlsKicker.textContent = pause ? kicker : 'Boundary Waters';
-    e.go.textContent = pause ? 'Paddle on' : 'Paddle in';
+    const season = !!(pr && pr.started);
+    e.go.textContent = pause ? 'Paddle on' : season ? 'Continue' : 'Paddle in';
     if (pause) e.hint.textContent = `${here()} · ${clock12(this.day.hours)}${tripDays}`;
-    else if (trip) e.hint.textContent = `Continue on ${here()} · ${shortDate(trip.year, trip.doy)} · ${clock12(trip.hours)}${tripDays}`;
-    else { const s = w.meta.start; e.hint.textContent = `Start at ${w.lakeName(w.lakeIdAt(s.x, s.z)) || 'Lake One'}, the default landing`; }
-    e.newTrip.classList.toggle('current', !pause && !trip);
+    else if (trip && season) e.hint.textContent = `Continue on ${here()} · ${shortDate(trip.year, trip.doy)} · ${clock12(trip.hours)}${tripDays}`;
+    else if (season) e.hint.textContent = `Continue the season${tripDays}`;
+    else { const s = w.meta.start; e.hint.textContent = `Begin a season at ${w.lakeName(w.lakeIdAt(s.x, s.z)) || 'Lake One'}, the default landing`; }
+    e.newTrip.classList.toggle('current', !pause && !trip && !season);
+    // home, marked in the list of entry points
+    for (const b of e.list.querySelectorAll('button')) {
+      const n = Number(b.querySelector('b') && b.querySelector('b').textContent), isHome = season && pr.home === n;
+      let tag = b.querySelector('small.home');
+      if (isHome && !tag) { tag = document.createElement('small'); tag.className = 'home'; tag.textContent = ' · home'; b.appendChild(tag); }
+      else if (!isHome && tag) tag.remove();
+    }
   }
 
   // --- the three ways out --------------------------------------------------------------------
   continueTrip() {
-    const t = this.saved, day = this.day;
-    if (this.trip && !this.trip.active && !(this.outfitter && this.outfitter.load())) this.trip.setMode(this.modePick); // a first trip travels the way picked
+    const t = this.saved, day = this.day, pr = this.profile, o = this.outfitter;
+    // no season yet: one begins at the landing nearest the canoe (the default start), in the mode picked
+    if (pr && !pr.started && o && o.newSeason) o.newSeason(o.nearest(this.player.x, this.player.z).l.ep, this.modePick);
+    else if (this.trip && !this.trip.active && !(o && o.load())) this.trip.setMode(this.modePick); // a first trip travels the way picked
     if (t) {
       day.setClock(t.year, t.doy, t.hours); day.running = t.running !== false;
       if (t.camera && t.camera !== this.chase.mode) this.chase.setMode(t.camera);
@@ -253,15 +272,26 @@ export class Title {
 
   resume() { this.day.running = this.pausedRunning; this.close(); }
 
-  async newTrip(ep) {
+  // New season → the mode → home: the entry point picked. Over a season under way it asks twice (the first pick says
+  // what is forgotten, the same pick again begins).
+  async newSeason(ep, { confirm = true } = {}) {
     if (this.busy) return;
+    const pr = this.profile;
+    if (confirm && pr && pr.started && this.confirmEp !== ep.ep) {
+      this.confirmEp = ep.ep;
+      const n = pr.known.length;
+      this.el.status.textContent = `A new season at ${ep.name} forgets the $${pr.money}, the gear and ${n} ${n === 1 ? 'outfitter' : 'outfitters'} known. Pick it again to begin.`;
+      return;
+    }
+    this.confirmEp = null;
     this.busy = true;
     const buttons = [...this.el.list.querySelectorAll('button')];
     for (const b of buttons) b.disabled = true;
     this.el.status.textContent = `Paddling in at ${ep.name}…`;
     // whatever trip was under way ends here (a stale active save would otherwise call the canoe back on boot), and the
-    // new one travels the way picked; the counter opens at the landing
-    if (this.outfitter && this.outfitter.abandon) this.outfitter.abandon(this.modePick);
+    // season travels the way picked, from home; the counter opens at its landing
+    if (this.outfitter && this.outfitter.newSeason) this.outfitter.newSeason(ep.ep, this.modePick);
+    else if (this.outfitter && this.outfitter.abandon) this.outfitter.abandon(this.modePick);
     else if (this.trip) this.trip.setMode(this.modePick);
     this.saver.clear(); this.saved = null;
     const ok = await this.player.teleport(ep.x, ep.z);
@@ -276,6 +306,7 @@ export class Title {
     this.close();
     this.saver.write();
   }
+  newTrip(ep) { return this.newSeason(ep, { confirm: false }); } // the trip core's name for it (its tests call it)
 
   // --- the drifting camera (called in place of the chase camera while the card is up) ----------
   update(dt) {

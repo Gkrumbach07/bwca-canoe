@@ -879,12 +879,11 @@ export class Hud {
       const rate = day.rate != null && day.rate < 0.99 ? `at a third while you travel${ts > 1 ? `, ×${ts}` : ''}` : `at ×${ts}`;
       row('Light', `${light} · clock ${day.running ? rate : 'stopped'}`);
     }
-    // the trip: the permit (its number, the day of it, out by when and where), then the energy, then the pack
-    if (core && core.active) {
-      const p = core.permit, due = core.dueIn, ex = core.exitWords();
-      const no = p && p.no ? `${p.no} · ` : '';
-      const when = due == null ? '' : due < 0 ? ` · ${word(-due)} ${plural(-due, 'day')} past the permit` : ` · out by ${core.outBy('day')}${ex ? `, ${esc(ex)}` : ''}`;
-      row('Permit', core.sandbox ? `Sandbox · ${esc(core.dayWords())} · no dates` : `${esc(no)}${esc(core.dayWords())}${when}`);
+    // the trip: the season's paper (its number, home, the day of the trip) and the money, then the energy, then the pack
+    if (core && (core.active || (core.profile && core.profile.started))) { // hubs 1A
+      const p = core.permit, pr = core.profile, home = pr && pr.home != null ? core.placeOf(pr.home) : '';
+      const bits = [core.sandbox ? 'Sandbox' : p && p.no ? p.no : 'not yet stamped', home ? `home ${home}` : '', core.active ? core.dayWords() : 'between trips', pr ? `$${pr.money} in hand` : ''];
+      row('Permit', esc(bits.filter(Boolean).join(' · ')));
     }
     if (energy) {
       const v = energy.value, cap = energy.ceiling, awake = energy.awake, adv = !!(core && core.adventure && core.active);
