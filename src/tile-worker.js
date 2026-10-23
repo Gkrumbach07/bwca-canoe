@@ -16,19 +16,24 @@ async function fetchTile(url) {
   return new Response(body).arrayBuffer();
 }
 
-// stride floats per instance (x, y, z, yaw, scale[, tint, squash]) -> a 4x4 column-major matrix per
-// instance plus an rgb tint when the stride carries one
+// stride floats per instance (x, y, z, yaw, scale[, tint, squash[, azimuth, tilt]], placement.js STRIDE) -> a
+// 4x4 column-major matrix per instance, T * Ry(azimuth) * Rz(tilt) * Ry(yaw) * S (the rocks lean: a slanted
+// group shares one azimuth and tilt, the flats follow the slope), plus an rgb tint when the stride carries one.
+// Every column keeps its axis's scale as its length (tiles.js and props.js read the footprint from it).
 function instanceData(items, stride, rx, rz) {
   const count = items.length / stride;
   const m = new Float32Array(count * 16), c = stride > 5 ? new Float32Array(count * 3) : null;
   for (let n = 0; n < count; n++) {
     const o = n * stride, x = items[o], y = items[o + 1], z = items[o + 2], yaw = items[o + 3], sc = items[o + 4];
-    const sq = stride > 6 ? items[o + 6] : 1;
-    const sx = sc * sq, sy = sc, sz = sc * (2 - sq), cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const sq = stride > 6 ? items[o + 6] : 1, az = stride > 8 ? items[o + 7] : 0, tl = stride > 8 ? items[o + 8] : 0;
+    const sx = sc * sq, sy = sc, sz = sc * (2 - sq), cy = Math.cos(yaw), sny = Math.sin(yaw);
+    const ca = Math.cos(az), sa = Math.sin(az), ct = Math.cos(tl), st = Math.sin(tl);
+    // A = Ry(az) * Rz(tl), rows; R = A * Ry(yaw)
+    const a00 = ca * ct, a01 = -ca * st, a02 = sa, a10 = st, a11 = ct, a20 = -sa * ct, a21 = sa * st, a22 = ca;
     const e = n * 16;
-    m[e] = cs * sx; m[e + 1] = 0; m[e + 2] = -sn * sx; m[e + 3] = 0;
-    m[e + 4] = 0; m[e + 5] = sy; m[e + 6] = 0; m[e + 7] = 0;
-    m[e + 8] = sn * sz; m[e + 9] = 0; m[e + 10] = cs * sz; m[e + 11] = 0;
+    m[e] = (a00 * cy - a02 * sny) * sx; m[e + 1] = a10 * cy * sx; m[e + 2] = (a20 * cy - a22 * sny) * sx; m[e + 3] = 0;
+    m[e + 4] = a01 * sy; m[e + 5] = a11 * sy; m[e + 6] = a21 * sy; m[e + 7] = 0;
+    m[e + 8] = (a00 * sny + a02 * cy) * sz; m[e + 9] = a10 * sny * sz; m[e + 10] = (a20 * sny + a22 * cy) * sz; m[e + 11] = 0;
     m[e + 12] = x; m[e + 13] = y; m[e + 14] = z; m[e + 15] = 1;
     if (c) { const tint = items[o + 5]; c[n * 3] = tint; c[n * 3 + 1] = tint * (0.97 + hash2(n, rx * 131 + rz, 2) * 0.06); c[n * 3 + 2] = tint; }
   }
@@ -61,7 +66,7 @@ async function buildFine(m) {
   const terrain = buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz });
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
-  const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...binCentre(b, b.size), ...instanceData(b.items, 7, b.rx, b.rz) }));
+  const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz) }));
   const abins = aquatic.bins.map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, ...binCentre(b), ...instanceData(b.items, 5, b.rx, b.rz) }));
   const transfer = [buf, cover.buffer, ...terrainBuffers(terrain)];
   if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.idx.buffer);

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt } from './terrain-build.js';
-import { angularRock, makeRockMaterial, makeToonMaterial } from './rocks.js';
+import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
+import { bakeOcclusion } from './occlusion.js';
 import { outfitterName } from './outfitter.js';
-import { SPECIES as SP } from './placement.js';
+import { SPECIES as SP, bedding } from './placement.js';
 
 // Resample a polyline at roughly `step` metre spacing.
 export function resample(pts, step) {
@@ -31,9 +33,45 @@ export function exclusionsFor(world) {
   return segs;
 }
 
-let propMaterial = null, rockMaterial = null, outcropGeo = null;
+let propMaterial = null, rockMaterial = null, ledgeGeos = null;
 function shared() {
-  if (!propMaterial) { propMaterial = makeToonMaterial(); rockMaterial = makeRockMaterial(); outcropGeo = angularRock(mulberry32(11), 'slab'); }
+  if (!propMaterial) {
+    propMaterial = makeToonMaterial(); rockMaterial = makeRockMaterial();
+    // the campsite ledges (rocks.js families): layered flats, and slanted rocks for the odd site
+    ledgeGeos = [rockGeometry('slab', 11), rockGeometry('block', 12)];
+  }
+}
+
+// A prop part with its occlusion baked into the vertex colour (occlusion.js, cheap settings) against a ground
+// plane at y = ground (tile-local metres): the shack's walls darken into the yard, the dock's piles into the
+// water and under its deck, the fire ring's stones into the ground, so they sit there instead of standing on
+// it. The bake costs vertices x triangles, so each piece (a stone, the grate, the tent, the shack, a hull) is
+// baked on its own and the pieces merged after: a tile's props bake in a few milliseconds.
+function bakedPart(builder, ground) {
+  const geo = builder.build();
+  bakeOcclusion(geo, { rays: 10, reach: 1.4, ground, floor: 0.3 });
+  underground(geo, ground, 0.4, 0.4);
+  return geo;
+}
+// The bake sees nothing above a vertex that is under its own ground plane (a wall's foot, a stone's lower
+// half), so those go dark here, over `depth` metres: the faces that run into the ground darken toward it.
+function underground(geo, ground, floor, depth) {
+  const pos = geo.getAttribute('position'), col = geo.getAttribute('color');
+  for (let i = 0; i < pos.count; i++) {
+    const d = pos.getY(i) - ground;
+    if (d >= 0) continue;
+    const t = Math.min(1, -d / depth), k = 1 - (1 - floor) * t * t * (3 - 2 * t);
+    col.setXYZ(i, col.getX(i) * k, col.getY(i) * k, col.getZ(i) * k);
+  }
+  col.needsUpdate = true;
+}
+// One mesh of the props' look material from the parts that have any triangles.
+function propMesh(geos) {
+  const parts = geos.filter((g) => g && g.getAttribute('position').count);
+  if (!parts.length) return null;
+  const m = new THREE.Mesh(parts.length > 1 ? mergeGeometries(parts) : parts[0], propMaterial);
+  m.castShadow = true; m.receiveShadow = true; m.matrixAutoUpdate = false;
+  return m;
 }
 
 // Portage trails, trail markers and campsites that fall inside tile (tx, ty), built in tile-local
@@ -89,14 +127,17 @@ export function buildTileProps(tg, world, tx, ty) {
   }
   if (g.p.length) { const trail = new THREE.Mesh(g.build(), propMaterial); trail.receiveShadow = true; trail.matrixAutoUpdate = false; group.add(trail); }
   // an outfitter at every entry point landing: a dock, a shack with the name over the door, a canoe rack
-  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) buildOutfitter(tg, ep, ox, oz, signs, rng, group, obstacles);
-  if (signs.p.length) { const sign = new THREE.Mesh(signs.build(), propMaterial); sign.castShadow = true; sign.receiveShadow = true; sign.matrixAutoUpdate = false; group.add(sign); }
+  const built = [];
+  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) built.push(...buildOutfitter(tg, ep, ox, oz, rng, group, obstacles));
+  const sign = propMesh([signs.p.length ? signs.build() : null, ...built]);
+  if (sign) group.add(sign);
 
-  const cg = new GeoBuilder();
   const crng = mulberry32(7 + tx * 1000 + ty);
-  const outcrops = []; // [x, y, z, yaw, sx, sy, sz] in tile-local coordinates
+  const camps = [], ledges = [[], []]; // the baked campsite parts; the ledge rocks' matrices, flats and slanted
   for (const c of world.campsites) {
     if (!inside(c.x, c.z)) continue;
+    let cg = new GeoBuilder();
+    const piece = (ground) => { camps.push(bakedPart(cg, ground)); cg = new GeoBuilder(); };
     const a = hash2(Math.round(c.x), Math.round(c.z), 5) * 6.28;
     // the fire ring sits a few metres back from the water, on the land side of the node
     const dir = tg.deeperDir(c.x, c.z);
@@ -106,7 +147,8 @@ export function buildTileProps(tg, world, tx, ty) {
     obstacles.push({ x: fx, z: fz, r: 1.0 });
     for (let i = 0; i < 9; i++) {
       const t = (i / 9) * 6.28;
-      cg.blob(lfx + Math.cos(t) * 0.75, fy + 0.05, lfz + Math.sin(t) * 0.75, 0.22 + crng() * 0.1, vary(0x76736a, crng, 0.1), crng, 0.4, 1.2, 0.7, 1);
+      cg.blob(lfx + Math.cos(t) * 0.75, fy + 0.05, lfz + Math.sin(t) * 0.75, 0.22 + crng() * 0.1, vary(0x938b80, crng, 0.1), crng, 0.4, 1.2, 0.7, 1);
+      piece(fy);
     }
     // the iron fire grate every BWCA site has
     const gc = new THREE.Color(0x2a2a2a);
@@ -115,20 +157,17 @@ export function buildTileProps(tg, world, tx, ty) {
     for (const [lx, lz] of [[-0.3, -0.2], [0.3, -0.2], [-0.3, 0.2], [0.3, 0.2]]) cg.tube(cg.ring(lfx + lx, fy, lfz + lz, 0.02, 3, crng), cg.ring(lfx + lx, fy + 0.28, lfz + lz, 0.02, 3, crng), gc, new THREE.Vector3(lfx + lx, fy + 0.1, lfz + lz));
     // a couple of charred logs in the ring and a log bench
     cg.blob(lfx, fy + 0.1, lfz, 0.3, new THREE.Color(0x3b2a1e), crng, 0.3, 1.6, 0.5, 0.7);
+    piece(fy);
     const bx = fx + Math.cos(a) * 2.6, bz = fz + Math.sin(a) * 2.6, by = H(bx, bz), lbx = bx - ox, lbz = bz - oz;
     obstacles.push({ x: bx, z: bz, ux: -Math.sin(a), uz: Math.cos(a), hx: 1.2, hz: 0.25, box: true });
     cg.tube(cg.ring(lbx - Math.sin(a) * 1.2, by + 0.2, lbz + Math.cos(a) * 1.2, 0.2, 5, crng, 0.1), cg.ring(lbx + Math.sin(a) * 1.2, by + 0.2, lbz - Math.cos(a) * 1.2, 0.2, 5, crng, 0.1), vary(0x8a6a48, crng), new THREE.Vector3(lbx, by + 0.2, lbz));
-    // granite outcrop between the fire ring and the water: smooth Shield rock slabs
+    piece(by);
+    // a granite ledge between the fire ring and the water (from a stream of its own; the draws the old slabs
+    // took from crng are still taken, so the tent keeps its place and colour)
     if (c.shore < 30) {
       const n = 2 + Math.floor(crng() * 3);
-      for (let i = 0; i < n; i++) {
-        const t = 2 + i * 2.6 + crng() * 1.5, side = (crng() - 0.5) * 7;
-        const rx = fx + dir.x * t - dir.z * side, rz = fz + dir.z * t + dir.x * side;
-        const oy = Math.max(H(rx, rz), tg.levelAt(rx, rz) + 0.2) - 0.6;
-        const r = 2.2 + crng() * 2.2;
-        outcrops.push(rx - ox, oy, rz - oz, crng() * 6.28, r * (1.3 + crng() * 0.6), r * (0.4 + crng() * 0.2), r * (1.0 + crng() * 0.5));
-        if (crng() < 0.6) outcrops.push(rx - ox + (crng() - 0.5) * r, oy + 0.15, rz - oz + (crng() - 0.5) * r, crng() * 6.28, r * 0.6, r * 0.25, r * 0.55);
-      }
+      for (let i = 0; i < n; i++) { for (let k = 0; k < 7; k++) crng(); if (crng() < 0.6) { crng(); crng(); crng(); } }
+      campLedge(tg, c, fx, fz, dir, ox, oz, H, ledges, obstacles);
     }
     // tent on the flattest nearby spot: an A-frame with a fly
     const ta = a + 2.2, tx_ = fx + Math.cos(ta) * 6, tz_ = fz + Math.sin(ta) * 6, ty_ = H(tx_, tz_) + 0.05;
@@ -142,26 +181,20 @@ export function buildTileProps(tg, world, tx, ty) {
     cg.quad(P(-l, 0, w), P(l, 0, w), P(l, h, 0), P(-l, h, 0), tc, ref);
     cg.tri(P(l, 0, -w), P(l, 0, w), P(l, h, 0), tc.clone().offsetHSL(0, 0, -0.08), ref);
     cg.tri(P(-l, 0, -w), P(-l, 0, w), P(-l, h, 0), tc.clone().offsetHSL(0, 0, -0.08), ref);
+    piece(ty_ - 0.05);
   }
-  if (cg.p.length) { const m = new THREE.Mesh(cg.build(), propMaterial); m.castShadow = true; m.receiveShadow = true; m.matrixAutoUpdate = false; group.add(m); }
-  const count = outcrops.length / 7;
-  if (count) {
-    const rocks = new THREE.InstancedMesh(outcropGeo, rockMaterial, count);
-    const dummy = new THREE.Object3D();
-    for (let i = 0; i < count; i++) {
-      const o = i * 7;
-      dummy.position.set(outcrops[o], outcrops[o + 1], outcrops[o + 2]);
-      dummy.rotation.set(0, outcrops[o + 3], 0);
-      dummy.scale.set(outcrops[o + 4], outcrops[o + 5], outcrops[o + 6]);
-      dummy.updateMatrix();
-      rocks.setMatrixAt(i, dummy.matrix);
-    }
+  const camp = propMesh(camps);
+  if (camp) group.add(camp);
+  ledges.forEach((ms, k) => {
+    if (!ms.length) return;
+    const rocks = new THREE.InstancedMesh(ledgeGeos[k], rockMaterial, ms.length);
+    ms.forEach((m, i) => rocks.setMatrixAt(i, m));
     rocks.instanceMatrix.needsUpdate = true;
     rocks.castShadow = true; rocks.receiveShadow = true;
     rocks.computeBoundingSphere();
     rocks.matrixAutoUpdate = false;
     group.add(rocks);
-  }
+  });
   // The fallen trunks, stumps and granite outcrops the worker placed with the trees (placement.js) hold the
   // walker off too: a trunk as a box along its length (vegetation.js builds it 6.4–7.2 m along local x), a
   // stump and an outcrop as circles of their scale that a carried canoe rides over (rock). They are read from
@@ -180,6 +213,41 @@ export function buildTileProps(tg, world, tx, ty) {
     }
   }
   return group;
+}
+
+// The granite ledge of a campsite, between the fire ring (fx, fz) and the water (dir points out to it): two or
+// three stacks of layered flats lying along the slope, or now and then a group of slanted rocks at one tilt
+// standing off to one side so the way from the landing to the fire stays open (those hold the walker off, the
+// low flats are walked over). Matrices go to ledges[0] (flats) and ledges[1] (slanted), tile-local.
+function campLedge(tg, c, fx, fz, dir, ox, oz, H, ledges, obstacles) {
+  const r = mulberry32((hash2(Math.round(c.x), Math.round(c.z), 13) * 4294967296) >>> 0);
+  const m4 = (x, y, z, az, tilt, spin, s, sq = 1) => new THREE.Matrix4().makeRotationY(az)
+    .multiply(new THREE.Matrix4().makeRotationZ(tilt)).multiply(new THREE.Matrix4().makeRotationY(spin))
+    .scale(new THREE.Vector3(s * sq, s, s * (2 - sq))).setPosition(x - ox, y, z - oz);
+  const kx = -dir.z, kz = dir.x; // along the shore
+  if (r() < 0.25) {
+    const az = r() * Math.PI * 2, tilt = 0.3 + r() * 0.35, side = r() < 0.5 ? -1 : 1, n = 3 + Math.floor(r() * 3);
+    const bury = Math.max(0.05, 0.6 * Math.cos(tilt) - 0.9 * Math.sin(tilt) + 0.05);
+    let o = 3 + r() * 1.5;
+    for (let i = 0; i < n; i++) {
+      const s = i === 0 ? 1.2 + r() * 0.7 : 0.6 + r() * 0.7, t = 3.5 + r() * 2;
+      const x = fx + dir.x * t + kx * side * o, z = fz + dir.z * t + kz * side * o;
+      o += s * (1.1 + r() * 0.5);
+      if (tg.shoreAt(x, z) < -1.5) continue;
+      ledges[1].push(m4(x, H(x, z) - s * bury, z, az, tilt, (r() - 0.5) * 0.12, s, 0.85 + r() * 0.3));
+      if (s > 0.75) obstacles.push({ x, z, r: 0.8 * s, rock: true });
+    }
+    return;
+  }
+  const n = 2 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const t = 2.5 + i * 2.8 + r() * 1.5, side = (r() - 0.5) * 7, s = 1.1 + r() * 1.0;
+    const x = fx + dir.x * t + kx * side, z = fz + dir.z * t + kz * side;
+    if (tg.shoreAt(x, z) < -1.5) continue;
+    const bed = bedding(tg, x, z), tilt = Math.min(0.4, bed.angle * 0.85);
+    const sink = s * (0.03 + Math.max(0, Math.tan(bed.angle) - Math.tan(tilt)) * 1.1);
+    ledges[0].push(m4(x, H(x, z) - sink, z, bed.angle < 0.04 ? r() * Math.PI * 2 : bed.az, tilt, r() * Math.PI * 2, s, 0.85 + r() * 0.3));
+  }
 }
 
 // --- outfitters ------------------------------------------------------------------------------------------------
@@ -203,7 +271,10 @@ function signMaterial(name) {
 
 // A dock out from the landing, planks on piles; the shack nine metres back with its door to the lake and the
 // outfitter's name on a board above it; two canoes on a rack beside. All of it stands on the shaped surface.
-function buildOutfitter(tg, ep, ox, oz, g, rng, group, obstacles) {
+// Returns its pieces (the dock, the shack, the rack, the hulls) as geometries with their occlusion baked, the
+// dock's against the water, the rest against the ground under the shack.
+function buildOutfitter(tg, ep, ox, oz, rng, group, obstacles) {
+  let g = new GeoBuilder();
   const V = (x, y, z) => new THREE.Vector3(x - ox, y, z - oz);
   const H = (x, z) => surfaceAt(tg, x, z);
   // the shore: from the landing (usually a little way out on the water) up onto dry ground, then back to the edge
@@ -232,19 +303,26 @@ function buildOutfitter(tg, ep, ox, oz, g, rng, group, obstacles) {
       g.tube(g.ring(px - ox, bed, pz - oz, 0.09, 5, rng), g.ring(px - ox, deckY + 0.12, pz - oz, 0.08, 5, rng), pile, new THREE.Vector3(px - ox, deckY - 1, pz - oz));
     }
   }
+  const parts = [bakedPart(g, level)];
+  g = new GeoBuilder();
   // the shack
   const sx = x - d.x * 9, sz = z - d.z * 9;
   const P = (a, y, b) => V(sx + d.x * b + nx * a, y, sz + d.z * b + nz * a);
   const W = 1.9, D = 1.5, wallH = 2.3, ov = 0.4;
   obstacles.push({ x: sx, z: sz, ux: d.x, uz: d.z, hx: D, hz: W, box: true });
   const corners = [[-W, -D], [W, -D], [W, D], [-W, D]];
-  let floor = -Infinity;
-  for (const [a, b] of corners) floor = Math.max(floor, H(sx + d.x * b + nx * a, sz + d.z * b + nz * a));
+  let floor = -Infinity, yard = 0;
+  for (const [a, b] of corners) { const h = H(sx + d.x * b + nx * a, sz + d.z * b + nz * a); floor = Math.max(floor, h); yard += h / 4; }
   floor += 0.08;
   const y0 = floor - 0.9, y1 = floor + wallH, yr = y1 + 1.15;
   const wall = vary(0x7a5636, rng, 0.05), wall2 = wall.clone().offsetHSL(0, 0, -0.05), roof = vary(0x4b5a44, rng, 0.05), trim = vary(0xe9dcbf, rng, 0.03);
   const door = new THREE.Color(0x3c2a1c), glass = new THREE.Color(0x9fb8c4), ref = P(0, floor + 1, 0);
-  for (let i = 0; i < 4; i++) { const [a0, b0] = corners[i], [a1, b1] = corners[(i + 1) % 4]; g.quad(P(a0, y0, b0), P(a1, y0, b1), P(a1, y1, b1), P(a0, y1, b0), i % 2 ? wall2 : wall, ref); }
+  // each wall in rows (under the ground, the foot, the rest) so the baked occlusion darkens it at the ground line
+  const rows = [y0, floor, floor + 0.6, y1];
+  for (let i = 0; i < 4; i++) {
+    const [a0, b0] = corners[i], [a1, b1] = corners[(i + 1) % 4];
+    for (let r = 0; r < 3; r++) g.quad(P(a0, rows[r], b0), P(a1, rows[r], b1), P(a1, rows[r + 1], b1), P(a0, rows[r + 1], b0), i % 2 ? wall2 : wall, ref);
+  }
   g.tri(P(-W, y1, D), P(W, y1, D), P(0, yr, D), trim, ref);
   g.tri(P(-W, y1, -D), P(W, y1, -D), P(0, yr, -D), trim, ref);
   const eave = y1 - (yr - y1) * (ov / W), refRoof = P(0, floor, 0);
@@ -263,6 +341,8 @@ function buildOutfitter(tg, ep, ox, oz, g, rng, group, obstacles) {
   sign.rotation.y = Math.atan2(d.x, d.z);
   sign.matrixAutoUpdate = false; sign.updateMatrix();
   group.add(sign);
+  parts.push(bakedPart(g, yard));
+  g = new GeoBuilder();
   // the canoe rack beside the shack: two trestles and two hulls
   const ra = W + 2.6, post = vary(0x6e5236, rng, 0.05);
   obstacles.push({ x: sx + nx * ra, z: sz + nz * ra, ux: d.x, uz: d.z, hx: 2.4, hz: 0.7, box: true });
@@ -283,8 +363,10 @@ function buildOutfitter(tg, ep, ox, oz, g, rng, group, obstacles) {
       const nx_ = hull.n[i], nz_ = hull.n[i + 2];
       hull.n[i] = nx_ * Math.cos(yaw) + nz_ * Math.sin(yaw); hull.n[i + 2] = -nx_ * Math.sin(yaw) + nz_ * Math.cos(yaw);
     }
-    g.p.push(...hull.p); g.n.push(...hull.n); g.c.push(...hull.c);
+    parts.push(bakedPart(hull, yard));
   }
+  parts.push(bakedPart(g, yard));
+  return parts;
 }
 
 // --- lost-and-found items for the task board: small, flat-coloured, sitting on y = 0 ------------------------------

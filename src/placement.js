@@ -9,6 +9,11 @@
 // saplings and ferns stands between the floor and the canopy, thickest at the edges of the woods; a few
 // trees in a hundred lie fallen or stand as stumps; granite slabs break the floor where the rock field is
 // strong. Every instance also falls in a variant group so a stand draws several geometries of a species.
+//
+// The rocks (pass 3) follow Campo Santo's shape sheet and come in groups (rockFeatures below): slanted rocks
+// three to seven to a group, all at the group's one tilt; layered flats lying along the slope; lone erratics
+// in the woods; small rocks and pebbles at the feet of the big ones. A rock instance carries its tilt, so
+// the worker turns it into the instance matrix (tile-worker.js).
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
 import { clearingAt, burnAt, calmAt, rockAt } from './fields.js';
 import { surfaceAt, groundClass, rockSlope, GROUND } from './terrain-build.js';
@@ -29,6 +34,10 @@ const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 // draw calls would otherwise add up. GROUP_SHARE: the cumulative share of the instances each group takes.
 export const GROUPS = [3, 3, 3, 3, 3, 3, 3, 1, 3, 3, 2, 2, 2, 1, 2, 1, 1];
 const GROUP_SHARE = { 1: [1], 2: [0.6, 1], 3: [0.45, 0.8, 1] };
+// Floats per instance: x, y, z (relative to the tile corner), yaw, scale, tint, squash; the rocks add the
+// azimuth and the angle of their tilt (the instance matrix is T * Ry(azimuth) * Rz(tilt) * Ry(yaw) * S).
+export const STRIDE = 7, ROCK_STRIDE = 9;
+const ROCKS = new Set([6, 16]);
 export const AQUATIC = { pad: 0, reed: 1, weed: 2 };
 const G = Object.fromEntries(GROUND.map((k, i) => [k, i])); // ground class name -> index
 
@@ -101,10 +110,113 @@ function pickTree(w, r) {
   return 1;
 }
 
-// Returns bins of instances (7 floats each: x, y, z relative to the tile corner, yaw, scale, tint, squash),
-// one per region (640 m, or 320 m for the small species) and species, the instances sorted into variant
-// groups with the count in each (`groups`), and the canopy shade over the tile's local extent (used to
-// darken the ground under thick forest).
+// The rocks used to be drawn from the cell's own stream here, between the shrubs and the understory. They
+// come from a stream of their own now (rockFeatures); this takes the draws they took, so the understory, the
+// deadfall and the outcrops still grow exactly where they did.
+function skipRockDraws(rng, grid, cnt, cx, cz, cell, segs, slope, bare) {
+  for (let q = 0; q < cnt; q++) {
+    const x = cx + (rng() - 0.5) * cell, z = cz + (rng() - 0.5) * cell, s = grid.shoreAt(x, z);
+    if (s < -3 || (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + 0.5))) continue;
+    rng(); // the scale
+    if (!(s > -2 && rng() < 0.08 + smoothstep(0.25, 0.5, slope) * 0.2) && bare && rng() < 0.3) rng();
+    rng(); rng(); rng(); // the yaw, the tint, the variant group
+  }
+}
+
+// The lie of the ground at a point, for a rock that rests along it: the azimuth that turns a rock's +x up the
+// slope (the instance's Ry(azimuth) takes +x to (cos, 0, -sin)) and the slope's angle, over a few metres of
+// the shaped surface.
+export function bedding(grid, x, z, e = 2.5) {
+  const gx = (surfaceAt(grid, x + e, z) - surfaceAt(grid, x - e, z)) / (2 * e), gz = (surfaceAt(grid, x, z + e) - surfaceAt(grid, x, z - e)) / (2 * e);
+  return { az: Math.atan2(-gz, gx), angle: Math.atan(Math.hypot(gx, gz)) };
+}
+
+// The rock families, in vegetation.js's ROCK_KINDS order (the family of a boulder variant is its index mod 3).
+export const ROCK_KIND = { slab: 0, block: 1, boulder: 2 };
+// Which variant group of a boulder bin draws a family. vegetation.js gives a bin's three groups the variants
+// base, base + 1 and base + 2 of its nine (variantsFor; base hashed from the region), so group g draws the
+// family (base + g) mod 3, and a rock goes into the group that draws its own. Keep in step with variantsFor.
+function rockGroup(rx, rz, kind) {
+  const base = Math.floor(hash2(rx * 7919 + rz, SPECIES.boulder, 9) * 9);
+  return (kind - (base % 3) + 3) % 3;
+}
+
+// The rock features a cell grows (docs/look.md, pass 3, Campo Santo's shape sheet), from the rock stream rr:
+//   slanted   three to seven slanted rocks side by side along the strike, every one at the group's tilt and
+//             azimuth (each group draws its own: no two groups lean alike), small slanted rocks at their feet
+//   flats     one to three stacks of layered flats lying along the slope (their bedding), on the gentle rock
+//             and the shores
+//   erratic   one big rounded boulder: the lone glacial erratics of the woods, boulders on the shores
+// and pebbles round the feet of all of them. Bare rock grows them densest, then the shores, then the woods
+// (mostly erratics there). canopy: how closed the woods are overhead (0..1). put(kind, x, z, scale, yaw, az,
+// tilt, sink, tint, squash) places one rock.
+function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy }, blocked, put) {
+  const shore = sd > -3 && sd < 10;
+  let e = 0;
+  if (shore) e += 0.06 + 0.12 * smoothstep(0.12, 0.45, slope) + 0.14 * rock;
+  if (bare) e += 0.2 + 0.16 * rock;
+  else if (sd >= 10) e += 0.012 + 0.03 * smoothstep(0.2, 0.45, slope) + 0.03 * smoothstep(0.25, 0.5, rock);
+  const n = Math.floor(e) + (rr() < e - Math.floor(e) ? 1 : 0);
+  // under a canopy a rock goes darker, as the ground does there (terrain.js darkens the floor by the shade)
+  const K = ROCK_KIND, tint = () => (0.9 + rr() * 0.16) * (1 - 0.32 * canopy);
+  for (let f = 0; f < n; f++) {
+    const fx = cx + (rr() - 0.5) * cell, fz = cz + (rr() - 0.5) * cell;
+    if (grid.shoreAt(fx, fz) < -2.5 || blocked(fx, fz, 2.5)) continue;
+    const r = rr(), gentle = slope < 0.18;
+    let type;
+    if (bare) type = gentle ? (r < 0.5 ? 'flats' : r < 0.8 ? 'slanted' : 'erratic') : (r < 0.6 ? 'slanted' : r < 0.85 ? 'flats' : 'erratic');
+    else if (shore) type = gentle ? (r < 0.4 ? 'flats' : r < 0.75 ? 'erratic' : 'slanted') : (r < 0.5 ? 'slanted' : r < 0.75 ? 'flats' : 'erratic');
+    else type = r < 0.8 ? 'erratic' : slope > 0.15 ? 'slanted' : 'flats';
+    const feet = []; // the big pieces [x, z, scale], for the pebbles
+    let pebbles = 0, pAz = -1, pTilt = 0;
+    if (type === 'slanted') {
+      // the group's one tilt; the strike runs along local z, square to the dip
+      const az = rr() * Math.PI * 2, tilt = 0.42 + rr() * 0.43, cnt = 3 + Math.floor(rr() * 5);
+      const dx = Math.cos(az), dz = -Math.sin(az), kx = Math.sin(az), kz = Math.cos(az);
+      const lead = bare ? 1.4 + rr() * 1.8 : shore ? 1.2 + rr() * 1.6 : 0.9 + rr() * 0.9;
+      const bury = Math.max(0.05, 0.6 * Math.cos(tilt) - 0.9 * Math.sin(tilt) + 0.05); // the tail under the ground
+      let left = lead * 0.55, right = lead * 0.55;
+      for (let k = 0; k < cnt; k++) {
+        const s = k === 0 ? lead : lead * (0.35 + rr() * 0.55);
+        let o = 0;
+        if (k > 0) {
+          const gap = s * (0.05 + rr() * 0.35);
+          if (rr() < 0.5) { o = -(left + gap + s * 0.55); left = -o + s * 0.55; } else { o = right + gap + s * 0.55; right = o + s * 0.55; }
+        }
+        const along = k === 0 ? 0 : (rr() - 0.6) * 0.9 * s;
+        const x = fx + kx * o + dx * along, z = fz + kz * o + dz * along;
+        if (put(K.block, x, z, s, (rr() - 0.5) * 0.12, az, tilt, s * (bury + slope * 0.35), tint(), 0.85 + rr() * 0.3)) feet.push([x, z, s]);
+      }
+      pebbles = 2 + Math.floor(rr() * 4); pAz = az; pTilt = tilt;
+    } else if (type === 'flats') {
+      const bed = bedding(grid, fx, fz), flat = bed.angle < 0.04;
+      const az = flat ? rr() * Math.PI * 2 : bed.az, tilt = Math.min(0.42, bed.angle * (0.75 + rr() * 0.2)) + rr() * 0.05;
+      const extra = Math.max(0, Math.tan(bed.angle) - Math.tan(tilt)); // what the bedding does not follow
+      const stacks = 1 + (rr() < 0.55 ? 1 : 0) + (rr() < 0.25 ? 1 : 0), main = (bare || shore ? 1.5 + rr() * 2.1 : 1.0 + rr() * 1.4) * (rr() < 0.12 ? 1.5 : 1);
+      for (let k = 0; k < stacks; k++) {
+        const s = k === 0 ? main : main * (0.45 + rr() * 0.4), a = rr() * Math.PI * 2, d = k === 0 ? 0 : (main + s) * (0.8 + rr() * 0.3);
+        const x = fx + Math.cos(a) * d, z = fz + Math.sin(a) * d;
+        if (put(K.slab, x, z, s, rr() * Math.PI * 2, az, tilt, s * (0.02 + slope * 0.2 + extra * 1.1), tint(), 0.85 + rr() * 0.3)) feet.push([x, z, s]);
+      }
+      pebbles = 1 + Math.floor(rr() * 3);
+    } else {
+      const s = (bare || shore ? 1.45 + rr() * 1.9 : 1.55 + rr() * 1.8) * (rr() < (bare || shore ? 0.15 : 0.08) ? 1.6 : 1);
+      if (put(K.boulder, fx, fz, s, rr() * Math.PI * 2, rr() * Math.PI * 2, rr() * 0.14, s * (0.04 + Math.min(0.3, slope * 0.6)), tint(), 0.92 + rr() * 0.16)) feet.push([fx, fz, s]);
+      pebbles = 1 + Math.floor(rr() * 4);
+    }
+    // small rocks and pebbles round the feet of the big ones; in a slanted group they take its tilt
+    for (let p = 0; p < pebbles && feet.length; p++) {
+      const [bx, bz, bs] = feet[Math.floor(rr() * feet.length)], a = rr() * Math.PI * 2, d = bs * (0.8 + rr() * 0.8);
+      const s = rr() < 0.15 ? 0.6 + rr() * 0.3 : 0.16 + rr() ** 1.5 * 0.4;
+      const slab = pAz < 0 && rr() < 0.2;
+      put(slab ? K.slab : K.block, bx + Math.cos(a) * d, bz + Math.sin(a) * d, s, rr() * Math.PI * 2, pAz < 0 ? rr() * Math.PI * 2 : pAz, pAz < 0 ? rr() * 0.35 : pTilt, s * (pAz < 0 ? 0.1 : 0.2), tint(), 0.8 + rr() * 0.4);
+    }
+  }
+}
+
+// Returns bins of instances (`stride` floats each, see STRIDE), one per region (640 m, or 320 m for the small
+// species) and species, the instances sorted into variant groups with the count in each (`groups`), and the
+// canopy shade over the tile's local extent (used to darken the ground under thick forest).
 export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, originX, originZ }) {
   const side = grid.side, cell = grid.cell;
   const shadeCount = new Float32Array(side * side);
@@ -112,6 +224,30 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
   const mask = tileSegments(grid, i0, j0, n, exclusions);
   let total = 0;
   const count = (rng, e) => Math.floor(e) + (rng() < e - Math.floor(e) ? 1 : 0);
+  // one instance into its (region, species) bin and variant group; a rock carries the azimuth and the angle
+  // of its tilt. For the boulder species `group` is the rock's family (ROCK_KIND), put in the group drawing it.
+  const emit = (sp, group, x, y, z, yaw, scale, tint, squash, az = 0, tilt = 0) => {
+    const size = SMALL.has(sp) ? SMALL_REGION : REGION;
+    const rx = Math.floor((x - grid.originX) / size), rz = Math.floor((z - grid.originZ) / size);
+    const key = (rx * 4096 + rz) * 32 + sp;
+    let b = bins.get(key);
+    if (!b) { b = { rx, rz, sp, size, parts: Array.from({ length: GROUPS[sp] }, () => []) }; bins.set(key, b); }
+    const part = b.parts[sp === SPECIES.boulder ? rockGroup(rx, rz, group) : group];
+    part.push(x - originX, y, z - originZ, yaw, scale, tint, squash);
+    if (ROCKS.has(sp)) part.push(az, tilt);
+    total++;
+  };
+  // inside a trail's, a campsite's or an outfitter's clearing (grown by pad metres)?
+  const blocked = (x, z, pad) => {
+    const segs = mask.get(grid.local(grid.cellI(x), grid.cellJ(z)));
+    return !!segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + pad);
+  };
+  // a rock of a family (ROCK_KIND) for rockFeatures: kept out of deep water and the clearings, sunk `sink` metres
+  const emitRock = (kind, x, z, scale, yaw, az, tilt, sink, tint, squash = 1) => {
+    if (grid.shoreAt(x, z) < -4 || blocked(x, z, 0.3 + scale * 0.8)) return false;
+    emit(SPECIES.boulder, kind, x, surfaceAt(grid, x, z) - sink, z, yaw, scale, tint, squash, az, tilt);
+    return true;
+  };
   // one cell ring beyond the tile so the canopy shade at the edge matches the neighbour's trees
   for (let j = j0 - 1; j < j0 + n + 1; j++) {
     for (let i = i0 - 1; i < i0 + n + 1; i++) {
@@ -164,10 +300,11 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const plan = [[-1, trees, 1.2], [7, shrubs, 0.4], [6, rocks, 0.5], [10, count(rng, eHazel), 0.4], [11, count(rng, eAlder), 0.4], [12, count(rng, eSapling), 0.4], [13, count(rng, eFern), 0.3],
         [14, count(rng, eLog), 1.5], [15, count(rng, eStump), 0.8], [16, count(rng, eOutcrop), 2.5]];
       for (const [kind, cnt, pad] of plan) {
+        if (kind === 6) { skipRockDraws(rng, grid, cnt, cx, cz, cell, segs, slope, bare); continue; }
         for (let q = 0; q < cnt; q++) {
           const x = cx + (rng() - 0.5) * cell, z = cz + (rng() - 0.5) * cell;
           const s = grid.shoreAt(x, z);
-          const isRock = kind === 6 || kind === 16;
+          const isRock = kind === 16;
           if (isRock ? s < -3 : s < 0.6) continue;
           if (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + pad)) continue;
           let sp = kind;
@@ -185,8 +322,6 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           if (GIANT[sp] && rng() < GIANT[sp]) scale *= 1.45;
           if (isTree && burn > 0.5) scale *= sp === 5 ? 1.25 : 0.45; // tall dead stems, small regrowth
           if (isTree && bare && sp !== 9) scale *= 0.7;              // stunted on the rock
-          if (kind === 6 && s > -2 && rng() < 0.08 + smoothstep(0.25, 0.5, slope) * 0.2) scale *= 2.6; // granite outcrop blocks
-          else if (kind === 6 && bare && rng() < 0.3) scale *= 2.2 + rng() * 1.6;                      // slabs breaking the surface
           if (isTree && s > 600) scale *= 1.15;
           if (kind === 12 && burn > 0.5) scale *= 0.8;
           let yaw = rng() * Math.PI * 2;
@@ -206,24 +341,20 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           }
           if (!core) continue;
           const slopeHere = grid.slopeAt(x, z);
-          // sink into the ground more on slopes so the downhill edge never hangs in the air; a boulder is
-          // only as tall as its scale, so its sink is capped or steep slopes would swallow it whole
+          // sink into the ground more on slopes so the downhill edge never hangs in the air (the rocks sink in
+          // rockFeatures; an outcrop is capped, as it also lies along the slope)
           let sink;
-          if (kind === 6) sink = scale * Math.min(0.5, 0.15 + slopeHere * 0.7);
-          else if (kind === 16) sink = scale * (0.05 + Math.min(0.35, slopeHere * 0.45));
+          if (kind === 16) sink = scale * (0.05 + Math.min(0.22, slopeHere * 0.3)); // it lies along the slope (bedding below)
           else if (kind === 14) sink = 0.02 * scale + slopeHere * 0.25 * scale;
           else if (kind === 15) sink = 0.35 + slopeHere * 0.8 * scale;
           else if (kind >= 10) sink = 0.05 + slopeHere * 1.0 * scale;
           else sink = (isShrub ? 0.45 : 0.35) + slopeHere * (isShrub ? 1.0 : 1.2) * scale;
-          const size = SMALL.has(sp) ? SMALL_REGION : REGION;
-          const rx = Math.floor((x - grid.originX) / size), rz = Math.floor((z - grid.originZ) / size);
-          const key = (rx * 4096 + rz) * 32 + sp;
-          let b = bins.get(key);
-          if (!b) { b = { rx, rz, sp, size, parts: Array.from({ length: GROUPS[sp] }, () => []) }; bins.set(key, b); }
-          b.parts[group].push(x - originX, surfaceAt(grid, x, z) - sink, z - originZ, yaw, scale, tint, squash);
-          total++;
+          // an outcrop lies along the slope like the bedrock it breaks out of, darker under a canopy
+          const outcrop = kind === 16, bed = outcrop ? bedding(grid, x, z) : null;
+          emit(sp, group, x, surfaceAt(grid, x, z) - sink, z, yaw, scale, outcrop ? tint * (1 - 0.32 * smoothstep(0.5, 2.0, e)) : tint, squash, outcrop ? bed.az : 0, outcrop ? bed.angle * 0.85 : 0);
         }
       }
+      if (core) rockFeatures(grid, mulberry32((hash2(i, j, seed + 101) * 4294967296) >>> 0), { cx, cz, cell, sd, slope, rock, bare, canopy: smoothstep(0.5, 2.0, e) }, blocked, emitRock);
     }
   }
   // canopy shade for the ground: tree count per cell, softened over the neighbours
@@ -236,10 +367,15 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
   // each bin's instances sorted by variant group, with the count in each group
   const out = [];
   for (const b of bins.values()) {
+    const stride = ROCKS.has(b.sp) ? ROCK_STRIDE : STRIDE;
+    // vegetation.js draws a bin with a single non-empty group as if it were group 0: a rock bin holding only
+    // one family that is not group 0's gets a zero-sized rock in group 0, so its family is drawn
+    const filled = b.parts.filter((a) => a.length);
+    if (b.sp === SPECIES.boulder && filled.length === 1 && !b.parts[0].length) b.parts[0].push(...filled[0].slice(0, 4), 0, 1, 1, 0, 0);
     const items = new Float32Array(b.parts.reduce((n, a) => n + a.length, 0));
     let o = 0;
     for (const a of b.parts) { items.set(a, o); o += a.length; }
-    out.push({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.parts.map((a) => a.length / 7), items });
+    out.push({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, stride, groups: b.parts.map((a) => a.length / stride), items });
   }
   return { bins: out, shade, total };
 }
