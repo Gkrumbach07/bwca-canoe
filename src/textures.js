@@ -135,7 +135,9 @@ function blur(src, w, h, r) {
 }
 
 // ---------- painting -------------------------------------------------------------------
-// Grey values in sRGB; the darkest parts (twigs, the leaves at the back) about 0.4, lit tips near white.
+// Grey values in sRGB; the darkest parts (twigs, the leaves at the back) about 0.55, lit tips white. The
+// sprite multiplies the crown's colour, so its value range is kept high and narrow: the light model and the
+// occlusion bake shape the crown, the sprite only gives the leaves and needles a little relief.
 
 const grey = (v, a = 1) => { const c = Math.round(Math.min(1, Math.max(0, v)) * 255); return `rgba(${c},${c},${c},${a})`; };
 const SPREAD = (rng) => rng() + rng() - 1;
@@ -201,7 +203,7 @@ function paintCluster(ctx, w, h, rng, o) {
       all.push({ pts: curve(x, y, aa + sd * (0.5 + rng() * 0.4), L * (0.3 + rng() * 0.25), -sd * 0.3, 4), w0: w * 0.005, w1: w * 0.0025 });
     }
   }
-  for (const t of all) twig(ctx, t.pts, t.w0, t.w1, 0.36);
+  for (const t of all) twig(ctx, t.pts, t.w0, t.w1, 0.46);
   const items = [];
   const add = (t, u, spread) => {
     const [x, y, a] = along(t, u), ang = a + (rng() < 0.5 ? -1 : 1) * spread;
@@ -211,18 +213,19 @@ function paintCluster(ctx, w, h, rng, o) {
   for (let i = items.length; i < leaves; i++) add(all[Math.floor(rng() * all.length)].pts, i % 4 ? 0.15 + 0.85 * Math.sqrt(rng()) : 0.08 + 0.4 * rng(), 0.35 + rng() * 0.75);
   items.sort((p, q) => p.z - q.z);
   for (const it of items) {
-    const v = 0.6 + 0.4 * it.z;
+    const v = 0.74 + 0.26 * it.z;
     const px = it.x + Math.cos(it.ang) * it.len * 0.12, py = it.y + Math.sin(it.ang) * it.len * 0.12;
-    twig(ctx, [[it.x, it.y], [px, py]], w * 0.004, w * 0.003, 0.4);
-    leaf(ctx, px, py, it.ang, it.len, it.len * wid, shape, teeth, v * 0.78, Math.min(1, v * 1.08), rng);
+    twig(ctx, [[it.x, it.y], [px, py]], w * 0.004, w * 0.003, 0.5);
+    leaf(ctx, px, py, it.ang, it.len, it.len * wid, shape, teeth, v * 0.86, Math.min(1, v * 1.08), rng);
   }
 }
 
 const PAINT = {
-  // birch: small ovate leaves with a pointed tip and a toothed edge, forty-odd on seven twigs
-  leaf(ctx, w, h, rng) { paintCluster(ctx, w, h, rng, { twigs: 8, subs: 2, leaves: 125, len: w * 0.075, wid: 0.36, shape: [0.6, 0.95], teeth: 0.07, reach: w * 0.35 }); },
+  // birch: small ovate leaves with a pointed tip and a toothed edge, two hundred-odd on nine twigs and their
+  // side twigs, crowded enough that the cluster reads as a ragged mass of leaves rather than a spray of them
+  leaf(ctx, w, h, rng) { paintCluster(ctx, w, h, rng, { twigs: 9, subs: 3, leaves: 230, len: w * 0.085, wid: 0.42, shape: [0.6, 0.95], teeth: 0.07, reach: w * 0.36 }); },
   // hazel and alder: broad round leaves, fewer and larger
-  leafRound(ctx, w, h, rng) { paintCluster(ctx, w, h, rng, { twigs: 6, subs: 1, leaves: 34, len: w * 0.15, wid: 0.44, shape: [0.45, 0.6], teeth: 0.05, reach: w * 0.31 }); },
+  leafRound(ctx, w, h, rng) { paintCluster(ctx, w, h, rng, { twigs: 6, subs: 2, leaves: 52, len: w * 0.15, wid: 0.5, shape: [0.45, 0.6], teeth: 0.05, reach: w * 0.3 }); },
   // a conifer spray: a twig along s from the trunk end (left), side twigs of uneven length swept forward and
   // drooping, some forked, short needles bristling all round every twig (a bottle brush, not a fern)
   spray(ctx, w, h, rng) {
@@ -230,19 +233,19 @@ const PAINT = {
     const env = (u) => h * 0.45 * Math.min(1, 1.7 * u ** 0.5 * (1 - u) ** 0.35);
     const twigs = [];
     let side = 1;
-    for (let u = 0.07; u < 0.95; u += 0.028 + rng() * 0.02) {
+    for (let u = 0.06; u < 0.95; u += 0.022 + rng() * 0.016) {
       const [x, y, a] = along(axis, u), L = env(u) * (0.55 + rng() * 0.5) / 0.85;
       const t = curve(x, y, a + side * (0.55 + rng() * 0.6), L, -side * (0.2 + rng() * 0.4) + 0.15, 5);
       twigs.push(t);
       if (rng() < 0.45) { const [x2, y2, a2] = along(t, 0.4 + rng() * 0.3); twigs.push(curve(x2, y2, a2 + side * 0.6, L * 0.45, 0.2, 3)); }
       if (rng() < 0.75) side = -side;
     }
-    for (const t of twigs) twig(ctx, t, w * 0.006, w * 0.003, 0.34);
-    twig(ctx, axis, w * 0.014, w * 0.005, 0.32);
+    for (const t of twigs) twig(ctx, t, w * 0.006, w * 0.003, 0.46);
+    twig(ctx, axis, w * 0.014, w * 0.005, 0.44);
     const needles = (pts, scale) => {
       for (let u = 0.03; u <= 1; u += 0.02 / scale) {
         const [x, y, a] = along(pts, u), L = h * (0.05 + rng() * 0.045) * (1.1 - 0.3 * u) * scale, out = Math.min(1, Math.abs(y - cy) / (h * 0.42));
-        for (let k = 0; k < 3; k++) needle(ctx, x, y, a + (rng() < 0.5 ? -1 : 1) * (0.35 + rng() * 1.9), L * (0.75 + rng() * 0.4), Math.max(1.2, w * 0.0032), 0.48 + 0.12 * out + rng() * 0.12, 0.74 + 0.16 * out + rng() * 0.12);
+        for (let k = 0; k < 4; k++) needle(ctx, x, y, a + (rng() < 0.5 ? -1 : 1) * (0.35 + rng() * 1.9), L * (0.75 + rng() * 0.4), Math.max(1.6, w * 0.0042), 0.62 + 0.1 * out + rng() * 0.1, 0.84 + 0.1 * out + rng() * 0.06);
       }
     };
     needles(axis, 0.7);
@@ -253,16 +256,16 @@ const PAINT = {
   tuft(ctx, w, h, rng) {
     const cy = h / 2, axis = curve(w * 0.012, cy, SPREAD(rng) * 0.05, w * 0.42, SPREAD(rng) * 0.15, 10);
     const lets = [axis];
-    for (let k = 0, n = 3 + Math.floor(rng() * 3); k < n; k++) {
+    for (let k = 0, n = 4 + Math.floor(rng() * 3); k < n; k++) {
       const [x, y, a] = along(axis, 0.45 + 0.5 * rng()), sd = k % 2 ? 1 : -1;
       lets.push(curve(x, y, a + sd * (0.35 + rng() * 0.5), w * (0.12 + rng() * 0.14), -sd * 0.2, 4));
     }
-    for (const t of lets) twig(ctx, t, t === axis ? w * 0.016 : w * 0.009, w * 0.005, 0.33);
+    for (const t of lets) twig(ctx, t, t === axis ? w * 0.016 : w * 0.009, w * 0.005, 0.44);
     const items = [];
     for (const t of lets) {
-      const n = t === axis ? 150 : 110;
+      const n = t === axis ? 210 : 160;
       for (let i = 0; i < n; i++) {
-        const u = 0.45 + 0.55 * Math.sqrt(rng()), [x, y, a] = along(t, u);
+        const u = 0.35 + 0.65 * Math.sqrt(rng()), [x, y, a] = along(t, u);
         const ang = a + SPREAD(rng) * (0.35 + 1.2 * u);
         let L = h * (0.22 + rng() * 0.22);
         L = Math.min(L, (cy - h * 0.04 - Math.abs(y - cy)) / Math.max(0.05, Math.abs(Math.sin(ang))), (w * 0.97 - x) / Math.max(0.05, Math.cos(ang)));
@@ -271,10 +274,10 @@ const PAINT = {
     }
     items.sort((p, q) => p.z - q.z);
     for (const n of items) {
-      const v = 0.58 + 0.38 * n.z;
+      const v = 0.72 + 0.28 * n.z;
       const pts = curve(n.x, n.y, n.ang, n.L, SPREAD(rng) * 0.2, 3);
-      ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1.2, w * 0.0034);
-      for (let i = 1; i < pts.length; i++) { ctx.strokeStyle = grey(v * (0.82 + 0.25 * i / (pts.length - 1))); ctx.beginPath(); ctx.moveTo(...pts[i - 1]); ctx.lineTo(...pts[i]); ctx.stroke(); }
+      ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1.6, w * 0.0046);
+      for (let i = 1; i < pts.length; i++) { ctx.strokeStyle = grey(v * (0.86 + 0.2 * i / (pts.length - 1))); ctx.beginPath(); ctx.moveTo(...pts[i - 1]); ctx.lineTo(...pts[i]); ctx.stroke(); }
     }
   },
   // a clump of grass blades from one root, curving out, dark at the root and pale at the tips
@@ -317,7 +320,7 @@ const PAINT = {
   },
   // far sprites, stamped from the near ones so the far tree reads as the same stuff
   farCone(ctx, w, h, rng) {
-    twig(ctx, [[w / 2, h], [w / 2, h * 0.06]], w * 0.03, w * 0.008, 0.3);
+    twig(ctx, [[w / 2, h], [w / 2, h * 0.06]], w * 0.03, w * 0.008, 0.5);
     const tiers = 15;
     for (let i = 0; i < tiers; i++) {
       const s = i / tiers, y = h * (0.96 - 0.8 * s), hw = w * 0.4 * (1 - s) ** 0.9 + w * 0.05;
@@ -326,20 +329,20 @@ const PAINT = {
     stamp(ctx, canvases.spray, w / 2, h * 0.2, 1, -Math.PI / 2, h * 0.14, w * 0.12);
   },
   farOval(ctx, w, h, rng) {
-    for (let i = 0; i < 4; i++) twig(ctx, curve(w / 2, h, -Math.PI / 2 + SPREAD(rng) * 0.7, h * 0.55, SPREAD(rng) * 0.4, 5), w * 0.02, w * 0.006, 0.32);
-    for (let i = 0; i < 34; i++) {
+    for (let i = 0; i < 4; i++) twig(ctx, curve(w / 2, h, -Math.PI / 2 + SPREAD(rng) * 0.7, h * 0.55, SPREAD(rng) * 0.4, 5), w * 0.02, w * 0.006, 0.55);
+    for (let i = 0; i < 40; i++) {
       const a = rng() * 6.28, r = i < 6 ? 0.3 * rng() : Math.sqrt(rng()), x = w / 2 + Math.cos(a) * r * w * 0.34, y = h * 0.45 + Math.sin(a) * r * h * 0.32, s = w * (0.26 + rng() * 0.12);
       ctx.drawImage(canvases.leaf, x - s / 2, y - s / 2, s, s);
     }
   },
   // a pine's crown from afar: a ragged ovoid of needle brushes up the top of a trunk, taller than wide
   farPine(ctx, w, h, rng) {
-    twig(ctx, [[w / 2, h], [w / 2, h * 0.12]], w * 0.03, w * 0.012, 0.3);
-    const arms = 11;
+    twig(ctx, [[w / 2, h], [w / 2, h * 0.12]], w * 0.03, w * 0.012, 0.5);
+    const arms = 13;
     for (let i = 0; i < arms; i++) {
       const sd = i % 2 ? 1 : -1, up = (i + 0.5) / arms, a = -Math.PI / 2 + sd * (0.35 + (1 - up) * 0.75), L = w * (0.2 + 0.18 * Math.sin(Math.PI * Math.min(1, up * 1.3))) * (0.8 + rng() * 0.4);
       const pts = curve(w / 2 + SPREAD(rng) * w * 0.03, h * (0.92 - up * 0.72), a, L, sd * 0.25, 4);
-      twig(ctx, pts, w * 0.012, w * 0.005, 0.32);
+      twig(ctx, pts, w * 0.009, w * 0.004, 0.62);
       const [x, y, ang] = along(pts, 1);
       stamp(ctx, canvases.tuft, x - Math.cos(ang) * L * 0.55, y - Math.sin(ang) * L * 0.55, 1, ang, w * 0.36, h * 0.2);
     }
