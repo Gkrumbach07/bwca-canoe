@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { GeoBuilder, CardBuilder, vary } from './geobuilder.js';
-import { mulberry32, hash2 } from './rng.js';
+import { mulberry32, hash2, smoothstep } from './rng.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { angularRock, makeRockMaterial, smoothToon } from './rocks.js';
+import { angularRock, makeRockMaterial, smoothToon, screeBlock } from './rocks.js';
+import { cliffModule, cliffModuleFar, makeCliffMaterial } from './cliffs.js';
+import { GROUPS } from './placement.js';
 import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
 import { foliageAtlas } from './textures.js';
@@ -30,7 +32,9 @@ import { SWAY, glslSway } from './wind.js';
 // and coloured from its own near variant so the swap keeps the silhouette (farTwin).
 //
 // Pass 5 added the understory (hazel, alder, a young fir, bracken), the deadfall (logs, stumps) and the
-// granite outcrops; the deadfall and the rocks are solid geometry (rocks.js) and stay so.
+// granite outcrops; the deadfall and the rocks are solid geometry (rocks.js) and stay so. The bluff pass added
+// the tamarack, the aspen and the black spruce, the scree's blocks (rocks.js screeBlock) and the cliff modules
+// (cliffs.js).
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -402,6 +406,53 @@ function jackPine(rng, v) {
   needles(cards, 'tuft', vec(T.at(0.95)), UP.clone().addScaledVector(perp(UP).applyAxisAngle(UP, rng() * 6.28), 0.7).normalize(), 1.3, 0.75, crown, shade(cols, y0, y1, rng), rng);
   return finish(g, cards);
 }
+// Tamarack: the deciduous conifer of the bogs and the wet lowlands, a narrow open cone of thin, nearly level
+// branches with short soft sprays along them, a light green in summer, gold in October, bare in winter (its
+// needles are tagged as leaves, so they turn and drop with the season, on their own later timing: setSeason).
+// Every branch has its bark, so a bare tamarack still reads as a tree.
+function tamarack(rng, v) {
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
+  const h = 13 * P.size, bark = vary(0x6b5546, rng), cols = crownColors(0x9cc865, 0x4d7d4e, rng);
+  const T = g.stem(0, -0.5, 0, 0.26 * P.girth, 0.035, h, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.3, shade: 0.3, ts: [0, 0.12, 0.6, 1] });
+  deadBranches(g, rng, T.at, 2 + Math.floor(rng() * 2), 0.06, 0.25, 0.6, 1.3, bark);
+  const R = (1.6 + rng() * 0.5) * (0.8 + P.size * 0.3), nrm = outward(T, -0.5, h, 0.8);
+  whorls(g, cards, rng, T, { t0: 0.22, t1: 0.9, count: 8 + Math.floor(rng() * 2), nb: (f) => (f < 0.5 ? 4 : 3), R: (f) => R * (1 - f * 0.75) + 0.2, droop: (f) => 0.05 + 0.15 * (1 - f), rise: 0.12, tube: () => true, nrm, cols, y0: 0, y1: h, bark, wid: 0.55, fan: 0.3, lo: 0.45 });
+  const a = T.at(0.9), b = T.at(1), d = vec(b).sub(vec(a));
+  needles(cards, 'spray', vec(a), d.clone().normalize(), d.length() * 1.3, 0.4, nrm, shade(cols, 0, h, rng), rng);
+  return finish(g, cards);
+}
+// Quaking aspen: a straight pale trunk, grey-green with black scars where its branches fell and bare far up, a
+// narrow rounded crown high on it, a lighter, yellower green than the birch's; gold in the fall. It grows in
+// clones (placement.js aspenAt), so a stand is all of a kind.
+function aspen(rng, v) {
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
+  const h = 13 * P.size, bark = vary(0xbfc2b0, rng, 0.03), cols = crownColors(0xb3cf5c, 0x4c7a4c, rng);
+  const lean = leanOf(P, h), twig = bark.clone().lerp(new THREE.Color(0x4a4a3e), 0.55);
+  const T = g.stem(0, -0.5, 0, 0.19 * P.girth, 0.035, h * 0.96, 5, bark, rng, { lean, bow: bowOf(P, h), flare: 0.25, shade: 0.3, ts: [0, 0.1, 0.6, 1] });
+  for (let i = 0, n = 5 + Math.floor(rng() * 4); i < n; i++) { const t = 0.06 + rng() * 0.55, s = T.at(t); g.scar(T.at, t, rng() * 6.28, s.r * (0.6 + rng() * 0.4), s.r * (0.5 + rng() * 0.4), new THREE.Color(0x2a2a26)); }
+  const R = (1.3 + rng() * 0.5) * (0.75 + P.size * 0.3), c = T.at(0.78), C = V(c.x, c.y, c.z), ry = h * 0.24;
+  const y0 = C.y - ry, y1 = C.y + ry * 1.2, size = 2.0 * (0.8 + P.size * 0.2);
+  broadCrown(g, cards, rng, T, { R, C, ry, size, slot: 'leaf', twig, cols, y0, y1, t0: 0.55, t1: 0.92, n: 7 + Math.floor(rng() * 2), rise: [0.75, 1.15], droop: 0.25 });
+  const nrm = skyward(away(C, R * 1.15, ry, R * 1.15), C, 0.3);
+  leafy(cards, 'leaf', vec(T.at(1)), perp(UP).applyAxisAngle(UP, rng() * 6.28).addScaledVector(UP, 1.1).normalize(), size, nrm, shade(cols, y0, y1, rng), rng);
+  for (let i = 0; i < 3; i++) leafy(cards, 'leaf', vec(T.at(0.66 + i * 0.09)), dirAt(rng() * 6.28, 0.2 + rng() * 0.4), size * 0.8, nrm, shade(cols, y0, y1, rng), rng, true);
+  return finish(g, cards);
+}
+// Black spruce: the bog's spruce, a thin dark spire of short drooping branches with a dense club of them near the
+// top and dead twigs low down; a dark blue-green.
+function blackSpruce(rng, v) {
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
+  const h = 11 * P.size, bark = vary(0x4f4339, rng), cols = crownColors(0x467a5c, 0x2c4d45, rng);
+  const T = g.stem(0, -0.5, 0, 0.2 * P.girth, 0.03, h, 4, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.3, shade: 0.3 });
+  deadBranches(g, rng, T.at, 2 + Math.floor(rng() * 3), 0.05, 0.3, 0.4, 0.9, bark);
+  const R = (0.95 + rng() * 0.3) * (0.85 + P.size * 0.2), nrm = outward(T, -0.5, h, 0.9);
+  whorls(g, cards, rng, T, { t0: 0.18, t1: 0.78, count: 8 + Math.floor(rng() * 2), nb: () => 4, R: (f) => R * (1 - f * 0.55) + 0.15, droop: (f) => 0.4 + 0.25 * (1 - f), tube: (f) => f < 0.1, nrm, cols, y0: 0, y1: h, bark, wid: 0.9, fan: 0.1, lo: 0.4 });
+  whorls(g, cards, rng, T, { t0: 0.82, t1: 0.92, count: 2, nb: () => 5, R: () => R * 0.55, droop: () => 0.3, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 1.0, lo: 0.55 });
+  const a = T.at(0.93), b = T.at(1), d = vec(b).sub(vec(a));
+  needles(cards, 'spray', vec(a), d.clone().normalize(), d.length() * 1.4, 0.4, nrm, shade(cols, 0, h, rng), rng);
+  return finish(g, cards);
+}
+
 // a low leafy shrub: two or three stems from one root with round-leaved clusters on them
 function shrub(rng) {
   const g = new GeoBuilder(), cards = new CardBuilder(), size = 0.8 + rng() * 0.35;
@@ -624,22 +675,31 @@ const LOW = {
   log: (rng) => { const g = new GeoBuilder(); g.trunk(0, -3.4, 0, 0.32, 0.2, 6.8, 3, vary(0x857360, rng, 0.07), rng); const geo = g.build(); geo.rotateZ(Math.PI / 2); geo.translate(0, 0.26, 0); return geo; },
   stump: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.4, 0, 0.32, 0.26, 1.1, 4, vary(0x625040, rng, 0.06), rng); return g.build(); },
   outcrop: (rng) => { const geo = angularRock(rng, 'slab'); geo.scale(0.85, 0.7, 0.85); return geo; },
+  tamarack: (rng, I) => farTwin(I, 'farCone', rng, { trunk: 0.25, widen: 0.95 }),
+  aspen: (rng, I) => farTwin(I, 'farOval', rng, { trunk: 0.45, widen: 0.85 }),
+  blackSpruce: (rng, I) => farTwin(I, 'farCone', rng, { widen: 0.9 }),
+  talus: (rng) => screeBlock(rng),
+  cliff: (rng) => cliffModuleFar(rng),
 };
 
 // index order must match placement.js SPECIES. `leaves`: deciduous, with an autumn colour (linear rgb).
 // `variants`: geometry variants built for the species (trees get twelve: see profile()).
 const ROCK_KINDS = ['slab', 'block', 'boulder'];
 const TREE_VARIANTS = 12;
+// Guests (placement.js GUEST): the old white pine, the black spruce and the aspen are drawn in the white pine's,
+// the spruce's and the birch's bins, so they cost no draw calls of their own far off. Their variants follow the
+// host's, made the host's height (`fit`), and they take the host's material (the aspen's leaves turn with the
+// birch's gold). Their own slots below hold no variants.
 export const SPECIES = [
-  { name: 'whitePine', make: whitePine, variants: TREE_VARIANTS },
-  { name: 'spruce', make: spruce, variants: TREE_VARIANTS },
+  { name: 'whitePine', make: whitePine, variants: TREE_VARIANTS, guest: { name: 'tallPine', make: tallPine, variants: TREE_VARIANTS, fit: 16 / 20 } },
+  { name: 'spruce', make: spruce, variants: TREE_VARIANTS, guest: { name: 'blackSpruce', make: blackSpruce, variants: 6, fit: 12.5 / 11 } },
   { name: 'redPine', make: redPine, variants: TREE_VARIANTS },
-  { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS },
+  { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS, guest: { name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 } },
   { name: 'cedar', make: cedar, variants: TREE_VARIANTS },
   { name: 'snag', make: snag, variants: TREE_VARIANTS },
   { name: 'boulder', make: (rng, v) => angularRock(rng, ROCK_KINDS[v % 3]), rock: true, variants: 9 },
   { name: 'shrub', make: shrub, leaves: [0.72, 0.22, 0.08], variants: 6 },
-  { name: 'tallPine', make: tallPine, variants: TREE_VARIANTS },
+  { name: 'tallPine', guestOf: 0 },
   { name: 'jackPine', make: jackPine, variants: TREE_VARIANTS },
   // the understory and the deadfall: small, so binned in 320 m regions (placement.js) and drawn only near the
   // camera, the low twin past `lod` metres to the region centre and nothing past `cull`; `shadow: false`
@@ -651,6 +711,15 @@ export const SPECIES = [
   { name: 'log', make: log, variants: 6, lod: 380, cull: 620 },
   { name: 'stump', make: stump, variants: 4, lod: 300, cull: 520 },
   { name: 'outcrop', make: outcrop, rock: true, variants: 6 },
+  // the bluff pass: the tamarack (gold late in October, bare in winter: its own timing, tamarackSeason); the
+  // aspen's and the black spruce's slots (guests, above); the scree's small blocks (many, so small regions, near
+  // only and no shadows); the cliff modules (cliffs.js; their own material), seen a long way off, so their far
+  // twin late
+  { name: 'tamarack', make: tamarack, leaves: [0.9, 0.62, 0.16], variants: 6, roles: true, season: 'tamarack' },
+  { name: 'aspen', guestOf: 3, roles: true },
+  { name: 'blackSpruce', guestOf: 1, roles: true },
+  { name: 'talus', make: (rng) => screeBlock(rng), rock: true, variants: 4, lod: 320, cull: 700, shadow: false },
+  { name: 'cliff', make: cliffModule, rock: true, cliff: true, variants: 4, lod: 1100 },
 ];
 const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
@@ -658,7 +727,7 @@ const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
 // The understory is walked through, and the fallen logs, stumps and outcrops are held off by their own
 // footprints (props.js reads them from the meshes; a carried canoe rides over a stump as over a boulder), so
 // none of them are trunks for the collision in tiles.js.
-const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16]);
+const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16, 20, 21]);
 const NORMS = [...Array(TREE_VARIANTS).keys()].filter((v) => ROLES[v % ROLES.length] === 'norm');
 // A bin's variant groups are drawn apart while the camera is within NEAR_GROUPS metres of the bin's region
 // (its nearest edge, not its centre, so the region underfoot always is); further out one mesh draws them all.
@@ -859,42 +928,81 @@ function makeCardDepth(leafOn, sw) {
   return m;
 }
 
+// A guest's geometry made the host's height (placement.js GUEST: its instances carry the inverse in their scale):
+// the positions and the cards' swell, about the foot.
+function fitGuest(geo, k) {
+  geo.scale(k, k, k);
+  const g = geo.getAttribute('aGrow');
+  if (g) { for (let i = 0; i < g.array.length; i++) g.array[i] *= k; g.needsUpdate = true; }
+  geo.computeBoundingSphere();
+}
+
+// The tamarack turns after the broadleaves and holds its gold longer: gold from early to mid October (the
+// birch and aspen from late September), its needles down in the first days of November.
+function tamarackSeason(s) {
+  const d = s.doy, bare = smoothstep(300, 312, d);
+  return { fall: smoothstep(268, 284, d) * (1 - smoothstep(301, 312, d)), spring: s.spring, leafOn: s.leaf > 0.5 && bare < 0.5 ? 1 : 0 };
+}
+
 // Geometry variants (built once) and the shared materials.
 export function makeVegetationKit(seed = 3) {
   CARD.uCardMap.value = foliageAtlas();
   const t0 = performance.now();
-  const variants = SPECIES.map((s) => Array.from({ length: s.variants || VARIANTS }, (_, v) => {
+  const build = (s, v) => {
     const rs = seed * 131 + v * 17 + s.name.length;
     if (s.rock) return { full: s.make(mulberry32(rs), v), low: LOW[s.name](mulberry32(rs)) };
     const full = solid(s.make(mulberry32(rs), v));
     const low = solid(LOW[s.name](mulberry32(rs + 7), crownInfo(full)));
     if (s.leaves) { tagLeaves(full); tagLeaves(low); }
+    if (s.fit) for (const geo of [full, low]) fitGuest(geo, s.fit);
     return { full, low };
-  }));
+  };
+  // a host's own variants, then its guest's; a guest's own slot holds none (it is never binned)
+  const variants = SPECIES.map((s) => (s.guestOf !== undefined ? [] : [
+    ...Array.from({ length: s.variants || VARIANTS }, (_, v) => build(s, v)),
+    ...(s.guest ? Array.from({ length: s.guest.variants }, (_, v) => build(s.guest, v)) : []),
+  ]));
   const material = makeCardMaterial(null);
   const rockMaterial = makeRockMaterial();
   const leafMaterials = SPECIES.map((s) => (s.leaves ? makeCardMaterial(s.leaves, s.name) : null));
   const cardMaterials = SPECIES.map((s, i) => leafMaterials[i] || (s.rock ? null : makeCardMaterial(null, s.name))); // each species sways its own way
   const materialFor = (sp) => (SPECIES[sp].rock ? rockMaterial : cardMaterials[sp] || material);
   const depthFor = (sp) => (SPECIES[sp].rock ? undefined : materialFor(sp).userData.depth);
+  const cliffMaterial = makeCliffMaterial(); // the cliff modules' own (makeVegetationMeshes picks it)
   const setSeason = (season) => {
-    for (const m of leafMaterials) if (m) { m.userData.u.uFall.value = season.fall; m.userData.u.uSpring.value = season.spring; m.userData.u.uLeafOn.value = season.leafOn; }
+    leafMaterials.forEach((m, sp) => {
+      if (!m) return;
+      const s = SPECIES[sp].season === 'tamarack' ? tamarackSeason(season) : season;
+      m.userData.u.uFall.value = s.fall; m.userData.u.uSpring.value = s.spring; m.userData.u.uLeafOn.value = s.leafOn;
+    });
   };
   const ms = performance.now() - t0;
-  return { variants, material, rockMaterial, materialFor, depthFor, setSeason, seed, ms };
+  return { variants, material, rockMaterial, cliffMaterial, materialFor, depthFor, setSeason, seed, ms };
 }
 
 // Which geometry variant each variant group of a (region, species) bin draws. The groups get different
-// variants; for the trees the two big groups take ordinary trees and the small third group any variant, so a
-// leaner, a giant or a runt turns up now and then rather than filling a whole region; the rocks step through
-// the kinds (slab, block, boulder) in turn.
+// variants; for the trees (and the bluff pass's, `roles`, of six variants) the two big groups take ordinary
+// trees and the small third group any variant, so a leaner, a giant or a runt turns up now and then rather than
+// filling a whole region; the rocks step through the kinds (slab, block, boulder) in turn.
 function variantsFor(b, nv, ng) {
+  const S = SPECIES[b.sp];
+  if (S.guest && ng > 1) {
+    // the host's groups from its own variants, the guest's from its own (after the host's)
+    const own = S.variants, hg = GROUPS[b.sp], guestSp = SPECIES.findIndex((q) => q.guestOf === b.sp);
+    return [...pickVariants(b, own, Math.min(hg, ng)), ...(ng > hg ? pickVariants({ rx: b.rx, rz: b.rz, sp: guestSp }, nv - own, ng - hg).map((v) => v + own) : [])];
+  }
+  return pickVariants(b, S.guest ? S.variants : nv, ng);
+}
+function pickVariants(b, nv, ng) {
+  const S = SPECIES[b.sp];
   const h = hash2(b.rx * 7919 + b.rz, b.sp, 9);
-  if (nv === TREE_VARIANTS && ng === 3) {
-    const i = Math.floor(h * NORMS.length), j = (i + 1 + Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 10) * (NORMS.length - 1))) % NORMS.length;
+  if ((nv === TREE_VARIANTS && ng === 3) || (S.roles && ng >= 2)) {
+    const norms = NORMS.filter((v) => v < nv);
+    const i = Math.floor(h * norms.length), j = (i + 1 + Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 10) * (norms.length - 1))) % norms.length;
+    if (ng === 2) return [norms[i], norms[j]];
     let k = Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 11) * nv);
-    while (k === NORMS[i] || k === NORMS[j]) k = (k + 1) % nv;
-    return [NORMS[i], NORMS[j], k];
+    while (k === norms[i] || k === norms[j]) k = (k + 1) % nv;
+    return [norms[i], norms[j], k];
   }
   const base = Math.floor(h * nv), step = SPECIES[b.sp].rock ? 1 : Math.max(1, Math.floor(nv / ng));
   return Array.from({ length: ng }, (_, g) => (base + g * step) % nv);
@@ -913,9 +1021,11 @@ export function makeVegetationMeshes(bins, kit) {
   const meshes = [];
   for (const b of bins) {
     if (!b.count) continue;
-    const S = SPECIES[b.sp], vs = kit.variants[b.sp], material = kit.materialFor(b.sp);
+    const S = SPECIES[b.sp], vs = kit.variants[b.sp], material = S.cliff ? kit.cliffMaterial : kit.materialFor(b.sp);
     const groups = b.groups && b.groups.filter(Boolean).length > 1 ? b.groups : null;
-    const picks = variantsFor(b, vs.length, groups ? groups.length : 1), v = vs[picks[0]];
+    // a bin with one group in it draws that group's variant (a guest's alone, say)
+    const only = !groups && b.groups ? b.groups.findIndex(Boolean) : 0;
+    const picks = only > 0 ? [variantsFor(b, vs.length, b.groups.length)[only]] : variantsFor(b, vs.length, groups ? groups.length : 1), v = vs[picks[0]];
     const mesh = new THREE.InstancedMesh(v.full, material, b.count);
     mesh.instanceMatrix = new THREE.InstancedBufferAttribute(b.matrices, 16);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(b.colors, 3);

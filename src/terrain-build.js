@@ -4,6 +4,9 @@
 import { fbm, lerp, smoothstep } from './rng.js';
 import { clearingAt, burnAt, rockAt } from './fields.js';
 
+// the cliff band strength (site.js CLIFF.band) a cell needs to be a cliff
+const CLIFF_BAND = 0.45, TALUS_MIN = 0.4;
+
 export const FINE_BAND = 25;    // metres either side of the shore that get 2x2 subdivision
 export const SHAPE_BAND = 9;    // metres either side of the shore where height follows the distance field exactly
 
@@ -20,6 +23,10 @@ const C = {
   // stands (forestLight), a cool grey-brown under a thick canopy (forestDark); moss comes in below. The
   // meadow is a light yellow-green, the burn tawny; each lit colour has a cooler shade partner (SHADE, MOSS)
   forest: hex(0xa28a67), forestLight: hex(0xb09a6d), forestDark: hex(0x5c544e), meadow: hex(0xa6a857), burn: hex(0xb29a62),
+  // the bluff pass, appended so the classes before keep their indices (the cover atlas, the ground cover and
+  // the footsteps read classes by index): a cliff face, the dark green-grey the Shield takes under its lichens
+  // and the water that runs down it, and the scree under a cliff, a cooler, darker grey than the granite knobs
+  cliff: hex(0x606659), talus: hex(0x6b6b64),
 };
 // moss on the forest floor, lit and in the canopy's shade: the pair the duff's own lit/shade pair is mixed with
 const MOSS = { lit: hex(0x87ad52), shade: hex(0x405f3a) };
@@ -41,56 +48,60 @@ export const GROUND = Object.keys(C);                 // class index -> name
 export const GROUND_PALETTE = GROUND.map((k) => C[k]); // class index -> linear rgb
 const I = Object.fromEntries(GROUND.map((k, i) => [k, i]));
 
-// Every class boundary is the zero crossing of a signed field (>= 0 inside), in this priority order. The
-// classes are what the ground cover, the footsteps and the cover atlas read (one class per cell); the
-// terrain itself blends the same fields into material weights (splatAt) and cuts only along the shoreline.
-//   0 shoreline (land inside)   1 bedrock   2 dark rock (steep)   3 lichen rock   4 burn   5 meadow
-//   6 dark forest (canopy shade)   7 light forest   8.. the bed's depth bands
-export const NFIELDS = 8 + BED_STEPS.length;
+// Every class boundary is the zero crossing of a field, in this priority order. The classes are what the
+// ground cover, the footsteps and the cover atlas read (one class per cell); the terrain itself blends the
+// same fields into material weights (splatAt) and cuts only along the shoreline.
+//   shoreline (land inside), cliff band, scree, bedrock (dark when steep, lichened in patches), burn, meadow,
+//   dark forest (canopy shade), light forest; the bed's depth bands under water
 
-// Which of the palette's classes a point of ground belongs to; also fills `fields` (NFIELDS signed values)
-// when given. pre: { sd, slope, rock, depth } with depth the grained water depth over the bed (or -1 on land).
-// Land runs rock or forest straight to the waterline, as Shield shores do; the water's foam line marks the edge.
-export function classify(grid, x, z, shade, pre, fields = null) {
-  if (fields) fields.fill(-1);
+// Which of the palette's classes a point of ground belongs to. pre: { sd, slope, rock, cliff, talus, depth } with
+// rock the bare bedrock (0..1), cliff and talus the site's bands (site.js, 0 without a site) and depth the
+// grained water depth over the bed (or -1 on land). Land runs rock or forest straight to the waterline, as
+// Shield shores do; the water's foam line marks the edge.
+export function classify(grid, x, z, shade, pre) {
   const sd = pre.sd;
-  if (fields) fields[0] = sd;
   if (sd < 0) {
     const d = pre.depth;
-    if (fields) for (let k = 0; k < BED_STEPS.length; k++) fields[8 + k] = d - BED_STEPS[k];
     return d < BED_STEPS[0] ? I.bedSand : d < BED_STEPS[1] ? I.bedShelf : d < BED_STEPS[2] ? I.bedWeed : d < BED_STEPS[3] ? I.bedDeep : I.bedHole;
   }
+  if (pre.cliff >= CLIFF_BAND) return I.cliff;
+  if (pre.talus >= TALUS_MIN) return I.talus;
   const slope = pre.slope, rock = pre.rock;
-  if (fields) fields[1] = rock - 0.5;
   if (rock >= 0.5) {
-    const dark = slope - 0.55;
-    if (fields) fields[2] = dark;
-    if (dark >= 0) return I.rockDark;
-    const lichen = lichenField(x, z);
-    if (fields) fields[3] = lichen;
-    return lichen >= 0 ? I.rockLichen : I.rock;
+    if (slope >= 0.55) return I.rockDark;
+    return lichenField(x, z) >= 0 ? I.rockLichen : I.rock;
   }
-  const burn = burnAt(x, z) - 0.5;
-  if (fields) fields[4] = burn;
-  if (burn >= 0) return I.burn;
-  const meadow = clearingAt(x, z) - 0.68; // same field the forest uses for clearings
-  if (fields) fields[5] = meadow;
-  if (meadow >= 0) return I.meadow;
-  const dark = shade - 0.55;
-  if (fields) fields[6] = dark;
-  if (dark >= 0) return I.forestDark;
-  const light = sunnyField(x, z);
-  if (fields) fields[7] = light;
-  return light >= 0 ? I.forestLight : I.forest;
+  if (burnAt(x, z) >= 0.5) return I.burn;
+  if (clearingAt(x, z) >= 0.68) return I.meadow; // same field the forest uses for clearings
+  if (shade >= 0.55) return I.forestDark;
+  return sunnyField(x, z) >= 0 ? I.forestLight : I.forest;
 }
 const lichenField = (x, z) => fbm(x * 0.03, z * 0.03, 2, 91) - 0.58;
 const sunnyField = (x, z) => fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few broad sunny stands, not a speckle of patches
 
-const _pre = { sd: 0, slope: 0, rock: 0, depth: -1 };
-export function groundClass(grid, x, z, shade = 0) {
-  _pre.sd = grid.shoreAt(x, z);
-  _pre.slope = rockSlope(grid, x, z);
-  _pre.rock = _pre.sd < 0 ? 0 : rockAt(_pre.slope, _pre.sd, x, z);
+// The ground's own fields at a point: from the tile's site (site.js) when there is one, else from the slope and
+// the shore alone (the far terrain, a grid with no site). `wall`: how much the drawn ground there is a wall (the
+// step the shore band makes of a steep bank, 44–51° and up over a few metres); `brink`: the same from 29°, the
+// convex edge above a wall where the bare rock runs out over the top; both read only near the steep cells.
+export function groundPre(grid, x, z, sd, site, pre) {
+  pre.sd = sd;
+  pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z);
+  pre.wall = 0; pre.brink = 0; pre.bog = 0;
+  if (sd >= 0 && site) {
+    pre.rock = site.at(site.bare, x, z); pre.cliff = site.at(site.cliff, x, z); pre.talus = site.at(site.talus, x, z);
+    pre.bog = bogMoss(site.at(site.wet, x, z));
+    if (site.at(site.steep, x, z) > 0.55) {
+      const e = 2.5, gx = surfaceAt(grid, x + e, z) - surfaceAt(grid, x - e, z), gz = surfaceAt(grid, x, z + e) - surfaceAt(grid, x, z - e), d = Math.hypot(gx, gz) / (2 * e);
+      pre.wall = smoothstep(0.95, 1.25, d); pre.brink = smoothstep(0.55, 0.85, d);
+    }
+  } else { pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z); pre.cliff = 0; pre.talus = 0; }
+  return pre;
+}
+const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, depth: -1 };
+// the wet ground's moss: a bog's floor is sphagnum, not needle duff (the ground cover reads it too, tile-worker.js)
+export const bogMoss = (wet) => 0.8 * smoothstep(0.55, 0.9, wet);
+export function groundClass(grid, x, z, shade = 0, site = null) {
+  groundPre(grid, x, z, grid.shoreAt(x, z), site, _pre);
   _pre.depth = _pre.sd < 0 ? Math.max(0, grid.levelAt(x, z, 3) - grid.heightAt(x, z)) + bedGrain(x, z) : -1;
   return classify(grid, x, z, shade, _pre);
 }
@@ -100,10 +111,12 @@ export function groundClass(grid, x, z, shade = 0) {
 export const mossAt = (x, z) => smoothstep(0.44, 0.6, fbm(x * 0.05 + 13, z * 0.05, 2, 83));
 
 // ---- the splat ------------------------------------------------------------------------------------------
-// The ground is painted from eight materials, each a lit colour and the colour it takes under a thick canopy
-// (the floor pass's lit/shade pairs). The terrain carries their weights per vertex as two vec4s
-// (aSplatA = duff, moss, meadow, burn; aSplatB = rock, dark rock, lichen rock, shore) and the shader blends
-// them through a world-space noise (terrain.js), so a transition is a soft irregular band a few metres wide.
+// The ground is painted from ten materials, each a lit colour and the colour it takes under a thick canopy
+// (the floor pass's lit/shade pairs). The terrain carries their weights per vertex as three vec4s
+// (aSplatA = duff, moss, meadow, burn; aSplatB = rock, dark rock, lichen rock, shore; aSplatC = cliff, scree and
+// two spare) and the shader blends them through a world-space noise (terrain.js), so a transition is a soft
+// irregular band a few metres wide. The cliff and the scree carry their own pattern there (streaks and lichen
+// on the one, small blocks on the other).
 // `shadeK` is how far each goes toward its shade colour under a full canopy.
 const SHORE = { lit: hex(0x8e8670), shade: hex(0x66604f) }; // the damp margin a soil shore has at the waterline
 export const SPLAT = [
@@ -117,16 +130,18 @@ export const SPLAT = [
   { name: 'rockDark', lit: C.rockDark, shade: hex(0x52565c), shadeK: 0.6 },
   { name: 'rockLichen', lit: C.rockLichen, shade: hex(0x7c7d6c), shadeK: 0.6 },
   { name: 'shore', lit: SHORE.lit, shade: SHORE.shade, shadeK: 0.5 },
+  { name: 'cliff', lit: C.cliff, shade: hex(0x484d47), shadeK: 0.5 },
+  { name: 'talus', lit: C.talus, shade: hex(0x51514d), shadeK: 0.5 },
 ];
 export const SPLAT_SUNNY = C.forestLight; // the duff's lit colour in the broad sunny stands
 export const BED_PALETTE = [C.bedSand, C.bedShelf, C.bedWeed, C.bedDeep, C.bedHole];
 export const BED_DEPTH_SCALE = 16; // aFloor.w is the bed depth over this many metres
 
 // what each ground class reads as in the splat (the ground cover has only the class map to go on):
-// [eight weights, canopy shade, sunny stand]
+// [twelve weights (the three vec4s), canopy shade, sunny stand]
 export const CLASS_SPLAT = GROUND.map((name) => {
-  const w = new Array(8).fill(0);
-  const slot = { forest: 0, forestLight: 0, forestDark: 0, meadow: 2, burn: 3, rock: 4, rockDark: 5, rockLichen: 6 }[name];
+  const w = new Array(12).fill(0);
+  const slot = { forest: 0, forestLight: 0, forestDark: 0, meadow: 2, burn: 3, rock: 4, rockDark: 5, rockLichen: 6, cliff: 8, talus: 9 }[name];
   w[slot === undefined ? 7 : slot] = 1;
   return { w, shade: name === 'forestDark' ? 0.8 : name === 'forest' ? 0.3 : 0, sunny: name === 'forestLight' ? 1 : 0 };
 });
@@ -135,22 +150,32 @@ export const CLASS_SPLAT = GROUND.map((name) => {
 const across = (v, w) => smoothstep(-w, w, v);
 
 // The splat at one point: the same fields and the same priority as classify, each threshold widened into
-// a blend. wA, wB: the eight weights (sum 1); fl: [canopy shade, sunny stand, bed, bed depth / BED_DEPTH_SCALE].
-export function splatAt(x, z, shade, pre, wA, wB, fl) {
+// a blend. wA, wB, wC: the ten weights and two spare (sum 1); fl: [canopy shade, sunny stand, bed, bed depth /
+// BED_DEPTH_SCALE].
+export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
+  wC[0] = wC[1] = wC[2] = wC[3] = 0;
   if (pre.sd < 0) {
     wA[0] = wA[1] = wA[2] = wA[3] = 0; wB[0] = wB[1] = wB[2] = wB[3] = 0;
     fl[0] = 0; fl[1] = 0; fl[2] = 1; fl[3] = Math.min(1, Math.max(0, pre.depth) / BED_DEPTH_SCALE);
     return;
   }
-  const rock = across(pre.rock - 0.5, 0.12);
-  const dark = across(pre.slope - 0.55, 0.08);
+  // the cliff's face (where the band's ground is a wall, and any other wall: a step too low for a cliff of its
+  // own reads as rock of the same kind), then the scree under it, take the ground first; the band's brink is
+  // bare rock; the rest share what is left
+  const band = across(pre.cliff - CLIFF_BAND, 0.15), wall = pre.wall || 0;
+  const cliff = Math.max(band, 0.85) * wall;
+  const scree = across(pre.talus - TALUS_MIN, 0.15) * (1 - cliff);
+  const left = 1 - cliff - scree;
+  wC[0] = cliff; wC[1] = scree;
+  const rock = across(Math.max(pre.rock, 0.9 * band * (pre.brink || 0)) - 0.5, 0.12) * left;
+  const dark = across(pre.slope - 0.55, 0.08) * (1 - band); // a cliff's brink is the pale lichened granite
   const lichen = across(lichenField(x, z), 0.05) * (1 - dark);
-  const soil = 1 - rock;
+  const soil = left - rock;
   const burn = across(burnAt(x, z) - 0.5, 0.25);
   const meadow = across(clearingAt(x, z) - 0.68, 0.025) * (1 - burn);
   const forest = 1 - burn - meadow;
   const sunny = across(sunnyField(x, z), 0.03);
-  const moss = mossAt(x, z) * (1 - 0.6 * sunny);
+  const moss = Math.max(mossAt(x, z), pre.bog || 0) * (1 - 0.6 * sunny);
   const shore = (1 - smoothstep(0.3, 2.4, pre.sd)) * 0.9;
   const ground = soil * (1 - shore);
   wA[0] = ground * forest * (1 - moss); wA[1] = ground * forest * moss; wA[2] = ground * meadow; wA[3] = ground * burn;
@@ -231,9 +256,9 @@ export function meshHeightAt(grid, x, z, cache = null) {
 // shoreline cuts the mesh: where it crosses a cell, the cell is cut along it (marching squares) so an edge
 // lies exactly on the waterline, and the crossing point is two vertices, one painted as land and one as
 // lake bed, so neither side bleeds into the other. Every other transition is a blend.
-export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, originX, originZ }) {
+export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, originX, originZ, site = null }) {
   const cell = grid.cell;
-  const pos = [], sa = [], sb = [], fl = [], sdv = [], idx = [], idxAll = [];
+  const pos = [], sa = [], sb = [], sc = [], fl = [], sdv = [], idx = [], idxAll = [];
   const twins = []; // [land, bed] vertex pairs at the waterline: they share one normal
   const tees = [];  // [mid, end, end]: a subdivided cell's mid-edge vertex against an undivided neighbour
   const stride = 2 * n + 7;
@@ -247,15 +272,15 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   const fineCell = (i, j) => Math.abs(grid.sdCell(i, j)) <= FINE_BAND;
   const quadFine = (i, j) => fine && (fineCell(i, j) || fineCell(i + 1, j) || fineCell(i, j + 1) || fineCell(i + 1, j + 1));
   const shadeAt = (x, z) => (shade ? shade[grid.local(grid.cellI(x), grid.cellJ(z))] : 0);
-  const pre = { sd: 0, slope: 0, rock: 0, depth: -1 };
-  const wA = [0, 0, 0, 0], wB = [0, 0, 0, 0], wf = [0, 0, 0, 0];
+  const pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, depth: -1 };
+  const wA = [0, 0, 0, 0], wB = [0, 0, 0, 0], wC = [0, 0, 0, 0], wf = [0, 0, 0, 0];
   const q8 = (v) => Math.round(Math.min(1, Math.max(0, v)) * 255);
   // the splat of a point: sd is the shore distance it is painted with (a waterline twin forces its side)
   const paint = (x, z, h, sd) => {
-    pre.sd = sd; pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z); pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z);
+    groundPre(grid, x, z, sd, site, pre);
     pre.depth = sd < 0 ? Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h) + bedGrain(x, z) : -1;
-    splatAt(x, z, shadeAt(x, z), pre, wA, wB, wf);
-    for (let k = 0; k < 4; k++) { sa.push(q8(wA[k])); sb.push(q8(wB[k])); fl.push(q8(wf[k])); }
+    splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
+    for (let k = 0; k < 4; k++) { sa.push(q8(wA[k])); sb.push(q8(wB[k])); sc.push(q8(wC[k])); fl.push(q8(wf[k])); }
   };
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));
@@ -310,7 +335,8 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     for (let k = 0; k < tees.length; k += 5) {
       const m = tees[k], [e0, e1] = teeEnds(k);
       for (let c = 0; c < 4; c++) {
-        sa[m * 4 + c] = (sa[e0 * 4 + c] + sa[e1 * 4 + c]) >> 1; sb[m * 4 + c] = (sb[e0 * 4 + c] + sb[e1 * 4 + c]) >> 1; fl[m * 4 + c] = (fl[e0 * 4 + c] + fl[e1 * 4 + c]) >> 1;
+        sa[m * 4 + c] = (sa[e0 * 4 + c] + sa[e1 * 4 + c]) >> 1; sb[m * 4 + c] = (sb[e0 * 4 + c] + sb[e1 * 4 + c]) >> 1;
+        sc[m * 4 + c] = (sc[e0 * 4 + c] + sc[e1 * 4 + c]) >> 1; fl[m * 4 + c] = (fl[e0 * 4 + c] + fl[e1 * 4 + c]) >> 1;
       }
     }
   };
@@ -394,5 +420,5 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   }
   const nrm = new Int8Array(nv * 3);
   for (let k = 0; k < nv * 3; k++) nrm[k] = Math.round(cur[k] * 127);
-  return { pos: new Float32Array(pos), nrm, splatA: new Uint8Array(sa), splatB: new Uint8Array(sb), floor: new Uint8Array(fl), idx: new Uint32Array(idx) };
+  return { pos: new Float32Array(pos), nrm, splatA: new Uint8Array(sa), splatB: new Uint8Array(sb), splatC: new Uint8Array(sc), floor: new Uint8Array(fl), idx: new Uint32Array(idx) };
 }

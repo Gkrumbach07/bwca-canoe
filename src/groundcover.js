@@ -28,6 +28,7 @@ const decl = glslSway + /* glsl */ `
   uniform vec3 uGrassTint;
   uniform vec4 uClassA[${N}];
   uniform vec4 uClassB[${N}];
+  uniform vec4 uClassC[${N}];
   uniform float uClassSunny[${N}];
   attribute vec2 aOffset;
   varying vec2 vGrassUv;
@@ -37,11 +38,11 @@ const decl = glslSway + /* glsl */ `
   // The terrain's splat under a point, rebuilt from the cover atlas: the four cells around it, each class
   // turned into material weights (terrain-build.js CLASS_SPLAT), the moss weight and the canopy shade from
   // the atlas's fourth byte (tile-worker.js packFloor), blended bilinearly as the terrain's vertices are.
-  void classSplat(vec2 rel, out vec4 wA, out vec4 wB, out vec4 fl) {
+  void classSplat(vec2 rel, out vec4 wA, out vec4 wB, out vec4 wC, out vec4 fl) {
     vec2 f = (rel - uAtlas.xy) * uAtlas.z - 0.5;
     vec2 fi = floor(f), a = f - fi;
     ivec2 c = ivec2(fi), mx = ivec2(int(uAtlas.w) - 1);
-    wA = vec4(0.0); wB = vec4(0.0); fl = vec4(0.0);
+    wA = vec4(0.0); wB = vec4(0.0); wC = vec4(0.0); fl = vec4(0.0);
     for (int k = 0; k < 4; k++) {
       ivec2 o = ivec2(k & 1, k >> 1);
       vec4 t = texelFetch(uCoverTex, clamp(c + o, ivec2(0), mx), 0);
@@ -52,6 +53,7 @@ const decl = glslSway + /* glsl */ `
       vec4 ca = uClassA[cls];
       wA += g * vec4(ca.x * (1.0 - moss), ca.y + ca.x * moss, ca.z, ca.w);
       wB += g * uClassB[cls];
+      wC += g * uClassC[cls];
       fl += g * vec4(shade * (1.0 - 0.8 * sunny), sunny, 0.0, 0.0);
     }
   }
@@ -94,9 +96,9 @@ const body = /* glsl */ `
   vec3 transformed = vec3(rel.x + p.x, surfaceAt(rel) - 0.05 + p.y, rel.y + p.z);
   // colour: the ground's own at the root (the blade's vertex colour lifts it toward a lit tip), a touch
   // greener per tuft, the season's tint; golden in burns and dry clearings; fireweed stalks in high summer
-  vec4 gA, gB, gF;
-  classSplat(rel, gA, gB, gF);
-  vec3 ground = groundColor(rel + uOrigin, gA, gB, gF, length(rel + uOrigin - cameraPosition.xz) * 0.0015);
+  vec4 gA, gB, gC, gF;
+  classSplat(rel, gA, gB, gC, gF);
+  vec3 ground = groundColor(rel + uOrigin, gA, gB, gC, gF, length(rel + uOrigin - cameraPosition.xz) * 0.0015);
   vec3 tint = mix(vec3(1.0, 1.02, 0.94), vec3(1.08, 1.12, 0.92), h2.x) * uGrassTint;
   vec3 base = ground * tint;
   base = mix(base, base * vec3(1.3, 1.08, 0.55), cv.g * (0.6 + 0.4 * h2.y));
@@ -168,6 +170,7 @@ export class GroundCover {
       ...SWAY,
       uClassA: { value: CLASS_SPLAT.map((c) => new THREE.Vector4(c.w[0], c.w[1], c.w[2], c.w[3])) },
       uClassB: { value: CLASS_SPLAT.map((c) => new THREE.Vector4(c.w[4], c.w[5], c.w[6], c.w[7])) },
+      uClassC: { value: CLASS_SPLAT.map((c) => new THREE.Vector4(c.w[8], c.w[9], c.w[10], c.w[11])) },
       uClassSunny: { value: CLASS_SPLAT.map((c) => c.sunny) },
     };
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });

@@ -1,0 +1,182 @@
+// What the ground is like at every cell of one tile, from the tile's own data (its halo included): how steep the
+// drawn ground is, where it stands as a cliff band and where the scree lies under one, ridge and hollow, the
+// lie toward the sun, how wet and how deep the soil is, and where the Shield is bare. The terrain's paint
+// (terrain-build.js), the forest, the rocks and the cliffs (placement.js) all read these arrays, so they agree.
+// Pure data (no three.js): it runs in the build worker.
+//
+// Seams: a cell's answer is the same in the two tiles that share it as long as nothing reaches past the halo
+// (six cells). The fields the paint reads reach at most five cells (the cliff band four, the scree under it one
+// more), so the terrain's vertices along a seam match exactly; the forest and the rocks read only core cells.
+//
+// The cliffs (docs/roadmap.md, the bluff pass). The 10 m elevation data smears a cliff into a ramp: on Lake One the
+// steepest 10 m cells are 32–40°. Where such a ramp meets the water the terrain's shore band (terrain-build.js
+// shoreShape) pins the waterline to the lake and the mesh climbs the rest in one step a few metres inland, 50–70°
+// and 6–19 m high: those steps are the bluffs the paddler sees. So the cliff test is made on the drawn ground, not
+// on the data: the steepest five metres of the mesh along its fall line at 42–52° or more, a step of at least
+// 4–7 m over 20 m, and a run of such cells along the contour (a single steep cell is a boulder, not a cliff).
+// Inland, where the data itself holds a cliff (the steep country to the east), the drawn ground is the data and
+// the same test finds it.
+import { smoothstep, clamp, fbm } from './rng.js';
+import { surfaceAt } from './terrain-build.js';
+import { burnAt } from './fields.js';
+
+const tan = (deg) => Math.tan((deg * Math.PI) / 180);
+// steep: the drawn steepness (rise over run of the steepest five metres) that starts and completes a cliff;
+// rise: the step over 20 m (m) that does the same; band: the band strength a cell needs to carry a cliff face.
+export const CLIFF = { steep: [tan(42), tan(52)], rise: [4, 7], band: 0.45 };
+// The cliff module's frame (cliffs.js builds every variant in it, placement.js places trees on it): the face at
+// z = 0 looking along -z, x across [-0.5, 0.5], y up [0, 1], z into the hill [0, 1]. Every variant has a bench
+// across its whole width at y = ledge: the lower tier's top, its front within z [0, 0.05], the upper tier's front
+// set back past z 0.13, along x within `benchX` at least, so a tree stood there at z within `ledgeZ` is on rock
+// whichever variant draws it (a bin far off draws all its modules with one variant).
+export const CLIFF_MODULE = { ledge: 0.42, ledgeZ: [0.08, 0.12], benchX: [-0.3, -0.06] };
+
+// Per-cell arrays (Float32Array side * side, cell centres, local index lj * side + li):
+//   S      the data's slope (rise over run), the five-point 20 m average terrain-build.js rockSlope takes
+//   dx dz  downhill (unit, xz) from the data, for the lie toward the sun; south: dz (+z is south)
+//   tpi    height over the mean of the 90 m square around (m): + a ridge or knob, - a hollow
+//   ux uz  uphill (unit, xz) on the drawn ground; steep: its steepest five metres (rise over run); rise: its step
+//          over 20 m along that line (m)
+//   cliff  0..1, the cliff band (steep, a real step, part of a run along the contour)
+//   talus  0..1, scree: the cliff's own foot and the cell or two under it, as far as the cliff is tall
+//   wet    0..1, flat low ground: a hollow, a bog, the flats along a quiet shore
+//   soil   0..1, how deep the soil is: thin on rock, ridges and steep ground, deep in hollows and on the flats
+//   bare   0..1, bare bedrock (the glaciated knobs on the shores and the ridge tops), over 0.5 is bare
+//   sun    -1..1, the lie toward the sun: + a dry warm south face, - a cool moist north face (0 on the flat)
+export class Site {
+  constructor(grid) {
+    const n = grid.side, N = n * n, cell = grid.cell;
+    this.grid = grid; this.n = n; this.cell = cell;
+    const A = () => new Float32Array(N);
+    const H = A(), S = A(), dx = A(), dz = A(), tpi = A(), ux = A(), uz = A(), steep = A(), rise = A(), cliff = A(), talus = A();
+    const wet = A(), soil = A(), bare = A(), sun = A(), sd = A();
+    Object.assign(this, { H, S, dx, dz, tpi, ux, uz, steep, rise, cliff, talus, wet, soil, bare, sun, sd });
+    const at = (li, lj) => clamp(lj, 0, n - 1) * n + clamp(li, 0, n - 1);
+    for (let k = 0; k < N; k++) { H[k] = grid.h[k] * 0.1; sd[k] = grid.sd[k] * 0.1; }
+
+    // the data's slope and fall line
+    const gx = A(), gz = A(), sl = A();
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li;
+      gx[k] = (H[at(li + 1, lj)] - H[at(li - 1, lj)]) / (2 * cell);
+      gz[k] = (H[at(li, lj + 1)] - H[at(li, lj - 1)]) / (2 * cell);
+      sl[k] = Math.hypot(gx[k], gz[k]);
+    }
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li, l = at(li - 1, lj), r = at(li + 1, lj), u = at(li, lj - 1), d = at(li, lj + 1);
+      S[k] = (2 * sl[k] + sl[l] + sl[r] + sl[u] + sl[d]) / 6;
+      const ax = 2 * gx[k] + gx[l] + gx[r] + gx[u] + gx[d], az = 2 * gz[k] + gz[l] + gz[r] + gz[u] + gz[d], L = Math.hypot(ax, az);
+      if (L > 1e-6) { dx[k] = -ax / L; dz[k] = -az / L; }
+    }
+
+    // ridge and hollow: height over the mean of the 9 x 9 cells around (a summed-area table)
+    const R = 4, sat = new Float64Array((n + 1) * (n + 1));
+    for (let lj = 0; lj < n; lj++) { let row = 0; for (let li = 0; li < n; li++) { row += H[lj * n + li]; sat[(lj + 1) * (n + 1) + li + 1] = sat[lj * (n + 1) + li + 1] + row; } }
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const a0 = Math.max(0, li - R), a1 = Math.min(n, li + R + 1), b0 = Math.max(0, lj - R), b1 = Math.min(n, lj + R + 1);
+      const sum = sat[b1 * (n + 1) + a1] - sat[b0 * (n + 1) + a1] - sat[b1 * (n + 1) + a0] + sat[b0 * (n + 1) + a0];
+      tpi[lj * n + li] = H[lj * n + li] - sum / ((a1 - a0) * (b1 - b0));
+    }
+
+    // the drawn ground: its fall line over 20 m and its steepest five metres along it (shaped as the mesh is)
+    const c0 = A();
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li;
+      if (sd[k] < -12 || (S[k] < 0.33 && Math.abs(sd[k]) > 12)) { steep[k] = S[k]; continue; }
+      const x = grid.cellX(grid.i0 + li), z = grid.cellZ(grid.j0 + lj), s = (px, pz) => surfaceAt(grid, px, pz);
+      const ex = (s(x + 10, z) - s(x - 10, z)) / 20, ez = (s(x, z + 10) - s(x, z - 10)) / 20, G = Math.hypot(ex, ez);
+      if (G < 0.15) { steep[k] = G; continue; }
+      const vx = ex / G, vz = ez / G;
+      ux[k] = vx; uz[k] = vz;
+      let prev = s(x - vx * 10, z - vz * 10), first = prev, top = 0;
+      for (let t = -5; t <= 10; t += 5) { const h = s(x + vx * t, z + vz * t); top = Math.max(top, (h - prev) / 5); prev = h; }
+      steep[k] = top; rise[k] = prev - first;
+      c0[k] = smoothstep(CLIFF.steep[0], CLIFF.steep[1], top) * smoothstep(CLIFF.rise[0], CLIFF.rise[1], rise[k]);
+    }
+    // the band: a steep cell counts once a neighbour along the contour is steep too, fully with two
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li;
+      if (c0[k] < 0.05) continue;
+      let cnt = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue;
+        const q = at(li + di, lj + dj);
+        if (c0[q] < 0.5) continue;
+        const along = Math.abs(di * ux[k] + dj * uz[k]) / Math.hypot(di, dj);
+        if (along < 0.6) cnt += 1;
+      }
+      cliff[k] = c0[k] * Math.min(1, cnt / 2);
+    }
+    // the scree: at the cliff's own foot and down its fall line from it, one cell under any cliff of 4 m and
+    // more, two under one of 12 m and more
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li;
+      let t = cliff[k] * 0.6;
+      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+        const far = Math.max(Math.abs(di), Math.abs(dj));
+        if (!far) continue;
+        const q = at(li + di, lj + dj), c = cliff[q];
+        if (c < 0.05) continue;
+        // this cell must lie down the cliff's fall line from it: the way from the cliff to here (-di, -dj) runs
+        // against the cliff's uphill
+        const L = Math.hypot(di, dj), down = (di * ux[q] + dj * uz[q]) / L;
+        if (down < 0.55) continue;
+        const reach = far === 1 ? smoothstep(3, 8, rise[q]) : smoothstep(12, 22, rise[q]);
+        t = Math.max(t, c * reach * smoothstep(0.55, 0.85, down));
+      }
+      talus[k] = t;
+    }
+
+    // the habitat fields
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li, x = grid.cellX(grid.i0 + li), z = grid.cellZ(grid.j0 + lj), s = S[k], d = sd[k];
+      const ridge = smoothstep(0.6, 3.2, tpi[k]), hollow = smoothstep(0.4, 2.6, -tpi[k]);
+      const flat = 1 - smoothstep(0.035, 0.12, s);
+      // the glaciated knobs the old rock field made, kept on the shores and the ridge tops and off the slopes
+      // and hollows; the bare shelf at the foot of a bluff; partly bare on steep ground that is not a cliff
+      const knob = smoothstep(0.64, 0.76, fbm(x * 0.007 + 5, z * 0.007, 3, 73));
+      const nearShore = 1 - smoothstep(25, 90, d);
+      const b = Math.max(knob * Math.max(nearShore * (1 - 0.7 * hollow), ridge * (1 - smoothstep(0.35, 0.6, s))), 0.42 * smoothstep(0.5, 0.95, s));
+      bare[k] = d < 0 ? 0 : Math.max(b, talus[k] * 0.5);
+      // the lie toward the sun, on ground steep enough for it to matter
+      sun[k] = dz[k] * smoothstep(0.04, 0.3, s);
+      // wet: flat ground in a hollow, flat ground in the broad lowland patches a bog field marks out (the 10 m
+      // data cannot see the drainage of a bog complex a few hundred metres across), or flat ground along a shore
+      // that lies barely over the lake (a fen, a beaver meadow, a bog behind a bay); never on a ridge. (The lake's
+      // level is looked for within four cells: the paint reads `wet` for the bog's moss, so it may reach no further.)
+      let low = 0;
+      if (d > 0 && d < 40) {
+        const lv = grid.levelAt(x, z, 4);
+        low = 1 - smoothstep(0.6, 3.0, H[k] - lv);
+      }
+      const shoreFlat = low * (1 - smoothstep(0.05, 0.16, s));
+      // (its seed keeps the bog fields off the ground the lodge frame on Lake One looks across, where the look is judged)
+      const boggy = smoothstep(0.42, 0.62, fbm(x * 0.0035 + 3, z * 0.0035, 3, 196));
+      const w = (flat * (0.15 + 0.6 * hollow + 0.75 * boggy) + 0.65 * shoreFlat * (0.5 + 0.5 * boggy)) * (1 - ridge) * (1 - bare[k]);
+      wet[k] = d < 0 ? 1 : clamp(w * (0.8 + 0.4 * fbm(x * 0.009 + 7, z * 0.009, 2, 177)), 0, 1);
+      // soil: thin on rock, ridges and steep ground, deep in the hollows and the wet flats (peat)
+      soil[k] = d < 0 ? 0 : clamp(0.6 + 0.3 * hollow + 0.2 * wet[k] - 0.45 * ridge - 0.9 * smoothstep(0.2, 0.75, s) - bare[k], 0, 1);
+    }
+  }
+
+  // local cell index of world (x, z), clamped to the tile's extent
+  index(x, z) {
+    const g = this.grid, n = this.n;
+    return clamp(g.cellJ(z) - g.j0, 0, n - 1) * n + clamp(g.cellI(x) - g.i0, 0, n - 1);
+  }
+  // an array bilinearly at world (x, z) (cell centres carry the values, as the terrain's vertices do)
+  at(arr, x, z) {
+    const g = this.grid, n = this.n;
+    const fx = (x - g.originX) / g.cell - 0.5 - g.i0, fz = (z - g.originZ) / g.cell - 0.5 - g.j0;
+    const i = Math.floor(fx), j = Math.floor(fz), a = fx - i, b = fz - j;
+    const i0 = clamp(i, 0, n - 1), i1 = clamp(i + 1, 0, n - 1), j0 = clamp(j, 0, n - 1), j1 = clamp(j + 1, 0, n - 1);
+    const v00 = arr[j0 * n + i0], v10 = arr[j0 * n + i1], v01 = arr[j1 * n + i0], v11 = arr[j1 * n + i1];
+    return (v00 * (1 - a) + v10 * a) * (1 - b) + (v01 * (1 - a) + v11 * a) * b;
+  }
+  // everything at a point for the forest (bilinear), into `o`
+  sample(x, z, o = {}) {
+    for (const key of ['S', 'tpi', 'cliff', 'talus', 'wet', 'soil', 'bare', 'sun', 'steep']) o[key] = this.at(this[key], x, z);
+    o.burn = burnAt(x, z);
+    return o;
+  }
+}
