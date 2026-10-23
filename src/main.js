@@ -38,6 +38,9 @@ import { TripStats } from './trip-stats.js';
 import { lookboard } from './lookboard.js';
 import { Trip } from './trip.js'; // trip core A
 import { Veil } from './veil.js'; // trip core A
+import { Camp, CampRegistry } from './camp.js'; // trip core C
+import { Fires } from './fire.js'; // trip core C
+import { Headlamp } from './headlamp.js'; // trip core C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -153,6 +156,15 @@ async function main() {
   energy.onNote = (t) => hud.note(t); tasks.onNote = (t) => hud.note(t, 6);
   energy.onEvac = (why) => trip.evacuate(why); // trip core A: no food and no energy ends an Adventure in an evacuation
   tasks.onChange = () => outfitter.save();
+  // trip core C: camp and night. The campfires (one light, always in the scene), the headlamp (likewise), who holds
+  // each campsite, and the camp itself; the trip, the veil and the packs are looked up on the first frame (whichever
+  // of them exist: `typeof` keeps this safe in any build, and before they are declared).
+  const fires = new Fires({ scene, wind, hemi, sun });
+  audio.fires = fires;
+  const lamp = new Headlamp({ scene, canoe, chase, camera, player, day });
+  const campsites = new CampRegistry(world);
+  const camp = new Camp({ world, player, day, energy, hud, scene, tiles, fires, lamp, audio, weather, wind, fishing, outfitter, registry: campsites,
+    links: () => ({ trip, veil, packs }) });
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
@@ -187,6 +199,7 @@ async function main() {
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
   window.__game.packs = packs; // trip core B
+  Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -205,10 +218,12 @@ async function main() {
     } else {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       outfitter.update(dt * ts);
+      camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
       player.update(dt);
       packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
       fishing.update(dt, ts);
       outfitter.prompt();
+      camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
       tasks.update(dt * ts);
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
       energy.update(dt * ts, wind, atCamp);
@@ -235,6 +250,7 @@ async function main() {
     wind.updateSway(dt * ts); // trees, understory, grass and reeds sway with the wind the water reads
     cover.setSeason(day.season);
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
+    fires.update(dt, day.doy * 24 + day.hours, camera.position); lamp.update(dt); // trip core C: the fires burn on the clock, the lamp rides the head
     cover.update(dt * ts, player.x, player.z, hemi, sun);
     mist.update(dt * ts, player.x, player.z);
     loons.update(dt * ts, player, day.season, faunaCtx);

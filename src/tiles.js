@@ -706,6 +706,7 @@ export class TileManager {
       });
       if (e.obstacles) for (const o of e.obstacles) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o);
     }
+    for (const o of this.dynamic || []) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o); // pitched since the tiles were built: camp.js's tents
     return out;
   }
   // a tile's rock i (its record at offset o) as the walker meets it

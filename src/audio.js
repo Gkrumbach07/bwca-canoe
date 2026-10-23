@@ -8,7 +8,7 @@
 import { GROUND } from './terrain-build.js';
 import { fbm, mulberry32 } from './rng.js';
 import { windHeight } from './waves.js';
-import { TAU, clamp01, smooth, bump, noiseBuffer, roomBuffer, setPos, Voice, songSeason, greenFrogSeason } from './audio-kit.js';
+import { TAU, clamp01, smooth, bump, noiseBuffer, roomBuffer, setPos, Voice, songSeason, greenFrogSeason, env } from './audio-kit.js';
 import { Beds } from './audio-beds.js';
 import * as V from './audio-voices.js';
 
@@ -33,7 +33,30 @@ const EMIT = {
   'moose-wade': [300, V.mooseWade],
   'splash': [600, V.splash],
   'thunder': [20000, V.thunder],
+  'tent-zip': [60, tentZip],
 };
+
+// A tent's door zipped shut (camp.js, when the tent is up): the teeth as a run of clicks through a narrow band that
+// climbs with the pull, faster in the middle of it, over the swish of the fabric
+function tentZip(au, pos, size = 1) {
+  const v = au.voice({ ...pos, gain: 0.3 * size, ref: 4, wet: 0.1, echo: 0 });
+  if (!v) return null;
+  const R = au.rand, t = v.t, dur = 0.55 + R() * 0.25;
+  const bp = v.filter('bandpass', 2600, 1.8), g = v.gain(0);
+  v.noise('white', bp); bp.connect(g); g.connect(v.input);
+  let s = t;
+  while (s < t + dur) {
+    const f = (s - t) / dur;
+    g.gain.setTargetAtTime((0.45 + R() * 0.55) * (0.5 + 0.5 * Math.sin(f * Math.PI)), s, 0.0006);
+    g.gain.setTargetAtTime(0, s + 0.0025, 0.0018);
+    s += 0.008 + 0.014 * Math.abs(f - 0.45) + R() * 0.003;
+  }
+  bp.frequency.setValueAtTime(2600, t); bp.frequency.linearRampToValueAtTime(4300, s);
+  const sw = v.filter('bandpass', 1300, 0.6), g2 = v.gain(0);
+  v.noise('pink', sw); sw.connect(g2); g2.connect(v.input);
+  env(g2.gain, t, 0.08, 0.22, Math.max(0.05, dur - 0.2), 0.15);
+  return v.until(s + 0.25);
+}
 
 // placement.js's birch-and-aspen stands (~150 m), for how much of the woods is leaves rather than needles
 const standAt = (x, z) => fbm(x * 0.0065 + 17, z * 0.0065, 2, 123);
@@ -57,6 +80,7 @@ const blankScene = () => ({
   doy: 190, leafOn: 1, ice: 0, loons: 1, cold: 0, fall: 0, airTemp: 18, rain: 0,
   open: 0.5, canopy: 0, landDist: 300, trees: { x: 0, z: 0, d: 400, amt: 0, conifer: 0, decid: 0 }, shore: { x: 0, z: 0 }, openDir: { x: 0, z: -1 },
   shallow: [], shallowNear: 0,
+  fire: null, // the lit campfire nearest the eye (fire.js Fires.near: { x, y, z, heat, embers }), from `this.fires`
 });
 
 export class Ambient {
@@ -69,6 +93,7 @@ export class Ambient {
     this.L = { x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: -1, ux: 0, uy: 1, uz: 0, rx: 1, rz: 0 }; // the listener: the camera
     this.me = { mode: null, stroke: 0, side: 0, rate: 0.95, step: 0.6, swimN: 0, lastCatch: -1, lastExit: -1, lastStep: -1, creakT: 4 };
     this.lifeT = {}; this.bout = null; this.player = null; this.world = null;
+    this.fires = null; // the campfires (fire.js), set by main: the crackle bed reads the nearest lit one
     this.lastTick = -1; this.lastNow = null; this.probeT = 0;
     if (autoStart && typeof window !== 'undefined') {
       const start = () => { if (!this.ctx) this.init(); window.removeEventListener('keydown', start); window.removeEventListener('pointerdown', start); };
@@ -191,6 +216,7 @@ export class Ambient {
     S.doy = se.doy ?? 190; S.leafOn = se.leafOn ?? 1; S.ice = se.ice ?? 0; S.loons = se.loons ?? 1; S.cold = se.cold ?? 0; S.fall = se.fall ?? 0;
     S.airTemp = (se.waterTemp ?? 18) - 4 * S.night + 3 * S.day; // the air by the water's temperature, cooler at night
     S.rain = c.weather ? c.weather.rain || 0 : 0;
+    S.fire = this.fires ? this.fires.near : null; // main sets `fires` (fire.js) when the campfires are made
     // the listener is the camera: its position, and the way it faces from its quaternion; else the paddler's head
     const cam = c.camera;
     if (cam && cam.position) {
