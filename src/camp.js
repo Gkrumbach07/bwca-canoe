@@ -423,8 +423,9 @@ export class Camp {
   // what E at a burning fire cooks now: the best fish on the stringer at any hour, else supper in the evening or
   // breakfast in the morning while there is food; null when nothing is due
   mealHere() {
-    const now = this.now, d = this.day, h = d.hours, { rise, set } = d.sunriseSunset;
+    const now = this.now, d = this.day, h = d.hours, { rise, set } = d.sunriseSunset, e0 = this.energy;
     if (now - this.cookedAt < COOK_GAP) return null;
+    if (e0 && e0.lastMealKind && e0.lastMealKind !== 'cold' && now - e0.lastMealAbs < COOK_GAP) return null; // the saved meal (a reload forgets cookedAt)
     const st = this.fishing && this.fishing.stringer;
     if (st && st.length) {
       let i = 0; for (let k = 1; k < st.length; k++) if (st[k].length > st[i].length) i = k;
