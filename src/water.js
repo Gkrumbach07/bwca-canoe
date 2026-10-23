@@ -264,18 +264,23 @@ const SKY_GLSL = Sky.glslSky || /* glsl */ `
 const glslColumn = /* glsl */ `
   uniform vec3 uColumn;   // transmit, veil, veilPow
   uniform vec3 uSpecClear, uSpecStain, uWaterAbs;
+  // No column is ever less than none. The depth comes in as a varying (0 at the shore, never below in the bake), but
+  // under multisampling a pixel the triangle only partly covers is shaded at the pixel's centre, off the triangle,
+  // and the varying runs on past its last vertex. Far off, where the whole shore band of the lattice is a sliver of
+  // one pixel row, it runs on far below zero: the veil's pow of a negative base is NaN, the tint's exp grows past 1,
+  // and the tone map burned the far waterline into a thin white line at night (4x samples; October 2026).
   // the refracted view's path through a column depth metres deep
   float columnPath(float depth, float cosI) {
     float s2 = (1.0 - cosI * cosI) / 1.7769;   // sin^2 of the refracted ray (n = 1.333)
-    return depth / sqrt(max(1.0 - s2, 0.3));
+    return max(depth, 0.0) / sqrt(max(1.0 - s2, 0.3));
   }
   // what the column passes of the bed's light, per channel: down to the bed and back up along the view
   vec3 columnTint(float depth, float path, float secchi) {
     vec3 K = (1.7 / secchi) * mix(uSpecStain, uSpecClear, smoothstep(1.5, 5.0, secchi)) + uWaterAbs;
-    return exp(-K * (depth + path) * uColumn.x);
+    return exp(-K * max(depth + path, 0.0) * uColumn.x);
   }
   // how much of the bed the column hides
-  float columnVeil(float path, float secchi) { return clamp(1.0 - exp(-uColumn.y * pow(path / secchi, uColumn.z)), 0.0, 0.985); }
+  float columnVeil(float path, float secchi) { return clamp(1.0 - exp(-uColumn.y * pow(max(path, 0.0) / secchi, uColumn.z)), 0.0, 0.985); }
   // the tint pass covers the near patch and gives out over its last 40 m (where the surface folds it into the veil)
   float tintReach(vec3 local, vec2 centre, float halfSize) { return 1.0 - smoothstep(halfSize - 40.0, halfSize - 6.0, max(abs(local.x - centre.x), abs(local.z - centre.y))); }
 `;
