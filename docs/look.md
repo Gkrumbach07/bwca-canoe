@@ -38,11 +38,18 @@ shore is a flat pale silhouette. The frame reads in three values: near dark, mid
 3. **Colour.** Flat, calm materials; the colour arrives through the sun, the fog and the grade.
 4. **Surfaces.** Big soft patches. Transitions blend over metres. Detail is sparse and placed.
 5. **Silhouettes.** Simple and sharp against what is behind, simpler the further away.
+6. **No violet by day.** Daytime shade is blue (hue 200–225), never lilac. Every warm stop in the day tables
+   is yellow-orange (green well above blue) and every cool one cyan-blue (green above red), so no blend between
+   them can pass through violet; pink and violet belong to the sky at dusk and night only (keys −5 and −1). A
+   grade curve that holds green below both red and blue anywhere turns every grey there magenta, so the shade
+   lifts blue, then green, over red, and at the black point green lifts as much as blue. A warm glow is never
+   added on top of blue sky (orange plus blue is violet where they meet): the warm band rises instead.
 
 ## The passes
 
 Each ships on its own and is judged from the point by the lodge on Lake One (entry point 30) at noon,
-17:30 and dusk, third person, plus a close-up and a wide shot across the lake.
+17:30 and dusk, third person, plus a close-up and a wide shot across the lake. Since phase 1 every change is
+judged on the look board (working notes): ten fixed spots at those hours and a July evening, one sheet.
 
 | # | Pass | Files | Done when |
 |---|---|---|---|
@@ -52,6 +59,21 @@ Each ships on its own and is judged from the point by the lodge on Lake One (ent
 | 4 | **Atmosphere and grade.** Fog as a colour ramp by distance with a second ramp toward the sun, blended by the angle to it; a sun disc with god rays at half resolution; a three-stop sky; colour grading by curves; all keyed from the day cycle so sun, sky, fog and grade move together. | `fog.js`, `sky.js`, `post.js`, `daycycle.js` | The far shore is a flat pale shape at every hour; the same frame reads in three values at noon, 17:30 and dusk; dawn and night keep their character. |
 
 Pass 1 goes first: the others build on its shader chunk. Passes 2, 3 and 4 then run in parallel.
+
+## What landed after the pivot
+
+All merged on main by 2026-10-22 (`docs/roadmap.md`, phase 1). The interfaces other code leans on are in the
+sections below.
+
+| Pass | What changed | Files |
+|---|---|---|
+| **Grade** | The lilac out: every daytime stop of the day tables and the grade curves rebuilt to the no-violet rule; the sky's gradient and glow made one GLSL chunk shared with the water; toward a low sun the warm bands rise (`skyLift`). | `daycycle.js`, `sky.js` |
+| **Water and lake plants** | The water's colour is the lake's own (depth over the measured Secchi depth) lit by the frame's light, and it mirrors the sky dome and, in a quarter-size pass, the shore, its trees and the canoe. Ripples by wind; a soft shore band. Lake plants: pad rafts with lilies, reeds, pondweed, wild rice, keyed by season. | `water.js`, `aquatic.js`, `aquatic-textures.js`, `floating.js`, `wake.js`, `placement.js` (`placeAquatic`) |
+| **Crowns** | Fuller, lighter crowns: denser sprites, normals turned skyward, cards keep 55 % of the baked occlusion, a leaf glow where the sun comes through thin edges, far twins matched in value. | `vegetation.js`, `textures.js`, `geobuilder.js` |
+| **Rocks** | Shards, irregular slabs and soft boulders with chamfers cut as planes of the solid; rocks seated on the drawn mesh; groups with one or two dominant rocks and pebbles at their feet. | `rocks.js`, `placement.js`, `tile-worker.js`, `terrain-build.js` (`meshHeightAt`) |
+| **Built props** | Dock, shack, rack, campsites, trails and signs built the way they would be, on one atlas material, worn, with box occlusion; the trail a decal that paints the ground under it. | `props.js`, `prop-kit.js`, `tasks.js` |
+| **Canoe and paddler** | A lofted 17 ft tripper with its fittings and a Duluth pack, a skinned paddler with arm and leg IK (feet planted on the ground under each foot), a water line that rides the swell, the first-person eye. | `canoe.js`, `hull.js`, `figure.js`, `gear.js`, `hullwater.js`, `loft.js` |
+| **Phase 1 polish** | One exact ground query used by everything that stands outside placement; the hull seated on it; the dead water rows gone from the day tables; the look board. | `tiles.js`, `prop-kit.js`, `props.js`, `player.js`, `camera.js`, `daycycle.js`, `lookboard.js` |
 
 ## What stays and what we do not do
 
@@ -69,6 +91,22 @@ baked lightmaps, no PBR, no external assets.
 - `npx -y eslint@8 --no-eslintrc --env browser,es2022,worker --parser-options=ecmaVersion:2023,sourceType:module --rule 'no-undef: error' src/` before committing.
 - Shader uniforms added through `onBeforeCompile` go in the declarations, not the body; `vColor` is a vec4
   in r186; alpha-tested cards cast shadows only when the material sets `alphaTest` so the depth pass sees it.
+- The look board: `await __game.lookboard()` renders every spot of `SPOTS` at every hour of `SETS`
+  (lookboard.js) into one labelled sheet and returns `{ url, frames, … }` (a PNG data URL; downloaded too when
+  the page is visible). `{ spots: ['Lake One bluff'], sets: ['22 Oct 17:30'] }` takes a subset, `{ type:
+  'image/jpeg' }` a smaller file. It holds the animation loop, the clock and the wind while it runs and puts
+  them, the player and the canvas size back after. Add a spot by adding an entry; keep spots within a few
+  kilometres of the lodge so the tiles stay loaded. The full sheet (40 frames) takes 2–5 s once the tiles are in.
+- The hidden pane leaves the canvas 0 × 0, so the camera's projection is NaN: anything that unprojects fails
+  and frustum culling is off (draw calls and triangles read about 4x high). Force a size first
+  (`camera.aspect`, `renderer.setSize`, `post.resize`), and dispatch a window `resize` event afterwards to put
+  it back. Screenshots of the pane show only the page; capture with `renderer.domElement.toDataURL()` in the
+  same task as the draw.
+- Long runs: `javascript_tool` gives up after 45 s, so start a run as a promise on `window` and poll it.
+  `player.teleport` streams tiles only while frames run, so step while awaiting it. The trip is saved on
+  `pagehide` too: set `__game.saver.enabled = false` before reloading, or the next load starts at the last spot.
+  A page-side `import('/src/x.js')` can be a second copy of a module Vite has re-served as `?t=…`: import the
+  URL the game loaded.
 
 ## The shared light (from pass 1)
 
@@ -80,8 +118,7 @@ baked lightmaps, no PBR, no external assets.
   for a point that sees less sky. `lookHash`, `lookNoise`, `lookFbm`, `lookFade` are world-space noise in both
   stages (integer-lattice hashes: exact at any coordinate, no seams).
 - The fog hook: `lookFog.pars` is declared after `<fog_pars_fragment>` and `lookFog.fragment` replaces
-  `<fog_fragment>` in every composed material. Today it is fog.js's haze. Pass 4 sets the two strings before
-  materials compile.
+  `<fog_fragment>` in every composed material; both resolve to fog.js's ramps (below).
 - Occlusion is baked per vertex into the colour (`src/occlusion.js` `bakeOcclusion(geo, { rays, reach, ground,
   floor })`): `smoothToon`, `creasedToon` and `angularRock` call it, so every tree, shrub, boulder, outcrop and
   the hull carry it. New geometry for passes 2 and 3 should go through the same call. There is no screen-space
@@ -92,3 +129,82 @@ baked lightmaps, no PBR, no external assets.
   `aSplatB` rock, dark rock, lichen rock, shore) and `aFloor` (canopy shade, sunny stand, bed, bed depth); the
   shader (`terrain.js` `glslGround`, uniforms `groundUniforms`) blends them. The ground cover evaluates the same
   `groundColor` from the class map plus the cover atlas's fourth byte (moss and shade nibbles).
+
+## The air, the sky and the grade (pass 4, grade)
+
+- One fog for every material (built-in, look, water, clouds, mist, wake): fog.js replaces three's fog chunks,
+  so import it before any material compiles. Inside `#ifdef USE_FOG` a shader can call `fogAt(vFogDir)` (vec4:
+  the haze's colour, and how much it covers, 0..1) or `fogApply(colour, vFogDir)` (the haze laid over a
+  colour, which is all `<fog_fragment>` does). The water applies it itself, once per pixel, and leaves the
+  mirrored shore as its own pass hazed it.
+- The ramps: `fogState.away` and `fogState.sunward`, 16 steps each even in u = s / (s + 600 m), s the view
+  distance through air that thins with height; blended toward the sun by `fogParams`. The day cycle builds a pair
+  per sun-altitude key from the `fog*` rows of its tables. Tune live: edit `DAY_TABLES.T.<row>[key]` in the
+  console, then `DAY_TABLES.rebuild()`.
+- The sky: `glslSky` (sky.js) is the dome's gradient and glow as one chunk, `skyGradient(d, zenith, mid,
+  horizon, sunDir, lift)` and `skyGlow(d, sunDir, sunColor, glow.xy)`. The dome's uniforms are `uZenith`,
+  `uMid`, `uHorizon`, `uSunColor`, `uGlow` (amount, power, lift) and `uSunDir`; the water holds those very
+  uniform objects (main.js passes `sky.material.uniforms` to `WaterSystem`) and calls the same two functions,
+  so the mirrored sky is the dome by construction. Renaming a uniform or changing a signature means water.js
+  follows.
+- The post chain (post.js): the scene renders into a 4-sample multisampled HalfFloat target (MSAA; the canvas
+  itself has none), god rays at half resolution, then one pass for ACES, the sRGB transfer, the per-key curves,
+  saturation, vignette and dither. The day cycle writes `post.look` each frame (set `post.look.vignette`, not
+  the uniform). Because the target is multisampled, `alphaToCoverage: true` works on alpha-cut materials: the
+  lake plants use it. The foliage cards still cut with `discard` against `uCardCut` (vegetation.js: the cutoff
+  falls with distance from the eye, so far crowns fill out into flat shapes; a custom depth material cuts the
+  same way for the shadows); coverage on them is untried (roadmap, phase 2).
+- The water's colour comes from the lake and the light, not the day tables: the table keeps only `foam`, and
+  the day cycle writes the water's `uFoam`, `uIce` and `uSunDir`.
+
+## Foliage (pass 2, crowns)
+
+- The sprites live in one generated atlas (textures.js). Each has a fixed slot (`SLOTS[name]`: rectangle, anchor,
+  halo) and geometry bakes UVs from it (`spriteUV(name, s, t)`), so a slot never moves. A hand-painted sprite
+  drops in with `setSprite(name, image)` or `await loadSprite(name, url)`; the far sprites (`farOval`,
+  `farCone`, `farPine`) are composed from the near ones once, so replace those too.
+- The leaf glow wraps three's `RE_Direct` in the card material (`uLeafGlow`: strength, lobe power, fade start and
+  end); it depends on the names `LambertMaterial` and `RE_Direct` in shading.js's light chunk.
+
+## Water and lake plants
+
+- `WATER_LOOK` (shallow, mid, deep, stain, ice) is the water's body, graded by depth over the lake's Secchi
+  depth; `REFLECTION = { scale, reach, full }` sets the mirror pass. Terrain, trees, snags and outcrops go on
+  `REFLECT_SHORE_LAYER` as tiles come in; the canoe and the rod on `REFLECT_LAYER`. The setting (R) turns the
+  pass off and the water mirrors the sky alone; the pass also stops 150 m inland.
+- `aquatic.js`: kinds 0 pads, 1 reeds, 2 pondweed, 3 wild rice; the `AQUA` uniforms `uGrow` (pads on the surface
+  June to mid-September), `uBloom`, `uTan`, `uIceHide` come from the season.
+
+## Rocks
+
+- `rockGeometry(kind, seed)` and `makeRockMaterial()` (rocks.js): `block` (a shard), `slab`, `boulder`. Each
+  family's base is y = 0 inside `FOOT`; placement.js's `ROCK_FOOT` holds the same outlines: change one, change
+  the other. `seatRock(ground, foot, …)` sinks a rock until its whole outline is under the ground it is given.
+
+## The ground things stand on
+
+- The terrain mesh is not the height field: the shore band's rock bumps and the flat triangles between vertices
+  put it up to a metre off `surfaceAt` (bilinear) near the shore. Two exact queries:
+  - `world.tiles.groundAt(x, z)` (tiles.js): the game's ground. Each installed fine tile keeps a `MeshGround`
+    (prop-kit.js) over the very arrays its mesh draws (no copy; the bucket list is skipped when the triangles
+    come in quad order, as they do), so a query is the triangle under the point: exact to 1e-12 m, about 75 ns.
+    A tile's mesh runs from half a cell into it to half a cell into the next, so the quad lattice picks the
+    tile. Off an installed mesh it falls back to `meshHeightAt` on the world's cells. The walker
+    (`player.groundAt`, and through it the paddler's feet), the hull set down or beached (`restHull`), the
+    props, the lost items and the camera's clearance all read it.
+  - `meshHeightAt(grid, x, z, cache)` (terrain-build.js): the same mesh computed from any grid, for the worker
+    and placement (no mesh exists yet there); the plain split in a cell the waterline cuts, a few centimetres off.
+- `restHull` lays the hull along the slope and across it (roll up to 17°), then settles it until its sampled
+  bottom (keel and bilges, from hull.js `keelAt` and `section`) touches the ground without cutting in.
+- prop-kit.js: `propMaterial()` (one material for every prop: a 16-cell generated atlas with worn paint),
+  `PropBuilder`, `occlude(geo, boxes, { ground })` (occlusion against a few boxes and the ground), `bakeSelf`,
+  `chunkStone`, `MeshGround`, and the trail decal's material, which paints terrain.js's `groundColor` under it.
+
+## Canoe and paddler
+
+- `hull.js` holds the hull's shape for anyone who needs it (`HULL`, `section`, `keelAt`, `outerAt`, `floorAt`,
+  `sheerY`); `canoe.js` builds the rig: `canoe.ground` (set by player.js) is the ground under each foot,
+  `canoe.eye(out, yawRel, pitch, dt)` the first-person eye, `canoe.hull` the hull's pivot (`dropHull` lifts it
+  0.3 m above the height it is given).
+- The hull and the figure bake their occlusion in the background after load (loft.js `bakeLater`): wait for
+  `bakesPending() === 0` before judging colours.

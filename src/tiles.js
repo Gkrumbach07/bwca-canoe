@@ -3,6 +3,8 @@ import { makeTerrainMesh } from './terrain.js';
 import { makeVegetationMeshes, updateVegetationLOD } from './vegetation.js';
 import { makeAquaticMeshes } from './aquatic.js';
 import { buildTileProps, exclusionsFor } from './props.js';
+import { MeshGround } from './prop-kit.js';
+import { meshHeightAt } from './terrain-build.js';
 
 // Streams the world around the player: a 5 x 5 neighbourhood of 2.56 km tiles (terrain, water, forest,
 // lake vegetation, portages, campsites) built in a pool of workers and installed one per frame, a 3 x 3
@@ -21,6 +23,7 @@ export class TileManager {
     this.world = world; this.scene = scene;
     this.terrainMaterial = terrainMaterial; this.water = water; this.vegetation = vegetation; this.aquatic = aquatic;
     this.tiles = new Map();      // key -> fine tile entry
+    this.grounds = new Map();    // ty * ntx + tx -> the installed fine tile's drawn ground { mesh: MeshGround, ox, oz }
     this.farTiles = new Map();   // key -> far tile entry
     this.farChunks = new Map();  // fine tile key -> far chunk group
     this.queue = [];             // entries waiting for a worker
@@ -185,6 +188,10 @@ export class TileManager {
     const w = this.world, r = e.result;
     w.setTile(e.tx, e.ty, r.data, r.cover);
     const [ox, oz] = w.tileOrigin(e.tx, e.ty);
+    // the drawn ground, from the terrain arrays the mesh is made of (shared with its geometry, not copied);
+    // registered before the props are built so they stand on it too
+    e.ground = new MeshGround(r.terrain, w.cell, w.tile);
+    this.grounds.set(e.ty * w.ntx + e.tx, { mesh: e.ground, ox, oz });
     const group = new THREE.Group();
     group.name = `tile ${e.key}`;
     group.position.set(ox, 0, oz);
@@ -254,6 +261,7 @@ export class TileManager {
         const e = victims[i];
         this.disposeGroup(e.group);
         w.clearTile(e.tx, e.ty);
+        this.grounds.delete(e.ty * w.ntx + e.tx); e.ground = null;
         this.tiles.delete(e.key);
         const fc = this.farChunks.get(e.key);
         if (fc) fc.visible = true;
@@ -270,6 +278,32 @@ export class TileManager {
       w.clearFar(e.fx, e.fy);
       this.farTiles.delete(e.key);
     }
+  }
+
+  // --- the ground ---------------------------------------------------------------------------------------------
+  // The game's one ground query: the height of the terrain as it is drawn at world (x, z). Anything that stands
+  // on the ground outside the worker's placement reads it (the walker and its feet, the hull set down or beached,
+  // the props, the lost items, the camera's clearance). On an installed fine tile it is the mesh's own
+  // triangle (prop-kit.js MeshGround: exact, a few hundred nanoseconds); elsewhere the same mesh computed from a
+  // grid (terrain-build.js meshHeightAt: the plain split in a cell the waterline cuts, a few centimetres off
+  // there), from `grid` when given (a tile's own halo'd grid while it installs), else from the world where it
+  // has the cells, else the world's smooth height.
+  groundAt(x, z, grid = null) {
+    const g = this.locate(x, z);
+    if (g) { const y = g.mesh.height(x - g.ox, z - g.oz); if (y === y) return y; }
+    const w = this.world;
+    if (grid) return meshHeightAt(grid, x, z);
+    return w.isReady(x, z) ? meshHeightAt(w, x, z) : w.heightAt(x, z);
+  }
+  // the installed tile whose mesh covers world (x, z): { mesh, ox, oz }, or undefined. The mesh of tile t runs
+  // from half a cell into t to half a cell into t + 1 (its quads join cell centres), so the quad lattice, not
+  // the tile lattice, picks it.
+  locate(x, z) {
+    const w = this.world, T = w.tile;
+    const qi = Math.floor((x - w.originX) / w.cell - 0.5), qj = Math.floor((z - w.originZ) / w.cell - 0.5);
+    const tx = Math.floor(qi / T), ty = Math.floor(qj / T);
+    if (tx < 0 || ty < 0 || tx >= w.ntx || ty >= w.nty) return undefined;
+    return this.grounds.get(ty * w.ntx + tx);
   }
 
   // for the HUD: ready tiles with their data (minimap drawing)

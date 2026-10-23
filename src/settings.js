@@ -9,7 +9,7 @@ import { LOD_SCALE } from './vegetation.js';
 export const DEFAULTS = {
   shadows: '2048',      // 'off' | '1024' | '2048' | '4096': the sun's shadow map size per cascade (sunlight.js)
   lod: 1,               // tree LOD and cull distance scale
-  reflections: true,    // the canoe's mirror pass on the water
+  reflections: true,    // the mirror pass: the shore, its trees and the canoe in the water (off: the sky alone)
   renderScale: 1,       // 0.5..1 of the device pixel ratio (capped at 2)
   volume: 1,            // 0..1
   mute: false,
@@ -40,7 +40,7 @@ export const SECTIONS = [
     { key: 'shadows', label: 'Shadows', desc: 'Two cascades: near and far · the size of each', type: 'select', options: [['off', 'Off'], ['1024', 'Soft (1024)'], ['2048', 'Standard (2048)'], ['4096', 'Sharp (4096)']] },
     { key: 'lod', label: 'Tree detail distance', type: 'range', min: 0.5, max: 2, step: 0.25, format: (v) => `${v}×` },
     { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1, step: 0.05, format: pct },
-    { key: 'reflections', label: 'Canoe reflection on the water', desc: 'R toggles it · a second pass over the scene', type: 'toggle' },
+    { key: 'reflections', label: 'Shore and sky in the water', desc: 'R toggles it · the shore, its trees and the canoe mirrored with the sky, a second pass over the scene; off, the water mirrors the sky alone', type: 'toggle' },
   ] },
   { id: 'sound', label: 'Sound', rows: [
     { key: 'volume', label: 'Volume', type: 'range', min: 0, max: 1, step: 0.05, format: pct },

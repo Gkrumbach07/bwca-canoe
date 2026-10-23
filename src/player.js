@@ -3,6 +3,7 @@ import { resample } from './props.js';
 import { clamp, lerp } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
+import { HULL, keelAt, section } from './hull.js';
 
 export class Input {
   constructor() {
@@ -31,6 +32,15 @@ const FLOAT_SD = -3.5;        // shoreAt where a canoe floats clear (the paddle 
 const WADE_SD = -2.5;         // shoreAt beyond which the water is too deep to wade
 const MAX_GRADE = Math.tan((40 * Math.PI) / 180);
 const RODS = 5.0292;
+const HULL_PIVOT_LIFT = 0.3;  // canoe.js dropHull stands the hull's pivot this far above the height it is given
+// The hull's bottom in its own frame (+x bow, +y up, +z starboard), sampled for seating it on the ground: the keel
+// from stem to stem and the bilges either side at five stations.
+const HULL_BOTTOM = (() => {
+  const pts = [], s = { y: 0, z: 0 }, half = HULL.L / 2;
+  for (let k = -5; k <= 5; k++) { const u = k * 0.17; pts.push([u * half, keelAt(u), 0]); }
+  for (const u of [-0.6, -0.3, 0, 0.3, 0.6]) for (const t of [0.3, 0.6]) { section(u, t, s); pts.push([u * half, s.y, s.z], [u * half, s.y, -s.z]); }
+  return pts;
+})();
 const LAND = { rock: 'Bare rock', rockDark: 'A rock face', rockLichen: 'Bare rock', meadow: 'A clearing', burn: 'Old burn', forest: 'The woods', forestLight: 'The woods', forestDark: 'Dark spruce' };
 
 export class Player {
@@ -76,8 +86,8 @@ export class Player {
     if (this.mode === 'walk') return 'On foot';
     return this.mode === 'swim' ? 'Swimming' : 'Paddling';
   }
-  // the height things stand on: the terrain as the mesh is built (reshaped in the shore band)
-  groundAt(x, z) { return surfaceAt(this.world, x, z); }
+  // the height things stand on: the terrain as it is drawn (tiles.js groundAt: the mesh's own triangles)
+  groundAt(x, z) { const t = this.world.tiles; return t ? t.groundAt(x, z) : surfaceAt(this.world, x, z); }
 
   trailFor(p) {
     let t = this.trailCache.get(p);
@@ -719,12 +729,26 @@ export class Player {
     return { x: lx, z: lz, deep, lake: w.lakeIdAt(lx, lz) };
   }
 
-  // Lay the hull on the ground at (x, z): it follows the slope under its ends, and floats where an end is in the water.
+  // Lay the hull on the ground at (x, z), bow along heading. It takes the slope under it along its length (plus
+  // pitchExtra for a hull that came down crooked) and across it, then settles until its bottom (the keel and the
+  // bilges, sampled) rests on the drawn ground without cutting into it. Over water an end rests on the water.
   restHull(x, z, heading, pitchExtra = 0) {
-    const w = this.world, f = { x: Math.cos(heading), z: -Math.sin(heading) };
+    const w = this.world, fx = Math.cos(heading), fz = -Math.sin(heading), rx = -fz, rz = fx; // bow, starboard
     const under = (px, pz) => { const s = this.groundAt(px, pz); return w.shoreAt(px, pz) < 0 ? Math.max(s, w.levelAt(px, pz)) : s; };
-    const hb = under(x + f.x * 2.2, z + f.z * 2.2), hs = under(x - f.x * 2.2, z - f.z * 2.2);
-    this.canoe.dropHull(x, Math.max(under(x, z), (hb + hs) / 2), z, heading, Math.atan2(hb - hs, 4.4) + pitchExtra);
+    const hb = under(x + fx * 2.2, z + fz * 2.2), hs = under(x - fx * 2.2, z - fz * 2.2);
+    let cross = 0;
+    for (const a of [-1.4, 0, 1.4]) cross += under(x + fx * a + rx * 0.45, z + fz * a + rz * 0.45) - under(x + fx * a - rx * 0.45, z + fz * a - rz * 0.45);
+    const pitch = Math.atan2(hb - hs, 4.4) + pitchExtra, roll = clamp(-Math.atan2(cross / 3, 0.9), -0.3, 0.3); // + roll lowers the starboard side
+    const ch = Math.cos(heading), sh = Math.sin(heading), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
+    let y = -Infinity;
+    for (const [px, py, pz] of HULL_BOTTOM) {
+      const y1 = py * cr - pz * sr, z1 = py * sr + pz * cr;           // roll about the keel line
+      const x2 = px * cp - y1 * sp, y2 = px * sp + y1 * cp;           // pitch about the beam
+      y = Math.max(y, under(x + x2 * ch + z1 * sh, z - x2 * sh + z1 * ch) - y2); // turned to the heading
+    }
+    this.canoe.dropHull(x, y - HULL_PIVOT_LIFT, z, heading, pitch);
+    this.canoe.hull.rotation.set(roll, heading, pitch, 'YZX');
+    this.canoe.hull.updateMatrixWorld();
   }
 
   dropHull(set = false) {

@@ -148,9 +148,11 @@ export class ChaseCamera {
     let py = ty + Math.sin(pitch) * dist;
     // never below the ground or the water, anywhere along the line from the paddler to the camera: on a slope
     // the hill behind you lifts the camera instead of swallowing it
+    const tiles = this.world.tiles;
     for (let s = 0.2; s <= 1.001; s += 0.2) {
       const sx = tx + (px - tx) * s, sz = tz + (pz - tz) * s;
-      const ground = Math.max(this.world.heightAt(sx, sz), this.world.levelAt(sx, sz)) + 1.5;
+      const h = tiles ? tiles.groundAt(sx, sz) : this.world.heightAt(sx, sz); // the drawn ground (tiles.js)
+      const ground = Math.max(h, this.world.levelAt(sx, sz)) + 1.5;
       const need = ty + (ground - ty) / s;
       if (py < need) py = need;
     }

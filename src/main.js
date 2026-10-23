@@ -30,8 +30,9 @@ import { TripSaver } from './save.js';
 import { Title } from './title.js';
 import { Journal } from './journal.js';
 import { TripStats } from './trip-stats.js';
+import { lookboard } from './lookboard.js';
 
-const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, water: 0x2d7694, reflect: 0xc9dde8, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
+const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
 const loadingEl = document.getElementById('loading'), barEl = document.getElementById('loading-bar'), msgEl = document.getElementById('loading-msg');
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
@@ -220,12 +221,19 @@ async function main() {
     post.render();
   };
   window.__game.step = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); draw(); };
+  window.__game.advance = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); }; // the simulation only, no drawing
   let last = performance.now();
-  renderer.setAnimationLoop((now) => {
+  const tick = (now) => {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     frame(dt);
     draw();
     fps.end(dt);
+  };
+  renderer.setAnimationLoop(tick);
+  // the look board (lookboard.js): a contact sheet of fixed spots and hours; the loop is held while it runs
+  window.__game.lookboard = (opts) => lookboard(window.__game, opts, {
+    pause: () => renderer.setAnimationLoop(null),
+    resume: () => { last = performance.now(); renderer.setAnimationLoop(tick); },
   });
   let booted = false; // the outfitter's start panel waits until the title card is away
 
