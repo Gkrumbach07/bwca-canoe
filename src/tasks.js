@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { TileGrid } from './grid.js';
 import { mulberry32 } from './rng.js';
-import { surfaceAt } from './terrain-build.js';
-import { buildItemProp } from './props.js';
+import { buildItemProp, groundAt } from './props.js';
 
 // Clue-driven tasks written from the real data. Three kinds: a lost item at a campsite a few portages from
 // the landing (a small prop appears at the site's water edge; E picks it up), a survey (walk a portage to
@@ -33,6 +32,7 @@ export const UNLOCKS = [
   { key: 'kevlar', label: 'a Kevlar canoe (lighter on the portages)' }, { key: 'jig', label: 'a jig and twister tail' },
   { key: 'silverminnow', label: 'a Johnson Silver Minnow' }, { key: 'lazyike', label: 'a Lazy Ike' }, { key: 'fisher', label: 'the old Fisher map sheets' },
 ];
+const UP = new THREE.Vector3(0, 1, 0);
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 const compass = (dx, dz) => COMPASS[Math.round((((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360) / 45) % 8];
@@ -271,8 +271,11 @@ export class Tasks {
         let m = this.props.get(t.id);
         if (!m && w.isReady(s.x, s.z)) {
           m = buildItemProp(t.item, t.id);
-          m.position.set(s.x, surfaceAt(w, s.x, s.z) + 0.02, s.z);
-          m.rotation.y = t.id * 1.7;
+          // on the drawn ground (props.js groundAt), lying with its slope
+          const e = 0.25, gx = groundAt(w, s.x + e, s.z) - groundAt(w, s.x - e, s.z), gz = groundAt(w, s.x, s.z + e) - groundAt(w, s.x, s.z - e);
+          const up = ITEMS[t.item].float ? UP : new THREE.Vector3(-gx, 2 * e, -gz).normalize();
+          m.position.set(s.x, groundAt(w, s.x, s.z) - 0.004, s.z);
+          m.quaternion.setFromUnitVectors(UP, up).multiply(new THREE.Quaternion().setFromAxisAngle(UP, t.id * 1.7));
           this.scene.add(m); this.props.set(t.id, m);
         }
         if (m && ITEMS[t.item].float) m.position.y = w.levelAt(s.x, s.z) + (this.water ? this.water.waveAt(s.x, s.z) : 0) - 0.12;
