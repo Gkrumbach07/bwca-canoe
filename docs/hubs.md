@@ -4,7 +4,8 @@ The second pass of the game loop, after the [trip core](trip-core.md). It turns 
 every entry point's outfitter into a hub: food and gear to buy, a board of paid notices, keepers and visitors to talk
 to. The owner's own words are in [game-vision.md](game-vision.md); where this plan and they differ, they win.
 
-It is built in four phases. Phase 1 is on main; phase 2 is joined on `claude/hubs-2`; phases 3 and 4 are planned.
+It is built in four phases. Phases 1 and 2 (and the pace) are on main; phase 3 is joined on `claude/hubs-3`; phase 4
+is planned.
 
 ## The owner's decisions (2026-10-23)
 
@@ -200,11 +201,14 @@ counter. The details are in [trip-core.md](trip-core.md), "Camping and sleep".
 
 ## People (phase 3)
 
-The keeper at every outfitter, and 0 to 2 visitors a week from about twelve kinds (a guide, a ranger, a photographer,
-a family, an old-timer, a portage crew, a birder, the café cook, the mail carrier, a pair of trippers), each in their
-months. E once gives a line; a second E offers their one task; once it is done they thank you. Figures reuse the
-paddler's model and material, posed standing and turning to look at you. Hooks for later: a party with a route, leaving
-dates and nights, that claims campsites, and a "Join us" stub.
+The keeper at every outfitter, and 0 to 2 visitors a week from twelve kinds (a guide, a ranger, a photographer, a
+family, an old-timer, a portage crew, a birder, the café cook, the mail carrier, a pair of trippers, a fishing guide, a
+kid with a bucket of leeches), each in their months and hours (`src/npcs.js`). E once gives a line that names something
+real (a lake and its fish, a site, a carry, the forecast); a second E takes on their one task, which is listed at the
+counter as "Asked of you in person" and paid by them or that counter; once it is paid they thank you. At the counter Q
+is a word with the keeper (the first of a day raises your standing there by 0.05), whoever else stands by. Figures reuse
+the paddler's model and material, three at most, posed standing, leaning on the counter or sitting, and turning to look
+at you. Hooks for later: a party with a route, leaving dates and nights, that claims campsites, and a "Join us" stub.
 
 ## The build
 
@@ -290,11 +294,110 @@ store floor). Its fixes:
   Kevlar in about two weeks of game days. (All of this was before the pace, which makes a game day 20–25 km of travel
   and about an hour and a half of real time at 1×: the progression in game days wants replaying in phase 4.)
 
-## What phases 3 and 4 will do
+## What phase 3 delivered
 
-- **Phase 3.** The camp chores (A: firewood, the fire, the latrine, berries, the wake time, the saw), the camera and
-  the photo notices (B: the $25 camera, a disposable lent for the first one, the journal's Photos tab), and people in
-  the outfitters (C: the keeper standing behind the counter, visitors in their months, the first chat of the day for
-  standing). Notes for it from the join: hulls could look like what they are (the Kevlar's gold, the Royalex's
-  colour); a lit, sleeping keeper figure would make the counter less empty; the rides' late-night bunk is free.
-- **Phase 4.** Balance across a season played on autopilot, ten game days without an evacuation, and the docs.
+Three streams joined on `claude/hubs-3`, on main with the pace (ce8a1e8):
+
+- **Camp chores** (A, `src/chores.js`, `src/camp.js`, `src/fire.js`): firewood (an armful in 25 minutes, 10 with the
+  saw, three at most, stacked by the ring as a woodpile and carried in the canoe when you push off), the fire fed and
+  burning down (3 h an armful, 5 h at most; it dims over its last 1.6 h to embers), the latrine (rest +0.05 once a day),
+  blueberries July 10 to August 20 on the burns and the lichen rock by a site (a pint in 20 minutes, three a site a
+  day), and the wake-time card at the tent (first light, 7:00 or 9:00; → or ← there opens it). The berries ($10 a pint)
+  and firewood ($6 an armful) notices.
+- **The camera and the photo notices** (B, `src/photo.js`, the journal's Photos tab, `fauna.subjects()`): C raises it
+  (the $25 35 mm, or the disposable the season's first photo notice lends for three pictures); a 16:9 print of 240 × 135
+  kept in IndexedDB (24 prints), a caption ("A cow moose, Lake Two, July 13, morning"); bird, loon, eagle, beaver, moose
+  and place notices.
+- **People in the outfitters** (C, `src/npcs.js`): above.
+
+**The join** played three game days of a July season at Trip pace through the real keys and buttons, the numbers
+logged at each step (the camera's moose was forced with `fauna.force`, the berries notice pinned in place of a far one
+nobody took, and a visitor with a task cast in at Lake One, where the week's visitor had none):
+
+| When | Where and what | $ | Energy · rest · food | Food | km |
+|---|---|---|---|---|---|
+| Day 1, 7:40 | New season at Lake One (30): Ruth's forty dollars as you step in, Q a word with her, the crew's hint, Finn's task (leeches for Grandpa, $8 and a dozen leeches), the loon photo (the disposable lent), the berries and a locket at Lake Two | 40 | 1.00 · 1.00 · 1.00 | 0 | 0 |
+| 7:43 | Three days of food | 22 | | 3 | 0 |
+| 7:58 | The loon, 46 m off, at 125 mm: the notice done | 22 | 0.99 · 1.00 · 1.00 | 3 | 0.4 |
+| 9:56 | Two portages to Lake Two; the locket picked up at 9:58 | 22 | 0.88 · 0.95 · 0.91 | 3 | 7.7 |
+| 10:40 | A site with a berry patch: the tent (15 min), the bottle (5 min); the afternoon waited out at camp (4×) | 22 | 0.85 · 0.93 · 0.88 | 3 | 9.5 |
+| 17:38 | Two armfuls (25 min each), stacked; the fire (20 min) at 17:58; supper at 18:35 (30 min) | 22 | 0.72 · 0.68 · 1.00 | 2½ | 9.5 |
+| 20:30–22:48 | The fire fed (3.5 h left), two more armfuls, three pints into the tin, the latrine, the bottle | 22 | 0.59 · 0.57 · 0.82 | 2½ | 9.5 |
+| 22:50 | → at the tent: the card at 7:00, E | 22 | 0.59 · 0.57 · 0.82 | 2½ | 9.5 |
+| Day 2, 7:01 | Up at seven (breakfast); the morning fire; a cow moose at 52 m in a bay, at 260 mm | 22 | 0.85 · 0.85 · 1.00 | 2 | 9.5 |
+| 8:13 | Back over the portages; the leeches left at Grandpa's site on Lake One | 22 | 0.81 · 0.85 · 0.95 | 2 | 11.9 |
+| 9:44 | Lake One's store: the berries handed over at the door, Claim all: $80 for four (loon $12, locket $30, berries $30, Finn's $8) | 102 | 0.72 · 0.82 · 0.89 | 2 | 16.8 |
+| 10:27–11:12 | A ride to Snowbank Lake (27, $10), and from there to Moose Lake (25, $10): in at Gus Lindgren's door | 82 | 0.72 · 0.77 · 0.83 | 2 | 16.8 |
+| 11:35 | Moose Lake: the beaver notice, two days of food; out to a site on Moose Lake | 70 | 0.72 · 0.76 · 0.81 | 4 | 16.8 |
+| 21:50 | The evening's chores; on foot along the shore to a beaver lodge: the beaver, the disposable's last picture | 70 | 0.47 · 0.47 · 0.97 | 3½ | 18.9 |
+| Day 3, 7:38 | Back in at Moose Lake: $15 for the beaver; then a 35 mm camera ($25) at Lake One | 85 → 60 | 0.82 · 0.85 · 0.97 | 3 | 21.0 |
+
+**Its fixes:**
+
+- **The camera zooms** (photo.js): the wheel (or Q and E held) turns a zoom ring from a 50 mm lens to a 300 mm one on
+  35 mm film, the print cut across the frame's width; the field of view follows the focal length and the canvas's
+  aspect, and the subject test reads the camera's own field of view, so the middle of the print narrows with the zoom.
+  A moose at 40 m stood about 7 px high in the print at the old halved view; at 260 mm a cow at 52 m stands nearly half
+  of it. The frame says the lens ("260 mm lens"), the mouse and the keys turn in step with how wide the view is, and the
+  wheel is the camera's, not the chase camera's.
+- **Life's pace for the camera** (pace.js `life`): main's Real pace keeps a floor of twice life now, so the camera's
+  old 'real' still boosted; it holds a pace of its own (no time-lapse, no floor, the clock 1:1).
+- **A visit belongs to the store** (outfitter.js `distTo`): three entry points' own spots lie far out on the lake
+  (Moose Lake 143 m from its store, Sawbill 122 m, North Fowl 175 m; Seagull 57 m), and the visit, the dock's prompt and
+  an arrival were measured from there: walking up to Moose Lake's store ended the visit at once, and "Tie up and go in"
+  was offered 125 m out on the water. They are measured from the store and its dock once built. Played at 25, 38, 54
+  and 70: the dock's prompt, the tie-up, first person, all six hotspots, the people, out to the dock and the launch.
+- **A ride gets in at the door** (rides.js): it arrived afloat at the landing's spot with the counter open (at Moose
+  Lake out on the lake); it now arrives as a season begins, tied up at the dock, standing at the door, and the keeper's
+  word for the road (or a stranger's welcome) comes as you walk in.
+- **A visitor's task reads as theirs** (tasks.js, journal.js): "Asked of you in person · Leeches for Grandpa · for
+  Finn", apart from "Taken from other boards"; "Asked by Finn" in the journal; Claim all's stamp says what it pays
+  (it said $72 and paid $80, a visitor's task included).
+- **Q at the counter** (npcs.js): with a visitor at the counter's end, the keeper's Q went missing; at the counter Q is
+  now always a word with the keeper, E the visitor you face or the counter. Greetings keep to the hour.
+- **One E at a time**: firewood was offered at an outfitter's door and in its yard (and 25 minutes there filled the
+  store's own firewood notice): not on a store's visit now. With the camera up at the tent, → to aim opened the wake
+  card (and its E turned you in): the arrows are the camera's while it is up.
+- **Blueberries that show**: clusters of four to seven berries a little bigger than life, sitting proud on the bushes,
+  in a dusty blue (they were single 1.3 cm berries, often inside the leaves).
+- **The walker crouches** for the low chores (canoe.js `state.crouch`, set by camp.js): gathering, sawing, picking,
+  laying, feeding and cooking on the fire, filling the bottle; the head comes down from 1.56 to 1.12 m.
+- **No rain indoors** (weather.js `indoors`): the drops round the camera fell through the store's roof.
+- **A portage trail that starts in the water** (player.js): the Kawishiwi River end of the Lake One carry shoulders the
+  canoe 3.1 m out, past wading depth, and every step was "Too deep to wade"; a step that goes shallower always goes now.
+
+**Checked and found sound:** the lost-item notices at Sawbill (38), Seagull (54) and Clearwater (62) come out every
+time when you are at the landing (0 empty in 90 rolls at each; stream C's misses were rolled from Lake One, 50 km off,
+where those lakes' cells are not loaded); the camera keeps the people quiet in a store (no focus, E and Q only zoom)
+and the chores off at camp, at life's pace; reloads at camp (the fire lit, two armfuls stacked, the tent, the berries
+picked that day), in a store with people, mid-portage and with a visitor's task taken come back whole; the program
+count held at 96–97 through the store with people, the camp and the camera (91 to 97 over a session as new things come
+into view), the lights at 5; frames at 1440 × 900 headless: 11.8–12.2 ms in a store with the keeper and a visitor
+(the three figures cost under a millisecond), 14.7 ms on open water, 10.9 ms with the camera up; no console errors.
+
+## Decisions in phase 3
+
+- The camera's zoom is the same on the 35 mm and the disposable (a lent camera that could not reach a moose would make
+  the first photo notice a chore); a real disposable has a fixed lens.
+- A visit, the dock and an arrival belong to the store's layout, not the entry point's own spot.
+- A ride arrives at the store's door, as a new season does.
+- No firewood is gathered about an outfitter's store.
+
+## What phase 4 will do
+
+**A season's balance at the new pace.** Phase 2's progression was played at 2 to 4 km a game day; at Trip pace a day
+is 20 to 25 km, and the three days above give the first numbers to balance against:
+
+- **Money.** The three days earned $95 (a $30 berries notice is an hour's picking at a camp you would stop at anyway;
+  a $30 locket two portages in is a morning; Finn's errand $8) against $30 of food and $20 of rides (and $25 for the
+  camera). That is fast next to the bent-shaft ($40) and the Kevlar ($240): replay ten game days and set the pay so the
+  Kevlar is about two weeks.
+- **The idle clock.** A camp reached at 10:30 has six hours to wait at the 12× clock (half an hour of real time at 1×)
+  with nothing to do: fishing from the shore, a nap, or chores that fill the afternoon would help. Pushing off strikes
+  the tent and drowns the fire, so an evening paddle for a beaver means pitching again; a base camp left standing for a
+  day trip is worth deciding.
+- **Rest.** A 7:00 start on the A-frame (0.85) leaves rest at 0.47 by 22:00 and the bar "held down by tiredness" all
+  evening; the latrine's +0.05 hardly shows. Check the evening against a real day's 20 km.
+- **The camera's reach** stays 120 m for a moose and 60 m for a beaver; with the zoom a moose at 120 m still stands about
+  a quarter of the print high, so the reach could grow with the lens.
+- **Docs**: trip-core.md's chores and the pace, and the owner's notes from playing it.
