@@ -355,6 +355,7 @@ export class Weather {
     const wu = this.water && this.water.uniforms;
     if (wu && wu.uRain) { wu.uRain.value = amount * (1 - L.snow) * (1 - ice); wu.uGlint.value = L.sun * L.sun; }
     const audio = this.audio, rain = Math.round(amount * (1 - L.snow) * 50) / 50;
+    this.rain = rain; // 0..1, read by the soundscape's rain bed through audio.tick's context
     this._rainTimer -= dt;
     if (audio && audio.emit && (rain !== this._rainSent || this._rainTimer <= 0) && (rain > 0 || this._rainSent > 0)) {
       audio.emit('rain', { intensity: rain });

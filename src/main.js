@@ -8,6 +8,7 @@ import { makeAquaticKit } from './aquatic.js';
 import { GroundCover } from './groundcover.js';
 import { Loons } from './loons.js';
 import { Fauna } from './fauna.js';
+import { Weather } from './weather.js';
 import { Mist } from './mist.js';
 import { Ambient } from './audio.js';
 import { makeTerrainMaterial } from './terrain.js';
@@ -129,6 +130,7 @@ async function main() {
   const geo = new GeoBridge();
   const wind = new Wind(11);
   player.wind = wind;
+  const weather = new Weather({ day, wind, scene, camera, audio, water, player, world }); // forecast, clouds, rain, fog, storms
   const fishing = new Fishing({ world, player, canoe, water, ripples, audio, chase, input, day, wind, scene });
   player.fishing = fishing;
   fishing.rod.traverse((o) => o.layers.enable(REFLECT_LAYER));
@@ -163,7 +165,7 @@ async function main() {
   if (trip && (trip.mode !== 'paddle' || world.shoreAt(trip.x, trip.z) > -2)) player.teleport(trip.x, trip.z);
   title.open('title');
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -213,7 +215,7 @@ async function main() {
     mist.update(dt * ts, player.x, player.z);
     loons.update(dt * ts, player, day.season, faunaCtx);
     fauna.update(dt * ts, faunaCtx);
-    audio.tick(dt, { player, world, wind, day, season: day.season, camera }); // the soundscape reads the whole scene
+    audio.tick(dt, { player, world, wind, day, season: day.season, camera, weather }); // the soundscape reads the whole scene
     geo.update(player, world);
     hud.update({ player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell });
     saver.update(dt);
