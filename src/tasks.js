@@ -93,7 +93,8 @@ const district = (ep) => (ep <= 20 ? 'LaCroix' : ep <= 33 ? 'Kawishiwi' : ep >= 
 // --- the kinds ---------------------------------------------------------------------------------------------------
 // A kind: { label, weight: { local, medium, far }, make(tasks, ctx) → fields | null (may be async), pay(t) → dollars,
 // update(tasks, t, dt) while taken on, onEvent(tasks, t, ev) → words when it took the event, progress(t) → words }.
-// ctx: { ep, band, rng, landing, reach, board }. A kind with an E action sets tasks.inReach in update and acts in use(tasks, t). Phase 2 and 3 kinds (photos, fetch, berries) register the same way.
+// ctx: { ep, band, rng, landing, reach, board }. A kind with an E action sets tasks.inReach in update and acts in
+// use(tasks, t). Phase 2 and 3 kinds (photos, fetch, berries) register the same way.
 export const KINDS = {};
 export function registerKind(key, def) { KINDS[key] = { key, label: key, weight: { local: 1, medium: 1, far: 1 }, ...def }; return KINDS[key]; }
 
@@ -486,7 +487,7 @@ export class Tasks {
     return true;
   }
   accept(id) { return this.take(id); }
-  // let a notice go: it stays pinned on its board for someone else (an item found goes back where it was)
+  // let a notice go before it is done: it stays pinned on its board, on offer again (a lost item's prop is lifted)
   drop(id) {
     const t = this.ads.get(+id);
     if (!t || t.status !== 'open') return false;
