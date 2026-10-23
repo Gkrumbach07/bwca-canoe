@@ -4,6 +4,7 @@ import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
 import { addSurface, INSTANCE_ORIGIN } from './floating.js';
 import { aquaticAtlas, aquaticUV } from './aquatic-textures.js';
+import { SWAY, glslSway } from './wind.js';
 
 // The lake plants (docs/look.md: crisp graphic clumps that sit in the water). Placement runs in the build worker
 // (placement.js placeAquatic); this file turns a tile's bins into instanced meshes in tile-local coordinates that
@@ -152,19 +153,38 @@ export const AQUA = {
   uIceHide: { value: 0 }, // 1 over a frozen lake
 };
 const noFlip = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
+// The wind on the plants (wind.js SWAY, as the trees and the grass have it): reeds and rice bend downwind from the
+// water line, the tops furthest, deeper as a gust rolls over, and swing and shiver about that; the rice is the more
+// limber. The pads only shift a little on the water. The submerged weed swings with the water instead. Phases come
+// from the world position (an instance's own hash, a slow wave across the weed beds), so a tile crossing moves nothing.
+const PLANT_SWAY = { 1: [0.14, 1.9], 3: [0.22, 1.5] }; // reeds, rice: lean in radians at 12 m/s under a gust, height (m)
+const windSway = (kind) => kind === 2
+  ? 'float ph = uWaterTime * 1.1 + fract(dot(ip.xz, vec2(0.5, 0.35) / 6.2831853)) * 6.2831853; transformed.x += sin(ph) * 0.12 * position.y; transformed.z += cos(ph * 0.7) * 0.07 * position.y;'
+  : /* glsl */ `
+    #ifdef USE_INSTANCING
+      mat3 aM = mat3(instanceMatrix);
+    #else
+      mat3 aM = mat3(1.0);
+    #endif
+    vec2 W = uSwayWind.xy;
+    float ag = swayGustAt(ip.xz) * uSwayGust.w, ah = swayHash(floor(ip.xz * 3.0)), load = uSwayWind.z;
+    float ph = swayOmega(${kind === 0 ? '0.35' : '0.75'} + 0.25 * ah) * uSwayGust.z + ah * 6.2831853 + position.x * 0.6;
+    ${kind === 0
+      ? `vec3 d = vec3(W.x, 0.0, W.y) * (0.05 * load * (0.3 + 0.7 * ag)) + vec3(sin(ph), 0.0, cos(ph * 0.8)) * 0.012 * smoothstep(1.0, 9.0, uSwayWind.w);`
+      : `float h = max(position.y, 0.0) * sy, bend = h * h / ${PLANT_SWAY[kind][1].toFixed(2)}, k = ${PLANT_SWAY[kind][0].toFixed(3)};
+    float along = k * load * (0.4 + 0.6 * ag + (0.25 + 0.4 * ag) * sin(ph)) + 0.05 * smoothstep(1.0, 9.0, uSwayWind.w) * (0.5 + 0.5 * ag) * sin(ph * 3.1 + 0.7);
+    float across = k * load * (0.1 + 0.2 * ag) * sin(ph * 0.73 + 1.9);
+    vec3 d = vec3(W.x * along - W.y * across, 0.0, W.y * along + W.x * across) * bend;
+    d.y = -0.5 * dot(d.xz, d.xz) / max(h, 0.1);`}
+    transformed += swayToObject(aM, d);`;
 const vertexBody = (kind) => INSTANCE_ORIGIN + /* glsl */ `
   {
     vAqUv = uv; vAqPart = aPart;
     ${kind === 0 || kind === 3 ? 'transformed *= uGrow;' : ''}
-    ${kind === 2 ? '' : 'transformed *= 1.0 - step(0.5, uIceHide);'}
-    ${kind === 2
-      ? 'float ph = uWaterTime * 1.1 + ipRel.x * 0.5 + ipRel.y * 0.35; transformed.x += sin(ph) * 0.12 * position.y; transformed.z += cos(ph * 0.7) * 0.07 * position.y;'
-      : `transformed.y += renderedWave(ipRel, uWaterTime) / sy;
-    ${kind === 0 ? '' : `float hh = max(position.y, 0.0); hh *= hh;
-    float ph = uWaterTime * (1.3 + 0.08 * uWindSpeed) + ipRel.x * 0.37 + ipRel.y * 0.29 + position.x * 0.6;
-    float amp = (0.015 + 0.006 * uWindSpeed) * hh;
-    transformed.x += (sin(ph) + 0.4 * sin(ph * 2.3 + 1.1)) * amp; transformed.z += cos(ph * 0.8) * amp * 0.7;`}`}
+    ${windSway(kind)}
+    ${kind === 2 ? '' : 'transformed *= 1.0 - step(0.5, uIceHide);\n    transformed.y += renderedWave(ipRel, uWaterTime) / sy;'}
   }`;
+const PLANT_DECL = 'uniform float uGrow, uIceHide;\nattribute float aPart;\nvarying vec2 vAqUv;\nvarying float vAqPart;\n' + glslSway;
 const fragCut = /* glsl */ `
   vec4 aq = texture2D( uAquaMap, vAqUv );
   vec2 tsz = vAqUv * 1024.0;
@@ -176,7 +196,7 @@ function makeAquaticMaterial(water, kind) {
   const m = makeLookMaterial({ side: THREE.DoubleSide, alphaToCoverage: true }, {
     wrap: FOLIAGE_WRAP, name: `look-aquatic-${kind}`,
     compile: (shader) => {
-      addSurface(shader, water, AQUA, 'uniform float uGrow, uIceHide;\nattribute float aPart;\nvarying vec2 vAqUv;\nvarying float vAqPart;');
+      addSurface(shader, water, { ...AQUA, ...SWAY }, PLANT_DECL);
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + vertexBody(kind));
       const tan = kind === 1 || kind === 3
         ? '\n  if ( vAqPart < 0.5 ) { float l = dot( diffuseColor.rgb, vec3( 0.3, 0.5, 0.2 ) ); diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.55, 0.4, 0.2 ) * ( 0.35 + 1.6 * l ), uTan ); }'
@@ -193,7 +213,7 @@ function makeAquaticMaterial(water, kind) {
 function makeAquaticDepth(water, kind) {
   const m = new THREE.MeshDepthMaterial();
   m.onBeforeCompile = (shader) => {
-    addSurface(shader, water, AQUA, 'uniform float uGrow, uIceHide;\nattribute float aPart;\nvarying vec2 vAqUv;\nvarying float vAqPart;');
+    addSurface(shader, water, { ...AQUA, ...SWAY }, PLANT_DECL);
     shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + vertexBody(kind));
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform sampler2D uAquaMap;\nuniform float uBloom;\nvarying vec2 vAqUv;\nvarying float vAqPart;')

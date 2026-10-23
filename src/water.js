@@ -31,6 +31,19 @@ const ATLAS_SLACK = 48;   // re-centre once the canoe gets this close to the atl
 export const REFLECTION = { scale: 0.25, reach: 1400, full: 120 };
 // vegetation.js SPECIES indices that stand tall enough to mirror: the trees, the snags and the outcrops
 const MIRRORED = new Set([0, 1, 2, 3, 4, 5, 8, 9, 16]);
+// The wind's fine ripples (windRipples in the shader): six wavelengths, 0.11 m to 0.84 m, each heading off the wind
+// by its own fan angle. A heading is drawn as the two nearest of RIP_DIRS fixed world directions (each wavelength's
+// set turned by its own offset), crossfaded by the angle with their energy kept, so a veering wind moves only the
+// weights. Each direction's phase at the patch centre is kept here in double precision from the world position and
+// the clock, so neither the veer, nor the floating origin's jump at a tile crossing, nor hours of play moves a crest.
+const RIPPLES = 6, RIP_DIRS = 16, RIP_STEP = (2 * Math.PI) / RIP_DIRS, TAU = 2 * Math.PI;
+const RIP = Array.from({ length: RIPPLES }, (_, i) => {
+  const k = TAU / (0.11 * Math.pow(1.5, i));
+  return { k, w: Math.sqrt(9.81 * k + 7.4e-5 * k * k * k), fan: (((i * 0.618 + 0.2) % 1) - 0.5) * 1.9, off: (i * 0.618) % 1 };
+});
+// each fixed direction's own phase, so no two line up
+const RIP_PH = Float64Array.from({ length: RIPPLES * RIP_DIRS }, (_, n) => { const s = Math.sin(n * 12.9898 + 4.1) * 43758.5453; return (s - Math.floor(s)) * TAU; });
+const GUST_DRIFT = 1.6;   // m/s: the cat's paws drift downwind this fast
 // the body of the water, linear albedo: the bed seen through a short column, the open water in a clear lake, the
 // deep blue-green, and the tea of a tannin-stained bog lake. The light (the sun and the sky fill) multiplies it.
 export const WATER_LOOK = {
@@ -217,7 +230,8 @@ const frag = /* glsl */ `
   #else
     uniform vec2 uSkyGlow;
   #endif
-  uniform vec2 uOrigin, uWindDir, uReflTexel;
+  uniform vec2 uOrigin, uReflTexel, uGustOff;
+  uniform vec4 uRip[${RIPPLES * 2}];
   uniform sampler2D uReflection;
   uniform vec2 uPatchLocal;
   uniform float uPatchHalf;
@@ -247,23 +261,24 @@ const frag = /* glsl */ `
   }
   // The wind's ripples as a tilt of the normal (x, z): six short waves, 0.1 to 0.85 m long, fanned about the wind
   // and drifting with it, their crests wandered by a slow warp; each fades out before it would alias (px: metres
-  // per pixel). rough: a slow field drifting downwind, the cat's paws where a gust touches the water.
-  vec2 windRipples(vec2 p, float t, float px, out float rough) {
-    rough = smoothstep(0.36, 0.68, lookFbm((p - uWindDir * t * 1.6) * 0.03, 5u, 2));
+  // per pixel). Each wave is two fixed world directions either side of its heading (uRip, see WaterSystem.update:
+  // the direction, its phase at the patch centre kept on the CPU, its weight), so a veering wind moves weights,
+  // never crests, and a tile crossing moves nothing. pw is the world position, for the noise. rough: a slow field
+  // drifting downwind, the cat's paws where a gust touches the water (uGustOff: the origin less the drift).
+  vec2 windRipples(vec2 p, vec2 pw, float px, out float rough) {
+    rough = smoothstep(0.36, 0.68, lookFbm((p + uGustOff) * 0.03, 5u, 2));
     vec2 tilt = vec2(0.0);
     if (lookFade(0.84, px) <= 0.0) return tilt;   // too far for the longest of them
-    float warp = 5.0 * lookNoise(p * 0.37, 7u);
-    vec2 wp = vec2(-uWindDir.y, uWindDir.x);
-    for (int i = 5; i >= 0; i--) {
+    float warp = 5.0 * lookNoise(pw * 0.37, 7u);
+    vec2 c = p - uPatchLocal;   // the phases are kept at the patch centre: small numbers here
+    for (int i = ${RIPPLES - 1}; i >= 0; i--) {
       float fi = float(i);
       float L = 0.11 * pow(1.5, fi);
       float fade = lookFade(L, px);
       if (fade <= 0.0) break;   // the shorter ones are gone too
-      float a = (fract(fi * 0.618 + 0.2) - 0.5) * 1.9;
-      vec2 d = cos(a) * uWindDir + sin(a) * wp;
-      float k = 6.2831853 / L;
-      float w = sqrt(9.81 * k + 7.4e-5 * k * k * k);
-      tilt += d * (0.07 * cos(k * dot(p, d) - w * t + fi * 1.7 + warp * (0.6 + 0.25 * fi)) * fade);
+      float k = 6.2831853 / L, wph = warp * (0.6 + 0.25 * fi);
+      vec4 a = uRip[i * 2], b = uRip[i * 2 + 1];
+      tilt += (a.xy * (a.w * cos(k * dot(c, a.xy) + a.z + wph)) + b.xy * (b.w * cos(k * dot(c, b.xy) + b.z + wph))) * (0.07 * fade);
     }
     return tilt;
   }
@@ -288,7 +303,8 @@ const frag = /* glsl */ `
     #endif
     // the normal: the swell's own (smooth, from the vertices), tilted by the wind's fine ripples
     float rough;
-    vec2 tilt = windRipples(vLocal.xz, uTime, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore);
+    vec2 pw = vLocal.xz + uOrigin;   // world xz, for the noise (a lattice relative to the origin would jump with it)
+    vec2 tilt = windRipples(vLocal.xz, pw, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore);
     vec3 n0 = normalize(vWaveN);
     vec3 n = normalize(n0 - vec3(tilt.x, 0.0, tilt.y));
     float F = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);   // Schlick: a fifth looking down beside the canoe, nearly all at the far shore
@@ -349,7 +365,7 @@ const frag = /* glsl */ `
     float sx = dFdx(shore), sy = dFdy(shore), det = ex.x * ey.y - ex.y * ey.x;
     float slope = abs(det) > 1e-9 ? length(vec2(sx * ey.y - sy * ex.y, sy * ex.x - sx * ey.x) / det) : 1.0;
     if (shore < 5.0) {
-      float edgeN = lookNoise(p * 0.45 + uTime * 0.04, 11u);
+      float edgeN = lookNoise(pw * 0.45 + uTime * 0.04, 11u);
       float lap = 0.5 + 0.5 * sin(uTime * 0.8 + dot(p, RIP3) * 0.5);
       float edge = 1.0 - smoothstep(0.0, 0.5 + 0.8 * edgeN + 0.35 * lap, shore);
       edgeA = edge * edge * 0.42;
@@ -406,6 +422,7 @@ export class WaterSystem {
     this.fetch = new Float32Array(ATLAS * ATLAS);
     this.cover = new Uint8Array(ATLAS * ATLAS * 4);
     this.wind = { x: 0, z: 1, speed: 2.5, bucket: -1, w: windWeights(0, 1) };
+    this.gustDrift = { x: 0, z: 0 };   // how far the cat's paws have drifted downwind (world metres, integrated)
     this.atlasI = NaN; this.atlasJ = NaN; this.atlasDirty = true;
     const tex = (data, format, type) => { const t = new THREE.DataTexture(data, ATLAS, ATLAS, format, type); t.minFilter = t.magFilter = THREE.NearestFilter; return t; };
     this.shoreTex = tex(this.shore, THREE.RedFormat, THREE.FloatType);
@@ -439,6 +456,8 @@ export class WaterSystem {
       uAtlas: { value: new THREE.Vector4(0, 0, 1 / world.cell, ATLAS) },
       uRippleAmt: { value: 0.3 },
       uWindDir: { value: new THREE.Vector2(0, 1) },
+      uRip: { value: new Float32Array(RIPPLES * 2 * 4) },
+      uGustOff: { value: new THREE.Vector2(this.origin.x, this.origin.z) },
       uReflTexel: { value: new THREE.Vector2(1 / 4, 1 / 4) },
       uSunLight: { value: new THREE.Color(0.6, 0.55, 0.45) },
       uSkyLight: { value: new THREE.Color(0.15, 0.2, 0.28) },
@@ -521,6 +540,7 @@ export class WaterSystem {
     const px = Math.round(cx / s) * s, pz = Math.round(cz / s) * s;
     this.patch.position.set(px, 0, pz);
     this.uniforms.uPatchLocal.value.set(px - this.origin.x, pz - this.origin.z);
+    this.updateRipples(dt, px, pz);
     const ci = w.cellI(cx), cj = w.cellJ(cz);
     if (this.atlasDirty || Math.abs(ci - (this.atlasI + ATLAS / 2)) > ATLAS / 2 - ATLAS_SLACK || Math.abs(cj - (this.atlasJ + ATLAS / 2)) > ATLAS / 2 - ATLAS_SLACK) this.rebuildAtlas(ci, cj);
     // the light the water column sends back: the key (the sun, or the moon at night) and the sky fill as they
@@ -532,6 +552,25 @@ export class WaterSystem {
       if (moon && moon.visible) add(moon.color, moon.intensity / Math.PI);
       u.uSkyLight.value.copy(hemi.color).multiplyScalar(hemi.intensity / Math.PI);
     }
+  }
+
+  // The fine ripples' directions, phases and weights (see RIP) for the patch centre (cx, cz, world metres), and the
+  // cat's paws' drift, from the wind setWind left this frame.
+  updateRipples(dt, cx, cz) {
+    const w = this.wind, R = this.uniforms.uRip.value, heading = Math.atan2(w.z, w.x), t = this.time;
+    for (let i = 0; i < RIPPLES; i++) {
+      const r = RIP[i], f = (heading + r.fan) / RIP_STEP - r.off, j0 = Math.floor(f), blend = (f - j0) * (Math.PI / 2);
+      for (let s = 0; s < 2; s++) {
+        const j = j0 + s, a = (j + r.off) * RIP_STEP, dx = Math.cos(a), dz = Math.sin(a);
+        let ph = r.k * (cx * dx + cz * dz) - r.w * t + RIP_PH[i * RIP_DIRS + (((j % RIP_DIRS) + RIP_DIRS) % RIP_DIRS)];
+        ph -= TAU * Math.floor(ph / TAU);
+        const o = (i * 2 + s) * 4;
+        R[o] = dx; R[o + 1] = dz; R[o + 2] = ph; R[o + 3] = s ? Math.sin(blend) : Math.cos(blend);
+      }
+    }
+    const g = this.gustDrift, l = Math.hypot(w.x, w.z) || 1;
+    g.x += (w.x / l) * GUST_DRIFT * dt; g.z += (w.z / l) * GUST_DRIFT * dt;
+    this.uniforms.uGustOff.value.set(this.origin.x - g.x, this.origin.z - g.z);
   }
 
   // Shore distance, terrain height, ground cover and water level for the cells around the canoe; the
