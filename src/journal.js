@@ -9,6 +9,7 @@ import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, w
 import { UNLOCKS } from './tasks.js';
 import { ITEMS } from './profile.js';
 import { gearIcon as kitIcon } from './outfitter.js';
+import { LURES } from './fishing.js';
 
 const ROWS = 8;        // catches per page
 const PENCIL = [
@@ -256,7 +257,14 @@ export class Journal {
         <div class="lab">Still on the wall</div><div class="wall">${left.map((u) => gearIcon(u.key, true)).join('')}</div>
         <p class="empty">${left.length ? `${left.map((u) => u.label.replace(/ \(.*\)$/, '')).map((s, i) => (i === 0 ? s[0].toUpperCase() + s.slice(1) : s)).join(', ')} ${left.length === 1 ? 'comes' : 'come'} down for tasks turned in.` : 'The wall is bare: you have the lot.'}</p>
       </div>`;
-    return { html, foot: 'five lures in the box: 1–5 with the rod up' };
+    return { html, foot: this.lureFoot() };
+  }
+  // the tackle box in a line: what is in it (the shop's box, when there is one) and the rod's number keys
+  lureFoot() {
+    const n = LURES.length, shop = this.outfitter && this.outfitter.shop;
+    if (!shop || typeof shop.box !== 'function') return `${word(n)} lures in the box: 1–${n} with the rod up`;
+    const k = shop.box().size;
+    return `${k ? `${word(k)} in the tackle box` : 'nothing in the tackle box'} · 1–${n} with the rod up`;
   }
   // the kit you own this season (profile.js), what is in use, and the money
   kitTab(pr) {
@@ -265,6 +273,6 @@ export class Journal {
     const canoe = ITEMS[kit.canoe] ? ITEMS[kit.canoe].label : 'An aluminium canoe';
     const html = `<div class="lede"><h2 id="right-h">${ids.length} ${plural(ids.length, 'thing')} in the kit</h2><div class="sub">${esc(canoe)} · ${kit.packs === 2 ? 'two Duluth packs' : 'one Duluth pack'} · $${pr.money} in hand</div></div>
       <div class="scroll"><ul class="plain">${ids.map(li).join('')}</ul></div>`;
-    return { html, foot: 'five lures in the box: 1–5 with the rod up' };
+    return { html, foot: this.lureFoot() };
   }
 }

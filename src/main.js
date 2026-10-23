@@ -207,7 +207,7 @@ async function main() {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (e.code === 'KeyG' && !player.input.paused) energy.manualEat(); // F is the fishing rod
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
-    if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-5 pick lures while the rod is up
+    if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-7 pick lures while the rod is up
     if (e.code === 'KeyR') settings.toggle('reflections');
     if (e.code === 'KeyN') settings.toggle('mute');
   });
