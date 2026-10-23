@@ -10,6 +10,49 @@ export const DATA_URL = (() => {
   return u.endsWith('/') ? u : u + '/';
 })();
 
+// ---- lake clarity -------------------------------------------------------------------------------------------------
+// How clear a lake is, as a Secchi depth in metres: how far down a white disc stays in sight, and so how far down the
+// bed reads from a canoe (water.js, terrain.js). The DNR has sounded 301 of the 21,191 polygons (`secchiMeasured`);
+// those stay exactly as measured. The bake gave every other one the inverse-distance mean of the sounded lakes within
+// 15 km (rivers 0.8 of it), which keeps the region (the clear Shield lakes up the Gunflint, the browner west) but
+// makes every lake in a district alike, near 2.7 m. A lake's own clarity in the Boundary Waters comes mostly from how
+// much bog drains into it: deep basins in bare rock run clear (5-9 m), shallow lakes and ponds ringed by muskeg run
+// tea-brown (1-2 m). From what the index knows of each lake, the estimate is that regional figure times:
+//   depth   where the DNR's bathymetry gives a maximum depth: 0.514 x maxDepth^0.245, held to 0.7-1.5 (the fit of the
+//           73 sounded lakes with a map: their Secchi over their region's, r = 0.51); 5 m -> 0.76, 15 m -> 1, 30 m -> 1.2
+//   size    ponds below the size the DNR samples are mostly bog and beaver ponds: 0.55 at a fifth of a hectare up to 1
+//           from 10 ha (lakes only: a river's polygons are short by how it is cut, not by what it is); the big lakes
+//           over 400 ha up to 1.1 (the 14 sounded ones over 1000 ha read 1.07 of their region)
+//   flow    creeks 0.85 (on top of the bake's 0.8 for running water: they drain the bogs)
+//   name    a weak hint, since the names are old and not always right (Mud Lake #322 sounds 5 m, Clear Lake #215 2 m):
+//           Mud, Bog, Muskeg, Marsh, Swamp, Rice, Manomin, Beaver, Muck, Tamarack 0.75; Clear, Crystal, Clearwater 1.2
+//   known   a short list of clear lakes the DNR has not sounded, from paddlers' knowledge, set outright (CLEAR_LAKES)
+// held to 0.8-8.5 m. What the index cannot give cheaply (the share of wetland along the shore or in the watershed, the
+// relief round the basin) would sharpen it; it belongs in the bake, which sees the whole grid at once.
+export const CLEAR_LAKES = [ // [name, centroid x, z (matched within 4 km), Secchi m]
+  ['Indiana Lake', -28277, 8513, 6.0],
+  ['Kekekabic Lake', 2124, 2722, 6.5],
+  ['Ogishkemuncie Lake', 11040, -382, 6.0],
+  ['Mountain Lake', 73819, -1934, 7.5],
+  ['Rose Lake', 58384, -1448, 5.5],
+  ['Duncan Lake', 56137, 1313, 5.0],
+];
+const STAINED_NAME = /\b(Mud|Bog|Muskeg|Marsh|Swamp|Rice|Manomin|Beaver|Muck|Tamarack)\b/i, CLEAR_NAME = /\b(Clear|Crystal|Clearwater)\b/i;
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+export function estimateSecchi(l, cellArea = 100) {
+  if (l.secchiMeasured) return l.secchi;
+  const name = l.name || '';
+  for (const [n, x, z, s] of CLEAR_LAKES) if (name === n && Math.hypot(l.cx - x, l.cz - z) < 4000) return s;
+  let s = l.secchiBaked ?? l.secchi ?? 2.6;
+  const lg = Math.log10(Math.max(0.01, (l.cells * cellArea) / 1e4)); // hectares
+  if (l.maxDepth) s *= Math.min(1.5, Math.max(0.7, 0.514 * l.maxDepth ** 0.245));
+  if (!l.river) s *= 0.55 + 0.45 * smooth(-0.7, 1.0, lg);
+  s *= 1 + 0.1 * smooth(2.6, 3.4, lg);
+  if (l.creek) s *= 0.85;
+  if (STAINED_NAME.test(name)) s *= 0.75; else if (CLEAR_NAME.test(name)) s *= 1.2;
+  return Math.min(8.5, Math.max(0.8, s));
+}
+
 export class World extends GridQueries {
   static async load(onProgress = () => {}, base = DATA_URL) {
     onProgress(0.05, 'Reading map data…');
@@ -45,7 +88,15 @@ export class World extends GridQueries {
     this.tileFlags = index.tiles;
     this.levelById = new Float32Array(index.lakes.length + 1);
     this.clarityById = new Float32Array(index.lakes.length + 1).fill(2.6); // Secchi depth, metres
-    for (const l of index.lakes) if (l) { this.levelById[l.id] = l.level; if (l.secchi) this.clarityById[l.id] = l.secchi; }
+    // the DNR's soundings as they are, every other lake's clarity estimated (estimateSecchi below); the record's own
+    // `secchi` takes the estimate too, so the HUD, the journal and the fishing read what the water shows (the bake's
+    // regional figure stays as `secchiBaked`)
+    for (const l of index.lakes) {
+      if (!l) continue;
+      this.levelById[l.id] = l.level;
+      if (!l.secchiMeasured) { l.secchiBaked = l.secchi; l.secchi = +estimateSecchi(l, g.cell * g.cell).toFixed(2); }
+      if (l.secchi) this.clarityById[l.id] = l.secchi;
+    }
     for (const p of this.portages) {
       let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
       for (const [x, z] of p.pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }

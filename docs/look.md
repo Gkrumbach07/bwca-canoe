@@ -180,15 +180,35 @@ baked lightmaps, no PBR, no external assets.
 
 ## Water and lake plants
 
-- `WATER_LOOK` (shallow, mid, deep, stain, ice) is the water's body, graded by depth over the lake's Secchi
-  depth; `REFLECTION = { scale, reach, full }` sets the mirror pass. Terrain, trees, snags and outcrops go on
+- The column (the lake pass, water.js): what comes up out of the water is the bed seen through it and the veil of
+  light the water scatters back. A tint pass (the near patch drawn once more just before the surface, renderOrder 9,
+  multiply blending) multiplies the column's colour into everything the opaque pass left under the water (the bed, its
+  stones and logs, the weed): per channel exp(-K x path x `COLUMN.transmit`), the path down to the bed and back up
+  the refracted view, K = 1.7 / Secchi x the lake's spectral shape (clear: green passes most; stained: red does) + the
+  water's own red. The surface then lays the veil over it (1 - exp(-veil x (path / Secchi)^veilPow): little in the first
+  half of the Secchi depth, about half at it) showing `WATER_LOOK` `clear`, `deep` or `stain`, and the Fresnel mirror
+  over all; past the patch the darkening folds into the veil. `COLUMN` and `WATER_LOOK` are live-tunable.
+- Each lake's Secchi depth: the DNR's 301 soundings as measured, every other lake estimated in world.js
+  (`estimateSecchi`: the bake's regional figure moved by max depth, pond size, flow and name, `CLEAR_LAKES` set
+  outright); the estimate is the lake record's `secchi` too (`secchiBaked` keeps the bake's).
+- The bed (terrain-build.js `bedPre`, terrain.js): under water the splat carries sand, cobble, silt and bedrock in
+  aSplatA and a weed bed in aSplatB.x, aFloor = (Secchi / 10, 0, 1, true depth / 16); the shader paints sand ripples,
+  rounded cobble over gravel, mottled silt, jointed bedrock, weed tufts, the deep ooze and caustics in the sun
+  (`uBedLook`, `uBedMats`; water.js drives `uBedTime` and `uBedSun`). placement.js `bedFeatures` puts boulders (the
+  boulder species) and scree-block stones on the stony beds, sunken logs off wooded shores and awash logs in the
+  quiet shallows.
+- `REFLECTION = { scale, reach, full }` sets the mirror pass. Terrain, trees, snags and outcrops go on
   `REFLECT_SHORE_LAYER` as tiles come in; the canoe and the rod on `REFLECT_LAYER`. The setting (R) turns the
   pass off and the water mirrors the sky alone; the pass also stops 150 m inland.
 - The shore's ripple lines are contours of the shore distance (a 10 m lattice, interpolated), so they are kept to
   the last 2.8 m of water and broken into dashes a metre or three long; further out its contours would run on as
   long strings across a bay.
-- `aquatic.js`: kinds 0 pads, 1 reeds, 2 pondweed, 3 wild rice; the `AQUA` uniforms `uGrow` (pads on the surface
-  June to mid-September), `uBloom`, `uTan`, `uIceHide` come from the season.
+- `aquatic.js`: kinds 0 pads (variants: plain, spatterdock with raised pads, white lily, yellow lily), 1 reeds
+  (bulrush, reed, cattail, sedge tussock), 2 weed (pondweed, milfoil), 3 wild rice; the `AQUA` uniforms `uGrow` (pads
+  on the surface June to mid-September), `uBloom`, `uTan`, `uIceHide` come from the season. placement.js
+  `placeAquatic` grows each where it grows (the bed's softness, a marshy or rocky shore behind, shelter, an inlet, the
+  lake's stain); its depths are to the drawn bed (`surfaceAt`), not the raw cells. A bin is culled by distance from
+  the middle of its own instances plus their spread, not its 640 m region's centre.
 
 ## Rocks
 

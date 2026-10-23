@@ -5,6 +5,7 @@ import { bakeOcclusion } from './occlusion.js';
 import { addSurface, INSTANCE_ORIGIN } from './floating.js';
 import { aquaticAtlas, aquaticUV } from './aquatic-textures.js';
 import { SWAY, glslSway } from './wind.js';
+import { REGION } from './placement.js';
 
 // The lake plants (docs/look.md: crisp graphic clumps that sit in the water). Placement runs in the build worker
 // (placement.js placeAquatic); this file turns a tile's bins into instanced meshes in tile-local coordinates that
@@ -18,7 +19,9 @@ import { SWAY, glslSway } from './wind.js';
 // The season: pads and rice grow in with the summer and go in the fall, the lilies bloom in high summer, the
 // reeds and the rice turn tan, and nothing stands above a frozen lake.
 
-const CULL = [420, 620, 260, 520];   // metres from the camera to a bin's region centre, per kind
+// metres from the camera to the nearest of a bin's instances (makeAquaticMeshes measures from the middle of their
+// spread, plus its half-diagonal) before the bin goes, per kind
+const CULL = [420, 560, 200, 480];
 
 // Cards: indexed quads (upright ones in rows, so the occlusion and the sway have vertices to work with), each
 // corner with its colour, its shading normal, its atlas UV and its part (0 leaf, 1 flower).
@@ -28,12 +31,14 @@ class Cards {
     this.p.push(x, y, z); this.n.push(n.x, n.y, n.z); this.c.push(col.r, col.g, col.b); this.uv.push(uv[0], uv[1]); this.part.push(part);
     return this.p.length / 3 - 1;
   }
-  // a card lying flat at height y: centre (x, z), half size r, turned by a
-  flat(x, y, z, r, a, sprite, col, part = 0) {
-    const c = Math.cos(a), s = Math.sin(a), up = new THREE.Vector3(0, 1, 0), k = [];
+  // a card lying flat at height y: centre (x, z), half size r, turned by a; tilt lifts it about its own z axis (a pad
+  // standing up out of the water on its stalk), its centre at y
+  flat(x, y, z, r, a, sprite, col, part = 0, tilt = 0) {
+    const c = Math.cos(a), s = Math.sin(a), ct = Math.cos(tilt), st = Math.sin(tilt), k = [];
+    const up = new THREE.Vector3(-st * c, ct, -st * s);
     for (const [u, v] of [[0, 0], [1, 0], [1, 1], [0, 1]]) {
-      const lx = (u * 2 - 1) * r, lz = (v * 2 - 1) * r;
-      k.push(this.vert(x + lx * c - lz * s, y, z + lx * s + lz * c, up, col, aquaticUV(sprite, u, v), part));
+      const lx = (u * 2 - 1) * r, lz = (v * 2 - 1) * r, tx = lx * ct, ty = lx * st;
+      k.push(this.vert(x + tx * c - lz * s, y + ty, z + tx * s + lz * c, up, col, aquaticUV(sprite, u, v), part));
     }
     this.ix.push(k[0], k[2], k[1], k[0], k[3], k[2]);
   }
@@ -75,7 +80,7 @@ const tint = (rng, r, g, b, j = 0.06) => new THREE.Color(r * (1 - j + 2 * j * rn
 // a raft of pads: a loose cluster grown pad by pad, each touching or overlapping one already there, sizes mixed,
 // each a hair above the last so the overlaps never fight; `flower` 1 white lilies, 2 yellow pond lilies
 function padRaft(rng, flower) {
-  const C = new Cards(), n = 7 + Math.floor(rng() * 8), pads = [];
+  const C = new Cards(), n = 11 + Math.floor(rng() * 11), pads = [];
   for (let i = 0; i < n; i++) {
     const r = 0.15 + Math.pow(rng(), 1.6) * 0.3;
     let x = 0, z = 0;
@@ -98,19 +103,41 @@ function padRaft(rng, flower) {
   return C.build();
 }
 
+// a raft of yellow pond lily (spatterdock): long heart-shaped pads, big and leathery, crowded and overlapping, a few of
+// them standing up out of the water on their stalks at a slant, and a few yellow ball flowers held just over the water
+function spatterRaft(rng) {
+  const C = new Cards(), n = 9 + Math.floor(rng() * 8), pads = [];
+  for (let i = 0; i < n; i++) {
+    const r = 0.17 + Math.pow(rng(), 1.4) * 0.17;
+    let x = 0, z = 0;
+    if (i) { const o = pads[Math.floor(rng() * pads.length)], a = rng() * Math.PI * 2, d = (o.r + r) * (0.5 + rng() * 0.45); x = o.x + Math.cos(a) * d; z = o.z + Math.sin(a) * d; }
+    pads.push({ x, z, r });
+    const up = rng() < 0.3, col = tint(rng, 1.0, 1.0, 0.92);
+    C.flat(x, up ? 0.06 + rng() * 0.14 : i * 0.004, z, r, rng() * Math.PI * 2, 'spatter', col, 0, up ? 0.5 + rng() * 0.6 : 0);
+  }
+  for (let f = 1 + Math.floor(rng() * 3); f > 0; f--) {
+    const o = pads[Math.floor(rng() * pads.length)], x = o.x + (rng() - 0.5) * o.r, z = o.z + (rng() - 0.5) * o.r;
+    const s = 0.045 + rng() * 0.015, y = 0.05 + rng() * 0.08, col = tint(rng, 1, 1, 1, 0.03), yaw = rng() * Math.PI;
+    C.flat(x, y + s * 0.55, z, s, rng() * Math.PI, 'yellowTop', col, 1);
+    for (const dy of [0, Math.PI / 2]) C.upright(x, y - 0.06, z, s * 2.1, s * 1.5 + 0.06, yaw + dy, 0, 0, 'yellowSide', col, [0, 1], x, z, 1);
+  }
+  return C.build();
+}
+
 // a clump of reeds: cards rooted near the middle, their faces spread round so it is full from any side, leaning out
 // a little; kind 0 bulrush, 1 reed and sedge, 2 cattail. Roots go below the water so the clump stands in it.
 const CLUMP = [
   { sprite: 'rush', cards: [3, 5], w: [0.5, 0.75], h: [1.3, 1.9], col: [0.95, 1.0, 0.95] },
   { sprite: 'reed', cards: [3, 5], w: [0.7, 1.0], h: [1.0, 1.5], col: [1.0, 1.0, 0.95] },
   { sprite: 'cattail', cards: [3, 4], w: [0.75, 1.0], h: [1.6, 2.2], col: [1.0, 1.0, 1.0] },
+  { sprite: 'sedge', cards: [5, 7], w: [0.8, 1.2], h: [0.6, 0.95], col: [1.0, 1.0, 0.95], spread: 0.3 },
 ];
 const ROWS = [0, 0.12, 0.24, 0.45, 1];
 function reedClump(rng, kind) {
   const K = CLUMP[kind], C = new Cards(), n = K.cards[0] + Math.floor(rng() * (K.cards[1] - K.cards[0] + 1));
   const yaw0 = rng() * Math.PI;
   for (let i = 0; i < n; i++) {
-    const a = rng() * Math.PI * 2, d = rng() * 0.22, x = Math.cos(a) * d, z = Math.sin(a) * d;
+    const a = rng() * Math.PI * 2, d = rng() * (K.spread || 0.22), x = Math.cos(a) * d, z = Math.sin(a) * d;
     const w = K.w[0] + rng() * (K.w[1] - K.w[0]), h = K.h[0] + rng() * (K.h[1] - K.h[0]);
     const yaw = yaw0 + (i / n) * Math.PI + (rng() - 0.5) * 0.4, lean = 0.08 + rng() * 0.14;
     C.upright(x, -0.35, z, w, h + 0.35, yaw, Math.cos(a) * lean, Math.sin(a) * lean, K.sprite, tint(rng, ...K.col, 0.07), ROWS, 0, 0);
@@ -129,10 +156,11 @@ function ricePatch(rng) {
   return occluded(C.build());
 }
 
-// submerged weed: crossed cards rising from the bed, y from 0 (bed) to 1 (tip) for the sway
-function weed(rng) {
-  const C = new Cards(), yaw = rng() * Math.PI;
-  for (let i = 0; i < 3; i++) C.upright((rng() - 0.5) * 0.15, 0, (rng() - 0.5) * 0.15, 0.55 + rng() * 0.2, 1.0, yaw + (i / 3) * Math.PI, 0, 0, 'weed', tint(rng, 0.85, 0.95, 0.85, 0.08), [0, 0.3, 1], 0, 0);
+// submerged weed: crossed cards rising from the bed, y from 0 (bed) to 1 (tip) for the sway; pondweed, or a bushier
+// clump of milfoil and coontail
+function weed(rng, sprite = 'weed') {
+  const C = new Cards(), yaw = rng() * Math.PI, bush = sprite === 'milfoil', n = bush ? 4 : 3;
+  for (let i = 0; i < n; i++) C.upright((rng() - 0.5) * 0.25, 0, (rng() - 0.5) * 0.25, (bush ? 0.75 : 0.55) + rng() * 0.2, bush ? 0.8 : 1.0, yaw + (i / n) * Math.PI, 0, 0, sprite, tint(rng, 0.85, 0.95, 0.85, 0.08), [0, 0.3, 1], 0, 0);
   return C.build();
 }
 
@@ -228,9 +256,11 @@ export function makeAquaticKit(water, seed = 9) {
   AQUA.uAquaMap.value = aquaticAtlas();
   const rng = mulberry32(seed);
   const geos = [
-    [padRaft(rng, 0), padRaft(rng, 0), padRaft(rng, 1), padRaft(rng, 2)],
-    [reedClump(rng, 0), reedClump(rng, 1), reedClump(rng, 2)],
-    [weed(rng), weed(rng)],
+    // pads: plain, spatterdock, white lilies, yellow lilies among plain pads (placement.js placeAquatic picks them)
+    [padRaft(rng, 0), spatterRaft(rng), padRaft(rng, 1), padRaft(rng, 2)],
+    // reeds: bulrush, reed and grass, cattail, sedge
+    [reedClump(rng, 0), reedClump(rng, 1), reedClump(rng, 2), reedClump(rng, 3)],
+    [weed(rng), weed(rng, 'milfoil')],
     [ricePatch(rng), ricePatch(rng)],
   ];
   const mats = [0, 1, 2, 3].map((k) => makeAquaticMaterial(water, k));
@@ -263,7 +293,14 @@ export function makeAquaticMeshes(bins, kit) {
     mesh.boundingSphere.radius += 2.5; // the sway and the swell
     mesh.matrixAutoUpdate = false;
     mesh.renderOrder = b.kind === 2 ? 0 : 11;
-    mesh.userData.lod = { full: geo, low: geo, cx: b.cx, cz: b.cz, lod: Infinity, cull: CULL[b.kind] ?? 600 };
+    // culled by distance from the middle of the instances' own spread (not the 640 m region's centre, which left the
+    // weed under the canoe culled in a region's corner), that spread's half-diagonal added. The instances are
+    // tile-local; regions nest in tiles, so the region holding their mean gives the tile's corner from its centre.
+    const a = b.matrices;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, mx = 0, mz = 0;
+    for (let i = 0; i < b.count; i++) { const x = a[i * 16 + 12], z = a[i * 16 + 14]; mx += x; mz += z; if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+    const ox = b.cx - (Math.floor(mx / b.count / REGION) + 0.5) * REGION, oz = b.cz - (Math.floor(mz / b.count / REGION) + 0.5) * REGION;
+    mesh.userData.lod = { full: geo, low: geo, cx: ox + (x0 + x1) / 2, cz: oz + (z0 + z1) / 2, lod: Infinity, cull: (CULL[b.kind] ?? 600) + Math.hypot(x1 - x0, z1 - z0) / 2 };
     meshes.push(mesh);
   }
   return meshes;
