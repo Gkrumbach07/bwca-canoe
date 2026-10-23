@@ -200,7 +200,12 @@ export class Outfitter {
     else if (act === 'start') this.start();
     else if (act === 'carryon') this.carryOn();
     else if (act === 'callit') this.callIt();
-    else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') { this.tasks.act(id, this.at.ep); this.save(); this.render(); }
+    else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
+      // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
+      const r = this.tasks.act(id, this.at.ep);
+      if (r && r.words && /^claim/.test(String(id))) this.greeting = r.words;
+      this.save(); this.render();
+    }
   }
   // the season's date, before it is stamped: a day either way (a month with Shift), never before the day the counter
   // opened. The clock goes with it, so the season behind the counter is the one you will paddle in.

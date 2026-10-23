@@ -644,7 +644,8 @@ export class Tasks {
     const list = away.map((t) => {
       const L = this.landing(t.from), k = KINDS[t.kind];
       const state = t.status === 'done' ? (t.from === ep ? '' : `done · claim at ${esc(L ? L.name : 'its outfitter')}, entry point ${t.from}`) : esc(k && k.progress ? k.progress(t) : 'on the go');
-      const btn = t.status === 'done' && t.from === ep ? ` <button type="button" class="stamp small" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>` : '';
+      // done, from this board (off its pins): claim it; done, from another board: the keeper says where it is paid
+      const btn = t.status === 'done' ? ` <button type="button" class="stamp small${t.from === ep ? '' : ' quiet'}" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>` : '';
       return `<li><b>${esc(t.title)}</b> · $${t.pay}${state ? ` · <span class="soft">${state}</span>` : ''}${btn}</li>`;
     }).join('');
     const elsewhere = away.length ? `<div class="elsewhere"><div class="lab">Taken from other boards</div><ul>${list}</ul></div>` : '';
