@@ -12,7 +12,8 @@ import { clamp } from './rng.js';
 const BASE = 0.00018;      // per second of the clock at its full rate: a day of doing nothing costs about a fifth of the meter
 // the efforts, like the base, are per second of the clock at its full rate: while you travel in Adventure the clock
 // runs at a third (trip.js), and so does what the effort costs, so a game day of travel costs the same in either mode
-const PADDLE = 0.0007;     // at a cruising 2 m/s in calm air
+const PADDLE = 0.0007;     // at a cruise in calm air
+const CRUISE = 2.5;        // m/s: what W holds in calm air (player.js); hustling past it costs more, drifting less
 const CARRY = 0.0004;      // walking a portage with one day of food (no load known), or with 40 kg on you
 const LOAD_REF = 40;       // kg: the carry drain scales with player.loadKg / LOAD_REF
 const SWIM = 0.0009;
@@ -118,7 +119,7 @@ export class Energy {
       if (power > 0.1 && v > 0.1) {
         let head = 0;
         if (wind) { const f = p.forward, wd = wind.dir; head = Math.max(0, -(f.x * wd.x + f.z * wd.z)) * wind.speed / 6; }
-        const effort = Math.pow(v / 2, 1.5) * (p.input.held('ShiftLeft', 'ShiftRight') ? 1.25 : 1);
+        const effort = Math.pow(v / CRUISE, 1.5) * (p.input.held('ShiftLeft', 'ShiftRight') ? 1.25 : 1);
         travel = PADDLE * effort * (1 + 0.8 * head) * power;
       } else if (v < 0.3) recover = REST;
     } else if (p.mode === 'carry' || p.mode === 'walk') {
