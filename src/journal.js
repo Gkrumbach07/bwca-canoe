@@ -2,9 +2,9 @@
 // cells, the energy bar, the distances, portages, lakes and nights, the tasks on the go, a pencil note. The
 // right page has tabs: Catches (the log, with personal bests), Tasks (the notices taken on, where each is paid, the
 // season's earnings), Lakes (where you have been), Trips (the logbook: every trip and how it ended), Gear (the kit you
-// own, from the season's profile). Data comes from the fishing code (log, bests), the tasks, the energy, the
-// outfitter's trip record, the trip's permit and logbook (trip.js, reached through the outfitter), the profile
-// (profile.js) and the trip tally (trip-stats.js).
+// own, from the season's profile), Photos (the prints the camera keeps, photo.js). Data comes from the fishing code
+// (log, bests), the tasks, the energy, the outfitter's trip record, the trip's permit and logbook (trip.js, reached
+// through the outfitter), the profile (profile.js), the trip tally (trip-stats.js) and the camera (photo.js).
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { UNLOCKS } from './tasks.js';
 import { ITEMS } from './profile.js';
@@ -104,7 +104,7 @@ export class Journal {
     const c = this.core;
     return [this.tab, this.page, f ? f.logVersion : 0, en ? Math.round(en.value * 100) : 0, en ? en.food : 0, st ? Math.round(st.km * 10) : 0, st ? st.portages : 0, st ? st.lakes.length : 0, st ? st.nights.length : 0,
       ts ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', ts ? ts.unlocks.length : 0, Math.floor(this.day.hours * 4), this.dayN,
-      c ? `${c.mode}${c.active}${c.book.trips.length}${c.state.wet}` : ''].join('|');
+      c ? `${c.mode}${c.active}${c.book.trips.length}${c.state.wet}` : '', this.photos ? this.photos.version : 0].join('|');
   }
 
   render(force) {
@@ -166,9 +166,9 @@ export class Journal {
 
   // --- the right page -------------------------------------------------------------------------------------
   rightPage() {
-    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ...(this.core ? [['trips', 'Trips']] : []), ['gear', 'Gear']];
+    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ...(this.core ? [['trips', 'Trips']] : []), ['gear', 'Gear'], ...(this.photos ? [['photos', 'Photos']] : [])]; // hubs 3B: the prints
     const nav = `<nav class="tabs" aria-label="Journal pages">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`;
-    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'gear' ? this.gearTab() : this.catchesTab();
+    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'gear' ? this.gearTab() : this.tab === 'photos' && this.photos ? this.photosTab() : this.catchesTab();
     const pageNo = (this.dayN || 0) * 2 + 1;
     return `<section class="page right" aria-labelledby="right-h"><div class="ribbon" aria-hidden="true"></div>${nav}<div class="tabpage">${body.html}</div>
       <div class="foot"><span>${body.foot || ''}</span><span class="keys"><kbd>J</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
@@ -194,7 +194,7 @@ export class Journal {
     // the notices taken on, the finished ones first, each with where it is paid
     const card = (t) => {
       const state = t.status === 'done' ? `Done · claim it at ${esc(at(t.from))}, entry point ${t.from}.` : `On the go · ${esc(ts.progressOf ? ts.progressOf(t) : '')}`;
-      return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${kinds[t.kind] || esc(t.kind)} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft">${state}</span></span></div>`;
+      return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${kinds[t.kind] || esc((ts.kinds && ts.kinds[t.kind] && ts.kinds[t.kind].label) || t.kind)} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft">${state}</span></span></div>`;
     };
     const list = [...done, ...open].map(card).join('');
     const paid = (ts.claimed || []).slice(-5).reverse();
@@ -265,6 +265,25 @@ export class Journal {
     if (!shop || typeof shop.box !== 'function') return `${word(n)} lures in the box: 1–${n} with the rod up`;
     const k = shop.box().size;
     return `${k ? `${word(k)} in the tackle box` : 'nothing in the tackle box'} · 1–${n} with the rod up`;
+  }
+  // hubs 3B: the prints (photo.js), newest first, four to a page: the picture, its caption in pencil, and the notice it
+  // went to (paid, once the notice has been claimed)
+  photosTab() {
+    const ph = this.photos, list = ph.prints(), per = 4, pages = Math.max(1, Math.ceil(list.length / per));
+    this.page = Math.min(this.page, pages - 1);
+    const paid = new Set(((this.tasks && this.tasks.claimed) || []).map((c) => c.id)), tilt = [-1.2, 0.9, 0.6, -0.8];
+    const cards = list.slice(this.page * per, this.page * per + per).map((p, i) => `<figure class="print" style="--tilt:${tilt[i % 4]}deg">
+      ${p.url ? `<img src="${p.url}" width="240" height="135" alt="${esc(p.caption)}">` : '<div class="blank">developing…</div>'}
+      <figcaption>${esc(p.caption)}${p.notice ? `<span class="for">for “${esc(p.notice.title)}”${paid.has(p.notice.id) ? ' · paid' : ''}</span>` : ''}</figcaption></figure>`).join('');
+    const film = ph.film, n = list.length;
+    const sub = film === '35mm' ? 'The 35 mm: C raises it, Space takes the picture. The last 24 are kept; the oldest goes first.'
+      : film === 'disposable' ? `The disposable has ${word(ph.shotsLeft)} ${plural(ph.shotsLeft, 'picture')} left. C raises it, Space takes the picture.`
+        : 'No camera. A 35 mm is $25 on the shelves at any outfitter; a photo notice comes with a disposable on loan.';
+    const html = `<div class="lede"><h2 id="right-h">${n ? `${n} ${plural(n, 'print')}` : 'No pictures yet'}</h2><div class="sub">${sub}</div></div>
+      ${n ? `<div class="prints">${cards}</div>` : '<div class="empty">A picture you take comes back as a print, here.</div>'}`;
+    const more = n - (this.page + 1) * per;
+    const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'the newest first';
+    return { html, foot };
   }
   // the kit you own this season (profile.js), what is in use, and the money
   kitTab(pr) {
