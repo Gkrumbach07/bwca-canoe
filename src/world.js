@@ -126,7 +126,8 @@ export class World extends GridQueries {
     return f ? f.s.lvl[f.m] * 0.1 : 0;
   }
   // ground cover of a cell (cover | gold << 8 | ground class << 16 | moss and canopy shade nibbles << 24, see
-  // placement.js coverField and tile-worker.js packFloor); 0 until the fine tile is in
+  // placement.js coverField and tile-worker.js packFloor; the grass's per-cell splat bytes follow these four);
+  // 0 until the fine tile is in
   coverCell(i, j) {
     if (i < 0 || j < 0 || i >= this.width || j >= this.height) return 0;
     const T = this.tile, t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)];

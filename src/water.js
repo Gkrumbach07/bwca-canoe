@@ -81,7 +81,8 @@ export const glslSurface = /* glsl */ `
   float atlasLevel(vec2 rel) { return levelAt(rel); }
   float shoreAt(vec2 rel) { return bilinear(uShoreTex, rel); }
   // ground cover (r: grass cover, g: golden / burn) with its own bilinear filter; b holds the ground class,
-  // a the moss weight (high nibble) and canopy shade (low nibble) the terrain's splat uses (groundcover.js reads it)
+  // a the moss weight (high nibble) and canopy shade (low nibble); the grass blends the terrain's own per-cell splat
+  // from the bytes after each tile's four-byte cover (placement.js coverField, groundcover.js)
   vec2 coverAt(vec2 rel) {
     vec2 f = (rel - uAtlas.xy) * uAtlas.z - 0.5;
     vec2 fi = floor(f), a = f - fi;
