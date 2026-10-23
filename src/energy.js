@@ -343,9 +343,12 @@ export class Energy {
     this.value = clamp(v, 0, 1);
     if (this.value <= 0) {
       if (this.live) {
-        // spent: eat if hunger is part of it; with nothing to eat or drink, someone comes out for you
-        if (this.hasFood && this.need.food < 0.8 && now - this.lastMealAbs > 1) this.meal('cold', 'You stop and eat');
-        else if (!this.hasFood && this.bottle <= 0.001 && this.onEvac) this.onEvac('food');
+        // spent: eat if hunger is part of it (the food need is low, or it is what holds the ceiling down; a bar held at
+        // 0 by tiredness alone is not fed, or it ate a ration every five hours until the pack was empty); with nothing
+        // to eat or drink, someone comes out for you
+        const nd = this.need, hunger = nd.food < 0.5 || 0.4 + 0.6 * nd.food <= Math.min(this.restNeed, 0.4 + 0.6 * nd.water) + 1e-6;
+        if (this.hasFood && hunger && now - this.lastMealAbs > 1) this.meal('cold', 'You stop and eat');
+        else if (!this.hasFood && this.bottle <= 0.001 && this.onEvac) this.onEvac('spent');
       } else if (this.hasFood) this.meal('cold', 'You stop and eat');
       else if (this.onEvac) this.onEvac('food');
     }
