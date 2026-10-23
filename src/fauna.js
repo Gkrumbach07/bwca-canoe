@@ -128,6 +128,7 @@ export class Fauna {
     return this.birds.force(kind);
   }
 
+  subjects() { const o = [], w = this.world, B = this.birds; for (const m of this.moose.list) if (m.alive) o.push({ kind: 'moose', bull: m.bull, calf: m.scale < 0.7, x: m.x, y: w.heightAt(m.x, m.z) + 1.45 * m.scale, z: m.z, h: 2.2 * m.scale }); for (const b of this.beavers.list) if (b.lodge && b.state !== 'home' && b.state !== 'under') o.push({ kind: 'beaver', x: b.x, y: this.levelAt(b.x, b.z) + 0.1, z: b.z, h: 0.3 }); for (const b of [...B.eagles, ...B.gulls, B.raven]) if (b && b.alive) o.push({ kind: b.kind, x: b.x, y: b.y, z: b.z, h: b.kind === 'eagle' ? 0.9 : 0.5 }); if (this.loons) for (const l of this.loons.loons) if (l.alive && l.state !== 'under') o.push({ kind: 'loon', x: l.x, y: l.level + l.y + 0.15, z: l.z, h: 0.35 }); return o; } // hubs 3B: what is out now for the camera (photo.js): kind, the middle of the body (x, y, z) and its height h
   // what is out, and what it costs this frame: instanced draws (one per part with any instance) and triangles
   get stats() {
     let calls = 0, tris = 0;

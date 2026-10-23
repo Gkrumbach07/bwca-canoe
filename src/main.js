@@ -47,6 +47,7 @@ import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
 import { sheets } from './sheets.js'; // hubs 2D
 import { Shop } from './shop.js'; // hubs 2B
+import { PhotoCamera } from './photo.js'; // hubs 3B
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -224,6 +225,12 @@ async function main() {
   outfitter.rides = rides;
   tasks.leanOf = (ep) => boardLean(ep, world);
   outfitter.keeperVoice = true; // the shop's counter (2B) renders the keeper, the signature and the rides itself, so 2C's stand-ins stay off
+  // hubs 3B: the camera and the photo notices (photo.js). C raises it (the $25 35 mm, or the disposable the first photo
+  // notice of a season lends), Space takes the picture; a subject counts near the middle of the print, near enough and
+  // not hidden by the land (fauna.subjects), and the print is kept for the journal's Photos tab. Made before the title,
+  // so its Esc lowers the camera ahead of the pause card.
+  const photo = new PhotoCamera({ world, player, chase, camera, renderer, fauna, day, hud, tasks, outfitter, profile, audio, veil, fishing, camp });
+  journal.photos = photo;
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -247,6 +254,7 @@ async function main() {
   window.__game.profile = profile; // hubs 1A
   window.__game.props = { storeLayout, onStore, storeLayouts, setStoreNotices, stats: storeStats }; // hubs 2A
   window.__game.shop = shop; // hubs 2B
+  window.__game.photo = photo; // hubs 3B
   window.__game.packs = packs; // trip core B
   Object.assign(window.__game, { camp, campsites, fires, lamp }); // trip core C
   // hubs 3A: camp chores (chores.js, run by the camp): firewood stacked by the ring, the fire fed and burning down, the
@@ -273,6 +281,7 @@ async function main() {
       fishing.update(dt, ts); // its HUD state must exist even behind the card; the cleared input keeps the rod still
     } else {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
+      photo.before(dt); // hubs 3B: with the camera up, its keys (the aim, Space) come before anyone else's E and Space
       outfitter.update(dt * ts);
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
       tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
@@ -331,6 +340,7 @@ async function main() {
     renderer.shadowMap.autoUpdate = sun.intensity > 0.001;
     water.renderReflection(renderer, scene, camera, player.level || world.levelAt(player.x, player.z));
     post.render();
+    photo.afterDraw(); // hubs 3B: a picture taken this frame is cut from the canvas as drawn
   };
   window.__game.step = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); draw(); };
   window.__game.advance = (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) frame(dt); }; // the simulation only, no drawing
