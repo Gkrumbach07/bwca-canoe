@@ -39,10 +39,12 @@ export class TripStats {
       if (m > 0) { this.km += m / 1000; this.touch((d) => { d.km += m / 1000; }); }
     }
     if (p.mode === 'carry') {
-      if ((this.t -= dt) <= 0) { this.t = 0.5; const tr = p.nearestTrail(p.x, p.z, 12); if (tr && tr.dist < 6) this.carried = { name: tr.def.name, rods: tr.def.rods }; }
+      if ((this.t -= dt) <= 0) { this.t = 0.5; const tr = p.nearestTrail(p.x, p.z, 12); if (tr && tr.dist < 6) this.carried = { name: tr.def.name, rods: tr.def.rods, def: tr.def }; }
     }
-    // a portage walked end to end: launched off your shoulders, or (a double portage) from the far end's ground
-    if ((this.lastMode === 'carry' || this.lastMode === 'walk') && p.mode === 'paddle' && this.carried) {
+    // a portage walked end to end: launched off your shoulders, or (a double portage) from the far end's ground, at
+    // one of the trail's own ends (not afloat at a landing after an evacuation)
+    const atEnd = (c) => !c.def || c.def.launch.some((l) => Math.abs(l.x - p.x) < 40 && Math.abs(l.z - p.z) < 40);
+    if ((this.lastMode === 'carry' || this.lastMode === 'walk') && p.mode === 'paddle' && this.carried && atEnd(this.carried)) {
       this.portages++; this.rods += this.carried.rods; this.touch((d) => { d.portages++; }); this.carried = null;
     }
     if (p.mode !== 'carry' && p.mode !== 'walk') this.carried = null;

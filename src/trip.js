@@ -267,7 +267,11 @@ export class Trip {
     }
     if (st) {
       if (st.carried) this.lastTrail = st.carried;
-      if (st.portages > this.lastPortages && this.lastTrail) { this.log('portage', { name: this.lastTrail.name, rods: this.lastTrail.rods }); this.seen('portages', this.lastTrail.name); }
+      if (st.portages > this.lastPortages && this.lastTrail) {
+        const t = this.lastTrail, l = t.def && t.def.launch[0]; // by place: several trails share a name ("Kawishiwi River – Kawishiwi River")
+        this.log('portage', { name: t.name, rods: t.rods });
+        this.seen('portages', l ? `${Math.round(l.x)}:${Math.round(l.z)}` : t.name);
+      }
       this.lastPortages = st.portages;
     }
     if ((this.seenT -= dt) <= 0) {
