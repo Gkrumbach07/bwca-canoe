@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clock12 } from './hud.js';
+import { clock12, esc } from './hud.js';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, clamp, lerp, smoothstep, hash2 } from './rng.js';
 import { makeToonMaterial, smoothToon } from './rocks.js';
@@ -722,7 +722,8 @@ export class Fishing {
     fx.pos.set(p.x + f.x * 0.9 + rx * 1.6, y + 1.05, p.z + f.z * 0.9 + rz * 1.6);
     fx.look.set(p.x - f.x * 1.25, y + 0.5, p.z - f.z * 1.25);
     this.chase.focus = fx;
-    p.prompt = { key: 'E', text: 'Let it go · <kbd>K</kbd>Keep it on the stringer' };
+    const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.world.lakeIdAt(p.x, p.z), L.length) : null; // hubs 1C: a notice taken on wants it
+    p.prompt = { key: 'E', text: `Let it go · <kbd>K</kbd>${want ? `Keep it for “${esc(want.title)}”` : 'Keep it on the stringer'}` };
   }
 
   release(keep) {

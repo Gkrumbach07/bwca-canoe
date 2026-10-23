@@ -297,7 +297,6 @@ export class Tasks {
   attach({ day = null, fishing = null, outfitter = null } = {}) { if (day) this.day = day; if (fishing) this.fishing = fishing; if (outfitter) this.outfitter = outfitter; return this; }
   get profile() { const g = window.__game; return (g && g.profile) || (this.outfitter && this.outfitter.profile) || null; }
   get money() { const p = this.profile; return p && typeof p.money === 'number' ? p.money : this.purse; }
-  get fishingOn() { return true; }
   get kinds() { return KINDS; } // the registry, for the console and the tests
   has(key) { return this.unlocks.some((u) => u.key === key); }
   note(t) { if (t && this.onNote) this.onNote(t); }
@@ -474,8 +473,6 @@ export class Tasks {
     }
     return null;
   }
-  // the old outfitter's call (until stream A's counter reads the board itself): write up this landing's board
-  generate(landing) { this.board(landing.ep); return this.filling.get(landing.ep) || Promise.resolve(); }
 
   // --- taking, doing, claiming --------------------------------------------------------------------------------
   take(id) {
@@ -562,7 +559,6 @@ export class Tasks {
     this.boardChanged();
     return r;
   }
-  endTrip() { /* open trips: the notices taken on are kept across trips and evacuations */ }
   reset() {
     for (const id of [...this.props.keys()]) this.removeProp(id);
     this.ads.clear(); this.boards = {}; this.filling.clear();
@@ -575,9 +571,8 @@ export class Tasks {
   // taken on wants goes into that notice's cooler (the best paying first), and the words come back for the catch
   // line; otherwise null and it goes on the stringer.
   onCatch(species, lakeId, lengthCm = 0, kept = true) {
-    const ev = { type: 'catch', species: species === 'trout' ? 'laketrout' : String(species || '').toLowerCase(), lake: lakeId, cm: lengthCm, kept: !!kept };
-    const fits = this.active.filter((t) => KINDS[t.kind] && KINDS[t.kind].fits && KINDS[t.kind].fits(this, t, ev)).sort((a, b) => b.pay - a.pay || a.id - b.id);
-    for (const t of fits) {
+    const ev = catchEvent(species, lakeId, lengthCm, kept);
+    for (const t of this.fitting(ev)) {
       const words = KINDS[t.kind].onEvent(this, t, ev);
       if (!words) continue;
       this.note(words);
@@ -588,6 +583,10 @@ export class Tasks {
     for (const t of this.active) { const k = KINDS[t.kind]; if (k && !k.fits && k.onEvent) k.onEvent(this, t, ev); }
     return null;
   }
+  // the notices taken on that a catch fits, the best paying first
+  fitting(ev) { return this.active.filter((t) => KINDS[t.kind] && KINDS[t.kind].fits && KINDS[t.kind].fits(this, t, ev)).sort((a, b) => b.pay - a.pay || a.id - b.id); }
+  // the notice a landed fish would go to if kept (fishing.js says so on the catch's prompt), or null
+  wants(species, lakeId, lengthCm = 0) { return this.fitting(catchEvent(species, lakeId, lengthCm, true))[0] || null; }
   // any other event a kind may want (arrivals, photos, later): every notice taken on hears it
   onEvent(ev) {
     let hit = false;
@@ -686,23 +685,6 @@ export class Tasks {
     return shortDate(date.getUTCFullYear(), n - absDay(date.getUTCFullYear(), 0));
   }
 
-  // the old outfitter's counter, until stream A's renders boardSection itself (outfitter.tasksBoard): its render
-  // reads the board as an array, so it sees an empty one through a proxy, and its board column is swapped for this
-  // one after each render; the 'task' buttons go to act().
-  legacyCounter(o) {
-    if (!o || o.tasksBoard || o._legacyBoard) return;
-    o._legacyBoard = true;
-    const real = this;
-    o.tasks = new Proxy(this, { get: (t, k) => { if (k === 'board') return []; if (k === 'turnIn') return () => []; const v = t[k]; return typeof v === 'function' ? v.bind(t) : v; } });
-    const render = o.render.bind(o), act = o.act.bind(o);
-    o.render = () => {
-      render();
-      const sec = o.open && o.el.panel ? o.el.panel.querySelector('section.board') : null;
-      if (sec && !sec.classList.contains('cork') && o.at) sec.outerHTML = real.boardSection(o.at.ep);
-    };
-    o.act = (a, id, ev) => { if (a === 'task') { real.act(id, o.at.ep); o.save(); o.render(); } else act(a, id, ev); };
-  }
-
   // --- persistence -------------------------------------------------------------------------------------------
   serialize() {
     return { v: 3, seed: this.seed, nextId: this.nextId, ads: [...this.ads.values()], boards: this.boards, purse: this.purse, earned: this.earned, claimed: this.claimed,
@@ -739,6 +721,11 @@ export class Tasks {
     a.pay = kind.pay(a);
     return a;
   }
+}
+
+// a catch as the kinds hear it (fishing.js names lake trout 'trout' in places)
+function catchEvent(species, lakeId, lengthCm, kept) {
+  return { type: 'catch', species: species === 'trout' ? 'laketrout' : String(species || '').toLowerCase(), lake: lakeId, cm: lengthCm, kept: !!kept };
 }
 
 // --- the cork board's look (Paper: cream notices, ink, a red tack, pencil for the pay) -----------------------------
