@@ -22,8 +22,10 @@ and checked on the look board. Agreed with the owner on 2026-10-22; phase 3 take
 
 ## Phase 2: performance and the look's leftovers
 
-- Real on-screen frame rate on the owner's machine; quality presets (shadows, crown detail, anti-aliasing,
-  render scale); per-cascade shadow culling; the startup occlusion bakes off the main thread or cached.
+- **Performance, done** (`docs/look.md`, Performance and quality): per-instance culling for the view and each
+  shadow cascade, quality presets Low to Ultra with Auto, the occlusion bakes cached in IndexedDB. Ultra is the old
+  look at ~20 % less frame time; Low is under half the old frame time. Still to do: the on-screen frame rate on the
+  owner's machine with the pane visible.
 - Leftovers: far trees reading as columns; spruce sprays reading as fern fronds close up; lit crowns olive
   rather than orange at golden hour; full-shade ground at golden hour too dark; grass colour slipping at ground
   transitions; alpha-to-coverage on the cards.
