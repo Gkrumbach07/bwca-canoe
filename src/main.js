@@ -165,7 +165,6 @@ async function main() {
   // claimed where it was posted. Until stream A's counter renders tasks.boardSection itself, a stub swaps it in.
   tasks.attach({ day, fishing, outfitter }); fishing.tasks = tasks;
   tasks.onBoard = () => { if (outfitter.open) outfitter.render(); };
-  if (!outfitter.tasksBoard) tasks.legacyCounter(outfitter);
   // trip core C: camp and night. The campfires (one light, always in the scene), the headlamp (likewise), who holds
   // each campsite, and the camp itself; the trip, the veil and the packs are looked up on the first frame (whichever
   // of them exist: `typeof` keeps this safe in any build, and before they are declared).
@@ -180,7 +179,7 @@ async function main() {
   // when there is one, how well the tent sleeps and what filter there is.
   energy.atCounter = () => !!outfitter.open;
   if (trip.on) { trip.on('start', () => energy.fresh()); trip.on('evac', () => energy.rescued()); }
-  camp.profileOf = () => (typeof profile !== 'undefined' ? profile : null); // eslint-disable-line no-undef -- stream A's, once joined
+  camp.profileOf = () => profile;
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
