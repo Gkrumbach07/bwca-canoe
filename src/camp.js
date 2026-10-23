@@ -252,7 +252,7 @@ export class Camp {
     if (p.mode !== 'walk') return;
     const drop = p.carry && p.carry.drop;
     if (drop && Math.hypot(drop.x - p.x, drop.z - p.z) <= HULL_REACH) return; // the canoe's E (player.js)
-    if (p.prompt && (p.prompt.key === 'E' || /<kbd>E<\/kbd>/.test(p.prompt.text || ''))) return; // a pack's, a dock's
+    if (p.prompt && (p.prompt.key || /<kbd>/.test(p.prompt.text || ''))) return; // a pack's, a dock's, a portage's (its Q too: the walk back for a pack)
     const site = this.nearestSite(p.x, p.z, SITE_R, true);
     if (site) this.atSitePrompts(site);
     else this.offSitePrompts();

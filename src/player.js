@@ -728,7 +728,8 @@ export class Player {
     if (onTrail) {
       const p = this.trailPoint(trail.trail, trail.along);
       const remaining = p.tx * f.x + p.tz * f.z >= 0 ? trail.trail.length - trail.along : trail.along;
-      trailText = `${trail.def.name} · ${Math.round(remaining / RODS)} rods to go`;
+      const rods = Math.round(remaining / RODS);
+      trailText = `${trail.def.name} · ${rods} ${rods === 1 ? 'rod' : 'rods'} to go`;
     }
     this.footPrompts(c, trail, note, trailText);
   }
