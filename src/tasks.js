@@ -33,6 +33,12 @@ const SIZE_PCT = [0.6, 0.75]; // a size notice asks for a fish between these per
 const STANDING = 0.25;       // standing with an outfitter for each notice claimed there (profile.raise)
 const SPECIES_PAY = { perch: 12, crappie: 13, smallmouth: 14, pike: 15, walleye: 18, laketrout: 30 };
 const SIZE_PAY = 10;
+// The way out is paid as well as the work (hubs 2 join): a canoe makes about 4–5 km a game day here, and a day of food
+// is $6, so a notice 8 km out (three or four days there and back) that paid $12 cost more than it paid. Lost items and
+// surveys add this much a kilometre of the straight line from the landing, a far laker a little; nothing past PAY_MAX.
+const KM_PAY = { item: 4, survey: 5, laketrout: 2 };
+const PAY_MAX = 60;
+const kmFrom = (L, x, z) => +(Math.hypot(x - L.x, z - L.z) / 1000).toFixed(1);
 
 // the lost things: each lead is the notice's opening, signed by whoever pinned it up
 const ITEMS = {
@@ -112,7 +118,7 @@ registerKind('fish', {
         const where = trout.hops != null ? hopsText(trout.hops) : `, ${fmtKm(trout.d / 1000)} km ${compass(trout.l.cx - c.landing.x, trout.l.cz - c.landing.z)} of here`;
         minCm = sizeIt ? sizeAt('laketrout', SIZE_PCT[0] + c.rng() * (SIZE_PCT[1] - SIZE_PCT[0])) : 0;
         const [say, sign] = pickR(c.rng, W.texts), text = fill(say, { one: minCm ? `One laker of ${minCm} cm or better` : 'One laker', lake, depth, where });
-        return { species: 'laketrout', minCm, need: 1, lakeHint: trout.l.id, title: minCm ? 'A big laker' : W.title, text, sign, hint: T.hintFor(trout.l.id) };
+        return { species: 'laketrout', minCm, need: 1, lakeHint: trout.l.id, km: +(trout.d / 1000).toFixed(1), title: minCm ? 'A big laker' : W.title, text, sign, hint: T.hintFor(trout.l.id) };
       }
       species = pickR(c.rng, ['walleye', 'pike'].filter(fresh)) || 'walleye';
       minCm = sizeAt(species, SIZE_PCT[1] - c.rng() * 0.05);
@@ -137,7 +143,7 @@ registerKind('fish', {
     const [text, sign] = pickR(c.rng, W.texts);
     return { species, minCm: 0, need: 1, title: W.title, text, sign };
   },
-  pay(t) { return t.species ? (SPECIES_PAY[t.species] || 12) + (t.minCm ? SIZE_PAY : 0) : 8; },
+  pay(t) { return t.species ? Math.min(PAY_MAX, (SPECIES_PAY[t.species] || 12) + (t.minCm ? SIZE_PAY : 0) + (t.species === 'laketrout' ? Math.round(KM_PAY.laketrout * (t.km || 0)) : 0)) : 8; },
   // a kept fish this notice wants: the species, the size, and lake trout only from deep water
   fits(T, t, ev) {
     if (!ev.kept || t.status !== 'open') return false;
@@ -188,11 +194,11 @@ registerKind('item', {
       const body = /river|creek/i.test(name) ? 'the river' : 'the lake';
       const dir = lake && lake.cells >= 2500 ? (feature !== 'island' ? ` on the ${compass(cand.s.x - lake.cx, cand.s.z - lake.cz)} side of ${body}` : ` toward the ${compass(cand.s.x - lake.cx, cand.s.z - lake.cz)} end`) : '';
       const [lead, sign] = pickR(c.rng, item.leads), text = `${lead} ${cap(name)}${hopsText(r.hops)}: ${site}${dir}${dir ? ',' : ''} ${item.where}.`;
-      return { key: cand.i, item: key, label: item.label, site: cand.i, lakeId, spot, hops: r.hops, title: pickR(c.rng, item.titles), text, sign, hint: T.hintFor(lakeId, cand.s) };
+      return { key: cand.i, item: key, label: item.label, site: cand.i, lakeId, spot, hops: r.hops, km: kmFrom(L, spot.x, spot.z), title: pickR(c.rng, item.titles), text, sign, hint: T.hintFor(lakeId, cand.s) };
     }
     return null;
   },
-  pay(t) { return 15 + 5 * (t.hops ?? 1); },
+  pay(t) { return Math.min(PAY_MAX, 15 + 5 * (t.hops ?? 1) + Math.round(KM_PAY.item * (t.km || 0))); },
   update(T, t) {
     const p = T.player, w = T.world, s = t.spot;
     if (!s) return;
@@ -253,14 +259,14 @@ registerKind('survey', {
       // a named point: the landing of the portage, on this side
       const W = SURVEY_WORDS.landing, dir = fromLake && fromLake.cells >= 2500 ? ` at the ${compass(p.launch[near].x - fromLake.cx, p.launch[near].z - fromLake.cz)} end` : '';
       const target = { x: p.launch[near].x, z: p.launch[near].z };
-      return { ...base, target, title: pickR(c.rng, W.titles), text: `${hops === 0 ? `On ${fromName}, right off this landing,` : `Paddle to ${fromName}${hopsText(hops)}, and`} find the ${p.rods}-rod portage to ${toName}${dir}. How's the landing? ${pickR(c.rng, W.whys)}`, hint: T.hintFor(p.launch[near].lake, target) };
+      return { ...base, target, km: kmFrom(L, target.x, target.z), title: pickR(c.rng, W.titles), text: `${hops === 0 ? `On ${fromName}, right off this landing,` : `Paddle to ${fromName}${hopsText(hops)}, and`} find the ${p.rods}-rod portage to ${toName}${dir}. How's the landing? ${pickR(c.rng, W.whys)}`, hint: T.hintFor(p.launch[near].lake, target) };
     }
     const W = SURVEY_WORDS.walk, end = far === 0 ? p.pts[0] : p.pts[p.pts.length - 1];
     const target = { x: end[0], z: end[1] };
     const from = fromName ? `from ${fromName}` : `off ${p.name.split(/\s[–-]\s/)[0]}`;
-    return { ...base, target, title: pickR(c.rng, W.titles), text: `Walk the ${p.rods}-rod portage ${from} to ${toName}${hopsText(hops)}. How's the far landing? ${pickR(c.rng, W.whys)}`, hint: T.hintFor(p.launch[near].lake, target) };
+    return { ...base, target, km: kmFrom(L, target.x, target.z), title: pickR(c.rng, W.titles), text: `Walk the ${p.rods}-rod portage ${from} to ${toName}${hopsText(hops)}. How's the far landing? ${pickR(c.rng, W.whys)}`, hint: T.hintFor(p.launch[near].lake, target) };
   },
-  pay(t) { return 10 + Math.round((t.rods || 0) / 25); },
+  pay(t) { return Math.min(PAY_MAX, 10 + Math.round((t.rods || 0) / 25) + Math.round(KM_PAY.survey * (t.km || 0))); },
   update(T, t) {
     const p = T.player;
     if (t.target && Math.hypot(t.target.x - p.x, t.target.z - p.z) < ARRIVE) {
