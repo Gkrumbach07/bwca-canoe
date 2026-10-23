@@ -161,6 +161,11 @@ async function main() {
   energy.onNote = (t) => hud.note(t); tasks.onNote = (t) => hud.note(t, 6);
   energy.onEvac = (why) => trip.evacuate(why); // trip core A: no food and no energy ends an Adventure in an evacuation
   tasks.onChange = () => outfitter.save();
+  // hubs 1C: a board per outfitter (tasks.js): the day turns its notices, kept fish go in a notice's cooler, money is
+  // claimed where it was posted. Until stream A's counter renders tasks.boardSection itself, a stub swaps it in.
+  tasks.attach({ day, fishing, outfitter }); fishing.tasks = tasks;
+  tasks.onBoard = () => { if (outfitter.open) outfitter.render(); };
+  if (!outfitter.tasksBoard) tasks.legacyCounter(outfitter);
   // trip core C: camp and night. The campfires (one light, always in the scene), the headlamp (likewise), who holds
   // each campsite, and the camp itself; the trip, the veil and the packs are looked up on the first frame (whichever
   // of them exist: `typeof` keeps this safe in any build, and before they are declared).
@@ -233,6 +238,7 @@ async function main() {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       outfitter.update(dt * ts);
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
+      tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
       player.update(dt);
       packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
       fishing.update(dt, ts);
