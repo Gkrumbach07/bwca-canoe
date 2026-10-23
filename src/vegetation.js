@@ -7,6 +7,7 @@ import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
 import { foliageAtlas } from './textures.js';
 import { REGION } from './placement.js';
+import { SWAY, glslSway } from './wind.js';
 
 // Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
 // turns a tile's placement bins into instanced meshes in tile-local coordinates.
@@ -708,9 +709,79 @@ export const CARD = {
 };
 const noFlip = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
 if (noFlip === THREE.ShaderChunk.normal_fragment_begin) console.warn('vegetation: normal chunk changed, cards seen from behind will go dark');
+
+// ---------- the sway ---------------------------------------------------------------
+// The wind (wind.js SWAY, the same wind the water reads) bends every tree from the base of its trunk, the top
+// furthest (as the square of the height over the species' height): a lean downwind that grows with the wind's
+// pressure and deepens under a gust, and a swing about it at the tree's own slow rate, mostly along the wind. The
+// gusts are a world-space field rolling downwind, read at the trunk's base, so the trees of a stand lean together
+// as a gust crosses it, and the field runs across tile seams. On top, the branches bob (more the further out from
+// the stem, each height and side in its own phase) and the leaf cards flutter about their anchors (the birch, which
+// stands in for the aspen, trembling fastest). The flutter and the bob fade with distance, well before the far
+// twin takes over, and the twin bends exactly as its tree did, so the switch shows nothing. Bare branches sway as
+// branches. The shadow pass's depth material runs the same code, so the shadows move with the crowns. Per species
+// (by name, so a species without an entry, the deadfall say, stands still): the lean in radians at 12 m/s under a
+// gust, the flutter in radians in a fresh breeze, the sway's rate and the flutter's (Hz), and the height (m).
+const SWAY_BY = {
+  whitePine: [0.026, 0.03, 0.26, 2.0, 16],
+  spruce: [0.018, 0.02, 0.32, 2.4, 12.5],
+  redPine: [0.024, 0.03, 0.28, 2.0, 15],
+  birch: [0.065, 0.08, 0.42, 4.0, 10.5],
+  cedar: [0.02, 0.025, 0.34, 2.4, 8],
+  snag: [0.008, 0, 0.3, 1, 9],
+  shrub: [0.08, 0.06, 0.8, 3.0, 1.0],
+  tallPine: [0.028, 0.03, 0.22, 2.0, 20],
+  jackPine: [0.032, 0.035, 0.36, 2.4, 6],
+  hazel: [0.09, 0.07, 0.7, 3.2, 2.2],
+  alder: [0.09, 0.065, 0.65, 3.0, 2.6],
+  sapling: [0.07, 0.025, 0.8, 2.6, 2.6],
+  fern: [0.15, 0.06, 1.0, 2.8, 1.0],
+};
+const swayUniforms = (name) => {
+  const s = SWAY_BY[name] || [0, 0, 0.3, 1, 10];
+  return { uSway: { value: new THREE.Vector4(s[0], s[1], s[2], s[3]) }, uSwayH: { value: s[4] } };
+};
+const swayPars = glslSway + /* glsl */ `
+  uniform vec4 uSway;
+  uniform float uSwayH;
+  // the sway of a vertex at p (object space, the swell applied), grow its offset from its card's anchor, dist its
+  // distance from the eye; anchor is where its card hangs (position - aGrow, exact for the leaves); returned in
+  // object space
+  vec3 treeSway(vec3 p, vec3 anchor, vec3 grow, float dist) {
+    #ifdef USE_INSTANCING
+      mat3 M = mat3(instanceMatrix); vec3 base = instanceMatrix[3].xyz;
+    #else
+      mat3 M = mat3(1.0); vec3 base = vec3(0.0);
+    #endif
+    vec3 off = M * p;   // from the trunk's base, in the tile's axes (metres)
+    float y = max(off.y, 0.0), load = uSwayWind.z;
+    vec2 W = uSwayWind.xy;
+    vec2 bw = (modelMatrix * vec4(base, 1.0)).xz;   // the trunk's base, world xz
+    float g = swayGustAt(bw) * uSwayGust.w, h = swayHash(floor(bw * 3.0));   // the gust over it, the tree's own number
+    float t = uSwayGust.z, ph = swayOmega(uSway.z * (0.85 + 0.3 * h)) * t + h * 6.2831853;
+    // the crown: the lean and the swing along the wind, a smaller swing across it
+    float along = uSway.x * load * (0.4 + 0.6 * g + (0.3 + 0.4 * g) * sin(ph));
+    float across = uSway.x * load * (0.1 + 0.2 * g) * sin(ph * 0.71 + 1.9);
+    float bend = y * y / uSwayH;
+    vec3 d = vec3(W.x * along - W.y * across, 0.0, W.y * along + W.x * across) * bend;
+    // the branches: out from the stem they bob, each height and side in its own phase
+    float r = length(off.xz), near = 1.0 - smoothstep(250.0, 600.0, dist);
+    float bob = uSway.x * 0.5 * load * (0.4 + 0.6 * g) * r * sin(swayOmega(uSway.z * 2.3) * t + h * 3.1 + off.y * 0.9 + dot(off.xz, vec2(0.7, 0.5))) * near;
+    d += vec3(W.x * 0.5, 1.0, W.y * 0.5) * bob;
+    vec3 o = swayToObject(M, d);
+    // the leaves: each card turned a little about its anchor, in a phase of its own
+    float fl = uSway.y * smoothstep(1.5, 10.0, uSwayWind.w) * (0.6 + 0.4 * g) * (1.0 - smoothstep(60.0, 220.0, dist));
+    if (fl > 0.0) {
+      float pc = dot(anchor, vec3(3.1, 2.3, 2.7));
+      float ang = fl * (sin(swayOmega(uSway.w) * t + pc) + 0.35 * sin(swayOmega(uSway.w * 1.7) * t + pc * 1.3));
+      o += ang * cross(normalize(vec3(sin(pc * 1.7), 0.6, cos(pc * 1.3))), grow);
+    }
+    return o;
+  }
+`;
 const cardVarying = 'varying vec2 vCardUv;\nvarying float vCardDist;';
-const cardPars = 'attribute vec3 aGrow;\nuniform vec3 uCardGrow;\n' + cardVarying;
-// replaces <begin_vertex>: the distance from the eye, and the card swollen about its anchor by it
+const cardPars = 'attribute vec3 aGrow;\nuniform vec3 uCardGrow;\n' + cardVarying + '\n' + swayPars;
+// replaces <begin_vertex>: the distance from the eye, the card swollen about its anchor by it, and the sway
 const cardBegin = (eye) => `
   vec3 transformed = vec3( position );
   vCardUv = uv;
@@ -719,7 +790,8 @@ const cardBegin = (eye) => `
     cw = instanceMatrix * cw;
   #endif
     vCardDist = distance( ( modelMatrix * cw ).xyz, ${eye} ); }
-  transformed += aGrow * uCardGrow.x * smoothstep( uCardGrow.y, uCardGrow.z, vCardDist );`;
+  transformed += aGrow * uCardGrow.x * smoothstep( uCardGrow.y, uCardGrow.z, vCardDist );
+  transformed += treeSway( transformed, position - aGrow, aGrow, vCardDist );`;
 const cardCut = `
   vec4 cardTex = texture2D( uCardMap, max( vCardUv, 0.0 ) );
   float cardCut = mix( uCardCut.x, uCardCut.y, smoothstep( uCardCut.z, uCardCut.w, vCardDist ) );
@@ -746,12 +818,14 @@ void RE_Direct_Leaf( const in IncidentLight directLight, const in vec3 geometryP
 const glowAt = `
   if ( vCardUv.x >= 0.0 ) leafGlow = mix( 0.2, 1.0, vCardOpen ) * ( 0.4 + 0.6 * ( 1.0 - smoothstep( cardCut, 1.0, cardTex.a ) ) ) * mix( 1.0, 0.4, smoothstep( uLeafGlow.z, uLeafGlow.w, vCardDist ) );`;
 
-function makeCardMaterial(autumn) {
+// `species` names the sway (SWAY_BY): one material per species, all sharing one program
+function makeCardMaterial(autumn, species = null) {
   const u = autumn ? { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } } : {};
+  const sw = swayUniforms(species);
   const m = makeLookMaterial({ side: THREE.DoubleSide }, {
     wrap: 'varying', name: autumn ? 'look-cards-leaves' : 'look-cards',
     compile: (shader) => {
-      Object.assign(shader.uniforms, CARD, u);
+      Object.assign(shader.uniforms, CARD, u, SWAY, sw);
       let vs = shader.vertexShader.replace('#include <common>', '#include <common>\n' + cardPars + '\nattribute float aOcc;\nvarying float vCardOpen;' + (autumn ? '\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;' : ''))
         .replace('#include <begin_vertex>', cardBegin('cameraPosition') + '\n  vCardOpen = aOcc;');
       if (autumn) vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
@@ -764,13 +838,14 @@ function makeCardMaterial(autumn) {
     },
   });
   m.userData.u = u;
-  m.userData.depth = makeCardDepth(u.uLeafOn || null);
+  m.userData.sway = sw;
+  m.userData.depth = makeCardDepth(u.uLeafOn || null, sw);
   return m;
 }
-function makeCardDepth(leafOn) {
+function makeCardDepth(leafOn, sw) {
   const m = new THREE.MeshDepthMaterial();
   m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, CARD, leafOn ? { uLeafOn: leafOn } : {});
+    Object.assign(shader.uniforms, CARD, SWAY, sw, leafOn ? { uLeafOn: leafOn } : {});
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform vec3 uEye;\n' + cardPars + (leafOn ? '\nattribute float aLeaf;\nvarying float vLeaf;' : ''))
       .replace('#include <begin_vertex>', cardBegin('uEye') + (leafOn ? '\n  vLeaf = aLeaf;' : ''));
@@ -798,8 +873,9 @@ export function makeVegetationKit(seed = 3) {
   }));
   const material = makeCardMaterial(null);
   const rockMaterial = makeRockMaterial();
-  const leafMaterials = SPECIES.map((s) => (s.leaves ? makeCardMaterial(s.leaves) : null));
-  const materialFor = (sp) => (SPECIES[sp].rock ? rockMaterial : leafMaterials[sp] || material);
+  const leafMaterials = SPECIES.map((s) => (s.leaves ? makeCardMaterial(s.leaves, s.name) : null));
+  const cardMaterials = SPECIES.map((s, i) => leafMaterials[i] || (s.rock ? null : makeCardMaterial(null, s.name))); // each species sways its own way
+  const materialFor = (sp) => (SPECIES[sp].rock ? rockMaterial : cardMaterials[sp] || material);
   const depthFor = (sp) => (SPECIES[sp].rock ? undefined : materialFor(sp).userData.depth);
   const setSeason = (season) => {
     for (const m of leafMaterials) if (m) { m.userData.u.uFall.value = season.fall; m.userData.u.uSpring.value = season.spring; m.userData.u.uLeafOn.value = season.leafOn; }

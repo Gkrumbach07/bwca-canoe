@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { mulberry32, noise2, smoothstep, clamp } from './rng.js';
 
 // The day's wind. Each morning rolls a character for the day (a dead-calm day, a breezy one, a blow), the
@@ -6,6 +7,49 @@ import { mulberry32, noise2, smoothstep, clamp } from './rng.js';
 const POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const POINTS_LONG = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 export const FRESH = 8;        // m/s: a fresh breeze (Beaufort 5) and up is when the wind matters
+
+// The sway: the wind as everything that bends in it reads it (the trees and the understory in vegetation.js, the
+// grass in groundcover.js, the reeds, the rice and the pads in aquatic.js), shared uniforms that Wind.updateSway
+// sets once a frame. The gusts are a field over the world (swayGustAt) drifting downwind with the wind, so a gust
+// rolls across a stand and the trees under it bend together, and a tile seam shows nothing. The drift is integrated
+// here, never direction times time, so a veering wind cannot shake it. The sway clock wraps at SWAY_PERIOD and every
+// sway frequency is rounded to whole cycles of it (swayOmega), so the wrap never shows and the shader never sees a
+// large time.
+export const SWAY_PERIOD = 600;          // seconds
+const GUST_CELL = 64;                    // metres: the gust field's lattice
+const GUST_WRAP = 1024 * GUST_CELL;      // the field repeats every 1024 cells, so the drift wraps there
+export const SWAY = {
+  // xy: the unit direction the wind blows toward (world x, z); z: the load, the wind's pressure against 12 m/s
+  // (1 there, 0.03 at 2 m/s, capped at 2); w: the speed (m/s)
+  uSwayWind: { value: new THREE.Vector4(0, 1, 0, 0) },
+  // xy: how far the gust field has drifted (world metres, wrapped); z: the sway clock (s, wrapped); w: the gusts'
+  // strength now, 1 on average (the day's gust signal)
+  uSwayGust: { value: new THREE.Vector4(0, 0, 0, 1) },
+};
+export const glslSway = /* glsl */ `
+  uniform vec4 uSwayWind, uSwayGust;
+  float swayHash(vec2 c) {
+    uvec2 q = uvec2(mod(c, 1024.0)) * uvec2(1597334677u, 3812015801u);
+    uint n = (q.x ^ (q.y >> 3u)) * 1597334677u;
+    n ^= n >> 15u;
+    n *= 2246822519u;
+    return float(n >> 8u) * (1.0 / 16777216.0);
+  }
+  float swayNoise(vec2 p) {
+    vec2 i = floor(p), f = p - i, u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(swayHash(i), swayHash(i + vec2(1.0, 0.0)), u.x), mix(swayHash(i + vec2(0.0, 1.0)), swayHash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+  // the gust field at world xz: 0 in a lull, 1 under a gust (whole-number octave so it wraps with the drift)
+  float swayGustAt(vec2 pw) {
+    vec2 q = (pw - uSwayGust.xy) * ${(1 / GUST_CELL).toFixed(6)};
+    return smoothstep(0.3, 0.72, swayNoise(q) * 0.7 + swayNoise(q * 3.0 + vec2(5.2, 1.3)) * 0.3);
+  }
+  // the angular frequency nearest hz cycles a second that makes whole cycles of the wrapped clock
+  float swayOmega(float hz) { return floor(hz * ${SWAY_PERIOD.toFixed(1)} + 0.5) * ${((2 * Math.PI) / SWAY_PERIOD).toFixed(9)}; }
+  // a displacement in the instance's frame (tile axes, metres) taken back into the object's, for an instance
+  // matrix that is a rotation times a scale (the vegetation's and the lake plants' are)
+  vec3 swayToObject(mat3 M, vec3 d) { return (transpose(M) * d) / vec3(dot(M[0], M[0]), dot(M[1], M[1]), dot(M[2], M[2])); }
+`;
 
 export class Wind {
   constructor(seed = 11) {
@@ -17,6 +61,7 @@ export class Wind {
     this.t = 0;
     this.lastHours = -1;
     this.gust = 0;
+    this.sway = { x: 0, z: 0, t: 0 }; // the gust field's drift and the sway clock (see SWAY)
   }
 
   // unit vector the wind blows TOWARD, in world xz (x east, z south)
@@ -41,6 +86,17 @@ export class Wind {
     const target = this.override ?? Math.max(0, base * (1 + this.gust));
     this.speed += (target - this.speed) * (1 - Math.exp(-dt * 0.4));
     this.from = (this.from + (noise2(this.t * 0.01, 1.5, 13) - 0.5) * 6 * dt + 360) % 360;
+  }
+
+  // Hands the wind to everything that sways (SWAY): its direction, speed and gusts, the gust field carried
+  // downwind (a little slower than the wind itself) and the sway clock moved on by dt. Once a frame, after update.
+  updateSway(dt) {
+    const d = this.dir, v = this.speed, s = this.sway;
+    s.x = (s.x + d.x * v * 0.8 * dt) % GUST_WRAP;
+    s.z = (s.z + d.z * v * 0.8 * dt) % GUST_WRAP;
+    s.t = (s.t + dt) % SWAY_PERIOD;
+    SWAY.uSwayWind.value.set(d.x, d.z, Math.min(2, (v / 12) * (v / 12)), v);
+    SWAY.uSwayGust.value.set(s.x, s.z, s.t, clamp(1 + 1.6 * this.gust, 0.4, 1.6));
   }
 
   // debug nudges from the keyboard

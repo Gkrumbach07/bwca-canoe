@@ -4,6 +4,7 @@ import { CLASS_SPLAT } from './terrain-build.js';
 import { groundUniforms, glslGround } from './terrain.js';
 import { applyLook } from './shading.js';
 import { foliageAtlas, spriteUV } from './textures.js';
+import { SWAY, glslSway } from './wind.js';
 
 // Grass clumps and fireweed on a camera-following patch. Each tuft belongs to a world cell (so it stays put
 // as the patch slides) but sits at a hashed offset inside it, so no lattice shows; presence, size and
@@ -21,7 +22,7 @@ const SIZE = 128, SPACING = 0.87;   // one tuft slot per 0.76 m²: a third of th
 const WID = 0.72, HGT = 0.58, ROOT = -0.12; // a clump's cards: width, height, the root below the ground
 const N = CLASS_SPLAT.length;
 
-const decl = /* glsl */ `
+const decl = glslSway + /* glsl */ `
   uniform vec2 uCenterLocal;   // patch centre relative to the floating origin, snapped to the lattice
   uniform float uTime, uHalf, uFlower;
   uniform vec3 uGrassTint;
@@ -79,7 +80,17 @@ const body = /* glsl */ `
   float yaw = h.z * 6.2832;
   vec3 p = position * sc;
   p.xz = mat2(cos(yaw), -sin(yaw), sin(yaw), cos(yaw)) * p.xz;
-  p.x += sin(uTime * 1.6 + rel.x * 0.35 + rel.y * 0.25) * 0.08 * position.y;
+  // the wind (wind.js SWAY, as the trees and the reeds have it): the clump bends downwind from its root, deeper as
+  // a gust rolls over, and the blades shiver about that, the tips furthest and a little lower; a calm leaves it be
+  {
+    vec2 gw = rel + uOrigin;   // world xz: nothing here may hang on the floating origin
+    float gy = max(p.y, 0.0), gg = swayGustAt(gw) * uSwayGust.w;
+    float shiver = sin(swayOmega(1.6 + 0.8 * h2.z) * uSwayGust.z + h3.z * 6.2831853 + fract((gw.x + gw.y) * 0.0636620) * 6.2831853);
+    float lean = uSwayWind.z * (0.1 + 0.3 * gg) + smoothstep(1.0, 9.0, uSwayWind.w) * (0.05 + 0.07 * gg) * shiver;
+    float d = lean * gy * gy / ${HGT.toFixed(2)};
+    p.xz += uSwayWind.xy * d;
+    p.y -= 0.5 * d * d / max(gy, 0.05);
+  }
   vec3 transformed = vec3(rel.x + p.x, surfaceAt(rel) - 0.05 + p.y, rel.y + p.z);
   // colour: the ground's own at the root (the blade's vertex colour lifts it toward a lit tip), a touch
   // greener per tuft, the season's tint; golden in burns and dry clearings; fireweed stalks in high summer
@@ -154,6 +165,7 @@ export class GroundCover {
       uCenterLocal: { value: new THREE.Vector2() }, uTime: { value: 0 }, uHalf: { value: SIZE / 2 },
       uFlower: { value: 1 }, uGrassTint: { value: new THREE.Vector3(1, 1, 1) }, uGrassMap: { value: foliageAtlas() },
       ...groundUniforms,
+      ...SWAY,
       uClassA: { value: CLASS_SPLAT.map((c) => new THREE.Vector4(c.w[0], c.w[1], c.w[2], c.w[3])) },
       uClassB: { value: CLASS_SPLAT.map((c) => new THREE.Vector4(c.w[4], c.w[5], c.w[6], c.w[7])) },
       uClassSunny: { value: CLASS_SPLAT.map((c) => c.sunny) },

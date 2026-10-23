@@ -44,7 +44,7 @@ export function makeFloatingMaterial(water, opts = {}, grow = null) {
 
 export function makeSwayMaterial(water, opts = {}) {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide, ...opts });
-  withSurface(m, water, INSTANCE_ORIGIN + `{ float ph = uWaterTime * 1.1 + ipRel.x * 0.5 + ipRel.y * 0.35; transformed.x += sin(ph) * 0.14 * position.y; transformed.z += cos(ph * 0.7) * 0.08 * position.y; }`);
+  withSurface(m, water, INSTANCE_ORIGIN + `{ float ph = uWaterTime * 1.1 + fract(dot(ip.xz, vec2(0.5, 0.35) / 6.2831853)) * 6.2831853; transformed.x += sin(ph) * 0.14 * position.y; transformed.z += cos(ph * 0.7) * 0.08 * position.y; }`);
   m.customProgramCacheKey = () => 'look-sway';
   return m;
 }
