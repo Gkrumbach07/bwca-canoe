@@ -108,6 +108,11 @@ export class Outfitter {
       });
     }
     if (hud && hud.registerPaper) hud.registerPaper('outfitter', () => this.close());
+    // the page going away (a reload, a closed tab): the trip's document now, not at the next eight-second save, so a
+    // bottle just filled, a meal just eaten or a fish just kept comes back with the spot the shell saves alongside
+    const flush = () => { if (this.trip.active) this.save(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   }
 
   nearest(x, z) {
@@ -474,6 +479,8 @@ export class Outfitter {
     const p = this.player;
     const data = { v: 3, trip: this.trip, pos: { x: p.x, z: p.z, heading: p.heading }, energy: this.energy.serialize(), tasks: this.tasks ? this.tasks.serialize() : null };
     if (this.core) data.core = this.core.serialize();
+    const f = p.fishing;
+    if (f && Array.isArray(f.stringer)) data.stringer = f.stringer.map((s) => ({ species: s.species, length: s.length })); // the fish kept for supper
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage full or private mode */ }
   }
   load() {
@@ -491,6 +498,8 @@ export class Outfitter {
     if (moved) pr.forgetMigration();
     if (d && d.trip && d.trip.active) {
       this.trip = { ...this.trip, ...d.trip, days: this.foodRoom };
+      const f = this.player.fishing;
+      if (f && Array.isArray(d.stringer) && !f.stringer.length) for (const s of d.stringer) if (s && s.species) f.stringer.push({ species: s.species, length: +s.length || 0 });
       this.pendingShow = false;
       if (d.pos && Math.hypot(d.pos.x - this.player.x, d.pos.z - this.player.z) > 40 && this.onTeleport) await this.onTeleport(d.pos.x, d.pos.z);
       const core = this.core, dw = core && core.active ? core.dayWords() : '';
