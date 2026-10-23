@@ -20,15 +20,20 @@
 // forecast is bringing, a moose in a bay, the route they paddle tomorrow. A line that means a lake's fish, a moose's bay
 // or a long carry is pencilled on the map as the keepers' hints are (outfitter.toldHints, which this module extends).
 // A second E takes on their one task, if they have one: fetch a thing from another outfitter (the fetch kind, also on the
-// boards), take a letter to another outfitter or a campsite (the npc kind), find a thing lost at a campsite (the board's
-// own item kind), or a photo for the photographer (stream B's photo kind when it is in the build; a fetch until then).
-// It pays money (sometimes a lure or a dozen leeches on top) and is claimed with that person, E again, or at the counter
-// of the outfitter they were at; once it is paid they thank you.
+// boards, by water only there), take a letter or a thing to another outfitter or ashore at a campsite (the npc kind),
+// find a thing lost at a campsite (the board's own item kind, or the npc kind where that finds nothing), or a photo for
+// the photographer (stream B's photo kind when it is in the build; a fetch until then). Water first; an errand by the
+// road pays both rides on top. It pays money (sometimes a lure or a dozen leeches on top), is listed at the counter
+// (never pinned on the board) and in the journal, and is claimed with that person, E again, or at the counter of the
+// outfitter they were at; once it is paid they thank you. Who you talked to and what they gave you is saved under
+// `bwca-canoe:people`, cleared with a new season.
 //
 // The figures. A pool of three figures on the paddler's own model and material (figure.js buildFigure with the
 // paddler's material, so no new shader program is added and no light), each recoloured per person by vertex role (the
 // figure is built once in key colours, and each vertex's role and baked occlusion are kept), posed with figure.js's
-// Poser: standing, leaning on the counter, or sitting. Never more than three are drawn, and only within 40 m.
+// Poser: standing, leaning on the counter, or sitting. Never more than three are drawn, and a store's people are drawn
+// together once you are within 40 m of its walls (so nobody appears as you come in the door, or as a tie-up puts you
+// there); the walker is held off them as off a trunk.
 //
 // Hooks for later. A visitor going on a trip carries `party = { route, lakes, leaves, nights }` (a real chain of lakes
 // out from the landing over the portages). Later they will put in as a party on the water that claims campsites through
@@ -37,6 +42,7 @@
 //   new People({ world, scene, player, day, hud, tasks, outfitter, profile, weather, registry, mat })
 //   people.update(dt)  after the outfitter's prompt (main.js): who is drawn, their poses, the prompt and E / Q
 //   people.claimsE     a visitor is the one you face: the outfitter's hotspot leaves E to the talk (outfitter.js)
+//   people.quiet       () => true while something else owns the keys (stream B's camera, raised): no prompt, no E
 //   people.roster(ep), people.at(ep), people.talkTo(key), people.parties(), people.toldHints(), people.stats()
 import * as THREE from 'three';
 import { buildFigure } from './figure.js';
