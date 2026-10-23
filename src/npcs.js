@@ -605,6 +605,11 @@ const OPENERS = {
   birder: ['Shh. Oh, it’s gone. Hello.', 'Hello!', 'Hi there.'], cook: ['Hi, hon.', 'Hello, dear.', 'Oh, hi.'], mail: ['Morning.', 'Afternoon.', 'Hey.'],
   trippers: ['Hey!', 'Hi.', 'Hey, how’s it going.'], fishguide: ['Morning.', 'Yep.', 'Hey.'], kid: ['Hi!', 'Hey! Hey!', 'Want to see my leeches?'],
 };
+// a greeting for the hour: no "Morning" after noon, no "Afternoon" before it or in the evening (as keeperLine does)
+function opener(arch, h) {
+  const all = OPENERS[arch] || ['Hello.'], fit = all.filter((w) => !(/^Morning/.test(w) && h >= 12) && !(/^Afternoon/.test(w) && (h < 12 || h >= 18)));
+  return pickR(Math.random, fit.length ? fit : ['Hello.']);
+}
 const BYE = {
   guide: 'Paddle safe.', ranger: 'Have a good trip. Fires in the grates.', photographer: 'Keep your eyes open out there.', family: 'Have a lovely trip!', oldtimer: 'Go on, then. The lake won’t wait for you.',
   crew: 'Watch your step on the carries.', birder: 'Listen for the loons tonight.', cook: 'Come by the café, hon.', mail: 'See you up the road.', trippers: 'Maybe we’ll see you out there.', fishguide: 'Tight lines.', kid: 'Bye! Don’t step on the leeches!',
@@ -685,6 +690,7 @@ export class People {
     for (let i = 0; i < POOL; i++) this.bodies.push(new Body(mat, scene, i));
     this.rosters = new Map();   // ep -> the people settled there while you are near
     this.focus = null;          // { person, key: 'E' | 'Q', fig } the one you face
+    this.qFocus = null;         // at the counter: the keeper, Q's (whoever else has E)
     this.claimsE = false;       // outfitter.js: a visitor takes E from the hotspot you also stand at
     this.onParty = null;        // later: (party) when a visitor's party puts in
     this.preparing = new Map(); // person key -> the promise writing up their task
@@ -905,11 +911,11 @@ export class People {
   // keeper at the counter is Q, the counter keeping E
   prompt() {
     const p = this.player, o = this.outfitter;
-    this.focus = null; this.claimsE = false;
+    this.focus = null; this.qFocus = null; this.claimsE = false;
     const free = p.onFoot && !p.teleporting && !p.input.paused && !(this.hud && (this.hud.paper || this.hud.big)) && !(o && (o.open || o.bunking)) && !(p.fishing && p.fishing.rodUp);
     if (!free || (this.quiet && this.quiet())) return;
     const fw = p.forward;
-    let best = null;
+    let best = null, keeper = null;
     for (const b of this.bodies) {
       if (!b.who) continue;
       const v = b.who.person, f = v.figs[b.who.fig];
@@ -917,24 +923,28 @@ export class People {
       if (d > reach) continue;
       const dot = d > 1e-3 ? (dx * fw.x + dz * fw.z) / d : 1;
       if (dot < TALK_FACE && d > 0.9) continue;
-      const score = dot - d * 0.15;
-      if (!best || score > best.score) best = { person: v, fig: b.who.fig, d, dot, score };
+      const score = dot - d * 0.15, c = { person: v, fig: b.who.fig, d, dot, score };
+      if (v.keeper) { if (!keeper || score > keeper.score) keeper = c; } else if (!best || score > best.score) best = c;
     }
-    if (!best) return;
+    if (!best && !keeper) return;
     const s = o && typeof o.spot === 'function' ? o.spot() : null;
-    if (best.person.keeper) {
-      if (s && s.key === 'counter') {
-        this.focus = { ...best, key: 'Q' };
-        const text = p.prompt && p.prompt.text ? p.prompt.text : 'The counter';
-        p.prompt = { key: 'E', text: `${text} &nbsp; <kbd>Q</kbd>A word with ${esc(best.person.first)}` };
-      } else if (!s) { this.focus = { ...best, key: 'E' }; p.prompt = { key: 'E', text: `A word with ${esc(best.person.name)} · ${esc(best.person.who)}` }; }
-    } else {
-      if (s) { const at = s.p.at, ax = (at ? at.x : s.p.x) - p.x, az = (at ? at.z : s.p.z) - p.z, al = Math.hypot(ax, az) || 1, sd = (ax * fw.x + az * fw.z) / al; if (sd > best.dot + 0.05 && best.d > 1.0) return; }
-      this.focus = { ...best, key: 'E' };
-      p.prompt = { key: 'E', text: this.promptText(best.person) };
+    // E: a visitor you face (more squarely than the hotspot you also stand at), else the keeper away from any hotspot;
+    // at the counter Q is a word with the keeper, whoever else stands by
+    let e = null;
+    if (best) {
+      const at = s && s.p.at, ax = s ? (at ? at.x : s.p.x) - p.x : 0, az = s ? (at ? at.z : s.p.z) - p.z : 0, al = Math.hypot(ax, az) || 1;
+      if (!s || !((ax * fw.x + az * fw.z) / al > best.dot + 0.05 && best.d > 1.0)) e = { ...best, key: 'E' };
     }
-    this.claimsE = this.focus.key === 'E';
-    if (this.focus.key === 'E' ? p.input.pressed('KeyE') : p.input.pressed('KeyQ')) this.talkTo(this.focus.person);
+    if (!e && keeper && !s) e = { ...keeper, key: 'E' };
+    const q = keeper && s && s.key === 'counter' ? { ...keeper, key: 'Q' } : null;
+    if (!e && !q) return;
+    const qText = q ? ` &nbsp; <kbd>Q</kbd>A word with ${esc(q.person.first)}` : '';
+    if (e) p.prompt = { key: 'E', text: `${e.person.keeper ? `A word with ${esc(e.person.name)} · ${esc(e.person.who)}` : this.promptText(e.person)}${qText}` };
+    else p.prompt = { key: 'E', text: `${p.prompt && p.prompt.text ? p.prompt.text : 'The counter'}${qText}` };
+    this.focus = e || q; this.qFocus = q;
+    this.claimsE = !!e;
+    if (e && p.input.pressed('KeyE')) this.talkTo(e.person);
+    else if (q && p.input.pressed('KeyQ')) this.talkTo(q.person);
   }
   promptText(v) {
     const n = this.s.talked[v.key] || 0, t = this.taskOf(v);
@@ -975,7 +985,7 @@ export class People {
     else if (t) words = { fetch: `Any luck at ${t.toPlace}?`, npc: `Still got ${t.short || 'it'}? No rush.`, item: `Did you find the ${t.label}? It’s at the site, I’m sure of it.`, photo: 'Any luck with the picture?' }[t.kind] || 'No rush.';
     else if (n === 0) {
       const h = this.hint(v, 0);
-      words = `${pickR(Math.random, OPENERS[v.arch] || ['Hello.'])} ${h ? h.text : ''}`.trim();
+      words = `${opener(v.arch, this.day.hours)} ${h ? h.text : ''}`.trim();
       if (v.hasTask && !this.s.paid[v.key]) this.prepare(v);
     } else if (v.hasTask && !this.s.paid[v.key] && !this.s.tasks[v.key]) {
       const r = this.offer(v);
