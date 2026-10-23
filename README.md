@@ -53,8 +53,9 @@ npm run bake:all
 npm run dev
 ```
 
-Open http://localhost:5173. The game opens on a title screen over the live lake: **Paddle in** continues the
-trip saved in this browser (or starts at Lake One), **New trip** picks any BWCA entry point, **Settings**
+Open http://localhost:5173. The game opens on a title screen over the live lake: **Continue** (or **Paddle in**
+before any season) picks up the season saved in this browser (or starts one at Lake One), **New season** starts
+one at any BWCA entry point, **Settings**
 has the quality, sound and control options (applied live, kept in `localStorage`). **Esc** brings the
 same screen up as a pause menu while playing. The baked map data lives in `public/data/` and is not committed (about 380 MB
 of tiles); the first bake downloads the Minnesota OpenStreetMap extract (290 MB) and about 5,800 elevation
@@ -84,17 +85,17 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | A / D | afloat: turn the hull while held, as sweep strokes, in both views. On land: strafe left / right |
 | Shift | hustle (on foot, a jog: a longer stride with both feet off the ground between steps) |
 | Space | afloat: brace (steadies the hull in a sea; you cannot paddle while bracing). The balance arc appears above the action line while the sea is working the hull. On foot: hop, about 0.4 m, onto a low rock or a log or over it (with the canoe on your shoulders you only stagger) |
-| E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter's counter at an entry point; pick up a found item; on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down. On a double portage: set the canoe down at the far end, pick up the pack left at the trail head, load up and launch. At a campsite: pitch the tent, light the fire, cook, sleep (see [docs/trip-core.md](docs/trip-core.md)) |
+| E | go ashore when the canoe is close to a bank; portage when near a landing; the outfitter's counter at an entry point; pick up a found item; on foot at the water's edge, fill the bottle (a tablet: drinkable in half an hour); on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down. On a double portage: set the canoe down at the far end, pick up the pack left at the trail head, load up and launch. At a campsite: pitch the tent, light the fire, cook, sleep (see [docs/trip-core.md](docs/trip-core.md)) |
 | Q | the second choice at a shore: go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it. On a portage: take the gear pack too (one heavy trip), or fetch the pack left at the trail head (a short fade while the walk back and the second carry pass) |
-| Tab | hold for the readout: where, water, way, wind, light, pack, tasks (Settings › HUD can make it a toggle, or keep it up; Developer adds the GPS sim, tiles, FPS and triangles) |
+| Tab | hold for the readout: where, water, way, wind, light, the permit and the money, energy (what holds it down, the hours up, the bottle), pack, tasks (Settings › HUD can make it a toggle, or keep it up; Developer adds the GPS sim, tiles, FPS and triangles) |
 | M | hold for a glance at the map (a half-sheet, 5 km across, slides up from the bottom right); press for the full sheet: drag to pan, wheel to zoom, click a spot and a pencil note asks before the canoe is moved; the header toggles the layers; M or Esc puts it away |
-| J | the journal: the trip (food, energy, kilometres, portages, lakes, nights, tasks on the go) on the left page, the tabs Catches / Tasks / Lakes / Gear on the right. L opens it too, for a while |
+| J | the journal: the trip (food, energy, kilometres, portages, lakes, nights, notices on the go) on the left page, the tabs Catches / Tasks / Lakes / Trips / Gear on the right. L opens it too, for a while |
 | F | take up the fishing rod / put it down (see *Fishing*) |
 | G | eat a meal (when you are still: in the canoe or on foot) |
 | H | the headlamp, afloat or on foot (it goes off on its own in full daylight and when you sleep) |
 | Space / mouse button | with the rod up: hold to load a cast where the reticle sits on the water and let go; set the hook on a bite; hold to reel in a fight |
 | 1 – 5 | with the rod up: jig & twister, Mepps spinner, Daredevle spoon, jointed Rapala, bobber & leech (the strip above the action line) |
-| K / E | keep the landed fish on the stringer / let it go (the catch card bottom left carries the fish) |
+| K / E | keep the landed fish (on the stringer, or in a notice's cooler when one taken on wants it: the prompt says which) / let it go (the catch card bottom left carries the fish) |
 | V | switch between first-person and chase camera |
 | [ / ] | step the time of day back / forward an hour (Sandbox) |
 | - / = | step the date back / forward a day (with Shift, a month) (Sandbox) |
@@ -104,10 +105,10 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | / | veer the wind 30° (Sandbox) |
 | R | toggle the shore, its trees and the canoe mirrored in the water (a second scene pass; off, the water mirrors the sky alone) |
 | 1 / 2 / 3 | game speed 1× / 2× / 4× (a ×2 mark bottom right while it is up) |
-| Esc | frees the mouse when the look has taken it; otherwise pause: the title screen with Paddle on / New trip / Settings / Controls (Esc again, or Enter, resumes); Controls shows this table in the game |
+| Esc | frees the mouse when the look has taken it; otherwise pause: the title screen with Paddle on / New season / Settings / Controls (Esc again, or Enter, resumes); Controls shows this table in the game |
 | mouse | look. In first person, and on land in third person, the mouse turns you the way it does in Minecraft: the first key or click takes the mouse, every movement turns the look at once, Esc frees the mouse (Esc again opens the menu). On land the body faces the look and WASD moves relative to it, A and D strafing; in third person the camera sits behind you and the mouse's tilt swings it up or down. Behind the canoe the cursor stays free: drag to orbit, wheel to zoom. *Settings → Steer the canoe where you point*: while you hold W the bow turns toward the cursor's point on the water, or toward the look in first person; A/D nudge, and nothing sticks |
 | the map sheet | click a spot to paddle in there (teleport to the nearest open water, anywhere in the wilderness; Sandbox) |
-| the title's entry points | the list beside *New trip* starts a trip at one of the BWCA entry point landings, travelling the way picked above it: *Adventure* (a permit, a food pack, a date to be out by) or *Sandbox* (no limits) |
+| the title's entry points | the list beside *New season* starts a season with its home at one of the BWCA entry point landings, travelling the way picked above it: *Adventure* (open trips: food to buy, notices to take, real rules) or *Sandbox* (no limits); over a season under way, pick it twice |
 
 What the HUD says on its own: the compass sits at the top right at half strength, its gold arrow on the rim
 where the wind is going, and speaks (full strength, the Beaufort name, the speed, the waves) when the wind
@@ -145,7 +146,7 @@ Controls (mouse sensitivity, inverted look, cursor steering, the game speed and 
 HUD (above) and Developer (the GPS simulator's state, FPS and triangles and the tiles as rows of the readout).
 The canoe's position, heading, the day clock and the camera mode are saved every few seconds
 (`src/save.js`, one `localStorage` document per namespace under `bwca-canoe:`; the journal's trip tally
-is `stats`, the HUD settings `settings`) so **Paddle in** picks the trip up where it stopped.
+is `stats`, the HUD settings `settings`) so **Continue** picks the trip up where it stopped.
 
 ## Wind and waves
 
@@ -197,41 +198,29 @@ field fills in beyond them. `M` opens it wide.
 
 ## Trips and tasks
 
-A trip travels one of two ways, picked on the title card: **Adventure** (a permit written at the counter, a food
-pack, a date to be out by, two packs and the double portage, your own tent at a designated site, a calm evacuation
-when the food, the sleep or the days run out) or **Sandbox** (the same lakes with no limits). The trip core is
-described in [docs/trip-core.md](docs/trip-core.md); what follows is the outfitter and the task board.
+A season travels one of two ways, picked on the title card: **Adventure** (open trips from push-off until you call
+it at a counter, food bought with money, one energy bar pulled down by rest, food and water, camping at the designated
+sites only, a calm evacuation when the bar is spent with nothing left to eat or drink) or **Sandbox** (the same lakes
+with no limits). A new season starts at the entry point you pick, home, with $40 and the starting kit. The trip core is
+described in [docs/trip-core.md](docs/trip-core.md), and the outfitter hubs it is growing into in
+[docs/hubs.md](docs/hubs.md) (the owner's own words are in [docs/game-vision.md](docs/game-vision.md)).
 
-Every BWCA entry point landing has an outfitter: a dock, a shack with the name over the door (the Ely,
-Sawbill and Gunflint outfitters where they are well known, plausible ones elsewhere; the list is in
-`src/outfitter.js`) and a canoe rack. The game opens at the Lake One landing with the outfitter's panel up;
-within 25 m of any landing **E** opens it again. The panel has three parts:
+Every BWCA entry point landing has an outfitter: a dock, a shack with the name over the door (the Ely, Sawbill and
+Gunflint outfitters where they are well known, plausible ones elsewhere; the list is in `src/outfitter.js`) and a
+canoe rack. Within 25 m of a landing **E** opens its counter (Paper), in three columns:
 
-- **The trip.** Choose 2 to 7 days of food and push off. Food is the only supply for now: a day of food is a
-  meal at dawn and one at dusk, and a little weight on the portages (`player.loadFactor`, which slows the walk a
-  little and so lengthens it). At any landing you can repack to a new number of days or **end the trip** there.
-- **The task board.** Two or three tasks written from the real map (`src/tasks.js`), each with a clue that
-  names the lake, how many portages in it lies, the rod count, which side of the lake, and whether the
-  campsite is on an island, a point or in a bay (read off the tile's own cells). Three kinds: a *lost item*
-  at a campsite a few portages from the landing (a paddle, a locket or a dry bag appears where the canoes
-  pull up below the site; **E** within a few metres picks it up), a *survey* (walk a portage to its far landing,
-  or paddle to a lake and find the put-in of a named portage), and a *fish* from a named lake (completed through
-  `tasks.onCatch(species, lakeId, lengthCm)`, which the fishing code calls; the kind is hidden while
-  `window.__game.fishing` is absent). Take one or several; a finished task is turned in at **any** outfitter.
-- **Your log.** A tally of tasks turned in and the gear they unlocked: placeholder lures by name, and a Kevlar
-  canoe that takes some weight off the portages. **New trip** forgets the trip, the log and the gear.
+- **The season permit and the food.** The permit is the season's paper, stamped at the first counter. Food is $6 a day
+  (two meals, 0.9 kg), up to what the packs hold; the counter's tap fills the bottle. During a trip, **Resupply · carry
+  on** keeps it going and **Call it a trip** logs it as came in, with a bunk night.
+- **The board.** Four notices pinned by the door (`src/tasks.js`): fish for the café (a kept fish that fits goes into
+  the notice's cooler), a lost item at a campsite (E picks it up), a portage to survey. Clues are written from the real
+  map. Each pays money, claimed only at the counter that posted it; one notice changes each morning, and nothing taken
+  on expires.
+- **Your kit**, the season's earnings, the outfitters you know and your standing here.
 
-**Energy** (`src/energy.js`) is the bar under the entry point list. It drains slowly with the clock, with the
-paddle (speed, hustle, a wind on the bow) and on the portages (more with a heavy pack); it comes back when you
-sit still, three times as fast at a campsite and twice as fast after a meal. Meals happen on their own at
-sunrise and sunset while there is food, or with **G** when you are still. With the pack empty and the bar
-under 15 % the HUD says so, gently; at zero, in Adventure, the trip ends in a calm evacuation (a fade, a line,
-and you wake at the nearest landing; see [docs/trip-core.md](docs/trip-core.md)). Sandbox never runs out. The big map (**M**) shows each task on the go as
-a soft circle around its lake, never the spot, and the outfitters as docks.
-
-The trip (food, energy, position, tasks taken and done, the tally and the gear) is kept in `localStorage`
-(`bwca-canoe-trip`) and resumes where you left it. The board is there if you want it; the lake is there if you
-don't.
+You know only your home outfitter at first; reaching another landing makes it known. The big map (**M**) shows each
+notice on the go as a soft circle around its lake, never the spot. The season (`bwca-canoe:profile`) and the trip
+(`bwca-canoe-trip`) are kept in `localStorage` and resume where you left them.
 
 ## Data pipeline
 
