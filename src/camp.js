@@ -40,6 +40,7 @@ const WAKE_AT = 0.25;       // hours after sunrise you wake
 const LATE_NIGHT = 5;       // turning in with fewer hours than this to first light, you sleep in instead:
 const SLEEP_IN = 7;         // this many hours,
 const SLEEP_IN_BY = 9;      // and up by this hour at the latest (a site reached after midnight still gives a night)
+const WORN_OUT = 0.3;       // a rest need under this (the 'tired' mark) lets the tent take you by day too, for SLEEP_IN hours
 const TENTS = { aframe: 0.85, 'a-frame': 0.85, dome: 1, fourseason: 1, 'four-season': 1, '4season': 1 }; // sleep quality by the profile's kit.tent
 const START_TENT = 0.85;    // the starting kit's A-frame, when there is no profile to ask
 const PAD = 0.05;           // a sleeping pad adds this
@@ -343,8 +344,11 @@ export class Camp {
     const d = this.day, { rise, set } = d.sunriseSunset, h = d.hours;
     const from = (set ?? 19) - SLEEP_FROM;
     if (h >= from || h < (rise ?? 6)) this.offer('Sleep', `until morning, about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
+    else if (this.wornOut) this.offer('Sleep', `worn out: until about ${clock12(this.wakeTime().at)}`, () => this.sleep('tent'));
     else this.say(`Your tent · you can turn in from ${clock12(from)}`);
   }
+  // done in by day (a site reached at dawn after a night on the water): the tent takes you anyway
+  get wornOut() { const e = this.energy; return !!(e && e.live && e.needs && e.needs.rest < WORN_OUT); }
 
   offSitePrompts() {
     const p = this.player;
@@ -514,7 +518,8 @@ export class Camp {
   // when a night begun now ends: a quarter hour after sunrise, or, turned in so late that first light is under five
   // hours off, seven hours on and no later than 9:00. { at: the hour, hours: how long }
   wakeTime() {
-    const d = this.day, rise = d.sunriseSunset.rise ?? 6;
+    const d = this.day, { rise: r, set } = d.sunriseSunset, rise = r ?? 6;
+    if (d.hours >= rise && d.hours < (set ?? 19) - SLEEP_FROM) { const at = Math.min(23.5, d.hours + SLEEP_IN); return { at, hours: at - d.hours, day: true }; } // a sleep by day, worn out
     let at = (rise + WAKE_AT) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
     if (hours < LATE_NIGHT && d.hours < 12) { at = Math.max(at, Math.min(SLEEP_IN_BY, d.hours + SLEEP_IN)); hours = at - d.hours; }
     return { at, hours };
@@ -523,17 +528,17 @@ export class Camp {
     const d = this.day, p = this.player, set = d.sunriseSunset.set, e = this.energy;
     // turning in before sunset: the night's jump would carry the clock past the dusk meal (energy.js eats only the
     // breakfast of a jump), so supper is eaten now, unless one was had in the last few hours (a cooked one, say)
-    if (set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
-    const { at: wakeAt, hours } = this.wakeTime();
+    const { at: wakeAt, hours, day: byDay } = this.wakeTime();
+    if (!byDay && set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
     const q = this.tentQuality() * (this.wet ? WET : 1);
     const fc = this.weather && this.weather.forecast ? this.weather.forecast(Math.max(1, Math.ceil(hours))) : [];
-    const n = this.tripDay(d.hours < 12 ? d.doy - 1 : d.doy); // the night of the evening's day
+    const n = this.tripDay(!byDay && d.hours < 12 ? d.doy - 1 : d.doy); // the night of the evening's day (a sleep by day: today)
     const where = this.camp && this.camp.site ? this.siteName(this.camp.site) : (p.placeName || 'Camp');
-    const hh = Math.max(1, Math.floor(hours)); // a short night is under seven hours: six and a half is 'six'
-    const night = hours >= 7 ? (this.wet ? 'a damp night in wet gear' : 'a full night\'s sleep') : `a short night, ${word(hh)} ${plural(hh, 'hour')}${this.wet ? ' in wet gear' : ''}`;
+    const hh = Math.max(1, Math.floor(hours + 0.01)); // a short night is under seven hours: six and a half is 'six'
+    const night = byDay ? `${word(hh)} ${plural(hh, 'hour')} by day${this.wet ? ' in wet gear' : ''}` : hours >= 7 ? (this.wet ? 'a damp night in wet gear' : 'a full night\'s sleep') : `a short night, ${word(hh)} ${plural(hh, 'hour')}${this.wet ? ' in wet gear' : ''}`;
     const card = {
-      kicker: `${n ? `Night ${n} · ` : ''}${where}`,
-      text: nightLine(fc, d.season),
+      kicker: `${n ? `${byDay ? 'Day' : 'Night'} ${n} · ` : ''}${where}`,
+      text: byDay ? 'Out like a light in the middle of the day, the fly zipped against the sun.' : nightLine(fc, d.season),
       sub: `${clock12(d.hours)} to ${clock12(wakeAt)} · ${night}`,
     };
     this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z };
