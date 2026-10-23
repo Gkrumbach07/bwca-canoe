@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { makeLookMaterial } from './shading.js';
-import { buildHullGeometry, buildLidGeometry, buildPackGeometry, PACK_AT, HULL, SEATS, YOKE_X, sheerY, floorAt, outerAt } from './hull.js';
+import { buildHullGeometry, buildLidGeometry, buildPackGeometry, PACK_AT, PACK2_AT, PACKS, HULL, SEATS, YOKE_X, sheerY, floorAt, outerAt } from './hull.js';
 import { buildFigure, LT, LS } from './figure.js';
 import { paddleMesher, PADDLE } from './gear.js';
 import { buildHullWater } from './hullwater.js';
 
 // The canoe rig: the hull (hull.js), its water line (hullwater.js), the paddler (figure.js, one skinned
-// figure), the paddle (gear.js) and the pack. player.js writes `state` (the mode, the stroke, the walk) and
+// figure), the paddle (gear.js) and the Duluth packs. player.js writes `state` (the mode, the stroke, the walk) and
 // the rig poses everything from it each frame:
 //   paddling  kneeling at the stern seat, a J-stroke with torso rotation whose catch, power and exit follow
 //             the stroke phase the thrust is pulsed from; sweeps when turning, a back stroke in reverse, a
@@ -21,8 +21,9 @@ import { buildHullWater } from './hullwater.js';
 //             about a right angle and swinging higher
 //   hopping   Space on foot (player.js): the legs push off, tuck in the air and reach for the ground again,
 //             the arms lift, and the landing sinks into the knees; with the canoe overhead a stagger instead
-//   carrying  the same feet under a heavier, shorter gait, the yoke on the shoulders, hands on the gunwales,
-//             the pack on the back
+//   carrying  the same feet under a heavier, shorter gait, the yoke on the shoulders, hands on the gunwales
+//   packs     in the hull, on the back or the chest, or standing on the ground (seatPacks, after the pose: packs.js
+//             says where each one is)
 //   swimming  treading water beside the overturned hull, a breaststroke when moving
 //   fishing   the hands where fishing.js holds the rod (state.fishing), the paddle across the gunwales
 //   idle      breathing and the odd glance
@@ -77,11 +78,10 @@ export function buildCanoeRig({ water = null } = {}) {
   hullPivot.add(contact);
   rig.userData.foam = contact;
   rig.add(hullPivot);
-  // the pack: in the hull ahead of the yoke, or on the back on a portage
-  const pack = new THREE.Mesh(buildPackGeometry(), mat);
-  pack.castShadow = true; pack.receiveShadow = true;
-  const packInHull = () => { hullPivot.add(pack); pack.position.set(PACK_AT.x, floorAt(PACK_AT.x) + PACK_AT.lift, 0); pack.rotation.set(0, 0, 0); };
-  packInHull();
+  // the packs (hull.js): the gear pack (0) and the food pack (1), each with its own place in the hull, flap up
+  const KINDS = ['gear', 'food'], SEAT_AT = [PACK_AT, PACK2_AT];
+  const packs = KINDS.map((k) => { const m = new THREE.Mesh(buildPackGeometry(k), mat); m.castShadow = true; m.receiveShadow = true; m.userData.kind = k; hullPivot.add(m); return m; });
+  const pack = packs[0];
 
   const fig = buildFigure(mat);
   const paddler = fig.group;
@@ -117,6 +117,9 @@ export function buildCanoeRig({ water = null } = {}) {
     swimSide: 1,         // which side of the hull you went over on (player.js, at the capsize)
     climb: 0,            // seconds left of righting the hull and climbing back in after a capsize (player.js sets it)
     climbSide: 1,        // which gunwale you come in over
+    packOnBack: undefined, // which pack rides on the back (0 the gear pack, 1 the food pack) or null (packs.js sets it);
+                         // left unset, the hull's first pack goes on the back with the canoe overhead
+    packOnChest: null,   // and on the chest: the second pack of a single heavy trip
   };
   const swimmer = new THREE.Vector3();
 
@@ -340,7 +343,6 @@ export function buildCanoeRig({ water = null } = {}) {
   function poseSeated(dt) {
     placePaddler(SEAT_X, 0, 0);
     hullPivot.position.set(0, 0, 0); hullPivot.rotation.set(0, 0, 0);
-    if (pack.parent !== hullPivot) packInHull();
     if (hat.parent !== fig.bones.head) hatOnHead();
     paddleInHand(); paddle.visible = true;
     contact.visible = true;
@@ -629,9 +631,6 @@ export function buildCanoeRig({ water = null } = {}) {
     const stg = state.stagger, wob = Math.sin(Math.PI * stg) * Math.sin(stg * 19);   // a stagger: the hull lurches and is caught
     hullPivot.rotation.set(Math.PI + 0.015 * Math.sin(Math.PI * 2 * g.phase) * (g.moving ? 1 : 0) + 0.07 * wob, yawC, 0.09 + 0.05 * Math.sin(Math.PI * stg), 'YZX');
     hullPivot.updateMatrix();
-    // the pack on the back, the hat strapped to it
-    if (pack.parent !== fig.bones.chest) { fig.bones.chest.add(pack); _mm.makeBasis(V(0, 1, 0), V(1, 0, 0), V(0, 0, -1)); pack.quaternion.setFromRotationMatrix(_mm); pack.position.set(-0.252, -0.06, 0); }
-    if (hat.parent !== pack) { pack.add(hat); hat.position.set(0.03, 0.048, 0); hat.rotation.set(Math.PI, 0, 0); }
     // hands on the gunwales ahead of the yoke
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
       const x = YOKE_X + 0.45, ys = sheerY(x) - 0.009, zg = outerAt(x, sheerY(x) - 0.002).z - 0.004;
@@ -650,7 +649,6 @@ export function buildCanoeRig({ water = null } = {}) {
   function poseSwim(dt) {
     contact.visible = false;
     if (hat.parent !== fig.bones.head) hatOnHead();
-    if (pack.parent !== hullPivot) packInHull();
     hullPivot.position.set(0, -0.3, 0);
     hullPivot.rotation.set(Math.PI, 0, 0.06 * Math.sin(state.walk * 0.7));
     // the paddle floats off the far side of the hull from you
@@ -757,11 +755,70 @@ export function buildCanoeRig({ water = null } = {}) {
     fig.bones.head.getWorldPosition(_v); paddler.worldToLocal(_v); J.head.p.copy(_v);
   }
 
+  // ---------------------------------------------------------------------------------------------------------
+  // The packs, after the pose: in the hull at their places, on the back (state.packOnBack: which one) or the chest
+  // (state.packOnChest) on the chest bone, so they ride a walk, a jog or a carry alike, or standing on the ground
+  // where packs.js set them down. With the hull overhead the hat rides strapped to the pack on the back (or hangs
+  // down the back on its cord); otherwise it is on the head (the poses put it back).
+  const packSeats = { hull: [0, 1], ground: [null, null] };
+  const _bq = new THREE.Quaternion(), _bm = new THREE.Matrix4();
+  const BACK_Q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 1, 0), V(1, 0, 0), V(0, 0, -1)));  // pack +x up the spine, its back panel (+y) against the back
+  const CHEST_Q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 1, 0), V(-1, 0, 0), V(0, 0, 1))); // and against the chest
+  const FLAT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0)); // lying in the hull, flap up
+  const packDims = (i) => PACKS[KINDS[i]];
+  function seatPacks(mode) {
+    // nothing rides in a hull that is overhead: left to itself (no packs.js) the first pack in it goes on the back
+    const onBack = state.packOnBack !== undefined ? state.packOnBack : mode === 'carry' ? packSeats.hull[0] ?? null : null, onChest = state.packOnChest ?? null;
+    for (let i = 0; i < packs.length; i++) {
+      const m = packs[i], P = packDims(i);
+      const g = packSeats.ground[i];
+      let where = i === onBack ? 'back' : i === onChest ? 'chest' : packSeats.hull.includes(i) ? 'hull' : g ? 'ground' : 'none';
+      if (where === 'hull' && mode === 'carry') where = 'none';
+      m.visible = where !== 'none';
+      if (where === 'back' || where === 'chest') {
+        if (m.parent !== fig.bones.chest) fig.bones.chest.add(m);
+        // the back panel against the back (or the chest), the pack riding low: its top at the shoulder blades
+        if (where === 'back') { m.quaternion.copy(BACK_Q); m.position.set(-0.135 - P.D * 0.36, 0.1 - P.H / 2, 0); }
+        else { m.quaternion.copy(CHEST_Q); m.position.set(0.13 + P.D * 0.36, 0.16 - P.H / 2, 0); }
+      } else if (where === 'hull') {
+        if (m.parent !== hullPivot) hullPivot.add(m);
+        const at = SEAT_AT[i] || PACK_AT;
+        m.quaternion.copy(FLAT_Q); m.position.set(at.x, floorAt(at.x) + at.lift, 0);
+      } else if (where === 'ground') {
+        const parent = rig.parent;
+        if (parent && m.parent !== parent) parent.add(m);
+        // standing on its bottom, the front toward `heading`, slumped back a little
+        const fx = Math.cos(g.heading), fz = -Math.sin(g.heading);
+        _bm.makeBasis(V(0, 1, 0), V(-fx, 0, -fz), V(-fz, 0, fx));
+        _bq.setFromRotationMatrix(_bm);
+        const tilt = 0.09;
+        m.quaternion.copy(_bq).multiply(_q.setFromAxisAngle(V(0, 0, 1), tilt));
+        // the bottom on the ground, sunk a little into it as a soft full bag settles: the middle half the height up
+        m.position.set(g.x - fx * Math.sin(tilt) * P.H / 2, g.y + Math.cos(tilt) * P.H / 2 - 0.035, g.z - fz * Math.sin(tilt) * P.H / 2);
+      }
+      m.updateMatrix();
+    }
+    // the hat: with the canoe overhead it is strapped to the pack on the back, or hangs on its cord down the back
+    if (mode === 'carry') {
+      const bi = onBack;
+      if (bi != null && packs[bi] && packs[bi].visible) {
+        const P = packDims(bi);
+        if (hat.parent !== packs[bi]) packs[bi].add(hat);
+        // on the flap's face, crown out: head-bone y (the crown) along the pack's -y (its front); the brim sits 0.163
+        // below the head bone's origin
+        hat.position.set(P.H * 0.12, 0.163 - (P.D * 0.64 + 0.03), 0); hat.rotation.set(Math.PI, 0, 0);
+      } else {
+        if (hat.parent !== fig.bones.chest) fig.bones.chest.add(hat);
+        hat.position.set(0.163 - 0.15, -0.06, 0); hat.rotation.set(0, 0, Math.PI / 2); // crown back, the brim on the back
+      }
+    }
+  }
+
   let firstPerson = false;
   const eyeLocal = V(), eyeT = V();
   let eyeInit = false;
   const api = {
-    rig, hull: hullPivot, paddler, paddle, pack, state, swimmer, figure: fig,
+    rig, hull: hullPivot, paddler, paddle, pack, packs, state, swimmer, figure: fig,
     ground: null, // set by player.js: the ground height at a world (x, z), for the feet
     update(dt) {
       if (dt <= 0) dt = 1e-4;
@@ -773,6 +830,7 @@ export function buildCanoeRig({ water = null } = {}) {
       else if (state.climb > 0) { poseClimb(dt); state.climb = Math.max(0, state.climb - dt); }
       else poseSeated(dt);
       if (mode !== 'walk' && mode !== 'carry') loco.init = false;
+      seatPacks(mode);
       contact.userData.update(dt, mode === 'paddle' ? state.speed : 0);
       // the head, neck and hat collapse out of the way from the paddler's eyes
       const s = firstPerson ? 1e-3 : 1;
@@ -797,7 +855,6 @@ export function buildCanoeRig({ water = null } = {}) {
     // the hull comes off the shoulders and lies on the ground where it was put; it stays put while the paddler
     // walks on. pitch (about the beam) follows the ground under it, or noses a beached hull up the bank.
     dropHull(x, y, z, heading, pitch = 0.2) {
-      if (pack.parent !== hullPivot) packInHull();
       if (hat.parent !== fig.bones.head) hatOnHead();
       rig.parent.attach(hullPivot);
       hullPivot.position.set(x, y + 0.3, z);
@@ -805,6 +862,11 @@ export function buildCanoeRig({ water = null } = {}) {
       hullPivot.updateMatrixWorld();
     },
     pickUpHull() { rig.attach(hullPivot); },
+    // Which packs lie in the hull: a count (the first n) or a list of indices (0 the gear pack, 1 the food pack).
+    setHullPacks(n) { packSeats.hull = Array.isArray(n) ? n.slice() : KINDS.map((_, i) => i).slice(0, Math.max(0, n)); },
+    // A pack standing on the ground at a world spot, its front toward `heading` (y the ground under it), or
+    // null to take it off the ground.
+    setPackGround(i, at) { packSeats.ground[i] = at ? { x: at.x, y: at.y, z: at.z, heading: at.heading || 0 } : null; },
     // the hands' reach over a stroke cycle (debugging): the worst shortfall of either wrist, metres
     reachReport(n = 40) {
       const save = { stroke: state.stroke, power: state.power };

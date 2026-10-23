@@ -20,6 +20,7 @@ import { makeVegetationKit } from './vegetation.js';
 import { TileManager } from './tiles.js';
 import { buildCanoeRig } from './canoe.js';
 import { Player, Input } from './player.js';
+import { Packs } from './packs.js'; // trip core B
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
 import { GeoBridge } from './geo.js';
@@ -158,6 +159,9 @@ async function main() {
     if (e.code === 'KeyN') settings.toggle('mute');
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
+  // trip core B: the packs and the portages (packs.js): where each pack is, the load you carry, the double portage
+  const packs = new Packs({ world, player, canoe, day, energy, hud, trip: typeof trip !== 'undefined' ? trip : null }); // with the veil: packs.veil = veil
+  player.packs = packs;
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -175,6 +179,7 @@ async function main() {
   renderer.compileAsync(tiles.prewarmGroup(), camera, scene).catch(() => {}); // and every species the tiles may bring
 
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
+  window.__game.packs = packs; // trip core B
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -194,6 +199,7 @@ async function main() {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       outfitter.update(dt * ts);
       player.update(dt);
+      packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
       fishing.update(dt, ts);
       outfitter.prompt();
       tasks.update(dt * ts);
