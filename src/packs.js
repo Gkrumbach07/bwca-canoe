@@ -5,8 +5,9 @@
 //   1. the landing ends at the trail head: the gear pack is set down there and you go over with the canoe and the
 //      food pack; Q at the trail head takes everything in one heavy trip instead;
 //   2. at the far end the canoe goes down (the food pack in it) and you walk back for the gear pack;
-//   3. walking back, Q fetches it: a short fade, the clock moves on by the walk back and the second carry (at the
-//      travel rate), the walk's energy is spent, and the pack stands at the far end; or walk it yourself;
+//   3. walking back, Q fetches it: a short fade, the clock moves on by the walk back and the second carry (their time
+//      at life pace, pace.js: what walking them yourself costs on the clock), the walk's energy is spent, and the pack
+//      stands at the far end; or walk it yourself;
 //   4. with everything together, E loads up and launches.
 // A trip with one pack always single-portages. Afloat (paddling, swimming, after a teleport or an evacuation) every
 // pack is in the hull; nothing about the packs is saved, so a reload finds them there too.
@@ -15,15 +16,18 @@
 // and chest) and player.loadFactor = max(1, loadKg / 40), which player.js's walking pace and energy.js's carry drain
 // read. Two hooks in player.js call in: footPrompts (the portage prompts, where the packs change them) and
 // beforeLaunch. The trip (trip.js, stream A) gives the pack count and the canoe; without one it is two packs and
-// an aluminium canoe, and the clock runs at the full rate.
+// an aluminium canoe.
+
+import { LIFE } from './pace.js';
+import { BASE_H, CARRY_H } from './energy.js';
 
 export const WEIGHTS = { aluminium: 34, royalex: 29, kevlar: 20, gear: 16, foodPack: 2, foodDay: 0.9 }; // kg
 const REACH = 3;            // m from a pack within which you pick it up or take it too
 const HULL_REACH = 3;       // m from the canoe within which its prompts apply (player.js)
 const LOAD_REACH = 10;      // m from the canoe within which a pack on the ground goes in at the launch
-const WALK_PACE = 2.2;      // m/s: player.js WALK.speed, the walk back and the carry with a pack
-const TRAVEL_RATE = 1 / 3;  // the clock's rate in Adventure while walking a portage (daycycle.js day.rate)
-const BASE_DRAIN = 0.00018, CARRY_DRAIN = 0.0004; // energy.js, per second of the clock: the base, and the carry's scaled by loadKg / 40
+// the fetch is charged at life pace (pace.js), as walking it yourself is: the walk back at a walk on the trail's going,
+// the carry over at a walk slowed by the pack (player.js: / (kg / 40) ^ 0.6, and no slower than a canoe carry)
+const TRAIL_GOING = 0.9;    // a portage trail's roots, rocks and grades against a walk on the flat
 const NAMES = { gear: 'the gear pack', food: 'the food pack', pack: 'the pack' };
 const SHORT = { gear: 'gear pack', food: 'food pack', pack: 'pack' };
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -321,9 +325,9 @@ export class Packs {
     const a = p.nearestOnTrail(tr, k.at.x, k.at.z), b = p.nearestOnTrail(tr, c.drop.x, c.drop.z), you = p.nearestOnTrail(tr, p.x, p.z);
     if (b.dist > 25 || you.dist > 30) return null;
     const back = Math.abs(you.along - a.along) + you.dist + a.dist, over = Math.abs(a.along - b.along) + a.dist + b.dist;
-    const seconds = (back + over) / WALK_PACE, carrying = over / WALK_PACE;
-    const rate = this.adventure ? TRAVEL_RATE : 1;
-    return { back, over, seconds, rate, hours: seconds * this.day.hoursPerSecond * rate, cost: (BASE_DRAIN * seconds + CARRY_DRAIN * (this.weightOf(k) / 40) * carrying) * rate, trail: k.at.trail.name };
+    const kg = this.weightOf(k), walk = LIFE.walk * TRAIL_GOING, laden = Math.max(LIFE.carry, walk / Math.pow(Math.max(1, kg / 40), 0.6));
+    const backH = back / walk / 3600, overH = over / laden / 3600, hours = backH + overH; // game hours: the walks' own time at life
+    return { back, over, seconds: hours * 3600, hours, cost: BASE_H * hours + CARRY_H * (kg / 40) * overH, trail: k.at.trail.name };
   }
 
   fetch(k, plan) {

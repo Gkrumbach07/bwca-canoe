@@ -42,7 +42,7 @@ const KEYMAP = [
     [['mouse'], 'look: in first person and on foot the first key or click takes the mouse and it turns you at once; behind the canoe, drag to orbit, wheel to zoom'], [['Esc'], 'frees the mouse when it is taken, otherwise this menu'],
   ]],
   ['The clock and the weather', [
-    [['1', '2', '3'], 'game speed 1× 2× 4× (when the rod is down)'], [['[', ']'], 'time of day back, forward an hour (Sandbox)'], [['-', '='], 'the date back, forward a day, Shift a month (Sandbox)'],
+    [['1', '2', '3'], 'game speed 1× 2× 4×, on top of the pace (Settings › Controls; when the rod is down)'], [['[', ']'], 'time of day back, forward an hour (Sandbox)'], [['-', '='], 'the date back, forward a day, Shift a month (Sandbox)'],
     [['P'], 'stop the clock (Sandbox)'], [[',', '.'], 'less, more wind (Sandbox)'], [['/'], 'veer the wind (Sandbox)'], [[';'], 'let the weather be (Sandbox)'], [['R'], 'the shore in the water'], [['N'], 'sound'],
   ]],
 ];

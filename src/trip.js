@@ -4,8 +4,12 @@
 // until "Call it a trip" at any counter (logged as came in, with a bunk night); "Resupply · carry on" keeps it going.
 // The permit is the season's paper (its number, home, the day it was stamped), written at the first counter.
 //
-// In Adventure it keeps the rules: the clock runs at a third while you travel (paddling, carrying, walking a portage),
-// the clock and wind keys and the map's "Paddle in" are off, a capsize costs energy and food and wets the gear, and a
+// The clock in either mode follows the pace (pace.js): while you travel (paddling under way, carrying the canoe, walking a
+// portage trail) it runs at the time-lapse the canoe or the walker moves at (player.boost: about 6 on open water at Trip
+// pace, up to 3 on a trail, 1 at Real), so a game hour covers what an hour covers in life; otherwise at the pace's gentle
+// idle rate (12 at Trip, 1 at Real). The 1/2/3 keys multiply both (main.js scales dt).
+//
+// In Adventure it keeps the rules: the clock and wind keys and the map's "Paddle in" are off, a capsize costs energy and food and wets the gear, and a
 // calm evacuation comes only when the energy bar is spent with nothing left to eat or drink (energy.onEvac): a fade, a
 // line from the outfitter, and you wake at 7:30 at the nearest outfitter you know. The stringer and the rest of the
 // day are lost; the tasks are kept, and there is no fee. Sandbox never ends a trip.
@@ -25,8 +29,8 @@ import { plural } from './hud.js';
 
 const DOC_KEY = 'bwca-canoe-trip';  // the outfitter's document
 const BOOK = 'logbook';             // save.js namespace
-const TRAVEL_RATE = 1 / 3;          // the clock while you travel, in Adventure
-const WAKE_AT = 7.5;                // the hour you wake at the landing after an evacuation
+const IDLE_EASE = 1.5;              // per second: how fast the clock eases to the idle rate once you stop travelling
+const WAKE_AT = 7.5;               // the hour you wake at the landing after an evacuation
 const LOG_MAX = 300;
 const CANOES = ['aluminium', 'royalex', 'kevlar']; // the hulls a season can own (shop.js); anything else reads as the aluminium
 const KNOWN_REACH = 30;             // metres from a landing that make its outfitter known
@@ -262,7 +266,12 @@ export class Trip {
   update(dt) {
     const p = this.player, d = this.day, s = this.state, adv = this.adventure;
     d.locked = adv;
-    d.rate = adv && s.active && this.travelling(dt) ? TRAVEL_RATE : 1;
+    // the pace: travelling, the clock runs at the time-lapse the canoe or the walker moves at, so the game's hour is the
+    // hour the way takes in life; otherwise it eases to the pace's idle rate
+    const pace = p.paceTable || { idle: 1 };
+    if (this.travelling(dt)) d.rate = Math.max(1, p.boost || 1);
+    else d.rate += (pace.idle - d.rate) * (1 - Math.exp(-dt * IDLE_EASE));
+    this.travel = this.travelT > 0;
     if ((this.bookT += dt) > 5) { this.bookT = 0; if (this.bookDirty) this.saveBook(); }
     if (!s.active || p.teleporting) { this.lastMode = p.mode; return; }
     this.watch(dt);

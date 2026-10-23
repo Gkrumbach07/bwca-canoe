@@ -1,7 +1,7 @@
 // Player settings: persisted in localStorage (save.js, namespace `settings`), applied to the running game
 // the moment they change, and edited in the panel the title screen opens. The key shortcuts (R, N, V, 1-3)
 // keep working: R and N route through here so the panel shows the truth; V and 1-3 change the live value,
-// the setting is the default a trip starts with. The HUD group says how much the HUD says while you paddle
+// the setting is the default a trip starts with; Pace (pace.js) is live. The HUD group says how much the HUD says while you paddle
 // (hud.js reads it every frame); Developer gathers what left the HUD: the GPS sim, FPS and triangles, tiles.
 import { save } from './save.js';
 import { LOD_SCALE } from './vegetation.js';
@@ -27,7 +27,8 @@ export const DEFAULTS = {
   invertLook: false,
   sensitivity: 1,       // mouse look, 0.3..3
   cursorSteer: false,   // the bow seeks the cursor's point on the water while you paddle
-  speed: 1,             // default game speed 1 | 2 | 4
+  pace: 'trip',         // 'trip': travel time-lapsed, a game day covers a real day's 20 km (pace.js) | 'real': life, the clock 1:1
+  speed: 1,             // default game speed 1 | 2 | 4, on top of the pace
   camera: 'third',      // default camera 'third' | 'first'
   // the HUD
   density: 'standard',  // 'quiet' | 'standard' | 'full'
@@ -68,7 +69,8 @@ export const SECTIONS = [
     { key: 'sensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.3, max: 3, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
     { key: 'invertLook', label: 'Invert look', type: 'toggle' },
     { key: 'cursorSteer', label: 'Steer the canoe where you point', desc: 'While you hold W the bow turns toward the cursor’s point on the water, or toward the look in first person', type: 'toggle' },
-    { key: 'speed', label: 'Game speed at the start of a trip', desc: '1 2 3 change it as you paddle', type: 'select', parse: Number, options: [[1, '1× · realistic'], [2, '2×'], [4, '4×']] },
+    { key: 'pace', label: 'Pace', desc: 'Trip: travel goes faster, the clock with it, so a day covers a real day’s 20 km; camp, fishing and walking about stay at life · Real: life, the clock 1:1', type: 'radio', options: [['trip', 'Trip'], ['real', 'Real']] },
+    { key: 'speed', label: 'Game speed at the start of a trip', desc: '1 2 3 change it as you paddle, on top of the pace', type: 'select', parse: Number, options: [[1, '1×'], [2, '2×'], [4, '4×']] },
     { key: 'camera', label: 'Camera at the start of a trip', desc: 'V switches as you paddle', type: 'select', options: [['third', 'Behind the canoe'], ['first', 'From the paddler’s seat']] },
   ] },
   { id: 'hud', label: 'HUD', rows: [
@@ -196,6 +198,7 @@ export class Settings {
       case 'invertLook': t.chase.invert = v; break;
       case 'sensitivity': t.chase.sensitivity = v; break;
       case 'cursorSteer': t.player.cursorSteer = v; t.chase.setCursorSteer(v); break;
+      case 'pace': t.player.pace = v === 'real' ? 'real' : 'trip'; break;
       case 'speed': if (initial) t.player.timeScale = v; break;
       case 'camera': if (initial && t.chase.mode !== v) t.chase.setMode(v); break;
       case 'hudScale': document.documentElement.style.setProperty('--hud', String(v)); break;

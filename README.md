@@ -29,7 +29,14 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
   workers, a coarse 80 m far field underneath, and lets the rest go.
 - **GPS simulation**: the canoe's real-world latitude/longitude is broadcast as the device location,
   so other tabs that ask for geolocation see you paddling (see *GPS simulator* below).
-- **A day in the Boundary Waters**: a 20-minute day/night cycle with the real sun and moon for the date and
+- **The pace** (`src/pace.js`): a game day covers a real BWCA day's distance. Everything moves at life pace (a loaded
+  canoe at 4 km an hour, a portage carry at 3), and while you travel the canoe and the clock are time-lapsed together:
+  at **Trip** pace (the default; Settings › Controls › Pace) ×6 on open water, a game hour of paddling in about ten
+  real minutes, and up to ×3 on a portage trail, so a travel day of 6 to 8 game hours covers 20 to 25 km. The boost
+  fades to life near a shore, a landing or a dock, on a slow stroke and in a hard turn; camp, chores, fishing and
+  walking off a trail stay at life with the clock at 12×. **Real** pace is 1:1 throughout. A "trip ×6" mark sits
+  bottom right while the boost carries you, and the readout (Tab) gives the clock's rate and the km an hour.
+- **A day in the Boundary Waters**: a day/night cycle on the pace's clock with the real sun and moon for the date and
   the clock (`src/astro.js`: sunrise and sunset shift through the year, the moon shows its phase), a
   sky-matched haze, golden light at the ends of the day, the clouds, the water, stars, with dawn mist over
   the lakes. The game starts on today's date at the current time.
@@ -104,7 +111,7 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | , / . | less / more wind (Sandbox; `;` hands control back to the weather) |
 | / | veer the wind 30° (Sandbox) |
 | R | toggle the shore, its trees and the canoe mirrored in the water (a second scene pass; off, the water mirrors the sky alone) |
-| 1 / 2 / 3 | game speed 1× / 2× / 4× (a ×2 mark bottom right while it is up) |
+| 1 / 2 / 3 | game speed 1× / 2× / 4×, on top of the pace (a ×2 mark bottom right while it is up) |
 | Esc | frees the mouse when the look has taken it; otherwise pause: the title screen with Paddle on / New season / Settings / Controls (Esc again, or Enter, resumes); Controls shows this table in the game |
 | mouse | look. In first person, and on land in third person, the mouse turns you the way it does in Minecraft: the first key or click takes the mouse, every movement turns the look at once, Esc frees the mouse (Esc again opens the menu). On land the body faces the look and WASD moves relative to it, A and D strafing; in third person the camera sits behind you and the mouse's tilt swings it up or down. Behind the canoe the cursor stays free: drag to orbit, wheel to zoom. *Settings → Steer the canoe where you point*: while you hold W the bow turns toward the cursor's point on the water, or toward the look in first person; A/D nudge, and nothing sticks |
 | the map sheet | click a spot to paddle in there (teleport to the nearest open water, anywhere in the wilderness; Sandbox). In Adventure the note gives the distance, the hours by the clock and, where your map shows them, the portages |
@@ -123,12 +130,12 @@ lines, the key hints, the HUD size and colour-blind marks.
 Paddle up to any bank and press **E**: the canoe noses in, you step out, and you choose to **E** shoulder
 it or **Q** leave it beached there, bow on the land. On foot WASD walks relative to the view (W into the
 screen, D to its right; with the mouse look the body faces the look and the walker strides, backs up or side-steps
-as the keys say), about 2.2 m/s (a jog at 3.4 with Shift, 1.8
-with the canoe on your shoulders): a brisk game pace rather than a measured walk, since the canoe runs
-quick too. The woods walk at the same pace as a portage trail; only the hills cost, less on a graded trail,
+as the keys say), at life pace: 1.35 m/s (a jog at 2.9 with Shift; with the canoe on your shoulders about 0.85,
+3 km an hour, by the load). On a portage trail the walk is time-lapsed with the clock at Trip pace (seen at about
+2.5 m/s under the canoe, up to ×3). The woods walk at the same pace as a trail; only the hills cost, less on a graded trail,
 and a slope past 40° stops you. Trunks and walls hold you off and you slide round them, and water past
 your knees stops you. A rock stops you at its edge, as it is drawn; one lower than a step (a slab, a small
-rock, a log on its side) you step up onto, and **Space** hops about 0.4 m, onto a higher one or over a log. The readout's km/h is the ground you actually make good, so it falls to nothing while
+rock, a log on its side) you step up onto, and **Space** hops about 0.4 m, onto a higher one or over a log. The readout's km/h is the ground you actually make good per hour of the game's clock, so it falls to nothing while
 something holds you. A canoe you have left
 shows on the map; back within 3 m of it, **E** launches it (**Q** shoulders it instead), and if the water
 there is too shallow for a canoe the prompt says so. Carrying, **E** launches at any shore with a metre of
@@ -142,7 +149,7 @@ portaging. Portage lengths are shown in rods, as on every BWCA map.
 The title and pause screens are keyboard-first: the arrows move between items (← → between the menu and the
 entry points), Enter picks, Esc goes back. Settings (`src/settings.js`) come in sections: Display (shadow map
 size, tree detail and cull distance, render scale, the shore and sky in the water), Sound (volume, mute),
-Controls (mouse sensitivity, inverted look, cursor steering, the game speed and camera a trip starts with),
+Controls (mouse sensitivity, inverted look, cursor steering, the pace, the game speed and camera a trip starts with),
 HUD (above) and Developer (the GPS simulator's state, FPS and triangles and the tiles as rows of the readout).
 The canoe's position, heading, the day clock and the camera mode are saved every few seconds
 (`src/save.js`, one `localStorage` document per namespace under `bwca-canoe:`; the journal's trip tally

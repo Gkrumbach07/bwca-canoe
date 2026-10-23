@@ -35,7 +35,16 @@ const SITE_R = 22;          // metres from a site's fire ring within which you a
 const AT_GRATE = 2.4;       // metres from the ash within which E is the fire's
 const AT_TENT = 3.2;        // and from the tent's middle within which it is the tent's
 const HULL_REACH = 3;       // player.js: within this of the canoe on the ground E is the canoe's
-const PITCH = { seconds: 1.6, hours: 0.25 }; // the tent goes up over 1.6 s while a quarter of an hour passes
+// The chores take their time at life (pace.js): the clock passes by each one's real length over a second or so on the
+// screen, while the walker holds still (pitching the tent a quarter hour, laying and lighting a fire twenty minutes,
+// a hot meal half an hour, filling the bottle five minutes)
+const CHORES = {
+  pitch: { seconds: 1.6, hours: 0.25, say: 'Pitching the tent…' },
+  fire: { seconds: 1.4, hours: 20 / 60, say: 'Laying the fire and lighting it…' },
+  rekindle: { seconds: 0.8, hours: 5 / 60, say: 'Building the fire up again…' },
+  cook: { seconds: 1.4, hours: 0.5, say: 'Cooking on the grate…' },
+  fill: { seconds: 0.7, hours: 5 / 60, say: 'Filling the bottle…' },
+};
 const SLEEP_FROM = 1.5;     // hours before sunset the tent will take you
 const WAKE_AT = 0.25;       // hours after sunrise you wake
 const LATE_NIGHT = 5;       // turning in with fewer hours than this to first light, you sleep in instead:
@@ -219,7 +228,7 @@ export class Camp {
     if (this.camp && p.mode === 'paddle' && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) > STRIKE_AFAR) this.strike({ quiet: true });
     if (this.lamp && this.player.input.pressed('KeyH')) this.lamp.toggle();
     this.rest(dt, dh);
-    if (this.busy) { this.pitching(dt); return; }
+    if (this.busy) { this.working(dt); return; }
     if (this.night) return;
     this.notes();
     this.still = Math.abs(p.speed) < 0.15 ? this.still + dt : 0;
@@ -299,6 +308,10 @@ export class Camp {
     return true;
   }
   fillBottle(wait = this.filterWait()) {
+    if (this.energy.bottle >= 2 - 0.001) { this.note('The bottle is full.'); return; }
+    this.chore('fill', () => this.filled(wait));
+  }
+  filled(wait) {
     const got = this.energy.fill(2, wait);
     if (this.audio && this.audio.paddleDip) this.audio.paddleDip();
     if (got <= 0) { this.note('The bottle is full.'); return; }
@@ -431,7 +444,7 @@ export class Camp {
     this.camp = c;
     this.raise(c);
     this.setRise(c, 0);
-    this.busy = { t: 0, passed: 0 };
+    this.chore('pitch', () => { if (c.mesh && this.audio) this.audio.emit('tent-zip', { x: c.x + c.fdx * 0.9, y: c.y + 0.5, z: c.z + c.fdz * 0.9 }); });
     this.layOut(c);
     this.log('camp', { key: c.key, x: Math.round(c.x), z: Math.round(c.z), offsite: !c.key });
     this.persist();
@@ -443,17 +456,19 @@ export class Camp {
     const sx = -c.fdz, sz = c.fdx;
     this.packs.unload({ x: c.x + c.fdx * 1.75 + sx * 1.0, z: c.z + c.fdz * 1.75 + sz * 1.0, heading: Math.atan2(-c.fdz, c.fdx) });
   }
-  // the quarter hour of pitching, over a second and a half
-  pitching(dt) {
-    const b = this.busy, c = this.camp;
+  // a chore (CHORES): the walker holds still while its time passes on the clock, then `done`
+  chore(kind, done = null) { this.busy = { t: 0, passed: 0, kind, done }; }
+  // the chore under way, per frame (real seconds): its hours spread over its seconds; the tent rises as it is pitched
+  working(dt) {
+    const b = this.busy, C = CHORES[b.kind] || CHORES.pitch, c = this.camp;
     b.t += dt;
-    const k = Math.min(1, b.t / PITCH.seconds), want = PITCH.hours * k;
+    const k = Math.min(1, b.t / C.seconds), want = C.hours * k;
     this.pass(want - b.passed); b.passed = want;
-    if (c && c.mesh) this.setRise(c, k);
-    this.say('Pitching the tent…');
+    if (b.kind === 'pitch' && c && c.mesh) this.setRise(c, k);
+    this.say(C.say);
     if (k >= 1) {
       this.busy = null;
-      if (c && this.audio) this.audio.emit('tent-zip', { x: c.x + c.fdx * 0.9, y: c.y + 0.5, z: c.z + c.fdz * 0.9 });
+      if (b.done) b.done();
     }
   }
   // take the camp down (the claim goes, the tent comes down)
@@ -479,10 +494,13 @@ export class Camp {
 
   // --- the fire and the pot -----------------------------------------------------------------------------------
   lightFire(site) {
-    const key = campKey(site), F = this.fires, now = this.now;
-    if (F.get(key)) F.feed(key, now); else F.kindle(key, site.layout.fire, now);
-    this.lit.add(key);
-    this.persist();
+    const key = campKey(site), F = this.fires;
+    this.chore(F.get(key) ? 'rekindle' : 'fire', () => {
+      const now = this.now;
+      if (F.get(key)) F.feed(key, now); else F.kindle(key, site.layout.fire, now);
+      this.lit.add(key);
+      this.persist();
+    });
   }
   // what E at a burning fire cooks now: the best fish on the stringer at any hour, else supper in the evening or
   // breakfast in the morning while there is food; null when nothing is due
@@ -503,8 +521,12 @@ export class Camp {
     return { label: evening ? 'Cook supper' : 'Cook breakfast', hint: 'a hot meal on the grate', supper: evening };
   }
   cook(meal) {
-    const e = this.energy;
     if (!meal.label) return;
+    if (!(meal.fish !== undefined || this.sandbox || this.energy.food >= 0.5)) { this.note('The food pack is empty.'); return; }
+    this.chore('cook', () => this.eatCooked(meal)); // half an hour on the grate, then the meal
+  }
+  eatCooked(meal) {
+    const e = this.energy;
     let ok, line;
     if (meal.fish !== undefined) {
       const f = this.fishing.stringer.splice(meal.fish, 1)[0], name = (SPECIES[f.species] && SPECIES[f.species].name.toLowerCase()) || 'fish';

@@ -342,7 +342,7 @@ export class Weather {
       this.wetness = A && LOOKS[A.s].rain > 0 ? 1 : w;
     }
     this._lastAbs = abs;
-    const dh = dt * day.hoursPerSecond;
+    const dh = dt * (day.hoursPerTick ?? day.hoursPerSecond); // game hours this frame, at the clock's own rate (the pace)
     const rain = L.rain * (1 - L.snow);
     if (rain > 0.02) this.wetness = Math.min(1, this.wetness + dh * 7 * rain);
     else this.wetness = Math.max(0, this.wetness - dh * dry(L.sun * Math.max(0, day.sunDir.y), this.wind ? this.wind.speed : 3) * (1 - 0.6 * L.grey));
