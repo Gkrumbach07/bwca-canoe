@@ -7,6 +7,7 @@ import { makePost } from './post.js';
 import { makeAquaticKit } from './aquatic.js';
 import { GroundCover } from './groundcover.js';
 import { Loons } from './loons.js';
+import { Fauna } from './fauna.js';
 import { Mist } from './mist.js';
 import { Ambient } from './audio.js';
 import { makeTerrainMaterial } from './terrain.js';
@@ -105,7 +106,8 @@ async function main() {
   const mist = new Mist(water);
   scene.add(mist.group);
   const audio = new Ambient();
-  const loons = new Loons(world, water, scene, 6, audio);
+  const loons = new Loons(world, water, scene, 6, audio, ripples);
+  const fauna = new Fauna(world, water, scene, { loons }); // beaver, moose, eagles, fish, insects, gulls, raven
 
   const canoe = buildCanoeRig({ water }); // the hull's water line rides the water's own swell
   canoe.rig.traverse((o) => o.layers.enable(REFLECT_LAYER));
@@ -122,6 +124,7 @@ async function main() {
   const post = makePost(renderer, scene, camera);
   const { lat, lon } = world.toLatLon(start.x, start.z);
   const day = new DayCycle({ scene, sun, hemi, moon, sky, clouds, water, post, stars, mist, ripples, hullFoam: canoe.rig.userData.foam.material, moonDisc }, { lat, lon });
+  const faunaCtx = { player, world, water, day, camera, ripples, audio };
   player.season = day.season;
   const geo = new GeoBridge();
   const wind = new Wind(11);
@@ -160,7 +163,7 @@ async function main() {
   if (trip && (trip.mode !== 'paddle' || world.shoreAt(trip.x, trip.z) > -2)) player.teleport(trip.x, trip.z);
   title.open('title');
 
-  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
+  window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -208,7 +211,8 @@ async function main() {
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
     cover.update(dt * ts, player.x, player.z, hemi, sun);
     mist.update(dt * ts, player.x, player.z);
-    loons.update(dt * ts, player, day.season);
+    loons.update(dt * ts, player, day.season, faunaCtx);
+    fauna.update(dt * ts, faunaCtx);
     audio.tick(dt, { player, world, wind, day, season: day.season, camera }); // the soundscape reads the whole scene
     geo.update(player, world);
     hud.update({ player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell });
