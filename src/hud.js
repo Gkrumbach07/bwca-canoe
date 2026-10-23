@@ -113,6 +113,9 @@ function msSegments(b, top, right, bottom, left) {
 
 const $ = (id) => document.getElementById(id);
 
+const PIN_CRUISE = 2.3;          // m/s: the aluminium canoe and the ash paddle at a steady stroke (shop.js measured 2.29)
+const PIN_TRAVEL_RATE = 1 / 3;   // the clock while you travel in Adventure (trip.js TRAVEL_RATE)
+
 export class Hud {
   // opts: { onTeleport(x, z), settings, camera }
   constructor(world, opts = {}) {
@@ -331,6 +334,7 @@ export class Hud {
   }
 
   // --- the pin and its pencil note ----------------------------------------------------------------
+  // (PIN_CRUISE and PIN_TRAVEL_RATE, above the class: the canoe's cruise and the clock's rate while you travel)
   propose(x, z, recentre) {
     if (!this.world.inBounds(x, z, 50)) return;
     this.pin = { x, z };
@@ -349,11 +353,18 @@ export class Hud {
         const from = p.lakeId, to = w.lakeIdAt(x, z);
         if (from > 0 && to > 0) {
           const r = tasks.reach(from).get(tasks.basinOf(to));
-          hops = r ? (r.hops === 0 ? ' No portages.' : ` ${word(r.hops)[0].toUpperCase()}${word(r.hops).slice(1)} ${plural(r.hops, 'portage')}.`) : ' A long way round.';
+          // the portages are counted only where your map shows them (sheets.js): across country it doesn't, the way is
+          // yours to find
+          const known = !r || r.hops === 0 || this.wayOnMap(tasks, from, to);
+          hops = !r ? ' A long way round.' : r.hops === 0 ? ' No portages.' : known ? ` ${word(r.hops)[0].toUpperCase()}${word(r.hops).slice(1)} ${plural(r.hops, 'portage')}.` : ' The way there runs off your map.';
         }
       }
-      // in Adventure the clock runs at a third while you travel, so the way takes three times the hours on the clock
-      const hours = (km / kmh) * (walk ? 3 : 1);
+      // Adventure: the hours on the game's own clock, from the canoe's cruise (an aluminium hull and an ash paddle make
+      // 2.3 m/s, times the gear's cruise: shop.js) and the clock while you travel (a third of its rate: trip.js), about
+      // 2.9 hours a kilometre, less with a fresh wind against you. Sandbox: a paddler's hours, at 4.5 km an hour.
+      const day = ctx && ctx.day, hps = day && day.hoursPerSecond ? day.hoursPerSecond : 24 / 1200;
+      const mps = PIN_CRUISE * ((p.gear && p.gear.cruise) || 1) * (wind && wind.fresh ? 0.8 : 1);
+      const hours = walk ? ((km * 1000) / mps) * hps * PIN_TRAVEL_RATE : km / kmh;
       text = `${walk ? '' : 'Paddle in here? '}${name ? `${name}, ` : ''}about ${fmtKm(km)} km ${dir}, ${fmtDuration(hours)}${walk ? ' by the clock' : ''}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
       if (walk) text = text[0].toUpperCase() + text.slice(1);
     } else if (name) text = `${walk ? '' : 'Paddle in here? '}${name}.`;
@@ -363,6 +374,19 @@ export class Hud {
     if (this.el.pinText) this.el.pinText.textContent = text;
     if (this.el.pin) this.el.pin.classList.add('show');
     this.placeConfirm();
+  }
+  // whether every portage on the fewest-portage way from one lake to another is on your map (both its ends shown):
+  // the counter of portages in the pin's note is said only then. No sheets attached (or Sandbox): always.
+  wayOnMap(tasks, fromLake, toLake) {
+    const sh = this.sheetsOn; if (!sh || !sh.gated || typeof tasks.graph !== 'function') return true;
+    const a = tasks.basinOf(fromLake), b = tasks.basinOf(toLake), adj = tasks.graph(), prev = new Map([[a, null]]), q = [a];
+    for (let h = 0; h < q.length && !prev.has(b); h++) for (const e of adj.get(q[h]) || []) if (!prev.has(e.to)) { prev.set(e.to, { from: q[h], e }); q.push(e.to); }
+    if (!prev.has(b)) return false;
+    for (let k = b; prev.get(k); k = prev.get(k).from) {
+      const def = this.world.portages[prev.get(k).e.portage];
+      if (!def || !def.launch.every((l) => sh.showsDetail(l.x, l.z))) return false;
+    }
+    return true;
   }
   placeConfirm() {
     const box = this.el.pin;
