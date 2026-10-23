@@ -110,7 +110,8 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     const hit = g && g.mesh.locate(x - g.ox, z - g.oz);
     return hit ? { mesh: g.mesh, hit } : null;
   };
-  const ctx = { tg, world, ox, oz, H, locate, obstacles, inside };
+  if (entry) clearYards(entry, yards, size); // the yards of stores built before this tile came in
+  const ctx = { tg, world, ox, oz, H, locate, obstacles, inside, entry };
   const pieces = [];
   const rng = mulberry32(42 + tx * 1000 + ty);
 
@@ -156,6 +157,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     const tall = full.boundingBox.max.y;
     for (let i = 0; i < vm.instanceMatrix.count; i++) {
       const o = i * 16, sx = Math.hypot(m[o], m[o + 1], m[o + 2]), sz = Math.hypot(m[o + 8], m[o + 9], m[o + 10]), top = m[o + 13] + tall * Math.hypot(m[o + 4], m[o + 5], m[o + 6]);
+      if (sx < 1e-6) continue; // let go of for a store's yard
       const x = m[o + 12] + ox, z = m[o + 14] + oz;
       if (log) obstacles.push({ x, z, ux: m[o] / sx, uz: m[o + 2] / sx, hx: 3.4 * sx, hz: 0.36 * sz, box: true, top });
       else obstacles.push({ x, z, r: 0.3 * sx, rock: true, top });
@@ -376,6 +378,27 @@ function signMaterial(name) {
   return m;
 }
 
+// the store's painted signs inside: cream letters on a green board, a material per text (the name sign's program)
+function shelfSignMaterial(text) {
+  const key = `shelf:${text}`;
+  let m = signCache.get(key);
+  if (m) return m;
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#2f4537'; ctx.fillRect(0, 0, 512, 96);
+  ctx.strokeStyle = '#d9cfae'; ctx.lineWidth = 4; ctx.strokeRect(10, 10, 492, 76);
+  ctx.fillStyle = '#e6dcbc'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  let size = 44; const font = () => `600 ${size}px Georgia, "Times New Roman", serif`;
+  ctx.font = font();
+  const spaced = text.split('').join('\u200a');
+  while (ctx.measureText(spaced).width > 440 && size > 16) { size -= 2; ctx.font = font(); }
+  ctx.fillText(spaced, 256, 51);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  m = makeToonMaterial({ vertexColors: false, map: tex, side: THREE.DoubleSide });
+  signCache.set(key, m);
+  return m;
+}
+
 // A dock out from the landing and, up the yard from it, the outfitter's store (buildStore) with its door to the
 // lake and the outfitter's name over it, a canoe rack beside it. The frame: from the landing up onto dry ground and
 // back to the edge, d out to the water.
@@ -509,6 +532,17 @@ const IN = {
   canoe: { a: -1.25 },
   ties: [-2.0, 2.0], tieY: [2.42, 2.58],
 };
+// the painted signs inside, in the store's frame: the text, its centre (a, y, b), its size, the way it faces (na, nb)
+const SIGNS = [
+  { text: 'GROCERIES', a: IN.food.a - 0.014, y: IN.food.h + 0.14, b: (IN.food.b0 + IN.food.b1) / 2, w: 1.1, h: 0.2, n: [-1, 0] },
+  { text: 'GROCERIES', a: IN.food.a + 0.014, y: IN.food.h + 0.14, b: (IN.food.b0 + IN.food.b1) / 2, w: 1.1, h: 0.2, n: [1, 0] },
+  { text: 'TACKLE & BAIT', a: IN.tackle.a - 0.014, y: IN.tackle.h + 0.14, b: (IN.tackle.b0 + IN.tackle.b1) / 2, w: 1.1, h: 0.2, n: [-1, 0] },
+  { text: 'TACKLE & BAIT', a: IN.tackle.a + 0.014, y: IN.tackle.h + 0.14, b: (IN.tackle.b0 + IN.tackle.b1) / 2, w: 1.1, h: 0.2, n: [1, 0] },
+  { text: 'CAMP GEAR', a: IN.gear.a0 - 0.016, y: 1.86, b: (IN.gear.b0 + IN.gear.b1) / 2, w: 1.0, h: 0.17, n: [-1, 0] },
+  { text: 'LURES', a: -ST.iW + 0.026, y: IN.pegs.y1 + 0.17, b: (IN.pegs.b0 + IN.pegs.b1) / 2, w: 0.8, h: 0.17, n: [1, 0] },
+  { text: 'NOTICES', a: ST.iW - 0.026, y: IN.board.y1 + 0.16, b: (IN.board.b0 + IN.board.b1) / 2, w: 0.7, h: 0.15, n: [-1, 0] },
+  { text: 'PERMITS · MAPS', a: 1.1, y: 2.44, b: -ST.iD + 0.026, w: 1.4, h: 0.22, n: [0, 1] },
+];
 // the walls going round, each from its outside-left corner (u along it, n out from its outside face): front, right,
 // back, left; and their openings (u along the wall, y up from the floor)
 const WALLS = [
@@ -731,7 +765,7 @@ function shellOutside(b, glass, rng) {
 // casings), the casings and the window stools, the baseboards, the plank floor, the ceiling of boards between the
 // rafters, the ridge beam, the wall plates and the tie beams.
 function shellInside(b, rng) {
-  const pine = (r) => tone(PINE, r, 0.08, 0.012);
+  const pine = (r) => tone(PINE, r, 0.08, 0.012), groove = C(0x4a301c);
   WALLS.forEach((w) => {
     const n = -ST.wall, topI = (u) => wtop(w, u, true), u0w = ST.wall, u1w = w.len - ST.wall;
     const blocks = w.open.map((op) => ({ u0: op.u0 - 0.075, u1: op.u1 + 0.075, y0: op.door ? -9 : op.y0 - 0.11, y1: op.y1 + 0.09 }));
@@ -754,8 +788,10 @@ function shellInside(b, rng) {
         for (let s = 0; s < steps; s++) {
           const ya = y0 + ((yTop - y0) * s) / steps, yb = y0 + ((yTop - y0) * (s + 1)) / steps, last = s === steps - 1;
           const pts = last && reach ? wallCol(w, c0, c1, ya, topI, n) : [wp(w, c0, ya, n), wp(w, c1, ya, n), wp(w, c1, yb, n), wp(w, c0, yb, n)];
-          b.face(pts, TILE.WOOD, col, { ref: wp(w, um, ya, 0), U: AY, o: wp(w, c0, 0, n), shift: sh, scale: 2.2 });
+          b.face(pts, TILE.SPLIT, col, { ref: wp(w, um, ya, 0), U: AY, o: wp(w, c0, 0, n), shift: sh });
         }
+        // the groove at the board's edge, a dark line up it
+        if (c0 > u0w + 1e-3) { const g0 = c0 - 0.004, g1 = c0 + 0.004, yt = reach ? topI(c0) : y1; b.face([wp(w, g0, y0, n - 0.0015), wp(w, g1, y0, n - 0.0015), wp(w, g1, yt, n - 0.0015), wp(w, g0, yt, n - 0.0015)], TILE.PLAIN, groove, { ref: wp(w, c0, y0, 0) }); }
       }
     }
     // the casings round the openings and the windows' stools and aprons
@@ -1077,18 +1113,18 @@ function backGoods(b, y0, room, rng) {
 // the stove in the back corner: a slate hearth, a box stove on legs with its door to the room and a kettle on it, the
 // pipe up through the roof, a sheet of iron on the wall behind, a box of split wood, a chair pulled up to it
 function stoveCorner(b, rng, occ) {
-  const s = IN.stove, iron = C(IRON);
+  const s = IN.stove, iron = C(0x3d3934), IRONT = TILE.PLAIN;
   sbox(b, -ST.iW, -1.45, 0, 0.03, -ST.iD, -2.05, TILE.STONE, C(0x5e5a54), { grain: 'x' });
-  sbox(b, s.a0, s.a1, s.y0, s.y1, s.b0, s.b1, TILE.METAL, iron, { grain: 'x' });
-  sbox(b, s.a0 - 0.02, s.a1 + 0.02, s.y1, s.y1 + 0.02, s.b0 - 0.02, s.b1 + 0.02, TILE.METAL, iron.clone().offsetHSL(0, 0, -0.03), { grain: 'x' });
-  for (const [a, c] of [[s.a0 + 0.04, s.b0 + 0.04], [s.a1 - 0.04, s.b0 + 0.04], [s.a0 + 0.04, s.b1 - 0.04], [s.a1 - 0.04, s.b1 - 0.04]]) sbox(b, a - 0.02, a + 0.02, 0.03, s.y0, c - 0.02, c + 0.02, TILE.METAL, iron, { grain: 'y' });
+  sbox(b, s.a0, s.a1, s.y0, s.y1, s.b0, s.b1, IRONT, iron, { grain: 'x' });
+  sbox(b, s.a0 - 0.02, s.a1 + 0.02, s.y1, s.y1 + 0.02, s.b0 - 0.02, s.b1 + 0.02, IRONT, iron.clone().offsetHSL(0, 0, -0.03), { grain: 'x' });
+  for (const [a, c] of [[s.a0 + 0.04, s.b0 + 0.04], [s.a1 - 0.04, s.b0 + 0.04], [s.a0 + 0.04, s.b1 - 0.04], [s.a1 - 0.04, s.b1 - 0.04]]) sbox(b, a - 0.02, a + 0.02, 0.03, s.y0, c - 0.02, c + 0.02, IRONT, iron, { grain: 'y' });
   const mid = (s.b0 + s.b1) / 2;
-  sbox(b, s.a1, s.a1 + 0.012, s.y0 + 0.07, s.y1 - 0.08, mid - 0.17, mid + 0.17, TILE.METAL, C(0x2a2826), { grain: 'z' });
+  sbox(b, s.a1, s.a1 + 0.012, s.y0 + 0.07, s.y1 - 0.08, mid - 0.17, mid + 0.17, IRONT, C(0x2b2825), { grain: 'z' });
   sbox(b, s.a1 + 0.012, s.a1 + 0.04, s.y0 + 0.2, s.y0 + 0.23, mid + 0.08, mid + 0.14, TILE.METAL, C(0x6a6660));
   occ.push(sobb(s.a0, s.a1, s.y0, s.y1, s.b0, s.b1));
   const [pa, pb] = s.pipe;
-  b.cyl(V(pa, s.y1 + 0.02, pb), V(pa, ceil(pa) + 0.01, pb), 0.075, 0.075, 10, TILE.METAL, iron, {});
-  b.cyl(V(pa, ceil(pa) - 0.02, pb), V(pa, ceil(pa), pb), 0.13, 0.13, 10, TILE.METAL, C(0x5a5650), { cap0: true, capTile: TILE.METAL });
+  b.cyl(V(pa, s.y1 + 0.02, pb), V(pa, ceil(pa) + 0.01, pb), 0.075, 0.075, 10, IRONT, iron, {});
+  b.cyl(V(pa, ceil(pa) - 0.02, pb), V(pa, ceil(pa), pb), 0.13, 0.13, 10, IRONT, C(0x4a4640), { cap0: true, capTile: TILE.METAL });
   // the kettle
   const ka = s.a1 - 0.18, kc = s.b1 - 0.14, ky = s.y1 + 0.02;
   b.cyl(V(ka, ky, kc), V(ka, ky + 0.11, kc), 0.1, 0.085, 10, TILE.PLAIN, C(0x3d5a6a), { cap1: true, capTile: TILE.PLAIN });
@@ -1096,7 +1132,8 @@ function stoveCorner(b, rng, occ) {
   const hd = []; for (let k = 0; k <= 8; k++) { const t = (k / 8) * Math.PI; hd.push(V(ka + Math.cos(t) * 0.07, ky + 0.11 + Math.sin(t) * 0.08, kc)); }
   b.tube(hd, 0.006, 4, TILE.PLAIN, C(0x2a2826));
   // the heat shield on the wall behind it
-  sbox(b, -ST.iW, -ST.iW + 0.012, 0.1, 1.5, -3.5, -2.1, TILE.METAL, C(0x4a4844), { grain: 'z' });
+  sbox(b, -ST.iW, -ST.iW + 0.012, 0.12, 1.25, -3.4, -2.25, TILE.PLAIN, C(0x8d8c86), { grain: 'z' });
+  for (const [y, c] of [[0.12, -2.25], [1.25, -2.25]]) { void c; sbox(b, -ST.iW + 0.012, -ST.iW + 0.03, y - 0.01, y + 0.01, -3.4, -2.25, TILE.PLAIN, C(0x6e6d68), { grain: 'z' }); }
   // the wood box with split wood in it
   const w = IN.wood, bw = C(0x7a5a3a);
   sbox(b, w.a0, w.a1, 0, 0.42, w.b0, w.b0 + 0.02, TILE.WOOD, bw, { grain: 'x' });
@@ -1142,6 +1179,21 @@ function overhead(b, rng, occ) {
   b.cyl(V(L.a, sTop - 0.02, L.b), V(L.a, L.y + 0.04, L.b), 0.016, 0.016, 6, TILE.PLAIN, C(0x8a8780), {});
   b.cyl(V(L.a, L.y + 0.075, L.b), V(L.a, L.y + 0.025, L.b), 0.03, 0.034, 8, TILE.PLAIN, C(0xfff2d0), { cap1: true, capTile: TILE.PLAIN, capCol: C(0xfff6e0) });
   void rng;
+}
+// the boards the painted signs are on (the letters are a texture of their own, per store): the shelf units' headers
+// stand on two posts on their tops; the others are on the walls and the gear's top shelf
+function signBoards(b) {
+  const wood = C(0x5a3e28);
+  for (const g of [IN.food, IN.tackle]) {
+    const c = (g.b0 + g.b1) / 2;
+    sbox(b, g.a - 0.012, g.a + 0.012, g.h + 0.02, g.h + 0.26, c - 0.58, c + 0.58, TILE.WOOD, wood, { grain: 'z' });
+    for (const e of [-0.45, 0.45]) sbox(b, g.a - 0.015, g.a + 0.015, g.h, g.h + 0.05, c + e - 0.015, c + e + 0.015, TILE.WOOD, wood, { grain: 'y' });
+  }
+  for (const S of SIGNS) {
+    if (S.text === 'GROCERIES' || S.text === 'TACKLE & BAIT') continue;
+    const [na, nb] = S.n, hw = S.w / 2 + 0.03, hh = S.h / 2 + 0.03, d = 0.012, ca = S.a - na * d, cb = S.b - nb * d;
+    sbox(b, ca - (na ? d : hw), ca + (na ? d : hw), S.y - hh, S.y + hh, cb - (nb ? d : hw), cb + (nb ? d : hw), TILE.WOOD, wood, { grain: na ? 'z' : 'x' });
+  }
 }
 // the door, open into the store against the front wall; the rag rug inside it; paddles leaning on a rail by the door
 function doorway(b, rng) {
@@ -1200,7 +1252,7 @@ function* buildStoreKit() {
   yield;
   part((b, occ) => stoveCorner(b, rng, occ), { rays: 6, reach: 0.45, floor: 0.4 });
   yield;
-  part((b, occ) => overhead(b, rng, occ), { rays: 6, reach: 0.6, floor: 0.45 });
+  part((b, occ) => { overhead(b, rng, occ); signBoards(b); }, { rays: 6, reach: 0.6, floor: 0.45 });
   const kit = K.done();
   const gl = glass.build();
   kit.glass = { position: gl.getAttribute('position').array, normal: gl.getAttribute('normal').array, color: gl.getAttribute('color').array, aPropUv: gl.getAttribute('aPropUv').array, aPropTile: gl.getAttribute('aPropTile').array, aOcc: gl.getAttribute('aOcc').array };
@@ -1330,8 +1382,9 @@ function roofCover(b, kind, col, rng) {
   }
 }
 
+const STEP_RISE = 0.165, STEP_RUN = 0.28;
 // The porch across the front (look.porch) or a stoop at the door, at the floor's height less 4 cm, and its steps down to
-// the ground: as many even risers (at most 21 cm) as it takes to meet the ground at their foot. g(a, b): the ground in
+// the ground: as many even risers (at most STEP_RISE) as it takes to meet the ground at their foot. g(a, b): the ground in
 // the store's frame. Returns { deck: [a0, a1, b0, b1], treads: [{ a0, a1, b0, b1, y }], posts: [[a, b]] } for the walker.
 function porchAndSteps(b, porch, g, look, rng, occ) {
   const ys = -0.04, d = porch ? 1.8 : 1.2, a0 = porch ? -ST.hW - 0.1 : DOOR.a - 0.85, a1 = porch ? ST.hW + 0.1 : DOOR.a + 0.85, s0 = ST.hD, s1 = ST.hD + d;
@@ -1353,8 +1406,15 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
     sbox(b, a - 0.045, a + 0.045, gy, ys - 0.2, pb - 0.045, pb + 0.045, TILE.WOOD, frameC, { grain: 'y' });
   }
   // the dark under the deck
-  void gmin;
-  skirt(b, [[a0 + 0.06, s0], [a0 + 0.06, s1 - 0.06], [a1 - 0.06, s1 - 0.06], [a1 - 0.06, s0]], ys - 0.19, g, rng, V((a0 + a1) / 2, 0, (s0 + s1) / 2 - 0.3));
+  // a low deck is skirted with boards; a high one stands open on its posts, braced
+  if (ys - gmin < 0.75) skirt(b, [[a0 + 0.06, s0], [a0 + 0.06, s1 - 0.06], [a1 - 0.06, s1 - 0.06], [a1 - 0.06, s0]], ys - 0.19, g, rng, V((a0 + a1) / 2, 0, (s0 + s1) / 2 - 0.3));
+  else for (let k = 0; k < postsA.length - 1; k++) {
+    const pa = postsA[k], qa = postsA[k + 1], pb = s1 - 0.1, top = ys - 0.22, bot = Math.max(g(pa, pb), g(qa, pb)) + 0.25;
+    if (top - bot < 0.4) continue;
+    const p0 = V(pa, top, pb + 0.06), p1 = V(qa, bot, pb + 0.06), along = p1.clone().sub(p0), L = along.length(); along.normalize();
+    const up = AZ.clone().cross(along).normalize(); if (up.y < 0) up.negate();
+    b.box(p0.clone().add(p1).multiplyScalar(0.5), along, up, AZ, L / 2, 0.045, 0.02, TILE.WOOD, frameC, { grain: 'x' });
+  }
   if (porch) {
     // posts up to a header, the roof sloping from the wall to it, a ceiling under, the cover by the look
     const yw = 2.6, yf = 2.3, sF = s1 + 0.2, roofY = (s) => yw + ((yf - yw) * (s - s0)) / (sF - s0), hb = s1 - 0.1, hTop = roofY(hb) - ST.th - 0.02;
@@ -1379,10 +1439,11 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
     for (const a of [1.08, 2.37]) sbox(b, a - 0.03, a + 0.03, ys, 0.42, s0 + 0.25, s0 + 0.55, TILE.WOOD, bw, { grain: 'y' });
     out.bench = [1.0, 2.45, s0 + 0.2, s0 + 0.6];
   }
-  // the steps, centred on the door
-  const run = 0.27, sw = porch ? 0.62 : 0.55, ca = DOOR.a;
+  // the steps, centred on the door: risers of at most STEP_RISE, so the tread two up is still within the walker's step
+  // (player.js: 0.35 m) and does not hold him off the one between
+  const run = STEP_RUN, sw = porch ? 0.62 : 0.55, ca = DOOR.a;
   let rises = 1, rh = ys - g(ca, s1 + 0.25);
-  for (let n = 1; n <= 16; n++) { rises = n; rh = (ys - g(ca, s1 + (n - 1) * run + 0.25)) / n; if (rh <= 0.21) break; }
+  for (let n = 1; n <= 20; n++) { rises = n; rh = (ys - g(ca, s1 + (n - 1) * run + 0.25)) / n; if (rh <= STEP_RISE) break; }
   const treads = rh * rises > 0.25 ? rises - 1 : 0, gFront = ys - rh * rises;
   for (let k = 1; k <= treads; k++) {
     const ty = ys - k * rh, ts = s1 + (k - 0.5) * run;
@@ -1396,27 +1457,49 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
     b.box(p0.clone().add(p1).multiplyScalar(0.5).addScaledVector(up, -0.06), along, up, AX, L / 2, 0.1, 0.02, TILE.WOOD, frameC, { grain: 'x' });
   }
   out.foot = s1 + treads * run;
+  // a railing round a deck that stands high (the gap left for the steps), and handrails down a long flight
+  out.rails = [];
+  const high = ys - Math.min(g(a0 + 0.1, s1 - 0.1), g(ca, s1 - 0.1), g(a1 - 0.1, s1 - 0.1));
+  if (high > 0.75) {
+    const rail = tone(0x8a7c68, rng, 0.04), ry = ys + 0.92, my = ys + 0.48;
+    const runs = [[[a0 + 0.04, s0 + 0.05], [a0 + 0.04, s1 - 0.04]], [[a0 + 0.04, s1 - 0.04], [ca - sw - 0.04, s1 - 0.04]], [[ca + sw + 0.04, s1 - 0.04], [a1 - 0.04, s1 - 0.04]], [[a1 - 0.04, s1 - 0.04], [a1 - 0.04, s0 + 0.05]]];
+    for (const [[pa, pc], [qa, qc]] of runs) {
+      const L = Math.hypot(qa - pa, qc - pc); if (L < 0.2) continue;
+      const along = V(qa - pa, 0, qc - pc).normalize(), side = V(along.z, 0, -along.x), mid = V((pa + qa) / 2, 0, (pc + qc) / 2);
+      for (const [y, h] of [[ry, 0.03], [my, 0.022]]) b.box(mid.clone().setY(y), along, AY, side, L / 2, h, 0.025, TILE.WOOD, rail, { grain: 'x', endTile: TILE.END });
+      const n = Math.max(1, Math.round(L / 1.4));
+      for (let k = 0; k <= n; k++) { const t = k / n, x = pa + (qa - pa) * t, z = pc + (qc - pc) * t; sbox(b, x - 0.035, x + 0.035, ys, ry, z - 0.035, z + 0.035, TILE.WOOD, rail, { grain: 'y', endTile: TILE.END }); }
+      out.rails.push([Math.min(pa, qa) - 0.04, Math.max(pa, qa) + 0.04, Math.min(pc, qc) - 0.04, Math.max(pc, qc) + 0.04]);
+    }
+  }
+  if (treads >= 4) for (const side of [-1, 1]) {
+    const a = ca + side * (sw + 0.03), p0 = V(a, ys + 0.9, s1), p1 = V(a, gFront + 0.9, s1 + treads * run), along = p1.clone().sub(p0), L = along.length(); along.normalize();
+    const up = AX.clone().cross(along).normalize(); if (up.y < 0) up.negate();
+    b.box(p0.clone().add(p1).multiplyScalar(0.5), along, up, AX, L / 2 + 0.03, 0.025, 0.025, TILE.WOOD, tone(0x8a7c68, rng, 0.04), { grain: 'x', endTile: TILE.END });
+    for (const t of [0, 0.5, 1]) { const q = p0.clone().lerp(p1, t), gy = t === 1 ? gFront - 0.05 : ys - (t * treads + 0.5) * rh; sbox(b, a - 0.03, a + 0.03, gy, q.y, q.z - 0.03, q.z + 0.03, TILE.WOOD, tone(0x8a7c68, rng, 0.04), { grain: 'y' }); }
+  }
   return out;
 }
 
 // A skirt of boards round the gap under a floor: down from y0 to a little into the ground along the polyline pts (in the
 // store's frame), facing away from `inside`, in pieces a metre or so long that follow the ground.
-function skirt(b, pts, y0, g, rng, inside) {
+function skirt(b, pts, y0, g, rng, inside, stone = false) {
   for (let i = 0; i < pts.length - 1; i++) {
-    const [a0, c0] = pts[i], [a1, c1] = pts[i + 1], L = Math.hypot(a1 - a0, c1 - c0), k = Math.max(1, Math.ceil(L / 1.0)), col = tone(0x6f665a, rng, 0.05);
+    const [a0, c0] = pts[i], [a1, c1] = pts[i + 1], L = Math.hypot(a1 - a0, c1 - c0), k = Math.max(1, Math.ceil(L / 1.0)), col = stone ? tone(0x8d877d, rng, 0.06) : tone(0x6f665a, rng, 0.05);
     for (let j = 0; j < k; j++) {
       const t0 = j / k, t1 = (j + 1) / k, pa = a0 + (a1 - a0) * t0, pc = c0 + (c1 - c0) * t0, qa = a0 + (a1 - a0) * t1, qc = c0 + (c1 - c0) * t1;
       const gp = g(pa, pc) - 0.08, gq = g(qa, qc) - 0.08;
       if (gp >= y0 && gq >= y0) continue;
-      b.face([V(pa, Math.min(gp, y0), pc), V(qa, Math.min(gq, y0), qc), V(qa, y0, qc), V(pa, y0, pc)], TILE.WOOD, col, { ref: inside, U: AY, scale: 1.6, shift: [rng() * 3, rng() * 3] });
+      if (stone) b.face([V(pa, Math.min(gp, y0), pc), V(qa, Math.min(gq, y0), qc), V(qa, y0, qc), V(pa, y0, pc)], TILE.STONE, col, { ref: inside, U: V(qa - pa, 0, qc - pc), scale: 0.7, shift: [rng() * 3, rng() * 3] });
+      else b.face([V(pa, Math.min(gp, y0), pc), V(qa, Math.min(gq, y0), qc), V(qa, y0, qc), V(pa, y0, pc)], TILE.WOOD, col, { ref: inside, U: AY, scale: 1.6, shift: [rng() * 3, rng() * 3] });
     }
   }
 }
 // what the store stands on: a skirt of boards round the crawl space under the sill, down into the ground, and a stone
-// at each corner where it meets the ground
-function foundation(b, g, rng) {
+// at each corner where it meets the ground; on a bank, where the floor stands over a metre up, a fieldstone wall
+function foundation(b, g, rng, high) {
   const hw = ST.hW - 0.05, hd = ST.hD - 0.05;
-  skirt(b, [[-hw, hd], [hw, hd], [hw, -hd], [-hw, -hd], [-hw, hd]], ST.base + 0.02, g, rng, V(0, 0, 0));
+  skirt(b, [[-hw, hd], [hw, hd], [hw, -hd], [-hw, -hd], [-hw, hd]], ST.base + 0.02, g, rng, V(0, 0, 0), high);
   for (const [a, c] of [[-ST.hW, -ST.hD], [ST.hW, -ST.hD], [-ST.hW, ST.hD], [ST.hW, ST.hD]]) {
     const gy = g(a, c);
     if (gy < ST.base - 0.05) chunkStone(b, new THREE.Matrix4().makeRotationY(rng() * 6.28).scale(V(0.26, 0.22, 0.26)).setPosition(a, gy - 0.06, c), rng, tone(0x8e8780, rng, 0.08, 0.02));
@@ -1447,6 +1530,87 @@ function woodpile(b, g, rng, occ) {
   return [a0 - 0.05, a1 + 0.05, c0, c1];
 }
 
+// --- a store's yard: no tree, shrub, log or rock stands in it ---------------------------------------------------
+// The mown yard round a landing (exclusionsFor) is centred on the entry point's own spot, which for some lies far out
+// on the lake (Moose Lake's is 125 m out), so a store could stand in the woods with a pine through its porch. Each store
+// keeps a yard (its footprint with room round it, the porch and the steps, a path down to the dock), and every tile's
+// props step lets go of the vegetation standing in a yard: its instances are zeroed (drawn as nothing; tiles.js
+// prepares their culling again) and its trunks and rocks moved out of the walker's way.
+const yards = [];
+function inYard(Y, x, z) {
+  const dx = x - Y.x, dz = z - Y.z, a = dx * Y.ax + dz * Y.az, b = dx * Y.bx + dz * Y.bz;
+  for (const [a0, a1, b0, b1] of Y.rects) if (a >= a0 && a <= a1 && b >= b0 && b <= b1) return true;
+  return false;
+}
+function clearYards(e, list, size) {
+  if (!e || !e.veg || e.ox === undefined) return 0;
+  const near = list.filter((Y) => Y.x + Y.r > e.ox && Y.x - Y.r < e.ox + size && Y.z + Y.r > e.oz && Y.z - Y.r < e.oz + size);
+  if (!near.length) return 0;
+  const hit = (x, z) => near.some((Y) => inYard(Y, x, z));
+  let n = 0;
+  for (const vm of e.veg) {
+    if (vm.userData.sp === undefined) continue; // the lake plants
+    const A = vm.instanceMatrix.array, N = vm.instanceMatrix.count;
+    let any = false;
+    for (let i = 0; i < N; i++) {
+      const o = i * 16;
+      if (A[o] === 0 && A[o + 5] === 0 && A[o + 10] === 0) continue;
+      if (hit(A[o + 12] + e.ox, A[o + 14] + e.oz)) { A.fill(0, o, o + 16); any = true; n++; }
+    }
+    if (!any) continue;
+    const l = vm.userData.lod;
+    for (const m of [vm, ...(l && l.groups && l.groups.meshes ? l.groups.meshes : [])]) {
+      m.instanceMatrix.needsUpdate = true;
+      const st = m.userData.cull;
+      if (st) { st.ready = false; for (const P of [st.view, st.c0, st.c1]) if (P) P.userData.sigN = -1; }
+    }
+  }
+  const C = e.collide;
+  if (C) {
+    const T = C.trunks, R = C.rocks;
+    for (let o = 0; o < T.length; o += 3) if (hit(T[o] + e.ox, T[o + 1] + e.oz)) { T[o] = -1e7; T[o + 1] = -1e7; }
+    for (let o = 0; o < R.length; o += 15) if (hit(R[o] + e.ox, R[o + 2] + e.oz)) { R[o] = -1e7; R[o + 2] = -1e7; if (e.shapes) e.shapes.delete(o / 15); }
+  }
+  return n;
+}
+
+// Where a store stands in its landing's frame F: { ao, b0, floorY, rise } (see buildStore).
+function storeSite(ctx, F, ep, dock, pd) {
+  const lawn = 31, steps = (floorY, ao, b0) => {
+    const ys = floorY - 0.04, front = b0 + ST.hD + pd, rise = ys - F.G(ao + DOOR.a, front + 0.4);
+    return front + Math.max(0, Math.ceil(rise / STEP_RISE) - 1) * STEP_RUN;
+  };
+  let best = null;
+  for (let b0 = -10.5; b0 >= -26; b0 -= 1) for (const ao of [0, -2.5, 2.5, -5, 5, -7.5, 7.5, -10, 10]) {
+    let gmax = -Infinity, gmin = Infinity, bad = false, wild = 0;
+    for (let a = -ST.hW - 0.2; a <= ST.hW + 0.25 && !bad; a += 1.6) for (let c = -ST.hD; c <= ST.hD + pd + 0.01; c += 1.45) {
+      const [wx, wz] = F.W(ao + a, b0 + c);
+      if (ctx.tg.shoreAt(wx, wz) < 1.5) { bad = true; break; }
+      if (Math.hypot(wx - ep.x, wz - ep.z) > lawn) wild = 0.3; // out of the mown yard: the woods are cleared for it
+      if (c <= ST.hD) { const y = F.G(ao + a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
+    }
+    if (bad) continue;
+    const floorY = Math.max(gmax + 0.3, gmin + 0.45), foot = steps(floorY, ao, b0);
+    const [fx, fz] = F.W(ao + DOOR.a, foot + 0.3);
+    if (ctx.tg.shoreAt(fx, fz) < 0.5) continue; // the steps' foot in the water
+    if (foot > dock.back - 1.5 && Math.abs(ao + DOOR.a) < dock.hw + 1.6) continue; // onto the dock
+    const score = floorY - gmin + wild + 0.06 * Math.abs(b0 + 12) + 0.05 * Math.abs(ao);
+    if (!best || score < best.score) best = { score, ao, b0, floorY, rise: +(floorY - gmin).toFixed(2) };
+  }
+  if (best) return best;
+  // nowhere fits: straight back from the dock, far enough for its steps
+  let b0 = Math.min(-11, dock.back - 2.4 - pd - ST.hD), floorY = 0;
+  for (let it = 0; it < 6; it++) {
+    let gmax = -Infinity, gmin = Infinity;
+    for (let a = -ST.hW; a <= ST.hW + 1e-6; a += 1) for (let c = -ST.hD; c <= ST.hD + 1e-6; c += 1) { const y = F.G(a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
+    floorY = Math.max(gmax + 0.3, gmin + 0.45);
+    const foot = steps(floorY, 0, b0);
+    if (foot <= dock.back - 1.5) return { ao: 0, b0, floorY, rise: +(floorY - gmin).toFixed(2), fallback: true };
+    b0 -= foot - (dock.back - 1.5) + 0.05;
+  }
+  return { ao: 0, b0, floorY, fallback: true };
+}
+
 // The store at its landing: where it stands (back from the dock's land end by the porch or stoop, its steps and a path's
 // width; the floor a little over the highest ground under it), the kit turned into place and recoloured, the parts
 // built here, the sign over the door and the cork board, the walker's obstacles and the layout.
@@ -1454,23 +1618,14 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   if (!storeKit) yield* buildStoreKit();
   const t0 = performance.now(), took = storeStats.stores[ep.ep] = [];
   const look = lookOf(ep, ctx.world), porch = !!look.porch, name = outfitterName(ep), K = storeKit;
-  const pd = porch ? 1.8 : 1.2, limit = dock.back - 2.2;
-  const G = (a, bb) => F.G(a, bb);
-  let b0 = Math.min(-11, limit - 1.0 - pd - ST.hD), floorY = 0;
-  for (let it = 0; it < 8; it++) {
-    let gmax = -Infinity, gmin = Infinity, wet = false;
-    for (let a = -ST.hW; a <= ST.hW + 1e-6; a += 1) for (let c = -ST.hD; c <= ST.hD + 1e-6; c += 1) {
-      const y = G(a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y);
-      const [wx, wz] = F.W(a, b0 + c); if (ctx.tg.shoreAt(wx, wz) < 1.5) wet = true;
-    }
-    floorY = Math.max(gmax + 0.3, gmin + 0.45);
-    if (wet) { b0 -= 1; continue; }
-    const ys = floorY - 0.04, front = b0 + ST.hD + pd, rise = ys - G(DOOR.a, front + 0.4), steps = Math.max(0, Math.ceil(rise / 0.21) - 1), foot = front + steps * 0.27;
-    if (foot <= limit + 1e-3) break;
-    b0 -= foot - limit + 0.05;
-  }
+  // Where it stands: of the spots back from the dock and to either side of it, the one whose floor stands least over the
+  // ground under it, that is dry, inside the outfitter's mown yard (exclusionsFor: 36 m round the landing, so no tree
+  // stands in it), and whose steps come down behind the dock's land end or beside it. ao: across, b0: back (its centre).
+  const pd = porch ? 1.8 : 1.2, site = storeSite(ctx, F, ep, dock, pd);
+  const { ao, b0, floorY } = site;
+  const G = (a, bb) => F.G(ao + a, bb);
   const gC = (a, c) => G(a, b0 + c) - floorY; // the ground in the store's frame
-  const O = F.P(0, floorY, b0), X = F.X, Z = F.Z, ratio = (() => {
+  const O = F.P(ao, floorY, b0), X = F.X, Z = F.Z, ratio = (() => {
     const d = roleColours(DEF_LOOK), l = roleColours(look);
     return [null, 1, 2, 3, 4].map((k) => (k ? [l[k].r / Math.max(1e-4, d[k].r), l[k].g / Math.max(1e-4, d[k].g), l[k].b / Math.max(1e-4, d[k].b)] : null));
   })();
@@ -1478,7 +1633,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   const b = new RoleBuilder(), occ = [...shellBoxes()];
   roofCover(b, look.roofKind, C(look.roof), rng);
   const pr = porchAndSteps(b, porch, gC, look, rng, occ);
-  foundation(b, gC, rng);
+  foundation(b, gC, rng, -Math.min(gC(-ST.hW, ST.hD), gC(ST.hW, ST.hD), gC(0, ST.hD), gC(-ST.hW, -ST.hD), gC(ST.hW, -ST.hD)) > 1.0);
   const pile = woodpile(b, gC, rng, occ);
   const here = b.build();
   occlude(here, occ, { ground: (a, c) => gC(a, c), rays: 8, reach: 0.9, floor: 0.35 });
@@ -1494,7 +1649,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   glass.castShadow = false; glass.receiveShadow = true; glass.matrixAutoUpdate = false; glass.name = `store ${ep.ep} glass`;
   group.add(glass);
   // the name over the door, and the cork board inside it
-  const at = (a, y, c) => F.P(a, floorY + y, b0 + c), yawOf = (v) => Math.atan2(v.x, v.z);
+  const at = (a, y, c) => F.P(ao + a, floorY + y, b0 + c), yawOf = (v) => Math.atan2(v.x, v.z);
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.5), signMaterial(name));
   sign.position.copy(at(0, 3.12, ST.hD + 0.056)); sign.rotation.y = yawOf(Z);
   sign.receiveShadow = true; sign.matrixAutoUpdate = false; sign.updateMatrix();
@@ -1506,10 +1661,17 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   cork.position.copy(at(ST.iW - 0.02, (B.y0 + B.y1) / 2, (B.b0 + B.b1) / 2)); cork.rotation.y = yawOf(X.clone().negate());
   cork.receiveShadow = true; cork.matrixAutoUpdate = false; cork.updateMatrix(); cork.name = `store ${ep.ep} board`;
   group.add(cork);
+  for (const S of SIGNS) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h), shelfSignMaterial(S.text));
+    m.position.copy(at(S.a + S.n[0] * 0.002, S.y, S.b + S.n[1] * 0.002));
+    m.rotation.y = yawOf(X.clone().multiplyScalar(S.n[0]).addScaledVector(Z, S.n[1]));
+    m.receiveShadow = true; m.matrixAutoUpdate = false; m.updateMatrix(); m.name = `store ${ep.ep} sign ${S.text}`;
+    group.add(m);
+  }
   // the walker: the walls (a gap at the door), the floor and the porch or stoop and each step to stand on, what stands
   // inside, the porch posts, the woodpile, the rack
   const box = (a0, a1, c0, c1, top) => {
-    const [x, z] = F.W((a0 + a1) / 2, b0 + (c0 + c1) / 2), o = { x, z, ux: X.x, uz: X.z, hx: Math.abs(a1 - a0) / 2, hz: Math.abs(c1 - c0) / 2, box: true };
+    const [x, z] = F.W(ao + (a0 + a1) / 2, b0 + (c0 + c1) / 2), o = { x, z, ux: X.x, uz: X.z, hx: Math.abs(a1 - a0) / 2, hz: Math.abs(c1 - c0) / 2, box: true };
     if (top !== undefined) o.top = floorY + top;
     ctx.obstacles.push(o);
   };
@@ -1525,18 +1687,32 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   box(I.stove.a0, I.stove.a1, I.stove.b0, I.stove.b1);
   box(I.wood.a0, I.wood.a1, I.wood.b0, I.wood.b1);
   box(DOOR.a0 - 0.08, DOOR.a0 + 0.02, ST.iD - 1.12, ST.iD); // the open door
-  { const [x, z] = F.W(I.chair.a, b0 + I.chair.b); ctx.obstacles.push({ x, z, r: 0.26 }); }
-  for (const [a, c] of pr.posts) { const [x, z] = F.W(a, b0 + c); ctx.obstacles.push({ x, z, r: 0.08 }); }
+  { const [x, z] = F.W(ao + I.chair.a, b0 + I.chair.b); ctx.obstacles.push({ x, z, r: 0.26 }); }
+  for (const [a, c] of pr.posts) { const [x, z] = F.W(ao + a, b0 + c); ctx.obstacles.push({ x, z, r: 0.08 }); }
   if (pr.bench) box(...pr.bench);
+  for (const r of pr.rails) box(...r);
   box(...pile);
-  pieces.push(...buildRack(ctx, F, rng, -(ST.hW + 2.3), b0 + 1.2));
+  pieces.push(...buildRack(ctx, F, rng, ao + (ao > 1 ? ST.hW + 2.3 : -(ST.hW + 2.3)), b0 + 1.2));
+  // the yard: the store and its porch, steps, rack and woodpile with room round them, and a path down to the dock
+  {
+    const foot = pr.foot, dockC = dock.back - b0, pa0 = Math.min(DOOR.a, -ao) - 1.8, pa1 = Math.max(DOOR.a, -ao) + 1.8;
+    const rects = [[-ST.hW - 4.2, ST.hW + 4.2, -ST.hD - 4, foot + 1.5], [pa0, pa1, foot, Math.max(foot, dockC + 1)]];
+    const r = Math.max(...rects.flatMap(([a0, a1, c0, c1]) => [Math.hypot(a0, c0), Math.hypot(a1, c0), Math.hypot(a0, c1), Math.hypot(a1, c1)]));
+    const [yx, yz] = F.W(ao, b0), Y = { ep: ep.ep, x: yx, z: yz, ax: X.x, az: X.z, bx: Z.x, bz: Z.z, rects, r };
+    const i = yards.findIndex((q) => q.ep === ep.ep);
+    if (i >= 0) yards[i] = Y; else yards.push(Y);
+    const T = ctx.world.tiles, size = ctx.world.tileMetres;
+    let cleared = clearYards(ctx.entry, [Y], size);
+    if (T && T.tiles) for (const e of T.tiles.values()) if (e !== ctx.entry && e.state === 'ready') cleared += clearYards(e, [Y], size);
+    site.cleared = cleared;
+  }
   // the layout
-  const cx = F.W(0, b0)[0], cz = F.W(0, b0)[1];
-  const W2 = (a, c) => { const [x, z] = F.W(a, b0 + c); return { x, z }; };
-  const at3 = (a, y, c) => { const [x, z] = F.W(a, b0 + c); return { x, y: floorY + y, z }; };
+  const cx = F.W(ao, b0)[0], cz = F.W(ao, b0)[1];
+  const W2 = (a, c) => { const [x, z] = F.W(ao + a, b0 + c); return { x, z }; };
+  const at3 = (a, y, c) => { const [x, z] = F.W(ao + a, b0 + c); return { x, y: floorY + y, z }; };
   const heading = (da, dc) => { const dx = X.x * da + Z.x * dc, dz = X.z * da + Z.z * dc; return Math.atan2(-dz, dx); };
   const L = {
-    ep: ep.ep, name, look, floorY, centre: { x: cx, z: cz }, front: heading(0, 1), axes: { a: { x: X.x, z: X.z }, b: { x: Z.x, z: Z.z } }, size: { hW: ST.hW, hD: ST.hD, iW: ST.iW, iD: ST.iD },
+    ep: ep.ep, name, look, floorY, site, centre: { x: cx, z: cz }, front: heading(0, 1), axes: { a: { x: X.x, z: X.z }, b: { x: Z.x, z: Z.z } }, size: { hW: ST.hW, hD: ST.hD, iW: ST.iW, iD: ST.iD },
     inside: (x, z) => { const dx = x - cx, dz = z - cz, a = dx * X.x + dz * X.z, c = dx * Z.x + dz * Z.z; return Math.abs(a) < ST.iW && Math.abs(c) < ST.iD; },
     door: { ...W2(DOOR.a, ST.hD + 0.45), y: floorY - 0.04, heading: heading(0, -1) },
     counter: { ...W2(0.6, I.counter.b1 + 0.6), heading: heading(0, -1), at: at3(1.1, I.counter.h, (I.counter.b0 + I.counter.b1) / 2) },
