@@ -57,6 +57,7 @@ const CHORES = {
   latrine: { seconds: 0.9, hours: 10 / 60, say: 'A quiet few minutes back in the trees…' },
   pick: { seconds: 1.4, hours: 20 / 60, say: 'Picking blueberries…' },
 };
+const LOW_CHORES = new Set(['fire', 'rekindle', 'feed', 'cook', 'fill', 'gather', 'saw', 'pick']); // done crouched (canoe.js state.crouch)
 const SLEEP_FROM = 1.5;     // hours before sunset the tent will take you
 const WAKE_AT = 0.25;       // hours after sunrise you wake
 const LATE_NIGHT = 5;       // turning in with fewer hours than this to first light, you sleep in instead:
@@ -245,6 +246,8 @@ export class Camp {
     if (this.lamp && this.player.input.pressed('KeyH')) this.lamp.toggle();
     this.rest(dt, dh);
     if (this.chores) this.chores.update(dt); // hubs 3A: the wood set down at a ring, the woodpile and the berries drawn
+    const cs = p.canoe && p.canoe.state; // down on your heels for the low chores (canoe.js state.crouch)
+    if (cs) cs.crouch = this.busy && LOW_CHORES.has(this.busy.kind) && p.mode === 'walk' ? 1 : 0;
     if (this.busy) { this.working(dt); return; }
     if (this.night) return;
     if (this.chores && this.chores.card.open) { p.prompt = null; return; } // the wake-time card holds the keys
@@ -412,8 +415,9 @@ export class Camp {
     // sandbox: a tent anywhere flat and dry, once you stand still a moment (Adventure: designated sites only, no tent
     // and no bivouac off a site)
     if (!this.camp && this.sandbox && this.still > 1.2) { const spot = this.spotAhead(); if (spot) { this.offer('Pitch the tent here', null, () => this.pitchAt(spot)); return; } }
-    // hubs 3A: off a site, an armful of firewood once you stand by the trees a moment (a notice's stove, a site ahead)
-    if (this.still > 1 && this.chores && !(this.outfitter && this.outfitter.visit && this.outfitter.visit.inside)) this.chores.gatherPrompt(null);
+    // hubs 3A: off a site, an armful of firewood once you stand by the trees a moment (a notice's stove, a site ahead);
+    // not about an outfitter's store (its yard, the dock, the door: outfitter.visit), whose wood a notice pays for
+    if (this.still > 1 && this.chores && !(this.outfitter && this.outfitter.visit)) this.chores.gatherPrompt(null);
   }
 
   // the nearest site (within r of its fire ring, or of its centre with layout false) whose tile has built it

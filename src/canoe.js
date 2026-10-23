@@ -120,6 +120,7 @@ export function buildCanoeRig({ water = null } = {}) {
     packOnBack: undefined, // which pack rides on the back (0 the gear pack, 1 the food pack) or null (packs.js sets it);
                          // left unset, the hull's first pack goes on the back with the canoe overhead
     packOnChest: null,   // and on the chest: the second pack of a single heavy trip
+    crouch: 0,           // 0..1 on foot: down on the heels for a low chore (camp.js: gathering wood, picking berries, the fire)
   };
   const swimmer = new THREE.Vector3();
 
@@ -535,8 +536,11 @@ export function buildCanoeRig({ water = null } = {}) {
   // the standing body over the feet: pelvis height from the ground under the feet and the legs' reach, the
   // bob (down after each contact, up at passing), sway toward the standing foot, the hips turning with the
   // swing and the shoulders against them
+  let crouchK = 0; // state.crouch, eased: the hips sink over the planted feet (the knees forward), the back bends over
   function standingBody(dt, g, carry) {
     const phi = g.phase, sp = g.sp * (g.moving ? 1 : 0);
+    crouchK += ((carry || g.air ? 0 : state.crouch || 0) - crouchK) * damp(5, dt);
+    const ck = ease(crouchK);
     const twoPi = Math.PI * 2;
     // in the air the ground is where the feet are (the rig rides the hop); otherwise the ground under the body
     const gl = g.air ? -0.1 : toLocal(_v.set(rig.position.x, ground(rig.position.x, rig.position.z), rig.position.z)).y;
@@ -550,7 +554,7 @@ export function buildCanoeRig({ water = null } = {}) {
     // a hop: the legs straight at the push-off, the knees up in the tuck; the landing sinks into them; a stagger
     // under the canoe dips
     const airDrop = g.air ? 0.02 + 0.05 * g.tuck : 0;
-    let target = gl + HIP_H - bend + bob - airDrop - 0.16 * ease(state.land) - 0.06 * Math.sin(Math.PI * state.stagger);
+    let target = gl + HIP_H - bend + bob - airDrop - 0.16 * ease(state.land) - 0.06 * Math.sin(Math.PI * state.stagger) - 0.4 * ck;
     // no higher than the planted legs reach (a jogging foot in the air does not hold the body down)
     const yaw = loco.hipYaw;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
@@ -566,10 +570,10 @@ export function buildCanoeRig({ water = null } = {}) {
     const roll = g.moving ? 0.06 * sp * Math.sin(twoPi * (phi - 0.03)) : 0;
     const pYaw = g.moving ? -0.11 * sp * Math.cos(twoPi * phi) * (g.backF ? -1 : 1) : 0;
     const lean = (carry ? 0.1 : 0.03) + (g.moving ? (g.backF ? -0.05 : 0.05 * sp + 0.06 * g.hustle + 0.11 * jog) : 0) + 0.01 * Math.sin(idle.breath)
-      + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger);
+      + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck;
     const pelvis = bodyQ(yaw + pYaw, 0.03 + lean * 0.3, roll);
     const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15, lean, -0.4 * roll + (g.moving ? 0.04 * g.mz * sp : 0));
-    const head = bodyQ(idle.yaw * 0.85, (carry ? 0.22 : 0.02) - idle.pitch + 0.15 * lean, 0);
+    const head = bodyQ(idle.yaw * 0.85, (carry ? 0.22 : 0.02) - idle.pitch + 0.15 * lean + 0.2 * ck, 0);
     const root = V(lean * 0.06, loco.hipY + ROOT_UP, swayZ);
     body(root, pelvis, chest, head, { shrugL: 0.012 * Math.sin(idle.breath), shrugR: 0.012 * Math.sin(idle.breath) });
     // the legs to the feet, knees over the toes
@@ -589,10 +593,12 @@ export function buildCanoeRig({ water = null } = {}) {
     // jogging, the arms are carried bent at about a right angle, a little forward, and swing higher
     const A = lerp(0.32 + 0.22 * sp + 0.12 * g.hustle, 0.62, jog) * (g.moving ? 1 : 0) * (1 - 0.6 * Math.abs(g.mz)) * (g.backF ? 0.6 : 1);
     const bend = lerp(0.32 + 0.25 * sp + 0.5 * g.hustle, 1.55, jog) + (g.air ? 0.5 : 0) + 0.4 * ease(state.land);
-    const fwd = 0.04 + 0.16 * jog + (g.air ? 0.25 * g.tuck : 0);
+    // crouched, the hands go down in front of the knees, working a little in turn (picking, gathering, the fire)
+    const ck = ease(crouchK), work = 0.12 * ck * Math.sin(idle.breath * 7);
+    const fwd = 0.04 + 0.16 * jog + (g.air ? 0.25 * g.tuck : 0) + 0.75 * ck;
     const cq = J.chest.q;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
-      const sw = A * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd;
+      const sw = A * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd + (k === 'L' ? work : -work);
       const sh = J['arm' + k].p;
       const du = V(Math.sin(sw), -Math.cos(sw), sg * 0.13).normalize().applyQuaternion(cq);
       const df = V(Math.sin(sw + bend), -Math.cos(sw + bend), sg * 0.06).normalize().applyQuaternion(cq);
