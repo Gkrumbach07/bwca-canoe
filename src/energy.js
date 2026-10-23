@@ -161,5 +161,6 @@ export class Energy {
     this.awakeSince = Number.isFinite(d.awakeSince) ? d.awakeSince : this.now;
     this.lastMealAbs = Number.isFinite(d.lastMealAbs) ? d.lastMealAbs : -1e9; this.lastMealKind = d.lastMealKind || null;
     this.tired = this.awake > 30 ? 2 : this.awake > 18 ? 1 : 0;
+    this.lastHours = this.day.hours; // the saved clock is back: no dawn or dusk crossed by the reload, no meal
   }
 }
