@@ -211,8 +211,8 @@ export class Shop {
   // 'goodbye', 'chat', 'ride'), or null for the counter's own lines
   keeperLine(ep, situation) {
     const C = this.C; if (!C || typeof C.keeperLine !== 'function') return null;
-    const rep = this.profile && ep != null ? this.profile.outfitter(ep).rep : 0, doy = this.day ? this.day.doy : undefined;
-    try { return C.keeperLine(this.outfitterProfile(ep), situation, { rep, doy }) || null; } catch { return null; }
+    const rep = this.profile && ep != null ? this.profile.outfitter(ep).rep : 0, doy = this.day ? this.day.doy : undefined, hours = this.day ? this.day.hours : undefined;
+    try { return C.keeperLine(this.outfitterProfile(ep), situation, { rep, doy, hours }) || null; } catch { return null; }
   }
   keeperName(ep) { const op = this.outfitterProfile(ep), k = op && op.keeper; return k && k.name ? k.name : null; }
   // the outfitter's signature item, sold only there

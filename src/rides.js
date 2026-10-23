@@ -105,7 +105,7 @@ export class Rides {
       : `${kmWords(r.km)} km up ${r.road === roadOf(from.ep) ? r.road : 'the roads'} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${r.late ? ` It’s late when you get in: a bunk at ${to.name}, and you’re up at half past seven.` : ''}`;
     const card = {
       kicker: `${from.name} → ${to.name}`,
-      text: `“${keeperLine(fromP, 'goodbye')}”`,
+      text: `“${keeperLine(fromP, 'goodbye', { hours: this.day ? this.day.hours : undefined })}”`,
       sub,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
       onDark: () => this.arrive(from, to, r, toP),

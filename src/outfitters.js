@@ -552,8 +552,9 @@ export function boardLean(ep, world) {
 }
 
 // --- what the keeper says ------------------------------------------------------------------------------------------
-// moment: hello stranger season passing morning after bunk ride goodbye chat (welcome is hello). ctx: { rep, doy, n }:
-// a friend of the house (standing 2 or more) hears an insider hint now and then; the season colours the talk.
+// moment: hello stranger season passing morning after bunk ride goodbye chat (welcome is hello). ctx: { rep, doy, n,
+// hours }: a friend of the house (standing 2 or more) hears an insider hint now and then; the season colours the talk;
+// the hour keeps a "Morning!" to the morning and a "tonight" to the afternoon and evening (forHour).
 const SEASON_TALK = [
   [120, 150, ['Ice went out late this year. The water’s still cold enough to stop your heart; stay near shore.', 'The lakers are up near the top while the water’s cold. Best trout weeks of the year.']],
   [150, 185, ['Blackflies this week, then the mosquitoes. Bring the head net.', 'The loons are on their nests. Give the little islands a wide berth.']],
@@ -561,6 +562,14 @@ const SEASON_TALK = [
   [245, 285, ['Colour’s coming on the birches. Cold nights now: bring the wool.', 'The bugs are gone. Best weeks of the year, if you don’t mind frost.']],
   [285, 320, ['The loons are gathering to leave. So are most of the paddlers.', 'Ice will be on the bays in a month. Don’t get caught out.']],
 ];
+// the lines of a pool that fit the hour of the day: none that say morning after noon, none that say tonight or this
+// evening before eleven (the whole pool when that would leave none)
+function forHour(pool, h) {
+  if (!Number.isFinite(h) || !pool || !pool.length) return pool;
+  const off = h >= 12 ? /\bmorning\b/i : h < 11 ? /\b(tonight|this evening)\b/i : null;
+  const keep = off ? pool.filter((s) => !off.test(s)) : pool;
+  return keep.length ? keep : pool;
+}
 export function keeperLine(profile, moment = 'hello', ctx = {}) {
   if (!profile) return '';
   const k = profile.keeper, L = k.moments || {}, rng = ctx.n != null ? mulberry32((profile.ep * 7919 + ctx.n * 104729) >>> 0) : Math.random;
@@ -573,7 +582,7 @@ export function keeperLine(profile, moment = 'hello', ctx = {}) {
   }
   // a friend of the house: the hello is an insider hint half the time
   if ((m === 'hello' || m === 'passing') && (ctx.rep || 0) >= 2 && profile.hints.length && rng() < 0.5) return k.hint(null, profile, Math.floor(rng() * 8));
-  return pickR(rng, L[m] && L[m].length ? L[m] : L.hello || [k.lines.hello]);
+  return pickR(rng, forHour(L[m] && L[m].length ? L[m] : L.hello || [k.lines.hello], ctx.hours));
 }
 
 // --- the phase-1 counter in the keeper's voice -------------------------------------------------------------------------
