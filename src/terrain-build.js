@@ -137,14 +137,10 @@ export const SPLAT_SUNNY = C.forestLight; // the duff's lit colour in the broad 
 export const BED_PALETTE = [C.bedSand, C.bedShelf, C.bedWeed, C.bedDeep, C.bedHole];
 export const BED_DEPTH_SCALE = 16; // aFloor.w is the bed depth over this many metres
 
-// what each ground class reads as in the splat (the ground cover has only the class map to go on):
-// [twelve weights (the three vec4s), canopy shade, sunny stand]
-export const CLASS_SPLAT = GROUND.map((name) => {
-  const w = new Array(12).fill(0);
-  const slot = { forest: 0, forestLight: 0, forestDark: 0, meadow: 2, burn: 3, rock: 4, rockDark: 5, rockLichen: 6, cliff: 8, talus: 9 }[name];
-  w[slot === undefined ? 7 : slot] = 1;
-  return { w, shade: name === 'forestDark' ? 0.8 : name === 'forest' ? 0.3 : 0, sunny: name === 'forestLight' ? 1 : 0 };
-});
+// A cell's splat as the cover map carries it (buildTerrainChunk cellSplat, placement.js coverField): twelve bytes,
+// duff, moss, meadow, burn | rock, dark rock, lichen rock, shore | cliff, scree, canopy shade, sunny stand, each
+// 0..255, the weights and the floor of the terrain vertex at the cell's centre.
+export const CELL_SPLAT = 12;
 
 // smoothstep across a threshold: 0 below v = -w, 1 above v = w
 const across = (v, w) => smoothstep(-w, w, v);
@@ -256,7 +252,10 @@ export function meshHeightAt(grid, x, z, cache = null) {
 // shoreline cuts the mesh: where it crosses a cell, the cell is cut along it (marching squares) so an edge
 // lies exactly on the waterline, and the crossing point is two vertices, one painted as land and one as
 // lake bed, so neither side bleeds into the other. Every other transition is a blend.
-export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, originX, originZ, site = null }) {
+// cellSplat: an optional Uint8Array of CELL_SPLAT bytes per local cell of the grid; each core cell gets the splat
+// of the vertex at its centre (the ten weights, the canopy shade, the sunny stand: see CELL_SPLAT), so the ground
+// cover can blend the very weights the terrain draws (placement.js coverField, groundcover.js).
+export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, originX, originZ, site = null, cellSplat = null }) {
   const cell = grid.cell;
   const pos = [], sa = [], sb = [], sc = [], fl = [], sdv = [], idx = [], idxAll = [];
   const twins = []; // [land, bed] vertex pairs at the waterline: they share one normal
@@ -374,6 +373,15 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     }
   }
   evenTees();
+  if (cellSplat) {
+    for (let j = j0; j < j0 + n; j++) for (let i = i0; i < i0 + n; i++) {
+      const v = map[(2 * i - 2 * (i0 - 1)) * stride + (2 * j - 2 * (j0 - 1))];
+      if (v < 0) continue;
+      const o = grid.local(i, j) * CELL_SPLAT;
+      for (let c = 0; c < 4; c++) { cellSplat[o + c] = sa[v * 4 + c]; cellSplat[o + 4 + c] = sb[v * 4 + c]; }
+      cellSplat[o + 8] = sc[v * 4]; cellSplat[o + 9] = sc[v * 4 + 1]; cellSplat[o + 10] = fl[v * 4]; cellSplat[o + 11] = fl[v * 4 + 1];
+    }
+  }
   // smooth normals: every face around a vertex votes, weighted by its area (the unnormalised cross product)
   const nv = pos.length / 3;
   const acc = new Float32Array(nv * 3);

@@ -2,9 +2,9 @@
 // placement and its ground-cover map as transferable typed arrays. The main thread only wraps them into
 // three.js objects.
 import { TileGrid } from './grid.js';
-import { buildTerrainChunk, mossAt, bogMoss } from './terrain-build.js';
+import { buildTerrainChunk } from './terrain-build.js';
 import { buildWaterChunk } from './water-build.js';
-import { placeVegetation, placeAquatic, coverField, REGION } from './placement.js';
+import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
 import { Site } from './site.js';
 
@@ -45,17 +45,6 @@ function instanceData(items, stride, rx, rz) {
 // the typed arrays of a terrain chunk (terrain-build.js), handed over rather than copied
 const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer];
 
-// The cover map's spare fourth byte carries what the ground cover needs to match the terrain's splat under
-// a tuft (groundcover.js): the moss weight (the moss field's, or a bog's) in the high nibble and the canopy
-// shade in the low one, per cell.
-function packFloor(grid, i0, j0, n, shade, cover, site) {
-  for (let j = j0; j < j0 + n; j++) for (let i = i0; i < i0 + n; i++) {
-    const k = grid.local(i, j);
-    const moss = Math.max(mossAt(grid.cellX(i), grid.cellZ(j)), bogMoss(site.wet[k])), sh = shade ? shade[k] : 0;
-    cover[k * 4 + 3] = (Math.round(Math.min(1, moss) * 15) << 4) | Math.round(Math.min(1, Math.max(0, sh)) * 15);
-  }
-}
-
 async function buildFine(m) {
   const g = cfg.grid;
   const buf = await fetchTile(m.url);
@@ -67,9 +56,11 @@ async function buildFine(m) {
   const site = new Site(grid);
   const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz, site });
   const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site });
+  // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the
+  // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);
-  packFloor(grid, i0, j0, g.tile, veg.shade, cover, site);
-  const terrain = buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site });
+  const cellSplat = cover.subarray(COVER_SPLAT_AT(grid.side));
+  const terrain = buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat });
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz) }));

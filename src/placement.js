@@ -30,7 +30,7 @@
 // thinning out away from it.
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
 import { clearingAt, burnAt, calmAt, rockAt } from './fields.js';
-import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND } from './terrain-build.js';
+import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND, CELL_SPLAT } from './terrain-build.js';
 import { CLIFF, CLIFF_MODULE } from './site.js';
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
@@ -676,14 +676,19 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
   return { bins: [...bins.values()].map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, items: new Float32Array(b.items) })), total };
 }
 
-// Ground cover per cell over the tile's local extent (core cells only), four bytes per cell: grass cover
-// 0..255 by ground class (none in water, on bare rock, trails and campsites; a sparse fifth under the forest
-// and thinner still under a thick canopy, more in the glades; full on the meadows and the lawns; most of a
-// burn; a fringe up from the shore whatever stands behind it), golden tint (burns and dry clearings), the
-// ground class the grass takes its colour from, 0.
+// Ground cover per cell over the tile's local extent (core cells only). The first side² x 4 bytes, four per
+// cell: grass cover 0..255 by ground class (none in water, on bare rock, trails and campsites; a sparse fifth
+// under the forest and thinner still under a thick canopy, more in the glades; full on the meadows and the lawns;
+// most of a burn; a fringe up from the shore whatever stands behind it), golden tint (burns and dry clearings),
+// the ground class (what the footsteps and the water read), 0. After them, from COVER_SPLAT_AT, CELL_SPLAT bytes
+// per cell: the terrain's own splat at the cell's centre (the ten material weights, the canopy shade, the sunny
+// stand), which the worker fills from the terrain build (tile-worker.js, terrain-build.js cellSplat); the grass
+// blends those, so a tuft takes the colour of the ground under it (groundcover.js). The four-byte part is laid
+// out as before, so world.coverCell and the water's atlas read it unchanged.
+export const COVER_SPLAT_AT = (side) => side * side * 4;
 export function coverField(grid, i0, j0, n, shade, exclusions, site = null) {
   const side = grid.side;
-  const cover = new Uint8Array(side * side * 4);
+  const cover = new Uint8Array(side * side * (4 + CELL_SPLAT));
   const bare = new Uint8Array(side * side), lawn = new Uint8Array(side * side);
   const mask = tileSegments(grid, i0, j0, n, exclusions, 3.5);
   for (const [k, segs] of mask) {
