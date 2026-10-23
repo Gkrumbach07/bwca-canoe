@@ -1,8 +1,9 @@
 // The journal (J; L still opens it for a while): a two-page paper spread. The left page is the trip: the food
 // cells, the energy bar, the distances, portages, lakes and nights, the tasks on the go, a pencil note. The
 // right page has tabs: Catches (the log, with personal bests), Tasks (on the go, done, on offer, the tally),
-// Lakes (where you have been), Gear (what came off the outfitter's wall). Data comes from the fishing code
-// (log, bests), the tasks, the energy, the outfitter's trip record and the trip tally (trip-stats.js).
+// Lakes (where you have been), Trips (the logbook: every trip and how it ended), Gear (what came off the outfitter's
+// wall). Data comes from the fishing code (log, bests), the tasks, the energy, the outfitter's trip record, the trip's
+// permit and logbook (trip.js, reached through the outfitter) and the trip tally (trip-stats.js).
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { UNLOCKS } from './tasks.js';
 
@@ -67,7 +68,8 @@ export class Journal {
 
   // --- the words ------------------------------------------------------------------------------------------
   get trip() { return this.outfitter ? this.outfitter.trip : null; }
-  get dayN() { const t = this.trip; return t && t.active ? Math.floor(this.outfitter.daysOut) + 1 : 0; }
+  get core() { return this.outfitter ? this.outfitter.core : null; } // the trip's rules and permit (trip.js)
+  get dayN() { const c = this.core; if (c) return c.active ? c.dayN : 0; const t = this.trip; return t && t.active ? Math.floor(this.outfitter.daysOut) + 1 : 0; }
   lakeList(lakes) {
     if (!lakes.length) return 'none yet';
     return lakes.map((l, i) => (i === 0 ? l.name : l.name.replace(/^Lake /, '').replace(/ Lake$/, ''))).join(', ');
@@ -81,9 +83,14 @@ export class Journal {
     return shortDate(c.year, c.doy);
   }
   pencilNote() {
-    const w = this.wind, d = this.day, en = this.energy, h = d.hours, set = d.sunriseSunset.set;
-    if (en && en.food < 1 && en.food > 0) return 'last of the food — head for an outfitter';
-    if (en && en.food <= 0 && this.trip && this.trip.active) return 'pack is empty. any outfitter will fill it';
+    const w = this.wind, d = this.day, en = this.energy, h = d.hours, set = d.sunriseSunset.set, c = this.core;
+    const adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
+    if (adv && c.dueIn != null && c.dueIn < 0) return 'past the permit. make for the nearest landing';
+    if (adv && c.dueIn === 0) return `out by today${c.exitWords() ? `, ${c.exitWords()}` : ''}`;
+    if (!sand && en && en.food < 1 && en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter';
+    if (!sand && en && en.food <= 0 && this.trip && this.trip.active) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
+    if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
+    if (adv && c.state.wet) return 'everything is damp. a fire tonight to dry the gear';
     if (en && en.value < 0.3) return 'tired. find a site early and eat something';
     if (w && w.fresh && h < 16) return 'wind should drop by evening — stay in the lee till then';
     if (w && w.speed < 2 && h < 10) return 'glassy this morning — make the miles before the wind gets up';
@@ -92,8 +99,10 @@ export class Journal {
   }
   signature() {
     const f = this.fishing, en = this.energy, st = this.stats, ts = this.tasks;
+    const c = this.core;
     return [this.tab, this.page, f ? f.logVersion : 0, en ? Math.round(en.value * 100) : 0, en ? en.food : 0, st ? Math.round(st.km * 10) : 0, st ? st.portages : 0, st ? st.lakes.length : 0, st ? st.nights.length : 0,
-      ts ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', ts ? ts.unlocks.length : 0, Math.floor(this.day.hours * 4), this.dayN].join('|');
+      ts ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', ts ? ts.unlocks.length : 0, Math.floor(this.day.hours * 4), this.dayN,
+      c ? `${c.mode}${c.active}${c.book.trips.length}${c.state.wet}` : ''].join('|');
   }
 
   render(force) {
@@ -108,11 +117,12 @@ export class Journal {
   // --- the trip page ------------------------------------------------------------------------------------
   leftPage() {
     const trip = this.trip, en = this.energy, st = this.stats, ts = this.tasks, o = this.outfitter, w = this.world;
-    const active = !!(trip && trip.active), dayN = this.dayN;
+    const active = !!(trip && trip.active), dayN = this.dayN, c = this.core, adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
     const from = active ? trip.fromName || 'the landing' : null;
     const outfitterName = active && o ? (o.landings.find((l) => l.ep === trip.ep) || {}).name : '';
     let pushed = '';
-    if (active) pushed = trip.startDoy != null ? `pushed off ${longDate(trip.startYear, trip.startDoy)}, ${clock12(trip.startHours)}` : `pushed off ${esc(trip.started || '')}`;
+    if (active) pushed = trip.startDoy != null ? `pushed off ${sand ? '' : `${longDate(trip.startYear, trip.startDoy)}, `}${clock12(trip.startHours)}` : `pushed off ${esc(trip.started || '')}`;
+    if (adv && c.permit && c.permit.exitBy) pushed += ` · out by ${longDate(c.permit.exitBy.year, c.permit.exitBy.doy)}${c.exitWords() ? `, ${esc(c.exitWords())}` : ''}`;
     // food: a cell a day, the half days as half cells, what is eaten left empty
     const total = active ? Math.max(trip.days || 0, Math.ceil(en.food)) : 0, left = en ? en.food : 0;
     let cells = '';
@@ -124,9 +134,10 @@ export class Journal {
     }
     const d = this.day, afterRise = d.sunriseSunset.rise == null || d.hours >= d.sunriseSunset.rise, beforeSet = d.sunriseSunset.set == null || d.hours < d.sunriseSunset.set;
     const meal = left <= 0 ? 'the pack is empty' : afterRise && beforeSet ? 'supper at sunset' : 'breakfast at dawn';
-    const foodTxt = active ? `${fmtDays(left)} ${plural(left, 'day')} of ${total} · ${meal}` : 'no trip under way';
+    const foodTxt = !active ? 'no trip under way' : sand ? `the pack keeps · ${meal}` : `${fmtDays(left)} ${left <= 1 ? 'day' : 'days'} of ${total} · ${meal}`;
     const ev = en ? Math.round(en.value * 100) : 100;
-    const energyTxt = en && en.warning ? 'no food and little left in you' : ev > 60 ? 'resting brings it back, faster at a campsite' : ev > 30 ? 'getting low · a meal or a rest at a campsite' : 'worn out · eat, or sit a while';
+    const cap = en ? Math.round(en.ceiling * 100) : 100;
+    const energyTxt = en && en.warning ? 'no food and little left in you' : adv && cap < 100 && ev >= cap - 2 ? `rest goes no higher now · only sleep fills it` : ev > 60 ? 'resting brings it back, faster at a campsite' : ev > 30 ? 'getting low · a meal or a rest at a campsite' : 'worn out · eat, or sit a while';
     const drops = st ? st.drops : 0;
     const dropTxt = drops === 0 ? '' : drops === 1 ? ' · the canoe dropped once' : drops === 2 ? ' · the canoe dropped twice' : ` · the canoe dropped ${drops} times`;
     const nights = st ? st.nights : [];
@@ -136,8 +147,8 @@ export class Journal {
     const todo = active_tasks.length ? active_tasks.map((t) => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span>${esc(t.clue)}${t.status === 'done' ? ' <span class="soft">Done; turn it in at any outfitter.</span>' : ''}</span></div>`).join('')
       : '<div class="empty">Nothing on the go. The board is up at any outfitter.</div>';
     return `<section class="page left" aria-labelledby="trip-h">
-      <div class="sc kicker">${active ? `The trip · day ${dayN}` : 'The trip'}</div>
-      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
+      <div class="sc kicker">${active ? `The trip · ${c ? `${c.adventure ? 'Adventure' : 'Sandbox'} · ${esc(c.dayWords())}` : `day ${dayN}`}` : `The trip${c ? ` · ${c.adventure ? 'Adventure' : 'Sandbox'}` : ''}`}</div>
+      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Any outfitter’s counter writes a permit.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
       <div class="grid">
         <div class="lab">Food</div><div class="with"><span class="cells" aria-hidden="true">${cells}</span><span>${foodTxt}</span></div>
         <div class="lab">Energy</div><div class="with"><span class="ebar"><i style="width:${ev}%"></i></span><span>${ev} % · ${energyTxt}</span></div>
@@ -153,9 +164,9 @@ export class Journal {
 
   // --- the right page -------------------------------------------------------------------------------------
   rightPage() {
-    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ['gear', 'Gear']];
+    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ...(this.core ? [['trips', 'Trips']] : []), ['gear', 'Gear']];
     const nav = `<nav class="tabs" aria-label="Journal pages">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`;
-    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'gear' ? this.gearTab() : this.catchesTab();
+    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'gear' ? this.gearTab() : this.catchesTab();
     const pageNo = (this.dayN || 0) * 2 + 1;
     return `<section class="page right" aria-labelledby="right-h"><div class="ribbon" aria-hidden="true"></div>${nav}<div class="tabpage">${body.html}</div>
       <div class="foot"><span>${body.foot || ''}</span><span class="keys"><kbd>J</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
@@ -196,6 +207,27 @@ export class Journal {
     const html = `<div class="lede"><h2 id="right-h">${lakes.length ? `${lakes.length} ${plural(lakes.length, 'lake')}` : 'No lakes yet'}</h2><div class="sub">In the order you first paddled them.</div></div>
       ${lakes.length ? `<div class="scroll"><table><thead><tr><th>Lake</th><th>First paddled</th><th>What it is</th><th>Clarity</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Push off and they will be written here.</div>'}`;
     return { html, foot: 'clarity: Secchi depth, from the DNR where it has one' };
+  }
+  // the logbook: every trip, newest first, and how it ended; what has been seen across them
+  tripsTab() {
+    const c = this.core, book = c.book, trips = book.trips.slice().reverse(), seen = book.seen, o = this.outfitter;
+    const place = (ep) => { const l = o && ep != null ? o.landings.find((x) => x.ep === ep) : null; return l ? l.place : '—'; };
+    const how = { completed: 'completed', late: 'completed late', evacuated: 'evacuated', abandoned: 'left off' };
+    const pages = Math.max(1, Math.ceil(trips.length / ROWS));
+    this.page = Math.min(this.page, pages - 1);
+    const rows = trips.slice(this.page * ROWS, this.page * ROWS + ROWS).map((t) => {
+      const e = t.entry || {}, when = e.year ? shortDate(e.year, e.doy) : '';
+      const days = t.mode === 'adventure' && t.nights != null ? `${t.days} of ${t.nights + 1}` : String(t.days || '—');
+      const note = t.why && t.why !== 'sandbox' && t.why !== 'as planned' ? `: ${esc(t.why)}` : t.why === 'as planned' ? ', as planned' : '';
+      return `<tr><td>${when}</td><td>${esc(place(t.from))}${t.to != null && t.to !== t.from ? ` → ${esc(place(t.to))}` : ''}</td><td>${days}</td><td>${fmtKm(t.km || 0)} km</td><td class="${t.k === 'evacuated' ? 'best' : ''}">${how[t.k] || t.k}${note}</td><td class="soft">${t.mode === 'sandbox' ? 'sandbox' : ''}</td></tr>`;
+    }).join('');
+    const counts = `${seen.lakes.length} ${plural(seen.lakes.length, 'lake')}, ${seen.camps.length} ${plural(seen.camps.length, 'campsite')}, ${seen.portages.length} ${plural(seen.portages.length, 'portage')} and ${seen.eps.length} ${plural(seen.eps.length, 'landing')} seen.`;
+    const done = book.trips.filter((t) => t.k === 'completed' || t.k === 'late').length;
+    const html = `<div class="lede"><h2 id="right-h">${book.trips.length ? `${book.trips.length} ${plural(book.trips.length, 'trip')}, ${done ? word(done) : 'none'} completed` : 'No trips logged yet'}</h2><div class="sub">${counts}</div></div>
+      ${trips.length ? `<div class="scroll"><table><thead><tr><th>Put in</th><th>From</th><th>Days</th><th>Paddled</th><th>How it ended</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">A trip is logged when it ends: at a counter, or when someone comes out for you.</div>'}`;
+    const more = trips.length - (this.page + 1) * ROWS;
+    const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'what you have seen stays seen';
+    return { html, foot };
   }
   gearTab() {
     const ts = this.tasks, have = ts ? ts.unlocks : [], left = UNLOCKS.filter((u) => !have.some((h) => h.key === u.key));

@@ -50,7 +50,9 @@ export function longDate(year, doy) { const { month, day } = monthDay(year, doy)
 export function shortDate(year, doy) { const { month, day } = monthDay(year, doy); return `${MONTHS[month]} ${day}`; }
 export const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 export const fmtKm = (km) => (km < 10 ? km.toFixed(1) : String(Math.round(km)));
-export const fmtDays = (d) => { if (d <= 0) return 'no'; const w = Math.floor(d + 1e-6), half = d - w >= 0.5 - 1e-6 && d - w < 0.99; return half ? `${w}½` : String(Math.round(d)); };
+export const fmtDays = (d) => { if (d <= 0) return 'no'; const w = Math.floor(d + 1e-6), half = d - w >= 0.5 - 1e-6 && d - w < 0.99; return half ? `${w || ''}½` : String(Math.round(d)); };
+// "3½ days", "1 day", "½ day"
+export const foodWords = (d) => `${fmtDays(d)} ${d <= 1 ? 'day' : 'days'}`;
 export const plural = (n, one, many = `${one}s`) => (n === 1 ? one : many);
 export const bearingOf = (heading) => ((90 - (heading * 180) / Math.PI) % 360 + 360) % 360;
 export const compassLong = (deg) => COMPASS_LONG[Math.round(deg / 45) % 8];
@@ -125,7 +127,7 @@ export class Hud {
       tension: $('tension'), tensionFill: $('tension-fill'), tensionEnd: $('tension-end'), tensionLabel: $('tension-label'),
       lures: $('lures'), prompt: $('prompt'), marks: $('marks'),
       map: $('map'), mapBody: $('map-body'), mapTitle: $('map-title'), mapSpan: $('map-span'), mapLayers: $('map-layers'), mapClose: $('map-close'),
-      mapScalebar: $('map-scalebar'), mapScale: $('map-scale'), pin: $('pin'), pinText: $('pin-text'), pinGo: $('pin-go'), pinCancel: $('pin-cancel'),
+      mapScalebar: $('map-scalebar'), mapScale: $('map-scale'), pin: $('pin'), pinText: $('pin-text'), pinGo: $('pin-go'), pinCancel: $('pin-cancel'), mapHint: $('map-hint'),
     };
     this.ctx = null;                 // the latest frame's inputs (update)
     this.cache = {};                 // last strings written, to spare the DOM
@@ -331,6 +333,7 @@ export class Hud {
     if (recentre) { this.view.cx = x; this.view.cz = z; }
     const w = this.world, p = this.player, ctx = this.ctx;
     const name = w.lakeName(w.lakeIdAt(x, z));
+    const walk = this.pinLocked; // Adventure: the pin measures the way, it does not move you
     let text = 'Paddle in here?';
     if (p) {
       const km = Math.hypot(x - p.x, z - p.z) / 1000, dir = compassLong(bearingOf(Math.atan2(-(z - p.z), x - p.x)));
@@ -344,8 +347,14 @@ export class Hud {
           hops = r ? (r.hops === 0 ? ' No portages.' : ` ${word(r.hops)[0].toUpperCase()}${word(r.hops).slice(1)} ${plural(r.hops, 'portage')}.`) : ' A long way round.';
         }
       }
-      text = `Paddle in here? ${name ? `${name}, ` : ''}about ${fmtKm(km)} km ${dir}, ${fmtDuration(km / kmh)}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
-    } else if (name) text = `Paddle in here? ${name}.`;
+      // in Adventure the clock runs at a third while you travel, so the way takes three times the hours on the clock
+      const hours = (km / kmh) * (walk ? 3 : 1);
+      text = `${walk ? '' : 'Paddle in here? '}${name ? `${name}, ` : ''}about ${fmtKm(km)} km ${dir}, ${fmtDuration(hours)}${walk ? ' by the clock' : ''}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
+      if (walk) text = text[0].toUpperCase() + text.slice(1);
+    } else if (name) text = `${walk ? '' : 'Paddle in here? '}${name}.`;
+    if (this.el.pinGo) this.el.pinGo.hidden = walk;
+    if (this.el.pinCancel) this.el.pinCancel.textContent = walk ? 'Close' : 'Not now';
+    const keys = this.el.pin && this.el.pin.querySelector('.keys'); if (keys) keys.textContent = walk ? 'Esc' : 'Enter · Esc';
     if (this.el.pinText) this.el.pinText.textContent = text;
     if (this.el.pin) this.el.pin.classList.add('show');
     this.placeConfirm();
@@ -363,8 +372,10 @@ export class Hud {
     this.pin = null;
     if (this.el.pin) this.el.pin.classList.remove('show');
   }
+  // Adventure: the map's pin only measures the way (main.js gates the move as well)
+  get pinLocked() { const t = this.ctx && this.ctx.trip; return !!(t && t.adventure); }
   confirm() {
-    if (!this.pin) return;
+    if (!this.pin || this.pinLocked) return;
     const { x, z } = this.pin;
     this.clearPin();
     this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
@@ -605,7 +616,7 @@ export class Hud {
   }
 
   // --- per frame ------------------------------------------------------------------------------------------
-  // ctx: { player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats, fps, shell }
+  // ctx: { player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats, fps, shell, trip }
   update(ctx) {
     this.ctx = ctx;
     const { player, settings } = { player: ctx.player, settings: this.settings };
@@ -665,17 +676,24 @@ export class Hud {
     }
   }
 
+  // the trip's day in words: "Day 3 of 5" (Adventure), "Day 3" (Sandbox, or before the trip core), '' between trips
+  dayWords(ctx) {
+    const { trip, outfitter } = ctx;
+    if (trip) return trip.active ? trip.dayWords(true) : '';
+    const t = outfitter && outfitter.trip;
+    return t && t.active ? `Day ${Math.floor(outfitter.daysOut) + 1}` : '';
+  }
   // arriving on a named lake, and the day card at dawn
   updateTitles(ctx) {
-    const { player, day, wind, stats, outfitter, energy } = ctx, w = this.world;
+    const { player, day, wind, stats, outfitter, energy, trip: core } = ctx, w = this.world;
     if (ctx.shell) return; // the title card is up: nothing has happened yet
     const id = player.mode === 'paddle' && !player.teleporting ? player.lakeId : 0;
     if (id > 0 && id !== this.lastLakeId) {
       const name = w.lakeName(id);
       if (name) {
         const l = w.lakes[id - 1], trip = outfitter && outfitter.trip;
-        const dayN = trip && trip.active ? Math.floor(outfitter.daysOut) + 1 : 0;
-        const kicker = `${dayN ? `Day ${dayN} · ` : ''}${clock12(day.hours)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`;
+        const dayW = this.dayWords(ctx);
+        const kicker = `${dayW ? `${dayW} · ` : ''}${clock12(day.hours)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`;
         const parts = [];
         if (trip && trip.active && stats) parts.push(stats.portages ? `${word(stats.portages)[0].toUpperCase()}${word(stats.portages).slice(1)} ${plural(stats.portages, 'portage')} from ${trip.fromName || 'the landing'}` : `Out from ${trip.fromName || 'the landing'}`);
         if (stats && stats.km > 0.05) parts.push(`${fmtKm(stats.km)} km paddled`);
@@ -684,16 +702,18 @@ export class Hud {
       }
       this.lastLakeId = id;
     } else if (id > 0) this.lastLakeId = id;
-    // dawn: the clock crossed sunrise
+    // dawn: the clock crossed sunrise (not by a jump: a night slept shows its own card)
     if (day) {
-      const rise = day.sunriseSunset.rise, h = day.hours, prev = this.lastHours;
-      if (rise != null && prev != null && prev < rise && h >= rise && h - prev < 1 && this.lastDawnDoy !== day.doy) {
+      const rise = day.sunriseSunset.rise, h = day.hours, prev = this.lastHours, jumped = (day.jumps || 0) !== (this.lastJumps || 0);
+      this.lastJumps = day.jumps || 0;
+      if (!jumped && rise != null && prev != null && prev < rise && h >= rise && h - prev < 1 && this.lastDawnDoy !== day.doy) {
         this.lastDawnDoy = day.doy;
-        const trip = outfitter && outfitter.trip, dayN = trip && trip.active ? Math.floor(outfitter.daysOut) + 1 : 0;
+        const dayW = this.dayWords(ctx);
         const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
-        const food = energy ? (energy.food > 0 ? `${fmtDays(energy.food)} ${plural(energy.food, 'day')} of food` : 'the food pack is empty') : '';
-        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
-        this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayN ? `Day ${dayN}` : 'A new day', sub);
+        const food = energy && !(core && core.sandbox) ? (energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : '';
+        const out = core && core.active && core.dueIn != null ? `out by ${core.outBy('day')}` : '';
+        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food, out].filter(Boolean).join(' · ');
+        this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayW || 'A new day', sub);
       }
       this.lastHours = h;
     }
@@ -736,20 +756,29 @@ export class Hud {
   }
 
 
-  // the status marks, bottom right at half strength: the time scale, the clock stopped, the GPS link, mute, tiles loading
+  // the status marks, bottom right at half strength: the time scale, the clock stopped, the trip's when it matters (the
+  // food down to a day, out by tomorrow, the gear wet), the GPS link, mute, tiles loading
   marksBuild() {
     const m = this.el.marks; if (!m) return;
     m.innerHTML = `<span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
+      + '<span id="mark-food" class="sc"></span><span id="mark-out" class="sc"></span><span id="mark-wet" class="sc">gear wet</span>'
       + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
       + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
       + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
-    this.mk = { speed: $('mark-speed'), clock: $('mark-clock'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+    this.mk = { speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), out: $('mark-out'), wet: $('mark-wet'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
   }
   updateMarks(ctx) {
-    const { ts, geo, day } = ctx, mk = this.mk, w = this.world; if (!mk) return;
+    const { ts, geo, day, trip, energy } = ctx, mk = this.mk, w = this.world; if (!mk) return;
     const sp = ts > 1 ? `×${ts}` : '';
     this.set('mspeed', mk.speed, sp); mk.speed.classList.toggle('on', !!sp);
     mk.clock.classList.toggle('on', !!(day && !day.running && !ctx.shell));
+    const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
+    const food = adv && energy && energy.food <= 1 ? (energy.food <= 0 ? 'no food' : `${foodWords(energy.food)} of food`) : '';
+    this.set('mfood', mk.food, food); mk.food.classList.toggle('on', !!food);
+    const due = adv ? trip.dueIn : null;
+    const out = due == null || due > 1 ? '' : due === 1 ? 'out tomorrow' : due === 0 ? 'out today' : 'overdue';
+    this.set('mout', mk.out, out); mk.out.classList.toggle('on', !!out);
+    mk.wet.classList.toggle('on', adv && !!trip.state.wet);
     mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
     mk.mute.classList.toggle('on', !!(this.settings && this.settings.get('mute')));
     let loading = 0;
@@ -826,10 +855,10 @@ export class Hud {
     const now = performance.now();
     if (!force && now - (this.readoutAt || 0) < 250) return;
     this.readoutAt = now;
-    const { player, geo, ts, day, wind, energy, tasks, outfitter, stats, fps } = ctx, w = this.world, s = this.settings;
+    const { player, geo, ts, day, wind, energy, tasks, stats, fps, trip: core } = ctx, w = this.world, s = this.settings;
     const id = player.lakeId, lake = id > 0 ? w.lakes[id - 1] : null;
     const name = player.placeName || w.lakeName(id) || 'Open water';
-    const trip = outfitter && outfitter.trip, dayN = trip && trip.active ? Math.floor(outfitter.daysOut) + 1 : 0;
+    const dayW = this.dayWords(ctx);
     const { lat, lon } = w.toLatLon(player.x, player.z);
     const rows = [];
     const row = (lab, html, cls = '') => rows.push(`<div class="sc">${lab}</div><div class="${cls}">${html}</div>`);
@@ -847,12 +876,27 @@ export class Hud {
     if (day) {
       const { rise, set } = day.sunriseSunset, h = day.hours;
       const light = set != null && h < set && (rise == null || h >= rise) ? `Sunset ${clock12(set)} · dark by ${clock12(Math.min(23.99, set + 0.8))}` : rise != null ? `Sunrise ${clock12(h < (rise || 0) ? rise : rise)}${h >= (set || 24) ? ' tomorrow' : ''}` : 'No sun today';
-      row('Light', `${light} · clock ${day.running ? `at ×${ts}` : 'stopped'}`);
+      const rate = day.rate != null && day.rate < 0.99 ? `at a third while you travel${ts > 1 ? `, ×${ts}` : ''}` : `at ×${ts}`;
+      row('Light', `${light} · clock ${day.running ? rate : 'stopped'}`);
+    }
+    // the trip: the permit (its number, the day of it, out by when and where), then the energy, then the pack
+    if (core && core.active) {
+      const p = core.permit, due = core.dueIn, ex = core.exitWords();
+      const no = p && p.no ? `${p.no} · ` : '';
+      const when = due == null ? '' : due < 0 ? ` · ${word(-due)} ${plural(-due, 'day')} past the permit` : ` · out by ${core.outBy('day')}${ex ? `, ${esc(ex)}` : ''}`;
+      row('Permit', core.sandbox ? `Sandbox · ${esc(core.dayWords())} · no dates` : `${esc(no)}${esc(core.dayWords())}${when}`);
     }
     if (energy) {
-      const v = energy.value, food = energy.food;
-      const meal = food <= 0 ? 'the pack is empty' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn';
-      row('Pack', `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>energy ${Math.round(v * 100)} % · ${food > 0 ? `${fmtDays(food)} ${plural(food, 'day')} of food` : 'no food'} · ${meal}`);
+      const v = energy.value, cap = energy.ceiling, awake = energy.awake, adv = !!(core && core.adventure && core.active);
+      const up = adv ? ` · up ${awake < 1 ? 'less than an hour' : `${Math.round(awake)} h`}` : '';
+      const rest = cap > 0.995 || v > 0.97 ? '' : v < cap - 0.01 ? ` · rest brings it to ${Math.round(cap * 100)} %` : ' · only sleep brings it higher';
+      row('Energy', `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>${Math.round(v * 100)} %${up}${rest}`);
+      const food = energy.food, sand = !!(core && core.sandbox);
+      const meal = !sand && food <= 0 ? '' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn';
+      const pk = core ? core.state.packs : null;
+      const packs = player.packs && player.packs.summary ? esc(player.packs.summary) : pk ? `${pk.count === 1 ? 'one pack' : 'two packs'}, ${pk.canoe === 'kevlar' ? 'Kevlar' : 'aluminium'} canoe` : '';
+      const foodW = sand ? 'food that keeps' : food > 0 ? `${foodWords(food)} of food` : 'the food pack is empty';
+      row('Pack', [packs, foodW, meal, core && core.state.wet ? 'the gear is wet' : ''].filter(Boolean).join(' · '));
     }
     if (tasks) {
       const open = tasks.active.length, done = tasks.active.filter((t) => t.status === 'done').length;
@@ -868,7 +912,7 @@ export class Hud {
     }
     const mode = s ? s.readoutMode : 'hold';
     const foot = mode === 'always' ? 'Always on · Settings › HUD' : mode === 'toggle' ? '<kbd>Tab</kbd> hides it · Full density keeps it up' : '<kbd>Tab</kbd> held · let go to hide · Full density keeps it up';
-    const html = `<div class="head"><div class="name">${esc(name)}</div><div class="sc date">${dayN ? `Day ${dayN} · ` : ''}${day ? `${longDate(day.year, day.doy)} · ${clock12(day.hours)}` : ''}</div></div><div class="grid">${rows.join('')}</div><div class="foot">${foot}</div>`;
+    const html = `<div class="head"><div class="name">${esc(name)}</div><div class="sc date">${dayW ? `${dayW} · ` : ''}${day ? `${longDate(day.year, day.doy)} · ${clock12(day.hours)}` : ''}</div></div><div class="grid">${rows.join('')}</div><div class="foot">${foot}</div>`;
     this.set('readout', this.el.readout, html, 'innerHTML');
   }
 
@@ -879,6 +923,7 @@ export class Hud {
     const name = w.lakeName(id) || 'open country';
     const code = sheetCode(w, v.cx, v.cz);
     this.set('mtitle', e.mapTitle, this.mode === 'sheet' ? `Fisher map ${code} · ${name}` : `${code} · ${name}`);
+    if (e.mapHint) this.set('mhint', e.mapHint, `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'} · depths in metres where the DNR has sounded`);
     this.set('mspan', e.mapSpan, `${v.span >= 10000 ? Math.round(v.span / 1000) : (v.span / 1000).toFixed(v.span < 5000 ? 1 : 0)} km across`);
     if (this.mode === 'sheet' && this.scaleInfo) {
       const { bar, cssPx } = this.scaleInfo, txt = `${bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}`;
