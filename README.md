@@ -3,6 +3,11 @@
 **Play it: https://gkrumbach07.github.io/bwca-canoe/** (a computer with a keyboard and mouse; about 20 MB
 of map data streams in as you paddle).
 
+**Watch the trailer:** [67 seconds, 720p, no sound](https://github.com/Gkrumbach07/bwca-canoe/releases/download/trailer-v2/bwca-trailer-v2-720p.mp4),
+recorded frame by frame from the game ([`scripts/trailer/`](scripts/trailer/)).
+
+[![Dusk on Lake One, from the trailer](docs/images/trailer-poster.jpg)](https://github.com/Gkrumbach07/bwca-canoe/releases/download/trailer-v2/bwca-trailer-v2-720p.mp4)
+
 A quiet canoeing game set on real terrain in the Boundary Waters Canoe Area Wilderness: the whole
 wilderness, from Crane Lake to the Pigeon River, streamed in 2.56 km tiles as you paddle. You start at the
 Lake One landing (entry point 30) east of Ely, Minnesota.
