@@ -420,7 +420,7 @@ export class Fishing {
       const a = Math.random() * TAU, r = 0.15 + Math.random() * 0.35;
       this.ripples.spawn(3, x, y + 0.02, z, 0.05 + Math.random() * 0.05, 0.12 + Math.random() * 0.15 * size, 1.2 + Math.random() * 1.2, Math.cos(a) * r, 0, Math.sin(a) * r);
     }
-    if (this.audio) this.audio.splash(size / (1 + Math.hypot(x - this.player.x, z - this.player.z) / 25));
+    if (this.audio) { if (this.audio.emit) this.audio.emit('splash', { x, y, z, size }); else this.audio.splash(size / (1 + Math.hypot(x - this.player.x, z - this.player.z) / 25)); }
   }
 
   tipWorld() { return this.rodParts.tip.getWorldPosition(this._tip); }

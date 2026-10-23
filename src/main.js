@@ -209,7 +209,7 @@ async function main() {
     cover.update(dt * ts, player.x, player.z, hemi, sun);
     mist.update(dt * ts, player.x, player.z);
     loons.update(dt * ts, player, day.season);
-    audio.update(dt, world.shoreAt(player.x, player.z), player.speed, player.mode === 'paddle');
+    audio.tick(dt, { player, world, wind, day, season: day.season, camera }); // the soundscape reads the whole scene
     geo.update(player, world);
     hud.update({ player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell });
     saver.update(dt);
