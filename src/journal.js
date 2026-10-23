@@ -192,9 +192,12 @@ export class Journal {
     const at = (ep) => { const l = ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
     const kinds = { item: 'Lost and found', survey: 'Portage crew', fish: 'Fish wanted' };
     // the notices taken on, the finished ones first, each with where it is paid
+    // (a visitor's task, npcs.js, is theirs: asked in person at that store, paid by them or its counter)
     const card = (t) => {
-      const state = t.status === 'done' ? `Done · claim it at ${esc(at(t.from))}, entry point ${t.from}.` : `On the go · ${esc(ts.progressOf ? ts.progressOf(t) : '')}`;
-      return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${kinds[t.kind] || esc((ts.kinds && ts.kinds[t.kind] && ts.kinds[t.kind].label) || t.kind)} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft">${state}</span></span></div>`;
+      const who = t.npc ? String(t.npcName || 'a visitor') : '';
+      const state = t.status === 'done' ? (t.npc ? `Done · ${esc(who.split(' ')[0])} pays it, or the counter at ${esc(at(t.from))}, entry point ${t.from}.` : `Done · claim it at ${esc(at(t.from))}, entry point ${t.from}.`) : `On the go · ${esc(ts.progressOf ? ts.progressOf(t) : '')}`;
+      const lab = t.npc ? `Asked by ${esc(who)}` : kinds[t.kind] || esc((ts.kinds && ts.kinds[t.kind] && ts.kinds[t.kind].label) || t.kind);
+      return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${lab} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft">${state}</span></span></div>`;
     };
     const list = [...done, ...open].map(card).join('');
     const paid = (ts.claimed || []).slice(-5).reverse();
@@ -276,7 +279,7 @@ export class Journal {
       ${p.url ? `<img src="${p.url}" width="240" height="135" alt="${esc(p.caption)}">` : '<div class="blank">developing…</div>'}
       <figcaption>${esc(p.caption)}${p.notice ? `<span class="for">for “${esc(p.notice.title)}”${paid.has(p.notice.id) ? ' · paid' : ''}</span>` : ''}</figcaption></figure>`).join('');
     const film = ph.film, n = list.length;
-    const sub = film === '35mm' ? 'The 35 mm: C raises it, Space takes the picture. The last 24 are kept; the oldest goes first.'
+    const sub = film === '35mm' ? 'The 35 mm: C raises it, the wheel zooms, Space takes the picture. The last 24 are kept; the oldest goes first.'
       : film === 'disposable' ? `The disposable has ${word(ph.shotsLeft)} ${plural(ph.shotsLeft, 'picture')} left. C raises it, Space takes the picture.`
         : ph.noCamera;
     const html = `<div class="lede"><h2 id="right-h">${n ? `${n} ${plural(n, 'print')}` : 'No pictures yet'}</h2><div class="sub">${sub}</div></div>

@@ -506,9 +506,11 @@ export class Tasks {
   // where a notice is paid, said from the counter at `ep`
   whereToClaim(t, ep = null) {
     const L = this.landing(t.from), here = ep != null ? this.landing(ep) : null;
-    if (!L) return 'That notice came off another board.';
+    if (!L) return t.npc ? 'That was asked of you at another outfitter.' : 'That notice came off another board.';
     const d = here ? Math.hypot(L.x - here.x, L.z - here.z) : 0;
     const far = here && d > 500 ? `, about ${fmtKm(d / 1000)} km ${compass(L.x - here.x, L.z - here.z)} of here` : '';
+    // a visitor's task (npcs.js): theirs, asked at their outfitter, and paid by them or that counter
+    if (t.npc) return `That is ${poss(t.npcName || 'a visitor')}, asked of you at ${L.name}. They pay it, or the counter there does: entry point ${L.ep}, ${L.place}${far}.`;
     return `That notice came off ${poss(L.name)} board. They pay it at their own counter: entry point ${L.ep}, ${L.place}${far}.`;
   }
   // pay one finished notice, only at the counter that posted it
@@ -547,8 +549,9 @@ export class Tasks {
     const total = paid.reduce((s, x) => s + x.pay, 0);
     const bits = [];
     if (paid.length) bits.push(`${pickR(Math.random, THANKS)} $${total} for ${paid.length === 1 ? `“${paid[0].task.title}”` : `${word(paid.length)} notices`}.`);
-    for (const from of [...new Set(elsewhere.map((t) => t.from))]) {
-      const these = elsewhere.filter((t) => t.from === from), names = these.map((t) => `“${t.title}”`).join(', ');
+    for (const t of elsewhere.filter((x) => x.npc)) bits.push(`“${t.title}”: ${this.whereToClaim(t, ep).replace(/^That is /, 'that is ')}`); // a visitor's: theirs
+    for (const from of [...new Set(elsewhere.filter((t) => !t.npc).map((t) => t.from))]) {
+      const these = elsewhere.filter((t) => t.from === from && !t.npc), names = these.map((t) => `“${t.title}”`).join(', ');
       bits.push(`${names}: ${this.whereToClaim(these[0], ep).replace(/^That notice came off (.*?) board\. They pay it/, these.length > 1 ? 'those came off $1 board. They pay them' : 'that came off $1 board. They pay it')}`);
     }
     const words = bits.join(' ') || 'Nothing finished for this board.';
@@ -645,18 +648,25 @@ export class Tasks {
     if (mine.length - ready.length) bits.push(`${word(mine.length - ready.length)} taken on`);
     if (ready.length) bits.push(`${word(ready.length)} to claim`);
     const sum = bits.length ? `${bits.join(', ')} · a new notice each morning` : writing ? 'the keeper is pinning up notices' : 'a new notice each morning';
-    const all = ready.length > 1 ? `<button type="button" class="stamp" data-act="task" data-id="claimall">Claim all · $${ready.reduce((s, t) => s + t.pay, 0)}</button>` : '';
+    // Claim all pays every finished notice this counter posted (turnIn), off its pins and asked in person too: so it says
+    const owed = this.active.filter((t) => t.status === 'done' && t.from === ep);
+    const all = owed.length > 1 ? `<button type="button" class="stamp" data-act="task" data-id="claimall">Claim all · $${owed.reduce((s, t) => s + t.pay, 0)}</button>` : '';
     const pins = slots.map((t, i) => this.notice(t, i, ep, writing)).join('');
-    // what you have on the go from other boards (and anything of this board's off its pins)
+    // what you have on the go from other boards (and anything of this board's off its pins), and apart from them what
+    // the people in the stores asked of you (npcs.js: never pinned on a board, theirs to pay, or their counter's)
     const away = this.active.filter((t) => !slots.includes(t));
-    const list = away.map((t) => {
-      const L = this.landing(t.from), k = KINDS[t.kind];
-      const state = t.status === 'done' ? (t.from === ep ? '' : `done · claim at ${esc(L ? L.name : 'its outfitter')}, entry point ${t.from}`) : esc(k && k.progress ? k.progress(t) : 'on the go');
-      // done, from this board (off its pins): claim it; done, from another board: the keeper says where it is paid
+    const row = (t) => {
+      const L = this.landing(t.from), k = KINDS[t.kind], first = t.npc ? esc(String(t.npcName || 'they').split(' ')[0]) : '';
+      const whose = t.npc ? ` · for ${esc(t.npcName || 'a visitor')}${t.from === ep ? '' : ` at ${esc(L ? L.name : 'another outfitter')}`}` : '';
+      const where = t.npc ? `done · ${first} pays it, or the counter at ${esc(L ? L.name : 'their outfitter')}, entry point ${t.from}` : `done · claim at ${esc(L ? L.name : 'its outfitter')}, entry point ${t.from}`;
+      const state = t.status === 'done' ? (t.from === ep ? '' : where) : esc(k && k.progress ? k.progress(t) : 'on the go');
+      // done, from this board (off its pins) or asked here: claim it; done, from elsewhere: the keeper says where it is paid
       const btn = t.status === 'done' ? ` <button type="button" class="stamp small${t.from === ep ? '' : ' quiet'}" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>` : '';
-      return `<li><b>${esc(t.title)}</b> · $${t.pay}${state ? ` · <span class="soft">${state}</span>` : ''}${btn}</li>`;
-    }).join('');
-    const elsewhere = away.length ? `<div class="elsewhere"><div class="lab">Taken from other boards</div><ul>${list}</ul></div>` : '';
+      return `<li><b>${esc(t.title)}</b>${whose} · $${t.pay}${state ? ` · <span class="soft">${state}</span>` : ''}${btn}</li>`;
+    };
+    const asked = away.filter((t) => t.npc), taken = away.filter((t) => !t.npc);
+    const elsewhere = away.length ? `<div class="elsewhere">${asked.length ? `<div class="lab">Asked of you in person</div><ul>${asked.map(row).join('')}</ul>` : ''}`
+      + `${taken.length ? `<div class="lab">Taken from other boards</div><ul>${taken.map(row).join('')}</ul>` : ''}</div>` : '';
     return `<section class="board cork" aria-labelledby="board-h">
       <div class="top"><h3 id="board-h">The board</h3><span class="sum">${sum}</span>${all}</div>
       <div class="notices">${pins}</div>${elsewhere}
