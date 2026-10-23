@@ -19,7 +19,8 @@
 // The signs keep the real business names (outfitter.js outfitterName); the keepers are made up.
 //
 //   outfitterProfile(ep, world) → { ep, name, place, lake, area, kind, kindWords, post, keeper: { name, manner,
-//     lines: { hello, goodbye, chat: [...], …each moment }, hint(world, profile, n) }, priceMul, signature,
+//     lines: { hello, goodbye, chat: [...] }, moments: { hello: [...], stranger: [...], …each moment }, hint(world,
+//     profile, n) }, priceMul, signature,
 //     boardWeights { fish, photo, lost, fetch, survey, berries, firewood }, look { stain, roof, roofKind, trim, door,
 //     porch, stainName }, hints [{ kind, text, lake, x, z, r }], facts, hand }
 //   keeperLine(profile, moment, ctx) → words; moments: hello stranger season passing morning after bunk ride goodbye chat
@@ -513,7 +514,8 @@ export function outfitterProfile(ep, world) {
   const hints = hintsFor(f, rng).map((h, i) => ({ kind: h.kind, text: hintText(h, manner, rng, i), lake: h.l.name, x: Math.round(h.l.x ?? f.x), z: Math.round(h.l.z ?? f.z), r: h.kind === 'carry' ? 500 : Math.round(Math.max(500, Math.sqrt(((h.l.cells || 3000) * 100) / Math.PI) * 1.2 + 250)), thick: (h.ab || 0) >= THICK }));
   // public talk: the keeper's own, the kind's, the place's, the manner's
   const chat = [...((H && H.lines.chat) || []), ...KIND[kind].chat.map((s) => fill(s, vars)), ...placeChat(f), ...V.chat];
-  const keeperObj = { name: kname, first: kname.split(' ')[0], manner, mannerWords: MANNER_WORDS[manner], lines: { ...lines, hello: lines.hello, goodbye: lines.goodbye, chat },
+  // lines as the contract has them (a hello, a goodbye and the talk), and every moment's lines for keeperLine
+  const keeperObj = { name: kname, first: kname.split(' ')[0], manner, mannerWords: MANNER_WORDS[manner], lines: { hello: lines.hello[0], goodbye: lines.goodbye[0], chat }, moments: { ...lines, chat },
     // an insider hint, the nth (keepers share them with a friend of the house: standing 2)
     hint(w, p, n = 0) { const hs = (p || profile).hints; return hs.length ? hs[((n % hs.length) + hs.length) % hs.length].text : pickR(Math.random, chat); } };
   // what is sold only here
@@ -561,17 +563,17 @@ const SEASON_TALK = [
 ];
 export function keeperLine(profile, moment = 'hello', ctx = {}) {
   if (!profile) return '';
-  const k = profile.keeper, L = k.lines, rng = ctx.n != null ? mulberry32((profile.ep * 7919 + ctx.n * 104729) >>> 0) : Math.random;
+  const k = profile.keeper, L = k.moments || {}, rng = ctx.n != null ? mulberry32((profile.ep * 7919 + ctx.n * 104729) >>> 0) : Math.random;
   const m = moment === 'welcome' ? 'hello' : moment;
   if (m === 'chat') {
-    const pool = [...L.chat];
+    const pool = [...(L.chat || k.lines.chat || [])];
     if (ctx.doy) for (const [a, b, lines] of SEASON_TALK) if (ctx.doy >= a && ctx.doy < b) pool.push(...lines, ...lines);
     if ((ctx.rep || 0) >= 2 && profile.hints.length) pool.push(...profile.hints.map((h) => h.text));
     return pickR(rng, pool);
   }
   // a friend of the house: the hello is an insider hint half the time
   if ((m === 'hello' || m === 'passing') && (ctx.rep || 0) >= 2 && profile.hints.length && rng() < 0.5) return k.hint(null, profile, Math.floor(rng() * 8));
-  return pickR(rng, L[m] && L[m].length ? L[m] : L.hello);
+  return pickR(rng, L[m] && L[m].length ? L[m] : L.hello || [k.lines.hello]);
 }
 
 // --- the phase-1 counter in the keeper's voice -------------------------------------------------------------------------
