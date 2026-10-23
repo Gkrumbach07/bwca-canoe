@@ -300,23 +300,28 @@ const THINGS = {
   'bait shop': [['a cooler of leeches', 'leeches'], ['a bucket of minnows', 'minnows']],
 };
 const FETCH_TITLES = ['An errand to {place}', 'Pick-up at {place}', 'Fetch from {place}'];
-// a landing reachable from here: by water within four portages (its hops), or by the road
-function fetchTarget(T, c, ranges, avoid = null) {
+// a landing reachable from here: by water within four portages (its hops) if there is one in range, else by the road
+// (water: the water only); none another notice on the board already sends you to
+function fetchTarget(T, c, ranges, { water = false } = {}) {
   const L = c.landing, reach = c.reach || new Map(), cands = [];
+  const held = new Set((c.board || []).filter((t) => t && t.to != null).map((t) => t.to));
   for (const e of T.world.entryPoints) {
-    if (e.ep === c.ep || e.ep === avoid) continue;
+    if (e.ep === c.ep || held.has(e.ep)) continue;
     const d = Math.hypot(e.x - L.x, e.z - L.z);
     if (d < ranges[0] * 1000 || d > ranges[1] * 1000) continue;
     const r = reach.get(T.basinOf(e.lake));
     cands.push({ e, d, hops: r ? r.hops : null });
   }
-  if (!cands.length) return null;
-  cands.sort((a, b) => (a.hops == null ? 1 : 0) - (b.hops == null ? 1 : 0) || a.d - b.d); // by water first, then the nearest
-  return pickR(c.rng, cands.slice(0, 4));
+  const wet = cands.filter((x) => x.hops != null), pool = wet.length ? wet : water ? [] : cands;
+  if (!pool.length) return null;
+  pool.sort((a, b) => a.d - b.d);
+  return pickR(c.rng, pool.slice(0, 4));
 }
+// a ride up the road (rides.js): $5 + $0.50 a road km (about 1.4 x the crow's), to the $5; a road errand pays both rides
+const rideFare = (km) => 5 * Math.round((5 + 0.5 * 1.4 * km) / 5);
 const BAND_KM = { local: [1, 7], medium: [5, 16], far: [12, 35] };
-function fetchFields(T, c, { thing = null, ranges = null, sign = null, lead = null, forWhom = 'us' } = {}) {
-  const tg = fetchTarget(T, c, ranges || BAND_KM[c.band] || BAND_KM.medium);
+function fetchFields(T, c, { thing = null, ranges = null, sign = null, lead = null, forWhom = 'us', water = false } = {}) {
+  const tg = fetchTarget(T, c, ranges || BAND_KM[c.band] || BAND_KM.medium, { water });
   if (!tg) return null;
   const to = T.landing(tg.e.ep), op = outfitterProfile(tg.e.ep, T.world), from = outfitterProfile(c.ep, T.world);
   const who = op && op.keeper ? op.keeper.name : `the keeper at ${to.name}`;
@@ -324,7 +329,7 @@ function fetchFields(T, c, { thing = null, ranges = null, sign = null, lead = nu
   const km = +(tg.d / 1000).toFixed(1), way = tg.hops == null ? ` (a ride up the road from the counter, ${fmtKm(km)} km as the crow flies)` : tg.hops === 0 ? ' (on this water)' : ` (${word(tg.hops)} ${tg.hops === 1 ? 'portage' : 'portages'} over)`;
   const text = `${lead ? `${lead} ` : ''}${who} at ${to.name}, ${to.place}${way}, has ${what} for ${forWhom}. Pick it up at their dock and bring it back here.`;
   const title = fill(pickR(c.rng, FETCH_TITLES), { place: to.place });
-  return { to: tg.e.ep, toName: to.name, toPlace: to.place, toKeeper: who, thing: what, short, hops: tg.hops, km, title, text, sign: sign || (from && from.keeper ? `${from.keeper.first}, behind the counter` : 'the counter'), hint: { x: to.x, z: to.z, r: 600 } };
+  return { to: tg.e.ep, toName: to.name, toPlace: to.place, toKeeper: who, thing: what, short, hops: tg.hops, road: tg.hops == null, km, title, text, sign: sign || (from && from.keeper ? `${from.keeper.first}, behind the counter` : 'the counter'), hint: { x: to.x, z: to.z, r: 600 } };
 }
 // the player is at another outfitter's landing: tied up there, in its store, or near its dock
 function arrivedAt(T, ep) {
@@ -335,9 +340,9 @@ function arrivedAt(T, ep) {
   return !!(L && Math.hypot(L.centre.x - p.x, L.centre.z - p.z) < 25);
 }
 registerKind('fetch', {
-  label: 'An errand', weight: { local: 0.35, medium: 0.9, far: 0.8 },
-  make(T, c) { return fetchFields(T, c); },
-  pay(t) { return Math.min(FETCH_PAY.max, FETCH_PAY.base + Math.round(FETCH_PAY.km * (t.km || 0))); },
+  label: 'An errand', weight: { local: 0.2, medium: 0.5, far: 0.45 },
+  make(T, c) { return fetchFields(T, c, { water: true }); }, // the boards send you by water
+  pay(t) { return t.road ? Math.min(60, FETCH_PAY.base + Math.round(FETCH_PAY.km * (t.km || 0)) + 2 * rideFare(t.km || 0)) : Math.min(FETCH_PAY.max, FETCH_PAY.base + Math.round(FETCH_PAY.km * (t.km || 0))); },
   update(T, t) {
     if (t.to == null || !arrivedAt(T, t.to)) return;
     t.status = 'done';
@@ -351,7 +356,7 @@ registerKind('fetch', {
 registerKind('npc', {
   label: 'A favour', weight: { local: 0, medium: 0, far: 0 }, // a visitor's, never pinned on a board
   make() { return null; },
-  pay(t) { return Math.min(LETTER_PAY.max, (t.base ?? LETTER_PAY.base) + Math.round(LETTER_PAY.km * (t.km || 0))); },
+  pay(t) { const n = (t.base ?? LETTER_PAY.base) + Math.round(LETTER_PAY.km * (t.km || 0)); return t.road ? Math.min(60, n + 2 * rideFare(t.km || 0)) : Math.min(LETTER_PAY.max, n); },
   update(T, t) {
     const p = T.player;
     let there = false;
@@ -402,6 +407,12 @@ class HintWriter {
     this.taken.add(l.name);
     return { sp, l, thick: sc - (sp === 'laketrout' ? 2 : sp === 'walleye' ? 1.4 : 1.1) >= 1.2, where: whereWords(l), ring: ringOf(l, sp) };
   }
+  // the named lake a point is on, by each lake's size and middle (a circle of its area, and 150 m of shore round it)
+  lakeByShape(x, z) {
+    let best = null, bd = 150;
+    for (const l of this.f.lakes) { const d = Math.hypot(l.x - x, l.z - z) - Math.sqrt(((l.cells || 0) * 100) / Math.PI); if (d < bd) { bd = d; best = l; } }
+    return best;
+  }
   camp(minD = 300) {
     const w = this.world, L = this.P.landingOf(this.ep), sites = [];
     // the sites near by and the water each is on (the record's name where it has one, else the nearest lake's)
@@ -411,6 +422,7 @@ class HintWriter {
     for (const { c, d } of near.slice(0, 80)) {
       let lake = siteLake(c), l = lake ? this.f.lakes.find((x) => x.name === lake) : null;
       if (!l && T) { const id = T.lakeNear(c.x, c.z, 6); l = this.f.lakes.find((x) => x.id === id) || null; lake = l ? l.name : null; }
+      if (!l) { l = this.lakeByShape(c.x, c.z); lake = l ? l.name : null; } // its tile not in: the lake whose round it is in
       if (!l || !lake || l.ha < 15 || this.used.has(lake)) continue;
       on.set(c, lake);
       sites.push({ c, l, lake, d, score: this.reachScore(l) + this.rng() * 0.3 });
@@ -420,7 +432,7 @@ class HintWriter {
     const s = sites[0], n = near.filter((x) => on.get(x.c) === s.lake).length;
     const side = s.l.ha >= 25 ? compass(s.c.x - s.l.x, s.c.z - s.l.z) : null;
     this.used.add(s.lake);
-    return { site: s.c, l: s.l, lake: s.lake, n, side, where: whereWords(s.l), name: side ? `the site on the ${side} shore of ${s.lake}` : `the site on ${s.lake}` };
+    return { site: s.c, l: s.l, lake: s.lake, n, side, where: s.l.here ? ', on this water' : whereWords(s.l), name: side ? `the site on the ${side} shore of ${s.lake}` : `the site on ${s.lake}` };
   }
   portage(n = 0) {
     const w = this.world, L = this.P.landingOf(this.ep), out = [];
@@ -607,12 +619,13 @@ const ASKS = {
   },
   letterOutfitter(P, v, c) {
     const tg = fetchTarget(P.tasks, { ...c }, [3, 30]);
+    const road = !!tg && tg.hops == null;
     if (!tg) return null;
     const to = P.tasks.landing(tg.e.ep), op = outfitterProfile(tg.e.ep, P.world), keeper = op && op.keeper ? op.keeper.name : 'the keeper';
     const km = +(tg.d / 1000).toFixed(1), old = v.arch === 'oldtimer';
     const thing = old ? `a letter for ${keeper}` : `the last of the mail for ${to.place}`, short = old ? 'the letter' : 'the mail';
     const way = tg.hops == null ? 'up the road' : tg.hops === 0 ? 'on this water' : `${word(tg.hops)} ${tg.hops === 1 ? 'portage' : 'portages'} over`;
-    return { kind: 'npc', fields: { to: tg.e.ep, toName: to.name, toPlace: to.place, thing, short, km, base: old ? 12 : 10, title: old ? `A letter for ${keeper}` : `The mail for ${to.place}`, text: `${old ? `A letter for ${keeper}, an old friend, at ${to.name}` : `The mail sack for ${to.name}`} (${to.place}, ${way}). Hand it over at their counter.`, sign: v.name, left: old ? `${keeper} reads the letter twice and laughs out loud.` : `${keeper} takes the mail and signs for it.`, hint: { x: to.x, z: to.z, r: 600 }, gift: old ? 'lure:daredevle' : null },
+    return { kind: 'npc', fields: { to: tg.e.ep, toName: to.name, toPlace: to.place, thing, short, km, road, base: old ? 12 : 10, title: old ? `A letter for ${keeper}` : `The mail for ${to.place}`, text: `${old ? `A letter for ${keeper}, an old friend, at ${to.name}` : `The mail sack for ${to.name}`} (${to.place}, ${way}). Hand it over at their counter.`, sign: v.name, left: old ? `${keeper} reads the letter twice and laughs out loud.` : `${keeper} takes the mail and signs for it.`, hint: { x: to.x, z: to.z, r: 600 }, gift: old ? 'lure:daredevle' : null },
       ask: old ? `I owe ${keeper} at ${to.place} a letter, ${way}. Forty years we’ve been writing. Would you take it?` : `I’ve one more sack for ${to.place}, ${way}, and the truck’s full. Could you run it over?` };
   },
   letterSite(P, v, c) { return siteErrand(P, v, c, 'ranger'); },
@@ -622,8 +635,8 @@ const ASKS = {
     let f = null;
     for (const band of v.arch === 'birder' ? ['local', 'medium'] : ['medium', 'local', 'far']) { f = await k.make(P.tasks, { ...c, band, board: [] }); if (f) break; }
     if (!f) return siteErrand(P, v, c, 'lost');
-    const what = f.label, rest = String(f.text || '').replace(/^[^.]*\.\s*/, '');
-    const lead = { family: `Our youngest left the ${what} at a campsite, and there were tears all the way back.`, trippers: `We left a ${what} behind at our last site. Rookie move.`, birder: `I set my ${what} down at a campsite and paddled off without it.` }[v.arch] || `We left a ${what} behind.`;
+    const what = { locket: 'Grandma’s locket', 'dry bag': 'the blue dry bag', paddle: 'the spare paddle' }[f.label] || `the ${f.label}`, rest = String(f.text || '').replace(/^[^.]*\.\s*/, '');
+    const lead = { family: `Our youngest left ${what} at a campsite, and there were tears all the way back.`, trippers: `We left ${what} behind at our last site. Rookie move.`, birder: `I set ${what} down at a campsite and paddled off without it.` }[v.arch] || `We left ${what} behind.`;
     const whose = { family: `The ${v.last}s’`, trippers: 'The trippers’', birder: 'The birder’s' }[v.arch] || 'A';
     return { kind: 'item', fields: { ...f, title: `${whose} ${f.label}`, text: `${lead} ${rest}`, sign: v.name, gift: v.arch === 'trippers' ? 'lure:silverminnow' : null },
       ask: `${lead} ${rest} Could you look for it?` };
@@ -647,7 +660,7 @@ async function siteErrand(P, v, c, who) {
     const [thing, short, lead] = { family: ['a stuffed moose', 'the moose', 'Our youngest left her stuffed moose at'], trippers: ['a fillet knife in a leather sheath', 'the knife', 'We left the fillet knife at'], birder: ['a pair of binoculars', 'the binoculars', 'I set my binoculars down at'] }[v.arch] || ['a mug', 'the mug', 'We left a mug at'];
     const whose = { family: `The ${v.last}s’`, trippers: 'The trippers’', birder: 'The birder’s' }[v.arch] || 'A';
     return { kind: 'npc', fields: { site: { x: s.site.x, z: s.site.z, lake: s.lake }, thing, short, km, base: 12, title: `${whose} ${short.replace(/^the /, '')}`, text: `${lead} ${s.name}${s.where}. Somewhere by the fire grate, we think.`, sign: v.name, left: `You find ${thing} on the rock by the fire grate.`, hint: H.P.tasks.hintFor(s.l.id, s.site), gift: v.arch === 'trippers' ? 'lure:silverminnow' : null },
-      ask: `${lead} ${s.name}${s.where}. Could you look for it, if you’re going that way?` };
+      ask: `${lead} ${s.name}${s.where}. Could you look for ${v.arch === 'birder' ? 'them' : 'it'}, if you’re going that way?` };
   }
   if (who === 'kid') {
     return { kind: 'npc', fields: { site: { x: s.site.x, z: s.site.z, lake: s.lake }, thing: 'a bucket of leeches', short: 'the leeches', km, base: 6, title: 'Leeches for Grandpa', text: `Grandpa’s camped at ${s.name}${s.where}, and he forgot his leeches. He’s the one with the pipe.`, sign: v.name, left: `Grandpa takes the bucket, puffs his pipe and says to thank ${v.name}.`, hint: H.P.tasks.hintFor(s.l.id, s.site), gift: 'leeches' },
