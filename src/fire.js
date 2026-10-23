@@ -23,6 +23,10 @@ export const FIRE = {
   decay: 1.8,
   lift: 0.45,         // the light's height over the ash (m)
 };
+// A steady light (an outfitter's store lamp, props.js storeLayout lamp) borrows the same PointLight when it is the
+// lit thing nearest the eye: warm, no flicker, a smaller pool. reach: metres from the eye past which it lets it go.
+export const STEADY = { color: 0xffcf94, intensity: 7, distance: 11, decay: 1.4, reach: 70 };
+const _fireColor = new THREE.Color(FIRE.color);
 
 const glslNoise = /* glsl */ `
   float fh(vec2 p) { p = fract(p * vec2(0.3183099, 0.3678794)) * 51.0; return fract(p.x * p.y * (p.x + p.y)); }
@@ -248,6 +252,8 @@ export class Fires {
     this.light.name = 'campfire light'; this.light.castShadow = false;
     scene.add(this.light);
     this.fires = new Map();   // key -> { key, at: { x, y, z, a }, lit, until, look }
+    this.lampOn = null;       // the steady lamp holding the light this frame, or null
+    this.steadies = new Map(); // key -> { key, at: { x, y, z }, intensity, color, distance, decay, reach } (steady)
     this.looks = [new FireLook(scene)]; // one built now, so its programs compile behind the title card
     this.free = [...this.looks];
     this.t = 0; this.now = 0;
@@ -289,6 +295,17 @@ export class Fires {
     this.fires.delete(key);
   }
 
+  // A steady light at `at` ({ x, y, z }): a store's lamp. It shares the one PointLight (the light count never changes):
+  // the light goes to whichever is nearest the eye, a lit fire or a steady lamp within its reach. intensity in candela,
+  // 0 or null to take it away; opts: { color, distance, decay, reach } (STEADY's by default). Returns its record.
+  steady(key, at, intensity = STEADY.intensity, opts = {}) {
+    if (!intensity || !at) { this.steadies.delete(key); return null; }
+    const o = { ...STEADY, ...opts };
+    const s = { key, at: { x: at.x, y: at.y, z: at.z }, intensity, color: new THREE.Color(o.color), distance: o.distance, decay: o.decay, reach: o.reach };
+    this.steadies.set(key, s);
+    return s;
+  }
+
   // dt: real seconds; now: abs game hours; eye: the camera's position
   update(dt, now, eye) {
     this.now = now;
@@ -305,7 +322,16 @@ export class Fires {
       if (d < bd) { bd = d; best = f; }
     }
     const L = this.light;
-    if (!best) { L.intensity = 0; this.near = null; return; }
+    // a steady lamp nearer the eye than any lit fire takes the light (no fire's uniforms change for it)
+    let lamp = null, ld = Infinity;
+    if (eye) for (const s of this.steadies.values()) { const d = Math.hypot(s.at.x - eye.x, s.at.z - eye.z); if (d < s.reach && d < ld) { ld = d; lamp = s; } }
+    if (lamp && ld < bd) {
+      L.color.copy(lamp.color); L.distance = lamp.distance; L.decay = lamp.decay;
+      L.position.set(lamp.at.x, lamp.at.y, lamp.at.z);
+      L.intensity = lamp.intensity * (1 - smoothstep(lamp.reach * 0.7, lamp.reach, ld));
+      this.lampOn = lamp;
+    } else { this.lampOn = null; L.color.copy(_fireColor); L.distance = FIRE.distance; L.decay = FIRE.decay; }
+    if (!best) { if (!this.lampOn) L.intensity = 0; this.near = null; return; }
     // one fire's uniforms: the nearest one's (the materials are shared; a second fire far off burns alike)
     const h = best.h, e = best.e, t = this.t;
     const flick = 0.82 + 0.1 * Math.sin(t * 7.3) * Math.sin(t * 2.9 + 1.3) + 0.08 * Math.sin(t * 19.7 + Math.sin(t * 5.1));
@@ -317,8 +343,10 @@ export class Fires {
     if (this.hemi) sc.copy(this.hemi.color).multiplyScalar(0.3 * this.hemi.intensity);
     if (this.sun) sc.add(_c.copy(this.sun.color).multiplyScalar(0.12 * this.sun.intensity));
     M.smoke.uniforms.uGlow.value.setRGB(0.5, 0.2, 0.06).multiplyScalar(h);
-    L.position.set(best.at.x + Math.sin(t * 9.1) * 0.03, best.at.y + FIRE.lift + Math.sin(t * 6.3) * 0.03, best.at.z + Math.cos(t * 8.2) * 0.03);
-    L.intensity = FIRE.intensity * (h * flick + 0.12 * e);
+    if (!this.lampOn) {
+      L.position.set(best.at.x + Math.sin(t * 9.1) * 0.03, best.at.y + FIRE.lift + Math.sin(t * 6.3) * 0.03, best.at.z + Math.cos(t * 8.2) * 0.03);
+      L.intensity = FIRE.intensity * (h * flick + 0.12 * e);
+    }
     this.near = { x: best.at.x, y: best.at.y, z: best.at.z, heat: h, embers: e };
   }
 }

@@ -6,7 +6,7 @@ import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
 import { SPECIES as SP, bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
 import { RockShape } from './collide.js';
-import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone } from './prop-kit.js';
+import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
@@ -125,7 +125,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   const trail = decal.mesh();
   if (trail) group.add(trail);
 
-  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) { yield; buildOutfitter(ctx, ep, rng, pieces, group); yield; }
+  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) { yield; yield* buildOutfitter(ctx, ep, rng, pieces, group); yield; }
 
   const ledges = [[], []]; // the ledge rocks' matrices, flats and slanted
   for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
@@ -161,6 +161,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
       else obstacles.push({ x, z, r: 0.3 * sx, rock: true, top });
     }
   }
+  flushStoreNews(); // the stores built here are told of once the tile is in, with its obstacles
   return group;
 }
 
@@ -375,20 +376,20 @@ function signMaterial(name) {
   return m;
 }
 
-// A dock out from the landing, the shack nine metres back with its door to the lake and the outfitter's
-// name over it, a canoe rack beside it. The frame: from the landing up onto dry ground and back to the
-// edge, d out to the water.
-function buildOutfitter(ctx, ep, rng, pieces, group) {
+// A dock out from the landing and, up the yard from it, the outfitter's store (buildStore) with its door to the
+// lake and the outfitter's name over it, a canoe rack beside it. The frame: from the landing up onto dry ground and
+// back to the edge, d out to the water.
+function* buildOutfitter(ctx, ep, rng, pieces, group) {
   const tg = ctx.tg;
   let x = ep.x, z = ep.z, d = tg.deeperDir(x, z);
   for (let i = 0; i < 300 && tg.shoreAt(x, z) < 1.0; i++) { x -= d.x * 0.5; z -= d.z * 0.5; if (i % 10 === 9) d = tg.deeperDir(x, z); }
   for (let i = 0; i < 300 && tg.shoreAt(x, z) > 1.2; i++) { x += d.x * 0.5; z += d.z * 0.5; if (i % 10 === 9) d = tg.deeperDir(x, z); }
   d = tg.deeperDir(x, z);
   const F = frame(ctx, x, z, d), level = tg.levelAt(x, z);
-  pieces.push(buildDock(ctx, F, level, rng));
-  const shack = buildShack(ctx, F, rng, -9.6, group, outfitterName(ep));
-  pieces.push(shack.geo);
-  pieces.push(...buildRack(ctx, F, rng, -(shack.hW + 3.0), -9.3));
+  const dock = buildDock(ctx, F, level, rng);
+  pieces.push(dock.geo);
+  yield;
+  yield* buildStore(ctx, F, rng, ep, group, pieces, dock);
 }
 
 // The dock: weathered cedar planks of uneven width and tone across three stringers, a few out of line;
@@ -403,7 +404,8 @@ function buildDock(ctx, F, level, rng) {
   for (let s = 0.8; s >= -6; s -= 0.1) if (Math.max(F.G(-hw, s), F.G(0, s), F.G(hw, s)) >= strBot - 0.17) { sill = s; break; }
   let back = sill - 0.3;
   if (Math.max(F.G(-hw, back), F.G(hw, back)) > deckY - 0.08) back = sill - 0.08;
-  ctx.obstacles.push({ x: F.W(0, (back + len) / 2)[0], z: F.W(0, (back + len) / 2)[1], ux: F.Z.x, uz: F.Z.z, hx: (len - back) / 2, hz: hw + 0.15, box: true });
+  // the deck to the walker: a box with a top, stepped onto from the bank and held off from the water
+  ctx.obstacles.push({ x: F.W(0, (back + len) / 2)[0], z: F.W(0, (back + len) / 2)[1], ux: F.Z.x, uz: F.Z.z, hx: (len - back) / 2, hz: hw, box: true, top: deckY });
   // planks
   const dryA = C(0x9d978b), dryB = C(0x8c7f6c);
   for (let s = back; s < len - 0.04;) {
@@ -466,210 +468,1098 @@ function buildDock(ctx, F, level, rng) {
   b.tube(coil, 0.011, 5, TILE.ROPE, rope);
   const geo = b.build();
   occlude(geo, occ, { ground: localGround(ctx), rays: 12, reach: 0.9, floor: 0.32 });
-  return geo;
+  return { geo, back, sill, hw, len, deckY };
 }
 
-// The shack: board-and-batten walls stained and worn, painted trim (corner boards, casings, fascia and
-// barge boards), a shingled gable roof with an overhang and a ridge cap, a stovepipe, glass in the windows,
-// a panelled door, on a sill over stone piers, a stoop with steps to the door, and the outfitter's name on
-// a board over it. Its front to the lake, centred b0 back from the landing.
-function buildShack(ctx, F, rng, b0, group, name) {
-  const b = new PropBuilder(), occ = [];
-  const hW = 2.2, hD = 1.8, pitch = 0.6, tp = Math.tan(pitch), bF = b0 + hD, bB = b0 - hD;
-  let gmax = -Infinity, gmin = Infinity;
-  for (const a of [-hW, 0, hW]) for (const s of [bB, b0, bF]) { const g = F.G(a, s); gmax = Math.max(gmax, g); gmin = Math.min(gmin, g); }
-  // the floor a little over the highest ground, but never more than a storey over the lowest (on a steep
-  // bank the uphill side sits down into the slope)
-  const floorY = Math.min(gmax + 0.34, gmin + 1.5), wall0 = floorY - 0.26, eaveY = floorY + 2.5, rise = hW * tp, ridgeY = eaveY + rise;
-  const stain = tone(0x7b4a33, rng, 0.04), batten = stain.clone().offsetHSL(0, 0, -0.03), trim = tone(0xd8ceb2, rng, 0.03);
-  const doorC = tone(0x435d49, rng, 0.04), roofC = tone(0x55564c, rng, 0.04), soffit = C(0x6b6052), iron = C(0x3a3836);
-  ctx.obstacles.push({ x: F.W(0, b0)[0], z: F.W(0, b0)[1], ux: F.Z.x, uz: F.Z.z, hx: hD + 0.08, hz: hW + 0.08, box: true });
-  // the four walls, going round: each wall's u = 0 end is where the one before it ends
-  const doorA = -0.55, door = { u0: doorA + hW - 0.47, u1: doorA + hW + 0.47, y0: floorY, y1: floorY + 2.0, depth: 0.07, fill: 'door' };
-  const walls = [
-    { o: [-hW, bF], U: F.X, N: F.Z, len: 2 * hW, gable: true, open: [door, { u0: 1.2 + hW - 0.42, u1: 1.2 + hW + 0.42, y0: floorY + 1.0, y1: floorY + 1.88, depth: 0.1, fill: 'glass' }] },
-    { o: [hW, bF], U: F.Z.clone().negate(), N: F.X, len: 2 * hD, open: [{ u0: hD - 0.1 - 0.4, u1: hD - 0.1 + 0.4, y0: floorY + 1.0, y1: floorY + 1.82, depth: 0.1, fill: 'glass' }] },
-    { o: [hW, bB], U: F.X.clone().negate(), N: F.Z.clone().negate(), len: 2 * hW, gable: true, open: [] },
-    { o: [-hW, bB], U: F.Z, N: F.X.clone().negate(), len: 2 * hD, open: [{ u0: hD - 0.2 - 0.4, u1: hD - 0.2 + 0.4, y0: floorY + 1.0, y1: floorY + 1.82, depth: 0.1, fill: 'glass' }] },
-  ];
-  const nameBoard = { u0: hW - 1.22, u1: hW + 1.22, y0: floorY + 2.1, y1: floorY + 2.74 };
-  for (const [wi, w] of walls.entries()) {
-    const O = F.P(w.o[0], 0, w.o[1]), at = (u, y, n = 0) => O.clone().addScaledVector(w.U, u).addScaledVector(w.N, n).setY(y);
-    const inside = at(w.len / 2, (wall0 + eaveY) / 2, -1), org = at(0, wall0);
-    const rect = (u0, u1, y0, y1) => { if (u1 - u0 > 1e-3 && y1 - y0 > 1e-3) b.face([at(u0, y0), at(u1, y0), at(u1, y1), at(u0, y1)], TILE.PAINT, stain, { ref: inside, U: F.Y, o: org }); };
-    // the outer face, cut round the openings
-    const ops = [...w.open].sort((p, q) => p.u0 - q.u0);
+// --- the outfitter's store ------------------------------------------------------------------------------------
+// An 8 x 6 m board-and-batten store, gable end to the lake: a porch (or a stoop) up from the dock to an open door, a
+// plank floor, knotty pine walls and an open roof inside with a canoe up on the tie beams, the counter across the back
+// with room for the keeper behind it, three shelf units (food; tackle, with a rack of rods; gear against the wall), a
+// pegboard of lures on the left wall, the cork board inside the door on the right, a box stove in the back corner, a
+// window in each side wall and one in the front, and a lamp over the middle aisle.
+//
+// The store's own frame: a across (+a to the right of someone looking at the front from the lake), y up from the
+// floor's top, b along it (+b to the lake: the front wall, with the door, faces +b). Everything that is the same in
+// every store (the walls inside and out, the floor, the roof inside, the fittings and the goods, the glass) is built
+// once in this frame (the store kit), its occlusion baked once with a daylight term for what is inside (a point far
+// from the door and the windows sees little of the sky), and each store is a copy of it turned into its landing's
+// frame and recoloured to its outfitter's look (stain, battens, trim, door). What depends on the ground or on the
+// look's shape (the roof's cover, the porch or the stoop and its steps, the foundation, the woodpile) is built per
+// store, in the same frame. Light: the sun comes in through the windows and the door by the shadow map (the glass
+// casts none), and the lamp is the campfires' one PointLight lent to the store nearest the eye (fire.js steady).
+const ST = { hW: 3.0, hD: 4.0, wall: 0.14, eave: 2.62, tp: 2 / 3, eo: 0.42, ro: 0.36, th: 0.07, sill: -0.26, base: -0.42 };
+ST.iW = ST.hW - ST.wall; ST.iD = ST.hD - ST.wall; ST.aE = ST.hW + ST.eo; ST.bE = ST.hD + ST.ro;
+const sheath = (a) => ST.eave + 0.025 + (ST.hW - Math.abs(a)) * ST.tp; // the roof boards' top over a (the cover lies on them)
+const ceil = (a) => sheath(a) - 0.025;                                 // their underside: the ceiling inside, the soffit out
+ST.ridge = sheath(0);
+const DOOR = { a0: -0.85, a1: 0.35, y1: 2.05 }; DOOR.a = (DOOR.a0 + DOOR.a1) / 2;
+// where things stand inside, in the store's frame (the build, the collision and the layout read them)
+const IN = {
+  counter: { a0: -0.6, a1: ST.iW, b0: -2.95, b1: -2.35, h: 0.95 },
+  back: { a0: -0.6, a1: ST.iW, b0: -ST.iD, b1: -ST.iD + 0.3 },
+  food: { a: -1.2, b0: -1.0, b1: 1.4, d: 0.7, h: 1.45 },
+  tackle: { a: 0.85, b0: -1.0, b1: 1.4, d: 0.7, h: 1.45, rack: 0.22 },
+  gear: { a0: 2.36, a1: ST.iW, b0: -1.6, b1: 0.4, h: 1.92 },
+  pegs: { b0: 1.3, b1: 3.4, y0: 0.75, y1: 2.08 },
+  board: { b0: 2.4, b1: 3.5, y0: 1.0, y1: 1.85 },
+  stove: { a0: -2.55, a1: -1.8, b0: -3.0, b1: -2.5, y0: 0.24, y1: 0.7, pipe: [-2.3, -2.75] },
+  wood: { a0: -1.72, a1: -1.28, b0: -ST.iD + 0.02, b1: -3.44 },
+  chair: { a: -1.12, b: -2.72 },
+  lamp: { a: -0.2, y: 2.1, b: -1.0 },
+  canoe: { a: -1.25 },
+  ties: [-2.0, 2.0], tieY: [2.42, 2.58],
+};
+// the walls going round, each from its outside-left corner (u along it, n out from its outside face): front, right,
+// back, left; and their openings (u along the wall, y up from the floor)
+const WALLS = [
+  { o: [-ST.hW, ST.hD], U: [1, 0], N: [0, 1], len: 2 * ST.hW, gable: true },
+  { o: [ST.hW, ST.hD], U: [0, -1], N: [1, 0], len: 2 * ST.hD },
+  { o: [ST.hW, -ST.hD], U: [-1, 0], N: [0, -1], len: 2 * ST.hW, gable: true },
+  { o: [-ST.hW, -ST.hD], U: [0, 1], N: [-1, 0], len: 2 * ST.hD },
+];
+const OPENINGS = [
+  { w: 0, u0: DOOR.a0 + ST.hW, u1: DOOR.a1 + ST.hW, y0: 0, y1: DOOR.y1, door: true },
+  { w: 0, u0: 4.0, u1: 5.2, y0: 0.8, y1: 2.05 },
+  { w: 1, u0: 2.2, u1: 3.2, y0: 0.95, y1: 1.9 },
+  { w: 3, u0: 3.4, u1: 4.4, y0: 0.95, y1: 1.9 },
+];
+WALLS.forEach((w, i) => { w.Uv = V(w.U[0], 0, w.U[1]); w.Nv = V(w.N[0], 0, w.N[1]); w.open = OPENINGS.filter((o) => o.w === i).sort((p, q) => p.u0 - q.u0); });
+const wp = (w, u, y, n = 0) => V(w.o[0] + w.U[0] * u + w.N[0] * n, y, w.o[1] + w.U[1] * u + w.N[1] * n);
+const wtop = (w, u, inner) => (w.gable ? ceil(u - ST.hW) : inner ? ceil(ST.iW) : ST.eave);
+// a convex piece of a wall's face (n out from its outside face) from y0 up to top(u) over [u0, u1], the gable's peak put in
+function wallCol(w, u0, u1, y0, top, n) {
+  const pts = [wp(w, u0, y0, n), wp(w, u1, y0, n), wp(w, u1, top(u1), n)];
+  if (w.gable && u0 < ST.hW - 1e-4 && u1 > ST.hW + 1e-4) pts.push(wp(w, ST.hW, top(ST.hW), n));
+  pts.push(wp(w, u0, top(u0), n));
+  return pts;
+}
+const AX = V(1, 0, 0), AY = V(0, 1, 0), AZ = V(0, 0, 1);
+// a box between (a0, y0, c0) and (a1, y1, c1) in the store's frame, and the same as an occluder
+const sbox = (b, a0, a1, y0, y1, c0, c1, tile, col, opts) => b.box(V((a0 + a1) / 2, (y0 + y1) / 2, (c0 + c1) / 2), AX, AY, AZ, Math.abs(a1 - a0) / 2, Math.abs(y1 - y0) / 2, Math.abs(c1 - c0) / 2, tile, col, opts);
+const sobb = (a0, a1, y0, y1, c0, c1) => obb(V((a0 + a1) / 2, (y0 + y1) / 2, (c0 + c1) / 2), AX, AY, AZ, Math.abs(a1 - a0) / 2, Math.abs(y1 - y0) / 2, Math.abs(c1 - c0) / 2);
+// a piece built in its own frame (x along it, y up, z across) and set down at (a, y, b) turned yaw about the vertical
+const turned = (a, y, b, yaw = 0) => new THREE.Matrix4().makeRotationY(yaw).setPosition(a, y, b);
+function placed(b, m, build) { const t = new RoleBuilder(); t.role = b.role; build(t); if (!t.count) return; const g = t.build(); g.applyMatrix4(m); b.addBuilt(g); }
+
+// What of a vertex's colour comes from the outfitter's look: the stain on the siding, the battens (a shade darker), the
+// painted trim, the door. The kit is coloured with DEF_LOOK; a store's copy is scaled by its look over that.
+const ROLE = { FIX: 0, STAIN: 1, BATTEN: 2, TRIM: 3, DOOR: 4 };
+class RoleBuilder extends PropBuilder {
+  constructor() { super(); this.r = []; this.role = ROLE.FIX; }
+  vert(p, n, u, v, tile, col) { super.vert(p, n, u, v, tile, col); this.r.push(this.role); }
+  addBuilt(g) { super.addBuilt(g); for (let i = g.getAttribute('position').count; i > 0; i--) this.r.push(this.role); return this; }
+}
+export const DEF_LOOK = { stain: 0x7b4a33, roof: 0x55564c, trim: 0xd8ceb2, door: 0x435d49, porch: true, roofKind: 'shingle' };
+// stream C's palette (outfitters.js), for a look seeded by the entry point while its module is not in the build
+const LOOK_STUB = {
+  stain: [0x6e3a2e, 0x8a3b2c, 0x8a857a, 0x3f5642, 0x8e5a3a, 0x5e4630, 0xa8823e, 0x4e6170, 0xd9d3c3],
+  roof: [[0x55564c, 'shingle'], [0x3e5a46, 'steel'], [0x7e3528, 'steel'], [0x2f2f2d, 'shingle'], [0x7a6650, 'shake']],
+  trim: [0xd8ceb2, 0xe6e2d6, 0x4a3a2c, 0x3a5040],
+  door: [0x435d49, 0x7a3a2c, 0x3d5568, 0x8a6a48],
+};
+// the outfitters' characters (stream C, src/outfitters.js) when the build has them: an empty glob until then
+const OUTFITTERS = import.meta.glob('./outfitters.js', { eager: true })['./outfitters.js'] || null;
+function lookOf(ep, world) {
+  if (OUTFITTERS && OUTFITTERS.outfitterProfile) {
+    try {
+      const p = OUTFITTERS.outfitterProfile(ep.ep, world), l = p && p.look;
+      if (l) return { ...DEF_LOOK, ...l, porch: l.porch !== undefined ? !!l.porch : DEF_LOOK.porch, roofKind: l.roofKind || 'shingle' };
+    } catch (e) { console.warn('the outfitter’s look', e); }
+  }
+  if (ep.ep === 30) return { ...DEF_LOOK };
+  const r = mulberry32(977 + ep.ep * 131), pick = (a) => a[Math.floor(r() * a.length)];
+  const [roof, roofKind] = pick(LOOK_STUB.roof);
+  return { stain: pick(LOOK_STUB.stain), roof, roofKind, trim: pick(LOOK_STUB.trim), door: pick(LOOK_STUB.door), porch: r() < 0.6 };
+}
+const roleColours = (look) => {
+  const s = C(look.stain);
+  return [null, s, s.clone().offsetHSL(0, 0, -0.03), C(look.trim), C(look.door)];
+};
+
+// --- daylight inside: how much of the outdoors a point inside sees through the door and the windows (the view factor
+// of each opening, by its centre and area, softened close to it), turned into a factor on the baked occlusion
+export const STORE_LIGHT = { dim: 0.46, gain: 4.5 };
+const DAY = OPENINGS.map((o) => { const w = WALLS[o.w]; return { c: wp(w, (o.u0 + o.u1) / 2, (o.y0 + o.y1) / 2, -ST.wall), n: w.Nv.clone().negate(), A: (o.u1 - o.u0) * (o.y1 - o.y0) }; });
+function daylit(geo) {
+  const P = geo.getAttribute('position').array, N = geo.getAttribute('normal').array, O = geo.getAttribute('aOcc'), { dim, gain } = STORE_LIGHT;
+  for (let v = 0; v < O.count; v++) {
+    const px = P[v * 3], py = P[v * 3 + 1], pz = P[v * 3 + 2], nx = N[v * 3], ny = N[v * 3 + 1], nz = N[v * 3 + 2];
+    let vf = 0;
+    for (const o of DAY) {
+      const dx = o.c.x - px, dy = o.c.y - py, dz = o.c.z - pz, r2 = dx * dx + dy * dy + dz * dz, r = Math.sqrt(r2) || 1e-3;
+      const cv = (dx * nx + dy * ny + dz * nz) / r, co = -(dx * o.n.x + dy * o.n.y + dz * o.n.z) / r;
+      if (cv > 0 && co > 0) vf += (o.A * cv * co) / (Math.PI * r2 + o.A);
+    }
+    O.setX(v, O.getX(v) * (dim + (1 - dim) * (1 - Math.exp(-vf * gain))));
+  }
+  O.needsUpdate = true;
+}
+
+// --- the kit: the parts' baked geometry gathered into flat arrays, with each vertex's look role
+class KitAcc {
+  constructor() { this.a = { position: [], normal: [], color: [], aPropUv: [], aPropTile: [], aOcc: [] }; this.r = []; }
+  add(g, roles) {
+    for (const k in this.a) { const src = g.getAttribute(k).array, dst = this.a[k]; for (let i = 0; i < src.length; i++) dst.push(src[i]); }
+    for (const r of roles) this.r.push(r);
+  }
+  done() { const out = { n: this.r.length, r: Uint8Array.from(this.r) }; for (const k in this.a) out[k] = Float32Array.from(this.a[k]); return out; }
+}
+function bakePart(K, b, boxes, { interior = true, rays = 8, reach = 0.6, floor = 0.35, ground = null } = {}) {
+  if (!b.count) return;
+  const g = b.build();
+  occlude(g, boxes, { rays, reach, floor, ground });
+  if (interior) daylit(g);
+  K.add(g, b.r);
+}
+// the shell as a few solid blocks, for the bakes: the walls between their openings, the floor, the roof's two slopes
+let shellOcc = null;
+function shellBoxes() {
+  if (shellOcc) return shellOcc;
+  const out = [];
+  const slab = (w, u0, u1, y0, y1) => { if (u1 - u0 > 0.02 && y1 - y0 > 0.02) out.push(obb(wp(w, (u0 + u1) / 2, (y0 + y1) / 2, -ST.wall / 2), w.Uv, AY, w.Nv, (u1 - u0) / 2, (y1 - y0) / 2, ST.wall / 2)); };
+  for (const w of WALLS) {
     let u = 0;
-    for (const op of ops) { rect(u, op.u0, wall0, eaveY); rect(op.u0, op.u1, wall0, op.y0); rect(op.u0, op.u1, op.y1, eaveY); u = op.u1; }
-    rect(u, w.len, wall0, eaveY);
-    if (w.gable) b.face([at(0, eaveY), at(w.len, eaveY), at(w.len / 2, ridgeY)], TILE.PAINT, stain, { ref: inside, U: F.Y, o: org });
-    // each opening: its reveals, its glass or door, its casing
-    for (const op of ops) {
-      const dp = op.depth, um = (op.u0 + op.u1) / 2, ym = (op.y0 + op.y1) / 2;
-      b.face([at(op.u0, op.y0), at(op.u0, op.y1), at(op.u0, op.y1, -dp), at(op.u0, op.y0, -dp)], TILE.PAINT, trim, { ref: at(op.u0 - 0.1, ym, -dp / 2) });
-      b.face([at(op.u1, op.y0), at(op.u1, op.y1), at(op.u1, op.y1, -dp), at(op.u1, op.y0, -dp)], TILE.PAINT, trim, { ref: at(op.u1 + 0.1, ym, -dp / 2) });
-      b.face([at(op.u0, op.y1), at(op.u1, op.y1), at(op.u1, op.y1, -dp), at(op.u0, op.y1, -dp)], TILE.PAINT, trim, { ref: at(um, op.y1 + 0.1, -dp / 2) });
-      if (op.fill === 'glass') b.face([at(op.u0, op.y0), at(op.u1, op.y0), at(op.u1, op.y0, -dp), at(op.u0, op.y0, -dp)], TILE.PAINT, trim, { ref: at(um, op.y0 - 0.1, -dp / 2) });
-      const S = (uu, y, n, hu, hy, hn, tile, col, grain = 'y') => b.box(at(uu, y, n), w.U, F.Y, w.N, hu, hy, hn, tile, col, { grain: grain === 'y' ? 'y' : 'x' });
-      if (op.fill === 'glass') {
-        b.face([at(op.u0, op.y1, -dp), at(op.u1, op.y1, -dp), at(op.u1, op.y0, -dp), at(op.u0, op.y0, -dp)], TILE.GLASS, C(0xffffff), { ref: at(um, ym, -1), uvs: [[0.02, 0.02], [0.98, 0.02], [0.98, 0.98], [0.02, 0.98]] });
-        S(um, ym, -dp + 0.016, 0.016, (op.y1 - op.y0) / 2, 0.014, TILE.PAINT, trim);
-        S(um, ym, -dp + 0.017, (op.u1 - op.u0) / 2, 0.016, 0.013, TILE.PAINT, trim, 'x');
-        S(um, op.y0 - 0.025, 0.035, (op.u1 - op.u0) / 2 + 0.1, 0.025, 0.05, TILE.PAINT, trim, 'x'); // sill
-        S(um, op.y0 - 0.1, 0.012, (op.u1 - op.u0) / 2, 0.05, 0.012, TILE.PAINT, trim, 'x');           // apron
+    for (const op of w.open) { slab(w, u, op.u0, ST.sill, ST.eave); slab(w, op.u0, op.u1, ST.sill, op.y0); slab(w, op.u0, op.u1, op.y1, ST.eave); u = op.u1; }
+    slab(w, u, w.len, ST.sill, ST.eave);
+    if (w.gable) slab(w, ST.hW - 1.6, ST.hW + 1.6, ST.eave, ST.eave + 1.05);
+  }
+  out.push(sobb(-ST.hW, ST.hW, ST.base, 0, -ST.hD, ST.hD));
+  for (const s of [-1, 1]) {
+    const p0 = V(0, ST.ridge, 0), p1 = V(s * ST.aE, sheath(ST.aE), 0), along = p1.clone().sub(p0), L = along.length(); along.normalize();
+    const up = V(-along.y * s, Math.abs(along.x), 0).normalize();
+    out.push(obb(p0.clone().add(p1).multiplyScalar(0.5).addScaledVector(up, 0.01), along, up, AZ, L / 2, 0.05, ST.bE));
+  }
+  return (shellOcc = out);
+}
+
+const PINE = 0xc0915c, PINE_DARK = 0x95683f, FLOOR = 0x8e6b4b, CEILING = 0xc79f6b, SHELF = 0xa97f53, IRON = 0x34322f;
+const LABELS = [0x9a3b2e, 0x3e5f45, 0xd8c79a, 0x4c6178, 0xc28a3a, 0x7a4f3a, 0xb9b3a0, 0x2f3a33, 0xa85a3a, 0xc9b38a];
+const TIN = C(0xb9b6ae);
+
+// The outside of the walls: the siding (painted boards) cut round the openings, battens every 34 cm, corner boards,
+// the casings, sills and drip caps of the openings, the reveals through the wall, the sashes and their glass, the sill
+// under the walls; the soffits, the fascia and the barge boards; the backing board for the name over the door; the
+// stovepipe above the roof. The glass goes to its own builder (it casts no shadow, so the sun comes in).
+function shellOutside(b, glass, rng) {
+  const D = DEF_LOOK, stain = C(D.stain), batten = stain.clone().offsetHSL(0, 0, -0.03), trim = C(D.trim);
+  WALLS.forEach((w, wi) => {
+    const topO = (u) => wtop(w, u, false), inside = (u) => wp(w, u, 1.2, -1), org = wp(w, 0, ST.sill);
+    b.role = ROLE.STAIN;
+    const rect = (u0, u1, y0, top) => { if (u1 - u0 > 1e-3) b.face(wallCol(w, u0, u1, y0, top, 0), TILE.PAINT, stain, { ref: inside((u0 + u1) / 2), U: AY, o: org }); };
+    let u = 0;
+    for (const op of w.open) { rect(u, op.u0, ST.sill, topO); if (op.y0 > ST.sill + 1e-3) rect(op.u0, op.u1, ST.sill, () => op.y0); rect(op.u0, op.u1, op.y1, topO); u = op.u1; }
+    rect(u, w.len, ST.sill, topO);
+    b.role = ROLE.TRIM;
+    const S = (uu, y, n, hu, hy, hn, tile, col, grain = 'y') => b.box(wp(w, uu, y, n), w.Uv, AY, w.Nv, hu, hy, hn, tile, col, { grain });
+    for (const op of w.open) {
+      const dp = ST.wall, um = (op.u0 + op.u1) / 2, ym = (op.y0 + op.y1) / 2;
+      // the reveals through the wall
+      b.face([wp(w, op.u0, op.y0), wp(w, op.u0, op.y1), wp(w, op.u0, op.y1, -dp), wp(w, op.u0, op.y0, -dp)], TILE.PAINT, trim, { ref: wp(w, op.u0 - 0.1, ym, -dp / 2) });
+      b.face([wp(w, op.u1, op.y0), wp(w, op.u1, op.y1), wp(w, op.u1, op.y1, -dp), wp(w, op.u1, op.y0, -dp)], TILE.PAINT, trim, { ref: wp(w, op.u1 + 0.1, ym, -dp / 2) });
+      b.face([wp(w, op.u0, op.y1), wp(w, op.u1, op.y1), wp(w, op.u1, op.y1, -dp), wp(w, op.u0, op.y1, -dp)], TILE.PAINT, trim, { ref: wp(w, um, op.y1 + 0.1, -dp / 2) });
+      if (!op.door) {
+        b.face([wp(w, op.u0, op.y0), wp(w, op.u1, op.y0), wp(w, op.u1, op.y0, -dp), wp(w, op.u0, op.y0, -dp)], TILE.PAINT, trim, { ref: wp(w, um, op.y0 - 0.1, -dp / 2) });
+        // the sash in the middle of the wall: a frame round the glass and a cross of muntins (four panes)
+        const gn = -0.07, hu = (op.u1 - op.u0) / 2, hy = (op.y1 - op.y0) / 2;
+        S(op.u0 + 0.025, ym, gn, 0.025, hy, 0.022, TILE.PAINT, trim); S(op.u1 - 0.025, ym, gn, 0.025, hy, 0.022, TILE.PAINT, trim);
+        S(um, op.y1 - 0.025, gn, hu, 0.025, 0.022, TILE.PAINT, trim, 'x'); S(um, op.y0 + 0.03, gn, hu, 0.03, 0.022, TILE.PAINT, trim, 'x');
+        S(um, ym, gn, 0.012, hy - 0.04, 0.016, TILE.PAINT, trim); S(um, ym, gn, hu - 0.04, 0.012, 0.016, TILE.PAINT, trim, 'x');
+        glass.face([wp(w, op.u0, op.y1, gn), wp(w, op.u1, op.y1, gn), wp(w, op.u1, op.y0, gn), wp(w, op.u0, op.y0, gn)], TILE.GLASS, C(0xffffff), { ref: wp(w, um, ym, -1), uvs: [[0.02, 0.02], [0.98, 0.02], [0.98, 0.98], [0.02, 0.98]] });
+        S(um, op.y0 - 0.025, 0.035, hu + 0.1, 0.025, 0.05, TILE.PAINT, trim, 'x'); // sill
+        S(um, op.y0 - 0.1, 0.012, hu, 0.05, 0.012, TILE.PAINT, trim, 'x');       // apron
       } else {
-        // a panelled door in its frame, a knob, a threshold
-        const dd = -dp - 0.02;
-        S(um, ym - 0.003, dd, (op.u1 - op.u0) / 2 - 0.004, (op.y1 - op.y0) / 2 - 0.003, 0.02, TILE.PAINT, doorC);
-        for (const [uu, hu] of [[op.u0 + 0.06, 0.05], [op.u1 - 0.06, 0.05]]) S(uu, ym, -dp + 0.006, hu, (op.y1 - op.y0) / 2 - 0.01, 0.006, TILE.PAINT, doorC);
-        for (const yy of [op.y0 + 0.08, op.y0 + 0.95, op.y1 - 0.08]) S(um, yy, -dp + 0.006, (op.u1 - op.u0) / 2 - 0.11, 0.06, 0.006, TILE.PAINT, doorC, 'x');
-        S(op.u1 - 0.14, op.y0 + 1.0, -dp + 0.03, 0.02, 0.02, 0.025, TILE.METAL, C(0x8a7a5a));
-        S(um, op.y0 + 0.012, -dp / 2, (op.u1 - op.u0) / 2, 0.012, dp / 2 + 0.02, TILE.WOOD, C(0x7d7264), 'x');
+        b.role = ROLE.FIX;
+        S(um, 0.007, -dp / 2, (op.u1 - op.u0) / 2, 0.007, dp / 2 + 0.04, TILE.WOOD, C(0x7d6a52), 'x'); // the threshold
+        b.role = ROLE.TRIM;
       }
-      // casing round the opening, a head with a drip cap over it
-      const yb = op.fill === 'glass' ? op.y0 - 0.05 : op.y0;
+      // the casing round it, a head with a drip cap over it
+      const yb = op.door ? op.y0 : op.y0 - 0.05;
       S(op.u0 - 0.045, (yb + op.y1 + 0.1) / 2, 0.014, 0.045, (op.y1 + 0.1 - yb) / 2, 0.014, TILE.PAINT, trim);
       S(op.u1 + 0.045, (yb + op.y1 + 0.1) / 2, 0.014, 0.045, (op.y1 + 0.1 - yb) / 2, 0.014, TILE.PAINT, trim);
       S(um, op.y1 + 0.055, 0.016, (op.u1 - op.u0) / 2 + 0.1, 0.055, 0.016, TILE.PAINT, trim, 'x');
       S(um, op.y1 + 0.12, 0.03, (op.u1 - op.u0) / 2 + 0.12, 0.01, 0.03, TILE.PAINT, trim, 'x');
     }
-    // battens every 0.34 m, cut round the casings and the name board, up to the eave or under the rake
-    const blocks = ops.map((op) => ({ u0: op.u0 - 0.12, u1: op.u1 + 0.12, y0: (op.fill === 'glass' ? op.y0 - 0.16 : op.y0 - 1), y1: op.y1 + 0.15 }));
-    if (wi === 0) blocks.push(nameBoard);
+    // battens every 34 cm, cut round the casings and the name board, up to the eave or under the rake
+    b.role = ROLE.BATTEN;
+    const blocks = w.open.map((op) => ({ u0: op.u0 - 0.12, u1: op.u1 + 0.12, y0: op.door ? -9 : op.y0 - 0.16, y1: op.y1 + 0.15 }));
+    if (wi === 0) blocks.push({ u0: ST.hW - 1.3, u1: ST.hW + 1.3, y0: 2.8, y1: 3.44 });
     for (let ub = 0.19; ub < w.len - 0.16; ub += 0.34) {
-      const top = w.gable ? eaveY + (w.len / 2 - Math.abs(ub - w.len / 2)) * tp - 0.13 : eaveY - 0.005;
-      let segs = [[wall0 + 0.01, top]];
+      const top = w.gable ? wtop(w, ub, false) - 0.1 : ST.eave - 0.005;
+      let segs = [[ST.sill + 0.01, top]];
       for (const k of blocks) {
         if (ub + 0.03 < k.u0 || ub - 0.03 > k.u1) continue;
         segs = segs.flatMap(([y0, y1]) => [[y0, Math.min(y1, k.y0)], [Math.max(y0, k.y1), y1]]).filter(([y0, y1]) => y1 - y0 > 0.05);
       }
-      for (const [y0, y1] of segs) b.box(at(ub, (y0 + y1) / 2, 0.011), w.U, F.Y, w.N, 0.028, (y1 - y0) / 2, 0.011, TILE.PAINT, batten, { grain: 'y', shift: [rng() * 3, rng() * 3] });
+      for (const [y0, y1] of segs) b.box(wp(w, ub, (y0 + y1) / 2, 0.011), w.Uv, AY, w.Nv, 0.028, (y1 - y0) / 2, 0.011, TILE.PAINT, batten, { grain: 'y', shift: [rng() * 3, rng() * 3] });
     }
-    // corner boards: the start one wraps over the end board of the wall before
-    b.box(at(0.0425, (wall0 + eaveY) / 2, 0.0125), w.U, F.Y, w.N, 0.0675, (eaveY - wall0) / 2, 0.0125, TILE.PAINT, trim, { grain: 'y' });
-    b.box(at(w.len - 0.055, (wall0 + eaveY) / 2, 0.0125), w.U, F.Y, w.N, 0.055, (eaveY - wall0) / 2, 0.0125, TILE.PAINT, trim, { grain: 'y' });
-    // the sill under the wall, set back under the siding's edge
-    b.box(at(w.len / 2, wall0 - 0.07, -0.08), w.U, F.Y, w.N, w.len / 2 - 0.15, 0.09, 0.06, TILE.WOOD, C(0x5d554a), { grain: 'x', endTile: TILE.END });
-  }
-  // the name over the door: a painted backing board, the sign on it
-  b.box(F.P(0, floorY + 2.42, bF + 0.022), F.X, F.Y, F.Z, 1.18, 0.3, 0.022, TILE.PAINT, trim, { grain: 'x' });
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.48), signMaterial(name));
-  sign.position.copy(F.P(0, floorY + 2.42, bF + 0.044 + 0.012));
-  sign.rotation.y = Math.atan2(F.Z.x, F.Z.z);
-  sign.receiveShadow = true; sign.matrixAutoUpdate = false; sign.updateMatrix();
-  group.add(sign);
-  // the roof: two shingled slabs over the walls, overhanging the eaves and the gables
-  const yb = (a) => ridgeY - Math.abs(a) * tp, th = 0.085, eo = 0.42, ro = 0.36, aE = hW + eo, f0 = bF + ro, f1 = bB - ro;
+    // corner boards (the start one wraps over the end of the wall before), the sill beam under the siding
+    b.role = ROLE.TRIM;
+    b.box(wp(w, 0.0425, (ST.sill + ST.eave) / 2, 0.0125), w.Uv, AY, w.Nv, 0.0675, (ST.eave - ST.sill) / 2, 0.0125, TILE.PAINT, trim, { grain: 'y' });
+    b.box(wp(w, w.len - 0.055, (ST.sill + ST.eave) / 2, 0.0125), w.Uv, AY, w.Nv, 0.055, (ST.eave - ST.sill) / 2, 0.0125, TILE.PAINT, trim, { grain: 'y' });
+    b.role = ROLE.FIX;
+    b.box(wp(w, w.len / 2, (ST.base + ST.sill) / 2, -0.06), w.Uv, AY, w.Nv, w.len / 2 - 0.08, (ST.sill - ST.base) / 2, 0.05, TILE.WOOD, C(0x5d554a), { grain: 'x', endTile: TILE.END });
+  });
+  // under the floor, closing it from below
+  b.face([V(-ST.hW + 0.02, ST.base, ST.hD - 0.02), V(ST.hW - 0.02, ST.base, ST.hD - 0.02), V(ST.hW - 0.02, ST.base, -ST.hD + 0.02), V(-ST.hW + 0.02, ST.base, -ST.hD + 0.02)], TILE.PLAIN, C(0x2c2925), { ref: V(0, 0, 0) });
+  // the soffits: under the eaves' overhang, and under the gables' overhang
+  const soffit = C(0x6b6052), up = (a, bb) => V(a, ceil(a) + 1, bb);
   for (const s of [-1, 1]) {
-    const e = s * aE, U = s > 0 ? F.Z : F.Z.clone().negate();
-    const top = [F.P(0, ridgeY + th, f0), F.P(0, ridgeY + th, f1), F.P(e, yb(e) + th, f1), F.P(e, yb(e) + th, f0)];
-    b.face(top, TILE.ROOF, roofC, { ref: F.P(0, eaveY, b0), U, o: F.P(e, yb(e) + th, s > 0 ? f0 : f1), shift: [rng(), 0] });
-    b.face([F.P(0, ridgeY, f0), F.P(0, ridgeY, f1), F.P(e, yb(e), f1), F.P(e, yb(e), f0)], TILE.WOOD, soffit, { ref: F.P(0, ridgeY + 1, b0), U: F.Z });
-    // fascia along the eave, barge boards under the rakes
-    b.box(F.P(s * (aE + 0.016), yb(e) + th - 0.09, b0), F.X, F.Y, F.Z, 0.016, 0.09, hD + ro + 0.03, TILE.PAINT, trim, { grain: 'z' });
-    const along = F.X.clone().multiplyScalar(s * aE).add(V(0, yb(e) - ridgeY, 0)), Lr = along.length(); along.normalize();
-    const up = F.Z.clone().cross(along).normalize(); if (up.y < 0) up.negate();
-    for (const bb of [f0 + 0.016, f1 - 0.016]) b.box(F.P(s * aE / 2, (ridgeY + yb(e)) / 2 + th - 0.09, bb).addScaledVector(up, 0), along, up, F.Z, Lr / 2 + 0.02, 0.09, 0.016, TILE.PAINT, trim, { grain: 'x' });
-    // the ridge cap, a board down each side of the ridge
-    b.box(F.P(s * 0.06, ridgeY + th + 0.012 - 0.06 * tp, b0), along, up, F.Z, 0.075, 0.012, hD + ro + 0.04, TILE.ROOF, roofC.clone().offsetHSL(0, 0, -0.05), { grain: 'z' });
-    occ.push(obb(F.P(s * aE / 2, (ridgeY + yb(e)) / 2 + th / 2, b0), along, up, F.Z, Lr / 2, th / 2, hD + ro));
+    b.face([V(s * ST.hW, ceil(ST.hW), -ST.bE), V(s * ST.aE, ceil(ST.aE), -ST.bE), V(s * ST.aE, ceil(ST.aE), ST.bE), V(s * ST.hW, ceil(ST.hW), ST.bE)], TILE.WOOD, soffit, { ref: up(s * 3.2, 0), U: AZ });
+    for (const e of [-1, 1]) b.face([V(0, ceil(0), e * ST.hD), V(s * ST.hW, ceil(ST.hW), e * ST.hD), V(s * ST.hW, ceil(ST.hW), e * ST.bE), V(0, ceil(0), e * ST.bE)], TILE.WOOD, soffit, { ref: up(s, e * ST.hD), U: AZ });
   }
-  // the stovepipe through the right slope, a collar, a rain cap
-  const sa = 1.15, sb = b0 - 0.45, yr = yb(sa) + th;
-  const pipeTop = ridgeY + 0.7;
-  b.cyl(F.P(sa, yr - 0.06, sb), F.P(sa, pipeTop, sb), 0.075, 0.075, 10, TILE.METAL, iron, {});
-  b.cyl(F.P(sa, yr - 0.02, sb), F.P(sa, yr + 0.06, sb), 0.11, 0.1, 10, TILE.METAL, iron.clone().offsetHSL(0, 0, 0.04), { cap1: true, capTile: TILE.METAL });
-  b.cyl(F.P(sa, pipeTop, sb), F.P(sa, pipeTop + 0.06, sb), 0.05, 0.05, 8, TILE.METAL, iron, {});
-  b.cyl(F.P(sa, pipeTop + 0.06, sb), F.P(sa, pipeTop + 0.17, sb), 0.17, 0.03, 10, TILE.METAL, iron, { cap0: true, capTile: TILE.METAL });
-  // the foundation: stacked stone piers under the sill where the ground is near, and where it falls away a
-  // post foundation (posts on footing stones, braced, the floor's joists showing under it); the floor's
-  // underside closes the shack from below
-  const pierTop = wall0 - 0.16, piers = [];
-  for (const [a, s] of [[-hW, bB], [0, bB], [hW, bB], [hW, b0], [hW, bF], [0, bF], [-hW, bF], [-hW, b0]]) {
-    const ia = a - Math.sign(a) * 0.08, is = s - Math.sign(s - b0) * 0.08, g = F.G(ia, is) - 0.1;
-    piers.push({ ia, is, g, h: pierTop - g });
+  // the fascia along each eave and the barge boards under the rakes, the cover's top line along their tops
+  b.role = ROLE.TRIM;
+  const top = (a) => sheath(a) + ST.th;
+  for (const s of [-1, 1]) {
+    b.box(V(s * (ST.aE + 0.016), top(ST.aE) - 0.085, 0), AX, AY, AZ, 0.016, 0.085, ST.bE + 0.03, TILE.PAINT, trim, { grain: 'z' });
+    const along = V(s * ST.aE, top(ST.aE) - top(0), 0), Lr = along.length(); along.normalize();
+    const upv = AZ.clone().cross(along).normalize(); if (upv.y < 0) upv.negate();
+    for (const e of [-1, 1]) b.box(V(s * ST.aE / 2, (top(0) + top(ST.aE)) / 2, e * (ST.bE + 0.016)).addScaledVector(upv, -0.085), along, upv, AZ, Lr / 2 + 0.02, 0.085, 0.016, TILE.PAINT, trim, { grain: 'x' });
   }
-  const open = piers.some((p) => p.h > 0.7), wood = C(0x6e665a);
-  for (const { ia, is, g, h } of piers) {
-    if (h < 0.06) continue;
-    if (h > 0.7) {
-      b.box(F.P(ia, (g + pierTop) / 2, is), F.X, F.Y, F.Z, 0.065, h / 2, 0.065, TILE.WOOD, wood, { grain: 'y', endTile: TILE.END });
-      stone(b, F.P(ia, g - 0.02, is), 0.2, rng() * 6.28, rng, { up: 1.4 });
-    } else {
-      const n = Math.max(1, Math.round(h / 0.17)), sh = h / n;
-      for (let k = 0; k < n; k++) {
-        const yaw = (rng() - 0.5) * 0.4, Xr = F.X.clone().multiplyScalar(Math.cos(yaw)).addScaledVector(F.Z, Math.sin(yaw)), Zr = F.Z.clone().multiplyScalar(Math.cos(yaw)).addScaledVector(F.X, -Math.sin(yaw));
-        b.box(F.P(ia + (rng() - 0.5) * 0.04, g + sh * (k + 0.5), is + (rng() - 0.5) * 0.04), Xr, F.Y, Zr, 0.17 + rng() * 0.04, sh / 2 - 0.004, 0.15 + rng() * 0.04, TILE.STONE, tone(0x8f8a83, rng, 0.1), { grain: 'x' });
+  // the backing board for the name, over the door
+  b.box(V(0, 3.12, ST.hD + 0.022), AX, AY, AZ, 1.25, 0.28, 0.022, TILE.PAINT, trim, { grain: 'x' });
+  // the stovepipe above the roof: a collar on the cover, the pipe, a rain cap
+  b.role = ROLE.FIX;
+  const [pa, pb] = IN.stove.pipe, iron = C(IRON), yr = top(pa), pipeTop = ST.ridge + 0.75;
+  b.cyl(V(pa, sheath(pa) - 0.04, pb), V(pa, pipeTop, pb), 0.075, 0.075, 10, TILE.METAL, iron, {});
+  b.cyl(V(pa, yr - 0.02, pb), V(pa, yr + 0.06, pb), 0.11, 0.1, 10, TILE.METAL, iron.clone().offsetHSL(0, 0, 0.04), { cap1: true, capTile: TILE.METAL });
+  b.cyl(V(pa, pipeTop, pb), V(pa, pipeTop + 0.06, pb), 0.05, 0.05, 8, TILE.METAL, iron, {});
+  b.cyl(V(pa, pipeTop + 0.06, pb), V(pa, pipeTop + 0.17, pb), 0.17, 0.03, 10, TILE.METAL, iron, { cap0: true, capTile: TILE.METAL });
+}
+
+// The inside of the shell: knotty pine boards up the walls to the ceiling (cut round the openings, their edges on the
+// casings), the casings and the window stools, the baseboards, the plank floor, the ceiling of boards between the
+// rafters, the ridge beam, the wall plates and the tie beams.
+function shellInside(b, rng) {
+  const pine = (r) => tone(PINE, r, 0.08, 0.012);
+  WALLS.forEach((w) => {
+    const n = -ST.wall, topI = (u) => wtop(w, u, true), u0w = ST.wall, u1w = w.len - ST.wall;
+    const blocks = w.open.map((op) => ({ u0: op.u0 - 0.075, u1: op.u1 + 0.075, y0: op.door ? -9 : op.y0 - 0.11, y1: op.y1 + 0.09 }));
+    // the boards' edges: random widths, with an edge at every block's side and at the gable's peak
+    const cuts = new Set([u0w, u1w]);
+    for (const k of blocks) { cuts.add(k.u0); cuts.add(k.u1); }
+    if (w.gable) cuts.add(ST.hW);
+    const fixed = [...cuts].filter((u) => u >= u0w && u <= u1w).sort((p, q) => p - q), edges = [];
+    for (let i = 0; i < fixed.length - 1; i++) {
+      const a = fixed[i], c = fixed[i + 1], k = Math.max(1, Math.round((c - a) / 0.15));
+      for (let j = 0; j < k; j++) edges.push(a + ((c - a) * j) / k);
+    }
+    edges.push(u1w);
+    for (let i = 0; i < edges.length - 1; i++) {
+      const c0 = edges[i], c1 = edges[i + 1], um = (c0 + c1) / 2, col = pine(rng), sh = [rng() * 3, rng() * 3];
+      let segs = [[0, Infinity]];
+      for (const k of blocks) { if (um < k.u0 || um > k.u1) continue; segs = segs.flatMap(([y0, y1]) => [[y0, Math.min(y1, k.y0)], [Math.max(y0, k.y1), y1]]).filter(([y0, y1]) => y1 - y0 > 0.02); }
+      for (const [y0, y1] of segs) {
+        const reach = y1 === Infinity, yTop = reach ? Math.min(topI(c0), topI(c1)) : y1, steps = Math.max(1, Math.ceil((yTop - y0) / 0.9));
+        for (let s = 0; s < steps; s++) {
+          const ya = y0 + ((yTop - y0) * s) / steps, yb = y0 + ((yTop - y0) * (s + 1)) / steps, last = s === steps - 1;
+          const pts = last && reach ? wallCol(w, c0, c1, ya, topI, n) : [wp(w, c0, ya, n), wp(w, c1, ya, n), wp(w, c1, yb, n), wp(w, c0, yb, n)];
+          b.face(pts, TILE.WOOD, col, { ref: wp(w, um, ya, 0), U: AY, o: wp(w, c0, 0, n), shift: sh, scale: 2.2 });
+        }
       }
     }
-  }
-  const under = C(0x2c2925), cb = gmin - 0.35, ci = 0.24;
-  b.face([F.P(-hW + 0.02, pierTop, bF - 0.02), F.P(hW - 0.02, pierTop, bF - 0.02), F.P(hW - 0.02, pierTop, bB + 0.02), F.P(-hW + 0.02, pierTop, bB + 0.02)], TILE.PLAIN, under, { ref: F.P(0, floorY, b0) });
-  if (open) {
-    // joists under the floor, braces between the posts round the outside
-    for (const a of [-1.6, -0.8, 0, 0.8, 1.6]) b.box(F.P(a, pierTop - 0.075, b0), F.X, F.Y, F.Z, 0.03, 0.075, hD - 0.12, TILE.WOOD, wood, { grain: 'z', endTile: TILE.END });
-    for (let k = 0; k < piers.length; k++) {
-      const p = piers[k], q = piers[(k + 1) % piers.length];
-      if (Math.min(p.h, q.h) < 0.8) continue;
-      const [hi, lo] = k % 2 ? [p, q] : [q, p];
-      const ox = Math.sign(hi.ia + lo.ia) * (Math.abs(hi.ia - lo.ia) < 0.01 ? 0.08 : 0), oz = Math.sign((hi.is + lo.is) / 2 - b0) * (Math.abs(hi.is - lo.is) < 0.01 ? 0.08 : 0);
-      const p0 = F.P(hi.ia + ox, pierTop - 0.12, hi.is + oz), p1 = F.P(lo.ia + ox, Math.max(lo.g + 0.25, pierTop - 1.6), lo.is + oz);
-      const along = p1.clone().sub(p0), L = along.length(); along.normalize();
-      const side = (Math.abs(hi.ia - lo.ia) < 0.01 ? F.X : F.Z).clone(), up = side.clone().cross(along).normalize();
-      b.box(p0.clone().add(p1).multiplyScalar(0.5), along, up, side, L / 2, 0.045, 0.018, TILE.WOOD, wood, { grain: 'x' });
+    // the casings round the openings and the windows' stools and aprons
+    const cas = C(PINE_DARK), S = (uu, y, nn, hu, hy, hn, col = cas, grain = 'y') => b.box(wp(w, uu, y, nn), w.Uv, AY, w.Nv, hu, hy, hn, TILE.WOOD, col, { grain });
+    for (const op of w.open) {
+      const um = (op.u0 + op.u1) / 2, yb = op.door ? 0 : op.y0 - 0.06, cn = n - 0.011;
+      S(op.u0 - 0.0375, (yb + op.y1 + 0.09) / 2, cn, 0.0375, (op.y1 + 0.09 - yb) / 2, 0.011);
+      S(op.u1 + 0.0375, (yb + op.y1 + 0.09) / 2, cn, 0.0375, (op.y1 + 0.09 - yb) / 2, 0.011);
+      S(um, op.y1 + 0.045, cn - 0.002, (op.u1 - op.u0) / 2 + 0.075, 0.045, 0.013, cas, 'x');
+      if (!op.door) {
+        S(um, op.y0 - 0.012, n - 0.03, (op.u1 - op.u0) / 2 + 0.09, 0.012, 0.035, tone(PINE_DARK, rng, 0.03), 'x');
+        S(um, op.y0 - 0.075, cn, (op.u1 - op.u0) / 2 + 0.05, 0.05, 0.011, cas, 'x');
+      }
     }
-  } else {
-    for (const [p, q] of [[[-hW + ci, bF - ci], [hW - ci, bF - ci]], [[hW - ci, bF - ci], [hW - ci, bB + ci]], [[hW - ci, bB + ci], [-hW + ci, bB + ci]], [[-hW + ci, bB + ci], [-hW + ci, bF - ci]]]) {
-      b.face([F.P(p[0], cb, p[1]), F.P(q[0], cb, q[1]), F.P(q[0], pierTop + 0.05, q[1]), F.P(p[0], pierTop + 0.05, p[1])], TILE.PLAIN, under, { ref: F.P(0, cb, b0) });
+    // the baseboard, round the door
+    const runs = w.open.some((op) => op.door) ? [[u0w, w.open[0].u0 - 0.075], [w.open[0].u1 + 0.075, u1w]] : [[u0w, u1w]];
+    for (const [s0, s1] of runs) if (s1 - s0 > 0.05) S((s0 + s1) / 2, 0.06, n - 0.009, (s1 - s0) / 2, 0.06, 0.009, C(0x6e4c30), 'x');
+  });
+  // the floor: planks along the store, their ends staggered, every piece of them a quad or so a metre long, on a dark
+  // subfloor (what shows in the gaps)
+  b.face([V(-ST.iW, -0.012, -ST.iD), V(ST.iW, -0.012, -ST.iD), V(ST.iW, -0.012, ST.iD), V(-ST.iW, -0.012, ST.iD)], TILE.PLAIN, C(0x2a221b), { ref: V(0, -1, 0) });
+  for (let a = -ST.iW; a < ST.iW - 0.02;) {
+    const w = Math.min(ST.iW - a, 0.15 + rng() * 0.05), a0 = a + 0.003, a1 = a + w - 0.003;
+    let c = -ST.iD - rng() * 1.6;
+    while (c < ST.iD) {
+      const c0 = Math.max(-ST.iD, c), c1 = Math.min(ST.iD, c + 1.4 + rng() * 1.6), col = tone(FLOOR, rng, 0.1, 0.015), sh = [rng() * 4, rng() * 4];
+      const k = Math.max(1, Math.ceil((c1 - c0) / 0.75));
+      for (let j = 0; j < k; j++) {
+        const s0 = c0 + ((c1 - c0) * j) / k, s1 = c0 + ((c1 - c0) * (j + 1)) / k;
+        b.face([V(a0, 0, s0), V(a1, 0, s0), V(a1, 0, s1), V(a0, 0, s1)], TILE.WOOD, col, { ref: V(a, -1, s0), U: AZ, o: V(a0, 0, c0), shift: sh });
+      }
+      c = c1 + 0.002;
+    }
+    a += w;
+  }
+  // the ceiling: boards along the store on the rafters, both slopes, in strips up the slope
+  for (const s of [-1, 1]) {
+    const strips = 4, col = tone(CEILING, rng, 0.04);
+    for (let i = 0; i < strips; i++) {
+      const aa = s * ST.iW * (1 - i / strips), ab = s * ST.iW * (1 - (i + 1) / strips);
+      for (let c = -ST.iD; c < ST.iD - 1e-3; c += ST.iD / 4) {
+        const c1 = Math.min(ST.iD, c + ST.iD / 4);
+        b.face([V(aa, ceil(aa), c), V(ab, ceil(ab), c), V(ab, ceil(ab), c1), V(aa, ceil(aa), c1)], TILE.WOOD, col, { ref: V((aa + ab) / 2, ceil((aa + ab) / 2) + 1, c), U: AZ, o: V(0, 0, -ST.iD) });
+      }
+    }
+    // the rafters under them, from the wall plate to the ridge beam
+    const A0 = ST.iW - 0.02, A1 = 0.06, p0 = V(s * A0, ceil(A0), 0), p1 = V(s * A1, ceil(A1), 0), along = p1.clone().sub(p0), L = along.length(); along.normalize();
+    const upv = AZ.clone().cross(along).normalize(); if (upv.y < 0) upv.negate();
+    for (let c = -ST.iD + 0.32; c < ST.iD - 0.2; c += 0.61) {
+      b.box(V((p0.x + p1.x) / 2, (p0.y + p1.y) / 2, c).addScaledVector(upv, -0.07), along, upv, AZ, L / 2, 0.07, 0.024, TILE.WOOD, tone(0xa47a50, rng, 0.05), { grain: 'x', endTile: TILE.END });
+    }
+    // the wall plate the rafters stand on
+    sbox(b, s * (ST.iW - 0.09), s * ST.iW, ceil(ST.iW) - 0.16, ceil(ST.iW - 0.09), -ST.iD, ST.iD, TILE.WOOD, C(0x9a7048), { grain: 'z' });
+  }
+  sbox(b, -0.05, 0.05, ST.ridge - 0.025 - 0.22, ST.ridge - 0.02, -ST.iD, ST.iD, TILE.WOOD, C(0x8f6743), { grain: 'z' });
+  for (const t of IN.ties) sbox(b, -ST.iW, ST.iW, IN.tieY[0], IN.tieY[1], t - 0.05, t + 0.05, TILE.WOOD, tone(0x9c7450, rng, 0.04), { grain: 'x', endTile: TILE.END });
+}
+
+// --- the goods ------------------------------------------------------------------------------------------------
+// a row of tins standing on a shelf: n of radius r and height h from c along b, at a (the front of the row)
+function tins(b, a, y, c, n, r, h, col, { step = 2.15, sides = 6, lid = TIN } = {}) {
+  for (let i = 0; i < n; i++) { const cc = c + r + i * r * step; b.cyl(V(a, y, cc), V(a, y + h, cc), r, r, sides, TILE.PLAIN, col, { cap1: true, capTile: TILE.PLAIN, capCol: lid }); }
+  return c + n * r * step;
+}
+// a carton standing at (a, y, c): w along b, d along a, h tall, turned a little
+const carton = (b, a, y, c, w, d, h, col, yaw = 0) => placed(b, turned(a, y, c, yaw), (t) => t.box(V(0, h / 2, 0), AX, AY, AZ, d / 2, h / 2, w / 2, TILE.PLAIN, col, { grain: 'y', skip: ['-y'] }));
+// a sack of flour or rice: a soft block, its neck gathered and tied
+function sack(b, a, y, c, w, d, h, col, rng) {
+  placed(b, turned(a, y, c, (rng() - 0.5) * 0.3), (t) => {
+    t.tube([V(0, 0, 0), V(0, h * 0.15, 0), V(0, h * 0.7, 0), V(0, h * 0.92, 0)], (q) => [0.5, 0.56, 0.5, 0.32][Math.min(3, Math.round(q * 3))] * Math.min(w, d), 7, TILE.CANVAS, col, { cap0: true, cap1: true });
+    t.cyl(V(0, h * 0.9, 0), V(0, h * 1.02, 0), 0.03, 0.018, 5, TILE.CANVAS, col, { cap1: true, capTile: TILE.CANVAS });
+    t.cyl(V(0, h * 0.89, 0), V(0, h * 0.92, 0), 0.034, 0.034, 6, TILE.ROPE, C(0xa08a62), {});
+  });
+}
+// a tackle box: the tray in the base, the lid, a seam, a handle and its catch
+function tackleBox(b, a, y, c, w, d, h, col) {
+  sbox(b, a - d / 2, a + d / 2, y, y + h * 0.62, c - w / 2, c + w / 2, TILE.FIBRE, col, { grain: 'z', skip: ['-y'] });
+  sbox(b, a - d / 2 + 0.004, a + d / 2 - 0.004, y + h * 0.62, y + h, c - w / 2 + 0.004, c + w / 2 - 0.004, TILE.FIBRE, col.clone().offsetHSL(0, 0, 0.03), { grain: 'z' });
+  sbox(b, a - 0.012, a + 0.012, y + h, y + h + 0.025, c - w * 0.22, c + w * 0.22, TILE.FIBRE, C(0x2e2e2c), { grain: 'z' });
+  sbox(b, a - d / 2 - 0.006, a - d / 2, y + h * 0.5, y + h * 0.72, c - 0.02, c + 0.02, TILE.METAL, C(0x8d8a84));
+}
+// What a shelf holds: groups of goods along it from c0 to c1, the front of them at a = ao (s: the way out of the
+// shelf, +1 or -1 along a), on y0 with `room` up to the shelf above. kind: 'food' | 'tackle' | 'back'.
+function shelfGoods(b, kind, level, s, y0, room, ao, depth, c0, c1, rng) {
+  const A = (t) => ao - s * t; // t metres in from the shelf's front edge
+  let c = c0 + 0.02 + rng() * 0.04;
+  const label = () => C(LABELS[Math.floor(rng() * LABELS.length)]).offsetHSL(0, -0.05, (rng() - 0.5) * 0.06);
+  const room0 = room - 0.02;
+  while (c < c1 - 0.12) {
+    const left = c1 - c, r = rng();
+    let kindHere;
+    if (kind === 'food') kindHere = level === 0 ? (r < 0.6 ? 'sack' : 'case') : level === 3 ? (r < 0.5 ? 'cartons' : 'tins-tall') : r < 0.5 ? 'tins' : r < 0.75 ? 'cartons' : 'jars';
+    else if (kind === 'tackle') kindHere = level === 0 ? (r < 0.55 ? 'bucket' : 'case') : level === 1 ? 'tackle' : level === 2 ? (r < 0.6 ? 'spools' : 'smallbox') : (r < 0.5 ? 'smallbox' : 'cartons');
+    else kindHere = r < 0.35 ? 'tins' : r < 0.7 ? 'cartons' : r < 0.85 ? 'jars' : 'smallbox';
+    if (kindHere === 'sack') {
+      const w = Math.min(left, 0.3 + rng() * 0.08), d = Math.min(depth - 0.04, 0.26), h = Math.min(room0, 0.26 + rng() * 0.06);
+      sack(b, A(d / 2 + 0.02), y0, c + w / 2, w, d, h, tone([0xe0d8c0, 0xd6c9a4, 0xc9b98e, 0xe8e2d2][Math.floor(rng() * 4)], rng, 0.04), rng);
+      c += w + 0.03;
+    } else if (kindHere === 'case') {
+      const w = Math.min(left, 0.3 + rng() * 0.1), d = Math.min(depth - 0.03, 0.24 + rng() * 0.06), h = Math.min(room0, 0.2 + rng() * 0.08);
+      carton(b, A(d / 2 + 0.015), y0, c + w / 2, w, d, h, tone(0x9c7a52, rng, 0.06), (rng() - 0.5) * 0.08);
+      if (room0 > h + 0.12 && rng() < 0.5) carton(b, A(d / 2 + 0.03), y0 + h, c + w / 2, w * 0.9, d * 0.9, Math.min(room0 - h, 0.14), tone(0x9c7a52, rng, 0.08), (rng() - 0.5) * 0.15);
+      c += w + 0.03;
+    } else if (kindHere === 'tins' || kindHere === 'tins-tall' || kindHere === 'jars') {
+      const jar = kindHere === 'jars', rr = jar ? 0.04 : 0.033 + rng() * 0.01, h = Math.min(room0 - 0.01, jar ? 0.11 : kindHere === 'tins-tall' ? 0.15 : 0.1 + rng() * 0.03);
+      const n = Math.max(1, Math.min(Math.floor((left - 0.02) / (rr * 2.15)), 3 + Math.floor(rng() * 5))), col = jar ? tone([0x8a4a2a, 0x6e3a2a, 0xa8823e][Math.floor(rng() * 3)], rng, 0.05) : label();
+      const lid = jar ? C([0xc9a44e, 0x9a3b2e, 0xd8d0b8][Math.floor(rng() * 3)]) : TIN;
+      tins(b, A(rr + 0.012), y0, c, n, rr, h, col, { lid });
+      if (depth > 4 * rr + 0.05) tins(b, A(3 * rr + 0.03), y0, c + rr * 0.5, Math.max(1, n - 1), rr, h, col, { lid });
+      if (!jar && room0 > 2 * h + 0.03 && rng() < 0.35) tins(b, A(rr + 0.012), y0 + h, c + rr, Math.max(1, n - 2), rr, h, col, { lid });
+      c += n * rr * 2.15 + 0.03;
+    } else if (kindHere === 'cartons' || kindHere === 'smallbox') {
+      const small = kindHere === 'smallbox', col = label(), w = small ? 0.06 + rng() * 0.03 : 0.12 + rng() * 0.07, d = small ? 0.05 + rng() * 0.03 : 0.06 + rng() * 0.03;
+      const h = Math.min(room0 - 0.01, small ? 0.08 + rng() * 0.05 : 0.17 + rng() * 0.1), n = Math.max(1, Math.min(Math.floor(left / (w + 0.012)), 2 + Math.floor(rng() * 4)));
+      for (let i = 0; i < n; i++) {
+        carton(b, A(d / 2 + 0.012), y0, c + w / 2 + i * (w + 0.012), w, d, h, col, (rng() - 0.5) * 0.06);
+        if (depth > 2 * d + 0.06 && rng() < 0.6) carton(b, A(1.5 * d + 0.03), y0, c + w / 2 + i * (w + 0.012), w, d, h, col, (rng() - 0.5) * 0.06);
+      }
+      c += n * (w + 0.012) + 0.03;
+    } else if (kindHere === 'tackle') {
+      const w = Math.min(left, 0.34 + rng() * 0.06), d = Math.min(depth - 0.03, 0.19), h = Math.min(room0 - 0.04, 0.14 + rng() * 0.04);
+      tackleBox(b, A(d / 2 + 0.015), y0, c + w / 2, w, d, h, tone([0x4b6b4a, 0x7c7d74, 0x6b4a32, 0xb8642e, 0x3f5a6a][Math.floor(rng() * 5)], rng, 0.04));
+      c += w + 0.035;
+    } else if (kindHere === 'bucket') {
+      const rr = 0.11 + rng() * 0.02, h = Math.min(room0 - 0.03, 0.24), col = tone([0xc9c2a8, 0x6a8a5a, 0xb85a32][Math.floor(rng() * 3)], rng, 0.04), cc = c + rr;
+      b.cyl(V(A(rr + 0.02), y0, cc), V(A(rr + 0.02), y0 + h, cc), rr * 0.92, rr, 9, TILE.FIBRE, col, { cap1: true, capTile: TILE.FIBRE, capCol: col.clone().offsetHSL(0, 0, -0.05) });
+      const bail = []; for (let k = 0; k <= 8; k++) { const t = (k / 8) * Math.PI; bail.push(V(A(rr + 0.02), y0 + h + Math.sin(t) * 0.05, cc + Math.cos(t) * rr)); }
+      b.tube(bail, 0.004, 3, TILE.METAL, C(0x8d8a84));
+      c += 2 * rr + 0.04;
+    } else if (kindHere === 'spools') {
+      const n = Math.max(1, Math.min(Math.floor(left / 0.11), 4 + Math.floor(rng() * 5))), col = C([0x6f8a5a, 0xd8d4c8, 0x4c6178, 0xb8a04a][Math.floor(rng() * 4)]);
+      for (let i = 0; i < n; i++) {
+        const cc = c + 0.05 + i * 0.11;
+        b.cyl(V(A(0.06), y0, cc), V(A(0.06), y0 + 0.05, cc), 0.05, 0.05, 8, TILE.PLAIN, C(0x2f2f2d), { cap1: true, capTile: TILE.PLAIN, capCol: col });
+      }
+      c += n * 0.11 + 0.03;
+    }
+    c += rng() * 0.03;
+  }
+}
+// A double-sided shelf unit (a gondola) standing along the store at a: a kick base, the ends, a back down its middle,
+// four shelves a side with a pale price strip on their edges, a top; the goods on every shelf. Its boards go in `occ`.
+function gondola(b, g, kind, rng, occ) {
+  const { a, b0, b1, d, h } = g, hd = d / 2, wood = () => tone(SHELF, rng, 0.04), lip = C(0xd9cfb4);
+  sbox(b, a - hd + 0.04, a + hd - 0.04, 0, 0.1, b0 + 0.02, b1 - 0.02, TILE.WOOD, C(0x4a3b2e), { grain: 'z' });
+  for (const e of [b0, b1 - 0.025]) sbox(b, a - hd, a + hd, 0, h, e, e + 0.025, TILE.WOOD, wood(), { grain: 'y', endTile: TILE.END });
+  sbox(b, a - 0.012, a + 0.012, 0.1, h - 0.025, b0 + 0.025, b1 - 0.025, TILE.WOOD, tone(0x9b7450, rng, 0.04), { grain: 'z' });
+  sbox(b, a - hd, a + hd, h - 0.025, h, b0, b1, TILE.WOOD, wood(), { grain: 'z' });
+  occ.push(sobb(a - hd + 0.04, a + hd - 0.04, 0, 0.1, b0, b1), sobb(a - 0.012, a + 0.012, 0.1, h, b0, b1), sobb(a - hd, a + hd, 0, h, b0, b0 + 0.025), sobb(a - hd, a + hd, 0, h, b1 - 0.025, b1), sobb(a - hd, a + hd, h - 0.025, h, b0, b1));
+  const levels = [0.1, 0.46, 0.82, 1.18];
+  for (const s of [-1, 1]) {
+    const ai = a + s * 0.012, ao = a + s * hd;
+    levels.forEach((y, i) => {
+      const yTop = y + 0.022, next = i < levels.length - 1 ? levels[i + 1] : h - 0.025;
+      sbox(b, ai, ao, y, yTop, b0 + 0.025, b1 - 0.025, TILE.WOOD, wood(), { grain: 'z' });
+      occ.push(sobb(ai, ao, y, yTop, b0, b1));
+      sbox(b, ao, ao + s * 0.008, y + 0.002, y + 0.045, b0 + 0.025, b1 - 0.025, TILE.PLAIN, lip, { grain: 'z' });
+      shelfGoods(b, kind, i, s, yTop, next - yTop, ao - s * 0.005, hd - 0.02, b0 + 0.03, b1 - 0.03, rng);
+    });
+  }
+}
+// the rack of rods at the front end of the tackle unit: a base with the butts in it, a rail, eight rods with their reels
+function rodRack(b, g, rng, occ) {
+  const c0 = g.b1, c1 = g.b1 + g.rack, wood = C(0x8a6440);
+  sbox(b, g.a - 0.3, g.a + 0.3, 0, 0.12, c0, c1, TILE.WOOD, wood, { grain: 'x' });
+  sbox(b, g.a - 0.3, g.a + 0.3, 1.0, 1.03, c1 - 0.06, c1 - 0.02, TILE.WOOD, wood, { grain: 'x' });
+  for (const e of [-0.3, 0.27]) sbox(b, g.a + e, g.a + e + 0.03, 0.12, 1.03, c1 - 0.06, c1 - 0.02, TILE.WOOD, wood, { grain: 'y' });
+  occ.push(sobb(g.a - 0.3, g.a + 0.3, 0, 0.12, c0, c1));
+  for (let k = 0; k < 8; k++) {
+    const a = g.a - 0.25 + k * 0.071, c = c0 + 0.09 + (rng() - 0.5) * 0.03, lean = (rng() - 0.5) * 0.05, top = 1.95 + rng() * 0.15;
+    const p0 = V(a, 0.12, c), p1 = V(a + lean, top, c + 0.04 + rng() * 0.03), blank = C([0x2e2e30, 0x5a3a2a, 0x3d4a5a, 0x6a6a5a][k % 4]);
+    b.cyl(p0, p1, 0.007, 0.0028, 4, TILE.PLAIN, blank, {});
+    const g0 = p0.clone().lerp(p1, 0.02), g1 = p0.clone().lerp(p1, 0.17);
+    b.cyl(g0, g1, 0.013, 0.012, 5, TILE.CANVAS, C(0xb39467), { cap0: true, capTile: TILE.CANVAS });
+    const r0 = p0.clone().lerp(p1, 0.2);
+    sbox(b, r0.x - 0.022, r0.x + 0.022, r0.y - 0.03, r0.y + 0.03, r0.z - 0.06, r0.z - 0.012, TILE.METAL, C(0x6d6a64));
+  }
+}
+// a Duluth pack standing against the wall: the canvas body, the flap over its top, two leather straps with buckles
+function duluth(b, a, y, c, col, rng, face = -1) {
+  const w = 0.27, d = 0.12, h = 0.54, leather = C(0x5a3a24);
+  placed(b, turned(a, y, c, face > 0 ? Math.PI : 0), (t) => {
+    t.box(V(0, h / 2, 0), AX, AY, AZ, d, h / 2, w, TILE.CANVAS, col, { grain: 'y' });
+    t.box(V(-d - 0.012, h - 0.12, 0), AX, AY, AZ, 0.014, 0.13, w - 0.01, TILE.CANVAS, col.clone().offsetHSL(0, 0, -0.03), { grain: 'z' });
+    t.box(V(0, h + 0.012, 0), AX, AY, AZ, d + 0.02, 0.014, w + 0.005, TILE.CANVAS, col.clone().offsetHSL(0, 0, -0.03), { grain: 'z' });
+    for (const z of [-0.12, 0.12]) {
+      t.box(V(-d - 0.028, h - 0.2, z), AX, AY, AZ, 0.004, 0.17, 0.018, TILE.PLAIN, leather, { grain: 'y' });
+      t.box(V(-d - 0.033, h - 0.33, z), AX, AY, AZ, 0.004, 0.02, 0.022, TILE.METAL, C(0x8a7a5a));
+    }
+  });
+  void rng;
+}
+// a stuff sack lying along the shelf (a tent, a sleeping pad rolled): a cylinder with a cinched end
+function rollBag(b, a, y, c, r, len, col) {
+  b.cyl(V(a, y + r, c - len / 2), V(a, y + r, c + len / 2), r, r, 8, TILE.CANVAS, col, { cap0: true, cap1: true, capTile: TILE.CANVAS, capCol: col.clone().offsetHSL(0, 0, -0.04), phase: 0.4 });
+  b.cyl(V(a, y + r, c + len / 2), V(a, y + r, c + len / 2 + 0.05), r * 0.5, 0.012, 6, TILE.CANVAS, col, {});
+}
+// the gear against the right wall: uprights, four shelves; packs and the food barrel low, tents and pads, the cook kits,
+// the life jackets on top, two paddles on pegs above
+function gearWall(b, rng, occ) {
+  const g = IN.gear, wood = () => tone(SHELF, rng, 0.04), levels = [0.08, 0.72, 1.32, g.h - 0.025];
+  for (const c of [g.b0, (g.b0 + g.b1) / 2, g.b1 - 0.03]) sbox(b, g.a0, g.a1, 0, g.h, c, c + 0.03, TILE.WOOD, wood(), { grain: 'y', endTile: TILE.END });
+  for (const y of levels) { sbox(b, g.a0, g.a1, y, y + 0.025, g.b0, g.b1, TILE.WOOD, wood(), { grain: 'z' }); occ.push(sobb(g.a0, g.a1, y, y + 0.025, g.b0, g.b1)); }
+  occ.push(sobb(g.a0, g.a1, 0, g.h, g.b0, g.b0 + 0.03), sobb(g.a0, g.a1, 0, g.h, g.b1 - 0.03, g.b1));
+  const fa = g.a0 + 0.03; // the front of the shelves
+  // the packs and the barrel
+  duluth(b, g.a1 - 0.14, levels[0] + 0.025, g.b0 + 0.36, tone(0xb39a6a, rng, 0.04), rng);
+  duluth(b, g.a1 - 0.14, levels[0] + 0.025, g.b0 + 0.95, tone(0x6b7350, rng, 0.04), rng);
+  const bc = g.b1 - 0.3, ba = (g.a0 + g.a1) / 2 + 0.02, by = levels[0] + 0.025, blue = C(0x3d6a8a);
+  b.cyl(V(ba, by, bc), V(ba, by + 0.56, bc), 0.19, 0.2, 12, TILE.FIBRE, blue, { cap1: true, capTile: TILE.FIBRE, capCol: blue.clone().offsetHSL(0, 0, -0.05) });
+  b.cyl(V(ba, by + 0.5, bc), V(ba, by + 0.56, bc), 0.205, 0.205, 12, TILE.FIBRE, C(0x2c4e66), {});
+  // tents and pads
+  const y1 = levels[1] + 0.025;
+  rollBag(b, g.a1 - 0.12, y1, g.b0 + 0.35, 0.095, 0.48, tone(0x5c7a55, rng, 0.04));
+  rollBag(b, fa + 0.1, y1, g.b0 + 0.4, 0.085, 0.42, tone(0xa8693f, rng, 0.04));
+  rollBag(b, g.a1 - 0.1, y1, g.b0 + 1.15, 0.075, 0.55, tone(0x56708a, rng, 0.04));
+  rollBag(b, fa + 0.09, y1, g.b0 + 1.2, 0.075, 0.55, tone(0xb8a04a, rng, 0.04));
+  rollBag(b, fa + 0.1, y1, g.b0 + 1.72, 0.09, 0.4, tone(0x8d4f45, rng, 0.04));
+  // cook kits: nested pots with lids, fuel bottles, a coil of rope
+  const y2 = levels[2] + 0.025, pot = C(0x8e8c86);
+  for (const [c, r, h] of [[g.b0 + 0.2, 0.11, 0.12], [g.b0 + 0.48, 0.095, 0.1], [g.b0 + 0.74, 0.12, 0.13]]) {
+    b.cyl(V(fa + r + 0.03, y2, c), V(fa + r + 0.03, y2 + h, c), r, r, 10, TILE.PLAIN, tone(0x8e8c86, rng, 0.05), { cap1: true, capTile: TILE.PLAIN, capCol: pot.clone().offsetHSL(0, 0, 0.05) });
+    b.cyl(V(fa + r + 0.03, y2 + h, c), V(fa + r + 0.03, y2 + h + 0.02, c), 0.015, 0.015, 5, TILE.PLAIN, C(0x2c2a28), { cap1: true });
+  }
+  tins(b, fa + 0.05, y2, g.b0 + 1.0, 4, 0.035, 0.2, C(0xa8402e), { lid: C(0x9a9890) });
+  const coil = []; for (let k = 0; k <= 40; k++) { const t = (k / 14) * Math.PI * 2, r = 0.12; coil.push(V(fa + 0.17 + Math.cos(t) * r, y2 + 0.012 + Math.floor(k / 14) * 0.02, g.b1 - 0.25 + Math.sin(t) * r)); }
+  b.tube(coil, 0.011, 5, TILE.ROPE, C(0xc9b48a));
+  // life jackets folded on top, in two stacks
+  const y3 = levels[3] + 0.025;
+  for (const [c, n] of [[g.b0 + 0.45, 4], [g.b0 + 1.45, 3]]) for (let k = 0; k < n; k++) {
+    const col = tone([0xc4602e, 0xa8402e, 0xc9a23a, 0x3d5a6a][(k + n) % 4], rng, 0.04), yy = y3 + k * 0.065;
+    placed(b, turned((g.a0 + g.a1) / 2 + 0.02, yy, c, (rng() - 0.5) * 0.15), (t) => t.box(V(0, 0.03, 0), AX, AY, AZ, 0.2, 0.03, 0.23, TILE.CANVAS, col, { grain: 'z' }));
+  }
+  // two paddles on pegs above, blades toward the back
+  for (const [y, wood] of [[2.24, C(0xb0895a)], [2.46, C(0x9a7a50)]]) {
+    const pb = new PropBuilder(); paddle(pb, mulberry32(Math.round(y * 100)), wood); const pg = pb.build();
+    pg.applyMatrix4(new THREE.Matrix4().makeBasis(V(0, 0, -1), V(-1, 0, 0), V(0, 1, 0)).setPosition(ST.iW - 0.035, y, (g.b0 + g.b1) / 2));
+    b.addBuilt(pg);
+    for (const c of [-0.45, 0.35]) b.cyl(V(ST.iW, y - 0.03, (g.b0 + g.b1) / 2 + c), V(ST.iW - 0.07, y - 0.025, (g.b0 + g.b1) / 2 + c), 0.008, 0.008, 5, TILE.WOOD, C(0x6e4c30), { cap1: true });
+  }
+}
+// the pegboard of lures on the left wall: the board in a pine frame, rows of hooks, a card on most with its lure
+function lureWall(b, rng, occ) {
+  const P = IN.pegs, x0 = -ST.iW, frame = C(PINE_DARK);
+  sbox(b, x0, x0 + 0.012, P.y0, P.y1, P.b0, P.b1, TILE.PLAIN, C(0xb48e60), { grain: 'z' });
+  for (const [c0, c1, y0, y1] of [[P.b0 - 0.04, P.b0, P.y0 - 0.04, P.y1 + 0.04], [P.b1, P.b1 + 0.04, P.y0 - 0.04, P.y1 + 0.04], [P.b0, P.b1, P.y1, P.y1 + 0.04], [P.b0, P.b1, P.y0 - 0.04, P.y0]]) sbox(b, x0, x0 + 0.025, y0, y1, c0, c1, TILE.WOOD, frame, { grain: c1 - c0 > 0.1 ? 'z' : 'y' });
+  occ.push(sobb(x0, x0 + 0.012, P.y0, P.y1, P.b0, P.b1));
+  const cards = [0xe8e2d0, 0xd9cfa8, 0xc9d3c8, 0xe0c890, 0xd8d8d0], lures = [[0xc23a2a, 0xe8e2d0], [0xc8c8c0, 0xc8c8c0], [0xc9a24a, 0xc9a24a], [0xb7c43a, 0x3a3a30], [0xd0702e, 0xd0702e], [0x2a2a2a, 0xc9a24a], [0xd8d2c0, 0x3d6a5a], [0x6a8a3a, 0xd0c040]];
+  for (let y = P.y1 - 0.1; y > P.y0 + 0.2; y -= 0.235) for (let c = P.b0 + 0.13; c < P.b1 - 0.06; c += 0.235) {
+    b.cyl(V(x0 + 0.012, y, c), V(x0 + 0.085, y + 0.012, c), 0.003, 0.003, 4, TILE.PLAIN, C(0x8a8780), {});
+    if (rng() < 0.12) continue; // a bare hook, sold out
+    const card = C(cards[Math.floor(rng() * cards.length)]), [l0, l1] = lures[Math.floor(rng() * lures.length)], cc = c + (rng() - 0.5) * 0.01, x1 = x0 + 0.055;
+    for (let k = 0; k < (rng() < 0.5 ? 2 : 1); k++) {
+      const xk = x1 + k * 0.012;
+      sbox(b, xk, xk + 0.003, y - 0.145, y + 0.005, cc - 0.035, cc + 0.035, TILE.PLAIN, card, { grain: 'y' });
+      sbox(b, xk + 0.003, xk + 0.012, y - 0.115, y - 0.07, cc - 0.012, cc + 0.012, TILE.PLAIN, C(l0), { grain: 'y' });
+      sbox(b, xk + 0.003, xk + 0.011, y - 0.07, y - 0.035, cc - 0.01, cc + 0.01, TILE.PLAIN, C(l1), { grain: 'y' });
     }
   }
-  // the stoop at the door: planks on a frame, posts at its front, steps down to the ground
-  const ys = floorY - 0.04, sd = 1.15, sw = 0.85, s0 = bF, s1 = bF + sd;
+}
+// the cork board's frame inside the door, on the right wall (the cork, the notices on it, is a texture of its own)
+function boardFrame(b) {
+  const B = IN.board, x1 = ST.iW, f = C(PINE_DARK);
+  for (const [c0, c1, y0, y1] of [[B.b0 - 0.05, B.b0, B.y0 - 0.05, B.y1 + 0.05], [B.b1, B.b1 + 0.05, B.y0 - 0.05, B.y1 + 0.05], [B.b0, B.b1, B.y1, B.y1 + 0.05], [B.b0, B.b1, B.y0 - 0.05, B.y0]]) sbox(b, x1 - 0.03, x1, y0, y1, c0, c1, TILE.WOOD, f, { grain: c1 - c0 > 0.1 ? 'z' : 'y' });
+  sbox(b, x1 - 0.012, x1, B.y0, B.y1, B.b0, B.b1, TILE.PLAIN, C(0x8a6440), { grain: 'z' }); // behind the cork
+  sbox(b, x1 - 0.07, x1, B.y0 - 0.07, B.y0 - 0.05, B.b0, B.b1, TILE.WOOD, f, { grain: 'z' }); // a ledge for the pencil
+  b.cyl(V(x1 - 0.045, B.y0 - 0.044, B.b0 + 0.2), V(x1 - 0.045, B.y0 - 0.044, B.b0 + 0.36), 0.004, 0.004, 5, TILE.PLAIN, C(0xc9a23a), { cap0: true, cap1: true });
+}
+// the counter across the back: a beadboard front on a kick, an end, a worn top, a shelf on the keeper's side; on it the
+// till, a bell, a jar of jerky, the permits, a rack of map sheets; the shelves on the back wall behind
+function counter(b, rng, occ) {
+  const K = IN.counter, top = K.h, stain = 0x6e4a30;
+  for (let a = K.a0 + 0.03; a < K.a1 - 0.01; a += 0.09) {
+    const a1 = Math.min(K.a1, a + 0.09);
+    b.face([V(a, 0.1, K.b1), V(a1, 0.1, K.b1), V(a1, top - 0.045, K.b1), V(a, top - 0.045, K.b1)], TILE.WOOD, tone(stain, rng, 0.06, 0.01), { ref: V(a, 0.5, K.b0), U: AY, shift: [rng() * 3, rng() * 3] });
+    sbox(b, a1 - 0.006, a1, 0.1, top - 0.045, K.b1, K.b1 + 0.006, TILE.WOOD, C(0x4a3020), { grain: 'y' });
+  }
+  sbox(b, K.a0 + 0.03, K.a1, 0, 0.1, K.b1 - 0.05, K.b1 - 0.04, TILE.WOOD, C(0x3a2a20), { grain: 'x' });
+  sbox(b, K.a0, K.a0 + 0.03, 0, top - 0.045, K.b0, K.b1, TILE.WOOD, tone(stain, rng, 0.04), { grain: 'y' });
+  sbox(b, K.a0 - 0.04, K.a1, top - 0.045, top, K.b0 - 0.02, K.b1 + 0.05, TILE.WOOD, C(0x8b6a4a), { grain: 'x', endTile: TILE.END });
+  sbox(b, K.a0 + 0.03, K.a1, 0.36, 0.38, K.b0, K.b1 - 0.02, TILE.WOOD, tone(stain, rng, 0.04), { grain: 'x' });
+  occ.push(sobb(K.a0, K.a1, 0, top, K.b1 - 0.05, K.b1), sobb(K.a0 - 0.04, K.a1, top - 0.045, top, K.b0, K.b1 + 0.05), sobb(K.a0 + 0.03, K.a1, 0.36, 0.38, K.b0, K.b1));
+  for (let a = K.a0 + 0.2; a < K.a1 - 0.25; a += 0.32 + rng() * 0.25) carton(b, a, 0.38, K.b0 + 0.18, 0.24 + rng() * 0.08, 0.2 + rng() * 0.08, 0.1 + rng() * 0.2, tone(0x9c7a52, rng, 0.06), (rng() - 0.5) * 0.12);
+  // the till: a body, the sloped keys, the drawer, a little sign on top
+  const ta = 2.05, tc = (K.b0 + K.b1) / 2;
+  sbox(b, ta - 0.19, ta + 0.19, top, top + 0.16, tc - 0.18, tc + 0.12, TILE.METAL, C(0x5a5650));
+  placed(b, new THREE.Matrix4().makeRotationX(-0.5).setPosition(ta, top + 0.15, tc + 0.12), (t) => t.box(V(0, 0, 0.07), AX, AY, AZ, 0.18, 0.03, 0.08, TILE.METAL, C(0x6e6a62)));
+  sbox(b, ta - 0.17, ta + 0.17, top + 0.16, top + 0.27, tc - 0.16, tc - 0.08, TILE.METAL, C(0x5a5650));
+  sbox(b, ta - 0.1, ta + 0.1, top + 0.18, top + 0.25, tc - 0.08, tc - 0.075, TILE.PLAIN, C(0xd8cfa8));
+  // the bell, a jar of jerky, the permits, the map sheets in a rack
+  b.cyl(V(0.35, top, tc + 0.12), V(0.35, top + 0.012, tc + 0.12), 0.045, 0.045, 8, TILE.WOOD, C(0x3a2a20), { cap1: true });
+  b.cyl(V(0.35, top + 0.012, tc + 0.12), V(0.35, top + 0.055, tc + 0.12), 0.04, 0.012, 8, TILE.PLAIN, C(0xc9a44e), { cap1: true, capTile: TILE.PLAIN });
+  b.cyl(V(0.9, top, tc), V(0.9, top + 0.22, tc), 0.075, 0.075, 10, TILE.PLAIN, C(0x7a4a2a), { cap1: true, capTile: TILE.PLAIN, capCol: C(0x6a6a62) });
+  sbox(b, 1.25, 1.47, top, top + 0.025, tc - 0.05, tc + 0.11, TILE.PLAIN, C(0xe6e0cc), { grain: 'x' });
+  sbox(b, 1.29, 1.31, top + 0.025, top + 0.03, tc - 0.02, tc + 0.12, TILE.PLAIN, C(0x2a3a5a), { grain: 'z' });
+  sbox(b, -0.48, -0.12, top, top + 0.03, tc - 0.1, tc + 0.1, TILE.WOOD, C(0x5a3a24), { grain: 'x' });
+  for (let k = 0; k < 4; k++) placed(b, new THREE.Matrix4().makeRotationX(-0.25).setPosition(-0.42 + k * 0.085, top + 0.03, tc), (t) => t.box(V(0, 0.11, 0), AX, AY, AZ, 0.035, 0.11, 0.006, TILE.PLAIN, C([0xd8d4b8, 0xb9c9b0, 0xd9c79a, 0xc9d3c8][k]), { grain: 'y' }));
+  // the shelves on the back wall behind the keeper, on brackets
+  const B = IN.back;
+  for (const y of [1.05, 1.45, 1.85]) {
+    sbox(b, B.a0, B.a1, y, y + 0.022, B.b0, B.b1, TILE.WOOD, tone(SHELF, rng, 0.04), { grain: 'x' });
+    occ.push(sobb(B.a0, B.a1, y, y + 0.022, B.b0, B.b1));
+    for (const a of [B.a0 + 0.15, (B.a0 + B.a1) / 2, B.a1 - 0.15]) sbox(b, a - 0.012, a + 0.012, y - 0.16, y, B.b0, B.b0 + 0.2, TILE.WOOD, C(0x6e4c30), { grain: 'y' });
+    backGoods(b, y + 0.022, 0.36, rng);
+  }
+}
+// what is on the back wall's shelves: along a, the front at b = IN.back.b1
+function backGoods(b, y0, room, rng) {
+  const B = IN.back;
+  let a = B.a0 + 0.04 + rng() * 0.05;
+  while (a < B.a1 - 0.12) {
+    const r = rng(), col = C(LABELS[Math.floor(rng() * LABELS.length)]);
+    if (r < 0.35) { const n = 3 + Math.floor(rng() * 4), rr = 0.035; for (let i = 0; i < n; i++) b.cyl(V(a + rr + i * 0.075, y0, B.b1 - 0.06), V(a + rr + i * 0.075, y0 + 0.11, B.b1 - 0.06), rr, rr, 6, TILE.PLAIN, col, { cap1: true, capTile: TILE.PLAIN, capCol: TIN }); a += n * 0.075 + 0.04; }
+    else if (r < 0.7) { const n = 2 + Math.floor(rng() * 3), w = 0.11 + rng() * 0.06, h = Math.min(room - 0.04, 0.16 + rng() * 0.12); for (let i = 0; i < n; i++) carton(b, a + w / 2 + i * (w + 0.012), y0, B.b1 - 0.06, 0.07, w, h, col, (rng() - 0.5) * 0.06); a += n * (w + 0.012) + 0.04; }
+    else if (r < 0.85) { for (let i = 0; i < 5; i++) sbox(b, a, a + 0.24, y0 + i * 0.012, y0 + i * 0.012 + 0.01, B.b1 - 0.22, B.b1 - 0.02, TILE.PLAIN, C([0xd8d4b8, 0xb9c9b0, 0xd9c79a][i % 3]), { grain: 'x' }); a += 0.3; }
+    else { sbox(b, a, a + 0.3, y0, y0 + 0.17, B.b1 - 0.2, B.b1 - 0.04, TILE.WOOD, C(0x5a3a24), { grain: 'x' }); b.cyl(V(a + 0.08, y0 + 0.09, B.b1 - 0.04), V(a + 0.08, y0 + 0.09, B.b1 - 0.032), 0.035, 0.035, 8, TILE.PLAIN, C(0xd8cfa8), { cap1: true, capTile: TILE.PLAIN }); a += 0.36; }
+  }
+}
+// the stove in the back corner: a slate hearth, a box stove on legs with its door to the room and a kettle on it, the
+// pipe up through the roof, a sheet of iron on the wall behind, a box of split wood, a chair pulled up to it
+function stoveCorner(b, rng, occ) {
+  const s = IN.stove, iron = C(IRON);
+  sbox(b, -ST.iW, -1.45, 0, 0.03, -ST.iD, -2.05, TILE.STONE, C(0x5e5a54), { grain: 'x' });
+  sbox(b, s.a0, s.a1, s.y0, s.y1, s.b0, s.b1, TILE.METAL, iron, { grain: 'x' });
+  sbox(b, s.a0 - 0.02, s.a1 + 0.02, s.y1, s.y1 + 0.02, s.b0 - 0.02, s.b1 + 0.02, TILE.METAL, iron.clone().offsetHSL(0, 0, -0.03), { grain: 'x' });
+  for (const [a, c] of [[s.a0 + 0.04, s.b0 + 0.04], [s.a1 - 0.04, s.b0 + 0.04], [s.a0 + 0.04, s.b1 - 0.04], [s.a1 - 0.04, s.b1 - 0.04]]) sbox(b, a - 0.02, a + 0.02, 0.03, s.y0, c - 0.02, c + 0.02, TILE.METAL, iron, { grain: 'y' });
+  const mid = (s.b0 + s.b1) / 2;
+  sbox(b, s.a1, s.a1 + 0.012, s.y0 + 0.07, s.y1 - 0.08, mid - 0.17, mid + 0.17, TILE.METAL, C(0x2a2826), { grain: 'z' });
+  sbox(b, s.a1 + 0.012, s.a1 + 0.04, s.y0 + 0.2, s.y0 + 0.23, mid + 0.08, mid + 0.14, TILE.METAL, C(0x6a6660));
+  occ.push(sobb(s.a0, s.a1, s.y0, s.y1, s.b0, s.b1));
+  const [pa, pb] = s.pipe;
+  b.cyl(V(pa, s.y1 + 0.02, pb), V(pa, ceil(pa) + 0.01, pb), 0.075, 0.075, 10, TILE.METAL, iron, {});
+  b.cyl(V(pa, ceil(pa) - 0.02, pb), V(pa, ceil(pa), pb), 0.13, 0.13, 10, TILE.METAL, C(0x5a5650), { cap0: true, capTile: TILE.METAL });
+  // the kettle
+  const ka = s.a1 - 0.18, kc = s.b1 - 0.14, ky = s.y1 + 0.02;
+  b.cyl(V(ka, ky, kc), V(ka, ky + 0.11, kc), 0.1, 0.085, 10, TILE.PLAIN, C(0x3d5a6a), { cap1: true, capTile: TILE.PLAIN });
+  b.tube([V(ka + 0.07, ky + 0.04, kc), V(ka + 0.13, ky + 0.09, kc), V(ka + 0.16, ky + 0.12, kc)], 0.014, 5, TILE.PLAIN, C(0x3d5a6a));
+  const hd = []; for (let k = 0; k <= 8; k++) { const t = (k / 8) * Math.PI; hd.push(V(ka + Math.cos(t) * 0.07, ky + 0.11 + Math.sin(t) * 0.08, kc)); }
+  b.tube(hd, 0.006, 4, TILE.PLAIN, C(0x2a2826));
+  // the heat shield on the wall behind it
+  sbox(b, -ST.iW, -ST.iW + 0.012, 0.1, 1.5, -3.5, -2.1, TILE.METAL, C(0x4a4844), { grain: 'z' });
+  // the wood box with split wood in it
+  const w = IN.wood, bw = C(0x7a5a3a);
+  sbox(b, w.a0, w.a1, 0, 0.42, w.b0, w.b0 + 0.02, TILE.WOOD, bw, { grain: 'x' });
+  sbox(b, w.a0, w.a1, 0, 0.42, w.b1 - 0.02, w.b1, TILE.WOOD, bw, { grain: 'x' });
+  for (const a of [w.a0, w.a1 - 0.02]) sbox(b, a, a + 0.02, 0, 0.42, w.b0, w.b1, TILE.WOOD, bw, { grain: 'z' });
+  sbox(b, w.a0, w.a1, 0, 0.03, w.b0, w.b1, TILE.WOOD, bw, { grain: 'x' });
+  occ.push(sobb(w.a0, w.a1, 0, 0.42, w.b0, w.b1));
+  for (let k = 0; k < 7; k++) {
+    const a = w.a0 + 0.07 + (k % 3) * 0.12 + (rng() - 0.5) * 0.02, y = 0.08 + Math.floor(k / 3) * 0.1, r = 0.045 + rng() * 0.01;
+    b.cyl(V(a, y + r * 0.6, w.b0 + 0.04), V(a + (rng() - 0.5) * 0.04, y + r * 0.6, w.b1 - 0.04), r, r * 0.95, 6, TILE.BARK, tone(0x6a5440, rng, 0.08), { arc: [Math.PI * 0.1, Math.PI * 1.9], cap0: true, cap1: true, capCol: C(0xc9b28e) });
+  }
+  // a chair by it, turned to the fire
+  placed(b, turned(IN.chair.a, 0, IN.chair.b, 0.35), (t) => chair(t, rng));
+}
+// a plain kitchen chair in its own frame, facing -x (the seat's front at -x), the floor at y = 0
+function chair(t, rng) {
+  const wood = tone(0x7a5232, rng, 0.04), r = 0.2;
+  t.box(V(0, 0.45, 0), AX, AY, AZ, r, 0.02, r, TILE.WOOD, wood, { grain: 'x' });
+  for (const [x, z] of [[-r + 0.03, -r + 0.03], [-r + 0.03, r - 0.03], [r - 0.03, -r + 0.03], [r - 0.03, r - 0.03]]) t.box(V(x, 0.215, z), AX, AY, AZ, 0.016, 0.215, 0.016, TILE.WOOD, wood, { grain: 'y' });
+  for (const z of [-r + 0.03, r - 0.03]) t.box(V(r - 0.03, 0.7, z), AX, AY, AZ, 0.016, 0.23, 0.016, TILE.WOOD, wood, { grain: 'y' });
+  for (const y of [0.62, 0.78, 0.9]) t.box(V(r - 0.03, y, 0), AX, AY, AZ, 0.012, 0.03, r - 0.02, TILE.WOOD, wood, { grain: 'z' });
+  t.box(V(0, 0.16, 0), AX, AY, AZ, r - 0.04, 0.01, 0.012, TILE.WOOD, wood, { grain: 'x' });
+}
+// up in the roof: a canoe upside down on the tie beams; the lamp on its cord from the ridge beam, an enamel shade over
+// a bulb (the light sits just under it, so the shade's inside and the bulb glow)
+function overhead(b, rng, occ) {
+  const u = Math.abs(IN.ties[0]) / (HULL_LENGTH / 2), gw = hullProfile(u).g + 0.02;
+  const g = hullGeo(C(0xb7834a), C(0x8a6440), C(0xc9b48a));
+  g.applyMatrix4(new THREE.Matrix4().makeRotationY(-Math.PI / 2).multiply(new THREE.Matrix4().makeRotationX(Math.PI)).setPosition(IN.canoe.a, IN.tieY[1] + gw, 0));
+  b.addBuilt(g);
+  occ.push(obb(V(IN.canoe.a, IN.tieY[1] + 0.3, 0), AX, AY, AZ, 0.45, 0.3, 2.3));
+  const L = IN.lamp, sTop = L.y + 0.2, sBot = L.y + 0.06, green = C(0x3f5a46), white = C(0xece6d6);
+  b.cyl(V(L.a, ST.ridge - 0.25, L.b), V(L.a, sTop + 0.04, L.b), 0.004, 0.004, 4, TILE.PLAIN, C(0x2a2826), {});
+  b.cyl(V(L.a, sTop, L.b), V(L.a, sTop + 0.05, L.b), 0.03, 0.025, 8, TILE.PLAIN, green, { cap1: true, capTile: TILE.PLAIN });
+  const sides = 14, ring = (y, r) => Array.from({ length: sides + 1 }, (_, i) => { const t = (i / sides) * Math.PI * 2; return V(L.a + Math.cos(t) * r, y, L.b + Math.sin(t) * r); });
+  const top = ring(sTop, 0.05), bot = ring(sBot, 0.21), lip = ring(sBot - 0.01, 0.215);
+  for (let i = 0; i < sides; i++) {
+    const out = V(L.a, sTop - 1, L.b);
+    b.face([top[i], top[i + 1], bot[i + 1], bot[i]], TILE.PLAIN, green, { ref: V(L.a, sTop - 0.4, L.b) });
+    b.face([top[i], top[i + 1], bot[i + 1], bot[i]], TILE.PLAIN, white, { ref: V(L.a + Math.cos((i + 0.5) / sides * 6.283) * 0.5, sTop + 0.2, L.b + Math.sin((i + 0.5) / sides * 6.283) * 0.5) });
+    b.face([bot[i], bot[i + 1], lip[i + 1], lip[i]], TILE.PLAIN, green, { ref: out });
+  }
+  b.cyl(V(L.a, sTop - 0.02, L.b), V(L.a, L.y + 0.04, L.b), 0.016, 0.016, 6, TILE.PLAIN, C(0x8a8780), {});
+  b.cyl(V(L.a, L.y + 0.075, L.b), V(L.a, L.y + 0.025, L.b), 0.03, 0.034, 8, TILE.PLAIN, C(0xfff2d0), { cap1: true, capTile: TILE.PLAIN, capCol: C(0xfff6e0) });
+  void rng;
+}
+// the door, open into the store against the front wall; the rag rug inside it; paddles leaning on a rail by the door
+function doorway(b, rng) {
+  const D = DOOR, w = D.a1 - D.a0 - 0.03, h = D.y1 - 0.01, th = 0.045, ang = 1.62, hx = D.a0 + 0.02, hz = ST.iD - 0.03;
+  const dir = V(Math.cos(ang), 0, -Math.sin(ang)), nrm = V(dir.z, 0, -dir.x);
+  b.role = ROLE.DOOR;
+  const P = (s, y, n) => V(hx + dir.x * s + nrm.x * n, y, hz + dir.z * s + nrm.z * n), dc = C(DEF_LOOK.door);
+  b.box(P(w / 2, h / 2 + 0.005, 0), dir, AY, nrm, w / 2, h / 2, th / 2, TILE.PAINT, dc, { grain: 'y' });
+  for (const n of [-1, 1]) {
+    for (const [s, hs] of [[0.06, 0.05], [w - 0.06, 0.05]]) b.box(P(s, h / 2, n * (th / 2 + 0.006)), dir, AY, nrm, hs, h / 2 - 0.01, 0.006, TILE.PAINT, dc, { grain: 'y' });
+    for (const y of [0.09, 0.98, h - 0.08]) b.box(P(w / 2, y, n * (th / 2 + 0.006)), dir, AY, nrm, w / 2 - 0.11, 0.06, 0.006, TILE.PAINT, dc, { grain: 'x' });
+    b.box(P(w - 0.12, 1.0, n * (th / 2 + 0.03)), dir, AY, nrm, 0.02, 0.02, 0.025, TILE.METAL, C(0x8a7a5a));
+  }
+  b.role = ROLE.FIX;
+  sbox(b, DOOR.a - 0.62, DOOR.a + 0.62, 0, 0.012, ST.iD - 1.15, ST.iD - 0.12, TILE.CANVAS, C(0x7a4a3a), { grain: 'z' });
+  sbox(b, DOOR.a - 0.55, DOOR.a + 0.55, 0.012, 0.014, ST.iD - 1.08, ST.iD - 0.19, TILE.CANVAS, C(0x9a7a4a), { grain: 'z' });
+  // the paddle rail inside the front wall, left of the door (as you face out), and four paddles leaning on it
+  const rz = ST.iD - 0.045;
+  sbox(b, -2.62, -1.12, 1.38, 1.44, rz - 0.03, rz + 0.03, TILE.WOOD, C(PINE_DARK), { grain: 'x' });
+  [[-2.45, 0xb0895a], [-2.08, 0x9a7a50], [-1.72, 0xc29a62], [-1.36, 0x8a6a48]].forEach(([a, col], k) => {
+    const pb = new PropBuilder(); paddle(pb, mulberry32(30 + k), C(col)); const pg = pb.build(), lean = 0.2;
+    const Xp = V(0, -Math.cos(lean), -Math.sin(lean)), Yp = V(0, -Math.sin(lean), Math.cos(lean)), Zp = Xp.clone().cross(Yp);
+    const tip = V(a, 0.004, rz - 0.06 - 1.4 * Math.sin(lean));
+    pg.applyMatrix4(new THREE.Matrix4().makeBasis(Xp, Yp, Zp).setPosition(tip.clone().addScaledVector(Xp, -0.72)));
+    b.addBuilt(pg);
+  });
+  void rng;
+}
+
+// The kit, built (and baked) a part at a time: a step generator, so the first store's tile spreads it over frames.
+let storeKit = null;
+export const storeStats = { kit: [], stores: {} }; // ms each part of the kit took, and each store's own steps
+function* buildStoreKit() {
+  propMaterial(); // the props' atlas, generated on first use (once a session, most of 0.1 s): a step of its own
+  yield;
+  const K = new KitAcc(), rng = mulberry32(9001), glass = new PropBuilder(), shell = shellBoxes();
+  const part = (fn, opts, boxes = []) => {
+    const t0 = performance.now(), b = new RoleBuilder(), occ = []; fn(b, occ); const t1 = performance.now(); bakePart(K, b, [...shell, ...boxes, ...occ], opts);
+    storeStats.kit.push({ verts: b.count, build: +(t1 - t0).toFixed(1), bake: +(performance.now() - t1).toFixed(1) });
+  };
+  part((b) => shellOutside(b, glass, rng), { interior: false, rays: 10, reach: 1.0, floor: 0.35, ground: -0.75 });
+  yield;
+  part((b) => shellInside(b, rng), { rays: 8, reach: 0.8, floor: 0.4 });
+  yield;
+  part((b) => doorway(b, rng), { rays: 8, reach: 0.5, floor: 0.45 });
+  yield;
+  part((b, occ) => counter(b, rng, occ), { rays: 6, reach: 0.4, floor: 0.4 });
+  yield;
+  part((b, occ) => gondola(b, IN.food, 'food', rng, occ), { rays: 6, reach: 0.35, floor: 0.4 });
+  yield;
+  part((b, occ) => { gondola(b, IN.tackle, 'tackle', rng, occ); rodRack(b, IN.tackle, rng, occ); }, { rays: 6, reach: 0.35, floor: 0.4 });
+  yield;
+  part((b, occ) => gearWall(b, rng, occ), { rays: 6, reach: 0.4, floor: 0.4 });
+  yield;
+  part((b, occ) => { lureWall(b, rng, occ); boardFrame(b); }, { rays: 6, reach: 0.3, floor: 0.45 });
+  yield;
+  part((b, occ) => stoveCorner(b, rng, occ), { rays: 6, reach: 0.45, floor: 0.4 });
+  yield;
+  part((b, occ) => overhead(b, rng, occ), { rays: 6, reach: 0.6, floor: 0.45 });
+  const kit = K.done();
+  const gl = glass.build();
+  kit.glass = { position: gl.getAttribute('position').array, normal: gl.getAttribute('normal').array, color: gl.getAttribute('color').array, aPropUv: gl.getAttribute('aPropUv').array, aPropTile: gl.getAttribute('aPropTile').array, aOcc: gl.getAttribute('aOcc').array };
+  storeKit = kit;
+}
+
+// --- a store at its landing ---------------------------------------------------------------------------------------
+// The layouts of the stores built, by entry point (storeLayout), and who wants to hear when one is built or dropped.
+const stores = new Map();
+const storeHeard = [];
+const storeNews = []; // built in this tile's steps: told once the tile is in (its obstacles with it)
+// The layout of entry point ep's store (its number, or its world.entryPoints record) once its tile has built it, else
+// null: { ep, name, look, floorY, inside(x, z), door: { x, z, y, heading }, counter, board, wall, shelves: [{ kind,
+// x, z }], keeper: { x, z, heading }, lamp: { x, y, z }, dockSide: { x, z }, dockLand: { x, z }, centre: { x, z } }.
+// World metres; a heading is player.heading's (forward = (cos h, -sin h)). door is the spot on the stoop or porch just
+// outside the threshold, heading in; counter, board, wall and each shelf is the floor spot in front of it (heading
+// toward it, `at` the thing itself, y absolute); keeper stands behind the counter facing the room.
+export function storeLayout(ep) { const n = ep && typeof ep === 'object' ? ep.ep : Number(ep); return stores.get(n) || null; }
+export function storeLayouts() { return [...stores.values()]; }
+// fn(layout, ep) when a store is built (and at once for those already built), fn(null, ep) when its tile lets it go
+export function onStore(fn) {
+  storeHeard.push(fn);
+  for (const L of stores.values()) fn(L, L.ep);
+  return () => { const i = storeHeard.indexOf(fn); if (i >= 0) storeHeard.splice(i, 1); };
+}
+function tellStore(L, ep) { for (const fn of storeHeard) { try { fn(L, ep); } catch (e) { console.warn('onStore', e); } } }
+function flushStoreNews() {
+  if (!storeNews.length) return;
+  const news = storeNews.splice(0);
+  queueMicrotask(() => { for (const L of news) if (stores.get(L.ep) === L) tellStore(L, L.ep); });
+}
+
+// The cork board inside the door: a canvas of cork with the outfitter's notices pinned on it (setStoreNotices, from the
+// board's live notices: tasks.js board(ep)), or a few scribbled papers until then.
+const BOARD_PX = [1024, 768];
+function drawBoard(cv, notices = null) {
+  const x = cv.getContext('2d'), [W, H] = BOARD_PX, r = mulberry32(5 + (notices ? notices.length : 0));
+  x.fillStyle = '#a47a4e'; x.fillRect(0, 0, W, H);
+  for (let i = 0; i < 2600; i++) { const v = r(); x.fillStyle = v < 0.5 ? `rgba(70,45,25,${0.12 + r() * 0.15})` : `rgba(215,175,125,${0.1 + r() * 0.12})`; x.fillRect(r() * W, r() * H, 2 + r() * 3, 2 + r() * 3); }
+  const slots = [[40, 36], [532, 52], [56, 404], [540, 392]], list = notices || [null, { scribble: 1 }, { scribble: 2 }, null];
+  list.slice(0, 4).forEach((t, i) => {
+    const [px, py] = slots[i], w = 430, h = 330, rot = (r() - 0.5) * 0.06, pin = ['#b83a2a', '#3a5a8a', '#d8b03a', '#3f6a45'][i];
+    x.save(); x.translate(px + w / 2, py + h / 2); x.rotate(rot);
+    if (!t) { // a bare pin, a torn corner left on it
+      x.fillStyle = '#e8e0c8'; x.beginPath(); x.moveTo(-14, -h / 2 + 4); x.lineTo(26, -h / 2 + 2); x.lineTo(8, -h / 2 + 40); x.closePath(); x.fill();
+    } else {
+      x.fillStyle = 'rgba(40,25,10,0.28)'; x.fillRect(-w / 2 + 8, -h / 2 + 10, w, h);
+      x.fillStyle = t.taken ? '#e4dcc4' : '#efe8d4'; x.fillRect(-w / 2, -h / 2, w, h);
+      x.fillStyle = '#2b2218'; x.textAlign = 'left'; x.textBaseline = 'top';
+      if (t.scribble) {
+        x.strokeStyle = 'rgba(40,32,24,0.75)'; x.lineWidth = 3;
+        for (let k = 0; k < 6; k++) { const y = -h / 2 + 50 + k * 42, len = (k === 0 ? 0.55 : 0.75 + r() * 0.2) * (w - 70); x.beginPath(); x.moveTo(-w / 2 + 34, y); for (let s = 0; s < len; s += 18) x.lineTo(-w / 2 + 34 + s, y + Math.sin(s * 0.3 + k) * 3); x.stroke(); }
+      } else {
+        let size = 40; x.font = `700 ${size}px Georgia, "Times New Roman", serif`;
+        while (x.measureText(t.title || '').width > w - 50 && size > 22) { size -= 2; x.font = `700 ${size}px Georgia, "Times New Roman", serif`; }
+        x.fillText(t.title || '', -w / 2 + 24, -h / 2 + 26);
+        x.font = 'italic 25px Georgia, "Times New Roman", serif';
+        const words = String(t.text || '').split(/\s+/); let line = '', y = -h / 2 + 34 + size, n = 0;
+        for (const wd of words) {
+          const tryL = line ? `${line} ${wd}` : wd;
+          if (x.measureText(tryL).width > w - 48) { x.fillText(line, -w / 2 + 24, y); y += 31; line = wd; if (++n >= 6) { line = ''; break; } } else line = tryL;
+        }
+        if (line && n < 6) x.fillText(line, -w / 2 + 24, y);
+        if (t.sign) { x.font = '22px Georgia, "Times New Roman", serif'; x.textAlign = 'right'; x.fillText(`— ${t.sign}`, w / 2 - 22, h / 2 - 44); }
+        if (t.taken) { x.save(); x.rotate(-0.2); x.strokeStyle = 'rgba(150,40,30,0.8)'; x.lineWidth = 5; x.strokeRect(-70, -26, 140, 52); x.fillStyle = 'rgba(150,40,30,0.85)'; x.font = '700 30px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('TAKEN', 0, 1); x.restore(); }
+      }
+    }
+    x.fillStyle = pin; x.beginPath(); x.arc(0, -h / 2 + 18, 11, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.45)'; x.beginPath(); x.arc(-3, -h / 2 + 15, 4, 0, Math.PI * 2); x.fill();
+    x.restore();
+  });
+}
+// Pin up entry point ep's notices on its store's board (tasks.js board(ep): a notice, or null for a bare pin). A notice
+// reads { title, text, sign } and `taken` when it is out with you.
+export function setStoreNotices(ep, notices) {
+  const L = storeLayout(ep);
+  if (!L || !L.boardCanvas) return false;
+  const list = (notices || []).map((t) => (t ? { title: t.title, text: t.text, sign: t.sign, taken: !!t.status && t.status !== 'offered' } : null));
+  drawBoard(L.boardCanvas, list);
+  L.boardTex.needsUpdate = true;
+  return true;
+}
+
+// copy arrays of the store's frame (a, y, b) into the tile's (origin O, axes X and Z), colours scaled per look role
+function placeArrays(src, O, X, Z, ratio = null, roles = null) {
+  const n = src.position.length / 3, p = new Float32Array(n * 3), nr = new Float32Array(n * 3), c = new Float32Array(src.color);
+  const P = src.position, N = src.normal;
+  for (let i = 0; i < n; i++) {
+    const a = P[i * 3], y = P[i * 3 + 1], b = P[i * 3 + 2], na = N[i * 3], ny = N[i * 3 + 1], nb = N[i * 3 + 2];
+    p[i * 3] = O.x + X.x * a + Z.x * b; p[i * 3 + 1] = O.y + y; p[i * 3 + 2] = O.z + X.z * a + Z.z * b;
+    nr[i * 3] = X.x * na + Z.x * nb; nr[i * 3 + 1] = ny; nr[i * 3 + 2] = X.z * na + Z.z * nb;
+    if (ratio && roles[i]) { const k = ratio[roles[i]]; c[i * 3] *= k[0]; c[i * 3 + 1] *= k[1]; c[i * 3 + 2] *= k[2]; }
+  }
+  return { position: p, normal: nr, color: c, aPropUv: src.aPropUv, aPropTile: src.aPropTile, aOcc: src.aOcc };
+}
+function joinArrays(list) {
+  const g = new THREE.BufferGeometry();
+  for (const [k, size] of [['position', 3], ['normal', 3], ['color', 3], ['aPropUv', 2], ['aPropTile', 1], ['aOcc', 1]]) {
+    const total = list.reduce((s, a) => s + a[k].length, 0), out = new Float32Array(total);
+    let o = 0; for (const a of list) { out.set(a[k], o); o += a[k].length; }
+    g.setAttribute(k, new THREE.BufferAttribute(out, size));
+  }
+  g.computeBoundingSphere();
+  return g;
+}
+const arraysOf = (g) => ({ position: g.getAttribute('position').array, normal: g.getAttribute('normal').array, color: g.getAttribute('color').array, aPropUv: g.getAttribute('aPropUv').array, aPropTile: g.getAttribute('aPropTile').array, aOcc: g.getAttribute('aOcc').array });
+
+// The roof's cover over the sheathing, by the look's kind: shingles (the atlas's courses), standing-seam steel (a rib
+// every 40 cm), or cedar shakes (the courses bigger and rougher); a ridge cap over the top.
+function roofCover(b, kind, col, rng) {
+  const th = ST.th, f0 = ST.bE, f1 = -ST.bE, y = (a) => sheath(a) + th;
+  for (const s of [-1, 1]) {
+    const e = s * ST.aE, U = s > 0 ? AZ : AZ.clone().negate();
+    const pts = [V(0, y(0), f0), V(0, y(0), f1), V(e, y(e), f1), V(e, y(e), f0)];
+    if (kind === 'steel') {
+      b.face(pts, TILE.PLAIN, col, { ref: V(0, ST.eave, 0), U });
+      const along = V(e, y(e) - y(0), 0), L = along.length(); along.normalize();
+      const up = AZ.clone().cross(along).normalize(); if (up.y < 0) up.negate();
+      for (let c = f1 + 0.2; c < f0 - 0.1; c += 0.4) b.box(V(e / 2, (y(0) + y(e)) / 2, c).addScaledVector(up, 0.012), along, up, AZ, L / 2, 0.012, 0.008, TILE.PLAIN, col.clone().offsetHSL(0, 0, 0.03), { grain: 'x' });
+    } else b.face(pts, TILE.ROOF, col, { ref: V(0, ST.eave, 0), U, o: V(e, y(e), s > 0 ? f0 : f1), shift: [rng(), 0], scale: kind === 'shake' ? 1.45 : 1 });
+    // the eave's edge and the gable ends of the cover
+    b.face([V(e, y(e), f1), V(e, y(e), f0), V(e, y(e) - th, f0), V(e, y(e) - th, f1)], TILE.WOOD, col.clone().offsetHSL(0, 0, -0.06), { ref: V(0, y(e), 0) });
+    for (const f of [f0, f1]) b.face([V(0, y(0), f), V(e, y(e), f), V(e, y(e) - th, f), V(0, y(0) - th, f)], TILE.WOOD, col.clone().offsetHSL(0, 0, -0.06), { ref: V(e / 2, y(e / 2), 0) });
+    const along = V(e, y(e) - y(0), 0); along.normalize();
+    const up = AZ.clone().cross(along).normalize(); if (up.y < 0) up.negate();
+    b.box(V(s * 0.07, y(0) + 0.014 - 0.07 * ST.tp, 0), along, up, AZ, 0.085, 0.014, ST.bE + 0.03, kind === 'steel' ? TILE.PLAIN : TILE.ROOF, col.clone().offsetHSL(0, 0, -0.05), { grain: 'z' });
+  }
+}
+
+// The porch across the front (look.porch) or a stoop at the door, at the floor's height less 4 cm, and its steps down to
+// the ground: as many even risers (at most 21 cm) as it takes to meet the ground at their foot. g(a, b): the ground in
+// the store's frame. Returns { deck: [a0, a1, b0, b1], treads: [{ a0, a1, b0, b1, y }], posts: [[a, b]] } for the walker.
+function porchAndSteps(b, porch, g, look, rng, occ) {
+  const ys = -0.04, d = porch ? 1.8 : 1.2, a0 = porch ? -ST.hW - 0.1 : DOOR.a - 0.85, a1 = porch ? ST.hW + 0.1 : DOOR.a + 0.85, s0 = ST.hD, s1 = ST.hD + d;
+  const out = { deck: [a0, a1, s0, s1], treads: [], posts: [] }, deck = C(0x8f8576), frameC = C(0x6a6255);
+  // the deck: planks across, on a rim joist; posts down to the ground under its front edge
   for (let s = s0 + 0.005; s < s1 - 0.02;) {
-    const w = 0.13 + rng() * 0.03, e = Math.min(s1, s + w);
-    b.box(F.P(doorA + (rng() - 0.5) * 0.01, ys - 0.0175, (s + e) / 2), F.X, F.Y, F.Z, sw + (rng() - 0.5) * 0.02, 0.0175, (e - s) / 2, TILE.WOOD, tone(0x8f8576, rng, 0.08), { grain: 'x', skip: ['-y'], shift: [rng() * 3, rng() * 3] });
+    const w = 0.13 + rng() * 0.03, e = Math.min(s1, s + w), col = tone(0x8f8576, rng, 0.08);
+    const k = Math.max(1, Math.ceil((a1 - a0) / 1.6));
+    for (let j = 0; j < k; j++) { const p0 = a0 + ((a1 - a0) * j) / k, p1 = a0 + ((a1 - a0) * (j + 1)) / k; sbox(b, p0, p1, ys - 0.035, ys, s, e, TILE.WOOD, col, { grain: 'x', skip: ['-y', ...(j > 0 ? ['-x'] : []), ...(j < k - 1 ? ['+x'] : [])], shift: [rng() * 3, rng() * 3] }); }
     s = e + 0.008;
   }
-  const frameC = C(0x6a6255);
-  b.box(F.P(doorA, ys - 0.035 - 0.07, s1 - 0.025), F.X, F.Y, F.Z, sw - 0.02, 0.07, 0.025, TILE.WOOD, frameC, { grain: 'x' });
-  for (const side of [-1, 1]) {
-    b.box(F.P(doorA + side * (sw - 0.04), ys - 0.035 - 0.07, (s0 + s1) / 2), F.X, F.Y, F.Z, 0.025, 0.07, sd / 2, TILE.WOOD, frameC, { grain: 'z' });
-    const pg = F.G(doorA + side * (sw - 0.08), s1 - 0.08) - 0.3;
-    b.box(F.P(doorA + side * (sw - 0.08), (pg + ys - 0.035) / 2, s1 - 0.08), F.X, F.Y, F.Z, 0.045, (ys - 0.035 - pg) / 2, 0.045, TILE.WOOD, frameC, { grain: 'y' });
+  sbox(b, a0, a1, ys - 0.2, ys - 0.035, s1 - 0.04, s1, TILE.WOOD, frameC, { grain: 'x' });
+  for (const a of [a0, a1 - 0.04]) sbox(b, a, a + 0.04, ys - 0.2, ys - 0.035, s0, s1, TILE.WOOD, frameC, { grain: 'z' });
+  occ.push(sobb(a0, a1, ys - 0.2, ys, s0, s1));
+  const postsA = porch ? [-ST.hW - 0.02, -1.3, 0.8, ST.hW + 0.02] : [a0 + 0.08, a1 - 0.08];
+  let gmin = Infinity;
+  for (const a of postsA) {
+    const pb = s1 - 0.1, gy = g(a, pb) - 0.3; gmin = Math.min(gmin, gy + 0.3);
+    sbox(b, a - 0.045, a + 0.045, gy, ys - 0.2, pb - 0.045, pb + 0.045, TILE.WOOD, frameC, { grain: 'y' });
   }
-  occ.push(obb(F.P(doorA, ys - 0.1, (s0 + s1) / 2), F.X, F.Y, F.Z, sw, 0.08, sd / 2));
-  // steps down to the ground: as many even risers (at most 21 cm) as it takes to meet the bank at their foot
-  const run = 0.27;
-  let rises = 1, rh = ys - F.G(doorA, s1 + 0.25);
-  for (let n = 1; n <= 16; n++) { rises = n; rh = (ys - F.G(doorA, s1 + (n - 1) * run + 0.25)) / n; if (rh <= 0.21) break; }
+  // the dark under the deck
+  void gmin;
+  skirt(b, [[a0 + 0.06, s0], [a0 + 0.06, s1 - 0.06], [a1 - 0.06, s1 - 0.06], [a1 - 0.06, s0]], ys - 0.19, g, rng, V((a0 + a1) / 2, 0, (s0 + s1) / 2 - 0.3));
+  if (porch) {
+    // posts up to a header, the roof sloping from the wall to it, a ceiling under, the cover by the look
+    const yw = 2.6, yf = 2.3, sF = s1 + 0.2, roofY = (s) => yw + ((yf - yw) * (s - s0)) / (sF - s0), hb = s1 - 0.1, hTop = roofY(hb) - ST.th - 0.02;
+    for (const a of postsA) { sbox(b, a - 0.055, a + 0.055, ys, hTop - 0.14, hb - 0.055, hb + 0.055, TILE.WOOD, tone(0x8a7c68, rng, 0.04), { grain: 'y', endTile: TILE.END }); out.posts.push([a, hb]); }
+    sbox(b, a0 - 0.05, a1 + 0.05, hTop - 0.14, hTop, hb - 0.06, hb + 0.06, TILE.PAINT, C(look.trim), { grain: 'x' });
+    sbox(b, a0 - 0.05, a1 + 0.05, roofY(sF) - 0.14, roofY(sF), sF, sF + 0.025, TILE.PAINT, C(look.trim), { grain: 'x' });
+    const slope = V(0, yf - yw, sF - s0).normalize(), upv = V(0, slope.z, -slope.y);
+    const L = Math.hypot(sF - s0, yf - yw), mid = V(0, (yw + yf) / 2, (s0 + sF) / 2);
+    for (let a = a0 + 0.1; a < a1; a += 0.8) b.box(V(a, mid.y - ST.th - 0.06, mid.z), AX, upv, slope, 0.022, 0.06, L / 2, TILE.WOOD, C(0x9a8a72), { grain: 'z' });
+    b.face([V(a0 - 0.05, yw - ST.th, s0), V(a1 + 0.05, yw - ST.th, s0), V(a1 + 0.05, yf - ST.th, sF), V(a0 - 0.05, yf - ST.th, sF)], TILE.WOOD, C(0xb09a7a), { ref: V(0, 9, s0 + 1), U: AX });
+    const col = C(look.roof), roofPts = [V(a0 - 0.05, yw, s0), V(a1 + 0.05, yw, s0), V(a1 + 0.05, yf, sF), V(a0 - 0.05, yf, sF)];
+    if (look.roofKind === 'steel') {
+      b.face(roofPts, TILE.PLAIN, col, { ref: V(0, 0, s0 + 1), U: slope });
+      for (let a = a0 + 0.15; a < a1; a += 0.4) b.box(V(a, mid.y + 0.012, mid.z), AX, upv, slope, 0.008, 0.012, L / 2, TILE.PLAIN, col.clone().offsetHSL(0, 0, 0.03), { grain: 'z' });
+    } else b.face(roofPts, TILE.ROOF, col, { ref: V(0, 0, s0 + 1), U: AX, scale: look.roofKind === 'shake' ? 1.45 : 1 });
+    b.face([V(a0 - 0.05, yf, sF), V(a1 + 0.05, yf, sF), V(a1 + 0.05, yf - ST.th, sF), V(a0 - 0.05, yf - ST.th, sF)], TILE.WOOD, col.clone().offsetHSL(0, 0, -0.06), { ref: V(0, yf, s0) });
+    for (const a of [a0 - 0.05, a1 + 0.05]) b.face([V(a, yw, s0), V(a, yf, sF), V(a, yf - ST.th - 0.12, sF), V(a, yw - ST.th - 0.12, s0)], TILE.WOOD, C(0x8a7c68), { ref: V(0, yw, s0 + 0.5) });
+    occ.push(obb(mid.clone().addScaledVector(upv, -ST.th / 2), AX, upv, slope, (a1 - a0) / 2 + 0.05, ST.th, L / 2));
+    // a bench under the front window
+    const bw = C(0x7a6a52);
+    sbox(b, 1.0, 2.45, 0.42, 0.46, s0 + 0.22, s0 + 0.58, TILE.WOOD, bw, { grain: 'x' });
+    for (const a of [1.08, 2.37]) sbox(b, a - 0.03, a + 0.03, ys, 0.42, s0 + 0.25, s0 + 0.55, TILE.WOOD, bw, { grain: 'y' });
+    out.bench = [1.0, 2.45, s0 + 0.2, s0 + 0.6];
+  }
+  // the steps, centred on the door
+  const run = 0.27, sw = porch ? 0.62 : 0.55, ca = DOOR.a;
+  let rises = 1, rh = ys - g(ca, s1 + 0.25);
+  for (let n = 1; n <= 16; n++) { rises = n; rh = (ys - g(ca, s1 + (n - 1) * run + 0.25)) / n; if (rh <= 0.21) break; }
   const treads = rh * rises > 0.25 ? rises - 1 : 0, gFront = ys - rh * rises;
   for (let k = 1; k <= treads; k++) {
     const ty = ys - k * rh, ts = s1 + (k - 0.5) * run;
-    b.box(F.P(doorA, ty - 0.0175, ts), F.X, F.Y, F.Z, 0.5, 0.0175, run / 2 + 0.01, TILE.WOOD, tone(0x8f8576, rng, 0.08), { grain: 'x', shift: [rng() * 3, rng() * 3] });
+    sbox(b, ca - sw, ca + sw, ty - 0.035, ty, ts - run / 2 - 0.01, ts + run / 2 + 0.01, TILE.WOOD, tone(0x8f8576, rng, 0.08), { grain: 'x', shift: [rng() * 3, rng() * 3] });
+    sbox(b, ca - sw + 0.02, ca + sw - 0.02, ty - rh, ty - 0.035, ts - run / 2 + 0.005, ts - run / 2 + 0.03, TILE.WOOD, frameC, { grain: 'x' });
+    out.treads.push({ a0: ca - sw, a1: ca + sw, b0: ts - run / 2, b1: ts + run / 2, y: ty });
   }
   if (treads) for (const side of [-1, 1]) {
-    const p0 = F.P(doorA + side * 0.47, ys - 0.06, s1), p1 = F.P(doorA + side * 0.47, gFront - 0.05, s1 + treads * run + 0.05), along = p1.clone().sub(p0), L = along.length(); along.normalize();
-    const up = F.X.clone().cross(along).normalize(); if (up.y < 0) up.negate();
-    b.box(p0.clone().add(p1).multiplyScalar(0.5).addScaledVector(up, -0.06), along, up, F.X, L / 2, 0.1, 0.02, TILE.WOOD, frameC, { grain: 'x' });
+    const p0 = V(ca + side * (sw - 0.03), ys - 0.06, s1), p1 = V(ca + side * (sw - 0.03), gFront - 0.05, s1 + treads * run + 0.05), along = p1.clone().sub(p0), L = along.length(); along.normalize();
+    const up = AX.clone().cross(along).normalize(); if (up.y < 0) up.negate();
+    b.box(p0.clone().add(p1).multiplyScalar(0.5).addScaledVector(up, -0.06), along, up, AX, L / 2, 0.1, 0.02, TILE.WOOD, frameC, { grain: 'x' });
   }
-  const sx = F.W(doorA, (s0 + s1 + treads * run) / 2);
-  ctx.obstacles.push({ x: sx[0], z: sx[1], ux: F.Z.x, uz: F.Z.z, hx: (sd + treads * run) / 2 + 0.05, hz: sw + 0.05, box: true });
-  // two paddles leaning on the right wall by the front corner
-  for (const [k, s] of [[0, bF - 0.38], [1, bF - 0.62]]) {
-    const tip = F.P(hW + 0.46 + k * 0.04, F.G(hW + 0.46, s) + 0.005, s + k * 0.05), grip = F.P(hW + 0.085, floorY + 1.32 - k * 0.06, s);
-    const Xp = tip.clone().sub(grip).normalize(), Zp = F.Z.clone(), Yp = Zp.clone().cross(Xp).normalize(); Zp.copy(Xp.clone().cross(Yp)).normalize();
-    const m = new THREE.Matrix4().makeBasis(Xp, Yp, Zp).setPosition(tip.clone().addScaledVector(Xp, -0.72));
-    const pb = new PropBuilder(); paddle(pb, mulberry32(k + 5), k ? C(0x9a7a50) : C(0xb0895a)); const pg = pb.build(); pg.applyMatrix4(m);
-    b.addBuilt(pg);
-  }
-  occ.push(obb(F.P(0, (wall0 + eaveY) / 2, b0), F.X, F.Y, F.Z, hW - 0.12, (eaveY - wall0) / 2, hD - 0.12));
-  occ.push(obb(F.P(0, eaveY + rise * 0.3, b0), F.X, F.Y, F.Z, hW * 0.55, rise * 0.3, hD - 0.12));
-  if (!open) occ.push(obb(F.P(0, (cb + pierTop) / 2, b0), F.X, F.Y, F.Z, hW - ci, (pierTop - cb) / 2, hD - ci));
-  else occ.push(obb(F.P(0, pierTop - 0.08, b0), F.X, F.Y, F.Z, hW - 0.1, 0.08, hD - 0.1));
-  const geo = b.build();
-  occlude(geo, occ, { ground: localGround(ctx), rays: 12, reach: 1.1, floor: 0.3 });
-  return { geo, hW };
+  out.foot = s1 + treads * run;
+  return out;
 }
+
+// A skirt of boards round the gap under a floor: down from y0 to a little into the ground along the polyline pts (in the
+// store's frame), facing away from `inside`, in pieces a metre or so long that follow the ground.
+function skirt(b, pts, y0, g, rng, inside) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [a0, c0] = pts[i], [a1, c1] = pts[i + 1], L = Math.hypot(a1 - a0, c1 - c0), k = Math.max(1, Math.ceil(L / 1.0)), col = tone(0x6f665a, rng, 0.05);
+    for (let j = 0; j < k; j++) {
+      const t0 = j / k, t1 = (j + 1) / k, pa = a0 + (a1 - a0) * t0, pc = c0 + (c1 - c0) * t0, qa = a0 + (a1 - a0) * t1, qc = c0 + (c1 - c0) * t1;
+      const gp = g(pa, pc) - 0.08, gq = g(qa, qc) - 0.08;
+      if (gp >= y0 && gq >= y0) continue;
+      b.face([V(pa, Math.min(gp, y0), pc), V(qa, Math.min(gq, y0), qc), V(qa, y0, qc), V(pa, y0, pc)], TILE.WOOD, col, { ref: inside, U: AY, scale: 1.6, shift: [rng() * 3, rng() * 3] });
+    }
+  }
+}
+// what the store stands on: a skirt of boards round the crawl space under the sill, down into the ground, and a stone
+// at each corner where it meets the ground
+function foundation(b, g, rng) {
+  const hw = ST.hW - 0.05, hd = ST.hD - 0.05;
+  skirt(b, [[-hw, hd], [hw, hd], [hw, -hd], [-hw, -hd], [-hw, hd]], ST.base + 0.02, g, rng, V(0, 0, 0));
+  for (const [a, c] of [[-ST.hW, -ST.hD], [ST.hW, -ST.hD], [-ST.hW, ST.hD], [ST.hW, ST.hD]]) {
+    const gy = g(a, c);
+    if (gy < ST.base - 0.05) chunkStone(b, new THREE.Matrix4().makeRotationY(rng() * 6.28).scale(V(0.26, 0.22, 0.26)).setPosition(a, gy - 0.06, c), rng, tone(0x8e8780, rng, 0.08, 0.02));
+  }
+}
+
+// a woodpile along the right wall, under the eave: split rounds stacked across two skids
+function woodpile(b, g, rng, occ) {
+  const a0 = ST.hW + 0.14, a1 = ST.hW + 0.64, c0 = -3.3, c1 = -0.5;
+  let base = -Infinity;
+  for (let c = c0; c <= c1; c += 0.4) for (const a of [a0, a1]) base = Math.max(base, g(a, c));
+  base += 0.1;
+  for (const a of [a0 + 0.1, a1 - 0.1]) {
+    sbox(b, a - 0.05, a + 0.05, base - 0.1, base, c0, c1, TILE.BARK, tone(0x5b4a3b, rng, 0.06), { grain: 'z' });
+    for (const c of [c0 + 0.2, (c0 + c1) / 2, c1 - 0.2]) { const gy = g(a, c); if (base - 0.1 > gy) sbox(b, a - 0.06, a + 0.06, gy - 0.1, base - 0.1, c - 0.06, c + 0.06, TILE.WOOD, C(0x6e665a), { grain: 'y' }); }
+  }
+  const rows = 4;
+  for (let j = 0; j < rows; j++) {
+    let c = c0 + 0.08 + (j % 2) * 0.05;
+    while (c < c1 - 0.08) {
+      const r = 0.055 + rng() * 0.02, y = base + 0.06 + j * 0.125 + r * 0.6;
+      if (j === rows - 1 && rng() < 0.3) { c += 2 * r + 0.01; continue; }
+      b.cyl(V(a0 - 0.02 + rng() * 0.03, y, c + r), V(a1 + rng() * 0.03, y + (rng() - 0.5) * 0.02, c + r + (rng() - 0.5) * 0.03), r, r * 0.95, 6, TILE.BARK, tone(0x5f4c3a, rng, 0.1), { arc: rng() < 0.5 ? [Math.PI * 0.15, Math.PI * 1.85] : null, cap0: true, cap1: true, capCol: tone(0xc9b28e, rng, 0.08), phase: rng() * 6 });
+      c += 2 * r + 0.012;
+    }
+  }
+  occ.push(sobb(a0, a1, base, base + rows * 0.125, c0, c1));
+  return [a0 - 0.05, a1 + 0.05, c0, c1];
+}
+
+// The store at its landing: where it stands (back from the dock's land end by the porch or stoop, its steps and a path's
+// width; the floor a little over the highest ground under it), the kit turned into place and recoloured, the parts
+// built here, the sign over the door and the cork board, the walker's obstacles and the layout.
+function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
+  if (!storeKit) yield* buildStoreKit();
+  const t0 = performance.now(), took = storeStats.stores[ep.ep] = [];
+  const look = lookOf(ep, ctx.world), porch = !!look.porch, name = outfitterName(ep), K = storeKit;
+  const pd = porch ? 1.8 : 1.2, limit = dock.back - 2.2;
+  const G = (a, bb) => F.G(a, bb);
+  let b0 = Math.min(-11, limit - 1.0 - pd - ST.hD), floorY = 0;
+  for (let it = 0; it < 8; it++) {
+    let gmax = -Infinity, gmin = Infinity, wet = false;
+    for (let a = -ST.hW; a <= ST.hW + 1e-6; a += 1) for (let c = -ST.hD; c <= ST.hD + 1e-6; c += 1) {
+      const y = G(a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y);
+      const [wx, wz] = F.W(a, b0 + c); if (ctx.tg.shoreAt(wx, wz) < 1.5) wet = true;
+    }
+    floorY = Math.max(gmax + 0.3, gmin + 0.45);
+    if (wet) { b0 -= 1; continue; }
+    const ys = floorY - 0.04, front = b0 + ST.hD + pd, rise = ys - G(DOOR.a, front + 0.4), steps = Math.max(0, Math.ceil(rise / 0.21) - 1), foot = front + steps * 0.27;
+    if (foot <= limit + 1e-3) break;
+    b0 -= foot - limit + 0.05;
+  }
+  const gC = (a, c) => G(a, b0 + c) - floorY; // the ground in the store's frame
+  const O = F.P(0, floorY, b0), X = F.X, Z = F.Z, ratio = (() => {
+    const d = roleColours(DEF_LOOK), l = roleColours(look);
+    return [null, 1, 2, 3, 4].map((k) => (k ? [l[k].r / Math.max(1e-4, d[k].r), l[k].g / Math.max(1e-4, d[k].g), l[k].b / Math.max(1e-4, d[k].b)] : null));
+  })();
+  // the parts built here, in the store's frame
+  const b = new RoleBuilder(), occ = [...shellBoxes()];
+  roofCover(b, look.roofKind, C(look.roof), rng);
+  const pr = porchAndSteps(b, porch, gC, look, rng, occ);
+  foundation(b, gC, rng);
+  const pile = woodpile(b, gC, rng, occ);
+  const here = b.build();
+  occlude(here, occ, { ground: (a, c) => gC(a, c), rays: 8, reach: 0.9, floor: 0.35 });
+  const hereRoles = b.r;
+  took.push(+(performance.now() - t0).toFixed(1));
+  yield;
+  const t1 = performance.now();
+  const geo = joinArrays([placeArrays(K, O, X, Z, ratio, K.r), placeArrays(arraysOf(here), O, X, Z, ratio, hereRoles)]);
+  const mesh = new THREE.Mesh(geo, propMaterial());
+  mesh.castShadow = true; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = `store ${ep.ep}`;
+  group.add(mesh);
+  const glass = new THREE.Mesh(joinArrays([placeArrays(K.glass, O, X, Z)]), propMaterial());
+  glass.castShadow = false; glass.receiveShadow = true; glass.matrixAutoUpdate = false; glass.name = `store ${ep.ep} glass`;
+  group.add(glass);
+  // the name over the door, and the cork board inside it
+  const at = (a, y, c) => F.P(a, floorY + y, b0 + c), yawOf = (v) => Math.atan2(v.x, v.z);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.5), signMaterial(name));
+  sign.position.copy(at(0, 3.12, ST.hD + 0.056)); sign.rotation.y = yawOf(Z);
+  sign.receiveShadow = true; sign.matrixAutoUpdate = false; sign.updateMatrix();
+  group.add(sign);
+  const B = IN.board, cv = document.createElement('canvas'); cv.width = BOARD_PX[0]; cv.height = BOARD_PX[1];
+  drawBoard(cv);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const cork = new THREE.Mesh(new THREE.PlaneGeometry(B.b1 - B.b0, B.y1 - B.y0), makeToonMaterial({ vertexColors: false, map: tex, side: THREE.DoubleSide }));
+  cork.position.copy(at(ST.iW - 0.02, (B.y0 + B.y1) / 2, (B.b0 + B.b1) / 2)); cork.rotation.y = yawOf(X.clone().negate());
+  cork.receiveShadow = true; cork.matrixAutoUpdate = false; cork.updateMatrix(); cork.name = `store ${ep.ep} board`;
+  group.add(cork);
+  // the walker: the walls (a gap at the door), the floor and the porch or stoop and each step to stand on, what stands
+  // inside, the porch posts, the woodpile, the rack
+  const box = (a0, a1, c0, c1, top) => {
+    const [x, z] = F.W((a0 + a1) / 2, b0 + (c0 + c1) / 2), o = { x, z, ux: X.x, uz: X.z, hx: Math.abs(a1 - a0) / 2, hz: Math.abs(c1 - c0) / 2, box: true };
+    if (top !== undefined) o.top = floorY + top;
+    ctx.obstacles.push(o);
+  };
+  const I = IN;
+  box(-ST.hW, DOOR.a0, ST.iD, ST.hD); box(DOOR.a1, ST.hW, ST.iD, ST.hD);
+  box(ST.iW, ST.hW, -ST.hD, ST.hD); box(-ST.hW, -ST.iW, -ST.hD, ST.hD); box(-ST.hW, ST.hW, -ST.hD, -ST.iD);
+  box(-ST.hW, ST.hW, -ST.hD, ST.hD, 0);
+  box(pr.deck[0], pr.deck[1], pr.deck[2], pr.deck[3], -0.04);
+  for (const t of pr.treads) box(t.a0, t.a1, t.b0, t.b1, t.y);
+  for (const g of [I.food, I.tackle]) box(g.a - g.d / 2, g.a + g.d / 2, g.b0, g.b1 + (g.rack || 0));
+  box(I.gear.a0, I.gear.a1, I.gear.b0, I.gear.b1);
+  box(I.counter.a0 - 0.04, I.counter.a1, I.counter.b0, I.counter.b1 + 0.05);
+  box(I.stove.a0, I.stove.a1, I.stove.b0, I.stove.b1);
+  box(I.wood.a0, I.wood.a1, I.wood.b0, I.wood.b1);
+  box(DOOR.a0 - 0.08, DOOR.a0 + 0.02, ST.iD - 1.12, ST.iD); // the open door
+  { const [x, z] = F.W(I.chair.a, b0 + I.chair.b); ctx.obstacles.push({ x, z, r: 0.26 }); }
+  for (const [a, c] of pr.posts) { const [x, z] = F.W(a, b0 + c); ctx.obstacles.push({ x, z, r: 0.08 }); }
+  if (pr.bench) box(...pr.bench);
+  box(...pile);
+  pieces.push(...buildRack(ctx, F, rng, -(ST.hW + 2.3), b0 + 1.2));
+  // the layout
+  const cx = F.W(0, b0)[0], cz = F.W(0, b0)[1];
+  const W2 = (a, c) => { const [x, z] = F.W(a, b0 + c); return { x, z }; };
+  const at3 = (a, y, c) => { const [x, z] = F.W(a, b0 + c); return { x, y: floorY + y, z }; };
+  const heading = (da, dc) => { const dx = X.x * da + Z.x * dc, dz = X.z * da + Z.z * dc; return Math.atan2(-dz, dx); };
+  const L = {
+    ep: ep.ep, name, look, floorY, centre: { x: cx, z: cz }, front: heading(0, 1), axes: { a: { x: X.x, z: X.z }, b: { x: Z.x, z: Z.z } }, size: { hW: ST.hW, hD: ST.hD, iW: ST.iW, iD: ST.iD },
+    inside: (x, z) => { const dx = x - cx, dz = z - cz, a = dx * X.x + dz * X.z, c = dx * Z.x + dz * Z.z; return Math.abs(a) < ST.iW && Math.abs(c) < ST.iD; },
+    door: { ...W2(DOOR.a, ST.hD + 0.45), y: floorY - 0.04, heading: heading(0, -1) },
+    counter: { ...W2(0.6, I.counter.b1 + 0.6), heading: heading(0, -1), at: at3(1.1, I.counter.h, (I.counter.b0 + I.counter.b1) / 2) },
+    keeper: { ...W2(1.0, (I.counter.b0 + I.back.b1) / 2), heading: heading(0, 1) },
+    board: { ...W2(ST.iW - 0.62, (B.b0 + B.b1) / 2), heading: heading(1, 0), at: at3(ST.iW - 0.02, (B.y0 + B.y1) / 2, (B.b0 + B.b1) / 2) },
+    wall: { ...W2(-ST.iW + 0.62, (I.pegs.b0 + I.pegs.b1) / 2), heading: heading(-1, 0), at: at3(-ST.iW + 0.05, (I.pegs.y0 + I.pegs.y1) / 2, (I.pegs.b0 + I.pegs.b1) / 2) },
+    shelves: [
+      { kind: 'food', ...W2(I.food.a - I.food.d / 2 - 0.6, 0.2), heading: heading(1, 0), at: at3(I.food.a - I.food.d / 2, 0.8, 0.2) },
+      { kind: 'tackle', ...W2(I.tackle.a - I.tackle.d / 2 - 0.6, 0.4), heading: heading(1, 0), at: at3(I.tackle.a - I.tackle.d / 2, 0.8, 0.4) },
+      { kind: 'gear', ...W2(I.gear.a0 - 0.6, (I.gear.b0 + I.gear.b1) / 2), heading: heading(1, 0), at: at3(I.gear.a0, 1.0, (I.gear.b0 + I.gear.b1) / 2) },
+    ],
+    lamp: at3(I.lamp.a, I.lamp.y, I.lamp.b),
+    dockSide: (() => { const [x, z] = F.W(dock.hw + 1.3, dock.len * 0.65); return { x, z }; })(),
+    dockLand: (() => { const [x, z] = F.W(0, dock.back + 0.5); return { x, z }; })(),
+    stepsFoot: W2(DOOR.a, pr.foot + 0.6),
+    boardCanvas: cv, boardTex: tex, mesh, glass,
+  };
+  stores.set(ep.ep, L);
+  storeNews.push(L);
+  took.push(+(performance.now() - t1).toFixed(1));
+  geo.addEventListener('dispose', () => { if (stores.get(ep.ep) === L) { stores.delete(ep.ep); tellStore(null, ep.ep); } tex.dispose(); });
+}
+
 // The canoe rack: two timber trestles, posts set in the ground, two cross bars each on knee braces, tied
 // along the bottom; a canoe upside down on each pair of bars, along the rack, bows to the lake.
 const HULL_COLOURS = [0xc5a46e, 0x5b7a5a, 0x9c4b3b, 0xa9aca8, 0x4d6a82];
