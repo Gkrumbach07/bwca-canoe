@@ -251,6 +251,20 @@ export const SHOTS = [
     clock: { doy: 196, hours: 15 }, weather: 'building', wind: 5, from: 290,
     body: { mode: 'paddle', x: -19665, z: 18089, heading: 1.9 },
     hold: 'KeyW', warm: 30,
+    // the sky snapped again once the camera stands at the shot (the weather clears the cumulus upwind of the
+    // thunderheads round the camera; set while the camera was still at the last shot it left puffs over them), and the
+    // big near puffs in front of the camera, which the weather keeps (it goes by their centres) but which spread over
+    // the anvils from overhead, moved round behind it (mirrored through the camera, 2 km further back)
+    prewarm(T, i) {
+      if (i !== 0) return;
+      const g = T.game, u = g.scene.getObjectByName('clouds').userData, c = g.camera.position;
+      const hx = Math.cos(u.anvilHead), hz = Math.sin(u.anvilHead);
+      for (const p of u.puffs) {
+        const ox = p.x - c.x, oz = p.z - c.z;
+        if (ox * ox + oz * oz < 1500 * 1500 && ox * hx + oz * hz > -0.5 * Math.hypot(ox, oz)) { p.x = c.x - ox - hx * 2000; p.z = c.z - oz - hz * 2000; }
+      }
+      g.weather.set('building');
+    },
     frame(T, i, t) {
       const g = T.game;
       if (i === 0) T.setWeather('storm', 5.2);
