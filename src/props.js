@@ -5,6 +5,7 @@ import { surfaceAt, meshHeightAt } from './terrain-build.js';
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
 import { SPECIES as SP, bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
+import { RockShape } from './collide.js';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone } from './prop-kit.js';
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
@@ -71,6 +72,15 @@ function propMesh(geos) {
 // Portage trails, trail signs, campsites and outfitters that fall inside tile (tx, ty), built in tile-local
 // coordinates from the tile's own halo'd grid (tg) so they never wait for a neighbour.
 export function buildTileProps(tg, world, tx, ty) {
+  const it = tilePropsSteps(tg, world, tx, ty);
+  let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
+}
+// The same a piece at a time: a generator that yields after each trail, outfitter and campsite (an outfitter's yard
+// with its occlusion bakes is the most of 20 ms) and returns the group, so tiles.js can spread a tile's props over a
+// few frames under a time budget.
+export function* tilePropsSteps(tg, world, tx, ty) {
   shared();
   const [ox, oz] = world.tileOrigin(tx, ty), size = world.tileMetres;
   const inside = (x, z) => x >= ox && x < ox + size && z >= oz && z < oz + size;
@@ -109,15 +119,16 @@ export function buildTileProps(tg, world, tx, ty) {
     const [bx0, bz0, bx1, bz1] = p.bbox;
     if (bx1 < ox - 4 || bx0 > ox + size + 4 || bz1 < oz - 4 || bz0 > oz + size + 4) continue;
     buildTrail(ctx, p, decal, pieces);
+    yield;
   }
   decal.lift(ctx);
   const trail = decal.mesh();
   if (trail) group.add(trail);
 
-  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) buildOutfitter(ctx, ep, rng, pieces, group);
+  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) { yield; buildOutfitter(ctx, ep, rng, pieces, group); yield; }
 
   const ledges = [[], []]; // the ledge rocks' matrices, flats and slanted
-  for (const c of world.campsites) if (inside(c.x, c.z)) buildCampsite(ctx, c, pieces, ledges);
+  for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
 
   const built = propMesh(pieces);
   if (built) group.add(built);
@@ -131,20 +142,23 @@ export function buildTileProps(tg, world, tx, ty) {
     rocks.matrixAutoUpdate = false;
     group.add(rocks);
   });
-  // The fallen trunks, stumps and granite outcrops the worker placed with the trees (placement.js) hold the
-  // walker off too: a trunk as a box along its length (vegetation.js builds it 6.4–7.2 m along local x), a
-  // stump and an outcrop as circles of their scale that a carried canoe rides over (rock). They are read from
-  // the tile's vegetation meshes (one per bin, holding all of its instances), which tiles.js makes before it
-  // builds the props.
+  // The fallen trunks and stumps the worker placed with the trees (placement.js) hold the walker off too: a trunk
+  // as a box along its length (vegetation.js builds it 6.4–7.2 m along local x), a stump as a circle of its scale
+  // that a carried canoe rides over (rock); each with `top`, the height of its top (from its geometry's bounds at
+  // the instance's scale), so the walker can step or hop up onto one that is low enough (player.js). They are read
+  // from the tile's vegetation meshes (one per bin, holding all of its instances), which tiles.js makes before it
+  // builds the props. The outcrops are rocks to the walker, held off by their own geometry (tiles.js treesNear).
   if (entry && entry.veg) for (const vm of entry.veg) {
     const sp = vm.userData.sp;
-    if (sp !== SP.log && sp !== SP.stump && sp !== SP.outcrop) continue;
-    const m = vm.instanceMatrix.array, log = sp === SP.log, foot = sp === SP.stump ? 0.3 : 0.95;
+    if (sp !== SP.log && sp !== SP.stump) continue;
+    const m = vm.instanceMatrix.array, log = sp === SP.log, full = vm.userData.lod ? vm.userData.lod.full : vm.geometry;
+    if (!full.boundingBox) full.computeBoundingBox();
+    const tall = full.boundingBox.max.y;
     for (let i = 0; i < vm.instanceMatrix.count; i++) {
-      const o = i * 16, sx = Math.hypot(m[o], m[o + 1], m[o + 2]), sz = Math.hypot(m[o + 8], m[o + 9], m[o + 10]);
+      const o = i * 16, sx = Math.hypot(m[o], m[o + 1], m[o + 2]), sz = Math.hypot(m[o + 8], m[o + 9], m[o + 10]), top = m[o + 13] + tall * Math.hypot(m[o + 4], m[o + 5], m[o + 6]);
       const x = m[o + 12] + ox, z = m[o + 14] + oz;
-      if (log) obstacles.push({ x, z, ux: m[o] / sx, uz: m[o + 2] / sx, hx: 3.4 * sx, hz: 0.36 * sz, box: true });
-      else obstacles.push({ x, z, r: foot * sx, rock: true });
+      if (log) obstacles.push({ x, z, ux: m[o] / sx, uz: m[o + 2] / sx, hx: 3.4 * sx, hz: 0.36 * sz, box: true, top });
+      else obstacles.push({ x, z, r: 0.3 * sx, rock: true, top });
     }
   }
   return group;
@@ -811,8 +825,7 @@ function campLedge(tg, c, fx, fz, dir, ox, oz, ledges, obstacles, H = null) {
       const x = fx + dir.x * t + kx * side * o, z = fz + dir.z * t + kz * side * o;
       o += s * (1.0 + r() * 0.5);
       if (tg.shoreAt(x, z) < -1.5) continue;
-      ledges[1].push(place(ROCK_KIND.block, x, z, az, tilt, (r() - 0.5) * 0.5, s, 0.85 + r() * 0.3, 0.85 + r() * 0.3));
-      if (s > 0.75) obstacles.push({ x, z, r: 0.8 * s, rock: true });
+      ledges[1].push(ledgeRock(obstacles, 1, place(ROCK_KIND.block, x, z, az, tilt, (r() - 0.5) * 0.5, s, 0.85 + r() * 0.3, 0.85 + r() * 0.3), ox, oz, 1.7 * s));
     }
     return;
   }
@@ -822,8 +835,16 @@ function campLedge(tg, c, fx, fz, dir, ox, oz, ledges, obstacles, H = null) {
     const x = fx + dir.x * t + kx * side, z = fz + dir.z * t + kz * side;
     if (tg.shoreAt(x, z) < -1.5) continue;
     const bed = bedding(tg, x, z), tilt = Math.min(0.4, bed.angle * 0.85);
-    ledges[0].push(place(ROCK_KIND.slab, x, z, bed.angle < 0.04 ? r() * Math.PI * 2 : bed.az, tilt, r() * Math.PI * 2, s, 0.85 + r() * 0.3, 0.8 + r() * 0.3));
+    ledges[0].push(ledgeRock(obstacles, 0, place(ROCK_KIND.slab, x, z, bed.angle < 0.04 ? r() * Math.PI * 2 : bed.az, tilt, r() * Math.PI * 2, s, 0.85 + r() * 0.3, 0.8 + r() * 0.3), ox, oz, 1.3 * s));
   }
+}
+
+// A ledge rock (matrix m, tile-local) to the walker: its own geometry where it stands, as the rocks of the woods are
+// (collide.js RockShape; the low flats are stepped onto, the big shards stop him at their edge). Returns m.
+function ledgeRock(obstacles, k, m, ox, oz, reach) {
+  const e = m.elements, rec = [e[12], e[13], e[14], reach, 0, 0, e[0], e[1], e[2], e[4], e[5], e[6], e[8], e[9], e[10]];
+  obstacles.push({ x: e[12] + ox, z: e[14] + oz, r: reach, rock: true, shape: new RockShape(ledgeGeos[k], rec, 0, ox, oz) });
+  return m;
 }
 
 // The dome tent, built once in its own frame (x along it, z across, the door at +z, y up from the ground):

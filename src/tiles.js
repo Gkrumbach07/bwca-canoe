@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { makeTerrainMesh } from './terrain.js';
-import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE } from './vegetation.js';
+import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as VEG_SPECIES } from './vegetation.js';
 import { makeAquaticMeshes } from './aquatic.js';
-import { buildTileProps, exclusionsFor } from './props.js';
+import { tilePropsSteps, exclusionsFor } from './props.js';
 import { MeshGround } from './prop-kit.js';
+import { RockShape } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
 import { cascadeHooks } from './sunlight.js';
 
@@ -17,7 +18,10 @@ const FAR_NEIGHBOURHOOD = 1;  // far tiles each side
 const MAX_LOADED = 36;        // fine tiles kept before the least recently wanted are dropped
 const DRAW_DISTANCE = 4600;   // metres to a tile centre; past the fog's far distance plus the tile radius
 const FAR_DRAW_DISTANCE = 12000; // far chunks are cheap (2k triangles): keep distant shores around for a clearer sky
-const INSTALLS_PER_FRAME = 1;
+// A built tile is installed in stages (installSteps: the ground and the terrain, then the forest and the lake plants,
+// then the props a trail, a yard or a campsite at a time, then the rest), as many a frame as fit in INSTALL_BUDGET
+// ms and at least one, so a tile coming in spreads its main-thread work over a few frames instead of one long one.
+const INSTALL_BUDGET = 3;
 
 // ---------- per-instance culling ---------------------------------------------------------------------------------
 // A vegetation bin is one instanced mesh over a 640 m (or 320 m) region, so three can only cull it whole: a bin
@@ -413,7 +417,9 @@ export class TileManager {
     const w = this.world;
     const [tx0, ty0] = w.tileOf(x - r, z - r), [tx1, ty1] = w.tileOf(x + r, z + r);
     const waits = [];
-    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) waits.push(this.request(tx, ty).ready);
+    // asked for outright (a teleport's target): kept in the queue even while it lies outside the player's
+    // neighbourhood, so busy workers cannot let it be forgotten and the wait resolve on nothing
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { const e = this.request(tx, ty); if (e.state === 'queued') e.ensured = true; waits.push(e.ready); }
     this.dispatch(x, z);
     return Promise.all(waits);
   }
@@ -437,7 +443,7 @@ export class TileManager {
     // the frame loop is not running yet, so pump the worker queue and the installs here
     while (done < entries.length) {
       this.dispatch(x, z);
-      this.install();
+      this.install(40);
       await new Promise((r) => setTimeout(r, 16));
     }
   }
@@ -459,6 +465,7 @@ export class TileManager {
       const fx = pfx + dx, fy = pfy + dy;
       if (fx >= 0 && fy >= 0 && fx < w.far.ntx && fy < w.far.nty) this.requestFar(fx, fy);
     }
+    this.camPos = camPos;
     this.dispatch(px, pz);
     this.install();
     this.evict();
@@ -484,6 +491,7 @@ export class TileManager {
     const w = this.world;
     const dist = (e) => {
       if (e.level === 'far') return -1; // far tiles are cheap and cover the gaps: first
+      if (e.ensured) return 0;          // then what was asked for outright (a teleport's target)
       const [ox, oz] = w.tileOrigin(e.tx, e.ty);
       return Math.hypot(ox + w.tileMetres / 2 - px, oz + w.tileMetres / 2 - pz);
     };
@@ -513,15 +521,24 @@ export class TileManager {
     if (e.level === 'far') this.installFar(e); else this.pending.push(e);
   }
 
-  install() {
-    for (let n = 0; n < INSTALLS_PER_FRAME && this.pending.length; n++) {
-      const e = this.pending.shift();
-      if (e.state !== 'built') continue;
-      this.installFine(e);
+  // budget: ms this frame may spend (prime passes more: no frame is waiting on it)
+  install(budget = INSTALL_BUDGET) {
+    const t0 = performance.now();
+    let steps = 0;
+    while (this.pending.length && (steps === 0 || performance.now() - t0 < budget)) {
+      const e = this.pending[0];
+      if (e.state !== 'built') { this.pending.shift(); continue; }
+      if (!e.steps) e.steps = this.installSteps(e);
+      const t = performance.now(), done = e.steps.next().done;
+      steps++;
+      (e.installMs || (e.installMs = [])).push(+(performance.now() - t).toFixed(2));
+      if (done) { this.pending.shift(); e.steps = null; this.stats.lastInstall = e.installMs; }
     }
   }
 
-  installFine(e) {
+  installFine(e) { const it = this.installSteps(e); while (!it.next().done); }
+
+  *installSteps(e) {
     const w = this.world, r = e.result;
     w.setTile(e.tx, e.ty, r.data, r.cover);
     const [ox, oz] = w.tileOrigin(e.tx, e.ty);
@@ -536,20 +553,29 @@ export class TileManager {
     group.updateMatrix();
     group.add(makeTerrainMesh(r.terrain, this.terrainMaterial));
     if (r.water) group.add(this.water.makeFarMesh(r.water));
+    this.scene.add(group);
+    freeze(group);
+    const fc = this.farChunks.get(e.key);
+    if (fc) fc.visible = false; // the fine terrain is in: the far chunk under it goes
+    yield;
+    // the forest and the lake plants, put at their LOD at once so no frame draws a whole stand at full detail
     e.veg = makeVegetationMeshes(r.veg, this.vegetation);
-    e.vegBins = r.veg; e.ox = ox; e.oz = oz; e.treeHash = null;
+    e.vegBins = r.veg; e.ox = ox; e.oz = oz; e.collide = r.collide; e.shapes = new Map();
     if (this.aquatic) e.veg.push(...makeAquaticMeshes(r.aquatic, this.aquatic));
     for (const m of e.veg) group.add(m);
-    const props = buildTileProps(w.tileGrid(e.tx, e.ty), w, e.tx, e.ty);
+    if (this.camPos) updateVegetationLOD(e.veg, this.camPos);
+    yield;
+    // the props, a piece at a time
+    const steps = tilePropsSteps(w.tileGrid(e.tx, e.ty), w, e.tx, e.ty);
+    let st = steps.next();
+    while (!st.done) { yield; st = steps.next(); }
+    const props = st.value;
     group.add(props);
     e.obstacles = props.userData.obstacles; // docks, shacks, tents and the like, in world coordinates
-    this.scene.add(group);
     freeze(group);
     e.group = group; e.state = 'ready'; e.result = null;
     this.stats.built++; this.stats.trees += r.trees; this.stats.plants += r.plants;
-    const fc = this.farChunks.get(e.key);
-    if (fc) fc.visible = false;
-    this.water.invalidateAtlas();
+    this.water.invalidateAtlas(e.tx * w.tile, e.ty * w.tile, w.tile);
     e.resolve();
   }
 
@@ -604,11 +630,11 @@ export class TileManager {
         this.tiles.delete(e.key);
         const fc = this.farChunks.get(e.key);
         if (fc) fc.visible = true;
-        this.water.invalidateAtlas();
+        this.water.invalidateAtlas(e.tx * w.tile, e.ty * w.tile, w.tile);
       }
     }
     // queued tiles that fell out of the neighbourhood are forgotten rather than built
-    this.queue = this.queue.filter((e) => { if (e.level === 'far' || wanted(e)) return true; this.tiles.delete(e.key); e.resolve(); return false; });
+    this.queue = this.queue.filter((e) => { if (e.level === 'far' || wanted(e) || e.ensured) return true; this.tiles.delete(e.key); e.resolve(); return false; });
     // far tiles: keep the neighbourhood plus a ring
     const [pfx, pfy] = this.farOf(ptx, pty);
     for (const e of [...this.farTiles.values()]) {
@@ -648,40 +674,66 @@ export class TileManager {
   // for the HUD: ready tiles with their data (minimap drawing)
   readyTiles() { return [...this.tiles.values()].filter((e) => e.state === 'ready'); }
 
-  // Tree trunks within r metres of (x, z): [{ x, z, r }] in world metres. Built lazily per tile from the
-  // instance matrices into a 10 m hash; boulders and shrubs are left out (they do not reach a canoe overhead).
-  // Everything the walker is held off within r metres: trunks and boulders as circles { x, z, r } (rock: true
-  // for a boulder), the props' footprints as circles or boxes { x, z, ux, uz, hx, hz, box: true }.
+  // Everything the walker is held off within r metres of (x, z), in world metres: the trunks as circles { x, z, r };
+  // the rocks (the boulder species and the outcrops) as { x, z, r, rock: true, shape } with r their reach and shape
+  // their own drawn geometry where it stands (collide.js RockShape: a height and an outline at any level); and the
+  // props' footprints, circles or boxes { x, z, ux, uz, hx, hz, box: true } (props.js; a log or a stump carries
+  // `top`, the height of its top, so it can be stepped over). The worker sorted the trunks and the rocks into cells
+  // (tile-worker.js collisionOf), so a query reads only the cells it touches; a rock's shape is made the first time
+  // one comes this near and kept with the tile.
   treesNear(x, z, r) {
-    const out = [], w = this.world, HASH = 10;
-    const [tx0, ty0] = w.tileOf(x - r, z - r), [tx1, ty1] = w.tileOf(x + r, z + r);
+    const out = [], w = this.world, M = 12; // M: the furthest a rock reaches past its cell (an outcrop at scale 5)
+    const [tx0, ty0] = w.tileOf(x - r - M, z - r - M), [tx1, ty1] = w.tileOf(x + r + M, z + r + M);
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const e = this.tiles.get(this.key(tx, ty));
-      if (!e || e.state !== 'ready' || !e.vegBins) continue;
-      if (!e.treeHash) {
-        const h = new Map();
-        for (const b of e.vegBins) {
-          if (!b.count || b.sp === 7) continue; // shrubs are walked through
-          const rock = b.sp === 6, m = b.matrices;
-          for (let i = 0; i < b.count; i++) {
-            const px = m[i * 16 + 12] + e.ox, pz = m[i * 16 + 14] + e.oz, sx = Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2]);
-            if (rock && sx < 0.6) continue; // knee-high: stepped over
-            const key = Math.floor(px / HASH) * 65536 + Math.floor(pz / HASH);
-            let a = h.get(key); if (!a) { a = []; h.set(key, a); }
-            // a trunk's radius, or a boulder's footprint (the rock geometry is a unit-radius block at its scale, part sunk)
-            a.push(px, pz, rock ? 0.8 * sx : 0.12 + 0.14 * sx, rock ? 1 : 0);
-          }
-        }
-        e.treeHash = h;
-      }
-      for (let cz = Math.floor((z - r) / HASH); cz <= Math.floor((z + r) / HASH); cz++) for (let cx = Math.floor((x - r) / HASH); cx <= Math.floor((x + r) / HASH); cx++) {
-        const a = e.treeHash.get(cx * 65536 + cz);
-        if (!a) continue;
-        for (let i = 0; i < a.length; i += 4) if (Math.hypot(a[i] - x, a[i + 1] - z) <= r + a[i + 2]) out.push({ x: a[i], z: a[i + 1], r: a[i + 2], rock: a[i + 3] === 1 });
-      }
+      if (!e || e.state !== 'ready' || !e.collide) continue;
+      const C = e.collide, n = C.n, S = C.cell, lx = x - e.ox, lz = z - e.oz;
+      const scan = (reach, start, each) => {
+        const c0 = Math.max(0, Math.floor((lx - reach) / S)), c1 = Math.min(n - 1, Math.floor((lx + reach) / S));
+        const r0 = Math.max(0, Math.floor((lz - reach) / S)), r1 = Math.min(n - 1, Math.floor((lz + reach) / S));
+        for (let cz = r0; cz <= r1; cz++) for (let cx = c0; cx <= c1; cx++) { const c = cz * n + cx; for (let i = start[c]; i < start[c + 1]; i++) each(i); }
+      };
+      const T = C.trunks;
+      scan(r + 1, C.trunkStart, (i) => {
+        const o = i * 3, dx = T[o] - lx, dz = T[o + 1] - lz, rr = r + T[o + 2];
+        if (dx * dx + dz * dz <= rr * rr) out.push({ x: T[o] + e.ox, z: T[o + 1] + e.oz, r: T[o + 2] });
+      });
+      const R = C.rocks, ST = 15; // tile-worker.js ROCK_STRIDE_C
+      scan(r + C.maxR, C.rockStart, (i) => {
+        const o = i * ST, dx = R[o] - lx, dz = R[o + 2] - lz, rr = r + R[o + 3];
+        if (dx * dx + dz * dz > rr * rr) return;
+        out.push({ x: R[o] + e.ox, z: R[o + 2] + e.oz, r: R[o + 3], rock: true, shape: this.rockShape(e, i, o) });
+      });
       if (e.obstacles) for (const o of e.obstacles) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o);
     }
     return out;
   }
+  // a tile's rock i (its record at offset o) as the walker meets it
+  rockShape(e, i, o) {
+    let s = e.shapes.get(i);
+    if (!s) {
+      const R = e.collide.rocks, vs = this.vegetation.variants[R[o + 5]], v = vs && vs[R[o + 4]];
+      s = v ? new RockShape(v.full, R, o, e.ox, e.oz) : null;
+      e.shapes.set(i, s);
+    }
+    return s;
+  }
   readyFarTiles() { return [...this.farTiles.values()].filter((e) => e.state === 'ready'); }
+
+  // One instance of every material the tiles draw with, as they draw it (instanced, with colours where the forest
+  // has them, the cards' depth material for the shadows): main.js compiles it at startup (renderer.compileAsync) so
+  // a species, a cliff or a lake plant first met miles on compiles nothing in the frame it comes into view.
+  prewarmGroup() {
+    const g = new THREE.Group(), kit = this.vegetation;
+    kit.variants.forEach((vs, sp) => {
+      if (!vs || !vs.length) return;
+      const m = new THREE.InstancedMesh(vs[0].full, VEG_SPECIES[sp].cliff ? kit.cliffMaterial : kit.materialFor(sp), 1);
+      m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(3).fill(1), 3);
+      m.customDepthMaterial = kit.depthFor(sp);
+      g.add(m);
+    });
+    const aq = this.aquatic;
+    if (aq) aq.geos.forEach((set, k) => { if (set && set.length && aq.mats[k]) g.add(new THREE.InstancedMesh(set[0], aq.mats[k], 1)); });
+    return g;
+  }
 }

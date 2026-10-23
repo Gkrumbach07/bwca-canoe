@@ -1,11 +1,20 @@
 import * as THREE from 'three';
 import { glslSurface } from './water.js';
+import { glslDrawn, glslFoamLight, foamUniforms, foamQuad } from './wake.js';
 
 // Rise rings: the clean, widening circles a fish leaves when it takes something off the surface, the kind you
 // see all over a calm bay at dusk (fauna.js Fish). The wake's lace bubbles (wake.js) are the wrong shape for
 // it, so these are their own small pool: one instanced quad per ring, everything in instance attributes and
 // aged in the shader, riding the drawn swell, in the shared haze. A rise draws a main ring with a fainter one
-// inside it; spawning is the only CPU cost, and the pool is one draw call.
+// inside it; spawning is the only CPU cost, and the pool is one draw call. The quad is subdivided and each vertex
+// sits on the swell as the patch draws it (wake.js drawnWave), so no crest cuts a ring into arcs.
+//
+// A rise ring is not foam: it is a little wave, seen because its crest catches more of the light than the flat water
+// round it and its trough less. So a ring brightens the water already drawn under it by a factor (and darkens it a
+// little just inside), with a faint film of white lit as the paddle's splashes are (wake.js foamLight): it takes
+// the water's own light, the sun, the sky fill, the sky it mirrors, the weather and the haze, so it shows at dusk as
+// the water does and never glows. The blend: colour + destination x alpha (alpha is the factor, over one: the scene
+// target is half float, so nothing clamps it).
 
 const MAX = 48;
 
@@ -16,28 +25,40 @@ const vert = /* glsl */ `
   varying vec2 vUv;
   varying float vAge;
   varying float vSeed;
+  varying float vShore;
+  #include <common>
   #include <fog_pars_vertex>
+  #include <shadowmap_pars_vertex>
   ${glslSurface}
+  ${glslDrawn}
   void main() {
     float age = uTime - aRing.z, t = clamp(age / aLife.x, 0.0, 1.0);
-    float alive = step(0.0, age) * step(age, aLife.x);
-    vec3 p = vec3(aRing.x, aLife.y + renderedWave(aRing.xy, uWaterTime) + 0.01, aRing.y);
-    vec3 local = p + vec3(position.x, 0.0, position.y) * aRing.w * alive;
+    if (age < 0.0 || age > aLife.x) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }   // a spent slot
+    vec3 local = vec3(aRing.x, 0.0, aRing.y) + vec3(position.x, 0.0, position.y) * aRing.w;
+    local.y = aLife.y + drawnWave(local.xz, uWaterTime) + 0.012;
+    vShore = smoothstep(-0.15, -0.9, shoreAt(local.xz));   // the ring dies out where the water thins to the shore
     vUv = position.xy * 2.0;
     vAge = t;
     vSeed = fract(aRing.z * 3.17);
-    vec4 mvPosition = modelViewMatrix * vec4(local, 1.0);
+    vec4 worldPosition = modelMatrix * vec4(local, 1.0);
+    vec4 mvPosition = viewMatrix * worldPosition;
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
+    #include <shadowmap_vertex>
   }
 `;
 
 const frag = /* glsl */ `
-  uniform vec3 uColor;
+  uniform vec3 uColor, uSkyMid, uSkyHorizon;
   varying vec2 vUv;
   varying float vAge;
   varying float vSeed;
+  varying float vShore;
+  #include <common>
+  #include <packing>
   #include <fog_pars_fragment>
+  #include <shadowmap_pars_fragment>
+  ${glslFoamLight}
   void main() {
     float r = length(vUv), aa = fwidth(r) * 1.2;
     // the ring runs out fast then slows, thinning as it goes; a fainter ring follows inside it
@@ -45,13 +66,19 @@ const frag = /* glsl */ `
     float ring = smoothstep(c - w - aa, c - w * 0.3, r) * (1.0 - smoothstep(c + w * 0.3, c + w + aa, r));
     float c2 = c * 0.62, w2 = w * 0.7;
     float ring2 = smoothstep(c2 - w2 - aa, c2, r) * (1.0 - smoothstep(c2, c2 + w2 + aa, r));
-    float a = (ring * 0.55 + ring2 * 0.25) * pow(1.0 - vAge, 1.4) * smoothstep(0.0, 0.04, vAge);
-    a *= 1.0 - smoothstep(0.96, 1.0, r);
-    if (a < 0.004) discard;
-    gl_FragColor = vec4(uColor, a);
-    #include <fog_fragment>
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
+    // the trough just inside each crest, a little darker
+    float cT = c - 2.2 * w, trough = smoothstep(cT - w - aa, cT, r) * (1.0 - smoothstep(cT, cT + w + aa, r));
+    float k = pow(1.0 - vAge, 1.4) * smoothstep(0.0, 0.04, vAge) * (1.0 - smoothstep(0.96, 1.0, r)) * vShore;
+    float lift = (ring * 1.2 + ring2 * 0.5) * k, dim = trough * 0.25 * k;
+    if (lift + dim < 0.003) discard;
+    float clear = 1.0;
+    #ifdef USE_FOG
+      clear = 1.0 - fogAt(vFogDir).a;   // in the haze the ring goes with what it lies on
+    #endif
+    // and the crest's far slope mirrors more of the low sky toward the eye than the flat water does: the dome's own
+    // colours, so in the dusk it is the sky's light the ring catches, never more
+    vec3 sky = mix(uSkyMid, uSkyHorizon, 0.6) * (ring * 0.14 + ring2 * 0.06);
+    gl_FragColor = vec4((uColor * foamLight() * (ring * 0.16 + ring2 * 0.06) + sky) * k * clear, 1.0 + (lift - dim) * clear);
   }
 `;
 
@@ -59,10 +86,7 @@ export class RiseRings {
   constructor(water) {
     this.water = water;
     this.origin = { x: water.origin.x, z: water.origin.z };
-    const base = new THREE.PlaneGeometry(1, 1);
-    const geo = new THREE.InstancedBufferGeometry();
-    geo.index = base.index;
-    geo.setAttribute('position', base.getAttribute('position'));
+    const geo = foamQuad(14);   // ~0.25 m a step on a 3.5 m ring: the patch's triangles are 3.2 m
     geo.instanceCount = MAX;
     this.ring = new Float32Array(MAX * 4);
     this.life = new Float32Array(MAX * 2).fill(1);
@@ -71,10 +95,14 @@ export class RiseRings {
     this.aLife = new THREE.InstancedBufferAttribute(this.life, 2).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aRing', this.aRing);
     geo.setAttribute('aLife', this.aLife);
+    // uColor: the albedo (the light comes from foamLight, as the wake's)
     this.material = new THREE.ShaderMaterial({
       vertexShader: vert, fragmentShader: frag,
-      uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uTime: { value: 0 }, uColor: { value: new THREE.Color(0xe9eef0) }, ...water.surfaceUniforms() },
-      transparent: true, depthWrite: false, fog: true, side: THREE.DoubleSide,
+      uniforms: { ...foamUniforms(water, { uTime: { value: 0 }, uColor: { value: new THREE.Color(0xdde6ea) } }), uSkyMid: water.uniforms.uSkyMid, uSkyHorizon: water.uniforms.uSkyHorizon },
+      transparent: true, depthWrite: false, fog: true, lights: true, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.SrcAlphaFactor,
+      blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
     });
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;

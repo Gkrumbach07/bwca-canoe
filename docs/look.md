@@ -166,6 +166,10 @@ baked lightmaps, no PBR, no external assets.
   patches darkens the albedo by `WEATHER.uWetness` times the porosity (ground 1, rock and cliff 0.5, bark and
   wood 1, leaves 0.3) and adds a faint sky sheen on what faces up. The terrain, the grass, the cards, the rocks,
   the cliffs, the props and the trail decal compose it; a new look material should too.
+- The stars (stars.js): about a hundred bright stars at their real places (J2000), the Dipper, Cassiopeia, Orion and
+  the rest, and a faint field over the whole sphere, sized and tinted by magnitude and colour; the day cycle turns the
+  sphere by the local sidereal time for the date, clock and longitude (astro.js `siderealDeg`, `equatorialToWorld`),
+  so Polaris stands at the latitude due north and the sky wheels round it. Below the horizon a star is gone.
 - A building storm's anvils (sky.js) stand 6.5–7.7 km upwind; the cumulus within 60 degrees of upwind goes while they
   show, so they stand clear over it. Each is a cumulonimbus, not a mushroom: a wide tower on a broad base with lower
   towers stepping down upwind, its upwind side one wall to a flat top, and the anvil streaming off downwind as a thin
@@ -207,6 +211,16 @@ baked lightmaps, no PBR, no external assets.
 - The shore's ripple lines are contours of the shore distance (a 10 m lattice, interpolated), so they are kept to
   the last 2.8 m of water and broken into dashes a metre or three long; further out its contours would run on as
   long strings across a bay.
+- **White water comes with the wind and takes the light.** The lap line at the waterline and the ripple lines scale
+  with `vCrest.z`, the wind-wave height of the most exposed water beside the shore (wind speed and fetch): nothing on
+  calm water or a sheltered shore, a broken line on a windward shore in a breeze, more in a blow. That foam, the
+  whitecaps, the wake's bubbles and splashes (wake.js) and the rise rings (fauna-rings.js) are lit as the water is
+  (wake.js `foamLight`: the key by its height in the sun's shadow plus the sky fill, read from the water's
+  `uSunLight` / `uSkyLight`, `FOAM_GAIN` 2), never a fixed white, so none glows at dusk. A rise ring is a wave, not
+  foam: it brightens the water drawn under it (blend: colour + destination x alpha) with the low sky's colour and a
+  film of lit white. Rings and bubbles are subdivided quads whose every vertex sits on the patch's drawn triangles
+  (wake.js `drawnWave`: PlaneGeometry splits each quad from its (0, 1) corner to its (1, 0) one), so a crest no longer
+  cuts them into arcs; they fade where the water thins to the shore.
 - `aquatic.js`: kinds 0 pads (variants: plain, spatterdock with raised pads, white lily, yellow lily), 1 reeds
   (bulrush, reed, cattail, sedge tussock), 2 weed (pondweed, milfoil), 3 wild rice; the `AQUA` uniforms `uGrow` (pads
   on the surface June to mid-September), `uBloom`, `uTan`, `uIceHide` come from the season. placement.js
@@ -219,6 +233,13 @@ baked lightmaps, no PBR, no external assets.
 - `rockGeometry(kind, seed)` and `makeRockMaterial()` (rocks.js): `block` (a shard), `slab`, `boulder`. Each
   family's base is y = 0 inside `FOOT`; placement.js's `ROCK_FOOT` holds the same outlines: change one, change
   the other. `seatRock(ground, foot, …)` sinks a rock until its whole outline is under the ground it is given.
+- The walker meets a rock as it is drawn: collide.js `RockShape` stands the variant's own geometry where the tile
+  draws it (from the worker's record, tile-worker.js `collisionOf`, and the kit's variant: a rock bin's group g draws
+  variant (base + g) mod n, as vegetation.js `pickVariants` has it; change one, change the other). He is held off the
+  outline of what of it stands higher than a step (0.35 m) over his feet, and steps onto what is lower, unless it is
+  steeper than 38° there (player.js `supportAt`, `rockSlope`); the outcrops and the campsite ledges are held the same
+  way. The worker sorts the trunks and the rocks into 16 m cells per tile, so `treesNear` costs the main thread
+  nothing on a tile's first query.
 
 ## Shorelines
 
@@ -278,6 +299,11 @@ of the trees. Open rock belongs to campsites and some points and ledges, not to 
   0.3 m above the height it is given).
 - The hull and the figure bake their occlusion in the background after load (loft.js `bakeLater`): wait for
   `bakesPending() === 0` before judging colours.
+- On foot the walker has a height of his own (`player.foot`: the ground, or the top of a rock, a log or a stump he
+  stepped or hopped onto). Space hops 0.42 m (under the canoe, a stagger); the rig reads `state.air`, `airT`, `vy`,
+  `land` and `stagger`. Shift is a jog blended from the walk by speed (`smooth(2.35, 2.85, v)`): a 0.32 stance (both
+  feet off the ground between steps), cadence 1.5 + 0.09 v cycles a second, the body lowest at mid-stance;
+  `state.cadence` times the footfalls (audio.js).
 
 ## Performance and quality (phase 2)
 
@@ -301,6 +327,17 @@ of the trees. Open rock belongs to campsites and some points and ledges, not to 
   are fitted, inside the shadow pass); a cascade proxy is visible only during the shadow pass and answers the shadow
   pass's frustum test for its own cascade only. `CULL.farSmall` drops instances under that radius past 60 m from the
   far cascade (1.5 m whenever the shadow reach is under 300 m, which is every preset but Ultra).
+- **The light count never changes** (daycycle.js): the sun, the fill and the moon stay in the scene, their intensity
+  driven to zero, because a light coming or going (or a shadow caster) recompiles every lit material at once: the
+  sunset frame took 1.3 s. With the sun down its shadows fade out and main.js stops redrawing the map. main.js also
+  compiles the scene and one instance of every tile material (tiles.js `prewarmGroup`) behind the title card.
+- **Tiles install in stages** (tiles.js `installSteps`, under `INSTALL_BUDGET` ms a frame): the ground and the
+  terrain, then the forest and the lake plants (put at their LOD at once), then the props a trail, a yard or a
+  campsite at a time (props.js `tilePropsSteps`). The water's atlas is built again only when a tile inside it comes
+  or goes, from the tile arrays directly. A teleport's tiles (`ensure`) stay queued even outside the neighbourhood.
+- The mirror pass draws with no lights (its camera does not see layer 0), so each lit material looks its program up
+  again in both passes every frame; lights on the mirror's layers at zero intensity spare that but run the full lit
+  shaders in the mirror, 1.2 ms slower at the lodge (October 2026), so it stays.
 - **Tile groups are frozen** once installed (tiles.js `freeze`): their world matrices are computed once and the
   scene's per-frame matrix walk skips them (it walked ~24 000 objects). Anything added to a tile group later must set
   its own `matrixWorld`, as the variant-group meshes and the proxies do.

@@ -9,6 +9,66 @@ import { glslSurface } from './water.js';
 
 const MAX = 1400;
 
+// What a ring or a bubble lying on the water needs from it (wake.js Ripples, fauna-rings.js RiseRings):
+//   drawnWave   the swell exactly as the near patch draws it: the patch is a 3.2 m grid of two triangles a
+//               quad (PlaneGeometry's split, from the quad's (0, 1) corner to its (1, 0) one), each vertex
+//               carrying surfaceWave, so between vertices the surface is flat triangles, not the bilinear
+//               blend renderedWave gives (a few centimetres apart on a chop). A flat quad at the swell of its
+//               centre went under the crests round it, which cut rings into arcs; these quads are subdivided
+//               and every vertex follows the drawn triangles. Past the patch, renderedWave (the far mesh is
+//               near it, and that far off a centimetre does not show).
+//   foamLight   the light on something white lying flat on the water, as the water's own body takes it: the
+//               key (the sun, or the moon at night) by its height, in the sun's shadow, and the sky fill, all
+//               read by reference from the water's uniforms (WaterSystem.update sets them from the lights the
+//               day cycle and the weather drive), so a splash or a rise ring is lit like the water round it and
+//               goes grey at dusk and dark at night instead of glowing a fixed white.
+// Needs glslSurface (water.js) and, for the shadow, <common>, <packing> and <shadowmap_pars_fragment>.
+export const glslDrawn = /* glsl */ `
+  float drawnWave(vec2 rel, float t) {
+    vec2 origin = uPatchLocal - vec2(uPatchHalf);
+    vec2 f = (rel - origin) / uPatchRes;
+    float n = 2.0 * uPatchHalf / uPatchRes;
+    if (f.x < 0.0 || f.y < 0.0 || f.x >= n || f.y >= n) return renderedWave(rel, t);
+    vec2 fi = floor(f), a = f - fi;
+    vec2 p00 = origin + fi * uPatchRes, p10 = p00 + vec2(uPatchRes, 0.0), p01 = p00 + vec2(0.0, uPatchRes);
+    float s;
+    float w10 = surfaceWave(p10, t, patchBorder(p10), s), w01 = surfaceWave(p01, t, patchBorder(p01), s);
+    if (a.x + a.y < 1.0) { float w00 = surfaceWave(p00, t, patchBorder(p00), s); return w00 + a.x * (w10 - w00) + a.y * (w01 - w00); }
+    vec2 p11 = p00 + vec2(uPatchRes);
+    float w11 = surfaceWave(p11, t, patchBorder(p11), s);
+    return w11 + (1.0 - a.x) * (w01 - w11) + (1.0 - a.y) * (w10 - w11);
+  }
+`;
+export const glslFoamLight = /* glsl */ `
+  uniform vec3 uSunLight, uSkyLight, uSunDir;
+  // white lying flat on the water: about the brightness the day tables' foam had at noon, and the light's own
+  // colour and strength at every other hour and in every weather
+  const float FOAM_GAIN = 2.0;
+  vec3 foamLight() {
+    float shadow = 1.0;
+    #if defined( USE_SHADOWMAP ) && NUM_SUN_LIGHT_SHADOWS > 0
+      shadow = getSunShadow(sunShadowMap[0], sunLightShadows[0], 0);
+    #endif
+    return (uSunLight * max(uSunDir.y, 0.0) * shadow + uSkyLight) * FOAM_GAIN;
+  }
+`;
+// The uniforms a foam material takes: the fog, the lights (for the sun's shadow map), the surface, and the
+// water's light by reference.
+export function foamUniforms(water, own) {
+  const u = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, own]);
+  const w = water.uniforms;
+  Object.assign(u, water.surfaceUniforms(), { uSunLight: w.uSunLight, uSkyLight: w.uSkyLight, uSunDir: w.uSunDir });
+  return u;
+}
+// A unit quad in the xy plane, subdivided so a ring or a bubble can follow the swell across it
+export function foamQuad(segments) {
+  const base = new THREE.PlaneGeometry(1, 1, segments, segments);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.index = base.index;
+  geo.setAttribute('position', base.getAttribute('position'));
+  return geo;
+}
+
 const vert = /* glsl */ `
   uniform float uTime, uWaterTime;
   attribute vec3 aPos;
@@ -20,44 +80,53 @@ const vert = /* glsl */ `
   varying float vKind;
   varying float vAge;
   varying float vSeed;
+  #include <common>
   #include <fog_pars_vertex>
+  #include <shadowmap_pars_vertex>
   ${glslSurface}
+  ${glslDrawn}
   void main() {
     float age = uTime - aData.x;
+    if (age < 0.0 || age > aData.y) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }   // a spent slot: nothing to draw
     float t = clamp(age / max(aData.y, 0.001), 0.0, 1.0);
-    float alive = step(0.0, age) * step(age, aData.y);
-    float swell = renderedWave(aPos.xz, uWaterTime);
     vec3 p = aPos;
     vec3 local;
+    float fade;
     if (aKind < 2.0) {
       // droplet: ballistic from the surface, billboarded
-      float size = mix(aData.z, aData.w, t) * alive;
-      p.y += swell;
+      float size = mix(aData.z, aData.w, t);
+      p.y += renderedWave(aPos.xz, uWaterTime);
       p += aVel * age + vec3(0.0, -4.9 * age * age, 0.0);
       vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
       vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
       local = p + (right * position.x + up * position.y) * size;
+      fade = 1.0 - t;
     } else {
-      // bubble: drifts on the surface, swells a little, then fades
-      float size = mix(aData.z, aData.w, sqrt(t)) * alive;
+      // bubble: drifts on the surface, swells a little, then fades; every vertex of it on the drawn swell (a
+      // centimetre over it), and it thins out where the water does, so a ring meets a shore instead of being cut
+      float size = mix(aData.z, aData.w, sqrt(t));
       p.xz += aVel.xz * age;
-      p.y += renderedWave(p.xz, uWaterTime);
       local = p + vec3(position.x, 0.0, position.y) * size;
+      local.y = aPos.y + drawnWave(local.xz, uWaterTime) + 0.012;
+      fade = (1.0 - smoothstep(0.25, 1.0, t)) * smoothstep(0.0, 0.08, t) * smoothstep(-0.15, -0.9, shoreAt(local.xz));
     }
     vUv = position.xy;
-    vFade = (aKind < 2.0 ? (1.0 - t) : (1.0 - smoothstep(0.25, 1.0, t)) * smoothstep(0.0, 0.08, t)) * alive;
+    vFade = fade;
     vKind = aKind;
     vAge = t;
     vSeed = fract(aData.x * 7.31 + aPos.x * 0.37);
-    vec4 mvPosition = modelViewMatrix * vec4(local, 1.0);
+    vec4 worldPosition = modelMatrix * vec4(local, 1.0);
+    vec4 mvPosition = viewMatrix * worldPosition;
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
+    #include <shadowmap_vertex>
   }
 `;
 
 // Soft white, thin and fading, like the shore's lines (water.js): a droplet is a small soft dot; a bubble left by
 // the hull is a thin ring that widens and thins as it drifts, with a faint wash inside, gone in a second or two,
-// so the wake reads as lace on the water rather than a trail of white discs.
+// so the wake reads as lace on the water rather than a trail of white discs. Lit as the water round it is
+// (foamLight), hazed by the shared fog.
 const frag = /* glsl */ `
   uniform vec3 uColor;
   varying vec2 vUv;
@@ -65,7 +134,11 @@ const frag = /* glsl */ `
   varying float vKind;
   varying float vAge;
   varying float vSeed;
+  #include <common>
+  #include <packing>
   #include <fog_pars_fragment>
+  #include <shadowmap_pars_fragment>
+  ${glslFoamLight}
   void main() {
     float r = length(vUv) * 2.0;
     float a;
@@ -80,7 +153,7 @@ const frag = /* glsl */ `
     }
     a *= vFade;
     if (a < 0.01) discard;
-    gl_FragColor = vec4(uColor, a);
+    gl_FragColor = vec4(uColor * foamLight(), a);
     #include <fog_fragment>
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -114,10 +187,7 @@ export class Ripples {
   constructor(water) {
     this.water = water;
     this.origin = { x: water.origin.x, z: water.origin.z };
-    const base = new THREE.PlaneGeometry(1, 1);
-    const geo = new THREE.InstancedBufferGeometry();
-    geo.index = base.index;
-    geo.setAttribute('position', base.getAttribute('position'));
+    const geo = foamQuad(6);
     geo.instanceCount = MAX;
     this.pos = new Float32Array(MAX * 3);
     this.vel = new Float32Array(MAX * 3);
@@ -131,10 +201,12 @@ export class Ripples {
       aKind: new THREE.InstancedBufferAttribute(this.kind, 1),
     };
     for (const [k, a] of Object.entries(this.attrs)) { a.setUsage(THREE.DynamicDrawUsage); geo.setAttribute(k, a); }
+    // uColor: the foam's albedo (the light comes from foamLight)
     this.material = new THREE.ShaderMaterial({
       vertexShader: vert, fragmentShader: frag,
-      uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uTime: { value: 0 }, uColor: { value: new THREE.Color(0xf1f6f6) }, ...water.surfaceUniforms() },
-      transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true,
+      uniforms: foamUniforms(water, { uTime: { value: 0 }, uColor: { value: new THREE.Color(0xe4ecee) } }),
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true, lights: true,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
     });
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;

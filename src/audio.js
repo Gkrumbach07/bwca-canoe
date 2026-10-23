@@ -409,12 +409,16 @@ export class Ambient {
       // the hull working in a sea
       if ((me.creakT -= adt) <= 0) { me.creakT = 2.5 + R() * 5; if (R() < S.waveH * 1.6) this.say('hull-creak', V.creak(this, body, 0.5 + S.waveH)); }
     } else if (S.onFoot) {
-      // footfalls at the walker's cadence (canoe.js's gait: two per cycle), by the ground underfoot
+      // footfalls at the walker's cadence (canoe.js's gait, walk or jog: two per cycle), by the ground underfoot;
+      // none in the air, and one (both feet) when a hop or a fall lands
       const v = st.speed, carry = S.mode === 'carry';
-      if (st.walkSpeed > 0.25 && v > 0.12) {
-        me.step += (carry ? 1.15 + 0.36 * v : 1 + 0.33 * v) * 2 * dt;
+      if (st.air) me.step = 0.6;
+      else if (me.air) { me.lastStep = now; this.footfall(S, carry); }
+      else if (st.walkSpeed > 0.25 && v > 0.12) {
+        me.step += (st.cadence || (carry ? 1.15 + 0.36 * v : 1 + 0.33 * v)) * 2 * dt;
         if (me.step >= 1) { me.step %= 1; if (now - me.lastStep > 0.16) { me.lastStep = now; this.footfall(S, carry); } }
       } else me.step = 0.6;
+      me.air = !!st.air;
     } else if (S.mode === 'swim') {
       const strong = st.walkSpeed > 0.4, n = Math.floor((st.walk / TAU) * (strong ? 1 : 2));
       if (n !== me.swimN) { me.swimN = n; if (now - me.lastStep > 0.25) { me.lastStep = now; this.say('swim', V.swimStroke(this, body, strong)); } }

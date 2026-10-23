@@ -349,9 +349,8 @@ export function topOf(world, x, z, near = 1.2, crown = false) {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// The streamed forest as the birds' and the beavers' searches read it, gathered a slice at a time. tiles.js
-// treesNear builds a tile's whole hash of trunks in one go (a few milliseconds a tile), and a search that crossed
-// a few fresh tiles, raycasting the trees it found, cost 5-12 ms in one frame. Here each ready tile's trunks and
+// The streamed forest as the birds' and the beavers' searches read it, gathered a slice at a time. A search that
+// crossed a few fresh tiles, raycasting the trees it found, cost 5-12 ms in one frame. Here each ready tile's trunks and
 // boulders by the water go into a cache in slices against a deadline (Stands.deadline, set by Search.step), and
 // the searches are generators that wait on it. Per tile entry, kept while the tile is in:
 //   trees   { x, z, r: trunk radius, sp, s: shore distance, mesh, i: instance } within 25 m of the water (props'

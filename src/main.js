@@ -2,7 +2,8 @@ import './fog.js'; // must come first: patches three's fog chunks before any mat
 import { SunLight } from './sunlight.js'; // patches the sun shadow chunk, also before any material compiles
 import * as THREE from 'three';
 import { World } from './world.js';
-import { DayCycle, buildStars, buildMoon } from './daycycle.js';
+import { DayCycle, buildMoon } from './daycycle.js';
+import { buildStars } from './stars.js';
 import { makePost } from './post.js';
 import { makeAquaticKit } from './aquatic.js';
 import { GroundCover } from './groundcover.js';
@@ -166,6 +167,12 @@ async function main() {
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
   if (trip && (trip.mode !== 'paddle' || world.shoreAt(trip.x, trip.z) > -2)) player.teleport(trip.x, trip.z);
   title.open('title');
+  // Compile every material the scene holds now, hidden ones too (the rise rings, the rain, the cloud deck and the
+  // anvils, the fish and the lures, the wildlife's parts), behind the title card and off the main thread where the
+  // browser can (KHR_parallel_shader_compile), so none compiles in the frame it first shows. The light count never
+  // changes (daycycle.js), so these programs serve day and night alike.
+  renderer.compileAsync(scene, camera).catch(() => {});
+  renderer.compileAsync(tiles.prewarmGroup(), camera, scene).catch(() => {}); // and every species the tiles may bring
 
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   loadingEl.classList.add('done');
@@ -224,8 +231,14 @@ async function main() {
     input.endFrame();
   };
   // debug helper: advance the simulation by n fixed steps and draw once (used for automated testing)
+  // (The lights stay on layer 0, so the mirror's pass, whose camera sees only its own layers, draws the shore unlit
+  // under the haze. That gives three a second light state, and each lit material looks its program up again in both
+  // passes every frame; putting the lights on the mirror's layers at zero intensity spares that but runs the full lit
+  // shaders in the mirror, which measured 1.2 ms a frame slower at the lodge (October 2026), so it stays as it is.)
   const draw = () => {
     fps.begin();
+    // no sun, no shadow map to draw: the shadows have faded out (daycycle.js) and the map is not read
+    renderer.shadowMap.autoUpdate = sun.intensity > 0.001;
     water.renderReflection(renderer, scene, camera, player.level || world.levelAt(player.x, player.z));
     post.render();
   };

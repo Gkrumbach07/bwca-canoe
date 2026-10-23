@@ -4,6 +4,7 @@ import { clamp, lerp } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
 import { HULL, keelAt, section } from './hull.js';
+import { pushOut } from './collide.js';
 
 export class Input {
   constructor() {
@@ -19,7 +20,12 @@ export class Input {
 }
 
 const PADDLE = { accel: 3.4, hustle: 5.2, reverse: 1.6, drag: 0.15, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
-const WALK = { speed: 2.2, hustle: 3.2, carry: 1.8, carryHustle: 2.5, face: 7 }; // m/s: a brisk game pace, not a measured walk (the canoe runs at about 1.5x life too); face: how fast the walker turns to where the keys point
+const WALK = { speed: 2.2, hustle: 3.4, carry: 1.8, carryHustle: 2.5, face: 7 }; // m/s: a brisk game pace, not a measured walk (the canoe runs at about 1.5x life too), Shift a jog; face: how fast the walker turns to where the keys point
+// On foot the walker has a height of his own (this.foot): the drawn ground, or the top of a rock, a log or a stump he
+// has stepped or hopped onto. STEP_UP is how high a step he takes without a hop (a low slab, a small rock, a log on
+// its side); BODY_R the body's reach round its centre, which a rock's outline holds off; Space hops about HOP metres.
+const STEP_UP = 0.35, BODY_R = 0.3, GRAVITY = 9.81, HOP = 0.42, HOP_V = Math.sqrt(2 * GRAVITY * HOP), ROCK_GRADE = Math.tan((38 * Math.PI) / 180);
+const _push = { x: 0, z: 0 };
 const RUB = 4;                // per second: a trunk or a wall you rub along bleeds your speed at this rate (about 0.6 of the walk stays)
 const SWIM = { speed: 0.85, hustle: 1.25, turn: 1.6 };
 const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
@@ -71,13 +77,14 @@ export class Player {
     this.footLatch = { keys: 4, h: 0 }; // on foot without mouse look: the bearing the held keys meant when pressed
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
-    canoe.ground = (x, z) => this.groundAt(x, z); // the walker's feet find the ground under each foot
+    canoe.ground = (x, z) => this.footGround(x, z); // the walker's feet find the ground (or the rock) under each foot
+    this.foot = null; // on foot: { y, vy, air, t, land, near } (updateFoot)
   }
 
   get forward() { return { x: Math.cos(this.heading), z: -Math.sin(this.heading) }; }
   get lakeId() { return this.world.lakeIdAt(this.x, this.z); }
   get onFoot() { return this.mode === 'carry' || this.mode === 'walk'; }
-  get altitude() { return this.onFoot ? this.groundAt(this.x, this.z) : this.world.levelAt(this.x, this.z); }
+  get altitude() { return this.onFoot ? (this.foot ? this.foot.y : this.groundAt(this.x, this.z)) : this.world.levelAt(this.x, this.z); }
   get waveHeightHere() { return this.wind && this.water ? windHeight(this.wind.speed, this.water.fetchAt(this.x, this.z)) : 0.05; }
   // where the canoe lies when it is not with you (beached or set down), for the map
   get hullDown() { return this.carry && this.carry.drop ? this.carry.drop : null; }
@@ -88,6 +95,31 @@ export class Player {
   }
   // the height things stand on: the terrain as it is drawn (tiles.js groundAt: the mesh's own triangles)
   groundAt(x, z) { const t = this.world.tiles; return t ? t.groundAt(x, z) : surfaceAt(this.world, x, z); }
+  // What the walker stands on at (x, z): the drawn ground, or whatever of the things near him (treesNear: a rock's own
+  // geometry, a log's or a stump's top) rises over it there but no higher than `reach` (a step over the feet).
+  supportAt(x, z, reach, near) {
+    let y = this.groundAt(x, z);
+    if (near) for (const t of near) {
+      if (t.shape) { if (t.shape.maxY > y) { const h = t.shape.heightAt(x, z); if (h > y && h <= reach) y = h; } }
+      else if (t.top !== undefined && t.top > y && t.top <= reach) {
+        const dx = x - t.x, dz = z - t.z;
+        if (t.box ? Math.abs(dx * t.ux + dz * t.uz) <= t.hx && Math.abs(-dx * t.uz + dz * t.ux) <= t.hz : dx * dx + dz * dz <= t.r * t.r) y = t.top;
+      }
+    }
+    return y;
+  }
+  // How steep the rock the walker would stand on at (x, z) is there (rise over run, over 15 cm, on that rock's own
+  // surface: a sample off its edge is left out, so the edge of a slab is a step, not a slope); 0 off any rock.
+  rockSlope(x, z, reach, near) {
+    let rock = null, top = -Infinity;
+    for (const t of near) if (t.shape && t.shape.maxY > top) { const h = t.shape.heightAt(x, z); if (h > top && h <= reach) { top = h; rock = t.shape; } }
+    if (!rock) return 0;
+    const e = 0.15, d = (dx, dz) => { const h = rock.heightAt(x + dx, z + dz); return h > -Infinity ? h - top : NaN; };
+    const one = (a, b) => (a === a && b === b ? (a - b) / (2 * e) : a === a ? a / e : b === b ? -b / e : 0);
+    return Math.hypot(one(d(e, 0), d(-e, 0)), one(d(0, e), d(0, -e)));
+  }
+  // the ground under a foot of the walker's (canoe.js plants the feet on it)
+  footGround(x, z) { const ft = this.foot; return ft && ft.near && this.onFoot ? this.supportAt(x, z, ft.y + STEP_UP, ft.near) : this.groundAt(x, z); }
 
   trailFor(p) {
     let t = this.trailCache.get(p);
@@ -196,6 +228,7 @@ export class Player {
     dt *= this.timeScale;
     this.time += dt;
     this.prompt = null; this.placeName = null; this.campsite = null; this.onTrail = false;
+    if (!this.onFoot) this.foot = null; // stepping ashore again starts from the ground
     if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); this.groundSpeed = 0; return; }
     const x0 = this.x, z0 = this.z;
     if (this.landing) this.updateLanding(dt);
@@ -539,7 +572,7 @@ export class Player {
 
   placeOnGround() {
     const rig = this.canoe.rig;
-    rig.position.set(this.x, this.groundAt(this.x, this.z) + 0.1, this.z);
+    rig.position.set(this.x, (this.foot ? this.foot.y : this.groundAt(this.x, this.z)) + 0.1, this.z);
     rig.rotation.set(0, this.heading, 0);
     this.canoe.state.mode = this.carry && this.carry.drop ? 'walk' : 'carry';
   }
@@ -566,6 +599,12 @@ export class Player {
     const carrying = !c.drop;
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
     c.hitCooldown -= dt;
+    const ft = this.foot || (this.foot = { y: this.groundAt(this.x, this.z), vy: 0, air: false, t: 0, land: 0, near: null });
+    // Space: a hop, or with the canoe overhead a stagger under it (no one jumps with a canoe on their shoulders)
+    if (inp.pressed('Space') && !ft.air) {
+      if (carrying) st.stagger = 1;
+      else { ft.air = true; ft.vy = HOP_V; ft.t = 0; }
+    }
     const { moving, mx, mz } = this.steerOnFoot(dt, WALK.face); // (mx, mz): the way the walker goes; f: the way the body faces
     const fwd = moving ? 1 : 0;
     const f = this.forward;
@@ -590,14 +629,24 @@ export class Player {
     // a heavy pack (the trip's food, the canoe's weight) is a slower walk
     const base = (carrying ? (hustle ? WALK.carryHustle : WALK.carry) : (hustle ? WALK.hustle : WALK.speed)) / Math.pow(Math.max(1, this.loadFactor), 0.6);
     if (fwd !== 0 && wall) note = wall;
-    const want = wall ? 0 : fwd * base * Math.max(0.55, going);
-    this.speed += (want - this.speed) * (1 - Math.exp(-dt * 6));
+    const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going);
+    this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
     let nx = this.x + mx * this.speed * dt, nz = this.z + mz * this.speed * dt;
     if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
     else if (!w.isReady(nx, nz)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Loading the land ahead…'; }
     else if (w.shoreAt(nx, nz) < WADE_SD) { nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade'; }
     const trees = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
+    ft.near = trees;
+    const reach = ft.y + STEP_UP;
     for (const t of trees) {
+      if (t.rock && t.shape !== undefined) {
+        // a rock: held off the outline of what of it stands higher than a step over the feet, so the walker stops at
+        // its visible edge, and a slab or a small rock lower than that is stepped onto (supportAt)
+        const hull = t.shape && t.shape.outline(reach);
+        if (hull && pushOut(nx, nz, hull, BODY_R, _push)) { nx = _push.x; nz = _push.z; this.speed *= Math.exp(-dt * RUB); }
+        continue;
+      }
+      if (t.top !== undefined && t.top <= reach) continue; // a log or a stump low enough to step onto
       if (t.box) { // a dock, a shack, a tent: held off the nearest face, sliding along it
         const px = nx - t.x, pz = nz - t.z, a = px * t.ux + pz * t.uz, b = -px * t.uz + pz * t.ux;
         const ka = t.hx + 0.35, kb = t.hz + 0.35;
@@ -634,6 +683,30 @@ export class Player {
         }
       }
     }
+    // the feet's height: on the ground or on what was stepped onto; a hop or a step off an edge flies until it meets
+    // what is under it again (a bank too high to clear stops the hop's way forward)
+    let support = this.supportAt(nx, nz, reach, trees);
+    if (ft.air && support > ft.y + STEP_UP) { nx = this.x; nz = this.z; this.speed *= 0.5; support = this.supportAt(nx, nz, reach, trees); }
+    // a step up onto a rock is onto a tread: where its surface is steeper than a walkable slope (a boulder's flank)
+    // the walker is held there as at a wall, sliding along it if he can, so he does not climb it a step at a time
+    if (!ft.air && support > ft.y + 0.03) {
+      const steep = (px, pz, y) => y > ft.y + 0.03 && y > this.groundAt(px, pz) + 0.02 && this.rockSlope(px, pz, reach, trees) > ROCK_GRADE;
+      if (steep(nx, nz, support)) {
+        const a = this.supportAt(nx, this.z, reach, trees), b = this.supportAt(this.x, nz, reach, trees);
+        if (!steep(nx, this.z, a)) { nz = this.z; support = a; } else if (!steep(this.x, nz, b)) { nx = this.x; support = b; } else { nx = this.x; nz = this.z; support = this.supportAt(nx, nz, reach, trees); }
+        this.speed *= Math.exp(-dt * RUB);
+      }
+    }
+    if (ft.air) {
+      ft.vy -= GRAVITY * dt; ft.y += ft.vy * dt; ft.t += dt;
+      if (ft.vy <= 0 && ft.y <= support) {
+        ft.land = Math.min(1, 0.4 + 0.2 * -ft.vy); ft.y = support; ft.vy = 0; ft.air = false; // the soundscape plays the landing (audio.js)
+      }
+    } else if (support < ft.y - 0.22) { ft.air = true; ft.vy = 0; ft.t = 0.25; } // off an edge: a short fall (no take-off)
+    else ft.y = support > ft.y ? ft.y + (support - ft.y) * (1 - Math.exp(-dt * 25)) : support;
+    ft.land = Math.max(0, ft.land - dt * 3);
+    st.air = ft.air; st.airT = ft.t; st.vy = ft.vy; st.land = ft.land;
+    st.stagger = Math.max(0, (st.stagger || 0) - dt * 1.6);
     this.x = nx; this.z = nz;
     st.walkSpeed += ((Math.abs(this.speed) > 0.05 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
     st.walk += Math.abs(this.speed) * dt * 4.2;
@@ -769,19 +842,31 @@ export class Player {
   }
 
   // Jump to the nearest open water around a map point (minimap click, entry point). The tiles around the
-  // target stream in first; the canoe sits still until they are there.
+  // target stream in first; the canoe sits still until they are there. Open water is looked for in tiers: a spot
+  // 6 m off the shore within 120 m (the lakes); then, for a narrow river or a small lake that has none, the spot
+  // nearest the point 2.5 m off the shore within 120 m (a canoe is under a metre wide); then 6 m off the shore
+  // out to 600 m; only then is the jump refused.
   async teleport(x, z) {
     const w = this.world;
     if (this.teleporting) return false;
     this.teleporting = true;
     try {
       if (w.tiles) await w.tiles.ensure(x, z, 130);
-      let best = null;
-      for (let dz = -120; dz <= 120; dz += 5) for (let dx = -120; dx <= 120; dx += 5) {
-        const px = x + dx, pz = z + dz;
-        if (!w.inBounds(px, pz, 50) || !w.isReady(px, pz) || w.shoreAt(px, pz) > -6) continue;
-        const d = Math.hypot(dx, dz);
-        if (!best || d < best.d) best = { x: px, z: pz, d };
+      const nearest = (reach, step, sd) => {
+        let best = null;
+        for (let dz = -reach; dz <= reach; dz += step) for (let dx = -reach; dx <= reach; dx += step) {
+          const d = Math.hypot(dx, dz);
+          if (best && d >= best.d) continue;
+          const px = x + dx, pz = z + dz;
+          if (!w.inBounds(px, pz, 50) || !w.isReady(px, pz) || w.shoreAt(px, pz) > sd) continue;
+          best = { x: px, z: pz, d };
+        }
+        return best;
+      };
+      let best = nearest(120, 5, -6) || nearest(120, 2, -2.5);
+      if (!best) {
+        if (w.tiles) await w.tiles.ensure(x, z, 610);
+        best = nearest(600, 5, -6);
       }
       if (!best) return false;
       if (this.carry && this.carry.drop) this.canoe.pickUpHull(); // the canoe comes along
