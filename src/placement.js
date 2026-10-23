@@ -383,39 +383,71 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
 // Lily pads, reeds and submerged weeds in sheltered shallows. Bins of 5 floats per instance
 // (x, y, z relative to the tile corner, yaw, scale), keyed by region, kind and geometry variant.
 export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ }) {
-  const cell = grid.cell;
+  // The lake plants follow the water they need (docs/look.md, the lake pass): rafts of lily pads in sheltered
+  // shallow water, reeds, rushes and cattails along soft shores, wild rice in beds in the shallow bays, pondweed on
+  // the bed; none on a rocky exposed shore. Kind 3 is the wild rice (aquatic.js), beside placement's AQUATIC kinds.
+  const cell = grid.cell, RICE = 3;
   const bins = new Map();
   let total = 0;
+  // how sheltered a spot is: of eight rays 48 m out over the water (sphere-traced on the shore distance, inside the
+  // tile's halo so a neighbour places the same), the share that reach land
+  const shelterAt = (x, z) => {
+    let hits = 0;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + 0.2, dx = Math.cos(a), dz = Math.sin(a);
+      for (let t = 0; t < 48;) { const s = grid.shoreAt(x + dx * t, z + dz * t); if (s >= 0) { hits++; break; } t += Math.max(-s * 0.9, 5); }
+    }
+    return hits / 8;
+  };
   for (let j = j0; j < j0 + n; j++) {
     for (let i = i0; i < i0 + n; i++) {
       const sd = grid.sdCell(i, j);
       if (sd < -32 || sd > 2) continue;
       const cx = grid.cellX(i), cz = grid.cellZ(j);
-      const calm = calmAt(cx, cz);
-      if (calm < 0.42) continue;
-      const rng = mulberry32((hash2(i, j, seed + 1) * 4294967296) >>> 0);
       const level = grid.levelAt(cx, cz, 3);
       const depth = level - grid.hCell(i, j);
+      // the shore this water faces: bare rock (exposed, steep, nothing roots) or soft ground
+      let soft = 1;
+      if (sd > -24) {
+        const dd = grid.deeperDir(cx, cz), back = Math.max(0, -sd) + 4, lx = cx - dd.x * back, lz = cz - dd.z * back;
+        soft = 1 - smoothstep(0.35, 0.6, rockAt(rockSlope(grid, lx, lz), grid.shoreAt(lx, lz), lx, lz));
+      }
+      if (soft < 0.05 && sd > -24) continue;
+      // sheltered: a cove round it, or the calm field's quiet water that the shape test misses
+      const calm = calmAt(cx, cz), shelter = shelterAt(cx, cz);
+      const shelt = clamp(smoothstep(0.15, 0.6, shelter) * 0.75 + smoothstep(0.45, 0.66, calm) * 0.5, 0, 1);
+      const rng = mulberry32((hash2(i, j, seed + 1) * 4294967296) >>> 0);
       const rx = Math.floor((cx - grid.originX) / REGION), rz = Math.floor((cz - grid.originZ) / REGION);
-      const place = (kind, expected, variants, test) => {
+      const place = (kind, expected, pick, test, lift, scaleOf) => {
         const cnt = Math.floor(expected) + (rng() < expected - Math.floor(expected) ? 1 : 0);
         for (let q = 0; q < cnt; q++) {
           const x = cx + (rng() - 0.5) * cell, z = cz + (rng() - 0.5) * cell;
           const s = grid.shoreAt(x, z), d = level - grid.heightAt(x, z);
           if (!test(s, d)) continue;
-          const y = kind === AQUATIC.weed ? grid.heightAt(x, z) : level + 0.07;
-          const scale = kind === AQUATIC.weed ? Math.min(0.4 + d * 0.4 * rng() + 0.25, d * 0.8) : kind === AQUATIC.pad ? 0.17 + rng() * 0.2 : 0.8 + rng() * 0.5;
-          const variant = kind === AQUATIC.pad && rng() < 0.12 ? 2 : Math.floor(rng() * variants);
-          const key = ((rx * 4096 + rz) * 4 + kind) * 4 + variant;
+          const y = kind === AQUATIC.weed ? grid.heightAt(x, z) : level + lift;
+          const variant = pick(d), key = ((rx * 4096 + rz) * 4 + kind) * 4 + variant;
           let b = bins.get(key);
           if (!b) { b = { rx, rz, kind, variant, items: [] }; bins.set(key, b); }
-          b.items.push(x - originX, y, z - originZ, rng() * Math.PI * 2, scale);
+          b.items.push(x - originX, y, z - originZ, rng() * Math.PI * 2, scaleOf(d));
           total++;
         }
       };
-      if (sd < -1.0 && sd > -22 && depth < 3.0 && calm > 0.5) place(AQUATIC.pad, 24 * smoothstep(0.5, 0.66, calm), 2, (s, d) => s < -0.7 && d > 0.25 && d < 3.2);
-      if (sd > -6 && sd < 1.6 && calm > 0.5) place(AQUATIC.reed, 2.6 * smoothstep(0.5, 0.68, calm), 3, (s, d) => s < 1.8 && d < 1.4);
-      if (sd < -3 && sd > -30 && depth > 0.4 && depth < 3.4) place(AQUATIC.weed, 1.6, 2, (s, d) => s < -2 && d > 0.35 && d < 3.6);
+      // beds of wild rice: 50-100 m fields in the sheltered shallows
+      const bed = smoothstep(0.45, 0.58, fbm(cx * 0.012 + 7, cz * 0.012, 2, 113)) * smoothstep(0.3, 0.7, shelt) * soft;
+      if (bed > 0.01 && sd < -2.5 && depth > 0.25 && depth < 1.6)
+        place(RICE, 4.2 * bed, () => (rng() < 0.5 ? 0 : 1), (s, d) => s < -2 && d > 0.25 && d < 1.6, 0.07, () => 0.85 + rng() * 0.35);
+      // rafts of lily pads: loose, gathered into patches 20-40 m across, thinner inside a rice bed
+      const raft = smoothstep(0.36, 0.56, fbm(cx * 0.03 + 3, cz * 0.03, 2, 77)) * smoothstep(0.2, 0.6, shelt) * soft * (1 - 0.7 * bed);
+      if (raft > 0.01 && sd < -1 && sd > -26 && depth > 0.3 && depth < 2.8)
+        place(AQUATIC.pad, 4.5 * raft, () => { const r = rng(); return r < 0.13 ? 2 : r < 0.21 ? 3 : r < 0.6 ? 0 : 1; }, (s, d) => s < -0.8 && d > 0.3 && d < 2.8, 0.035, () => 0.8 + rng() * 0.45);
+      // reeds along soft shores, in stands: cattails in the marshy shallows of a cove, bulrush out to a metre, reed
+      // and sedge at the edge
+      const stand = smoothstep(0.38, 0.56, fbm(cx * 0.05 + 11, cz * 0.05, 2, 91)) * smoothstep(0.1, 0.45, shelt) * soft;
+      if (stand > 0.01 && sd > -8 && sd < 1.2)
+        place(AQUATIC.reed, 4.5 * stand, (d) => (d > 0.6 ? 0 : d < 0.35 && shelt > 0.55 ? 2 : rng() < 0.6 ? 1 : 0), (s, d) => s < 1.0 && d > -0.05 && d < 1.2, 0.07, () => 0.8 + rng() * 0.45);
+      // pondweed on the bed, more where it is sheltered
+      if (sd < -3 && sd > -30 && depth > 0.4 && depth < 3.4)
+        place(AQUATIC.weed, 1.2 * (0.4 + 0.6 * shelt), () => Math.floor(rng() * 2), (s, d) => s < -2 && d > 0.35 && d < 3.6, 0, (d) => Math.min(0.4 + d * 0.4 * rng() + 0.25, d * 0.8));
     }
   }
   return { bins: [...bins.values()].map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, items: new Float32Array(b.items) })), total };
