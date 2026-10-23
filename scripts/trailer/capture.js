@@ -313,6 +313,9 @@ export function install(game, opts = {}) {
     for (let i = 0; i < warm; i++) { if (shot.prewarm) shot.prewarm(T, i, warm); game.advance(STEP, 1); if (i % 10 === 0) await nextTask(); }
     game.step(STEP, 1);
     T.status.state = 'recording';
+    // the socket open before the first draw: send() reads the drawing buffer after awaiting it, and a first frame that
+    // waited for the connection was read after the buffer had been cleared (black)
+    if (!only) await connect();
     const want = only ? new Set(only.map((t) => Math.min(n - 1, Math.max(0, Math.round(t * (n - 1)))))) : null;
     let sheet = null;
     if (want) {

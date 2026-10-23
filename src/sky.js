@@ -91,9 +91,10 @@ export function buildSky(sunDir, palette) {
 //             drifting with the wind. The cover thresholds the noise, so it comes in as broken stratocumulus and
 //             closes to a flat grey sheet, a little darker where thick and silver at thin edges toward the sun, and
 //             fades out toward its rim into the dome's horizon (which the day cycle greys to match).
-//   anvils    a building storm's cumulonimbus on the upwind horizon, 6.5-7.6 km out: a dark tower on a rain-dark
-//             base under a wide flat-topped anvil sheared off to one side (seen side on, the way the shape reads),
-//             its top and dome lit, the cumulus between cleared away so the towers stand clear over them.
+//   anvils    a building storm's cumulonimbus on the upwind horizon, 6.5-7.7 km out: a wide tower on a broad,
+//             rain-dark base, lower towers stepping down upwind of it, and from its top a flat anvil streaming off
+//             downwind to a thin ragged edge (seen side on, the way the shape reads), lit as the cumulus are and
+//             darkening toward the base; the cumulus between cleared away so the towers stand clear over them.
 export const CLOUD_COUNT = 220;
 export const DECK_HEIGHT = 1000;   // metres over the water under the camera
 const cloudVert = /* glsl */ `
@@ -131,14 +132,17 @@ const cloudFrag = /* glsl */ `
     vec3 n = normalize(vN);
     float lit = n.y * 0.75 + dot(n, uSunDir) * 0.45;
     #ifdef ANVIL_HEIGHT
-      // a thunderhead reads as one dark mass: the tower in its own shadow, slate (uBase) with only its sunward
-      // flank lifted, darker still toward the rain under its base; the anvil and the dome over the tower are thin
-      // ice lit through by the sun (uTop), bright even from underneath and brightest on their sunward faces
+      // a thunderhead: the tower lit as the cumulus it grew from is, bright on its sunward flank and a blue slate in
+      // its own shade, darkening down into the rain-dark base (one ramp from the base to the anvil, so the tower and
+      // the anvil read as one mass, never a dark stalk under a white cap); the anvil thin ice lit through, pale even
+      // where the sun is behind it, its underside in shade
       float hf = clamp(vH / ANVIL_HEIGHT, 0.0, 1.0);
-      float top = smoothstep(0.6, 0.88, hf);
+      float top = smoothstep(0.64, 0.74, hf);
       float sun = smoothstep(-0.35, 0.85, lit);
-      float t = mix(0.14 * sun, 0.45 + 0.55 * sun, top);
-      vec3 col = mix(uBase, uTop, clamp(t, 0.0, 1.0)) * mix(0.62, 1.0, smoothstep(0.0, 0.35, hf));
+      float tower = mix(0.05, 0.85, smoothstep(-0.1, 0.5, lit)) * mix(0.3, 1.0, smoothstep(0.0, 0.45, hf));
+      float under = 1.0 - smoothstep(-0.75, -0.25, n.y);
+      float t = mix(tower, mix(0.42 + 0.58 * sun, 0.2, under), top);
+      vec3 col = mix(uBase, uTop, clamp(t, 0.0, 1.0)) * mix(0.7, 1.0, smoothstep(0.0, 0.3, hf));
       const float rimK = 0.06;
     #else
       float t = smoothstep(-0.25, -0.05, lit) * 0.45 + smoothstep(0.2, 0.45, lit) * 0.55;
@@ -228,41 +232,119 @@ function makeCloudGeometry(rng) {
   return merged;
 }
 
-// A cumulonimbus, ANVIL_H tall with its base at y = 0: a broad flat base, a cauliflower tower of puffs round a solid
-// core (so no sky shows through it), narrowing and leaning a little downshear (+x) as it climbs, and over it the
-// anvil: wide flattened lobes whose tops all reach one height (the flat top at the tropopause), thick over the tower
-// and thinning downshear, so the underside slopes up to a thin edge; a dome overshooting the top. `mature` widens
-// the anvil (a young storm is mostly tower and dome).
+// A cumulonimbus, ANVIL_H tall with its base at y = 0, x downshear and z toward the eye (the storms are always seen
+// side on, from +z):
+//   the tower      wide, on a broad flat base, narrowing a little as it climbs and leaning downshear: a solid core up
+//                  its axis with cauliflower turrets round it (none on the far side, which never shows); its upwind
+//                  half carries on up to the flat top, so the upwind side is one wall from the base to the top
+//   the flank      a line of lower towers stepping down upshear (the young storm has two), widening the base
+//   the anvil      flattened lobes in two rows across the shear, cut flat at the top (the tropopause): deep over the
+//                  tower, then a wedge thinning downshear, the underside sloping up to a thin, ragged leading edge
+//                  (lobes dropping out and scattering, a few thin tongues past it); only a short lip upshear
+// The flat top and the flat base are cut (every vertex clamped to 0..top). The depth across the shear is squeezed
+// (the tower to 0.6, the anvil to 0.35), so the near side of a storm 7 km off does not loom over the eye: the anvil's
+// near edge stays a flat line rather than a dome. The shading normals are the full-depth cloud's, bent toward each
+// tower's broad cylinder (the anvil's slab), the turrets keeping their lit caps: big planes of light with lumpy
+// edges, not a pile of separately shaded balls. `mature` lengthens the anvil and the flank.
 const ANVIL_H = 3500;
 function makeAnvilGeometry(rng, mature = 1) {
+  const H = ANVIL_H, C = 1050, topY = 0.96 * H, base = 0.68 * H;   // C: the tower's radius
   const parts = [];
-  const blob = (rx, ry, rz, x, y, z, seg = 12) => { const g = new THREE.SphereGeometry(1, seg, Math.max(6, seg >> 1)); g.scale(rx, ry, rz); g.translate(x, y, z); parts.push(g); };
-  const H = ANVIL_H, topY = 0.93 * H, towerTop = 0.8 * H;
-  // the base: the tower's foot, a little wider than the tower, flat underneath
-  for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + rng(); blob(620 + rng() * 180, 260, 560 + rng() * 160, Math.cos(a) * 320, 230, Math.sin(a) * 280); }
-  // the core: a column of big ellipsoids up the axis
-  for (let k = 0; k < 6; k++) { const v = k / 5; blob(820 - 330 * v, 520, 760 - 300 * v, v * 220, 300 + v * (towerTop - 500), 0); }
-  // the cauliflower over it, narrowing as it climbs, then flaring into the anvil
-  for (let i = 0; i < 70; i++) {
-    const v = Math.pow(rng(), 0.85), y = 250 + v * (towerTop - 250);
-    const w = 1050 - 420 * v + 650 * Math.max(0, (v - 0.78) / 0.22) ** 2;
-    const r = (210 + rng() * 190) * (1 - 0.3 * v), a = rng() * Math.PI * 2, d = w * (0.55 + 0.45 * Math.sqrt(rng())) * 0.72;
-    blob(r, r * 1.08, r, Math.cos(a) * d + v * 220 + Math.max(0, v - 0.78) * 1400, y, Math.sin(a) * d * 0.9, 10);
+  // a blob, and what its broad normal leans toward: part 1 a tower round the axis at x = axis, part 2 the anvil
+  const blob = (rx, ry, rz, x, y, z, seg, part, axis = 0) => {
+    const g = new THREE.SphereGeometry(1, seg, 6);
+    g.deleteAttribute('uv'); g.deleteAttribute('normal');
+    g.scale(rx, ry, rz); g.translate(x, y, z);
+    const n = g.attributes.position.count;
+    g.setAttribute('part', new THREE.BufferAttribute(new Float32Array(n).fill(part), 1));
+    g.setAttribute('axis', new THREE.BufferAttribute(new Float32Array(n).fill(axis), 1));
+    parts.push(g);
+  };
+  const R = (a, b) => a + (b - a) * rng();
+  const sm = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+  const lean = (y) => 380 * Math.pow(Math.max(0, y) / H, 1.5);
+  // the tower's radius by height: a broad foot narrowing up into the updraft, flaring a little into the anvil
+  const prof = [[0, 1.3], [0.25, 1.15], [0.55, 0.95], [0.85, 0.86], [1, 1.02]];
+  const radAt = (y) => {
+    const v = Math.min(1, Math.max(0, y / base));
+    for (let i = 1; i < prof.length; i++) if (v <= prof[i][0]) return C * (prof[i - 1][1] + (prof[i][1] - prof[i - 1][1]) * sm((v - prof[i - 1][0]) / (prof[i][0] - prof[i - 1][0])));
+    return C * prof[prof.length - 1][1];
+  };
+  // the tower: eight levels of core, turrets round the lower six
+  for (let k = 0; k < 8; k++) {
+    const sp = (base - 260) / 7, y = 260 + k * sp, r = radAt(y), cx = lean(y);
+    blob(r * 0.82, sp, r * 0.74, cx, y, 0, 12, 1, cx);
+    if (y > 0.6 * H) continue;
+    for (let j = 0; j < 6; j++) {
+      const a = (j / 6) * Math.PI * 2 + R(-0.35, 0.35) + k * 0.6;
+      if (Math.sin(a) < -0.55) continue;
+      const rt = r * R(0.3, 0.44), d = r - rt * 0.7;
+      blob(rt, rt * R(0.95, 1.15) * (1 + 0.25 * k / 7), rt * 0.95, cx + Math.cos(a) * d, y + R(-0.3, 0.3) * sp, Math.sin(a) * d * 0.88, 10, 1, cx);
+    }
   }
-  // the anvil: lobes with their tops at topY, thickest where they spring from the tower and thinning downshear to a
-  // thin edge (the underside sloping up), a short overhang upshear
-  const n = 14;
-  for (let k = 0; k < n; k++) {
-    const f = k / (n - 1), x = -350 + f * (2300 + 1700 * mature), thick = 70 + 300 * (1 - f) ** 1.5;
-    const rx = 750 + 300 * rng() + 250 * mature, rz = (850 + 300 * rng()) * (0.7 + 0.4 * mature) * (1 - 0.3 * f);
-    blob(rx, thick, rz, x, topY - thick + 20 * (rng() - 0.5), (rng() - 0.5) * 400, 16);
+  // the updraft: the upwind half of the tower carried on up into the anvil's flat top
+  for (let i = 0; i < 3; i++) {
+    const y = base + (i + 0.6) * 0.1 * H, r = C * (0.8 - 0.05 * i), cx = lean(base) - 0.15 * C;
+    blob(r * 0.85, 0.09 * H, r * 0.72, cx, y, 0, 12, 1, cx);
+    for (let j = 0; j < 3; j++) {
+      const a = Math.PI * R(0.55, 0.95) + (j - 1) * 0.5, rt = r * R(0.35, 0.45), d = r - rt * 0.6;
+      blob(rt, rt * R(1, 1.2), rt * 0.95, cx + Math.cos(a) * d, y + R(-0.03, 0.05) * H, Math.sin(a) * d * 0.88, 10, 1, cx);
+    }
   }
-  // the overshooting dome over the tower
-  blob(520, 330, 480, 160, topY + 40, 0);
-  blob(330, 230, 300, 360, topY + 180, 120);
-  const merged = mergeVertices(mergeGeometries(parts, false), 1);
-  merged.computeVertexNormals();
-  return merged;
+  // the flank: towers stepping down upshear ([height, radius] of each, by H and C)
+  const flank = [[0.5, 0.56], [0.37, 0.46], [0.25, 0.38]], nf = mature > 0.6 ? 3 : 2;
+  let fx = -radAt(0) * 0.55;
+  for (let i = 0; i < nf; i++) {
+    const h = flank[i][0] * H * (mature > 0.6 ? 1 : 0.85), r = flank[i][1] * C;
+    fx -= r * (i === 0 ? 1 : 1.24);
+    blob(r * 0.9, h * 0.55, r * 0.8, fx, h * 0.45, 0, 12, 1, fx);
+    for (let j = 0; j < 4; j++) {
+      const rt = r * R(0.42, 0.58), a = R(0.2, Math.PI - 0.2);
+      blob(rt, rt * R(1, 1.2), rt * 0.95, fx + Math.cos(a) * r * 0.5, h - rt * R(0.6, 0.9), Math.sin(a) * r * 0.45, 10, 1, fx);
+    }
+  }
+  // the anvil: deep over the tower (from a little upshear of its axis to 0.3 C past it), a wedge thinning downshear
+  const ax = lean(base), xEnd = ax + 1500 + 1500 * mature, xBack = ax - radAt(base) + 0.45 * C, deep = 0.28 * H, tip = 90;
+  const depthAt = (x) => {
+    if (x >= ax + 0.3 * C) return tip + (deep - tip) * (1 - Math.min(1, (x - ax - 0.3 * C) / (xEnd - ax - 0.3 * C)));
+    if (x >= ax) return deep;
+    return deep * (1 - 0.55 * sm((ax - x) / (ax - xBack)));
+  };
+  const widthAt = (x) => C + (x > ax ? 420 * mature * sm((x - ax) / (xEnd - ax)) : -200 * sm((ax - x) / (ax - xBack)));
+  const step = 560, nx = Math.ceil((xEnd - xBack) / step);
+  for (let i = 0; i <= nx; i++) {
+    const f = i / nx, x0 = xBack + f * (xEnd - xBack), W = widthAt(x0);
+    for (let row = 0; row < 2; row++) {
+      const edge = f > 0.8 ? (f - 0.8) / 0.2 : 0;   // the leading edge: lobes drop out and scatter
+      if (edge > 0 && rng() < 0.35 * edge) continue;
+      const x = x0 + R(-0.25, 0.25) * step * (1 + 1.5 * edge);
+      const d = depthAt(x) * R(0.88, 1.08), rz = W * R(0.5, 0.62), zc = (row - 0.5) * 2 * (W - rz) + R(-0.08, 0.08) * W;
+      blob(step * R(0.95, 1.2) * (i === 0 ? 0.8 : 1), d * 0.72, rz, x, topY - d * 0.28, zc, 14, 2);
+    }
+  }
+  for (let i = 0; i < 3; i++) {   // thin tongues past the leading edge
+    const z = R(-0.7, 0.7) * widthAt(xEnd), len = R(250, 450), th = R(35, 55);
+    blob(len, th, R(300, 450), xEnd + R(-150, 150), topY - th * 0.6, z, 12, 2);
+  }
+  // the flat top and the flat base cut, the shading normals, the depth squeezed
+  const merged = mergeGeometries(parts, false), pos = merged.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setY(i, Math.min(topY, Math.max(0, pos.getY(i))));
+  const geo = mergeVertices(merged, 1);
+  geo.computeVertexNormals();
+  const P = geo.attributes.position, N = geo.attributes.normal, part = geo.attributes.part, axis = geo.attributes.axis;
+  const v = new THREE.Vector3(), m = new THREE.Vector3();
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), anvil = part.getX(i) === 2;
+    v.set(N.getX(i), N.getY(i), N.getZ(i));
+    if (y <= 1) v.set(0, -1, 0);
+    else if (anvil && y >= topY - 1) v.set(0, 1, 0);
+    else if (anvil) { if (v.y < 0) v.lerp(m.set(v.x * 0.4, -1, v.z * 0.4).normalize(), 0.45).normalize(); }
+    else v.lerp(m.set(x - axis.getX(i), 0.2 * C, z / 0.88).normalize(), 0.45 + 0.55 * (1 - sm((v.y + 0.1) / 0.8))).normalize();
+    N.setXYZ(i, v.x, v.y, v.z);
+    P.setZ(i, z * (anvil ? 0.35 : 0.6));
+  }
+  geo.deleteAttribute('part'); geo.deleteAttribute('axis');
+  return geo;
 }
 
 export function buildClouds(count, extent, palette, sunDir, seed = 5) {
@@ -319,21 +401,22 @@ export function buildClouds(count, extent, palette, sunDir, seed = 5) {
   deck.visible = false;
   group.add(deck);
   // the anvils: their own colours (a lit top over a dark base, set by the day cycle) on the same shaders, two shapes
-  // (a mature storm with a wide anvil, a younger one mostly tower and dome), each placed by its bearing from upwind,
-  // its distance and its scale, the anvil sheared across the line of sight (all the same way, as one wind aloft
-  // would), so it is seen side on: the silhouette that says "storm"
+  // (a mature storm with a long anvil and a full flank, a younger one with a short anvil), each from its own seed so
+  // the shapes stay put, placed by its bearing from upwind, its distance and its scale, every anvil sheared the same
+  // way (one wind aloft) square to the upwind bearing, so looking upwind they are seen side on: the silhouette that
+  // says "storm"
   const anvilMat = mat.clone();
   anvilMat.defines = { FOG_SCALE: '0.07', ANVIL_HEIGHT: `${ANVIL_H}.0` };   // a strong shape against the sky: hazed as if much nearer than it is
-  const anvilMeshes = [makeAnvilGeometry(rng, 1), makeAnvilGeometry(rng, 0.3)].map((g) => {
+  const anvilMeshes = [makeAnvilGeometry(mulberry32(101), 1), makeAnvilGeometry(mulberry32(202), 0.3)].map((g) => {
     const m = new THREE.InstancedMesh(g, anvilMat, 2);
     m.count = 0; m.frustumCulled = false; m.name = 'anvils';
     group.add(m);
     return m;
   });
   const anvils = [
-    { bearing: -0.3, dist: 7300, scale: 1.0, shape: 0, turn: 0.1 },
-    { bearing: 0.33, dist: 6500, scale: 0.78, shape: 1, turn: -0.15 },
-    { bearing: -0.78, dist: 7700, scale: 0.72, shape: 0, turn: 0.25 },
+    { bearing: -0.3, dist: 7300, scale: 1.0, shape: 0, turn: 0 },
+    { bearing: 0.33, dist: 6500, scale: 0.78, shape: 1, turn: 0 },
+    { bearing: -0.82, dist: 7700, scale: 0.72, shape: 0, turn: 0 },   // at the edge of a view upwind
   ];
   group.userData = {
     extent, puffs, meshes, deck, deckMat, anvilMeshes, anvils, material: mat, anvilMaterial: anvilMat, presence: 0, anvilShown: 0, anvilHead: NaN,
@@ -397,8 +480,9 @@ export function updateClouds(group, dt, cx = 0, cz = 0) {
     const base = (w ? w.base : u.base) + 250, grow = Math.sqrt(u.anvilShown);
     for (const s of u.anvils) {
       const h = u.anvilHead + s.bearing, m = u.anvilMeshes[s.shape];
-      // the shear: square to the line of sight, to its right, turned a little away from the eye
-      const sx = -Math.sin(h) * 0.95 + Math.cos(h) * 0.3, sz = Math.cos(h) * 0.95 + Math.sin(h) * 0.3;
+      // the shear: one wind aloft for them all, square to the upwind bearing and to its right (each anvil's long flat
+      // top then runs level across a view upwind, not tilted by its own bearing), turned by its own turn
+      const sx = -Math.sin(u.anvilHead), sz = Math.cos(u.anvilHead);
       _q.setFromAxisAngle(_up, Math.atan2(-sz, sx) + s.turn);
       const k = grow * s.scale;
       _m.compose(_p.set(cx + Math.cos(h) * s.dist, base, cz + Math.sin(h) * s.dist), _q, _s.set(k, k * (0.6 + 0.4 * grow), k));

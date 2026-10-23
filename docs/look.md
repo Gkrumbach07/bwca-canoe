@@ -166,8 +166,12 @@ baked lightmaps, no PBR, no external assets.
   patches darkens the albedo by `WEATHER.uWetness` times the porosity (ground 1, rock and cliff 0.5, bark and
   wood 1, leaves 0.3) and adds a faint sky sheen on what faces up. The terrain, the grass, the cards, the rocks,
   the cliffs, the props and the trail decal compose it; a new look material should too.
-- A building storm's anvils (sky.js) stand 6.5–7.6 km upwind, sheared across the line of sight; the cumulus within
-  60 degrees of upwind goes while they show, so they stand clear over it.
+- A building storm's anvils (sky.js) stand 6.5–7.7 km upwind; the cumulus within 60 degrees of upwind goes while they
+  show, so they stand clear over it. Each is a cumulonimbus, not a mushroom: a wide tower on a broad base with lower
+  towers stepping down upwind, its upwind side one wall to a flat top, and the anvil streaming off downwind as a thin
+  wedge to a ragged edge. Every anvil is sheared the same way, square to the upwind bearing, so the flat tops run level
+  across a view upwind. Their depth across the shear is squeezed so the near side never looms over the eye as a dome,
+  and the shading normals are bent toward each tower's broad shape (lumpy edges, a few big planes of light).
 
 ## Foliage (pass 2, crowns)
 
