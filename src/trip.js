@@ -28,6 +28,7 @@ const BOOK = 'logbook';             // save.js namespace
 const TRAVEL_RATE = 1 / 3;          // the clock while you travel, in Adventure
 const WAKE_AT = 7.5;                // the hour you wake at the landing after an evacuation
 const LOG_MAX = 300;
+const CANOES = ['aluminium', 'royalex', 'kevlar']; // the hulls a season can own (shop.js); anything else reads as the aluminium
 const KNOWN_REACH = 30;             // metres from a landing that make its outfitter known
 
 // days since 1970 for a calendar date, and back
@@ -84,7 +85,7 @@ export class Trip {
     const pr = this.profile, s = this.state; if (!pr) return;
     const kit = pr.kit;
     s.packs.count = pr.has('pack2') ? 2 : 1;
-    s.packs.canoe = kit.canoe === 'kevlar' && pr.has('kevlar') ? 'kevlar' : 'aluminium';
+    s.packs.canoe = CANOES.includes(kit.canoe) && pr.has(kit.canoe) ? kit.canoe : 'aluminium';
     if (pr.permit && (!s.permit || s.permit.no !== pr.permit.no)) s.permit = paper(pr.permit);
   }
 
@@ -157,7 +158,7 @@ export class Trip {
     s.since = { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) }; s.from = f.ep;
     const pr = this.profile;
     s.permit = pr && pr.permit ? paper(pr.permit) : s.permit || { no: f.no || null, ep: f.ep, entry: { ...s.since } };
-    s.packs = { count: 1, canoe: f.canoe === 'kevlar' ? 'kevlar' : 'aluminium', foodDays: f.foodDays ?? 0 };
+    s.packs = { count: 1, canoe: CANOES.includes(f.canoe) ? f.canoe : 'aluminium', foodDays: f.foodDays ?? 0 };
     this.syncKit();
     s.fish0 = this.fishing ? this.fishing.log.length : 0;
     this.lastLake = 0; this.lastPortages = this.stats ? this.stats.portages : 0;

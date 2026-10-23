@@ -17,7 +17,7 @@
 // beforeLaunch. The trip (trip.js, stream A) gives the pack count and the canoe; without one it is two packs and
 // an aluminium canoe, and the clock runs at the full rate.
 
-export const WEIGHTS = { aluminium: 34, kevlar: 20, gear: 16, foodPack: 2, foodDay: 0.9 }; // kg
+export const WEIGHTS = { aluminium: 34, royalex: 29, kevlar: 20, gear: 16, foodPack: 2, foodDay: 0.9 }; // kg
 const REACH = 3;            // m from a pack within which you pick it up or take it too
 const HULL_REACH = 3;       // m from the canoe within which its prompts apply (player.js)
 const LOAD_REACH = 10;      // m from the canoe within which a pack on the ground goes in at the launch
@@ -53,7 +53,7 @@ export class Packs {
   set trip(t) { this._trip = t; }
   get setup() { const t = this.trip; return (t && t.state && t.state.packs) || null; }
   get count() { const t = this.trip, pr = t && t.profile; if (pr) return pr.has('pack2') ? 2 : 1; const s = this.setup; return s && s.count === 1 ? 1 : 2; } // hubs 1A: what you own
-  get canoeKind() { const s = this.setup; return s && s.canoe === 'kevlar' ? 'kevlar' : 'aluminium'; }
+  get canoeKind() { const s = this.setup, k = s && s.canoe; return k === 'kevlar' || k === 'royalex' ? k : 'aluminium'; }
   get adventure() { const t = this.trip; return !!(t && t.adventure); }
   get canoeKg() { const g = this.player.gear; return g && g.canoeKg > 0 ? g.canoeKg : WEIGHTS[this.canoeKind]; } // hubs 2B: the canoe in use (shop.js player.gear)
   // days of food in the food pack: what the trip has left (energy.js), else what it set out with

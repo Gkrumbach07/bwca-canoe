@@ -578,7 +578,7 @@ export class Outfitter {
       const body = mine.length > 1 ? `<div class="choose">${mine.map((id) => this.choice('use', id, name(id), kit[slot] === id)).join('')}</div>` : `<div>${kit[slot] ? name(kit[slot]) : '—'}</div>`;
       return `<div class="lab">${label}</div>${body}`;
     };
-    const kg = this.player.gear ? this.player.gear.canoeKg : kit.canoe === 'kevlar' ? 20 : 34;
+    const kg = this.player.gear ? this.player.gear.canoeKg : ({ kevlar: 20, royalex: 29 }[kit.canoe] || 34);
     const passive = owned.filter((id) => { const it = itemOf(id); return it && !it.slot && !id.startsWith('lure:') && id !== 'leeches' && id !== 'pack' && it.kind !== 'map'; });
     const box = this.shop ? [...this.shop.box()] : [];
     const lures = box.map((l) => { const def = LURES.find((d) => d.id === l); return def ? `${gearIcon(LURE_ITEM[l] || 'lure:jig')}<span>${esc(BOX_NAME[l] || def.short || def.name)}${l === 'leech' && this.shop ? ` <span class="soft">· ${this.shop.leeches}</span>` : ''}</span>` : ''; }).filter(Boolean);

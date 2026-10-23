@@ -913,7 +913,7 @@ export class Hud {
       const food = energy.food, sand = !!(core && core.sandbox);
       const meal = !sand && food <= 0 ? '' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn';
       const pk = core ? core.state.packs : null;
-      const packs = player.packs && player.packs.summary ? esc(player.packs.summary) : pk ? `${pk.count === 1 ? 'one pack' : 'two packs'}, ${pk.canoe === 'kevlar' ? 'Kevlar' : 'aluminium'} canoe` : '';
+      const packs = player.packs && player.packs.summary ? esc(player.packs.summary) : pk ? `${pk.count === 1 ? 'one pack' : 'two packs'}, ${{ kevlar: 'Kevlar', royalex: 'Royalex' }[pk.canoe] || 'aluminium'} canoe` : '';
       const foodW = sand ? 'food that keeps' : food > 0 ? `${foodWords(food)} of food` : 'the food pack is empty';
       row('Pack', [packs, foodW, meal, core && core.state.wet ? 'the gear is wet' : ''].filter(Boolean).join(' · '));
     }
