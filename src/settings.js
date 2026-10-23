@@ -5,11 +5,22 @@
 // (hud.js reads it every frame); Developer gathers what left the HUD: the GPS sim, FPS and triangles, tiles.
 import { save } from './save.js';
 import { LOD_SCALE } from './vegetation.js';
+import { CULL } from './tiles.js';
+import { REFLECTION } from './water.js';
+import { PRESETS, PRESET_NAMES, PRESET_KEYS, benchmark } from './quality.js';
 
 export const DEFAULTS = {
+  // the display: a preset (quality.js) sets the rows after it; changing one of them by hand makes it 'custom'
+  quality: 'auto',      // 'auto' | 'low' | 'medium' | 'high' | 'ultra' | 'custom'
+  autoPick: '',         // what Auto chose on its benchmark ('' until it has run): not a row of the panel
   shadows: '2048',      // 'off' | '1024' | '2048' | '4096': the sun's shadow map size per cascade (sunlight.js)
+  shadowReach: 300,     // metres the far cascade reaches; under 300 the small things past 60 m drop out of it (tiles.js CULL.farSmall)
   lod: 1,               // tree LOD and cull distance scale
+  vegDensity: 1,        // the share of the understory and the scree drawn, 0.5..1 (the trees are never thinned)
   reflections: true,    // the mirror pass: the shore, its trees and the canoe in the water (off: the sky alone)
+  reflectionScale: 0.25, // the mirror pass's size against the drawing buffer, each way (water.js REFLECTION.scale)
+  antialias: '4',       // '4' | '2' (MSAA samples) | 'fxaa' | 'off' (post.js)
+  godRays: true,        // the sun's shafts (post.js)
   renderScale: 1,       // 0.5..1 of the device pixel ratio (capped at 2)
   volume: 1,            // 0..1
   mute: false,
@@ -37,10 +48,17 @@ const pct = (v) => `${Math.round(v * 100)} %`;
 // the sections of the settings card: one row per setting (type select | range | toggle | radio | status)
 export const SECTIONS = [
   { id: 'display', label: 'Display', rows: [
+    { key: 'quality', label: 'Quality', desc: 'Sets the rows below · Auto picks from a short test', type: 'select',
+      options: (s) => [['auto', s && s.values.autoPick ? `Auto · ${PRESET_NAMES[s.values.autoPick] || s.values.autoPick}` : 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra'], ['custom', 'Custom']] },
     { key: 'shadows', label: 'Shadows', desc: 'Two cascades: near and far · the size of each', type: 'select', options: [['off', 'Off'], ['1024', 'Soft (1024)'], ['2048', 'Standard (2048)'], ['4096', 'Sharp (4096)']] },
+    { key: 'shadowReach', label: 'Shadow distance', type: 'range', min: 100, max: 300, step: 20, format: (v) => `${v} m` },
     { key: 'lod', label: 'Tree detail distance', type: 'range', min: 0.5, max: 2, step: 0.25, format: (v) => `${v}×` },
+    { key: 'vegDensity', label: 'Undergrowth', desc: 'The shrubs, saplings, ferns and scree drawn', type: 'range', min: 0.5, max: 1, step: 0.05, format: pct },
     { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1, step: 0.05, format: pct },
+    { key: 'antialias', label: 'Anti-aliasing', type: 'select', options: [['4', 'MSAA 4×'], ['2', 'MSAA 2×'], ['fxaa', 'FXAA'], ['off', 'Off']] },
     { key: 'reflections', label: 'Shore and sky in the water', desc: 'R toggles it · the shore, its trees and the canoe mirrored with the sky, a second pass over the scene; off, the water mirrors the sky alone', type: 'toggle' },
+    { key: 'reflectionScale', label: 'Reflection detail', type: 'select', parse: Number, options: [[0.15, 'Low'], [0.2, 'Medium'], [0.25, 'Standard'], [0.35, 'High']] },
+    { key: 'godRays', label: 'Sun shafts', type: 'toggle' },
   ] },
   { id: 'sound', label: 'Sound', rows: [
     { key: 'volume', label: 'Volume', type: 'range', min: 0, max: 1, step: 0.05, format: pct },
@@ -77,6 +95,8 @@ export class Settings {
     const stored = save.read('settings', {}) || {};
     this.values = { ...DEFAULTS };
     for (const k of Object.keys(DEFAULTS)) if (k in stored && typeof stored[k] === typeof DEFAULTS[k]) this.values[k] = stored[k];
+    // settings saved before the presets: display rows already set by hand stay as they are (Custom), not Auto's
+    if (!('quality' in stored) && [...PRESET_KEYS].some((k) => k in stored && stored[k] !== DEFAULTS[k])) this.values.quality = 'custom';
     this.listeners = new Set();
     this.t = null; // the game objects, once attached
   }
@@ -87,9 +107,44 @@ export class Settings {
     save.write('settings', this.values);
     this.apply(k);
     for (const fn of this.listeners) fn(k, v);
+    // a display row changed by hand: the quality is now the player's own
+    if (!this.presetting && PRESET_KEYS.has(k) && this.values.quality !== 'custom') this.set('quality', 'custom');
   }
   toggle(k) { this.set(k, !this.values[k]); }
-  reset() { for (const k of Object.keys(DEFAULTS)) this.set(k, DEFAULTS[k]); }
+  reset() {
+    for (const k of Object.keys(DEFAULTS)) if (k !== 'quality') this.set(k, DEFAULTS[k]);
+    if (this.values.quality === DEFAULTS.quality) this.apply('quality'); else this.set('quality', DEFAULTS.quality);
+  }
+
+  // --- the quality presets (quality.js) ----------------------------------------------------------------------
+  applyPreset(name) {
+    const p = PRESETS[name]; if (!p) return;
+    this.presetting = true;
+    try { for (const k of Object.keys(p)) this.set(k, p[k]); } finally { this.presetting = false; }
+  }
+  // Auto's benchmark: the scene behind the title card, a few frames at each preset tried (quality.js benchmark).
+  // Runs once a few seconds after the game is up, unless Auto has a pick already; again when Auto is picked.
+  runAuto() {
+    const t = this.t; if (!t) return null;
+    let r;
+    try { r = benchmark(this, t); } catch (e) { console.warn('quality: the benchmark failed, High it is', e); r = { pick: 'high', ms: {} }; }
+    this.applyPreset(r.pick);
+    this.set('autoPick', r.pick);
+    for (const fn of this.listeners) fn('quality', this.values.quality); // the panel's Auto label names the pick
+    console.log(`quality: Auto picked ${PRESET_NAMES[r.pick]} (ms a frame: ${Object.entries(r.ms).map(([k, v]) => `${k} ${v}`).join(', ')})`);
+    this.lastBenchmark = r;
+    return r;
+  }
+  scheduleAuto(delay = 2500) {
+    clearTimeout(this.autoTimer);
+    this.autoTimer = setTimeout(() => {
+      if (this.values.quality !== 'auto') return;
+      // a hidden page or a canvas not yet laid out would time nothing worth keeping: try again later
+      const c = this.t && this.t.renderer.domElement;
+      if (document.visibilityState !== 'visible' || !c || c.width < 320 || c.height < 200) { this.scheduleAuto(2000); return; }
+      this.runAuto();
+    }, delay);
+  }
   onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
 
   // --- what the density means for each part of the HUD (hud.js asks these every frame) --------------------
@@ -103,23 +158,33 @@ export class Settings {
   // targets: { renderer, scene, sun, water, post, audio, chase, player, stats, geo }
   attach(targets) {
     this.t = targets;
-    for (const k of Object.keys(DEFAULTS)) this.apply(k, true);
+    for (const k of Object.keys(DEFAULTS)) if (k !== 'quality') this.apply(k, true);
+    this.apply('quality', true);
   }
 
   apply(k, initial = false) {
     const t = this.t; if (!t) return;
     const v = this.values[k];
     switch (k) {
+      case 'quality':
+        if (PRESETS[v]) this.applyPreset(v);
+        else if (v === 'auto') { if (initial && PRESETS[this.values.autoPick]) this.applyPreset(this.values.autoPick); else this.scheduleAuto(initial ? 2500 : 300); }
+        break;
       case 'shadows': {
-        const on = v !== 'off', size = on ? parseInt(v, 10) : 0;
+        const on = v !== 'off', size = on ? parseInt(v, 10) : 0, was = t.renderer.shadowMap.enabled;
         t.renderer.shadowMap.enabled = on;
         t.sun.castShadow = on;
         if (on) t.sun.shadow.mapSize.set(size, size); // per cascade; the shadow pass resizes its atlas when this differs
-        if (!initial) refreshMaterials(t.scene); // programs with/without shadow sampling
+        if (!initial && on !== was) refreshMaterials(t.scene); // programs with/without shadow sampling (a new size needs none)
         break;
       }
+      case 'shadowReach': t.sun.shadow.camera.far = v; CULL.farSmall = v < 300 ? 1.5 : 0; break;
       case 'lod': LOD_SCALE.value = v; break;
+      case 'vegDensity': CULL.understory = v; break;
       case 'reflections': t.water.reflectionsOn = v; break;
+      case 'reflectionScale': REFLECTION.scale = v; break;
+      case 'antialias': if (t.post.setAntialias) t.post.setAntialias(v === 'fxaa' ? 'fxaa' : v === 'off' ? 0 : parseInt(v, 10)); break;
+      case 'godRays': t.post.rays.enabled = v; break;
       case 'renderScale': {
         t.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2) * v);
         t.post.composer.setPixelRatio(t.renderer.getPixelRatio()); // re-sizes the passes too
@@ -138,6 +203,8 @@ export class Settings {
     }
   }
 }
+
+const optionsOf = (row, settings) => (typeof row.options === 'function' ? row.options(settings) : row.options);
 
 function refreshMaterials(scene) {
   const seen = new Set();
@@ -196,7 +263,7 @@ export class SettingsPanel {
       let input = null, value = null, holder = null;
       if (row.type === 'select') {
         input = document.createElement('select');
-        for (const [val, text] of row.options) { const o = document.createElement('option'); o.value = String(val); o.textContent = text; input.appendChild(o); }
+        for (const [val, text] of optionsOf(row, this.settings)) { const o = document.createElement('option'); o.value = String(val); o.textContent = text; input.appendChild(o); }
         input.addEventListener('change', () => this.settings.set(row.key, row.parse ? row.parse(input.value) : input.value));
         holder = input;
       } else if (row.type === 'range') {
@@ -246,6 +313,7 @@ export class SettingsPanel {
       return;
     }
     const v = this.settings.get(k);
+    if (row.type === 'select' && typeof row.options === 'function') optionsOf(row, this.settings).forEach(([, text], i) => { if (c.input.options[i]) c.input.options[i].textContent = text; });
     if (row.type === 'toggle') c.input.checked = !!v;
     else if (row.type === 'radio') { for (const r of c.input) { const on = r.value === String(v); r.checked = on; r.parentElement.classList.toggle('on', on); } }
     else c.input.value = String(v);

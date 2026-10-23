@@ -12,6 +12,10 @@ import * as THREE from 'three';
 const _dir = new THREE.Vector3(), _centre = new THREE.Vector3(), _snap = new THREE.Vector3();
 const _axisX = new THREE.Vector3(), _axisY = new THREE.Vector3();
 
+// Called with (shadow, camera) once the cascades are fitted for a frame, inside the shadow pass and before any
+// cascade is drawn: the tiles cull their casters per cascade here (tiles.js), against getFrustum(i).
+export const cascadeHooks = [];
+
 export class SunLightShadow extends THREE.LightShadow {
   constructor() {
     // the template camera: the renderer reads its depth flags, and `far` is how far shadows reach
@@ -47,6 +51,7 @@ export class SunLightShadow extends THREE.LightShadow {
     this._cascadeData[1].set(nearFade, far, far * (1 - this.fade * 0.5), this.farBiasScale);
     this._fit(0, camera, near, splitAt, _dir);
     this._fit(1, camera, nearFade, far, _dir);
+    for (const h of cascadeHooks) h(this, camera);
   }
 
   // Fit cascade i's orthographic camera to the sphere round the slice a..b of the view frustum, looking

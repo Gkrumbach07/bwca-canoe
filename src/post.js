@@ -9,6 +9,9 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 //   anti-aliasing   the composer's targets carry 4 samples (WebGL2 multisampled renderbuffers, resolved with
 //                   their depth after the scene pass). The canvas itself has none: nothing but a full-screen
 //                   quad is ever drawn to it. Alpha-tested cards can use alphaToCoverage on these targets.
+//                   setAntialias (the quality setting) changes the samples (4, 2 or 0), or takes none and runs
+//                   FXAA in the grade pass instead, on the scene as it comes in (edges found on its tone-mapped
+//                   luma), for a fraction of the cost; with no samples alphaToCoverage falls back to a plain cut.
 //   god rays        a mask of the open sky about the sun (the depth buffer's clear value is the sky: the dome
 //                   writes no depth, so trees, terrain and clouds all occlude), blurred radially toward the
 //                   sun's place on screen in two passes (32 taps, then 8 between them) and added in linear
@@ -136,12 +139,34 @@ const GradeShader = {
     uCurve: { value: null },
     uSaturation: { value: 1.0 },
     uVignette: { value: 0.22 },
+    uTexel: { value: new THREE.Vector2(1, 1) },
   },
   vertexShader: quadVert,
   fragmentShader: /* glsl */ `
     #include <tonemapping_pars_fragment>
     uniform sampler2D tDiffuse, tRays, tDepth;
     uniform float uRays, uSaturation, uVignette, uRayAir;
+    uniform vec2 uTexel;
+    // FXAA (the classic five-tap edge search and a blend along the edge), on linear HDR input: the edges are
+    // found on a tone-mapped luma, so a bright sky does not swamp the shade beside it
+    float fxLuma(vec3 c) { float l = dot(c, vec3(0.299, 0.587, 0.114)); return l / (1.0 + l); }
+    #if FXAA
+    vec3 fxaa(vec2 uv) {
+      vec3 cM = texture2D(tDiffuse, uv).rgb;
+      float lNW = fxLuma(texture2D(tDiffuse, uv + vec2(-1.0, -1.0) * uTexel).rgb), lNE = fxLuma(texture2D(tDiffuse, uv + vec2(1.0, -1.0) * uTexel).rgb);
+      float lSW = fxLuma(texture2D(tDiffuse, uv + vec2(-1.0, 1.0) * uTexel).rgb), lSE = fxLuma(texture2D(tDiffuse, uv + vec2(1.0, 1.0) * uTexel).rgb);
+      float lM = fxLuma(cM);
+      float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE))), lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+      if (lMax - lMin < max(0.0312, lMax * 0.125)) return cM;
+      vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
+      float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 1.0 / 128.0);
+      dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * uTexel;
+      vec3 a = 0.5 * (texture2D(tDiffuse, uv - dir / 6.0).rgb + texture2D(tDiffuse, uv + dir / 6.0).rgb);
+      vec3 b = 0.5 * a + 0.25 * (texture2D(tDiffuse, uv - dir * 0.5).rgb + texture2D(tDiffuse, uv + dir * 0.5).rgb);
+      float lB = fxLuma(b);
+      return (lB < lMin || lB > lMax) ? a : b;
+    }
+    #endif
     uniform vec2 uNearFar;
     uniform vec3 uRayColor;
     uniform vec3 uCurve[${CURVE_STEPS}];
@@ -153,7 +178,11 @@ const GradeShader = {
       return vec3(mix(uCurve[i.r].r, uCurve[i.r + 1].r, t.r), mix(uCurve[i.g].g, uCurve[i.g + 1].g, t.g), mix(uCurve[i.b].b, uCurve[i.b + 1].b, t.b));
     }
     void main() {
-      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      #if FXAA
+        vec3 c = fxaa(vUv);
+      #else
+        vec3 c = texture2D(tDiffuse, vUv).rgb;
+      #endif
       // the shafts are light the air scatters toward the eye, so they are as strong as the air in front of a
       // pixel is deep: full over the sky and the far shore, faint on the shack ten metres away
       if (uRays > 0.0) {
@@ -181,10 +210,13 @@ class GradePass extends Pass {
     this.look = look; this.rays = rays;
     this.uniforms = THREE.UniformsUtils.clone(GradeShader.uniforms);
     this.uniforms.uCurve.value = look.curve; // shared: the day cycle writes it
-    this.material = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: GradeShader.vertexShader, fragmentShader: GradeShader.fragmentShader, depthTest: false, depthWrite: false, toneMapped: false });
+    // FXAA is compiled in or out (a define, not a branch: the grade costs nothing more with it off)
+    this.material = new THREE.ShaderMaterial({ uniforms: this.uniforms, defines: { FXAA: 0 }, vertexShader: GradeShader.vertexShader, fragmentShader: GradeShader.fragmentShader, depthTest: false, depthWrite: false, toneMapped: false });
     this.quad = new FullScreenQuad(this.material);
     this._black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); this._black.needsUpdate = true;
   }
+  get fxaa() { return this.material.defines.FXAA === 1; }
+  set fxaa(on) { const v = on ? 1 : 0; if (this.material.defines.FXAA !== v) { this.material.defines.FXAA = v; this.material.needsUpdate = true; } }
   render(renderer, writeBuffer, readBuffer) {
     const u = this.uniforms, L = this.look;
     u.tDiffuse.value = readBuffer.texture;
@@ -198,6 +230,7 @@ class GradePass extends Pass {
     u.toneMappingExposure.value = renderer.toneMappingExposure * L.exposure;
     u.uSaturation.value = L.saturation;
     u.uVignette.value = L.vignette;
+    u.uTexel.value.set(1 / readBuffer.width, 1 / readBuffer.height);
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
     this.quad.render(renderer);
   }
@@ -229,5 +262,12 @@ export function makePost(renderer, scene, camera, { samples = 4 } = {}) {
     composer, grade, rays, look,
     render() { composer.render(); },
     resize(w, h) { composer.setSize(w, h); },
+    // mode: 4 or 2 (samples), 'fxaa' (no samples, FXAA in the grade) or 0 (none). The targets are re-made on the
+    // next frame when the samples change; nothing recompiles.
+    setAntialias(mode) {
+      const n = typeof mode === 'number' ? mode : 0;
+      grade.fxaa = mode === 'fxaa';
+      for (const t of [composer.renderTarget1, composer.renderTarget2]) if (t.samples !== n) { t.samples = n; t.dispose(); }
+    },
   };
 }

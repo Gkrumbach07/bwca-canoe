@@ -208,3 +208,54 @@ baked lightmaps, no PBR, no external assets.
   0.3 m above the height it is given).
 - The hull and the figure bake their occlusion in the background after load (loft.js `bakeLater`): wait for
   `bakesPending() === 0` before judging colours.
+
+## Performance and quality (phase 2)
+
+- **Timing a frame.** Use the wall time of frames drawn back to back with a one-pixel `readPixels` at each end
+  (quality.js `frameCost(targets)`): that is the frame as the slower of the CPU and the GPU sets it. The GPU timer
+  queries (`EXT_disjoint_timer_query_webgl2`) read two to three times high per pass on ANGLE over Metal (the gaps
+  between passes count as GPU time; a half-resolution blur reads 3 ms), so compare passes by switching them off and
+  timing the frame. quality.js `profile(__game)` still gives exact per-pass CPU time, calls and triangles. Hold the
+  animation loop while timing; even a hidden pane sometimes runs it.
+- **Per-instance culling** (tiles.js `InstanceCuller`). The bins that cost (full geometry or casting shadows) and the
+  variant-group meshes beside them are drawn through proxies: one for the view, one per cascade, each holding only
+  the instances that can show in its pass. The bin leaves layer 0 and keeps the mirror's shore layer, so
+  `water.renderReflection` still draws it whole with its forced geometry and counts. updateVegetationLOD stays the
+  authority on visibility, geometry, count and shadow; the proxies copy them every frame and share the material, so
+  the sway, the swell and the seasons need nothing. A mesh is prepared once before its first cull (a few per frame,
+  under `CULL.budget` ms; until then it draws whole): **its instances are sorted in place along a Morton curve of
+  16 m cells inside each variant group**, so the bin's `b.matrices` (and `e.vegBins`) are no longer in placement
+  order; nothing may rely on that order. Chunks of neighbours are tested first, then instances in the chunks that
+  straddle a plane, and a proxy is refilled and uploaded only when what it holds changed. View proxies are culled in
+  `scene.onBeforeRender` (main camera only), cascade proxies in `sunlight.js cascadeHooks` (called once the cascades
+  are fitted, inside the shadow pass); a cascade proxy is visible only during the shadow pass and answers the shadow
+  pass's frustum test for its own cascade only. `CULL.farSmall` drops instances under that radius past 60 m from the
+  far cascade (1.5 m whenever the shadow reach is under 300 m, which is every preset but Ultra).
+- **Tile groups are frozen** once installed (tiles.js `freeze`): their world matrices are computed once and the
+  scene's per-frame matrix walk skips them (it walked ~24 000 objects). Anything added to a tile group later must set
+  its own `matrixWorld`, as the variant-group meshes and the proxies do.
+- **Quality presets** (quality.js `PRESETS`, settings.js `quality`): Low, Medium, High, Ultra and Auto. A preset only
+  sets the display rows (shadow map size, `shadowReach`, `lod`, `vegDensity`, `reflections`, `reflectionScale`,
+  `antialias` 4 / 2 / fxaa / off, `godRays`, `renderScale`); changing a row by hand makes it Custom. **Ultra is the
+  game as it was** (2048 maps to 300 m, MSAA 4x, the mirror at a quarter size). Every preset keeps the shadows on, so
+  switching never recompiles. Auto times High (then Ultra, or Medium and Low) behind the title card a few seconds
+  after the first start and keeps the best under 11 ms (`AUTO_BUDGET`); `__game.settings.runAuto()` reruns it. FXAA
+  is compiled into the grade pass by a define (as a uniform branch it cost 2 ms even when off).
+- **The occlusion bakes are cached** (occlusion.js): keyed by a hash of the positions, normals, index and options,
+  their per-vertex factors kept in IndexedDB (`bwca-occlusion`), so a second start skips them; bump `BAKE_VERSION`
+  if the bake itself changes. main.js awaits `occlusionCacheReady` before the kits are built. The bake walks a
+  uniform grid along each ray and gives exactly the brute-force result (checked on all 239 startup bakes).
+- **Numbers** (M4 Pro, 1920 × 1080, pixel ratio 1, synced wall time per frame with the simulation, best of 5 x 20
+  frames; the machine was shared, so expect ±10 %):
+
+  | Spot | Before | Ultra | High | Medium | Low |
+  |---|---|---|---|---|---|
+  | Lodge 12:00 | 10.6 ms, 895 calls, 15.0 M tris | 8.3 ms, 781, 9.4 M | 8.4 | 6.9 | 4.7 ms, 319, 3.7 M |
+  | Lodge 17:30 | 10.4 ms, 877, 14.9 M | 8.4 ms, 787, 8.9 M | 7.9 | 7.4 | 5.0 ms, 349, 3.3 M |
+  | Open lake 17:30 | 10.2 ms, 972, 14.3 M | 8.2 ms, 837, 8.4 M | 8.4 | 6.4 | 4.8 ms, 322, 3.1 M |
+  | Forest 17:30 | 9.7 ms, 920, 13.9 M | 8.5 ms, 854, 9.2 M | 7.9 | 7.5 | 4.5 ms, 342, 3.6 M |
+
+  At 1080p this machine is CPU-bound near 6 ms of draw submission on Ultra (three's traversal of ~22 000 tile meshes
+  in each of four scene walks a frame, and ~800 draws); the GPU part is ~7–8 ms and scales with pixels (4K Ultra:
+  18 ms). The shadow pass was 2.5 ms of the 10.4 before; with the culling the shadow pass draws 2.6 M triangles, not
+  6.6 M. On-screen frame rate is still unmeasured (the pane stayed hidden).
