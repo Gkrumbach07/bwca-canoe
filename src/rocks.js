@@ -569,6 +569,44 @@ function fallbackRock(rng) {
   return finish(B, rng);
 }
 
+// (d) A block of scree: a fresh angular block broken off a cliff, cheap because there are many (a few dozen
+// triangles): a box of six jittered planes, no two parallel, one or two corners knocked off, crisp edges with a
+// narrow chamfer on a few (the drybrush), its base on y = 0 inside placement.js TALUS_FOOT (an ellipse 1 by 0.85),
+// about 0.8 tall. Coloured from the cliff it fell from: the dark green-grey, its edges lighter.
+const SCREE = [0x6d7268, 0x676c63, 0x72746b, 0x62675f].map((h) => new THREE.Color(h));
+const SCREE_EDGE = new THREE.Color(0xaeb1a2);
+export function screeBlock(rng) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const X = 0.62 + rng() * 0.18, Z = 0.5 + rng() * 0.16, Y = 0.55 + rng() * 0.3, j = () => (rng() - 0.5) * 0.35;
+    let planes = [
+      plane(0, -1, 0, 0),
+      through(1, j() + 0.1, j(), X, 0, 0), through(-1, j() + 0.1, j(), -X, 0, 0),
+      through(j(), j() + 0.1, 1, 0, 0, Z), through(j(), j() + 0.1, -1, 0, 0, -Z),
+      through(j() * 0.6, 1, j() * 0.6, 0, Y, 0),
+    ];
+    for (let c = 1 + Math.floor(rng() * 2); c > 0; c--) planes = cut(planes, new V3((rng() - 0.5) * 2, 0.4 + rng(), (rng() - 0.5) * 2), 0.1 + rng() * 0.18);
+    const B = new RockBuilder();
+    if (!addBlock(B, planes, { bevel: 0.03, seg: 9, edgeW: (n1, n2, pa, pb, r) => (pa.y < 0.02 && pb.y < 0.02 ? 0 : r() < 0.55 ? 0 : 0.5 + r() * 0.5) }, rng)) continue;
+    if (!inFoot(B, 0, { x: 1.0, z: 0.85 })) continue;
+    const base = SCREE[Math.floor(rng() * SCREE.length)].clone().multiplyScalar(0.92 + rng() * 0.14), col = new Float32Array(B.count * 3), c = new THREE.Color();
+    for (let i = 0; i < B.count; i++) {
+      c.copy(base);
+      if (B.role[i] === 2) c.lerp(SCREE_EDGE, smooth(0.25, 1.3, B.sharp[i]) * 0.55);
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(B.p.flatMap((p) => [p.x, p.y, p.z]), 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(B.n.flatMap((n) => [n.x, n.y, n.z]), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setIndex(B.idx);
+    geo.computeBoundingBox();
+    bakeOcclusion(geo, { ground: 0, reach: 0.6, rays: 12, floor: 0.5 });
+    geo.computeBoundingSphere();
+    return geo;
+  }
+  return fallbackRock(rng);
+}
+
 // The families by the names vegetation.js asks for: 'slab' the layered flats, 'block' the slanted rock (the
 // cheapest, so it is also every rock's far twin), 'boulder' the erratic. All are about two units across and
 // stand on their base at y = 0 inside FOOT (the slanted rock's tail goes deep below the ground once tilted);
@@ -579,3 +617,5 @@ export function angularRock(rng, kind = 'block') {
 }
 // A rock of a family from a seed (props.js: the campsite ledges).
 export function rockGeometry(kind, seed) { return angularRock(mulberry32(seed), kind); }
+// The block kit, for the cliffs (cliffs.js): planes, convex chamfered blocks, cuts and the colour noise.
+export const ROCK_KIT = { RockBuilder, addBlock, polytope, cut, plane, through, noise3, smooth, edgeWidth };
