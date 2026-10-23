@@ -361,7 +361,7 @@ export class Energy {
 
   serialize() {
     return {
-      value: this.value, food: this.food, fedUntil: this.fedUntil, awakeSince: this.awakeSince, lastMealAbs: this.lastMealAbs, lastMealKind: this.lastMealKind,
+      value: this.value, food: this.food, fedUntil: this.fedUntil, awakeSince: this.awakeSince, lastMealAbs: this.lastMealAbs, lastMealKind: this.lastMealKind, lastMealAuto: this.lastMealAuto,
       rest0: this.rest0, need: { ...this.need }, drinkable: this.drinkable, treating: this.treating, readyIn: this.treating > 0 ? Math.max(0, this.readyAt - this.now) : 0,
     };
   }
@@ -369,6 +369,7 @@ export class Energy {
     this.value = clamp(d.value ?? 1, 0, 1); this.food = Math.max(0, d.food ?? 0); this.fedUntil = d.fedUntil ?? -1;
     this.awakeSince = Number.isFinite(d.awakeSince) ? d.awakeSince : this.now;
     this.lastMealAbs = Number.isFinite(d.lastMealAbs) ? d.lastMealAbs : -1e9; this.lastMealKind = d.lastMealKind || null;
+    this.lastMealAuto = !!d.lastMealAuto; // a cold meal at dawn or dusk that a cooked one may still take the place of
     // the needs (a save from before them comes back with them full)
     const num = (x, dflt) => (Number.isFinite(x) ? x : dflt);
     this.rest0 = clamp(num(d.rest0, 1), 0, 1);
