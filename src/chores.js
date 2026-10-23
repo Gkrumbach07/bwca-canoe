@@ -83,21 +83,44 @@ function woodpileGeometry() {
 }
 // A low faceted mound of leaves: an icosahedron squashed and jittered, flat faces in a few greens (Firewatch's
 // "graphic" foliage: big simple shapes coloured by the light)
-function mound(b, rng, cx, cy, cz, rx, ry, rz, greens) {
-  const ico = new THREE.IcosahedronGeometry(1, 0), pos = ico.getAttribute('position'), seen = new Map(), pts = [];
+// (a patch is a few hundred of them and a thousand berries, built as you come near a site: the icosahedron's twelve
+// corners and twenty faces are read once, and the vertices written straight in, about 6 ms a patch)
+let ICO = null;
+function icosahedron() {
+  if (ICO) return ICO;
+  const g = new THREE.IcosahedronGeometry(1, 0), pos = g.getAttribute('position'), verts = [], idx = [], seen = new Map();
   for (let i = 0; i < pos.count; i++) {
     const k = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
-    if (!seen.has(k)) { const j = 0.82 + rng() * 0.3; seen.set(k, V(cx + pos.getX(i) * rx * j, cy + Math.max(-0.35, pos.getY(i)) * ry * j, cz + pos.getZ(i) * rz * j)); }
-    pts.push(seen.get(k));
+    let j = seen.get(k);
+    if (j === undefined) { j = verts.length; seen.set(k, j); verts.push([pos.getX(i), pos.getY(i), pos.getZ(i)]); }
+    idx.push(j); // three's winding: each face counter-clockwise seen from outside
   }
-  const ref = V(cx, cy - ry * 0.2, cz);
-  for (let i = 0; i < pts.length; i += 3) b.face([pts[i], pts[i + 1], pts[i + 2]], TILE.PLAIN, tone(pickR(rng, greens), rng, 0.08, 0.02), { ref });
-  ico.dispose();
+  g.dispose();
+  return (ICO = { verts, idx });
 }
-// a berry: a little octahedron, dusty blue with its bloom
+function mound(b, rng, cx, cy, cz, rx, ry, rz, greens) {
+  const { verts, idx } = icosahedron();
+  const P = verts.map(([x, y, z]) => { const j = 0.82 + rng() * 0.3; return { x: cx + x * rx * j, y: cy + Math.max(-0.35, y) * ry * j, z: cz + z * rz * j }; });
+  for (let i = 0; i < idx.length; i += 3) {
+    const A = P[idx[i]], B = P[idx[i + 1]], Cc = P[idx[i + 2]], col = tone(pickR(rng, greens), rng, 0.08, 0.02);
+    const ux = B.x - A.x, uy = B.y - A.y, uz = B.z - A.z, vx = Cc.x - A.x, vy = Cc.y - A.y, vz = Cc.z - A.z;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz);
+    if (l < 1e-12) continue; // a bottom face flattened to nothing
+    nx /= l; ny /= l; nz /= l;
+    const n = { x: nx, y: ny, z: nz };
+    for (const Q of [A, B, Cc]) b.vert(Q, n, Q.x * 3, Q.z * 3, TILE.PLAIN, col);
+  }
+}
+// a berry: a little octahedron, dusty blue with its bloom (its eight faces' normals worked out once)
+const OCT = [];
+for (const sx of [1, -1]) for (const sy of [1, -1]) for (const sz of [1, -1]) OCT.push({ sx, sy, sz, flip: sx * sy * sz < 0, n: new THREE.Vector3(sx, sy / 0.9, sz).normalize() });
 function berry(b, p, r, col) {
-  const X = [V(r, 0, 0), V(-r, 0, 0)], Y = [V(0, r * 0.9, 0), V(0, -r * 0.9, 0)], Z = [V(0, 0, r), V(0, 0, -r)];
-  for (const x of X) for (const y of Y) for (const z of Z) b.face([p.clone().add(x), p.clone().add(y), p.clone().add(z)], TILE.PLAIN, col, { ref: p });
+  const h = r * 0.9;
+  for (const o of OCT) {
+    const X = { x: p.x + o.sx * r, y: p.y, z: p.z }, Y = { x: p.x, y: p.y + o.sy * h, z: p.z }, Z = { x: p.x, y: p.y, z: p.z + o.sz * r };
+    for (const Q of o.flip ? [X, Z, Y] : [X, Y, Z]) b.vert(Q, o.n, 0.5, 0.5, TILE.PLAIN, col);
+  }
 }
 // A blueberry patch seated on the ground (gy(x, z): the drawn ground at a point, world metres): low bushes over about
 // 2 m and their berries in three geometries, a third of the berries in each (a pint picked hides one). In world
