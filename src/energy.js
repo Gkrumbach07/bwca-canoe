@@ -5,6 +5,18 @@ import { itemDef } from './items.js';
 // an item's food family for the readout: 'meal' (raw, to cook), 'snack', 'forage', 'hot' (cooked: camp 2's hot:* and
 // fried:*), or its own kind
 const FOOD_KIND = (id) => { const d = itemDef(id); return !d ? '' : d.kind === 'food' && d.cooked ? 'hot' : d.kind; };
+// the meals, snacks and hot meals in some containers, and their words ("a hot meal, 3 meals and 1 snack", or '')
+function poolWords(pool) {
+  let meals = 0, snacks = 0, hot = 0;
+  for (const c of pool) for (const e of c.grid) {
+    if (e.box) continue;
+    const k = FOOD_KIND(e.id);
+    if (k === 'meal') meals += e.qty; else if (k === 'snack' || k === 'forage') snacks += e.qty; else if (k === 'hot') hot += e.qty;
+  }
+  const n = (x, one) => `${x === 1 ? (one === 'hot meal' ? 'a' : '1') : x} ${one}${x === 1 ? '' : 's'}`;
+  const parts = [hot ? n(hot, 'hot meal') : '', meals ? n(meals, 'meal') : '', snacks ? n(snacks, 'snack') : ''].filter(Boolean);
+  return { meals, snacks, hot, words: parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] || '' };
+}
 
 // Energy: one bar from 0 to 1, and in Adventure three needs that pull it down (rest, food, water), the way Wild n
 // Chill's single bar works. The bar drains slowly with the clock, faster with the paddle (speed, hustle, a wind on the
@@ -143,15 +155,18 @@ export class Energy {
     let pool;
     try { pool = typeof i.campReach === 'function' ? i.campReach() : i.foodPool(); } catch { pool = null; }
     if (!pool) return i.foodWords();
-    let meals = 0, snacks = 0, hot = 0;
-    for (const c of pool) for (const e of c.grid) {
-      if (e.box) continue;
-      const k = FOOD_KIND(e.id);
-      if (k === 'meal') meals += e.qty; else if (k === 'snack' || k === 'forage') snacks += e.qty; else if (k === 'hot') hot += e.qty;
-    }
-    const n = (x, one) => `${x === 1 ? (one === 'hot meal' ? 'a' : '1') : x} ${one}${x === 1 ? '' : 's'}`;
-    const parts = [hot ? n(hot, 'hot meal') : '', meals ? n(meals, 'meal') : '', snacks ? n(snacks, 'snack') : ''].filter(Boolean);
-    return parts.length ? parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] : 'no food';
+    return poolWords(pool).words || 'no food';
+  }
+  // camp join: the food in the barrels hung at your camp (inventory.hungAtCamp), counted apart from what is to hand:
+  // { days (two meals a day), words ("3 meals and 1 snack hung in the barrel", or '') }. The HUD's food mark and the
+  // readout count it, so a barrel hung for the night does not read as "No food".
+  hungFood() {
+    const i = this.inv;
+    if (!i || typeof i.hungAtCamp !== 'function') return { days: 0, words: '' };
+    const hung = i.hungAtCamp();
+    if (!hung.length) return { days: 0, words: '' };
+    const w = poolWords(hung);
+    return { days: (w.meals + w.hot) / 2, words: w.words ? `${w.words} hung in the ${hung.length > 1 ? 'barrels' : 'barrel'}` : '' };
   }
   // a ration out of the pack for a meal on the grate (supper in the evening): false when there is none
   useRation(kind) {

@@ -518,6 +518,14 @@ export class Inventory {
     return r;
   }
   inCampReach(cId) { const c = this.cont(cId); return !!(c && this.campReach().includes(c)); }
+  // the barrels hung at the camp you are at (camp 1: on a limb within its area, out of reach until let down or stood
+  // under): their food is the camp's, though nothing is cooked or eaten out of them up there (energy.hungFood)
+  hungAtCamp() {
+    const cp = this.camp, a = cp && typeof cp.reachArea === 'function' ? cp.reachArea() : null;
+    if (!a) return [];
+    const near = new Set(this.reachable());
+    return this.containers.filter((c) => { const k = this.root(c); return k.where === 'hung' && k.at && !near.has(c) && Math.hypot(k.at.x - a.x, k.at.z - a.z) <= a.r + 5; });
+  }
   // the containers whose food counts for a meal now: the camp's reach
   foodPool() { return this.campReach(); }
   countIn(cs, kind) { let n = 0; for (const c of cs) for (const e of c.grid) if (!e.box && (itemDef(e.id) || {}).kind === kind) n += e.qty; return n; }

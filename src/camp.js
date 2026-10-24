@@ -833,7 +833,8 @@ export class Camp {
     const d = this.day, h = this.hud, p = this.player, w = this.world, e = this.energy;
     const rise = d.sunriseSunset.rise, wind = this.wind, dayN = this.tripDay(d.doy);
     const here = p.placeName || w.lakeName(p.lakeId) || 'Open country';
-    const food = this.sandbox ? '' : e.foodWords ? `${e.foodWords()} with you` : e.food > 0 ? `${fmtDays(e.food)} ${plural(e.food <= 1 ? 1 : 2, 'day')} of food` : 'the food pack is empty';
+    const hung = !this.sandbox && e.hungFood ? e.hungFood().words : ''; // the barrel hung overnight
+    const food = this.sandbox ? '' : e.foodWords ? `${e.foodWords()} with you${hung ? ` · ${hung}` : ''}` : e.food > 0 ? `${fmtDays(e.food)} ${plural(e.food <= 1 ? 1 : 2, 'day')} of food` : 'the food pack is empty';
     if (h && h.showPlace) {
       h.showPlace(`${longDate(d.year, d.doy)}${rise != null ? ` · sunrise ${clock12(rise)}` : ''}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayN ? `Day ${dayN}` : 'A new day', [here, food].filter(Boolean).join(' · '));
       h.lastDawnDoy = d.doy;
