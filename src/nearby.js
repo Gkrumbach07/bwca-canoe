@@ -61,7 +61,7 @@ const POINT = { fire: 3.0, tent: 4.2, seat: 2.8, hung: 3.4, log: 1.8, water: 2.6
 const BURN_FULL = 6;         // game hours of wood the fire's meter calls full
 const FOOD = new Set(['meal', 'fish']);
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
-const lower = (s) => String(s).charAt(0).toLowerCase() + String(s).slice(1);
+const lower = (s) => (/^[A-Z]-/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // ("A-frame" keeps its capital)
 const thingName = (d) => (!d ? 'thing' : /^(Duluth|Johnson)/.test(d.name) ? d.name : d.id === 'pile' ? 'things on the ground' : lower(d.short && d.kind !== 'container' ? d.name : d.name));
 const hoursWords = (h) => (h < 0.75 ? 'half an hour' : h < 1.25 ? 'an hour' : `${Math.round(h * 2) / 2} h`.replace('.5 h', '½ h'));
 const _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _v = new THREE.Vector3();
