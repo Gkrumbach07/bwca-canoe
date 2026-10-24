@@ -152,6 +152,10 @@ async function main() {
   if (saved) { player.x = saved.x; player.z = saved.z; player.heading = saved.heading; }
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   player.chase = chase; // walking is read against the view; the cursor steers the canoe when asked
+  // fb2 E: the trees, shrubs and ferns between the third-person camera and the walker are seen through (a dither on the
+  // vegetation's own materials, patched here before anything compiles: no new program); the camera pulls in, on a
+  // spring, only for the ground, rocks, walls and a big trunk at the lens (camera.js)
+  chase.seeThrough(tiles.vegetation);
   const settings = new Settings();
   const hud = new Hud(world, { onTeleport: async (x, z) => { if (trip && trip.adventure) return; if (await player.teleport(x, z)) chase.snap(); }, settings, camera }); // trip core A: the map moves you in Sandbox only
   const post = makePost(renderer, scene, camera);
