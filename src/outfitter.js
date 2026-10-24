@@ -451,10 +451,15 @@ export class Outfitter {
     const v = this.visit, p = this.player;
     if (!v || !v.inside || !v.L || !Array.isArray(v.L.hot) || !p.onFoot || this.open || this.shelfOpen || this.bunking || !ray) return null;
     let best = null;
+    const o = ray.origin, d = ray.direction, dl = Math.hypot(d.x, d.z) || 1;
     for (const h of v.L.hot) {
       if (reachTo(h, p.x, p.z) > REACH) continue;
       const r = test ? test(h) : boxHit(ray, h);
-      if (r && Number.isFinite(r.t) && (!best || r.t < best.t)) best = { t: r.t, miss: r.miss || 0, h };
+      if (!r || !Number.isFinite(r.t) || r.t <= 1e-4) continue; // (a ray from inside a box: a third-person camera backed into a shelf)
+      // where it meets the box: in front of the walker along the view, not between the camera and his back
+      const ex = o.x + d.x * r.t - p.x, ez = o.z + d.z * r.t - p.z;
+      if ((ex * d.x + ez * d.z) / dl < -0.25) continue;
+      if (!best || r.t < best.t) best = { t: r.t, miss: r.miss || 0, h };
     }
     return best ? { ...best, target: this.targetOf(best.h, v) } : null;
   }
