@@ -234,7 +234,13 @@ export class Camp {
   // --- the camp's reach (inventory.campReach) ------------------------------------------------------------------
   // The area you are at, on foot: a site's (AREA_R round its fire ring, while it is free or yours), or round your own
   // tent pitched off a site (Sandbox): { x, z, r, key, site } or null. Read every quarter second (update).
-  reachArea() { const p = this.player; return p && p.onFoot ? this.area : null; }
+  reachArea() {
+    const p = this.player;
+    if (!p || !p.onFoot) return null;
+    // asked before the first frame's reading (a reload's "Back ashore" note, outfitter.boot): read it now
+    if (!this.areaRead) { this.areaRead = true; this.area = this.areaAt(p.x, p.z); }
+    return this.area;
+  }
   areaAt(x, z, r = AREA_R) {
     const site = this.nearestSite(x, z, r, true);
     if (site) {
@@ -272,7 +278,7 @@ export class Camp {
     if (this.card) this.card.update(dt);
     if (p.teleporting) { hold.update(dt); this.ghost.park(); return; }
     this.restorePending();
-    if ((this.areaT -= dt) <= 0) { this.areaT = 0.25; this.area = p.onFoot ? this.areaAt(p.x, p.z) : null; }
+    if ((this.areaT -= dt) <= 0) { this.areaT = 0.25; this.area = p.onFoot ? this.areaAt(p.x, p.z) : null; this.areaRead = true; }
     // launching leaves the camp as it stands: a word of what is still ashore
     if (this.lastMode !== 'paddle' && p.mode === 'paddle' && this.lastMode !== null) this.leaving();
     this.lastMode = p.mode;
