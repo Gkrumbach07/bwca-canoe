@@ -339,6 +339,9 @@ export class Camp {
   prompts() {
     const p = this.player, soft = p.prompt && p.prompt.soft ? p.prompt : null;
     this.ghostOn = false;
+    // the walker is held (a panel, a card, camp 2's sit to eat or the pot going on) or chores.js owns the line: its words
+    // stay, and no ghost
+    if (p.input.paused || (p.prompt && p.prompt.own === 'chores')) { this.ghost.park(); return; }
     this.sitePrompts(soft);
     if (!this.ghostOn) this.ghost.park();
     // a thing carried away from the canoe offers only Q (packs.js): the camp's E takes the line and keeps the Q
