@@ -757,6 +757,16 @@ export class Inventory {
     if (this.pendingNote && this.hud) { this.hud.note(this.pendingNote, 9); this.pendingNote = null; }
     if (this.fishing && Array.isArray(this.fishing.stringer)) this.syncStringer();
     this.bridgeLeeches();
+    // a word, once, as you paddle away from something left on the shore (it stays there until you come back for it)
+    if (p && p.mode === 'paddle' && this.hud && (this.noteT = (this.noteT || 0) + dt) > 1) {
+      this.noteT = 0;
+      const left = [...this.containers.filter((c) => c.where === 'ground' && c.item !== 'pile'), ...this.long.filter((l) => l.where === 'ground')].filter((t) => t.at && !t.at.camp && !t.at.noted && this.dist(t.at) > 60);
+      if (left.length) {
+        for (const t of left) t.at.noted = true;
+        const n = left.map((t) => { const nm = itemDef(t.item || t.id).name; return `the ${/^(Duluth|Johnson)/.test(nm) ? nm : lower(nm)}`; });
+        this.hud.note(`Left behind on the shore: ${n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0]}. ${left.length > 1 ? 'They stay' : 'It stays'} there until you come back.`, 6);
+      }
+    }
     // empty piles go
     for (let i = this.containers.length - 1; i >= 0; i--) { const c = this.containers[i]; if (c.item === 'pile' && !c.grid.length) { this.containers.splice(i, 1); this.dirty = true; } }
     if (this.dirty && (this.saveT += dt) > SAVE_EVERY) this.write();

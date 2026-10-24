@@ -304,10 +304,13 @@ export class Packs {
     const ground = all.filter((u) => u.obj.where === 'ground' && u.obj.at && !u.obj.at.camp);
     // set down for the second trip, at the trail head away from the canoe
     const left = ground.filter((u) => u.obj.at.trail && Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH);
-    // the nearest thing in reach, one you have room for first (a barrel beside a pack, with a pack on your back already)
+    // the nearest thing in reach, one you have room for first (a barrel beside a pack, with a pack on your back already);
+    // past a step and a half only one you face, so a pack set down by the fire does not take E from the fire
     let near = null, nd = REACH, full = null;
+    const fx = Math.cos(p.heading), fz = -Math.sin(p.heading);
     for (const u of ground) {
-      const d = Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z); if (d >= REACH) continue;
+      const dx = u.obj.at.x - p.x, dz = u.obj.at.z - p.z, d = Math.hypot(dx, dz);
+      if (d >= REACH || (c.drop && d > 1.6 && (dx * fx + dz * fz) / d < 0.5)) continue;
       const room = u.id === 'pile' || !!this.slotFor(u);
       if (room && (!near || d < nd)) { nd = d; near = u; } else if (!room && !full) full = u;
     }
@@ -442,7 +445,7 @@ export class Packs {
       }
     }
     this.leaveOk = false;
-    if (far.length) { for (const u of far) u.obj.at.left = true; if (this.hud) this.hud.note(`You push off and leave ${names(far)} at the trail head.`, 5); }
+    if (far.length) { for (const u of far) { u.obj.at.left = true; u.obj.at.noted = true; } if (this.hud) this.hud.note(`You push off and leave ${names(far)} at the trail head.`, 5); }
     for (const u of all) {
       const o = u.obj;
       if (this.isCarried(u)) inv.load(u.ref);
