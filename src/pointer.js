@@ -19,7 +19,8 @@
 //     target { kind: 'item' | 'container' | 'person' | 'shelf' | 'board' | 'maptable' | 'canoe' | 'fire' | 'tent' |
 //              'latrine' | 'tree' | …, ref, label, verb: 'Pick up' | 'Talk' | 'Open' | 'Get in' | …, act(),
 //              enabled? (false: the label shows `why` and E does nothing), why?, hint?,
-//              mesh? (an Object3D whose geometry takes the rim), shell? ({ geometry, matrix }), box? (as near.box) }
+//              mesh? (a Mesh whose geometry takes the rim), shell? ({ geometry, matrix }: the rim on that), box? (as
+//              near.box: with no mesh or shell, a soft pool of light on the ground under it instead) }
 //   pointer.target          the thing pointed at now, or null
 //   pointer.before()        main.js, before anyone reads E: E acts on the target (and is taken)
 //   pointer.update(dt, shell) main.js, after the camera: the ray, the target, the dot, the rim
@@ -68,8 +69,13 @@ class Pointer {
     this.isArmed = null;
     this.on = false;
     this.attached = false;
-    this.boxGeos = new Map();
     this.near = this.makeNear();
+    // Esc stops an armed job (the tent's ghost, the barrel's hang) before the pause card hears it: a capture listener on
+    // the window made when this module loads, so it comes before title.js's (made in main(), capture too)
+    if (typeof window !== 'undefined') window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' || !this.attached || !this.armed()) return;
+      if (this.onCancel && this.onCancel('esc')) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
   }
 
   attach({ camera, player, scene, renderer = null, hud = null, chase = null, outfitter = null, fishing = null, photo = null, dialogue = null }) {
@@ -87,19 +93,16 @@ class Pointer {
       // a click on the scene is a key too (Mouse0), for a job armed to start on it (the tent's ghost) and a held job
       const cv = renderer && renderer.domElement;
       if (cv) {
-        cv.addEventListener('mousedown', (e) => { if (e.button === 0) { this.input.down.add('Mouse0'); this.input.once.add('Mouse0'); } });
-        cv.addEventListener('contextmenu', (e) => { if (this.onCancel && this.onCancel('right')) e.preventDefault(); });
+        cv.addEventListener('mousedown', (e) => { if (e.button === 0) { this.input.down.add('Mouse0'); this.input.once.add('Mouse0'); } else if (e.button === 2 && this.armed() && this.onCancel) this.onCancel('right'); }); // (a right-click stops an armed job, captured or not)
+        cv.addEventListener('contextmenu', (e) => e.preventDefault()); // (no browser menu over the scene)
       }
       window.addEventListener('mouseup', (e) => { if (e.button === 0) this.input.down.delete('Mouse0'); });
       window.addEventListener('blur', () => this.input.down.delete('Mouse0'));
-      // Esc stops an armed job before the pause card hears it (capture phase, ahead of title.js)
-      window.addEventListener('keydown', (e) => {
-        if (e.code !== 'Escape' || !this.armed()) return;
-        if (this.onCancel && this.onCancel('esc')) { e.preventDefault(); e.stopImmediatePropagation(); }
-      }, true);
     }
     // the rim: one translucent material, its back faces pushed out along the normals, so only a soft edge shows round
-    // the thing; always in the scene (parked under the world) so its program is made behind the title card
+    // the thing; always in the scene and drawn every frame (parked far under the world, never culled), so its program
+    // is made behind the title card for the pass that really draws it (main.js's compile pass is the canvas's; the
+    // scene is drawn into the post chain's target, a program apart)
     const mat = this.rimMat = new THREE.MeshBasicMaterial({ color: 0xfff0cf, transparent: true, opacity: 0.55, side: THREE.BackSide, depthWrite: false });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uRim = { value: RIM };
@@ -112,8 +115,19 @@ class Pointer {
     this.parkGeo = g;
     this.rim = new THREE.Mesh(g, mat);
     this.rim.name = 'pointer-rim'; this.rim.matrixAutoUpdate = false; this.rim.renderOrder = 4; this.rim.castShadow = false; this.rim.receiveShadow = false;
+    // the pool of light under a thing known only by its box: one flat square, a radial fade (a small canvas as the
+    // alpha), its own translucent material; parked under the world too
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, '#b0b0b0'); gr.addColorStop(1, '#000');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(cv);
+    this.glowMat = new THREE.MeshBasicMaterial({ color: 0xffe9bf, transparent: true, opacity: 0.42, alphaMap: tex, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const pg = new THREE.PlaneGeometry(1, 1); pg.rotateX(-Math.PI / 2);
+    this.glow = new THREE.Mesh(pg, this.glowMat);
+    this.glow.name = 'pointer-pool'; this.glow.matrixAutoUpdate = false; this.glow.renderOrder = 4; this.glow.castShadow = false; this.glow.receiveShadow = false;
     this.park();
-    scene.add(this.rim);
+    scene.add(this.rim, this.glow);
     return this;
   }
   register(fn) { this.providers.add(fn); return () => this.providers.delete(fn); }
@@ -295,25 +309,28 @@ class Pointer {
       t.mesh.updateWorldMatrix(true, false);
       geo = t.mesh.geometry; r.matrix.copy(t.mesh.matrixWorld);
     } else if (t.shell && t.shell.geometry) { geo = t.shell.geometry; r.matrix.copy(t.shell.matrix); }
-    else if (t.box) {
-      const b = t.box, k = `${b.hx.toFixed(2)},${b.hy.toFixed(2)},${b.hz.toFixed(2)}`;
-      geo = this.boxGeos.get(k);
-      if (!geo) { geo = new THREE.BoxGeometry(b.hx * 2, b.hy * 2, b.hz * 2); this.boxGeos.set(k, geo); if (this.boxGeos.size > 40) { const [k0, g0] = this.boxGeos.entries().next().value; g0.dispose(); this.boxGeos.delete(k0); } }
-      r.matrix.makeRotationY(b.heading || 0).setPosition(b.x, b.y, b.z);
-    }
-    if (!geo || !geo.getAttribute('normal')) { this.park(); return; }
+    // a thing known only by its box (a shelf, a person, the latrine): a soft pool of light on the ground under it
+    if (!geo && t.box) { this.parkRim(); this.pool(t.box, t.enabled === false); return; }
+    this.parkPool();
+    if (!geo || !geo.getAttribute('normal')) { this.parkRim(); return; }
     r.geometry = geo;
     r.matrixWorldNeedsUpdate = true; r.updateMatrixWorld(true);
     r.frustumCulled = false;
     this.rimMat.opacity = t.enabled === false ? 0.28 : 0.55;
   }
-  park() {
-    const r = this.rim;
-    if (!r) return;
-    r.geometry = this.parkGeo;
-    r.matrix.makeTranslation(0, -1e4, 0); r.matrixWorldNeedsUpdate = true; r.updateMatrixWorld(true);
-    r.frustumCulled = true;
+  // the pool under a box target: its footprint and a little more, on its bottom (the floor, the ground at its feet)
+  pool(b, off) {
+    const g = this.glow;
+    if (!g) return;
+    const y = b.y - b.hy + 0.025;
+    g.matrix.makeRotationY(b.heading || 0).multiply(_m.makeScale(b.hx * 2 + 0.7, 1, b.hz * 2 + 0.7)).setPosition(b.x, y, b.z);
+    g.matrixWorldNeedsUpdate = true; g.updateMatrixWorld(true);
+    g.frustumCulled = false;
+    this.glowMat.opacity = off ? 0.22 : 0.42;
   }
+  parkRim() { const r = this.rim; if (!r) return; r.geometry = this.parkGeo; r.matrix.makeTranslation(0, -1e4, 0); r.matrixWorldNeedsUpdate = true; r.updateMatrixWorld(true); r.frustumCulled = false; }
+  parkPool() { const g = this.glow; if (!g) return; g.matrix.makeTranslation(0, -1e4, 0); g.matrixWorldNeedsUpdate = true; g.updateMatrixWorld(true); g.frustumCulled = false; }
+  park() { this.parkRim(); this.parkPool(); }
 }
 
 export const pointer = new Pointer();

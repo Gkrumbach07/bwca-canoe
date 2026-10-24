@@ -140,7 +140,7 @@ class Hold {
     const p = this.player;
     if (!p) return;
     const n = j.phases.length, i = Math.min(n - 1, Math.floor(j.at + 1e-9)), ph = j.phases[i];
-    p.prompt = { key: null, text: `${ring(j.at / n, n, j.key)}${j.label || ph.name} · ${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}`, hold: true };
+    p.prompt = { key: null, text: `${ring(j.at / n, n, j.auto ? null : j.key)}${j.label || ph.name} · ${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}`, hold: true };
   }
 
   // E, a line and "hold"; on the press, the job (opts as begin). p.prompt is set only when E is free (no key showing)
@@ -164,7 +164,7 @@ function ring(f, n, key) {
     const a = (i / n) * TAU - Math.PI / 2, c = Math.cos(a), s = Math.sin(a);
     ticks += `<line x1="${(C + c * (R - 2.6)).toFixed(2)}" y1="${(C + s * (R - 2.6)).toFixed(2)}" x2="${(C + c * (R + 2.6)).toFixed(2)}" y2="${(C + s * (R + 2.6)).toFixed(2)}" stroke="rgba(16,22,29,.55)" stroke-width="1.6"/>`;
   }
-  const letter = /^(BookHold|Mouse\d)$/.test(String(key)) ? 'E' : String(key || 'KeyE').replace(/^Key/, '').slice(0, 2);
+  const letter = key === null ? '' : /^(BookHold|Mouse\d)$/.test(String(key)) ? 'E' : String(key || 'KeyE').replace(/^Key/, '').slice(0, 2); // (an auto job: no key)
   return `<svg class="hold-ring" width="38" height="38" viewBox="0 0 38 38" style="flex:none;overflow:visible;vertical-align:middle;margin:-8px 12px -8px 0;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.5))" aria-hidden="true">`
     + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="rgba(243,236,221,.3)" stroke-width="3.5"/>`
     + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#f3ecdd" stroke-width="3.5" stroke-linecap="butt" stroke-dasharray="${on.toFixed(2)} ${len.toFixed(2)}" transform="rotate(-90 ${C} ${C})"/>`

@@ -275,7 +275,7 @@ class Nearby {
       const hull = this.canoe && this.canoe.hull, hy = hull ? (hull.getWorldPosition(_v), _v.y) : p.groundAt(d.x, d.z);
       const hit = near.box({ x: d.x, y: hy + 0.22, z: d.z, hx: 2.45, hy: 0.3, hz: 0.46, heading: d.heading || 0 });
       const a = packs.hullAction();
-      if (hit && a) push(hit, { kind: 'canoe', ref: 'canoe', label: a.label, verb: a.verb, hint: a.hint || null, box: { x: d.x, y: hy + 0.22, z: d.z, hx: 2.45, hy: 0.3, hz: 0.46, heading: d.heading || 0 }, act: a.run });
+      if (hit && a) push(hit, { kind: 'canoe', ref: 'canoe', label: a.label, verb: a.verb, hint: a.hint || null, mesh: this.hullMesh(), box: { x: d.x, y: hy + 0.22, z: d.z, hx: 2.45, hy: 0.3, hz: 0.46, heading: d.heading || 0 }, act: a.run });
     }
     // the camp's things whose work is the book's: E opens it at their panel
     const site = this.site(AREA_R);
@@ -323,6 +323,14 @@ class Nearby {
       push(near.segment(o.ax, ga + r, o.az, o.bx, gb + r, o.bz, r + 0.06), { kind: 'item', ref: `downLog:${sw.k}`, label: 'A down spruce', verb: 'Open', hint: sw.left ? 'saw it into lengths' : 'sawn already', act: () => this.openAt(`downLog:${sw.k}`) });
     }
     return out;
+  }
+  // the hull's own mesh (the biggest in canoe.hull), for the dot's rim
+  hullMesh() {
+    if (this._hull !== undefined) return this._hull;
+    let best = null, n = 0;
+    const h = this.canoe && this.canoe.hull;
+    if (h) h.traverse((o) => { const c = o.isMesh && !o.isSkinnedMesh && o.geometry.getAttribute('normal') ? o.geometry.getAttribute('position').count : 0; if (c > n) { n = c; best = o; } });
+    return (this._hull = best);
   }
   fireHint(key) {
     const st = this.fires.state(key);
