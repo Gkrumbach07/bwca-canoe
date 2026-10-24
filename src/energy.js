@@ -513,7 +513,7 @@ export class Energy {
   // a word, once, when the bottle runs dry or a need runs low (again once it has come back)
   needNotes() {
     const n = this.needs, o = this.noted;
-    if (this.bottle <= 0.001 && !o.dry) { o.dry = true; this.note('The bottle is dry. Fill it at the shore: E, on foot at the water.'); }
+    if (this.bottle <= 0.001 && !o.dry) { o.dry = true; this.note('The bottle is dry. Fill it at the shore: on foot at the water, from its panel in the book (I).'); }
     for (const k of ['water', 'food', 'rest', 'warmth']) {
       if (n[k] > LOW + 0.1) { o[k] = false; continue; }
       if (n[k] >= LOW || o[k]) continue;
