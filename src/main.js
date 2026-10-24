@@ -344,6 +344,12 @@ async function main() {
   canoe.update = (dt) => { camp2.beforePose(); pose2(dt); camp2.afterPose(); };
   journal.pack.onUse = (e, mode, c) => camp2.cook.onUse(e, mode, c) ?? (use2 ? use2(e, mode, c) : null);
   window.__game.cook = camp2.cook;
+  // fb2 B: the book's pack side is where you do things (the owner's second round, 2026-10-24): a container goes where its
+  // strap is dragged (the back, the chest, a hand, the canoe, the ground, into another), a container in a hand shows its
+  // grid, the Ground area (what lies within reach) replaces Drop, and the things near you (nearby.js: the fire ring's
+  // bins, meter and buttons, the pitched tent, the latrine, the hang) are panels whose held buttons run while the mouse
+  // holds them; Pitch and Hang are on the right-click menus.
+  invUI.attach({ nearby: () => window.__game.nearby || null, hold });
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   renderer.compileAsync(scene, camera).catch(() => {});
