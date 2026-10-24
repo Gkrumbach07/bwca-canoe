@@ -400,7 +400,7 @@ export class Packs {
       const lo = this.loadables(d);
       if (lo.some((u) => !this.autoLoads(u))) {
         const L = this.dropLaunch(d), kg = Math.round(lo.reduce((s, u) => s + this.weightOf(u), 0));
-        p.say(note, ['E', `Load everything here · hold · ${lo.length > 3 ? `${lo.length} things` : names(lo)}, ${kg} kg`], L && L.deep ? ['Q', 'Launch and leave them'] : ['Q', 'Shoulder the canoe']);
+        p.say(note, ['E', `Load everything here · hold · ${lo.length > 3 ? `${lo.length} things` : names(lo)}, ${kg} kg`], L && L.deep ? ['Q', `Launch and leave ${lo.length > 1 ? 'them' : 'it'}`] : ['Q', 'Shoulder the canoe']);
         if (inp.pressed('KeyE')) hold.begin(this.loadAllOpts(d, lo));
         else if (inp.pressed('KeyQ')) { if (L && L.deep) p.launch(L); else p.pickUpHull(); }
         return true;
