@@ -61,6 +61,7 @@ import { pointer, peopleTargets, forageTargets, taskTargets } from './pointer.js
 import { nearby } from './nearby.js'; // fb2 A
 import { FORAGE } from './forage.js'; // fb2 A
 import { KINDS } from './tasks.js'; // fb2 A
+import { cards } from './cards.js'; // wc B
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -384,6 +385,19 @@ async function main() {
   // bins, meter and buttons, the pitched tent, the latrine, the hang) are panels whose held buttons run while the mouse
   // holds them; Pitch and Hang are on the right-click menus.
   invUI.attach({ nearby: () => window.__game.nearby || null, hold });
+  // wc B: the cards and the book (the owner's third round of 2026-10-24: "the whole inventory system … confusing",
+  // "having to scroll to see items is a struggle"). The book is one screen for stuff (inv-ui.js MineSide): the body on
+  // the left, a tab per container you carry across the top, one grid at a time, Here for what lies within reach and the
+  // canoe beside you (Set everything out, Load everything here), Keeping at an outfitter; a thing dragged off the page
+  // goes down at your feet; right-click lists an item's verbs, hover says what it is for; eating is instant. The fire is
+  // a card (cards.js: your stuff · the fire), stream A's E at the ring opens it; its Q "Open it" on a container or a
+  // pile is journal.openHere. The card ticks with the journal and holds the walker like the book does.
+  invUI.attach({ audio, journal, packs: () => packs, cards });
+  cards.attach({ hud, nearby: () => window.__game.nearby || null, journal, player, hold, onUse: (e, mode, c) => journal.pack.onUse(e, mode, c) });
+  const updJournalB = journal.update.bind(journal), updOutfitterB = outfitter.update.bind(outfitter);
+  journal.update = (dt) => { updJournalB(dt); cards.update(dt); };
+  outfitter.update = (dt) => { updOutfitterB(dt); if (cards.shown) player.input.paused = true; };
+  window.__game.cards = cards;
   // fb2 C: the store, the counter and the dock (outfitter.js, trip.js, props.js). Trips start and end by themselves at
   // the landings, the store's hotspots are the pointer's targets (outfitter.js registers them when pointer.js is in the
   // build), and the counter's free tap is at the counter only, not at the cork board (both are the outfitter's paper).
