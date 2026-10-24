@@ -99,23 +99,37 @@ Campsites are the designated ones, each with a steel grate and a tent pad; only 
 ring do its prompts apply. On foot at a free site:
 
 - **E Pitch the tent** (at the pad): claims the site, sets the pack out by the door, and takes a quarter hour.
-- **E Gather firewood** (hubs phase 3), within about 10 m of a tree or a log on the ground: an armful of dead and down
-  in 25 minutes (10 with the folding saw), up to three to hand. Walking up to the ring stacks what you carry there, a
-  woodpile of crossed split lengths, a layer an armful; pushing off takes the stack along in the canoe (for the next
-  site, or a firewood notice).
-- **E Light the fire** (at the grate): it takes an armful (off the stack, or the one you carry); laying and lighting
-  it takes twenty minutes (building it up on warm embers five). An armful burns three game hours, full until about an
-  hour and a half is left, then the flames shorten, the light dims to a quarter and the lengths in the ring char and
-  sink into brightening coals; the embers glow three quarters of an hour more. *Add wood* (another armful, five
-  minutes) gives three hours more, up to five in the ring. With no wood to hand the ring says so, and near the trees
-  E gathers some. Half an hour by a fire dries wet gear.
-- **E Cook supper / breakfast** at a burning fire, in the evening or the morning: half an hour on the grate, then a
-  hot meal. (Every chore passes its life length on the clock over a second or so on the screen, the walker holding
-  still; filling the bottle takes five minutes.) Within three hours of
-  the cold meal eaten on the clock it takes that meal's place (no second ration); a fish off the stringer cooks first
-  and saves the ration.
-- **E Use the latrine** at the box back in the trees (about 15 m behind the ring): ten minutes, rest +0.05 (an hour and
-  a half less awake, as far as the night's rest allows), once a day.
+- **Firewood is found** (camp 2, the owner's feedback of 2026-10-24: `src/chores.js`): dead branches (1×2 in a grid,
+  0.7 kg) and short logs (1×3, 2.2 kg) lie about every site, a dozen branches and five logs within 30 m of the ring,
+  most under the trees and beside the down logs, and here and there in the woods (more in the dark spruce and the old
+  burns, none in the open). They are placed by the ground, the same every visit, and come back two days after they are
+  picked up. **E** at one picks it up into an armload in a free hand (a hand's container, 3×3: three branches, or
+  three logs; drawn at the hip), else into what you carry. With the folding saw in reach, **hold E** at a down log:
+  three cuts, five minutes each, a short log dropped beside it at each (once in two days a log). At the ring, **E**
+  with an armload stacks it on the woodpile (twelve pieces, crossed lengths drawn by the count).
+- **The fire** (fire.js): **hold E** at the ring to lay it (kindling first: a branch or two and a log, eight minutes)
+  and light it (six). A branch burns 0.6 game hours and a log 1.5, up to 4½ hours in the ring; full while more than an
+  hour is left, then the flames shorten, the light dims to a quarter and the lengths char into brightening coals. Out
+  of wood, the coals smoulder (a dull glow and a thread of smoke) for ten hours: a fire left overnight is still smoking
+  in the morning. At a burning fire a **tap of E** feeds it a piece (a log once it is going, a branch on the coals
+  brings them back), or cooks, or eats what is in the pot; **held, E puts it out**: a pot of lake water, the ash
+  stirred in, more water and the back of a hand (three phases, the flames gone after the first), a cloud of steam and a
+  hiss. Let go halfway and it stays as far as it got. The fire takes its wood from the woodpile, your arms and anything
+  in the camp's reach. Half an hour by a fire dries wet gear.
+- **The pot** (`src/cook.js`): a tap of **E** at a burning fire (or Use → *Cook it on the fire* in the book) puts the
+  best raw thing in the camp's reach on the grate: a fish off the stringer first (cleaned and fried in the pot's lid),
+  else the meal of the hour (supper from 2 pm, breakfast in the morning), with water from the bottle (supper 0.4 L,
+  breakfast 0.3, a freeze-dried one 0.5; boiled, lake water is safe, so a bottle still under its tablet will do). The
+  cook pot comes out of its pack onto the grate, a fixed container at the ring, so the book shows what is on it. It
+  cooks for 6 to 8 real seconds while 20 to 25 game minutes pass (while you are about the camp; walk off and it still
+  cooks), steaming and bubbling (a fish sizzles), and only over a fire that burns. Done, two taps of the spoon on the
+  rim: E eats it, or the book moves it into a pack as leftovers that keep five hours (a fish four) and then go off. A
+  raw meal or fish is never eaten (the book says to cook it first).
+- **Eating:** E walks you round the fire to the bench and you sit, the pot in one hand and the spoon going to your
+  mouth (four and a half seconds, ten minutes on the clock); then the food need and the pot is put back in its pack. A
+  hot meal eaten from the book within reach of a bench sits you down the same way.
+- **The latrine:** **hold E** at the box back in the trees (about 15 m behind the ring): you walk to it and sit, ten
+  minutes; rest +0.05 (an hour and a half less awake, as far as the night's rest allows) once a day.
 - **Berries and mushrooms** (the feedback of 2026-10-24, `src/forage.js`; it replaced the site's one blueberry patch):
   wild strawberries, juneberries, blueberries, raspberries and pin cherries, chanterelles, hedgehogs and lobster
   mushrooms, each on its own ground and in its season and likelier by the sites and along the portage trails, with a
@@ -128,9 +142,12 @@ ring do its prompts apply. On foot at a free site:
   five hours off, seven hours on and up by 9:00 at the latest. Turned in before sunset, supper is eaten at bedtime.
   Done in by day (the *tired* mark up), the tent takes you at once: *Sleep · worn out*, seven hours by day.
 - **Rest** at a site recovers three times as fast, four times by a burning fire.
-- **Leaving:** launching strikes the tent, drowns the fires you lit, frees the site and takes the woodpile along.
+- **Leaving:** nothing is struck or put out (camp stream 1): a note says what is still ashore (the tent, the fire burning or the coals smouldering, the pot on the grate, the barrel hung), and it all stays as it is until you come back.
 
-A whole evening is eight keys: E ashore, E pitch, E an armful, E light, E supper, E the latrine, → at the tent, E.
+A whole evening (camp 2's test): E ashore, the tent held up, three branches and a log picked up as you walk about the
+site (an E each), the fire laid and lit (held), supper on the grate (a tap), a branch on while it cooks (a tap), supper
+eaten on the bench (a tap), the latrine (held), E at the tent and E on the card; in the morning the coals are still
+smoking and a held E puts them out.
 
 An hour before sunset, if you have not camped, a note names the nearest free site. Off a site in Adventure there is
 nothing to pitch and no bivouac: find a site, paddle on by headlamp, or come in to a counter. In Sandbox a tent goes
@@ -193,7 +210,7 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 | E | afloat | go ashore · portage at a landing · the counter at a dock · pick up a lost item in reach |
 | E | portage trail | set the canoe down · pick up a pack · shoulder the canoe · launch / load up and launch |
 | E | on foot at the water's edge | fill the bottle (when it is down a little and no other prompt holds E) |
-| E | campsite, on foot | pitch the tent (pad) · light the fire, add wood, cook (grate) · sleep, the wake-time card (tent) · the latrine · gather firewood (near the trees) |
+| E | campsite, on foot | pitch the tent (held, where the ghost stands green) · pick up a dead branch or a short log (into an armload in a free hand) · at the ring: hold to lay and light the fire; at a burning fire a tap feeds it, cooks or eats what is in the pot, and held it puts the fire out · stack an armload on the woodpile · hold at a down log with the saw · hold at the latrine · sleep, the wake-time card (tent) |
 | E | on foot, by a patch in season | pick berries or mushrooms into a container you can reach (forage.js) |
 | E | on foot, by a thing on the ground / at the canoe | pick it up / load what you carry into the canoe |
 | ← → | at your tent, still / the wake-time card | open the card with the time moved / choose first light, 7:00 or 9:00 |
@@ -257,11 +274,23 @@ player's camp is saved, in `trip.state.camp`; it comes back up once its tile has
 are afloat more than 500 m from it. `camp.profileOf()` gives the tent's quality (`profile.sleepQ`) and the filter.
 `camp.wakeTime(choice)` and `camp.sleep(kind, choice)` take the card's choice ('first', 7 or 9).
 
-`camp.chores` (chores.js, hubs phase 3; main.js sets `.tasks`, and `__game.chores` is it): `wood`, `arms`, `pile`
-({ key, n }: the stack at a site's ring), `pints`, `woodHere(key)`, `useWood(key)`, `pileSpot(site)`, `openWake(site, i)`, `card` (open, choice), `onLaunch()`. Saved in
-`trip.state.chores` (or its own key with no trip): the armfuls, the stack, the pints, the day of the latrine and the
-day's picking. The props record `c.layout.latrine` ({ x, z }) where they set the box. fire.js: `FIRE.most` (hours of
-wood a ring holds), `FIRE.low` and `FIRE.floor` (the burn-down), `fires.wood(f)` (the lengths' scale).
+`camp.chores` (chores.js; main.js sets `.tasks`, and `__game.chores` is it). camp.js calls `before()` (ahead of
+player.update: the E of the prompt it showed last frame is taken there, so a pack set out near the ring never takes
+the fire's) and `update(dt)` (before its own prompts, which stand back from a keyed one or one with `own: 'chores'`),
+`openWake(site, i)`, `offered(site)`, `card`, and `ashore()` for the leaving note ('the fire is still burning', 'the
+pot is on the grate'). main.js (camp 2) wraps `canoe.moveOf` with `move()` (the seat's sit, `move.eat` while eating)
+and `canoe.update` with `beforePose()` (the rig carried onto the seat) and `afterPose()` (the armloads, the spoon and
+the pot in the hands), and the book's Use with `cook.onUse`. The rest: `campPool()` (stream 1's
+`inventory.campReach()`), `grate(key, site)`, `woodUnits(key)`, `pileSpot(site)`, `s.piles` ({ key: { 'wood:branch':
+n, 'wood:log': m } }), `near` (the pieces drawn), `cook` (cook.js: `pot`, `seat`, `eating`, `tapAction`, `start`,
+`eatAt`, `sitAt(spot)`, `benchSpot(site)`, `latrineSpot(site)`), `hold` (hold.js). Saved in `trip.state.chores` (or
+its own key with no trip), v 2: the woodpiles, the pieces taken (and the day), the logs sawn, the lengths dropped, the
+fires you lit (fire.js `record`: at, lit, until, laid), the pot on the grate, the pints and the day of the latrine; a
+v 1 stack of armfuls comes back as two branches and a log an armful. The props record `c.layout.latrine` ({ x, z })
+where they set the box. fire.js: `FIRE.branch`, `FIRE.log`, `FIRE.most` (hours of wood a ring holds), `FIRE.low` and
+`FIRE.floor` (the burn-down), `FIRE.smoulder` (hours the coals stay hot), `fires.state(key)` ('none' | 'laid' |
+'burning' | 'coals'), `lay`, `kindle`, `feed`, `douseK(key, k)` (put out so far), `douse`, `steamAt(name, at,
+amount)` ('douse' or 'pot').
 
 ### daycycle.js
 
