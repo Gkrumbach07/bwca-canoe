@@ -57,9 +57,12 @@ function boxT(S, o, top) {
 // The crowns, from the tiles' own trees (the vegetation bins: species and scale per instance), gathered once per tile
 // a slice at a time and hashed by 8 m cell. Per species (vegetation.js SPECIES order; the guests are drawn in their
 // hosts' bins): its height at unit scale, the crown's bottom and top as shares of it, its widest radius, and whether
-// it is a cone widest at the bottom (the spruces, the cedar, the white pine's tiers) or a round crown (the birch, the
-// red and jack pines). A little generous below: boughs droop.
-const CROWN = { 0: [16, 0.38, 0.95, 2.8, 1], 1: [12.5, 0.04, 1.0, 2.4, 1], 2: [15, 0.55, 1.05, 2.2, 0], 3: [10.5, 0.3, 1.08, 2.2, 0], 4: [8, 0.05, 1.0, 2.1, 1], 9: [6, 0.3, 1.0, 1.7, 0], 17: [13, 0.18, 1.0, 1.9, 1] };
+// it is a cone widest at the bottom (the spruces, the cedar, the tamarack) or a round crown (the white pine's tiers,
+// the birch, the red and jack pines). A little generous below: boughs droop. Measured from the drawn trees (vegetation.js makers, the
+// median of every variant; the radius about nine tenths of the bough tips'): the cones keep `top` of their radius at
+// the top, as the spruce's and the cedar's boughs do (at the join, a cedar's 3.4 m boughs filled the carry's view while
+// the old 2.1 m cone let the camera sit in them).
+const CROWN = { 0: [19.5, 0.22, 1.1, 5.6, 0], 1: [16, 0.0, 1.0, 3.2, 1, 0.4], 2: [19, 0.45, 1.08, 4.0, 0], 3: [13, 0.25, 1.08, 3.6, 0], 4: [9.9, 0.0, 1.02, 3.3, 1, 0.35], 9: [8.6, 0.18, 1.08, 3.1, 0], 17: [15.4, 0.06, 1.0, 2.9, 1, 0.35] };
 const CELL = 8, crownTiles = new WeakMap();
 function crownsOf(e, budget) {
   let c = crownTiles.get(e);
@@ -76,7 +79,7 @@ function crownsOf(e, budget) {
       const o = c.i * 16, s = Math.hypot(M[o], M[o + 1], M[o + 2]);
       if (s < 0.05) continue;
       const x = M[o + 12] + e.ox, y = M[o + 13], z = M[o + 14] + e.oz, h = K[0] * s;
-      const rec = { x, z, y0: y + K[1] * h, y1: y + K[2] * h, R: K[3] * (0.6 + 0.4 * s), cone: K[4] };
+      const rec = { x, z, y0: y + K[1] * h, y1: y + K[2] * h, R: K[3] * (0.6 + 0.4 * s), cone: K[4], top: K[5] || 0 };
       const key = Math.floor(x / CELL) * 65536 + Math.floor(z / CELL);
       let a = c.hash.get(key);
       if (!a) c.hash.set(key, (a = []));
@@ -110,7 +113,7 @@ const _crowns = [];
 function crownR(t, y) {
   if (y < t.y0 || y > t.y1) return -1;
   const f = (y - t.y0) / (t.y1 - t.y0);
-  return t.cone ? t.R * (1 - f) : t.R * Math.sqrt(Math.max(0, 1 - (2 * f - 1) * (2 * f - 1)));
+  return t.cone ? t.R * (1 - f * (1 - t.top)) : t.R * Math.sqrt(Math.max(0, 1 - (2 * f - 1) * (2 * f - 1)));
 }
 
 const _props = new Set();
@@ -392,7 +395,7 @@ export class ChaseCamera {
     const k = this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 12 : 5));
     this.pos.lerp(new THREE.Vector3(px, py, pz), k);
     this.look.lerp(new THREE.Vector3(tx + player.forward.x * 2, ty + 0.4, tz + player.forward.z * 2), this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
-    const cam = this.pullIn(dt, tx, ty, tz, onFoot);
+    const cam = this.pullIn(dt, tx, ty, tz, onFoot && !carrying); // under the canoe a crown pulls in only as far as a paddler's: 2 m would sit in the stern
     this.first = false;
     this.camera.position.copy(cam);
     this.camera.lookAt(this.look);

@@ -716,13 +716,15 @@ export class Outfitter {
     else this.hud.note(`${fmtDaysWords(food)} of food in the pack. Push off when you like.`);
     this.save();
   }
+  // the food you can reach, in the inventory's words ("1 meal and 2 snacks"), else in days
+  foodWords() { const inv = invModel(); if (inv && typeof inv.foodWords === 'function') { const w = inv.foodWords(); return w === 'no food' ? 'no food with you' : w; } return `${fmtDaysWords(this.energy ? this.energy.food : 0)} of food`; }
   // "Resupply · carry on" (or leaving the counter during a trip): the trip goes on
   carryOn() {
     const a = this.at, en = this.energy;
     if (this.core) this.core.resupply(a.ep, { food: en ? +en.food.toFixed(2) : 0 });
     this.summary = null;
     this.hide();
-    this.hud.note(`Carry on from ${a.name}: ${en && en.food > 0 ? `${fmtDaysWords(en.food)} of food` : 'no food in the pack'}${this.profile ? `, $${this.money} in hand` : ''}.`, 5);
+    this.hud.note(`Carry on from ${a.name}: ${this.foodWords()}${this.profile ? `, $${this.money} in hand` : ''}.`, 5);
     this.save();
   }
   // "Call it a trip": logged as came in, then a bunk night, and you wake at 7:00 rested to the counter
@@ -858,7 +860,7 @@ export class Outfitter {
       const core = this.core, dw = core && core.active ? core.dayWords() : '';
       if (moved === 'v2') this.hud.note('The permit is a season’s paper now: no dates and no exit. Come in when you like; any counter sells food.', 8);
       else if (moved === 'v1') this.hud.note('An older trip, back as Sandbox: the same lakes with no limits.', 7);
-      else this.hud.note(`${vis ? 'Back at the outfitter' : this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${fmtDaysWords(this.energy.food)} of food, energy ${Math.round(this.energy.value * 100)} %${pr ? `, $${pr.money} in hand` : ''}.`);
+      else this.hud.note(`${vis ? 'Back at the outfitter' : this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${this.foodWords()}, energy ${Math.round(this.energy.value * 100)} %${pr ? `, $${pr.money} in hand` : ''}.`);
       return;
     }
     this.pendingShow = false;

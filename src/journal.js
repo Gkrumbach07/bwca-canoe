@@ -110,7 +110,7 @@ export class Journal {
   pencilNote() {
     const w = this.wind, d = this.day, en = this.energy, h = d.hours, set = d.sunriseSunset.set, c = this.core;
     const adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
-    if (!sand && en && en.food < 1 && en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter';
+    if (!sand && en && en.food < 1 && en.food > 0 && this.trip && this.trip.active) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter';
     if (!sand && en && en.food <= 0 && this.trip && this.trip.active) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
     if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
     if (adv && c.state.wet) return 'everything is damp. a fire tonight to dry the gear';
@@ -171,7 +171,7 @@ export class Journal {
       : '<div class="empty">Nothing on the go. Every outfitter pins notices by the door, paid at its own counter.</div>';
     return `<section class="page left" aria-labelledby="trip-h">
       <div class="sc kicker">${active ? `The trip · ${c ? `${c.adventure ? 'Adventure' : 'Sandbox'} · ${esc(c.dayWords())}` : `day ${dayN}`}` : `The trip${c ? ` · ${c.adventure ? 'Adventure' : 'Sandbox'}` : ''}`}</div>
-      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Food at any counter; push off when you like.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
+      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Food on the provisions shelf; push off when you like.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
       <div class="grid">
         <div class="lab">Food</div><div class="with"><span class="cells" aria-hidden="true">${cells}</span><span>${foodTxt}</span></div>
         <div class="lab">Energy</div><div class="with"><span class="ebar"><i style="width:${ev}%"></i></span><span>${ev} % · ${energyTxt}</span></div>
