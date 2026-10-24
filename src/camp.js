@@ -733,7 +733,7 @@ export class Camp {
       const hung = [], out = [];
       for (const k of inv.containers) {
         const d = itemDef(k.item);
-        if (!d || d.fixed || !near(k.at)) continue;
+        if (!d || (d.fixed && k.item !== 'pile') || !near(k.at)) continue;
         if (k.where === 'hung') { hung.push(k); continue; }
         if (k.where === 'ground') out.push(k);
       }

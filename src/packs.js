@@ -313,7 +313,8 @@ export class Packs {
     const lakeOf = (id) => w.lakeName(id) || 'the water';
     const all = this.units(), from = c.drop || p;
     // what lies on the ground, set out at camp too (camp 1); never a fixed thing (the grate at a fire ring, chores.js)
-    const ground = all.filter((u) => u.obj.where === 'ground' && u.obj.at && !u.def.fixed);
+    // but a pile (its things are picked up)
+    const ground = all.filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile'));
     // set down for the second trip, at the trail head away from the canoe: of the trail you (or the canoe) are on now
     // (camp 1: a thing left at some other trail head, by a teleport say, no longer holds the canoe's E at a camp)
     const onTrail = (q) => { const t = p.nearestTrail(q.x, q.z, 30); return t ? this.world.portages.indexOf(t.def) : -1; };
@@ -437,7 +438,7 @@ export class Packs {
   loadables(d) {
     const camp = this.inv.camp, a = camp && camp.areaAt ? camp.areaAt(d.x, d.z) : null;
     const within = (at) => (a ? Math.hypot(at.x - a.x, at.z - a.z) <= a.r : false) || Math.hypot(at.x - d.x, at.z - d.z) <= LOAD_REACH;
-    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && !u.def.fixed && !(u.obj.at.trail && !this.autoLoads(u)) && within(u.obj.at))
+    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile') && !(u.obj.at.trail && !this.autoLoads(u)) && within(u.obj.at))
       .sort((u, v) => Math.hypot(u.obj.at.x - d.x, u.obj.at.z - d.z) - Math.hypot(v.obj.at.x - d.x, v.obj.at.z - d.z));
   }
   // the gear in the canoe now, kg (the containers and the long items lying in it)
