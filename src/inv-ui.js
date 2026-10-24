@@ -921,6 +921,12 @@ function over(st, x, y) {
     if (res !== 'no' || !z) tgt = g;
   }
   if (!tgt && z) { zone = z; res = zoneCheck(st, z); }
+  // a pack or a barrel off a shelf (no grid of yours takes it): dropped anywhere on your side it is bought, kept by the
+  // outfitters like a double-click (shop.js buyItem), so a container is bought by a drag like everything else
+  const mine = st.grid && st.grid.opts.shelf && nd && nd.kind === 'container' && !nd.nest ? document.elementFromPoint(x, y) : null, side = mine && mine.closest ? mine.closest('.sh-mine') : null;
+  if (side && res === 'no') { res = 'buy'; tgt = null; zone = null; }
+  if (st.side && st.side !== side) st.side.classList.remove('dz-ok');
+  st.side = res === 'buy' ? side : null; if (st.side) st.side.classList.add('dz-ok');
   st.tgt = tgt; st.zone = zone; st.res = res;
   // the cells lit in the grid, or the zone lit
   if (st.hl && (!tgt || st.hl.parentNode !== tgt.el)) { st.hl.remove(); st.hl = null; }
@@ -939,7 +945,8 @@ function end(st, x, y) {
   const { tgt, res, cell, zone } = st;
   cleanup(st);
   drag = null; quietClick = now() + 200;
-  if (res !== 'no' && zone) dropOnZone(st, zone);
+  if (res === 'buy') st.grid.opts.screen.buy(st.e.id, null);
+  else if (res !== 'no' && zone) dropOnZone(st, zone);
   else if (res !== 'no' && tgt) {
     const [cx, cy] = cell, from = st.grid;
     if (st.kind === 'thing') { if (!model().move(null, st.thing.id, tgt.c.id, cx, cy, st.rot)) note('It won’t go in there.', 2.5); }
@@ -959,6 +966,7 @@ function cleanup(st) {
   if (st.ghost) st.ghost.remove();
   if (st.hl) st.hl.remove();
   if (st.zl) st.zl.classList.remove('dz-ok', 'dz-swap', 'dz-no');
+  if (st.side) st.side.classList.remove('dz-ok');
   st.el.classList.remove('lifted');
   document.body.classList.remove('ig-dragging');
   for (const s of SCREENS) if (s.el) s.el.classList.remove('dragging-thing', 'dragging-item');
