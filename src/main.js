@@ -49,6 +49,9 @@ import { sheets } from './sheets.js'; // hubs 2D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
+import { inventory } from './inventory.js'; // fb A
+import { ITEMS, defineItem, itemDef } from './items.js'; // fb A
+import { ContainerView } from './containers.js'; // fb A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -207,7 +210,6 @@ async function main() {
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
-    if (e.code === 'KeyG' && !player.input.paused) energy.manualEat(); // F is the fishing rod
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
     if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-7 pick lures while the rod is up
     if (e.code === 'KeyR') settings.toggle('reflections');
@@ -271,6 +273,17 @@ async function main() {
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
   window.__game.npcs = npcs; // hubs 3C
+  // fb A: one physical inventory (items.js, inventory.js): everything you own is an item in a container (the packs,
+  // the barrels, the bucket, the tackle box, the pockets, the stringer) or a long item (the rod, the paddle), each
+  // somewhere in the world, reachable only by you, the canoe or an outfitter's stash; packs.js runs its frame and the
+  // portages on it, and containers.js draws the things right after the pose (canoe.update), so what rides on the body
+  // keeps up with it. G is gone: food is eaten from the inventory (energy.js).
+  inventory.attach({ player, world, profile, energy, outfitter, fishing, trip, hud, camp, shop });
+  const invView = new ContainerView({ inventory, canoe, scene, player, reflectLayer: REFLECT_LAYER });
+  const poseCanoe = canoe.update;
+  canoe.update = (dt) => { poseCanoe(dt); invView.afterPose(); };
+  fishing.hasLure = (id) => inventory.hasLure(id); // the lures (and leeches) in a container in reach now (stream G's list reads it)
+  Object.assign(window.__game, { inventory, items: { ITEMS, defineItem, itemDef }, invView });
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
