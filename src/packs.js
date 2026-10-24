@@ -415,7 +415,9 @@ export class Packs {
   loadables(d) {
     const camp = this.inv.camp, a = camp && camp.areaAt ? camp.areaAt(d.x, d.z) : null;
     const within = (at) => (a ? Math.hypot(at.x - a.x, at.z - a.z) <= a.r : false) || Math.hypot(at.x - d.x, at.z - d.z) <= LOAD_REACH;
-    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile') && !(u.obj.at.trail && !this.autoLoads(u)) && within(u.obj.at))
+    // (not a woodpile: firewood set down at a camp stays there for the next party, fb2's Ground area makes them)
+    const woodpile = (o) => o.item === 'pile' && o.grid.length > 0 && o.grid.every((e) => !e.box && /^wood:/.test(e.id));
+    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile') && !woodpile(u.obj) && !(u.obj.at.trail && !this.autoLoads(u)) && within(u.obj.at))
       .sort((u, v) => Math.hypot(u.obj.at.x - d.x, u.obj.at.z - d.z) - Math.hypot(v.obj.at.x - d.x, v.obj.at.z - d.z));
   }
   // the gear in the canoe now, kg (the containers and the long items lying in it)
