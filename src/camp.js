@@ -7,6 +7,7 @@ import { daysInYear } from './astro.js';
 import { sheets } from './sheets.js'; // hubs 2D: the dusk word names only a site your map shows
 import { Chores } from './chores.js'; // hubs 3A: firewood, the latrine, blueberries, the wake-time card
 import { FIRE } from './fire.js';
+import { hold } from './hold.js'; // camp 2 (temporary, stream 1's camp.js wires it): the held-progress ring
 
 // Camp and night (the trip core, stream C). On foot at a campsite: pitch your tent at the site's pad (props.js
 // c.layout), light a fire in the grate (fire.js), cook a hot meal on it, sleep in the tent to morning under a night
@@ -175,6 +176,7 @@ export class Camp {
     this.profileOf = null;    // () => the profile (stream A), set by main.js
     this.restT = 0; this.atSite = false;
     this.lit = new Set();     // the fires the player lit (keys): drowned when the player pushes off
+    hold.attach({ input: this.player.input, day: this.day, player: this.player }); // camp 2 (temporary)
     this.chores = new Chores(this); // hubs 3A: the wood, the latrine, the berries, the wake-time card (main.js sets .tasks)
   }
 
@@ -221,6 +223,7 @@ export class Camp {
   before() {
     const ch = this.chores;
     if (ch && !this.busy && !this.night) ch.before();
+    hold.before(); // camp 2 (temporary)
     if (this.busy || (this.card && this.card.active) || (ch && ch.card.open)) this.player.input.paused = true;
   }
 
@@ -246,9 +249,11 @@ export class Camp {
     if (this.lamp && this.player.input.pressed('KeyH')) this.lamp.toggle();
     this.rest(dt, dh);
     if (this.chores) this.chores.update(dt); // hubs 3A: the wood set down at a ring, the woodpile and the berries drawn
+    hold.update(dt); // camp 2 (temporary)
     const cs = p.canoe && p.canoe.state; // down on your heels for the low chores (canoe.js state.crouch)
     if (cs) cs.crouch = this.busy && LOW_CHORES.has(this.busy.kind) && p.mode === 'walk' ? 1 : 0;
     if (this.busy) { this.working(dt); return; }
+    if (hold.active) return; // camp 2 (temporary)
     if (this.night) return;
     if (this.chores && this.chores.card.open) { p.prompt = null; return; } // the wake-time card holds the keys
     this.notes();
@@ -369,12 +374,10 @@ export class Camp {
     const name = this.siteName(site);
     if (holder && holder !== PLAYER) { this.say(`${name} · Taken: another party is camped here`); return; }
     const mine = !!(this.camp && this.camp.key === key);
-    if (Math.hypot(L.fire.x - p.x, L.fire.z - p.z) < AT_GRATE && this.firePrompts(site, key)) return;
+    if (Math.hypot(L.fire.x - p.x, L.fire.z - p.z) < AT_GRATE) return; // camp 2 (temporary): the grate is chores.js's
     if (mine && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) < AT_TENT) { this.tentPrompts(site); return; }
-    if (ch && ch.spotPrompts(site)) return;
     const pitch = () => this.offer('Pitch the tent', `${name}, free`, () => this.pitch(site));
     if (!mine && Math.hypot(L.pad.x - p.x, L.pad.z - p.z) < 7) { pitch(); return; }
-    if (ch && ch.gatherPrompt(site)) return;
     if (!mine) pitch();
   }
 
@@ -423,7 +426,6 @@ export class Camp {
     if (!this.camp && this.sandbox && this.still > 1.2) { const spot = this.spotAhead(); if (spot) { this.offer('Pitch the tent here', null, () => this.pitchAt(spot)); return; } }
     // hubs 3A: off a site, an armful of firewood once you stand by the trees a moment (a notice's stove, a site ahead);
     // not about an outfitter's store (its yard, the dock, the door: outfitter.visit), whose wood a notice pays for
-    if (this.still > 1 && this.chores && !(this.outfitter && this.outfitter.visit)) this.chores.gatherPrompt(null);
   }
 
   // the nearest site (within r of its fire ring, or of its centre with layout false) whose tile has built it
@@ -534,9 +536,9 @@ export class Camp {
   leave({ quiet = false } = {}) {
     const F = this.fires;
     let drowned = false;
-    if (F) for (const key of this.lit) if (F.get(key)) { F.douse(key); drowned = true; }
+    void F; // camp 2 (temporary): nothing is put out on leaving
     this.lit.clear();
-    const stowed = this.chores ? this.chores.onLaunch() : 0, wood = stowed ? ` The wood goes in the canoe: ${word(stowed)} ${plural(stowed, 'armful')}.` : ''; // hubs 3A
+    const stowed = 0, wood = stowed ? ` The wood goes in the canoe: ${word(stowed)} ${plural(stowed, 'armful')}.` : ''; // hubs 3A
     if (this.camp) { const had = this.camp; this.strike({ quiet: true }); if (!quiet) this.note(had.key ? `You strike the tent${drowned ? ' and drown the fire' : ''}. The site is free again.${wood}` : `You strike the tent.${wood}`); }
     else if (drowned && !quiet) this.note(`You drown the fire before you push off.${wood}`);
     else if (wood && !quiet) this.note(wood.trim());
@@ -647,7 +649,6 @@ export class Camp {
     if (Number.isFinite(n.wakeAt)) d.setClock(d.year, d.doy, n.wakeAt);
     const e = this.energy;
     if (e.sleep) e.sleep(n.q, n.hours); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
-    if (this.camp && this.camp.key && this.fires) this.fires.douse(this.camp.key);
     if (this.wet && this.player.gear && this.player.gear.sleepDry) { this.state.wet = false; this.note('The gear dried overnight in the vestibule.'); } // hubs 2B: the four-season tent
     this.cookedAt = -Infinity;
     this.log('sleep', { kind: n.kind, key: this.camp ? this.camp.key : null, q: +n.q.toFixed(2), hours: Math.round(n.hours * 10) / 10 });
@@ -671,7 +672,7 @@ export class Camp {
     const c = this.camp;
     if (!c) return null;
     const f = c.key && this.fires ? this.fires.get(c.key) : null;
-    return { key: c.key, pitched: true, fireUntil: f ? f.until : null, since: c.since, x: c.x, z: c.z, fdx: c.fdx, fdz: c.fdz };
+    return { key: c.key, pitched: true, since: c.since, x: c.x, z: c.z, fdx: c.fdx, fdz: c.fdz };
   }
   persist() {
     const s = this.serialize();
@@ -695,7 +696,7 @@ export class Camp {
       const L = site.layout.pad;
       c = { key: s.key, site, x: L.x, z: L.z, fdx: L.fdx, fdz: L.fdz };
       const now = this.now;
-      if (this.fires && s.fireUntil != null && s.fireUntil > now) { const f = this.fires.kindle(s.key, site.layout.fire, now - 1, s.fireUntil - now + 1); f.until = s.fireUntil; this.lit.add(s.key); }
+      void now;
     } else {
       if (!this.world.isReady(s.x, s.z) || !this.tiles.locate(s.x, s.z)) return;
       c = { key: null, site: null, x: s.x, z: s.z, fdx: s.fdx, fdz: s.fdz };
