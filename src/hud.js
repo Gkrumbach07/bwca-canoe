@@ -46,6 +46,25 @@ const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const COMPASS_LONG = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+// fb2 F: the energy bar's needs in its order (energy.js NEED_KEYS), its width (hud.css #energy) and the needs' icons,
+// 16 px, drawn in currentColor: a snowflake, zz, a fork and knife, a drop
+const NEEDS = ['warmth', 'rest', 'food', 'water'];
+const ENERGY_W = 360;
+const flake = () => {
+  let d = '';
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3, cx = Math.sin(a), cy = -Math.cos(a), at = (r) => `${(8 + cx * r).toFixed(2)} ${(8 + cy * r).toFixed(2)}`;
+    const tick = (sg) => { const b = a + sg * 0.75; return `${(8 + cx * 4.3 + Math.sin(b) * 2.3).toFixed(2)} ${(8 + cy * 4.3 - Math.cos(b) * 2.3).toFixed(2)}`; };
+    d += `M8 8L${at(6.6)}M${tick(1)}L${at(4.3)}L${tick(-1)}`;
+  }
+  return d;
+};
+const NEED_ICON = {
+  warmth: `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="${flake()}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  rest: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 7.5h6l-6 6.5h6M9.5 2h5l-5 5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="square"/></svg>',
+  food: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v4.2M5.25 1.5v4.2M7.5 1.5v4.2M3 5.7c0 1.9 4.5 1.9 4.5 0M5.25 7v7.5M12 14.5V1.5c2.2 1.3 2.6 5.6 0 7.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  water: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2C8 1.2 3 7 3 10a5 5 0 0 0 10 0C13 7 8 1.2 8 1.2Z" fill="currentColor"/><path d="M5.6 10.2a2.5 2.5 0 0 0 1.9 2.4" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2" stroke-linecap="round"/></svg>',
+};
 
 // --- time and words ----------------------------------------------------------------------------------------
 export function clock12(hours) {
@@ -170,6 +189,7 @@ export class Hud {
     this.bindMap();
     this.bindKeys();
     this.marksBuild();
+    this.energyBuild(); // fb2 F: the energy bar
     window.addEventListener('resize', () => { this.sizeCanvas(); this.placeConfirm(); });
   }
   // for the title screen: is anything of paper up (its Esc belongs to the paper, not the menu)
@@ -672,6 +692,7 @@ export class Hud {
     this.updateBalance(ctx);
     this.updateFishing(ctx);
     this.updateMarks(ctx);
+    this.updateEnergy(ctx); // fb2 F
     if (this.tab.shown) this.renderReadout();
     if (this.mode !== 'hidden' && !ctx.shell) {
       if (this.mode !== 'sheet') { this.view.cx = player.x; this.view.cz = player.z; this.view.span = GLANCE_SPAN; }
@@ -789,16 +810,16 @@ export class Hud {
 
 
   // the status marks, bottom right at half strength: the pace while it time-lapses the travel ("trip ×4", pace.js), the
-  // time scale, the clock stopped, the trip's when it matters (the food down to a day, the gear wet, a need run low:
-  // tired, hungry or thirsty), the GPS link, mute, tiles loading
+  // time scale, the clock stopped, the trip's when it matters (the food down to a day, the gear wet), the GPS link, mute,
+  // tiles loading. (A need run low is no longer a word here: fb2 F, its chunk and icon on the energy bar say it.)
   marksBuild() {
     const m = this.el.marks; if (!m) return;
     m.innerHTML = `<span id="mark-pace" class="sc"></span><span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
-      + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span><span id="mark-need" class="sc"></span>'
+      + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span>'
       + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
       + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
       + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
-    this.mk = { pace: $('mark-pace'), speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), need: $('mark-need'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+    this.mk = { pace: $('mark-pace'), speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
   }
   updateMarks(ctx) {
     const { ts, geo, day, trip, energy, player } = ctx, mk = this.mk, w = this.world; if (!mk) return;
@@ -820,15 +841,91 @@ export class Hud {
     const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 1 ? (energy.food <= 0 ? (energy.foodWords && energy.foodWords() !== 'no food' ? energy.foodWords() : hung && hung.words ? hung.words : 'no food') : energy.foodWords ? energy.foodWords() : `${foodWords(energy.food)} of food`) : ''; // fb A
     this.set('mfood', mk.food, food); mk.food.classList.toggle('on', !!food);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
-    // hubs 1B: one need mark, only while a need is under 0.3 (energy.low: 'tired', 'hungry' or 'thirsty')
-    const need = adv && energy && energy.low ? energy.low : '';
-    this.set('mneed', mk.need, need); mk.need.classList.toggle('on', !!need);
     mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
     mk.mute.classList.toggle('on', !!(this.settings && this.settings.get('mute')));
     let loading = 0;
     if (w.tiles) { const t = w.tiles; loading = t.queue.length + t.pending.length + t.workers.filter((k) => k.key).length; }
     this.loading = loading;
     mk.tiles.classList.toggle('on', loading > 0);
+  }
+
+  // --- the energy bar (fb2 F) -----------------------------------------------------------------------------------
+  // Wild n Chill's bar, as the owner asked (2026-10-24, second round): one long thin bar, top left in the Air. Green is
+  // the energy you have; the dim track after it, up to the ceiling, is what rest can still bring back; and each need's
+  // chunk eats into it from the right end, in the bar's order cold (pale blue), sleep (orange), hunger (yellow), thirst
+  // (blue): energy.chunks(). A chunk is dashed and marching while it grows faster than its everyday rate (energy.js),
+  // and its icon (snowflake, zz, fork and knife, drop) sits under it while it grows or is a tenth of the bar or more.
+  // Shown only when it matters, as the marks are: on a trip, while a chunk grows, a need is low, the bar is under half,
+  // the ceiling under 0.6 or a chunk other than sleep 0.15 or more, and for a few seconds after it changes (a meal, a
+  // capsize); in Quiet only when it is urgent (a chunk growing, a need low, the bar under a quarter). Hidden at once while
+  // the readout is up (Tab, or always at Full density): its Energy row draws the same bar.
+  energyBuild() {
+    const air = this.el.air; if (!air) return;
+    const el = document.createElement('div');
+    el.id = 'energy'; el.className = 'fade'; el.setAttribute('role', 'img'); el.setAttribute('aria-label', 'Energy');
+    el.innerHTML = `<div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div>`
+      + `<div class="icons">${NEEDS.map((k) => `<span class="icon ${k}">${NEED_ICON[k]}</span>`).join('')}</div>`;
+    air.appendChild(el);
+    const q = (sel) => el.querySelector(sel);
+    this.eb = { el, fill: q('.fill'), room: q('.room'), chunk: {}, icon: {}, ref: null, until: 0, sig: '', top: '' };
+    for (const k of NEEDS) { this.eb.chunk[k] = q(`.chunk.${k}`); this.eb.icon[k] = q(`.icon.${k}`); }
+  }
+  updateEnergy(ctx) {
+    const eb = this.eb; if (!eb) return;
+    const { energy, trip, shell } = ctx, s = this.settings;
+    const on = !!(energy && trip && trip.active && !shell && !this.tab.shown);
+    let show = false;
+    if (on) {
+      const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
+      // the bar: the green, the room up to the ceiling, the chunks laid from the right end (rounded: the DOM is spared)
+      const pct = (x) => `${(Math.round(x * 1000) / 10).toFixed(1)}%`;
+      let sig = `${pct(v)}|${pct(cap)}`, x = 1;
+      const at = {};
+      for (let i = ch.length - 1; i >= 0; i--) { x -= ch[i].size; at[ch[i].key] = x; }
+      for (const c of ch) sig += `|${c.key}${pct(c.size)}${c.growing ? '*' : ''}`;
+      if (sig !== eb.sig) {
+        eb.sig = sig;
+        eb.fill.style.width = pct(Math.min(v, cap + 0.001));
+        eb.room.style.left = pct(Math.min(v, cap)); eb.room.style.width = pct(Math.max(0, cap - v));
+        // the icons under their chunks, nudged apart where chunks are narrow (16 px each, within the bar)
+        const W = ENERGY_W, marks = [];
+        for (const c of ch) {
+          const el = eb.chunk[c.key];
+          el.style.left = pct(at[c.key]); el.style.width = pct(c.size);
+          el.classList.toggle('grow', c.growing);
+          const shown = c.size > 0.004 && (c.growing || c.size >= 0.1);
+          eb.icon[c.key].classList.toggle('on', shown);
+          if (shown) marks.push({ k: c.key, x: (at[c.key] + c.size / 2) * W });
+        }
+        for (let i = 1; i < marks.length; i++) marks[i].x = Math.max(marks[i].x, marks[i - 1].x + 18);
+        for (let i = marks.length - 1; i >= 0; i--) marks[i].x = Math.min(marks[i].x, i === marks.length - 1 ? W - 8 : marks[i + 1].x - 18);
+        for (const m of marks) eb.icon[m.k].style.left = `${Math.max(8, m.x).toFixed(1)}px`;
+        const held = energy.heldBy || '';
+        eb.el.setAttribute('aria-label', `Energy ${Math.round(v * 100)} %${held ? `, ${held}` : ''}`);
+      }
+      // whether it matters now
+      const growing = ch.some((c) => c.growing), low = !!energy.low;
+      const urgent = growing || low || v < 0.25;
+      const ref = eb.ref, now = performance.now();
+      const moved = !ref || Math.abs(v - ref.v) >= 0.1 || ch.some((c) => Math.abs(c.size - (ref.c[c.key] || 0)) >= 0.05);
+      if (moved) { if (ref) eb.until = now + 6000; eb.ref = { v, c: Object.fromEntries(ch.map((c) => [c.key, c.size])) }; }
+      const big = ch.some((c) => c.key !== 'rest' && c.size >= 0.15); // a fifth or so of a need gone (the day's tiredness shows by the ceiling)
+      const density = s ? s.get('density') : 'standard';
+      show = urgent || (density !== 'quiet' && (v < 0.5 || cap < 0.6 || big || now < eb.until));
+      // under the spot card while the rod is up (both keep the top left), measured only when its words change
+      const spot = this.el.spot, words = spot && spot.classList.contains('show') ? `${this.cache.spotWhere}|${this.cache.spotWho}` : '';
+      if (words !== eb.spotWords) { eb.spotWords = words; const top = words ? `${48 + spot.offsetHeight + 22}px` : ''; if (top !== eb.top) { eb.top = top; eb.el.style.top = top; } }
+    } else eb.ref = null;
+    eb.el.classList.toggle('now', this.tab.shown); // gone at once under the readout, which has its own
+    eb.el.classList.toggle('show', show);
+  }
+  // the same bar, small, for the readout's Energy row (no march: the row is redrawn as its numbers change)
+  energyBarHtml(energy) {
+    const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
+    const pct = (x) => `${(Math.round(x * 200) / 2).toFixed(1)}%`;
+    let x = 1, out = '';
+    for (let i = ch.length - 1; i >= 0; i--) { const c = ch[i]; x -= c.size; if (c.size > 0.004) out = `<i class="chunk ${c.key}${c.growing ? ' grow' : ''}" style="left:${pct(x)};width:${pct(c.size)}"></i>${out}`; }
+    return `<span class="ebar" aria-hidden="true"><i class="fill" style="width:${pct(Math.min(v, cap + 0.001))}"></i><i class="room" style="left:${pct(Math.min(v, cap))};width:${pct(Math.max(0, cap - v))}"></i>${out}</span>`;
   }
 
   // --- fishing: the spot card, the reticle, the lure strip, the tension line, the catch card -----------------
@@ -946,7 +1043,7 @@ export class Hud {
       else if (low || (held && cap <= 0.995 && v <= 0.97)) why = ` · ${held}`;
       else if (cap <= 0.995 && v <= 0.97) why = ' · only sleep brings it higher';
       const water = adv && energy.bottleWords ? ` · ${energy.bottleWords()}` : '';
-      row('Energy', `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>${Math.round(v * 100)} %${why}${up}${water}`);
+      row('Energy', `${energy.chunks ? this.energyBarHtml(energy) : `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>`}${Math.round(v * 100)} %${why}${up}${water}`); // fb2 F: the bar with its chunks
       const food = energy.food, sand = !!(core && core.sandbox);
       const meal = energy.inventory ? '' : !sand && food <= 0 ? '' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn'; // fb A: no meals on their own
       const pk = core ? core.state.packs : null;
