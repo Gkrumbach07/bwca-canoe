@@ -3,8 +3,9 @@
 // log, and how it ended. Trips are open: no nights, no date to be out by and no exit place. They start and end by
 // themselves (fb2 C, outfitter.js updateTrip): a trip pushes off as you paddle away from an outfitter's landing, and
 // comes in as you set foot at any outfitter's landing, logged as "came in" there (comeIn). Back where it left without
-// having gone anywhere, it is taken back (takeBack: nothing logged). The permit is the season's paper (its number,
-// home, the day it was stamped), stamped at a counter or as the season's first trip pushes off.
+// having gone anywhere, it is taken back (takeBack: nothing logged). There is no permit (the world cards, 2026-10-24:
+// "what is the stamp for at the counter, i thought we got rid of that"): the season is just the season, home is the
+// profile's, and a saved core that still carries a permit drops it on loading.
 //
 // The clock in either mode follows the pace (pace.js): while you travel (paddling under way, carrying the canoe, walking a
 // portage trail) it runs at the time-lapse the canoe or the walker moves at (player.boost: about 6 on open water at Trip
@@ -22,7 +23,7 @@
 // landings, portages) across trips: the hook for achievements.
 //
 //   trip.mode ('adventure' | 'sandbox'), trip.adventure, trip.sandbox, trip.active, trip.dayN, trip.state (the saved core),
-//   trip.state.permit { no, ep, entry }, trip.state.packs { count, canoe, foodDays }, trip.log(kind, data),
+//   trip.state.since { year, doy, hours }, trip.state.from (the push-off's entry point), trip.state.packs { count, canoe, foodDays }, trip.log(kind, data),
 //   trip.on(kind, fn) → off, trip.start(f), trip.comeIn(ep), trip.takeBack(), trip.evacuate(why),
 //   trip.nearestKnownOutfitter(x, z)
 //   kinds: 'start' (the season's first push-off: the needs fresh, main.js) 'leave' (a later one) 'lake' 'portage'
@@ -55,14 +56,14 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 function blank(mode = 'adventure') {
   return {
     v: 3, id: null, mode: mode === 'sandbox' ? 'sandbox' : 'adventure', active: false,
-    permit: null, since: null, from: null, packs: { count: 1, canoe: 'aluminium', foodDays: 0 },
+    since: null, from: null, packs: { count: 1, canoe: 'aluminium', foodDays: 0 },
     camp: null, wet: false, offsite: 0, log: [], outcome: null,
   };
 }
 const blankBook = () => ({ trips: [], seen: { lakes: [], camps: [], eps: [], portages: [] } });
 function readDoc() { try { const s = localStorage.getItem(DOC_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
-// the season's paper from any older permit: its number, home and its date, and nothing else
-const paper = (p) => (p ? { no: p.no || null, ep: p.ep ?? null, entry: p.entry ? { year: p.entry.year, doy: p.entry.doy, hours: +(p.entry.hours ?? 8) } : null } : null);
+// an older core's permit carried the push-off: its date and its entry point are all that is kept of it
+const stampDate = (p) => (p && p.entry ? { year: p.entry.year, doy: p.entry.doy, hours: +(p.entry.hours ?? 8) } : null);
 
 export class Trip {
   // t: { world, player, day, energy, hud, veil, tasks, fishing, stats, profile }
@@ -94,7 +95,6 @@ export class Trip {
     const kit = pr.kit;
     s.packs.count = pr.has('pack2') ? 2 : 1;
     s.packs.canoe = CANOES.includes(kit.canoe) && pr.has(kit.canoe) ? kit.canoe : 'aluminium';
-    if (pr.permit && (!s.permit || s.permit.no !== pr.permit.no)) s.permit = paper(pr.permit);
   }
 
   // --- the mode and the words ------------------------------------------------------------------------------
@@ -104,7 +104,6 @@ export class Trip {
   get adventure() { return this.state.mode === 'adventure'; }
   get sandbox() { return this.state.mode === 'sandbox'; }
   get active() { return !!this.state.active; }
-  get permit() { return this.state.permit; }
   get today() { const a = this.asOf || this.day; return absDay(a.year, a.doy); } // asOf: a saved date the words are for
   // the day of the trip, by the calendar: the push-off day is day 1, and never less (Sandbox's clock keys, or an old
   // save, can set the date back before it)
@@ -158,16 +157,13 @@ export class Trip {
   }
 
   // --- starting and ending ---------------------------------------------------------------------------------
-  // push-off: { ep, foodDays, no, canoe, fresh } (the permit comes from the season's paper, or is written here when
-  // there is none). fresh: the season's first trip, put in rested with the needs full ('start'); a later one leaves the
-  // energy as it is ('leave': a landing is not a refill)
+  // push-off: { ep, foodDays, canoe, fresh }. fresh: the season's first trip, put in rested with the needs full
+  // ('start'); a later one leaves the energy as it is ('leave': a landing is not a refill)
   start(f) {
     const s = this.state, d = this.day;
     s.id = `${f.ep}-${absDay(d.year, d.doy)}-${Math.floor(Math.random() * 1e5).toString(36)}`;
     s.active = true; s.outcome = null; s.camp = null; s.offsite = 0; s.log = [];
     s.since = { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) }; s.from = f.ep;
-    const pr = this.profile;
-    s.permit = pr && pr.permit ? paper(pr.permit) : s.permit || { no: f.no || null, ep: f.ep, entry: { ...s.since } };
     s.packs = { count: 1, canoe: CANOES.includes(f.canoe) ? f.canoe : 'aluminium', foodDays: f.foodDays ?? 0 };
     this.syncKit();
     s.fish0 = this.fishing ? this.fishing.log.length : 0;
@@ -194,9 +190,9 @@ export class Trip {
   close(k, why, ep) {
     const s = this.state, d = this.day, st = this.stats;
     s.outcome = { k, why, ep, at: { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) } };
-    const entry = s.since || (s.permit && s.permit.entry) || { year: d.year, doy: d.doy, hours: d.hours };
+    const entry = s.since || { year: d.year, doy: d.doy, hours: d.hours };
     this.book.trips.push({
-      id: s.id, mode: s.mode, k, why, from: s.from ?? (s.permit ? s.permit.ep : null), to: ep, entry, end: s.outcome.at,
+      id: s.id, mode: s.mode, k, why, from: s.from ?? null, to: ep, entry, end: s.outcome.at,
       days: Math.max(1, absDay(d.year, d.doy) - absDay(entry.year, entry.doy) + 1), packs: s.packs.count, canoe: s.packs.canoe,
       km: st ? +st.km.toFixed(2) : 0, portages: st ? st.portages : 0, lakes: st ? st.lakes.length : 0, nights_out: st ? st.nights.length : 0,
       fish: this.fishing ? Math.max(0, this.fishing.log.length - (s.fish0 || 0)) : 0, offsite: s.offsite || 0,
@@ -322,19 +318,18 @@ export class Trip {
 
   // --- saving ------------------------------------------------------------------------------------------------
   serialize() { return this.state; }
-  // the outfitter's document: its core (v3; a v2 core loses its dates), or an old one (no core) brought back as
-  // Sandbox with a permit built from it
+  // the outfitter's document: its core (v3; a v2 core loses its dates; any permit either carried is dropped, its
+  // push-off kept as since and from), or an old one (no core) brought back as Sandbox
   restoreFrom(doc) {
     if (!doc) { this.setMode(this.mode); return; }
     const c = doc.core;
     if (c && (c.v === 3 || c.v === 2)) {
       const b = blank(c.mode);
       const s = { ...b, ...c, v: 3, packs: { ...b.packs, ...(c.packs || {}) }, log: Array.isArray(c.log) ? c.log : [] };
-      s.permit = paper(c.permit); // the season's paper: nights, "out by" and the exit are gone
-      if (c.v === 2) { // the trip core's permit: the put-in becomes the trip's day 1, and its dates go
-        s.since = c.active && c.permit && c.permit.entry ? { ...s.permit.entry } : null;
-        s.from = c.permit ? c.permit.ep ?? null : null;
-      }
+      const pm = c.permit || null; // a core from before the world cards: the paper's date and entry point stand in for a missing push-off
+      if (c.v === 2 || (pm && c.active && !s.since)) s.since = c.active ? stampDate(pm) : null;
+      if (c.v === 2 || (pm && s.from == null)) s.from = pm ? pm.ep ?? null : null;
+      delete s.permit;
       this.state = s;
     } else {
       const t = doc.trip || {}, s = blank('sandbox'), d = this.day;
@@ -343,7 +338,7 @@ export class Trip {
       if (t.active) {
         const entry = { year: t.startYear ?? d.year, doy: t.startDoy ?? d.doy, hours: t.startHours ?? 8 };
         s.active = true; s.id = `${t.ep}-${absDay(entry.year, entry.doy)}-old`;
-        s.permit = { no: null, ep: t.ep ?? null, entry }; s.since = { ...entry }; s.from = t.ep ?? null;
+        s.since = { ...entry }; s.from = t.ep ?? null;
       }
       this.state = s;
     }

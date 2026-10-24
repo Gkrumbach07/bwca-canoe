@@ -1,8 +1,8 @@
 // Outfitters at the entry point landings: a name for each, the store you walk into, its shelves, the counter, the board,
 // the trip's old record (where you are, when it started) and its persistence. The outfitter is where a season starts
 // and where you come in: its shelves sell the food and the gear, its counter fills the bottle and offers the services.
-// The permit is the season's paper, stamped once (at the counter, or as the season's first trip pushes off): its
-// number, home and the day. Sandbox's shelves are free. The board is the tasks' own (tasks.js boardSection), the shop
+// There is no permit and no stamp (the world cards, 2026-10-24): the counter is the bunk, the rides and the claims, and
+// the season is just the season. Sandbox's shelves are free. The board is the tasks' own (tasks.js boardSection), the shop
 // and what the gear does are shop.js's, the rides up the road rides.js's (set on outfitter.rides), the keepers' words
 // outfitters.js's (through the shop). The rules of the trip and its saved core live in trip.js, the money and the gear
 // in profile.js; this document carries the core alongside the old fields.
@@ -20,14 +20,12 @@
 // round each whole shelf unit, so either side of one opens it), E opens the provisions, tackle or gear shelf, or the
 // lure wall, as two panes (inv-ui.js ShelfScreen: your containers on the left, the shelf on the right); the map table
 // opens its own screen (maptable.js, stream D: outfitter.mapTable); the counter opens the counter, which offers only a
-// bunk night, the rides up the road, the season's permit and the notices you've done to claim; the cork board opens
+// bunk night, the rides up the road and the notices you've done to claim; the cork board opens
 // the board, and only the board. The keeper greets you, signed with the keeper's name, on the first visit of a day.
 // Without a store (its tile not built yet) E by the landing opens the counter from the water. A new season begins at
 // the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
 // store comes back on its floor (updateArrival).
-import { longDate, shortDate, esc, plural } from './hud.js';
-import { seasonAt } from './season.js';
-import { absDay, dateOfAbs } from './trip.js';
+import { esc, plural } from './hud.js';
 import { FOOD_PRICE } from './profile.js';
 import * as props from './props.js';
 import { SHELVES, itemOf } from './shop.js';
@@ -133,14 +131,6 @@ const HOT = {
 const SHELF_OF = { food: 'food', tackle: 'tackle', gear: 'gear', wall: 'lure' };
 const SHELF_LOOK = { food: 'shelf', tackle: 'shelf', gear: 'shelf', lure: 'pegs', map: 'table' };
 
-// the lakes are frozen on a date, and the first open-water day from there
-const iced = (e) => seasonAt(e.doy).ice > 0.5;
-function thawFrom(e) {
-  let n = absDay(e.year, e.doy);
-  for (let i = 0; i < 400; i++, n++) { const d = dateOfAbs(n); if (seasonAt(d.doy).ice < 0.02) return d; }
-  return e;
-}
-
 export class Outfitter {
   // targets: { energy, tasks, hud, day, stats, onTeleport, trip (trip.js), veil (veil.js) }; the profile (profile.js),
   // the shop (shop.js) and the rides (stream C's rides.js) are set on it after (main.js)
@@ -174,8 +164,6 @@ export class Outfitter {
     this.greeted = {};               // ep → the day its keeper last said hello
     this.stubStore = false;          // tests: an invisible store beside the shack when props.js has no storeLayout
     this.stubs = new Map();
-    this.draft = null;               // the season's permit before it is stamped: { entry } (the date it will carry)
-    this.today = null;               // the date the counter opened on (the stamp can't be earlier)
     this.pendingShow = false;        // open the counter as soon as the canoe is at a landing and nothing else is up
     this.saveTimer = 0; this.evac = null; this.summary = null; this.greeting = ''; this.who = null; this.lineKind = 'welcome'; this.arrivedBy = null; this.staged = null; this.bunking = false;
     this.el = { panel: document.getElementById('outfitter') };
@@ -553,7 +541,7 @@ export class Outfitter {
   }
 
   // --- the counter and the board ----------------------------------------------------------------------------
-  // the paper at the counter ('counter': a bunk, the rides, the permit, the notices to claim) or at the board ('board')
+  // the paper at the counter ('counter': a bunk, the rides, the notices to claim) or at the board ('board')
   show(landing, tab = null, focus = null) {
     const pr = this.profile, core = this.core, st = this.staged; // staged: the face a hotspot asked for, should a wrapper drop the arguments
     this.staged = null;
@@ -568,8 +556,6 @@ export class Outfitter {
     this.heard(landing.ep, this.greeting);
     this.who = this.shop ? this.shop.keeperName(landing.ep) : null;
     this.lineKind = 'welcome';
-    this.today = { year: this.day.year, doy: this.day.doy };
-    if (this.adventure && pr && !pr.permit && !this.trip.active) this.draft = this.draft || { entry: { ...this.today } };
     if (this.energy && typeof this.energy.fill === 'function') this.energy.fill(2, 0); // the counter's tap: a full bottle, free
     if (this.hud && this.hud.openPaper) this.hud.openPaper('outfitter');
     this.el.panel.classList.add('show');
@@ -610,14 +596,10 @@ export class Outfitter {
     this.hide();
   }
   act(act, id, ev = null) {
-    const f = this.draft;
     if (act === 'close') this.close();
     else if (act === 'shelf') this.openShelf(id, this.at);
     else if (act === 'bunk') this.bunk();
     else if (act === 'ride' && this.rides) this.rides.act(id);
-    else if (act === 'date' && f && !this.stamped) this.shiftDate(Number(id) * (ev && ev.shiftKey ? 30 : 1));
-    else if (act === 'thaw' && f && !this.stamped) this.setEntry(thawFrom(f.entry));
-    else if (act === 'stamp') { this.stamp(); this.render(); }
     else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
       const r = this.tasks.act(id, this.at.ep);
@@ -625,66 +607,9 @@ export class Outfitter {
       this.save(); this.render();
     }
   }
-  // the season's date, before it is stamped: a day either way (a month with Shift), never before the day the counter
-  // opened. The clock goes with it, so the season behind the counter is the one you will paddle in.
-  shiftDate(n) {
-    const f = this.draft, t0 = this.today ? absDay(this.today.year, this.today.doy) : absDay(this.day.year, this.day.doy);
-    const cur = absDay(f.entry.year, f.entry.doy);
-    this.setEntry(dateOfAbs(Math.max(t0, Math.min(t0 + 366, cur + n))));
-  }
-  setEntry(e) {
-    const f = this.draft; if (!f) return;
-    f.entry = { year: e.year, doy: e.doy };
-    if (this.day.year !== e.year || this.day.doy !== e.doy) this.day.setClock(e.year, e.doy, this.day.hours);
-    this.render();
-  }
-
-  // the permit's number: home and the month and day of the season's stamp (or of today, before it)
-  permitNo(home, d) {
-    const date = new Date(d.year, 0, d.doy);
-    return `No. ${home}-${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-  }
-  // the season's permit, stamped once: at the counter (Stamp it), or as the season's first trip pushes off (start)
-  get stamped() { const pr = this.profile; return pr ? !!pr.permit : !!(this.core && this.core.permit); }
-  stamp() {
-    const pr = this.profile; if (!pr || pr.permit) return false;
-    const d = this.day, a = this.at || this.nearest(this.player.x, this.player.z).l;
-    let e = this.draft ? this.draft.entry : { year: d.year, doy: d.doy };
-    if (this.adventure && iced(e)) e = thawFrom(e); // the lakes are iced on it: the thaw
-    if (e.year !== d.year || e.doy !== d.doy) d.setClock(e.year, e.doy, d.hours);
-    const home = pr.home != null ? pr.home : a.ep;
-    pr.stamp({ no: this.permitNo(home, e), ep: home, entry: { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) } });
-    this.draft = null;
-    this.save();
-    return true;
-  }
-
-  // The season's permit, small: its number, home and the day it was issued. Before it is stamped (Adventure) the day
-  // can still move, a day either way (a month with Shift), or to the thaw when the lakes are iced in on it.
-  permitSection(a) {
-    const pr = this.profile, core = this.core, adv = this.adventure;
-    const home = pr && pr.home != null ? this.landing(pr.home) : null;
-    const stamped = pr ? pr.permit : core && core.permit;
-    const rows = [`<div class="lab">Home</div><div>${home ? `${esc(this.lakeOf(home))} · entry point ${home.ep}` : esc(this.lakeOf(a))}</div>`];
-    let ice = false, thaw = null;
-    if (adv && !stamped) { // the date the season's paper will carry, while it can still move
-      const f = this.draft || (this.draft = { entry: { year: this.day.year, doy: this.day.doy } });
-      ice = iced(f.entry); thaw = ice ? thawFrom(f.entry) : null;
-      const first = this.today && absDay(f.entry.year, f.entry.doy) <= absDay(this.today.year, this.today.doy);
-      rows.push(`<div class="lab">Issued</div><div class="when"><span class="date">`
-        + `<button type="button" class="step small" data-act="date" data-id="-1" aria-label="A day earlier (Shift: a month)" title="Shift: a month" ${first ? 'disabled' : ''}>‹</button>`
-        + `<span>${longDate(f.entry.year, f.entry.doy)}</span>`
-        + `<button type="button" class="step small" data-act="date" data-id="1" aria-label="A day later (Shift: a month)" title="Shift: a month">›</button></span>`
-        + `${ice ? `<button type="button" class="pencil-btn" data-act="thaw">iced in · put in ${shortDate(thaw.year, thaw.doy)}?</button>` : ''}</div>`);
-    } else if (stamped && stamped.entry) rows.push(`<div class="lab">Issued</div><div>${longDate(stamped.entry.year, stamped.entry.doy)} · <span class="soft">good all season</span></div>`);
-    const no = stamped && stamped.no ? stamped.no : this.permitNo(pr && pr.home != null ? pr.home : a.ep, (this.draft && this.draft.entry) || this.day);
-    const foot = stamped ? '<div class="inked">Stamped</div>'
-      : `<div class="stampline"><button type="button" class="stamp small" data-act="stamp">Stamp it</button><span class="pencil">${esc(ice ? `iced in until ${shortDate(thaw.year, thaw.doy)}` : 'or it’s stamped as you push off')}</span></div>`;
-    return `<section class="permit small" aria-labelledby="permit-h">
-      <div class="top"><h3 id="permit-h">Season permit</h3><span class="sc no">${this.sandbox ? 'Sandbox' : esc(no)}</span></div>
-      <div class="grid">${rows.join('')}</div>${foot}
-    </section>`;
-  }
+  // (The season permit, its stamp and its date stepper stood here until the world cards of 2026-10-24: "what is the
+  // stamp for at the counter, i thought we got rid of that. no permit". Home is the profile's; the season starts on
+  // the title.)
   // The notices you've done: this outfitter's, to claim here (one by one, or all at once), and the others', with where
   // each is paid (tasks.js pays a notice only at the counter that posted it)
   claimsSection(a) {
@@ -748,8 +673,8 @@ export class Outfitter {
     if (t && typeof t.boardSection === 'function') return t.boardSection(a.ep);
     return '<section class="board" aria-labelledby="board-h"><div class="top"><h3 id="board-h">The board</h3><span class="sum">adverts from this outfitter</span></div><div class="cards"><p class="muted">The board is being written up.</p></div></section>';
   }
-  // The paper: at the counter, the permit and the notices done on the left, the keeper's desk (a bunk, the rides) on
-  // the right; at the cork board, the board and nothing else
+  // The paper: at the counter, the notices done on the left, the keeper's desk (a bunk, the rides) on the right, and
+  // nothing else (no permit, no stamp); at the cork board, the board and nothing else
   render() {
     if (!this.open || !this.el.panel) return;
     const a = this.at, board = this.tab === 'board';
@@ -763,7 +688,7 @@ export class Outfitter {
       ? `<div class="lede"><div class="sc kicker">${esc(a.name)} · ${kicker}</div><h2>The board</h2><div class="say">Notices pinned up by the door. Take one on; it’s paid at the counter when it’s done.</div></div>`
       : `<div class="lede"><div class="sc kicker">${kicker}</div><h2>${esc(a.name)}</h2><div class="say">“${esc(this.greeting)}”${this.who ? ` <span class="who">— ${esc(this.who)}</span>` : ''}</div></div>`;
     const body = board ? `<div class="counter one">${this.boardSection(a)}</div>`
-      : `<div class="counter two"><div class="col">${this.permitSection(a)}${this.claimsSection(a)}</div>${this.deskSection(a)}</div>`;
+      : `<div class="counter two"><div class="col">${this.claimsSection(a)}</div>${this.deskSection(a)}</div>`;
     this.el.panel.classList.toggle('simple', !board);
     this.el.panel.innerHTML = `<header>${lede}${purse}<button type="button" class="stamp outline" data-act="close" aria-label="Leave (E or Esc)">${leave}</button></header>${receipt}${body}`;
     const now = this.el.panel.querySelector('.desk, .col, .cards');
@@ -771,23 +696,22 @@ export class Outfitter {
   }
 
   // --- the trip ----------------------------------------------------------------------------------------------
-  // Push off (updateTrip, as you paddle away from a landing): the season's paper is stamped if it is not yet (the
-  // season's first trip: you put in rested, as a new season does), and the trip is under way. Later trips leave the
-  // energy and the needs as they are: a landing is not a refill.
+  // Push off (updateTrip, as you paddle away from a landing): the trip is under way. The season's first trip puts you
+  // in rested, as a new season does; later trips leave the energy and the needs as they are: a landing is not a refill.
   start() {
     const a = this.at || this.port || this.nearest(this.player.x, this.player.z).l;
     const d = this.day, core = this.core, adv = this.adventure, pr = this.profile;
-    const first = this.stamp() || !(core && core.state && core.state.id); // the season's first trip (a new season's core has none yet)
+    const first = !(core && core.state && core.state.id); // the season's first trip (a new season's core has no id yet)
     const food = this.energy ? this.energy.food : 0;
     this.trip = { active: true, ep: a.ep, days: this.foodRoom, started: d.clock, startAbs: d.doy * 24 + d.hours, startYear: d.year, startDoy: d.doy, startHours: d.hours, turnedIn: 0, fromName: this.lakeOf(a), away: false };
     if (first && this.energy) this.energy.value = 1;
     if (this.stats) this.stats.reset();
     if (core) core.start({ ep: a.ep, foodDays: food, canoe: pr ? pr.kit.canoe : 'aluminium', fresh: first });
-    this.summary = null; this.draft = null; this.port = null;
+    this.summary = null; this.port = null;
     if (this.open) this.hide();
-    // the permit, as a title over the water
+    // the push-off, as a title over the water
     const lake = this.lakeOf(a), purse = pr ? ` · $${pr.money} in hand` : '';
-    if (core && adv) this.hud.showPlace(`${core.permit && core.permit.no ? `Permit ${core.permit.no}` : 'Season permit'} · ${a.name}`, lake, `${this.foodWords()}${purse} · come in at any outfitter`, 6);
+    if (core && adv) this.hud.showPlace(`${first ? 'The season begins' : 'Pushing off'} · ${a.name}`, lake, `${this.foodWords()}${purse} · come in at any outfitter`, 6);
     else if (core) this.hud.showPlace(`Sandbox · ${a.name}`, lake, `${core.packWords(food)} · no dates`, 6);
     else this.hud.note(`${fmtDaysWords(food)} of food in the pack. Off you go.`);
     this.save();
@@ -835,7 +759,7 @@ export class Outfitter {
     if (core) core.reset(mode); // after the profile: the packs and the canoe are the new season's
     if (this.open) this.hide();
     this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
-    this.summary = null; this.draft = null; this.evac = null; this.bunking = false; this.greeted = {}; this.arrival = null; this.port = null; this.docking = null;
+    this.summary = null; this.evac = null; this.bunking = false; this.greeted = {}; this.arrival = null; this.port = null; this.docking = null;
     if (this.visit) this.endVisit();
     if (this.energy) { this.energy.reset(); this.energy.food = 0; }
     if (this.tasks && this.tasks.reset) this.tasks.reset();
@@ -857,7 +781,7 @@ export class Outfitter {
   // at full dark: the trip is over (the tasks are kept)
   evacuated() {
     this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
-    this.summary = null; this.draft = null;
+    this.summary = null;
     if (this.open) this.hide();
     this.save();
   }
@@ -896,7 +820,7 @@ export class Outfitter {
     try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
   }
   // On load: resume a trip where it was left, or open the counter at the landing. A document without a trip core
-  // is from before it and comes back as Sandbox, and a trip core's v2 permit loses its dates (trip.js). The food
+  // is from before it and comes back as Sandbox, and an older core's permit is dropped (trip.js). The food
   // in the pack is yours between trips too.
   async boot() {
     const d = this.load(), pr = this.profile;
@@ -915,7 +839,7 @@ export class Outfitter {
       this.pendingShow = false;
       if (d.pos && Math.hypot(d.pos.x - this.player.x, d.pos.z - this.player.z) > 40 && this.onTeleport) await this.onTeleport(d.pos.x, d.pos.z);
       const core = this.core, dw = core && core.active ? core.dayWords() : '';
-      if (moved === 'v2') this.hud.note('The permit is a season’s paper now: no dates and no exit. Come in when you like; any counter sells food.', 8);
+      if (moved === 'v2') this.hud.note('An older trip, back as an open one: no dates, no exit and no permit. Come in when you like; any counter sells food.', 8);
       else if (moved === 'v1') this.hud.note('An older trip, back as Sandbox: the same lakes with no limits.', 7);
       else this.hud.note(`${vis ? 'Back at the outfitter' : this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${this.foodWords()}, energy ${Math.round(this.energy.value * 100)} %${pr ? `, $${pr.money} in hand` : ''}.`);
       return;
@@ -955,8 +879,8 @@ function boxHit(ray, h) {
   return { t: t0, miss: 0 };
 }
 
-// the counter's two columns, the small permit, the notices done, the desk (the counter's own look is hud.css's; tasks.js
-// adds the board's, rides.js the rides')
+// the counter's two columns, the notices done, the desk (the counter's own look is hud.css's; tasks.js adds the board's,
+// rides.js the rides')
 const CSS = `
 #outfitter { gap: 16px; }
 #outfitter.simple { width: min(1020px, 94vw); height: auto; max-height: min(698px, 90vh); }
@@ -965,12 +889,6 @@ const CSS = `
 #outfitter .counter.one { grid-template-columns: minmax(0, 1fr); }
 #outfitter .counter.two { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); }
 #outfitter .counter .col { display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow: auto; scrollbar-width: thin; padding-right: 4px; }
-#outfitter .permit.small { flex: none; padding: 14px 18px 16px; gap: 10px; overflow: visible; }
-#outfitter .permit.small h3 { font-size: 17px; }
-#outfitter .permit.small .grid { font-size: 14.5px; gap: 6px 12px; }
-#outfitter .permit .stampline { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-#outfitter .permit .stampline .pencil { font-size: 18px; text-align: left; }
-#outfitter .permit .inked { align-self: flex-end; margin-top: -6px; font: 700 11px/1 var(--sc); letter-spacing: .22em; text-transform: uppercase; color: var(--map-red); border: 2px solid var(--map-red); border-radius: 2px; padding: 5px 9px 4px; transform: rotate(-5deg); opacity: .78; }
 #outfitter .claims { display: flex; flex-direction: column; gap: 10px; flex: none; }
 #outfitter .claims .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--edge); padding-bottom: 8px; }
 #outfitter .claims .top .stamp { font-size: 10.5px; padding: 4px 10px; }
