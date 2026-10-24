@@ -486,7 +486,7 @@ export function buildCanoeRig({ water = null } = {}) {
       // the jog upright, the knee lifting lightly: a shorter flight and a lower swing than the sprinter's it had been
       c = lerp(0.6 + 0.24 * v, 1.2 + 0.08 * v, jog);
       fs = lerp(lerp(0.58, 0.5, hustle), 0.36, jog);
-      clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.16, jog);
+      clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.16, jog) + 0.12 * wadeK;
     }
     c *= 1 + 0.2 * Math.abs(mz);
     state.cadence = moving ? c : 0;
@@ -556,7 +556,12 @@ export function buildCanoeRig({ water = null } = {}) {
         // a jogging foot stays back a moment as the heel comes up, then the knee brings it through
         const e = lerp(ease(s), Math.pow(ease(s), 1.3), jog);
         f.pos.lerpVectors(f.lift, f.target, e);
-        f.pos.y = lerp(f.lift.y, f.target.y, s) + f.clear * Math.pow(Math.sin(Math.PI * Math.pow(s, lerp(0.8, 0.6, jog))), 1.2);
+        // a step up (a log, a rock, the store's step): the knee lifts the foot over the edge early; a step down holds it
+        // up until it is over the lower ground
+        const rise = f.target.y - f.lift.y, up = smooth(0.08, 0.2, rise), down = smooth(0.08, 0.2, -rise);
+        const sy = lerp(lerp(s, Math.sin((Math.PI / 2) * Math.min(1, s * 1.25)), up), s * s, down);
+        const cl = Math.max(f.clear, up * (0.45 * rise + 0.08));
+        f.pos.y = lerp(f.lift.y, f.target.y, sy) + cl * Math.pow(Math.sin(Math.PI * Math.pow(s, lerp(0.8, 0.6, jog))), 1.2);
         f.pos.y = Math.max(f.pos.y, ground(f.pos.x, f.pos.z) + 0.01 * Math.sin(Math.PI * s)); // never through a bump on the way
         f.yaw = f.liftYaw + wrapPi(f.targetYaw - f.liftYaw) * e;
         // toes down after the push-off, up again to meet the ground with the heel
@@ -630,7 +635,7 @@ export function buildCanoeRig({ water = null } = {}) {
     const roll = lerp(-0.025 * Math.sin(idle.shift), 0.06 * sp * Math.sin(twoPi * (phi - 0.03)), mw);
     const pYaw = -0.11 * sp * Math.cos(twoPi * phi) * (g.backF ? -1 : 1);
     // the jog upright: a few degrees forward of the walk, no more
-    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog) + 0.01 * Math.sin(idle.breath)
+    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK
       + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck;
     const pelvis = bodyQ(yaw + pYaw, 0.03 + lean * 0.3, roll);
     const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15, lean, -0.4 * roll + 0.04 * g.mz * sp);
@@ -659,10 +664,12 @@ export function buildCanoeRig({ water = null } = {}) {
     const fwd = 0.04 + 0.12 * jog + (g.air ? 0.25 * g.tuck : 0) + 0.75 * ck;
     const cq = J.chest.q;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
-      const sw = A * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd + (k === 'L' ? work : -work);
+      // a hand carrying something (stream A's state.held: the bucket, the tackle box, the rod) hangs straighter and swings less
+      const held = state.held && state.held[k] ? 1 : 0;
+      const sw = A * (1 - 0.6 * held) * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd * (1 - 0.5 * held) + (k === 'L' ? work : -work) * (1 - held);
       const sh = J['arm' + k].p;
-      const du = V(Math.sin(sw), -Math.cos(sw), sg * 0.13).normalize().applyQuaternion(cq);
-      const df = V(Math.sin(sw + bend), -Math.cos(sw + bend), sg * 0.06).normalize().applyQuaternion(cq);
+      const du = V(Math.sin(sw), -Math.cos(sw), sg * (0.13 + 0.55 * wadeK)).normalize().applyQuaternion(cq);
+      const df = V(Math.sin(sw + bend * (1 - 0.7 * held)), -Math.cos(sw + bend * (1 - 0.7 * held)), sg * (0.06 + 0.3 * wadeK)).normalize().applyQuaternion(cq);
       const elbow = sh.clone().addScaledVector(du, 0.315);
       const target = elbow.clone().addScaledVector(df, 0.265 + 0.07);
       const pole = elbow.clone().add(V(-0.3, 0, sg * 0.05).applyQuaternion(cq));
@@ -670,12 +677,14 @@ export function buildCanoeRig({ water = null } = {}) {
     }
   }
 
-  function poseWalk(dt) {
+  let wadeK = 0; // wading (player.move 'wade'), eased: the knees lifted high out of the water, the arms out from the sides
+  function poseWalk(dt, mk = null) {
     placePaddler(0, 0, 0);
     if (hat.parent !== fig.bones.head) hatOnHead();
     contact.visible = false;
     stowPaddle();
     updateIdle(dt, state.walkSpeed < 0.2);
+    wadeK += ((mk === 'wade' ? 1 : 0) - wadeK) * damp(4, dt);
     const g = locomote(dt, false);
     standingBody(dt, g, false);
     swingArms(g);
@@ -716,12 +725,14 @@ export function buildCanoeRig({ water = null } = {}) {
   function poseSwim(dt) {
     contact.visible = false;
     if (hat.parent !== fig.bones.head) hatOnHead();
-    hullPivot.position.set(0, -0.3, 0);
-    hullPivot.rotation.set(Math.PI, 0, 0.06 * Math.sin(state.walk * 0.7));
-    // the paddle floats off the far side of the hull from you
-    paddleInHand(); paddle.visible = true;
-    const away = -(state.swimSide || 1);
-    placePaddle(V(-0.2, -0.04, away * 1.05), V(1, 0.0, away * 0.08).normalize(), V(0, 1, 0));
+    if (state.swimHull !== false && hullPivot.parent === rig) {
+      // capsized: the hull overturned beside you, the paddle floating off its far side
+      hullPivot.position.set(0, -0.3, 0);
+      hullPivot.rotation.set(Math.PI, 0, 0.06 * Math.sin(state.walk * 0.7));
+      paddleInHand(); paddle.visible = true;
+      const away = -(state.swimSide || 1);
+      placePaddle(V(-0.2, -0.04, away * 1.05), V(1, 0.0, away * 0.08).normalize(), V(0, 1, 0));
+    } else stowPaddle(); // a swim from the shore: the canoe lies where it was left, the paddle in it
     const loc = rig.worldToLocal(swimmer.clone());
     placePaddler(loc.x, loc.y, loc.z, state.swimHeading - rig.rotation.y);
     updateIdle(dt, state.walkSpeed < 0.3);
@@ -823,6 +834,223 @@ export function buildCanoeRig({ water = null } = {}) {
   }
 
   // ---------------------------------------------------------------------------------------------------------
+  // The walker's moves (player.js player.move, read through api.moveOf): a vault over a log, a climb onto a rock or a
+  // ledge, and sitting. player.js drives the body's path (the rig: the feet's height plus 0.1, along from -> to); these
+  // pose the limbs on it from world places that stay put while the body passes: the hand on the log, the hands on the
+  // edge, the feet where they push off and land. Each is a few keys per part over the move's u (0..1), run through a
+  // smooth curve. A step up is the gait's own (locomote: the swinging knee lifted over the edge); a hop, a fall and a
+  // landing are the air pose (state.air, state.land); wading is the walk with the knees high and the arms out.
+  // track: a value through keys [[u, v], ...]: a cubic through each key, flat at the two ends
+  function track(u, K) {
+    const n = K.length;
+    if (u <= K[0][0]) return K[0][1];
+    if (u >= K[n - 1][0]) return K[n - 1][1];
+    let i = 0;
+    while (u > K[i + 1][0]) i++;
+    const u0 = K[i][0], p0 = K[i][1], u1 = K[i + 1][0], p1 = K[i + 1][1], h = u1 - u0, t = (u - u0) / h;
+    const m0 = i > 0 ? ((p1 - K[i - 1][1]) / (u1 - K[i - 1][0])) * h : 0;
+    const m1 = i + 2 < n ? ((K[i + 2][1] - p0) / (K[i + 2][0] - u0)) * h : 0;
+    const t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * p0 + (t3 - 2 * t2 + t) * m0 + (-2 * t3 + 3 * t2) * p1 + (t3 - t2) * m1;
+  }
+  // the same through world points [[u, Vector3], ...]
+  const _kx = [], _ky = [], _kz = [];
+  function trackV(u, K, out) {
+    _kx.length = _ky.length = _kz.length = K.length;
+    for (let i = 0; i < K.length; i++) { _kx[i] = [K[i][0], K[i][1].x]; _ky[i] = [K[i][0], K[i][1].y]; _kz[i] = [K[i][0], K[i][1].z]; }
+    return out.set(track(u, _kx), track(u, _ky), track(u, _kz));
+  }
+  // the move's own frame in the world: its way (f), its right (r), a point `along` metres on from `from`, `side` to the
+  // right, at height y
+  const mvF = { fx: 1, fz: 0, rx: 0, rz: 1, L: 0, ox: 0, oz: 0 };
+  function moveFrame(m) {
+    const dx = m.to.x - m.from.x, dz = m.to.z - m.from.z, L = Math.hypot(dx, dz);
+    const h = Number.isFinite(m.heading) ? m.heading : rig.rotation.y;
+    mvF.fx = L > 0.05 ? dx / L : Math.cos(h); mvF.fz = L > 0.05 ? dz / L : -Math.sin(h);
+    mvF.rx = -mvF.fz; mvF.rz = mvF.fx; mvF.L = L; mvF.ox = m.from.x; mvF.oz = m.from.z;
+    mvF.yaw = Math.atan2(-mvF.fz, mvF.fx);
+  }
+  const mvAt = (along, side, y, out = V()) => out.set(mvF.ox + mvF.fx * along + mvF.rx * side, y, mvF.oz + mvF.fz * along + mvF.rz * side);
+  // a timed move's start: where the feet were (they push off from there), kept until the kind changes
+  const moveStart = { kind: null, feet: { L: V(), R: V() } };
+  function noteMoveStart(m) {
+    if (moveStart.kind === m.kind && moveStart.t0 <= m.t) { moveStart.t0 = m.t; return; }
+    moveStart.kind = m.kind; moveStart.t0 = m.t;
+    for (const k of ['L', 'R']) {
+      const f = loco.feet[k];
+      if (loco.init && Number.isFinite(f.pos.x) && flatDist(f.pos, rig.position) < 1.2) moveStart.feet[k].copy(f.pos);
+      else mvAt(0, k === 'L' ? -0.11 : 0.11, m.from.y, moveStart.feet[k]);
+    }
+  }
+  // limbs to world places: a foot (its ankle over the sole's point p, yawed `yaw`, pitched) and a hand (the fist at p,
+  // its grip along `axis`, the palm toward `palm`)
+  const _wa = V(), _wb = V(), _wc = V();
+  function footTo(k, p, yawW, pitch, kneeOut = 0.05) {
+    ankleAt(p, yawW, pitch, ankles[k]);
+    const a = toLocal(ankles[k], _wa), sg = k === 'L' ? -1 : 1, yl = yawW - rig.rotation.y;
+    footFrameQ(yawW, pitch, fq[k]);
+    const hip = J['thigh' + k].p;
+    const pole = _wb.set((hip.x + a.x) / 2 + Math.cos(yl) * 0.6, (hip.y + a.y) / 2, (hip.z + a.z) / 2 - Math.sin(yl) * 0.6 + sg * kneeOut);
+    P.leg(k, a.clone(), pole, fq[k]);
+  }
+  function handTo(k, pWorld, axisL, palmL, poleOff) {
+    const t = toLocal(pWorld, _wc), sh = J['arm' + k].p, sg = k === 'L' ? -1 : 1;
+    P.arm(k, t.clone(), axisL, V(sh.x + poleOff.x, sh.y + poleOff.y, sh.z + sg * poleOff.z), palmL);
+  }
+  // a hand's free place (local): from its shoulder, hanging by the hip, or (up) out to the side for balance
+  const freeHand = (k, out, up = 0) => { const sg = k === 'L' ? -1 : 1, sh = J['arm' + k].p; return out.set(sh.x + 0.06 + 0.06 * up, sh.y - 0.56 + 0.36 * up, sh.z + sg * (0.08 + 0.4 * up)); };
+  const _h0 = V(), _h1 = V(), _hw = V();
+
+  // A vault over a log or a low rock: the left hand on its top, the body over it leaning on that hand with the legs
+  // tucked and swung across on the right, then down on the far side, the knees giving on the landing.
+  function poseVault(dt, m) {
+    placePaddler(0, 0, 0);
+    if (hat.parent !== fig.bones.head) hatOnHead();
+    contact.visible = false; stowPaddle(); updateIdle(dt, false);
+    noteMoveStart(m); moveFrame(m);
+    const u = sat(m.u), top = m.top ?? m.from.y + 0.7, L = Math.max(0.6, mvF.L);
+    const nearD = m.nearD ?? L * 0.32, far = m.far >= 0 ? m.far : nearD + 0.4, mid = (nearD + far) / 2;
+    const g0 = m.from.y, g1 = m.to.y;
+    const yOff = mvF.yaw - rig.rotation.y; // the body keeps to the move's way whatever the view does
+    // the hips (world height) through take-off, over, and the landing
+    const hipW = track(u, [[0, g0 + 0.83], [0.08, g0 + 0.72], [0.2, g0 + 0.84], [0.45, top + 0.24], [0.7, g1 + 0.72], [0.84, g1 + 0.6], [1, g1 + 0.83]]);
+    const lean = track(u, [[0, 0.1], [0.08, 0.3], [0.25, 0.62], [0.45, 0.75], [0.65, 0.4], [0.84, 0.35], [1, 0.05]]);
+    const side = track(u, [[0, 0], [0.2, -0.2], [0.45, -0.48], [0.65, -0.25], [0.85, 0], [1, 0]]);
+    const twist = track(u, [[0, 0], [0.25, -0.2], [0.48, -0.5], [0.72, -0.15], [1, 0]]);
+    const root = V(0.04 * lean, hipW - rig.position.y + ROOT_UP, -0.06 * side);
+    const pelvis = bodyQ(yOff + twist, 0.05 + lean * 0.4, side * 0.6);
+    const chest = bodyQ(yOff + twist * 0.35, lean, side);
+    const head = bodyQ(yOff, 0.1 + lean * 0.25 - 0.25 * smooth(0.1, 0.4, u) * (1 - smooth(0.6, 0.85, u)), side * 0.3);
+    body(root, pelvis, chest, head);
+    // the feet: the left pushes off where it stood, the right drives up; both tucked over the top on the right; down
+    // beside each other on the far side
+    const fL = trackV(u, [[0, moveStart.feet.L], [0.12, moveStart.feet.L], [0.3, mvAt(nearD + 0.05, 0.25, top + 0.15, _h0)], [0.45, mvAt(mid + 0.1, 0.38, top + 0.15, _h1)], [0.6, mvAt(far + 0.15, 0.3, top + 0.05, _hw)], [0.78, mvAt(L - 0.06, -0.11, g1, V())], [1, mvAt(L, -0.11, g1, V())]], V());
+    const fR = trackV(u, [[0, moveStart.feet.R], [0.1, mvAt(0.3, 0.16, g0 + 0.35, V())], [0.28, mvAt(nearD + 0.15, 0.36, top + 0.22, V())], [0.45, mvAt(mid + 0.2, 0.48, top + 0.2, V())], [0.6, mvAt(far + 0.25, 0.4, top + 0.08, V())], [0.78, mvAt(L + 0.06, 0.11, g1, V())], [1, mvAt(L, 0.11, g1, V())]], V());
+    for (const [k, p] of [['L', fL], ['R', fR]]) {
+      const gy = ground(p.x, p.z);
+      if (p.y < gy) p.y = gy;
+      const air = smooth(0.08, 0.18, u) * (1 - smooth(0.74, 0.84, u));
+      footTo(k, p, mvF.yaw + (k === 'L' ? 0.08 : -0.08) + 0.5 * air, -0.45 * air, 0.05 + 0.25 * air);
+    }
+    // the left hand on the top, the right out for balance
+    const plant = smooth(0.03, 0.17, u) * (1 - smooth(0.58, 0.7, u));
+    const logP = mvAt(mid + 0.12, -0.15, top + 0.035, _h0);
+    const free = toWorld(freeHand('L', _h1, smooth(0.6, 0.8, u) * (1 - smooth(0.85, 1, u))), _hw);
+    const hL = V().lerpVectors(free, logP, plant);
+    handTo('L', hL, V(mvF.rx, 0, mvF.rz).applyAxisAngle(V(0, 1, 0), -rig.rotation.y), V(0, -1, 0), { x: -0.25, y: -0.1, z: 0.45 });
+    const up = smooth(0.1, 0.32, u) * (1 - smooth(0.78, 0.98, u));
+    const cq = J.chest.q, sh = J.armR.p;
+    const tR = freeHand('R', V(), up);
+    P.arm('R', tR, V(1, 0, -0.15).applyQuaternion(cq), V(sh.x - 0.3, sh.y - 0.2, sh.z + 0.3), V(0, 0, -1).applyQuaternion(cq));
+    loco.hipW = NaN; // the gait takes the hips up afresh after
+  }
+
+  // A climb onto a rock or a ledge (up to about 2 m): the hands up onto the edge, the feet walked up the face; the right
+  // foot up onto the top with the body bent over the edge, the hands pushing; then standing up and stepping in.
+  function poseClimbUp(dt, m) {
+    placePaddler(0, 0, 0);
+    if (hat.parent !== fig.bones.head) hatOnHead();
+    contact.visible = false; stowPaddle(); updateIdle(dt, false);
+    noteMoveStart(m); moveFrame(m);
+    const u = sat(m.u), top = m.top ?? m.to.y, L = Math.max(0.3, mvF.L), g0 = m.from.y, rise = Math.max(0.3, top - g0);
+    const face = m.nearD ?? Math.max(0.25, L - 0.45); // the face, metres on from where he began
+    const yOff = mvF.yaw - rig.rotation.y;
+    // the hips: a dip to spring, pulled up off the hands with the feet on the face, pressed up over the edge on straight
+    // arms, the foot on the top under them, then standing
+    const hangC = top - Math.min(0.95, 0.6 * rise); // where player.js has the feet at the hang (u 0.35)
+    const pull = Math.max(g0 + 0.85, Math.min(top - 0.2, hangC + 0.62));
+    const hipW = track(u, [[0, g0 + 0.83], [0.14, g0 + 0.76], [0.35, pull], [0.55, Math.max(pull + 0.05, top + 0.05)], [0.72, top + 0.3], [0.87, top + 0.62], [1, m.to.y + 0.83]]);
+    const hipA = track(u, [[0, 0], [0.35, face - 0.4], [0.55, face - 0.18], [0.72, face + 0.04], [1, L]]); // back off the face, then over it
+    const hipP = mvAt(hipA, 0, hipW, _h0), hl = toLocal(hipP, _h1);
+    const lean = track(u, [[0, 0.1], [0.14, 0.22], [0.35, 0.12], [0.55, 0.62], [0.72, 0.85], [0.88, 0.45], [1, 0.05]]);
+    const root = V(hl.x, hl.y + ROOT_UP, hl.z);
+    const look = -0.35 * smooth(0.05, 0.25, u) * (1 - smooth(0.5, 0.7, u)); // eyes up at the edge while hanging
+    body(root, bodyQ(yOff, 0.05 + lean * 0.5, 0), bodyQ(yOff, lean, 0), bodyQ(yOff, lean * 0.4 + look, 0));
+    // the feet: on the face (toes to it) as the body hangs; the right up onto the top; the left after it; both on the top
+    const onFace = (k, y) => mvAt(face - 0.17, k === 'L' ? -0.13 : 0.13, Math.min(y, top - 0.12), V());
+    const fy0 = Math.max(g0, Math.min(hangC + 0.05, top - 0.25));
+    const fL = trackV(u, [[0, moveStart.feet.L], [0.2, onFace('L', g0 + rise * 0.25)], [0.4, onFace('L', fy0)], [0.7, onFace('L', fy0 + 0.1)], [0.86, mvAt(face + 0.3, -0.12, top + 0.12, V())], [1, mvAt(L, -0.11, m.to.y, V())]], V());
+    const fR = trackV(u, [[0, moveStart.feet.R], [0.25, onFace('R', g0 + rise * 0.4)], [0.42, onFace('R', fy0 + 0.15)], [0.55, mvAt(face - 0.05, 0.13, top + 0.2, V())], [0.68, mvAt(face + 0.22, 0.13, top, V())], [0.88, mvAt(face + 0.22, 0.13, top, V())], [1, mvAt(L, 0.11, m.to.y, V())]], V());
+    for (const [k, p, onTop] of [['L', fL, smooth(0.86, 0.95, u)], ['R', fR, smooth(0.62, 0.7, u)]]) {
+      const gy = ground(p.x, p.z);
+      if (p.y < gy - 0.02 && onTop > 0.5) p.y = gy;
+      const wall = 1 - onTop;
+      footTo(k, p, mvF.yaw + (k === 'L' ? 0.08 : -0.08), 0.35 * wall * smooth(0.1, 0.3, u), 0.12 * wall + 0.05);
+    }
+    // the hands: up to the edge from the sides, on it until he stands, then down again
+    const on = smooth(0.04, 0.2, u) * (1 - smooth(0.8, 0.96, u));
+    const axis = V(mvF.rx, 0, mvF.rz).applyAxisAngle(V(0, 1, 0), -rig.rotation.y);
+    for (const k of ['L', 'R']) {
+      const sg = k === 'L' ? -1 : 1;
+      const edge = mvAt(face + 0.1, sg * 0.24, top + 0.035, _h0);
+      const free = toWorld(freeHand(k, _h1, 0.6 * (1 - smooth(0.85, 1, u))), _hw);
+      handTo(k, V().lerpVectors(free, edge, on), axis, V(0, -1, 0), { x: -0.3, y: -0.25, z: 0.4 });
+    }
+    loco.hipW = NaN;
+  }
+
+  // Sitting (the latrine, a bench, a log by the fire): the seat at player.move.top (world), or knee height off the
+  // ground; the feet planted ahead, the forearms on the thighs.
+  function poseSit(dt, m) {
+    placePaddler(0, 0, 0);
+    if (hat.parent !== fig.bones.head) hatOnHead();
+    contact.visible = false; stowPaddle(); updateIdle(dt, true);
+    const gy = ground(rig.position.x, rig.position.z), seat = Number.isFinite(m.top) ? m.top : gy + 0.45;
+    const br = Math.sin(idle.breath), hipY = seat + 0.1 - rig.position.y;
+    const pelvis = bodyQ(0, -0.05, 0), chest = bodyQ(idle.yaw * 0.15, 0.22 + 0.012 * br, 0), head = bodyQ(idle.yaw * 0.85, 0.02 - idle.pitch, 0);
+    body(V(-0.06, hipY + ROOT_UP, 0), pelvis, chest, head, { shrugL: 0.012 * br, shrugR: 0.012 * br });
+    const h = rig.rotation.y;
+    for (const [k, sg] of [['L', -1], ['R', 1]]) {
+      const p = toWorld(V(0.42, 0, sg * 0.16), _h0); p.y = ground(p.x, p.z);
+      footTo(k, p, h + sg * -0.12, 0, 0.1);
+      const knee = V(0.36, hipY + 0.02, sg * 0.16);
+      const sh = J['arm' + k].p;
+      P.arm(k, knee.add(V(-0.05, 0.06, -sg * 0.02)), V(0, 0, -sg), V(sh.x - 0.25, sh.y - 0.3, sh.z + sg * 0.3), V(0, -1, 0));
+    }
+    loco.init = false;
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // A change of pose (stepping out of the water, a vault begun or done, sitting down) blends from the last frame's
+  // pose over a short while, bone by bone, the figure's place too; not across a jump of more than a metre (a teleport,
+  // a launch) or into and out of the climb into the canoe, which blends itself.
+  // seconds: into a vault or a climb quickly (its first keys stand where the walk left off), out of one a little longer
+  const blendTime = (from, to) => (to === 'vault' || to === 'climbUp' ? 0.08 : from === 'vault' || from === 'climbUp' ? 0.16 : 0.28);
+  const pb = { t: 1, dur: 0.28, kind: null, has: false, pos: V(), quat: new THREE.Quaternion(), root: V(), q: bones.map(() => new THREE.Quaternion()), lastPos: V(), lastQuat: new THREE.Quaternion(), lastRoot: V(), lastQ: bones.map(() => new THREE.Quaternion()) };
+  const _bp = V(), _bqq = new THREE.Quaternion(), _bmw = new THREE.Matrix4();
+  function blendPose(kind, dt) {
+    if (kind !== pb.kind) {
+      const ok = pb.kind && pb.has && kind !== 'climbIn' && pb.kind !== 'climbIn';
+      pb.dur = blendTime(pb.kind, kind);
+      pb.kind = kind;
+      if (ok) { pb.t = 0; pb.pos.copy(pb.lastPos); pb.quat.copy(pb.lastQuat); pb.root.copy(pb.lastRoot); for (let i = 0; i < bones.length; i++) pb.q[i].copy(pb.lastQ[i]); }
+    }
+    // the figure's place in the world now
+    rig.updateMatrixWorld(true);
+    paddler.getWorldPosition(_bp); paddler.getWorldQuaternion(_bqq);
+    if (pb.t < 1) {
+      if (_bp.distanceTo(pb.pos) > 1.2) pb.t = 1;
+      else {
+        pb.t = Math.min(1, pb.t + dt / pb.dur);
+        const w = ease(pb.t);
+        // the place: from where it was (world) to where the pose puts it, back into the rig's space
+        _bp.lerpVectors(pb.pos, _bp, w); _bqq.slerpQuaternions(pb.quat, _bqq, w);
+        _bmw.compose(_bp, _bqq, V(1, 1, 1)).premultiply(_inv.copy(paddler.parent.matrixWorld).invert());
+        _bmw.decompose(paddler.position, paddler.quaternion, _wa); paddler.updateMatrix();
+        fig.bones.root.position.lerpVectors(pb.root, fig.bones.root.position, w);
+        for (let i = 0; i < bones.length; i++) bones[i].quaternion.slerpQuaternions(pb.q[i], bones[i].quaternion, w);
+        // the eye and the packs read the head and the chest from the joints: put the head where it is drawn
+        paddler.updateMatrixWorld(true);
+        fig.bones.head.getWorldPosition(_wb); paddler.worldToLocal(_wb); J.head.p.copy(_wb);
+        paddler.getWorldPosition(_bp); paddler.getWorldQuaternion(_bqq);
+      }
+    }
+    pb.has = true;
+    pb.lastPos.copy(_bp); pb.lastQuat.copy(_bqq); pb.lastRoot.copy(fig.bones.root.position);
+    for (let i = 0; i < bones.length; i++) pb.lastQ[i].copy(bones[i].quaternion);
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
   // The packs, after the pose: in the hull at their places, on the back (state.packOnBack: which one) or the chest
   // (state.packOnChest) on the chest bone, so they ride a walk, a jog or a carry alike, or standing on the ground
   // where packs.js set them down. With the hull overhead the hat rides strapped to the pack on the back (or hangs
@@ -888,16 +1116,30 @@ export function buildCanoeRig({ water = null } = {}) {
   const api = {
     rig, hull: hullPivot, paddler, paddle, pack, packs, state, swimmer, figure: fig,
     ground: null, // set by player.js: the ground height at a world (x, z), for the feet
+    moveOf: null, // set by main.js: () => player.move, the move the walker is making (vault, climb, sit, wade ...)
     update(dt) {
       if (dt <= 0) dt = 1e-4;
       const mode = state.mode;
       if (mode !== 'paddle') state.climb = 0;
-      if (mode === 'carry') poseCarry(dt);
-      else if (mode === 'walk') poseWalk(dt);
-      else if (mode === 'swim') poseSwim(dt);
-      else if (state.climb > 0) { poseClimb(dt); state.climb = Math.max(0, state.climb - dt); }
-      else poseSeated(dt);
+      // the walker's move (player.js player.move): a vault, a climb, sitting; the rest are the gait's
+      const mv = api.moveOf ? api.moveOf() : null, mk = mv && mode === 'walk' ? mv.kind : null;
+      let kind;
+      if (mode === 'carry') { kind = 'carry'; poseCarry(dt); }
+      else if (mode === 'walk') {
+        if (mk === 'vault' && mv.dur > 0) { kind = 'vault'; poseVault(dt, mv); }
+        else if (mk === 'climb' && mv.dur > 0) { kind = 'climbUp'; poseClimbUp(dt, mv); }
+        else if (mk === 'sit') { kind = 'sit'; poseSit(dt, mv); }
+        else {
+          kind = 'walk';
+          if (pb.kind === 'vault' || pb.kind === 'climbUp') loco.init = false; // the feet planted afresh where the move left him
+          poseWalk(dt, mk);
+        }
+      } else if (mode === 'swim') { kind = 'swim'; poseSwim(dt); }
+      else if (state.climb > 0) { kind = 'climbIn'; poseClimb(dt); state.climb = Math.max(0, state.climb - dt); }
+      else { kind = 'seated'; poseSeated(dt); }
       if (mode !== 'walk' && mode !== 'carry') loco.init = false;
+      if (kind !== 'vault' && kind !== 'climbUp') moveStart.kind = null;
+      blendPose(kind, dt);
       seatPacks(mode);
       contact.userData.update(dt, mode === 'paddle' ? state.speed : 0);
       // the head, neck and hat collapse out of the way from the paddler's eyes

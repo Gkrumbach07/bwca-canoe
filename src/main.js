@@ -134,6 +134,9 @@ async function main() {
   const input = new Input();
   const player = new Player(world, canoe, input);
   player.ripples = ripples; player.water = water; player.audio = audio;
+  // fb D: the figure poses the walker's move (player.js player.move, stream C): a vault, a climb, sitting, wading;
+  // without it (an older player.js) the gait is all there is
+  canoe.moveOf = () => player.move || null;
   if (saved) { player.x = saved.x; player.z = saved.z; player.heading = saved.heading; }
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   player.chase = chase; // walking is read against the view; the cursor steers the canoe when asked

@@ -99,28 +99,29 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}) {
   let soft = Infinity;
   const steps = Math.max(2, Math.ceil(L / SIGHT.step));
   for (const o of near) {
+    // a box: up to its top; one without (a wall) about 4 m, or indoors (the shelves, the counter: the walls are the
+    // interior's box above) a shelf's height
+    if (o.box) { const t = boxT(S, o, o.top !== undefined ? o.top : indoors ? floorY + SIGHT.shelf : ground(o.x, o.z) + SIGHT.wall); if (t < hard) { hard = t; out.what = 'box'; } continue; }
+    if (o.shape && o.shape.heightAt) {
+      // a solid by its drawn shape (a rock, an outcrop, a bluff's module, a log, a stump): inside where the point is
+      // under its top; only the samples over its footprint are asked
+      const sh = o.shape, bb = sh.minX !== undefined;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps; if (t >= hard) break;
+        const [x, y, z] = at(t);
+        if (bb && (y > sh.maxY + 0.1 || x < sh.minX - 0.1 || x > sh.maxX + 0.1 || z < sh.minZ - 0.1 || z > sh.maxZ + 0.1)) continue;
+        if (y < sh.heightAt(x, z) + SIGHT.margin) { hard = t; out.what = o.log ? 'log' : o.cliff ? 'cliff' : 'rock'; break; }
+      }
+      continue;
+    }
     if (o.log) {
-      // a log: a capsule along the ground from (ax, az) to (bx, bz), up to its top
-      const lx = o.bx - o.ax, lz = o.bz - o.az, l2 = lx * lx + lz * lz || 1e-9, top = o.top ?? ground(o.ax, o.az) + 2 * o.r;
+      // a log without a shape: a capsule along the ground from (ax, az) to (bx, bz), its stem's radius, up to its top
+      const rad = o.rad ?? o.r, lx = o.bx - o.ax, lz = o.bz - o.az, l2 = lx * lx + lz * lz || 1e-9, top = o.top ?? ground(o.ax, o.az) + 2 * rad;
       for (let i = 0; i <= steps; i++) {
         const t = i / steps; if (t >= hard) break;
         const [x, y, z] = at(t); if (y > top) continue;
         const u = Math.min(1, Math.max(0, ((x - o.ax) * lx + (z - o.az) * lz) / l2));
-        if (Math.hypot(x - o.ax - lx * u, z - o.az - lz * u) < o.r + SIGHT.margin) { hard = t; out.what = 'log'; break; }
-      }
-      continue;
-    }
-    // a box: up to its top; one without (a wall) about 4 m, or indoors (the shelves, the counter: the walls are the
-    // interior's box above) a shelf's height
-    if (o.box) { const t = boxT(S, o, o.top !== undefined ? o.top : indoors ? floorY + SIGHT.shelf : ground(o.x, o.z) + SIGHT.wall); if (t < hard) { hard = t; out.what = 'box'; } continue; }
-    if (o.rock && o.shape) {
-      // a rock: inside where the point is under its top; only the samples over its footprint are asked
-      const sh = o.shape;
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps; if (t >= hard) break;
-        const [x, y, z] = at(t);
-        if (y > sh.maxY + 0.1 || x < sh.minX - 0.1 || x > sh.maxX + 0.1 || z < sh.minZ - 0.1 || z > sh.maxZ + 0.1) continue;
-        if (y < sh.heightAt(x, z) + SIGHT.margin) { hard = t; out.what = 'rock'; break; }
+        if (Math.hypot(x - o.ax - lx * u, z - o.az - lz * u) < rad + SIGHT.margin) { hard = t; out.what = 'log'; break; }
       }
       continue;
     }
