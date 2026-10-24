@@ -29,6 +29,10 @@ const PADDLE = { accel: 3.1, hustle: 4.65, reverse: 1.35, drag: 0.31, lin: 0.12,
 // m/s at life (pace.js LIFE): a walk, Shift a jog, and a carry before the load slows it; face: how fast the walker turns
 // to where the keys point. On a portage trail the walker is time-lapsed as the canoe is on the water (SEEN, pace.js).
 const WALK = { speed: LIFE.walk, hustle: LIFE.jog, carry: LIFE.carry, carryHustle: LIFE.carryHustle, face: 7 };
+// fb2 E: the load on foot without the canoe: it slows the walk only past kg, as (kg / LOAD.kg) ^ -walk (it had been the
+// carry's ^ -0.6); up a flight of steps the walk slows by up to STAIRS.slow as the feet rise at STAIRS.climb m/s
+const LOAD = { kg: 40, walk: 0.35 };
+const STAIRS = { slow: 0.25, climb: [0.2, 0.6] };
 // The boost on the water (pace.js) eases back to the pace's floor only where the hull needs it: a bank dead ahead (AHEAD:
 // the metres of open water along the bow, from AHEAD[0] none to AHEAD[1] all, so it does not hit the shore at speed), a
 // slow stroke (the speed at life over the cruise, CRUISING) and a hard turn (the yaw rate over the paddle's, TURNING).
@@ -830,14 +834,16 @@ export class Player {
   }
 
   // the top of whatever is at (x, z) seen from above, for getting over it: the drawn ground, a solid's top there (a rock,
-  // a log, a cliff's block), a prop's top; Infinity inside a trunk, a wall or a prop with no top
+  // a log, a cliff's block), a prop's top; Infinity inside a trunk, a wall or a prop with no top. fb2 E: and inside a
+  // store's stairs, its deck and the walls beside a flight (stream C's `stair`, `store` and `wall` boxes): they are
+  // walked up (a tread is a step, STEP_UP), never climbed or vaulted, so Space is not offered at them
   topAt(x, z, near) {
     let y = this.groundAt(x, z);
     for (const t of near) {
       if (t.shape) { if (t.shape.maxY > y) { const h = t.shape.heightAt(x, z); if (h > y) y = h; } continue; }
       const dx = x - t.x, dz = z - t.z;
       const inside = t.box ? Math.abs(dx * t.ux + dz * t.uz) <= t.hx && Math.abs(-dx * t.uz + dz * t.ux) <= t.hz : dx * dx + dz * dz <= t.r * t.r;
-      if (inside) { if (t.top === undefined) return Infinity; if (t.top > y) y = t.top; }
+      if (inside) { if (t.top === undefined || t.stair || t.store || t.wall) return Infinity; if (t.top > y) y = t.top; }
     }
     return y;
   }
@@ -993,6 +999,7 @@ export class Player {
     const hustle = inp.held('ShiftLeft', 'ShiftRight');
     c.hitCooldown -= dt;
     const ft = this.foot || (this.foot = { y: this.groundAt(this.x, this.z), vy: 0, air: false, t: 0, land: 0, near: null, peak: 0 });
+    const footY0 = ft.y;
     const trail = this.nearestTrail(this.x, this.z), onTrail = !!trail && trail.dist < TRAIL_WIDTH;
     const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
     this.onTrail = onTrail; this.campsite = camp;
@@ -1017,10 +1024,17 @@ export class Player {
       let wall = null;
       if (!onTrail && !onSolid && grade > MAX_GRADE) wall = 'Too steep to climb here';
       else if (!onTrail && !onSolid && grade < -1.2) wall = 'A drop — find another way down';
+      // fb2 E: stood on something (a flight of steps, a rock, a deck) its own rise is the hill, not the ground's under it:
+      // up a flight at about a stride a second (ft.climb, m/s), a little slower, as people take stairs
+      else if (onSolid) going *= 1 - STAIRS.slow * smoothstep(STAIRS.climb[0], STAIRS.climb[1], ft.climb || 0);
       else if (grade > 0) going *= 1 - (cleared ? 0.45 : 0.7) * Math.pow(Math.min(1, grade / MAX_GRADE), 1.3);
       else going *= 1 - (cleared ? 0.2 : 0.4) * Math.min(1, -grade / MAX_GRADE);
-      // a heavy pack (the trip's food, the canoe's weight) is a slower walk; the water drags at the legs
-      const base = (carrying ? (hustle ? WALK.carryHustle : WALK.carry) : (hustle ? WALK.hustle : WALK.speed)) / Math.pow(Math.max(1, this.loadFactor), 0.6);
+      // a heavy pack (the trip's food, the canoe's weight) is a slower walk; the water drags at the legs. fb2 E: on foot
+      // without the canoe a load slows you only past LOAD.kg, and gently (LOAD.walk): a pack on the back, a barrel on the
+      // chest and the rod in hand (12-35 kg) walk the owner's 3 mph; 60 kg is about 13 % slower. Under the canoe the carry
+      // keeps its own (the portage's 3 km an hour with 55 kg, pace.js)
+      const base = carrying ? (hustle ? WALK.carryHustle : WALK.carry) / Math.pow(Math.max(1, this.loadFactor), 0.6)
+        : (hustle ? WALK.hustle : WALK.speed) / Math.pow(Math.max(1, (this.loadKg || 0) / LOAD.kg), LOAD.walk);
       const wade = 1 - 0.5 * smoothstep(0.25, SWIM_DEPTH, this.depthAt(this.x, this.z, ft.y));
       if (fwd !== 0 && wall) note = wall;
       // Space: over or onto what you are walking into (a vault, a climb), else a hop; with the canoe overhead a
@@ -1066,10 +1080,14 @@ export class Player {
         else if (!w.isReady(nx, nz)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Loading the land ahead…'; }
         const near = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
         ft.near = near;
-        const reach = ft.y + STEP_UP;
+        // fb2 E: the feet's height for what holds him and what he steps up onto: what is under him now, if his feet are
+        // still easing up to it (up a flight at a jog they lag a few centimetres, and the tread two up, 0.30 m over the
+        // one he is on, must stay within a step of it)
+        const feetY = ft.air ? ft.y : Math.max(ft.y, this.supportAt(this.x, this.z, ft.y + STEP_UP, near));
+        const reach = feetY + STEP_UP;
         // held off everything at its drawn edge, sliding along it; eased round a trunk to whichever side you were
         // already passing on; still caught in a corner between two after that, you stay where you were
-        this.clearOf(nx, nz, ft.y, near, _held);
+        this.clearOf(nx, nz, feetY, near, _held);
         ft.easeAge = (ft.easeAge ?? 9) + dt;
         let pressed = false;
         if (_held.hit) {
@@ -1086,9 +1104,9 @@ export class Player {
             const s = t.shape, cx = s ? (s.minX + s.maxX) / 2 : t.x, cz = s ? (s.minZ + s.maxZ) / 2 : t.z, side = Math.sign((nx - cx) * -mz + (nz - cz) * mx) || 1;
             const ease = (_held.trunk ? 1.2 : 0.9) * dt;
             nx += -mz * side * ease; nz += mx * side * ease;
-            this.clearOf(nx, nz, ft.y, near, _held); nx = _held.x; nz = _held.z;
+            this.clearOf(nx, nz, feetY, near, _held); nx = _held.x; nz = _held.z;
           }
-          if (this.blockedAt(nx, nz, ft.y, near) && !this.blockedAt(this.x, this.z, ft.y, near)) { nx = this.x; nz = this.z; }
+          if (this.blockedAt(nx, nz, feetY, near) && !this.blockedAt(this.x, this.z, feetY, near)) { nx = this.x; nz = this.z; }
         } else ft.stuck = 0;
         if (carrying) {
           for (const t of near) {
@@ -1171,6 +1189,8 @@ export class Player {
         }
       }
     }
+    // fb2 E: how fast the feet are rising (m/s at life), for the stairs' pace
+    ft.climb = (ft.climb || 0) + ((dt > 0 && !ft.air && !this.act ? (ft.y - footY0) / (dt * Math.max(1, this.boost)) : 0) - (ft.climb || 0)) * (1 - Math.exp(-dt * 6));
     ft.land = Math.max(0, ft.land - dt * 3);
     st.air = ft.air; st.airT = ft.t; st.vy = ft.vy; st.land = ft.land;
     st.stagger = Math.max(0, (st.stagger || 0) - dt * 1.6);
