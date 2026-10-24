@@ -71,12 +71,16 @@ function panGeometry(fried) {
   b.cyl(V(0, 0, 0), V(0, 0.018, 0), R_POT * 0.86, R_POT * 1.04, 12, TILE.PLAIN, metal, { cap0: true });
   b.cyl(V(0, 0.004, 0), V(0, 0.005, 0), R_POT * 0.95, R_POT * 0.95, 12, TILE.PLAIN, C(0x3e3a36), { cap1: true });
   b.tube([V(R_POT, 0.016, 0), V(R_POT + 0.06, 0.03, 0), V(R_POT + 0.12, 0.034, 0)], 0.004, 4, TILE.PLAIN, wire, { cap1: true });
-  const meat = C(fried ? 0xc88a3c : 0xd9b8a6), skin = C(fried ? 0x8c5a26 : 0x9a9f8a);
-  for (const [z, l] of [[-0.025, 0.07], [0.026, 0.065]]) {
+  // two fillets, flat: built round, then pressed to a third of their height in the lid
+  const f = new PropBuilder(), meat = C(fried ? 0xb9773a : 0xe2c3b0), edge = C(fried ? 0x7a4a22 : 0xb3b7a2);
+  for (const [z, l] of [[-0.028, 0.078], [0.03, 0.072]]) {
     const pts = [];
-    for (let i = 0; i <= 6; i++) { const t = i / 6; pts.push(V(-l + 2 * l * t, 0.012 + Math.sin(t * Math.PI) * 0.006, z + Math.sin(t * Math.PI * 2) * 0.004)); }
-    b.tube(pts, (t) => 0.004 + 0.018 * Math.sin(Math.max(0.12, Math.min(0.94, t)) * Math.PI) ** 0.7, 6, TILE.PLAIN, (p) => (p.y > 0.018 ? meat : skin), { cap0: true, cap1: true });
+    for (let i = 0; i <= 6; i++) { const t = i / 6; pts.push(V(-l + 2 * l * t, 0, z + Math.sin(t * Math.PI * 2) * 0.004)); }
+    f.tube(pts, (t) => 0.004 + 0.021 * Math.sin(Math.max(0.12, Math.min(0.94, t)) * Math.PI) ** 0.7, 7, TILE.PLAIN, (p) => (p.y > 0.008 ? meat : edge), { cap0: true, cap1: true });
   }
+  const fish = f.build();
+  fish.scale(1, 0.38, 1); fish.translate(0, 0.016, 0);
+  b.addBuilt(fish);
   return shade(b.build(), (x, y, z, ny) => (ny < -0.4 ? 0.55 : 0.95));
 }
 // a camp spoon, a little bigger than life so it reads: the handle along +x, the bowl at its end
@@ -491,7 +495,7 @@ export class Cook {
       if (!d || !Number.isFinite(d.until) || now < d.until) continue;
       const def = itemDef(e.id); if (!def || !def.cooked) continue;
       inv.take(c.id, e.uid, e.qty);
-      this.note(`The leftover ${eatName(def)} has gone off. You pack it out in the garbage bag.`, 5);
+      this.note(`The leftover ${eatName(def)} ${isAre(eatName(def)) === 'are' ? 'have' : 'has'} gone off. You pack it out in the garbage bag.`, 5);
     }
   }
 
@@ -506,7 +510,8 @@ export class Cook {
       at = this.grateSpot(site);
       const og = this.onGrate(keyOn);
       const fishy = P ? P.fish : og.food ? /^fried:/.test(og.food.id) : false;
-      if (og.pot || P) look = fishy ? (P && P.t < P.dur * 0.5 ? 'panRaw' : 'panFried') : 'potLid';
+      const inHand = !!(this.eating && this.eating.key === keyOn && this.eating.apply); // the pot is in his hand
+      if ((og.pot || P) && !inHand) look = fishy ? (P && P.t < P.dur * 0.5 ? 'panRaw' : 'panFried') : 'potLid';
       if (P && !P.cold) steam = fishy ? 0.35 + 0.35 * smoothstep(0.2, 0.6, P.t / P.dur) : 0.25 + 0.75 * smoothstep(0.1, 0.55, P.t / P.dur);
       else if (this.hot && this.hot.key === keyOn && og.food) steam = 0.5 * (1 - smoothstep(4, 40, this.hot.t)) + 0.12;
     }

@@ -1026,7 +1026,7 @@ export function buildCanoeRig({ water = null } = {}) {
       const sh = J['arm' + k].p;
       if (E && k === 'L') P.arm(k, V(0.34, hipY + 0.3, -0.04), V(0, 0, 1), V(sh.x - 0.15, sh.y - 0.35, sh.z - 0.3), V(0, 1, 0));
       else if (E) {
-        const pot = V(0.33, hipY + 0.36, 0.0), mouth = V().copy(J.head.p).add(V(0.13, -0.06, 0.02)), t = pot.lerp(mouth, ek);
+        const pot = V(0.33, hipY + 0.36, 0.0), mouth = V().copy(J.head.p).add(V(0.14, -0.02, 0.01)), t = pot.lerp(mouth, ek);
         P.arm(k, t, V(0.45, 0.25 + 0.3 * ek, -0.85).normalize(), V(sh.x - 0.1, sh.y - 0.4, sh.z + 0.35), V(0, 1, 0));
       } else P.arm(k, knee.add(V(-0.05, 0.06, -sg * 0.02)), V(0, 0, -sg), V(sh.x - 0.25, sh.y - 0.3, sh.z + sg * 0.3), V(0, -1, 0));
     }
