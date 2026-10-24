@@ -919,7 +919,7 @@ function thingMenu(t, isLong) {
   if (t.where !== 'back' && wear.includes('back')) out.push({ label: 'Carry it on your back', run: () => world('carry', id, 'back') });
   if (t.where !== 'chest' && wear.includes('chest')) out.push({ label: 'Wear it on your chest', run: () => world('carry', id, 'chest') });
   if (t.where !== 'hands' && (isLong || d.hand)) out.push({ label: 'Take it in your hands', run: () => world('carry', id, 'hands') });
-  if (t.where !== 'canoe' && typeof inv.load === 'function') out.push({ label: 'Load it into the canoe', run: () => world('load', id) });
+  if (t.where !== 'canoe' && typeof inv.load === 'function' && (inv.atStash || typeof inv.nearCanoe !== 'function' || inv.nearCanoe())) out.push({ label: 'Load it into the canoe', run: () => world('load', id) }); // only with the canoe by you
   if (t.where !== 'ground' && t.where !== 'stash' && typeof inv.setDown === 'function') out.push({ label: 'Set it down here', run: () => world('setDown', id) });
   if (t.where !== 'stash' && inv.atStash && typeof inv.stow === 'function') out.push({ label: 'Leave it with the outfitters', run: () => world('stow', id) });
   return out;

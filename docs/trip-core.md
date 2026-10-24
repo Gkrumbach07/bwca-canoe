@@ -116,10 +116,11 @@ ring do its prompts apply. On foot at a free site:
   and saves the ration.
 - **E Use the latrine** at the box back in the trees (about 15 m behind the ring): ten minutes, rest +0.05 (an hour and
   a half less awake, as far as the night's rest allows), once a day.
-- **E Pick blueberries**, July 10 to August 20, at a site with a patch on the burn or the lichen rock at its edge
-  (the tile's ground class; about half the sites near Lake One): a pint in 20 minutes, three pints a site a day, the
-  bushes thinning a third a pint and full again the next day. A pint a berries notice still wants goes in the tin for
-  it; any other is eaten as you pick (food +0.15). Out of season there is no patch and no prompt.
+- **Berries and mushrooms** (the feedback of 2026-10-24, `src/forage.js`; it replaced the site's one blueberry patch):
+  wild strawberries, juneberries, blueberries, raspberries and pin cherries, chanterelles, hedgehogs and lobster
+  mushrooms, each on its own ground and in its season and likelier by the sites and along the portage trails, with a
+  glint and a rustle as you come near. **E** within reach puts a pint or a handful into a container you can reach, or
+  you eat it as you pick; a pint a berries notice still wants goes in the tin for it. See docs/hubs.md.
 - **E Sleep** at the tent, from an hour and a half before sunset: a small paper card, *Up at* first light (its time
   shown, chosen to begin with), 7:00 or 9:00, with the hours of sleep each gives; ← → chooses, E turns in, Esc (or a
   step away) lets it be. Standing still at the tent, ← → opens the card with the time already moved. A night card,
@@ -147,9 +148,10 @@ One energy bar, pulled down by three needs (Adventure, while a trip is under way
 - **Rest:** what the last night gave (the tent's quality × hours slept / 7; the starting A-frame is 0.85, wet gear
   ×0.8), falling the longer you are awake (whole for the first couple of hours, about half by sixteen). Only sleep
   brings it back.
-- **Food:** falls from full to empty over 24 game hours awake (a third as fast asleep). The meals come on the clock at
-  sunrise and sunset while there is food (half a day each), or with **G** when you are still. A cold meal gives +0.5,
-  a hot one or a fish +0.6.
+- **Food:** falls from full to empty over 24 game hours awake (a third as fast asleep). There is no **G** and, on a trip, no
+  meal on the clock at sunrise or sunset (the feedback of 2026-10-24): you eat from the pack (**I**) standing still, on
+  foot or afloat, a snack as it is and a meal or a fish once it is cooked; `energy.food` counts the meals within reach.
+  A cold meal gives +0.5, a hot one or a fish +0.6. Sandbox keeps food free.
 - **Water:** a 2 L bottle you drink from on your own. A litre lasts 6 game hours, 4 when paddling hard, carrying 30 kg
   or more, or on a sunny July or August afternoon. The need only falls once the bottle is dry (to empty in 8 hours,
   5⅓ hard). On foot at the water's edge, **E Fill the bottle** (tablets: drinkable in half an hour); any counter
@@ -191,13 +193,16 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 | E | afloat | go ashore · portage at a landing · the counter at a dock · pick up a lost item in reach |
 | E | portage trail | set the canoe down · pick up a pack · shoulder the canoe · launch / load up and launch |
 | E | on foot at the water's edge | fill the bottle (when it is down a little and no other prompt holds E) |
-| E | campsite, on foot | pitch the tent (pad) · light the fire, add wood, cook (grate) · sleep, the wake-time card (tent) · the latrine · pick blueberries · gather firewood (near the trees) |
+| E | campsite, on foot | pitch the tent (pad) · light the fire, add wood, cook (grate) · sleep, the wake-time card (tent) · the latrine · gather firewood (near the trees) |
+| E | on foot, by a patch in season | pick berries or mushrooms into a container you can reach (forage.js) |
+| E | on foot, by a thing on the ground / at the canoe | pick it up / load what you carry into the canoe |
 | ← → | at your tent, still / the wake-time card | open the card with the time moved / choose first light, 7:00 or 9:00 |
-| Q | portage trail | take the gear pack too · fetch the pack left at the trail head · shoulder the canoe |
+| Q | portage trail | take one more pack too · fetch what was left at the trail head · shoulder the canoe |
+| Q | on foot, carrying | set down what you carry (it stays there until you come back for it) |
 | Q | shore | go ashore at a landing without portaging · leave a beached canoe |
 | K / E | a fish held up | keep it (into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
 | H | anywhere | the headlamp |
-| G | still | eat a meal by hand |
+| I | anywhere | the book at the pack: eat a snack when still (a meal or a fish cooked first), move things between containers |
 | Space, Shift | afloat / on foot | brace / vault, climb or hop · hustle / jog |
 | 1 2 3 | anywhere, the rod down | 1×, 2×, 4× on top of the pace (Settings › Controls › Pace: Trip or Real) |
 | `[ ] - = P` · `, . / ;` | Sandbox | the clock and the date · the wind |
@@ -253,8 +258,7 @@ are afloat more than 500 m from it. `camp.profileOf()` gives the tent's quality 
 `camp.wakeTime(choice)` and `camp.sleep(kind, choice)` take the card's choice ('first', 7 or 9).
 
 `camp.chores` (chores.js, hubs phase 3; main.js sets `.tasks`, and `__game.chores` is it): `wood`, `arms`, `pile`
-({ key, n }: the stack at a site's ring), `pints`, `woodHere(key)`, `useWood(key)`, `patchFor(site)` (the blueberry
-patch, or null), `pileSpot(site)`, `openWake(site, i)`, `card` (open, choice), `onLaunch()`. Saved in
+({ key, n }: the stack at a site's ring), `pints`, `woodHere(key)`, `useWood(key)`, `pileSpot(site)`, `openWake(site, i)`, `card` (open, choice), `onLaunch()`. Saved in
 `trip.state.chores` (or its own key with no trip): the armfuls, the stack, the pints, the day of the latrine and the
 day's picking. The props record `c.layout.latrine` ({ x, z }) where they set the box. fire.js: `FIRE.most` (hours of
 wood a ring holds), `FIRE.low` and `FIRE.floor` (the burn-down), `fires.wood(f)` (the lengths' scale).

@@ -25,19 +25,25 @@ const KEYMAP = [
   ['On the water', [
     [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'turn the hull while held, as sweep strokes'],
     [['Shift'], 'hustle'], [['Space'], 'brace in a sea (you cannot paddle while bracing)'],
-    [['E'], 'go ashore · portage at a landing · the outfitter at a dock · pick up a find'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
-    [['G'], 'eat a meal, when you are still'], [['H'], 'the headlamp (afloat or on foot)'],
+    [['E'], 'go ashore · portage at a landing · the outfitter at a dock · pick up a find · right the canoe after a capsize'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
+    [['I'], 'eat from the pack, when you are still: a snack as it is, a meal or a fish cooked first'], [['H'], 'the headlamp (afloat or on foot)'],
   ]],
   ['On foot', [
-    [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'], [['Space'], 'hop (onto a low rock or a log); with the canoe overhead you only stagger'],
-    [['E'], 'launch a canoe at the water’s edge · set a carried one down'], [['Q'], 'shoulder a canoe on the ground · set a carried one down where you could launch'],
+    [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'],
+    [['Space'], 'walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m; otherwise a hop · with the canoe overhead you only stagger'],
+    [['E'], 'pick up a pack, a barrel or a thing on the ground · at the canoe: load what you carry, launch · set a carried canoe down'],
+    [['Q'], 'set down what you carry · shoulder a canoe on the ground · at a trail head: take one more pack, or fetch what is left'],
+    [['W'], 'past your depth: swim (Shift harder) · Space climbs out onto a rock, a dock or the bank · E at the canoe climbs in'],
   ]],
   ['At an outfitter', [
-    [['E'], 'at the dock: tie up and go in · inside: the counter, the board, a shelf or the lure wall you face · talk to someone you face (again: their task)'],
+    [['E'], 'at the dock: tie up and go in · inside: the counter (the permit, a bunk, a ride), the board, or a shelf, the lure wall or the map table you face: yours on the left, theirs on the right'],
     [['Q'], 'at the dock: the counter straight from the water · at the counter: a word with the keeper'],
   ]],
+  ['People', [
+    [['E'], 'talk to someone you face (again: their task) · choose with 1–9 or a click, Esc to leave'], [['T'], 'what was said: the last six lines'],
+  ]],
   ['At camp', [
-    [['E'], 'pitch the tent, gather wood, light and feed the fire, cook, the latrine, pick berries in season, fill the bottle, sleep'],
+    [['E'], 'pitch the tent, gather wood, light and feed the fire, cook, the latrine, fill the bottle, sleep · berries and mushrooms in season, anywhere, into a container in reach'],
     [['←', '→'], 'standing at the tent in the evening: when to wake (first light, 7:00, 9:00); E turns in, Esc not yet'],
   ]],
   ['The camera', [
@@ -46,11 +52,12 @@ const KEYMAP = [
   ]],
   ['Fishing', [
     [['F'], 'take up the rod · put it down'], [['Space', 'click'], 'hold to load a cast where the cursor points, let go to cast · set the hook · hold to reel'],
-    [['1', '2', '3', '4', '5'], 'jig & twister, Mepps spinner, Daredevle spoon, jointed Rapala, bobber & leech'], [['E', 'K'], 'let the fish go · keep it on the stringer'],
+    [['1', '2', '…'], 'change the lure: the ones you have with you, in the strip’s order'], [['E', 'K'], 'let the fish go · keep it on the stringer'],
   ]],
   ['Looking', [
-    [['Tab'], 'hold for the readout: where, water, way, wind, light, pack, tasks'], [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in)'],
-    [['J'], 'the journal: the trip, catches, tasks, lakes, gear (L opens it too)'], [['V'], 'from the paddler’s seat · behind the canoe'],
+    [['Tab'], 'hold for the readout: where, water, way, wind, light, pack, tasks · in the book: the other side'], [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in)'],
+    [['J'], 'the book: the journal (the trip, catches, tasks, lakes, trips, photos), and the pack with Tab (L opens it too)'],
+    [['I'], 'the book at the pack: what you carry and what is in reach, to move, eat or use (drag, R turns, right-click)'], [['V'], 'from the paddler’s seat · behind the canoe'],
     [['mouse'], 'look: in first person and on foot the first key or click takes the mouse and it turns you at once; behind the canoe, drag to orbit, wheel to zoom'], [['Esc'], 'frees the mouse when it is taken, otherwise this menu'],
   ]],
   ['The clock and the weather', [

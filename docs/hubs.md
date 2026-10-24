@@ -194,12 +194,12 @@ the bar down: "Energy 64 % · held down by thirst".
 **Chores** (phase 3, stream A: `src/chores.js`, run by the camp; each one E and its life length on the clock): gather
 firewood near a tree (25 min an armful, 10 with the saw, up to 3 to hand, stacked by the ring as a woodpile and taken
 along in the canoe), light the fire with an armful and feed it another (it burns down without: fire.js), use the
-latrine (rest +0.05, once a day), pick blueberries July 10 to August 20 at a site's patch (3 pints a site a day; a
-snack, food +0.15, or into the tin for a notice), and turn in from a small card that picks the wake time (first light,
+latrine (rest +0.05, once a day), and turn in from a small card that picks the wake time (first light,
 7:00 or 9:00). A whole evening is eight keys (ashore, pitch, an armful, light, supper, the latrine, → at the tent, E).
 The berries notice ("Blueberries for pies", $10 a pint, in season) and the firewood one ("Wood for the sauna", $6 an
 armful) are registered from chores.js; what they want is handed over on foot at the posting store and claimed at its
-counter. The details are in [trip-core.md](trip-core.md), "Camping and sleep".
+counter. The details are in [trip-core.md](trip-core.md), "Camping and sleep". (The site's blueberry patch went in the
+feedback pass of 2026-10-24: berries and mushrooms now grow anywhere in their season, `src/forage.js`, below.)
 
 ## People (phase 3)
 
@@ -304,7 +304,7 @@ Three streams joined on `claude/hubs-3`, on main with the pace (ce8a1e8):
   saw, three at most, stacked by the ring as a woodpile and carried in the canoe when you push off), the fire fed and
   burning down (3 h an armful, 5 h at most; it dims over its last 1.6 h to embers), the latrine (rest +0.05 once a day),
   blueberries July 10 to August 20 on the burns and the lichen rock by a site (a pint in 20 minutes, three a site a
-  day), and the wake-time card at the tent (first light, 7:00 or 9:00; → or ← there opens it). The berries ($10 a pint)
+  day; replaced by forage.js on 2026-10-24), and the wake-time card at the tent (first light, 7:00 or 9:00; → or ← there opens it). The berries ($10 a pint)
   and firewood ($6 an armful) notices.
 - **The camera and the photo notices** (B, `src/photo.js`, the journal's Photos tab, `fauna.subjects()`): C raises it
   (the $25 35 mm, or the disposable the season's first photo notice lends for three pictures); a 16:9 print of 240 × 135
@@ -361,7 +361,8 @@ nobody took, and a visitor with a task cast in at Lake One, where the week's vis
   store's own firewood notice): not on a store's visit now. With the camera up at the tent, → to aim opened the wake
   card (and its E turned you in): the arrows are the camera's while it is up.
 - **Blueberries that show**: clusters of four to seven berries a little bigger than life, sitting proud on the bushes,
-  in a dusty blue (they were single 1.3 cm berries, often inside the leaves).
+  in a dusty blue (they were single 1.3 cm berries, often inside the leaves). The patch itself moved to forage.js on
+  2026-10-24, with the other berries and the mushrooms.
 - **The walker crouches** for the low chores (canoe.js `state.crouch`, set by camp.js): gathering, sawing, picking,
   laying, feeding and cooking on the fire, filling the bottle; the head comes down from 1.56 to 1.12 m.
 - **No rain indoors** (weather.js `indoors`): the drops round the camera fell through the store's roof.
