@@ -5,7 +5,7 @@ import { daysInYear } from './astro.js';
 import { sheets } from './sheets.js'; // hubs 2D: the dusk word names only a site your map shows
 import { Chores } from './chores.js'; // hubs 3A / camp 2: the fire, the wood, the cooking, the latrine, the wake-time card
 import { hold } from './hold.js'; // camp 1: held work, with its ring
-import { TentStages, TentGhost, PITCH, STRIKE, STAGE_WORDS, TENT_FLY } from './tent.js'; // camp 1: the tent in its phases
+import { TentStages, TentGhost, TENT_FLY, kindOf, tentOf } from './tent.js'; // camp 1: the tent in its phases (the A-frame's own, camp join)
 import { Hang } from './hang.js'; // camp 1: the barrel hung from a limb
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
@@ -175,7 +175,7 @@ export class Camp {
     this.tiles.dynamic = this.tiles.dynamic || [];
     this.camp = null;         // your tent: { key, site, x, z, fdx, fdz, since, stage (1-4), item, from, colour, stages, pose, obstacle, y }
     this.draft = null;        // a pitch begun, before the footprint is staked: { spot, stages }
-    this.pool = [new TentStages(this.scene, TENT_FLY.aframe)]; // one now, behind the title card; more as they are wanted
+    this.pool = [new TentStages(this.scene, 'aframe', TENT_FLY.aframe)]; // one now, behind the title card; more as they are wanted
     this.ghost = new TentGhost(this.scene);
     this.busy = null;         // a chore under way: { t, passed, kind, done }
     this.night = null;        // sleeping: { kind, q, hours, ... }
@@ -452,21 +452,24 @@ export class Camp {
     }
     return any;
   }
-  // the ghost: the tent 2.1 m ahead, its door to you, on the drawn ground; and what is wrong with the spot, if anything
-  ghostSpot(site) {
-    const p = this.player, w = this.world, f = p.forward, x = p.x + f.x * GHOST_AHEAD, z = p.z + f.z * GHOST_AHEAD;
+  // the ghost: the tent a couple of metres ahead (the A-frame end on, a little farther for its vestibule), its door to
+  // you, on the drawn ground; and what is wrong with the spot, if anything. item: the tent's (its kind's size)
+  ghostSpot(site, item = 'aframe') {
+    const p = this.player, w = this.world, f = p.forward, size = tentOf(item).size, ahead = size.ahead || GHOST_AHEAD;
+    const x = p.x + f.x * ahead, z = p.z + f.z * ahead;
     if (!w.isReady(x, z)) return null;
-    const o = this.spot, now = performance.now();
-    if (o && Math.hypot(o.px - p.x, o.pz - p.z) < 0.08 && Math.abs(Math.atan2(Math.sin(o.h - p.heading), Math.cos(o.h - p.heading))) < 0.03 && now - o.t < 400 && o.site === site) return o;
+    const o = this.spot, now = performance.now(), kind = kindOf(item);
+    if (o && o.kind === kind && Math.hypot(o.px - p.x, o.pz - p.z) < 0.08 && Math.abs(Math.atan2(Math.sin(o.h - p.heading), Math.cos(o.h - p.heading))) < 0.03 && now - o.t < 400 && o.site === site) return o;
     const fdx = -f.x, fdz = -f.z, ground = (gx, gz) => this.tiles.groundAt(gx, gz);
-    const pose = tentPose(ground, x, z, fdx, fdz);
-    const why = this.pitchProblem(x, z, fdx, fdz, site);
-    this.spot = { x, z, fdx, fdz, pose, ok: !why, why, px: p.x, pz: p.z, h: p.heading, t: now, site };
+    const pose = tentPose(ground, x, z, fdx, fdz, size);
+    const why = this.pitchProblem(x, z, fdx, fdz, site, size);
+    this.spot = { x, z, fdx, fdz, pose, ok: !why, why, px: p.x, pz: p.z, h: p.heading, t: now, site, kind };
     return this.spot;
   }
-  // why a tent can't stand at (x, z) with its door to (fdx, fdz), in a few words, or null when it can
-  pitchProblem(x, z, fdx, fdz, site) {
-    const w = this.world, T = this.tiles, p = this.player, TA = 1.15, TB = 0.82;
+  // why a tent of `size` (tent.js TENT_KINDS) can't stand at (x, z) with its door to (fdx, fdz), in a few words, or null
+  // when it can
+  pitchProblem(x, z, fdx, fdz, site, size = tentOf('aframe').size) {
+    const w = this.world, T = this.tiles, p = this.player, TA = size.a, TB = size.b, front = (size.vest || 0) + 0.6;
     const Xx = -fdz, Xz = fdx; // along the tent; (fdx, fdz) across it, to the door
     const pt = (u, v) => [x + Xx * u + fdx * v, z + Xz * u + fdz * v];
     if (this.adventure) {
@@ -476,7 +479,7 @@ export class Camp {
     // the water: every corner and the door well up the bank
     const pts = [];
     for (const u of [-TA, 0, TA]) for (const v of [-TB, 0, TB]) pts.push([u, v, ...pt(u, v)]);
-    if (pts.some(([, , px, pz]) => w.shoreAt(px, pz) < 2.2) || w.shoreAt(...pt(0, TB + 0.6)) < 1.2) return 'too near the water';
+    if (pts.some(([, , px, pz]) => w.shoreAt(px, pz) < 2.2) || w.shoreAt(...pt(0, TB + front)) < 1.2) return 'too near the water';
     // the slope: the plane through the footprint's nine points, and how far the ground strays from it
     const g = pts.map(([u, v, px, pz]) => [u, v, T.groundAt(px, pz)]);
     const mean = g.reduce((s, q) => s + q[2], 0) / g.length;
@@ -485,8 +488,10 @@ export class Camp {
     const gu = su / suu, gv = sv / svv, deg = (Math.atan(Math.hypot(gu, gv)) * 180) / Math.PI;
     if (deg > MAX_SLOPE) return `too steep, ${Math.round(deg)}°`;
     if (g.some(([u, v, h]) => Math.abs(h - (mean + gu * u + gv * v)) > BUMPS)) return 'too lumpy';
+    // the footprint's box, out to the A-frame's vestibule stake in front and its beak behind
+    const VEST = size.vest || 0, BACK = size.back || 0;
+    const boxDist = (cx, cz) => { const dx = cx - x, dz = cz - z, lu = Math.abs(dx * Xx + dz * Xz) - TA, dv = dx * fdx + dz * fdz, lv = dv > 0 ? dv - TB - VEST : -dv - TB - BACK; return Math.hypot(Math.max(0, lu), Math.max(0, lv)); };
     // the site's own things: the fire ring, the bench, the latrine
-    const boxDist = (cx, cz) => { const dx = cx - x, dz = cz - z, lu = Math.abs(dx * Xx + dz * Xz) - TA, lv = Math.abs(dx * fdx + dz * fdz) - TB; return Math.hypot(Math.max(0, lu), Math.max(0, lv)); };
     if (site && site.layout) {
       const L = site.layout;
       if (boxDist(L.fire.x, L.fire.z) < 0.85 + NEAR_FIRE) return 'too near the fire ring';
@@ -494,7 +499,7 @@ export class Camp {
       if (L.bench && boxDist(L.bench.x, L.bench.z) < 1.15) return 'on the bench';
     }
     // the trunks, the rocks, the down logs and the stumps where it would stand (tiles.js treesNear: the walker's own)
-    for (const t of T.treesNear(x, z, TA + 0.8)) {
+    for (const t of T.treesNear(x, z, Math.max(TA, TB + VEST) + 0.8)) {
       if (t.tent) continue;
       if (t.shape) {
         for (const [u, v, h] of g) { const [px, pz] = pt(u * 1.05, v * 1.05); if (t.shape.heightAt(px, pz) > h - 0.04) return t.log ? 'a log in the way' : t.stump ? 'a stump in the way' : 'on rock'; }
@@ -525,9 +530,9 @@ export class Camp {
   pitchPrompts(site) {
     const tent = this.tentInReach();
     if (!tent || this.still < GHOST_STILL[site ? 0 : 1]) return false;
-    const s = this.ghostSpot(site);
+    const s = this.ghostSpot(site, tent.def.id);
     if (!s) return false;
-    this.ghost.show(s.pose.matrix, s.ok); this.ghostOn = true;
+    this.ghost.show(s.pose.matrix, s.ok, s.kind); this.ghostOn = true;
     if (s.ok) hold.offer('Pitch the tent here', `the ${lower(tent.def.name)}`, this.pitchOpts(s, tent, site));
     else this.say(`No tent here · ${s.why}`);
     return true;
@@ -535,16 +540,16 @@ export class Camp {
 
   // --- the tent: pitching and striking ---------------------------------------------------------------------------
   stagesFor(item) {
-    const colour = TENT_FLY[item] ?? TENT_FLY.aframe;
-    const i = this.pool.findIndex((s) => s.colour === colour);
-    return i >= 0 ? this.pool.splice(i, 1)[0] : new TentStages(this.scene, colour);
+    const colour = TENT_FLY[item] ?? TENT_FLY.aframe, kind = kindOf(item);
+    const i = this.pool.findIndex((s) => s.colour === colour && s.kind === kind);
+    return i >= 0 ? this.pool.splice(i, 1)[0] : new TentStages(this.scene, kind, colour);
   }
   // the hold that pitches at the ghost's spot: the footprint (the tent comes out of its pack, the site is yours), the
   // poles, the tent, the fly
   pitchOpts(spot, tent, site) {
-    const p = this.player;
+    const p = this.player, K = tentOf(tent.def.id);
     return {
-      id: 'tent', label: 'Pitching the tent', phases: PITCH, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => {
         if (!this.camp && !this.draft) { const st = this.stagesFor(tent.def.id); st.place(spot.pose.matrix); this.draft = { spot, stages: st, item: tent.def.id }; }
         const st = this.camp ? this.camp.stages : this.draft && this.draft.stages;
@@ -558,28 +563,28 @@ export class Camp {
       onStop: (job) => {
         if (!this.camp) { this.dropDraft(); return; }
         this.setStage(this.camp, job.done);
-        this.note(`${cap(STAGE_WORDS[job.done])}. Hold E at it to carry on.`, 3);
+        this.note(`${cap(K.words[job.done])}. Hold E at it to carry on.`, 3);
       },
     };
   }
   // the hold that carries a half-pitched tent on from where it stands
   pitchOnOpts() {
-    const c = this.camp, p = this.player;
+    const c = this.camp, p = this.player, K = tentOf(c.item);
     return {
-      id: 'tent', label: 'Pitching the tent', phases: PITCH, at: c.stage, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: c.stage, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(at); },
       onPhase: (i) => { this.setStage(c, i + 1); if (i === 3) this.pitched(); },
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(STAGE_WORDS[job.done])}. Hold E at it to carry on.`, 3); } },
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. Hold E at it to carry on.`, 3); } },
     };
   }
   // the hold that strikes it, from the stage it stands at back to rolled up and in a pack
   strikeOpts() {
-    const c = this.camp, from = c.stage, p = this.player;
+    const c = this.camp, from = c.stage, p = this.player, K = tentOf(c.item);
     return {
-      id: 'strike', label: 'Striking the tent', phases: STRIKE.slice(4 - from), at: 0, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'strike', label: 'Striking the tent', phases: K.strike.slice(4 - from), at: 0, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(from - at); },
       onPhase: (i) => { const st = from - (i + 1); if (st <= 0) this.packTent(); else this.setStage(c, st); },
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); this.note(`The tent stands with ${STAGE_WORDS[c.stage]}. Hold to carry on.`, 3); } },
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); this.note(`The tent stands with ${K.words[c.stage]}. Hold to carry on.`, 3); } },
     };
   }
   // the footprint staked: the tent out of its container, the site claimed, the camp begun
@@ -616,7 +621,7 @@ export class Camp {
   }
   // the tent's place on the drawn ground (props.js tentPose) and its box for the walker
   poseTent(c) {
-    const pose = tentPose((x, z) => this.tiles.groundAt(x, z), c.x, c.z, c.fdx, c.fdz);
+    const pose = tentPose((x, z) => this.tiles.groundAt(x, z), c.x, c.z, c.fdx, c.fdz, tentOf(c.item).size);
     c.pose = pose.matrix; c.obstacle = pose.obstacle; c.y = pose.y;
     c.stages.place(c.pose);
   }
@@ -677,7 +682,7 @@ export class Camp {
     const q = !soft;
     if (c.stage < 4) {
       const sleepNoFly = c.stage === 3 && sleepy && q;
-      p.say(`Your tent · ${STAGE_WORDS[c.stage]}`, ['E', `${c.stage === 3 ? 'Put the fly on' : 'Carry on pitching'} · hold`], q ? (sleepNoFly ? ['Q', 'Sleep without the fly'] : ['Q', 'Take it down · hold']) : null);
+      p.say(`Your tent · ${tentOf(c.item).words[c.stage]}`, ['E', `${c.stage === 3 ? 'Put the fly on' : 'Carry on pitching'} · hold`], q ? (sleepNoFly ? ['Q', 'Sleep without the fly'] : ['Q', 'Take it down · hold']) : null);
       if (inp.pressed('KeyE')) hold.begin(this.pitchOnOpts());
       else if (q && inp.pressed('KeyQ')) { if (sleepNoFly) this.turnIn(site, night); else hold.begin({ ...this.strikeOpts(), key: 'KeyQ' }); }
       return;
@@ -729,7 +734,7 @@ export class Camp {
     hold.cancel(); this.dropDraft();
     const camp = c && Math.hypot(c.x - p.x, c.z - p.z) < ASHORE_NOTE ? c : null;
     const area = this.areaAt(p.x, p.z, AREA_R + 15) || (camp ? { x: camp.site ? camp.site.layout.fire.x : camp.x, z: camp.site ? camp.site.layout.fire.z : camp.z, r: AREA_R } : null);
-    if (camp) parts.push(camp.stage >= 4 ? 'the tent is still up' : `the tent stands half pitched, ${STAGE_WORDS[camp.stage]}`);
+    if (camp) parts.push(camp.stage >= 4 ? 'the tent is still up' : `the tent stands half pitched, ${tentOf(camp.item).words[camp.stage]}`);
     if (this.chores && typeof this.chores.ashore === 'function') { try { for (const s of this.chores.ashore() || []) if (s) parts.push(s); } catch (e) { console.warn('chores.ashore', e); } }
     if (inv && area) {
       const near = (at) => at && Math.hypot(at.x - area.x, at.z - area.z) <= area.r + 10;

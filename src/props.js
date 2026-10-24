@@ -2040,18 +2040,91 @@ export function buildTentMesh(colour = TENT_COLOURS[0]) {
   m.castShadow = true; m.receiveShadow = true; m.name = 'tent';
   return m;
 }
+// The A-frame tent (the starting kit's: "Two poles and a fly. It sags when it rains."), in the dome's frame turned end
+// on: x across, z along the ridge with the door at the +z end, y up from the ground. An A of two poles at each end and
+// a ridge pole between them hold the canvas (tent.js draws those stages); the rain fly goes over the ridge and down to
+// a hand's width off the ground on either side, sagging a little between the poles, beaked out at the back and out over
+// the door into a vestibule staked to the ground, its right flap rolled back and tied so the tent's door shows; guy lines
+// from the ridge's ends and the eaves out to stakes. One mesh of the props' material, its occlusion baked once.
+const AW = 0.8, AL = 1.1, AH = 1.05, AV = 0.62, AB = 0.24; // half width, half length (the ridge), ridge height, how far the vestibule and the back beak reach out
+export const AFRAME_SIZE = { a: AW, b: AL, h: AH, vest: AV, back: AB, ahead: AL + AV + 0.72 };
+const AEX = AW * 1.12, AEY = 0.13, AL1 = AL * 1.03; // the fly's eaves (out and up) and its ends along the ridge
+export const aframeRidge = (z) => AH + 0.035 - 0.045 * (1 - (z / AL1) ** 2); // the ridge sags a little between the A's
+let aframeOcc = null;
+function aframeBuild(fly, line, peg) {
+  const b = new PropBuilder(), K = 4, S = 8;
+  // a point on side s's panel: u from the ridge (0) down to the eave (1), v along it from the back (-1) to the front (1);
+  // the cloth sags between the poles, most in the middle of the panel
+  const P = (s, u, v) => { const z = v * AL1, sag = 0.045 * Math.sin(Math.PI * u) * (1 - v * v); return V(s * (AEX * u - sag * 0.35), aframeRidge(z) * (1 - u) + AEY * u - sag, z); };
+  const shadeOf = (u, v) => (u < 0.06 ? 0.8 : u > 0.94 ? 0.86 : 1) * (1 - 0.06 * u) * (Math.abs(v) > 0.97 ? 0.9 : 1); // the ridge's seam tape and the hem's binding darker
+  for (const s of [-1, 1]) {
+    const grid = [], N = [];
+    for (let i = 0; i <= K; i++) {
+      const row = [], nr = [];
+      for (let k = 0; k <= S; k++) {
+        const u = i / K, v = -1 + (2 * k) / S, e = 0.02, p = P(s, u, v);
+        const du = P(s, Math.min(1, u + e), v).sub(P(s, Math.max(0, u - e), v)), dv = P(s, u, Math.min(1, v + e)).sub(P(s, u, Math.max(-1, v - e)));
+        const n = dv.cross(du).normalize(); if (n.x * s + n.y * 0.2 < 0) n.negate();
+        row.push(p); nr.push(n);
+      }
+      grid.push(row); N.push(nr);
+    }
+    for (let i = 0; i < K; i++) for (let k = 0; k < S; k++) {
+      const q = [[i, k], [i, k + 1], [i + 1, k + 1], [i + 1, k]];
+      const tri = (ids) => {
+        const A = grid[ids[0][0]][ids[0][1]], B = grid[ids[1][0]][ids[1][1]], Cc = grid[ids[2][0]][ids[2][1]];
+        const e = B.clone().sub(A).cross(Cc.clone().sub(A)), order = e.dot(N[ids[0][0]][ids[0][1]]) >= 0 ? [0, 1, 2] : [0, 2, 1];
+        for (const o of order) { const [ii, kk] = ids[o], u = ii / K, v = -1 + (2 * kk) / S; b.vert(grid[ii][kk], N[ii][kk], (v * AL1) / 1.2, (u * 1.3) / 1.2, TILE.CANVAS, fly.clone().multiplyScalar(shadeOf(u, v))); }
+      };
+      tri([q[0], q[1], q[2]]); tri([q[0], q[2], q[3]]);
+    }
+  }
+  // the ends: a short beak at the back, closed; the vestibule out over the door, its left flap zipped down to the stake
+  // and its right one rolled back to the eave and tied (both sides of the cloth drawn, for the look in through the door)
+  const Rb = V(0, aframeRidge(-AL1), -AL1), Bk = V(0, 0.08, -AL1 - AB), Rf = V(0, aframeRidge(AL1), AL1), F = V(0, 0.06, AL1 + AV);
+  const E = (s, z) => V(s * AEX, AEY, z), end = fly.clone().multiplyScalar(0.9), under = fly.clone().multiplyScalar(0.55);
+  for (const s of [-1, 1]) b.face([Rb, E(s, -AL1), Bk], TILE.CANVAS, end, { ref: V(0, 0.35, 0) });
+  b.face([Rf, E(-1, AL1), F], TILE.CANVAS, fly.clone().multiplyScalar(0.84), { ref: V(0, 0.35, 0) });
+  b.face([Rf, E(-1, AL1), F], TILE.CANVAS, under, { ref: V(-1, 0.6, AL1 + AV * 0.6) });
+  b.tube([Rf.clone().add(V(0.004, 0.004, 0.004)), F.clone().add(V(0.004, 0.012, 0.006))], 0.006, 3, TILE.PLAIN, fly.clone().multiplyScalar(0.45)); // the zip
+  const roll = [];
+  for (let i = 0; i <= 6; i++) { const t = i / 6, p = Rf.clone().lerp(E(1, AL1), 0.12 + 0.86 * t); roll.push(p.add(V(0.02, 0.025, 0.035))); }
+  b.tube(roll, (t) => 0.026 + 0.018 * Math.sin(Math.PI * t), 6, TILE.CANVAS, fly.clone().multiplyScalar(0.8), { cap0: true, cap1: true });
+  for (const t of [0.38, 0.72]) { const p = roll[Math.round(t * 6)]; b.tube([p.clone().add(V(-0.02, 0.05, -0.02)), p.clone().add(V(0.04, -0.05, 0.03))], 0.008, 4, TILE.PLAIN, line); } // its ties
+  // guy lines: the ridge's ends out along it, the eaves' middles out to the side; a stake at each and at the hem's corners
+  const stake = (p) => b.box(p, V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.006, 0.07, 0.006, TILE.METAL, peg, { grain: 'y' });
+  const guys = [[Rb.clone().add(V(0, 0.02, -0.01)), V(0, 0.02, -AL1 - AB - 0.62)], [Rf.clone().add(V(0, 0.02, 0.01)), V(0, 0.02, AL1 + AV + 0.38)]];
+  for (const s of [-1, 1]) guys.push([P(s, 0.72, 0).add(V(s * 0.01, 0.01, 0)), V(s * (AEX + 0.62), 0.02, 0)]);
+  for (const [a, g] of guys) { b.tube([a, g], 0.0045, 3, TILE.PLAIN, line); stake(g); }
+  for (const s of [-1, 1]) for (const z of [-AL1, AL1]) stake(V(s * (AEX + 0.05), 0.0, z));
+  stake(F.clone().setY(0)); stake(Bk.clone().setY(0));
+  return b;
+}
+export function buildAFrameMesh(colour = TENT_COLOURS[0]) {
+  shared();
+  const g = aframeBuild(new THREE.Color(colour), C(0xc8c2b0), C(0x8f8c86)).build();
+  if (!aframeOcc) { const W = C(0xffffff), w = aframeBuild(W, W, W).build(); bakeSelf(w, { rays: 10, reach: 0.9, ground: 0, floor: 0.35 }); aframeOcc = w.getAttribute('aOcc').array.slice(); }
+  g.getAttribute('aOcc').array.set(aframeOcc);
+  occlude(g, [], { ground: 0, rays: 6, reach: 0.4, floor: 0.6, bury: 0.08 });
+  g.computeBoundingSphere();
+  const m = new THREE.Mesh(g, propMaterial());
+  m.castShadow = true; m.receiveShadow = true; m.name = 'tent-aframe';
+  return m;
+}
 // Where a tent pitched at world (x, z) with its door facing (fdx, fdz) stands: on the slope of the ground under its
 // footprint (ground(x, z): the drawn ground, tiles.js groundAt), its hem a little into it. Returns the world matrix
-// and what it is to the walker, a box { x, z, ux, uz, hx, hz, box: true } (tiles.js treesNear, player.js).
-export function tentPose(ground, x, z, fdx, fdz) {
-  const Zf = V(fdx, 0, fdz), Xf = V(-fdz, 0, fdx);
+// and what it is to the walker, a box { x, z, ux, uz, hx, hz, box: true } (tiles.js treesNear, player.js). size: the
+// tent's (TENT_SIZE, the dome's, or AFRAME_SIZE: its vestibule and back beak lengthen the box toward the door).
+export function tentPose(ground, x, z, fdx, fdz, size = TENT_SIZE) {
+  const A = size.a, B = size.b, Zf = V(fdx, 0, fdz), Xf = V(-fdz, 0, fdx);
   const at = (u, w) => { const px = x + Xf.x * u + Zf.x * w, pz = z + Xf.z * u + Zf.z * w; return V(px, ground(px, pz), pz); };
-  const c00 = at(-TA, -TB), c11 = at(TA, TB), c01 = at(-TA, TB), c10 = at(TA, -TB);
+  const c00 = at(-A, -B), c11 = at(A, B), c01 = at(-A, B), c10 = at(A, -B);
   const up = c11.clone().sub(c00).cross(c01.clone().sub(c10)).normalize(); if (up.y < 0) up.negate();
   const Zt = Zf.clone().addScaledVector(up, -Zf.dot(up)).normalize(), Xt = up.clone().cross(Zt).normalize();
   const y = (c00.y + c11.y + c01.y + c10.y) / 4 - 0.03;
   const matrix = new THREE.Matrix4().makeBasis(Xt, up, Zt).setPosition(x, y, z);
-  return { matrix, y, obstacle: { x: x + Zf.x * 0.15, z: z + Zf.z * 0.15, ux: Xf.x, uz: Xf.z, hx: TA + 0.1, hz: TB + 0.3, box: true, tent: true } };
+  const fwd = size.vest ? (size.vest - (size.back || 0)) / 2 : 0.15, hz = size.vest ? B + (size.vest + (size.back || 0)) / 2 - 0.1 : B + 0.3;
+  return { matrix, y, obstacle: { x: x + Zf.x * fwd, z: z + Zf.z * fwd, ux: Xf.x, uz: Xf.z, hx: A + 0.1, hz, box: true, tent: true } };
 }
 // The latrine: a fibreglass box with its lid down, set into the ground.
 function latrine(ctx, x, z, ang, rng) {
