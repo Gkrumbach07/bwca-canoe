@@ -389,6 +389,8 @@ export class Packs {
     if (carried.length) {
       const u = this.lastCarried();
       p.say(note || trailText || `The canoe is ${dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`} away`, ['Q', `Set down ${the(u)}`]);
+      // only Q here: the camp's E or a berry patch's may take the line, keeping the Q (camp.js, forage.js)
+      if (p.prompt) Object.assign(p.prompt, { soft: true, tail: ` &nbsp; <kbd>Q</kbd>Set down ${the(u)}` });
       if (inp.pressed('KeyQ')) { const r = this.inv.setDown(u.ref); if (this.hud && r.words) this.hud.note(r.words, 2.5); }
       return true;
     }

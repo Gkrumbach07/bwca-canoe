@@ -300,11 +300,17 @@ export class Camp {
   say(text) { this.player.prompt = { key: null, text }; }
 
   prompts() {
+    const p = this.player, soft = p.prompt && p.prompt.soft ? p.prompt : null;
+    this.sitePrompts(soft);
+    // a thing carried away from the canoe offers only Q (packs.js): the camp's E takes the line and keeps the Q
+    if (soft && p.prompt && p.prompt !== soft && soft.tail) p.prompt = { ...p.prompt, text: `${p.prompt.text}${soft.tail}`, tail: soft.tail };
+  }
+  sitePrompts(soft) {
     const p = this.player;
     if (p.mode !== 'walk') return;
     const drop = p.carry && p.carry.drop;
     if (drop && Math.hypot(drop.x - p.x, drop.z - p.z) <= HULL_REACH) return; // the canoe's E (player.js)
-    if (p.prompt && (p.prompt.key || /<kbd>/.test(p.prompt.text || ''))) return; // a pack's, a dock's, a portage's (its Q too: the walk back for a pack)
+    if (!soft && p.prompt && (p.prompt.key || /<kbd>/.test(p.prompt.text || ''))) return; // a pack's, a dock's, a portage's (its Q too: the walk back for a pack)
     const site = this.nearestSite(p.x, p.z, SITE_R, true);
     if (this.bottlePrompt(site)) return; // at the water's edge the water's E comes before the site's
     if (site) this.atSitePrompts(site);

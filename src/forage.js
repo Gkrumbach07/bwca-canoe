@@ -775,12 +775,17 @@ export class Forage {
     if (c && (c.busy || c.night || (c.chores && c.chores.card && c.chores.card.open))) return false;
     if (o && o.visit && o.visit.inside) return false;
     const pr = p.prompt;
-    if (!pr) return true;
+    if (!pr || pr.soft) return true; // soft: a thing carried offers only Q (packs.js), kept on the patch's line
     if (!pr.key && !/<kbd>/.test(pr.text || '')) return true;
     // the camp's E anywhere on a site or by the trees gives way to a patch you are standing at
     return pr.key === 'E' && /^(Gather firewood|Pitch the tent)/.test(pr.text || '');
   }
   prompt() {
+    const p = this.player, was = p.prompt, tail = was && was.tail; // a carried thing's Q (packs.js; kept by the camp's E)
+    this.patchPrompt();
+    if (tail && p.prompt && p.prompt !== was) p.prompt = { ...p.prompt, text: `${p.prompt.text}${tail}`, tail };
+  }
+  patchPrompt() {
     const p = this.player;
     this.near = null;
     if (!this.free()) return;
