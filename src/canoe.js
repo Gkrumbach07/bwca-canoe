@@ -25,7 +25,9 @@ import { buildHullWater } from './hullwater.js';
 //   packs     in the hull, on the back or the chest, or standing on the ground (seatPacks, after the pose: packs.js
 //             says where each one is)
 //   swimming  treading water beside the overturned hull, a breaststroke when moving
-//   fishing   the hands where fishing.js holds the rod (state.fishing), the paddle across the gunwales
+//   fishing   the hands where fishing.js holds the rod (state.fishing), the paddle across the gunwales; standing on foot
+//             the same hands on the rod (wc C: rodArms, from poseWalk), the body turned to where it points
+//   sitting   player.move 'sit' (poseSit): on a bench, a log or the latrine, the feet planted ahead, the forearms on the thighs
 //   idle      breathing and the odd glance
 // Canoe frame: +x bow, +y up, +z starboard; the origin sits FLOAT_OFFSET above the water at rest.
 
@@ -379,17 +381,20 @@ export function buildCanoeRig({ water = null } = {}) {
     placePaddle(toRig(G), pad.D, pad.N);
     state.grip.copy(toRig(G)); state.blade.copy(toRig(pad.B));
     state.gripT.copy(state.grip); state.bladeT.copy(state.blade);
-    if (fz) {
-      // the rod's hands (fishing.js, rig space): right round the cork behind the reel, left on the crank
-      const chestP = J.chest.p;
-      const R = fromRig(fz.R), L = fromRig(fz.L);
-      const dir = fz.dir ? V().copy(fz.dir) : V(1, 0, 0), up = fz.up ? V().copy(fz.up) : V(0, 1, 0);
-      P.arm('R', R, dir, V(J.armR.p.x - 0.2, J.armR.p.y - 0.4, J.armR.p.z + 0.45), up.clone().negate());
-      const ax = fz.knobAxis ? V().copy(fz.knobAxis) : V(0, 0, 1);
-      P.arm('L', L, ax, V(J.armL.p.x - 0.25, J.armL.p.y - 0.45, J.armL.p.z - 0.4), V().subVectors(chestP, L));
-      return;
-    }
+    if (fz) { rodArms(fz); return; }
     paddleHands(J.chest.p);
+  }
+
+  // the rod's hands (fishing.js state.fishing, rig space): the right fist round the cork behind the reel, the left on the
+  // crank knob, on the butt for the cast, or either side of a fish held up; kneeling in the canoe or standing on foot
+  // (wc C), the body's joints already placed for the frame
+  function rodArms(fz) {
+    const chestP = J.chest.p;
+    const R = fromRig(fz.R), L = fromRig(fz.L);
+    const dir = fz.dir ? V().copy(fz.dir) : V(1, 0, 0), up = fz.up ? V().copy(fz.up) : V(0, 1, 0);
+    P.arm('R', R, dir, V(J.armR.p.x - 0.2, J.armR.p.y - 0.4, J.armR.p.z + 0.45), up.clone().negate());
+    const ax = fz.knobAxis ? V().copy(fz.knobAxis) : V(0, 0, 1);
+    P.arm('L', L, ax, V(J.armL.p.x - 0.25, J.armL.p.y - 0.45, J.armL.p.z - 0.4), V().subVectors(chestP, L));
   }
 
   // ---------------------------------------------------------------------------------------------------------
@@ -657,7 +662,9 @@ export function buildCanoeRig({ water = null } = {}) {
   // bob (down after each contact, up at passing), sway toward the standing foot, the hips turning with the
   // swing and the shoulders against them
   let crouchK = 0; // state.crouch, eased: the hips sink over the planted feet (the knees forward), the back bends over
-  function standingBody(dt, g, carry) {
+  // fz (wc C): fishing.js's hands while the rod is up on foot: the chest turned toward where the rod points (fz.yaw),
+  // leaning back for the cast or into the fight (fz.lean), the head down to the lure (fz.look)
+  function standingBody(dt, g, carry, fz = null) {
     const phi = g.phase, mw = g.mw, sp = g.sp * mw;
     crouchK += ((carry || g.air ? 0 : state.crouch || 0) - crouchK) * damp(5, dt);
     const ck = ease(crouchK);
@@ -709,9 +716,10 @@ export function buildCanoeRig({ water = null } = {}) {
     // the jog upright: a few degrees forward of the walk, no more
     const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog + SLOPE.lean * smooth(0.05, SLOPE.full, loco.grade)) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK
       + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck;
-    const pelvis = bodyQ(yaw + pYaw, 0.03 + lean * 0.3, roll);
-    const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15, lean, -0.4 * roll + 0.04 * g.mz * sp);
-    const head = bodyQ(idle.yaw * 0.85, (carry ? 0.22 : 0.02) - idle.pitch + 0.15 * lean + 0.2 * ck, 0);
+    const fy = fz ? 0.35 * (fz.yaw || 0) : 0, fl = fz ? 0.6 * (fz.lean || 0) : 0, fh = fz ? -0.18 * (fz.look || 0) : 0;
+    const pelvis = bodyQ(yaw + pYaw + 0.25 * fy, 0.03 + lean * 0.3, roll);
+    const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15 + fy, lean + fl, -0.4 * roll + 0.04 * g.mz * sp);
+    const head = bodyQ(idle.yaw * 0.85 + (fz ? 0.5 * (fz.yaw || 0) - 0.5 * fy : 0), (carry ? 0.22 : 0.02) - idle.pitch + 0.15 * lean + 0.2 * ck + fh, 0);
     const root = V(lean * 0.06, loco.hipY + ROOT_UP, swayZ);
     body(root, pelvis, chest, head, { shrugL: 0.012 * Math.sin(idle.breath), shrugR: 0.012 * Math.sin(idle.breath) });
     // the legs to the feet, knees over the toes
@@ -755,11 +763,12 @@ export function buildCanoeRig({ water = null } = {}) {
     if (hat.parent !== fig.bones.head) hatOnHead();
     contact.visible = false;
     stowPaddle();
-    updateIdle(dt, state.walkSpeed < 0.2);
+    const fz = state.mode === 'walk' ? state.fishing : null; // wc C: the rod up on foot (fishing.js): the hands on it
+    updateIdle(dt, state.walkSpeed < 0.2 && !fz);
     wadeK += ((mk === 'wade' ? 1 : 0) - wadeK) * damp(4, dt);
     const g = locomote(dt, false);
-    standingBody(dt, g, false);
-    swingArms(g);
+    standingBody(dt, g, false, fz);
+    if (fz) rodArms(fz); else swingArms(g);
   }
 
   function poseCarry(dt) {
@@ -1061,30 +1070,27 @@ export function buildCanoeRig({ water = null } = {}) {
     loco.hipW = NaN;
   }
 
-  // Sitting (the latrine, a bench, a log by the fire): the seat at player.move.top (world), or knee height off the
-  // ground; the feet planted ahead, the forearms on the thighs.
+  // Sitting (the latrine, a bench, a log by the fire; wc C: player.sitAt): the seat at player.move.top (world), or knee
+  // height off the ground; the feet planted ahead, as far as the legs reach from a high seat, the forearms on the thighs.
+  // (The eating variant went with the sit to eat: the owner, 2026-10-24, "i dont want to have to sit to eat food".)
   function poseSit(dt, m) {
     placePaddler(0, 0, 0);
     if (hat.parent !== fig.bones.head) hatOnHead();
     contact.visible = false; stowPaddle(); updateIdle(dt, true);
     const gy = ground(rig.position.x, rig.position.z), seat = Number.isFinite(m.top) ? m.top : gy + 0.45;
     const br = Math.sin(idle.breath), hipY = seat + 0.1 - rig.position.y;
-    // camp 2 (cook.js): eating out of the pot, m.eat { k: the spoon's cycle }: bent over it a little, the pot in the left
-    // hand in front, the spoon in the right going from the pot to the mouth and back
-    const E = m.eat, ek = E ? 0.5 - 0.5 * Math.cos(Math.min(1, (E.k % 1) / 0.55) * Math.PI * 2) : 0;
-    const pelvis = bodyQ(0, -0.05, 0), chest = bodyQ(idle.yaw * 0.15, (E ? 0.34 - 0.06 * ek : 0.22) + 0.012 * br, 0), head = bodyQ(E ? 0 : idle.yaw * 0.85, E ? 0.2 - 0.16 * ek : 0.02 - idle.pitch, 0);
+    const pelvis = bodyQ(0, -0.05, 0), chest = bodyQ(idle.yaw * 0.15, 0.22 + 0.012 * br, 0), head = bodyQ(idle.yaw * 0.85, 0.02 - idle.pitch, 0);
     body(V(-0.06, hipY + ROOT_UP, 0), pelvis, chest, head, { shrugL: 0.012 * br, shrugR: 0.012 * br });
     const h = rig.rotation.y;
+    // the feet ahead of the seat: a knee's reach on a low seat, nearer in under a high one, so the legs are never straight
+    const above = hipY + rig.position.y - gy, reach = (LT + LS) * 0.93;
+    const ahead = Math.min(0.45, Math.max(0.22, Math.sqrt(Math.max(0.04, reach * reach - above * above))));
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
-      const p = toWorld(V(0.42, 0, sg * 0.16), _h0); p.y = ground(p.x, p.z);
+      const p = toWorld(V(ahead, 0, sg * 0.16), _h0); p.y = ground(p.x, p.z);
       footTo(k, p, h + sg * -0.12, 0, 0.1);
-      const knee = V(0.36, hipY + 0.02, sg * 0.16);
+      const knee = V(ahead - 0.06, hipY + 0.02 + 0.1 * (0.45 - ahead), sg * 0.16);
       const sh = J['arm' + k].p;
-      if (E && k === 'L') P.arm(k, V(0.34, hipY + 0.3, -0.04), V(0, 0, 1), V(sh.x - 0.15, sh.y - 0.35, sh.z - 0.3), V(0, 1, 0));
-      else if (E) {
-        const pot = V(0.33, hipY + 0.36, 0.0), mouth = V().copy(J.head.p).add(V(0.14, -0.02, 0.01)), t = pot.lerp(mouth, ek);
-        P.arm(k, t, V(0.45, 0.25 + 0.3 * ek, -0.85).normalize(), V(sh.x - 0.1, sh.y - 0.4, sh.z + 0.35), V(0, 1, 0));
-      } else P.arm(k, knee.add(V(-0.05, 0.06, -sg * 0.02)), V(0, 0, -sg), V(sh.x - 0.25, sh.y - 0.3, sh.z + sg * 0.3), V(0, -1, 0));
+      P.arm(k, knee.add(V(-0.05, 0.06, -sg * 0.02)), V(0, 0, -sg), V(sh.x - 0.25, sh.y - 0.3, sh.z + sg * 0.3), V(0, -1, 0));
     }
     loco.init = false;
   }
