@@ -27,13 +27,13 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // shape, the props' boxes, and inside a store its walls and ceiling.
 // (doorHalf, doorTop: the store's door, props.js DOOR, 1.2 m wide and 2.05 m high; stoop: how far out through it the
 // camera may stand)
-const SIGHT = { margin: 0.12, step: 0.18, wall: 4.0, shelf: 1.5, post: 2.5, ceiling: 2.55, bigTrunk: 0.35, trunkNear: 1.4, doorHalf: 0.6, doorTop: 2.05, stoop: 0.7 };
+const SIGHT = { margin: 0.12, step: 0.18, wall: 4.0, shelf: 1.5, post: 2.5, ceiling: 2.55, bigTrunk: 0.35, trunkNear: 1.4, doorHalf: 0.6, doorTop: 2.05, stoop: 1.1 };
 // the pull, along the line from the walker: min, the closest the camera comes (m); margin, how far it stays off what it
 // meets (the spring works inside it, so the camera never goes into the thing itself); inW, the spring's rate coming in
 // (rad/s, critically damped: about a tenth of a second); hold, the seconds the way must stay clear before it eases out;
 // hyst, how much further out (m) the clear way must reach before that starts; outW, the spring's rate going out; door,
-// how close it comes at a store's threshold, from doorReach m out
-const PULL = { min: 0.45, margin: 0.3, inW: 18, hold: 0.35, hyst: 0.3, outW: 3.2, door: 0.8, doorReach: 3.5 };
+// how close it comes at a store's threshold, from doorReach m out; side, how far either side the indoor feelers reach
+const PULL = { min: 0.45, margin: 0.3, inW: 18, hold: 0.35, hyst: 0.3, outW: 3.2, door: 1.1, doorReach: 3.0, side: 1.4 };
 // fb2 E: the see-through. Every vegetation material's fragment (camera.js seeThrough patches them before they compile:
 // the same two programs, no new one) is dropped by a 4 x 4 ordered dither where it lies in a cone round the line from
 // the camera (uSeeA) to the walker's chest (uSeeB): uSee.y metres across at the camera, uSee.z at the walker, stopping
@@ -539,6 +539,15 @@ export class ChaseCamera {
     if (!hit.what || hit.what !== 'store') for (const Ly of storeLayouts()) {
       const dd = Ly.door ? Math.hypot(tx - Ly.door.x, tz - Ly.door.z) : Infinity;
       if (dd < PULL.doorReach) { want = Math.min(want, PULL.door + (len - PULL.door) * smoothstep(0.4, PULL.doorReach, dd)); break; }
+    }
+    // indoors two more lines either side of the camera (PULL.side m across at its end) feel for the walls ahead of it:
+    // turning toward a wall or a corner it comes in on the spring before the middle line meets the wall and has to stop it
+    if (hit.what === 'store') {
+      const sx = -dz / len, sz = dx / len, h2 = Math.hypot(sx, sz) || 1, side = this._side || (this._side = {});
+      for (const k of [-1, 1]) {
+        const s2 = sightLine(this.world, tx, ty, tz, P.x + (sx / h2) * PULL.side * k, P.y, P.z + (sz / h2) * PULL.side * k, side);
+        if (s2.hard < Infinity) want = Math.min(want, Math.max(PULL.min, s2.hard - PULL.margin));
+      }
     }
     // the thing itself: never past it (a trunk at the lens is seen through meanwhile, SEE's lens, so the spring has it)
     const limit = hit.hard < Infinity && hit.what !== 'trunk' ? Math.max(PULL.min, hit.hard - 0.08) : len;

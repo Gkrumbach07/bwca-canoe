@@ -797,13 +797,20 @@ export class Player {
         if (t.shape) { if (t.shape.push(x, z, R, level, head, _push)) { x = _push.x; z = _push.z; moved = true; out.solid = t; if (small(t.shape)) out.trunk = t; } continue; }
         if (t.top !== undefined && t.top <= level) continue;
         if (t.box) {
-          const px = x - t.x, pz = z - t.z, a = px * t.ux + pz * t.uz, b = -px * t.uz + pz * t.ux, ka = t.hx + R, kb = t.hz + R;
-          if (Math.abs(a) < ka && Math.abs(b) < kb) {
-            const da = ka - Math.abs(a), db = kb - Math.abs(b);
+          // fb2 E: the circle against the box itself, its corners round (the R-grown rectangle's square corners held a
+          // walker passing a wall's end, a flight's side or a door post by a few centimetres his circle never touched)
+          const px = x - t.x, pz = z - t.z, a = px * t.ux + pz * t.uz, b = -px * t.uz + pz * t.ux;
+          const ca = clamp(a, -t.hx, t.hx), cb = clamp(b, -t.hz, t.hz), ea = a - ca, eb = b - cb, e2 = ea * ea + eb * eb;
+          if (e2 >= R * R) continue;
+          if (e2 > 1e-10) { // outside the box, within R of it: out along the line from its nearest point
+            const e = Math.sqrt(e2), k = (R - e) / e, da = ea * k, db = eb * k;
+            x += t.ux * da - t.uz * db; z += t.uz * da + t.ux * db;
+          } else { // the middle inside it: out by the nearer side, as before
+            const da = t.hx + R - Math.abs(a), db = t.hz + R - Math.abs(b);
             if (da < db) { const s = Math.sign(a) || 1; x += t.ux * s * da; z += t.uz * s * da; }
             else { const s = Math.sign(b) || 1; x += -t.uz * s * db; z += t.ux * s * db; }
-            moved = true;
           }
+          moved = true;
           continue;
         }
         const dx = x - t.x, dz = z - t.z, d = Math.hypot(dx, dz), keep = t.r + R;
@@ -827,7 +834,11 @@ export class Player {
       if (t.shape) { if (t.shape.overlaps(x, z, R, level, head, 0)) return true; continue; }
       if (t.top !== undefined && t.top <= level) continue;
       const dx = x - t.x, dz = z - t.z;
-      if (t.box) { if (Math.abs(dx * t.ux + dz * t.uz) < t.hx + R && Math.abs(-dx * t.uz + dz * t.ux) < t.hz + R) return true; continue; }
+      if (t.box) { // (fb2 E: corners round, as clearOf's)
+        const a = dx * t.ux + dz * t.uz, b = -dx * t.uz + dz * t.ux, ea = a - clamp(a, -t.hx, t.hx), eb = b - clamp(b, -t.hz, t.hz);
+        if (ea * ea + eb * eb < R * R) return true;
+        continue;
+      }
       if (dx * dx + dz * dz < (t.r + R) ** 2) return true;
     }
     return false;
