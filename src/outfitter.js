@@ -777,7 +777,7 @@ export class Outfitter {
   start() {
     const a = this.at || this.port || this.nearest(this.player.x, this.player.z).l;
     const d = this.day, core = this.core, adv = this.adventure, pr = this.profile;
-    const first = this.stamp();
+    const first = this.stamp() || !(core && core.state && core.state.id); // the season's first trip (a new season's core has none yet)
     const food = this.energy ? this.energy.food : 0;
     this.trip = { active: true, ep: a.ep, days: this.foodRoom, started: d.clock, startAbs: d.doy * 24 + d.hours, startYear: d.year, startDoy: d.doy, startHours: d.hours, turnedIn: 0, fromName: this.lakeOf(a), away: false };
     if (first && this.energy) this.energy.value = 1;
