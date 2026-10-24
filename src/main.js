@@ -56,6 +56,10 @@ import { invUI } from './inv-ui.js'; // fb B
 import { Dialogue } from './dialogue.js'; // fb F
 import { Forage } from './forage.js'; // fb G
 import { hold } from './hold.js'; // camp 1
+import { pointer, peopleTargets, forageTargets, taskTargets } from './pointer.js'; // fb2 A
+import { nearby } from './nearby.js'; // fb2 A
+import { FORAGE } from './forage.js'; // fb2 A
+import { KINDS } from './tasks.js'; // fb2 A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -344,6 +348,16 @@ async function main() {
   canoe.update = (dt) => { camp2.beforePose(); pose2(dt); camp2.afterPose(); };
   journal.pack.onUse = (e, mode, c) => camp2.cook.onUse(e, mode, c) ?? (use2 ? use2(e, mode, c) : null);
   window.__game.cook = camp2.cook;
+  // fb2 A: the world side of interacting (the owner's second feedback of 2026-10-24). A quiet dot in the middle of the
+  // view (pointer.js): E does what it points at within reach (pick up, talk, open, get in) and nothing else, and there
+  // is no Q drop. The camp's work is done from the book (nearby.js: the fire's fuel and grate, the tent, the hang, the
+  // latrine, the canoe's load, the bottle, the saw: the panels stream B draws); held work keeps hold.js (the book's
+  // BookHold, E or a click). Made before the compile below, so the dot's rim has its program behind the title card.
+  pointer.attach({ camera, player, scene, renderer, hud, chase, outfitter, fishing, photo, dialogue: talk });
+  nearby.attach({ camp, packs, journal, hud, pointer, canoe, player });
+  pointer.register(nearby.targets);
+  pointer.register(peopleTargets(npcs)); pointer.register(forageTargets(forage, FORAGE)); pointer.register(taskTargets(tasks, KINDS));
+  Object.assign(window.__game, { pointer, nearby });
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   renderer.compileAsync(scene, camera).catch(() => {});
@@ -367,6 +381,7 @@ async function main() {
       photo.before(dt); // hubs 3B: with the camera up, its keys (the aim, Space) come before anyone else's E and Space
       outfitter.update(dt * ts);
       talk.before(dt); // fb F: a conversation holds the walker and turns the view to the speaker
+      pointer.before(); // fb2 A: E on what the dot points at (and only that), before anyone else reads it
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
       forage.before(); // fb G: E for the berry patch whose prompt showed; the walker holds still while picking
       tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
@@ -377,6 +392,7 @@ async function main() {
       outfitter.prompt();
       npcs.update(dt); // hubs 3C: who is drawn and how they stand, the talk prompt and its E / Q, after the store's own prompt
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
+      nearby.update(dt); // fb2 A: the book's panels for what is near (their change signal), the stations tidied
       forage.update(dt); // fb G: the patches near you, drawn in season; their prompt and the picking (after the camp's)
       tasks.update(dt * ts);
       sheets.update(player); // hubs 2D: the cells around you as you go
@@ -392,6 +408,7 @@ async function main() {
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
+    pointer.update(dt, shell); // fb2 A: the dot, its label and the rim, after the camera
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
     water.update(dt * ts, player.x, player.z);
