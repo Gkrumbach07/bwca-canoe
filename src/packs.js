@@ -44,6 +44,7 @@ const HULL_REACH = 3;       // m from the canoe within which its prompts apply (
 const LOAD_REACH = 10;      // m from the canoe within which a thing set down for the trip goes in at the launch
 const LEAVE_AGAIN = 6;      // seconds: E again within this launches and leaves what is back at the trail head
 const CANOE_KG = 160;       // kg of gear a tripping canoe takes besides its paddler ("Load everything here" stops there)
+const CANOE_ROOM = 8;       // containers a canoe takes (inventory.js CANOE_ROOM)
 const LOAD_EACH = { minutes: 1, seconds: 0.45, per100m: 2.5 }; // a thing carried down and loaded: its minutes (more the farther it lies), its real seconds
 // the fetch is charged at life pace (pace.js), as walking it yourself is: the walk back at a walk on the trail's going,
 // the carry over at a walk slowed by the load (player.js: / (kg / 40) ^ 0.6, and no slower than a canoe carry)
@@ -456,8 +457,12 @@ export class Packs {
       inv.emit('items');
       return stuck ? { ok: false, why: 'full' } : { ok: true };
     }
-    const r = inv.load(u.ref);
-    return r.ok ? { ok: true } : { ok: false, why: r.why };
+    // carried down to the hull: inventory.load's move without its reach (the thing may lie across the site)
+    if (u.kind === 'container' && inv.containers.filter((c) => c.where === 'canoe').length >= CANOE_ROOM) return { ok: false, why: 'full' };
+    const o = u.obj;
+    o.where = 'canoe'; o.at = null; o.hand = null;
+    inv.emit('load');
+    return { ok: true };
   }
   // the held E at the hull: each thing a phase (its minutes a little more the farther it lies), loaded as its phase
   // ends; let go and what is in is in. A word at the end for what would not go.

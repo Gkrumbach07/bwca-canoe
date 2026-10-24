@@ -36,7 +36,7 @@ export const HANG = [
 ];
 export const LOWER = [
   { name: 'Untied', doing: 'Untying the rope from the trunk', minutes: 1, seconds: 0.8 },
-  { name: 'Lowered', doing: 'Letting the barrel down', minutes: 2, seconds: 1.3 },
+  { name: 'Lowered', doing: 'Letting it down hand over hand', minutes: 2, seconds: 1.3 },
 ];
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -121,8 +121,11 @@ export class Hang {
   // each frame (camp.update): the limbs drawn for the barrels hung (from the save too) and a hang under way
   update() {
     const inv = this.inv, seen = new Set();
+    const pe0 = this.pending;
     if (inv && inv.attached) for (const c of inv.containers) {
       if (c.where !== 'hung' || !c.at || !c.at.tree) continue;
+      // tied on at the rope's foot and the hang given up (walked off, a reload): untied, it stands there on the ground
+      if (c.at.up === false && !(pe0 && pe0.ref === c.id)) { inv.setDown(c.id, { x: c.at.x, z: c.at.z, heading: c.at.heading || 0 }, { left: false, force: true }); continue; }
       seen.add(c.id);
       this.drawLimb(c.id, c.at.tree, c.at.limb, 'tied');
     }
@@ -178,35 +181,36 @@ export class Hang {
     if (!inv || !inv.attached) return [];
     return inv.reachable().filter((c) => BARRELS[c.item] && c.where !== 'hung' && c.where !== 'in');
   }
+  // the barrel hung up in a tree nearest (px, pz) within AT_HUNG of its rope or its trunk (not one still being hoisted)
   hungNear(px, pz) {
     const inv = this.inv;
     if (!inv || !inv.attached) return null;
     let best = null, bd = AT_HUNG;
     for (const c of inv.containers) {
-      if (c.where !== 'hung' || !c.at) continue;
+      if (c.where !== 'hung' || !c.at || c.at.up === false) continue;
       const t = c.at.tree, d = Math.min(Math.hypot(c.at.x - px, c.at.z - pz), t ? Math.hypot(t.x - px, t.z - pz) : Infinity);
       if (d < bd) { bd = d; best = c; }
     }
     return best;
   }
-  // E at a hung barrel (let it down), at a hang let go (carry on), or with a barrel in reach at a tree with a high limb
-  // (hang it); true when it set the prompt
+  // E at a hang let go (carry on: the rope over the limb, or the barrel tied on at its foot), at a hung barrel (let it
+  // down), or with a barrel in reach at a tree with a high limb (hang it); true when it set the prompt
   prompts() {
     const p = this.player;
     if (p.mode !== 'walk' || hold.active) return false;
+    const pe = this.pending;
+    if (pe && pe.done >= 1 && Math.hypot(pe.tree.x - p.x, pe.tree.z - p.z) < AT_TREE + 1) {
+      const c = this.inv.cont(pe.ref);
+      if (c && (c.where === 'ground' || c.where === 'hung' || this.inv.inReach(c))) {
+        hold.offer(pe.done >= 2 ? 'Carry on hoisting the barrel' : 'Carry on hanging the barrel', `${HANG[pe.done - 1].name.toLowerCase()} so far`, this.hangOpts(c, pe.spot, pe.done));
+        return true;
+      }
+    }
     const hung = this.hungNear(p.x, p.z);
     if (hung) {
       const t = hung.at.tree, d = itemDef(hung.item);
       hold.offer('Let the barrel down', `${lower(d ? d.name : 'the barrel')}, from the ${t ? t.name : 'tree'}`, this.lowerOpts(hung));
       return true;
-    }
-    const pe = this.pending;
-    if (pe && pe.done >= 1 && Math.hypot(pe.tree.x - p.x, pe.tree.z - p.z) < AT_TREE + 1) {
-      const c = this.inv.cont(pe.ref);
-      if (c && (c.where === 'ground' || this.inv.inReach(c))) {
-        hold.offer('Carry on hanging the barrel', `${HANG[pe.done - 1].name.toLowerCase()} so far`, this.hangOpts(c, pe.spot, pe.done));
-        return true;
-      }
     }
     const bs = this.barrels();
     if (!bs.length) return false;
@@ -228,7 +232,7 @@ export class Hang {
     const inv = this.inv, H = BARRELS[c.item] || 0.6, p = this.player;
     const low = spot.gy + H / 2 + 0.02, high = spot.gy + CLEAR + H / 2;
     const at = (y) => ({ x: spot.x, y, z: spot.z, heading: Math.atan2(-spot.dz, spot.dx), limb: spot.limb + 0.06 });
-    const tieOn = () => { if (inv.cont(c.id) && inv.cont(c.id).where !== 'hung') { inv.hang(c.id, at(low)); const k = inv.cont(c.id); if (k && k.at) k.at.tree = spot.tree; } };
+    const tieOn = () => { if (inv.cont(c.id) && inv.cont(c.id).where !== 'hung') { inv.hang(c.id, at(low)); const k = inv.cont(c.id); if (k && k.at) { k.at.tree = spot.tree; k.at.up = false; } } };
     return {
       id: 'hang', label: 'Hanging the barrel', phases: HANG, at: from, near: { x: p.x, z: p.z, r: 1.5 },
       onPhase: (i) => {
@@ -237,7 +241,7 @@ export class Hang {
         if (i === 2) {
           const k = inv.cont(c.id); if (!k) return;
           if (k.where !== 'hung') tieOn();
-          k.at.y = high; this.pending = null;
+          k.at.y = high; k.at.up = true; this.pending = null;
           inv.emit('hung');
           const tag = this.camp.reachArea ? this.camp.reachArea() : null; if (tag && k.at) k.at.camp = tag.key || 'camp';
           this.camp.note(`The ${lower(itemDef(c.item).name)} hangs from the ${spot.tree.name}, ${CLEAR} m up and ${OUT.toFixed(1).replace('.0', '')} m out from the trunk.`, 5);
@@ -245,9 +249,10 @@ export class Hang {
         }
       },
       onTick: (k) => { if (k > 2) { let b = inv.cont(c.id); if (b && b.where !== 'hung') { tieOn(); b = inv.cont(c.id); } if (b && b.where === 'hung' && b.at) b.at.y = low + (high - low) * ease(k - 2); } },
+      // let go: tied on, it stays tied at the rope's foot (back down if it was part way up), for a hold to hoist it
       onStop: (job) => {
         const b = inv.cont(c.id);
-        if (b && b.where === 'hung' && job.done < 3) { inv.setDown(b.id, { x: spot.x, z: spot.z, heading: Math.atan2(-spot.dz, spot.dx) }, { left: false, force: true }); }
+        if (b && b.where === 'hung' && b.at && b.at.up === false) b.at.y = low;
         if (this.pending) { this.pending.done = Math.max(1, job.done); if (job.done < 1) this.pending = null; }
         if (job.done >= 1 && job.done < 3) this.camp.note(`${HANG[job.done - 1].name}. Hold E there to carry on.`, 3);
       },
@@ -258,7 +263,7 @@ export class Hang {
   lowerOpts(c) {
     const inv = this.inv, H = BARRELS[c.item] || 0.6, a = c.at, high = a.y, low = (a.tree ? this.tiles.groundAt(a.x, a.z) : a.y - CLEAR) + H / 2 + 0.02, p = this.player;
     return {
-      id: 'lower', label: 'Letting the barrel down', phases: LOWER, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'lower', label: 'Lowering the barrel', phases: LOWER, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (k) => { const b = inv.cont(c.id); if (b && b.where === 'hung' && k > 1) b.at.y = high + (low - high) * ease(k - 1); },
       onPhase: (i) => {
         if (i < 1) return;
@@ -288,7 +293,7 @@ export class Hang {
       const gone = [];
       for (let i = 0; i < n; i++) { const e = food[i]; const t = inv.take(c.id, e.uid, 1); if (t) gone.push(itemDef(t.id).name); }
       if (!gone.length) continue;
-      const nm = itemDef(c.item).name, where = BARRELS[c.item] ? `pried at the ${lower(nm)} left on the ground until the lid gave` : `got into the ${/^Duluth/.test(nm) ? nm : lower(nm)} left on the ground`;
+      const nm = itemDef(c.item).name, where = BARRELS[c.item] ? 'pried at the blue barrel left on the ground until the lid gave' : c.item === 'pile' ? 'found the food left lying on the ground' : `got into the ${/^Duluth/.test(nm) ? nm : lower(nm)} left on the ground`;
       c0.log('bear', { item: c.item, gone });
       return `A bear came through in the night and ${where}: ${gone.length > 1 ? `${lower(gone[0])} and ${lower(gone[1])}` : lower(gone[0])} gone, the wrappers in the brush. Hang the food tonight.`;
     }
