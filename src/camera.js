@@ -47,6 +47,7 @@ export const SEE = {
   uSeeB: { value: new THREE.Vector3() },
 };
 const SEE_STRENGTH = 0.95;
+const SHOULDER = 0.75; // m: how far right of him the view moves looking all the way down (ChaseCamera.update)
 const seePars = /* glsl */ `
 uniform vec4 uSee;
 uniform vec2 uSeeLens;
@@ -465,7 +466,11 @@ export class ChaseCamera {
     const dist = this.distance * (onFoot ? 0.8 : 1);
     const tx = player.x, tz = player.z;
     const ty = (onFoot ? player.altitude + 1.6 : this.world.levelAt(tx, tz) + 0.6);
-    const px = tx + Math.cos(yaw) * Math.cos(pitch) * dist, pz = tz - Math.sin(yaw) * Math.cos(pitch) * dist;
+    // fb2 E: looking down on foot the view moves over his right shoulder (the camera and the look point together, up to
+    // SHOULDER m), so what is pointed at by his feet shows beside his head on the screen, not under it (stream A's
+    // crosshair: a branch at his feet, the fire ring); level, it is straight behind him as before
+    const down = footLook ? smoothstep(0, 1, -this.viewPitch) : 0, shx = -player.forward.z * SHOULDER * down, shz = player.forward.x * SHOULDER * down;
+    const px = tx + shx + Math.cos(yaw) * Math.cos(pitch) * dist, pz = tz + shz - Math.sin(yaw) * Math.cos(pitch) * dist;
     let py = ty + Math.sin(pitch) * dist;
     // never below the ground or the water, anywhere along the line from the paddler to the camera: on a slope
     // the hill behind you lifts the camera instead of swallowing it
@@ -496,12 +501,12 @@ export class ChaseCamera {
       const s = clamp(-this.viewPitch / 1.0, 0, 1);
       if (s > 0) {
         ahead = 2 - 0.8 * s;
-        const gx = tx + player.forward.x * ahead, gz = tz + player.forward.z * ahead;
+        const gx = tx + shx + player.forward.x * ahead, gz = tz + shz + player.forward.z * ahead;
         const gy = (player.footGround ? player.footGround(gx, gz) : tiles ? tiles.groundAt(gx, gz) : this.world.heightAt(gx, gz)) + 0.05; // a deck or a step underfoot too
         ly = ty + 0.4 + (gy - ty - 0.4) * s * s * (3 - 2 * s);
       }
     }
-    this.look.lerp(new THREE.Vector3(tx + player.forward.x * ahead, ly, tz + player.forward.z * ahead), this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
+    this.look.lerp(new THREE.Vector3(tx + shx + player.forward.x * ahead, ly, tz + shz + player.forward.z * ahead), this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
     const cam = this.pullIn(dt, tx, ty, tz);
     this.first = false;
     // fb2 E: pulled in, the camera keeps the bearing and tilt it has at full length (a spring arm: it slides toward the
