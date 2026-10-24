@@ -434,7 +434,12 @@ export class Chores {
     p.prompt = { key: 'E', text: `${text}${hint ? ` · ${hint}` : ''}${tail}`, ...(tail ? { tail } : {}), own: 'chores' };
     this.armed = run;
   }
-  say(text) { const p = this.player; if (!p.prompt || p.prompt.soft) p.prompt = { key: null, text, own: 'chores' }; }
+  // a line of ours with no key: over a soft prompt or a plain line with no key in it ("The canoe is 17 m away"), never
+  // over someone's key (a carried thing's Q keeps its tail)
+  say(text) {
+    const p = this.player, pr = p.prompt;
+    if (!pr || pr.soft || (!pr.key && !/<kbd>/.test(pr.text || ''))) p.prompt = { key: null, text: `${text}${pr && pr.soft && pr.tail ? pr.tail : ''}`, own: 'chores', ...(pr && pr.soft && pr.tail ? { tail: pr.tail } : {}) };
+  }
 
   prompts() {
     const p = this.player, c = this.camp;
