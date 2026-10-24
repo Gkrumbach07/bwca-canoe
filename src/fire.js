@@ -11,17 +11,27 @@ import { smoothstep } from './rng.js';
 // layer 0 with the sun, the fill and the moon (the mirror pass draws with no lights); the flames are on the mirror's
 // layer, so a fire by the water shows in it.
 //
-// A fire burns FIRE.burn game hours on an armful of wood (hubs 3A: camp.js lights it with one and feeds it another),
-// up to FIRE.most hours of wood at once. It burns full while there is plenty left, then burns down over the last
-// FIRE.low hours: the flames shorten, the light dims to FIRE.floor of itself, the split lengths in the ring char and sink
-// and the bed of coals under them brightens. Out of wood, the embers glow for FIRE.embers more; then it is out. Times
-// are absolute game hours (day.doy * 24 + day.hours, as energy.js keeps them).
+// A fire burns on its wood (camp 2, the camp redone: a dead branch FIRE.branch game hours, a short log FIRE.log, the old
+// armful FIRE.burn; chores.js lays it and feeds it a piece at a time), up to FIRE.most hours of wood at once. It burns
+// full while there is plenty left, then burns down over the last FIRE.low hours: the flames shorten, the light dims to
+// FIRE.floor of itself, the split lengths in the ring char and sink and the bed of coals under them brightens. Out of
+// wood the coals smoulder (a dull glow, a thread of smoke) for FIRE.smoulder hours more: nothing at camp happens by
+// itself, so a fire left overnight is still smoking in the morning until it is put out by hand (chores.js: water on it,
+// the steam and the hiss; Fires.douseK follows the held job), or a branch on the coals brings it back. A fire can be laid
+// and not yet lit (lay). Times are absolute game hours (day.doy * 24 + day.hours, as energy.js keeps them).
+// Steam (camp 2): soft white puffs on their own light-free material (the smoke's pattern), one emitter for a fire being
+// put out and one for the pot on the grate (cook.js), each always in the scene and parked when idle, so their program
+// is made behind the title card and nothing compiles when the pot first boils.
 export const FIRE = {
-  burn: 3,            // game hours a fire burns on one armful of wood
-  most: 5,            // game hours of wood a fire holds at once (about two armfuls)
-  low: 1.6,           // game hours left under which it burns down
+  burn: 2.4,          // game hours a fire burns on the old armful of wood (items.js firewood)
+  branch: 0.6,        // on a dead branch (items.js wood:branch: kindling, quick)
+  log: 1.5,           // on a short log (wood:log)
+  most: 4.5,          // game hours of wood a fire holds at once
+  low: 1.0,           // game hours left under which it burns down
   floor: 0.25,        // how hard it still burns (the flames, the light) just before the wood is gone
-  embers: 0.75,       // game hours the embers glow after
+  embers: 0.75,       // game hours over which the last flames' coals settle to a smoulder
+  smoulder: 10,       // game hours the coals stay hot after the wood is gone, until put out
+  coals: 0.3,         // how bright the smouldering coals glow (of the embers' full)
   color: 0xff8a3d,
   intensity: 9,       // candela at full heat
   distance: 18,
@@ -249,6 +259,90 @@ class FireLook {
   park() { this.place({ x: 0, y: PARKED, z: 0, a: 0 }); }
 }
 
+// Steam (camp 2): puffs rising and widening fast, thinning to nothing; white, lit by the sky's fill and the sun and, from
+// below, by the fire. Every emitter is its own material with the one shader (one program for them all).
+const steamVert = /* glsl */ `
+  attribute vec3 aBase;
+  attribute float aSeed;
+  uniform float uTime, uAmount, uRate, uRise, uSize0, uSize1, uSpread;
+  uniform vec2 uWind;
+  varying vec2 vUv;
+  varying float vA, vSeed, vLow;
+  #include <common>
+  #include <fog_pars_vertex>
+  void main() {
+    vUv = position.xy; vSeed = aSeed;
+    float t = fract(uTime * uRate * (0.75 + 0.5 * fract(aSeed * 5.37)) + aSeed);
+    vec3 c = aBase + vec3(0.0, t * uRise, 0.0) + vec3(uWind.x, 0.0, uWind.y) * t * t * uRise * 0.7
+      + vec3(sin(aSeed * 31.0 + t * 3.0), 0.0, cos(aSeed * 17.0 + t * 2.6)) * uSpread * (0.3 + t);
+    float s = uSize0 + t * uSize1;
+    vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]), up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+    vec3 w = c + (right * position.x + up * (position.y - 0.5)) * s;
+    vA = uAmount * smoothstep(0.0, 0.1, t) * (1.0 - t) * (1.0 - 0.5 * t);
+    vLow = 1.0 - smoothstep(0.0, 0.4, t);
+    vec4 mvPosition = modelViewMatrix * vec4(w, 1.0);
+    gl_Position = uAmount > 0.001 ? projectionMatrix * mvPosition : vec4(2.0, 2.0, 2.0, 1.0);
+    #include <fog_vertex>
+  }
+`;
+const steamFrag = /* glsl */ `
+  uniform vec3 uColor, uGlow;
+  uniform float uThick;
+  varying vec2 vUv;
+  varying float vA, vSeed, vLow;
+  #include <common>
+  #include <fog_pars_fragment>
+  ${glslNoise}
+  void main() {
+    vec2 q = vUv - vec2(0.0, 0.5);
+    float r = length(q) * 2.0, n = fn(q * 3.4 + vSeed * 13.0) * 0.65 + fn(q * 7.0 - vSeed * 5.0) * 0.35;
+    float a = (1.0 - smoothstep(0.2, 1.0, r + (n - 0.5) * 0.55)) * vA * uThick;
+    if (a < 0.003) discard;
+    gl_FragColor = vec4(uColor + uGlow * vLow, a);
+    #include <fog_fragment>
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+// kinds: douse (a fire put out: a big cloud boiling up), pot (a thread off the pot on the grate)
+const STEAMS = {
+  douse: { puffs: 24, rate: 0.4, rise: 3.2, size0: 0.3, size1: 1.9, spread: 0.4, thick: 0.7, base: 0.5, ease: 3 },
+  pot: { puffs: 12, rate: 0.55, rise: 0.85, size0: 0.06, size1: 0.36, spread: 0.06, thick: 0.6, base: 0.06, ease: 1.5 },
+};
+class Steam {
+  constructor(scene, kind) {
+    const k = this.k = STEAMS[kind], fog = THREE.UniformsUtils.clone(THREE.UniformsLib.fog);
+    this.mat = new THREE.ShaderMaterial({
+      vertexShader: steamVert, fragmentShader: steamFrag,
+      uniforms: { ...fog, uTime: { value: 0 }, uWind: { value: new THREE.Vector2() }, uAmount: { value: 0 }, uRate: { value: k.rate }, uRise: { value: k.rise }, uSize0: { value: k.size0 }, uSize1: { value: k.size1 }, uSpread: { value: k.spread }, uThick: { value: k.thick }, uColor: { value: new THREE.Color(0.8, 0.8, 0.8) }, uGlow: { value: new THREE.Color(0, 0, 0) } },
+      transparent: true, depthWrite: false, fog: true, side: THREE.DoubleSide,
+    });
+    const list = Array.from({ length: k.puffs }, (_, i) => ({ base: [Math.sin(i * 2.4) * k.base * ((i % 3) / 3), 0, Math.cos(i * 2.4) * k.base * ((i % 3) / 3)], seed: (i + 0.5) / k.puffs }));
+    this.mesh = new THREE.Mesh(quads(list), this.mat);
+    this.mesh.name = `steam ${kind}`; this.mesh.renderOrder = 17; this.mesh.frustumCulled = false; // drawn every frame (parked: no pixels), as the fire is
+    this.mesh.position.set(0, PARKED, 0);
+    scene.add(this.mesh);
+    this.amount = 0; this.target = 0; this.held = 0; this.t = Math.random() * 10;
+  }
+  want(at, amount) { this.mesh.position.set(at.x, at.y, at.z); this.target = Math.max(0, Math.min(1, amount)); this.held = 0.25; }
+  update(dt, F) {
+    this.held -= dt;
+    if (this.held <= 0) this.target = 0;
+    this.amount += (this.target - this.amount) * Math.min(1, dt * this.k.ease);
+    if (this.amount < 0.002 && this.target === 0) { this.amount = 0; if (this.mesh.position.y > PARKED + 1) this.mesh.position.y = PARKED; }
+    this.t += dt;
+    const u = this.mat.uniforms;
+    u.uTime.value = this.t % 3600; u.uAmount.value = this.amount;
+    if (F.wind) { const d = F.wind.dir, s = Math.min(1, F.wind.speed / 8); u.uWind.value.set(d.x * s, d.z * s); }
+    const c = u.uColor.value;
+    c.setRGB(0.12, 0.12, 0.13);
+    if (F.hemi) c.add(_c.copy(F.hemi.color).multiplyScalar(0.62 * F.hemi.intensity));
+    if (F.sun) c.add(_c.copy(F.sun.color).multiplyScalar(0.3 * F.sun.intensity));
+    const n = F.near, d = n ? Math.hypot(n.x - this.mesh.position.x, n.z - this.mesh.position.z) : Infinity;
+    u.uGlow.value.setRGB(0.55, 0.24, 0.08).multiplyScalar(d < 3 ? n.heat + 0.3 * n.embers : 0);
+  }
+}
+
 export class Fires {
   // { scene, wind, hemi, sun }: the smoke takes the light of the sky fill and the sun
   constructor({ scene, wind = null, hemi = null, sun = null }) {
@@ -261,52 +355,78 @@ export class Fires {
     this.steadies = new Map(); // key -> { key, at: { x, y, z }, intensity, color, distance, decay, reach } (steady)
     this.looks = [new FireLook(scene)]; // one built now, so its programs compile behind the title card
     this.free = [...this.looks];
+    this.steams = { douse: new Steam(scene, 'douse'), pot: new Steam(scene, 'pot') }; // camp 2: put out, and the pot
     this.t = 0; this.now = 0;
     this.near = null;         // the lit fire nearest the eye: { x, y, z, heat } (audio.js reads it)
   }
 
   get(key) { return this.fires.get(key) || null; }
-  // 0..1 how hard it burns at abs hour `now` (0 once only embers are left): full while the wood lasts, down to
-  // FIRE.floor over the last FIRE.low hours (the flames and the light both follow it)
+  // 0..1 how hard it burns at abs hour `now` (0 once only coals are left, and while it is laid and not lit): full
+  // while the wood lasts, down to FIRE.floor over the last FIRE.low hours (the flames and the light both follow it);
+  // being put out (f.out, 0..1: chores.js's held job), the flames go first
   heat(f, now = this.now) {
-    if (!f || now >= f.until) return 0;
+    if (!f || f.laid || now >= f.until) return 0;
     const catchUp = smoothstep(f.lit, f.lit + 0.06, now), left = f.until - now;
-    return catchUp * (FIRE.floor + (1 - FIRE.floor) * smoothstep(0, FIRE.low, left));
+    return catchUp * (FIRE.floor + (1 - FIRE.floor) * smoothstep(0, FIRE.low, left)) * (1 - smoothstep(0, 0.45, f.out || 0));
   }
-  // how bright the bed of coals is: it grows as the wood burns down, then fades once it is gone
+  // how bright the bed of coals is: it grows as the wood burns down; once the wood is gone it settles to a smoulder
+  // (FIRE.coals) that lasts until the coals go cold (FIRE.smoulder hours on) or the fire is put out
   embers(f, now = this.now) {
-    if (!f) return 0;
-    if (now >= f.until) return 1 - smoothstep(f.until, f.until + FIRE.embers, now);
-    return (0.5 + 0.5 * (1 - smoothstep(0.2, FIRE.low, f.until - now))) * (0.6 + 0.4 * smoothstep(f.lit, f.lit + 0.3, now));
+    if (!f || f.laid) return 0;
+    const out = 1 - smoothstep(0.25, 1, f.out || 0);
+    if (now >= f.until) {
+      const settle = 1 - (1 - FIRE.coals) * smoothstep(f.until, f.until + FIRE.embers, now), cold = f.until + FIRE.smoulder;
+      return settle * (1 - smoothstep(cold - 1.5, cold, now)) * out;
+    }
+    return (0.5 + 0.5 * (1 - smoothstep(0.2, FIRE.low, f.until - now))) * (0.6 + 0.4 * smoothstep(f.lit, f.lit + 0.3, now)) * out;
   }
-  // how much of the wood in the ring is left to look at (1: fresh lengths, about 0.4: charred stubs in the coals)
-  wood(f, now = this.now) { return !f ? 0 : 0.4 + 0.6 * smoothstep(0, FIRE.burn, Math.max(0, f.until - now)); }
-  isLit(key, now = this.now) { const f = this.fires.get(key); return !!f && now < f.until; }
-  // hours of burning left (0 when out or only embers)
-  left(key, now = this.now) { const f = this.fires.get(key); return f ? Math.max(0, f.until - now) : 0; }
+  // how much of the wood in the ring is left to look at (1: fresh lengths, laid or just lit; about 0.4: charred stubs)
+  wood(f, now = this.now) { return !f ? 0 : f.laid ? 1 : 0.4 + 0.6 * smoothstep(0, 2.2, Math.max(0, f.until - now)); }
+  isLit(key, now = this.now) { const f = this.fires.get(key); return !!f && !f.laid && now < f.until; }
+  // hours of burning left (0 when out, laid, or only coals)
+  left(key, now = this.now) { const f = this.fires.get(key); return f && !f.laid ? Math.max(0, f.until - now) : 0; }
+  // what the ring holds: 'none' | 'laid' (wood laid, not lit) | 'burning' | 'coals' (smouldering, still hot)
+  state(key, now = this.now) {
+    const f = this.fires.get(key);
+    if (!f) return 'none';
+    if (f.laid) return 'laid';
+    if (now < f.until) return 'burning';
+    return now < f.until + FIRE.smoulder ? 'coals' : 'none';
+  }
+  look(key, at) {
+    let f = this.fires.get(key);
+    if (f) return f;
+    const look = this.free.pop() || (() => { const l = new FireLook(this.scene); this.looks.push(l); return l; })();
+    f = { key, at: { ...at }, look, lit: -1e9, until: -1e9, laid: 0, out: 0 };
+    this.fires.set(key, f);
+    look.place(at);
+    return f;
+  }
+  // wood laid in the ring and not lit: `hours` of it (camp 2: the first phase of lighting a fire)
+  lay(key, at, hours) { const f = this.look(key, at); f.laid = Math.max(0.05, hours); f.out = 0; return f; }
 
-  // at: { x, y, z, a } (props.js c.layout.fire: the ash's centre, its ground height, the grate's bearing)
+  // at: { x, y, z, a } (props.js c.layout.fire: the ash's centre, its ground height, the grate's bearing); a fire laid
+  // there is lit on its own wood (hours: more on top, or none)
   kindle(key, at, now, hours = FIRE.burn) {
     let f = this.fires.get(key);
-    if (f && now < f.until) { f.until = now + hours; return f; }
-    if (!f) {
-      const look = this.free.pop() || (() => { const l = new FireLook(this.scene); this.looks.push(l); return l; })();
-      f = { key, at: { ...at }, look };
-      this.fires.set(key, f);
-      look.place(at);
-    }
-    f.lit = now; f.until = now + hours;
+    if (f && f.laid) { hours = f.laid + (hours || 0); f.laid = 0; }
+    else if (f && now < f.until) { f.until = now + hours; return f; }
+    f = f || this.look(key, at);
+    f.lit = now; f.until = now + Math.min(FIRE.most, hours); f.out = 0;
     return f;
   }
-  // an armful on a fire that burns (or on its embers): another span of burning on top of what is left, up to
-  // FIRE.most hours of wood in the ring
+  // a piece of wood on a fire that burns (or on its hot coals, which it brings back): another span of burning on top
+  // of what is left, up to FIRE.most hours of wood in the ring
   feed(key, now, hours = FIRE.burn) {
     const f = this.fires.get(key);
-    if (f && now < f.until + FIRE.embers) {
-      if (now >= f.until) { f.lit = now; f.until = now + hours; } else f.until = Math.min(now + FIRE.most, f.until + hours);
-    }
+    if (!f) return null;
+    if (f.laid) { f.laid = Math.min(FIRE.most, f.laid + hours); return f; }
+    if (now < f.until) f.until = Math.min(now + FIRE.most, f.until + hours);
+    else if (now < f.until + FIRE.smoulder) { f.lit = now - 0.04; f.until = now + hours; f.out = 0; } // the coals catch it at once
     return f;
   }
+  // how far along being put out it is (0..1, the held job in chores.js): the flames die, then the coals
+  douseK(key, k) { const f = this.fires.get(key); if (f) f.out = Math.max(0, Math.min(1, k)); return f; }
   douse(key) {
     const f = this.fires.get(key);
     if (!f) return;
@@ -314,6 +434,17 @@ export class Fires {
     this.free.push(f.look);
     this.fires.delete(key);
   }
+  // the fires as saved (chores.js keeps the ones you lit in the trip's document) and back
+  record(key) { const f = this.fires.get(key); return f ? { key, at: { x: f.at.x, y: f.at.y, z: f.at.z, a: f.at.a || 0 }, lit: f.lit, until: f.until, laid: f.laid || 0 } : null; }
+  restoreRecord(r) {
+    if (!r || !r.key || !r.at) return null;
+    const f = this.look(r.key, r.at);
+    f.lit = Number.isFinite(r.lit) ? r.lit : -1e9; f.until = Number.isFinite(r.until) ? r.until : -1e9; f.laid = r.laid > 0 ? r.laid : 0; f.out = 0;
+    return f;
+  }
+  // Steam (camp 2): name 'douse' (a fire put out) or 'pot' (the pot on the grate); at { x, y, z }; amount 0..1. Held
+  // while called each frame; let go, it eases off.
+  steamAt(name, at, amount = 1) { const s = this.steams[name]; if (s) s.want(at, amount); return s; }
 
   // A steady light at `at` ({ x, y, z }): a store's lamp. It shares the one PointLight (the light count never changes):
   // the light goes to whichever is nearest the eye, a lit fire or a steady lamp within its reach. intensity in candela,
@@ -336,14 +467,16 @@ export class Fires {
     let best = null, bd = Infinity;
     for (const f of [...this.fires.values()]) {
       const h = this.heat(f, now), e = this.embers(f, now);
-      if (h <= 0 && e <= 0.001) { this.douse(f.key); continue; }
+      if (!f.laid && h <= 0 && e <= 0.001 && !(f.out > 0 && f.out < 1)) { this.douse(f.key); continue; } // gone cold (a fire being put out is let go by its job)
       f.h = h; f.e = e;
       // the lengths in the ring burn down with the wood: smaller and sunk into the coals
       const s = this.wood(f, now), wd = f.look.wood;
       if (Math.abs(wd.scale.y - s) > 0.004) { wd.scale.set(0.75 + 0.25 * s, s, 0.75 + 0.25 * s); wd.position.y = -0.03 * (1 - s); wd.updateMatrixWorld(); }
-      const d = eye ? Math.hypot(f.at.x - eye.x, f.at.z - eye.z) : 0;
+      // the nearest fire that glows takes the uniforms (a laid one only when nothing else does)
+      const d = (eye ? Math.hypot(f.at.x - eye.x, f.at.z - eye.z) : 0) + (f.laid ? 1e6 : 0);
       if (d < bd) { bd = d; best = f; }
     }
+    for (const s of Object.values(this.steams)) s.update(dt, this);
     const L = this.light;
     // a steady lamp nearer the eye than any lit fire takes the light (no fire's uniforms change for it)
     let lamp = null, ld = Infinity;
@@ -361,7 +494,7 @@ export class Fires {
     M.glow.uniforms.uHeat.value = h * (0.9 + 0.1 * flick);
     M.glow.uniforms.uFlame.value = Math.max(0.05, h);
     M.glow.uniforms.uEmber.value = e;
-    M.smoke.uniforms.uSmoke.value = 0.35 + 0.65 * Math.max(h, e * 0.6);
+    M.smoke.uniforms.uSmoke.value = best.laid ? 0 : (0.35 + 0.65 * Math.max(h, e * 0.6)) * (1 - smoothstep(0.6, 1, best.out || 0));
     const sc = M.smoke.uniforms.uColor.value;
     if (this.hemi) sc.copy(this.hemi.color).multiplyScalar(0.3 * this.hemi.intensity);
     if (this.sun) sc.add(_c.copy(this.sun.color).multiplyScalar(0.12 * this.sun.intensity));

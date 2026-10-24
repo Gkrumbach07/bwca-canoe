@@ -325,6 +325,16 @@ async function main() {
   if (shop.quietStrip) shop.quietStrip = () => {};
   const forage = new Forage({ world, player, day, tiles, scene, camp, hud, energy, audio, outfitter });
   window.__game.forage = forage;
+  // camp 2: the fire, the food and the latrine (chores.js, fire.js, cook.js). Firewood is found lying about and picked up
+  // into the arms; the fire is laid, lit, fed and put out by hand; a pot on the grate cooks for a short wait and is eaten
+  // sitting on the bench; the latrine is sat on. The figure sits through the walker's move (canoe.js poseSit): the cook's
+  // seat comes first, the rig is carried onto the seat before the pose and the spoon, the pot and the armloads are drawn
+  // after it; the book's Use cooks a raw meal at a burning fire.
+  const camp2 = camp.chores, moveOf2 = canoe.moveOf, pose2 = canoe.update, use2 = journal.pack.onUse;
+  canoe.moveOf = () => camp2.move() || (moveOf2 ? moveOf2() : null);
+  canoe.update = (dt) => { camp2.beforePose(); pose2(dt); camp2.afterPose(); };
+  journal.pack.onUse = (e, mode, c) => camp2.cook.onUse(e, mode, c) ?? (use2 ? use2(e, mode, c) : null);
+  window.__game.cook = camp2.cook;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
