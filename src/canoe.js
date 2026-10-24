@@ -403,6 +403,7 @@ export function buildCanoeRig({ water = null } = {}) {
   // the air at every moment, so they never ended (the stomping at idle).
   const SETTLE = { dist: 0.085, yaw: 0.42, dur: 0.34, clear: 0.045 };
   const OFF = { L: 0, R: 0.5 };
+  const _aim = V();
   const loco = { init: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, feet: {}, rigPos: V(), h: 0 };
   for (const h of ['L', 'R']) loco.feet[h] = { pos: V(), yaw: 0, lift: V(), liftYaw: 0, target: V(), targetYaw: 0, swing: false, s: 0, dur: 0.3, cyc: -1, planted: 1, clear: 0.05, slope: 0, pitch: 0 };
   const ground = (x, z) => (api.ground ? api.ground(x, z) : rig.position.y - 0.1);
@@ -496,7 +497,7 @@ export function buildCanoeRig({ water = null } = {}) {
     const vx = moving ? (mx * ch + mz * shh) * v : 0, vz = moving ? (-mx * shh + mz * ch) * v : 0;
     const amp = 0.3 + 0.7 * sp;
     const F = loco.feet;
-    const startSwing = (f, dur, cl) => { f.swing = true; f.s = 0; f.dur = Math.max(0.12, dur); f.clear = cl; f.lift.copy(f.pos); f.liftYaw = f.yaw; };
+    const startSwing = (f, dur, cl) => { f.swing = true; f.s = 0; f.dur = Math.max(0.12, dur); f.clear = cl; f.lift.copy(f.pos); f.liftYaw = f.yaw; f.fresh = true; };
     const cycOf = (k) => Math.floor(loco.phase + OFF[k]);
     const uOf = (k) => loco.phase + OFF[k] - Math.floor(loco.phase + OFF[k]);
     // where a foot is, along the way the body goes (+ ahead of the hips)
@@ -509,8 +510,11 @@ export function buildCanoeRig({ water = null } = {}) {
       loco.phase = Math.ceil(loco.phase) + 2 + frac(u0 - OFF[lead]);
       for (const k of ['L', 'R']) {
         const f = F[k];
-        if (k === lead) { f.cyc = cycOf(k); if (!f.swing) startSwing(f, (1 - uOf(k)) / c, clear); }
-        else f.cyc = uOf(k) >= fs ? cycOf(k) : cycOf(k) - 1;
+        if (k === lead) {
+          f.cyc = cycOf(k);
+          if (!f.swing) startSwing(f, (1 - uOf(k)) / c, clear);
+          else if (f.s < 1) f.dur = Math.min(f.dur, 0.14 / (1 - f.s)); // a settle step under way comes down soon, the other foot next
+        } else f.cyc = uOf(k) >= fs ? cycOf(k) : cycOf(k) - 1;
       }
     }
     loco.moving = moving;
@@ -522,8 +526,9 @@ export function buildCanoeRig({ water = null } = {}) {
         if (f.swing) { f.clear = clear; continue; }
         const cy = cycOf(k), u = uOf(k);
         // its turn in the cycle, or left further behind than the stride allows (the other foot down, unless jogging)
-        const late = -along(f) > E / 2 + 0.24 && (!o.swing || jog > 0.5);
+        const behind = -along(f), far = behind > Math.min(E / 2 + 0.24, 0.6), late = far && (!o.swing || jog > 0.5);
         if ((u >= fs && f.cyc !== cy) || late) { f.cyc = cy; startSwing(f, late && u < fs ? (1 - fs) / c : (1 - u) / c, clear); }
+        else if (far && o.swing && o.s < 1) o.dur = Math.min(o.dur, 0.1 / (1 - o.s)); // the other foot down quickly, so this one can go
       }
     } else if (!F.L.swing && !F.R.swing) {
       // standing: the foot furthest off its place under the hip (or turned from it) steps back to it, one at a time
@@ -541,15 +546,26 @@ export function buildCanoeRig({ water = null } = {}) {
       const f = F[k];
       const toe = k === 'L' ? 0.08 : -0.08;
       if (f.swing) {
+        if (moving) f.dur = Math.min(f.dur, Math.max(0.12, (1 - fs) / c)); // a step begun slow, setting off, quickens with the pace
         f.s = Math.min(1, f.s + dt / f.dur);
         const s = f.s;
         const tau = (1 - s) * f.dur;
         const land = restLocal(k, moving ? loco.hipYaw : 0, _v3);
         if (moving) { land.x += mx * E / 2; land.z += mz * E / 2; }
-        const tw = toWorld(land, f.target);
-        tw.x += vx * tau; tw.z += vz * tau; tw.y = ground(tw.x, tw.z);
+        // where it will land, followed smoothly: the pace, the way or the step's timing changing under a swing (setting
+        // off, a step hurried along) move the aim, never the foot in one frame
+        const tw = toWorld(land, _aim);
+        tw.x += vx * tau; tw.z += vz * tau;
+        if (f.fresh) { f.target.copy(tw); f.fresh = false; }
+        else { const ka = damp(16, dt); f.target.x += (tw.x - f.target.x) * ka; f.target.z += (tw.z - f.target.z) * ka; }
+        f.target.y = ground(f.target.x, f.target.z);
         f.targetYaw = h + (moving ? loco.hipYaw : 0) + toe;
-        if (s >= 1) { f.swing = false; f.planted = 0; plantAt(f, f.target, f.targetYaw); }
+        if (s >= 1) {
+          f.swing = false; f.planted = 0; plantAt(f, f.target, f.targetYaw);
+          // the phase kept with the feet: a landing is the start of that foot's cycle (a step hurried or held back, setting
+          // off or speeding up, would otherwise leave the cycle and the feet out of step)
+          if (moving) { const d = Math.round(loco.phase + OFF[k]) - OFF[k] - loco.phase; loco.phase += Math.max(-0.15, Math.min(0.15, d)); }
+        }
       }
       if (f.swing) {
         const s = f.s;
@@ -610,7 +626,7 @@ export function buildCanoeRig({ water = null } = {}) {
     let target = gl + HIP_H - bend + bob - airDrop - 0.16 * ease(state.land) - 0.06 * Math.sin(Math.PI * state.stagger) - 0.4 * ck;
     // no higher than the planted legs reach. A walking foot reaching for the ground counts from mid-swing, so the hips
     // settle into the heel strike instead of dropping at it; a jogging foot in the air does not hold the body down. Only
-    // so far for a foot left behind: past half a metre out it steps (locomote) rather than pulling the hips down
+    // so far for a foot left behind: past 0.42 m out it steps (locomote) rather than pulling the hips down
     const yaw = loco.hipYaw;
     let cap = Infinity;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
@@ -618,7 +634,7 @@ export function buildCanoeRig({ water = null } = {}) {
       if (f.swing && !g.air && (jog > 0.5 || f.s < 0.5)) continue;
       const a = toLocal(ankles[k], _v2);
       const hx = Math.sin(yaw) * sg * 0.098, hz = Math.cos(yaw) * sg * 0.098;
-      const horiz = Math.min(0.5, Math.hypot(a.x - hx, a.z - hz)), reach = (LT + LS) * 0.995;
+      const horiz = Math.min(0.42, Math.hypot(a.x - hx, a.z - hz)), reach = (LT + LS) * 0.995;
       const max = a.y + Math.sqrt(Math.max(0, reach * reach - horiz * horiz));
       if (max < cap) cap = max;
     }

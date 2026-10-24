@@ -13,14 +13,15 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 //         point under the rock's top is inside it), logs, stumps and posts, the props' boxes (a store's walls and the
 //         dock up to their tops; a wall without a top stands about 4 m), the ground, and inside a store its interior
 //         box (the walls, the doorway and the ceiling: the camera never ends up outside them)
-//   soft  the crowns, which the trunks stand for: a cone of boughs from a metre up to about 50 trunk radii, as wide
-//         at the bottom as about 5.5 radii; the camera sinks in a little, but is not pulled all the way to the walker
+//   soft  the crowns (crownsNear: each tree's crown from its species and scale); the camera sinks in a little, but is
+//         not pulled all the way to the walker
 // The things come from tiles.treesNear (trunks, rocks with their RockShape, the tiles' obstacles and the camp's tents);
-// logs ({ log, ax, az, bx, bz, r, top }) are read too where the walker's collision gives them.
-const SIGHT = { margin: 0.12, step: 0.18, crownFrom: 1.0, crownTop: 50, crownR: 5.5, crownMin: 0.8, crownMax: 2.8, wall: 4.0, shelf: 1.5, post: 2.5, ceiling: 2.55 };
+// solids with a shape (rocks, outcrops, bluff modules, logs, stumps) are read by it, a log without one as a capsule of its
+// stem radius (rad).
+const SIGHT = { margin: 0.12, step: 0.18, wall: 4.0, shelf: 1.5, post: 2.5, ceiling: 2.55 };
 // the pull: min, the closest the camera comes (m); margin, how far it stays off what it meets; softFoot / softCanoe, the
-// closest a crown alone pulls it; out, the rate (1/s) it eases back out once clear
-const PULL = { min: 0.45, margin: 0.28, softFoot: 2.6, softCanoe: 4.5, out: 2.2 };
+// closest a crown alone pulls it; in, the rate (1/s) a crown draws it in; out, the rate it eases back out once clear
+const PULL = { min: 0.45, margin: 0.28, softFoot: 2.0, softCanoe: 4.0, in: 7, out: 2.2 };
 const _seg = { ax: 0, ay: 0, az: 0, dx: 0, dy: 0, dz: 0, L: 0 };
 // the first t in [0, 1] where the 2D segment enters a circle of radius r round (cx, cz), or Infinity (inside at the
 // start counts as 0)
@@ -53,6 +54,65 @@ function boxT(S, o, top) {
   else { const tt = (top - S.ay) / S.dy; if (tt > t1) return Infinity; if (tt > t0) t0 = tt; }
   return t0;
 }
+// The crowns, from the tiles' own trees (the vegetation bins: species and scale per instance), gathered once per tile
+// a slice at a time and hashed by 8 m cell. Per species (vegetation.js SPECIES order; the guests are drawn in their
+// hosts' bins): its height at unit scale, the crown's bottom and top as shares of it, its widest radius, and whether
+// it is a cone widest at the bottom (the spruces, the cedar, the white pine's tiers) or a round crown (the birch, the
+// red and jack pines). A little generous below: boughs droop.
+const CROWN = { 0: [16, 0.38, 0.95, 2.8, 1], 1: [12.5, 0.04, 1.0, 2.4, 1], 2: [15, 0.55, 1.05, 2.2, 0], 3: [10.5, 0.3, 1.08, 2.2, 0], 4: [8, 0.05, 1.0, 2.1, 1], 9: [6, 0.3, 1.0, 1.7, 0], 17: [13, 0.18, 1.0, 1.9, 1] };
+const CELL = 8, crownTiles = new WeakMap();
+function crownsOf(e, budget) {
+  let c = crownTiles.get(e);
+  if (!c) { c = { bin: 0, i: 0, done: false, hash: new Map() }; crownTiles.set(e, c); }
+  if (c.done) return c;
+  const bins = e.vegBins || [];
+  let n = 0;
+  while (c.bin < bins.length) {
+    const b = bins[c.bin], K = CROWN[b.sp];
+    if (!K || !b.count) { c.bin++; c.i = 0; continue; }
+    const M = b.matrices;
+    for (; c.i < b.count; c.i++) {
+      if (++n > budget) return c;
+      const o = c.i * 16, s = Math.hypot(M[o], M[o + 1], M[o + 2]);
+      if (s < 0.05) continue;
+      const x = M[o + 12] + e.ox, y = M[o + 13], z = M[o + 14] + e.oz, h = K[0] * s;
+      const rec = { x, z, y0: y + K[1] * h, y1: y + K[2] * h, R: K[3] * (0.6 + 0.4 * s), cone: K[4] };
+      const key = Math.floor(x / CELL) * 65536 + Math.floor(z / CELL);
+      let a = c.hash.get(key);
+      if (!a) c.hash.set(key, (a = []));
+      a.push(rec);
+    }
+    c.bin++; c.i = 0;
+  }
+  c.done = true;
+  return c;
+}
+// the crowns whose middle is within r (plus their own reach) of (x, z); a tile not yet gathered gathers up to 4000
+// trees a call, so a fresh tile costs a few frames of a millisecond rather than one long one
+function crownsNear(world, x, z, r, out) {
+  out.length = 0;
+  const T = world.tiles;
+  if (!T || !T.tiles || !world.tileOf) return out;
+  const [tx0, ty0] = world.tileOf(x - r - 3, z - r - 3), [tx1, ty1] = world.tileOf(x + r + 3, z + r + 3);
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+    const e = T.tiles.get(T.key(tx, ty));
+    if (!e || e.state !== 'ready' || !e.vegBins) continue;
+    const c = crownsOf(e, 4000);
+    for (let cz = Math.floor((z - r - 3) / CELL); cz <= Math.floor((z + r + 3) / CELL); cz++) for (let cx = Math.floor((x - r - 3) / CELL); cx <= Math.floor((x + r + 3) / CELL); cx++) {
+      const a = c.hash.get(cx * 65536 + cz);
+      if (a) for (const t of a) if (Math.abs(t.x - x) <= r + t.R && Math.abs(t.z - z) <= r + t.R) out.push(t);
+    }
+  }
+  return out;
+}
+const _crowns = [];
+// a crown's radius at height y, or -1 outside its height
+function crownR(t, y) {
+  if (y < t.y0 || y > t.y1) return -1;
+  const f = (y - t.y0) / (t.y1 - t.y0);
+  return t.cone ? t.R * (1 - f) : t.R * Math.sqrt(Math.max(0, 1 - (2 * f - 1) * (2 * f - 1)));
+}
+
 const _props = new Set();
 function propsNear(world, x, z, r) {
   _props.clear();
@@ -135,20 +195,21 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}) {
       if (t < hard && ay + S.dy * t < top) { hard = t; out.what = 'post'; }
       continue;
     }
-    const g = ground(o.x, o.z);
     // a trunk: hard at its radius
     const t = circleT(S, o.x, o.z, o.r + SIGHT.margin);
     if (t < hard) { hard = t; out.what = 'trunk'; }
-    if (indoors) continue;
-    // and its crown: a cone of boughs, soft; one the pivot stands in is the walker's own shade, not in the way
-    const y0 = g + SIGHT.crownFrom, y1 = g + Math.max(6, SIGHT.crownTop * o.r), R0 = Math.min(SIGHT.crownMax, Math.max(SIGHT.crownMin, SIGHT.crownR * o.r));
-    const coneR = (y) => (y < y0 || y > y1 ? -1 : R0 * (y1 - y) / (y1 - y0));
-    if (Math.hypot(ax - o.x, az - o.z) < coneR(ay)) continue;
-    if (circleT(S, o.x, o.z, R0) === Infinity) continue;
-    for (let i = 1; i <= steps; i++) {
-      const tt = i / steps; if (tt >= soft || tt >= hard) break;
-      const [x, y, z] = at(tt), r = coneR(y);
-      if (r > 0 && Math.hypot(x - o.x, z - o.z) < r) { soft = tt; break; }
+  }
+  // the crowns, soft; one the pivot stands in is the walker's own shade, not in the way
+  if (!indoors) {
+    for (const c of crownsNear(world, mx, mz, half + 1, _crowns)) {
+      const r0 = crownR(c, ay);
+      if (r0 > 0 && Math.hypot(ax - c.x, az - c.z) < r0) continue;
+      if (circleT(S, c.x, c.z, c.R) === Infinity) continue;
+      for (let i = 1; i <= steps; i++) {
+        const tt = i / steps; if (tt >= soft || tt >= hard) break;
+        const [x, y, z] = at(tt), r = crownR(c, y);
+        if (r > 0 && Math.hypot(x - c.x, z - c.z) < r) { soft = tt; break; }
+      }
     }
   }
   // the ground (and the water) along the line, finer than the lift's five samples
@@ -192,7 +253,8 @@ export class ChaseCamera {
     this.cursorSteer = false; // the canoe follows the cursor (settings): shown by the pointer
     this.occlusion = true;    // third person: pulled in ahead of what stands in the way (pullIn)
     this.roomAware = true;    // and kept inside a store's walls, so a store need not switch to first person (outfitter.js reads it)
-    this.pull = Infinity;     // the distance the pull allows now (m), eased back out
+    this.pull = Infinity;     // the distance the solid things allow now (m), eased back out
+    this.softPull = Infinity; // and the crowns
     this.sight = null;        // the last sightLine: { hard, soft } metres along the line from the pivot
     const lock = () => {
       if (!this.wantsLock || this.locked) return;
@@ -341,20 +403,26 @@ export class ChaseCamera {
   // stays the unobstructed chase, so the pull is all there is to undo. Close in, the near plane comes in too.
   pullIn(dt, tx, ty, tz, onFoot) {
     const out = this._cam || (this._cam = new THREE.Vector3());
-    if (!this.occlusion) { this.pull = Infinity; this.setNear(0.3); return out.copy(this.pos); }
+    if (!this.occlusion) { this.pull = this.softPull = Infinity; this.setNear(0.3); return out.copy(this.pos); }
     // indoors the chase keeps under the ceiling, sliding along it rather than coming in to the walker's head
     const P = this._base || (this._base = new THREE.Vector3());
     P.copy(this.pos);
     for (const L of storeLayouts()) if (L.inside && L.inside(tx, tz)) { P.y = Math.min(P.y, L.floorY + SIGHT.ceiling - 0.2); break; }
     const dx = P.x - tx, dy = P.y - ty, dz = P.z - tz, len = Math.hypot(dx, dy, dz);
-    if (len < 0.6) { this.pull = len; this.setNear(0.3); return out.copy(P); }
+    if (len < 0.6) { this.pull = this.softPull = len; this.setNear(0.3); return out.copy(P); }
     const hit = (this.sight = sightLine(this.world, tx, ty, tz, P.x, P.y, P.z, this.sight || {}));
-    let allow = len;
-    if (hit.hard < Infinity) allow = Math.min(allow, Math.max(PULL.min, hit.hard - PULL.margin));
-    if (hit.soft < Infinity) allow = Math.min(allow, Math.max(Math.min(len, onFoot ? PULL.softFoot : PULL.softCanoe), hit.soft - PULL.margin));
-    if (this.first || !Number.isFinite(this.pull) || allow <= this.pull) this.pull = allow;
-    else this.pull = Math.min(allow, this.pull + (allow - this.pull) * (1 - Math.exp(-dt * PULL.out)) + dt * 0.4);
-    const d = Math.min(len, this.pull);
+    // a solid thing pulls the camera in at once (Minecraft's pop); a crown draws it in quickly but smoothly, so walking
+    // through the woods does not jerk the view from bough to bough; either lets it out again gently
+    const hard = hit.hard < Infinity ? Math.max(PULL.min, hit.hard - PULL.margin) : len;
+    const soft = hit.soft < Infinity ? Math.max(Math.min(len, onFoot ? PULL.softFoot : PULL.softCanoe), hit.soft - PULL.margin) : len;
+    const ease = (cur, want) => {
+      if (this.first || !Number.isFinite(cur)) return want;
+      if (want < cur) return cur + (want - cur) * (1 - Math.exp(-dt * PULL.in));
+      return Math.min(want, cur + (want - cur) * (1 - Math.exp(-dt * PULL.out)) + dt * 0.4);
+    };
+    this.softPull = ease(this.softPull, soft);
+    this.pull = this.first || !Number.isFinite(this.pull) || hard <= this.pull ? hard : ease(this.pull, hard);
+    const d = Math.min(len, this.pull, this.softPull);
     this.setNear(d < 1.8 ? Math.max(0.06, 0.3 * d / 1.8) : 0.3);
     return out.set(tx + (dx / len) * d, ty + (dy / len) * d, tz + (dz / len) * d);
   }
