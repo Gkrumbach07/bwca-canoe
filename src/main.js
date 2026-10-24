@@ -49,6 +49,7 @@ import { sheets } from './sheets.js'; // hubs 2D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
+import { invUI } from './inv-ui.js'; // fb B
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -271,6 +272,18 @@ async function main() {
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
   window.__game.npcs = npcs; // hubs 3C
+  // fb B: the inventory's face (inv-ui.js) on stream A's inventory (inv-ui's stand-in until it is in the build): the
+  // book's pack side (journal.js; J, Tab between the journal and the pack, I straight to the pack), the store's
+  // shelves, lure wall and map table as two panes (outfitter.js), and the icons. From the pack a lure is tied on and a
+  // map sheet opens the map.
+  invUI.attach({ inventory: () => window.__game.inventory || null, profile, player, energy, hud, shop, outfitter });
+  journal.pack.onUse = (e, mode) => {
+    const lure = shop.lureOf(e.id);
+    if (lure) { if (mode === 'label') return fishing.rodUp ? 'Tie it on' : null; shop.tieOn(lure); hud.note(`Tied on: ${e.id.replace(/^lure:/, '')}.`, 3); return null; }
+    if (String(e.id).startsWith('sheet:')) { if (mode === 'label') return 'Look at the map'; journal.close(); hud.setMode('sheet'); }
+    return null;
+  };
+  window.__game.invUI = invUI;
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
