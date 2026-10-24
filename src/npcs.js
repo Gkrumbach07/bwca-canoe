@@ -1270,7 +1270,7 @@ export class People {
     return [
       { text: a.news ? 'Anything else going on?' : 'What’s the news?', go: () => this.kNews(v) },
       { text: a.place ? 'What else should I know about the place?' : 'Tell me about this place.', dim: a.place >= place.length, go: () => this.kPlace(v) },
-      { text: 'The counter, please: a ride, a bunk, the permit.', kind: 'counter', go: () => ({ end: true, after: () => this.openCounter(v) }) },
+      { text: 'The counter, please: a ride, a bunk, what I’m owed.', kind: 'counter', go: () => ({ end: true, after: () => this.openCounter(v) }) },
       { text: 'Goodbye.', kind: 'bye', go: () => null },
     ];
   }
@@ -1301,7 +1301,7 @@ export class People {
     else say = 'That’s the place. The rest is on the map.';
     return { say, choices: this.kChoices(v) };
   }
-  // the keeper's services: the counter opens (its counter tab: the permit, the bunk, the rides, the notices to claim)
+  // the keeper's services: the counter opens (its counter tab: the bunk, the rides, the notices to claim)
   openCounter(v) {
     const o = this.outfitter; if (!o || typeof o.show !== 'function') return;
     const l = typeof o.landing === 'function' ? o.landing(v.ep) : null;

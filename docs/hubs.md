@@ -48,8 +48,10 @@ logbook.
 
 ## Open trips (phase 1)
 
-- **The permit** is the season's paper: its number, home and the day it was stamped at the first counter. There are no
-  nights, no "out by" and no exit place.
+- **No permit** (since the world cards, the owner's third round of 2026-10-24: "what is the stamp for at the counter, i
+  thought we got rid of that. no permit"). The season is just the season, begun on the title with a home; there are no
+  nights, no "out by" and no exit place. (Phase 1 had kept it as the season's paper, its number, home and the day it
+  was stamped at the first counter.)
 - **A trip** runs from push-off at an outfitter's dock until you are on foot at any outfitter's landing again: it is
   logged as came in by itself (since the second round of 2026-10-24; it was *Call it a trip* at a counter, with a bunk
   night, and *Resupply · carry on*).
@@ -61,7 +63,8 @@ logbook.
   the gear are kept.
 - **Saves.** The `profile` save holds the money, the gear owned, the outfitters known and your standing with each.
   Older saves migrate: the Kevlar and the lure unlocks become owned items, money is $10 a task turned in (never less
-  than $40), the landings seen become known outfitters, and an active permit loses its dates.
+  than $40), the landings seen become known outfitters, and an older core's permit is dropped (its stamp date stands
+  in for a missing push-off).
 
 ## Outfitters as hubs (phase 2)
 
@@ -831,3 +834,106 @@ is 20 to 25 km, and the three days above give the first numbers to balance again
 - **The camera's reach** stays 120 m for a moose and 60 m for a beaver; with the zoom a moose at 120 m still stands about
   a quarter of the print high, so the reach could grow with the lens.
 - **Docs**: trip-core.md's chores and the pace, and the owner's notes from playing it.
+
+## The world cards (the owner's third round of 2026-10-24)
+
+The owner played the second round and found the inventory-as-workbench confusing: "overall it seems confusing. the
+whole inventory system"; "what does the pot even do, same with some other items"; "having to scroll to see items is a
+struggle. like there are so. many containers now"; "why is the toilet a container"; "some keys are used to pick up the
+canoe (Q and E). I feel liek at most an item cna have two quick actions. primary is E and secondary is Q"; "i dont want
+to have to sit to eat food, just consume it. no animation"; "what is the stamp for at the counter, i thought we got rid
+of that. no permit"; "when there are tasks that say to go to specific campsites, its confusing so it should identify the
+campsite if it is known, but if it is unknown then general areas can be sued, but dont use just the lake as the
+circled areas. and use a more hand drawn red circle for the tasks locations like it was hand annotated". Offered world
+cards or more tuning of the book, they chose world cards: **world things get their own card, the book is only for your
+stuff, and nothing has more than E and Q.** Asked what E on a hung barrel does ("you get a screen where you can choose
+to Lower it?"): no. E just lowers it. A card opens only where there is something to move or a choice to make.
+
+**One rule for keys.** Whatever the dot points at has at most two actions, E primary and Q secondary, always shown
+together on the dot's label ("E Get in · Q Shoulder it"); a held one says "hold"; nothing ever has a third key.
+
+| Pointed at | E | Q |
+|---|---|---|
+| Hung barrel | Lower | — |
+| A tree with a good limb, barrel in your hands | Hang (hold) | — |
+| Barrel, pack, bucket, tackle box on the ground | Pick up | Open it (card: your stuff · its contents) |
+| A branch or log | Pick up | — |
+| A pile | Take one | Open the pile (card) |
+| The fire ring | Open the fire (card) | Light (hold) when laid, Douse (hold) when burning |
+| A pitched tent | Rest until… (the dial) | Strike (hold) |
+| A bagged tent on the ground | Pick up | Pitch (the ghost, then hold) |
+| The latrine, a bench, a log seat | Sit | — |
+| The canoe, on foot | Get in | Shoulder it; "Unload it first" when loaded |
+| The dock, from the water | Tie up | — |
+| The water's edge, on foot | Fill the bottle | — |
+| A down log, with the saw in reach | Saw (hold) | — |
+| A berry bush, mushrooms | Pick | — |
+| A person | Talk | — |
+| A shelf, the board, the map table, the counter | Open | — |
+
+**Cards** are the shelf's two-pane screen, your stuff on the left, the thing on the right, drag between them, Esc or E
+closes: the fire (fuel, the grate, the ash, the meters, Light / Douse / Cook; "no pot" when there is none in reach), a
+container on the ground or in the canoe (its grid), a pile (its contents); the canoe's load is a tab in the book while
+you stand beside it (*Set everything out* · *Load everything here*); the shelves, the lure wall, the map table, the
+board and the counter as they were. No card for the hung barrel, the tent (Rest until… is a small dial), the latrine,
+the bench, people, the dock or the water.
+
+**The book (J)** is only your things, one screen, no scrolling: the body on the left (back, chest, left hand, right
+hand, the pockets as four quick slots), a tab per container across the top, a Canoe tab beside the canoe, a Keeping tab
+at an outfitter. Ctrl-click sends a thing on, a drag onto a tab puts it in that container, a drag off the book puts it
+on the ground. Right-click lists an item's verbs and nothing else (Eat, instant; Pitch; Hang, which says "carry it to a
+tree and point at the limb"; Put in hand; Use; Cook, in the fire card); a greyed verb says why. Hover: the name, the
+weight and a one-line purpose ("Cooks a meal on the grate."). The journal side is unchanged.
+
+**The rest.** Eating is instant, anywhere you're still. E Sit on the bench, the log seat and the latrine (a pose; time
+passes; E or a move key stands you up; the latrine's rest bonus stays). Rest until…: first light, 7:00, 9:00, noon,
+4 pm, dusk, 10 pm or any hour, day or night (a daytime rest is a nap). Shore fishing with the rod in a hand, on foot,
+facing water within casting reach. A loaded canoe can't be shouldered. The counter: no permit, no stamp, only the
+bunk, the rides and the claims. Buying by drag lands where dropped, with a small effect. Task places on the map are the
+keeper's red pencil. Every item says what it is for.
+
+Built as four streams on main 5377bf7: **A** the verbs and the camp (`pointer.js`, `nearby.js`, `camp.js`, `hang.js`,
+`tent.js`, `chores.js`, `packs.js`, `cook.js`); **B** the cards and the book (`inv-ui.js`, `journal.js`, a new
+`cards.js`, the shelf's buy-by-drag effect); **C** sitting and shore fishing (`fishing.js`, `player.js`, `canoe.js`,
+`props.js`'s seats); **D** the counter, the task circles and the item words (below).
+
+### Stream D: the counter, the task circles, the item words
+
+- **No permit, no stamp** (`src/outfitter.js`, `src/trip.js`). The counter renders the notices done on the left and the
+  desk (a bunk, the rides) on the right, and nothing else: the permit section, *Stamp it*, the date stepper and the
+  thaw are gone with `draft`, `today`, `permitNo`, `stamped` and `stamp`. The trip keeps no permit object: `trip.permit`
+  is gone, the saved core has no `permit` field, and a core that still carries one (any save from before) drops it as
+  it loads, its stamp date standing in for a missing `since` and its entry point for `from`, so an old trip comes back
+  active on its day. The push-off title over the water reads "The season begins · …" the first time and "Pushing off ·
+  …" after; the readout's Permit row is a Season row ("Adventure · home Lake One · day 3 · $40 in hand"); the keeper's
+  counter line is "a ride, a bunk, what I'm owed". `profile.permit` and `profile.stamp()` stay in `profile.js` for old
+  saves, unread and unwritten.
+- **The keeper's red pencil** (`src/tasks.js` `hints()` → `targetOf(t)`, `hintFor(lakeId, site, label)`; `src/hud.js`
+  `drawMap` → `pencilRing`). Every notice on the go is one ring, drawn by hand: a wobbly ellipse that goes round not
+  quite all the way, a second lighter pass a hair off it, and its word in the pencil hand, red. A campsite or landing
+  you **know** is ringed tight, 150 m, and named: known is named in the notice (an island site is the island's; a kind
+  may say so with `t.known`) or on a map you can see (Sandbox, an outfitter's whole map, a sheet you own:
+  `sheets.showsDetail`). Labels: "the island site", "the site on the point", "the site in the bay", "the campsite", "the
+  39-rod portage". One you don't know is ringed by the **area the notice describes**, 400–700 m, the ring pushed out
+  over the water so the spot sits inside it off its middle, never the whole lake: "the south side" on a big lake, "off
+  the point", "the bay", "the island", "the portage to Lake Two", "about here" on a pond. A laker notice rings the
+  lake's deep middle, "lakers, deep". The rings are drawn outside the sheets' clip, on blank paper too: the pencil goes
+  where the keeper pointed, sheet or no sheet, and the legend reads "where a notice sends you, in the keeper's pencil".
+  An old save's whole-lake hint is cut to 700 m. The npc kinds' sites (npcs.js) show the same way now.
+- **Every item says what it is for** (`src/items.js`). `words` is a one-line purpose, not flavour: "Cooks a meal on the
+  grate.", "Saws a down log into short logs for the fire: hold E at the log with it in reach.", "Purifies the bottle: a
+  tablet dropped in and half an hour's wait.", "Fishes from the canoe (F), or from the shore, a dock or a rock with it
+  in your hand."; `defineItem` fills a kind-based line for any def without one (the camp's and forage's included), so
+  the tooltip always has one. `verbs` is the right-click list, plain data: `[{ id, label, where?, why? }]` with ids
+  eat · cook · pitch · hang · hand · tie · use; `where: 'fire'` on Cook; `why` when the verb is greyed with its reason
+  ("carry it to a tree and point at the limb" on Hang, "only in the fire card" on Cook, "cook it on the grate first"
+  on Eat of a raw meal or fish). Derived by `verbsFor(def)` when a def names none: food → Eat (Cook first when raw);
+  a tent → Pitch; barrels (`hang: true`) → Hang; long items and hand-carried containers → Put in hand; lures and
+  leeches → Tie it on; a map sheet → Look at the map. Exports `VERBS`, `verbsFor`, `verbsOf`. 112 items, none without
+  a line or a list.
+- **Tests** (headless, real keys): the counter at EP 30 with only Notices done, A bunk tonight and Ride up the road
+  (no permit or stamp word, no date stepper); an old document with a stamped v3 core and a stamped profile loads as an
+  active Adventure on day 3 with no `permit` key, `since` from the stamp and `from` 30; a lost-locket notice ("the
+  campsite on the south side of the lake") rings the south side at 532 m with no sheet, and the campsite at 150 m with
+  F-24 bought or on the whole map; a 39-rod survey rings "the portage to Lake Two" at 400 m, then "the 39-rod portage"
+  at 150 m; every item has words and verbs. No console errors.

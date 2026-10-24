@@ -18,6 +18,11 @@ import { esc, word, plural, fmtKm, shortDate } from './hud.js';
 // wants goes into that notice's cooler on its own (fishing.js calls onCatch). A finished notice is paid only at the
 // counter that posted it, through the profile (profile.js: earn) or, without one, a purse kept here. Each board is
 // saved with the tasks, keyed by entry point.
+//
+// On the map (hud.js drawMap, the world cards of 2026-10-24) a notice on the go is the keeper's red pencil (hints →
+// targetOf): a campsite you know (on a sheet you own, or any map you can see: a store's, Sandbox's) is ringed tight,
+// about 150 m, and named ("the island site"); one you don't is ringed by the bay, arm or stretch the notice describes
+// (hintFor: 400–700 m, the spot inside the ring, never the whole lake); a laker notice rings the lake's deep middle.
 
 const HOPS = 4;              // portages out from the landing a notice may send you
 const RANGE = 14000;         // metres from the landing, as the crow flies
@@ -41,6 +46,12 @@ const SIZE_PAY = 10;
 const KM_PAY = { item: 1.5, survey: 2, laketrout: 1 };
 const PAY_MAX = 60;
 const kmFrom = (L, x, z) => +(Math.hypot(x - L.x, z - L.z) / 1000).toFixed(1);
+// the map's rings (hints): tight round a known place, else the area the notice describes, never the whole lake
+const TIGHT = 150;           // metres round a known campsite or landing
+const AREA = [400, 700];     // metres round the bay, arm or stretch of an unknown one
+const SITE_LABEL = { island: 'the island site', point: 'the site on the point', bay: 'the site in the bay', shore: 'the campsite' };
+const AREA_LABEL = { island: 'the island', point: 'off the point', bay: 'the bay' };
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // the lost things: each lead is the notice's opening, signed by whoever pinned it up
 const ITEMS = {
@@ -120,7 +131,7 @@ registerKind('fish', {
         const where = trout.hops != null ? hopsText(trout.hops) : `, ${fmtKm(trout.d / 1000)} km ${compass(trout.l.cx - c.landing.x, trout.l.cz - c.landing.z)} of here`;
         minCm = sizeIt ? sizeAt('laketrout', SIZE_PCT[0] + c.rng() * (SIZE_PCT[1] - SIZE_PCT[0])) : 0;
         const [say, sign] = pickR(c.rng, W.texts), text = fill(say, { one: minCm ? `One laker of ${minCm} cm or better` : 'One laker', lake, depth, where });
-        return { species: 'laketrout', minCm, need: 1, lakeHint: trout.l.id, km: +(trout.d / 1000).toFixed(1), title: minCm ? 'A big laker' : W.title, text, sign, hint: T.hintFor(trout.l.id) };
+        return { species: 'laketrout', minCm, need: 1, lakeHint: trout.l.id, km: +(trout.d / 1000).toFixed(1), title: minCm ? 'A big laker' : W.title, text, sign, hint: T.hintFor(trout.l.id, null, 'lakers, deep') };
       }
       species = pickR(c.rng, ['walleye', 'pike'].filter(fresh)) || 'walleye';
       minCm = sizeAt(species, SIZE_PCT[1] - c.rng() * 0.05);
@@ -196,7 +207,7 @@ registerKind('item', {
       const body = /river|creek/i.test(name) ? 'the river' : 'the lake';
       const dir = lake && lake.cells >= 2500 ? (feature !== 'island' ? ` on the ${compass(cand.s.x - lake.cx, cand.s.z - lake.cz)} side of ${body}` : ` toward the ${compass(cand.s.x - lake.cx, cand.s.z - lake.cz)} end`) : '';
       const [lead, sign] = pickR(c.rng, item.leads), text = `${lead} ${cap(name)}${hopsText(r.hops)}: ${site}${dir}${dir ? ',' : ''} ${item.where}.`;
-      return { key: cand.i, item: key, label: item.label, site: cand.i, lakeId, spot, hops: r.hops, km: kmFrom(L, spot.x, spot.z), title: pickR(c.rng, item.titles), text, sign, hint: T.hintFor(lakeId, cand.s) };
+      return { key: cand.i, item: key, label: item.label, site: cand.i, lakeId, spot, feature, hops: r.hops, km: kmFrom(L, spot.x, spot.z), title: pickR(c.rng, item.titles), text, sign, hint: T.hintFor(lakeId, cand.s, AREA_LABEL[feature] || null) };
     }
     return null;
   },
@@ -256,7 +267,7 @@ registerKind('survey', {
     const cand = pickR(c.rng, sorted.slice(0, c.band === 'far' ? 6 : 10));
     const { p, near, hops, toName, fromName } = cand, far = 1 - near;
     const fromLake = T.lakeRec(p.launch[near].lake), sign = c.rng() < 0.5 ? `the ${district(c.ep)} trail crew` : 'the portage crew';
-    const base = { key: cand.i, portage: cand.i, rods: p.rods, hops, lakeId: p.launch[near].lake, sign };
+    const base = { key: cand.i, portage: cand.i, rods: p.rods, hops, lakeId: p.launch[near].lake, to: toName, sign };
     if (fromName && c.rng() < 0.4) {
       // a named point: the landing of the portage, on this side
       const W = SURVEY_WORDS.landing, dir = fromLake && fromLake.cells >= 2500 ? ` at the ${compass(p.launch[near].x - fromLake.cx, p.launch[near].z - fromLake.cz)} end` : '';
@@ -390,13 +401,46 @@ export class Tasks {
     } catch { return null; }
   }
   used(kind, key) { for (const t of this.ads.values()) if (t.kind === kind && t.key === key) return true; return false; }
-  // the soft circle on the map: the lake, never the spot
-  hintFor(lakeId, site = null) {
+  // The area a notice describes, for the map's ring: the part of the lake a spot is on (the bay, the arm, the stretch:
+  // 400–700 m, the ring pushed out over the water so the spot sits inside it, off its middle), or without a spot the
+  // lake's deep middle (a laker notice). Never the whole lake: a big lake gets its side named ("the northeast side").
+  hintFor(lakeId, site = null, label = null) {
     const l = this.lakeRec(lakeId);
-    if (!l) return site ? { x: site.x + (Math.random() - 0.5) * 700, z: site.z + (Math.random() - 0.5) * 700, r: 900 } : null;
-    let r = Math.max(500, Math.sqrt((l.cells * 100) / Math.PI) * 1.2 + 250);
-    if (site) r = Math.max(r, Math.hypot(site.x - l.cx, site.z - l.cz) + 300);
-    return { x: l.cx, z: l.cz, r: Math.round(r) };
+    if (!l) return site ? { x: Math.round(site.x), z: Math.round(site.z), r: 500, label: label || 'about here' } : null;
+    const lakeR = Math.sqrt((l.cells * 100) / Math.PI); // the lake as a disc, in metres
+    if (!site) return { x: Math.round(l.cx), z: Math.round(l.cz), r: Math.round(clampN(lakeR * 0.6, AREA[0], AREA[1])), label: label || 'the deep water' };
+    const r = clampN(lakeR * 0.5, AREA[0], AREA[1]), dx = l.cx - site.x, dz = l.cz - site.z, d = Math.hypot(dx, dz) || 1;
+    const push = Math.min(d * 0.5, r * 0.45);
+    const words = label || (l.cells >= 2500 ? `the ${compass(site.x - l.cx, site.z - l.cz)} side` : 'about here');
+    return { x: Math.round(site.x + (dx / d) * push), z: Math.round(site.z + (dz / d) * push), r: Math.round(r), label: words };
+  }
+  // a place is known when a map you can see shows it: Sandbox, an outfitter's whole map, or a sheet you own (sheets.js)
+  known(x, z) {
+    const g = window.__game, sh = g && g.sheets;
+    if (!sh || typeof sh.view !== 'function') return true;
+    return sh.view() !== 'owned' || sh.showsDetail(x, z);
+  }
+  // the keeper's red pencil for a notice on the go (hud.js drawMap): { x, z, r, label, tight }. A known campsite or
+  // landing is ringed tight and named; an unknown one by the area the notice describes; a lake-only notice by its
+  // saved area (an old save's whole-lake hint is cut to 700 m).
+  targetOf(t) {
+    const w = this.world, s = t.site;
+    const site = typeof s === 'number' ? w.campsites[s] || null : s && Number.isFinite(s.x) && Number.isFinite(s.z) ? s : null;
+    const at = site || t.spot || t.target || null;
+    const lakeId = t.lakeId ?? (site && site.lake) ?? (t.target && t.target.lake) ?? 0;
+    if (at && Number.isFinite(at.x) && Number.isFinite(at.z)) {
+      // named in the notice (an island site is the island's; a kind may say so with t.known), or on a map you can see
+      const named = !!t.known || t.feature === 'island' || !!(t.target && t.target.type === 'island');
+      if (named || this.known(at.x, at.z)) {
+        const label = t.kind === 'survey' ? (t.rods ? `the ${t.rods}-rod portage` : 'the portage')
+          : site || t.kind === 'item' ? SITE_LABEL[t.feature] || 'the campsite'
+            : t.target && t.target.type === 'island' ? 'the island site' : t.place || 'here';
+        return { x: at.x, z: at.z, r: TIGHT, label, tight: true };
+      }
+      if (lakeId) return this.hintFor(lakeId, at, t.kind === 'item' ? AREA_LABEL[t.feature] || null : t.kind === 'survey' && t.to ? `the portage to ${t.to}` : null);
+    }
+    if (t.hint && Number.isFinite(t.hint.x)) return { ...t.hint, r: Math.min(t.hint.r || AREA[1], AREA[1]), label: t.hint.label || (t.species === 'laketrout' ? 'lakers, deep' : 'about here') };
+    return at ? this.hintFor(lakeId, at) : null;
   }
 
   // --- the boards ---------------------------------------------------------------------------------------------
@@ -607,8 +651,8 @@ export class Tasks {
   }
   // a notice's state in a few words ("the cooler is empty", "the paddle is still out there")
   progressOf(t) { const k = KINDS[t.kind]; return t.status === 'done' ? 'done' : k && k.progress ? k.progress(t) : 'on the go'; }
-  // the map: a soft circle per notice on the go
-  hints() { return this.active.filter((t) => t.status === 'open' && t.hint).map((t) => t.hint); }
+  // the map: the keeper's red pencil per notice on the go (targetOf)
+  hints() { return this.active.filter((t) => t.status === 'open').map((t) => this.targetOf(t)).filter(Boolean); }
   // the readout's words (hud.js may read them)
   get readout() {
     const a = this.active, done = a.filter((t) => t.status === 'done');

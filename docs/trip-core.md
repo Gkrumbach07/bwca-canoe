@@ -59,12 +59,15 @@ during play brings the same card back as a pause screen.
 
 E within 25 m of a landing (or the counter opening by itself at the start of a season, after a bunk night or an
 evacuation) puts up the outfitter's paper counter. (Since the owner's second round of 2026-10-24 you walk into the
-store and point at the counter, and it offers only a bunk, the rides, the permit and claims; see
-[hubs.md](hubs.md). What follows is the counter as the trip core built it.)
+store and point at the counter, and it offers only a bunk, the rides and claims; the permit and its stamp went with
+the world cards, the owner's third round of 2026-10-24; see [hubs.md](hubs.md). What follows is the counter as the trip
+core built it.)
 
 - **The header:** the outfitter, the keeper's line and the money in hand. The keeper's line also carries a claim's
   answer: the thanks and the pay, or where a notice from another board is paid.
-- **The season permit (left):** its number, home and the day it was stamped ("good all season"). Before the first
+- **The season permit (left):** gone since the world cards (2026-10-24: "no permit"). There is no permit object anywhere
+  now: the season is just the season, home is the profile's, and an older save's permit is dropped as it loads (its
+  stamp date stands in for a missing push-off). It was: its number, home and the day it was stamped ("good all season"). Before the first
   push-off of a season the date can still move (a day either way, a month with Shift), and the thaw is offered when
   the lakes are iced. Below it the canoe, the packs, and **the food**: what is in the pack, the room left, a stepper
   and *Buy 3 days · $18*. A day of food is $6 (two meals, 0.9 kg), up to what the packs hold (a Duluth pack 7 days).
@@ -295,14 +298,15 @@ Each module reads the others by feature detection.
 ```js
 profile.money, earn(n, why), spend(n, why) → bool, has(id), give(id), kit { canoe, paddle, tent, filter, packs },
 profile.knows(ep), learn(ep), known, home, outfitter(ep) → { rep }, raise(ep, d), onChange(fn) → off
-profile.started, mode, permit, foodRoom, sleepQ, begin({ home, mode }), stamp(permit), use(slot, id), ledger, earned
+profile.started, mode, foodRoom, sleepQ, begin({ home, mode }), use(slot, id), ledger, earned
+// (profile.permit and stamp(permit) remain for old saves; nothing writes or reads them since the world cards of 2026-10-24)
 ```
 
 ### trip.js (`Trip`)
 
 ```js
-trip.mode, trip.adventure, trip.sandbox, trip.active, trip.dayN, trip.permit   // { no, ep, entry }
-trip.state             // the saved core: { v: 3, id, mode, active, permit, since, from, packs, camp, wet, offsite, log, outcome }
+trip.mode, trip.adventure, trip.sandbox, trip.active, trip.dayN   // (no trip.permit: the world cards, 2026-10-24)
+trip.state             // the saved core: { v: 3, id, mode, active, since, from, packs, camp, wet, offsite, log, outcome }
 trip.state.packs       // { count: 1 | 2 (from what you own), canoe, foodDays }
 trip.log(kind, data)   // kinds: start lake portage camp sleep capsize offsite resupply known evac exit
 trip.on(kind, fn)      // → off; '*' hears every kind
@@ -390,7 +394,7 @@ chase camera is carried by the share of the move beyond life (`1 - 1 / (boost ×
 
 | Key | What |
 |---|---|
-| `bwca-canoe:profile` | the season: money and its ledger, gear owned and in use, outfitters known, standing, home, the permit |
+| `bwca-canoe:profile` | the season: money and its ledger, gear owned and in use, outfitters known, standing, home, the sheets owned (an old permit field may linger, unread) |
 | `bwca-canoe-trip` | the outfitter's document: `pos`, `energy` (the needs, the bottle and its tablet timer, the meal clock), `tasks` (the boards and the notices with their coolers), `stringer`, and the trip core as `core` |
 | `bwca-canoe:trip` | the spot (save.js `TripSaver`): position, mode, the beached canoe when on foot, clock, camera, speed |
 | `bwca-canoe:logbook` | every trip's outcome, and what has been seen |

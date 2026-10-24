@@ -42,6 +42,25 @@ const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
 const PENCIL = 'Caveat, "Bradley Hand", "Segoe Print", cursive'; // the pencil hand (index.html --pencil-font)
 // what a keeper's ring on the map is for, in the pencil hand (outfitters.js hint kinds)
 const HINT_LABEL = { laketrout: 'lakers, deep', walleye: 'walleye at dusk', pike: 'pike in the weeds', smallmouth: 'smallmouth, rocky points', crappie: 'crappie at dusk', perch: 'perch', moose: 'moose at dawn', carry: 'a long carry' };
+// The keeper's red pencil (drawMap, the notices' places): a ring drawn by hand round (a, b) at radius r, wobbling a
+// little, going round not quite all the way, and a second lighter pass a hair off it, the way a pencil goes round
+// twice. seed keeps one ring's wobble the same from frame to frame.
+function pencilRing(ctx, a, b, r, k, seed) {
+  const s = (seed * 0.6180339887) % 1, a0 = s * 6.2832, N = 72, sweep = 6.2832 * (0.9 + s * 0.08);
+  const pass = (ox, oy, sq, alpha, lw, from, to) => {
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const u = from + ((to - from) * i) / N, t = a0 + u * sweep;
+      const wob = 1 + 0.03 * Math.sin(t * 3 + s * 9) + 0.02 * Math.sin(t * 5.7 - s * 4) + 0.012 * Math.sin(t * 11 + s);
+      const x = a + ox + Math.cos(t) * r * wob * (1 + 0.03 * sq), y = b + oy + Math.sin(t) * r * wob * (1 - 0.03 * sq);
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.strokeStyle = `rgba(184, 44, 32, ${alpha})`; ctx.lineWidth = lw; ctx.stroke();
+  };
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  pass(0, 0, 1, 0.82, 2.2 * k, 0, 1);
+  pass(1.4 * k, -1.1 * k, -1, 0.34, 1.3 * k, 0.06, 0.86);
+}
 const PRESS = 300;           // ms: M let go sooner than this was a press, not a hold
 const HOLD_OFF = 300;        // ms: held keys hide this long after release
 const TITLE_HOLD = 4, NOTE_HOLD = 5, CATCH_HOLD = 8; // seconds
@@ -1035,11 +1054,12 @@ export class Hud {
       const rate = `×${x >= 2 ? Math.round(x) : +x.toFixed(1)} ${core && core.travel ? 'while you travel' : 'at rest'}${P ? ` · ${P.label} pace` : ''}`;
       row('Light', `${light} · clock ${day.running ? rate : 'stopped'}`);
     }
-    // the trip: the season's paper (its number, home, the day of the trip) and the money, then the energy, then the pack
+    // the trip: the season (its way, home, the day of the trip) and the money, then the energy, then the pack (no permit
+    // since the world cards of 2026-10-24)
     if (core && (core.active || (core.profile && core.profile.started))) { // hubs 1A
-      const p = core.permit, pr = core.profile, home = pr && pr.home != null ? core.placeOf(pr.home) : '';
-      const bits = [core.sandbox ? 'Sandbox' : p && p.no ? p.no : 'not yet stamped', home ? `home ${home}` : '', core.active ? core.dayWords() : 'between trips', pr ? `$${pr.money} in hand` : ''];
-      row('Permit', esc(bits.filter(Boolean).join(' · ')));
+      const pr = core.profile, home = pr && pr.home != null ? core.placeOf(pr.home) : '';
+      const bits = [core.sandbox ? 'Sandbox' : 'Adventure', home ? `home ${home}` : '', core.active ? core.dayWords() : 'between trips', pr ? `$${pr.money} in hand` : ''];
+      row('Season', esc(bits.filter(Boolean).join(' · ')));
     }
     if (energy) {
       // hubs 1B: "Energy 64 % · held down by thirst": the bar, what holds it down (or where rest brings it), the hours
@@ -1138,7 +1158,7 @@ export class Hud {
     const bare = look === 'owned' && none;
     if (this.bareLegs !== bare) {
       this.bareLegs = bare;
-      for (const i of e.map.querySelectorAll('.band.foot .leg > i.portage, .band.foot .leg > i.camp, .band.foot .leg > i.dock, .band.foot .leg > i.task')) i.parentNode.style.display = bare ? 'none' : '';
+      for (const i of e.map.querySelectorAll('.band.foot .leg > i.portage, .band.foot .leg > i.camp, .band.foot .leg > i.dock')) i.parentNode.style.display = bare ? 'none' : ''; // (the notices' red pencil stays: it is drawn on blank paper too)
     }
     const detail = table ? 'click a sheet to see what is on it · the red-dotted ones are sold at this table'
       : look === 'whole' ? 'the whole Boundary Waters, here at the outfitter · the sheets dotted over it, yours ruled in ink'
@@ -1365,15 +1385,6 @@ export class Hud {
           if (close) { ctx.beginPath(); ctx.arc(a, b, r * 0.38, 0, 6.28); ctx.fillStyle = '#f4e9d6'; ctx.fill(); }
         }
       }
-      // task areas: a soft circle around the lake, never the spot
-      const hints = lay.tasks && this.ctx && this.ctx.tasks ? this.ctx.tasks.hints() : [];
-      for (const h of hints) {
-        if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
-        const [a, b] = toPx(h.x, h.z), r = h.r / mPerPx;
-        ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28);
-        ctx.fillStyle = 'rgba(192, 57, 43, 0.13)'; ctx.fill();
-        ctx.setLineDash([6 * k, 5 * k]); ctx.strokeStyle = 'rgba(160, 45, 35, 0.6)'; ctx.lineWidth = 1.6 * k; ctx.stroke(); ctx.setLineDash([]);
-      }
       // the keepers' words (outfitter.js toldHints): a ring pencilled round the water they meant, as a keeper marks your
       // map across the counter, and what for in the same hand
       for (const h of told) {
@@ -1419,6 +1430,22 @@ export class Hud {
         if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
       }
       ctx.restore();
+    }
+    // The notices' places (tasks.js hints, the world cards of 2026-10-24): the keeper's red pencil, a wobbly ring not
+    // quite closed, as if annotated by hand across the counter, with its word in the same hand. Tight round a campsite
+    // or landing you know (named in the notice, or on a map you can see) and named ("the island site"); else round the
+    // bay, arm or stretch the notice describes, never the whole lake. Drawn over blank paper too, outside the sheets'
+    // clip: the pencil goes where the keeper pointed, sheet or no sheet.
+    const hints = lay.tasks && this.ctx && this.ctx.tasks && typeof this.ctx.tasks.hints === 'function' ? this.ctx.tasks.hints() : [];
+    for (const h of hints) {
+      if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
+      const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 7 * k);
+      pencilRing(ctx, a, b, r, k, Math.abs(Math.round(h.x * 7 + h.z * 13)));
+      if (h.label && (mPerPx < 60 || h.tight)) {
+        ctx.font = `600 ${16 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(176, 40, 30, 0.9)';
+        if (r > 44 * k) { ctx.textAlign = 'center'; ctx.fillText(h.label, clamp(a, 70 * k, W - 70 * k), clamp(b - r + 20 * k, 24 * k, H - 12 * k)); }
+        else { ctx.textAlign = 'left'; ctx.fillText(h.label, clamp(a + r * 0.78, 8 * k, W - 120 * k), clamp(b - r * 0.82 - 4 * k, 24 * k, H - 12 * k)); }
+      }
     }
     this.hintLegend(told.length > 0);
     if (clipped) this.drawNeatlines(ctx, sh, owned, toPx, k);

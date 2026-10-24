@@ -36,7 +36,7 @@ const KEYMAP = [
     [['W'], 'past your depth: swim (Shift harder) · Space climbs out onto a rock, a dock or the bank · E at the canoe climbs in'],
   ]],
   ['At an outfitter', [
-    [['E'], 'from the water at the dock: alongside, and up onto the deck; walk up the steps and in · inside, point at the counter (a bunk, a ride up the road, the season permit, claims), the cork board, a shelf (from either side), the lure wall or the map table: yours on the left, theirs on the right'],
+    [['E'], 'from the water at the dock: alongside, and up onto the deck; walk up the steps and in · inside, point at the counter (a bunk, a ride up the road, claims: no permit), the cork board, a shelf (from either side), the lure wall or the map table: yours on the left, theirs on the right'],
     [['Q'], 'at the counter: a word with the keeper'],
     [['M'], 'in a store or at its map table: the whole Boundary Waters with the sheets dotted over it, “$8 here” at this table and “✓ yours” in ink. A sheet bought is yours for the season, never carried'],
     [[], 'a trip begins as you push off from an outfitter’s dock and ends by itself when you come in on foot at any outfitter’s landing: the logbook says “came in”'],
