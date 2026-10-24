@@ -152,18 +152,18 @@ class Hold {
 // the radial ring, inline in the action line where the key would be: a faint track, the filled arc, a tick per phase
 // boundary, the key's letter in the middle
 function ring(f, n, key) {
-  const R = 13, C = 16, len = TAU * R, on = Math.max(0, Math.min(1, f)) * len;
+  const R = 15, C = 19, len = TAU * R, on = Math.max(0, Math.min(1, f)) * len;
   let ticks = '';
   for (let i = 1; i < n; i++) {
     const a = (i / n) * TAU - Math.PI / 2, c = Math.cos(a), s = Math.sin(a);
-    ticks += `<line x1="${(C + c * (R - 3.5)).toFixed(2)}" y1="${(C + s * (R - 3.5)).toFixed(2)}" x2="${(C + c * (R + 3.5)).toFixed(2)}" y2="${(C + s * (R + 3.5)).toFixed(2)}" stroke="rgba(243,236,221,.55)" stroke-width="1.5"/>`;
+    ticks += `<line x1="${(C + c * (R - 2.6)).toFixed(2)}" y1="${(C + s * (R - 2.6)).toFixed(2)}" x2="${(C + c * (R + 2.6)).toFixed(2)}" y2="${(C + s * (R + 2.6)).toFixed(2)}" stroke="rgba(16,22,29,.55)" stroke-width="1.6"/>`;
   }
   const letter = String(key || 'KeyE').replace(/^Key/, '').slice(0, 2);
-  return `<svg class="hold-ring" width="32" height="32" viewBox="0 0 32 32" style="flex:none;overflow:visible;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.5))" aria-hidden="true">`
-    + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="rgba(243,236,221,.28)" stroke-width="3"/>`
-    + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#f3ecdd" stroke-width="3" stroke-linecap="butt" stroke-dasharray="${on.toFixed(2)} ${len.toFixed(2)}" transform="rotate(-90 ${C} ${C})"/>`
+  return `<svg class="hold-ring" width="38" height="38" viewBox="0 0 38 38" style="flex:none;overflow:visible;vertical-align:middle;margin:-8px 12px -8px 0;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.5))" aria-hidden="true">`
+    + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="rgba(243,236,221,.3)" stroke-width="3.5"/>`
+    + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#f3ecdd" stroke-width="3.5" stroke-linecap="butt" stroke-dasharray="${on.toFixed(2)} ${len.toFixed(2)}" transform="rotate(-90 ${C} ${C})"/>`
     + ticks
-    + `<text x="${C}" y="${C + 4.5}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#f3ecdd" style="font-family:var(--sans)">${letter}</text></svg>`;
+    + `<text x="${C}" y="${C + 4.5}" text-anchor="middle" font-size="13" font-weight="700" fill="#f3ecdd" style="font-family:var(--sans)">${letter}</text></svg>`;
 }
 
 export const hold = new Hold();
