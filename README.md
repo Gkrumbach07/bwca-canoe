@@ -94,7 +94,7 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | W / S | paddle forward / back; on land, walk into the view / toward it |
 | A / D | afloat: turn the hull while held, as sweep strokes, in both views. On land: strafe left / right |
 | Shift | hustle (on foot, a jog: a longer stride with both feet off the ground between steps) |
-| Space | afloat: brace (steadies the hull in a sea; you cannot paddle while bracing). The balance arc appears above the action line while the sea is working the hull. On foot: hop, about 0.4 m, onto a low rock or a log or over it (with the canoe on your shoulders you only stagger) |
+| Space | afloat: brace (steadies the hull in a sea; you cannot paddle while bracing). The balance arc appears above the action line while the sea is working the hull. On foot, moving into something: vault over a down log or a low rock (waist high and thin), or climb onto a rock, a ledge, a bank or a dock up to about 2 m (hold it into them; the prompt says which when you are pressed against one); otherwise a hop, about 0.4 m (with the canoe on your shoulders you only stagger). Swimming: held into a rock, a dock or a bank low over the water, climb out |
 | E | go ashore when the canoe is close to a bank; portage when near a landing; at an outfitter's dock, tie up and go in (you stand at the store's door; inside the view is first person); in the store, E at the counter, the cork board, a shelf or the lure wall opens the counter at that tab, and E or Esc puts it away; in a store, talk to someone you face (the keeper away from the counter, or a visitor: their word names a real lake, fish, site or carry; a second E takes on their one task, paid by them or at that counter); pick up a found item; on foot at the water's edge, fill the bottle (a tablet: drinkable in half an hour); on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down. On a double portage: set the canoe down at the far end, pick up the pack left at the trail head, load up and launch. At a campsite: pitch the tent, gather firewood (an armful in 25 minutes, 10 with the saw; three at most, stacked by the ring), light and feed the fire, cook, use the latrine, pick blueberries in season (July 10 to August 20, on the burns and the lichen rock by some sites), fill the bottle, and at the tent sleep (see [docs/trip-core.md](docs/trip-core.md) and [docs/hubs.md](docs/hubs.md)) |
 | Q | the second choice at a shore: at an outfitter's dock, the counter straight from the water; at a store's counter, a word with the keeper (the first of the day raises your standing there a little); go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it. On a portage: take the gear pack too (one heavy trip), or fetch the pack left at the trail head (a short fade while the walk back and the second carry pass) |
 | ← / → | standing still at your tent in the evening: the wake-time card (first light, 7:00 or 9:00), ← → to choose, E turns in, Esc lets it be |
@@ -138,9 +138,17 @@ screen, D to its right; with the mouse look the body faces the look and the walk
 as the keys say), at life pace: 1.35 m/s (a jog at 2.9 with Shift; with the canoe on your shoulders about 0.85,
 3 km an hour, by the load). On a portage trail the walk is time-lapsed with the clock at Trip pace (seen at about
 2.5 m/s under the canoe, up to ×3). The woods walk at the same pace as a trail; only the hills cost, less on a graded trail,
-and a slope past 40° stops you. Trunks and walls hold you off and you slide round them, and water past
-your knees stops you. A rock stops you at its edge, as it is drawn; one lower than a step (a slab, a small
-rock, a log on its side) you step up onto, and **Space** hops about 0.4 m, onto a higher one or over a log. The readout's km/h is the ground you actually make good per hour of the game's clock, so it falls to nothing while
+and a slope past 40° stops you. Everything solid holds you off at its drawn edge and you slide along it: trunks
+at their drawn girth, rocks, the bluffs' cliffs and scree, down logs, stumps, walls. One lower than a step (a
+slab, a small rock, a thin log) you step up onto. Walking into something waist high and thin (a down log, a low
+rock), **Space** vaults you over it; into a rock, a ledge or a bank up to about 2 m with room on top, **Space**
+held climbs you up onto it, hands and then a knee; walk on across it and you drop off the far side (a drop of
+more than about 2.6 m is refused at its edge). Pressed against one, the prompt says which. Otherwise **Space**
+hops about 0.4 m. The water drags at your legs as it deepens; chest deep you swim (W a slow breaststroke, Shift
+a hard one, still you tread water, and it costs energy), and where it shallows you stand and wade out again. A
+swimmer climbs out onto a rock, a dock or a low bank with **Space** held into it, and **E** beside the beached
+canoe pushes it off and climbs in. With the canoe on your shoulders you wade no deeper than your thighs. The
+readout's km/h is the ground you actually make good per hour of the game's clock, so it falls to nothing while
 something holds you. A canoe you have left
 shows on the map; back within 3 m of it, **E** launches it (**Q** shoulders it instead), and if the water
 there is too shallow for a canoe the prompt says so. Carrying, **E** launches at any shore with a metre of
@@ -169,8 +177,8 @@ each direction carries and how tall the waves are from the wind speed and the **
 of each spot (marched across the water's surface atlas whenever the wind moves to a new 15° bucket). So a
 small lake stays flat in a gale while the downwind shore of a big one builds whitecaps. The canoe drifts
 downwind and its bow falls off the wind. Broadside to real waves the hull rolls; quarter the waves or hold
-**Space** to brace, or over you go: the hull floats upside down, drifting, and you swim to it (W/S, A/D) and
-press **E** to right it and climb back in. On a calm day the canoe cannot be tipped.
+**Space** to brace, or over you go: the hull floats upside down, drifting, and you swim to it (W/S, A/D; you
+cannot leave it and wade off) and press **E** to right it and climb back in. On a calm day the canoe cannot be tipped.
 
 ## Fishing
 

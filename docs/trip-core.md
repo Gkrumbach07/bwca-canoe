@@ -198,7 +198,7 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 | K / E | a fish held up | keep it (into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
 | H | anywhere | the headlamp |
 | G | still | eat a meal by hand |
-| Space, Shift | afloat / on foot | brace / hop · hustle / jog |
+| Space, Shift | afloat / on foot | brace / vault, climb or hop · hustle / jog |
 | 1 2 3 | anywhere, the rod down | 1×, 2×, 4× on top of the pace (Settings › Controls › Pace: Trip or Real) |
 | `[ ] - = P` · `, . / ;` | Sandbox | the clock and the date · the wind |
 

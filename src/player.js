@@ -156,9 +156,9 @@ export class Player {
   }
   // How steep the rock the walker would stand on at (x, z) is there (rise over run, over 15 cm, on that rock's own
   // surface: a sample off its edge is left out, so the edge of a slab is a step, not a slope); 0 off any rock.
-  rockSlope(x, z, reach, near) {
+  rockSlope(x, z, reach, near, minTop = -Infinity) {
     let rock = null, top = -Infinity;
-    for (const t of near) if (t.shape && t.shape.maxY > top) { const h = t.shape.heightAt(x, z); if (h > top && h <= reach) { top = h; rock = t.shape; } }
+    for (const t of near) if (t.shape && t.shape.maxY > top && t.shape.maxY > minTop) { const h = t.shape.heightAt(x, z); if (h > top && h <= reach) { top = h; rock = t.shape; } }
     if (!rock) return 0;
     const e = 0.15, d = (dx, dz) => { const h = rock.heightAt(x + dx, z + dz); return h > -Infinity ? h - top : NaN; };
     const one = (a, b) => (a === a && b === b ? (a - b) / (2 * e) : a === a ? a / e : b === b ? -b / e : 0);
@@ -549,12 +549,14 @@ export class Player {
     // held off whatever stands within SWIM_CLEAR of the surface (as if his feet were there: clearOf holds off what
     // rises a step over the feet)
     const near = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [], yb = this.level - SWIM_CLEAR - STEP_UP;
+    // the overturned hull floats beside you: you swim round it, not through it
+    if (hull) near.push({ x: hull.cx, z: hull.cz, ux: Math.cos(hull.heading), uz: -Math.sin(hull.heading), hx: 2.3, hz: 0.42, box: true });
     this.clearOf(nx, nz, yb, near, _held);
     if (_held.hit) {
       nx = _held.x; nz = _held.z;
       if (this.blockedAt(nx, nz, yb, near) && !this.blockedAt(this.x, this.z, yb, near)) { nx = this.x; nz = this.z; }
     }
-    if (!hull) {
+    if (!hull && this.carry) { // (a swim from shore always has the canoe somewhere: this.carry.drop)
       // shallow enough to stand: on your feet, wading
       const bed = this.supportAt(nx, nz, this.level - 0.2, near);
       if (this.level - bed < STAND_DEPTH && w.shoreAt(nx, nz) > -40) { this.x = nx; this.z = nz; this.leaveWater(bed); this.setMove('wade', dt, { depth: this.level - bed }); return; }
@@ -774,14 +776,16 @@ export class Player {
   // The walker's circle at (x, z), the feet at y, held clear of everything in `near`: the trunks, the solids' parts that
   // rise more than a step over the feet (and start below his head), the props taller than a step (a wall, a tent, a
   // post; a deck no higher than a step is stood on). Round up to four times, as one push can send him into another.
-  // Into out { x, z, hit, trunk } (trunk: a trunk that held him, for easing round it).
+  // Into out { x, z, hit, trunk } (trunk: a trunk or a small solid, a scree block or a stump, that held him: he eases
+  // round it rather than standing stuck against it; a big rock or a wall he stands at, to climb it say).
   clearOf(x, z, y, near, out) {
     const level = y + STEP_UP, head = y + HEAD, R = BODY_R;
-    out.hit = false; out.trunk = null;
+    out.hit = false; out.trunk = null; out.solid = null;
+    const small = (s) => s.maxX - s.minX < 1.6 && s.maxZ - s.minZ < 1.6;
     for (let pass = 0; pass < 4; pass++) {
       let moved = false;
       for (const t of near) {
-        if (t.shape) { if (t.shape.push(x, z, R, level, head, _push)) { x = _push.x; z = _push.z; moved = true; } continue; }
+        if (t.shape) { if (t.shape.push(x, z, R, level, head, _push)) { x = _push.x; z = _push.z; moved = true; out.solid = t; if (small(t.shape)) out.trunk = t; } continue; }
         if (t.top !== undefined && t.top <= level) continue;
         if (t.box) {
           const px = x - t.x, pz = z - t.z, a = px * t.ux + pz * t.uz, b = -px * t.uz + pz * t.ux, ka = t.hx + R, kb = t.hz + R;
@@ -1048,17 +1052,26 @@ export class Player {
         // held off everything at its drawn edge, sliding along it; eased round a trunk to whichever side you were
         // already passing on; still caught in a corner between two after that, you stay where you were
         this.clearOf(nx, nz, ft.y, near, _held);
+        ft.easeAge = (ft.easeAge ?? 9) + dt;
         let pressed = false;
         if (_held.hit) {
           nx = _held.x; nz = _held.z; pressed = true;
-          const t = _held.trunk;
+          // a trunk or a small rock: eased round at once. A boulder you walk into nearly head on with nothing to get over
+          // (no vault or climb offered): after a moment, eased round it too (a face to climb, a wall, a cliff: you stand)
+          const made = Math.hypot(nx - this.x, nz - this.z) / Math.max(1e-6, dt * this.boost), sol = _held.solid;
+          // (once easing round one, met again within half a second it is eased round at once: no stop and go)
+          ft.stuck = moving && made < 0.3 * Math.max(0.3, this.speed) ? (ft.stuck || 0) + dt : 0;
+          const big = sol && !sol.cliff && sol.shape.maxX - sol.shape.minX < 5 && sol.shape.maxZ - sol.shape.minZ < 5 && !ft.hint && (ft.stuck > 0.35 || (sol === ft.easing && ft.easeAge < 0.5));
+          if (big) { ft.easing = sol; ft.easeAge = 0; }
+          const t = _held.trunk || (big ? sol : null);
           if (t && moving) {
-            const side = Math.sign((nx - t.x) * -mz + (nz - t.z) * mx) || 1;
-            nx += -mz * side * 1.2 * dt; nz += mx * side * 1.2 * dt;
+            const s = t.shape, cx = s ? (s.minX + s.maxX) / 2 : t.x, cz = s ? (s.minZ + s.maxZ) / 2 : t.z, side = Math.sign((nx - cx) * -mz + (nz - cz) * mx) || 1;
+            const ease = (_held.trunk ? 1.2 : 0.9) * dt;
+            nx += -mz * side * ease; nz += mx * side * ease;
             this.clearOf(nx, nz, ft.y, near, _held); nx = _held.x; nz = _held.z;
           }
           if (this.blockedAt(nx, nz, ft.y, near) && !this.blockedAt(this.x, this.z, ft.y, near)) { nx = this.x; nz = this.z; }
-        }
+        } else ft.stuck = 0;
         if (carrying) {
           for (const t of near) {
             if (t.shape || t.box) continue; // the hull rides above a boulder or a log; a wall already holds the walker off
@@ -1080,13 +1093,26 @@ export class Player {
         // what is under it again (a bank too high to clear stops the hop's way forward)
         let support = this.supportAt(nx, nz, reach, near);
         if (ft.air && support > ft.y + STEP_UP) { nx = this.x; nz = this.z; this.speed *= 0.5; support = this.supportAt(nx, nz, reach, near); }
-        // a step up onto a rock is onto a tread: where its surface is steeper than a walkable slope (a boulder's flank)
-        // the walker is held there as at a wall, sliding along it if he can, so he does not climb it a step at a time
-        if (!ft.air && support > ft.y + 0.03) {
-          const steep = (px, pz, y) => y > ft.y + 0.03 && y > this.groundAt(px, pz) + 0.02 && this.rockSlope(px, pz, reach, near) > ROCK_GRADE;
-          if (steep(nx, nz, support)) {
-            const a = this.supportAt(nx, this.z, reach, near), b = this.supportAt(this.x, nz, reach, near);
-            if (!steep(nx, this.z, a)) { nz = this.z; support = a; } else if (!steep(this.x, nz, b)) { nx = this.x; support = b; } else { nx = this.x; nz = this.z; support = this.supportAt(nx, nz, reach, near); }
+        // A step up onto a rock is onto a tread: where its surface is steeper than a walkable slope (a boulder's flank) the
+        // walker is held at its foot as at a wall, sliding along it if he can, so he does not climb it a step at a time.
+        // Read at the body's leading edge (the flank's foot is the rock's drawn edge on the ground); a rock no taller than a
+        // step from the feet (a pebble, a low slab) is stepped onto whatever its slope.
+        if (!ft.air && moving) {
+          const flank = (px, pz, dx, dz) => {
+            const lx = px + dx * BODY_R * 0.9, lz = pz + dz * BODY_R * 0.9, ly = this.supportAt(lx, lz, reach, near);
+            return ly > ft.y + 0.05 && ly > this.groundAt(lx, lz) + 0.02 && this.rockSlope(lx, lz, reach, near, ft.y + STEP_UP) > ROCK_GRADE;
+          };
+          const sx = nx - this.x, sz = nz - this.z, sl = Math.hypot(sx, sz);
+          if (sl > 1e-6 && flank(nx, nz, sx / sl, sz / sl)) {
+            // slide: the step turned along the flank, the least turn whose leading edge is not on it
+            let done = false;
+            for (const a of [0.5, -0.5, 1.0, -1.0, 1.45, -1.45]) {
+              const c = Math.cos(a), s = Math.sin(a), rx = (sx * c - sz * s) / sl, rz = (sx * s + sz * c) / sl;
+              const qx = this.x + rx * sl * c, qz = this.z + rz * sl * c;
+              if (!flank(qx, qz, rx, rz) && !this.blockedAt(qx, qz, ft.y, near)) { nx = qx; nz = qz; done = true; break; }
+            }
+            if (!done) { nx = this.x; nz = this.z; }
+            support = this.supportAt(nx, nz, reach, near);
             pressed = true;
           }
         }
@@ -1101,15 +1127,17 @@ export class Player {
         if (carrying && deep > CARRY_DEPTH && deep > this.depthAt(this.x, this.z, ft.y) + 0.005) {
           nx = this.x; nz = this.z; this.speed *= 0.3; note = 'Too deep to wade with the canoe overhead'; support = this.supportAt(nx, nz, reach, near);
         } else if (!carrying && deep > SWIM_DEPTH && (!ft.air || ft.y < w.levelAt(nx, nz) - 0.3)) swimNow = true;
-        // what the legs make good is what the walk is: pressed against a wall the stride shortens to the slide
-        if (moving && dt > 0) {
+        // rubbing along something bleeds a little of the walk (about three quarters of it stays, so a slide along a
+        // face keeps going); held fast against it, most of it (the legs' own stride reads the ground made good)
+        if (pressed && moving && dt > 0) {
           const made = Math.hypot(nx - this.x, nz - this.z) / (dt * this.boost);
-          if (made < this.speed) this.speed += (made - this.speed) * (1 - Math.exp(-dt * 8));
+          this.speed *= Math.exp(-dt * (made < 0.15 * this.speed ? 8 : 2));
         }
         // pressed against something to get over: say so
+        ft.hint = false;
         if (pressed && moving && !carrying && !ft.air && !note) {
           const a = this.traverseAhead(nx, nz, ft.y, mx, mz, near);
-          if (a) note = a.kind === 'vault' ? '<kbd>Space</kbd>Vault over' : '<kbd>Space</kbd>Climb up';
+          if (a) { note = a.kind === 'vault' ? '<kbd>Space</kbd>Vault over' : '<kbd>Space</kbd>Climb up'; ft.hint = true; }
         }
         if (ft.air) {
           ft.vy -= GRAVITY * dt; ft.y += ft.vy * dt; ft.t += dt; ft.peak = Math.max(ft.peak, ft.y);

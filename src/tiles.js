@@ -695,7 +695,7 @@ export class TileManager {
   // The worker sorted the trunks and the solids into cells (tile-worker.js collisionOf), so a query reads only the
   // cells it touches; a solid's shape is made the first time one comes this near and kept with the tile.
   treesNear(x, z, r) {
-    const out = [], w = this.world, M = 24; // M: the furthest a solid reaches past its cell (a cliff module)
+    const out = [], w = this.world, M = 40; // M: the furthest a solid reaches from its origin (a cliff module running far back into its hill)
     const [tx0, ty0] = w.tileOf(x - r - M, z - r - M), [tx1, ty1] = w.tileOf(x + r + M, z + r + M);
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const e = this.tiles.get(this.key(tx, ty));
@@ -766,6 +766,7 @@ export class TileManager {
         } else if (sp === 15) Object.assign(s, { stump: true, top: shape.maxY });
         else { s.rock = true; if (sp === 21) s.cliff = true; }
       }
+      if (e.shapes.size > 6000) e.shapes.clear(); // made again when met again
       e.shapes.set(i, s);
     }
     return s;
