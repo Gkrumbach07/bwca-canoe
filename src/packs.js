@@ -18,6 +18,14 @@
 // On foot elsewhere: E beside a thing on the ground picks it up (onto the back, the chest or a hand), Q sets down what
 // you carry, and E at the canoe loads what you carry into it. Unloading the canoe is from the inventory (stream B's
 // J book: inventory.carry / setDown).
+// At a camp (the camp redone, 2026-10-24: "it doesnt do it automatically when you leave, and you CAN leave stuff. you
+// need to repack bags in canoe"): nothing is set out when the tent goes up and nothing goes back in the canoe at the
+// launch. E picks up what is set out at camp like anything on the ground (never a fixed thing, the grate); Q sets down
+// what you carry where you stand, and within a site's area it counts as set out at camp. At the canoe with things still
+// on the ground about it (the camp's reach where it lies at a camp, else LOAD_REACH of the hull), a held E loads
+// everything there, a thing a phase (hold.js), while the canoe has room by count and by weight; Q launches and leaves
+// them. A reload in the middle of a carry comes back on the trail with the canoe overhead and the carry still on you
+// (resumeCarry, main.js).
 //
 // Each frame (after player.update) it writes player.loadKg (the canoe when it is overhead, plus what you carry, by the
 // items' own weights) and player.loadFactor = max(1, loadKg / 40), which player.js's walking pace and energy.js's carry
@@ -28,13 +36,16 @@ import { LIFE } from './pace.js';
 import { BASE_H, CARRY_H } from './energy.js';
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
+import { hold } from './hold.js'; // camp 1: the held "Load everything here"
 
 export const WEIGHTS = { aluminium: 34, royalex: 29, kevlar: 20, gear: 16, foodPack: 2, foodDay: 0.9 }; // kg (the canoes; the rest is the items' own)
 const REACH = 3;            // m from a thing on the ground within which you pick it up or take it too
 const HULL_REACH = 3;       // m from the canoe within which its prompts apply (player.js)
 const LOAD_REACH = 10;      // m from the canoe within which a thing set down for the trip goes in at the launch
-const CAMP_REACH = 200;     // m: the packs set out at the camp you strike go back in the canoe at the launch
 const LEAVE_AGAIN = 6;      // seconds: E again within this launches and leaves what is back at the trail head
+const CANOE_KG = 160;       // kg of gear a tripping canoe takes besides its paddler ("Load everything here" stops there)
+const CANOE_ROOM = 8;       // containers a canoe takes (inventory.js CANOE_ROOM)
+const LOAD_EACH = { minutes: 1, seconds: 0.45, per100m: 2.5 }; // a thing carried down and loaded: its minutes (more the farther it lies), its real seconds
 // the fetch is charged at life pace (pace.js), as walking it yourself is: the walk back at a walk on the trail's going,
 // the carry over at a walk slowed by the load (player.js: / (kg / 40) ^ 0.6, and no slower than a canoe carry)
 const TRAIL_GOING = 0.9;    // a portage trail's roots, rocks and grades against a walk on the flat
@@ -121,6 +132,9 @@ export class Packs {
       s = all.some((u) => u.obj.where === 'ground' && u.obj.at && u.obj.at.camp) ? 'Packs out at camp' : inCanoe.length === all.length ? (inCanoe.length ? 'Everything in the canoe' : 'Nothing with you') : `${inCanoe.length} ${inCanoe.length === 1 ? 'thing' : 'things'} in the canoe`;
     }
     if (left.length) s += ` · ${left[0].name} ${metres(left[0].d)} back${left.length > 1 ? ` (and ${left.length - 1} more)` : ''}`;
+    // camp join: the tent left standing at a camp you have paddled away from
+    const cp = this.inv.camp, tent = cp && cp.camp, td = tent ? Math.hypot(tent.x - p.x, tent.z - p.z) : 0;
+    if (tent && td > 60) s += ` · the tent ${tent.stage >= 4 ? 'up' : 'half pitched'} ${metres(td)} back`;
     return s;
   }
   // how many carries a portage from the canoe as it is now takes
@@ -136,9 +150,9 @@ export class Packs {
 
   // every thing set out for the trip back in the canoe (the old restow)
   restow() { for (const u of this.units()) if (u.obj.where !== 'canoe') this.inv.load(u.ref); }
-  // Set the packs out at a camp spot (camp.js, when the tent goes up): every pack and barrel that is with you (in the
-  // canoe or on you) stands on the ground there, side by side, fronts toward `heading`; the bucket, the rod and the
-  // paddle stay in the canoe. They go back in the canoe when you launch. Returns how many were set out.
+  // Set the packs out at a camp spot: every pack and barrel that is with you (in the canoe or on you) stands on the
+  // ground there, side by side, fronts toward `heading`; the bucket, the rod and the paddle stay in the canoe. They stay
+  // there until you pick them up (the camp redone: nothing calls this when the tent goes up any more). Returns how many.
   unload({ x, z, heading = 0 } = {}) {
     const ks = this.units().filter((u) => u.kind === 'container' && (u.def.wear || []).length && (u.obj.where === 'canoe' || u.obj.where === 'back' || u.obj.where === 'chest'));
     const rx = Math.sin(heading), rz = Math.cos(heading); // to the right of the heading
@@ -301,9 +315,14 @@ export class Packs {
     if (o && o.visit && o.visit.inside) return false; // in a store: the stash is the J book's (stream B), the hotspots are the store's
     const lakeOf = (id) => w.lakeName(id) || 'the water';
     const all = this.units(), from = c.drop || p;
-    const ground = all.filter((u) => u.obj.where === 'ground' && u.obj.at && !u.obj.at.camp);
-    // set down for the second trip, at the trail head away from the canoe
-    const left = ground.filter((u) => u.obj.at.trail && Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH);
+    // what lies on the ground, set out at camp too (camp 1); never a fixed thing (the grate at a fire ring, chores.js)
+    // but a pile (its things are picked up)
+    const ground = all.filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile'));
+    // set down for the second trip, at the trail head away from the canoe: of the trail you (or the canoe) are on now
+    // (camp 1: a thing left at some other trail head, by a teleport say, no longer holds the canoe's E at a camp)
+    const onTrail = (q) => { const t = p.nearestTrail(q.x, q.z, 30); return t ? this.world.portages.indexOf(t.def) : -1; };
+    const here = new Set([onTrail(from), onTrail(p)]);
+    const left = ground.filter((u) => u.obj.at.trail && here.has(u.obj.at.trail.i) && Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH);
     // the nearest thing in reach, one you have room for first (a barrel beside a pack, with a pack on your back already);
     // past a step and a half only one you face, so a pack set down by the fire does not take E from the fire
     let near = null, nd = REACH, full = null;
@@ -340,11 +359,15 @@ export class Packs {
     if (near && !(this.autoLoads(near) && Math.hypot(near.obj.at.x - d.x, near.obj.at.z - d.z) <= LOAD_REACH)) {
       const plan = near.obj.at.trail && Math.hypot(near.obj.at.x - d.x, near.obj.at.z - d.z) > LOAD_REACH ? this.fetchPlan(left) : null;
       const can = near.id === 'pile' || !!this.slotFor(near);
-      p.say(note || trailText, can ? ['E', `Pick up ${the(near)}`] : null, plan ? ['Q', `Carry it all over (${aboutHours(plan.hours)})`] : !can ? null : this.carried().length ? ['Q', `Set down ${the(this.lastCarried())}`] : null);
-      if (!can && !plan) p.say(note || `${cap(the(near))}: your back and hands are full`);
+      // camp join: at the hull with nothing carried, Q launches and leaves it (set down by the canoe at a camp, it took
+      // the canoe's E from every side)
+      const L = !plan && dd <= HULL_REACH && !this.carried().length ? this.dropLaunch(d) : null, leave = !!(L && L.deep);
+      p.say(note || trailText, can ? ['E', `Pick up ${the(near)}`] : null, plan ? ['Q', `Carry it all over (${aboutHours(plan.hours)})`] : leave ? ['Q', `Launch and leave ${the(near)}`] : !can ? null : this.carried().length ? ['Q', `Set down ${the(this.lastCarried())}`] : null);
+      if (!can && !plan && !leave) p.say(note || `${cap(the(near))}: your back and hands are full`);
       if (can && inp.pressed('KeyE')) this.pickUp(near);
       else if (plan && inp.pressed('KeyQ')) this.fetch(left, plan);
-      else if (!plan && inp.pressed('KeyQ') && this.carried().length) this.inv.setDown(this.lastCarried().ref);
+      else if (leave && inp.pressed('KeyQ')) p.launch(L);
+      else if (!plan && inp.pressed('KeyQ') && this.carried().length) this.setDownHere(this.lastCarried().ref);
       return true;
     }
     if (left.length) {
@@ -372,6 +395,16 @@ export class Packs {
         else if (inp.pressed('KeyQ')) p.pickUpHull();
         return true;
       }
+      // camp 1: things set out about the canoe (at a camp, or set down by hand near it): a held E loads everything here,
+      // Q launches and leaves them (or shoulders the canoe where there is no water to launch onto)
+      const lo = this.loadables(d);
+      if (lo.some((u) => !this.autoLoads(u))) {
+        const L = this.dropLaunch(d), kg = Math.round(lo.reduce((s, u) => s + this.weightOf(u), 0));
+        p.say(note, ['E', `Load everything here · hold · ${lo.length > 3 ? `${lo.length} things` : names(lo)}, ${kg} kg`], L && L.deep ? ['Q', `Launch and leave ${lo.length > 1 ? 'them' : 'it'}`] : ['Q', 'Shoulder the canoe']);
+        if (inp.pressed('KeyE')) hold.begin(this.loadAllOpts(d, lo));
+        else if (inp.pressed('KeyQ')) { if (L && L.deep) p.launch(L); else p.pickUpHull(); }
+        return true;
+      }
       // everything together: E loads up (when something set down for the trip is not in the canoe yet) and launches,
       // from the trail's own launch point when the canoe lies at a trail end. With everything in the canoe this is a
       // canoe set down at a trail end (set down to fill the bottle, say): player.js alone would find no water within
@@ -391,14 +424,73 @@ export class Packs {
       p.say(note || trailText || `The canoe is ${dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`} away`, ['Q', `Set down ${the(u)}`]);
       // only Q here: the camp's E or a berry patch's may take the line, keeping the Q (camp.js, forage.js)
       if (p.prompt) Object.assign(p.prompt, { soft: true, tail: ` &nbsp; <kbd>Q</kbd>Set down ${the(u)}` });
-      if (inp.pressed('KeyQ')) { const r = this.inv.setDown(u.ref); if (this.hud && r.words) this.hud.note(r.words, 2.5); }
+      if (inp.pressed('KeyQ')) { const r = this.setDownHere(u.ref); if (this.hud && r.words) this.hud.note(r.words, 2.5); }
       return true;
     }
     return false;
   }
   lastCarried() { const c = this.carried(); return c.find((u) => u.obj.where === 'hands') || c.find((u) => u.obj.where === 'chest') || c[0]; }
   // set down for the trip (a trail head, the camp), not by hand: it goes in at the launch
-  autoLoads(u) { const a = u.obj.at; return !!(a && !a.left && (a.trail || a.camp)); }
+  autoLoads(u) { const a = u.obj.at; return !!(a && !a.left && a.trail); }
+  // Q: set it down at your feet; within a site's area (or by your own tent) it is set out at camp (camp.js reachArea)
+  setDownHere(ref) {
+    const r = this.inv.setDown(ref), camp = this.inv.camp, a = camp && camp.reachArea ? camp.reachArea() : null, t = this.inv.thing(ref);
+    if (r.ok && a && t && t.obj.at) t.obj.at.camp = a.key || 'camp';
+    return r;
+  }
+
+  // --- repacking the canoe (camp 1) ----------------------------------------------------------------------------------
+  // What a held E at the canoe lying at d would load: the things on the ground about it (the camp's reach where it lies
+  // at a camp, else within LOAD_REACH of it), not fixed, not left at a trail head (the fetch's), nearest the hull first
+  loadables(d) {
+    const camp = this.inv.camp, a = camp && camp.areaAt ? camp.areaAt(d.x, d.z) : null;
+    const within = (at) => (a ? Math.hypot(at.x - a.x, at.z - a.z) <= a.r : false) || Math.hypot(at.x - d.x, at.z - d.z) <= LOAD_REACH;
+    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile') && !(u.obj.at.trail && !this.autoLoads(u)) && within(u.obj.at))
+      .sort((u, v) => Math.hypot(u.obj.at.x - d.x, u.obj.at.z - d.z) - Math.hypot(v.obj.at.x - d.x, v.obj.at.z - d.z));
+  }
+  // the gear in the canoe now, kg (the containers and the long items lying in it)
+  canoeGearKg() {
+    let kg = 0;
+    for (const u of this.units()) if (u.obj.where === 'canoe') kg += this.weightOf(u);
+    return kg;
+  }
+  // one thing into the canoe: a container or a long item as it is, a pile's things into the canoe's containers; false
+  // (with why) when the canoe has no room for it by count or by weight
+  loadOne(u) {
+    const inv = this.inv;
+    if (u.obj.where !== 'ground') return { ok: true };
+    const kg = this.weightOf(u);
+    if (this.canoeGearKg() + kg > CANOE_KG) return { ok: false, why: 'kg' };
+    if (u.id === 'pile') {
+      const pool = inv.containers.filter((c) => inv.rootWhere(c) === 'canoe');
+      let stuck = 0;
+      for (const e of [...u.obj.grid]) { const r = inv.place(e.id, e.qty, { data: e.data || null, pool, quiet: true }); if (r.placed) inv.take(u.obj.id, e.uid, r.placed); if (!r.ok) stuck++; }
+      inv.emit('items');
+      return stuck ? { ok: false, why: 'full' } : { ok: true };
+    }
+    // carried down to the hull: inventory.load's move without its reach (the thing may lie across the site)
+    if (u.kind === 'container' && inv.containers.filter((c) => c.where === 'canoe').length >= CANOE_ROOM) return { ok: false, why: 'full' };
+    const o = u.obj;
+    o.where = 'canoe'; o.at = null; o.hand = null;
+    inv.emit('load');
+    return { ok: true };
+  }
+  // the held E at the hull: each thing a phase (its minutes a little more the farther it lies), loaded as its phase
+  // ends; let go and what is in is in. A word at the end for what would not go.
+  loadAllOpts(d, list) {
+    const p = this.player, skipped = [];
+    const phases = list.map((u) => { const m = Math.hypot(u.obj.at.x - d.x, u.obj.at.z - d.z); return { name: `${cap(short(u))} in`, doing: `Loading ${the(u)}`, minutes: LOAD_EACH.minutes + (m / 100) * LOAD_EACH.per100m, seconds: LOAD_EACH.seconds + Math.min(0.6, m / 40) }; });
+    const done = (n) => {
+      const inN = n - skipped.length;
+      if (this.hud) this.hud.note(`${inN ? `${inN === list.length ? 'Everything is' : `${inN} ${inN === 1 ? 'thing' : 'things'}`} in the canoe` : 'Nothing went in'}${skipped.length ? `; no room for ${names(skipped)}${skipped.some((s) => s.why === 'kg') ? ` (the canoe has its ${CANOE_KG} kg)` : ''}` : ''}.`, 4);
+    };
+    return {
+      id: 'load', label: 'Loading the canoe', phases, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
+      onPhase: (i) => { const r = this.loadOne(list[i]); if (!r.ok) skipped.push(Object.assign(list[i], { why: r.why })); },
+      onDone: () => done(list.length),
+      onStop: (job) => { if (job.done) done(job.done); },
+    };
+  }
 
   // Where the canoe overhead would launch from here, as player.js's carrying prompt finds it: a trail end within 5 m,
   // or a shore with a metre of water in reach, once you have walked a few steps from where you shouldered it.
@@ -427,9 +519,26 @@ export class Packs {
     return p.launchFrom(d.x, d.z, 8);
   }
 
+  // A reload in the middle of a carry (main.js, camp 1): back on the trail where the save left you, the canoe on your
+  // shoulders and what you carried still on you (the inventory kept it there), rather than afloat with it all in the
+  // hull. False when the spot is not on land with its tile in (then the canoe goes back on the water, as before).
+  resumeCarry(s) {
+    const p = this.player, w = this.world;
+    if (!s || s.mode !== 'carry' || !Number.isFinite(s.x) || !Number.isFinite(s.z)) return false;
+    if (!w.isReady(s.x, s.z) || !w.inBounds(s.x, s.z, 40) || w.shoreAt(s.x, s.z) <= 0.3) return false;
+    p.mode = 'carry'; p.x = s.x; p.z = s.z; p.heading = Number.isFinite(s.heading) ? s.heading : 0;
+    p.speed = 0; p.yawRate = 0; p.foot = null; p.act = null; p.boost = 1;
+    p.landing = null; p.ashore = null; p.swim = null; p.bob = null;
+    p.carry = { trail: null, drop: null, hitCooldown: 1.0, from: { x: s.x, z: s.z }, choice: false };
+    this.canoe.pickUpHull(); this.canoe.state.mode = 'carry';
+    if (p.placeOnGround) p.placeOnGround();
+    this.prevMode = 'carry';
+    return true;
+  }
+
   // Before player.js launches: no paddle, no launch; something still back at the trail head stops it once (E again,
-  // or Q at the far end, leaves it there); then what you carry, what was set down for the trip by the canoe and the
-  // packs set out at the camp go into the canoe. What you set down by hand stays where it is.
+  // or Q at the far end, leaves it there); then what you carry and what was set down for the trip by the canoe go into
+  // the canoe. What you set down by hand, and whatever is set out at a camp, stays where it is (camp 1).
   beforeLaunch() {
     const p = this.player, c = p.carry, from = c && c.drop ? c.drop : p, inv = this.inv, all = this.units();
     const near = (u, r) => u.obj.at && (Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) <= r || Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) <= r);
@@ -438,7 +547,9 @@ export class Packs {
       if (this.hud) this.hud.note('No paddle with you: it is still where you left it.', 5);
       return false;
     }
-    const far = all.filter((u) => u.obj.where === 'ground' && u.obj.at && u.obj.at.trail && !u.obj.at.left && !near(u, LOAD_REACH));
+    const onTrail = (q) => { const t = p.nearestTrail(q.x, q.z, 30); return t ? this.world.portages.indexOf(t.def) : -1; };
+    const here = new Set([onTrail(from), onTrail(p)]); // camp 1: only the trail you launch from (not one left far off)
+    const far = all.filter((u) => u.obj.where === 'ground' && u.obj.at && u.obj.at.trail && here.has(u.obj.at.trail.i) && !u.obj.at.left && !near(u, LOAD_REACH));
     if (far.length && !this.leaveOk) {
       if (this.clock - this.warnAt > LEAVE_AGAIN) {
         this.warnAt = this.clock;
@@ -451,7 +562,7 @@ export class Packs {
     for (const u of all) {
       const o = u.obj;
       if (this.isCarried(u)) inv.load(u.ref);
-      else if (o.where === 'ground' && o.at && !o.at.left && ((o.at.trail && near(u, LOAD_REACH)) || (o.at.camp && near(u, CAMP_REACH)))) { o.at = null; o.where = 'canoe'; }
+      else if (o.where === 'ground' && o.at && !o.at.left && o.at.trail && near(u, LOAD_REACH)) { o.at = null; o.where = 'canoe'; } // camp 1: never what is set out at a camp
       else if (o.where === 'ground' && u.kind === 'long' && u.obj.inUse && near(u, LOAD_REACH)) { o.at = null; o.where = 'canoe'; }
     }
     inv.emit('load');

@@ -742,7 +742,8 @@ export class Hud {
         this.lastDawnDoy = day.doy;
         const dayW = this.dayWords(ctx);
         const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
-        const food = energy && !(core && core.sandbox) ? (energy.foodWords ? `${energy.foodWords()} with you` : energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : ''; // fb A: the meals and snacks in reach
+        const hungW = energy && energy.hungFood ? energy.hungFood().words : '';
+        const food = energy && !(core && core.sandbox) ? (energy.foodWords ? `${energy.foodWords()} with you${hungW ? ` · ${hungW}` : ''}` : energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : ''; // fb A: the meals and snacks in reach (camp join: and the barrel hung)
         const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
         this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayW || 'A new day', sub);
       }
@@ -815,7 +816,8 @@ export class Hud {
     this.set('mspeed', mk.speed, sp); mk.speed.classList.toggle('on', !!sp);
     mk.clock.classList.toggle('on', !!(day && !day.running && !ctx.shell));
     const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
-    const food = adv && energy && energy.food <= 1 ? (energy.food <= 0 ? (energy.foodWords && energy.foodWords() !== 'no food' ? energy.foodWords() : 'no food') : energy.foodWords ? energy.foodWords() : `${foodWords(energy.food)} of food`) : ''; // fb A
+    const hung = adv && energy && energy.hungFood ? energy.hungFood() : null; // camp join: the barrel hung at camp is food you have
+    const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 1 ? (energy.food <= 0 ? (energy.foodWords && energy.foodWords() !== 'no food' ? energy.foodWords() : hung && hung.words ? hung.words : 'no food') : energy.foodWords ? energy.foodWords() : `${foodWords(energy.food)} of food`) : ''; // fb A
     this.set('mfood', mk.food, food); mk.food.classList.toggle('on', !!food);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
     // hubs 1B: one need mark, only while a need is under 0.3 (energy.low: 'tired', 'hungry' or 'thirsty')
@@ -949,7 +951,8 @@ export class Hud {
       const meal = energy.inventory ? '' : !sand && food <= 0 ? '' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn'; // fb A: no meals on their own
       const pk = core ? core.state.packs : null;
       const packs = player.packs && player.packs.summary ? esc(player.packs.summary) : pk ? `${pk.count === 1 ? 'one pack' : 'two packs'}, ${{ kevlar: 'Kevlar', royalex: 'Royalex' }[pk.canoe] || 'aluminium'} canoe` : '';
-      const foodW = sand ? 'food that keeps' : energy.foodWords ? `${energy.foodWords()} with you` : food > 0 ? `${foodWords(food)} of food` : 'the food pack is empty'; // fb A: the meals and snacks in reach
+      const hungW = !sand && energy.hungFood ? energy.hungFood().words : '';
+      const foodW = sand ? 'food that keeps' : energy.foodWords ? `${energy.foodWords()} with you${hungW ? ` · ${hungW}` : ''}` : food > 0 ? `${foodWords(food)} of food` : 'the food pack is empty'; // fb A: the meals and snacks in reach (camp join: and the barrel hung)
       row('Pack', [packs, foodW, meal, core && core.state.wet ? 'the gear is wet' : ''].filter(Boolean).join(' · '));
     }
     // the notices taken on, and where the finished ones are paid (tasks.js)

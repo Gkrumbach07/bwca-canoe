@@ -501,24 +501,43 @@ export class Inventory {
   lures() { const s = new Set(); for (const c of this.reachable()) for (const e of c.grid) { const d = itemDef(e.id); if (!e.box && d && d.lure) s.add(d.lure); } return s; }
 
   // --- food --------------------------------------------------------------------------------------------------------------
-  // the containers whose food counts for a meal now: what is in reach, and what is set out at the camp you are at
-  // (camp.js lays the packs out by the tent door and cooks at the grate a few steps off)
-  foodPool() {
-    const r = this.reachable(), p = this.player;
+  // The camp's reach (the camp redone, 2026-10-24: "food in reach should mean the camp's reach"). On foot at a campsite
+  // that is free or yours (camp.js reachArea: within its area, about 25 m round its fire ring; or round your own tent
+  // pitched off a site): what is in reach anyway, everything set down on the ground there, and the canoe lying there with
+  // what is in it. A hung barrel only from under it, as anywhere (it is let down first). Elsewhere, what is in reach. The
+  // camp's food and wood (energy.js, chores.js), the tent to pitch and its pack when struck (camp.js) come from it.
+  campReach() {
+    const r = this.reachable(), cp = this.camp, a = cp && typeof cp.reachArea === 'function' ? cp.reachArea() : null;
+    if (!a) return r;
+    const s = this.canoeSpot(), canoeIn = !!(s && !s.afloat && !s.overhead && Math.hypot(s.x - a.x, s.z - a.z) <= a.r), has = new Set(r);
     for (const c of this.containers) {
-      if (r.includes(c)) continue;
+      if (has.has(c)) continue;
       const k = this.root(c);
-      if (k.where === 'ground' && k.at && k.at.camp && p && Math.hypot(k.at.x - p.x, k.at.z - p.z) <= CAMP_REACH) r.push(c);
+      if ((k.where === 'ground' && k.at && Math.hypot(k.at.x - a.x, k.at.z - a.z) <= a.r) || (k.where === 'canoe' && canoeIn)) r.push(c);
     }
     return r;
   }
+  inCampReach(cId) { const c = this.cont(cId); return !!(c && this.campReach().includes(c)); }
+  // the barrels hung at the camp you are at (camp 1: on a limb within its area, out of reach until let down or stood
+  // under): their food is the camp's, though nothing is cooked or eaten out of them up there (energy.hungFood)
+  hungAtCamp() {
+    const cp = this.camp, a = cp && typeof cp.reachArea === 'function' ? cp.reachArea() : null;
+    if (!a) return [];
+    const near = new Set(this.reachable());
+    return this.containers.filter((c) => { const k = this.root(c); return k.where === 'hung' && k.at && !near.has(c) && Math.hypot(k.at.x - a.x, k.at.z - a.z) <= a.r + 5; });
+  }
+  // the containers whose food counts for a meal now: the camp's reach
+  foodPool() { return this.campReach(); }
   countIn(cs, kind) { let n = 0; for (const c of cs) for (const e of c.grid) if (!e.box && (itemDef(e.id) || {}).kind === kind) n += e.qty; return n; }
   meals() { return this.countIn(this.foodPool(), 'meal'); }
-  snacks() { return this.countIn(this.reachable(), 'snack') + this.countIn(this.reachable(), 'forage'); }
+  snacks() { const r = this.foodPool(); return this.countIn(r, 'snack') + this.countIn(r, 'forage'); }
+  // "a hot meal, 3 meals and 1 snack": a cooked thing kept as leftovers too (cook.js), as energy.js says it in the readout
   foodWords() {
     const m = this.meals(), s = this.snacks();
-    const a = m ? `${m} meal${m === 1 ? '' : 's'}` : '', b = s ? `${s} snack${s === 1 ? '' : 's'}` : '';
-    return a && b ? `${a} and ${b}` : a || b || 'no food';
+    let hot = 0;
+    for (const c of this.foodPool()) for (const e of c.grid) { const d = !e.box && itemDef(e.id); if (d && d.kind === 'food' && d.cooked) hot += e.qty; }
+    const parts = [hot ? (hot === 1 ? 'a hot meal' : `${hot} hot meals`) : '', m ? `${m} meal${m === 1 ? '' : 's'}` : '', s ? `${s} snack${s === 1 ? '' : 's'}` : ''].filter(Boolean);
+    return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] || 'no food';
   }
   // A meal for the grate (energy.meal, camp.js's cooking): supper in the evening, breakfast otherwise, else any meal;
   // taken from the food in reach or set out at camp. Returns the item's def, or null when there is none.
@@ -683,7 +702,13 @@ export class Inventory {
     if (!t) return no('gone', 'That is not here.');
     if (t.def.fixed) return no('fixed', '');
     if (!force && !this.thingReachable(t)) return no('far', `${t.def.name} is out of reach.`);
-    if (!at) { if (!p || !p.onFoot) return no('afloat', 'Not from the canoe: go ashore first.'); at = this.spotNear(p.x, p.z, p.heading); }
+    if (!at) {
+      if (!p || !p.onFoot) return no('afloat', 'Not from the canoe: go ashore first.');
+      at = this.spotNear(p.x, p.z, p.heading);
+      // within a camp's area it is set out at camp (as packs.js Q does), from the book too
+      const a = this.camp && typeof this.camp.reachArea === 'function' ? this.camp.reachArea() : null;
+      if (a) at = { ...at, camp: a.key || 'camp' };
+    }
     const o = t.obj;
     if (t.kind === 'container' && o.where === 'in') this.unnest(o);
     o.where = 'ground'; o.hand = null;
@@ -757,7 +782,7 @@ export class Inventory {
     const p = this.player;
     // afloat in your own canoe, whatever you carried is in the hull (a swim from shore leaves things where they are)
     if (p && p.mode !== this.prevMode) {
-      if (p.mode === 'paddle') this.stowCarried(true);
+      if (p.mode === 'paddle') this.stowCarried(); // camp 1: what is set out at a camp stays there (the camp redone)
       this.prevMode = p.mode;
     } else if (p && p.mode === 'paddle' && !this.atStash && (this.ver !== this.paddleVer)) { this.paddleVer = this.ver; this.stowCarried(); } // put on at the dock's counter, then paddled off
     if (this.pendingNote && this.hud) { this.hud.note(this.pendingNote, 9); this.pendingNote = null; }
@@ -777,8 +802,8 @@ export class Inventory {
     for (let i = this.containers.length - 1; i >= 0; i--) { const c = this.containers[i]; if (c.item === 'pile' && !c.grid.length) { this.containers.splice(i, 1); this.dirty = true; } }
     if (this.dirty && (this.saveT += dt) > SAVE_EVERY) this.write();
   }
-  // what you carry goes into the canoe (a launch, a teleport, a ride, an evacuation), and the packs set out at camp
-  // with it (a launch strikes the camp; a ride or an evacuation takes them along)
+  // what you carry goes into the canoe (a launch, a teleport, a ride, an evacuation); with camp true the packs set out
+  // at a camp too (nothing asks that since the camp redone: what you leave at camp stays there until you fetch it)
   stowCarried(camp = false) {
     let moved = false;
     for (const c of this.containers) if (c.where === 'back' || c.where === 'chest' || c.where === 'hands' || (camp && c.where === 'ground' && c.at && c.at.camp && !c.at.left)) { c.where = 'canoe'; c.hand = null; c.at = null; moved = true; }

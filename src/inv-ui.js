@@ -593,6 +593,7 @@ const ICONS = {
   canoe: [170, 50, (c) => drawCanoe(c, '#b9c0c4', '#7d868c')], aluminium: [170, 50, (c) => drawCanoe(c, '#b9c0c4', '#7d868c')], kevlar: [170, 50, (c) => drawCanoe(c, '#d8b86a', '#6a4a2a')], royalex: [170, 50, (c) => drawCanoe(c, '#4f7a4a', '#2a3a24')],
   breakfast: [60, 104, (c) => drawBag(c, '#d6c08a', [['#a88a52', 30], ['#f0e6c8', 12]], PAL.blue)],
   sleepingbag: [100, 108, (c) => drawBagSack(c, '#7a2f2a', '#4a1a16')], bag: [100, 108, (c) => drawBagSack(c, '#7a2f2a', '#4a1a16')], clothes: [100, 100, drawDryBag],
+  fish: [120, 50, (c) => drawFish(c, 'walleye')], // a fish on the stringer (picture() draws it by its species) and a fried one
   pot: [100, 96, drawPot], tarp: [100, 100, drawTarp], crate: [100, 100, drawCrate], pile: [100, 100, drawCrate], stringer: [60, 104, drawStringer], yoke: [110, 52, drawYokePads],
   map: [100, 102, drawMap], berries: [80, 80, drawBerries], blueberries: [80, 80, drawBerries], mushroom: [80, 80, drawMushroom], firewood: [112, 54, drawFirewood],
   cedaryoke: [150, 52, drawCedarYoke], net: [80, 120, drawNet], blanket: [100, 90, drawBlanket], jacket: [100, 80, drawJacket], sail: [50, 110, drawSail], cover: [100, 90, drawCover],
@@ -912,8 +913,10 @@ function itemMenu(g, e) {
     return out;
   }
   if (e.box) out.push({ label: 'Open it', run: () => reveal(e.uid) });
-  if (d && d.eat) out.push(d.eat.cook ? { label: 'Cook it first: the pot on a fire', disabled: true } : { label: 'Eat it', run: () => eat(e) });
-  if (g.opts.onUse) { const u = g.opts.onUse(e, 'label', g.c); if (u) out.push({ label: u, run: () => g.opts.onUse(e, 'use', g.c) }); }
+  // a use of its own (cook.js: "Cook it on the fire" at a burning fire) stands in for the greyed "Cook it first"
+  const use = g.opts.onUse ? g.opts.onUse(e, 'label', g.c) : null;
+  if (d && d.eat && !(d.eat.cook && use)) out.push(d.eat.cook ? { label: 'Cook it first: the pot on a fire', disabled: true } : { label: 'Eat it', run: () => eat(e) });
+  if (use) out.push({ label: use, run: () => g.opts.onUse(e, 'use', g.c) });
   if ((e.qty || 1) > 1) out.push({ label: `Split off ${Math.floor((e.qty || 1) / 2)}`, run: () => split(g, e) });
   if (d && d.w !== d.h) out.push({ label: 'Turn it', run: () => turn(g, e) });
   for (const o of others(g).filter((k) => k.c.id !== e.uid && firstFit(k.c, e.id, e.qty || 1)).slice(0, 5)) out.push({ label: `Move to the ${lower(short(itemDef(o.c.item)) || nameOf(o.c))}`, run: () => { if (!moveInto(g, e, o)) note('No room in there.', 2.5); } });
@@ -1039,8 +1042,11 @@ export class PackSide {
     const longs = (inv.long || []).filter((l) => stash || l.where === 'hands' || (l.where === 'canoe' && atCanoe) || (l.where === 'ground' && l.at && p && Math.hypot(l.at.x - p.x, l.at.z - p.z) < 3));
     const kgOn = typeof inv.weight === 'function' ? inv.weight() : on.reduce((k, c) => k + weightOf(c), 0);
     const food = typeof inv.foodWords === 'function' ? inv.foodWords() : '';
+    // at a camp the food words count the camp's reach (inventory.campReach: the barrel in the canoe on the shore), more
+    // than the grids below show
+    const atCamp = !stash && !!(inv.camp && typeof inv.camp.reachArea === 'function' && inv.camp.reachArea());
     this.el.innerHTML = `<header class="pk-head">
-        <div class="lede"><div class="sc kicker">The pack · ${stash ? 'at the outfitter’s, everything you own' : 'what you carry and what is within reach'}</div><h2>${kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light'}</h2><div class="sub">${esc(loadWords(kgOn))}${food ? ` · ${esc(food)} within reach` : ''}</div></div>
+        <div class="lede"><div class="sc kicker">The pack · ${stash ? 'at the outfitter’s, everything you own' : 'what you carry and what is within reach'}</div><h2>${kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light'}</h2><div class="sub">${esc(loadWords(kgOn))}${food ? ` · ${esc(food)} ${atCamp ? 'about the camp' : 'within reach'}` : ''}</div></div>
         <div class="pk-note pencil" aria-live="polite">${esc(noteNow())}</div>
         ${pr ? `<div class="purse"><span class="sc">In hand</span><b>$${pr.money}</b></div>` : ''}
       </header>

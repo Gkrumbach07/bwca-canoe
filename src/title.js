@@ -31,8 +31,8 @@ const KEYMAP = [
   ['On foot', [
     [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'],
     [['Space'], 'walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m; otherwise a hop · with the canoe overhead you only stagger'],
-    [['E'], 'pick up a pack, a barrel or a thing on the ground · at the canoe: load what you carry, launch · set a carried canoe down'],
-    [['Q'], 'set down what you carry · shoulder a canoe on the ground · at a trail head: take one more pack, or fetch what is left'],
+    [['E'], 'pick up a pack, a barrel or a thing on the ground · at the canoe: load what you carry, launch; with things set out about it, hold to load everything here · set a carried canoe down'],
+    [['Q'], 'set down what you carry · shoulder a canoe on the ground · at the canoe: launch and leave what is set out · at a trail head: take one more pack, or fetch what is left'],
     [['W'], 'past your depth: swim (Shift harder) · Space climbs out onto a rock, a dock or the bank · E at the canoe climbs in'],
   ]],
   ['At an outfitter', [
@@ -43,8 +43,11 @@ const KEYMAP = [
     [['E'], 'talk to someone you face (again: their task) · choose with 1–9 or a click, Esc to leave'], [['T'], 'what was said: the last six lines'],
   ]],
   ['At camp', [
-    [['E'], 'pitch the tent, gather wood, light and feed the fire, cook, the latrine, fill the bottle, sleep · berries and mushrooms in season, anywhere, into a container in reach'],
+    [['E'], 'held, a ring filling on the action line (let go and it stops where it got to, hold again to carry on): pitch the tent where its ghost stands green, phase by phase · strike it by day · lay and light the fire, put it out · hang the barrel from a tree, let it down · the latrine · the saw at a down log'],
+    [['E'], 'a tap: pick up a dead branch or a short log into your arms · at a burning fire: feed it, put the pot on (a fish, or the meal of the hour with water from the bottle), eat what is in it on the bench · fill the bottle · sleep at the tent · berries and mushrooms in season'],
+    [['Q'], 'at the ring with wood in your arms: stack it on the woodpile · at a half-pitched tent: take it down (held) · at night: strike the tent (held), or with no fly on, sleep without it'],
     [['←', '→'], 'standing at the tent in the evening: when to wake (first light, 7:00, 9:00); E turns in, Esc not yet'],
+    [['I'], 'cook a raw meal from the book at a burning fire (Use), keep what is cooked as leftovers · nothing at camp is struck, put out or packed for you: what you leave stays'],
   ]],
   ['The camera', [
     [['C'], 'raise it (the $25 35 mm, or the disposable a photo notice lends) · C or Esc lowers it'], [['wheel'], 'zoom from a normal lens to a long one (Q and E held too)'],

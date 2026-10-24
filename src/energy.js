@@ -1,16 +1,34 @@
 import { clamp } from './rng.js';
 import { monthDay } from './astro.js';
 import { LIFE } from './pace.js';
+import { itemDef } from './items.js';
+// an item's food family for the readout: 'meal' (raw, to cook), 'snack', 'forage', 'hot' (cooked: camp 2's hot:* and
+// fried:*), or its own kind
+const FOOD_KIND = (id) => { const d = itemDef(id); return !d ? '' : d.kind === 'food' && d.cooked ? 'hot' : d.kind; };
+// the meals, snacks and hot meals in some containers, and their words ("a hot meal, 3 meals and 1 snack", or '')
+function poolWords(pool) {
+  let meals = 0, snacks = 0, hot = 0;
+  for (const c of pool) for (const e of c.grid) {
+    if (e.box) continue;
+    const k = FOOD_KIND(e.id);
+    if (k === 'meal') meals += e.qty; else if (k === 'snack' || k === 'forage') snacks += e.qty; else if (k === 'hot') hot += e.qty;
+  }
+  const n = (x, one) => `${x === 1 ? (one === 'hot meal' ? 'a' : '1') : x} ${one}${x === 1 ? '' : 's'}`;
+  const parts = [hot ? n(hot, 'hot meal') : '', meals ? n(meals, 'meal') : '', snacks ? n(snacks, 'snack') : ''].filter(Boolean);
+  return { meals, snacks, hot, words: parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] || '' };
+}
 
 // Energy: one bar from 0 to 1, and in Adventure three needs that pull it down (rest, food, water), the way Wild n
 // Chill's single bar works. The bar drains slowly with the clock, faster with the paddle (speed, hustle, a wind on the
 // bow), on the portages (by the load on your back, player.loadKg, when the packs set it) and after dark; it comes back
 // when you sit or stand still, faster at a campsite (restBoost) and after a meal.
 // Food is items (the owner's feedback of 2026-10-24, stream A: items.js, inventory.js). A meal (oatmeal, rice and
-// lentils, a freeze-dried supper) or a kept fish is cooked on the grate at camp (meal('hot'), meal('fish'): the meal
-// comes out of the food in reach); a snack or a berry is eaten from the inventory, standing still, on foot or in the
-// canoe (inventory.eat → eatItem). There is no G and, on a trip, no meal on its own at dawn or dusk: hunger asks you to
-// eat. energy.food is the days of food with you (the meals in reach, two a day); writing it places or takes meals.
+// lentils, a freeze-dried supper) or a kept fish is only eaten cooked: camp 2's cook.js puts it on the grate of a burning
+// fire with water from the bottle (useWater) for a short wait, and what comes off (items.js hot:*, fried:*) is eaten at
+// the fire or kept a few hours as leftovers (eatItem; onEat lets cook.js sit you down to it); a snack or a berry is eaten
+// from the inventory, standing still, on foot or in the canoe (inventory.eat → eatItem). There is no G and, on a trip, no
+// meal on its own at dawn or dusk: hunger asks you to eat. energy.food is the days of food with you (the meals in reach,
+// two a day); writing it places or takes meals. meal(kind) is the old whole meal at once (no trip, Sandbox's tests).
 //
 // The needs (Adventure, while a trip is under way; each 0 to 1):
 // - rest: what the last night gave (the tent's quality × min(1, hours slept / 7)), falling the longer you are awake;
@@ -95,7 +113,7 @@ export class Energy {
     this._food = 0;
     this.value = 1; this.food = 0; this.fedUntil = -1;
     this.lastHours = day.hours; this.warned = false; this.warnTimer = 0;
-    this.onEvac = null; this.onNote = null;
+    this.onEvac = null; this.onNote = null; this.onEat = null; // onEat(eat, name): camp 2's cook.js
     this.trip = null;       // the trip's rules (trip.js), set by the trip
     this.exertion = 0;      // what the paddle cost this frame, for the HUD
     this.awakeSince = this.now;
@@ -128,8 +146,28 @@ export class Energy {
   get inv() { const i = this.inventory; return i && i.attached ? i : null; }
   get food() { const i = this.inv; return i ? i.meals() / 2 : this._food; }
   set food(v) { const i = this.inv; v = Math.max(0, Number(v) || 0); if (i) i.setMeals(v * 2); else this._food = v; }
-  // what there is to eat with you, in words ("5 meals and 2 snacks"), for the readout
-  foodWords() { const i = this.inv; return i ? i.foodWords() : this._food > 0 ? `${this._food} day${this._food === 1 ? '' : 's'} of food` : 'no food'; }
+  // what there is to eat with you, in words ("5 meals and 2 snacks", "a hot supper and 3 meals"), for the readout. camp 2:
+  // at your camp it is the camp's reach (stream 1's inventory.campReach: the barrel by the tent, the pot on the grate),
+  // so the readout by the fire does not say "no food" while the barrel at the tent has berries in it
+  foodWords() {
+    const i = this.inv;
+    if (!i) return this._food > 0 ? `${this._food} day${this._food === 1 ? '' : 's'} of food` : 'no food';
+    let pool;
+    try { pool = typeof i.campReach === 'function' ? i.campReach() : i.foodPool(); } catch { pool = null; }
+    if (!pool) return i.foodWords();
+    return poolWords(pool).words || 'no food';
+  }
+  // camp join: the food in the barrels hung at your camp (inventory.hungAtCamp), counted apart from what is to hand:
+  // { days (two meals a day), words ("3 meals and 1 snack hung in the barrel", or '') }. The HUD's food mark and the
+  // readout count it, so a barrel hung for the night does not read as "No food".
+  hungFood() {
+    const i = this.inv;
+    if (!i || typeof i.hungAtCamp !== 'function') return { days: 0, words: '' };
+    const hung = i.hungAtCamp();
+    if (!hung.length) return { days: 0, words: '' };
+    const w = poolWords(hung);
+    return { days: (w.meals + w.hot) / 2, words: w.words ? `${w.words} hung in the ${hung.length > 1 ? 'barrels' : 'barrel'}` : '' };
+  }
   // a ration out of the pack for a meal on the grate (supper in the evening): false when there is none
   useRation(kind) {
     const i = this.inv;
@@ -217,6 +255,16 @@ export class Energy {
     this.noted.dry = false;
     return Math.max(0, add);
   }
+  // camp 2: water out of the bottle for the pot (cook.js: a dehydrated meal wants its water; boiled, lake water is safe, so
+  // what is still under a tablet goes first). Returns whether there was enough (none is taken when there was not).
+  useWater(litres) {
+    const l = Math.max(0, Number(litres) || 0);
+    if (this.bottle < l - 0.001) return false;
+    const a = Math.min(this.treating, l);
+    this.treating -= a; this.drinkable = Math.max(0, this.drinkable - (l - a));
+    if (this.treating <= 0.001) this.treating = 0;
+    return true;
+  }
   // "1.4 L in the bottle", "2 L in the bottle, drinkable in 20 min", "the bottle is dry"
   bottleWords() {
     const l = (x) => `${x >= 1.95 ? '2' : x.toFixed(1)} L`;
@@ -258,6 +306,7 @@ export class Energy {
     this.fedUntil = Math.max(this.fedUntil, now + (eat.hot ? FED_HOURS : FED_HOURS / 2));
     if (eat.hot || food >= 0.45) { this.lastMealAbs = now; this.lastMealKind = eat.hot ? 'hot' : 'cold'; this.lastMealAuto = false; }
     if (name) this.lastEaten = { name, at: now };
+    if (this.onEat) { try { this.onEat(eat, name); } catch (e) { console.warn('energy.onEat', e); } } // camp 2: a hot meal near the bench is eaten sitting (cook.js)
     return true;
   }
   // the bar up by x, but not past the ceiling (unless it already stood above it)

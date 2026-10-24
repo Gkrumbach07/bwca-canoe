@@ -100,7 +100,23 @@ for (const [sp, name, w, h] of [['walleye', 'Walleye', 2, 1], ['pike', 'Northern
   defineItem({ id: `fish:${sp}`, name, kind: 'fish', w, h, kg: 0.8, species: sp, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, words: 'Kept for supper. Fry it on the grate.' });
 }
 defineItem({ id: 'leeches', name: 'Leeches', kind: 'bait', kg: 0.025, stack: 12, price: 4, sold: 12, lure: 'leech', icon: 'leeches', words: 'Fresh from the bait fridge, for the bobber rig. A walleye can’t leave one alone.' });
-defineItem({ id: 'firewood', name: 'An armful of firewood', kind: 'firewood', w: 3, h: 2, kg: 6, words: 'Dead and down, broken to length.' });
+defineItem({ id: 'firewood', name: 'An armful of firewood', kind: 'firewood', w: 3, h: 2, kg: 6, burn: 2.4, words: 'Dead and down, broken to length.' });
+// camp 2 (the camp redone, 2026-10-24): firewood is found lying about, a piece at a time (chores.js), and burns by the
+// piece (burn: game hours on a fire, fire.js); a few pieces are carried in the arms, a hand's armload (woodarms, drawn by
+// chores.js). The grate holds what is cooking or cooked and the pot (cook.js): a fixed container at the fire ring.
+defineItem({ id: 'wood:branch', name: 'Dead branch', short: 'Branch', kind: 'firewood', w: 1, h: 2, kg: 0.7, burn: 0.6, icon: 'firewood', words: 'Dead and down, dry enough to snap over a knee. Kindling, and it burns quick.' });
+defineItem({ id: 'wood:log', name: 'Short log', short: 'Log', kind: 'firewood', w: 1, h: 3, kg: 2.2, burn: 1.5, icon: 'firewood', words: 'A length of dead spruce, a forearm long. It burns long once the fire is going.' });
+defineItem({ id: 'woodarms', name: 'Armload of wood', short: 'Armload', kind: 'container', w: 2, h: 3, kg: 0, hand: true, container: { cols: 3, rows: 3, accepts: ['firewood'] }, icon: 'firewood', words: 'Branches and logs in the crook of an arm, bark and all.' });
+defineItem({ id: 'grate', name: 'On the grate', short: 'The grate', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool'] }, icon: 'pot', words: 'The steel grate over the fire ring.' });
+// what comes off the grate: a meal cooked (hot, eaten at the fire, or kept a few hours as leftovers) and a fish fried
+for (const [id, raw, name, words] of [
+  ['hot:breakfast', 'meal:breakfast', 'Hot oatmeal', 'Oatmeal, brown sugar and raisins, steaming in the pot.'],
+  ['hot:supper', 'meal:supper', 'Rice and lentils, hot', 'Curry rice and lentils, thick and hot.'],
+  ['hot:freeze', 'meal:freeze', 'Freeze-dried supper, ready', 'Soaked and steaming in its bag. It smells like a real supper.'],
+]) defineItem({ id, name, kind: 'food', w: 1, h: 1, kg: 0.6, cooked: raw, keep: 5, eat: { ...ITEMS[raw].eat, cook: false, hot: true }, icon: 'pot', words });
+for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['smallmouth', 'Smallmouth bass'], ['laketrout', 'Lake trout'], ['perch', 'Yellow perch'], ['crappie', 'Crappie'], ['fish', 'Fish']]) {
+  defineItem({ id: `fried:${sp}`, name: `Fried ${sp === 'fish' ? 'fish' : name.toLowerCase().replace(/^northern /, '')}`, kind: 'food', w: 2, h: 1, kg: 0.5, cooked: `fish:${sp}`, keep: 4, species: sp, eat: { food: 0.6, lift: 0.45, hot: true }, icon: 'fish', words: 'Cleaned at the water and fried golden in the pot lid.' });
+}
 
 // --- the tackle --------------------------------------------------------------------------------------------------
 defineItem({ id: 'lure:jig', name: 'Jig & twister tail', kind: 'lure', kg: 0.01, price: 3, lure: 'jig', words: 'A lead head and a curly tail. Hop it along the bottom for walleye.' });

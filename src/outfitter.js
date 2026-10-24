@@ -717,7 +717,7 @@ export class Outfitter {
     this.save();
   }
   // the food you can reach, in the inventory's words ("1 meal and 2 snacks"), else in days
-  foodWords() { const inv = invModel(); if (inv && typeof inv.foodWords === 'function') { const w = inv.foodWords(); return w === 'no food' ? 'no food with you' : w; } return `${fmtDaysWords(this.energy ? this.energy.food : 0)} of food`; }
+  foodWords() { const inv = invModel(); if (inv && typeof inv.foodWords === 'function') { const w = inv.foodWords(), h = this.energy && this.energy.hungFood ? this.energy.hungFood().words : ''; if (h) return w === 'no food' ? h : `${w} · ${h}`; return w === 'no food' ? 'no food with you' : w; } return `${fmtDaysWords(this.energy ? this.energy.food : 0)} of food`; }
   // "Resupply · carry on" (or leaving the counter during a trip): the trip goes on
   carryOn() {
     const a = this.at, en = this.energy;

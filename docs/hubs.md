@@ -536,6 +536,138 @@ store with the keeper and a visitor; no console errors.
   "no food" with berries in the barrel at the tent.
 - A wind capsize needs open water: a river's short fetch never builds the sea.
 
+(The first two were the camp pass's, below: done.)
+
+### The camp redone, stream 1: the tent where you choose, the barrel hung, nothing left to itself
+
+The owner: "setting up tent should be done where you say set up tent, should go through phases, like flat staked, poles
+up, tent up, raintarp on. you have to press and hold as it goes through the phases, and if you stop then it stops at a
+phase you were last on", "you have to hang your blue food barrel", and "it doesnt do it automatically when you leave,
+and you CAN leave stuff. you need to repack bags in canoe". The details are in [trip-core.md](trip-core.md), "Camping
+and sleep".
+
+- **Held work** (`hold.js`): any job that takes time is a held key with a radial ring in the action line's key, a tick
+  per phase and the phase's name; it moves only while the key is down, passes each phase's minutes on the clock, and
+  stops where it stands when you let go. Both streams' jobs use it (the tent, the barrel, the canoe's load; the fire,
+  the saw, the latrine).
+- **The tent where you choose** (`camp.js`, `tent.js`): a ghost green on good ground and red where it can't stand, with
+  the reason; held E through four phases, each drawn (the sheet unrolls, the poles stand, the tent rises, the fly
+  settles); a half-pitched tent stays so across reloads; struck the same way back into a pack. The site is claimed
+  from the first phase until the strike. Only the fly sleeps best; without it the rain soaks you.
+- **The barrel hung** (`hang.js`): from a real limb of a drawn white pine, red pine or birch, 3 m up and 1.8 m out,
+  the rope tied off round the trunk; let down with a held E. A barrel left on the ground overnight in Adventure may be
+  raided.
+- **Nothing on leaving**: launching strikes nothing, puts nothing out and packs nothing; a note says what is still
+  ashore, and it stays, across reloads, until you come back.
+- **Repacking** (`packs.js`): a held E at the hull loads everything set out about the camp; Q launches and leaves it.
+  E picks up a pack set out at camp like anything on the ground. A reload in the middle of a carry comes back on the
+  trail with the canoe overhead and the carry on you (`packs.resumeCarry`).
+- **The camp's reach** (`inventory.campReach`): at a site that is free or yours, what is set out within its area and
+  the canoe lying there count for the food, the wood, the tent and the pot.
+
+### The camp redone, stream 2: the fire, the food and the latrine
+
+The owner: "picking up firewood should be actually walking around camp and finding loose branches and logs, putting
+them in your inventory", "you make a fire so you can cook so you can eat. not just press G ... it puts a small pot on the
+grate and you cook for some time, you have to wait short time but not instant, then you can eat", "the toilet actually
+you should actually sit", "you should be able to snuff out fire". Built on stream 1's held ring (hold.js) and camp reach
+(`inventory.campReach`); the details are in [trip-core.md](trip-core.md), "Camping and sleep".
+
+- **Firewood** (`chores.js`): dead branches and short logs about every site (12 and 5, under the trees and by the down
+  logs) and in the woods' cells, the same every visit, back two days after they are taken. E picks one up into an
+  armload in a free hand (`woodarms`, drawn at the hip and set down beside you when you sit), else into a pack you
+  carry. The saw cuts three logs off a down log (held). An armload is stacked on the woodpile by the ring.
+- **The fire** (`fire.js`): laid and lit with a held E (kindling first), fed a piece at a time with a tap, put out with
+  a held E (three phases, a steam cloud and a hiss). Left, it burns down and its coals smoulder ten hours, so the
+  morning's fire still wants putting out; a branch on hot coals brings it back. Nothing puts it out for you.
+- **The pot** (`cook.js`): a tap at a burning fire puts the best raw thing in the camp's reach on the grate (a fish
+  first, else the meal of the hour), with water from the bottle; it cooks 6 to 8 real seconds (20 to 25 game minutes),
+  steaming, bubbling or sizzling, then chimes. E eats it sitting on the bench (the pot in one hand, the spoon to the
+  mouth: canoe.js `poseSit` with `move.eat`); the book can keep it as leftovers for five hours. Raw is never eaten.
+- **The latrine:** a held E walks you to the box and sits you on it (the rig carried onto the seat, poseSit).
+- **The readout's food** at camp counts the camp's reach (the barrel by the tent, a hot meal in the pot).
+- **Programs and lights:** the steam (one shader, two emitters) is drawn from the first frame, parked; the wood, the pot
+  and the hand things are on the props' material. A full evening adds no program of its own (the evening's sun shafts,
+  post.js, compile once as the sun gets low, as before); the lights stay at 5.
+
+### The camp redone, joined and played
+
+The two streams joined on `claude/camp-redo` (main 7abe24c and the two merges), then played as a player through the
+real and held keys, headless at 1440 × 900: a new Adventure season at entry point 30 (July 12, 7:40, $40), two camp
+evenings on Lake One and the leaving between them.
+
+- **Outfitting.** At the provisions shelf a 30 L barrel ($25), two rice suppers, two oatmeal breakfasts and a trail mix
+  dragged into it ($1 left); the barrel carried out on the back and loaded with E at the hull; launched at 7:45. A 48 cm
+  pike landed and kept 1.7 km out (8:33).
+- **Evening 1, site A** (1.1 km north-east of the store; ashore 8:47, 2.9 km, energy 97 %). The A-frame's ghost green
+  at the pad and red over the ring ("too near the fire ring"); E held to the A-poles and let go (8:56 to 9:06), a
+  reload, the tent still half up; held again to the tent hung, then the fly (9:17). Three branches and two logs picked
+  up walking 2 to 20 m about the site, stacked on the woodpile with the armload's Q at the ring. A wait to 16:30 (energy
+  73 %, the bottle down to 0.15 L, filled at the shore); the fire laid and lit (held, 16:43 to 16:58, 2½ h of wood). The
+  barrel carried up from the canoe and the supper cooked from the book (Use, 0.4 L from the bottle, 8 real seconds and 25
+  game minutes, steaming; a branch fed meanwhile), eaten on the bench (food 0.59 to 1.0); the pike fried (a tap) and
+  kept in the barrel as leftovers (gone off by morning). The latrine held (18:24 to 18:35, rest +0.045). The barrel hung
+  from a white pine's limb 5 m up, let go after the rope and carried on (18:46). By the fire to 19:45; the wake card,
+  7:00. Night 1: "Rain on the fly all night", dry, up at 7:00 with energy 85 %.
+- **The leaving.** The barrel let down; two branches; a breakfast fire; the oatmeal refused at first (0.27 L for 0.3),
+  the bottle filled, cooked and eaten; the fire put out (held, the steam); the tent struck to the floor (E held), the
+  rest taken down with Q, pitched again and left standing on purpose; the pack set out by the tent and "Load everything
+  here" held at the hull (the pack and the barrel, 13 kg, 8:58 to 9:00). E launched: "The tent is still up. Everything
+  stays as it is until you come back." A reload 350 m out: the tent up, the site still held.
+- **Site B** (1.2 km west; ashore 9:16, 4.1 km): no ghost, and now the line says why ("your tent is up 1.2 km north-east,
+  at the campsite on Lake One: strike it there to pitch it here"). An afternoon's wait, the bottle filled, five pieces
+  gathered, the fire lit, two stacked, supper cooked and eaten on the bench (17:29), the latrine (rest 0.59 to 0.64).
+  The leech bucket set down by the hull and a reload with the fire burning; Q "Launch and leave the leech bucket": "The
+  fire is still burning; the leech bucket is set out. Everything stays as it is until you come back."
+- **Back for the tent** (A at 18:01, 5.3 km): standing as left. At dusk the fly taken off (Q held), rain at bedtime (set
+  by hand: the forecast was clear), Q "Sleep without the fly": "a damp night in wet gear", the night at 0.61 (0.85 ×
+  0.9 × 0.8), the gear soaked by morning; the tent struck with Q into the pack, a breakfast fire, "Your gear is dry by
+  the fire", put out, the barrel set out and loaded with "Load everything here", launched with nothing left. At B the
+  bucket picked up and loaded (6.5 km); a fire left to burn down to coals (8:03 to 10:06), a branch on them ("it
+  catches again"), put out.
+- **The dome and the saw** (put in the pack for the test: the season had $1): the dome's ghost and its four phases
+  drawn as the dome; the saw's three lengths from a down log at B, resumed after picking up the first.
+- **Keys:** at the ring, the tent, the latrine, the hull, the wood and the bench, turning round at each: one owner of E
+  and of Q on every line. The book holds the keys while it is open; forage takes E only over a plain line or the ghost.
+- **Numbers:** 97 programs at a fresh load (98 with the glint's sprite now compiled behind the title), 101 after the
+  whole play (the glint, and a plain lambert and a custom shader that are not the camp's); lights 5; frames 7.3 ms
+  median (9.1 at the 90th) by the fire at B, 842 draw calls; no console errors besides the book's fish icon.
+
+### What the camp join fixed
+
+- **The A-frame drawn as the dome.** The starting kit's A-frame is a ridge tent now (props.js `buildAFrameMesh`, end on,
+  an A of poles at each end and a ridge pole, a vestibule over the door with a flap rolled back), with its own stages
+  (the floor staked, the A-poles up, the tent hung, the fly on), its own ghost and size; the dome stays the dome.
+- **The book's pack side threw** with a fish on the stringer in reach (no 'fish' in the icon table): the canoe's grids
+  never drew.
+- **"No food"** in four places at camp: the resume note after a reload at camp (the area not read before the first
+  frame), the HUD's mark while gathering the site's own wood (it lay out to 30 m, the area is 25), the mark and the
+  readout all evening once the barrel was hung, and the book's food words at the fire ("within reach" over empty
+  grids: "about the camp" now). Cooked leftovers count in the book's words too.
+- **The woodpile** could only be stacked from behind its undrawn spot (the ring's E is the fire's): the armload's Q at
+  the ring stacks it.
+- **The fire's plain lines** ("no wood to hand", "logs will not light on their own") never showed over "The canoe is
+  17 m away".
+- **Water for the pot:** "wants 0.3 L and the bottle has 0.3 L" (0.27); the line says it in mL before the tap.
+- **A thing set down by the hull** took the canoe's E from every side: "Q Launch and leave it". A thing set down from
+  the book within a camp's area counts as set out at camp.
+- **One tent at a time**: at another site, where yours stands; the readout's Pack row says it too.
+- **The strike's notes** named the wrong key, and the night card said "a still night" in the rain falling at bedtime.
+- **The menu's greyed "Cook it first"** beside "Cook it on the fire", the barrel's name in the hang's lines, "leave
+  them" for one thing, and forage's glint compiled mid-play.
+- **The Controls card and the README** speak the held jobs, the ghost, the hang, the fire, the pot, the latrine and
+  "Load everything here".
+
+### Left after the camp join
+
+- One tent stands at a time: a second tent (the A-frame and a bought dome) cannot be pitched while the first stands
+  elsewhere.
+- A fire lit in the late afternoon is cold by a 7:00 wake (it smoulders ten hours after the last wood), so the morning
+  douse only meets coals after a fire fed late.
+- The book does not show the camp's reach (the barrel in the canoe on the shore) as grids: cooking from the book means
+  carrying the food up, as a player would; a tap at the fire reaches the whole camp.
+- The mid-portage reload (stream 1's `resumeCarry`) and the bear's night were not played again here.
+
 ## What phase 4 will do
 
 **A season's balance at the new pace.** Phase 2's progression was played at 2 to 4 km a game day; at Trip pace a day
@@ -546,9 +678,9 @@ is 20 to 25 km, and the three days above give the first numbers to balance again
   camera). That is fast next to the bent-shaft ($40) and the Kevlar ($240): replay ten game days and set the pay so the
   Kevlar is about two weeks.
 - **The idle clock.** A camp reached at 10:30 has six hours to wait at the 12× clock (half an hour of real time at 1×)
-  with nothing to do: fishing from the shore, a nap, or chores that fill the afternoon would help. Pushing off strikes
-  the tent and drowns the fire, so an evening paddle for a beaver means pitching again; a base camp left standing for a
-  day trip is worth deciding.
+  with nothing to do: fishing from the shore, a nap, or chores that fill the afternoon would help (the camp redone gives
+  some: wood to walk for, the fire, the pot, the barrel). Pushing off no longer strikes the tent or drowns the fire, so
+  a base camp can be left standing for a day trip.
 - **Rest.** A 7:00 start on the A-frame (0.85) leaves rest at 0.47 by 22:00 and the bar "held down by tiredness" all
   evening; the latrine's +0.05 hardly shows. Check the evening against a real day's 20 km.
 - **The camera's reach** stays 120 m for a moose and 60 m for a beaver; with the zoom a moose at 120 m still stands about

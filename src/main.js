@@ -55,6 +55,7 @@ import { ContainerView } from './containers.js'; // fb A
 import { invUI } from './inv-ui.js'; // fb B
 import { Dialogue } from './dialogue.js'; // fb F
 import { Forage } from './forage.js'; // fb G
+import { hold } from './hold.js'; // camp 1
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -262,7 +263,9 @@ async function main() {
   const title = new Title({ world, player, chase, camera, day, hud, settings, saver, saved, trip, outfitter });
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
   // (on foot with the canoe set down somewhere, at a camp say, you come back on foot beside it)
-  if (saved && saved.mode === 'walk' && player.standAt(saved)) chase.snap();
+  // camp 1: one saved in the middle of a carry comes back on the trail, the canoe overhead and the carry on you (packs.js)
+  if (saved && saved.mode === 'carry' && packs.resumeCarry(saved)) chase.snap();
+  else if (saved && saved.mode === 'walk' && player.standAt(saved)) chase.snap();
   else if (saved && (saved.mode !== 'paddle' || world.shoreAt(saved.x, saved.z) > -2)) player.teleport(saved.x, saved.z);
   title.open('title');
   // Compile every material the scene holds now, hidden ones too (the rise rings, the rain, the cloud deck and the
@@ -325,6 +328,25 @@ async function main() {
   if (shop.quietStrip) shop.quietStrip = () => {};
   const forage = new Forage({ world, player, day, tiles, scene, camp, hud, energy, audio, outfitter });
   window.__game.forage = forage;
+  // camp 1: the camp redone (camp.js, tent.js, hang.js, hold.js). The tent is pitched where you choose (a ghost, green or
+  // red), through its phases with E held (hold.js's ring: the footprint, the poles, the tent, the fly; let go and it
+  // stops there), struck the same way; the barrel hung from a real limb; nothing struck, put out or packed when you push
+  // off, and what you leave stays there; the canoe repacked by hand (packs.js: E picks up what is set out, a held E at
+  // the hull loads everything there). The camp runs hold.update and hold.before; camp stream 2's fire and pot use it too.
+  Object.assign(window.__game, { hold, hang: camp.hang });
+  // camp 2: the fire, the food and the latrine (chores.js, fire.js, cook.js). Firewood is found lying about and picked up
+  // into the arms; the fire is laid, lit, fed and put out by hand; a pot on the grate cooks for a short wait and is eaten
+  // sitting on the bench; the latrine is sat on. The figure sits through the walker's move (canoe.js poseSit): the cook's
+  // seat comes first, the rig is carried onto the seat before the pose and the spoon, the pot and the armloads are drawn
+  // after it; the book's Use cooks a raw meal at a burning fire.
+  const camp2 = camp.chores, moveOf2 = canoe.moveOf, pose2 = canoe.update, use2 = journal.pack.onUse;
+  canoe.moveOf = () => camp2.move() || (moveOf2 ? moveOf2() : null);
+  canoe.update = (dt) => { camp2.beforePose(); pose2(dt); camp2.afterPose(); };
+  journal.pack.onUse = (e, mode, c) => camp2.cook.onUse(e, mode, c) ?? (use2 ? use2(e, mode, c) : null);
+  window.__game.cook = camp2.cook;
+  // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
+  // the first time it winked over a ripe patch); programs already made are only looked up
+  renderer.compileAsync(scene, camera).catch(() => {});
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
