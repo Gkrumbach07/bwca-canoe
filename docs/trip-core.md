@@ -198,7 +198,7 @@ ahead. It goes off by itself in full daylight and when you sleep, and a note sug
 
 ### The single bar, the needs and water
 
-One energy bar, pulled down by three needs (Adventure, while a trip is under way; each 0 to 1):
+One energy bar, pulled down by four needs (Adventure, while a trip is under way; each 0 to 1):
 
 - **Rest:** what the last night gave (the tent's quality × hours slept / 7; the starting A-frame is 0.85, wet gear
   ×0.8), falling the longer you are awake (whole for the first couple of hours, about half by sixteen). Only sleep
@@ -211,11 +211,25 @@ One energy bar, pulled down by three needs (Adventure, while a trip is under way
   or more, or on a sunny July or August afternoon. The need only falls once the bottle is dry (to empty in 8 hours,
   5⅓ hard). On foot at the water's edge, **E Fill the bottle** (tablets: drinkable in half an hour); any counter
   fills it free at once.
+- **Warmth** (the second 2026-10-24 round, a gentle fourth need): it falls when the air you feel is under 12 °C (the
+  weather's temperature, less the wind afloat and half of it ashore, the rain on you, and 2 °C more after dark), 2.5×
+  as fast wet through (rain on you, a swim; wet gear counts a little), a little over half as fast paddling or walking,
+  and fast in the water (by the lake's temperature, with a gasp going in). It comes back by a fire (within 6 m, by its
+  heat), inside a store, slowly in warm air, and with a night in the tent and the bag (dry: all of it; damp gear 0.8; no
+  bag in reach 0.6). A July day and night barely touch it (20 s in the water after a July capsize costs 0.075); a wet
+  October evening away from the fire takes it from 1 to 0.37 in two and a half hours, the fire brings it back within
+  the hour, and 20 s in October water costs 0.3.
 
-How they pull the bar: it recovers only up to the ceiling, min(rest, 0.4 + 0.6 × food, 0.4 + 0.6 × water), and a bar
-above the ceiling is pulled down to it; a need below 0.3 drains the bar 1.5× and shows its mark (*tired*, *hungry* or
-*thirsty*, bottom right); a need at 0 stops recovery. The readout says what holds the bar down: "Energy 64 % · held
-down by thirst · up 11 h · 1.2 L in the bottle". At 0 with food in the pack and hunger part of it, you stop and eat.
+How they pull the bar (Wild n Chill's, the same round): each need takes a chunk off the bar's top end, W × (1 − need),
+with W rest 1, food 0.4, water 0.4, warmth 0.35, and the bar recovers only up to the ceiling, 1 − the chunks (it was
+min(rest, 0.4 + 0.6 × food, 0.4 + 0.6 × water): only the lowest need counted). A bar above the ceiling is pulled down
+to it; a need below 0.3 drains the bar 1.5×; a need at 0 stops recovery. A July day of travel ends within a few points
+of the old tuning (a dry bottle shows as a thirst chunk the old ceiling hid). The HUD draws the bar top left: green for
+the energy, a dim track up to the ceiling, and the chunks from the right end (cold pale blue, sleep orange, hunger
+yellow, thirst blue), dashed and marching while one grows faster than its everyday rate or while its need is low, with
+its icon (snowflake, zz, fork and knife, drop) under it; it shows only when it matters, and the old *tired* / *hungry*
+/ *thirsty* marks are gone. The readout says what holds the bar down: "Energy 52 % · held down by tiredness and cold ·
+up 11 h · 1.2 L in the bottle". At 0 with food in the pack and hunger part of it, you stop and eat.
 
 Every rate is per game hour, paid on the hours the clock passes, so a stretch costs what its game hours cost at any
 pace or game speed: the base (0.009 an hour), the paddle (0.045 an hour at a cruise, more for speed, hustle and a
@@ -297,14 +311,16 @@ landings (within 30 m of one its outfitter becomes known, with a note).
 ### energy.js (`Energy`)
 
 ```js
-energy.value, energy.needs { rest, food, water } (live: needs.food = 1 feeds you), energy.ceiling, energy.low,
-energy.heldBy, energy.bottle, energy.fill(litres, waitHours), energy.bottleWords(), energy.meal('cold' | 'hot' | 'fish'),
+energy.value, energy.needs { rest, food, water, warmth } (live: needs.food = 1 feeds you), energy.ceiling, energy.low,
+energy.chunks() ([{ key, size, growing, need }] in the bar's order), energy.soaked, energy.heldBy, energy.bottle, energy.fill(litres, waitHours), energy.bottleWords(), energy.meal('cold' | 'hot' | 'fish'),
 energy.sleep(q, hours), energy.fresh(), energy.rescued(), energy.spend(x), energy.restBoost, energy.food (ration days),
 energy.awake, energy.onEvac, energy.atCounter
 ```
 
 main.js hooks `trip.on('start')` to `energy.fresh()` (a trip puts in with the needs full) and `trip.on('evac')` to
-`energy.rescued()` (whoever comes out brings food and water); the bunk night sets the needs and the bottle itself.
+`energy.rescued()` (whoever comes out brings food and water, and warms you); the bunk night sets the needs and the
+bottle itself. For warmth it sets `energy.fires` (fire.js, `fires.near`) and `energy.indoors` (inside a store); the
+weather comes from `day.weather`, wet gear from `trip.state.wet`. `energy.spentWhy()` can now say `'cold'`.
 
 ### camp.js (`Camp`, `CampRegistry`)
 
