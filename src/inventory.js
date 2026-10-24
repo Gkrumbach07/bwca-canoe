@@ -30,7 +30,7 @@
 // Saved in its own namespace (`bwca-canoe:inventory`), tied to the profile's season (profile.seasonId). A season from
 // before the items migrates once (migrate()): the kit and the owned items, the packs, the days of food, the lures, the
 // leeches and the stringer become items in containers in the canoe.
-import { ITEMS, itemDef, sizeOf, fishKg, LEGACY, STARTER_KIT, FOOD_KINDS } from './items.js';
+import { ITEMS, itemDef, defineItem, sizeOf, fishKg, LEGACY, STARTER_KIT, FOOD_KINDS } from './items.js';
 import { save } from './save.js';
 
 const NS = 'inventory';
@@ -89,9 +89,15 @@ export class Inventory {
     save.write(NS, this.serialize());
   }
   serialize() {
-    return { v: VERSION, season: this.season, n: this.n, containers: this.containers.map((c) => ({ ...c, grid: c.grid.map((e) => ({ ...e })), at: c.at ? { ...c.at } : null })), long: this.long.map((l) => ({ ...l, at: l.at ? { ...l.at } : null })) };
+    // a signature item (sig:<ep>) is defined only once its store's profile is made: its definition rides in the save,
+    // so it is there when the inventory restores, before any store is drawn
+    const defs = {}, keep = (id) => { if (/^sig:/.test(id) && itemDef(id)) defs[id] = itemDef(id); };
+    for (const c of this.containers) for (const e of c.grid) keep(e.id);
+    for (const l of this.long) keep(l.id);
+    return { v: VERSION, season: this.season, n: this.n, containers: this.containers.map((c) => ({ ...c, grid: c.grid.map((e) => ({ ...e })), at: c.at ? { ...c.at } : null })), long: this.long.map((l) => ({ ...l, at: l.at ? { ...l.at } : null })), defs };
   }
   restore(s) {
+    for (const d of Object.values(s.defs || {})) if (d && d.id && !itemDef(d.id)) defineItem(d);
     this.season = s.season || (this.profile && this.profile.seasonId) || null;
     this.n = Math.max(1, s.n | 0);
     this.containers = (Array.isArray(s.containers) ? s.containers : []).filter((c) => c && itemDef(c.item)).map((c) => ({ id: c.id, item: c.item, name: c.name || itemDef(c.item).name, grid: Array.isArray(c.grid) ? c.grid.filter((e) => e && e.uid && (e.box || itemDef(e.id))).map((e) => ({ ...e, qty: Math.max(1, e.qty | 0) })) : [], where: c.where || 'stash', at: c.at || null, in: c.in || null, hand: c.hand ?? null }));

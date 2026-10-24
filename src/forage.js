@@ -6,6 +6,7 @@ import { word, plural } from './hud.js';
 import { mulberry32, hash2 } from './rng.js';
 import { save } from './save.js';
 import { step as rustle } from './audio-voices.js';
+import { ITEMS, defineItem } from './items.js';
 
 // Berries and mushrooms (fb G, 2026-10-24). The owner: "its hard to find blueberries, also add in more of the classic
 // berries you would see and where they would show up, same with mushrooms". This replaces the one blueberry patch a
@@ -179,6 +180,8 @@ export const FORAGE_ITEMS = FORAGE_IDS.filter((id) => FORAGE[id].pick).map((id) 
     words: `${s.name}, picked on the trip. ${mush ? 'Cook them first: on the grate with supper.' : 'Eat them as they are, or keep them for the pancakes.'}`,
   };
 });
+// defined as the module loads, before the inventory restores a save: a pint kept in the barrel comes back with it
+for (const def of FORAGE_ITEMS) if (!ITEMS[def.id]) defineItem(def);
 
 // --- the looks --------------------------------------------------------------------------------------------------------
 // Firewatch's graphic foliage: big simple faceted shapes coloured by the light. Each look is built once per variant in

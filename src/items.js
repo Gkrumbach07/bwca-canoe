@@ -55,6 +55,8 @@ export function itemDef(id) {
   if (d) return d;
   const s = String(id);
   if (s.startsWith('fish:')) return defineItem({ id: s, name: cap(s.slice(5)), kind: 'fish', w: 2, h: 1, kg: 0.8, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, words: 'Cleaned and kept for supper.' });
+  // a map sheet the inventory restores before the shop's sheets are in (shop.js loads sheets.js later and names it fully)
+  if (s.startsWith('sheet:')) return defineItem({ id: s, name: `Fisher map ${s.slice(6)}`, short: s.slice(6), kind: 'map', w: 2, h: 2, kg: 0.1, price: 8, icon: 'map', stub: true, words: 'A Fisher map sheet on waterproof paper.' });
   return null;
 }
 export function sizeOf(id, rot = 0) {

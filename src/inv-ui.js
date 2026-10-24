@@ -109,8 +109,11 @@ export function defineItem(def) {
 // a catalogue item (shop.js CATALOG, a sheet, a signature) as an item definition, made once
 export function itemFor(it) {
   if (!it) return null;
-  const have = itemDef(it.id); if (have) return have;
-  if (String(it.id).startsWith('sheet:')) return defineItem({ id: it.id, name: it.name, short: String(it.sheet || it.id.slice(6)), kind: 'map', w: 2, h: 2, kg: it.kg || 0.1, price: it.price || 8, icon: 'map', words: it.words || '' });
+  const have = itemDef(it.id); if (have && !have.stub) return have;
+  if (String(it.id).startsWith('sheet:')) { // a stub (items.js, a sheet restored before the shop knew it) takes its full name
+    const def = { id: it.id, name: it.name, short: String(it.sheet || it.id.slice(6)), kind: 'map', w: 2, h: 2, kg: it.kg || 0.1, price: it.price || 8, icon: 'map', words: it.words || '', stub: false };
+    return have && A_ITEMS ? A_ITEMS.defineItem(def) : defineItem(def);
+  }
   const f = FAMILY[it.family];
   if (f) {
     const long = LONG_FAMILY.has(it.family);
