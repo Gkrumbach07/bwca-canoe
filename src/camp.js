@@ -804,7 +804,9 @@ export class Camp {
     if (!byDay && set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
     const fly = !c || c.stage >= 4, rain = !fly && this.rainyNight(hours);
     const q = this.tentQuality() * (this.wet ? WET : 1) * (fly ? 1 : NO_FLY) * (rain ? WET : 1);
-    const fc = this.weather && this.weather.forecast ? this.weather.forecast(Math.max(1, Math.ceil(hours))) : [];
+    const W = this.weather, fc0 = W && W.forecast ? W.forecast(Math.max(1, Math.ceil(hours))) : [];
+    // the weather now leads the night's line (as rainyNight counts it): rain falling at bedtime is a wet night's first
+    const fc = W && W.state && (!fc0.length || fc0[0].state !== W.state) ? [{ state: W.state }, ...fc0] : fc0;
     const n = this.tripDay(!byDay && d.hours < 12 ? d.doy - 1 : d.doy); // the night of the evening's day (a sleep by day: today)
     const where = c && c.site ? this.siteName(c.site) : (p.placeName || 'Camp');
     const hh = Math.max(1, Math.floor(hours + 0.01)); // a short night is under seven hours: six and a half is 'six'
