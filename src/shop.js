@@ -6,7 +6,8 @@
 // containers. shelf is where it stands in the store: 'food' (the provisions shelf: meals, snacks, the barrels and the
 // water), 'tackle' (the tackle shelf: the rod, the leeches and their bucket, the tackle box), 'gear' (the gear shelf
 // and the rafters: packs, paddles, canoes, tents and the rest), 'lure' (the pegboard lure wall), 'map' (the map
-// table: the map sheets of this country and a map case) and 'counter' (a bunk: the counter is for services only).
+// table: the map sheets of this country, owned once bought: maptable.js, fb2 D) and 'counter' (a bunk: the counter is
+// for services only).
 // The words are the keeper's: what a thing does, never a number past the price and the weight. Each outfitter adds
 // its own signature item (stream C's outfitters.js), and its prices are the table's × that outfitter's priceMul (×0.9
 // more at standing 3).
@@ -118,7 +119,8 @@ export const CATALOG = [
   { id: 'saw', name: 'Folding saw', shelf: 'gear', price: 18, kg: 0.4, family: 'saw', words: 'For the dead and down wood. An armful in no time at all.', effect: { saw: true } },
   { id: 'camera', name: 'Camera, 35 mm', shelf: 'gear', price: 25, kg: 0.6, family: 'camera', words: 'A good little camera and a roll of film. The magazines pay for a sharp picture.', effect: { camera: true } },
   // --- the map table ---------------------------------------------------------------------------------------------
-  { id: 'mapcase', name: 'Map case', shelf: 'map', price: 10, kg: 0.2, words: 'Clear vinyl with a roll-top seal. The sheet stays dry on the thwart in front of you.' },
+  // the map sheets of each outfitter's country (sheets.js stockFor, added in stock()); no map case since fb2 D: a sheet
+  // bought is yours for the season (profile.ownSheet), not a thing in a pack
   // --- at the counter -------------------------------------------------------------------------------------------
   { id: 'bunk', name: 'A night in the bunkhouse', shelf: 'counter', price: 8, kg: 0, use: 'bunk', words: 'A real bed, soup on the stove and breakfast in the morning.' },
 ];
@@ -355,6 +357,11 @@ export class Shop {
     if (!it) return { ok: false, why: 'stock', words: 'Not on these shelves.' };
     if (it.use) return { ok: false, why: 'counter', words: 'Ask at the counter.' };
     if (it.owned) return { ok: false, why: 'owned', words: `You have ${lowerA(it.name)} already.` };
+    if (/^sheet:/.test(it.id)) { // fb2 D: a sheet is yours for the season, a profile entry and not a thing in a pack
+      if (!pr.spend(it.price, `${it.name}${this.landing(ep) ? ` at ${this.landing(ep).name}` : ''}`)) return { ok: false, why: 'short', words: `Not enough in hand: the sheet is $${it.price}, and you have $${pr.money}.` };
+      pr.ownSheet(it.id); refresh();
+      return { ok: true, sheet: it.sheet, words: `${it.name}${it.price ? `, $${it.price}` : ''}: yours now, on your map whenever you press M. $${pr.money} in hand.` };
+    }
     n = Math.max(1, Math.floor(n));
     const cost = it.price * n, where = this.landing(ep), at = where ? ` at ${where.name}` : '';
     if (cost > pr.money) return { ok: false, why: 'short', words: `Not enough in hand: ${n > 1 ? `${n} for $${cost}` : `${lowerA(it.name)} is $${cost}`}, and you have $${pr.money}.` };

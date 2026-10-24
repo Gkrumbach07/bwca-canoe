@@ -21,6 +21,12 @@
 // list keeps what is not a thing you carry: the canoes, the old Fisher maps, the map sheets and the signature items
 // nobody has made an item of. The old ids answer through the inventory: 'pack' (a Duluth pack), 'pack2' (two), 'barrel'
 // (a barrel), 'rod' (the medium-heavy rod), 'leeches'. seasonId ties the inventory's save to this season.
+//
+// The map sheets (the owner's second feedback of 2026-10-24, stream D): a sheet you buy is yours for the season, a
+// profile entry and not a thing you carry. sheets() lists the ids you own ('F-24'), ownSheet(id) adds one (with or
+// without the 'sheet:' prefix); has('sheet:F-24') and give('sheet:F-24') answer through them, so the shop's "owned"
+// and an old give keep working. An older save's 'sheet:…' entries in the owned list move into the sheets on load;
+// sheet items still in an inventory, and the map case they rode in, are migrated by sheets.js once it is attached.
 import { save } from './save.js';
 import { itemDef, LEGACY } from './items.js';
 
@@ -59,8 +65,10 @@ const FOOD_ROOM = { pack: 7, pack2: 10, barrel: 14 }; // days of food each holds
 
 const newId = () => `s${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
 function blank() {
-  return { v: 1, id: newId(), started: false, mode: 'adventure', home: null, permit: null, money: 0, earned: 0, spent: 0, owned: [], kit: { ...KIT0 }, known: [], rep: {}, ledger: [], migrated: null, told: [] };
+  return { v: 1, id: newId(), started: false, mode: 'adventure', home: null, permit: null, money: 0, earned: 0, spent: 0, owned: [], kit: { ...KIT0 }, known: [], rep: {}, ledger: [], migrated: null, told: [], sheets: [] };
 }
+// fb2 D: a sheet's id without its item prefix ('sheet:F-24' → 'F-24')
+const sheetId = (id) => { const k = String(id ?? '').replace(/^sheet:/, ''); return /^F-\d+$/.test(k) ? k : null; };
 function readDoc() { try { const s = localStorage.getItem(DOC_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 const dollars = (n) => Math.max(0, Math.round(Number(n) || 0));
 
@@ -69,8 +77,11 @@ export class Profile {
     this.handlers = new Set();
     const s = save.read(NS);
     if (s && s.v === 1) {
-      this.s = { ...blank(), ...s, kit: { ...KIT0, ...(s.kit || {}) }, rep: { ...(s.rep || {}) }, told: Array.isArray(s.told) ? s.told.slice() : [] };
-      if (!s.id) this.write(); // a season from before the items: its id is new, and the inventory migrates it once
+      this.s = { ...blank(), ...s, kit: { ...KIT0, ...(s.kit || {}) }, rep: { ...(s.rep || {}) }, told: Array.isArray(s.told) ? s.told.slice() : [], sheets: Array.isArray(s.sheets) ? s.sheets.map(sheetId).filter(Boolean) : [] };
+      // fb2 D: sheets bought before the inventory sat in the owned list as 'sheet:F-24'; they are the profile's sheets now
+      const old = (this.s.owned || []).filter((id) => /^sheet:/.test(id));
+      if (old.length) { for (const id of old) { const k = sheetId(id); if (k && !this.s.sheets.includes(k)) this.s.sheets.push(k); } this.s.owned = this.s.owned.filter((id) => !/^sheet:/.test(id)); }
+      if (!s.id || old.length || !Array.isArray(s.sheets)) this.write(); // a season from before the items: its id is new, and the inventory migrates it once
     } else {
       const doc = readDoc();
       this.s = doc ? Profile.migrate(doc, save.read('logbook')) : blank();
@@ -159,9 +170,10 @@ export class Profile {
   // --- gear -------------------------------------------------------------------------------------------------
   get inv() { const i = this.inventory; return i && i.attached ? i : null; }
   // a thing you carry (an item of items.js, or an old id that is one now), rather than a canoe or a paper
-  static physical(id) { return !!(itemDef(LEGACY[id] || id) || id === 'leeches'); }
+  static physical(id) { return !sheetId(id) && !!(itemDef(LEGACY[id] || id) || id === 'leeches'); } // fb2 D: a sheet is not
   has(id) {
     if (this.s.owned.includes(id)) return true;
+    if (/^sheet:/.test(id)) return this.ownsSheet(id); // fb2 D
     const inv = this.inv; if (!inv) return false;
     const n = (q) => inv.count(q, { reachable: false });
     if (id === 'pack') return n('pack3') + n('pack4') >= 1;
@@ -172,6 +184,7 @@ export class Profile {
   }
   give(id) {
     if (!id) return false;
+    if (/^sheet:/.test(id)) return this.ownSheet(id); // fb2 D: a sheet is the profile's, not a thing in a pack
     const inv = this.inv;
     if (inv && Profile.physical(id)) { const ok = inv.give(LEGACY[id] || id); if (ok) this.changed('gear'); return ok; }
     if (this.has(id)) return false;
@@ -191,7 +204,19 @@ export class Profile {
       for (const id of ids) if (id !== 'rod') out.add(id); // 'rod' in the list is the old medium-heavy one (below)
       for (const old of ['pack', 'pack2', 'barrel', 'rod']) if (this.has(old)) out.add(old);
     }
+    for (const k of this.s.sheets) out.add(`sheet:${k}`); // fb2 D
     return [...out];
+  }
+
+  // --- the map sheets (fb2 D) -------------------------------------------------------------------------------------
+  // the sheets you own, by id ('F-24'), in the order bought
+  sheets() { return this.s.sheets.slice(); }
+  ownsSheet(id) { const k = sheetId(id); return !!k && this.s.sheets.includes(k); }
+  // a sheet is yours for the season: true when it is new
+  ownSheet(id) {
+    const k = sheetId(id); if (!k || this.s.sheets.includes(k)) return false;
+    this.s.sheets.push(k); this.changed('sheets');
+    return true;
   }
   // what is in use: { canoe, paddle, tent, filter, packs } (packs: 1, or 2 with the second pack)
   get kit() { return { ...this.s.kit, packs: this.has('pack2') ? 2 : 1 }; }

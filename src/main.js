@@ -46,6 +46,7 @@ import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from 
 import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
 import { sheets } from './sheets.js'; // hubs 2D
+import { MapTable } from './maptable.js'; // fb2 D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
@@ -323,6 +324,19 @@ async function main() {
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
+  // fb2 D: maps owned, not carried (sheets.js, maptable.js). A sheet bought is the profile's for the season
+  // (profile.sheets(), ownSheet); the old sheet items and map cases migrate out of the inventory. M at an outfitter (in
+  // its store, at its counter or its map table) shows the whole Boundary Waters with the sheets dotted over it, in the
+  // wild only the sheets you own and blank paper elsewhere. The map table sells the landing's sheets over the whole map
+  // (stream C's hotspot opens it: outfitter.mapTable.show; an old openShelf('map') comes here too), and the walker holds
+  // still while it is up.
+  sheets.attach({ outfitter, inventory });
+  const mapTable = new MapTable({ hud, profile, shop, outfitter, world });
+  outfitter.mapTable = mapTable;
+  const openShelfD = outfitter.openShelf.bind(outfitter), updateOutfitterD = outfitter.update.bind(outfitter);
+  outfitter.openShelf = (kind, landing) => (kind === 'map' && landing && mapTable.show({ ep: landing.ep, landing }) ? undefined : openShelfD(kind, landing));
+  outfitter.update = (dt) => { updateOutfitterD(dt); if (mapTable.open) player.input.paused = true; };
+  window.__game.mapTable = mapTable;
   // fb G: nature and fishing. The mist is in the air now (fog.js; mist.js drives it) and drifts with the wind. The rod's
   // lures are the ones you have (fishing.hasLure: stream A's inventory.hasLure, the lures in reach, once it is in; else the
   // shop's tackle box), so the shop's dimming of the lure strip goes: the strip lists only those. Berries and mushrooms in their own

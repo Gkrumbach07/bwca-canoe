@@ -1,29 +1,36 @@
-// Map sheets (hubs phase 2, stream D). The map gates its detail the way a paddler's knowledge does: the lakes and their
-// names always show, but campsites, portages with their rods, and the soundings show only on the Fisher sheets you have
-// bought, or within about a kilometre of where you have been. Sandbox shows everything.
+// Map sheets (hubs phase 2, stream D; owned, not carried, since the owner's second feedback of 2026-10-24, stream D).
+// The map shows what your sheets show. Sheets you buy are yours for the season: a profile entry (profile.sheets(),
+// profile.ownSheet(id)), never a thing in a pack, so nothing can be left behind or lost.
 //
 // The sheets. A grid of 20 × 17 km sheets over the wilderness, like the real McKenzie and Fisher series: each has a
 // number and the names of its lakes ("F-24 · Lake One · Snowbank · Moose"). The grid's offset was chosen against the
 // data so that every outfitter's landing lies on the same sheet as its lake, and Lake One's dock sits 6 km inside its
 // sheet. Only sheets with something on them (campsites, portages or sounded lakes) are printed, 39 of them, numbered in
-// reading order from the north-west. The outfitters sell them at $8 (shop.js): each stocks its own sheet and the ones
-// around it. You own a sheet through the profile: `profile.has('sheet:' + id)`.
+// reading order from the north-west. Each outfitter's map table sells its own sheet and the ones around it, at $8
+// (shop.js prices them, maptable.js sells them).
 //
-// Where you have been. The wilderness is cut into 250 m cells; a cell is seen once you have come within 750 m of its
-// middle, so the map's soft edge (hud.js) carries the detail out to about 1 km either side of your track: a corridor.
-// Every outfitter you know adds its home water, 2 km around its landing (the keeper's word for it): home at a season's
-// start, another when you reach its landing or ride up the road to it. The cells are a Set of integer keys, saved in
-// their own namespace (`bwca-canoe:sheets`) packed as runs. An older save with none starts with the cells around the
-// outfitters it knows, and its old "Fisher map sheets" unlock (maps:fisher) becomes the home sheet.
+// What the map shows (hud.js drawMap reads view()):
+//   'open'   Sandbox: everything, everywhere.
+//   'whole'  at an outfitter (inside its store, at its counter or at its map table): the whole Boundary Waters, with
+//            the printed sheets dotted over it, each marked yours or not.
+//   'owned'  in the wild: only the sheets you own, with everything on them; elsewhere blank paper, no lakes and no
+//            names. With no sheets at all, only you and the compass on paper.
+// The "seen corridor" of the hubs phase (250 m cells round where you had been) is gone.
 //
-//   SHEETS [{ id, no, name, title, col, row, i, j, x0, z0, x1, z1, cx, cz }], GRID, SHEET_PRICE,
+// The migration. A save from before this keeps its sheets as items, in the map case (items.js) or a pack: once the
+// inventory is attached each one becomes the profile's, and the emptied map case goes back to the outfitters (its $10
+// back). An old "Fisher map sheets" unlock (maps:fisher) becomes the home sheet.
+//
+//   SHEETS [{ id, no, name, title, col, row, i, j, x0, z0, x1, z1, cx, cz }], GRID, SHEET_PRICE, sheetKey(id),
 //   sheetAt(x, z) → sheet | null, sheetById(id), neighbours(id) → sheets around it (edges first), stockFor(ep, reach),
-//   sheetItem(id) → a catalogue item { id: 'sheet:F-24', name, kind: 'map', price, kg, words, effect }, sheetKey(id),
-//   owned(id), seen (the Set of cell keys), showsDetail(x, z), and `sheets`: attach({ world, profile, trip }),
-//   update(player), see(x, z), open (Sandbox: everything shows), ownedSheets(), mask() (hud.js), version
+//   sheetItem(id) → the shop's catalogue entry { id: 'sheet:F-24', name, kind: 'map', price, words, effect },
+//   owned(id), showsDetail(x, z), and `sheets`: attach({ world, profile, trip, outfitter, inventory }), view(), open
+//   (Sandbox), gated, whole (at an outfitter), forced ('whole' while the map table is up), owned(id), ownedSheets(),
+//   hereIds() → the sheets the outfitter you are at sells, soldAt(id) → the entry points whose table sells it,
+//   contents(id) → { campsites, portages, lakes }, migrate(inventory), update() (per frame: the migration's watch),
+//   version (bumps when the sheets owned change)
 import { save } from './save.js';
 
-const NS = 'sheets';
 export const SHEET_PRICE = 8;
 export const SHEET_KG = 0.1;
 export const sheetKey = (id) => `sheet:${id}`;
@@ -103,175 +110,137 @@ export function sheetItem(id) {
   };
 }
 
-// --- where you have been: 250 m cells ----------------------------------------------------------------------------
-export const CELL = 250;          // m: fine enough that a kilometre's reach comes out round, not square
-export const REACH = 750;          // m from a cell's middle that counts as having been near it
-const SX0 = -100000, SZ0 = -35000, SCOLS = 800, SROWS = 280; // covers the baked world (±99.84 km × ±34.56 km)
-const MARK_STEP = 60;              // m moved before the cells are looked at again
-const SAVE_AFTER = 4000;           // ms: a change is written at most this often (and when the page goes away)
-const SEED_REACH = 2000;           // m around an outfitter you know: its home water, the keeper's word for it
-export const cellKey = (x, z) => {
-  const c = Math.floor((x - SX0) / CELL), r = Math.floor((z - SZ0) / CELL);
-  return c < 0 || c >= SCOLS || r < 0 || r >= SROWS ? -1 : r * SCOLS + c;
-};
-export const cellCentre = (k) => [SX0 + ((k % SCOLS) + 0.5) * CELL, SZ0 + (Math.floor(k / SCOLS) + 0.5) * CELL];
-
-// packed: the sorted keys as runs, base 36, "start" or "start+more", comma-separated
-export function pack(set) {
-  const keys = [...set].sort((a, b) => a - b), out = [];
-  for (let n = 0; n < keys.length;) {
-    let m = n; while (m + 1 < keys.length && keys[m + 1] === keys[m] + 1) m++;
-    out.push(m > n ? `${keys[n].toString(36)}+${(m - n).toString(36)}` : keys[n].toString(36));
-    n = m + 1;
-  }
-  return out.join(',');
-}
-export function unpack(str, into = new Set()) {
-  if (typeof str !== 'string' || !str) return into;
-  for (const run of str.split(',')) {
-    const [a, b] = run.split('+'), s = parseInt(a, 36), len = b ? parseInt(b, 36) : 0;
-    if (!Number.isFinite(s) || !Number.isFinite(len) || len < 0 || len > SCOLS * SROWS) continue;
-    for (let k = s; k <= s + len; k++) if (k >= 0 && k < SCOLS * SROWS) into.add(k);
-  }
-  return into;
-}
-
-// The mask hud.js draws the corridor through: white where you have been, soft at the edges. 2 px a cell (125 m a
-// pixel); each seen cell stamps a soft disc, solid to 150 m from its middle and gone by 600 m, laid over the others
-// (a union, not a sum), so neighbouring cells melt into one band with a soft, rounded edge and the grid never shows. New cells are stamped as they come; a reset repaints it whole.
-const MASK_PX = 2;
-const DISC_IN = 150, DISC_OUT = 600;
+const NONE = new Set();
 
 class Sheets {
   constructor() {
-    this.seen = new Set();
-    this.world = null; this.profile = null; this.trip = null;
-    this.version = 0;             // bumps when the cells or the sheets owned change
+    this.world = null; this.profile = null; this.trip = null; this.outfitter = null; this.inventory = null;
+    this.version = 0;             // bumps when the sheets owned change
     this.ownedList = null;        // cached: the sheets the profile holds
-    this.last = null;             // where the cells were last looked at
-    this.dirty = false; this.savedAt = 0;
-    this.maskState = null;        // { canvas, ctx, stamp, pending: [], full: true }
+    this.sold = null;             // cached: sheet id → the entry points whose map table sells it
+    this.counts = null;           // cached: sheet id → { campsites, portages, lakes }
+    this.pending = false;         // the inventory changed: look for a sheet item to migrate on the next update
+    this.forced = null;           // a view held from outside (the map table holds 'whole')
   }
 
-  // world: for the outfitters' landings; profile: the sheets owned and the season; trip: Sandbox or Adventure
-  attach({ world, profile, trip } = {}) {
-    this.world = world || this.world; this.trip = trip || this.trip;
+  // world: the landings, campsites and portages; profile: the sheets owned and the season; trip: Sandbox or Adventure;
+  // outfitter: whether you are at one (the whole map); inventory: the old sheet items to migrate. Called again with
+  // more as main.js makes them (hubs 2D's line, then fb2 D's block).
+  attach({ world, profile, trip, outfitter, inventory } = {}) {
+    if (world && world !== this.world) { this.world = world; this.sold = null; this.counts = null; }
+    if (trip) this.trip = trip;
+    if (outfitter) this.outfitter = outfitter;
     if (profile && profile !== this.profile) {
       this.profile = profile;
-      profile.onChange((what) => {
-        if (what === 'season') this.newSeason();
-        else if (what === 'known') { for (const ep of profile.known) this.seeAround(ep); }
-        else { this.ownedList = null; this.version++; }
-      });
+      profile.onChange((what) => { if (what === 'sheets' || what === 'season' || what === 'gear') { this.ownedList = null; this.version++; } });
+      if (save.has('sheets')) save.clear('sheets'); // the corridor's cells, gone with it
+      // an old "Fisher map sheets" unlock: the home sheet
+      if (profile.started && profile.has('maps:fisher') && !profile.sheets().length) this.giveHome();
     }
-    this.load();
-    if (typeof window !== 'undefined') {
-      window.addEventListener('pagehide', () => this.flush());
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') this.flush(); });
+    const inv = inventory || (profile && profile.inventory) || null;
+    if (inv && inv !== this.inventory && typeof inv.onChange === 'function') {
+      this.inventory = inv;
+      inv.onChange((what) => { if (what !== 'sheets') this.pending = true; });
+      this.migrate(inv);
     }
     return this;
   }
-  load() {
-    const s = save.read(NS);
-    this.seen.clear();
-    if (s && s.v === 1 && s.cell === CELL) { unpack(s.cells, this.seen); this.touched(true); return; }
-    // an older save (or a first load): the cells around the outfitters it knows; an old "Fisher map sheets" unlock
-    // becomes the home sheet
-    const pr = this.profile;
-    if (pr && pr.started) {
-      for (const ep of pr.known) this.seeAround(ep);
-      if (pr.has('maps:fisher')) { const h = this.landingOf(pr.home), s0 = h && sheetAt(h.x, h.z); if (s0) pr.give(sheetKey(s0.id)); }
-    }
-    this.touched(true);
-    this.flush(true);
-  }
-  // a new season: what you knew is forgotten; home's dock is where you have been
-  newSeason() {
-    this.seen.clear(); this.last = null; this.ownedList = null;
-    if (this.profile && this.profile.home != null) this.seeAround(this.profile.home);
-    this.touched(true);
-    this.flush(true);
-  }
   landingOf(ep) { const w = this.world; return w ? w.entryPoints.find((e) => e.ep === Number(ep)) || null : null; }
-  seeAround(ep, reach = SEED_REACH) { const l = this.landingOf(ep); return l ? this.see(l.x, l.z, reach) : 0; }
+  giveHome() {
+    const pr = this.profile, l = pr && this.landingOf(pr.home), s0 = l && stockFor(l)[0];
+    if (s0) pr.ownSheet(s0.id);
+  }
 
   // Sandbox: everything shows
   get open() { return !!(this.trip && this.trip.sandbox); }
   get gated() { return !this.open; }
+  // at an outfitter: inside its store, at its counter, a shelf or its map table (or held there by the table)
+  get whole() {
+    if (this.forced === 'whole') return true;
+    const o = this.outfitter; if (!o) return false;
+    return !!((o.visit && o.visit.inside) || o.open || o.shelfOpen || (o.mapTable && o.mapTable.open));
+  }
+  // what the map draws now: 'open' | 'whole' | 'owned'
+  view() { return this.open ? 'open' : this.whole ? 'whole' : 'owned'; }
   owned(id) { const s = sheetById(id); return !!(s && this.profile && this.profile.has(sheetKey(s.id))); }
   ownedSheets() {
     if (!this.ownedList) this.ownedList = this.profile ? SHEETS.filter((s) => this.profile.has(sheetKey(s.id))) : [];
     return this.ownedList;
   }
-  // true where the map shows campsites, portages and depths: Sandbox, a sheet you own, or a cell you have been near
+  // true where the map shows its detail away from an outfitter: Sandbox, or a sheet you own (camp.js's dusk word and
+  // the pin's lake name and count of portages read it)
   showsDetail(x, z) {
     if (this.open) return true;
     const s = sheetAt(x, z);
-    if (s && this.owned(s.id)) return true;
-    const k = cellKey(x, z);
-    return k >= 0 && this.seen.has(k);
-  }
-  hasSeen(x, z) { const k = cellKey(x, z); return k >= 0 && this.seen.has(k); }
-
-  // mark the cells whose middles lie within reach of a point; returns how many were new
-  see(x, z, reach = REACH) {
-    if (!Number.isFinite(x) || !Number.isFinite(z)) return 0;
-    const n = Math.ceil(reach / CELL) + 1, c0 = Math.floor((x - SX0) / CELL), r0 = Math.floor((z - SZ0) / CELL);
-    let added = 0;
-    for (let r = r0 - n; r <= r0 + n; r++) for (let c = c0 - n; c <= c0 + n; c++) {
-      if (c < 0 || c >= SCOLS || r < 0 || r >= SROWS) continue;
-      const cx = SX0 + (c + 0.5) * CELL, cz = SZ0 + (r + 0.5) * CELL;
-      if (Math.hypot(cx - x, cz - z) > reach) continue;
-      const k = r * SCOLS + c;
-      if (this.seen.has(k)) continue;
-      this.seen.add(k); added++;
-      if (this.maskState && !this.maskState.full) this.maskState.pending.push(k);
-    }
-    if (added) this.touched(false);
-    return added;
-  }
-  touched(full) { this.version++; this.dirty = true; if (full && this.maskState) { this.maskState.full = true; this.maskState.pending.length = 0; } }
-
-  // per frame, in the game (not behind the title): the cells around you as you go
-  update(player) {
-    if (!player || player.teleporting) return;
-    const x = player.x, z = player.z, l = this.last;
-    if (!l || Math.abs(x - l.x) + Math.abs(z - l.z) > MARK_STEP) { this.last = { x, z }; this.see(x, z); }
-    if (this.dirty) { const now = performance.now(); if (now - this.savedAt > SAVE_AFTER) this.flush(); }
-  }
-  flush(force = false) {
-    if (!this.dirty && !force) return;
-    this.dirty = false; this.savedAt = performance.now();
-    save.write(NS, { v: 1, cell: CELL, cells: pack(this.seen) });
+    return !!(s && this.owned(s.id));
   }
 
-  // { canvas, x0, z0, mPerPx }: white where you have been (hud.js scales it over the sheet and keeps the detail there)
-  mask() {
-    let m = this.maskState;
-    if (!m) {
-      const canvas = document.createElement('canvas'); canvas.width = SCOLS * MASK_PX; canvas.height = SROWS * MASK_PX;
-      const ctx = canvas.getContext('2d');
-      const R = Math.ceil((DISC_OUT / CELL) * MASK_PX) + 1, stamp = document.createElement('canvas'); stamp.width = stamp.height = R * 2;
-      const sc = stamp.getContext('2d'), g = sc.createRadialGradient(R, R, (DISC_IN / CELL) * MASK_PX, R, R, (DISC_OUT / CELL) * MASK_PX);
-      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.45, 'rgba(255,255,255,0.6)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-      sc.fillStyle = g; sc.fillRect(0, 0, R * 2, R * 2);
-      m = this.maskState = { canvas, ctx, stamp, R, pending: [], full: true };
+  // the sheets the outfitter you are at sells at its map table, as a Set of ids (empty away from one)
+  hereIds() {
+    const o = this.outfitter, ep = o ? (o.visit ? o.visit.ep : o.open && o.at ? o.at.ep : null) : null;
+    if (ep == null) return NONE;
+    if (!this.here || this.here.ep !== ep) { const l = this.landingOf(ep); this.here = { ep, ids: new Set(l ? stockFor(l).map((s) => s.id) : []) }; }
+    return this.here.ids;
+  }
+  // the entry points whose map table sells a sheet, nearest the sheet's middle first
+  soldAt(id) {
+    const s = sheetById(id), w = this.world; if (!s || !w) return [];
+    if (!this.sold) {
+      this.sold = new Map();
+      for (const e of w.entryPoints) for (const t of stockFor(e)) { const l = this.sold.get(t.id) || []; l.push(e); this.sold.set(t.id, l); }
+      for (const [k, l] of this.sold) { const t = sheetById(k); l.sort((a, b) => Math.hypot(a.x - t.cx, a.z - t.cz) - Math.hypot(b.x - t.cx, b.z - t.cz)); }
     }
-    const stampAt = (k) => { const c = k % SCOLS, r = Math.floor(k / SCOLS); m.ctx.drawImage(m.stamp, (c + 0.5) * MASK_PX - m.R, (r + 0.5) * MASK_PX - m.R); };
-    m.ctx.globalCompositeOperation = 'source-over'; // overlapping rims join as a union, so the edge stays soft
-    if (m.full) {
-      m.ctx.clearRect(0, 0, m.canvas.width, m.canvas.height);
-      for (const k of this.seen) stampAt(k);
-      m.full = false; m.pending.length = 0;
-    } else if (m.pending.length) {
-      for (const k of m.pending) stampAt(k);
-      m.pending.length = 0;
+    return this.sold.get(s.id) || [];
+  }
+  // what is on a sheet, counted once: campsites, portages (by their middle) and named lakes (by their centroid)
+  contents(id) {
+    const s = sheetById(id), w = this.world; if (!s || !w) return { campsites: 0, portages: 0, lakes: 0 };
+    if (!this.counts) {
+      const c = this.counts = new Map(SHEETS.map((t) => [t.id, { campsites: 0, portages: 0, lakes: 0 }]));
+      const add = (x, z, k) => { const t = sheetAt(x, z); if (t) c.get(t.id)[k]++; };
+      for (const p of w.campsites || []) add(p.x, p.z, 'campsites');
+      for (const p of w.portages || []) { const m = p.pts && p.pts[Math.floor(p.pts.length / 2)]; if (m) add(m[0], m[1], 'portages'); }
+      for (const l of w.lakes || []) if (l && l.name) add(l.cx, l.cz, 'lakes');
     }
-    return { canvas: m.canvas, x0: SX0, z0: SZ0, mPerPx: CELL / MASK_PX };
+    return this.counts.get(s.id);
+  }
+
+  // The migration: sheet items in any container become the profile's sheets, and a map case left empty goes back to
+  // the outfitters with its price. Returns how many sheets came out.
+  migrate(inv = this.inventory) {
+    const pr = this.profile; this.pending = false;
+    if (!inv || !pr || !Array.isArray(inv.containers)) return 0;
+    let n = 0, cases = 0;
+    for (const c of inv.containers) {
+      const grid = c.grid || [], keep = grid.filter((e) => e.box || !/^sheet:/.test(String(e.id)));
+      if (keep.length === grid.length) continue;
+      for (const e of grid) if (!keep.includes(e)) { pr.ownSheet(e.id); n++; }
+      c.grid = keep;
+    }
+    for (const c of [...inv.containers]) {
+      if (c.item !== 'mapcase' || (c.grid || []).length) continue;
+      for (const h of inv.containers) if (h.grid && h.grid.some((e) => e.box && e.uid === c.id)) h.grid = h.grid.filter((e) => !(e.box && e.uid === c.id));
+      inv.containers.splice(inv.containers.indexOf(c), 1); cases++;
+    }
+    if (cases && pr.started && !this.open) pr.earn(10 * cases, `the map case${cases > 1 ? 's' : ''} back: the sheets are yours now`);
+    if (n || cases) {
+      if (typeof inv.emit === 'function') inv.emit('sheets');
+      if (typeof inv.write === 'function') inv.write();
+      this.ownedList = null; this.version++;
+      console.log(`fb2 D: ${n} map sheet${n === 1 ? '' : 's'} out of the inventory and owned${cases ? `, ${cases} map case${cases > 1 ? 's' : ''} back` : ''}`);
+    }
+    return n;
+  }
+  // per frame: a sheet item or a map case that turned up in the inventory since (an old path's buy, a restore) is
+  // migrated; only looked for after the inventory changed
+  update() {
+    if (!this.pending) return;
+    this.pending = false;
+    const inv = this.inventory;
+    if (inv && inv.containers.some((c) => c.item === 'mapcase' || (c.grid || []).some((e) => !e.box && /^sheet:/.test(String(e.id))))) this.migrate(inv);
   }
 }
 
 export const sheets = new Sheets();
-export const seen = sheets.seen; // the one Set: a reset clears it, never replaces it
 export const owned = (id) => sheets.owned(id);
 export const showsDetail = (x, z) => sheets.showsDetail(x, z);
