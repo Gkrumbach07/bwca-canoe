@@ -42,12 +42,13 @@ const KNOWN_REACH = 30;             // metres from a landing that make its outfi
 export const absDay = (year, doy) => Math.round(Date.UTC(year, 0, doy) / 86400000);
 export function dateOfAbs(n) { const d = new Date(n * 86400000), year = d.getUTCFullYear(); return { year, doy: n - absDay(year, 0) }; }
 
-const REASONS = { food: 'spent, and gone hungry', water: 'spent, and gone without water', spent: 'spent, with nothing left to eat or drink', awake: 'spent, after too long awake' };
+const REASONS = { food: 'spent, and gone hungry', water: 'spent, and gone without water', spent: 'spent, with nothing left to eat or drink', awake: 'spent, after too long awake', cold: 'spent, and chilled through' };
 const LINES = {
   food: ['You let yourself go hungry out there. We took the motor out and fetched you in. Hot food first.', 'It happens to everyone once. Come in and eat something; the lake will keep.'],
   water: ['You were dry as a bone out there. Drink this first, slowly.', 'No water and nothing left in you. We brought you in; sit, drink, rest.'],
   spent: ['You were about done in out there. We brought you in to rest.', 'Nothing left to eat or drink. We came and got you; that is what we are here for.'],
   awake: ['You were asleep on your feet out there. We brought you in; the bunk is made up.', 'Nobody paddles forever. Sleep now; the lake will keep.'],
+  cold: ['You were shaking with the cold out there. We brought you in; sit by the stove and get dry.', 'Wet and cold is how it goes wrong out there. Dry clothes first, then something hot.'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
@@ -222,7 +223,7 @@ export class Trip {
     if (!best && pr && pr.home != null) best = this.landing(pr.home);
     return best || (o.nearest(x, z) || {}).l || null;
   }
-  // when the bar has sat empty an hour (energy.onEvac): why 'food' | 'water' | 'awake' (the need that ran it down) | 'spent'
+  // when the bar has sat empty an hour (energy.onEvac): why 'food' | 'water' | 'awake' | 'cold' (the need that ran it down) | 'spent'
   evacuate(why = 'food') {
     if (!this.adventure || !this.active || this.evacuating) return false;
     this.evacuating = true;
