@@ -4,7 +4,7 @@ import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt, meshHeightAt } from './terrain-build.js';
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
-import { SPECIES as SP, bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
+import { bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
 import { RockShape } from './collide.js';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 
@@ -143,26 +143,8 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     rocks.matrixAutoUpdate = false;
     group.add(rocks);
   });
-  // The fallen trunks and stumps the worker placed with the trees (placement.js) hold the walker off too: a trunk
-  // as a box along its length (vegetation.js builds it 6.4–7.2 m along local x), a stump as a circle of its scale
-  // that a carried canoe rides over (rock); each with `top`, the height of its top (from its geometry's bounds at
-  // the instance's scale), so the walker can step or hop up onto one that is low enough (player.js). They are read
-  // from the tile's vegetation meshes (one per bin, holding all of its instances), which tiles.js makes before it
-  // builds the props. The outcrops are rocks to the walker, held off by their own geometry (tiles.js treesNear).
-  if (entry && entry.veg) for (const vm of entry.veg) {
-    const sp = vm.userData.sp;
-    if (sp !== SP.log && sp !== SP.stump) continue;
-    const m = vm.instanceMatrix.array, log = sp === SP.log, full = vm.userData.lod ? vm.userData.lod.full : vm.geometry;
-    if (!full.boundingBox) full.computeBoundingBox();
-    const tall = full.boundingBox.max.y;
-    for (let i = 0; i < vm.instanceMatrix.count; i++) {
-      const o = i * 16, sx = Math.hypot(m[o], m[o + 1], m[o + 2]), sz = Math.hypot(m[o + 8], m[o + 9], m[o + 10]), top = m[o + 13] + tall * Math.hypot(m[o + 4], m[o + 5], m[o + 6]);
-      if (sx < 1e-6) continue; // let go of for a store's yard
-      const x = m[o + 12] + ox, z = m[o + 14] + oz;
-      if (log) obstacles.push({ x, z, ux: m[o] / sx, uz: m[o + 2] / sx, hx: 3.4 * sx, hz: 0.36 * sz, box: true, top });
-      else obstacles.push({ x, z, r: 0.3 * sx, rock: true, top });
-    }
-  }
+  // (The fallen trunks and stumps the worker placed with the trees hold the walker off by their own drawn geometry,
+  // as the rocks do: tile-worker.js collisionOf, tiles.js treesNear.)
   flushStoreNews(); // the stores built here are told of once the tile is in, with its obstacles
   return group;
 }
