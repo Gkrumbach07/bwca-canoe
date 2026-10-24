@@ -1391,12 +1391,13 @@ export class PackSide {
     const near3 = (l) => l.at && p && Math.hypot(l.at.x - p.x, l.at.z - p.z) < 3;
     const longs = inv.long || [], longCanoe = longs.filter((l) => l.where === 'canoe' && atCanoe), longGround = longs.filter((l) => l.where === 'ground' && near3(l)), longKept = longs.filter((l) => l.where === 'stash' && stash);
     const kgOn = typeof inv.weight === 'function' ? inv.weight() : 0;
+    const hungW = !stash && ctx.energy && typeof ctx.energy.hungFood === 'function' ? ctx.energy.hungFood().words : ''; // (the barrel hung at camp, as the HUD says it)
     const food = typeof inv.foodWords === 'function' ? inv.foodWords() : '';
     // at a camp the food words count the camp's reach (inventory.campReach: the barrel in the canoe on the shore), more
     // than the grids below show
     const atCamp = !stash && !!(inv.camp && typeof inv.camp.reachArea === 'function' && inv.camp.reachArea());
     this.el.innerHTML = `<header class="pk-head">
-        <div class="lede"><div class="sc kicker">The pack · ${stash ? 'at the outfitter’s, everything you own' : objs.length ? 'what you carry, and what is by you' : 'what you carry and what is within reach'}</div><h2>${kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light'}</h2><div class="sub">${esc(loadWords(kgOn))}${food ? ` · ${esc(food)} ${atCamp ? 'about the camp' : 'within reach'}` : ''}</div></div>
+        <div class="lede"><div class="sc kicker">The pack · ${stash ? 'at the outfitter’s, everything you own' : objs.length ? 'what you carry, and what is by you' : 'what you carry and what is within reach'}</div><h2>${kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light'}</h2><div class="sub">${esc(loadWords(kgOn))}${food ? ` · ${esc(food)} ${atCamp ? 'about the camp' : 'within reach'}` : ''}${hungW ? ` · ${esc(hungW)}` : ''}</div></div>
         <div class="pk-note pencil" aria-live="polite">${esc(noteNow())}</div>
         ${pr ? `<div class="purse"><span class="sc">In hand</span><b>$${pr.money}</b></div>` : ''}
       </header>
