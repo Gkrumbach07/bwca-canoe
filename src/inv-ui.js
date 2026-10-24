@@ -1039,7 +1039,7 @@ export class PackSide {
       s.appendChild(mk('div', 'slot-lab', esc(label)));
       const f = mk('div', 'slot-frame');
       if (d) {
-        const pic = isLong ? iconAt(thing.id, 4 * CELL - 10, CELL - 8) : iconAt(thing.item, 2 * CELL, 2 * CELL);
+        const pic = isLong ? iconAt(thing.id, 4 * CELL - 10, CELL - 8) : cls === 'hand' ? iconAt(thing.item, 2 * CELL, CELL - 8) : iconAt(thing.item, 2 * CELL, 2 * CELL);
         f.append(pic, mk('span', 'slot-nm', esc(short(d))));
         if (thingMenu(thing, isLong).length) f.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, thingMenu(thing, isLong)); });
       } else f.appendChild(mk('span', 'slot-none', '—'));
