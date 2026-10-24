@@ -112,6 +112,7 @@ export class Player {
     const d = world.deeperDir(this.x, this.z);
     this.heading = Math.atan2(-d.z, d.x);
     canoe.ground = (x, z) => this.footGround(x, z); // the walker's feet find the ground (or the rock) under each foot
+    canoe.terrain = (x, z) => this.groundAt(x, z); // fb2 E: and the terrain alone, for how steep the hill is
     this.foot = null; // on foot: { y, vy, air, t, land, near, peak } (updateFoot)
     // fb C: what the body is doing, for the figure to animate (canoe.js; the contract in the 2026-10-24 brief):
     //   kind     'idle' | 'walk' | 'jog' | 'wade' | 'step' | 'vault' | 'climb' | 'jump' | 'fall' | 'land' | 'swim' |
