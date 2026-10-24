@@ -282,6 +282,7 @@ async function main() {
   const invView = new ContainerView({ inventory, canoe, scene, player, reflectLayer: REFLECT_LAYER });
   const poseCanoe = canoe.update;
   canoe.update = (dt) => { poseCanoe(dt); invView.afterPose(); };
+  fishing.hasLure = (id) => inventory.hasLure(id); // the lures (and leeches) in a container in reach now (stream G's list reads it)
   Object.assign(window.__game, { inventory, items: { ITEMS, defineItem, itemDef }, invView });
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.

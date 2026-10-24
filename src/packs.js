@@ -277,12 +277,19 @@ export class Packs {
     return Math.abs(p.groundAt(x + 0.4, z) - p.groundAt(x - 0.4, z)) < 0.45 && Math.abs(p.groundAt(x, z + 0.4) - p.groundAt(x, z - 0.4)) < 0.45;
   }
 
-  // the rig's own two packs stay hidden: the inventory's things are drawn by containers.js
+  // the rig's own two packs stay hidden: the inventory's things are drawn by containers.js. For the poses (canoe.js,
+  // stream D) the rig's state says what rides where: state.held { R, L } (the item id in each hand, or null),
+  // state.worn { back, chest } (the item id on the back and the chest, or null)
   show() {
-    const c = this.canoe, st = c.state;
+    const c = this.canoe, st = c.state, inv = this.inv;
     if (c.setHullPacks) c.setHullPacks([]);
     st.packOnBack = null; st.packOnChest = null;
     if (c.setPackGround) for (let i = 0; i < 2; i++) c.setPackGround(i, null);
+    const h = inv.hands, idOf = (t) => (!t ? null : t.container ? (inv.cont(t.container) || {}).item || null : (inv.longOf(t.long) || {}).id || null);
+    const held = st.held || (st.held = { R: null, L: null }), worn = st.worn || (st.worn = { back: null, chest: null });
+    held.R = idOf(h[0]); held.L = idOf(h[1]);
+    const b = inv.worn('back'), ch = inv.worn('chest');
+    worn.back = b ? b.item : null; worn.chest = ch ? ch.item : null;
   }
 
   // ---------------------------------------------------------------------------------------------------------------

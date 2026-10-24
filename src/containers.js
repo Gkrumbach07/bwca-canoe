@@ -164,6 +164,8 @@ export class ContainerView {
     // the hull's places, filled in order
     const flat = [...FLAT], stand = [...STAND], small = [...SMALL];
     const stack = new Map();
+    // the rod up (fishing.js draws its own): the stowed one is not drawn
+    const rodUp = !!(inv.fishing && inv.fishing.rodUp), isRod = (id) => (itemDef(id) || {}).long === 'rod';
     const inCanoe = inv.containers.filter((c) => c.where === 'canoe').sort((a, b) => order(a.item) - order(b.item) || (a.id < b.id ? -1 : 1));
     for (const c of inCanoe) {
       const o = this.objFor(c.id, c.item); if (!o) continue;
@@ -192,7 +194,7 @@ export class ContainerView {
       if (l.where !== 'canoe' || l.inUse) continue;
       const o = this.objFor(l.uid, l.id); if (!o) continue;
       seen.add(l.uid);
-      if (overhead) { o.visible = false; continue; }
+      if (overhead || (rodUp && isRod(l.id))) { o.visible = false; continue; }
       if (o.parent !== cn.hull) cn.hull.add(o);
       o.visible = true;
       const z = -0.24 + 0.07 * portRod++;
@@ -223,7 +225,7 @@ export class ContainerView {
       const o = this.objFor(h.key, h.id); if (!o) continue;
       seen.add(h.key);
       if (o.parent !== this.scene) this.scene.add(o);
-      o.visible = true;
+      o.visible = !(rodUp && isRod(h.id));
       this.inHand(o, h.hand === 1 ? 'L' : 'R', overhead);
     }
     // on the ground and hung

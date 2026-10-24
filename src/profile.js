@@ -199,7 +199,7 @@ export class Profile {
   use(slot, id) {
     if (!this.has(id) || (ITEMS[id] && ITEMS[id].slot !== slot) || this.s.kit[slot] === id) return false;
     this.s.kit[slot] = id;
-    if (slot === 'paddle' && this.inv) this.inv.refreshUse();
+    if (slot === 'paddle' && this.inv) this.inv.useLong(id);
     this.changed('kit'); return true;
   }
   // days of food the packs hold: a Duluth pack 7, the second one 10 more, a barrel 14

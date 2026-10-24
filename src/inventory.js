@@ -81,7 +81,7 @@ export class Inventory {
   }
   onChange(fn) { this.handlers.add(fn); return () => this.handlers.delete(fn); }
   emit(what) {
-    this.dirty = true;
+    this.dirty = true; this.ver = (this.ver || 0) + 1;
     for (const fn of this.handlers) { try { fn(what, this); } catch (e) { console.warn('inventory.onChange', e); } }
   }
   write() {
@@ -604,6 +604,15 @@ export class Inventory {
     for (const l of this.long) { const d = itemDef(l.id); l.inUse = !!(d && d.long === 'paddle' && l.id === want && !found); if (l.inUse) found = true; }
     if (!found) { const l = this.long.find((q) => (itemDef(q.id) || {}).long === 'paddle'); if (l) l.inUse = true; }
   }
+  // A paddle put to use (profile.use): at an outfitter it goes into the canoe and the one it replaces is kept for you
+  useLong(id) {
+    const l = this.long.find((q) => q.id === id), was = this.long.find((q) => q.inUse);
+    this.refreshUse();
+    if (!l || !this.atStash || l.where === 'canoe' || l.where === 'hands') return;
+    if (was && was !== l && was.where === 'canoe') { was.where = 'stash'; was.at = null; }
+    l.where = 'canoe'; l.at = null; l.hand = null;
+    this.emit('long');
+  }
   // profile.give for a physical id: a container to the stash (or by you), a long item likewise, an item where it
   // fits best in reach, or the outfitters' crate
   give(id) {
@@ -766,6 +775,8 @@ export class Inventory {
   // since goes onto the stringer (or into a container in reach that takes fish), one taken since leaves the inventory.
   syncStringer(first = false) {
     const arr = this.fishing.stringer;
+    // nothing to do when no fish came or went and the inventory has not changed since the last time
+    if (!first && this.stringerVer === this.ver && arr.length === this.lastStringer.size && arr.every((f) => f && f.uid && this.lastStringer.has(f.uid))) return;
     const st = this.containers.find((c) => c.item === 'stringer' && this.rootWhere(c) === 'canoe') || this.containers.find((c) => c.item === 'stringer');
     if (!first) {
       const present = new Set(arr.map((f) => f && f.uid).filter(Boolean));
@@ -780,13 +791,14 @@ export class Inventory {
     arr.length = 0;
     this.lastStringer = new Set();
     if (st) for (const e of st.grid) if (!e.box && (itemDef(e.id) || {}).kind === 'fish') { arr.push({ species: e.id.slice(5), length: e.data && e.data.length ? e.data.length : 30, uid: e.uid }); this.lastStringer.add(e.uid); }
+    this.stringerVer = this.ver;
   }
   // The hubs' shop (shop.js) counts the leeches itself (shop.s.leeches) until stream B's shop reads the inventory
   // (shop.usesInventory): while it does, the inventory's leeches follow its count.
   oldLeeches() { const sh = this.shop; return sh && sh.s && typeof sh.s.leeches === 'number' && !sh.usesInventory ? sh.s.leeches : null; }
   bridgeLeeches() {
     const n = this.oldLeeches(); if (n == null) { this.seenLeeches = null; return; }
-    if (this.seenLeeches == null) { this.seenLeeches = n; return; }
+    if (this.seenLeeches == null || this.leechSeason !== this.season) { this.seenLeeches = n; this.leechSeason = this.season; return; } // a new season starts the shop's count over
     if (n === this.seenLeeches) return;
     const d = n - this.seenLeeches; this.seenLeeches = n;
     if (d < 0) this.remove('leeches', -d);
