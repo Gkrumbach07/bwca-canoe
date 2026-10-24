@@ -811,6 +811,7 @@ class Grid {
   }
 }
 // a bin's kinds: [kinds or item ids], or a function (itemId, def) → bool; none given takes anything
+const pct = (v) => `${Math.round(Math.max(0, Math.min(1, v || 0)) * 100)}%`;
 const binAccepts = (b, id) => { const a = b.accepts, d = itemDef(id); if (a == null) return true; if (typeof a === 'function') return !!a(id, d); return a.includes(id) || !!(d && a.includes(d.kind)); };
 // a bin's things laid out on its cells (where they say, else the first room), the bin as tall as it must be
 function binContainer(id, b) {
@@ -1357,7 +1358,7 @@ export class PackSide {
     this.objs = nearObjects();
     this.pieces = n && typeof n.groundPieces === 'function' && onFoot() ? (() => { try { return n.groundPieces() || []; } catch { return []; } })() : [];
     const near = this.objs.map((o) => [o.id, o.title, (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}:${s.words || ''}`).join(';'),
-      (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}`).join(';'), o.meter ? 1 : 0].join('/')).join('|');
+      (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}`).join(';'), o.meter ? 1 : 0, o.cooking ? 1 : 0].join('/')).join('|');
     return [version, list.map((c) => `${c.id}:${c.where}:${c.hand ?? ''}:${(c.grid || []).length}`).join(), (inv.long || []).map((l) => `${l.uid}:${l.where}:${l.hand ?? ''}`).join(), pr ? pr.money : 0, inv.atStash ? 1 : 0,
       p ? p.mode : '', onFoot() ? 1 : 0, near, this.pieces.map((q) => q.uid).join()].join('|');
   }
@@ -1465,7 +1466,7 @@ export class PackSide {
   }
   // a thing near you as a panel: its strap (a picture, the name, how it stands), a meter, its bins, its buttons
   panel(o) {
-    const w = mk('div', `nb k-${o.kind}${o.focus ? ' focus' : ''}${!o.meter && !(o.slots && o.slots.length) ? ' slim' : ''}`);
+    const w = mk('div', `nb k-${o.kind}${o.focus ? ' focus' : ''}${!o.meter && !o.cooking && !(o.slots && o.slots.length) ? ' slim' : ''}`);
     w.dataset.nb = o.id;
     const head = mk('div', 'nb-head');
     const ik = `nb:${o.kind}`;
@@ -1474,7 +1475,10 @@ export class PackSide {
     head.appendChild(mk('span', 'wh', esc(o.sub || '')));
     w.appendChild(head);
     const body = mk('div', 'nb-body');
-    if (o.meter) body.appendChild(mk('div', 'nb-meter', `<span class="lab">${esc(o.meter.label || '')}</span><span class="bar"><i style="width:${Math.round(Math.max(0, Math.min(1, o.meter.value || 0)) * 100)}%"></i></span><span class="w">${esc(o.meter.words || '')}</span>`));
+    // the meters: how much wood is in the fire, and while the pot is on, how far on the cooking is
+    const meter = (k, m, lab) => mk('div', `nb-meter m-${k}`, `<span class="lab">${esc(m.label || lab)}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`);
+    if (o.meter) body.appendChild(meter('burn', o.meter, ''));
+    if (o.cooking) body.appendChild(meter('cook', o.cooking, 'Cooking'));
     if (o.slots && o.slots.length) {
       const row = mk('div', 'nb-slots');
       for (const s of o.slots) {
@@ -1500,8 +1504,10 @@ export class PackSide {
   actButton(o, a) {
     const off = a.enabled === false, b = mk('button', `nb-act${a.held ? ' held' : ''}${off ? ' off' : ''}`);
     b.type = 'button'; b.dataset.act = `${o.id}|${a.id}`; if (a.job) b.dataset.job = a.job;
-    b.innerHTML = `${a.held ? ringSvg(0) : ''}<span class="l">${esc(a.label)}</span>${a.held ? '<span class="h">hold</span>' : ''}`; // why it cannot be done yet: its tag, and the pencil note when pressed
-    if (off) { b.setAttribute('aria-disabled', 'true'); if (a.why) b.title = a.why; }
+    // held: "hold" beside it; a hint ("on the bench by the fire") beside a ready one; why it cannot be done yet is its
+    // tag, and the pencil note when it is pressed
+    b.innerHTML = `${a.held ? ringSvg(0) : ''}<span class="l">${esc(a.label)}</span>${a.held ? '<span class="h">hold</span>' : a.hint && !off ? `<span class="h">${esc(a.hint)}</span>` : ''}`;
+    if (off) { b.setAttribute('aria-disabled', 'true'); if (a.why) b.title = a.why; } else if (a.hint) b.title = a.hint;
     if (a.held) {
       b.addEventListener('pointerdown', (ev) => { if (ev.button !== 0) return; ev.preventDefault(); if (off) { if (a.why) note(a.why, 3); return; } this.startHold(o, a, b); });
     } else b.addEventListener('click', () => runNear(a));
@@ -1559,10 +1565,12 @@ export class PackSide {
     for (const o of objs) {
       const el = this.el.querySelector(`.nb[data-nb="${CSS.escape(o.id)}"]`); if (!el) continue;
       const wh = el.querySelector('.nb-head .wh'); if (wh && wh.textContent !== (o.sub || '')) wh.textContent = o.sub || '';
-      if (!o.meter) continue;
-      const bar = el.querySelector('.nb-meter i'), w = el.querySelector('.nb-meter .w');
-      if (bar) bar.style.width = `${Math.round(Math.max(0, Math.min(1, o.meter.value || 0)) * 100)}%`;
-      if (w && w.textContent !== (o.meter.words || '')) w.textContent = o.meter.words || '';
+      for (const [k, m] of [['burn', o.meter], ['cook', o.cooking]]) {
+        const row = el.querySelector(`.nb-meter.m-${k}`); if (!row || !m) continue;
+        const bar = row.querySelector('i'), w = row.querySelector('.w');
+        if (bar) bar.style.width = pct(m.value);
+        if (w && w.textContent !== (m.words || '')) w.textContent = m.words || '';
+      }
     }
   }
   // the thing whose E opened the book (nearby.js focus), scrolled to and lit
