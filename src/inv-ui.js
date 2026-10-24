@@ -21,9 +21,10 @@ import './inv-ui.css';
 // this file, the shop or the outfitter.
 const A_ITEMS = import.meta.glob('./items.js', { eager: true })['./items.js'] || null;
 const A_INV = import.meta.glob('./inventory.js', { eager: true })['./inventory.js'] || null;
-// the second round (fb2): the things near you (stream A's nearby.js: the fire ring, the pitched tent, the latrine, the
-// hang) and the held work (hold.js), feature-tested the same way
-const A_NEAR = import.meta.glob('./nearby.js', { eager: true })['./nearby.js'] || null;
+// the second round (fb2): the held work (hold.js, which imports nothing). The things near you (stream A's nearby.js: the
+// fire ring, the pitched tent, the latrine, the hang) come only through attach, never an import here: nearby.js imports
+// camp.js and tent.js, and pulling them in this early (journal.js imports this file) reads tent.js's TENT_SIZE before it
+// is set (the merge test, 2026-10-24)
 const A_HOLD = import.meta.glob('./hold.js', { eager: true })['./hold.js'] || null;
 // what the screens work with: main.js's fb B block (attach), else stream A's singleton, else the stand-in
 const ctx = { inventory: null, profile: null, player: null, energy: null, hud: null, shop: null, outfitter: null, stub: null, nearby: null, hold: null };
@@ -36,9 +37,9 @@ export function model() {
   return ctx.stub;
 }
 export const live = () => !model().stub; // stream A's model is in
-// the things near you: main.js's (attach), else stream A's nearby.js; each call is guarded, a thrown error costs a panel
-// and not the book
-function nearby() { const t = ctx.nearby, v = typeof t === 'function' ? t() : t; return v || (A_NEAR && A_NEAR.nearby) || null; }
+// the things near you: main.js's (attach: window.__game.nearby); each call is guarded, a thrown error costs a panel and
+// not the book
+function nearby() { const t = ctx.nearby, v = typeof t === 'function' ? t() : t; return v || null; }
 function nearObjects() {
   const n = nearby(); if (!n || typeof n.objects !== 'function') return [];
   try { return (n.objects() || []).filter((o) => o && o.id); } catch (e) { console.warn('nearby.objects', e); return []; }
