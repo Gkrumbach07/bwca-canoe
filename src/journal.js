@@ -33,7 +33,7 @@ export class Journal {
     this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button></div>
       <div class="book-key"><kbd>Tab</kbd> turns to the other side</div><div class="side j"></div><div class="side p"></div>`;
     this.jEl = this.el.querySelector('.side.j'); this.pEl = this.el.querySelector('.side.p');
-    this.pack = new PackSide(this.pEl, { onUse: t.onUse || null });
+    this.pack = new PackSide(this.pEl, { onUse: t.onUse || null, closeBook: () => this.close() }); // fb2 B: a nearby thing's action that wants the world (Pitch, Eat at the fire) closes the book first
     this.hud.registerPaper('journal', () => this.close());
     this.el.addEventListener('click', (e) => {
       const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); return; }
