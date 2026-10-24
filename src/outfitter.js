@@ -570,9 +570,9 @@ export class Outfitter {
     const inv = invModel(), all = inv && inv.containers ? inv.containers : [], packs = all.filter((c) => /^pack/.test(String(c.item))).length, barrels = all.filter((c) => /^barrel/.test(String(c.item))).length;
     rows.push(`<div class="lab">Packs</div><div>${packs > 1 ? `${packs} Duluth packs` : packs ? 'One Duluth pack' : 'No pack'}${barrels ? ` and ${barrels > 1 ? `${barrels} barrels` : 'a barrel'}` : ''} · <span class="soft">${packs > 1 ? 'two carries' : 'one carry'}</span></div>`);
     const food = inv && typeof inv.foodWords === 'function' ? inv.foodWords() : this.energy ? `${fmtDaysWords(this.energy.food)} of food` : '';
-    const inStore = !!(this.visit && this.layout(a.ep)), shelves = inStore ? '' : `<div class="shelfbtns">${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}</div>`;
+    const noStore = !this.layout(a.ep), shelves = !noStore ? '' : `<div class="shelfbtns">${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}</div>`;
     const pack = `<div class="lab">Food</div><p class="left">${esc(food || 'Nothing to eat')} within reach</p>
-        <p class="note">${this.sandbox ? 'Sandbox: the shelves are free and nobody goes hungry.' : 'Meals and snacks are on the provisions shelf: walk over, pick them up and pack them yourself.'}</p>${shelves}`;
+        <p class="note">${this.sandbox ? 'Sandbox: the shelves are free and nobody goes hungry.' : noStore ? 'The store is being opened up: the shelves are here for now.' : 'Meals and snacks are on the provisions shelf: walk over, pick them up and pack them yourself.'}</p>${shelves}`;
     let push;
     if (!active) {
       const iceTxt = ice ? `the lakes are iced in until ${shortDate(thaw.year, thaw.doy)}` : '';

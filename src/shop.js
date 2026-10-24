@@ -218,6 +218,8 @@ export class Shop {
   get money() { return this.profile ? this.profile.money : 0; }
   // the inventory (stream A's, or inv-ui.js's stand-in) once it holds the things; the old counts before
   get inv() { const m = model(); return m && !m.stub ? m : null; }
+  // the leeches and the lures are counted in the inventory (stream A's bridge to the old count steps aside)
+  get usesInventory() { return !!this.inv; }
   get suppers() { const inv = this.inv; return inv ? inv.count('meal:freeze', { reachable: false }) : 0; }
   get leeches() {
     const inv = this.inv;
@@ -371,9 +373,10 @@ export class Shop {
       return { ok: true, words: `${it.name}${paid(n)}: with your things${it.slot ? ', and the one you’ll use' : ''}. $${pr.money} in hand.` };
     }
     if (d && d.kind === 'container') {
-      for (let i = 0; i < n; i++) inv.addContainer(it.id, 'stash');
+      let made = null;
+      for (let i = 0; i < n; i++) made = inv.addContainer(it.id, 'stash');
       pr.spend(cost, `${it.name}${at}`); this.apply(); refresh();
-      return { ok: true, words: `${it.name}${paid(n)}: it’s with your things. Fill it, then carry it out. $${pr.money} in hand.` };
+      return { ok: true, cId: made && made.id, words: `${it.name}${paid(n)}: it’s with your things. Fill it, then carry it out. $${pr.money} in hand.` };
     }
     // a thing that goes in: where it was dropped, else where there is room, one at a time
     const qty = it.qty || 1, into = new Map();

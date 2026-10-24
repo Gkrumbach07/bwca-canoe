@@ -40,12 +40,12 @@ export const CELL = 50; // px a grid cell (the icons read at 48)
 const LOCAL = {};
 const L = (id, name, kind, w, h, kg, o = {}) => { LOCAL[id] = { id, name, kind, w, h, kg, stack: 1, price: 0, icon: id, words: '', ...o }; };
 // containers
-L('pockets', 'Your pockets', 'container', 1, 1, 0, { icon: 'pockets', container: { cols: 4, rows: 1 }, words: 'Shirt and trouser pockets: a snack, a lure, the tablets.' });
+L('pockets', 'Your pockets', 'container', 1, 1, 0, { short: 'Pockets', icon: 'pockets', container: { cols: 4, rows: 1 }, words: 'Shirt and trouser pockets: a snack, a lure, the tablets.' });
 L('pack3', 'Duluth pack #3', 'container', 4, 5, 2.0, { short: 'Duluth #3', icon: 'pack', wear: ['back', 'chest'], price: 25, container: { cols: 6, rows: 8 }, words: 'Canvas and leather, the old #3: a week’s food, or the tent and the cook kit.' });
 L('pack4', 'Duluth pack #4', 'container', 5, 5, 2.4, { short: 'Duluth #4', icon: 'pack4', wear: ['back', 'chest'], price: 35, container: { cols: 7, rows: 9 }, words: 'The big #4. Everything goes in, and you’ll feel every bit of it on the long carries.' });
 L('barrel30', 'Blue barrel, 30 L', 'container', 3, 4, 2.2, { short: 'Barrel 30', icon: 'barrel', wear: ['back', 'chest'], hand: true, price: 25, container: { cols: 4, rows: 4, accepts: ['food', 'meal', 'snack', 'fish', 'forage'] }, words: 'A blue barrel on a harness. The food rides dry and sealed, and the bears can’t smell it.' });
 L('barrel60', 'Blue barrel, 60 L', 'container', 4, 5, 3.0, { short: 'Barrel 60', icon: 'barrel60', wear: ['back'], price: 35, container: { cols: 5, rows: 6, accepts: ['food', 'meal', 'snack', 'fish', 'forage'] }, words: 'The big blue barrel: two weeks of food for a long trip. Heavy on the first portage, light on the last.' });
-L('bucket', 'Leech bucket', 'container', 2, 2, 0.6, { icon: 'bucket', hand: true, price: 6, container: { cols: 2, rows: 2, accepts: ['bait'] }, words: 'A foam bucket with a lid. Leeches stay lively in it for days if you change the water.' });
+L('bucket', 'Leech bucket', 'container', 2, 2, 0.6, { short: 'Bucket', icon: 'bucket', hand: true, price: 6, container: { cols: 2, rows: 2, accepts: ['bait'] }, words: 'A foam bucket with a lid. Leeches stay lively in it for days if you change the water.' });
 L('tacklebox', 'Tackle box', 'container', 3, 2, 0.8, { short: 'Tackle box', icon: 'tacklebox', hand: true, nest: true, price: 12, container: { cols: 4, rows: 3, accepts: ['lure', 'tool'] }, words: 'A green box with trays that fold out. The lures you own are the ones in here.' });
 L('mapcase', 'Map case', 'container', 1, 3, 0.2, { short: 'Map case', icon: 'mapcase', hand: true, nest: true, price: 10, container: { cols: 2, rows: 6, accepts: ['map'] }, words: 'Clear vinyl with a roll-top seal. The sheet stays dry on the thwart in front of you.' });
 // food
@@ -56,7 +56,7 @@ L('snack:trailmix', 'Trail mix', 'snack', 1, 1, 0.25, { short: 'Trail mix', icon
 L('snack:jerky', 'Beef jerky', 'snack', 1, 1, 0.15, { short: 'Jerky', icon: 'jerky', price: 3, eat: { food: 0.25, cook: false }, words: 'Smoked in the shed out back. Chewy, salty, and it keeps forever.' });
 L('snack:chocolate', 'Chocolate bar', 'snack', 1, 1, 0.1, { short: 'Choc.', icon: 'chocolate', price: 1, eat: { food: 0.15, cook: false }, words: 'Milk chocolate. It goes soft in the sun; eat it at the top of the portage.' });
 // bait and lures
-L('leeches', 'Leeches', 'bait', 1, 1, 0.03, { icon: 'leeches', price: 4, stack: 12, sold: 12, words: 'Ribbon leeches from the bait fridge, by the dozen. A walleye can’t leave one alone.' });
+L('leeches', 'Leeches', 'bait', 1, 1, 0.03, { short: 'Leeches', icon: 'leeches', price: 4, stack: 12, sold: 12, words: 'Ribbon leeches from the bait fridge, by the dozen. A walleye can’t leave one alone.' });
 for (const [id, name, short, price] of [['lure:jig', 'Jig & twister tail', 'Jig', 3], ['lure:mepps', 'Mepps spinner', 'Mepps', 6], ['lure:daredevle', 'Red-and-white Daredevle', 'Daredevle', 7], ['lure:rapala', 'Jointed Rapala', 'Rapala', 12], ['lure:silverminnow', 'Johnson Silver Minnow', 'S. Minnow', 8], ['lure:lazyike', 'Lazy Ike', 'Lazy Ike', 9]]) L(id, name, 'lure', 1, 1, 0.02, { short, icon: id.slice(5), price, stack: 3 });
 // tools and camp gear
 L('tablets', 'Purifying tablets', 'tool', 1, 1, 0.05, { short: 'Tablets', icon: 'tablets', price: 2 });
@@ -83,6 +83,10 @@ L('carbon', 'Carbon bent-shaft paddle', 'long', 1, 6, 0.5, { short: 'Carbon', ic
 L('aluminium', 'Aluminium canoe, 17 ft', 'long', 5, 1, 34, { short: 'Aluminium', icon: 'canoe', hull: true });
 L('royalex', 'Royalex Prospector, 16 ft', 'long', 5, 1, 29, { short: 'Royalex', icon: 'royalex', price: 160, hull: true });
 L('kevlar', 'Kevlar tripper, 17 ft', 'long', 5, 1, 20, { short: 'Kevlar', icon: 'kevlar', price: 240, hull: true });
+
+L('stringer', 'Fish stringer', 'container', 1, 2, 0.2, { short: 'Stringer', icon: 'stringer', hand: true, nest: true, container: { cols: 3, rows: 5, accepts: ['fish'] } });
+L('crate', 'Kept for you at the outfitters', 'container', 1, 1, 0, { short: 'Crate', icon: 'crate', container: { cols: 10, rows: 8 } });
+L('firewood', 'An armful of firewood', 'firewood', 3, 2, 6, { short: 'Firewood', icon: 'firewood' });
 
 // Footprints and pictures for the signature items (outfitters.js families) and anything else the shop brings
 const FAMILY = { yoke: [3, 1, 'cedaryoke'], paddle: [1, 5, 'ottertail'], net: [2, 3, 'net'], blanket: [2, 2, 'blanket'], jacket: [2, 1, 'jacket'], sail: [1, 4, 'sail'], cover: [2, 2, 'cover'],
@@ -112,7 +116,8 @@ export function itemFor(it) {
   return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: it.kind === 'lure' ? 'lure' : 'gear', w: 1, h: 1, kg: it.kg || 0.2, price: it.price || 0, icon: it.id, words: it.words || '' });
 }
 export const shortOf = (name) => { const s = String(name || '').replace(/^(A|An|The) /, '').replace(/,.*$/, ''); const w = s.split(' '); return w.length > 2 ? w.slice(-2).join(' ') : s; };
-export const short = (d) => (d ? d.short || shortOf(d.name) : '');
+// the short name in an item's corner: its own, the stand-in's, else the last words of its name
+export const short = (d) => (d ? d.short || (LOCAL[d.id] && LOCAL[d.id].short) || shortOf(d.name) : '');
 // the footprint of an item, turned or not
 export const dims = (d, rot) => { const w = d ? d.w || 1 : 1, h = d ? d.h || 1 : 1; return rot ? [h, w] : [w, h]; };
 export const gridSize = (c) => { const d = itemDef(c && c.item), k = (d && d.container) || (c && c.size) || { cols: 4, rows: 4 }; return { cols: k.cols, rows: k.rows, accepts: k.accepts || null }; };
@@ -602,8 +607,9 @@ function iconKey(d, id) {
 const CACHE = new Map();
 const DPR = () => Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
 // the cached picture of item id letterboxed in w × h css px (unturned)
-function picture(id, w, h) {
-  const d = itemDef(id), key = iconKey(d, id), dpr = DPR(), ck = `${id}|${key}|${w}x${h}@${dpr}`;
+function picture(id, w0, h0) {
+  let w = w0, h = h0;
+  const d = itemDef(id), key = iconKey(d, id), dpr = DPR(), ck = `${id}|${key}|${w0}x${h0}@${dpr}`;
   let cv = CACHE.get(ck);
   if (cv) return cv;
   cv = document.createElement('canvas');
@@ -611,12 +617,13 @@ function picture(id, w, h) {
   const c = cv.getContext('2d');
   c.scale(dpr, dpr);
   if (d && typeof d.draw === 'function') { // the item's own drawing (stream G's forage)
-    const sz = Math.min(w, h);
+    const sz = Math.min(w0, h0);
     c.save(); c.translate((w - sz) / 2, (h - sz) / 2);
     try { d.draw(c, sz); } catch (e) { console.warn('icon draw', id, e); }
     c.restore(); CACHE.set(ck, cv); return cv;
   }
   const pad = Math.min(w, h) > 40 ? 3 : 1, [bw, bh, fn] = key ? ICONS[key] : [100, 100, (cc) => drawTag(cc, short(d) || String(id))];
+  if ((bw > bh * 1.6 && h > w * 1.6) || (bh > bw * 1.6 && w > h * 1.6)) { c.translate(w, 0); c.rotate(Math.PI / 2); [w, h] = [h, w]; } // turned to fit
   const s = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
   c.translate((w - bw * s) / 2, (h - bh * s) / 2); c.scale(s, s);
   if (key === 'fish') drawFish(c, (d && d.species) || String(id).replace(/^fish:/, ''));
@@ -856,6 +863,7 @@ function turn(g, e) {
 function reveal(cId) {
   const el = document.querySelector(`.ct[data-cid="${CSS.escape(cId)}"]`);
   if (!el) return;
+  if (el.classList.contains('folded')) { el.classList.remove('folded'); FOLDED.set(cId, false); }
   el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   el.classList.remove('lit'); void el.offsetWidth; el.classList.add('lit');
 }
@@ -888,7 +896,7 @@ function itemMenu(g, e) {
   if (g.opts.onUse) { const u = g.opts.onUse(e, 'label', g.c); if (u) out.push({ label: u, run: () => g.opts.onUse(e, 'use', g.c) }); }
   if ((e.qty || 1) > 1) out.push({ label: `Split off ${Math.floor((e.qty || 1) / 2)}`, run: () => split(g, e) });
   if (d && d.w !== d.h) out.push({ label: 'Turn it', run: () => turn(g, e) });
-  for (const o of others(g).slice(0, 5)) out.push({ label: `Move to the ${lower(short(itemDef(o.c.item)) || nameOf(o.c))}`, run: () => { if (!moveInto(g, e, o)) note('No room in there.', 2.5); } });
+  for (const o of others(g).filter((k) => k.c.id !== e.uid && firstFit(k.c, e.id, e.qty || 1)).slice(0, 5)) out.push({ label: `Move to the ${lower(short(itemDef(o.c.item)) || nameOf(o.c))}`, run: () => { if (!moveInto(g, e, o)) note('No room in there.', 2.5); } });
   if (typeof inv.drop === 'function' && !e.box) out.push({ label: 'Drop it here', run: () => world('drop', g.c.id, e.uid) });
   return out;
 }
@@ -944,13 +952,16 @@ export function hideTip() { clearTimeout(tipTimer); if (tipEl) { tipEl.remove();
 
 // --- the blocks the screens are made of ---------------------------------------------------------------------------
 // a container: a leather strap with its name, where it is and its weight, over its grid
+const FOLDED = new Map(); // container id → folded (a click on its strap); the crate starts folded while empty
 function block(c, byId, opts = {}) {
-  const w = mk('div', `ct w-${c.where}${c.where === 'in' ? ' nested' : ''}`);
+  const folded = FOLDED.has(c.id) ? FOLDED.get(c.id) : c.item === 'crate' && !(c.grid || []).length;
+  const w = mk('div', `ct w-${c.where}${c.where === 'in' ? ' nested' : ''}${folded ? ' folded' : ''}`);
   w.dataset.cid = c.id;
   const inv = model(), kg = typeof inv.weight === 'function' && live() ? inv.weight(c.id) : weightOf(c), { cols, rows } = gridSize(c);
   const used = (c.grid || []).reduce((n, e) => { const [a, b] = dims(itemDef(e.id), e.rot); return n + a * b; }, 0);
   const head = mk('div', 'ct-head', `<span class="nm">${esc(nameOf(c))}</span><span class="wh">${esc(whereWords(c, byId))}</span><span class="kg">${kgText(kg)}${used >= cols * rows ? ' · full' : ''}</span>`);
   if (thingMenu(c, false).length) { head.classList.add('acts'); head.title = 'Right-click: carry it, set it down, load it'; head.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, thingMenu(c, false)); }); }
+  head.addEventListener('click', () => { const f = !w.classList.contains('folded'); FOLDED.set(c.id, f); w.classList.toggle('folded', f); });
   const g = mk('div');
   grid(g, c, { onUse: opts.onUse });
   w.append(head, g);
@@ -974,6 +985,8 @@ function ordered(list) {
 const topOf = (c, byId) => { let k = c; for (let i = 0; i < 6 && k.where === 'in' && byId.get(k.in); i++) k = byId.get(k.in); return k; };
 const GROUP = { back: 'on', chest: 'on', hands: 'on', pockets: 'on', canoe: 'canoe', stash: 'stash', ground: 'near', hung: 'near', pile: 'near' };
 const groupOf = (c, byId) => GROUP[topOf(c, byId).where] || 'near';
+const RANK = { on: 0, canoe: 1, near: 2, stash: 3 };
+const sorted = (list, byId) => list.slice().sort((a, b) => (RANK[groupOf(a, byId)] + (topOf(a, byId).item === 'crate' ? 1 : 0)) - (RANK[groupOf(b, byId)] + (topOf(b, byId).item === 'crate' ? 1 : 0)));
 
 // --- the book's pack side -----------------------------------------------------------------------------------------
 // Tarkov's layout on the book's canvas: what you wear and hold on the left (the back, the chest, the hands, the
@@ -1001,13 +1014,13 @@ export class PackSide {
     const scroll = [...this.el.querySelectorAll('.pk-col')].map((n) => n.scrollTop);
     for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy();
     const on = list.filter((c) => groupOf(c, byId) === 'on'), canoe = list.filter((c) => groupOf(c, byId) === 'canoe');
-    const near = list.filter((c) => groupOf(c, byId) === 'near'), kept = list.filter((c) => groupOf(c, byId) === 'stash');
+    const near = list.filter((c) => groupOf(c, byId) === 'near'), kept = sorted(list.filter((c) => groupOf(c, byId) === 'stash'), byId);
     const p = ctx.player, atCanoe = stash || canoe.length > 0 || (p && p.mode === 'paddle');
     const longs = (inv.long || []).filter((l) => stash || l.where === 'hands' || (l.where === 'canoe' && atCanoe) || (l.where === 'ground' && l.at && p && Math.hypot(l.at.x - p.x, l.at.z - p.z) < 3));
-    const carried = typeof inv.weight === 'function' ? inv.weight() : on.reduce((k, c) => k + weightOf(c), 0);
+    const kgOn = typeof inv.weight === 'function' ? inv.weight() : on.reduce((k, c) => k + weightOf(c), 0);
     const food = typeof inv.foodWords === 'function' ? inv.foodWords() : '';
     this.el.innerHTML = `<header class="pk-head">
-        <div class="lede"><div class="sc kicker">The pack · ${stash ? 'at the outfitter’s, everything you own' : 'what you carry and what is within reach'}</div><h2>${carried > 0.05 ? `${kgText(carried)} on you` : 'Travelling light'}</h2><div class="sub">${esc(loadWords(carried))}${food ? ` · ${esc(food)} within reach` : ''}</div></div>
+        <div class="lede"><div class="sc kicker">The pack · ${stash ? 'at the outfitter’s, everything you own' : 'what you carry and what is within reach'}</div><h2>${kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light'}</h2><div class="sub">${esc(loadWords(kgOn))}${food ? ` · ${esc(food)} within reach` : ''}</div></div>
         ${pr ? `<div class="purse"><span class="sc">In hand</span><b>$${pr.money}</b></div>` : ''}
       </header>
       <div class="pk-body"><section class="pk-col pk-on" aria-label="On you"></section><section class="pk-col pk-carry" aria-label="What you carry"></section><section class="pk-col pk-near" aria-label="Within reach"></section></div>
@@ -1035,14 +1048,17 @@ export class PackSide {
     for (const c of on.filter((k) => k.where === 'pockets')) cOn.appendChild(block(c, byId, { onUse: this.onUse }));
     const lg = longs.filter((l) => l.where !== 'hands');
     if (lg.length) { cOn.appendChild(mk('div', 'pk-lab', 'Long things')); for (const l of lg) cOn.appendChild(longBlock(l)); }
-    // what you carry: the grids of the back, the chest and the hands, and what is nested in them
-    for (const c of on) if (c.where !== 'pockets' && !(c.where === 'in' && topOf(c, byId).where === 'pockets')) cCarry.appendChild(block(c, byId, { onUse: this.onUse }));
-    if (!cCarry.children.length) cCarry.appendChild(mk('p', 'pk-empty', 'Nothing on your back or in your hands. E at a pack on the ground takes it up.'));
+    // what you carry: the grids of the back, the chest and the hands, and what is nested in them; with nothing on
+    // you, the canoe's load takes the middle
+    const carried = on.filter((c) => c.where !== 'pockets' && !(c.where === 'in' && topOf(c, byId).where === 'pockets'));
+    for (const c of carried) cCarry.appendChild(block(c, byId, { onUse: this.onUse }));
+    const sec = (col, title, cs) => { if (!cs.length) return; col.appendChild(mk('div', 'pk-lab', esc(title))); const f = mk('div', 'pk-flow'); for (const c of cs) f.appendChild(block(c, byId, { onUse: this.onUse })); col.appendChild(f); };
+    const canoeTitle = stash ? 'The canoe, tied at the dock' : 'In the canoe';
+    if (!carried.length) { cCarry.appendChild(mk('p', 'pk-empty', 'Nothing on your back or in your hands. E at a pack on the ground takes it up.')); sec(cCarry, canoeTitle, canoe); }
+    else sec(cNear, canoeTitle, canoe);
     // within reach
-    const sec = (title, cs) => { if (!cs.length) return; cNear.appendChild(mk('div', 'pk-lab', esc(title))); const f = mk('div', 'pk-flow'); for (const c of cs) f.appendChild(block(c, byId, { onUse: this.onUse })); cNear.appendChild(f); };
-    sec(stash ? 'The canoe, tied at the dock' : 'In the canoe', canoe);
-    sec('Close by', near);
-    sec('Kept for you by the outfitters', kept);
+    sec(cNear, 'Close by', near);
+    sec(cNear, 'Kept for you by the outfitters', kept);
     if (!cNear.children.length) cNear.appendChild(mk('p', 'pk-empty', stash ? 'Nothing kept here.' : 'Nothing else within reach. What you leave behind stays where you left it.'));
     [...this.el.querySelectorAll('.pk-col')].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });
   }
@@ -1060,8 +1076,8 @@ export class ShelfScreen {
     el.addEventListener('click', (ev) => { const b = ev.target.closest('button[data-act]'); if (b && b.dataset.act === 'close') this.close(); });
   }
   show(spec) {
-    this.spec = spec; this.open = true; this.receipt = null;
-    listen();
+    this.spec = spec; this.open = true; this.receipt = null; this.fresh = true;
+    listen(); hideTip();
     if (this.hud && this.hud.openPaper) this.hud.openPaper('shelf');
     this.render(true);
   }
@@ -1076,6 +1092,7 @@ export class ShelfScreen {
   buy(id, spot, n = 1) {
     const r = this.spec.buy(id, spot, n) || { ok: false, words: 'Not today.' };
     this.receipt = r;
+    if (r.ok && r.cId) this.reveal = r.cId; // the container it went into, scrolled to
     if (r.ok) note(r.words, 4);
     refresh();
     this.render(true);
@@ -1088,8 +1105,9 @@ export class ShelfScreen {
     const inv = model(), all = inv.reachable(ctx.player) || [], sig = [version, all.map((c) => `${c.id}:${c.where}`).join(), this.money()].join('|');
     if (!force && sig === this.sig) return;
     this.sig = sig;
-    const s = this.spec, money = this.money(), { list, byId } = ordered(all), r = this.receipt;
-    const scroll = [...this.el.querySelectorAll('.sh-mine, .sh-stock')].map((n) => n.scrollTop);
+    const s = this.spec, money = this.money(), o = ordered(all), byId = o.byId, list = sorted(o.list, byId), r = this.receipt;
+    const scroll = this.fresh ? [] : [...this.el.querySelectorAll('.sh-mine, .sh-stock')].map((n) => n.scrollTop);
+    this.fresh = false;
     for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy();
     this.el.className = `paper show look-${s.look || 'shelf'}`;
     this.el.innerHTML = `<header>
@@ -1103,22 +1121,27 @@ export class ShelfScreen {
           <div class="sh-receipt pencil${r && !r.ok ? ' no' : ''}">${esc(r ? r.words : s.hint || 'Drag a thing into one of yours, or double-click it to buy one.')}</div></section>
       </div>
       <footer class="sh-foot"><span>drag onto a slot to buy it there · double-click or <kbd>Ctrl</kbd>-click buys into the first with room · <kbd>R</kbd> turns it while dragging · right-click for more</span></footer>`;
-    const mine = this.el.querySelector('.sh-mine .pk-flow');
-    for (const c of list) mine.appendChild(block(c, byId));
+    const mine = this.el.querySelector('.sh-mine .pk-flow'), big = mk('div', 'sh-col'), small = mk('div', 'sh-col'), under = mk('div', 'sh-under');
+    mine.append(big, small, under);
+    for (const c of list) {
+      const top = topOf(c, byId), { cols, rows } = gridSize(top);
+      (top.item === 'crate' ? under : cols * rows >= 20 && top.item !== 'stringer' ? big : small).appendChild(block(c, byId));
+    }
     const longs = (inv.long || []).filter((l) => l.where !== 'ground');
-    if (longs.length) { const f = mk('div', 'pk-longs'); for (const l of longs) f.appendChild(longBlock(l)); mine.appendChild(f); }
+    if (longs.length) { const f = mk('div', 'pk-longs'); for (const l of longs) f.appendChild(longBlock(l)); small.appendChild(f); }
+    if (this.reveal) { const id = this.reveal; this.reveal = null; setTimeout(() => reveal(id), 30); }
     // the stock on shelf boards ten cells wide: the tallest first, each board as high as the tallest thing on it, the
     // things standing on it (a long thin thing lies down)
-    const cols = 10, shelf = { id: `shelf:${s.kind}`, item: null, size: { cols, rows: 1 }, grid: [], boards: [] };
+    const cols = 10, gap = s.look === 'pegs' ? 1 : 0, shelf = { id: `shelf:${s.kind}`, item: null, size: { cols, rows: 1 }, grid: [], boards: [] };
     const items = s.stock().map((it) => { const d = itemDef(it.id), w = d ? d.w || 1 : 1, h = d ? d.h || 1 : 1, rot = w === 1 && h >= 3 ? 1 : 0; return { it, W: rot ? h : w, H: rot ? w : h, rot }; })
       .sort((a, b) => b.H - a.H || b.W - a.W || (b.it.signature ? 1 : 0) - (a.it.signature ? 1 : 0));
     let y = 0, x = 0, band = 0;
     for (const q of items) {
-      if (x + q.W > cols) { shelf.boards.push(y + band); y += band; x = 0; band = 0; }
+      if (x + q.W > cols) { shelf.boards.push(y + band); y += band + gap; x = 0; band = 0; }
       if (!band) band = q.H;
       const it = q.it;
       shelf.grid.push({ uid: `shelf:${it.id}`, id: it.id, x, y: y + band - q.H, rot: q.rot, w: q.W, h: q.H, qty: it.qty || 1, price: it.price, owned: !!it.owned, inUse: !!it.inUse, hull: !!it.hull, sig: !!it.signature, words: it.words, dear: it.price > money && !it.owned });
-      x += q.W;
+      x += q.W + gap;
     }
     if (band) shelf.boards.push(y + band);
     shelf.size.rows = Math.max(y + band, 4);
