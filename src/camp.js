@@ -600,7 +600,7 @@ export class Camp {
       onTick: (at) => { if (this.camp === c) c.stages.set(from - at); },
       onPhase: (i) => { const st = from - (i + 1); if (st <= 0) this.packTent(); else this.setStage(c, st); },
       // (half struck, Q takes the rest down and E pitches it again: tentPrompts)
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) this.note(`The tent stands with ${K.words[c.stage]}. Hold Q to take the rest down, or E to pitch it again.`, 4); } },
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) this.note(`${cap(K.words[c.stage])}. ${c.stage === 3 && this.sleepy ? 'Q to sleep without the fly, or hold E to put it back on.' : 'Hold Q to take the rest down, or E to pitch it again.'}`, 4); } },
     };
   }
   // the footprint staked: the tent out of its container, the site claimed, the camp begun
@@ -693,7 +693,7 @@ export class Camp {
   // (Q is the packs' while you carry something: then it sets that down.)
   tentPrompts(site = null, soft = false) {
     const c = this.camp, p = this.player, inp = p.input, d = this.day, { rise, set } = d.sunriseSunset, h = d.hours;
-    const from = (set ?? 19) - SLEEP_FROM, night = h >= from || h < (rise ?? 6), sleepy = night || this.wornOut;
+    const from = (set ?? 19) - SLEEP_FROM, night = this.night0, sleepy = this.sleepy;
     const ch = this.chores, wake = night ? `until first light, about ${clock12(this.wakeTime('first').at)}` : `worn out: until about ${clock12(this.wakeTime().at)}`;
     const q = !soft;
     if (c.stage < 4) {
@@ -716,6 +716,9 @@ export class Camp {
     const ch = this.chores;
     if (night && ch && ch.openWake) ch.openWake(site, 0); else this.sleep('tent');
   }
+  // from an hour and a half before sunset to sunrise the tent takes you (night0), and by day too when worn out (sleepy)
+  get night0() { const d = this.day, { rise, set } = d.sunriseSunset, h = d.hours; return h >= (set ?? 19) - SLEEP_FROM || h < (rise ?? 6); }
+  get sleepy() { return this.night0 || this.wornOut; }
   // done in by day (a site reached at dawn after a night on the water): the tent takes you anyway
   get wornOut() { const e = this.energy; return !!(e && e.live && e.needs && e.needs.rest < WORN_OUT); }
 
