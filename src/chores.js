@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { PropBuilder, propMaterial, TILE } from './prop-kit.js';
 import { registerKind } from './tasks.js';
-import { GROUND } from './terrain-build.js';
 import { dayOfYear } from './astro.js';
 import { clock12, word, plural, esc } from './hud.js';
-import { mulberry32, hash2 } from './rng.js';
+import { mulberry32 } from './rng.js';
 import { save } from './save.js';
 
 // Camp chores (hubs phase 3, stream A). The owner: "it's all just a bunch of little tasks, which at the end of the day,
@@ -16,10 +15,9 @@ import { save } from './save.js';
 //   site's fire ring sets what you carry down there, where it shows as a woodpile (one stack an armful); pushing off
 //   from the site takes the stack along in the canoe. Lighting the fire takes an armful, and so does feeding it.
 // - The latrine. E at the box back in the trees (props.js c.layout.latrine): ten quiet minutes, rest +0.05, once a day.
-// - Blueberries. July 10 to August 20, a patch on the burn or the lichen rock by a site (the tile's ground class,
-//   world.coverCell), drawn in season with its berries: E picks a pint in 20 minutes, three pints a site a day (the
-//   bushes thin by a third each pint). A pint a berries notice still wants goes into the tin for it; any other you eat
-//   as you pick (the food need +0.15).
+// - Blueberries (and the other berries and the mushrooms) are forage.js's now (fb G, 2026-10-24): patches in their own
+//   ground and season everywhere, not one by each site. A pint of blueberries a berries notice still wants goes into the
+//   tin here (s.pints, pintsWanted), which the notice hands over.
 // - Sleep with a wake time. E at the tent (or ← → there, standing still) opens a small paper card: first light (the
 //   default, its time shown), 7:00 or 9:00, chosen with ← →; E again turns in (camp.sleep with the choice).
 // And two notices for the boards (tasks.js registerKind): blueberries for the café ($10 a pint, in season) and firewood
@@ -31,9 +29,6 @@ import { save } from './save.js';
 
 export const WOOD = { reach: 10, most: 3, ring: 3.4, stow: 60 };
 const AT_LATRINE = 1.9, LATRINE_REST = 0.05;
-const AT_BERRIES = 2.8, PINTS_A_DAY = 3, BERRY_FOOD = 0.15;
-const PATCH_NEAR = 110;                      // metres from a site at which its patch is drawn
-const BERRY_GROUND = new Set(['burn', 'rockLichen']);
 export const SEASON = { from: [6, 10], to: [7, 20] }; // [month (0-based), day]: July 10 to August 20, the blueberries
 export const PAY = { pint: 10, armful: 6 };
 // the wake times on the card: first light (camp.js wakeTime: a quarter hour after sunrise, or later after a late night)
@@ -81,88 +76,6 @@ function woodpileGeometry() {
   }
   return out;
 }
-// A low faceted mound of leaves: an icosahedron squashed and jittered, flat faces in a few greens (Firewatch's
-// "graphic" foliage: big simple shapes coloured by the light)
-// (a patch is a few hundred of them and a thousand berries, built as you come near a site: the icosahedron's twelve
-// corners and twenty faces are read once, and the vertices written straight in, about 6 ms a patch)
-let ICO = null;
-function icosahedron() {
-  if (ICO) return ICO;
-  const g = new THREE.IcosahedronGeometry(1, 0), pos = g.getAttribute('position'), verts = [], idx = [], seen = new Map();
-  for (let i = 0; i < pos.count; i++) {
-    const k = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
-    let j = seen.get(k);
-    if (j === undefined) { j = verts.length; seen.set(k, j); verts.push([pos.getX(i), pos.getY(i), pos.getZ(i)]); }
-    idx.push(j); // three's winding: each face counter-clockwise seen from outside
-  }
-  g.dispose();
-  return (ICO = { verts, idx });
-}
-function mound(b, rng, cx, cy, cz, rx, ry, rz, greens) {
-  const { verts, idx } = icosahedron();
-  const P = verts.map(([x, y, z]) => { const j = 0.82 + rng() * 0.3; return { x: cx + x * rx * j, y: cy + Math.max(-0.35, y) * ry * j, z: cz + z * rz * j }; });
-  for (let i = 0; i < idx.length; i += 3) {
-    const A = P[idx[i]], B = P[idx[i + 1]], Cc = P[idx[i + 2]], col = tone(pickR(rng, greens), rng, 0.08, 0.02);
-    const ux = B.x - A.x, uy = B.y - A.y, uz = B.z - A.z, vx = Cc.x - A.x, vy = Cc.y - A.y, vz = Cc.z - A.z;
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    const l = Math.hypot(nx, ny, nz);
-    if (l < 1e-12) continue; // a bottom face flattened to nothing
-    nx /= l; ny /= l; nz /= l;
-    const n = { x: nx, y: ny, z: nz };
-    for (const Q of [A, B, Cc]) b.vert(Q, n, Q.x * 3, Q.z * 3, TILE.PLAIN, col);
-  }
-}
-// a berry: a little octahedron, dusty blue with its bloom (its eight faces' normals worked out once)
-const OCT = [];
-for (const sx of [1, -1]) for (const sy of [1, -1]) for (const sz of [1, -1]) OCT.push({ sx, sy, sz, flip: sx * sy * sz < 0, n: new THREE.Vector3(sx, sy / 0.9, sz).normalize() });
-function berry(b, p, r, col) {
-  const h = r * 0.9;
-  for (const o of OCT) {
-    const X = { x: p.x + o.sx * r, y: p.y, z: p.z }, Y = { x: p.x, y: p.y + o.sy * h, z: p.z }, Z = { x: p.x, y: p.y, z: p.z + o.sz * r };
-    for (const Q of o.flip ? [X, Z, Y] : [X, Y, Z]) b.vert(Q, o.n, 0.5, 0.5, TILE.PLAIN, col);
-  }
-}
-// A blueberry patch seated on the ground (gy(x, z): the drawn ground at a point, world metres): low bushes over about
-// 2 m and their berries in three geometries, a third of the berries in each (a pint picked hides one). In world
-// coordinates less the patch's centre (the mesh is placed at x, gy(x, z), z).
-function berryGeometry(x0, z0, gy, seed) {
-  const rng = mulberry32(seed), lv = new PropBuilder(), bs = [new PropBuilder(), new PropBuilder(), new PropBuilder()];
-  const greens = [0x5e8139, 0x6e9042, 0x527235, 0x7f9b4a, 0x63863f], bronze = 0x7d6a3c, blues = [0x4c5f96, 0x5a6ba2, 0x404e82, 0x5f6a9a], y0 = gy(x0, z0);
-  const bushes = 24 + Math.floor(rng() * 6);
-  let nb = 0;
-  for (let i = 0; i < bushes; i++) {
-    const a = rng() * 6.28, d = Math.sqrt(rng()), bx = Math.cos(a) * d * 1.6, bz = Math.sin(a) * d * 1.15;
-    const s = (1.0 + rng() * 0.6) * (1.15 - 0.35 * d), tops = [];
-    // a low bush: a handful of small leafy clumps, the middle ones higher, now and then one gone bronze
-    const clumps = 5 + Math.floor(rng() * 3);
-    for (let m = 0; m < clumps; m++) {
-      const t = rng() * 6.28, o = m ? (0.06 + rng() * 0.13) * s : 0, mx = bx + Math.cos(t) * o, mz = bz + Math.sin(t) * o;
-      const rx = (0.075 + rng() * 0.05) * s, ry = (0.07 + rng() * 0.04) * s, lift = (0.22 - o) * 0.75 * s + rng() * 0.04;
-      const my = gy(x0 + mx, z0 + mz) - y0 + ry * 0.45 + Math.max(0, lift);
-      mound(lv, rng, mx, my, mz, rx, ry, rx * (0.8 + rng() * 0.35), rng() < 0.03 ? [bronze] : greens);
-      tops.push([mx, my, mz, rx, ry]);
-    }
-    // the berries: small blue clusters sitting proud on the clumps' tops and shoulders, a few berries a cluster drawn a
-    // little bigger than life (a real one is a centimetre across: life-size, they vanish two steps off), where they show
-    // from the camp
-    for (const [mx, my, mz, rx, ry] of tops) {
-      const clusters = 1 + Math.floor(rng() * 1.8);
-      for (let k = 0; k < clusters; k++) {
-        const t = rng() * 6.28, u = 0.15 + rng() * 0.55, ct = Math.cos(t), st = Math.sin(t), col = tone(pickR(rng, blues), rng, 0.08, 0.012);
-        const cx = mx + ct * rx * u * 1.12, cz = mz + st * rx * u * 1.12, cy = my + ry * Math.sqrt(Math.max(0, 1 - u * u)) * 1.1;
-        const many = 4 + Math.floor(rng() * 4);
-        for (let q = 0; q < many; q++) {
-          const a2 = (q / many) * 6.28 + rng() * 0.6, d2 = q ? 0.022 + rng() * 0.016 : 0, r = 0.019 + rng() * 0.007;
-          berry(bs[nb % 3], V(cx + Math.cos(a2) * d2, cy + r * 0.6 + (q ? -rng() * 0.012 : 0.008), cz + Math.sin(a2) * d2), r, q % 3 === 2 ? col.clone().offsetHSL(0, 0, 0.06) : col);
-        }
-        nb++;
-      }
-    }
-  }
-  const leaves = shadeBy(lv.build(), (py, ny) => (0.58 + 0.42 * Math.min(1, Math.max(0, (py + 0.02) / 0.3))) * (ny < -0.2 ? 0.72 : 1));
-  return { leaves, berries: bs.map((b) => shadeBy(b.build(), (py, ny) => (ny < -0.3 ? 0.8 : 1))) };
-}
-
 // --- the wake-time card ----------------------------------------------------------------------------------------------
 // A small paper slip over the camp (no scrim: the evening stays in view): first light, 7:00, 9:00; ← → chooses, E turns
 // in, Esc (or Q, or a step away) lets it be. Its keys are taken in the capture phase, ahead of the game's, the title's
@@ -243,10 +156,8 @@ export class Chores {
   constructor(camp) {
     this.camp = camp; this.tasks = null;
     this.card = new WakeCard();
-    this.patches = new Map();   // site key -> { x, z, seed } | null (no berry ground near it)
-    this.patchMesh = null;      // the patch drawn now: { key, group, berries: [mesh × 3] }
     this.pileMesh = null;       // the woodpile: { group, layers: [mesh × 3] }, placed at the pile's site
-    this.s = blank();           // what is saved: { arms, pile: { key, n } | null, pints, latrine, picked: { key: [day, n] } }
+    this.s = blank();           // what is saved: { arms, pile: { key, n } | null, pints (the notice's tin), latrine }
     this.stateRef = undefined;  // the trip's document the saved part was read from
     this.t = 0; this.sleepOffer = false; this.near = null; this.woodNear = null; this.woodT = 0;
     current = this;
@@ -256,7 +167,6 @@ export class Chores {
   get energy() { return this.camp.energy; }
   get day() { return this.camp.day; }
   get today() { const d = this.day; return absDay(d.year, d.doy); }
-  get inSeason() { const d = this.day; return berrySeason(d.year, d.doy); }
   note(t, s) { this.camp.note(t, s); }
 
   // --- the wood you have --------------------------------------------------------------------------------------------
@@ -289,7 +199,7 @@ export class Chores {
     const r = inp.pressed('ArrowRight'), l = inp.pressed('ArrowLeft');
     if ((r || l) && this.sleepSite !== undefined) this.openWake(this.sleepSite, r ? 1 : 0);
   }
-  // after the player has moved (camp.update): the saved part, the wood set down at a ring, the patch and the pile drawn
+  // after the player has moved (camp.update): the saved part, the wood set down at a ring, the pile drawn
   update(dt) {
     const c = this.camp, p = this.player;
     if (c.state !== this.stateRef) { this.stateRef = c.state; this.restore(); }
@@ -301,7 +211,6 @@ export class Chores {
       const site = this.near = c.nearestSite(p.x, p.z, 30, true);
       if (site && this.s.arms > 0 && this.atRing(site)) this.note(`You stack the wood by the ring: ${this.stackAt(site)}.`, 4);
     } else this.near = null;
-    this.berries();
     if (this.s.pile && (!this.pileMesh || !this.pileMesh.group.visible)) this.placePile();
   }
   // within a step of the ring of a site that is yours or free
@@ -318,20 +227,12 @@ export class Chores {
   }
 
   // --- prompts --------------------------------------------------------------------------------------------------------
-  // the latrine box and the blueberries, by their own spots at a site (true when one of them holds E)
+  // the latrine box, by its own spot at a site (true when it holds E; the berries are forage.js's)
   spotPrompts(site) {
     const c = this.camp, p = this.player, L = site.layout;
     if (L.latrine && Math.hypot(L.latrine.x - p.x, L.latrine.z - p.z) < AT_LATRINE) {
       if (this.s.latrine === this.today) return false;
       c.offer('Use the latrine', 'the box back in the trees', () => this.useLatrine());
-      return true;
-    }
-    const patch = this.inSeason ? this.patchFor(site) : null;
-    if (patch && Math.hypot(patch.x - p.x, patch.z - p.z) < AT_BERRIES) {
-      const left = this.pintsLeft(keyOf(site));
-      if (left <= 0) { c.say('Blueberries · picked clean today; more ripen by tomorrow'); return true; }
-      const want = this.pintsWanted() > this.s.pints;
-      c.offer('Pick blueberries', `a pint, 20 min${want ? ', for the notice' : ''} · ${word(left)} ${plural(left, 'pint')} on the bushes`, () => this.pick(site));
       return true;
     }
     return false;
@@ -382,26 +283,6 @@ export class Chores {
       this.persist();
     });
   }
-  pick(site) {
-    const key = keyOf(site);
-    this.camp.chore('pick', () => {
-      const today = this.today, pk = this.s.picked[key];
-      this.s.picked[key] = [today, (pk && pk[0] === today ? pk[1] : 0) + 1];
-      const want = this.pintsWanted();
-      if (want > this.s.pints) {
-        this.s.pints++;
-        const t = this.berryNotice();
-        this.note(`A pint of blueberries into the tin${t ? ` for “${t.title}”` : ''}: ${word(this.s.pints)} of ${word(want)}.`, 5);
-      } else {
-        const e = this.energy;
-        if (e && e.live && e.needs) e.needs.food = Math.min(1, e.needs.food + BERRY_FOOD);
-        this.note('A pint of blueberries, warm from the sun. Most of them go in by the handful.', 5);
-      }
-      this.berries();
-      this.persist();
-    });
-  }
-  pintsLeft(key) { const pk = this.s.picked[key]; return PINTS_A_DAY - (pk && pk[0] === this.today ? pk[1] : 0); }
   // the pints the berries notices taken on still want, from any board
   pintsWanted() { return this.notices('berries').reduce((s, t) => s + Math.max(0, (t.need || 1) - (t.got || 0)), 0); }
   berryNotice() { return this.notices('berries')[0] || null; }
@@ -433,71 +314,6 @@ export class Chores {
   }
   // camp.tentPrompts: the sleep prompt is up this frame (so ← → there opens the card)
   offered(site) { this.sleepOffer = true; this.sleepSite = site; }
-
-  // --- blueberries ----------------------------------------------------------------------------------------------------
-  // where a site's patch is: the nearest open berry ground (the burn, the lichen rock) 5 to 34 m from its ring, dry, not
-  // steep, clear of trunks, rocks, the tent pad, the bench and the latrine; null when there is none; undefined until the
-  // site's tile has built it
-  patchFor(site) {
-    const key = keyOf(site);
-    if (this.patches.has(key)) return this.patches.get(key);
-    const L = site.layout, w = this.world, t = this.camp.tiles;
-    if (!L || !t) return undefined;
-    const f = L.fire, avoid = [[L.pad, 5], [L.bench, 3], [L.latrine, 4]].filter(([q]) => q), wd = w.deeperDir(f.x, f.z);
-    let best = null;
-    for (let r = 8; r <= 34 && !best; r += 2.5) {
-      const a0 = hash2(Math.round(site.x), Math.round(site.z), 41) * 6.28;
-      for (let k = 0; k < 20 && !best; k++) {
-        const a = a0 + (k / 20) * 6.28, x = f.x + Math.cos(a) * r, z = f.z + Math.sin(a) * r;
-        const cv = w.coverCell(w.cellI(x), w.cellJ(z));
-        if (!cv || !BERRY_GROUND.has(GROUND[(cv >> 16) & 255])) continue;
-        // at the edge of the camp, not on the way down to the water where the canoes come in
-        if (w.shoreAt(x, z) < 3.5 || (r < 16 && Math.cos(a) * wd.x + Math.sin(a) * wd.z > 0.6) || avoid.some(([q, d]) => Math.hypot(q.x - x, q.z - z) < d)) continue;
-        let lo = Infinity, hi = -Infinity;
-        for (const [u, v] of [[-1.1, 0], [1.1, 0], [0, -0.9], [0, 0.9], [0, 0]]) { const h = t.groundAt(x + u, z + v); lo = Math.min(lo, h); hi = Math.max(hi, h); }
-        if (hi - lo > 0.55) continue;
-        if (t.treesNear(x, z, 1.5).length) continue;
-        best = { x, z, seed: (hash2(Math.round(x), Math.round(z), 43) * 1e9) >>> 0, r };
-      }
-    }
-    this.patches.set(key, best);
-    return best;
-  }
-  // the patch of the nearest site within PATCH_NEAR, drawn in season with what is left on it today
-  berries() {
-    const p = this.player, c = this.camp;
-    let want = null;
-    if (this.inSeason && (p.mode === 'walk' || p.mode === 'paddle')) {
-      const site = c.nearestSite(p.x, p.z, PATCH_NEAR, true), patch = site ? this.patchFor(site) : null;
-      if (patch) want = { key: keyOf(site), patch };
-    }
-    let m = this.patchMesh;
-    if (!want) { if (m) m.group.visible = false; return; }
-    if (!m || m.key !== want.key) { this.dropPatch(); m = this.patchMesh = this.buildPatch(want.key, want.patch); }
-    m.group.visible = true;
-    const left = this.pintsLeft(want.key);
-    m.berries.forEach((b, i) => { b.visible = i < left; });
-  }
-  buildPatch(key, patch) {
-    const t = this.camp.tiles, gy = (x, z) => t.groundAt(x, z);
-    const { leaves, berries } = berryGeometry(patch.x, patch.z, gy, patch.seed);
-    const mat = propMaterial(), group = new THREE.Group();
-    group.name = 'blueberry patch';
-    const mk = (g) => { const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; m.matrixAutoUpdate = false; group.add(m); return m; };
-    mk(leaves);
-    const bm = berries.map(mk);
-    group.position.set(patch.x, gy(patch.x, patch.z), patch.z);
-    group.matrixAutoUpdate = false; group.updateMatrix(); group.updateMatrixWorld(true);
-    this.camp.scene.add(group);
-    return { key, group, berries: bm };
-  }
-  dropPatch() {
-    const m = this.patchMesh;
-    if (!m) return;
-    this.camp.scene.remove(m.group);
-    m.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-    this.patchMesh = null;
-  }
 
   // --- the woodpile -------------------------------------------------------------------------------------------------
   // where a site's stack goes: a step and a half from the ring on its back side (away from the water), clear of the
@@ -541,12 +357,9 @@ export class Chores {
   }
 
   // --- saving ---------------------------------------------------------------------------------------------------------
-  serialize() { return { v: 1, ...this.s, picked: { ...this.s.picked } }; }
+  serialize() { return { v: 1, ...this.s }; }
   persist() {
     const c = this.camp, st = c.state;
-    // only today's picking is worth keeping
-    const today = this.today;
-    for (const k of Object.keys(this.s.picked)) if (this.s.picked[k][0] !== today) delete this.s.picked[k];
     if (st) { st.chores = this.serialize(); if (c.outfitter && c.outfitter.save) c.outfitter.save(); }
     else save.write('chores', this.serialize());
   }
@@ -558,12 +371,11 @@ export class Chores {
       this.s.pile = d.pile && d.pile.key && d.pile.n > 0 ? { key: d.pile.key, n: Math.min(WOOD.most, d.pile.n | 0) } : null;
       this.s.pints = Math.max(0, d.pints | 0);
       this.s.latrine = d.latrine ?? null;
-      this.s.picked = d.picked && typeof d.picked === 'object' ? { ...d.picked } : {};
     }
     this.placePile();
   }
 }
-const blank = () => ({ arms: 0, pile: null, pints: 0, latrine: null, picked: {} });
+const blank = () => ({ arms: 0, pile: null, pints: 0, latrine: null });
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 // --- the notices -------------------------------------------------------------------------------------------------------
