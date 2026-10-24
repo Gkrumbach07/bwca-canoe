@@ -49,6 +49,7 @@ import { sheets } from './sheets.js'; // hubs 2D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
+import { Forage } from './forage.js'; // fb G
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -274,6 +275,15 @@ async function main() {
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
+  // fb G: nature and fishing. The mist is in the air now (fog.js; mist.js drives it) and drifts with the wind. The rod's
+  // lures are the ones you have (fishing.hasLure: stream A's reader when its block has set one, else the shop's tackle
+  // box), so the shop's dimming of the lure strip goes: the strip lists only those. Berries and mushrooms in their own
+  // ground and season (forage.js), picked with E into a container you can reach, or eaten as you pick.
+  mist.wind = wind;
+  fishing.hasLure ??= (id) => shop.box().has(id);
+  if (shop.quietStrip) shop.quietStrip = () => {};
+  const forage = new Forage({ world, player, day, tiles, scene, camp, hud, energy, audio, outfitter });
+  window.__game.forage = forage;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -294,6 +304,7 @@ async function main() {
       photo.before(dt); // hubs 3B: with the camera up, its keys (the aim, Space) come before anyone else's E and Space
       outfitter.update(dt * ts);
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
+      forage.before(); // fb G: E for the berry patch whose prompt showed; the walker holds still while picking
       tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
       player.update(dt);
       packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
@@ -302,6 +313,7 @@ async function main() {
       outfitter.prompt();
       npcs.update(dt); // hubs 3C: who is drawn and how they stand, the talk prompt and its E / Q, after the store's own prompt
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
+      forage.update(dt); // fb G: the patches near you, drawn in season; their prompt and the picking (after the camp's)
       tasks.update(dt * ts);
       sheets.update(player); // hubs 2D: the cells around you as you go
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
