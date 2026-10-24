@@ -379,9 +379,9 @@ async function main() {
     } else {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       photo.before(dt); // hubs 3B: with the camera up, its keys (the aim, Space) come before anyone else's E and Space
+      pointer.before(); // fb2 A: E on what the dot points at (and only that), before anyone else reads it (the store's too)
       outfitter.update(dt * ts);
       talk.before(dt); // fb F: a conversation holds the walker and turns the view to the speaker
-      pointer.before(); // fb2 A: E on what the dot points at (and only that), before anyone else reads it
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
       forage.before(); // fb G: E for the berry patch whose prompt showed; the walker holds still while picking
       tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
