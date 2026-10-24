@@ -35,6 +35,7 @@ import * as THREE from 'three';
 
 export const REACH = 2.6;          // m from the walker within which a thing on the ground is pointed at and picked up
 const RIM = 0.028;                 // m the rim stands off the thing's surface
+const RIM_COL = 0xfff0cf, POOL_COL = 0xffe9bf; // the rim's and the pool's colour in full daylight
 const FAR = 9;                     // m along the ray past the walker that the ground is looked for (the ghost)
 const CSS = `
 #crosshair { left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; display: none; }
@@ -78,8 +79,8 @@ class Pointer {
     }, true);
   }
 
-  attach({ camera, player, scene, renderer = null, hud = null, chase = null, outfitter = null, fishing = null, photo = null, dialogue = null }) {
-    Object.assign(this, { camera, player, scene, renderer, hud, chase, outfitter, fishing, photo, dialogue });
+  attach({ camera, player, scene, renderer = null, hud = null, chase = null, outfitter = null, fishing = null, photo = null, dialogue = null, day = null }) {
+    Object.assign(this, { camera, player, scene, renderer, hud, chase, outfitter, fishing, photo, dialogue, day });
     this.input = player.input;
     this.attached = true;
     if (typeof document !== 'undefined') {
@@ -103,7 +104,7 @@ class Pointer {
     // the thing; always in the scene and drawn every frame (parked far under the world, never culled), so its program
     // is made behind the title card for the pass that really draws it (main.js's compile pass is the canvas's; the
     // scene is drawn into the post chain's target, a program apart)
-    const mat = this.rimMat = new THREE.MeshBasicMaterial({ color: 0xfff0cf, transparent: true, opacity: 0.55, side: THREE.BackSide, depthWrite: false });
+    const mat = this.rimMat = new THREE.MeshBasicMaterial({ color: RIM_COL, transparent: true, opacity: 0.55, side: THREE.BackSide, depthWrite: false });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uRim = { value: RIM };
       sh.vertexShader = sh.vertexShader.replace('void main() {', 'uniform float uRim;\nvoid main() {').replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed += normalize( normal ) * uRim;');
@@ -122,7 +123,7 @@ class Pointer {
     gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, '#b0b0b0'); gr.addColorStop(1, '#000');
     cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
     const tex = new THREE.CanvasTexture(cv);
-    this.glowMat = new THREE.MeshBasicMaterial({ color: 0xffe9bf, transparent: true, opacity: 0.42, alphaMap: tex, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    this.glowMat = new THREE.MeshBasicMaterial({ color: POOL_COL, transparent: true, opacity: 0.42, alphaMap: tex, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const pg = new THREE.PlaneGeometry(1, 1); pg.rotateX(-Math.PI / 2);
     this.glow = new THREE.Mesh(pg, this.glowMat);
     this.glow.name = 'pointer-pool'; this.glow.matrixAutoUpdate = false; this.glow.renderOrder = 4; this.glow.castShadow = false; this.glow.receiveShadow = false;
@@ -190,6 +191,7 @@ class Pointer {
     if (h && (h.paper || h.big)) return false;
     if (this.dialogue && this.dialogue.talking) return false;
     if (this.photo && this.photo.raised) return false;
+    if (this.quiet && this.quiet()) return false; // nearby.js: a card up at camp (the wake-time card, the night, a fade)
     if (f && (f.rodUp || f.landed)) return false;
     return true;
   }
@@ -316,7 +318,9 @@ class Pointer {
     r.geometry = geo;
     r.matrixWorldNeedsUpdate = true; r.updateMatrixWorld(true);
     r.frustumCulled = false;
-    this.rimMat.opacity = t.enabled === false ? 0.28 : 0.55;
+    const k = this.light();
+    this.rimMat.color.setHex(RIM_COL).multiplyScalar(k);
+    this.rimMat.opacity = (t.enabled === false ? 0.28 : 0.55) * (0.55 + 0.45 * k);
   }
   // the pool under a box target: its footprint and a little more, on its bottom (the floor, the ground at its feet)
   pool(b, off) {
@@ -326,8 +330,12 @@ class Pointer {
     g.matrix.makeRotationY(b.heading || 0).multiply(_m.makeScale(b.hx * 2 + 0.7, 1, b.hz * 2 + 0.7)).setPosition(b.x, y, b.z);
     g.matrixWorldNeedsUpdate = true; g.updateMatrixWorld(true);
     g.frustumCulled = false;
-    this.glowMat.opacity = off ? 0.22 : 0.42;
+    const k = this.light();
+    this.glowMat.color.setHex(POOL_COL).multiplyScalar(k);
+    this.glowMat.opacity = (off ? 0.22 : 0.42) * (0.55 + 0.45 * k);
   }
+  // how lit the scene is (the rim and the pool are unlit: at night they dim with it, never a neon edge in the dark)
+  light() { const d = this.day; if (!d || !Number.isFinite(d.elevation)) return 1; return Math.max(0.14, Math.min(1, (d.elevation + 5) / 11)); }
   parkRim() { const r = this.rim; if (!r) return; r.geometry = this.parkGeo; r.matrix.makeTranslation(0, -1e4, 0); r.matrixWorldNeedsUpdate = true; r.updateMatrixWorld(true); r.frustumCulled = false; }
   parkPool() { const g = this.glow; if (!g) return; g.matrix.makeTranslation(0, -1e4, 0); g.matrixWorldNeedsUpdate = true; g.updateMatrixWorld(true); g.frustumCulled = false; }
   park() { this.parkRim(); this.parkPool(); }

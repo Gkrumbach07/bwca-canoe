@@ -353,7 +353,7 @@ async function main() {
   // is no Q drop. The camp's work is done from the book (nearby.js: the fire's fuel and grate, the tent, the hang, the
   // latrine, the canoe's load, the bottle, the saw: the panels stream B draws); held work keeps hold.js (the book's
   // BookHold, E or a click). Made before the compile below, so the dot's rim has its program behind the title card.
-  pointer.attach({ camera, player, scene, renderer, hud, chase, outfitter, fishing, photo, dialogue: talk });
+  pointer.attach({ camera, player, scene, renderer, hud, chase, outfitter, fishing, photo, dialogue: talk, day });
   nearby.attach({ camp, packs, journal, hud, pointer, canoe, player });
   pointer.register(nearby.targets);
   pointer.register(peopleTargets(npcs)); pointer.register(forageTargets(forage, FORAGE)); pointer.register(taskTargets(tasks, KINDS));

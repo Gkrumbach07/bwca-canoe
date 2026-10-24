@@ -63,6 +63,8 @@ class Nearby {
     if (pointer) {
       pointer.isArmed = () => !!(camp.pitching || camp.hang.armed);
       pointer.onCancel = () => camp.cancelPitch('You leave the tent where it was.') || camp.hang.disarm();
+      // no dot while a card is up at camp: the wake-time card, the night's card, a fade
+      pointer.quiet = () => !!((camp.chores && camp.chores.card && camp.chores.card.open) || camp.night || (camp.veil && camp.veil.active) || (camp.card && camp.card.active));
     }
     camp.pointer = pointer;
     return this;
