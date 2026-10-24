@@ -142,7 +142,7 @@ export function itemFor(it) {
 }
 export const shortOf = (name) => { const s = String(name || '').replace(/^(A|An|The) /, '').replace(/,.*$/, ''); const w = s.split(' '); return w.length > 2 ? w.slice(-2).join(' ') : s; };
 // the short name in an item's corner: its own, the stand-in's, else the last words of its name
-export const short = (d) => (d ? d.short || (LOCAL[d.id] && LOCAL[d.id].short) || shortOf(d.name) : '');
+export const short = (d) => (d ? d.short || (LOCAL[d.id] && LOCAL[d.id].short) || (d.cooked && /^hot:/.test(d.id) && itemDef(d.cooked) ? `Hot ${lower(short(itemDef(d.cooked)))}` : shortOf(d.name)) : ''); // (a cooked meal: "Hot supper")
 // the footprint of an item, turned or not
 export const dims = (d, rot) => { const w = d ? d.w || 1 : 1, h = d ? d.h || 1 : 1; return rot ? [h, w] : [w, h]; };
 export const gridSize = (c) => { const d = itemDef(c && c.item), k = (d && d.container) || (c && c.size) || { cols: 4, rows: 4 }; return { cols: k.cols, rows: k.rows, accepts: k.accepts || null }; };
@@ -1502,7 +1502,6 @@ export class PackSide {
     if (off) { b.setAttribute('aria-disabled', 'true'); if (a.why) b.title = a.why; }
     if (a.held) {
       b.addEventListener('pointerdown', (ev) => { if (ev.button !== 0) return; ev.preventDefault(); if (off) { if (a.why) note(a.why, 3); return; } this.startHold(o, a, b); });
-      b.addEventListener('pointerleave', () => { if (this.held && this.held.btn === b) this.stopHold(); });
     } else b.addEventListener('click', () => runNear(a));
     return b;
   }
@@ -1532,7 +1531,8 @@ export class PackSide {
     if (h.btn) h.btn.classList.remove('down');
     soon(false);
   }
-  // each frame: the ring on a held button whose job is under way (from the mouse or from E), its phase beside it
+  // each frame: the ring on a held button whose job is under way (from the mouse or from E), and the phase under way in
+  // pencil under the panel's buttons (the button keeps its size, so it never slides out from under the mouse)
   tickHold(all = false) {
     const H = holdOf(), j = H && H.active;
     if (!j && !this.wasHolding && !all) return;
@@ -1544,8 +1544,11 @@ export class PackSide {
       b.dataset.k = k;
       b.classList.toggle('going', on);
       const svg = b.querySelector('.nb-ring'); if (svg) svg.outerHTML = ringSvg(f, n);
-      const hs = b.querySelector('.h');
-      if (hs) { const i = on ? Math.min(n - 1, Math.floor(j.at + 1e-9)) : 0, ph = on ? j.phases[i] : null; hs.textContent = on ? `${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}` : 'hold'; }
+      const acts = b.closest('.nb-acts'); if (!acts) continue;
+      let line = acts.nextElementSibling;
+      if (!line || !line.classList.contains('nb-doing')) { line = mk('div', 'nb-doing pencil'); acts.after(line); }
+      if (on) { const i = Math.min(n - 1, Math.floor(j.at + 1e-9)), ph = j.phases[i]; line.textContent = `${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}`; line.dataset.by = b.dataset.act; }
+      else if (line.dataset.by === b.dataset.act) { line.textContent = ''; line.dataset.by = ''; }
     }
   }
   // a few times a second: the meters and the panels' words, in place (nearby.js keeps them cheap)
