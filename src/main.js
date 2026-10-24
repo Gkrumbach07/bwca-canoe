@@ -276,11 +276,11 @@ async function main() {
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
   // fb G: nature and fishing. The mist is in the air now (fog.js; mist.js drives it) and drifts with the wind. The rod's
-  // lures are the ones you have (fishing.hasLure: stream A's reader when its block has set one, else the shop's tackle
-  // box), so the shop's dimming of the lure strip goes: the strip lists only those. Berries and mushrooms in their own
+  // lures are the ones you have (fishing.hasLure: stream A's inventory.hasLure, the lures in reach, once it is in; else the
+  // shop's tackle box), so the shop's dimming of the lure strip goes: the strip lists only those. Berries and mushrooms in their own
   // ground and season (forage.js), picked with E into a container you can reach, or eaten as you pick.
   mist.wind = wind;
-  fishing.hasLure ??= (id) => shop.box().has(id);
+  fishing.hasLure ??= (id) => { const inv = window.__game.inventory; return inv && inv.hasLure ? inv.hasLure(id) : shop.box().has(id); }; // fb A's: in reach now
   if (shop.quietStrip) shop.quietStrip = () => {};
   const forage = new Forage({ world, player, day, tiles, scene, camp, hud, energy, audio, outfitter });
   window.__game.forage = forage;

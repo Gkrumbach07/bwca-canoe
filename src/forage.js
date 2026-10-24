@@ -859,7 +859,9 @@ export class Forage {
     if (!r || !r.ok) return null;
     const g = window.__game, c = inv.containers && inv.containers.find((k) => k.id === r.cId), it = c && g.items && g.items.ITEMS ? g.items.ITEMS[c.item] : null;
     const name = it && it.name ? it.name.replace(/^(an?|the) /i, '') : '';
-    return name ? `the ${name[0].toLowerCase()}${name.slice(1)}` : 'your pack';
+    if (!name) return 'your pack';
+    const low = `${name[0].toLowerCase()}${name.slice(1)}`;
+    return /^your /i.test(name) ? low : `the ${low}`; // "your pockets", "the blue food barrel, 60 L"
   }
   // the items, once stream A's items.js is in (main.js sets window.__game.items)
   define(dt) {
