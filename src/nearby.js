@@ -311,7 +311,11 @@ class Nearby {
     const hg = this.camp.hang;
     const hung = hg.hungNear(p.x, p.z);
     if (hung && near.flat(hung.at.x, hung.at.z) <= POINT.hung) {
-      push(near.sphere(hung.at.x, hung.at.y, hung.at.z, 0.45), { kind: 'barrelHung', ref: `barrelHung:${hung.id}`, label: 'The barrel, hung', verb: 'Open', mesh: view && view.objs && view.objs.get(hung.id), act: () => this.openAt(`barrelHung:${hung.id}`) });
+      // the barrel, or the trunk its rope is tied off on (3 m up, the barrel alone is out of the third-person ray's
+      // reach from within POINT.hung: the camera looking up sinks behind you and its ray rises only so far)
+      const tt = hung.at.tree, ty = tt ? p.groundAt(tt.x, tt.z) : 0;
+      const hits = [near.sphere(hung.at.x, hung.at.y, hung.at.z, 0.45), tt ? near.segment(tt.x, ty + 0.3, tt.z, tt.x, ty + 2.4, tt.z, (tt.r || 0.25) + 0.2) : null].filter(Boolean);
+      push(hits.sort((a, b) => a.miss - b.miss)[0] || null, { kind: 'barrelHung', ref: `barrelHung:${hung.id}`, label: 'The barrel, hung', verb: 'Open', mesh: view && view.objs && view.objs.get(hung.id), act: () => this.openAt(`barrelHung:${hung.id}`) });
     }
     const bar = hg.barrelToHang(), tr = bar && !hung ? hg.treeFor(bar) : null;
     if (tr) {
