@@ -215,7 +215,9 @@ export class Shop {
   }
   write() { save.write(NS, this.s); }
   newSeason() { this.s = { v: 1, leeches: DOZEN }; this.write(); }
-  apply() { return applyGear(this.profile, this.player); }
+  // (and whenever money changes hands the inventory is written with it: a thing bought is in the save as soon as the
+  // dollars are gone from it, not up to 6 s of play later, so a reload or a closed tab never keeps one without the other)
+  apply() { const inv = this.inv; if (inv && inv.attached && inv.dirty && typeof inv.write === 'function') inv.write(); return applyGear(this.profile, this.player); }
   get gear() { return this.player.gear || this.apply(); }
   get money() { return this.profile ? this.profile.money : 0; }
   // the inventory (stream A's, or inv-ui.js's stand-in) once it holds the things; the old counts before
