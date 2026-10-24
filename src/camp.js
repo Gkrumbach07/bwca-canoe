@@ -590,7 +590,8 @@ export class Camp {
       id: 'strike', label: 'Striking the tent', phases: K.strike.slice(4 - from), at: 0, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(from - at); },
       onPhase: (i) => { const st = from - (i + 1); if (st <= 0) this.packTent(); else this.setStage(c, st); },
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); this.note(`The tent stands with ${K.words[c.stage]}. Hold to carry on.`, 3); } },
+      // (half struck, Q takes the rest down and E pitches it again: tentPrompts)
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) this.note(`The tent stands with ${K.words[c.stage]}. Hold Q to take the rest down, or E to pitch it again.`, 4); } },
     };
   }
   // the footprint staked: the tent out of its container, the site claimed, the camp begun
