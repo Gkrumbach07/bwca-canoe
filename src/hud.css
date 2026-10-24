@@ -122,6 +122,38 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #marks > .on { display: inline-flex; }
 #marks svg { display: block; }
 
+/* the energy bar (fb2 F): Wild n Chill's one long thin bar, top left. Green is the energy you have; the dim track after
+   it, up to the ceiling, is what rest can bring back; each need's chunk eats in from the right end in its colour (cold
+   pale blue, sleep orange, hunger yellow, thirst blue), dashed and marching while it grows (cold dotted), with its icon
+   under it. A thin dark edge, as the game's, so it reads on snow and sky alike. The readout's Energy row draws it small. */
+#air, #readout { --e-green: #7fb58f; --e-edge: rgba(16, 20, 22, .72); --e-room: rgba(243, 236, 221, .16);
+  --e-warmth: #bcd8e8; --e-warmth-d: #7f9fb2; --e-rest: #dd8d5b; --e-rest-d: #9c5a35; --e-food: #dcb469; --e-food-d: #9c7c3c; --e-water: #5f9dd2; --e-water-d: #3b6894; }
+#energy { left: 64px; top: 34px; width: 360px; }
+#energy .track, #readout .ebar { position: relative; height: 6px; border: 1.5px solid var(--e-edge); border-radius: 2px; background: rgba(16, 20, 22, .4); box-shadow: 0 1px 2px rgba(0, 0, 0, .35); overflow: hidden; }
+#energy .track i, #readout .ebar i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; }
+#energy .fill, #readout .ebar .fill { background: var(--e-green); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); transition: width .4s ease-out; }
+#energy .room, #readout .ebar .room { background: var(--e-room); }
+#energy .chunk, #readout .ebar .chunk { background: var(--c); box-shadow: inset 1.5px 0 0 var(--e-edge); }
+#energy .chunk.grow, #readout .ebar .chunk.grow { background: repeating-linear-gradient(90deg, var(--c) 0 6px, var(--cd) 6px 8px); }
+#energy .chunk.warmth.grow, #readout .ebar .chunk.warmth.grow { background: repeating-linear-gradient(90deg, var(--c) 0 2.5px, var(--cd) 2.5px 4px); }
+#energy .chunk.grow { animation: energy-march 1.6s linear infinite; }
+#energy .chunk.warmth.grow { animation-duration: 2.4s; }
+@keyframes energy-march { from { background-position: 0 0; } to { background-position: -16px 0; } } /* the dashes march in, toward the green */
+.chunk.warmth { --c: var(--e-warmth); --cd: var(--e-warmth-d); }
+.chunk.rest { --c: var(--e-rest); --cd: var(--e-rest-d); }
+.chunk.food { --c: var(--e-food); --cd: var(--e-food-d); }
+.chunk.water { --c: var(--e-water); --cd: var(--e-water-d); }
+#energy .icons { position: relative; height: 16px; margin-top: 5px; }
+#energy .icon { position: absolute; left: 0; top: 0; width: 16px; height: 16px; margin-left: -8px; opacity: 0; transition: opacity .3s, left .3s ease-out; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .6)); }
+#energy .icon.on { opacity: 1; }
+#energy .icon svg { display: block; }
+#energy .icon.warmth { color: var(--e-warmth); }
+#energy .icon.rest { color: var(--e-rest); }
+#energy .icon.food { color: var(--e-food); }
+#energy .icon.water { color: var(--e-water); }
+#readout .ebar { display: inline-block; width: 150px; height: 5px; vertical-align: middle; margin-right: 10px; }
+@media (prefers-reduced-motion: reduce) { #energy .chunk.grow { animation: none; } }
+
 /* --- Paper ------------------------------------------------------------------------------------------------- */
 #scrim { position: fixed; inset: 0; background: var(--deep); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 4; }
 body.paper-open #scrim { opacity: .55; pointer-events: auto; }

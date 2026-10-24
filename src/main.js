@@ -206,6 +206,8 @@ async function main() {
   energy.atCounter = () => !!outfitter.open;
   if (trip.on) { trip.on('start', () => energy.fresh()); trip.on('evac', () => energy.rescued()); }
   camp.profileOf = () => profile;
+  // fb2 F: warmth, the fourth need (energy.js): a lit fire near you warms you (fires.near), and so does the inside of a store
+  energy.fires = fires; energy.indoors = () => !!(outfitter.visit && outfitter.visit.inside);
   // hubs 2A: the outfitters' stores (props.js): each store's lamp borrows the campfires' one light while it is the lit
   // thing nearest the eye (fire.js steady), and its cork board shows that outfitter's notices once its board is up
   // (tasks.js), redrawn when they change; window.__game.props for the walk-in and the tests
