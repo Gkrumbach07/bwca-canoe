@@ -83,7 +83,7 @@ class Nearby {
       pointer.isArmed = () => !!(camp.pitching || camp.hang.armed);
       pointer.onCancel = () => camp.cancelPitch('You leave the tent where it was.') || camp.hang.disarm();
       // no dot while a card is up at camp: the Rest dial, the night's card, a fade
-      pointer.quiet = () => !!((camp.chores && camp.chores.card && camp.chores.card.open) || camp.dialOpen || camp.night || (camp.veil && camp.veil.active) || (camp.card && camp.card.active));
+      pointer.quiet = () => !!((camp.chores && camp.chores.card && camp.chores.card.open) || camp.dialOpen || camp.night || (camp.veil && camp.veil.active) || (camp.card && camp.card.active) || this.cardUp());
       // sat down: the label reads "E Stand up"; E is the walker's (stream C), or the fallback's
       pointer.seated = () => this.isSeated();
       pointer.stand = () => this.standUp();
@@ -110,9 +110,11 @@ class Nearby {
   // E at the ring: the fire's card; without it (B not in the build yet), the book at the pack
   openFire(key) {
     const c = this.cards();
-    if (c) { try { c.open('fire', key); return true; } catch (e) { console.warn('cards.open fire', e); } }
+    if (c) { try { if (c.open('fire', key) !== false) return true; } catch (e) { console.warn('cards.open fire', e); } } // (false: the ring is not in objects(): the book instead)
     return this.openBook();
   }
+  // a card up (stream B's cards.shown): no dot under it
+  cardUp() { const c = this.cards(); return !!(c && c.shown); }
   // Q at a container or a pile on the ground: the book's Here tab at it; without it, the book at the pack
   openHere(ref) {
     const j = this.book();
