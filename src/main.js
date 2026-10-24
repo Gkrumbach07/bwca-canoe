@@ -49,6 +49,7 @@ import { sheets } from './sheets.js'; // hubs 2D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
+import { Dialogue } from './dialogue.js'; // fb F
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -240,6 +241,12 @@ async function main() {
   outfitter.people = npcs;
   npcs.quiet = () => photo.raised; // the people say nothing while the camera is up (3B)
   weather.indoors = () => !!(outfitter.visit && outfitter.visit.inside); // hubs 3 join: no rain falling inside a store
+  // fb F: dialogue (dialogue.js). What people say shows by their heads with their names, one at a time in a room, pinned
+  // to the screen's edge when they are off it; E on someone opens a conversation (numbered choices; you hold still and
+  // the view turns to them, or in third person outside a store cuts over your shoulder); T shows the last six lines.
+  // Made before the title, so its Esc and number keys come first.
+  const talk = new Dialogue({ camera, player, chase, hud, day, frame: () => !(outfitter.visit && outfitter.visit.inside) });
+  npcs.dialogue = talk;
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -271,6 +278,7 @@ async function main() {
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
   window.__game.npcs = npcs; // hubs 3C
+  window.__game.dialogue = talk; // fb F
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
@@ -293,6 +301,7 @@ async function main() {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       photo.before(dt); // hubs 3B: with the camera up, its keys (the aim, Space) come before anyone else's E and Space
       outfitter.update(dt * ts);
+      talk.before(dt); // fb F: a conversation holds the walker and turns the view to the speaker
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
       tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
       player.update(dt);
@@ -314,6 +323,7 @@ async function main() {
     canoe.update(dt * ts);
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
+    talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
     water.update(dt * ts, player.x, player.z);

@@ -328,14 +328,14 @@ export class Outfitter {
       if (fresh) this.core.fresh = null;
       const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, kind);
       this.heard(v.ep, words);
-      this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7);
+      if (!(this.people && this.people.keeperSays && this.people.keeperSays(v.ep, words, kind))) this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7); // fb F: said by the keeper's head
     }
   }
   leaveStore(v) {
     const ch = this.player.chase;
     if (v.switched && ch && ch.mode === 'first') ch.setMode('third');
     v.switched = false;
-    if (!v.bye) { v.bye = true; const who = this.shop ? this.shop.keeperName(v.ep) : null; this.hud.note(`${who ? `${who}, from the door` : 'From the door'}: “${this.say(v.ep, 'goodbye')}”`, 4); }
+    if (!v.bye) { v.bye = true; const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, 'goodbye'); if (!(this.people && this.people.keeperSays && this.people.keeperSays(v.ep, words, 'goodbye'))) this.hud.note(`${who ? `${who}, from the door` : 'From the door'}: “${words}”`, 4); } // fb F
   }
   endVisit(launched) {
     const v = this.visit; if (!v) return;
