@@ -344,6 +344,9 @@ async function main() {
   canoe.update = (dt) => { camp2.beforePose(); pose2(dt); camp2.afterPose(); };
   journal.pack.onUse = (e, mode, c) => camp2.cook.onUse(e, mode, c) ?? (use2 ? use2(e, mode, c) : null);
   window.__game.cook = camp2.cook;
+  // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
+  // the first time it winked over a ripe patch); programs already made are only looked up
+  renderer.compileAsync(scene, camera).catch(() => {});
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
