@@ -52,7 +52,7 @@ const DROP_MAX = 2.6;
 // LOW_OVER: the lowest thing Space gets over rather than hops at, a little under a step: the collision holds the body
 // off a log whose top only peaks over a step at a ring of its stem, and that must be vaulted, not hopped into (the join)
 const LOW_OVER = STEP_UP - 0.1;
-const SPACE = { early: 0.8, ahead: 1.0 }; // a Space pressed this long before, this far short of, a vault or a climb waits for it
+const SPACE = { early: 0.8, ahead: 1.0, reach: [0.35, 0.65, 1.0] }; // a Space pressed this long before, this far short of (looked for from each reach), a vault or a climb waits for it
 // fb C: the water on foot. Wading slows you with the depth; past SWIM_DEPTH (chest deep) you swim, and you stand again
 // under STAND_DEPTH; with the canoe overhead you go no deeper than CARRY_DEPTH. A swimmer is held off whatever stands
 // within SWIM_CLEAR of the surface (a rock out of the water, a dock).
@@ -1037,8 +1037,14 @@ export class Player {
       if (!started && tap && !ft.air) {
         if (carrying) st.stagger = 1;
         else {
-          const ax = this.x + mx * SPACE.ahead, az = this.z + mz * SPACE.ahead; // read from the feet there (downhill to a log, they are lower)
-          if (!(moving && this.traverseAhead(ax, az, this.supportAt(ax, az, ft.y + STEP_UP, nearNow), mx, mz, nearNow))) { ft.air = true; ft.vy = HOP_V; ft.t = 0; ft.peak = ft.y; ft.hop = true; ft.spaceT = 0; }
+          // something to get over a stride or so ahead keeps the press for when he reaches it. Looked for from a few
+          // points short of the stride, read from the feet there (downhill to a log they are lower): from a full stride
+          // ahead a thin log a stride away is already underfoot, nothing rises, and he would hop into it (main, 2026-10-24)
+          const ahead = moving && SPACE.reach.some((r) => {
+            const ax = this.x + mx * r, az = this.z + mz * r;
+            return this.traverseAhead(ax, az, this.supportAt(ax, az, ft.y + STEP_UP, nearNow), mx, mz, nearNow);
+          });
+          if (!ahead) { ft.air = true; ft.vy = HOP_V; ft.t = 0; ft.peak = ft.y; ft.hop = true; ft.spaceT = 0; }
         }
       }
       if (!started) {
