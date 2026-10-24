@@ -50,12 +50,12 @@ const THICK = 1.2;           // an abundance this high (the top tenth) is "thick
 const TOWNS = [['Ely', -48571, 20793], ['Grand Marais', 65631, 37805], ['Tofte', 28234, 57375], ['Isabella', -10429, 52594], ['Crane Lake', -94833, -19570], ['Cook', -109881, 26464], ['Hovland', 92747, 27798]];
 // the road each landing is reached by
 const ROADS = [
-  ['the Echo Trail', [4, 6, 7, 8, 9, 14, 16, 19, 20, 22, 77, 80]],
+  ['the Echo Trail', [4, 6, 7, 8, 9, 14, 16, 19, 20, 22, 77]],
   ['the Crane Lake road', [1, 12]],
   ['the Fernberg Road', [24, 25, 26, 27, 29, 30, 31]],
   ['Highway 1', [32, 33, 34, 35, 36, 37, 67, 75, 84]],
   ['the Sawbill Trail', [38, 39, 40, 41]],
-  ['the Gunflint Trail', [43, 44, 45, 47, 48, 49, 50, 51, 52, 54, 55, 57, 58, 60, 61, 62, 64, 66]],
+  ['the Gunflint Trail', [43, 44, 45, 47, 48, 49, 50, 51, 52, 54, 55, 57, 58, 60, 61, 62, 64, 66, 80]], // fb E: Larch Creek is on the Gunflint
   ['the Arrowhead Trail', [68, 69, 70]],
 ];
 export function roadOf(ep) { const r = ROADS.find(([, eps]) => eps.includes(Number(ep))); return r ? r[0] : 'the county road'; }

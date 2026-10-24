@@ -300,6 +300,10 @@ async function main() {
     return null;
   };
   window.__game.invUI = invUI;
+  // fb E: world data. The landings stand at their real put-ins and the trails the first bake dropped are connected (world.js
+  // applyFixes from src/world-fixes.json for the data-v3 release; a newer bake has both built in): { landings, portages, baked }
+  window.__game.worldFixes = world.fixed;
+  if (world.fixed) console.log(`fb E: ${world.fixed.landings} landings at their put-ins, ${world.fixed.portages} portages connected to the ${world.fixed.baked} baked`);
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;

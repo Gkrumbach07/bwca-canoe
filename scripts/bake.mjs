@@ -25,6 +25,7 @@ import { prefetchTerrarium, makeSampler } from './elevation.mjs';
 import { loadOsm } from './osm-extract.mjs';
 import { loadBathymetry } from './bathymetry.mjs';
 import { loadClarity } from './clarity.mjs';
+import { makeWater, placeLandings, linkPortages, chainsFrom } from './world-links.mjs';
 
 // ---------- CLI ---------------------------------------------------------------------
 
@@ -159,12 +160,6 @@ function edt2d(g, W, rows, out, clampCells, scratch) {
 }
 
 // ---------- helpers --------------------------------------------------------------------
-
-function polyLength(pts) {
-  let L = 0;
-  for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-  return L;
-}
 
 // Nearest comfortably-deep water cell to a point (for launching a canoe).
 function findLaunch(x, z, grid, lakeId, sdist, maxCells = 10, wantLake = 0) {
@@ -613,29 +608,14 @@ async function main() {
   }
   log(`levels and names assigned (${((Date.now() - t0) / 1000).toFixed(0)} s so far)`);
 
-  // --- portages
-  const portages = [];
+  // --- portages: the first bake's 969 as they were, then the ones it dropped, connected (world-links.mjs)
+  const water = makeWater({ grid, lakeAt: (i, j) => lakeId[j * W + i], sdAt: (i, j) => sdist[j * W + i] / 10, name: (id) => displayName[id] || null, basin: (id) => lakeBasin[id], big: (id) => !lakes[id - 1].creek && lakeArea[id] >= 50 });
+  let portages;
   {
-    const lakeName = (id) => displayName[id] || 'an unnamed lake';
-    let candidates = 0;
-    for (const c of osm.portages) {
-      const pts = c.pts.map(([lat, lon]) => proj.toLocal(lat, lon));
-      candidates++;
-      const len = polyLength(pts);
-      if (len < CFG.portage.minLen || len > CFG.portage.maxLen) continue;
-      const ends = [pts[0], pts[pts.length - 1]];
-      const inside = ends.every(([x, z]) => grid.ci(x) >= 1 && grid.ci(x) < W - 1 && grid.cj(z) >= 1 && grid.cj(z) < H - 1);
-      if (!inside) continue;
-      const launches = ends.map(([x, z]) => findLaunch(x, z, grid, lakeId, sdist));
-      if (launches.some((l) => !l || l.dist > CFG.portage.maxEndToWater)) continue;
-      const name = c.names.find((n) => !/^portage$/i.test(n)) || `${lakeName(launches[0].lake)} – ${lakeName(launches[1].lake)}`;
-      portages.push({
-        name, lengthM: Math.round(len), rods: Math.round(len / 5.0292),
-        pts: pts.map(([x, z]) => [r1(x), r1(z)]),
-        launch: launches.map((l) => ({ x: r1(l.x), z: r1(l.z), lake: l.lake })),
-      });
-    }
-    log(`${portages.length} portages kept of ${candidates} candidate trails`);
+    const { kept, added, report } = linkPortages(chainsFrom(osm.portages, proj), water);
+    portages = [...kept, ...added];
+    log(`${report.candidates} candidate trails: ${report.kept} kept as they are, ${report.added} of the ${report.dropped} the first bake dropped connected (${JSON.stringify(report.done)}), ${report.left.length} left out`);
+    for (const l of report.left) log(`  left out: ${l.names.join('/') || 'unnamed'}: ${l.why}`);
   }
 
   // --- campsites
@@ -793,48 +773,14 @@ async function main() {
     log(`overview ${ovW} x ${ovH} px written`);
   }
 
-  // --- entry points: OSM features named after an entry point first, then the hand list matched to named lakes
+  // --- entry points: the hand list's real put-ins (scripts/entrypoints.json), on the water put into there (world-links.mjs)
   const entryPoints = [];
   {
     const handList = JSON.parse(await fsp.readFile(new URL('./entrypoints.json', import.meta.url), 'utf8'));
-    const centroid = (id) => [grid.cx(sumI[id] / lakeArea[id]), grid.cz(sumJ[id] / lakeArea[id])];
-    const byName = new Map();
-    lakes.forEach((l, i) => { if (l.name && lakeArea[i + 1]) { const key = l.name.toLowerCase(); if (!byName.has(key)) byName.set(key, []); byName.get(key).push(i + 1); } });
-    // OSM maps many landings as "<name> BWCA Entry Point" (sometimes with the number): match either way
-    const norm = (s) => (s || '').toLowerCase().replace(/\bbwca\b|\bentry\s*point\b|\bep\b|\(|\)|only/g, ' ').replace(/[^a-z0-9]+/g, '');
-    const poiByNum = new Map(), poiByName = new Map();
-    for (const p of osm.pois) {
-      const name = p.tags.name || '';
-      if (!/entry\s*point|\bE\.?P\.?\s*#?\s*\d/i.test(name)) continue;
-      const m = /(?:entry\s*point|\bE\.?P\.?)\s*#?\s*(\d+)/i.exec(name);
-      if (m) poiByNum.set(+m[1], p);
-      const n = norm(name);
-      if (n && !poiByName.has(n)) poiByName.set(n, p);
-    }
-    for (const e of handList) {
-      const [hx, hz] = proj.toLocal(e.lat, e.lon);
-      if (grid.ci(hx) < 0 || grid.ci(hx) >= W || grid.cj(hz) < 0 || grid.cj(hz) >= H) continue;
-      let launch = null, how = '';
-      const poi = poiByNum.get(e.ep) || poiByName.get(norm(e.name)) || (e.osmName && poiByName.get(norm(e.osmName)));
-      if (poi) { const [px, pz] = proj.toLocal(poi.lat, poi.lon); launch = findLaunch(px, pz, grid, lakeId, sdist, 100); how = 'osm'; }
-      if (!launch) {
-        const ids = byName.get(e.lake.toLowerCase()) || [];
-        let best = null;
-        for (const id of ids) { const [cx, cz] = centroid(id); const d = Math.hypot(cx - hx, cz - hz); if (!best || d < best.d) best = { id, d }; }
-        if (best && best.d < 12000) {
-          // the cell of that lake nearest the hint, then a comfortable launch spot next to it
-          const l = lakes[best.id - 1];
-          let bx = 0, bz = 0, bd = Infinity;
-          const i0 = Math.max(0, grid.ci(l.minX)), i1 = Math.min(W - 1, grid.ci(l.maxX)), j0 = Math.max(0, grid.cj(l.minZ)), j1 = Math.min(H - 1, grid.cj(l.maxZ));
-          for (let j = j0; j <= j1; j += 3) for (let i = i0; i <= i1; i += 3) if (lakeId[j * W + i] === best.id) { const d = Math.hypot(grid.cx(i) - hx, grid.cz(j) - hz); if (d < bd) { bd = d; bx = grid.cx(i); bz = grid.cz(j); } }
-          if (bd < Infinity) { launch = findLaunch(bx, bz, grid, lakeId, sdist, 20, best.id); how = `lake ${(bd / 1000).toFixed(1)} km from hint`; }
-        }
-      }
-      // rivers and creeks are rarely water polygons: as a last resort take any water near the hint itself
-      if (!launch) { launch = findLaunch(hx, hz, grid, lakeId, sdist, 60); how = 'hint'; }
-      if (!launch) { log(`  entry point ${e.ep} ${e.name}: no match`); continue; }
-      entryPoints.push({ ep: e.ep, name: e.name, x: r1(launch.x), z: r1(launch.z), lake: launch.lake });
-      log(`  entry point ${e.ep} ${e.name} -> ${displayName[launch.lake] || 'unnamed'} (${how})`);
+    for (const L of placeLandings(handList, water, proj, { portages, campsites })) {
+      if (L.missing) { log(`  entry point ${L.ep} ${L.name}: no water near its put-in`); continue; }
+      entryPoints.push({ ep: L.ep, name: L.name, x: L.x, z: L.z, lake: L.lake });
+      log(`  entry point ${L.ep} ${L.name} -> ${displayName[L.lake] || 'unnamed'}, ${L.off} m from the put-in (${L.how})`);
     }
     entryPoints.sort((a, b) => a.ep - b.ep);
   }

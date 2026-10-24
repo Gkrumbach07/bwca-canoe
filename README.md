@@ -298,9 +298,19 @@ the trip (`bwca-canoe-trip`) are kept in `localStorage` and resume where you lef
      in 256-cell far tiles for the far field.
    - `overview.png`: an 80 m/px shaded map of the whole area.
 
-Entry points come from OSM features named `… BWCA Entry Point` where they exist, otherwise from the hand
-list in `scripts/entrypoints.json` (number, name, the OSM lake name and an approximate position); edit that
-file to add or correct landings.
+Entry points come from `scripts/entrypoints.json`: each of the 55 with its real put-in (where the canoe first
+goes into the water, from the Forest Service's entry point records on recreation.gov checked against the OSM
+public water access sites; its `usfs` field keeps the Forest Service's own coordinate) and the water put into
+there, which is not always the one the entry point is named for (EP 60 Duncan Lake puts in on West Bearskin). The
+landing is that water's cell nearest the put-in, kept 50 m off the portage trails and 40 m off the campsites so a
+store never stands on a trail; edit the file to correct a landing.
+
+Portages: every OSM portage trail is kept. A trail under 2.5 km with both ends within 70 m of water is kept as it
+is (the first bake kept only these, 969 of 1,045); a longer one too; an end that stops at a fork walks on along the
+other trails to water; any other dry end gets a straight connector over land to the nearest water. Only trails
+wholly off the grid and stubs from a lake back to itself are left out (`scripts/world-links.mjs`).
+`scripts/world-fixes.mjs` writes the same corrections as a table, `src/world-fixes.json`, that `world.js` applies
+to the data release they were made for (data-v3), so the published data needs no rebake.
 
 ## Runtime
 

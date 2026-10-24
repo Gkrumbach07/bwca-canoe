@@ -24,7 +24,7 @@ export const CFG = {
   tileUrl: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
   geofabrik: (name) => `https://download.geofabrik.de/${name}-latest.osm.pbf`,
   extracts: ['north-america/us/minnesota'],
-  portage: { maxEndToWater: 70, minLen: 15, maxLen: 2500 },
+  // the portage rules (what the first bake kept, how the rest are connected) are world-links.mjs PORTAGE
   startLatLon: [47.9417, -91.4645], // Lake One landing at the end of the Fernberg road
 };
 
