@@ -394,8 +394,18 @@ export function buildCanoeRig({ water = null } = {}) {
 
   // ---------------------------------------------------------------------------------------------------------
   // On foot. Feet are kept in world space while planted; the swing lifts one toward where it should land.
-  const loco = { init: false, phase: 0, hipY: HIP_H - 0.1, hipYaw: 0, stepping: false, feet: {}, rigPos: V(), h: 0, gait: 0 };
-  for (const h of ['L', 'R']) loco.feet[h] = { pos: V(), yaw: 0, lift: V(), liftYaw: 0, target: V(), targetYaw: 0, swing: false, u: 0, slope: 0, pitch: 0 };
+  // Moving, the gait's phase runs at the cadence and each foot swings once a cycle, when its share of the cycle passes the
+  // stance. That is marked per cycle, so a stance that shortens as a walk becomes a jog cannot skip a swing and leave the
+  // foot planted while the body runs on (the reach of that leg then dragged the hips to the ground: the jog's "weird low
+  // lunge", the owner, 2026-10-24); and a planted foot left further behind than the stride allows steps at once.
+  // Standing, a foot steps only when it is off its spot under the hip or turned from it (the body turning to the look),
+  // one foot at a time, and then both stay planted: with the stance half the cycle the old settle steps had one foot in
+  // the air at every moment, so they never ended (the stomping at idle).
+  const SETTLE = { dist: 0.085, yaw: 0.42, dur: 0.34, clear: 0.045 };
+  const OFF = { L: 0, R: 0.5 };
+  const _aim = V();
+  const loco = { init: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, feet: {}, rigPos: V(), h: 0 };
+  for (const h of ['L', 'R']) loco.feet[h] = { pos: V(), yaw: 0, lift: V(), liftYaw: 0, target: V(), targetYaw: 0, swing: false, s: 0, dur: 0.3, cyc: -1, planted: 1, clear: 0.05, slope: 0, pitch: 0 };
   const ground = (x, z) => (api.ground ? api.ground(x, z) : rig.position.y - 0.1);
   const toWorld = (local, out = V()) => { const h = rig.rotation.y, c = Math.cos(h), s = Math.sin(h); return out.set(rig.position.x + local.x * c + local.z * s, rig.position.y + local.y, rig.position.z - local.x * s + local.z * c); };
   const toLocal = (world, out = V()) => { const h = rig.rotation.y, c = Math.cos(h), s = Math.sin(h), dx = world.x - rig.position.x, dz = world.z - rig.position.z; return out.set(dx * c - dz * s, world.y - rig.position.y, dx * s + dz * c); };
@@ -408,9 +418,9 @@ export function buildCanoeRig({ water = null } = {}) {
     f.slope = Math.atan2(gb - gh, HEEL + BALL);
   }
   function initFeet() {
-    loco.init = true; loco.phase = 0; loco.stepping = false;
-    for (const h of ['L', 'R']) { const f = loco.feet[h]; plantAt(f, toWorld(restLocal(h)), rig.rotation.y + (h === 'L' ? 0.08 : -0.08)); f.swing = false; f.u = h === 'L' ? 0 : 0.5; }
-    loco.hipY = ground(rig.position.x, rig.position.z) - rig.position.y + HIP_H - 0.02;
+    loco.init = true; loco.phase = 0; loco.stepping = false; loco.moving = false;
+    for (const h of ['L', 'R']) { const f = loco.feet[h]; plantAt(f, toWorld(restLocal(h)), rig.rotation.y + (h === 'L' ? 0.08 : -0.08)); f.swing = false; f.s = 0; f.cyc = -1; f.planted = 1; }
+    loco.hipY = ground(rig.position.x, rig.position.z) - rig.position.y + HIP_H - 0.02; loco.hipW = NaN;
     loco.rigPos.copy(rig.position); loco.h = rig.rotation.y;
   }
   // the ankle (world) for a foot reference point on the ground, its yaw and pitch (+ toes up), pivoting on the
@@ -432,6 +442,7 @@ export function buildCanoeRig({ water = null } = {}) {
   // the hips at the top, reaching down again as it falls; planted afresh where they land.
   function airFeet(dt) {
     loco.air = true; loco.stepping = false;
+    loco.mw += (0 - loco.mw) * damp(6, dt);
     const T = state.airT, rising = state.vy > 0;
     const tuck = rising ? smooth(0.04, 0.2, T) : smooth(-2.6, -0.5, state.vy); // up after the push-off, down again to land
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
@@ -445,7 +456,7 @@ export function buildCanoeRig({ water = null } = {}) {
       ankleAt(f.pos, f.yaw, pitch, ankles[k]);
       footFrameQ(f.yaw, pitch, fq[k]); tq[k].copy(fq[k]);
     }
-    return { v: Math.max(0, state.speed), sp: 0, hustle: 0, jog: 0, moving: false, backF: false, mx: 1, mz: 0, fs: 0.5, phase: loco.phase, amp: 1, air: true, tuck };
+    return { v: Math.max(0, state.speed), sp: 0, hustle: 0, jog: 0, moving: false, mw: loco.mw, backF: false, mx: 1, mz: 0, fs: 0.5, phase: loco.phase, amp: 1, air: true, tuck };
   }
 
   // advance the feet; returns the gait numbers the upper body uses
@@ -473,48 +484,101 @@ export function buildCanoeRig({ water = null } = {}) {
     let c, fs, clear;
     if (carry) { c = 0.55 + 0.3 * v; fs = 0.6; clear = 0.05 + 0.02 * sp; }
     else {
+      // the jog upright, the knee lifting lightly: a shorter flight and a lower swing than the sprinter's it had been
       c = lerp(0.6 + 0.24 * v, 1.2 + 0.08 * v, jog);
-      fs = lerp(lerp(0.58, 0.5, hustle), 0.32, jog);
-      clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.26, jog);
+      fs = lerp(lerp(0.58, 0.5, hustle), 0.36, jog);
+      clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.16, jog) + 0.12 * wadeK;
     }
     c *= 1 + 0.2 * Math.abs(mz);
     state.cadence = moving ? c : 0;
     const L = v / c, E = fs * L;
-    // keep stepping while moving, or until both feet are back under the hips
-    let settle = false;
-    for (const h of ['L', 'R']) { const f = loco.feet[h]; if (f.swing) settle = true; else if (flatDist(f.pos, toWorld(restLocal(h), _v3)) > 0.09 && !moving) settle = true; }
-    loco.stepping = moving || settle;
-    const cad = moving ? c : 1.7;
-    if (loco.stepping) loco.phase += cad * dt;
     // world velocity of the body, for where a swinging foot will land
     const h = rig.rotation.y, ch = Math.cos(h), shh = Math.sin(h);
     const vx = moving ? (mx * ch + mz * shh) * v : 0, vz = moving ? (-mx * shh + mz * ch) * v : 0;
     const amp = 0.3 + 0.7 * sp;
-    for (const [k, off] of [['L', 0], ['R', 0.5]]) {
-      const f = loco.feet[k];
-      const u = frac(loco.phase + off);
-      const fsx = moving ? fs : 0.5;
-      if (loco.stepping) {
-        if (!f.swing && u >= fsx && (f.u < fsx || u < f.u)) { f.swing = true; f.lift.copy(f.pos); f.liftYaw = f.yaw; }
-        else if (f.swing && u < f.u) {
-          f.swing = false;
-          plantAt(f, f.target, f.targetYaw);
-        }
+    const F = loco.feet;
+    const startSwing = (f, dur, cl) => { f.swing = true; f.s = 0; f.dur = Math.max(0.12, dur); f.clear = cl; f.lift.copy(f.pos); f.liftYaw = f.yaw; f.fresh = true; };
+    const cycOf = (k) => Math.floor(loco.phase + OFF[k]);
+    const uOf = (k) => loco.phase + OFF[k] - Math.floor(loco.phase + OFF[k]);
+    // where a foot is, along the way the body goes (+ ahead of the hips)
+    const along = (f) => { const a = toLocal(f.pos, _v2); return a.x * mx + a.z * mz; };
+    if (moving && !loco.moving) {
+      // setting off: the phase is set so the first step comes now, by the foot further back (or the one already in the air)
+      let lead = F.L.swing ? 'L' : F.R.swing ? 'R' : null;
+      if (!lead) lead = along(F.L) <= along(F.R) ? 'L' : 'R';
+      const u0 = F[lead].swing ? fs + F[lead].s * (1 - fs) : fs + 1e-4;
+      loco.phase = Math.ceil(loco.phase) + 2 + frac(u0 - OFF[lead]);
+      for (const k of ['L', 'R']) {
+        const f = F[k];
+        if (k === lead) {
+          f.cyc = cycOf(k);
+          if (!f.swing) startSwing(f, (1 - uOf(k)) / c, clear);
+          else if (f.s < 1) f.dur = Math.min(f.dur, 0.14 / (1 - f.s)); // a settle step under way comes down soon, the other foot next
+        } else f.cyc = uOf(k) >= fs ? cycOf(k) : cycOf(k) - 1;
       }
-      f.u = u;
+    }
+    loco.moving = moving;
+    loco.mw += ((moving ? 1 : 0) - loco.mw) * damp(moving ? 7 : 5, dt);
+    if (moving) {
+      loco.phase += c * dt;
+      for (const k of ['L', 'R']) {
+        const f = F[k], o = F[k === 'L' ? 'R' : 'L'];
+        if (f.swing) { f.clear = clear; continue; }
+        const cy = cycOf(k), u = uOf(k);
+        // its turn in the cycle, or left further behind than the stride allows (the other foot down, unless jogging)
+        const behind = -along(f), far = behind > Math.min(E / 2 + 0.24, 0.6), late = far && (!o.swing || jog > 0.5);
+        if ((u >= fs && f.cyc !== cy) || late) { f.cyc = cy; startSwing(f, late && u < fs ? (1 - fs) / c : (1 - u) / c, clear); }
+        else if (far && o.swing && o.s < 1) o.dur = Math.min(o.dur, 0.1 / (1 - o.s)); // the other foot down quickly, so this one can go
+      }
+    } else if (!F.L.swing && !F.R.swing) {
+      // standing: the foot furthest off its place under the hip (or turned from it) steps back to it, one at a time
+      let worst = null, wv = 1;
+      for (const k of ['L', 'R']) {
+        const f = F[k], d = flatDist(f.pos, toWorld(restLocal(k), _v3)) / SETTLE.dist;
+        const y = Math.abs(wrapPi(f.yaw - (h + (k === 'L' ? 0.08 : -0.08)))) / SETTLE.yaw;
+        const e = Math.max(d, y);
+        if (e > wv) { wv = e; worst = k; }
+      }
+      if (worst) startSwing(F[worst], SETTLE.dur, SETTLE.clear);
+    }
+    loco.stepping = moving || F.L.swing || F.R.swing;
+    for (const k of ['L', 'R']) {
+      const f = F[k];
       const toe = k === 'L' ? 0.08 : -0.08;
       if (f.swing) {
-        const s = sat((u - fsx) / (1 - fsx));
-        const tau = (1 - u) / cad;
+        if (moving) f.dur = Math.min(f.dur, Math.max(0.12, (1 - fs) / c)); // a step begun slow, setting off, quickens with the pace
+        f.s = Math.min(1, f.s + dt / f.dur);
+        const s = f.s;
+        const tau = (1 - s) * f.dur;
         const land = restLocal(k, moving ? loco.hipYaw : 0, _v3);
         if (moving) { land.x += mx * E / 2; land.z += mz * E / 2; }
-        const tw = toWorld(land, f.target);
-        tw.x += vx * tau; tw.z += vz * tau; tw.y = ground(tw.x, tw.z);
+        // where it will land, followed smoothly: the pace, the way or the step's timing changing under a swing (setting
+        // off, a step hurried along) move the aim, never the foot in one frame
+        const tw = toWorld(land, _aim);
+        tw.x += vx * tau; tw.z += vz * tau;
+        if (f.fresh) { f.target.copy(tw); f.fresh = false; }
+        else { const ka = damp(16, dt); f.target.x += (tw.x - f.target.x) * ka; f.target.z += (tw.z - f.target.z) * ka; }
+        f.target.y = ground(f.target.x, f.target.z);
         f.targetYaw = h + (moving ? loco.hipYaw : 0) + toe;
-        // a jogging foot stays back a moment as the heel kicks up toward the seat, then the knee drives it forward
-        const e = lerp(ease(s), Math.pow(ease(s), 1.45), jog);
+        if (s >= 1) {
+          f.swing = false; f.planted = 0; plantAt(f, f.target, f.targetYaw);
+          // the phase kept with the feet: a landing is the start of that foot's cycle (a step hurried or held back, setting
+          // off or speeding up, would otherwise leave the cycle and the feet out of step)
+          if (moving) { const d = Math.round(loco.phase + OFF[k]) - OFF[k] - loco.phase; loco.phase += Math.max(-0.15, Math.min(0.15, d)); }
+        }
+      }
+      if (f.swing) {
+        const s = f.s;
+        // a jogging foot stays back a moment as the heel comes up, then the knee brings it through
+        const e = lerp(ease(s), Math.pow(ease(s), 1.3), jog);
         f.pos.lerpVectors(f.lift, f.target, e);
-        f.pos.y = lerp(f.lift.y, f.target.y, s) + clear * Math.pow(Math.sin(Math.PI * Math.pow(s, lerp(0.8, 0.55, jog))), 1.2) * (moving ? 1 : 0.6);
+        // a step up (a log, a rock, the store's step): the knee lifts the foot over the edge early; a step down holds it
+        // up until it is over the lower ground
+        const rise = f.target.y - f.lift.y, up = smooth(0.08, 0.2, rise), down = smooth(0.08, 0.2, -rise);
+        const sy = lerp(lerp(s, Math.sin((Math.PI / 2) * Math.min(1, s * 1.25)), up), s * s, down);
+        const cl = Math.max(f.clear, up * (0.45 * rise + 0.08));
+        f.pos.y = lerp(f.lift.y, f.target.y, sy) + cl * Math.pow(Math.sin(Math.PI * Math.pow(s, lerp(0.8, 0.6, jog))), 1.2);
+        f.pos.y = Math.max(f.pos.y, ground(f.pos.x, f.pos.z) + 0.01 * Math.sin(Math.PI * s)); // never through a bump on the way
         f.yaw = f.liftYaw + wrapPi(f.targetYaw - f.liftYaw) * e;
         // toes down after the push-off, up again to meet the ground with the heel
         let pt = s < 0.3 ? lerp(-0.55, -0.2, s / 0.3) : s < 0.85 ? lerp(-0.2, 0.18, (s - 0.3) / 0.55) : lerp(0.18, 0.22, (s - 0.85) / 0.15);
@@ -524,17 +588,18 @@ export function buildCanoeRig({ water = null } = {}) {
         footFrameQ(f.yaw, pt + f.slope * s, fq[k]);
         tq[k].copy(fq[k]);
       } else {
-        // planted: heel strike, flat, heel off (the other way on a back-step), the toes kept on the ground
-        const sig = loco.stepping && moving ? u / fsx : 0.4;
+        // planted: heel strike, flat, heel off (the other way on a back-step), the toes kept on the ground; standing, flat
+        f.planted += dt;
+        const sig = moving ? sat(f.planted * c / fs) : 0.4;
         let pt = sig < 0.12 ? 0.22 * (1 - sig / 0.12) : sig < 0.6 ? 0 : -0.55 * Math.pow((sig - 0.6) / 0.4, 1.4);
-        pt *= amp * (backF ? -0.6 : 1);
+        pt *= amp * (backF ? -0.6 : 1) * loco.mw;
         f.pitch = pt;
         ankleAt(f.pos, f.yaw, pt + f.slope, ankles[k]);
         footFrameQ(f.yaw, pt + f.slope, fq[k]);
         if (pt < 0) footFrameQ(f.yaw, f.slope, tq[k]); else tq[k].copy(fq[k]);
       }
     }
-    return { v, sp, hustle, jog, moving, backF, mx, mz, fs, phase: loco.phase, amp, air: false, tuck: 0 };
+    return { v, sp, hustle, jog, moving, mw: loco.mw, backF, mx, mz, fs, phase: loco.phase, amp, air: false, tuck: 0 };
   }
 
   // the standing body over the feet: pelvis height from the ground under the feet and the legs' reach, the
@@ -542,41 +607,54 @@ export function buildCanoeRig({ water = null } = {}) {
   // swing and the shoulders against them
   let crouchK = 0; // state.crouch, eased: the hips sink over the planted feet (the knees forward), the back bends over
   function standingBody(dt, g, carry) {
-    const phi = g.phase, sp = g.sp * (g.moving ? 1 : 0);
+    const phi = g.phase, mw = g.mw, sp = g.sp * mw;
     crouchK += ((carry || g.air ? 0 : state.crouch || 0) - crouchK) * damp(5, dt);
     const ck = ease(crouchK);
     const twoPi = Math.PI * 2;
     // in the air the ground is where the feet are (the rig rides the hop); otherwise the ground under the body
     const gl = g.air ? -0.1 : toLocal(_v.set(rig.position.x, ground(rig.position.x, rig.position.z), rig.position.z)).y;
-    const jog = g.moving ? g.jog : 0;
-    const bend = carry ? 0.05 + 0.02 * sp : lerp(0.018 + 0.02 * sp + 0.03 * g.hustle, 0.065, jog);
+    const jog = g.jog * mw;
+    const bend = carry ? 0.05 + 0.02 * sp : lerp(0.018 + 0.02 * sp + 0.03 * g.hustle * mw, 0.04, jog);
     const bobA = (carry ? 0.012 : 0.01) + 0.008 * sp;
     // the walk: down after each contact, up at passing; the jog: lowest at mid-stance (half the stance after a
     // foot lands), highest in the flight between steps
-    const bobW = -bobA * (0.5 + 0.5 * Math.cos(twoPi * 2 * (phi - 0.07))), bobJ = -0.042 * Math.cos(twoPi * 2 * (phi - g.fs / 2));
-    const bob = g.moving ? lerp(bobW, bobJ, jog) : -0.006 * (0.5 + 0.5 * Math.sin(idle.breath));
+    const bobW = -bobA * (0.5 + 0.5 * Math.cos(twoPi * 2 * (phi - 0.07))), bobJ = -0.03 * Math.cos(twoPi * 2 * (phi - g.fs / 2));
+    const bob = lerp(-0.006 * (0.5 + 0.5 * Math.sin(idle.breath)), lerp(bobW, bobJ, g.jog), mw);
     // a hop: the legs straight at the push-off, the knees up in the tuck; the landing sinks into them; a stagger
     // under the canoe dips
     const airDrop = g.air ? 0.02 + 0.05 * g.tuck : 0;
     let target = gl + HIP_H - bend + bob - airDrop - 0.16 * ease(state.land) - 0.06 * Math.sin(Math.PI * state.stagger) - 0.4 * ck;
-    // no higher than the planted legs reach (a jogging foot in the air does not hold the body down)
+    // no higher than the planted legs reach. A walking foot reaching for the ground counts from mid-swing, so the hips
+    // settle into the heel strike instead of dropping at it; a jogging foot in the air does not hold the body down. Only
+    // so far for a foot left behind: past 0.42 m out it steps (locomote) rather than pulling the hips down
     const yaw = loco.hipYaw;
+    let cap = Infinity;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
-      if (jog > 0.5 && loco.feet[k].swing) continue;
+      const f = loco.feet[k];
+      if (f.swing && !g.air && (jog > 0.5 || f.s < 0.5)) continue;
       const a = toLocal(ankles[k], _v2);
       const hx = Math.sin(yaw) * sg * 0.098, hz = Math.cos(yaw) * sg * 0.098;
-      const horiz = Math.hypot(a.x - hx, a.z - hz), reach = (LT + LS) * 0.995;
+      const horiz = Math.min(0.42, Math.hypot(a.x - hx, a.z - hz)), reach = (LT + LS) * 0.995;
       const max = a.y + Math.sqrt(Math.max(0, reach * reach - horiz * horiz));
-      if (max < target) target = max;
+      if (max < cap) cap = max;
     }
-    loco.hipY += (target - loco.hipY) * damp(target < loco.hipY ? 30 : 14, dt);
-    const swayZ = g.moving ? -0.024 * sp * Math.sin(twoPi * (phi - 0.03)) : 0.012 * Math.sin(idle.shift);
-    const roll = g.moving ? 0.06 * sp * Math.sin(twoPi * (phi - 0.03)) : 0;
-    const pYaw = g.moving ? -0.11 * sp * Math.cos(twoPi * phi) * (g.backF ? -1 : 1) : 0;
-    const lean = (carry ? 0.1 : 0.03) + (g.moving ? (g.backF ? -0.05 : 0.05 * sp + 0.06 * g.hustle + 0.11 * jog) : 0) + 0.01 * Math.sin(idle.breath)
+    target = Math.min(target, cap);
+    // the hips follow their height in the world, not the rig's: a step down off a stone, a slab underfoot or the ground's
+    // facets come through the body softly (in a hop the body rides the rig)
+    const ry = rig.position.y;
+    if (!g.air && Number.isFinite(loco.hipW)) loco.hipY = loco.hipW - ry;
+    loco.hipY += (target - loco.hipY) * damp(target < loco.hipY ? 22 : 12, dt);
+    loco.hipY = Math.min(loco.hipY, cap + 0.008); // never past what the planted legs reach
+    loco.hipW = loco.hipY + ry;
+    // standing: the weight drifts slowly from foot to foot, the hips rolling a touch over the one that takes it
+    const swayZ = lerp(0.014 * Math.sin(idle.shift), -0.024 * sp * Math.sin(twoPi * (phi - 0.03)), mw);
+    const roll = lerp(-0.025 * Math.sin(idle.shift), 0.06 * sp * Math.sin(twoPi * (phi - 0.03)), mw);
+    const pYaw = -0.11 * sp * Math.cos(twoPi * phi) * (g.backF ? -1 : 1);
+    // the jog upright: a few degrees forward of the walk, no more
+    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK
       + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck;
     const pelvis = bodyQ(yaw + pYaw, 0.03 + lean * 0.3, roll);
-    const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15, lean, -0.4 * roll + (g.moving ? 0.04 * g.mz * sp : 0));
+    const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15, lean, -0.4 * roll + 0.04 * g.mz * sp);
     const head = bodyQ(idle.yaw * 0.85, (carry ? 0.22 : 0.02) - idle.pitch + 0.15 * lean + 0.2 * ck, 0);
     const root = V(lean * 0.06, loco.hipY + ROOT_UP, swayZ);
     body(root, pelvis, chest, head, { shrugL: 0.012 * Math.sin(idle.breath), shrugR: 0.012 * Math.sin(idle.breath) });
@@ -593,19 +671,21 @@ export function buildCanoeRig({ water = null } = {}) {
 
   // arms hanging and swinging against the legs; the elbows bend more as the pace picks up
   function swingArms(g) {
-    const phi = g.phase, sp = g.moving ? g.sp : 0, jog = g.moving ? g.jog : 0;
+    const phi = g.phase, mw = g.mw, sp = g.sp * mw, jog = g.jog * mw;
     // jogging, the arms are carried bent at about a right angle, a little forward, and swing higher
-    const A = lerp(0.32 + 0.22 * sp + 0.12 * g.hustle, 0.62, jog) * (g.moving ? 1 : 0) * (1 - 0.6 * Math.abs(g.mz)) * (g.backF ? 0.6 : 1);
+    const A = lerp(0.32 + 0.22 * sp + 0.12 * g.hustle, 0.56, jog) * mw * (1 - 0.6 * Math.abs(g.mz)) * (g.backF ? 0.6 : 1);
     const bend = lerp(0.32 + 0.25 * sp + 0.5 * g.hustle, 1.55, jog) + (g.air ? 0.5 : 0) + 0.4 * ease(state.land);
     // crouched, the hands go down in front of the knees, working a little in turn (picking, gathering, the fire)
     const ck = ease(crouchK), work = 0.12 * ck * Math.sin(idle.breath * 7);
-    const fwd = 0.04 + 0.16 * jog + (g.air ? 0.25 * g.tuck : 0) + 0.75 * ck;
+    const fwd = 0.04 + 0.12 * jog + (g.air ? 0.25 * g.tuck : 0) + 0.75 * ck;
     const cq = J.chest.q;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
-      const sw = A * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd + (k === 'L' ? work : -work);
+      // a hand carrying something (stream A's state.held: the bucket, the tackle box, the rod) hangs straighter and swings less
+      const held = state.held && state.held[k] ? 1 : 0;
+      const sw = A * (1 - 0.6 * held) * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd * (1 - 0.5 * held) + (k === 'L' ? work : -work) * (1 - held);
       const sh = J['arm' + k].p;
-      const du = V(Math.sin(sw), -Math.cos(sw), sg * 0.13).normalize().applyQuaternion(cq);
-      const df = V(Math.sin(sw + bend), -Math.cos(sw + bend), sg * 0.06).normalize().applyQuaternion(cq);
+      const du = V(Math.sin(sw), -Math.cos(sw), sg * (0.13 + 0.55 * wadeK)).normalize().applyQuaternion(cq);
+      const df = V(Math.sin(sw + bend * (1 - 0.7 * held)), -Math.cos(sw + bend * (1 - 0.7 * held)), sg * (0.06 + 0.3 * wadeK)).normalize().applyQuaternion(cq);
       const elbow = sh.clone().addScaledVector(du, 0.315);
       const target = elbow.clone().addScaledVector(df, 0.265 + 0.07);
       const pole = elbow.clone().add(V(-0.3, 0, sg * 0.05).applyQuaternion(cq));
@@ -613,12 +693,14 @@ export function buildCanoeRig({ water = null } = {}) {
     }
   }
 
-  function poseWalk(dt) {
+  let wadeK = 0; // wading (player.move 'wade'), eased: the knees lifted high out of the water, the arms out from the sides
+  function poseWalk(dt, mk = null) {
     placePaddler(0, 0, 0);
     if (hat.parent !== fig.bones.head) hatOnHead();
     contact.visible = false;
     stowPaddle();
     updateIdle(dt, state.walkSpeed < 0.2);
+    wadeK += ((mk === 'wade' ? 1 : 0) - wadeK) * damp(4, dt);
     const g = locomote(dt, false);
     standingBody(dt, g, false);
     swingArms(g);
@@ -639,7 +721,7 @@ export function buildCanoeRig({ water = null } = {}) {
     const shoulder = neck.y - 0.032;
     hullPivot.position.set(neck.x - 0.02, shoulder + padTop, 0);
     const stg = state.stagger, wob = Math.sin(Math.PI * stg) * Math.sin(stg * 19);   // a stagger: the hull lurches and is caught
-    hullPivot.rotation.set(Math.PI + 0.015 * Math.sin(Math.PI * 2 * g.phase) * (g.moving ? 1 : 0) + 0.07 * wob, yawC, 0.09 + 0.05 * Math.sin(Math.PI * stg), 'YZX');
+    hullPivot.rotation.set(Math.PI + 0.015 * Math.sin(Math.PI * 2 * g.phase) * g.mw + 0.07 * wob, yawC, 0.09 + 0.05 * Math.sin(Math.PI * stg), 'YZX');
     hullPivot.updateMatrix();
     // hands on the gunwales ahead of the yoke
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
@@ -659,12 +741,14 @@ export function buildCanoeRig({ water = null } = {}) {
   function poseSwim(dt) {
     contact.visible = false;
     if (hat.parent !== fig.bones.head) hatOnHead();
-    hullPivot.position.set(0, -0.3, 0);
-    hullPivot.rotation.set(Math.PI, 0, 0.06 * Math.sin(state.walk * 0.7));
-    // the paddle floats off the far side of the hull from you
-    paddleInHand(); paddle.visible = true;
-    const away = -(state.swimSide || 1);
-    placePaddle(V(-0.2, -0.04, away * 1.05), V(1, 0.0, away * 0.08).normalize(), V(0, 1, 0));
+    if (state.swimHull !== false && hullPivot.parent === rig) {
+      // capsized: the hull overturned beside you, the paddle floating off its far side
+      hullPivot.position.set(0, -0.3, 0);
+      hullPivot.rotation.set(Math.PI, 0, 0.06 * Math.sin(state.walk * 0.7));
+      paddleInHand(); paddle.visible = true;
+      const away = -(state.swimSide || 1);
+      placePaddle(V(-0.2, -0.04, away * 1.05), V(1, 0.0, away * 0.08).normalize(), V(0, 1, 0));
+    } else stowPaddle(); // a swim from the shore: the canoe lies where it was left, the paddle in it
     const loc = rig.worldToLocal(swimmer.clone());
     placePaddler(loc.x, loc.y, loc.z, state.swimHeading - rig.rotation.y);
     updateIdle(dt, state.walkSpeed < 0.3);
@@ -766,6 +850,223 @@ export function buildCanoeRig({ water = null } = {}) {
   }
 
   // ---------------------------------------------------------------------------------------------------------
+  // The walker's moves (player.js player.move, read through api.moveOf): a vault over a log, a climb onto a rock or a
+  // ledge, and sitting. player.js drives the body's path (the rig: the feet's height plus 0.1, along from -> to); these
+  // pose the limbs on it from world places that stay put while the body passes: the hand on the log, the hands on the
+  // edge, the feet where they push off and land. Each is a few keys per part over the move's u (0..1), run through a
+  // smooth curve. A step up is the gait's own (locomote: the swinging knee lifted over the edge); a hop, a fall and a
+  // landing are the air pose (state.air, state.land); wading is the walk with the knees high and the arms out.
+  // track: a value through keys [[u, v], ...]: a cubic through each key, flat at the two ends
+  function track(u, K) {
+    const n = K.length;
+    if (u <= K[0][0]) return K[0][1];
+    if (u >= K[n - 1][0]) return K[n - 1][1];
+    let i = 0;
+    while (u > K[i + 1][0]) i++;
+    const u0 = K[i][0], p0 = K[i][1], u1 = K[i + 1][0], p1 = K[i + 1][1], h = u1 - u0, t = (u - u0) / h;
+    const m0 = i > 0 ? ((p1 - K[i - 1][1]) / (u1 - K[i - 1][0])) * h : 0;
+    const m1 = i + 2 < n ? ((K[i + 2][1] - p0) / (K[i + 2][0] - u0)) * h : 0;
+    const t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * p0 + (t3 - 2 * t2 + t) * m0 + (-2 * t3 + 3 * t2) * p1 + (t3 - t2) * m1;
+  }
+  // the same through world points [[u, Vector3], ...]
+  const _kx = [], _ky = [], _kz = [];
+  function trackV(u, K, out) {
+    _kx.length = _ky.length = _kz.length = K.length;
+    for (let i = 0; i < K.length; i++) { _kx[i] = [K[i][0], K[i][1].x]; _ky[i] = [K[i][0], K[i][1].y]; _kz[i] = [K[i][0], K[i][1].z]; }
+    return out.set(track(u, _kx), track(u, _ky), track(u, _kz));
+  }
+  // the move's own frame in the world: its way (f), its right (r), a point `along` metres on from `from`, `side` to the
+  // right, at height y
+  const mvF = { fx: 1, fz: 0, rx: 0, rz: 1, L: 0, ox: 0, oz: 0 };
+  function moveFrame(m) {
+    const dx = m.to.x - m.from.x, dz = m.to.z - m.from.z, L = Math.hypot(dx, dz);
+    const h = Number.isFinite(m.heading) ? m.heading : rig.rotation.y;
+    mvF.fx = L > 0.05 ? dx / L : Math.cos(h); mvF.fz = L > 0.05 ? dz / L : -Math.sin(h);
+    mvF.rx = -mvF.fz; mvF.rz = mvF.fx; mvF.L = L; mvF.ox = m.from.x; mvF.oz = m.from.z;
+    mvF.yaw = Math.atan2(-mvF.fz, mvF.fx);
+  }
+  const mvAt = (along, side, y, out = V()) => out.set(mvF.ox + mvF.fx * along + mvF.rx * side, y, mvF.oz + mvF.fz * along + mvF.rz * side);
+  // a timed move's start: where the feet were (they push off from there), kept until the kind changes
+  const moveStart = { kind: null, feet: { L: V(), R: V() } };
+  function noteMoveStart(m) {
+    if (moveStart.kind === m.kind && moveStart.t0 <= m.t) { moveStart.t0 = m.t; return; }
+    moveStart.kind = m.kind; moveStart.t0 = m.t;
+    for (const k of ['L', 'R']) {
+      const f = loco.feet[k];
+      if (loco.init && Number.isFinite(f.pos.x) && flatDist(f.pos, rig.position) < 1.2) moveStart.feet[k].copy(f.pos);
+      else mvAt(0, k === 'L' ? -0.11 : 0.11, m.from.y, moveStart.feet[k]);
+    }
+  }
+  // limbs to world places: a foot (its ankle over the sole's point p, yawed `yaw`, pitched) and a hand (the fist at p,
+  // its grip along `axis`, the palm toward `palm`)
+  const _wa = V(), _wb = V(), _wc = V();
+  function footTo(k, p, yawW, pitch, kneeOut = 0.05) {
+    ankleAt(p, yawW, pitch, ankles[k]);
+    const a = toLocal(ankles[k], _wa), sg = k === 'L' ? -1 : 1, yl = yawW - rig.rotation.y;
+    footFrameQ(yawW, pitch, fq[k]);
+    const hip = J['thigh' + k].p;
+    const pole = _wb.set((hip.x + a.x) / 2 + Math.cos(yl) * 0.6, (hip.y + a.y) / 2, (hip.z + a.z) / 2 - Math.sin(yl) * 0.6 + sg * kneeOut);
+    P.leg(k, a.clone(), pole, fq[k]);
+  }
+  function handTo(k, pWorld, axisL, palmL, poleOff) {
+    const t = toLocal(pWorld, _wc), sh = J['arm' + k].p, sg = k === 'L' ? -1 : 1;
+    P.arm(k, t.clone(), axisL, V(sh.x + poleOff.x, sh.y + poleOff.y, sh.z + sg * poleOff.z), palmL);
+  }
+  // a hand's free place (local): from its shoulder, hanging by the hip, or (up) out to the side for balance
+  const freeHand = (k, out, up = 0) => { const sg = k === 'L' ? -1 : 1, sh = J['arm' + k].p; return out.set(sh.x + 0.06 + 0.06 * up, sh.y - 0.56 + 0.36 * up, sh.z + sg * (0.08 + 0.4 * up)); };
+  const _h0 = V(), _h1 = V(), _hw = V();
+
+  // A vault over a log or a low rock: the left hand on its top, the body over it leaning on that hand with the legs
+  // tucked and swung across on the right, then down on the far side, the knees giving on the landing.
+  function poseVault(dt, m) {
+    placePaddler(0, 0, 0);
+    if (hat.parent !== fig.bones.head) hatOnHead();
+    contact.visible = false; stowPaddle(); updateIdle(dt, false);
+    noteMoveStart(m); moveFrame(m);
+    const u = sat(m.u), top = m.top ?? m.from.y + 0.7, L = Math.max(0.6, mvF.L);
+    const nearD = m.nearD ?? L * 0.32, far = m.far >= 0 ? m.far : nearD + 0.4, mid = (nearD + far) / 2;
+    const g0 = m.from.y, g1 = m.to.y;
+    const yOff = mvF.yaw - rig.rotation.y; // the body keeps to the move's way whatever the view does
+    // the hips (world height) through take-off, over, and the landing
+    const hipW = track(u, [[0, g0 + 0.83], [0.08, g0 + 0.72], [0.2, g0 + 0.84], [0.45, top + 0.24], [0.7, g1 + 0.72], [0.84, g1 + 0.6], [1, g1 + 0.83]]);
+    const lean = track(u, [[0, 0.1], [0.08, 0.3], [0.25, 0.62], [0.45, 0.75], [0.65, 0.4], [0.84, 0.35], [1, 0.05]]);
+    const side = track(u, [[0, 0], [0.2, -0.2], [0.45, -0.48], [0.65, -0.25], [0.85, 0], [1, 0]]);
+    const twist = track(u, [[0, 0], [0.25, -0.2], [0.48, -0.5], [0.72, -0.15], [1, 0]]);
+    const root = V(0.04 * lean, hipW - rig.position.y + ROOT_UP, -0.06 * side);
+    const pelvis = bodyQ(yOff + twist, 0.05 + lean * 0.4, side * 0.6);
+    const chest = bodyQ(yOff + twist * 0.35, lean, side);
+    const head = bodyQ(yOff, 0.1 + lean * 0.25 - 0.25 * smooth(0.1, 0.4, u) * (1 - smooth(0.6, 0.85, u)), side * 0.3);
+    body(root, pelvis, chest, head);
+    // the feet: the left pushes off where it stood, the right drives up; both tucked over the top on the right; down
+    // beside each other on the far side
+    const fL = trackV(u, [[0, moveStart.feet.L], [0.12, moveStart.feet.L], [0.3, mvAt(nearD + 0.05, 0.25, top + 0.15, _h0)], [0.45, mvAt(mid + 0.1, 0.38, top + 0.15, _h1)], [0.6, mvAt(far + 0.15, 0.3, top + 0.05, _hw)], [0.78, mvAt(L - 0.06, -0.11, g1, V())], [1, mvAt(L, -0.11, g1, V())]], V());
+    const fR = trackV(u, [[0, moveStart.feet.R], [0.1, mvAt(0.3, 0.16, g0 + 0.35, V())], [0.28, mvAt(nearD + 0.15, 0.36, top + 0.22, V())], [0.45, mvAt(mid + 0.2, 0.48, top + 0.2, V())], [0.6, mvAt(far + 0.25, 0.4, top + 0.08, V())], [0.78, mvAt(L + 0.06, 0.11, g1, V())], [1, mvAt(L, 0.11, g1, V())]], V());
+    for (const [k, p] of [['L', fL], ['R', fR]]) {
+      const gy = ground(p.x, p.z);
+      if (p.y < gy) p.y = gy;
+      const air = smooth(0.08, 0.18, u) * (1 - smooth(0.74, 0.84, u));
+      footTo(k, p, mvF.yaw + (k === 'L' ? 0.08 : -0.08) + 0.5 * air, -0.45 * air, 0.05 + 0.25 * air);
+    }
+    // the left hand on the top, the right out for balance
+    const plant = smooth(0.03, 0.17, u) * (1 - smooth(0.58, 0.7, u));
+    const logP = mvAt(mid + 0.12, -0.15, top + 0.035, _h0);
+    const free = toWorld(freeHand('L', _h1, smooth(0.6, 0.8, u) * (1 - smooth(0.85, 1, u))), _hw);
+    const hL = V().lerpVectors(free, logP, plant);
+    handTo('L', hL, V(mvF.rx, 0, mvF.rz).applyAxisAngle(V(0, 1, 0), -rig.rotation.y), V(0, -1, 0), { x: -0.25, y: -0.1, z: 0.45 });
+    const up = smooth(0.1, 0.32, u) * (1 - smooth(0.78, 0.98, u));
+    const cq = J.chest.q, sh = J.armR.p;
+    const tR = freeHand('R', V(), up);
+    P.arm('R', tR, V(1, 0, -0.15).applyQuaternion(cq), V(sh.x - 0.3, sh.y - 0.2, sh.z + 0.3), V(0, 0, -1).applyQuaternion(cq));
+    loco.hipW = NaN; // the gait takes the hips up afresh after
+  }
+
+  // A climb onto a rock or a ledge (up to about 2 m): the hands up onto the edge, the feet walked up the face; the right
+  // foot up onto the top with the body bent over the edge, the hands pushing; then standing up and stepping in.
+  function poseClimbUp(dt, m) {
+    placePaddler(0, 0, 0);
+    if (hat.parent !== fig.bones.head) hatOnHead();
+    contact.visible = false; stowPaddle(); updateIdle(dt, false);
+    noteMoveStart(m); moveFrame(m);
+    const u = sat(m.u), top = m.top ?? m.to.y, L = Math.max(0.3, mvF.L), g0 = m.from.y, rise = Math.max(0.3, top - g0);
+    const face = m.nearD ?? Math.max(0.25, L - 0.45); // the face, metres on from where he began
+    const yOff = mvF.yaw - rig.rotation.y;
+    // the hips: a dip to spring, pulled up off the hands with the feet on the face, pressed up over the edge on straight
+    // arms, the foot on the top under them, then standing
+    const hangC = top - Math.min(0.95, 0.6 * rise); // where player.js has the feet at the hang (u 0.35)
+    const pull = Math.max(g0 + 0.85, Math.min(top - 0.2, hangC + 0.62));
+    const hipW = track(u, [[0, g0 + 0.83], [0.14, g0 + 0.76], [0.35, pull], [0.55, Math.max(pull + 0.05, top + 0.05)], [0.72, top + 0.3], [0.87, top + 0.62], [1, m.to.y + 0.83]]);
+    const hipA = track(u, [[0, 0], [0.35, face - 0.4], [0.55, face - 0.18], [0.72, face + 0.04], [1, L]]); // back off the face, then over it
+    const hipP = mvAt(hipA, 0, hipW, _h0), hl = toLocal(hipP, _h1);
+    const lean = track(u, [[0, 0.1], [0.14, 0.22], [0.35, 0.12], [0.55, 0.62], [0.72, 0.85], [0.88, 0.45], [1, 0.05]]);
+    const root = V(hl.x, hl.y + ROOT_UP, hl.z);
+    const look = -0.35 * smooth(0.05, 0.25, u) * (1 - smooth(0.5, 0.7, u)); // eyes up at the edge while hanging
+    body(root, bodyQ(yOff, 0.05 + lean * 0.5, 0), bodyQ(yOff, lean, 0), bodyQ(yOff, lean * 0.4 + look, 0));
+    // the feet: on the face (toes to it) as the body hangs; the right up onto the top; the left after it; both on the top
+    const onFace = (k, y) => mvAt(face - 0.17, k === 'L' ? -0.13 : 0.13, Math.min(y, top - 0.12), V());
+    const fy0 = Math.max(g0, Math.min(hangC + 0.05, top - 0.25));
+    const fL = trackV(u, [[0, moveStart.feet.L], [0.2, onFace('L', g0 + rise * 0.25)], [0.4, onFace('L', fy0)], [0.7, onFace('L', fy0 + 0.1)], [0.86, mvAt(face + 0.3, -0.12, top + 0.12, V())], [1, mvAt(L, -0.11, m.to.y, V())]], V());
+    const fR = trackV(u, [[0, moveStart.feet.R], [0.25, onFace('R', g0 + rise * 0.4)], [0.42, onFace('R', fy0 + 0.15)], [0.55, mvAt(face - 0.05, 0.13, top + 0.2, V())], [0.68, mvAt(face + 0.22, 0.13, top, V())], [0.88, mvAt(face + 0.22, 0.13, top, V())], [1, mvAt(L, 0.11, m.to.y, V())]], V());
+    for (const [k, p, onTop] of [['L', fL, smooth(0.86, 0.95, u)], ['R', fR, smooth(0.62, 0.7, u)]]) {
+      const gy = ground(p.x, p.z);
+      if (p.y < gy - 0.02 && onTop > 0.5) p.y = gy;
+      const wall = 1 - onTop;
+      footTo(k, p, mvF.yaw + (k === 'L' ? 0.08 : -0.08), 0.35 * wall * smooth(0.1, 0.3, u), 0.12 * wall + 0.05);
+    }
+    // the hands: up to the edge from the sides, on it until he stands, then down again
+    const on = smooth(0.04, 0.2, u) * (1 - smooth(0.8, 0.96, u));
+    const axis = V(mvF.rx, 0, mvF.rz).applyAxisAngle(V(0, 1, 0), -rig.rotation.y);
+    for (const k of ['L', 'R']) {
+      const sg = k === 'L' ? -1 : 1;
+      const edge = mvAt(face + 0.1, sg * 0.24, top + 0.035, _h0);
+      const free = toWorld(freeHand(k, _h1, 0.6 * (1 - smooth(0.85, 1, u))), _hw);
+      handTo(k, V().lerpVectors(free, edge, on), axis, V(0, -1, 0), { x: -0.3, y: -0.25, z: 0.4 });
+    }
+    loco.hipW = NaN;
+  }
+
+  // Sitting (the latrine, a bench, a log by the fire): the seat at player.move.top (world), or knee height off the
+  // ground; the feet planted ahead, the forearms on the thighs.
+  function poseSit(dt, m) {
+    placePaddler(0, 0, 0);
+    if (hat.parent !== fig.bones.head) hatOnHead();
+    contact.visible = false; stowPaddle(); updateIdle(dt, true);
+    const gy = ground(rig.position.x, rig.position.z), seat = Number.isFinite(m.top) ? m.top : gy + 0.45;
+    const br = Math.sin(idle.breath), hipY = seat + 0.1 - rig.position.y;
+    const pelvis = bodyQ(0, -0.05, 0), chest = bodyQ(idle.yaw * 0.15, 0.22 + 0.012 * br, 0), head = bodyQ(idle.yaw * 0.85, 0.02 - idle.pitch, 0);
+    body(V(-0.06, hipY + ROOT_UP, 0), pelvis, chest, head, { shrugL: 0.012 * br, shrugR: 0.012 * br });
+    const h = rig.rotation.y;
+    for (const [k, sg] of [['L', -1], ['R', 1]]) {
+      const p = toWorld(V(0.42, 0, sg * 0.16), _h0); p.y = ground(p.x, p.z);
+      footTo(k, p, h + sg * -0.12, 0, 0.1);
+      const knee = V(0.36, hipY + 0.02, sg * 0.16);
+      const sh = J['arm' + k].p;
+      P.arm(k, knee.add(V(-0.05, 0.06, -sg * 0.02)), V(0, 0, -sg), V(sh.x - 0.25, sh.y - 0.3, sh.z + sg * 0.3), V(0, -1, 0));
+    }
+    loco.init = false;
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
+  // A change of pose (stepping out of the water, a vault begun or done, sitting down) blends from the last frame's
+  // pose over a short while, bone by bone, the figure's place too; not across a jump of more than a metre (a teleport,
+  // a launch) or into and out of the climb into the canoe, which blends itself.
+  // seconds: into a vault or a climb quickly (its first keys stand where the walk left off), out of one a little longer
+  const blendTime = (from, to) => (to === 'vault' || to === 'climbUp' ? 0.08 : from === 'vault' || from === 'climbUp' ? 0.16 : 0.28);
+  const pb = { t: 1, dur: 0.28, kind: null, has: false, pos: V(), quat: new THREE.Quaternion(), root: V(), q: bones.map(() => new THREE.Quaternion()), lastPos: V(), lastQuat: new THREE.Quaternion(), lastRoot: V(), lastQ: bones.map(() => new THREE.Quaternion()) };
+  const _bp = V(), _bqq = new THREE.Quaternion(), _bmw = new THREE.Matrix4();
+  function blendPose(kind, dt) {
+    if (kind !== pb.kind) {
+      const ok = pb.kind && pb.has && kind !== 'climbIn' && pb.kind !== 'climbIn';
+      pb.dur = blendTime(pb.kind, kind);
+      pb.kind = kind;
+      if (ok) { pb.t = 0; pb.pos.copy(pb.lastPos); pb.quat.copy(pb.lastQuat); pb.root.copy(pb.lastRoot); for (let i = 0; i < bones.length; i++) pb.q[i].copy(pb.lastQ[i]); }
+    }
+    // the figure's place in the world now
+    rig.updateMatrixWorld(true);
+    paddler.getWorldPosition(_bp); paddler.getWorldQuaternion(_bqq);
+    if (pb.t < 1) {
+      if (_bp.distanceTo(pb.pos) > 1.2) pb.t = 1;
+      else {
+        pb.t = Math.min(1, pb.t + dt / pb.dur);
+        const w = ease(pb.t);
+        // the place: from where it was (world) to where the pose puts it, back into the rig's space
+        _bp.lerpVectors(pb.pos, _bp, w); _bqq.slerpQuaternions(pb.quat, _bqq, w);
+        _bmw.compose(_bp, _bqq, V(1, 1, 1)).premultiply(_inv.copy(paddler.parent.matrixWorld).invert());
+        _bmw.decompose(paddler.position, paddler.quaternion, _wa); paddler.updateMatrix();
+        fig.bones.root.position.lerpVectors(pb.root, fig.bones.root.position, w);
+        for (let i = 0; i < bones.length; i++) bones[i].quaternion.slerpQuaternions(pb.q[i], bones[i].quaternion, w);
+        // the eye and the packs read the head and the chest from the joints: put the head where it is drawn
+        paddler.updateMatrixWorld(true);
+        fig.bones.head.getWorldPosition(_wb); paddler.worldToLocal(_wb); J.head.p.copy(_wb);
+        paddler.getWorldPosition(_bp); paddler.getWorldQuaternion(_bqq);
+      }
+    }
+    pb.has = true;
+    pb.lastPos.copy(_bp); pb.lastQuat.copy(_bqq); pb.lastRoot.copy(fig.bones.root.position);
+    for (let i = 0; i < bones.length; i++) pb.lastQ[i].copy(bones[i].quaternion);
+  }
+
+  // ---------------------------------------------------------------------------------------------------------
   // The packs, after the pose: in the hull at their places, on the back (state.packOnBack: which one) or the chest
   // (state.packOnChest) on the chest bone, so they ride a walk, a jog or a carry alike, or standing on the ground
   // where packs.js set them down. With the hull overhead the hat rides strapped to the pack on the back (or hangs
@@ -827,31 +1128,47 @@ export function buildCanoeRig({ water = null } = {}) {
   let firstPerson = false;
   const eyeLocal = V(), eyeT = V();
   let eyeInit = false;
+  const EYE_SPRING = 16, eyeY = { on: false, y: 0, v: 0 }; // rad/s: the first-person eye's height on foot (eye, below)
   const api = {
     rig, hull: hullPivot, paddler, paddle, pack, packs, state, swimmer, figure: fig,
     ground: null, // set by player.js: the ground height at a world (x, z), for the feet
+    moveOf: null, // set by main.js: () => player.move, the move the walker is making (vault, climb, sit, wade ...)
     update(dt) {
       if (dt <= 0) dt = 1e-4;
       const mode = state.mode;
       if (mode !== 'paddle') state.climb = 0;
-      if (mode === 'carry') poseCarry(dt);
-      else if (mode === 'walk') poseWalk(dt);
-      else if (mode === 'swim') poseSwim(dt);
-      else if (state.climb > 0) { poseClimb(dt); state.climb = Math.max(0, state.climb - dt); }
-      else poseSeated(dt);
+      // the walker's move (player.js player.move): a vault, a climb, sitting; the rest are the gait's
+      const mv = api.moveOf ? api.moveOf() : null, mk = mv && mode === 'walk' ? mv.kind : null;
+      let kind;
+      if (mode === 'carry') { kind = 'carry'; poseCarry(dt); }
+      else if (mode === 'walk') {
+        if (mk === 'vault' && mv.dur > 0) { kind = 'vault'; poseVault(dt, mv); }
+        else if (mk === 'climb' && mv.dur > 0) { kind = 'climbUp'; poseClimbUp(dt, mv); }
+        else if (mk === 'sit') { kind = 'sit'; poseSit(dt, mv); }
+        else {
+          kind = 'walk';
+          if (pb.kind === 'vault' || pb.kind === 'climbUp') loco.init = false; // the feet planted afresh where the move left him
+          poseWalk(dt, mk);
+        }
+      } else if (mode === 'swim') { kind = 'swim'; poseSwim(dt); }
+      else if (state.climb > 0) { kind = 'climbIn'; poseClimb(dt); state.climb = Math.max(0, state.climb - dt); }
+      else { kind = 'seated'; poseSeated(dt); }
       if (mode !== 'walk' && mode !== 'carry') loco.init = false;
+      if (kind !== 'vault' && kind !== 'climbUp') moveStart.kind = null;
+      blendPose(kind, dt);
       seatPacks(mode);
       contact.userData.update(dt, mode === 'paddle' ? state.speed : 0);
       // the head, neck and hat collapse out of the way from the paddler's eyes
       const s = firstPerson ? 1e-3 : 1;
       fig.bones.neck.scale.setScalar(s);
     },
-    setFirstPerson(on) { firstPerson = on; },
+    setFirstPerson(on) { if (on && !firstPerson) { eyeInit = false; eyeY.on = false; } firstPerson = on; }, // entering the view starts the eye afresh
     // Where the first-person camera goes (world): ahead of the face in the direction of the look, a little
     // above the head's pivot, so no look angle sees the inside of the body. The offset is eased in the
     // paddler's own space (the body's bob comes through softly) and then carried with the body exactly.
     // yawRel: the look's bearing relative to the body's heading (player.heading)
-    eye(out, yawRel, pitch, dt = 1 / 60) {
+    eye(out, yawRel, pitch, dt = 1 / 60, reset = false) {
+      if (reset) { eyeInit = false; eyeY.on = false; }
       const hp = J.head.p;
       const yl = yawRel;
       const down = Math.max(0, -Math.sin(pitch));
@@ -860,7 +1177,19 @@ export function buildCanoeRig({ water = null } = {}) {
       if (!eyeInit) { eyeLocal.copy(eyeT); eyeInit = true; }
       eyeLocal.lerp(eyeT, damp(25, dt));
       rig.updateMatrixWorld(true);
-      return out.copy(eyeLocal).applyMatrix4(paddler.matrixWorld);
+      out.copy(eyeLocal).applyMatrix4(paddler.matrixWorld);
+      // On foot (and swimming) the eye's height is eased in the world by a critically damped spring: the step's bob comes
+      // through softly, and a stone stepped onto or off, a facet of the ground or a foot planting does not jolt the view
+      // (the owner, 2026-10-24: "the character sorta jitters, very noticeable in first person view"). Only the height:
+      // across, the eye stays carried with the body exactly, so it never trails into the head.
+      if (state.mode === 'paddle' && state.climb <= 0) { eyeY.on = false; return out; }
+      const dtc = Math.min(Math.max(dt, 0), 0.1);
+      if (!eyeY.on || Math.abs(out.y - eyeY.y) > 1.2) { eyeY.on = true; eyeY.y = out.y; eyeY.v = 0; return out; }
+      const w = EYE_SPRING, e0 = eyeY.y - out.y, v0 = eyeY.v, ex = Math.exp(-w * dtc), b = v0 + w * e0;
+      eyeY.y = out.y + (e0 + b * dtc) * ex;
+      eyeY.v = (v0 - w * b * dtc) * ex;
+      out.y = eyeY.y;
+      return out;
     },
     // the hull comes off the shoulders and lies on the ground where it was put; it stays put while the paddler
     // walks on. pitch (about the beam) follows the ground under it, or noses a beached hull up the bank.

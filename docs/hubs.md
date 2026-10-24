@@ -4,8 +4,8 @@ The second pass of the game loop, after the [trip core](trip-core.md). It turns 
 every entry point's outfitter into a hub: food and gear to buy, a board of paid notices, keepers and visitors to talk
 to. The owner's own words are in [game-vision.md](game-vision.md); where this plan and they differ, they win.
 
-It is built in four phases. Phases 1 and 2 (and the pace) are on main; phase 3 is joined on `claude/hubs-3`; phase 4
-is planned.
+It is built in four phases. Phases 1 to 3 (and the pace) are on main; the owner's feedback of 2026-10-24 (below) is
+joined on `claude/fb-1024`, with the camp redone after it; phase 4 is planned.
 
 ## The owner's decisions (2026-10-23)
 
@@ -194,12 +194,12 @@ the bar down: "Energy 64 % · held down by thirst".
 **Chores** (phase 3, stream A: `src/chores.js`, run by the camp; each one E and its life length on the clock): gather
 firewood near a tree (25 min an armful, 10 with the saw, up to 3 to hand, stacked by the ring as a woodpile and taken
 along in the canoe), light the fire with an armful and feed it another (it burns down without: fire.js), use the
-latrine (rest +0.05, once a day), pick blueberries July 10 to August 20 at a site's patch (3 pints a site a day; a
-snack, food +0.15, or into the tin for a notice), and turn in from a small card that picks the wake time (first light,
+latrine (rest +0.05, once a day), and turn in from a small card that picks the wake time (first light,
 7:00 or 9:00). A whole evening is eight keys (ashore, pitch, an armful, light, supper, the latrine, → at the tent, E).
 The berries notice ("Blueberries for pies", $10 a pint, in season) and the firewood one ("Wood for the sauna", $6 an
 armful) are registered from chores.js; what they want is handed over on foot at the posting store and claimed at its
-counter. The details are in [trip-core.md](trip-core.md), "Camping and sleep".
+counter. The details are in [trip-core.md](trip-core.md), "Camping and sleep". (The site's blueberry patch went in the
+feedback pass of 2026-10-24: berries and mushrooms now grow anywhere in their season, `src/forage.js`, below.)
 
 ## People (phase 3)
 
@@ -304,8 +304,8 @@ Three streams joined on `claude/hubs-3`, on main with the pace (ce8a1e8):
   saw, three at most, stacked by the ring as a woodpile and carried in the canoe when you push off), the fire fed and
   burning down (3 h an armful, 5 h at most; it dims over its last 1.6 h to embers), the latrine (rest +0.05 once a day),
   blueberries July 10 to August 20 on the burns and the lichen rock by a site (a pint in 20 minutes, three a site a
-  day), and the wake-time card at the tent (first light, 7:00 or 9:00; → or ← there opens it). The berries ($10 a pint)
-  and firewood ($6 an armful) notices.
+  day; replaced by forage.js on 2026-10-24), and the wake-time card at the tent (first light, 7:00 or 9:00; → or ←
+  there opens it). The berries ($10 a pint) and firewood ($6 an armful) notices.
 - **The camera and the photo notices** (B, `src/photo.js`, the journal's Photos tab, `fauna.subjects()`): C raises it
   (the $25 35 mm, or the disposable the season's first photo notice lends for three pictures); a 16:9 print of 240 × 135
   kept in IndexedDB (24 prints), a caption ("A cow moose, Lake Two, July 13, morning"); bird, loon, eagle, beaver, moose
@@ -361,7 +361,8 @@ nobody took, and a visitor with a task cast in at Lake One, where the week's vis
   store's own firewood notice): not on a store's visit now. With the camera up at the tent, → to aim opened the wake
   card (and its E turned you in): the arrows are the camera's while it is up.
 - **Blueberries that show**: clusters of four to seven berries a little bigger than life, sitting proud on the bushes,
-  in a dusty blue (they were single 1.3 cm berries, often inside the leaves).
+  in a dusty blue (they were single 1.3 cm berries, often inside the leaves). The patch itself moved to forage.js on
+  2026-10-24, with the other berries and the mushrooms.
 - **The walker crouches** for the low chores (canoe.js `state.crouch`, set by camp.js): gathering, sawing, picking,
   laying, feeding and cooking on the fire, filling the bottle; the head comes down from 1.56 to 1.12 m.
 - **No rain indoors** (weather.js `indoors`): the drops round the camera fell through the store's roof.
@@ -384,6 +385,156 @@ into view), the lights at 5; frames at 1440 × 900 headless: 11.8–12.2 ms in a
 - A visit, the dock and an arrival belong to the store's layout, not the entry point's own spot.
 - A ride arrives at the store's door, as a new season does.
 - No firewood is gathered about an outfitter's store.
+
+## The owner's feedback of 2026-10-24
+
+After playing phase 3 the owner sent a long list; it is kept verbatim with the build brief of that day. The lines that
+set the pass:
+
+> "I dont like how the store is really just a modal still even tho we have the physical stuff. … i sorta like how
+> witcher 3 did it. they had it as there is your inventory on left, and on right is the shelf/shop."
+
+> "i also liek the escape from trakov inventory system. its like a grid and items take up bigger sections of the
+> inventory."
+
+> "when you are in the wild, you only see the ones when you either are next to, holding, or in the canoe with the
+> container. otherwise if you leave the stuff behind then you cant see or use the things in your inventory. things like
+> rod, leach bucket, all things you have to deal with for portages, annoying but makes it sorta fun"
+
+> "consuming things is done from the inventory. some of them must be cooked first … no G to eat"
+
+> "i should be able to climb up and over big rocks, or vault over down trees step over" · "need to be able to swim.
+> once i cant wade, go into swim mode"
+
+> "when the camera is behind something like a tree in 3rd person view, we need to move the camera forward until it ius
+> out of the way. minecraft does this"
+
+> "dialog in games is hard to use, it goes away fast, not sure who is saying it, its not in my cone of vision"
+
+> "outfitters/entry points are in wrong spots" · "i know at some point you trimmed portages that dont connect, dont do
+> that"
+
+> "its hard to find blueberries, also add in more of the classic berreis you would see and where they would show up"
+
+The thread through all of it: the physical world carries the game. What you own is a thing somewhere (in the canoe, on
+your back, on the ground where you left it), a store is walked through shelf by shelf, people are heard where they
+stand, and the woods are solid enough to climb.
+
+### What changed
+
+Seven streams, joined in this order on `claude/fb-1024` (main ff2593b):
+
+- **One physical inventory** (A: `src/items.js`, `src/inventory.js`, `src/containers.js`, `src/packs.js`). Everything you
+  own is an item in a container (Duluth packs #3 and #4, the blue barrels of 30 and 60 L, the leech bucket, the tackle
+  box, your pockets, the stringer) or a long thing (the rod, the paddles). You reach what you carry, what lies or hangs
+  within 3 m, the canoe you are in or beside, and at an outfitter everything (the stash). A portage carries the canoe
+  overhead, a pack on the back and a thing in each hand; the rest waits at the trail head for the walk back or Q's
+  fetch. No G and no meals on the clock in Adventure: a snack is eaten from the pack standing still, a meal or a fish
+  is cooked first. Older saves become items.
+- **The book and the store** (B: `src/inv-ui.js`, `journal.js`, `outfitter.js`, `shop.js`, `props.js`). J opens one
+  book: the journal (catches, tasks, lakes, trips, photos) on paper, and with Tab (or I) the pack on a canvas mat, as
+  Tarkov grids with drawn icons (drag, R to turn, Shift-drag to split, Ctrl-click to send on, a right-click menu). The
+  shelves, the lure wall and a new map table under the store's right window open Witcher's two panes, yours on the
+  left and the shelf on the right; a buy goes into the slot it is dropped on or the first with room, and is refused
+  politely when nothing fits. The counter is services only.
+- **The walker** (C: `src/collide.js`, `player.js`, `tiles.js`). Every solid collides by its drawn shape, part by part
+  (boulders, outcrops, scree, cliff modules, logs, stumps; trunks at their real radius). Space into something vaults a
+  thin waist-high thing, climbs anything up to about 2 m with room on top, else hops. Past chest depth you swim; a wind
+  capsize leaves you swimming by the overturned hull, and E rights it. `player.move` tells the body what it is doing.
+- **The body and the camera** (D: `src/canoe.js`, `camera.js`). The jog's lunge (a planted foot missing its step) and
+  the idle stomping are gone, the first-person eye rides a damped spring, and there are poses for the vault, the climb,
+  sitting, wading, the high step, swimming and treading water. The third-person camera pulls in at once for anything
+  solid and eases in for foliage, and in a store keeps within the walls, so third person is allowed indoors.
+- **World data** (E: `src/world-fixes.json`, applied by world.js at load, no rebake). The landings stand at the real
+  put-ins (the median error went from 1.2 km to 26 m), and the 54 portages the first bake dropped are back, joined to
+  the water (969 to 1,021).
+- **Dialogue** (F: `src/dialogue.js`). A passing remark shows by the speaker's head with their name and role for 3 s
+  plus 60 ms a character, pinned to the screen's edge when they are off it; a store is one room, so one line at a time
+  and never more than two on screen; T shows the last six. E on a person opens a conversation at the bottom of the
+  view: numbered choices, Esc to leave, the view turned to them.
+- **Nature and fishing** (G: `src/mist.js`, `fog.js`, `forage.js`, `fishing.js`). The mist is part of the fog, with no
+  edge anywhere. Strawberries, juneberries, blueberries, raspberries and pin cherries, chanterelles, hedgehogs and
+  lobster mushrooms (and a false lookalike) grow on their own ground in their own season, likelier by the sites and the
+  trails, with a glint and a rustle; picking puts a pint or a handful into a container in reach. The lure strip lists
+  only the lures you have; the bobber hangs on the line.
+
+### The join, played through
+
+A new Adventure season at entry point 30 (July 12, 7:40, Trip pace, $40), through the keys and the mouse, headless at
+1440 × 900:
+
+- **The store.** Ruth's welcome showed by her head ("Forty dollars to start you, dear…", 7.9 s). Anneli's tree: a hint
+  twice, about her, goodbye, and "Watch your step on the carries" as she was left. At the provisions shelf a 30 L barrel
+  ($25, double-clicked: kept by the outfitters), then a rice supper, trail mix and a chocolate bar dragged into it ($9
+  left); at the map table F-24 ($8, into the Duluth pack; $1 left). The counter showed the permit, a bunk ($8) and a
+  ride to Snowbank ($10), and no food. The barrel was put on the back from its menu, carried out, and loaded with E at
+  the hull; E launched at 7:58.
+- **The portage.** Lake One – Kawishiwi River (23 rods), 1 km off: the canoe overhead, the pack on the back, the rod and
+  the bucket in the hands, 48 kg; the barrel waited at the trail head. Over, the canoe set down, 110 m back for the
+  barrel (E), a 0.7 m log 9 m off the trail vaulted with the barrel on, back to the canoe, E loaded it.
+- **The water.** Off the river bank: wading at 0.3 m, swimming at 1.15 m, 29 m out and back. A forced 22 m/s gale on
+  the river filled the balance only to 0.52 in two minutes beam-on (no fetch for a sea there), so the capsize was
+  forced: treading by the overturned hull, "Over you go. Half a day of food is spoiled" (the supper), the gear wet;
+  E righted it and climbed in. From the shore by the store, a swim to the beached canoe and "E Push the canoe off and
+  climb in".
+- **Camp** at a Lake One site (the river's sites had no water route without a second carry, so the canoe was moved
+  back to Lake One). A pint of blueberries 13 m from the fire went into the barrel on the back (18 min). The trail mix
+  from the book: "Hold still to eat" while walking, eaten standing (energy 69 to 77 %). The camera raised, then J and
+  I each lowered it. Tent 15 min, an armful 25, the fire 20. The pack set down by hand away from the tent; the launch
+  struck the camp and took the barrel set out by the tent; 149 m out: "Left behind on the shore: the Duluth pack #3. It
+  stays there until you come back." Back for it: E picked it up, E loaded it, "Everything in the canoe".
+- **Traversal** by the store: the 1.2 m rock climbed, the bowed log vaulted from both sides.
+
+### What the join fixed
+
+- **A reload lost what was defined late**: the inventory restored before the shop knew the map sheets, before a store
+  made its signature item and before forage's items were in, and dropped them: the $8 sheet was gone after a reload.
+  Sheets now resolve lazily (items.js), forage defines its items as it loads, a signature item's definition rides in the
+  save.
+- **The camera in a spruce on the carry**: camera.js's crowns were half the drawn trees' size (a cedar 2.1 m against
+  3.4 m drawn, narrowing to nothing at the top), so the carry's camera sat in the boughs with the walker hidden. The
+  crowns follow the drawn trees now, and under the canoe a crown pulls the camera in only to 4 m (at 2 m it sat inside
+  the stern).
+- **A thing carried hid the camp and the berries**: away from the canoe with the barrel on, "Q Set down the small
+  barrel" took the line and the camp's E (the tent, the fire, the firewood) and a patch's both stood back from it. That
+  prompt is soft now: they take the line and keep the Q.
+- **The two traversal misses**: the log by the store lies along a slope, bowed, and its stem as one convex hull held
+  the walker along its whole length where its middle was a step high, so Space hopped; a log's stem is cut into the
+  frusta between its rings now, and Space gets over anything from a little under a step. A Space pressed a stride short
+  of the 1.2 m rock hopped into it: a press is kept 0.8 s and something to get over within a metre ahead is walked up
+  to.
+- **The words for food**: the journal's trip page counted days of food against the pack's room ("no day of 14 · the
+  pack is empty" with two snacks in the barrel; "pack is empty. the nearest landing" standing in a store), and the
+  resume and carry-on notes said "no days of food". They say the inventory's words now ("2 snacks within reach"), and
+  the food notes keep quiet at an outfitter.
+- **The book said things under itself**: eating, carrying and moving from the book report through the HUD's line, which
+  lies under the paper, so "Hold still to eat" was never seen; the pack side writes it in pencil in its header, and an
+  open shelf on its receipt.
+- **A swim off a carry's far end** lost the portage from the trip's count.
+- **The Controls card and the docs**: I, Tab in the book, T, a People section, vault and climb, swimming, carrying and
+  setting down, the shelves' panes and the map table, the lures you have; the README, trip-core.md and this file.
+- **Sawbill's map table** led with F-36 (its landing 225 m over the edge) and sold F-26, Sawbill Lake's own sheet, as a
+  neighbour; a landing within a kilometre of an edge leads with its lake's sheet (Sawbill, Isabella, North Kawishiwi,
+  Magnetic).
+- The book offered "Load it into the canoe" 18 m from the canoe, and refused it: only with the canoe by you now.
+
+**Checked and found sound:** reloads in the store, at the dock, mid-portage (afloat off the trail head, what you carried
+in the canoe, the barrel still on the trail), at camp with the barrel on the back and the tent up, and afloat with the
+pack left on the shore all came back whole: the containers where they were, $1, the sheet, the photo, the pint in the
+barrel and the day's picking. The third-person camera in the store, 1,057 frames walking every aisle and turning on the
+spot: never above the ceiling, outside the floor only in the doorway as you step in. The program count held at 95
+through the dock, the camera (raised, a picture, lowered), swimming, climbing back in and the camp (90 to 95 on the
+first walk through the store after a reload), the lights at 5; frames 6.4 ms median at the camp and 6.9 ms in the
+store with the keeper and a visitor; no console errors.
+
+### Left for the camp pass
+
+- The packs set out at camp go back in the canoe by themselves at the launch, and E does not take them up (the camp
+  holds them): the repack by hand is the camp pass's.
+- Meals and fish are cooked only by the old grate prompt; the pot on the grate and the wait are the camp pass's. By the
+  fire the readout counts the meals in the packs set out within 25 m but the snacks only within reach, so it can say
+  "no food" with berries in the barrel at the tent.
+- A wind capsize needs open water: a river's short fetch never builds the sea.
 
 ## What phase 4 will do
 

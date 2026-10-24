@@ -68,6 +68,14 @@ export function neighbours(id) {
   const around = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]];
   return around.map(([dc, dr]) => sheetIn(s.col + dc, s.row + dr)).filter(Boolean);
 }
+// a lake of the world's by its id (world.lakes is not indexed by it), kept per world
+const LAKES = new WeakMap();
+function lakeOf(id) {
+  const w = sheets.world; if (id == null || !w || !Array.isArray(w.lakes)) return null;
+  let m = LAKES.get(w);
+  if (!m) { m = new Map(); for (const l of w.lakes) if (l && l.id != null) m.set(l.id, l); LAKES.set(w, m); }
+  return m.get(id) || null;
+}
 // how far a point is from a sheet's paper (0 on it)
 const distTo = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1));
 // what an outfitter stocks: its own sheet, then the sheets around it that come within `reach` of its landing,
@@ -75,8 +83,12 @@ const distTo = (s, x, z) => Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max
 export function stockFor(ep, reach = 12000) {
   const at = typeof ep === 'object' && ep ? ep : sheets.world ? sheets.world.entryPoints.find((e) => e.ep === Number(ep)) : null;
   if (!at || !Number.isFinite(at.x)) return [];
-  const own = sheetAt(at.x, at.z);
+  let own = sheetAt(at.x, at.z);
   if (!own) return [];
+  // a landing within a kilometre over a sheet's edge from its own lake (the real put-ins, 2026-10-24: Sawbill's lies 225 m
+  // onto F-36, Sawbill Lake on F-26) leads with the lake's sheet; the landing's own is the first of the others
+  const lake = lakeOf(at.lake), home = lake ? sheetAt(lake.cx, lake.cz) : null;
+  if (home && home !== own && Math.min(at.x - own.x0, own.x1 - at.x, at.z - own.z0, own.z1 - at.z) < 1000) own = home;
   const near = neighbours(own.id).map((s) => [s, distTo(s, at.x, at.z)]).filter(([, d]) => d <= reach).sort((a, b) => a[1] - b[1]);
   return [own, ...near.map(([s]) => s)];
 }

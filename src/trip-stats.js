@@ -44,10 +44,10 @@ export class TripStats {
     // a portage walked end to end: launched off your shoulders, or (a double portage) from the far end's ground, at
     // one of the trail's own ends (not afloat at a landing after an evacuation)
     const atEnd = (c) => !c.def || c.def.launch.some((l) => Math.abs(l.x - p.x) < 40 && Math.abs(l.z - p.z) < 40);
-    if ((this.lastMode === 'carry' || this.lastMode === 'walk') && p.mode === 'paddle' && this.carried && atEnd(this.carried)) {
+    if ((this.lastMode === 'carry' || this.lastMode === 'walk' || this.lastMode === 'swim') && p.mode === 'paddle' && this.carried && atEnd(this.carried)) {
       this.portages++; this.rods += this.carried.rods; this.touch((d) => { d.portages++; }); this.carried = null;
     }
-    if (p.mode !== 'carry' && p.mode !== 'walk') this.carried = null;
+    if (p.mode !== 'carry' && p.mode !== 'walk' && p.mode !== 'swim') this.carried = null; // (a swim off the far end keeps it: fb C)
     const drops = p.dropCount || 0;
     if (drops !== this.lastDrops) { this.drops += Math.max(0, drops - this.lastDrops); this.lastDrops = drops; this.dirty = true; }
     // the lakes, in the order they were first paddled

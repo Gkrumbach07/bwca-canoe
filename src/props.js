@@ -4,7 +4,7 @@ import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt, meshHeightAt } from './terrain-build.js';
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
-import { SPECIES as SP, bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
+import { bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
 import { RockShape } from './collide.js';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 
@@ -143,26 +143,8 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     rocks.matrixAutoUpdate = false;
     group.add(rocks);
   });
-  // The fallen trunks and stumps the worker placed with the trees (placement.js) hold the walker off too: a trunk
-  // as a box along its length (vegetation.js builds it 6.4–7.2 m along local x), a stump as a circle of its scale
-  // that a carried canoe rides over (rock); each with `top`, the height of its top (from its geometry's bounds at
-  // the instance's scale), so the walker can step or hop up onto one that is low enough (player.js). They are read
-  // from the tile's vegetation meshes (one per bin, holding all of its instances), which tiles.js makes before it
-  // builds the props. The outcrops are rocks to the walker, held off by their own geometry (tiles.js treesNear).
-  if (entry && entry.veg) for (const vm of entry.veg) {
-    const sp = vm.userData.sp;
-    if (sp !== SP.log && sp !== SP.stump) continue;
-    const m = vm.instanceMatrix.array, log = sp === SP.log, full = vm.userData.lod ? vm.userData.lod.full : vm.geometry;
-    if (!full.boundingBox) full.computeBoundingBox();
-    const tall = full.boundingBox.max.y;
-    for (let i = 0; i < vm.instanceMatrix.count; i++) {
-      const o = i * 16, sx = Math.hypot(m[o], m[o + 1], m[o + 2]), sz = Math.hypot(m[o + 8], m[o + 9], m[o + 10]), top = m[o + 13] + tall * Math.hypot(m[o + 4], m[o + 5], m[o + 6]);
-      if (sx < 1e-6) continue; // let go of for a store's yard
-      const x = m[o + 12] + ox, z = m[o + 14] + oz;
-      if (log) obstacles.push({ x, z, ux: m[o] / sx, uz: m[o + 2] / sx, hx: 3.4 * sx, hz: 0.36 * sz, box: true, top });
-      else obstacles.push({ x, z, r: 0.3 * sx, rock: true, top });
-    }
-  }
+  // (The fallen trunks and stumps the worker placed with the trees hold the walker off by their own drawn geometry,
+  // as the rocks do: tile-worker.js collisionOf, tiles.js treesNear.)
   flushStoreNews(); // the stores built here are told of once the tile is in, with its obstacles
   return group;
 }
@@ -499,7 +481,8 @@ function buildDock(ctx, F, level, rng) {
 // plank floor, knotty pine walls and an open roof inside with a canoe up on the tie beams, the counter across the back
 // with room for the keeper behind it, three shelf units (food; tackle, with a rack of rods; gear against the wall), a
 // pegboard of lures on the left wall, the cork board inside the door on the right, a box stove in the back corner, a
-// window in each side wall and one in the front, and a lamp over the middle aisle.
+// window in each side wall and one in the front, a map table under the right-hand window with a Fisher sheet spread
+// on it (feedback 2026-10-24: the maps have a table of their own), and a lamp over the middle aisle.
 //
 // The store's own frame: a across (+a to the right of someone looking at the front from the lake), y up from the
 // floor's top, b along it (+b to the lake: the front wall, with the door, faces +b). Everything that is the same in
@@ -525,6 +508,7 @@ const IN = {
   gear: { a0: 2.36, a1: ST.iW, b0: -1.6, b1: 0.4, h: 1.92 },
   pegs: { b0: 1.3, b1: 3.4, y0: 0.75, y1: 2.08 },
   board: { b0: 2.4, b1: 3.5, y0: 1.0, y1: 1.85 },
+  maps: { a0: ST.iW - 0.64, a1: ST.iW - 0.02, b0: 0.66, b1: 1.94, h: 0.82 },
   stove: { a0: -2.55, a1: -1.8, b0: -3.0, b1: -2.5, y0: 0.24, y1: 0.7, pipe: [-2.3, -2.75] },
   wood: { a0: -1.72, a1: -1.28, b0: -ST.iD + 0.02, b1: -3.44 },
   chair: { a: -1.12, b: -2.72 },
@@ -1052,6 +1036,59 @@ function lureWall(b, rng, occ) {
     }
   }
 }
+// The map table under the right-hand window: a pine table on square legs, its top's end grain, a stack of folded sheets
+// at the door end and a pencil; the sheet spread on it is a texture of its own (mapSheetMaterial), laid on per store.
+function mapTable(b, rng, occ) {
+  const M = IN.maps, top = M.h, leg = C(0x6e4c30);
+  sbox(b, M.a0, M.a1, top - 0.04, top, M.b0, M.b1, TILE.WOOD, tone(0x9a7650, rng, 0.04), { grain: 'z', endTile: TILE.END });
+  for (const [a, c] of [[M.a0 + 0.06, M.b0 + 0.06], [M.a1 - 0.06, M.b0 + 0.06], [M.a0 + 0.06, M.b1 - 0.06], [M.a1 - 0.06, M.b1 - 0.06]]) sbox(b, a - 0.03, a + 0.03, 0, top - 0.04, c - 0.03, c + 0.03, TILE.WOOD, leg, { grain: 'y' });
+  sbox(b, M.a0 + 0.06, M.a1 - 0.06, top - 0.13, top - 0.04, M.b0 + 0.04, M.b0 + 0.065, TILE.WOOD, leg, { grain: 'x' });
+  sbox(b, M.a0 + 0.06, M.a1 - 0.06, top - 0.13, top - 0.04, M.b1 - 0.065, M.b1 - 0.04, TILE.WOOD, leg, { grain: 'x' });
+  sbox(b, M.a0 + 0.04, M.a0 + 0.065, top - 0.13, top - 0.04, M.b0 + 0.06, M.b1 - 0.06, TILE.WOOD, leg, { grain: 'z' });
+  sbox(b, M.a0 + 0.08, M.a1 - 0.08, 0.16, 0.18, M.b0 + 0.08, M.b1 - 0.08, TILE.WOOD, tone(0x7a5a3a, rng, 0.04), { grain: 'z' });
+  // the folded sheets, each a little askew, and a bundle on the low shelf
+  const cols = [0xe4dcc0, 0xd9d0b2, 0xe8e0c8, 0xdcd4ba, 0xe2d8bc];
+  for (let k = 0; k < 5; k++) {
+    const o = (rng() - 0.5) * 0.03, y = top + k * 0.009;
+    sbox(b, M.a0 + 0.06 + o, M.a0 + 0.3 + o, y, y + 0.008, M.b1 - 0.3 - o, M.b1 - 0.07 - o, TILE.PLAIN, C(cols[k]), { grain: 'x' });
+    sbox(b, M.a0 + 0.06 + o, M.a0 + 0.3 + o, y + 0.008, y + 0.0085, M.b1 - 0.3 - o, M.b1 - 0.26 - o, TILE.PLAIN, C(0x2d4f66), { grain: 'x' });
+  }
+  for (let k = 0; k < 3; k++) sbox(b, M.a0 + 0.14, M.a1 - 0.14, 0.18 + k * 0.012, 0.19 + k * 0.012, M.b0 + 0.2, M.b0 + 0.62, TILE.PLAIN, C(cols[k + 1]), { grain: 'x' });
+  b.cyl(V(M.a1 - 0.12, top + 0.004, M.b0 + 0.12), V(M.a1 - 0.12, top + 0.004, M.b0 + 0.3), 0.004, 0.004, 6, TILE.PLAIN, C(0xd9a032), { cap0: true, cap1: true, capTile: TILE.PLAIN });
+  occ.push(sobb(M.a0, M.a1, top - 0.04, top, M.b0, M.b1), sobb(M.a0 + 0.08, M.a1 - 0.08, 0.16, 0.18, M.b0 + 0.08, M.b1 - 0.08));
+}
+// the sheet spread on the map table: a Fisher-style sheet drawn once (lakes, shore lines, a few contours, the red
+// portage rods and campsites, the neatline and its number), one material for every store (the cork board's program)
+function mapSheetMaterial() {
+  let m = signCache.get('maptable');
+  if (m) return m;
+  const W = 512, H = 820, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d'), r = mulberry32(2424);
+  x.fillStyle = '#ece4ca'; x.fillRect(0, 0, W, H);
+  x.strokeStyle = 'rgba(150, 120, 80, .35)'; x.lineWidth = 1.2;
+  for (let k = 0; k < 14; k++) { x.beginPath(); let px = 0, py = r() * H; x.moveTo(px, py); while (px < W) { px += 30 + r() * 30; py += (r() - 0.5) * 60; x.lineTo(px, py); } x.stroke(); }
+  const lake = (cx, cy, rx, ry, n) => {
+    x.beginPath();
+    for (let i = 0; i <= n; i++) { const t = (i / n) * Math.PI * 2, w = 0.75 + r() * 0.45; const px = cx + Math.cos(t) * rx * w, py = cy + Math.sin(t) * ry * w; if (i === 0) x.moveTo(px, py); else x.lineTo(px, py); }
+    x.closePath(); x.fillStyle = '#9cc2d6'; x.fill(); x.strokeStyle = '#2d4f66'; x.lineWidth = 2; x.stroke();
+  };
+  const lakes = [[150, 170, 110, 60, 22], [330, 290, 140, 70, 26], [140, 470, 90, 120, 24], [380, 560, 80, 50, 18], [250, 700, 160, 55, 24], [430, 120, 50, 40, 14], [70, 320, 40, 30, 12]];
+  for (const l of lakes) lake(...l);
+  x.setLineDash([7, 6]); x.strokeStyle = '#b4321f'; x.lineWidth = 3;
+  for (const [a, b2, c2, d] of [[220, 210, 270, 250], [190, 380, 170, 410], [300, 360, 360, 520], [210, 560, 230, 660]]) { x.beginPath(); x.moveTo(a, b2); x.lineTo(c2, d); x.stroke(); }
+  x.setLineDash([]); x.fillStyle = '#b4321f';
+  for (const [a, b2] of [[120, 150], [290, 300], [160, 500], [390, 560], [260, 700], [420, 130]]) { x.beginPath(); x.arc(a, b2, 5, 0, 7); x.fill(); }
+  x.strokeStyle = 'rgba(60, 40, 20, .25)'; x.lineWidth = 1;
+  for (let gx = 0; gx <= W; gx += 128) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, H); x.stroke(); }
+  for (let gy = 0; gy <= H; gy += 128) { x.beginPath(); x.moveTo(0, gy); x.lineTo(W, gy); x.stroke(); }
+  x.strokeStyle = '#2a2016'; x.lineWidth = 6; x.strokeRect(14, 14, W - 28, H - 28);
+  x.fillStyle = '#2a2016'; x.font = '600 34px Georgia, serif'; x.fillText('F-24', 32, H - 36);
+  x.font = 'italic 22px Georgia, serif'; x.fillText('Lake One · Snowbank · Moose', 140, H - 38);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  m = makeToonMaterial({ vertexColors: false, map: tex, side: THREE.DoubleSide });
+  signCache.set('maptable', m);
+  return m;
+}
 // the cork board's frame inside the door, on the right wall (the cork, the notices on it, is a texture of its own)
 function boardFrame(b) {
   const B = IN.board, x1 = ST.iW, f = C(PINE_DARK);
@@ -1248,6 +1285,8 @@ function* buildStoreKit() {
   yield;
   part((b, occ) => gearWall(b, rng, occ), { rays: 6, reach: 0.4, floor: 0.4 });
   yield;
+  part((b, occ) => mapTable(b, rng, occ), { rays: 6, reach: 0.35, floor: 0.4 });
+  yield;
   part((b, occ) => { lureWall(b, rng, occ); boardFrame(b); }, { rays: 6, reach: 0.3, floor: 0.45 });
   yield;
   part((b, occ) => stoveCorner(b, rng, occ), { rays: 6, reach: 0.45, floor: 0.4 });
@@ -1266,9 +1305,9 @@ const storeHeard = [];
 const storeNews = []; // built in this tile's steps: told once the tile is in (its obstacles with it)
 // The layout of entry point ep's store (its number, or its world.entryPoints record) once its tile has built it, else
 // null: { ep, name, look, floorY, inside(x, z), door: { x, z, y, heading }, counter, board, wall, shelves: [{ kind,
-// x, z }], keeper: { x, z, heading }, lamp: { x, y, z }, dockSide: { x, z }, dockLand: { x, z }, centre: { x, z } }.
+// x, z }], mapTable, keeper: { x, z, heading }, lamp: { x, y, z }, dockSide: { x, z }, dockLand: { x, z }, centre }.
 // World metres; a heading is player.heading's (forward = (cos h, -sin h)). door is the spot on the stoop or porch just
-// outside the threshold, heading in; counter, board, wall and each shelf is the floor spot in front of it (heading
+// outside the threshold, heading in; counter, board, wall, mapTable and each shelf is the floor spot in front of it (heading
 // toward it, `at` the thing itself, y absolute); keeper stands behind the counter facing the room.
 export function storeLayout(ep) { const n = ep && typeof ep === 'object' ? ep.ep : Number(ep); return stores.get(n) || null; }
 export function storeLayouts() { return [...stores.values()]; }
@@ -1661,6 +1700,14 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   cork.position.copy(at(ST.iW - 0.02, (B.y0 + B.y1) / 2, (B.b0 + B.b1) / 2)); cork.rotation.y = yawOf(X.clone().negate());
   cork.receiveShadow = true; cork.matrixAutoUpdate = false; cork.updateMatrix(); cork.name = `store ${ep.ep} board`;
   group.add(cork);
+  // the sheet spread on the map table, flat on its top, the long way along the store
+  {
+    const M = IN.maps, q = new THREE.Quaternion().setFromAxisAngle(AY, yawOf(Z)).multiply(new THREE.Quaternion().setFromAxisAngle(AX, -Math.PI / 2));
+    const sheet = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.74), mapSheetMaterial());
+    sheet.position.copy(at((M.a0 + M.a1) / 2 + 0.02, M.h + 0.003, (M.b0 + M.b1) / 2 - 0.16)); sheet.quaternion.copy(q);
+    sheet.receiveShadow = true; sheet.matrixAutoUpdate = false; sheet.updateMatrix(); sheet.name = `store ${ep.ep} map`;
+    group.add(sheet);
+  }
   for (const S of SIGNS) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h), shelfSignMaterial(S.text));
     m.position.copy(at(S.a + S.n[0] * 0.002, S.y, S.b + S.n[1] * 0.002));
@@ -1683,6 +1730,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   for (const t of pr.treads) box(t.a0, t.a1, t.b0, t.b1, t.y);
   for (const g of [I.food, I.tackle]) box(g.a - g.d / 2, g.a + g.d / 2, g.b0, g.b1 + (g.rack || 0));
   box(I.gear.a0, I.gear.a1, I.gear.b0, I.gear.b1);
+  box(I.maps.a0, I.maps.a1, I.maps.b0, I.maps.b1);
   box(I.counter.a0 - 0.04, I.counter.a1, I.counter.b0, I.counter.b1 + 0.05);
   box(I.stove.a0, I.stove.a1, I.stove.b0, I.stove.b1);
   box(I.wood.a0, I.wood.a1, I.wood.b0, I.wood.b1);
@@ -1724,6 +1772,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
       { kind: 'tackle', ...W2(I.tackle.a - I.tackle.d / 2 - 0.6, 0.4), heading: heading(1, 0), at: at3(I.tackle.a - I.tackle.d / 2, 0.8, 0.4) },
       { kind: 'gear', ...W2(I.gear.a0 - 0.6, (I.gear.b0 + I.gear.b1) / 2), heading: heading(1, 0), at: at3(I.gear.a0, 1.0, (I.gear.b0 + I.gear.b1) / 2) },
     ],
+    mapTable: { ...W2(I.maps.a0 - 0.6, (I.maps.b0 + I.maps.b1) / 2), heading: heading(1, 0), at: at3((I.maps.a0 + I.maps.a1) / 2, I.maps.h, (I.maps.b0 + I.maps.b1) / 2) },
     lamp: at3(I.lamp.a, I.lamp.y, I.lamp.b),
     dockSide: (() => { const [x, z] = F.W(dock.hw + 1.3, dock.len * 0.65); return { x, z }; })(),
     dockLand: (() => { const [x, z] = F.W(0, dock.back + 0.5); return { x, z }; })(),

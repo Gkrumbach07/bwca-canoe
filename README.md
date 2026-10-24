@@ -94,19 +94,20 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 | W / S | paddle forward / back; on land, walk into the view / toward it |
 | A / D | afloat: turn the hull while held, as sweep strokes, in both views. On land: strafe left / right |
 | Shift | hustle (on foot, a jog: a longer stride with both feet off the ground between steps) |
-| Space | afloat: brace (steadies the hull in a sea; you cannot paddle while bracing). The balance arc appears above the action line while the sea is working the hull. On foot: hop, about 0.4 m, onto a low rock or a log or over it (with the canoe on your shoulders you only stagger) |
-| E | go ashore when the canoe is close to a bank; portage when near a landing; at an outfitter's dock, tie up and go in (you stand at the store's door; inside the view is first person); in the store, E at the counter, the cork board, a shelf or the lure wall opens the counter at that tab, and E or Esc puts it away; in a store, talk to someone you face (the keeper away from the counter, or a visitor: their word names a real lake, fish, site or carry; a second E takes on their one task, paid by them or at that counter); pick up a found item; on foot at the water's edge, fill the bottle (a tablet: drinkable in half an hour); on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down. On a double portage: set the canoe down at the far end, pick up the pack left at the trail head, load up and launch. At a campsite: pitch the tent, gather firewood (an armful in 25 minutes, 10 with the saw; three at most, stacked by the ring), light and feed the fire, cook, use the latrine, pick blueberries in season (July 10 to August 20, on the burns and the lichen rock by some sites), fill the bottle, and at the tent sleep (see [docs/trip-core.md](docs/trip-core.md) and [docs/hubs.md](docs/hubs.md)) |
-| Q | the second choice at a shore: at an outfitter's dock, the counter straight from the water; at a store's counter, a word with the keeper (the first of the day raises your standing there a little); go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it. On a portage: take the gear pack too (one heavy trip), or fetch the pack left at the trail head (a short fade while the walk back and the second carry pass) |
+| Space | afloat: brace (steadies the hull in a sea; you cannot paddle while bracing). The balance arc appears above the action line while the sea is working the hull. On foot, moving into something: vault over a down log or a low rock (waist high and thin), or climb onto a rock, a ledge, a bank or a dock up to about 2 m (hold it into them; the prompt says which when you are pressed against one); otherwise a hop, about 0.4 m (with the canoe on your shoulders you only stagger). Swimming: held into a rock, a dock or a bank low over the water, climb out |
+| E | go ashore when the canoe is close to a bank; portage when near a landing; at an outfitter's dock, tie up and go in (you stand at the store's door; inside, either view: the chase camera keeps within the walls); in the store, E at the counter or the cork board opens the counter at that tab, and E at a shelf, the lure wall or the map table opens that shelf as two panes, your containers on the left and the shelf on the right (E or Esc puts it away); talk to someone you face (a conversation in a panel at the bottom: choose with 1–9 or a click, Esc to leave; the keeper away from the counter, or a visitor: their word names a real lake, fish, site or carry; their one task is a choice, paid by them or at that counter); pick up a found item; on foot, pick up a pack, a barrel or a thing on the ground (onto your back, your chest or into a free hand), and at the canoe load what you carry into it; on foot at the water's edge, fill the bottle (a tablet: drinkable in half an hour); on foot, launch a canoe lying at the water's edge, launch a carried canoe at a shore with water enough, or set it down. On a double portage: set the canoe down at the far end, pick up what was left at the trail head, load up and launch; swimming, at the canoe: right it after a capsize, or push it off, and climb in. Berries and mushrooms in season wherever they grow, likelier by the sites and along the portage trails (`src/forage.js`): a pint or a handful into a container you can reach, or eaten as you pick. At a campsite: pitch the tent, gather firewood (an armful in 25 minutes, 10 with the saw; three at most, stacked by the ring), light and feed the fire, cook, use the latrine, fill the bottle, and at the tent sleep (see [docs/trip-core.md](docs/trip-core.md) and [docs/hubs.md](docs/hubs.md)) |
+| Q | the second choice at a shore: at an outfitter's dock, the counter straight from the water; at a store's counter, a word with the keeper (the first of the day raises your standing there a little); go ashore at a portage landing without portaging, leave a beached canoe where it is, shoulder a canoe on the ground, set a carried one down where you could launch it; on foot, set down what you carry (a hand's first, then the chest, then the back: it stays there until you come back for it). On a portage: take one more pack or barrel too (one heavy trip), or fetch what was left at the trail head (a short fade while the walks back and the carries pass) |
 | ← / → | standing still at your tent in the evening: the wake-time card (first light, 7:00 or 9:00), ← → to choose, E turns in, Esc lets it be |
 | C | the camera, when you have one (the $25 35 mm from an outfitter's gear shelf, or the disposable the season's first photo notice lends you for three pictures): the view goes to the eye in the print's 16:9 frame; the mouse (or the arrows and WASD, Shift for a fine hand) aims, the wheel (or Q and E held) zooms from a 50 mm to a 300 mm lens, Space or a click takes the picture, C or Esc lowers it. You hold still while it is up, and the clock runs at life's pace. A subject counts when it is near the middle of the print, near enough and in sight; the prints are kept in the journal's Photos tab |
-| Tab | hold for the readout: where, water, way, wind, light, the permit and the money, energy (what holds it down, the hours up, the bottle), pack, tasks (Settings › HUD can make it a toggle, or keep it up; Developer adds the GPS sim, tiles, FPS and triangles) |
+| Tab | in the book, the other side; otherwise hold for the readout: where, water, way, wind, light, the permit and the money, energy (what holds it down, the hours up, the bottle), pack, tasks (Settings › HUD can make it a toggle, or keep it up; Developer adds the GPS sim, tiles, FPS and triangles) |
 | M | hold for a glance at the map (a half-sheet, 5 km across, slides up from the bottom right); press for the full sheet: drag to pan, wheel to zoom, click a spot and a pencil note says the way there (in Sandbox it asks before the canoe is moved); the header toggles the layers; M or Esc puts it away. In Adventure the campsites, portages and soundings show on the map sheets you own and near where you have been; a keeper's insider word is a pencilled ring |
-| J | the journal: the trip (food, energy, kilometres, portages, lakes, nights, notices on the go) on the left page, the tabs Catches / Tasks / Lakes / Trips / Gear on the right. L opens it too, for a while |
+| J | the book, on the side last open: the journal (the trip: food, energy, kilometres, portages, lakes, nights, notices on the go, on the left page; the tabs Catches / Tasks / Lakes / Trips / Photos on the right), and with Tab the pack. L opens it too, for a while |
+| I | the book at the pack: what you wear and hold, the grids of what you carry, and what is within reach (the canoe you are in or beside, a thing on the ground within 3 m; at an outfitter, everything you own). Drag a thing between grids (R turns it while dragging, Shift-drag splits a stack, Ctrl-click sends it on); right-click to eat, split, turn, move, drop or use it (tie on a lure, open a map). A snack is eaten standing still, on foot or afloat; a meal or a fish is cooked first |
+| T | what was said: the last six lines people spoke near you |
 | F | take up the fishing rod / put it down (see *Fishing*) |
-| G | eat a meal (when you are still: in the canoe or on foot) |
 | H | the headlamp, afloat or on foot (it goes off on its own in full daylight and when you sleep) |
 | Space / mouse button | with the rod up: hold to load a cast where the reticle sits on the water and let go; set the hook on a bite; hold to reel in a fight |
-| 1 – 7 | with the rod up: jig & twister, Mepps spinner, Daredevle spoon, jointed Rapala, bobber & leech, Silver Minnow, Lazy Ike (the strip above the action line; the ones not in your tackle box are faint and refused, and a snapped line loses that lure) |
+| 1 – 7 | with the rod up: the lures you have with you, in the order of the strip above the action line (it lists only those: a lure in a tackle box you left on the shore is not there; a snapped line loses that lure) |
 | K / E | keep the landed fish (on the stringer, or in a notice's cooler when one taken on wants it: the prompt says which) / let it go (the catch card bottom left carries the fish) |
 | V | switch between first-person and chase camera |
 | [ / ] | step the time of day back / forward an hour (Sandbox) |
@@ -138,9 +139,17 @@ screen, D to its right; with the mouse look the body faces the look and the walk
 as the keys say), at life pace: 1.35 m/s (a jog at 2.9 with Shift; with the canoe on your shoulders about 0.85,
 3 km an hour, by the load). On a portage trail the walk is time-lapsed with the clock at Trip pace (seen at about
 2.5 m/s under the canoe, up to ×3). The woods walk at the same pace as a trail; only the hills cost, less on a graded trail,
-and a slope past 40° stops you. Trunks and walls hold you off and you slide round them, and water past
-your knees stops you. A rock stops you at its edge, as it is drawn; one lower than a step (a slab, a small
-rock, a log on its side) you step up onto, and **Space** hops about 0.4 m, onto a higher one or over a log. The readout's km/h is the ground you actually make good per hour of the game's clock, so it falls to nothing while
+and a slope past 40° stops you. Everything solid holds you off at its drawn edge and you slide along it: trunks
+at their drawn girth, rocks, the bluffs' cliffs and scree, down logs, stumps, walls. One lower than a step (a
+slab, a small rock, a thin log) you step up onto. Walking into something waist high and thin (a down log, a low
+rock), **Space** vaults you over it; into a rock, a ledge or a bank up to about 2 m with room on top, **Space**
+held climbs you up onto it, hands and then a knee; walk on across it and you drop off the far side (a drop of
+more than about 2.6 m is refused at its edge). Pressed against one, the prompt says which. Otherwise **Space**
+hops about 0.4 m. The water drags at your legs as it deepens; chest deep you swim (W a slow breaststroke, Shift
+a hard one, still you tread water, and it costs energy), and where it shallows you stand and wade out again. A
+swimmer climbs out onto a rock, a dock or a low bank with **Space** held into it, and **E** beside the beached
+canoe pushes it off and climbs in. With the canoe on your shoulders you wade no deeper than your thighs. The
+readout's km/h is the ground you actually make good per hour of the game's clock, so it falls to nothing while
 something holds you. A canoe you have left
 shows on the map; back within 3 m of it, **E** launches it (**Q** shoulders it instead), and if the water
 there is too shallow for a canoe the prompt says so. Carrying, **E** launches at any shore with a metre of
@@ -169,8 +178,8 @@ each direction carries and how tall the waves are from the wind speed and the **
 of each spot (marched across the water's surface atlas whenever the wind moves to a new 15° bucket). So a
 small lake stays flat in a gale while the downwind shore of a big one builds whitecaps. The canoe drifts
 downwind and its bow falls off the wind. Broadside to real waves the hull rolls; quarter the waves or hold
-**Space** to brace, or over you go: the hull floats upside down, drifting, and you swim to it (W/S, A/D) and
-press **E** to right it and climb back in. On a calm day the canoe cannot be tipped.
+**Space** to brace, or over you go: the hull floats upside down, drifting, and you swim to it (W/S, A/D; you
+cannot leave it and wade off) and press **E** to right it and climb back in. On a calm day the canoe cannot be tipped.
 
 ## Fishing
 
@@ -178,8 +187,9 @@ Fishing is the thing to do out here (`src/fishing.js`). Press **F** in the canoe
 gunwales and the rod comes up; the line under the readout says what kind of water you are sitting in
 ("Rocky point · 4 m, drop-off to 9 m · walleye and smallmouth water", "Weedy bay · 1.8 m · pike water"), read
 from the real bed, the shore distance, the weed beds and the bedrock shores around the canoe. Pick a lure with
-**1–7** (jig, spinner, spoon, crankbait, a leech 2.4 m under a bobber, the weedless Silver Minnow or the Lazy Ike;
-the ones in your tackle box, bought on an outfitter's lure wall), hold **Space** or the mouse button
+the number keys (jig, spinner, spoon, crankbait, a leech 2.4 m under a bobber, the weedless Silver Minnow or the Lazy
+Ike: only the ones with you, in a tackle box or the leech bucket you can reach, numbered in the strip's order; bought on
+an outfitter's lure wall), hold **Space** or the mouse button
 to load the cast and let go: the lure flies to where the cursor points (in first person the view itself follows
 the cursor); a pale ring on the water marks the spot, a full load drops the lure on it and a short one falls short. It
 splashes down and sinks at its own rate, or the bobber rides the swell. **W** retrieves (Shift faster;
@@ -223,18 +233,21 @@ the door (the Ely, Sawbill and Gunflint outfitters where they are well known, pl
 `src/outfitter.js`). Each is its own (`src/outfitters.js`): a lodge, a river post, a trout camp or a bait shop, with a
 keeper (fictional) who has a manner, lines for the moment and insider hints read from the real lakes, prices of its
 own, a signature item sold only there, and a board that leans its own way. At the dock **E** ties up and you walk in
-(first person inside); **Q** opens the counter from the water. **E** at a hotspot opens the counter (Paper) at a tab:
+(either view inside); **Q** opens the counter from the water. **E** at the counter or the board opens the counter (Paper) at
+a tab; **E** at a shelf opens that shelf:
 
-- **The counter.** The season permit, stamped at the first counter; food at about $6 a day (two meals, 0.9 kg), up to
-  what the packs hold; the counter's tap fills the bottle. During a trip, **Resupply · carry on** keeps it going and
-  **Call it a trip** logs it as came in, with a bunk night. The keeper's word, the map sheets of this country ($8,
-  `src/sheets.js`), a bunk tonight ($8), the rides up the road (`src/rides.js`: to the outfitters you know and the next
+- **The counter** (services only). The season permit, stamped at the first counter; the counter's tap fills the bottle. During a trip, **Resupply · carry on** keeps it going and
+  **Call it a trip** logs it as came in, with a bunk night. The keeper's word, a bunk tonight ($8), the rides up the road (`src/rides.js`: to the outfitters you know and the next
   one you don't, about $5 + $0.50 a km, the canoe on the roof), and your kit, the season's earnings and your standing.
 - **The board.** Four notices on the cork board by the door (`src/tasks.js`): fish for the café (a kept fish that fits
   goes into the notice's cooler), a lost item at a campsite (E picks it up), a portage to survey. Clues are written from
   the real map. Each pays money, claimed only at the counter that posted it; one notice changes each morning, and
   nothing taken on expires.
-- **The shelves and the lure wall** (`src/shop.js`): food and water, tackle, gear. A better paddle, a lighter or
+- **The shelves, the lure wall and the map table** (`src/shop.js`, `src/inv-ui.js`): two panes, Witcher-style, your
+  containers on the left as Tarkov grids and the shelf on the right; drag a thing into a slot to buy it there, or
+  double-click it into the first container with room (refused politely when nothing fits). The meals, the snacks and the
+  blue barrels at the provisions shelf; tackle; gear; the lures; the Fisher map sheets of this country ($8,
+  `src/sheets.js`) on the table under the window. A better paddle, a lighter or
   steadier canoe, a second pack (and the double portage), tents, filters, a rod, lures; each says what it does in the
   keeper's words, and is felt rather than counted (the Kevlar and a bent-shaft paddle make the canoe about 9 % quicker
   and 14 kg lighter on the portages).
@@ -290,9 +303,19 @@ the trip (`bwca-canoe-trip`) are kept in `localStorage` and resume where you lef
      in 256-cell far tiles for the far field.
    - `overview.png`: an 80 m/px shaded map of the whole area.
 
-Entry points come from OSM features named `… BWCA Entry Point` where they exist, otherwise from the hand
-list in `scripts/entrypoints.json` (number, name, the OSM lake name and an approximate position); edit that
-file to add or correct landings.
+Entry points come from `scripts/entrypoints.json`: each of the 55 with its real put-in (where the canoe first
+goes into the water, from the Forest Service's entry point records on recreation.gov checked against the OSM
+public water access sites; its `usfs` field keeps the Forest Service's own coordinate) and the water put into
+there, which is not always the one the entry point is named for (EP 60 Duncan Lake puts in on West Bearskin). The
+landing is that water's cell nearest the put-in, kept 50 m off the portage trails and 40 m off the campsites so a
+store never stands on a trail; edit the file to correct a landing.
+
+Portages: every OSM portage trail is kept. A trail under 2.5 km with both ends within 70 m of water is kept as it
+is (the first bake kept only these, 969 of 1,045); a longer one too; an end that stops at a fork walks on along the
+other trails to water; any other dry end gets a straight connector over land to the nearest water. Only trails
+wholly off the grid and stubs from a lake back to itself are left out (`scripts/world-links.mjs`).
+`scripts/world-fixes.mjs` writes the same corrections as a table, `src/world-fixes.json`, that `world.js` applies
+to the data release they were made for (data-v3), so the published data needs no rebake.
 
 ## Runtime
 
@@ -312,7 +335,7 @@ file to add or correct landings.
   height and ground cover around the canoe (`src/water.js`). The same GLSL (`glslSurface`) gives every
   shader the terrain surface and the swell exactly as the water patch renders it: lily pads, reeds, foam
   bubbles and loons ride it (`src/floating.js`, `src/wake.js`), grass stands on it (`src/groundcover.js`),
-  the mist is masked by it (`src/mist.js`).
+  the mist is part of the fog, thickest on the water and thinning with height, with no edge anywhere (`src/mist.js`).
 - The day/night cycle (`src/daycycle.js`) drives the lights, the sky dome, the clouds, the water colours, the
   stars, the mist and the colour grade (`src/post.js`); the haze is matched to the sky by overriding three's
   fog chunks (`src/fog.js`).

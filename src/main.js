@@ -49,6 +49,12 @@ import { sheets } from './sheets.js'; // hubs 2D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
+import { inventory } from './inventory.js'; // fb A
+import { ITEMS, defineItem, itemDef } from './items.js'; // fb A
+import { ContainerView } from './containers.js'; // fb A
+import { invUI } from './inv-ui.js'; // fb B
+import { Dialogue } from './dialogue.js'; // fb F
+import { Forage } from './forage.js'; // fb G
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -134,6 +140,9 @@ async function main() {
   const input = new Input();
   const player = new Player(world, canoe, input);
   player.ripples = ripples; player.water = water; player.audio = audio;
+  // fb D: the figure poses the walker's move (player.js player.move, stream C): a vault, a climb, sitting, wading;
+  // without it (an older player.js) the gait is all there is
+  canoe.moveOf = () => player.move || null;
   if (saved) { player.x = saved.x; player.z = saved.z; player.heading = saved.heading; }
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   player.chase = chase; // walking is read against the view; the cursor steers the canoe when asked
@@ -207,7 +216,6 @@ async function main() {
   let campTimer = 0, atCamp = false;
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
-    if (e.code === 'KeyG' && !player.input.paused) energy.manualEat(); // F is the fishing rod
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
     if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-7 pick lures while the rod is up
     if (e.code === 'KeyR') settings.toggle('reflections');
@@ -240,6 +248,12 @@ async function main() {
   outfitter.people = npcs;
   npcs.quiet = () => photo.raised; // the people say nothing while the camera is up (3B)
   weather.indoors = () => !!(outfitter.visit && outfitter.visit.inside); // hubs 3 join: no rain falling inside a store
+  // fb F: dialogue (dialogue.js). What people say shows by their heads with their names, one at a time in a room, pinned
+  // to the screen's edge when they are off it; E on someone opens a conversation (numbered choices; you hold still and
+  // the view turns to them, or in third person outside a store cuts over your shoulder); T shows the last six lines.
+  // Made before the title, so its Esc and number keys come first.
+  const talk = new Dialogue({ camera, player, chase, hud, day, frame: () => !(outfitter.visit && outfitter.visit.inside) });
+  npcs.dialogue = talk;
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -271,9 +285,46 @@ async function main() {
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
   window.__game.npcs = npcs; // hubs 3C
+  // fb A: one physical inventory (items.js, inventory.js): everything you own is an item in a container (the packs,
+  // the barrels, the bucket, the tackle box, the pockets, the stringer) or a long item (the rod, the paddle), each
+  // somewhere in the world, reachable only by you, the canoe or an outfitter's stash; packs.js runs its frame and the
+  // portages on it, and containers.js draws the things right after the pose (canoe.update), so what rides on the body
+  // keeps up with it. G is gone: food is eaten from the inventory (energy.js).
+  inventory.attach({ player, world, profile, energy, outfitter, fishing, trip, hud, camp, shop });
+  const invView = new ContainerView({ inventory, canoe, scene, player, reflectLayer: REFLECT_LAYER });
+  const poseCanoe = canoe.update;
+  canoe.update = (dt) => { poseCanoe(dt); invView.afterPose(); };
+  fishing.hasLure = (id) => inventory.hasLure(id); // the lures (and leeches) in a container in reach now (stream G's list reads it)
+  Object.assign(window.__game, { inventory, items: { ITEMS, defineItem, itemDef }, invView });
+  // fb B: the inventory's face (inv-ui.js) on stream A's inventory (inv-ui's stand-in until it is in the build): the
+  // book's pack side (journal.js; J, Tab between the journal and the pack, I straight to the pack), the store's
+  // shelves, lure wall and map table as two panes (outfitter.js), and the icons. From the pack a lure is tied on and a
+  // map sheet opens the map.
+  invUI.attach({ inventory: () => window.__game.inventory || null, profile, player, energy, hud, shop, outfitter });
+  journal.pack.onUse = (e, mode) => {
+    const lure = shop.lureOf(e.id);
+    if (lure) { if (mode === 'label') return fishing.rodUp ? 'Tie it on' : null; shop.tieOn(lure); hud.note(`Tied on: ${e.id.replace(/^lure:/, '')}.`, 3); return null; }
+    if (String(e.id).startsWith('sheet:')) { if (mode === 'label') return 'Look at the map'; journal.close(); hud.setMode('sheet'); }
+    return null;
+  };
+  window.__game.invUI = invUI;
+  // fb E: world data. The landings stand at their real put-ins and the trails the first bake dropped are connected (world.js
+  // applyFixes from src/world-fixes.json for the data-v3 release; a newer bake has both built in): { landings, portages, baked }
+  window.__game.worldFixes = world.fixed;
+  if (world.fixed) console.log(`fb E: ${world.fixed.landings} landings at their put-ins, ${world.fixed.portages} portages connected to the ${world.fixed.baked} baked`);
+  window.__game.dialogue = talk; // fb F
   // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
   // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
+  // fb G: nature and fishing. The mist is in the air now (fog.js; mist.js drives it) and drifts with the wind. The rod's
+  // lures are the ones you have (fishing.hasLure: stream A's inventory.hasLure, the lures in reach, once it is in; else the
+  // shop's tackle box), so the shop's dimming of the lure strip goes: the strip lists only those. Berries and mushrooms in their own
+  // ground and season (forage.js), picked with E into a container you can reach, or eaten as you pick.
+  mist.wind = wind;
+  fishing.hasLure ??= (id) => { const inv = window.__game.inventory; return inv && inv.hasLure ? inv.hasLure(id) : shop.box().has(id); }; // fb A's: in reach now
+  if (shop.quietStrip) shop.quietStrip = () => {};
+  const forage = new Forage({ world, player, day, tiles, scene, camp, hud, energy, audio, outfitter });
+  window.__game.forage = forage;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -293,7 +344,9 @@ async function main() {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       photo.before(dt); // hubs 3B: with the camera up, its keys (the aim, Space) come before anyone else's E and Space
       outfitter.update(dt * ts);
+      talk.before(dt); // fb F: a conversation holds the walker and turns the view to the speaker
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
+      forage.before(); // fb G: E for the berry patch whose prompt showed; the walker holds still while picking
       tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
       player.update(dt);
       packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
@@ -302,6 +355,7 @@ async function main() {
       outfitter.prompt();
       npcs.update(dt); // hubs 3C: who is drawn and how they stand, the talk prompt and its E / Q, after the store's own prompt
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
+      forage.update(dt); // fb G: the patches near you, drawn in season; their prompt and the picking (after the camp's)
       tasks.update(dt * ts);
       sheets.update(player); // hubs 2D: the cells around you as you go
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
@@ -312,8 +366,10 @@ async function main() {
     }
     veil.update(dt); // trip core A: the fade cards, behind the title card too
     canoe.update(dt * ts);
+    player.afterRig(); // fb C: a swim from shore leaves the beached hull where it lies (canoe.js's swim pose turns it over)
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
+    talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
     water.update(dt * ts, player.x, player.z);

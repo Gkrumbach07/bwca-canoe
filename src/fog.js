@@ -20,6 +20,13 @@ import * as THREE from 'three';
 //                  scale height, on/off), integrated along the ray in closed form, so from the canoe the far shore
 //                  is gone while the sky overhead stays blue, and from a ridge the bank lies below in the valley.
 //                  Its colour is the lit fog (fogLayerColor) plus a glow toward the sun (fogLayerSun).
+//   the mist       the dawn's mist on the water (mist.js owns it; fb G, 2026-10-24: it had been two flat sheets, read
+//                  as a hovering layer with a hard line in first person and a hard curve from above). A density that
+//                  falls off with height above the water (fogMist: density per metre at the water, the water's world y,
+//                  the scale height) and with distance from the eye (reach: the air past it adds little, so the far
+//                  shore stays a shape and the open water never goes to a white wall), integrated along the ray in
+//                  closed form, thinned toward the eye (the canoe stays clear), and broken into drifting banks by a noise read where along the ray the mist mostly
+//                  is (fogMistNoise: the drift, the banks' size, how patchy). No edge anywhere: it is all one field.
 //
 // The day cycle (daycycle.js) builds a pair of ramps per sun-altitude key and interpolates them with the light
 // and the grade. The uniforms are shared typed arrays, so one update reaches every material. Import this module
@@ -38,6 +45,11 @@ export const fogState = {
   layer: new Float32Array([0, 0, 10, 0]),      // the low layer: density /m at the base, base world y (m), scale height (m), on (1) or off (0)
   layerColor: new Float32Array([0.8, 0.82, 0.85]),
   layerSun: new Float32Array([0, 0, 0]),       // the layer's glow looking toward the sun
+  // fb G: the mist (mist.js writes these each frame)
+  mist: new Float32Array([0, 0, 2.5, 0]),      // density /m at the water, the water's world y, scale height (m), reach (m; 0 = off)
+  mistNoise: new Float32Array([0, 0, 0.011, 0.7]), // drift x, z (m), the banks' frequency (1/m), how patchy (0 even .. 1)
+  mistColor: new Float32Array([0.85, 0.87, 0.9, 0.2]), // rgb, and how much of it a level ray takes (w: 1 = all)
+  mistSun: new Float32Array([0, 0, 0, 18]),    // the mist's glow looking toward the sun; w: metres from the eye it thins over
 };
 // a plain grey ramp until the day cycle runs
 for (let i = 0; i < FOG_STEPS; i++) {
@@ -56,6 +68,10 @@ const extras = {
   fogLayer: { value: fogState.layer },
   fogLayerColor: { value: fogState.layerColor },
   fogLayerSun: { value: fogState.layerSun },
+  fogMist: { value: fogState.mist },
+  fogMistNoise: { value: fogState.mistNoise },
+  fogMistColor: { value: fogState.mistColor },
+  fogMistSun: { value: fogState.mistSun },
 };
 Object.assign(THREE.UniformsLib.fog, extras);
 for (const name of Object.keys(THREE.ShaderLib)) {
@@ -88,6 +104,8 @@ THREE.ShaderChunk.fog_pars_fragment = /* glsl */ `
 	uniform vec3 fogAir;
 	uniform vec4 fogLayer;
 	uniform vec3 fogLayerColor, fogLayerSun;
+	uniform vec4 fogMist, fogMistNoise;
+	uniform vec4 fogMistColor, fogMistSun;
 	varying float vFogDepth;
 	varying vec3 vFogDir;
 	#ifdef FOG_EXP2
@@ -96,6 +114,20 @@ THREE.ShaderChunk.fog_pars_fragment = /* glsl */ `
 		uniform float fogNear;
 		uniform float fogFar;
 	#endif
+	// the mist's banks: value noise in world metres (two octaves), 0..1
+	float fogMistHash( vec2 p ) { p = fract( p * vec2( 0.3183099, 0.3678794 ) ) * 51.0; return fract( p.x * p.y * ( p.x + p.y ) ); }
+	float fogMistVN( vec2 p ) {
+		vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f );
+		return mix( mix( fogMistHash( i ), fogMistHash( i + vec2( 1.0, 0.0 ) ), f.x ), mix( fogMistHash( i + vec2( 0.0, 1.0 ) ), fogMistHash( i + vec2( 1.0, 1.0 ) ), f.x ), f.y );
+	}
+	float fogMistBanks( vec2 xz ) {
+		// the banks, the wisps in them (turning over as they drift: their own drift is a little off the banks'), and
+		// fine streaks drawn out along x and z in turn
+		vec2 q = ( xz + fogMistNoise.xy ) * fogMistNoise.z;
+		float n = fogMistVN( q ) * 0.55 + fogMistVN( q * 2.63 + vec2( 5.2, 1.3 ) - fogMistNoise.xy * fogMistNoise.z * 0.6 ) * 0.3
+			+ fogMistVN( q * vec2( 7.1, 3.3 ) + vec2( 2.7, 8.1 ) ) * 0.15;
+		return mix( 1.0, 0.06 + 2.3 * smoothstep( 0.36, 0.74, n ), fogMistNoise.w );
+	}
 	vec4 fogAt( vec3 ray ) {
 		float dist = max( length( ray ), 0.001 );
 		vec3 dir = ray / dist;
@@ -121,6 +153,34 @@ THREE.ShaderChunk.fog_pars_fragment = /* glsl */ `
 			// the layer lies nearer than the ramp's haze: mix( mix( c, ramp, ramp.a ), layer, a ) as one haze
 			float A = 1.0 - ( 1.0 - haze.a ) * ( 1.0 - a );
 			haze.rgb = ( haze.rgb * haze.a * ( 1.0 - a ) + lc * a ) / max( A, 1e-4 );
+			haze.a = A;
+		}
+		if ( fogMist.w > 0.0 ) {
+			// the mist: rho0 * exp( -h / H ) * exp( -t / R ) along the ray, h the height above the water (the ends held
+			// at the water, so a ray down to lower ground gains nothing below it), in closed form:
+			// tau = rho0 * ( exp( -ha / H ) - exp( -hb / H - L / R ) ) / k,  k = slope / H + 1 / R
+			float H = fogMist.z, R = fogMist.w;
+			float ha = max( cameraPosition.y - fogMist.y, 0.0 ), hb = max( cameraPosition.y + ray.y - fogMist.y, 0.0 );
+			float k = ( hb - ha ) / ( H * dist ) + 1.0 / R, x = k * dist;
+			float ea = exp( - ha / H );
+			float I = abs( x ) > 1e-3 ? ( ea - exp( - hb / H - dist / R ) ) / k : ea * dist;
+			// and it thins toward the eye (weighed by 1 - exp( -t / N )): the canoe and the water by it stay clear
+			float kn = k + 1.0 / fogMistSun.w;
+			I = max( I - ( abs( kn * dist ) > 1e-3 ? ( ea - exp( - hb / H - dist / R - dist / fogMistSun.w ) ) / kn : ea * dist ), 0.0 );
+			// the banks, read where along the ray the mist mostly lies (the weight's mean: near the eye looking up or
+			// out, near the far end looking down on the water) and either side of it
+			float xc = clamp( x, -30.0, 30.0 );
+			float tm = dist * ( abs( xc ) > 1e-2 ? 1.0 / xc - 1.0 / ( exp( xc ) - 1.0 ) : 0.5 - xc / 12.0 );
+			vec2 d2 = ray.xz / dist;
+			float banks = 0.5 * ( fogMistBanks( cameraPosition.xz + d2 * tm * 0.6 ) + fogMistBanks( cameraPosition.xz + d2 * min( tm * 1.45, dist ) ) );
+			// a level ray takes only a share of it (fogMistColor.w), a ray down onto the water all of it: the mist lies
+			// on the water as it does seen from a height, and from the canoe it veils the far shore without walling it
+			float graze = mix( fogMistColor.w, 1.0, smoothstep( 0.012, 0.3, abs( hb - ha ) / dist ) );
+			float a = 1.0 - exp( - fogMist.x * I * banks * graze );
+			vec3 mc = fogMistColor.rgb + fogMistSun.rgb * pow( max( dot( dir, fogSunDir ), 0.0 ), 6.0 );
+			// the mist lies nearer than the haze behind it: one haze, as for the layer
+			float A = 1.0 - ( 1.0 - haze.a ) * ( 1.0 - a );
+			haze.rgb = ( haze.rgb * haze.a * ( 1.0 - a ) + mc * a ) / max( A, 1e-4 );
 			haze.a = A;
 		}
 		return haze;

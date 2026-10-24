@@ -53,6 +53,31 @@ export function estimateSecchi(l, cellArea = 100) {
   return Math.min(8.5, Math.max(0.8, s));
 }
 
+// ---- fb E (2026-10-24): the landings and the portages of the data-v3 release ---------------------------------------
+// The release's entry point landings came from a hand list of rough coordinates (two decimals, some just wrong: EP 80
+// Larch Creek was put 99 km west on the Echo Trail, EP 68 Pine Lake on Pine Lake 7 km from its McFarland Lake landing,
+// EP 29 on the Kawishiwi River 5 km from Ojibway Lake), matched to the named lake's cell nearest that rough point, so a
+// big lake's landing went wherever the guess fell (Sawbill, Brule, Homer, Seagull 0.7–2.4 km off); only the 18 the
+// OSM extract names as trailheads were right. And its bake dropped 76 of the extract's 1,045 portage trails: those over
+// 2.5 km, those with an end over 70 m from water (most of them pieces of a trail that forks, which OSM leaves
+// unjoined), those running off the grid. The bake now does both right (scripts/world-links.mjs, with the real put-ins
+// in scripts/entrypoints.json); for the release already published, src/world-fixes.json (scripts/world-fixes.mjs, made
+// from that release's own tiles) carries the 55 landings at their put-ins and the 52 dropped trails connected. It is
+// applied only to the release it was made from.
+const FIXES_FOR = '2026-10-22T02:16:45.493Z';
+const resampleLine = (pts, step) => {
+  const out = [[pts[0][0], pts[0][1]]];
+  let carry = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, z0] = pts[i - 1], [x1, z1] = pts[i], L = Math.hypot(x1 - x0, z1 - z0);
+    let d = step - carry;
+    while (d <= L) { out.push([x0 + ((x1 - x0) * d) / L, z0 + ((z1 - z0) * d) / L]); d += step; }
+    carry = L - (d - step);
+  }
+  out.push([pts[pts.length - 1][0], pts[pts.length - 1][1]]);
+  return out;
+};
+
 export class World extends GridQueries {
   static async load(onProgress = () => {}, base = DATA_URL) {
     onProgress(0.05, 'Reading map data…');
@@ -62,10 +87,12 @@ export class World extends GridQueries {
       : `${res.status} fetching ${base}index.json: check VITE_DATA_URL and the bucket's CORS policy (docs/HOSTING.md)`);
     const index = await res.json();
     if (index.version !== 3) throw new Error('map data is from an older bake: run `npm run bake:all`');
-    return new World(index, base);
+    // fb E: the correction table, for the release it was made from (its own chunk, fetched only then)
+    const fixes = index.source && index.source.baked === FIXES_FOR ? (await import('./world-fixes.json').catch(() => null))?.default : null;
+    return new World(index, base, fixes);
   }
 
-  constructor(index, base) {
+  constructor(index, base, fixes = null) {
     super();
     this.meta = index; this.base = base;
     const g = index.grid;
@@ -97,12 +124,39 @@ export class World extends GridQueries {
       if (!l.secchiMeasured) { l.secchiBaked = l.secchi; l.secchi = +estimateSecchi(l, g.cell * g.cell).toFixed(2); }
       if (l.secchi) this.clarityById[l.id] = l.secchi;
     }
+    this.fixed = fixes ? this.applyFixes(fixes) : null;
     for (const p of this.portages) {
+      if (p.tread && !p.trailPts) p.trailPts = resampleLine(p.tread, 1.6); // a newer bake's connected trails (fb E)
       let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
       for (const [x, z] of p.pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
       p.bbox = [x0, z0, x1, z1];
     }
     this.gridDesc = { cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo };
+  }
+
+  // fb E: the landings moved to their put-ins (each record's lake checked by name against this index, the bake's spot
+  // kept as `baked`), and the connected portages appended after the release's own, so the indices saved survey tasks
+  // hold stay good. A connected trail that walks on along others draws only its own piece (`tread`): props.js draws a
+  // portage's `trailPts` when it has them, so the stretch it shares is drawn once, by the trail it belongs to.
+  applyFixes(f) {
+    if (!f || f.for !== (this.meta.source && this.meta.source.baked)) return null;
+    const named = (id) => { const l = id > 0 ? this.lakes[id - 1] : null; return l ? l.displayName || l.name || null : null; };
+    let landings = 0, portages = 0;
+    for (const r of f.entryPoints || []) {
+      const e = this.entryPoints.find((x) => x.ep === r.ep);
+      if (!e || named(r.lake) !== (r.lakeName ?? null)) continue;
+      e.baked = { x: e.x, z: e.z, lake: e.lake };
+      e.x = r.x; e.z = r.z; e.lake = r.lake;
+      landings++;
+    }
+    for (const p of f.portages || []) {
+      if (!p.pts || p.pts.length < 2 || !p.launch || p.launch.some((l) => !this.lakes[l.lake - 1])) continue;
+      const q = { name: p.name, lengthM: p.lengthM, rods: p.rods, pts: p.pts, launch: p.launch, connected: p.fix };
+      if (p.tread && p.tread.length > 1) q.trailPts = resampleLine(p.tread, 1.6);
+      this.portages.push(q);
+      portages++;
+    }
+    return { landings, portages, baked: this.portages.length - portages };
   }
 
   // --- tiles ----------------------------------------------------------------

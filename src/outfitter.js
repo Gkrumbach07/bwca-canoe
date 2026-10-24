@@ -1,7 +1,7 @@
-// Outfitters at the entry point landings: a name for each, the store you walk into, the counter (a paper sheet in
-// four tabs: the counter itself, the board, the shelves and the lure wall), the trip's old record (where you are,
-// when it started) and its persistence. The outfitter is where a season starts and where you come in when you need
-// to: any counter sells food, up to what the packs hold, fills the bottle, and offers the two ways on: "Resupply ·
+// Outfitters at the entry point landings: a name for each, the store you walk into, its shelves, the counter (a paper
+// sheet in two tabs: the counter's services and the board), the trip's old record (where you are, when it started)
+// and its persistence. The outfitter is where a season starts and where you come in when you need to: its shelves
+// sell the food and the gear, its counter fills the bottle and offers the services and the two ways on: "Resupply ·
 // carry on" (the trip goes on) and "Call it a trip" (logged as came in, a bunk night, and you wake at 7:00 rested).
 // The permit is the season's paper, stamped at the first counter of the season: its number, home and the day.
 // Sandbox's counter does not charge for food. The board is the tasks' own (tasks.js boardSection), the shop and what
@@ -11,9 +11,13 @@
 //
 // Walking in (hubs phase 2, stream B). Where the landing's store is built (props.js storeLayout(ep), stream A), E at
 // the dock afloat is "Tie up and go in": the canoe is tied alongside the dock and you stand at the door; Q still opens
-// the counter straight from the dock. Over the threshold the view goes to first person (and back as you step out).
-// Inside, E at the counter, the board, a shelf or the lure wall opens the counter at that tab; the keeper greets you,
-// signed with the keeper's name, on the first visit of a day. Closing the counter inside leaves you in the store;
+// the counter straight from the dock. Over the threshold the view goes to first person (and back as you step out),
+// unless the camera keeps itself inside the walls (camera.js roomAware, stream D of 2026-10-24).
+// The store is physical (feedback 2026-10-24, stream B): E at the provisions, tackle or gear shelf, the lure wall or the
+// map table opens that shelf's two panes (inv-ui.js ShelfScreen: your containers on the left, the shelf on the right,
+// a buy dropped into a slot or the first container with room); E at the counter opens the counter, which is for
+// services only (the permit, a bunk, the rides, claiming notices), and E at the board the board. The keeper greets
+// you, signed with the keeper's name, on the first visit of a day. Closing the counter inside leaves you in the store;
 // the trip pushes off (or carries on) when you launch from the dock, or from the counter's own stamps, which take
 // you straight out to the canoe. Without a store (its tile not built yet, or no stream A) E opens the counter as
 // before. A new season begins tied up at the home store's door (the keeper's forty dollars as you step in), and the
@@ -23,8 +27,8 @@ import { seasonAt } from './season.js';
 import { absDay, dateOfAbs } from './trip.js';
 import { ITEMS, FOOD_PRICE } from './profile.js';
 import * as props from './props.js';
-import { SHELVES, LURE_ITEM, itemOf } from './shop.js';
-import { LURES } from './fishing.js';
+import { SHELVES, itemOf } from './shop.js';
+import { ShelfScreen, model as invModel } from './inv-ui.js';
 
 // Real outfitters by entry area where they are well known (Ely and the Fernberg Road, the Echo Trail, the
 // Sawbill Trail, the Gunflint Trail); invented but plausible names elsewhere.
@@ -34,7 +38,7 @@ const NAMES = {
   32: "Cliff Wold's Outfitting", 33: "Cliff Wold's Outfitting", 22: 'Piragis Northwoods Company', 20: 'Voyageur North Outfitters',
   77: 'Voyageur North Outfitters', 4: 'Spirit of the Wilderness', 6: 'Spirit of the Wilderness', 7: 'Ely Outfitting Company',
   1: 'Trout Lake Landing Outfitters', 8: 'Spirit of the Wilderness', 9: 'Voyageur North Outfitters', 14: 'Voyageur North Outfitters',
-  16: 'Spirit of the Wilderness', 19: 'Ely Outfitting Company', 80: 'Voyageur North Outfitters', 12: "Anderson's Canoe Outfitters",
+  16: 'Spirit of the Wilderness', 19: 'Ely Outfitting Company', 80: 'Seagull Outfitters', 12: "Anderson's Canoe Outfitters",
   34: 'Sawbill Canoe Outfitters', 35: 'Sawbill Canoe Outfitters', 36: 'Sawbill Canoe Outfitters', 37: 'Sawbill Canoe Outfitters',
   38: 'Sawbill Canoe Outfitters', 39: 'Sawbill Canoe Outfitters', 67: 'Sawbill Canoe Outfitters', 75: 'Sawbill Canoe Outfitters',
   84: 'Sawbill Canoe Outfitters', 40: 'Sawtooth Outfitters', 41: 'Sawtooth Outfitters',
@@ -104,8 +108,6 @@ const STANDING = ['new', 'a familiar face', 'a regular', 'a friend of the house'
 
 const NEAR = 25;                 // metres from the landing (its dock, once built: distTo) within which E opens the counter
 const SAVE_KEY = 'bwca-canoe-trip';
-const DEFAULT_BUY = 3;           // days of food the stepper offers first
-const SANDBOX_DAYS = 4;          // Sandbox: the food pack's days (they only set its weight)
 const WAKE_BUNK = 7;             // the hour you wake after a bunk night
 const EVAC_FADE = 1.4;           // seconds of fade before the move (the old evacuation, without a trip core)
 const SPOT_R = 1.5;              // metres from a store hotspot's floor spot within which E is its
@@ -114,8 +116,9 @@ const DOOR_R = 3;                // metres from the door, outside, within which 
 const VISIT_FAR = 90;            // metres from the store and its dock (distTo) at which a visit is over (a ride, a teleport, a walk away)
 const ARRIVAL_WAIT = 20;         // game seconds an arrival waits for the landing's store to be built before it gives up
 const ARRIVAL_FAR = 250;         // metres from the landing (distTo) within which an arrival still goes in (a teleport finds water up to 120 m out)
-const TABS = [['counter', 'The counter'], ['board', 'The board'], ['shelves', 'The shelves'], ['wall', 'The lure wall']];
-const SPOT_WORDS = { counter: 'The counter', board: 'The board', wall: 'The lure wall', food: 'The provisions shelf · food and water', tackle: 'The tackle shelf · the rod and the bait', gear: 'The gear shelf · paddles, packs and tents' };
+const TABS = [['counter', 'The counter'], ['board', 'The board']];
+const SPOT_WORDS = { counter: 'The counter', board: 'The board', wall: 'The lure wall · lures for the tackle box', maps: 'The map table · Fisher sheets of this country', food: 'The provisions shelf · meals, snacks and the barrels', tackle: 'The tackle shelf · the rod, the leeches and the bucket', gear: 'The gear shelf · packs, paddles, tents and canoes' };
+const SHELF_LOOK = { food: 'shelf', tackle: 'shelf', gear: 'shelf', lure: 'pegs', map: 'table' };
 const SLOTS = [['canoe', 'Canoe'], ['paddle', 'Paddle'], ['tent', 'Tent'], ['filter', 'Water']];
 
 // the lakes are frozen on a date, and the first open-water day from there
@@ -141,7 +144,7 @@ export class Outfitter {
     if (trip) trip.outfitter = this;
     this.landings = world.entryPoints.map((ep) => ({ ep: ep.ep, name: outfitterName(ep), place: ep.name, x: ep.x, z: ep.z, lake: ep.lake }));
     this.trip = { active: false, ep: null, days: 0, started: null, startAbs: 0, turnedIn: 0 };
-    this.open = false; this.at = null; this.near = null; this.buyN = DEFAULT_BUY;
+    this.open = false; this.at = null; this.near = null;
     this.tab = 'counter'; this.focus = null; this.receipt = null;
     this.visit = null;               // in or about a store: { ep, landing, L, inside, switched, settled }
     this.arrival = null;             // a season begun, or a page reloaded in a store: in at the store once it is built
@@ -154,12 +157,17 @@ export class Outfitter {
     this.pendingShow = false;        // open the counter as soon as the canoe is at a landing and nothing else is up
     this.saveTimer = 0; this.evac = null; this.summary = null; this.greeting = ''; this.who = null; this.lineKind = 'welcome'; this.arrivedBy = null; this.staged = null; this.bunking = false;
     this.el = { panel: document.getElementById('outfitter') };
+    const shelfEl = document.getElementById('shelf');
+    this.shelf = shelfEl ? new ShelfScreen(shelfEl, hud) : null; // a shelf's two panes (inv-ui.js)
+    this.shelfAt = null;             // the shelf open: { kind, ep }
     if (this.el.panel) {
       injectCss();
       this.el.panel.addEventListener('click', (e) => { const b = e.target.closest('button[data-act]'); if (b && !b.disabled) this.act(b.dataset.act, b.dataset.id, e); });
       this.el.panel.addEventListener('change', (e) => { const s = e.target.closest('select[data-act]'); if (s) { this.act(s.dataset.act, s.value, e); s.blur(); } });
       window.addEventListener('keydown', (e) => {
-        if (!this.open || (e.target && e.target.tagName === 'SELECT')) return;
+        if (e.target && e.target.tagName === 'SELECT') return;
+        if (this.shelfOpen && (e.code === 'Escape' || e.code === 'KeyE')) { this.shelf.close(); this.player.input.once.delete('KeyE'); return; }
+        if (!this.open) return;
         if (e.code === 'Escape' || e.code === 'KeyE') { this.close(); this.player.input.once.delete('KeyE'); } // the same E must not reopen it
       });
     }
@@ -315,7 +323,7 @@ export class Outfitter {
   }
   enterStore(v) {
     const ch = this.player.chase;
-    if (ch && ch.mode !== 'first') { v.switched = true; ch.setMode('first'); }
+    if (ch && ch.mode !== 'first' && !ch.roomAware) { v.switched = true; ch.setMode('first'); }
     const d = this.day, today = `${d.year}-${d.doy}`;
     if (this.greeted[v.ep] !== today) {
       this.greeted[v.ep] = today;
@@ -328,14 +336,14 @@ export class Outfitter {
       if (fresh) this.core.fresh = null;
       const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, kind);
       this.heard(v.ep, words);
-      this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7);
+      if (!(this.people && this.people.keeperSays && this.people.keeperSays(v.ep, words, kind))) this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7); // fb F: said by the keeper's head
     }
   }
   leaveStore(v) {
     const ch = this.player.chase;
     if (v.switched && ch && ch.mode === 'first') ch.setMode('third');
     v.switched = false;
-    if (!v.bye) { v.bye = true; const who = this.shop ? this.shop.keeperName(v.ep) : null; this.hud.note(`${who ? `${who}, from the door` : 'From the door'}: “${this.say(v.ep, 'goodbye')}”`, 4); }
+    if (!v.bye) { v.bye = true; const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, 'goodbye'); if (!(this.people && this.people.keeperSays && this.people.keeperSays(v.ep, words, 'goodbye'))) this.hud.note(`${who ? `${who}, from the door` : 'From the door'}: “${words}”`, 4); } // fb F
   }
   endVisit(launched) {
     const v = this.visit; if (!v) return;
@@ -359,8 +367,9 @@ export class Outfitter {
     const s = [];
     if (L.counter) s.push({ key: 'counter', tab: 'counter', p: L.counter });
     if (L.board) s.push({ key: 'board', tab: 'board', p: L.board });
-    for (const sh of L.shelves || []) s.push({ key: sh.kind, tab: 'shelves', focus: sh.kind, p: sh });
-    if (L.wall) s.push({ key: 'wall', tab: 'wall', p: L.wall });
+    for (const sh of L.shelves || []) s.push({ key: sh.kind, shelf: sh.kind, p: sh });
+    if (L.wall) s.push({ key: 'wall', shelf: 'lure', p: L.wall });
+    if (L.mapTable) s.push({ key: 'maps', shelf: 'map', p: L.mapTable });
     return s;
   }
   // the nearest one in reach that you face, inside
@@ -376,7 +385,7 @@ export class Outfitter {
     return best;
   }
   spotText(s, v) {
-    if (s.key === 'counter') { const who = this.shop ? this.shop.keeperName(v.ep) : null; return `The counter${who ? ` · ${esc(who)}` : ''}: the permit, food, maps and the road`; }
+    if (s.key === 'counter') { const who = this.shop ? this.shop.keeperName(v.ep) : null; return `The counter${who ? ` · ${esc(who)}` : ''}: the permit, a bunk, the road`; }
     if (s.key === 'board') {
       let ready = 0;
       try { ready = (this.tasks && this.tasks.active ? this.tasks.active : []).filter((t) => t.from === v.ep && t.status === 'done').length; } catch { ready = 0; }
@@ -392,7 +401,7 @@ export class Outfitter {
     const n = p.mode === 'paddle' && !p.landing && !p.teleporting ? this.nearest(p.x, p.z) : null;
     this.near = n && n.d < NEAR ? n.l : null;
     p.suppressLanding = !!this.near;
-    p.input.paused = this.open || !!this.evac || veil || this.bunking || (this.hud && this.hud.paper === 'journal');
+    p.input.paused = this.open || this.shelfOpen || !!this.evac || veil || this.bunking || (this.hud && this.hud.paper === 'journal');
     if (!p.packs) p.loadFactor = this.loadFactor; // the packs (packs.js) set it from the load once they are there
     const free = !this.open && !this.evac && !veil && !this.bunking && !(this.hud && this.hud.paper);
     if (this.arrival && !p.teleporting && !veil) this.updateArrival(dt);
@@ -407,7 +416,10 @@ export class Outfitter {
         else if (p.input.pressed(L ? 'KeyQ' : 'KeyE')) this.show(this.near);
       } else if (this.visit && this.visit.inside) {
         const s = this.spot();
-        if (s && !(this.people && this.people.claimsE) && p.input.pressed('KeyE')) { this.staged = { tab: s.tab, focus: s.focus || null }; this.show(this.visit.landing, s.tab, s.focus || null); }
+        if (s && !(this.people && this.people.claimsE) && p.input.pressed('KeyE')) {
+          if (s.shelf) this.openShelf(s.shelf, this.visit.landing);
+          else { this.staged = { tab: s.tab, focus: null }; this.show(this.visit.landing, s.tab, null); }
+        }
       }
     }
     if (this.evac) this.updateEvac(dt);
@@ -423,22 +435,22 @@ export class Outfitter {
       p.prompt = L ? { key: null, text: `${esc(name)} &nbsp;·&nbsp; <kbd>E</kbd>Tie up and go in &nbsp; <kbd>Q</kbd>The counter` } : { key: 'E', text: name };
     }
     const v = this.visit;
-    if (v && !this.open && !this.bunking && p.onFoot) {
+    if (v && !this.open && !this.shelfOpen && !this.bunking && p.onFoot) {
       if (v.inside) { const s = this.spot(); p.prompt = s ? { key: 'E', text: this.spotText(s, v) } : null; }
       else if (v.L && v.L.door && Math.hypot(v.L.door.x - p.x, v.L.door.z - p.z) < DOOR_R && !(p.prompt && /kbd/.test(p.prompt.text || ''))) p.prompt = { key: null, text: `${esc(v.landing.name)} · the door is open` };
     }
   }
 
   // --- the counter ------------------------------------------------------------------------------------------
-  // open at a tab: 'counter' (the permit, food, money, maps and rides), 'board', 'shelves' (focus: the shelf's kind)
-  // or 'wall'
+  // open at a tab: 'counter' (the permit, the services, money and rides) or 'board'
   show(landing, tab = null, focus = null) {
     const pr = this.profile, core = this.core, st = this.staged; // staged: the tab a hotspot asked for, should a wrapper drop the arguments
     this.staged = null;
     if (!tab && st) { tab = st.tab; focus = st.focus; }
     const stranger = (pr && !pr.knows(landing.ep)) || (core && core.fresh === landing.ep); // a first visit
     if (core) { core.learn(landing.ep); core.fresh = null; } else if (pr) pr.learn(landing.ep);
-    this.at = landing; this.open = true; this.tab = TABS.some(([k]) => k === tab) ? tab : 'counter'; this.focus = tab === 'shelves' ? focus : null; this.receipt = null;
+    if (this.shelfOpen) this.shelf.close();
+    this.at = landing; this.open = true; this.tab = TABS.some(([k]) => k === tab) ? tab : 'counter'; this.focus = focus; this.receipt = null;
     const rode = this.arrivedBy === 'ride'; this.arrivedBy = null; // stream C's rides: the keeper's words for one come up the road
     const kind = this.lineKind === 'welcome' ? (stranger ? 'stranger' : rode ? 'ride' : this.trip.active ? 'passing' : 'welcome') : this.lineKind;
     this.greeting = this.say(landing.ep, kind);
@@ -447,11 +459,32 @@ export class Outfitter {
     this.lineKind = 'welcome';
     this.today = { year: this.day.year, doy: this.day.doy };
     if (this.adventure && pr && !pr.permit && !this.trip.active) this.draft = this.draft || { entry: { ...this.today } };
-    this.buyN = this.sandbox ? Math.max(1, Math.round(this.energy ? this.energy.food : 0)) || SANDBOX_DAYS : Math.min(DEFAULT_BUY, this.buyMax());
     if (this.energy && typeof this.energy.fill === 'function') this.energy.fill(2, 0); // the counter's tap: a full bottle, free
     if (this.hud && this.hud.openPaper) this.hud.openPaper('outfitter');
     this.el.panel.classList.add('show');
     this.render();
+  }
+  // A shelf's two panes (inv-ui.js ShelfScreen): 'food', 'tackle', 'gear', 'lure' (the wall) or 'map' (the table), your
+  // containers on the left (at the store, all of them) and the shelf on the right at this outfitter's prices
+  get shelfOpen() { return !!(this.shelf && this.shelf.open); }
+  openShelf(kind, landing) {
+    if (!this.shelf || !this.shop || !landing) return;
+    if (this.open) this.hide();
+    const ep = landing.ep, sh = SHELVES.find((k) => k.kind === kind) || SHELVES[0], who = this.shop.keeperName(ep), op = this.shop.outfitterProfile(ep);
+    if (this.core) this.core.learn(ep); else if (this.profile) this.profile.learn(ep);
+    this.at = landing; this.shelfAt = { kind, ep };
+    const sig = this.shop.signature(ep), here = sig && sig.shelf === kind;
+    const words = kind === 'map' ? 'The sheets are on the table. Take the one you’re paddling, and the next one over.' : here ? `${sig.name}: made here, and you won’t find it anywhere else.` : null;
+    this.shelf.show({
+      kind, look: SHELF_LOOK[kind] || 'shelf', title: sh.name, shelfName: sh.where, sub: sh.sub,
+      kicker: `Entry point ${ep} · ${this.lakeOf(landing)} · ${landing.name}${op && (op.kindWords || op.kind) ? ` · ${op.kindWords || op.kind}` : ''}`,
+      say: words, who: words ? who : null,
+      hint: this.sandbox ? 'Sandbox: the shelves are free. Drag a thing into one of yours, or double-click it.' : null,
+      stock: () => this.shop.shelfStock(kind, ep),
+      buy: (id, spot, n) => { const r = this.shop.buyItem(id, ep, spot, n); this.save(); return r; },
+      money: () => this.money,
+      onClose: () => { this.shelfAt = null; },
+    });
   }
   hide() {
     this.open = false;
@@ -466,18 +499,11 @@ export class Outfitter {
     if (!this.trip.active) { this.start(); return; }
     this.carryOn();
   }
-  // the most days of food the stepper can buy: what fits, and (in Adventure) what you can pay for
-  buyMax() { return this.sandbox ? this.foodRoom : Math.max(0, Math.min(this.room, Math.floor(this.money / this.foodPrice))); }
   act(act, id, ev = null) {
     const f = this.draft;
     if (act === 'close') this.close();
     else if (act === 'tab') { this.tab = id; this.focus = null; this.render(); }
-    else if (act === 'less' || act === 'more') {
-      const k = act === 'less' ? -1 : 1, max = this.buyMax();
-      this.buyN = Math.max(this.sandbox ? 0 : Math.min(1, max), Math.min(max, this.buyN + k));
-      this.render();
-    } else if (act === 'buy') this.buy();
-    else if (act === 'food1') { this.buyN = 1; this.buy(); }
+    else if (act === 'shelf') this.openShelf(id, this.at);
     else if (act === 'shop' && this.shop) {
       const r = this.shop.buy(id, this.at.ep);
       this.receipt = { text: r.words, ok: r.ok };
@@ -496,7 +522,6 @@ export class Outfitter {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
       const r = this.tasks.act(id, this.at.ep);
       if (r && r.words && /^claim/.test(String(id))) this.greeting = r.words;
-      if (this.buyN < 1 && !this.sandbox) this.buyN = Math.min(DEFAULT_BUY, this.buyMax()); // money just paid: the stepper offers food again
       this.save(); this.render();
     }
   }
@@ -519,25 +544,13 @@ export class Outfitter {
     const date = new Date(d.year, 0, d.doy);
     return `No. ${home}-${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
   }
-  tally(n) {
-    let html = '';
-    for (let i = 1; i <= n; i++) { if (i % 5 === 0) html += '<i class="five"></i>'; else { if (i > 1 && i % 5 === 1) html += '<i class="gap"></i>'; html += '<i></i>'; } }
-    return html;
-  }
   choice(act, id, label, on, disabled = false) {
     return `<button type="button" class="opt${on ? ' on' : ''}" data-act="${act}" data-id="${id}" aria-pressed="${on}"${disabled ? ' disabled' : ''}>${label}</button>`;
-  }
-  stepper(n, min, max, label) {
-    return `<div class="stepper">
-          <button type="button" class="step" data-act="less" aria-label="A day less" ${n <= min ? 'disabled' : ''}>−</button>
-          <div class="days"><div class="tally" aria-hidden="true">${this.tally(n)}</div><div class="n"><b>${n}</b> ${label}</div></div>
-          <button type="button" class="step" data-act="more" aria-label="A day more" ${n >= max ? 'disabled' : ''}>+</button>
-        </div>`;
   }
 
   // the season's permit, the food and the ways on: the counter tab's left column
   permitSection(a) {
-    const pr = this.profile, core = this.core, adv = this.adventure, active = this.trip.active, en = this.energy;
+    const pr = this.profile, core = this.core, adv = this.adventure, active = this.trip.active;
     const home = pr && pr.home != null ? this.landing(pr.home) : null;
     const stamped = pr ? pr.permit : core && core.permit;
     const rows = [];
@@ -553,29 +566,17 @@ export class Outfitter {
         + `<button type="button" class="step small" data-act="date" data-id="1" aria-label="A day later (Shift: a month)" title="Shift: a month">›</button></span>`
         + `${ice ? `<button type="button" class="pencil-btn" data-act="thaw">iced in · put in ${shortDate(thaw.year, thaw.doy)}?</button>` : ''}</div>`);
     } else if (stamped && stamped.entry) rows.push(`<div class="lab">Issued</div><div>${longDate(stamped.entry.year, stamped.entry.doy)} · <span class="soft">good all season</span></div>`);
-    const kit = pr ? pr.kit : { packs: 1 };
-    rows.push(`<div class="lab">Packs</div><div>${kit.packs === 2 ? 'Two Duluth packs' : 'One Duluth pack'}${pr && pr.has('barrel') ? ' and a barrel' : ''} · <span class="soft">${kit.packs === 2 ? 'two carries' : 'one carry'}</span></div>`);
-    // the food: what is in the pack, and the stepper of what to buy
-    const food = en ? en.food : 0, room = this.room, max = this.buyMax(), n = Math.max(0, Math.min(this.buyN, max)), price = this.foodPrice;
-    this.buyN = n;
-    let pack;
-    if (this.sandbox) {
-      pack = `<div class="lab">Food pack</div>${this.stepper(n, 0, max, plural(n, 'day'))}
-        <button type="button" class="stamp outline buy" data-act="buy" ${Math.abs(n - food) < 0.01 ? 'disabled' : ''}>Repack to ${n} ${plural(n, 'day')}</button>
-        <p class="note">Sandbox: the food keeps, and the counter does not charge. The days only set the pack’s weight.</p>`;
-    } else {
-      const inPack = food <= 0 ? 'No food in the pack' : `${fmtDaysWords(food)} of food in the pack`;
-      const cost = n * price;
-      const why = room <= 0 ? 'The pack is full.' : max <= 0 ? `A day of food is $${price}: not enough in hand.` : `$${this.money - cost} left after.`;
-      pack = `<div class="lab">Food</div><p class="left">${inPack} · <span class="soft">room for ${room} more</span></p>
-        ${this.stepper(n, Math.min(1, max), max, plural(n, 'day'))}
-        <button type="button" class="stamp buy" data-act="buy" ${n <= 0 ? 'disabled' : ''}>Buy ${n} ${plural(n, 'day')} · $${cost}</button>
-        <p class="note">$${price} a day: two meals. ${why}</p>`;
-    }
+    // what you carry and the food in it (the inventory, stream A); the food itself is on the provisions shelf
+    const inv = invModel(), all = inv && inv.containers ? inv.containers : [], packs = all.filter((c) => /^pack/.test(String(c.item))).length, barrels = all.filter((c) => /^barrel/.test(String(c.item))).length;
+    rows.push(`<div class="lab">Packs</div><div>${packs > 1 ? `${packs} Duluth packs` : packs ? 'One Duluth pack' : 'No pack'}${barrels ? ` and ${barrels > 1 ? `${barrels} barrels` : 'a barrel'}` : ''} · <span class="soft">${packs > 1 ? 'two carries' : 'one carry'}</span></div>`);
+    const food = inv && typeof inv.foodWords === 'function' ? inv.foodWords() : this.energy ? `${fmtDaysWords(this.energy.food)} of food` : '';
+    const noStore = !this.layout(a.ep), shelves = !noStore ? '' : `<div class="shelfbtns">${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}</div>`;
+    const pack = `<div class="lab">Food</div><p class="left">${esc(food || 'Nothing to eat')} within reach</p>
+        <p class="note">${this.sandbox ? 'Sandbox: the shelves are free and nobody goes hungry.' : noStore ? 'The store is being opened up: the shelves are here for now.' : 'Meals and snacks are on the provisions shelf: walk over, pick them up and pack them yourself.'}</p>${shelves}`;
     let push;
     if (!active) {
       const iceTxt = ice ? `the lakes are iced in until ${shortDate(thaw.year, thaw.doy)}` : '';
-      const hungry = !this.sandbox && food <= 0 ? 'no food in the pack yet' : '';
+      const hungry = !this.sandbox && this.energy && this.energy.food <= 0 ? 'no food in the packs yet: the provisions shelf' : '';
       const leave = this.inStore ? 'out the door and into the canoe' : 'leaving the counter pushes off too';
       push = `<button type="button" class="stamp big push" data-act="start">${ice ? `Push off on ${shortDate(thaw.year, thaw.doy)}` : 'Push off'}</button><div class="pencil">${esc(this.summary || iceTxt || hungry || leave)}</div>`;
     } else {
@@ -605,8 +606,9 @@ export class Outfitter {
     const parts = [];
     if (hint) parts.push(`<div class="word"><div class="lab">${esc(keeper.name || 'The keeper')}, leaning on the counter</div><p>“${esc(hint)}”</p></div>`);
     else if (keeper && keeper.name) parts.push(`<div class="word"><div class="lab">${esc(keeper.name)}${keeper.manner ? ` · ${esc(keeper.manner)}` : ''}</div><p class="soft">${rep >= 2 ? 'Nothing much to tell today.' : 'Friendly enough. Keeps the good spots to the regulars.'}</p></div>`);
-    const sheets = shop ? shop.stock(a.ep).filter((s) => s.kind === 'map') : [];
+    const sheets = shop && !this.layout(a.ep) ? shop.stock(a.ep).filter((s) => s.shelf === 'map' && s.id !== 'mapcase') : [];
     if (sheets.length) parts.push(`<div class="maps"><div class="lab">Map sheets of this country</div>${sheets.map((s) => this.sheetRow(s)).join('')}</div>`);
+    else if (shop && this.layout(a.ep)) parts.push('<p class="soft">The map sheets are out on the table by the window, and the food and the gear are on the shelves.</p>');
     // a night in the bunkhouse, the trip going on
     const price = this.sandbox ? 0 : shop ? shop.price('bunk', a.ep) : 8, short = !this.sandbox && price > this.money;
     parts.push(`<div class="bunkrow${short ? ' dear' : ''}"><div><b>A bunk tonight</b> · <span class="soft">a real bed, soup and breakfast${this.trip.active ? '; the trip goes on' : ''}</span></div>
@@ -657,59 +659,14 @@ export class Outfitter {
       return `<div class="lab">${label}</div>${body}`;
     };
     const kg = this.player.gear ? this.player.gear.canoeKg : ({ kevlar: 20, royalex: 29 }[kit.canoe] || 34);
-    const passive = owned.filter((id) => { const it = itemOf(id); return it && !it.slot && !id.startsWith('lure:') && id !== 'leeches' && id !== 'pack' && it.kind !== 'map'; });
-    const box = this.shop ? [...this.shop.box()] : [];
-    const lures = box.map((l) => { const def = LURES.find((d) => d.id === l); return def ? `${gearIcon(LURE_ITEM[l] || 'lure:jig')}<span>${esc(BOX_NAME[l] || def.short || def.name)}${l === 'leech' && this.shop ? ` <span class="soft">· ${this.shop.leeches}</span>` : ''}</span>` : ''; }).filter(Boolean);
     const known = pr.known.length, all = this.landings.length;
     const rep = Math.floor(pr.outfitter(a.ep).rep), earned = pr.earned;
     return `<section class="wall" aria-labelledby="wall-h">
-      <div class="top"><h3 id="wall-h">Your kit</h3></div>
+      <div class="top"><h3 id="wall-h">Your outfit</h3></div>
       <div class="slots">${SLOTS.map(slotRow).join('')}</div>
-      <p class="soft">The canoe is ${kg} kg on the portages.</p>
-      ${passive.length ? `<ul>${passive.map((id) => { const it = itemOf(id); return `<li>${gearIcon(id)}<span>${esc(it.name)}</span></li>`; }).join('')}</ul>` : ''}
-      ${lures.length ? `<div class="lab">In the tackle box</div><div class="box">${lures.map((h) => `<span class="lure">${h}</span>`).join('')}</div>` : ''}
+      <p class="soft">The canoe is ${kg} kg on the portages. What you carry, and what is in it, is in your book: <kbd>J</kbd>, then <kbd>Tab</kbd>.</p>
       <div class="lab">This season</div>
       <p>${earned ? `$${earned} earned on the boards` : 'Nothing earned yet'} · ${known} of ${all} ${plural(all, 'outfitter')} known. You are ${STANDING[Math.max(0, Math.min(5, rep))]} here.</p>
-    </section>`;
-  }
-  // one thing on a shelf: what it is, the keeper's words, the price and the weight; yours marked, the dear ones quiet
-  card(it) {
-    const priceTxt = it.price ? `$${it.price}` : '', buyTxt = it.price ? `Buy · ${priceTxt}` : 'Take it';
-    let foot;
-    if (it.use === 'food') {
-      const room = this.room, short = !this.sandbox && it.price > this.money;
-      foot = `<span class="soft">${room > 0 ? `room for ${room} more` : 'the pack is full'}</span><button type="button" class="stamp small" data-act="food1" ${room <= 0 || short || this.sandbox ? 'disabled' : ''}>${this.sandbox ? 'Free here' : `Buy a day · ${priceTxt}`}</button>`;
-    } else if (it.use === 'supper') foot = `<span class="soft">${it.count ? `${it.count} in the pack` : 'none in the pack'}</span><button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>${buyTxt}</button>`;
-    else if (it.use === 'bait') foot = `<span class="soft">${it.count ? `${it.count} in the bucket` : 'the bucket is empty'}</span>${it.count >= 12 ? '<span class="mark">a full dozen</span>' : `<button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>${it.count ? 'Top up' : 'Buy'}${priceTxt ? ` · ${priceTxt}` : ''}</button>`}`;
-    else if (it.owned) foot = `<span class="soft">${it.kg ? `${fmtKg(it.kg)}` : ''}</span>${it.slot ? (it.inUse ? '<span class="mark">yours · in use</span>' : `<button type="button" class="stamp small outline" data-act="use" data-id="${esc(it.id)}">Use this one</button>`) : `<span class="mark">${it.kind === 'lure' ? 'in the box' : 'yours'}</span>`}`;
-    else foot = `<span class="soft">${it.kg ? fmtKg(it.kg) : ''}</span><button type="button" class="stamp small" data-act="shop" data-id="${esc(it.id)}" ${it.afford ? '' : 'disabled'}>${buyTxt}</button>`;
-    const quiet = !it.owned && !it.afford && it.use !== 'food';
-    return `<div class="item${it.owned ? ' yours' : ''}${quiet ? ' dear' : ''}${it.signature ? ' sig' : ''}">
-      <div class="head">${gearIcon(it.id, quiet)}<b>${esc(it.name)}</b><span class="price">${priceTxt}</span></div>
-      ${it.signature ? '<div class="made">made here · sold only at this counter</div>' : ''}
-      <p class="words">${esc(it.words || '')}</p>
-      <div class="foot">${foot}</div>
-    </div>`;
-  }
-  // the shelves: provisions, tackle and gear side by side, the one you walked up to marked
-  shelvesTab(a) {
-    const stock = this.shop ? this.shop.stock(a.ep) : [];
-    const cols = SHELVES.map((sh) => {
-      const items = stock.filter((it) => it.kind === sh.kind).sort((x, y) => (y.signature ? 1 : 0) - (x.signature ? 1 : 0)); // what is made here first
-      return `<section class="shelf${this.focus === sh.kind ? ' here' : ''}" aria-label="${esc(sh.name)}">
-        <div class="top"><h3>${esc(sh.name)}</h3><span class="sum">${this.focus === sh.kind ? 'you are at this shelf' : esc(sh.sub)}</span></div>
-        <div class="items">${items.map((it) => this.card(it)).join('')}</div>
-      </section>`;
-    }).join('');
-    return `<div class="shelves">${cols}</div>`;
-  }
-  // the lure wall: a pegboard of lures, what is in your box marked
-  wallTab(a) {
-    const stock = this.shop ? this.shop.stock(a.ep).filter((it) => it.kind === 'lure').sort((x, y) => (y.signature ? 1 : 0) - (x.signature ? 1 : 0)) : [];
-    const box = this.shop ? [...this.shop.box()].filter((l) => l !== 'leech') : [];
-    return `<section class="pegboard" aria-label="The lure wall">
-      <div class="top"><h3>The lure wall</h3><span class="sum">${box.length ? `${box.length} in your box · a snapped line loses the lure` : 'nothing in the box'} · 1–${LURES.length} with the rod up</span></div>
-      <div class="pegs">${stock.map((it) => this.card(it)).join('')}</div>
     </section>`;
   }
 
@@ -718,43 +675,19 @@ export class Outfitter {
     const a = this.at, active = this.trip.active;
     const lakeName = this.lakeOf(a), area = areaOf(a.ep), op = this.shop ? this.shop.outfitterProfile(a.ep) : null;
     const purse = this.profile ? `<div class="purse"><span class="sc">In hand</span><b>$${this.money}</b></div>` : '';
-    const was = this.el.panel.querySelector('.permit, .items, .pegs'), scroll = was ? was.scrollTop : 0;
+    const was = this.el.panel.querySelector('.permit, .desk'), scroll = was ? was.scrollTop : 0;
     const leave = this.inStore ? 'Look around · E' : `${active ? 'Carry on' : 'Push off'} · E`;
     const nav = `<nav class="tabs" aria-label="The counter's tabs">${TABS.map(([k, l]) => `<button type="button" data-act="tab" data-id="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}`
       + `${this.receipt ? `<span class="receipt pencil${this.receipt.ok ? '' : ' no'}">${esc(this.receipt.text)}</span>` : ''}</nav>`;
     let body;
     if (this.tab === 'board') body = `<div class="counter one">${this.boardSection(a)}</div>`;
-    else if (this.tab === 'shelves') body = this.shelvesTab(a);
-    else if (this.tab === 'wall') body = this.wallTab(a);
     else body = `<div class="counter">${this.permitSection(a)}${this.deskSection(a)}${this.wallSection(a)}</div>`;
     this.el.panel.innerHTML = `<header>
       <div class="lede"><div class="sc kicker">Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && (op.kindWords || op.kind) ? ` · ${esc(op.kindWords || op.kind)}` : ''}</div><h2>${esc(a.name)}</h2><div class="say">“${esc(this.greeting)}”${this.who ? ` <span class="who">— ${esc(this.who)}</span>` : ''}</div></div>
       ${purse}<button type="button" class="stamp outline" data-act="close" aria-label="Leave the counter (E or Esc)">${leave}</button>
     </header>${nav}${body}`;
-    const now = this.el.panel.querySelector('.permit, .items, .pegs');
+    const now = this.el.panel.querySelector('.permit, .desk');
     if (scroll && now && now.className === (was && was.className)) now.scrollTop = scroll;
-  }
-
-  // --- money and food ----------------------------------------------------------------------------------------
-  buy() {
-    const en = this.energy, n = this.buyN, a = this.at; if (!en) return;
-    if (this.sandbox) { // repack, free: the days set the pack's weight
-      en.food = n; this.trip.days = Math.max(this.trip.days || 0, n);
-      if (this.core) this.core.state.packs.foodDays = n;
-      this.hud.note(`Repacked: ${fmtDaysWords(n)} of food.`); this.save(); this.render();
-      return;
-    }
-    if (n <= 0) return;
-    const price = this.foodPrice, cost = n * price;
-    if (n > this.room) { this.hud.note('That will not fit in the pack.'); return; }
-    if (!this.profile || !this.profile.spend(cost, `${n} ${plural(n, 'day')} of food at ${a.name}`)) { this.hud.note(`Not enough in hand: ${n} ${plural(n, 'day')} is $${cost}.`); this.render(); return; }
-    en.food = +(en.food + n).toFixed(2);
-    if (this.core) this.core.state.packs.foodDays = en.food;
-    const words = `${n} ${plural(n, 'day')} of food, $${cost}. ${fmtDaysWords(en.food)} in the pack, $${this.money} in hand.`;
-    this.hud.note(words, 6);
-    if (this.tab !== 'counter') this.receipt = { text: words, ok: true };
-    this.buyN = Math.min(this.buyN, this.buyMax());
-    this.save(); this.render();
   }
 
   // --- the trip ----------------------------------------------------------------------------------------------
@@ -783,13 +716,15 @@ export class Outfitter {
     else this.hud.note(`${fmtDaysWords(food)} of food in the pack. Push off when you like.`);
     this.save();
   }
+  // the food you can reach, in the inventory's words ("1 meal and 2 snacks"), else in days
+  foodWords() { const inv = invModel(); if (inv && typeof inv.foodWords === 'function') { const w = inv.foodWords(); return w === 'no food' ? 'no food with you' : w; } return `${fmtDaysWords(this.energy ? this.energy.food : 0)} of food`; }
   // "Resupply · carry on" (or leaving the counter during a trip): the trip goes on
   carryOn() {
     const a = this.at, en = this.energy;
     if (this.core) this.core.resupply(a.ep, { food: en ? +en.food.toFixed(2) : 0 });
     this.summary = null;
     this.hide();
-    this.hud.note(`Carry on from ${a.name}: ${en && en.food > 0 ? `${fmtDaysWords(en.food)} of food` : 'no food in the pack'}${this.profile ? `, $${this.money} in hand` : ''}.`, 5);
+    this.hud.note(`Carry on from ${a.name}: ${this.foodWords()}${this.profile ? `, $${this.money} in hand` : ''}.`, 5);
     this.save();
   }
   // "Call it a trip": logged as came in, then a bunk night, and you wake at 7:00 rested to the counter
@@ -925,7 +860,7 @@ export class Outfitter {
       const core = this.core, dw = core && core.active ? core.dayWords() : '';
       if (moved === 'v2') this.hud.note('The permit is a season’s paper now: no dates and no exit. Come in when you like; any counter sells food.', 8);
       else if (moved === 'v1') this.hud.note('An older trip, back as Sandbox: the same lakes with no limits.', 7);
-      else this.hud.note(`${vis ? 'Back at the outfitter' : this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${fmtDaysWords(this.energy.food)} of food, energy ${Math.round(this.energy.value * 100)} %${pr ? `, $${pr.money} in hand` : ''}.`);
+      else this.hud.note(`${vis ? 'Back at the outfitter' : this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${this.foodWords()}, energy ${Math.round(this.energy.value * 100)} %${pr ? `, $${pr.money} in hand` : ''}.`);
       return;
     }
     this.pendingShow = false;
@@ -942,11 +877,8 @@ function fmtDaysWords(d) {
   const n = half ? `${whole || ''}½` : String(Math.round(d));
   return `${n} day${n === '1' || n === '½' ? '' : 's'}`;
 }
-const fmtKg = (kg) => (kg < 1 ? `${Math.round(kg * 1000)} g` : `${kg % 1 ? kg.toFixed(1) : kg} kg`);
 // "Kevlar tripper, 17 ft" → "Kevlar tripper" for the kit's choices
 const shortName = (s) => { const t = String(s).replace(/,\s*\d+\s*ft$/, '').replace(/ (paddle|tent|filter)$/i, '').replace(/^(Purifying|Water) /, ''); return t.charAt(0).toUpperCase() + t.slice(1); };
-// the tackle box's names for the rod's lures
-const BOX_NAME = { jig: 'Jig', spinner: 'Mepps', spoon: 'Daredevle', crankbait: 'Rapala', leech: 'Leeches', silverminnow: 'Silver Minnow', lazyike: 'Lazy Ike' };
 
 // the tabs, the desk, the shelves and the lure wall (the counter's own look is hud.css's; tasks.js adds the board's)
 const CSS = `
@@ -974,32 +906,10 @@ const CSS = `
 #outfitter .mark { font: 700 10.5px/1.3 var(--sc); letter-spacing: .12em; color: #3f5a2a; text-transform: lowercase; }
 #outfitter .wall .slots { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 7px 10px; align-items: baseline; font-size: 15px; }
 #outfitter .wall .slots .choose { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-#outfitter .wall .box { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
-#outfitter .wall .box .lure { display: inline-flex; align-items: center; gap: 4px; }
-#outfitter .shelves { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(14px, 2%, 26px); flex: 1 1 auto; min-height: 0; }
-#outfitter .shelf, #outfitter .pegboard { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-#outfitter .shelf .top, #outfitter .pegboard .top { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--edge); padding-bottom: 8px; flex: none; }
-#outfitter .shelf .top .sum, #outfitter .pegboard .top .sum { font-size: 14px; font-style: italic; color: var(--ink-soft); }
-#outfitter .shelf.here .top { border-bottom: 2px solid var(--ink); padding-bottom: 7px; }
-#outfitter .shelf.here .top .sum { color: var(--ink); }
-#outfitter .items { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; scrollbar-width: thin; padding-right: 4px; }
-#outfitter .pegboard { flex: 1 1 auto; }
-#outfitter .pegs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); grid-auto-rows: max-content; gap: 14px; align-content: start; min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-width: thin;
-  padding: 14px; border-radius: 3px; border: 1px solid var(--edge-deep); background-color: #b99a6a;
-  background-image: radial-gradient(rgba(58, 38, 18, .5) 1.6px, transparent 2.2px); background-size: 18px 18px; background-position: 9px 9px; box-shadow: inset 0 1px 5px rgba(40, 24, 8, .25); }
-#outfitter .item { box-sizing: border-box; padding: 10px 14px 10px; background: var(--paper-card); border: 1px solid var(--edge); border-radius: 3px; display: flex; flex-direction: column; gap: 5px; flex: none; }
-#outfitter .pegs .item { box-shadow: 0 3px 6px rgba(40, 24, 8, .25); }
-#outfitter .item.yours { border-left: 4px solid var(--moss); }
-#outfitter .item.sig { background: var(--paper-note); }
-#outfitter .item .head { display: flex; align-items: center; gap: 10px; }
-#outfitter .item .head b { font: 600 16px/1.2 var(--serif); flex: 1 1 auto; }
-#outfitter .item .price { font: 500 23px/0.9 var(--pencil-font); color: var(--pencil); flex: none; }
-#outfitter .item .made { font: 700 10px/1.3 var(--sc); letter-spacing: .12em; color: var(--map-red); }
-#outfitter .item .words { font-size: 14px; line-height: 1.38; }
-#outfitter .item .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; margin-top: 2px; }
-#outfitter .item .foot .soft { color: var(--ink-soft); font-style: italic; }
-#outfitter .item .foot .stamp { flex: none; font-size: 10.5px; padding: 5px 10px; }
-#outfitter .item.dear .stamp:disabled { opacity: .8; }
+#outfitter .wall kbd { font-size: 10px; padding: 0 4px; }
+#outfitter .permit .shelfbtns { display: flex; flex-wrap: wrap; gap: 6px; }
+#outfitter .permit .shelfbtns .stamp { font-size: 10.5px; padding: 4px 9px; }
+#outfitter .desk p.soft { font-size: 15px; }
 `;
 let cssIn = false;
 function injectCss() {

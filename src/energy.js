@@ -5,9 +5,12 @@ import { LIFE } from './pace.js';
 // Energy: one bar from 0 to 1, and in Adventure three needs that pull it down (rest, food, water), the way Wild n
 // Chill's single bar works. The bar drains slowly with the clock, faster with the paddle (speed, hustle, a wind on the
 // bow), on the portages (by the load on your back, player.loadKg, when the packs set it) and after dark; it comes back
-// when you sit or stand still, faster at a campsite (restBoost) and after a meal. Meals happen on their own at dawn and
-// dusk while there is food, or by hand with G when the canoe is still; a supper cooked at camp (meal('hot')) takes the
-// place of the one at sunset.
+// when you sit or stand still, faster at a campsite (restBoost) and after a meal.
+// Food is items (the owner's feedback of 2026-10-24, stream A: items.js, inventory.js). A meal (oatmeal, rice and
+// lentils, a freeze-dried supper) or a kept fish is cooked on the grate at camp (meal('hot'), meal('fish'): the meal
+// comes out of the food in reach); a snack or a berry is eaten from the inventory, standing still, on foot or in the
+// canoe (inventory.eat → eatItem). There is no G and, on a trip, no meal on its own at dawn or dusk: hunger asks you to
+// eat. energy.food is the days of food with you (the meals in reach, two a day); writing it places or takes meals.
 //
 // The needs (Adventure, while a trip is under way; each 0 to 1):
 // - rest: what the last night gave (the tent's quality × min(1, hours slept / 7)), falling the longer you are awake;
@@ -88,6 +91,8 @@ const HELD_WORD = { rest: 'tiredness', food: 'hunger', water: 'thirst' };
 export class Energy {
   constructor(player, day) {
     this.player = player; this.day = day;
+    this.inventory = null;  // inventory.js, once main.js attaches it: then the food is its meals
+    this._food = 0;
     this.value = 1; this.food = 0; this.fedUntil = -1;
     this.lastHours = day.hours; this.warned = false; this.warnTimer = 0;
     this.onEvac = null; this.onNote = null;
@@ -119,6 +124,25 @@ export class Energy {
   get sandbox() { const t = this.trip; return !!(t && t.sandbox); }
   get live() { return this.adventure; } // the needs fall only on an Adventure under way
   get hasFood() { return this.sandbox || this.food >= 0.5; }
+  // days of food with you: the meals in reach (and set out at your camp), two a day; without the inventory a number
+  get inv() { const i = this.inventory; return i && i.attached ? i : null; }
+  get food() { const i = this.inv; return i ? i.meals() / 2 : this._food; }
+  set food(v) { const i = this.inv; v = Math.max(0, Number(v) || 0); if (i) i.setMeals(v * 2); else this._food = v; }
+  // what there is to eat with you, in words ("5 meals and 2 snacks"), for the readout
+  foodWords() { const i = this.inv; return i ? i.foodWords() : this._food > 0 ? `${this._food} day${this._food === 1 ? '' : 's'} of food` : 'no food'; }
+  // a ration out of the pack for a meal on the grate (supper in the evening): false when there is none
+  useRation(kind) {
+    const i = this.inv;
+    if (!i) { this._food = Math.max(0, this._food - 0.5); return true; }
+    const set = this.day.sunriseSunset && this.day.sunriseSunset.set, evening = set != null && this.day.hours > 14;
+    return !!i.takeMeal(evening);
+  }
+  // a ration back in the pack (a fish was the meal after all)
+  returnRation() {
+    const i = this.inv;
+    if (!i) { this._food += 0.5; return; }
+    i.place('meal:supper', 1, { crate: i.atStash });
+  }
   // the three needs, 0 to 1 (full in Sandbox and between trips)
   get needs() { return this._needs; }
   // the need that ran the bar down, for the evacuation's words: 'awake' (rest), 'food' or 'water'
@@ -213,35 +237,49 @@ export class Energy {
     const recent = now >= this.lastMealAbs && now - this.lastMealAbs < SLOT_HOURS;
     if (recent && this.lastMealAuto && this.lastMealKind === 'cold' && gain > MEALS.cold) {
       this.feed(feed - FEED.cold); this.lift(gain - MEALS.cold);
-      if (!ration && !this.sandbox) this.food += 0.5; // the fish was the meal: the ration goes back in the pack
+      if (!ration && !this.sandbox) this.returnRation(); // the fish was the meal: the ration goes back in the pack
       this.lastMealKind = kind; this.lastMealAuto = false; this.fedUntil = now + FED_HOURS;
       if (when) this.note(`${when}: ${this.foodLeft()}.`);
       return true;
     }
     if (ration && !this.hasFood) return false;
-    if (ration && !this.sandbox) this.food = Math.max(0, this.food - 0.5);
+    if (ration && !this.sandbox && !this.useRation(kind)) return false;
     this.feed(feed); this.lift(gain);
     this.fedUntil = now + FED_HOURS; this.lastMealAbs = now; this.lastMealKind = kind; this.lastMealAuto = false;
     if (when) this.note(`${when}${this.player.mode === 'carry' ? ' on the trail' : this.atCamp ? ' at the campsite' : this.player.mode === 'walk' ? '' : ' in the canoe'}: ${this.foodLeft()}.`);
     return true;
   }
   feed(x) { this.need.food = clamp(this.need.food + x, 0, 1); }
+  // Eat a thing from the inventory (inventory.eat): eat is the item's { food, lift, hot } (items.js). A snack feeds a
+  // little and lifts the bar a little; a cooked meal counts as the meal of the hour.
+  eatItem(eat = {}, name = '') {
+    const food = Number.isFinite(eat.food) ? eat.food : 0.2, gain = Number.isFinite(eat.lift) ? eat.lift : food * 0.5, now = this.now;
+    this.feed(food); this.lift(gain);
+    this.fedUntil = Math.max(this.fedUntil, now + (eat.hot ? FED_HOURS : FED_HOURS / 2));
+    if (eat.hot || food >= 0.45) { this.lastMealAbs = now; this.lastMealKind = eat.hot ? 'hot' : 'cold'; this.lastMealAuto = false; }
+    if (name) this.lastEaten = { name, at: now };
+    return true;
+  }
   // the bar up by x, but not past the ceiling (unless it already stood above it)
   lift(x) { const cap = Math.max(this.value, this.ceiling); this.value = Math.min(cap, this.value + x); }
   foodLeft() {
     if (this.sandbox) return 'the pack keeps';
+    if (this.inv) { const w = this.inv.foodWords(); return w === 'no food' ? 'no food left with you' : `${w} left`; }
     return this.food <= 0 ? 'the pack is empty' : `${this.food % 1 ? `${Math.floor(this.food) || ''}½` : this.food} day${this.food <= 1 ? '' : 's'} of food left`;
   }
   // the old call: a cold meal
   eat(when = null) { return this.meal('cold', when || 'You eat'); }
-  // the meal of a dawn or a dusk, unless one was had just before
+  // the meal of a dawn or a dusk, unless one was had just before: only with no trip at all (the old free paddle); on a
+  // trip hunger asks you to eat (the owner, 2026-10-24: no automatic meals)
   autoMeal(when) {
+    if (this.trip) return;
     const now = this.now;
     if (now >= this.lastMealAbs && now - this.lastMealAbs < SLOT_HOURS) return;
     if (this.meal('cold', when)) this.lastMealAuto = true;
   }
-  // G: a meal by hand, when you are still
+  // the old G (gone from the keys): on a trip, a word about where the food is eaten now
   manualEat() {
+    if (this.trip) { this.note('Eat from the inventory (J): a snack when you are still, a meal cooked on the grate at a fire.'); return; }
     if (!this.still) { this.note('Hold still to eat.'); return; }
     if (!this.meal('cold', 'You eat')) this.note(this.adventure ? 'The food pack is empty.' : 'The food pack is empty. Any outfitter will fill it.');
   }
@@ -290,7 +328,7 @@ export class Energy {
       if (n[k] >= LOW || o[k]) continue;
       o[k] = true;
       if (k === 'water') this.note(this.bottle > 0.001 ? 'Thirsty. The bottle is treating; half an hour.' : 'Thirsty, and the bottle is dry. Fill it at the shore.');
-      else if (k === 'food') this.note(this.hasFood ? 'Hungry. G for a meal from the pack, when you are still.' : 'Hungry, and the food pack is empty.');
+      else if (k === 'food') this.note(this.inv ? (this.inv.snacks() ? 'Hungry. A snack from the pack (J, when you are still), or cook a meal at a fire.' : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and no food with you.') : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and the food pack is empty.');
       else this.note('Tired. Only a night’s sleep brings it back now: a campsite, or an outfitter’s bunk.');
     }
     if (n.rest <= EMPTY && !o.spent) { o.spent = true; this.note('Done in. Nothing brings you back now but a night’s sleep.'); }
@@ -390,7 +428,7 @@ export class Energy {
     };
   }
   restore(d) {
-    this.value = clamp(d.value ?? 1, 0, 1); this.food = Math.max(0, d.food ?? 0); this.fedUntil = d.fedUntil ?? -1;
+    this.value = clamp(d.value ?? 1, 0, 1); this._food = Math.max(0, d.food ?? 0); this.fedUntil = d.fedUntil ?? -1; // with the inventory the food is its meals: the saved days are only the old count
     this.awakeSince = Number.isFinite(d.awakeSince) ? d.awakeSince : this.now;
     this.lastMealAbs = Number.isFinite(d.lastMealAbs) ? d.lastMealAbs : -1e9; this.lastMealKind = d.lastMealKind || null;
     this.lastMealAuto = !!d.lastMealAuto; // a cold meal at dawn or dusk that a cooked one may still take the place of

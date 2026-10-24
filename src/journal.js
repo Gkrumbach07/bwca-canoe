@@ -1,15 +1,14 @@
-// The journal (J; L still opens it for a while): a two-page paper spread. The left page is the trip: the food
-// cells, the energy bar, the distances, portages, lakes and nights, the tasks on the go, a pencil note. The
-// right page has tabs: Catches (the log, with personal bests), Tasks (the notices taken on, where each is paid, the
-// season's earnings), Lakes (where you have been), Trips (the logbook: every trip and how it ended), Gear (the kit you
-// own, from the season's profile), Photos (the prints the camera keeps, photo.js). Data comes from the fishing code
-// (log, bests), the tasks, the energy, the outfitter's trip record, the trip's permit and logbook (trip.js, reached
-// through the outfitter), the profile (profile.js), the trip tally (trip-stats.js) and the camera (photo.js).
+// The book (J; L still opens it for a while; I opens it at the pack): one leather-bound book with two sides, Tab
+// between them. The journal side is a two-page paper spread. Its left page is the trip: the food cells, the energy
+// bar, the distances, portages, lakes and nights, the tasks on the go, a pencil note. Its right page has tabs:
+// Catches (the log, with personal bests), Tasks (the notices taken on, where each is paid, the season's earnings),
+// Lakes (where you have been), Trips (the logbook: every trip and how it ended), Photos (the prints the camera keeps,
+// photo.js). The gear, the food and what you carry are the pack side's (inv-ui.js PackSide): the Tarkov grids of your
+// containers on a canvas mat (feedback 2026-10-24: "the journal is only for catches, tasks, lakes, trips, photos").
+// Data comes from the fishing code (log, bests), the tasks, the energy, the outfitter's trip record, the trip's permit
+// and logbook (trip.js, reached through the outfitter), the trip tally (trip-stats.js) and the camera (photo.js).
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
-import { UNLOCKS } from './tasks.js';
-import { ITEMS } from './profile.js';
-import { gearIcon as kitIcon } from './outfitter.js';
-import { LURES } from './fishing.js';
+import { PackSide } from './inv-ui.js';
 
 const ROWS = 8;        // catches per page
 const PENCIL = [
@@ -20,26 +19,24 @@ const PENCIL = [
   'pike in the weedy bay by the inlet, spoons',
   'lay over tomorrow if the wind holds',
 ];
-const GEAR_ICON = {
-  mepps: '<svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true"><ellipse cx="12" cy="7" rx="9" ry="4" fill="currentColor"/><path d="M21 7h6M24 4v6" stroke="currentColor" stroke-width="1.5"/></svg>',
-  daredevle: '<svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true"><polygon points="2,7 12,1 26,7 12,13" fill="currentColor"/></svg>',
-  rapala: '<svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true"><rect x="3" y="3" width="22" height="8" rx="4" fill="currentColor"/><circle cx="7" cy="7" r="1.2" fill="#ebe2cb"/></svg>',
-  kevlar: '<svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true"><path d="M2 5 Q 14 14 26 5 L 22 9 Q 14 13 6 9 Z" fill="currentColor"/><path d="M2 5 Q 14 2 26 5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>',
-  jig: '<svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true"><circle cx="7" cy="6" r="4" fill="currentColor"/><path d="M11 6 Q 18 2 26 9" stroke="currentColor" stroke-width="2" fill="none"/></svg>',
-  silverminnow: '<svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true"><path d="M2 7 Q 10 1 20 7 Q 10 13 2 7 Z" fill="currentColor"/><path d="M20 7 L 26 3 L 26 11 Z" fill="currentColor"/></svg>',
-  lazyike: '<svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true"><path d="M3 10 Q 10 1 17 7 T 26 5" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
-  fisher: '<svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true"><path d="M2 10 Q 14 -2 26 10" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="26" cy="10" r="2" fill="currentColor"/></svg>',
-};
-const gearIcon = (key, faint = false) => `<span style="color:${faint ? '#9a8a70' : '#2a2016'}; display:inline-flex">${GEAR_ICON[key] || GEAR_ICON.jig}</span>`;
+const SIDES = ['journal', 'pack'];
 
 export class Journal {
-  // t: { hud, world, player, day, fishing, tasks, energy, outfitter, stats, wind }
+  // t: { hud, world, player, day, fishing, tasks, energy, outfitter, stats, wind, onUse }
   constructor(t) {
     Object.assign(this, t);
     this.el = document.getElementById('journal');
-    this.open = false; this.tab = 'catches'; this.page = 0; this.sig = ''; this.t = 0;
+    this.open = false; this.tab = 'catches'; this.page = 0; this.sig = ''; this.t = 0; this.side = 'journal';
+    // the book: a tab for each side on its top edge, the journal's spread and the pack's mat
+    this.el.classList.add('book');
+    this.el.setAttribute('aria-label', 'The book: the journal and the pack');
+    this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button></div>
+      <div class="book-key"><kbd>Tab</kbd> turns to the other side</div><div class="side j"></div><div class="side p"></div>`;
+    this.jEl = this.el.querySelector('.side.j'); this.pEl = this.el.querySelector('.side.p');
+    this.pack = new PackSide(this.pEl, { onUse: t.onUse || null });
     this.hud.registerPaper('journal', () => this.close());
     this.el.addEventListener('click', (e) => {
+      const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); return; }
       const tab = e.target.closest('[data-tab]'); if (tab) { this.tab = tab.dataset.tab; this.page = 0; this.render(true); return; }
       const pg = e.target.closest('[data-page]'); if (pg) { this.page = Math.max(0, this.page + Number(pg.dataset.page)); this.render(true); return; }
       const close = e.target.closest('[data-close]'); if (close) this.close();
@@ -47,28 +44,52 @@ export class Journal {
     window.addEventListener('keydown', (e) => {
       const tag = e.target && e.target.tagName;
       if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (e.code === 'KeyJ' || e.code === 'KeyL') { if (e.repeat || this.hud.paper === 'outfitter') return; this.toggle(); }
+      const busy = this.hud.paper === 'outfitter' || this.hud.paper === 'shelf'; // the counter and the shelves keep the keys
+      if (e.code === 'KeyJ' || e.code === 'KeyL') { if (e.repeat || busy) return; this.toggle(); }
+      else if (e.code === 'KeyI') { if (e.repeat || busy) return; if (this.open && this.side === 'pack') this.close(); else { this.setSide('pack'); this.show(); } }
       else if (!this.open) return;
       else if (e.code === 'Escape') this.close();
-      else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { this.page = Math.max(0, this.page + (e.code === 'ArrowRight' ? 1 : -1)); this.render(true); }
+      else if (this.side === 'journal' && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) { this.page = Math.max(0, this.page + (e.code === 'ArrowRight' ? 1 : -1)); this.render(true); }
     });
+    // Tab turns the book to its other side while it is open (ahead of the readout's Tab, hud.js)
+    window.addEventListener('keydown', (e) => {
+      if (!this.open || e.code !== 'Tab') return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (!e.repeat) this.setSide(this.side === 'pack' ? 'journal' : 'pack');
+    }, true);
+    this.setSide('journal');
   }
   toggle() { if (this.open) this.close(); else this.show(); }
-  show() {
+  // J opens the book at the side it was last closed on
+  show(side = null) {
+    if (side) this.setSide(side);
     if (this.open) return;
     this.open = true;
     this.hud.openPaper('journal');
     this.el.classList.add('show');
-    this.render(true);
+    if (this.side === 'pack') this.pack.show(); else this.render(true);
   }
   close() {
     if (!this.open) return;
     this.open = false;
+    this.pack.hide();
     this.el.classList.remove('show');
     this.hud.closePaper('journal');
   }
+  setSide(side) {
+    if (!SIDES.includes(side)) return;
+    this.side = side;
+    for (const b of this.el.querySelectorAll('.book-tab')) { const on = b.dataset.side === side; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
+    this.jEl.classList.toggle('on', side === 'journal'); this.pEl.classList.toggle('on', side === 'pack');
+    if (!this.open) return;
+    if (side === 'pack') this.pack.show(); else { this.pack.hide(); this.render(true); }
+  }
   // while it is up, the page follows the game (a meal, a fish, the clock) at a gentle rate
-  update(dt) { if (!this.open) return; if ((this.t += dt) > 0.5) { this.t = 0; this.render(false); } }
+  update(dt) {
+    if (!this.open) return;
+    if (this.side === 'pack') { this.pack.update(dt); return; }
+    if ((this.t += dt) > 0.5) { this.t = 0; this.render(false); }
+  }
 
   // --- the words ------------------------------------------------------------------------------------------
   get trip() { return this.outfitter ? this.outfitter.trip : null; }
@@ -89,8 +110,11 @@ export class Journal {
   pencilNote() {
     const w = this.wind, d = this.day, en = this.energy, h = d.hours, set = d.sunriseSunset.set, c = this.core;
     const adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
-    if (!sand && en && en.food < 1 && en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter';
-    if (!sand && en && en.food <= 0 && this.trip && this.trip.active) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
+    // (the inventory's snacks count as food too; at an outfitter the shelf is a step away)
+    const out = this.trip && this.trip.active && !(this.outfitter && this.outfitter.visit), inv = en && en.inv;
+    const none = inv && typeof inv.snacks === 'function' ? inv.meals() + inv.snacks() <= 0 : en && en.food <= 0;
+    if (!sand && en && out && en.food < 1 && !none) { if (en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter'; }
+    if (!sand && en && out && none) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
     if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
     if (adv && c.state.wet) return 'everything is damp. a fire tonight to dry the gear';
     if (en && en.value < 0.3) return 'tired. find a site early and eat something';
@@ -111,9 +135,9 @@ export class Journal {
     const sig = this.signature();
     if (!force && sig === this.sig) return;
     this.sig = sig;
-    const scrolls = [...this.el.querySelectorAll('.scroll, .section')].map((n) => n.scrollTop);
-    this.el.innerHTML = this.leftPage() + this.rightPage();
-    [...this.el.querySelectorAll('.scroll, .section')].forEach((n, i) => { if (scrolls[i]) n.scrollTop = scrolls[i]; });
+    const scrolls = [...this.jEl.querySelectorAll('.scroll, .section')].map((n) => n.scrollTop);
+    this.jEl.innerHTML = this.leftPage() + this.rightPage();
+    [...this.jEl.querySelectorAll('.scroll, .section')].forEach((n, i) => { if (scrolls[i]) n.scrollTop = scrolls[i]; });
   }
 
   // --- the trip page ------------------------------------------------------------------------------------
@@ -135,7 +159,9 @@ export class Journal {
     }
     const d = this.day, afterRise = d.sunriseSunset.rise == null || d.hours >= d.sunriseSunset.rise, beforeSet = d.sunriseSunset.set == null || d.hours < d.sunriseSunset.set;
     const meal = left <= 0 ? 'the pack is empty' : afterRise && beforeSet ? 'supper at sunset' : 'breakfast at dawn';
-    const foodTxt = !active ? 'no trip under way' : sand ? `the pack keeps · ${meal}` : `${fmtDays(left)} ${left <= 1 ? 'day' : 'days'} of ${total} · ${meal}`;
+    // with the inventory (fb A), its own words: the meals and snacks within reach, eaten from the pack (no meal comes on the clock)
+    const words = en && en.inv && typeof en.foodWords === 'function' ? en.foodWords() : null;
+    const foodTxt = !active ? 'no trip under way' : sand ? `the pack keeps · ${meal}` : words ? `${words === 'no food' ? 'nothing to eat' : words} within reach · eaten from the pack` : `${fmtDays(left)} ${left <= 1 ? 'day' : 'days'} of ${total} · ${meal}`;
     const ev = en ? Math.round(en.value * 100) : 100;
     const cap = en ? Math.round(en.ceiling * 100) : 100;
     const energyTxt = en && en.warning ? 'no food and little left in you' : adv && cap < 100 && ev >= cap - 2 ? `rest goes no higher now · only sleep fills it` : ev > 60 ? 'resting brings it back, faster at a campsite' : ev > 30 ? 'getting low · a meal or a rest at a campsite' : 'worn out · eat, or sit a while';
@@ -150,7 +176,7 @@ export class Journal {
       : '<div class="empty">Nothing on the go. Every outfitter pins notices by the door, paid at its own counter.</div>';
     return `<section class="page left" aria-labelledby="trip-h">
       <div class="sc kicker">${active ? `The trip · ${c ? `${c.adventure ? 'Adventure' : 'Sandbox'} · ${esc(c.dayWords())}` : `day ${dayN}`}` : `The trip${c ? ` · ${c.adventure ? 'Adventure' : 'Sandbox'}` : ''}`}</div>
-      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Food at any counter; push off when you like.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
+      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Food on the provisions shelf; push off when you like.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
       <div class="grid">
         <div class="lab">Food</div><div class="with"><span class="cells" aria-hidden="true">${cells}</span><span>${foodTxt}</span></div>
         <div class="lab">Energy</div><div class="with"><span class="ebar"><i style="width:${ev}%"></i></span><span>${ev} % · ${energyTxt}</span></div>
@@ -166,12 +192,13 @@ export class Journal {
 
   // --- the right page -------------------------------------------------------------------------------------
   rightPage() {
-    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ...(this.core ? [['trips', 'Trips']] : []), ['gear', 'Gear'], ...(this.photos ? [['photos', 'Photos']] : [])]; // hubs 3B: the prints
+    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ...(this.core ? [['trips', 'Trips']] : []), ...(this.photos ? [['photos', 'Photos']] : [])]; // hubs 3B: the prints; the gear is the pack side's
     const nav = `<nav class="tabs" aria-label="Journal pages">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`;
-    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'gear' ? this.gearTab() : this.tab === 'photos' && this.photos ? this.photosTab() : this.catchesTab();
+    if (!tabs.some(([k]) => k === this.tab)) this.tab = 'catches';
+    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'photos' && this.photos ? this.photosTab() : this.catchesTab();
     const pageNo = (this.dayN || 0) * 2 + 1;
     return `<section class="page right" aria-labelledby="right-h"><div class="ribbon" aria-hidden="true"></div>${nav}<div class="tabpage">${body.html}</div>
-      <div class="foot"><span>${body.foot || ''}</span><span class="keys"><kbd>J</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
+      <div class="foot"><span>${body.foot || ''}</span><span class="keys"><kbd>Tab</kbd> the pack · <kbd>J</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
   }
   catchesTab() {
     const f = this.fishing, log = f ? f.log : [], bests = f ? Object.values(f.bests || {}) : [];
@@ -249,26 +276,6 @@ export class Journal {
     const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'what you have seen stays seen';
     return { html, foot };
   }
-  gearTab() {
-    const pr = this.outfitter ? this.outfitter.profile : null;
-    if (pr) return this.kitTab(pr);
-    const ts = this.tasks, have = ts ? ts.unlocks : [], left = UNLOCKS.filter((u) => !have.some((h) => h.key === u.key));
-    const canoe = ts && ts.has('kevlar') ? 'A Kevlar canoe, 17 ft: lighter on the portages.' : 'An aluminium canoe, 17 ft. The Kevlar one is still on the wall.';
-    const html = `<div class="lede"><h2 id="right-h">${have.length ? `${have.length} ${plural(have.length, 'thing')} off the wall` : 'Nothing off the wall yet'}</h2><div class="sub">${canoe}</div></div>
-      <div class="scroll" style="display:flex;flex-direction:column;gap:14px">
-        ${have.length ? `<div class="lab">Taken off the wall</div><ul class="plain">${have.map((u) => `<li>${gearIcon(u.key)}${esc(u.label)}</li>`).join('')}</ul>` : ''}
-        <div class="lab">Still on the wall</div><div class="wall">${left.map((u) => gearIcon(u.key, true)).join('')}</div>
-        <p class="empty">${left.length ? `${left.map((u) => u.label.replace(/ \(.*\)$/, '')).map((s, i) => (i === 0 ? s[0].toUpperCase() + s.slice(1) : s)).join(', ')} ${left.length === 1 ? 'comes' : 'come'} down for tasks turned in.` : 'The wall is bare: you have the lot.'}</p>
-      </div>`;
-    return { html, foot: this.lureFoot() };
-  }
-  // the tackle box in a line: what is in it (the shop's box, when there is one) and the rod's number keys
-  lureFoot() {
-    const n = LURES.length, shop = this.outfitter && this.outfitter.shop;
-    if (!shop || typeof shop.box !== 'function') return `${word(n)} lures in the box: 1–${n} with the rod up`;
-    const k = shop.box().size;
-    return `${k ? `${word(k)} in the tackle box` : 'nothing in the tackle box'} · 1–${n} with the rod up`;
-  }
   // hubs 3B: the prints (photo.js), newest first, four to a page: the picture, its caption in pencil, and the notice it
   // went to (paid, once the notice has been claimed)
   photosTab() {
@@ -287,14 +294,5 @@ export class Journal {
     const more = n - (this.page + 1) * per;
     const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'the newest first';
     return { html, foot };
-  }
-  // the kit you own this season (profile.js), what is in use, and the money
-  kitTab(pr) {
-    const kit = pr.kit, owned = pr.owned, ids = Object.keys(ITEMS).filter((id) => owned.includes(id));
-    const li = (id) => { const it = ITEMS[id], spare = it.slot && kit[it.slot] !== id; return `<li>${kitIcon(id, spare)}${esc(it.label)}${it.note ? ` <span class="soft">· ${esc(it.note)}</span>` : ''}${spare ? ' <span class="soft">· on the rack</span>' : ''}</li>`; };
-    const canoe = ITEMS[kit.canoe] ? ITEMS[kit.canoe].label : 'An aluminium canoe';
-    const html = `<div class="lede"><h2 id="right-h">${ids.length} ${plural(ids.length, 'thing')} in the kit</h2><div class="sub">${esc(canoe)} · ${kit.packs === 2 ? 'two Duluth packs' : 'one Duluth pack'} · $${pr.money} in hand</div></div>
-      <div class="scroll"><ul class="plain">${ids.map(li).join('')}</ul></div>`;
-    return { html, foot: this.lureFoot() };
   }
 }

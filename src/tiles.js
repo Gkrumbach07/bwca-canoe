@@ -4,7 +4,7 @@ import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as 
 import { makeAquaticMeshes } from './aquatic.js';
 import { tilePropsSteps, exclusionsFor } from './props.js';
 import { MeshGround } from './prop-kit.js';
-import { RockShape } from './collide.js';
+import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
 import { cascadeHooks } from './sunlight.js';
 
@@ -559,8 +559,16 @@ export class TileManager {
     if (fc) fc.visible = false; // the fine terrain is in: the far chunk under it goes
     yield;
     // the forest and the lake plants, put at their LOD at once so no frame draws a whole stand at full detail
+    // which mesh draws each of the worker's bins (one per bin with instances, in order), for the collision's geometry
+    // keys (bin * 64 + group: tile-worker.js collisionOf); read before makeVegetationMeshes drops the bins that are
+    // no trunks from the list
+    const binMesh = [];
+    let nb = 0;
+    for (const b of r.veg) binMesh.push(b.count ? nb++ : -1);
     e.veg = makeVegetationMeshes(r.veg, this.vegetation);
+    e.binMesh = binMesh;
     e.vegBins = r.veg; e.ox = ox; e.oz = oz; e.collide = r.collide; e.shapes = new Map();
+    e.trunkR = r.collide ? new Float32Array(r.collide.trunks.length / 3).fill(NaN) : null; // the drawn radii, measured on first meeting
     if (this.aquatic) e.veg.push(...makeAquaticMeshes(r.aquatic, this.aquatic));
     for (const m of e.veg) group.add(m);
     if (this.camPos) updateVegetationLOD(e.veg, this.camPos);
@@ -674,15 +682,20 @@ export class TileManager {
   // for the HUD: ready tiles with their data (minimap drawing)
   readyTiles() { return [...this.tiles.values()].filter((e) => e.state === 'ready'); }
 
-  // Everything the walker is held off within r metres of (x, z), in world metres: the trunks as circles { x, z, r };
-  // the rocks (the boulder species and the outcrops) as { x, z, r, rock: true, shape } with r their reach and shape
-  // their own drawn geometry where it stands (collide.js RockShape: a height and an outline at any level); and the
-  // props' footprints, circles or boxes { x, z, ux, uz, hx, hz, box: true } (props.js; a log or a stump carries
-  // `top`, the height of its top, so it can be stepped over). The worker sorted the trunks and the rocks into cells
-  // (tile-worker.js collisionOf), so a query reads only the cells it touches; a rock's shape is made the first time
-  // one comes this near and kept with the tile.
+  // Everything the walker is held off within r metres of (x, z), in world metres:
+  //   the trunks as circles { x, z, r }, r the drawn trunk's radius a little over the ground (measured from the geometry
+  //     the tree is drawn with: collide.js trunkProfile);
+  //   the solids, each with `shape`, its own drawn geometry where it stands (collide.js RockShape: a height, and a hull
+  //     per part at any level), and r its reach round (x, z): the rocks (the boulders, the outcrops, the scree) and the
+  //     cliff modules of the bluffs { rock: true, cliff?: true }; the down logs { log: true, top, ax, az, bx, bz, rad }
+  //     (the stem as a capsule from (ax, az) to (bx, bz) of radius rad, for anyone who wants it simple) and the
+  //     stumps { stump: true, top };
+  //   the props' footprints, circles or boxes { x, z, ux, uz, hx, hz, box: true } (props.js; one with `top`, the
+  //     height of its top, is stood on: a dock's deck).
+  // The worker sorted the trunks and the solids into cells (tile-worker.js collisionOf), so a query reads only the
+  // cells it touches; a solid's shape is made the first time one comes this near and kept with the tile.
   treesNear(x, z, r) {
-    const out = [], w = this.world, M = 12; // M: the furthest a rock reaches past its cell (an outcrop at scale 5)
+    const out = [], w = this.world, M = 40; // M: the furthest a solid reaches from its origin (a cliff module running far back into its hill)
     const [tx0, ty0] = w.tileOf(x - r - M, z - r - M), [tx1, ty1] = w.tileOf(x + r + M, z + r + M);
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const e = this.tiles.get(this.key(tx, ty));
@@ -694,27 +707,66 @@ export class TileManager {
         for (let cz = r0; cz <= r1; cz++) for (let cx = c0; cx <= c1; cx++) { const c = cz * n + cx; for (let i = start[c]; i < start[c + 1]; i++) each(i); }
       };
       const T = C.trunks;
-      scan(r + 1, C.trunkStart, (i) => {
-        const o = i * 3, dx = T[o] - lx, dz = T[o + 1] - lz, rr = r + T[o + 2];
-        if (dx * dx + dz * dz <= rr * rr) out.push({ x: T[o] + e.ox, z: T[o + 1] + e.oz, r: T[o + 2] });
+      scan(r + 1.5, C.trunkStart, (i) => {
+        const o = i * 3, dx = T[o] - lx, dz = T[o + 1] - lz, d2 = dx * dx + dz * dz;
+        if (d2 > (r + 1.5) ** 2) return;
+        const tr = this.trunkRadius(e, i);
+        if (d2 <= (r + tr) ** 2) out.push({ x: T[o] + e.ox, z: T[o + 1] + e.oz, r: tr });
       });
       const R = C.rocks, ST = 15; // tile-worker.js ROCK_STRIDE_C
       scan(r + C.maxR, C.rockStart, (i) => {
         const o = i * ST, dx = R[o] - lx, dz = R[o + 2] - lz, rr = r + R[o + 3];
         if (dx * dx + dz * dz > rr * rr) return;
-        out.push({ x: R[o] + e.ox, z: R[o + 2] + e.oz, r: R[o + 3], rock: true, shape: this.rockShape(e, i, o) });
+        const s = this.rockShape(e, i, o);
+        if (!s || (R[o + 3] > 3 && s.shape.boundsDist(x, z) > r)) return; // a big one: near its bounds, not just its reach
+        out.push(s);
       });
       if (e.obstacles) for (const o of e.obstacles) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o);
     }
     for (const o of this.dynamic || []) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o); // pitched since the tiles were built: camp.js's tents
     return out;
   }
-  // a tile's rock i (its record at offset o) as the walker meets it
+  // the geometry the worker's key names (bin * 64 + group): the variant that group of that bin is drawn with
+  keyGeometry(e, key) {
+    const bi = Math.floor(key / 64), g = key - bi * 64, mi = e.binMesh ? e.binMesh[bi] : -1, m = mi >= 0 && e.veg ? e.veg[mi] : null;
+    const L = m && m.userData.lod;
+    if (!L) return null;
+    return L.groups ? L.groups.geos[g] || L.full : L.full;
+  }
+  // a tile's trunk i at its drawn radius: the stem's 0.3 m over the ground, at the tree's scale (kept once measured)
+  trunkRadius(e, i) {
+    let tr = e.trunkR[i];
+    if (tr === tr) return tr;
+    const T = e.collide.trunks, Mt = e.collide.trunkMeta, o = i * 3, q = i * 4;
+    const geo = Mt && this.keyGeometry(e, Mt[q + 3]);
+    tr = T[o + 2];
+    if (geo) {
+      const y = this.groundAt(T[o] + e.ox, T[o + 1] + e.oz) + 0.3, h = (y - Mt[q]) / Math.max(1e-3, Mt[q + 1]);
+      const pr = profileAt(trunkProfile(geo), h);
+      if (pr === pr) tr = Math.max(0.06, pr * Mt[q + 2]);
+    }
+    e.trunkR[i] = tr;
+    return tr;
+  }
+  // a tile's solid i (its record at offset o) as the walker meets it: { x, z, r, shape, ...what it is } (kept)
   rockShape(e, i, o) {
     let s = e.shapes.get(i);
-    if (!s) {
-      const R = e.collide.rocks, vs = this.vegetation.variants[R[o + 5]], v = vs && vs[R[o + 4]];
-      s = v ? new RockShape(v.full, R, o, e.ox, e.oz) : null;
+    if (s === undefined) {
+      const R = e.collide.rocks, sp = R[o + 5], geo = this.keyGeometry(e, R[o + 4]);
+      s = null;
+      if (geo) {
+        // a log's limbs and a stump's roots (thin pieces of a few vertices) are passed; the stem and the root plate hold
+        const wood = sp === 14 || sp === 15, shape = new RockShape(geo, R, o, e.ox, e.oz, { minVerts: wood ? 6 : 0, rings: sp === 14 });
+        s = { x: R[o] + e.ox, z: R[o + 2] + e.oz, r: R[o + 3], shape };
+        if (sp === 14) {
+          // the stem's axis in the world: the instance matrix (columns at o + 6, o + 9, o + 12) on its own frame's ends
+          const st = stemOf(geo), at = (px) => [R[o] + R[o + 6] * px + R[o + 9] * st.y + R[o + 12] * st.z + e.ox, R[o + 2] + R[o + 8] * px + R[o + 11] * st.y + R[o + 14] * st.z + e.oz];
+          const [ax, az] = at(st.x0), [bx, bz] = at(st.x1);
+          Object.assign(s, { log: true, top: shape.maxY, ax, az, bx, bz, rad: st.r * Math.hypot(R[o + 12], R[o + 13], R[o + 14]) });
+        } else if (sp === 15) Object.assign(s, { stump: true, top: shape.maxY });
+        else { s.rock = true; if (sp === 21) s.cliff = true; }
+      }
+      if (e.shapes.size > 6000) e.shapes.clear(); // made again when met again
       e.shapes.set(i, s);
     }
     return s;

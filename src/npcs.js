@@ -13,20 +13,27 @@
 // the porch bench, or stand at the porch rail looking at the lake (a store with a stoop and no porch keeps them inside).
 // Who is in a store is settled as you come near it and holds while you are there, so nobody comes or goes in front of you.
 //
-// Talking. E within two metres of someone you face gives their line as a note, in their voice. At the counter E is still
-// the counter and Q is a word with the keeper (keeperLine's talk: the keeper's own lines, the season's, and their insider
-// hints at standing 2); the first word of the day with a keeper raises your standing there a little. A visitor's line
-// names something real near by: a lake and its fish, a campsite, a portage and how the trail is, the weather the
-// forecast is bringing, a moose in a bay, the route they paddle tomorrow. A line that means a lake's fish, a moose's bay
-// or a long carry is pencilled on the map as the keepers' hints are (outfitter.toldHints, which this module extends).
-// A second E takes on their one task, if they have one: fetch a thing from another outfitter (the fetch kind, also on the
-// boards, by water only there), take a letter or a thing to another outfitter or ashore at a campsite (the npc kind),
-// find a thing lost at a campsite (the board's own item kind, or the npc kind where that finds nothing), or a photo for
-// the photographer (stream B's photo kind when it is in the build; a fetch until then). Water first; an errand by the
-// road pays both rides on top. It pays money (sometimes a lure or a dozen leeches on top), is listed at the counter
-// (never pinned on the board) and in the journal, and is claimed with that person, E again, or at the counter of the
-// outfitter they were at; once it is paid they thank you. Who you talked to and what they gave you is saved under
-// `bwca-canoe:people`, cleared with a new season.
+// Talking (the owner's 2026-10-24 feedback, stream F: everything people say goes through dialogue.js). As you walk by,
+// people make passing remarks, shown by their heads with their names: a visitor as you come near or a moment after you
+// come into the room, a hook when they have something to ask, two trippers or a parent and a child between themselves,
+// the keeper's hello as you come in and goodbye as you go (outfitter.js asks keeperSays), and now and then a word from
+// behind the counter while you browse. A store is one room: its people's remarks queue there, one at a time.
+// E within two metres of someone you face opens a conversation, Witcher style: a visitor's tree is their greeting, then
+// ask about the area (their hints, in turn), ask about them (lore), their task (asked, then taken on or not; how it is
+// going; handed over and paid) and goodbye. The keeper's is the news (keeperLine's talk: the keeper's own lines, the
+// season's, and their insider hints at standing 2), the place, the counter (its services) and goodbye; at the counter E
+// is still the counter and Q opens the keeper's conversation; the first word of the day with a keeper raises your
+// standing there a little. A visitor's hint names something real near by: a lake and its fish, a campsite, a portage
+// and how the trail is, the weather the forecast is bringing, a moose in a bay, the route they paddle tomorrow. A hint
+// that means a lake's fish, a moose's bay or a long carry is pencilled on the map as the keepers' hints are
+// (outfitter.toldHints, which this module extends). Their one task, if they have one: fetch a thing from another
+// outfitter (the fetch kind, also on the boards, by water only there), take a letter or a thing to another outfitter or
+// ashore at a campsite (the npc kind), find a thing lost at a campsite (the board's own item kind, or the npc kind where
+// that finds nothing), or a photo for the photographer (stream B's photo kind when it is in the build; a fetch until
+// then). Water first; an errand by the road pays both rides on top. It pays money (sometimes a lure or a dozen leeches on
+// top), is listed at the counter (never pinned on the board) and in the journal, and is handed over in their
+// conversation or at the counter of the outfitter they were at; once it is paid they thank you. Who you talked to, what
+// you asked them and what they gave you is saved under `bwca-canoe:people`, cleared with a new season.
 //
 // The figures. A pool of three figures on the paddler's own model and material (figure.js buildFigure with the
 // paddler's material, so no new shader program is added and no light), each recoloured per person by vertex role (the
@@ -44,6 +51,9 @@
 //   people.claimsE     a visitor is the one you face: the outfitter's hotspot leaves E to the talk (outfitter.js)
 //   people.quiet       () => true while something else owns the keys (stream B's camera, raised): no prompt, no E
 //   people.roster(ep), people.at(ep), people.talkTo(key), people.parties(), people.toldHints(), people.stats()
+//   people.dialogue    dialogue.js (main.js sets it): barks and conversations; without it the lines go to hud.note
+//   people.keeperSays(ep, words, moment)  the keeper's hello or goodbye as a bark (outfitter.js); false: say it yourself
+//   people.speakerOf(person, fig)         the speaker dialogue.js places on the screen (the figure's head)
 import * as THREE from 'three';
 import { buildFigure } from './figure.js';
 import { Mesher, V3, ringPts, loft } from './loft.js';
@@ -54,6 +64,7 @@ import { mulberry32 } from './rng.js';
 import { save } from './save.js';
 import { esc, word, fmtKm } from './hud.js';
 import { monthDay } from './astro.js';
+import { PRI } from './dialogue.js';
 
 const NS = 'people';
 const POOL = 3;               // figures drawn at most, at once
@@ -73,6 +84,12 @@ const ARRIVE_SITE = 32;       // metres from a campsite that count as there
 const FETCH_PAY = { base: 15, km: 1, max: 50 };   // the hubs plan's fetch: $15 + $1 a km, up to $50
 const LETTER_PAY = { base: 10, km: 1, max: 40 };
 export const JOIN_US = false; // later: "Join us" on a visitor going on a trip
+const REMARK_R = 4.5;         // metres within which a visitor remarks as you come near
+const ROOM_R = 7.5;           // and, a moment after you come into their room (ROOM_SETTLE s), anyone this near
+const ROOM_SETTLE = 2.5;
+const REMARK_GAP = 50;        // seconds before the same visitor remarks again
+const PAIR_AFTER = 7;         // seconds in the room before a pair talk between themselves
+const KEEPER_IDLE_AFTER = 35; // seconds in the store before the keeper says something over the counter
 
 // --- small helpers ---------------------------------------------------------------------------------------------------
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -619,6 +636,98 @@ const THANKS = {
   crew: 'Good. That saves us a day.', birder: 'Oh, thank you! I’d have wept.', cook: 'Bless you, hon.', mail: 'Saved me a trip. Thanks.', trippers: 'You’re a lifesaver.', fishguide: 'That’ll do. Thanks.', kid: 'Did he like them? Here, you can have some!',
 };
 
+// --- the conversation trees and the passing remarks (stream F) -------------------------------------------------------
+// Who each is, in a word or two, over their line on the screen
+const ROLE = { keeper: 'the keeper', guide: 'guide', ranger: 'ranger', photographer: 'photographer', family: 'with the kids', oldtimer: 'old-timer', crew: 'portage crew', birder: 'birder', cook: 'café cook', mail: 'mail carrier', trippers: 'tripper', fishguide: 'fishing guide', kid: 'with the leeches' };
+const roleOf = (v, fig) => (v.keeper ? ROLE.keeper : v.arch === 'family' && fig === 1 ? 'their kid' : ROLE[v.arch] || '');
+// the first time you meet them: who they are, in their words
+const INTRO = {
+  guide: (v) => `I’m ${v.first}. I guide out of ${v.vars.town}.`,
+  ranger: (v) => `${v.first}, with the Forest Service. I look after the sites round here.`,
+  photographer: (v) => `${v.first}. I take pictures for a magazine in ${v.vars.city}, when the light lets me.`,
+  family: (v) => `We’re the ${v.last}s, up from ${v.vars.city}. This one’s been up since five.`,
+  oldtimer: (v) => `${v.first}. I’ve fished these lakes since the fifties.`,
+  crew: (v) => `${v.first}, ${v.vars.district} portage crew. We keep the carries open.`,
+  birder: (v) => `${v.first}. I’m here for the birds, I’m afraid. Everyone else is here for the fish.`,
+  cook: (v) => `I’m ${v.first}, hon. I cook at the café.`,
+  mail: (v) => `${v.first}. I drive the mail up ${v.vars.road}.`,
+  trippers: (v) => `I’m ${v.first}${v.figNames && v.figNames[1] ? `, and that’s ${v.figNames[1]}` : ''}. We go in tomorrow.`,
+  fishguide: (v) => `${v.first}. I guide for fish. Walleye, mostly.`,
+  kid: (v) => `I’m ${v.first}! I have a bucket of leeches!`,
+};
+const AGAIN = { kid: ['Hi again!', 'You came back!'], oldtimer: ['Back, are you?', 'Well, now.'], cook: ['Hello again, hon.'], birder: ['Oh, hello again.'] };
+// about them: their lore, in turn ('route' and 'history' are their hints of those names, when the place has them)
+const LORE = {
+  guide: [(v) => `Twelve seasons out of ${v.vars.town}. Most of my parties have never held a paddle; by the third day they’re arguing about J-strokes.`, 'route', 'The trick is the first portage. Get them over it laughing and the rest of the week looks after itself.'],
+  ranger: [(v) => `I patrol the ${v.vars.district} district: the sites, the latrines, the fire grates. Mostly the latrines.`, 'Most people do it right. The ones who don’t leave fish guts on the rocks and wonder why the bear came.', 'Nine to a site, two canoes at most. It’s not me being difficult. It’s the place staying wild.'],
+  photographer: ['One good frame a day, if I’m lucky. The rest is mosquitoes and waiting.', 'I’m after a moose standing in the mist with the sun behind it. Six summers now.'],
+  family: ['It’s the kids’ first time in. We’ll see if it’s their last.', 'route', (v) => `${v.vars.city}’s a long drive, but they slept the whole way. I didn’t.`],
+  oldtimer: ['My father brought me up in ’52 in a wood-canvas Chestnut. There were motorboats on half these lakes then.', 'history', 'I don’t paddle the big water any more. I sit here and tell people where the fish are. Most of them don’t listen.'],
+  crew: [(v) => `We clear the ${v.vars.district} portages: blowdown, washouts, the odd beaver dam. Crosscut saws only, in the wilderness.`, 'Eight days in, six out. You get used to the bugs. No, you don’t.'],
+  birder: ['Two hundred and eleven species for Minnesota. A boreal owl would make it twelve.', 'Listen at dusk for the white-throated sparrow: “Old Sam Peabody, Peabody.” Once you’ve heard it you’ll hear it everywhere.'],
+  cook: ['Nine summers at the café. The walleye on the menu is whatever you lot bring in.', 'Saturday’s pie day. Blueberry when they’re on, apple when they’re not, and everyone complains either way.'],
+  mail: [(v) => `Three days a week up ${v.vars.road} and back. Washboard the whole way.`, 'I know every dog between here and town by name. Not all of them like me.'],
+  trippers: ['route', 'Our first time this far in. We practised the portages in the back yard with the canoe on our heads. The neighbours loved it.'],
+  fishguide: ['Twenty years on these lakes. I could find the fish blindfolded; it’s the clients who need the glasses.', 'Fish follow the wind and the light. Learn those and you won’t need a guide. Don’t tell anyone I said so.'],
+  kid: ['I’m going to catch the biggest fish in the whole lake. Grandpa said.', 'I named one of my leeches Gerald. He’s the long one.'],
+};
+const NO_MORE = { kid: 'That’s all I know. Do you want to see my leeches again?', oldtimer: 'That’s the lot. The rest you find out on the water, like I did.' };
+const NO_SELF = { oldtimer: 'Oh, I could go on. Another time.', kid: 'That’s everything about me.' };
+// what they say as you pass: their own, and the hour's and the weather's
+const REMARKS = {
+  guide: ['Wind’s coming round to the west.', 'Good day for it, if you’re going in.', 'Watch the big stretches after noon.'],
+  ranger: ['Fires in the grates only, mind.', 'Nice to see a proper pack.', 'Hang your food tonight.'],
+  photographer: ['The light’s all wrong today.', 'Did you hear the loons last night?', 'Shh. A chickadee, on the rail.'],
+  family: ['Don’t touch that, honey.', 'Have you been out long?', 'Is it always this buggy?'],
+  oldtimer: ['Sit a minute, if you’ve a minute.', 'Hm. Another one going in.', 'Fish are biting, if you know how.'],
+  crew: ['Watch the third step on that trail. It’s loose.', 'Blowdown on every carry this week.', 'Mind the mud.'],
+  birder: ['Was that a veery? Did you hear it?', 'Oh! A Blackburnian. No. Gone.', 'Boreal chickadee by the dock this morning.'],
+  cook: ['Wipe your boots, dear.', 'Pie’s Saturday, hon.', 'You look hungry.'],
+  mail: ['Washboard all the way up.', 'Nothing for you today, I’m afraid.', 'Road’s dusty.'],
+  trippers: ['Going in, or coming out?', 'Have you done the long carry?', 'How’s the water out there?'],
+  fishguide: ['They’re on the reefs at dusk.', 'Jigs or spoons?', 'Wind on the point, fish on the point.'],
+  kid: ['I have leeches!', 'Do you want to see my leeches?', 'I caught a perch!'],
+};
+// a hook: muttered when they have something to ask and have not asked it yet
+const HOOK = {
+  guide: 'Short a paddle, and a party at six. Hm.', ranger: 'Somebody has to get that note out there…', photographer: 'One picture short. One.', family: 'We’ll never find it now…',
+  oldtimer: 'I owe a letter I can’t carry myself any more.', crew: 'The saw’s gone dull, and the file’s up the road.', birder: 'How could I leave it behind…', cook: 'No flour, and Saturday’s pie day.',
+  mail: 'One sack too many for the truck.', trippers: 'Rookie move, leaving it behind.', fishguide: 'Out of leeches, with a party at six.', kid: 'Grandpa forgot his leeches!',
+};
+const ACCEPT = { guide: 'Good. I owe you one.', ranger: 'Much obliged.', photographer: 'Wonderful. Thank you.', family: 'Oh, would you? Thank you!', oldtimer: 'Good. It’ll make their week.', crew: 'Good. Saves us a day.', birder: 'Oh, thank you!', cook: 'You’re a dear.', mail: 'Saves me a trip.', trippers: 'You’re a lifesaver.', fishguide: 'Good.', kid: 'Yay! Thank you!' };
+const LATER = { kid: 'Okay… but soon?', oldtimer: 'It’s waited forty years. It’ll wait.', cook: 'No trouble, hon.' };
+const NO_TASK = { kid: 'Never mind! Grandpa found them.', oldtimer: 'No, no. It’ll keep.' };
+// two of a pair between themselves: [figure, words], in turn (family: 0 the parent, 1 the child)
+const PAIRS = {
+  trippers: [[[0, 'Did you pack the coffee?'], [1, 'You packed the coffee.']], [[0, 'How many portages tomorrow?'], [1, 'Don’t ask. Just carry.']], [[1, 'Think the wind will lie down?'], [0, 'It always does. Eventually.']]],
+  family: [[[1, 'Can we get a lure? Please?'], [0, 'One lure. One.']], [[1, 'Is there a bathroom in the woods?'], [0, 'The whole woods is the bathroom, honey.']], [[1, 'I want to see a moose.'], [0, 'Then you’ll have to be very quiet.']]],
+};
+// the keeper's words by manner: what they ask you, who they are, what they say over the counter while you browse
+const KEEPER_ASK = { warm: 'What can I get you, dear?', dry: 'What’ll it be?', gruff: 'Yep?', 'old hand': 'Well, now. What do you need?', keen: 'Hi! What can I help with?', precise: 'How can I help?' };
+const KEEPER_SELF = {
+  warm: 'Twenty-odd summers behind this counter. Winters I knit and listen to the ice.', dry: 'I came up for one summer in ’98. The summer’s still going.', gruff: 'Born here. I’ll die here. Not today, though.',
+  'old hand': 'Forty years. I sold the first Kevlar canoe on this road, and the man sank it in a week.', keen: 'It’s my first summer! I’m at the university in Duluth the rest of the year.', precise: 'Twenty years with the Forest Service, then this. The trails are the same; the paperwork is worse.',
+};
+const KEEPER_IDLE = {
+  warm: ['Holler if you need anything, dear.', 'Coffee’s on, if you want a cup.'], dry: ['Take your time. The lake isn’t going anywhere.', 'Browsing is free. So far.'], gruff: ['Shelves are labelled.', 'Mm.'],
+  'old hand': ['That shelf’s been there since ’71. So have I.', 'Ask if you can’t find it.'], keen: ['Let me know if you need help finding anything!', 'The new spoons just came in!'], precise: ['Everything’s priced. Ask if it isn’t.', 'Ask if you can’t find something.'],
+};
+// a task's words in the tree: the choice that hands it over, and the line about how it is going
+function doneChoice(t) {
+  if (t.kind === 'item') return `I found the ${t.label}.`;
+  if (t.kind === 'photo') return 'Here’s the photo.';
+  if (t.kind === 'fetch') return `Here’s ${t.short || 'it'}.`;
+  return /^You find/.test(t.left || '') ? `I found ${t.short || 'it'}.` : 'It’s delivered.';
+}
+function doneRemark(t) {
+  if (t.kind === 'item') return `You found the ${t.label}!`;
+  if (t.kind === 'photo') return 'Did you get the picture?';
+  if (t.kind === 'fetch') return `Is that ${t.short || 'it'}? Bring it here!`;
+  return /^You find/.test(t.left || '') ? `You found ${t.short || 'it'}!` : 'Did it get there all right?';
+}
+const statusWords = (t) => ({ fetch: `Any luck at ${t.toPlace}?`, npc: `Still got ${t.short || 'it'}? No rush.`, item: `Did you find the ${t.label}? It’s at the site, I’m sure of it.`, photo: 'Any luck with the picture?' }[t.kind] || 'No rush.');
+const aboutChoice = (t) => (t.kind === 'item' ? `About the ${t.label}…` : t.kind === 'photo' ? 'About the picture…' : `About ${t.short || 'the errand'}…`);
+
 // What each one asks of you, and the words for it: make(people, person) → { kind, fields } | Promise of one | null
 const ASKS = {
   fetch(P, v, c) {
@@ -682,7 +791,7 @@ async function siteErrand(P, v, c, who) {
 }
 
 // --- the people --------------------------------------------------------------------------------------------------------
-const blankState = () => ({ v: 1, talked: {}, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {} });
+const blankState = () => ({ v: 1, talked: {}, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {}, asked: {} });
 export class People {
   constructor({ world, scene, player, day, hud, tasks, outfitter = null, profile = null, weather = null, registry = null, mat }) {
     this.world = world; this.scene = scene; this.player = player; this.day = day; this.hud = hud; this.tasks = tasks; this.outfitter = outfitter; this.profile = profile; this.weather = weather; this.registry = registry;
@@ -696,6 +805,9 @@ export class People {
     this.preparing = new Map(); // person key -> the promise writing up their task
     this.checkT = 0;
     this.quiet = null;          // () => true while something else owns the keys (the camera raised: stream B)
+    this.dialogue = null;       // stream F: dialogue.js, set by main.js (barks by the speaker's head, the conversations)
+    this.clock = 0;             // seconds of play, for the remarks' spacing
+    this.roomEp = null; this.roomT = 0; // the store you are in, and how long you have been inside it
     this.s = this.load();
     if (profile && profile.onChange) profile.onChange((what) => { if (what === 'season') this.reset(); });
     // the visitors' words on the map, with the keepers' (hud.js reads outfitter.toldHints)
@@ -710,7 +822,7 @@ export class People {
   // --- saved state: who you have talked to, the tasks they gave, the words on the map --------------------------------
   load() {
     const s = save.read(NS);
-    return s && s.v === 1 ? { v: 1, talked: s.talked || {}, tasks: s.tasks || {}, paid: s.paid || {}, gifts: s.gifts || {}, names: s.names || {}, told: Array.isArray(s.told) ? s.told : [], chat: s.chat || {} } : blankState();
+    return s && s.v === 1 ? { v: 1, talked: s.talked || {}, tasks: s.tasks || {}, paid: s.paid || {}, gifts: s.gifts || {}, names: s.names || {}, told: Array.isArray(s.told) ? s.told : [], chat: s.chat || {}, asked: s.asked || {} } : blankState();
   }
   write() { save.write(NS, this.s); }
   reset() { this.s = blankState(); this.rosters.clear(); this.preparing.clear(); this.write(); }
@@ -793,6 +905,10 @@ export class People {
     const second = A.pair === 'adult' ? pickR(rng, rng() < 0.5 ? F_NAMES : M_NAMES) : null;
     const full = arch === 'family' ? `${name} ${last}` : second && second !== name ? `${name} and ${second}` : name;
     const v = { key: `${ep}:${this.week}:${arch}`, ep, arch, name: full, first: name, last, city, vars, figs };
+    // each figure's own name, for the line over their head (the family's child: a name of their own, drawn apart so
+    // the visitor's own draws are as they were)
+    const other = seeded(ep, this.week, 0x6b1d);
+    v.figNames = figs.length < 2 ? [name] : [name, A.pair === 'adult' ? (second && second !== name ? second : pickR(other, M_NAMES.filter((n) => n !== name))) : pickR(other, KID_NAMES.filter((n) => n !== name))];
     v.who = A.who(vars);
     v.hasTask = !!A.task && rng() < A.odds;
     if (A.party) v.party = this.partyFor(v, rng); // the hook for later: a party on the water
@@ -864,6 +980,7 @@ export class People {
     }
     if (p.onFoot) this.holdOff();
     this.prompt();
+    this.murmur(dt);
     if ((this.checkT += dt) > 0.5) { this.checkT = 0; this.checkTasks(); }
   }
   // the head (and a little of the chest) toward you within reach, else an idle glance now and then; a standing visitor
@@ -957,12 +1074,239 @@ export class People {
 
   // --- talking ----------------------------------------------------------------------------------------------------------
   say(v, words, secs = 8, first = false) { if (this.hud && words) this.hud.note(`${first ? v.name : v.first}${v.keeper || !first ? '' : `, ${v.who}`}: “${words}”`, secs); }
+  // E (or Q at the counter): a conversation (dialogue.js), else (no dialogue in the build) their line as a note
   talkTo(key) {
     const v = typeof key === 'string' ? this.find(key) : key;
     if (!v) return null;
+    if (this.dialogue) return v.keeper ? this.keeperConverse(v) : this.converse(v);
     return v.keeper ? this.keeperTalk(v) : this.visitorTalk(v);
   }
   find(key) { for (const list of this.rosters.values()) for (const v of list) if (v.key === key) return v; return null; }
+
+  // --- what dialogue.js needs: speakers, barks --------------------------------------------------------------------
+  // The speaker of a person's figure: their name and role, and their head (the bone when drawn, else the spot they stand
+  // or sit at) while they are settled here; null once they are let go
+  speakerOf(v, fig = 0) {
+    const list = v._sp || (v._sp = []);
+    if (list[fig]) return list[fig];
+    const self = this, names = v.figNames || [v.first];
+    return (list[fig] = {
+      key: `${v.key}#${fig}`, person: v.key, name: v.keeper ? v.first : names[fig] || v.first, role: roleOf(v, fig),
+      pos(out) {
+        const f = v.figs[fig], roster = self.rosters.get(v.ep);
+        if (!f || !roster || !roster.includes(v)) return null;
+        const sc = f.look.wear.scale || 1, b = self.bodies.find((x) => x.who && x.who.person === v && x.who.fig === fig);
+        if (b) { b.fig.bones.head.getWorldPosition(out); out.y += 0.16 * sc; return out; }
+        return out.set(f.x, f.y + (f.spec.pose === 'sit' ? f.spec.seat + 0.78 : 1.66) * sc, f.z);
+      },
+    });
+  }
+  // a line by a figure's head, queued in their store's room (or a note, without dialogue.js)
+  bark(v, fig, text, pri = PRI.ambient, next = null) {
+    if (!text) return null;
+    if (this.dialogue) return this.dialogue.bark(this.speakerOf(v, fig), text, { room: v.ep, pri, next });
+    if (this.hud) this.hud.note(`${(v.figNames && v.figNames[fig]) || v.first}: “${text}”`, 6);
+    return null;
+  }
+  // the keeper's hello as you come in and goodbye as you go (outfitter.js): a bark by their head; false when there is
+  // no dialogue or no keeper here (the caller writes the note itself)
+  keeperSays(ep, words, moment = 'hello') {
+    if (!this.dialogue || !words) return false;
+    ep = Number(ep);
+    let list = this.rosters.get(ep);
+    if (!list) { const L = storeLayout(ep); if (!L) return false; list = this.roster(ep, L); this.rosters.set(ep, list); }
+    const k = list.find((v) => v.keeper); if (!k) return false;
+    this.dialogue.bark(this.speakerOf(k, 0), words, { room: ep, pri: moment === 'goodbye' ? PRI.reply : PRI.greet });
+    return true;
+  }
+  // Passing remarks: a visitor as you come within REMARK_R, or anyone within ROOM_R a moment after you come into their
+  // room (each once, then not for REMARK_GAP s, and then only now and then); a pair between themselves once you have
+  // been in the room a while; the keeper over the counter once a visit while you browse. Who is pressing (a hook, a
+  // thing you bring them) goes first; the queue in dialogue.js keeps it to one at a time in the room.
+  murmur(dt) {
+    const D = this.dialogue, p = this.player, o = this.outfitter, vis = o && o.visit;
+    this.clock += dt;
+    if (vis) { if (this.roomEp !== vis.ep) { this.roomEp = vis.ep; this.roomT = 0; } if (vis.inside) this.roomT += dt; } else { this.roomEp = null; this.roomT = 0; }
+    if (!D || D.talking || !p.onFoot || p.teleporting || (this.quiet && this.quiet()) || (o && (o.open || o.bunking)) || (this.hud && this.hud.paper)) return;
+    const inside = !!(vis && vis.inside);
+    for (const b of this.bodies) {
+      if (!b.who) continue;
+      const v = b.who.person, fi = b.who.fig, f = v.figs[fi];
+      const m = v._m || (v._m = { near: false, last: -1e9, n: 0, pair: false, idle: false });
+      const d = Math.hypot(f.x - p.x, f.z - p.z), here = inside && this.roomEp === v.ep;
+      if (v.keeper) {
+        if (here && !m.idle && this.roomT > KEEPER_IDLE_AFTER && this.clock - (m.spoke || -1e9) > 30) {
+          m.idle = true;
+          const op = outfitterProfile(v.ep, this.world), pool = KEEPER_IDLE[(op && op.keeper && op.keeper.manner) || 'warm'] || KEEPER_IDLE.warm;
+          this.bark(v, 0, pickR(Math.random, pool), PRI.ambient);
+        }
+        continue;
+      }
+      if (fi !== 0) continue; // a pair's remarks are the first figure's; the second answers in their talk
+      const near = d < REMARK_R || (here && this.roomT > ROOM_SETTLE && d < ROOM_R);
+      if (near && !m.near && this.clock - m.last > REMARK_GAP && (m.n === 0 || Math.random() < 0.6)) {
+        const w = this.remarkFor(v);
+        if (w) { this.bark(v, 0, w.text, w.pri); m.last = this.clock; m.n++; }
+      }
+      m.near = near;
+      const talk = PAIRS[v.arch];
+      if (talk && v.figs.length > 1 && !m.pair && here && this.roomT > PAIR_AFTER && d < 9.5) {
+        m.pair = true;
+        const [a, c] = pickR(Math.random, talk);
+        this.bark(v, a[0], a[1], PRI.ambient, { sp: this.speakerOf(v, c[0]), text: c[1], room: v.ep, pri: PRI.ambient + 0.4 });
+      }
+    }
+  }
+  // what a visitor says as you pass: what you bring them, what they need, thanks, else their own remarks and the hour's
+  remarkFor(v) {
+    const t = this.taskOf(v);
+    if (t && t.status === 'done') return { text: doneRemark(t), pri: PRI.hook };
+    if (this.s.paid[v.key]) return Math.random() < 0.5 ? { text: 'Thanks again for that.', pri: PRI.ambient } : null;
+    if (t) return { text: statusWords(t), pri: PRI.ambient };
+    if (v.hasTask && HOOK[v.arch]) return { text: HOOK[v.arch], pri: PRI.hook };
+    const pool = [...(REMARKS[v.arch] || ['Hello.'])], h = this.day.hours, wet = this.weather && this.weather.wetness > 0.35;
+    if (wet) pool.push('Wet one out there.', 'Shake off by the stove, if you like.');
+    if (h < 9) pool.push('Early start, eh?');
+    if (h >= 19) pool.push('Getting on for supper.');
+    return { text: pickR(Math.random, pool), pri: PRI.ambient };
+  }
+
+  // --- the conversations (dialogue.js) --------------------------------------------------------------------------------
+  asked(v) { return this.s.asked[v.key] || (this.s.asked[v.key] = { area: 0, self: 0, news: 0, place: 0 }); }
+  // a visitor's tree: the greeting, then the area, them, their task and goodbye
+  converse(v) {
+    const n = this.s.talked[v.key] || 0;
+    this.s.talked[v.key] = n + 1;
+    if (v.hasTask && !this.s.paid[v.key] && !this.s.tasks[v.key]) this.prepare(v); // written up while you talk
+    this.write();
+    const first = n === 0, t = this.taskOf(v);
+    let say;
+    if (first) say = `${opener(v.arch, this.day.hours)} ${(INTRO[v.arch] || (() => ''))(v)}`.trim();
+    else if (t && t.status === 'done') say = doneRemark(t);
+    else if (t) say = statusWords(t);
+    else if (this.s.paid[v.key]) say = THANKS[v.arch] || 'Thank you again.';
+    else say = pickR(Math.random, AGAIN[v.arch] || ['Hello again.', 'Back again?']);
+    if (v._m) v._m.last = this.clock; // no remark straight after
+    return this.dialogue.open({ speaker: this.speakerOf(v, 0), name: v.name, role: v.who, room: v.ep, start: () => ({ say, choices: this.vChoices(v) }), bye: () => BYE[v.arch] || 'Good paddling.' });
+  }
+  vChoices(v) {
+    const a = this.asked(v), hints = this.hintList(v), lore = this.loreOf(v), t = this.taskOf(v), out = [];
+    out.push({ text: a.area ? 'Anything else worth knowing?' : 'What’s good around here?', dim: a.area >= hints.length, go: () => this.vArea(v) });
+    out.push({ text: a.self ? 'Go on.' : 'Tell me about yourself.', dim: a.self >= lore.length, go: () => this.vSelf(v) });
+    if (t && t.status === 'done') out.push({ text: doneChoice(t), kind: 'task', go: () => this.vClaim(v, t) });
+    else if (t) out.push({ text: aboutChoice(t), kind: 'task', go: () => ({ say: statusWords(t), choices: this.vChoices(v) }) });
+    else if (v.hasTask && !this.s.paid[v.key]) out.push({ text: 'Need a hand with anything?', kind: 'task', go: () => this.vAsk(v) });
+    out.push({ text: 'Goodbye.', kind: 'bye', go: () => null });
+    return out;
+  }
+  // their hints, in turn (each told on the map where it means some water), then that they have told you all they know
+  hintList(v) {
+    const A = ARCH[v.arch]; if (!A) return [];
+    if (v._hints) return v._hints;
+    const H = new HintWriter(this, v.ep, seeded(v.ep, this.week, v.arch.length, 0x4a17)), out = [];
+    for (const k of A.hints) { const fn = HINTS[k]; if (!fn) continue; try { const h = fn(H, v, 0, this); if (h && h.text && !out.some((x) => x.text === h.text)) out.push(h); } catch (e) { console.warn('people: a hint', k, e); } }
+    return (v._hints = out);
+  }
+  vArea(v) {
+    const a = this.asked(v), list = this.hintList(v);
+    let say;
+    if (a.area < list.length) { const h = list[a.area++]; if (h.ring) this.tell(v, h); say = h.text; this.write(); }
+    else say = NO_MORE[v.arch] || 'That’s about all I know. The rest you find out on the water.';
+    return { say, choices: this.vChoices(v) };
+  }
+  // about them: their lore lines, their route or their history where those are hints of theirs
+  loreOf(v) {
+    if (v._lore) return v._lore;
+    const out = [];
+    for (const l of LORE[v.arch] || []) {
+      if (typeof l === 'function') { out.push(l(v)); continue; }
+      if (l === 'route' || l === 'history') { try { const H = new HintWriter(this, v.ep, seeded(v.ep, this.week, 0x10e)), h = HINTS[l](H, v, 0, this); if (h && h.text) out.push(h.text); } catch { /* the place has none */ } continue; }
+      out.push(l);
+    }
+    return (v._lore = out);
+  }
+  vSelf(v) {
+    const a = this.asked(v), list = this.loreOf(v);
+    let say;
+    if (a.self < list.length) { say = list[a.self++]; this.write(); }
+    else say = NO_SELF[v.arch] || 'Not much more to tell.';
+    return { say, choices: this.vChoices(v) };
+  }
+  // their task: asked (written up when the talk began; a lost thing may take a moment), then taken on or not
+  vAsk(v) {
+    const job = this.prepare(v);
+    const ready = () => {
+      const r = job && job.result, k = r ? KINDS[r.kind] : null;
+      if (!r || !k) { v.hasTask = false; return { say: NO_TASK[v.arch] || 'No, I’m all right. Thanks, though.', choices: this.vChoices(v) }; }
+      let p = 0;
+      try { p = k.pay({ kind: r.kind, from: v.ep, band: 'medium', ...r.fields }); } catch { p = 0; }
+      return { say: `${r.ask}${p ? ` ${pay(p)}` : ''}`, choices: [
+        { text: 'I’ll do it.', kind: 'task', go: () => { const w = this.offer(v); return { say: w === 'wait' ? 'Hang on, let me think where it was.' : w ? ACCEPT[v.arch] || 'Thank you.' : NO_TASK[v.arch] || 'No, I’m all right. Thanks, though.', choices: this.vChoices(v) }; } },
+        { text: 'Not right now.', go: () => ({ say: LATER[v.arch] || 'No trouble. I’m here a while yet.', choices: this.vChoices(v) }) },
+      ] };
+    };
+    if (!job) return ready();
+    return 'result' in job ? ready() : job.then(ready, ready);
+  }
+  vClaim(v, t) {
+    const words = this.claimWith(v, t);
+    return { say: words, choices: this.vChoices(v) };
+  }
+  // the keeper's tree: the news, the place, the counter's services, goodbye
+  keeperConverse(v) {
+    const op = outfitterProfile(v.ep, this.world), pr = this.profile, d = this.day, manner = (op && op.keeper && op.keeper.manner) || 'warm';
+    const n = this.s.talked[v.key] || 0, stamp = `${d.year}-${d.doy}`;
+    this.s.talked[v.key] = n + 1;
+    if (pr && this.s.chat[v.ep] !== stamp) { this.s.chat[v.ep] = stamp; pr.raise(v.ep, STANDING_CHAT); } // the first word of the day
+    this.write();
+    if (v._m) v._m.spoke = this.clock;
+    const L = this.landingOf(v.ep), name = L && L.name ? L.name : null;
+    return this.dialogue.open({ speaker: this.speakerOf(v, 0), name: v.name, role: name ? `the keeper · ${name}` : 'the keeper', room: v.ep,
+      start: () => ({ say: KEEPER_ASK[manner] || 'What can I do for you?', choices: this.kChoices(v) }),
+      bye: () => keeperLine(op, 'goodbye', { hours: d.hours, n: this.today * 5 + n }) });
+  }
+  kChoices(v) {
+    const a = this.asked(v), place = this.placeOf(v);
+    return [
+      { text: a.news ? 'Anything else going on?' : 'What’s the news?', go: () => this.kNews(v) },
+      { text: a.place ? 'What else should I know about the place?' : 'Tell me about this place.', dim: a.place >= place.length, go: () => this.kPlace(v) },
+      { text: 'The counter, please: a ride, a bunk, the permit.', kind: 'counter', go: () => ({ end: true, after: () => this.openCounter(v) }) },
+      { text: 'Goodbye.', kind: 'bye', go: () => null },
+    ];
+  }
+  kNews(v) {
+    const op = outfitterProfile(v.ep, this.world), pr = this.profile, d = this.day, a = this.asked(v);
+    const words = keeperLine(op, 'chat', { rep: pr ? pr.outfitter(v.ep).rep : 0, doy: d.doy, n: (a.news++) + this.today * 3, hours: d.hours });
+    this.write();
+    if (this.outfitter && typeof this.outfitter.heard === 'function') this.outfitter.heard(v.ep, words); // an insider hint goes on the map
+    return { say: words, choices: this.kChoices(v) };
+  }
+  // the place in the keeper's words: what kind of place it is and where, who they are, the long carry, the deep water,
+  // the sites
+  placeOf(v) {
+    if (v._place) return v._place;
+    const op = outfitterProfile(v.ep, this.world); if (!op) return [];
+    const f = op.facts || {}, manner = (op.keeper && op.keeper.manner) || 'warm', out = [];
+    out.push(`We’re ${op.kindWords} on ${theWater(op.lake)}${op.area ? `, up ${op.area}` : ''}.${f.town ? ` ${f.town}’s ${f.townKm} km back down the road.` : ''}`);
+    if (KEEPER_SELF[manner]) out.push(KEEPER_SELF[manner]);
+    if (f.longest) out.push(`The long carry round here is ${f.longest}. It sorts people out.`);
+    if (f.deep && f.deep.length) out.push(`Deep water near by: ${listWords(f.deep)}. That’s lake trout country.`);
+    if (f.camps >= 10) out.push(`There are ${f.camps >= 100 ? 'over a hundred' : `${Math.floor(f.camps / 10) * 10}-odd`} campsites within a day of here. You’ll find one.`);
+    return (v._place = out);
+  }
+  kPlace(v) {
+    const a = this.asked(v), list = this.placeOf(v);
+    let say;
+    if (a.place < list.length) { say = list[a.place++]; this.write(); }
+    else say = 'That’s the place. The rest is on the map.';
+    return { say, choices: this.kChoices(v) };
+  }
+  // the keeper's services: the counter opens (its counter tab: the permit, the bunk, the rides, the notices to claim)
+  openCounter(v) {
+    const o = this.outfitter; if (!o || typeof o.show !== 'function') return;
+    const l = typeof o.landing === 'function' ? o.landing(v.ep) : null;
+    if (l) o.show(l, 'counter');
+  }
   // the keeper's word across the counter: their talk, the season's, an insider hint to a friend of the house
   keeperTalk(v) {
     const op = outfitterProfile(v.ep, this.world), pr = this.profile, d = this.day;

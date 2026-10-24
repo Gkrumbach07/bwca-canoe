@@ -185,6 +185,10 @@ export class Fishing {
     this.rodUp = false;
     this.state = 'stowed';     // stowed | ready | charging | swing | flying | inwater | bite | fight | landed
     this.lureIndex = 0;
+    // fb G: the lures you have (keys 1–n and the strip list only these): hasLure(id) is set by main.js (the shop's
+    // tackle box, or the inventory's); without it every lure is to hand
+    this.hasLure = null;
+    this.owned = LURES.map((_, i) => i); this.ownedT = 0; this.ownedSig = '';
     this.power = 0; this.charge = 0;
     this.pitch = 0.03; this.yaw = 0; this.bend = 0; this.crank = 0;
     this.aim = 0;              // world yaw of the cast
@@ -215,6 +219,23 @@ export class Fishing {
   }
 
   get lureDef() { return LURES[this.lureIndex]; }
+  // fb G: the indices (into LURES) of the lures you have, in LURES's order. With none, the jig: there is always a spare
+  // in the bottom of the box (shop.js onSnap)
+  ownedLures() {
+    const has = this.hasLure;
+    const out = [];
+    for (let i = 0; i < LURES.length; i++) { let ok = true; if (has) { try { ok = !!has(LURES[i].id); } catch { ok = true; } } if (ok) out.push(i); }
+    if (!out.length) out.push(Math.max(0, LURES.findIndex((l) => l.id === 'jig')));
+    return out;
+  }
+  // the owned list refreshed four times a second, and on a change the tied-on lure kept to one you have (between casts)
+  refreshOwned(dt) {
+    if ((this.ownedT -= dt) > 0) return;
+    this.ownedT = 0.25;
+    this.owned = this.ownedLures();
+    if (!this.owned.includes(this.lureIndex) && (this.state === 'stowed' || this.state === 'ready')) this.lureIndex = this.owned[0];
+  }
+  lureKeys() { const n = this.owned.length; return n > 1 ? `1–${n} change the lure` : '1 the lure'; }
   get button() { return this.input.held('Space') || this.mouse.down; }
   buttonPressed() { return this.input.pressed('Space') || this.mouse.pressed; }
 
@@ -446,9 +467,12 @@ export class Fishing {
       this.spot.hab = this.habitatAt(p.x, p.z);
       this.spot.parts = this.describe(this.spot.hab, this.day.hours); this.spot.text = this.spot.parts.text;
     }
+    this.refreshOwned(dt);
     if (this.rodUp) {
-      for (let k = 0; k < LURES.length; k++) if (inp.pressed(`Digit${k + 1}`)) {
-        if (this.state === 'ready' || this.state === 'charging') { this.lureIndex = k; this.message = { text: `Tied on a ${LURES[k].name.toLowerCase()}`, t: 1.6 }; }
+      // fb G: 1–n pick from the lures you have, in the strip's order
+      for (let k = 0; k < this.owned.length; k++) if (inp.pressed(`Digit${k + 1}`)) {
+        const i = this.owned[k];
+        if (this.state === 'ready' || this.state === 'charging') { this.lureIndex = i; this.message = { text: `Tied on a ${LURES[i].name.toLowerCase()}`, t: 1.6 }; }
         else this.message = { text: 'Reel in to change lures', t: 1.6 };
       }
       const warning = p.balance > 0.25 ? p.prompt : null; // the sea's warning outranks the rod's prompts
@@ -469,12 +493,12 @@ export class Fishing {
     if (s === 'ready' || s === 'charging') { const reach = this.computeAim(); this.placeAimRing(reach); } else this.aimRing.visible = false;
     if (s === 'ready') {
       if (this.buttonPressed()) { this.state = 'charging'; this.charge = 0; this.power = 0; }
-      p.prompt = { key: 'Space', text: `Hold to load a cast where the cursor points · 1–${LURES.length} change the lure · F puts the rod down` };
+      p.prompt = { key: 'Space', text: `Hold to load a cast where the cursor points · ${this.lureKeys()} · F puts the rod down` };
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
       if (!this.button) { this.state = 'swing'; this.swing = 0; this.pending = { power: this.power }; }
-      p.prompt = { key: null, text: `Let go to cast · 1–${LURES.length} change the lure · F puts the rod down` };
+      p.prompt = { key: null, text: `Let go to cast · ${this.lureKeys()} · F puts the rod down` };
     } else if (s === 'swing') {
       this.swing += dt;
       if (this.pending && this.swing > 0.12) this.launch();
@@ -814,7 +838,9 @@ export class Fishing {
       const sw = Math.sin(this.player.time * 2.1) * 0.08 * (s === 'charging' ? 2 : 1);
       end = this._v.set(t.x + sw * Math.cos(this.aim + 1.5), t.y - 0.6, t.z + sw * 0.5);
       sag = 0;
-      this.bobber.visible = def.bobber;
+      // fb G: a plain true or false (it was the lure's own `bobber`, undefined on every other lure, and three hides an
+      // object only when visible === false: the bobber stayed in the air wherever it was last put, 2026-10-24)
+      this.bobber.visible = !!def.bobber;
       if (def.bobber) { this.bobber.position.set(end.x, end.y + 0.35, end.z); this.bobber.rotation.set(0.1, 0, 0.1); }
     } else {
       const surf = l.onLand ? l.y : this.surfaceAt(l.x, l.z);
@@ -883,7 +909,14 @@ export class Fishing {
 
   fillUi() {
     const u = this.ui;
-    u.rodUp = this.rodUp; u.state = this.state; u.lure = this.lureIndex; u.lures = LURES;
+    // fb G: the strip lists only the lures you have (numbered as the keys pick them); on a change to the list the HUD,
+    // which redraws the strip when the chosen one changes, is handed -1 for a frame so it redraws
+    const sig = this.owned.join(',');
+    const fresh = sig !== this.ownedSig;
+    if (fresh || !this.ownedDefs) this.ownedDefs = this.owned.map((i) => LURES[i]);
+    u.rodUp = this.rodUp; u.state = this.state; u.lures = this.ownedDefs;
+    u.lure = fresh ? -1 : this.owned.indexOf(this.lureIndex);
+    this.ownedSig = sig;
     u.power = this.state === 'charging' ? this.power : null;
     u.spot = this.rodUp && this.spot.parts ? this.spot.parts : null;
     u.aim = this.rodUp && (this.state === 'ready' || this.state === 'charging') ? this.aimWorld : null;
