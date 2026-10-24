@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp } from './rng.js';
+import { clamp, smoothstep } from './rng.js';
 import { storeLayouts } from './props.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -13,15 +13,85 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 //         point under the rock's top is inside it), logs, stumps and posts, the props' boxes (a store's walls and the
 //         dock up to their tops; a wall without a top stands about 4 m), the ground, and inside a store its interior
 //         box (the walls, the doorway and the ceiling: the camera never ends up outside them)
-//   soft  the crowns (crownsNear: each tree's crown from its species and scale); the camera sinks in a little, but is
-//         not pulled all the way to the walker
+//   soft  the crowns (crownsNear: each tree's crown from its species and scale), only when asked (opts.crowns): the
+//         chase no longer pulls in for them (fb2 E: it sees through them, SEE)
 // The things come from tiles.treesNear (trunks, rocks with their RockShape, the tiles' obstacles and the camp's tents);
 // solids with a shape (rocks, outcrops, bluff modules, logs, stumps) are read by it, a log without one as a capsule of its
 // stem radius (rad).
-const SIGHT = { margin: 0.12, step: 0.18, wall: 4.0, shelf: 1.5, post: 2.5, ceiling: 2.55 };
-// the pull: min, the closest the camera comes (m); margin, how far it stays off what it meets; softFoot / softCanoe, the
-// closest a crown alone pulls it; in, the rate (1/s) a crown draws it in; out, the rate it eases back out once clear
-const PULL = { min: 0.45, margin: 0.28, softFoot: 2.0, softCanoe: 4.0, in: 7, out: 2.2 };
+// fb2 E (the owner, 2026-10-24: "the whole thing where the camera snaps to being in front of any trees that are in the
+// way is kind of glitchy. And when it's in that snapped mode ... it just feels weird"): the trees no longer pull the
+// camera in. Their crowns, boughs, trunks and the understory between the camera and the walker are seen through instead
+// (SEE, below: a screen-door dither on the vegetation's own materials), and a trunk is hard only when it is big
+// (SIGHT.bigTrunk m) and the camera would stand in it or just behind it (within SIGHT.trunkNear m of the camera's end
+// of the line). The rest is as it was: the ground and the water, rocks, outcrops, bluffs, logs and stumps by their drawn
+// shape, the props' boxes, and inside a store its walls and ceiling.
+// (doorHalf, doorTop: the store's door, props.js DOOR, 1.2 m wide and 2.05 m high; stoop: how far out through it the
+// camera may stand)
+const SIGHT = { margin: 0.12, step: 0.18, wall: 4.0, shelf: 1.5, post: 2.5, ceiling: 2.55, bigTrunk: 0.35, trunkNear: 1.4, doorHalf: 0.6, doorTop: 2.05, stoop: 0.7 };
+// the pull, along the line from the walker: min, the closest the camera comes (m); margin, how far it stays off what it
+// meets (the spring works inside it, so the camera never goes into the thing itself); inW, the spring's rate coming in
+// (rad/s, critically damped: about a tenth of a second); hold, the seconds the way must stay clear before it eases out;
+// hyst, how much further out (m) the clear way must reach before that starts; outW, the spring's rate going out; door,
+// how close it comes at a store's threshold, from doorReach m out
+const PULL = { min: 0.45, margin: 0.3, inW: 18, hold: 0.35, hyst: 0.3, outW: 3.2, door: 0.8, doorReach: 3.5 };
+// fb2 E: the see-through. Every vegetation material's fragment (camera.js seeThrough patches them before they compile:
+// the same two programs, no new one) is dropped by a 4 x 4 ordered dither where it lies in a cone round the line from
+// the camera (uSeeA) to the walker's chest (uSeeB): uSee.y metres across at the camera, uSee.z at the walker, stopping
+// uSee.w short of him, at most uSee.x strong (a ghost of the tree stays); and anything within uSeeLens of the lens goes
+// altogether, so the camera is never inside a bough. Only in the pass drawn from the chase camera itself (not the
+// water's mirror, the title's orbit or a close-up), and not in the shadow pass (the depth material is left alone).
+export const SEE = {
+  uSee: { value: new THREE.Vector4(0, 1.0, 1.3, 0.05) },
+  uSeeLens: { value: new THREE.Vector2(0.7, 1.5) },
+  uSeeA: { value: new THREE.Vector3() },
+  uSeeB: { value: new THREE.Vector3() },
+};
+const SEE_STRENGTH = 0.95;
+const seePars = /* glsl */ `
+uniform vec4 uSee;
+uniform vec2 uSeeLens;
+uniform vec3 uSeeA, uSeeB;
+varying vec3 vSeeW;
+float seeBayer( vec2 p ) {
+  ivec2 q = ivec2( mod( floor( p ), 4.0 ) );
+  float b[16] = float[16]( 0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0 );
+  return ( b[ q.x + q.y * 4 ] + 0.5 ) / 16.0;
+}
+float seeFade() {
+  vec3 ab = uSeeB - uSeeA, ap = vSeeW - uSeeA;
+  float L = length( ab );
+  if ( L < 0.05 ) return 0.0;
+  vec3 u = ab / L;
+  float s = dot( ap, u ), d = length( ap - u * clamp( s, 0.0, L ) ), r = mix( uSee.y, uSee.z, clamp( s / L, 0.0, 1.0 ) );
+  float cone = ( 1.0 - smoothstep( 0.6 * r, r, d ) ) * smoothstep( -0.3, 0.2, s ) * ( 1.0 - smoothstep( L - uSee.w - 0.4, L - uSee.w, s ) );
+  float lens = 1.0 - smoothstep( uSeeLens.x, uSeeLens.y, length( ap ) );
+  return max( cone * uSee.x, lens * step( 0.001, uSee.x ) );
+}`;
+const seeFrag = /* glsl */ `
+  if ( uSee.x > 0.0 && seeFade() > seeBayer( gl_FragCoord.xy ) ) discard;`;
+const seeVert = /* glsl */ `
+  { vec4 seeW = vec4( transformed, 1.0 );
+  #ifdef USE_INSTANCING
+    seeW = instanceMatrix * seeW;
+  #endif
+    vSeeW = ( modelMatrix * seeW ).xyz; }`;
+function patchSee(m, camera, chase) {
+  if (!m || m.userData.see) return;
+  const compile = m.onBeforeCompile, key = m.customProgramCacheKey, before = m.onBeforeRender;
+  m.onBeforeCompile = function (shader, renderer) {
+    compile.call(this, shader, renderer);
+    Object.assign(shader.uniforms, SEE);
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vSeeW;').replace('#include <project_vertex>', '#include <project_vertex>' + seeVert);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\n' + seePars).replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>' + seeFrag);
+  };
+  m.customProgramCacheKey = function () { return key.call(this) + '|see'; };
+  // on only in a pass drawn from where the chase put the camera (the uniforms go up again whenever the camera changes)
+  m.onBeforeRender = function (renderer, scene, cam, ...rest) {
+    before.call(this, renderer, scene, cam, ...rest);
+    SEE.uSee.value.x = cam === camera && cam.position.distanceToSquared(SEE.uSeeA.value) < 0.01 ? chase.seeStrength : 0;
+  };
+  m.userData.see = true;
+}
 const _seg = { ax: 0, ay: 0, az: 0, dx: 0, dy: 0, dz: 0, L: 0 };
 // the first t in [0, 1] where the 2D segment enters a circle of radius r round (cx, cz), or Infinity (inside at the
 // start counts as 0)
@@ -129,7 +199,7 @@ function propsNear(world, x, z, r) {
   for (const o of T.dynamic || []) _props.add(o);
   return _props;
 }
-export function sightLine(world, ax, ay, az, bx, by, bz, out = {}) {
+export function sightLine(world, ax, ay, az, bx, by, bz, out = {}, opts = {}) {
   out.hard = Infinity; out.soft = Infinity; out.what = null;
   const S = _seg;
   S.ax = ax; S.ay = ay; S.az = az; S.dx = bx - ax; S.dy = by - ay; S.dz = bz - az;
@@ -147,8 +217,16 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}) {
     const pa = (ax - c.x) * A.x + (az - c.z) * A.z, pb = (ax - c.x) * B.x + (az - c.z) * B.z;
     const da = S.dx * A.x + S.dz * A.z, db = S.dx * B.x + S.dz * B.z;
     const exit = (p, d, h) => (Math.abs(d) < 1e-9 ? Infinity : d > 0 ? (h - p) / d : (-h - p) / d);
-    let t = Math.min(exit(pa, da, Ly.size.iW - m), exit(pb, db, Ly.size.iD - m));
-    if (S.dy > 1e-6) t = Math.min(t, (Ly.floorY + SIGHT.ceiling - ay) / S.dy);
+    const ta = exit(pa, da, Ly.size.iW - m), tc = S.dy > 1e-6 ? (Ly.floorY + SIGHT.ceiling - ay) / S.dy : Infinity;
+    let tb = exit(pb, db, Ly.size.iD - m);
+    // fb2 E: out through the open door (the front wall, +b, inside the door's gap and under its head), the camera may stand
+    // a little way out on the stoop, looking in: so stepping in does not throw it from the porch to the walker's head,
+    // and turning away from the door inside brings it to the wall beside it, not from far out
+    if (tb <= Math.min(ta, tc) && db > 0 && Ly.door) {
+      const dA = (Ly.door.x - c.x) * A.x + (Ly.door.z - c.z) * A.z, ea = pa + da * tb, ey = ay + S.dy * tb;
+      if (Math.abs(ea - dA) < SIGHT.doorHalf - 0.12 && ey < Ly.floorY + SIGHT.doorTop - 0.12) tb += (SIGHT.stoop + PULL.margin) / L;
+    }
+    const t = Math.min(ta, tb, tc);
     if (t < hard) { hard = Math.max(0, t); out.what = 'store'; }
     floorY = Ly.floorY;
     break;
@@ -198,12 +276,14 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}) {
       if (t < hard && ay + S.dy * t < top) { hard = t; out.what = 'post'; }
       continue;
     }
-    // a trunk: hard at its radius
+    // a trunk: seen through (SEE) unless it is big and the camera would stand in it or just behind it (fb2 E)
+    if (o.r < SIGHT.bigTrunk) continue;
     const t = circleT(S, o.x, o.z, o.r + SIGHT.margin);
-    if (t < hard) { hard = t; out.what = 'trunk'; }
+    if (t < hard && (1 - t) * L < SIGHT.trunkNear) { hard = t; out.what = 'trunk'; }
   }
-  // the crowns, soft; one the pivot stands in is the walker's own shade, not in the way
-  if (!indoors) {
+  // the crowns, soft (fb2 E: only when asked; the chase sees through them); one the pivot stands in is the walker's
+  // own shade, not in the way
+  if (!indoors && opts.crowns) {
     for (const c of crownsNear(world, mx, mz, half + 1, _crowns)) {
       const r0 = crownR(c, ay);
       if (r0 > 0 && Math.hypot(ax - c.x, az - c.z) < r0) continue;
@@ -256,9 +336,11 @@ export class ChaseCamera {
     this.cursorSteer = false; // the canoe follows the cursor (settings): shown by the pointer
     this.occlusion = true;    // third person: pulled in ahead of what stands in the way (pullIn)
     this.roomAware = true;    // and kept inside a store's walls, so a store need not switch to first person (outfitter.js reads it)
-    this.pull = Infinity;     // the distance the solid things allow now (m), eased back out
-    this.softPull = Infinity; // and the crowns
+    this.pull = Infinity;     // the distance the solid things allow now (m), on a spring
+    this.pullV = 0;           // fb2 E: the spring's speed (m/s)
+    this.pullHold = 0;        // fb2 E: seconds the way has been clear (it eases out after PULL.hold)
     this.sight = null;        // the last sightLine: { hard, soft } metres along the line from the pivot
+    this.seeStrength = 0;     // fb2 E: how strongly the vegetation between the camera and the walker is seen through (SEE)
     const lock = () => {
       if (!this.wantsLock || this.locked) return;
       try { const p = dom.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) { /* not allowed here; dragging looks instead */ }
@@ -293,6 +375,16 @@ export class ChaseCamera {
     });
     dom.addEventListener('pointerleave', () => { this.cursor.inside = false; });
     dom.addEventListener('wheel', (e) => { this.distance = clamp(this.distance * Math.exp(e.deltaY * 0.0012), 4, 40); e.preventDefault(); }, { passive: false });
+  }
+
+  // fb2 E: see through the trees between the camera and the walker (SEE): patch the vegetation kit's card materials
+  // (every tree, shrub and fern; not the rocks or the cliffs) before they first compile (main.js, right after this camera
+  // is made)
+  seeThrough(kit) {
+    if (!kit || !kit.materialFor) return;
+    const mats = new Set([kit.material]);
+    for (let sp = 0; sp < (kit.variants || []).length; sp++) { const m = kit.materialFor(sp); if (m && m.userData && m.userData.depth) mats.add(m); }
+    for (const m of mats) patchSee(m, this.camera, this);
   }
 
   get mouseLook() { return this.mode === 'first' || this.footLook; }
@@ -335,6 +427,7 @@ export class ChaseCamera {
   }
 
   update(dt, player, carrying) {
+    this.seeStrength = 0; // (fb2 E: on again below, in third person behind the walker or the canoe)
     if (this.focus) {
       const k = this.first ? 1 : 1 - Math.exp(-dt * 4);
       this.pos.lerp(this.focus.pos, k); this.look.lerp(this.focus.look, k);
@@ -394,38 +487,78 @@ export class ChaseCamera {
     this.lastTarget = { x: tx, z: tz };
     const k = this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 12 : 5));
     this.pos.lerp(new THREE.Vector3(px, py, pz), k);
-    this.look.lerp(new THREE.Vector3(tx + player.forward.x * 2, ty + 0.4, tz + player.forward.z * 2), this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
-    const cam = this.pullIn(dt, tx, ty, tz, onFoot && !carrying); // under the canoe a crown pulls in only as far as a paddler's: 2 m would sit in the stern
+    // the point looked at: 2 m ahead of him at about head height; on foot, as the view tilts down it slides in and down
+    // to the ground a stride ahead (fb2 E, for stream A's crosshair: looking all the way down, the middle of the screen is
+    // on the ground 1.2 m in front of him, where a branch at his feet can be pointed at, as over-the-shoulder games look
+    // down at the hands)
+    let ahead = 2, ly = ty + 0.4;
+    if (footLook) {
+      const s = clamp(-this.viewPitch / 1.0, 0, 1);
+      if (s > 0) {
+        ahead = 2 - 0.8 * s;
+        const gx = tx + player.forward.x * ahead, gz = tz + player.forward.z * ahead;
+        const gy = (player.footGround ? player.footGround(gx, gz) : tiles ? tiles.groundAt(gx, gz) : this.world.heightAt(gx, gz)) + 0.05; // a deck or a step underfoot too
+        ly = ty + 0.4 + (gy - ty - 0.4) * s * s * (3 - 2 * s);
+      }
+    }
+    this.look.lerp(new THREE.Vector3(tx + player.forward.x * ahead, ly, tz + player.forward.z * ahead), this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
+    const cam = this.pullIn(dt, tx, ty, tz);
     this.first = false;
+    // fb2 E: pulled in, the camera keeps the bearing and tilt it has at full length (a spring arm: it slides toward the
+    // walker along the line, the walker stays where he is on the screen and the mouse turns the view exactly as it does
+    // out in the open); it had turned to look at the point ahead of him from wherever the pull left it, so close in the
+    // view tipped down and swung with every move
+    const dir = (this._dir || (this._dir = new THREE.Vector3())).subVectors(this.look, this.pos);
     this.camera.position.copy(cam);
-    this.camera.lookAt(this.look);
+    if (dir.lengthSq() > 1e-8) this.camera.lookAt(dir.add(cam)); else this.camera.lookAt(this.look);
+    // the see-through's line: from the lens to the walker's chest, or the paddler's
+    this.seeStrength = SEE_STRENGTH;
+    SEE.uSeeA.value.copy(this.camera.position);
+    SEE.uSeeB.value.set(tx, onFoot ? ty - 0.4 : ty + 0.2, tz);
   }
 
-  // Minecraft's camera: along the line from the pivot to where the chase would put it, in at once ahead of anything
-  // solid (sightLine), and back out gently once the way is clear. Crowns pull it in only part of the way. this.pos
-  // stays the unobstructed chase, so the pull is all there is to undo. Close in, the near plane comes in too.
-  pullIn(dt, tx, ty, tz, onFoot) {
+  // The camera along the line from the pivot to where the chase would put it, held short of anything solid (sightLine:
+  // the ground, rocks, walls, a big trunk at the lens; fb2 E: the trees are seen through instead, SEE). The pull rides a
+  // critically damped spring: in quickly (PULL.inW) but never past the thing itself (the spring works inside the margin),
+  // and out only once the way has stayed clear PULL.hyst further out for PULL.hold seconds, then gently (PULL.outW), so
+  // an edge grazing the line does not pump it in and out. this.pos stays the unobstructed chase. Close in, the near
+  // plane comes in too.
+  pullIn(dt, tx, ty, tz) {
     const out = this._cam || (this._cam = new THREE.Vector3());
-    if (!this.occlusion) { this.pull = this.softPull = Infinity; this.setNear(0.3); return out.copy(this.pos); }
+    if (!this.occlusion) { this.pull = Infinity; this.pullV = 0; this.setNear(0.3); return out.copy(this.pos); }
     // indoors the chase keeps under the ceiling, sliding along it rather than coming in to the walker's head
     const P = this._base || (this._base = new THREE.Vector3());
     P.copy(this.pos);
     for (const L of storeLayouts()) if (L.inside && L.inside(tx, tz)) { P.y = Math.min(P.y, L.floorY + SIGHT.ceiling - 0.2); break; }
     const dx = P.x - tx, dy = P.y - ty, dz = P.z - tz, len = Math.hypot(dx, dy, dz);
-    if (len < 0.6) { this.pull = this.softPull = len; this.setNear(0.3); return out.copy(P); }
+    if (len < 0.6) { this.pull = len; this.pullV = 0; this.setNear(0.3); return out.copy(P); }
     const hit = (this.sight = sightLine(this.world, tx, ty, tz, P.x, P.y, P.z, this.sight || {}));
-    // a solid thing pulls the camera in at once (Minecraft's pop); a crown draws it in quickly but smoothly, so walking
-    // through the woods does not jerk the view from bough to bough; either lets it out again gently
-    const hard = hit.hard < Infinity ? Math.max(PULL.min, hit.hard - PULL.margin) : len;
-    const soft = hit.soft < Infinity ? Math.max(Math.min(len, onFoot ? PULL.softFoot : PULL.softCanoe), hit.soft - PULL.margin) : len;
-    const ease = (cur, want) => {
-      if (this.first || !Number.isFinite(cur)) return want;
-      if (want < cur) return cur + (want - cur) * (1 - Math.exp(-dt * PULL.in));
-      return Math.min(want, cur + (want - cur) * (1 - Math.exp(-dt * PULL.out)) + dt * 0.4);
-    };
-    this.softPull = ease(this.softPull, soft);
-    this.pull = this.first || !Number.isFinite(this.pull) || hard <= this.pull ? hard : ease(this.pull, hard);
-    const d = Math.min(len, this.pull, this.softPull);
+    let want = hit.hard < Infinity ? Math.max(PULL.min, hit.hard - PULL.margin) : len;
+    // coming up to a store's door from outside the camera comes in on the spring (to PULL.door m at the threshold), so
+    // stepping in does not throw it from out in the yard to inside the walls in a frame; leaving, it eases back out
+    if (!hit.what || hit.what !== 'store') for (const Ly of storeLayouts()) {
+      const dd = Ly.door ? Math.hypot(tx - Ly.door.x, tz - Ly.door.z) : Infinity;
+      if (dd < PULL.doorReach) { want = Math.min(want, PULL.door + (len - PULL.door) * smoothstep(0.4, PULL.doorReach, dd)); break; }
+    }
+    // the thing itself: never past it (a trunk at the lens is seen through meanwhile, SEE's lens, so the spring has it)
+    const limit = hit.hard < Infinity && hit.what !== 'trunk' ? Math.max(PULL.min, hit.hard - 0.08) : len;
+    let d = this.pull, v = this.pullV;
+    if (this.first || !Number.isFinite(d)) { d = want; v = 0; this.pullHold = 0; }
+    else {
+      d = Math.min(d, len);
+      const spring = (w, k) => { // critically damped toward k at rate w
+        const x0 = d - k, b = v + w * x0, e = Math.exp(-w * dt);
+        d = k + (x0 + b * dt) * e; v = (v - w * b * dt) * e;
+      };
+      if (want < d - 0.005) { this.pullHold = 0; spring(PULL.inW, want); }
+      else if (want > d + PULL.hyst || (want >= len && d < len)) {
+        this.pullHold += dt;
+        if (this.pullHold > PULL.hold) spring(PULL.outW, want); else v = 0;
+      } else { this.pullHold = 0; v = 0; }
+    }
+    if (d > limit) { d = limit; v = Math.min(0, v); } // (a wall met all at once: there at once)
+    d = Math.max(PULL.min * 0.5, Math.min(d, len));
+    this.pull = d; this.pullV = v;
     this.setNear(d < 1.8 ? Math.max(0.06, 0.3 * d / 1.8) : 0.3);
     return out.set(tx + (dx / len) * d, ty + (dy / len) * d, tz + (dz / len) * d);
   }
