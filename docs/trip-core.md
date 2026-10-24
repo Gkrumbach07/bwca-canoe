@@ -98,15 +98,35 @@ The portage counts in the journal and the logbook when you launch at the far end
 Campsites are the designated ones, each with a steel grate and a tent pad; only within about 22 m of a site's fire
 ring do its prompts apply. On foot at a free site:
 
-- **E Pitch the tent** (at the pad): claims the site, sets the pack out by the door, and takes a quarter hour.
+- **The tent is pitched where you choose** (camp 1, the owner's feedback of 2026-10-24: `src/camp.js`, `src/tent.js`,
+  `src/hold.js`). With a tent in a container in the camp's reach, stand still a moment on the site's ground and a
+  ghost tent stands a couple of metres ahead, its door to you: green on good ground, red where it can't go (on rock, on
+  a slope over 12°, among trunks, a log or a stump, on the portage trail, by the ring, the bench or the latrine, at the
+  water's edge, outside the site's area), the reason on the line. **Hold E** and it goes up phase by phase while a ring
+  fills on the action line: the A-frame (the starting kit's, a ridge tent end on with its door in the front end, a
+  vestibule staked out over it) the floor staked, the A-poles up, the tent hung, the fly on; the dome and the
+  four-season tent the footprint staked, the poles up, the tent up, the fly on; a quarter hour on the clock in all. Let
+  go and it stops at the phase finished (a reload brings it back so); hold E at it to carry on. The tent leaves its pack
+  with the first phase, and the site is yours until it is struck. By day a **held E** at it strikes it, the phases
+  backwards, back into a container in the camp's reach (the one it came out of first; rolled up on the ground when
+  nothing has room); from dusk E sleeps and a **held Q** strikes; a half-pitched tent takes E to carry on and Q (held)
+  to take it down, and at night with the fly off, Q sleeps without it. One tent stands at a time: at another site a
+  still moment says where yours is ("your tent is up 1.2 km north-east, at the campsite on Lake One: strike it there
+  to pitch it here"), and the readout's Pack row adds "the tent up 1.2 km back". Only the tent with its fly sleeps
+  best: no fly ×0.9, and rain at bedtime or in the night with the fly off ×0.8 more and the gear soaked by morning.
+- **The camp's reach** (`inventory.campReach`, camp.js `reachArea`): at a site that is free or yours, what is set out
+  within its area (25 m round the ring) and the canoe lying there are to hand for the food, the wood, the tent and the
+  pot, and the readout and the book count their food ("4 meals and 1 snack about the camp").
 - **Firewood is found** (camp 2, the owner's feedback of 2026-10-24: `src/chores.js`): dead branches (1×2 in a grid,
-  0.7 kg) and short logs (1×3, 2.2 kg) lie about every site, a dozen branches and five logs within 30 m of the ring,
-  most under the trees and beside the down logs, and here and there in the woods (more in the dark spruce and the old
-  burns, none in the open). They are placed by the ground, the same every visit, and come back two days after they are
-  picked up. **E** at one picks it up into an armload in a free hand (a hand's container, 3×3: three branches, or
-  three logs; drawn at the hip), else into what you carry. With the folding saw in reach, **hold E** at a down log:
-  three cuts, five minutes each, a short log dropped beside it at each (once in two days a log). At the ring, **E**
-  with an armload stacks it on the woodpile (twelve pieces, crossed lengths drawn by the count).
+  0.7 kg) and short logs (1×3, 2.2 kg) lie about every site, a dozen branches and five logs within 23 m of the ring
+  (inside the camp's area, so a walk for wood never takes you out of its reach), most under the trees and beside the
+  down logs, and here and there in the woods (more in the dark spruce and the old burns, none in the open). They are
+  placed by the ground, the same every visit, and come back two days after they are picked up. **E** at one picks it
+  up into an armload in a free hand (a hand's container, 3×3: three branches, or three logs; drawn at the hip), else
+  into what you carry. With the folding saw in reach, **hold E** at a down log: three cuts, five minutes each, a short
+  log dropped beside it at each (once in two days a log; let go and pick up the length at your feet, then hold again).
+  At the ring, the armload's **Q** stacks it on the woodpile (twelve pieces, crossed lengths drawn by the count); E
+  there is the fire's, and standing at the pile behind the ring, E stacks it too.
 - **The fire** (fire.js): **hold E** at the ring to lay it (kindling first: a branch or two and a log, eight minutes)
   and light it (six). A branch burns 0.6 game hours and a log 1.5, up to 4½ hours in the ring; full while more than an
   hour is left, then the flames shorten, the light dims to a quarter and the lengths char into brightening coals. Out
@@ -142,12 +162,30 @@ ring do its prompts apply. On foot at a free site:
   five hours off, seven hours on and up by 9:00 at the latest. Turned in before sunset, supper is eaten at bedtime.
   Done in by day (the *tired* mark up), the tent takes you at once: *Sleep · worn out*, seven hours by day.
 - **Rest** at a site recovers three times as fast, four times by a burning fire.
-- **Leaving:** nothing is struck or put out (camp stream 1): a note says what is still ashore (the tent, the fire burning or the coals smouldering, the pot on the grate, the barrel hung), and it all stays as it is until you come back.
+- **The barrel** (camp 1, `src/hang.js`): with a blue barrel in reach, **hold E** at a white pine, a red pine or a big
+  birch whose lowest limb is 4 to 7½ m up (the spruces, cedars and jack pines branch to the ground): the rope over the
+  limb, the barrel tied on, hoisted 3 m up and 1.8 m out from the trunk and tied off round it; let go part way and it
+  stays as far as it got. **Hold E** at the hung barrel to let it down. Hung, it is out of reach (nothing is cooked or
+  eaten out of it) but its food is still yours: the readout says "3 meals and 1 snack hung in the barrel" and the HUD's
+  food mark stays down. In Adventure, food left on the ground overnight within 60 m may be found by a bear (a note in
+  the morning, a meal or two gone; a sealed barrel seldom); a hung barrel never.
+- **Repacking** (camp 1, `src/packs.js`): E at the canoe loads what you carry. With things set out about the camp (in
+  its area, or within 10 m of the hull), a **held E** at the hull loads everything there, a thing a phase (a minute
+  and more the farther it lies), while the canoe has room for eight things and 160 kg; Q launches and leaves them. A
+  thing set down right by the hull offers "Q Launch and leave it" with its pick-up. At the ring, the armload's Q stacks
+  it on the woodpile.
+- **Leaving:** nothing is struck, put out or packed (camp stream 1): a note says what is still ashore ("The fire is still
+  burning; the leech bucket is set out. Everything stays as it is until you come back.": the tent, half pitched or up,
+  the fire burning or the coals smouldering, the pot on the grate, the barrel hung, the things set out), and it all
+  stays as it is, across reloads, until you come back.
 
 A whole evening (camp 2's test): E ashore, the tent held up, three branches and a log picked up as you walk about the
 site (an E each), the fire laid and lit (held), supper on the grate (a tap), a branch on while it cooks (a tap), supper
 eaten on the bench (a tap), the latrine (held), E at the tent and E on the card; in the morning the coals are still
 smoking and a held E puts them out.
+
+Two evenings and the leaving between them (the camp join's play, 2026-10-24): see [hubs.md](hubs.md), "The camp
+redone, joined and played".
 
 An hour before sunset, if you have not camped, a note names the nearest free site. Off a site in Adventure there is
 nothing to pitch and no bivouac: find a site, paddle on by headlamp, or come in to a counter. In Sandbox a tent goes
@@ -210,12 +248,13 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 | E | afloat | go ashore · portage at a landing · the counter at a dock · pick up a lost item in reach |
 | E | portage trail | set the canoe down · pick up a pack · shoulder the canoe · launch / load up and launch |
 | E | on foot at the water's edge | fill the bottle (when it is down a little and no other prompt holds E) |
-| E | campsite, on foot | pitch the tent (held, where the ghost stands green) · pick up a dead branch or a short log (into an armload in a free hand) · at the ring: hold to lay and light the fire; at a burning fire a tap feeds it, cooks or eats what is in the pot, and held it puts the fire out · stack an armload on the woodpile · hold at a down log with the saw · hold at the latrine · sleep, the wake-time card (tent) |
+| E | campsite, on foot | pitch the tent (held, where the ghost stands green; again to carry on) · strike it by day (held) · pick up a dead branch or a short log (into an armload in a free hand) · at the ring: hold to lay and light the fire; at a burning fire a tap feeds it, cooks or eats what is in the pot, and held it puts the fire out · hold at a tree to hang the barrel, at the hung barrel to let it down · hold at a down log with the saw · hold at the latrine · at the canoe: hold to load everything here · sleep, the wake-time card (tent) |
 | E | on foot, by a patch in season | pick berries or mushrooms into a container you can reach (forage.js) |
 | E | on foot, by a thing on the ground / at the canoe | pick it up / load what you carry into the canoe |
 | ← → | at your tent, still / the wake-time card | open the card with the time moved / choose first light, 7:00 or 9:00 |
 | Q | portage trail | take one more pack too · fetch what was left at the trail head · shoulder the canoe |
-| Q | on foot, carrying | set down what you carry (it stays there until you come back for it) |
+| Q | on foot, carrying | set down what you carry (it stays there until you come back for it) · at the ring, an armload: stack it on the woodpile |
+| Q | campsite, on foot | a half-pitched tent: take it down (held) · at night: strike the tent (held), or with the fly off, sleep without it · at the canoe with things set out: launch and leave them |
 | Q | shore | go ashore at a landing without portaging · leave a beached canoe |
 | K / E | a fish held up | keep it (into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
 | H | anywhere | the headlamp |
@@ -270,8 +309,16 @@ main.js hooks `trip.on('start')` to `energy.fresh()` (a trip puts in with the ne
 ### camp.js (`Camp`, `CampRegistry`)
 
 The registry is keyed `Math.round(x):Math.round(z)` (`claim`, `release`, `holder`, `isFree`, `nearestFree`). Only the
-player's camp is saved, in `trip.state.camp`; it comes back up once its tile has built, and is struck quietly when you
-are afloat more than 500 m from it. `camp.profileOf()` gives the tent's quality (`profile.sleepQ`) and the filter.
+player's camp is saved, in `trip.state.camp` (`{ key, stage 1–4, item, from, x, z, fdx, fdz }`); it comes back up at the
+stage it was left at once its tile has built, and stays up until you strike it (nothing is struck on leaving; a trip
+that ends hands it to the outfitters). `camp.camp` is the tent (`stage`, `item`, `stages`: tent.js `TentStages`);
+tent.js's `TENT_KINDS` gives each kind (`kindOf(item)`: 'aframe' or 'dome') its pitch and strike phases, its stage
+words and its size (props.js `TENT_SIZE`, `AFRAME_SIZE`, which `tentPose(…, size)` and `camp.pitchProblem` read), and
+`TentGhost` a shape per kind. `camp.reachArea()` is the site's area you stand in (`inventory.campReach`), and
+`camp.tentAway(c)` the words for a tent left at another site. hold.js (`hold.begin({ key, label, phases, at, onPhase,
+onDone, onStop, onTick, near, crouch })`, `hold.offer`, `hold.active`) runs every held job; hang.js (`camp.hang`) the
+barrels hung (`inventory.hang`, `at.tree`, `at.up`) and the bear's night; `inventory.hungAtCamp()` and
+`energy.hungFood()` count their food. `camp.profileOf()` gives the tent's quality (`profile.sleepQ`) and the filter.
 `camp.wakeTime(choice)` and `camp.sleep(kind, choice)` take the card's choice ('first', 7 or 9).
 
 `camp.chores` (chores.js; main.js sets `.tasks`, and `__game.chores` is it). camp.js calls `before()` (ahead of
