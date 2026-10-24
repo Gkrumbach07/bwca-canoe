@@ -536,6 +536,31 @@ store with the keeper and a visitor; no console errors.
   "no food" with berries in the barrel at the tent.
 - A wind capsize needs open water: a river's short fetch never builds the sea.
 
+### The camp redone, stream 2: the fire, the food and the latrine
+
+The owner: "picking up firewood should be actually walking around camp and finding loose branches and logs, putting
+them in your inventory", "you make a fire so you can cook so you can eat. not just press G ... it puts a small pot on the
+grate and you cook for some time, you have to wait short time but not instant, then you can eat", "the toilet actually
+you should actually sit", "you should be able to snuff out fire". Built on stream 1's held ring (hold.js) and camp reach
+(`inventory.campReach`); the details are in [trip-core.md](trip-core.md), "Camping and sleep".
+
+- **Firewood** (`chores.js`): dead branches and short logs about every site (12 and 5, under the trees and by the down
+  logs) and in the woods' cells, the same every visit, back two days after they are taken. E picks one up into an
+  armload in a free hand (`woodarms`, drawn at the hip and set down beside you when you sit), else into a pack you
+  carry. The saw cuts three logs off a down log (held). An armload is stacked on the woodpile by the ring.
+- **The fire** (`fire.js`): laid and lit with a held E (kindling first), fed a piece at a time with a tap, put out with
+  a held E (three phases, a steam cloud and a hiss). Left, it burns down and its coals smoulder ten hours, so the
+  morning's fire still wants putting out; a branch on hot coals brings it back. Nothing puts it out for you.
+- **The pot** (`cook.js`): a tap at a burning fire puts the best raw thing in the camp's reach on the grate (a fish
+  first, else the meal of the hour), with water from the bottle; it cooks 6 to 8 real seconds (20 to 25 game minutes),
+  steaming, bubbling or sizzling, then chimes. E eats it sitting on the bench (the pot in one hand, the spoon to the
+  mouth: canoe.js `poseSit` with `move.eat`); the book can keep it as leftovers for five hours. Raw is never eaten.
+- **The latrine:** a held E walks you to the box and sits you on it (the rig carried onto the seat, poseSit).
+- **The readout's food** at camp counts the camp's reach (the barrel by the tent, a hot meal in the pot).
+- **Programs and lights:** the steam (one shader, two emitters) is drawn from the first frame, parked; the wood, the pot
+  and the hand things are on the props' material. A full evening adds no program of its own (the evening's sun shafts,
+  post.js, compile once as the sun gets low, as before); the lights stay at 5.
+
 ## What phase 4 will do
 
 **A season's balance at the new pace.** Phase 2's progression was played at 2 to 4 km a game day; at Trip pace a day

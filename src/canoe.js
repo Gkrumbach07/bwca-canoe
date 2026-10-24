@@ -1013,7 +1013,10 @@ export function buildCanoeRig({ water = null } = {}) {
     contact.visible = false; stowPaddle(); updateIdle(dt, true);
     const gy = ground(rig.position.x, rig.position.z), seat = Number.isFinite(m.top) ? m.top : gy + 0.45;
     const br = Math.sin(idle.breath), hipY = seat + 0.1 - rig.position.y;
-    const pelvis = bodyQ(0, -0.05, 0), chest = bodyQ(idle.yaw * 0.15, 0.22 + 0.012 * br, 0), head = bodyQ(idle.yaw * 0.85, 0.02 - idle.pitch, 0);
+    // camp 2 (cook.js): eating out of the pot, m.eat { k: the spoon's cycle }: bent over it a little, the pot in the left
+    // hand in front, the spoon in the right going from the pot to the mouth and back
+    const E = m.eat, ek = E ? 0.5 - 0.5 * Math.cos(Math.min(1, (E.k % 1) / 0.55) * Math.PI * 2) : 0;
+    const pelvis = bodyQ(0, -0.05, 0), chest = bodyQ(idle.yaw * 0.15, (E ? 0.34 - 0.06 * ek : 0.22) + 0.012 * br, 0), head = bodyQ(E ? 0 : idle.yaw * 0.85, E ? 0.2 - 0.16 * ek : 0.02 - idle.pitch, 0);
     body(V(-0.06, hipY + ROOT_UP, 0), pelvis, chest, head, { shrugL: 0.012 * br, shrugR: 0.012 * br });
     const h = rig.rotation.y;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
@@ -1021,7 +1024,11 @@ export function buildCanoeRig({ water = null } = {}) {
       footTo(k, p, h + sg * -0.12, 0, 0.1);
       const knee = V(0.36, hipY + 0.02, sg * 0.16);
       const sh = J['arm' + k].p;
-      P.arm(k, knee.add(V(-0.05, 0.06, -sg * 0.02)), V(0, 0, -sg), V(sh.x - 0.25, sh.y - 0.3, sh.z + sg * 0.3), V(0, -1, 0));
+      if (E && k === 'L') P.arm(k, V(0.34, hipY + 0.3, -0.04), V(0, 0, 1), V(sh.x - 0.15, sh.y - 0.35, sh.z - 0.3), V(0, 1, 0));
+      else if (E) {
+        const pot = V(0.33, hipY + 0.36, 0.0), mouth = V().copy(J.head.p).add(V(0.14, -0.02, 0.01)), t = pot.lerp(mouth, ek);
+        P.arm(k, t, V(0.45, 0.25 + 0.3 * ek, -0.85).normalize(), V(sh.x - 0.1, sh.y - 0.4, sh.z + 0.35), V(0, 1, 0));
+      } else P.arm(k, knee.add(V(-0.05, 0.06, -sg * 0.02)), V(0, 0, -sg), V(sh.x - 0.25, sh.y - 0.3, sh.z + sg * 0.3), V(0, -1, 0));
     }
     loco.init = false;
   }
