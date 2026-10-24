@@ -702,7 +702,13 @@ export class Inventory {
     if (!t) return no('gone', 'That is not here.');
     if (t.def.fixed) return no('fixed', '');
     if (!force && !this.thingReachable(t)) return no('far', `${t.def.name} is out of reach.`);
-    if (!at) { if (!p || !p.onFoot) return no('afloat', 'Not from the canoe: go ashore first.'); at = this.spotNear(p.x, p.z, p.heading); }
+    if (!at) {
+      if (!p || !p.onFoot) return no('afloat', 'Not from the canoe: go ashore first.');
+      at = this.spotNear(p.x, p.z, p.heading);
+      // within a camp's area it is set out at camp (as packs.js Q does), from the book too
+      const a = this.camp && typeof this.camp.reachArea === 'function' ? this.camp.reachArea() : null;
+      if (a) at = { ...at, camp: a.key || 'camp' };
+    }
     const o = t.obj;
     if (t.kind === 'container' && o.where === 'in') this.unnest(o);
     o.where = 'ground'; o.hand = null;

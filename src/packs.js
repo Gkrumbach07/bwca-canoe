@@ -359,10 +359,14 @@ export class Packs {
     if (near && !(this.autoLoads(near) && Math.hypot(near.obj.at.x - d.x, near.obj.at.z - d.z) <= LOAD_REACH)) {
       const plan = near.obj.at.trail && Math.hypot(near.obj.at.x - d.x, near.obj.at.z - d.z) > LOAD_REACH ? this.fetchPlan(left) : null;
       const can = near.id === 'pile' || !!this.slotFor(near);
-      p.say(note || trailText, can ? ['E', `Pick up ${the(near)}`] : null, plan ? ['Q', `Carry it all over (${aboutHours(plan.hours)})`] : !can ? null : this.carried().length ? ['Q', `Set down ${the(this.lastCarried())}`] : null);
-      if (!can && !plan) p.say(note || `${cap(the(near))}: your back and hands are full`);
+      // camp join: at the hull with nothing carried, Q launches and leaves it (set down by the canoe at a camp, it took
+      // the canoe's E from every side)
+      const L = !plan && dd <= HULL_REACH && !this.carried().length ? this.dropLaunch(d) : null, leave = !!(L && L.deep);
+      p.say(note || trailText, can ? ['E', `Pick up ${the(near)}`] : null, plan ? ['Q', `Carry it all over (${aboutHours(plan.hours)})`] : leave ? ['Q', `Launch and leave ${the(near)}`] : !can ? null : this.carried().length ? ['Q', `Set down ${the(this.lastCarried())}`] : null);
+      if (!can && !plan && !leave) p.say(note || `${cap(the(near))}: your back and hands are full`);
       if (can && inp.pressed('KeyE')) this.pickUp(near);
       else if (plan && inp.pressed('KeyQ')) this.fetch(left, plan);
+      else if (leave && inp.pressed('KeyQ')) p.launch(L);
       else if (!plan && inp.pressed('KeyQ') && this.carried().length) this.setDownHere(this.lastCarried().ref);
       return true;
     }
