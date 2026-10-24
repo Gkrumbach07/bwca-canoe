@@ -49,53 +49,67 @@ function instanceData(items, stride, rx, rz) {
 }
 
 // What the walker is held off (tiles.js treesNear), built here so a tile's first query costs the main thread
-// nothing: the trunks as circles and the rocks (the boulder species, and the outcrops) with what the main thread
-// needs to stand their own geometry where they are drawn. Each list is sorted into CELL m cells over the tile with
-// a start index per cell (a cell's items are start[c] .. start[c + 1]).
-//   trunks  x, z (tile-local), radius
-//   rocks   x, y, z (the instance's origin, tile-local), R (its reach round the origin, over the ground), variant
-//           (the geometry: kit.variants[sp][variant]), sp, then the instance matrix's three columns (9 floats)
-// A rock's variant is the one its bin's variant group draws (vegetation.js pickVariants: a rock bin's group g draws
-// variant (base + g) mod n, base hashed from the region; keep in step).
-const COLLIDE_CELL = 16, ROCK_STRIDE_C = 15;
-const NOT_TRUNKS = new Set([6, 7, 10, 11, 12, 13, 14, 15, 16, 20, 21]); // vegetation.js NOT_TRUNKS and the rocks
-const ROCK_VARIANTS = { 6: 9, 16: 6 };
-const ROCK_REACH = { 6: 1.7, 16: 2.0 };   // the geometry's reach from its origin at unit scale (rocks.js FOOT; vegetation.js outcrop)
+// nothing: the trunks as circles, and the solids (the boulders, the outcrops, the scree, the cliff modules of the
+// bluffs, the down logs and the stumps) with what the main thread needs to stand their own drawn geometry where they
+// are. Each list is sorted into CELL m cells over the tile with a start index per cell (a cell's items are start[c] ..
+// start[c + 1]).
+//   trunks     x, z (tile-local), a first radius from the scale (tiles.js measures the drawn one: trunkMeta)
+//   trunkMeta  per trunk: the instance's y, its height scale, its mean horizontal scale, its geometry key
+//   rocks      the solids: x, y, z (the instance's origin, tile-local), R (its reach round the origin, over the
+//              ground), its geometry key, sp, then the instance matrix's three columns (9 floats)
+// A geometry key is the bin's index in this tile's list times 64 plus the variant group: tiles.js reads the geometry
+// that group of that bin is drawn with (vegetation.js makeVegetationMeshes), so the collision is always the drawn
+// shape whatever variant the bin picked.
+const COLLIDE_CELL = 16, ROCK_STRIDE_C = 15, TRUNK_META = 4;
+const NOT_TRUNKS = new Set([6, 7, 10, 11, 12, 13, 14, 15, 16, 20, 21]); // vegetation.js NOT_TRUNKS and the solids
+// the solids and their geometry's reach from the origin over the ground at unit scale (rocks.js FOOT, vegetation.js
+// outcrop, log, stump; rocks.js screeBlock; the cliff module is reached by its own frame below)
+const SOLID_REACH = { 6: 1.7, 14: 3.75, 15: 1.1, 16: 2.0, 20: 1.0, 21: 0 };
 function collisionOf(bins, size) {
   const n = Math.ceil(size / COLLIDE_CELL), N = n * n;
   const trunks = [], rocks = [];
   let maxR = 0;
-  for (const b of bins) {
-    const m = b.matrices, count = b.count;
-    if (ROCK_VARIANTS[b.sp]) {
-      const nv = ROCK_VARIANTS[b.sp], base = Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 9) * nv);
-      const groups = b.groups && b.groups.length ? b.groups : [count];
+  bins.forEach((b, bi) => {
+    const m = b.matrices, count = b.count, reach = SOLID_REACH[b.sp];
+    const groups = b.groups && b.groups.length ? b.groups : [count];
+    if (reach !== undefined) {
       for (let g = 0, i = 0; g < groups.length; g++) for (let k = 0; k < groups[g]; k++, i++) {
         const e = i * 16, sx = Math.hypot(m[e], m[e + 1], m[e + 2]), sz = Math.hypot(m[e + 8], m[e + 9], m[e + 10]);
         if (sx < 0.05) continue; // the empty rock a one-family bin carries in group 0 (placement.js)
-        const R = ROCK_REACH[b.sp] * Math.max(sx, sz);
+        if (b.sp === 20 && Math.max(sx, sz) < 0.25) continue; // a pebble of scree: below any step
+        // a cliff module: its face along x across [-0.5, 0.5] at z = 0, reaching back into the hill to z = 1 (cliffs.js)
+        const R = b.sp === 21 ? Math.hypot(0.55 * sx, 1.05 * sz) : reach * Math.max(sx, sz);
         maxR = Math.max(maxR, R);
-        rocks.push([m[e + 12], m[e + 13], m[e + 14], R, (base + g) % nv, b.sp, m[e], m[e + 1], m[e + 2], m[e + 4], m[e + 5], m[e + 6], m[e + 8], m[e + 9], m[e + 10]]);
+        rocks.push([m[e + 12], m[e + 13], m[e + 14], R, bi * 64 + g, b.sp, m[e], m[e + 1], m[e + 2], m[e + 4], m[e + 5], m[e + 6], m[e + 8], m[e + 9], m[e + 10]]);
       }
     } else if (!NOT_TRUNKS.has(b.sp)) {
-      for (let i = 0; i < count; i++) { const e = i * 16; trunks.push(m[e + 12], m[e + 14], 0.12 + 0.14 * Math.hypot(m[e], m[e + 1], m[e + 2])); }
+      for (let g = 0, i = 0; g < groups.length; g++) for (let k = 0; k < groups[g]; k++, i++) {
+        const e = i * 16, sx = Math.hypot(m[e], m[e + 1], m[e + 2]), sz = Math.hypot(m[e + 8], m[e + 9], m[e + 10]);
+        if (sx < 1e-6) continue;
+        trunks.push([m[e + 12], m[e + 14], 0.12 + 0.14 * sx, m[e + 13], Math.hypot(m[e + 4], m[e + 5], m[e + 6]), (sx + sz) / 2, bi * 64 + g]);
+      }
     }
-  }
+  });
   const cellOf = (x, z) => Math.min(n - 1, Math.max(0, Math.floor(z / COLLIDE_CELL))) * n + Math.min(n - 1, Math.max(0, Math.floor(x / COLLIDE_CELL)));
-  const sort = (count, stride, get) => {
-    const start = new Uint32Array(N + 1), cells = new Uint32Array(count);
-    for (let i = 0; i < count; i++) { cells[i] = cellOf(get(i, 0), get(i, 1)); start[cells[i] + 1]++; }
+  // records into cells: the start of each cell and the records in cell order (x at k, z at kz of each record)
+  const sort = (recs, kz) => {
+    const count = recs.length, start = new Uint32Array(N + 1), cells = new Uint32Array(count);
+    for (let i = 0; i < count; i++) { cells[i] = cellOf(recs[i][0], recs[i][kz]); start[cells[i] + 1]++; }
     for (let c = 0; c < N; c++) start[c + 1] += start[c];
-    const fill = start.slice(0, N), out = new Float32Array(count * stride);
-    for (let i = 0; i < count; i++) { const o = fill[cells[i]]++ * stride; for (let k = 0; k < stride; k++) out[o + k] = get(i, k); }
-    return { start, items: out };
+    const fill = start.slice(0, N), order = new Uint32Array(count);
+    for (let i = 0; i < count; i++) order[fill[cells[i]]++] = i;
+    return { start, order };
   };
-  const nt = trunks.length / 3, rockX = (i, k) => rocks[i][k === 1 ? 2 : k === 2 ? 1 : k];
-  const t = sort(nt, 3, (i, k) => trunks[i * 3 + k]);
-  // rocks: sorted by their xz (get's k 0 and 1 are x and z), then written in record order x, y, z, ...
-  const r = sort(rocks.length, ROCK_STRIDE_C, (i, k) => (k < 3 ? rockX(i, k) : rocks[i][k]));
-  for (let i = 0; i < rocks.length; i++) { const o = i * ROCK_STRIDE_C, z = r.items[o + 1]; r.items[o + 1] = r.items[o + 2]; r.items[o + 2] = z; }
-  return { cell: COLLIDE_CELL, n, maxR, trunks: t.items, trunkStart: t.start, rocks: r.items, rockStart: r.start };
+  const t = sort(trunks, 1), nt = trunks.length;
+  const trunkArr = new Float32Array(nt * 3), meta = new Float32Array(nt * TRUNK_META);
+  for (let j = 0; j < nt; j++) {
+    const q = trunks[t.order[j]];
+    trunkArr[j * 3] = q[0]; trunkArr[j * 3 + 1] = q[1]; trunkArr[j * 3 + 2] = q[2];
+    meta[j * TRUNK_META] = q[3]; meta[j * TRUNK_META + 1] = q[4]; meta[j * TRUNK_META + 2] = q[5]; meta[j * TRUNK_META + 3] = q[6];
+  }
+  const r = sort(rocks, 2), rockArr = new Float32Array(rocks.length * ROCK_STRIDE_C);
+  for (let j = 0; j < rocks.length; j++) rockArr.set(rocks[r.order[j]], j * ROCK_STRIDE_C);
+  return { cell: COLLIDE_CELL, n, maxR, trunks: trunkArr, trunkMeta: meta, trunkStart: t.start, rocks: rockArr, rockStart: r.start };
 }
 
 // the typed arrays of a terrain chunk (terrain-build.js), handed over rather than copied
@@ -122,7 +136,7 @@ async function buildFine(m) {
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz) }));
   const abins = aquatic.bins.map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, ...binCentre(b), ...instanceData(b.items, 5, b.rx, b.rz) }));
   const collide = collisionOf(bins, g.tile * g.cell);
-  const transfer = [buf, cover.buffer, ...terrainBuffers(terrain), collide.trunks.buffer, collide.trunkStart.buffer, collide.rocks.buffer, collide.rockStart.buffer];
+  const transfer = [buf, cover.buffer, ...terrainBuffers(terrain), collide.trunks.buffer, collide.trunkMeta.buffer, collide.trunkStart.buffer, collide.rocks.buffer, collide.rockStart.buffer];
   if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.idx.buffer);
   for (const b of bins) transfer.push(b.matrices.buffer, b.colors.buffer);
   for (const b of abins) transfer.push(b.matrices.buffer);
