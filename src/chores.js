@@ -399,6 +399,7 @@ export class Chores {
     // the wood about: the cells round you read as you go, the drawn set rebuilt when it changes
     const on = (p.mode === 'walk' || p.mode === 'paddle' || p.mode === 'carry') && !p.teleporting;
     if (on && ((this.cellT -= dt) <= 0)) { this.cellT = 0.5; this.restoreDrops(); this.refreshWood(p.x, p.z); }
+    if (this.redrawIn > 0 && (this.redrawIn -= dt) <= 0) this.dirty = true;
     if (this.dirty) this.drawWood();
     this.placePile();
     this.prompts();
@@ -582,13 +583,16 @@ export class Chores {
   // A piece at (x, z) of `kind` with variant from rng, lying on the ground: clear of trunks, rocks, logs and anything
   // built, off the water, the ring, the pad, the bench, the latrine and the woodpile, on ground it lies flat on (its ends'
   // ground no more than a third of its length apart). The piece, or null.
-  pieceAt(key, kind, x, z, rng, site = null) {
+  // (loose: where it falls, the checks but the ground's let go: a length dropped by your feet)
+  pieceAt(key, kind, x, z, rng, site = null, loose = false) {
     const w = this.world, t = this.camp.tiles;
-    if (!w.isReady(x, z) || !(w.shoreAt(x, z) > 2)) return null;
+    if (!w.isReady(x, z) || !(w.shoreAt(x, z) > (loose ? 0.3 : 2))) return null;
     const v = Math.floor(rng() * 3), len = LENGTH[kind][v], yaw = rng() * Math.PI * 2, cx = Math.cos(yaw), sz = -Math.sin(yaw);
     const x0 = x - cx * len / 2, z0 = z - sz * len / 2, x1 = x + cx * len / 2, z1 = z + sz * len / 2;
     const g0 = t.groundAt(x0, z0), g1 = t.groundAt(x1, z1), g = t.groundAt(x, z);
-    if (![g0, g1, g].every(Number.isFinite) || Math.abs(g1 - g0) > len * 0.34 || Math.abs((g0 + g1) / 2 - g) > 0.08) return null;
+    if (![g0, g1, g].every(Number.isFinite)) return null;
+    if (loose) { const y = (g0 + g1) / 2 - 0.012, q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, Math.atan2(g1 - g0, len), 'YXZ')); return { key, kind, v, x, y, z, len, yaw, pos: new THREE.Vector3(x, y, z), q, g: this.pieceIdx[`${kind}${v}`] }; }
+    if (Math.abs(g1 - g0) > len * 0.34 || Math.abs((g0 + g1) / 2 - g) > 0.08) return null;
     const L = site && site.layout;
     if (L) for (const [q, r] of [[L.fire, 3.2], [L.pad, 3.4], [L.bench, 2.2], [L.latrine, 2.2]]) if (q && Math.hypot(q.x - x, q.z - z) < r) return null;
     if (site && Math.hypot(this.pileSpot(site).x - x, this.pileSpot(site).z - z) < 1.6) return null;
@@ -731,7 +735,7 @@ export class Chores {
     }
     if (!ok) { this.note('Your hands are full, and nothing you carry has room for it.', 3.5); return; }
     if (pc.key.startsWith('d:')) { const i = this.dropped.indexOf(pc); if (i >= 0) this.dropped.splice(i, 1); } else this.s.taken[pc.key] = this.today;
-    this.dirty = true;
+    this.redrawIn = 0.28; // it leaves the ground as the hand gets to it
     this.cook.gesture = { t: 0, dur: 0.5, say: `Picking up the ${name}…` };
     this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, pc.kind === 'log');
     const n = this.armloads().reduce((s, c) => s + c.grid.reduce((k, e) => k + e.qty, 0), 0);
@@ -775,6 +779,7 @@ export class Chores {
         const rng = mulberry32(strHash(k) + i * 31 + this.today);
         let pc = null;
         for (let t = 0; t < 6 && !pc; t++) pc = this.pieceAt(`d:${k}:${this.today}:${i}`, 'log', lx + nx * ((log.rad || 0.2) + 0.4 + t * 0.2), lz + nz * ((log.rad || 0.2) + 0.4 + t * 0.2), rng);
+        if (!pc) pc = this.pieceAt(`d:${k}:${this.today}:${i}`, 'log', p.x + (lx - p.x) * 0.35 + (i - 1) * 0.3 * -nz, p.z + (lz - p.z) * 0.35 + (i - 1) * 0.3 * nx, rng, null, true); // by your feet
         if (pc) { this.dropped.push(pc); this.dirty = true; this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, true); }
         this.persist();
       },
@@ -989,7 +994,7 @@ export class Chores {
     for (const k of Object.keys(this.s.sawn)) if (today - this.s.sawn[k].day >= WOOD.regrow) delete this.s.sawn[k];
     return {
       v: 2, piles: this.s.piles, pints: this.s.pints, latrine: this.s.latrine, taken: this.s.taken, sawn: this.s.sawn,
-      dropped: this.dropped.map((d) => ({ key: d.key, kind: d.kind, x: +d.x.toFixed(2), z: +d.z.toFixed(2) })),
+      dropped: this.dropped.map((d) => ({ key: d.key, kind: d.kind, v: d.v, yaw: +d.yaw.toFixed(3), x: +d.x.toFixed(2), z: +d.z.toFixed(2) })),
       fires, cook: this.cook.serialize(),
     };
   }
@@ -1024,12 +1029,15 @@ export class Chores {
     this.pendingDrops = [];
     for (const d of q) {
       if (!this.world.isReady(d.x, d.z)) { this.pendingDrops.push(d); continue; }
-      const pc = this.pieceAt(d.key, d.kind === 'log' ? 'log' : 'branch', d.x, d.z, mulberry32(strHash(d.key)));
+      const kind = d.kind === 'log' ? 'log' : 'branch', yaw = Number.isFinite(d.yaw) ? d.yaw : null;
+      const pc = this.pieceAt(d.key, kind, d.x, d.z, yaw == null ? mulberry32(strHash(d.key)) : seqRng([Number.isFinite(d.v) ? (d.v + 0.5) / 3 : 0.5, yaw / (Math.PI * 2)]), null, true);
       if (pc) { this.dropped.push(pc); this.dirty = true; }
     }
   }
 }
 const blank = () => ({ piles: {}, pints: 0, latrine: null, taken: {}, sawn: {} });
+// a "random" that gives these numbers in turn (a saved piece's variant and bearing, for pieceAt)
+const seqRng = (xs) => { let i = 0; return () => xs[Math.min(xs.length - 1, i++)]; };
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const _v1 = new THREE.Vector3();
 const lowerName = (c) => { const d = itemDef(c.item), n = (d && (d.short || d.name)) || 'pack'; return n.charAt(0).toLowerCase() + n.slice(1); };
