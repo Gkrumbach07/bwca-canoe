@@ -7,8 +7,9 @@
 // containers on a canvas mat (feedback 2026-10-24: "the journal is only for catches, tasks, lakes, trips, photos").
 // Data comes from the fishing code (log, bests), the tasks, the energy, the outfitter's trip record, the trip's permit
 // and logbook (trip.js, reached through the outfitter), the trip tally (trip-stats.js) and the camera (photo.js).
-// The pack side is one screen (wc B, the world cards): the body on the left, a tab per container across the top, Here
-// for what lies within reach; Tab turns to the next tab, Shift-Tab to the journal; openHere(ref) is stream A's Q.
+// The pack side is one screen (wc B, the world cards): the body on the left, a tab per container across the top, and
+// Here as the right pane (what lies within reach, the canoe beside you, the outfitters' keeping); Tab turns to the next
+// tab, Shift-Tab to the journal; openHere(ref) is stream A's Q.
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { PackSide } from './inv-ui.js';
 
@@ -56,7 +57,7 @@ export class Journal {
       else if (this.side === 'journal' && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) { this.page = Math.max(0, this.page + (e.code === 'ArrowRight' ? 1 : -1)); this.render(true); }
     });
     // Tab while the book is open (ahead of the readout's Tab, hud.js): on the pack side the next tab along (the
-    // containers, Here, Keeping), Shift-Tab the journal; on the journal side, the pack
+    // containers), Shift-Tab the journal; on the journal side, the pack
     window.addEventListener('keydown', (e) => {
       if (!this.open || e.code !== 'Tab') return;
       e.preventDefault(); e.stopImmediatePropagation();
@@ -67,7 +68,7 @@ export class Journal {
     }, true);
     this.setSide('journal');
   }
-  // the book open at the pack side's Here tab, with that container's (or pile's) grid scrolled to and lit: stream A's
+  // the book open at the pack side, with that container's (or pile's) grid in the right pane scrolled to and lit: stream A's
   // Q "Open it" on a container on the ground and Q "Open the pile" (ref: the container's id)
   openHere(ref) {
     this.show('pack');

@@ -53,8 +53,17 @@
 .pk-foot { flex: none; display: flex; justify-content: space-between; gap: 18px; font: 700 10.5px/1.4 var(--sc); letter-spacing: .12em; color: var(--cream-65); border-top: 1.5px dashed rgba(243, 236, 221, .22); padding-top: 9px; }
 .pk-foot kbd, .pk-mat kbd { border-color: var(--cream-50) !important; color: var(--cream-86); }
 
-/* --- wc B: your stuff on one screen (MineSide): the body on the left, a tab per container across the top ------------- */
+/* --- wc B: your stuff on one screen (MineSide): the body on the left, a tab per container across the top; in the book,
+   Here as the right pane (what you are facing: the ground within reach, the canoe beside you, the outfitters' keeping) */
 .mine { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: var(--body-col, 262px) minmax(0, 1fr); gap: 20px; }
+.mine.with-here { grid-template-columns: var(--body-col, 262px) minmax(0, 1fr) minmax(0, var(--here-col, 548px)); }
+.mn-here { min-height: 0; min-width: 0; display: flex; flex-direction: column; border-left: 1.5px dashed rgba(243, 236, 221, .28); padding-left: 18px; }
+.here-head { flex: none; display: flex; align-items: baseline; gap: 10px; min-height: 44px; box-sizing: border-box; padding: 0 2px 7px; border-bottom: 2px solid var(--leather-deep); align-items: flex-end; }
+.here-head b { font: 700 12px/1.2 var(--sc); letter-spacing: .14em; color: var(--cream); background: #4d5a3a; padding: 6px 14px 7px; border-radius: 6px 6px 0 0; border: 1.5px solid var(--leather-deep); border-bottom: none; box-shadow: inset 0 0 0 2px #4d5a3a, inset 0 0 0 3px rgba(201, 162, 74, .38); margin-bottom: -7px; }
+.here-head i { font: italic 12.5px/1.2 var(--serif); color: var(--cream-72); padding-bottom: 1px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.here-body { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .3) transparent; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; padding: 14px 8px 8px 2px; }
+.here-body .pk-zone { align-self: stretch; }
+.here-body > .pk-empty { padding: 8px 10px; }
 .mn-body { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 4px; overflow: hidden; }
 .mn-pockets { display: flex; flex-direction: column; gap: 4px; }
 .mn-pockets .ig { border-radius: 3px; border-color: var(--leather); }
@@ -67,9 +76,7 @@
 .ctab:hover { color: var(--cream); filter: brightness(1.12); }
 .ctab.on { transform: none; color: var(--cream); background: var(--leather); box-shadow: inset 0 0 0 2px var(--leather), inset 0 0 0 3px rgba(201, 162, 74, .38), 0 2px 0 var(--leather); }
 .ctab.on i { color: var(--cream-86); }
-.ctab.k-here { background: #43503a; margin-left: 10px; }
-.ctab.k-here.on { background: #4d5a3a; box-shadow: inset 0 0 0 2px #4d5a3a, inset 0 0 0 3px rgba(201, 162, 74, .38), 0 2px 0 #4d5a3a; }
-.ctab.k-keeping { background: #4a4030; }
+.ctab.k-keeping { background: #4a4030; margin-left: 10px; }
 .ctab.k-keeping.on { background: #5d5038; box-shadow: inset 0 0 0 2px #5d5038, inset 0 0 0 3px rgba(201, 162, 74, .38), 0 2px 0 #5d5038; }
 .dragging-item .ctab, .dragging-thing .ctab { box-shadow: inset 0 0 0 1.5px rgba(220, 180, 105, .35); }
 .ctab.dz-ok, .ctab.dz-buy { background: rgba(143, 191, 122, .35) !important; color: var(--cream); box-shadow: inset 0 0 0 2px var(--moss) !important; }

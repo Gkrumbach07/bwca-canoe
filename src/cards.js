@@ -1,6 +1,6 @@
 // The world cards (the owner's third round of 2026-10-24: "the whole inventory system … confusing", "a card opens
 // only where there is something to move or a choice to make"). The book is the one screen for stuff: yours, and what
-// lies within reach under its Here tab (inv-ui.js MineSide; journal.openHere brings a container or a pile up there).
+// lies within reach in its right pane, Here (inv-ui.js MineSide; journal.openHere lights a container or a pile there).
 // A card is for a job: the fire. It is the two-pane screen the shelf uses, your stuff on the left (the body and your
 // tabs, as in the book) and the thing on the right: the fire's fuel (wood only), the grate (the pot, a meal or a fish,
 // what is cooked), the ash, a burn meter and a cooking meter, Light / Cook / Eat / Douse (held where held). Drag between
@@ -9,7 +9,7 @@
 //   import { cards } from './cards.js';
 //   cards.attach({ hud, nearby, journal, player, hold, onUse })   (main.js, the wc B block)
 //   cards.open(kind, ref) → bool    kind 'fire' (ref: the ring's key, 'fire:<key>' or the object); 'container' and
-//                                   'pile' go to the book's Here tab (journal.openHere(ref)): the book shows stuff
+//                                   'pile' go to the book's right pane (journal.openHere(ref)): the book shows stuff
 //   cards.close()
 //   cards.update(dt)                each frame (main.js runs it with the journal's update): the ring on a held button,
 //                                   the meters, and the card put away when the fire is out of reach

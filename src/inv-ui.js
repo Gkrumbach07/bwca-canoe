@@ -12,9 +12,10 @@
 //   MineSide                                    your stuff on one screen (the owner, 2026-10-24: "having to scroll to
 //                                               see items is a struggle"): the body on the left (back, chest, hands,
 //                                               pockets), a tab per container you carry across the top, one grid at a
-//                                               time; a Here tab for what lies within reach and the canoe beside you,
-//                                               a Keeping tab at an outfitter. The book's pack side, the shelf's left
-//                                               pane and the fire card's left pane are all this one thing.
+//                                               time; in the book, Here as the right pane: what lies within reach, the
+//                                               canoe beside you, and at an outfitter what they keep. The book's pack
+//                                               side, the shelf's left pane and the fire card's left pane are all this
+//                                               one thing (the shelf and the card have their own right pane).
 //   PackSide                                    the book's pack side (journal.js shows it): MineSide with its header
 //   ShelfScreen                                 a shelf, the lure wall or the map table: yours on the left, the
 //                                               shelf's stock on the right, priced; a drag buys exactly where it lands
@@ -864,7 +865,7 @@ function binContainer(id, b) {
 // --- dragging -----------------------------------------------------------------------------------------------------
 // Two kinds of drag share the ghost and the drop: an item out of a grid (st.kind 'item'), and a thing by its strap or
 // its slot (st.kind 'thing': a container or a long thing, carried, set down, loaded or nested). The drop goes to the
-// grid under the pointer when it would take it there, else to a tab (data-tab: a container of yours, Here, Keeping),
+// grid under the pointer when it would take it there, else to a tab (data-tab: a container of yours, Keeping at a shelf),
 // else to the zone under it (data-dz: 'back', 'chest', 'hand0' the right hand, 'hand1' the left, 'canoe', 'ground',
 // 'stash'); let go off the page altogether, on foot, it goes down on the ground at your feet (the owner, 2026-10-24:
 // "should be able to drag off modal to put on ground").
@@ -910,11 +911,11 @@ function begin(st) {
   ghostDraw(st);
   document.body.classList.add('ig-dragging');
   for (const s of SCREENS) if (s.open && s.el) s.el.classList.add(st.kind === 'thing' ? 'dragging-thing' : 'dragging-item');
-  // held near the top or the bottom of a scrolling pane, the pane scrolls (the Here tab with much on the ground)
+  // held near the top or the bottom of a scrolling pane, the pane scrolls (the Here pane with much on the ground)
   st.scroller = setInterval(() => { if (st.x != null && edgeScroll(st.x, st.y)) over(st, st.x, st.y); }, 30);
 }
 function edgeScroll(x, y) {
-  const el = document.elementFromPoint(x, y), col = el && el.closest ? el.closest('.tabpage, .sh-stock, .cd-thing') : null;
+  const el = document.elementFromPoint(x, y), col = el && el.closest ? el.closest('.tabpage, .here-body, .sh-stock, .cd-thing') : null;
   if (!col || col.scrollHeight <= col.clientHeight + 1) return false;
   const r = col.getBoundingClientRect(), e = 56, was = col.scrollTop;
   if (y > r.bottom - e) col.scrollTop += Math.ceil((y - (r.bottom - e)) / 4);
@@ -1192,18 +1193,18 @@ function binTake(b, e, toCId, { x, y, rot, qty } = {}) {
 }
 
 // --- the tabs as drop targets -------------------------------------------------------------------------------------------
-// a container's tab takes an item (the first room in it) or a container that nests; Here takes anything down onto the
-// ground at your feet; Keeping takes anything into the outfitters' keeping; from a shelf, a drop on a tab buys into it
+// a container's tab takes an item (the first room in it) or a container that nests; Keeping (a tab at a shelf) takes
+// anything into the outfitters' keeping; from a shelf, a drop on a tab buys into it. (Here is a pane, not a tab: its
+// zones take the drop.)
 function tabCheck(st, tabEl) {
   const key = tabEl.dataset.tab, inv = model(), src = st.grid, e = st.e;
   if (!live()) return 'no';
   if (src && src.opts.shelf) {
     const d = itemDef(e.id), k = d && d.kind;
-    if (e.hull || e.owned || e.dear || k === 'long' || k === 'container' || key === 'here') return 'no';
+    if (e.hull || e.owned || e.dear || k === 'long' || k === 'container') return 'no';
     const c = key === 'keeping' ? inv.crate : inv.cont(key);
     return c && canFit(c, e.id) ? 'buy' : 'no';
   }
-  if (key === 'here') return st.kind === 'thing' || e.box ? zoneCheckDz(st, 'ground') : itemGroundCheck(st);
   if (key === 'keeping') return zoneCheckDz(st, 'stash');
   const c = inv.cont(key); if (!c) return 'no';
   if (st.kind === 'thing' || e.box) {
@@ -1217,7 +1218,6 @@ function tabCheck(st, tabEl) {
 function dropOnTab(st, tabEl) {
   const key = tabEl.dataset.tab, inv = model(), src = st.grid, e = st.e;
   if (src && src.opts.shelf) { const c = key === 'keeping' ? inv.crate : inv.cont(key), f = c && inv.firstFit(c.id, e.id); if (f) src.opts.screen.buy(e.id, { cId: c.id, x: f.x, y: f.y, rot: f.rot }); return; }
-  if (key === 'here') { dropOnZone(st, 'ground'); return; }
   if (key === 'keeping') { dropOnZone(st, 'stash'); return; }
   const c = inv.cont(key); if (!c) return;
   if (st.kind === 'thing' || e.box) { const t = thingOfDrag(st), f = t && inv.firstFit(c.id, t.obj.item); if (!f || !inv.move(null, t.id, c.id, f.x, f.y, f.rot)) note('It won’t go in there.', 2.5); else note(`${t.def.name}: into the ${lower(short(itemDef(c.item)) || nameOf(c))}.`, 3); return; }
@@ -1593,19 +1593,24 @@ export const panelSig = (o) => [o.id, o.title, o.sub || '', (o.slots || []).map(
 
 // --- your stuff, on one screen ------------------------------------------------------------------------------------
 // The body on the left: the back and the chest, each hand, the pockets as four quick slots. Across the top a tab for
-// every container you carry (Pack · Barrel · Bucket · Tackle box …), one grid open at a time; Here for what lies
-// within reach (each thing on the ground as its own grid, the wood lying about as a pile) and the canoe beside you
-// (with Set everything out and Load everything here); Keeping at an outfitter. Nothing left elsewhere shows.
+// every container you carry (Pack · Barrel · Bucket · Tackle box …), one grid open at a time. In the book (pane: true)
+// the right pane is Here, what you are facing (the owner, 2026-10-24: "left is me, right is what I'm facing"): each
+// thing on the ground within reach as its own grid, the wood lying about as a pile, the canoe's load when you stand
+// beside it (with Set everything out and Load everything here), and at an outfitter what they keep for you. It is
+// always there while the book is open, never a tab; "Nothing here" when the ground is empty. The fire card and the
+// shelf have their own right pane, so their MineSide is the body and the tabs alone (Keeping stays a tab at a shelf,
+// so a thing can be bought into it). Nothing left elsewhere shows.
 const TAB_NAMES = { pack3: 'Pack', pack4: 'Pack', barrel30: 'Barrel', barrel60: 'Barrel', bucket: 'Bucket', tacklebox: 'Tackle box', stringer: 'Stringer', mapcase: 'Map case', woodarms: 'Armload' };
 const TAB_TWO = { pack3: 'Pack #3', pack4: 'Pack #4', barrel30: 'Barrel 30', barrel60: 'Barrel 60' };
 const SHORT_WHERE = { back: 'back', chest: 'chest' };
 export class MineSide {
-  // owner: the screen this is part of (its render(force), its held state); onUse: the grids' Use (the lures, the sheets)
-  constructor({ owner = null, onUse = null, closeBook = null } = {}) {
-    this.el = mk('div', 'mine'); this.owner = owner; this.onUse = onUse; this.closeBook = closeBook;
+  // owner: the screen this is part of (its render(force), its held state); onUse: the grids' Use (the lures, the sheets);
+  // pane: Here drawn as the right pane (the book)
+  constructor({ owner = null, onUse = null, closeBook = null, pane = false } = {}) {
+    this.el = mk('div', `mine${pane ? ' with-here' : ''}`); this.owner = owner; this.onUse = onUse; this.closeBook = closeBook; this.pane = !!pane;
     this.tab = null; this.sig = ''; this.pendLit = null; this.pieces = [];
   }
-  // the tabs now: [{ key, kind: 'cont' | 'here' | 'keeping', c?, label, sub }]
+  // the tabs now: [{ key, kind: 'cont' | 'keeping', c?, label, sub }], and what Here holds
   tabs() {
     const inv = model(), { carried, list, byId } = tabContainers(), p = ctx.player;
     const top = (c) => topOf(c, byId);
@@ -1616,15 +1621,14 @@ export class MineSide {
       const base = TAB_NAMES[c.item] || short(itemDef(c.item)) || 'Container';
       let label = base;
       if (names.get(base) > 1) { label = TAB_TWO[c.item] || base; const k = seen.get(label) || 0; seen.set(label, k + 1); if (k) label = `${label} ${k + 1}`; }
-      const t = top(c), sub = c.where === 'in' ? `in the ${lower(short(itemDef(t.item)) || 'pack')}` : t.where === 'hands' ? (t.hand === 1 ? 'left hand' : 'right hand') : SHORT_WHERE[t.where] || t.where;
+      const t = top(c), sub = c.where === 'in' ? `in the ${lower(TAB_NAMES[t.item] || short(itemDef(t.item)) || 'pack')}` : t.where === 'hands' ? (t.hand === 1 ? 'left hand' : 'right hand') : SHORT_WHERE[t.where] || t.where;
       return { key: c.id, kind: 'cont', c, label, sub };
     });
     const { ground, canoe, atCanoe } = this.hereLists(list, byId);
     const n = ground.length + (this.pieces.length ? 1 : 0);
-    const hereSub = p && p.mode === 'paddle' ? 'in the canoe' : inv.atStash ? 'the canoe at the dock' : atCanoe ? (n ? `the canoe · ${n} on the ground` : 'the canoe beside you') : n ? `${n} on the ground` : 'within reach';
-    tabs.push({ key: 'here', kind: 'here', label: 'Here', sub: hereSub, n: canoe.length + n });
-    if (inv.atStash) tabs.push({ key: 'keeping', kind: 'keeping', label: 'Keeping', sub: 'at the outfitter’s' });
-    return { tabs, list, byId, carried };
+    const hereSub = p && p.mode === 'paddle' ? 'in the canoe' : inv.atStash ? (n ? `the canoe at the dock · ${n} on the ground` : 'the canoe at the dock, and what they keep for you') : atCanoe ? (n ? `the canoe beside you · ${n} on the ground` : 'the canoe beside you') : n ? `${n} on the ground, within reach` : 'within reach';
+    if (inv.atStash && !this.pane) tabs.push({ key: 'keeping', kind: 'keeping', label: 'Keeping', sub: 'at the outfitter’s' });
+    return { tabs, list, byId, carried, here: { ground, canoe, atCanoe, n, sub: hereSub } };
   }
   // what Here shows: the things on the ground within reach (not the fire's stations), the canoe's load when beside it
   hereLists(list, byId) {
@@ -1643,15 +1647,17 @@ export class MineSide {
   setTab(key) { if (this.tab === key) return; this.tab = key; this.sig = ''; if (this.owner) this.owner.render(true); else this.render(true); }
   // the next tab along (Tab), or back (Shift-Tab)
   nextTab(dir = 1) { const { tabs } = this.tabs(); if (!tabs.length) return; const i = tabs.findIndex((t) => t.key === this.current(tabs)); this.setTab(tabs[(i + dir + tabs.length) % tabs.length].key); }
-  // a container's grid brought up and lit: its own tab, else the tab that holds it (Here, Keeping)
+  // a container's grid brought up and lit: its own tab, else the tab that holds it, else where it lies in the right pane
+  // (Here: the ground, the canoe; what the outfitters keep)
   openAt(ref) {
     const inv = model(), c = typeof inv.cont === 'function' ? inv.cont(ref) : null, { tabs } = this.tabs();
     this.pendLit = ref;
-    if (tabs.some((t) => t.key === ref)) { this.setTab(ref); return; }
     const parent = c && c.where === 'in' ? c.in : null;
-    if (parent && tabs.some((t) => t.key === parent)) { this.setTab(parent); return; }
     const where = c ? (typeof inv.rootWhere === 'function' ? inv.rootWhere(c) : c.where) : 'ground';
-    this.setTab(where === 'stash' ? 'keeping' : 'here');
+    if (tabs.some((t) => t.key === ref)) this.setTab(ref);
+    else if (parent && tabs.some((t) => t.key === parent)) this.setTab(parent);
+    else if (!this.pane && where === 'stash' && tabs.some((t) => t.key === 'keeping')) this.setTab('keeping');
+    this.sig = '';
     if (this.owner) this.owner.render(true); else this.render(true);
   }
   sigNow() {
@@ -1665,8 +1671,9 @@ export class MineSide {
     if (drag) { dirty = true; return; }
     const sig = this.sigNow(); if (!force && sig === this.sig) return;
     this.sig = sig;
-    const { tabs, list, byId } = this.tabs(), key = this.current(tabs), sc = this.owner;
+    const { tabs, list, byId, here } = this.tabs(), key = this.current(tabs), sc = this.owner;
     const page0 = this.el.querySelector('.tabpage'), scroll = page0 ? page0.scrollTop : 0;
+    const here0 = this.el.querySelector('.here-body'), hereScroll = here0 ? here0.scrollTop : 0;
     for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy();
     this.el.textContent = '';
     // the body
@@ -1686,15 +1693,24 @@ export class MineSide {
       nav.appendChild(b);
     }
     side.appendChild(nav);
-    const page = mk('div', `tabpage tp-${key === 'here' ? 'here' : key === 'keeping' ? 'keeping' : 'cont'}`);
+    const page = mk('div', `tabpage tp-${key === 'keeping' ? 'keeping' : 'cont'}`);
     const t = tabs.find((q) => q.key === key);
     if (!t) page.appendChild(mk('p', 'pk-empty', 'Nothing on you. Drag a pack by its strap to the slots on the left, or E at it on the ground.'));
     else if (t.kind === 'cont') page.appendChild(block(t.c, byId, { onUse: this.onUse, screen: sc }));
-    else if (t.kind === 'here') this.herePage(page, list, byId);
     else this.keepingPage(page, list, byId);
     side.appendChild(page);
     this.el.append(body, side);
     if (scroll && !page.classList.contains('tp-cont')) page.scrollTop = scroll;
+    // the right pane: what you are facing
+    if (this.pane) {
+      const col = mk('section', 'mn-here'); col.setAttribute('aria-label', 'Here: what is within reach');
+      col.appendChild(mk('div', 'here-head', `<b>Here</b><i>${esc(here.sub)}</i>`));
+      const hb = mk('div', 'here-body');
+      this.herePage(hb, list, byId);
+      col.appendChild(hb);
+      this.el.appendChild(col);
+      if (hereScroll) hb.scrollTop = hereScroll;
+    }
     // the grid brought up (openAt) lit for a moment, and scrolled to; the light survives a redraw (its animation picks
     // up where it was)
     if (this.pendLit) { this.lit = { ref: this.pendLit, t0: now(), until: now() + 1600 }; this.pendLit = null; }
@@ -1749,7 +1765,7 @@ export class MineSide {
     z.appendChild(f); col.appendChild(z);
     return z;
   }
-  // Here: the ground within reach, then the canoe beside you
+  // Here, the right pane: the ground within reach, then the canoe beside you, then (at an outfitter) what they keep
   herePage(page, list, byId) {
     const inv = model(), p = ctx.player, sc = this.owner, { ground, canoe, atCanoe } = this.hereLists(list, byId);
     const near3 = (l) => l.at && p && Math.hypot(l.at.x - p.x, l.at.z - p.z) < 3;
@@ -1759,14 +1775,15 @@ export class MineSide {
     if (onFoot()) {
       const kids = [...blocks(ground), ...longGround.map((l) => longBlock(l, { screen: sc }))];
       if (this.pieces.length) kids.push(this.piecesBlock());
-      this.zone(page, 'ground', 'On the ground · within reach', kids, kids.length ? 'drag here to set a thing down' : 'Nothing on the ground here. Drag a thing here, or off the page, to set it down at your feet.');
+      this.zone(page, 'ground', 'On the ground · within reach', kids, kids.length ? 'drag here to set a thing down' : 'Nothing here. Drag a thing here, or off the page, to set it down at your feet.');
     }
     if (atCanoe) {
       const title = inv.atStash ? 'The canoe · tied at the dock' : afloat ? 'In the canoe' : 'The canoe · beside you';
       const z = this.zone(page, 'canoe', title, [...blocks(canoe), ...longCanoe.map((l) => longBlock(l, { screen: sc }))], canoe.length || longCanoe.length ? (afloat ? '' : 'drag a pack here to load it') : 'Nothing in the canoe. Drag a pack here to load it.');
       if (!afloat && !inv.atStash) z.appendChild(this.canoeActs(canoe, longCanoe));
     }
-    if (!page.children.length) page.appendChild(mk('p', 'pk-empty', afloat ? 'Nothing in the canoe.' : 'Nothing within reach. What you leave behind stays where you left it.'));
+    if (inv.atStash) this.keepingPage(page, list, byId);
+    if (!page.children.length) page.appendChild(mk('p', 'pk-empty', afloat ? 'Nothing in the canoe.' : 'Nothing here. What you leave behind stays where you left it.'));
   }
   // the canoe's two: everything out onto the ground about the hull, everything about it in (held: packs.js)
   canoeActs(canoe, longCanoe) {
@@ -1819,7 +1836,8 @@ function loadAll(d, list, opts = {}) {
   if (!H || !d || !list.length || typeof pk.loadAllOpts !== 'function') return null;
   return H.begin({ ...pk.loadAllOpts(d, list), ...o });
 }
-// the book open at Here with that container's (or pile's) grid lit: stream A's Q "Open it" and "Open the pile"
+// the book open with that container's (or pile's) grid lit where it lies in the right pane: stream A's Q "Open it" and
+// "Open the pile"
 export function openHere(ref) {
   const j = of(ctx.journal);
   const id = ref && typeof ref === 'object' ? ref.cId || ref.id || ref.container || null : ref;
@@ -1830,13 +1848,13 @@ export function openHere(ref) {
 }
 
 // --- the book's pack side -----------------------------------------------------------------------------------------
-// MineSide under the book's header (what is on you, the food within reach, the pencil note, the purse) and over its
-// keys. One screen: nothing scrolls but Here when much lies about.
+// MineSide with Here as its right pane, under the book's header (what is on you, the food within reach, the pencil
+// note, the purse) and over its keys. One screen: nothing scrolls but the right pane when much lies about.
 export class PackSide {
   constructor(el, { onUse = null, closeBook = null } = {}) {
     this.el = el; this.open = false; this.sig = ''; this.t = 0; this.mt = 0; this.onUse = onUse; this.closeBook = closeBook;
     this.held = null; this.fresh = true;
-    this.mine = new MineSide({ owner: this, onUse: (e, mode, c) => (this.onUse ? this.onUse(e, mode, c) : null), closeBook });
+    this.mine = new MineSide({ owner: this, onUse: (e, mode, c) => (this.onUse ? this.onUse(e, mode, c) : null), closeBook, pane: true });
     SCREENS.add(this);
   }
   // opened at your pack (the back's container) each time; Tab or a click turns to the others
@@ -1875,7 +1893,7 @@ export class PackSide {
         <div class="purse"${w.money ? '' : ' hidden'}><span class="sc">In hand</span><b></b></div>
       </header>
       <div class="pk-body"></div>
-      <footer class="pk-foot"><span>drag a thing by its strap to a slot, a tab, Here or off the page (the ground) · <kbd>Ctrl</kbd>-click sends it on · <kbd>R</kbd> turns · <kbd>Shift</kbd>-drag splits · right-click: what it is for</span><span><kbd>Tab</kbd> the next tab · <kbd>Shift</kbd>-<kbd>Tab</kbd> the journal · <kbd>J</kbd> closes</span></footer>`;
+      <footer class="pk-foot"><span>drag between the panes, a strap to a slot or a tab, anything off the page to the ground · <kbd>Ctrl</kbd>-click sends it on · <kbd>R</kbd> turns · right-click: what it is for</span><span><kbd>Tab</kbd> the next tab · <kbd>Shift</kbd>-<kbd>Tab</kbd> the journal · <kbd>J</kbd> closes</span></footer>`;
       this.el.querySelector('.pk-body').appendChild(this.mine.el);
       this.sig = '';
     }

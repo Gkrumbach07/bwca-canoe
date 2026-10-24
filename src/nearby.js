@@ -7,9 +7,9 @@
 //   pointed at                            E                          Q
 //   a hung barrel                         Lower (hold)               —
 //   a tree with a good limb, barrel on you  Hang (hold)              —
-//   a barrel, pack, bucket, box on the ground  Pick up               Open it (the book's Here tab)
+//   a barrel, pack, bucket, box on the ground  Pick up               Open it (the book, lit in Here)
 //   a branch or a log                     Pick up                    —
-//   a pile                                Take one                   Open the pile (the book's Here tab)
+//   a pile                                Take one                   Open the pile (the book, lit in Here)
 //   the fire ring                         Open the fire (its card)   Light (hold) when laid · Douse (hold) when burning
 //   a pitched tent                        Rest until… (the dial)     Strike (hold)      (half pitched: E carries on)
 //   a bagged tent on the ground           Pick up                    Pitch (the ghost, then hold)
@@ -28,7 +28,7 @@
 //   nearby.attach({ camp, packs, journal, hud, pointer, canoe, player, inventory })   (main.js, fb2 A)
 //   nearby.world({ cards, journal, sitter })   (main.js, wc A: the other streams', feature-detected at each call)
 //     cards()   → stream B's { open(kind, ref), close() } or null (E at the ring: cards.open('fire', key))
-//     journal   the book: openHere(ref) (B's Here tab) when it has it, else show('pack')
+//     journal   the book: openHere(ref) (B's right pane, Here) when it has it, else show('pack')
 //     sitter()  → stream C's player with sitAt(spot) → bool, stand(), seated, or null: then cook.js's seat sits you
 //   nearby.objects() -> [{ id, kind, title, sub?, slots?, actions, meter?, cooking? }]
 //     kind     'fire' | 'pile'
@@ -40,7 +40,7 @@
 //     meter    the fire's: { value 0..1, label, words }; cooking: { value 0..1, words } while the pot is on
 //   nearby.itemActions(ref) -> [{ id, label, enabled, why?, closeBook?, run }]   ref: { cId, uid, itemId } |
 //              { container: cId } | { long: uid }: a tent's Pitch, a barrel's Hang, wood onto the fire, a meal onto the grate
-//   nearby.groundPieces() -> [{ uid: 'piece:<key>', id, at }]: the loose wood within reach (the book's Here tab)
+//   nearby.groundPieces() -> [{ uid: 'piece:<key>', id, at }]: the loose wood within reach (the book's Here pane)
 //   nearby.takePiece(uid, toCId, x?, y?, rot?) -> { ok, words }
 //   nearby.onChange(fn) -> off: the set, or something in it, changed (read objects() again)
 //   nearby.targets(ray, near)  the pointer's provider (pointer.js): the table above
@@ -56,7 +56,7 @@ import { eatName } from './cook.js';
 
 const FIRE_PANEL = 4;        // m from the ring within which its object is in objects() (the card)
 const HULL_REACH = 3;        // m from the canoe's keel line (inventory.js HULL_REACH)
-const PIECE_REACH = 3;       // m: the loose wood the Here tab lists (inventory.js REACH)
+const PIECE_REACH = 3;       // m: the loose wood the book's Here pane lists (inventory.js REACH)
 const POINT = { fire: 3.0, tent: 4.2, seat: 2.8, hung: 3.4, log: 1.8, water: 2.6 }; // m within which the dot takes them
 const BURN_FULL = 6;         // game hours of wood the fire's meter calls full
 const FOOD = new Set(['meal', 'fish']);
@@ -115,7 +115,7 @@ class Nearby {
   }
   // a card up (stream B's cards.shown): no dot under it
   cardUp() { const c = this.cards(); return !!(c && c.shown); }
-  // Q at a container or a pile on the ground: the book's Here tab at it; without it, the book at the pack
+  // Q at a container or a pile on the ground: the book with it lit in Here; without it, the book at the pack
   openHere(ref) {
     const j = this.book();
     if (j && typeof j.openHere === 'function') { try { j.openHere(ref); return true; } catch (e) { console.warn('journal.openHere', e); } }
@@ -211,7 +211,7 @@ class Nearby {
     return { id, label, enabled: !!spot, why: spot ? null : full, run: () => { const s = inv.firstFit(to, e.id); return !!(s && inv.move(from.id, e.uid, to.id, s.x, s.y, s.rot, 1)); } };
   }
 
-  // --- the loose wood, for the book's Here tab ------------------------------------------------------------------------
+  // --- the loose wood, for the book's Here pane ------------------------------------------------------------------------
   groundPieces() {
     const p = this.player, ch = this.chores, out = [];
     if (!p || p.mode !== 'walk') return out;
