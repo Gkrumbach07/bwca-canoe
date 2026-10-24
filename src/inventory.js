@@ -188,6 +188,7 @@ export class Inventory {
       if (typeof pr.write === 'function') pr.write();
     }
     this.migrated = { days, meals, from: pr && pr.migrated ? pr.migrated : 'profile' };
+    this.pendingNote = 'Everything you own is a thing now, and it is in the canoe: the packs, the barrel, the bucket, the rod. J opens the inventory.';
     this.refreshUse();
     this.emit('migrate');
     this.write();
@@ -356,7 +357,7 @@ export class Inventory {
   // leeches, the tackle box for lures, the stringer for fish), then what you carry, the canoe, the stash; the pockets
   // take snacks and berries first. opts.prefer: container ids to try first; opts.crate: what does not fit waits in the
   // outfitters' crate; opts.all: any container you own, not only those in reach.
-  place(itemId, qty = 1, { prefer = [], data = null, crate = false, all = false, quiet = false, exclude = [] } = {}) {
+  place(itemId, qty = 1, { prefer = [], data = null, crate = false, all = false, quiet = false, exclude = [], pool: within = null } = {}) {
     const d = itemDef(itemId);
     if (!d) return { ok: false, placed: 0, why: 'unknown', cId: null, uid: null };
     if (d.kind === 'container') {
@@ -364,7 +365,7 @@ export class Inventory {
       return { ok: true, placed: 1, cId: c.id, uid: c.id, why: null };
     }
     if (d.kind === 'long') { const l = this.addLong(itemId, this.atStash || !this.attached ? 'stash' : 'canoe', null, { quiet }); return { ok: true, placed: 1, cId: null, uid: l.uid, why: null }; }
-    const pool = (all || !this.attached ? this.containers : this.reachable()).filter((c) => c.item !== 'crate' && c.item !== 'pile' && !exclude.includes(c.id) && this.accepts(c, d));
+    const pool = (within || (all || !this.attached ? this.containers : this.reachable())).filter((c) => c.item !== 'crate' && c.item !== 'pile' && !exclude.includes(c.id) && this.accepts(c, d));
     const pre = prefer.map((id) => this.cont(id)).filter((c) => c && pool.includes(c));
     const rest = pool.filter((c) => !pre.includes(c)).sort((a, b) => this.score(b, d) - this.score(a, d));
     let left = Math.max(1, qty | 0), first = null, uid = null;
@@ -529,7 +530,7 @@ export class Inventory {
     if (n < have) { while (have > n && this.takeMeal(have % 2 === 0)) have--; return; }
     for (let i = have; i < n; i++) {
       const id = i % 2 ? 'meal:supper' : 'meal:breakfast';
-      const r = this.place(id, 1, { crate: this.atStash, quiet: true });
+      const r = this.place(id, 1, { crate: this.atStash, quiet: true, pool: this.foodPool() });
       if (!r.ok) { if (this.hud) this.hud.note('No room for more food in what you have with you.', 4); break; }
     }
     this.emit('items');
@@ -662,11 +663,11 @@ export class Inventory {
     return ok(slot === 'hands' ? `${t.def.name} in hand.` : `${t.def.name} on your ${slot}.`);
   }
   // Set it down on the ground at your feet (or at `at`): it stays there, with what is in it, until you come back for it
-  setDown(ref, at = null, { left = true, quiet = false } = {}) {
+  setDown(ref, at = null, { left = true, quiet = false, force = false } = {}) {
     const t = this.thing(ref), p = this.player;
     if (!t) return no('gone', 'That is not here.');
     if (t.def.fixed) return no('fixed', '');
-    if (!this.thingReachable(t)) return no('far', `${t.def.name} is out of reach.`);
+    if (!force && !this.thingReachable(t)) return no('far', `${t.def.name} is out of reach.`);
     if (!at) { if (!p || !p.onFoot) return no('afloat', 'Not from the canoe: go ashore first.'); at = this.spotNear(p.x, p.z, p.heading); }
     const o = t.obj;
     if (t.kind === 'container' && o.where === 'in') this.unnest(o);
@@ -744,6 +745,7 @@ export class Inventory {
       if (p.mode === 'paddle') this.stowCarried(true);
       this.prevMode = p.mode;
     }
+    if (this.pendingNote && this.hud) { this.hud.note(this.pendingNote, 9); this.pendingNote = null; }
     if (this.fishing && Array.isArray(this.fishing.stringer)) this.syncStringer();
     this.bridgeLeeches();
     // empty piles go

@@ -144,7 +144,7 @@ export class Packs {
     const rx = Math.sin(heading), rz = Math.cos(heading); // to the right of the heading
     ks.forEach((u, i) => {
       const o = (i - (ks.length - 1) / 2) * 0.66, px = x + rx * o, pz = z + rz * o;
-      this.inv.setDown(u.ref, { x: px, z: pz, y: this.groundUnder(px, pz, heading, u), heading, camp: true }, { left: false, quiet: true });
+      this.inv.setDown(u.ref, { x: px, z: pz, y: this.groundUnder(px, pz, heading, u), heading, camp: true }, { left: false, quiet: true, force: true });
     });
     if (ks.length) this.inv.emit('ground');
     return ks.length;
@@ -195,7 +195,7 @@ export class Packs {
     for (const u of rest) {
       const s = this.spotNear(p.x, p.z, p.heading, 1, 1, taken);
       taken.push(s);
-      inv.setDown(u.ref, { x: s.x, z: s.z, y: this.groundUnder(s.x, s.z, p.heading, u), heading: Math.atan2(-(p.z - s.z), p.x - s.x), trail }, { left: false, quiet: true });
+      inv.setDown(u.ref, { x: s.x, z: s.z, y: this.groundUnder(s.x, s.z, p.heading, u), heading: Math.atan2(-(p.z - s.z), p.x - s.x), trail }, { left: false, quiet: true, force: true });
     }
     if (rest.length) inv.emit('ground');
   }
@@ -297,8 +297,14 @@ export class Packs {
     const ground = all.filter((u) => u.obj.where === 'ground' && u.obj.at && !u.obj.at.camp);
     // set down for the second trip, at the trail head away from the canoe
     const left = ground.filter((u) => u.obj.at.trail && Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH);
-    let near = null, nd = REACH;
-    for (const u of ground) { const d = Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z); if (d < nd) { nd = d; near = u; } }
+    // the nearest thing in reach, one you have room for first (a barrel beside a pack, with a pack on your back already)
+    let near = null, nd = REACH, full = null;
+    for (const u of ground) {
+      const d = Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z); if (d >= REACH) continue;
+      const room = u.id === 'pile' || !!this.slotFor(u);
+      if (room && (!near || d < nd)) { nd = d; near = u; } else if (!room && !full) full = u;
+    }
+    if (!near && full) near = full;
     if (!c.drop) {
       // the canoe overhead: beside a thing, Q takes it too; at the far end with things still back at the start, E sets
       // the canoe down to walk back for them, Q launches and leaves them there
@@ -485,7 +491,7 @@ export class Packs {
     for (const u of plan.units) {
       if (u.obj.where !== 'ground') continue;
       const s = this.spotNear(d.x, d.z, d.heading, 1, -1, taken); taken.push(s);
-      this.inv.setDown(u.ref, { x: s.x, z: s.z, y: this.groundUnder(s.x, s.z, d.heading, u), heading: Math.atan2(-(d.z - s.z), d.x - s.x), trail: u.obj.at && u.obj.at.trail }, { left: false, quiet: true });
+      this.inv.setDown(u.ref, { x: s.x, z: s.z, y: this.groundUnder(s.x, s.z, d.heading, u), heading: Math.atan2(-(d.z - s.z), d.x - s.x), trail: u.obj.at && u.obj.at.trail }, { left: false, quiet: true, force: true });
     }
     this.inv.emit('ground');
     const y = this.spotNear(d.x, d.z, d.heading, -1, -1);
@@ -533,4 +539,4 @@ export class Packs {
 }
 
 // the order a free hand takes things in, with the canoe coming up: the rod first, then the bucket, the tackle box…
-function rank(u) { const i = HAND_ORDER.indexOf(u.id); return i < 0 ? (u.kind === 'long' ? 1.5 : 8) : i; }
+function rank(u) { const i = HAND_ORDER.indexOf(u.id); return i < 0 ? (u.kind === 'long' ? HAND_ORDER.length : 8) : i; }
