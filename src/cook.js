@@ -18,13 +18,14 @@ import { word } from './hud.js';
 //   steaming (fire.js's pot steam) and bubbling, a fish sizzling in the pot's lid. It needs the fire burning under it.
 //   Done, it chimes, and the cooked thing (items.js hot:* and fried:*) sits in the pot on the grate: the panel's Eat eats
 //   it, or the book moves it into a container as leftovers, which keep `keep` game hours and then go off.
-// - Eating: Eat walks you round the fire to the bench and you sit, the pot in one hand and the spoon going to your mouth
-//   (canoe.js poseSit with move.eat), for EAT_SECONDS, ten minutes on the clock; then the food need (energy.eatItem) and
-//   the pot goes back in a pack. A hot meal eaten from the book near your bench sits you down the same way.
-// - Sitting: sitAt(spot) walks the walker to a spot in front of a seat (round whatever is between, along an arc about
-//   it), turns him and sits him down onto it: the figure's rig is moved onto the seat (beforePose) and poseSit is given
-//   the seat's height (move()). The latrine (chores.js) and the bench use it. main.js (camp 2) wraps canoe.moveOf and
-//   canoe.update to call move(), beforePose() and afterPose() (the spoon and the pot in the hands).
+// - Eating is instant (wc A, the owner's third round of 2026-10-24: "i dont want to have to sit to eat food, just
+//   consume it. no animation"): Eat on the fire's card (eatAt) takes the cooked thing out of the pot and eats it there
+//   and then (energy.eatItem), the pot back in its pack; a thing eaten from the book (inventory.eat) is the same, with
+//   no sit. Sitting on the bench is its own thing now (E Sit, stream C's player.sitAt).
+// - Sitting (the fallback when player.sitAt is not in the build, and the latrine's walk): sitAt(spot) walks the walker
+//   to a spot in front of a seat (round whatever is between, along an arc about it), turns him and sits him down onto
+//   it: the figure's rig is moved onto the seat (beforePose) and poseSit is given the seat's height (move()). main.js
+//   (camp 2) wraps canoe.moveOf and canoe.update to call move(), beforePose() and afterPose().
 // Saved through chores.js (trip.state.chores.cook).
 
 export const COOK = { // real seconds on the grate and game minutes on the clock; litres of water from the bottle
@@ -33,10 +34,9 @@ export const COOK = { // real seconds on the grate and game minutes on the clock
   'meal:freeze': { seconds: 6, minutes: 20, water: 0.5, say: 'the water on to boil' },
   fish: { seconds: 7, minutes: 20, water: 0, say: 'cleaned and into the lid to fry' },
 };
-const EAT_SECONDS = 4.6, EAT_MINUTES = 10, SET_SECONDS = 1.0;
+const EAT_MINUTES = 10, SET_SECONDS = 1.0; // a meal takes ten minutes on the clock, eaten at once
 const NEAR_CAMP = 30;          // m from the fire within which the cook's minutes pass on the clock
 const HEAT_MIN = 0.12;         // the fire's heat (fire.js) under which the pot stops cooking
-const BENCH_REACH = 9;         // m from a site's bench within which a hot meal eaten from the book is eaten sitting
 const WALK = 1.6;              // m/s, walked to a seat
 const RIG = new THREE.Vector3();
 
@@ -160,8 +160,8 @@ export class Cook {
   constructor(chores) {
     this.ch = chores;
     this.pot = null;       // on the grate: { key, raw, out, data, t, dur, hours, at0, fish, done, cold }
-    this.seat = null;      // sitting (or walking to sit): { stand, seat, heading, path, phase, t, k, eat, until }
-    this.eating = null;    // { def, t, apply, key }
+    this.seat = null;      // sitting (or walking to sit): { stand, seat, heading, path, phase, t, k, until }
+    this.eating = null;    // (wc A: eating is instant; kept null for the poses that asked)
     this.gesture = null;   // a moment on the heels (setting the pot on): { t, say }
     this.hot = null;       // the pot just off the boil: { key, t } (its steam thins over a little while)
     this.soundT = 0; this.spoilT = 0;
@@ -171,10 +171,9 @@ export class Cook {
     this.potOpen = mk(potGeometry({ lid: false, food: 0xb9925a }));
     this.panRaw = mk(panGeometry(false));
     this.panFried = mk(panGeometry(true));
-    this.spoon = mk(spoonGeometry()); this.spoon.castShadow = false;
-    this.handPot = mk(potGeometry({ lid: false, food: 0xb9925a })); // the pot in the hand while eating (the lid off)
+    void spoonGeometry; // (the spoon and the pot in the hands went with the eating sit, wc A)
     const e = this.energy;
-    if (e) e.onEat = (eat, name) => this.onEat(eat, name); // a hot meal eaten from the book, near the bench, sits you down
+    if (e && e.onEat) e.onEat = null; // wc A: nothing sits you down to a meal any more
   }
   get camp() { return this.ch.camp; }
   get player() { return this.ch.camp.player; }
@@ -183,7 +182,7 @@ export class Cook {
   get inv() { return this.ch.inv; }
   get audio() { return this.ch.camp.audio; }
   get now() { return this.ch.camp.now; }
-  get busy() { return !!(this.seat || this.eating || this.gesture); }
+  get busy() { return !!(this.seat || this.gesture); }
   note(t, s = 5) { this.ch.note(t, s); }
   sound(fn, at, ...a) { const au = this.audio; if (!au || !au.ctx || !au.enabled) return; try { fn(au, at, ...a); } catch { /* the sound is a nicety */ } }
   // the clock moved on a little (as camp.pass and hold.js do: over midnight by setClock)
@@ -339,53 +338,28 @@ export class Cook {
     return true;
   }
 
-  // --- eating -------------------------------------------------------------------------------------------------------
-  // E at the fire with a meal in the pot: round to the bench, sit, eat out of the pot
+  // --- eating (wc A: at once, no sit) --------------------------------------------------------------------------------
+  // Eat on the fire's card with a meal in the pot: it is eaten there and then, ten minutes on the clock, the food need
+  // up (energy.eatItem) and the pot back in its pack
   eatAt(site, key) {
     const og = this.onGrate(key);
-    if (!og.food || this.busy) return false;
+    if (!og.food) return false;
     const def = itemDef(og.food.id), got = this.inv.take(og.g.id, og.food.uid, 1);
     if (!got) return false;
-    const spot = this.benchSpot(site);
-    this.eating = { def, data: got.data || null, t: 0, apply: true, key, site, phase: 0 };
-    this.sitAt(spot);
+    const e = this.energy;
+    if (e && e.eatItem) e.eatItem(def.eat || {}, def.name);
+    this.pass(EAT_MINUTES / 60);
+    const d = this.ch.camp.day, h = d.hours, what = eatName(def);
+    const line = h >= 17 || h < 3 ? 'the loons starting up out on the lake' : h < 10 ? 'the mist lifting off the bay' : 'the jays watching from the spruce';
+    this.note(`${cap(what)} out of the pot by the fire, ${line}.`, 6);
+    this.putAway(key, false);
+    if (this.ch.camp.log) this.ch.camp.log('meal', { what: def.id, at: 'fire' });
     this.inv.emit('items');
     this.ch.persist();
     return true;
   }
-  // a hot meal eaten from the book (energy.eatItem): near a site's bench, you sit down to it (it is already eaten)
-  onEat(eat, name) {
-    if (this.eatingNow || !eat || !eat.hot || this.busy) return;
-    const p = this.player;
-    if (p.mode !== 'walk') return;
-    const site = this.ch.camp.nearestSite(p.x, p.z, BENCH_REACH + 3, true);
-    if (!site || !site.layout || !site.layout.bench) return;
-    const spot = this.benchSpot(site);
-    if (Math.hypot(spot.stand.x - p.x, spot.stand.z - p.z) > BENCH_REACH) return;
-    this.eating = { def: { name, eat }, t: 0, apply: false, key: null, site, phase: 0 };
-    this.sitAt(spot);
-  }
-  // seated: eat for EAT_SECONDS (the spoon to the mouth), then the food need and the pot back in the pack
-  updateEating(dt) {
-    const E = this.eating, S = this.seat;
-    if (!S || S.phase !== 'seated') return;
-    E.t += dt;
-    E.phase += dt / 1.15;
-    this.pass((EAT_MINUTES / 60) * (dt / EAT_SECONDS));
-    if (E.t < EAT_SECONDS) return;
-    if (E.apply) {
-      const e = this.energy;
-      this.eatingNow = true;
-      try { if (e && e.eatItem) e.eatItem(E.def.eat || {}, E.def.name); } finally { this.eatingNow = false; }
-      const d = this.ch.camp.day, h = d.hours, what = eatName(E.def);
-      const line = h >= 17 || h < 3 ? 'the loons starting up out on the lake' : h < 10 ? 'the mist lifting off the bay' : 'the jays watching from the spruce';
-      this.note(`${cap(what)} out of the pot on the bench by the fire, ${line}.`, 6);
-      if (E.key) this.putAway(E.key, false);
-      if (this.ch.camp.log) this.ch.camp.log('meal', { what: E.def.id || E.def.name, at: 'fire' });
-    }
-    this.eating = null;
-    this.standUp();
-  }
+  // (the hot meal's sit from the book, camp 2: gone; eating is instant everywhere)
+  onEat() {}
 
   // --- sitting ------------------------------------------------------------------------------------------------------
   // walk to spot.stand (round spot.round's middle along an arc), turn to spot.heading, and sit on spot.seat
@@ -403,10 +377,12 @@ export class Cook {
     this.seat = { ...spot, path, phase: 'walk', t: 0, k: 0, until };
   }
   standUp() { const S = this.seat; if (S && S.phase !== 'up') { S.phase = 'up'; S.t = 0; } }
+  // sat down (or sitting down), the fallback's word of it (pointer.seated)
+  get seated() { const S = this.seat; return !!(S && (S.phase === 'sit' || S.phase === 'seated')); }
   updateSeat(dt) {
     const S = this.seat, p = this.player;
     if (!S) return;
-    if (p.mode !== 'walk' || p.teleporting) { this.seat = null; this.eating = null; return; }
+    if (p.mode !== 'walk' || p.teleporting) { this.seat = null; return; }
     S.t += dt;
     if (S.phase === 'walk') {
       let step = WALK * dt;
@@ -430,22 +406,21 @@ export class Cook {
       if (S.k <= 0) this.seat = null;
     }
   }
-  // the move canoe.js poses (main.js camp 2 wraps canoe.moveOf): sitting, with the spoon's cycle while eating
+  // the move canoe.js poses (main.js camp 2 wraps canoe.moveOf): sitting
   move() {
     const S = this.seat;
     if (!S || S.phase === 'walk' || (S.phase === 'up' && S.k < 0.55)) return null;
     const m = this._move || (this._move = { kind: 'sit', t: 0, dur: 0, u: 0, from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 }, top: 0, heading: 0, speed: 0, depth: 0, carry: false, nearD: null, far: null, eat: null });
     m.t = S.t; m.top = S.seat.y; m.heading = S.heading;
     m.from.x = m.to.x = S.seat.x; m.from.y = m.to.y = S.seat.y; m.from.z = m.to.z = S.seat.z;
-    const E = this.eating;
-    m.eat = E && S.phase === 'seated' ? { k: E.phase, t: E.t } : E && S.phase === 'sit' ? { k: 0, t: 0 } : null;
+    m.eat = null;
     return m;
   }
 
   // --- the frame -----------------------------------------------------------------------------------------------------
-  // before player.update (chores.before): the walker held while sitting, eating or setting the pot on
+  // before player.update (chores.before): the walker held while sitting or setting the pot on
   before() { if (this.busy) this.player.input.paused = true; }
-  // after player.update (chores.update): the pot, the seat, the eating, the leftovers
+  // after player.update (chores.update): the pot, the seat, the leftovers
   update(dt) {
     const p = this.player;
     if (this.gesture) {
@@ -454,10 +429,7 @@ export class Cook {
       if (this.gesture.t >= this.gesture.dur) this.gesture = null;
     }
     this.updateSeat(dt);
-    if (this.eating) {
-      if (!this.seat) this.eating = null;
-      else { this.updateEating(dt); if (this.eating && p.mode === 'walk') p.prompt = { key: null, text: this.eating.apply ? `Eating the ${eatName(this.eating.def)} by the fire…` : 'Eating…' }; }
-    } else if (this.seat && this.seat.phase !== 'up' && p.mode === 'walk' && !this.seat.quiet && !this.ch.holdActive()) p.prompt = { key: null, text: 'Sitting down…' };
+    if (this.seat && this.seat.phase !== 'up' && p.mode === 'walk' && !this.seat.quiet && !this.ch.holdActive()) p.prompt = { key: null, text: this.seat.phase === 'seated' ? `Sitting on the ${this.seat.kind || 'bench'}` : 'Sitting down…' };
     const P = this.pot;
     if (P) {
       const F = this.fires, f = F.get(P.key), site = this.ch.camp.registry.site(P.key), og = this.onGrate(P.key);
@@ -512,8 +484,7 @@ export class Cook {
       at = this.grateSpot(site);
       const og = this.onGrate(keyOn);
       const fishy = P ? P.fish : og.food ? /^fried:/.test(og.food.id) : false;
-      const inHand = !!(this.eating && this.eating.key === keyOn && this.eating.apply); // the pot is in his hand
-      if ((og.pot || P) && !inHand) look = fishy ? (P && P.t < P.dur * 0.5 ? 'panRaw' : 'panFried') : 'potLid';
+      if (og.pot || P) look = fishy ? (P && P.t < P.dur * 0.5 ? 'panRaw' : 'panFried') : 'potLid';
       if (P && !P.cold) steam = fishy ? 0.35 + 0.35 * smoothstep(0.2, 0.6, P.t / P.dur) : 0.25 + 0.75 * smoothstep(0.1, 0.55, P.t / P.dur);
       else if (this.hot && this.hot.key === keyOn && og.food) steam = 0.5 * (1 - smoothstep(4, 40, this.hot.t)) + 0.12;
     }
@@ -539,26 +510,8 @@ export class Cook {
     rig.rotation.set(0, S.heading, 0);
     rig.updateMatrixWorld(true);
   }
-  // after the pose: the spoon in the right hand and the pot in the left while eating
-  afterPose() {
-    const E = this.eating, S = this.seat, cn = this.player.canoe, on = !!(E && S && (S.phase === 'seated' || S.phase === 'sit') && cn && cn.figure);
-    this.spoon.visible = on; this.handPot.visible = on && !!E.apply;
-    if (!on) return;
-    const b = cn.figure.bones;
-    b.handR.updateWorldMatrix(true, false); b.handL.updateWorldMatrix(true, false);
-    // the hand bone's frame (figure.js Poser): +x the grip axis (the thumb side), the fingers along the bind direction
-    const R = b.handR.matrixWorld, Lm = b.handL.matrixWorld;
-    const grip = (m, sg) => V(0, -1, -0.24 * sg).normalize().multiplyScalar(0.07).add(V(0, -0.24, -sg).normalize().multiplyScalar(0.017)).applyMatrix4(m);
-    const pR = grip(R, -1), ax = V(1, 0, 0).transformDirection(R);
-    this.spoon.position.copy(pR).addScaledVector(ax, -0.05);
-    this.spoon.quaternion.setFromUnitVectors(V(1, 0, 0), ax);
-    if (E.apply) {
-      const pL = grip(Lm, 1), dn = V(0, -1, -0.24).normalize().transformDirection(Lm), palm = V(0, -0.24, 1).normalize().transformDirection(Lm);
-      this.handPot.position.copy(pL).addScaledVector(palm, R_POT * 0.6).addScaledVector(dn, 0.01);
-      this.handPot.position.y -= H_POT * 0.55;
-      this.handPot.rotation.set(0, S.heading, 0);
-    }
-  }
+  // after the pose: nothing in the hands any more (the spoon and the pot went with the eating sit, wc A)
+  afterPose() {}
 
   // --- the book (main.js camp 2: journal.pack.onUse) ----------------------------------------------------------------
   // fb2 A: the grate is the fire's panel in the book now (nearby.js: a raw meal or a fish dragged onto the grate, Cook;

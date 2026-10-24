@@ -1,11 +1,13 @@
 // Hanging the food barrel (the camp redone, 2026-10-24: "you have to hang your blue food barrel"). With a blue barrel in
 // reach (on you, at your feet, in the canoe beside you) and a tree near whose lowest limb is high enough, the rope goes
 // over the limb, the barrel is tied on and hoisted, and it hangs well out from the trunk with its bottom three metres off
-// the ground, the rope tied off round the trunk; let down again, it stands at the rope's foot. fb2 A (the owner's second
-// feedback of 2026-10-24: the inventory is where you interact): it is done from the book, held, not on E: the tree's
-// panel (nearby.js: Hang the barrel), the hung barrel's (Lower it), or a barrel's right-click Hang, which closes the book
-// and waits for E or a click at the tree, held. A hung barrel is in reach only once lowered, or from under it (to look in:
-// inventory.js REACH).
+// the ground, the rope tied off round the trunk; let down again, it stands at the rope's foot. wc A (the world cards,
+// the owner's third round of 2026-10-24; asked what E on a hung barrel does, "you get a screen where you can choose to
+// Lower it?": no): it is on the dot (pointer.js, nearby.js), held: with the barrel on you, a tree with a good limb reads
+// "E Hang · hold" (treeTarget); the hung barrel, or the trunk its rope is tied off on, reads "E Lower · hold"
+// (hungTarget), and E just lowers it. No card. A barrel's right-click Hang in the book (nearby.itemActions) says to carry
+// it to a tree and point at the limb, or arms the hang when you stand under one. A hung barrel is in reach only once
+// lowered, or from under it (to look in: inventory.js REACH).
 //
 // The trees are the drawn ones (tiles.js vegBins: each tree's species, place and scale): a white pine's, a red pine's or
 // a big birch's lowest limb, where its crown starts (camera.js CROWN's measures of the drawn trees), four to seven and a
@@ -199,10 +201,10 @@ export class Hang {
     }
     return best;
   }
-  // --- from the book (fb2 A) -----------------------------------------------------------------------------------------
-  // Nothing here is on E any more (E is the pointer's: pick up, talk, open, get in). The book's panels (nearby.js) and
-  // a barrel's right-click Hang do it: held there (the book's BookHold), or armed in the world (Hang from the right-click
-  // closes the book: E or a click at the tree, held, hangs it).
+  // --- on the dot (wc A) ---------------------------------------------------------------------------------------------
+  // Nothing here is a panel any more: the tree and the hung barrel are the pointer's targets (nearby.js asks treeTarget
+  // and hungTarget), E held. A barrel's right-click Hang in the book (nearby.itemActions) arms it instead (arm: E or a
+  // click at the tree, held) when a tree is within reach, else says to carry it to one.
   prompts() { return false; }
   // the barrel to hang now: one you carry first, else one at your feet
   barrelToHang(cId = null) {
@@ -210,6 +212,32 @@ export class Hang {
     if (cId) return bs.find((k) => k.id === cId) || null;
     return bs.find((k) => k.where === 'back' || k.where === 'chest' || k.where === 'hands') || bs[0] || null;
   }
+  // the barrel on you (your back, your chest, a hand): the one the dot hangs ("a tree with a good limb, barrel in your hands")
+  barrelCarried() { return this.barrels().find((k) => k.where === 'back' || k.where === 'chest' || k.where === 'hands') || null; }
+  // The tree the dot offers "E Hang · hold" at: with a barrel on you (or a hang let go part way at a tree within reach,
+  // the rope over or the barrel tied on at its foot), the nearest tree with a limb high enough: { t, spot, c, from,
+  // label, run(opts) } or null. run begins the hold with the dot's keys (opts.key: KeyE, and Mouse0).
+  treeTarget() {
+    const p = this.player;
+    if (p.mode !== 'walk' || !this.inv || !this.inv.attached) return null;
+    const ph = this.pendingHere();
+    if (ph) {
+      const { pe, c } = ph;
+      return { t: pe.tree, spot: pe.spot, c, from: pe.done, label: `The ${pe.tree.name} · ${HANG[pe.done - 1].name.toLowerCase()} so far`, verb: pe.done >= 2 ? 'Carry on hoisting' : 'Carry on hanging', run: (o) => hold.begin({ ...this.hangOpts(c, pe.spot, pe.done), ...this.keys(o) }) };
+    }
+    const c = this.barrelCarried(), at = c ? this.treeFor(c) : null;
+    if (!c || !at) return null;
+    return { t: at.t, spot: at.spot, c, from: 0, label: `The ${at.t.name} · a limb ${Math.round(at.t.up)} m up`, verb: 'Hang', run: (o) => hold.begin({ ...this.hangOpts(c, at.spot, 0), ...this.keys(o) }) };
+  }
+  // the hung barrel the dot offers "E Lower · hold" at: { c, tree, label, run(opts) } or null
+  hungTarget() {
+    const p = this.player, hung = this.hungNear(p.x, p.z);
+    if (!hung) return null;
+    const t = hung.at.tree;
+    return { c: hung, tree: t, label: `The ${barrelName(hung.item)}, hung from the ${t ? t.name : 'tree'}`, verb: 'Lower', run: (o) => hold.begin({ ...this.lowerOpts(hung), ...this.keys(o) }) };
+  }
+  // the hold's keys from the dot (opts.key KeyE, Mouse0 besides) or the book (BookHold, with E and a click)
+  keys(o) { const k = (o && o.key) || 'KeyE'; return { key: k, keys: [...new Set([k, 'Mouse0', ...((o && o.keys) || []), ...(k === 'BookHold' ? ['KeyE'] : [])])] }; }
   // the nearest tree within reach whose limb takes barrel c, and where it would hang: { t, spot } or null
   treeFor(c, px = this.player.x, pz = this.player.z) {
     for (const t of this.treesNear(px, pz, AT_TREE)) { const spot = this.spotFor(t, px, pz, BARRELS[c.item]); if (spot) return { t, spot }; }
@@ -222,32 +250,6 @@ export class Hang {
     const c = this.inv.cont(pe.ref);
     return c && (c.where === 'ground' || c.where === 'hung' || this.inv.inReach(c)) ? { pe, c } : null;
   }
-  // the panels for nearby.js: the tree you could hang a barrel from (or carry on a hang from), and a hung barrel near
-  // keys(o): the hold's keys as the book gives them
-  panels(keys) {
-    const p = this.player, out = [];
-    if (p.mode !== 'walk' || !this.inv || !this.inv.attached) return out;
-    const ph = this.pendingHere();
-    if (ph) {
-      const { pe, c } = ph;
-      out.push({ id: `hangTree:${pe.tree.x.toFixed(1)}:${pe.tree.z.toFixed(1)}`, kind: 'hangTree', title: `The ${pe.tree.name}`, sub: `${HANG[pe.done - 1].name.toLowerCase()} so far · the ${barrelName(c.item)}`, actions: [
-        { id: 'hang', label: pe.done >= 2 ? 'Carry on hoisting' : 'Carry on hanging', held: true, job: 'hang', enabled: true, run: (o) => hold.begin({ ...this.hangOpts(c, pe.spot, pe.done), ...keys(o) }) },
-      ] });
-    } else {
-      const c = this.barrelToHang(), at = c ? this.treeFor(c) : null;
-      if (c && at) out.push({ id: `hangTree:${at.t.x.toFixed(1)}:${at.t.z.toFixed(1)}`, kind: 'hangTree', title: `The ${at.t.name}`, sub: `a limb ${Math.round(at.t.up)} m up · good for a food hang`, actions: [
-        { id: 'hang', label: `Hang the ${barrelName(c.item)}`, held: true, job: 'hang', enabled: true, run: (o) => hold.begin({ ...this.hangOpts(c, at.spot, 0), ...keys(o) }) },
-      ] });
-    }
-    const hung = this.hungNear(p.x, p.z);
-    if (hung) {
-      const t = hung.at.tree;
-      out.push({ id: `barrelHung:${hung.id}`, kind: 'barrelHung', title: `The ${barrelName(hung.item)}, hung`, sub: `from the ${t ? t.name : 'tree'}, ${CLEAR} m up`, cId: hung.id, actions: [
-        { id: 'lower', label: 'Lower it', held: true, job: 'lower', enabled: true, run: (o) => hold.begin({ ...this.lowerOpts(hung), ...keys(o) }) },
-      ] });
-    }
-    return out;
-  }
   // Hang from a barrel's right-click (nearby.itemActions): why not here, or null
   hangRefused(cId) {
     const p = this.player, inv = this.inv, c = inv && inv.cont(cId);
@@ -255,7 +257,7 @@ export class Hang {
     if (c.where === 'hung') return 'it is hung already';
     if (p.mode !== 'walk') return 'ashore, on foot';
     if (!this.barrels().includes(c)) return 'the barrel is not within reach';
-    if (!this.treeFor(c)) return 'no tree here with a limb high enough: stand under a big pine or a birch';
+    if (!this.treeFor(c)) return 'carry it to a tree with a good limb and point at the limb: a big pine or a birch';
     return null;
   }
   // armed: E or a click at the tree, held, hangs it (camp.prompts calls aim each frame while it waits)

@@ -388,6 +388,16 @@ async function main() {
   // the landings, the store's hotspots are the pointer's targets (outfitter.js registers them when pointer.js is in the
   // build), and the counter's free tap is at the counter only, not at the cork board (both are the outfitter's paper).
   energy.atCounter = () => !!outfitter.open && outfitter.tab === 'counter';
+  // wc A: the world cards (the owner's third round of 2026-10-24). Whatever the dot points at has at most E and Q, both
+  // on its label (pointer.js), and the camp's work is on the things themselves (nearby.js: the hung barrel's E Lower, a
+  // tree's E Hang, the fire ring's E Open the fire and Q Light or Douse, the tent's E Rest until… (camp.restDial) and Q
+  // Strike, the seats' E Sit, the canoe's E Get in and Q Shoulder it with "Unload it first" when loaded, the water's E
+  // Fill the bottle, a down log's E Saw); the book is only for your things. The fire's card is stream B's
+  // (window.__game.cards.open('fire', key), read through nearby.objects(), reduced to the fire and the piles), a
+  // container or a pile on the ground opens the book's Here tab (journal.openHere), and sitting is stream C's
+  // (player.sitAt / stand / seated); each is looked up when it is wanted, with a fallback until it lands. Eating is
+  // instant (cook.js). The book's Canoe tab calls packs.setOutAll and packs.loadAll.
+  nearby.world({ cards: () => window.__game.cards || null, journal, sitter: () => (typeof player.sitAt === 'function' && typeof player.stand === 'function' ? player : null) });
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   renderer.compileAsync(scene, camera).catch(() => {});

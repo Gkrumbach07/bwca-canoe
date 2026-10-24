@@ -1,29 +1,49 @@
-// The things near you that the book works (the owner's second feedback of 2026-10-24: "What I'd much rather have is I'd
-// open my inventory up when I'm near the fire and I drag food onto the fire. or drag logs onto the fire", "your
-// inventory is like your interaction space", and "just don't make E interact be the only way to interact with it").
-// The camp's work is done from the book's pack side (inv-ui.js, stream B, renders these as panels beside your
-// containers), never on E: the fire's fuel and grate, cooking and eating, the tent's pitch and strike and the night, the
-// barrel's hang, the latrine, loading the canoe, filling the bottle, the saw. Held work keeps hold.js's ring: a held
-// button in the book puts the pseudo key 'BookHold' in input.down while the mouse is down on it (E held counts too).
+// The things near you, on the dot (the owner's third round of 2026-10-24, the world cards: "some keys are used to pick up
+// the canoe (Q and E). I feel like at most an item can have two quick actions. primary is E and secondary is Q"; asked
+// what E on a hung barrel does, "you get a screen where you can choose to Lower it?": no, E just lowers it). Whatever
+// the dot points at has at most E and Q, both on its label (pointer.js), and a card opens only where there is something
+// to move or a choice to make:
+//
+//   pointed at                            E                          Q
+//   a hung barrel                         Lower (hold)               —
+//   a tree with a good limb, barrel on you  Hang (hold)              —
+//   a barrel, pack, bucket, box on the ground  Pick up               Open it (the book's Here tab)
+//   a branch or a log                     Pick up                    —
+//   a pile                                Take one                   Open the pile (the book's Here tab)
+//   the fire ring                         Open the fire (its card)   Light (hold) when laid · Douse (hold) when burning
+//   a pitched tent                        Rest until… (the dial)     Strike (hold)      (half pitched: E carries on)
+//   a bagged tent on the ground           Pick up                    Pitch (the ghost, then hold)
+//   the latrine, the bench, a log seat    Sit                        —
+//   the canoe, on foot                    Get in                     Shoulder it · "Unload it first" when loaded
+//   the water's edge, on foot             Fill the bottle            —
+//   a down log, the saw in reach          Saw (hold)                 —
+//   a berry bush, mushrooms               Pick                       —        (pointer.js forageTargets)
+//   a person                              Talk                       —        (pointer.js peopleTargets)
+//   a shelf, the board, the map table, the counter   Open            —        (outfitter.js)
+//
+// What is left for the book (stream B's inv-ui.js) to read of the camp: nearby.objects(), the fire and the piles only
+// (the fire's card reads the fire object; the tent, the latrine and the hang are not panels any more).
 //
 //   import { nearby } from './nearby.js';
 //   nearby.attach({ camp, packs, journal, hud, pointer, canoe, player, inventory })   (main.js, fb2 A)
-//   nearby.objects() -> [{ id, kind, title, sub?, slots?, actions, meter?, cooking?, focus? }]
-//     kind     'fire' | 'tent' | 'latrine' | 'hangTree' | 'barrelHung' | 'canoe' | 'water' | 'downLog'
-//     slots    the fire's: [{ id: 'fuel' | 'grate' | 'ash', label, accepts: [kinds], cId?, items?, words? }]: the fuel and
-//              the grate are fixed inventory containers at the ring (chores.js firefuel, items.js grate: a drop is
+//   nearby.world({ cards, journal, sitter })   (main.js, wc A: the other streams', feature-detected at each call)
+//     cards()   → stream B's { open(kind, ref), close() } or null (E at the ring: cards.open('fire', key))
+//     journal   the book: openHere(ref) (B's Here tab) when it has it, else show('pack')
+//     sitter()  → stream C's player with sitAt(spot) → bool, stand(), seated, or null: then cook.js's seat sits you
+//   nearby.objects() -> [{ id, kind, title, sub?, slots?, actions, meter?, cooking? }]
+//     kind     'fire' | 'pile'
+//     the fire's slots [{ id: 'fuel' | 'grate' | 'ash', label, accepts: [kinds], cId?, items?, words? }]: the fuel and the
+//              grate are fixed inventory containers at the ring (chores.js firefuel, items.js grate: a drop is
 //              inventory.move); the ash is words only
-//     actions  [{ id, label, enabled, why?, hint?, held?, job? (hold.js's id while it runs), closeBook?, run(opts) }]
-//              opts: { key } the held key ('BookHold'); closeBook: close the book first (it walks you, or a card opens)
+//     actions  [{ id, label, enabled, why?, hint?, held?, job? (hold.js's id while it runs), run(opts) }]
+//              opts: { key } the held key ('BookHold' from a card's button, 'KeyQ' from the dot)
 //     meter    the fire's: { value 0..1, label, words }; cooking: { value 0..1, words } while the pot is on
-//     focus    the one E opened the book at (pointed at the fire ring, the tent, the latrine, a tree, a hung barrel)
-//   nearby.itemActions(ref) -> [{ id, label, enabled, why?, closeBook?, held?, run }]   ref: { cId, uid, itemId } |
+//   nearby.itemActions(ref) -> [{ id, label, enabled, why?, closeBook?, run }]   ref: { cId, uid, itemId } |
 //              { container: cId } | { long: uid }: a tent's Pitch, a barrel's Hang, wood onto the fire, a meal onto the grate
-//   nearby.groundPieces() -> [{ uid: 'piece:<key>', id, at }]: the loose wood within reach (the book's Ground area)
+//   nearby.groundPieces() -> [{ uid: 'piece:<key>', id, at }]: the loose wood within reach (the book's Here tab)
 //   nearby.takePiece(uid, toCId, x?, y?, rot?) -> { ok, words }
 //   nearby.onChange(fn) -> off: the set, or something in it, changed (read objects() again)
-//   nearby.targets(ray, near)  the pointer's provider (pointer.js): what lies on the ground (E Pick up), the canoe (E Get
-//              in, or shoulder it), and the camp's things whose work is the book's (E Open: the book at its panel)
+//   nearby.targets(ray, near)  the pointer's provider (pointer.js): the table above
 //   nearby.update(dt)  main.js, after the camp: the change signal, the stations no one is near tidied away
 import * as THREE from 'three';
 import { hold } from './hold.js';
@@ -34,15 +54,14 @@ import { BARRELS } from './hang.js';
 import { tentOf } from './tent.js';
 import { eatName } from './cook.js';
 
-const FIRE_PANEL = 4;        // m from the ring within which its panel is in the book
-const LATRINE_PANEL = 6;     // m from the box within which its Use walks you to it
-const SAW_PANEL = 1.6;       // m from a down log's stem (the saw's)
+const FIRE_PANEL = 4;        // m from the ring within which its object is in objects() (the card)
 const HULL_REACH = 3;        // m from the canoe's keel line (inventory.js HULL_REACH)
-const PIECE_REACH = 3;       // m: the loose wood the Ground area lists (inventory.js REACH)
-const POINT = { fire: 3.0, tent: 4.2, latrine: 2.8, hung: 3.4, log: 1.8 }; // m within which E opens the book at them
+const PIECE_REACH = 3;       // m: the loose wood the Here tab lists (inventory.js REACH)
+const POINT = { fire: 3.0, tent: 4.2, seat: 2.8, hung: 3.4, log: 1.8, water: 2.6 }; // m within which the dot takes them
 const BURN_FULL = 6;         // game hours of wood the fire's meter calls full
 const FOOD = new Set(['meal', 'fish']);
-const lower = (s) => String(s).charAt(0).toLowerCase() + String(s).slice(1);
+const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
+const lower = (s) => (/^[A-Z]-/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // ("A-frame" keeps its capital)
 const thingName = (d) => (!d ? 'thing' : /^(Duluth|Johnson)/.test(d.name) ? d.name : d.id === 'pile' ? 'things on the ground' : lower(d.short && d.kind !== 'container' ? d.name : d.name));
 const hoursWords = (h) => (h < 0.75 ? 'half an hour' : h < 1.25 ? 'an hour' : `${Math.round(h * 2) / 2} h`.replace('.5 h', '½ h'));
 const _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _v = new THREE.Vector3();
@@ -52,9 +71,9 @@ const BODY = { pack3: [0.32, 0.42], pack4: [0.34, 0.46], barrel30: [0.24, 0.3], 
 class Nearby {
   constructor() {
     this.handlers = new Set();
-    this.focus = null;
     this.list = null; this.t = 0; this.sig = ''; this.tidyT = 0;
     this.attached = false;
+    this.hooks = { cards: null, journal: null, sitter: null };
     this.targets = (ray, near) => this.pointTargets(ray, near);
   }
   attach({ camp, packs, journal = null, hud = null, pointer = null, canoe = null, player = null, inventory = INVENTORY }) {
@@ -63,23 +82,48 @@ class Nearby {
     if (pointer) {
       pointer.isArmed = () => !!(camp.pitching || camp.hang.armed);
       pointer.onCancel = () => camp.cancelPitch('You leave the tent where it was.') || camp.hang.disarm();
-      // no dot while a card is up at camp: the wake-time card, the night's card, a fade
-      pointer.quiet = () => !!((camp.chores && camp.chores.card && camp.chores.card.open) || camp.night || (camp.veil && camp.veil.active) || (camp.card && camp.card.active));
+      // no dot while a card is up at camp: the Rest dial, the night's card, a fade
+      pointer.quiet = () => !!((camp.chores && camp.chores.card && camp.chores.card.open) || camp.dialOpen || camp.night || (camp.veil && camp.veil.active) || (camp.card && camp.card.active) || this.cardUp());
+      // sat down: the label reads "E Stand up"; E is the walker's (stream C), or the fallback's
+      pointer.seated = () => this.isSeated();
+      pointer.stand = () => this.standUp();
     }
     camp.pointer = pointer;
     return this;
   }
+  // wc A: the other streams' hooks (main.js), each looked up when it is wanted
+  world(o = {}) { Object.assign(this.hooks, o); return this; }
   get chores() { return this.camp.chores; }
   get cook() { return this.camp.chores.cook; }
   get fires() { return this.camp.fires; }
   onChange(fn) { this.handlers.add(fn); return () => this.handlers.delete(fn); }
   emit() { for (const f of this.handlers) { try { f(this); } catch (e) { console.warn('nearby onChange', e); } } }
-  // the hold's keys from the book: its own pseudo key, and E and a click on the scene besides
-  keys(o) { const k = (o && o.key) || 'KeyE'; return { key: k, keys: ['KeyE', 'Mouse0', k] }; }
+  // the hold's keys: the dot's (KeyE or KeyQ, and a click), or a card's (BookHold, with E and a click besides)
+  keys(o) { const k = (o && o.key) || 'KeyE'; return { key: k, keys: [...new Set([k, 'Mouse0', ...((o && o.keys) || []), ...(k === 'BookHold' ? ['KeyE'] : [])])] }; }
   inv0() { const i = this.inv; return i && i.attached ? i : null; }
   site(r) { const p = this.player, c = this.camp, s = c.nearestSite(p.x, p.z, r, true); if (!s) return null; const h = c.registry.holder(campKey(s)); return !h || h === 'player' ? s : null; }
+  note(t, s = 3) { if (this.hud) this.hud.note(t, s); }
 
-  // --- the panels ------------------------------------------------------------------------------------------------
+  // --- the cards and the book (stream B's, feature-detected) -----------------------------------------------------------
+  cards() { const c = this.hooks.cards; const v = typeof c === 'function' ? c() : c; return v && typeof v.open === 'function' ? v : null; }
+  book() { return this.hooks.journal || this.journal; }
+  // E at the ring: the fire's card; without it (B not in the build yet), the book at the pack
+  openFire(key) {
+    const c = this.cards();
+    if (c) { try { if (c.open('fire', key) !== false) return true; } catch (e) { console.warn('cards.open fire', e); } } // (false: the ring is not in objects(): the book instead)
+    return this.openBook();
+  }
+  // a card up (stream B's cards.shown): no dot under it
+  cardUp() { const c = this.cards(); return !!(c && c.shown); }
+  // Q at a container or a pile on the ground: the book's Here tab at it; without it, the book at the pack
+  openHere(ref) {
+    const j = this.book();
+    if (j && typeof j.openHere === 'function') { try { j.openHere(ref); return true; } catch (e) { console.warn('journal.openHere', e); } }
+    return this.openBook();
+  }
+  openBook() { const j = this.book(); if (!j) return false; if (j.open && j.side === 'pack') return true; j.show('pack'); return true; }
+
+  // --- the objects (the fire's card and the piles) ------------------------------------------------------------------
   objects() {
     if (!this.attached) return [];
     const now = performance.now();
@@ -89,17 +133,11 @@ class Nearby {
     return this.list;
   }
   build() {
-    const p = this.player, out = [];
-    if (!p || p.mode !== 'walk' || p.teleporting || !this.inv0()) return out;
-    const add = (o) => { if (o) out.push(o); };
-    add(this.fireObject());
-    add(this.camp.tentPanel());
-    for (const o of this.camp.hang.panels((o2) => this.keys(o2))) out.push(o);
-    add(this.canoeObject());
-    add(this.latrineObject());
-    add(this.waterObject());
-    add(this.logObject());
-    for (const o of out) if (o.id === this.focus) o.focus = true;
+    const p = this.player, out = [], inv = this.inv0();
+    if (!p || p.mode !== 'walk' || p.teleporting || !inv) return out;
+    const f = this.fireObject();
+    if (f) out.push(f);
+    for (const c of inv.containers) if (c.item === 'pile' && c.where === 'ground' && c.at && c.grid.length && inv.inReach(c)) out.push(this.pileObject(c));
     return out;
   }
   fireObject() {
@@ -115,57 +153,26 @@ class Nearby {
       { id: 'light', label: st === 'coals' ? 'Light it again' : 'Light', held: true, job: 'fire-light', enabled: !lightWhy, why: lightWhy, run: (o) => ch.light(site, key, this.keys(o)) },
       { id: 'cook', label: ck.cookLabel(key), enabled: !cookWhy, why: cookWhy, run: () => ck.cookNow(site, key) },
     ];
-    if (og.food) actions.push({ id: 'eat', label: `Eat the ${eatName(itemDef(og.food.id))}`, closeBook: true, enabled: !ck.busy, why: ck.busy ? 'a moment' : null, hint: 'on the bench by the fire', run: () => ck.eatAt(site, key) });
+    if (og.food) actions.push({ id: 'eat', label: `Eat the ${eatName(itemDef(og.food.id))}`, enabled: true, hint: 'there and then', run: () => ck.eatAt(site, key) });
     actions.push({ id: 'douse', label: 'Douse', held: true, job: 'fire-out', enabled: st === 'burning' || st === 'coals', why: 'there is no fire to put out', run: (o) => ch.douse(site, key, this.keys(o)) });
     const ash = st === 'burning' ? 'embers under the flames' : st === 'coals' ? 'hot coals under the ash' : F.get(key) && !F.get(key).laid ? 'warm ash' : 'cold ash';
+    const pot = ck.potHere(key);
     return {
       id: `fire:${key}`, kind: 'fire', title: 'The fire ring', sub, key,
       slots: [
         { id: 'fuel', label: 'Fuel', cId: bin.id, accepts: ['firewood'], words: info.units.length ? ch.woodWords(info.units) : 'dead branches and short logs' },
-        { id: 'grate', label: 'The grate', cId: grate.id, accepts: ['meal', 'fish', 'food', 'tool'], words: og.food ? 'ready' : P ? (P.cold ? 'the fire is too low under it' : 'cooking') : 'a meal or a fish, the pot' },
+        { id: 'grate', label: 'The grate', cId: grate.id, accepts: ['meal', 'fish', 'food', 'tool'], words: og.food ? 'ready' : P ? (P.cold ? 'the fire is too low under it' : 'cooking') : pot ? 'a meal or a fish, the pot' : 'no pot' },
         { id: 'ash', label: 'The ash', accepts: [], items: [], words: ash },
       ],
       actions,
       meter: { value: Math.min(1, info.hours / BURN_FULL), label: 'Burn', words: st === 'burning' ? `about ${hoursWords(info.hours)} of wood` : info.fuel ? `${hoursWords(info.fuel)} of wood laid` : 'no wood' },
       cooking: P && !P.done ? { value: Math.min(1, P.t / P.dur), words: P.cold ? 'the fire is too low under it' : `ready in ${Math.max(1, Math.ceil(P.dur - P.t))} s` } : null,
-      state: st,
+      state: st, noPot: !pot,
     };
   }
-  latrineObject() {
-    const site = this.site(AREA_R), p = this.player;
-    const L = site && site.layout && site.layout.latrine;
-    if (!L || Math.hypot(L.x - p.x, L.z - p.z) > LATRINE_PANEL) return null;
-    const busy = !!(hold.active || this.cook.busy), used = this.chores.usedLatrine();
-    return { id: `latrine:${campKey(site)}`, kind: 'latrine', title: 'The latrine', sub: `the box back in the trees${used ? ' · used today' : ''}`, actions: [
-      { id: 'use', label: 'Use', closeBook: true, enabled: !busy, why: busy ? 'a moment' : null, hint: 'ten quiet minutes', run: () => this.chores.latrine(site) },
-    ] };
-  }
-  canoeObject() {
-    const p = this.player, c = p.carry, d = c && c.drop, inv = this.inv0();
-    if (!d || !inv || this.packs.busy) return null;
-    const s = inv.canoeSpot();
-    if (!s || inv.hullDist(s, p.x, p.z) > HULL_REACH) return null;
-    const lo = this.packs.loadables(d).filter((u) => !this.packs.autoLoads(u));
-    if (!lo.length) return null;
-    const kg = Math.round(lo.reduce((k, u) => k + this.packs.weightOf(u), 0));
-    return { id: 'canoe', kind: 'canoe', title: 'The canoe', sub: `${lo.length === 1 ? 'one thing' : `${lo.length} things`} set out about it · ${kg} kg`, actions: [
-      { id: 'load', label: 'Load everything here', held: true, job: 'load', enabled: true, run: (o) => hold.begin({ ...this.packs.loadAllOpts(d, lo), ...this.keys(o) }) },
-    ] };
-  }
-  waterObject() {
-    const b = this.camp.bottleHere();
-    if (!b) return null;
-    const busy = !!(this.camp.busy || hold.active);
-    return { id: 'water', kind: 'water', title: 'The water’s edge', sub: b.words, actions: [
-      { id: 'fill', label: 'Fill the bottle', enabled: !busy, why: busy ? 'a moment' : null, run: () => this.camp.fillBottle(b.wait) },
-    ] };
-  }
-  logObject() {
-    const s = this.chores.sawTarget(SAW_PANEL);
-    if (!s) return null;
-    return { id: `downLog:${s.k}`, kind: 'downLog', title: 'A down spruce', sub: s.left ? `${s.left === 3 ? 'three' : s.left === 2 ? 'two' : 'one'} short ${s.left === 1 ? 'log' : 'logs'} in it, with the folding saw` : 'sawn into lengths already', actions: [
-      { id: 'saw', label: 'Saw it into lengths', held: true, job: 'saw', enabled: s.left > 0, why: 'sawn already: it grows no more till another day', run: (o) => this.chores.beginSaw(s.log, s.k, s.cuts, this.keys(o)) },
-    ] };
+  pileObject(c) {
+    const n = c.grid.reduce((s, e) => s + e.qty, 0), wood = this.chores.woodOnly(c);
+    return { id: `pile:${c.id}`, kind: 'pile', title: wood ? 'A woodpile' : 'Things on the ground', sub: `${n} ${n === 1 ? 'thing' : 'things'}`, cId: c.id, slots: [{ id: 'items', label: wood ? 'Wood' : 'On the ground', cId: c.id, accepts: null }], actions: [] };
   }
 
   // --- a thing's own actions (the book's right-click) -------------------------------------------------------------
@@ -204,7 +211,7 @@ class Nearby {
     return { id, label, enabled: !!spot, why: spot ? null : full, run: () => { const s = inv.firstFit(to, e.id); return !!(s && inv.move(from.id, e.uid, to.id, s.x, s.y, s.rot, 1)); } };
   }
 
-  // --- the loose wood, for the book's Ground area -------------------------------------------------------------------
+  // --- the loose wood, for the book's Here tab ------------------------------------------------------------------------
   groundPieces() {
     const p = this.player, ch = this.chores, out = [];
     if (!p || p.mode !== 'walk') return out;
@@ -225,21 +232,50 @@ class Nearby {
     return { ok: true, words: '' };
   }
 
-  // --- the dot (pointer.js provider) -----------------------------------------------------------------------------
-  // the book open at a panel (E Open)
-  openAt(id) {
-    this.focus = id; this.list = null;
-    const j = this.journal;
-    if (j) { if (j.open && j.side === 'pack') j.setSide('pack'); else j.show('pack'); }
-    this.emit();
+  // --- sitting (stream C's player.sitAt, else cook.js's seat) ---------------------------------------------------------
+  sitter() { const s = this.hooks.sitter; return typeof s === 'function' ? s() : s || null; }
+  sitAt(spot) {
+    const S = this.sitter();
+    if (S) { const r = S.sitAt(spot); if (r === false) this.note('Not from here: stand by it.', 3); return r !== false; }
+    if (this.cook.busy || hold.active) return false;
+    this.cook.sitAt(spot);
+    return true;
   }
+  isSeated() { const S = this.sitter(); return S ? !!S.seated : this.cook.seated; }
+  standUp() { const S = this.sitter(); if (S) S.stand(); else this.cook.standUp(); }
+  // the seats at the site you stand at: stream C's layout.seats (two spots on the bench, the latrine's lid), else the
+  // bench and the latrine as cook.js finds them; a store's porch bench too. [{ spot, box, label, latrine? }]
+  seats(site) {
+    const p = this.player, t = this.camp.tiles, out = [];
+    const sit = (q, ax, az, kind) => {
+      const h = Number.isFinite(q.heading) ? q.heading : 0, y = Number.isFinite(q.y) ? q.y : t.groundAt(q.x, q.z) + 0.45;
+      const spot = { kind, seat: { x: q.x, y, z: q.z }, stand: { x: q.x + Math.cos(h) * 0.66, z: q.z - Math.sin(h) * 0.66 }, heading: h, round: null, id: q.id || null };
+      const along = Number.isFinite(ax) ? Math.atan2(-az, ax) : h + Math.PI / 2;
+      return { spot, box: { x: q.x, y: y - 0.12, z: q.z, hx: kind === 'latrine' ? 0.34 : 0.45, hy: kind === 'latrine' ? 0.26 : 0.2, hz: kind === 'latrine' ? 0.34 : 0.24, heading: along }, label: kind === 'latrine' ? 'the latrine' : kind === 'log' ? 'a log seat' : 'the bench', latrine: kind === 'latrine' };
+    };
+    const L = site && site.layout;
+    if (L) {
+      const tagged = Array.isArray(L.seats) && L.seats.length > 0;
+      if (tagged) for (const q of L.seats) out.push(sit(q, q.ax, q.az, q.kind || 'bench'));
+      else if (L.bench) { const b = this.cook.benchSpot(site); out.push({ spot: b, box: { x: L.bench.x, y: b.seat.y - 0.12, z: L.bench.z, hx: 0.78, hy: 0.2, hz: 0.24, heading: Math.atan2(-L.bench.az, L.bench.ax) }, label: 'the bench', latrine: false }); }
+      // the latrine (props.js c.layout.latrine): its ten minutes and its rest bonus are chores.js's
+      if (L.latrine && !(tagged && L.seats.some((q) => q.kind === 'latrine'))) { const b = this.cook.latrineSpot(site), gy = t.groundAt(L.latrine.x, L.latrine.z); out.push({ spot: b, box: { x: L.latrine.x, y: gy + 0.24, z: L.latrine.z, hx: 0.34, hy: 0.26, hz: 0.34, heading: 0 }, label: 'the latrine', latrine: true }); }
+    }
+    // a store's porch bench (props.js storeLayout().seats, stream C)
+    const o = this.camp.outfitter, SL = o && o.visit && o.visit.L;
+    if (SL && Array.isArray(SL.seats)) for (const q of SL.seats) if (Math.hypot(q.x - p.x, q.z - p.z) <= POINT.seat + 1) out.push(sit(q, q.ax, q.az, q.kind || 'bench'));
+    return out;
+  }
+
+  // --- the dot (pointer.js provider): the table ---------------------------------------------------------------------
   pointTargets(ray, near) {
     const p = this.player, inv = this.inv0(), out = [];
-    if (!inv || p.mode !== 'walk' || hold.active || this.cook.busy) return out;
+    if (!inv || p.mode !== 'walk' || hold.active || this.cook.busy || this.isSeated()) return out;
     const push = (hit, target) => { if (hit) out.push({ dist: hit.t, miss: hit.miss, target }); };
     const view = typeof window !== 'undefined' && window.__game ? window.__game.invView : null;
-    const ch = this.chores, packs = this.packs;
-    // the things set down on the ground in reach: pick them up
+    const ch = this.chores, packs = this.packs, camp = this.camp;
+    // the things set down on the ground in reach: a container (E Pick up · Q Open it), a long thing (E Pick up), a pile
+    // (E Take one · Q Open the pile), a woodpile the same, a bagged tent (E Pick up · Q Pitch)
     for (const u of packs.units()) {
       const o = u.obj, at = o.at;
       if (o.where !== 'ground' || !at || (u.def.fixed && u.id !== 'pile') || near.flat(at.x, at.z) > near.reach) continue;
@@ -247,7 +283,7 @@ class Nearby {
       if (u.kind === 'long') {
         const fx = Math.cos(at.heading || 0), fz = -Math.sin(at.heading || 0);
         const hit = near.segment(at.x - fx * 0.95, y + 0.04, at.z - fz * 0.95, at.x + fx * 0.95, y + 0.04, at.z + fz * 0.95, 0.2);
-        push(hit, { kind: 'item', ref: u.ref, label: `the ${thingName(u.def)}`, verb: 'Pick up', enabled: inv.freeHand() >= 0, why: 'both hands are full', mesh: view && view.objs && view.objs.get(u.ref), act: () => packs.pickUp(u) });
+        push(hit, { kind: 'item', ref: u.ref, label: `the ${thingName(u.def)}`, e: { verb: 'Pick up', why: inv.freeHand() >= 0 ? null : 'both hands are full', run: () => packs.pickUp(u) }, mesh: view && view.objs && view.objs.get(u.ref) });
         continue;
       }
       const wood = ch.woodOnly(o), [h, r] = wood ? [0.18, 0.5] : BODY[u.id] || [0.2, 0.36];
@@ -256,30 +292,41 @@ class Nearby {
       if (wood) {
         const e = o.grid.find((q) => q.id === 'wood:log') || o.grid[0], n = ch.pieceCount(o), pm = ch.pileMesh(o.id);
         const room = !!(ch.armFor(e.id, false) || inv.freeHand() >= 0);
-        push(hit, { kind: 'item', ref: o.id, label: `a ${e.id === 'wood:log' ? 'log' : 'branch'} from the woodpile (${n})`, verb: 'Pick up', enabled: room, why: 'your hands are full', box: { x: at.x, y: y + 0.18, z: at.z, hx: 0.42, hy: 0.2, hz: 0.42, heading: (at.heading || 0) }, mesh: pm ? pm.layers[0] : null, act: () => this.fromPile(o, e) });
+        push(hit, { kind: 'pile', ref: o.id, label: `the woodpile (${n})`, e: { verb: 'Take one', why: room ? null : 'your hands are full', run: () => this.fromPile(o, e) }, q: { verb: 'Open the pile', run: () => this.openHere(o.id) }, box: { x: at.x, y: y + 0.18, z: at.z, hx: 0.42, hy: 0.2, hz: 0.42, heading: (at.heading || 0) }, mesh: pm ? pm.layers[0] : null });
         continue;
       }
-      const room = u.id === 'pile' || !!packs.slotFor(u);
-      push(hit, { kind: 'container', ref: o.id, label: u.id === 'pile' ? 'the things on the ground' : `the ${thingName(u.def)}`, verb: 'Pick up', enabled: room, why: 'your back and hands are full', mesh: view && view.objs && view.objs.get(o.id), act: () => packs.pickUp(u) });
+      if (u.id === 'pile') {
+        const tent = this.baggedTent(o);
+        if (tent) {
+          const why = camp.pitchRefused(camp.tentByUid(tent.uid));
+          push(hit, { kind: 'item', ref: o.id, label: `the ${lower(tent.def.name)}, bagged`, e: { verb: 'Pick up', run: () => packs.pickUp(u) }, q: { verb: 'Pitch', why, run: () => camp.beginPitch(tent.uid) }, mesh: view && view.objs && view.objs.get(o.id) });
+          continue;
+        }
+        const top = o.grid.find((q) => !q.box) || o.grid[0], n = o.grid.length, dd = top ? itemDef(top.id) : null;
+        push(hit, { kind: 'pile', ref: o.id, label: n === 1 && dd ? `the ${lower(dd.name)}, on the ground` : `the things on the ground (${n})`, e: { verb: 'Take one', why: top ? null : 'nothing there', run: () => this.takeOne(o) }, q: { verb: 'Open the pile', run: () => this.openHere(o.id) }, mesh: view && view.objs && view.objs.get(o.id) });
+        continue;
+      }
+      const room = !!packs.slotFor(u);
+      push(hit, { kind: 'container', ref: o.id, label: `the ${thingName(u.def)}`, e: { verb: 'Pick up', why: room ? null : 'your back and hands are full', run: () => packs.pickUp(u) }, q: { verb: 'Open it', run: () => this.openHere(o.id) }, mesh: view && view.objs && view.objs.get(o.id) });
     }
-    // the loose wood
+    // the loose wood: E Pick up
     for (const pc of ch.near) {
       if (!ch.available(pc) || near.flat(pc.x, pc.z) > near.reach) continue;
       const fx = Math.cos(pc.yaw), fz = -Math.sin(pc.yaw), L = pc.len / 2, r = pc.kind === 'log' ? 0.17 : 0.14;
       const hit = near.segment(pc.x - fx * L, pc.y + 0.05, pc.z - fz * L, pc.x + fx * L, pc.y + 0.05, pc.z + fz * L, r);
       if (!hit) continue;
       _m.compose(pc.pos, pc.q, _one);
-      push({ t: hit.t, miss: hit.miss * 0.85 }, { kind: 'item', ref: `piece:${pc.key}`, label: pc.kind === 'log' ? 'Short log' : 'Dead branch', verb: 'Pick up', enabled: ch.canTakePiece(pc), why: 'your hands are full, and nothing you carry has room', shell: { geometry: ch.pieceGeos[pc.g], matrix: _m.clone() }, act: () => ch.pickUp(pc) });
+      push({ t: hit.t, miss: hit.miss * 0.85 }, { kind: 'item', ref: `piece:${pc.key}`, label: pc.kind === 'log' ? 'a short log' : 'a dead branch', e: { verb: 'Pick up', why: ch.canTakePiece(pc) ? null : 'your hands are full, and nothing you carry has room', run: () => ch.pickUp(pc) }, shell: { geometry: ch.pieceGeos[pc.g], matrix: _m.clone() } });
     }
-    // the canoe lying by (or floated at a dock's side): get in, or shoulder it
+    // the canoe lying by (or floated at a dock's side): E Get in · Q Shoulder it ("Unload it first" when loaded)
     const c = p.carry, d = c && c.drop, s = d && inv.canoeSpot();
     if (d && s && inv.hullDist(s, p.x, p.z) <= HULL_REACH) {
       const hull = this.canoe && this.canoe.hull, hy = hull ? (hull.getWorldPosition(_v), _v.y) : p.groundAt(d.x, d.z);
-      const hit = near.box({ x: d.x, y: hy + 0.22, z: d.z, hx: 2.45, hy: 0.3, hz: 0.46, heading: d.heading || 0 });
-      const a = packs.hullAction();
-      if (hit && a) push(hit, { kind: 'canoe', ref: 'canoe', label: a.label, verb: a.verb, hint: a.hint || null, mesh: this.hullMesh(), box: { x: d.x, y: hy + 0.22, z: d.z, hx: 2.45, hy: 0.3, hz: 0.46, heading: d.heading || 0 }, act: a.run });
+      const box = { x: d.x, y: hy + 0.22, z: d.z, hx: 2.45, hy: 0.3, hz: 0.46, heading: d.heading || 0 };
+      const hit = near.box(box), a = packs.hullAction();
+      if (hit && a) push(hit, { kind: 'canoe', ref: 'canoe', label: a.label, e: a.e, q: a.q || null, hint: a.hint || null, mesh: this.hullMesh(), box });
     }
-    // the camp's things whose work is the book's: E opens it at their panel
+    // the camp's things: the fire ring (E Open the fire · Q Light or Douse), the grate's top (E Pick up), the seats
     const site = this.site(AREA_R);
     if (site && site.layout) {
       const L = site.layout, key = campKey(site), f = L.fire;
@@ -290,45 +337,81 @@ class Nearby {
         const gh = top ? near.sphere(gs.x, gs.y + 0.07, gs.z, 0.2) : null;
         if (gh) {
           const dd = itemDef(top.id), name = top.id === 'pot' ? 'the cook pot' : dd && dd.cooked ? `the ${eatName(dd)}` : `the ${lower(dd ? dd.name : 'thing')}`;
-          push({ t: gh.t, miss: gh.miss * 0.7 }, { kind: 'item', ref: `grate:${top.uid}`, label: `${name}, off the grate`, verb: 'Pick up', box: { x: gs.x, y: gs.y + 0.06, z: gs.z, hx: 0.11, hy: 0.07, hz: 0.11, heading: 0 }, act: () => this.offGrate(key, top) });
+          push({ t: gh.t, miss: gh.miss * 0.7 }, { kind: 'item', ref: `grate:${top.uid}`, label: `${name}, off the grate`, e: { verb: 'Pick up', run: () => this.offGrate(key, top) }, box: { x: gs.x, y: gs.y + 0.06, z: gs.z, hx: 0.11, hy: 0.07, hz: 0.11, heading: 0 } });
         }
-        push(near.sphere(f.x, f.y + 0.22, f.z, 0.85), { kind: 'fire', ref: `fire:${key}`, label: 'The fire ring', verb: 'Open', hint: this.fireHint(key), box: { x: f.x, y: f.y + 0.16, z: f.z, hx: 0.62, hy: 0.18, hz: 0.62, heading: f.a || 0 }, act: () => this.openAt(`fire:${key}`) });
-      }
-      const la = L.latrine;
-      if (la && near.flat(la.x, la.z) <= POINT.latrine) {
-        const gy = p.groundAt(la.x, la.z);
-        push(near.box({ x: la.x, y: gy + 0.24, z: la.z, hx: 0.34, hy: 0.26, hz: 0.34, heading: 0 }), { kind: 'latrine', ref: `latrine:${key}`, label: 'The latrine', verb: 'Open', box: { x: la.x, y: gy + 0.24, z: la.z, hx: 0.34, hy: 0.26, hz: 0.34, heading: 0 }, act: () => this.openAt(`latrine:${key}`) });
+        push(near.sphere(f.x, f.y + 0.22, f.z, 0.85), { kind: 'fire', ref: `fire:${key}`, label: 'the fire ring', hint: this.fireHint(key), e: { verb: 'Open the fire', run: () => this.openFire(key) }, q: this.fireQ(site, key), box: { x: f.x, y: f.y + 0.16, z: f.z, hx: 0.62, hy: 0.18, hz: 0.62, heading: f.a || 0 } });
       }
     }
-    // your tent
-    const t = this.camp.camp;
-    if (t && t.stage > 0 && near.flat(t.x, t.z) <= POINT.tent) {
+    // the seats: the bench, a log seat, the latrine (E Sit)
+    for (const st of this.seats(site)) {
+      const b = st.box;
+      if (near.flat(b.x, b.z) > POINT.seat) continue;
+      const run = st.latrine ? () => ch.latrine(site, this.seatHooks()) : () => this.sitAt(st.spot);
+      push(near.box(b), { kind: 'seat', ref: `seat:${st.spot.id || `${b.x.toFixed(1)}:${b.z.toFixed(1)}`}`, label: st.label, e: { verb: 'Sit', why: hold.active || this.cook.busy ? 'a moment' : null, run }, box: b });
+    }
+    // your tent: half pitched E Carry on pitching · Q Strike; up E Rest until… · Q Strike
+    const t = camp.camp, ta = t && t.stage > 0 ? camp.tentActions() : null;
+    if (ta && near.flat(t.x, t.z) <= POINT.tent) {
       const size = tentOf(t.item).size, hd = Math.atan2(-t.fdx, -t.fdz), y = (t.y || p.groundAt(t.x, t.z)) + size.h * 0.45;
       const b = { x: t.x, y, z: t.z, hx: size.a + 0.05, hy: size.h * 0.5, hz: size.b + 0.05, heading: hd };
-      push(near.box(b), { kind: 'tent', ref: 'tent', label: 'Your tent', verb: 'Open', hint: tentOf(t.item).words[t.stage], mesh: t.stages && t.stages.fly && t.stage >= 4 ? t.stages.fly : null, box: b, act: () => this.openAt('tent') });
+      push(near.box(b), { kind: 'tent', ref: 'tent', label: ta.label, hint: ta.hint, e: ta.e, q: ta.q, mesh: t.stages && t.stages.fly && t.stage >= 4 ? t.stages.fly : null, box: b });
     }
-    // a hung barrel overhead, or the tree you could hang one from
-    const hg = this.camp.hang;
-    const hung = hg.hungNear(p.x, p.z);
-    if (hung && near.flat(hung.at.x, hung.at.z) <= POINT.hung) {
-      // the barrel, or the trunk its rope is tied off on (3 m up, the barrel alone is out of the third-person ray's
-      // reach from within POINT.hung: the camera looking up sinks behind you and its ray rises only so far)
-      const tt = hung.at.tree, ty = tt ? p.groundAt(tt.x, tt.z) : 0;
-      const hits = [near.sphere(hung.at.x, hung.at.y, hung.at.z, 0.45), tt ? near.segment(tt.x, ty + 0.3, tt.z, tt.x, ty + 2.4, tt.z, (tt.r || 0.25) + 0.2) : null].filter(Boolean);
-      push(hits.sort((a, b) => a.miss - b.miss)[0] || null, { kind: 'barrelHung', ref: `barrelHung:${hung.id}`, label: 'The barrel, hung', verb: 'Open', mesh: view && view.objs && view.objs.get(hung.id), act: () => this.openAt(`barrelHung:${hung.id}`) });
+    // a hung barrel overhead (E Lower · hold): the barrel, or the trunk its rope is tied off on (3 m up, the barrel alone
+    // is out of the third-person ray's reach from within POINT.hung)
+    const hg = camp.hang, hung = hg.hungTarget();
+    if (hung && near.flat(hung.c.at.x, hung.c.at.z) <= POINT.hung) {
+      const tt = hung.tree, at = hung.c.at, ty = tt ? p.groundAt(tt.x, tt.z) : 0;
+      const hits = [near.sphere(at.x, at.y, at.z, 0.45), tt ? near.segment(tt.x, ty + 0.3, tt.z, tt.x, ty + 2.4, tt.z, (tt.r || 0.25) + 0.2) : null].filter(Boolean);
+      push(hits.sort((a, b) => a.miss - b.miss)[0] || null, { kind: 'barrelHung', ref: `barrelHung:${hung.c.id}`, label: lower(hung.label), e: { verb: hung.verb, held: true, run: hung.run }, mesh: view && view.objs && view.objs.get(hung.c.id) });
     }
-    const bar = hg.barrelToHang(), tr = bar && !hung ? hg.treeFor(bar) : null;
+    // a tree with a good limb, a barrel on you (E Hang · hold), or one with a hang let go part way
+    const tr = !hung ? hg.treeTarget() : null;
     if (tr) {
       const gy = p.groundAt(tr.t.x, tr.t.z);
-      push(near.segment(tr.t.x, gy + 0.3, tr.t.z, tr.t.x, gy + 3.2, tr.t.z, 0.45), { kind: 'tree', ref: `hangTree:${tr.t.x.toFixed(1)}:${tr.t.z.toFixed(1)}`, label: `The ${tr.t.name}`, verb: 'Open', hint: 'hang the barrel', act: () => this.openAt(`hangTree:${tr.t.x.toFixed(1)}:${tr.t.z.toFixed(1)}`) });
+      push(near.segment(tr.t.x, gy + 0.3, tr.t.z, tr.t.x, gy + 3.2, tr.t.z, 0.45), { kind: 'tree', ref: `hangTree:${tr.t.x.toFixed(1)}:${tr.t.z.toFixed(1)}`, label: lower(tr.label), e: { verb: tr.verb, held: true, run: tr.run } });
     }
-    // a down log, with the saw
+    // a down log, with the saw in reach (E Saw · hold)
     const sw = ch.sawTarget(POINT.log);
     if (sw) {
       const o = sw.log, ga = p.groundAt(o.ax, o.az), gb = p.groundAt(o.bx, o.bz), r = (o.rad || 0.2) + 0.08;
-      push(near.segment(o.ax, ga + r, o.az, o.bx, gb + r, o.bz, r + 0.06), { kind: 'item', ref: `downLog:${sw.k}`, label: 'A down spruce', verb: 'Open', hint: sw.left ? 'saw it into lengths' : 'sawn already', act: () => this.openAt(`downLog:${sw.k}`) });
+      push(near.segment(o.ax, ga + r, o.az, o.bx, gb + r, o.bz, r + 0.06), { kind: 'downLog', ref: `downLog:${sw.k}`, label: 'a down spruce', hint: sw.left ? `${sw.left === 3 ? 'three' : sw.left === 2 ? 'two' : 'one'} short ${sw.left === 1 ? 'log' : 'logs'} in it` : null, e: { verb: 'Saw', held: true, why: sw.left > 0 ? null : 'sawn already: it grows no more till another day', run: (o2) => ch.beginSaw(sw.log, sw.k, sw.cuts, this.keys(o2)) } });
     }
+    // the water's edge, on foot (E Fill the bottle)
+    const w = this.waterEdge();
+    if (w) push(near.box(w.box), { kind: 'water', ref: 'water', label: 'the water’s edge', hint: w.hint, e: { verb: 'Fill the bottle', why: w.why, run: () => camp.fillBottle(w.wait) }, box: w.box });
     return out;
+  }
+  // the fire ring's Q: Light (held) while it is laid and not lit, Douse (held) while it burns or the coals are hot;
+  // cold and empty, nothing
+  fireQ(site, key) {
+    const ch = this.chores, info = ch.fireInfo(key), st = info.state, busy = hold.active || this.cook.busy;
+    if (st === 'burning' || st === 'coals') return { verb: 'Douse', held: true, why: busy ? 'a moment' : null, run: (o) => ch.douse(site, key, this.keys(o)) };
+    if (!info.units.length) return null;
+    const why = ch.lightProblem(key);
+    return { verb: 'Light', held: true, why: busy ? 'a moment' : why, run: (o) => ch.light(site, key, this.keys(o)) };
+  }
+  // the water within reach ahead of you (world.shoreAt < 0), as a flat box on it: { box, why, wait, hint } or null
+  waterEdge() {
+    const p = this.player, w = this.camp.world, e = this.camp.energy, f = p.forward;
+    let pt = null;
+    for (let d = 0.4; d <= POINT.water && !pt; d += 0.3) { const x = p.x + f.x * d, z = p.z + f.z * d; if (w.isReady(x, z) && w.shoreAt(x, z) < 0) pt = { x: x + f.x * 0.5, z: z + f.z * 0.5 }; }
+    if (!pt) return null;
+    const b = this.camp.bottleHere();
+    let why = null;
+    if (!b) {
+      if (!e || !e.fill || !e.live) return null; // no trip under way: nothing to fill
+      why = e.bottle > 2 - 0.05 ? 'the bottle is full' : null;
+      if (!why) return null;
+    }
+    const y = w.levelAt(pt.x, pt.z);
+    return { box: { x: pt.x, y: y + 0.02, z: pt.z, hx: 0.8, hy: 0.06, hz: 0.8, heading: p.heading }, why, wait: b ? b.wait : 0, hint: b ? b.words : null };
+  }
+  seatHooks() { const S = this.sitter(); return S ? { sit: (spot) => S.sitAt(spot), stand: () => S.stand(), seated: () => !!S.seated } : null; }
+  // a pile that is a bagged tent and nothing else: its entry and def, or null
+  baggedTent(pile) {
+    if (pile.item !== 'pile' || pile.grid.length !== 1) return null;
+    const e = pile.grid[0], d = e && !e.box ? itemDef(e.id) : null;
+    return d && d.slot === 'tent' ? { uid: e.uid, def: d } : null;
   }
   // the hull's own mesh (the biggest in canoe.hull), for the dot's rim
   hullMesh() {
@@ -352,6 +435,18 @@ class Nearby {
     ch.cook.gesture = { t: 0, dur: 0.45, say: 'Taking wood off the pile…' };
     inv.emit('items'); ch.persist();
   }
+  // E at a pile of things: the top one into what you carry (a container in it onto you)
+  takeOne(pile) {
+    const inv = this.inv, e = pile.grid.find((q) => !q.box) || pile.grid[0];
+    if (!e) return;
+    if (e.box) { const r = inv.carry(e.uid, 'auto'); if (!r.ok) this.camp.note(r.words || 'No room on you for it.', 3); return; }
+    const d = itemDef(e.id), r = inv.place(e.id, 1, { data: e.data || null, exclude: [pile.id], quiet: true });
+    if (!r.ok) { this.camp.note('No room for it in anything you carry.', 3); return; }
+    inv.take(pile.id, e.uid, 1);
+    const to = inv.cont(r.cId), td = to ? itemDef(to.item) : null;
+    this.camp.note(`${d ? d.name : 'It'}, into ${to && to.item === 'pockets' ? 'your pockets' : `the ${lower((td && (td.short || td.name)) || 'pack')}`}.`, 2.5);
+    inv.emit('items');
+  }
   // E at the grate: the cooked thing (or a raw one, or the pot) off it, into what you carry
   offGrate(key, e) {
     const inv = this.inv, ck = this.cook;
@@ -367,19 +462,21 @@ class Nearby {
   // --- the frame -------------------------------------------------------------------------------------------------
   update(dt) {
     if (!this.attached) return;
+    const p = this.player;
+    // sat down on the fallback's seat: a move key stands you up; up from the latrine early: its minutes stop
+    if (!this.sitter() && this.cook.seated && !hold.active && p.input && p.input.down && MOVE_KEYS.some((k) => p.input.down.has(k))) this.cook.standUp();
+    if (this.chores) this.chores.latrineUp(() => this.isSeated());
     if ((this.sigT = (this.sigT || 0) - dt) <= 0) {
       this.sigT = 0.25;
       this.list = null;
       const list = this.objects();
       const sig = list.map((o) => `${o.id}:${o.sub || ''}:${o.actions.map((a) => `${a.id}${a.enabled ? 1 : 0}${a.label}`).join(',')}:${o.meter ? Math.round(o.meter.value * 40) : ''}:${o.cooking ? Math.round(o.cooking.value * 20) : ''}`).join('|');
       if (sig !== this.sig) { this.sig = sig; this.emit(); }
-      // the panel E opened the book at stays the focus while the book is open
-      if (this.focus && !(this.journal && this.journal.open)) this.focus = null;
     }
-    // the stations by rings no one is near, with nothing in them, are tidied away (made again with the panel)
+    // the stations by rings no one is near, with nothing in them, are tidied away (made again with the card)
     if ((this.tidyT -= dt) <= 0) {
       this.tidyT = 3;
-      const inv = this.inv0(), p = this.player;
+      const inv = this.inv0();
       if (inv && p) for (let i = inv.containers.length - 1; i >= 0; i--) {
         const c = inv.containers[i];
         if ((c.item === 'firefuel' || c.item === 'grate') && !c.grid.length && c.at && Math.hypot(c.at.x - p.x, c.at.z - p.z) > 60) { const F = this.fires, k = c.at.fuel; if (c.item === 'firefuel' && k && F.get(k) && !F.get(k).laid && F.state(k) !== 'none') continue; inv.containers.splice(i, 1); inv.emit('containers'); }

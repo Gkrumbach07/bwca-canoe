@@ -22,11 +22,15 @@ import { itemDef } from './items.js';
 //     staked, the poles up, the tent up, the rain fly on. Let go and it stops at the phase finished; E or a click
 //     again carries on, or its panel in the book does. The tent comes out of its pack when the footprint is staked;
 //     the site is yours from then until it is struck.
-//   - Your tent's panel in the book (tentPanel): carry on pitching or put the fly on (held), strike it (held: the
-//     phases backwards, back into a container in the camp's reach, or rolled up on the ground if nothing has room),
-//     and Sleep (the wake-time card, chores.js) from dusk, or by day worn out. Only the tent with its fly on sleeps
-//     best; without the fly a night's rain soaks you.
-//   - The barrel is hung from a limb, held, from the book (hang.js).
+//   - Your tent is on the dot (wc A, the world cards, the owner's third round of 2026-10-24: "why cant i go in tent and
+//     sleep, should be allowed as a way to skip through the day. like witcher i can rest for some part of time to get to
+//     certain parts of the day"): pointed at, it has two keys (tentActions, nearby.js): half pitched "E Carry on
+//     pitching · hold, Q Strike · hold"; the fly still off "E Put the fly on · hold, Q Rest until…"; up "E Rest until… ·
+//     Q Strike · hold". Rest until… opens the dial (RestDial, restDial()): first light, 7:00, 9:00, noon, 4 pm, dusk,
+//     10 pm, or any hour by ← →, day or night; a rest that spans no night is a nap (the rest comes back some, less than
+//     a night: nap()). The strike runs the phases backwards, back into a container in the camp's reach, or rolled up on
+//     the ground if nothing has room. Only the tent with its fly on sleeps best; without the fly a night's rain soaks you.
+//   - The barrel is hung from a limb, held, on the dot (hang.js).
 //   - Launching strikes nothing, puts out nothing and packs nothing: a note says what is still ashore (the tent, the
 //     fire, the barrel hung, the things set out), and it all stays as it is, across reloads, until you come back.
 // In Adventure you camp at the designated sites only (hubs phase 1: "that's not allowed, so not even camp"). The night
@@ -71,6 +75,9 @@ const LATE_NIGHT = 5;       // turning in with fewer hours than this to first li
 const SLEEP_IN = 7;         // this many hours,
 const SLEEP_IN_BY = 9;      // and up by this hour at the latest (a site reached after midnight still gives a night)
 const WORN_OUT = 0.3;       // a rest need under this (the 'tired' mark) lets the tent take you by day too, for SLEEP_IN hours
+const NAP_UNDER = 5;        // wc A: a rest shorter than this many hours is a nap, not a night (nap())
+const NAP_GAIN = 0.7;       // a nap gives this share of a night's rest for its hours (a 3 h nap about 0.3)
+const NAP_AWAKE = 1.5;      // and takes this many hours off the hours awake for each hour napped (the rest's ceiling)
 const TENTS = { aframe: 0.85, 'a-frame': 0.85, dome: 1, fourseason: 1, 'four-season': 1, '4season': 1 }; // sleep quality by the profile's kit.tent
 const START_TENT = 0.85;    // the starting kit's A-frame, when there is no profile to ask
 const PAD = 0.05;           // a sleeping pad adds this
@@ -130,6 +137,80 @@ export class CampRegistry {
   }
 }
 
+// --- the Rest-until dial (wc A) --------------------------------------------------------------------------------------
+// A small paper slip over the camp, as the wake-time card was (chores.js): E at the pitched tent opens it. Seven times
+// to pick from (first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm) or any hour by ← →, day or night; the line under says
+// how long that is and whether it is a nap or a night. E, Enter or the stamp rests; Esc (or Q, or a step away) lets it
+// be. Its keys are taken in the capture phase, ahead of the game's and the pause card's.
+const DIAL_CSS = `
+#rest-dial { left: 50%; margin-left: -270px; bottom: 112px; width: 540px; padding: 15px 20px 13px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+#rest-dial .kick { font-size: 11.5px; letter-spacing: .16em; }
+#rest-dial h4 { margin: 0; font: 500 24px/1.1 var(--serif); color: var(--ink); display: flex; align-items: baseline; gap: 14px; }
+#rest-dial h4 .hour { margin-left: auto; font: 500 22px/1.1 var(--serif); color: var(--ink); display: inline-flex; align-items: center; gap: 10px; }
+#rest-dial h4 .hour kbd { font-size: 11px; padding: 1px 6px; min-width: 18px; color: var(--ink-soft); border-color: var(--edge); }
+#rest-dial h4 .hour b { min-width: 86px; text-align: center; font-weight: 500; }
+#rest-dial .row { display: flex; gap: 7px; }
+#rest-dial .opt { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 4px 6px; border: 1.5px solid var(--edge); border-radius: 3px; background: transparent; color: var(--ink-soft); cursor: pointer; min-width: 0; }
+#rest-dial .opt b { font: 600 16.5px/1.15 var(--serif); color: var(--ink); white-space: nowrap; }
+#rest-dial .opt span { font: 700 10.5px/1.3 var(--sc); letter-spacing: .08em; white-space: nowrap; }
+#rest-dial .opt.on { background: var(--ink); border-color: var(--ink); color: var(--paper-card); }
+#rest-dial .opt.on b { color: var(--paper); }
+#rest-dial .sub { font: italic 15.5px/1.3 var(--serif); color: var(--ink-soft); min-height: 1.3em; margin: 0; }
+#rest-dial .keys { display: flex; align-items: center; gap: 7px; font: 700 11px/1.3 var(--sc); letter-spacing: .1em; color: var(--ink-soft); }
+#rest-dial .keys .stamp { margin-left: auto; }
+`;
+let dialCss = false;
+class RestDial {
+  constructor() {
+    if (!dialCss && typeof document !== 'undefined') { dialCss = true; const s = document.createElement('style'); s.id = 'rest-dial-css'; s.textContent = DIAL_CSS; document.head.appendChild(s); }
+    const el = this.el = document.createElement('div');
+    el.id = 'rest-dial'; el.className = 'paper'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Rest until');
+    el.innerHTML = '<div class="sc kick"></div><h4>Rest until <span class="hour"><kbd>←</kbd><b></b><kbd>→</kbd></span></h4><div class="row" role="radiogroup" aria-label="Rest until"></div><p class="sub"></p>'
+      + '<div class="keys"><kbd>←</kbd><kbd>→</kbd> any hour <kbd>E</kbd> rest <kbd>Esc</kbd> not yet<button type="button" class="stamp small" data-go="1">Rest</button></div>';
+    document.body.appendChild(el);
+    this.kick = el.querySelector('.kick'); this.row = el.querySelector('.row'); this.sub = el.querySelector('.sub'); this.hourEl = el.querySelector('.hour b');
+    this.isOpen = false; this.at = 7; this.opts = []; this.onPick = null; this.onClose = null; this.words = null;
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-go]')) { this.confirm(); return; }
+      const h = e.target.closest('.hour kbd'); if (h) { this.step(h.textContent === '←' ? -1 : 1); return; }
+      const b = e.target.closest('button[data-i]');
+      if (b) { this.set(this.opts[+b.dataset.i].at); if (e.detail >= 2) this.confirm(); }
+    });
+    window.addEventListener('keydown', (e) => {
+      if (!this.isOpen) return;
+      const c = e.code;
+      if (c === 'ArrowLeft' || c === 'KeyA') this.step(-1);
+      else if (c === 'ArrowRight' || c === 'KeyD') this.step(1);
+      else if (c === 'KeyE' || c === 'Enter' || c === 'Space') { if (!e.repeat) this.confirm(); }
+      else if (c === 'Escape' || c === 'KeyQ' || c === 'Backspace') this.close();
+      else { if (!/^(Shift|Control|Alt|Meta|Tab)/.test(c)) this.close(); return; } // a step away (W), the map: the dial goes
+      e.preventDefault(); e.stopImmediatePropagation();
+    }, true);
+  }
+  get open() { return this.isOpen; }
+  // opts: [{ label, small, at (the hour) }]; at: the hour chosen to begin with; words(at) → the line under
+  show({ kicker, opts, at, words, onPick, onClose = null }) {
+    this.opts = opts; this.onPick = onPick; this.onClose = onClose; this.words = words;
+    this.kick.textContent = kicker || 'Rest';
+    this.row.innerHTML = opts.map((o, k) => `<button type="button" class="opt" role="radio" data-i="${k}"><b>${esc(o.label)}</b><span>${esc(o.small)}</span></button>`).join('');
+    this.isOpen = true;
+    this.set(at);
+    this.el.classList.add('show');
+  }
+  // the hour by one, whole hours (first light and dusk are not on the hour: a step from them goes to the next whole one)
+  step(d) { const h = this.at, w = d > 0 ? Math.floor(h + 1e-6) + 1 : Math.ceil(h - 1e-6) - 1; this.set(((w % 24) + 24) % 24); }
+  set(at) {
+    this.at = at;
+    [...this.row.children].forEach((b, k) => { const on = Math.abs(this.opts[k].at - at) < 0.01; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+    this.hourEl.textContent = clock12(at);
+    this.sub.textContent = this.words ? this.words(at) : '';
+  }
+  confirm() { if (!this.isOpen) return; const at = this.at, f = this.onPick; this.hide(); if (f) f(at); }
+  close() { if (!this.isOpen) return; const f = this.onClose; this.hide(); if (f) f(); }
+  hide() { this.isOpen = false; this.el.classList.remove('show'); }
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
 // The night card when no veil (veil.js) is there to show it: deep, a kicker, a line, a sub, faded per frame.
 class NightCard {
   constructor() {
@@ -180,6 +261,7 @@ export class Camp {
     this.busy = null;         // a chore under way: { t, passed, kind, done }
     this.night = null;        // sleeping: { kind, q, hours, ... }
     this.card = null;         // the fallback night card (NightCard), made on first use
+    this.dial = null;         // wc A: the Rest-until dial (RestDial), made on first use
     this.lastMode = null; this.booted = false; this.pending = null;
     this.still = 0; this.dry = 0; this.lastNow = null;
     this.nudged = null; this.lampHinted = null;
@@ -262,8 +344,9 @@ export class Camp {
     const ch = this.chores;
     if (ch && !this.busy && !this.night) ch.before();
     hold.before();
-    if (this.busy || (this.card && this.card.active) || (ch && ch.card && ch.card.open)) this.player.input.paused = true;
+    if (this.busy || (this.card && this.card.active) || (ch && ch.card && ch.card.open) || this.dialOpen) this.player.input.paused = true;
   }
+  get dialOpen() { return !!(this.dial && this.dial.open); }
 
   // after player.update (and the outfitter's prompt): the camp's keys and prompts. dt: real seconds.
   update(dt) {
@@ -295,7 +378,7 @@ export class Camp {
     if (this.morningNote && !this.night && !(this.veil && this.veil.active)) { this.note(this.morningNote, 9); this.morningNote = null; }
     if (this.busy) { this.ghost.park(); this.working(dt); return; }
     if (this.night || hold.active) { this.ghost.park(); return; }
-    if (this.chores && this.chores.card && this.chores.card.open) { this.ghost.park(); p.prompt = null; return; } // the wake-time card holds the keys
+    if ((this.chores && this.chores.card && this.chores.card.open) || this.dialOpen) { this.ghost.park(); p.prompt = null; return; } // the wake-time card or the dial holds the keys
     this.notes();
     this.still = Math.abs(p.speed) < 0.15 ? this.still + dt : 0;
     this.prompts();
@@ -723,25 +806,46 @@ export class Camp {
     if (!quiet) this.note(`The tent is down and rolled up.${words}${c.key ? ' The site is free again.' : ''}`, 5);
   }
 
-  // fb2 A: your tent's panel in the book (nearby.js), within TENT_PANEL of it: carry on pitching or put the fly on
-  // (held), strike it (held), sleep (the wake-time card at night; by day only worn out). held(o): the hold's keys from
-  // the book (o.key: its BookHold; E too). Without the fly on it sleeps, but rain comes through the mesh.
-  tentPanel() {
+  // wc A: your tent's two keys on the dot (nearby.js draws the target within TENT_PANEL of it): { e, q, label, hint,
+  // stage }. Half pitched: E carries on pitching (held), Q strikes (held). The fly still off: E puts it on (held), Q
+  // rests without it (rain comes through the mesh). Up: E Rest until… (the dial), Q strikes (held). o.key: the key held.
+  tentActions() {
     const c = this.camp, p = this.player;
     if (!c || p.mode !== 'walk' || Math.hypot(c.x - p.x, c.z - p.z) > TENT_PANEL) return null;
-    const K = tentOf(c.item), d = itemDef(c.item), { set } = this.day.sunriseSunset, from = (set ?? 19) - SLEEP_FROM;
-    const night = this.night0, sleepy = this.sleepy, keys = (o) => ({ key: (o && o.key) || 'KeyE', keys: ['KeyE', 'Mouse0', ...(o && o.key ? [o.key] : [])] });
-    const wake = sleepy ? (night ? `until first light, about ${clock12(this.wakeTime('first').at)}` : `worn out: until about ${clock12(this.wakeTime().at)}`) : null;
-    const actions = [];
-    if (c.stage < 4) actions.push({ id: 'pitch', label: c.stage === 3 ? 'Put the fly on' : 'Carry on pitching', held: true, job: 'tent', enabled: true, run: (o) => hold.begin({ ...this.pitchOnOpts(), ...keys(o) }) });
-    actions.push({ id: 'sleep', label: c.stage === 3 ? 'Sleep without the fly' : 'Sleep', closeBook: true, enabled: c.stage >= 3 && sleepy, why: c.stage < 3 ? 'it is not up yet' : sleepy ? null : `you can turn in from ${clock12(from)}`, hint: wake, run: () => this.turnIn(c.site, night) });
-    actions.push({ id: 'strike', label: 'Strike the tent', held: true, job: 'strike', enabled: true, run: (o) => hold.begin({ ...this.strikeOpts(), ...keys(o) }) });
-    return { id: 'tent', kind: 'tent', title: `Your ${lower(d ? d.name : 'tent')}`, sub: `${K.words[c.stage]}${c.site ? ` · ${this.siteName(c.site)}` : ''}`, actions, stage: c.stage };
+    const K = tentOf(c.item), d = itemDef(c.item), keys = (o) => ({ key: (o && o.key) || 'KeyE', keys: [...new Set([(o && o.key) || 'KeyE', 'Mouse0', ...((o && o.keys) || [])])] });
+    const busy = !!(hold.active || this.busy || this.night || this.dialOpen);
+    const pitch = { verb: c.stage === 3 ? 'Put the fly on' : 'Carry on pitching', held: true, why: busy ? 'a moment' : null, run: (o) => hold.begin({ ...this.pitchOnOpts(), ...keys(o) }) };
+    const strike = { verb: 'Strike', held: true, why: busy ? 'a moment' : null, run: (o) => hold.begin({ ...this.strikeOpts(), ...keys(o) }) };
+    const rest = { verb: c.stage === 3 ? 'Rest until… (no fly)' : 'Rest until…', why: busy ? 'a moment' : null, run: () => this.restDial() };
+    const e = c.stage >= 4 ? rest : pitch, q = c.stage >= 4 ? strike : c.stage === 3 ? rest : strike;
+    return { e, q, label: `your ${lower(d ? d.name : 'tent')}`, hint: K.words[c.stage], stage: c.stage };
   }
-  turnIn(site, night) {
-    const ch = this.chores;
-    if (night && ch && ch.openWake) ch.openWake(site, 0); else this.sleep('tent');
+  // the Rest-until dial: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →; E rests until then
+  restDial() {
+    const c = this.camp, d = this.day, { rise, set } = d.sunriseSunset;
+    if (!c || c.stage < 3) { this.note('The tent isn’t up yet: carry on pitching it first.'); return false; }
+    if (this.night || this.busy || hold.active) return false;
+    if (!this.dial) this.dial = new RestDial();
+    const first = ((rise ?? 6) + WAKE_AT) % 24, dusk = (set ?? 19) % 24;
+    const opts = [
+      { label: 'First light', small: clock12(first), at: first },
+      { label: '7:00', small: 'am', at: 7 }, { label: '9:00', small: 'am', at: 9 }, { label: 'Noon', small: '12 pm', at: 12 }, { label: '4:00', small: 'pm', at: 16 },
+      { label: 'Dusk', small: clock12(dusk), at: dusk }, { label: '10:00', small: 'pm', at: 22 },
+    ];
+    // the first of them after now (by an hour at least), as the one to begin with
+    const h = d.hours, ahead = (at) => (((at - h) % 24) + 24) % 24;
+    const start = opts.map((o) => o.at).filter((at) => ahead(at) >= 1).sort((a, b) => ahead(a) - ahead(b))[0] ?? first;
+    const words = (at) => {
+      const w = this.wakeTime(at), M = Math.round(w.hours * 60), H = Math.floor(M / 60), m = M % 60;
+      const span = `${H ? `${H} h` : ''}${m ? ` ${m} min` : ''}`.trim() || 'no time at all';
+      const kind = w.nap ? 'a nap: some of the rest comes back' : w.hours >= 7 ? 'a full night' : `a short night: the tent gives ${Math.round(Math.min(1, w.hours / 7) * 100)} % of its rest`;
+      return `${span} · ${kind}${c.stage < 4 ? ' · no fly on' : ''}`;
+    };
+    this.dial.show({ kicker: `Rest · ${c.site ? this.siteName(c.site) : 'your tent'}`, opts, at: start, words, onPick: (at) => this.sleep('tent', at) });
+    return true;
   }
+  // (the wake-time card's hook, chores.js: the dial is the tent's E now)
+  turnIn() { return this.restDial(); }
   // from an hour and a half before sunset to sunrise the tent takes you (night0), and by day too when worn out (sleepy)
   get night0() { const d = this.day, { rise, set } = d.sunriseSunset, h = d.hours; return h >= (set ?? 19) - SLEEP_FROM || h < (rise ?? 6); }
   get sleepy() { return this.night0 || this.wornOut; }
@@ -806,10 +910,17 @@ export class Camp {
   // hours off, seven hours on and no later than 9:00. { at: the hour, hours: how long }
   // choice (hubs 3A, the wake-time card): 'first' (that), or an hour of the clock to wake at (7 or 9): the next time
   // it comes round
+  // wc A: an hour chosen on the dial (any hour, day or night) is the next time it comes round; a rest under NAP_UNDER
+  // hours that spans no night (it starts and ends between sunrise and sunset) is a nap (nap), else a night (energy.sleep)
   wakeTime(choice = 'first') {
-    const d = this.day, { rise: r, set } = d.sunriseSunset, rise = r ?? 6;
-    if (d.hours >= rise && d.hours < (set ?? 19) - SLEEP_FROM) { const at = Math.min(23.5, d.hours + SLEEP_IN); return { at, hours: at - d.hours, day: true }; } // a sleep by day, worn out
-    if (Number.isFinite(choice)) { const at = choice % 24; return { at, hours: ((at - d.hours) % 24 + 24) % 24 || 24 }; }
+    const d = this.day, { rise: r, set } = d.sunriseSunset, rise = r ?? 6, dusk = set ?? 19;
+    if (Number.isFinite(choice)) {
+      const at = ((choice % 24) + 24) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
+      const byDay = (h) => h >= rise && h < dusk;
+      const nap = hours < NAP_UNDER && byDay(d.hours) && byDay(at) && at > d.hours;
+      return { at, hours, nap, day: nap };
+    }
+    if (d.hours >= rise && d.hours < dusk - SLEEP_FROM) { const at = Math.min(23.5, d.hours + SLEEP_IN); return { at, hours: at - d.hours, day: true }; } // a sleep by day, worn out
     let at = (rise + WAKE_AT) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
     if (hours < LATE_NIGHT && d.hours < 12) { at = Math.max(at, Math.min(SLEEP_IN_BY, d.hours + SLEEP_IN)); hours = at - d.hours; }
     return { at, hours };
@@ -826,7 +937,7 @@ export class Camp {
     if (kind === 'tent' && c && c.stage < 3) { this.note('The tent isn’t up yet: carry on pitching it first.'); return; }
     // turning in before sunset: the night's jump would carry the clock past the dusk meal (energy.js eats only the
     // breakfast of a jump), so supper is eaten now, unless one was had in the last few hours (a cooked one, say)
-    const { at: wakeAt, hours, day: byDay } = this.wakeTime(choice);
+    const { at: wakeAt, hours, day: byDay, nap } = this.wakeTime(choice);
     if (!byDay && set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
     const fly = !c || c.stage >= 4, rain = !fly && this.rainyNight(hours);
     const q = this.tentQuality() * (this.wet ? WET : 1) * (fly ? 1 : NO_FLY) * (rain ? WET : 1);
@@ -837,13 +948,14 @@ export class Camp {
     const where = c && c.site ? this.siteName(c.site) : (p.placeName || 'Camp');
     const hh = Math.max(1, Math.floor(hours + 0.01)); // a short night is under seven hours: six and a half is 'six'
     const damp = this.wet || rain;
-    const night = byDay ? `${word(hh)} ${plural(hh, 'hour')} by day${damp ? ' in wet gear' : ''}` : hours >= 7 ? (damp ? 'a damp night in wet gear' : fly ? 'a full night\'s sleep' : 'a full night, no fly on') : `a short night, ${word(hh)} ${plural(hh, 'hour')}${damp ? ' in wet gear' : ''}`;
+    const night = nap ? `a nap, ${hours < 1 ? 'an hour or less' : `${word(hh)} ${plural(hh, 'hour')}`}` : byDay ? `${word(hh)} ${plural(hh, 'hour')} by day${damp ? ' in wet gear' : ''}` : hours >= 7 ? (damp ? 'a damp night in wet gear' : fly ? 'a full night\'s sleep' : 'a full night, no fly on') : `a short night, ${word(hh)} ${plural(hh, 'hour')}${damp ? ' in wet gear' : ''}`;
     const card = {
       kicker: `${n ? `${byDay ? 'Day' : 'Night'} ${n} · ` : ''}${where}`,
-      text: byDay ? 'Out like a light in the middle of the day, the fly zipped against the sun.' : nightLine(fc, d.season, fly),
+      text: nap ? napLine(d.hours, wakeAt, fly, W && W.state) : byDay ? 'Out like a light in the middle of the day, the fly zipped against the sun.' : nightLine(fc, d.season, fly),
       sub: `${clock12(d.hours)} to ${clock12(wakeAt)} · ${night}`,
+      ...(nap ? { fadeIn: 1.0, hold: 1.6, fadeOut: 1.6 } : {}),
     };
-    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain };
+    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap };
     const onDark = () => this.wake();
     const done = () => this.morning();
     if (this.veil && this.veil.card) this.veil.card({ ...card, onDark }).then(done, done);
@@ -858,7 +970,9 @@ export class Camp {
     this.jump(n.hours);
     if (Number.isFinite(n.wakeAt)) d.setClock(d.year, d.doy, n.wakeAt);
     const e = this.energy;
-    if (e.sleep) e.sleep(n.q, n.hours); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
+    if (n.nap) this.nap(n.q, n.hours);
+    else if (e.sleep) e.sleep(n.q, n.hours); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
+    if (n.nap) { this.log('nap', { key: this.camp ? this.camp.key : null, hours: Math.round(n.hours * 10) / 10 }); this.persist(); return; }
     const lines = [];
     if (n.rain && this.state) { this.state.wet = true; lines.push('Rain came through the mesh in the night with no fly on: your gear is soaked.'); }
     else if (this.wet && this.player.gear && this.player.gear.sleepDry) { this.state.wet = false; lines.push('The gear dried overnight in the vestibule.'); } // hubs 2B: the four-season tent
@@ -868,8 +982,25 @@ export class Camp {
     this.log('sleep', { kind: n.kind, key: this.camp ? this.camp.key : null, q: +n.q.toFixed(2), hours: Math.round(n.hours * 10) / 10, fly: !n.rain && (!this.camp || this.camp.stage >= 4) });
     this.persist();
   }
-  // after the card: the day's card (the HUD skips jumps)
+  // wc A: a nap (energy.js has only the night's sleep): the rest need comes back by NAP_GAIN of a night's share for the
+  // hours napped, the hours awake fall by NAP_AWAKE an hour (the rest's ceiling), warmth comes back some in the bag, and
+  // the bar is back up to what the needs allow, as after a night
+  nap(q, hours) {
+    const e = this.energy;
+    if (!e) return;
+    if (!e.live || !e.needs) { e.value = Math.max(e.value, Math.min(1, e.value + q * hours / 7)); return; }
+    const before = e.needs.rest;
+    if (Number.isFinite(e.awakeSince)) e.awakeSince = Math.min(e.now, e.awakeSince + NAP_AWAKE * hours);
+    e.needs.rest = Math.min(1, Math.max(before, before + q * NAP_GAIN * Math.min(1, hours / 7)));
+    if (e.need && Number.isFinite(e.need.warmth)) e.need.warmth = Math.min(1, e.need.warmth + 0.25 * Math.min(1, hours / 2));
+    if (Number.isFinite(e.ceiling)) e.value = Math.max(e.value, e.ceiling);
+    e.wokeAt = e.now; e.warned = false;
+    if (typeof e.unnote === 'function') e.unnote();
+  }
+  // after the card: the day's card (the HUD skips jumps; after a nap, a word instead)
   morning() {
+    const n = this.night;
+    if (n && n.nap) { this.night = null; this.note(`Up at ${clock12(this.day.hours)}, ${n.hours < 1.5 ? 'a little' : 'a good deal'} more rested.`, 5); return; }
     this.night = null;
     const d = this.day, h = this.hud, p = this.player, w = this.world, e = this.energy;
     const rise = d.sunriseSunset.rise, wind = this.wind, dayN = this.tripDay(d.doy);
@@ -917,6 +1048,14 @@ export class Camp {
   }
 }
 
+// a nap's line, by the hour of the day and the weather now
+function napLine(h, at, fly, state) {
+  const rain = /rain|storm/.test(String(state || ''));
+  if (rain) return fly ? 'Rain on the fly, and you doze off to it.' : 'Rain through the mesh, no fly on: a damp doze.';
+  if (h < 10) return 'The morning sun on the tent, and you sleep in a while.';
+  if (at >= 17) return 'You lie down in the afternoon and wake to the evening light, the lake gone still.';
+  return 'Out like a light in the middle of the day, the fly zipped against the sun.';
+}
 // The night's weather, in a line, from the forecast for the hours slept (weather.js forecast: one entry per change);
 // fly: whether the fly was on (without it the rain comes through the mesh)
 function nightLine(fc, season, fly = true) {
