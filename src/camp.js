@@ -2,7 +2,7 @@ import { tentPose } from './props.js';
 import { save } from './save.js';
 import { clock12, longDate, plural, fmtDays, compassLong, word } from './hud.js';
 import { daysInYear } from './astro.js';
-import { sheets } from './sheets.js'; // hubs 2D: the dusk word names only a site your map shows
+import { sheets } from './sheets.js'; // the dusk word names only a site on a sheet you own (fb2 D: owned, not carried)
 import { Chores } from './chores.js'; // hubs 3A / camp 2: the fire, the wood, the cooking, the latrine, the wake-time card
 import { hold } from './hold.js'; // camp 1: held work, with its ring
 import { TentStages, TentGhost, TENT_FLY, kindOf, tentOf } from './tent.js'; // camp 1: the tent in its phases (the A-frame's own, camp join)
@@ -313,8 +313,8 @@ export class Camp {
     } else if (!this.wet) this.dry = 0;
   }
 
-  // an hour before sunset in Adventure: the nearest free site your map shows (a sheet you own, or near where you have
-  // been: sheets.js), never one off it; once dark: the headlamp
+  // an hour before sunset in Adventure: the nearest free site your map shows (on a sheet you own: sheets.js), never one
+  // off it; once dark: the headlamp
   notes() {
     const d = this.day, p = this.player, { set } = d.sunriseSunset;
     const stamp = d.year * 1000 + d.doy, evening = d.hours >= 12 ? stamp : stamp - 1;

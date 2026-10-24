@@ -327,8 +327,8 @@ async function main() {
   window.__game.worldFixes = world.fixed;
   if (world.fixed) console.log(`fb E: ${world.fixed.landings} landings at their put-ins, ${world.fixed.portages} portages connected to the ${world.fixed.baked} baked`);
   window.__game.dialogue = talk; // fb F
-  // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
-  // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
+  // hubs 2D: map sheets (sheets.js). The sheets you own gate the map's campsites, portages and soundings (hud.js; fb2 D
+  // below); Sandbox shows everything. The map table sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
   // fb2 D: maps owned, not carried (sheets.js, maptable.js). A sheet bought is the profile's for the season
   // (profile.sheets(), ownSheet); the old sheet items and map cases migrate out of the inventory. M at an outfitter (in
@@ -425,7 +425,7 @@ async function main() {
       nearby.update(dt); // fb2 A: the book's panels for what is near (their change signal), the stations tidied
       forage.update(dt); // fb G: the patches near you, drawn in season; their prompt and the picking (after the camp's)
       tasks.update(dt * ts);
-      sheets.update(player); // hubs 2D: the cells around you as you go
+      sheets.update(player); // fb2 D: an old save's sheet items and map case migrate out, once the inventory is in
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
       energy.update(dt * ts, wind, atCamp);
       tripStats.update(dt * ts, outfitter.trip.active);
