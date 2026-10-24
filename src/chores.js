@@ -24,17 +24,18 @@ import { Cook, hiss, woodKnock } from './cook.js';
 //   a hand's container; drawn here), else into what you carry. With the folding saw in reach (player.gear.saw and the
 //   item), a down log's panel in the book saws it, held: three cuts, a short log dropped by it at each. Wood set down
 //   from the book (its Ground area: a pile on the ground, by the ring or anywhere) is a woodpile, drawn stacked.
-// - The fire (fire.js), worked from the book (fb2 A, nearby.js's fire panel): its Fuel is a fixed container at the ring
-//   (firefuel); the wood dragged into it is the fire laid. Light (held; kindling first: at least a branch, two pieces
-//   in all) puts a match to it; burning, it takes its next piece from the ring while under KEEP hours are left (logs
-//   burn long), so it burns full while there is wood in it and burns down after; Douse (held) puts it out: water,
-//   stirred in, water again, the steam boiling up and the hiss, the coals cold. Left, it smoulders until morning
-//   (fire.js FIRE.smoulder), and a branch dropped on the hot coals brings it back.
+// - The fire (fire.js), worked from its card (wc A: stream B's cards.open('fire'), on the fire ring's E; nearby.js's
+//   fire object) and from the dot (Q Light or Douse, held): its Fuel is a fixed container at the ring (firefuel); the
+//   wood dragged into it is the fire laid. Light (held; kindling first: at least a branch, two pieces in all) puts a
+//   match to it; burning, it takes its next piece from the ring while under KEEP hours are left (logs burn long), so it
+//   burns full while there is wood in it and burns down after; Douse (held) puts it out: water, stirred in, water again,
+//   the steam boiling up and the hiss, the coals cold. Left, it smoulders until morning (fire.js FIRE.smoulder), and a
+//   branch dropped on the hot coals brings it back. A down log with the saw to hand reads "E Saw · hold" (beginSaw).
 // - Cooking and eating: cook.js (the pot on the grate, the wait, the cooked things, the bench).
-// - The latrine: the book's Use walks you back to the box in the trees (props.js c.layout.latrine) and sits you down
-//   (cook.js sitAt, canoe.js's sit), ten quiet minutes on their own; rest +0.05 once a day.
+// - The latrine (wc A): E Sit at the box in the trees (props.js c.layout.latrine; the dot, nearby.js) walks you to it
+//   and sits you down (player.sitAt, stream C; else cook.js sitAt), ten quiet minutes on their own; rest +0.05 once a day.
 // - Blueberries are forage.js's (fb G); a pint a berries notice still wants goes into the tin here (s.pints).
-// - Sleep with a wake time: the tent panel's Sleep opens the paper card (first light, 7:00, 9:00).
+// - Sleep with a wake time: camp.js's Rest-until dial (wc A); the wake-time card here is the old one, kept for its CSS.
 // And two notices for the boards (tasks.js registerKind): blueberries for the café ($10 a pint, in season) and firewood
 // for the sauna ($6 an armful of three pieces), handed over on foot at the posting outfitter's store.
 //
@@ -513,15 +514,21 @@ export class Chores {
   }
 
   // --- the latrine ---------------------------------------------------------------------------------------------------
-  // fb2 A: Use (the book): you walk back to the box and sit, ten quiet minutes on their own (no key held)
-  latrine(site) {
+  // wc A: E Sit at the box (the dot, nearby.js): you walk back to it and sit (stream C's player.sitAt through `seat`,
+  // else cook.sitAt), and ten quiet minutes pass on their own (an auto hold, no key held); the rest bonus once a day.
+  // E or a move key stands you up (nearby.js cancels the hold once you are up). seat: { sit(spot) → bool, stand(),
+  // seated() → bool } or null for cook.js's own
+  latrine(site, seat = null) {
     if (hold.active || this.cook.busy) return null;
-    const spot = this.cook.latrineSpot(site);
-    this.cook.sitAt(spot);
-    this.cook.seat.quiet = true;
+    const spot = this.cook.latrineSpot(site), own = !(seat && typeof seat.sit === 'function');
+    if (own) { this.cook.sitAt(spot); this.cook.seat.quiet = true; }
+    else if (seat.sit(spot) === false) { this.note('Not from here: stand by the box.', 3); return null; }
+    const seated = () => (own ? !!(this.cook.seat && this.cook.seat.phase === 'seated') : !!seat.seated());
+    const up = () => { if (own) this.cook.standUp(); else seat.stand(); };
+    this.latrineSat = false;
     return hold.begin({
       id: 'latrine', label: 'The latrine', phases: LATRINE, near: { x: spot.stand.x, z: spot.stand.z, r: 6 }, auto: true,
-      wait: () => !(this.cook.seat && this.cook.seat.phase === 'seated'),
+      wait: () => { const s = seated(); if (s) this.latrineSat = true; return !s; },
       onDone: () => {
         const e = this.energy, first = this.s.latrine !== this.today;
         this.s.latrine = this.today;
@@ -533,12 +540,14 @@ export class Chores {
           e.needs.rest = want;
         }
         this.note(first ? 'Ten quiet minutes on the box back in the trees, a red squirrel scolding. A little more rested.' : 'Ten quiet minutes on the box back in the trees.', 5);
-        this.cook.standUp();
+        up();
         this.persist();
       },
-      onStop: () => this.cook.standUp(),
+      onStop: () => { if (own) this.cook.standUp(); },
     });
   }
+  // the latrine's hold stops once you have got up from the box early (nearby.js, each frame): seated() as above
+  latrineUp(seated) { if (hold.is('latrine') && this.latrineSat && !seated()) { this.latrineSat = false; hold.cancel(); } }
   usedLatrine() { return this.s.latrine === this.today; }
 
   // --- the wood about ----------------------------------------------------------------------------------------------
