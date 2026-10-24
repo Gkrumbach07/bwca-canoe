@@ -507,6 +507,9 @@ A new Adventure season at entry point 30 (July 12, 7:40, Trip pace, $40), throug
   pack is empty" with two snacks in the barrel; "pack is empty. the nearest landing" standing in a store), and the
   resume and carry-on notes said "no days of food". They say the inventory's words now ("2 snacks within reach"), and
   the food notes keep quiet at an outfitter.
+- **The book said things under itself**: eating, carrying and moving from the book report through the HUD's line, which
+  lies under the paper, so "Hold still to eat" was never seen; the pack side writes it in pencil in its header, and an
+  open shelf on its receipt.
 - **A swim off a carry's far end** lost the portage from the trip's count.
 - **The Controls card and the docs**: I, Tab in the book, T, a People section, vault and climb, swimming, carrying and
   setting down, the shelves' panes and the map table, the lures you have; the README, trip-core.md and this file.
