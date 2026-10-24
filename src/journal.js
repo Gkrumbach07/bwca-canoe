@@ -110,8 +110,11 @@ export class Journal {
   pencilNote() {
     const w = this.wind, d = this.day, en = this.energy, h = d.hours, set = d.sunriseSunset.set, c = this.core;
     const adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
-    if (!sand && en && en.food < 1 && en.food > 0 && this.trip && this.trip.active) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter';
-    if (!sand && en && en.food <= 0 && this.trip && this.trip.active) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
+    // (the inventory's snacks count as food too; at an outfitter the shelf is a step away)
+    const out = this.trip && this.trip.active && !(this.outfitter && this.outfitter.visit), inv = en && en.inv;
+    const none = inv && typeof inv.snacks === 'function' ? inv.meals() + inv.snacks() <= 0 : en && en.food <= 0;
+    if (!sand && en && out && en.food < 1 && !none) { if (en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter'; }
+    if (!sand && en && out && none) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
     if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
     if (adv && c.state.wet) return 'everything is damp. a fire tonight to dry the gear';
     if (en && en.value < 0.3) return 'tired. find a site early and eat something';
@@ -156,7 +159,9 @@ export class Journal {
     }
     const d = this.day, afterRise = d.sunriseSunset.rise == null || d.hours >= d.sunriseSunset.rise, beforeSet = d.sunriseSunset.set == null || d.hours < d.sunriseSunset.set;
     const meal = left <= 0 ? 'the pack is empty' : afterRise && beforeSet ? 'supper at sunset' : 'breakfast at dawn';
-    const foodTxt = !active ? 'no trip under way' : sand ? `the pack keeps · ${meal}` : `${fmtDays(left)} ${left <= 1 ? 'day' : 'days'} of ${total} · ${meal}`;
+    // with the inventory (fb A), its own words: the meals and snacks within reach, eaten from the pack (no meal comes on the clock)
+    const words = en && en.inv && typeof en.foodWords === 'function' ? en.foodWords() : null;
+    const foodTxt = !active ? 'no trip under way' : sand ? `the pack keeps · ${meal}` : words ? `${words === 'no food' ? 'nothing to eat' : words} within reach · eaten from the pack` : `${fmtDays(left)} ${left <= 1 ? 'day' : 'days'} of ${total} · ${meal}`;
     const ev = en ? Math.round(en.value * 100) : 100;
     const cap = en ? Math.round(en.ceiling * 100) : 100;
     const energyTxt = en && en.warning ? 'no food and little left in you' : adv && cap < 100 && ev >= cap - 2 ? `rest goes no higher now · only sleep fills it` : ev > 60 ? 'resting brings it back, faster at a campsite' : ev > 30 ? 'getting low · a meal or a rest at a campsite' : 'worn out · eat, or sit a while';
