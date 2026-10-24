@@ -419,6 +419,15 @@ export class Camp {
     if (c && (c.key === key || !c.key) && Math.hypot(c.x - p.x, c.z - p.z) < AT_TENT) { this.tentPrompts(site, soft); return; }
     if (this.hang.prompts()) return;
     if (!c) this.pitchPrompts(site);
+    else if (c.key !== key && this.still >= GHOST_STILL[0]) this.say(`${this.siteName(site)} · ${this.tentAway(c)}`);
+  }
+  // your tent standing at another site, in a few words: "your tent is up 1.2 km east, at Campsite · Lake One"
+  tentAway(c) {
+    const p = this.player, d = Math.hypot(c.x - p.x, c.z - p.z), deg = ((Math.atan2(c.x - p.x, -(c.z - p.z)) * 180) / Math.PI + 360) % 360;
+    const far = d < 1000 ? `${Math.max(50, Math.round(d / 50) * 50)} m` : `${(d / 1000).toFixed(1)} km`;
+    const id = c.site && p.nearWater ? p.nearWater(c.site.x, c.site.z, 6) : 0, lake = id ? this.world.lakeName(id) : null;
+    const at = c.site ? (c.site.name ? `, at the ${c.site.name} campsite` : lake ? `, at the campsite on ${lake}` : ', at a campsite') : '';
+    return `your tent is ${c.stage >= 4 ? 'up' : 'half pitched'} ${far} ${compassLong(deg)}${at}: strike it there to pitch it here`;
   }
   offSitePrompts(soft) {
     const p = this.player, c = this.camp;

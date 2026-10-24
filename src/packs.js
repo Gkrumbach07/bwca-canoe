@@ -132,6 +132,9 @@ export class Packs {
       s = all.some((u) => u.obj.where === 'ground' && u.obj.at && u.obj.at.camp) ? 'Packs out at camp' : inCanoe.length === all.length ? (inCanoe.length ? 'Everything in the canoe' : 'Nothing with you') : `${inCanoe.length} ${inCanoe.length === 1 ? 'thing' : 'things'} in the canoe`;
     }
     if (left.length) s += ` · ${left[0].name} ${metres(left[0].d)} back${left.length > 1 ? ` (and ${left.length - 1} more)` : ''}`;
+    // camp join: the tent left standing at a camp you have paddled away from
+    const cp = this.inv.camp, tent = cp && cp.camp, td = tent ? Math.hypot(tent.x - p.x, tent.z - p.z) : 0;
+    if (tent && td > 60) s += ` · the tent ${tent.stage >= 4 ? 'up' : 'half pitched'} ${metres(td)} back`;
     return s;
   }
   // how many carries a portage from the canoe as it is now takes
