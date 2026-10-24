@@ -42,6 +42,8 @@ export const LOWER = [
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const ease = (k) => { const t = Math.min(1, Math.max(0, k)); return t * t * (3 - 2 * t); };
 const lower = (s) => String(s).charAt(0).toLowerCase() + String(s).slice(1);
+// a barrel as a line says it ("the small blue barrel", not "the blue barrel, 30 L")
+const barrelName = (item) => ({ barrel30: 'small blue barrel', barrel60: 'big blue barrel' })[item] || lower((itemDef(item) || { name: 'barrel' }).name);
 
 export class Hang {
   // camp: camp.js's Camp (its world, tiles, player, scene, hud, trip, note)
@@ -208,8 +210,8 @@ export class Hang {
     }
     const hung = this.hungNear(p.x, p.z);
     if (hung) {
-      const t = hung.at.tree, d = itemDef(hung.item);
-      hold.offer('Let the barrel down', `${lower(d ? d.name : 'the barrel')}, from the ${t ? t.name : 'tree'}`, this.lowerOpts(hung));
+      const t = hung.at.tree;
+      hold.offer('Let the barrel down', `the ${barrelName(hung.item)}, from the ${t ? t.name : 'tree'}`, this.lowerOpts(hung));
       return true;
     }
     const bs = this.barrels();
@@ -244,7 +246,7 @@ export class Hang {
           k.at.y = high; k.at.up = true; this.pending = null;
           inv.emit('hung');
           const tag = this.camp.reachArea ? this.camp.reachArea() : null; if (tag && k.at) k.at.camp = tag.key || 'camp';
-          this.camp.note(`The ${lower(itemDef(c.item).name)} hangs from the ${spot.tree.name}, ${CLEAR} m up and ${OUT.toFixed(1).replace('.0', '')} m out from the trunk.`, 5);
+          this.camp.note(`The ${barrelName(c.item)} hangs from the ${spot.tree.name}, ${CLEAR} m up and ${OUT.toFixed(1).replace('.0', '')} m out from the trunk.`, 5);
           this.camp.log('hang', { item: c.item, tree: spot.tree.name, x: Math.round(spot.x), z: Math.round(spot.z) });
         }
       },
@@ -270,7 +272,7 @@ export class Hang {
         const b = inv.cont(c.id); if (!b) return;
         const tag = this.camp.reachArea ? this.camp.reachArea() : null;
         inv.setDown(b.id, { x: a.x, z: a.z, heading: a.heading || 0, ...(tag ? { camp: tag.key || 'camp' } : {}) }, { left: false, force: true });
-        this.camp.note(`The ${lower(itemDef(c.item).name)} is down.`, 3);
+        this.camp.note(`The ${barrelName(c.item)} is down.`, 3);
       },
       onStop: () => { const b = inv.cont(c.id); if (b && b.where === 'hung') b.at.y = high; },
     };
