@@ -266,7 +266,9 @@ export class Cook {
       const pot = this.potHere(key), K = COOK[raw.def.kind === 'fish' ? 'fish' : raw.def.id] || COOK['meal:supper'];
       const label = raw.def.kind === 'fish' ? `Fry the ${this.nameOf(raw.def, raw.e.data)}` : `Cook the ${this.nameOf(raw.def)}`;
       if (!pot) return { say: `${label} · the cook pot is not to hand: it is in a pack` };
-      return { label, hint: raw.def.kind === 'fish' ? 'cleaned, in the pot lid' : `the pot on the grate, ${K.water} L of water`, run: () => this.start(site, key, raw) };
+      const e0 = this.energy, short = K.water > 0 && e0 && e0.useWater && !e0.sandbox && e0.bottle < K.water - 0.001;
+      if (short) return { say: `The ${this.nameOf(raw.def)} ${isAre(this.nameOf(raw.def)) === 'are' ? 'want' : 'wants'} ${mL(K.water)} of water · the bottle has ${e0.bottle > 0.04 ? mL(e0.bottle) : 'none'}: fill it at the shore` };
+      return { label, hint: raw.def.kind === 'fish' ? 'cleaned, in the pot lid' : `the pot on the grate, ${mL(K.water)} of water`, run: () => this.start(site, key, raw) };
     }
     if (og.pot) return { label: 'Put the pot away', hint: 'scrubbed out with sand', run: () => this.putAway(key, true) };
     return null;
@@ -282,7 +284,7 @@ export class Cook {
     if (og.food) { this.note(`The ${eatName(itemDef(og.food.id))} is still in the pot: eat it, or keep it in a pack.`); return false; }
     const K = COOK[fish ? 'fish' : def.id] || COOK['meal:supper'];
     if (K.water > 0 && e0 && e0.useWater && !e0.sandbox) {
-      if (e0.bottle < K.water - 0.001) { this.note(`The ${this.nameOf(def)} wants ${K.water} L of water and the bottle has ${e0.bottle > 0.04 ? `${e0.bottle.toFixed(1)} L` : 'none'}: fill it at the shore.`, 5); return false; }
+      if (e0.bottle < K.water - 0.001) { this.note(`The ${this.nameOf(def)} wants ${mL(K.water)} of water and the bottle has ${e0.bottle > 0.04 ? mL(e0.bottle) : 'none'}: fill it at the shore.`, 5); return false; }
     }
     const pot = this.potHere(key);
     if (!pot) { this.note('The cook pot is not to hand: it is in one of the packs.'); return false; }
@@ -611,6 +613,8 @@ export class Cook {
   }
 }
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+// litres as a line says them, to the 10 mL (rounded down: "270 mL", never "0.3 L" for 0.27 against 0.3 wanted)
+const mL = (l) => (l >= 1 ? `${(Math.floor(l * 10) / 10).toFixed(1)} L` : `${Math.floor(l * 100 + 1e-6) * 10} mL`);
 const isAre = (name) => (/\band\b/.test(name) ? 'are' : 'is'); // "the rice and lentils are", "the oatmeal is"
 // a cooked thing as you would say it: "rice and lentils", "fried walleye", "oatmeal"
 function eatName(d) {
