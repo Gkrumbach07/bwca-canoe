@@ -6,7 +6,7 @@ import { clock12, word, plural, esc } from './hud.js';
 import { mulberry32, hash2 } from './rng.js';
 import { save } from './save.js';
 import { GROUND } from './terrain-build.js';
-import { itemDef } from './items.js';
+import { itemDef, defineItem } from './items.js';
 import { inventory as INVENTORY } from './inventory.js';
 import { FIRE } from './fire.js';
 import { hold } from './hold.js';
@@ -20,34 +20,42 @@ import { Cook, hiss, woodKnock } from './cook.js';
 // - Firewood is things you find. Dead branches (items.js wood:branch, 1×2) and short logs (wood:log, 1×3) lie about
 //   every site (SITE_WOOD, more under the trees and by the down logs) and here and there in the woods (WOODS: more in the
 //   dark spruce and the burns), placed by the ground (the same every time) and coming back REGROW days after they were
-//   picked up. E at one picks it up: into an armload in a free hand (items.js woodarms, a hand's container; drawn here),
-//   else into what you carry. With the folding saw in reach (player.gear.saw and the item), hold E at a down log: three
-//   cuts, a short log dropped by it at each. At a ring, E with an armload stacks it on the woodpile (WOOD.pile pieces, one
-//   per site, drawn by its count); the fire takes wood from the pile, the arms or anything in the camp's reach.
-// - The fire (fire.js). Hold E at the ring to lay it (kindling first: at least a branch, two pieces in all) and light it.
-//   At a burning fire a tap of E feeds it a piece (logs burn long), or cooks (cook.js), or eats what is in the pot; held,
-//   E puts it out: water, stirred in, water again, the steam boiling up and the hiss, the coals cold. Left, it burns down
-//   and smoulders until morning (fire.js FIRE.smoulder), and a branch on the hot coals brings it back.
+//   picked up. E pointed at one (pointer.js, nearby.js) picks it up: into an armload in a free hand (items.js woodarms,
+//   a hand's container; drawn here), else into what you carry. With the folding saw in reach (player.gear.saw and the
+//   item), a down log's panel in the book saws it, held: three cuts, a short log dropped by it at each. Wood set down
+//   from the book (its Ground area: a pile on the ground, by the ring or anywhere) is a woodpile, drawn stacked.
+// - The fire (fire.js), worked from the book (fb2 A, nearby.js's fire panel): its Fuel is a fixed container at the ring
+//   (firefuel); the wood dragged into it is the fire laid. Light (held; kindling first: at least a branch, two pieces
+//   in all) puts a match to it; burning, it takes its next piece from the ring while under KEEP hours are left (logs
+//   burn long), so it burns full while there is wood in it and burns down after; Douse (held) puts it out: water,
+//   stirred in, water again, the steam boiling up and the hiss, the coals cold. Left, it smoulders until morning
+//   (fire.js FIRE.smoulder), and a branch dropped on the hot coals brings it back.
 // - Cooking and eating: cook.js (the pot on the grate, the wait, the cooked things, the bench).
-// - The latrine. Hold E at the box back in the trees (props.js c.layout.latrine): you walk to it and sit (cook.js sitAt,
-//   canoe.js's sit), ten quiet minutes; rest +0.05 once a day.
+// - The latrine: the book's Use walks you back to the box in the trees (props.js c.layout.latrine) and sits you down
+//   (cook.js sitAt, canoe.js's sit), ten quiet minutes on their own; rest +0.05 once a day.
 // - Blueberries are forage.js's (fb G); a pint a berries notice still wants goes into the tin here (s.pints).
-// - Sleep with a wake time: E at the tent (or ← → there) opens the paper card (first light, 7:00, 9:00).
+// - Sleep with a wake time: the tent panel's Sleep opens the paper card (first light, 7:00, 9:00).
 // And two notices for the boards (tasks.js registerKind): blueberries for the café ($10 a pint, in season) and firewood
 // for the sauna ($6 an armful of three pieces), handed over on foot at the posting outfitter's store.
 //
-// The prompts are claimed here, in update() (camp.update calls it before its own prompts, which stand back from a keyed
-// prompt), and their E is taken in before() (camp.before, ahead of player.update), so a pack set out near the ring does
-// not take the fire's E. What camp.js asks of it: before(), update(dt), openWake(site, choice), offered(site), card,
-// ashore() (for the leaving note); main.js (camp 2) asks move(), beforePose(), afterPose() and cook.onUse. Everything is
-// saved in the trip's document (trip.state.chores), or under its own key with no trip.
+// Nothing here takes E (fb2 A: E is the pointer's: pick up, talk, open, get in). What camp.js asks of it: before(),
+// update(dt), openWake(site, choice), card, ashore() (for the leaving note); nearby.js asks the fire's (fuelBin, grate,
+// fireInfo, lightProblem, light, douse), the latrine's, the saw's and the wood's; main.js (camp 2) asks move(),
+// beforePose(), afterPose(). Everything is saved in the trip's document (trip.state.chores), or under its own key with no
+// trip.
 
+// fb2 A (the owner's second feedback of 2026-10-24: "the fire could be thought of as a container ... separate bins that
+// you could drag things from your inventory ... onto the fire"): the fire ring is worked from the book (nearby.js), its
+// fuel a fixed container at the ring like the grate, and the grate takes a raw meal or a fish dragged onto it. Both are
+// stations: never where a thing picked up is put away (inventory.place).
+defineItem({ id: 'firefuel', name: 'In the fire ring', short: 'Fuel', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, station: true, container: { cols: 4, rows: 3, accepts: ['firewood'] }, icon: 'firewood', words: 'Dead branches and short logs laid in the ring. They burn a piece at a time once it is lit.' });
+defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'meal', 'fish'] } });
+const KEEP = 1.1;            // fb2 A: game hours of burning left under which a fire takes its next piece from the ring
 export const WOOD = { reach: 1.45, regrow: 2, pile: 12, ringR: 2.4, near: 58, drop: 95, cell: 24 };
 // (to: inside the camp's area, camp.js AREA_R 25 m, so walking about for wood never takes you out of the camp's reach)
 const SITE_WOOD = { branches: 12, logs: 5, tries: 90, from: 4.5, to: 23 };
 const WOODS = { forestDark: 1, forest: 0.75, forestLight: 0.6, burn: 1.3, meadow: 0.12, rock: 0.15, rockLichen: 0.15, rockDark: 0.2 };
-const AT_LATRINE = 1.9, LATRINE_REST = 0.05, AT_PILE = 1.35, SAW_REACH = 0.95;
-const TAP = 0.25;            // real seconds: E let go sooner than this at a burning fire is a tap (feed, cook, eat)
+const LATRINE_REST = 0.05, SAW_REACH = 0.95;
 export const SEASON = { from: [6, 10], to: [7, 20] }; // [month (0-based), day]: July 10 to August 20, the blueberries
 export const PAY = { pint: 10, armful: 6 };
 const ARMFUL = 3;            // pieces of wood a notice's "armful" is
@@ -272,10 +280,8 @@ export class Chores {
     this.card = new WakeCard();
     this.s = blank();           // what is saved (serialize)
     this.stateRef = undefined;  // the trip's document the saved part was read from
-    this.t = 0; this.sleepOffer = false;
+    this.t = 0;
     this.lit = new Set();       // the fires you lit or laid (keys): saved with their state
-    this.armed = null;          // what E does, from the prompt shown last frame: () => void
-    this.qArmed = null;         // and Q, at the ring with wood in your arms (the woodpile)
     this.steamT = 0; this.steamAt = null;
     this.cells = new Map();     // the woods' wood: cell key -> [pieces] | null (none); unset: not read yet
     this.sites = new Map();     // site key -> [pieces] (its wood, made once its layout is in)
@@ -287,7 +293,7 @@ export class Chores {
     this.field = new THREE.Mesh(new THREE.BufferGeometry(), this.mat);
     this.field.name = 'firewood'; this.field.castShadow = true; this.field.receiveShadow = true; this.field.matrixAutoUpdate = false; this.field.frustumCulled = false; this.field.visible = false;
     camp.scene.add(this.field);
-    this.pileMesh = null;       // the woodpile drawn nearest you: { group, layers: [mesh × 3] }
+    this.pileMeshes = [];       // fb2 A: the woodpiles drawn (piles of wood set down from the book): [{ group, layers, ref }]
     this.bundles = new Map();   // armload container id -> { mesh, sig }
     this.cook = new Cook(this);
     this.hold = hold; // the held-progress ring (hold.js), for the tests
@@ -329,214 +335,160 @@ export class Chores {
     const inv = this.inv, i = inv.containers.findIndex((c) => c.item === 'grate' && c.at && c.at.grate === key && !c.grid.length);
     if (i >= 0) { inv.containers.splice(i, 1); inv.emit('containers'); }
   }
-  // the armloads in your hands
-  armloads() { const inv = this.inv; return inv && inv.attached ? inv.containers.filter((c) => c.item === 'woodarms' && c.where === 'hands') : []; }
+  // fb2 A: the ring's fuel (items.js-style 'firefuel', defined above: on the ground at the ring, at.fuel = key): the wood
+  // dragged into it from the book is the fire laid, and once lit it burns a piece at a time (syncFire); made with `site`
+  fuelBin(key, site = null) {
+    const inv = this.inv;
+    if (!inv || !inv.attached) return null;
+    let b = inv.containers.find((c) => c.item === 'firefuel' && c.at && c.at.fuel === key);
+    if (!b && site && site.layout) {
+      const f = site.layout.fire;
+      b = inv.addContainer('firefuel', 'ground', { x: f.x, z: f.z, y: f.y + 0.05, heading: 0, camp: true, fuel: key, ring: { x: f.x, y: f.y, z: f.z, a: f.a || 0 }, v: 2 }, { quiet: true });
+    }
+    return b || null;
+  }
+  // the pieces in a fuel bin, one each: [{ id, e, burn }]
+  binUnits(b) { const out = []; if (b) for (const e of b.grid) if (!e.box && isWood(e.id)) for (let i = 0; i < e.qty; i++) out.push({ id: e.id, e, burn: burnOf(e.id) }); return out; }
+  binHours(b) { return this.binUnits(b).reduce((s, u) => s + u.burn, 0); }
+  // one piece out of the bin (its burn), or 0
+  takeFromBin(b, u) { return b && this.inv.take(b.id, u.e.uid, 1) ? u.burn : 0; }
   // an armload with room for item `id`: one you hold, or a new one in a free hand (null when both hands are full)
+  armloads() { const inv = this.inv; return inv && inv.attached ? inv.containers.filter((c) => c.item === 'woodarms' && c.where === 'hands') : []; }
   armFor(id, make = true) {
     const inv = this.inv;
     for (const c of this.armloads()) if (inv.firstFit(c, id)) return c;
     if (!make || inv.freeHand() < 0) return null;
     return inv.addContainer('woodarms', 'hands', null, { quiet: true, hand: inv.freeHand() });
   }
-  // the wood to hand at site `key`, a piece at a time: the woodpile's, then what is in the camp's reach (the arms first)
-  woodUnits(key) {
-    const out = [], pile = this.s.piles[key];
-    if (pile) for (const [id, n] of Object.entries(pile)) for (let i = 0; i < n; i++) out.push({ id, pile: key });
-    const pool = this.campPool().slice().sort((a, b) => (b.item === 'woodarms') - (a.item === 'woodarms'));
-    for (const c of pool) for (const e of c.grid) if (!e.box && isWood(e.id)) for (let i = 0; i < e.qty; i++) out.push({ id: e.id, c, e });
-    return out;
-  }
-  takeUnit(u) {
-    if (u.pile) { const p = this.s.piles[u.pile]; if (!p || !p[u.id]) return 0; p[u.id]--; if (!p[u.id]) delete p[u.id]; if (!Object.keys(p).length) delete this.s.piles[u.pile]; return burnOf(u.id); }
-    return this.inv.take(u.c.id, u.e.uid, 1) ? burnOf(u.id) : 0;
-  }
-  // the wood for laying a fire: kindling first (a branch or two, at least one), then a log; an old armful on its own.
-  // { units, words } or null with why ('none' | 'kindling')
-  layChoice(units) {
-    const arm = units.find((u) => u.id === 'firewood');
-    if (arm) return { units: [arm], words: 'an armful of wood' };
-    const br = units.filter((u) => u.id === 'wood:branch'), lg = units.filter((u) => u.id === 'wood:log');
-    if (!br.length) return lg.length ? { why: 'kindling' } : { why: 'none' };
-    if (br.length + lg.length < 2) return { why: 'more', n: 1 };
-    const nb = Math.min(lg.length ? 2 : 3, br.length), take = [...br.slice(0, nb), ...lg.slice(0, 1)], nl = take.length - nb;
-    return { units: take, words: `${word(nb)} ${plural(nb, 'branch', 'branches')}${nl ? ' and a log' : ''}` };
-  }
-  // the piece to feed a fire with: on coals a branch (it catches); burning low a log if there is one; else a log, else a
-  // branch, so long as there is room in the ring
-  feedChoice(units, state, left) {
-    if (!units.length) return null;
-    const br = units.find((u) => u.id === 'wood:branch' || u.id === 'firewood'), lg = units.find((u) => u.id === 'wood:log');
-    const u = state === 'coals' ? br || lg : lg || br;
-    if (!u || left + burnOf(u.id) * 0.5 > FIRE.most) return null;
-    return u;
-  }
   woodCount(units) { const b = units.filter((u) => u.id !== 'wood:log').length, l = units.length - b; return { b, l, n: units.length }; }
   woodWords(units) { const { b, l } = this.woodCount(units); return [b ? `${word(b)} ${plural(b, 'branch', 'branches')}` : '', l ? `${word(l)} ${plural(l, 'log')}` : ''].filter(Boolean).join(' and ') || 'no wood'; }
 
   // --- the frame ------------------------------------------------------------------------------------------------------
-  // before player.update (camp.before): E for the prompt shown last frame (taken here, so nothing after sees it); the
-  // walker held while sitting or setting the pot on; ← → at the tent opens the wake card
-  before() {
-    const c = this.camp, inp = this.player.input;
-    this.cook.before();
-    const a = this.armed, q = this.qArmed;
-    this.armed = null; this.qArmed = null;
-    if (a && !inp.paused && !hold.active && inp.once.has('KeyE') && this.player.mode === 'walk') { inp.once.delete('KeyE'); a(); return; }
-    // the armload's Q at the ring or the woodpile stacks it there (packs.js would set it down on the ground)
-    if (q && !inp.paused && !hold.active && inp.once.has('KeyQ') && this.player.mode === 'walk') { inp.once.delete('KeyQ'); q(); return; }
-    if (this.card.open || !this.sleepOffer) return;
-    if (c.still < 0.3 || inp.paused) return;
-    const r = inp.pressed('ArrowRight'), l = inp.pressed('ArrowLeft');
-    if ((r || l) && this.sleepSite !== undefined) this.openWake(this.sleepSite, r ? 1 : 0);
-  }
-  // after the player has moved (camp.update, before its prompts): the saved part, the wood about, the fires' steam, the
-  // pot, the prompts
+  // before player.update (camp.before): the walker held while sitting or setting the pot on (fb2 A: nothing at camp is
+  // done on E any more; the jobs are the book's, nearby.js)
+  before() { this.cook.before(); }
+  // after the player has moved (camp.update, before its prompts): the saved part, the wood about, the fires' steam and
+  // their fuel, the pot, the woodpiles
   update(dt) {
     const c = this.camp, p = this.player;
     if (c.state !== this.stateRef) { this.stateRef = c.state; this.restore(); }
     if (!this.tripHooked && c.trip && c.trip.on) { this.tripHooked = true; for (const k of ['exit', 'evac']) c.trip.on(k, () => this.tripEnded()); }
-    this.sleepOffer = false;
     this.cook.update(dt);
     this.dropEmptyArms();
     // the steam of a fire put out boils up a while after
     if (this.steamT > 0 && this.steamAt) { this.steamT -= dt; this.fires.steamAt('douse', this.steamAt, Math.min(1, this.steamT / 1.4)); }
     // the wood about: the cells round you read as you go, the drawn set rebuilt when it changes
     const on = (p.mode === 'walk' || p.mode === 'paddle' || p.mode === 'carry') && !p.teleporting;
-    if (on && ((this.cellT -= dt) <= 0)) { this.cellT = 0.5; this.restoreDrops(); this.refreshWood(p.x, p.z); }
+    if (on && ((this.cellT -= dt) <= 0)) { this.cellT = 0.5; this.restoreDrops(); this.refreshWood(p.x, p.z); this.migratePiles(); }
     if (this.redrawIn > 0 && (this.redrawIn -= dt) <= 0) this.dirty = true;
     if (this.dirty) this.drawWood();
-    this.placePile();
-    this.prompts();
-  }
-  // a prompt of our own may be put up here: on foot, nothing of ours busy, E not someone else's (a pack's pick-up gives
-  // way when what we offer is nearer, or we are at the ring)
-  free(dist = 0, atRing = false) {
-    const c = this.camp, p = this.player, o = c.outfitter;
-    if (p.mode !== 'walk' || p.teleporting || hold.active || this.cook.busy || c.busy || c.night || this.card.open) return false;
-    if (o && o.visit && o.visit.inside) return false;
-    const pr = p.prompt;
-    if (!pr || pr.soft) return true;
-    if (!pr.key && !/<kbd>/.test(pr.text || '')) return true;
-    if (/<kbd>E<\/kbd>Pick up /.test(pr.text || '')) { const k = this.nearestThing(); return atRing ? k > 1.1 : k > dist + 0.2; }
-    return false;
-  }
-  // metres to the nearest thing on the ground a pack's E would pick up (packs.js)
-  nearestThing() {
-    const inv = this.inv, p = this.player; let d = Infinity;
-    if (!inv || !inv.attached) return d;
-    for (const c of inv.containers) if (c.where === 'ground' && c.at && !(itemDef(c.item) || {}).fixed) d = Math.min(d, Math.hypot(c.at.x - p.x, c.at.z - p.z));
-    for (const l of inv.long) if (l.where === 'ground' && l.at) d = Math.min(d, Math.hypot(l.at.x - p.x, l.at.z - p.z));
-    return d;
-  }
-  // E with a line (its run taken next frame in before()), keeping a carried thing's Q (packs.js soft prompt)
-  offer(text, run, hint = '') {
-    const p = this.player, was = p.prompt, tail = was && was.soft && was.tail ? was.tail : '';
-    p.prompt = { key: 'E', text: `${text}${hint ? ` · ${hint}` : ''}${tail}`, ...(tail ? { tail } : {}), own: 'chores' };
-    this.armed = run;
-  }
-  // a line of ours with no key: over a soft prompt or a plain line with no key in it ("The canoe is 17 m away"), never
-  // over someone's key (a carried thing's Q keeps its tail)
-  say(text) {
-    const p = this.player, pr = p.prompt;
-    if (!pr || pr.soft || (!pr.key && !/<kbd>/.test(pr.text || ''))) p.prompt = { key: null, text: `${text}${pr && pr.soft && pr.tail ? pr.tail : ''}`, own: 'chores', ...(pr && pr.soft && pr.tail ? { tail: pr.tail } : {}) };
+    if ((this.fuelT = (this.fuelT || 0) - dt) <= 0) { this.fuelT = 0.25; this.syncFires(); }
   }
 
-  prompts() {
-    const p = this.player, c = this.camp;
-    if (!this.free(Infinity, true)) return;
-    const site = c.nearestSite(p.x, p.z, 26, true), L = site && site.layout, key = site ? keyOf(site) : null;
-    const holder = site ? c.registry.holder(key) : null, ours = !holder || holder === 'player';
-    // the ring (with wood in your arms, its Q stacks the wood on the woodpile)
-    if (L && ours) {
-      const dr = Math.hypot(L.fire.x - p.x, L.fire.z - p.z);
-      if (dr < WOOD.ringR && this.free(dr, true) && this.firePrompts(site, key)) { this.pileQ(site, key); return; }
-    }
-    // a piece of wood at your feet
-    const piece = this.nearestPiece(p.x, p.z, WOOD.reach);
-    if (piece && this.free(piece.d)) { this.piecePrompt(piece); return; }
-    if (L && ours) {
-      // the woodpile, the latrine
-      const ps = this.pileSpot(site), dp = Math.hypot(ps.x - p.x, ps.z - p.z);
-      if (dp < AT_PILE && this.free(dp) && this.pilePrompts(site, key)) return;
-      if (L.latrine) { const dl = Math.hypot(L.latrine.x - p.x, L.latrine.z - p.z); if (dl < AT_LATRINE && this.free(dl)) { this.latrinePrompt(site); return; } }
-    }
-    // a down log, with the saw
-    this.sawPrompt();
+  // --- the fire (fb2 A: from the book) -------------------------------------------------------------------------------
+  // Every ring with a fuel bin, a few times a second: what lies in the ring is the fire laid (drawn so) until it is lit;
+  // a fire burning takes its next piece from the ring while under KEEP hours are left, so it burns full while there is
+  // wood in the ring and burns down after (a night's jump burns the ring's wood on in turn, as it would have); a dead
+  // branch dropped on hot coals catches them again; a cold ring with nothing in it is no fire at all.
+  syncFires() {
+    const inv = this.inv;
+    if (!inv || !inv.attached || !this.fires) return;
+    for (const b of inv.containers) if (b.item === 'firefuel' && b.at && b.at.fuel) this.syncFire(b.at.fuel, b);
   }
-
-  // --- the fire ------------------------------------------------------------------------------------------------------
-  // the ring at a site that is yours or free: lay and light it (held), feed it, cook, eat (a tap), put it out (held)
-  firePrompts(site, key) {
-    const F = this.fires, st = F.state(key), units = this.woodUnits(key), cook = this.cook;
-    if (!F) return false;
-    if (st === 'none' || st === 'laid') {
-      const t = cook.tapAction(site, key); // a meal left in the pot from before
-      if (t && t.run && /^Eat/.test(t.label)) { this.offer(t.label, t.run, t.hint); return true; }
-      if (st === 'laid') { this.offer('Light the fire · hold', () => this.beginLight(site, key, null), `the wood is laid${units.length ? ` · ${this.woodWords(units)} more to hand` : ''}`); return true; }
-      const lay = this.layChoice(units);
-      if (lay.units) { this.offer('Light the fire · hold', () => this.beginLight(site, key, lay), lay.words); return true; }
-      this.say(lay.why === 'kindling' ? 'The fire ring · logs will not light on their own: a dead branch or two for kindling first' : lay.why === 'more' ? 'The fire ring · one branch is not a fire: another piece of wood first' : 'The fire ring · no wood to hand: dead branches and logs lie about the site');
-      return true;
+  syncFire(key, b = this.fuelBin(key)) {
+    const F = this.fires, now = this.now;
+    if (!F || !b) return;
+    const units = this.binUnits(b), at = b.at.ring || { x: b.at.x, y: b.at.y - 0.05, z: b.at.z, a: 0 };
+    const last = Number.isFinite(b.at.syncT) ? b.at.syncT : now;
+    b.at.syncT = now;
+    let f = F.get(key), changed = false;
+    // a fire laid before the ring had a bin (an older save): its wood is in the ring as branches
+    if (f && f.laid && !units.length && !b.at.v) { b.at.v = 2; for (let n = Math.max(2, Math.round(f.laid / FIRE.branch)); n > 0; n--) if (!this.inv.put(b, 'wood:branch', { quiet: true })) break; return; }
+    b.at.v = 2;
+    const chain = () => {
+      let fed = 0;
+      f = F.get(key);
+      while (units.length && f.until - now < KEEP) {
+        const left = f.until - now, i = left > 0.25 ? Math.max(0, units.findIndex((u) => u.id === 'wood:log')) : Math.max(0, units.findIndex((u) => u.id !== 'wood:log'));
+        const u = units.splice(i, 1)[0], h = this.takeFromBin(b, u);
+        if (!h) break;
+        f.until = Math.min(Math.max(now, f.until) + FIRE.most, f.until + h); fed++;
+      }
+      return fed;
+    };
+    if (f && !f.laid && f.lit > -1e8) {
+      const st = F.state(key);
+      // burning, or burnt out since it was last seen burning (the night's jump): the ring's wood burns on in turn
+      if (st === 'burning' || (f.until >= last - 1e-6 && f.until < now)) { changed = chain() > 0; }
+      else if (st === 'coals') {
+        const br = units.find((u) => u.id === 'wood:branch' || u.id === 'firewood');
+        if (br) {
+          units.splice(units.indexOf(br), 1);
+          const h = this.takeFromBin(b, br);
+          if (h) { F.feed(key, now, h); this.lit.add(key); chain(); changed = true; this.note('A branch on the hot coals, a breath or two, and it catches again.', 4); }
+        }
+      } else if (st === 'none') { F.douse(key); this.lit.delete(key); f = null; changed = true; }
+      if (f) { if (changed) { this.inv.emit('items'); this.persist(); } return; }
     }
-    const left = F.left(key), feed = this.feedChoice(units, st, left);
-    const feedAct = feed ? { label: st === 'coals' ? `Build it up again · a ${feed.id === 'wood:log' ? 'log' : 'branch'} on the coals` : `Add a ${feed.id === 'wood:log' ? 'log' : 'branch'}`, hint: st === 'coals' ? 'they are still hot' : `${left < FIRE.low ? 'it is burning down' : `about ${hoursWords(left)} of wood in it`}${units.length > 1 ? ` · ${this.woodWords(units.filter((u) => u !== feed))} more` : ''}`, run: () => this.feed(site, key, feed) } : null;
-    // a tap: eat what is in the pot; feed a fire burning low; cook (only on a fire that burns); feed it; put the pot away
-    const t = cook.tapAction(site, key, st === 'burning'), say = t && t.say ? t.say : '';
-    let tap = null;
-    if (t && t.run && /^Eat/.test(t.label)) tap = t;
-    else if (feedAct && (left < FIRE.low * 0.8 || say)) tap = feedAct;
-    else if (t && t.run) tap = t;
-    else tap = feedAct;
-    const out = st === 'coals' ? 'the coals are still smoking' : 'water on it, stirred in';
-    if (tap) this.offer(tap.label, () => this.beginDouse(site, key, tap), `${say && tap === feedAct ? `${say.replace(/^.* · /, '')} · ` : tap.hint ? `${tap.hint} · ` : ''}<kbd>hold E</kbd>put it out`);
-    else if (say) this.offer(say.replace(' · ', ' · <kbd>hold E</kbd>put it out · '), () => this.beginDouse(site, key, null));
-    else this.offer('Put the fire out · hold', () => this.beginDouse(site, key, null), out);
-    return true;
+    // not lit: the wood in the ring is a fire laid, or there is none
+    if (units.length) {
+      const hours = units.reduce((s, u) => s + u.burn, 0);
+      if (f && f.laid) f.laid = hours; else if (!f) { F.lay(key, at, hours); this.lit.add(key); }
+    } else if (f && f.laid) { F.douse(key); this.lit.delete(key); }
   }
   ringAt(site) { const f = site.layout.fire; return { x: f.x, y: f.y, z: f.z, a: f.a || 0 }; }
-  // hold E: lay the fire (the wood out of your arms, the pile, the packs), then light it
-  beginLight(site, key, lay) {
-    const F = this.fires, p = this.player, at = this.ringAt(site), start = F.state(key) === 'laid' ? 1 : 0;
-    hold.begin({
-      id: 'fire-light', label: 'The fire', phases: LIGHT, at: start, crouch: true, near: { x: p.x, z: p.z, r: 2.5 },
+  // what the ring holds now, for its panel: { state, left (h burning), fuel (h in the ring), units, hours, kindling }
+  fireInfo(key) {
+    const F = this.fires, b = this.fuelBin(key), units = this.binUnits(b), st = F ? F.state(key) : 'none';
+    const left = F ? F.left(key) : 0, fuel = units.reduce((s, u) => s + u.burn, 0);
+    const kindling = units.some((u) => u.id === 'wood:branch' || u.id === 'firewood');
+    return { state: st, left, fuel, hours: left + fuel, units, kindling, bin: b };
+  }
+  // why the ring will not light now, or null: kindling first (a dead branch at least), two pieces in all (an old armful
+  // alone will do)
+  lightProblem(key) {
+    const st = this.fires.state(key), { units } = this.fireInfo(key);
+    if (st === 'burning') return 'it is burning';
+    if (!units.length) return st === 'coals' ? 'wood in the ring first: a dead branch catches on the coals' : 'wood in the ring first: drag a branch or two into the fuel';
+    if (units.some((u) => u.id === 'firewood')) return null;
+    if (!units.some((u) => u.id === 'wood:branch')) return 'logs will not light on their own: a dead branch for kindling';
+    if (units.length < 2) return 'one branch is not a fire: another piece of wood';
+    return null;
+  }
+  // held: the kindling laid under the wood, then a match to the bark (the ring's kindling, a branch or two, catches; the
+  // rest burns in turn). opts: the hold's own (the key held: E, the book's BookHold)
+  light(site, key, opts = {}) {
+    const F = this.fires, p = this.player, at = this.ringAt(site), start = 0;
+    if (this.lightProblem(key)) return null;
+    this.fuelBin(key, site);
+    return hold.begin({
+      id: 'fire-light', label: 'The fire', phases: LIGHT, at: start, crouch: !opts.book, near: { x: p.x, z: p.z, r: 2.5 }, ...opts,
       onPhase: (i) => {
-        if (i === 0) {
-          const units = lay ? lay.units : this.layChoice(this.woodUnits(key)).units;
-          if (!units) { hold.cancel(); return; }
-          let h = 0; for (const u of units) h += this.takeUnit(u);
-          F.lay(key, at, h); this.lit.add(key);
-          this.sound(woodKnock, { x: at.x, y: at.y + 0.2, z: at.z }, true);
-          this.inv.emit('items'); this.persist();
-        } else {
-          F.kindle(key, at, this.now - 0.045, 0); this.lit.add(key); // (blown on through the phase: it has caught)
-          this.note(`The bark catches and the kindling with it. The fire is going: about ${hoursWords(F.left(key))} of wood in it.`, 5);
-          this.persist();
-        }
+        if (i === 0) { this.sound(woodKnock, { x: at.x, y: at.y + 0.2, z: at.z }, true); return; }
+        const b = this.fuelBin(key), units = this.binUnits(b);
+        const arm = units.find((u) => u.id === 'firewood'), br = units.filter((u) => u.id === 'wood:branch');
+        const take = arm ? [arm] : br.slice(0, units.length > 2 ? 2 : 1);
+        let h = 0; for (const u of take) h += this.takeFromBin(b, u);
+        if (!h) { hold.cancel(); return; }
+        const f = F.get(key); if (f) f.laid = 0;
+        F.kindle(key, at, this.now - 0.045, h); this.lit.add(key); // (blown on through the phase: it has caught)
+        this.syncFire(key, b);
+        this.note(`The bark catches and the kindling with it. The fire is going: about ${hoursWords(this.fireInfo(key).hours)} of wood in the ring.`, 5);
+        this.inv.emit('items'); this.persist();
       },
-      onStop: (job) => { if (job.done === 1 && F.state(key) === 'laid') this.note('The fire is laid. Hold E to light it.', 3.5); },
+      onStop: (job) => { if (job.done === 1) this.note('The kindling is laid under the wood. Hold Light to put a match to it.', 3.5); },
     });
   }
-  // a tap: a piece on the fire (or on the hot coals, which bring it back)
-  feed(site, key, u) {
-    const F = this.fires, st = F.state(key), h = this.takeUnit(u), at = this.ringAt(site);
-    if (!h) return;
-    F.feed(key, this.now, h); this.lit.add(key);
-    this.cook.gesture = { t: 0, dur: 0.55, say: st === 'coals' ? 'Blowing the coals back to life…' : 'Laying it on…' };
-    this.sound(woodKnock, { x: at.x, y: at.y + 0.25, z: at.z }, u.id === 'wood:log');
-    this.inv.emit('items'); this.persist();
-    if (st === 'coals') this.note('A branch on the hot coals, a breath or two, and it catches again.', 4);
-  }
-  // E at a burning fire: a tap does `tap` (feed, cook, eat); held, it is put out, a phase at a time (the steam and
-  // the hiss, the flames gone after the first, cold after the last); let go, it stays as far as it got
-  beginDouse(site, key, tap) {
+  // held: water on it, stirred in, water again, the steam boiling up and the hiss, the coals cold; let go, it stays as
+  // far as it got. What wood was still in the ring stays there, wet through, a fire laid.
+  douse(site, key, opts = {}) {
     const F = this.fires, p = this.player, f = F.get(key), at = this.ringAt(site);
-    if (!f) return;
+    if (!f || f.laid) return null;
     const start = Math.min(2, Math.floor((f.out || 0) * 3 + 1e-6)), pos = { x: at.x, y: at.y + 0.3, z: at.z };
     let fx = false;
-    hold.begin({
-      id: 'fire-out', label: 'Putting the fire out', phases: DOUSE, at: start, crouch: true, near: { x: p.x, z: p.z, r: 2.5 },
-      onTick: (a, job) => {
-        if (job.t < TAP) return;
+    return hold.begin({
+      id: 'fire-out', label: 'Putting the fire out', phases: DOUSE, at: start, crouch: !opts.book, near: { x: p.x, z: p.z, r: 2.5 }, ...opts,
+      onTick: (a) => {
         if (!fx) { fx = true; this.sound(hiss, pos, 1); }
         F.douseK(key, a / DOUSE.length);
         this.steamAt = { x: at.x, y: at.y + 0.05, z: at.z }; this.steamT = Math.max(this.steamT, 1.4);
@@ -547,29 +499,29 @@ export class Chores {
       },
       onDone: () => {
         F.douse(key); this.lit.delete(key); this.steamT = 2.6;
+        const b = this.fuelBin(key); if (b) b.at.syncT = this.now;
         this.note('The fire is out: drowned, stirred and drowned again, the ash cold to the back of a hand.', 5);
+        this.syncFire(key, b);
         this.persist();
       },
       onStop: (job) => {
-        if (job.t < TAP && job.at < start + 0.3) { F.douseK(key, start / DOUSE.length); if (tap && tap.run) tap.run(); return; }
         F.douseK(key, job.done / DOUSE.length);
-        if (job.done > 0 && job.done < DOUSE.length) this.note(job.done === 1 ? 'The flames are out, but the coals are still hot under the ash. Hold E to finish it.' : 'Nearly out: the ash is still warm. Hold E to finish it.', 4);
+        if (job.done > 0 && job.done < DOUSE.length) this.note(job.done === 1 ? 'The flames are out, but the coals are still hot under the ash. Hold Douse to finish it.' : 'Nearly out: the ash is still warm. Hold Douse to finish it.', 4);
         this.persist();
       },
     });
   }
 
   // --- the latrine ---------------------------------------------------------------------------------------------------
-  latrinePrompt(site) {
-    const used = this.s.latrine === this.today;
-    this.offer('Use the latrine · hold', () => this.beginLatrine(site), used ? 'the box back in the trees' : 'the box back in the trees, a quiet few minutes');
-  }
-  beginLatrine(site) {
-    const spot = this.cook.latrineSpot(site), p = this.player;
+  // fb2 A: Use (the book): you walk back to the box and sit, ten quiet minutes on their own (no key held)
+  latrine(site) {
+    if (hold.active || this.cook.busy) return null;
+    const spot = this.cook.latrineSpot(site);
     this.cook.sitAt(spot);
     this.cook.seat.quiet = true;
-    hold.begin({
-      id: 'latrine', label: 'The latrine', phases: LATRINE, near: { x: p.x, z: p.z, r: 3.5 },
+    return hold.begin({
+      id: 'latrine', label: 'The latrine', phases: LATRINE, near: { x: spot.stand.x, z: spot.stand.z, r: 6 }, auto: true,
+      wait: () => !(this.cook.seat && this.cook.seat.phase === 'seated'),
       onDone: () => {
         const e = this.energy, first = this.s.latrine !== this.today;
         this.s.latrine = this.today;
@@ -587,6 +539,7 @@ export class Chores {
       onStop: () => this.cook.standUp(),
     });
   }
+  usedLatrine() { return this.s.latrine === this.today; }
 
   // --- the wood about ----------------------------------------------------------------------------------------------
   // A piece at (x, z) of `kind` with variant from rng, lying on the ground: clear of trunks, rocks, logs and anything
@@ -723,14 +676,7 @@ export class Chores {
     this.field.visible = list.length > 0;
   }
   get dropped() { return this._dropped || (this._dropped = []); }
-  // E at a piece: into an armload (a free hand), else into what you carry
-  piecePrompt(pc) {
-    const id = pc.kind === 'log' ? 'wood:log' : 'wood:branch', name = pc.kind === 'log' ? 'short log' : 'dead branch', inv = this.inv;
-    if (!inv || !inv.attached) return;
-    const arm = this.armFor(id, false), n = this.armloads().reduce((s, c) => s + c.grid.reduce((k, e) => k + e.qty, 0), 0);
-    const where = arm ? `into your arms · ${word(n)} there` : inv.freeHand() >= 0 ? 'into your arms' : 'into your pack';
-    this.offer(`Pick up the ${name}`, () => this.pickUp(pc.ref), where);
-  }
+  // E at a piece (the pointer, nearby.js): into an armload (a free hand), else into what you carry
   pickUp(pc) {
     const inv = this.inv, id = pc.kind === 'log' ? 'wood:log' : 'wood:branch', name = pc.kind === 'log' ? 'short log' : 'dead branch';
     const arm = this.armFor(id, true);
@@ -743,7 +689,7 @@ export class Chores {
       if (c) where = `the ${lowerName(c)}`;
     }
     if (!ok) { this.note('Your hands are full, and nothing you carry has room for it.', 3.5); return; }
-    if (pc.key.startsWith('d:')) { const i = this.dropped.indexOf(pc); if (i >= 0) this.dropped.splice(i, 1); } else this.s.taken[pc.key] = this.today;
+    this.claimPiece(pc);
     this.redrawIn = 0.28; // it leaves the ground as the hand gets to it
     this.cook.gesture = { t: 0, dur: 0.5, say: `Picking up the ${name}…` };
     this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, pc.kind === 'log');
@@ -751,6 +697,19 @@ export class Chores {
     this.note(where === 'your arms' ? `A ${name}, into the crook of your arm: ${word(n)} ${plural(n, 'piece')} of wood.` : `A ${name}, into ${where}.`, 2.5);
     inv.emit('items');
     this.persist();
+  }
+  // a piece off the ground (into a container: E, or a drag out of the book's Ground area, nearby.takePiece): gone
+  // until it grows back (the saw's lengths for good)
+  claimPiece(pc) {
+    if (pc.key.startsWith('d:')) { const i = this.dropped.indexOf(pc); if (i >= 0) this.dropped.splice(i, 1); } else this.s.taken[pc.key] = this.today;
+    this.redrawIn = Math.min(this.redrawIn > 0 ? this.redrawIn : 0.28, 0.28);
+  }
+  // can you pick piece pc up now: an armload with room, a free hand, or room in what you carry
+  canTakePiece(pc) {
+    const inv = this.inv, id = pc.kind === 'log' ? 'wood:log' : 'wood:branch';
+    if (!inv || !inv.attached) return false;
+    if (this.armFor(id, false) || inv.freeHand() >= 0) return true;
+    return inv.reachable().some((c) => c.item !== 'grate' && c.item !== 'pockets' && c.item !== 'crate' && !(itemDef(c.item) || {}).station && inv.firstFit(c, id));
   }
   // an armload with nothing in it is no thing at all
   dropEmptyArms() {
@@ -766,19 +725,20 @@ export class Chores {
     if (!inv || !inv.attached) return !!(p.gear && p.gear.saw);
     return this.campPool().some((c) => c.grid.some((e) => e.id === 'saw')) || inv.count('saw') > 0;
   }
-  sawPrompt() {
+  // fb2 A: the down log you stand at with the saw to hand (the book's panel): { log, k, cuts, d } or null
+  sawTarget(r = SAW_REACH) {
     const p = this.player;
-    if (!this.free(SAW_REACH) || !this.hasSaw()) return;
+    if (p.mode !== 'walk' || !this.hasSaw()) return null;
     const log = this.camp.tiles.treesNear(p.x, p.z, 2.4).filter((o) => o.log).map((o) => ({ o, d: capsule(p.x, p.z, o) - (o.rad || 0.2) })).sort((a, b) => a.d - b.d)[0];
-    if (!log || log.d > SAW_REACH) return;
+    if (!log || log.d > r) return null;
     const k = `${Math.round(log.o.x)}:${Math.round(log.o.z)}`, s = this.s.sawn[k], cuts = s && this.today - s.day < WOOD.regrow ? s.cuts : 0;
-    if (cuts >= SAW.length) { this.say('A down spruce · sawn into lengths already'); return; }
-    this.offer('Saw the down log into lengths · hold', () => this.beginSaw(log.o, k, cuts), `${word(SAW.length - cuts)} short ${plural(SAW.length - cuts, 'log')} with the folding saw`);
+    return { log: log.o, k, cuts, d: log.d, left: SAW.length - cuts };
   }
-  beginSaw(log, k, cuts) {
+  beginSaw(log, k, cuts, opts = {}) {
     const p = this.player;
-    hold.begin({
-      id: 'saw', label: 'The folding saw', phases: SAW, at: cuts, crouch: true, near: { x: p.x, z: p.z, r: 2.5 },
+    if (cuts >= SAW.length) return null;
+    return hold.begin({
+      id: 'saw', label: 'The folding saw', phases: SAW, at: cuts, crouch: true, near: { x: p.x, z: p.z, r: 2.5 }, ...opts,
       onPhase: (i) => {
         this.s.sawn[k] = { day: this.today, cuts: i + 1 };
         // the length drops beside the log, on your side of it
@@ -796,54 +756,26 @@ export class Chores {
     });
   }
 
-  // --- the woodpile -----------------------------------------------------------------------------------------------------
-  pileCount(key) { const p = this.s.piles[key]; return p ? Object.values(p).reduce((s, n) => s + n, 0) : 0; }
-  pilePrompts(site, key) {
-    const inv = this.inv, carried = this.armloads().reduce((s, c) => s + c.grid.filter((e) => isWood(e.id)).reduce((k, e) => k + e.qty, 0), 0), n = this.pileCount(key);
-    if (carried && n < WOOD.pile) { this.offer('Stack your wood on the woodpile', () => this.stack(site, key), `${word(carried)} ${plural(carried, 'piece')} · ${n ? `${word(n)} there` : 'by the ring'}`); return true; }
-    if (n && inv && inv.attached) {
-      const p = this.s.piles[key], id = p['wood:log'] ? 'wood:log' : Object.keys(p)[0];
-      if (!this.armFor(id, false) && inv.freeHand() < 0) { this.say(`The woodpile · ${word(n)} ${plural(n, 'piece')} · your hands are full`); return true; }
-      this.offer(`Take a ${id === 'wood:log' ? 'log' : 'branch'} from the woodpile`, () => this.unstack(key, id), `${word(n)} stacked`);
-      return true;
+  // --- the woodpiles (fb2 A) --------------------------------------------------------------------------------------------
+  // A woodpile is wood set down on the ground from the book (its Ground area: inventory.drop makes a 'pile' there), by
+  // the ring or anywhere; a pile with only wood in it is drawn as a stacked woodpile (a layer for every few pieces), not
+  // as the bag a pile of things is (containers.js). The old stack by the ring (s.piles, camp 2) becomes such a pile at
+  // its spot once that site's ground is in.
+  woodOnly(c) { return c.item === 'pile' && c.where === 'ground' && c.at && c.grid.length > 0 && c.grid.every((e) => !e.box && isWood(e.id)); }
+  pieceCount(c) { return c.grid.reduce((s, e) => s + e.qty, 0); }
+  migratePiles() {
+    const inv = this.inv;
+    if (!inv || !inv.attached || !this.s.piles) return;
+    for (const key of Object.keys(this.s.piles)) {
+      const site = this.camp.registry.site(key);
+      if (!site || !site.layout || !this.world.isReady(site.layout.fire.x, site.layout.fire.z)) continue;
+      const s = this.pileSpot(site), pile = inv.addContainer('pile', 'ground', { x: s.x, z: s.z, y: s.y, heading: -s.a, camp: key }, { quiet: true });
+      for (const [id, n] of Object.entries(this.s.piles[key])) for (let i = 0; i < n; i++) if (!inv.put(pile, id, { quiet: true })) break;
+      delete this.s.piles[key];
+      inv.emit('ground'); this.persist();
     }
-    return false;
   }
-  // at the ring, with wood in your arms and room on the pile: the carried thing's Q (packs.js "Set down the armload")
-  // stacks it on the woodpile instead, since E there is the fire's
-  pileQ(site, key) {
-    const p = this.player, pr = p.prompt, n = this.pileCount(key);
-    if (!pr || !pr.tail || n >= WOOD.pile || !/armload/.test(pr.tail)) return;
-    if (!this.armloads().some((c) => c.grid.some((e) => isWood(e.id)))) return;
-    const tail = ` &nbsp; <kbd>Q</kbd>Stack it on the woodpile${n ? ` · ${word(n)} there` : ''}`;
-    p.prompt = { ...pr, text: pr.text.replace(pr.tail, tail), tail };
-    this.qArmed = () => this.stack(site, key);
-  }
-  stack(site, key) {
-    const inv = this.inv, pile = this.s.piles[key] || (this.s.piles[key] = {});
-    let moved = 0;
-    for (const c of this.armloads()) for (const e of [...c.grid]) {
-      if (!isWood(e.id)) continue;
-      const room = WOOD.pile - this.pileCount(key), n = Math.min(room, e.qty);
-      if (n <= 0) break;
-      inv.take(c.id, e.uid, n); pile[e.id] = (pile[e.id] || 0) + n; moved += n;
-    }
-    if (!Object.keys(pile).length) delete this.s.piles[key];
-    if (!moved) return;
-    const ps = this.pileSpot(site);
-    this.cook.gesture = { t: 0, dur: 0.6, say: 'Stacking the wood…' };
-    this.sound(woodKnock, { x: ps.x, y: ps.y + 0.1, z: ps.z }, true);
-    this.note(`You stack the wood by the ring: ${word(this.pileCount(key))} ${plural(this.pileCount(key), 'piece')} on the pile.`, 3.5);
-    inv.emit('items'); this.persist();
-  }
-  unstack(key, id) {
-    const inv = this.inv, arm = this.armFor(id, true);
-    if (!arm || !inv.put(arm, id, { quiet: true })) { this.note('Your hands are full.', 2.5); return; }
-    this.takeUnit({ id, pile: key });
-    this.cook.gesture = { t: 0, dur: 0.45, say: 'Taking wood off the pile…' };
-    inv.emit('items'); this.persist();
-  }
-  // where a site's stack goes: a step and a half from the ring on its back side (away from the water), clear of the
+  // where a site's old stack went: a step and a half from the ring on its back side (away from the water), clear of the
   // bench, the pad and any trunk, on ground that is near level; { x, z, a, y } (a: the first layer's bearing)
   pileSpot(site) {
     if (site.pileSpot) return site.pileSpot;
@@ -863,35 +795,40 @@ export class Chores {
     site.pileSpot = best;
     return best;
   }
-  // the woodpile nearest you drawn (a layer for every few pieces), or hidden
-  placePile() {
-    const p = this.player;
-    let site = null, n = 0, bd = 150;
-    for (const key of Object.keys(this.s.piles)) {
-      const s = this.camp.registry.site(key);
-      if (!s || !s.layout) continue;
-      const d = Math.hypot(s.layout.fire.x - p.x, s.layout.fire.z - p.z);
-      if (d < bd) { bd = d; site = s; n = this.pileCount(key); }
-    }
-    if (!site || !n) { if (this.pileMesh) this.pileMesh.group.visible = false; return; }
-    if (!this.pileMesh) {
-      const group = new THREE.Group();
-      group.name = 'woodpile';
-      const layers = woodpileGeometry().map((g) => { const m = new THREE.Mesh(g, this.mat); m.castShadow = true; m.receiveShadow = true; m.matrixAutoUpdate = false; group.add(m); return m; });
-      group.matrixAutoUpdate = false;
-      this.camp.scene.add(group);
-      this.pileMesh = { group, layers };
-    }
-    const s = this.pileSpot(site), m = this.pileMesh, key = keyOf(site), layers = Math.min(3, Math.ceil(n / 4));
-    if (m.key !== key || m.n !== layers) {
-      m.key = key; m.n = layers;
-      const t = this.camp.tiles, gy = Math.min(t.groundAt(s.x, s.z), s.y + 0.06) - 0.015;
-      m.group.position.set(s.x, gy, s.z); m.group.rotation.set(0, -s.a, 0);
-      m.group.updateMatrix(); m.group.updateMatrixWorld(true);
-      m.layers.forEach((l, i) => { l.visible = i < layers; });
-    }
-    m.group.visible = true;
+  // the woodpiles near you drawn (after the containers are posed: their bag hidden), the rest parked
+  drawPiles() {
+    const inv = this.inv, p = this.player, view = typeof window !== 'undefined' && window.__game ? window.__game.invView : null;
+    const want = [];
+    if (inv && inv.attached) for (const c of inv.containers) if (this.woodOnly(c) && Math.abs(c.at.x - p.x) < 150 && Math.abs(c.at.z - p.z) < 150) want.push(c);
+    want.sort((a, b) => Math.hypot(a.at.x - p.x, a.at.z - p.z) - Math.hypot(b.at.x - p.x, b.at.z - p.z));
+    const pool = this.pileMeshes || (this.pileMeshes = []);
+    want.length = Math.min(want.length, 6);
+    want.forEach((c, i) => {
+      let m = pool[i];
+      if (!m) {
+        const group = new THREE.Group();
+        group.name = 'woodpile';
+        const layers = (this.pileGeos || (this.pileGeos = woodpileGeometry())).map((g) => { const k = new THREE.Mesh(g, this.mat); k.castShadow = true; k.receiveShadow = true; k.matrixAutoUpdate = false; group.add(k); return k; });
+        group.matrixAutoUpdate = false;
+        this.camp.scene.add(group);
+        m = pool[i] = { group, layers };
+      }
+      const n = Math.min(3, Math.ceil(this.pieceCount(c) / 4)), y = Number.isFinite(c.at.y) ? c.at.y : this.camp.tiles.groundAt(c.at.x, c.at.z);
+      const sig = `${c.id}|${n}|${c.at.x.toFixed(2)},${c.at.z.toFixed(2)},${y.toFixed(2)}`;
+      if (m.sig !== sig) {
+        m.sig = sig; m.ref = c.id;
+        m.group.position.set(c.at.x, Math.min(this.camp.tiles.groundAt(c.at.x, c.at.z), y + 0.06) - 0.015, c.at.z); m.group.rotation.set(0, (c.at.heading || 0) + Math.PI / 2, 0);
+        m.group.updateMatrix(); m.group.updateMatrixWorld(true);
+        m.layers.forEach((l, k) => { l.visible = k < n; });
+      }
+      m.group.visible = true;
+      const bag = view && view.objs && view.objs.get(c.id);
+      if (bag) bag.visible = false;
+    });
+    for (let i = want.length; i < pool.length; i++) { pool[i].group.visible = false; pool[i].ref = null; }
   }
+  // the woodpile drawn for pile `cId` (the pointer's rim), or null
+  pileMesh(cId) { const m = (this.pileMeshes || []).find((q) => q.ref === cId && q.group.visible); return m || null; }
 
   // --- the figure (main.js camp 2) --------------------------------------------------------------------------------------
   move() { return this.cook.move(); }
@@ -899,6 +836,7 @@ export class Chores {
   // after the pose: the armloads in the hands (and set down on the ground), the spoon and the pot
   afterPose() {
     this.cook.afterPose();
+    this.drawPiles(); // fb2 A: the woodpiles set down from the book (their bag hidden)
     const inv = this.inv, p = this.player, cn = p.canoe, seen = new Set(), S = this.cook.seat, sat = !!(S && S.phase !== 'walk');
     if (inv && inv.attached && cn && cn.figure) {
       for (const c of inv.containers) {
@@ -985,8 +923,8 @@ export class Chores {
     });
     this.card.show({ kicker: `Turn in · ${site ? c.siteName(site) : 'your tent'}`, opts, i, onPick: (choice) => c.sleep('tent', choice) });
   }
-  // camp.tentPrompts: the sleep prompt is up this frame (so ← → there opens the card)
-  offered(site) { this.sleepOffer = true; this.sleepSite = site; }
+  // (camp.tentPrompts' old hook: the wake card is the tent panel's Sleep now, nearby.js)
+  offered() {}
   // the old hooks (camp.js before camp 2): the prompts are this module's own now
   spotPrompts() { return false; }
   gatherPrompt() { return false; }
@@ -1039,7 +977,6 @@ export class Chores {
       for (const r of Array.isArray(d.fires) ? d.fires : []) { if (!F || !r || !r.key) continue; if (!r.laid && this.now >= r.until + FIRE.smoulder) continue; if (F.restoreRecord(r)) this.lit.add(r.key); }
       this.cook.restore(d.cook || null);
     }
-    this.placePile();
   }
   // the saw's lengths come back once their ground is in
   restoreDrops() {

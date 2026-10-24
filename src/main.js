@@ -46,6 +46,7 @@ import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from 
 import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
 import { sheets } from './sheets.js'; // hubs 2D
+import { MapTable } from './maptable.js'; // fb2 D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
@@ -56,6 +57,10 @@ import { invUI } from './inv-ui.js'; // fb B
 import { Dialogue } from './dialogue.js'; // fb F
 import { Forage } from './forage.js'; // fb G
 import { hold } from './hold.js'; // camp 1
+import { pointer, peopleTargets, forageTargets, taskTargets } from './pointer.js'; // fb2 A
+import { nearby } from './nearby.js'; // fb2 A
+import { FORAGE } from './forage.js'; // fb2 A
+import { KINDS } from './tasks.js'; // fb2 A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -147,6 +152,10 @@ async function main() {
   if (saved) { player.x = saved.x; player.z = saved.z; player.heading = saved.heading; }
   const chase = new ChaseCamera(camera, renderer.domElement, world);
   player.chase = chase; // walking is read against the view; the cursor steers the canoe when asked
+  // fb2 E: the trees, shrubs and ferns between the third-person camera and the walker are seen through (a dither on the
+  // vegetation's own materials, patched here before anything compiles: no new program); the camera pulls in, on a
+  // spring, only for the ground, rocks, walls and a big trunk at the lens (camera.js)
+  chase.seeThrough(tiles.vegetation);
   const settings = new Settings();
   const hud = new Hud(world, { onTeleport: async (x, z) => { if (trip && trip.adventure) return; if (await player.teleport(x, z)) chase.snap(); }, settings, camera }); // trip core A: the map moves you in Sandbox only
   const post = makePost(renderer, scene, camera);
@@ -197,6 +206,8 @@ async function main() {
   energy.atCounter = () => !!outfitter.open;
   if (trip.on) { trip.on('start', () => energy.fresh()); trip.on('evac', () => energy.rescued()); }
   camp.profileOf = () => profile;
+  // fb2 F: warmth, the fourth need (energy.js): a lit fire near you warms you (fires.near), and so does the inside of a store
+  energy.fires = fires; energy.indoors = () => !!(outfitter.visit && outfitter.visit.inside);
   // hubs 2A: the outfitters' stores (props.js): each store's lamp borrows the campfires' one light while it is the lit
   // thing nearest the eye (fire.js steady), and its cork board shows that outfitter's notices once its board is up
   // (tasks.js), redrawn when they change; window.__game.props for the walk-in and the tests
@@ -316,9 +327,22 @@ async function main() {
   window.__game.worldFixes = world.fixed;
   if (world.fixed) console.log(`fb E: ${world.fixed.landings} landings at their put-ins, ${world.fixed.portages} portages connected to the ${world.fixed.baked} baked`);
   window.__game.dialogue = talk; // fb F
-  // hubs 2D: map sheets (sheets.js). The sheets you own and the cells you have been near gate the map's campsites,
-  // portages and soundings (hud.js); Sandbox shows everything. The shop (2B) sells the sheets from SHEETS and stockFor.
+  // hubs 2D: map sheets (sheets.js). The sheets you own gate the map's campsites, portages and soundings (hud.js; fb2 D
+  // below); Sandbox shows everything. The map table sells the sheets from SHEETS and stockFor.
   sheets.attach({ world, profile, trip }); window.__game.sheets = sheets;
+  // fb2 D: maps owned, not carried (sheets.js, maptable.js). A sheet bought is the profile's for the season
+  // (profile.sheets(), ownSheet); the old sheet items and map cases migrate out of the inventory. M at an outfitter (in
+  // its store, at its counter or its map table) shows the whole Boundary Waters with the sheets dotted over it, in the
+  // wild only the sheets you own and blank paper elsewhere. The map table sells the landing's sheets over the whole map
+  // (stream C's hotspot opens it: outfitter.mapTable.show; an old openShelf('map') comes here too), and the walker holds
+  // still while it is up.
+  sheets.attach({ outfitter, inventory });
+  const mapTable = new MapTable({ hud, profile, shop, outfitter, world });
+  outfitter.mapTable = mapTable;
+  const openShelfD = outfitter.openShelf.bind(outfitter), updateOutfitterD = outfitter.update.bind(outfitter);
+  outfitter.openShelf = (kind, landing) => (kind === 'map' && landing && mapTable.show({ ep: landing.ep, landing }) ? undefined : openShelfD(kind, landing));
+  outfitter.update = (dt) => { updateOutfitterD(dt); if (mapTable.open) player.input.paused = true; };
+  window.__game.mapTable = mapTable;
   // fb G: nature and fishing. The mist is in the air now (fog.js; mist.js drives it) and drifts with the wind. The rod's
   // lures are the ones you have (fishing.hasLure: stream A's inventory.hasLure, the lures in reach, once it is in; else the
   // shop's tackle box), so the shop's dimming of the lure strip goes: the strip lists only those. Berries and mushrooms in their own
@@ -344,6 +368,26 @@ async function main() {
   canoe.update = (dt) => { camp2.beforePose(); pose2(dt); camp2.afterPose(); };
   journal.pack.onUse = (e, mode, c) => camp2.cook.onUse(e, mode, c) ?? (use2 ? use2(e, mode, c) : null);
   window.__game.cook = camp2.cook;
+  // fb2 A: the world side of interacting (the owner's second feedback of 2026-10-24). A quiet dot in the middle of the
+  // view (pointer.js): E does what it points at within reach (pick up, talk, open, get in) and nothing else, and there
+  // is no Q drop. The camp's work is done from the book (nearby.js: the fire's fuel and grate, the tent, the hang, the
+  // latrine, the canoe's load, the bottle, the saw: the panels stream B draws); held work keeps hold.js (the book's
+  // BookHold, E or a click). Made before the compile below, so the dot's rim has its program behind the title card.
+  pointer.attach({ camera, player, scene, renderer, hud, chase, outfitter, fishing, photo, dialogue: talk, day });
+  nearby.attach({ camp, packs, journal, hud, pointer, canoe, player });
+  pointer.register(nearby.targets);
+  pointer.register(peopleTargets(npcs)); pointer.register(forageTargets(forage, FORAGE)); pointer.register(taskTargets(tasks, KINDS));
+  Object.assign(window.__game, { pointer, nearby });
+  // fb2 B: the book's pack side is where you do things (the owner's second round, 2026-10-24): a container goes where its
+  // strap is dragged (the back, the chest, a hand, the canoe, the ground, into another), a container in a hand shows its
+  // grid, the Ground area (what lies within reach) replaces Drop, and the things near you (nearby.js: the fire ring's
+  // bins, meter and buttons, the pitched tent, the latrine, the hang) are panels whose held buttons run while the mouse
+  // holds them; Pitch and Hang are on the right-click menus.
+  invUI.attach({ nearby: () => window.__game.nearby || null, hold });
+  // fb2 C: the store, the counter and the dock (outfitter.js, trip.js, props.js). Trips start and end by themselves at
+  // the landings, the store's hotspots are the pointer's targets (outfitter.js registers them when pointer.js is in the
+  // build), and the counter's free tap is at the counter only, not at the cork board (both are the outfitter's paper).
+  energy.atCounter = () => !!outfitter.open && outfitter.tab === 'counter';
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   renderer.compileAsync(scene, camera).catch(() => {});
@@ -365,6 +409,7 @@ async function main() {
     } else {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       photo.before(dt); // hubs 3B: with the camera up, its keys (the aim, Space) come before anyone else's E and Space
+      pointer.before(); // fb2 A: E on what the dot points at (and only that), before anyone else reads it (the store's too)
       outfitter.update(dt * ts);
       talk.before(dt); // fb F: a conversation holds the walker and turns the view to the speaker
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
@@ -377,9 +422,10 @@ async function main() {
       outfitter.prompt();
       npcs.update(dt); // hubs 3C: who is drawn and how they stand, the talk prompt and its E / Q, after the store's own prompt
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
+      nearby.update(dt); // fb2 A: the book's panels for what is near (their change signal), the stations tidied
       forage.update(dt); // fb G: the patches near you, drawn in season; their prompt and the picking (after the camp's)
       tasks.update(dt * ts);
-      sheets.update(player); // hubs 2D: the cells around you as you go
+      sheets.update(player); // fb2 D: an old save's sheet items and map case migrate out, once the inventory is in
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
       energy.update(dt * ts, wind, atCamp);
       tripStats.update(dt * ts, outfitter.trip.active);
@@ -392,6 +438,7 @@ async function main() {
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
+    pointer.update(dt, shell); // fb2 A: the dot, its label and the rim, after the camera
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
     water.update(dt * ts, player.x, player.z);

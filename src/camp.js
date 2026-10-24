@@ -2,7 +2,7 @@ import { tentPose } from './props.js';
 import { save } from './save.js';
 import { clock12, longDate, plural, fmtDays, compassLong, word } from './hud.js';
 import { daysInYear } from './astro.js';
-import { sheets } from './sheets.js'; // hubs 2D: the dusk word names only a site your map shows
+import { sheets } from './sheets.js'; // the dusk word names only a site on a sheet you own (fb2 D: owned, not carried)
 import { Chores } from './chores.js'; // hubs 3A / camp 2: the fire, the wood, the cooking, the latrine, the wake-time card
 import { hold } from './hold.js'; // camp 1: held work, with its ring
 import { TentStages, TentGhost, TENT_FLY, kindOf, tentOf } from './tent.js'; // camp 1: the tent in its phases (the A-frame's own, camp join)
@@ -12,27 +12,29 @@ import { itemDef } from './items.js';
 
 // Camp and night (the trip core, stream C; redone on the owner's feedback of 2026-10-24: "setting up your camp in your
 // own little way"). Nothing at camp happens by itself.
-//   - The tent is pitched where you choose. With a tent in a container in the camp's reach (inventory.campReach), on
-//     foot and standing a moment on a site's ground (or anywhere flat in Sandbox), a ghost tent stands where it would
-//     go, its door to you: green on good ground, red where it can't (on rock, on a slope over 12°, among trunks, a log
-//     or a stump, on the portage trail, by the fire ring, the bench or the latrine, at the water's edge, outside the
-//     site's area in Adventure), the reason on the action line. Hold E (hold.js) and it goes up phase by phase
-//     (tent.js): the footprint staked, the poles up, the tent up, the rain fly on. Let go and it stops at the phase
-//     finished; hold E at it to carry on. The tent comes out of its pack when the footprint is staked; the site is
-//     yours from then until it is struck.
-//   - At your tent: by day, hold E to strike it, the phases backwards (the fly off, the tent down, the poles down,
-//     rolled up), back into a container in the camp's reach, or rolled up on the ground if nothing has room. From dusk
-//     E sleeps (the wake-time card, chores.js) and a held Q strikes; a half-pitched tent takes E to carry on, Q to take
-//     it down. Only the tent with its fly on sleeps best; without the fly a night's rain soaks you.
-//   - The barrel is hung from a limb with a held E (hang.js).
+//   - The tent is pitched where you choose (fb2 A: from the book, the owner's second feedback of 2026-10-24: "go into
+//     my inventory ... right click and say pitch. Or if it's on the ground, right click and say pitch"). Pitch on the
+//     tent in a container in the camp's reach (inventory.campReach) or on the ground (nearby.itemActions) closes the
+//     book and puts a ghost tent where the dot meets the ground (pointer.js), its door to you: green on good ground,
+//     red where it can't (on rock, on a slope over 12 degrees, among trunks, a log or a stump, on the portage trail, by
+//     the fire ring, the bench or the latrine, at the water's edge, outside the site's area in Adventure), the reason
+//     on the action line. E or a click there, held (hold.js), and it goes up phase by phase (tent.js): the footprint
+//     staked, the poles up, the tent up, the rain fly on. Let go and it stops at the phase finished; E or a click
+//     again carries on, or its panel in the book does. The tent comes out of its pack when the footprint is staked;
+//     the site is yours from then until it is struck.
+//   - Your tent's panel in the book (tentPanel): carry on pitching or put the fly on (held), strike it (held: the
+//     phases backwards, back into a container in the camp's reach, or rolled up on the ground if nothing has room),
+//     and Sleep (the wake-time card, chores.js) from dusk, or by day worn out. Only the tent with its fly on sleeps
+//     best; without the fly a night's rain soaks you.
+//   - The barrel is hung from a limb, held, from the book (hang.js).
 //   - Launching strikes nothing, puts out nothing and packs nothing: a note says what is still ashore (the tent, the
 //     fire, the barrel hung, the things set out), and it all stays as it is, across reloads, until you come back.
 // In Adventure you camp at the designated sites only (hubs phase 1: "that's not allowed, so not even camp"). The night
 // gives the bar its rest by the tent (profile.sleepQ / player.gear.sleep; damp gear x0.8, no fly x0.9) and by the hours
-// slept (energy.sleep(q, hours)). On foot at the water's edge E fills the bottle when no other prompt holds E. An hour
+// slept (energy.sleep(q, hours)). On foot at the water's edge the book's water panel fills the bottle. An hour
 // before sunset, in Adventure, a note names the nearest free site; once it is dark a note suggests the headlamp (H).
-// The fire, the firewood, the cooking, the eating and the latrine are chores.js's (camp stream 2): its update sets its
-// own prompts (with their key) ahead of the site's, and chores.ashore() names what it leaves burning.
+// The fire, the firewood, the cooking, the eating and the latrine are chores.js's (camp stream 2), worked from the book
+// too (nearby.js), and chores.ashore() names what it leaves burning. Nothing here takes E (pointer.js has it).
 //
 // The registry says who holds each site: keys are `Math.round(x):Math.round(z)` (the index's sites have no ids). The
 // player holds with 'player'; the parties met on the water hold with their own ids, and the player's prompt at a held
@@ -49,10 +51,9 @@ export const campKey = (c) => `${Math.round(c.x)}:${Math.round(c.z)}`;
 
 const SITE_R = 22;          // metres from a site's fire ring within which its prompts are the site's
 export const AREA_R = 25;   // and the site's area: what is set out within it is in the camp's reach (inventory.campReach)
-const AT_TENT = 3.2;        // metres from the tent's middle within which E is the tent's
-const HULL_REACH = 3;       // player.js: within this of the canoe on the ground E is the canoe's
-const GHOST_AHEAD = 2.1;    // metres ahead of the walker the ghost tent's middle stands, its door to him
-const GHOST_STILL = [0.35, 1.0]; // seconds standing still before the ghost shows: at a site, and off one (Sandbox)
+const TENT_PANEL = 5;       // fb2 A: metres from the tent's middle within which its panel is in the book
+const GHOST_AHEAD = 2.1;    // metres ahead of the walker the ghost tent's middle stands when the dot meets no ground
+const GHOST_STILL = [0.35, 1.0]; // seconds standing still before a word of the site shows (the ghost is the book's Pitch now)
 const MAX_SLOPE = 12;       // degrees: steeper ground won't take a tent
 const BUMPS = 0.2;          // m: ground this far off the footprint's plane is too lumpy
 const NEAR_FIRE = 1.4;      // m of clearance from the fire ring's stones to the tent's footprint
@@ -78,7 +79,6 @@ const NO_FLY = 0.9;         // and a night with no fly on (dew through the mesh)
 const RAINY = new Set(['light-rain', 'rain', 'storm']);
 const FILTERS = { tablets: 0.5, pump: 5 / 60, gravity: 5 / 60 }; // game hours before the water is drinkable, by kit.filter
 const AT_WATER = 2.5;       // metres from the waterline (world.shoreAt) within which E fills the bottle
-const BOTTLE_ASK = 1.8;     // litres: the bottle is offered a fill below this
 const DRY_HOURS = 0.5;      // game hours by a fire that dry wet gear
 const REST_SITE = 40;       // metres from a site's centre that count as at a campsite for resting
 const lower = (s) => (/^[A-Z]-/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // "A-frame" keeps its capital
@@ -186,7 +186,9 @@ export class Camp {
     this.profileOf = null;    // () => the profile (stream A), set by main.js
     this.restT = 0; this.atSite = false;
     this.area = null; this.areaT = 0; // the camp's reach where you stand (reachArea), every quarter second
-    this.spot = null;         // the ghost's last reading: { x, z, fdx, fdz, pose, ok, why, px, pz, h, t }
+    this.spot = null;         // the ghost's last reading: { x, z, fdx, fdz, pose, ok, why, t, site, kind }
+    this.pitching = null;     // fb2 A: a Pitch from the book under way: { uid, item, x, z } (the ghost follows the dot)
+    this.pointer = null;      // fb2 A: pointer.js (main.js): where the dot meets the ground
     this.morningNote = null;  // a line for the morning (a bear in the night)
     hold.attach({ input: this.player.input, day: this.day, player: this.player });
     this.hang = new Hang(this, { inventory: this.inventory });
@@ -311,8 +313,8 @@ export class Camp {
     } else if (!this.wet) this.dry = 0;
   }
 
-  // an hour before sunset in Adventure: the nearest free site your map shows (a sheet you own, or near where you have
-  // been: sheets.js), never one off it; once dark: the headlamp
+  // an hour before sunset in Adventure: the nearest free site your map shows (on a sheet you own: sheets.js), never one
+  // off it; once dark: the headlamp
   notes() {
     const d = this.day, p = this.player, { set } = d.sunriseSunset;
     const stamp = d.year * 1000 + d.doy, evening = d.hours >= 12 ? stamp : stamp - 1;
@@ -335,53 +337,41 @@ export class Camp {
   }
 
   // --- prompts --------------------------------------------------------------------------------------------------
-  // E with a line, when E is free here: on foot, the canoe out of reach, no one else's E showing
-  offer(action, info, fn) {
-    this.player.prompt = { key: 'E', text: info ? `${action} · ${info}` : action };
-    if (this.player.input.pressed('KeyE')) fn();
-  }
+  // fb2 A: nothing at camp is done on E (E is the pointer's: pick up, talk, open, get in; the jobs are the book's,
+  // nearby.js). What is left here: the tent's ghost while a Pitch from the book is under way (at the dot, E or a click
+  // and hold), the barrel's hang armed the same way (hang.js), and a few words where you stand.
   say(text) { this.player.prompt = { key: null, text }; }
 
   prompts() {
-    const p = this.player, soft = p.prompt && p.prompt.soft ? p.prompt : null;
-    this.ghostOn = false;
-    // the walker is held (a panel, a card, camp 2's sit to eat or the pot going on) or chores.js owns the line: its words
-    // stay, and no ghost
-    if (p.input.paused || (p.prompt && p.prompt.own === 'chores')) { this.ghost.park(); return; }
-    this.sitePrompts(soft);
-    if (!this.ghostOn) this.ghost.park();
-    // a thing carried away from the canoe offers only Q (packs.js): the camp's E takes the line and keeps the Q
-    if (soft && p.prompt && p.prompt !== soft && soft.tail) p.prompt = { ...p.prompt, text: `${p.prompt.text}${soft.tail}`, tail: soft.tail };
-  }
-  sitePrompts(soft) {
     const p = this.player;
-    if (p.mode !== 'walk') return;
-    const drop = p.carry && p.carry.drop;
-    if (drop && Math.hypot(drop.x - p.x, drop.z - p.z) <= HULL_REACH) return; // the canoe's E (player.js, packs.js)
-    // a pack's, a dock's, a portage's, the fire's or the wood's (chores.js sets its own with its key)
-    if (!soft && p.prompt && (p.prompt.key || /<kbd>/.test(p.prompt.text || ''))) return;
+    this.ghostOn = false;
+    if (this.pitching) this.aimPitch();
+    else if (this.hang.armed) this.hang.aim();
+    else if (!p.input.paused) this.sitePrompts();
+    if (!this.ghostOn) this.ghost.park();
+  }
+  // a word at a site, standing a moment, when no one has a key on the line: taken by another party, your tent elsewhere
+  sitePrompts() {
+    const p = this.player;
+    if (p.mode !== 'walk' || this.still < GHOST_STILL[0]) return;
+    if (p.prompt && (p.prompt.key || /<kbd>/.test(p.prompt.text || ''))) return; // the canoe's Q, a fetch
     const site = this.nearestSite(p.x, p.z, SITE_R, true);
-    if (this.bottlePrompt(site)) return; // at the water's edge the water's E comes before the site's
-    if (site) this.atSitePrompts(site, !!soft);
-    else this.offSitePrompts(!!soft);
+    if (!site) return;
+    const key = campKey(site), holder = this.registry.holder(key), c = this.camp;
+    if (holder && holder !== PLAYER) this.say(`${this.siteName(site)} · Taken: another party is camped here`);
+    else if (c && c.key !== key) this.say(`${this.siteName(site)} · ${this.tentAway(c)}`);
   }
 
   // --- the bottle (hubs 1B) --------------------------------------------------------------------------------------
-  // On foot at the water's edge, on an Adventure under way, with the bottle down a little: E fills it. At a site the
-  // grate's and the tent's own E stay theirs.
-  bottlePrompt(site) {
+  // On foot at the water's edge, on an Adventure under way, with the bottle down a little: the book's water panel fills
+  // it (nearby.js; it was E). { left, wait, words } or null where it can't be filled here.
+  bottleHere() {
     const p = this.player, e = this.energy, w = this.world;
-    if (!e || !e.fill || !e.live || e.bottle > BOTTLE_ASK) return false;
+    if (p.mode !== 'walk' || !e || !e.fill || !e.live || e.bottle > 2 - 0.05) return null;
     const f = p.forward, edge = w.shoreAt(p.x, p.z) <= AT_WATER || w.shoreAt(p.x + f.x * 1.6, p.z + f.z * 1.6) < 0;
-    if (!edge) return false;
-    if (site && site.layout) {
-      const L = site.layout;
-      if (Math.hypot(L.fire.x - p.x, L.fire.z - p.z) < 2.4) return false;
-      if (this.camp && Math.hypot(this.camp.x - p.x, this.camp.z - p.z) < AT_TENT) return false;
-    }
+    if (!edge) return null;
     const wait = this.filterWait(), left = e.bottle <= 0.02 ? 'dry' : `${e.bottle.toFixed(1)} L left`;
-    this.offer('Fill the bottle', `${left} · ${wait >= 0.25 ? 'a tablet: drinkable in half an hour' : 'through the filter, a few minutes'}`, () => this.fillBottle(wait));
-    return true;
+    return { left: e.bottle, wait, words: `${left} · ${wait >= 0.25 ? 'a tablet: drinkable in half an hour' : 'through the filter, a few minutes'}` };
   }
   fillBottle(wait = this.filterWait()) {
     if (this.energy.bottle >= 2 - 0.001) { this.note('The bottle is full.'); return; }
@@ -411,16 +401,6 @@ export class Camp {
   // game hours before the water just filled is drinkable: tablets half an hour, a filter a few minutes
   filterWait() { const k = this.kitOf('filter'); return FILTERS[k] ?? (/pump|gravity|filter/.test(k) ? FILTERS.pump : FILTERS.tablets); }
 
-  // At a site E belongs to the nearest thing that wants it: the fire, the wood and the latrine first (chores.js, already
-  // set), then your tent, the barrel and its tree (hang.js), and the ghost where you would pitch.
-  atSitePrompts(site, soft) {
-    const p = this.player, key = campKey(site), holder = this.registry.holder(key), c = this.camp;
-    if (holder && holder !== PLAYER) { this.say(`${this.siteName(site)} · Taken: another party is camped here`); return; }
-    if (c && (c.key === key || !c.key) && Math.hypot(c.x - p.x, c.z - p.z) < AT_TENT) { this.tentPrompts(site, soft); return; }
-    if (this.hang.prompts()) return;
-    if (!c) this.pitchPrompts(site);
-    else if (c.key !== key && this.still >= GHOST_STILL[0]) this.say(`${this.siteName(site)} · ${this.tentAway(c)}`);
-  }
   // your tent standing at another site, in a few words: "your tent is up 1.2 km east, at Campsite · Lake One"
   tentAway(c) {
     const p = this.player, d = Math.hypot(c.x - p.x, c.z - p.z), deg = ((Math.atan2(c.x - p.x, -(c.z - p.z)) * 180) / Math.PI + 360) % 360;
@@ -429,15 +409,6 @@ export class Camp {
     const at = c.site ? (c.site.name ? `, at the ${c.site.name} campsite` : lake ? `, at the campsite on ${lake}` : ', at a campsite') : '';
     return `your tent is ${c.stage >= 4 ? 'up' : 'half pitched'} ${far} ${compassLong(deg)}${at}: strike it there to pitch it here`;
   }
-  offSitePrompts(soft) {
-    const p = this.player, c = this.camp;
-    if (c && !c.key && Math.hypot(c.x - p.x, c.z - p.z) < AT_TENT) { this.tentPrompts(null, soft); return; }
-    if (this.hang.prompts()) return;
-    // Sandbox: a tent anywhere flat and dry (Adventure: designated sites only, no tent and no bivouac off a site); not
-    // about an outfitter's yard
-    if (!c && this.sandbox && !(this.outfitter && this.outfitter.visit)) this.pitchPrompts(null);
-  }
-
   // the nearest site (within r of its fire ring, or of its centre with layout false) whose tile has built it
   nearestSite(x, z, r, layout = true) {
     let best = null, bd = r;
@@ -467,20 +438,96 @@ export class Camp {
     }
     return any;
   }
-  // the ghost: the tent a couple of metres ahead (the A-frame end on, a little farther for its vestibule), its door to
-  // you, on the drawn ground; and what is wrong with the spot, if anything. item: the tent's (its kind's size)
-  ghostSpot(site, item = 'aframe') {
-    const p = this.player, w = this.world, f = p.forward, size = tentOf(item).size, ahead = size.ahead || GHOST_AHEAD;
-    const x = p.x + f.x * ahead, z = p.z + f.z * ahead;
-    if (!w.isReady(x, z)) return null;
+  // the ghost at (x, z), its door to (fdx, fdz), for a tent item: its pose on the drawn ground and what is wrong with the
+  // spot, if anything (kept a moment while nothing moves)
+  ghostAt(site, item, x, z, fdx, fdz) {
+    if (!this.world.isReady(x, z)) return null;
     const o = this.spot, now = performance.now(), kind = kindOf(item);
-    if (o && o.kind === kind && Math.hypot(o.px - p.x, o.pz - p.z) < 0.08 && Math.abs(Math.atan2(Math.sin(o.h - p.heading), Math.cos(o.h - p.heading))) < 0.03 && now - o.t < 400 && o.site === site) return o;
-    const fdx = -f.x, fdz = -f.z, ground = (gx, gz) => this.tiles.groundAt(gx, gz);
-    const pose = tentPose(ground, x, z, fdx, fdz, size);
+    if (o && o.kind === kind && o.site === site && Math.hypot(o.x - x, o.z - z) < 0.04 && Math.abs(o.fdx - fdx) + Math.abs(o.fdz - fdz) < 0.03 && now - o.t < 400) return o;
+    const size = tentOf(item).size, pose = tentPose((gx, gz) => this.tiles.groundAt(gx, gz), x, z, fdx, fdz, size);
     const why = this.pitchProblem(x, z, fdx, fdz, site, size);
-    this.spot = { x, z, fdx, fdz, pose, ok: !why, why, px: p.x, pz: p.z, h: p.heading, t: now, site, kind };
+    this.spot = { x, z, fdx, fdz, pose, ok: !why, why, t: now, site, kind };
     return this.spot;
   }
+
+  // --- the tent: pitched from the book (fb2 A) -----------------------------------------------------------------------
+  // The owner, 2026-10-24: "I want to have to go into my inventory. Press the tent what's in my bag and right click and
+  // say pitch. Or if it's on the ground, right click and say pitch." Pitch (nearby.itemActions) closes the book and puts
+  // the ghost where the dot meets the ground, 1.4 to 4.5 m off, its door to you: green where it can stand, red (and why)
+  // where it can't. E or a click there, held, pitches it phase by phase (hold.js: E or the mouse); let go and it stops at
+  // the phase finished, and E or a click again carries on. Esc or a right-click stops; so does walking off.
+  // The tent entry with uid in the camp's reach (a pack, a pile on the ground): { c, e, def } or null
+  tentByUid(uid) {
+    const inv = this.inv;
+    if (!inv) return null;
+    for (const c of inv.campReach()) for (const e of c.grid) if (e.uid === uid && !e.box) { const d = itemDef(e.id); return d && d.slot === 'tent' ? { c, e, def: d } : null; }
+    return null;
+  }
+  // why that tent can't be pitched from here now, or null; site: the one you stand at (or null off one)
+  pitchRefused(tent) {
+    const p = this.player;
+    if (!tent) return 'the tent is not within reach';
+    if (p.mode !== 'walk') return 'on foot, ashore';
+    if (this.outfitter && this.outfitter.visit) return 'not in an outfitter’s yard';
+    if (this.camp) return this.camp.stage >= 4 ? 'your tent is up already: strike it to pitch it elsewhere' : 'your tent stands half pitched: carry on with it, or strike it';
+    const site = this.nearestSite(p.x, p.z, AREA_R, true);
+    if (this.adventure && !site) return 'only at a campsite in Adventure';
+    if (site) { const h = this.registry.holder(campKey(site)); if (h && h !== PLAYER) return 'another party is camped here'; }
+    return null;
+  }
+  // Pitch from the book: the ghost follows the dot until it is placed; { ok, words }
+  beginPitch(uid) {
+    const tent = this.tentByUid(uid), why = this.pitchRefused(tent);
+    if (why) { this.note(`No pitching here: ${why}.`, 4); return { ok: false, words: why }; }
+    const p = this.player;
+    hold.cancel();
+    if (this.hang.armed) this.hang.disarm();
+    this.pitching = { uid, item: tent.def.id, x: p.x, z: p.z, placing: false, t: 0 };
+    return { ok: true, words: '' };
+  }
+  cancelPitch(words = null) {
+    if (!this.pitching) return false;
+    this.pitching = null;
+    if (hold.is('tent')) hold.cancel();
+    this.ghost.park();
+    if (words) this.note(words, 3);
+    return true;
+  }
+  // each frame while pitching (prompts, when no hold runs): the ghost at the dot, and E or the mouse to start the hold
+  aimPitch() {
+    const P = this.pitching, p = this.player, inp = p.input, c = this.camp;
+    const go = () => { const e = inp.pressed('KeyE'), m = inp.pressed('Mouse0'); return e || m; };
+    if (p.mode !== 'walk' || p.teleporting || Math.hypot(p.x - P.x, p.z - P.z) > 30) { this.cancelPitch(); return; }
+    // placed and let go part way: E or the mouse again at it carries on (the hold's own ring); up, it is done
+    if (c && c.item === P.item) {
+      if (c.stage >= 4) { this.pitching = null; return; }
+      if (Math.hypot(c.x - p.x, c.z - p.z) > 6) { this.cancelPitch(); return; }
+      this.say(`Your tent · ${tentOf(c.item).words[c.stage]} &nbsp;·&nbsp; <kbd>E</kbd>or click, held: carry on pitching &nbsp; <kbd>Esc</kbd>stop`);
+      if (go()) hold.begin({ ...this.pitchOnOpts(), keys: ['KeyE', 'Mouse0'] });
+      return;
+    }
+    if (c) { this.cancelPitch(); return; }
+    const tent = this.tentByUid(P.uid);
+    if (!tent) { this.cancelPitch('The tent is not within reach any more.'); return; }
+    const site = this.nearestSite(p.x, p.z, AREA_R, true);
+    // where the dot meets the ground, held between 1.4 and 4.5 m off; looking up, a couple of metres ahead
+    const g = this.pointer && this.pointer.groundHit, f = p.forward;
+    let x = p.x + f.x * GHOST_AHEAD, z = p.z + f.z * GHOST_AHEAD;
+    if (g) {
+      const dx = g.x - p.x, dz = g.z - p.z, d = Math.hypot(dx, dz) || 1, k = Math.max(1.4, Math.min(4.5, d)) / d;
+      x = p.x + dx * k; z = p.z + dz * k;
+    }
+    let fdx = p.x - x, fdz = p.z - z; const fl = Math.hypot(fdx, fdz) || 1; fdx /= fl; fdz /= fl;
+    const s = this.ghostAt(site, tent.def.id, x, z, fdx, fdz);
+    if (!s) return;
+    this.ghost.show(s.pose.matrix, s.ok, s.kind); this.ghostOn = true;
+    const name = lower(tent.def.name);
+    if (s.ok) {
+      this.say(`Pitch the ${name} here &nbsp;·&nbsp; <kbd>E</kbd>or click, held &nbsp; <kbd>Esc</kbd>stop`);
+      if (go()) hold.begin({ ...this.pitchOpts(s, tent, site), keys: ['KeyE', 'Mouse0'] });
+    } else { this.say(`No tent here · ${s.why} &nbsp;·&nbsp; <kbd>Esc</kbd>stop`); go(); }
+  }
+
   // why a tent of `size` (tent.js TENT_KINDS) can't stand at (x, z) with its door to (fdx, fdz), in a few words, or null
   // when it can
   pitchProblem(x, z, fdx, fdz, site, size = tentOf('aframe').size) {
@@ -541,18 +588,6 @@ export class Camp {
     if (d && boxDist(d.x, d.z) < 1.4) return 'the canoe is in the way';
     return null;
   }
-  // the ghost and E held to pitch (true when it set the prompt)
-  pitchPrompts(site) {
-    const tent = this.tentInReach();
-    if (!tent || this.still < GHOST_STILL[site ? 0 : 1]) return false;
-    const s = this.ghostSpot(site, tent.def.id);
-    if (!s) return false;
-    this.ghost.show(s.pose.matrix, s.ok, s.kind); this.ghostOn = true;
-    if (s.ok) hold.offer('Pitch the tent here', `the ${lower(tent.def.name)}`, this.pitchOpts(s, tent, site));
-    else this.say(`No tent here · ${s.why}`);
-    return true;
-  }
-
   // --- the tent: pitching and striking ---------------------------------------------------------------------------
   stagesFor(item) {
     const colour = TENT_FLY[item] ?? TENT_FLY.aframe, kind = kindOf(item);
@@ -578,7 +613,7 @@ export class Camp {
       onStop: (job) => {
         if (!this.camp) { this.dropDraft(); return; }
         this.setStage(this.camp, job.done);
-        this.note(`${cap(K.words[job.done])}. Hold E at it to carry on.`, 3);
+        this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'E or a click, held, carries on.' : 'Carry on from its panel in the book (I).'}`, 3);
       },
     };
   }
@@ -589,7 +624,7 @@ export class Camp {
       id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: c.stage, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(at); },
       onPhase: (i) => { this.setStage(c, i + 1); if (i === 3) this.pitched(); },
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. Hold E at it to carry on.`, 3); } },
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'E or a click, held, carries on.' : 'Carry on from its panel in the book (I).'}`, 3); } },
     };
   }
   // the hold that strikes it, from the stage it stands at back to rolled up and in a pack
@@ -599,8 +634,8 @@ export class Camp {
       id: 'strike', label: 'Striking the tent', phases: K.strike.slice(4 - from), at: 0, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(from - at); },
       onPhase: (i) => { const st = from - (i + 1); if (st <= 0) this.packTent(); else this.setStage(c, st); },
-      // (half struck, Q takes the rest down and E pitches it again: tentPrompts)
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) this.note(`${cap(K.words[c.stage])}. ${c.stage === 3 && this.sleepy ? 'Q to sleep without the fly, or hold E to put it back on.' : 'Hold Q to take the rest down, or E to pitch it again.'}`, 4); } },
+      // (half struck: the panel's Strike takes the rest down, Carry on pitching puts it back up)
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) this.note(`${cap(K.words[c.stage])}. Strike takes the rest down; Carry on pitching puts it back up.`, 4); } },
     };
   }
   // the footprint staked: the tent out of its container, the site claimed, the camp begun
@@ -688,29 +723,20 @@ export class Camp {
     if (!quiet) this.note(`The tent is down and rolled up.${words}${c.key ? ' The site is free again.' : ''}`, 5);
   }
 
-  // At your tent. Half pitched: E carries on, Q takes it down (both held). Pitched, by day: E held strikes it. From
-  // dusk (or worn out): E sleeps (the wake-time card), Q held strikes. With the tent up but no fly, Q sleeps without it.
-  // (Q is the packs' while you carry something: then it sets that down.)
-  tentPrompts(site = null, soft = false) {
-    const c = this.camp, p = this.player, inp = p.input, d = this.day, { rise, set } = d.sunriseSunset, h = d.hours;
-    const from = (set ?? 19) - SLEEP_FROM, night = this.night0, sleepy = this.sleepy;
-    const ch = this.chores, wake = night ? `until first light, about ${clock12(this.wakeTime('first').at)}` : `worn out: until about ${clock12(this.wakeTime().at)}`;
-    const q = !soft;
-    if (c.stage < 4) {
-      const sleepNoFly = c.stage === 3 && sleepy && q;
-      p.say(`Your tent · ${tentOf(c.item).words[c.stage]}`, ['E', `${c.stage === 3 ? 'Put the fly on' : 'Carry on pitching'} · hold`], q ? (sleepNoFly ? ['Q', 'Sleep without the fly'] : ['Q', 'Take it down · hold']) : null);
-      if (inp.pressed('KeyE')) hold.begin(this.pitchOnOpts());
-      else if (q && inp.pressed('KeyQ')) { if (sleepNoFly) this.turnIn(site, night); else hold.begin({ ...this.strikeOpts(), key: 'KeyQ' }); }
-      return;
-    }
-    if (sleepy) {
-      if (ch && night) ch.offered(site);
-      p.say(null, ['E', `Sleep · ${wake}${night && ch ? ' · <kbd>←</kbd><kbd>→</kbd> later' : ''}`], q ? ['Q', 'Strike the tent · hold'] : null);
-      if (inp.pressed('KeyE')) this.turnIn(site, night);
-      else if (q && inp.pressed('KeyQ')) hold.begin({ ...this.strikeOpts(), key: 'KeyQ' });
-      return;
-    }
-    hold.offer('Strike the tent', `you can turn in from ${clock12(from)}`, this.strikeOpts());
+  // fb2 A: your tent's panel in the book (nearby.js), within TENT_PANEL of it: carry on pitching or put the fly on
+  // (held), strike it (held), sleep (the wake-time card at night; by day only worn out). held(o): the hold's keys from
+  // the book (o.key: its BookHold; E too). Without the fly on it sleeps, but rain comes through the mesh.
+  tentPanel() {
+    const c = this.camp, p = this.player;
+    if (!c || p.mode !== 'walk' || Math.hypot(c.x - p.x, c.z - p.z) > TENT_PANEL) return null;
+    const K = tentOf(c.item), d = itemDef(c.item), { set } = this.day.sunriseSunset, from = (set ?? 19) - SLEEP_FROM;
+    const night = this.night0, sleepy = this.sleepy, keys = (o) => ({ key: (o && o.key) || 'KeyE', keys: ['KeyE', 'Mouse0', ...(o && o.key ? [o.key] : [])] });
+    const wake = sleepy ? (night ? `until first light, about ${clock12(this.wakeTime('first').at)}` : `worn out: until about ${clock12(this.wakeTime().at)}`) : null;
+    const actions = [];
+    if (c.stage < 4) actions.push({ id: 'pitch', label: c.stage === 3 ? 'Put the fly on' : 'Carry on pitching', held: true, job: 'tent', enabled: true, run: (o) => hold.begin({ ...this.pitchOnOpts(), ...keys(o) }) });
+    actions.push({ id: 'sleep', label: c.stage === 3 ? 'Sleep without the fly' : 'Sleep', closeBook: true, enabled: c.stage >= 3 && sleepy, why: c.stage < 3 ? 'it is not up yet' : sleepy ? null : `you can turn in from ${clock12(from)}`, hint: wake, run: () => this.turnIn(c.site, night) });
+    actions.push({ id: 'strike', label: 'Strike the tent', held: true, job: 'strike', enabled: true, run: (o) => hold.begin({ ...this.strikeOpts(), ...keys(o) }) });
+    return { id: 'tent', kind: 'tent', title: `Your ${lower(d ? d.name : 'tent')}`, sub: `${K.words[c.stage]}${c.site ? ` · ${this.siteName(c.site)}` : ''}`, actions, stage: c.stage };
   }
   turnIn(site, night) {
     const ch = this.chores;
@@ -741,7 +767,7 @@ export class Camp {
   // a trip that ends (an evacuation, the end at a counter): the tent goes to the outfitters, quietly; nothing else moves
   leave({ quiet = false } = {}) {
     hold.cancel();
-    this.dropDraft();
+    this.dropDraft(); this.pitching = null;
     if (this.camp) this.strike({ quiet, stash: true });
     this.persist();
   }
@@ -750,7 +776,7 @@ export class Camp {
   // word does not say it again.
   leaving() {
     const p = this.player, inv = this.inv, parts = [], c = this.camp;
-    hold.cancel(); this.dropDraft();
+    hold.cancel(); this.dropDraft(); this.pitching = null; if (this.hang.armed) this.hang.disarm();
     const camp = c && Math.hypot(c.x - p.x, c.z - p.z) < ASHORE_NOTE ? c : null;
     const area = this.areaAt(p.x, p.z, AREA_R + 15) || (camp ? { x: camp.site ? camp.site.layout.fire.x : camp.x, z: camp.site ? camp.site.layout.fire.z : camp.z, r: AREA_R } : null);
     if (camp) parts.push(camp.stage >= 4 ? 'the tent is still up' : `the tent stands half pitched, ${tentOf(camp.item).words[camp.stage]}`);
@@ -797,7 +823,7 @@ export class Camp {
   }
   sleep(kind, choice = 'first') {
     const d = this.day, p = this.player, set = d.sunriseSunset.set, e = this.energy, c = this.camp;
-    if (kind === 'tent' && c && c.stage < 3) { this.note('The tent isn’t up yet: hold E at it to carry on pitching.'); return; }
+    if (kind === 'tent' && c && c.stage < 3) { this.note('The tent isn’t up yet: carry on pitching it first.'); return; }
     // turning in before sunset: the night's jump would carry the clock past the dusk meal (energy.js eats only the
     // breakfast of a jump), so supper is eaten now, unless one was had in the last few hours (a cooked one, say)
     const { at: wakeAt, hours, day: byDay } = this.wakeTime(choice);

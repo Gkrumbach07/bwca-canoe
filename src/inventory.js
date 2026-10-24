@@ -371,7 +371,8 @@ export class Inventory {
       return { ok: true, placed: 1, cId: c.id, uid: c.id, why: null };
     }
     if (d.kind === 'long') { const l = this.addLong(itemId, this.atStash || !this.attached ? 'stash' : 'canoe', null, { quiet }); return { ok: true, placed: 1, cId: null, uid: l.uid, why: null }; }
-    const pool = (within || (all || !this.attached ? this.containers : this.reachable())).filter((c) => c.item !== 'crate' && c.item !== 'pile' && !exclude.includes(c.id) && this.accepts(c, d));
+    // (fb2 A: never into a station, the fire ring's fuel or the grate, unless asked for by name in `prefer`)
+    const pool = (within || (all || !this.attached ? this.containers : this.reachable())).filter((c) => c.item !== 'crate' && c.item !== 'pile' && !exclude.includes(c.id) && this.accepts(c, d) && (!(itemDef(c.item) || {}).station || prefer.includes(c.id)));
     const pre = prefer.map((id) => this.cont(id)).filter((c) => c && pool.includes(c));
     const rest = pool.filter((c) => !pre.includes(c)).sort((a, b) => this.score(b, d) - this.score(a, d));
     let left = Math.max(1, qty | 0), first = null, uid = null;

@@ -122,6 +122,38 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #marks > .on { display: inline-flex; }
 #marks svg { display: block; }
 
+/* the energy bar (fb2 F): Wild n Chill's one long thin bar, top left. Green is the energy you have; the dim track after
+   it, up to the ceiling, is what rest can bring back; each need's chunk eats in from the right end in its colour (cold
+   pale blue, sleep orange, hunger yellow, thirst blue), dashed and marching while it grows (cold dotted), with its icon
+   under it. A thin dark edge, as the game's, so it reads on snow and sky alike. The readout's Energy row draws it small. */
+#air, #readout { --e-green: #7fb58f; --e-edge: rgba(16, 20, 22, .72); --e-room: rgba(243, 236, 221, .16);
+  --e-warmth: #bcd8e8; --e-warmth-d: #7f9fb2; --e-rest: #dd8d5b; --e-rest-d: #9c5a35; --e-food: #dcb469; --e-food-d: #9c7c3c; --e-water: #5f9dd2; --e-water-d: #3b6894; }
+#energy { left: 64px; top: 34px; width: 360px; }
+#energy .track, #readout .ebar { position: relative; height: 6px; border: 1.5px solid var(--e-edge); border-radius: 2px; background: rgba(16, 20, 22, .4); box-shadow: 0 1px 2px rgba(0, 0, 0, .35); overflow: hidden; }
+#energy .track i, #readout .ebar i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; }
+#energy .fill, #readout .ebar .fill { background: var(--e-green); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); transition: width .4s ease-out; }
+#energy .room, #readout .ebar .room { background: var(--e-room); }
+#energy .chunk, #readout .ebar .chunk { background: var(--c); box-shadow: inset 1.5px 0 0 var(--e-edge); }
+#energy .chunk.grow, #readout .ebar .chunk.grow { background: repeating-linear-gradient(90deg, var(--c) 0 6px, var(--cd) 6px 8px); }
+#energy .chunk.warmth.grow, #readout .ebar .chunk.warmth.grow { background: repeating-linear-gradient(90deg, var(--c) 0 2.5px, var(--cd) 2.5px 4px); }
+#energy .chunk.grow { animation: energy-march 1.6s linear infinite; }
+#energy .chunk.warmth.grow { animation-duration: 2.4s; }
+@keyframes energy-march { from { background-position: 0 0; } to { background-position: -16px 0; } } /* the dashes march in, toward the green */
+.chunk.warmth { --c: var(--e-warmth); --cd: var(--e-warmth-d); }
+.chunk.rest { --c: var(--e-rest); --cd: var(--e-rest-d); }
+.chunk.food { --c: var(--e-food); --cd: var(--e-food-d); }
+.chunk.water { --c: var(--e-water); --cd: var(--e-water-d); }
+#energy .icons { position: relative; height: 16px; margin-top: 5px; }
+#energy .icon { position: absolute; left: 0; top: 0; width: 16px; height: 16px; margin-left: -8px; opacity: 0; transition: opacity .3s, left .3s ease-out; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .6)); }
+#energy .icon.on { opacity: 1; }
+#energy .icon svg { display: block; }
+#energy .icon.warmth { color: var(--e-warmth); }
+#energy .icon.rest { color: var(--e-rest); }
+#energy .icon.food { color: var(--e-food); }
+#energy .icon.water { color: var(--e-water); }
+#readout .ebar { display: inline-block; width: 150px; height: 5px; vertical-align: middle; margin-right: 10px; }
+@media (prefers-reduced-motion: reduce) { #energy .chunk.grow { animation: none; } }
+
 /* --- Paper ------------------------------------------------------------------------------------------------- */
 #scrim { position: fixed; inset: 0; background: var(--deep); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 4; }
 body.paper-open #scrim { opacity: .55; pointer-events: auto; }
@@ -332,3 +364,34 @@ body.paper-open #scrim { opacity: .55; pointer-events: auto; }
   #outfitter .counter { grid-template-columns: 1fr; }
   #outfitter header h2 { font-size: 28px; }
 }
+
+/* fb2 D: the map table (src/maptable.js): this table's sheets beside the whole map, on a card laid over the sheet */
+#maptable { position: absolute; top: 14px; right: 14px; bottom: 14px; width: 300px; box-sizing: border-box; display: none; flex-direction: column; background: var(--paper-card); border: 1.5px solid var(--edge-deep); border-radius: 3px; box-shadow: 0 10px 30px rgba(40, 25, 10, .3); color: var(--ink); font: 15px/1.35 var(--serif); z-index: 2; overflow: hidden; cursor: default; }
+#map.table #maptable { display: flex; }
+#map.table #pin { display: none !important; }
+#maptable .mt-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--edge); flex: none; }
+#maptable .mt-head .sc { font-size: 10.5px; letter-spacing: .14em; }
+#maptable .mt-head h3 { font: 500 21px/1.15 var(--serif); letter-spacing: 0; margin-top: 3px; }
+#maptable .say { font-size: 17px; line-height: 1.08; margin-top: 6px; }
+#maptable .who { font: 700 10px/1.4 var(--sc); letter-spacing: .14em; color: var(--ink-faint); margin-top: 3px; }
+#maptable .lab { padding: 10px 16px 2px; font-size: 10.5px; flex: none; color: var(--ink-soft); }
+#maptable .mt-list { flex: 1 1 auto; overflow-y: auto; padding: 2px 0 6px; min-height: 0; }
+#maptable .row { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 8px; padding: 7px 16px; cursor: pointer; }
+#maptable .row:hover { background: rgba(192, 57, 43, .05); }
+#maptable .row.sel { background: rgba(192, 57, 43, .1); }
+#maptable .row .no { font: 700 15px/1 var(--serif); color: var(--map-red); }
+#maptable .row .no i { display: block; margin-top: 3px; font: 700 9px/1 var(--sc); font-style: normal; letter-spacing: .12em; color: var(--ink-faint); }
+#maptable .row.mine .no { color: var(--ink); }
+#maptable .row .nm { min-width: 0; }
+#maptable .row .nm b { display: block; font-weight: 600; font-size: 14px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#maptable .row .nm span, #maptable .soft { font-size: 12px; color: var(--ink-soft); }
+#maptable .mark { font: 600 19px/1 var(--pencil-font); color: #2a341e; white-space: nowrap; }
+#maptable .stamp { white-space: nowrap; }
+#maptable .mt-card { flex: none; border-top: 1px solid var(--edge); padding: 11px 16px 12px; background: var(--paper-note); display: flex; flex-direction: column; gap: 4px; }
+#maptable .mt-card .t { font: 600 15.5px/1.2 var(--serif); }
+#maptable .mt-card p { font-size: 14px; }
+#maptable .mt-card .buy { margin-top: 4px; }
+#maptable .receipt { flex: none; font: 500 18px/1.1 var(--pencil-font); color: var(--pencil); padding: 8px 16px; border-top: 1px dashed var(--edge); }
+#maptable .receipt.no { color: var(--map-red); }
+#maptable .mt-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--edge); background: var(--paper-deep); }
+#maptable .money { font: 700 11.5px/1.3 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }

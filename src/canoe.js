@@ -401,10 +401,22 @@ export function buildCanoeRig({ water = null } = {}) {
   // Standing, a foot steps only when it is off its spot under the hip or turned from it (the body turning to the look),
   // one foot at a time, and then both stay planted: with the stance half the cycle the old settle steps had one foot in
   // the air at every moment, so they never ended (the stomping at idle).
+  // fb2 E: on a hill (the owner, 2026-10-24: "when I'm going up a hill, the character does this weird wide leg splayed
+  // glitchiness"). Up a 0.35 grade the foot left behind stands about 0.13 m lower than on the flat, so its reach dragged the
+  // hips down 0.25 m at every double support, a deep lunge with the front thigh level; and each step up the slope was
+  // taken as a step up a stair, the knee lifted high over an edge that was not there. Now the grade along the way (eased,
+  // from the feet's own ground: a flight of stairs counts) shortens the stride (SLOPE.stride a cycle per unit of
+  // steepness, strideDown downhill) and leans him into it; the hips sit a little lower as people bend their knees on a
+  // hill (SLOPE.sink m at full steepness); and the foot behind steps as soon as its reach would pull the hips more than
+  // SLOPE.slack under where they want to be. A swing
+  // lifts the knee over an edge only where the ground along its way rises above the straight line from where it left to
+  // where it lands (a tread, a log, a rock), by more than STEP_EDGE; on an even slope it follows the slope.
+  const SLOPE = { full: 0.45, stride: 0.35, strideDown: 0.6, sink: 0.05, slack: 0.025, lean: 0.14 };
+  const STEP_EDGE = [0.05, 0.14];
   const SETTLE = { dist: 0.085, yaw: 0.42, dur: 0.34, clear: 0.045 };
   const OFF = { L: 0, R: 0.5 };
   const _aim = V();
-  const loco = { init: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, feet: {}, rigPos: V(), h: 0 };
+  const loco = { init: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, feet: {}, rigPos: V(), h: 0, grade: 0, tilt: 0, want: HIP_H - 0.05 };
   for (const h of ['L', 'R']) loco.feet[h] = { pos: V(), yaw: 0, lift: V(), liftYaw: 0, target: V(), targetYaw: 0, swing: false, s: 0, dur: 0.3, cyc: -1, planted: 1, clear: 0.05, slope: 0, pitch: 0 };
   const ground = (x, z) => (api.ground ? api.ground(x, z) : rig.position.y - 0.1);
   const toWorld = (local, out = V()) => { const h = rig.rotation.y, c = Math.cos(h), s = Math.sin(h); return out.set(rig.position.x + local.x * c + local.z * s, rig.position.y + local.y, rig.position.z - local.x * s + local.z * c); };
@@ -437,6 +449,27 @@ export function buildCanoeRig({ water = null } = {}) {
   }
   const fq = { L: new THREE.Quaternion(), R: new THREE.Quaternion() }, tq = { L: new THREE.Quaternion(), R: new THREE.Quaternion() };
   const ankles = { L: V(), R: V() };
+  // fb2 E: how high (rig space) foot k's reach lets the hips stand, from its ankle as last placed (standingBody's cap for
+  // that foot, without its 0.42 m clamp)
+  const _ra = V(), _rb = V();
+  function reachOf(k) {
+    const a = toLocal(ankles[k], _ra), sg = k === 'L' ? -1 : 1, yaw = loco.hipYaw, R = (LT + LS) * 0.995;
+    const horiz = Math.hypot(a.x - Math.sin(yaw) * sg * 0.098, a.z - Math.cos(yaw) * sg * 0.098);
+    return horiz >= R ? a.y - 1 : a.y + Math.sqrt(R * R - horiz * horiz);
+  }
+  loco.reachOf = reachOf; // (for the tests)
+  // fb2 E: how far the ground along a swing's way rises above the straight line from where the foot left to where it lands
+  // (0 on an even slope; a tread's edge, a log, a rock on the way)
+  function edgeOf(f) {
+    let bump = 0;
+    for (let i = 1; i <= 5; i++) {
+      const s = i / 6;
+      _rb.lerpVectors(f.lift, f.target, s);
+      const d = ground(_rb.x, _rb.z) - _rb.y;
+      if (d > bump) bump = d;
+    }
+    return bump;
+  }
 
   // In a hop or a fall: the feet leave the ground and follow the body, pushed off with the toes down, tucked up under
   // the hips at the top, reaching down again as it falls; planted afresh where they land.
@@ -490,10 +523,23 @@ export function buildCanoeRig({ water = null } = {}) {
       clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.16, jog) + 0.12 * wadeK;
     }
     c *= 1 + 0.2 * Math.abs(mz);
-    state.cadence = moving ? c : 0;
-    const L = v / c, E = fs * L;
     // world velocity of the body, for where a swinging foot will land
     const h = rig.rotation.y, ch = Math.cos(h), shh = Math.sin(h);
+    // fb2 E: the grade along the way, from the feet's ground 0.35 m ahead and behind (a flight of stairs is steep), eased:
+    // a steep one shortens the stride; and the tilt, the terrain's own steepness (a step's edge beside him is not a hill)
+    {
+      const px = rig.position.x, pz = rig.position.z, e = 0.35, T = api.terrain || ground;
+      const ux = moving ? mx * ch + mz * shh : ch, uz = moving ? -mx * shh + mz * ch : -shh;
+      const gx = (T(px + e, pz) - T(px - e, pz)) / (2 * e), gz = (T(px, pz + e) - T(px, pz - e)) / (2 * e);
+      const lim = (x) => Math.max(-1.2, Math.min(1.2, x)), k = damp(10, dt);
+      const along = (ground(px + ux * e, pz + uz * e) - ground(px - ux * e, pz - uz * e)) / (2 * e);
+      loco.grade += (lim(along) - loco.grade) * k; // along the way, or standing the way he faces (+ up): the stride
+      loco.tilt += (Math.min(1.2, Math.hypot(gx, gz)) - loco.tilt) * k;        // the ground's own steepness: the hips
+    }
+    const steep = Math.min(1, Math.abs(loco.grade) / SLOPE.full);
+    c *= 1 + (loco.grade < 0 ? SLOPE.strideDown : SLOPE.stride) * steep * (1 - jog); // (down a hill shorter still: the foot ahead lands lower)
+    state.cadence = moving ? c : 0;
+    const L = v / c, E = fs * L;
     const vx = moving ? (mx * ch + mz * shh) * v : 0, vz = moving ? (-mx * shh + mz * ch) * v : 0;
     const amp = 0.3 + 0.7 * sp;
     const F = loco.feet;
@@ -525,8 +571,11 @@ export function buildCanoeRig({ water = null } = {}) {
         const f = F[k], o = F[k === 'L' ? 'R' : 'L'];
         if (f.swing) { f.clear = clear; continue; }
         const cy = cycOf(k), u = uOf(k);
-        // its turn in the cycle, or left further behind than the stride allows (the other foot down, unless jogging)
-        const behind = -along(f), far = behind > Math.min(E / 2 + 0.24, 0.6), late = far && (!o.swing || jog > 0.5);
+        // its turn in the cycle, or left further behind than the stride allows (the other foot down, unless jogging); or
+        // (fb2 E) behind and lower, down a slope's length, so that its reach would hold the hips under where they want to be
+        // (on the flat the hips' dip at double support is about 0.07 m; that slack is let go only as the ground steepens)
+        const slack = lerp(0.13, SLOPE.slack, smooth(0.15, 0.6, steep));
+        const behind = -along(f), far = behind > Math.min(E / 2 + 0.24, 0.6) || (jog < 0.5 && behind > 0.12 && reachOf(k) < loco.want - slack), late = far && (!o.swing || jog > 0.5);
         if ((u >= fs && f.cyc !== cy) || late) { f.cyc = cy; startSwing(f, late && u < fs ? (1 - fs) / c : (1 - u) / c, clear); }
         else if (far && o.swing && o.s < 1) o.dur = Math.min(o.dur, 0.1 / (1 - o.s)); // the other foot down quickly, so this one can go
       }
@@ -574,9 +623,11 @@ export function buildCanoeRig({ water = null } = {}) {
         f.pos.lerpVectors(f.lift, f.target, e);
         // a step up (a log, a rock, the store's step): the knee lifts the foot over the edge early; a step down holds it
         // up until it is over the lower ground
-        const rise = f.target.y - f.lift.y, up = smooth(0.08, 0.2, rise), down = smooth(0.08, 0.2, -rise);
+        // (fb2 E: only over an edge on the way; up or down an even slope the foot keeps to the slope)
+        const bump = edgeOf(f), edge = smooth(STEP_EDGE[0], STEP_EDGE[1], bump);
+        const rise = f.target.y - f.lift.y, up = smooth(0.08, 0.2, rise) * edge, down = smooth(0.08, 0.2, -rise) * edge;
         const sy = lerp(lerp(s, Math.sin((Math.PI / 2) * Math.min(1, s * 1.25)), up), s * s, down);
-        const cl = Math.max(f.clear, up * (0.45 * rise + 0.08));
+        const cl = Math.max(f.clear, up * (0.45 * rise + 0.08), edge * (1 - up) * (bump + 0.04)); // (over a log on the level: its height)
         f.pos.y = lerp(f.lift.y, f.target.y, sy) + cl * Math.pow(Math.sin(Math.PI * Math.pow(s, lerp(0.8, 0.6, jog))), 1.2);
         f.pos.y = Math.max(f.pos.y, ground(f.pos.x, f.pos.z) + 0.01 * Math.sin(Math.PI * s)); // never through a bump on the way
         f.yaw = f.liftYaw + wrapPi(f.targetYaw - f.liftYaw) * e;
@@ -624,6 +675,11 @@ export function buildCanoeRig({ water = null } = {}) {
     // under the canoe dips
     const airDrop = g.air ? 0.02 + 0.05 * g.tuck : 0;
     let target = gl + HIP_H - bend + bob - airDrop - 0.16 * ease(state.land) - 0.06 * Math.sin(Math.PI * state.stagger) - 0.4 * ck;
+    // fb2 E: on a hill the knees stay a little bent (the hips lower by up to SLOPE.sink, by the ground's steepness whichever
+    // way it falls: standing across a slope the lower foot holds them too), and that is where they want to be:
+    // a foot whose reach would hold them under it steps (locomote)
+    target -= SLOPE.sink * smooth(0.08, SLOPE.full, loco.tilt) * mw;
+    loco.want = target;
     // no higher than the planted legs reach. A walking foot reaching for the ground counts from mid-swing, so the hips
     // settle into the heel strike instead of dropping at it; a jogging foot in the air does not hold the body down. Only
     // so far for a foot left behind: past 0.42 m out it steps (locomote) rather than pulling the hips down
@@ -651,7 +707,7 @@ export function buildCanoeRig({ water = null } = {}) {
     const roll = lerp(-0.025 * Math.sin(idle.shift), 0.06 * sp * Math.sin(twoPi * (phi - 0.03)), mw);
     const pYaw = -0.11 * sp * Math.cos(twoPi * phi) * (g.backF ? -1 : 1);
     // the jog upright: a few degrees forward of the walk, no more
-    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK
+    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog + SLOPE.lean * smooth(0.05, SLOPE.full, loco.grade)) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK
       + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck;
     const pelvis = bodyQ(yaw + pYaw, 0.03 + lean * 0.3, roll);
     const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15, lean, -0.4 * roll + 0.04 * g.mz * sp);
@@ -1137,8 +1193,9 @@ export function buildCanoeRig({ water = null } = {}) {
   let eyeInit = false;
   const EYE_SPRING = 16, eyeY = { on: false, y: 0, v: 0 }; // rad/s: the first-person eye's height on foot (eye, below)
   const api = {
-    rig, hull: hullPivot, paddler, paddle, pack, packs, state, swimmer, figure: fig,
+    rig, hull: hullPivot, paddler, paddle, pack, packs, state, swimmer, figure: fig, loco,
     ground: null, // set by player.js: the ground height at a world (x, z), for the feet
+    terrain: null, // fb2 E: set by player.js: the drawn terrain alone (no rock, step or deck), for the hill's steepness
     moveOf: null, // set by main.js: () => player.move, the move the walker is making (vault, climb, sit, wade ...)
     update(dt) {
       if (dt <= 0) dt = 1e-4;

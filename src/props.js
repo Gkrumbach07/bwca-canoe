@@ -1421,13 +1421,22 @@ function roofCover(b, kind, col, rng) {
   }
 }
 
-const STEP_RISE = 0.165, STEP_RUN = 0.28;
+// fb2 C: risers of at most 15 cm (agreed with stream E, player.js: the walker's circle reaches into the tread two up,
+// 0.30 m over his feet, inside his 0.35 m step with room for the feet's easing), treads 28 cm deep
+const STEP_RISE = 0.15, STEP_RUN = 0.28, SITE_RISE = 0.165;
+const STAIR_LOW = 0.75;   // a deck no higher than this over the ground at its front has no rails, and steps across its front
+const RAIL_H = 0.92;      // a rail's (and a flight's side wall's) height over what it stands on, for the walker and the camera
 // The porch across the front (look.porch) or a stoop at the door, at the floor's height less 4 cm, and its steps down to
-// the ground: as many even risers (at most STEP_RISE) as it takes to meet the ground at their foot. g(a, b): the ground in
-// the store's frame. Returns { deck: [a0, a1, b0, b1], treads: [{ a0, a1, b0, b1, y }], posts: [[a, b]] } for the walker.
+// the ground: as many even risers (at most STEP_RISE) as it takes to meet the lowest ground across the flight's width at
+// its foot. A low deck (STAIR_LOW) has its steps across the whole of its front; a high one has a flight 1.5 m wide
+// centred on the door, rails round the deck, and the flight's sides walled (a handrail) wherever a tread stands more
+// than a step over the ground beside it, so the walker can neither step off its side nor be offered a climb onto it:
+// he walks round to its foot (fb2 C, the owner: "going upstairs I kind of have to press space to climb"). g(a, b): the
+// ground in the store's frame. Returns { deck: [a0, a1, b0, b1], treads: [{ a0, a1, b0, b1, y }], walls: [{ a0, a1,
+// b0, b1, top }], posts: [[a, b]], rails, bench, foot } for the walker.
 function porchAndSteps(b, porch, g, look, rng, occ) {
   const ys = -0.04, d = porch ? 1.8 : 1.2, a0 = porch ? -ST.hW - 0.1 : DOOR.a - 0.85, a1 = porch ? ST.hW + 0.1 : DOOR.a + 0.85, s0 = ST.hD, s1 = ST.hD + d;
-  const out = { deck: [a0, a1, s0, s1], treads: [], posts: [] }, deck = C(0x8f8576), frameC = C(0x6a6255);
+  const out = { deck: [a0, a1, s0, s1], treads: [], walls: [], posts: [] }, deck = C(0x8f8576), frameC = C(0x6a6255);
   // the deck: planks across, on a rim joist; posts down to the ground under its front edge
   for (let s = s0 + 0.005; s < s1 - 0.02;) {
     const w = 0.13 + rng() * 0.03, e = Math.min(s1, s + w), col = tone(0x8f8576, rng, 0.08);
@@ -1478,11 +1487,14 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
     for (const a of [1.08, 2.37]) sbox(b, a - 0.03, a + 0.03, ys, 0.42, s0 + 0.25, s0 + 0.55, TILE.WOOD, bw, { grain: 'y' });
     out.bench = [1.0, 2.45, s0 + 0.2, s0 + 0.6];
   }
-  // the steps, centred on the door: risers of at most STEP_RISE, so the tread two up is still within the walker's step
-  // (player.js: 0.35 m) and does not hold him off the one between
-  const run = STEP_RUN, sw = porch ? 0.62 : 0.55, ca = DOOR.a;
-  let rises = 1, rh = ys - g(ca, s1 + 0.25);
-  for (let n = 1; n <= 20; n++) { rises = n; rh = (ys - g(ca, s1 + (n - 1) * run + 0.25)) / n; if (rh <= STEP_RISE) break; }
+  // the steps: risers of at most STEP_RISE, so the tread two up is still within the walker's step (player.js: 0.35 m)
+  // and does not hold him off the one between; across the whole front of a low deck, else a flight centred on the door
+  const run = STEP_RUN;
+  const high = ys - Math.min(g(a0 + 0.1, s1 - 0.1), g(DOOR.a, s1 - 0.1), g(a1 - 0.1, s1 - 0.1)), low = high <= STAIR_LOW;
+  const ca = low ? (a0 + a1) / 2 : DOOR.a, sw = low ? (a1 - a0) / 2 : porch ? 0.75 : 0.7;
+  const gLow = (c) => Math.min(g(ca - sw + 0.12, c), g(ca, c), g(ca + sw - 0.12, c)); // the lowest ground across the flight
+  let rises = 1, rh = ys - gLow(s1 + 0.25);
+  for (let n = 1; n <= 32; n++) { rises = n; rh = (ys - gLow(s1 + (n - 1) * run + 0.25)) / n; if (rh <= STEP_RISE) break; }
   const treads = rh * rises > 0.25 ? rises - 1 : 0, gFront = ys - rh * rises;
   for (let k = 1; k <= treads; k++) {
     const ty = ys - k * rh, ts = s1 + (k - 0.5) * run;
@@ -1490,16 +1502,30 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
     sbox(b, ca - sw + 0.02, ca + sw - 0.02, ty - rh, ty - 0.035, ts - run / 2 + 0.005, ts - run / 2 + 0.03, TILE.WOOD, frameC, { grain: 'x' });
     out.treads.push({ a0: ca - sw, a1: ca + sw, b0: ts - run / 2, b1: ts + run / 2, y: ty });
   }
+  // A side of the flight where any tread stands more than a step over the ground beside it is walled (the handrail)
+  // from the deck to the foot, a piece a tread (its top a rail's height over that tread, for the camera), so he neither
+  // steps off it nor is held at its edge with a climb on offer. The wall ends at the foot in the round newel post (a
+  // circle, not a box's square end: coming up along the flight's edge he slides round it onto the flight rather than
+  // being held by the wall's corner).
+  const walled = [-1, 1].map((side) => out.treads.some((t) => { const c = (t.b0 + t.b1) / 2; return t.y - Math.min(g(ca + side * (sw + 0.25), c), g(ca + side * (sw + 0.6), c)) > 0.3; }));
+  const NEWEL = 0.12;
+  for (const [i, side] of [[0, -1], [1, 1]]) {
+    if (!walled[i]) continue;
+    const e = ca + side * sw, a0 = Math.min(e, e + side * 0.08), a1 = Math.max(e, e + side * 0.08), bEnd = s1 + treads * run - NEWEL;
+    for (const t of out.treads) if (t.b0 < bEnd) out.walls.push({ a0, a1, b0: t.b0 - 0.01, b1: Math.min(t.b1 + 0.01, bEnd), top: t.y + RAIL_H });
+    const last = out.treads[out.treads.length - 1];
+    out.walls.push({ a: ca + side * (sw + 0.04), b: bEnd, r: NEWEL, top: last.y + RAIL_H });
+  }
   if (treads) for (const side of [-1, 1]) {
     const p0 = V(ca + side * (sw - 0.03), ys - 0.06, s1), p1 = V(ca + side * (sw - 0.03), gFront - 0.05, s1 + treads * run + 0.05), along = p1.clone().sub(p0), L = along.length(); along.normalize();
     const up = AX.clone().cross(along).normalize(); if (up.y < 0) up.negate();
     b.box(p0.clone().add(p1).multiplyScalar(0.5).addScaledVector(up, -0.06), along, up, AX, L / 2, 0.1, 0.02, TILE.WOOD, frameC, { grain: 'x' });
   }
   out.foot = s1 + treads * run;
+  out.low = low; out.width = 2 * sw; out.ca = ca;
   // a railing round a deck that stands high (the gap left for the steps), and handrails down a long flight
   out.rails = [];
-  const high = ys - Math.min(g(a0 + 0.1, s1 - 0.1), g(ca, s1 - 0.1), g(a1 - 0.1, s1 - 0.1));
-  if (high > 0.75) {
+  if (!low) {
     const rail = tone(0x8a7c68, rng, 0.04), ry = ys + 0.92, my = ys + 0.48;
     const runs = [[[a0 + 0.04, s0 + 0.05], [a0 + 0.04, s1 - 0.04]], [[a0 + 0.04, s1 - 0.04], [ca - sw - 0.04, s1 - 0.04]], [[ca + sw + 0.04, s1 - 0.04], [a1 - 0.04, s1 - 0.04]], [[a1 - 0.04, s1 - 0.04], [a1 - 0.04, s0 + 0.05]]];
     for (const [[pa, pc], [qa, qc]] of runs) {
@@ -1508,14 +1534,19 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
       for (const [y, h] of [[ry, 0.03], [my, 0.022]]) b.box(mid.clone().setY(y), along, AY, side, L / 2, h, 0.025, TILE.WOOD, rail, { grain: 'x', endTile: TILE.END });
       const n = Math.max(1, Math.round(L / 1.4));
       for (let k = 0; k <= n; k++) { const t = k / n, x = pa + (qa - pa) * t, z = pc + (qc - pc) * t; sbox(b, x - 0.035, x + 0.035, ys, ry, z - 0.035, z + 0.035, TILE.WOOD, rail, { grain: 'y', endTile: TILE.END }); }
-      out.rails.push([Math.min(pa, qa) - 0.04, Math.max(pa, qa) + 0.04, Math.min(pc, qc) - 0.04, Math.max(pc, qc) + 0.04]);
+      out.rails.push([Math.min(pa, qa) - 0.04, Math.max(pa, qa) + 0.04, Math.min(pc, qc) - 0.04, Math.max(pc, qc) + 0.04, ys + RAIL_H]);
     }
   }
-  if (treads >= 4) for (const side of [-1, 1]) {
+  for (const [i, side] of [[0, -1], [1, 1]]) {
+    if (!(walled[i] || (!low && treads >= 4))) continue;
     const a = ca + side * (sw + 0.03), p0 = V(a, ys + 0.9, s1), p1 = V(a, gFront + 0.9, s1 + treads * run), along = p1.clone().sub(p0), L = along.length(); along.normalize();
     const up = AX.clone().cross(along).normalize(); if (up.y < 0) up.negate();
     b.box(p0.clone().add(p1).multiplyScalar(0.5), along, up, AX, L / 2 + 0.03, 0.025, 0.025, TILE.WOOD, tone(0x8a7c68, rng, 0.04), { grain: 'x', endTile: TILE.END });
     for (const t of [0, 0.5, 1]) { const q = p0.clone().lerp(p1, t), gy = t === 1 ? gFront - 0.05 : ys - (t * treads + 0.5) * rh; sbox(b, a - 0.03, a + 0.03, gy, q.y, q.z - 0.03, q.z + 0.03, TILE.WOOD, tone(0x8a7c68, rng, 0.04), { grain: 'y' }); }
+    if (walled[i]) { // the newel post at the foot (the walker's round end of the wall)
+      const na = ca + side * (sw + 0.04), nb = s1 + treads * run - NEWEL;
+      b.cyl(V(na, g(na, nb) - 0.1, nb), V(na, gFront + rh + 0.98, nb), 0.07, 0.07, 8, TILE.WOOD, tone(0x8a7c68, rng, 0.04), { cap1: true, capTile: TILE.END });
+    }
   }
   return out;
 }
@@ -1617,7 +1648,7 @@ function clearYards(e, list, size) {
 function storeSite(ctx, F, ep, dock, pd) {
   const lawn = 31, steps = (floorY, ao, b0) => {
     const ys = floorY - 0.04, front = b0 + ST.hD + pd, rise = ys - F.G(ao + DOOR.a, front + 0.4);
-    return front + Math.max(0, Math.ceil(rise / STEP_RISE) - 1) * STEP_RUN;
+    return front + Math.max(0, Math.ceil(rise / SITE_RISE) - 1) * STEP_RUN; // (the riser the sites were chosen with: a store stays where it stood)
   };
   let best = null;
   for (let b0 = -10.5; b0 >= -26; b0 -= 1) for (const ao of [0, -2.5, 2.5, -5, 5, -7.5, 7.5, -10, 10]) {
@@ -1717,17 +1748,25 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   }
   // the walker: the walls (a gap at the door), the floor and the porch or stoop and each step to stand on, what stands
   // inside, the porch posts, the woodpile, the rack
-  const box = (a0, a1, c0, c1, top) => {
+  // (fb2 C, with stream E's player.js: the floor and the deck are `store`, each tread `stair` and the flight's side walls
+  // and the rails `wall`, with a top at their real height for the camera: none of them is vaulted or climbed)
+  const box = (a0, a1, c0, c1, top, tag = null) => {
     const [x, z] = F.W(ao + (a0 + a1) / 2, b0 + (c0 + c1) / 2), o = { x, z, ux: X.x, uz: X.z, hx: Math.abs(a1 - a0) / 2, hz: Math.abs(c1 - c0) / 2, box: true };
     if (top !== undefined) o.top = floorY + top;
+    if (tag) o[tag] = true;
     ctx.obstacles.push(o);
   };
   const I = IN;
   box(-ST.hW, DOOR.a0, ST.iD, ST.hD); box(DOOR.a1, ST.hW, ST.iD, ST.hD);
   box(ST.iW, ST.hW, -ST.hD, ST.hD); box(-ST.hW, -ST.iW, -ST.hD, ST.hD); box(-ST.hW, ST.hW, -ST.hD, -ST.iD);
-  box(-ST.hW, ST.hW, -ST.hD, ST.hD, 0);
-  box(pr.deck[0], pr.deck[1], pr.deck[2], pr.deck[3], -0.04);
-  for (const t of pr.treads) box(t.a0, t.a1, t.b0, t.b1, t.y);
+  box(-ST.hW, ST.hW, -ST.hD, ST.hD, 0, 'store');
+  box(pr.deck[0], pr.deck[1], pr.deck[2], pr.deck[3], -0.04, 'store');
+  for (const t of pr.treads) box(t.a0, t.a1, t.b0, t.b1, t.y, 'stair');
+  for (const w of pr.walls) {
+    if (!w.r) { box(w.a0, w.a1, w.b0, w.b1, w.top, 'wall'); continue; }
+    const [x, z] = F.W(ao + w.a, b0 + w.b); // the newel post at a wall's foot: round
+    ctx.obstacles.push({ x, z, r: w.r, top: floorY + w.top, wall: true });
+  }
   for (const g of [I.food, I.tackle]) box(g.a - g.d / 2, g.a + g.d / 2, g.b0, g.b1 + (g.rack || 0));
   box(I.gear.a0, I.gear.a1, I.gear.b0, I.gear.b1);
   box(I.maps.a0, I.maps.a1, I.maps.b0, I.maps.b1);
@@ -1738,7 +1777,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   { const [x, z] = F.W(ao + I.chair.a, b0 + I.chair.b); ctx.obstacles.push({ x, z, r: 0.26 }); }
   for (const [a, c] of pr.posts) { const [x, z] = F.W(ao + a, b0 + c); ctx.obstacles.push({ x, z, r: 0.08 }); }
   if (pr.bench) box(...pr.bench);
-  for (const r of pr.rails) box(...r);
+  for (const r of pr.rails) box(r[0], r[1], r[2], r[3], r[4], 'wall');
   box(...pile);
   pieces.push(...buildRack(ctx, F, rng, ao + (ao > 1 ? ST.hW + 2.3 : -(ST.hW + 2.3)), b0 + 1.2));
   // the yard: the store and its porch, steps, rack and woodpile with room round them, and a path down to the dock
@@ -1759,6 +1798,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
   const W2 = (a, c) => { const [x, z] = F.W(ao + a, b0 + c); return { x, z }; };
   const at3 = (a, y, c) => { const [x, z] = F.W(ao + a, b0 + c); return { x, y: floorY + y, z }; };
   const heading = (da, dc) => { const dx = X.x * da + Z.x * dc, dz = X.z * da + Z.z * dc; return Math.atan2(-dz, dx); };
+  const hot = (key, a0, a1, y0, y1, c0, c1) => { const [x, z] = F.W(ao + (a0 + a1) / 2, b0 + (c0 + c1) / 2); return { key, x, z, y: floorY + (y0 + y1) / 2, hx: (a1 - a0) / 2, hy: (y1 - y0) / 2, hz: (c1 - c0) / 2, heading: heading(1, 0) }; };
   const L = {
     ep: ep.ep, name, look, floorY, site, centre: { x: cx, z: cz }, front: heading(0, 1), axes: { a: { x: X.x, z: X.z }, b: { x: Z.x, z: Z.z } }, size: { hW: ST.hW, hD: ST.hD, iW: ST.iW, iD: ST.iD },
     inside: (x, z) => { const dx = x - cx, dz = z - cz, a = dx * X.x + dz * X.z, c = dx * Z.x + dz * Z.z; return Math.abs(a) < ST.iW && Math.abs(c) < ST.iD; },
@@ -1776,7 +1816,23 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
     lamp: at3(I.lamp.a, I.lamp.y, I.lamp.b),
     dockSide: (() => { const [x, z] = F.W(dock.hw + 1.3, dock.len * 0.65); return { x, z }; })(),
     dockLand: (() => { const [x, z] = F.W(0, dock.back + 0.5); return { x, z }; })(),
-    stepsFoot: W2(DOOR.a, pr.foot + 0.6),
+    // fb2 C: tying up at the dock (outfitter.js): where you step out onto its deck beside a canoe tied at dockSide, and
+    // the way the dock runs out to the water (a heading, as player.heading's)
+    dockDeck: (() => { const [x, z] = F.W(dock.hw - 0.45, dock.len * 0.65); return { x, z, y: dock.deckY }; })(),
+    dockHeading: Math.atan2(-F.Z.z, F.Z.x),
+    stepsFoot: W2(pr.ca, pr.foot + 0.6),
+    stairs: { low: pr.low, width: +pr.width.toFixed(2), treads: pr.treads.length, rise: pr.treads.length ? +(pr.treads[0].y - (pr.treads[1] ? pr.treads[1].y : pr.treads[0].y - 0.15)).toFixed(3) : 0, walled: pr.walls.filter((w) => w.r).length }, // fb2 C
+    // fb2 C: what E opens in the store, as boxes for the pointer (pointer.js: centre x, y, z, half sizes hx along the
+    // store's a, hy up, hz along its b, turned `heading`): the whole of each shelf unit, so it opens from either side
+    hot: [
+      hot('food', I.food.a - I.food.d / 2, I.food.a + I.food.d / 2, 0, I.food.h + 0.12, I.food.b0, I.food.b1),
+      hot('tackle', I.tackle.a - I.tackle.d / 2, I.tackle.a + I.tackle.d / 2, 0, I.tackle.h + 0.12, I.tackle.b0, I.tackle.b1 + I.tackle.rack),
+      hot('gear', I.gear.a0, I.gear.a1, 0, I.gear.h, I.gear.b0, I.gear.b1),
+      hot('wall', -ST.iW, -ST.iW + 0.14, I.pegs.y0 - 0.05, I.pegs.y1 + 0.05, I.pegs.b0, I.pegs.b1),
+      hot('board', ST.iW - 0.1, ST.iW, B.y0 - 0.05, B.y1 + 0.05, B.b0, B.b1),
+      hot('maps', I.maps.a0, I.maps.a1, 0, I.maps.h + 0.06, I.maps.b0, I.maps.b1),
+      hot('counter', I.counter.a0, I.counter.a1, 0, I.counter.h + 0.06, I.counter.b0, I.counter.b1),
+    ],
     boardCanvas: cv, boardTex: tex, mesh, glass,
   };
   stores.set(ep.ep, L);

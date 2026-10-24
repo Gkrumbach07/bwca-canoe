@@ -25,29 +25,32 @@ const KEYMAP = [
   ['On the water', [
     [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'turn the hull while held, as sweep strokes'],
     [['Shift'], 'hustle'], [['Space'], 'brace in a sea (you cannot paddle while bracing)'],
-    [['E'], 'go ashore · portage at a landing · the outfitter at a dock · pick up a find · right the canoe after a capsize'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
-    [['I'], 'eat from the pack, when you are still: a snack as it is, a meal or a fish cooked first'], [['H'], 'the headlamp (afloat or on foot)'],
+    [['E'], 'go ashore · portage at a landing · at an outfitter’s dock, come alongside and step up onto the deck · pick up a find · right the canoe after a capsize'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
+    [['I'], 'the book at the pack: right-click food to eat it (a snack as it is; a meal or a fish is cooked on a fire’s grate first)'], [['H'], 'the headlamp (afloat or on foot)'],
   ]],
-  ['On foot', [
+  ['On foot: the dot', [
     [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'],
     [['Space'], 'walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m; otherwise a hop · with the canoe overhead you only stagger'],
-    [['E'], 'pick up a pack, a barrel or a thing on the ground · at the canoe: load what you carry, launch; with things set out about it, hold to load everything here · set a carried canoe down'],
-    [['Q'], 'set down what you carry · shoulder a canoe on the ground · at the canoe: launch and leave what is set out · at a trail head: take one more pack, or fetch what is left'],
+    [['E'], 'what the dot in the middle of the view points at, within reach (its rim and its word show under the dot): pick it up (wood, a pack, a barrel, a thing on the ground), talk, open (a shelf, the board, the map table, the counter, or the book at a camp’s fire ring, tent or latrine), get in the canoe. Pointed at nothing, E does nothing · with the canoe overhead: launch, or set it down'],
+    [['Q'], 'only travel: leave the canoe where you stepped out · shoulder a canoe lying by · at a trail head, fetch what is left · with the canoe overhead, take one more thing too, set it down, or launch and leave what is left. Nothing is dropped on Q: things go down from the book’s Ground area'],
     [['W'], 'past your depth: swim (Shift harder) · Space climbs out onto a rock, a dock or the bank · E at the canoe climbs in'],
   ]],
   ['At an outfitter', [
-    [['E'], 'at the dock: tie up and go in · inside: the counter (the permit, a bunk, a ride), the board, or a shelf, the lure wall or the map table you face: yours on the left, theirs on the right'],
-    [['Q'], 'at the dock: the counter straight from the water · at the counter: a word with the keeper'],
+    [['E'], 'from the water at the dock: alongside, and up onto the deck; walk up the steps and in · inside, point at the counter (a bunk, a ride up the road, the season permit, claims), the cork board, a shelf (from either side), the lure wall or the map table: yours on the left, theirs on the right'],
+    [['Q'], 'at the counter: a word with the keeper'],
+    [['M'], 'in a store or at its map table: the whole Boundary Waters with the sheets dotted over it, “$8 here” at this table and “✓ yours” in ink. A sheet bought is yours for the season, never carried'],
+    [[], 'a trip begins as you push off from an outfitter’s dock and ends by itself when you come in on foot at any outfitter’s landing: the logbook says “came in”'],
   ]],
   ['People', [
-    [['E'], 'talk to someone you face (again: their task) · choose with 1–9 or a click, Esc to leave'], [['T'], 'what was said: the last six lines'],
+    [['E'], 'talk to someone the dot is on (again: their task) · choose with 1–9 or a click, Esc to leave'], [['T'], 'what was said: the last six lines'],
   ]],
-  ['At camp', [
-    [['E'], 'held, a ring filling on the action line (let go and it stops where it got to, hold again to carry on): pitch the tent where its ghost stands green, phase by phase · strike it by day · lay and light the fire, put it out · hang the barrel from a tree, let it down · the latrine · the saw at a down log'],
-    [['E'], 'a tap: pick up a dead branch or a short log into your arms · at a burning fire: feed it, put the pot on (a fish, or the meal of the hour with water from the bottle), eat what is in it on the bench · fill the bottle · sleep at the tent · berries and mushrooms in season'],
-    [['Q'], 'at the ring with wood in your arms: stack it on the woodpile · at a half-pitched tent: take it down (held) · at night: strike the tent (held), or with no fly on, sleep without it'],
-    [['←', '→'], 'standing at the tent in the evening: when to wake (first light, 7:00, 9:00); E turns in, Esc not yet'],
-    [['I'], 'cook a raw meal from the book at a burning fire (Use), keep what is cooked as leftovers · nothing at camp is struck, put out or packed for you: what you leave stays'],
+  ['At camp: the book is the workbench', [
+    [['I'], 'near a camp’s things the pack side shows them as panels beside your own: the fire ring (Fuel, the grate, the ash; Light, Cook, Douse), your tent (Strike, Sleep), the latrine (Use), a hung barrel (Lower), the water’s edge (Fill the bottle), the canoe (Load everything here). E at a fire ring, tent or latrine opens the book at its panel'],
+    [['drag'], 'wood into the fire’s Fuel (a branch burns short, a log long, a branch catches on hot coals) · a pot, a meal or a fish onto the grate · a pack or a barrel by its strap to your back, chest, a hand, the canoe or the ground · anything onto the Ground area to set it down at your feet (wood alone makes a woodpile)'],
+    [['hold'], 'a held button (Light, Douse, Strike, Lower, Carry on pitching, the saw) works while the mouse is held on it, its ring filling; let go and it stops where it got to'],
+    [['right-click'], 'a thing in the book: Pitch (a tent), Hang it from a tree (a blue barrel, standing under a big pine or a birch), Eat it, and the rest'],
+    [['click', 'E'], 'held, with a tent’s ghost or a barrel’s rope out: place it where the dot is and work through the phases (the ghost green where it can stand) · Esc or a right-click puts it away'],
+    [['←', '→'], 'the wake-time card at Sleep: when to wake (first light, 7:00, 9:00); E turns in, Esc not yet · nothing at camp is struck, put out or packed for you: what you leave stays'],
   ]],
   ['The camera', [
     [['C'], 'raise it (the $25 35 mm, or the disposable a photo notice lends) · C or Esc lowers it'], [['wheel'], 'zoom from a normal lens to a long one (Q and E held too)'],
@@ -58,10 +61,12 @@ const KEYMAP = [
     [['1', '2', '…'], 'change the lure: the ones you have with you, in the strip’s order'], [['E', 'K'], 'let the fish go · keep it on the stringer'],
   ]],
   ['Looking', [
-    [['Tab'], 'hold for the readout: where, water, way, wind, light, pack, tasks · in the book: the other side'], [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in)'],
+    [['Tab'], 'hold for the readout: where, water, way, wind, light, energy (what holds it down), pack, tasks · in the book: the other side'],
+    [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in): in the wild only the sheets you own, blank paper elsewhere (with none, you and a compass); at an outfitter the whole map'],
     [['J'], 'the book: the journal (the trip, catches, tasks, lakes, trips, photos), and the pack with Tab (L opens it too)'],
-    [['I'], 'the book at the pack: what you carry and what is in reach, to move, eat or use (drag, R turns, right-click)'], [['V'], 'from the paddler’s seat · behind the canoe'],
-    [['mouse'], 'look: in first person and on foot the first key or click takes the mouse and it turns you at once; behind the canoe, drag to orbit, wheel to zoom'], [['Esc'], 'frees the mouse when it is taken, otherwise this menu'],
+    [['I'], 'the book at the pack: what you carry, what is in reach and what is near, to move, eat or use (drag, R turns, right-click, held buttons)'], [['V'], 'from the paddler’s seat · behind the canoe'],
+    [['mouse'], 'look: in first person and on foot the first key or click takes the mouse and it turns you at once (on foot the dot sits in the middle of the view); behind the canoe, drag to orbit, wheel to zoom'], [['Esc'], 'frees the mouse when it is taken, puts away a tent’s ghost or a barrel’s rope, otherwise this menu'],
+    [[], 'the energy bar, top left when it matters: green is the energy you have; the chunks at its end are what each need takes off how high it can go: cold (a snowflake, dotted pale blue), sleep (zz, orange), hunger (a fork and knife, yellow), thirst (a drop, blue), dashed while growing'],
   ]],
   ['The clock and the weather', [
     [['1', '2', '3'], 'game speed 1× 2× 4×, on top of the pace (Settings › Controls; when the rod is down)'], [['[', ']'], 'time of day back, forward an hour (Sandbox)'], [['-', '='], 'the date back, forward a day, Shift a month (Sandbox)'],

@@ -20,6 +20,8 @@ const PENCIL = [
   'lay over tomorrow if the wind holds',
 ];
 const SIDES = ['journal', 'pack'];
+// what lifts the energy bar's ceiling, by the need whose chunk is biggest (energy.chunks)
+const LIFTS = { rest: 'a night’s sleep lifts it', food: 'a meal lifts it', water: 'a drink lifts it', warmth: 'a fire, or the tent and the bag, lift it' };
 
 export class Journal {
   // t: { hud, world, player, day, fishing, tasks, energy, outfitter, stats, wind, onUse }
@@ -33,7 +35,7 @@ export class Journal {
     this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button></div>
       <div class="book-key"><kbd>Tab</kbd> turns to the other side</div><div class="side j"></div><div class="side p"></div>`;
     this.jEl = this.el.querySelector('.side.j'); this.pEl = this.el.querySelector('.side.p');
-    this.pack = new PackSide(this.pEl, { onUse: t.onUse || null });
+    this.pack = new PackSide(this.pEl, { onUse: t.onUse || null, closeBook: () => this.close() }); // fb2 B: a nearby thing's action that wants the world (Pitch, Eat at the fire) closes the book first
     this.hud.registerPaper('journal', () => this.close());
     this.el.addEventListener('click', (e) => {
       const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); return; }
@@ -164,7 +166,11 @@ export class Journal {
     const foodTxt = !active ? 'no trip under way' : sand ? `the pack keeps · ${meal}` : words ? `${words === 'no food' ? 'nothing to eat' : words} within reach · eaten from the pack` : `${fmtDays(left)} ${left <= 1 ? 'day' : 'days'} of ${total} · ${meal}`;
     const ev = en ? Math.round(en.value * 100) : 100;
     const cap = en ? Math.round(en.ceiling * 100) : 100;
-    const energyTxt = en && en.warning ? 'no food and little left in you' : adv && cap < 100 && ev >= cap - 2 ? `rest goes no higher now · only sleep fills it` : ev > 60 ? 'resting brings it back, faster at a campsite' : ev > 30 ? 'getting low · a meal or a rest at a campsite' : 'worn out · eat, or sit a while';
+    // at its ceiling the bar goes no higher until the need that holds it down is met (fb2 F: the ceiling is the bar less
+    // each need's chunk, sleep, hunger, thirst and cold): the biggest chunk says what lifts it
+    const top = en && typeof en.chunks === 'function' ? en.chunks().reduce((a, c) => (!a || c.size > a.size ? c : a), null) : null;
+    const lifts = top && top.size > 0.01 ? ` · ${LIFTS[top.key] || 'a night’s sleep lifts it'}` : '';
+    const energyTxt = en && en.warning ? 'no food and little left in you' : adv && cap < 100 && ev >= cap - 2 ? `${(en && en.heldBy) || 'it goes no higher now'}${lifts}` : ev > 60 ? 'resting brings it back, faster at a campsite' : ev > 30 ? 'getting low · a meal or a rest at a campsite' : 'worn out · eat, or sit a while';
     const drops = st ? st.drops : 0;
     const dropTxt = drops === 0 ? '' : drops === 1 ? ' · the canoe dropped once' : drops === 2 ? ' · the canoe dropped twice' : ` · the canoe dropped ${drops} times`;
     const nights = st ? st.nights : [];
@@ -271,7 +277,7 @@ export class Journal {
     const counts = `${seen.lakes.length} ${plural(seen.lakes.length, 'lake')}, ${seen.camps.length} ${plural(seen.camps.length, 'campsite')} and ${seen.portages.length} ${plural(seen.portages.length, 'portage')} seen${pr ? `; ${known} of ${all} outfitters known` : `, ${seen.eps.length} ${plural(seen.eps.length, 'landing')}`}.`;
     const inN = book.trips.filter((t) => t.k === 'completed' || t.k === 'late').length;
     const html = `<div class="lede"><h2 id="right-h">${book.trips.length ? `${book.trips.length} ${plural(book.trips.length, 'trip')}, ${inN ? word(inN) : 'none'} came in` : 'No trips logged yet'}</h2><div class="sub">${counts}</div></div>
-      ${trips.length ? `<div class="scroll"><table><thead><tr><th>Pushed off</th><th>From</th><th>Days</th><th>Paddled</th><th>How it ended</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">A trip is logged when you call it at a counter, or when someone brings you in.</div>'}`;
+      ${trips.length ? `<div class="scroll"><table><thead><tr><th>Pushed off</th><th>From</th><th>Days</th><th>Paddled</th><th>How it ended</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">A trip is logged by itself when you come in at an outfitter’s landing, or when someone brings you in.</div>'}`;
     const more = trips.length - (this.page + 1) * ROWS;
     const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'what you have seen stays seen';
     return { html, foot };

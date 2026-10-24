@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
-import { sheets, sheetAt } from './sheets.js'; // hubs 2D: the map sheets you own and where you have been
+import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
 import { lifeKmh } from './pace.js';
 import './hud.css';
 
@@ -15,9 +15,11 @@ import './hud.css';
 // rim, red dashed portages with rod counts, red campsite dots, serif lake names): a glance that slides up
 // from the bottom right while M is held, the full sheet when M is pressed (drag to pan, wheel to zoom, click
 // to drop a pin; a pencil note asks before the canoe is moved), or a small corner sheet that stays up when
-// asked for. In Adventure the campsites, portages and soundings show only on the map sheets you own (their edges
-// lightly ruled) and in a soft corridor around where you have been, with a light wash of paper over the country
-// beyond (sheets.js); the lakes and their names always show. The journal (journal.js) and the outfitter's counter
+// asked for. What the map shows follows the sheets (sheets.js view; the owner's second feedback of 2026-10-24): at an
+// outfitter (inside its store, at its counter or its map table, maptable.js) the whole Boundary Waters, with the
+// printed sheets dotted over it, yours ruled in ink; in the wild only the sheets you own, with everything on them
+// and cut to their neatlines, and blank paper elsewhere (no lakes, no names: with no sheets, only you and the north
+// arrow); Sandbox everything. The journal (journal.js) and the outfitter's counter
 // (outfitter.js) are paper too; one paper object is up at a time, on a scrim, and the HUD keeps the register of which.
 
 const GLANCE_SPAN = 5000;    // metres across the glance and the corner sheet
@@ -32,8 +34,10 @@ const WATER = [184, 208, 216], RIM = [84, 118, 136];
 const TINT_LOW = [224, 216, 182], TINT_HIGH = [160, 166, 112];
 const BANDS = 14;
 const PAPER = '#e9e1cc';
-const WASH = 0.22;           // the paper laid over country you know nothing of (Adventure)
 const NEAT = 'rgba(74, 59, 38, 0.55)', FOLD = 'rgba(74, 59, 38, 0.4)'; // an owned sheet's neatline, and where two of yours meet
+// fb2 D: the printed sheets over the whole map (at an outfitter): yours ruled in ink, the rest dotted, red where this
+// table sells it
+const OWN_LINE = 'rgba(42, 52, 30, 0.85)', DOT_LINE = 'rgba(74, 59, 38, 0.72)', SOLD_DOT = 'rgba(180, 50, 31, 0.9)';
 const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
 const PENCIL = 'Caveat, "Bradley Hand", "Segoe Print", cursive'; // the pencil hand (index.html --pencil-font)
 // what a keeper's ring on the map is for, in the pencil hand (outfitters.js hint kinds)
@@ -46,6 +50,25 @@ const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const COMPASS_LONG = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+// fb2 F: the energy bar's needs in its order (energy.js NEED_KEYS), its width (hud.css #energy) and the needs' icons,
+// 16 px, drawn in currentColor: a snowflake, zz, a fork and knife, a drop
+const NEEDS = ['warmth', 'rest', 'food', 'water'];
+const ENERGY_W = 360;
+const flake = () => {
+  let d = '';
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3, cx = Math.sin(a), cy = -Math.cos(a), at = (r) => `${(8 + cx * r).toFixed(2)} ${(8 + cy * r).toFixed(2)}`;
+    const tick = (sg) => { const b = a + sg * 0.75; return `${(8 + cx * 4.3 + Math.sin(b) * 2.3).toFixed(2)} ${(8 + cy * 4.3 - Math.cos(b) * 2.3).toFixed(2)}`; };
+    d += `M8 8L${at(6.6)}M${tick(1)}L${at(4.3)}L${tick(-1)}`;
+  }
+  return d;
+};
+const NEED_ICON = {
+  warmth: `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="${flake()}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  rest: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 7.5h6l-6 6.5h6M9.5 2h5l-5 5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="square"/></svg>',
+  food: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v4.2M5.25 1.5v4.2M7.5 1.5v4.2M3 5.7c0 1.9 4.5 1.9 4.5 0M5.25 7v7.5M12 14.5V1.5c2.2 1.3 2.6 5.6 0 7.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  water: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2C8 1.2 3 7 3 10a5 5 0 0 0 10 0C13 7 8 1.2 8 1.2Z" fill="currentColor"/><path d="M5.6 10.2a2.5 2.5 0 0 0 1.9 2.4" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2" stroke-linecap="round"/></svg>',
+};
 
 // --- time and words ----------------------------------------------------------------------------------------
 export function clock12(hours) {
@@ -116,6 +139,8 @@ function msSegments(b, top, right, bottom, left) {
 }
 
 const $ = (id) => document.getElementById(id);
+// letter-spaced capitals for the map's lettering (hair spaces between the letters)
+const spaced = (s) => String(s).split('').join(String.fromCharCode(8202));
 
 
 export class Hud {
@@ -170,6 +195,7 @@ export class Hud {
     this.bindMap();
     this.bindKeys();
     this.marksBuild();
+    this.energyBuild(); // fb2 F: the energy bar
     window.addEventListener('resize', () => { this.sizeCanvas(); this.placeConfirm(); });
   }
   // for the title screen: is anything of paper up (its Esc belongs to the paper, not the menu)
@@ -246,6 +272,7 @@ export class Hud {
       if (this.mode === 'sheet') c.classList.add('grabbing');
     });
     c.addEventListener('pointermove', (e) => {
+      if (!drag && this.table && this.mode === 'sheet') { const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py); this.table.hoverAt(x, z); return; } // fb2 D: the sheet under the pointer
       if (!drag || this.mode !== 'sheet') return;
       const [px, py] = rectPx(e);
       const dx = px - drag.px, dy = py - drag.py;
@@ -262,6 +289,7 @@ export class Hud {
       if (this.mode !== 'sheet') { this.setMode('sheet'); return; }
       const [px, py] = rectPx(e);
       const [x, z] = this.worldAt(px, py);
+      if (this.table) { this.table.pick(x, z); return; } // fb2 D: at the map table a click picks a sheet
       this.propose(x, z, false);
     };
     c.addEventListener('pointerup', up);
@@ -317,6 +345,7 @@ export class Hud {
       if (was === 'sheet') this.closePaper('map');
       this.view.span = GLANCE_SPAN;
       this.clearPin();
+      if (was === 'sheet' && this.table) { const t = this.table; this.table = null; t.closed(); } // fb2 D: the map table goes with the sheet
     }
     this.sizeCanvas();
     requestAnimationFrame(() => this.sizeCanvas()); // once the sheet has its laid-out size
@@ -341,8 +370,8 @@ export class Hud {
     this.pin = { x, z };
     if (this.mode !== 'sheet') this.setMode('sheet');
     if (recentre) { this.view.cx = x; this.view.cz = z; }
-    const w = this.world, p = this.player, ctx = this.ctx;
-    const name = w.lakeName(w.lakeIdAt(x, z));
+    const w = this.world, p = this.player, ctx = this.ctx, sh = this.sheetsOn;
+    const name = !sh || sh.view() !== 'owned' || sh.showsDetail(x, z) ? w.lakeName(w.lakeIdAt(x, z)) : null; // fb2 D: blank paper names nothing
     const walk = this.pinLocked; // Adventure: the pin measures the way, it does not move you
     let text = 'Paddle in here?';
     if (p) {
@@ -376,7 +405,7 @@ export class Hud {
   // whether every portage on the fewest-portage way from one lake to another is on your map (both its ends shown):
   // the counter of portages in the pin's note is said only then. No sheets attached (or Sandbox): always.
   wayOnMap(tasks, fromLake, toLake) {
-    const sh = this.sheetsOn; if (!sh || !sh.gated || typeof tasks.graph !== 'function') return true;
+    const sh = this.sheetsOn; if (!sh || sh.view() !== 'owned' || typeof tasks.graph !== 'function') return true;
     const a = tasks.basinOf(fromLake), b = tasks.basinOf(toLake), adj = tasks.graph(), prev = new Map([[a, null]]), q = [a];
     for (let h = 0; h < q.length && !prev.has(b); h++) for (const e of adj.get(q[h]) || []) if (!prev.has(e.to)) { prev.set(e.to, { from: q[h], e }); q.push(e.to); }
     if (!prev.has(b)) return false;
@@ -672,6 +701,7 @@ export class Hud {
     this.updateBalance(ctx);
     this.updateFishing(ctx);
     this.updateMarks(ctx);
+    this.updateEnergy(ctx); // fb2 F
     if (this.tab.shown) this.renderReadout();
     if (this.mode !== 'hidden' && !ctx.shell) {
       if (this.mode !== 'sheet') { this.view.cx = player.x; this.view.cz = player.z; this.view.span = GLANCE_SPAN; }
@@ -789,16 +819,16 @@ export class Hud {
 
 
   // the status marks, bottom right at half strength: the pace while it time-lapses the travel ("trip ×4", pace.js), the
-  // time scale, the clock stopped, the trip's when it matters (the food down to a day, the gear wet, a need run low:
-  // tired, hungry or thirsty), the GPS link, mute, tiles loading
+  // time scale, the clock stopped, the trip's when it matters (the food down to a day, the gear wet), the GPS link, mute,
+  // tiles loading. (A need run low is no longer a word here: fb2 F, its chunk and icon on the energy bar say it.)
   marksBuild() {
     const m = this.el.marks; if (!m) return;
     m.innerHTML = `<span id="mark-pace" class="sc"></span><span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
-      + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span><span id="mark-need" class="sc"></span>'
+      + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span>'
       + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
       + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
       + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
-    this.mk = { pace: $('mark-pace'), speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), need: $('mark-need'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+    this.mk = { pace: $('mark-pace'), speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
   }
   updateMarks(ctx) {
     const { ts, geo, day, trip, energy, player } = ctx, mk = this.mk, w = this.world; if (!mk) return;
@@ -820,15 +850,91 @@ export class Hud {
     const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 1 ? (energy.food <= 0 ? (energy.foodWords && energy.foodWords() !== 'no food' ? energy.foodWords() : hung && hung.words ? hung.words : 'no food') : energy.foodWords ? energy.foodWords() : `${foodWords(energy.food)} of food`) : ''; // fb A
     this.set('mfood', mk.food, food); mk.food.classList.toggle('on', !!food);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
-    // hubs 1B: one need mark, only while a need is under 0.3 (energy.low: 'tired', 'hungry' or 'thirsty')
-    const need = adv && energy && energy.low ? energy.low : '';
-    this.set('mneed', mk.need, need); mk.need.classList.toggle('on', !!need);
     mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
     mk.mute.classList.toggle('on', !!(this.settings && this.settings.get('mute')));
     let loading = 0;
     if (w.tiles) { const t = w.tiles; loading = t.queue.length + t.pending.length + t.workers.filter((k) => k.key).length; }
     this.loading = loading;
     mk.tiles.classList.toggle('on', loading > 0);
+  }
+
+  // --- the energy bar (fb2 F) -----------------------------------------------------------------------------------
+  // Wild n Chill's bar, as the owner asked (2026-10-24, second round): one long thin bar, top left in the Air. Green is
+  // the energy you have; the dim track after it, up to the ceiling, is what rest can still bring back; and each need's
+  // chunk eats into it from the right end, in the bar's order cold (pale blue), sleep (orange), hunger (yellow), thirst
+  // (blue): energy.chunks(). A chunk is dashed and marching while it grows faster than its everyday rate (energy.js),
+  // and its icon (snowflake, zz, fork and knife, drop) sits under it while it grows or is a tenth of the bar or more.
+  // Shown only when it matters, as the marks are: on a trip, while a chunk grows, a need is low, the bar is under half,
+  // the ceiling under 0.6 or a chunk other than sleep 0.15 or more, and for a few seconds after it changes (a meal, a
+  // capsize); in Quiet only when it is urgent (a chunk growing, a need low, the bar under a quarter). Hidden at once while
+  // the readout is up (Tab, or always at Full density): its Energy row draws the same bar.
+  energyBuild() {
+    const air = this.el.air; if (!air) return;
+    const el = document.createElement('div');
+    el.id = 'energy'; el.className = 'fade'; el.setAttribute('role', 'img'); el.setAttribute('aria-label', 'Energy');
+    el.innerHTML = `<div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div>`
+      + `<div class="icons">${NEEDS.map((k) => `<span class="icon ${k}">${NEED_ICON[k]}</span>`).join('')}</div>`;
+    air.appendChild(el);
+    const q = (sel) => el.querySelector(sel);
+    this.eb = { el, fill: q('.fill'), room: q('.room'), chunk: {}, icon: {}, ref: null, until: 0, sig: '', top: '' };
+    for (const k of NEEDS) { this.eb.chunk[k] = q(`.chunk.${k}`); this.eb.icon[k] = q(`.icon.${k}`); }
+  }
+  updateEnergy(ctx) {
+    const eb = this.eb; if (!eb) return;
+    const { energy, trip, shell } = ctx, s = this.settings;
+    const on = !!(energy && trip && trip.active && !shell && !this.tab.shown);
+    let show = false;
+    if (on) {
+      const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
+      // the bar: the green, the room up to the ceiling, the chunks laid from the right end (rounded: the DOM is spared)
+      const pct = (x) => `${(Math.round(x * 1000) / 10).toFixed(1)}%`;
+      let sig = `${pct(v)}|${pct(cap)}`, x = 1;
+      const at = {};
+      for (let i = ch.length - 1; i >= 0; i--) { x -= ch[i].size; at[ch[i].key] = x; }
+      for (const c of ch) sig += `|${c.key}${pct(c.size)}${c.growing ? '*' : ''}`;
+      if (sig !== eb.sig) {
+        eb.sig = sig;
+        eb.fill.style.width = pct(Math.min(v, cap + 0.001));
+        eb.room.style.left = pct(Math.min(v, cap)); eb.room.style.width = pct(Math.max(0, cap - v));
+        // the icons under their chunks, nudged apart where chunks are narrow (16 px each, within the bar)
+        const W = ENERGY_W, marks = [];
+        for (const c of ch) {
+          const el = eb.chunk[c.key];
+          el.style.left = pct(at[c.key]); el.style.width = pct(c.size);
+          el.classList.toggle('grow', c.growing);
+          const shown = c.size > 0.004 && (c.growing || c.size >= 0.1);
+          eb.icon[c.key].classList.toggle('on', shown);
+          if (shown) marks.push({ k: c.key, x: (at[c.key] + c.size / 2) * W });
+        }
+        for (let i = 1; i < marks.length; i++) marks[i].x = Math.max(marks[i].x, marks[i - 1].x + 18);
+        for (let i = marks.length - 1; i >= 0; i--) marks[i].x = Math.min(marks[i].x, i === marks.length - 1 ? W - 8 : marks[i + 1].x - 18);
+        for (const m of marks) eb.icon[m.k].style.left = `${Math.max(8, m.x).toFixed(1)}px`;
+        const held = energy.heldBy || '';
+        eb.el.setAttribute('aria-label', `Energy ${Math.round(v * 100)} %${held ? `, ${held}` : ''}`);
+      }
+      // whether it matters now
+      const growing = ch.some((c) => c.growing), low = !!energy.low;
+      const urgent = growing || low || v < 0.25;
+      const ref = eb.ref, now = performance.now();
+      const moved = !ref || Math.abs(v - ref.v) >= 0.1 || ch.some((c) => Math.abs(c.size - (ref.c[c.key] || 0)) >= 0.05);
+      if (moved) { if (ref) eb.until = now + 6000; eb.ref = { v, c: Object.fromEntries(ch.map((c) => [c.key, c.size])) }; }
+      const big = ch.some((c) => c.key !== 'rest' && c.size >= 0.15); // a fifth or so of a need gone (the day's tiredness shows by the ceiling)
+      const density = s ? s.get('density') : 'standard';
+      show = urgent || (density !== 'quiet' && (v < 0.5 || cap < 0.6 || big || now < eb.until));
+      // under the spot card while the rod is up (both keep the top left), measured only when its words change
+      const spot = this.el.spot, words = spot && spot.classList.contains('show') ? `${this.cache.spotWhere}|${this.cache.spotWho}` : '';
+      if (words !== eb.spotWords) { eb.spotWords = words; const top = words ? `${48 + spot.offsetHeight + 22}px` : ''; if (top !== eb.top) { eb.top = top; eb.el.style.top = top; } }
+    } else eb.ref = null;
+    eb.el.classList.toggle('now', this.tab.shown); // gone at once under the readout, which has its own
+    eb.el.classList.toggle('show', show);
+  }
+  // the same bar, small, for the readout's Energy row (no march: the row is redrawn as its numbers change)
+  energyBarHtml(energy) {
+    const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
+    const pct = (x) => `${(Math.round(x * 200) / 2).toFixed(1)}%`;
+    let x = 1, out = '';
+    for (let i = ch.length - 1; i >= 0; i--) { const c = ch[i]; x -= c.size; if (c.size > 0.004) out = `<i class="chunk ${c.key}${c.growing ? ' grow' : ''}" style="left:${pct(x)};width:${pct(c.size)}"></i>${out}`; }
+    return `<span class="ebar" aria-hidden="true"><i class="fill" style="width:${pct(Math.min(v, cap + 0.001))}"></i><i class="room" style="left:${pct(Math.min(v, cap))};width:${pct(Math.max(0, cap - v))}"></i>${out}</span>`;
   }
 
   // --- fishing: the spot card, the reticle, the lure strip, the tension line, the catch card -----------------
@@ -946,7 +1052,7 @@ export class Hud {
       else if (low || (held && cap <= 0.995 && v <= 0.97)) why = ` · ${held}`;
       else if (cap <= 0.995 && v <= 0.97) why = ' · only sleep brings it higher';
       const water = adv && energy.bottleWords ? ` · ${energy.bottleWords()}` : '';
-      row('Energy', `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>${Math.round(v * 100)} %${why}${up}${water}`);
+      row('Energy', `${energy.chunks ? this.energyBarHtml(energy) : `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>`}${Math.round(v * 100)} %${why}${up}${water}`); // fb2 F: the bar with its chunks
       const food = energy.food, sand = !!(core && core.sandbox);
       const meal = energy.inventory ? '' : !sand && food <= 0 ? '' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn'; // fb A: no meals on their own
       const pk = core ? core.state.packs : null;
@@ -972,17 +1078,19 @@ export class Hud {
   }
 
   // --- the map's chrome: the header band, the layer toggles, the footer scale -----------------------------------
-  // what the sheets add to it, made once: whether you have the sheet (after the title), and a legend for your sheets
+  // what the sheets add to it, made once: whether the sheet is yours (after the title), and the legend for the sheets
   mapChromeEl() {
     if (this.chromeEl) return this.chromeEl;
-    const e = this.el, ownDot = document.createElement('span'), own = document.createElement('span'), leg = document.createElement('span');
+    const e = this.el, ownDot = document.createElement('span'), own = document.createElement('span'), leg = document.createElement('span'), legBuy = document.createElement('span');
     ownDot.className = 'dot'; ownDot.textContent = '·'; own.className = 'own';
     e.mapTitle.after(ownDot, own);
     leg.className = 'leg';
-    leg.innerHTML = `<i style="width: 16px; height: 11px; border: 1.3px solid ${NEAT}"></i>a sheet of yours`;
+    leg.innerHTML = `<i style="width: 16px; height: 11px; border: 1.6px solid ${OWN_LINE}"></i>a sheet of yours`;
+    legBuy.className = 'leg';
+    legBuy.innerHTML = `<i style="width: 16px; height: 11px; border: 2px dotted ${DOT_LINE}"></i>a sheet to buy`;
     const you = e.map.querySelector('.band.foot .leg .you');
-    if (you) you.parentNode.before(leg); else if (e.mapHint) e.mapHint.before(leg);
-    this.chromeEl = { own, ownDot, leg };
+    if (you) you.parentNode.before(leg, legBuy); else if (e.mapHint) e.mapHint.before(leg, legBuy);
+    this.chromeEl = { own, ownDot, leg, legBuy };
     return this.chromeEl;
   }
   // the legend's "a keeper's word", once one has been told (drawMap)
@@ -998,28 +1106,45 @@ export class Hud {
     this.hintLeg = leg;
   }
   updateMapChrome() {
-    const e = this.el, w = this.world, v = this.view;
-    const id = this.mode === 'sheet' ? w.lakeIdAt(v.cx, v.cz) || (this.player ? this.player.lakeId : 0) : (this.player ? this.player.lakeId : 0);
-    const name = w.lakeName(id) || 'open country';
-    const sh = this.sheetsOn, gate = !!(sh && sh.gated), sheet = this.mode === 'sheet';
-    if (!sh) { const code = sheetCode(w, v.cx, v.cz); this.set('mtitle', e.mapTitle, sheet ? `Fisher map ${code} · ${name}` : `${code} · ${name}`); }
+    const e = this.el, w = this.world, v = this.view, sheet = this.mode === 'sheet';
+    const sh = this.sheetsOn, look = sh ? sh.view() : 'open', table = this.table;
+    const lakeHere = () => (sheet ? w.lakeIdAt(v.cx, v.cz) || (look === 'owned' ? 0 : this.player ? this.player.lakeId : 0) : (this.player ? this.player.lakeId : 0));
+    if (!sh) { const code = sheetCode(w, v.cx, v.cz), name = w.lakeName(lakeHere()) || 'open country'; this.set('mtitle', e.mapTitle, sheet ? `Fisher map ${code} · ${name}` : `${code} · ${name}`); }
     else {
-      // the sheet under the middle of the view (in the glance, the one you are on), and in Adventure whether you have it
-      const s = sheetAt(v.cx, v.cz);
-      this.set('mtitle', e.mapTitle, s ? (sheet ? `Fisher map ${s.title}` : `${s.id} · ${name}`) : sheet ? `Off the sheets · ${name}` : name);
-      const own = gate && s ? (sh.owned(s.id) ? (sheet ? 'in your map case' : 'your sheet') : (sheet ? 'not in your map case' : 'not your sheet')) : '';
+      // the sheet under the middle of the view (in the glance, the one you are on), and whether it is yours; in the
+      // wild a lake is named only on a sheet of yours
+      const s = table ? sheetById(table.named) : sheetAt(v.cx, v.cz), mine = !!(s && sh.owned(s.id)), none = !sh.ownedSheets().length;
+      const name = look !== 'owned' || mine ? w.lakeName(lakeHere()) || 'open country' : null;
+      let title;
+      if (table) title = s ? `The map table · ${s.title}` : 'The map table · the Boundary Waters';
+      else if (look === 'owned' && none) title = sheet ? 'No sheets yet · blank paper' : 'No sheets yet';
+      else if (look === 'owned' && !mine) title = sheet ? 'Off your sheets · blank paper' : 'Off your sheets';
+      else title = s ? (sheet ? `Fisher map ${s.title}` : `${s.id} · ${name}`) : sheet ? `Off the sheets · ${name}` : name;
+      this.set('mtitle', e.mapTitle, title);
+      const own = s && (look === 'whole' || (look === 'owned' && mine)) ? (mine ? (sheet ? 'yours' : 'your sheet') : 'not yours') : '';
       const el = this.mapChromeEl();
       this.set('mown', el.own, own);
       el.own.style.display = own ? '' : 'none'; el.ownDot.style.display = own ? '' : 'none';
-      el.own.style.color = gate && s && sh.owned(s.id) ? 'var(--ink)' : 'var(--ink-faint)';
-      el.leg.style.display = gate ? '' : 'none';
+      el.own.style.color = mine ? 'var(--ink)' : 'var(--ink-faint)';
+      el.leg.style.display = look === 'whole' || (look === 'owned' && !none) ? '' : 'none';
+      el.legBuy.style.display = look === 'whole' || table ? '' : 'none';
       // the glance and the corner are always 5 km across: there the band says whose sheet it is instead
       const span = !(own && !sheet);
       e.mapSpan.style.display = span ? '' : 'none';
       if (e.mapSpan.previousElementSibling) e.mapSpan.previousElementSibling.style.display = span ? '' : 'none';
     }
-    const detail = gate ? 'campsites, portages and soundings show on your sheets and near where you have been' : 'depths in metres where the DNR has sounded';
-    if (e.mapHint) this.set('mhint', e.mapHint, `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'} · ${detail}`);
+    const none = !!(sh && !sh.ownedSheets().length);
+    // blank paper keys nothing: the portage, campsite, dock and task keys come back with a sheet
+    const bare = look === 'owned' && none;
+    if (this.bareLegs !== bare) {
+      this.bareLegs = bare;
+      for (const i of e.map.querySelectorAll('.band.foot .leg > i.portage, .band.foot .leg > i.camp, .band.foot .leg > i.dock, .band.foot .leg > i.task')) i.parentNode.style.display = bare ? 'none' : '';
+    }
+    const detail = table ? 'click a sheet to see what is on it · the red-dotted ones are sold at this table'
+      : look === 'whole' ? 'the whole Boundary Waters, here at the outfitter · the sheets dotted over it, yours ruled in ink'
+        : look === 'owned' ? (none ? 'blank paper: the map tables at the outfitters sell the sheets, and each one you buy shows here' : 'your sheets, with everything on them · the rest is blank until you buy its sheet')
+          : 'depths in metres where the DNR has sounded';
+    if (e.mapHint) this.set('mhint', e.mapHint, table ? `drag to pan · wheel to zoom · ${detail}` : `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'} · ${detail}`);
     this.set('mspan', e.mapSpan, `${v.span >= 10000 ? Math.round(v.span / 1000) : (v.span / 1000).toFixed(v.span < 5000 ? 1 : 0)} km across`);
     if (this.mode === 'sheet' && this.scaleInfo) {
       const { bar, cssPx } = this.scaleInfo, txt = `${bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}`;
@@ -1032,37 +1157,8 @@ export class Hud {
   // --- the sheet itself ------------------------------------------------------------------------------------------
   // the map sheets (sheets.js), once main.js has attached them to the season; null draws every detail, as before
   get sheetsOn() { return sheets.profile ? sheets : null; }
-  // a canvas the size of the map, kept from frame to frame
-  mapLayer(name, W, H) {
-    const L = this.paperLayers || (this.paperLayers = {});
-    const c = L[name] || (L[name] = document.createElement('canvas'));
-    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
-    return c.getContext('2d');
-  }
-  // Keeps the detail layer only where you know the water, lays a light wash of paper over the rest, and puts the
-  // detail on the sheet. What you know: the corridor of where you have been, soft at its edge (sheets.js's mask, the
-  // part under the view scaled up with smoothing), and the sheets you own, crisp to their neatlines.
-  keepKnown(ctx, d, sh, owned, x0, z0, spanX, spanZ, mPerPx, W, H) {
-    const m = this.mapLayer('mask', W, H), mk = sh.mask(), iw = mk.canvas.width, ih = mk.canvas.height;
-    m.globalCompositeOperation = 'source-over'; m.clearRect(0, 0, W, H);
-    m.imageSmoothingEnabled = true; m.imageSmoothingQuality = 'high';
-    let sx = (x0 - mk.x0) / mk.mPerPx, sy = (z0 - mk.z0) / mk.mPerPx, sw = spanX / mk.mPerPx, sh2 = spanZ / mk.mPerPx;
-    const f = W / sw; // map pixels per mask pixel
-    let dx = 0, dy = 0, dw = W, dh = H;
-    if (sx < 0) { dx = -sx * f; dw -= dx; sw += sx; sx = 0; }
-    if (sy < 0) { dy = -sy * f; dh -= dy; sh2 += sy; sy = 0; }
-    if (sx + sw > iw) { const cut = sx + sw - iw; sw -= cut; dw -= cut * f; }
-    if (sy + sh2 > ih) { const cut = sy + sh2 - ih; sh2 -= cut; dh -= cut * f; }
-    if (sw > 0 && sh2 > 0 && dw > 0 && dh > 0) m.drawImage(mk.canvas, sx, sy, sw, sh2, dx, dy, dw, dh);
-    m.fillStyle = '#fff';
-    for (const s of owned) m.fillRect((s.x0 - x0) / mPerPx, (s.z0 - z0) / mPerPx, (s.x1 - s.x0) / mPerPx, (s.z1 - s.z0) / mPerPx);
-    d.globalCompositeOperation = 'destination-in'; d.drawImage(m.canvas, 0, 0); d.globalCompositeOperation = 'source-over';
-    m.globalCompositeOperation = 'source-out'; m.fillStyle = PAPER; m.fillRect(0, 0, W, H); m.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = WASH; ctx.drawImage(m.canvas, 0, 0); ctx.globalAlpha = 1;
-    ctx.drawImage(d.canvas, 0, 0);
-  }
-  // The edges of the sheets you own, lightly: a thin ink neatline, a fainter fold where two of yours meet, and the
-  // sheet's number and lakes in small letter-spaced capitals in its margin.
+  // The edges of the sheets you own, in the wild: a thin ink neatline, a fainter fold where two of yours meet, and
+  // the sheet's number and lakes in small letter-spaced capitals in its margin.
   drawNeatlines(ctx, sh, owned, toPx, k) {
     if (!owned.length) return;
     const W = this.canvas.width, H = this.canvas.height;
@@ -1088,13 +1184,59 @@ export class Hud {
       // the edge is near the top), else just outside the south edge; on a sheet wide enough to carry it
       const top = b >= 0 && b <= H - 30 * k, bottom = !top && e >= 30 * k && e <= H;
       if (c - a < 260 * k || (!top && !bottom)) continue;
-      const text = `${s.id} · ${s.name}`.toUpperCase().split('').join(String.fromCharCode(8202));
+      const text = spaced(`${s.id} · ${s.name}`);
       const out = top ? b >= 22 * k : e <= H - 22 * k, y = top ? (out ? b - 6 * k : b + 6 * k) : (out ? e + 6 * k : e - 6 * k);
       ctx.font = `600 ${10.5 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.textBaseline = top === out ? 'bottom' : 'top';
       const tw = ctx.measureText(text).width, lx = clamp(a + 10 * k, 10 * k, Math.min(W, c) - tw - 10 * k);
       if (lx < a + 4 * k || lx + tw > c - 4 * k) continue;
       ctx.lineWidth = 3.5 * k; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(233, 225, 204, 0.9)'; ctx.strokeText(text, lx, y);
       ctx.fillStyle = 'rgba(74, 59, 38, 0.78)'; ctx.fillText(text, lx, y);
+    }
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+  }
+  // The printed sheets over the whole map, at an outfitter and at its map table: each sheet's edge dotted, ruled in
+  // ink where it is yours, and in its corner its number, its lakes and whether it is yours (at the table, its price
+  // here, or where it is sold). The map table's pick and the sheet under the pointer are washed red.
+  drawSheetGrid(ctx, sh, toPx, inView, k) {
+    const t = this.table, sel = t ? t.selected : null, hov = t ? t.hover : null;
+    const here = t ? t.stockIds : sh ? sh.hereIds() : null;
+    ctx.save();
+    for (const s of SHEETS) {
+      if (!inView(s.x0, s.z0, s.x1, s.z1)) continue;
+      const [a, b] = toPx(s.x0, s.z0), [c, e] = toPx(s.x1, s.z1), w = c - a, h = e - b;
+      const mine = !!(sh && sh.owned(s.id)), sold = !!(here && here.has(s.id)), pick = s.id === sel, lit = pick || s.id === hov;
+      if (lit) { ctx.fillStyle = pick ? 'rgba(192, 57, 43, 0.11)' : 'rgba(192, 57, 43, 0.06)'; ctx.fillRect(a, b, w, h); }
+      // neighbours' edges sit side by side a hair apart, not on top of each other
+      const inset = 2 * k;
+      ctx.beginPath(); ctx.rect(a + inset, b + inset, w - 2 * inset, h - 2 * inset);
+      if (mine) { ctx.setLineDash([]); ctx.lineCap = 'butt'; ctx.strokeStyle = OWN_LINE; ctx.lineWidth = (pick ? 2.6 : 1.9) * k; }
+      else { ctx.setLineDash([0.01, (sold ? 5.5 : 6.5) * k]); ctx.lineCap = 'round'; ctx.strokeStyle = sold || pick ? SOLD_DOT : DOT_LINE; ctx.lineWidth = (sold || pick ? 3 : 2.3) * k; }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // the corner label in the part of the sheet in view: the number, the lakes where it is wide enough, and yours /
+      // its price / where it is sold
+      const vw = Math.min(c, this.canvas.width) - Math.max(a, 0), vh = Math.min(e, this.canvas.height) - Math.max(b, 0);
+      if (w < 44 * k || vw < 60 * k || vh < 64 * k) continue;
+      const lx = Math.max(a, 0) + 9 * k, ly = Math.max(b, 0) + 9 * k;
+      const status = mine ? 'yours' : t ? (sold ? t.priceWords(s.id) : t.soldWords(s.id)) : sold ? 'sold here' : '';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+      const halo = (txt, x, y) => { ctx.lineWidth = 3.5 * k; ctx.strokeStyle = 'rgba(233, 225, 204, 0.92)'; ctx.strokeText(txt, x, y); ctx.fillText(txt, x, y); };
+      const big = vw > 150 * k, room = Math.min(c, this.canvas.width) - lx - 9 * k;
+      ctx.font = `700 ${(big ? 15 : 12) * k}px ${SERIF}`; ctx.fillStyle = mine ? 'rgba(42, 32, 22, 0.92)' : sold || pick ? 'rgba(160, 45, 30, 0.95)' : 'rgba(74, 59, 38, 0.8)';
+      halo(s.id, lx, ly);
+      let y = ly + (big ? 18 : 15) * k;
+      if (big) {
+        ctx.font = `600 ${9.5 * k}px ${SERIF}`; ctx.fillStyle = 'rgba(74, 59, 38, 0.82)';
+        let name = spaced(s.name.toUpperCase());
+        while (name.length > 4 && ctx.measureText(name).width > room) name = `${name.slice(0, -3)}…`;
+        halo(name, lx, y); y += 13 * k;
+      }
+      if (status && vw > 70 * k) {
+        ctx.font = `600 ${(big ? 15 : 13) * k}px ${PENCIL}`;
+        ctx.fillStyle = mine ? 'rgba(42, 52, 30, 0.92)' : sold ? 'rgba(160, 45, 30, 0.95)' : 'rgba(74, 64, 54, 0.75)';
+        halo(mine ? `✓ ${status}` : status, lx, y);
+      }
     }
     ctx.textBaseline = 'alphabetic';
     ctx.restore();
@@ -1109,158 +1251,183 @@ export class Hud {
     const sheet = this.mode === 'sheet', lay = this.layers;
     const toPx = (x, z) => [(x - x0) / mPerPx, (z - z0) / mPerPx];
     const inView = (ax, az, bx, bz) => !(bx < x0 || ax > x0 + spanX || bz < z0 || az > z0 + spanZ);
+    // What the map may show (sheets.js view): Sandbox everything; at an outfitter the whole wilderness, the sheets dotted
+    // over it; in the wild only the sheets you own, everything on them cut to their neatlines, and blank paper round
+    // them (with none in view, only you and the north arrow).
+    const sh = this.sheetsOn, look = sh ? sh.view() : 'open';
+    const clipped = look === 'owned', owned = clipped ? sh.ownedSheets().filter((s) => inView(s.x0, s.z0, s.x1, s.z1)) : [];
+    const blank = clipped && !owned.length;
+    const onMine = (ax, az, bx, bz) => !clipped || owned.some((s) => !(bx < s.x0 || ax > s.x1 || bz < s.z0 || az > s.z1));
+    // the paint is cut to your sheets (in the wild), and always to the baked country (past its edge the far tiles' halos
+    // would show as stripes)
+    const clip = () => {
+      ctx.save();
+      ctx.beginPath();
+      const rect = (ax, az, bx, bz) => { ax = Math.max(ax, w.minX); az = Math.max(az, w.minZ); bx = Math.min(bx, w.maxX); bz = Math.min(bz, w.maxZ); if (bx > ax && bz > az) { const [a, b] = toPx(ax, az); ctx.rect(a, b, (bx - ax) / mPerPx, (bz - az) / mPerPx); } };
+      if (clipped) for (const s of owned) rect(s.x0, s.z0, s.x1, s.z1);
+      else rect(w.minX, w.minZ, w.maxX, w.maxZ);
+      ctx.clip();
+    };
     ctx.fillStyle = PAPER;
     ctx.fillRect(0, 0, W, H);
     ctx.imageSmoothingEnabled = true;
     const depthLabels = []; // [level, x, z] from the fine tiles in view, lettered once the view is close
     const soundings = [];   // [image, x, y, size]: the fine tiles' depth contours, drawn with the rest of the detail
-    // the whole wilderness underneath
-    if (this.overview) {
-      const mpp = w.meta.overview.cellsPerPx * w.cell;
-      const [a, b] = toPx(w.minX, w.minZ);
-      ctx.drawImage(this.overview, a, b, (w.sizeX / mpp) * (mpp / mPerPx), (w.sizeZ / mpp) * (mpp / mPerPx));
-    }
-    if (w.tiles) {
-      // the far field
-      const farMetres = w.far.tile * w.cell * w.far.factor;
-      const aliveFar = new Set();
-      for (const e of w.tiles.readyFarTiles()) {
-        aliveFar.add(e.key);
-        const ox = w.originX + e.fx * farMetres, oz = w.originZ + e.fy * farMetres;
-        if (!inView(ox, oz, ox + farMetres, oz + farMetres)) continue;
-        const img = this.farImage(e);
-        if (!img) continue;
-        const [a, b] = toPx(ox, oz);
-        ctx.drawImage(img, a, b, farMetres / mPerPx + 0.5, farMetres / mPerPx + 0.5);
+    if (!blank) {
+      clip();
+      // the whole wilderness underneath
+      if (this.overview) {
+        const mpp = w.meta.overview.cellsPerPx * w.cell;
+        const [a, b] = toPx(w.minX, w.minZ);
+        ctx.drawImage(this.overview, a, b, (w.sizeX / mpp) * (mpp / mPerPx), (w.sizeZ / mpp) * (mpp / mPerPx));
       }
-      for (const key of this.farImages.keys()) if (!aliveFar.has(key)) this.farImages.delete(key);
-      // every tile in view at full detail once the view is close enough for contours to read: streamed
-      // tiles from their own cells, the rest fetched for the map alone
-      const live = new Map(w.tiles.readyTiles().map((e) => [e.key, e]));
-      for (const key of this.fineImages.keys()) if (!live.has(key)) this.fineImages.delete(key);
-      if (mPerPx < FINE_M_PER_PX) {
-        this.tick++;
-        const [tx0, ty0] = w.tileOf(x0, z0), [tx1, ty1] = w.tileOf(x0 + spanX, z0 + spanZ);
-        // nearest the centre first, so the middle of the view sharpens before the edges
-        const order = [];
-        for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) order.push([tx, ty, Math.hypot(tx + 0.5 - (v.cx - w.originX) / w.tileMetres, ty + 0.5 - (v.cz - w.originZ) / w.tileMetres)]);
-        order.sort((p, q) => p[2] - q[2]);
-        let painted = 0;
-        for (const [tx, ty] of order) {
-          const key = `${tx},${ty}`, e = live.get(key);
-          let img;
-          if (e) img = this.fineImage(e);
-          else if (painted < 2 || this.mapTiles.get(key)?.img) { const had = this.mapTiles.get(key)?.img; img = this.mapTile(tx, ty); if (img && !had) painted++; }
+      if (w.tiles) {
+        // the far field
+        const farMetres = w.far.tile * w.cell * w.far.factor;
+        const aliveFar = new Set();
+        for (const e of w.tiles.readyFarTiles()) {
+          aliveFar.add(e.key);
+          const ox = w.originX + e.fx * farMetres, oz = w.originZ + e.fy * farMetres;
+          if (!inView(ox, oz, ox + farMetres, oz + farMetres) || !onMine(ox, oz, ox + farMetres, oz + farMetres)) continue;
+          const img = this.farImage(e);
           if (!img) continue;
-          const [ox, oz] = w.tileOrigin(tx, ty);
           const [a, b] = toPx(ox, oz);
-          ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
-          if (img.depth && lay.depths) soundings.push([img.depth, a, b, w.tileMetres / mPerPx + 0.5]);
-          if (mPerPx < 7 && img.labels && lay.depths) depthLabels.push(...img.labels);
+          ctx.drawImage(img, a, b, farMetres / mPerPx + 0.5, farMetres / mPerPx + 0.5);
         }
-        this.pruneMapTiles();
+        for (const key of this.farImages.keys()) if (!aliveFar.has(key)) this.farImages.delete(key);
+        // every tile in view at full detail once the view is close enough for contours to read: streamed
+        // tiles from their own cells, the rest fetched for the map alone (in the wild, only on your sheets)
+        const live = new Map(w.tiles.readyTiles().map((e) => [e.key, e]));
+        for (const key of this.fineImages.keys()) if (!live.has(key)) this.fineImages.delete(key);
+        if (mPerPx < FINE_M_PER_PX) {
+          this.tick++;
+          const [tx0, ty0] = w.tileOf(x0, z0), [tx1, ty1] = w.tileOf(x0 + spanX, z0 + spanZ);
+          // nearest the centre first, so the middle of the view sharpens before the edges
+          const order = [];
+          for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) order.push([tx, ty, Math.hypot(tx + 0.5 - (v.cx - w.originX) / w.tileMetres, ty + 0.5 - (v.cz - w.originZ) / w.tileMetres)]);
+          order.sort((p, q) => p[2] - q[2]);
+          let painted = 0;
+          for (const [tx, ty] of order) {
+            const [ox, oz] = w.tileOrigin(tx, ty);
+            if (!onMine(ox, oz, ox + w.tileMetres, oz + w.tileMetres)) continue;
+            const key = `${tx},${ty}`, e = live.get(key);
+            let img;
+            if (e) img = this.fineImage(e);
+            else if (painted < 2 || this.mapTiles.get(key)?.img) { const had = this.mapTiles.get(key)?.img; img = this.mapTile(tx, ty); if (img && !had) painted++; }
+            if (!img) continue;
+            const [a, b] = toPx(ox, oz);
+            ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
+            if (img.depth && lay.depths) soundings.push([img.depth, a, b, w.tileMetres / mPerPx + 0.5]);
+            if (mPerPx < 7 && img.labels && lay.depths) depthLabels.push(...img.labels);
+          }
+          this.pruneMapTiles();
+        }
       }
+      ctx.restore();
     }
     ctx.drawImage(this.grain, 0, 0);
-    // The detail a paddler has to know the water for: the soundings, the portages with their rods, the campsites. In
-    // Adventure it goes on a layer of its own and is kept only on the sheets you own and in the soft corridor of where
-    // you have been (sheets.js); the country beyond takes a light wash of paper. Sandbox draws it straight.
-    const sh = this.sheetsOn, gate = !!(sh && sh.gated);
-    const owned = gate ? sh.ownedSheets().filter((s) => inView(s.x0, s.z0, s.x1, s.z1)) : [];
-    const whole = gate && owned.some((s) => s.x0 <= x0 && s.z0 <= z0 && s.x1 >= x0 + spanX && s.z1 >= z0 + spanZ);
-    const masked = gate && !whole;
-    const d = masked ? this.mapLayer('detail', W, H) : ctx;
-    if (masked) { d.globalCompositeOperation = 'source-over'; d.clearRect(0, 0, W, H); d.imageSmoothingEnabled = true; }
-    for (const [img, a, b, size] of soundings) d.drawImage(img, a, b, size, size);
-    // depth figures on the sounded lakes, in metres, haloed in the water colour
-    if (depthLabels.length) {
-      d.font = `600 ${11 * k}px ${SERIF}`; d.textAlign = 'center'; d.textBaseline = 'middle';
-      d.lineWidth = 3 * k; d.strokeStyle = `rgb(${WATER.join(',')})`; d.fillStyle = '#2d4f66'; d.lineJoin = 'round';
-      for (const [lvl, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); d.strokeText(String(lvl), a, b); d.fillText(String(lvl), a, b); }
-      d.textBaseline = 'alphabetic';
-    }
-    // portages: red dashed, with the rod count beside the middle of the trail when there is room
-    const close = mPerPx < 16, mid = mPerPx < 60;
-    d.lineCap = 'round'; d.lineJoin = 'round';
-    d.font = `italic 600 ${13 * k}px ${SERIF}`;
-    if (lay.portages) for (const p of w.portages) {
-      const [bx0, bz0, bx1, bz1] = p.bbox;
-      if (!inView(bx0, bz0, bx1, bz1)) continue;
-      d.beginPath();
-      p.pts.forEach(([x, z], n) => { const [a, b] = toPx(x, z); if (n) d.lineTo(a, b); else d.moveTo(a, b); });
-      d.setLineDash(close ? [7 * k, 4 * k] : [4 * k, 3 * k]); d.strokeStyle = '#c0392b'; d.lineWidth = (close ? 2.4 : 1.6) * k; d.stroke(); d.setLineDash([]);
-      if (close) {
-        const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
-        d.fillStyle = '#b4321f'; d.textAlign = 'left';
-        d.fillText(`${p.rods} rods`, mx + 7 * k, my - 6 * k);
+    // the detail a paddler has the sheet for: the soundings, the portages with their rods, the campsites, the task
+    // areas and the keepers' rings, the lake names and the docks (in the wild, on your sheets only)
+    const told = !blank && lay.tasks && this.ctx && this.ctx.outfitter && typeof this.ctx.outfitter.toldHints === 'function' ? this.ctx.outfitter.toldHints() : [];
+    if (!blank) {
+      clip();
+      for (const [img, a, b, size] of soundings) ctx.drawImage(img, a, b, size, size);
+      // depth figures on the sounded lakes, in metres, haloed in the water colour
+      if (depthLabels.length) {
+        ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.lineWidth = 3 * k; ctx.strokeStyle = `rgb(${WATER.join(',')})`; ctx.fillStyle = '#2d4f66'; ctx.lineJoin = 'round';
+        for (const [lvl, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeText(String(lvl), a, b); ctx.fillText(String(lvl), a, b); }
+        ctx.textBaseline = 'alphabetic';
       }
-    }
-    // campsites: red dots with a pale centre
-    if (mid && lay.campsites) {
-      const r = (close ? 4.2 : 2.6) * k;
-      for (const c of w.campsites) {
-        if (!inView(c.x, c.z, c.x, c.z)) continue;
-        const [a, b] = toPx(c.x, c.z);
-        d.beginPath(); d.arc(a, b, r, 0, 6.28); d.fillStyle = '#c0392b'; d.fill();
-        if (close) { d.beginPath(); d.arc(a, b, r * 0.38, 0, 6.28); d.fillStyle = '#f4e9d6'; d.fill(); }
+      // portages: red dashed, with the rod count beside the middle of the trail when there is room
+      const close = mPerPx < 16, mid = mPerPx < 60;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
+      if (lay.portages) for (const p of w.portages) {
+        const [bx0, bz0, bx1, bz1] = p.bbox;
+        if (!inView(bx0, bz0, bx1, bz1)) continue;
+        ctx.beginPath();
+        p.pts.forEach(([x, z], n) => { const [a, b] = toPx(x, z); if (n) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
+        ctx.setLineDash(close ? [7 * k, 4 * k] : [4 * k, 3 * k]); ctx.strokeStyle = '#c0392b'; ctx.lineWidth = (close ? 2.4 : 1.6) * k; ctx.stroke(); ctx.setLineDash([]);
+        if (close) {
+          const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
+          ctx.fillStyle = '#b4321f'; ctx.textAlign = 'left';
+          ctx.fillText(`${p.rods} rods`, mx + 7 * k, my - 6 * k);
+        }
       }
-    }
-    if (masked) this.keepKnown(ctx, d, sh, owned, x0, z0, spanX, spanZ, mPerPx, W, H);
-    if (gate) this.drawNeatlines(ctx, sh, owned, toPx, k);
-    // task areas: a soft circle around the lake, never the spot
-    const hints = lay.tasks && this.ctx && this.ctx.tasks ? this.ctx.tasks.hints() : [];
-    for (const h of hints) {
-      if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
-      const [a, b] = toPx(h.x, h.z), r = h.r / mPerPx;
-      ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28);
-      ctx.fillStyle = 'rgba(192, 57, 43, 0.13)'; ctx.fill();
-      ctx.setLineDash([6 * k, 5 * k]); ctx.strokeStyle = 'rgba(160, 45, 35, 0.6)'; ctx.lineWidth = 1.6 * k; ctx.stroke(); ctx.setLineDash([]);
-    }
-    // the keepers' words (outfitter.js toldHints): a ring pencilled round the water they meant, as a keeper marks your
-    // map across the counter, and what for in the same hand
-    const told = lay.tasks && this.ctx && this.ctx.outfitter && typeof this.ctx.outfitter.toldHints === 'function' ? this.ctx.outfitter.toldHints() : [];
-    for (const h of told) {
-      if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
-      const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
-      ctx.beginPath(); ctx.ellipse(a, b, r * 1.04, r * 0.97, 0.3, 0, 6.28);
-      ctx.fillStyle = 'rgba(74, 64, 54, 0.07)'; ctx.fill();
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = 'rgba(74, 64, 54, 0.62)'; ctx.lineWidth = 1.7 * k; ctx.stroke();
-      // a second, lighter pass a hair off the first, the way a pencil goes round twice
-      ctx.beginPath(); ctx.ellipse(a + 1.5 * k, b - 1 * k, r * 1.01, r * 1.0, 0.9, 0.4, 5.9);
-      ctx.strokeStyle = 'rgba(74, 64, 54, 0.3)'; ctx.lineWidth = 1.1 * k; ctx.stroke();
-      if (mid || r > 30 * k) {
-        // what for, just inside the top of the ring (kept on the sheet when the top runs off it)
-        ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
-        const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
-        ctx.fillText(HINT_LABEL[h.kind] || 'a keeper’s word', tx, ty);
+      // campsites: red dots with a pale centre
+      if (mid && lay.campsites) {
+        const r = (close ? 4.2 : 2.6) * k;
+        for (const c of w.campsites) {
+          if (!inView(c.x, c.z, c.x, c.z)) continue;
+          const [a, b] = toPx(c.x, c.z);
+          ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28); ctx.fillStyle = '#c0392b'; ctx.fill();
+          if (close) { ctx.beginPath(); ctx.arc(a, b, r * 0.38, 0, 6.28); ctx.fillStyle = '#f4e9d6'; ctx.fill(); }
+        }
       }
+      // task areas: a soft circle around the lake, never the spot
+      const hints = lay.tasks && this.ctx && this.ctx.tasks ? this.ctx.tasks.hints() : [];
+      for (const h of hints) {
+        if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
+        const [a, b] = toPx(h.x, h.z), r = h.r / mPerPx;
+        ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28);
+        ctx.fillStyle = 'rgba(192, 57, 43, 0.13)'; ctx.fill();
+        ctx.setLineDash([6 * k, 5 * k]); ctx.strokeStyle = 'rgba(160, 45, 35, 0.6)'; ctx.lineWidth = 1.6 * k; ctx.stroke(); ctx.setLineDash([]);
+      }
+      // the keepers' words (outfitter.js toldHints): a ring pencilled round the water they meant, as a keeper marks your
+      // map across the counter, and what for in the same hand
+      for (const h of told) {
+        if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
+        const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
+        ctx.beginPath(); ctx.ellipse(a, b, r * 1.04, r * 0.97, 0.3, 0, 6.28);
+        ctx.fillStyle = 'rgba(74, 64, 54, 0.07)'; ctx.fill();
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(74, 64, 54, 0.62)'; ctx.lineWidth = 1.7 * k; ctx.stroke();
+        // a second, lighter pass a hair off the first, the way a pencil goes round twice
+        ctx.beginPath(); ctx.ellipse(a + 1.5 * k, b - 1 * k, r * 1.01, r * 1.0, 0.9, 0.4, 5.9);
+        ctx.strokeStyle = 'rgba(74, 64, 54, 0.3)'; ctx.lineWidth = 1.1 * k; ctx.stroke();
+        if (mid || r > 30 * k) {
+          // what for, just inside the top of the ring (kept on the sheet when the top runs off it)
+          ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
+          const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
+          ctx.fillText(HINT_LABEL[h.kind] || 'a keeper’s word', tx, ty);
+        }
+      }
+      // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
+      if (lay.lakes) {
+        ctx.font = `italic 600 ${(close ? 17 : 14) * k}px ${SERIF}`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
+        const minCells = Math.max(600, (5 * mPerPx) ** 2);
+        for (const l of w.lakes) {
+          if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz)) continue;
+          const [a, b] = toPx(l.cx, l.cz);
+          ctx.fillText(spaced(l.name.toUpperCase()), a, b + 6 * k);
+        }
+      }
+      // entry points: the outfitters' docks, a pier with a shack at its root
+      ctx.font = `600 ${11 * k}px ${SERIF}`;
+      for (const ep of w.entryPoints) {
+        if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
+        const [a, b] = toPx(ep.x, ep.z);
+        ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
+        ctx.fillStyle = '#5e4630';
+        ctx.fillRect(-1.6, -9, 3.2, 12);
+        for (const y of [-7, -3, 1]) ctx.fillRect(-3.2, y, 6.4, 1.4);
+        ctx.fillStyle = '#b4321f';
+        ctx.fillRect(-4.5, 3, 9, 5);
+        ctx.beginPath(); ctx.moveTo(-5.5, 3); ctx.lineTo(0, -1.5); ctx.lineTo(5.5, 3); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
+      }
+      ctx.restore();
     }
     this.hintLegend(told.length > 0);
-    // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
-    if (lay.lakes) {
-      ctx.font = `italic 600 ${(close ? 17 : 14) * k}px ${SERIF}`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
-      const minCells = Math.max(600, (5 * mPerPx) ** 2);
-      for (const l of w.lakes) {
-        if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz)) continue;
-        const [a, b] = toPx(l.cx, l.cz);
-        ctx.fillText(l.name.toUpperCase().split('').join(String.fromCharCode(8202)), a, b + 6 * k);
-      }
-    }
-    // entry points: the outfitters' docks, a pier with a shack at its root
-    ctx.font = `600 ${11 * k}px ${SERIF}`;
-    for (const ep of w.entryPoints) {
-      if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
-      const [a, b] = toPx(ep.x, ep.z);
-      ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
-      ctx.fillStyle = '#5e4630';
-      ctx.fillRect(-1.6, -9, 3.2, 12);
-      for (const y of [-7, -3, 1]) ctx.fillRect(-3.2, y, 6.4, 1.4);
-      ctx.fillStyle = '#b4321f';
-      ctx.fillRect(-4.5, 3, 9, 5);
-      ctx.beginPath(); ctx.moveTo(-5.5, 3); ctx.lineTo(0, -1.5); ctx.lineTo(5.5, 3); ctx.closePath(); ctx.fill();
-      ctx.restore();
-      if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
+    if (clipped) this.drawNeatlines(ctx, sh, owned, toPx, k);
+    if (look === 'whole' || this.table) this.drawSheetGrid(ctx, sh, toPx, inView, k);
+    // blank paper on the open sheet: a pencil word for where the rest of the map is
+    if (blank && sheet) {
+      const none = !sh.ownedSheets().length;
+      ctx.font = `600 ${24 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.62)'; ctx.textAlign = 'center';
+      ctx.fillText(none ? 'No sheets yet. The map tables at the outfitters sell them.' : 'None of your sheets covers this.', W / 2, H * 0.74);
     }
     // the canoe where it was left (beached or set down), so you can find your way back to it
     const hull = player.hullDown;
@@ -1299,8 +1466,9 @@ export class Hud {
       ctx.fillStyle = '#f4e9d6'; ctx.beginPath(); ctx.arc(0, -20, 4, 0, 6.28); ctx.fill();
       ctx.restore();
     }
-    // the north arrow
-    ctx.save(); ctx.translate(W - 44 * k, 44 * k); ctx.scale(k, k);
+    // the north arrow (left of the map table's list when it is up)
+    const cover = this.table ? this.table.cover * (W / (this.canvas.getBoundingClientRect().width || W)) : 0;
+    ctx.save(); ctx.translate(W - 44 * k - cover, 44 * k); ctx.scale(k, k);
     ctx.strokeStyle = '#4a3b26'; ctx.fillStyle = '#4a3b26'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(0, 22); ctx.lineTo(0, -22); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(-6, -10); ctx.lineTo(6, -10); ctx.closePath(); ctx.fill();
@@ -1311,7 +1479,7 @@ export class Hud {
     const bar = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].reduce((best, d) => (Math.abs(d - want) < Math.abs(best - want) ? d : best), 500);
     const bpx = bar / mPerPx;
     if (sheet) this.scaleInfo = { bar, cssPx: bpx / (W / (this.canvas.getBoundingClientRect().width || W)) };
-    else {
+    else if (!blank) {
       ctx.fillStyle = '#4a3b26'; ctx.fillRect(24 * k, H - 28 * k, bpx, 3 * k); ctx.fillRect(24 * k, H - 34 * k, 2 * k, 9 * k); ctx.fillRect(24 * k + bpx - 2 * k, H - 34 * k, 2 * k, 9 * k);
       ctx.font = `600 ${12 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.fillText(bar >= 1000 ? `${bar / 1000} km` : `${bar} m`, 24 * k + bpx + 8 * k, H - 26 * k);
     }
