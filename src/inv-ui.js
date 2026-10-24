@@ -1006,6 +1006,7 @@ function zoneCheck(st, z) {
       if (hand ? t.isLong || d.hand : (d.wear || []).includes(dz)) return occ ? 'swap' : 'ok';
       return occ && !occ.isLong && d.nest && canFit(occ.obj, o.item) ? 'ok' : 'no'; // not worn that way: into the one there
     }
+    if (o.item === 'woodarms' && dz !== 'ground') return 'no'; // an armload is wood in the crook of an arm: set down, it is a pile
     if (dz === 'canoe') return o.where === 'canoe' ? 'no' : 'ok';
     if (dz === 'ground') return !onFoot() || (o.where === 'ground' && typeof inv.dist === 'function' && inv.dist(o.at) < 1.6) ? 'no' : 'ok';
     if (dz === 'stash') return inv.atStash && o.where !== 'stash' ? 'ok' : 'no';
@@ -1229,6 +1230,7 @@ function thingMenu(t, isLong) {
   const inv = model(), d = itemDef(isLong ? t.id : t.item), id = isLong ? t.uid : t.id, out = [];
   if (!d || d.fixed || d.station || t.where === 'pockets' || (!isLong && /^(crate|pockets|pile)$/.test(t.item))) return out;
   if (t.where === 'hung') return nearItems(nearActions({ container: id })); // up a tree: only what the tree offers (Lower)
+  if (!isLong && t.item === 'woodarms') return [...nearItems(nearActions({ container: id })), { label: 'Stack it on the ground', run: () => { said(armloadDown(thingOf(t))); refresh(); } }];
   out.push(...nearItems(nearActions(isLong ? { long: id } : { container: id })));
   const wear = d.wear || [];
   if (t.where !== 'back' && wear.includes('back')) out.push({ label: 'Carry it on your back', run: () => world('carry', id, 'back') });
