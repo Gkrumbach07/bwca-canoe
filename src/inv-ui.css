@@ -128,6 +128,8 @@
 .nb-head .nm { font: 700 12.5px/1.2 var(--sc); letter-spacing: .12em; white-space: nowrap; }
 .nb-head .wh { font: italic 14px/1.2 var(--serif); color: var(--cream-86); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nb-body { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px; }
+.nb.slim .nb-body { padding: 7px 10px 8px; }
+.nb.slim .nb-act { padding-top: 4px; padding-bottom: 5px; }
 .nb-meter { display: flex; align-items: center; gap: 10px; }
 .nb-meter .lab, .nb-lab { font: 700 10.5px/1.2 var(--sc); letter-spacing: .14em; color: var(--cream-72); }
 .nb-lab i { font: italic 13px/1.2 var(--serif); letter-spacing: 0; color: var(--cream-86); margin-left: 4px; }

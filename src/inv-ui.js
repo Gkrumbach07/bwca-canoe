@@ -1465,7 +1465,7 @@ export class PackSide {
   }
   // a thing near you as a panel: its strap (a picture, the name, how it stands), a meter, its bins, its buttons
   panel(o) {
-    const w = mk('div', `nb k-${o.kind}${o.focus ? ' focus' : ''}`);
+    const w = mk('div', `nb k-${o.kind}${o.focus ? ' focus' : ''}${!o.meter && !(o.slots && o.slots.length) ? ' slim' : ''}`);
     w.dataset.nb = o.id;
     const head = mk('div', 'nb-head');
     const ik = `nb:${o.kind}`;
