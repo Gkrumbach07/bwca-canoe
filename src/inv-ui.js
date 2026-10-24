@@ -1259,7 +1259,7 @@ function openMenu(x, y, items) {
   const m = menuEl = mk('div', 'ig-menu');
   for (const it of items) {
     const b = mk('button', '', esc(it.label)); b.type = 'button'; b.disabled = !!it.disabled;
-    if (it.title) b.title = it.title;
+    if (it.title) { b.title = it.title; if (it.disabled) b.appendChild(mk('small', 'why', esc(it.title))); } // why not, written under it (a hover tip alone is never seen)
     b.addEventListener('click', (ev) => { ev.stopPropagation(); closeMenu(); if (it.run) it.run(); });
     m.appendChild(b);
   }
