@@ -661,7 +661,16 @@ const SCREENS = new Set();  // the open screens, redrawn when the model changes
 let drag = null, dirty = false, menuEl = null, tipEl = null, tipTimer = 0, version = 0, listening = null, pend = false;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const mk = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-const note = (words, t = 4) => { if (words && ctx.hud && ctx.hud.note) ctx.hud.note(words, t); };
+// what an action says (eaten, refused, carried): the HUD's line, and in pencil on an open book or shelf, whose paper
+// covers that line (the join, 2026-10-24: "Hold still to eat" was said under the book, unseen)
+let lastNote = null;
+const note = (words, t = 4) => {
+  if (!words) return;
+  if (ctx.hud && ctx.hud.note) ctx.hud.note(words, t);
+  lastNote = { words, until: performance.now() + t * 1000 };
+  for (const sc of SCREENS) if (sc.open && sc.el) { const n = sc.el.querySelector('.pk-note, .sh-receipt'); if (n) { n.textContent = words; n.classList.remove('no'); } }
+};
+const noteNow = () => (lastNote && performance.now() < lastNote.until ? lastNote.words : '');
 
 function listen() {
   const inv = model(); if (listening === inv) return;
@@ -1032,6 +1041,7 @@ export class PackSide {
     const food = typeof inv.foodWords === 'function' ? inv.foodWords() : '';
     this.el.innerHTML = `<header class="pk-head">
         <div class="lede"><div class="sc kicker">The pack · ${stash ? 'at the outfitter’s, everything you own' : 'what you carry and what is within reach'}</div><h2>${kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light'}</h2><div class="sub">${esc(loadWords(kgOn))}${food ? ` · ${esc(food)} within reach` : ''}</div></div>
+        <div class="pk-note pencil" aria-live="polite">${esc(noteNow())}</div>
         ${pr ? `<div class="purse"><span class="sc">In hand</span><b>$${pr.money}</b></div>` : ''}
       </header>
       <div class="pk-body"><section class="pk-col pk-on" aria-label="On you"></section><section class="pk-col pk-carry" aria-label="What you carry"></section><section class="pk-col pk-near" aria-label="Within reach"></section></div>
