@@ -48,7 +48,8 @@ const CANOE_KG = 160;       // kg of gear a tripping canoe takes besides its pad
 const CANOE_ROOM = 8;       // containers a canoe takes (inventory.js CANOE_ROOM)
 const LOAD_EACH = { minutes: 1, seconds: 0.45, per100m: 2.5 }; // a thing carried down and loaded: its minutes (more the farther it lies), its real seconds
 // the fetch is charged at life pace (pace.js), as walking it yourself is: the walk back at a walk on the trail's going,
-// the carry over at a walk slowed by the load (player.js: / (kg / 40) ^ 0.6, and no slower than a canoe carry)
+// the carry over at a walk slowed by the load (player.js LOAD: / (kg / 40) ^ 0.35 past 40 kg, and no slower than a
+// canoe carry)
 const TRAIL_GOING = 0.9;    // a portage trail's roots, rocks and grades against a walk on the flat
 const HAND_ORDER = ['rod', 'rodmh', 'bucket', 'tacklebox', 'mapcase', 'barrel30', 'stringer'];
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -559,7 +560,7 @@ export class Packs {
     const kg = these.reduce((s, u) => s + this.weightOf(u), 0) / trips;
     const back1 = Math.abs(you.along - a.along) + you.dist + a.dist, over = Math.abs(a.along - b.along) + a.dist + b.dist;
     const back = back1 + (trips - 1) * over; // the first walk back from where you stand, then from the canoe each time
-    const walk = LIFE.walk * TRAIL_GOING, laden = Math.max(LIFE.carry, walk / Math.pow(Math.max(1, kg / 40), 0.6));
+    const walk = LIFE.walk * TRAIL_GOING, laden = Math.max(LIFE.carry, walk / Math.pow(Math.max(1, kg / 40), 0.35));
     const backH = back / walk / 3600, overH = (over * trips) / laden / 3600, hours = backH + overH; // game hours: the walks' own time at life
     return { back, over, trips, seconds: hours * 3600, hours, cost: BASE_H * hours + CARRY_H * (kg / 40) * overH, trail: def.name, units: these };
   }
