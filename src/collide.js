@@ -65,12 +65,45 @@ export function stemOf(geo) {
 
 const _out = { x: 0, z: 0 };
 
+// A down log's stem is rings of vertices along its own x (vegetation.js log: a bowed, leaning prism of four rings), so
+// the whole stem is not convex: its hull above a step's plane bridged the sag between a high butt and a high top, and a
+// log lying along a slope held the walker along its whole length where its drawn top was below a step (the fb join,
+// 2026-10-24: Space only hopped there). Cut into the frusta between consecutive rings, each convex, it holds him where
+// it is drawn. Parts with fewer than three rings stay whole. Cached per part.
+const RINGS = new WeakMap();
+function ringSegments(q, P) {
+  let segs = RINGS.get(q);
+  if (segs) return segs;
+  segs = [q];
+  if (q.verts.length >= 12) {
+    const xs = Array.from(q.verts, (i) => P[i * 3]).sort((a, b) => a - b), cuts = [];
+    let sum = xs[0], n = 1;
+    for (let k = 1; k < xs.length; k++) { if (xs[k] - xs[k - 1] > 0.2) { cuts.push(sum / n); sum = 0; n = 0; } sum += xs[k]; n++; }
+    cuts.push(sum / n);
+    if (cuts.length >= 3) {
+      const ringOf = (i) => { const x = P[i * 3]; let b = 0; for (let k = 1; k < cuts.length; k++) if (Math.abs(x - cuts[k]) < Math.abs(x - cuts[b])) b = k; return b; };
+      const out = [], T = q.tris;
+      for (let k = 0; k + 1 < cuts.length; k++) {
+        const tris = [];
+        for (let t = 0; t < T.length; t += 3) {
+          const a = ringOf(T[t]), b = ringOf(T[t + 1]), c = ringOf(T[t + 2]);
+          if (Math.min(a, b, c) >= k && Math.max(a, b, c) <= k + 1) tris.push(T[t], T[t + 1], T[t + 2]);
+        }
+        if (tris.length) out.push({ verts: Uint32Array.from(new Set(tris)), tris: Uint32Array.from(tris) });
+      }
+      if (out.length > 1) segs = out;
+    }
+  }
+  RINGS.set(q, segs);
+  return segs;
+}
+
 export class RockShape {
   // geo: the variant's full geometry; rec: the worker's record (tiles.js, tile-worker.js collisionOf) at offset o: x, y,
   // z (tile-local), reach, its geometry key, species, then the instance matrix's three columns; ox, oz: the tile's
   // corner. minVerts: parts with no more vertices than this are left out (a log's limbs, a stump's roots: thin sticks
   // the walker passes)
-  constructor(geo, rec, o, ox, oz, { minVerts = 0 } = {}) {
+  constructor(geo, rec, o, ox, oz, { minVerts = 0, rings = false } = {}) {
     const P = geo.getAttribute('position').array, n = P.length / 3;
     const x0 = rec[o] + ox, y0 = rec[o + 1], z0 = rec[o + 2] + oz;
     const a = rec[o + 6], b = rec[o + 7], c = rec[o + 8], d = rec[o + 9], e = rec[o + 10], f = rec[o + 11], g = rec[o + 12], h = rec[o + 13], k = rec[o + 14];
@@ -82,6 +115,7 @@ export class RockShape {
     this.v = v;
     let parts = partsOf(geo);
     if (minVerts > 0) { const kept = parts.filter((q) => q.verts.length > minVerts); if (kept.length) parts = kept; }
+    if (rings) parts = parts.flatMap((q) => ringSegments(q, P));
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxY = -Infinity, minY = Infinity;
     this.parts = parts.map((q) => {
       const s = { verts: q.verts, tris: q.tris, minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity, minY: Infinity, maxY: -Infinity, hulls: new Map() };

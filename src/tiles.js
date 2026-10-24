@@ -756,7 +756,7 @@ export class TileManager {
       s = null;
       if (geo) {
         // a log's limbs and a stump's roots (thin pieces of a few vertices) are passed; the stem and the root plate hold
-        const wood = sp === 14 || sp === 15, shape = new RockShape(geo, R, o, e.ox, e.oz, { minVerts: wood ? 6 : 0 });
+        const wood = sp === 14 || sp === 15, shape = new RockShape(geo, R, o, e.ox, e.oz, { minVerts: wood ? 6 : 0, rings: sp === 14 });
         s = { x: R[o] + e.ox, z: R[o + 2] + e.oz, r: R[o + 3], shape };
         if (sp === 14) {
           // the stem's axis in the world: the instance matrix (columns at o + 6, o + 9, o + 12) on its own frame's ends

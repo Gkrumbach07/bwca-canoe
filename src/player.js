@@ -49,6 +49,10 @@ const _push = { x: 0, z: 0 }, _held = { x: 0, z: 0, hit: false, trunk: null };
 const VAULT = { max: 1.15, thin: 1.3, dur: 0.62 };
 const CLIMB = { max: 2.05, fromWater: 1.05, dur: [0.8, 1.5] };
 const DROP_MAX = 2.6;
+// LOW_OVER: the lowest thing Space gets over rather than hops at, a little under a step: the collision holds the body
+// off a log whose top only peaks over a step at a ring of its stem, and that must be vaulted, not hopped into (the join)
+const LOW_OVER = STEP_UP - 0.1;
+const SPACE = { early: 0.8, ahead: 1.0 }; // a Space pressed this long before, this far short of, a vault or a climb waits for it
 // fb C: the water on foot. Wading slows you with the depth; past SWIM_DEPTH (chest deep) you swim, and you stand again
 // under STAND_DEPTH; with the canoe overhead you go no deeper than CARRY_DEPTH. A swimmer is held off whatever stands
 // within SWIM_CLEAR of the surface (a rock out of the water, a dock).
@@ -858,7 +862,7 @@ export class Player {
     for (let d = S; d <= BODY_R + 0.7; d += S) {
       const h = this.topAt(x + mx * d, z + mz * d, near);
       if (h === Infinity) return null; // a trunk or a wall first: nothing to get over
-      if (h > y0 + STEP_UP && h - prev > 0.06) { nearD = d; break; }
+      if (h > y0 + LOW_OVER && h - prev > 0.06) { nearD = d; break; }
       prev = h;
     }
     if (nearD < 0) return null;
@@ -866,11 +870,11 @@ export class Player {
     for (let d = nearD; d <= nearD + 2.6; d += S) {
       const h = this.topAt(x + mx * d, z + mz * d, near);
       if (h === Infinity) { if (d - nearD < 0.5) return null; break; }
-      if (h <= y0 + STEP_UP || h < top - 0.5) { far = d; break; }
+      if (h <= y0 + LOW_OVER || h < top - 0.5) { far = d; break; }
       if (h > top) top = h;
     }
     const h = top - y0;
-    if (!(h > STEP_UP)) return null;
+    if (!(h > LOW_OVER)) return null;
     // over: a thin one no higher than the waist, with room to land beyond
     if (!fromWater && far >= 0 && h <= VAULT.max && far - nearD <= VAULT.thin) {
       for (const extra of [0.12, 0.3, 0.5]) {
@@ -1020,15 +1024,22 @@ export class Player {
       if (fwd !== 0 && wall) note = wall;
       // Space: over or onto what you are walking into (a vault, a climb), else a hop; with the canoe overhead a
       // stagger under it (no one jumps with a canoe on their shoulders)
+      // A press a stride early is kept SPACE.early seconds: something to get over that far ahead is walked up to and
+      // got over, not hopped into (the fb join, 2026-10-24: Space a metre short of a 1.2 m rock only hopped)
       const tap = inp.pressed('Space'), held = inp.held('Space');
+      if (tap) ft.spaceT = SPACE.early; else if (ft.spaceT > 0) ft.spaceT -= dt;
       let started = false;
-      if (!ft.air && !carrying && moving && (tap || held)) {
-        const a = this.traverseAhead(this.x, this.z, ft.y, mx, mz, ft.near || (w.tiles ? w.tiles.treesNear(this.x, this.z, 4.5) : []));
-        if (a) { this.startAct(a, ft.y); started = true; }
+      const nearNow = ft.near || (w.tiles ? w.tiles.treesNear(this.x, this.z, 4.5) : []);
+      if (!ft.air && !carrying && moving && (tap || held || ft.spaceT > 0)) {
+        const a = this.traverseAhead(this.x, this.z, ft.y, mx, mz, nearNow);
+        if (a) { this.startAct(a, ft.y); started = true; ft.spaceT = 0; }
       }
       if (!started && tap && !ft.air) {
         if (carrying) st.stagger = 1;
-        else { ft.air = true; ft.vy = HOP_V; ft.t = 0; ft.peak = ft.y; ft.hop = true; }
+        else {
+          const ax = this.x + mx * SPACE.ahead, az = this.z + mz * SPACE.ahead; // read from the feet there (downhill to a log, they are lower)
+          if (!(moving && this.traverseAhead(ax, az, this.supportAt(ax, az, ft.y + STEP_UP, nearNow), mx, mz, nearNow))) { ft.air = true; ft.vy = HOP_V; ft.t = 0; ft.peak = ft.y; ft.hop = true; ft.spaceT = 0; }
+        }
       }
       if (!started) {
         const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade;
