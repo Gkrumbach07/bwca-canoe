@@ -314,8 +314,11 @@ export class Packs {
     const all = this.units(), from = c.drop || p;
     // what lies on the ground, set out at camp too (camp 1); never a fixed thing (the grate at a fire ring, chores.js)
     const ground = all.filter((u) => u.obj.where === 'ground' && u.obj.at && !u.def.fixed);
-    // set down for the second trip, at the trail head away from the canoe
-    const left = ground.filter((u) => u.obj.at.trail && Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH);
+    // set down for the second trip, at the trail head away from the canoe: of the trail you (or the canoe) are on now
+    // (camp 1: a thing left at some other trail head, by a teleport say, no longer holds the canoe's E at a camp)
+    const onTrail = (q) => { const t = p.nearestTrail(q.x, q.z, 30); return t ? this.world.portages.indexOf(t.def) : -1; };
+    const here = new Set([onTrail(from), onTrail(p)]);
+    const left = ground.filter((u) => u.obj.at.trail && here.has(u.obj.at.trail.i) && Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH);
     // the nearest thing in reach, one you have room for first (a barrel beside a pack, with a pack on your back already);
     // past a step and a half only one you face, so a pack set down by the fire does not take E from the fire
     let near = null, nd = REACH, full = null;
@@ -536,7 +539,9 @@ export class Packs {
       if (this.hud) this.hud.note('No paddle with you: it is still where you left it.', 5);
       return false;
     }
-    const far = all.filter((u) => u.obj.where === 'ground' && u.obj.at && u.obj.at.trail && !u.obj.at.left && !near(u, LOAD_REACH));
+    const onTrail = (q) => { const t = p.nearestTrail(q.x, q.z, 30); return t ? this.world.portages.indexOf(t.def) : -1; };
+    const here = new Set([onTrail(from), onTrail(p)]); // camp 1: only the trail you launch from (not one left far off)
+    const far = all.filter((u) => u.obj.where === 'ground' && u.obj.at && u.obj.at.trail && here.has(u.obj.at.trail.i) && !u.obj.at.left && !near(u, LOAD_REACH));
     if (far.length && !this.leaveOk) {
       if (this.clock - this.warnAt > LEAVE_AGAIN) {
         this.warnAt = this.clock;
