@@ -678,6 +678,141 @@ evenings on Lake One and the leaving between them.
   carrying the food up, as a player would; a tap at the fire reaches the whole camp.
 - The mid-portage reload (stream 1's `resumeCarry`) and the bear's night were not played again here.
 
+## The owner's second feedback of 2026-10-24
+
+After playing the camp redone the owner sent a second list the same day; it is kept verbatim with that round's build
+brief. The lines that set the pass:
+
+> "i want to be able to move containers without having to right click. i want to drag to spots in inventory" · "Just
+> because something is in my hand, why can't I look into it? For example, the leech bucket."
+
+> "I don't like how interacting with things is kind of just one key. Like, I got confused because I'd go to the fire and
+> I'd press E and it might add a log. I press E again and it might add food. … It didn't feel like I was actually doing
+> it. What I'd much rather have is I'd open my inventory up when I'm near the fire and I drag food onto the fire. or
+> drag logs onto the fire."
+
+> "Like, your inventory is like your interaction space. … So you don't have to really guess what E does. E is like your
+> interact button. But it's really just like your pickup button. I wonder if it'll also be easier if we had a little
+> crosshair or a little circle in the middle of the screen for where you're pointing."
+
+> "I don't want maps to be part of the inventory. … when you go into the wild and you press M to see your map, … You
+> should see nothing if you have no map. … they're not inventory pieces. … just something you buy and you have forever."
+
+> "when I am in the store, both sides of the shelf should allow me to interact with it" · "when I'm going up a hill, the
+> character does this weird wide led splayed glitchiness" · "Going upstairs, I kind of have to press space to climb" ·
+> "the whole thing where the camera snaps to being in front of any trees that are in the way is kind of glitchy"
+
+> "also for the energy bar we should follow the wild and chill game how they do it"
+
+> "I don't like the whole thing at the counter where you could press resupply, carry on, or call it a trip. … I also
+> don't like how there's an option to tie up and go in and it just teleports you there. You shouldn't be able to do
+> that."
+
+### What changed
+
+Six streams, joined in this order on `claude/fb2-1024` (main 0117fab), with stream E's fifth commit merged after:
+
+- **The dot** (A: `src/pointer.js`, `src/nearby.js`). A small quiet dot in the middle of the view; what it points at
+  within reach (2.6 m) gets a soft rim (a back-face shell) or a pool of light and its word under the dot. On foot E does
+  that and only that: pick up, talk, open (a store's hotspots, or the book at a camp's fire ring, tent, latrine or hung
+  barrel), get in the canoe; pointed at nothing it does nothing. No camp job runs on E and there is no Q drop: Q keeps
+  only travel (leave the canoe where you stepped out, the fetch, shouldering the canoe, and the carry's choices). The
+  camp's jobs are `nearby.objects()`, panels for the book; a tent is pitched from its right-click (a ghost at the dot,
+  placed and worked through with a held click or E; Esc or a right-click puts it away), a barrel is hung from its
+  right-click under a big pine or a birch.
+- **The book as the workbench** (B: `src/inv-ui.js`). Containers move by dragging their strap to the back, the chest,
+  either hand, the canoe, the ground, the outfitters' keeping or into another container (a full slot swaps); a container
+  in a hand shows its grid. The **Ground area** is everything on the ground within reach and the wood lying about;
+  dropping onto it makes or fills a pile at your feet, a woodpile when it is all wood. The camp's panels: the fire ring
+  (Fuel, the grate, the ash, the burn and cooking meters, Light, Cook, Douse), the tent (Strike, Sleep), the latrine
+  (Use), the hung barrel (Lower), the water's edge, the canoe; a held button runs while the mouse is held, a ring
+  filling.
+- **The store, the counter and the dock** (C: `src/outfitter.js`, `src/props.js`, `src/trip.js`). Each shelf unit is one
+  box, met from either side or its ends; the counter offers a bunk, the rides, the season permit and claims, and nothing
+  else; E afloat by the dock brings the canoe alongside and you step up onto the deck; stairs have risers of 0.15 m or
+  less, walled sides and newel posts, walked with W alone. A trip begins as you push off and comes in by itself on foot
+  at any outfitter's landing ("came in"); a 30 m out-and-back is taken back.
+- **Maps owned** (D: `src/sheets.js`, `src/maptable.js`, `src/hud.js`). A sheet bought is the profile's for the season;
+  in the wild M shows only your sheets and blank paper elsewhere ("No sheets yet": you and a compass); in a store and at
+  its map table, the whole map with the 39 sheets dotted, "$8 here" and "✓ yours". The seen corridor is gone; old sheet
+  items and map cases migrate out with the case's $10 back.
+- **The walker and the camera** (E: `src/canoe.js`, `src/player.js`, `src/camera.js`). Uphill the stride shortens, the
+  hips sink a little and the back foot steps before it can pull the hips down (hip height on a 0.35 grade 0.81–0.83 m,
+  was 0.63–0.91); trees, shrubs and ferns between the camera and the walker are dithered (no new programs); the camera
+  pulls in only for solids, on a spring that holds before easing out; looking down on foot the view moves over his right
+  shoulder so his head is not under the dot. No walking slowdown was found (1.348 m/s on the flat); past 40 kg the walk
+  slows as (kg / 40) ^ −0.35.
+- **The energy bar and warmth** (F: `src/energy.js`, `src/hud.js`). Wild n Chill's bar: green energy, then a chunk for
+  each need off its ceiling (1 − Σ, rest 1, food 0.4, water 0.4, warmth 0.35), cold dotted pale blue with a snowflake,
+  sleep orange zz, hunger yellow fork and knife, thirst blue drop, dashed while growing, shown only when it matters.
+  Warmth falls below a felt 12 °C, faster wet, in the water and after dark, and comes back by a fire within 6 m, indoors
+  and in the tent and bag.
+
+### The join, played through
+
+A new Adventure season at entry point 30 (July 12, 7:40, $40) through the real keys and the real mouse (drag,
+right-click, held clicks), headless at 1440 × 900, the camera third person:
+
+- **The store.** Down the steps to the dock (4.6 s, −1.19 m) and back up to the door (4.7 s, +1.17 m), Space never
+  pressed. Ruth: "Forty dollars to start you, dear. Food on the shelf, work on the board by the door." From the far side
+  of the provisions (between the shelf and the lure wall) the dot read "E Open · The provisions shelf" and E opened it.
+  The 30 L barrel bought by a drag onto your side ($15 left), a rice supper and an oatmeal breakfast dragged into it
+  ($9); at the map table the whole map, F-24 bought with a click ($1, "✓ yours"); a real Esc closed it without the pause
+  card, and M in the store showed the whole map. The counter: the permit ("Stamp it"), a bunk $8, a ride to Snowbank
+  $10, nothing to claim. In the book the barrel went by its strap from the keeping to the canoe.
+- **Setting out.** Out the door, down the steps and the dock; the dot on the hull: "E Get in · the canoe, onto Lake
+  One". The trip began by itself at 7:49 and was away 200 m on. M: F-24 alone, blank paper west of its neatline.
+- **Camp**, 2.7 km on, at a Lake One site. E at nothing changed nothing; Q away from the canoe did nothing. A branch at
+  1.3 m with the view tilted down: the dot on it, the walker's head 73 px left of the dot; E, "into the crook of your
+  arm"; a log and a branch more. E at the ring opened the book at its panel; three pieces dragged into Fuel ("2½ h of
+  wood laid"), Light held 2.8 s (10 game minutes); the pack and the barrel fetched from the canoe by their straps; the
+  pot and the supper dragged onto the grate, Cook (8 s), reloaded mid-cook, cooked, eaten from the panel (food 0.84 to
+  1). The tent: right-click, Pitch, the ghost green at the dot; a real Esc and a right-click each put it away without
+  the pause card; a held click staked the floor, a reload kept it, E at the tent opened its panel (no pitching on E),
+  and the held buttons finished it, the ring filling on "Put the fly on". The barrel hung from a white pine 15 m off (3
+  m up, 1.8 m out). The latrine's Use walked there and sat ten minutes. Three pieces dragged onto the Ground area made a
+  "Woodpile, on the ground, 1 m off", which a reload kept, drawn. The leech bucket in the right hand showed its 12.
+- **A cold night** (the clock moved to October 17, 19:00, in rain at 6 °C): 14 m from the cold ring, warmth fell from 1
+  to 0.43 in two hours, the cold chunk to 0.20, dotted and dashed, "held down by cold". The fire lit again from the
+  woodpile (`fires.near` heat 0.92): warmth 0 to 0.51 in an hour beside it. A night in the tent: 1.0 at 7:46.
+- **Walking.** Up a 0.27 grade: hips 0.89–0.90 m over the ground the whole way, 1.15 m/s. Through the woods to the camp
+  in third person with the view swinging: 323 frames, no camera jump over 0.15 m (the largest change 0.015 m a frame),
+  never pulled in, trunks between the camera and him a tenth of the time, the shrubs dithered round him.
+- **Coming in.** 2.9 km back; E by the dock, onto the deck: "Came in at Kawishiwi Lodge & Outfitters … The trip is in
+  your logbook", and the Trips page "1 trip, one came in". Up the steps with W alone.
+- **The seams.** No console error anywhere. The program count held through the dot's rim and pool, the book's panels,
+  the map table and both Ms (the three TAPS programs come with the sun's rays in view, and the fauna's when they show,
+  as before). An old save's map case (F-23, F-13, F-24) and loose F-34, with F-14 among the owned, came back as five
+  owned sheets and $10. A staged evacuation for the cold: "You were shaking with the cold out there…", logged "spent,
+  and chilled through", the counter open at the door. A new season: no sheets, M "No sheets yet · blank paper".
+
+### What the join fixed
+
+- **A barrel dragged off a shelf** onto your side did nothing (it nests in no pack, and the shelf screen has no zones);
+  dropped anywhere on your side it is bought now, kept for you, as a double-click buys it.
+- **What you buy is saved with its money**: the inventory saved 6 s of play after a change, the profile at once, so a
+  lost tab kept the $31 spent and lost the barrel and its meals. Every change of money writes the inventory too.
+- **"The fire is too low to cook on"** on reloading with the pot on a burning fire: the first frame read the fires' own
+  clock, still 0.
+- **A greyed menu entry says why**: "Hang it from a tree" away from a big pine gave no reason; it is written under it.
+- **A woodpile is not loaded into the canoe**: the canoe's "Load everything here" counted the Ground area's woodpile.
+- **The hung barrel takes the dot by its tree**: 3 m up it was out of the third-person ray's reach within 3.4 m.
+- **The book's header** said "no food about the camp" with a meal hung in the barrel there.
+- **Words**: an evacuation for the cold had none of its own; the journal's energy line said "only sleep fills it" (it
+  says what holds the bar down and what lifts it now); the trips page's "call it at a counter"; the dry bottle's "E, on
+  foot at the water"; the fetch estimate's old load curve; the Controls card, the README, trip-core.md and this file's
+  "Tie up and go in", "Call it a trip" and seen corridor.
+
+### Left after the second round
+
+- In a narrow aisle (the provisions' far side) the third-person camera eases in to 1.1 m and the walker's back fills the
+  middle of the view: the dot still opens the shelf, but you see his pack, not the cans (first person reads it).
+- On coming in by yourself, the tent and the pot left at camp go to the outfitters' crate, as the end of a trip has done
+  since the camp was redone, but a barrel hung there stays in its tree.
+- The counter's welcome after any evacuation is the food one ("Eat something. Then eat something else.").
+- The cold night, the October clock and the evacuation were staged by moving the clock and the needs; a season's own
+  October and a capsize in cold water were not played.
+
 ## What phase 4 will do
 
 **A season's balance at the new pace.** Phase 2's progression was played at 2 to 4 km a game day; at Trip pace a day
