@@ -1,34 +1,40 @@
-// Outfitters at the entry point landings: a name for each, the store you walk into, its shelves, the counter (a paper
-// sheet in two tabs: the counter's services and the board), the trip's old record (where you are, when it started)
-// and its persistence. The outfitter is where a season starts and where you come in when you need to: its shelves
-// sell the food and the gear, its counter fills the bottle and offers the services and the two ways on: "Resupply ·
-// carry on" (the trip goes on) and "Call it a trip" (logged as came in, a bunk night, and you wake at 7:00 rested).
-// The permit is the season's paper, stamped at the first counter of the season: its number, home and the day.
-// Sandbox's counter does not charge for food. The board is the tasks' own (tasks.js boardSection), the shop and what
-// the gear does are shop.js's, the rides up the road stream C's (rides.js, set on outfitter.rides), the keepers'
-// words stream C's (outfitters.js, through the shop). The rules of the trip and its saved core live in trip.js, the
-// money and the gear in profile.js; this document carries the core alongside the old fields.
+// Outfitters at the entry point landings: a name for each, the store you walk into, its shelves, the counter, the board,
+// the trip's old record (where you are, when it started) and its persistence. The outfitter is where a season starts
+// and where you come in: its shelves sell the food and the gear, its counter fills the bottle and offers the services.
+// The permit is the season's paper, stamped once (at the counter, or as the season's first trip pushes off): its
+// number, home and the day. Sandbox's shelves are free. The board is the tasks' own (tasks.js boardSection), the shop
+// and what the gear does are shop.js's, the rides up the road rides.js's (set on outfitter.rides), the keepers' words
+// outfitters.js's (through the shop). The rules of the trip and its saved core live in trip.js, the money and the gear
+// in profile.js; this document carries the core alongside the old fields.
 //
-// Walking in (hubs phase 2, stream B). Where the landing's store is built (props.js storeLayout(ep), stream A), E at
-// the dock afloat is "Tie up and go in": the canoe is tied alongside the dock and you stand at the door; Q still opens
-// the counter straight from the dock. Over the threshold the view goes to first person (and back as you step out),
-// unless the camera keeps itself inside the walls (camera.js roomAware, stream D of 2026-10-24).
-// The store is physical (feedback 2026-10-24, stream B): E at the provisions, tackle or gear shelf, the lure wall or the
-// map table opens that shelf's two panes (inv-ui.js ShelfScreen: your containers on the left, the shelf on the right,
-// a buy dropped into a slot or the first container with room); E at the counter opens the counter, which is for
-// services only (the permit, a bunk, the rides, claiming notices), and E at the board the board. The keeper greets
-// you, signed with the keeper's name, on the first visit of a day. Closing the counter inside leaves you in the store;
-// the trip pushes off (or carries on) when you launch from the dock, or from the counter's own stamps, which take
-// you straight out to the canoe. Without a store (its tile not built yet, or no stream A) E opens the counter as
-// before. A new season begins tied up at the home store's door (the keeper's forty dollars as you step in), and the
-// trip pushes off when you launch from its dock; a page reloaded in a store comes back on its floor (updateArrival).
+// Trips start and end by themselves (fb2 C, the owner 2026-10-24: "trips simply start and end as you leave and reach
+// outfitters"): getting into the canoe at an outfitter's landing (or paddling off from one) pushes off, and setting
+// foot at any outfitter's landing after being away comes in, logged as "came in at …" (trip.js comeIn). Back at the
+// landing you left without having gone anywhere, the push-off is taken back and nothing is logged.
+//
+// Walking in. There is no "Tie up and go in": you land at the shore like anywhere else, or, afloat by an outfitter's
+// dock, E ties the canoe up alongside it and you step out onto its deck, then walk up the yard, the steps and in
+// (props.js builds the steps as stairs the walker takes without Space). Over the threshold the view goes to first
+// person (and back as you step out), unless the camera keeps itself inside the walls (camera.js roomAware).
+// The store is physical: pointed at with the crosshair (pointer.js, stream A of fb2; the store's hotspots are boxes
+// round each whole shelf unit, so either side of one opens it), E opens the provisions, tackle or gear shelf, or the
+// lure wall, as two panes (inv-ui.js ShelfScreen: your containers on the left, the shelf on the right); the map table
+// opens its own screen (maptable.js, stream D: outfitter.mapTable); the counter opens the counter, which offers only a
+// bunk night, the rides up the road, the season's permit and the notices you've done to claim; the cork board opens
+// the board, and only the board. The keeper greets you, signed with the keeper's name, on the first visit of a day.
+// Without a store (its tile not built yet) E by the landing opens the counter from the water. A new season begins at
+// the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
+// store comes back on its floor (updateArrival).
 import { longDate, shortDate, esc, plural } from './hud.js';
 import { seasonAt } from './season.js';
 import { absDay, dateOfAbs } from './trip.js';
-import { ITEMS, FOOD_PRICE } from './profile.js';
+import { FOOD_PRICE } from './profile.js';
 import * as props from './props.js';
 import { SHELVES, itemOf } from './shop.js';
 import { ShelfScreen, model as invModel } from './inv-ui.js';
+// fb2 C: the crosshair's pointer (stream A's pointer.js) when the build has it: the store's hotspots are its targets;
+// without it, E in the store reads the same boxes along the view (aimAt)
+const POINTER = import.meta.glob('./pointer.js', { eager: true })['./pointer.js'] || null;
 
 // Real outfitters by entry area where they are well known (Ely and the Fernberg Road, the Echo Trail, the
 // Sawbill Trail, the Gunflint Trail); invented but plausible names elsewhere.
@@ -104,22 +110,28 @@ const iconOf = (id) => {
   const it = itemOf(id); return (it && (FAMILY_ICON[it.family] || (it.slot === 'paddle' ? 'paddle' : null))) || 'jig';
 };
 export const gearIcon = (id, faint = false) => `<span style="color:${faint ? '#9a8a70' : '#2a2016'}; display:inline-flex"><svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true">${ICON[iconOf(id)] || ICON.jig}</svg></span>`;
-const STANDING = ['new', 'a familiar face', 'a regular', 'a friend of the house', 'an old hand', 'one of the family'];
 
-const NEAR = 25;                 // metres from the landing (its dock, once built: distTo) within which E opens the counter
+const NEAR = 25;                 // metres from the landing (its dock, once built: distTo) within which it is the landing you are by afloat
 const SAVE_KEY = 'bwca-canoe-trip';
 const WAKE_BUNK = 7;             // the hour you wake after a bunk night
 const EVAC_FADE = 1.4;           // seconds of fade before the move (the old evacuation, without a trip core)
-const SPOT_R = 1.5;              // metres from a store hotspot's floor spot within which E is its
-const SPOT_FACE = Math.cos((80 * Math.PI) / 180); // and how squarely you must face it
+const REACH = 1.6;               // metres from the walker to a store hotspot's box (its nearest side) within which E opens it
 const DOOR_R = 3;                // metres from the door, outside, within which the door says it is open
 const VISIT_FAR = 90;            // metres from the store and its dock (distTo) at which a visit is over (a ride, a teleport, a walk away)
 const ARRIVAL_WAIT = 20;         // game seconds an arrival waits for the landing's store to be built before it gives up
 const ARRIVAL_FAR = 250;         // metres from the landing (distTo) within which an arrival still goes in (a teleport finds water up to 120 m out)
-const TABS = [['counter', 'The counter'], ['board', 'The board']];
-const SPOT_WORDS = { counter: 'The counter', board: 'The board', wall: 'The lure wall · lures for the tackle box', maps: 'The map table · Fisher sheets of this country', food: 'The provisions shelf · meals, snacks and the barrels', tackle: 'The tackle shelf · the rod, the leeches and the bucket', gear: 'The gear shelf · packs, paddles, tents and canoes' };
+const COME_IN = 30;              // metres from a landing (distTo) within which, on foot, a trip under way has come in
+const AWAY = 90;                 // metres from the landing a trip left that make it a trip (back sooner, the push-off is taken back)
+const DOCK_R = 7;                // metres from the dock's side (afloat) within which E ties up alongside it
+const DOCK_TIME = 1.6;           // seconds the canoe takes to come alongside the dock
+const MODES = ['counter', 'board']; // the paper's two faces: the counter at the counter, the board at the cork board
+// what each of the store's hotspots is to the pointer (the layout's `hot` keys, props.js): its kind and its name
+const HOT = {
+  food: ['shelf', 'The provisions shelf'], tackle: ['shelf', 'The tackle shelf'], gear: ['shelf', 'The gear shelf'], wall: ['shelf', 'The lure wall'],
+  maps: ['maptable', 'The map table'], counter: ['counter', 'The counter'], board: ['board', 'The board'],
+};
+const SHELF_OF = { food: 'food', tackle: 'tackle', gear: 'gear', wall: 'lure' };
 const SHELF_LOOK = { food: 'shelf', tackle: 'shelf', gear: 'shelf', lure: 'pegs', map: 'table' };
-const SLOTS = [['canoe', 'Canoe'], ['paddle', 'Paddle'], ['tent', 'Tent'], ['filter', 'Water']];
 
 // the lakes are frozen on a date, and the first open-water day from there
 const iced = (e) => seasonAt(e.doy).ice > 0.5;
@@ -145,10 +157,20 @@ export class Outfitter {
     this.landings = world.entryPoints.map((ep) => ({ ep: ep.ep, name: outfitterName(ep), place: ep.name, x: ep.x, z: ep.z, lake: ep.lake }));
     this.trip = { active: false, ep: null, days: 0, started: null, startAbs: 0, turnedIn: 0 };
     this.open = false; this.at = null; this.near = null;
-    this.tab = 'counter'; this.focus = null; this.receipt = null;
+    this.tab = 'counter'; this.focus = null; this.receipt = null; // tab: the paper's face, 'counter' or 'board' (MODES)
+    this.port = null;                // fb2 C: the landing you are at (on foot by it, or at its counter): a trip pushes off from it
+    this.docking = null;             // fb2 C: the canoe coming alongside a dock (E afloat by it): { l, L, t, x0, z0, h0, h1 }
+    this.dockAt = null;              // the landing whose dock you are afloat by, its store built (E ties up)
+    this.aimed = null;               // without the pointer: the hotspot the view is on, in the store
+    this.mapTable = null;            // stream D's map table screen (maptable.js), set in its main.js block
+    // fb2 C: the store's hotspots as the crosshair's targets (stream A's pointer.js); E in the store is then the pointer's
+    this.pointer = POINTER && POINTER.pointer ? POINTER.pointer : null;
+    if (this.pointer && typeof this.pointer.register === 'function') {
+      this.pointer.register((ray, near) => this.targets(ray, near));
+      this.pointer.passStore = false;
+    } else this.pointer = null;
     this.visit = null;               // in or about a store: { ep, landing, L, inside, switched, settled }
     this.arrival = null;             // a season begun, or a page reloaded in a store: in at the store once it is built
-    this.leftFrom = null;            // a store walked away from before the season's first push-off
     this.greeted = {};               // ep → the day its keeper last said hello
     this.stubStore = false;          // tests: an invisible store beside the shack when props.js has no storeLayout
     this.stubs = new Map();
@@ -253,25 +275,49 @@ export class Outfitter {
     this.stubs.set(ep, L);
     return L;
   }
-  // E at the dock afloat: the canoe tied alongside the dock (a hull set down on the water, as player.js sets one down
-  // on the ground), and you on the stoop at the door, facing in
-  tieUp(l, L, quiet = false) {
+  // The canoe tied alongside the dock (a hull set down on the water, as player.js sets one down on the ground), and you
+  // at the door facing in (a season begun, a ride's end, a page reloaded: placed by the game, never on a key), or on
+  // the dock's deck beside the canoe facing the land (at: 'deck', the end of tying up from the water: dockUp)
+  tieUp(l, L, quiet = false, at = 'door') {
     const p = this.player, w = this.world, ds = L.dockSide || L.dockLand || L.door;
-    const dd = w.deeperDir(ds.x, ds.z), hh = Math.atan2(-dd.z, dd.x);
+    const dd = w.deeperDir(ds.x, ds.z), hh = Number.isFinite(this.docking && this.docking.h1) ? this.docking.h1 : Math.atan2(-dd.z, dd.x);
     p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.yawRate = 0; p.bob = null; p.balance = 0; p.extraRoll = 0;
     p.mode = 'walk';
     p.carry = { trail: null, drop: { x: ds.x, z: ds.z, heading: hh }, hitCooldown: 0, from: null, choice: false };
     p.restHull(ds.x, ds.z, hh);
-    p.x = L.door.x; p.z = L.door.z; p.heading = L.door.heading;
-    const y = Number.isFinite(L.door.y) ? L.door.y : p.groundAt(p.x, p.z);
+    const deck = at === 'deck' && L.dockDeck ? L.dockDeck : null;
+    if (deck) { p.x = deck.x; p.z = deck.z; p.heading = Number.isFinite(L.dockHeading) ? L.dockHeading + Math.PI : L.door.heading; }
+    else { p.x = L.door.x; p.z = L.door.z; p.heading = L.door.heading; }
+    const y = deck && Number.isFinite(deck.y) ? deck.y : !deck && Number.isFinite(L.door.y) ? L.door.y : p.groundAt(p.x, p.z);
     p.foot = { y, vy: 0, air: false, t: 0, land: 0, near: null };
     p.canoe.state.stroke = 0; p.canoe.state.power = 0;
     p.placeOnGround();
     const ch = p.chase;
     if (ch) { ch.viewYaw = p.heading; ch.forwardYaw = p.heading; ch.viewPitch = 0; ch.snap(); }
     this.visit = { ep: l.ep, landing: l, L, inside: false, switched: false, settled: false, bye: false };
+    this.port = l;
     if (this.core) this.core.learn(l.ep); else if (this.profile) this.profile.learn(l.ep);
-    if (!quiet) this.hud.note(`Tied up at the ${l.name} dock. The door is open.`, 4);
+    if (!quiet) this.hud.note(deck ? `Tied up at the ${l.name} dock. The store is up the yard.` : `Tied up at the ${l.name} dock. The door is open.`, 4);
+  }
+  // E afloat by a store's dock: the canoe comes alongside it, paddled in over DOCK_TIME (updateDocking), and you step
+  // out onto the deck. Like going ashore anywhere, only onto the dock: no door, no teleport.
+  dockUp(l, L) {
+    const p = this.player, ds = L.dockSide;
+    let h1 = Number.isFinite(L.dockHeading) ? L.dockHeading : p.heading;
+    const turn = (a) => Math.abs(Math.atan2(Math.sin(a - p.heading), Math.cos(a - p.heading)));
+    if (turn(h1 + Math.PI) < turn(h1)) h1 += Math.PI; // bow out or bow in, whichever is less of a turn
+    this.docking = { l, L, t: 0, x0: p.x, z0: p.z, h0: p.heading, h1, d: Math.hypot(ds.x - p.x, ds.z - p.z) };
+  }
+  updateDocking(dt) {
+    const D = this.docking, p = this.player, ds = D.L.dockSide;
+    if (p.mode !== 'paddle' || p.teleporting) { this.docking = null; return; }
+    D.t += dt;
+    const dur = Math.max(0.6, Math.min(DOCK_TIME, 0.35 + D.d * 0.3)), u = Math.min(1, D.t / dur), k = u * u * (3 - 2 * u);
+    p.x = D.x0 + (ds.x - D.x0) * k; p.z = D.z0 + (ds.z - D.z0) * k;
+    p.heading = D.h0 + Math.atan2(Math.sin(D.h1 - D.h0), Math.cos(D.h1 - D.h0)) * k;
+    p.speed = 0; p.yawRate = 0;
+    const st = p.canoe.state; st.power = 0.35 * (1 - k); st.stroke = (st.stroke + dt * 0.8) % 1;
+    if (u >= 1) { this.tieUp(D.l, D.L, false, 'deck'); this.docking = null; }
   }
   // A season begun at a landing with a store, or a page reloaded in one (boot): once the store is built (its tile
   // streams in), the canoe is tied up at its dock and you stand at the door, or back where you were on the floor.
@@ -288,8 +334,9 @@ export class Outfitter {
     }
     this.arrival = null;
     if (this.distTo(l, p.x, p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) { if (a.why === 'season' || a.pending) this.pendingShow = true; return; }
-    this.tieUp(l, L, a.why === 'reload' || a.why === 'ride');
+    this.tieUp(l, L, a.why === 'reload' || a.why === 'ride' || a.why === 'evac');
     if (a.why === 'ride') this.hud.note(`The truck leaves you at ${l.name}: the canoe at the dock, the door open.`, 5);
+    if (a.why === 'evac' && a.pending) this.pendingShow = true;
     const v = this.visit;
     if (a.why === 'reload') {
       const d = this.day; this.greeted[a.ep] = `${d.year}-${d.doy}`; // the keeper said hello before the reload
@@ -304,19 +351,18 @@ export class Outfitter {
       if (a.pending) this.pendingShow = true;
     }
   }
-  // a visit begins at a tie-up or on walking in, and ends afloat again or far off: a launch from it pushes off (or
-  // carries on) unless the counter's stamps already did
+  // a visit begins at a tie-up or on foot by a store (its yard, its dock), and ends afloat again or far off
   updateVisit() {
     const p = this.player;
     let v = this.visit;
     if (!v) {
       if (!p.onFoot || p.teleporting) return;
-      const n = this.nearest(p.x, p.z); if (!n || n.d > 60) return;
-      const L = this.layout(n.l.ep); if (!L || !L.inside(p.x, p.z)) return;
+      const n = this.nearest(p.x, p.z); if (!n || n.d > COME_IN) return;
+      const L = this.layout(n.l.ep); if (!L) return;
       v = this.visit = { ep: n.l.ep, landing: n.l, L, inside: false, switched: false, settled: false, bye: false };
     }
     const far = this.distTo(v.landing, p.x, p.z) > VISIT_FAR;
-    if (!p.onFoot || far) { this.endVisit(p.mode === 'paddle' && !p.teleporting && !far); return; }
+    if (!p.onFoot || far) { this.endVisit(); return; }
     const L = this.layout(v.ep) || v.L; v.L = L;
     const inside = !!L.inside(p.x, p.z);
     if (inside !== v.inside) { v.inside = inside; if (inside) this.enterStore(v); else this.leaveStore(v); }
@@ -345,112 +391,177 @@ export class Outfitter {
     v.switched = false;
     if (!v.bye) { v.bye = true; const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, 'goodbye'); if (!(this.people && this.people.keeperSays && this.people.keeperSays(v.ep, words, 'goodbye'))) this.hud.note(`${who ? `${who}, from the door` : 'From the door'}: “${words}”`, 4); } // fb F
   }
-  endVisit(launched) {
+  endVisit() {
     const v = this.visit; if (!v) return;
     this.visit = null;
     const ch = this.player.chase;
     if (v.switched && ch && ch.mode === 'first') ch.setMode('third');
-    if (v.settled || (this.core && this.core.evacuating)) return;
-    if (launched) { this.at = v.landing; if (!this.trip.active) this.start(); else this.carryOn(); }
-    else if (!this.player.teleporting && !this.trip.active) this.leftFrom = v.landing;
-  }
-  // the counter's stamps from inside the store: out the door and into the canoe at the dock
-  launchFromDock() {
-    const v = this.visit, p = this.player; if (!v || !p.onFoot) return;
-    v.settled = true;
-    const ds = v.L && (v.L.dockSide || v.L.dockLand); if (!ds) return;
-    p.launch({ x: ds.x, z: ds.z });
-    if (p.mode === 'paddle' && p.chase) p.chase.snap();
-  }
-  // the things in the store E opens the counter at: the counter, the board, each shelf and the lure wall
-  spots(L) {
-    const s = [];
-    if (L.counter) s.push({ key: 'counter', tab: 'counter', p: L.counter });
-    if (L.board) s.push({ key: 'board', tab: 'board', p: L.board });
-    for (const sh of L.shelves || []) s.push({ key: sh.kind, shelf: sh.kind, p: sh });
-    if (L.wall) s.push({ key: 'wall', shelf: 'lure', p: L.wall });
-    if (L.mapTable) s.push({ key: 'maps', shelf: 'map', p: L.mapTable });
-    return s;
-  }
-  // the nearest one in reach that you face, inside
-  spot() {
-    const v = this.visit, p = this.player; if (!v || !v.inside || !v.L) return null;
-    const f = p.forward; let best = null, bd = SPOT_R;
-    for (const s of this.spots(v.L)) {
-      const d = Math.hypot(s.p.x - p.x, s.p.z - p.z); if (d > bd) continue;
-      const at = s.p.at;
-      if (at) { const ax = at.x - p.x, az = at.z - p.z, al = Math.hypot(ax, az); if (al > 0.25 && (ax * f.x + az * f.z) / al < SPOT_FACE) continue; }
-      best = s; bd = d;
-    }
-    return best;
-  }
-  spotText(s, v) {
-    if (s.key === 'counter') { const who = this.shop ? this.shop.keeperName(v.ep) : null; return `The counter${who ? ` · ${esc(who)}` : ''}: the permit, a bunk, the road`; }
-    if (s.key === 'board') {
-      let ready = 0;
-      try { ready = (this.tasks && this.tasks.active ? this.tasks.active : []).filter((t) => t.from === v.ep && t.status === 'done').length; } catch { ready = 0; }
-      return `The board${ready ? ` · ${ready} to claim` : ' · notices from this outfitter'}`;
-    }
-    return SPOT_WORDS[s.key] || 'The shelves';
   }
 
-  // Before the player moves: who is nearby, E or Q at the dock, E at a hotspot in the store; the counter (or a fade,
-  // or the journal) holds the paddle still.
+  // --- the trip's start and end, by themselves (fb2 C) --------------------------------------------------------
+  // The landing you are at (on foot by it, or afloat by it with its counter up) is your port. Into the canoe there, or
+  // paddling off from it, the trip pushes off; on foot at any outfitter's landing again, it has come in: logged, if you
+  // went anywhere (AWAY from the landing it left, or to another one), else the push-off is taken back.
+  updateTrip() {
+    const p = this.player, core = this.core, t = this.trip;
+    if (p.teleporting || this.arrival || this.evac || this.bunking || this.docking || (core && core.evacuating) || (this.veil && this.veil.active)) return;
+    const walking = p.mode === 'walk' || p.mode === 'carry';
+    if (walking) {
+      const n = this.nearest(p.x, p.z), at = n && n.d < COME_IN ? n.l : null;
+      if (at) {
+        if (t.active) { if (t.away || at.ep !== t.ep) this.comeIn(at); else this.takeBack(at); }
+        this.port = at;
+      }
+    } else if (p.mode === 'paddle' && !t.active && this.port) {
+      if (this.portWalked || this.distTo(this.port, p.x, p.z) > NEAR) { this.at = this.port; this.start(); }
+    }
+    this.portWalked = walking && !!this.port;
+    if (t.active && !t.away) {
+      const from = this.landing(t.ep);
+      if (!from || this.distTo(from, p.x, p.z) > AWAY) { t.away = true; this.save(); }
+    }
+  }
+  // a trip under way has reached an outfitter: logged as came in, there (trip.js comeIn); no paper, no night
+  comeIn(l) {
+    const core = this.core, st = this.stats, t = this.trip;
+    const days = Math.max(1, core && core.active ? core.dayN : Math.floor(this.daysOut) + 1), km = st ? st.km : 0, from = t.fromName || 'the landing';
+    if (core) core.comeIn(l.ep);
+    this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
+    this.at = l; this.summary = null;
+    const kmW = km > 0.05 ? `, ${km < 10 ? km.toFixed(1) : Math.round(km)} km paddled` : '';
+    this.hud.note(`Came in at ${l.name}: ${days} ${plural(days, 'day')} out from ${from}${kmW}. The trip is in your logbook.`, 6);
+    this.save();
+  }
+  // back at the landing the trip left without having gone anywhere: no trip after all
+  takeBack(l) {
+    if (this.core && typeof this.core.takeBack === 'function') this.core.takeBack();
+    this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
+    this.at = l;
+    this.save();
+  }
+
+  // --- the store's hotspots: what the crosshair opens -----------------------------------------------------------
+  // The pointer's provider (pointer.js, stream A): inside a store, the hotspot box the view's ray meets first, if the
+  // walker is within REACH of it. near.box is the pointer's own test; without it, boxHit.
+  targets(ray, near) {
+    const h = this.aimAt(ray, near && typeof near.box === 'function' ? near.box : null);
+    return h ? [{ dist: h.t, miss: h.miss || 0, target: h.target }] : [];
+  }
+  aimAt(ray, test = null) {
+    const v = this.visit, p = this.player;
+    if (!v || !v.inside || !v.L || !Array.isArray(v.L.hot) || !p.onFoot || this.open || this.shelfOpen || this.bunking || !ray) return null;
+    let best = null;
+    const o = ray.origin, d = ray.direction, dl = Math.hypot(d.x, d.z) || 1;
+    for (const h of v.L.hot) {
+      if (reachTo(h, p.x, p.z) > REACH) continue;
+      const r = test ? test(h) : boxHit(ray, h);
+      if (!r || !Number.isFinite(r.t) || r.t <= 1e-4) continue; // (a ray from inside a box: a third-person camera backed into a shelf)
+      // where it meets the box: in front of the walker along the view, not between the camera and his back
+      const ex = o.x + d.x * r.t - p.x, ez = o.z + d.z * r.t - p.z;
+      if ((ex * d.x + ez * d.z) / dl < -0.25) continue;
+      if (!best || r.t < best.t) best = { t: r.t, miss: r.miss || 0, h };
+    }
+    return best ? { ...best, target: this.targetOf(best.h, v) } : null;
+  }
+  targetOf(h, v) {
+    const [kind, name] = HOT[h.key] || ['shelf', 'The shelves'];
+    let label = name;
+    if (h.key === 'counter') { const who = this.shop ? this.shop.keeperName(v.ep) : null; if (who) label = `${name} · ${who}`; }
+    else if (h.key === 'board') { const ready = this.readyHere(v.ep).length; if (ready) label = `${name} · ${ready} to claim`; }
+    const box = { x: h.x, y: h.y, z: h.z, hx: h.hx, hy: h.hy, hz: h.hz, heading: h.heading };
+    return { kind, ref: h.key, label, verb: 'Open', act: () => this.openHot(h.key, v.landing), box, at: { x: h.x, y: h.y, z: h.z } };
+  }
+  // what E on a hotspot opens: a shelf's two panes, the map table's screen, the counter, the board
+  openHot(key, landing) {
+    if (!landing) return false;
+    this.port = landing;
+    if (SHELF_OF[key]) { this.openShelf(SHELF_OF[key], landing); return true; }
+    if (key === 'maps') {
+      if (this.mapTable && typeof this.mapTable.show === 'function') return this.mapTable.show({ ep: landing.ep, landing });
+      this.openShelf('map', landing); return true;
+    }
+    this.show(landing, key === 'board' ? 'board' : 'counter');
+    return true;
+  }
+  // npcs.js's question (until the people are the pointer's too): the hotspot the view is on, as the old floor spot it
+  // reads ({ key, p: { x, z, at } }), so the counter keeps E and the keeper behind it is Q
+  spot() {
+    const h = this.pointer ? null : this.aimed;
+    return h ? { key: h.h.key, p: { x: this.player.x, z: this.player.z, at: { x: h.h.x, z: h.h.z } } } : null;
+  }
+  // the notices done that this outfitter pays
+  readyHere(ep) { try { return (this.tasks && this.tasks.active ? this.tasks.active : []).filter((t) => t.from === ep && t.status === 'done'); } catch { return []; } }
+  // Without the pointer: the hotspot the walker looks at, along the look from his eyes (the bearing and tilt of the
+  // view, camera.js viewYaw and viewPitch), whichever way the camera itself stands
+  viewRay() {
+    const p = this.player, ch = p.chase;
+    const yaw = ch ? ch.viewYaw : p.heading, pitch = ch ? ch.viewPitch || 0 : 0, y = (p.foot ? p.foot.y : p.groundAt(p.x, p.z)) + 1.62;
+    return { origin: { x: p.x, y, z: p.z }, direction: { x: Math.cos(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: -Math.sin(yaw) * Math.cos(pitch) } };
+  }
+
+  // Before the player moves: who is nearby, E afloat by a dock (tie up alongside it), E at a hotspot in the store when
+  // there is no pointer; the trip's start and end; the counter (or a fade, or the journal) holds the paddle still.
   update(dt) {
     const p = this.player, veil = !!(this.veil && this.veil.active) || !!(this.core && this.core.evacuating);
-    const n = p.mode === 'paddle' && !p.landing && !p.teleporting ? this.nearest(p.x, p.z) : null;
+    const n = p.mode === 'paddle' && !p.landing && !p.teleporting && !p.ashore ? this.nearest(p.x, p.z) : null;
     this.near = n && n.d < NEAR ? n.l : null;
-    p.suppressLanding = !!this.near;
-    p.input.paused = this.open || this.shelfOpen || !!this.evac || veil || this.bunking || (this.hud && this.hud.paper === 'journal');
+    const L = this.near ? this.layout(this.near.ep) : null;
+    // the dock's side within reach afloat: E ties up there (the shore's "Go ashore" steps aside for it); a landing
+    // whose store is not built yet: E opens its counter from the water
+    this.dockAt = L && L.dockSide && L.dockDeck && Math.hypot(L.dockSide.x - p.x, L.dockSide.z - p.z) < DOCK_R ? this.near : null;
+    p.suppressLanding = !!this.dockAt || (!!this.near && !L) || !!this.docking;
+    p.input.paused = this.open || this.shelfOpen || !!this.evac || veil || this.bunking || !!this.docking || (this.hud && this.hud.paper === 'journal');
     if (!p.packs) p.loadFactor = this.loadFactor; // the packs (packs.js) set it from the load once they are there
-    const free = !this.open && !this.evac && !veil && !this.bunking && !(this.hud && this.hud.paper);
+    const free = !this.open && !this.evac && !veil && !this.bunking && !this.docking && !(this.hud && this.hud.paper);
     if (this.arrival && !p.teleporting && !veil) this.updateArrival(dt);
     if (this.pendingShow && !p.teleporting && free && !this.arrival) { this.pendingShow = false; this.show(this.visit ? this.visit.landing : this.nearest(p.x, p.z).l); }
     this.updateVisit();
-    if (this.leftFrom && p.mode === 'paddle' && !p.teleporting) { const l = this.leftFrom; this.leftFrom = null; if (!this.trip.active && !veil) { this.at = l; this.start(); } }
-    if (free && this.open === false) {
+    this.updateTrip();
+    if (this.docking) this.updateDocking(dt);
+    else if (free && this.open === false) {
       const rod = !!(p.fishing && p.fishing.rodUp);
       if (this.near && !rod) {
-        const L = this.layout(this.near.ep);
-        if (L && p.input.pressed('KeyE')) this.tieUp(this.near, L);
-        else if (p.input.pressed(L ? 'KeyQ' : 'KeyE')) this.show(this.near);
-      } else if (this.visit && this.visit.inside) {
-        const s = this.spot();
-        if (s && !(this.people && this.people.claimsE) && p.input.pressed('KeyE')) {
-          if (s.shelf) this.openShelf(s.shelf, this.visit.landing);
-          else { this.staged = { tab: s.tab, focus: null }; this.show(this.visit.landing, s.tab, null); }
-        }
+        if (this.dockAt && p.input.pressed('KeyE')) this.dockUp(this.dockAt, L);
+        else if (!L && p.input.pressed('KeyE')) this.show(this.near);
+      } else if (!this.pointer && this.visit && this.visit.inside) {
+        // no pointer in the build: the hotspot along the view takes E, unless a visitor you face has it (npcs.js)
+        const h = this.aimAt(this.viewRay());
+        this.aimed = h;
+        if (h && !(this.people && this.people.claimsE) && p.input.pressed('KeyE')) { p.input.once.delete('KeyE'); h.target.act(); }
       }
     }
     if (this.evac) this.updateEvac(dt);
     if (this.trip.active) { this.saveTimer += dt; if (this.saveTimer > 8) { this.saveTimer = 0; this.save(); } }
   }
   // after the player moved: the dock's prompt, unless something more pressing is being said; the store's hotspots
+  // (without the pointer, which says its own); the door
   prompt() {
     const p = this.player;
     const rod = !!(p.fishing && p.fishing.rodUp); // the rod outranks the dock
-    if (this.near && !this.open && !this.evac && !rod && (!p.prompt || p.prompt.key === 'E')) {
+    if (this.docking) p.prompt = { key: null, text: 'Coming alongside the dock…' };
+    else if (this.near && !this.open && !this.evac && !rod && (!p.prompt || p.prompt.key === 'E' || this.dockAt)) {
       const known = !this.profile || this.profile.knows(this.near.ep), L = this.layout(this.near.ep);
       const name = `${this.near.name} · entry point ${this.near.ep}${known ? '' : ' · new to you'}`;
-      p.prompt = L ? { key: null, text: `${esc(name)} &nbsp;·&nbsp; <kbd>E</kbd>Tie up and go in &nbsp; <kbd>Q</kbd>The counter` } : { key: 'E', text: name };
+      if (this.dockAt) p.prompt = { key: 'E', text: `Tie up at the dock · ${esc(name)}` };
+      else if (!L) p.prompt = { key: 'E', text: `${esc(name)} · the counter` };
     }
     const v = this.visit;
     if (v && !this.open && !this.shelfOpen && !this.bunking && p.onFoot) {
-      if (v.inside) { const s = this.spot(); p.prompt = s ? { key: 'E', text: this.spotText(s, v) } : null; }
+      if (v.inside) { const h = this.pointer ? null : this.aimed; p.prompt = h ? { key: 'E', text: `Open · ${esc(h.target.label)}` } : null; } // with the pointer, its label under the crosshair says it
       else if (v.L && v.L.door && Math.hypot(v.L.door.x - p.x, v.L.door.z - p.z) < DOOR_R && !(p.prompt && /kbd/.test(p.prompt.text || ''))) p.prompt = { key: null, text: `${esc(v.landing.name)} · the door is open` };
     }
   }
 
-  // --- the counter ------------------------------------------------------------------------------------------
-  // open at a tab: 'counter' (the permit, the services, money and rides) or 'board'
+  // --- the counter and the board ----------------------------------------------------------------------------
+  // the paper at the counter ('counter': a bunk, the rides, the permit, the notices to claim) or at the board ('board')
   show(landing, tab = null, focus = null) {
-    const pr = this.profile, core = this.core, st = this.staged; // staged: the tab a hotspot asked for, should a wrapper drop the arguments
+    const pr = this.profile, core = this.core, st = this.staged; // staged: the face a hotspot asked for, should a wrapper drop the arguments
     this.staged = null;
     if (!tab && st) { tab = st.tab; focus = st.focus; }
     const stranger = (pr && !pr.knows(landing.ep)) || (core && core.fresh === landing.ep); // a first visit
     if (core) { core.learn(landing.ep); core.fresh = null; } else if (pr) pr.learn(landing.ep);
     if (this.shelfOpen) this.shelf.close();
-    this.at = landing; this.open = true; this.tab = TABS.some(([k]) => k === tab) ? tab : 'counter'; this.focus = focus; this.receipt = null;
+    this.at = landing; this.port = landing; this.open = true; this.tab = MODES.includes(tab) ? tab : 'counter'; this.focus = focus; this.receipt = null;
     const rode = this.arrivedBy === 'ride'; this.arrivedBy = null; // stream C's rides: the keeper's words for one come up the road
     const kind = this.lineKind === 'welcome' ? (stranger ? 'stranger' : rode ? 'ride' : this.trip.active ? 'passing' : 'welcome') : this.lineKind;
     this.greeting = this.say(landing.ep, kind);
@@ -491,33 +602,22 @@ export class Outfitter {
     this.el.panel.classList.remove('show');
     if (this.hud && this.hud.closePaper) this.hud.closePaper('outfitter');
   }
-  // leaving the counter: in the store, back to the store; at the dock, pushing off between trips, carrying on during one
+  // leaving the paper: back to the store, or to the water at a landing with no store; the trip is not the counter's
+  // business (it pushes off as you paddle away)
   get inStore() { return !!(this.visit && this.player.onFoot); }
   close() {
     if (!this.open) return;
-    if (this.inStore) { this.hide(); return; }
-    if (!this.trip.active) { this.start(); return; }
-    this.carryOn();
+    this.hide();
   }
   act(act, id, ev = null) {
     const f = this.draft;
     if (act === 'close') this.close();
-    else if (act === 'tab') { this.tab = id; this.focus = null; this.render(); }
     else if (act === 'shelf') this.openShelf(id, this.at);
-    else if (act === 'shop' && this.shop) {
-      const r = this.shop.buy(id, this.at.ep);
-      this.receipt = { text: r.words, ok: r.ok };
-      if (r.ok) this.hud.note(r.words, 5);
-      this.save(); this.render();
-    } else if (act === 'use' && this.shop) { this.shop.equip(id); this.receipt = null; this.render(); }
     else if (act === 'bunk') this.bunk();
     else if (act === 'ride' && this.rides) this.rides.act(id);
-    else if (act === 'date' && f && !this.trip.active) this.shiftDate(Number(id) * (ev && ev.shiftKey ? 30 : 1));
-    else if (act === 'thaw' && f && !this.trip.active) this.setEntry(thawFrom(f.entry));
-    else if (act === 'canoe') { if (this.profile) this.profile.use('canoe', id); this.render(); }
-    else if (act === 'start') { this.start(); this.launchFromDock(); }
-    else if (act === 'carryon') { this.carryOn(); this.launchFromDock(); }
-    else if (act === 'callit') this.callIt();
+    else if (act === 'date' && f && !this.stamped) this.shiftDate(Number(id) * (ev && ev.shiftKey ? 30 : 1));
+    else if (act === 'thaw' && f && !this.stamped) this.setEntry(thawFrom(f.entry));
+    else if (act === 'stamp') { this.stamp(); this.render(); }
     else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
       const r = this.tasks.act(id, this.at.ep);
@@ -544,17 +644,28 @@ export class Outfitter {
     const date = new Date(d.year, 0, d.doy);
     return `No. ${home}-${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
   }
-  choice(act, id, label, on, disabled = false) {
-    return `<button type="button" class="opt${on ? ' on' : ''}" data-act="${act}" data-id="${id}" aria-pressed="${on}"${disabled ? ' disabled' : ''}>${label}</button>`;
+  // the season's permit, stamped once: at the counter (Stamp it), or as the season's first trip pushes off (start)
+  get stamped() { const pr = this.profile; return pr ? !!pr.permit : !!(this.core && this.core.permit); }
+  stamp() {
+    const pr = this.profile; if (!pr || pr.permit) return false;
+    const d = this.day, a = this.at || this.nearest(this.player.x, this.player.z).l;
+    let e = this.draft ? this.draft.entry : { year: d.year, doy: d.doy };
+    if (this.adventure && iced(e)) e = thawFrom(e); // the lakes are iced on it: the thaw
+    if (e.year !== d.year || e.doy !== d.doy) d.setClock(e.year, e.doy, d.hours);
+    const home = pr.home != null ? pr.home : a.ep;
+    pr.stamp({ no: this.permitNo(home, e), ep: home, entry: { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) } });
+    this.draft = null;
+    this.save();
+    return true;
   }
 
-  // the season's permit, the food and the ways on: the counter tab's left column
+  // The season's permit, small: its number, home and the day it was issued. Before it is stamped (Adventure) the day
+  // can still move, a day either way (a month with Shift), or to the thaw when the lakes are iced in on it.
   permitSection(a) {
-    const pr = this.profile, core = this.core, adv = this.adventure, active = this.trip.active;
+    const pr = this.profile, core = this.core, adv = this.adventure;
     const home = pr && pr.home != null ? this.landing(pr.home) : null;
     const stamped = pr ? pr.permit : core && core.permit;
-    const rows = [];
-    rows.push(`<div class="lab">Home</div><div>${home ? `${esc(this.lakeOf(home))} · entry point ${home.ep}` : esc(this.lakeOf(a))}</div>`);
+    const rows = [`<div class="lab">Home</div><div>${home ? `${esc(this.lakeOf(home))} · entry point ${home.ep}` : esc(this.lakeOf(a))}</div>`];
     let ice = false, thaw = null;
     if (adv && !stamped) { // the date the season's paper will carry, while it can still move
       const f = this.draft || (this.draft = { entry: { year: this.day.year, doy: this.day.doy } });
@@ -566,33 +677,32 @@ export class Outfitter {
         + `<button type="button" class="step small" data-act="date" data-id="1" aria-label="A day later (Shift: a month)" title="Shift: a month">›</button></span>`
         + `${ice ? `<button type="button" class="pencil-btn" data-act="thaw">iced in · put in ${shortDate(thaw.year, thaw.doy)}?</button>` : ''}</div>`);
     } else if (stamped && stamped.entry) rows.push(`<div class="lab">Issued</div><div>${longDate(stamped.entry.year, stamped.entry.doy)} · <span class="soft">good all season</span></div>`);
-    // what you carry and the food in it (the inventory, stream A); the food itself is on the provisions shelf
-    const inv = invModel(), all = inv && inv.containers ? inv.containers : [], packs = all.filter((c) => /^pack/.test(String(c.item))).length, barrels = all.filter((c) => /^barrel/.test(String(c.item))).length;
-    rows.push(`<div class="lab">Packs</div><div>${packs > 1 ? `${packs} Duluth packs` : packs ? 'One Duluth pack' : 'No pack'}${barrels ? ` and ${barrels > 1 ? `${barrels} barrels` : 'a barrel'}` : ''} · <span class="soft">${packs > 1 ? 'two carries' : 'one carry'}</span></div>`);
-    const food = inv && typeof inv.foodWords === 'function' ? inv.foodWords() : this.energy ? `${fmtDaysWords(this.energy.food)} of food` : '';
-    const noStore = !this.layout(a.ep), shelves = !noStore ? '' : `<div class="shelfbtns">${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}</div>`;
-    const pack = `<div class="lab">Food</div><p class="left">${esc(food || 'Nothing to eat')} within reach</p>
-        <p class="note">${this.sandbox ? 'Sandbox: the shelves are free and nobody goes hungry.' : noStore ? 'The store is being opened up: the shelves are here for now.' : 'Meals and snacks are on the provisions shelf: walk over, pick them up and pack them yourself.'}</p>${shelves}`;
-    let push;
-    if (!active) {
-      const iceTxt = ice ? `the lakes are iced in until ${shortDate(thaw.year, thaw.doy)}` : '';
-      const hungry = !this.sandbox && this.energy && this.energy.food <= 0 ? 'no food in the packs yet: the provisions shelf' : '';
-      const leave = this.inStore ? 'out the door and into the canoe' : 'leaving the counter pushes off too';
-      push = `<button type="button" class="stamp big push" data-act="start">${ice ? `Push off on ${shortDate(thaw.year, thaw.doy)}` : 'Push off'}</button><div class="pencil">${esc(this.summary || iceTxt || hungry || leave)}</div>`;
-    } else {
-      const h = this.day.hours, night = h >= 17 || h < 5 ? 'calling it: a bunk tonight' : 'calling it: a bunk, up at seven';
-      push = `<div class="ways"><button type="button" class="stamp big push" data-act="carryon">Resupply · carry on</button><button type="button" class="stamp outline" data-act="callit">Call it a trip</button></div><div class="pencil">${esc(this.summary || night)}</div>`;
-    }
     const no = stamped && stamped.no ? stamped.no : this.permitNo(pr && pr.home != null ? pr.home : a.ep, (this.draft && this.draft.entry) || this.day);
-    return `<section class="permit" aria-labelledby="permit-h">
-      <div class="top"><h3 id="permit-h">Season permit</h3><span class="sc no">${this.sandbox ? 'Sandbox' : `${esc(no)}${stamped ? '' : ' · to stamp'}`}</span></div>
-      <div class="grid">${rows.join('')}</div>
-      <div class="pack">${pack}</div>
-      ${push}
+    const foot = stamped ? '<div class="inked">Stamped</div>'
+      : `<div class="stampline"><button type="button" class="stamp small" data-act="stamp">Stamp it</button><span class="pencil">${esc(ice ? `iced in until ${shortDate(thaw.year, thaw.doy)}` : 'or it’s stamped as you push off')}</span></div>`;
+    return `<section class="permit small" aria-labelledby="permit-h">
+      <div class="top"><h3 id="permit-h">Season permit</h3><span class="sc no">${this.sandbox ? 'Sandbox' : esc(no)}</span></div>
+      <div class="grid">${rows.join('')}</div>${foot}
     </section>`;
   }
-  // the counter tab's middle: the keeper's word, the map sheets of this country, a bunk tonight, and the rides up
-  // the road (stream C's section)
+  // The notices you've done: this outfitter's, to claim here (one by one, or all at once), and the others', with where
+  // each is paid (tasks.js pays a notice only at the counter that posted it)
+  claimsSection(a) {
+    const t = this.tasks, done = (t && t.active ? [...t.active] : []).filter((n) => n.status === 'done');
+    const here = done.filter((n) => n.from === a.ep), there = done.filter((n) => n.from !== a.ep);
+    const rows = here.map((n) => `<li><span class="nm">${esc(n.title)}</span><b class="fare">$${n.pay || 0}</b><button type="button" class="stamp small" data-act="task" data-id="claim:${n.id}">Claim</button></li>`);
+    for (const n of there) {
+      const l = this.landing(n.from);
+      rows.push(`<li class="far"><span class="nm">${esc(n.title)}</span><span class="soft">${n.npc ? `${esc(n.npcName || 'a visitor')}’s: ` : ''}paid at ${esc(l ? l.name : 'its outfitter')}${l ? `, entry point ${l.ep}` : ''}</span></li>`);
+    }
+    const all = here.length > 1 ? `<button type="button" class="stamp small outline" data-act="task" data-id="claimall">Claim all · $${here.reduce((s, n) => s + (n.pay || 0), 0)}</button>` : '';
+    return `<section class="claims" aria-labelledby="claims-h">
+      <div class="top"><h3 id="claims-h">Notices done</h3>${all}</div>
+      ${rows.length ? `<ul>${rows.join('')}</ul>` : '<p class="soft">Nothing to claim. The board is by the door when you want work.</p>'}
+    </section>`;
+  }
+  // the keeper's word (an insider's, to a friend of the house), a bunk tonight, and the rides up the road (rides.js);
+  // at a landing whose store is not built yet, its shelves from here
   deskSection(a) {
     const shop = this.shop, pr = this.profile;
     const op = shop ? shop.outfitterProfile(a.ep) : null, keeper = op && op.keeper, rep = pr ? pr.outfitter(a.ep).rep : 0;
@@ -605,14 +715,10 @@ export class Outfitter {
     }
     const parts = [];
     if (hint) parts.push(`<div class="word"><div class="lab">${esc(keeper.name || 'The keeper')}, leaning on the counter</div><p>“${esc(hint)}”</p></div>`);
-    else if (keeper && keeper.name) parts.push(`<div class="word"><div class="lab">${esc(keeper.name)}${keeper.manner ? ` · ${esc(keeper.manner)}` : ''}</div><p class="soft">${rep >= 2 ? 'Nothing much to tell today.' : 'Friendly enough. Keeps the good spots to the regulars.'}</p></div>`);
-    const sheets = shop && !this.layout(a.ep) ? shop.stock(a.ep).filter((s) => s.shelf === 'map' && s.id !== 'mapcase') : [];
-    if (sheets.length) parts.push(`<div class="maps"><div class="lab">Map sheets of this country</div>${sheets.map((s) => this.sheetRow(s)).join('')}</div>`);
-    else if (shop && this.layout(a.ep)) parts.push('<p class="soft">The map sheets are out on the table by the window, and the food and the gear are on the shelves.</p>');
-    // a night in the bunkhouse, the trip going on
     const price = this.sandbox ? 0 : shop ? shop.price('bunk', a.ep) : 8, short = !this.sandbox && price > this.money;
-    parts.push(`<div class="bunkrow${short ? ' dear' : ''}"><div><b>A bunk tonight</b> · <span class="soft">a real bed, soup and breakfast${this.trip.active ? '; the trip goes on' : ''}</span></div>
+    parts.push(`<div class="bunkrow${short ? ' dear' : ''}"><div><b>A bunk tonight</b> · <span class="soft">a real bed, soup and breakfast, up at seven</span></div>
       <button type="button" class="stamp small outline" data-act="bunk" ${short ? 'disabled' : ''}>${price ? `$${price}` : 'Free'}</button></div>`);
+    if (!this.layout(a.ep)) parts.push(`<div class="shelfbtns"><p class="soft">The store is being opened up: the shelves are here for now.</p>${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}</div>`);
     const rides = this.rides && typeof this.rides.section === 'function' ? this.rides.section(a.ep) : '';
     return `<section class="desk" aria-labelledby="desk-h">
       <div class="top"><h3 id="desk-h">At the counter</h3></div>
@@ -636,114 +742,65 @@ export class Outfitter {
     }
     return out;
   }
-  sheetRow(s) {
-    const btn = s.owned ? '<span class="mark">yours</span>' : `<button type="button" class="stamp small" data-act="shop" data-id="${esc(s.id)}" ${s.afford ? '' : 'disabled'}>${s.price ? `$${s.price}` : 'Take it'}</button>`;
-    return `<div class="mapsheet${s.afford || s.owned ? '' : ' dear'}">${gearIcon(s.id, !s.owned)}<span class="nm"><b>${esc(s.name)}</b>${s.here ? ' <span class="soft">· this landing</span>' : ''}</span>${btn}</div>`;
-  }
   // the board: the tasks' own section (tasks.js), or a quiet card until there is one
   boardSection(a) {
     const t = this.tasks;
     if (t && typeof t.boardSection === 'function') return t.boardSection(a.ep);
     return '<section class="board" aria-labelledby="board-h"><div class="top"><h3 id="board-h">The board</h3><span class="sum">adverts from this outfitter</span></div><div class="cards"><p class="muted">The board is being written up.</p></div></section>';
   }
-  // your kit and the season: the counter tab's right column. The canoe, paddle, tent and water in use, with what else
-  // you own of each to swap to; what else you carry; the lures in the box; the season.
-  wallSection(a) {
-    const pr = this.profile;
-    if (!pr) return '<section class="wall"><div class="top"><h3>Your kit</h3></div><p class="soft">An aluminium canoe and a pack.</p></section>';
-    const kit = pr.kit, owned = pr.owned;
-    const slotRow = ([slot, label]) => {
-      const mine = owned.filter((id) => { const it = itemOf(id) || ITEMS[id]; return it && it.slot === slot; });
-      const name = (id) => { const it = itemOf(id); return esc(shortName(it ? it.name : ITEMS[id] ? ITEMS[id].label : id)); };
-      const body = mine.length > 1 ? `<div class="choose">${mine.map((id) => this.choice('use', id, name(id), kit[slot] === id)).join('')}</div>` : `<div>${kit[slot] ? name(kit[slot]) : '—'}</div>`;
-      return `<div class="lab">${label}</div>${body}`;
-    };
-    const kg = this.player.gear ? this.player.gear.canoeKg : ({ kevlar: 20, royalex: 29 }[kit.canoe] || 34);
-    const known = pr.known.length, all = this.landings.length;
-    const rep = Math.floor(pr.outfitter(a.ep).rep), earned = pr.earned;
-    return `<section class="wall" aria-labelledby="wall-h">
-      <div class="top"><h3 id="wall-h">Your outfit</h3></div>
-      <div class="slots">${SLOTS.map(slotRow).join('')}</div>
-      <p class="soft">The canoe is ${kg} kg on the portages. What you carry, and what is in it, is in your book: <kbd>J</kbd>, then <kbd>Tab</kbd>.</p>
-      <div class="lab">This season</div>
-      <p>${earned ? `$${earned} earned on the boards` : 'Nothing earned yet'} · ${known} of ${all} ${plural(all, 'outfitter')} known. You are ${STANDING[Math.max(0, Math.min(5, rep))]} here.</p>
-    </section>`;
-  }
-
+  // The paper: at the counter, the permit and the notices done on the left, the keeper's desk (a bunk, the rides) on
+  // the right; at the cork board, the board and nothing else
   render() {
     if (!this.open || !this.el.panel) return;
-    const a = this.at, active = this.trip.active;
+    const a = this.at, board = this.tab === 'board';
     const lakeName = this.lakeOf(a), area = areaOf(a.ep), op = this.shop ? this.shop.outfitterProfile(a.ep) : null;
     const purse = this.profile ? `<div class="purse"><span class="sc">In hand</span><b>$${this.money}</b></div>` : '';
-    const was = this.el.panel.querySelector('.permit, .desk'), scroll = was ? was.scrollTop : 0;
-    const leave = this.inStore ? 'Look around · E' : `${active ? 'Carry on' : 'Push off'} · E`;
-    const nav = `<nav class="tabs" aria-label="The counter's tabs">${TABS.map(([k, l]) => `<button type="button" data-act="tab" data-id="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}`
-      + `${this.receipt ? `<span class="receipt pencil${this.receipt.ok ? '' : ' no'}">${esc(this.receipt.text)}</span>` : ''}</nav>`;
-    let body;
-    if (this.tab === 'board') body = `<div class="counter one">${this.boardSection(a)}</div>`;
-    else body = `<div class="counter">${this.permitSection(a)}${this.deskSection(a)}${this.wallSection(a)}</div>`;
-    this.el.panel.innerHTML = `<header>
-      <div class="lede"><div class="sc kicker">Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && (op.kindWords || op.kind) ? ` · ${esc(op.kindWords || op.kind)}` : ''}</div><h2>${esc(a.name)}</h2><div class="say">“${esc(this.greeting)}”${this.who ? ` <span class="who">— ${esc(this.who)}</span>` : ''}</div></div>
-      ${purse}<button type="button" class="stamp outline" data-act="close" aria-label="Leave the counter (E or Esc)">${leave}</button>
-    </header>${nav}${body}`;
-    const now = this.el.panel.querySelector('.permit, .desk');
-    if (scroll && now && now.className === (was && was.className)) now.scrollTop = scroll;
+    const was = this.el.panel.querySelector('.desk, .col, .cards'), scroll = was ? was.scrollTop : 0, wasCls = was ? was.className : '';
+    const leave = this.inStore ? 'Back to the store · E' : 'Back to the water · E';
+    const receipt = this.receipt ? `<div class="receipt pencil${this.receipt.ok ? '' : ' no'}">${esc(this.receipt.text)}</div>` : '';
+    const kicker = `Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && (op.kindWords || op.kind) ? ` · ${esc(op.kindWords || op.kind)}` : ''}`;
+    const lede = board
+      ? `<div class="lede"><div class="sc kicker">${esc(a.name)} · ${kicker}</div><h2>The board</h2><div class="say">Notices pinned up by the door. Take one on; it’s paid at the counter when it’s done.</div></div>`
+      : `<div class="lede"><div class="sc kicker">${kicker}</div><h2>${esc(a.name)}</h2><div class="say">“${esc(this.greeting)}”${this.who ? ` <span class="who">— ${esc(this.who)}</span>` : ''}</div></div>`;
+    const body = board ? `<div class="counter one">${this.boardSection(a)}</div>`
+      : `<div class="counter two"><div class="col">${this.permitSection(a)}${this.claimsSection(a)}</div>${this.deskSection(a)}</div>`;
+    this.el.panel.classList.toggle('simple', !board);
+    this.el.panel.innerHTML = `<header>${lede}${purse}<button type="button" class="stamp outline" data-act="close" aria-label="Leave (E or Esc)">${leave}</button></header>${receipt}${body}`;
+    const now = this.el.panel.querySelector('.desk, .col, .cards');
+    if (scroll && now && now.className === wasCls) now.scrollTop = scroll;
   }
 
   // --- the trip ----------------------------------------------------------------------------------------------
-  // push off: the season's paper is stamped at the first counter, and the trip is under way
+  // Push off (updateTrip, as you paddle away from a landing): the season's paper is stamped if it is not yet (the
+  // season's first trip: you put in rested, as a new season does), and the trip is under way. Later trips leave the
+  // energy and the needs as they are: a landing is not a refill.
   start() {
-    const a = this.at || this.nearest(this.player.x, this.player.z).l;
+    const a = this.at || this.port || this.nearest(this.player.x, this.player.z).l;
     const d = this.day, core = this.core, adv = this.adventure, pr = this.profile;
-    if (pr && !pr.permit) {
-      let e = this.draft ? this.draft.entry : { year: d.year, doy: d.doy };
-      if (adv && iced(e)) e = thawFrom(e); // the lakes are iced on it: the thaw
-      if (e.year !== d.year || e.doy !== d.doy) d.setClock(e.year, e.doy, d.hours);
-      const home = pr.home != null ? pr.home : a.ep;
-      pr.stamp({ no: this.permitNo(home, e), ep: home, entry: { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) } });
-    }
+    const first = this.stamp() || !(core && core.state && core.state.id); // the season's first trip (a new season's core has none yet)
     const food = this.energy ? this.energy.food : 0;
-    this.trip = { active: true, ep: a.ep, days: this.foodRoom, started: d.clock, startAbs: d.doy * 24 + d.hours, startYear: d.year, startDoy: d.doy, startHours: d.hours, turnedIn: 0, fromName: this.lakeOf(a) };
-    if (this.energy) this.energy.value = 1;
+    this.trip = { active: true, ep: a.ep, days: this.foodRoom, started: d.clock, startAbs: d.doy * 24 + d.hours, startYear: d.year, startDoy: d.doy, startHours: d.hours, turnedIn: 0, fromName: this.lakeOf(a), away: false };
+    if (first && this.energy) this.energy.value = 1;
     if (this.stats) this.stats.reset();
-    if (core) core.start({ ep: a.ep, foodDays: food, canoe: pr ? pr.kit.canoe : 'aluminium' });
-    this.summary = null; this.draft = null; this.leftFrom = null;
-    this.hide();
+    if (core) core.start({ ep: a.ep, foodDays: food, canoe: pr ? pr.kit.canoe : 'aluminium', fresh: first });
+    this.summary = null; this.draft = null; this.port = null;
+    if (this.open) this.hide();
     // the permit, as a title over the water
     const lake = this.lakeOf(a), purse = pr ? ` · $${pr.money} in hand` : '';
-    if (core && adv) this.hud.showPlace(`${core.permit && core.permit.no ? `Permit ${core.permit.no}` : 'Season permit'} · ${a.name}`, lake, `${core.packWords(food)}${purse} · come in when you like`, 6);
+    if (core && adv) this.hud.showPlace(`${core.permit && core.permit.no ? `Permit ${core.permit.no}` : 'Season permit'} · ${a.name}`, lake, `${this.foodWords()}${purse} · come in at any outfitter`, 6);
     else if (core) this.hud.showPlace(`Sandbox · ${a.name}`, lake, `${core.packWords(food)} · no dates`, 6);
-    else this.hud.note(`${fmtDaysWords(food)} of food in the pack. Push off when you like.`);
+    else this.hud.note(`${fmtDaysWords(food)} of food in the pack. Off you go.`);
     this.save();
   }
   // the food you can reach, in the inventory's words ("1 meal and 2 snacks"), else in days
   foodWords() { const inv = invModel(); if (inv && typeof inv.foodWords === 'function') { const w = inv.foodWords(), h = this.energy && this.energy.hungFood ? this.energy.hungFood().words : ''; if (h) return w === 'no food' ? h : `${w} · ${h}`; return w === 'no food' ? 'no food with you' : w; } return `${fmtDaysWords(this.energy ? this.energy.food : 0)} of food`; }
-  // "Resupply · carry on" (or leaving the counter during a trip): the trip goes on
-  carryOn() {
-    const a = this.at, en = this.energy;
-    if (this.core) this.core.resupply(a.ep, { food: en ? +en.food.toFixed(2) : 0 });
-    this.summary = null;
-    this.hide();
-    this.hud.note(`Carry on from ${a.name}: ${this.foodWords()}${this.profile ? `, $${this.money} in hand` : ''}.`, 5);
-    this.save();
-  }
-  // "Call it a trip": logged as came in, then a bunk night, and you wake at 7:00 rested to the counter
-  callIt() {
-    const a = this.at, core = this.core, st = this.stats;
-    if (!this.trip.active) return;
-    const days = Math.max(1, core ? core.dayN : Math.floor(this.daysOut) + 1), km = st ? st.km : 0, from = this.trip.fromName || 'the landing';
-    if (core) core.callIt(a.ep);
-    this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
-    this.summary = null; this.draft = null;
-    this.night(a, `The trip is logged as came in: ${days} ${plural(days, 'day')} out from ${from}${km > 0.05 ? `, ${km < 10 ? km.toFixed(1) : Math.round(km)} km paddled` : ''}. You wake at seven, rested.`);
-  }
-  // a night in the bunkhouse for its price (free in Sandbox): the trip, if there is one, goes on
+  // a night in the bunkhouse for its price (free in Sandbox)
   bunk() {
     const a = this.at, shop = this.shop; if (!a) return;
     const price = this.sandbox ? 0 : shop ? shop.price('bunk', a.ep) : 8;
     if (price && (!this.profile || !this.profile.spend(price, `a night in the bunkhouse at ${a.name}`))) { this.receipt = { text: `Not enough in hand: the bunk is $${price}.`, ok: false }; this.render(); return; }
-    if (this.trip.active && this.core) this.core.resupply(a.ep, { food: this.energy ? +this.energy.food.toFixed(2) : 0, bunk: true });
-    this.night(a, `A night in a real bed${price ? ` for $${price}` : ''}. You wake at seven, rested and fed${this.trip.active ? '; the trip goes on' : ''}.`);
+    if (this.core) this.core.log('bunk', { ep: a.ep, price });
+    this.night(a, `A night in a real bed${price ? ` for $${price}` : ''}. You wake at seven, rested and fed.`);
   }
   // the bunk night: a card, the clock to 7:00, rested, fed and watered, then the counter at the morning
   night(a, sub) {
@@ -778,8 +835,8 @@ export class Outfitter {
     if (core) core.reset(mode); // after the profile: the packs and the canoe are the new season's
     if (this.open) this.hide();
     this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
-    this.summary = null; this.draft = null; this.evac = null; this.bunking = false; this.leftFrom = null; this.greeted = {}; this.arrival = null;
-    if (this.visit) this.endVisit(false);
+    this.summary = null; this.draft = null; this.evac = null; this.bunking = false; this.greeted = {}; this.arrival = null; this.port = null; this.docking = null;
+    if (this.visit) this.endVisit();
     if (this.energy) { this.energy.reset(); this.energy.food = 0; }
     if (this.tasks && this.tasks.reset) this.tasks.reset();
     if (this.stats) this.stats.reset();
@@ -800,12 +857,12 @@ export class Outfitter {
   // at full dark: the trip is over (the tasks are kept)
   evacuated() {
     this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
-    this.summary = null; this.draft = null; this.leftFrom = null;
+    this.summary = null; this.draft = null;
     if (this.open) this.hide();
     this.save();
   }
-  // faded back: the counter at the landing you woke at
-  afterEvac(to) { if (to) { this.lineKind = 'after'; this.pendingShow = true; } }
+  // faded back: in at the store's door at the landing you woke at, and its counter (from the water where it has none)
+  afterEvac(to) { if (to) { this.lineKind = 'after'; if (this.layout(to.ep)) this.arrival = { why: 'evac', ep: to.ep, t: 0, pending: true }; else this.pendingShow = true; } }
   startEvac() {
     if (this.core) return this.core.evacuate('food');
     // no trip core: the old way, the nearest landing
@@ -850,7 +907,7 @@ export class Outfitter {
     if (moved) pr.forgetMigration();
     // the page went away in a store: back on its floor once it is built (updateArrival)
     const vis = d && d.visit && this.landing(d.visit.ep) && this.distTo(this.landing(d.visit.ep), this.player.x, this.player.z) < ARRIVAL_FAR ? d.visit : null;
-    if (vis) this.arrival = { why: 'reload', ep: vis.ep, x: vis.x, z: vis.z, heading: vis.heading, inside: vis.inside, switched: vis.switched, t: 0, pending: !(d.trip && d.trip.active) };
+    if (vis) this.arrival = { why: 'reload', ep: vis.ep, x: vis.x, z: vis.z, heading: vis.heading, inside: vis.inside, switched: vis.switched, t: 0, pending: false };
     if (d && d.trip && d.trip.active) {
       this.trip = { ...this.trip, ...d.trip, days: this.foodRoom };
       const f = this.player.fishing;
@@ -864,9 +921,11 @@ export class Outfitter {
       return;
     }
     this.pendingShow = false;
-    if (vis || this.arrival) return; // the counter opens in the store once you are back in it; a season begun goes in at the door
+    if (vis || this.arrival) return; // back on the store's floor once it is built; a season begun goes in at the door
+    // between trips anywhere else: the landing nearest is the one the next trip pushes off from (no paper pops up: the
+    // counter is in the store, and the trip is not its business)
     const n = this.nearest(this.player.x, this.player.z);
-    this.show(n.l);
+    if (n) this.port = n.l;
   }
 }
 
@@ -877,38 +936,63 @@ function fmtDaysWords(d) {
   const n = half ? `${whole || ''}½` : String(Math.round(d));
   return `${n} day${n === '1' || n === '½' ? '' : 's'}`;
 }
-// "Kevlar tripper, 17 ft" → "Kevlar tripper" for the kit's choices
-const shortName = (s) => { const t = String(s).replace(/,\s*\d+\s*ft$/, '').replace(/ (paddle|tent|filter)$/i, '').replace(/^(Purifying|Water) /, ''); return t.charAt(0).toUpperCase() + t.slice(1); };
+// A hotspot box (props.js storeLayout().hot: centre x, y, z, half sizes hx along its heading, hy up, hz across) in its
+// own frame: forward = (cos h, -sin h) as player.heading's, across = (sin h, cos h)
+function local(h, x, z) { const c = Math.cos(h.heading), s = Math.sin(h.heading), dx = x - h.x, dz = z - h.z; return [dx * c - dz * s, dx * s + dz * c]; }
+// metres from (x, z) to the box's nearest side, on the ground
+function reachTo(h, x, z) { const [a, b] = local(h, x, z); return Math.hypot(Math.max(0, Math.abs(a) - h.hx), Math.max(0, Math.abs(b) - h.hz)); }
+// where a ray ({ origin, direction }, unit) enters the box: { t, miss: 0 } or null (the slabs)
+function boxHit(ray, h) {
+  const o = ray.origin, d = ray.direction, c = Math.cos(h.heading), s = Math.sin(h.heading);
+  const [oa, ob] = local(h, o.x, o.z), da = d.x * c - d.z * s, db = d.x * s + d.z * c, oy = o.y - h.y;
+  let t0 = 0, t1 = Infinity;
+  for (const [p, q, e] of [[oa, da, h.hx], [oy, d.y, h.hy], [ob, db, h.hz]]) {
+    if (Math.abs(q) < 1e-9) { if (Math.abs(p) > e) return null; continue; }
+    let u = (-e - p) / q, v = (e - p) / q; if (u > v) [u, v] = [v, u];
+    t0 = Math.max(t0, u); t1 = Math.min(t1, v);
+    if (t0 > t1) return null;
+  }
+  return { t: t0, miss: 0 };
+}
 
-// the tabs, the desk, the shelves and the lure wall (the counter's own look is hud.css's; tasks.js adds the board's)
+// the counter's two columns, the small permit, the notices done, the desk (the counter's own look is hud.css's; tasks.js
+// adds the board's, rides.js the rides')
 const CSS = `
 #outfitter { gap: 16px; }
-#outfitter .tabs { display: flex; align-items: baseline; gap: 26px; font: 700 12px/1.4 var(--sc); letter-spacing: .16em; flex: none; border-bottom: 1px solid var(--edge); margin-top: -4px; }
-#outfitter .tabs button { appearance: none; background: none; border: none; padding: 0 0 7px; margin-bottom: -1px; color: var(--ink-soft); font: inherit; letter-spacing: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
-#outfitter .tabs button.on { color: var(--ink); border-bottom-color: var(--ink); }
-#outfitter .tabs button:hover:not(.on) { color: var(--ink); }
-#outfitter .tabs .receipt { margin-left: auto; font-size: 19px; letter-spacing: 0; text-transform: none; max-width: 52%; text-align: right; line-height: 1.1; padding-bottom: 6px; }
-#outfitter .tabs .receipt.no { color: var(--map-red); }
+#outfitter.simple { width: min(1020px, 94vw); height: auto; max-height: min(698px, 90vh); }
+#outfitter > .receipt { flex: none; margin-top: -8px; font-size: 19px; line-height: 1.1; }
+#outfitter > .receipt.no { color: var(--map-red); }
 #outfitter .counter.one { grid-template-columns: minmax(0, 1fr); }
+#outfitter .counter.two { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); }
+#outfitter .counter .col { display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow: auto; scrollbar-width: thin; padding-right: 4px; }
+#outfitter .permit.small { flex: none; padding: 14px 18px 16px; gap: 10px; overflow: visible; }
+#outfitter .permit.small h3 { font-size: 17px; }
+#outfitter .permit.small .grid { font-size: 14.5px; gap: 6px 12px; }
+#outfitter .permit .stampline { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#outfitter .permit .stampline .pencil { font-size: 18px; text-align: left; }
+#outfitter .permit .inked { align-self: flex-end; margin-top: -6px; font: 700 11px/1 var(--sc); letter-spacing: .22em; text-transform: uppercase; color: var(--map-red); border: 2px solid var(--map-red); border-radius: 2px; padding: 5px 9px 4px; transform: rotate(-5deg); opacity: .78; }
+#outfitter .claims { display: flex; flex-direction: column; gap: 10px; flex: none; }
+#outfitter .claims .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--edge); padding-bottom: 8px; }
+#outfitter .claims .top .stamp { font-size: 10.5px; padding: 4px 10px; }
+#outfitter .claims ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#outfitter .claims li { display: flex; align-items: center; gap: 10px; font-size: 15px; padding: 6px 8px; border: 1px solid var(--edge); border-left: 3px solid var(--moss); border-radius: 2px; background: var(--paper-card); }
+#outfitter .claims li .nm { flex: 1 1 auto; min-width: 0; }
+#outfitter .claims li.far { flex-direction: column; align-items: flex-start; gap: 1px; border-left-color: var(--edge-deep); }
+#outfitter .claims .fare { font: 500 21px/0.95 var(--pencil-font); color: var(--pencil); flex: none; }
+#outfitter .claims .stamp.small { font-size: 10.5px; padding: 4px 10px; flex: none; }
+#outfitter .claims .soft { font-size: 13.5px; font-style: italic; color: var(--ink-soft); margin: 0; }
+#outfitter .desk .shelfbtns { display: flex; flex-wrap: wrap; gap: 6px; }
+#outfitter .desk .shelfbtns p { flex: 1 0 100%; margin: 0; }
+#outfitter .desk .shelfbtns .stamp { font-size: 10.5px; padding: 4px 9px; }
 #outfitter .say .who { font-style: normal; font: 500 19px/1 var(--pencil-font); color: var(--pencil); margin-left: 4px; }
 #outfitter .desk { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: auto; scrollbar-width: thin; padding-right: 4px; }
 #outfitter .desk .top { border-bottom: 1px solid var(--edge); padding-bottom: 8px; flex: none; }
 #outfitter .desk .word p { font-size: 16px; line-height: 1.45; font-style: italic; }
 #outfitter .desk .word p.soft, #outfitter .desk .soft { color: var(--ink-soft); font-style: italic; }
-#outfitter .desk .maps { display: flex; flex-direction: column; gap: 6px; }
-#outfitter .desk .mapsheet { display: flex; align-items: center; gap: 10px; font-size: 15px; }
-#outfitter .desk .mapsheet .nm { flex: 1 1 auto; min-width: 0; }
-#outfitter .desk .mapsheet .stamp, #outfitter .desk .mapsheet .mark { flex: none; }
 #outfitter .desk .bunkrow { display: flex; align-items: center; gap: 12px; font-size: 15px; border-top: 1px solid var(--edge); padding-top: 12px; }
 #outfitter .desk .top + .bunkrow { border-top: none; padding-top: 0; }
 #outfitter .desk .bunkrow > div { flex: 1 1 auto; }
 #outfitter .dear { opacity: .55; }
-#outfitter .mark { font: 700 10.5px/1.3 var(--sc); letter-spacing: .12em; color: #3f5a2a; text-transform: lowercase; }
-#outfitter .wall .slots { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 7px 10px; align-items: baseline; font-size: 15px; }
-#outfitter .wall .slots .choose { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-#outfitter .wall kbd { font-size: 10px; padding: 0 4px; }
-#outfitter .permit .shelfbtns { display: flex; flex-wrap: wrap; gap: 6px; }
-#outfitter .permit .shelfbtns .stamp { font-size: 10.5px; padding: 4px 9px; }
 #outfitter .desk p.soft { font-size: 15px; }
 `;
 let cssIn = false;

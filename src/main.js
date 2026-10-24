@@ -364,6 +364,10 @@ async function main() {
   // bins, meter and buttons, the pitched tent, the latrine, the hang) are panels whose held buttons run while the mouse
   // holds them; Pitch and Hang are on the right-click menus.
   invUI.attach({ nearby: () => window.__game.nearby || null, hold });
+  // fb2 C: the store, the counter and the dock (outfitter.js, trip.js, props.js). Trips start and end by themselves at
+  // the landings, the store's hotspots are the pointer's targets (outfitter.js registers them when pointer.js is in the
+  // build), and the counter's free tap is at the counter only, not at the cork board (both are the outfitter's paper).
+  energy.atCounter = () => !!outfitter.open && outfitter.tab === 'counter';
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   renderer.compileAsync(scene, camera).catch(() => {});

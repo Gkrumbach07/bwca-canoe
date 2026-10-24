@@ -1,8 +1,10 @@
 // The trip: how you travel (Adventure, a season of open trips; or Sandbox, the same lakes with no limits), the trip
-// under way from push-off until you call it, the packs and the canoe (from what you own, profile.js), the trip's own
-// log, and how it ended. Trips are open: no nights, no date to be out by and no exit place. A trip runs from push-off
-// until "Call it a trip" at any counter (logged as came in, with a bunk night); "Resupply · carry on" keeps it going.
-// The permit is the season's paper (its number, home, the day it was stamped), written at the first counter.
+// under way from push-off until you come in, the packs and the canoe (from what you own, profile.js), the trip's own
+// log, and how it ended. Trips are open: no nights, no date to be out by and no exit place. They start and end by
+// themselves (fb2 C, outfitter.js updateTrip): a trip pushes off as you paddle away from an outfitter's landing, and
+// comes in as you set foot at any outfitter's landing, logged as "came in" there (comeIn). Back where it left without
+// having gone anywhere, it is taken back (takeBack: nothing logged). The permit is the season's paper (its number,
+// home, the day it was stamped), stamped at a counter or as the season's first trip pushes off.
 //
 // The clock in either mode follows the pace (pace.js): while you travel (paddling under way, carrying the canoe, walking a
 // portage trail) it runs at the time-lapse the canoe or the walker moves at (player.boost: about 6 on open water at Trip
@@ -21,9 +23,10 @@
 //
 //   trip.mode ('adventure' | 'sandbox'), trip.adventure, trip.sandbox, trip.active, trip.dayN, trip.state (the saved core),
 //   trip.state.permit { no, ep, entry }, trip.state.packs { count, canoe, foodDays }, trip.log(kind, data),
-//   trip.on(kind, fn) → off, trip.start(f), trip.callIt(ep), trip.resupply(ep), trip.evacuate(why),
+//   trip.on(kind, fn) → off, trip.start(f), trip.comeIn(ep), trip.takeBack(), trip.evacuate(why),
 //   trip.nearestKnownOutfitter(x, z)
-//   kinds: 'start' 'lake' 'portage' 'camp' 'sleep' 'capsize' 'offsite' 'resupply' 'known' 'evac' 'exit'
+//   kinds: 'start' (the season's first push-off: the needs fresh, main.js) 'leave' (a later one) 'lake' 'portage'
+//   'camp' 'sleep' 'capsize' 'offsite' 'bunk' 'ride' 'known' 'evac' 'exit'
 import { save } from './save.js';
 import { plural } from './hud.js';
 
@@ -154,11 +157,13 @@ export class Trip {
   }
 
   // --- starting and ending ---------------------------------------------------------------------------------
-  // push-off: { ep, foodDays, no } (the permit comes from the season's paper, or is written here when there is none)
+  // push-off: { ep, foodDays, no, canoe, fresh } (the permit comes from the season's paper, or is written here when
+  // there is none). fresh: the season's first trip, put in rested with the needs full ('start'); a later one leaves the
+  // energy as it is ('leave': a landing is not a refill)
   start(f) {
     const s = this.state, d = this.day;
     s.id = `${f.ep}-${absDay(d.year, d.doy)}-${Math.floor(Math.random() * 1e5).toString(36)}`;
-    s.active = true; s.outcome = null; s.camp = null; s.wet = false; s.offsite = 0; s.log = [];
+    s.active = true; s.outcome = null; s.camp = null; s.offsite = 0; s.log = [];
     s.since = { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) }; s.from = f.ep;
     const pr = this.profile;
     s.permit = pr && pr.permit ? paper(pr.permit) : s.permit || { no: f.no || null, ep: f.ep, entry: { ...s.since } };
@@ -166,24 +171,22 @@ export class Trip {
     this.syncKit();
     s.fish0 = this.fishing ? this.fishing.log.length : 0;
     this.lastLake = 0; this.lastPortages = this.stats ? this.stats.portages : 0;
-    // you put in having been up since the morning
+    // the season's first trip: you put in having been up since the morning
     const en = this.energy;
-    if (en) { en.value = 1; en.awakeSince = en.now - Math.min(12, Math.max(0, d.hours - 7)); en.tired = 0; en.lastMealAbs = -1e9; }
+    if (f.fresh && en) { s.wet = false; en.value = 1; en.awakeSince = en.now - Math.min(12, Math.max(0, d.hours - 7)); en.tired = 0; en.lastMealAbs = -1e9; }
     this.seen('eps', f.ep); this.learn(f.ep);
-    this.log('start', { ep: f.ep });
+    this.log(f.fresh ? 'start' : 'leave', { ep: f.ep });
   }
-  // the counter's "Call it a trip": logged as came in (the outfitter gives the bunk night)
-  callIt(ep) {
+  // a trip under way has reached an outfitter's landing (outfitter.js updateTrip): logged as came in, there
+  comeIn(ep) {
     if (!this.active) return null;
     this.learn(ep);
     return this.close('completed', 'came in', ep);
   }
-  // the counter's "Resupply · carry on": the trip goes on
-  resupply(ep, data = {}) {
-    if (!this.active) return false;
-    this.learn(ep);
-    this.state.packs.foodDays = this.energy ? +this.energy.food.toFixed(2) : this.state.packs.foodDays;
-    this.log('resupply', { ep, ...data });
+  // back at the landing it left without having gone anywhere: no trip after all, and nothing in the logbook
+  takeBack() {
+    const s = this.state; if (!s.active) return false;
+    s.active = false; s.camp = null; s.outcome = null; s.log = [];
     return true;
   }
   abandon() { return this.active ? this.close('abandoned', 'a new season begun', null) : null; }
