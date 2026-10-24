@@ -43,7 +43,8 @@ import { Cook, hiss, woodKnock } from './cook.js';
 // saved in the trip's document (trip.state.chores), or under its own key with no trip.
 
 export const WOOD = { reach: 1.45, regrow: 2, pile: 12, ringR: 2.4, near: 58, drop: 95, cell: 24 };
-const SITE_WOOD = { branches: 12, logs: 5, tries: 70, from: 4.5, to: 30 };
+// (to: inside the camp's area, camp.js AREA_R 25 m, so walking about for wood never takes you out of the camp's reach)
+const SITE_WOOD = { branches: 12, logs: 5, tries: 90, from: 4.5, to: 23 };
 const WOODS = { forestDark: 1, forest: 0.75, forestLight: 0.6, burn: 1.3, meadow: 0.12, rock: 0.15, rockLichen: 0.15, rockDark: 0.2 };
 const AT_LATRINE = 1.9, LATRINE_REST = 0.05, AT_PILE = 1.35, SAW_REACH = 0.95;
 const TAP = 0.25;            // real seconds: E let go sooner than this at a burning fire is a tap (feed, cook, eat)
