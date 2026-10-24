@@ -466,7 +466,7 @@ export class Cook {
         this.note('You take the pot off the grate before it is done.', 4);
         this.pot = null; this.ch.persist();
       } else {
-        const heat = F.heat(f);
+        const heat = F.heat(f, this.now); // (the game's clock, not the fires' own: on the first frame after a reload theirs is still 0)
         if (heat >= HEAT_MIN) {
           P.t += dt; P.cold = false;
           // the cook's minutes on the clock over its seconds, while you are about the camp
