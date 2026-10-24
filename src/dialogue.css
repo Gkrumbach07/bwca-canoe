@@ -1,0 +1,66 @@
+/* What people say (dialogue.js). Air's type (cream on the scene, the serif for speech, gold small caps for who) on a
+   soft deep wash so a line reads over a bright sky or a lit window: no border, feathered by a wide shadow, a tail to
+   the speaker's head. The conversation is a band across the bottom middle, feathered at both ends, the way subtitles
+   sit in a film; its choices are numbered with Air's outlined keys. Motion: in 240 ms with a 6 px rise, out 700 ms. */
+
+#talk { position: fixed; inset: 0; pointer-events: none; z-index: 3; color: var(--cream); font: 17px/1.35 var(--sans); text-shadow: 0 1px 2px rgba(0, 0, 0, .55); }
+body.shell-open #talk { display: none; }
+body.paper-open #talk .barks, body.paper-open #talk .log { visibility: hidden; }
+#talk kbd { display: inline-block; min-width: 22px; box-sizing: border-box; padding: 1px 7px; border: 1.5px solid rgba(243, 236, 221, .8); border-radius: 4px; font: 700 12px/1.3 var(--sans); text-align: center; text-shadow: none; vertical-align: 1px; letter-spacing: 0; color: var(--cream); }
+
+/* --- barks -------------------------------------------------------------------------------------------------------- */
+#talk .barks { position: absolute; inset: 0; }
+#talk .bark { position: absolute; left: 0; top: 0; will-change: transform, opacity; animation: talk-in .24s ease-out both; transition: opacity .7s; }
+#talk .bark.out { opacity: 0; }
+@keyframes talk-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+#talk .bark .box { position: relative; zoom: var(--hud); box-sizing: border-box; width: max-content; max-width: 360px; padding: 7px 14px 9px; border-radius: 9px;
+  background: rgba(14, 27, 34, .62); box-shadow: 0 0 22px 8px rgba(14, 27, 34, .30); }
+#talk .bark .box::after { content: ''; position: absolute; left: var(--tail, 50%); bottom: -8px; margin-left: -8px; border: 8px solid transparent; border-bottom: 0; border-top-color: rgba(14, 27, 34, .62); }
+#talk .bark.notail .box::after, #talk .bark.pin .box::after { display: none; }
+#talk .who { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; white-space: nowrap; }
+#talk .who .name { font: 700 13px/1.3 var(--sc); letter-spacing: .14em; color: var(--gold); }
+#talk .who .role { font: 500 12px/1.3 var(--sc); letter-spacing: .1em; color: rgba(243, 236, 221, .62); }
+#talk .who .arr { display: none; font: 700 18px/1 var(--sans); color: var(--gold); }
+#talk .bark.pin-l .arr.l, #talk .bark.pin-r .arr.r { display: inline; }
+#talk .bark.pin-r .who { justify-content: flex-end; }
+#talk .bark.pin-r .box { text-align: right; }
+#talk .bark .say { font: italic 19px/1.3 var(--serif); color: rgba(243, 236, 221, .96); }
+
+/* --- the conversation ---------------------------------------------------------------------------------------------- */
+#talk .convo { position: absolute; left: 50%; bottom: 36px; translate: -50% 0; width: min(820px, calc(100vw - 64px)); box-sizing: border-box; padding: 18px 72px 14px; pointer-events: auto;
+  zoom: var(--hud); background: linear-gradient(90deg, rgba(14, 27, 34, 0), rgba(14, 27, 34, .74) 14%, rgba(14, 27, 34, .74) 86%, rgba(14, 27, 34, 0)); border-radius: 6px;
+  opacity: 0; visibility: hidden; transform: translateY(10px); transition: opacity .24s ease-out, transform .24s ease-out, visibility 0s .24s; }
+#talk .convo.show { opacity: 1; visibility: visible; transform: none; transition: opacity .24s ease-out, transform .24s ease-out, visibility 0s; }
+#talk .convo .head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+#talk .convo .head .name { font: 700 15px/1.3 var(--sc); letter-spacing: .16em; color: var(--gold); }
+#talk .convo .head .role { font: 500 13px/1.3 var(--sc); letter-spacing: .1em; color: rgba(243, 236, 221, .62); }
+#talk .convo .you { margin-top: 6px; font: italic 16px/1.35 var(--serif); color: rgba(243, 236, 221, .55); }
+#talk .convo .you::before { content: 'You · '; font: 500 12px/1 var(--sc); letter-spacing: .1em; font-style: normal; }
+#talk .convo .say { margin-top: 6px; font: 21px/1.38 var(--serif); color: var(--cream); animation: talk-in .24s ease-out both; }
+#talk .convo .say.wait { color: rgba(243, 236, 221, .6); }
+#talk .convo .opts { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#talk .convo .opt { display: flex; align-items: baseline; gap: 12px; padding: 4px 8px; margin: 0 -8px; border-radius: 4px; cursor: pointer; font-size: 18px; color: rgba(243, 236, 221, .92); }
+#talk .convo .opt:hover { background: rgba(243, 236, 221, .08); color: var(--cream); }
+#talk .convo .opt em { font: 500 12px/1 var(--sc); letter-spacing: .1em; font-style: normal; color: rgba(220, 180, 105, .8); }
+#talk .convo .opt.task span { color: var(--gold); }
+#talk .convo .opt.counter span { color: var(--sky); }
+#talk .convo .opt.dim span { color: rgba(243, 236, 221, .5); }
+#talk .convo .opt.bye span { color: rgba(243, 236, 221, .78); }
+#talk .convo .foot { margin-top: 12px; font-size: 13px; color: rgba(243, 236, 221, .55); }
+#talk .convo .foot kbd { font-size: 11px; padding: 0 5px; border-color: rgba(243, 236, 221, .5); color: rgba(243, 236, 221, .7); }
+/* while you talk the panel owns the bottom row: the journal lines lift over it, the place title waits */
+body.talking #air #lines { bottom: calc((var(--talk-h, 260px) + 52px) / var(--hud, 1)); max-width: 40vw; } /* #air is zoomed by the HUD size */
+body.talking #air #place, body.talking #air #prompt { visibility: hidden; }
+
+/* --- what was said (T) --------------------------------------------------------------------------------------------- */
+#talk .log { position: absolute; right: 40px; top: 210px; width: 400px; max-width: calc(100vw - 80px); box-sizing: border-box; padding: 14px 18px 12px; zoom: var(--hud); border-radius: 9px;
+  background: rgba(14, 27, 34, .66); box-shadow: 0 0 26px 10px rgba(14, 27, 34, .3);
+  opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity .7s, transform .7s, visibility 0s .7s; }
+#talk .log.show { opacity: 1; visibility: visible; transform: none; transition: opacity .24s ease-out, transform .24s ease-out, visibility 0s; }
+#talk .log .sc { font: 700 12px/1.4 var(--sc); letter-spacing: .14em; color: rgba(243, 236, 221, .7); }
+#talk .log ol { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+#talk .log li .say { font: italic 16px/1.32 var(--serif); color: rgba(243, 236, 221, .92); }
+#talk .log li .at { margin-left: auto; font: 12px/1 var(--sans); color: rgba(243, 236, 221, .5); font-variant-numeric: tabular-nums; }
+#talk .log li.none { font: italic 16px/1.3 var(--serif); color: rgba(243, 236, 221, .6); }
+#talk .log .foot { margin-top: 10px; font-size: 12px; color: rgba(243, 236, 221, .5); }
+#talk .log .foot kbd { font-size: 11px; padding: 0 5px; }
