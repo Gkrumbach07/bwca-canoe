@@ -412,6 +412,14 @@ async function main() {
   // (player.sitAt / stand / seated); each is looked up when it is wanted, with a fallback until it lands. Eating is
   // instant (cook.js). The book's Canoe tab calls packs.setOutAll and packs.loadAll.
   nearby.world({ cards: () => window.__game.cards || null, journal, sitter: () => (typeof player.sitAt === 'function' && typeof player.stand === 'function' ? player : null) });
+  // wc C: sitting and shore fishing (the owner, 2026-10-24: "why can't I put the fishing rod in my hand and fish with it
+  // outside of canoe", "letting myself sit in the bench would be a nice interaction", and no sitting down to eat).
+  // player.sitAt / stand (player.js) sit you on a bench, a log seat or the latrine (props.js c.layout.seats and a store's
+  // porch bench; stream A's E Sit calls them), E or any move key stands you up, and canoe.js's sit no longer eats. With
+  // the rod in a hand (inventory.rodInHand) F fishes from the shore, a dock or a rock with the canoe's keys and card
+  // (fishing.js on foot; the standing figure holds the rod, canoe.js rodArms); a kept fish goes on the stringer when the
+  // canoe is in reach, else into a container you carry.
+  fishing.inventory = inventory; fishing.indoors = () => !!(outfitter.visit && outfitter.visit.inside);
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   renderer.compileAsync(scene, camera).catch(() => {});

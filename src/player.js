@@ -81,6 +81,9 @@ const HULL_BOTTOM = (() => {
   return pts;
 })();
 const LAND = { rock: 'Bare rock', rockDark: 'A rock face', rockLichen: 'Bare rock', meadow: 'A clearing', burn: 'Old burn', forest: 'The woods', forestLight: 'The woods', forestDark: 'Dark spruce' };
+// wc C: sitting (sitAt / stand): a seat within reach m is walked to at walk m/s, sat down on over down s and stood up from
+// over up s; the hips sit back m behind the seat's middle, and a seat without a stand spot is stood at front m before it
+const SIT = { reach: 4.0, walk: 1.6, down: 0.45, up: 0.35, back: 0.07, front: 0.6 };
 
 export class Player {
   constructor(world, canoe, input) {
@@ -120,7 +123,7 @@ export class Player {
     this.foot = null; // on foot: { y, vy, air, t, land, near, peak } (updateFoot)
     // fb C: what the body is doing, for the figure to animate (canoe.js; the contract in the 2026-10-24 brief):
     //   kind     'idle' | 'walk' | 'jog' | 'wade' | 'step' | 'vault' | 'climb' | 'jump' | 'fall' | 'land' | 'swim' |
-    //            'tread' | 'paddle' (and later 'sit' | 'crouch')
+    //            'tread' | 'paddle' | 'sit' (wc C: on a seat, top the seat's height, heading the way you face)
     //   t        seconds since this kind began; dur, u: a timed move's length and t / dur (0 and 0 for an open one)
     //   from, to { x, y, z } the feet where the move began and where it ends (both here for an open one); top: the
     //            top of what is stepped, vaulted or climbed (null otherwise); heading: the way it goes (as this.heading)
@@ -130,6 +133,11 @@ export class Player {
     this.move = { kind: 'paddle', t: 0, dur: 0, u: 0, from: { x: this.x, y: 0, z: this.z }, to: { x: this.x, y: 0, z: this.z }, top: null, heading: this.heading, speed: 0, depth: 0, carry: false };
     this.act = null;   // fb C: a vault or a climb under way (startAct, updateAct)
     this.restAt = null; // fb C: where restHull laid the hull (afterRig keeps it there through a swim from shore)
+    // wc C: sitting (sitAt): { kind, id, x, y, z (the seat's top, world), heading, stand, path, phase: 'walk' | 'down' |
+    // 'seated' | 'up', t, k, from } or null. E stands you up here too (the pointer takes the once-key when it points at
+    // nothing, so it is read off the key itself): stream A's E Stand up and this both just stand.
+    this.seat = null;
+    if (typeof window !== 'undefined') window.addEventListener('keydown', (e) => { if (e.code === 'KeyE' && !e.repeat && this.seat && !this.input.paused) this.stand(); });
   }
 
   get forward() { return { x: Math.cos(this.heading), z: -Math.sin(this.heading) }; }
@@ -284,11 +292,13 @@ export class Player {
     this.time += dt;
     this.prompt = null; this.placeName = null; this.campsite = null; this.onTrail = false;
     if (!this.onFoot) { this.foot = null; this.act = null; } // stepping ashore again starts from the ground
+    if (this.seat && (this.mode !== 'walk' || this.teleporting)) this.seat = null; // wc C: a seat is left by anything that moves you
     if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); this.groundSpeed = 0; return; }
     const x0 = this.x, z0 = this.z;
     if (this.landing || this.ashore || this.mode === 'swim') this.easeBoost(1, dt); // nosing in, a landing, a swim: at life
     if (this.landing) this.updateLanding(dt);
     else if (this.ashore) this.updateAshore(dt);
+    else if (this.seat) this.updateSeat(dt); // wc C: on a seat (or walking to it, or getting up)
     else if (this.onFoot) this.updateFoot(dt);
     else if (this.mode === 'swim') this.updateSwim(dt);
     else this.updatePaddle(dt);
@@ -979,6 +989,101 @@ export class Player {
     m.carry = this.mode === 'carry';
   }
 
+  // --- wc C: sitting (a bench, a log seat, the latrine; stream A's E Sit calls these) --------------------------------
+  // sitAt(spot): spot.seat { x, y, z } (or a flat x, z, y: the seat's top, world metres), spot.heading (the way you face
+  // sitting, as this.heading), spot.stand { x, z } (where you stand before sitting; else SIT.front m in front of it),
+  // spot.round { x, z, r } (the fire ring: walked round along an arc, never nearer its middle than r), spot.kind and id
+  // (words). On foot only, within SIT.reach m, not mid-vault. You walk to the stand spot, sit down (this.move 'sit', top
+  // the seat's height: canoe.js poseSit) and stay until stand(): E (the pointer's, or the key itself), any move key or
+  // Space. sitAt while seated stands you up. False when nothing happened.
+  get seated() { return !!this.seat; }
+  sitAt(spot) {
+    if (this.seat) { this.stand(); return true; }
+    if (!spot || this.mode !== 'walk' || this.teleporting || this.act) return false;
+    const s = spot.seat || spot, x = +s.x, z = +s.z;
+    if (!Number.isFinite(x) || !Number.isFinite(z) || Math.hypot(x - this.x, z - this.z) > SIT.reach) return false;
+    const heading = Number.isFinite(spot.heading) ? spot.heading : this.heading;
+    const fx = Math.cos(heading), fz = -Math.sin(heading);
+    const y = Number.isFinite(s.y) ? s.y : this.groundAt(x, z) + 0.45;
+    const stand = spot.stand && Number.isFinite(spot.stand.x) ? { x: spot.stand.x, z: spot.stand.z } : { x: x + fx * SIT.front, z: z + fz * SIT.front };
+    if (this.fishing && this.fishing.rodUp) this.fishing.stow();
+    const path = [], R = spot.round;
+    if (R && Number.isFinite(R.x) && Number.isFinite(R.r)) {
+      const a0 = Math.atan2(this.z - R.z, this.x - R.x), a1 = Math.atan2(stand.z - R.z, stand.x - R.x);
+      const r0 = Math.max(R.r, Math.hypot(this.x - R.x, this.z - R.z)), r1 = Math.hypot(stand.x - R.x, stand.z - R.z);
+      let da = a1 - a0; da = Math.atan2(Math.sin(da), Math.cos(da));
+      const n = Math.max(1, Math.ceil(Math.abs(da) / 0.35));
+      for (let i = 1; i <= n; i++) { const k = i / n, a = a0 + da * k, r = Math.max(R.r, r0 + (r1 - r0) * k); path.push({ x: R.x + Math.cos(a) * r, z: R.z + Math.sin(a) * r }); }
+    }
+    path.push(stand);
+    this.seat = { kind: spot.kind || 'seat', id: spot.id || null, x, y, z, heading, stand, path, phase: 'walk', t: 0, k: 0, from: null };
+    this.speed = 0; this.yawRate = 0;
+    return true;
+  }
+  stand() {
+    const S = this.seat;
+    if (!S || S.phase === 'up') return;
+    if (S.phase === 'walk') { this.seat = null; return; }
+    S.phase = 'up'; S.t = 0; S.from = { x: this.x, z: this.z, heading: this.heading, k: S.k };
+  }
+  updateSeat(dt) {
+    const S = this.seat, inp = this.input, st = this.canoe.state, w = this.world;
+    S.t += dt;
+    this.easeBoost(1, dt);
+    const fx = Math.cos(S.heading), fz = -Math.sin(S.heading);
+    const sx = S.x + fx * SIT.back, sz = S.z + fz * SIT.back; // the hips over the seat: the rig a little ahead of its middle
+    const x0 = this.x, z0 = this.z;
+    let walking = false;
+    if (S.phase === 'walk') {
+      let step = SIT.walk * dt;
+      while (step > 0 && S.path.length) {
+        const q = S.path[0], dx = q.x - this.x, dz = q.z - this.z, d = Math.hypot(dx, dz);
+        if (d <= step) { this.x = q.x; this.z = q.z; S.path.shift(); step -= d; continue; }
+        this.x += (dx / d) * step; this.z += (dz / d) * step; this.heading = Math.atan2(-dz, dx); step = 0;
+      }
+      walking = true;
+      if (!S.path.length || S.t > 4) { this.x = S.stand.x; this.z = S.stand.z; S.phase = 'down'; S.t = 0; S.from = { x: this.x, z: this.z, heading: this.heading }; }
+    } else if (S.phase === 'down') {
+      const k = S.k = smoothstep(0, 1, S.t / SIT.down);
+      this.x = lerp(S.from.x, sx, k); this.z = lerp(S.from.z, sz, k);
+      let dh = S.heading - S.from.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); this.heading = S.from.heading + dh * k;
+      if (S.t >= SIT.down) { S.phase = 'seated'; S.t = 0; S.k = 1; }
+    } else if (S.phase === 'seated') {
+      this.x = sx; this.z = sz; this.heading = S.heading; S.k = 1;
+      if (this.moveKeys().moving || inp.pressed('Space')) this.stand();
+    } else {
+      const k = smoothstep(0, 1, S.t / SIT.up);
+      S.k = (1 - k) * (S.from.k ?? 1);
+      this.x = lerp(S.from.x, S.stand.x, k); this.z = lerp(S.from.z, S.stand.z, k);
+      if (S.t >= SIT.up) { this.x = S.stand.x; this.z = S.stand.z; this.seat = null; }
+    }
+    // the feet on the ground (or the deck) under him, the body still
+    const ft = this.foot || (this.foot = { y: this.groundAt(this.x, this.z), vy: 0, air: false, t: 0, land: 0, near: null, peak: 0 });
+    ft.near = w.tiles ? w.tiles.treesNear(this.x, this.z, 4.5) : [];
+    ft.y = this.footGround(this.x, this.z); ft.air = false; ft.vy = 0; ft.land = Math.max(0, ft.land - dt * 3); ft.peak = ft.y;
+    st.air = false; st.land = ft.land; st.stagger = 0; st.hustle = false;
+    // the gait: the walk to the seat strides, the rest stands
+    const moved = Math.hypot(this.x - x0, this.z - z0), raw = dt > 0 && moved < 1 ? Math.min(5, moved / dt) : 0;
+    st.speed += (raw - st.speed) * (1 - Math.exp(-dt * 12));
+    st.walkSpeed += ((raw > 0.12 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
+    st.walk += raw * dt * 4.2;
+    const kd = 1 - Math.exp(-dt * 10);
+    st.moveFwd += ((walking ? 1 : 0) - st.moveFwd) * kd; st.moveLat += (0 - st.moveLat) * kd;
+    this._fx = this.x; this._fz = this.z;
+    this.placeOnGround();
+    const S2 = this.seat;
+    if (!S2 || S2.phase === 'walk' || (S2.phase === 'up' && S2.k < 0.45)) this.setMove(walking ? 'walk' : 'idle', dt, {});
+    else this.setMove('sit', dt, { top: S2.y, heading: S2.heading });
+    // where you are, for the HUD header, and what you are doing
+    const camp = this.nearCampsite(this.x, this.z); this.campsite = camp;
+    if (camp) { const id = this.nearWater(camp.x, camp.z, 6); this.placeName = camp.name ? `${camp.name} campsite` : `Campsite${id ? ' · ' + (w.lakeName(id) || 'unnamed water') : ''}`; }
+    else { const id = this.nearWater(this.x, this.z, 8); this.placeName = id ? `${w.lakeName(id) || 'Unnamed water'} shore` : 'The woods'; }
+    if (S2) {
+      const on = S2.kind === 'latrine' ? 'on the box' : S2.kind === 'bench' ? 'on the bench' : S2.kind === 'log' ? 'on the log' : S2.kind === 'chair' ? 'in the chair' : 'down';
+      this.prompt = { key: null, text: S2.phase === 'seated' ? `Sitting ${on} · <kbd>E</kbd> or a move key to stand` : S2.phase === 'up' ? 'Standing up…' : 'Sitting down…' };
+    }
+  }
+
   // in over your depth on foot: you swim, the canoe left where it lies
   enterSwim() {
     const st = this.canoe.state, w = this.world;
@@ -1017,12 +1122,16 @@ export class Player {
     const cls = GROUND[(w.coverCell(w.cellI(this.x), w.cellJ(this.z)) >> 16) & 255];
     let note = null, moving = false, mx = 0, mz = 0, nx = this.x, nz = this.z, swimNow = false, stepUp = -1;
     const f = this.forward;
+    // wc C: the rod up on foot (fishing.js): you stand where you are and face the look; W reels, Space casts, E and K are the
+    // catch's, so none of them walks, hops or shoulders the canoe here (the pointer is off too, pointer.js usable)
+    const rodUp = !!(this.fishing && this.fishing.rodUp) && this.mode === 'walk';
     if (this.act) {
       this.updateAct(dt);
       nx = this.x; nz = this.z;
       ft.near = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
     } else {
       ({ moving, mx, mz } = this.steerOnFoot(dt, WALK.face)); // (mx, mz): the way the walker goes; f: the way the body faces
+      if (rodUp) moving = false;
       const fwd = moving ? 1 : 0;
       // the going: the woods walk at the same pace as a trail (a bushwhacking crawl is no fun); a trail, a campsite and
       // an outfitter's yard are graded, so the hill costs them less
@@ -1052,7 +1161,7 @@ export class Player {
       // stagger under it (no one jumps with a canoe on their shoulders)
       // A press a stride early is kept SPACE.early seconds: something to get over that far ahead is walked up to and
       // got over, not hopped into (the fb join, 2026-10-24: Space a metre short of a 1.2 m rock only hopped)
-      const tap = inp.pressed('Space'), held = inp.held('Space');
+      const tap = !rodUp && inp.pressed('Space'), held = !rodUp && inp.held('Space');
       if (tap) ft.spaceT = SPACE.early; else if (ft.spaceT > 0) ft.spaceT -= dt;
       let started = false;
       const nearNow = ft.near || (w.tiles ? w.tiles.treesNear(this.x, this.z, 4.5) : []);
@@ -1240,7 +1349,7 @@ export class Player {
       const rods = Math.round(remaining / RODS);
       trailText = `${trail.def.name} · ${rods} ${rods === 1 ? 'rod' : 'rods'} to go`;
     }
-    if (A) this.prompt = null;
+    if (A || rodUp) this.prompt = null; // (the rod's own prompts follow, fishing.js)
     else this.footPrompts(c, trail, note, trailText);
     if (swimNow) this.enterSwim();
   }

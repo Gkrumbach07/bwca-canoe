@@ -1305,7 +1305,8 @@ const storeHeard = [];
 const storeNews = []; // built in this tile's steps: told once the tile is in (its obstacles with it)
 // The layout of entry point ep's store (its number, or its world.entryPoints record) once its tile has built it, else
 // null: { ep, name, look, floorY, inside(x, z), door: { x, z, y, heading }, counter, board, wall, shelves: [{ kind,
-// x, z }], mapTable, keeper: { x, z, heading }, lamp: { x, y, z }, dockSide: { x, z }, dockLand: { x, z }, centre }.
+// x, z }], mapTable, keeper: { x, z, heading }, lamp: { x, y, z }, dockSide: { x, z }, dockLand: { x, z }, centre,
+// seats: [{ kind: 'bench', id, x, z, y, heading, ax, az }] (wc C: the porch bench, as a campsite's c.layout.seats) }.
 // World metres; a heading is player.heading's (forward = (cos h, -sin h)). door is the spot on the stoop or porch just
 // outside the threshold, heading in; counter, board, wall, mapTable and each shelf is the floor spot in front of it (heading
 // toward it, `at` the thing itself, y absolute); keeper stands behind the counter facing the room.
@@ -1821,6 +1822,9 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
     dockDeck: (() => { const [x, z] = F.W(dock.hw - 0.45, dock.len * 0.65); return { x, z, y: dock.deckY }; })(),
     dockHeading: Math.atan2(-F.Z.z, F.Z.x),
     stepsFoot: W2(pr.ca, pr.foot + 0.6),
+    // wc C: the porch bench under the front window (porchAndSteps out.bench: a0, a1, c0, c1 in the store's frame, its seat
+    // 0.46 over the floor), two spots facing out to the yard, in c.layout.seats's shape (player.js sitAt)
+    seats: pr.bench ? [0.3, 0.7].map((u, i) => ({ kind: 'bench', id: `porch:${i}`, ...W2(pr.bench[0] + (pr.bench[1] - pr.bench[0]) * u, (pr.bench[2] + pr.bench[3]) / 2), y: floorY + 0.46, heading: heading(0, 1), ax: X.x, az: X.z })) : [],
     stairs: { low: pr.low, width: +pr.width.toFixed(2), treads: pr.treads.length, rise: pr.treads.length ? +(pr.treads[0].y - (pr.treads[1] ? pr.treads[1].y : pr.treads[0].y - 0.15)).toFixed(3) : 0, walled: pr.walls.filter((w) => w.r).length }, // fb2 C
     // fb2 C: what E opens in the store, as boxes for the pointer (pointer.js: centre x, y, z, half sizes hx along the
     // store's a, hy up, hz along its b, turned `heading`): the whole of each shelf unit, so it opens from either side
@@ -1898,9 +1902,10 @@ function buildRack(ctx, F, rng, ra, rb) {
 // A BWCA site: the steel fire grate on its legs in a ring of rocks, higher at the back, ash and charred ends
 // in it; a split-log bench on two rounds; the latrine box back in the woods; the granite ledge down to the water.
 // No tent: you pitch your own (camp.js), on the flattest clear spot by the ring, which the site keeps as
-// c.layout = { fire: { x, z, y, a }, pad: { x, z, fdx, fdz }, bench: { x, z, ax, az } } in world metres (fire.a:
-// the grate's bearing; pad.fd: the way the door faces, to the fire; bench.a: along the log). Recorded when the
-// site's tile builds its props (the same every time: the search reads the drawn ground).
+// c.layout = { fire: { x, z, y, a }, pad: { x, z, fdx, fdz }, bench: { x, z, ax, az }, seats: [{ kind, id, x, z, y,
+// heading, ax, az }], latrine?: { x, z } } in world metres (fire.a: the grate's bearing; pad.fd: the way the door faces,
+// to the fire; bench.a: along the log; seats: where you sit, wc C). Recorded when the site's tile builds its props (the
+// same every time: the search reads the drawn ground).
 function buildCampsite(ctx, c, pieces, ledges) {
   const { tg, ox, oz, H } = ctx;
   const crng = mulberry32(7 + Math.round(c.x) * 31 + Math.round(c.z) * 17);
@@ -1970,6 +1975,9 @@ function buildCampsite(ctx, c, pieces, ledges) {
   const tx = best ? best.x : fx + Math.cos(a + 2.2) * 6, tz = best ? best.z : fz + Math.sin(a + 2.2) * 6;
   let fdx = fx - tx, fdz = fz - tz; const fl = Math.hypot(fdx, fdz) || 1; fdx /= fl; fdz /= fl;
   c.layout = { fire: { x: fx, z: fz, y: fy, a: ga }, pad: { x: tx, z: tz, fdx, fdz }, bench: { x: bx, z: bz, ax, az } };
+  // wc C: the seats (player.js sitAt; stream A's E Sit): two spots on the split log's flat face (y its top, world), facing the
+  // fire (heading as player.heading's), ax, az along the log; the latrine stays c.layout.latrine
+  { const fh = Math.atan2(-(fz - bz), fx - bx), top = ly + lr; c.layout.seats = [-0.45, 0.45].map((t, i) => ({ kind: 'bench', id: `bench:${i}`, x: bx + ax * t, z: bz + az * t, y: top, heading: fh, ax, az })); }
   // the latrine back in the trees, away from the water
   const la = Math.atan2(backZ, backX) + (crng() - 0.5) * 1.2, lx = fx + Math.cos(la) * 15, lz = fz + Math.sin(la) * 15;
   if (tg.shoreAt(lx, lz) > 3) { pieces.push(latrine(ctx, lx, lz, la, crng)); c.layout.latrine = { x: lx, z: lz }; } // hubs 3A: E at the box (camp.js)
