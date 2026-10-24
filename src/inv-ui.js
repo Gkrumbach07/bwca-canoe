@@ -885,6 +885,7 @@ const WHERE = { back: 'on your back', chest: 'on your chest', hands: 'in your ha
 const nameOf = (c) => c.name || (itemDef(c.item) || {}).name || 'A container';
 function whereWords(c, byId) {
   if (c.where === 'in') { const p = byId && byId.get(c.in); return p ? `in the ${lower(short(itemDef(p.item)) || nameOf(p))}` : 'inside'; }
+  if (c.item === 'crate') return 'what is left with them';
   const p = ctx.player, w = WHERE[c.where] || c.where || '';
   if ((c.where === 'ground' || c.where === 'hung') && c.at && p) { const d = Math.hypot(c.at.x - p.x, c.at.z - p.z); return `${w}${d > 1.2 ? `, ${Math.round(d)} m off` : ''}`; }
   return w;
