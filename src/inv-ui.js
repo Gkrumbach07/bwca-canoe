@@ -112,7 +112,11 @@ export function itemFor(it) {
   const have = itemDef(it.id); if (have) return have;
   if (String(it.id).startsWith('sheet:')) return defineItem({ id: it.id, name: it.name, short: String(it.sheet || it.id.slice(6)), kind: 'map', w: 2, h: 2, kg: it.kg || 0.1, price: it.price || 8, icon: 'map', words: it.words || '' });
   const f = FAMILY[it.family];
-  if (f) return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: LONG_FAMILY.has(it.family) ? 'long' : it.lure ? 'lure' : 'gear', w: f[0], h: f[1], kg: it.kg || 0.5, price: it.price || 0, icon: f[2], words: it.words || '', stack: it.lure ? 3 : 1 });
+  if (f) {
+    const long = LONG_FAMILY.has(it.family);
+    return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: long ? 'long' : it.lure ? 'lure' : 'gear', w: f[0], h: f[1], kg: it.kg || 0.5, price: it.price || 0, icon: f[2], words: it.words || '', stack: it.lure ? 3 : 1,
+      ...(long ? { long: it.family === 'paddle' ? 'paddle' : it.family } : {}), ...(it.slot ? { slot: it.slot } : {}), ...(it.lure ? { lure: it.lure } : {}) });
+  }
   return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: it.kind === 'lure' ? 'lure' : 'gear', w: 1, h: 1, kg: it.kg || 0.2, price: it.price || 0, icon: it.id, words: it.words || '' });
 }
 export const shortOf = (name) => { const s = String(name || '').replace(/^(A|An|The) /, '').replace(/,.*$/, ''); const w = s.split(' '); return w.length > 2 ? w.slice(-2).join(' ') : s; };
@@ -821,7 +825,10 @@ if (typeof window !== 'undefined') {
 
 // --- the actions --------------------------------------------------------------------------------------------------
 // the other grids on screen (not the shelf, not this one), in the page's order
-const others = (g) => [...GRIDS.values()].filter((o) => o !== g && !o.opts.shelf && o.el.isConnected && o.c && !(g.c && o.c.id === g.c.id));
+const others = (g) => {
+  const seen = new Set([g.c && g.c.id]);
+  return [...GRIDS.values()].filter((o) => { if (o === g || o.opts.shelf || !o.c || !o.el.isConnected || o.el.offsetParent === null || seen.has(o.c.id)) return false; seen.add(o.c.id); return true; });
+};
 function moveInto(g, e, to, qty = null) {
   const c = to.c || to, f = firstFit(c, e.id, qty || e.qty || 1);
   if (!f) return false;
@@ -999,7 +1006,7 @@ export class PackSide {
     SCREENS.add(this);
   }
   show() { this.open = true; listen(); this.render(true); }
-  hide() { this.open = false; closeMenu(); hideTip(); }
+  hide() { this.open = false; this.sig = ''; closeMenu(); hideTip(); for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy(); }
   update(dt) { if (this.open && (this.t += dt) > 0.4) { this.t = 0; this.render(false); } }
   sigNow() {
     const inv = model(), list = inv.reachable(ctx.player) || [], pr = ctx.profile;
