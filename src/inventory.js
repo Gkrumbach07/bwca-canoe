@@ -753,7 +753,7 @@ export class Inventory {
     if (p && p.mode !== this.prevMode) {
       if (p.mode === 'paddle') this.stowCarried(true);
       this.prevMode = p.mode;
-    }
+    } else if (p && p.mode === 'paddle' && !this.atStash && (this.ver !== this.paddleVer)) { this.paddleVer = this.ver; this.stowCarried(); } // put on at the dock's counter, then paddled off
     if (this.pendingNote && this.hud) { this.hud.note(this.pendingNote, 9); this.pendingNote = null; }
     if (this.fishing && Array.isArray(this.fishing.stringer)) this.syncStringer();
     this.bridgeLeeches();
