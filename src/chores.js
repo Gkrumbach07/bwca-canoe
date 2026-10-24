@@ -275,6 +275,7 @@ export class Chores {
     this.t = 0; this.sleepOffer = false;
     this.lit = new Set();       // the fires you lit or laid (keys): saved with their state
     this.armed = null;          // what E does, from the prompt shown last frame: () => void
+    this.qArmed = null;         // and Q, at the ring with wood in your arms (the woodpile)
     this.steamT = 0; this.steamAt = null;
     this.cells = new Map();     // the woods' wood: cell key -> [pieces] | null (none); unset: not read yet
     this.sites = new Map();     // site key -> [pieces] (its wood, made once its layout is in)
@@ -378,9 +379,11 @@ export class Chores {
   before() {
     const c = this.camp, inp = this.player.input;
     this.cook.before();
-    const a = this.armed;
-    this.armed = null;
+    const a = this.armed, q = this.qArmed;
+    this.armed = null; this.qArmed = null;
     if (a && !inp.paused && !hold.active && inp.once.has('KeyE') && this.player.mode === 'walk') { inp.once.delete('KeyE'); a(); return; }
+    // the armload's Q at the ring or the woodpile stacks it there (packs.js would set it down on the ground)
+    if (q && !inp.paused && !hold.active && inp.once.has('KeyQ') && this.player.mode === 'walk') { inp.once.delete('KeyQ'); q(); return; }
     if (this.card.open || !this.sleepOffer) return;
     if (c.still < 0.3 || inp.paused) return;
     const r = inp.pressed('ArrowRight'), l = inp.pressed('ArrowLeft');
@@ -438,10 +441,10 @@ export class Chores {
     if (!this.free(Infinity, true)) return;
     const site = c.nearestSite(p.x, p.z, 26, true), L = site && site.layout, key = site ? keyOf(site) : null;
     const holder = site ? c.registry.holder(key) : null, ours = !holder || holder === 'player';
-    // the ring
+    // the ring (with wood in your arms, its Q stacks the wood on the woodpile)
     if (L && ours) {
       const dr = Math.hypot(L.fire.x - p.x, L.fire.z - p.z);
-      if (dr < WOOD.ringR && this.free(dr, true) && this.firePrompts(site, key)) return;
+      if (dr < WOOD.ringR && this.free(dr, true) && this.firePrompts(site, key)) { this.pileQ(site, key); return; }
     }
     // a piece of wood at your feet
     const piece = this.nearestPiece(p.x, p.z, WOOD.reach);
@@ -800,6 +803,16 @@ export class Chores {
       return true;
     }
     return false;
+  }
+  // at the ring, with wood in your arms and room on the pile: the carried thing's Q (packs.js "Set down the armload")
+  // stacks it on the woodpile instead, since E there is the fire's
+  pileQ(site, key) {
+    const p = this.player, pr = p.prompt, n = this.pileCount(key);
+    if (!pr || !pr.tail || n >= WOOD.pile || !/armload/.test(pr.tail)) return;
+    if (!this.armloads().some((c) => c.grid.some((e) => isWood(e.id)))) return;
+    const tail = ` &nbsp; <kbd>Q</kbd>Stack it on the woodpile${n ? ` · ${word(n)} there` : ''}`;
+    p.prompt = { ...pr, text: pr.text.replace(pr.tail, tail), tail };
+    this.qArmed = () => this.stack(site, key);
   }
   stack(site, key) {
     const inv = this.inv, pile = this.s.piles[key] || (this.s.piles[key] = {});
