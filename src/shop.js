@@ -308,7 +308,7 @@ export class Shop {
     if (!D || !l) return [];
     if (typeof D.stockFor === 'function' && typeof D.sheetItem === 'function') { // D's own stock: the landing's sheet, then its neighbours within reach
       let list = [];
-      try { list = D.stockFor({ x: l.x, z: l.z }) || []; } catch { list = []; }
+      try { list = D.stockFor({ x: l.x, z: l.z, lake: l.lake }) || []; } catch { list = []; }
       return list.map((s, i) => { const it = D.sheetItem(s.id || s); if (it) itemFor(it); return it ? { ...it, kind: 'map', here: i === 0 } : null; }).filter(Boolean);
     }
     if (typeof D.sheetAt !== 'function') return [];
