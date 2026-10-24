@@ -23,6 +23,10 @@
 //     crouch: false,                     // down on the heels meanwhile (canoe.js state.crouch)
 //     id: 'tent',                        // a name, for hold.is(id)
 //     near: { x, z, r },                 // stop when the walker is farther than r from x, z (a teleport, a shove)
+//     keys: ['KeyE', 'Mouse0'],          // fb2 A: any of these held keeps it going (with `key`); the book's held buttons
+//                                        // put the pseudo key 'BookHold' in input.down, a click on the scene 'Mouse0'
+//     auto: false,                       // fb2 A: it runs on its own, no key held (the latrine once you are sat down)
+//     wait: () => false,                 // fb2 A: while this says so it does not move on, nor stop (walking to the seat)
 //   }) -> the job: { id, label, phases, at, done, ... }
 //   hold.update(dt)   // real seconds, once a frame: camp.js calls it at the top of camp.update; nobody else needs to
 //   hold.before()     // before player.update: holds the walker still; camp.js calls it from camp.before
@@ -60,6 +64,7 @@ class Hold {
       id: o.id || null, key: o.key || 'KeyE', label: o.label || '', phases, at, done: Math.floor(at + 1e-6), start: at,
       onPhase: o.onPhase || null, onDone: o.onDone || null, onStop: o.onStop || null, onTick: o.onTick || null,
       clock: o.clock === undefined ? true : o.clock, still: o.still !== false, crouch: !!o.crouch, near: o.near || null,
+      keys: [...new Set([o.key || 'KeyE', ...(o.keys || [])])], auto: !!o.auto, wait: o.wait || null,
       t: 0, frames: 0, over: false,
     };
     if (job.done >= phases.length) { job.over = true; if (job.onDone) job.onDone(job); return job; }
@@ -103,9 +108,10 @@ class Hold {
     const j = this.active;
     if (!j) return;
     const inp = this.input, p = this.player;
-    const down = !!(inp && inp.down && inp.down.has(j.key));
+    const down = j.auto || !!(inp && inp.down && j.keys.some((k) => inp.down.has(k)));
     const away = j.near && p && Math.hypot(p.x - j.near.x, p.z - j.near.z) > (j.near.r || 3);
     if (!down || away || (p && p.teleporting)) { this.finish(j, false); return; }
+    if (j.wait && j.wait()) { this.show(j); return; } // not yet: on the way to it
     j.frames++; j.t += dt;
     let left = dt;
     while (left > 1e-9 && j.at < j.phases.length) {
@@ -134,7 +140,7 @@ class Hold {
     const p = this.player;
     if (!p) return;
     const n = j.phases.length, i = Math.min(n - 1, Math.floor(j.at + 1e-9)), ph = j.phases[i];
-    p.prompt = { key: null, text: `${ring(j.at / n, n, j.key)}${j.label || ph.name} · ${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}`, hold: true };
+    p.prompt = { key: null, text: `${ring(j.at / n, n, j.auto ? null : j.key)}${j.label || ph.name} · ${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}`, hold: true };
   }
 
   // E, a line and "hold"; on the press, the job (opts as begin). p.prompt is set only when E is free (no key showing)
@@ -158,7 +164,7 @@ function ring(f, n, key) {
     const a = (i / n) * TAU - Math.PI / 2, c = Math.cos(a), s = Math.sin(a);
     ticks += `<line x1="${(C + c * (R - 2.6)).toFixed(2)}" y1="${(C + s * (R - 2.6)).toFixed(2)}" x2="${(C + c * (R + 2.6)).toFixed(2)}" y2="${(C + s * (R + 2.6)).toFixed(2)}" stroke="rgba(16,22,29,.55)" stroke-width="1.6"/>`;
   }
-  const letter = String(key || 'KeyE').replace(/^Key/, '').slice(0, 2);
+  const letter = key === null ? '' : /^(BookHold|Mouse\d)$/.test(String(key)) ? 'E' : String(key || 'KeyE').replace(/^Key/, '').slice(0, 2); // (an auto job: no key)
   return `<svg class="hold-ring" width="38" height="38" viewBox="0 0 38 38" style="flex:none;overflow:visible;vertical-align:middle;margin:-8px 12px -8px 0;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.5))" aria-hidden="true">`
     + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="rgba(243,236,221,.3)" stroke-width="3.5"/>`
     + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#f3ecdd" stroke-width="3.5" stroke-linecap="butt" stroke-dasharray="${on.toFixed(2)} ${len.toFixed(2)}" transform="rotate(-90 ${C} ${C})"/>`
