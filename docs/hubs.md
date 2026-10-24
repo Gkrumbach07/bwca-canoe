@@ -5,7 +5,8 @@ every entry point's outfitter into a hub: food and gear to buy, a board of paid 
 to. The owner's own words are in [game-vision.md](game-vision.md); where this plan and they differ, they win.
 
 It is built in four phases. Phases 1 to 3 (and the pace) are on main; the owner's feedback of 2026-10-24 (below) is
-joined on `claude/fb-1024`, with the camp redone after it; phase 4 is planned.
+joined on `claude/fb-1024`, with the camp redone after it, and the owner's second round of the same day on
+`claude/fb2-1024`; phase 4 is planned.
 
 ## The owner's decisions (2026-10-23)
 
@@ -17,7 +18,8 @@ joined on `claude/fb-1024`, with the camp redone after it; phase 4 is planned.
 3. **Camping in Adventure.** Designated campsites only: no fire rings and no bivouac off a site ("that's not allowed,
    so not even camp"). Sandbox can still camp anywhere, since it has no rules.
 4. **Maps.** Lakes always show. Campsites, portage rods and depths show only on the map sheets you own, or within
-   1 km of where you have been.
+   1 km of where you have been. (The second round of 2026-10-24 changed this: the sheets are owned, not carried, and
+   in the wild only they show, blank paper elsewhere; see below.)
 5. **Evacuation.** No fee. You keep your notices, and lose the stringer and the rest of the day.
 6. **The camera.** A $25 item of its own; the first photo notice lends you a disposable (phase 3).
 7. **The pace** (later the same day, replacing the trip core's "about 5 km a day"): "id like the distance i can
@@ -48,8 +50,9 @@ logbook.
 
 - **The permit** is the season's paper: its number, home and the day it was stamped at the first counter. There are no
   nights, no "out by" and no exit place.
-- **A trip** runs from push-off until you choose *Call it a trip* at any counter: it is logged as came in, and you get a
-  bunk night and wake fully rested and fed at 7:00. *Resupply · carry on* keeps the trip going.
+- **A trip** runs from push-off at an outfitter's dock until you are on foot at any outfitter's landing again: it is
+  logged as came in by itself (since the second round of 2026-10-24; it was *Call it a trip* at a counter, with a bunk
+  night, and *Resupply · carry on*).
 - **What limits you** is food (a Duluth pack holds 7 days), the single energy bar, the weather (a capsize), daylight
   (travel after dark costs ×1.3, and you want a site before dark) and weight.
 - **Evacuation** comes when the bar has sat at 0 for an hour of the clock (the owner: "if it goes all the way down,
@@ -83,16 +86,19 @@ rides are free and instant and the map pin goes anywhere.
 plank floor, the counter with the keeper behind it, three shelf units (food, tackle, gear), the cork board by the door,
 a pegboard lure wall, a canoe on the rafters, a woodstove and windows. It is built from the existing prop pieces with
 baked occlusion, lit by the sun through the windows and a warm lamp pool that shares the campfire's light (the light
-count never changes). At the dock E is *Tie up and go in*; Q still opens the counter straight from the dock. Inside
-the view is first person, and E at the counter, the board, the shelves or the lure wall opens the paper counter at that
-tab. The board is a texture drawn from the live notices.
+count never changes). At the dock E brings the canoe alongside and you step up onto the deck, then walk up the steps
+and in (the second round of 2026-10-24: no more *Tie up and go in*, and no counter from the water). Inside, either view,
+the dot opens what it points at: the counter (services only), the cork board, a shelf from either side, the lure wall or
+the map table. The board is a texture drawn from the live notices.
 
 **Map sheets.** 39 Fisher sheets, F-1 to F-39, about 20 × 17 km each and named for their lakes (Lake One's is
-F-24 · Lake One · Snowbank · Moose). Each outfitter sells its own sheet and its neighbours' at $8. In Adventure the map
-draws campsites, portage rods and soundings only on the sheets you own and in a soft corridor about a kilometre either
-side of where you have been (250 m cells; each known outfitter adds 2 km of home water); lakes and their names always
-show, and Sandbox shows everything. The words follow the map: the dusk word names only a campsite your map shows, and
-a click on the map counts the portages only when every one on the way is on your map.
+F-24 · Lake One · Snowbank · Moose). Each outfitter sells its own sheet and its neighbours' at $8, at its map table.
+Since the second round of 2026-10-24 a sheet is owned, not carried (`profile.sheets()`): in the wild M shows only your
+sheets, cut at their neatlines with everything on them, and blank paper elsewhere (no lakes, no names; with none, you
+and a compass); in a store, at its counter or its map table, the whole Boundary Waters with the sheets dotted over it,
+owned or not. Sandbox shows everything. (It was a soft corridor about a kilometre either side of where you had been,
+in 250 m cells, gone now with its save.) The words follow the map: the dusk word names only a campsite your map shows,
+and a click on the map counts the portages only when every one on the way is on your map.
 
 ## The economy
 
@@ -229,10 +235,12 @@ Each phase runs as three parallel streams, joined and played through before it g
   (an aluminium canoe, an ash paddle, one Duluth pack, an A-frame tent, water tablets, a jig, a Mepps and a dozen
   leeches); money, gear owned, outfitters known, standing; Continue shows the money. Old saves migrate.
 - **Open trips** (`src/trip.js` v3, `src/outfitter.js`): the season's permit; food at $6 a day up to what the packs
-  hold; *Resupply · carry on* and *Call it a trip* (the bunk night) at any counter; an outfitter becomes known at its
-  landing; the evacuation to the nearest known outfitter.
+  hold; *Resupply · carry on* and *Call it a trip* (the bunk night) at any counter (both gone in the second round of
+  2026-10-24: trips start and end by themselves); an outfitter becomes known at its landing; the evacuation to the
+  nearest known outfitter.
 - **The single bar** (`src/energy.js`, `src/camp.js`, `src/hud.js`): rest, food and water; the 2 L bottle filled at the
-  water's edge (E, tablets: drinkable in half an hour) or free at any counter; sleep by the tent's quality and the
+  water's edge (E then, the book's water panel since the second round; tablets: drinkable in half an hour) or free at
+  any counter; sleep by the tent's quality and the
   hours slept; no camping off a designated site in Adventure.
 - **The board** (`src/tasks.js`): a registry of kinds (fish for the café, a lost item, a portage to survey), four pins
   per outfitter, a kept fish that fits a notice going into its cooler, claims paid only where posted (through
@@ -256,8 +264,9 @@ Four streams joined on `claude/hubs-2`:
   own cleared yard on the flattest dry spot behind or beside the dock (on fieldstone with railed porch posts on a steep
   bank), coloured by the outfitter's `look`; `props.storeLayout(ep)` and `onStore`; the lamp borrows the campfires' one
   light (`Fires.steady`), and after sunset the glass goes so the store glows through its windows.
-- **Walking in and the shop** (B, `src/shop.js`, `src/outfitter.js`): *Tie up and go in*, first person inside, the
-  hotspots, the counter in four tabs (the counter, the board, the shelves, the lure wall), the full catalogue,
+- **Walking in and the shop** (B, `src/shop.js`, `src/outfitter.js`): *Tie up and go in* (walked since the second
+  round), first person inside, the hotspots, the counter in four tabs (the counter, the board, the shelves, the lure
+  wall; since then a shelf of its own each, and the counter services only), the full catalogue,
   `player.gear` read in one line each by the paddle, the energy, the packs, the camp and the rod; the tackle box (a
   lure not in it is refused), the freeze-dried supper, the leeches, the gravity bag.
 - **55 outfitters and the rides** (C, `src/outfitters.js`, `src/rides.js`): 13 lodges, 15 river posts, 16 trout camps
@@ -265,7 +274,7 @@ Four streams joined on `claude/hubs-2`:
   Thibodeau, 14 Leon Zupancic); the keepers' lines and hints, the board's lean, the signature items; rides to the
   outfitters you know and up the road to the nearest one you don't.
 - **Map sheets** (D, `src/sheets.js`, `src/hud.js`): the 39 sheets, the corridor of where you have been, the owned
-  sheets' neatlines, "in your map case" in the header.
+  sheets' neatlines, "in your map case" in the header (the corridor and the map case gone in the second round).
 
 **The join** played a season of 16 game days from Lake One through the real keys and buttons (New season, the dock,
 the door, every hotspot, the shelves, the board, the cooler, a lost item, a survey, campsites, two evacuations, both
@@ -347,8 +356,9 @@ nobody took, and a visitor with a task cast in at Lake One, where the week's vis
 - **A visit belongs to the store** (outfitter.js `distTo`): three entry points' own spots lie far out on the lake
   (Moose Lake 143 m from its store, Sawbill 122 m, North Fowl 175 m; Seagull 57 m), and the visit, the dock's prompt and
   an arrival were measured from there: walking up to Moose Lake's store ended the visit at once, and "Tie up and go in"
-  was offered 125 m out on the water. They are measured from the store and its dock once built. Played at 25, 38, 54
-  and 70: the dock's prompt, the tie-up, first person, all six hotspots, the people, out to the dock and the launch.
+  (since the second round, the glide alongside the dock) was offered 125 m out on the water. They are measured from
+  the store and its dock once built. Played at 25, 38, 54 and 70: the dock's prompt, the tie-up, first person, all six
+  hotspots, the people, out to the dock and the launch.
 - **A ride gets in at the door** (rides.js): it arrived afloat at the landing's spot with the counter open (at Moose
   Lake out on the lake); it now arrives as a season begins, tied up at the dock, standing at the door, and the keeper's
   word for the road (or a stranger's welcome) comes as you walk in.

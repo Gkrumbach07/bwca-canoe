@@ -1,7 +1,8 @@
 # The trip core
 
-How a trip plays: two ways to travel, the season and its money, open trips from push-off to "Call it a trip", the
-single energy bar with its three needs, the water bottle, packs and portages, camping at the designated sites, the
+How a trip plays: two ways to travel, the season and its money, open trips from push-off at an outfitter's dock until
+you come in at one, the single energy bar with its needs (rest, food, water, and warmth since the owner's second round
+of 2026-10-24), the water bottle, packs and portages, camping at the designated sites, the
 headlamp, a calm evacuation, the logbook and the pace. Read this before touching `trip.js`, `profile.js`, `energy.js`,
 `camp.js`, `packs.js`, `outfitter.js`, `pace.js`, the player's speeds or the clock in `daycycle.js`.
 
@@ -57,7 +58,9 @@ during play brings the same card back as a pause screen.
 ### The counter
 
 E within 25 m of a landing (or the counter opening by itself at the start of a season, after a bunk night or an
-evacuation) puts up the outfitter's paper counter:
+evacuation) puts up the outfitter's paper counter. (Since the owner's second round of 2026-10-24 you walk into the
+store and point at the counter, and it offers only a bunk, the rides, the permit and claims; see
+[hubs.md](hubs.md). What follows is the counter as the trip core built it.)
 
 - **The header:** the outfitter, the keeper's line and the money in hand. The keeper's line also carries a claim's
   answer: the thanks and the pay, or where a notice from another board is paid.
@@ -65,9 +68,11 @@ evacuation) puts up the outfitter's paper counter:
   push-off of a season the date can still move (a day either way, a month with Shift), and the thaw is offered when
   the lakes are iced. Below it the canoe, the packs, and **the food**: what is in the pack, the room left, a stepper
   and *Buy 3 days · $18*. A day of food is $6 (two meals, 0.9 kg), up to what the packs hold (a Duluth pack 7 days).
-- **The way on:** between trips, *Push off* (leaving the counter pushes off too). During a trip, *Resupply · carry
-  on* (the trip goes on) and *Call it a trip* (logged as came in, a bunk night, and you wake at 7:00 rested, fed and
-  watered, at the counter).
+- **The way on:** gone since the owner's second round of 2026-10-24 ("I don't like the whole thing at the counter
+  where you could press resupply, carry on, or call it a trip"). A trip pushes off as you go afloat from an outfitter's
+  dock and comes in by itself when you are on foot at any outfitter's landing again, logged as came in (a 30 m
+  out-and-back is taken back, not logged); only the season's first trip refreshes the bar. It was *Push off*,
+  *Resupply · carry on* and *Call it a trip* (logged as came in, a bunk night, and you woke at 7:00 at the counter).
 - **The board (middle):** four notices pinned by the door, *Take it on*, *Let it go*, *Claim · $12*, and the notices
   taken from other boards (see [hubs.md](hubs.md) for the kinds and the pay). A notice is paid only at the counter
   that posted it; tried elsewhere, the keeper says where.
