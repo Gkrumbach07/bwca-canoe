@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import { glslSurface } from './water.js';
+import { glslFoamLight, foamUniforms } from './wake.js';
 import { HULL, outerAt, keelAt } from './hull.js';
 
 // Where the hull meets the water: a thin soft line hugging the waterline, a small bow wave and a stern eddy
 // that grow with speed, next to nothing when the canoe sits still. It replaces the old flat white band.
 // The strip rides the swell exactly as the water patch renders it (glslSurface's renderedWave) and slides
 // up and down the hull's side with it, so the line stays on the hull as the waves pass. Soft, thin, fading
-// white, the same register as the wake and the paddle splashes (wake.js); its colour is the water's foam
-// colour, which the day cycle sets (daycycle.js copies it into material.color).
+// white, the same register as the wake and the paddle splashes (wake.js), and lit as they are: a white albedo
+// (uColor) under the water's own light (wake.js foamLight: the key by its height in the sun's shadow, and the
+// sky fill), so it greys at dusk and under cloud instead of keeping the day table's foam colour, which at an
+// overcast dusk made the stern wash the brightest thing in the frame (polish A). Nothing is drawn while the
+// hull is rolled over (a capsize) or lifted off the water (set down, carried): the strip would be laid flat
+// onto the surface under or beside it.
 
 const vert = /* glsl */ `
   uniform float uWaterTime, uSpeed, uTime, uRest;
@@ -17,7 +22,9 @@ const vert = /* glsl */ `
   varying vec2 vEdge;
   varying float vAlpha;
   varying float vSpeed;
+  #include <common>
   #include <fog_pars_vertex>
+  #include <shadowmap_pars_vertex>
   ${glslSurface}
   float waterAt(vec2 world) { vec2 rel = world - uOrigin; return levelAt(rel) + renderedWave(rel, uWaterTime); }
   void main() {
@@ -41,9 +48,15 @@ const vert = /* glsl */ `
     vEdge = aEdge;
     vSpeed = sp;
     vAlpha = 0.22 + 0.25 * sp + 0.35 * lead * sp + 0.2 * trail * sp;
+    // the hull rolled past 60 degrees (a capsize) or its pivot lifted well off the water (set down, carried): nothing
+    vec3 hullUp = normalize(vec3(modelMatrix[1]));
+    float lift = modelMatrix[3].y - waterAt(modelMatrix[3].xz);
+    vAlpha *= step(0.5, hullUp.y) * (1.0 - smoothstep(0.45, 0.7, lift));
+    vec4 worldPosition = wp;
     vec4 mvPosition = viewMatrix * wp;
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
+    #include <shadowmap_vertex>
   }
 `;
 
@@ -53,7 +66,11 @@ const frag = /* glsl */ `
   varying vec2 vEdge;
   varying float vAlpha;
   varying float vSpeed;
+  #include <common>
+  #include <packing>
   #include <fog_pars_fragment>
+  #include <shadowmap_pars_fragment>
+  ${glslFoamLight}
   float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
   float n1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(i), h1(i + 1.0), f); }
   void main() {
@@ -63,7 +80,7 @@ const frag = /* glsl */ `
     float brk = n1(vEdge.y * 46.0 + uTime * (0.6 + 4.0 * vSpeed)) * 0.6 + n1(vEdge.y * 13.0 - uTime * 0.7) * 0.4;
     float a = vAlpha * fall * mix(0.65, 1.15, brk) * uOpacity;
     if (a < 0.004) discard;
-    gl_FragColor = vec4(uColor, a);
+    gl_FragColor = vec4(uColor * foamLight(), a);
     #include <fog_fragment>
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -127,17 +144,15 @@ export function buildHullWater(water, floatOffset) {
   geo.setAttribute('aUp', new THREE.BufferAttribute(upA, 3));
   geo.setAttribute('aEdge', new THREE.BufferAttribute(edge, 2));
   geo.setIndex(idx);
-  const uniforms = {
-    ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
-    uColor: { value: new THREE.Color(0xf1f6f6) }, uSpeed: { value: 0 }, uTime: { value: 0 }, uRest: { value: 0.022 }, uOpacity: { value: 1 },
-    ...(water ? water.surfaceUniforms() : {}),
-  };
+  // uColor: the foam's albedo (the light comes from foamLight, as the wake's)
+  const own = { uColor: { value: new THREE.Color(0xe4ecee) }, uSpeed: { value: 0 }, uTime: { value: 0 }, uRest: { value: 0.022 }, uOpacity: { value: 1 } };
+  const uniforms = water ? foamUniforms(water, own) : { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), ...own };
   const material = new THREE.ShaderMaterial({
     vertexShader: water ? vert : 'void main() { gl_Position = vec4(2.0); }',
     fragmentShader: water ? frag : 'void main() { discard; }',
-    uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true,
+    uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true, lights: !!water,
   });
-  material.color = uniforms.uColor.value; // the day cycle writes the foam colour here
+  material.color = uniforms.uColor.value; // the albedo, for anyone who wants to tint it
   const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = 11;

@@ -299,6 +299,7 @@ class Pointer {
       let q = pr.key === 'E' ? { ...pr, key: null } : pr;
       if (/<kbd>E<\/kbd>/.test(q.text || '')) q = { ...q, text: stripE(q.text) };
       if (this.target && this.target.q) { if (q.key === 'Q') q = { ...q, key: null }; if (/<kbd>Q<\/kbd>/.test(q.text || '')) q = { ...q, text: stripKey(q.text, 'Q') }; }
+      if (q.canoeHint && this.target && this.target.kind === 'canoe') q = { ...q, text: '' }; // "point at the canoe" (packs.js): the dot is on it, the label has its keys
       if (q !== pr) p.prompt = q.text ? q : null;
     }
   }

@@ -319,7 +319,7 @@ const frag = /* glsl */ `
   #else
     uniform vec2 uSkyGlow;
   #endif
-  uniform vec2 uOrigin, uReflTexel, uGustOff;
+  uniform vec2 uOrigin, uReflTexel, uGustOff, uWindDir; // (uWindDir: the whitecaps' patches drift downwind)
   uniform vec4 uRip[${RIPPLES * 2}];
   uniform sampler2D uReflection;
   uniform vec2 uPatchLocal;
@@ -513,8 +513,13 @@ const frag = /* glsl */ `
       lineA = line * 0.34 * dash * smoothstep(0.55, 0.85, slope) * smoothstep(0.6, 1.6, 0.065 / fw) * (1.0 - smoothstep(9.0, 30.0, dist))
         * smoothstep(0.1, 0.5, shore) * (1.0 - smoothstep(1.0, 2.8, shore)) * (1.0 - smoothstep(0.8, 2.0, vDepth)) * smoothstep(0.15, 0.7, expose);
     }
-    // whitecaps: once the wind has raised real waves, their crests break
-    float cap = smoothstep(0.62, 0.8, vCrest.x) * smoothstep(0.35, 0.7, vCrest.y) * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.75;
+    // whitecaps: once the wind has raised real waves their crests break: the odd one in a fresh breeze (a wind-wave height
+    // of about 0.25 m), many in a blow (0.6 m and up, a near gale over open water). The swell's height is bilinear
+    // between its lattice nodes, so a crest is a broad blob: a cap is a patch a metre or two across on it, picked by a
+    // noise drifting downwind, never the whole crest at once (polish A: the old thresholds showed none under 0.6 m)
+    float blow = smoothstep(0.18, 0.7, vCrest.y);
+    float capN = smoothstep(0.63 - 0.14 * blow, 0.76 - 0.09 * blow, lookNoise(pw * 1.5 - uWindDir * (uTime * 0.9), 31u));
+    float cap = smoothstep(0.64 - 0.12 * blow, 0.86 - 0.1 * blow, vCrest.x) * blow * capN * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.8;
     float foam = max(max(edgeA, lineA), cap) * live;
     // white water lit as the splashes and the rise rings are (wake.js foamLight): the key by its height in the sun's
     // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white

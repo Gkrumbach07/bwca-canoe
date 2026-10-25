@@ -145,7 +145,7 @@ function segment(e) {
 }
 
 export class DayCycle {
-  // targets: { scene, sun, hemi, moon, sky, clouds, water, post, stars, mist, ripples, hullFoam, moonDisc }
+  // targets: { scene, sun, hemi, moon, sky, clouds, water, post, stars, mist, ripples, moonDisc } (hullFoam is taken and left alone)
   // place: { lat, lon } where the sky is computed (the start of the trip; the difference across the area is tiny)
   constructor(targets, place = { lat: 47.94, lon: -91.46 }, start = null) {
     this.t = targets;
@@ -307,11 +307,12 @@ export class DayCycle {
     if (cu) { cu.uTop.value.copy(this.lerpColor('cloudTop', c)); cu.uBase.value.copy(this.lerpColor('cloudBase', c)); cu.uSky.value.copy(su.uZenith.value); cu.uSunDir.value.copy(this.sunDir); }
     if (t.stars) t.stars.material.uniforms.uOpacity.value = this.lerpNum('stars');
     // water: the foam, the ice and the sun's glint (its colour is the sky dome and the shore it mirrors, water.js); the
-    // wake's and the fish's rings take the water's light themselves (wake.js foamLight)
+    // wake's and the fish's rings, and the hull's water line (hullwater.js), take the water's light themselves (wake.js
+    // foamLight), so the table's foam colour no longer goes to the hull (polish A: lit from the table it was the
+    // brightest thing in an overcast dusk)
     const wu = t.water.uniforms;
     wu.uFoam.value.copy(this.lerpColor('foam', c));
     if (wu.uIce) wu.uIce.value = this.season.ice;
-    if (t.hullFoam) t.hullFoam.color.copy(wu.uFoam.value);
     wu.uSunDir.value.copy(this.sunDir.y > 0.02 ? this.sunDir : this.moonDir);
     // the grade and the god rays (post.js)
     if (t.post) {
@@ -349,20 +350,33 @@ export class DayCycle {
     t.hemi.intensity *= W.fill;
     toGrey(t.hemi.color, grey * 0.75, 1);
     t.hemi.groundColor.multiplyScalar(1 - 0.4 * hide * grey);
+    const moonFull = t.moon.intensity;
     t.moon.intensity *= 1 - 0.8 * deck;
+    // polish A: a floor under the night fill beneath cloud. An overcast night was a black screen (no hull, water or
+    // shore): the deck took the moon and the stars and gave nothing back. Under a deck at night the fill goes toward a
+    // cool grey glow (NIGHT_GLOW, and most of the moonlight the deck took, scattered down through it), and the deck's
+    // own colour lifts a little with it, so the sky stays the palest thing and the shore keeps its silhouette.
+    const glow = night * deck;
+    if (glow > 0.001) {
+      t.hemi.color.lerp(_glow, NIGHT_GLOW.fill * glow);
+      t.hemi.intensity = Math.max(t.hemi.intensity, (NIGHT_GLOW.floor + moonFull * 0.8 * 0.6) * glow);
+    }
     // the cloud's own colour
     const DC = toGrey(_dc.copy(colors.cloudBase[this._seg[0]]).lerp(colors.cloudBase[this._seg[1]], this._seg[2]), 1, 1.05 * bright);
+    if (glow > 0.001) DC.lerp(_glow, NIGHT_GLOW.deck * glow);
     // the air: the ramps closed in (reach) and greyed, the sun's side of them fading as the sun goes in, more of what
     // the haze covers greyed; the haze overhead toward the deck
     fogState.air[0] = FOG_REACH * W.reach;
     fogState.params[1] *= 1 - 0.9 * hide * (1 - 0.6 * fog);
     fogState.params[2] += (0.85 - fogState.params[2]) * grey * 0.6;
+    const gk = NIGHT_GLOW.haze * glow; // (polish A: the haze under the deck's night glow goes toward half of it)
     for (const ramp of [fogState.away, fogState.sunward]) {
       for (let i = 0; i < ramp.length; i += 4) {
         const l = (0.2126 * ramp[i] + 0.7152 * ramp[i + 1] + 0.0722 * ramp[i + 2]) * bright;
         ramp[i] += (l * 0.95 - ramp[i]) * grey + fc.r * f * 0.12;
         ramp[i + 1] += (l * 0.99 - ramp[i + 1]) * grey + fc.g * f * 0.12;
         ramp[i + 2] += (l * 1.06 - ramp[i + 2]) * grey + fc.b * f * 0.12;
+        if (gk > 0) { ramp[i] += (_glow.r * 0.5 - ramp[i]) * gk; ramp[i + 1] += (_glow.g * 0.5 - ramp[i + 1]) * gk; ramp[i + 2] += (_glow.b * 0.5 - ramp[i + 2]) * gk; }
       }
     }
     const far = _far.setRGB(fogState.away[60], fogState.away[61], fogState.away[62]);
@@ -445,6 +459,10 @@ export class DayCycle {
 }
 
 const _white = new THREE.Color(1, 1, 1), _dc = new THREE.Color(), _far = new THREE.Color(), _layer = new THREE.Color(), _g = new THREE.Color(), _anvil = new THREE.Color();
+// the glow under a cloud deck at night (applyWeather): its colour (a cool grey), how far the fill goes to it, the
+// fill's floor (intensity), how far the deck's colour goes to it; live-tunable
+const _glow = new THREE.Color(0x7c8898);
+export const NIGHT_GLOW = { fill: 0.75, floor: 0.5, deck: 0.3, haze: 0.3 };
 // a colour toward the neutral (a breath of blue in it) of its own luminance times bright, by k
 function toGrey(col, k, bright = 1) {
   const l = (0.2126 * col.r + 0.7152 * col.g + 0.0722 * col.b) * bright;

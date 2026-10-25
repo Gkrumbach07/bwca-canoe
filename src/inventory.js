@@ -532,12 +532,13 @@ export class Inventory {
   countIn(cs, kind) { let n = 0; for (const c of cs) for (const e of c.grid) if (!e.box && (itemDef(e.id) || {}).kind === kind) n += e.qty; return n; }
   meals() { return this.countIn(this.foodPool(), 'meal'); }
   snacks() { const r = this.foodPool(); return this.countIn(r, 'snack') + this.countIn(r, 'forage'); }
-  // "a hot meal, 3 meals and 1 snack": a cooked thing kept as leftovers too (cook.js), as energy.js says it in the readout
+  // "a hot meal, 3 meals to cook and 1 snack": a cooked thing kept as leftovers too (cook.js), as energy.js says it in
+  // the readout; a raw meal is food that wants the pot first, and says so (polish B); "no food" only with nothing at all
   foodWords() {
     const m = this.meals(), s = this.snacks();
     let hot = 0;
     for (const c of this.foodPool()) for (const e of c.grid) { const d = !e.box && itemDef(e.id); if (d && d.kind === 'food' && d.cooked) hot += e.qty; }
-    const parts = [hot ? (hot === 1 ? 'a hot meal' : `${hot} hot meals`) : '', m ? `${m} meal${m === 1 ? '' : 's'}` : '', s ? `${s} snack${s === 1 ? '' : 's'}` : ''].filter(Boolean);
+    const parts = [hot ? (hot === 1 ? 'a hot meal' : `${hot} hot meals`) : '', m ? `${m} meal${m === 1 ? '' : 's'} to cook` : '', s ? `${s} snack${s === 1 ? '' : 's'}` : ''].filter(Boolean);
     return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] || 'no food';
   }
   // A meal for the grate (energy.meal, camp.js's cooking): supper in the evening, breakfast otherwise, else any meal;

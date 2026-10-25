@@ -218,8 +218,10 @@ export class Birds {
     if (wantFlap || b.state === 'strike') b.phase += dt * Math.PI * 2 * b.k.hz;
     b.flap += (beat - b.flap) * Math.min(1, dt * 12);
     b.sweep = b.state === 'strike' ? 0.3 : 0;
-    if (b.k.call && !sitting && b.state !== 'strike') { b.callT -= dt; if (b.callT <= 0) { b.callT = 40 + rng() * 120; f.emit(b.k.call, b.x, b.y, b.z, 1); } }
-    else if (b.k.call && sitting) { b.callT -= dt * 0.5; if (b.callT <= 0) { b.callT = 50 + rng() * 120; f.emit(b.k.call, b.x, b.y, b.z, 1); } }
+    // the calls: half as often through the day as at dawn and dusk (polish B: nine in 25 minutes was busy)
+    const slow = 2 - Math.max(f.light.dawn, f.light.dusk);
+    if (b.k.call && !sitting && b.state !== 'strike') { b.callT -= dt; if (b.callT <= 0) { b.callT = (40 + rng() * 120) * slow; f.emit(b.k.call, b.x, b.y, b.z, 1); } }
+    else if (b.k.call && sitting) { b.callT -= dt * 0.5; if (b.callT <= 0) { b.callT = (50 + rng() * 120) * slow; f.emit(b.k.call, b.x, b.y, b.z, 1); } }
   }
 
   // what a glide ends in

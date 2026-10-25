@@ -204,7 +204,7 @@ export class Weather {
     this._strikeIn = 6;
     this._strikes = [];          // { t: seconds since, amp }
     this._thunder = [];          // { at: seconds to go, x, y, z, size }
-    this._rainSent = -1; this._rainTimer = 0;
+    this.rain = 0;
     this._levelTimer = 0;
     this._light = new THREE.Color();
     this._rng = mulberry32(seed * 977 + 1);
@@ -391,13 +391,9 @@ export class Weather {
     }
     const wu = this.water && this.water.uniforms;
     if (wu && wu.uRain) { wu.uRain.value = amount * (1 - L.snow) * (1 - ice); wu.uGlint.value = L.sun * L.sun; }
-    const audio = this.audio, rain = Math.round(amount * (1 - L.snow) * 50) / 50;
-    this.rain = rain; // 0..1, read by the soundscape's rain bed through audio.tick's context
-    this._rainTimer -= dt;
-    if (audio && audio.emit && (rain !== this._rainSent || this._rainTimer <= 0) && (rain > 0 || this._rainSent > 0)) {
-      audio.emit('rain', { intensity: rain });
-      this._rainSent = rain; this._rainTimer = 2;
-    }
+    // 0..1, read by the soundscape's rain bed through audio.tick's context (polish B: the emit('rain') every two seconds
+    // went too, a cue the soundscape never had)
+    this.rain = Math.round(amount * (1 - L.snow) * 50) / 50;
   }
 }
 const _white = new THREE.Color(1, 1, 1), _tmp = new THREE.Color();
