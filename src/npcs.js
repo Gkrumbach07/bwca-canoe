@@ -1044,7 +1044,7 @@ export class People {
       if (v.keeper) { if (!keeper || score > keeper.score) keeper = c; } else if (!best || score > best.score) best = c;
     }
     if (!best && !keeper) return;
-    const s = o && typeof o.spot === 'function' ? o.spot() : null;
+    const s = this.hotSpot();
     // E: a visitor you face (more squarely than the hotspot you also stand at), else the keeper away from any hotspot;
     // at the counter Q is a word with the keeper, whoever else stands by
     let e = null;
@@ -1055,6 +1055,8 @@ export class People {
     if (!e && keeper && !s) e = { ...keeper, key: 'E' };
     const q = keeper && s && s.key === 'counter' ? { ...keeper, key: 'Q' } : null;
     if (!e && !q) return;
+    // (fb4 join) the dot on the counter has the keeper's Q on its own label (outfitter.js asks keeperWord): no line here
+    if (!e && q && o && o.pointer) { this.focus = q; this.qFocus = q; return; }
     const qText = q ? ` &nbsp; <kbd>Q</kbd>A word with ${esc(q.person.first)}` : '';
     if (e) p.prompt = { key: 'E', text: `${e.person.keeper ? `A word with ${esc(e.person.name)} · ${esc(e.person.who)}` : this.promptText(e.person)}${qText}` };
     else p.prompt = { key: 'E', text: `${p.prompt && p.prompt.text ? p.prompt.text : 'The counter'}${qText}` };
@@ -1062,6 +1064,23 @@ export class People {
     this.claimsE = !!e;
     if (e && p.input.pressed('KeyE')) this.talkTo(e.person);
     else if (q && p.input.pressed('KeyQ')) this.talkTo(q.person);
+  }
+  // the store's hotspot you look at, in outfitter.spot()'s shape ({ key, p: { x, z, at } }). fb4 join (stream D's find:
+  // Q at the counter never opened a word with the keeper while the dot existed): with the pointer, spot() is null and
+  // the hotspot is the one the dot is on
+  hotSpot() {
+    const o = this.outfitter, ptr = o && o.pointer, p = this.player;
+    if (!ptr) return o && typeof o.spot === 'function' ? o.spot() : null;
+    const t = ptr.target, hot = o.visit && o.visit.inside && o.visit.L && Array.isArray(o.visit.L.hot) ? o.visit.L.hot : null;
+    const h = t && hot ? hot.find((q) => q.key === t.ref) : null;
+    return h ? { key: h.key, p: { x: p.x, z: p.z, at: { x: h.x, z: h.z } } } : null;
+  }
+  // the counter's Q on the dot's label (outfitter.js targetOf): a word with the keeper drawn at store ep, or null
+  keeperWord(ep) {
+    const b = this.bodies.find((x) => x.who && x.who.person.keeper && x.who.person.ep === Number(ep));
+    if (!b) return null;
+    const v = b.who.person;
+    return { verb: `A word with ${v.first}`, run: () => this.talkTo(v) };
   }
   promptText(v) {
     const n = this.s.talked[v.key] || 0, t = this.taskOf(v);
