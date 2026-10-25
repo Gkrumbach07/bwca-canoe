@@ -1598,8 +1598,8 @@ export const panelSig = (o) => [o.id, o.title, o.sub || '', (o.slots || []).map(
 // thing on the ground within reach as its own grid, the wood lying about as a pile, the canoe's load when you stand
 // beside it (with Set everything out and Load everything here), and at an outfitter what they keep for you. It is
 // always there while the book is open, never a tab; "Nothing here" when the ground is empty. The fire card and the
-// shelf have their own right pane, so their MineSide is the body and the tabs alone (Keeping stays a tab at a shelf,
-// so a thing can be bought into it). Nothing left elsewhere shows.
+// shelf have their own right pane, so their MineSide is the body and the tabs alone (at a shelf the canoe's containers
+// at the dock and Keeping are tabs too, so a thing can be bought straight into them). Nothing left elsewhere shows.
 const TAB_NAMES = { pack3: 'Pack', pack4: 'Pack', barrel30: 'Barrel', barrel60: 'Barrel', bucket: 'Bucket', tacklebox: 'Tackle box', stringer: 'Stringer', mapcase: 'Map case', woodarms: 'Armload' };
 const TAB_TWO = { pack3: 'Pack #3', pack4: 'Pack #4', barrel30: 'Barrel 30', barrel60: 'Barrel 60' };
 const SHORT_WHERE = { back: 'back', chest: 'chest' };
@@ -1625,6 +1625,8 @@ export class MineSide {
       return { key: c.id, kind: 'cont', c, label, sub };
     });
     const { ground, canoe, atCanoe } = this.hereLists(list, byId);
+    // a shelf (no pane of its own) at the dock: the canoe's containers as tabs too, so a thing is bought straight into them
+    if (!this.pane && inv.atStash) for (const c of canoe) tabs.push({ key: c.id, kind: 'cont', c, label: TAB_NAMES[c.item] || short(itemDef(c.item)) || 'Container', sub: 'in the canoe' });
     const n = ground.length + (this.pieces.length ? 1 : 0);
     const hereSub = p && p.mode === 'paddle' ? 'in the canoe' : inv.atStash ? (n ? `the canoe at the dock · ${n} on the ground` : 'the canoe at the dock, and what they keep for you') : atCanoe ? (n ? `the canoe beside you · ${n} on the ground` : 'the canoe beside you') : n ? `${n} on the ground, within reach` : 'within reach';
     if (inv.atStash && !this.pane) tabs.push({ key: 'keeping', kind: 'keeping', label: 'Keeping', sub: 'at the outfitter’s' });

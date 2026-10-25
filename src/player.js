@@ -1034,6 +1034,10 @@ export class Player {
     const sx = S.x + fx * SIT.back, sz = S.z + fz * SIT.back; // the hips over the seat: the rig a little ahead of its middle
     const x0 = this.x, z0 = this.z;
     let walking = false;
+    // a move key or Space pressed after the sit began stands you up at any phase (the join, 2026-10-24: W while still
+    // sitting down was swallowed); a key still held from the walk up is not a press
+    const moving = this.moveKeys().moving || inp.pressed('Space');
+    if (!S.armed) S.armed = !moving; else if (moving && S.phase !== 'up') this.stand();
     if (S.phase === 'walk') {
       let step = SIT.walk * dt;
       while (step > 0 && S.path.length) {
@@ -1050,7 +1054,6 @@ export class Player {
       if (S.t >= SIT.down) { S.phase = 'seated'; S.t = 0; S.k = 1; }
     } else if (S.phase === 'seated') {
       this.x = sx; this.z = sz; this.heading = S.heading; S.k = 1;
-      if (this.moveKeys().moving || inp.pressed('Space')) this.stand();
     } else {
       const k = smoothstep(0, 1, S.t / SIT.up);
       S.k = (1 - k) * (S.from.k ?? 1);

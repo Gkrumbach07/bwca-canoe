@@ -309,7 +309,7 @@ export class Hang {
         const b = inv.cont(c.id);
         if (b && b.where === 'hung' && b.at && b.at.up === false) b.at.y = low;
         if (this.pending) { this.pending.done = Math.max(1, job.done); if (job.done < 1) this.pending = null; }
-        if (job.done >= 1 && job.done < 3) this.camp.note(`${HANG[job.done - 1].name}. ${this.armed ? 'E or a click, held, carries on.' : 'Carry on from the tree in the book (I).'}`, 3);
+        if (job.done >= 1 && job.done < 3) this.camp.note(`${HANG[job.done - 1].name}. ${this.armed ? 'E or a click, held, carries on.' : 'Point at the limb and hold E to carry on.'}`, 3);
       },
     };
   }

@@ -160,9 +160,15 @@ const DIAL_CSS = `
 #rest-dial .keys .stamp { margin-left: auto; }
 `;
 let dialCss = false;
+// the dial's keys ahead of the title's Escape and everyone else's: a capture listener made now, at load (as cards.js
+// does), since title.js's own capture listener would otherwise fire first and open the pause card over the dial (the
+// join, 2026-10-24)
+let dialUp = null;
+if (typeof window !== 'undefined') window.addEventListener('keydown', (e) => { if (dialUp && dialUp.isOpen) dialUp.onKey(e); }, true);
 class RestDial {
   constructor() {
     if (!dialCss && typeof document !== 'undefined') { dialCss = true; const s = document.createElement('style'); s.id = 'rest-dial-css'; s.textContent = DIAL_CSS; document.head.appendChild(s); }
+    dialUp = this;
     const el = this.el = document.createElement('div');
     el.id = 'rest-dial'; el.className = 'paper'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Rest until');
     el.innerHTML = '<div class="sc kick"></div><h4>Rest until <span class="hour"><kbd>←</kbd><b></b><kbd>→</kbd></span></h4><div class="row" role="radiogroup" aria-label="Rest until"></div><p class="sub"></p>'
@@ -176,16 +182,16 @@ class RestDial {
       const b = e.target.closest('button[data-i]');
       if (b) { this.set(this.opts[+b.dataset.i].at); if (e.detail >= 2) this.confirm(); }
     });
-    window.addEventListener('keydown', (e) => {
-      if (!this.isOpen) return;
-      const c = e.code;
-      if (c === 'ArrowLeft' || c === 'KeyA') this.step(-1);
-      else if (c === 'ArrowRight' || c === 'KeyD') this.step(1);
-      else if (c === 'KeyE' || c === 'Enter' || c === 'Space') { if (!e.repeat) this.confirm(); }
-      else if (c === 'Escape' || c === 'KeyQ' || c === 'Backspace') this.close();
-      else { if (!/^(Shift|Control|Alt|Meta|Tab)/.test(c)) this.close(); return; } // a step away (W), the map: the dial goes
-      e.preventDefault(); e.stopImmediatePropagation();
-    }, true);
+  }
+  onKey(e) {
+    if (!this.isOpen) return;
+    const c = e.code;
+    if (c === 'ArrowLeft' || c === 'KeyA') this.step(-1);
+    else if (c === 'ArrowRight' || c === 'KeyD') this.step(1);
+    else if (c === 'KeyE' || c === 'Enter' || c === 'Space') { if (!e.repeat) this.confirm(); }
+    else if (c === 'Escape' || c === 'KeyQ' || c === 'Backspace') this.close();
+    else { if (!/^(Shift|Control|Alt|Meta|Tab)/.test(c)) this.close(); return; } // a step away (W), the map: the dial goes
+    e.preventDefault(); e.stopImmediatePropagation();
   }
   get open() { return this.isOpen; }
   // opts: [{ label, small, at (the hour) }]; at: the hour chosen to begin with; words(at) → the line under
@@ -696,7 +702,7 @@ export class Camp {
       onStop: (job) => {
         if (!this.camp) { this.dropDraft(); return; }
         this.setStage(this.camp, job.done);
-        this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'E or a click, held, carries on.' : 'Carry on from its panel in the book (I).'}`, 3);
+        this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'E or a click, held, carries on.' : 'E at the tent, held, carries on.'}`, 3);
       },
     };
   }
@@ -707,7 +713,7 @@ export class Camp {
       id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: c.stage, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(at); },
       onPhase: (i) => { this.setStage(c, i + 1); if (i === 3) this.pitched(); },
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'E or a click, held, carries on.' : 'Carry on from its panel in the book (I).'}`, 3); } },
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'E or a click, held, carries on.' : 'E at the tent, held, carries on.'}`, 3); } },
     };
   }
   // the hold that strikes it, from the stage it stands at back to rolled up and in a pack
