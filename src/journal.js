@@ -12,6 +12,7 @@
 // tab, Shift-Tab to the journal; openHere(ref) is stream A's Q.
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { PackSide } from './inv-ui.js';
+import { KINDS } from './tasks.js'; // fb3 C: a notice's kind, for its progress and its label
 
 const ROWS = 8;        // catches per page
 const PENCIL = [
@@ -108,6 +109,32 @@ export class Journal {
   }
 
   // --- the words ------------------------------------------------------------------------------------------
+  // fb3 C (16, the owner: "task completion or partial completion could be better. like the checkbox is confusing when
+  // it's just dark"): a notice's state, plain. Taken: an empty box and where to do it. In progress: a half box and the
+  // progress line ("1 of 2 in the cooler", "two of three pints handed over"). Done: a tick and where to claim it.
+  // (Claimed: a grey tick with the pay, from the claimed list.) Returns { cls, word, words }.
+  taskState(t) {
+    const ts = this.tasks, k = KINDS[t.kind] || null, w = this.world;
+    const at = (ep) => { const l = ts && ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
+    if (t.status === 'done') {
+      const who = t.npc ? String(t.npcName || 'a visitor').split(' ')[0] : '';
+      return { cls: 'done', word: 'Done', words: who ? `${who} pays it, or the counter at ${at(t.from)}, entry point ${t.from}` : `claim it at ${at(t.from)}, entry point ${t.from}` };
+    }
+    // how far along: the kind's own fraction, else what is in the cooler or handed over against what is wanted
+    let f = 0;
+    if (k && typeof k.fraction === 'function') { const v = k.fraction(t); if (Number.isFinite(v)) f = v; }
+    else { const n = t.need || 1; if (Array.isArray(t.cooler) && t.cooler.length) f = t.cooler.length / n; else if (Number.isFinite(t.got) && t.got > 0) f = t.got / n; }
+    const progress = k && typeof k.progress === 'function' ? k.progress(t) : (ts && ts.progressOf ? ts.progressOf(t) : 'on the go');
+    if (f > 0) return { cls: 'half', word: 'In progress', words: progress };
+    // taken: where to do it (the keeper's pencil on the map: the site or the water, and the lake)
+    let where = '';
+    try {
+      const tg = ts && typeof ts.targetOf === 'function' ? ts.targetOf(t) : null, label = tg && tg.label ? String(tg.label) : '';
+      const lake = w && typeof w.lakeName === 'function' ? w.lakeName(t.lakeId || t.lakeHint || 0) || '' : '';
+      where = label && lake && !label.includes(lake) ? `${label}, ${lake}` : lake ? `on ${lake}` : label || (t.toPlace ? `at ${t.toPlace}` : '');
+    } catch { where = ''; }
+    return { cls: 'taken', word: 'Taken', words: where ? `${where} · ${progress}` : progress };
+  }
   get trip() { return this.outfitter ? this.outfitter.trip : null; }
   get core() { return this.outfitter ? this.outfitter.core : null; } // the trip's rules and permit (trip.js)
   get dayN() { const c = this.core; if (c) return c.active ? c.dayN : 0; const t = this.trip; return t && t.active ? Math.floor(this.outfitter.daysOut) + 1 : 0; }
@@ -192,8 +219,8 @@ export class Journal {
     const nightTxt = nights.length ? `${nights.length} · ${esc(nights[nights.length - 1].where)}` : 'none yet';
     const daysOn = st ? st.daysOnWater : 0;
     const active_tasks = ts ? ts.active : [];
-    const paidAt = (t) => { const l = ts && ts.landing ? ts.landing(t.from) : null; return l ? `${l.name}, entry point ${t.from}` : `entry point ${t.from}`; };
-    const todo = active_tasks.length ? active_tasks.map((t) => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span>${esc(t.clue)}${t.status === 'done' ? ` <span class="soft">Done; claim it at ${esc(paidAt(t))}.</span>` : ''}</span></div>`).join('')
+    // fb3 C (16): each notice with its state in the box and a word on it (taskState)
+    const todo = active_tasks.length ? active_tasks.map((t) => { const st = this.taskState(t); return `<div class="todo ${st.cls}"><i aria-hidden="true"></i><span>${esc(t.clue)} <span class="soft"><span class="sc">${esc(st.word)}</span> · ${esc(st.words)}</span></span></div>`; }).join('')
       : '<div class="empty">Nothing on the go. Every outfitter pins notices by the door, paid at its own counter.</div>';
     return `<section class="page left" aria-labelledby="trip-h">
       <div class="sc kicker">${active ? `The trip · ${c ? `${c.adventure ? 'Adventure' : 'Sandbox'} · ${esc(c.dayWords())}` : `day ${dayN}`}` : `The trip${c ? ` · ${c.adventure ? 'Adventure' : 'Sandbox'}` : ''}`}</div>
@@ -239,17 +266,16 @@ export class Journal {
     const all = ts.active, open = all.filter((t) => t.status !== 'done'), done = all.filter((t) => t.status === 'done');
     const at = (ep) => { const l = ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
     const kinds = { item: 'Lost and found', survey: 'Portage crew', fish: 'Fish wanted' };
-    // the notices taken on, the finished ones first, each with where it is paid
+    // the notices taken on, the finished ones first, each with its state plain (fb3 C, 16: taskState) and where it is paid
     // (a visitor's task, npcs.js, is theirs: asked in person at that store, paid by them or its counter)
     const card = (t) => {
-      const who = t.npc ? String(t.npcName || 'a visitor') : '';
-      const state = t.status === 'done' ? (t.npc ? `Done · ${esc(who.split(' ')[0])} pays it, or the counter at ${esc(at(t.from))}, entry point ${t.from}.` : `Done · claim it at ${esc(at(t.from))}, entry point ${t.from}.`) : `On the go · ${esc(ts.progressOf ? ts.progressOf(t) : '')}`;
-      const lab = t.npc ? `Asked by ${esc(who)}` : kinds[t.kind] || esc((ts.kinds && ts.kinds[t.kind] && ts.kinds[t.kind].label) || t.kind);
-      return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><i aria-hidden="true"></i><span><span class="lab">${lab} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft">${state}</span></span></div>`;
+      const who = t.npc ? String(t.npcName || 'a visitor') : '', st = this.taskState(t);
+      const lab = t.npc ? `Asked by ${esc(who)}` : kinds[t.kind] || esc((KINDS[t.kind] && KINDS[t.kind].label) || t.kind);
+      return `<div class="todo ${st.cls}"><i aria-hidden="true"></i><span><span class="lab">${lab} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft state"><span class="sc">${esc(st.word)}</span> · ${esc(st.words)}</span></span></div>`;
     };
     const list = [...done, ...open].map(card).join('');
     const paid = (ts.claimed || []).slice(-5).reverse();
-    const claimed = paid.length ? `<div class="lab">Claimed lately</div>${paid.map((c) => `<div class="todo done"><i aria-hidden="true"></i><span>$${c.pay} · ${esc(c.title)} · <span class="soft">${esc(at(c.from))}</span></span></div>`).join('')}` : '';
+    const claimed = paid.length ? `<div class="lab">Claimed lately</div>${paid.map((c) => `<div class="todo claimed"><i aria-hidden="true"></i><span><b>${esc(c.title)}</b> · <span class="soft">${esc(at(c.from))}</span><span class="pay">$${c.pay}</span><br><span class="soft state"><span class="sc">Claimed</span> · $${c.pay} paid at ${esc(at(c.from))}</span></span></div>`).join('')}` : '';
     const n = (ts.claimed || []).length, earned = ts.earned || 0;
     const head = open.length || done.length ? `${open.length ? `${word(open.length)[0].toUpperCase()}${word(open.length).slice(1)} on the go` : 'Nothing on the go'}${done.length ? `, ${word(done.length)} to claim` : ''}` : 'Nothing on the go';
     const sub = earned ? `$${earned} from the boards this season, ${n} ${plural(n, 'notice')} claimed. Each is paid only at the counter that posted it.` : 'Every outfitter pins four notices by the door. Each is paid only at the counter that posted it.';

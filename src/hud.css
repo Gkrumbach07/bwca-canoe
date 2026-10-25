@@ -45,6 +45,7 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #readout .bar i { display: block; height: 100%; background: var(--cream); }
 #readout .foot { font-size: 13px; color: rgba(243, 236, 221, .6); display: flex; align-items: center; gap: 8px; }
 #readout .foot kbd { font-size: 11px; padding: 1px 6px; border-color: rgba(243, 236, 221, .6); }
+#air.ebar #readout { top: 80px; } /* fb3 C: the readout keeps under the energy bar, which stays up (it has no Energy row now) */
 
 /* the spot card: top left while the rod is up */
 #spot { left: 64px; top: 48px; display: flex; flex-direction: column; gap: 8px; max-width: 420px; text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
@@ -97,6 +98,10 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #lures span b { font-weight: 700; font-size: 12px; color: rgba(243, 236, 221, .6); margin-right: 6px; }
 #lures span.on { color: var(--gold); font-weight: 700; border-bottom-color: var(--gold); }
 #lures span.on b { color: inherit; }
+/* fb3 C: the bobber rig with no leech in reach (stream B's fishing.ui.needsLeeches) */
+#lures span.off { color: var(--cream-50); }
+#lures span.off.on { color: rgba(220, 180, 105, .6); }
+#lures span.off i { font: italic 12px/1 var(--serif); margin-left: 7px; color: var(--ember); }
 #balance { left: 50%; translate: -50% 0; bottom: 118px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #balance .label { color: var(--cream-72); text-shadow: 0 1px 2px rgba(0, 0, 0, .45); }
 #balance.hot .label { color: var(--ember); }
@@ -127,7 +132,7 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
    it, up to the ceiling, is what rest can bring back; each need's chunk eats in from the right end in its colour (cold
    pale blue, sleep orange, hunger yellow, thirst blue), dashed and marching while it grows (cold dotted), with its icon
    under it. A thin dark edge, as the game's, so it reads on snow and sky alike. The readout's Energy row draws it small. */
-#air, #readout { --e-green: #7fb58f; --e-edge: rgba(16, 20, 22, .72); --e-room: rgba(243, 236, 221, .16);
+#air, #readout, #strip { --e-green: #7fb58f; --e-edge: rgba(16, 20, 22, .72); --e-room: rgba(243, 236, 221, .16);
   --e-warmth: #bcd8e8; --e-warmth-d: #7f9fb2; --e-rest: #dd8d5b; --e-rest-d: #9c5a35; --e-food: #dcb469; --e-food-d: #9c7c3c; --e-water: #5f9dd2; --e-water-d: #3b6894; }
 #energy { left: 64px; top: 34px; width: 360px; }
 #energy .track, #readout .ebar { position: relative; height: 6px; border: 1.5px solid var(--e-edge); border-radius: 2px; background: rgba(16, 20, 22, .4); box-shadow: 0 1px 2px rgba(0, 0, 0, .35); overflow: hidden; }
@@ -153,7 +158,25 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #energy .icon.food { color: var(--e-food); }
 #energy .icon.water { color: var(--e-water); }
 #readout .ebar { display: inline-block; width: 150px; height: 5px; vertical-align: middle; margin-right: 10px; }
-@media (prefers-reduced-motion: reduce) { #energy .chunk.grow { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #energy .chunk.grow, #strip .chunk.grow { animation: none; } }
+
+/* fb3 C (14): the strip over the paper. The owner: "the health bar and time should be visible pretty much all the time,
+   even in modals, because that's when I'm eating and want to know if I need to keep eating". Top centre, over the scrim
+   and every paper and the Rest dial: the same bar, its number, the clock and the day. The one box in the Air: it lies
+   over a different ground in every paper (the book's leather, a card's cream), so a deep translucent pill carries it. */
+#strip { position: fixed; left: 50%; top: 8px; translate: -50% 0; z-index: 6; display: flex; align-items: center; gap: 10px; padding: 6px 14px 7px; border-radius: 4px; background: rgba(14, 27, 34, .74); border: 1px solid rgba(243, 236, 221, .14); box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+  color: var(--cream); font: 15px/1.2 var(--sans); text-shadow: var(--air-shadow); font-variant-numeric: tabular-nums; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; white-space: nowrap; }
+#strip.show { opacity: 1; visibility: visible; transition: opacity .2s; }
+body.shell-open #strip { display: none; }
+#strip .track { position: relative; width: 200px; height: 6px; border: 1.5px solid var(--e-edge); border-radius: 2px; background: rgba(16, 20, 22, .4); overflow: hidden; }
+#strip .track i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; }
+#strip .fill { background: var(--e-green); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); transition: width .4s ease-out; }
+#strip .room { background: var(--e-room); }
+#strip .chunk { background: var(--c); box-shadow: inset 1.5px 0 0 var(--e-edge); }
+#strip .chunk.grow { background: repeating-linear-gradient(90deg, var(--c) 0 6px, var(--cd) 6px 8px); animation: energy-march 1.6s linear infinite; }
+#strip .pct { min-width: 38px; }
+#strip .dot { color: var(--cream-50); }
+#strip .day { color: var(--cream-72); font-size: 11.5px; }
 
 /* --- Paper ------------------------------------------------------------------------------------------------- */
 #scrim { position: fixed; inset: 0; background: var(--deep); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 4; }
@@ -184,6 +207,10 @@ body.paper-open #scrim { opacity: .55; pointer-events: auto; }
 
 /* the map sheet: a glance (hold M, bottom right), the full sheet (press M), or a corner sheet that stays up */
 #map { display: flex; flex-direction: column; overflow: hidden; }
+/* fb3 C (21): the head band keeps to one line whatever it says (a title left over from the sheet wrapped in the
+   glance's narrow band for a frame, and the canvas was measured against the wrong height) */
+#map .band.head { flex-wrap: nowrap; white-space: nowrap; }
+#map .band.head .title, #map .band.head .own { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #map .body { position: relative; flex: 1 1 auto; min-height: 0; background: #e9e1cc; }
 #map canvas { display: block; width: 100%; height: 100%; cursor: pointer; touch-action: none; }
 #map.sheet canvas { cursor: grab; }
@@ -237,8 +264,18 @@ body.paper-open #scrim { opacity: .55; pointer-events: auto; }
 #journal .ebar i { display: block; height: 100%; background: var(--ink); }
 #journal .section { border-top: 1px solid var(--edge); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; scrollbar-width: thin; }
 #journal .todo { display: flex; gap: 12px; align-items: flex-start; font-size: 16px; line-height: 1.4; }
-#journal .todo i { flex: none; width: 14px; height: 14px; border: 1.5px solid var(--ink); margin-top: 4px; box-sizing: border-box; }
-#journal .todo.done i { background: var(--ink); }
+#journal .todo i { flex: none; width: 14px; height: 14px; border: 1.5px solid var(--ink); margin-top: 4px; box-sizing: border-box; position: relative; }
+/* fb3 C (16): a notice's state in its box (the owner: "the checkbox is confusing when it's just dark"): taken is an
+   empty box; in progress a box half filled; done a tick; claimed a grey tick, the words greyed with it */
+#journal .todo.half i { background: linear-gradient(90deg, var(--ink) 0 50%, transparent 50%); }
+#journal .todo.done i, #journal .todo.claimed i { border-color: var(--ink); }
+#journal .todo.done i::after, #journal .todo.claimed i::after { content: ''; position: absolute; left: 3px; top: -1px; width: 5px; height: 9px; border: solid var(--ink); border-width: 0 2px 2px 0; transform: rotate(40deg); }
+#journal .todo.claimed i { border-color: var(--ink-faint); }
+#journal .todo.claimed i::after { border-color: var(--ink-faint); }
+#journal .todo.claimed { color: var(--ink-faint); }
+#journal .todo.claimed .pay, #journal .todo.claimed b { color: var(--ink-soft); }
+#journal .todo .state { display: block; }
+#journal .todo .pay { margin-left: 10px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 #journal .todo .soft { color: var(--ink-soft); font-style: italic; }
 #journal .foot { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; font: 700 11px/1.4 var(--sc); letter-spacing: .14em; color: var(--ink-faint); flex: none; }
 #journal .foot .pencil { font-size: 22px; letter-spacing: 0; transform: rotate(-2deg); max-width: 70%; }

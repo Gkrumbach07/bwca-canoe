@@ -440,6 +440,14 @@ async function main() {
   // describes, never the whole lake); every item says what it is for and lists its right-click verbs (items.js words
   // and verbs, which the book's tooltips and menus read). Nothing to wire: the verbs' table and lookup for the console.
   Object.assign(window.__game.items, { VERBS, verbsOf });
+  // fb3 C: the book, the cards, the HUD and the title (the owner's feedback of 2026-10-25). The readout (Tab) is the
+  // moment only (the sun, the wind, the sky, the way) and reads the weather for its Sky row; the strip over the paper
+  // (hud.js updateStrip: the energy bar, the clock and the day) stands over the book, every card and the Rest dial
+  // (camp.dialOpen, which the paper register does not know); the fire card's left pane lists what is in reach as tabs
+  // (cards.js); journal.openHere('canoe') opens the book with the canoe lit on the right (stream A's Q on a loaded hull).
+  const hudUpdateC = hud.update.bind(hud);
+  hud.update = (c) => hudUpdateC(c && !c.weather ? { ...c, weather } : c);
+  hud.stripAlso = () => !!camp.dialOpen;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
