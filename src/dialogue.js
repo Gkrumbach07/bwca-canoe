@@ -19,7 +19,11 @@
 // one (the panel waits with an ellipsis), null to leave (their farewell said as a bark as you go) or { end: true, after }
 // to leave quietly and then do something (the keeper's counter).
 //
-// What was said: the last six lines, from barks and conversations, with T (or `dialogue.history` for the journal).
+// What was said: the last six lines, from barks and conversations (`dialogue.history`, for the console). fb4 D (the owner,
+// 2026-10-25: "T is a little bit confusing … I think we can have that when we talk to someone, we can have a way to see
+// what we said last to them"): T and its panel are gone. A conversation opens with what that person last said to you
+// and when ("Last time · yesterday"), kept per speaker in the `talk` namespace, so the keeper's last line is there when
+// you talk to them at the counter.
 //
 //   const talk = new Dialogue({ camera, player, chase, hud, day, frame })   frame(): may it cut over your shoulder here
 //   talk.bark(speaker, text, { room, pri, secs, next })   speaker: { key, name, role?, pos(outVec3) → head or null }
@@ -28,8 +32,9 @@
 //             go() → node | Promise of one | null | { end, after } }] }
 //   talk.before(dt)    after the outfitter's update, before the player moves: holds the walker, turns the view
 //   talk.update(dt, shell)   after the camera: the queue, the timers, the places on the screen
-//   talk.talking, talk.talkingTo(key), talk.history, talk.stats()
+//   talk.talking, talk.talkingTo(key), talk.history, talk.lastFrom(key), talk.stats()
 import * as THREE from 'three';
+import { save } from './save.js';
 import './dialogue.css';
 
 export const PRI = { ambient: 1, hook: 1.5, greet: 2, reply: 3 };
@@ -37,8 +42,9 @@ const MAX_ON = 2;               // barks on the screen at once, at most
 const GAP = 0.6;                // seconds between two barks in one room
 const FADE = 0.7;               // seconds a bark takes to fade out
 const FAR = 22;                 // metres beyond which a queued bark's speaker is too far to be heard
-const LOG_N = 6;                // lines kept for T
-const LOG_HOLD = 12;            // seconds the history stays up
+const LOG_N = 6;                // lines kept in the history
+const LAST_N = 40;              // fb4 D: the people whose last words to you are kept (the `talk` namespace)
+const NS = 'talk';
 const ABOVE = 0.34;             // metres over the head the tail points at
 const EDGE = { side: 28, top: 24, bottom: 132 }; // px kept clear at the screen's edges (the bottom: the action line)
 const holdFor = (text) => 3 + 0.06 * String(text || '').length;
@@ -60,17 +66,17 @@ export class Dialogue {
     this.gapUntil = new Map(); // room → the clock before which the room's next bark waits
     this.log = [];        // the last lines: { name, role, text, at }
     this.clock = 0; this.seq = 0;
-    this.convo = null;    // { speaker, name, role, room, node, you, wait, bye }
-    this.logOpen = false; this.logT = 0;
+    this.convo = null;    // { speaker, name, role, room, node, you, wait, bye, last }
+    const kept = save.read(NS, null);
+    this.last = kept && kept.v === 1 && kept.by && typeof kept.by === 'object' ? kept.by : {}; // fb4 D: speaker key → { say, you, at }
     const root = this.root = div('talk'); root.id = 'talk';
     this.barksEl = div('barks'); root.appendChild(this.barksEl);
     this.panel = div('convo'); root.appendChild(this.panel);
-    this.logEl = div('log'); root.appendChild(this.logEl);
     document.body.appendChild(root);
     this.panel.addEventListener('click', (e) => { const o = e.target.closest('[data-i]'); if (o) this.choose(Number(o.dataset.i)); });
     this.panel.addEventListener('pointerdown', (e) => e.stopPropagation()); // a click on a choice is not a look or a cast
     // capture phase, so the keys a conversation takes (the numbers, Esc) reach nothing else: not the game speed, not
-    // the pause card; T opens what was said
+    // the pause card
     window.addEventListener('keydown', (e) => {
       if (document.body.classList.contains('shell-open')) return;
       const tag = e.target && e.target.tagName;
@@ -81,13 +87,14 @@ export class Dialogue {
         if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.leave(); return; }
         if (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.skip(); return; }
       }
-      if (e.code === 'KeyT' && !e.repeat && !(this.hud && this.hud.paper)) this.toggleLog();
     }, true);
   }
 
   get talking() { return !!this.convo; }
   talkingTo(key) { const c = this.convo; return !!(c && c.speaker && (c.speaker.key === key || c.speaker.person === key)); }
   get history() { return this.log.slice(); }
+  // fb4 D: what this speaker last said to you in a conversation, { say, you, at: { year, doy, hours } }, or null
+  lastFrom(key) { const l = key != null ? this.last[key] : null; return l && l.say ? l : null; }
 
   // --- barks --------------------------------------------------------------------------------------------------------
   // A passing line by the speaker's head. A newer line from someone already waiting replaces theirs if it is at least
@@ -108,7 +115,6 @@ export class Dialogue {
     const d = this.day, h = d ? d.hours : null;
     this.log.push({ name, role: role || '', text, at: h != null ? `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}` : '' });
     while (this.log.length > LOG_N) this.log.shift();
-    if (this.logOpen) this.renderLog();
   }
   // the head (or the spot above it) of a speaker, or null when they are gone
   headOf(sp, out) { try { return sp.pos ? sp.pos(out) : null; } catch { return null; } }
@@ -208,13 +214,12 @@ export class Dialogue {
   open(c) {
     if (!c || !c.speaker) return false;
     if (this.convo) this.close(false);
-    this.convo = { ...c, node: null, you: null, wait: false, t: 0 };
+    this.convo = { ...c, node: null, you: null, wait: false, t: 0, last: this.lastFrom(c.speaker.key), said: null, saidTo: null };
     // what they were saying is now said here; the room waits while you talk
     for (const b of this.on) if (b.sp.key === c.speaker.key && !b.out) b.t = 0;
     this.queue = this.queue.filter((q) => q.sp.key !== c.speaker.key);
     document.body.classList.add('talking');
     this.panel.classList.add('show');
-    if (this.logOpen) this.toggleLog(false);
     let first = null;
     try { first = c.start ? c.start() : null; } catch (e) { console.warn('dialogue: start', e); }
     this.showNode(first || { say: '…', choices: [{ text: 'Goodbye.', kind: 'bye', go: () => null }] });
@@ -230,7 +235,7 @@ export class Dialogue {
     if (node == null) { this.leave(); return; }
     if (node.end) { const after = node.after; this.close(false); if (typeof after === 'function') after(); return; }
     c.node = node; c.t = 0;
-    if (node.say) this.remember(node.by || c.speaker.name, c.speaker.role, node.say);
+    if (node.say) { this.remember(node.by || c.speaker.name, c.speaker.role, node.say); if (c.you) { c.said = node.say; c.saidTo = c.you; } } // fb4 D: an answer, and what drew it
     this.render();
   }
   choose(i) {
@@ -255,6 +260,7 @@ export class Dialogue {
   }
   close() {
     if (!this.convo) return;
+    this.keepLast(this.convo);
     this.convo = null;
     if (this.shot && this.chase && this.chase.focus === this.shot) this.chase.focus = null; // the chase eases back
     this.shot = null;
@@ -265,11 +271,13 @@ export class Dialogue {
     const c = this.convo; if (!c) return;
     const n = c.node || {}, list = n.choices || [];
     const opts = list.map((o, i) => `<li class="opt${o.kind ? ` ${o.kind}` : ''}${o.dim ? ' dim' : ''}" data-i="${i}"><kbd>${i + 1}</kbd><span>${esc(o.text)}</span>${o.kind === 'task' ? '<em>a task</em>' : o.kind === 'counter' ? '<em>the counter</em>' : ''}</li>`).join('');
+    const L = c.last && !c.you ? c.last : null; // fb4 D: what they said to you last time, until you answer
     this.panel.innerHTML = `<div class="head"><span class="name">${esc(n.by || c.name || c.speaker.name)}</span>${c.role ? `<span class="role">${esc(c.role)}</span>` : ''}</div>`
+      + (L ? `<div class="last"><span class="when">Last time · ${esc(this.whenWords(L.at))}</span>${L.you ? `<span class="you-then">You: ${esc(quote(L.you))}</span>` : ''}<span class="then">${esc(quote(L.say))}</span></div>` : '')
       + (c.you ? `<div class="you">${esc(quote(c.you))}</div>` : '')
       + `<div class="say${c.wait ? ' wait' : ''}">${esc(c.wait ? '…' : quote(n.say || '…'))}</div>`
       + (list.length ? `<ol class="opts">${opts}</ol>` : '')
-      + `<div class="foot"><kbd>1</kbd>–<kbd>${Math.max(1, list.length)}</kbd> or click &nbsp;·&nbsp; <kbd>Esc</kbd> to leave &nbsp;·&nbsp; <kbd>T</kbd> what was said</div>`;
+      + `<div class="foot"><kbd>1</kbd>–<kbd>${Math.max(1, list.length)}</kbd> or click &nbsp;·&nbsp; <kbd>Esc</kbd> to leave</div>`;
     document.body.style.setProperty('--talk-h', `${Math.ceil(this.panel.getBoundingClientRect().height || 240)}px`);
   }
 
@@ -312,18 +320,26 @@ export class Dialogue {
     if (this.hud && this.hud.paper) return; // a paper is up (the counter, the journal, the map): the barks wait under it
     this.pump(dt);
     this.layout();
-    if (this.logOpen && (this.logT -= dt) <= 0) this.toggleLog(false);
   }
 
-  // --- what was said (T) --------------------------------------------------------------------------------------------
-  toggleLog(on = !this.logOpen) {
-    this.logOpen = on; this.logT = LOG_HOLD;
-    if (on) this.renderLog();
-    this.logEl.classList.toggle('show', on);
+  // --- fb4 D: what each person last said to you ----------------------------------------------------------------------
+  // a conversation ending keeps its last line from them (and your last word to them), by the speaker's key, saved
+  keepLast(c) {
+    const key = c && c.speaker && c.speaker.key, say = c && c.said;
+    if (key == null || !say || say === '…') return; // (only an answer counts: a greeting and a goodbye keep the last time's)
+    const d = this.day;
+    this.last[key] = { say: String(say), you: c.saidTo ? String(c.saidTo) : null, at: d ? { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) } : null };
+    const keys = Object.keys(this.last);
+    if (keys.length > LAST_N) for (const k of keys.slice(0, keys.length - LAST_N)) delete this.last[k];
+    save.write(NS, { v: 1, by: this.last });
   }
-  renderLog() {
-    const rows = this.log.length ? this.log.map((l) => `<li><div class="who"><span class="name">${esc(l.name)}</span>${l.role ? `<span class="role">${esc(l.role)}</span>` : ''}<span class="at">${esc(l.at)}</span></div><div class="say">${esc(quote(l.text))}</div></li>`).join('') : '<li class="none">Nobody has said anything yet.</li>';
-    this.logEl.innerHTML = `<div class="sc">What was said</div><ol>${rows}</ol><div class="foot"><kbd>T</kbd> to close</div>`;
+  // "earlier today", "yesterday", "3 days ago", "last season"
+  whenWords(at) {
+    const d = this.day;
+    if (!at || !d) return 'before';
+    if (at.year !== d.year) return 'last season';
+    const n = d.doy - at.doy;
+    return n <= 0 ? 'earlier today' : n === 1 ? 'yesterday' : `${n} days ago`;
   }
 
   // --- the console and the tests ------------------------------------------------------------------------------------
@@ -333,6 +349,7 @@ export class Dialogue {
       queue: this.queue.map((q) => ({ who: q.sp.name, room: q.room, pri: q.pri, age: +q.age.toFixed(1), text: q.text.slice(0, 60) })),
       convo: this.convo ? { who: this.convo.name, say: this.convo.node && this.convo.node.say, choices: (this.convo.node && this.convo.node.choices || []).map((o) => o.text), wait: this.convo.wait } : null,
       log: this.log.map((l) => `${l.name}: ${l.text}`),
+      last: this.convo && this.convo.last ? this.convo.last.say : null,
     };
   }
 }
