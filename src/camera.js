@@ -110,6 +110,13 @@ function circleT(S, cx, cz, r) {
   const t = (-b - Math.sqrt(disc)) / a;
   return t >= 0 && t <= 1 ? t : Infinity;
 }
+// is the segment's start inside the box's footprint (with the margin): the thing the walker stands in or sits on
+// (fb3 A: the bench's obstacle has no top, so it read as a wall round the seated walker's head and pulled the chase in
+// to PULL.min; the owner, 2026-10-25: "sitting on a bench zooms me in in 3rd person and doesnt let me use my zoom level")
+function insideBox(S, o) {
+  const px = S.ax - o.x, pz = S.az - o.z, m = SIGHT.margin;
+  return Math.abs(px * o.ux + pz * o.uz) <= o.hx + m && Math.abs(-px * o.uz + pz * o.ux) <= o.hz + m;
+}
 // an oriented box (centre x, z; its a axis ux, uz; half sizes hx along a, hz across; y from -inf to top): entry t
 function boxT(S, o, top) {
   const px = S.ax - o.x, pz = S.az - o.z;
@@ -248,7 +255,10 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}, opts = {}) {
   for (const o of near) {
     // a box: up to its top; one without (a wall) about 4 m, or indoors (the shelves, the counter: the walls are the
     // interior's box above) a shelf's height
-    if (o.box) { const t = boxT(S, o, o.top !== undefined ? o.top : indoors ? floorY + SIGHT.shelf : ground(o.x, o.z) + SIGHT.wall); if (t < hard) { hard = t; out.what = 'box'; } continue; }
+    if (o.box) {
+      if (insideBox(S, o)) continue; // fb3 A: the seat he sits on (or anything he stands in) is not in the way
+      const t = boxT(S, o, o.top !== undefined ? o.top : indoors ? floorY + SIGHT.shelf : ground(o.x, o.z) + SIGHT.wall); if (t < hard) { hard = t; out.what = 'box'; } continue;
+    }
     if (o.shape && o.shape.heightAt) {
       // a solid by its drawn shape (a rock, an outcrop, a bluff's module, a log, a stump): inside where the point is
       // under its top; only the samples over its footprint are asked
@@ -279,6 +289,7 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}, opts = {}) {
       if (o.top === undefined && !o.rock && o.r < 0.1) continue;
       const top = o.top !== undefined ? o.top : ground(o.x, o.z) + (o.rock ? SIGHT.post : o.r >= 0.6 ? 0.4 : 1.1);
       const t = circleT(S, o.x, o.z, o.r + SIGHT.margin);
+      if (t <= 0) continue; // fb3 A: sat on the latrine (its post holds the pivot): not in the way
       if (t < hard && ay + S.dy * t < top) { hard = t; out.what = 'post'; }
       continue;
     }

@@ -21,8 +21,10 @@
 //           each test -> { t (m along the ray), miss (0 dead on .. 1 at the edge) } or null
 //     target { kind: 'item' | 'container' | 'pile' | 'person' | 'shelf' | 'board' | 'maptable' | 'counter' | 'canoe' |
 //              'fire' | 'tent' | 'seat' | 'tree' | 'barrelHung' | 'water' | 'downLog' | …, ref, label,
-//              e: { verb, run(opts), held?, why? },      E: the primary (opts: { key: 'KeyE' }, for a held job)
-//              q?: { verb, run(opts), held?, why? },     Q: the secondary (opts: { key: 'KeyQ' })
+//              e: { verb, run(opts), held?, why?, help? },  E: the primary (opts: { key: 'KeyE' }, for a held job)
+//              q?: { verb, run(opts), held?, why?, help? }, Q: the secondary (opts: { key: 'KeyQ' })
+//              (why: the verb can't be done now, dimmed with the reason in its place; the key then says why, and runs
+//              help() if there is one: the canoe's "Unload it first" opens the book at the canoe, fb3 A)
 //              hint?, mesh? (a Mesh whose geometry takes the rim), shell? ({ geometry, matrix }: the rim on that),
 //              box? (as near.box: with no mesh or shell, a soft pool of light on the ground under it instead) }
 //            (an older provider's { verb, act, enabled, why } is read as e: { verb, run: act, why })
@@ -244,7 +246,11 @@ class Pointer {
       const a = e ? t.e : t.q, key = e ? 'KeyE' : 'KeyQ';
       if (!a) { if (e) inp.once.delete('KeyE'); return; }
       inp.once.delete(key);
-      if (a.why) { if (this.hud) this.hud.note(a.why, 3); return; }
+      if (a.why) {
+        if (this.hud) this.hud.note(a.why, 3);
+        if (typeof a.help === 'function') { try { a.help({ key, from: 'dot' }); } catch (err) { console.warn('pointer help', err); } }
+        return;
+      }
       try { a.run({ key, keys: [key, 'Mouse0'], from: 'dot' }); } catch (err) { console.warn('pointer act', err); }
       return;
     }
@@ -257,7 +263,10 @@ class Pointer {
   update(dt, shell = false) {
     const ok = this.usable(shell), p = this.player;
     this.on = ok;
-    if (!ok) { this.setTarget(null); this.groundHit = null; this.show(false); return; }
+    // fb3 A (the owner, 2026-10-25: "when i get in and paddle away, or pick up and walk away with the boat, the ghost
+    // outline stays"): off the dot, the rim and the pool go too. The rim had kept the hull's geometry at the hull's
+    // last matrix while you paddled or carried it away, a ghost of the canoe where it had lain.
+    if (!ok) { this.setTarget(null); this.groundHit = null; this.show(false); this.park(); return; }
     const cam = this.camera;
     cam.updateMatrixWorld();
     cam.getWorldPosition(_o); cam.getWorldDirection(_d);
