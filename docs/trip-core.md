@@ -256,7 +256,7 @@ the energy, a dim track up to the ceiling, and the chunks from the right end (co
 yellow, thirst blue), dashed and marching while one grows faster than its everyday rate or while its need is low, with
 its icon (snowflake, zz, fork and knife, drop) under it; it shows only when it matters, and the old *tired* / *hungry*
 / *thirsty* marks are gone. The readout says what holds the bar down: "Energy 52 % · held down by tiredness and cold ·
-up 11 h · 1.2 L in the bottle". At 0 nothing is eaten for you: the note says to eat from the pack (J), drink or rest.
+up 11 h · 1.2 L in the bottle". At 0 nothing is eaten for you: the note says to eat from the pack (I, the book), drink or rest.
 
 Every rate is per game hour, paid on the hours the clock passes, so a stretch costs what its game hours cost at any
 pace or game speed: the base (0.009 an hour), the paddle (0.045 an hour at a cruise, more for speed, hustle and a
@@ -297,12 +297,16 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 | Q | on foot, the dot on the canoe | shoulder it ("Unload it first" while anything but the paddle, the rod and the stringer rides in it: the book opens at the canoe) |
 | Q | on foot, carrying | set down what you carry (it stays there until you come back for it) · at the ring, an armload: stack it on the woodpile |
 | Q | campsite, on foot | a half-pitched tent: take it down (held) · at night: strike the tent (held), or with the fly off, sleep without it · at the canoe with things set out: launch and leave them |
-| K / E | a fish held up | keep it, in your hand (into a pack in reach with both hands full; into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
+| E / Q | a fish held up | keep it, in your hand (into a pack in reach with both hands full; into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
 | H | anywhere, day or night | the headlamp |
-| I | anywhere | the book at the pack: eat a serving of a snack when still (a meal or a fish cooked first), Drink from the bottle, move things between containers |
+| I | anywhere | the book (I or Esc closes it): your body and containers on the left, a tab for each thing within reach on the right (The canoe, a pack on the ground, Wood, The ground), the Journal a tab of its own; right-click a thing for its verbs and why one is greyed; eat a serving of a snack when still (a meal or a fish cooked first), Drink from the bottle, move things between containers |
 | Space, Shift | afloat / on foot | brace / vault, climb or hop · hustle / jog |
 | 1 2 3 | anywhere, the rod down | 1×, 2×, 4× on top of the pace (Settings › Controls › Pace: Trip or Real) |
 | `[ ] - = P` · `, . / ;` | Sandbox | the clock and the date · the wind |
+
+The whole set since the second 2026-10-25 round (the README and the title's Controls card list it): W A S D and the
+mouse, Shift, Space, E and Q on the dot, F the rod, I the book, M the map, Tab held the moment's readout, V the view, H
+the headlamp, C the camera, 1 2 3 the pace, Esc. J, L, T, R and Ctrl-click are gone (reflections are a Settings row).
 
 E belongs to the most specific context. Afloat, a lost item in reach comes first (tasks.before takes E ahead of "Go
 ashore"), then the dock's counter, then a landing's portage, then the bank. On foot, a portage's or a pack's prompt

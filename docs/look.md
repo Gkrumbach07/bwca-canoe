@@ -206,8 +206,8 @@ baked lightmaps, no PBR, no external assets.
   boulder species) and scree-block stones on the stony beds, sunken logs off wooded shores and awash logs in the
   quiet shallows.
 - `REFLECTION = { scale, reach, full }` sets the mirror pass. Terrain, trees, snags and outcrops go on
-  `REFLECT_SHORE_LAYER` as tiles come in; the canoe and the rod on `REFLECT_LAYER`. The setting (R) turns the
-  pass off and the water mirrors the sky alone; the pass also stops 150 m inland.
+  `REFLECT_SHORE_LAYER` as tiles come in; the canoe and the rod on `REFLECT_LAYER`. Settings › *Shore and sky in the
+  water* (it was R until the second 2026-10-25 round) turns the pass off and the water mirrors the sky alone; the pass also stops 150 m inland.
 - The shore's ripple lines are contours of the shore distance (a 10 m lattice, interpolated), so they are kept to
   the last 2.8 m of water and broken into dashes a metre or three long; further out its contours would run on as
   long strings across a bay.
