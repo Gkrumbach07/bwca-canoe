@@ -24,7 +24,9 @@
 //              e: { verb, run(opts), held?, why?, help? },  E: the primary (opts: { key: 'KeyE' }, for a held job)
 //              q?: { verb, run(opts), held?, why?, help? }, Q: the secondary (opts: { key: 'KeyQ' })
 //              (why: the verb can't be done now, dimmed with the reason in its place; the key then says why, and runs
-//              help() if there is one: the canoe's "Unload it first" opens the book at the canoe, fb3 A)
+//              help() if there is one: the canoe's "Unload it first" opens the book at the canoe, fb3 A. fb4 A, the
+//              round's decision 2: a greyed verb also carries needs, [{ label, have?, need?, unit?, done?, timer? }],
+//              the checklist the book and the cards draw, and next, the one thing to do now, which the key's note adds)
 //              hint?, mesh? (a Mesh whose geometry takes the rim), shell? ({ geometry, matrix }: the rim on that),
 //              box? (as near.box: with no mesh or shell, a soft pool of light on the ground under it instead) }
 //            (an older provider's { verb, act, enabled, why } is read as e: { verb, run: act, why })
@@ -71,11 +73,12 @@ function normalize(t) {
   t.e = { verb: t.verb || 'Use', run: t.act || (() => {}), why, held: !!t.held };
   return t;
 }
-// one key's part of the label: the key, the verb (or, dimmed, why it can't be done), "hold" for a held one
+// one key's part of the label: the key, the verb (or, dimmed, why it can't be done); a held one says so before its key,
+// "hold E Push it off" (fb4 A: read as it is done, the word first)
 function actHtml(key, a) {
   if (!a) return '';
   const off = !!a.why;
-  return `<span class="act${off ? ' off' : ''}"><kbd>${key}</kbd><span>${esc(off ? a.why : a.verb)}</span>${a.held && !off ? '<span class="hold">hold</span>' : ''}</span>`;
+  return `<span class="act${off ? ' off' : ''}${a.held && !off ? ' held' : ''}">${a.held && !off ? '<span class="hold">hold</span>' : ''}<kbd>${key}</kbd><span>${esc(off ? a.why : a.verb)}</span></span>`;
 }
 // a prompt line without its E (player.js say: "info &nbsp;·&nbsp; <kbd>E</kbd>Do this &nbsp; <kbd>Q</kbd>Do that"), or
 // without its Q (stripKey: the dot's label has the key, so the line at the bottom loses it)
@@ -247,7 +250,8 @@ class Pointer {
       if (!a) { if (e) inp.once.delete('KeyE'); return; }
       inp.once.delete(key);
       if (a.why) {
-        if (this.hud) this.hud.note(a.why, 3);
+        // (fb4 A, decision 2: the reason and the one thing to do next)
+        if (this.hud) this.hud.note(a.next ? `${String(a.why).replace(/[.:]\s*$/, '')}. ${a.next}${/[.!?]$/.test(a.next) ? '' : '.'}` : a.why, a.next ? 5 : 3);
         if (typeof a.help === 'function') { try { a.help({ key, from: 'dot' }); } catch (err) { console.warn('pointer help', err); } }
         return;
       }
@@ -434,7 +438,11 @@ export function forageTargets(forage, FORAGE) {
       const tall = s.tall ? 1.1 : 0.25, hit = near.sphere(q.x, q.y + tall, q.z, s.tall ? 0.9 : 0.75);
       if (!hit) continue;
       const left = s.pick ? forage.leftOn(q) : 1, look = s.kind === 'lookalike';
-      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'item', ref: q.key, label: s.name || s.short, e: { verb: look ? 'Look' : (s.pick && s.pick.verb) || 'Pick', why: look || left > 0 ? null : 'picked for today', run: () => forage.start(q) }, mesh: q.mesh } });
+      // (fb4 A, decision 2: stream C's pickCheck when it is there: { enabled, why, needs, next })
+      let pc = null;
+      if (!look && typeof forage.pickCheck === 'function') { try { pc = forage.pickCheck(q); } catch (e) { pc = null; } }
+      const why = look ? null : pc ? (pc.enabled === true ? null : pc.why || (pc.enabled === false ? 'picked for today' : null)) : left > 0 ? null : 'picked for today';
+      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'item', ref: q.key, label: s.name || s.short, e: { verb: look ? 'Look' : (s.pick && s.pick.verb) || 'Pick', why, needs: pc && pc.needs ? pc.needs : null, next: pc && pc.next ? pc.next : null, run: () => forage.start(q) }, mesh: q.mesh } });
     }
     return out;
   };

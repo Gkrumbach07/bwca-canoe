@@ -451,6 +451,13 @@ async function main() {
   packs.openCanoe = () => (typeof journal.openHere === 'function' ? journal.openHere('canoe') : false);
   const travellingA = trip.travelling.bind(trip);
   trip.travelling = (dt) => { const r = travellingA(dt); if (!r && player.mode === 'walk' && player.lapsing && Math.abs(player.speed) > 0.1) { trip.travelT = 1; return true; } return r; };
+  // fb4 A: the shore and the figure (the owner's second round of 2026-10-25). A hull nosed in or lying on the bank is
+  // beached: E is held, "Push it off" (packs.js beginPush: you walk it out until both ends float and stand beside it in
+  // the shallows; a tap moves nothing); afloat, E "Get in" puts you in it where it floats and as it faces (player.launch
+  // in place), and what you wear goes into the hull with one note; nothing comes back out when you step out. Greyed
+  // verbs carry decision 2's why, needs and next (packs.js, nearby.js, pointer.js). The figure keeps its head in any
+  // view not at the eye (canoe.js: the pause card, the title, a close-up), however the camera was set.
+  canoe.viewer = camera;
   // fb3 B: items and their uses (the owner's 2026-10-25 round). Every item says what it does in numbers (items.js
   // stats, which the book's tooltip draws), with the effect real in code: the sleeping bag is the night's rest
   // (energy.sleep), the tarp keeps the rain off the ring or a pack (chores.js), the clothes change after a soaking

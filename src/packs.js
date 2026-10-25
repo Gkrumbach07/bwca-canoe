@@ -19,9 +19,14 @@
 //      back for the rest (E pointed at a thing picks it up), or Q fetches it all: a short fade, the clock moves on by
 //      the walks back and the carries over (as many trips as it takes, at life pace: pace.js), the walks' energy is
 //      spent, and it all stands by the canoe;
-//   5. E pointed at the canoe gets in only where it floats (its end in the water); beached on dry ground E reads "Push it
-//      off first" and does that, a short push to the water. Getting in, what is in your hands goes into the hull at your
-//      feet (your hands are for the paddle); what is on your back and chest stays where it is.
+//   5. E pointed at the canoe gets in only where it floats, both ends over water (afloat); nosed in, an end up the bank
+//      (beached), or lying on the bank by the water, E is held: "Push it off" walks it out until both ends float, you
+//      in the shallows beside it (pushPlan, beginPush). Then E "Get in" puts you in it where it floats, facing as it
+//      lies (fb4 A, the owner's second round of 2026-10-25: "it's pretty easy to accidentally get back in the canoe,
+//      which basically teleports you a little bit further out into the water facing away ... once you nose in, you
+//      have to nose it back out. If it's already in the water, you can just press get in, and then it'll just put you
+//      right in the water where it was"). Getting in, what you wear goes into the hull (back, chest, hands: paddling
+//      needs you unloaded), with one note; stepping out, nothing comes back out by itself.
 // On foot elsewhere (fb2 A, the owner's second feedback of 2026-10-24): E is the pointer's (pointer.js, nearby.js): a
 // thing on the ground pointed at is picked up (onto the back, the chest or a hand; a pile's things into what you carry),
 // and the canoe pointed at is got into (what you carry goes in with you) or shouldered. There is no Q drop: things are
@@ -61,10 +66,15 @@ const LOAD_EACH = { minutes: 1, seconds: 0.45, per100m: 2.5 }; // a thing carrie
 // the carry over at a walk slowed by the load (player.js LOAD: / (kg / 40) ^ 0.35 past 40 kg, and no slower than a
 // canoe carry)
 const TRAIL_GOING = 0.9;    // a portage trail's roots, rocks and grades against a walk on the flat
-// fb3 A: the canoe floats, for E Get in, when either end lies this far out from the waterline (shoreAt, m) over this much
-// water (m); beached short of that, E pushes it off: a slide to the water of PUSH.secs plus PUSH.perM a metre
-const FLOATS = { sd: -0.6, depth: 0.12 };
-const PUSH = { secs: 0.5, perM: 0.22, land: 0.8 }; // land: m of the hull's middle landward of the waterline once pushed (as stepOut beaches it)
+// fb4 A: the canoe floats, for E Get in, when both ends (END m from the middle) lie past FLOATS.sd from the waterline
+// (shoreAt, m) over FLOATS.depth of water (m), and its middle past FLOATS.mid: player.js's paddle wants its ends past
+// -0.5 and its middle past -1.2, so a hull got into where it floats can always be paddled off. Short of that it is
+// beached, and a held E pushes it off: PUSH.brace s of hands on the gunwales (a tap moves nothing), then the slide out
+// to where it floats over PUSH.secs plus PUSH.perM a metre, marched out from the waterline PUSH.step at a time up to
+// PUSH.reach m; you end beside its middle (PUSH.beside m off the keel), in no deeper than PUSH.wade m of water.
+const FLOATS = { sd: -0.7, mid: -1.4, depth: 0.12 };
+const END = 2.3;
+const PUSH = { brace: 0.35, secs: 0.6, perM: 0.4, step: 0.25, reach: 16, beside: 0.95, wade: 0.8 };
 const TAG_TRAIL = 15;       // m from a portage trail within which a thing set down counts as left at that trail (the fetch)
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)); // (a name keeps its capital)
@@ -94,7 +104,7 @@ export class Packs {
     this.fade = null;   // the fetch's own fade, when there is no veil
     this.el = null;
     this.leaveOk = false; this.clock = 0;
-    this.push = null;   // fb3 A: the canoe being pushed off to the water: { from, to, t, dur } (pushOff, updatePush)
+    this.push = null;   // fb4 A: the push under way, a held job (beginPush): { from, to, you, youFrom, dur, dist }
     this.tagT = 0;      // fb3 A: the next look for things set down by a trail (tagTrailThings)
     this.openCanoe = null; // fb3 A, main.js: opens the book with the canoe on the right (journal.openHere('canoe'))
     // wc A: the rod held in a hand (stream C's fishing.canFishOnFoot reads inventory.rodInHand): the long item, or null
@@ -196,7 +206,7 @@ export class Packs {
     this.prevMode = mode;
     this.inv.update(dt);
     if (this.fade) this.updateFade(dt / (p.timeScale || 1));
-    if (this.push) this.updatePush(dt / (p.timeScale || 1));
+    if (this.push && !hold.is('pushOff')) this.push = null; // (the held job moves it: beginPush's onTick)
     if ((this.tagT -= dt) <= 0) { this.tagT = 1; this.tagTrailThings(); }
     const kg = this.loadKg;
     p.loadKg = kg; p.loadFactor = Math.max(1, kg / 40);
@@ -214,7 +224,7 @@ export class Packs {
   // (canShoulder refuses the rest), and when it goes down what rides on you stays on you (it had gone into the hull: the
   // owner, 2026-10-25, "when i drop the canoe and i have stuff on my body, it automatically goes into the canoe which is
   // wrong"). A push under way ends with the mode.
-  onMode(prev, mode) { if (mode !== 'walk') this.push = null; }
+  onMode(prev, mode) { if (mode !== 'walk') { if (this.push && hold.is('pushOff')) hold.cancel(); this.push = null; } }
   // a thing set down by hand within TAG_TRAIL of a portage trail is left at that trail (its key on `at`), so the fetch
   // from the far end finds it; never what is set out at a camp (nothing is set down by itself any more, so nothing else
   // writes the key)
@@ -372,7 +382,7 @@ export class Packs {
     // things are set down from the book. What stays on Q is travel: leave the canoe where you stepped out, the fetch
     // from the trail head, shouldering the canoe at the hull.
     // fb3 A: no "Leave it here" after stepping out and no Q on this line at the hull: the dot on the hull has both keys
-    // (E Get in, or Push it off first; Q Shoulder it, or "Unload it first")
+    // (E Get in, or, beached, a held E Push it off; Q Shoulder it, or "Unload it first")
     const d = c.drop, dd = Math.hypot(d.x - p.x, d.z - p.z);
     c.choice = false;
     const plan = left.length ? this.fetchPlan(left) : null, k = left[0];
@@ -387,7 +397,7 @@ export class Packs {
       const a = this.hullAction(), v = a && a.e ? a.e.verb : null;
       // (polish B: the line says what the hull offers while the dot is not yet on it, which from the dock at level it is
       // not; once the dot is on it the label has the words and pointer.js drops this line, canoeHint)
-      const hint = !note && !info && v ? (v === 'Get in' ? 'the canoe floats at the bank: point at it to get in' : v === 'Push it off first' ? 'the canoe is beached: point at it to push it off, or to shoulder it' : 'point at the canoe to shoulder it') : null;
+      const hint = !note && !info && v ? (v === 'Get in' ? 'the canoe floats: point at it to get in' : v === 'Push it off' ? 'the canoe is beached: point at it and hold E to push it off, or Q to shoulder it' : 'point at the canoe to shoulder it') : null;
       p.say(note || info || hint);
       if (hint && p.prompt) p.prompt.canoeHint = true;
       return true;
@@ -396,22 +406,55 @@ export class Packs {
     return true;
   }
   // wc A: what the dot offers at the canoe lying on the ground (or floated at a dock's side): { e, q, label, hint }, or
-  // null. fb3 A (the owner, 2026-10-25: "i am able to get in when the boat is not really in the water"): E gets in only
-  // where the hull floats, an end of it out in the water (afloat); beached short of that with open water within reach,
-  // E reads "Push it off first" and does that (pushOff: a short slide to the water, you walking with it); with no water
-  // to launch into (up the bank, a frozen lake) E shoulders it. Q is always the shoulder: loaded (anything in it but the
-  // lashed things) it reads "Unload it first", and pressed it opens the book with the canoe on the right (help).
+  // null. fb4 A (the owner's second round of 2026-10-25): afloat, both ends over water (or tied at a dock's side), E
+  // "Get in" puts you in it where it floats and as it faces (getIn; greyed, with its checklist, without a paddle);
+  // beached, nosed in or on the bank with the water near, E is held: "Push it off" (beginPush) walks it out until it
+  // floats, and a tap does nothing; with no water to launch into (up the bank, a frozen lake, a shallow flat) E shoulders
+  // it. Q is always the shoulder: loaded (anything in it but the lashed things) it reads "Unload it first" with the
+  // things still in it as its checklist, and pressed it opens the book with the canoe on the right (help). Every greyed
+  // verb carries decision 2's why, needs and next.
   hullAction() {
     const p = this.player, c = p.carry, d = c && c.drop;
     if (p.mode !== 'walk' || !d || this.busy) return null;
-    if (this.push) return { e: { verb: 'Push it off first', why: 'pushing it off…', run: () => {} }, q: null, label: 'the canoe' };
+    if (this.push) return { e: { verb: 'Push it off', held: true, run: () => {} }, q: null, label: 'the canoe' };
     const can = this.canShoulder();
-    const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, run: () => { if (this.canShoulder().ok) p.pickUpHull(); }, help: () => this.openBookAtCanoe() };
+    const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, needs: can.needs, next: can.next, run: () => { if (this.canShoulder().ok) p.pickUpHull(); }, help: () => this.openBookAtCanoe() };
     const L = this.dropLaunch(d), lake = L ? this.world.lakeName(L.lake) || 'the water' : null;
+    if (this.atDock(d)) return { e: this.getInVerb(d, L), q: shoulder, label: 'the canoe, at the dock' };
     const frozen = !!(this.day && this.day.season && this.day.season.ice > 0.5);
     if (!L || !L.deep || frozen) return { e: shoulder, q: null, label: 'the canoe', hint: L && frozen ? `${lake} is frozen over` : L ? 'too shallow to launch here' : null };
-    if (this.afloat(d)) return { e: { verb: 'Get in', run: () => p.launch(L) }, q: shoulder, label: `the canoe, onto ${lake}` };
-    return { e: { verb: 'Push it off first', run: () => this.pushOff(d) }, q: shoulder, label: 'the canoe, beached' };
+    if (this.afloat(d)) return { e: this.getInVerb(d, L), q: shoulder, label: `the canoe, afloat on ${lake}` };
+    const plan = this.pushPlan(d);
+    const push = plan ? { verb: 'Push it off', held: true, run: (o) => this.beginPush(d, o) }
+      : { verb: 'Push it off', held: true, why: 'Too shallow to float it here', needs: [{ label: 'A hand’s depth of water under both ends', done: false }], next: 'Shoulder it (Q) and carry it along the shore to deeper water', run: () => {} };
+    return { e: push, q: shoulder, label: 'the canoe, beached' };
+  }
+  // E Get in, or greyed with its checklist: no paddle with you (in the canoe or in a hand)
+  getInVerb(d, L) {
+    const pad = this.paddleCheck();
+    if (!pad.ok) return { verb: 'Get in', why: 'No paddle with you', needs: [{ label: 'A paddle in the canoe or in a hand', done: false }], next: pad.next, run: () => {} };
+    return { verb: 'Get in', run: () => this.getIn(d, L) };
+  }
+  // a paddle with you, or where the nearest one is: { ok, next }
+  paddleCheck() {
+    const all = this.units({ all: true }), pads = all.filter((u) => u.kind === 'long' && u.def.long === 'paddle');
+    if (!pads.length || pads.some((u) => u.obj.where === 'canoe' || u.obj.where === 'hands')) return { ok: true, next: null };
+    const p = this.player, ground = pads.filter((u) => u.obj.where === 'ground' && u.obj.at).map((u) => ({ u, m: Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) })).sort((a, b) => a.m - b.m)[0];
+    if (ground) return { ok: false, next: `${cap(the(ground.u))} lies ${metres(ground.m)} from here: point at it and E to pick it up` };
+    if (pads.some((u) => u.obj.where === 'stash')) return { ok: false, next: 'Your paddle is kept at the outfitters: fetch it there' };
+    return { ok: false, next: 'Put a paddle in the canoe from the book (I)' };
+  }
+  // into the canoe where it floats, facing as it lies (player.launch in place: no teleport to a launch point)
+  getIn(d, L = null) {
+    if (!d) return false;
+    this.player.launch({ x: d.x, z: d.z, heading: d.heading || 0, lake: L ? L.lake : this.world.lakeIdAt(d.x, d.z), deep: true, inPlace: true });
+    return this.player.mode === 'paddle';
+  }
+  // tied alongside a store's dock (outfitter.js tieUp: the canoe set down at its dockSide): afloat, whatever the
+  // waterline says under its inner end
+  atDock(d) {
+    const o = window.__game && window.__game.outfitter, v = o && o.visit, s = v && v.L && v.L.dockSide;
+    return !!(s && Math.hypot(d.x - s.x, d.z - s.z) < 1.2);
   }
   // the book with the canoe on the right (main.js wires journal.openHere('canoe'); else the book at the pack)
   openBookAtCanoe() {
@@ -420,58 +463,99 @@ export class Packs {
     if (j && typeof j.show === 'function') { j.show('pack'); return true; }
     return false;
   }
-  // does the canoe lying at d float: an end of it (the stern as it was beached, or the bow if it was set down facing the
-  // water) out past FLOATS.sd from the waterline over FLOATS.depth of water
-  afloat(d) {
-    const w = this.world, fx = Math.cos(d.heading || 0), fz = -Math.sin(d.heading || 0);
-    for (const k of [-2.2, 2.2]) {
-      const x = d.x + fx * k, z = d.z + fz * k;
-      if (!w.isReady(x, z)) continue;
-      if (w.shoreAt(x, z) < FLOATS.sd && w.levelAt(x, z) - w.heightAt(x, z) >= FLOATS.depth) return true;
-    }
-    return false;
+  // does the canoe lying at d (or a hull at x, z, heading) float: both ends past FLOATS.sd from the waterline over
+  // FLOATS.depth of water, its middle past FLOATS.mid
+  afloat(d) { return this.floatsAt(d.x, d.z, d.heading || 0); }
+  floatsAt(x, z, h) {
+    const w = this.world, fx = Math.cos(h), fz = -Math.sin(h);
+    const wet = (px, pz, sd) => w.isReady(px, pz) && w.shoreAt(px, pz) < sd && w.levelAt(px, pz) - w.heightAt(px, pz) >= FLOATS.depth;
+    return wet(x, z, FLOATS.mid) && wet(x + fx * END, z + fz * END, FLOATS.sd) && wet(x - fx * END, z - fz * END, FLOATS.sd);
   }
-  // E on a beached hull: push it to the water. It slides (and swings, the nearer way round, so an end lies in the water)
-  // to where stepOut would have beached it: its middle PUSH.land m up from the waterline, an end 1.4 m out; you walk with
-  // it. Nothing in it moves.
-  pushOff(d) {
+  // Where a push takes the canoe lying at d: onto the waterline nearest it, turned the nearer way round to lie square to
+  // the shore (bow up the bank, or bow to the water: as it lies, if it is already), then marched out until it floats.
+  // You end beside its middle, on the side you stand, as deep as you wade (else nearer the bank along its side).
+  // { from, to: { x, z, heading }, you: { x, z }, dist, dur }, or null (the water too far, or too shallow to float it)
+  pushPlan(d) {
+    const key = `${d.x.toFixed(2)}:${d.z.toFixed(2)}:${(d.heading || 0).toFixed(3)}`;
+    if (this._plan && this._plan.key === key && Math.abs(this.clock - this._plan.t) < 0.5) return this._plan.v;
+    const v = this.planPush(d);
+    this._plan = { key, t: this.clock, v };
+    return v;
+  }
+  planPush(d) {
     const w = this.world, p = this.player;
-    if (this.push || !d) return false;
     let sx = d.x, sz = d.z, sd = w.shoreAt(sx, sz);
     for (let i = 0; i < 24 && Math.abs(sd) > 0.12; i++) { const g = w.deeperDir(sx, sz); sx += g.x * sd; sz += g.z * sd; sd = w.shoreAt(sx, sz); } // onto the waterline
-    if (!w.isReady(sx, sz) || Math.abs(sd) > 0.5) { if (this.hud) this.hud.note('The water is too far to push it to from here: shoulder it.', 4); return false; }
-    const g = w.deeperDir(sx, sz), lx = -g.x, lz = -g.z, landward = Math.atan2(-lz, lx);
-    const h0 = d.heading || 0, dl = wrap(landward - h0), toward = Math.abs(dl) <= Math.PI / 2 ? landward : wrap(landward + Math.PI); // bow up the bank, or bow to the water, whichever it is nearer
-    const to = { x: sx + lx * PUSH.land, z: sz + lz * PUSH.land, heading: toward };
+    if (!w.isReady(sx, sz) || Math.abs(sd) > 0.5) return null;
+    const g0 = w.deeperDir(sx, sz), landward = Math.atan2(g0.z, -g0.x);
+    const h0 = d.heading || 0, toward = Math.abs(wrap(landward - h0)) <= Math.PI / 2 ? landward : wrap(landward + Math.PI);
+    let x = sx, z = sz, found = false;
+    for (let m = 0; m <= PUSH.reach; m += PUSH.step) {
+      if (this.floatsAt(x, z, toward)) { found = true; break; }
+      const g = w.deeperDir(x, z); x += g.x * PUSH.step; z += g.z * PUSH.step;
+    }
+    if (!found) return null;
+    // a little past the first spot that floats, so it is not on the edge of floating
+    { const g = w.deeperDir(x, z); if (this.floatsAt(x + g.x * 0.4, z + g.z * 0.4, toward)) { x += g.x * 0.4; z += g.z * 0.4; } }
+    const to = { x, z, heading: toward };
+    // you: beside its middle on your side of it (+1 the hull's right as it lay: the turn is under a quarter, so the side
+    // holds), no deeper than PUSH.wade; else along its side toward the bank
+    const fx = Math.cos(toward), fz = -Math.sin(toward), rx = -fz, rz = fx;
+    const side = (p.x - d.x) * Math.sin(h0) + (p.z - d.z) * Math.cos(h0) >= 0 ? 1 : -1;
+    const bank = fx * -g0.x + fz * -g0.z >= 0 ? 1 : -1; // which way along the hull the bank lies
+    const depth = (px, pz) => w.levelAt(px, pz) - p.groundAt(px, pz);
+    let you = null;
+    for (let t = 0; t <= 4.2 && !you; t += 0.35) {
+      const px = x + fx * bank * t + rx * side * PUSH.beside, pz = z + fz * bank * t + rz * side * PUSH.beside;
+      if (w.isReady(px, pz) && (w.shoreAt(px, pz) > 0 || depth(px, pz) <= PUSH.wade)) you = { x: px, z: pz };
+    }
+    if (!you) you = { x: sx + rx * side * PUSH.beside, z: sz + rz * side * PUSH.beside };
     const dist = Math.hypot(to.x - d.x, to.z - d.z);
-    if (dist < 0.05 && Math.abs(wrap(toward - h0)) < 0.05) return false;
-    this.push = { from: { x: d.x, z: d.z, heading: h0 }, to, t: 0, dur: PUSH.secs + dist * PUSH.perM };
-    if (this.hud) this.hud.note('You push the canoe down to the water.', 3);
-    if (p.audio) p.audio.paddleDip();
+    return { from: { x: d.x, z: d.z, heading: h0 }, to, you, dist, dur: PUSH.secs + dist * PUSH.perM };
+  }
+  // hold E on the beached hull: a held job (hold.js), hands on the gunwales first (a tap moves nothing), then the slide
+  // as long as E is down; let go and it stops where it got to (E again carries on from there). Nothing in it moves.
+  beginPush(d, opts = {}) {
+    if (this.push || !d) return false;
+    const plan = this.pushPlan(d);
+    if (!plan) return false;
+    const p = this.player, key = (opts && opts.key) || 'KeyE';
+    this.push = { ...plan, youFrom: { x: p.x, z: p.z, heading: p.heading } };
+    hold.begin({
+      id: 'pushOff', key, keys: [...new Set([key, 'Mouse0', ...((opts && opts.keys) || [])])], label: 'Pushing it off', clock: false,
+      phases: [{ name: 'Hands on the gunwales', doing: 'Hands on the gunwales', seconds: PUSH.brace }, { name: 'Walking it out', doing: 'Walking it out', seconds: plan.dur }],
+      onTick: (at) => this.pushTo(Math.max(0, Math.min(1, at - 1))),
+      onDone: () => {
+        this.pushTo(1); this.push = null; this._plan = null;
+        if (this.hud) this.hud.note('It floats. E to get in.', 3);
+        if (p.audio) p.audio.paddleDip();
+        this.inv.emit('load');
+      },
+      onStop: () => { this.push = null; this._plan = null; },
+    });
     return true;
   }
-  // the push, per frame (real seconds): the hull along its slide and round to its heading, laid on the ground each step
-  // (restHull), you carried along with it
-  updatePush(dt) {
+  // the hull u of the way along its slide (eased) and round to its heading, laid on the ground or the water there
+  // (restHull), you walking with it from where you stood to your spot beside it, facing the way it goes
+  pushTo(u) {
     const P = this.push, p = this.player, c = p.carry, d = c && c.drop;
-    if (!d) { this.push = null; return; }
-    P.t += dt;
-    const u = Math.min(1, P.t / P.dur), k = u * u * (3 - 2 * u);
-    const x = P.from.x + (P.to.x - P.from.x) * k, z = P.from.z + (P.to.z - P.from.z) * k;
-    const dx = x - d.x, dz = z - d.z;
-    d.x = x; d.z = z; d.heading = wrap(P.from.heading + wrap(P.to.heading - P.from.heading) * k);
+    if (!P || !d) return;
+    const k = u * u * (3 - 2 * u);
+    d.x = P.from.x + (P.to.x - P.from.x) * k; d.z = P.from.z + (P.to.z - P.from.z) * k;
+    d.heading = wrap(P.from.heading + wrap(P.to.heading - P.from.heading) * k);
     p.restHull(d.x, d.z, d.heading);
-    // you with it: the same step, where the ground takes you (a step into the shallows is a wade)
-    const w = this.world, nx = p.x + dx, nz = p.z + dz;
-    if (w.isReady(nx, nz) && w.shoreAt(nx, nz) > -1.5) { p.x = nx; p.z = nz; }
-    if (u >= 1) { this.push = null; this.inv.emit('load'); }
+    const Y = P.youFrom, nx = Y.x + (P.you.x - Y.x) * k, nz = Y.z + (P.you.z - Y.z) * k;
+    if (this.world.isReady(nx, nz)) { p.x = nx; p.z = nz; }
+    if (P.dist > 0.2 && u > 0) p.heading = Math.atan2(-(P.to.z - P.from.z), P.to.x - P.from.x);
   }
   // the things riding in the canoe that are not lashed in it (the paddle in use and the stringer are): what stops the
   // shoulder and what "Set everything out" sets out
   loadedUnits() { return this.units().filter((u) => u.obj.where === 'canoe' && !this.lashed(u)); }
+  // { ok, why, needs, next } (decision 2: the things still in it as steps)
   canShoulder() {
-    const n = this.loadedUnits().length;
-    return n ? { ok: false, why: 'Unload it first' } : { ok: true, why: null };
+    const list = this.loadedUnits();
+    if (!list.length) return { ok: true, why: null };
+    return { ok: false, why: 'Unload it first', needs: list.map((u) => ({ label: `${cap(the(u))} out of it`, done: false })), next: 'Q opens the book at the canoe: Set everything out, or drag each onto the ground' };
   }
   // wc A, the book's Canoe tab (stream B): everything in the canoe beside you (but the lashed things) set out on the
   // ground about the hull, at camp when at one. { n, words }
@@ -615,25 +699,37 @@ export class Packs {
     return true;
   }
 
-  // Before player.js launches (fb3 A: nothing loads by itself). No paddle in the canoe or in a hand, no launch. What is
-  // in your hands goes into the hull at your feet (your hands are for the paddle); what is on your back and chest stays
-  // on you, what lies on the ground stays where it lies, and a word says what is left at the trail head you push off
-  // from (what you leave stays, the fetch finds it from the far end).
+  // Before player.js launches (fb3 A: nothing loads by itself, but for this). No paddle in the canoe or in a hand, no
+  // launch. fb4 A (the owner, 2026-10-25: "I can get in the boat with things on my body and still paddle just fine. I
+  // don't know if we want to automatically add them to the boat when that happens"): what you wear goes into the hull,
+  // back, chest and hands (paddling needs you unloaded), with one note; what lies on the ground stays where it lies,
+  // and a word says what is left at the trail head you push off from (what you leave stays, the fetch finds it from the
+  // far end). Nothing comes back out when you step out again.
   beforeLaunch() {
     const p = this.player, inv = this.inv, all = this.units();
-    const paddles = all.filter((u) => u.kind === 'long' && u.def.long === 'paddle');
-    if (paddles.length && !paddles.some((u) => u.obj.where === 'canoe' || u.obj.where === 'hands')) {
-      if (this.hud) this.hud.note('No paddle with you: it is still where you left it.', 5);
+    const pad = this.paddleCheck();
+    if (!pad.ok) {
+      if (this.hud) this.hud.note(`No paddle with you. ${pad.next}.`, 5);
       return false;
     }
     const left = this.leftHere(p.carry, p).filter((u) => !(u.obj.at && u.obj.at.noted));
     if (left.length) { for (const u of left) u.obj.at.noted = true; if (this.hud) this.hud.note(`You push off and leave ${names(left)} at the trail head.`, 5); }
     this.leaveOk = false;
-    const hands = all.filter((u) => u.obj.where === 'hands');
-    for (const u of hands) { const o = u.obj; o.where = 'canoe'; o.at = null; o.hand = null; }
-    if (hands.length && this.hud) this.hud.note(`${cap(names(hands))} into the hull at your feet: your hands are for the paddle.`, 4);
+    const worn = this.loadWorn(all);
+    if (worn.length && this.hud) this.hud.note(this.loadedWords(worn), 4);
     inv.emit('load');
     return true;
+  }
+  // what you wear into the canoe, the paddle in a hand too (it is the one in use): the things moved
+  loadWorn(all = this.units()) {
+    const order = { back: 0, chest: 1, hands: 2 }, on = all.filter((u) => u.obj.where in order).sort((a, b) => order[a.obj.where] - order[b.obj.where]);
+    for (const u of on) { const o = u.obj; o.where = 'canoe'; o.at = null; o.hand = null; }
+    return on.filter((u) => !(u.kind === 'long' && u.def.long === 'paddle'));
+  }
+  // "Your pack and the barrel go into the canoe."
+  loadedWords(list) {
+    const n = names(list).replace(/^the /, 'your ');
+    return `${cap(n)} ${list.length > 1 ? 'go' : 'goes'} into the canoe.`;
   }
 
   // ---------------------------------------------------------------------------------------------------------------

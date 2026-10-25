@@ -1195,8 +1195,10 @@ export function buildCanoeRig({ water = null } = {}) {
   }
 
   let firstPerson = false;
-  const eyeLocal = V(), eyeT = V();
-  let eyeInit = false;
+  const eyeLocal = V(), eyeT = V(), eyeAt = V();
+  let eyeInit = false, eyeSeen = false;
+  const EYE_NEAR = 0.6; // m: a camera this near the eye is at it (the first-person camera is the eye exactly)
+  const atEye = () => { const c = api.viewer; if (!c || !c.position) return true; return eyeSeen && c.position.distanceToSquared(eyeAt) < EYE_NEAR * EYE_NEAR; };
   const EYE_SPRING = 16, eyeY = { on: false, y: 0, v: 0 }; // rad/s: the first-person eye's height on foot (eye, below)
   // fb3 join: the pose eases from frame to frame (the gait's slope and tilt, the hips, the feet, the idle sway, the blend,
   // the first-person eye), so one non-finite input poisoned it for good: the join's test once aimed at an undefined point
@@ -1237,8 +1239,11 @@ export function buildCanoeRig({ water = null } = {}) {
     blendPose(kind, dt);
     seatPacks(mode);
     contact.userData.update(dt, mode === 'paddle' ? state.speed : 0);
-    // the head, neck and hat collapse out of the way from the paddler's eyes
-    const s = firstPerson ? 1e-3 : 1;
+    // the head, neck and hat collapse out of the way from the paddler's eyes, and only while the camera is at them
+    // (fb4 A, the owner, 2026-10-25: "if I'm in first person mode and I pause, the person has no head"): the pause card's
+    // drifting view, the title's, a close-up, any view pulled back from the eye (api.viewer, the camera, set by main.js:
+    // within EYE_NEAR of where eye() last put the eye) draws the head
+    const s = firstPerson && atEye() ? 1e-3 : 1;
     fig.bones.neck.scale.setScalar(s);
   }
   const posed = () => { const r = J.root.p, n = J.neck.p, h = J.head.p; return Number.isFinite(r.x + r.y + r.z + n.x + n.y + h.x + h.y + h.z); };
@@ -1247,6 +1252,7 @@ export function buildCanoeRig({ water = null } = {}) {
     ground: null, // set by player.js: the ground height at a world (x, z), for the feet
     terrain: null, // fb2 E: set by player.js: the drawn terrain alone (no rock, step or deck), for the hill's steepness
     moveOf: null, // set by main.js: () => player.move, the move the walker is making (vault, climb, sit, wade ...)
+    viewer: null, // fb4 A, set by main.js: the camera; first person hides the head only while it is at the eye (pose)
     update(dt) {
       if (!(dt > 0)) dt = 1e-4; // (a NaN dt too)
       pose(dt);
@@ -1272,13 +1278,14 @@ export function buildCanoeRig({ water = null } = {}) {
       // through softly, and a stone stepped onto or off, a facet of the ground or a foot planting does not jolt the view
       // (the owner, 2026-10-24: "the character sorta jitters, very noticeable in first person view"). Only the height:
       // across, the eye stays carried with the body exactly, so it never trails into the head.
-      if (state.mode === 'paddle' && state.climb <= 0) { eyeY.on = false; return out; }
+      if (state.mode === 'paddle' && state.climb <= 0) { eyeY.on = false; eyeAt.copy(out); eyeSeen = true; return out; }
       const dtc = Math.min(Math.max(dt, 0), 0.1);
-      if (!eyeY.on || Math.abs(out.y - eyeY.y) > 1.2) { eyeY.on = true; eyeY.y = out.y; eyeY.v = 0; return out; }
+      if (!eyeY.on || Math.abs(out.y - eyeY.y) > 1.2) { eyeY.on = true; eyeY.y = out.y; eyeY.v = 0; eyeAt.copy(out); eyeSeen = true; return out; }
       const w = EYE_SPRING, e0 = eyeY.y - out.y, v0 = eyeY.v, ex = Math.exp(-w * dtc), b = v0 + w * e0;
       eyeY.y = out.y + (e0 + b * dtc) * ex;
       eyeY.v = (v0 - w * b * dtc) * ex;
       out.y = eyeY.y;
+      eyeAt.copy(out); eyeSeen = true; // (where the eye is: pose() hides the head only while the camera is here)
       return out;
     },
     // the hull comes off the shoulders and lies on the ground where it was put; it stays put while the paddler
