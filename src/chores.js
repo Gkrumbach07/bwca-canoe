@@ -879,7 +879,7 @@ export class Chores {
     const p = this.player, inv = this.inv;
     if (!(p.gear && p.gear.saw) && !(inv && inv.attached)) return false;
     if (!inv || !inv.attached) return !!(p.gear && p.gear.saw);
-    return this.campPool().some((c) => c.grid.some((e) => e.id === 'saw' || e.id === 'axehead')) || inv.count('saw') > 0 || inv.count('axehead') > 0; // (content C: the Hudson’s Bay axe cuts as the saw does)
+    return this.campPool().some((c) => c.grid.some((e) => e.id === 'saw' || e.id === 'hatchet')) || inv.count('saw') > 0 || inv.count('hatchet') > 0; // (content C: the camp hatchet found at a site cuts as the saw does)
   }
   // fb2 A: the down log you stand at with the saw to hand (the book's panel): { log, k, cuts, d } or null
   sawTarget(r = SAW_REACH) {

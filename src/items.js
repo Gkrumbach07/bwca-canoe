@@ -517,12 +517,19 @@ for (const [id, name, kg, price, servings, serving, eat, identity, model, tint] 
 
 // --- the uniques: one of each, a one-line story in the identity and a small real perk (kit.js); found in the world
 // (uniques.js: a glint at a real portage, campsite or landing, once a season) or the end of a keeper's arc (stream B)
-defineItem({ id: 'axehead', name: 'Hudson’s Bay axe', short: 'HB axe', kind: 'tool', w: 1, h: 3, kg: 1.1, unique: true, identity: 'Trade iron, 1800s · a new ash handle', model: 'axe', onYou: [O('Cuts', 'as the saw does')] });
-defineItem({ id: 'tradesilver', name: 'Trade-silver brooch', short: 'Brooch', kind: 'gear', kg: 0.02, unique: true, identity: 'A voyageur’s heart, from the ash', model: 'box', tint: 0xc7c9cc, onYou: [O('Keepers', 'warm to you ×1.5')] });
+// two of the finds are history, and history stays where it lies (the owner, 2026-10-25: "the old axe head and the
+// trade-silver brooch become finds you leave where they lie and report to the ranger at a counter"): never items you
+// carry, no perk; noted with E or a photo, reported at any counter for a reward and the keepers' goodwill (uniques.js).
+// Reporting both this season is what the brooch's goodwill became: word gets round the counters (uniques.goodwill).
+defineItem({ id: 'axehead', name: 'Old axe head', short: 'Axe head', kind: 'tool', w: 1, h: 3, kg: 1.1, unique: true, artifact: true, identity: 'Trade iron, 1800s · a Hudson’s Bay stamp', model: 'axe', onYou: [] });
+defineItem({ id: 'tradesilver', name: 'Trade-silver brooch', short: 'Brooch', kind: 'gear', kg: 0.02, unique: true, artifact: true, identity: 'A voyageur’s silver heart, 1790s', model: 'box', tint: 0xc7c9cc, onYou: [] });
+// the axe's perk is a modern hatchet's now: somebody left it at a campsite, and packing it out is Leave No Trace
+defineItem({ id: 'hatchet', name: 'Camp hatchet', short: 'Hatchet', kind: 'tool', w: 1, h: 2, kg: 0.7, unique: true, identity: 'Left behind at a campsite · packed out', model: 'axe', tint: 0xd9663f, onYou: [O('Cuts', 'as the saw does')] });
 defineItem({ id: 'brassreel', name: 'Old brass reel', short: 'Reel', kind: 'tool', kg: 0.3, unique: true, identity: 'A 1950s bait-caster, still smooth', model: 'box', tint: 0xb8923a, onYou: [O('Line', 'holds ×1.15')] });
 defineItem({ id: 'matchsafe', name: 'Tin match safe', short: 'Matches', kind: 'tool', kg: 0.05, unique: true, identity: 'Dented tin, the matches still dry', model: 'tube', tint: 0xa0a4a8, onYou: [O('A fire', 'lights on 2 dry pieces')] });
 defineItem({ id: 'toque', name: 'Red wool toque', short: 'Toque', kind: 'gear', kg: 0.1, unique: true, identity: 'Hand-knit, lost on a portage', model: 'cap', tint: 0xa8322a, onYou: [O('Cold', 'costs ×0.8')] });
 defineItem({ id: 'luckycap', name: 'Lise’s lucky cap', short: 'Cap', kind: 'gear', kg: 0.1, unique: true, identity: 'Faded UMD Bulldogs cap · never lost a fish', model: 'cap', tint: 0x6e2630, onYou: [O('Bites', '×1.08')] });
 defineItem({ id: 'guidemap', name: 'Arvid’s guiding map', short: 'Arvid’s map', kind: 'map', w: 2, h: 2, kg: 0.05, unique: true, icon: 'guidemap', identity: 'An old Fisher sheet, pencilled', model: 'map', onYou: [O('A site', 'pencilled on your map'), EF('rest', 0.08, 'a night there')] });
 defineItem({ id: 'lure:cedarminnow', name: 'Eino’s cedar minnow', short: 'Cedar', kind: 'lure', kg: 0.02, unique: true, lure: 'cedarminnow', identity: 'Carved white cedar, painted by hand', model: 'lure', tint: 0x6f8a52, onYou: [lureOn('cedarminnow')] });
-export const UNIQUE_IDS = ['axehead', 'tradesilver', 'brassreel', 'matchsafe', 'toque', 'luckycap', 'guidemap', 'lure:cedarminnow'];
+export const UNIQUE_IDS = ['hatchet', 'brassreel', 'matchsafe', 'toque', 'luckycap', 'guidemap', 'lure:cedarminnow'];
+export const ARTIFACT_IDS = ['axehead', 'tradesilver']; // found and left where they lie

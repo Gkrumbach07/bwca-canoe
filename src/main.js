@@ -614,13 +614,15 @@ async function main() {
   pointer.teach = (id, text, o) => hints.next(id, text, o);
   // content C: gear, upgrades and unique items (content pass 1, 2026-10-25: "item upgrades, different unique items, varied
   // items"). items.js has the defs (the bags, pads, rods, lamps, the stove and fuel, the jacket and the head net, the chair,
-  // coffee and cocoa, the net, the knife and the fillets, three lures, a waterproof pack, more food, eight uniques),
+  // coffee and cocoa, the net, the knife and the fillets, three lures, a waterproof pack, more food, the uniques),
   // shop.js the shelves (stocked by outfitter kind), gear-icons.js their pictures. kit.js is what they do with you, read
   // by the systems they touch: energy (the bag's night, the jacket, the toque, the bugs, the chair, the lamp after dark),
   // fishing (the cap, the reel, the net at the side, the graphite rod's strike), trip (a capsize with the bag in a dry
   // pack), camp (the filter at the water's edge); the stove, a cup, the knife and the chair are verbs in the book.
-  // uniques.js lays the five finds out at real places with forage's glint, E on the dot picks one up; stream B's keepers
-  // give the other three (uniques.give, or profile.give).
+  // uniques.js lays six finds out at real places with forage's glint: four E on the dot picks up, and two pieces of
+  // history (an old axe head, a trade-silver brooch: the owner, "finds you leave where they lie and report to the ranger
+  // at a counter") that E or a photo notes where they lie, the journal keeps, and a counter's "Report a find" passes to
+  // the Forest Service for a reward and the keepers' goodwill; stream B's keepers give three more (uniques.give).
   kit.attach({ player, inventory, energy, fishing, camp, fires, day, weather, wind, hud, profile, lamp, shop, world, uniques, canoe, scene });
   energy.kit = kit; fishing.kit = kit; trip.kit = kit; shop.kit = kit;
   uniques.attach({ world, scene, player, inventory, profile, hud, camp, day, pointer, audio });
@@ -632,7 +634,21 @@ async function main() {
   const verbC = inventory.verb.bind(inventory);
   inventory.verb = (id, ref) => kit.verb(id, ref) || verbC(id, ref); // Cook on it, Brew a cup, Fillet the catch, Sit in it
   const raiseC = profile.raise.bind(profile);
-  profile.raise = (ep, d = 1) => raiseC(ep, d > 0 && kit.owns('tradesilver') ? d * 1.5 : d); // the keepers know trade silver
+  profile.raise = (ep, d = 1) => raiseC(ep, d > 0 ? d * uniques.goodwill() : d); // both finds reported: word gets round the counters
+  const claimsC = outfitter.claimsSection.bind(outfitter), actC = outfitter.act.bind(outfitter);
+  outfitter.claimsSection = (a) => claimsC(a) + uniques.counterSection(); // "Report a find: an old axe head"
+  outfitter.act = (act, id, ev) => {
+    if (act !== 'report') return actC(act, id, ev);
+    const r = uniques.report(id, outfitter.at && outfitter.at.ep);
+    if (r.ok) outfitter.greeting = r.words;
+    outfitter.receipt = { text: r.ok ? `Reported to the Forest Service: +$10${r.both ? ' · the counters think well of you' : ''}` : r.words, ok: r.ok };
+    outfitter.save(); outfitter.render();
+    return r;
+  };
+  const leftPageC = journal.leftPage.bind(journal);
+  journal.leftPage = () => { const html = leftPageC(), rows = uniques.journalRows(); return rows ? html.replace(/(<div class="lab">On the go<\/div>)(<div class="empty">[^<]*<\/div>)?/, (m, head) => head + rows) : html; }; // a find noted, till it is reported
+  const captureC = photo.capture.bind(photo);
+  photo.capture = () => { const rec = captureC(); try { uniques.fromPhoto(photo); } catch (e) { console.warn('uniques.fromPhoto', e); } return rec; }; // a photo of an old thing notes it
   const taskHintsC = tasks.hints.bind(tasks);
   tasks.hints = () => [...taskHintsC(), ...uniques.mapMarks()]; // Arvid's site, in the map's pencil
   const onUseC = journal.pack.onUse;
@@ -640,10 +656,10 @@ async function main() {
     if (e && e.id === 'guidemap') { if (mode === 'label') return 'Look at the map'; const g = uniques.guideSite(); journal.close(); hud.setMode('sheet'); if (g && hud.view) { hud.view.cx = g.x; hud.view.cz = g.z; } return null; }
     return onUseC ? onUseC(e, mode, c) : null;
   };
-  const kitMoments = new Map(kit.moments().map((m) => [m.id, m]));
+  const kitMoments = new Map([...kit.moments(), ...uniques.moments()].map((m) => [m.id, m]));
   for (const m of kitMoments.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
   const dueC = hints.due.bind(hints);
-  hints.due = (id, rec) => (kitMoments.has(id) ? kitMoments.get(id).due(rec) : dueC(id, rec)); // the bugs, a fish at the side, a cold night, the fish remains
+  hints.due = (id, rec) => (kitMoments.has(id) ? kitMoments.get(id).due(rec) : dueC(id, rec)); // the bugs, a fish at the side, a cold night, the fish remains, an old thing
   Object.assign(window.__game, { kit, uniques });
   // content A: more kinds of notice for the boards (task-kinds.js, the owner's content pass of 2026-10-25: "more varied
   // tasks"): a blowdown across a portage sawn clear, litter packed out of a campsite, a Secchi reading at a lake's deep

@@ -157,6 +157,12 @@ function drawAxe(c) {
   for (const [x, y] of [[14, 20], [34, 24], [24, 14]]) { ell(c, x, y, 2, 2); fill(c, '#6a5a48'); }
   label(c, 'HB', 25, 26, 9, '#8a7a6a');
 }
+function drawHatchet(c) {
+  rr(c, 22, 30, 10, 66, 4); fill(c, PAL.orange); stroke(c);
+  rr(c, 22, 78, 10, 18, 3); fill(c, PAL.black); stroke(c, 1.4);
+  shape(c, [8, 10, 34, 8, 40, 16, 38, 34, 26, 32, 16, 32, 4, 34, 3, 16]); fill(c, '#3c3f42'); stroke(c);
+  line(c, [5, 30, 15, 31], 1.6, PAL.silver);
+}
 function drawTradeSilver(c) {
   c.beginPath(); c.moveTo(40, 70); c.bezierCurveTo(8, 46, 14, 14, 40, 28); c.bezierCurveTo(66, 14, 72, 46, 40, 70); c.closePath(); fill(c, '#c7c9cc'); stroke(c);
   c.beginPath(); c.moveTo(40, 58); c.bezierCurveTo(22, 44, 26, 26, 40, 36); c.bezierCurveTo(54, 26, 58, 44, 40, 58); c.closePath(); stroke(c, 1.4, '#7d8186');
@@ -202,6 +208,6 @@ addIcons({
   spinnerbait: [80, 96, drawSpinnerbait], jigminnow: [100, 56, drawJigMinnow], topwater: [110, 50, drawTopwater], cedarminnow: [112, 50, drawCedarMinnow],
   packdry: [100, 108, drawPackDry], pancakes: [60, 104, drawPancakes], chili: [80, 92, drawChili], bannock: [60, 104, drawBannock],
   sausage: [100, 56, drawSausage], granola: [90, 70, drawGranola], apricots: [80, 80, drawApricots], tortilla: [90, 80, drawTortilla],
-  axehead: [50, 150, drawAxe], tradesilver: [80, 80, drawTradeSilver], brassreel: [90, 82, drawBrassReel], matchsafe: [60, 90, drawMatchSafe],
+  axehead: [50, 150, drawAxe], hatchet: [44, 100, drawHatchet], tradesilver: [80, 80, drawTradeSilver], brassreel: [90, 82, drawBrassReel], matchsafe: [60, 90, drawMatchSafe],
   toque: [90, 80, drawToque], luckycap: [100, 70, drawLuckyCap], guidemap: [100, 102, drawGuideMap],
 });

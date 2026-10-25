@@ -110,9 +110,14 @@ const RUMOURS = {
     if (!/^[A-Z]\w*’s\b/.test(what)) what = what[0].toLowerCase() + what.slice(1); // "Old brass reel" → "an old brass reel"; "Hudson’s Bay axe" stays
     const an = /^[aeiou]/i.test(what) ? 'an' : 'a';
     const where = u.place || (u.lake ? `a site on ${theWater(u.lake)}` : 'out there');
-    const text = u.kind === 'landing' ? `Somebody lost ${an} ${what} in the shallows at ${where}, years back. It never turned up.`
-      : u.kind === 'portage' ? `A fellow swore he saw ${an} ${what} beside ${where}. Probably just rust.`
-        : `There’s an old story about ${an} ${what} at ${where}. Nobody’s found it.`;
+    // (content C: history stays where it lies, the owner's call of 2026-10-25: an old axe head, a trade-silver brooch are
+    // left be and told to the ranger at a counter; a modern thing left at a site is packed out)
+    const text = u.artifact ? (u.kind === 'portage' ? `A fellow swore he saw ${an} ${what} beside ${where}. If you come on it, leave it where it lies and tell the ranger at a counter.`
+      : `There’s an old story about ${an} ${what} at ${where}. If you see it, leave it be and tell the ranger. The Forest Service likes to know.`)
+      : u.lost ? `Some party left ${an} ${what} at ${where}. Pack it out if you’re by.`
+        : u.kind === 'landing' ? `Somebody lost ${an} ${what} in the shallows at ${where}, years back. It never turned up.`
+          : u.kind === 'portage' ? `A fellow swore he saw ${an} ${what} beside ${where}. Probably just rust.`
+            : `There’s an old story about ${an} ${what} at ${where}. Nobody’s found it.`;
     return { id: `find:${u.id}`, kind: 'find', text, ring: { kind: 'find', lake: u.lake || '', x: Math.round(u.x + (H.rng() - 0.5) * 500), z: Math.round(u.z + (H.rng() - 0.5) * 500), r: 650, label: 'an old story' } }; // (the ring is the area, not the spot)
   },
 };
