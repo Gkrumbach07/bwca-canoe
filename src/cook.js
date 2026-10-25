@@ -56,16 +56,17 @@ function shade(g, f) {
   return g;
 }
 const R_POT = 0.085, H_POT = 0.1;
+// (content D: the caps are plain metal, not the END cell's wood end grain)
 // the cook pot: blackened aluminium, the lid on with its knob, the wire bail folded to one side (y 0 the bottom)
 function potGeometry({ lid = true, food = null } = {}) {
   const b = new PropBuilder(), metal = C(0x8f8b84), soot = C(0x3d3a36), wire = C(0xa4a6a8);
-  b.cyl(V(0, 0, 0), V(0, H_POT * 0.35, 0), R_POT * 0.97, R_POT, 12, TILE.PLAIN, soot, { cap0: true });
+  b.cyl(V(0, 0, 0), V(0, H_POT * 0.35, 0), R_POT * 0.97, R_POT, 12, TILE.PLAIN, soot, { cap0: true, capTile: TILE.PLAIN });
   b.cyl(V(0, H_POT * 0.35, 0), V(0, H_POT, 0), R_POT, R_POT * 1.01, 12, TILE.PLAIN, metal);
-  b.cyl(V(0, H_POT - 0.006, 0), V(0, H_POT + 0.003, 0), R_POT * 1.04, R_POT * 1.04, 12, TILE.PLAIN, metal, { cap1: !lid && !food });
+  b.cyl(V(0, H_POT - 0.006, 0), V(0, H_POT + 0.003, 0), R_POT * 1.04, R_POT * 1.04, 12, TILE.PLAIN, metal, { cap1: !lid && !food, capTile: TILE.PLAIN });
   if (lid) {
-    b.cyl(V(0, H_POT + 0.003, 0), V(0, H_POT + 0.012, 0), R_POT * 1.03, R_POT * 0.8, 12, TILE.PLAIN, metal, { cap1: true });
-    b.cyl(V(0, H_POT + 0.012, 0), V(0, H_POT + 0.026, 0), 0.012, 0.01, 6, TILE.PLAIN, soot, { cap1: true });
-  } else if (food) b.cyl(V(0, H_POT * 0.62, 0), V(0, H_POT * 0.7, 0), R_POT * 0.96, R_POT * 0.95, 12, TILE.PLAIN, C(food), { cap1: true });
+    b.cyl(V(0, H_POT + 0.003, 0), V(0, H_POT + 0.012, 0), R_POT * 1.03, R_POT * 0.8, 12, TILE.PLAIN, metal, { cap1: true, capTile: TILE.PLAIN });
+    b.cyl(V(0, H_POT + 0.012, 0), V(0, H_POT + 0.026, 0), 0.012, 0.01, 6, TILE.PLAIN, soot, { cap1: true, capTile: TILE.PLAIN });
+  } else if (food) b.cyl(V(0, H_POT * 0.62, 0), V(0, H_POT * 0.7, 0), R_POT * 0.96, R_POT * 0.95, 12, TILE.PLAIN, C(food), { cap1: true, capTile: TILE.PLAIN });
   const bail = [];
   for (let i = 0; i <= 10; i++) { const a = (i / 10) * Math.PI; bail.push(V(-Math.sin(a) * 0.03 - 0.002, H_POT * 0.82 + Math.sin(a) * 0.025, -Math.cos(a) * R_POT * 1.06)); }
   b.tube(bail.map((p) => p.applyAxisAngle(V(0, 0, 1), -1.15).add(V(-R_POT * 0.15, 0.02, 0))), 0.0022, 4, TILE.PLAIN, wire);
@@ -74,8 +75,8 @@ function potGeometry({ lid = true, food = null } = {}) {
 // the pot's lid turned over as a pan, its folding handle out, a fish frying in it (raw pale; fried golden)
 function panGeometry(fried) {
   const b = new PropBuilder(), metal = C(0x7a766f), wire = C(0xa4a6a8);
-  b.cyl(V(0, 0, 0), V(0, 0.018, 0), R_POT * 0.86, R_POT * 1.04, 12, TILE.PLAIN, metal, { cap0: true });
-  b.cyl(V(0, 0.004, 0), V(0, 0.005, 0), R_POT * 0.95, R_POT * 0.95, 12, TILE.PLAIN, C(0x3e3a36), { cap1: true });
+  b.cyl(V(0, 0, 0), V(0, 0.018, 0), R_POT * 0.86, R_POT * 1.04, 12, TILE.PLAIN, metal, { cap0: true, capTile: TILE.PLAIN });
+  b.cyl(V(0, 0.004, 0), V(0, 0.005, 0), R_POT * 0.95, R_POT * 0.95, 12, TILE.PLAIN, C(0x3e3a36), { cap1: true, capTile: TILE.PLAIN });
   b.tube([V(R_POT, 0.016, 0), V(R_POT + 0.06, 0.03, 0), V(R_POT + 0.12, 0.034, 0)], 0.004, 4, TILE.PLAIN, wire, { cap1: true });
   // two fillets, flat: built round, then pressed to a third of their height in the lid
   const f = new PropBuilder(), meat = C(fried ? 0xb9773a : 0xe2c3b0), edge = C(fried ? 0x7a4a22 : 0xb3b7a2);
