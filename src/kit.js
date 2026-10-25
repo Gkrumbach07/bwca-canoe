@@ -291,7 +291,7 @@ export class Kit {
       if (K.water > 0 && e && !e.sandbox && typeof e.useWater === 'function') e.useWater(K.water);
       const now = e ? e.now : 0, d = itemDef(out), data = { cooked: +now.toFixed(3), until: +(now + ((d && d.keep) || 4)).toFixed(3) };
       const r = inv.toHandNew(out, { data });
-      if (!r.ok) inv.place(out, 1, { data, pool: this.pool(), quiet: true });
+      if (!r.ok && !(inv.place(out, 1, { data, pool: this.pool(), quiet: true }) || {}).ok) this.atFeet(out, data);
       inv.emit('items');
       cp.note(`${d ? d.name : 'Supper'}: ready${r.ok ? ', in your hand' : ''}.`);
     }, { seconds: 2.4, hours: minutes / 60, say: 'The stove roars under the pot…', crouch: true });
@@ -360,7 +360,7 @@ export class Kit {
         inv.take(f.c.id, f.e.uid, 1);
         const prefer = inv.campReach().filter((c) => c.item !== 'stringer' && /barrel|pack/.test(c.item)).sort((a, b) => /barrel/.test(b.item) - /barrel/.test(a.item)).map((c) => c.id);
         const r = inv.place(id, 1, { prefer, data, quiet: true, exclude: inv.campReach().filter((c) => c.item === 'stringer').map((c) => c.id) });
-        if (!r || !r.ok) inv.toHandNew(id, { data });
+        if ((!r || !r.ok) && !inv.toHandNew(id, { data }).ok) this.atFeet(id, data);
         n++;
       }
       this.filleted += n;
@@ -368,6 +368,15 @@ export class Kit {
       cp.note(n ? `${n === 1 ? 'Filleted' : `${n} fish filleted`}: the fillets are in with the food.` : 'Nothing to fillet.');
     }, { seconds: 1.2 + 0.7 * list.length, hours: (FILLET_MIN * list.length) / 60, say: 'Filleting…', crouch: true });
     return { ok: true, words: '' };
+  }
+  // with no hand free and no room anywhere: set down at your feet (a pile, as the book's own drop makes)
+  atFeet(id, data = null) {
+    const inv = this.inv, p = this.t.player; if (!inv || !p) return false;
+    const f = p.forward || { x: 0, z: 1 }, x = p.x + f.x * 0.6, z = p.z + f.z * 0.6;
+    const pile = inv.addContainer('pile', 'ground', { x, z, y: p.groundAt(x, z), heading: p.heading || 0, left: true }, { quiet: true });
+    const ok = !!(pile && inv.put(pile, id, { data, quiet: true }));
+    inv.emit('ground');
+    return ok;
   }
   // the chair: set down (or in reach), you sit in it where you stand; sat in it the bar comes back SIT_BOOST faster
   sitVerb(ref) {
