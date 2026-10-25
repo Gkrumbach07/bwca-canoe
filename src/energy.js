@@ -387,7 +387,7 @@ export class Energy {
       const sec = this.treatingSec();
       return { label: 'Treating', mark: 'treating', timer: Math.round(sec), running: true, until: now + sec / 3600, next: `${this.drinkable > 0.02 ? `${litres(this.drinkable)} drinkable now; ` : ''}${litres(this.treating)} drinkable in ${timerWords(sec)}` };
     }
-    if (this.bottle <= 0.02) return { label: 'Empty', mark: 'empty', next: 'Fill it at the water’s edge: on foot, face the water and press E' };
+    if (this.bottle <= 0.02) return { label: 'Needs filling', mark: 'empty', next: 'Empty: fill it at the water’s edge (on foot, face the water and press E), or free at any counter' };
     if (this.drinkable < 0.5) return { label: `${litres(this.drinkable)} left`, mark: 'low', next: 'Fill it at the water’s edge before you set off' };
     return null;
   }

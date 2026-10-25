@@ -1062,7 +1062,7 @@ export class Inventory {
     const n = Number.isFinite(d.servings) ? d.servings : Number.isFinite(d.uses) ? d.uses : 1;
     if (n > 1) {
       const left = Number.isFinite(e.left) ? e.left : n, unit = d.servings > 1 ? 'servings' : 'left';
-      if (left <= Math.max(1, Math.floor(n * 0.2))) return { label: `${left} of ${n} ${unit === 'left' ? 'left' : unit}`, mark: 'low', next: d.id === 'tablets' ? 'More at any outfitter’s counter; one goes in each time you fill the bottle' : left <= 1 ? 'The last one' : 'Running low' };
+      if (left <= Math.max(1, Math.floor(n * 0.2))) return { label: `${left} of ${n} ${unit === 'left' ? 'left' : unit}`, mark: 'low', next: d.id === 'tablets' ? 'More at any outfitter’s counter; one goes in each time you fill the bottle' : `${left <= 1 ? 'The last one' : 'Running low'}: more at any outfitter’s counter` };
       if (left < n) return { label: `${left} of ${n} ${unit === 'left' ? 'left' : unit}`, mark: null, next: d.servings > 1 ? 'A serving at a time: right-click › Eat, standing still' : d.id === 'tablets' ? 'One goes in each time you fill the bottle' : '' };
     }
     return null;
