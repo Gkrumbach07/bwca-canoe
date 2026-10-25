@@ -87,7 +87,8 @@ export function aboutHours(h) {
 // a thing's name in a prompt: "the Duluth pack #3", "the rod"
 const SHORT = { pack3: 'pack', pack4: 'big pack', barrel30: 'small barrel', barrel60: 'barrel', bucket: 'leech bucket', tacklebox: 'tackle box', mapcase: 'map case', stringer: 'stringer', rod: 'rod', rodmh: 'rod', ash: 'paddle', bentshaft: 'paddle', carbon: 'paddle', pile: 'things on the ground' };
 // (a hand's holder, stream B's 'inhand', is named by the thing in it: "the trail mix", not "the in your hand")
-const short = (u) => { const e = u.def.one && u.obj.grid && u.obj.grid[0], d = e && itemDef(e.id); return d ? lower(d.name) : SHORT[u.id] || lower(u.def.name); };
+// (a holder's thing, or a pile's one thing: fb4 join, "no room for the A-frame tent", not "the things on the ground")
+const short = (u) => { const g = u.obj.grid, e = (u.def.one || (u.id === 'pile' && g && g.length === 1)) && g && g[0], d = e && itemDef(e.id); return d ? lower(d.name) : SHORT[u.id] || lower(u.def.name); };
 const the = (u) => `the ${short(u)}`;
 function names(us) {
   const n = us.map(the);
@@ -418,7 +419,7 @@ export class Packs {
       const a = this.hullAction(), v = a && a.e ? a.e.verb : null;
       // (polish B: the line says what the hull offers while the dot is not yet on it, which from the dock at level it is
       // not; once the dot is on it the label has the words and pointer.js drops this line, canoeHint)
-      const hint = !note && !info && v ? (v === 'Get in' ? 'the canoe floats: point at it to get in' : v === 'Push it off' ? 'the canoe is beached: point at it and hold E to push it off, or Q to shoulder it' : 'point at the canoe to shoulder it') : null;
+      const hint = !note && !info && v ? (v === 'Get in' ? 'the canoe floats: point at it to get in' : v === 'Push it off' ? `the canoe is beached: point at it and hold E to push it off${a.q && !a.q.why ? ', or Q to shoulder it' : ''}` : 'point at the canoe to shoulder it') : null;
       p.say(note || info || hint);
       if (hint && p.prompt) p.prompt.canoeHint = true;
       return true;
@@ -666,7 +667,10 @@ export class Packs {
     const phases = list.map((u) => { const m = Math.hypot(u.obj.at.x - d.x, u.obj.at.z - d.z); return { name: `${cap(short(u))} in`, doing: `Loading ${the(u)}`, minutes: LOAD_EACH.minutes + (m / 100) * LOAD_EACH.per100m, seconds: LOAD_EACH.seconds + Math.min(0.6, m / 40) }; });
     const done = (n) => {
       const inN = n - skipped.length;
-      if (this.hud) this.hud.note(`${inN ? `${inN === list.length ? 'Everything is' : `${inN} ${inN === 1 ? 'thing' : 'things'}`} in the canoe` : 'Nothing went in'}${skipped.length ? `; no room for ${names(skipped)}${skipped.some((s) => s.why === 'kg') ? ` (the canoe has its ${CANOE_KG} kg)` : ''}` : ''}.`, 4);
+      // (fb4 join: and what to do about it: a loose thing goes in a pack in the canoe, so make room in one)
+      const loose = skipped.some((s) => s.why === 'full' && s.id === 'pile'), kg = skipped.some((s) => s.why === 'kg');
+      const next = !skipped.length ? '' : kg ? ' Take something heavy out, or make two trips.' : loose ? ' A loose thing rides in a pack in the canoe: make room in one, or carry it on you.' : ' The canoe takes eight packs and barrels: carry the rest.';
+      if (this.hud) this.hud.note(`${inN ? `${inN === list.length ? 'Everything is' : `${inN} ${inN === 1 ? 'thing' : 'things'}`} in the canoe` : 'Nothing went in'}${skipped.length ? `; no room for ${names(skipped)}${kg ? ` (the canoe has its ${CANOE_KG} kg)` : ''}` : ''}.${next}`, skipped.length ? 6 : 4);
     };
     return {
       id: 'load', label: 'Loading the canoe', phases, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
