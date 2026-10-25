@@ -265,6 +265,9 @@ export class Packs {
     for (const e of [...pile.grid]) {
       const r = inv.place(e.id, e.qty, { data: e.data || null, exclude: [pile.id], quiet: true });
       if (r.placed) { inv.take(pile.id, e.uid, r.placed); moved++; }
+      // (fb5 join: no room in the packs, a free hand takes it, as hands take anything: the struck tent with the left hand
+      // free said "No room for all of it")
+      if (!r.ok && pile.grid.includes(e) && typeof inv.canHand === 'function' && inv.canHand(e.id) && inv.freeHand() >= 0 && inv.toHand(pile.id, e.uid).ok) { moved++; continue; }
       if (!r.ok) stuck++;
     }
     if (this.hud) this.hud.note(stuck ? 'No room for all of it in what you have with you.' : moved ? 'Picked up.' : 'Nothing to pick up.', 3);
