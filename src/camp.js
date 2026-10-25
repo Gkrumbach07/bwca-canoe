@@ -906,8 +906,12 @@ export class Camp {
       for (const l of inv.long) if (l.where === 'ground' && near(l.at)) out.push(l);
       if (hung.length) parts.push(`${hung.length > 1 ? 'the barrels are' : 'the barrel is'} hung`);
       const named = out.filter((k) => k.item !== 'pile').map((k) => `the ${thingName(itemDef(k.item || k.id))}`);
-      if (out.some((k) => k.item === 'pile')) named.push('some things on the ground');
-      if (named.length) parts.push(`${listOf(named)} ${named.length > 1 ? 'are' : 'is'} set out`);
+      // (fb4 join: "some things on the ground is set out" said the plural with "is"; a woodpile is named as one)
+      const piles = out.filter((k) => k.item === 'pile'), woodpiles = piles.filter((k) => k.grid.length && k.grid.every((e) => /^wood:/.test(e.id)));
+      if (woodpiles.length) named.push(woodpiles.length > 1 ? 'woodpiles' : 'a woodpile');
+      if (piles.length > woodpiles.length) named.push('some things on the ground');
+      const plural = named.length > 1 || /^(some |woodpiles)/.test(named[0] || '');
+      if (named.length) parts.push(`${listOf(named)} ${plural ? 'are' : 'is'} set out`);
       for (const k of [...hung, ...out]) if (k.at) k.at.noted = true;
     }
     if (!parts.length) return;

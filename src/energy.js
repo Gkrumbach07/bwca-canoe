@@ -567,7 +567,7 @@ export class Energy {
     const left = e && Number.isFinite(e.left) ? e.left : 1;
     if (left <= 0) {
       const d = this.wetSetDrying();
-      return { ok: false, why: 'The spare set is wet', needs: [NEED.timer('The spare set drying', d.sec, true, { note: d.byFire ? 'by the fire' : 'in the air: 30 min by a lit fire' })], next: d.byFire ? `Dry in ${timerWords(d.sec)}: stay by the fire` : 'Stand by a lit fire: it dries in 30 min (8 h in the air, or overnight)' };
+      return { ok: false, why: 'The spare set is wet', needs: [NEED.timer('The spare set drying', d.sec, true, { note: d.byFire ? 'by the fire' : 'in the air: 30 min by a lit fire' })], next: d.byFire ? `Dry in ${timerWords(d.sec)}: stay by the fire` : `Stand by a lit fire: it dries in ${timerWords((d.sec * WET_SET_FIRE_H) / WET_SET_AIR_H)} (${timerWords(d.sec)} in the air, or overnight)` };
     }
     const wet = this.soaked > 0.25 || !!(this.trip && this.trip.state && this.trip.state.wet);
     if (!wet) return { ok: false, why: 'You are dry already', needs: [NEED.step('Wet through, or the gear wet', false, { note: this.soaked > 0.02 ? `${Math.round(this.soaked * 100)} % wet` : 'dry' })], next: 'Keep it for after a capsize or a soaking' };
@@ -586,7 +586,9 @@ export class Energy {
     const left = e && Number.isFinite(e.left) ? e.left : 1;
     if (left <= 0) {
       const d = this.wetSetDrying();
-      return { label: d.byFire ? 'Drying' : 'Wet set', mark: d.byFire ? 'drying' : 'wet', timer: Math.round(d.sec), running: true, until: this.now + d.sec / 3600, next: d.byFire ? `Dry in ${timerWords(d.sec)}: stay by the fire` : `Dries by a lit fire in 30 min (stand within 3 m of it); in the air ${timerWords(d.sec)}, or overnight` };
+      // (fb4 join: by a fire, what is left of it, not always the 30 min a soaked set takes)
+      const fireSec = (d.sec * WET_SET_FIRE_H) / WET_SET_AIR_H;
+      return { label: d.byFire ? 'Drying' : 'Wet set', mark: d.byFire ? 'drying' : 'wet', timer: Math.round(d.sec), running: true, until: this.now + d.sec / 3600, next: d.byFire ? `Dry in ${timerWords(d.sec)}: stay by the fire` : `Dries by a lit fire in ${timerWords(fireSec)} (stand within 3 m of it); in the air ${timerWords(d.sec)}, or overnight` };
     }
     const wet = this.live && (this.soaked > 0.25 || !!(this.trip && this.trip.state && this.trip.state.wet));
     if (wet) return { label: 'A dry set', mark: 'ready', next: 'You are wet through: right-click › Change into dry clothes (on foot)' };
