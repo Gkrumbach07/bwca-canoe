@@ -1078,7 +1078,7 @@ export class Inventory {
     if (!d) return null;
     if (e.id === 'bottle') return en && typeof en.bottleStatus === 'function' ? bottleWords(en.bottleStatus()) : null;
     if (e.id === 'clothes') return en && typeof en.clothesStatus === 'function' ? clothesWords(en.clothesStatus(e)) : null;
-    if (e.id === 'sleepingbag' && this.gearWet()) return this.dampStatus('Your gear is damp: a night in it is 80 % as warm');
+    if ((e.id === 'sleepingbag' || d.bag) && this.gearWet()) return this.dampStatus(d.bag && d.bag.down ? 'Your gear is damp: a night in down is half as warm' : 'Your gear is damp: a night in it is 80 % as warm'); // (content C: any bag)
     // fb5 A: what is on the grate says its own state (cooking, ready, "needs the pot", "water 0.3 L"): cook.grateStatus,
     // else last round's potStatus for the pot
     if (c && c.item === 'grate') {

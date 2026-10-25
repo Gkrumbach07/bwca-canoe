@@ -258,9 +258,12 @@ export class Trip {
     const cold = (this.day.season && this.day.season.waterTemp != null ? this.day.season.waterTemp : 15) < 12, en = this.energy;
     const spoiled = en ? Math.min(0.5, en.food) : 0;
     if (en) { en.spend(cold ? 0.5 : 0.25); en.food = Math.max(0, en.food - spoiled); }
-    this.state.wet = true;
+    // content C: the bag and the clothes rolled up in a waterproof pack stay dry (kit.js dryKit; main.js sets this.kit)
+    let dry = false; try { dry = !!(this.kit && typeof this.kit.dryKit === 'function' && this.kit.dryKit()); } catch { dry = false; }
+    if (!dry) this.state.wet = true;
     const food = spoiled >= 0.5 ? 'Half a day of food is spoiled, and the gear' : spoiled > 0 ? 'The last of the food is spoiled, and the gear' : 'The gear';
-    this.say(`Over you go${cold ? ', into cold water' : ''}. ${food} is wet until a fire dries it.`, 7);
+    if (dry) this.say(`Over you go${cold ? ', into cold water' : ''}.${spoiled > 0 ? ` ${spoiled >= 0.5 ? 'Half a day of food is spoiled' : 'The last of the food is spoiled'}.` : ''} The bag and the clothes stayed dry in the portage pack.`, 7);
+    else this.say(`Over you go${cold ? ', into cold water' : ''}. ${food} is wet until a fire dries it.`, 7);
   }
 
   // --- per frame (game seconds) ------------------------------------------------------------------------------

@@ -388,7 +388,7 @@ export class Fishing {
     f.action = speed < 0.05 ? lureDef.still : speed < 1.6 ? lureDef.slow : lureDef.fast * sp.fast;
     f.abundance = 0.75 + 0.5 * hash2(hab.lakeId, SPECIES_IDS.indexOf(id), 5);
     if (id === 'walleye' && hab.cells && hab.cells < 2500) f.abundance *= 0.35;
-    f.rate = TUNING.base * f.abundance * f.lure * f.bed * f.zone * f.shore * f.structure * f.time * f.clarity * f.wind * f.action;
+    f.rate = TUNING.base * f.abundance * f.lure * f.bed * f.zone * f.shore * f.structure * f.time * f.clarity * f.wind * f.action * (this.kit ? this.kit.mods.bite : 1); // (content C: the lucky cap)
     return f.rate;
   }
 
@@ -736,7 +736,7 @@ export class Fishing {
   updateBite(dt) {
     const b = this.bite, p = this.player;
     b.t += dt;
-    const [w0, w1] = TUNING.hookWindow;
+    const w0 = TUNING.hookWindow[0], w1 = TUNING.hookWindow[1] * (p.gear && p.gear.feel ? p.gear.feel : 1); // content C: the graphite rod feels the take sooner
     const set = this.buttonPressed() || this.input.pressed('KeyW');
     if (set && b.t >= w0 && b.t <= w1) { this.hook(); return; }
     if (b.t > w1 + 0.25 || (set && b.t < w0)) {
@@ -782,7 +782,7 @@ export class Fishing {
     f.tension += (target - f.tension) * (1 - Math.exp(-dt * 2.8));
     if (f.tension > 0.8) f.danger += (f.tension - 0.8) * dt * 7; else f.danger = Math.max(0, f.danger - dt * 0.45);
     if (f.tension < 0.1) f.slack += dt; else f.slack = 0;
-    if (f.danger > TUNING.snapDanger * (p.gear ? p.gear.snap : 1)) { this.endFight('snap'); if (this.onSnap) this.onSnap(this.lureDef, f); return; } // hubs 2B: the rod (shop.js player.gear); the lure is lost (shop.js onSnap)
+    if (f.danger > TUNING.snapDanger * (p.gear ? p.gear.snap : 1) * (this.kit ? this.kit.mods.snap : 1)) { this.endFight('snap'); if (this.onSnap) this.onSnap(this.lureDef, f); return; } // hubs 2B: the rod (shop.js player.gear); the lure is lost (shop.js onSnap); content C: the brass reel (kit.js)
     if (f.slack > TUNING.slackLimit) return this.endFight('thrown');
     // line: in against the reel, out with the run
     let dLine = 0;
@@ -837,6 +837,9 @@ export class Fishing {
 
   land() {
     const f = this.fish;
+    // content C: a big fish at the side thrashes and may throw the hook, with no landing net to get under it (kit.js)
+    const side = this.kit && typeof this.kit.atTheSide === 'function' ? this.kit.atTheSide(f) : null;
+    if (side) { this.endFight('thrown'); this.message = { text: side, t: 3 }; return; }
     this.fish = null;
     this.state = 'landed';
     const sp = SPECIES[f.species];

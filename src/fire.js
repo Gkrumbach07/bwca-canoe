@@ -60,8 +60,11 @@ export function woodCount(units = []) {
     c.dryH += burn;
     if (u.id === 'firewood') { c.armful = true; c.kindling = true; c.dry += LIGHT_PIECES; } else { c.dry++; if (u.id === 'wood:branch') c.kindling = true; }
   }
+  if (c.dry > 0 && FIRE_KIT.dryBonus) c.dry += FIRE_KIT.dryBonus; // content C: the match safe's dry matches catch on a piece less (kit.js)
   return c;
 }
+// content C: what the kit with you adds to the lighting (kit.js sets it: the tin match safe in reach, 1)
+export const FIRE_KIT = { dryBonus: 0 };
 // enough dry fuel in the ring to catch
 export const lights = (c) => !!(c && (c.armful || (c.kindling && c.dry >= LIGHT_PIECES)));
 const WOOD_ICON = '🪵';

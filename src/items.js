@@ -404,3 +404,125 @@ export const STARTER_KIT = {
   bucket: [['leeches', 12]],
   long: ['ash', 'rod'],
 };
+
+// --- content C: the gear's upgrades, the varied things and the uniques ---------------------------------------------
+// Content pass 1, stream C (the owner, 2026-10-25: "item upgrades, different unique items, varied items"). Every def
+// keeps fb5 B's schema: identity (what it is), onYou (what it does to you: the bar's icons with +points, or a comparison
+// line), uses or servings, kg. None says what it is for: the thing that needs it says so (the stove's own verb, the
+// bugs' moment, the fire's chips). What each does is real in code: kit.js reads them (in reach: inventory.reachable),
+// shop.js's applyGear the owned ones (player.gear). Stream D draws them in 3D from `model` and `tint` (item-models.js,
+// feature-detected) and a container's world mesh from `mesh`. The defs already above that change (the starter bag, the
+// pad, the rods, the filters) are merged here by defineItem, so their own lines stay as they were.
+//   bag: { rating (°C the bag is good to), down? (half as warm damp) }   the night's rest and warmth (kit.js night)
+//   pad: °C a pad adds to the bag     cooksTo: the hot item a raw meal comes off the grate (or the stove) as
+//   eat.warm: warmth, points out of 1, a serving (energy.eatItem)     brew: what a cup does (kit.js brew)
+//   unique: one of a kind (found in the world, uniques.js, or a keeper's arc, stream B); never sold
+//   dry: a container whose contents stay dry (rain on it set down, a capsize)
+
+// what the new lures take, a word per fish (LURE_TAKES above; shop.js copies them into fishing.js's SPECIES)
+Object.assign(LURE_TAKES, {
+  spinnerbait: { walleye: 0.5, smallmouth: 1.3, pike: 1.45, laketrout: 0.2, crappie: 0.6, perch: 0.4 },
+  jigminnow: { walleye: 1.45, smallmouth: 0.9, pike: 0.6, laketrout: 0.9, crappie: 1.1, perch: 1.15 },
+  topwater: { walleye: 0.3, smallmouth: 1.5, pike: 1.3, laketrout: 0.05, crappie: 0.3, perch: 0.2 },
+  cedarminnow: { walleye: 1.5, smallmouth: 1.3, pike: 1.15, laketrout: 0.5, crappie: 0.5, perch: 0.6 },
+});
+// a lure's On-you line: the words, and the fish as { fish, word, step } (step 1 neutral … 5 excellent) for the tooltip's
+// pips (the fb5 join's takesOn shape; a build without the pips draws the words)
+const STEP_OF = { neutral: 1, OK: 2, good: 3, great: 4, excellent: 5 };
+const lureOn = (lure) => {
+  const t = LURE_TAKES[lure] || {}, takes = [];
+  for (const [sp, x] of Object.entries(t).sort((a, b) => b[1] - a[1])) {
+    if (takes.length >= 3) break;
+    const w = takeWord(x), f = FISH_WORD[sp] || sp;
+    takes.push({ fish: f.charAt(0).toUpperCase() + f.slice(1), word: w, step: STEP_OF[w] || 1 });
+    if (w === 'neutral') break;
+  }
+  return { label: '', value: takesLine(lure), takes };
+};
+// the bags: what the night does to you when it is colder than the bag is good to (kit.js night)
+export const isBag = (id) => !!(ITEMS[id] && ITEMS[id].bag);
+const OC = (v) => `${v < 0 ? '−' : ''}${Math.abs(v)} °C`;
+
+// the sleeping bags: summer → three-season → down (the starter is the summer bag)
+defineItem({ id: 'sleepingbag', name: 'Summer bag', short: 'Summer bag', kg: 1.2, bag: { rating: 7 }, identity: 'Synthetic, light · good to 7 °C', model: 'sack', tint: 0x7a2f2a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(7))] });
+defineItem({ id: 'bag3', name: 'Three-season bag', short: '3-season', kind: 'gear', w: 2, h: 3, kg: 1.6, price: 45, bag: { rating: -4 }, identity: 'Synthetic, warm when damp · good to −4 °C', model: 'sack', tint: 0x4a6a3a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(-4))] });
+defineItem({ id: 'bagdown', name: 'Down bag', short: 'Down bag', kind: 'gear', w: 2, h: 2, kg: 0.95, price: 95, bag: { rating: -9, down: true }, identity: 'Goose down, packs small · good to −9 °C', model: 'sack', tint: 0x2f5f8a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(-9)), O('Damp', 'half as warm')] });
+// the pads: foam → self-inflating
+defineItem({ id: 'pad', name: 'Foam pad', short: 'Foam pad', price: 20, pad: 1.5, identity: 'Closed-cell foam, rolled', onYou: [EF('rest', 0.05, 'a night'), O('Bag', '+1.5 °C')] });
+defineItem({ id: 'padair', name: 'Self-inflating pad', short: 'Air pad', kind: 'gear', w: 1, h: 3, kg: 0.9, price: 50, pad: 3, identity: 'Foam and air, 4 cm thick', model: 'sack', tint: 0xc96a2a, onYou: [EF('rest', 0.1, 'a night'), O('Bag', '+3 °C')] });
+
+// the rods: medium → medium-heavy → graphite; the hook sets within the strike window after a take (fishing.js)
+defineItem({ id: 'rod', onYou: [O('Line', 'holds 1 s in the red'), O('Hook set', 'within 1.3 s')] });
+defineItem({ id: 'rodmh', onYou: [O('Line', 'holds 1.4 s in the red'), O('Hook set', 'within 1.3 s')] });
+defineItem({ id: 'rodpro', name: 'Graphite rod', short: 'Graphite', kind: 'long', w: 1, h: 7, kg: 0.35, price: 85, long: 'rod', identity: 'Graphite, smooth drag · 6½ ft', onYou: [O('Line', 'holds 1.8 s in the red'), O('Hook set', 'within 1.8 s')] });
+
+// the headlamps: the one on your cap (no item: 30 m, travel after dark ×1.3) → LED → rechargeable
+defineItem({ id: 'headlamp2', name: 'LED headlamp', short: 'Headlamp', kind: 'tool', kg: 0.08, price: 15, identity: 'Three AAA, 200 lumens', model: 'headlamp', onYou: [O('Beam', '40 m'), O('After dark', 'travel ×1.2')] });
+defineItem({ id: 'headlamp3', name: 'Rechargeable headlamp', short: 'Lamp 400', kind: 'tool', kg: 0.11, price: 35, identity: '400 lumens, a red night mode', model: 'headlamp', tint: 0xb4321f, onYou: [O('Beam', '55 m'), O('After dark', 'travel ×1.1')] });
+
+// the water: tablets → a pump (drinkable at once) → a gravity bag (fills the bottle at camp)
+defineItem({ id: 'pump', identity: 'Hand pump · drinkable at once', model: 'pump' });
+defineItem({ id: 'gravity', identity: 'Gravity bag · fills the bottle at camp', model: 'gravity' });
+
+// the stove and its fuel (a canister's uses are its boils: a meal or a cup)
+defineItem({ id: 'stove', name: 'Canister stove', short: 'Stove', kind: 'tool', kg: 0.12, price: 35, identity: 'A brass burner on a gas canister', model: 'stove',
+  verbs: [{ id: 'stove', label: 'Cook on it' }, { id: 'hand', label: 'Put in hand' }] });
+defineItem({ id: 'fuel', name: 'Fuel canister', short: 'Fuel', kind: 'tool', kg: 0.36, price: 6, uses: 10, identity: 'Isobutane, 230 g', model: 'canister', tint: 0x2f68a8 });
+
+// clothes for the weather and the bugs
+defineItem({ id: 'rainjacket', name: 'Rain jacket', short: 'Rain jacket', kind: 'gear', w: 2, h: 1, kg: 0.45, price: 30, identity: 'Coated nylon, a hood', model: 'jacket', tint: 0xc99a2e, onYou: [O('In rain', 'wet through ×0.15')] });
+defineItem({ id: 'headnet', name: 'Head net', short: 'Head net', kind: 'gear', kg: 0.04, price: 5, identity: 'No-see-um mesh, over a cap', model: 'headnet', onYou: [O('Bugs', '×0.35')] });
+
+// the camp: a chair, coffee and cocoa
+defineItem({ id: 'chair', name: 'Canoe chair', short: 'Chair', kind: 'gear', w: 2, h: 3, kg: 0.7, price: 25, identity: 'Folding foam and nylon, two straps', model: 'chair', tint: 0x3f5443,
+  verbs: [{ id: 'sit', label: 'Sit in it' }, { id: 'hand', label: 'Put in hand' }], onYou: [EF('energy', 0.05, 'an hour sat in it')] });
+defineItem({ id: 'coffee', name: 'Coffee bags', short: 'Coffee', kind: 'food', kg: 0.12, price: 4, servings: 10, serving: 'a cup', identity: 'Ground coffee in steeping bags', model: 'coffee',
+  brew: { rest: 0.06, lift: 0.08, morning: true }, verbs: [{ id: 'brew', label: 'Brew a cup' }, { id: 'hand', label: 'Put in hand' }], onYou: [EF('rest', 0.06), EF('energy', 0.08, 'a morning cup')] });
+defineItem({ id: 'cocoa', name: 'Hot cocoa', short: 'Cocoa', kind: 'food', kg: 0.15, price: 3, servings: 6, serving: 'a cup', identity: 'Cocoa and powdered milk, by the packet', model: 'coffee', tint: 0x6a3a22,
+  brew: { warm: 0.15, food: 0.05 }, verbs: [{ id: 'brew', label: 'Brew a cup' }, { id: 'hand', label: 'Put in hand' }], onYou: [EF('warmth', 0.15), EF('food', 0.05, 'a cup')] });
+
+// for the fish: a landing net, a fillet knife (and the fillets it makes), more lures
+defineItem({ id: 'net', name: 'Landing net', short: 'Net', kind: 'tool', w: 2, h: 3, kg: 0.7, price: 20, family: 'net', identity: 'Aluminium hoop, rubber mesh', model: 'net', onYou: [O('Big fish', 'held at the side')] });
+defineItem({ id: 'knife', name: 'Fillet knife', short: 'Knife', kind: 'tool', w: 1, h: 2, kg: 0.15, price: 14, identity: 'Thin flexible blade, birch handle', model: 'knife',
+  verbs: [{ id: 'clean', label: 'Fillet the catch' }, { id: 'hand', label: 'Put in hand' }] });
+export const FILLET_SHARE = 0.4; // of a whole fish's weight
+for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Pike'], ['smallmouth', 'Smallmouth'], ['laketrout', 'Lake trout'], ['perch', 'Perch'], ['crappie', 'Crappie']]) {
+  defineItem({ id: `fillet:${sp}`, name: `${name} fillets`, short: 'Fillets', kind: 'fish', w: 1, h: 2, kg: 0.3, species: sp, fillet: true, icon: 'fillet', eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Cleaned and skinned' });
+}
+defineItem({ id: 'lure:spinnerbait', name: 'Spinnerbait', short: 'Spinbait', kind: 'lure', kg: 0.02, price: 7, lure: 'spinnerbait', identity: 'Wire arm, willow blade · weedless', model: 'lure', tint: 0xb8d03a, onYou: [lureOn('spinnerbait')] });
+defineItem({ id: 'lure:jigminnow', name: 'Jig & minnow', short: 'Jig & min', kind: 'lure', kg: 0.01, price: 4, lure: 'jigminnow', identity: 'Lead jig tipped with a salted minnow', model: 'lure', tint: 0xd96a2a, onYou: [lureOn('jigminnow')] });
+defineItem({ id: 'lure:topwater', name: 'Topwater plug', short: 'Topwater', kind: 'lure', kg: 0.02, price: 9, lure: 'topwater', identity: 'Floats, walks on the surface', model: 'lure', tint: 0xe8e2d0, onYou: [lureOn('topwater')] });
+
+// a waterproof pack: what is in it stays dry (rain on it set down, a capsize)
+defineItem({ id: 'packdry', name: 'Portage pack', short: 'Portage pack', kind: 'container', w: 4, h: 5, kg: 1.5, price: 55, wear: ['back', 'chest'], mesh: 'packdry', tint: 0x5d6b5a, dry: true, container: { cols: 6, rows: 8 }, identity: 'Waterproof roll-top · room 6 × 8' });
+
+// more food: the meals cook on the grate (or the stove) into their hot ones; the snacks are eaten a serving at a time
+for (const [id, name, kg, price, eat, identity, hot, hotName] of [
+  ['meal:pancakes', 'Pancake breakfast', 0.35, 4, { food: 0.55, lift: 0.35 }, 'Pancake mix and a little syrup', 'hot:pancakes', 'Pancakes, hot'],
+  ['meal:chili', 'Chili mac', 0.22, 6, { food: 0.65, lift: 0.5, boil: true, warm: 0.1 }, 'Freeze-dried, in a foil pouch', 'hot:chili', 'Chili mac, hot'],
+  ['meal:bannock', 'Bannock mix', 0.3, 2, { food: 0.45, lift: 0.35 }, 'Flour, baking powder and lard', 'hot:bannock', 'Bannock, fresh'],
+]) {
+  const e = { ...eat, cook: true, hot: true };
+  defineItem({ id, name, short: { 'meal:pancakes': 'Pancakes', 'meal:chili': 'Chili mac', 'meal:bannock': 'Bannock' }[id], kind: 'meal', kg, price, eat: e, cooksTo: hot, icon: id.slice(5), identity, model: id === 'meal:chili' ? 'pouch' : 'bag', ...(id === 'meal:chili' ? { tint: 0xa8402e } : {}),
+    onYou: [EF('food', e.food), EF('energy', e.lift), ...(e.warm ? [EF('warmth', e.warm)] : [])] });
+  defineItem({ id: hot, name: hotName, kind: 'food', w: 1, h: 1, kg: 0.5, cooked: id, keep: 5, eat: { ...e, cook: false, hot: true }, icon: 'pot', identity: 'Hot from the pot',
+    onYou: [EF('food', e.food), EF('energy', e.lift), ...(e.warm ? [EF('warmth', e.warm)] : [])] });
+}
+for (const [id, name, kg, price, servings, serving, eat, identity, model, tint] of [
+  ['snack:sausage', 'Summer sausage', 0.35, 4, 6, 'a few slices', { food: 0.09, lift: 0.04 }, 'Smoked and dry-cured · keeps', 'jerky', 0x9a2a22],
+  ['snack:granola', 'Granola bars', 0.2, 3, 4, 'a bar', { food: 0.06, lift: 0.06 }, 'Oats and honey, four bars', 'bar', null],
+  ['snack:apricots', 'Dried apricots', 0.2, 3, 5, 'a handful', { food: 0.05, lift: 0.05 }, 'A bag of dried fruit', 'bag', 0xd98a3a],
+  ['snack:tortilla', 'Tortillas & peanut butter', 0.45, 4, 3, 'a wrap', { food: 0.2, lift: 0.12 }, 'Flour tortillas, a jar of peanut butter', 'bag', null],
+]) defineItem({ id, name, short: { 'snack:sausage': 'Sausage', 'snack:granola': 'Granola', 'snack:apricots': 'Apricots', 'snack:tortilla': 'Tortillas' }[id], kind: 'snack', kg, price, servings, serving, eat, identity, model, ...(tint ? { tint } : {}) });
+
+// --- the uniques: one of each, a one-line story in the identity and a small real perk (kit.js); found in the world
+// (uniques.js: a glint at a real portage, campsite or landing, once a season) or the end of a keeper's arc (stream B)
+defineItem({ id: 'axehead', name: 'Hudson’s Bay axe', short: 'HB axe', kind: 'tool', w: 1, h: 3, kg: 1.1, unique: true, identity: 'Trade iron, 1800s · a new ash handle', model: 'axe', onYou: [O('Cuts', 'as the saw does')] });
+defineItem({ id: 'tradesilver', name: 'Trade-silver brooch', short: 'Brooch', kind: 'gear', kg: 0.02, unique: true, identity: 'A voyageur’s heart, from the ash', model: 'box', tint: 0xc7c9cc, onYou: [O('Keepers', 'warm to you ×1.5')] });
+defineItem({ id: 'brassreel', name: 'Old brass reel', short: 'Reel', kind: 'tool', kg: 0.3, unique: true, identity: 'A 1950s bait-caster, still smooth', model: 'box', tint: 0xb8923a, onYou: [O('Line', 'holds ×1.15')] });
+defineItem({ id: 'matchsafe', name: 'Tin match safe', short: 'Matches', kind: 'tool', kg: 0.05, unique: true, identity: 'Dented tin, the matches still dry', model: 'tube', tint: 0xa0a4a8, onYou: [O('A fire', 'lights on 2 dry pieces')] });
+defineItem({ id: 'toque', name: 'Red wool toque', short: 'Toque', kind: 'gear', kg: 0.1, unique: true, identity: 'Hand-knit, lost on a portage', model: 'cap', tint: 0xa8322a, onYou: [O('Cold', 'costs ×0.8')] });
+defineItem({ id: 'luckycap', name: 'Lise’s lucky cap', short: 'Cap', kind: 'gear', kg: 0.1, unique: true, identity: 'Faded UMD Bulldogs cap · never lost a fish', model: 'cap', tint: 0x6e2630, onYou: [O('Bites', '×1.08')] });
+defineItem({ id: 'guidemap', name: 'Arvid’s guiding map', short: 'Arvid’s map', kind: 'map', w: 2, h: 2, kg: 0.05, unique: true, icon: 'guidemap', identity: 'An old Fisher sheet, pencilled', model: 'map', onYou: [O('A site', 'pencilled on your map'), EF('rest', 0.08, 'a night there')] });
+defineItem({ id: 'lure:cedarminnow', name: 'Eino’s cedar minnow', short: 'Cedar', kind: 'lure', kg: 0.02, unique: true, lure: 'cedarminnow', identity: 'Carved white cedar, painted by hand', model: 'lure', tint: 0x6f8a52, onYou: [lureOn('cedarminnow')] });
+export const UNIQUE_IDS = ['axehead', 'tradesilver', 'brassreel', 'matchsafe', 'toque', 'luckycap', 'guidemap', 'lure:cedarminnow'];
