@@ -257,7 +257,7 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}, opts = {}) {
     // interior's box above) a shelf's height
     if (o.box) {
       if (insideBox(S, o)) continue; // fb3 A: the seat he sits on (or anything he stands in) is not in the way
-      const t = boxT(S, o, o.top !== undefined ? o.top : indoors ? floorY + SIGHT.shelf : ground(o.x, o.z) + SIGHT.wall); if (t < hard) { hard = t; out.what = 'box'; } continue;
+      const t = boxT(S, o, o.top !== undefined ? o.top : o.seeTop !== undefined ? o.seeTop : indoors ? floorY + SIGHT.shelf : ground(o.x, o.z) + SIGHT.wall); // (seeTop: a bench, props.js) if (t < hard) { hard = t; out.what = 'box'; } continue;
     }
     if (o.shape && o.shape.heightAt) {
       // a solid by its drawn shape (a rock, an outcrop, a bluff's module, a log, a stump): inside where the point is

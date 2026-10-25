@@ -1950,9 +1950,11 @@ function buildCampsite(ctx, c, pieces, ledges) {
   for (const u of [-0.41, 0.41]) b.box(GP(u, gy + 0.08, 0.26), gX, Y, gZ, 0.01, 0.08, 0.01, TILE.METAL, iron, { grain: 'y' });
   // the bench: a split log, flat face up, on two rounds standing in the ground
   const bx = fx + Math.cos(a) * 2.6, bz = fz + Math.sin(a) * 2.6, ax = -Math.sin(a), az = Math.cos(a);
-  ctx.obstacles.push({ x: bx, z: bz, ux: ax, uz: az, hx: 1.1, hz: 0.25, box: true });
   const rounds = [-0.72, 0.72].map((t) => { const x = bx + ax * t, z = bz + az * t; return { x, z, g: H(x, z) }; });
   const rTop = Math.max(rounds[0].g, rounds[1].g) + 0.26, bark = tone(0x5b4a3b, crng, 0.06);
+  // (seeTop: the camera's line passes over it, camera.js; to the walker it has no top, a thing to go round, not onto.
+  // The fb3 join: standing up off it the chase was pulled in to 0.45 m by a 4 m "wall" and eased back out)
+  ctx.obstacles.push({ x: bx, z: bz, ux: ax, uz: az, hx: 1.1, hz: 0.25, box: true, seeTop: rTop + 0.18 });
   for (const r of rounds) b.cyl(L(r.x, r.g - 0.25, r.z), L(r.x, rTop, r.z), 0.19, 0.18, 9, TILE.BARK, bark, { cap1: true, capCol: C(0xc9c2b4), jitter: 0.1, rng: crng });
   const lr = 0.17, ly = rTop + lr;
   b.cyl(L(bx - ax * 1.05, ly, bz - az * 1.05), L(bx + ax * 1.05, ly + 0.01, bz + az * 1.05), lr, lr * 0.93, 7, TILE.BARK, bark, { arc: [Math.PI, Math.PI * 2], flatTile: TILE.SPLIT, flatCol: tone(0xb39e80, crng, 0.06), cap0: true, cap1: true, capCol: C(0xc9c2b4), up: Y });
