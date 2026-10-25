@@ -446,7 +446,7 @@ export class ContainerView {
         continue;
       }
       if (o.parent !== this.scene) this.scene.add(o);
-      if (overhead) { bones.chest.getWorldPosition(w); w.y -= 0.62; w.addScaledVector(r, 0.3 * side).addScaledVector(f, 0.05); }
+      if (overhead) { bones.chest.getWorldPosition(w); w.y -= 0.4; w.addScaledVector(r, 0.25 * side).addScaledVector(f, 0.03); } // (the hands on the gunwales: clipped to the belt at the hip)
       else this.fist(side, w);
       holdMatrix(m, w, f, r, side, this._lm);
       this._lm.decompose(o.position, o.quaternion, o.scale);
@@ -582,7 +582,7 @@ export class ContainerView {
     if (c.where === 'hands') {
       if (o.parent !== this.scene) this.scene.add(o);
       const side = c.hand === 1 ? -1 : 1, w = this._w, f = this._f.set(Math.cos(p.heading), 0, -Math.sin(p.heading)), r = this._r.set(-f.z, 0, f.x);
-      if (p.mode === 'carry') { cn.figure.bones.chest.getWorldPosition(w); w.y -= 0.62; w.addScaledVector(r, 0.3 * side); }
+      if (p.mode === 'carry') { cn.figure.bones.chest.getWorldPosition(w); w.y -= 0.4; w.addScaledVector(r, 0.25 * side); }
       else this.fist(side, w);
       // hung by the cord's end, the fish heads up under it (the merged frame's +x up, its depth across the body)
       const g = o.geometry; if (!g.boundingBox) g.computeBoundingBox();
