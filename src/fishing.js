@@ -9,6 +9,7 @@ import { SEATS, sheerY, floorAt } from './hull.js';
 import { calmAt, rockAt } from './fields.js';
 import { rockSlope } from './terrain-build.js';
 import { windHeight } from './waves.js';
+import { itemDef } from './items.js';
 
 // Fishing from the canoe. F brings the rod up (the paddle rests across the gunwales); hold Space or the
 // mouse to load a cast and let go; the lure flies, splashes down and sinks or hangs under a bobber; W
@@ -17,9 +18,17 @@ import { windHeight } from './waves.js';
 // or a twitch and a window to set the hook; the fight is a tension bar: reel against the fish, ease off
 // when it runs. Nothing fails you: a snapped line costs the lure, a thrown hook costs nothing.
 // Everything here is tunable through TUNING, SPECIES and LURES (window.__game.fishing holds them).
+// wc C (the owner, 2026-10-24: "why can't I put the fishing rod in my hand and fish with it outside of canoe"): on foot
+// with the rod in a hand (the book: drag it to a hand slot, or Put in hand; inventory.rodInHand) the same F brings it up
+// facing water within a cast, from the shore, a dock or a rock, and the cast, the retrieve, the bites, the fight and the
+// catch card are the canoe's; the standing figure holds it (canoe.js rodArms). A kept fish goes on the stringer when the
+// canoe is in reach, else into a container you carry that takes fish (inventory.js syncStringer).
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const TAU = Math.PI * 2;
+// wc C: on foot. offShore: no further than this from the water's edge; reach: open water looked for this far ahead, in a
+// fan either side of the way you face; drag: a lure reeled this close to the tip comes up the bank to your feet
+const FOOT = { offShore: 12, reach: 24, drag: 4 };
 
 export const TUNING = {
   base: 1 / 80,          // bites per second for one species at every factor 1.0
@@ -183,6 +192,10 @@ export class Fishing {
     this.focus = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
 
     this.rodUp = false;
+    this.onFoot = false;       // wc C: the rod up standing on foot (the shore, a dock, a rock), not from the canoe
+    this.inventory = null;     // wc C: set by main.js: the inventory, for the rod in a hand (rodInHand) and the canoe's reach
+    this.indoors = null;       // wc C: set by main.js: () => inside a store
+    this.footWater = null;     // wc C: the nearest open water found ahead on foot { x, z, d }, for the spot readout
     this.state = 'stowed';     // stowed | ready | charging | swing | flying | inwater | bite | fight | landed
     this.lureIndex = 0;
     // fb G: the lures you have (keys 1–n and the strip list only these): hasLure(id) is set by main.js (the shop's
@@ -249,8 +262,10 @@ export class Fishing {
   saveLog() {
     try { localStorage.setItem('bwca-canoe-catchlog', JSON.stringify({ catches: this.log.slice(-200), bests: this.bests })); } catch { /* storage may be off */ }
   }
+  // the lake a fish came out of: under the fish (on foot you stand on the shore), else under you
+  catchLake(f) { const w = this.world; return (f && Number.isFinite(f.x) ? w.lakeIdAt(f.x, f.z) : 0) || w.lakeIdAt(this.player.x, this.player.z); }
   record(fish, kept) {
-    const w = this.world, id = w.lakeIdAt(this.player.x, this.player.z);
+    const w = this.world, id = this.catchLake(fish);
     const entry = { species: fish.species, name: SPECIES[fish.species].name, length: Math.round(fish.length), weight: Math.round(fish.weight * 100) / 100, lake: w.lakeName(id) || 'Unnamed water', time: this.day.clock, hours: this.day.hours, doy: this.day.doy, year: this.day.year, lure: LURES[fish.lure].name, lureShort: LURES[fish.lure].short, kept, at: Date.now() };
     this.log.push(entry);
     const b = this.bests[fish.species];
@@ -355,7 +370,7 @@ export class Fishing {
   }
   stow(silent = false) {
     if (this.state === 'landed') this.release(false);
-    this.rodUp = false; this.state = 'stowed'; this.lineOut = 0; this.power = 0;
+    this.rodUp = false; this.onFoot = false; this.state = 'stowed'; this.lineOut = 0; this.power = 0;
     this.bite = null; this.fish = null; this.pending = null;
     this.bobber.visible = false; this.line.visible = false; this.aimRing.visible = false;
     this.chase.orbitLocked = false; this.chase.focus = null;
@@ -369,9 +384,11 @@ export class Fishing {
   // Where the player is pointing: the ray through the cursor in either view (the view's own centre when the
   // cursor is off the page). Where it meets the water inside the rod's reach, the cast is aimed at the spot
   // and will not fly past it.
+  // the water's level: the hull's afloat, the nearest water's on foot
+  waterLevel() { const p = this.player; return !this.onFoot && p.level ? p.level : this.world.levelAt(p.x, p.z); }
   computeAim() {
     const p = this.player, ch = this.chase, cam = ch.camera, t = this.tipWorld();
-    const level = p.level || this.world.levelAt(p.x, p.z);
+    const level = this.waterLevel();
     let ox, oy, oz, dx, dy, dz;
     if (!ch.cursor.inside) {
       cam.getWorldDirection(this._v2);
@@ -419,7 +436,7 @@ export class Fishing {
   launch() {
     const p = this.pending; this.pending = null;
     const t = this.tipWorld();
-    const level = this.player.level || this.world.levelAt(this.player.x, this.player.z), h = Math.max(0.3, t.y - level);
+    const level = this.waterLevel(), h = Math.max(0.3, t.y - level);
     let sp = lerp(TUNING.castSpeed[0], TUNING.castSpeed[1], p.power), yaw = this.aim;
     const ap = this.aimPoint;
     if (ap) { const D = Math.hypot(ap.x - t.x, ap.z - t.z); if (D > 1.5) { yaw = Math.atan2(-(ap.z - t.z), ap.x - t.x); sp = Math.min(sp, speedFor(D, h)); } }
@@ -448,14 +465,45 @@ export class Fishing {
 
   surfaceAt(x, z) { return this.world.levelAt(x, z) + (this.water ? this.water.waveAt(x, z) : 0); }
 
+  // --- wc C: on foot --------------------------------------------------------------------------------------------------------
+  // the rod in a hand: stream A's inventory.rodInHand (packs.js), else the long item itself
+  rodInHand() {
+    const inv = this.inventory; if (!inv) return false;
+    if ('rodInHand' in inv) return !!inv.rodInHand;
+    return !!(inv.long || []).find((l) => l.where === 'hands' && (itemDef(l.id) || {}).long === 'rod');
+  }
+  // standing on foot with the rod in a hand, free to fish: not teleporting, not mid-vault, not on a seat, not in a store
+  footOk() {
+    const p = this.player;
+    return p.mode === 'walk' && !p.teleporting && !p.act && !p.seat && !(this.indoors && this.indoors()) && this.rodInHand();
+  }
+  // open water within a cast in the fan ahead (a metre deep by the shore field); the nearest spot is kept as footWater
+  waterAhead() {
+    const p = this.player, w = this.world;
+    if (w.shoreAt(p.x, p.z) > FOOT.offShore) { this.footWater = null; return false; }
+    let best = null;
+    for (const da of [0, -0.45, 0.45, -0.9, 0.9, -1.3, 1.3]) {
+      const c = Math.cos(p.heading + da), s = -Math.sin(p.heading + da);
+      for (let d = 1.5; d <= FOOT.reach; d += 1.5) { const x = p.x + c * d, z = p.z + s * d; if (w.shoreAt(x, z) < -1.0) { if (!best || d < best.d) best = { x, z, d }; break; } }
+    }
+    this.footWater = best;
+    return !!best;
+  }
+  canFishOnFoot() { return this.footOk() && this.waterAhead(); }
+  // where the spot readout reads the water: under the hull afloat; on foot where the cast is aimed, or the water ahead
+  spotAt() { const p = this.player; if (!this.onFoot) return p; return this.aimWorld || this.footWater || p; }
+
   // --- per frame -------------------------------------------------------------------------------------------------------
   update(dt, timeScale = 1) {
     const p = this.player, inp = this.input;
     const afloat = p.mode === 'paddle' && !p.landing && !p.ashore && !p.teleporting && !(this.canoe.state.climb > 0);
-    this.rod.visible = p.mode === 'paddle'; // it lies in the hull: not on your shoulders, on the bank or in the water
-    if (!afloat && this.rodUp) this.stow();
-    if (afloat && inp.pressed('KeyF')) {
-      if (!this.rodUp) this.raise();
+    const foot = !afloat && this.footOk(); // wc C: standing with the rod in a hand
+    if (this.rodUp && !(afloat || foot)) this.stow();
+    this.onFoot = this.rodUp && !afloat;
+    this.rod.visible = p.mode === 'paddle' || this.onFoot; // it lies in the hull (not on your shoulders, on the bank or in the water), or is up in your hands on foot (down, containers.js carries it)
+    const water = foot && !this.rodUp ? this.waterAhead() : false;
+    if ((afloat || foot) && inp.pressed('KeyF')) {
+      if (!this.rodUp) { if (afloat || water) { this.onFoot = !afloat; this.raise(); } else this.message = { text: 'No water within a cast from here', t: 1.8 }; }
       else if (this.state === 'fight') this.message = { text: 'Land it first', t: 1.5 };
       else this.stow();
     }
@@ -464,9 +512,11 @@ export class Fishing {
     // the spot readout, refreshed twice a second while the rod is up
     if (this.rodUp && (this.spot.t -= dt) <= 0) {
       this.spot.t = 0.5;
-      this.spot.hab = this.habitatAt(p.x, p.z);
+      const at = this.spotAt();
+      this.spot.hab = this.habitatAt(at.x, at.z);
       this.spot.parts = this.describe(this.spot.hab, this.day.hours); this.spot.text = this.spot.parts.text;
     }
+    if (water && !this.rodUp && !p.prompt) p.prompt = { key: 'F', text: 'Fish from here' };
     this.refreshOwned(dt);
     if (this.rodUp) {
       // fb G: 1–n pick from the lures you have, in the strip's order
@@ -493,7 +543,7 @@ export class Fishing {
     if (s === 'ready' || s === 'charging') { const reach = this.computeAim(); this.placeAimRing(reach); } else this.aimRing.visible = false;
     if (s === 'ready') {
       if (this.buttonPressed()) { this.state = 'charging'; this.charge = 0; this.power = 0; }
-      p.prompt = { key: 'Space', text: `Hold to load a cast where the cursor points · ${this.lureKeys()} · F puts the rod down` };
+      p.prompt = { key: 'Space', text: `Hold to load a cast where ${this.onFoot ? 'you look' : 'the cursor points'} · ${this.lureKeys()} · F puts the rod down` };
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
@@ -576,10 +626,16 @@ export class Fishing {
       if (horiz > allowed) {
         const k = allowed / horiz;
         const nx = t.x + dx * k, nz = t.z + dz * k;
-        if (w.shoreAt(nx, nz) < 0 || l.onLand) { l.x = nx; l.z = nz; if (l.onLand && w.shoreAt(nx, nz) < 0) { l.onLand = false; this.splash(l.x, this.surfaceAt(l.x, l.z), l.z, 4, 0.6); } }
+        const ashore = this.onFoot && Math.hypot(nx - t.x, nz - t.z) < FOOT.drag; // wc C: reeled in from the shore it comes up the bank to your feet
+        if (w.shoreAt(nx, nz) < 0 || l.onLand || ashore) {
+          l.x = nx; l.z = nz;
+          if (l.onLand && w.shoreAt(nx, nz) < 0) { l.onLand = false; this.splash(l.x, this.surfaceAt(l.x, l.z), l.z, 4, 0.6); }
+          else if (!l.onLand && w.shoreAt(nx, nz) >= 0) { l.onLand = true; l.depth = 0; }
+        }
       }
     }
-    l.y = l.onLand ? surf : surf - l.depth;
+    const surfNow = l.onLand ? w.heightAt(l.x, l.z) + 0.05 : this.surfaceAt(l.x, l.z);
+    l.y = l.onLand ? surfNow : surfNow - l.depth;
     if (horiz < 1.6 || this.lineOut <= 1.05) {
       this.state = 'ready'; this.lineOut = 0; this.bite = null;
       for (const m of this.lureMeshes) m.visible = false; this.bobber.visible = false;
@@ -694,7 +750,8 @@ export class Fishing {
       if (this.crankAcc >= 1) { this.crankAcc -= 1; this.audio.reelClick(f.run > 0 ? 1.8 : 1.0); }
     }
     if (reeling) this.crank += dt * 7;
-    if (this.lineOut <= TUNING.landAt && horiz < 3.5) return this.land();
+    const shoreD = this.onFoot ? Math.max(0, w.shoreAt(t.x, t.z)) : 0; // wc C: from a bank the fish comes to the water's edge below you
+    if (this.lineOut <= TUNING.landAt + shoreD && horiz < 3.5 + shoreD) return this.land();
     const sp = SPECIES[f.species];
     p.prompt = { key: null, text: f.danger > 0.35 ? 'Ease off — the line is singing' : f.slack > 1 ? 'Reel! The line has gone slack' : f.run > 0 ? 'It is running — let it go' : `Reel it in · ${this.lineOut.toFixed(0)} m${f.t > 6 ? ` · feels like a ${sp.name.toLowerCase()}` : ''}` };
   }
@@ -741,12 +798,12 @@ export class Fishing {
     const keep = this.input.pressed('KeyK'), rel = this.input.pressed('KeyE');
     if (keep && L.t > 0.4) return this.release(true);
     if ((rel && L.t > 0.4) || L.t > TUNING.holdUp) return this.release(false);
-    const f = p.forward, rx = -f.z, rz = f.x, y = this.canoe.rig.position.y;
+    const f = p.forward, rx = -f.z, rz = f.x, y = this.canoe.rig.position.y + (this.onFoot ? 0.62 : 0); // wc C: standing, the fish is held higher
     const fx = this.focus;
     fx.pos.set(p.x + f.x * 0.9 + rx * 1.6, y + 1.05, p.z + f.z * 0.9 + rz * 1.6);
     fx.look.set(p.x - f.x * 1.25, y + 0.5, p.z - f.z * 1.25);
     this.chase.focus = fx;
-    const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.world.lakeIdAt(p.x, p.z), L.length) : null; // hubs 1C: a notice taken on wants it
+    const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.catchLake(L), L.length) : null; // hubs 1C: a notice taken on wants it
     p.prompt = { key: 'E', text: `Let it go · <kbd>K</kbd>${want ? `Keep it for “${esc(want.title)}”` : 'Keep it on the stringer'}` };
   }
 
@@ -759,10 +816,24 @@ export class Fishing {
     if (mesh) { this.canoe.paddler.remove(mesh); this.scene.add(mesh); mesh.visible = false; mesh.scale.setScalar(1); }
     if (L) {
       L.entry.kept = keep; this.logVersion++; this.saveLog();
-      const cooler = this.tasks ? this.tasks.onCatch(L.species, this.world.lakeIdAt(this.player.x, this.player.z), L.length, keep) : null; // hubs 1C: a notice taken on wants it
+      const cooler = this.tasks ? this.tasks.onCatch(L.species, this.catchLake(L), L.length, keep) : null; // hubs 1C: a notice taken on wants it
       if (keep && cooler) this.message = { text: cooler, t: 3 }; // into that notice's cooler, not the stringer
-      else if (keep) { this.stringer.push({ species: L.species, length: L.length }); this.message = { text: `On the stringer · ${this.stringer.length} fish`, t: 2 }; }
-      else { const r = this.canoe.rig, f = this.player.forward; const x = r.position.x - f.z * 1.2, z = r.position.z + f.x * 1.2; this.splash(x, this.surfaceAt(x, z), z, 7, 0.7); this.message = { text: 'Released', t: 1.5 }; }
+      else if (keep) {
+        // wc C: on foot the stringer is the canoe's: beside it the fish goes on it (inventory.js syncStringer), away from
+        // it into a container you carry that takes fish (the barrel, a pack), or back in the water when none has room
+        const inv = this.inventory, away = this.onFoot && inv && inv.nearCanoe && inv.place && !inv.nearCanoe();
+        if (away) {
+          const r = inv.place(`fish:${L.species}`, 1, { data: { length: Math.round(L.length) } });
+          if (r && r.ok) this.message = { text: 'Kept · into your pack', t: 2 };
+          else { L.entry.kept = false; this.saveLog(); this.message = { text: 'No room to keep it: you let it go.', t: 3 }; if (Number.isFinite(L.x) && this.world.shoreAt(L.x, L.z) < 0) this.splash(L.x, this.surfaceAt(L.x, L.z), L.z, 7, 0.7); }
+        } else { this.stringer.push({ species: L.species, length: L.length }); this.message = { text: `On the stringer · ${this.stringer.length} fish`, t: 2 }; }
+      } else {
+        // let go beside the hull, or back into the water it came from
+        let x, z;
+        if (this.onFoot && Number.isFinite(L.x) && this.world.shoreAt(L.x, L.z) < 0) { x = L.x; z = L.z; }
+        else { const r = this.canoe.rig, f = this.player.forward; x = r.position.x - f.z * 1.2; z = r.position.z + f.x * 1.2; }
+        this.splash(x, this.surfaceAt(x, z), z, 7, 0.7); this.message = { text: 'Released', t: 1.5 };
+      }
     }
     this.state = 'ready';
   }
@@ -771,16 +842,18 @@ export class Fishing {
   // The rod in rig space (+x bow, +z starboard): held in the right hand in front of the kneeling paddler's
   // stomach, pointing where the cast goes; the left hand on the crank knob, or on the butt for the cast.
   poseRod(dt) {
-    const rod = this.rod, parts = this.rodParts, s = this.state, p = this.player;
+    const rod = this.rod, parts = this.rodParts, s = this.state, p = this.player, foot = this.onFoot;
     const sx = SEATS.stern.x;
     let grip, yaw, pitch, bend = 0.02, k = 1 - Math.exp(-dt * 10), lean = 0, look = 0;
     if (!this.rodUp || s === 'landed') {
-      // laid along the starboard bilge (or across the gunwales while the fish is held up)
-      grip = s === 'landed' ? V(sx + 0.66, sheerY(sx + 0.66) + 0.022, -0.5) : V(-0.82, floorAt(-0.82) + 0.05, 0.26);
-      yaw = s === 'landed' ? -Math.PI / 2 : 0.045; pitch = s === 'landed' ? 0.02 : 0.03;
+      // laid along the starboard bilge (or across the gunwales while the fish is held up); on foot, laid at your feet
+      // while the fish is held up (the rig's origin is a tenth of a metre over the ground)
+      if (foot) { grip = V(0.3, -0.08, 0.38); yaw = -0.5; pitch = 0.03; }
+      else { grip = s === 'landed' ? V(sx + 0.66, sheerY(sx + 0.66) + 0.022, -0.5) : V(-0.82, floorAt(-0.82) + 0.05, 0.26); yaw = s === 'landed' ? -Math.PI / 2 : 0.045; pitch = s === 'landed' ? 0.02 : 0.03; }
       k = this.rodUp ? k : 1;
     } else {
-      grip = V(sx + 0.47, 0.31, 0.11);
+      // wc C: standing (the figure at the rig's origin facing +x) the cork is held in front of the stomach
+      grip = foot ? V(0.3, 1.02, 0.14) : V(sx + 0.47, 0.31, 0.11);
       let relYaw = this.aim - p.heading; relYaw = Math.atan2(Math.sin(relYaw), Math.cos(relYaw));
       yaw = clamp(relYaw, -TUNING.rodArc, TUNING.rodArc);
       if (s === 'ready') pitch = 0.45;
@@ -808,10 +881,10 @@ export class Fishing {
     const H = this.hands;
     H.dir.copy(this._dir); H.up.copy(this._up); H.yaw = this.yaw; H.lean = lean; H.look = look;
     if (s === 'landed' && this.heldFish) {
-      const L = Math.min(0.42, this.landed.length / 100 * 0.38);
-      this.heldFish.position.set(0.52, 0.5 + 0.04 * Math.sin(this.landed.t * 2), 0);
+      const L = Math.min(0.42, this.landed.length / 100 * 0.38), up = foot ? 0.62 : 0, fwd = foot ? -0.08 : 0; // wc C: held up standing
+      this.heldFish.position.set(0.52 + fwd, 0.5 + up + 0.04 * Math.sin(this.landed.t * 2), 0);
       this.heldFish.rotation.set(0.25, Math.PI / 2, 0.08 * Math.sin(this.landed.t * 3));
-      H.L.set(0.5, 0.47, -L).add(this.canoe.paddler.position); H.R.set(0.5, 0.47, L).add(this.canoe.paddler.position);
+      H.L.set(0.5 + fwd, 0.47 + up, -L).add(this.canoe.paddler.position); H.R.set(0.5 + fwd, 0.47 + up, L).add(this.canoe.paddler.position);
       H.dir.set(0, 0, 1); H.up.set(0, 1, 0); H.knobAxis.set(0, 0, 1); H.yaw = 0; H.lean = 0.05; H.look = 0.6;
     } else if (this.rodUp) {
       H.R.copy(parts.hand).applyMatrix4(rod.matrix);

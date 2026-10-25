@@ -207,7 +207,7 @@ body.paper-open #scrim { opacity: .55; pointer-events: auto; }
 #map .leg .portage { width: 22px; border-top: 2.4px dashed #c0392b; }
 #map .leg .camp { width: 8px; height: 8px; border-radius: 50%; background: #c0392b; }
 #map .leg .dock { width: 9px; height: 9px; background: var(--map-red); }
-#map .leg .task { width: 16px; height: 16px; border-radius: 50%; border: 1.5px dashed rgba(160, 45, 35, .7); background: rgba(192, 57, 43, .13); }
+#map .leg .task { width: 16px; height: 15px; border-radius: 50% 48% 52% 50% / 46% 54% 46% 54%; border: 2px solid rgba(184, 44, 32, .8); background: transparent; transform: rotate(-9deg); } /* the keeper's red pencil round a notice's place */
 #map .leg .you { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 11px solid #e8562f; }
 #map .foot .hint { margin-left: auto; font-size: 17px; letter-spacing: 0; }
 #pin { position: absolute; width: 300px; box-sizing: border-box; padding: 12px 14px; background: var(--paper-note); border: 1.5px solid #8a7250; border-radius: 3px; box-shadow: 0 8px 24px rgba(0, 0, 0, .3); display: none; flex-direction: column; gap: 8px; z-index: 2; transform: translate(-50%, -100%); }

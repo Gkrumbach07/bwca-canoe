@@ -19,6 +19,10 @@
 // thing on the ground pointed at is picked up (onto the back, the chest or a hand; a pile's things into what you carry),
 // and the canoe pointed at is got into (what you carry goes in with you) or shouldered. There is no Q drop: things are
 // set down, loaded and unloaded from the book (stream B's pack side: inventory.carry / setDown / load).
+// wc A (the world cards, the owner's third round of 2026-10-24: "canoe can be picked up with items in it"): the canoe
+// pointed at reads "E Get in · Q Shoulder it" (hullAction), and with anything riding in it but the paddle in use and
+// the stringer, which are lashed, its Q reads "Unload it first" (canShoulder); the book's Canoe tab (stream B) empties
+// it with setOutAll and fills it with loadAll.
 // At a camp (the camp redone, 2026-10-24: "it doesnt do it automatically when you leave, and you CAN leave stuff. you
 // need to repack bags in canoe"): nothing is set out when the tent goes up and nothing goes back in the canoe at the
 // launch. What is set out at camp is picked up like anything on the ground (never a fixed thing, the grate); set down
@@ -79,6 +83,9 @@ export class Packs {
     this.fade = null;   // the fetch's own fade, when there is no veil
     this.el = null;
     this.leaveOk = false; this.warnAt = -1e9; this.clock = 0;
+    // wc A: the rod held in a hand (stream C's fishing.canFishOnFoot reads inventory.rodInHand): the long item, or null
+    const inv = this.inv;
+    if (inv && !('rodInHand' in inv)) Object.defineProperty(inv, 'rodInHand', { configurable: true, get() { return this.long.find((l) => l.where === 'hands' && (itemDef(l.id) || {}).long === 'rod') || null; } });
     this.show();
   }
 
@@ -375,24 +382,60 @@ export class Packs {
       return true;
     }
     if (dd <= HULL_REACH) {
-      p.say(note || info, ['Q', 'Shoulder the canoe']);
-      if (inp.pressed('KeyQ')) p.pickUpHull();
+      const can = this.canShoulder();
+      p.say(note || info, ['Q', can.ok ? 'Shoulder the canoe' : `Shoulder the canoe · ${can.why}`]);
+      if (inp.pressed('KeyQ')) { if (can.ok) p.pickUpHull(); else if (this.hud) this.hud.note(`${can.why}: the book's Canoe tab sets everything out.`, 4); }
       return true;
     }
     p.say(note || trailText || info || far);
     return true;
   }
-  // fb2 A: what E does pointed at the canoe lying on the ground (or floated at a dock's side): { verb, label, run }, or
-  // null. Just stepped out, or with things still back at the trail head: shoulder it; where it lies at the water: get
-  // in (what you carry goes in with you, packs.beforeLaunch); up the bank: shoulder it.
+  // wc A: what the dot offers at the canoe lying on the ground (or floated at a dock's side): { e, q, label, hint }, or
+  // null. Where it lies at the water: E gets in (what you carry goes in with you, packs.beforeLaunch) and Q shoulders
+  // it; up the bank, just stepped out, or with things still back at the trail head: E shoulders it. Loaded (anything in
+  // it but the paddle in use and the stringer, which ride lashed), the shoulder reads "Unload it first".
   hullAction() {
     const p = this.player, c = p.carry, d = c && c.drop;
     if (p.mode !== 'walk' || !d || this.busy) return null;
-    const shoulder = { verb: 'Pick up', label: 'the canoe, onto your shoulders', run: () => p.pickUpHull() };
-    if (c.choice || this.leftHere(c, p).length) return shoulder;
+    const can = this.canShoulder();
+    const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, run: () => { if (this.canShoulder().ok) p.pickUpHull(); } };
+    if (c.choice || this.leftHere(c, p).length) return { e: shoulder, q: null, label: 'the canoe' };
     const L = this.dropLaunch(d), lake = L ? this.world.lakeName(L.lake) || 'the water' : null;
-    if (L && L.deep) return { verb: 'Get in', label: `the canoe, onto ${lake}`, run: () => p.launch(L) };
-    return { ...shoulder, hint: L ? 'too shallow to launch here' : null };
+    if (L && L.deep) return { e: { verb: 'Get in', run: () => p.launch(L) }, q: shoulder, label: `the canoe, onto ${lake}` };
+    return { e: shoulder, q: null, label: 'the canoe', hint: L ? 'too shallow to launch here' : null };
+  }
+  // the things riding in the canoe that are not lashed in it (the paddle in use and the stringer are): what stops the
+  // shoulder and what "Set everything out" sets out
+  loadedUnits() { return this.units().filter((u) => u.obj.where === 'canoe' && !this.lashed(u)); }
+  canShoulder() {
+    const n = this.loadedUnits().length;
+    return n ? { ok: false, why: 'Unload it first' } : { ok: true, why: null };
+  }
+  // wc A, the book's Canoe tab (stream B): everything in the canoe beside you (but the lashed things) set out on the
+  // ground about the hull, at camp when at one. { n, words }
+  setOutAll() {
+    const p = this.player, c = p.carry, d = c && c.drop, inv = this.inv;
+    if (p.mode !== 'walk' || !d) return { n: 0, words: 'Not from here: on foot, beside the canoe.' };
+    if (inv.hullDist({ x: d.x, z: d.z, heading: d.heading || 0 }, p.x, p.z) > HULL_REACH + 1) return { n: 0, words: 'The canoe is out of reach.' };
+    const list = this.loadedUnits();
+    if (!list.length) return { n: 0, words: 'Nothing but the paddle and the stringer in it.' };
+    const camp = inv.camp, a = camp && camp.areaAt ? camp.areaAt(d.x, d.z) : null, taken = [];
+    for (const u of list) {
+      const s = this.spotNear(d.x, d.z, d.heading || 0, 1, -1, taken); taken.push(s);
+      inv.setDown(u.ref, { x: s.x, z: s.z, y: this.groundUnder(s.x, s.z, d.heading || 0, u), heading: Math.atan2(-(d.z - s.z), d.x - s.x), ...(a ? { camp: a.key || 'camp' } : {}) }, { left: false, quiet: true, force: true });
+    }
+    inv.emit('ground');
+    return { n: list.length, words: `${cap(names(list))} set out beside the canoe.` };
+  }
+  // wc A, the book's Canoe tab: everything lying about the canoe loaded, held (hold.js: a thing a phase). opts: the
+  // hold's keys ({ key: 'BookHold' }). The job, or null with nothing to load.
+  loadAll(opts = {}) {
+    const p = this.player, c = p.carry, d = c && c.drop;
+    if (p.mode !== 'walk' || !d || this.busy) return null;
+    const lo = this.loadables(d).filter((u) => !this.autoLoads(u));
+    if (!lo.length) return null;
+    const key = (opts && opts.key) || 'KeyE';
+    return hold.begin({ ...this.loadAllOpts(d, lo), key, keys: [...new Set([key, 'KeyE', 'Mouse0', ...((opts && opts.keys) || [])])] });
   }
   // the things set down for the second trip at the trail head away from the canoe, of the trail you (or it) are on
   leftHere(c = this.player.carry, p = this.player) {

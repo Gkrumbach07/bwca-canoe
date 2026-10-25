@@ -1,5 +1,5 @@
-// The inventory's face (feedback 2026-10-24, stream B): the icons, the Tarkov grid, the book's pack side and the
-// store's two-pane shelves.
+// The inventory's face (feedback 2026-10-24, stream B; the world cards, the third round): the icons, the Tarkov grid,
+// the book's pack side, the store's two-pane shelves, and the pieces the fire card (cards.js) is built from.
 //
 // The model is stream A's (items.js: ITEMS and defineItem; inventory.js: the containers, reachable, fits, put, take,
 // move, eat, onChange). Until it is in the build this file runs on a small stand-in with the same calls (StubInventory,
@@ -7,13 +7,21 @@
 //
 //   icon(itemId, size = 48) → <canvas>          an item's picture: drawn once on a 2D canvas per size and cached
 //   grid(el, container, { onDrop, onUse })      a container as a Tarkov grid: drag and drop between any grids on the
-//                                               page, R rotates while dragging, right-click for Use / Eat / Drop /
-//                                               Split / Move, Ctrl-click moves to the next container that has room
-//   PackSide                                    the book's inventory side (journal.js shows it): what you carry, what
-//                                               is within reach, the canoe's load, the stash at an outfitter
-//   ShelfScreen                                 a shelf, the lure wall or the map table: your containers on the left,
-//                                               the shelf's stock on the right, priced (outfitter.js opens it)
-//   invUI.attach({ inventory, profile, player, energy, hud, shop, outfitter })   (main.js, the fb B block)
+//                                               page, R rotates while dragging, Shift-drag splits, Ctrl-click sends an
+//                                               item to the next container with room, right-click lists its verbs
+//   MineSide                                    your stuff on one screen (the owner, 2026-10-24: "having to scroll to
+//                                               see items is a struggle"): the body on the left (back, chest, hands,
+//                                               pockets), a tab per container you carry across the top, one grid at a
+//                                               time; in the book, Here as the right pane: what lies within reach, the
+//                                               canoe beside you, and at an outfitter what they keep. The book's pack
+//                                               side, the shelf's left pane and the fire card's left pane are all this
+//                                               one thing (the shelf and the card have their own right pane).
+//   PackSide                                    the book's pack side (journal.js shows it): MineSide with its header
+//   ShelfScreen                                 a shelf, the lure wall or the map table: yours on the left, the
+//                                               shelf's stock on the right, priced; a drag buys exactly where it lands
+//   openHere(ref)                               the book open at Here with that container's grid lit (stream A's Q)
+//   firePanel, startHold, tickHold, SCREENS     the fire card's pieces (cards.js)
+//   invUI.attach({ inventory, profile, player, energy, hud, shop, outfitter, nearby, hold, audio, journal, packs, cards })
 import './inv-ui.css';
 
 // --- the model ----------------------------------------------------------------------------------------------------
@@ -27,8 +35,9 @@ const A_INV = import.meta.glob('./inventory.js', { eager: true })['./inventory.j
 // is set (the merge test, 2026-10-24)
 const A_HOLD = import.meta.glob('./hold.js', { eager: true })['./hold.js'] || null;
 // what the screens work with: main.js's fb B block (attach), else stream A's singleton, else the stand-in
-const ctx = { inventory: null, profile: null, player: null, energy: null, hud: null, shop: null, outfitter: null, stub: null, nearby: null, hold: null };
+const ctx = { inventory: null, profile: null, player: null, energy: null, hud: null, shop: null, outfitter: null, stub: null, nearby: null, hold: null, audio: null, journal: null, packs: null, cards: null };
 export function attach(o) { Object.assign(ctx, o); return ctx; }
+const of = (t) => (typeof t === 'function' ? t() : t) || null; // a thing given as itself or as a getter
 export function model() {
   const t = ctx.inventory, v = typeof t === 'function' ? t() : t;
   if (v) return v;
@@ -40,9 +49,14 @@ export const live = () => !model().stub; // stream A's model is in
 // the things near you: main.js's (attach: window.__game.nearby); each call is guarded, a thrown error costs a panel and
 // not the book
 function nearby() { const t = ctx.nearby, v = typeof t === 'function' ? t() : t; return v || null; }
-function nearObjects() {
-  const n = nearby(); if (!n || typeof n.objects !== 'function') return [];
-  try { return (n.objects() || []).filter((o) => o && o.id); } catch (e) { console.warn('nearby.objects', e); return []; }
+// the fire ring near you, as nearby.objects() gives it (the fire card, cards.js): by its key, its id or itself
+export function fireObject(ref = null) {
+  const n = nearby(); if (!n || typeof n.objects !== 'function') return null;
+  let list = [];
+  try { list = (n.objects() || []).filter((o) => o && o.id && o.kind === 'fire'); } catch (e) { console.warn('nearby.objects', e); return null; }
+  if (ref && typeof ref === 'object') return list.find((o) => o.id === ref.id) || null;
+  if (ref == null) return list[0] || null;
+  return list.find((o) => o.key === ref || o.id === ref || o.id === `fire:${ref}`) || null;
 }
 // the right-click actions a thing has where you stand (Pitch, Hang): ref { cId, uid, itemId } for an item in a grid,
 // { container } for a container, { long } for a long thing
@@ -50,7 +64,24 @@ function nearActions(ref) {
   const n = nearby(); if (!n || typeof n.itemActions !== 'function') return [];
   try { return (n.itemActions(ref) || []).filter((a) => a && a.label); } catch (e) { console.warn('nearby.itemActions', e); return []; }
 }
-const holdOf = () => { const t = ctx.hold, v = typeof t === 'function' ? t() : t; return v || (A_HOLD && A_HOLD.hold) || null; };
+const holdOf = () => of(ctx.hold) || (A_HOLD && A_HOLD.hold) || null;
+const packsOf = () => of(ctx.packs) || (typeof window !== 'undefined' && window.__game ? window.__game.packs : null) || null;
+// an item's verbs for the right-click (stream D's items.js: def.verbs, verbsOf; derived here until it is in):
+// [{ id: 'eat' | 'cook' | 'pitch' | 'hang' | 'hand' | 'tie' | 'use', label, where?, why? }]
+export function verbsFor(d, id = d && d.id) {
+  if (!d) return [];
+  if (A_ITEMS && typeof A_ITEMS.verbsOf === 'function') { try { const v = A_ITEMS.verbsOf(id); if (Array.isArray(v)) return v; } catch { /* the derivation below */ } }
+  if (Array.isArray(d.verbs)) return d.verbs;
+  const out = [];
+  if (d.eat) out.push(d.eat.cook && !d.cooked ? { id: 'eat', label: 'Eat', why: 'cook it on the grate first' } : { id: 'eat', label: 'Eat' });
+  if (d.eat && d.eat.cook && !d.cooked) out.push({ id: 'cook', label: 'Cook', where: 'fire', why: 'only in the fire card' });
+  if (d.slot === 'tent') out.push({ id: 'pitch', label: 'Pitch' });
+  if (d.hang || /^barrel/.test(String(d.id))) out.push({ id: 'hang', label: 'Hang', why: 'carry it to a tree and point at the limb' });
+  if (d.kind === 'long' || (d.hand && d.kind === 'container')) out.push({ id: 'hand', label: 'Put in hand' });
+  if ((d.kind === 'lure' || d.kind === 'bait') && d.lure) out.push({ id: 'tie', label: 'Tie it on' });
+  if (d.kind === 'map') out.push({ id: 'use', label: 'Look at the map' });
+  return out;
+}
 
 export const CELL = 50; // px a grid cell (the icons read at 48)
 
@@ -714,16 +745,16 @@ export const ICON_KEYS = Object.keys(ICONS);
 // other: a shelf's grid (opts.shelf) only gives (a drop from it is a buy, opts.screen.buy), never takes. A bin with no
 // container behind it (opts.bin: the fire's ash, the wood lying about) takes and gives through its own drop and take.
 const GRIDS = new Map();    // element → Grid
-const SCREENS = new Set();  // the open screens, redrawn when the model changes
-let drag = null, dirty = false, menuEl = null, tipEl = null, tipTimer = 0, version = 0, listening = null, listeningNear = null, pend = false, quietClick = 0;
-const BOOK_KEY = 'BookHold'; // the pseudo key held down while the mouse holds a held action's button (hold.js reads input.down)
+export const SCREENS = new Set();  // the open screens (the book's pack side, a shelf, the fire card), redrawn when the model changes
+let drag = null, dirty = false, menuEl = null, tipEl = null, tipTimer = 0, version = 0, listening = null, listeningNear = null, pend = false;
+export const BOOK_KEY = 'BookHold'; // the pseudo key held down while the mouse holds a held action's button (hold.js reads input.down)
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const mk = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-// what an action says (eaten, refused, carried): the HUD's line, and in pencil on an open book or shelf, whose paper
-// covers that line (the join, 2026-10-24: "Hold still to eat" was said under the book, unseen)
+// what an action says (eaten, refused, carried): the HUD's line, and in pencil on an open book, shelf or card, whose
+// paper covers that line (the join, 2026-10-24: "Hold still to eat" was said under the book, unseen)
 let lastNote = null;
-const note = (words, t = 4) => {
+export const note = (words, t = 4) => {
   if (!words) return;
   if (ctx.hud && ctx.hud.note) ctx.hud.note(words, t);
   lastNote = { words, until: now() + t * 1000 };
@@ -753,6 +784,7 @@ export function grid(el, container, opts = {}) {
   const old = GRIDS.get(el); if (old) old.destroy();
   return new Grid(el, container, opts);
 }
+export function destroyGridsIn(el) { for (const g of [...GRIDS.values()]) if (el.contains(g.el)) g.destroy(); }
 class Grid {
   constructor(el, c, opts) {
     this.el = el; this.c = c; this.opts = opts;
@@ -781,7 +813,7 @@ class Grid {
     const st = d ? d.stack || 1 : 1;
     if ((e.qty || 1) > 1 || st > 1) it.appendChild(mk('span', 'ig-qty', String(e.qty || 1)));
     if (e.data && Number.isFinite(e.data.length)) it.appendChild(mk('span', 'ig-qty', `${Math.round(e.data.length)} cm`));
-    if (d && d.eat && !shelf) it.appendChild(mk('span', `ig-mark ${d.eat.cook ? 'cook' : 'eat'}`, d.eat.cook ? 'raw' : 'eat'));
+    if (d && d.eat && !shelf) it.appendChild(mk('span', `ig-mark ${d.eat.cook && !d.cooked ? 'cook' : 'eat'}`, d.eat.cook && !d.cooked ? 'raw' : 'eat'));
     if (e.box) it.appendChild(mk('span', 'ig-mark open', 'open'));
     if (shelf) it.appendChild(mk('span', 'ig-price', e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'));
     it.addEventListener('pointerdown', (ev) => press(this, e, it, ev));
@@ -833,8 +865,10 @@ function binContainer(id, b) {
 // --- dragging -----------------------------------------------------------------------------------------------------
 // Two kinds of drag share the ghost and the drop: an item out of a grid (st.kind 'item'), and a thing by its strap or
 // its slot (st.kind 'thing': a container or a long thing, carried, set down, loaded or nested). The drop goes to the
-// grid under the pointer when it would take it there, else to the zone under it (data-dz: 'back', 'chest', 'hand0'
-// the right hand, 'hand1' the left, 'canoe', 'ground', 'stash').
+// grid under the pointer when it would take it there, else to a tab (data-tab: a container of yours, Keeping at a shelf),
+// else to the zone under it (data-dz: 'back', 'chest', 'hand0' the right hand, 'hand1' the left, 'canoe', 'ground',
+// 'stash'); let go off the page altogether, on foot, it goes down on the ground at your feet (the owner, 2026-10-24:
+// "should be able to drag off modal to put on ground").
 function press(g, e, el, ev) {
   if (ev.button !== 0) return;
   ev.preventDefault();
@@ -846,13 +880,13 @@ function press(g, e, el, ev) {
   follow(st, () => { if (st.ctrl) quick(g, e); });
 }
 // a thing picked up by its strap, its slot or its frame: t { id, isLong, obj, def }
-function pressThing(t, el, ev) {
+function pressThing(t, el, ev, onClick = null) {
   if (ev.button !== 0 || !t || !t.def || t.def.fixed || t.def.station) return;
   ev.preventDefault();
   closeMenu();
   const st = { kind: 'thing', thing: t, grid: null, e: { uid: t.id, id: t.isLong ? t.obj.id : t.obj.item, box: !t.isLong, long: t.isLong, qty: 1, rot: 0 }, el,
     x0: ev.clientX, y0: ev.clientY, gx: CELL / 2, gy: CELL / 2, rot: 0, started: false, qty: null };
-  follow(st, null);
+  follow(st, onClick);
 }
 function follow(st, onClick) {
   const move = (m) => {
@@ -872,15 +906,16 @@ function begin(st) {
   st.started = true; drag = st; hideTip();
   st.el.classList.add('lifted');
   st.ghost = mk('div', `ig-ghost${st.kind === 'thing' ? ' thing' : ''}`);
+  st.fromShelf = !!(st.grid && st.grid.opts.shelf) || !!st.el.closest('#shelf');
   document.body.appendChild(st.ghost);
   ghostDraw(st);
   document.body.classList.add('ig-dragging');
   for (const s of SCREENS) if (s.open && s.el) s.el.classList.add(st.kind === 'thing' ? 'dragging-thing' : 'dragging-item');
-  // held near the top or the bottom of a column, the column scrolls (the Ground area under the fire's panel)
+  // held near the top or the bottom of a scrolling pane, the pane scrolls (the Here pane with much on the ground)
   st.scroller = setInterval(() => { if (st.x != null && edgeScroll(st.x, st.y)) over(st, st.x, st.y); }, 30);
 }
 function edgeScroll(x, y) {
-  const el = document.elementFromPoint(x, y), col = el && el.closest ? el.closest('.pk-col, .sh-mine, .sh-stock') : null;
+  const el = document.elementFromPoint(x, y), col = el && el.closest ? el.closest('.tabpage, .here-body, .sh-stock, .cd-thing') : null;
   if (!col || col.scrollHeight <= col.clientHeight + 1) return false;
   const r = col.getBoundingClientRect(), e = 56, was = col.scrollTop;
   if (y > r.bottom - e) col.scrollTop += Math.ceil((y - (r.bottom - e)) / 4);
@@ -900,38 +935,50 @@ function ghostDraw(st) {
   const pic = iconAt(st.e.id, uw * CELL - 4, uh * CELL - 4); pic.className = `ig-pic${st.rot ? ' rot' : ''}`;
   st.ghost.appendChild(pic);
   if (st.qty) st.ghost.appendChild(mk('span', 'ig-qty', String(st.qty)));
+  st.tag = mk('span', 'ig-ghost-tag', ''); st.ghost.appendChild(st.tag);
+}
+// the pointer is off every open paper (and not on a menu or a tag)
+function offPage(x, y) {
+  const top = document.elementFromPoint(x, y);
+  return !(top && top.closest && top.closest('.paper, .ig-menu, .ig-tip, .ig-ghost'));
 }
 function over(st, x, y) {
   st.x = x; st.y = y;
   st.ghost.style.left = `${x - st.gx}px`; st.ghost.style.top = `${y - st.gy}px`;
-  let g = null, z = null;
-  const nd = itemDef(st.e.id), loose = st.kind === 'thing' && !(nd && nd.nest); // a pack, a barrel, a long thing: no grid takes it, only the zones
+  let g = null, z = null, tab = null;
+  const nd = itemDef(st.e.id), loose = st.kind === 'thing' && !(nd && nd.nest); // a pack, a barrel, a long thing: no grid takes it, only the zones and the tabs
   for (const el of document.elementsFromPoint(x, y)) {
     if (!el.closest) continue;
-    const ge = el.closest('.ig'), ze = el.closest('[data-dz]');
+    const ge = el.closest('.ig'), ze = el.closest('[data-dz]'), te = el.closest('[data-tab]');
     if (ge && GRIDS.has(ge) && !loose) g = GRIDS.get(ge);
     if (ze) z = ze;
-    if (g || z) break;
+    if (te) tab = te;
+    if (g || z || tab) break;
   }
-  let res = 'no', tgt = null, zone = null;
+  let res = 'no', tgt = null, zone = null, off = false;
   if (g) {
     const [cx, cy] = g.cellAt(x, y, st.gx, st.gy);
     st.cell = [cx, cy];
     res = g.check(st, cx, cy, st.rot);
-    if (res !== 'no' || !z) tgt = g;
+    if (res !== 'no' || !(z || tab)) tgt = g;
   }
-  if (!tgt && z) { zone = z; res = zoneCheck(st, z); }
+  if (!tgt && tab) { zone = tab; res = tabCheck(st, tab); }
+  else if (!tgt && z) { zone = z; res = zoneCheck(st, z); }
+  // off the page: from the book or the card, on foot, the thing goes down on the ground at your feet
+  if (!tgt && !zone && !st.fromShelf && offPage(x, y)) { off = true; res = st.kind === 'thing' || st.e.box ? zoneCheckDz(st, 'ground') : itemGroundCheck(st); }
   // a pack or a barrel off a shelf (no grid of yours takes it): dropped anywhere on your side it is bought, kept by the
   // outfitters like a double-click (shop.js buyItem), so a container is bought by a drag like everything else
   const mine = st.grid && st.grid.opts.shelf && nd && nd.kind === 'container' && !nd.nest ? document.elementFromPoint(x, y) : null, side = mine && mine.closest ? mine.closest('.sh-mine') : null;
   if (side && res === 'no') { res = 'buy'; tgt = null; zone = null; }
   if (st.side && st.side !== side) st.side.classList.remove('dz-ok');
   st.side = res === 'buy' ? side : null; if (st.side) st.side.classList.add('dz-ok');
-  st.tgt = tgt; st.zone = zone; st.res = res;
-  // the cells lit in the grid, or the zone lit
+  st.tgt = tgt; st.zone = zone; st.res = res; st.off = off;
+  st.ghost.classList.toggle('off', off && res !== 'no'); st.ghost.classList.toggle('off-no', off && res === 'no');
+  if (st.tag) st.tag.textContent = off ? (res !== 'no' ? 'to the ground' : onFoot() ? 'not here' : 'go ashore first') : '';
+  // the cells lit in the grid, or the zone (or the tab) lit
   if (st.hl && (!tgt || st.hl.parentNode !== tgt.el)) { st.hl.remove(); st.hl = null; }
-  if (st.zl && st.zl !== zone) { st.zl.classList.remove('dz-ok', 'dz-swap', 'dz-no'); st.zl = null; }
-  if (zone) { st.zl = zone; zone.classList.remove('dz-ok', 'dz-swap', 'dz-no'); zone.classList.add(`dz-${res === 'no' ? 'no' : res === 'swap' ? 'swap' : 'ok'}`); }
+  if (st.zl && st.zl !== zone) { st.zl.classList.remove('dz-ok', 'dz-swap', 'dz-no', 'dz-buy'); st.zl = null; }
+  if (zone) { st.zl = zone; zone.classList.remove('dz-ok', 'dz-swap', 'dz-no', 'dz-buy'); zone.classList.add(`dz-${res === 'no' ? 'no' : res === 'swap' ? 'swap' : res === 'buy' ? 'buy' : 'ok'}`); }
   if (!tgt) return;
   const [cx, cy] = st.cell, d = itemDef(st.e.id), [w, h] = dims(d, st.rot);
   if (!st.hl) { st.hl = mk('div', 'ig-hl'); tgt.el.appendChild(st.hl); }
@@ -942,12 +989,15 @@ function over(st, x, y) {
 }
 function end(st, x, y) {
   if (x != null) over(st, x, y);
-  const { tgt, res, cell, zone } = st;
+  const { tgt, res, cell, zone, off } = st;
   cleanup(st);
-  drag = null; quietClick = now() + 200;
-  if (res === 'buy') st.grid.opts.screen.buy(st.e.id, null);
-  else if (res !== 'no' && zone) dropOnZone(st, zone);
-  else if (res !== 'no' && tgt) {
+  drag = null;
+  if (res === 'no') { /* nothing */ }
+  else if (zone && zone.dataset.tab != null) dropOnTab(st, zone);
+  else if (zone) dropOnZone(st, zone.dataset.dz);
+  else if (off) dropOnZone(st, 'ground');
+  else if (!tgt && res === 'buy') st.grid.opts.screen.buy(st.e.id, null); // a container off a shelf, dropped on your side
+  else if (tgt) {
     const [cx, cy] = cell, from = st.grid;
     if (st.kind === 'thing') { if (!model().move(null, st.thing.id, tgt.c.id, cx, cy, st.rot)) note('It won’t go in there.', 2.5); }
     else if (from.opts.shelf) from.opts.screen.buy(st.e.id, { cId: tgt.c.id, x: cx, y: cy, rot: st.rot });
@@ -965,7 +1015,7 @@ function cleanup(st) {
   clearInterval(st.scroller);
   if (st.ghost) st.ghost.remove();
   if (st.hl) st.hl.remove();
-  if (st.zl) st.zl.classList.remove('dz-ok', 'dz-swap', 'dz-no');
+  if (st.zl) st.zl.classList.remove('dz-ok', 'dz-swap', 'dz-no', 'dz-buy');
   if (st.side) st.side.classList.remove('dz-ok');
   st.el.classList.remove('lifted');
   document.body.classList.remove('ig-dragging');
@@ -999,12 +1049,14 @@ function inHand(i) {
 const wornThing = (slot) => { const inv = model(); return thingOf(typeof inv.worn === 'function' ? inv.worn(slot) : (inv.containers || []).find((c) => c.where === slot)); };
 const occupant = (dz) => (dz === 'back' || dz === 'chest' ? wornThing(dz) : dz === 'hand0' || dz === 'hand1' ? inHand(+dz[4]) : null);
 const onFoot = () => { const p = ctx.player; return !!(p && (p.onFoot || p.mode === 'walk' || p.mode === 'carry')); };
+const stillNow = () => { const inv = model(); return typeof inv.still === 'function' ? !!inv.still() : true; };
 // the thing a drag holds: the thing itself, or a nested container's entry in a grid
 function thingOfDrag(st) { if (st.kind === 'thing') return st.thing; const inv = model(); return thingOf(typeof inv.cont === 'function' ? inv.cont(st.e.uid) : null); }
 const canFit = (c, itemId) => { const inv = model(); return typeof inv.firstFit === 'function' ? !!inv.firstFit(c.id, itemId) : !!firstFit(c, itemId); };
 // what a drop on zone z would do: 'ok' | 'swap' (what is there goes where this came from) | 'no'
-function zoneCheck(st, z) {
-  const dz = z.dataset.dz, inv = model(), src = st.grid;
+const zoneCheck = (st, z) => zoneCheckDz(st, z.dataset.dz);
+function zoneCheckDz(st, dz) {
+  const inv = model(), src = st.grid;
   if (!live() || (src && src.opts.shelf)) return 'no';
   if (st.kind === 'thing' || st.e.box) {
     const t = thingOfDrag(st); if (!t || !t.obj || !t.def || t.def.fixed || t.def.station) return 'no';
@@ -1025,15 +1077,24 @@ function zoneCheck(st, z) {
   // an item: to the ground (a pile at your feet), into what is on your back, your chest or in a hand, or an armload
   const d = itemDef(st.e.id), bin = src && src.opts.bin;
   if (!d || (bin && !bin.take)) return 'no';
-  if (dz === 'ground') return !bin && onFoot() ? 'ok' : 'no';
+  if (dz === 'ground') return itemGroundCheck(st);
+  if (dz === 'stash') return inv.atStash && inv.crate && canFit(inv.crate, st.e.id) ? 'ok' : 'no';
   if (!isSlot(dz)) return 'no';
   const occ = occupant(dz);
   if (occ && !occ.isLong) return occ.obj.id !== (src && src.c.id) && canFit(occ.obj, st.e.id) ? 'ok' : 'no';
   return !occ && dz.startsWith('hand') && d.kind === 'firewood' && itemDef('woodarms') && onFoot() ? 'ok' : 'no';
 }
-function dropOnZone(st, zone) {
-  const dz = zone.dataset.dz;
-  said(st.kind === 'thing' || st.e.box ? thingTo(thingOfDrag(st), dz) : itemTo(st, dz));
+// an item out of one of your grids onto the ground: on foot, and not out of a bin (the wood lying about is on the ground already)
+function itemGroundCheck(st) {
+  const src = st.grid, bin = src && src.opts.bin;
+  if (!live() || !src || src.opts.shelf || bin) return 'no';
+  if (src.c.item === 'pile' && typeof model().dist === 'function' && src.c.at && model().dist(src.c.at) < 1.6) return 'no'; // out of the pile at your feet onto the pile at your feet
+  return onFoot() ? 'ok' : 'no';
+}
+function dropOnZone(st, dz) {
+  const thing = st.kind === 'thing' || st.e.box, t = thing ? thingOfDrag(st) : null;
+  const r = said(thing ? thingTo(t, dz) : itemTo(st, dz));
+  if (thing && t && r && r.ok && isSlot(dz)) openTab(t.id); // a container put on gets its tab
 }
 // a thing to a zone. Onto a slot that is taken, what is there goes where this came from (the canoe, the ground where it
 // lay, the other slot), or down at your feet.
@@ -1087,10 +1148,12 @@ function armloadDown(t) {
   for (const e of [...t.obj.grid]) if (toGround(t.obj.id, e).ok) n += e.qty || 1;
   return n ? { ok: true, words: `The wood stacked on the ground: ${n} ${n === 1 ? 'piece' : 'pieces'}.` } : { ok: false, words: 'No room to set it down here.' };
 }
-// an item to a zone: onto the ground, or into what is in that slot (a piece of wood into a free hand is an armload)
+// an item to a zone: onto the ground, into the outfitters' crate, or into what is in that slot (a piece of wood into a
+// free hand is an armload)
 function itemTo(st, dz) {
   const inv = model(), e = st.e, src = st.grid, bin = src && src.opts.bin;
   if (dz === 'ground') return toGround(src.c.id, e, st.qty);
+  if (dz === 'stash') return inv.crate && moveInto(src, e, inv.crate, st.qty) ? { ok: true, words: `${itemDef(e.id).name}: kept for you.` } : { ok: false, words: 'No room on their shelf.' };
   const occ = occupant(dz);
   let to = occ && !occ.isLong ? occ.obj : null;
   if (!to && dz.startsWith('hand') && (itemDef(e.id) || {}).kind === 'firewood') to = inv.addContainer('woodarms', 'hands', null, { hand: +dz[4] });
@@ -1100,13 +1163,15 @@ function itemTo(st, dz) {
   return moveInto(src, e, to, st.qty) ? { ok: true, words: `${itemDef(e.id).name}: ${where}.` } : { ok: false, words: 'No room for it there.' };
 }
 // an item out onto the ground (inventory.drop's pile): onto a pile within a step that has room for it, else a new one
-// beside you, within reach so the Ground area shows it
+// beside you, within reach so Here shows it
 function toGround(cId, e, qty = null) {
   const inv = model(), p = ctx.player;
   if (e.box) return inv.setDown(e.uid);
   if (!onFoot()) return { ok: false, words: 'Not from the canoe: go ashore first.' };
-  const n = qty || e.qty || 1, d = itemDef(e.id);
-  const piles = (inv.containers || []).filter((k) => k.item === 'pile' && k.where === 'ground' && k.at && inv.dist(k.at) < 1.6).sort((a, b) => inv.dist(a.at) - inv.dist(b.at));
+  const n = qty || e.qty || 1, d = itemDef(e.id), wood = d.kind === 'firewood';
+  // a pile within a step with room: wood onto the woodpile, anything else onto a pile that is not one (a woodpile stays wood)
+  const isWoodpile = (k) => nameOf(k) === 'Woodpile';
+  const piles = (inv.containers || []).filter((k) => k.item === 'pile' && k.where === 'ground' && k.at && inv.dist(k.at) < 1.6 && k.id !== cId && (wood || !isWoodpile(k))).sort((a, b) => (wood ? (isWoodpile(b) ? 1 : 0) - (isWoodpile(a) ? 1 : 0) : 0) || inv.dist(a.at) - inv.dist(b.at));
   for (const k of piles) { const f = firstFit(k, e.id, n); if (f && inv.move(cId, e.uid, k.id, f.x, f.y, f.rot, qty || undefined)) return { ok: true, words: `${d.name} on the ground.` }; }
   let s = inv.spotNear(p.x, p.z, p.heading, piles.length ? -1 : 1, 1);
   if (!s || Math.hypot(s.x - p.x, s.z - p.z) > 2.2) s = { x: p.x + Math.sin(p.heading) * 0.8, z: p.z + Math.cos(p.heading) * 0.8 };
@@ -1127,67 +1192,88 @@ function binTake(b, e, toCId, { x, y, rot, qty } = {}) {
   return !!r.ok;
 }
 
+// --- the tabs as drop targets -------------------------------------------------------------------------------------------
+// a container's tab takes an item (the first room in it) or a container that nests; Keeping (a tab at a shelf) takes
+// anything into the outfitters' keeping; from a shelf, a drop on a tab buys into it. (Here is a pane, not a tab: its
+// zones take the drop.)
+function tabCheck(st, tabEl) {
+  const key = tabEl.dataset.tab, inv = model(), src = st.grid, e = st.e;
+  if (!live()) return 'no';
+  if (src && src.opts.shelf) {
+    const d = itemDef(e.id), k = d && d.kind;
+    if (e.hull || e.owned || e.dear || k === 'long' || k === 'container') return 'no';
+    const c = key === 'keeping' ? inv.crate : inv.cont(key);
+    return c && canFit(c, e.id) ? 'buy' : 'no';
+  }
+  if (key === 'keeping') return zoneCheckDz(st, 'stash');
+  const c = inv.cont(key); if (!c) return 'no';
+  if (st.kind === 'thing' || e.box) {
+    const t = thingOfDrag(st); if (!t || t.isLong || !t.def || !t.def.nest || c.id === t.id || c.in === t.id) return 'no';
+    return canFit(c, t.obj.item) ? 'ok' : 'no';
+  }
+  if (src && src.opts.bin && !src.opts.bin.take) return 'no';
+  if (src && src.c.id === c.id) return 'no';
+  return canFit(c, e.id) ? 'ok' : 'no';
+}
+function dropOnTab(st, tabEl) {
+  const key = tabEl.dataset.tab, inv = model(), src = st.grid, e = st.e;
+  if (src && src.opts.shelf) { const c = key === 'keeping' ? inv.crate : inv.cont(key), f = c && inv.firstFit(c.id, e.id); if (f) src.opts.screen.buy(e.id, { cId: c.id, x: f.x, y: f.y, rot: f.rot }); return; }
+  if (key === 'keeping') { dropOnZone(st, 'stash'); return; }
+  const c = inv.cont(key); if (!c) return;
+  if (st.kind === 'thing' || e.box) { const t = thingOfDrag(st), f = t && inv.firstFit(c.id, t.obj.item); if (!f || !inv.move(null, t.id, c.id, f.x, f.y, f.rot)) note('It won’t go in there.', 2.5); else note(`${t.def.name}: into the ${lower(short(itemDef(c.item)) || nameOf(c))}.`, 3); return; }
+  if (!moveInto(src, e, c, st.qty)) note('No room in there.', 2.5);
+}
+
 // --- the actions --------------------------------------------------------------------------------------------------
-// the other grids on screen (not the shelf, not a bin, not this one), in the page's order
-const others = (g) => {
-  const seen = new Set([g.c && g.c.id]);
-  return [...GRIDS.values()].filter((o) => { if (o === g || o.opts.shelf || o.opts.bin || !o.c || !o.el.isConnected || o.el.offsetParent === null || seen.has(o.c.id)) return false; seen.add(o.c.id); return true; });
-};
+// the containers your tabs show, in their order (the body's, then what nests in them; the pockets last)
+function tabContainers() {
+  const inv = model(), all = inv.reachable(ctx.player) || [], { list, byId } = ordered(all);
+  const top = (c) => topOf(c, byId), rank = (c) => { const t = top(c); return t.where === 'back' ? 0 : t.where === 'chest' ? 1 : t.where === 'hands' ? 2 + (t.hand || 0) : 9; };
+  const carried = list.filter((c) => { const w = top(c).where; return (w === 'back' || w === 'chest' || w === 'hands') && !fixedThing(c); }).sort((a, b) => rank(a) - rank(b));
+  const pockets = list.filter((c) => c.item === 'pockets');
+  return { carried, pockets, list, byId };
+}
 function moveInto(g, e, to, qty = null) {
   const c = to.c || to, f = firstFit(c, e.id, qty || e.qty || 1);
   if (!f) return false;
   if (g.opts && g.opts.bin) return binTake(g.opts.bin, e, c.id, { x: f.x, y: f.y, rot: f.rot, qty });
   return model().move(g.c.id, e.uid, c.id, f.x, f.y, f.rot, qty || undefined);
 }
-// Ctrl-click: a shelf's item bought into the first container with room; one of yours to the next one with room
+// Ctrl-click: a shelf's item bought into the first container with room; one of yours sent on to the next container
+// with room (the next tab along, wrapping round, the pockets last)
 function quick(g, e) {
   if (g.opts.shelf) { g.opts.screen.buy(e.id, null); return; }
-  for (const o of others(g)) if (moveInto(g, e, o)) return;
+  const { carried, pockets } = tabContainers(), ring = [...carried, ...pockets], i = ring.findIndex((c) => c.id === g.c.id);
+  const order = i >= 0 ? [...ring.slice(i + 1), ...ring.slice(0, i)] : ring;
+  for (const c of order) if (c.id !== e.uid && moveInto(g, e, c)) { note(`${itemDef(e.id).name}: into the ${lower(short(itemDef(c.item)) || nameOf(c))}.`, 2.5); return; }
   note('No room for it anywhere else.', 2.5);
 }
+// a double-click: a shelf's thing bought; a container opened at its tab; a snack eaten; else the thing's use
 function primary(g, e) {
   if (g.opts.shelf) { g.opts.screen.buy(e.id, null); return; }
   const d = itemDef(e.id);
-  if (e.box) { reveal(e.uid); return; }
-  if (d && d.eat && !d.eat.cook) { eat(e); return; }
+  if (e.box) { openTab(e.uid); return; }
+  if (d && d.eat && !(d.eat.cook && !d.cooked)) { eat(e); return; }
   if (g.opts.onUse) g.opts.onUse(e, 'use', g.c);
 }
+// eaten where you stand, at once (the owner, 2026-10-24: "i dont want to have to sit to eat food, just consume it")
 function eat(e) {
   const inv = model(); if (typeof inv.eat !== 'function') return;
   const r = inv.eat(e.uid) || {};
   note(r.words || (r.ok ? 'You eat.' : r.why === 'cook' ? 'That wants cooking first: on the grate, over a fire.' : r.why === 'moving' ? 'Hold still to eat.' : 'Not now.'), 3.5);
   refresh();
 }
-function split(g, e) {
-  const n = Math.floor((e.qty || 1) / 2); if (n < 1) return;
-  const f = firstFit(g.c, e.id, n, { merge: false });
-  if (f) { model().move(g.c.id, e.uid, g.c.id, f.x, f.y, f.rot, n); return; }
-  for (const o of others(g)) { const h = firstFit(o.c, e.id, n, { merge: false }); if (h) { model().move(g.c.id, e.uid, o.c.id, h.x, h.y, h.rot, n); return; } }
-  note('No room to split it.', 2.5);
-}
-function turn(g, e) {
-  const r = e.rot ? 0 : 1;
-  if (placeCheck(g.c, e.id, e.x, e.y, r, e.uid) === 'ok') { model().move(g.c.id, e.uid, g.c.id, e.x, e.y, r); return; }
-  const f = firstFit({ ...g.c, grid: (g.c.grid || []).filter((q) => q.uid !== e.uid) }, e.id, e.qty || 1, { merge: false });
-  if (f && f.rot === r) model().move(g.c.id, e.uid, g.c.id, f.x, f.y, r); else note('No room to turn it.', 2.5);
-}
-// a nested container's grid, scrolled to and lit for a moment
-function reveal(cId) {
-  const el = document.querySelector(`.ct[data-cid="${CSS.escape(cId)}"]`);
-  if (!el) return;
-  if (el.classList.contains('folded')) { el.classList.remove('folded'); FOLDED.set(cId, false); }
-  el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  el.classList.remove('lit'); void el.offsetWidth; el.classList.add('lit');
-}
+// a container's grid brought up: its own tab when you carry it, else the tab that holds it (Here, Keeping), lit
+function openTab(cId) { for (const s of SCREENS) if (s.open && s.mine) s.mine.openAt(cId); }
 // a world action on a container or a long thing (carry, setDown, load, stow), its words as a note
 function world(fn, ...args) {
   const inv = model(); if (typeof inv[fn] !== 'function') return;
   said(inv[fn](...args), 'Not from here.');
   refresh();
 }
-// a thing near you's action (nearby.js), from a panel's button or a right-click menu: the book closed first when it
-// wants the world (the ghost tent at the crosshair, the walk to the bench or the latrine, the wake-time card)
-function runNear(a, opts = {}) {
+// a thing near you's action (nearby.js), from the fire card's button or a verb: the book or the card closed first when
+// it wants the world (the ghost tent at the crosshair)
+export function runNear(a, opts = {}) {
   if (!a || a.enabled === false) { if (a && a.why) note(a.why, 3); return null; }
   if (a.closeBook) closeBooks();
   let r = null;
@@ -1197,7 +1283,6 @@ function runNear(a, opts = {}) {
   return r;
 }
 function closeBooks() { for (const s of SCREENS) if (s.open && typeof s.closeBook === 'function') s.closeBook(); }
-const nearItems = (acts) => acts.map((a) => ({ label: a.label, disabled: a.enabled === false, title: a.why, run: () => runNear(a) }));
 const WHERE = { back: 'on your back', chest: 'on your chest', hands: 'in your hands', pockets: 'on you', canoe: 'in the canoe', ground: 'on the ground', hung: 'hung in a tree', stash: 'kept by the outfitters', pile: 'on the ground' };
 // what a container is called on its strap: a pile on the ground is a woodpile when it is all wood
 const nameOf = (c) => {
@@ -1207,49 +1292,89 @@ const nameOf = (c) => {
 function whereWords(c, byId) {
   if (c.where === 'in') { const p = byId && byId.get(c.in); return p ? `in the ${lower(short(itemDef(p.item)) || nameOf(p))}` : 'inside'; }
   if (c.item === 'crate') return 'what is left with them';
-  const p = ctx.player, w = c.item === 'pile' ? 'on the ground' : WHERE[c.where] || c.where || '';
+  const p = ctx.player, w = c.item === 'pile' ? 'on the ground' : c.where === 'hands' ? (c.hand === 1 ? 'in your left hand' : 'in your right hand') : WHERE[c.where] || c.where || '';
   if ((c.where === 'ground' || c.where === 'hung') && c.at && p) { const d = Math.hypot(c.at.x - p.x, c.at.z - p.z); return `${w}${d > 1.2 ? `, ${Math.round(d)} m off` : ''}`; }
   return w;
 }
+
+// --- the right-click: a thing's verbs, and nothing else ---------------------------------------------------------------
+// (the owner, 2026-10-24: "at most an item can have two quick actions"; the book's menu lists what the thing is for:
+// Eat, Cook, Pitch, Hang, Put in hand, Tie it on, Look at the map, stream D's items.js verbs). A greyed verb says why.
+// ref: { g, e } an entry in a grid; { thing } a container or a long thing by its strap, its slot or its frame
+function verbMenu(ref, sc = null) {
+  const inv = model(), e = ref.e || null, g = ref.g || null, t = ref.thing || (e && e.box ? thingOf(inv.cont ? inv.cont(e.uid) : null) : null);
+  const d = e ? itemDef(e.id) : t ? t.def : null;
+  if (!d) return [];
+  const onUse = g && !g.opts.bin ? g.opts.onUse : null, fire = sc && typeof sc.fireObj === 'function' ? sc.fireObj() : null;
+  const near = e && g && !g.opts.bin ? { cId: g.c.id, uid: e.uid, itemId: e.id } : t ? (t.isLong ? { long: t.id } : { container: t.id }) : null;
+  const acts = near ? nearActions(near) : [];
+  const out = [];
+  const grey = (label, why) => out.push({ label, disabled: true, title: why || '' });
+  for (const v of verbsFor(d, d.id)) {
+    const label = v.label || v.id;
+    switch (v.id) {
+      case 'eat': {
+        if (!e) break;
+        if (v.why) grey(label, v.why); else if (!stillNow()) grey(label, 'hold still'); else out.push({ label, run: () => eat(e) });
+        break;
+      }
+      case 'cook': {
+        if (!e || !g) break;
+        if (!fire) { grey(label, v.why || 'only in the fire card'); break; }
+        const put = acts.find((a) => a.id === 'grate'), onGrate = g.c.item === 'grate', cook = (fire.actions || []).find((a) => a.id === 'cook');
+        if (!onGrate && !put) grey(label, 'the grate is full');
+        else if (!onGrate && put.enabled === false) grey(label, put.why || 'not now');
+        else if (onGrate && cook && cook.enabled === false) grey(label, cook.why || 'not now');
+        else out.push({ label, run: () => {
+          if (!onGrate) runNear(put);
+          const n = nearby(); if (n) n.list = null; // the fire read again now the grate has it
+          const f2 = sc.fireObj(), c2 = f2 && (f2.actions || []).find((a) => a.id === 'cook');
+          if (c2 && c2.enabled !== false) runNear(c2); else if (c2 && c2.why) note(c2.why, 3.5);
+        } });
+        break;
+      }
+      case 'pitch': {
+        const a = acts.find((x) => x.id === 'pitch');
+        if (!a) grey(label, v.why || 'not here'); else if (a.enabled === false) grey(label, a.why || 'not here'); else out.push({ label, run: () => runNear(a) });
+        break;
+      }
+      case 'hang': grey(label, v.why || 'carry it to a tree and point at the limb'); break;
+      case 'hand': {
+        if (!t) break;
+        const o = t.obj;
+        if (o.where === 'hands') grey(label, 'in your hand already');
+        else if (!onFoot() && !inv.atStash) grey(label, 'not from the canoe');
+        else if (typeof inv.freeHand === 'function' && inv.freeHand() < 0) grey(label, 'both hands are full');
+        else out.push({ label, run: () => world('carry', t.id, 'hands') });
+        break;
+      }
+      case 'tie': case 'use': {
+        if (!e) break;
+        const lab = onUse ? onUse(e, 'label', g.c) : null;
+        if (!lab) grey(label, v.why || (v.id === 'tie' ? 'take the rod up first' : 'not now')); else out.push({ label: v.id === 'use' ? lab : label, run: () => onUse(e, 'use', g.c) });
+        break;
+      }
+      default: grey(label, v.why || '');
+    }
+  }
+  return out;
+}
 function itemMenu(g, e) {
-  const d = itemDef(e.id), out = [];
+  const d = itemDef(e.id);
   if (g.opts.shelf) {
     const sc = g.opts.screen, price = e.price || 0, money = sc.money();
     if (e.owned) return [{ label: e.inUse ? 'Yours, in use' : 'Yours already', disabled: true }];
-    out.push({ label: `Buy ${e.qty > 1 ? `${e.qty}` : 'one'}${price ? ` · $${price}` : ' · free'}`, disabled: price > money, run: () => sc.buy(e.id, null) });
+    const out = [{ label: `Buy ${e.qty > 1 ? `${e.qty}` : 'one'}${price ? ` · $${price}` : ' · free'}`, disabled: price > money, run: () => sc.buy(e.id, null) }];
     if (!e.hull && d && (d.kind === 'meal' || d.kind === 'snack' || d.kind === 'lure')) out.push({ label: `Buy three${price ? ` · $${price * 3}` : ''}`, disabled: price * 3 > money, run: () => sc.buy(e.id, null, 3) });
     return out;
   }
-  // what the things near you make of it (nearby.js): Pitch a tent, put a meal on the grate or wood on the fire
-  const bin = g.opts.bin;
-  out.push(...nearItems(nearActions(bin ? { bin: bin.id, obj: bin.obj, uid: e.uid, itemId: e.id } : { cId: g.c.id, uid: e.uid, itemId: e.id })));
-  if (e.box) out.push({ label: 'Open it', run: () => reveal(e.uid) });
-  const use = !bin && g.opts.onUse ? g.opts.onUse(e, 'label', g.c) : null;
-  // eaten as it is (a snack, a berry, a cooked meal); a raw meal or a fish is cooked on the grate at a fire, in its panel
-  if (d && d.eat && !(use && /^Eat/.test(use))) out.push(d.eat.cook ? { label: g.c.item === 'grate' ? 'Raw: the fire’s Cook cooks it' : 'Raw: cook it on the grate at a fire', disabled: true } : { label: 'Eat it', run: () => eat(e) });
-  if (use) out.push({ label: use, run: () => g.opts.onUse(e, 'use', g.c) });
-  if (bin) return out;
-  if ((e.qty || 1) > 1) out.push({ label: `Split off ${Math.floor((e.qty || 1) / 2)}`, run: () => split(g, e) });
-  if (d && d.w !== d.h) out.push({ label: 'Turn it', run: () => turn(g, e) });
-  for (const o of others(g).filter((k) => k.c.id !== e.uid && !(nearby() && (itemDef(k.c.item) || {}).station) && firstFit(k.c, e.id, e.qty || 1)).slice(0, 5)) out.push({ label: `Move to the ${lower(short(itemDef(o.c.item)) || nameOf(o.c))}`, run: () => { if (!moveInto(g, e, o)) note('No room in there.', 2.5); } });
-  return out;
+  return verbMenu({ g, e }, g.opts.screen || null);
 }
-// what you can do with a container or a long thing: the things near you's (Hang the barrel), then carry it, set it
-// down, load it, leave it at the outfitter's (each also a drag of its strap)
-function thingMenu(t, isLong) {
-  const inv = model(), d = itemDef(isLong ? t.id : t.item), id = isLong ? t.uid : t.id, out = [];
-  if (!d || d.fixed || d.station || t.where === 'pockets' || (!isLong && /^(crate|pockets|pile)$/.test(t.item))) return out;
-  if (t.where === 'hung') return nearItems(nearActions({ container: id })); // up a tree: only what the tree offers (Lower)
-  if (!isLong && t.item === 'woodarms') return [...nearItems(nearActions({ container: id })), { label: 'Stack it on the ground', run: () => { said(armloadDown(thingOf(t))); refresh(); } }];
-  out.push(...nearItems(nearActions(isLong ? { long: id } : { container: id })));
-  const wear = d.wear || [];
-  if (t.where !== 'back' && wear.includes('back')) out.push({ label: 'Carry it on your back', run: () => world('carry', id, 'back') });
-  if (t.where !== 'chest' && wear.includes('chest')) out.push({ label: 'Wear it on your chest', run: () => world('carry', id, 'chest') });
-  if (t.where !== 'hands' && (isLong || d.hand)) out.push({ label: 'Take it in your hands', run: () => world('carry', id, 'hands') });
-  if (t.where !== 'canoe' && typeof inv.load === 'function' && (inv.atStash || typeof inv.nearCanoe !== 'function' || inv.nearCanoe())) out.push({ label: 'Load it into the canoe', run: () => world('load', id) }); // only with the canoe by you
-  if (t.where !== 'ground' && t.where !== 'stash' && typeof inv.setDown === 'function') out.push({ label: 'Set it on the ground', run: () => world('setDown', id) });
-  if (t.where !== 'stash' && inv.atStash && typeof inv.stow === 'function') out.push({ label: 'Leave it with the outfitters', run: () => world('stow', id) });
-  return out;
+// a container or a long thing by its strap: its own verbs (Put in hand; Hang, greyed: that is E at a tree)
+function thingMenu(t, isLong, sc = null) {
+  const d = itemDef(isLong ? t.id : t.item);
+  if (!d || d.fixed || d.station || t.where === 'pockets' || t.where === 'hung' || (!isLong && /^(crate|pockets|pile|woodarms)$/.test(t.item))) return [];
+  return verbMenu({ thing: isLong ? longOf(t) : thingOf(t) }, sc);
 }
 
 // --- the menu and the tag -----------------------------------------------------------------------------------------
@@ -1270,16 +1395,17 @@ function openMenu(x, y, items) {
 }
 function outside(ev) { if (menuEl && !menuEl.contains(ev.target)) closeMenu(); }
 export function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } window.removeEventListener('pointerdown', outside, true); }
-const KIND_WORDS = { meal: 'A meal · raw: cook it on the grate', snack: 'A snack · eat it standing still', food: 'Food', fish: 'A fish · fry it on the grate', bait: 'Bait · the bucket', lure: 'A lure · the tackle box', tool: 'A tool', gear: 'Camp gear', container: 'A container', long: 'A long thing · carried in the hands', map: 'A map sheet', forage: 'Found in the bush', firewood: 'Firewood · the fire’s fuel, or a pile on the ground' };
+// the tag: the name, its weight, and the one line that says what it is for (items.js words, stream D)
 function showTip(el, g, e) {
   hideTip();
   const d = itemDef(e.id); if (!d) return;
   const t = tipEl = mk('div', 'ig-tip');
-  const kg = (d.kg || 0) * (e.qty || 1), st = d.stack || 1;
-  const kind = e.hull ? 'A canoe · it waits at the dock' : e.box ? 'A container · double-click to open' : d.kind === 'food' && d.cooked ? 'Cooked · eat it, or keep it a few hours' : KIND_WORDS[d.kind] || '';
+  const kg = e.data && Number.isFinite(e.data.kg) ? e.data.kg * (e.qty || 1) : (d.kg || 0) * (e.qty || 1), st = d.stack || 1;
+  const words = e.words || d.words || (e.hull ? 'A canoe: it waits at the dock.' : e.box ? 'A container: double-click to open it.' : '');
   let foot = `${kgText(kg)}${st > 1 ? ` · ${e.qty || 1} of ${st} in a stack` : ''}`;
   if (g.opts.shelf) foot = `${e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'}${e.qty > 1 ? ` for ${e.qty}` : ''} · ${foot}`;
-  t.innerHTML = `<b>${esc(d.name)}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}</b><span class="k">${esc(kind)}</span>${e.words || d.words ? `<p>${esc(e.words || d.words)}</p>` : ''}<span class="f">${esc(foot)}</span>`;
+  else if (d.cooked) foot += ' · keeps a few hours';
+  t.innerHTML = `<b>${esc(d.name)}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}</b>${words ? `<p>${esc(words)}</p>` : ''}<span class="f">${esc(foot)}</span>`;
   document.body.appendChild(t);
   const r = el.getBoundingClientRect(), tr = t.getBoundingClientRect();
   let x = r.right + 8, y = r.top;
@@ -1291,33 +1417,36 @@ export function hideTip() { clearTimeout(tipTimer); if (tipEl) { tipEl.remove();
 
 // --- the blocks the screens are made of ---------------------------------------------------------------------------
 // a container: a leather strap with its name, where it is and its weight, over its grid. The strap is its handle:
-// dragged, the container goes where it is dropped (a slot, the canoe, the ground, into another); clicked, it folds.
-const FOLDED = new Map(); // container id → folded (a click on its strap); the crate starts folded while empty
+// dragged, the container goes where it is dropped (a slot, a tab, the canoe, the ground, into another).
 const fixedThing = (c) => { const d = itemDef(c.item); return !d || !!d.fixed || !!d.station || /^(crate|pockets|pile)$/.test(c.item); };
+const isStation = (c) => { const d = itemDef(c.item); return !!(d && d.station) || c.item === 'firefuel' || c.item === 'grate'; };
 function block(c, byId, opts = {}) {
-  const folded = FOLDED.has(c.id) ? FOLDED.get(c.id) : c.item === 'crate' && !(c.grid || []).length;
-  const w = mk('div', `ct w-${c.where}${c.where === 'in' ? ' nested' : ''}${folded ? ' folded' : ''}${c.item === 'pile' ? ' pile' : ''}`);
+  const w = mk('div', `ct w-${c.where}${c.where === 'in' ? ' nested' : ''}${c.item === 'pile' ? ' pile' : ''}`);
   w.dataset.cid = c.id;
   const inv = model(), kg = typeof inv.weight === 'function' && live() ? inv.weight(c.id) : weightOf(c), { cols, rows } = gridSize(c);
+  const wide = Math.max(cols * CELL + 4, 154); // as wide as its grid, a strap's width at least (the words are cut to it: a bucket is not as wide as its name)
+  w.style.width = `${wide}px`; if (wide < 250) w.classList.add('narrow');
   const used = (c.grid || []).reduce((n, e) => { const [a, b] = dims(itemDef(e.id), e.rot); return n + a * b; }, 0);
   const head = mk('div', 'ct-head', `<span class="nm">${esc(nameOf(c))}</span><span class="wh">${esc(whereWords(c, byId))}</span><span class="kg">${kgText(kg)}${used >= cols * rows ? ' · full' : ''}</span>`);
-  if (!fixedThing(c) && c.where !== 'hung') { head.classList.add('grab'); head.title = 'Drag the strap to carry it, set it down or load it · right-click for more'; head.addEventListener('pointerdown', (ev) => pressThing(thingOf(c), w, ev)); } // (a hung barrel comes down by its panel's Lower)
-  if (thingMenu(c, false).length) { head.classList.add('acts'); head.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, thingMenu(c, false)); }); }
-  head.addEventListener('click', () => { if (now() < quietClick) return; const f = !w.classList.contains('folded'); FOLDED.set(c.id, f); w.classList.toggle('folded', f); });
+  head.title = `${nameOf(c)} · ${whereWords(c, byId)} · ${kgText(kg)}${!fixedThing(c) && c.where !== 'hung' ? ' · drag the strap to carry it, set it down or load it' : ''}`;
+  if (!fixedThing(c) && c.where !== 'hung') { head.classList.add('grab'); head.addEventListener('pointerdown', (ev) => pressThing(thingOf(c), w, ev)); }
+  const menu = () => thingMenu(c, false, opts.screen);
+  if (menu().length) { head.classList.add('acts'); head.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); }); }
   const g = mk('div');
-  grid(g, c, { onUse: opts.onUse });
+  grid(g, c, { onUse: opts.onUse, screen: opts.screen });
   w.append(head, g);
   return w;
 }
 // a long thing (the rod, a paddle) as a 5 × 1 frame with its name and where it is; dragged, it goes where it is dropped
-function longBlock(l, { inHand = false } = {}) {
+function longBlock(l, { inHand = false, screen = null } = {}) {
   const d = itemDef(l.id), w = mk('div', `lg w-${l.where}${l.inUse ? ' inuse' : ''}`);
   w.dataset.uid = l.uid;
   const pic = iconAt(l.id, 4 * CELL, CELL - 8); pic.className = 'lg-pic';
   w.append(pic, mk('span', 'lg-nm', `${esc(d ? d.name : l.id)}<i>${esc(inHand ? (l.inUse ? 'in use' : '') : `${WHERE[l.where] || l.where}${l.inUse ? ' · in use' : ''}`)}</i>`));
-  w.title = 'Drag it to a hand, the canoe or the ground · right-click for more';
+  w.title = 'Drag it to a hand, the canoe or the ground';
   w.addEventListener('pointerdown', (ev) => pressThing(longOf(l), w, ev));
-  if (thingMenu(l, true).length) w.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, thingMenu(l, true)); });
+  const menu = () => thingMenu(l, true, screen);
+  if (menu().length) w.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
   return w;
 }
 // containers in order, each followed by those nested in it
@@ -1328,10 +1457,6 @@ function ordered(list) {
   return { list: out, byId };
 }
 const topOf = (c, byId) => { let k = c; for (let i = 0; i < 6 && k.where === 'in' && byId.get(k.in); i++) k = byId.get(k.in); return k; };
-const GROUP = { back: 'on', chest: 'on', hands: 'on', pockets: 'on', canoe: 'canoe', stash: 'stash', ground: 'near', hung: 'near', pile: 'near' };
-const groupOf = (c, byId) => GROUP[topOf(c, byId).where] || 'near';
-const RANK = { on: 0, canoe: 1, near: 2, stash: 3 };
-const sorted = (list, byId) => list.slice().sort((a, b) => (RANK[groupOf(a, byId)] + (topOf(a, byId).item === 'crate' ? 1 : 0)) - (RANK[groupOf(b, byId)] + (topOf(b, byId).item === 'crate' ? 1 : 0)));
 // the hold ring on a held action's button: a track, the arc done, a tick between phases
 function ringSvg(f, n = 1) {
   const R = 9, C = 12, len = Math.PI * 2 * R, on = Math.max(0, Math.min(1, f)) * len;
@@ -1340,325 +1465,540 @@ function ringSvg(f, n = 1) {
   return `<svg class="nb-ring" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle class="tr" cx="${C}" cy="${C}" r="${R}"/><circle class="on" cx="${C}" cy="${C}" r="${R}" stroke-dasharray="${on.toFixed(2)} ${len.toFixed(2)}" transform="rotate(-90 ${C} ${C})"/><g class="tk">${ticks}</g></svg>`;
 }
 
-// --- the book's pack side -----------------------------------------------------------------------------------------
-// Tarkov's layout on the book's canvas, and the place you do things (the owner, 2026-10-24: "your inventory is like
-// your interaction space"). On the left what you wear and hold: the back and the chest (their grids in the middle),
-// each hand with the grid of what is in it (the leech bucket), the pockets. In the middle the grids of what is on your
-// back and chest. On the right what is by you: the things near you as panels (nearby.js: the fire ring's bins, burn
-// meter and buttons, the pitched tent, the latrine, the hang), the ground within reach (the Ground area: drag a thing
-// there to set it down, the wood for a pile), the canoe when you are at it, and at an outfitter everything they keep for
-// you. A container goes anywhere by its strap; held work (Light, Douse, Strike) runs while the mouse holds its button.
-export class PackSide {
-  constructor(el, { onUse = null, closeBook = null } = {}) {
-    this.el = el; this.open = false; this.sig = ''; this.t = 0; this.mt = 0; this.onUse = onUse; this.closeBook = closeBook;
-    this.objs = []; this.pieces = []; this.held = null;
-    SCREENS.add(this);
+// --- held buttons (the fire's Light and Douse, the canoe's Load everything here) ---------------------------------------
+// Held work on the mouse: the book's own key down in the input while the button is held (hold.js moves the job only
+// while its key is down); E held keeps it going too. sc is the screen the button is on (its `held`), b the button.
+export function actButton(sc, o, a) {
+  const off = a.enabled === false, b = mk('button', `nb-act${a.held ? ' held' : ''}${off ? ' off' : ''}`);
+  b.type = 'button'; b.dataset.act = `${o.id}|${a.id}`; if (a.job) b.dataset.job = a.job;
+  // held: "hold" beside it; a hint beside a ready one; why it cannot be done yet is its tag, and the pencil note when
+  // it is pressed
+  b.innerHTML = `${a.held ? ringSvg(0) : ''}<span class="l">${esc(a.label)}</span>${a.held ? '<span class="h">hold</span>' : a.hint && !off ? `<span class="h">${esc(a.hint)}</span>` : ''}`;
+  if (off) { b.setAttribute('aria-disabled', 'true'); if (a.why) b.title = a.why; } else if (a.hint) b.title = a.hint;
+  if (a.held) b.addEventListener('pointerdown', (ev) => { if (ev.button !== 0) return; ev.preventDefault(); if (off) { if (a.why) note(a.why, 3); return; } startHold(sc, o, a, b); });
+  else b.addEventListener('click', () => runNear(a));
+  return b;
+}
+export function startHold(sc, o, a, b) {
+  const inp = ctx.player && ctx.player.input;
+  if (!inp || !inp.down) return;
+  stopHold(sc);
+  inp.down.add(BOOK_KEY);
+  const h = sc.held = { o: o.id, a: a.id, job: a.job || null, extra: null, btn: b, key: `${o.id}|${a.id}` };
+  b.classList.add('down');
+  if (a.closeBook) closeBooks();
+  let r = null;
+  try { r = a.run({ key: BOOK_KEY, keys: ['KeyE', 'Mouse0', BOOK_KEY], from: 'book' }); } catch (e) { console.warn('held action', a.id, e); }
+  if (r && r.words) note(r.words, 3.5);
+  const H = holdOf(), j = H && H.active;
+  if (j) { h.job = h.job || j.id; if (j.key && j.key !== BOOK_KEY && !inp.down.has(j.key)) { inp.down.add(j.key); h.extra = j.key; } }
+  const up = () => { window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', up, true); window.removeEventListener('blur', up); if (sc.held === h) stopHold(sc); };
+  window.addEventListener('pointerup', up, true); window.addEventListener('pointercancel', up, true); window.addEventListener('blur', up);
+}
+export function stopHold(sc) {
+  const h = sc.held; if (!h) return;
+  sc.held = null;
+  const inp = ctx.player && ctx.player.input;
+  if (inp && inp.down) { inp.down.delete(BOOK_KEY); if (h.extra) inp.down.delete(h.extra); }
+  if (h.btn) h.btn.classList.remove('down');
+  soon(false);
+}
+// each frame: the ring on a held button whose job is under way (from the mouse or from E), and the phase under way in
+// pencil under the buttons (the button keeps its size, so it never slides out from under the mouse)
+export function tickHold(sc, all = false) {
+  const H = holdOf(), j = H && H.active;
+  if (!j && !sc.wasHolding && !all) return;
+  sc.wasHolding = !!j;
+  if (!sc.el) return;
+  for (const b of sc.el.querySelectorAll('.nb-act.held')) {
+    const own = sc.held && sc.held.btn === b, on = !!(j && ((b.dataset.job && j.id === b.dataset.job) || (own && sc.held.job === j.id)));
+    const n = on ? j.phases.length : 1, f = on ? j.at / n : 0, k = `${on ? 1 : 0}:${f.toFixed(3)}`;
+    if (b.dataset.k === k) continue;
+    b.dataset.k = k;
+    b.classList.toggle('going', on);
+    const svg = b.querySelector('.nb-ring'); if (svg) svg.outerHTML = ringSvg(f, n);
+    const acts = b.closest('.nb-acts'); if (!acts) continue;
+    let line = acts.nextElementSibling;
+    if (!line || !line.classList.contains('nb-doing')) { line = mk('div', 'nb-doing pencil'); acts.after(line); }
+    if (on) { const i = Math.min(n - 1, Math.floor(j.at + 1e-9)), ph = j.phases[i]; line.textContent = `${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}`; line.dataset.by = b.dataset.act; }
+    else if (line.dataset.by === b.dataset.act) { line.textContent = ''; line.dataset.by = ''; }
   }
-  show() { this.open = true; listen(); this.render(true); this.focusNear(); }
-  hide() { this.stopHold(); this.open = false; this.sig = ''; closeMenu(); hideTip(); for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy(); }
-  update(dt) {
-    if (!this.open) return;
-    this.tickHold();
-    if ((this.mt += dt) > 0.2) { this.mt = 0; this.liven(); }
-    if ((this.t += dt) > 0.4) { this.t = 0; this.render(false); }
+}
+
+// --- the fire's pane (cards.js draws it on the card's right) -------------------------------------------------------------
+// The fire ring as nearby.objects() gives it: its strap (the picture, the name, how it stands), the burn meter and the
+// cooking meter, the fuel (wood only) and the grate (the pot, a meal or a fish, what is cooked) as grids, the ash in
+// words, and Light / Cook / Eat / Douse (held where held). With no pot within reach the grate says so.
+function grateWords(o, s) {
+  const n = nearby(), inv = model(), c = s.cId && typeof inv.cont === 'function' ? inv.cont(s.cId) : null;
+  const potOn = !!(c && c.grid.some((e) => e.id === 'pot'));
+  if (potOn) return s.words || '';
+  let here = null;
+  try { here = n && n.cook && typeof n.cook.potHere === 'function' ? n.cook.potHere(o.key) : null; } catch { here = null; }
+  if (o.pot === false || o.noPot || (n && n.cook && !here)) return 'no pot';
+  return s.words || '';
+}
+export function firePanel(o, sc) {
+  const w = mk('div', `nb k-${o.kind}${!o.meter && !o.cooking && !(o.slots && o.slots.length) ? ' slim' : ''}`);
+  w.dataset.nb = o.id;
+  const head = mk('div', 'nb-head');
+  const ik = `nb:${o.kind}`;
+  if (ICONS[ik]) { const pic = iconAt(ik, 44, 34); pic.className = 'nb-pic'; head.appendChild(pic); }
+  head.appendChild(mk('span', 'nm', esc(o.title || '')));
+  head.appendChild(mk('span', 'wh', esc(o.sub || '')));
+  w.appendChild(head);
+  const body = mk('div', 'nb-body');
+  const meter = (k, m, lab) => mk('div', `nb-meter m-${k}`, `<span class="lab">${esc(m.label || lab)}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`);
+  if (o.meter) body.appendChild(meter('burn', o.meter, ''));
+  body.appendChild(o.cooking ? meter('cook', o.cooking, 'Cooking') : mk('div', 'nb-meter m-cook none'));
+  if (o.slots && o.slots.length) {
+    const row = mk('div', 'nb-slots');
+    for (const s of o.slots) {
+      const sw = mk('div', `nb-slot s-${s.id}`);
+      const words = s.id === 'grate' ? grateWords(o, s) : s.words;
+      sw.appendChild(mk('div', 'nb-lab', `${esc(s.label || s.id)}${words ? ` <i>${esc(words)}</i>` : ''}`));
+      const g = mk('div'), inv = model(), c = s.cId && typeof inv.cont === 'function' ? inv.cont(s.cId) : null;
+      if (c) grid(g, c, { onUse: sc.onUse || null, screen: sc });
+      else if (s.id === 'ash') { g.className = 'nb-ash'; g.textContent = ''; }
+      else { const b = { ...s, obj: o.id }; grid(g, binContainer(`bin:${o.id}:${s.id}`, b), { bin: b, screen: sc }); }
+      sw.appendChild(g);
+      row.appendChild(sw);
+    }
+    body.appendChild(row);
+  }
+  const acts = (o.actions || []).filter((a) => a && a.label);
+  if (acts.length) {
+    const row = mk('div', 'nb-acts');
+    for (const a of acts) row.appendChild(actButton(sc, o, a));
+    body.appendChild(row);
+  }
+  w.appendChild(body);
+  return w;
+}
+// a few times a second: the meters and the words, in place
+export function livenPanel(el, o) {
+  const wh = el.querySelector('.nb-head .wh'); if (wh && wh.textContent !== (o.sub || '')) wh.textContent = o.sub || '';
+  for (const [k, m] of [['burn', o.meter], ['cook', o.cooking]]) {
+    const row = el.querySelector(`.nb-meter.m-${k}`); if (!row) continue;
+    if (!m) { row.classList.add('none'); continue; }
+    if (row.classList.contains('none')) { row.classList.remove('none'); row.innerHTML = `<span class="lab">${esc(m.label || 'Cooking')}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`; continue; }
+    const bar = row.querySelector('i'), w = row.querySelector('.w');
+    if (bar) bar.style.width = pct(m.value);
+    if (w && w.textContent !== (m.words || '')) w.textContent = m.words || '';
+  }
+}
+// the signature of a fire object: what would change its drawing
+export const panelSig = (o) => [o.id, o.title, o.sub || '', (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}:${s.words || ''}`).join(';'),
+  (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}${a.why || ''}`).join(';'), o.meter ? 1 : 0, o.cooking ? 1 : 0].join('/');
+
+// --- your stuff, on one screen ------------------------------------------------------------------------------------
+// The body on the left: the back and the chest, each hand, the pockets as four quick slots. Across the top a tab for
+// every container you carry (Pack · Barrel · Bucket · Tackle box …), one grid open at a time. In the book (pane: true)
+// the right pane is Here, what you are facing (the owner, 2026-10-24: "left is me, right is what I'm facing"): each
+// thing on the ground within reach as its own grid, the wood lying about as a pile, the canoe's load when you stand
+// beside it (with Set everything out and Load everything here), and at an outfitter what they keep for you. It is
+// always there while the book is open, never a tab; "Nothing here" when the ground is empty. The fire card and the
+// shelf have their own right pane, so their MineSide is the body and the tabs alone (at a shelf the canoe's containers
+// at the dock and Keeping are tabs too, so a thing can be bought straight into them). Nothing left elsewhere shows.
+const TAB_NAMES = { pack3: 'Pack', pack4: 'Pack', barrel30: 'Barrel', barrel60: 'Barrel', bucket: 'Bucket', tacklebox: 'Tackle box', stringer: 'Stringer', mapcase: 'Map case', woodarms: 'Armload' };
+const TAB_TWO = { pack3: 'Pack #3', pack4: 'Pack #4', barrel30: 'Barrel 30', barrel60: 'Barrel 60' };
+const SHORT_WHERE = { back: 'back', chest: 'chest' };
+export class MineSide {
+  // owner: the screen this is part of (its render(force), its held state); onUse: the grids' Use (the lures, the sheets);
+  // pane: Here drawn as the right pane (the book)
+  constructor({ owner = null, onUse = null, closeBook = null, pane = false } = {}) {
+    this.el = mk('div', `mine${pane ? ' with-here' : ''}`); this.owner = owner; this.onUse = onUse; this.closeBook = closeBook; this.pane = !!pane;
+    this.tab = null; this.sig = ''; this.pendLit = null; this.pieces = [];
+  }
+  // the tabs now: [{ key, kind: 'cont' | 'keeping', c?, label, sub }], and what Here holds
+  tabs() {
+    const inv = model(), { carried, list, byId } = tabContainers(), p = ctx.player;
+    const top = (c) => topOf(c, byId);
+    const names = new Map();
+    for (const c of carried) { const n = TAB_NAMES[c.item] || short(itemDef(c.item)) || 'Container'; names.set(n, (names.get(n) || 0) + 1); }
+    const seen = new Map();
+    const tabs = carried.map((c) => {
+      const base = TAB_NAMES[c.item] || short(itemDef(c.item)) || 'Container';
+      let label = base;
+      if (names.get(base) > 1) { label = TAB_TWO[c.item] || base; const k = seen.get(label) || 0; seen.set(label, k + 1); if (k) label = `${label} ${k + 1}`; }
+      const t = top(c), sub = c.where === 'in' ? `in the ${lower(TAB_NAMES[t.item] || short(itemDef(t.item)) || 'pack')}` : t.where === 'hands' ? (t.hand === 1 ? 'left hand' : 'right hand') : SHORT_WHERE[t.where] || t.where;
+      return { key: c.id, kind: 'cont', c, label, sub };
+    });
+    const { ground, canoe, atCanoe } = this.hereLists(list, byId);
+    // a shelf (no pane of its own) at the dock: the canoe's containers as tabs too, so a thing is bought straight into them
+    if (!this.pane && inv.atStash) for (const c of canoe) tabs.push({ key: c.id, kind: 'cont', c, label: TAB_NAMES[c.item] || short(itemDef(c.item)) || 'Container', sub: 'in the canoe' });
+    const n = ground.length + (this.pieces.length ? 1 : 0);
+    const hereSub = p && p.mode === 'paddle' ? 'in the canoe' : inv.atStash ? (n ? `the canoe at the dock · ${n} on the ground` : 'the canoe at the dock, and what they keep for you') : atCanoe ? (n ? `the canoe beside you · ${n} on the ground` : 'the canoe beside you') : n ? `${n} on the ground, within reach` : 'within reach';
+    if (inv.atStash && !this.pane) tabs.push({ key: 'keeping', kind: 'keeping', label: 'Keeping', sub: 'at the outfitter’s' });
+    return { tabs, list, byId, carried, here: { ground, canoe, atCanoe, n, sub: hereSub } };
+  }
+  // what Here shows: the things on the ground within reach (not the fire's stations), the canoe's load when beside it
+  hereLists(list, byId) {
+    const inv = model(), p = ctx.player, top = (c) => topOf(c, byId);
+    const ground = list.filter((c) => { const k = top(c); return k.where === 'ground' && !isStation(k); });
+    const canoe = list.filter((c) => top(c).where === 'canoe');
+    const atCanoe = !!(inv.atStash || canoe.length > 0 || (p && p.mode === 'paddle') || (typeof inv.nearCanoe === 'function' && inv.nearCanoe()));
+    return { ground, canoe, atCanoe };
+  }
+  current(tabs) {
+    if (this.tab && tabs.some((t) => t.key === this.tab)) return this.tab;
+    const inv = model(), back = typeof inv.worn === 'function' ? inv.worn('back') : null;
+    const t = (back && tabs.find((q) => q.key === back.id)) || tabs.find((q) => q.kind === 'cont') || tabs[0];
+    return t ? t.key : null;
+  }
+  setTab(key) { if (this.tab === key) return; this.tab = key; this.sig = ''; if (this.owner) this.owner.render(true); else this.render(true); }
+  // the next tab along (Tab), or back (Shift-Tab)
+  nextTab(dir = 1) { const { tabs } = this.tabs(); if (!tabs.length) return; const i = tabs.findIndex((t) => t.key === this.current(tabs)); this.setTab(tabs[(i + dir + tabs.length) % tabs.length].key); }
+  // a container's grid brought up and lit: its own tab, else the tab that holds it, else where it lies in the right pane
+  // (Here: the ground, the canoe; what the outfitters keep)
+  openAt(ref) {
+    const inv = model(), c = typeof inv.cont === 'function' ? inv.cont(ref) : null, { tabs } = this.tabs();
+    this.pendLit = ref;
+    const parent = c && c.where === 'in' ? c.in : null;
+    const where = c ? (typeof inv.rootWhere === 'function' ? inv.rootWhere(c) : c.where) : 'ground';
+    if (tabs.some((t) => t.key === ref)) this.setTab(ref);
+    else if (parent && tabs.some((t) => t.key === parent)) this.setTab(parent);
+    else if (!this.pane && where === 'stash' && tabs.some((t) => t.key === 'keeping')) this.setTab('keeping');
+    this.sig = '';
+    if (this.owner) this.owner.render(true); else this.render(true);
   }
   sigNow() {
-    const inv = model(), list = inv.reachable(ctx.player) || [], pr = ctx.profile, p = ctx.player, n = nearby();
-    this.objs = nearObjects();
+    const inv = model(), list = inv.reachable(ctx.player) || [], p = ctx.player, n = nearby();
     this.pieces = n && typeof n.groundPieces === 'function' && onFoot() ? (() => { try { return n.groundPieces() || []; } catch { return []; } })() : [];
-    const near = this.objs.map((o) => [o.id, o.title, (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}:${s.words || ''}`).join(';'),
-      (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}`).join(';'), o.meter ? 1 : 0, o.cooking ? 1 : 0].join('/')).join('|');
-    return [version, list.map((c) => `${c.id}:${c.where}:${c.hand ?? ''}:${(c.grid || []).length}`).join(), (inv.long || []).map((l) => `${l.uid}:${l.where}:${l.hand ?? ''}`).join(), pr ? pr.money : 0, inv.atStash ? 1 : 0,
-      p ? p.mode : '', onFoot() ? 1 : 0, near, this.pieces.map((q) => q.uid).join()].join('|');
+    const pk = packsOf(), lo = pk && typeof pk.loadables === 'function' && p && p.carry && p.carry.drop ? (() => { try { return pk.loadables(p.carry.drop).filter((u) => !(typeof pk.autoLoads === 'function' && pk.autoLoads(u))).length; } catch { return 0; } })() : 0;
+    return [version, this.tab, list.map((c) => `${c.id}:${c.where}:${c.hand ?? ''}:${c.in || ''}:${(c.grid || []).length}`).join(), (inv.long || []).map((l) => `${l.uid}:${l.where}:${l.hand ?? ''}`).join(), inv.atStash ? 1 : 0,
+      p ? p.mode : '', onFoot() ? 1 : 0, typeof inv.nearCanoe === 'function' && inv.nearCanoe() ? 1 : 0, this.pieces.map((q) => q.uid).join(), lo, this.pendLit || ''].join('|');
   }
   render(force) {
-    if (!this.open) return;
     if (drag) { dirty = true; return; }
     const sig = this.sigNow(); if (!force && sig === this.sig) return;
     this.sig = sig;
-    const inv = model(), pr = ctx.profile, all = inv.reachable(ctx.player) || [], { list, byId } = ordered(all), stash = !!inv.atStash, objs = this.objs || [], p = ctx.player;
-    const scroll = [...this.el.querySelectorAll('.pk-col')].map((n) => n.scrollTop);
+    const { tabs, list, byId, here } = this.tabs(), key = this.current(tabs), sc = this.owner;
+    const page0 = this.el.querySelector('.tabpage'), scroll = page0 ? page0.scrollTop : 0;
+    const here0 = this.el.querySelector('.here-body'), hereScroll = here0 ? here0.scrollTop : 0;
     for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy();
-    const top = (c) => topOf(c, byId), grp = (c) => groupOf(c, byId), hasNear = !!nearby();
-    // the stations (the fire's fuel and grate: nearby.js) are drawn in their panels; without nearby.js, with the ground
-    const station = new Set(); for (const o of objs) for (const s of o.slots || []) if (s.cId) station.add(s.cId);
-    const worn = list.filter((c) => { const w = top(c).where; return w === 'back' || w === 'chest'; });
-    const pockets = list.filter((c) => top(c).where === 'pockets'), held = list.filter((c) => top(c).where === 'hands');
-    const canoe = list.filter((c) => grp(c) === 'canoe'), kept = sorted(list.filter((c) => grp(c) === 'stash'), byId);
-    const ground = list.filter((c) => { const k = top(c); return k.where === 'ground' && !station.has(k.id) && !(hasNear && fixedThing(k) && k.item !== 'pile'); });
-    const hung = list.filter((c) => top(c).where === 'hung');
-    const atCanoe = stash || canoe.length > 0 || (p && p.mode === 'paddle');
-    const near3 = (l) => l.at && p && Math.hypot(l.at.x - p.x, l.at.z - p.z) < 3;
-    const longs = inv.long || [], longCanoe = longs.filter((l) => l.where === 'canoe' && atCanoe), longGround = longs.filter((l) => l.where === 'ground' && near3(l)), longKept = longs.filter((l) => l.where === 'stash' && stash);
-    const kgOn = typeof inv.weight === 'function' ? inv.weight() : 0;
-    const hungW = !stash && ctx.energy && typeof ctx.energy.hungFood === 'function' ? ctx.energy.hungFood().words : ''; // (the barrel hung at camp, as the HUD says it)
-    const food = typeof inv.foodWords === 'function' ? inv.foodWords() : '';
-    // at a camp the food words count the camp's reach (inventory.campReach: the barrel in the canoe on the shore), more
-    // than the grids below show
-    const atCamp = !stash && !!(inv.camp && typeof inv.camp.reachArea === 'function' && inv.camp.reachArea());
-    this.el.innerHTML = `<header class="pk-head">
-        <div class="lede"><div class="sc kicker">The pack · ${stash ? 'at the outfitter’s, everything you own' : objs.length ? 'what you carry, and what is by you' : 'what you carry and what is within reach'}</div><h2>${kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light'}</h2><div class="sub">${esc(loadWords(kgOn))}${food ? ` · ${esc(food)} ${atCamp ? 'about the camp' : 'within reach'}` : ''}${hungW ? ` · ${esc(hungW)}` : ''}</div></div>
-        <div class="pk-note pencil" aria-live="polite">${esc(noteNow())}</div>
-        ${pr ? `<div class="purse"><span class="sc">In hand</span><b>$${pr.money}</b></div>` : ''}
-      </header>
-      <div class="pk-body"><section class="pk-col pk-on" aria-label="On you"></section><section class="pk-col pk-carry" aria-label="What you carry"></section><section class="pk-col pk-near" aria-label="By you"></section></div>
-      <footer class="pk-foot"><span>drag a thing by its strap to a slot, the canoe or the ground · drag items between grids · <kbd>R</kbd> turns it · <kbd>Shift</kbd>-drag splits · right-click for more · held buttons: hold the mouse</span><span><kbd>Tab</kbd> the journal · <kbd>J</kbd> closes</span></footer>`;
-    const [cOn, cCarry, cNear] = this.el.querySelectorAll('.pk-col');
-    // on you: the back and the chest, each hand with what is in it, the pockets
+    this.el.textContent = '';
+    // the body
+    const body = mk('section', 'mn-body'); body.setAttribute('aria-label', 'On you');
     const slots = mk('div', 'slots');
     slots.append(this.wornSlot('back', 'On your back'), this.wornSlot('chest', 'On your chest'));
-    cOn.appendChild(slots);
-    for (const i of [0, 1]) cOn.appendChild(this.handSlot(i, held, byId));
-    for (const c of pockets) cOn.appendChild(block(c, byId, { onUse: this.onUse }));
-    // the middle: the grids of what is on your back and your chest, and what is nested in them
-    for (const c of worn) cCarry.appendChild(block(c, byId, { onUse: this.onUse }));
-    const zone = (col, dz, title, kids, empty) => {
-      const z = mk('div', `pk-zone z-${dz}`); z.dataset.dz = dz;
-      z.appendChild(mk('div', 'pk-lab', esc(title)));
-      const f = mk('div', 'pk-flow');
-      for (const k of kids) f.appendChild(k);
-      if (empty) f.appendChild(mk('div', 'pk-well', esc(empty)));
-      z.appendChild(f); col.appendChild(z);
-      return z;
-    };
-    const blocks = (cs) => cs.map((c) => block(c, byId, { onUse: this.onUse }));
-    const canoeTitle = stash ? 'The canoe, tied at the dock' : p && p.mode === 'paddle' ? 'In the canoe' : 'In the canoe, beside you';
-    const canoeZone = (col) => { if (atCanoe) zone(col, 'canoe', canoeTitle, [...blocks(canoe), ...longCanoe.map((l) => longBlock(l))], canoe.length || longCanoe.length ? (p && p.mode === 'paddle' ? '' : 'drag a pack here to load it') : 'Nothing in the canoe. Drag a pack here to load it.'); };
-    if (!worn.length) { cCarry.appendChild(mk('p', 'pk-empty', 'Nothing on your back or chest. Drag a pack by its strap to the slots on the left, or E at it on the ground.')); canoeZone(cCarry); }
-    // by you: the things near you, the ground, what hangs from a limb, the canoe, the outfitters' keeping
-    for (const o of objs) cNear.appendChild(this.panel(o));
-    if (onFoot()) {
-      const kids = [...blocks(ground), ...longGround.map((l) => longBlock(l))];
-      if (this.pieces.length) kids.push(this.piecesBlock());
-      zone(cNear, 'ground', 'On the ground · within reach', kids, kids.length ? 'drag here to set it down' : 'Nothing on the ground here. Drag a thing here to set it down: a pack, or wood for a pile.');
+    body.appendChild(slots);
+    body.append(this.handSlot(0), this.handSlot(1));
+    for (const c of list.filter((q) => q.item === 'pockets')) { const w = mk('div', 'mn-pockets'); w.appendChild(mk('div', 'slot-lab', 'Pockets · quick slots')); const g = mk('div'); grid(g, c, { onUse: this.onUse, screen: sc }); w.appendChild(g); body.appendChild(w); }
+    // the tabs and the page
+    const side = mk('section', 'mn-tabs');
+    const nav = mk('nav', 'ctabs'); nav.setAttribute('role', 'tablist');
+    for (const t of tabs) {
+      const b = mk('button', `ctab k-${t.kind}${t.key === key ? ' on' : ''}`, `<b>${esc(t.label)}</b><i>${esc(t.sub || '')}</i>`);
+      b.type = 'button'; b.dataset.tab = t.key; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(t.key === key));
+      b.addEventListener('click', () => this.setTab(t.key));
+      nav.appendChild(b);
     }
-    if (hung.length) { cNear.appendChild(mk('div', 'pk-lab', 'Hung from a limb')); const f = mk('div', 'pk-flow'); for (const b of blocks(hung)) f.appendChild(b); cNear.appendChild(f); }
-    if (worn.length) canoeZone(cNear);
-    if (stash) zone(cNear, 'stash', 'Kept for you by the outfitters', [...blocks(kept), ...longKept.map((l) => longBlock(l))], kept.length || longKept.length ? '' : 'Nothing kept here.');
-    if (!cNear.children.length) cNear.appendChild(mk('p', 'pk-empty', 'Nothing else within reach. What you leave behind stays where you left it.'));
-    [...this.el.querySelectorAll('.pk-col')].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });
-    this.tickHold(true);
+    side.appendChild(nav);
+    const page = mk('div', `tabpage tp-${key === 'keeping' ? 'keeping' : 'cont'}`);
+    const t = tabs.find((q) => q.key === key);
+    if (!t) page.appendChild(mk('p', 'pk-empty', 'Nothing on you. Drag a pack by its strap to the slots on the left, or E at it on the ground.'));
+    else if (t.kind === 'cont') page.appendChild(block(t.c, byId, { onUse: this.onUse, screen: sc }));
+    else this.keepingPage(page, list, byId);
+    side.appendChild(page);
+    this.el.append(body, side);
+    if (scroll && !page.classList.contains('tp-cont')) page.scrollTop = scroll;
+    // the right pane: what you are facing
+    if (this.pane) {
+      const col = mk('section', 'mn-here'); col.setAttribute('aria-label', 'Here: what is within reach');
+      col.appendChild(mk('div', 'here-head', `<b>Here</b><i>${esc(here.sub)}</i>`));
+      const hb = mk('div', 'here-body');
+      this.herePage(hb, list, byId);
+      col.appendChild(hb);
+      this.el.appendChild(col);
+      if (hereScroll) hb.scrollTop = hereScroll;
+    }
+    // the grid brought up (openAt) lit for a moment, and scrolled to; the light survives a redraw (its animation picks
+    // up where it was)
+    if (this.pendLit) { this.lit = { ref: this.pendLit, t0: now(), until: now() + 1600 }; this.pendLit = null; }
+    if (this.lit) {
+      if (now() > this.lit.until) this.lit = null;
+      else {
+        const ref = this.lit.ref, el = this.el.querySelector(`.ct[data-cid="${CSS.escape(ref)}"], .ct[data-piece="${CSS.escape(ref)}"]`) || (String(ref).startsWith('piece:') ? this.el.querySelector('.ct.pieces') : null);
+        if (el) { if (this.lit.t0 === now() || now() - this.lit.t0 < 50) setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 0); el.style.animationDelay = `${-(now() - this.lit.t0)}ms`; el.classList.add('lit'); }
+      }
+    }
   }
-  // the back or the chest: the thing worn there, its strap a handle; a drop zone
+  // the back or the chest: the thing worn there, its strap a handle; a drop zone; a click opens its tab
   wornSlot(dz, label) {
-    const t = wornThing(dz), s = mk('div', `slot big${t ? '' : ' empty'}`);
+    const t = wornThing(dz), s = mk('div', `slot big${t ? '' : ' empty'}`), sc = this.owner;
     s.dataset.dz = dz;
     s.appendChild(mk('div', 'slot-lab', esc(label)));
     const f = mk('div', 'slot-frame');
     if (t && t.def) {
       f.append(iconAt(t.obj.item, 2 * CELL, 2 * CELL), mk('span', 'slot-nm', esc(short(t.def))));
-      f.classList.add('grab'); f.title = 'Drag it to set it down, load it or swap it · right-click for more';
-      f.addEventListener('pointerdown', (ev) => pressThing(t, f, ev));
-      if (thingMenu(t.obj, false).length) f.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, thingMenu(t.obj, false)); });
+      f.classList.add('grab'); f.title = 'Click for its grid · drag it to set it down, load it or swap it';
+      if (this.tab === t.obj.id) f.classList.add('on');
+      f.addEventListener('pointerdown', (ev) => pressThing(t, f, ev, () => this.setTab(t.obj.id)));
+      const menu = () => thingMenu(t.obj, false, sc);
+      if (menu().length) f.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
     } else f.appendChild(mk('span', 'slot-none', dz === 'back' ? 'a pack' : 'a pack or a barrel'));
     s.appendChild(f);
     return s;
   }
-  // a hand: what is in it, a container with its grid (the bucket's leeches), a long thing in its frame; a drop zone
-  handSlot(i, held, byId) {
-    const t = inHand(i), s = mk('div', `slot hand${t ? '' : ' empty'}${t && t.isLong ? ' long' : ''}`);
+  // a hand: what is in it, a container (its grid is its tab) or a long thing in its frame; a drop zone
+  handSlot(i) {
+    const t = inHand(i), s = mk('div', `slot hand${t ? '' : ' empty'}${t && t.isLong ? ' long' : ''}`), sc = this.owner;
     s.dataset.dz = `hand${i}`;
     s.appendChild(mk('div', 'slot-lab', i ? 'Left hand' : 'Right hand'));
     if (!t || !t.def) { const f = mk('div', 'slot-frame'); f.appendChild(mk('span', 'slot-none', 'the rod, a paddle, the bucket')); s.appendChild(f); return s; }
-    if (t.isLong) { s.appendChild(longBlock(t.obj, { inHand: true })); return s; }
-    s.appendChild(block(t.obj, byId, { onUse: this.onUse }));
-    for (const c of held) if (c.where === 'in' && topOf(c, byId) === t.obj) s.appendChild(block(c, byId, { onUse: this.onUse }));
+    if (t.isLong) { s.appendChild(longBlock(t.obj, { inHand: true, screen: sc })); return s; }
+    const f = mk('div', 'slot-frame grab');
+    f.append(iconAt(t.obj.item, CELL, CELL), mk('span', 'slot-nm', esc(short(t.def))));
+    f.title = 'Click for its grid · drag it to set it down or load it';
+    if (this.tab === t.obj.id) f.classList.add('on');
+    f.addEventListener('pointerdown', (ev) => pressThing(t, f, ev, () => this.setTab(t.obj.id)));
+    const menu = () => thingMenu(t.obj, false, sc);
+    if (menu().length) f.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
+    s.appendChild(f);
     return s;
   }
-  // the wood lying about within reach (nearby.groundPieces): a bin you take from
+  zone(col, dz, title, kids, empty) {
+    const z = mk('div', `pk-zone z-${dz}`); z.dataset.dz = dz;
+    z.appendChild(mk('div', 'pk-lab', esc(title)));
+    const f = mk('div', 'pk-flow');
+    for (const k of kids) f.appendChild(k);
+    if (empty) f.appendChild(mk('div', 'pk-well', esc(empty)));
+    z.appendChild(f); col.appendChild(z);
+    return z;
+  }
+  // Here, the right pane: the ground within reach, then the canoe beside you, then (at an outfitter) what they keep
+  herePage(page, list, byId) {
+    const inv = model(), p = ctx.player, sc = this.owner, { ground, canoe, atCanoe } = this.hereLists(list, byId);
+    const near3 = (l) => l.at && p && Math.hypot(l.at.x - p.x, l.at.z - p.z) < 3;
+    const longs = inv.long || [], longCanoe = longs.filter((l) => l.where === 'canoe' && atCanoe), longGround = longs.filter((l) => l.where === 'ground' && near3(l));
+    const blocks = (cs) => cs.map((c) => block(c, byId, { onUse: this.onUse, screen: sc }));
+    const afloat = p && p.mode === 'paddle';
+    if (onFoot()) {
+      const kids = [...blocks(ground), ...longGround.map((l) => longBlock(l, { screen: sc }))];
+      if (this.pieces.length) kids.push(this.piecesBlock());
+      this.zone(page, 'ground', 'On the ground · within reach', kids, kids.length ? 'drag here to set a thing down' : 'Nothing here. Drag a thing here, or off the page, to set it down at your feet.');
+    }
+    if (atCanoe) {
+      const title = inv.atStash ? 'The canoe · tied at the dock' : afloat ? 'In the canoe' : 'The canoe · beside you';
+      const z = this.zone(page, 'canoe', title, [...blocks(canoe), ...longCanoe.map((l) => longBlock(l, { screen: sc }))], canoe.length || longCanoe.length ? (afloat ? '' : 'drag a pack here to load it') : 'Nothing in the canoe. Drag a pack here to load it.');
+      if (!afloat && !inv.atStash) z.appendChild(this.canoeActs(canoe, longCanoe));
+    }
+    if (inv.atStash) this.keepingPage(page, list, byId);
+    if (!page.children.length) page.appendChild(mk('p', 'pk-empty', afloat ? 'Nothing in the canoe.' : 'Nothing here. What you leave behind stays where you left it.'));
+  }
+  // the canoe's two: everything out onto the ground about the hull, everything about it in (held: packs.js)
+  canoeActs(canoe, longCanoe) {
+    const pk = packsOf(), p = ctx.player, d = p && p.carry && p.carry.drop, sc = this.owner, row = mk('div', 'nb-acts canoe-acts');
+    const loadable = pk && d && typeof pk.loadables === 'function' ? pk.loadables(d).filter((u) => !(typeof pk.autoLoads === 'function' && pk.autoLoads(u))) : [];
+    const out = canoe.filter((c) => c.where === 'canoe').length + longCanoe.filter((l) => !l.inUse && l.id !== 'stringer').length;
+    const o = { id: 'canoe' };
+    row.appendChild(actButton(sc, o, { id: 'setout', label: 'Set everything out', enabled: out > 0, why: 'nothing in the canoe to set out', run: () => setOutAll() }));
+    row.appendChild(actButton(sc, o, { id: 'load', label: 'Load everything here', held: true, job: 'load', enabled: loadable.length > 0, why: 'nothing lies about to load', run: (opts) => loadAll(d, loadable, opts) }));
+    return row;
+  }
+  keepingPage(page, list, byId) {
+    const inv = model(), sc = this.owner, kept = list.filter((c) => topOf(c, byId).where === 'stash').sort((a, b) => (a.item === 'crate' ? 1 : 0) - (b.item === 'crate' ? 1 : 0)); // the crate (their back shelf) last
+    const longKept = (inv.long || []).filter((l) => l.where === 'stash');
+    this.zone(page, 'stash', 'Kept for you by the outfitters', [...kept.map((c) => block(c, byId, { onUse: this.onUse, screen: sc })), ...longKept.map((l) => longBlock(l, { screen: sc }))], kept.length || longKept.length ? 'they ship it up the road to whichever counter you come in at' : 'Nothing kept here.');
+  }
+  // the wood lying about within reach (nearby.groundPieces): a pile you take from
   piecesBlock() {
-    const n = nearby(), w = mk('div', 'ct pieces');
-    w.appendChild(mk('div', 'ct-head', `<span class="nm">Lying about</span><span class="wh">dead and down, within reach</span>`));
+    const n = nearby(), w = mk('div', 'ct pieces'), sc = this.owner;
+    w.dataset.piece = 'pieces';
+    w.appendChild(mk('div', 'ct-head', '<span class="nm">Lying about</span><span class="wh">dead and down, within reach</span>'));
     const b = { id: 'pieces', items: this.pieces.map((q) => ({ uid: q.uid, id: q.id })), cols: 4, rows: 2, take: ({ uid, toCId, x, y, rot }) => n.takePiece(uid, toCId, x, y, rot) };
-    const g = mk('div'); grid(g, binContainer('bin:pieces', b), { bin: b });
+    const g = mk('div'); grid(g, binContainer('bin:pieces', b), { bin: b, screen: sc });
     w.appendChild(g);
     return w;
   }
-  // a thing near you as a panel: its strap (a picture, the name, how it stands), a meter, its bins, its buttons
-  panel(o) {
-    const w = mk('div', `nb k-${o.kind}${o.focus ? ' focus' : ''}${!o.meter && !o.cooking && !(o.slots && o.slots.length) ? ' slim' : ''}`);
-    w.dataset.nb = o.id;
-    const head = mk('div', 'nb-head');
-    const ik = `nb:${o.kind}`;
-    if (ICONS[ik]) { const pic = iconAt(ik, 44, 34); pic.className = 'nb-pic'; head.appendChild(pic); }
-    head.appendChild(mk('span', 'nm', esc(o.title || '')));
-    head.appendChild(mk('span', 'wh', esc(o.sub || '')));
-    w.appendChild(head);
-    const body = mk('div', 'nb-body');
-    // the meters: how much wood is in the fire, and while the pot is on, how far on the cooking is
-    const meter = (k, m, lab) => mk('div', `nb-meter m-${k}`, `<span class="lab">${esc(m.label || lab)}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`);
-    if (o.meter) body.appendChild(meter('burn', o.meter, ''));
-    if (o.cooking) body.appendChild(meter('cook', o.cooking, 'Cooking'));
-    if (o.slots && o.slots.length) {
-      const row = mk('div', 'nb-slots');
-      for (const s of o.slots) {
-        const sw = mk('div', `nb-slot s-${s.id}`);
-        sw.appendChild(mk('div', 'nb-lab', `${esc(s.label || s.id)}${s.words ? ` <i>${esc(s.words)}</i>` : ''}`));
-        const g = mk('div'), inv = model(), c = s.cId && typeof inv.cont === 'function' ? inv.cont(s.cId) : null;
-        if (c) grid(g, c, { onUse: this.onUse });
-        else { const b = { ...s, obj: o.id }; grid(g, binContainer(`bin:${o.id}:${s.id}`, b), { bin: b }); }
-        sw.appendChild(g);
-        row.appendChild(sw);
-      }
-      body.appendChild(row);
+}
+// everything in the canoe beside you set out on the ground about the hull (packs.setOutAll, stream A; a stand-in until it is in)
+function setOutAll() {
+  const pk = packsOf(), inv = model(), p = ctx.player;
+  let r = null;
+  if (pk && typeof pk.setOutAll === 'function') r = pk.setOutAll();
+  else {
+    let n = 0;
+    const spot = (k) => inv.spotNear(p.x, p.z, p.heading, k % 2 ? -1 : 1, 1 + Math.floor(k / 2) * 0.7);
+    for (const c of [...inv.containers]) if (c.where === 'canoe' && !fixedThing(c) && c.item !== 'stringer') { const s = spot(n); if (inv.setDown(c.id, { x: s.x, z: s.z, heading: p.heading }, { force: true }).ok) n++; }
+    for (const l of [...inv.long]) if (l.where === 'canoe' && !l.inUse) { const s = spot(n); if (inv.setDown(l.uid, { x: s.x, z: s.z, heading: p.heading }, { force: true }).ok) n++; }
+    r = { n, words: n ? `${n === 1 ? 'One thing' : `${n} things`} set out beside the canoe.` : 'Nothing in the canoe to set out.' };
+  }
+  if (r && r.words) note(r.words, 3.5);
+  refresh();
+  return r;
+}
+// the held load: packs.loadAll (stream A), else the hold job over packs.loadAllOpts
+function loadAll(d, list, opts = {}) {
+  const pk = packsOf(), H = holdOf();
+  if (!pk) return null;
+  const o = { key: opts.key || BOOK_KEY, keys: opts.keys || ['KeyE', 'Mouse0', opts.key || BOOK_KEY] };
+  if (typeof pk.loadAll === 'function') return pk.loadAll(o);
+  if (!H || !d || !list.length || typeof pk.loadAllOpts !== 'function') return null;
+  return H.begin({ ...pk.loadAllOpts(d, list), ...o });
+}
+// the book open with that container's (or pile's) grid lit where it lies in the right pane: stream A's Q "Open it" and
+// "Open the pile"
+export function openHere(ref) {
+  const j = of(ctx.journal);
+  const id = ref && typeof ref === 'object' ? ref.cId || ref.id || ref.container || null : ref;
+  const cards = of(ctx.cards); if (cards && cards.shown && typeof cards.close === 'function') cards.close();
+  if (j && typeof j.show === 'function') { j.show('pack'); if (j.pack && j.pack.mine) { j.pack.mine.openAt(id); return true; } }
+  for (const s of SCREENS) if (s.open && s.mine) { s.mine.openAt(id); return true; }
+  return false;
+}
+
+// --- the book's pack side -----------------------------------------------------------------------------------------
+// MineSide with Here as its right pane, under the book's header (what is on you, the food within reach, the pencil
+// note, the purse) and over its keys. One screen: nothing scrolls but the right pane when much lies about.
+export class PackSide {
+  constructor(el, { onUse = null, closeBook = null } = {}) {
+    this.el = el; this.open = false; this.sig = ''; this.t = 0; this.mt = 0; this.onUse = onUse; this.closeBook = closeBook;
+    this.held = null; this.fresh = true;
+    this.mine = new MineSide({ owner: this, onUse: (e, mode, c) => (this.onUse ? this.onUse(e, mode, c) : null), closeBook, pane: true });
+    SCREENS.add(this);
+  }
+  // opened at your pack (the back's container) each time; Tab or a click turns to the others
+  show() { this.open = true; this.fresh = true; this.mine.tab = null; listen(); this.render(true); }
+  hide() { stopHold(this); this.open = false; this.sig = ''; this.mine.sig = ''; closeMenu(); hideTip(); for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy(); }
+  update(dt) {
+    if (!this.open) return;
+    tickHold(this);
+    if ((this.t += dt) > 0.4) { this.t = 0; this.render(false); }
+  }
+  nextTab(dir = 1) { this.mine.nextTab(dir); }
+  openHere(ref) { if (!openHere(ref)) this.mine.openAt(ref); }
+  headWords() {
+    const inv = model(), pr = ctx.profile, stash = !!inv.atStash;
+    const kgOn = typeof inv.weight === 'function' ? inv.weight() : 0;
+    const hungW = !stash && ctx.energy && typeof ctx.energy.hungFood === 'function' ? ctx.energy.hungFood().words : ''; // (the barrel hung at camp, as the HUD says it)
+    const food = typeof inv.foodWords === 'function' ? inv.foodWords() : '';
+    // at a camp the food words count the camp's reach (inventory.campReach: the barrel in the canoe on the shore)
+    const atCamp = !stash && !!(inv.camp && typeof inv.camp.reachArea === 'function' && inv.camp.reachArea());
+    return {
+      kicker: `The pack · ${stash ? 'at the outfitter’s: what you carry, the canoe at the dock, and what they keep for you' : 'what you carry, and what is here within reach'}`,
+      h2: kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light',
+      sub: `${loadWords(kgOn)}${food ? ` · ${food} ${atCamp ? 'about the camp' : 'within reach'}` : ''}${hungW ? ` · ${hungW}` : ''}`,
+      money: pr ? `$${pr.money}` : '',
+    };
+  }
+  render(force) {
+    if (!this.open) return;
+    if (drag) { dirty = true; return; }
+    const w = this.headWords(), sig = [w.kicker, w.h2, w.sub, w.money].join('|');
+    if (this.fresh) {
+      this.fresh = false;
+      this.el.innerHTML = `<header class="pk-head">
+        <div class="lede"><div class="sc kicker"></div><h2></h2><div class="sub"></div></div>
+        <div class="pk-note pencil" aria-live="polite">${esc(noteNow())}</div>
+        <div class="purse"${w.money ? '' : ' hidden'}><span class="sc">In hand</span><b></b></div>
+      </header>
+      <div class="pk-body"></div>
+      <footer class="pk-foot"><span>drag between the panes, a strap to a slot or a tab, anything off the page to the ground · <kbd>Ctrl</kbd>-click sends it on · <kbd>R</kbd> turns · right-click: what it is for</span><span><kbd>Tab</kbd> the next tab · <kbd>Shift</kbd>-<kbd>Tab</kbd> the journal · <kbd>J</kbd> closes</span></footer>`;
+      this.el.querySelector('.pk-body').appendChild(this.mine.el);
+      this.sig = '';
     }
-    const acts = (o.actions || []).filter((a) => a && a.label);
-    if (acts.length) {
-      const row = mk('div', 'nb-acts');
-      for (const a of acts) row.appendChild(this.actButton(o, a));
-      body.appendChild(row);
+    if (sig !== this.sig) {
+      this.sig = sig;
+      this.el.querySelector('.kicker').textContent = w.kicker; this.el.querySelector('h2').textContent = w.h2; this.el.querySelector('.lede .sub').textContent = w.sub;
+      const purse = this.el.querySelector('.purse'); if (w.money) { purse.hidden = false; purse.querySelector('b').textContent = w.money; } else purse.hidden = true;
     }
-    w.appendChild(body);
-    return w;
-  }
-  actButton(o, a) {
-    const off = a.enabled === false, b = mk('button', `nb-act${a.held ? ' held' : ''}${off ? ' off' : ''}`);
-    b.type = 'button'; b.dataset.act = `${o.id}|${a.id}`; if (a.job) b.dataset.job = a.job;
-    // held: "hold" beside it; a hint ("on the bench by the fire") beside a ready one; why it cannot be done yet is its
-    // tag, and the pencil note when it is pressed
-    b.innerHTML = `${a.held ? ringSvg(0) : ''}<span class="l">${esc(a.label)}</span>${a.held ? '<span class="h">hold</span>' : a.hint && !off ? `<span class="h">${esc(a.hint)}</span>` : ''}`;
-    if (off) { b.setAttribute('aria-disabled', 'true'); if (a.why) b.title = a.why; } else if (a.hint) b.title = a.hint;
-    if (a.held) {
-      b.addEventListener('pointerdown', (ev) => { if (ev.button !== 0) return; ev.preventDefault(); if (off) { if (a.why) note(a.why, 3); return; } this.startHold(o, a, b); });
-    } else b.addEventListener('click', () => runNear(a));
-    return b;
-  }
-  // held work on the mouse: the book's own key down in the input while the button is held (hold.js moves the job only
-  // while its key is down); E held keeps it going too
-  startHold(o, a, b) {
-    const inp = ctx.player && ctx.player.input;
-    if (!inp || !inp.down) return;
-    this.stopHold();
-    inp.down.add(BOOK_KEY);
-    const h = this.held = { o: o.id, a: a.id, job: a.job || null, extra: null, btn: b, key: `${o.id}|${a.id}` };
-    b.classList.add('down');
-    if (a.closeBook) closeBooks();
-    let r = null;
-    try { r = a.run({ key: BOOK_KEY, from: 'book' }); } catch (e) { console.warn('nearby held action', a.id, e); }
-    if (r && r.words) note(r.words, 3.5);
-    const H = holdOf(), j = H && H.active;
-    if (j) { h.job = h.job || j.id; if (j.key && j.key !== BOOK_KEY && !inp.down.has(j.key)) { inp.down.add(j.key); h.extra = j.key; } }
-    const up = () => { window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', up, true); window.removeEventListener('blur', up); if (this.held === h) this.stopHold(); };
-    window.addEventListener('pointerup', up, true); window.addEventListener('pointercancel', up, true); window.addEventListener('blur', up);
-  }
-  stopHold() {
-    const h = this.held; if (!h) return;
-    this.held = null;
-    const inp = ctx.player && ctx.player.input;
-    if (inp && inp.down) { inp.down.delete(BOOK_KEY); if (h.extra) inp.down.delete(h.extra); }
-    if (h.btn) h.btn.classList.remove('down');
-    soon(false);
-  }
-  // each frame: the ring on a held button whose job is under way (from the mouse or from E), and the phase under way in
-  // pencil under the panel's buttons (the button keeps its size, so it never slides out from under the mouse)
-  tickHold(all = false) {
-    const H = holdOf(), j = H && H.active;
-    if (!j && !this.wasHolding && !all) return;
-    this.wasHolding = !!j;
-    for (const b of this.el.querySelectorAll('.nb-act.held')) {
-      const own = this.held && this.held.btn === b, on = !!(j && ((b.dataset.job && j.id === b.dataset.job) || (own && this.held.job === j.id)));
-      const n = on ? j.phases.length : 1, f = on ? j.at / n : 0, k = `${on ? 1 : 0}:${f.toFixed(3)}`;
-      if (b.dataset.k === k) continue;
-      b.dataset.k = k;
-      b.classList.toggle('going', on);
-      const svg = b.querySelector('.nb-ring'); if (svg) svg.outerHTML = ringSvg(f, n);
-      const acts = b.closest('.nb-acts'); if (!acts) continue;
-      let line = acts.nextElementSibling;
-      if (!line || !line.classList.contains('nb-doing')) { line = mk('div', 'nb-doing pencil'); acts.after(line); }
-      if (on) { const i = Math.min(n - 1, Math.floor(j.at + 1e-9)), ph = j.phases[i]; line.textContent = `${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}`; line.dataset.by = b.dataset.act; }
-      else if (line.dataset.by === b.dataset.act) { line.textContent = ''; line.dataset.by = ''; }
-    }
-  }
-  // a few times a second: the meters and the panels' words, in place (nearby.js keeps them cheap)
-  liven() {
-    const objs = nearObjects();
-    for (const o of objs) {
-      const el = this.el.querySelector(`.nb[data-nb="${CSS.escape(o.id)}"]`); if (!el) continue;
-      const wh = el.querySelector('.nb-head .wh'); if (wh && wh.textContent !== (o.sub || '')) wh.textContent = o.sub || '';
-      for (const [k, m] of [['burn', o.meter], ['cook', o.cooking]]) {
-        const row = el.querySelector(`.nb-meter.m-${k}`); if (!row || !m) continue;
-        const bar = row.querySelector('i'), w = row.querySelector('.w');
-        if (bar) bar.style.width = pct(m.value);
-        if (w && w.textContent !== (m.words || '')) w.textContent = m.words || '';
-      }
-    }
-  }
-  // the thing whose E opened the book (nearby.js focus), scrolled to and lit
-  focusNear() {
-    const el = this.el.querySelector('.nb.focus'); if (!el) return;
-    el.scrollIntoView({ block: 'nearest' });
-    el.classList.remove('lit'); void el.offsetWidth; el.classList.add('lit');
+    this.mine.render(force);
+    tickHold(this, true);
   }
 }
 
 // --- a shelf, the lure wall or the map table ------------------------------------------------------------------------
-// Witcher 3's two panes: your containers on the left (at an outfitter, all of them), the shelf on the right, priced.
+// Witcher 3's two panes: yours on the left (MineSide: the body, your tabs, Here for the canoe at the dock, Keeping), the
+// shelf on the right, priced. A drag buys exactly where it lands (that slot, or the first room in the tab it is dropped
+// on), never another box, and a bought thing is marked: the tag flips to "bought", a quiet chime, a glint on the thing.
 // spec: { kind, kicker, title, shelfName, sub, say, who, look ('shelf' | 'pegs' | 'table'), stock() → [{ id, price,
 // qty, owned, inUse, hull, words, signature }], buy(id, spot, n) → { ok, words }, money(), onClose }
 export class ShelfScreen {
   constructor(el, hud) {
-    this.el = el; this.hud = hud; this.open = false; this.spec = null; this.receipt = null; this.sig = '';
+    this.el = el; this.hud = hud; this.open = false; this.spec = null; this.receipt = null; this.sig = ''; this.held = null;
+    this.mine = new MineSide({ owner: this, onUse: null, closeBook: () => this.close() });
+    this.bought = null; this.glint = null;
     SCREENS.add(this);
     if (hud && hud.registerPaper) hud.registerPaper('shelf', () => this.close());
     el.addEventListener('click', (ev) => { const b = ev.target.closest('button[data-act]'); if (b && b.dataset.act === 'close') this.close(); });
   }
   show(spec) {
-    this.spec = spec; this.open = true; this.receipt = null; this.fresh = true;
+    this.spec = spec; this.open = true; this.receipt = null; this.fresh = true; this.bought = null; this.glint = null;
     listen(); hideTip();
     if (this.hud && this.hud.openPaper) this.hud.openPaper('shelf');
     this.render(true);
   }
   close() {
     if (!this.open) return;
+    stopHold(this);
     this.open = false; this.el.classList.remove('show'); closeMenu(); hideTip();
     for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy();
     if (this.hud && this.hud.closePaper) this.hud.closePaper('shelf');
     const s = this.spec; if (s && s.onClose) s.onClose();
   }
+  closeBook() { this.close(); }
   money() { return this.spec && this.spec.money ? this.spec.money() : 0; }
   buy(id, spot, n = 1) {
+    const inv = model(), before = new Set();
+    for (const c of inv.containers || []) for (const e of c.grid || []) before.add(e.uid);
     const r = this.spec.buy(id, spot, n) || { ok: false, words: 'Not today.' };
     this.receipt = r;
-    if (r.ok && r.cId) this.reveal = r.cId; // the container it went into, scrolled to
-    if (r.ok) note(r.words, 4);
+    if (r.ok) {
+      note(r.words, 4);
+      // the marks of the purchase: the tag on the shelf, the glint on the thing where it landed (the new entry there,
+      // or the stack it joined), the chime
+      this.bought = { id, until: now() + 1600 };
+      const c = r.cId && typeof inv.cont === 'function' ? inv.cont(r.cId) : null;
+      const fresh = c ? (c.grid || []).filter((e) => e.id === id && !before.has(e.uid)) : [];
+      const stack = c && !fresh.length ? (c.grid || []).filter((e) => e.id === id && (!spot || (e.x === spot.x && e.y === spot.y))) : [];
+      this.glint = { cId: r.cId || null, uids: [...fresh, ...stack].map((e) => e.uid), until: now() + 1600 };
+      if (r.cId) this.mine.openAt(r.cId);
+      chime();
+    }
     refresh();
     this.render(true);
     return r.ok;
   }
-  update() { if (this.open) this.render(false); }
+  update() { if (!this.open) return; tickHold(this); this.render(false); }
   render(force) {
     if (!this.open) return;
     if (drag) { dirty = true; return; }
-    const inv = model(), all = inv.reachable(ctx.player) || [], sig = [version, all.map((c) => `${c.id}:${c.where}`).join(), this.money()].join('|');
-    if (!force && sig === this.sig) return;
-    this.sig = sig;
-    const s = this.spec, money = this.money(), o = ordered(all), byId = o.byId, list = sorted(o.list, byId), r = this.receipt;
-    const scroll = this.fresh ? [] : [...this.el.querySelectorAll('.sh-mine, .sh-stock')].map((n) => n.scrollTop);
-    this.fresh = false;
-    for (const g of [...GRIDS.values()]) if (this.el.contains(g.el)) g.destroy();
-    this.el.className = `paper show look-${s.look || 'shelf'}`;
-    this.el.innerHTML = `<header>
+    const inv = model(), all = inv.reachable(ctx.player) || [], money = this.money(), s = this.spec, r = this.receipt;
+    const sig = [version, all.map((c) => `${c.id}:${c.where}`).join(), money, r ? r.words : '', this.bought ? this.bought.id : ''].join('|');
+    if (this.fresh) {
+      this.fresh = false;
+      this.el.className = `paper show look-${s.look || 'shelf'}`;
+      this.el.innerHTML = `<header>
         <div class="lede"><div class="sc kicker">${esc(s.kicker || '')}</div><h2>${esc(s.title)}</h2>${s.say ? `<div class="say">“${esc(s.say)}”${s.who ? ` <span class="who">— ${esc(s.who)}</span>` : ''}</div>` : ''}</div>
         <div class="purse"><span class="sc">In hand</span><b>$${money}</b></div>
         <button type="button" class="stamp outline" data-act="close" aria-label="Step back from the shelf (E or Esc)">Step back · E</button>
       </header>
       <div class="sh-body">
-        <section class="sh-mine pk-mat" aria-label="Your containers"><div class="pk-lab">Yours${typeof inv.foodWords === 'function' ? ` · ${esc(inv.foodWords())}` : ''}</div><div class="pk-flow"></div></section>
+        <section class="sh-mine pk-mat" aria-label="Yours"><div class="pk-lab">Yours${typeof inv.foodWords === 'function' ? ` · ${esc(inv.foodWords())}` : ''}</div></section>
         <section class="sh-shelf" aria-label="${esc(s.title)}"><div class="sh-top"><h3>${esc(s.shelfName || s.title)}</h3><span class="sum">${esc(s.sub || '')}</span></div><div class="sh-stock"></div>
-          <div class="sh-receipt pencil${r && !r.ok ? ' no' : ''}">${esc(r ? r.words : s.hint || 'Drag a thing into one of yours, or double-click it to buy one.')}</div></section>
+          <div class="sh-receipt pencil"></div></section>
       </div>
-      <footer class="sh-foot"><span>drag onto a slot to buy it there · double-click or <kbd>Ctrl</kbd>-click buys into the first with room · <kbd>R</kbd> turns it while dragging · right-click for more</span></footer>`;
-    const mine = this.el.querySelector('.sh-mine .pk-flow'), big = mk('div', 'sh-col'), small = mk('div', 'sh-col'), under = mk('div', 'sh-under');
-    mine.append(big, small, under);
-    for (const c of list) {
-      const top = topOf(c, byId), { cols, rows } = gridSize(top);
-      (top.item === 'crate' ? under : cols * rows >= 20 && top.item !== 'stringer' ? big : small).appendChild(block(c, byId));
+      <footer class="sh-foot"><span>drag onto a slot or a tab to buy it there · double-click or <kbd>Ctrl</kbd>-click buys into the first with room · <kbd>R</kbd> turns it while dragging · right-click for more</span></footer>`;
+      this.el.querySelector('.sh-mine').appendChild(this.mine.el);
+      this.sig = '';
     }
-    const longs = (inv.long || []).filter((l) => l.where !== 'ground');
-    if (longs.length) { const f = mk('div', 'pk-longs'); for (const l of longs) f.appendChild(longBlock(l)); small.appendChild(f); }
-    if (this.reveal) { const id = this.reveal; this.reveal = null; setTimeout(() => reveal(id), 30); }
-    // the stock on shelf boards ten cells wide: the tallest first, each board as high as the tallest thing on it, the
-    // things standing on it (a long thin thing lies down)
+    if (force || sig !== this.sig) {
+      this.sig = sig;
+      this.el.querySelector('header .purse b').textContent = `$${money}`;
+      const rc = this.el.querySelector('.sh-receipt'); rc.textContent = r ? r.words : s.hint || 'Drag a thing into one of yours, or double-click it to buy one.'; rc.classList.toggle('no', !!(r && !r.ok));
+      this.stock(money);
+    }
+    this.mine.render(force);
+    this.marks();
+  }
+  // the stock on shelf boards ten cells wide: the tallest first, each board as high as the tallest thing on it, the
+  // things standing on it (a long thin thing lies down)
+  stock(money) {
+    const s = this.spec, box = this.el.querySelector('.sh-stock'), scroll = box.scrollTop;
+    for (const g of [...GRIDS.values()]) if (box.contains(g.el)) g.destroy();
+    box.textContent = '';
     const cols = 10, gap = s.look === 'pegs' ? 1 : 0, shelf = { id: `shelf:${s.kind}`, item: null, size: { cols, rows: 1 }, grid: [], boards: [] };
     const items = s.stock().map((it) => { const d = itemDef(it.id), w = d ? d.w || 1 : 1, h = d ? d.h || 1 : 1, rot = w === 1 && h >= 3 ? 1 : 0; return { it, W: rot ? h : w, H: rot ? w : h, rot }; })
       .sort((a, b) => b.H - a.H || b.W - a.W || (b.it.signature ? 1 : 0) - (a.it.signature ? 1 : 0));
@@ -1674,10 +2014,37 @@ export class ShelfScreen {
     shelf.size.rows = Math.max(y + band, 4);
     const sg = mk('div');
     grid(sg, shelf, { shelf: true, screen: this });
-    this.el.querySelector('.sh-stock').appendChild(sg);
-    [...this.el.querySelectorAll('.sh-mine, .sh-stock')].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });
+    box.appendChild(sg);
+    box.scrollTop = scroll;
   }
+  // the purchase's marks while they last: "bought" on the shelf's tag, the glint on the thing in your grid
+  marks() {
+    const t = now();
+    if (this.bought) {
+      if (t < this.bought.until) { const el = this.el.querySelector(`.ig-shelf .ig-item[data-id="${CSS.escape(this.bought.id)}"]`); if (el && !el.classList.contains('bought')) { el.classList.add('bought'); const p = el.querySelector('.ig-price'); if (p) { p.dataset.was = p.textContent; p.textContent = 'bought'; } } }
+      else { const el = this.el.querySelector('.ig-shelf .ig-item.bought'); if (el) { el.classList.remove('bought'); const p = el.querySelector('.ig-price'); if (p && p.dataset.was) p.textContent = p.dataset.was; } this.bought = null; }
+    }
+    if (this.glint) {
+      if (t < this.glint.until) for (const uid of this.glint.uids) { const el = this.el.querySelector(`.ig-item[data-uid="${CSS.escape(uid)}"]`); if (el && !el.classList.contains('glint')) el.classList.add('glint'); }
+      else this.glint = null;
+    }
+  }
+}
+// a quiet two-note chime by your ear (audio.js's voice), for a thing bought
+function chime() {
+  const au = of(ctx.audio), p = ctx.player;
+  if (!au || !au.ctx || !au.enabled || typeof au.voice !== 'function') return;
+  try {
+    const v = au.voice({ x: p ? p.x : 0, y: p ? (p.altitude || 0) + 1.5 : 0, z: p ? p.z : 0, gain: 0.14, ref: 6, wet: 0.08, air: false, pri: 2 });
+    if (!v) return;
+    const t = v.t;
+    for (const [s, f, a, d] of [[0, 1760, 0.6, 0.42], [0.17, 2217, 0.45, 0.55]]) {
+      const o = v.osc('sine', f, t + s, t + s + d + 0.05), g = v.gain(0); o.connect(g); g.connect(v.input);
+      g.gain.setValueAtTime(0, t + s); g.gain.linearRampToValueAtTime(a, t + s + 0.005); g.gain.exponentialRampToValueAtTime(0.001, t + s + d);
+    }
+    v.until(t + 0.9);
+  } catch { /* the chime is a nicety */ }
 }
 
 // for the tests and the console
-export const invUI = { icon, iconAt, iconUrl, grid, itemDef, defineItem, model, attach, refresh, placeCheck, firstFit, CELL, GRIDS, get drag() { return drag; } };
+export const invUI = { icon, iconAt, iconUrl, grid, itemDef, defineItem, model, attach, refresh, placeCheck, firstFit, CELL, GRIDS, SCREENS, openHere, verbsFor, fireObject, get drag() { return drag; } };

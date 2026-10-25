@@ -1,13 +1,16 @@
 // What you point at (the owner's second feedback of 2026-10-24: "I wonder if it'll also be easier if we had a little
 // crosshair or a little circle in the middle of the screen for where you're pointing. So that you can actually point at
-// the food on the fire and pick it up instead of just be around the fire and pick it up", and "E is like your interact
-// button. But it's really just like your pickup button"). On foot, a small quiet dot sits in the middle of the view (in
-// third person the ray runs along the camera, through the dot). What it points at within reach gets a soft rim (a
-// back-face shell on the thing, one translucent material) and a small label under the dot: "E Pick up · Dead branch",
-// "E Talk · Ruth", "E Open · The fire ring". E does that, and only that: it picks up a thing on the ground (into the
-// hands or the first container with room), talks to a person, opens a store's shelf, board or map table (or the book at
-// a camp's fire ring, tent or latrine: the jobs there are the book's, nearby.js), or gets into the canoe. Pointed at
-// nothing, E does nothing. There is no Q drop: things are put down from the book (its Ground area).
+// the food on the fire and pick it up instead of just be around the fire and pick it up"; and the third, the world
+// cards: "some keys are used to pick up the canoe (Q and E). I feel like at most an item can have two quick actions.
+// primary is E and secondary is Q"). On foot, a small quiet dot sits in the middle of the view (in third person the ray
+// runs along the camera, through the dot). What it points at within reach gets a soft rim (a back-face shell on the
+// thing, one translucent material) and a small label under the dot with its one or two keys, always both: "E Pick up ·
+// Q Open it · the Duluth pack", "E Get in · Q Shoulder it · the canoe", "E Lower · the barrel, hung". Nothing ever has
+// a third key; a held action says "hold"; an action that can't be done now is dimmed and says why in its verb's place
+// (the canoe's Q reads "Unload it first"). E does the first, Q the second, and nothing else: the camp's jobs are on the
+// things themselves (nearby.js) and a card opens only where there is something to move or a choice to make (the
+// fire's card, stream B's; the book's Here tab for a container or a pile on the ground). Pointed at nothing, E and Q
+// do nothing of the dot's. There is no Q drop: things are put down from the book.
 //
 //   import { pointer } from './pointer.js';
 //   pointer.attach({ camera, player, scene, renderer, hud, chase, outfitter, fishing, photo, dialogue })
@@ -16,19 +19,23 @@
 //     near  { x, y, z (the walker's feet), reach (m), flat(x, z) (m from the walker, level),
 //             sphere(x, y, z, r), segment(ax, ay, az, bx, by, bz, r), box({ x, y, z, hx, hy, hz, heading }) }
 //           each test -> { t (m along the ray), miss (0 dead on .. 1 at the edge) } or null
-//     target { kind: 'item' | 'container' | 'person' | 'shelf' | 'board' | 'maptable' | 'canoe' | 'fire' | 'tent' |
-//              'latrine' | 'tree' | …, ref, label, verb: 'Pick up' | 'Talk' | 'Open' | 'Get in' | …, act(),
-//              enabled? (false: the label shows `why` and E does nothing), why?, hint?,
-//              mesh? (a Mesh whose geometry takes the rim), shell? ({ geometry, matrix }: the rim on that), box? (as
-//              near.box: with no mesh or shell, a soft pool of light on the ground under it instead) }
+//     target { kind: 'item' | 'container' | 'pile' | 'person' | 'shelf' | 'board' | 'maptable' | 'counter' | 'canoe' |
+//              'fire' | 'tent' | 'seat' | 'tree' | 'barrelHung' | 'water' | 'downLog' | …, ref, label,
+//              e: { verb, run(opts), held?, why? },      E: the primary (opts: { key: 'KeyE' }, for a held job)
+//              q?: { verb, run(opts), held?, why? },     Q: the secondary (opts: { key: 'KeyQ' })
+//              hint?, mesh? (a Mesh whose geometry takes the rim), shell? ({ geometry, matrix }: the rim on that),
+//              box? (as near.box: with no mesh or shell, a soft pool of light on the ground under it instead) }
+//            (an older provider's { verb, act, enabled, why } is read as e: { verb, run: act, why })
 //   pointer.target          the thing pointed at now, or null
-//   pointer.before()        main.js, before anyone reads E: E acts on the target (and is taken)
+//   pointer.before()        main.js, before anyone reads E or Q: they act on the target (and are taken)
 //   pointer.update(dt, shell) main.js, after the camera: the ray, the target, the dot, the rim
 //   pointer.groundHit       where the ray meets the ground near the walker ({ x, y, z, t }), or null (the tent's ghost)
 //   pointer.passStore       inside an outfitter's store with nothing pointed at, E is left to the store's own code
 //                           (stream C turns it off once the store's hotspots are registered here)
 //   pointer.isArmed         () => bool: a job waits for E or a click (nearby.js: the tent's ghost, the barrel's hang),
 //                           so E and the mouse are left to it
+//   pointer.seated          () => bool: sat down (stream C's player.seated): the label reads "E Stand up" and E is left
+//                           to the walker (player.js stands him up); pointer.stand(): the fallback's stand-up
 // The pick: of the candidates the ray passes, the one it passes nearest its middle (miss), the nearer on a tie. Within
 // reach of the walker is each provider's to judge (near.flat, near.reach).
 import * as THREE from 'three';
@@ -46,17 +53,37 @@ const CSS = `
 #crosshair .ch-lab { position: absolute; left: 0; top: 18px; translate: -50% 0; white-space: nowrap; font-size: 15px; line-height: 1.3; font-family: var(--sans); font-weight: 500; color: var(--cream); letter-spacing: 0; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); opacity: 0; transition: opacity .15s; display: flex; align-items: center; gap: 8px; }
 #crosshair.on .ch-lab { opacity: 1; }
 #crosshair .ch-lab kbd { font-size: 12px; padding: 1px 6px; min-width: 20px; }
+#crosshair .ch-lab .act { display: inline-flex; align-items: center; gap: 6px; }
+#crosshair .ch-lab .act + .act { margin-left: 2px; }
+#crosshair .ch-lab .act .hold { font-size: 11.5px; font-style: italic; color: rgba(243, 236, 221, .66); letter-spacing: .02em; }
+#crosshair .ch-lab .act.off { color: rgba(243, 236, 221, .6); font-style: italic; }
+#crosshair .ch-lab .act.off kbd { border-color: rgba(243, 236, 221, .4); color: rgba(243, 236, 221, .6); }
 #crosshair .ch-lab .what { color: rgba(243, 236, 221, .78); }
 #crosshair.off .ch-lab { color: rgba(243, 236, 221, .7); font-style: italic; }
 #air.nohints #crosshair .ch-lab kbd { display: none; }
 `;
-// a prompt line without its E (player.js say: "info &nbsp;·&nbsp; <kbd>E</kbd>Do this &nbsp; <kbd>Q</kbd>Do that")
-export function stripE(text) {
-  let s = String(text || '').replace(/<kbd>E<\/kbd>.*?(?=\s*&nbsp;\s*<kbd>|$)/g, '');
+// an older provider's target ({ verb, act, enabled, why }) read as the two-key shape: e: { verb, run, why }
+function normalize(t) {
+  if (!t || t.e || typeof t.act !== 'function' && !t.verb) return t;
+  const why = t.enabled === false ? (t.why || 'not now') : null;
+  t.e = { verb: t.verb || 'Use', run: t.act || (() => {}), why, held: !!t.held };
+  return t;
+}
+// one key's part of the label: the key, the verb (or, dimmed, why it can't be done), "hold" for a held one
+function actHtml(key, a) {
+  if (!a) return '';
+  const off = !!a.why;
+  return `<span class="act${off ? ' off' : ''}"><kbd>${key}</kbd><span>${esc(off ? a.why : a.verb)}</span>${a.held && !off ? '<span class="hold">hold</span>' : ''}</span>`;
+}
+// a prompt line without its E (player.js say: "info &nbsp;·&nbsp; <kbd>E</kbd>Do this &nbsp; <kbd>Q</kbd>Do that"), or
+// without its Q (stripKey: the dot's label has the key, so the line at the bottom loses it)
+export function stripKey(text, key = 'E') {
+  let s = String(text || '').replace(new RegExp(`<kbd>${key}</kbd>.*?(?=\\s*&nbsp;\\s*<kbd>|$)`, 'g'), '');
   s = s.replace(/(\s*&nbsp;\s*)+(?=\s*&nbsp;·&nbsp;)/g, '').replace(/&nbsp;·&nbsp;(\s*&nbsp;\s*)+/g, '&nbsp;·&nbsp; ');
   s = s.replace(/^(\s|&nbsp;|·)+/, '').replace(/(\s|&nbsp;|·)+$/, '');
   return s;
 }
+export const stripE = (text) => stripKey(text, 'E');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _m = new THREE.Matrix4();
 
@@ -68,6 +95,7 @@ class Pointer {
     this.groundHit = null;
     this.passStore = true;
     this.isArmed = null;
+    this.seated = null; this.stand = null; // wc A: sat down (stream C's player.seated; nearby.js's fallback)
     this.on = false;
     this.attached = false;
     this.near = this.makeNear();
@@ -197,22 +225,30 @@ class Pointer {
   }
   inStore() { const o = this.outfitter; return !!(o && o.visit); }
 
-  // before player.update and everyone else's E: E on the target. Pointed at nothing, E does nothing (in a store, until
-  // stream C's hotspots are here, it is left to the store).
+  // before player.update and everyone else's E and Q: E does the target's first, Q its second (both taken). Pointed at
+  // nothing, E does nothing (in a store, until stream C's hotspots are here, it is left to the store); Q is left to
+  // travel (packs.js: leave the canoe where you stepped out, the fetch). Sat down, E is the walker's: it stands him up.
   before() {
     const inp = this.input;
-    if (!this.usable() || inp.paused) return;
+    if (!this.usable()) return;
+    // sat down: E stands you up (the fallback holds the input paused while you sit, so this comes before that)
+    if (this.seated && this.seated()) { if (inp.once.has('KeyE') && this.stand) { inp.once.delete('KeyE'); this.stand(); } return; }
+    if (inp.paused) return;
     if (this.armed()) return; // the ghost's E and click are its own (nearby.js)
-    if (!inp.once.has('KeyE')) return;
+    const e = inp.once.has('KeyE'), q = inp.once.has('KeyQ');
+    if (!e && !q) return;
     const holdActive = typeof window !== 'undefined' && window.__game && window.__game.hold && window.__game.hold.active;
     if (holdActive) return;
     const t = this.target;
     if (t) {
-      inp.once.delete('KeyE');
-      if (t.enabled === false) { if (t.why && this.hud) this.hud.note(t.why, 3); return; }
-      try { t.act(); } catch (e) { console.warn('pointer act', e); }
+      const a = e ? t.e : t.q, key = e ? 'KeyE' : 'KeyQ';
+      if (!a) { if (e) inp.once.delete('KeyE'); return; }
+      inp.once.delete(key);
+      if (a.why) { if (this.hud) this.hud.note(a.why, 3); return; }
+      try { a.run({ key, keys: [key, 'Mouse0'], from: 'dot' }); } catch (err) { console.warn('pointer act', err); }
       return;
     }
+    if (!e) return;
     if (this.passStore && this.inStore()) return;
     inp.once.delete('KeyE');
   }
@@ -233,6 +269,12 @@ class Pointer {
     const n = this.near;
     n.x = p.x; n.z = p.z; n.y = p.altitude; n.reach = REACH;
     let best = null;
+    if (this.seated && this.seated()) {
+      // sat down: the one thing to do is get up (E, the walker's own; or the fallback's)
+      this.setTarget(this.sitTarget || (this.sitTarget = { kind: 'seat', ref: 'seated', label: '', e: { verb: 'Stand up', run: () => { if (this.stand) this.stand(); } } }));
+      this.groundHit = null; this.show(true); this.drawRim();
+      return;
+    }
     if (!this.armed()) {
       for (const fn of this.providers) {
         let list;
@@ -245,16 +287,18 @@ class Pointer {
         }
       }
     }
-    this.setTarget(best ? best.target : null);
+    this.setTarget(best ? normalize(best.target) : null);
     this.groundHit = this.findGround();
     this.show(true);
     this.drawRim();
     // on foot the E is the dot's: a line at the bottom offering E for something you do not point at would lie, so it
-    // keeps its words and loses the key (the store keeps its own until stream C has moved it here)
+    // keeps its words and loses the key (the store keeps its own until stream C has moved it here); and while the dot
+    // offers a Q of its own, the line's Q goes too (the canoe's shoulder is on the label)
     const pr = p.prompt;
     if (pr && !pr.hold && !this.armed() && !(this.passStore && this.inStore())) {
       let q = pr.key === 'E' ? { ...pr, key: null } : pr;
       if (/<kbd>E<\/kbd>/.test(q.text || '')) q = { ...q, text: stripE(q.text) };
+      if (this.target && this.target.q) { if (q.key === 'Q') q = { ...q, key: null }; if (/<kbd>Q<\/kbd>/.test(q.text || '')) q = { ...q, text: stripKey(q.text, 'Q') }; }
       if (q !== pr) p.prompt = q.text ? q : null;
     }
   }
@@ -290,16 +334,16 @@ class Pointer {
     const el = this.el;
     if (!el) return;
     el.classList.toggle('show', on);
-    const t = on ? this.target : null;
+    const t = on ? this.target : null, e = t && t.e, q = t && t.q;
     el.classList.toggle('on', !!t);
-    el.classList.toggle('off', !!(t && t.enabled === false));
-    const sig = t ? `${t.verb}|${t.label}|${t.enabled}|${t.why || ''}|${t.hint || ''}` : '';
+    el.classList.toggle('off', !!(t && e && e.why && !(q && !q.why)));
+    const part = (a) => (a ? `${a.verb}|${a.why || ''}|${a.held ? 1 : 0}` : '');
+    const sig = t ? `${part(e)}|${part(q)}|${t.label}|${t.hint || ''}` : '';
     if (sig === this.sig) return;
     this.sig = sig;
     if (!t) { this.lab.innerHTML = ''; return; }
-    this.lab.innerHTML = t.enabled === false
-      ? `<span>${esc(t.label)}</span>${t.why ? `<span class="what">· ${esc(t.why)}</span>` : ''}`
-      : `<kbd>E</kbd><span>${esc(t.verb)}</span>${t.label ? `<span class="what">· ${esc(t.label)}</span>` : ''}${t.hint ? `<span class="what">· ${esc(t.hint)}</span>` : ''}`;
+    // both keys, always, then the thing: "E Pick up · Q Open it · the Duluth pack"
+    this.lab.innerHTML = `${actHtml('E', e)}${actHtml('Q', q)}${t.label ? `<span class="what">· ${esc(t.label)}</span>` : ''}${t.hint ? `<span class="what">· ${esc(t.hint)}</span>` : ''}`;
   }
   // the rim on the thing pointed at: its own mesh's geometry where it has one, else the shape it gave, else a box
   drawRim() {
@@ -311,8 +355,9 @@ class Pointer {
       t.mesh.updateWorldMatrix(true, false);
       geo = t.mesh.geometry; r.matrix.copy(t.mesh.matrixWorld);
     } else if (t.shell && t.shell.geometry) { geo = t.shell.geometry; r.matrix.copy(t.shell.matrix); }
+    const off = !!(t.e && t.e.why && !(t.q && !t.q.why));
     // a thing known only by its box (a shelf, a person, the latrine): a soft pool of light on the ground under it
-    if (!geo && t.box) { this.parkRim(); this.pool(t.box, t.enabled === false); return; }
+    if (!geo && t.box) { this.parkRim(); this.pool(t.box, off); return; }
     this.parkPool();
     if (!geo || !geo.getAttribute('normal')) { this.parkRim(); return; }
     r.geometry = geo;
@@ -320,7 +365,7 @@ class Pointer {
     r.frustumCulled = false;
     const k = this.light();
     this.rimMat.color.setHex(RIM_COL).multiplyScalar(k);
-    this.rimMat.opacity = (t.enabled === false ? 0.28 : 0.55) * (0.55 + 0.45 * k);
+    this.rimMat.opacity = (off ? 0.28 : 0.55) * (0.55 + 0.45 * k);
   }
   // the pool under a box target: its footprint and a little more, on its bottom (the floor, the ground at its feet)
   pool(b, off) {
@@ -362,12 +407,12 @@ export function peopleTargets(people) {
       const hit = near.segment(f.x, bot, f.z, f.x, top, f.z, 0.42);
       if (!hit) continue;
       const name = v.keeper ? v.name : (people.s && people.s.talked && people.s.talked[v.key] ? v.first : v.name);
-      out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: v.key, label: name, verb: 'Talk', hint: v.who && !v.keeper ? v.who : null, box: { x: f.x, y: (top + bot) / 2, z: f.z, hx: 0.3, hy: (top - bot) / 2, hz: 0.3, heading: f.heading || 0 }, act: () => people.talkTo(v) } });
+      out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: v.key, label: name, e: { verb: 'Talk', run: () => people.talkTo(v) }, hint: v.who && !v.keeper ? v.who : null, box: { x: f.x, y: (top + bot) / 2, z: f.z, hx: 0.3, hy: (top - bot) / 2, hz: 0.3, heading: f.heading || 0 } } });
     }
     return out;
   };
 }
-// The berries and mushrooms (forage.js): a ripe patch pointed at within its reach is "E Pick"
+// The berries and mushrooms (forage.js): a ripe patch pointed at within its reach is "E Pick" (a lookalike "E Look")
 export function forageTargets(forage, FORAGE) {
   return (ray, near) => {
     if (!forage || !forage.drawn || forage.busy) return null;
@@ -379,7 +424,7 @@ export function forageTargets(forage, FORAGE) {
       const tall = s.tall ? 1.1 : 0.25, hit = near.sphere(q.x, q.y + tall, q.z, s.tall ? 0.9 : 0.75);
       if (!hit) continue;
       const left = s.pick ? forage.leftOn(q) : 1, look = s.kind === 'lookalike';
-      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'item', ref: q.key, label: s.name || s.short, verb: look ? 'Look' : (s.pick && s.pick.verb) || 'Pick', enabled: look || left > 0, why: left > 0 ? null : 'picked for today', mesh: q.mesh, act: () => forage.start(q) } });
+      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'item', ref: q.key, label: s.name || s.short, e: { verb: look ? 'Look' : (s.pick && s.pick.verb) || 'Pick', why: look || left > 0 ? null : 'picked for today', run: () => forage.start(q) }, mesh: q.mesh } });
     }
     return out;
   };
@@ -396,7 +441,7 @@ export function taskTargets(tasks, KINDS) {
       m.getWorldPosition(_v);
       const hit = near.sphere(_v.x, _v.y + 0.08, _v.z, 0.45);
       if (!hit) continue;
-      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'item', ref: `task:${t.id}`, label: `the ${t.label}`, verb: 'Pick up', mesh: m.isMesh ? m : null, act: () => KINDS[t.kind].use(tasks, t) } });
+      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'item', ref: `task:${t.id}`, label: `the ${t.label}`, e: { verb: 'Pick up', run: () => KINDS[t.kind].use(tasks, t) }, mesh: m.isMesh ? m : null } });
     }
     return out;
   };

@@ -61,6 +61,8 @@ import { pointer, peopleTargets, forageTargets, taskTargets } from './pointer.js
 import { nearby } from './nearby.js'; // fb2 A
 import { FORAGE } from './forage.js'; // fb2 A
 import { KINDS } from './tasks.js'; // fb2 A
+import { cards } from './cards.js'; // wc B
+import { VERBS, verbsOf } from './items.js'; // wc D
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -384,10 +386,47 @@ async function main() {
   // bins, meter and buttons, the pitched tent, the latrine, the hang) are panels whose held buttons run while the mouse
   // holds them; Pitch and Hang are on the right-click menus.
   invUI.attach({ nearby: () => window.__game.nearby || null, hold });
+  // wc B: the cards and the book (the owner's third round of 2026-10-24: "the whole inventory system … confusing",
+  // "having to scroll to see items is a struggle"). The book is one screen for stuff (inv-ui.js MineSide): the body on
+  // the left, a tab per container you carry across the top, one grid at a time, Here for what lies within reach and the
+  // canoe beside you (Set everything out, Load everything here), Keeping at an outfitter; a thing dragged off the page
+  // goes down at your feet; right-click lists an item's verbs, hover says what it is for; eating is instant. The fire is
+  // a card (cards.js: your stuff · the fire), stream A's E at the ring opens it; its Q "Open it" on a container or a
+  // pile is journal.openHere. The card ticks with the journal and holds the walker like the book does.
+  invUI.attach({ audio, journal, packs: () => packs, cards });
+  cards.attach({ hud, nearby: () => window.__game.nearby || null, journal, player, hold, onUse: (e, mode, c) => journal.pack.onUse(e, mode, c) });
+  const updJournalB = journal.update.bind(journal), updOutfitterB = outfitter.update.bind(outfitter);
+  journal.update = (dt) => { updJournalB(dt); cards.update(dt); };
+  outfitter.update = (dt) => { updOutfitterB(dt); if (cards.shown) player.input.paused = true; };
+  window.__game.cards = cards;
   // fb2 C: the store, the counter and the dock (outfitter.js, trip.js, props.js). Trips start and end by themselves at
   // the landings, the store's hotspots are the pointer's targets (outfitter.js registers them when pointer.js is in the
   // build), and the counter's free tap is at the counter only, not at the cork board (both are the outfitter's paper).
   energy.atCounter = () => !!outfitter.open && outfitter.tab === 'counter';
+  // wc A: the world cards (the owner's third round of 2026-10-24). Whatever the dot points at has at most E and Q, both
+  // on its label (pointer.js), and the camp's work is on the things themselves (nearby.js: the hung barrel's E Lower, a
+  // tree's E Hang, the fire ring's E Open the fire and Q Light or Douse, the tent's E Rest until… (camp.restDial) and Q
+  // Strike, the seats' E Sit, the canoe's E Get in and Q Shoulder it with "Unload it first" when loaded, the water's E
+  // Fill the bottle, a down log's E Saw); the book is only for your things. The fire's card is stream B's
+  // (window.__game.cards.open('fire', key), read through nearby.objects(), reduced to the fire and the piles), a
+  // container or a pile on the ground opens the book's Here tab (journal.openHere), and sitting is stream C's
+  // (player.sitAt / stand / seated); each is looked up when it is wanted, with a fallback until it lands. Eating is
+  // instant (cook.js). The book's Canoe tab calls packs.setOutAll and packs.loadAll.
+  nearby.world({ cards: () => window.__game.cards || null, journal, sitter: () => (typeof player.sitAt === 'function' && typeof player.stand === 'function' ? player : null) });
+  // wc C: sitting and shore fishing (the owner, 2026-10-24: "why can't I put the fishing rod in my hand and fish with it
+  // outside of canoe", "letting myself sit in the bench would be a nice interaction", and no sitting down to eat).
+  // player.sitAt / stand (player.js) sit you on a bench, a log seat or the latrine (props.js c.layout.seats and a store's
+  // porch bench; stream A's E Sit calls them), E or any move key stands you up, and canoe.js's sit no longer eats. With
+  // the rod in a hand (inventory.rodInHand) F fishes from the shore, a dock or a rock with the canoe's keys and card
+  // (fishing.js on foot; the standing figure holds the rod, canoe.js rodArms); a kept fish goes on the stringer when the
+  // canoe is in reach, else into a container you carry.
+  fishing.inventory = inventory; fishing.indoors = () => !!(outfitter.visit && outfitter.visit.inside);
+  // wc D: the world cards (the owner's third round of 2026-10-24): no permit and no stamp at the counter (outfitter.js,
+  // trip.js: the season is just the season); a notice's place on the map is the keeper's red pencil (tasks.hints →
+  // targetOf, hud.js drawMap pencilRing: tight and named round a known campsite, else the bay or arm the notice
+  // describes, never the whole lake); every item says what it is for and lists its right-click verbs (items.js words
+  // and verbs, which the book's tooltips and menus read). Nothing to wire: the verbs' table and lookup for the console.
+  Object.assign(window.__game.items, { VERBS, verbsOf });
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   renderer.compileAsync(scene, camera).catch(() => {});
