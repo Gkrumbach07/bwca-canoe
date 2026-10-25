@@ -1357,6 +1357,8 @@ function tabCheck(st, tabEl) {
   if (!live()) return 'no';
   if (src && src.opts.shelf) {
     const d = itemDef(e.id), k = d && d.kind;
+    // fb4 join: a pack or a barrel dropped on The canoe is bought into the canoe (not kept by the outfitters)
+    if (key === 'canoe' && k === 'container' && !e.hull && !e.owned && !e.dear) return (inv.containers || []).filter((c) => c.where === 'canoe').length < 8 ? 'buy' : 'no';
     if (e.hull || e.owned || e.dear || k === 'long' || k === 'container') return 'no';
     const c = key === 'keeping' ? inv.crate : key === 'canoe' ? canoeFor(e.id) : inv.cont(key);
     return c && canFit(c, e.id) ? 'buy' : 'no';
@@ -1374,6 +1376,13 @@ function tabCheck(st, tabEl) {
 }
 function dropOnTab(st, tabEl) {
   const key = tabEl.dataset.tab, inv = model(), src = st.grid, e = st.e;
+  if (src && src.opts.shelf && key === 'canoe' && (itemDef(e.id) || {}).kind === 'container') { // (fb4 join: bought into the canoe)
+    const sc = src.opts.screen, had = new Set((inv.containers || []).map((c) => c.id));
+    if (!sc.buy(e.id, null)) return;
+    const c = (inv.containers || []).find((k) => !had.has(k.id) && k.item === e.id), r = c && typeof inv.load === 'function' ? inv.load(c.id) : null;
+    if (r && r.ok) { const words = `${itemDef(e.id).name}, $${e.price || 0}: in the canoe at the dock. $${sc.money()} in hand.`; sc.receipt = { ok: true, words }; note(words, 4); sc.mine.openAt('canoe'); sc.render(true); }
+    return;
+  }
   if (src && src.opts.shelf) { const c = key === 'keeping' ? inv.crate : key === 'canoe' ? canoeFor(e.id) : inv.cont(key), f = c && inv.firstFit(c.id, e.id); if (f) src.opts.screen.buy(e.id, { cId: c.id, x: f.x, y: f.y, rot: f.rot }); return; }
   if (SPECIAL_TABS[key]) { dropOnZone(st, SPECIAL_TABS[key]); return; }
   const c = inv.cont(key); if (!c) return;
