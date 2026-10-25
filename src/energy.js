@@ -104,6 +104,7 @@ const LOW_DRAIN = 1.5;
 const PULL_H = 0.06;       // a game hour: a bar above the ceiling is pulled down to it
 const EMPTY = 0.005;       // a need this low stops the bar's recovery
 const SPENT_GRACE = 1;     // game hours at an empty bar before someone comes out for you (Adventure)
+const SPENT_OVER = 0.02;   // spent at 0, the bar is spent until it is back over this (a sliver of rest does not count)
 const NEARLY = 0.08;      // a word, once, as the bar nears empty
 const FOOD_HOURS = 24;     // game hours awake from a full food need to an empty one
 const ASLEEP = 1 / 3;      // the needs fall at this rate asleep (and across any jump of the clock longer than JUMP)
@@ -161,6 +162,7 @@ export class Energy {
     this.value = 1; this.food = 0; this.fedUntil = -1;
     this.lastHours = day.hours; this.warned = false; this.warnTimer = 0;
     this.onEvac = null; this.onNote = null; this.onEat = null; // onEat(eat, name): camp 2's cook.js
+    this.spentAt = null;    // when the bar hit 0 (game hours), while it is still spent: the hour of grace runs from it
     this.trip = null;       // the trip's rules (trip.js), set by the trip
     this.exertion = 0;      // what the paddle cost this frame, for the HUD
     this.awakeSince = this.now;
@@ -301,11 +303,11 @@ export class Energy {
   fresh() {
     this.rest0 = 1; this.need.food = 1; this.need.water = 1; this.need.warmth = 1; this.soaked = 0;
     this.drinkable = BOTTLE; this.treating = 0; this.readyAt = -1e9;
-    this.lastNow = this.now; this.unnote(); this.lastChunks = null;
+    this.lastNow = this.now; this.unnote(); this.lastChunks = null; this.spentAt = null;
   }
   unnote() { for (const k in this.noted) this.noted[k] = false; }
   // fetched in by an evacuation: whoever came out brought hot food and water, and a blanket (main.js, on the trip's 'evac')
-  rescued() { this.need.food = 1; this.need.water = 1; this.need.warmth = 1; this.soaked = 0; this.fill(BOTTLE, 0); this.unnote(); this.lastChunks = null; }
+  rescued() { this.need.food = 1; this.need.water = 1; this.need.warmth = 1; this.soaked = 0; this.fill(BOTTLE, 0); this.unnote(); this.lastChunks = null; this.spentAt = null; }
 
   // --- the bottle ----------------------------------------------------------------------------------------------
   // Fill it: up to `litres` more, to the 2 L it holds. waitHours: how long the water takes to be drinkable (tablets
@@ -591,13 +593,15 @@ export class Energy {
     this.value = clamp(v, 0, 1);
     if (this.live) {
       // The owner's rule: "if it goes all the way down, you're done". Spent, you have an hour of the clock to stop and
-      // put it right (eat, drink, rest, or sleep at a site); still at 0 after it, someone comes out for you, for
-      // whichever need ran you down. Nearly spent, a word first.
-      if (this.value <= 0) {
-        if (this.spentAt == null) { this.spentAt = now; this.note('Spent. Stop now: eat, drink or rest, or someone will come out for you.'); }
-        else if (now - this.spentAt >= SPENT_GRACE && this.onEvac) { this.spentAt = null; this.onEvac(this.spentWhy()); }
-      } else {
-        if (this.spentAt != null && this.value > 0.02) this.spentAt = null;
+      // put it right (eat, drink, rest, or sleep at a site); still spent after it, someone comes out for you, for
+      // whichever need ran you down. Spent is the bar at 0, and it stays spent until the bar is back over SPENT_OVER
+      // (polish B: drifting with a need low but not out, rest crept the bar up a sliver a minute, 0.0002 in ten seconds,
+      // so it was never "at 0" again and the hour never ran). Nearly spent, a word first.
+      if (this.spentAt == null) {
+        if (this.value <= 0) { this.spentAt = now; this.note('Spent. Stop now: eat from the pack (J), drink or rest, or someone will come out for you within the hour.'); }
+      } else if (this.value >= SPENT_OVER) this.spentAt = null;
+      else if (now - this.spentAt >= SPENT_GRACE && this.onEvac) { this.spentAt = null; this.onEvac(this.spentWhy()); }
+      if (this.value > 0) {
         if (this.value < NEARLY && !this.noted.nearly) { this.noted.nearly = true; this.note('Nearly spent. Rest, eat or drink soon, or make for a site.'); }
         else if (this.value > NEARLY + 0.15) this.noted.nearly = false;
       }
@@ -620,6 +624,7 @@ export class Energy {
       value: this.value, food: this.food, fedUntil: this.fedUntil, awakeSince: this.awakeSince, lastMealAbs: this.lastMealAbs, lastMealKind: this.lastMealKind, lastMealAuto: this.lastMealAuto,
       rest0: this.rest0, need: { ...this.need }, drinkable: this.drinkable, treating: this.treating, readyIn: this.treating > 0 ? Math.max(0, this.readyAt - this.now) : 0,
       soaked: this.soaked, // fb2 F (need.warmth rides in need)
+      spentFor: this.spentAt == null ? null : Math.max(0, this.now - this.spentAt), // game hours spent so far: a reload does not restart the hour
     };
   }
   restore(d) {
@@ -637,5 +642,6 @@ export class Energy {
     this.unnote(); const n = this.needs; for (const k of ['rest', 'food', 'water', 'warmth']) this.noted[k] = n[k] < LOW; this.noted.dry = this.bottle <= 0.001;
     this.lastHours = this.day.hours; // the saved clock is back: no dawn or dusk crossed by the reload, no meal
     this.lastNow = this.now;         // and no hours of need passed
+    this.spentAt = Number.isFinite(d.spentFor) && this.value < SPENT_OVER ? this.now - d.spentFor : null; // the hour of grace carries on
   }
 }
