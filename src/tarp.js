@@ -510,7 +510,7 @@ export class Tarp {
         rig.drawAt = null;
         if (!rig.placed) { this.dropDraft(); return; }
         this.setStage(rig, Math.max(1, job.done));
-        if (job.done < 3) this.note(`${cap(STAGE_WORDS[rig.stage])}. Point at it and hold E to carry on, or Q to take it down.`, 4);
+        if (job.done < 3) this.note(`${cap(STAGE_WORDS[rig.stage])}. Point at it and hold E to carry on, or hold Q to take it down.`, 4);
       },
     };
   }

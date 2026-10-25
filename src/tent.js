@@ -114,7 +114,7 @@ export function pitchNeeds(camp, tent) {
   else if (c) {
     const d = Math.hypot(c.x - p.x, c.z - p.z);
     needs.push({ label: 'Your tent struck', done: false, note: d > 30 ? `it stands ${far(d)} ${bearingOf(c.x - p.x, c.z - p.z)}` : tentOf(c.item).words[c.stage] || 'standing' });
-    next = d > 30 ? `Walk back to it (${far(d)} ${bearingOf(c.x - p.x, c.z - p.z)}) and hold Q at it to strike it, or pitch there.` : c.stage >= 4 ? 'Hold Q at it to strike it first.' : 'Point at it and hold E to carry on pitching, or Q to strike it.';
+    next = d > 30 ? `Walk back to it (${far(d)} ${bearingOf(c.x - p.x, c.z - p.z)}) and hold Q at it to strike it, or pitch there.` : c.stage >= 4 ? 'Hold Q at it to strike it first.' : 'Point at it and hold E to carry on pitching, or hold Q to strike it.';
   } else if (/campsite|another party/.test(why)) {
     needs.push({ label: /another party/.test(why) ? 'A site no one holds' : 'At a campsite (Adventure)', done: false });
     const n = camp.registry && camp.registry.nearestFree ? camp.registry.nearestFree(p.x, p.z, 6000) : null;
