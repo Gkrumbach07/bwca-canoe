@@ -1041,7 +1041,7 @@ const blank = () => ({ piles: {}, pints: 0, latrine: null, taken: {}, sawn: {} }
 const seqRng = (xs) => { let i = 0; return () => xs[Math.min(xs.length - 1, i++)]; };
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const _v1 = new THREE.Vector3();
-const lowerName = (c) => { const d = itemDef(c.item), n = (d && (d.short || d.name)) || 'pack'; return n.charAt(0).toLowerCase() + n.slice(1); };
+const lowerName = (c) => { const d = itemDef(c.item), n = (d && (d.short || d.name)) || 'pack'; return /^(Duluth|Johnson)/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1); }; // (a name stays a name: "the Duluth pack #3")
 // "an hour", "about 2 h", "half an hour"
 function hoursWords(h) { if (h < 0.75) return 'half an hour'; if (h < 1.25) return 'an hour'; return `${Math.round(h * 2) / 2} h`.replace('.5 h', '½ h'); }
 // the distance from (x, z) to a down log's stem (tiles.js: the capsule from (ax, az) to (bx, bz))
