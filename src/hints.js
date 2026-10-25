@@ -237,6 +237,9 @@ export class Hints {
   // --- the fire's events (stream A: fires.on) -----------------------------------------------------------------------
   fireEvent(kind, ev) {
     const d = ev && typeof ev === 'object' ? ev : { key: ev };
+    // (a word waiting about the fire as it was goes when it changes: no "It caught" over the coals)
+    if (kind === 'coals' || kind === 'out') { this.pend.delete('lit'); this.pend.delete('low'); }
+    if (kind === 'lit') { this.pend.delete('coals'); this.pend.delete('low'); }
     if (kind === 'lit') { if (d.quiet) return; if (!d.relit) this.pend.set('lit', { t: this.clockT, data: d }); return; }
     if (kind === 'ready') { this.pend.set('cooked', { t: this.clockT, data: d }); return; }
     if (kind === 'wet') { this.pend.set('wetwood', { t: this.clockT, data: d }); return; }
@@ -480,8 +483,8 @@ export class Hints {
       this.here = this.siteHere();
       this.watchFire(this.here && this.here.site);
       this.learnFromWorld();
-      const g = t.pointer && t.pointer.target; // (the dot resting on a greyed verb, for the right-click)
-      this.greyT = g && ((g.e && g.e.why) || (g.q && g.q.why)) ? (this.greyT || 0) + step : 0;
+      const g = t.pointer && t.pointer.target; // (the dot resting on a thing it can do nothing with, for the right-click)
+      this.greyT = g && g.e && g.e.why && !(g.q && !g.q.why) ? (this.greyT || 0) + step : 0;
     }
     // the card up: it holds SHOW seconds, or goes when something else takes the screen
     if (this.cur) {

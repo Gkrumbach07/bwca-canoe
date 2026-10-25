@@ -108,10 +108,10 @@ export function chipOf(needs, why = '') {
   return why ? trimWords(why) : '';
 }
 // a provider's old `hint` on the label, kept only when it is a few words of state ("used today", "2 in reach"), never an
-// explanation (a clause after ':' or ',', a list after '·')
+// explanation (a clause after ':' or ',', a list after '·') or a rate (the owner: no percentages on the screen)
 function briefHint(h) {
   const t = String(h || '').split(' · ')[0].trim();
-  return t && t.length <= 26 && !/[:,]/.test(t) ? t : '';
+  return t && t.length <= 26 && !/[:,%]/.test(t) ? t : '';
 }
 // a prompt line without its E (player.js say: "info &nbsp;·&nbsp; <kbd>E</kbd>Do this &nbsp; <kbd>Q</kbd>Do that"), or
 // without its Q (stripKey: the dot's label has the key, so the line at the bottom loses it)
