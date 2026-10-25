@@ -56,19 +56,21 @@
 /* --- wc B: your stuff on one screen (MineSide): the body on the left, a tab per container across the top; in the book,
    Here as the right pane (what you are facing: the ground within reach, the canoe beside you, the outfitters' keeping) */
 .mine { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: var(--body-col, 262px) minmax(0, 1fr); gap: 20px; }
-.mine.with-here { grid-template-columns: var(--body-col, 262px) minmax(0, 1fr) minmax(0, var(--here-col, 548px)); }
+/* fb3 C (20): the tab column is as wide as the grid it shows (a #4 pack is seven cells), Here takes the rest, so no
+   grid is ever cut and nothing scrolls sideways at 1280 or 1440 */
+.mine.with-here { grid-template-columns: var(--body-col, 262px) minmax(304px, max-content) minmax(0, 1fr); }
 .mn-here { min-height: 0; min-width: 0; display: flex; flex-direction: column; border-left: 1.5px dashed rgba(243, 236, 221, .28); padding-left: 18px; }
 .here-head { flex: none; display: flex; align-items: baseline; gap: 10px; min-height: 44px; box-sizing: border-box; padding: 0 2px 7px; border-bottom: 2px solid var(--leather-deep); align-items: flex-end; }
 .here-head b { font: 700 12px/1.2 var(--sc); letter-spacing: .14em; color: var(--cream); background: #4d5a3a; padding: 6px 14px 7px; border-radius: 6px 6px 0 0; border: 1.5px solid var(--leather-deep); border-bottom: none; box-shadow: inset 0 0 0 2px #4d5a3a, inset 0 0 0 3px rgba(201, 162, 74, .38); margin-bottom: -7px; }
 .here-head i { font: italic 12.5px/1.2 var(--serif); color: var(--cream-72); padding-bottom: 1px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.here-body { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .3) transparent; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; padding: 14px 8px 8px 2px; }
+.here-body { flex: 1 1 auto; min-height: 0; overflow: hidden auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .3) transparent; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; padding: 14px 8px 8px 10px; }
 .here-body .pk-zone { align-self: stretch; }
 .here-body > .pk-empty { padding: 8px 10px; }
 .mn-body { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 4px; overflow: hidden; }
 .mn-pockets { display: flex; flex-direction: column; gap: 4px; }
 .mn-pockets .ig { border-radius: 3px; border-color: var(--leather); }
 .mn-tabs { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
-.ctabs { flex: none; display: flex; align-items: flex-end; gap: 4px; padding: 0 2px; border-bottom: 2px solid var(--leather-deep); overflow-x: auto; scrollbar-width: none; }
+.ctabs { flex: none; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; row-gap: 5px; padding: 0 2px; border-bottom: 2px solid var(--leather-deep); } /* (fb3 C: a long row wraps; it scrolled sideways) */
 .ctab { appearance: none; flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 14px 6px; border: 1.5px solid var(--leather-deep); border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer;
   background: #3a2415; background-image: linear-gradient(rgba(255, 255, 255, .04), transparent); color: var(--cream-72); transform: translateY(3px); transition: transform .12s, background .12s, box-shadow .12s; }
 .ctab b { font: 700 12px/1.2 var(--sc); letter-spacing: .14em; white-space: nowrap; }
@@ -78,11 +80,15 @@
 .ctab.on i { color: var(--cream-86); }
 .ctab.k-keeping { background: #4a4030; margin-left: 10px; }
 .ctab.k-keeping.on { background: #5d5038; box-shadow: inset 0 0 0 2px #5d5038, inset 0 0 0 3px rgba(201, 162, 74, .38), 0 2px 0 #5d5038; }
+/* fb3 C (13): what is in reach at the fire, a tab each after yours, in the ground's cord rather than your leather */
+.ctab.k-ground, .ctab.k-pieces { background: #4f4a38; }
+.ctab.k-cont + .ctab.k-ground, .ctab.k-cont + .ctab.k-pieces { margin-left: 10px; }
+.ctab.k-ground.on, .ctab.k-pieces.on { background: #6b5a40; box-shadow: inset 0 0 0 2px #6b5a40, inset 0 0 0 3px rgba(243, 236, 221, .26), 0 2px 0 #6b5a40; }
 .dragging-item .ctab, .dragging-thing .ctab { box-shadow: inset 0 0 0 1.5px rgba(220, 180, 105, .35); }
 .ctab.dz-ok, .ctab.dz-buy { background: rgba(143, 191, 122, .35) !important; color: var(--cream); box-shadow: inset 0 0 0 2px var(--moss) !important; }
 .ctab.dz-no { background: rgba(180, 50, 31, .3) !important; box-shadow: inset 0 0 0 2px rgba(217, 102, 63, .8) !important; }
-.tabpage { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .3) transparent; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; padding: 14px 8px 8px 2px; }
-.tabpage.tp-cont { overflow: hidden; }
+.tabpage { flex: 1 1 auto; min-height: 0; overflow: hidden auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .3) transparent; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; padding: 14px 8px 8px 2px; }
+.tabpage.tp-cont { overflow: hidden auto; } /* (fb3 C: a grid taller than the page, the #4 pack at 720 px, scrolls down, never sideways) */
 .tabpage > .ct { max-width: 100%; }
 .tabpage .pk-zone { align-self: stretch; }
 .canoe-acts { margin-top: 4px; }
@@ -100,6 +106,9 @@
 .slot-frame.on { box-shadow: inset 0 2px 10px rgba(0, 0, 0, .5), 0 0 0 2px var(--gold); }
 .slot-nm { position: absolute; right: 5px; top: 3px; font: 700 10.5px/1 var(--sc); letter-spacing: .06em; color: var(--cream-86); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
 .slot-none { font: italic 15px var(--serif); color: rgba(243, 236, 221, .3); }
+/* fb3 C (decision 11, stream B's holder): a hand with one plain thing in it shows the thing at its own footprint */
+.slot.hand.held .slot-frame.one { height: auto; min-height: 54px; padding: 4px 6px; justify-content: flex-start; }
+.slot.hand.held .slot-frame.one .ig { border-radius: 3px; border-color: var(--leather); }
 
 /* a container: a leather strap over its grid */
 .ct { display: inline-flex; flex-direction: column; flex: none; border-radius: 4px; }
@@ -112,7 +121,7 @@
 .ct-head .kg { margin-left: auto; color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
 .ct-head.acts { cursor: context-menu; }
 .ct.nested .ct-head { background: #6a4a2c; }
-.ct.lit { animation: ct-lit 1.4s ease-out; }
+.ct.lit, .pk-zone.lit { animation: ct-lit 1.4s ease-out; } /* (the canoe's zone lit too: journal.openHere('canoe'), fb3 C) */
 @keyframes ct-lit { 0% { box-shadow: 0 0 0 3px var(--gold), 0 0 24px rgba(220, 180, 105, .6); } 100% { box-shadow: 0 0 0 3px transparent; } }
 /* a long thing in a 5 × 1 frame */
 .lg { position: relative; width: calc(var(--cell) * 5); height: var(--cell); display: flex; align-items: center; background: var(--well); border: 2px solid var(--leather); border-radius: 3px; box-shadow: inset 0 2px 8px rgba(0, 0, 0, .45); cursor: context-menu; flex: none; }
@@ -233,6 +242,14 @@
 .ig-mark.eat { background: var(--moss); color: #1d2a14; }
 .ig-mark.cook { background: #c9874a; color: #2a1608; }
 .ig-mark.open { background: var(--gold); color: var(--ink); }
+/* fb3 C (decision 9, stream B's numbers): what is left of a thing's uses, servings or litres, a thin bar along its foot
+   (a paler end for the litres under a tablet); a fixed entry (the bottle in the pockets) is not dragged */
+.ig-bar { position: absolute; left: 3px; right: 3px; bottom: 2px; height: 3px; border-radius: 1px; background: rgba(0, 0, 0, .5); overflow: hidden; pointer-events: none; }
+.ig-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--gold); }
+.ig-bar em { position: absolute; top: 0; bottom: 0; background: rgba(159, 196, 216, .9); }
+.ig-item.has-bar .ig-mark { bottom: 7px; }
+.ig-item.has-bar .ig-qty { bottom: 5px; }
+.ig-item.fixed { cursor: default; }
 .ig-ghost { position: fixed; z-index: 30; pointer-events: none; box-sizing: border-box; border: 1px solid rgba(220, 180, 105, .9); background: rgba(42, 41, 31, .55); box-shadow: 0 10px 26px rgba(0, 0, 0, .5); }
 .ig-hl { position: absolute; pointer-events: none; box-sizing: border-box; z-index: 2; border: 2px solid; }
 .ig-hl.ok, .ig-hl.buy { background: rgba(143, 191, 122, .3); border-color: var(--moss); }
@@ -251,6 +268,10 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 .ig-tip .k { font: 700 10.5px/1.3 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }
 .ig-tip p { margin: 2px 0 0; font: 14px/1.38 var(--serif); }
 .ig-tip .f { font: 500 19px/1.05 var(--pencil-font); color: var(--pencil); }
+/* fb3 C (decision 9): the stats block, what a thing does in numbers: "Night's rest: full · in the tent" */
+.ig-tip .st { display: flex; flex-direction: column; gap: 3px; margin: 5px 0 2px; padding: 6px 0 0; border-top: 1px dashed rgba(138, 114, 80, .5); font: 13.5px/1.3 var(--serif); }
+.ig-tip .st b { font: 600 13.5px/1.3 var(--serif); }
+.ig-tip .st i { color: var(--ink-soft); font-size: 12.5px; }
 
 /* --- the shelves ------------------------------------------------------------------------------------------------------ */
 #shelf { left: 50%; top: 50%; translate: -50% -50%; width: min(1320px, 95vw); height: min(830px, 93vh); padding: 26px 30px 16px; display: flex; flex-direction: column; gap: 16px; }
@@ -264,14 +285,15 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 #shelf header .purse b { font: 500 30px/1 var(--serif); color: var(--ink); font-variant-numeric: tabular-nums; }
 #shelf header .stamp { flex: none; }
 #shelf .sh-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 520px; gap: 22px; }
-#shelf .sh-mine, #card .cd-mine { min-height: 0; overflow: hidden; padding: 12px 14px 12px; border-radius: 4px; border: 2px solid var(--mat-deep); box-shadow: inset 0 0 30px rgba(0, 0, 0, .25); display: flex; flex-direction: column; gap: 8px; --body-col: 170px; }
+/* fb3 C (20): the body column as wide as the book's (the pockets are five cells now, with the bottle), so nothing on the
+   left is cut off; it fits beside the shelf and the fire at 1280 */
+#shelf .sh-mine, #card .cd-mine { min-height: 0; overflow: hidden; padding: 12px 14px 12px; border-radius: 4px; border: 2px solid var(--mat-deep); box-shadow: inset 0 0 30px rgba(0, 0, 0, .25); display: flex; flex-direction: column; gap: 8px; --body-col: 262px; }
 #shelf .sh-mine .pk-lab { color: var(--cream-86); flex: none; }
 #shelf .sh-mine .mine, #card .cd-mine .mine { gap: 12px; }
-#shelf .sh-mine .slots, #card .cd-mine .slots { grid-template-columns: 1fr; }
 #shelf .sh-shelf { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 #shelf .sh-top { display: flex; align-items: baseline; gap: 12px; border-bottom: 2px solid var(--ink); padding-bottom: 7px; flex: none; }
 #shelf .sh-top .sum { font-size: 14px; font-style: italic; color: var(--ink-soft); }
-#shelf .sh-stock { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; padding: 14px 8px; border-radius: 3px; border: 1px solid var(--edge-deep); box-shadow: inset 0 2px 8px rgba(40, 24, 8, .3); }
+#shelf .sh-stock { flex: 1 1 auto; min-height: 0; overflow: hidden auto; scrollbar-width: thin; padding: 14px 12px; border-radius: 3px; border: 1px solid var(--edge-deep); box-shadow: inset 0 2px 8px rgba(40, 24, 8, .3); }
 #shelf .sh-receipt { flex: none; font-size: 21px; min-height: 1.2em; line-height: 1.1; }
 #shelf .sh-receipt.no { color: var(--map-red); }
 #shelf .sh-foot { flex: none; font: 700 10.5px/1.4 var(--sc); letter-spacing: .12em; color: var(--ink-faint); border-top: 1px solid var(--edge); padding-top: 8px; }
@@ -306,7 +328,7 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 #card header .stamp { flex: none; margin-left: auto; }
 #card header .pk-note + .stamp { margin-left: 24px; }
 #card .cd-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 500px; gap: 22px; }
-#card .cd-thing { min-height: 0; overflow: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 12px; }
+#card .cd-thing { min-height: 0; overflow: hidden auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 12px; }
 #card .cd-thing .nb { align-self: stretch; background: rgba(36, 34, 25, .9); box-shadow: inset 0 0 0 1.5px rgba(26, 20, 12, .55), 0 6px 18px rgba(0, 0, 0, .25); color: var(--cream); }
 #card .cd-thing .nb-body { gap: 14px; padding: 14px 16px 16px; }
 #card .cd-thing .nb.k-fire .nb-slots { gap: 12px 18px; }
