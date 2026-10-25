@@ -67,8 +67,8 @@ function drawPole(c, s) {
 
 // --- the measures ----------------------------------------------------------------------------------------------------
 const SHEET = { half: 1.5, slope: 1.5 };  // m: half the sheet along the ridge; its run from the ridge down to an eave
-const TIE = 1.95;          // m over a trunk's foot the ridge line is tied
-const CROSS = 2.0;         // m over the ground two poles cross as shear legs
+const TIE = 2.2;           // m over a trunk's foot the ridge line is tied (headroom under the ridge)
+const CROSS = 2.1;         // m over the ground two poles cross as shear legs
 export const TREES = [3, 7]; // m trunk to trunk for a ridge line between two trees
 const TREE_R = [0.06, 1.3]; // a trunk's radius that takes a line (a thinner one bends)
 const UNDER = 1.35;        // m off the ridge's line you may stand and be under the sheet
@@ -81,6 +81,7 @@ const THETA = { thrown: 1.45, hung: 1.25, taut: 0.69 }; // rad below level the s
 const REACH = 4.5;         // m from the sheet's middle within which the dot takes the rig
 const SHOW = 260;          // m within which a rig is drawn
 const FAR = 30;            // m walked off with the pitch armed: it is let go
+const AHEAD = 0.9;         // m ahead of you the sheet's middle goes (you under its near half), where it will stand
 const NYLON = new THREE.Color(0x5c7a58), UNDERSIDE = new THREE.Color(0x4a6347), CORD = new THREE.Color(0xd8d2b8), POLE = new THREE.Color(0x8b8276), STAKE = new THREE.Color(0x9a958c);
 
 // The pitch, phase by phase (hold.js): its name once done, what is being done meanwhile, game minutes, real seconds held
@@ -268,8 +269,20 @@ export class Tarp {
   tarpEntry(uid, pool = this.pool()) { for (const c of pool) for (const e of c.grid) if (e.uid === uid && !e.box && e.id === 'tarp') return { c, e }; return null; }
 
   // --- the anchors ---------------------------------------------------------------------------------------------------
-  // the trunks that take a line within r of (x, z) (tiles.js treesNear: the drawn trunks)
-  trunks(x, z, r) { return this.tiles.treesNear(x, z, r).filter((o) => !o.shape && !o.box && !o.tent && o.r >= TREE_R[0] && o.r <= TREE_R[1]); }
+  // the trunks that take a line within r of (x, z) (tiles.js treesNear: the drawn trunks; its props' footprints are
+  // circles too, the fire ring's a metre round, a post's, a chair's: those are left out)
+  trunks(x, z, r) {
+    const props = this.propsNear(x, z, r);
+    return this.tiles.treesNear(x, z, r).filter((o) => !o.shape && !o.box && !o.tent && !o.low && !o.wall && o.top == null && !props.has(o) && o.r >= TREE_R[0] && o.r <= TREE_R[1]);
+  }
+  // the props' footprints (the tiles' obstacles, props.js) within r of (x, z), as a set
+  propsNear(x, z, r) {
+    const T = this.tiles, w = this.world, out = new Set();
+    if (!T || !T.tiles || !w.tileOf) return out;
+    const [tx0, ty0] = w.tileOf(x - r - 2, z - r - 2), [tx1, ty1] = w.tileOf(x + r + 2, z + r + 2);
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { const e = T.tiles.get(T.key(tx, ty)); if (e && e.obstacles) for (const o of e.obstacles) out.add(o); }
+    return out;
+  }
   // a rig from end a to end b ({ x, z, r, t: 'tree' | 'poles' }), its sheet centred sc metres from a, lh either way
   makeRig(kind, A, B, sc, lh, poles) {
     const dx = B.x - A.x, dz = B.z - A.z, len = Math.hypot(dx, dz) || 1, ga = this.ground(A.x, A.z), gb = this.ground(B.x, B.z);
@@ -286,14 +299,18 @@ export class Tarp {
     if (!w.isReady(cx, cz)) return 'the ground here is not in yet';
     if (w.shoreAt(cx, cz) < 0.3) return 'too near the water';
     for (const [s, v] of [[r.sc - r.lh, -W], [r.sc - r.lh, W], [r.sc + r.lh, -W], [r.sc + r.lh, W]]) { const [x, z] = at(s, v); if (w.shoreAt(x, z) < -0.6) return 'out over the water'; }
-    // the ridge stands 1.4 to 2.6 m over the ground under it all along the sheet
-    for (let i = 0; i <= 4; i++) { const s = r.sc - r.lh + (2 * r.lh * i) / 4, [x, z] = at(s, 0), h = ridgeY(r, s) - this.ground(x, z); if (h < 1.35) return 'the ground rises too high under the ridge'; if (h > 2.7) return 'the ground falls away too steeply under it'; }
+    // the ridge stands 1.7 to 2.8 m over the ground under it all along the sheet (headroom, and no stilts)
+    for (let i = 0; i <= 4; i++) { const s = r.sc - r.lh + (2 * r.lh * i) / 4, [x, z] = at(s, 0), h = ridgeY(r, s) - this.ground(x, z); if (h < 1.7) return 'the ground rises too high under the ridge'; if (h > 2.8) return 'the ground falls away too steeply under it'; }
     // the poles' feet and their stakes: on land, clear of trunks
     for (const [t, s, out] of [[r.ends[0], 0, -1], [r.ends[1], r.len, 1]]) {
       if (t !== 'poles') continue;
       for (const [ss, v] of [[s, -SPREAD], [s, SPREAD], [s + out * END_GUY, 0]]) { const [x, z] = at(ss, v); if (!w.isReady(x, z) || w.shoreAt(x, z) < 0.15) return 'a pole would stand in the water'; }
       const [x, z] = at(s, 0);
       if (this.trunks(x, z, 0.65).some((o) => !skip.includes(o))) return 'a tree stands where a pole would go';
+      for (const o of this.propsNear(x, z, 1.5)) {
+        const dx = x - o.x, dz = z - o.z;
+        if (o.box ? Math.abs(dx * o.ux + dz * o.uz) < o.hx + 0.5 && Math.abs(-dx * o.uz + dz * o.ux) < o.hz + 0.5 : Math.hypot(dx, dz) < (o.r || 0.2) + 0.5) return 'something built stands where a pole would go';
+      }
     }
     // no other trunk under the sheet or across the ridge line
     for (const o of this.trunks(cx, cz, r.len / 2 + 2.5)) {
@@ -304,51 +321,65 @@ export class Tarp {
     }
     return null;
   }
-  // The rig that would go up where you stand (px, pz, facing heading) with n poles to hand, the fewest poles first:
-  // { rig } or { why, tree (a tree within reach), pair (the nearest two trees 3–7 m apart, within 40 m, or null) }
+  // The rig that would go up where you stand (px, pz, facing heading) with n poles to hand, the fewest poles first, the
+  // sheet a little ahead of you (you under its near half: so it goes over the ring you face) or else over you:
+  // { rig } or { why, tree (a tree within reach) }
   findRig(px, pz, heading, n) {
     const fx = Math.cos(heading), fz = -Math.sin(heading);
-    const near = this.trunks(px, pz, TREES[1] + 1.5);
+    const near = this.trunks(px, pz, TREES[1] + 2.5);
+    const trees = near.map((o) => ({ o, d: Math.hypot(o.x - px, o.z - pz) })).filter((q) => q.d <= NEAR_TREE && q.d > q.o.r + 0.4).sort((a, b) => a.d - b.d);
+    let why = null;
+    for (const k of [AHEAD, 0]) {
+      const r = this.findRigAt(px + fx * k, pz + fz * k, px, pz, fx, fz, n, near, trees);
+      if (r.rig) return r;
+      why = why || r.why;
+    }
+    return { why, tree: trees.length ? trees[0] : null };
+  }
+  // the same with the sheet centred on (qx, qz), you at (px, pz) under it
+  findRigAt(qx, qz, px, pz, fx, fz, n, near, trees) {
     let best = null, bestScore = Infinity, firstWhy = null;
+    const under = (r) => { const dx = px - r.ax, dz = pz - r.az, s = dx * r.tx + dz * r.tz, v = -dx * r.tz + dz * r.tx; return Math.abs(s - r.sc) <= r.lh + 0.1 && Math.abs(v) <= UNDER; };
     // two trees, you between them
     for (let i = 0; i < near.length; i++) for (let j = i + 1; j < near.length; j++) {
       const A = near[i], B = near[j], d = Math.hypot(B.x - A.x, B.z - A.z);
       if (d < TREES[0] || d > TREES[1]) continue;
-      const tx = (B.x - A.x) / d, tz = (B.z - A.z) / d, s = (px - A.x) * tx + (pz - A.z) * tz, v = -(px - A.x) * tz + (pz - A.z) * tx;
-      if (Math.abs(v) > UNDER || s < 0 || s > d) continue;
+      const tx = (B.x - A.x) / d, tz = (B.z - A.z) / d, s = (qx - A.x) * tx + (qz - A.z) * tz, v = -(px - A.x) * tz + (pz - A.z) * tx;
+      if (Math.abs(v) > UNDER || s < -1 || s > d + 1) continue;
       const lh = Math.min(SHEET.half, (d - A.r - B.r - 0.6) / 2);
       if (lh < 0.9) continue;
       const sc = Math.min(Math.max(s, A.r + 0.3 + lh), d - B.r - 0.3 - lh);
-      if (Math.abs(s - sc) > lh + 0.25) continue;
+      const r = this.makeRig('trees', { x: A.x, z: A.z, r: A.r, t: 'tree' }, { x: B.x, z: B.z, r: B.r, t: 'tree' }, sc, lh, 0);
+      if (!under(r)) continue;
       const score = Math.abs(v) + Math.abs(s - sc) * 0.5;
       if (score >= bestScore) continue;
-      const r = this.makeRig('trees', { x: A.x, z: A.z, r: A.r, t: 'tree' }, { x: B.x, z: B.z, r: B.r, t: 'tree' }, sc, lh, 0);
-      const why = this.rigProblem(r, [A, B]);
-      if (why) { firstWhy = firstWhy || why; continue; }
+      const w = this.rigProblem(r, [A, B]);
+      if (w) { firstWhy = firstWhy || w; continue; }
       best = r; bestScore = score;
     }
     if (best) return { rig: best };
-    // one tree and two poles: the ridge from the trunk out over where you stand to the shear legs
-    const trees = near.map((o) => ({ o, d: Math.hypot(o.x - px, o.z - pz) })).filter((q) => q.d <= NEAR_TREE && q.d > q.o.r + 0.4).sort((a, b) => a.d - b.d);
-    let treeWhy = null;
-    if (n >= POLES.tree) for (const { o, d } of trees) {
-      const tx = (px - o.x) / d, tz = (pz - o.z) / d, lh = SHEET.half, sc = Math.max(d, o.r + 0.3 + lh), len = sc + lh + 0.35;
+    // one tree and two poles: the ridge from the trunk out over the sheet's middle to the shear legs
+    if (n >= POLES.tree) for (const { o } of trees) {
+      const d = Math.hypot(qx - o.x, qz - o.z);
+      if (d < o.r + 0.4) continue;
+      const tx = (qx - o.x) / d, tz = (qz - o.z) / d, lh = SHEET.half, sc = Math.max(d, o.r + 0.3 + lh), len = sc + lh + 0.35;
       if (len > TREES[1] + 0.5) continue;
       const r = this.makeRig('tree', { x: o.x, z: o.z, r: o.r, t: 'tree' }, { x: o.x + tx * len, z: o.z + tz * len, r: 0, t: 'poles' }, sc, lh, POLES.tree);
-      const why = this.rigProblem(r, [o]);
-      if (why) { treeWhy = treeWhy || why; continue; }
+      if (!under(r)) continue;
+      const w = this.rigProblem(r, [o]);
+      if (w) { firstWhy = firstWhy || w; continue; }
       return { rig: r };
     }
     // four poles in the open: the ridge along the way you face (or turned a little where that will not stand)
-    let openWhy = null;
     if (n >= POLES.open) for (const da of [0, 0.5, -0.5, 1.0, -1.0, Math.PI / 2]) {
-      const c = Math.cos(da), s = Math.sin(da), tx = fx * c - fz * s, tz = fx * s + fz * c, lh = SHEET.half, half = lh + 0.35;
-      const r = this.makeRig('poles', { x: px - tx * half, z: pz - tz * half, r: 0, t: 'poles' }, { x: px + tx * half, z: pz + tz * half, r: 0, t: 'poles' }, half, lh, POLES.open);
-      const why = this.rigProblem(r);
-      if (why) { openWhy = openWhy || why; continue; }
+      const c = Math.cos(da), sn = Math.sin(da), tx = fx * c - fz * sn, tz = fx * sn + fz * c, lh = SHEET.half, half = lh + 0.35;
+      const r = this.makeRig('poles', { x: qx - tx * half, z: qz - tz * half, r: 0, t: 'poles' }, { x: qx + tx * half, z: qz + tz * half, r: 0, t: 'poles' }, half, lh, POLES.open);
+      if (!under(r)) continue;
+      const w = this.rigProblem(r);
+      if (w) { firstWhy = firstWhy || w; continue; }
       return { rig: r };
     }
-    return { why: firstWhy || treeWhy || openWhy || null, tree: trees.length ? trees[0] : null };
+    return { why: firstWhy };
   }
   // the nearest two trees 3–7 m apart within 30 m of you, for the checklist's next step: { x, z, d } (their middle)
   nearestPair(px, pz) {
