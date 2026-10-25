@@ -25,15 +25,15 @@ const KEYMAP = [
   ['On the water', [
     [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'turn the hull while held, as sweep strokes'],
     [['Shift'], 'hustle'], [['Space'], 'brace in a sea (you cannot paddle while bracing)'],
-    [['E'], 'go ashore · portage at a landing · tie up at an outfitter’s dock and step up onto the deck · pick up a find · right the canoe after a capsize'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
-    [['I'], 'the book at the pack: right-click food to eat it (a snack as it is; a meal or a fish is cooked on a fire’s grate first)'], [['H'], 'the headlamp (afloat or on foot)'],
+    [['E'], 'go ashore, at any bank and at a portage landing alike (in at the trail’s put-in: you step out by the canoe, beached, and shoulder it yourself, Q at the hull) · tie up at an outfitter’s dock and step up onto the deck · pick up a find · right the canoe after a capsize'],
+    [['I'], 'the book at the pack: right-click food to eat a serving (a snack as it is; a meal or a fish is cooked on a fire’s grate first) · Drink from the bottle in your pockets (a gulp, 0.25 L): nothing is drunk for you'], [['H'], 'the headlamp, day or night (afloat or on foot)'],
   ]],
   ['On foot: the dot', [
     [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'],
     [['Space'], 'walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m; otherwise a hop · with the canoe overhead you only stagger'],
     [[], 'whatever the dot in the middle of the view points at has at most two actions, both on its label: E and Q. A held one says “hold”; a greyed one says why. Pointed at nothing, E and Q do nothing'],
-    [['E'], 'pick up (wood, a pack, a barrel, a bucket, a bagged tent, a find) · take one from a pile · open the fire (its card) · rest until… at your tent (the dial) · sit (the bench, a log seat, the latrine; E or a move key stands you up) · get in the canoe · fill the bottle at the water’s edge · talk · open a shelf, the board, the map table, the counter · held: hang the barrel at a limb, lower it, saw a down log, carry on pitching'],
-    [['Q'], 'open it (a container or a pile on the ground: the book, with it lit on the right) · light or douse the fire, held · pitch a bagged tent (the ghost, then E held) · strike your tent, held · shoulder the canoe (“Unload it first” while loaded) · at a trail head, fetch what is left · with the canoe overhead: set it down, or launch and leave what is left'],
+    [['E'], 'pick up (wood, a pack, a barrel, a bucket, a bagged tent, a find) · take one from a pile (into what you carry, else a free hand) · open the fire (its card) · rest until… at your tent (the dial) · sit (the bench, a log seat, the latrine; E or a move key stands you up) · get in the canoe where it floats (beached: push it off first, and it slides down to the water with you; what is in your hands goes into the hull at your feet) · fill the bottle at the water’s edge (a tablet in from the tablets in reach) · talk · open a shelf, the board, the map table, the counter · held: hang the barrel at a limb, lower it, saw a down log, carry on pitching'],
+    [['Q'], 'open it (a container or a pile on the ground: the book, with it lit on the right) · light or douse the fire, held · pitch a bagged tent (the ghost, then E held) · strike your tent, held · shoulder the canoe (only the paddle, the rod and the stringer ride in it overhead; with anything else aboard “Unload it first” opens the book at the canoe) · at a trail head, fetch what is left · with the canoe overhead: set it down, or launch and leave what is left'],
     [['W'], 'past your depth: swim (Shift harder) · Space climbs out onto a rock, a dock or the bank · E at the canoe climbs in'],
   ]],
   ['At an outfitter', [
@@ -46,18 +46,18 @@ const KEYMAP = [
     [['E'], 'talk to someone the dot is on (again: their task) · choose with 1–9 or a click, Esc to leave'], [['T'], 'what was said: the last six lines'],
   ]],
   ['The book: left is you, right is what you face', [
-    [['I'], 'the book at the pack. Left is always you: the back, the chest, each hand, the pockets, and a tab per container you carry (Pack · Barrel · Bucket · Tackle box · Armload; a box in the pack has its own tab, “in the pack”), one grid open at a time. Right is Here: everything within reach that isn’t on you, each container on the ground as its own grid, loose wood and dropped things as a pile, the canoe’s load when you stand beside it (Set everything out · Load everything here, held), and at an outfitter what they keep for you. “Nothing here” when the ground is empty'],
+    [['I'], 'the book at the pack. Left is always you: the back, the chest, each hand (anything: a thing, a pack, the rod), the pockets (the bottle with its litre bar, and four quick slots for small things), and a tab per container you carry (Pack · Barrel · Bucket · Tackle box · Armload; a box in the pack has its own tab, “in the pack”), one grid open at a time. Right is Here: everything within reach that isn’t on you, each container on the ground as its own grid, loose wood and dropped things as a pile, the canoe’s load when you stand beside it (Set everything out · Load everything here, held), and at an outfitter what they keep for you. “Nothing here” when the ground is empty'],
     [['drag'], 'between the two panes either way · a pack or a barrel by its strap to your back, your chest, a hand, the canoe or Here · a thing onto a tab to put it in that container · anything off the page: the ground at your feet (wood alone makes a woodpile)'],
     [['Ctrl', 'click'], 'send a thing on to the next container with room'], [['R'], 'turn a thing while dragging'], [['Shift', 'drag'], 'split a stack'],
-    [['right-click'], 'a thing’s verbs and nothing else: Eat (instant, wherever you stand still), Pitch, Hang (“carry it to a tree and point at the limb”), Put in hand, Tie it on, Look at the map; Cook only in the fire card. A greyed verb says why'],
-    [['hover'], 'what a thing is: its name, what it is for, its weight'],
+    [['right-click'], 'a thing’s verbs and nothing else: Eat (a serving, instant, wherever you stand still), Drink, Drink up, Pitch, Pitch over… (the tarp), Hang (“carry it to a tree and point at the limb”), Put in hand, Put on the stringer (while it is in reach), Change into dry clothes, Tie it on, Look at the map; Cook only in the fire card. A greyed verb says why'],
+    [['hover'], 'what a thing is and what it does, in numbers (the bag’s night, the tablets’ uses, a lure’s takes), its weight; the uses or servings left show on a small bar'],
     [['Tab'], 'the next tab along · Shift-Tab the journal · J or Esc closes'],
   ]],
   ['At camp: E at the thing', [
-    [['E'], 'at the fire ring: the fire card, your stuff on the left and the fire on the right: drag wood into the fuel, a pot and a meal or a fish onto the grate (“no pot” says when there is none), then Light (held), Cook, Eat (there and then), Douse (held). E or Esc closes it'],
+    [['E'], 'at the fire ring: the fire card, yours and what is in reach on the left (a tab each: the packs and piles on the ground about you, the wood lying about, the canoe’s load beside you) and the fire on the right: drag wood into the fuel, a pot and a meal or a fish onto the grate (“no pot” says when there is none), then Light (held), Cook, Eat (there and then), Douse (held). E or Esc closes it'],
     [['hold'], 'a held button works while the mouse is held on it, its ring filling; let go and it stops where it got to. The same held from the dot: Q Light, Q Douse, Q Strike, Q Pitch then E, E Hang, E Lower, E Saw'],
     [['←', '→'], 'the Rest until… dial, from E at your pitched tent: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →, day or night (a daytime rest is a nap). E rests, Esc not yet · nothing at camp is struck, put out or packed for you: what you leave stays'],
-    [['F'], 'with the rod in a hand (drag it to a hand slot, or Put in hand), on foot facing water within a cast: the rod up, the same cast, lures and fight as from the canoe. A kept fish goes on the stringer when the canoe is in reach, else into your pack'],
+    [['F'], 'with the rod in a hand (drag it to a hand slot, or Put in hand), on foot facing water within a cast: the rod up, the same cast, lures and fight as from the canoe. K keeps a fish in your hand (Put on the stringer from the book while the stringer is in reach); the bobber rig takes a leech per bite from the bucket in reach (a hand, a step off, the canoe), and the lure strip says “needs leeches” when there is none'],
   ]],
   ['The camera', [
     [['C'], 'raise it (the $25 35 mm, or the disposable a photo notice lends) · C or Esc lowers it'], [['wheel'], 'zoom from a normal lens to a long one (Q and E held too)'],
@@ -65,10 +65,11 @@ const KEYMAP = [
   ]],
   ['Fishing', [
     [['F'], 'take up the rod · put it down'], [['Space', 'click'], 'hold to load a cast where the cursor points, let go to cast · set the hook · hold to reel'],
-    [['1', '2', '…'], 'change the lure: the ones you have with you, in the strip’s order'], [['E', 'K'], 'let the fish go · keep it on the stringer'],
+    [['1', '2', '…'], 'change the lure: the ones you have with you, in the strip’s order'], [['E', 'K'], 'let the fish go · keep it, in your hand (into a pack in reach with both hands full)'],
   ]],
   ['Looking', [
-    [['Tab'], 'hold for the readout: where, water, way, wind, light, energy (what holds it down), pack, tasks · in the book: the other side'],
+    [['Tab'], 'hold for the readout, the moment only: the place, the time and the day, sunrise and sunset, the wind and the waves, the temperature and the sky, your speed and heading · in the book: the next tab'],
+    [[], 'the energy bar, the clock and the day stay up in a strip at the top over the book, every card and the Rest dial'],
     [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in): in the wild only the sheets you own, blank paper elsewhere (with none, you and a compass); at an outfitter the whole map'],
     [['J'], 'the book, on the side last open: the journal (the trip, catches, tasks, lakes, trips, photos), and the pack (left is you, right is Here) with Tab'],
     [['I'], 'the book straight at the pack'], [['V'], 'from the paddler’s seat · behind the canoe'],
@@ -93,13 +94,16 @@ export class Title {
     this.pausedRunning = true;
     this.el = {
       shell: $('shell'), menu: $('title-card'), settingsCard: $('settings-card'), controlsCard: $('controls-card'),
-      kicker: $('title-kicker'), go: $('btn-continue'), hint: $('continue-hint'), newTrip: $('btn-new'), settings: $('btn-settings'), controls: $('btn-controls'),
+      kicker: $('title-kicker'), go: $('btn-continue'), goLi: $('li-continue'), hint: $('continue-hint'), newTrip: $('btn-new'), newHint: $('new-hint'), settings: $('btn-settings'), controls: $('btn-controls'),
       entries: $('entry-card'), list: $('entry-list'), status: $('entry-status'), modePick: $('mode-pick'), modeNote: $('mode-note'),
+      confirm: $('confirm-card'), confirmSub: $('confirm-sub'), confirmGo: $('btn-confirm'), confirmKeep: $('btn-keep'),
       settingsKicker: $('settings-kicker'), controlsKicker: $('controls-kicker'), nav: $('settings-nav'), form: $('settings-form'), keymap: $('keymap'),
     };
     this.panel = new SettingsPanel(this.settings, this.el.form, this.el.nav);
     this.drift = { angle: Math.random() * Math.PI * 2, t: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), fresh: true };
-    this.confirmEp = null;  // a new season over one under way asks twice
+    // fb3 C (17): what stands beside the menu: nothing, the confirm card (a new season over one under way asks once),
+    // or the entry points (the way to travel and home, shown only after New season is chosen)
+    this.right = null;
     this.el.newTrip.textContent = 'New season';
     this.buildEntries();
     this.buildKeymap();
@@ -117,11 +121,11 @@ export class Title {
       const n = document.createElement('b'); n.textContent = String(ep.ep);
       b.append(n, document.createTextNode(ep.name));
       if (Math.hypot(ep.x - start.x, ep.z - start.z) < 600) { b.classList.add('current'); const s = document.createElement('small'); s.textContent = ' · the default start'; b.appendChild(s); }
-      b.addEventListener('click', () => this.newSeason(ep));
+      b.addEventListener('click', () => this.newSeason(ep, { confirm: false })); // the list shows only once the confirm is given
       li.appendChild(b);
       list.appendChild(li);
     }
-    this.el.entries.hidden = false;
+    this.el.entries.hidden = true;
     // the way to travel: Adventure or Sandbox, for the season New season begins
     const pick = this.el.modePick;
     if (pick) {
@@ -132,7 +136,6 @@ export class Title {
   modeButtons() { return this.el.modePick ? [...this.el.modePick.querySelectorAll('button[data-mode]')] : []; }
   setPick(mode) {
     this.modePick = mode === 'sandbox' ? 'sandbox' : 'adventure';
-    this.confirmEp = null; if (this.el.status && /new season/i.test(this.el.status.textContent)) this.el.status.textContent = '';
     save.write('tripMode', this.modePick);
     for (const b of this.modeButtons()) { const on = b.dataset.mode === this.modePick; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
     if (this.el.modeNote) this.el.modeNote.textContent = MODES[this.modePick];
@@ -145,9 +148,11 @@ export class Title {
   bind() {
     const e = this.el;
     e.go.addEventListener('click', () => (this.state === 'pause' ? this.resume() : this.continueTrip()));
-    e.newTrip.addEventListener('click', () => this.focusEntries());
+    e.newTrip.addEventListener('click', () => this.askNewSeason());
     e.settings.addEventListener('click', () => this.showCard('settings'));
     e.controls.addEventListener('click', () => this.showCard('controls'));
+    if (e.confirmGo) e.confirmGo.addEventListener('click', () => this.confirmed());
+    if (e.confirmKeep) e.confirmKeep.addEventListener('click', () => { this.showRight(null); (this.el.go.offsetParent ? this.el.go : this.el.newTrip).focus(); });
     // capture phase: fires before every other key handler on the window and, while the card is up, ends the event there
     window.addEventListener('keydown', (ev) => {
       if (this.state === 'game') {
@@ -180,9 +185,39 @@ export class Title {
     shell.classList.toggle('full', name === 'controls');
     if (name === 'settings') { this.panel.show(this.panel.section); const first = this.el.nav.querySelector('button'); if (first) first.focus(); }
     else if (name === 'controls') { const k = this.el.keymap; if (k) k.scrollTop = 0; }
-    else this.el.go.focus();
+    else { this.showRight(null); (this.el.go.offsetParent ? this.el.go : this.el.newTrip).focus(); }
+  }
+  // what stands beside the menu (fb3 C, 17): null, 'confirm' or 'entries'; New season's marker stays gold while one is up
+  showRight(which) {
+    this.right = which;
+    const e = this.el;
+    if (e.confirm) e.confirm.hidden = which !== 'confirm';
+    e.entries.hidden = which !== 'entries';
+    e.newTrip.classList.toggle('open', !!which);
+    if (which === 'entries') { this.el.status.textContent = ''; this.focusEntries(); }
+    else if (which === 'confirm' && e.confirmGo) { e.confirmGo.focus(); }
+  }
+  // New season: over a season under way it asks once (the confirm card); then the way to travel and the entry points
+  askNewSeason() {
+    if (this.busy) return;
+    const pr = this.profile;
+    if (pr && pr.started && this.right !== 'entries') { this.confirmWords(); this.showRight('confirm'); return; }
+    this.showRight('entries');
+  }
+  // the confirm given: the entry points (or, asked from outside with the pick already made, that season begins)
+  confirmed() {
+    const p = this.pendingEp; this.pendingEp = null;
+    if (p) this.newSeason(p, { confirm: false }); else this.showRight('entries');
+  }
+  confirmWords() {
+    const pr = this.profile, core = this.trip, e = this.el;
+    if (!e.confirmSub || !pr) return;
+    const n = pr.known.length, home = pr.home != null && core && core.placeOf ? core.placeOf(pr.home) : '';
+    const bits = [core ? (core.adventure ? 'Adventure' : 'Sandbox') : '', home ? `home ${home}` : '', core && core.active ? core.dayWords() : 'between trips', `$${pr.money}`, 'the gear', `${n} ${n === 1 ? 'outfitter' : 'outfitters'} known`].filter(Boolean);
+    e.confirmSub.textContent = `The season under way: ${bits.join(' · ')}.`;
   }
   focusEntries() {
+    if (this.right !== 'entries') { this.showRight('entries'); return; }
     const home = this.el.list.querySelector('small.home');
     const cur = (home && home.parentElement) || this.el.list.querySelector('button.current') || this.el.list.querySelector('button');
     if (cur) { cur.focus(); cur.scrollIntoView({ block: 'nearest' }); }
@@ -190,14 +225,17 @@ export class Title {
 
   back() {
     if (this.card !== 'menu') { this.showCard('menu'); return; }
+    if (this.right) { this.showRight(null); this.el.newTrip.focus(); return; } // the confirm or the entry points away: the menu
     if (this.state === 'pause') this.resume();
   }
 
-  // the two columns of the menu card: the menu items, and the entry points
+  // the two columns of the menu card: the menu items, and what stands beside them (the confirm's two, or the way to
+  // travel and the entry points)
   columns() {
-    const items = [...this.el.menu.querySelectorAll('.menu .item:not([disabled])')];
-    const pick = this.modeButtons().filter((b) => b.classList.contains('on'));
-    const list = [...pick, ...this.el.list.querySelectorAll('button:not([disabled])')];
+    const items = [...this.el.menu.querySelectorAll('.menu > ul .item:not([disabled])')].filter((b) => b.offsetParent !== null);
+    let list = [];
+    if (this.right === 'confirm' && this.el.confirm) list = [...this.el.confirm.querySelectorAll('button:not([disabled])')];
+    else if (this.right === 'entries') { const pick = this.modeButtons().filter((b) => b.classList.contains('on')); list = [...pick, ...this.el.list.querySelectorAll('button:not([disabled])')]; }
     return [items, list];
   }
   focusables() {
@@ -219,7 +257,7 @@ export class Title {
   }
   switchColumn(dir) {
     const [items, list] = this.columns();
-    if (dir > 0 && items.includes(document.activeElement)) this.focusEntries();
+    if (dir > 0 && items.includes(document.activeElement)) { if (this.right === 'confirm' && list[0]) list[0].focus(); else if (this.right === 'entries') this.focusEntries(); }
     else if (dir < 0 && (list.includes(document.activeElement) || this.modeButtons().includes(document.activeElement))) this.el.newTrip.focus();
   }
 
@@ -264,19 +302,25 @@ export class Title {
     const here = () => p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z) || (p.nearWater ? p.nearWater(p.x, p.z, 12) : 0)) || (p.mode === 'paddle' ? 'open water' : 'ashore'); // on foot: the water beside you
     // "Adventure · day 2 · $22", or the old words without a trip core
     const money = pr && pr.started ? ` · $${pr.money}` : '';
-    const tripDays = (core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : pr && pr.started ? ' · between trips' : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1}` : '') + money;
-    this.confirmEp = null; e.status.textContent = '';
+    const mode = core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : pr && pr.started ? ` · ${core.adventure ? 'Adventure' : 'Sandbox'} · between trips` : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1}` : '';
+    const tripDays = mode + money;
+    e.status.textContent = '';
     const kicker = pause ? `Paused · ${here()} · ${clock12(this.day.hours)}` : 'Boundary Waters Canoe Area Wilderness';
     e.kicker.textContent = kicker;
     e.settingsKicker.textContent = pause ? kicker : 'Boundary Waters';
     e.controlsKicker.textContent = pause ? kicker : 'Boundary Waters';
     const season = !!(pr && pr.started);
-    e.go.textContent = pause ? 'Paddle on' : season ? 'Continue' : 'Paddle in';
+    // fb3 C (17): Continue first, with the save's line under it (where, when, the way, the day, the money); without a
+    // season there is nothing to continue, so the item is away and New season is the first choice
+    e.go.textContent = pause ? 'Paddle on' : 'Continue';
+    if (e.goLi) e.goLi.hidden = !pause && !season;
     if (pause) e.hint.textContent = `${here()} · ${clock12(this.day.hours)}${tripDays}`;
-    else if (trip && season) e.hint.textContent = `Continue on ${here()} · ${shortDate(trip.year, trip.doy)} · ${clock12(trip.hours)}${tripDays}`;
-    else if (season) e.hint.textContent = `Continue the season${tripDays}`;
-    else { const s = w.meta.start; e.hint.textContent = `Begin a season at ${w.lakeName(w.lakeIdAt(s.x, s.z)) || 'Lake One'}, the default landing`; }
-    e.newTrip.classList.toggle('current', !pause && !trip && !season);
+    else if (trip && season) e.hint.textContent = `${here()} · ${shortDate(trip.year, trip.doy)}, ${clock12(trip.hours)}${tripDays}`;
+    else if (season) e.hint.textContent = `The season${tripDays}`;
+    else e.hint.textContent = '';
+    if (e.newHint) e.newHint.textContent = season ? (pause ? '' : 'forgets the season under way') : `a fresh start: pick where, with $40 and the kit`;
+    e.newTrip.classList.toggle('current', !pause && !season);
+    this.showRight(null);
     // home, marked in the list of entry points
     for (const b of e.list.querySelectorAll('button')) {
       const n = Number(b.querySelector('b') && b.querySelector('b').textContent), isHome = season && pr.home === n;
@@ -307,18 +351,20 @@ export class Title {
 
   resume() { this.day.running = this.pausedRunning; this.close(); }
 
-  // New season → the mode → home: the entry point picked. Over a season under way it asks twice (the first pick says
-  // what is forgotten, the same pick again begins).
+  // New season → (the confirm, once, over a season under way) → the mode → home: the entry point picked. The entry
+  // points show only past the confirm, so a pick from the list needs none (confirm: false); a call from outside with a
+  // season under way is asked first, the pick kept for the confirm.
   async newSeason(ep, { confirm = true } = {}) {
     if (this.busy) return;
     const pr = this.profile;
-    if (confirm && pr && pr.started && this.confirmEp !== ep.ep) {
-      this.confirmEp = ep.ep;
-      const n = pr.known.length;
-      this.el.status.textContent = `A new season at ${ep.name} forgets the $${pr.money}, the gear and ${n} ${n === 1 ? 'outfitter' : 'outfitters'} known. Pick it again to begin.`;
+    if (confirm && pr && pr.started && this.right !== 'entries') {
+      this.pendingEp = ep;
+      if (this.state === 'game') this.open('title');
+      this.confirmWords();
+      this.showRight('confirm');
       return;
     }
-    this.confirmEp = null;
+    this.pendingEp = null;
     this.busy = true;
     const buttons = [...this.el.list.querySelectorAll('button')];
     for (const b of buttons) b.disabled = true;

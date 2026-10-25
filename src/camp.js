@@ -88,7 +88,7 @@ const FILTERS = { tablets: 0.5, pump: 5 / 60, gravity: 5 / 60 }; // game hours b
 const AT_WATER = 2.5;       // metres from the waterline (world.shoreAt) within which E fills the bottle
 const DRY_HOURS = 0.5;      // game hours by a fire that dry wet gear
 const REST_SITE = 40;       // metres from a site's centre that count as at a campsite for resting
-const lower = (s) => (/^[A-Z]-/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // "A-frame" keeps its capital
+const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // "A-frame", "the Duluth #3" keep their capitals
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const listOf = (a) => (a.length <= 1 ? a[0] || '' : a.length === 2 ? `${a[0]} and ${a[1]}` : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
 const thingName = (d) => (d ? (/^(Duluth|Johnson|Blue)/.test(d.name) ? d.name.replace(/^Blue barrel.*/, 'blue barrel') : lower(d.name)) : 'thing');
@@ -461,7 +461,10 @@ export class Camp {
     const f = p.forward, edge = w.shoreAt(p.x, p.z) <= AT_WATER || w.shoreAt(p.x + f.x * 1.6, p.z + f.z * 1.6) < 0;
     if (!edge) return null;
     const wait = this.filterWait(), left = e.bottle <= 0.02 ? 'dry' : `${e.bottle.toFixed(1)} L left`;
-    return { left: e.bottle, wait, words: `${left} · ${wait >= 0.25 ? 'a tablet: drinkable in half an hour' : 'through the filter, a few minutes'}` };
+    // (the fb3 join: a tablet only from the tablets in reach, energy.fill; the tube left in the pack by the fire says so
+    // here, before the bottle is filled with lake water as it comes)
+    const inv = this.inventory, tab = wait < 0.25 || e.sandbox || !inv || typeof inv.usesLeft !== 'function' || inv.usesLeft('tablets') > 0;
+    return { left: e.bottle, wait, words: `${left} · ${wait >= 0.25 ? (tab ? 'a tablet: drinkable in half an hour' : 'no tablet in reach: lake water as it comes') : 'through the filter, a few minutes'}` };
   }
   fillBottle(wait = this.filterWait()) {
     if (this.energy.bottle >= 2 - 0.001) { this.note('The bottle is full.'); return; }
@@ -471,6 +474,7 @@ export class Camp {
     const got = this.energy.fill(2, wait);
     if (this.audio && this.audio.paddleDip) this.audio.paddleDip();
     if (got <= 0) { this.note('The bottle is full.'); return; }
+    if (wait >= 0.25 && !(this.energy.treating > 0.001) && !this.energy.sandbox) return; // no tablet in reach: energy.fill has said so
     this.note(wait >= 0.25 ? 'You fill the bottle and drop in a tablet. Drinkable in half an hour.' : 'You pump the bottle full. Drinkable in a few minutes.');
   }
   // the profile (stream A), wherever it is to be had

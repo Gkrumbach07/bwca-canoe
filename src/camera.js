@@ -110,6 +110,13 @@ function circleT(S, cx, cz, r) {
   const t = (-b - Math.sqrt(disc)) / a;
   return t >= 0 && t <= 1 ? t : Infinity;
 }
+// is the segment's start inside the box's footprint (with the margin): the thing the walker stands in or sits on
+// (fb3 A: the bench's obstacle has no top, so it read as a wall round the seated walker's head and pulled the chase in
+// to PULL.min; the owner, 2026-10-25: "sitting on a bench zooms me in in 3rd person and doesnt let me use my zoom level")
+function insideBox(S, o) {
+  const px = S.ax - o.x, pz = S.az - o.z, m = SIGHT.margin;
+  return Math.abs(px * o.ux + pz * o.uz) <= o.hx + m && Math.abs(-px * o.uz + pz * o.ux) <= o.hz + m;
+}
 // an oriented box (centre x, z; its a axis ux, uz; half sizes hx along a, hz across; y from -inf to top): entry t
 function boxT(S, o, top) {
   const px = S.ax - o.x, pz = S.az - o.z;
@@ -248,7 +255,10 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}, opts = {}) {
   for (const o of near) {
     // a box: up to its top; one without (a wall) about 4 m, or indoors (the shelves, the counter: the walls are the
     // interior's box above) a shelf's height
-    if (o.box) { const t = boxT(S, o, o.top !== undefined ? o.top : indoors ? floorY + SIGHT.shelf : ground(o.x, o.z) + SIGHT.wall); if (t < hard) { hard = t; out.what = 'box'; } continue; }
+    if (o.box) {
+      if (insideBox(S, o)) continue; // fb3 A: the seat he sits on (or anything he stands in) is not in the way
+      const t = boxT(S, o, o.top !== undefined ? o.top : o.seeTop !== undefined ? o.seeTop : indoors ? floorY + SIGHT.shelf : ground(o.x, o.z) + SIGHT.wall); // (seeTop: a bench, props.js) if (t < hard) { hard = t; out.what = 'box'; } continue;
+    }
     if (o.shape && o.shape.heightAt) {
       // a solid by its drawn shape (a rock, an outcrop, a bluff's module, a log, a stump): inside where the point is
       // under its top; only the samples over its footprint are asked
@@ -279,6 +289,7 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}, opts = {}) {
       if (o.top === undefined && !o.rock && o.r < 0.1) continue;
       const top = o.top !== undefined ? o.top : ground(o.x, o.z) + (o.rock ? SIGHT.post : o.r >= 0.6 ? 0.4 : 1.1);
       const t = circleT(S, o.x, o.z, o.r + SIGHT.margin);
+      if (t <= 0) continue; // fb3 A: sat on the latrine (its post holds the pivot): not in the way
       if (t < hard && ay + S.dy * t < top) { hard = t; out.what = 'post'; }
       continue;
     }
@@ -432,7 +443,25 @@ export class ChaseCamera {
     this.first = true;
   }
 
+  // fb3 join: the chase eases from where it was (the lerps of pos and look, the pull's spring), so a NaN once (the eye or
+  // the walker for a frame) stayed for good: a lerp from NaN is NaN, snap() could not clear it, and every frame threw in
+  // the audio's listener. Started afresh about the walker (or where it last was), the view's look kept where it is finite.
+  heal(player) {
+    const f = Number.isFinite, h = f(player.heading) ? player.heading : f(this.viewYaw) ? this.viewYaw : 0;
+    const x = f(player.x) ? player.x : 0, z = f(player.z) ? player.z : 0, y = f(player.altitude) ? player.altitude : 0;
+    this.pos.set(x - Math.cos(h) * 4, y + 2.5, z + Math.sin(h) * 4); this.look.set(x, y + 1.5, z); this.head.copy(this.pos);
+    if (!f(this.viewYaw)) this.viewYaw = h;
+    if (!f(this.forwardYaw)) this.forwardYaw = this.viewYaw;
+    if (!f(this.viewPitch)) this.viewPitch = 0;
+    if (!f(this.userYaw)) this.userYaw = 0;
+    if (!f(this.userPitch)) this.userPitch = 0;
+    this.pull = Infinity; this.pullV = 0; this.pullHold = 0; this.sight = null; this.lastTarget = null;
+    this.first = true;
+  }
+
   update(dt, player, carrying) {
+    const P = this.pos, L = this.look; // fb3 join: never left poisoned (heal)
+    if (!Number.isFinite(P.x + P.y + P.z + L.x + L.y + L.z + this.viewYaw + this.viewPitch + this.forwardYaw + this.pullV)) this.heal(player);
     this.seeStrength = 0; // (fb2 E: on again below, in third person behind the walker or the canoe)
     if (this.focus) {
       const k = this.first ? 1 : 1 - Math.exp(-dt * 4);

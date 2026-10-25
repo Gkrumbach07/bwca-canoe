@@ -19,7 +19,7 @@ const PROBE = 0.4;             // seconds between looks around (trees, open wate
 const RINGS = [15, 40, 100, 240], RING_OPEN = [0.1, 0.2, 0.3, 0.4];
 const DEG = 180 / Math.PI;
 // mean seconds between calls at full activity (activity scales the rate)
-const MEAN = { sparrow: 25, thrush: 50, squirrel: 70, owl: 220, loon: 140, raven: 260, ice: 160, frog: 7 };
+const MEAN = { sparrow: 25, thrush: 50, squirrel: 70, owl: 220, loon: 300, raven: 260, ice: 160, frog: 7 }; // (loon was 140: the fb3 join)
 const THRUSH_PITCH = [1650, 1950, 2250, 2600, 3000];
 // the emit contract: kind -> [how far it carries at size 1 (m), the sound]
 const EMIT = {
@@ -406,8 +406,12 @@ export class Ambient {
     if (!v) return null;
     this.count('loon-' + kind);
     if (kind === 'hoot') return v;
-    const R = this.rand, d = this.distTo(pos), L = this.L;
-    if (R() < (depth === 0 ? (kind === 'tremolo' ? 0.3 : 0.45) : depth === 1 ? 0.15 : 0)) {
+    const R = this.rand, d = this.distTo(pos), L = this.L, S = this.S;
+    // (fb3 D: by day an answer from across the lake comes a third as often; the chorus is the twilight's and the night's.
+    // The fb3 join: after dark too every call heard here, the birds' own and their answers, could draw one, which with
+    // the birds' exchanges made 6.5 calls a minute at dusk; now one call in five or so, and no answer to an answer)
+    const tw = Math.max(S.night, S.dusk, S.dawn), readily = 0.35 + 0.65 * tw;
+    if (R() < (depth === 0 ? (kind === 'tremolo' ? 0.12 : 0.2) : 0) * readily) {
       const a = Math.atan2(pos.z - L.z, pos.x - L.x) + (R() < 0.5 ? -1 : 1) * (0.8 + R() * 2), dd = Math.min(3000, d * (0.6 + R()) + 60);
       const q = { x: L.x + Math.cos(a) * dd, y: pos.y, z: L.z + Math.sin(a) * dd };
       const r = R(), nk = kind === 'yodel' ? (r < 0.6 ? 'yodel' : 'wail') : kind === 'tremolo' ? (r < 0.5 ? 'tremolo' : 'wail') : r < 0.8 ? 'wail' : 'tremolo';

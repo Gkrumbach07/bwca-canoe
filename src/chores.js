@@ -51,6 +51,14 @@ import { Cook, hiss, woodKnock } from './cook.js';
 // stations: never where a thing picked up is put away (inventory.place).
 defineItem({ id: 'firefuel', name: 'In the fire ring', short: 'Fuel', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, station: true, container: { cols: 4, rows: 3, accepts: ['firewood'] }, icon: 'firewood', words: 'Dead branches and short logs laid in the ring. They burn a piece at a time once it is lit.' });
 defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'meal', 'fish'] } });
+// fb3 B (the owner, 2026-10-25: "things like sleeping bag and tarp … feel like they have no use"): the rain tarp is pitched
+// over the fire ring or a pack on the ground from the book (its Pitch over… verb, inventory.verb → tarpVerb): the tarp
+// goes into this container on the ground there (shown in Here; drag it out to take it down), drawn as a sheet on four
+// lines (drawTarps). Rain on a ring with no tarp burns a fire down RAIN.burn times faster and wets the wood in it through
+// after RAIN.wetAfter hours (it won't light for RAIN.wetFor); rain on a pack on the ground with no tarp soaks the gear
+// after RAIN.packAfter hours (trip.state.wet). A tarp over either keeps it dry.
+defineItem({ id: 'tarpup', name: 'Rain tarp, pitched', short: 'Tarp up', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 2, rows: 2, accepts: [] }, icon: 'tarp', verbs: [], words: 'The tarp pitched on four lines over the fire ring or a pack; drag it out to take it down.' });
+const RAIN = { on: 0.3, burn: 1, wetAfter: 1 / 3, wetFor: 3, packAfter: 0.5, dry: 0.5, reach: 2.2, verbReach: 4 };
 const KEEP = 1.1;            // fb2 A: game hours of burning left under which a fire takes its next piece from the ring
 export const WOOD = { reach: 1.45, regrow: 2, pile: 12, ringR: 2.4, near: 58, drop: 95, cell: 24 };
 // (to: inside the camp's area, camp.js AREA_R 25 m, so walking about for wood never takes you out of the camp's reach)
@@ -165,6 +173,19 @@ function mergePieces(list, geos) {
   return geo;
 }
 const _one = new THREE.Vector3(1, 1, 1);
+// fb3 B: the pitched tarp, in its own frame (the ring or the pack at the origin on the ground): a 2.6 m square of green
+// nylon sagging a little at 1.9 m, both faces, on four lines to pegs out at the corners
+function tarpGeometry() {
+  const b = new PropBuilder(), nylon = new THREE.Color(0x5c7a58), under = new THREE.Color(0x4a6347), cord = new THREE.Color(0xd8d2b8);
+  const W = 1.3, H = 1.9, SAG = 0.22, N = 4;
+  const pt = (u, v) => { const s = SAG * (1 - Math.pow(Math.abs(u - 0.5) * 2, 2)) * (1 - Math.pow(Math.abs(v - 0.5) * 2, 2)); return V((u - 0.5) * 2 * W, H - s, (v - 0.5) * 2 * W); };
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const a = pt(i / N, j / N), c = pt((i + 1) / N, j / N), d = pt((i + 1) / N, (j + 1) / N), e = pt(i / N, (j + 1) / N);
+    b.quad(a, e, d, c, TILE.PLAIN, nylon); b.quad(a, c, d, e, TILE.PLAIN, under);
+  }
+  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.tube([V(sx * W, H, sz * W), V(sx * (W + 1.1), 0.03, sz * (W + 1.1))], 0.006, 4, TILE.PLAIN, cord, { cap0: true, cap1: true });
+  return shadeBy(b.build(), (py, ny) => (ny < -0.3 ? 0.68 : 0.95));
+}
 // an icon for the book: a dead branch or a short log on paper (inv-ui.js draws an item's own draw(ctx, size))
 function drawPiece(kind) {
   return (c, s) => {
@@ -308,7 +329,97 @@ export class Chores {
     if (on && ((this.cellT -= dt) <= 0)) { this.cellT = 0.5; this.restoreDrops(); this.refreshWood(p.x, p.z); this.migratePiles(); }
     if (this.redrawIn > 0 && (this.redrawIn -= dt) <= 0) this.dirty = true;
     if (this.dirty) this.drawWood();
-    if ((this.fuelT = (this.fuelT || 0) - dt) <= 0) { this.fuelT = 0.25; this.syncFires(); }
+    if ((this.fuelT = (this.fuelT || 0) - dt) <= 0) { this.fuelT = 0.25; this.syncFires(); this.syncRain(); }
+    // fb3 B: a pitched tarp's container with the tarp taken out of it is gone
+    const inv = this.inv;
+    if (inv && inv.attached) for (let i = inv.containers.length - 1; i >= 0; i--) { const c = inv.containers[i]; if (c.item === 'tarpup' && !c.grid.length) { inv.containers.splice(i, 1); inv.emit('containers'); } }
+  }
+
+  // --- fb3 B: the tarp and the rain -----------------------------------------------------------------------------------
+  // the rain falling here, 0–1 (none inside a store)
+  rainNow() {
+    const W = this.camp.weather, L = W && W.look;
+    if (!L || !(L.rain > 0)) return 0;
+    const en = this.energy;
+    try { if (en && typeof en.inside === 'function' && en.inside()) return 0; } catch { /* no store */ }
+    return Math.max(0, L.rain * (1 - 0.5 * (L.snow || 0)));
+  }
+  tarps() { const inv = this.inv; return inv && inv.attached ? inv.containers.filter((c) => c.item === 'tarpup' && c.where === 'ground' && c.at && c.grid.length) : []; }
+  tarpOverRing(key) { return this.tarps().find((t) => t.at.over === 'ring' && t.at.ring === key) || null; }
+  tarpOverContainer(c) { if (!c || !c.at) return null; return this.tarps().find((t) => t.at.over === 'pack' && (t.at.ref === c.id || Math.hypot(t.at.x - c.at.x, t.at.z - c.at.z) < RAIN.reach)) || null; }
+  // the book's Pitch over… on the tarp (c, e: where it is): over the fire ring you stand by, else the nearest pack on the
+  // ground within a few steps. → { enabled, why, label, run }
+  tarpVerb(c, e) {
+    const p = this.player, inv = this.inv, grey = (why) => ({ enabled: false, why, label: 'Pitch over…', run: () => {} });
+    if (!p || p.mode !== 'walk') return grey('on foot, by the fire ring or a pack on the ground');
+    if (!e || e.id !== 'tarp' || !inv) return grey('not a tarp');
+    // the nearer of the fire ring and a pack on the ground within a few steps (stand by the one you mean)
+    const site = this.camp.nearestSite(p.x, p.z, RAIN.verbReach + 2, true), cands = [];
+    if (site && site.layout && site.layout.fire) { const f = site.layout.fire, d = Math.hypot(f.x - p.x, f.z - p.z); if (d <= RAIN.verbReach) cands.push({ d, over: { kind: 'ring', key: keyOf(site), x: f.x, z: f.z, y: f.y, a: f.a || 0, label: 'the fire ring' } }); }
+    for (const k of inv.containers) {
+      if (k.where !== 'ground' || !k.at || k === c || !this.isGear(k)) continue;
+      const d = Math.hypot(k.at.x - p.x, k.at.z - p.z);
+      if (d <= RAIN.verbReach) cands.push({ d, over: { kind: 'pack', ref: k.id, x: k.at.x, z: k.at.z, y: Number.isFinite(k.at.y) ? k.at.y : null, a: k.at.heading || 0, label: `the ${lowerName(k)}` } });
+    }
+    cands.sort((a, b) => a.d - b.d);
+    const over = cands.length ? cands[0].over : null;
+    if (!over) return grey('stand by the fire ring, or by a pack set down on the ground');
+    if (over.kind === 'ring' ? this.tarpOverRing(over.key) : this.tarpOverContainer(inv.cont(over.ref))) return grey(`a tarp is over ${over.label} already`);
+    return { enabled: true, why: null, label: `Pitch over ${over.label}`, run: () => this.pitchTarp(c, e, over) };
+  }
+  pitchTarp(c, e, over) {
+    const inv = this.inv, p = this.player;
+    const got = inv.take(c.id, e.uid, 1);
+    if (!got) return { ok: false, why: 'gone' };
+    const y = Number.isFinite(over.y) ? over.y : p.groundAt(over.x, over.z);
+    const area = typeof this.camp.reachArea === 'function' ? this.camp.reachArea() : null;
+    const t = inv.addContainer('tarpup', 'ground', { x: over.x, z: over.z, y, heading: over.a, over: over.kind, ring: over.key || null, ref: over.ref || null, left: true, ...(area ? { camp: area.key || 'camp' } : {}) }, { quiet: true });
+    t.grid.push({ ...got, x: 0, y: 0, rot: 0 });
+    inv.emit('ground');
+    this.note(over.kind === 'ring' ? 'The tarp goes up over the fire ring on four lines: the wood and the fire stay dry in rain.' : `The tarp goes up over ${over.label} on four lines: the gear in it stays dry in rain.`, 5);
+    return { ok: true, why: null, words: '' };
+  }
+  // a container that holds gear the rain can get into: a pack or a barrel (worn on the back or the chest), not the
+  // bucket, the tackle box or a pile
+  isGear(c) { const d = itemDef(c.item); return !!(d && d.wear && !d.fixed && !d.station); }
+  // a few times a second: rain on the packs set down with no tarp over them soaks the gear after a while; it dries in
+  // the dry (the ring's wood is syncFire's)
+  syncRain() {
+    const inv = this.inv, p = this.player, now = this.now, last = Number.isFinite(this.rainT) ? this.rainT : now;
+    this.rainT = now;
+    if (!inv || !inv.attached) return;
+    const dh = Math.max(0, Math.min(1, now - last)), rain = this.rainNow(), tr = this.camp.trip;
+    if (!(dh > 0)) return;
+    for (const c of inv.containers) {
+      if (c.where !== 'ground' || !c.at || !this.isGear(c)) continue;
+      if (Math.abs(c.at.x - p.x) > 80 || Math.abs(c.at.z - p.z) > 80) continue;
+      if (rain > RAIN.on && !this.tarpOverContainer(c)) {
+        c.at.rainH = (c.at.rainH || 0) + dh * rain;
+        if (c.at.rainH >= RAIN.packAfter && tr && tr.state && !tr.state.wet && tr.adventure) { tr.state.wet = true; this.note(`Rain has got into the ${lowerName(c)} on the ground: the gear is wet until a fire dries it. A tarp over it would have kept it dry.`, 6); }
+      } else if (c.at.rainH) c.at.rainH = Math.max(0, c.at.rainH - dh * RAIN.dry);
+    }
+  }
+  // the pitched tarps near you, drawn (after the containers are posed: their bag hidden), the rest parked
+  drawTarps() {
+    const inv = this.inv, p = this.player, view = typeof window !== 'undefined' && window.__game ? window.__game.invView : null;
+    if (!inv || !inv.attached) return;
+    const want = this.tarps().filter((c) => Math.abs(c.at.x - p.x) < 150 && Math.abs(c.at.z - p.z) < 150).slice(0, 4);
+    const pool = this.tarpMeshes || (this.tarpMeshes = []);
+    want.forEach((c, i) => {
+      let m = pool[i];
+      if (!m) {
+        const mesh = new THREE.Mesh(this.tarpGeo || (this.tarpGeo = tarpGeometry()), this.mat);
+        mesh.castShadow = true; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = 'tarp';
+        this.camp.scene.add(mesh);
+        m = pool[i] = { mesh, sig: '' };
+      }
+      const y = Number.isFinite(c.at.y) ? c.at.y : this.camp.tiles.groundAt(c.at.x, c.at.z), sig = `${c.id}|${c.at.x.toFixed(2)},${c.at.z.toFixed(2)},${y.toFixed(2)}`;
+      if (m.sig !== sig) { m.sig = sig; m.ref = c.id; m.mesh.position.set(c.at.x, y, c.at.z); m.mesh.rotation.set(0, c.at.heading || 0, 0); m.mesh.updateMatrix(); m.mesh.updateMatrixWorld(true); }
+      m.mesh.visible = true;
+      const bag = view && view.objs && view.objs.get(c.id);
+      if (bag) bag.visible = false;
+    });
+    for (let i = want.length; i < pool.length; i++) { pool[i].mesh.visible = false; pool[i].ref = null; }
   }
 
   // --- the fire (fb2 A: from the book) -------------------------------------------------------------------------------
@@ -328,6 +439,17 @@ export class Chores {
     const last = Number.isFinite(b.at.syncT) ? b.at.syncT : now;
     b.at.syncT = now;
     let f = F.get(key), changed = false;
+    // fb3 B: rain on the ring with no tarp over it: a burning fire burns down RAIN.burn times faster, and the wood in the
+    // ring is wet through after RAIN.wetAfter hours of it (it won't light for RAIN.wetFor hours); dry weather dries it
+    const rain = this.rainNow(), dh = Math.max(0, Math.min(1, now - last));
+    if (rain > RAIN.on && dh > 0 && !this.tarpOverRing(key)) {
+      b.at.rainH = (b.at.rainH || 0) + dh * rain;
+      if (f && !f.laid && now < f.until) f.until = Math.max(now, f.until - dh * rain * RAIN.burn);
+      if (b.at.rainH >= RAIN.wetAfter) {
+        if (!(b.at.wetUntil > now) && units.length && !(f && !f.laid && now < f.until)) this.note('The rain has wet the wood in the ring through. A tarp over the ring would keep it dry.', 5);
+        b.at.wetUntil = now + RAIN.wetFor;
+      }
+    } else if (b.at.rainH && dh > 0) b.at.rainH = Math.max(0, b.at.rainH - dh * RAIN.dry);
     // a fire laid before the ring had a bin (an older save): its wood is in the ring as branches
     if (f && f.laid && !units.length && !b.at.v) { b.at.v = 2; for (let n = Math.max(2, Math.round(f.laid / FIRE.branch)); n > 0; n--) if (!this.inv.put(b, 'wood:branch', { quiet: true })) break; return; }
     b.at.v = 2;
@@ -373,9 +495,10 @@ export class Chores {
   // why the ring will not light now, or null: kindling first (a dead branch at least), two pieces in all (an old armful
   // alone will do)
   lightProblem(key) {
-    const st = this.fires.state(key), { units } = this.fireInfo(key);
+    const st = this.fires.state(key), { units, bin } = this.fireInfo(key);
     if (st === 'burning') return 'it is burning';
     if (!units.length) return st === 'coals' ? 'wood in the ring first: a dead branch catches on the coals' : 'wood in the ring first: drag a branch or two into the fuel';
+    if (bin && bin.at && bin.at.wetUntil > this.now) return `the wood in the ring is wet through: ${this.tarpOverRing(key) ? 'under the tarp it dries in a few hours' : 'a tarp over the ring, and a few hours to dry'}`; // fb3 B
     if (units.some((u) => u.id === 'firewood')) return null;
     if (!units.some((u) => u.id === 'wood:branch')) return 'logs will not light on their own: a dead branch for kindling';
     if (units.length < 2) return 'one branch is not a fire: another piece of wood';
@@ -771,6 +894,7 @@ export class Chores {
   afterPose() {
     this.cook.afterPose();
     this.drawPiles(); // fb2 A: the woodpiles set down from the book (their bag hidden)
+    this.drawTarps(); // fb3 B: the tarps pitched over a ring or a pack
     const inv = this.inv, p = this.player, cn = p.canoe, seen = new Set(), S = this.cook.seat, sat = !!(S && S.phase !== 'walk');
     if (inv && inv.attached && cn && cn.figure) {
       for (const c of inv.containers) {
@@ -917,7 +1041,7 @@ const blank = () => ({ piles: {}, pints: 0, latrine: null, taken: {}, sawn: {} }
 const seqRng = (xs) => { let i = 0; return () => xs[Math.min(xs.length - 1, i++)]; };
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const _v1 = new THREE.Vector3();
-const lowerName = (c) => { const d = itemDef(c.item), n = (d && (d.short || d.name)) || 'pack'; return n.charAt(0).toLowerCase() + n.slice(1); };
+const lowerName = (c) => { const d = itemDef(c.item), n = (d && (d.short || d.name)) || 'pack'; return /^(Duluth|Johnson)/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1); }; // (a name stays a name: "the Duluth pack #3")
 // "an hour", "about 2 h", "half an hour"
 function hoursWords(h) { if (h < 0.75) return 'half an hour'; if (h < 1.25) return 'an hour'; return `${Math.round(h * 2) / 2} h`.replace('.5 h', '½ h'); }
 // the distance from (x, z) to a down log's stem (tiles.js: the capsule from (ax, az) to (bx, bz))

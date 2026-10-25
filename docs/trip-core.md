@@ -23,8 +23,11 @@ From the owner (2026-10-23):
   an hour covers in life. **Trip** pace (the default): T = 6 on open water (the canoe seen at 6.6 m/s, a game hour of
   paddling in about ten real minutes) and up to 3 on a portage trail (the carry seen at 2.5 m/s). **Real** pace:
   T = 1. The boost fades to life near a shore ahead, in a narrow channel, near a landing or a dock, on a slow stroke
-  and in a hard turn. Camp, chores, fishing, walking off a trail, swimming and a counter have no boost and a gentle
-  clock (12× at Trip, 1× at Real). The 1/2/3 keys (1×, 2×, 4×) multiply all of it. Sleep jumps the night. Measured:
+  and in a hard turn. On foot off a trail outside a camp's area, a store and its yard, the walker is time-lapsed too
+  (the 2026-10-25 round, "i still feel slow walking"): T = 1.8 at Trip, seen at about 2.4 m/s with the clock at the same
+  factor, so a game hour still covers a real walk (measured: 200 m into the woods at 2.1–2.2 m/s seen, the clock ×1.8
+  once out of the camp). Camp, chores, fishing, swimming and a counter have no boost and a gentle clock (12× at Trip,
+  1× at Real). The 1/2/3 keys (1×, 2×, 4×) multiply all of it. Sleep jumps the night. Measured:
   a July day of 6.5 game hours of travel covers 23–24 km with four portages (see Balance). The details are in
   `src/pace.js` and "The pace" below.
 - **Open trips.** No nights, no "out by", no exit place. Live out there as long as you can; come in when you need to,
@@ -90,14 +93,21 @@ The starting kit is one Duluth pack: the gear and the food in one, a single carr
 aluminium canoe is 34 kg, the pack 16 kg plus 0.9 kg a day of food: about 55 kg with five days). A second pack
 (phase 2) brings back the double portage:
 
-1. **At the landing.** *E Portage* takes the canoe to the trail head. With two packs the gear pack is set down there
-   and you shoulder the canoe with the food pack; *Q* beside the gear pack takes it too, for one heavy trip.
-2. **The far end.** With everything on you, *E Launch*. With a pack back at the trail head, *E Set the canoe down ·
-   walk back for the gear pack*.
+1. **At the landing** (the owner's feedback of 2026-10-25: "no special portage button"): *E Go ashore · Portage: …*
+   is a landing like any other. The canoe glides in to the trail's put-in (the waterline nearest the trail's end) and
+   you step out beside it, beached, with nothing on your shoulders. **Q on the hull** shoulders it once only the paddle
+   in use, the rod and the stringer ride in it (lashed); with anything else aboard Q reads "Unload it first" and opens
+   the book with the canoe on the right, one drag from your back, your chest or a hand. Nothing loads or stows by
+   itself: what you wear stays on you. With two packs the gear pack waits at the trail head; *Q* beside it takes it
+   too, for one heavy trip.
+2. **The far end.** *E Launch onto …* (what is in your hands goes into the hull at your feet, with a note: your hands
+   are for the paddle; the back and the chest stay as they are) or *Q Set the canoe down*. With a pack back at the
+   trail head, *E Set the canoe down · walk back for the gear pack*.
 3. **Walk back**, or *Q Fetch it (about 5 min on a 23-rod trail)*: a fade, the clock moves on by the walk and the
-   second carry at life pace (what walking them yourself costs on the clock), and the walk's energy is spent.
-4. **Load up.** *E Load up and launch*. A canoe set down at a trail end (to fill the bottle, say) launches from the
-   trail's own launch point: *E Launch · Q Shoulder the canoe*.
+   second carry at life pace (what walking them yourself costs on the clock), and the walk's energy is spent. Things
+   set down within 15 m of a trail count as left at it, so the fetch finds them.
+4. **Away.** A canoe set down at a trail end (to fill the bottle, say) gets in from the dot: *E Get in* where it
+   floats; beached on dry ground, *E Push it off first* slides it down to the water with you.
 
 The portage counts in the journal and the logbook when you launch at the far end.
 
@@ -177,11 +187,12 @@ ring do its prompts apply. On foot at a free site:
   eaten out of it) but its food is still yours: the readout says "3 meals and 1 snack hung in the barrel" and the HUD's
   food mark stays down. In Adventure, food left on the ground overnight within 60 m may be found by a bear (a note in
   the morning, a meal or two gone; a sealed barrel seldom); a hung barrel never.
-- **Repacking** (camp 1, `src/packs.js`): E at the canoe loads what you carry. With things set out about the camp (in
-  its area, or within 10 m of the hull), a **held E** at the hull loads everything there, a thing a phase (a minute
-  and more the farther it lies), while the canoe has room for eight things and 160 kg; Q launches and leaves them. A
-  thing set down right by the hull offers "Q Launch and leave it" with its pick-up. At the ring, the armload's Q stacks
-  it on the woodpile.
+- **Repacking** (camp 1, `src/packs.js`; the 2026-10-25 round: nothing loads by itself): E at the canoe is *Get in*
+  (or *Push it off first*), and only what is in your hands goes into the hull at your feet; a pack on your back and a
+  barrel on your chest ride on you. With things set out about the camp (in its area, or within 10 m of the hull), the
+  book's *Load everything here* (held) at the hull loads everything there, a thing a phase (a minute and more the
+  farther it lies), while the canoe has room for eight things and 160 kg. At the ring, the armload's Q stacks it on
+  the woodpile.
 - **Leaving:** nothing is struck, put out or packed (camp stream 1): a note says what is still ashore ("The fire is still
   burning; the leech bucket is set out. Everything stays as it is until you come back.": the tent, half pitched or up,
   the fire burning or the coals smouldering, the pot on the grate, the barrel hung, the things set out), and it all
@@ -201,8 +212,9 @@ up anywhere flat and dry once you stand still a moment. A site another party hol
 
 ### The headlamp
 
-**H**, afloat or on foot: one soft warm-white cone from the hat band that lights the path and the camp a few metres
-ahead. It goes off by itself in full daylight and when you sleep, and a note suggests it once each evening.
+**H**, afloat or on foot, day or night (the 2026-10-25 round): one soft warm-white cone from the hat band that lights the path and the camp a few metres
+ahead. By day the beam is lost in the sun and shows in the shade; it goes off when you sleep, and a note suggests it
+once each evening.
 
 ### The single bar, the needs and water
 
@@ -215,10 +227,13 @@ One energy bar, pulled down by four needs (Adventure, while a trip is under way;
   meal on the clock at sunrise or sunset (the feedback of 2026-10-24): you eat from the pack (**I**) standing still, on
   foot or afloat, a snack as it is and a meal or a fish once it is cooked; `energy.food` counts the meals within reach.
   A cold meal gives +0.5, a hot one or a fish +0.6. Sandbox keeps food free.
-- **Water:** a 2 L bottle you drink from on your own. A litre lasts 6 game hours, 4 when paddling hard, carrying 30 kg
-  or more, or on a sunny July or August afternoon. The need only falls once the bottle is dry (to empty in 8 hours,
-  5⅓ hard). On foot at the water's edge, **E Fill the bottle** (tablets: drinkable in half an hour); any counter
-  fills it free at once.
+- **Water** (the 2026-10-25 round: nothing is drunk for you): the 2 L bottle rides in the pockets' first cell with a
+  litre bar, and **Drink** is its verb in the book (I, right-click: a gulp of 0.25 L, +19 %; *Drink up* the rest). The
+  thirst falls on its own, 12.5 % a game hour (19 % paddling hard, carrying 30 kg or on a hot afternoon), and only a
+  drink brings it back: "Thirsty. Drink from the bottle (I)." On foot at the water's edge, **E Fill the bottle**: a
+  tablet goes in from the tablets in reach (a tube of 20, its bar on the icon; drinkable in half an hour, Drink greyed
+  "the water is treating" meanwhile); with none in reach the water's edge says so and it goes in as it comes (a queasy
+  stomach for 6 h). Any counter fills it free at once.
 - **Warmth** (the second 2026-10-24 round, a gentle fourth need): it falls when the air you feel is under 12 °C (the
   weather's temperature, less the wind afloat and half of it ashore, the rain on you, and 2 °C more after dark), 2.5×
   as fast wet through (rain on you, a swim; wet gear counts a little), a little over half as fast paddling or walking,
@@ -267,20 +282,20 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 
 | Key | Where | What |
 |---|---|---|
-| E | afloat | go ashore · portage at a landing · the counter at a dock · pick up a lost item in reach |
-| E | portage trail | set the canoe down · pick up a pack · shoulder the canoe · launch / load up and launch |
+| E | afloat | go ashore (at a portage landing: at the trail's put-in, the canoe beached) · tie up at a dock · pick up a lost item in reach |
+| E | portage trail, carrying | launch onto the water at a trail end or a shore with water enough · set the canoe down (where there is none) |
 | E | on foot at the water's edge | fill the bottle (when it is down a little and no other prompt holds E) |
 | E | campsite, on foot | pitch the tent (held, where the ghost stands green; again to carry on) · strike it by day (held) · pick up a dead branch or a short log (into an armload in a free hand) · at the ring: hold to lay and light the fire; at a burning fire a tap feeds it, cooks or eats what is in the pot, and held it puts the fire out · hold at a tree to hang the barrel, at the hung barrel to let it down · hold at a down log with the saw · hold at the latrine · at the canoe: hold to load everything here · sleep, the wake-time card (tent) |
 | E | on foot, by a patch in season | pick berries or mushrooms into a container you can reach (forage.js) |
-| E | on foot, by a thing on the ground / at the canoe | pick it up / load what you carry into the canoe |
+| E | on foot, the dot on a thing / on the canoe | pick it up (into what you carry, else a free hand) / get in where it floats, else push it off first |
 | ← → | at your tent, still / the wake-time card | open the card with the time moved / choose first light, 7:00 or 9:00 |
-| Q | portage trail | take one more pack too · fetch what was left at the trail head · shoulder the canoe |
+| Q | portage trail | take one more pack too · fetch what was left at the trail head · set the canoe down |
+| Q | on foot, the dot on the canoe | shoulder it ("Unload it first" while anything but the paddle, the rod and the stringer rides in it: the book opens at the canoe) |
 | Q | on foot, carrying | set down what you carry (it stays there until you come back for it) · at the ring, an armload: stack it on the woodpile |
 | Q | campsite, on foot | a half-pitched tent: take it down (held) · at night: strike the tent (held), or with the fly off, sleep without it · at the canoe with things set out: launch and leave them |
-| Q | shore | go ashore at a landing without portaging · leave a beached canoe |
-| K / E | a fish held up | keep it (into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
-| H | anywhere | the headlamp |
-| I | anywhere | the book at the pack: eat a snack when still (a meal or a fish cooked first), move things between containers |
+| K / E | a fish held up | keep it, in your hand (into a pack in reach with both hands full; into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
+| H | anywhere, day or night | the headlamp |
+| I | anywhere | the book at the pack: eat a serving of a snack when still (a meal or a fish cooked first), Drink from the bottle, move things between containers |
 | Space, Shift | afloat / on foot | brace / vault, climb or hop · hustle / jog |
 | 1 2 3 | anywhere, the rod down | 1×, 2×, 4× on top of the pace (Settings › Controls › Pace: Trip or Real) |
 | `[ ] - = P` · `, . / ;` | Sandbox | the clock and the date · the wind |

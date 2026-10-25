@@ -323,7 +323,7 @@ export class StubInventory {
   stow(id) { return this.atStash ? this.to(id, 'stash') : { ok: false, why: 'stash', words: 'Only at an outfitter.' }; }
   carry(id, where = 'back') { for (const o of [...this.containers, ...this.long]) if (o.uid !== id && o.id !== id && o.where === where && where !== 'hands') o.where = this.atStash ? 'stash' : 'ground'; return this.to(id, where); }
 }
-const lower = (s) => String(s).charAt(0).toLowerCase() + String(s).slice(1);
+const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // (a name keeps its capital)
 
 // --- the icons ----------------------------------------------------------------------------------------------------
 // Flat shapes in the game's palette with a soft ink edge, drawn once per size on a 2D canvas and cached. Each drawing
@@ -624,6 +624,14 @@ function drawStringer(c) {
   rr(c, 22, 0, 16, 8, 3); fill(c, PAL.brass); stroke(c, 1.2);
 }
 function drawTag(c, text) { rr(c, 6, 6, 88, 88, 6); fill(c, PAL.paper); stroke(c); label(c, text.slice(0, 3).toUpperCase(), 50, 52, 26); }
+// the water bottle (fb3 C, decision 12: an item in the pockets with its litre bar): a wide-mouth bottle, its cap on a loop
+function drawBottle(c) {
+  rr(c, 14, 24, 40, 80, 9); fill(c, 'rgba(178, 206, 216, .88)'); stroke(c);
+  rr(c, 18, 6, 32, 18, 5); fill(c, PAL.blue); stroke(c, 1.6);
+  c.beginPath(); c.moveTo(50, 12); c.quadraticCurveTo(66, 10, 60, 28); stroke(c, 2.6, PAL.blueD);
+  c.globalAlpha = 0.5; rr(c, 20, 34, 6, 60, 3); fill(c, '#fff'); c.globalAlpha = 1;
+  for (const y of [48, 66, 84]) { shape(c, [42, y, 50, y]); stroke(c, 1.3, 'rgba(50, 70, 80, .55)'); }
+}
 // the things near you, for their panels' straps (fb2): the fire ring, a pitched tent, the latrine, a limb with a rope, the
 // canoe ashore, the water's edge, a down log
 function drawFireRing(c) {
@@ -669,7 +677,7 @@ const ICONS = {
   freeze: [70, 108, drawFreeze], trailmix: [80, 80, drawTrailMix], jerky: [90, 70, drawJerky], chocolate: [110, 56, drawChocolate],
   leeches: [80, 84, drawLeeches], jig: [80, 64, drawJig], mepps: [60, 100, drawMepps], daredevle: [50, 100, drawDaredevle], rapala: [120, 50, drawRapala],
   silverminnow: [50, 100, drawSilverMinnow], lazyike: [110, 50, drawLazyIke], spinner: [60, 100, drawMepps], spoon: [50, 100, drawDaredevle], crankbait: [120, 50, drawRapala],
-  tablets: [70, 70, drawTablets], pump: [60, 108, drawPump], gravity: [90, 108, drawGravity], saw: [110, 46, drawSaw], camera: [100, 70, drawCamera],
+  tablets: [70, 70, drawTablets], pump: [60, 108, drawPump], gravity: [90, 108, drawGravity], saw: [110, 46, drawSaw], camera: [100, 70, drawCamera], bottle: [68, 108, drawBottle],
   pad: [110, 50, drawPad], yokepads: [110, 52, drawYokePads], tent: [70, 108, (c) => drawTentSack(c, '#4f7a4a')], aframe: [70, 108, (c) => drawTentSack(c, '#4f7a4a')],
   dome: [70, 108, (c) => drawTentSack(c, '#c9662f')], fourseason: [70, 108, (c) => drawTentSack(c, '#d9b23a')],
   paddle: [176, 42, (c) => drawPaddle(c, 'ash')], ash: [176, 42, (c) => drawPaddle(c, 'ash')], bentshaft: [176, 50, (c) => drawPaddle(c, 'bentshaft')], carbon: [176, 50, (c) => drawPaddle(c, 'carbon')], ottertail: [176, 42, (c) => drawPaddle(c, 'ottertail')],
@@ -793,7 +801,7 @@ class Grid {
     this.render();
   }
   destroy() { if (GRIDS.get(this.el) === this) GRIDS.delete(this.el); }
-  get size() { return gridSize(this.c); }
+  get size() { return this.opts.size || gridSize(this.c); } // opts.size: drawn at another size (a holder shown as the one thing it holds)
   render() {
     const { cols, rows } = this.size, el = this.el;
     el.style.width = `${cols * CELL}px`; el.style.height = `${rows * CELL}px`;
@@ -816,7 +824,18 @@ class Grid {
     if (d && d.eat && !shelf) it.appendChild(mk('span', `ig-mark ${d.eat.cook && !d.cooked ? 'cook' : 'eat'}`, d.eat.cook && !d.cooked ? 'raw' : 'eat'));
     if (e.box) it.appendChild(mk('span', 'ig-mark open', 'open'));
     if (shelf) it.appendChild(mk('span', 'ig-price', e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'));
-    it.addEventListener('pointerdown', (ev) => press(this, e, it, ev));
+    // fb3 C (stream B's uses, servings and litres): a thin bar along the foot for what is left of a thing that has uses
+    // (the tablets), servings (the trail mix) or litres (the bottle), and the number where a stack's count would go
+    const n = d ? (d.uses ?? d.servings ?? d.litres ?? null) : null;
+    if (n != null && n > 1 && !shelf) {
+      const left = Number.isFinite(e.left) ? e.left : n, f = Math.max(0, Math.min(1, left / n));
+      const bar = mk('span', 'ig-bar', `<i style="width:${(f * 100).toFixed(1)}%"></i>`);
+      if (d.litres && Number.isFinite(e.treating) && e.treating > 0) { const tr = Math.max(0, Math.min(f, e.treating / n)); bar.insertAdjacentHTML('beforeend', `<em style="left:${((f - tr) * 100).toFixed(1)}%;width:${(tr * 100).toFixed(1)}%"></em>`); }
+      it.appendChild(bar); it.classList.add('has-bar');
+      if ((e.qty || 1) === 1 && st <= 1) it.appendChild(mk('span', 'ig-qty', d.litres ? `${+left.toFixed(2)} L` : String(Math.round(left))));
+    }
+    if (e.fixed) it.classList.add('fixed'); // a fixed entry (the bottle in the pockets) is not dragged
+    else it.addEventListener('pointerdown', (ev) => press(this, e, it, ev));
     it.addEventListener('contextmenu', (ev) => { ev.preventDefault(); hideTip(); openMenu(ev.clientX, ev.clientY, itemMenu(this, e)); });
     it.addEventListener('dblclick', (ev) => { ev.preventDefault(); primary(this, e); });
     it.addEventListener('pointerenter', () => { clearTimeout(tipTimer); tipTimer = setTimeout(() => { if (!drag) showTip(it, this, e); }, 260); });
@@ -1065,7 +1084,8 @@ function zoneCheckDz(st, dz) {
       if (!onFoot() && !inv.atStash) return 'no';
       const occ = occupant(dz), hand = dz !== 'back' && dz !== 'chest';
       if (occ && occ.obj === o) return 'no';
-      if (hand ? t.isLong || d.hand : (d.wear || []).includes(dz)) return occ ? 'swap' : 'ok';
+      // a hand takes any container once the model carries any in a hand (stream B's canHand: "hands take anything")
+      if (hand ? t.isLong || d.hand || typeof inv.canHand === 'function' : (d.wear || []).includes(dz)) return occ ? 'swap' : 'ok';
       return occ && !occ.isLong && d.nest && canFit(occ.obj, o.item) ? 'ok' : 'no'; // not worn that way: into the one there
     }
     if (o.item === 'woodarms' && dz !== 'ground') return 'no'; // an armload is wood in the crook of an arm: set down, it is a pile
@@ -1082,7 +1102,10 @@ function zoneCheckDz(st, dz) {
   if (!isSlot(dz)) return 'no';
   const occ = occupant(dz);
   if (occ && !occ.isLong) return occ.obj.id !== (src && src.c.id) && canFit(occ.obj, st.e.id) ? 'ok' : 'no';
-  return !occ && dz.startsWith('hand') && d.kind === 'firewood' && itemDef('woodarms') && onFoot() ? 'ok' : 'no';
+  if (occ || !dz.startsWith('hand')) return 'no';
+  // fb3 C (decision 11, stream B): a free hand takes any item (inventory.canHand; a piece of wood makes an armload)
+  if (typeof inv.canHand === 'function' && !bin) { try { return inv.canHand(st.e.id) ? 'ok' : 'no'; } catch { return 'no'; } }
+  return d.kind === 'firewood' && itemDef('woodarms') && onFoot() ? 'ok' : 'no';
 }
 // an item out of one of your grids onto the ground: on foot, and not out of a bin (the wood lying about is on the ground already)
 function itemGroundCheck(st) {
@@ -1154,9 +1177,16 @@ function itemTo(st, dz) {
   const inv = model(), e = st.e, src = st.grid, bin = src && src.opts.bin;
   if (dz === 'ground') return toGround(src.c.id, e, st.qty);
   if (dz === 'stash') return inv.crate && moveInto(src, e, inv.crate, st.qty) ? { ok: true, words: `${itemDef(e.id).name}: kept for you.` } : { ok: false, words: 'No room on their shelf.' };
-  const occ = occupant(dz);
+  const occ = occupant(dz), hand = dz.startsWith('hand');
   let to = occ && !occ.isLong ? occ.obj : null;
-  if (!to && dz.startsWith('hand') && (itemDef(e.id) || {}).kind === 'firewood') to = inv.addContainer('woodarms', 'hands', null, { hand: +dz[4] });
+  // fb3 C (decision 11, stream B): an item into a free hand goes to a holder the model makes (inventory.toHand: "In your
+  // hand"; wood keeps making an armload); without it, the old armload for wood alone
+  if (!to && hand && !bin && typeof inv.toHand === 'function') {
+    let r = null;
+    try { r = inv.toHand(src.c.id, e.uid, +dz[4], st.qty || undefined) || null; } catch (err) { console.warn('inventory.toHand', err); }
+    return r && r.ok ? { ok: true, words: r.words || `${itemDef(e.id).name}: in your hand.` } : { ok: false, words: (r && (r.words || r.why)) || 'It won’t go in your hand.' };
+  }
+  if (!to && hand && (itemDef(e.id) || {}).kind === 'firewood') to = inv.addContainer('woodarms', 'hands', null, { hand: +dz[4] });
   if (!to) return { ok: false };
   const where = `into the ${lower(short(itemDef(to.item)) || nameOf(to))}`;
   if (bin) return binTake(bin, e, to.id, { qty: st.qty }) ? { ok: true } : { ok: false };
@@ -1287,6 +1317,7 @@ const WHERE = { back: 'on your back', chest: 'on your chest', hands: 'in your ha
 // what a container is called on its strap: a pile on the ground is a woodpile when it is all wood
 const nameOf = (c) => {
   if (c.item === 'pile') { const g = c.grid || []; return g.length && g.every((e) => (itemDef(e.id) || {}).kind === 'firewood') ? 'Woodpile' : 'Set down here'; }
+  if ((itemDef(c.item) || {}).one && c.where === 'canoe') return 'At your feet'; // a hand's holder put into the hull at Get in (the fb3 join)
   return c.name || (itemDef(c.item) || {}).name || 'A container';
 };
 function whereWords(c, byId) {
@@ -1310,6 +1341,14 @@ function verbMenu(ref, sc = null) {
   const acts = near ? nearActions(near) : [];
   const out = [];
   const grey = (label, why) => out.push({ label, disabled: true, title: why || '' });
+  // fb3 C (stream B's inventory.verb): the verbs the model runs itself (Drink, Put on the stringer, Change, Pitch over,
+  // Put in hand on a plain thing): { enabled, why, label?, run }, null for one it does not know (greyed then)
+  const hook = (id) => { if (typeof inv.verb !== 'function' || !near) return null; try { return inv.verb(id, near) || null; } catch (err) { console.warn('inventory.verb', id, err); return null; } };
+  const viaHook = (id, label, why) => {
+    const r = hook(id);
+    if (!r) { grey(label, why); return; }
+    out.push({ label: r.label || label, disabled: r.enabled === false, title: r.why || '', run: () => { let q = null; try { q = typeof r.run === 'function' ? r.run() : null; } catch (err) { console.warn('verb', id, err); } if (q && q.words) note(q.words, 3.5); refresh(); } });
+  };
   for (const v of verbsFor(d, d.id)) {
     const label = v.label || v.id;
     switch (v.id) {
@@ -1340,6 +1379,7 @@ function verbMenu(ref, sc = null) {
       }
       case 'hang': grey(label, v.why || 'carry it to a tree and point at the limb'); break;
       case 'hand': {
+        if (e && !t) { viaHook(v.id, label, v.why || 'not from here'); break; } // a plain thing into a free hand (stream B)
         if (!t) break;
         const o = t.obj;
         if (o.where === 'hands') grey(label, 'in your hand already');
@@ -1354,7 +1394,7 @@ function verbMenu(ref, sc = null) {
         if (!lab) grey(label, v.why || (v.id === 'tie' ? 'take the rod up first' : 'not now')); else out.push({ label: v.id === 'use' ? lab : label, run: () => onUse(e, 'use', g.c) });
         break;
       }
-      default: grey(label, v.why || '');
+      default: viaHook(v.id, label, v.why || '');
     }
   }
   return out;
@@ -1373,7 +1413,7 @@ function itemMenu(g, e) {
 // a container or a long thing by its strap: its own verbs (Put in hand; Hang, greyed: that is E at a tree)
 function thingMenu(t, isLong, sc = null) {
   const d = itemDef(isLong ? t.id : t.item);
-  if (!d || d.fixed || d.station || t.where === 'pockets' || t.where === 'hung' || (!isLong && /^(crate|pockets|pile|woodarms)$/.test(t.item))) return [];
+  if (!d || d.fixed || d.station || d.one || t.where === 'pockets' || t.where === 'hung' || (!isLong && /^(crate|pockets|pile|woodarms)$/.test(t.item))) return [];
   return verbMenu({ thing: isLong ? longOf(t) : thingOf(t) }, sc);
 }
 
@@ -1405,7 +1445,14 @@ function showTip(el, g, e) {
   let foot = `${kgText(kg)}${st > 1 ? ` · ${e.qty || 1} of ${st} in a stack` : ''}`;
   if (g.opts.shelf) foot = `${e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'}${e.qty > 1 ? ` for ${e.qty}` : ''} · ${foot}`;
   else if (d.cooked) foot += ' · keeps a few hours';
-  t.innerHTML = `<b>${esc(d.name)}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}</b>${words ? `<p>${esc(words)}</p>` : ''}<span class="f">${esc(foot)}</span>`;
+  // fb3 C (decision 9, stream B's numbers): what is left of its uses, servings or litres; and the stats block, what it
+  // does, by how much and when ("Night's rest: full · in the tent"), under the purpose line
+  const n = d.uses ?? d.servings ?? d.litres ?? null, left = n != null ? (Number.isFinite(e.left) ? e.left : n) : null;
+  if (n != null && !g.opts.shelf) foot += d.litres ? ` · ${+left.toFixed(2)} of ${n} L` : d.servings ? ` · ${Math.round(left)} of ${n} ${n === 1 ? 'serving' : 'servings'}` : ` · ${Math.round(left)} of ${n} left`;
+  else if (n != null && g.opts.shelf) foot += d.litres ? ` · holds ${n} L` : d.servings ? ` · ${n} ${n === 1 ? 'serving' : 'servings'}` : ` · ${n} uses`;
+  const stats = Array.isArray(d.stats) ? d.stats.filter((s) => s && (s.label || s.value)) : [];
+  const statsHtml = stats.length ? `<div class="st">${stats.map((s) => `<div><b>${esc(s.label || '')}${s.label ? ':' : ''}</b> ${esc(s.value ?? '')}${s.when ? ` <i>${esc(s.when)}</i>` : ''}</div>`).join('')}</div>` : '';
+  t.innerHTML = `<b>${esc(d.name)}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}</b>${words ? `<p>${esc(words)}</p>` : ''}${statsHtml}<span class="f">${esc(foot)}</span>`;
   document.body.appendChild(t);
   const r = el.getBoundingClientRect(), tr = t.getBoundingClientRect();
   let x = r.right + 8, y = r.top;
@@ -1418,7 +1465,7 @@ export function hideTip() { clearTimeout(tipTimer); if (tipEl) { tipEl.remove();
 // --- the blocks the screens are made of ---------------------------------------------------------------------------
 // a container: a leather strap with its name, where it is and its weight, over its grid. The strap is its handle:
 // dragged, the container goes where it is dropped (a slot, a tab, the canoe, the ground, into another).
-const fixedThing = (c) => { const d = itemDef(c.item); return !d || !!d.fixed || !!d.station || /^(crate|pockets|pile)$/.test(c.item); };
+const fixedThing = (c) => { const d = itemDef(c.item); return !d || !!d.fixed || !!d.station || !!d.one || /^(crate|pockets|pile)$/.test(c.item); }; // (one: a hand's holder for a single thing, stream B: no tab, no strap)
 const isStation = (c) => { const d = itemDef(c.item); return !!(d && d.station) || c.item === 'firefuel' || c.item === 'grate'; };
 function block(c, byId, opts = {}) {
   const w = mk('div', `ct w-${c.where}${c.where === 'in' ? ' nested' : ''}${c.item === 'pile' ? ' pile' : ''}`);
@@ -1606,8 +1653,10 @@ const SHORT_WHERE = { back: 'back', chest: 'chest' };
 export class MineSide {
   // owner: the screen this is part of (its render(force), its held state); onUse: the grids' Use (the lures, the sheets);
   // pane: Here drawn as the right pane (the book)
-  constructor({ owner = null, onUse = null, closeBook = null, pane = false } = {}) {
-    this.el = mk('div', `mine${pane ? ' with-here' : ''}`); this.owner = owner; this.onUse = onUse; this.closeBook = closeBook; this.pane = !!pane;
+  // ground: what is in reach as tabs after yours (the fire card, fb3 C 13: the ground's containers and piles, the wood
+  // lying about, the canoe's load beside you)
+  constructor({ owner = null, onUse = null, closeBook = null, pane = false, ground = false } = {}) {
+    this.el = mk('div', `mine${pane ? ' with-here' : ''}`); this.owner = owner; this.onUse = onUse; this.closeBook = closeBook; this.pane = !!pane; this.ground = !!ground;
     this.tab = null; this.sig = ''; this.pendLit = null; this.pieces = [];
   }
   // the tabs now: [{ key, kind: 'cont' | 'keeping', c?, label, sub }], and what Here holds
@@ -1627,6 +1676,13 @@ export class MineSide {
     const { ground, canoe, atCanoe } = this.hereLists(list, byId);
     // a shelf (no pane of its own) at the dock: the canoe's containers as tabs too, so a thing is bought straight into them
     if (!this.pane && inv.atStash) for (const c of canoe) tabs.push({ key: c.id, kind: 'cont', c, label: TAB_NAMES[c.item] || short(itemDef(c.item)) || 'Container', sub: 'in the canoe' });
+    // fb3 C (13): the fire card's left pane lists what is in reach as Here does, a tab each after yours (the owner:
+    // "when I'm by the fire I can't see the items like portage pack")
+    if (!this.pane && this.ground && !inv.atStash) {
+      for (const c of ground) tabs.push({ key: c.id, kind: 'ground', c, label: c.item === 'pile' ? nameOf(c) : TAB_NAMES[c.item] || short(itemDef(c.item)) || 'Container', sub: 'on the ground' });
+      if (this.pieces.length) tabs.push({ key: 'pieces', kind: 'pieces', label: 'Lying about', sub: 'dead and down' });
+      if (atCanoe && !(p && p.mode === 'paddle')) for (const c of canoe) tabs.push({ key: c.id, kind: 'ground', c, label: TAB_NAMES[c.item] || short(itemDef(c.item)) || 'Container', sub: 'in the canoe' });
+    }
     const n = ground.length + (this.pieces.length ? 1 : 0);
     const hereSub = p && p.mode === 'paddle' ? 'in the canoe' : inv.atStash ? (n ? `the canoe at the dock · ${n} on the ground` : 'the canoe at the dock, and what they keep for you') : atCanoe ? (n ? `the canoe beside you · ${n} on the ground` : 'the canoe beside you') : n ? `${n} on the ground, within reach` : 'within reach';
     if (inv.atStash && !this.pane) tabs.push({ key: 'keeping', kind: 'keeping', label: 'Keeping', sub: 'at the outfitter’s' });
@@ -1698,7 +1754,8 @@ export class MineSide {
     const page = mk('div', `tabpage tp-${key === 'keeping' ? 'keeping' : 'cont'}`);
     const t = tabs.find((q) => q.key === key);
     if (!t) page.appendChild(mk('p', 'pk-empty', 'Nothing on you. Drag a pack by its strap to the slots on the left, or E at it on the ground.'));
-    else if (t.kind === 'cont') page.appendChild(block(t.c, byId, { onUse: this.onUse, screen: sc }));
+    else if (t.kind === 'cont' || t.kind === 'ground') page.appendChild(block(t.c, byId, { onUse: this.onUse, screen: sc }));
+    else if (t.kind === 'pieces') page.appendChild(this.piecesBlock());
     else this.keepingPage(page, list, byId);
     side.appendChild(page);
     this.el.append(body, side);
@@ -1719,7 +1776,7 @@ export class MineSide {
     if (this.lit) {
       if (now() > this.lit.until) this.lit = null;
       else {
-        const ref = this.lit.ref, el = this.el.querySelector(`.ct[data-cid="${CSS.escape(ref)}"], .ct[data-piece="${CSS.escape(ref)}"]`) || (String(ref).startsWith('piece:') ? this.el.querySelector('.ct.pieces') : null);
+        const ref = this.lit.ref, el = this.el.querySelector(`.ct[data-cid="${CSS.escape(ref)}"], .ct[data-piece="${CSS.escape(ref)}"]`) || (String(ref).startsWith('piece:') ? this.el.querySelector('.ct.pieces') : ref === 'canoe' ? this.el.querySelector('.pk-zone.z-canoe') : null);
         if (el) { if (this.lit.t0 === now() || now() - this.lit.t0 < 50) setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 0); el.style.animationDelay = `${-(now() - this.lit.t0)}ms`; el.classList.add('lit'); }
       }
     }
@@ -1746,8 +1803,19 @@ export class MineSide {
     const t = inHand(i), s = mk('div', `slot hand${t ? '' : ' empty'}${t && t.isLong ? ' long' : ''}`), sc = this.owner;
     s.dataset.dz = `hand${i}`;
     s.appendChild(mk('div', 'slot-lab', i ? 'Left hand' : 'Right hand'));
-    if (!t || !t.def) { const f = mk('div', 'slot-frame'); f.appendChild(mk('span', 'slot-none', 'the rod, a paddle, the bucket')); s.appendChild(f); return s; }
+    if (!t || !t.def) { const f = mk('div', 'slot-frame'); f.appendChild(mk('span', 'slot-none', typeof model().canHand === 'function' ? 'anything: a thing, a pack, the rod' : 'the rod, a paddle, the bucket')); s.appendChild(f); return s; }
     if (t.isLong) { s.appendChild(longBlock(t.obj, { inHand: true, screen: sc })); return s; }
+    // fb3 C (decision 11, stream B's holder): a hand holding one plain thing (def.one) shows the thing itself, at its own
+    // footprint, dragged out of it as from any grid, its verbs on the right-click
+    if (t.def.one) {
+      const held = (t.obj.grid || [])[0];
+      s.classList.add('held');
+      const f = mk('div', 'slot-frame one');
+      if (held) { const hd = itemDef(held.id), [w, h] = dims(hd, held.rot), g = mk('div'); grid(g, t.obj, { onUse: this.onUse, screen: sc, size: { cols: Math.max(1, w + (held.x || 0)), rows: Math.max(1, h + (held.y || 0)) } }); f.appendChild(g); }
+      else f.appendChild(mk('span', 'slot-none', 'an empty hand'));
+      s.appendChild(f);
+      return s;
+    }
     const f = mk('div', 'slot-frame grab');
     f.append(iconAt(t.obj.item, CELL, CELL), mk('span', 'slot-nm', esc(short(t.def))));
     f.title = 'Click for its grid · drag it to set it down or load it';
@@ -1842,7 +1910,10 @@ function loadAll(d, list, opts = {}) {
 // "Open the pile"
 export function openHere(ref) {
   const j = of(ctx.journal);
-  const id = ref && typeof ref === 'object' ? ref.cId || ref.id || ref.container || null : ref;
+  // 'canoe' (or the canoe itself: a ref of kind 'canoe', or the beached hull's spot, with no container id) lights the
+  // canoe's zone in Here: stream A's Q on a loaded hull, "Unload it first" (fb3 C, decision 3)
+  const canoe = ref === 'canoe' || !!(ref && typeof ref === 'object' && !ref.cId && !ref.id && !ref.container && (ref.kind === 'canoe' || ref.canoe === true || ref.hull || (ref.x != null && ref.z != null)));
+  const id = canoe ? 'canoe' : ref && typeof ref === 'object' ? ref.cId || ref.id || ref.container || null : ref;
   const cards = of(ctx.cards); if (cards && cards.shown && typeof cards.close === 'function') cards.close();
   if (j && typeof j.show === 'function') { j.show('pack'); if (j.pack && j.pack.mine) { j.pack.mine.openAt(id); return true; } }
   for (const s of SCREENS) if (s.open && s.mine) { s.mine.openAt(id); return true; }

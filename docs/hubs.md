@@ -885,19 +885,26 @@ everything out* · *Load everything here*, held), and at an outfitter what they 
 the book is open, never a tab; "Nothing here" when the ground is empty; only it scrolls. Q on a container or a pile on
 the ground opens the book with that thing's grid lit in Here. Drag both ways; a drag off the page is the ground at your
 feet. No Take-all and no sort button (the owner said no); Ctrl-click to the next container with room stays, and E on
-the dot stays the quick way for a single thing. The fire card and the shelf keep their own right pane, so their left
-pane is the body and the tabs alone (at a shelf the canoe's containers at the dock and Keeping are tabs too, so a thing
-is bought straight into them).
+the dot stays the quick way for a single thing. The fire card and the shelf keep their own right pane; the shelf's
+left pane is the body and the tabs (the canoe's containers at the dock and Keeping are tabs too, so a thing is bought
+straight into them), and since the 2026-10-25 round **the fire card's left pane lists what is in reach** as tabs beside
+yours (the owner: "when im by the fire i cant see the items like portage pack"): a pack set down by the ring, a pile, the
+wood about, the canoe's load beside you.
 
-**The container model** (the owner, held to): back (a pack or the 60 L barrel), chest (a second pack or barrel), each
-hand (the rod, a paddle, the bucket, the tackle box, an armload), pockets (four quick slots). Containers: pack
-(anything but a pack or barrel), barrel (food only), bucket (bait only), tackle box (lures only; nested in a pack with
-its own tab, labelled "in the pack"), stringer (fish, lashed in the canoe; on foot a kept fish goes to the pack),
-armload (wood, a hand), piles (anything), the canoe (up to its weight), the keeping. A nested container shows as an
+**The container model** (the owner, held to; hands, pockets and the bottle as of the 2026-10-25 round): back (a pack or
+the 60 L barrel), chest (a second pack or barrel), each hand (**anything**: a loose thing rides in the hand's holder, a
+container or a long thing whole), pockets (five cells: the bottle fixed in the first, with its litre bar, and four quick
+slots for small things, 1 × 1 or 1 × 2). Containers: pack (anything but a pack or barrel), barrel (food only), bucket
+(bait only), tackle box (lures only; nested in a pack with its own tab, labelled "in the pack"), stringer (fish, lashed
+in the canoe; a kept fish goes to your hand, and *Put on the stringer* is its verb while the stringer is in reach),
+armload (wood, a hand), piles (anything), the canoe (up to its weight), the keeping. A fish is 1 × 3. A nested container shows as an
 item in the parent grid and gets its own tab, "in the pack" or "in your hand"; double-clicking the item jumps to its
-tab. Right-click lists an item's verbs and nothing else (Eat, instant; Pitch; Hang, which says "carry it to a tree and
-point at the limb"; Put in hand; Use; Cook, in the fire card); a greyed verb says why. Hover: the name, the weight and
-a one-line purpose ("Cooks a meal on the grate."). The journal side is unchanged.
+tab. Right-click lists an item's verbs and nothing else (Eat, a serving, instant; Pitch; Hang, which says "carry it to a
+tree and point at the limb"; Put in hand; Use; Cook, in the fire card; since 2026-10-25 Drink and Drink up on the
+bottle, Put on the stringer, Change into dry clothes, Pitch over… on the tarp); a greyed verb says why. Hover: the name,
+the weight, a one-line purpose and the numbers (`def.stats`: what it does, by how much, when), with the uses or
+servings left on a small bar on the icon. The journal side shows the tasks' states plainly (taken, in progress, done,
+claimed).
 
 **The rest.** Eating is instant, anywhere you're still. E Sit on the bench, the log seat and the latrine (a pose; time
 passes; E or a move key stands you up; the latrine's rest bonus stays). Rest until…: first light, 7:00, 9:00, noon,
@@ -983,9 +990,8 @@ dot on the canoe and the ring, the book, the fire card; 103 through two shore ca
 - **Leftovers** (4281664): the WakeCard and its CSS, `chores.openWake`, `WAKES`, `camp.turnIn` and the checks on
   `chores.card` are gone. The Controls card and the README's rows say the final keys (f0e714e).
 
-Noted, not changed: the fire card's left pane has no Here (the owner's two panes: left is you), so at the fire you
-cook from what you carry, the pack on the back, the barrel on the chest, the armload in a hand; a barrel on the ground
-is picked up first. A reload resumes from the last save tick, so a cook under way comes back a little behind. The
+Noted, not changed then: the fire card's left pane had no Here (the owner's two panes: left is you), so at the fire you
+cooked from what you carried. The owner asked for it in the 2026-10-25 round and it lists what is in reach now. A reload resumes from the last save tick, so a cook under way comes back a little behind. The
 dock's "Tie up" is the bottom line's, as every afloat prompt is.
 
 ### Stream D: the counter, the task circles, the item words
@@ -1028,3 +1034,102 @@ dock's "Tie up" is the bottom line's, as every afloat prompt is.
   campsite on the south side of the lake") rings the south side at 532 m with no sheet, and the campsite at 150 m with
   F-24 bought or on the whole map; a 39-rod survey rings "the portage to Lake Two" at 400 m, then "the 39-rod portage"
   at 150 m; every item has words and verbs. No console errors.
+
+## The owner's feedback of 2026-10-25
+
+The owner's words, after the world cards went live: the title was confusing, the loons too often, a ghost outline of
+the canoe stayed behind, a portage landing put the canoe straight on the shoulders, getting things out of the canoe was
+unclear, things moved into the canoe and onto the stringer by themselves, the map opened with a glitch, the walk was
+slow and slower still off a trail, portages looked bare, task states were unclear, many items had no visible use (the
+pot, the bag, the tarp, the clothes, the tablets), food was eaten in one go, hands held little, leeches and water were a
+mystery, the fire could not see the pack on the ground, the bar and the clock hid under paper, the bench zoomed the
+camera in, the readout said too much, the headlamp was off by day, and some papers scrolled sideways. Built as four
+streams on main 77588f4 and joined on `claude/fb3-1025`:
+
+- **The canoe and movement** (stream A, `packs.js`, `player.js`, `pace.js`, `pointer.js`, `camera.js`, `headlamp.js`):
+  nothing loads or stows by itself; a portage landing is a landing; only the paddle in use, the rod and the stringer
+  ride in the canoe overhead, and Q on a loaded hull reads "Unload it first" and opens the book at the canoe; Get in only
+  where the hull floats, else Push it off first; the dot's rim parks when the dot leaves; the walk off a trail is
+  time-lapsed ×1.8 with the clock (camp, stores and yards at life); the bench keeps the camera's distance; H by day.
+- **Items and their uses** (stream B, `items.js`, `inventory.js`, `cook.js`, `energy.js`, `fishing.js`, `chores.js`):
+  every item that does something says it in numbers (`def.stats`); uses and servings (tablets 20, trail mix 6, jerky 4,
+  a bar 2); the bag is the night's rest (×0.6 without it), the tarp keeps rain off the ring or a pack, the clothes change
+  after a soaking; a meal cooks only in the pot on the grate, a fish on a stick without it; hands take anything;
+  pockets are the bottle plus four small slots; a fish is 1 × 3 and goes to the hand, *Put on the stringer* is its verb
+  while the stringer is in reach; a leech per bite from the bucket in reach; the bottle is drunk from (Drink, 0.25 L),
+  nothing is drunk for you.
+- **The book, the cards, the HUD, the title** (stream C): the fire card's left pane lists what is in reach; the strip
+  (the bar, the clock, the day) over every paper and the Rest dial; the readout is the moment; task states plain;
+  Continue with the save's line and New season asking once; the map opens clean; no sideways scroll.
+- **The world and the sound** (stream D, `placement.js`, `props.js`, `loons.js`, `audio.js`): portages a green tunnel
+  (the forest kept off only the tread plus a hand's width, the edges planted); loons quiet by day.
+
+### The join, played through (2026-10-25)
+
+Real keys and the real mouse through the headless driver, 1440 × 900, Adventure from the title:
+
+| Day, clock | What was played | Result |
+|---|---|---|
+| 1, 07:40 | Title: Continue "Lake One · Jul 12, 8:36 pm · Adventure · day 1 · $40"; New season → the confirm card ("The season under way: …") → Start a new season → Adventure → 30 Lake One | On foot at the lodge's door, $40 |
+| 07:45 | Groceries (the strip over the shelf): the barrel onto Keeping, a supper and an oatmeal into it, trail mix and tablets into the pack in the canoe; Tackle: a dozen leeches into the bucket | $1 left; the uses bars on the tablets (20) and the trail mix (6) |
+| 07:57 | The dock: the pack onto the back, the trail mix into a hand, the barrel from Keeping into the canoe, E Get in | the hand's thing into the hull with its note (named wrongly: fixed); the pack stayed on the back |
+| 08:02–08:55 | 1 km to the Lake One – Kawishiwi River portage, W held | the pack on the back throughout; thirst 1 → 0.89, the bottle untouched at 2 L |
+| 08:59 | E at "Go ashore · Portage: …" 27 m out | stepped out 23 m from the trail, round a point (fixed: in at the put-in, 7 m from the trail's start, 12 s) |
+| 09:00 | Q on the hull: "Unload it first", the book at the canoe (lit); the barrel to the chest, the bucket to a hand; Q | shouldered with the paddle, the rod and the stringer in, 51.7 kg |
+| 09:05 | The carry, 116 m | the hull caught the trail's sign post walking up from the landing (fixed); then 110 m, no catches, seen 2.4 m/s, 2.2 game min; the walker readable in the tunnel |
+| 09:10 | Q Set the canoe down; looked away; E Push it off first; E Get in | what was worn stayed on; the rim parked; a 2 s slide; the bucket into the hull with its note |
+| 10:46 | 1.6 km down the Kawishiwi River to the site at (-21929, 17785), E ashore | — |
+| 10:51–12:25 | The pack set down by the ring; E at the ring: Barrel (chest), Pack and Tackle box (on the ground) as tabs; three branches and a log with the dot; into the fuel; Light held; a supper onto the grate | "a meal needs the pot: drag it onto the grate"; the pot on: Cook (0.4 L from the bottle), Eat: food 0.82 → 0.99, the strip's bar 58 → 63 % (its number read 72 %: fixed) |
+| 12:30 | A serving of trail mix from the right-click | "5 of 6 servings left", bar 83 % |
+| 12:40–13:30 | The rod and the bucket out of the canoe by drags, the bucket down at the water's edge, F, the bobber rig | a bite took a leech (24 → 23 → 22); K: the walleye in the free hand; *Put on the stringer* greyed 3.6 m from the canoe, run at 1.8 m; 8.7 m from the bucket the strip "needs leeches"; the walleye fried on a stick (turned with R onto the grate) and eaten |
+| 13:33 | Drink, Drink up, E at the water's edge 7 m from the pack | Drink 0.25 L +19 %; no tablet in reach and the words said otherwise (fixed); with the tube in the pockets "A tablet in: 19 left", Drink greyed while treating |
+| 13:45 | The tooltips | the bag, the tarp, the clothes, the tablets, the pot, the trail mix, the jig and the Mepps all say their numbers |
+| 14:05 | The bench, H, a walk 200 m into the woods and back, Tab, the map | sitting kept the distance and the wheel (standing up pulled the camera in to 0.45 m: fixed); H on by day; the walk seen 2.1–2.2 m/s with the clock ×1.8 out of the camp, life and ×12 in it; the readout the moment; M opens at its size on the first frame with the strip over it, held it glances; programs steady (70 at camp, 63 on the map) |
+| 14:30 | Pitch over the fire ring (the tarp), the rain forced 40 min | the ring dry; the pack left out got wet ("A tarp over it would have kept it dry") |
+| 15:00–07:00 | The tent from the book's Pitch, E held; Rest until… (the strip over the dial) with the bag, then a night with the bag carried 40 m off | rest 0.68, then 0.408 (×0.6) |
+| 2, 07:00 | Thirst 0: drank; the bag fetched off the ground with both hands empty | "No room for it in anything you carry" (fixed: into a free hand); the tent struck into the pack, the tarp in by Ctrl-click, the pack on, the bucket picked up, E Get in |
+| 07:46–11:19 | Back up the river (thirst 0.47 → 0.09 by the portage), ashore 5 m from the trail, unload, carry, E Launch onto Lake One | — |
+| 12:07 | E Tie up at the lodge | "Came in at Kawishiwi Lodge & Outfitters: 2 days out from Lake One, 5.7 km paddled. The trip is in your logbook." |
+| 12:20 | The board (a notice taken), the counter, the journal's Tasks | the strip over each; "Taken · two pints to pick, in season"; no sideways scroll in the book, a shelf, the counter or the map at 1280 × 720 and 1440 × 900 |
+| 12:42 | Reload | the title "Lake One · Jul 13, 12:42 pm · Adventure · between trips · $1"; New season asks once, Keep the season backs out; an older save (pockets of four with no bottle, a permit on the profile) loads with the bottle in the first cell and nothing lost |
+
+The loons first, measured paddling about Lake One at 20:36 for ten minutes with the frames paced to the wall clock
+(the audio's own timers run on it): 7.7 calls a minute heard before (a burst of twenty in the first 47 s), 2.5 after,
+about 1.2 exchanges a minute, the first after two minutes.
+
+### What the join fixed
+
+- **Loons after dark** (ed5b1fe): each bird's own call about every six minutes after dark, answered once (the summer
+  night's chorus still adds one now and then), the first calls spread over minutes; the lake answers one call in five,
+  never an answer; the far loons half as often.
+- **The hands' thing into the hull** (6922ef7): named by the thing ("The trail mix into the hull at your feet"), and a
+  holder lying in the canoe reads "At your feet".
+- **The portage landing** (379950f, af09ab8): in at the trail's put-in by way of the launch point, 1.5–5.7 m from the
+  trail's end from any side (measured at six ends from four directions); the canoe carried overhead rides over the
+  trail's sign post.
+- **The tablets out of reach** (c63bff3): the water's edge says "no tablet in reach: lake water as it comes", and the
+  notes say what happened.
+- **The strip's number** (c83e371) is the fill's.
+- **Standing up off a bench** (2101105): the bench has a camera-only top, so the chase no longer comes in to 0.45 m.
+- **A thing off a pile or the grate** goes to a free hand when nothing carried has room; item names keep their capitals
+  in the notes (4bf2e7a, 6d54b30).
+- **The words** (6ed29e2): the Controls card, the README, trip-core.md and this file.
+- **The NaN after a shoulder** (seen once in the playthrough): not the push or the shoulder. The test's hull helper read
+  `carry.drop`, null once the canoe is up, so its aim went to an undefined point and `T.aim3` set the heading and the
+  view to NaN for its frames; one NaN heading poisoned the pose's eased state (`loco.grade`) and the chase's lerps, so
+  the figure, the hull on it and the camera stayed NaN after the heading came back. Now the pose heals itself
+  (`canoe.heal`, and a second pose when one comes out non-finite), so does the chase (`chase.heal`), and main.js's frame
+  puts a non-finite walker, hull or camera back to its last finite value with one warning.
+
+### Left after the join
+
+- *Put on the stringer* out of reach is greyed with its reason rather than gone (the world cards' rule: a greyed verb
+  says why).
+- A canoe stepped out of can lie with its bow on a campsite's ledge rock (stepOut does not look for rocks).
+- The "two trips with the gear" hint from the water no longer shows (packs.js looks for a prompt starting "Portage:";
+  it is "Go ashore · Portage: …" now), and its count takes a barrel on the chest for a second carry, which one carry
+  with the pack and the barrel showed it is not; both left for a balance pass.
+- A reload on foot comes back afloat at the last stop with what you carried still on you (a bucket in a hand while
+  paddling), as before.
+- At camp the clock runs at the idle 12× while you walk at life (decision 6 as specified): three pieces of wood took
+  45 game minutes.

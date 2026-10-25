@@ -27,7 +27,7 @@ import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
 import { Fishing } from './fishing.js';
-import { Energy } from './energy.js';
+import { Energy, GULP } from './energy.js';
 import { Tasks } from './tasks.js';
 import { Outfitter } from './outfitter.js';
 import { Settings, FpsCounter } from './settings.js';
@@ -440,12 +440,81 @@ async function main() {
   // describes, never the whole lake); every item says what it is for and lists its right-click verbs (items.js words
   // and verbs, which the book's tooltips and menus read). Nothing to wire: the verbs' table and lookup for the console.
   Object.assign(window.__game.items, { VERBS, verbsOf });
+  // fb3 A: the canoe and movement (the owner's feedback of 2026-10-25). Nothing moves by itself (packs.js: no auto-stow
+  // when the canoe goes down, no auto-load when you push off, only the lashed paddle, rod and stringer ride in it when
+  // it goes overhead); a portage landing is a landing like any other (player.js: you step out with the canoe beached, Q
+  // on the hull shoulders it); E Get in only where the hull floats, else "Push it off first"; Q on a loaded hull reads
+  // "Unload it first" and opens the book with the canoe on the right (journal.openHere('canoe'), stream C's ref); the
+  // dot's rim parks when the dot goes off (pointer.js); on foot off a trail, outside a camp and a yard, the walker is
+  // time-lapsed like the trail (pace.js foot, 1.8 at Trip) and the clock follows him (trip.travelling reads the walker's
+  // lapsing, below); sitting keeps the camera's distance (camera.js); the headlamp works by day (headlamp.js).
+  packs.openCanoe = () => (typeof journal.openHere === 'function' ? journal.openHere('canoe') : false);
+  const travellingA = trip.travelling.bind(trip);
+  trip.travelling = (dt) => { const r = travellingA(dt); if (!r && player.mode === 'walk' && player.lapsing && Math.abs(player.speed) > 0.1) { trip.travelT = 1; return true; } return r; };
+  // fb3 B: items and their uses (the owner's 2026-10-25 round). Every item says what it does in numbers (items.js
+  // stats, which the book's tooltip draws), with the effect real in code: the sleeping bag is the night's rest
+  // (energy.sleep), the tarp keeps the rain off the ring or a pack (chores.js), the clothes change after a soaking
+  // (energy.changeClothes), a tablet goes in per fill (energy.fill → inventory.useOne), food is eaten a serving at a time
+  // (inventory.eat) and the bottle is an item in the pockets with Drink on it: nothing is drunk for you (energy.drink).
+  // A meal cooks only with the pot on the grate, a fish on a stick without it (cook.js); a landed fish goes to your hand,
+  // "Put on the stringer" is its verb while the stringer is in reach, and the bobber rig takes a leech from the bucket
+  // per bite (fishing.js). The inventory's verbs (inventory.verb) answer the book's right-click for hand, stringer,
+  // drink, change and tarp; the tarp's needs the chores.
+  inventory.chores = camp.chores;
+  shop.useLeech = () => {}; // the leech goes at the bite (fishing.js takeLeech): the shop's per-catch and per-snap takes step aside
+  const updShopB = shop.update.bind(shop); // the shop's word when the rig can't be tied on, in the strip's terms when you own the bait
+  shop.update = () => { updShopB(); const m = fishing.message; if (m && /^No leeches in reach/.test(m.text) && fishing.ownsBait && fishing.ownsBait()) m.text = 'Needs leeches: the bucket in a hand, within a step, or in the canoe'; };
+  window.__game.GULP = GULP;
+  // fb3 C: the book, the cards, the HUD and the title (the owner's feedback of 2026-10-25). The readout (Tab) is the
+  // moment only (the sun, the wind, the sky, the way) and reads the weather for its Sky row; the strip over the paper
+  // (hud.js updateStrip: the energy bar, the clock and the day) stands over the book, every card and the Rest dial
+  // (camp.dialOpen, which the paper register does not know); the fire card's left pane lists what is in reach as tabs
+  // (cards.js); journal.openHere('canoe') opens the book with the canoe lit on the right (stream A's Q on a loaded hull).
+  const hudUpdateC = hud.update.bind(hud);
+  hud.update = (c) => hudUpdateC(c && !c.weather ? { ...c, weather } : c);
+  hud.stripAlso = () => !!camp.dialOpen;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
+
+  // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few
+  // frames) the figure, the hull on its shoulders and the camera went NaN and stayed so, and every frame threw in the audio's
+  // listener. Each frame the walker (before the pose) and the hull and the camera (after the chase) are checked; a bad one
+  // is put back to its last finite value, the pose and the chase start afresh (canoe.heal, chase.heal), one warning says
+  // what went bad (again only after a second of good frames), and the game carries on.
+  const NG = { x: player.x, z: player.z, heading: player.heading, cam: camera.position.clone(), quat: camera.quaternion.clone(), warned: false, ok: 0 };
+  const fin3 = (v) => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+  const nanWarn = (bad) => { NG.ok = 0; if (!NG.warned) { NG.warned = true; console.warn(`fb3 join: non-finite ${bad.join(', ')}; put back to the last finite values`); } };
+  const guardWalker = () => {
+    const p = player, bad = [];
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.z)) bad.push('walker x/z');
+    if (!Number.isFinite(p.heading)) bad.push('heading');
+    if (!Number.isFinite(p.altitude)) bad.push('altitude');
+    if (!bad.length) { NG.x = p.x; NG.z = p.z; NG.heading = p.heading; return; }
+    p.x = NG.x; p.z = NG.z; p.heading = NG.heading; p.speed = 0; p.yawRate = 0;
+    if (!Number.isFinite(p.boost)) p.boost = 1;
+    if (p.foot && !Number.isFinite(p.foot.y)) p.foot = null; // (back on the ground under him)
+    canoe.rig.position.set(p.x, p.altitude + (p.onFoot ? 0.1 : 0), p.z); canoe.rig.rotation.set(0, p.heading, 0);
+    nanWarn(bad);
+  };
+  const guardView = (shell) => {
+    const e = canoe.hull.matrixWorld.elements, bad = [];
+    if (!Number.isFinite(e[12]) || !Number.isFinite(e[13]) || !Number.isFinite(e[14])) {
+      bad.push('hull');
+      const d = player.carry && player.carry.drop;
+      if (d && Number.isFinite(d.x) && Number.isFinite(d.z) && Number.isFinite(d.heading)) player.restHull(d.x, d.z, d.heading); else canoe.heal();
+    }
+    if (!fin3(camera.position)) {
+      bad.push('camera');
+      chase.heal(player); if (!shell) chase.update(1e-3, player, player.mode === 'carry');
+      if (!fin3(camera.position)) { camera.position.copy(NG.cam); camera.quaternion.copy(NG.quat); }
+    }
+    if (bad.length) nanWarn(bad);
+    else { NG.cam.copy(camera.position); NG.quat.copy(camera.quaternion); if (++NG.ok > 60) NG.warned = false; }
+  };
 
   const frame = (dt) => {
     const ts = player.timeScale;
@@ -485,10 +554,12 @@ async function main() {
       journal.update(dt);
     }
     veil.update(dt); // trip core A: the fade cards, behind the title card too
+    guardWalker(); // fb3 join: a NaN never freezes the game (above)
     canoe.update(dt * ts);
     player.afterRig(); // fb C: a swim from shore leaves the beached hull where it lies (canoe.js's swim pose turns it over)
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
+    guardView(shell);
     talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
     pointer.update(dt, shell); // fb2 A: the dot, its label and the rim, after the camera
     setOrigin(player.x, player.z);

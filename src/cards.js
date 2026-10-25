@@ -47,7 +47,10 @@ class Cards {
     el.id = 'card'; el.className = 'paper'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'A card: your stuff and the thing');
     (document.getElementById('shelf') || document.body).insertAdjacentElement('afterend', el);
     el.addEventListener('click', (ev) => { const b = ev.target.closest('button[data-act]'); if (b && b.dataset.act === 'close') this.close(); });
-    this.mine = new MineSide({ owner: this.screen, onUse: this.screen.onUse, closeBook: () => this.close() });
+    // fb3 C (13, the owner: "when I'm by the fire I can't see the items like portage pack"): the left pane lists what is
+    // in reach as Here does, as tabs beside yours: the containers and piles on the ground about you, the wood lying
+    // about, the canoe's load when it is beside you
+    this.mine = new MineSide({ owner: this.screen, onUse: this.screen.onUse, closeBook: () => this.close(), ground: true });
     SCREENS.add(this.screen);
     if (this.hud && this.hud.registerPaper) this.hud.registerPaper('card', () => this.close());
   }
@@ -98,7 +101,7 @@ class Cards {
         <section class="cd-mine pk-mat" aria-label="Yours"></section>
         <section class="cd-thing" aria-label="${esc(o.title || 'The fire')}"></section>
       </div>
-      <footer class="sh-foot"><span>drag wood into the fuel, a meal or a fish onto the grate · held buttons: hold the mouse · what is cooked comes off the grate into your grid</span><span><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></footer>`;
+      <footer class="sh-foot"><span>yours and what is in reach on the left, a tab each · drag wood into the fuel, a meal or a fish onto the grate · held buttons: hold the mouse · what is cooked comes off the grate into your grid</span><span><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></footer>`;
       this.el.querySelector('.cd-mine').appendChild(this.mine.el);
     }
     const sub = this.el.querySelector('.cd-sub'); if (sub.textContent !== (o.sub || '')) sub.textContent = o.sub || '';

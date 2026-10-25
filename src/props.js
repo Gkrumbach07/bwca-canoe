@@ -4,7 +4,7 @@ import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt, meshHeightAt } from './terrain-build.js';
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
-import { bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
+import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
 import { RockShape } from './collide.js';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 
@@ -39,7 +39,9 @@ export function resample(pts, step) {
 // trees and brush stay off it but the grass grows through.
 export function exclusionsFor(world) {
   const segs = [];
-  for (const p of world.portages) for (let i = 1; i < p.pts.length; i++) segs.push([p.pts[i - 1][0], p.pts[i - 1][1], p.pts[i][0], p.pts[i][1], 2.2]);
+  // (fb3 D: the trails keep the forest off only the tread plus a hand's width, TRAIL.clear in placement.js, along the
+  // line the decal is drawn on, its corners rounded as buildTrail rounds them)
+  for (const p of world.portages) { const pts = rounded(p.pts); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
   for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, -36]); // the mown yard around an outfitter's dock
   return segs;
@@ -247,7 +249,7 @@ class TrailDecal {
   }
 }
 // The polyline with its corners rounded off (a fillet up to 2 m along each leg), so the path bends instead
-// of kinking and its rows never fold over on the inside of a turn; it stays inside the vegetation's 2.2 m.
+// of kinking and its rows never fold over on the inside of a turn (the vegetation's exclusion follows the same line).
 function rounded(pts) {
   if (pts.length < 3) return pts;
   const out = [pts[0]];
@@ -319,7 +321,7 @@ function portageSign(ctx, pts, end, seed) {
   let fx = x - xn, fz = z - zn; const L = Math.hypot(fx, fz) || 1; fx /= L; fz /= L; // facing out along the path, to the water
   const side = rng() < 0.5 ? 1 : -1, px = x + fz * side * 1.15, pz = z - fx * side * 1.15;
   const F = frame(ctx, px, pz, { x: fx, z: fz }), g = F.G(0, 0), b = new PropBuilder();
-  ctx.obstacles.push({ x: px, z: pz, r: 0.15 });
+  ctx.obstacles.push({ x: px, z: pz, r: 0.15, low: true }); // (low: a canoe carried overhead rides over the post, player.js)
   const post = tone(0x7f6851, rng, 0.06), top = g + 1.12, ref = F.P(0, g + 0.5, 0);
   b.box(F.P(0, (g - 0.35 + top) / 2, 0), F.X, F.Y, F.Z, 0.045, (top - g + 0.35) / 2, 0.045, TILE.WOOD, post, { grain: 'y', skip: ['+y'] });
   b.face([F.P(-0.045, top, -0.045), F.P(0.045, top, -0.045), F.P(0, top + 0.05, 0)], TILE.WOOD, post, { ref });
@@ -1948,9 +1950,11 @@ function buildCampsite(ctx, c, pieces, ledges) {
   for (const u of [-0.41, 0.41]) b.box(GP(u, gy + 0.08, 0.26), gX, Y, gZ, 0.01, 0.08, 0.01, TILE.METAL, iron, { grain: 'y' });
   // the bench: a split log, flat face up, on two rounds standing in the ground
   const bx = fx + Math.cos(a) * 2.6, bz = fz + Math.sin(a) * 2.6, ax = -Math.sin(a), az = Math.cos(a);
-  ctx.obstacles.push({ x: bx, z: bz, ux: ax, uz: az, hx: 1.1, hz: 0.25, box: true });
   const rounds = [-0.72, 0.72].map((t) => { const x = bx + ax * t, z = bz + az * t; return { x, z, g: H(x, z) }; });
   const rTop = Math.max(rounds[0].g, rounds[1].g) + 0.26, bark = tone(0x5b4a3b, crng, 0.06);
+  // (seeTop: the camera's line passes over it, camera.js; to the walker it has no top, a thing to go round, not onto.
+  // The fb3 join: standing up off it the chase was pulled in to 0.45 m by a 4 m "wall" and eased back out)
+  ctx.obstacles.push({ x: bx, z: bz, ux: ax, uz: az, hx: 1.1, hz: 0.25, box: true, seeTop: rTop + 0.18 });
   for (const r of rounds) b.cyl(L(r.x, r.g - 0.25, r.z), L(r.x, rTop, r.z), 0.19, 0.18, 9, TILE.BARK, bark, { cap1: true, capCol: C(0xc9c2b4), jitter: 0.1, rng: crng });
   const lr = 0.17, ly = rTop + lr;
   b.cyl(L(bx - ax * 1.05, ly, bz - az * 1.05), L(bx + ax * 1.05, ly + 0.01, bz + az * 1.05), lr, lr * 0.93, 7, TILE.BARK, bark, { arc: [Math.PI, Math.PI * 2], flatTile: TILE.SPLIT, flatCol: tone(0xb39e80, crng, 0.06), cap0: true, cap1: true, capCol: C(0xc9c2b4), up: Y });

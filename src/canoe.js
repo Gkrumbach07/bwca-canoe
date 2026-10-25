@@ -1198,39 +1198,59 @@ export function buildCanoeRig({ water = null } = {}) {
   const eyeLocal = V(), eyeT = V();
   let eyeInit = false;
   const EYE_SPRING = 16, eyeY = { on: false, y: 0, v: 0 }; // rad/s: the first-person eye's height on foot (eye, below)
+  // fb3 join: the pose eases from frame to frame (the gait's slope and tilt, the hips, the feet, the idle sway, the blend,
+  // the first-person eye), so one non-finite input poisoned it for good: the join's test once aimed at an undefined point
+  // and the walker's heading was NaN for a few frames, loco.grade took the NaN, and the figure, the hull on its shoulders
+  // and the eye stayed NaN after the heading came back. heal() starts all of it afresh; update() heals and poses once more
+  // whenever the pose it made is not finite, so a bad frame is only ever that frame.
+  const heal = () => {
+    Object.assign(loco, { init: false, air: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, grade: 0, tilt: 0, want: HIP_H - 0.05 });
+    for (const k of ['L', 'R']) Object.assign(loco.feet[k], { swing: false, s: 0, dur: 0.3, cyc: -1, planted: 1, slope: 0, pitch: 0 });
+    Object.assign(idle, { breath: 0, glanceT: 3, glanceYaw: 0, glancePitch: 0, yaw: 0, pitch: 0, hold: 0, shift: 0 });
+    for (const k of ['speed', 'walkSpeed', 'moveFwd', 'moveLat', 'walk', 'stagger', 'land', 'airT', 'vy', 'crouch', 'cadence']) if (!Number.isFinite(state[k])) state[k] = 0;
+    crouchK = 0; wadeK = 0; eyeInit = false; eyeY.on = false; eyeY.v = 0;
+    pb.t = 1; pb.has = false;
+    hullPivot.scale.set(1, 1, 1);
+  };
+  // the pose of the frame, by the mode and the walker's move (update, below)
+  function pose(dt) {
+    const mode = state.mode;
+    if (mode !== 'paddle') state.climb = 0;
+    // the walker's move (player.js player.move): a vault, a climb, sitting; the rest are the gait's
+    const mv = api.moveOf ? api.moveOf() : null, mk = mv && mode === 'walk' ? mv.kind : null;
+    let kind;
+    if (mode === 'carry') { kind = 'carry'; poseCarry(dt); }
+    else if (mode === 'walk') {
+      if (mk === 'vault' && mv.dur > 0) { kind = 'vault'; poseVault(dt, mv); }
+      else if (mk === 'climb' && mv.dur > 0) { kind = 'climbUp'; poseClimbUp(dt, mv); }
+      else if (mk === 'sit') { kind = 'sit'; poseSit(dt, mv); }
+      else {
+        kind = 'walk';
+        if (pb.kind === 'vault' || pb.kind === 'climbUp') loco.init = false; // the feet planted afresh where the move left him
+        poseWalk(dt, mk);
+      }
+    } else if (mode === 'swim') { kind = 'swim'; poseSwim(dt); }
+    else if (state.climb > 0) { kind = 'climbIn'; poseClimb(dt); state.climb = Math.max(0, state.climb - dt); }
+    else { kind = 'seated'; poseSeated(dt); }
+    if (mode !== 'walk' && mode !== 'carry') loco.init = false;
+    if (kind !== 'vault' && kind !== 'climbUp') moveStart.kind = null;
+    blendPose(kind, dt);
+    seatPacks(mode);
+    contact.userData.update(dt, mode === 'paddle' ? state.speed : 0);
+    // the head, neck and hat collapse out of the way from the paddler's eyes
+    const s = firstPerson ? 1e-3 : 1;
+    fig.bones.neck.scale.setScalar(s);
+  }
+  const posed = () => { const r = J.root.p, n = J.neck.p, h = J.head.p; return Number.isFinite(r.x + r.y + r.z + n.x + n.y + h.x + h.y + h.z); };
   const api = {
-    rig, hull: hullPivot, paddler, paddle, pack, packs, state, swimmer, figure: fig, loco,
+    rig, hull: hullPivot, paddler, paddle, pack, packs, state, swimmer, figure: fig, loco, heal,
     ground: null, // set by player.js: the ground height at a world (x, z), for the feet
     terrain: null, // fb2 E: set by player.js: the drawn terrain alone (no rock, step or deck), for the hill's steepness
     moveOf: null, // set by main.js: () => player.move, the move the walker is making (vault, climb, sit, wade ...)
     update(dt) {
-      if (dt <= 0) dt = 1e-4;
-      const mode = state.mode;
-      if (mode !== 'paddle') state.climb = 0;
-      // the walker's move (player.js player.move): a vault, a climb, sitting; the rest are the gait's
-      const mv = api.moveOf ? api.moveOf() : null, mk = mv && mode === 'walk' ? mv.kind : null;
-      let kind;
-      if (mode === 'carry') { kind = 'carry'; poseCarry(dt); }
-      else if (mode === 'walk') {
-        if (mk === 'vault' && mv.dur > 0) { kind = 'vault'; poseVault(dt, mv); }
-        else if (mk === 'climb' && mv.dur > 0) { kind = 'climbUp'; poseClimbUp(dt, mv); }
-        else if (mk === 'sit') { kind = 'sit'; poseSit(dt, mv); }
-        else {
-          kind = 'walk';
-          if (pb.kind === 'vault' || pb.kind === 'climbUp') loco.init = false; // the feet planted afresh where the move left him
-          poseWalk(dt, mk);
-        }
-      } else if (mode === 'swim') { kind = 'swim'; poseSwim(dt); }
-      else if (state.climb > 0) { kind = 'climbIn'; poseClimb(dt); state.climb = Math.max(0, state.climb - dt); }
-      else { kind = 'seated'; poseSeated(dt); }
-      if (mode !== 'walk' && mode !== 'carry') loco.init = false;
-      if (kind !== 'vault' && kind !== 'climbUp') moveStart.kind = null;
-      blendPose(kind, dt);
-      seatPacks(mode);
-      contact.userData.update(dt, mode === 'paddle' ? state.speed : 0);
-      // the head, neck and hat collapse out of the way from the paddler's eyes
-      const s = firstPerson ? 1e-3 : 1;
-      fig.bones.neck.scale.setScalar(s);
+      if (!(dt > 0)) dt = 1e-4; // (a NaN dt too)
+      pose(dt);
+      if (!posed()) { heal(); pose(1e-4); } // fb3 join: never left poisoned (above)
     },
     setFirstPerson(on) { if (on && !firstPerson) { eyeInit = false; eyeY.on = false; } firstPerson = on; }, // entering the view starts the eye afresh
     // Where the first-person camera goes (world): ahead of the face in the direction of the look, a little
