@@ -109,6 +109,17 @@ class Nearby {
     this.hooks = { cards: null, journal: null, sitter: null };
     this.targets = (ray, near) => this.pointTargets(ray, near);
   }
+  // an empty ring's "Gather wood" with wood in your arms reads "Put the wood in" (the dot's chip and the card's)
+  askWood(need) {
+    if (!Array.isArray(need) || !need[0] || need[0].kind !== 'empty' || !this.woodInHand()) return need;
+    return [{ ...need[0], text: 'Put the wood in' }, ...need.slice(1)];
+  }
+  // wood in your arms or a hand (the ring's chip then asks for it in)
+  woodInHand() {
+    const inv = this.inv;
+    if (!inv || !inv.attached) return false;
+    try { return inv.containers.some((c) => inv.rootWhere(c) === 'hands' && c.grid.some((e) => !e.box && /^wood:/.test(e.id))); } catch { return false; }
+  }
   attach({ camp, packs, journal = null, hud = null, pointer = null, canoe = null, player = null, inventory = INVENTORY }) {
     Object.assign(this, { camp, packs, journal, hud, pointer, canoe, player: player || camp.player, inv: inventory });
     this.attached = true;
@@ -192,7 +203,7 @@ class Nearby {
         { id: 'grate', label: 'Grate', cId: grate.id, accepts: ['meal', 'fish', 'food', 'tool'] },
       ],
       actions,
-      need: F.ringNeed(key, units),
+      need: this.askWood(F.ringNeed(key, units)),
       burn: F.burn(key, units),
       coals: F.coals(key),
       cooking: ck.cookingNow(key),
@@ -381,7 +392,9 @@ class Nearby {
         }
         // (fb5 A, decision 1: "E Fire ring", plus at most the one missing chip, or nothing when lit; stream E's pointer.js
         // draws target.chip)
-        const need = ch.fireNeed(key);
+        let need = ch.fireNeed(key);
+        // (fb5 join: "Gather wood" read wrong with an armful of it: the ring then asks for it in)
+        need = this.askWood([need])[0];
         push(near.sphere(f.x, f.y + 0.22, f.z, 0.85), { kind: 'fire', ref: `fire:${key}`, label: '', chip: need ? need.text : null, hint: need ? need.text : null, e: { verb: 'Fire ring', run: () => this.openFire(key) }, q: this.fireQ(site, key), box: { x: f.x, y: f.y + 0.16, z: f.z, hx: 0.62, hy: 0.18, hz: 0.62, heading: f.a || 0 } });
       }
     }
