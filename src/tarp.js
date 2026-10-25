@@ -9,22 +9,30 @@
 //   - between two trees 3–7 m apart, you standing between them (no poles);
 //   - one tree within a few steps and two poles (the ridge from the trunk out over where you stand to the shear legs);
 //   - four poles in the open (shear legs at both ends, the ridge along the way you face).
-// A pole (items.js `pole`, stream C's; stubbed below until it lands) is found lying about like firewood (chores.js) or
-// cut from a down log with the folding saw. "Pitch the tarp" on the tarp in the book (inventory.verb → verb(c, e)) says
-// what is missing as a checklist (fb4 decision 2: "Trees 3–7 m apart: none here · Poles: 1 of 4") when the anchors are
-// not where you stand; when they are, it closes the book and shows the rig as a ghost where you stand, and E or a
-// click, held (hold.js), pitches it in three phases: the ridge line up (the poles stood up), the sheet over, the
-// corners guyed out. Let go and it stays at the phase finished; the dot on it carries on (E) or takes it down (Q, held),
-// the poles and the tarp going back into what has room, or a pile where it stood. Drawn as the sheet sagging on its
-// ridge, the line wrapped round the trunks, the poles standing in the ground and a guy line to a stake at each corner.
-// `covers(x, z)` is the sheet's footprint once it is over the ridge: rain does not wet what is under it (chores.js: the
-// ring and its wood, the packs set out; energy.js: you, stream C's).
+// A pole (items.js `pole`; stubbed below if it is missing) is found lying about like firewood (chores.js) or cut from a
+// down log with the folding saw.
 //
-//   tarp.verb(c, e)       → { enabled, why, needs, next, label, run }   (the tarp's entry e in container c)
-//   tarp.check(uid)       → { rig, why, needs, next }                    (the same, without the run)
+// fb5 D (the owner's third round of 2026-10-25: "the info under is a bit long. the crafting formula should be when u
+// pitch it. so let them pitch it no matter what. but if you get to a spot where you cant pitch unless you have poles and
+// you dont have poles, there should be some icon at the bottom saying its missing x number of poles"): "Pitch the tarp"
+// on the tarp in the book (inventory.verb → verb(c, e)) is always on, on foot ashore, and carries no checklist. It arms
+// a ghost that follows you and snaps to the trees where it can: green where the tarp can stand, and E or a click, held
+// (hold.js), pitches it in three phases (the ridge line up, the sheet over, the corners guyed out); red where it can't,
+// with the bottom chip (chip.js) saying what is missing: "pole ×2", "a tree or pole ×2", or a short phrase ("Too near
+// the water"). While it is red the dot is yours again (pick up a pole, open the book); Esc or a right-click puts it
+// away. Let go mid-pitch and it stays at the phase finished; the dot on it carries on (E) or takes it down (Q, held), the
+// poles and the tarp going back into what has room, or a pile where it stood. Drawn as the sheet sagging on its ridge,
+// the line wrapped round the trunks, the poles standing in the ground and a guy line to a stake at each corner.
+// `covers(x, z)` is the sheet's footprint once it is over the ridge: rain does not wet what is under it (chores.js: the
+// ring and its wood, the packs set out; energy.js: you).
+//
+//   tarp.verb(c, e)       → { enabled, why, needs: [], next: null, label, run }   (the tarp's entry e in container c)
+//   tarp.check(uid)       → { rig, ok, why, chip }  rig: where the ghost stands; ok: it can go up there; chip: the parts
+//                           of what is missing ([{ icon?, text }]); why: that as a line (or what stops it altogether)
 //   tarp.covers(x, z)     → bool
 //   tarp.targets          the pointer's provider (main.js registers it): a pitched rig, a loose pole
-//   tarp.armed            the pitch waiting for E or a click (main.js lends it pointer.isArmed and onCancel)
+//   tarp.armed            the pitch following you: { uid, ok, ... } (main.js lends the pointer its E while ok)
+//   tarp.on(ev, fn)       'armed' | 'green' | 'red' ({ why, missing, kind }) | 'pitched' | 'struck' | 'disarmed'
 //   tarp.rigs             [{ id, kind, ax, az, ar, bx, bz, br, ends, len, tx, tz, sc, lh, stage, poles, ... }]
 //   tarp.update(dt)       chores.update, each frame: the aim, the rigs and the ghost drawn
 //   tarp.serialize() / restore(list)   in chores' saved document (trip.state.chores.tarps)
@@ -33,28 +41,12 @@ import { PropBuilder, propMaterial, TILE } from './prop-kit.js';
 import { itemDef, defineItem } from './items.js';
 import { hold } from './hold.js';
 import { compassLong, plural, word } from './hud.js';
+import { chip } from './chip.js';
 
-// --- the pole (stream C defines it in items.js; this stands in until then) ---------------------------------------------
-const POLE_WORDS = 'A straight dead pole, about two metres: holds up a tarp where the trees don’t.';
-if (!itemDef('pole')) {
-  defineItem({ id: 'pole', name: 'Tarp pole', short: 'Pole', kind: 'gear', w: 1, h: 3, kg: 0.9, stack: 4, icon: 'pole', price: 0, words: POLE_WORDS,
-    stats: [{ label: 'Holds up a tarp', value: 'two with a tree, four alone' }, { label: 'Found', value: 'lying by the down logs and under the trees; or cut one from a down log with the folding saw' }] });
-}
-// its icon in the book: a grey pole on the diagonal, a stub or two (inv-ui.js draws an item's own draw(ctx, size))
+// --- the pole (items.js defines it; this stands in until it does) ----------------------------------------------------------
+if (!itemDef('pole')) defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'gear', w: 1, h: 3, kg: 0.9, stack: 4, icon: 'pole', price: 0, identity: 'Dead pole · 2 m', words: 'Dead pole · 2 m' });
+// its icon in the book where the book has none: a grey pole on the diagonal, a stub or two
 { const d = itemDef('pole'); if (d && typeof d.draw !== 'function') d.draw = drawPole; }
-// the tarp says how it is pitched now (items.js is stream C's: only while its words are still last round's)
-{
-  const d = itemDef('tarp');
-  if (d && /fire ring or a pack/.test(d.words || '')) {
-    d.words = 'Pitched on a ridge line between two trees, or a tree and two poles, or four poles: the rain stays off what is under it.';
-    d.stats = [
-      { label: 'Pitch', value: 'two trees 3–7 m apart · one tree and two poles · four poles', when: 'right-click Pitch the tarp, then hold E where you stand' },
-      { label: 'Under it', value: 'the rain wets neither the fire ring and its wood, the packs set out, nor you', when: 'without it, rain burns a fire down twice as fast and half an hour of it soaks a pack' },
-      { label: 'Covers', value: '3 × 2.3 m' },
-      { label: 'Pitching', value: 'about 10 min, three phases, E held; Q at it takes it down' },
-    ];
-  }
-}
 function drawPole(c, s) {
   c.save(); c.translate(s / 2, s / 2); c.rotate(-0.78);
   const L = s * 0.94, R = s * 0.045;
@@ -80,29 +72,44 @@ const GUY = { out: 0.75, along: 0.4 }; // a corner's guy line runs this far out 
 const THETA = { thrown: 1.45, hung: 1.25, taut: 0.69 }; // rad below level the sheet falls from the ridge, by stage
 const REACH = 4.5;         // m from the sheet's middle within which the dot takes the rig
 const SHOW = 260;          // m within which a rig is drawn
-const FAR = 30;            // m walked off with the pitch armed: it is let go
 const AHEAD = 0.9;         // m ahead of you the sheet's middle goes (you under its near half), where it will stand
+const GHOST = { ok: 0x86e29a, no: 0xe86a52 }; // fb5 D: the ghost green where it can stand, red where it can't
 const NYLON = new THREE.Color(0x5c7a58), UNDERSIDE = new THREE.Color(0x4a6347), CORD = new THREE.Color(0xd8d2b8), POLE = new THREE.Color(0x8b8276), STAKE = new THREE.Color(0x9a958c);
 
 // The pitch, phase by phase (hold.js): its name once done, what is being done meanwhile, game minutes, real seconds held
+// (fb5 D: the words a line each, short)
 export const PITCH_TARP = [
   { name: 'Ridge line up', doing: 'Tying the ridge line', minutes: 4, seconds: 1.4 },
-  { name: 'Sheet over', doing: 'Throwing the tarp over the line', minutes: 2, seconds: 0.9 },
-  { name: 'Guyed out', doing: 'Staking out the corners and snugging the lines', minutes: 4, seconds: 1.4 },
+  { name: 'Sheet over', doing: 'Throwing the sheet over', minutes: 2, seconds: 0.9 },
+  { name: 'Guyed out', doing: 'Staking out the corners', minutes: 4, seconds: 1.4 },
 ];
-const DOING = {
-  trees: 'Tying the ridge line trunk to trunk',
-  tree: 'Lashing two poles into shear legs and running the ridge line from the trunk to them',
-  poles: 'Lashing the poles into two pairs of shear legs, the ridge line between them',
-};
+const DOING = { trees: 'Tying the line trunk to trunk', tree: 'Lashing the poles, the line to the trunk', poles: 'Lashing the poles into shear legs' };
 export const STRIKE_TARP = [ // STRIKE_TARP[i] takes it from stage 3 - i to 2 - i
-  { name: 'Lines in', doing: 'Pulling the stakes and coiling the guy lines', minutes: 2, seconds: 0.9 },
-  { name: 'Sheet folded', doing: 'Pulling the tarp off the line and folding it', minutes: 2, seconds: 0.9 },
+  { name: 'Lines in', doing: 'Pulling the stakes', minutes: 2, seconds: 0.9 },
+  { name: 'Sheet folded', doing: 'Folding the sheet', minutes: 2, seconds: 0.9 },
   { name: 'Ridge line down', doing: 'Untying the ridge line', minutes: 2, seconds: 1.0 },
 ];
-export const STAGE_WORDS = ['not pitched', 'the ridge line up', 'the sheet over, not guyed out', 'pitched'];
-const KIND_WORDS = { trees: 'between two trees', tree: 'on a tree and two poles', poles: 'on four poles' };
-const PITCH_MIN = PITCH_TARP.reduce((s, q) => s + q.minutes, 0);
+export const STAGE_WORDS = ['not pitched', 'ridge line up', 'not guyed out', 'pitched'];
+const STAGE_LINE = ['The tarp is down.', 'The ridge line is up.', 'The sheet is over, not guyed out.', 'The tarp is up.'];
+// fb5 D: why a rig can't stand, as the chip says it (rigProblem's words → a short phrase)
+const PROBLEM = [
+  [/not in yet/, 'Not here yet'], [/too near the water|pole would stand in the water/, 'Too near the water'], [/over the water/, 'Over the water'],
+  [/rises too high/, 'Ground too uneven'], [/falls away/, 'Ground too steep'], [/something built/, 'Something in the way'], [/tree/, 'A tree in the way'],
+];
+const problemWords = (why) => { for (const [re, w] of PROBLEM) if (re.test(why || '')) return w; return why ? cap(why) : 'Not here'; };
+// the chip's pole: the book's pole on the diagonal, drawn bolder for 20 px
+function poleGlyph(c, s) {
+  c.save(); c.translate(s / 2, s / 2); c.rotate(-0.8);
+  const L = s * 0.92, R = s * 0.105;
+  c.fillStyle = '#c4b9a5'; c.strokeStyle = '#2f2820'; c.lineWidth = Math.max(1.5, s / 20); c.lineJoin = 'round'; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-L / 2, -R); c.lineTo(L / 2, -R * 0.72); c.lineTo(L / 2, R * 0.72); c.lineTo(-L / 2, R); c.closePath(); c.fill(); c.stroke();
+  c.lineWidth = Math.max(2, s / 14); c.strokeStyle = '#c4b9a5';
+  c.beginPath(); c.moveTo(-L * 0.08, -R * 1.2); c.lineTo(0, -R * 2.6); c.stroke();
+  c.fillStyle = '#efe2c2'; c.strokeStyle = '#2f2820'; c.lineWidth = Math.max(1.5, s / 20);
+  c.beginPath(); c.ellipse(L / 2, 0, R * 0.4, R * 0.72, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+  c.restore();
+}
+const poleChip = (n, pre = null) => [...(pre ? [{ text: pre }] : []), { icon: poleGlyph, text: `pole ×${n}` }];
 
 // a trunk's radius up at the tie (tiles.js measures it a little over the ground, where a big pine flares)
 const tieR = (r) => Math.min(r || 0.2, 0.05 + (r || 0.2) * 0.5);
@@ -236,16 +243,30 @@ function stake(b, p) {
 const tinyGeo = () => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0.01, 0, 0, 0, 0.01, 0], 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3)); return g; };
 
 // --- the tarp ----------------------------------------------------------------------------------------------------------
+// fb5 D: while the ghost is red the pointer is not armed (its dot is yours), so its Esc does not reach the tarp: this one
+// does, made when the module loads so it comes before the pause card's (title.js, made in main()). E pointed at nothing
+// where it is red shakes the chip.
+let ACTIVE = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (ev) => {
+    const t = ACTIVE;
+    if (!t || !t.armed || t.armed.ok || ev.repeat) return;
+    if (ev.code === 'Escape') { if (t.disarm('You leave the tarp in its bag.')) { ev.preventDefault(); ev.stopImmediatePropagation(); } return; }
+    if (ev.code === 'KeyE') { const g = window.__game, pt = g && g.pointer; if (!(pt && pt.target)) t.nudge(); }
+  }, true);
+  window.addEventListener('mousedown', (ev) => { const t = ACTIVE; if (ev.button === 2 && t && t.armed && !t.armed.ok && ev.target && ev.target.tagName === 'CANVAS') t.disarm('You leave the tarp in its bag.'); });
+}
 export class Tarp {
   // chores: chores.js's Chores (the camp, its world, tiles, player, scene and the inventory through it)
   constructor(chores) {
     this.ch = chores;
     this.rigs = [];            // pitched (stage 1 to 3): saved
-    this.armed = null;         // a Pitch from the book waiting for E or a click where you stand: { uid, x, z, t, chk }
+    this.armed = null;         // a Pitch from the book, its ghost following you: { uid, ok (green), was, t, chk }
     this.draft = null;         // a pitch under way before the ridge line is up: { rig, mesh }
     this.meshes = new Map();   // rig id -> { mesh, sig }
     this.n = 1;
     this.cache = null;
+    this.handlers = {};        // fb5 D: on(ev, fn)
     // the ghost: the rig where it would go, one translucent material, drawn every frame (parked far under the ground when
     // not wanted) so its program is made behind the title card
     this.ghostMat = new THREE.MeshBasicMaterial({ color: 0x86e29a, transparent: true, opacity: 0.34, depthWrite: false, side: THREE.DoubleSide });
@@ -254,6 +275,7 @@ export class Tarp {
     this.ghostSig = ''; this.parkGhost();
     chores.camp.scene.add(this.ghost);
     this.targets = (ray, near) => this.pointTargets(ray, near);
+    ACTIVE = this;
   }
   get camp() { return this.ch.camp; }
   get player() { return this.camp.player; }
@@ -381,7 +403,61 @@ export class Tarp {
     }
     return { why: firstWhy };
   }
-  // the nearest two trees 3–7 m apart within 30 m of you, for the checklist's next step: { x, z, d } (their middle)
+  // --- where it can stand (fb5 D) --------------------------------------------------------------------------------------
+  // What stops the tarp going up at all (one short line), or null: the canoe on you, on the water, the outfitter's yard,
+  // the tarp out of reach. Anything else is the spot's: the ghost goes red there and the chip says what is missing.
+  blocked(uid = null, pool = this.pool()) {
+    const p = this.player, o = this.camp.outfitter;
+    if (p.mode === 'carry') return 'Set the canoe down first';
+    if (p.mode !== 'walk' || p.teleporting) return 'Ashore first';
+    if (o && o.visit) return 'Not in the outfitter’s yard';
+    if (uid != null && !this.tarpEntry(uid, pool)) return 'The tarp is out of reach';
+    return null;
+  }
+  // Where the tarp with entry uid would stand from where you stand now, and whether it can:
+  // { rig, ok, why, chip, missing?, kind? }. rig: the ghost's (null when something stops it altogether); ok: green;
+  // chip: what is missing as the bottom chip's parts. Read every few frames at most (the aim): kept for a quarter second
+  // while you stand where you stood.
+  check(uid = null) {
+    const p = this.player, now = performance.now(), poolNow = this.pool(), poles = this.polesInReach(poolNow);
+    const key = `${uid}|${Math.round(p.x * 4)}|${Math.round(p.z * 4)}|${Math.round(p.heading * 8)}|${poles}|${p.mode}`;
+    if (this.cache && this.cache.key === key && now - this.cache.t < 250) return this.cache.v;
+    const v = this.check0(uid, poolNow, poles);
+    this.cache = { key, t: now, v };
+    return v;
+  }
+  check0(uid, pool, poles) {
+    const p = this.player, stop = this.blocked(uid, pool);
+    if (stop) return { rig: null, ok: false, why: stop, chip: [{ text: stop }] };
+    // with the poles to hand, the fewest first: green
+    const f = this.findRig(p.x, p.z, p.heading, poles);
+    if (f.rig) return { rig: f.rig, ok: true, why: null, chip: null, kind: f.rig.kind, poles };
+    // where it would stand with poles enough (a tree here and two, or four in the open): red, and the poles it is short
+    const h = this.findRig(p.x, p.z, p.heading, POLES.open);
+    if (h.rig) {
+      const missing = Math.max(1, h.rig.poles - poles), orTree = h.rig.kind === 'poles' && poles >= POLES.tree;
+      return { rig: h.rig, ok: false, why: `${orTree ? 'a tree or ' : ''}pole ×${missing}`, chip: poleChip(missing, orTree ? 'a tree or' : null), missing, kind: h.rig.kind, poles };
+    }
+    // nothing stands here at all: the ghost on four poles ahead of you, red, and the spot's trouble
+    const why = problemWords(h.why || f.why);
+    return { rig: this.openRig(p.x, p.z, p.heading), ok: false, why, chip: [{ text: why }], missing: 0, kind: null, poles };
+  }
+  // the four-pole rig ahead of you, the ridge along your facing, unchecked (the red ghost where nothing will stand)
+  openRig(px, pz, heading) {
+    const fx = Math.cos(heading), fz = -Math.sin(heading), qx = px + fx * AHEAD, qz = pz + fz * AHEAD, half = SHEET.half + 0.35;
+    return this.makeRig('poles', { x: qx - fx * half, z: qz - fz * half, r: 0, t: 'poles' }, { x: qx + fx * half, z: qz + fz * half, r: 0, t: 'poles' }, half, SHEET.half, POLES.open);
+  }
+  // the one thing to do next where it is red, for a first-time teaching line (the 'red' event's next; stream E's
+  // moments show it once): the nearest stand of two trees, or the nearest dead pole
+  redNext(k) {
+    if (!k || k.ok || !k.rig) return null;
+    const p = this.player;
+    if (!k.missing) return 'Step a few metres and try again';
+    const pair = this.nearestPair(p.x, p.z), pole = this.nearestPole(p.x, p.z), saw = this.ch.hasSaw();
+    if (pair && (pair.d < 25 || k.missing > 1)) return `Two trees ${pair.gap.toFixed(0)} m apart stand ${metres(pair.d)} ${bearing(pair.x - p.x, pair.z - p.z)}: between them it needs no poles`;
+    return `${cap(word(k.missing))} more ${plural(k.missing, 'pole')}: ${pole ? `a dead one lies ${metres(pole.d)} ${bearing(pole.x - p.x, pole.z - p.z)}` : 'dead ones lie by the down logs'}${saw ? ', or the saw cuts one from a down log' : ''}`;
+  }
+  // the nearest two trees 3–7 m apart within 30 m of you: { x, z, d, gap } (their middle)
   nearestPair(px, pz) {
     const T = this.trunks(px, pz, 30).map((o) => ({ o, d: Math.hypot(o.x - px, o.z - pz) })).sort((a, b) => a.d - b.d).slice(0, 70).map((q) => q.o);
     let best = null;
@@ -401,97 +477,66 @@ export class Tarp {
     for (const pc of this.ch.poleNear || []) { if (!this.ch.available(pc)) continue; const d = Math.hypot(pc.x - px, pc.z - pz); if (!best || d < best.d) best = { x: pc.x, z: pc.z, d }; }
     return best;
   }
-
-  // --- the checklist (fb4 decision 2) ------------------------------------------------------------------------------------
-  // Can the tarp with entry uid be pitched where you stand now: { rig, why, needs, next }. Read every few frames at most
-  // (a book's menu, the aim): kept for a quarter second while you stand where you stood.
-  check(uid = null) {
-    const p = this.player, now = performance.now(), poolNow = this.pool(), poles = this.polesInReach(poolNow);
-    const key = `${uid}|${Math.round(p.x * 4)}|${Math.round(p.z * 4)}|${Math.round(p.heading * 8)}|${poles}|${p.mode}`;
-    if (this.cache && this.cache.key === key && now - this.cache.t < 250) return this.cache.v;
-    const v = this.check0(uid, poolNow, poles);
-    this.cache = { key, t: now, v };
-    return v;
-  }
-  check0(uid, pool, poles) {
-    const p = this.player, o = this.camp.outfitter;
-    const steps = PITCH_TARP.map((ph) => ({ label: `${ph.name} · ${ph.minutes} min`, done: false }));
-    const no = (why, needs, next) => ({ rig: null, why, needs, next });
-    if (p.mode === 'carry') return no('The canoe on your shoulders', [{ label: 'Hands free: the canoe down', done: false }], 'Set the canoe down first (Q).');
-    if (p.mode !== 'walk' || p.teleporting) return no('On foot, ashore', [{ label: 'On foot, ashore', done: false }], 'Go ashore first; the tarp goes up on land.');
-    if (o && o.visit) return no('Not in an outfitter’s yard', [{ label: 'Out of the outfitter’s yard', done: false }], 'Pitch it at a campsite or a landing out on the lakes.');
-    if (uid != null && !this.tarpEntry(uid, pool)) return no('The tarp is not within reach', [{ label: 'The tarp within reach', done: false }], 'Carry the pack the tarp is in, or stand by it.');
-    const f = this.findRig(p.x, p.z, p.heading, poles);
-    if (f.rig) {
-      const r = f.rig, gap = r.kind === 'trees' ? `${r.len.toFixed(1).replace('.0', '')} m apart` : '';
-      const anchor = r.kind === 'trees' ? { label: `Two trees ${gap}, you between them`, done: true }
-        : r.kind === 'tree' ? { label: 'A tree here, and poles', have: Math.min(poles, POLES.tree), need: POLES.tree, unit: 'poles', done: true }
-          : { label: 'Poles, in the open', have: Math.min(poles, POLES.open), need: POLES.open, unit: 'poles', done: true };
-      return { rig: r, why: null, needs: [anchor, ...steps], next: `Hold E where you stand: ${KIND_WORDS[r.kind]}, about ${PITCH_MIN} min.` };
-    }
-    // nothing will hold it here: what is missing, and the one thing to do now
-    const pair = this.nearestPair(p.x, p.z), tree = f.tree, need = tree ? POLES.tree : POLES.open, short = Math.max(0, need - poles);
-    const pairWords = pair ? `the nearest stand ${metres(pair.d)} ${bearing(pair.x - p.x, pair.z - p.z)}` : 'none within 30 m';
-    const needs = [
-      { label: 'Two trees 3–7 m apart, you between them', done: false, note: pairWords },
-      { label: tree ? 'Or the tree here and two poles' : 'Or a tree within 5 m and two poles', have: Math.min(poles, POLES.tree), need: POLES.tree, unit: 'poles', done: !!tree && poles >= POLES.tree },
-      { label: 'Or four poles, in the open', have: Math.min(poles, POLES.open), need: POLES.open, unit: 'poles', done: poles >= POLES.open },
-    ];
-    // the anchors are there but the ground or a tree is in the way
-    if (f.why && (poles >= need || (pair && pair.d < 2))) return { rig: null, why: cap(f.why), needs, next: `Not here: ${f.why}. Step a few metres and try again.` };
-    const why = `Trees 3–7 m apart: ${pair && pair.d < 2 ? 'not either side of you' : 'none here'} · Poles: ${poles} of ${need}`;
-    const pole = this.nearestPole(p.x, p.z), saw = this.ch.hasSaw();
-    let next;
-    if (pair && (pair.d < 25 || short > 1)) next = `Two trees ${pair.gap.toFixed(0)} m apart stand ${metres(pair.d)} ${bearing(pair.x - p.x, pair.z - p.z)}: stand between them and pitch it there.`;
-    else next = `${cap(word(short))} more ${plural(short, 'pole')}: ${pole ? `a dead one lies ${metres(pole.d)} ${bearing(pole.x - p.x, pole.z - p.z)}` : 'dead ones lie by the down logs and under the trees'}${saw ? ', or cut one from a down log with the saw' : ''}.`;
-    return { rig: null, why, needs, next };
-  }
-  // the book's right-click on the tarp (inventory.verb('tarp') → chores.tarpVerb → here)
+  // the book's right-click on the tarp (inventory.verb('tarp') → chores.tarpVerb → here): always on, ashore and on foot;
+  // no checklist (the spot says what is missing once the ghost is out)
   verb(c, e) {
-    const label = 'Pitch the tarp';
-    if (!e || e.id !== 'tarp') return { enabled: false, label, why: 'Not a tarp', needs: [], next: null, run: () => {} };
-    const k = this.check(e.uid);
-    if (!k.rig) return { enabled: false, label, why: k.why, needs: k.needs, next: k.next, run: () => {} };
-    return { enabled: true, label, why: null, needs: k.needs, next: k.next, run: () => this.arm(e.uid) };
+    const label = 'Pitch the tarp', none = () => {};
+    if (!e || e.id !== 'tarp') return { enabled: false, label, why: 'Not a tarp', needs: [], next: null, run: none };
+    const stop = this.blocked(e.uid);
+    if (stop) return { enabled: false, label, why: stop, needs: [], next: stop === 'Not in the outfitter’s yard' ? 'Pitch it at a campsite or a landing out on the lakes' : null, run: none };
+    return { enabled: true, label, why: null, needs: [], next: null, run: () => this.arm(e.uid) };
   }
+
+  // --- events (stream E's moments hook these) --------------------------------------------------------------------------
+  on(ev, fn) { (this.handlers[ev] || (this.handlers[ev] = [])).push(fn); return () => { const l = this.handlers[ev]; const i = l ? l.indexOf(fn) : -1; if (i >= 0) l.splice(i, 1); }; }
+  emit(ev, info = {}) { for (const fn of this.handlers[ev] || []) { try { fn(info, this); } catch (err) { console.warn('tarp.on', ev, err); } } }
 
   // --- the pitch -------------------------------------------------------------------------------------------------------
+  // the ghost out, following you: green pitches on E or a click (held), red says on the chip what is missing
   arm(uid) {
-    const k = this.check(uid);
-    if (!k.rig) { this.note(`No tarp here: ${k.why}.`, 4); return { ok: false, words: k.why }; }
-    const cp = this.camp, p = this.player, g = typeof window !== 'undefined' ? window.__game : null;
+    const stop = this.blocked(uid);
+    if (stop) { this.note(`${stop}.`, 3); return { ok: false, words: stop }; }
+    const cp = this.camp, g = typeof window !== 'undefined' ? window.__game : null;
     if (cp.pitching) cp.cancelPitch();
     if (cp.hang && cp.hang.armed) cp.hang.disarm();
     hold.cancel();
     // the book (or a card) closed: the ghost is in the world
     try { if (g && g.cards && g.cards.shown && typeof g.cards.close === 'function') g.cards.close(); } catch { /* a card */ }
     try { if (g && g.journal && g.journal.open) g.journal.close(); } catch { /* the book */ }
-    this.armed = { uid, x: p.x, z: p.z, t: 0, chk: null };
-    this.note(`The tarp ${KIND_WORDS[k.rig.kind]}, where you stand: hold E or a click to pitch it.`, 4);
+    this.armed = { uid, ok: false, was: null, t: 0, chk: null };
+    this.emit('armed', { uid });
     return { ok: true, words: '' };
   }
   disarm(words = null) {
     if (!this.armed) return false;
-    this.armed = null; this.parkGhost();
+    this.armed = null; this.parkGhost(); chip.clear('tarp');
     if (hold.is('tarp')) hold.cancel(); // (armed only until the ridge line is up: the draft goes with it)
     if (words) this.note(words, 3);
+    this.emit('disarmed');
     return true;
   }
-  // each frame while armed (update, when no hold runs): the ghost where you stand, and E or the mouse to start the hold
+  // E pressed where the ghost is red, pointing at nothing: the chip shakes (it is what stops you)
+  nudge() { if (this.armed && !this.armed.ok) chip.nudge('tarp'); }
+  // each frame while armed (update, when no hold runs): the ghost where you stand, green or red, and E or the mouse to
+  // start the hold on green
   aim(dt) {
     const A = this.armed, p = this.player, inp = p.input;
-    if (p.mode !== 'walk' || p.teleporting || Math.hypot(p.x - A.x, p.z - A.z) > FAR) { this.disarm(); return; }
-    if (!this.tarpEntry(A.uid)) { this.disarm('The tarp is not within reach any more.'); return; }
+    if (p.mode !== 'walk' || p.teleporting) { this.disarm(); return; }
+    if (!this.tarpEntry(A.uid)) { this.disarm('The tarp is out of reach.'); return; }
     if ((A.t -= dt) <= 0 || !A.chk) { A.t = 0.12; A.chk = this.check(A.uid); }
-    const k = A.chk, go = () => { const e = inp.pressed('KeyE'), m = inp.pressed('Mouse0'); return e || m; };
-    if (k.rig) {
-      this.showGhost(k.rig);
-      p.prompt = { key: null, text: `Pitch the tarp here · ${KIND_WORDS[k.rig.kind]} &nbsp;·&nbsp; hold <kbd>E</kbd>or click &nbsp; <kbd>Esc</kbd>stop` };
-      if (go()) hold.begin({ ...this.pitchOpts(k.rig, A.uid), keys: ['KeyE', 'Mouse0'] });
+    const k = A.chk;
+    A.ok = !!(k.rig && k.ok);
+    if (k.rig) this.showGhost(k.rig, A.ok); else this.parkGhost();
+    if (A.ok !== A.was) { A.was = A.ok; if (A.ok) this.emit('green', { kind: k.kind }); else this.emit('red', { why: k.why, missing: k.missing || 0, kind: k.kind || null, poles: k.poles || 0, next: this.redNext(k) }); }
+    if (A.ok) {
+      chip.clear('tarp');
+      p.prompt = { key: null, text: 'Pitch the tarp here &nbsp;·&nbsp; hold <kbd>E</kbd>or click &nbsp; <kbd>Esc</kbd>stop' };
+      const e = inp.pressed('KeyE'), m = inp.pressed('Mouse0');
+      if (e || m) hold.begin({ ...this.pitchOpts(k.rig, A.uid), keys: ['KeyE', 'Mouse0'] });
     } else {
-      this.parkGhost();
-      p.prompt = { key: null, text: `No tarp here · ${k.why} &nbsp;·&nbsp; <kbd>Esc</kbd>stop` };
-      go();
+      chip.set('tarp', k.chip);
+      p.prompt = { key: null, text: 'Pitch the tarp &nbsp;·&nbsp; <kbd>Esc</kbd>stop' };
+      if (inp.pressed('Mouse0')) this.nudge(); // (E is the dot's while it is red: pick up a pole; pointed at nothing, it nudges too)
     }
   }
   // the hold that pitches rig r (a new one: the tarp and its poles come out of what holds them as the ridge line goes up)
@@ -510,7 +555,7 @@ export class Tarp {
         rig.drawAt = null;
         if (!rig.placed) { this.dropDraft(); return; }
         this.setStage(rig, Math.max(1, job.done));
-        if (job.done < 3) this.note(`${cap(STAGE_WORDS[rig.stage])}. Point at it and hold E to carry on, or hold Q to take it down.`, 4);
+        if (job.done < 3) this.note(STAGE_LINE[rig.stage], 3);
       },
     };
   }
@@ -521,7 +566,7 @@ export class Tarp {
       id: 'tarp', label: 'Pitching the tarp', phases: PITCH_TARP, at: from, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { rig.drawAt = at; },
       onPhase: (i) => { this.setStage(rig, i + 1); if (i === 2) this.pitched(rig); },
-      onStop: (job) => { rig.drawAt = null; if (this.rigs.includes(rig)) { this.setStage(rig, Math.max(rig.stage, job.done)); if (job.done < 3) this.note(`${cap(STAGE_WORDS[rig.stage])}.`, 3); } },
+      onStop: (job) => { rig.drawAt = null; if (this.rigs.includes(rig)) { this.setStage(rig, Math.max(rig.stage, job.done)); if (job.done < 3) this.note(STAGE_LINE[rig.stage], 3); } },
     };
   }
   // the hold that takes it down, from its stage back to folded away
@@ -532,14 +577,14 @@ export class Tarp {
       id: 'tarp-down', label: 'Taking the tarp down', phases, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { rig.drawAt = Math.max(0, from - at); },
       onPhase: (i) => { const st = from - (i + 1); if (st <= 0) this.packRig(rig); else this.setStage(rig, st); },
-      onStop: (job) => { rig.drawAt = null; if (this.rigs.includes(rig)) { this.setStage(rig, from - job.done); if (job.done > 0) this.note(`${cap(STAGE_WORDS[rig.stage])}. Q at it, held, takes the rest down.`, 4); } },
+      onStop: (job) => { rig.drawAt = null; if (this.rigs.includes(rig)) { this.setStage(rig, from - job.done); if (job.done > 0) this.note(STAGE_LINE[rig.stage], 3); } },
     };
   }
   // the ridge line up: the tarp and the poles out of what held them, the rig standing
   place(rig, uid) {
     const inv = this.inv, pool = this.pool(), hit = this.tarpEntry(uid, pool);
-    if (!inv || !hit) { this.note('The tarp is not to hand any more.', 3); this.dropDraft(); return false; }
-    if (this.polesInReach(pool) < rig.poles) { this.note(`The poles are not to hand any more: ${rig.poles} wanted.`, 3); this.dropDraft(); return false; }
+    if (!inv || !hit) { this.note('The tarp is out of reach.', 3); this.dropDraft(); return false; }
+    if (this.polesInReach(pool) < rig.poles) { this.note('The poles are out of reach.', 3); this.dropDraft(); return false; }
     const got = inv.take(hit.c.id, uid, 1);
     if (!got) { this.dropDraft(); return false; }
     let left = rig.poles;
@@ -548,14 +593,15 @@ export class Tarp {
     Object.assign(rig, { id: `t${Date.now().toString(36)}${this.n++}`, placed: true, from: hit.c.id, data: got.data || null, left: got.left, since: this.camp.now, camp: a ? a.key || null : null });
     this.rigs.push(rig);
     this.dropDraft();
-    this.armed = null; this.parkGhost();
+    this.armed = null; this.parkGhost(); chip.clear('tarp');
     this.setStage(rig, 1);
     inv.emit('items');
     this.camp.log('tarp', { kind: rig.kind, poles: rig.poles, x: Math.round(rig.ax), z: Math.round(rig.az) });
     return true;
   }
   pitched(rig) {
-    this.note(`The tarp is up ${KIND_WORDS[rig.kind]}, guyed out at the corners: what is under it stays dry in the rain.`, 5);
+    this.note(STAGE_LINE[3], 3);
+    this.emit('pitched', { kind: rig.kind, poles: rig.poles, x: rig.ax + rig.tx * rig.sc, z: rig.az + rig.tz * rig.sc });
   }
   setStage(rig, k) { rig.stage = Math.max(0, Math.min(3, k)); this.ch.persist(); }
   // folded away: the tarp back into a container in the camp's reach (the one it came out of first) and the poles with
@@ -581,12 +627,13 @@ export class Tarp {
         inv.emit('ground');
       }
       const into = t.ok && t.cId ? inv.cont(t.cId) : null, name = into ? lower((itemDef(into.item) || {}).short || (itemDef(into.item) || {}).name || 'pack') : null;
-      const pw = rig.poles ? `${rig.poles === 4 ? 'the four poles' : 'the two poles'}` : '';
-      words = into && !loose ? ` It goes in the ${name}${pw ? `, ${pw} with it` : ''}.` : into ? ` It goes in the ${name}; ${pw || 'the rest'} lie${rig.poles === 1 ? 's' : ''} where it stood.` : ` Nothing has room: ${pw ? `it lies folded with ${pw}` : 'it lies folded'} where it stood.`;
+      // (fb5 D: one line, where it went)
+      words = into && !loose ? `The tarp${rig.poles ? ' and poles' : ''} into the ${name}.` : into ? `The tarp into the ${name}; the poles lie here.` : 'The tarp lies folded here.';
       inv.emit('items');
     }
     this.ch.persist();
-    if (!quiet) this.note(`The tarp is down and folded.${words}`, 5);
+    if (!quiet) this.note(words || STAGE_LINE[0], 3.5);
+    this.emit('struck', { quiet });
   }
   // a trip that ends: the tarp goes to the outfitters with the tent, the poles stay in the woods
   tripEnded() {
@@ -614,7 +661,8 @@ export class Tarp {
   // --- the dot (pointer.js provider) -----------------------------------------------------------------------------------
   pointTargets(ray, near) {
     const p = this.player, out = [];
-    if (!this.inv || p.mode !== 'walk' || hold.active || this.armed) return out;
+    // (fb5 D: while the ghost is red the dot is yours: a pole to pick up, a rig to take down; green, E is the ghost's)
+    if (!this.inv || p.mode !== 'walk' || hold.active || (this.armed && this.armed.ok)) return out;
     const keys = (o) => { const k = (o && o.key) || 'KeyE'; return { key: k, keys: [...new Set([k, 'Mouse0', ...((o && o.keys) || [])])] }; };
     for (const r of this.rigs) {
       const cx = r.ax + r.tx * r.sc, cz = r.az + r.tz * r.sc;
@@ -624,12 +672,11 @@ export class Tarp {
       const hit = near.box(box);
       if (!hit) continue;
       const m = this.meshes.get(r.id), busy = !!(hold.active || this.camp.busy || this.camp.night);
-      const steps = PITCH_TARP.map((ph, i) => ({ label: `${ph.name} · ${ph.minutes} min`, done: r.stage > i }));
-      const left = PITCH_TARP.slice(r.stage).reduce((s, q) => s + q.minutes, 0);
-      const e = r.stage < 3 ? { verb: r.stage === 2 ? 'Guy it out' : 'Carry on pitching', held: true, why: busy ? 'a moment' : null, needs: steps, next: `Hold E: ${PITCH_TARP[r.stage].name.toLowerCase()} next, ${left} min to go.`, run: (o) => hold.begin({ ...this.pitchOnOpts(r), ...keys(o) }) } : null;
-      const q = { verb: 'Take it down', held: true, why: busy ? 'a moment' : null, needs: STRIKE_TARP.slice(3 - r.stage).map((ph) => ({ label: `${ph.name} · ${ph.minutes} min`, done: false })), next: `Hold Q: the tarp${r.poles ? ' and the poles' : ''} back into the pack.`, run: (o) => hold.begin({ ...this.strikeOpts(r), ...keys(o) }) };
+      // (fb5 D: no checklists; a half-pitched rig says only what stage it is at)
+      const e = r.stage < 3 ? { verb: r.stage === 2 ? 'Guy it out' : 'Carry on pitching', held: true, why: busy ? 'a moment' : null, run: (o) => hold.begin({ ...this.pitchOnOpts(r), ...keys(o) }) } : null;
+      const q = { verb: 'Take it down', held: true, why: busy ? 'a moment' : null, run: (o) => hold.begin({ ...this.strikeOpts(r), ...keys(o) }) };
       const shell = m && m.mesh.visible && m.sheet ? { geometry: m.sheet, matrix: m.mesh.matrixWorld.clone() } : null;
-      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'tarp', ref: `tarp:${r.id}`, label: 'the rain tarp', hint: `${KIND_WORDS[r.kind]}${r.stage < 3 ? ` · ${STAGE_WORDS[r.stage]}` : ''}`, e, q, shell, box } });
+      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'tarp', ref: `tarp:${r.id}`, label: 'the tarp', hint: r.stage < 3 ? STAGE_WORDS[r.stage] : '', e, q, shell, box } });
     }
     // a dead pole lying about: E Pick up
     const ch = this.ch, held = this.polesInReach();
@@ -639,7 +686,7 @@ export class Tarp {
       const hit = near.segment(pc.x - fx * L, pc.y + 0.04, pc.z - fz * L, pc.x + fx * L, pc.y + 0.04, pc.z + fz * L, 0.13);
       if (!hit) continue;
       const m = new THREE.Matrix4().compose(pc.pos, pc.q, new THREE.Vector3(1, 1, 1));
-      out.push({ dist: hit.t, miss: hit.miss * 0.85, target: { kind: 'item', ref: `pole:${pc.key}`, label: 'a dead pole', hint: held ? `${held} in reach` : 'for a tarp', e: { verb: 'Pick up', why: ch.canTakePiece(pc) ? null : 'your hands are full, and nothing you carry has room', run: () => ch.pickUp(pc) }, shell: { geometry: ch.pieceGeos[pc.g], matrix: m } } });
+      out.push({ dist: hit.t, miss: hit.miss * 0.85, target: { kind: 'item', ref: `pole:${pc.key}`, label: 'a dead pole', hint: held ? `${held} with you` : '', e: { verb: 'Pick up', why: ch.canTakePiece(pc) ? null : 'no room on you', run: () => ch.pickUp(pc) }, shell: { geometry: ch.pieceGeos[pc.g], matrix: m } } });
     }
     return out;
   }
@@ -647,7 +694,7 @@ export class Tarp {
   // --- the frame -------------------------------------------------------------------------------------------------------
   update(dt) {
     if (this.armed && !hold.active) this.aim(dt);
-    else this.parkGhost(); // (while the hold runs the draft itself rises where the ghost stood)
+    else { this.parkGhost(); chip.clear('tarp'); } // (while the hold runs the draft itself rises where the ghost stood)
     if (this.draft && !hold.is('tarp')) this.dropDraft();
     this.draw();
   }
@@ -685,7 +732,9 @@ export class Tarp {
   dropMesh(id) { const m = this.meshes.get(id); if (!m) return; m.mesh.removeFromParent(); m.mesh.geometry.dispose(); if (m.sheet) m.sheet.dispose(); this.meshes.delete(id); }
   drawDraft(rig, at) { this.draft = { rig }; this.drawRig('draft', rig, at); }
   dropDraft() { this.draft = null; this.dropMesh('draft'); }
-  showGhost(r) {
+  showGhost(r, ok = true) {
+    const col = ok ? GHOST.ok : GHOST.no;
+    if (this.ghostCol !== col) { this.ghostCol = col; this.ghostMat.color.setHex(col); this.ghostMat.opacity = ok ? 0.34 : 0.4; }
     const sig = `${r.kind}|${r.ax.toFixed(2)},${r.az.toFixed(2)},${r.bx.toFixed(2)},${r.bz.toFixed(2)},${r.sc.toFixed(2)}`;
     if (sig !== this.ghostSig) {
       const { geo, sheet, ox, oy, oz } = rigGeometry(r, 3, (x, z) => this.ground(x, z));

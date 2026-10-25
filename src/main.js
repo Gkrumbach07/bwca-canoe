@@ -65,6 +65,7 @@ import { KINDS } from './tasks.js'; // fb2 A
 import { cards } from './cards.js'; // wc B
 import { VERBS, verbsOf } from './items.js'; // wc D
 import { withTentNeeds, pitchNeeds } from './tent.js'; // fb4 E
+import { chip } from './chip.js'; // fb5 D
 import { Hints } from './hints.js'; // fb4 D
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
@@ -507,6 +508,18 @@ async function main() {
   const beginPitchE = camp.beginPitch.bind(camp), armHangE = camp.hang.arm.bind(camp.hang);
   camp.beginPitch = (uid) => { tarp.disarm(); return beginPitchE(uid); };
   camp.hang.arm = (cId) => { tarp.disarm(); return armHangE(cId); };
+  // fb5 D: the tarp, pitched anywhere (the owner's third round of 2026-10-25: "let them pitch it no matter what … there
+  // should be some icon at the bottom saying its missing x number of poles"). Pitch the tarp is always on, ashore, with
+  // no checklist; its ghost follows you (tarp.js), green where it can stand (E or a click, held, pitches it) and red where
+  // it can't, the bottom chip (chip.js) saying what is missing: "pole ×2", "a tree or pole ×2", "Too near the water".
+  // While it is red the dot is yours (pick up a pole): the pointer is armed only while it is green, and tarp.js's own
+  // listeners take Esc and a right-click then. The chip is anyone's: hud.chip(text, icon) / hud.chip(null), and
+  // window.__game.chip for an owner of its own (chip.set(key, …) / chip.clear(key)).
+  const armedD = pointer.isArmed;
+  pointer.isArmed = () => (tarp.armed && !tarp.armed.ok ? !!(armedE && armedE()) : armedD());
+  if (typeof hud.chip !== 'function') hud.chip = (text, icon = null) => chip.set('hud', text, icon);
+  if (!('chipShown' in hud)) Object.defineProperty(hud, 'chipShown', { get: () => chip.shown });
+  window.__game.chip = chip;
   const tentActionsE = camp.tentActions.bind(camp);
   camp.tentActions = () => withTentNeeds(camp, tentActionsE());
   camp.pitchNeeds = (tent) => pitchNeeds(camp, tent);
