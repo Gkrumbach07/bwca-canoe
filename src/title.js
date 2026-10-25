@@ -54,7 +54,7 @@ const KEYMAP = [
     [['Tab'], 'the next tab along · Shift-Tab the journal · J or Esc closes'],
   ]],
   ['At camp: E at the thing', [
-    [['E'], 'at the fire ring: the fire card, your stuff on the left and the fire on the right: drag wood into the fuel, a pot and a meal or a fish onto the grate (“no pot” says when there is none), then Light (held), Cook, Eat (there and then), Douse (held). E or Esc closes it'],
+    [['E'], 'at the fire ring: the fire card, yours and what is in reach on the left (a tab each: the packs and piles on the ground about you, the wood lying about, the canoe’s load beside you) and the fire on the right: drag wood into the fuel, a pot and a meal or a fish onto the grate (“no pot” says when there is none), then Light (held), Cook, Eat (there and then), Douse (held). E or Esc closes it'],
     [['hold'], 'a held button works while the mouse is held on it, its ring filling; let go and it stops where it got to. The same held from the dot: Q Light, Q Douse, Q Strike, Q Pitch then E, E Hang, E Lower, E Saw'],
     [['←', '→'], 'the Rest until… dial, from E at your pitched tent: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →, day or night (a daytime rest is a nap). E rests, Esc not yet · nothing at camp is struck, put out or packed for you: what you leave stays'],
     [['F'], 'with the rod in a hand (drag it to a hand slot, or Put in hand), on foot facing water within a cast: the rod up, the same cast, lures and fight as from the canoe. A kept fish goes on the stringer when the canoe is in reach, else into your pack'],
@@ -68,7 +68,8 @@ const KEYMAP = [
     [['1', '2', '…'], 'change the lure: the ones you have with you, in the strip’s order'], [['E', 'K'], 'let the fish go · keep it on the stringer'],
   ]],
   ['Looking', [
-    [['Tab'], 'hold for the readout: where, water, way, wind, light, energy (what holds it down), pack, tasks · in the book: the other side'],
+    [['Tab'], 'hold for the readout, the moment only: the place, the time and the day, sunrise and sunset, the wind and the waves, the temperature and the sky, your speed and heading · in the book: the next tab'],
+    [[], 'the energy bar, the clock and the day stay up in a strip at the top over the book, every card and the Rest dial'],
     [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in): in the wild only the sheets you own, blank paper elsewhere (with none, you and a compass); at an outfitter the whole map'],
     [['J'], 'the book, on the side last open: the journal (the trip, catches, tasks, lakes, trips, photos), and the pack (left is you, right is Here) with Tab'],
     [['I'], 'the book straight at the pack'], [['V'], 'from the paddler’s seat · behind the canoe'],
@@ -93,13 +94,16 @@ export class Title {
     this.pausedRunning = true;
     this.el = {
       shell: $('shell'), menu: $('title-card'), settingsCard: $('settings-card'), controlsCard: $('controls-card'),
-      kicker: $('title-kicker'), go: $('btn-continue'), hint: $('continue-hint'), newTrip: $('btn-new'), settings: $('btn-settings'), controls: $('btn-controls'),
+      kicker: $('title-kicker'), go: $('btn-continue'), goLi: $('li-continue'), hint: $('continue-hint'), newTrip: $('btn-new'), newHint: $('new-hint'), settings: $('btn-settings'), controls: $('btn-controls'),
       entries: $('entry-card'), list: $('entry-list'), status: $('entry-status'), modePick: $('mode-pick'), modeNote: $('mode-note'),
+      confirm: $('confirm-card'), confirmSub: $('confirm-sub'), confirmGo: $('btn-confirm'), confirmKeep: $('btn-keep'),
       settingsKicker: $('settings-kicker'), controlsKicker: $('controls-kicker'), nav: $('settings-nav'), form: $('settings-form'), keymap: $('keymap'),
     };
     this.panel = new SettingsPanel(this.settings, this.el.form, this.el.nav);
     this.drift = { angle: Math.random() * Math.PI * 2, t: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), fresh: true };
-    this.confirmEp = null;  // a new season over one under way asks twice
+    // fb3 C (17): what stands beside the menu: nothing, the confirm card (a new season over one under way asks once),
+    // or the entry points (the way to travel and home, shown only after New season is chosen)
+    this.right = null;
     this.el.newTrip.textContent = 'New season';
     this.buildEntries();
     this.buildKeymap();
@@ -117,11 +121,11 @@ export class Title {
       const n = document.createElement('b'); n.textContent = String(ep.ep);
       b.append(n, document.createTextNode(ep.name));
       if (Math.hypot(ep.x - start.x, ep.z - start.z) < 600) { b.classList.add('current'); const s = document.createElement('small'); s.textContent = ' · the default start'; b.appendChild(s); }
-      b.addEventListener('click', () => this.newSeason(ep));
+      b.addEventListener('click', () => this.newSeason(ep, { confirm: false })); // the list shows only once the confirm is given
       li.appendChild(b);
       list.appendChild(li);
     }
-    this.el.entries.hidden = false;
+    this.el.entries.hidden = true;
     // the way to travel: Adventure or Sandbox, for the season New season begins
     const pick = this.el.modePick;
     if (pick) {
@@ -132,7 +136,6 @@ export class Title {
   modeButtons() { return this.el.modePick ? [...this.el.modePick.querySelectorAll('button[data-mode]')] : []; }
   setPick(mode) {
     this.modePick = mode === 'sandbox' ? 'sandbox' : 'adventure';
-    this.confirmEp = null; if (this.el.status && /new season/i.test(this.el.status.textContent)) this.el.status.textContent = '';
     save.write('tripMode', this.modePick);
     for (const b of this.modeButtons()) { const on = b.dataset.mode === this.modePick; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
     if (this.el.modeNote) this.el.modeNote.textContent = MODES[this.modePick];
@@ -145,9 +148,11 @@ export class Title {
   bind() {
     const e = this.el;
     e.go.addEventListener('click', () => (this.state === 'pause' ? this.resume() : this.continueTrip()));
-    e.newTrip.addEventListener('click', () => this.focusEntries());
+    e.newTrip.addEventListener('click', () => this.askNewSeason());
     e.settings.addEventListener('click', () => this.showCard('settings'));
     e.controls.addEventListener('click', () => this.showCard('controls'));
+    if (e.confirmGo) e.confirmGo.addEventListener('click', () => this.confirmed());
+    if (e.confirmKeep) e.confirmKeep.addEventListener('click', () => { this.showRight(null); (this.el.go.offsetParent ? this.el.go : this.el.newTrip).focus(); });
     // capture phase: fires before every other key handler on the window and, while the card is up, ends the event there
     window.addEventListener('keydown', (ev) => {
       if (this.state === 'game') {
@@ -180,9 +185,39 @@ export class Title {
     shell.classList.toggle('full', name === 'controls');
     if (name === 'settings') { this.panel.show(this.panel.section); const first = this.el.nav.querySelector('button'); if (first) first.focus(); }
     else if (name === 'controls') { const k = this.el.keymap; if (k) k.scrollTop = 0; }
-    else this.el.go.focus();
+    else { this.showRight(null); (this.el.go.offsetParent ? this.el.go : this.el.newTrip).focus(); }
+  }
+  // what stands beside the menu (fb3 C, 17): null, 'confirm' or 'entries'; New season's marker stays gold while one is up
+  showRight(which) {
+    this.right = which;
+    const e = this.el;
+    if (e.confirm) e.confirm.hidden = which !== 'confirm';
+    e.entries.hidden = which !== 'entries';
+    e.newTrip.classList.toggle('open', !!which);
+    if (which === 'entries') { this.el.status.textContent = ''; this.focusEntries(); }
+    else if (which === 'confirm' && e.confirmGo) { e.confirmGo.focus(); }
+  }
+  // New season: over a season under way it asks once (the confirm card); then the way to travel and the entry points
+  askNewSeason() {
+    if (this.busy) return;
+    const pr = this.profile;
+    if (pr && pr.started && this.right !== 'entries') { this.confirmWords(); this.showRight('confirm'); return; }
+    this.showRight('entries');
+  }
+  // the confirm given: the entry points (or, asked from outside with the pick already made, that season begins)
+  confirmed() {
+    const p = this.pendingEp; this.pendingEp = null;
+    if (p) this.newSeason(p, { confirm: false }); else this.showRight('entries');
+  }
+  confirmWords() {
+    const pr = this.profile, core = this.trip, e = this.el;
+    if (!e.confirmSub || !pr) return;
+    const n = pr.known.length, home = pr.home != null && core && core.placeOf ? core.placeOf(pr.home) : '';
+    const bits = [core ? (core.adventure ? 'Adventure' : 'Sandbox') : '', home ? `home ${home}` : '', core && core.active ? core.dayWords() : 'between trips', `$${pr.money}`, 'the gear', `${n} ${n === 1 ? 'outfitter' : 'outfitters'} known`].filter(Boolean);
+    e.confirmSub.textContent = `The season under way: ${bits.join(' · ')}.`;
   }
   focusEntries() {
+    if (this.right !== 'entries') { this.showRight('entries'); return; }
     const home = this.el.list.querySelector('small.home');
     const cur = (home && home.parentElement) || this.el.list.querySelector('button.current') || this.el.list.querySelector('button');
     if (cur) { cur.focus(); cur.scrollIntoView({ block: 'nearest' }); }
@@ -190,14 +225,17 @@ export class Title {
 
   back() {
     if (this.card !== 'menu') { this.showCard('menu'); return; }
+    if (this.right) { this.showRight(null); this.el.newTrip.focus(); return; } // the confirm or the entry points away: the menu
     if (this.state === 'pause') this.resume();
   }
 
-  // the two columns of the menu card: the menu items, and the entry points
+  // the two columns of the menu card: the menu items, and what stands beside them (the confirm's two, or the way to
+  // travel and the entry points)
   columns() {
-    const items = [...this.el.menu.querySelectorAll('.menu .item:not([disabled])')];
-    const pick = this.modeButtons().filter((b) => b.classList.contains('on'));
-    const list = [...pick, ...this.el.list.querySelectorAll('button:not([disabled])')];
+    const items = [...this.el.menu.querySelectorAll('.menu > ul .item:not([disabled])')].filter((b) => b.offsetParent !== null);
+    let list = [];
+    if (this.right === 'confirm' && this.el.confirm) list = [...this.el.confirm.querySelectorAll('button:not([disabled])')];
+    else if (this.right === 'entries') { const pick = this.modeButtons().filter((b) => b.classList.contains('on')); list = [...pick, ...this.el.list.querySelectorAll('button:not([disabled])')]; }
     return [items, list];
   }
   focusables() {
@@ -219,7 +257,7 @@ export class Title {
   }
   switchColumn(dir) {
     const [items, list] = this.columns();
-    if (dir > 0 && items.includes(document.activeElement)) this.focusEntries();
+    if (dir > 0 && items.includes(document.activeElement)) { if (this.right === 'confirm' && list[0]) list[0].focus(); else if (this.right === 'entries') this.focusEntries(); }
     else if (dir < 0 && (list.includes(document.activeElement) || this.modeButtons().includes(document.activeElement))) this.el.newTrip.focus();
   }
 
@@ -264,19 +302,25 @@ export class Title {
     const here = () => p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z) || (p.nearWater ? p.nearWater(p.x, p.z, 12) : 0)) || (p.mode === 'paddle' ? 'open water' : 'ashore'); // on foot: the water beside you
     // "Adventure · day 2 · $22", or the old words without a trip core
     const money = pr && pr.started ? ` · $${pr.money}` : '';
-    const tripDays = (core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : pr && pr.started ? ' · between trips' : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1}` : '') + money;
-    this.confirmEp = null; e.status.textContent = '';
+    const mode = core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : pr && pr.started ? ` · ${core.adventure ? 'Adventure' : 'Sandbox'} · between trips` : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1}` : '';
+    const tripDays = mode + money;
+    e.status.textContent = '';
     const kicker = pause ? `Paused · ${here()} · ${clock12(this.day.hours)}` : 'Boundary Waters Canoe Area Wilderness';
     e.kicker.textContent = kicker;
     e.settingsKicker.textContent = pause ? kicker : 'Boundary Waters';
     e.controlsKicker.textContent = pause ? kicker : 'Boundary Waters';
     const season = !!(pr && pr.started);
-    e.go.textContent = pause ? 'Paddle on' : season ? 'Continue' : 'Paddle in';
+    // fb3 C (17): Continue first, with the save's line under it (where, when, the way, the day, the money); without a
+    // season there is nothing to continue, so the item is away and New season is the first choice
+    e.go.textContent = pause ? 'Paddle on' : 'Continue';
+    if (e.goLi) e.goLi.hidden = !pause && !season;
     if (pause) e.hint.textContent = `${here()} · ${clock12(this.day.hours)}${tripDays}`;
-    else if (trip && season) e.hint.textContent = `Continue on ${here()} · ${shortDate(trip.year, trip.doy)} · ${clock12(trip.hours)}${tripDays}`;
-    else if (season) e.hint.textContent = `Continue the season${tripDays}`;
-    else { const s = w.meta.start; e.hint.textContent = `Begin a season at ${w.lakeName(w.lakeIdAt(s.x, s.z)) || 'Lake One'}, the default landing`; }
-    e.newTrip.classList.toggle('current', !pause && !trip && !season);
+    else if (trip && season) e.hint.textContent = `${here()} · ${shortDate(trip.year, trip.doy)}, ${clock12(trip.hours)}${tripDays}`;
+    else if (season) e.hint.textContent = `The season${tripDays}`;
+    else e.hint.textContent = '';
+    if (e.newHint) e.newHint.textContent = season ? (pause ? '' : 'forgets the season under way') : `a fresh start: pick where, with $40 and the kit`;
+    e.newTrip.classList.toggle('current', !pause && !season);
+    this.showRight(null);
     // home, marked in the list of entry points
     for (const b of e.list.querySelectorAll('button')) {
       const n = Number(b.querySelector('b') && b.querySelector('b').textContent), isHome = season && pr.home === n;
@@ -307,18 +351,20 @@ export class Title {
 
   resume() { this.day.running = this.pausedRunning; this.close(); }
 
-  // New season → the mode → home: the entry point picked. Over a season under way it asks twice (the first pick says
-  // what is forgotten, the same pick again begins).
+  // New season → (the confirm, once, over a season under way) → the mode → home: the entry point picked. The entry
+  // points show only past the confirm, so a pick from the list needs none (confirm: false); a call from outside with a
+  // season under way is asked first, the pick kept for the confirm.
   async newSeason(ep, { confirm = true } = {}) {
     if (this.busy) return;
     const pr = this.profile;
-    if (confirm && pr && pr.started && this.confirmEp !== ep.ep) {
-      this.confirmEp = ep.ep;
-      const n = pr.known.length;
-      this.el.status.textContent = `A new season at ${ep.name} forgets the $${pr.money}, the gear and ${n} ${n === 1 ? 'outfitter' : 'outfitters'} known. Pick it again to begin.`;
+    if (confirm && pr && pr.started && this.right !== 'entries') {
+      this.pendingEp = ep;
+      if (this.state === 'game') this.open('title');
+      this.confirmWords();
+      this.showRight('confirm');
       return;
     }
-    this.confirmEp = null;
+    this.pendingEp = null;
     this.busy = true;
     const buttons = [...this.el.list.querySelectorAll('button')];
     for (const b of buttons) b.disabled = true;

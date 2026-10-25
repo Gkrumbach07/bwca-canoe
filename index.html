@@ -163,14 +163,23 @@
         <p class="sub" id="title-sub">A quiet canoe trip across the real Boundary Waters: the lakes, the portages between them, the weather and the light of the day.</p>
         <p class="sub touch-note" id="touch-note">Made for keyboard and mouse: there are no touch controls yet.</p>
       </div>
+      <!-- fb3 C (17): two clear choices. Continue first, with the save's line under it; New season under it, which asks
+           once over a season under way (the confirm card) and only then shows the way to travel and the entry points -->
       <nav class="menu" aria-label="Main menu">
         <ul>
-          <li><button id="btn-continue" class="item" type="button">Paddle in</button><div class="hint" id="continue-hint"></div></li>
-          <li><button id="btn-new" class="item" type="button">New season</button></li>
+          <li id="li-continue"><button id="btn-continue" class="item" type="button">Continue</button><div class="hint" id="continue-hint"></div></li>
+          <li><button id="btn-new" class="item" type="button">New season</button><div class="hint" id="new-hint"></div></li>
           <li><button id="btn-settings" class="item" type="button">Settings</button></li>
           <li><button id="btn-controls" class="item" type="button">Controls</button></li>
         </ul>
+        <div class="confirm" id="confirm-card" hidden>
+          <div class="sc kicker">New season</div>
+          <p class="ask">This forgets the season under way.</p>
+          <p class="sub" id="confirm-sub"></p>
+          <div class="row"><button id="btn-confirm" class="item" type="button">Start a new season</button><button id="btn-keep" class="item" type="button">Keep the season</button></div>
+        </div>
         <div class="entries" id="entry-card" hidden>
+          <div class="sc kicker">New season · how you travel</div>
           <div class="mode-pick" id="mode-pick" role="radiogroup" aria-label="How you travel"><button type="button" data-mode="adventure" role="radio" aria-checked="true">Adventure</button><span class="dot" aria-hidden="true">·</span><button type="button" data-mode="sandbox" role="radio" aria-checked="false">Sandbox</button></div>
           <p class="status" id="entry-status"></p>
           <p class="note" id="mode-note"></p>
@@ -178,7 +187,7 @@
           <ul id="entry-list" role="list"></ul>
         </div>
       </nav>
-      <p class="keys"><kbd>↑ ↓</kbd> choose <kbd>Enter</kbd> pick <kbd>Esc</kbd> back</p>
+      <p class="keys"><kbd>↑ ↓</kbd> choose <kbd>Enter</kbd> pick <kbd>← →</kbd> between the columns <kbd>Esc</kbd> back</p>
       <p class="credit" id="title-credit">Terrain: USGS 3DEP via AWS Terrain Tiles · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors (ODbL) · Lake depths and clarity: Minnesota DNR · Everything else procedural, no assets. Your trip and settings are saved in this browser only.</p>
     </section>
     <section class="shell-card" id="settings-card" hidden aria-labelledby="settings-title">

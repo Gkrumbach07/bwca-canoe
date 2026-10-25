@@ -33,8 +33,22 @@
 .menu .item::before { content: ''; flex: none; width: 14px; height: 2px; background: transparent; }
 .menu .item:focus-visible, .menu .item.current, .menu .item:hover { color: var(--gold); outline: none; }
 .menu .item:focus-visible::before, .menu .item.current::before { background: var(--gold); }
+.menu .item.open { color: var(--gold); } /* New season, while its confirm or its entry points stand beside the menu */
+.menu .item.open::before { background: var(--gold); }
 .menu .item:disabled { color: var(--cream-50); cursor: default; }
-.menu .hint { font-size: 13.5px; color: var(--cream-72); padding-left: 28px; min-height: 1em; max-width: 200px; line-height: 1.4; } /* wraps, so the entry points keep their column inside the band */
+.menu .hint { font-size: 13.5px; color: var(--cream-72); padding-left: 28px; min-height: 1em; max-width: 260px; line-height: 1.4; } /* wraps, so the entry points keep their column inside the band */
+.menu .hint:empty { display: none; }
+.menu li[hidden] { display: none; }
+/* fb3 C (17): the confirm card, where the entry points go, asked once over a season under way: New season → this → the
+   way to travel and the entry points. Its two choices are menu items, the first the gold one. */
+.confirm { display: flex; flex-direction: column; gap: 10px; max-width: 360px; padding-bottom: 6px; }
+.confirm[hidden] { display: none; }
+.confirm .kicker { font-size: 12px; letter-spacing: .16em; color: rgba(243, 236, 221, .7); }
+.confirm .ask { margin: 0; font: 500 26px/1.2 var(--serif); color: var(--cream); }
+.confirm .sub { margin: 0 0 6px; font-size: 13.5px; line-height: 1.45; color: var(--cream-72); }
+.confirm .sub:empty { display: none; }
+.confirm .row { display: flex; flex-direction: column; gap: 10px; font-size: 20px; }
+.confirm .item.current { color: var(--gold); }
 .entries { display: flex; flex-direction: column; gap: 10px; padding-bottom: 2px; }
 .entries[hidden] { display: none; }
 .entries .kicker { font-size: 12px; letter-spacing: .16em; color: rgba(243, 236, 221, .7); }
@@ -122,7 +136,7 @@
   .shell-card .head { left: 24px; top: 32px; gap: 10px; }
   .shell-card h1 { font-size: 48px; }
   .shell-card p.sub { display: none; }
-  .menu { left: 24px; bottom: 72px; gap: 32px; flex-direction: column; align-items: flex-start; }
+  .menu { left: 24px; bottom: 72px; gap: 32px; flex-direction: column-reverse; align-items: flex-start; }
   .menu ul { font-size: 20px; gap: 10px; }
   .entries ul { max-height: 30vh; }
   .shell-card .keys { left: 24px; bottom: 20px; }
