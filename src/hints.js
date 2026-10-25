@@ -126,9 +126,9 @@ export const MOMENTS = [
   { id: 'grey', prio: TEACH, recur: 'once', learn: 'grey', keyed: true, text: '{right-click} a thing in the book to see why' },
   { id: 'shelf', prio: TEACH, recur: 'once', learn: 'shelf', keyed: true, text: '{E} look at the shelf' },
   { id: 'book', prio: TEACH, recur: 'once', learn: 'book', keyed: true, text: '{I} your pack and what’s around you' },
-  { id: 'pace', prio: TEACH, recur: 'once', learn: 'pace', keyed: true, text: '{1}{2}{3} the pace' },
+  { id: 'pace', prio: TEACH, recur: 'once', learn: 'pace', keyed: true, text: '{1}{2}{3} how fast time runs' }, // (fb5 join: "the pace" read as paddling speed)
   { id: 'jog', prio: TEACH, recur: 'once', learn: 'jog', keyed: true, text: '{Shift} jog' },
-  { id: 'view', prio: TEACH, recur: 'once', learn: 'view', keyed: true, text: '{V} the view' },
+  { id: 'view', prio: TEACH, recur: 'once', learn: 'view', keyed: true, text: '{V} change the view' },
 ];
 const BY_ID = new Map(MOMENTS.map((m) => [m.id, m]));
 // energy.js's cues (needNotes and the bar's words) that the moments say now
