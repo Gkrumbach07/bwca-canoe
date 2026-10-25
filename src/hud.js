@@ -1040,7 +1040,9 @@ export class Hud {
     if (!show) return;
     if (energy) {
       const bar = this.barState(energy);
-      if (bar.sig !== s.sig) { s.sig = bar.sig; this.barApply(s, bar); s.pct.textContent = `${Math.round(bar.v * 100)} %`; }
+      // (the number is what the fill shows: the value held to the ceiling while it is pulled down to it; the fb3 join
+      // read "72 %" over a fill at 58 % as a supper went in)
+      if (bar.sig !== s.sig) { s.sig = bar.sig; this.barApply(s, bar); s.pct.textContent = `${Math.round(Math.min(bar.v, bar.cap) * 100)} %`; }
     }
     const dayW = this.dayWords(ctx);
     this.set('stripClock', s.clock, day ? clock12(day.hours) : '');
