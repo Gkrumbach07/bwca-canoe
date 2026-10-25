@@ -88,7 +88,7 @@ const FILTERS = { tablets: 0.5, pump: 5 / 60, gravity: 5 / 60 }; // game hours b
 const AT_WATER = 2.5;       // metres from the waterline (world.shoreAt) within which E fills the bottle
 const DRY_HOURS = 0.5;      // game hours by a fire that dry wet gear
 const REST_SITE = 40;       // metres from a site's centre that count as at a campsite for resting
-const lower = (s) => (/^[A-Z]-/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // "A-frame" keeps its capital
+const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // "A-frame", "the Duluth #3" keep their capitals
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const listOf = (a) => (a.length <= 1 ? a[0] || '' : a.length === 2 ? `${a[0]} and ${a[1]}` : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
 const thingName = (d) => (d ? (/^(Duluth|Johnson|Blue)/.test(d.name) ? d.name.replace(/^Blue barrel.*/, 'blue barrel') : lower(d.name)) : 'thing');

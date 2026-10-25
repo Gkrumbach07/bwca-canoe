@@ -61,7 +61,7 @@ const POINT = { fire: 3.0, tent: 4.2, seat: 2.8, hung: 3.4, log: 1.8, water: 2.6
 const BURN_FULL = 6;         // game hours of wood the fire's meter calls full
 const FOOD = new Set(['meal', 'fish']);
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
-const lower = (s) => (/^[A-Z]-/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // ("A-frame" keeps its capital)
+const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // ("A-frame", "the Duluth #3" keep their capitals)
 const thingName = (d) => (!d ? 'thing' : /^(Duluth|Johnson)/.test(d.name) ? d.name : d.id === 'pile' ? 'things on the ground' : lower(d.short && d.kind !== 'container' ? d.name : d.name));
 const hoursWords = (h) => (h < 0.75 ? 'half an hour' : h < 1.25 ? 'an hour' : `${Math.round(h * 2) / 2} h`.replace('.5 h', '½ h'));
 const _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _v = new THREE.Vector3();
@@ -437,13 +437,24 @@ class Nearby {
     ch.cook.gesture = { t: 0, dur: 0.45, say: 'Taking wood off the pile…' };
     inv.emit('items'); ch.persist();
   }
+  // the fb3 join: hands take anything (stream B, decision 11), so with nothing carried that has room a thing taken off a
+  // pile or the grate goes into a free hand (a sleeping bag left on the ground had read "No room for it" with both
+  // hands empty)
+  toFreeHand(cId, e) {
+    const inv = this.inv;
+    if (typeof inv.canHand !== 'function' || !inv.canHand(e.id) || inv.freeHand() < 0) return false;
+    const h = inv.toHand(cId, e.uid, null, 1);
+    if (!h.ok) return false;
+    this.camp.note(h.words, 2.5); inv.emit('items');
+    return true;
+  }
   // E at a pile of things: the top one into what you carry (a container in it onto you)
   takeOne(pile) {
     const inv = this.inv, e = pile.grid.find((q) => !q.box) || pile.grid[0];
     if (!e) return;
     if (e.box) { const r = inv.carry(e.uid, 'auto'); if (!r.ok) this.camp.note(r.words || 'No room on you for it.', 3); return; }
     const d = itemDef(e.id), r = inv.place(e.id, 1, { data: e.data || null, exclude: [pile.id], quiet: true });
-    if (!r.ok) { this.camp.note('No room for it in anything you carry.', 3); return; }
+    if (!r.ok) { if (!this.toFreeHand(pile.id, e)) this.camp.note('No room for it in anything you carry, and your hands are full.', 3); return; }
     inv.take(pile.id, e.uid, 1);
     const to = inv.cont(r.cId), td = to ? itemDef(to.item) : null;
     this.camp.note(`${d ? d.name : 'It'}, into ${to && to.item === 'pockets' ? 'your pockets' : `the ${lower((td && (td.short || td.name)) || 'pack')}`}.`, 2.5);
@@ -454,7 +465,7 @@ class Nearby {
     const inv = this.inv, ck = this.cook;
     if (e.id === 'pot') { ck.putAway(key, true); return; }
     const g = ck.grate(key), r = inv.place(e.id, 1, { data: e.data || null, quiet: true });
-    if (!r.ok) { this.camp.note('No room for it in anything you carry.', 3); return; }
+    if (!r.ok) { if (!this.toFreeHand(g.id, e)) this.camp.note('No room for it in anything you carry, and your hands are full.', 3); return; }
     inv.take(g.id, e.uid, 1);
     const d = itemDef(e.id);
     this.camp.note(`${d && d.cooked ? `The ${eatName(d)}` : d ? d.name : 'It'}, off the grate and into the ${lower(((itemDef((inv.cont(r.cId) || {}).item) || {}).name) || 'pack')}.`, 3);

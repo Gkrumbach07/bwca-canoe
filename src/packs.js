@@ -67,7 +67,7 @@ const FLOATS = { sd: -0.6, depth: 0.12 };
 const PUSH = { secs: 0.5, perM: 0.22, land: 0.8 }; // land: m of the hull's middle landward of the waterline once pushed (as stepOut beaches it)
 const TAG_TRAIL = 15;       // m from a portage trail within which a thing set down counts as left at that trail (the fetch)
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-const lower = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)); // (a name keeps its capital)
 const metres = (d) => (d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`);
 // game hours as the prompt says them: "about 35 min", "about 1 h 10"
 export function aboutHours(h) {

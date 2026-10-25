@@ -54,7 +54,7 @@ const STILL = 0.25;                   // m/s: still enough to eat
 const SAVE_EVERY = 6;                 // seconds of play between saves while something is dirty
 const WHERE_RANK = { back: 0.4, chest: 0.35, hands: 0.3, pockets: 0.05, canoe: 0.2, stash: 0.1, ground: 0, hung: 0 };
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
-const lower = (s) => String(s).charAt(0).toLowerCase() + String(s).slice(1);
+const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // (a name keeps its capital: "the Duluth #3")
 const ok = (words = '') => ({ ok: true, why: null, words });
 const no = (why, words = '') => ({ ok: false, why, words });
 
