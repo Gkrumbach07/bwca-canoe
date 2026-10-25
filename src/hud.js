@@ -801,7 +801,7 @@ export class Hud {
     if (!wind) return;
     const ice = !!(day && day.season && day.season.ice > 0.5); // a frozen lake has no waves (polish B)
     const H = ice ? 0 : player.waveHeightHere || 0;
-    const matters = wind.fresh || H > WAVE_MATTERS;
+    const matters = player.mode === 'paddle' && (wind.fresh || H > WAVE_MATTERS); // (fb5 join: the wind speaks on the water; "Fresh breeze · 8 m/s · waves 0.1 m" in a store doorway or at camp said nothing to do)
     const mode = s ? s.compassMode : 'always';
     const show = mode === 'always' || (mode === 'wind' && matters);
     e.compass.classList.toggle('show', show);
