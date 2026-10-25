@@ -517,61 +517,28 @@ async function main() {
   };
   // fb4 C: needs and statuses (the owner's second round of 2026-10-25: "if I can't use something, I want to know exactly
   // why I can't use it … some sort of checklist or timer or quantity out of total", and "things that have statuses like
-  // wet clothes … you need to know"). Every greyed verb and card button says why as a checklist with the next step
-  // (items.js check: needs have of need, steps, timers in game seconds), and inventory.status(ref) gives each item's
-  // state (wet, drying, treating, cooking, burning, hot, low, empty, ready) for the book to draw. Wood is wet piece by
-  // piece now (inventory.syncWet: the rain on an open ring, a pile or an armload; dry by a lit fire in 30 min, 3 h in dry
-  // air), and a fire lights on three dry pieces with a dry branch among them (fire.js lightCheck). The ring's checks for
-  // nearby.js (stream A passes them to the card and the dot): chores.lightCheck / douseCheck / fireState (and
-  // cook.cookCheck / cookingNow, native); chores.lightProblem says lightCheck's why, so Light refuses what the card says;
-  // the ring's pieces come dry first (binUnits), so the kindling Light takes is a dry branch. Until stream A passes the
-  // needs through, nearby.fireObject is decorated here (a no-op once its light action has needs of its own).
+  // wet clothes … you need to know"). Every greyed verb carries why with its needs and next (items.js check), and
+  // inventory.status(ref) gives each item's state (wet, drying, treating, cooking, burning, hot, low, empty, ready) for
+  // the book to draw. Wood is wet piece by piece (inventory.syncWet: the rain on an open ring, a pile or an armload; dry
+  // by a lit fire in 30 min, 3 h in dry air). The fire's own checks moved into chores.js and fire.js (fb5 A, below).
+  window.__game.needs = { timerWords: (s) => inventory.timerWords(s), status: (r) => inventory.status(r), verb: (id, r) => inventory.verb(id, r) }; // for the console and the tests
+  // fb5 A: the fire made simple (the owner's third round of 2026-10-25: "fire ring got too complex … it should just light
+  // when enough fuel is added automatically. cooking is automatic when you put something over a active fire, no extra
+  // button. douse is a extra button", "why cant i burn a pole?", "it should only show whats missing"). The ring lights
+  // itself the moment its fuel holds a dry branch and three dry pieces in all, with a match struck, a flare and the catch
+  // (chores.js catchFire, fire.js flare); a dry piece on hot coals brings it back; a pole burns like a log. What sits on
+  // the grate over a lit fire cooks by itself, the pot drawing its water from the bottle (cook.js autoCook), and is
+  // marked Ready on the grate (cook.grateStatus, through inventory.status: "needs the pot", "water 0.3 L", Ready). The
+  // card and the dot show only what is missing (chores.fireNeed / fireNeeds: "Gather wood", "a dry branch", "🪵 ×2 more",
+  // "Wet wood won’t catch"); lit, only the burn bar. The fire's events for stream E's moments: fires.on('lit' | 'low' |
+  // 'coals' | 'out' | 'cooking' | 'ready' | 'wet', fn), or the fires.events queue. A match struck while the card or the book
+  // covers the view flares when the paper lifts (fires.veiled).
   {
-    const ch4 = camp.chores, wetFlag = (u) => (u && u.e && u.e.data && u.e.data.wet > 0 ? 1 : 0);
-    const units4 = ch4.binUnits.bind(ch4);
-    // (a stable sort: the ring's order otherwise; while Light is held, only the dry pieces: it takes its kindling from them)
-    ch4.binUnits = (b) => { const u = units4(b).sort((x, y) => wetFlag(x) - wetFlag(y)); return hold.is('fire-light') ? u.filter((x) => !wetFlag(x)) : u; };
-    const rate4 = (b) => (b && typeof inventory.wetRate === 'function' ? inventory.wetRate(b) : 1);
-    ch4.lightCheck = (key) => {
-      const b = ch4.fuelBin(key), c = fires.lightCheck(key, ch4.binUnits(b), { rate: rate4(b) });
-      // (fb4 join: wet wood filling the ring leaves no room for the dry: the first step is taking it out)
-      if (!c.enabled && b && ch4.binUnits(b).some((u) => wetFlag(u)) && !inventory.firstFit(b, 'wood:branch')) {
-        c.needs = [NEED.step('Room in the ring for dry wood', false, { note: 'it is full of wet wood' }), ...c.needs];
-        c.next = 'Take the wet wood out first: drag it onto the ground by the ring (by a lit fire it dries in 30 min), then dry wood in';
-      } else if (!c.enabled && b && /^(Gather|Two|Three|One|A dry branch)/.test(c.next || '')) {
-        // (fb4 join: dry wood already within reach, on you or on a pile by you: drag it in, not "gather")
-        let dry = 0, branch = false;
-        for (const k of inventory.reachable()) if (k !== b) for (const e of k.grid) if (!e.box && /^wood:/.test(e.id) && !(e.data && e.data.wet > 0)) { dry += e.qty || 1; if (e.id === 'wood:branch') branch = true; }
-        if (dry) c.next = `${dry} ${dry === 1 ? 'piece' : 'pieces'} of dry wood within reach${branch ? '' : ' (no branch among them)'}: drag ${dry === 1 ? 'it' : 'them'} into the fuel`;
-      }
-      return c;
-    };
-    ch4.lightProblem = (key) => { const c = ch4.lightCheck(key); return c.enabled ? null : c.why; };
-    ch4.douseCheck = (key) => fires.douseCheck(key);
-    ch4.fireState = (key) => {
-      const b = ch4.fuelBin(key), rain = typeof ch4.rainNow === 'function' ? ch4.rainNow() : 0;
-      const st = fires.ringState(key, ch4.binUnits(b), { rate: rate4(b), rain, covered: !!(b && rain > 0 && inventory.rainAt(b) <= 0), cooking: ch4.cook.cookingNow(key) });
-      if (typeof ch4.nightWood === 'function') { try { st.fuel.night = ch4.nightWood(key); } catch (e) { console.warn('chores.nightWood', e); } } // stream E's
-      return st;
-    };
-    const fireObj4 = nearby.fireObject.bind(nearby);
-    nearby.fireObject = () => {
-      const o = fireObj4();
-      if (!o || !o.key || !Array.isArray(o.actions)) return o;
-      const act = (id) => o.actions.find((a) => a.id === id), light = act('light');
-      if (light && light.needs) return o; // stream A passes them through itself
-      const put = (a, c) => { if (!a || !c) return; a.needs = c.needs; a.next = c.next; if (!c.enabled) { a.enabled = false; a.why = c.why; } else if (a.enabled !== false) a.why = null; };
-      put(light, ch4.lightCheck(o.key));
-      const site = typeof nearby.site === 'function' ? nearby.site(4) : null;
-      if (site) put(act('cook'), ch4.cook.cookCheck(site, o.key));
-      put(act('douse'), ch4.douseCheck(o.key));
-      if (act('eat')) { act('eat').needs = []; act('eat').next = 'Eaten there and then, ten minutes on the clock'; }
-      if (!o.fuel) Object.assign(o, ch4.fireState(o.key));
-      const ck = ch4.cook.cookingNow(o.key);
-      if (ck) o.cooking = { ...(o.cooking || {}), ...ck };
-      return o;
-    };
-    window.__game.needs = { timerWords: (s) => inventory.timerWords(s), status: (r) => inventory.status(r), verb: (id, r) => inventory.verb(id, r) }; // for the console and the tests
+    const ch5 = camp.chores, ck5 = ch5.cook;
+    fires.veiled = () => !!(cards.shown || journal.open);
+    const statusA = inventory.entryStatus.bind(inventory);
+    inventory.entryStatus = (c, e) => (c && c.item === 'grate' && typeof ck5.grateStatus === 'function' ? ck5.grateStatus(c, e) : statusA(c, e)); // (stream B's inventory.js calls it itself once it is in)
+    window.__game.fire = { need: (k) => ch5.fireNeed(k), needs: (k) => ch5.fireNeeds(k), on: (n, fn) => fires.on(n, fn), events: fires.events }; // for the console, the tests and stream E
   }
   // fb4 B: the book (the owner's second round of 2026-10-25). I opens and closes it (Pack and Journal are tabs on its
   // edge; J, L, Tab and Ctrl-click are gone, R turns a thing only while it is dragged); its right pane is a tab per thing

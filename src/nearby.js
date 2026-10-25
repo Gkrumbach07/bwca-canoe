@@ -10,7 +10,8 @@
 //   a barrel, pack, bucket, box on the ground  Pick up               Open it (the book, lit in Here)
 //   a branch or a log                     Pick up                    —
 //   a pile                                Take one                   Open the pile (the book, lit in Here)
-//   the fire ring                         Open the fire (its card)   Light (hold) when laid · Douse (hold) when burning
+//   the fire ring                         Fire ring (its card)       Douse (hold) when burning or hot coals; the one
+//                                                                    chip of what it is short of (fb5 A: it lights itself)
 //   a pitched tent                        Rest until… (the dial)     Strike (hold)      (half pitched: E carries on)
 //   a bagged tent on the ground           Pick up                    Pitch (the ghost, then hold)
 //   a bagged tarp on the ground           Pick up                    Pitch the tarp (stream E's tarp.verb, fb4)
@@ -32,14 +33,17 @@
 //     cards()   → stream B's { open(kind, ref), close() } or null (E at the ring: cards.open('fire', key))
 //     journal   the book: openHere(ref) (B's right pane, Here) when it has it, else show('pack')
 //     sitter()  → stream C's player with sitAt(spot) → bool, stand(), seated, or null: then cook.js's seat sits you
-//   nearby.objects() -> [{ id, kind, title, sub?, slots?, actions, meter?, cooking? }]
+//   nearby.objects() -> [{ id, kind, title, sub?, slots?, actions, ... }]
 //     kind     'fire' | 'pile'
-//     the fire's slots [{ id: 'fuel' | 'grate' | 'ash', label, accepts: [kinds], cId?, items?, words? }]: the fuel and the
-//              grate are fixed inventory containers at the ring (chores.js firefuel, items.js grate: a drop is
-//              inventory.move); the ash is words only
+//     the fire's slots [{ id: 'fuel' | 'grate', label, accepts: [kinds], cId }]: fixed inventory containers at the ring
+//              (chores.js firefuel, items.js grate: a drop is inventory.move)
 //     actions  [{ id, label, enabled, why?, hint?, held?, job? (hold.js's id while it runs), run(opts) }]
-//              opts: { key } the held key ('BookHold' from a card's button, 'KeyQ' from the dot)
-//     meter    the fire's: { value 0..1, label, words }; cooking: { value 0..1, words } while the pot is on
+//              opts: { key } the held key ('BookHold' from a card's button, 'KeyQ' from the dot). fb5 A: the fire has
+//              one, Douse (held), while it burns or the coals are hot
+//     fb5 A, the fire's state, only what is missing (decision 1): state 'none' | 'laid' | 'burning' | 'coals'; need
+//              [chip] or null (chores.fireNeeds: "Gather wood", "a dry branch", "🪵 ×2 more", "Wet wood won’t catch");
+//              burn { left (game h), value, low } while it burns; coals { value } while they are hot; cooking
+//              { value, label, timer, running } while something cooks on the grate
 //   nearby.itemActions(ref) -> [{ id, label, enabled, why?, closeBook?, run }]   ref: { cId, uid, itemId } |
 //              { container: cId } | { long: uid }: a tent's Pitch, a barrel's Hang, wood onto the fire, a meal onto the grate
 //   nearby.groundPieces() -> [{ uid: 'piece:<key>', id, at }]: the loose wood within reach (the book's Here pane)
@@ -60,12 +64,10 @@ const FIRE_PANEL = 4;        // m from the ring within which its object is in ob
 const HULL_REACH = 3;        // m from the canoe's keel line (inventory.js HULL_REACH)
 const PIECE_REACH = 3;       // m: the loose wood the book's Here pane lists (inventory.js REACH)
 const POINT = { fire: 3.0, tent: 4.2, seat: 2.8, hung: 3.4, log: 1.8, water: 2.6 }; // m within which the dot takes them
-const BURN_FULL = 6;         // game hours of wood the fire's meter calls full
 const FOOD = new Set(['meal', 'fish']);
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // ("A-frame", "the Duluth #3" keep their capitals)
 const thingName = (d) => (!d ? 'thing' : /^(Duluth|Johnson)/.test(d.name) ? d.name : d.id === 'pile' ? 'things on the ground' : lower(d.short && d.kind !== 'container' ? d.name : d.name));
-const hoursWords = (h) => (h < 0.75 ? 'half an hour' : h < 1.25 ? 'an hour' : `${Math.round(h * 2) / 2} h`.replace('.5 h', '½ h'));
 const _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _v = new THREE.Vector3();
 // fb4 A, the round's decision 2 (the owner, 2026-10-25: "if I can't use something, I want to know exactly why I can't use
 // it ... there needs to be a very clear action on what needs to be done next"): every verb here that can grey carries
@@ -176,32 +178,24 @@ class Nearby {
     const key = campKey(site), ch = this.chores, ck = this.cook, F = this.fires;
     const bin = ch.fuelBin(key, site), grate = ch.grate(key, site);
     if (!bin || !grate) return null;
-    const info = ch.fireInfo(key), st = info.state, og = ck.onGrate(key), P = ck.pot && ck.pot.key === key ? ck.pot : null;
-    const lightWhy = ch.lightProblem(key), cookWhy = ck.cookProblem(site, key);
-    const sub = st === 'burning' ? `burning · about ${hoursWords(info.hours)} of wood` : st === 'coals' ? 'the coals still smoking' : info.units.length ? `laid, not lit · ${ch.woodWords(info.units)}` : 'cold';
-    // (fb4 A: each action with its check's why, needs and next where stream C has them: the card draws the checklist)
-    const act = (a, c) => { if (!c) return a; const why = whyOf(c); return { ...a, enabled: !why, why, needs: c.needs || null, next: c.next || null }; };
-    const actions = [
-      act({ id: 'light', label: st === 'coals' ? 'Light it again' : 'Light', held: true, job: 'fire-light', enabled: !lightWhy, why: lightWhy, run: (o) => ch.light(site, key, this.keys(o)) }, check(ch, 'lightCheck', key)),
-      act({ id: 'cook', label: ck.cookLabel(key), enabled: !cookWhy, why: cookWhy, run: () => ck.cookNow(site, key) }, check(ck, 'cookCheck', site, key)),
-    ];
-    if (og.food) actions.push({ id: 'eat', label: `Eat the ${eatName(itemDef(og.food.id))}`, enabled: true, hint: 'there and then', run: () => ck.eatAt(site, key) });
-    const lit = st === 'burning' || st === 'coals';
-    actions.push(act({ id: 'douse', label: 'Douse', held: true, job: 'fire-out', enabled: lit, why: lit ? null : 'there is no fire to put out', needs: lit ? null : [{ label: 'A fire burning, or hot coals', done: false }], next: lit ? null : 'Light it first', run: (o) => ch.douse(site, key, this.keys(o)) }, check(ch, 'douseCheck', key)));
-    const ash = st === 'burning' ? 'embers under the flames' : st === 'coals' ? 'hot coals under the ash' : F.get(key) && !F.get(key).laid ? 'warm ash' : 'cold ash';
-    const pot = ck.potHere(key);
+    // fb5 A (the owner's third round of 2026-10-25: "fire ring got too complex … it should only show whats missing"):
+    // no Light, no Cook, no Eat: the fire lights itself, the grate cooks over it, the cooked thing is taken off. Douse
+    // (held) is the one button, while there is a fire to put out. The rest is state: the chips of what is missing, the
+    // burn, the coals, the pot's progress.
+    const st = F.state(key), units = ch.binUnits(bin), lit = st === 'burning' || st === 'coals', f0 = F.get(key);
+    const actions = lit ? [{ id: 'douse', label: 'Douse', held: true, job: 'fire-out', enabled: true, why: null, run: (o) => ch.douse(site, key, this.keys(o)) }] : [];
     return {
-      id: `fire:${key}`, kind: 'fire', title: 'The fire ring', sub, key,
+      id: `fire:${key}`, kind: 'fire', title: 'Fire ring', key, state: st,
       slots: [
-        { id: 'fuel', label: 'Fuel', cId: bin.id, accepts: ['firewood'], words: info.units.length ? ch.woodWords(info.units) : 'dead branches and short logs' },
-        { id: 'grate', label: 'The grate', cId: grate.id, accepts: ['meal', 'fish', 'food', 'tool'], words: og.food ? 'ready' : P ? (P.cold ? 'the fire is too low under it' : 'cooking') : pot ? 'a meal or a fish, the pot' : 'no pot' },
-        { id: 'ash', label: 'The ash', accepts: [], items: [], words: ash },
+        { id: 'fuel', label: 'Fuel', cId: bin.id, accepts: ['firewood'] },
+        { id: 'grate', label: 'Grate', cId: grate.id, accepts: ['meal', 'fish', 'food', 'tool'] },
       ],
       actions,
-      meter: { value: Math.min(1, info.hours / BURN_FULL), label: 'Burn', words: st === 'burning' ? `about ${hoursWords(info.hours)} of wood` : info.fuel ? `${hoursWords(info.fuel)} of wood laid` : 'no wood' },
-      cooking: typeof ck.cookingNow === 'function' ? check(ck, 'cookingNow', key) : P && !P.done ? { value: Math.min(1, P.t / P.dur), words: P.cold ? 'the fire is too low under it' : `ready in ${Math.max(1, Math.ceil(P.dur - P.t))} s` } : null,
-      state: st, noPot: !pot,
-      ...(check(ch, 'fireState', key) || {}), // (fb4 A: stream C's fuel { light, hour }, wet, timers and status, for the card)
+      need: F.ringNeed(key, units),
+      burn: F.burn(key, units),
+      coals: F.coals(key),
+      cooking: ck.cookingNow(key),
+      caught: !!(st === 'burning' && f0 && Number.isFinite(f0.strikeT) && F.t - f0.strikeT < 2.5), // (it has just caught: the card flares)
     };
   }
   pileObject(c) {
@@ -384,7 +378,10 @@ class Nearby {
           const dd = itemDef(top.id), name = top.id === 'pot' ? 'the cook pot' : dd && dd.cooked ? `the ${eatName(dd)}` : `the ${lower(dd ? dd.name : 'thing')}`;
           push({ t: gh.t, miss: gh.miss * 0.7 }, { kind: 'item', ref: `grate:${top.uid}`, label: `${name}, off the grate`, e: { verb: 'Pick up', run: () => this.offGrate(key, top) }, box: { x: gs.x, y: gs.y + 0.06, z: gs.z, hx: 0.11, hy: 0.07, hz: 0.11, heading: 0 } });
         }
-        push(near.sphere(f.x, f.y + 0.22, f.z, 0.85), { kind: 'fire', ref: `fire:${key}`, label: 'the fire ring', hint: this.fireHint(key), e: { verb: 'Open the fire', run: () => this.openFire(key) }, q: this.fireQ(site, key), box: { x: f.x, y: f.y + 0.16, z: f.z, hx: 0.62, hy: 0.18, hz: 0.62, heading: f.a || 0 } });
+        // (fb5 A, decision 1: "E Fire ring", plus at most the one missing chip, or nothing when lit; stream E's pointer.js
+        // draws target.chip)
+        const need = ch.fireNeed(key);
+        push(near.sphere(f.x, f.y + 0.22, f.z, 0.85), { kind: 'fire', ref: `fire:${key}`, label: '', chip: need ? need.text : null, hint: need ? need.text : null, e: { verb: 'Fire ring', run: () => this.openFire(key) }, q: this.fireQ(site, key), box: { x: f.x, y: f.y + 0.16, z: f.z, hx: 0.62, hy: 0.18, hz: 0.62, heading: f.a || 0 } });
       }
     }
     // the seats: the bench, a log seat, the latrine (E Sit)
@@ -433,14 +430,11 @@ class Nearby {
     if (w) push(near.box(w.box), { kind: 'water', ref: 'water', label: 'the water’s edge', hint: w.hint, e: { verb: 'Fill the bottle', why: w.why, needs: w.needs || null, next: w.next || null, run: () => camp.fillBottle(w.wait) }, box: w.box });
     return out;
   }
-  // the fire ring's Q: Light (held) while it is laid and not lit, Douse (held) while it burns or the coals are hot;
-  // cold and empty, nothing
+  // the fire ring's Q: Douse (held) while it burns or the coals are hot; else none (fb5 A: it lights itself)
   fireQ(site, key) {
-    const ch = this.chores, info = ch.fireInfo(key), st = info.state, busy = hold.active || this.cook.busy ? 'a moment' : null;
-    if (st === 'burning' || st === 'coals') return checked({ verb: 'Douse', held: true, why: null, run: (o) => ch.douse(site, key, this.keys(o)) }, check(ch, 'douseCheck', key), busy);
-    if (!info.units.length) return null;
-    const why = ch.lightProblem(key);
-    return checked({ verb: 'Light', held: true, why, run: (o) => ch.light(site, key, this.keys(o)) }, check(ch, 'lightCheck', key), busy);
+    const ch = this.chores, st = this.fires.state(key), busy = hold.active || this.cook.busy ? 'a moment' : null;
+    if (st !== 'burning' && st !== 'coals') return null;
+    return { verb: 'Douse', held: true, why: busy, run: (o) => ch.douse(site, key, this.keys(o)) };
   }
   // the water within reach ahead of you (world.shoreAt < 0), as a flat box on it: { box, why, wait, hint } or null
   waterEdge() {
@@ -478,10 +472,6 @@ class Nearby {
     const h = this.canoe && this.canoe.hull;
     if (h) h.traverse((o) => { const c = o.isMesh && !o.isSkinnedMesh && o.geometry.getAttribute('normal') ? o.geometry.getAttribute('position').count : 0; if (c > n) { n = c; best = o; } });
     return (this._hull = best);
-  }
-  fireHint(key) {
-    const st = this.fires.state(key);
-    return st === 'burning' ? 'burning' : st === 'coals' ? 'the coals are hot' : this.chores.fireInfo(key).units.length ? 'laid' : null;
   }
   // E at the woodpile: a piece off it, into an armload (a free hand) or what you carry
   fromPile(pile, e) {
@@ -539,7 +529,7 @@ class Nearby {
       this.sigT = 0.25;
       this.list = null;
       const list = this.objects();
-      const sig = list.map((o) => `${o.id}:${o.sub || ''}:${o.actions.map((a) => `${a.id}${a.enabled ? 1 : 0}${a.label}`).join(',')}:${o.meter ? Math.round(o.meter.value * 40) : ''}:${o.cooking ? Math.round(o.cooking.value * 20) : ''}`).join('|');
+      const sig = list.map((o) => `${o.id}:${o.sub || ''}:${o.state || ''}:${(o.need || []).map((q) => q.text).join(',')}:${o.actions.map((a) => `${a.id}${a.enabled ? 1 : 0}${a.label}`).join(',')}:${o.burn ? `${Math.round(o.burn.value * 40)}${o.burn.low ? 'l' : ''}` : ''}:${o.coals ? Math.round(o.coals.value * 20) : ''}:${o.cooking ? Math.round(o.cooking.value * 20) : ''}`).join('|');
       if (sig !== this.sig) { this.sig = sig; this.emit(); }
     }
     // the stations by rings no one is near, with nothing in them, are tidied away (made again with the card)

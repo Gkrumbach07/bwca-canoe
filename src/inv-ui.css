@@ -398,3 +398,25 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 .nb-needs .nb-lab i { font-size: 13.5px; }
 .nb-meter .tmr { font: 600 13px/1.2 var(--sans); color: var(--gold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #card .sh-foot { flex: none; font: 700 10.5px/1.4 var(--sc); letter-spacing: .12em; color: var(--ink-faint); border-top: 1px solid var(--edge); padding-top: 8px; display: flex; justify-content: space-between; gap: 18px; }
+
+/* fb5 A: the fire's pane, only what is missing (the chips while it is cold, the burn bar alone while it is lit, amber
+   under 20 min; a thin bar under the grate while something cooks; the head flaring as it catches) */
+.nb.fp .nb-body { gap: 12px; }
+.fp-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; min-height: 30px; }
+.fp-line.none { display: none; }
+.fp-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px 4px 7px; border-radius: 15px; background: rgba(20, 16, 10, .32); border: 1.5px dashed rgba(243, 236, 221, .38); font: italic 16px/1.15 var(--serif); color: var(--cream-86); white-space: nowrap; }
+.fp-chip .ic { width: 24px; height: 24px; margin: -3px 0; flex: none; }
+.fp-chip.k-wet { border-color: rgba(159, 196, 216, .6); color: #d6e6ef; }
+.fp-lead { font: 700 10.5px/1.2 var(--sc); letter-spacing: .14em; color: #e9a36b; text-transform: uppercase; }
+.fp-bar { position: relative; flex: 1 1 auto; min-width: 120px; height: 12px; border-radius: 6px; background: var(--well); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6); overflow: hidden; }
+.fp-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: linear-gradient(90deg, #8a3a1c, var(--ember) 70%, #ec8a4a); transition: width .4s, background .6s; }
+.fp-bar.low i { background: linear-gradient(90deg, #9a6414, #e0a530 70%, #f2c34a); animation: fp-low 1.8s ease-in-out infinite; }
+@keyframes fp-low { 50% { opacity: .62; } }
+.fp-t { flex: none; min-width: 54px; text-align: right; font: 600 14px/1 var(--sans); color: var(--cream-86); font-variant-numeric: tabular-nums; }
+.fp-cook { display: block; height: 5px; margin-top: 3px; border-radius: 3px; background: var(--well); overflow: hidden; }
+.fp-cook i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6f7f86, #c9d4d6 70%, #f3ecdd); transition: width .4s; }
+.fp-cook.none { visibility: hidden; }
+.nb.fp.caught .nb-head { animation: fp-caught 1.8s ease-out; }
+.nb.fp.caught .fp-bar i { animation: fp-catch 1.8s ease-out; }
+@keyframes fp-caught { 0% { box-shadow: inset 0 0 0 2px #5e3b26, inset 0 0 44px rgba(255, 176, 70, .85), 0 0 26px 4px rgba(242, 160, 60, .55); } 100% { box-shadow: inset 0 0 0 2px #5e3b26, inset 0 0 0 3px rgba(217, 102, 63, .45), 0 0 0 0 rgba(242, 160, 60, 0); } }
+@keyframes fp-catch { 0% { filter: brightness(2.2); } 100% { filter: none; } }

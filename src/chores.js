@@ -6,11 +6,11 @@ import { word, plural } from './hud.js';
 import { mulberry32, hash2 } from './rng.js';
 import { save } from './save.js';
 import { GROUND } from './terrain-build.js';
-import { itemDef, defineItem } from './items.js';
+import { itemDef, defineItem, WOOD_DRY, LIGHT_PIECES } from './items.js';
 import { inventory as INVENTORY } from './inventory.js';
-import { FIRE } from './fire.js';
+import { FIRE, woodCount, lights, LOW_H } from './fire.js';
 import { hold } from './hold.js';
-import { Cook, hiss, woodKnock } from './cook.js';
+import { Cook, hiss, woodKnock, strike } from './cook.js';
 import { Tarp } from './tarp.js'; // fb4 E: the tarp pitched like the tent, on trees or poles
 
 // Camp chores (hubs phase 3, stream A; redone by camp 2, the owner's feedback of 2026-10-24: "picking up firewood
@@ -26,12 +26,17 @@ import { Tarp } from './tarp.js'; // fb4 E: the tarp pitched like the tent, on t
 //   item), a down log's panel in the book saws it, held: three cuts, a short log dropped by it at each. Wood set down
 //   from the book (its Ground area: a pile on the ground, by the ring or anywhere) is a woodpile, drawn stacked.
 // - The fire (fire.js), worked from its card (wc A: stream B's cards.open('fire'), on the fire ring's E; nearby.js's
-//   fire object) and from the dot (Q Light or Douse, held): its Fuel is a fixed container at the ring (firefuel); the
-//   wood dragged into it is the fire laid. Light (held; kindling first: at least a branch, two pieces in all) puts a
-//   match to it; burning, it takes its next piece from the ring while under KEEP hours are left (logs burn long), so it
-//   burns full while there is wood in it and burns down after; Douse (held) puts it out: water, stirred in, water again,
-//   the steam boiling up and the hiss, the coals cold. Left, it smoulders until morning (fire.js FIRE.smoulder), and a
-//   branch dropped on the hot coals brings it back. A down log with the saw to hand reads "E Saw · hold" (beginSaw).
+//   fire object) and from the dot (Q Douse, held): its Fuel is a fixed container at the ring (firefuel); the wood
+//   dragged into it is the fire laid. fb5 A (the owner's third round of 2026-10-25: "it should just light when enough
+//   fuel is added automatically", "why cant i burn a pole?"): it lights by itself the moment a piece goes in and the
+//   ring holds a dry branch and LIGHT_PIECES dry pieces in all (catchFire: a match struck, a flare, the catch, its
+//   sound); a pole burns like a log. Burning, it takes its next piece from the ring while under KEEP hours are left
+//   (the long-burning first, the quick ones once it is low), so it burns full while there is wood in it and burns down
+//   after; Douse (held, the only button) puts it out: water, stirred in, water again, the steam boiling up and the hiss,
+//   the coals cold, and what wood is left in the ring drowned with it. Left, it smoulders until morning (fire.js
+//   FIRE.smoulder), and any dry piece on the hot coals brings it back. What the ring is short of is fireNeed's one chip
+//   (the dot) and fireNeeds' chips (the card). The fire's events (fire.js on/events: lit, low, coals, out, wet) are said
+//   here. A down log with the saw to hand reads "E Saw · hold" (beginSaw).
 // - Cooking and eating: cook.js (the pot on the grate, the wait, the cooked things, the bench).
 // - The latrine (wc A): E Sit at the box in the trees (props.js c.layout.latrine; the dot, nearby.js) walks you to it
 //   and sits you down (player.sitAt, stream C; else cook.js sitAt), ten quiet minutes on their own; rest +0.05 once a day.
@@ -42,7 +47,7 @@ import { Tarp } from './tarp.js'; // fb4 E: the tarp pitched like the tent, on t
 //
 // Nothing here takes E (fb2 A: E is the pointer's: pick up, talk, open, get in). What camp.js asks of it: before(),
 // update(dt), ashore() (for the leaving note); nearby.js asks the fire's (fuelBin, grate,
-// fireInfo, lightProblem, light, douse), the latrine's, the saw's and the wood's; main.js (camp 2) asks move(),
+// fireInfo, fireNeed(s), douse), the latrine's, the saw's and the wood's; main.js (camp 2) asks move(),
 // beforePose(), afterPose(). Everything is saved in the trip's document (trip.state.chores), or under its own key with no
 // trip.
 
@@ -61,6 +66,9 @@ defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts:
 // ring or a pack, a container on the ground) is gone: one found in a save becomes the tarp folded in a pile there.
 defineItem({ id: 'tarpup', name: 'Rain tarp, pitched', short: 'Tarp up', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 2, rows: 2, accepts: [] }, icon: 'tarp', verbs: [], words: 'The tarp, folded where it was pitched.' });
 const RAIN = { on: 0.3, burn: 1, wetAfter: 1 / 3, wetFor: 3, packAfter: 0.5, dry: 0.5 };
+// fb5 A (the owner: "why cant i burn a pole?"): a pole is fuel, and burns about as long as a short log (stream B's items.js
+// makes it so; this only when its def is older)
+{ const d = itemDef('pole'); if (d && (d.kind !== 'firewood' || !Number.isFinite(d.burn))) defineItem({ id: 'pole', kind: 'firewood', burn: FIRE.log }); }
 // fb4 E: the poles lying about for a tarp (tarp.js), found like the wood: a few round each site, most by the down logs and
 // under the trees, and now and then in the woods; one cut from a down log with the saw (POLE_CUT: two a log a day)
 const SITE_POLES = { n: 6, tries: 70, from: 4, to: 23 };
@@ -78,10 +86,6 @@ export const SEASON = { from: [6, 10], to: [7, 20] }; // [month (0-based), day]:
 export const PAY = { pint: 10, armful: 6 };
 const ARMFUL = 3;            // pieces of wood a notice's "armful" is
 // the wake times on the card: first light (camp.js wakeTime: a quarter hour after sunrise, or later after a late night)
-const LIGHT = [
-  { name: 'Laid', doing: 'Laying birch bark, the kindling and the wood in the ring', minutes: 8, seconds: 1.5 },
-  { name: 'Lit', doing: 'A match to the bark, blowing it into flame', minutes: 6, seconds: 1.4 },
-];
 const DOUSE = [
   { name: 'Drowned', doing: 'Pouring a pot of lake water on it', minutes: 3, seconds: 1.1 },
   { name: 'Stirred', doing: 'Stirring the ash in with a stick', minutes: 3, seconds: 1.0 },
@@ -232,6 +236,7 @@ export class Chores {
     this.stateRef = undefined;  // the trip's document the saved part was read from
     this.t = 0;
     this.lit = new Set();       // the fires you lit or laid (keys): saved with their state
+    this.ringSeen = new Map();  // fb5 A: ring key -> { st, low, wet } as last seen (the events say the changes); bins seen this session
     this.steamT = 0; this.steamAt = null;
     this.cells = new Map();     // the woods' wood: cell key -> [pieces] | null (none); unset: not read yet
     this.sites = new Map();     // site key -> [pieces] (its wood, made once its layout is in)
@@ -301,7 +306,8 @@ export class Chores {
     return b || null;
   }
   // the pieces in a fuel bin, one each: [{ id, e, burn }]
-  binUnits(b) { const out = []; if (b) for (const e of b.grid) if (!e.box && isWood(e.id)) for (let i = 0; i < e.qty; i++) out.push({ id: e.id, e, burn: burnOf(e.id) }); return out; }
+  // (fb5 A: the dry pieces first, then the wet; the grid's order otherwise)
+  binUnits(b) { const out = []; if (b) for (const e of b.grid) if (!e.box && isWood(e.id)) for (let i = 0; i < e.qty; i++) out.push({ id: e.id, e, burn: burnOf(e.id) }); return out.sort((x, y) => wetU(x) - wetU(y)); }
   binHours(b) { return this.binUnits(b).reduce((s, u) => s + u.burn, 0); }
   // one piece out of the bin (its burn), or 0
   takeFromBin(b, u) { return b && this.inv.take(b.id, u.e.uid, 1) ? u.burn : 0; }
@@ -335,6 +341,8 @@ export class Chores {
     if (on && ((this.cellT -= dt) <= 0)) { this.cellT = 0.5; this.restoreDrops(); this.refreshWood(p.x, p.z); this.migratePiles(); }
     if (this.redrawIn > 0 && (this.redrawIn -= dt) <= 0) this.dirty = true;
     if (this.dirty) this.drawWood();
+    // (fb5 A: a change in the inventory, a piece dropped in the ring, syncs the rings on the next frame: it catches at once)
+    if (!this.invHooked && this.inv && this.inv.attached && typeof this.inv.onChange === 'function') { this.invHooked = true; this.inv.onChange(() => { this.fuelT = Math.min(this.fuelT || 0, 0.02); }); }
     if ((this.fuelT = (this.fuelT || 0) - dt) <= 0) { this.fuelT = 0.25; this.syncFires(); this.syncRain(); this.migrateTarps(); }
     this.tarp.update(dt); // fb4 E: the pitch armed, the rigs and the ghost drawn
   }
@@ -416,19 +424,28 @@ export class Chores {
       b.at.rainH = (b.at.rainH || 0) + dh * rain;
       if (f && !f.laid && now < f.until) f.until = Math.max(now, f.until - dh * rain * RAIN.burn);
       if (b.at.rainH >= RAIN.wetAfter) {
-        if (!(b.at.wetUntil > now) && units.length && !(f && !f.laid && now < f.until)) this.note('The rain has wet the wood in the ring through. The tarp pitched over the ring would keep it dry.', 5);
         b.at.wetUntil = now + RAIN.wetFor;
       }
     } else if (b.at.rainH && dh > 0) b.at.rainH = Math.max(0, b.at.rainH - dh * RAIN.dry);
     // a fire laid before the ring had a bin (an older save): its wood is in the ring as branches
     if (f && f.laid && !units.length && !b.at.v) { b.at.v = 2; for (let n = Math.max(2, Math.round(f.laid / FIRE.branch)); n > 0; n--) if (!this.inv.put(b, 'wood:branch', { quiet: true })) break; return; }
     b.at.v = 2;
+    // fb5 A: a piece put in (more pieces than last seen) arms the ring: lit by itself when it holds enough dry wood (and
+    // you are by it, to strike the match); an old save's laid fire is armed once, quietly, as it loads
+    const seen = this.ringSeen.get(key), first = !seen;
+    const n = units.length, prevN = Number.isFinite(b.at.n) ? b.at.n : n;
+    if (n > prevN) b.at.armed = true;
+    if (first && f && f.laid && b.at.armed === undefined) b.at.armed = true;
+    b.at.n = n;
+    const dry = units.filter((u) => !wetU(u));
+    // the dry pieces fed while it burns: the long-burning while there is time, the quick ones once it is low
     const chain = () => {
       let fed = 0;
       f = F.get(key);
-      while (units.length && f.until - now < KEEP) {
-        const left = f.until - now, i = left > 0.25 ? Math.max(0, units.findIndex((u) => u.id === 'wood:log')) : Math.max(0, units.findIndex((u) => u.id !== 'wood:log'));
-        const u = units.splice(i, 1)[0], h = this.takeFromBin(b, u);
+      while (dry.length && f.until - now < KEEP) {
+        const left = f.until - now, by = (u) => u.burn;
+        const i = dry.reduce((bi, u, k) => (left > 0.25 ? by(u) > by(dry[bi]) : by(u) < by(dry[bi])) ? k : bi, 0);
+        const u = dry.splice(i, 1)[0], h = this.takeFromBin(b, u);
         if (!h) break;
         f.until = Math.min(Math.max(now, f.until) + FIRE.most, f.until + h); fed++;
       }
@@ -438,21 +455,62 @@ export class Chores {
       const st = F.state(key);
       // burning, or burnt out since it was last seen burning (the night's jump): the ring's wood burns on in turn
       if (st === 'burning' || (f.until >= last - 1e-6 && f.until < now)) { changed = chain() > 0; }
-      else if (st === 'coals') {
-        const br = units.find((u) => u.id === 'wood:branch' || u.id === 'firewood');
-        if (br) {
-          units.splice(units.indexOf(br), 1);
-          const h = this.takeFromBin(b, br);
-          if (h) { F.feed(key, now, h); this.lit.add(key); chain(); changed = true; this.note('A branch on the hot coals, a breath or two, and it catches again.', 4); }
+      else if (st === 'coals' && dry.length) {
+        // any dry piece on the hot coals catches them again (the quick-catching first)
+        const i = dry.reduce((bi, u, k) => (u.burn < dry[bi].burn ? k : bi), 0), br = dry.splice(i, 1)[0], h = this.takeFromBin(b, br);
+        if (h) {
+          const quiet = first || !this.byRing(at);
+          F.feed(key, now, h, { flare: !quiet }); this.lit.add(key); chain(); changed = true; b.at.armed = false;
+          if (!quiet) this.sound(strike, { x: at.x, y: at.y + 0.2, z: at.z }, true);
+          this.ringEvent(key, 'lit', { relit: true, quiet });
         }
       } else if (st === 'none') { F.douse(key); this.lit.delete(key); f = null; changed = true; }
-      if (f) { if (changed) { this.inv.emit('items'); this.persist(); } return; }
+      if (f) { this.ringWatch(key, b); if (changed) { this.inv.emit('items'); this.persist(); } return; }
     }
     // not lit: the wood in the ring is a fire laid, or there is none
     if (units.length) {
       const hours = units.reduce((s, u) => s + u.burn, 0);
       if (f && f.laid) f.laid = hours; else if (!f) { F.lay(key, at, hours); this.lit.add(key); }
+      const c = woodCount(units);
+      if (b.at.armed && lights(c) && (first || this.byRing(at))) { this.catchFire(key, b, at, { quiet: first }); return; }
     } else if (f && f.laid) { F.douse(key); this.lit.delete(key); }
+    this.ringWatch(key, b);
+  }
+  // you are by the ring (someone there to strike the match): within 6 m of it on foot
+  byRing(at, r = 6) { const p = this.player; return !!(p && (p.mode === 'walk' || p.mode === 'carry') && Math.hypot(p.x - at.x, p.z - at.z) <= r); }
+  // fb5 A: the ring catches: the dry kindling (the old armful, else the quickest-burning dry piece, a branch) kindled, a
+  // match struck and the flare (fire.js), the rest of the dry wood fed in turn; quiet (a save loading): no match, no sound
+  catchFire(key, b, at, { quiet = false } = {}) {
+    const F = this.fires, units = this.binUnits(b).filter((u) => !wetU(u));
+    const arm = units.find((u) => u.id === 'firewood'), br = units.filter((u) => u.id === 'wood:branch');
+    const k = arm || br[0] || units[0];
+    const h = k ? this.takeFromBin(b, k) : 0;
+    if (!h) return false;
+    const f = F.get(key); if (f) f.laid = 0;
+    F.kindle(key, at, this.now, h, { flare: !quiet }); this.lit.add(key);
+    b.at.armed = false; b.at.syncT = this.now;
+    this.syncFire(key, b); // (the rest of the dry wood in turn)
+    if (!quiet) this.sound(strike, { x: at.x, y: at.y + 0.2, z: at.z }, false);
+    this.ringEvent(key, 'lit', { relit: false, quiet });
+    this.inv.emit('items'); this.persist();
+    return true;
+  }
+  // the fire's events (fire.js emit): said once a change is seen
+  ringEvent(key, type, more = {}) { const F = this.fires; if (F && typeof F.emit === 'function') F.emit(type, { key, ...more }); }
+  // each sync: burning low (under LOW_H of wood in all, once a burn), down to coals, gone cold; wet wood keeping a ring
+  // that has enough pieces from catching (once, until it changes)
+  ringWatch(key, b) {
+    const F = this.fires, st = F.state(key), was = this.ringSeen.get(key) || { st, low: false, wet: false };
+    const units = this.binUnits(b), burn = F.burn(key, units);
+    const low = !!(burn && burn.left < LOW_H), c = woodCount(units), wet = st !== 'burning' && !!b.at.armed && c.wet > 0 && !lights(c) && c.n >= LIGHT_PIECES;
+    if (this.ringSeen.has(key)) {
+      if (low && !was.low) this.ringEvent(key, 'low', { left: burn.left });
+      if (was.st === 'burning' && st === 'coals' && !((F.get(key) || {}).out > 0)) this.ringEvent(key, 'coals'); // (not while it is being put out)
+      if ((was.st === 'coals' || was.st === 'burning') && (st === 'none' || st === 'laid')) this.ringEvent(key, 'out', { doused: !!this.dousedNow });
+      if (wet && !was.wet) this.ringEvent(key, 'wet');
+    }
+    this.dousedNow = false;
+    this.ringSeen.set(key, { st, low: low || (was.low && !!burn && burn.left < LOW_H + 0.05), wet });
   }
   ringAt(site) { const f = site.layout.fire; return { x: f.x, y: f.y, z: f.z, a: f.a || 0 }; }
   // what the ring holds now, for its panel: { state, left (h burning), fuel (h in the ring), units, hours, kindling }
@@ -462,42 +520,21 @@ export class Chores {
     const kindling = units.some((u) => u.id === 'wood:branch' || u.id === 'firewood');
     return { state: st, left, fuel, hours: left + fuel, units, kindling, bin: b };
   }
-  // why the ring will not light now, or null: kindling first (a dead branch at least), two pieces in all (an old armful
-  // alone will do)
-  lightProblem(key) {
-    const st = this.fires.state(key), { units, bin } = this.fireInfo(key);
-    if (st === 'burning') return 'it is burning';
-    if (!units.length) return st === 'coals' ? 'wood in the ring first: a dead branch catches on the coals' : 'wood in the ring first: drag a branch or two into the fuel';
-    if (bin && bin.at && bin.at.wetUntil > this.now) return `the wood in the ring is wet through: ${this.covered(bin.at.x, bin.at.z) ? 'under the tarp it dries in a few hours' : 'the tarp pitched over the ring, and a few hours to dry'}`; // fb3 B
-    if (units.some((u) => u.id === 'firewood')) return null;
-    if (!units.some((u) => u.id === 'wood:branch')) return 'logs will not light on their own: a dead branch for kindling';
-    if (units.length < 2) return 'one branch is not a fire: another piece of wood';
-    return null;
+  // fb5 A: what the ring at `key` is short of, as chips (fire.js ringNeed): [{ kind, text, n?, item?, lead? }] or null
+  // (burning, or enough dry wood in it); with no key, the ring of the site you are at
+  fireNeeds(key = null) {
+    const k = key || this.hereKey();
+    if (!k || !this.fires) return null;
+    const b = this.fuelBin(k);
+    return this.fires.ringNeed(k, this.binUnits(b));
   }
-  // held: the kindling laid under the wood, then a match to the bark (the ring's kindling, a branch or two, catches; the
-  // rest burns in turn). opts: the hold's own (the key held: E, the book's BookHold)
-  light(site, key, opts = {}) {
-    const F = this.fires, p = this.player, at = this.ringAt(site), start = 0;
-    if (this.lightProblem(key)) return null;
-    this.fuelBin(key, site);
-    return hold.begin({
-      id: 'fire-light', label: 'The fire', phases: LIGHT, at: start, crouch: !opts.book, near: { x: p.x, z: p.z, r: 2.5 }, ...opts,
-      onPhase: (i) => {
-        if (i === 0) { this.sound(woodKnock, { x: at.x, y: at.y + 0.2, z: at.z }, true); return; }
-        const b = this.fuelBin(key), units = this.binUnits(b);
-        const arm = units.find((u) => u.id === 'firewood'), br = units.filter((u) => u.id === 'wood:branch');
-        const take = arm ? [arm] : br.slice(0, units.length > 2 ? 2 : 1);
-        let h = 0; for (const u of take) h += this.takeFromBin(b, u);
-        if (!h) { hold.cancel(); return; }
-        const f = F.get(key); if (f) f.laid = 0;
-        F.kindle(key, at, this.now - 0.045, h); this.lit.add(key); // (blown on through the phase: it has caught)
-        this.syncFire(key, b);
-        this.note(`The bark catches and the kindling with it. The fire is going: about ${hoursWords(this.fireInfo(key).hours)} of wood in the ring.`, 5);
-        this.inv.emit('items'); this.persist();
-      },
-      onStop: (job) => { if (job.done === 1) this.note('The kindling is laid under the wood. Hold Light to put a match to it.', 3.5); },
-    });
-  }
+  // the one chip (the dot's line, stream E's moments): { kind, text, n?, item? } or null
+  fireNeed(key = null) { const n = this.fireNeeds(key); return n && n.length ? n[0] : null; }
+  hereKey() { const p = this.player, s = this.camp.nearestSite ? this.camp.nearestSite(p.x, p.z, 25, true) : null; return s ? keyOf(s) : null; }
+  // the ring's check (fire.js lightCheck): enabled when nothing is missing; why its first chip
+  lightCheck(key) { return this.fires.lightCheck(key, this.binUnits(this.fuelBin(key))); }
+  lightProblem(key) { const c = this.lightCheck(key); return c.enabled ? null : c.why; }
+  douseCheck(key) { return this.fires.douseCheck(key); }
   // held: water on it, stirred in, water again, the steam boiling up and the hiss, the coals cold; let go, it stays as
   // far as it got. What wood was still in the ring stays there, wet through, a fire laid.
   douse(site, key, opts = {}) {
@@ -513,19 +550,24 @@ export class Chores {
         this.steamAt = { x: at.x, y: at.y + 0.05, z: at.z }; this.steamT = Math.max(this.steamT, 1.4);
       },
       onPhase: (i) => {
-        if (i === 0) { const g = F.get(key); if (g && g.until > this.now) g.until = this.now; this.sound(hiss, pos, 1.2); } // drowned: no wood burning
+        if (i === 0) { // drowned: no wood burning, and what is left in the ring drowned with it (fb5 A: so it does not catch again by itself)
+          const g = F.get(key); if (g && g.until > this.now) g.until = this.now; this.sound(hiss, pos, 1.2);
+          const b = this.fuelBin(key);
+          if (b) { b.at.armed = false; for (const e of b.grid) if (!e.box && isWood(e.id)) e.data = { ...(e.data || {}), wet: WOOD_DRY.air }; this.inv.emit('items'); }
+        }
         if (i === 1) this.sound(hiss, pos, 0.7);
       },
       onDone: () => {
         F.douse(key); this.lit.delete(key); this.steamT = 2.6;
         const b = this.fuelBin(key); if (b) b.at.syncT = this.now;
-        this.note('The fire is out: drowned, stirred and drowned again, the ash cold to the back of a hand.', 5);
+        this.note('The fire is out.', 3);
+        this.dousedNow = true;
         this.syncFire(key, b);
         this.persist();
       },
       onStop: (job) => {
         F.douseK(key, job.done / DOUSE.length);
-        if (job.done > 0 && job.done < DOUSE.length) this.note(job.done === 1 ? 'The flames are out, but the coals are still hot under the ash. Hold Douse to finish it.' : 'Nearly out: the ash is still warm. Hold Douse to finish it.', 4);
+        if (job.done > 0 && job.done < DOUSE.length) this.note('The coals are still hot.', 3);
         this.persist();
       },
     });
@@ -753,9 +795,8 @@ export class Chores {
     this.cook.gesture = { t: 0, dur: 0.5, say: `Picking up the ${name}…` };
     this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, pc.kind === 'log');
     const n = this.armloads().reduce((s, c) => s + c.grid.reduce((k, e) => k + e.qty, 0), 0);
-    // (fb4 E, decision 2: at a camp, the evening's wood as have of need)
-    const ev = this.nightWood(), more = ev ? ` · ${ev.have} of ${ev.need} for the evening` : '';
-    this.note(where === 'your arms' ? `A ${name}, into the crook of your arm: ${word(n)} ${plural(n, 'piece')} of wood${more}.` : `A ${name}, into ${where}${more}.`, 2.5);
+    // (fb5 A: no standing count for the evening; the ring says what it is short of)
+    this.note(where === 'your arms' ? `A ${name} · ${n} in your arms.` : `A ${name}, into ${where}.`, 2);
     inv.emit('items');
     this.persist();
   }
@@ -779,8 +820,7 @@ export class Chores {
     this.redrawIn = 0.28;
     this.cook.gesture = { t: 0, dur: 0.5, say: 'Picking up the dead pole…' };
     this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, false);
-    const n = this.tarp.polesInReach();
-    this.note(`A dead pole, into ${where}: ${word(n)} ${plural(n, 'pole')} in reach (a tarp takes two with a tree, four alone).`, 3);
+    this.note(`A dead pole, into ${where}.`, 2.5);
     inv.emit('items');
     this.persist();
   }
@@ -908,7 +948,7 @@ export class Chores {
         for (let t = 0; t < 6 && !pc; t++) pc = this.pieceAt(key, 'pole', lx + nx * ((log.rad || 0.2) + 0.45 + t * 0.2), lz + nz * ((log.rad || 0.2) + 0.45 + t * 0.2), rng);
         if (!pc) pc = this.pieceAt(key, 'pole', p.x + (lx - p.x) * 0.4, p.z + (lz - p.z) * 0.4, rng, null, true);
         if (pc) { this.dropped.push(pc); this.dirty = true; this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, false); }
-        this.note('A straight dead pole off the log, its twigs trimmed: it lies by the log. E picks it up.', 4);
+        this.note('A pole off the log: it lies by it.', 3);
         this.persist();
       },
     });
@@ -949,7 +989,7 @@ export class Chores {
   // the ring or anywhere; a pile with only wood in it is drawn as a stacked woodpile (a layer for every few pieces), not
   // as the bag a pile of things is (containers.js). The old stack by the ring (s.piles, camp 2) becomes such a pile at
   // its spot once that site's ground is in.
-  woodOnly(c) { return c.item === 'pile' && c.where === 'ground' && c.at && c.grid.length > 0 && c.grid.every((e) => !e.box && isWood(e.id)); }
+  woodOnly(c) { return c.item === 'pile' && c.where === 'ground' && c.at && c.grid.length > 0 && c.grid.every((e) => !e.box && isWood(e.id)) && c.grid.some((e) => e.id !== 'pole'); } // (fb5 A: poles are fuel too, but a pile of poles alone lies as poles)
   pieceCount(c) { return c.grid.reduce((s, e) => s + e.qty, 0); }
   migratePiles() {
     const inv = this.inv;
@@ -1139,7 +1179,7 @@ export class Chores {
   restore() {
     const st = this.camp.state, d = st ? st.chores : save.read('chores'), F = this.fires;
     for (const key of this.lit) if (F && F.get(key)) F.douse(key); // another trip's fires
-    this.lit.clear();
+    this.lit.clear(); this.ringSeen.clear();
     this.s = blank(); this._dropped = []; this.dirty = true;
     this.tarp.restore(d && d.v === 2 ? d.tarps || [] : []); // fb4 E: the rigs pitched on this trip (another trip's come down)
     if (d && d.v === 1) { // hubs 3A's armfuls: a stack by a ring becomes two branches and a log an armful
@@ -1169,6 +1209,7 @@ export class Chores {
   }
 }
 const blank = () => ({ piles: {}, pints: 0, latrine: null, taken: {}, sawn: {} });
+const wetU = (u) => (u && u.e && u.e.data && u.e.data.wet > 0 ? 1 : 0); // fb5 A: a ring's piece is wet
 // a "random" that gives these numbers in turn (a saved piece's variant and bearing, for pieceAt)
 const seqRng = (xs) => { let i = 0; return () => xs[Math.min(xs.length - 1, i++)]; };
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
