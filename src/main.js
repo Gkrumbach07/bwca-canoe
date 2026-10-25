@@ -601,6 +601,13 @@ async function main() {
   hints.attach({ energy, weather, trip, fires, cards, packs, nearby, world, tarp });
   energy.onCue = (id) => hints.handles(id);
   pointer.teach = (id, text, o) => hints.next(id, text, o);
+  // content B: conversations (the owner's content pass of 2026-10-25: "npc convos"). The keepers are people: a past, things
+  // to talk about that open over the season, an arc of three or four beats with a payoff (a discount at their counter, a
+  // site nobody knows pencilled on the map, or one of stream C's one-of-a-kind things), the week's word from their own
+  // country (real lakes, sites and portages, pencilled), advice in their words, and a memory of your trips, catches and
+  // jobs (npcs.js, talk-*.js). Four more kinds of visitor. Nothing is said twice in a visit.
+  npcs.attach({ trip, fishing, loons, inventory, uniques: () => window.__game.uniques || null });
+  { const pm = shop.priceMul.bind(shop); shop.priceMul = (ep) => pm(ep) * npcs.dealAt(ep); } // an arc's discount at its own counter
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

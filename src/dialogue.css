@@ -43,6 +43,7 @@ body.paper-open #talk .barks { visibility: hidden; }
 #talk .convo .opt:hover { background: rgba(243, 236, 221, .08); color: var(--cream); }
 #talk .convo .opt em { font: 500 12px/1 var(--sc); letter-spacing: .1em; font-style: normal; color: rgba(220, 180, 105, .8); }
 #talk .convo .opt.task span { color: var(--gold); }
+#talk .convo .opt.arc span { color: var(--gold); font-style: italic; } /* content B: a keeper's story, its next beat ready */
 #talk .convo .opt.counter span { color: var(--sky); }
 #talk .convo .opt.dim span { color: rgba(243, 236, 221, .5); }
 #talk .convo .opt.bye span { color: rgba(243, 236, 221, .78); }
