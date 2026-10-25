@@ -63,6 +63,7 @@ import { FORAGE } from './forage.js'; // fb2 A
 import { KINDS } from './tasks.js'; // fb2 A
 import { cards } from './cards.js'; // wc B
 import { VERBS, verbsOf } from './items.js'; // wc D
+import { chipOf, missingOf } from './items.js'; // fb5 B
 import { withTentNeeds, pitchNeeds } from './tent.js'; // fb4 E
 import { Hints } from './hints.js'; // fb4 D
 
@@ -579,6 +580,12 @@ async function main() {
   // all the tabs; a greyed verb or button draws its checklist and next step (inv-ui.js needsHtml, decision 2) and a
   // thing's state its mark and tooltip line (inventory.status, stream C), their timers counted down with this clock.
   invUI.attach({ day });
+  // fb5 B: the items' words (the owner's third round of 2026-10-25: "only whats relevant … The item doesn't say what it
+  // can be used for"). Every item is the one schema (items.js: identity, onYou, uses or servings, kg; the tooltip draws
+  // name, identity, state, on you, uses, weight and nothing else), a state is a word, a hint and a timer (inventory.js),
+  // and a greyed verb shows its why and the first thing missing as a chip (items.js chipOf, inv-ui.js whyHtml), which
+  // the fire card and the dot read too. Nothing to wire: the chip's words for the console and the tests.
+  Object.assign(window.__game.items, { chipOf, missingOf });
   // fb4 D: the keys, the hints, the pace toast and the bobber (the owner's second round of 2026-10-25). The keys are the
   // round's set (title.js KEYMAP; the bindings above: R and N gone, dialogue.js's T gone, fishing.js's K now E keep and
   // Q let go). Onboarding hints, once a season each, and a toast whenever the pace changes (hints.js), run after the
