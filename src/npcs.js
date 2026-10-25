@@ -80,7 +80,7 @@ import { save } from './save.js';
 import { esc, word, fmtKm } from './hud.js';
 import { monthDay } from './astro.js';
 import { PRI } from './dialogue.js';
-import { HAND as KEEPER_HAND, MANNER as KEEPER_MANNER, OPEN as KEEPER_OPEN, NO_WORD, NO_PAST, ASK_PROMPT, ASK_DONE, MEM as MEM_WORDS, HOW as HOW_WORDS, RELS, COLLEGES, SUBJECTS, CITIES as K_CITIES } from './talk-keepers.js'; // content B
+import { HAND as KEEPER_HAND, MANNER as KEEPER_MANNER, OPEN as KEEPER_OPEN, NO_WORD, NO_PAST, ASK_PROMPT, ASK_DONE, TASK_THANKS, MEM as MEM_WORDS, HOW as HOW_WORDS, RELS, COLLEGES, SUBJECTS, CITIES as K_CITIES } from './talk-keepers.js'; // content B
 import { rumoursFor, leadIn, adviceFor } from './talk-rumours.js'; // content B
 import { Memory, FISH_WORD, GOOD_CM } from './talk-memory.js'; // content B
 import { VISITORS, VISITOR_HINTS } from './talk-visitors.js'; // content B
@@ -750,7 +750,7 @@ const NO_SELF = { oldtimer: 'Oh, I could go on. Another time.', kid: 'That’s e
 // what they say as you pass: their own, and the hour's and the weather's
 const REMARKS = {
   guide: ['Wind’s coming round to the west.', 'Good day for it, if you’re going in.', 'Watch the big stretches after noon.'],
-  ranger: ['Fires in the grates only, mind.', 'Nice to see a proper pack.', 'Hang your food tonight.'],
+  ranger: ['Fires in the grates only, mind.', 'Nice to see a proper pack.', 'Hang your food tonight.', 'Somebody left cans and glass in a fire grate. Pack it out, people.'],
   photographer: ['The light’s all wrong today.', 'Did you hear the loons last night?', 'Shh. A chickadee, on the rail.'],
   family: ['Don’t touch that, honey.', 'Have you been out long?', 'Is it always this buggy?'],
   oldtimer: ['Sit a minute, if you’ve a minute.', 'Hm. Another one going in.', 'Fish are biting, if you know how.'],
@@ -1337,6 +1337,7 @@ export class People {
     if (wet) pool.push('Wet one out there.', 'Shake off by the stove, if you like.');
     if (h < 9) pool.push('Early start, eh?');
     if (h >= 19) pool.push('Getting on for supper.');
+    if (v.arch === 'monitor' && KINDS.secchi) pool.push('The lake monitors always want more readings. Ask at the counter if there’s a disk to borrow.'); // content B: stream A's secchi notices
     const w = this.fresh(pool);
     return w ? { text: w, pri: PRI.ambient } : null;
   }
@@ -1815,7 +1816,7 @@ export class People {
     }
     if (!line) {
       const task = m.tasks.filter((x) => x.from === ep && x.day >= (last ?? -1e9) && x.day > (heard.task ?? -1e9)).pop();
-      if (task) { heard.task = task.day; line = this.fresh(W('task').map((s) => fillC(s, { title: task.title }))); }
+      if (task) { heard.task = task.day; line = this.fresh((man !== 'gruff' && TASK_THANKS[task.kind]) || W('task').map((s) => fillC(s, { title: task.title }))); } // (stream A's new kinds in their own words)
     }
     if (!line) {
       const f = M.bigFish(Math.max(last ?? -1e9, (heard.fish ?? -1e9) + 1));

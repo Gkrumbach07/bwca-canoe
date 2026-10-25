@@ -255,6 +255,17 @@ export const MEM = {
     keen: ['It’s been {n} days! I was worried!', 'You’re back! It’s been forever. Well, {n} days.'], precise: ['{N} days since your last visit.', 'It’s been {n} days. Welcome back.'],
   },
 };
+// a job of stream A's new kinds (task-kinds.js), thanked in its own words as you come in (gruff keepers keep to MEM.task)
+export const TASK_THANKS = {
+  deadfall: ['Thanks for clearing that portage. The next party won’t know it was ever blocked.', 'You cut that blowdown out? Good. The crew’s three weeks behind.'],
+  litter: ['Thanks for packing out that site. Cans and a torn tarp, they told me. People.', 'That site’s clean again because of you. Leave No Trace isn’t a slogan, it’s a chore.'],
+  secchi: ['The lake monitors were glad of that reading. Every number counts.', 'Your Secchi reading went in the book. Twenty years of them now.'],
+  loons: ['Your loon count went to the DNR. The pairs are holding, they say.', 'Thanks for the loon count. Chicks and all.'],
+  report: ['Your trip report’s pinned by the board. People read those.', 'Good report. Half my customers will paddle that loop now.'],
+  canoe: ['You brought the rental back! It was a week overdue and somebody’s deposit.', 'Thanks for paddling that canoe home. The number on the bow is ours.'],
+  lunch: ['The shore lunch class ate well because of you.', 'Those fish fed the whole class. Fried in the pan on the rocks, the old way.'],
+};
+
 // "How am I doing?": a sum of the season, then their judgement, by manner
 export const HOW = {
   none: { warm: 'You’ve not been out yet, dear. Go on, the lake’s waiting.', dry: 'So far you’ve done some shopping.', gruff: 'Haven’t been out yet.', 'old hand': 'You’ve not wet a paddle yet. Go on.', keen: 'You haven’t even been out yet! Go!', precise: 'No trips on record yet.' },
