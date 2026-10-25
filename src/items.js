@@ -152,19 +152,30 @@ export const LURE_TAKES = {
 export const TAKE_STEPS = [[1.4, 'excellent'], [1.25, 'great'], [1.1, 'good'], [1.0, 'OK']];
 export const takeWord = (x) => { for (const [at, w] of TAKE_STEPS) if (x >= at - 1e-9) return w; return 'neutral'; };
 const FISH_WORD = { walleye: 'walleye', smallmouth: 'smallmouth', pike: 'pike', laketrout: 'lake trout', crappie: 'crappie', perch: 'perch' };
-// the fish that matter for a lure, best first: three at most, and one neutral at most (the one that shows what it isn't for)
-export function takesLine(lure) {
-  const t = LURE_TAKES[lure]; if (!t) return '';
+// the owner, after the words (2026-10-25: "the lure description can use icons for the neutral, great, etc"): each word is
+// a step of five, drawn as pips beside the fish's name (inv-ui.js tipHtml); the word stays as the pips' title
+export const TAKE_STEP = { neutral: 1, OK: 2, good: 3, great: 4, excellent: 5 };
+const upFirst = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+// the fish that matter for a lure, best first: three at most, and one neutral at most (the one that shows what it isn't
+// for), as [{ fish: 'Walleye', word: 'great', step: 4 }]
+export function takesList(lure) {
+  const t = LURE_TAKES[lure]; if (!t) return [];
   const list = Object.entries(t).sort((a, b) => b[1] - a[1]), out = [];
   for (const [sp, x] of list) {
     if (out.length >= 3) break;
     const w = takeWord(x);
-    out.push(`${FISH_WORD[sp] || sp} ${w}`);
+    out.push({ fish: upFirst(FISH_WORD[sp] || sp), word: w, step: TAKE_STEP[w] || 1 });
     if (w === 'neutral') break;
   }
-  const line = out.join(' · ');
-  return line.charAt(0).toUpperCase() + line.slice(1);
+  return out;
 }
+// the same in words: "Pike great · lake trout great · walleye neutral"
+export function takesLine(lure) {
+  const line = takesList(lure).map((q) => `${q.fish.toLowerCase()} ${q.word}`).join(' · ');
+  return upFirst(line);
+}
+// a lure's or the bait's On-you line: the words, and the list the tooltip draws as pips
+export const takesOn = (lure) => ({ label: '', value: takesLine(lure), takes: takesList(lure) });
 
 const KINDS = new Set(['food', 'snack', 'meal', 'fish', 'bait', 'lure', 'tool', 'gear', 'map', 'container', 'long', 'firewood', 'forage']);
 export const FOOD_KINDS = ['food', 'snack', 'meal', 'fish', 'forage'];
@@ -317,7 +328,7 @@ for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['s
 }
 // the takes are fishing.js SPECIES[*].lures, the three best, written out (the comparison number of bait and lures)
 defineItem({ id: 'leeches', name: 'Leeches', kind: 'bait', kg: 0.025, stack: 12, price: 4, sold: 12, lure: 'leech', icon: 'leeches', identity: 'Live ribbon leeches · 1 a bite',
-  onYou: [O('', takesLine('leech'))] });
+  onYou: [takesOn('leech')] });
 defineItem({ id: 'firewood', name: 'An armful of firewood', kind: 'firewood', w: 3, h: 2, kg: 6, burn: 2.4, identity: 'Split wood, an armful' });
 // camp 2 (the camp redone, 2026-10-24): firewood is found lying about, a piece at a time (chores.js), and burns by the
 // piece (burn: game hours on a fire, fire.js); a few pieces are carried in the arms, a hand's armload (woodarms, drawn by
@@ -344,12 +355,12 @@ for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['s
 
 // --- the tackle --------------------------------------------------------------------------------------------------
 // the identity says how it swims; the comparison is what takes it, a word per fish (takesLine, LURE_TAKES above)
-defineItem({ id: 'lure:jig', name: 'Jig & twister tail', kind: 'lure', kg: 0.01, price: 3, lure: 'jig', identity: 'Lead-head jig · hops the bottom', onYou: [O('', takesLine('jig'))] });
-defineItem({ id: 'lure:mepps', name: 'Mepps spinner', kind: 'lure', kg: 0.01, price: 6, lure: 'spinner', identity: 'Spinner · runs 1 m down', onYou: [O('', takesLine('spinner'))] });
-defineItem({ id: 'lure:daredevle', name: 'Red-and-white Daredevle', kind: 'lure', kg: 0.02, price: 7, lure: 'spoon', identity: 'Spoon · runs 2.2 m down', onYou: [O('', takesLine('spoon'))] });
-defineItem({ id: 'lure:rapala', name: 'Jointed Rapala', kind: 'lure', kg: 0.02, price: 12, lure: 'crankbait', identity: 'Balsa crankbait · dives 3.4 m', onYou: [O('', takesLine('crankbait'))] });
-defineItem({ id: 'lure:silverminnow', name: 'Johnson Silver Minnow', kind: 'lure', kg: 0.02, price: 8, lure: 'silverminnow', identity: 'Weedless spoon', onYou: [O('', takesLine('silverminnow'))] });
-defineItem({ id: 'lure:lazyike', name: 'Lazy Ike', kind: 'lure', kg: 0.02, price: 9, lure: 'lazyike', identity: 'Banana plug · a slow wobble', onYou: [O('', takesLine('lazyike'))] });
+defineItem({ id: 'lure:jig', name: 'Jig & twister tail', kind: 'lure', kg: 0.01, price: 3, lure: 'jig', identity: 'Lead-head jig · hops the bottom', onYou: [takesOn('jig')] });
+defineItem({ id: 'lure:mepps', name: 'Mepps spinner', kind: 'lure', kg: 0.01, price: 6, lure: 'spinner', identity: 'Spinner · runs 1 m down', onYou: [takesOn('spinner')] });
+defineItem({ id: 'lure:daredevle', name: 'Red-and-white Daredevle', kind: 'lure', kg: 0.02, price: 7, lure: 'spoon', identity: 'Spoon · runs 2.2 m down', onYou: [takesOn('spoon')] });
+defineItem({ id: 'lure:rapala', name: 'Jointed Rapala', kind: 'lure', kg: 0.02, price: 12, lure: 'crankbait', identity: 'Balsa crankbait · dives 3.4 m', onYou: [takesOn('crankbait')] });
+defineItem({ id: 'lure:silverminnow', name: 'Johnson Silver Minnow', kind: 'lure', kg: 0.02, price: 8, lure: 'silverminnow', identity: 'Weedless spoon', onYou: [takesOn('silverminnow')] });
+defineItem({ id: 'lure:lazyike', name: 'Lazy Ike', kind: 'lure', kg: 0.02, price: 9, lure: 'lazyike', identity: 'Banana plug · a slow wobble', onYou: [takesOn('lazyike')] });
 
 // --- camp gear and tools -----------------------------------------------------------------------------------------
 // a tent's number is the night's rest in it (rest by morning, out of 100); the bag's and the pad's, what they add

@@ -174,6 +174,7 @@ export function effectOnYou(f, { paddle = false } = {}) {
 }
 // a lure's takes as a word per fish (items.js takesLine), for a signature spoon
 const takesOf = (lure) => (lure && A_ITEMS && typeof A_ITEMS.takesLine === 'function' ? A_ITEMS.takesLine(lure) : '');
+const takesOn = (lure) => (A_ITEMS && typeof A_ITEMS.takesOn === 'function' ? A_ITEMS.takesOn(lure) : { label: '', value: takesOf(lure) });
 
 // an item's definition: A's, then the stand-in's or the shop's own
 export function itemDef(id) {
@@ -200,7 +201,7 @@ export function itemFor(it) {
   if (f) {
     const long = LONG_FAMILY.has(it.family);
     return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: long ? 'long' : it.lure ? 'lure' : 'gear', w: f[0], h: f[1], kg: it.kg || 0.5, price: it.price || 0, icon: f[2], stack: it.lure ? 3 : 1,
-      identity: FAMILY_ID[it.family] || '', onYou: [...(takesOf(it.lure) ? [{ label: '', value: takesOf(it.lure) }] : []), ...effectOnYou(it.effect, { paddle: it.family === 'paddle' })],
+      identity: FAMILY_ID[it.family] || '', onYou: [...(takesOf(it.lure) ? [takesOn(it.lure)] : []), ...effectOnYou(it.effect, { paddle: it.family === 'paddle' })],
       ...(long ? { long: it.family === 'paddle' ? 'paddle' : it.family } : {}), ...(it.slot ? { slot: it.slot } : {}), ...(it.lure ? { lure: it.lure } : {}) });
   }
   return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: it.kind === 'lure' ? 'lure' : 'gear', w: 1, h: 1, kg: it.kg || 0.2, price: it.price || 0, icon: it.id, onYou: effectOnYou(it.effect) });
@@ -1687,7 +1688,13 @@ export function tipHtml(d, e, { shelf = false } = {}) {
   const qty = st > 1 && (e.qty || 1) > 1 ? `×${e.qty}` : '';
   const price = shelf ? `${e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'}${e.qty > 1 ? ` for ${e.qty}` : ''}` : '';
   const foot = [uses, [price, qty, kgText(kg)].filter(Boolean).map(esc).join(' · ')].filter(Boolean).join('<span class="sep">·</span>');
-  return `<b class="nm">${esc(name)}</b>${identity ? `<span class="id">${esc(identity)}</span>` : ''}${stt && !stt.bar ? statusHtml(stt) : ''}${effsHtml(effs)}${on.length ? `<div class="on">${on.map((o) => `<span>${o.label ? `<b>${esc(o.label)}</b> ` : ''}${esc(o.value ?? '')}</span>`).join('')}</div>` : ''}<span class="f">${foot}</span>`;
+  return `<b class="nm">${esc(name)}</b>${identity ? `<span class="id">${esc(identity)}</span>` : ''}${stt && !stt.bar ? statusHtml(stt) : ''}${effsHtml(effs)}${on.length ? `<div class="on">${on.map((o) => (Array.isArray(o.takes) && o.takes.length ? takesHtml(o.takes) : `<span>${o.label ? `<b>${esc(o.label)}</b> ` : ''}${esc(o.value ?? '')}</span>`)).join('')}</div>` : ''}<span class="f">${foot}</span>`;
+}
+// the owner (2026-10-25: "the lure description can use icons for the neutral, great, etc"): a lure's or the bait's takes
+// as the fish's name and five pips, as many filled as the step (neutral 1 … excellent 5, items.js TAKE_STEP); excellent
+// in the warm accent; the word is the title and the label read aloud
+function takesHtml(list) {
+  return list.map((q) => { const n = Math.max(1, Math.min(5, q.step | 0)); return `<span class="take${n === 5 ? ' top' : ''}" title="${esc(`${q.fish}: ${q.word}`)}" aria-label="${esc(`${q.fish}: ${q.word}`)}"><span class="fw">${esc(q.fish)}</span><span class="pips" aria-hidden="true">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= n ? 'on' : ''}"></i>`).join('')}</span></span>`; }).join('');
 }
 // fb5 B (the owner, after the first tooltips: "icons with +integers, stacked, no percent"): what an item does to the
 // energy bar's needs, a chip each in a row, the bar's own icon and the points out of 100, then when ("a handful")
