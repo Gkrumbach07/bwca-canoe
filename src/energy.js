@@ -14,7 +14,7 @@ function poolWords(pool) {
     if (k === 'meal') meals += e.qty; else if (k === 'snack' || k === 'forage') snacks += e.qty; else if (k === 'hot') hot += e.qty;
   }
   const n = (x, one) => `${x === 1 ? (one === 'hot meal' ? 'a' : '1') : x} ${one}${x === 1 ? '' : 's'}`;
-  const parts = [hot ? n(hot, 'hot meal') : '', meals ? n(meals, 'meal') : '', snacks ? n(snacks, 'snack') : ''].filter(Boolean);
+  const parts = [hot ? n(hot, 'hot meal') : '', meals ? `${n(meals, 'meal')} to cook` : '', snacks ? n(snacks, 'snack') : ''].filter(Boolean); // (a raw meal wants the pot first, and says so: polish B)
   return { meals, snacks, hot, words: parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] || '' };
 }
 
