@@ -298,6 +298,14 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 .ig-tip .stt .sep { color: var(--ink-faint); }
 .ig-tip .stt .tmr { font: 600 13.5px/1.3 var(--sans); font-variant-numeric: tabular-nums; }
 .ig-tip .stt .chip { margin-left: 2px; }
+/* the effects on the energy bar's needs: the HUD's dark chip, its icon in the bar's colour (hud.css #air's --e-*), +points */
+.ig-tip .eff { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 5px; margin-top: 1px; --e-green: #7fb58f; --e-warmth: #bcd8e8; --e-rest: #dd8d5b; --e-food: #dcb469; --e-water: #5f9dd2; }
+.ig-tip .ef { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 4px; border-radius: 3px; background: rgba(22, 26, 28, .86); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35); color: var(--c, #f3ecdd); }
+.ig-tip .ef svg { display: block; width: 15px; height: 15px; }
+.ig-tip .ef b { font: 700 13px/1 var(--sans); font-variant-numeric: tabular-nums; color: #f3ecdd; }
+.ig-tip .ef i { font: 700 10px/1 var(--sc); letter-spacing: .08em; color: var(--c, #f3ecdd); font-style: normal; }
+.ig-tip .ef-food { --c: var(--e-food); } .ig-tip .ef-water { --c: var(--e-water); } .ig-tip .ef-rest { --c: var(--e-rest); } .ig-tip .ef-warmth { --c: var(--e-warmth); } .ig-tip .ef-energy { --c: var(--e-green); }
+.ig-tip .eff em { font: italic 13.5px/1.2 var(--serif); color: var(--ink-soft); margin-left: 2px; }
 
 /* --- fb5 B (decision 6): the one thing missing, a chip; a greyed verb's line is its why and that chip ------------------ */
 .chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 1px 7px 2px; border-radius: 10px; border: 1px solid rgba(138, 114, 80, .55); background: rgba(138, 114, 80, .14); font: 600 12.5px/1.35 var(--sans); font-style: normal; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: baseline; }

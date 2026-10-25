@@ -85,9 +85,13 @@ export function check(enabled, why, needs = [], next = '', more = {}) {
 //   name                 def.name (a fish adds its length)
 //   identity             def.identity: what it is, a few words (≤ 50 chars): "Fallen deadwood, thin", "Spinning rod · 6 ft"
 //   state                inventory.status(ref): its label, a short `hint` and its timer ("Wet · dries by a fire, 30 min")
-//   on you               def.onYou: [{ label, value }], what it does to you eaten, drunk, worn or slept in, in numbers
-//                        ("Food +6 % a handful", "Night's rest full (60 % without)"); the comparison numbers that help
-//                        choose between bags, clothes, paddles, rods, lures and canoes sit here too ("Walleye ×1.25 · …")
+//   on you               def.onYou: what it does to you eaten, drunk, worn or slept in. What moves the energy bar's
+//                        needs is an effect, { need, add, when? }: need 'food' | 'water' | 'rest' | 'warmth' | 'energy',
+//                        add the points it gives out of 100 (an integer), drawn as the bar's own icon and "+6", in a row
+//                        (the owner, after the first tooltips: "icons with +integers, stacked, no percent"); when, a few
+//                        words after the row ("a handful", "a night"). Anything else is a line, { label, value }: the
+//                        numbers that help choose a paddle or a rod, and a lure's or the bait's takes as a word per fish
+//                        (takesLine: "Pike great · lake trout great · walleye neutral")
 //   uses                 def.uses / def.servings / def.litres, and the entry's `left`: a small bar, "19 of 20"
 //   weight               def.kg (a fish's from its length)
 // Nothing says what it is for, how another system uses it, or what to do next: the fire, the tarp, the tent and the rod
@@ -131,6 +135,37 @@ export function chipOf(needs, why = '') {
 
 export const ITEMS = {};
 
+// --- fb5 B: a lure's takes, a word per fish -----------------------------------------------------------------------
+// fishing.js SPECIES[*].lures (and its silverminnow/lazyike additions), written out: how much more often a fish takes this
+// lure than its everyday one. The owner (2026-10-25, after the tooltips): "per fish a word, not numbers", on the scale
+// neutral · OK · good · great · excellent; anything under 1 is neutral. The thresholds spread the real values (1.0 to
+// 1.6): 1.0 OK, 1.1 good, 1.25 great, 1.4 excellent.
+export const LURE_TAKES = {
+  jig: { walleye: 1.25, smallmouth: 0.9, pike: 0.5, laketrout: 0.9, crappie: 1.1, perch: 1.0 },
+  spinner: { walleye: 0.7, smallmouth: 1.0, pike: 1.1, laketrout: 0.3, crappie: 0.5, perch: 0.4 },
+  spoon: { walleye: 0.5, smallmouth: 0.5, pike: 1.3, laketrout: 1.3, crappie: 0.2, perch: 0.2 },
+  crankbait: { walleye: 0.9, smallmouth: 1.2, pike: 1.0, laketrout: 0.5, crappie: 0.4, perch: 0.3 },
+  leech: { walleye: 1.0, smallmouth: 1.0, pike: 0.6, laketrout: 0.1, crappie: 1.3, perch: 1.3 },
+  silverminnow: { walleye: 0.5, smallmouth: 0.85, pike: 1.6, laketrout: 0.3, crappie: 0.3, perch: 0.4 },
+  lazyike: { walleye: 1.35, smallmouth: 1.0, pike: 0.9, laketrout: 0.6, crappie: 0.45, perch: 0.45 },
+};
+export const TAKE_STEPS = [[1.4, 'excellent'], [1.25, 'great'], [1.1, 'good'], [1.0, 'OK']];
+export const takeWord = (x) => { for (const [at, w] of TAKE_STEPS) if (x >= at - 1e-9) return w; return 'neutral'; };
+const FISH_WORD = { walleye: 'walleye', smallmouth: 'smallmouth', pike: 'pike', laketrout: 'lake trout', crappie: 'crappie', perch: 'perch' };
+// the fish that matter for a lure, best first: three at most, and one neutral at most (the one that shows what it isn't for)
+export function takesLine(lure) {
+  const t = LURE_TAKES[lure]; if (!t) return '';
+  const list = Object.entries(t).sort((a, b) => b[1] - a[1]), out = [];
+  for (const [sp, x] of list) {
+    if (out.length >= 3) break;
+    const w = takeWord(x);
+    out.push(`${FISH_WORD[sp] || sp} ${w}`);
+    if (w === 'neutral') break;
+  }
+  const line = out.join(' · ');
+  return line.charAt(0).toUpperCase() + line.slice(1);
+}
+
 const KINDS = new Set(['food', 'snack', 'meal', 'fish', 'bait', 'lure', 'tool', 'gear', 'map', 'container', 'long', 'firewood', 'forage']);
 export const FOOD_KINDS = ['food', 'snack', 'meal', 'fish', 'forage'];
 
@@ -172,14 +207,15 @@ export function verbsFor(d) {
 export function verbsOf(id) { const d = itemDef(id); return d ? d.verbs || [] : []; }
 
 // --- fb5 B: the schema's lines --------------------------------------------------------------------------------------
-// an on-you line
+// an on-you line, and an effect on the bar's needs (the points out of 100, an integer)
 const O = (label, value) => ({ label, value });
-const pct = (x) => `${Math.round(x * 100)} %`;
-// what eating one serving does: Food (the food need) and Energy (the bar), the serving named when there are several
+const EF = (need, x, when = '') => ({ need, add: Math.round(x * 100), ...(when ? { when } : {}) });
+// what eating one serving does: food (the food need) and energy (the bar), the serving named when there are several
 function eatOnYou(d) {
   if (!d.eat) return [];
-  const e = d.eat, out = [O('Food', `+${pct(e.food)}${d.serving ? ` ${d.serving}` : ''}`)];
-  if (Number.isFinite(e.lift) && e.lift > 0) out.push(O('Energy', `+${pct(e.lift)}`));
+  const e = d.eat, out = [EF('food', e.food)];
+  if (Number.isFinite(e.lift) && e.lift > 0) out.push(EF('energy', e.lift));
+  if (d.serving) out[out.length - 1].when = d.serving;
   return out;
 }
 // the identity of a def that gives none: those defined in other files (chores.js, tarp.js, forage.js, the shop) by id,
@@ -280,8 +316,8 @@ for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['s
   defineItem({ id: `fish:${sp}`, name, kind: 'fish', w: 1, h: 3, kg: 0.8, species: sp, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Fresh catch' });
 }
 // the takes are fishing.js SPECIES[*].lures, the three best, written out (the comparison number of bait and lures)
-defineItem({ id: 'leeches', name: 'Leeches', kind: 'bait', kg: 0.025, stack: 12, price: 4, sold: 12, lure: 'leech', icon: 'leeches', identity: 'Live ribbon leeches',
-  onYou: [O('Bait', '1 a bite'), O('', 'Crappie ×1.3 · perch ×1.3 · walleye ×1.0')] });
+defineItem({ id: 'leeches', name: 'Leeches', kind: 'bait', kg: 0.025, stack: 12, price: 4, sold: 12, lure: 'leech', icon: 'leeches', identity: 'Live ribbon leeches · 1 a bite',
+  onYou: [O('', takesLine('leech'))] });
 defineItem({ id: 'firewood', name: 'An armful of firewood', kind: 'firewood', w: 3, h: 2, kg: 6, burn: 2.4, identity: 'Split wood, an armful' });
 // camp 2 (the camp redone, 2026-10-24): firewood is found lying about, a piece at a time (chores.js), and burns by the
 // piece (burn: game hours on a fire, fire.js); a few pieces are carried in the arms, a hand's armload (woodarms, drawn by
@@ -307,28 +343,28 @@ for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['s
 }
 
 // --- the tackle --------------------------------------------------------------------------------------------------
-// the identity says how it swims; the comparison is what takes it, the three best of fishing.js SPECIES[*].lures
-defineItem({ id: 'lure:jig', name: 'Jig & twister tail', kind: 'lure', kg: 0.01, price: 3, lure: 'jig', identity: 'Lead-head jig · hops the bottom', onYou: [O('', 'Walleye ×1.25 · crappie ×1.1 · perch ×1.0')] });
-defineItem({ id: 'lure:mepps', name: 'Mepps spinner', kind: 'lure', kg: 0.01, price: 6, lure: 'spinner', identity: 'Spinner · runs 1 m down', onYou: [O('', 'Pike ×1.1 · smallmouth ×1.0 · walleye ×0.7')] });
-defineItem({ id: 'lure:daredevle', name: 'Red-and-white Daredevle', kind: 'lure', kg: 0.02, price: 7, lure: 'spoon', identity: 'Spoon · runs 2.2 m down', onYou: [O('', 'Pike ×1.3 · lake trout ×1.3 · walleye ×0.5')] });
-defineItem({ id: 'lure:rapala', name: 'Jointed Rapala', kind: 'lure', kg: 0.02, price: 12, lure: 'crankbait', identity: 'Balsa crankbait · dives 3.4 m', onYou: [O('', 'Smallmouth ×1.2 · pike ×1.0 · walleye ×0.9')] });
-defineItem({ id: 'lure:silverminnow', name: 'Johnson Silver Minnow', kind: 'lure', kg: 0.02, price: 8, lure: 'silverminnow', identity: 'Weedless spoon', onYou: [O('', 'Pike ×1.6 · smallmouth ×0.85 · walleye ×0.5')] });
-defineItem({ id: 'lure:lazyike', name: 'Lazy Ike', kind: 'lure', kg: 0.02, price: 9, lure: 'lazyike', identity: 'Banana plug · a slow wobble', onYou: [O('', 'Walleye ×1.35 · smallmouth ×1.0 · pike ×0.9')] });
+// the identity says how it swims; the comparison is what takes it, a word per fish (takesLine, LURE_TAKES above)
+defineItem({ id: 'lure:jig', name: 'Jig & twister tail', kind: 'lure', kg: 0.01, price: 3, lure: 'jig', identity: 'Lead-head jig · hops the bottom', onYou: [O('', takesLine('jig'))] });
+defineItem({ id: 'lure:mepps', name: 'Mepps spinner', kind: 'lure', kg: 0.01, price: 6, lure: 'spinner', identity: 'Spinner · runs 1 m down', onYou: [O('', takesLine('spinner'))] });
+defineItem({ id: 'lure:daredevle', name: 'Red-and-white Daredevle', kind: 'lure', kg: 0.02, price: 7, lure: 'spoon', identity: 'Spoon · runs 2.2 m down', onYou: [O('', takesLine('spoon'))] });
+defineItem({ id: 'lure:rapala', name: 'Jointed Rapala', kind: 'lure', kg: 0.02, price: 12, lure: 'crankbait', identity: 'Balsa crankbait · dives 3.4 m', onYou: [O('', takesLine('crankbait'))] });
+defineItem({ id: 'lure:silverminnow', name: 'Johnson Silver Minnow', kind: 'lure', kg: 0.02, price: 8, lure: 'silverminnow', identity: 'Weedless spoon', onYou: [O('', takesLine('silverminnow'))] });
+defineItem({ id: 'lure:lazyike', name: 'Lazy Ike', kind: 'lure', kg: 0.02, price: 9, lure: 'lazyike', identity: 'Banana plug · a slow wobble', onYou: [O('', takesLine('lazyike'))] });
 
 // --- camp gear and tools -----------------------------------------------------------------------------------------
-// a tent's and a pad's number is the night's rest in it; the bag's, the night's rest with it and without
-defineItem({ id: 'aframe', name: 'A-frame tent', kind: 'gear', w: 2, h: 4, kg: 3.0, price: 0, slot: 'tent', icon: 'tent', identity: 'Two poles and a fly', onYou: [O('Night’s rest', '85 %')] });
-defineItem({ id: 'dome', name: 'Dome tent', kind: 'gear', w: 2, h: 4, kg: 2.8, price: 50, slot: 'tent', icon: 'dome', identity: 'Freestanding dome', onYou: [O('Night’s rest', '100 %')] });
-defineItem({ id: 'fourseason', name: 'Four-season tent', kind: 'gear', w: 2, h: 5, kg: 3.6, price: 95, slot: 'tent', icon: 'dome', identity: 'Dome with a vestibule', onYou: [O('Night’s rest', '100 %'), O('Wet gear', 'dry by morning')] });
-defineItem({ id: 'sleepingbag', name: 'Sleeping bag', kind: 'gear', w: 2, h: 3, kg: 1.8, price: 0, icon: 'bag', identity: 'Down bag · good to 0 °C', onYou: [O('Night’s rest', 'full (60 % without)')] });
-defineItem({ id: 'clothes', name: 'Clothes bag', kind: 'gear', w: 2, h: 2, kg: 2.5, price: 0, icon: 'clothes', uses: 1, identity: 'Fleece, wool socks and a dry shirt', onYou: [O('Warmth', '×2 for 2 h, changed into')] });
+// a tent's number is the night's rest in it (rest by morning, out of 100); the bag's and the pad's, what they add
+defineItem({ id: 'aframe', name: 'A-frame tent', kind: 'gear', w: 2, h: 4, kg: 3.0, price: 0, slot: 'tent', icon: 'tent', identity: 'Two poles and a fly', onYou: [EF('rest', 0.85, 'a night')] });
+defineItem({ id: 'dome', name: 'Dome tent', kind: 'gear', w: 2, h: 4, kg: 2.8, price: 50, slot: 'tent', icon: 'dome', identity: 'Freestanding dome', onYou: [EF('rest', 1, 'a night')] });
+defineItem({ id: 'fourseason', name: 'Four-season tent', kind: 'gear', w: 2, h: 5, kg: 3.6, price: 95, slot: 'tent', icon: 'dome', identity: 'Dome with a vestibule', onYou: [EF('rest', 1, 'a night'), O('Wet gear', 'dry by morning')] });
+defineItem({ id: 'sleepingbag', name: 'Sleeping bag', kind: 'gear', w: 2, h: 3, kg: 1.8, price: 0, icon: 'bag', identity: 'Down bag · good to 0 °C', onYou: [EF('rest', 0.4, 'a night')] });
+defineItem({ id: 'clothes', name: 'Clothes bag', kind: 'gear', w: 2, h: 2, kg: 2.5, price: 0, icon: 'clothes', uses: 1, identity: 'Fleece, wool socks and a dry shirt', onYou: [EF('warmth', 0.3, 'changed into dry')] }); // (energy.js: warmth back twice as fast for 2 h, up to 0.15 an hour more)
 defineItem({ id: 'pot', name: 'Cook pot', kind: 'tool', w: 2, h: 2, kg: 1.2, price: 0, icon: 'pot', identity: 'Blackened pot and lid' });
 // fb4 (decision 7: the tarp is pitched like the tent, on a rig with anchors; tarp.js pitches it and says what is missing)
 defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, price: 0, icon: 'tarp', identity: 'Nylon tarp · 3 × 3 m' });
 // fb5 A/B: a pole is deadwood (it burns about like a log, decision 1) that also holds up a tarp; tarp.js counts it by id
 defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'firewood', w: 1, h: 3, kg: 0.9, stack: 4, burn: 1.5, icon: 'pole', identity: 'Straight deadwood · 2 m' });
-defineItem({ id: 'pad', name: 'Sleeping pad', kind: 'gear', w: 2, h: 3, kg: 0.6, price: 30, identity: 'Closed-cell foam', onYou: [O('Night’s rest', '+5 %')] });
-defineItem({ id: 'yokepads', name: 'Portage yoke pads', kind: 'gear', w: 2, h: 1, kg: 0.4, price: 15, icon: 'yoke', identity: 'Foam pads for the yoke', onYou: [O('Canoe carry', 'energy ×0.85')] });
+defineItem({ id: 'pad', name: 'Sleeping pad', kind: 'gear', w: 2, h: 3, kg: 0.6, price: 30, identity: 'Closed-cell foam', onYou: [EF('rest', 0.05, 'a night')] });
+defineItem({ id: 'yokepads', name: 'Portage yoke pads', kind: 'gear', w: 2, h: 1, kg: 0.4, price: 15, icon: 'yoke', identity: 'Foam pads for the yoke', onYou: [O('Canoe carry', 'effort ×0.85')] });
 // the water treatments: how long till the bottle is drinkable is their comparison
 defineItem({ id: 'tablets', name: 'Purifying tablets', kind: 'tool', kg: 0.05, price: 2, slot: 'filter', uses: 20, identity: 'Iodine tablets · 30 min to treat' });
 defineItem({ id: 'pump', name: 'Pump filter', kind: 'tool', w: 1, h: 2, kg: 0.4, price: 35, slot: 'filter', identity: 'Hand pump · 5 min to treat' });
@@ -337,7 +373,7 @@ defineItem({ id: 'saw', name: 'Folding saw', kind: 'tool', w: 1, h: 3, kg: 0.4, 
 defineItem({ id: 'camera', name: 'Camera, 35 mm', kind: 'tool', w: 2, h: 1, kg: 0.6, price: 25, identity: 'Film camera, a roll in it' });
 // fb3 B: the bottle is an item (decision 12), fixed in the first pocket cell; `left` is the litres in it. Nothing drinks
 // for you: thirst falls on its own and comes back only when you Drink (energy.drink).
-defineItem({ id: 'bottle', name: 'Water bottle', short: 'Bottle', kind: 'tool', w: 1, h: 1, kg: 0.15, price: 0, litres: 2, icon: 'bottle', identity: 'Two-litre bottle', onYou: [O('Water', '+19 % a gulp')] });
+defineItem({ id: 'bottle', name: 'Water bottle', short: 'Bottle', kind: 'tool', w: 1, h: 1, kg: 0.15, price: 0, litres: 2, icon: 'bottle', identity: 'Two-litre bottle', onYou: [EF('water', 0.19, 'a gulp')] });
 
 // --- the long items: held in a hand, lying in the canoe or on the ground -------------------------------------------
 // a paddle's comparison is its cruise and its effort; a rod's, how long its line holds in the red

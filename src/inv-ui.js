@@ -44,6 +44,9 @@ const A_INV = import.meta.glob('./inventory.js', { eager: true })['./inventory.j
 // camp.js and tent.js, and pulling them in this early (journal.js imports this file) reads tent.js's TENT_SIZE before it
 // is set (the merge test, 2026-10-24)
 const A_HOLD = import.meta.glob('./hold.js', { eager: true })['./hold.js'] || null;
+// fb5 B: the energy bar's own need icons (hud.js NEED_ICON: a snowflake, zz, a fork and knife, a drop), so an item's
+// effect reads as the bar it moves
+const A_HUD = import.meta.glob('./hud.js', { eager: true })['./hud.js'] || null;
 // what the screens work with: main.js's fb B block (attach), else stream A's singleton, else the stand-in
 const ctx = { inventory: null, profile: null, player: null, energy: null, hud: null, shop: null, outfitter: null, stub: null, nearby: null, hold: null, audio: null, journal: null, packs: null, cards: null, day: null };
 export function attach(o) { Object.assign(ctx, o); return ctx; }
@@ -166,9 +169,11 @@ export function effectOnYou(f, { paddle = false } = {}) {
   if (Number.isFinite(f.stability) && f.stability !== 1) out.push({ label: 'Steady', value: times(f.stability) });
   if (Number.isFinite(f.carry) && f.carry !== 1) out.push({ label: 'Carrying', value: `energy ${times(f.carry)}` });
   if (Number.isFinite(f.snap) && f.snap !== 1) out.push({ label: 'Line', value: times(f.snap) });
-  if (Number.isFinite(f.sleepAdd) && f.sleepAdd) out.push({ label: 'Night’s rest', value: `+${Math.round(f.sleepAdd * 100)} %` });
+  if (Number.isFinite(f.sleepAdd) && f.sleepAdd) out.push({ need: 'rest', add: Math.round(f.sleepAdd * 100), when: 'a night' });
   return out;
 }
+// a lure's takes as a word per fish (items.js takesLine), for a signature spoon
+const takesOf = (lure) => (lure && A_ITEMS && typeof A_ITEMS.takesLine === 'function' ? A_ITEMS.takesLine(lure) : '');
 
 // an item's definition: A's, then the stand-in's or the shop's own
 export function itemDef(id) {
@@ -195,7 +200,7 @@ export function itemFor(it) {
   if (f) {
     const long = LONG_FAMILY.has(it.family);
     return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: long ? 'long' : it.lure ? 'lure' : 'gear', w: f[0], h: f[1], kg: it.kg || 0.5, price: it.price || 0, icon: f[2], stack: it.lure ? 3 : 1,
-      identity: FAMILY_ID[it.family] || '', onYou: effectOnYou(it.effect, { paddle: it.family === 'paddle' }),
+      identity: FAMILY_ID[it.family] || '', onYou: [...(takesOf(it.lure) ? [{ label: '', value: takesOf(it.lure) }] : []), ...effectOnYou(it.effect, { paddle: it.family === 'paddle' })],
       ...(long ? { long: it.family === 'paddle' ? 'paddle' : it.family } : {}), ...(it.slot ? { slot: it.slot } : {}), ...(it.lure ? { lure: it.lure } : {}) });
   }
   return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: it.kind === 'lure' ? 'lure' : 'gear', w: 1, h: 1, kg: it.kg || 0.2, price: it.price || 0, icon: it.id, onYou: effectOnYou(it.effect) });
@@ -1671,7 +1676,8 @@ export function tipHtml(d, e, { shelf = false } = {}) {
   const name = `${d.name}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}`;
   const identity = typeof d.identity === 'string' ? d.identity : e.hull ? 'A canoe' : '';
   const stt = !shelf ? statusOf(e) : null;
-  const on = (Array.isArray(d.onYou) ? d.onYou : []).filter((o) => o && (o.label || o.value));
+  const all = (Array.isArray(d.onYou) ? d.onYou : []).filter(Boolean), effs = all.filter((o) => o.need && Number.isFinite(o.add));
+  const on = all.filter((o) => !o.need && (o.label || o.value));
   const n = d.uses ?? d.servings ?? d.litres ?? null, left = n != null ? (Number.isFinite(e.left) ? e.left : n) : null;
   let uses = '';
   if (n != null && !shelf && (n > 1 || d.litres)) {
@@ -1681,7 +1687,20 @@ export function tipHtml(d, e, { shelf = false } = {}) {
   const qty = st > 1 && (e.qty || 1) > 1 ? `×${e.qty}` : '';
   const price = shelf ? `${e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'}${e.qty > 1 ? ` for ${e.qty}` : ''}` : '';
   const foot = [uses, [price, qty, kgText(kg)].filter(Boolean).map(esc).join(' · ')].filter(Boolean).join('<span class="sep">·</span>');
-  return `<b class="nm">${esc(name)}</b>${identity ? `<span class="id">${esc(identity)}</span>` : ''}${stt && !stt.bar ? statusHtml(stt) : ''}${on.length ? `<div class="on">${on.map((o) => `<span>${o.label ? `<b>${esc(o.label)}</b> ` : ''}${esc(o.value ?? '')}</span>`).join('')}</div>` : ''}<span class="f">${foot}</span>`;
+  return `<b class="nm">${esc(name)}</b>${identity ? `<span class="id">${esc(identity)}</span>` : ''}${stt && !stt.bar ? statusHtml(stt) : ''}${effsHtml(effs)}${on.length ? `<div class="on">${on.map((o) => `<span>${o.label ? `<b>${esc(o.label)}</b> ` : ''}${esc(o.value ?? '')}</span>`).join('')}</div>` : ''}<span class="f">${foot}</span>`;
+}
+// fb5 B (the owner, after the first tooltips: "icons with +integers, stacked, no percent"): what an item does to the
+// energy bar's needs, a chip each in a row, the bar's own icon and the points out of 100, then when ("a handful")
+const ENERGY_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="5" width="14" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2.6" y="6.6" width="7" height="2.8" fill="currentColor"/></svg>'; // (the bar itself, its green)
+const NEED_WORD = { food: 'Food', water: 'Water', rest: 'Rest', warmth: 'Warmth', energy: 'Energy' };
+function needIcon(k) {
+  if (k === 'energy') return ENERGY_ICON;
+  const I = A_HUD && A_HUD.NEED_ICON; return I && I[k] ? I[k] : '';
+}
+export function effsHtml(effs) {
+  if (!effs || !effs.length) return '';
+  const when = effs.map((o) => o.when).filter(Boolean)[0] || '';
+  return `<div class="eff">${effs.map((o) => { const ic = needIcon(o.need); return `<span class="ef ef-${esc(o.need)}" title="${esc(NEED_WORD[o.need] || o.need)}">${ic || `<i>${esc(NEED_WORD[o.need] || o.need)}</i>`}<b>${o.add >= 0 ? '+' : '−'}${Math.abs(o.add)}</b></span>`; }).join('')}${when ? `<em>${esc(when)}</em>` : ''}</div>`;
 }
 function showTip(el, g, e) {
   hideTip();
@@ -2441,4 +2460,4 @@ function chime() {
 
 // for the tests and the console
 export const dragging = () => !!drag;
-export const invUI = { icon, iconAt, iconUrl, grid, itemDef, defineItem, model, attach, refresh, placeCheck, firstFit, CELL, GRIDS, SCREENS, openHere, verbsFor, fireObject, needsHtml, statusOf, timeWords, gameHours, whyHtml, chipHtml, firstMissing, tipHtml, statusHtml, get drag() { return drag; } };
+export const invUI = { icon, iconAt, iconUrl, grid, itemDef, defineItem, model, attach, refresh, placeCheck, firstFit, CELL, GRIDS, SCREENS, openHere, verbsFor, fireObject, needsHtml, statusOf, timeWords, gameHours, whyHtml, chipHtml, firstMissing, tipHtml, statusHtml, effsHtml, get drag() { return drag; } };

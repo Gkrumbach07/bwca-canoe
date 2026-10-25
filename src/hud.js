@@ -84,7 +84,7 @@ const flake = () => {
   }
   return d;
 };
-const NEED_ICON = {
+export const NEED_ICON = { // (exported for fb5 B: the item tooltips draw the same icons)
   warmth: `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="${flake()}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   rest: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 7.5h6l-6 6.5h6M9.5 2h5l-5 5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="square"/></svg>',
   food: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v4.2M5.25 1.5v4.2M7.5 1.5v4.2M3 5.7c0 1.9 4.5 1.9 4.5 0M5.25 7v7.5M12 14.5V1.5c2.2 1.3 2.6 5.6 0 7.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
