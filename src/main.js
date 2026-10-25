@@ -285,8 +285,18 @@ async function main() {
   // anvils, the fish and the lures, the wildlife's parts), behind the title card and off the main thread where the
   // browser can (KHR_parallel_shader_compile), so none compiles in the frame it first shows. The light count never
   // changes (daycycle.js), so these programs serve day and night alike.
-  renderer.compileAsync(scene, camera).catch(() => {});
-  renderer.compileAsync(tiles.prewarmGroup(), camera, scene).catch(() => {}); // and every species the tiles may bring
+  // polish A: compiled with the composer's target bound (post.js draws the scene into it, never onto the canvas). The
+  // tone mapping and the output colour space are program parameters that depend on whether a target is bound, so a
+  // compile against the canvas made programs the composer's draws never used, and a hidden thing (the rain, the cloud
+  // deck, the rise rings) still compiled in the frame it first showed.
+  const prewarm = (root) => {
+    renderer.setRenderTarget(post.composer.readBuffer);
+    const done = renderer.compileAsync(root, camera, scene).catch(() => {});
+    renderer.setRenderTarget(null);
+    return done;
+  };
+  prewarm(scene);
+  prewarm(tiles.prewarmGroup()); // and every species the tiles may bring
 
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon };
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
@@ -429,7 +439,7 @@ async function main() {
   Object.assign(window.__game.items, { VERBS, verbsOf });
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
-  renderer.compileAsync(scene, camera).catch(() => {});
+  prewarm(scene); // polish A: with the composer's target bound, as above
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -481,6 +491,7 @@ async function main() {
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
     water.update(dt * ts, player.x, player.z);
+    ripples.lapse = player.boost || 1; // polish A: the hull's bubbles age at the travel's time-lapse (wake.js)
     ripples.update(dt * ts);
     updateClouds(clouds, dt * ts, camera.position.x, camera.position.z);
     day.update(dt * ts);

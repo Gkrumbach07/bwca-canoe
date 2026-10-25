@@ -240,9 +240,6 @@ export class SettingsPanel {
       b.addEventListener('click', () => this.show(s.id));
       nav.appendChild(b);
     }
-    const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'reset'; reset.textContent = 'Reset to defaults';
-    reset.addEventListener('click', () => this.settings.reset());
-    nav.appendChild(reset);
   }
   show(id) {
     this.section = id;
@@ -299,6 +296,17 @@ export class SettingsPanel {
       this.controls.set(row.key, { row, input, value });
       this.refresh(row.key);
     }
+    // polish A: Reset to defaults is a button at the foot of the rows, not a section of the nav (chosen there, it left the
+    // section's form up unchanged, which read like a failed page); it says "restored" for a moment when pressed
+    const foot = document.createElement('div'); foot.className = 'sfoot';
+    const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'reset'; reset.textContent = 'Reset to defaults';
+    const note = document.createElement('span'); note.className = 'note'; note.textContent = 'defaults restored'; note.setAttribute('aria-live', 'polite');
+    reset.addEventListener('click', () => {
+      this.settings.reset();
+      note.classList.add('show'); clearTimeout(this.noteTimer); this.noteTimer = setTimeout(() => note.classList.remove('show'), 2200);
+    });
+    foot.append(reset, note);
+    f.appendChild(foot);
     clearInterval(this.timer);
     if (sec.rows.some((r) => r.type === 'status')) this.timer = setInterval(() => this.refreshStatus(), 1000);
   }

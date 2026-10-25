@@ -561,8 +561,9 @@ export class PhotoCamera {
     if (h < rise + 1.25) return 'dawn';
     if (h < 11) return 'morning';
     if (h < 14) return 'midday';
-    if (h < set - 1.25) return 'afternoon';
-    if (h < set + 0.6) return 'dusk';
+    if (h < set - 2) return 'afternoon';
+    if (h < set - 0.4) return 'evening';   // from about two hours before sunset (a 7:30 pm print in July is an evening one)
+    if (h < set + 0.8) return 'dusk';      // to the end of civil dusk, about three quarters of an hour after the sun goes
     return 'night';
   }
   // the shutter (and the film wound on): two clicks through a narrow band, then the lever's swish or the thumbwheel
@@ -678,7 +679,7 @@ const CSS = `
 #photo .flash { position: absolute; inset: 0; background: #fff6e4; opacity: 0; }
 #photo .flash.go { animation: photo-flash .34s ease-out; }
 @keyframes photo-flash { 0% { opacity: .5; } 100% { opacity: 0; } }
-body.photo-up #air > div:not(#lines) { visibility: hidden; }
+body.photo-up #air > div:not(#lines) { visibility: hidden; transition: none; } /* at once: a row mid-fade (the balance arc as the sea eases) kept its .7 s visibility delay and showed through the frame */
 body.photo-up #lines { bottom: 118px; }
 body.photo-up #photo-print { bottom: 118px; }
 body.shell-open #photo, body.shell-open #photo-print, body.paper-open #photo-print { display: none; }

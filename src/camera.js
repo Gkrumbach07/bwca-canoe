@@ -36,18 +36,23 @@ const SIGHT = { margin: 0.12, step: 0.18, wall: 4.0, shelf: 1.5, post: 2.5, ceil
 const PULL = { min: 0.45, margin: 0.3, inW: 18, hold: 0.35, hyst: 0.3, outW: 3.2, door: 1.1, doorReach: 3.0, side: 1.4 };
 // fb2 E: the see-through. Every vegetation material's fragment (camera.js seeThrough patches them before they compile:
 // the same two programs, no new one) is dropped by a 4 x 4 ordered dither where it lies in a cone round the line from
-// the camera (uSeeA) to the walker's chest (uSeeB): uSee.y metres across at the camera, uSee.z at the walker, stopping
-// uSee.w short of him, at most uSee.x strong (a ghost of the tree stays); and anything within uSeeLens of the lens goes
-// altogether, so the camera is never inside a bough. Only in the pass drawn from the chase camera itself (not the
-// water's mirror, the title's orbit or a close-up), and not in the shadow pass (the depth material is left alone).
+// the camera (uSeeA) to the walker's chest (uSeeB), stopping uSee.w short of him, at most uSee.x strong (a ghost of the
+// tree stays); and anything within uSeeLens of the lens goes altogether, so the camera is never inside a bough. Only
+// in the pass drawn from the chase camera itself (not the water's mirror, the title's orbit or a close-up), and not
+// in the shadow pass (the depth material is left alone).
+// polish A: the cone opens from the lens (uSee.y m there, uSee.z m more per metre along the line, at least 0.9 m at the
+// walker), so on the screen it is a disc about the walker a little bigger than he is, with a soft rim; it was 1 m
+// across at the lens, which at the lens is the whole frame, so half the view was a screen door on the carry and at a
+// forest edge. The lens bubble is smaller for the same reason.
 export const SEE = {
-  uSee: { value: new THREE.Vector4(0, 1.0, 1.3, 0.05) },
-  uSeeLens: { value: new THREE.Vector2(0.7, 1.5) },
+  uSee: { value: new THREE.Vector4(0, 0.12, 0.13, 0.05) },
+  uSeeLens: { value: new THREE.Vector2(0.45, 0.8) },
   uSeeA: { value: new THREE.Vector3() },
   uSeeB: { value: new THREE.Vector3() },
 };
 const SEE_STRENGTH = 0.95;
 const SHOULDER = 0.75; // m: how far right of him the view moves looking all the way down (ChaseCamera.update)
+const CARRY_PITCH = 0.1; // rad: the chase's tilt on foot under the canoe (0.27 elsewhere; polish A)
 const seePars = /* glsl */ `
 uniform vec4 uSee;
 uniform vec2 uSeeLens;
@@ -63,8 +68,8 @@ float seeFade() {
   float L = length( ab );
   if ( L < 0.05 ) return 0.0;
   vec3 u = ab / L;
-  float s = dot( ap, u ), d = length( ap - u * clamp( s, 0.0, L ) ), r = mix( uSee.y, uSee.z, clamp( s / L, 0.0, 1.0 ) );
-  float cone = ( 1.0 - smoothstep( 0.6 * r, r, d ) ) * smoothstep( -0.3, 0.2, s ) * ( 1.0 - smoothstep( L - uSee.w - 0.4, L - uSee.w, s ) );
+  float s = dot( ap, u ), d = length( ap - u * clamp( s, 0.0, L ) ), r = uSee.y + clamp( s, 0.0, L ) * max( uSee.z, 0.9 / L );
+  float cone = ( 1.0 - smoothstep( 0.45 * r, r, d ) ) * smoothstep( -0.3, 0.2, s ) * ( 1.0 - smoothstep( L - uSee.w - 0.4, L - uSee.w, s ) );
   float lens = 1.0 - smoothstep( uSeeLens.x, uSeeLens.y, length( ap ) );
   return max( cone * uSee.x, lens * step( 0.001, uSee.x ) );
 }`;
@@ -445,13 +450,16 @@ export class ChaseCamera {
     this.lastHeading = player.heading;
     if (this.mode === 'first') return this.updateFirst(dt, player);
     let yaw, pitch;
+    const carry = carrying || player.mode === 'carry';
     if (footLook) {
       // the camera sits behind the walker, who faces the look; the mouse's tilt swings the camera up or down
       if (this.first) { this.viewYaw = player.heading; this.viewPitch = 0; }
       this.userYaw = 0; this.userPitch = 0;
       this.forwardYaw = this.viewYaw;
       yaw = player.heading + Math.PI;
-      pitch = clamp(this.pitch - this.viewPitch * 0.6, -0.1, 1.1);
+      // polish A: under the canoe the chase sits lower (CARRY_PITCH), so the hull overhead is seen nearly edge-on with
+      // his body and legs under its gunwales, as a portager looks from behind; from the usual tilt its stern hid him
+      pitch = clamp((carry ? CARRY_PITCH : this.pitch) - this.viewPitch * 0.6, -0.1, 1.1);
     } else {
       // behind the canoe: a drag orbits, and the view eases back behind the hull once the drag is over
       this.userYaw = wrap(this.userYaw);
@@ -496,7 +504,7 @@ export class ChaseCamera {
     // to the ground a stride ahead (fb2 E, for stream A's crosshair: looking all the way down, the middle of the screen is
     // on the ground 1.2 m in front of him, where a branch at his feet can be pointed at, as over-the-shoulder games look
     // down at the hands)
-    let ahead = 2, ly = ty + 0.4;
+    let ahead = 2, ly = ty + (carry ? -0.3 : 0.4); // (polish A: on the carry the look is at his chest, under the hull, not at the hull)
     if (footLook) {
       const s = clamp(-this.viewPitch / 1.0, 0, 1);
       if (s > 0) {
