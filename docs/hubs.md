@@ -444,9 +444,11 @@ Seven streams, joined in this order on `claude/fb-1024` (main ff2593b):
   overhead, a pack on the back and a thing in each hand; the rest waits at the trail head for the walk back or Q's
   fetch. No G and no meals on the clock in Adventure: a snack is eaten from the pack standing still, a meal or a fish
   is cooked first. Older saves become items.
-- **The book and the store** (B: `src/inv-ui.js`, `journal.js`, `outfitter.js`, `shop.js`, `props.js`). J opens one
+- **The book and the store** (B: `src/inv-ui.js`, `journal.js`, `outfitter.js`, `shop.js`, `props.js`). J opened one
   book: the journal (catches, tasks, lakes, trips, photos) on paper, and with Tab (or I) the pack on a canvas mat, as
-  Tarkov grids with drawn icons (drag, R to turn, Shift-drag to split, Ctrl-click to send on, a right-click menu). The
+  Tarkov grids with drawn icons (drag, R to turn, Shift-drag to split, Ctrl-click to send on, a right-click menu).
+  (Since the second 2026-10-25 round I is the one key, Pack and Journal are tabs inside the book; J, L, Tab inside the
+  book and Ctrl-click are gone, and R turns a thing only while you drag it.) The
   shelves, the lure wall and a new map table under the store's right window open Witcher's two panes, yours on the
   left and the shelf on the right; a buy goes into the slot it is dropped on or the first with room, and is refused
   politely when nothing fits. The counter is services only.
@@ -463,7 +465,8 @@ Seven streams, joined in this order on `claude/fb-1024` (main ff2593b):
   the water (969 to 1,021).
 - **Dialogue** (F: `src/dialogue.js`). A passing remark shows by the speaker's head with their name and role for 3 s
   plus 60 ms a character, pinned to the screen's edge when they are off it; a store is one room, so one line at a time
-  and never more than two on screen; T shows the last six. E on a person opens a conversation at the bottom of the
+  and never more than two on screen; T showed the last six (gone in the second 2026-10-25 round: a conversation
+  opens with "Last time · …" instead). E on a person opens a conversation at the bottom of the
   view: numbered choices, Esc to leave, the view turned to them.
 - **Nature and fishing** (G: `src/mist.js`, `fog.js`, `forage.js`, `fishing.js`). The mist is part of the fog, with no
   edge anywhere. Strawberries, juneberries, blueberries, raspberries and pin cherries, chanterelles, hedgehogs and
@@ -876,16 +879,17 @@ closes: the fire (fuel, the grate, the ash, the meters, Light / Cook / Eat / Dou
 reach); the shelves, the lure wall, the map table, the board and the counter as they were. No card for the hung barrel
 (E lowers it), the tent (Rest until… is a small dial), the latrine, the bench, people, the dock or the water.
 
-**The book (J, or I at the pack) is two-pane: left is always you, right is what you're facing** (the owner's decision
+**The book (I) is two-pane: left is always you, right is what you're facing** (the owner's decision
 after the streams were built, 2026-10-24, after a design pass over Minecraft, Valheim, The Long Dark, Tarkov, Zomboid
 and DayZ: DayZ's vicinity panel for the book, Minecraft's chest screen for the rest). Left: the body slots and a tab per
-container you carry, one grid open at a time. Right: **Here**, everything within reach that isn't on you: each container
-on the ground as its own grid, loose wood and dropped things as a pile, the canoe's load when you stand beside it (*Set
-everything out* · *Load everything here*, held), and at an outfitter what they keep for you. Here is always there while
-the book is open, never a tab; "Nothing here" when the ground is empty; only it scrolls. Q on a container or a pile on
+container you carry, one grid open at a time. Right: everything within reach that isn't on you; until the second 2026-10-25 round
+one **Here** pane, since then **a tab each**: The canoe when it is beside you (*Set everything out* · *Load everything
+here*, held), each container on the ground, Wood (the woodpiles and the wood lying about), The ground (loose things),
+and Keeping at an outfitter; one grid open at a time on each side, drags between any left tab and any right one or onto
+a tab; "Nothing within reach" when there are none. Q on a container or a pile on
 the ground opens the book with that thing's grid lit in Here. Drag both ways; a drag off the page is the ground at your
-feet. No Take-all and no sort button (the owner said no); Ctrl-click to the next container with room stays, and E on
-the dot stays the quick way for a single thing. The fire card and the shelf keep their own right pane; the shelf's
+feet. No Take-all and no sort button (the owner said no); Ctrl-click to the next container with room stayed until the
+second 2026-10-25 round took it out, and E on the dot stays the quick way for a single thing. The fire card and the shelf keep their own right pane; the shelf's
 left pane is the body and the tabs (the canoe's containers at the dock and Keeping are tabs too, so a thing is bought
 straight into them), and since the 2026-10-25 round **the fire card's left pane lists what is in reach** as tabs beside
 yours (the owner: "when im by the fire i cant see the items like portage pack"): a pack set down by the ring, a pile, the
@@ -901,7 +905,8 @@ armload (wood, a hand), piles (anything), the canoe (up to its weight), the keep
 item in the parent grid and gets its own tab, "in the pack" or "in your hand"; double-clicking the item jumps to its
 tab. Right-click lists an item's verbs and nothing else (Eat, a serving, instant; Pitch; Hang, which says "carry it to a
 tree and point at the limb"; Put in hand; Use; Cook, in the fire card; since 2026-10-25 Drink and Drink up on the
-bottle, Put on the stringer, Change into dry clothes, Pitch over… on the tarp); a greyed verb says why. Hover: the name,
+bottle, Put on the stringer, Change into dry clothes, Pitch over… on the tarp, which the second 2026-10-25 round made
+*Pitch the tarp* on trees or poles); a greyed verb says why, and since that round as a checklist with the next step. Hover: the name,
 the weight, a one-line purpose and the numbers (`def.stats`: what it does, by how much, when), with the uses or
 servings left on a small bar on the icon. The journal side shows the tasks' states plainly (taken, in progress, done,
 claimed).
@@ -1133,3 +1138,125 @@ about 1.2 exchanges a minute, the first after two minutes.
   paddling), as before.
 - At camp the clock runs at the idle 12× while you walk at life (decision 6 as specified): three pieces of wood took
   45 game minutes.
+
+## The owner's second feedback of 2026-10-25
+
+The owner's words, after the first 10-25 round went live: the book's right side should be a tab per thing around you
+(the canoe, each container on the ground, the wood, the ground) rather than one Here pane; "if I can't use something,
+I want to know exactly why", as a checklist, a timer or a quantity out of a total, with the next step, and every item
+with a state saying its state and what to do; a canoe nosed in was too easy to get back into by accident (a teleport out
+facing away), so pushing off should be a held E and Get in should put you in where it floats; too many keys (Tab,
+Shift-Tab, Ctrl, R, J, L, T), one key for the book, and hints that show the keys when they first apply, with a clearer
+mark of the pace; the bobber and the "needs leeches" strip flashing; a tarp that floats in the air, to be pitched like
+the tent on trees or sticks; crafting as needing other things in reach, not recipes; the head missing in first person
+when paused. Built as five streams on main ff482af and joined on `claude/fb4-1025b`:
+
+- **The shore and the figure** (A, `packs.js`, `player.js`, `canoe.js`, `pointer.js`, `nearby.js`): a beached canoe's
+  E is *hold E Push it off* (a 0.35 s grip, so a tap moves nothing; the hold walks it out until both ends float, and you
+  stand in the shallows); afloat, *E Get in* puts you in it where it floats, facing as it lies, and what you wear goes
+  into the hull with one note. Every held verb reads "hold E …"; a greyed verb carries its checklist and next step, and
+  E on it says them. The head is hidden only while the camera is at the eye.
+- **The book** (B, `inv-ui.js`, `journal.js`, `cards.js`): the right pane is tabs (The canoe, each ground container,
+  Wood, The ground, Keeping); with a card or a shelf open the left holds every tab, yours first. I is the one key (Pack
+  and Journal tabs inside). The checklists render under a greyed verb in the right-click menu and under a card's button
+  (ticks, "2 of 4 pieces", countdowns on the game clock, the next step in italics); an item's state is a mark on its icon
+  and a line in its tooltip.
+- **Needs and statuses** (C, `items.js`, `inventory.js`, `cook.js`, `fire.js`, `energy.js`, `forage.js`): `check`,
+  `NEED.qty / step / timer`, `inventory.status(ref)` (wet, drying, treating, cooking, hot, raw, low, empty…). Wood is wet
+  piece by piece (20 min of rain on it in the open; dry by a lit fire in 30 min, in dry air in 3 h); a fire lights on
+  three dry pieces with a dry branch among them. The fire's Light and Douse, cooking, the bottle's treating, the wet
+  clothes: all checklists or timers.
+- **The keys and the hints** (D, `hints.js`, `title.js`, `hud.js`, `settings.js`, `fishing.js`, `dialogue.js`): J, L, T,
+  R and Ctrl-click gone (reflections a Settings row; a conversation opens with "Last time · …"); seven onboarding hints
+  once a season (V, Shift, the shelf, I, 1 2 3, H, right-click), the pace toast; the bobber's two writers made one; the
+  New season confirm describes the season.
+- **The tarp and the chores' checklists** (E, `tarp.js`, `tent.js`, `hang.js`, `chores.js`): a ridge line between two
+  trees 3–7 m apart, or a tree and two poles, or four poles (the fewest poles first); the pole a new item, found or cut
+  from a down log with the saw; a ghost, three held phases, `tarp.covers(x, z)` keeping what is under it dry; Q held
+  takes it down and the poles come back. Checklists for the tent's stages, the hang (it names a limb), the down log, the
+  latrine and the evening's wood ("have of 8").
+
+### The join, played through (the second round of 2026-10-25)
+
+Real keys and the real mouse through the headless driver, 1440 × 900, Adventure from the title, the site at
+(-18802, 17562) on Lake One:
+
+| Day, clock | What was played | Result |
+|---|---|---|
+| 1, 07:40 | Title: New season → the confirm ("The season under way: Adventure · home Lake One · between trips · $40 · the aluminium canoe and a pack · 1 outfitter known.") → Adventure → 30 Lake One | On foot at the lodge's door; the V hint after 2 s |
+| 07:45 | The provisions shelf (the shelf hint first): a supper, a breakfast, trail mix and tablets dragged onto The canoe's tab; the barrel the same | the food into the pack in the canoe; the barrel kept by the outfitters (fixed: into the canoe); $5 left |
+| 07:57 | To the dock (the Shift hint); the book: the meals into the barrel within The canoe's tab, the pack onto the back; E Get in | in 0.04 m and 0.4° from where the hull lay; "Your pack goes into the canoe."; the right-click hint when the dot greyed Q |
+| 08:00 | Paddle: the 1 2 3 hint at 10.4 s; 2 | "Trip pace ×2 · the clock runs ×8 on the water, ×6 on a trail, ×24 at camp"; the hint stayed up after 2 (fixed) |
+| 09:25 | 2.9 km to the site, nose in, E Go ashore | beached |
+| 09:26 | A tap of E on the hull; then E held | the tap moved it 0 m; the push 2.7 s, the hull afloat, you in 0.45 m of water; E Get in 0.03 m / 0.2°; nosed in again and out |
+| — | (Before the day) the book's drop while wading after a push-off | the tarp set down 0.68 m under the water (fixed: onto dry ground within 2.5 m, else greyed "You're standing in the water") |
+| 09:34 | I: The canoe a tab; the pack and the barrel by their straps onto The ground; then barrel → chest, pack → back | each became its own tab (Duluth pack, Tackle box in it, Barrel), then yours |
+| 09:40–12:35 | Four poles, four branches and two logs with the dot | "four poles in reach (a tarp takes two with a tree, four alone)"; "4 of 8 for the evening" |
+| 12:40 | E at the ring: the fire's card (Pack, Tackle box, Barrel, Armload, The ground on the left); three branches into the fuel; a woodpile 6.8 m off | Light ready: "Laying and lighting it · 14 min" |
+| 12:51 | The tarp: right-click › Pitch the tarp by the ring, the ghost, hold E | ✓ Poles 4/4; ridge line, sheet, guys (11 min); it covers the ring |
+| 13:02–13:43 | Rain forced for 41 game minutes | the ring's branches dry; the woodpile wet ("wet 3 h"), blue marks on the icons, the tooltip "Wet · Out of the rain first: under the tarp or into a pack, then 30 min by a lit fire" |
+| 13:49 | The wet wood into the ring, the dry out | Light greyed: "Needs dry wood · A dry branch for kindling 0 of 1 · Dry wood in the ring 0 of 3 · Wet: 3 pieces 3 h · → Gather dry wood"; one dry branch back filled the ring with no room for more and the list still asked for wood (fixed: take the wet out first; and dry wood within reach is named, fixed) |
+| 14:04 | Two wet logs out onto the ground by the ring, two dry branches in, hold Light | "about 2 h of wood"; Burns for 2 h 21 counting down, Catching < 1 min, Wet wood 1 piece drying 28 min; the logs dry by the fire |
+| 14:05–14:29 | The pot onto the grate, the supper beside it, Cook, Eat | "Cooking · 23 min" counting down; food 0.99 |
+| 14:39–15:33 | Drink; fill at the water's edge (a tablet); Drink up; fill the empty bottle | "Treating · 30 min · 1.4 L drinkable now; 0.6 L drinkable in 30 min"; empty and filled: Drink greyed "Treating 2 L under a tablet · 30 min · Wait 30 min" |
+| 15:34 | Wet through from the afternoon's rain: right-click the clothes bag | "A dry set · You are wet through: right-click › Change into dry clothes"; Change: "Wet set · 8 h · Dries by a lit fire in 30 min…" (the note said twice: fixed) |
+| 15:37–15:53 | The tent on the pad (Pitch from the book, hold E) | four stages, 16 min |
+| 15:59–16:08 | The barrel: right-click › Hang | greyed: "A limb 4–7½ m up within 3½ m: none here → Walk to the white pine 13 m south-west: a limb 5 m up"; there, "hold E Hang · the white pine · a limb 5 m up", hung 3 m up |
+| 16:10 | The latrine | "E Sit · rest +5 %, once a day", E Stand up |
+| 16:25–17:04 | The bench by the fire | the wet set "Drying · 5 min"; the fire went to coals and it read "Wet set · 33 min · Dries by a lit fire in 30 min" (fixed: the time left by a fire) |
+| 17:10–21:13 | Rest until… dusk at the tent; the H hint at −2° | — |
+| 21:15–21:26 | The rod from The canoe to a hand; 6.6 m from the canoe (the leeches out of reach); F; the bobber rig for 120 frames; the jig; a crappie, 21 cm; E | the bobber shown all 120 frames, 0 flips, 0 strip mutations, 0 prompt changes ("Needs leeches · the bucket in a hand, by you or in the canoe"); E kept it in the hand (the dot is off while the rod is up) |
+| 21:26 | V to first person, Esc | the paused view draws the figure with its head and headlamp |
+| 21:30–07:01 | Rest until 7:00 | "Monday, July 13 · sunrise 5:22 am · Day 2" |
+| 2, 07:05 | hold Q on the tarp | three phases; "The tarp is down and folded. It goes in the Duluth pack #3, the four poles with it." |
+| 07:17–07:35 | hold Q strike; hold E lower the barrel; pack up | the pack full (tarp, poles): the tent lay rolled where it stood; with both hands full its E Pick up only said "No room for all of it" after E (fixed: greyed with the checklist); Load everything here said "no room for the things on the ground" (fixed: names it and the next step); the poles left for the next party |
+| 08:00 | hold E Push it off, E Get in | "Your pack and the small barrel go into the canoe."; "Some things on the ground is set out" (fixed) |
+| 09:02 | 3 km home, E Tie up | "Came in at Kawishiwi Lodge & Outfitters: 2 days out from Lake One, 6.0 km paddled." |
+| 09:10 | E on Ruth, the news; Esc; the dot on the counter; Q | "E Open · Q A word with Ruth" (fixed); the word opens "Last time · earlier today · You: 'What's the news?' …" |
+| 09:15 | Reload, Continue, walk 10 s | all seven hints in the season's record; none shown again |
+
+### The seams
+
+| Seam | Result |
+|---|---|
+| Every held verb's label | hold E Push it off; hold Q Light (laid); hold Q Douse (lit); hold E Hang; hold E Carry on pitching / hold Q Take it down; the ghosts' lines say "hold E or click" (fixed); E Saw · Q Cut a pole greyed without the saw with their checklists |
+| Q on a loaded hull | the book opens at The canoe's tab, with the note "Unload it first. Q opens the book at the canoe…" |
+| The right-click hint | the first time the dot greyed a verb (Q "Unload it first" at the dock) |
+| Tab and I | Tab held outside the book shows the readout, let go it goes; in the book Tab does nothing; I opens and closes |
+| E on a landed fish | E keeps it; the dot is off while the rod is up, so nothing else takes it |
+| `pole` | defined once (items.js; tarp.js's stub only when it is missing, and items.js loads first) |
+| Horizontal scroll | none in the book with five right tabs, the fire card or a shelf at 1440 × 900 and 1280 × 720; at 1280 the tab beside the body clipped the pack's last 6 px (fixed) |
+| Programs | 64 at the store, 67 at camp with the fire and the tarp, steady over 200 frames |
+| Old saves | a first-round save (fb3 B's) loads with no errors; with last round's `tarpup` on the ground it becomes the tarp in a pile |
+| Console | no errors or warnings through the day |
+
+### What the join fixed
+
+- **Setting down in the shallows** (f0ebce1): inventory.downSpot: standing in the water, the nearest dry ground within
+  2.5 m (packs.drySpotNear, the ground 5 cm over the water); with none the drop greys, "You're standing in the water",
+  the checklist "Dry ground within 2.5 m", next "Step ashore to set it down, or put it in the canoe" (the drag's tag and
+  a note). There is no Q drop (the world cards), so the book's drops are the ways.
+- **Q at the counter** (09d13da): the counter's dot target carries "Q A word with Ruth" (npcs.keeperWord), and npcs.js
+  reads the dot's hotspot instead of `outfitter.spot()` (always null with the pointer).
+- **A container bought onto The canoe** goes into the canoe (21d5f54).
+- **Light** (dd672ab, e117de4): a ring full of wet wood says take it out first; dry wood within reach is named.
+- **Pick up greys** when nothing on you has room (8d6d0ab); a greyed verb's note starts with a capital.
+- **The canoe's words** (824ff51): Q offered on the beached line only when it can be done; Load everything here names
+  the thing it couldn't load and says what to do.
+- **Hints and notes** (4f93a1a): a hint goes once you press its key; the same note said twice is one line.
+- **The wet set** says its own time by a fire; "some things on the ground are set out" (8663b7f).
+- **"hold E or click"** on the ghosts' lines; the tab beside the body fits at 1280 (bbeeedd); "hold Q" in the tarp's and
+  the tent's notes (3bff535); a raw fish on the stringer is not told to go on the stringer (ef564db).
+
+### Left after the join
+
+- **Dead wood lying about stays dry in the rain.** Wetness is per piece for wood you hold or have set down; a branch
+  picked up in the rain is dry, so rain never stops a fire for long. A feature for the next pass: pieces about the camp
+  wet while it rains and for hours after (and the tarp worth more).
+- The fire's burn bar reads "3½ h of wood laid" counting wet wood beside "An hour's burn: dry wood laid 0 of 1 h".
+- At 1440 the shelf's planks run 6 px into the stock's padding (hidden, no scroll).
+- Rest across a four-hour nap at the tent went from 0.77 (15:22) to 0.48 (21:06): not measured across the nap itself;
+  worth a look in a balance pass.
+- Left alone as decided: the camp clock at ×12 while walking; the "two trips" hint; a beached canoe's bow on a ledge
+  rock. A reload on foot at this site came back on foot both times.
+- The tooling: my route follower stalled once on a long paddle (T.travel reroutes).

@@ -100,14 +100,17 @@ aluminium canoe is 34 kg, the pack 16 kg plus 0.9 kg a day of food: about 55 kg 
    the book with the canoe on the right, one drag from your back, your chest or a hand. Nothing loads or stows by
    itself: what you wear stays on you. With two packs the gear pack waits at the trail head; *Q* beside it takes it
    too, for one heavy trip.
-2. **The far end.** *E Launch onto …* (what is in your hands goes into the hull at your feet, with a note: your hands
-   are for the paddle; the back and the chest stay as they are) or *Q Set the canoe down*. With a pack back at the
-   trail head, *E Set the canoe down · walk back for the gear pack*.
+2. **The far end.** *E Launch onto …* (what you wear goes into the hull, back, chest and hands, with one note:
+   paddling needs you unloaded) or *Q Set the canoe down*. With a pack back at the trail head, *E Set the canoe down ·
+   walk back for the gear pack*.
 3. **Walk back**, or *Q Fetch it (about 5 min on a 23-rod trail)*: a fade, the clock moves on by the walk and the
    second carry at life pace (what walking them yourself costs on the clock), and the walk's energy is spent. Things
    set down within 15 m of a trail count as left at it, so the fetch finds them.
 4. **Away.** A canoe set down at a trail end (to fill the bottle, say) gets in from the dot: *E Get in* where it
-   floats; beached on dry ground, *E Push it off first* slides it down to the water with you.
+   floats, both ends over water, and you are in it there, facing as it lies (no jump to a launch point); nosed in or
+   lying on the bank, *hold E Push it off*: hands on the gunwales (a tap moves nothing), then you walk it out until
+   both ends float and stand beside it in the shallows; let go and it stays where it got to (the 2026-10-25 second
+   round, `packs.js` hullAction, pushPlan, beginPush).
 
 The portage counts in the journal and the logbook when you launch at the far end.
 
@@ -188,8 +191,9 @@ ring do its prompts apply. On foot at a free site:
   food mark stays down. In Adventure, food left on the ground overnight within 60 m may be found by a bear (a note in
   the morning, a meal or two gone; a sealed barrel seldom); a hung barrel never.
 - **Repacking** (camp 1, `src/packs.js`; the 2026-10-25 round: nothing loads by itself): E at the canoe is *Get in*
-  (or *Push it off first*), and only what is in your hands goes into the hull at your feet; a pack on your back and a
-  barrel on your chest ride on you. With things set out about the camp (in its area, or within 10 m of the hull), the
+  (or, beached, *hold E Push it off*), and getting in puts what you wear into the hull (the pack on your back, the
+  barrel on your chest, what is in your hands) with one note; stepping out, nothing comes back out by itself (the
+  second 2026-10-25 round). With things set out about the camp (in its area, or within 10 m of the hull), the
   book's *Load everything here* (held) at the hull loads everything there, a thing a phase (a minute and more the
   farther it lies), while the canoe has room for eight things and 160 kg. At the ring, the armload's Q stacks it on
   the woodpile.
@@ -252,7 +256,7 @@ the energy, a dim track up to the ceiling, and the chunks from the right end (co
 yellow, thirst blue), dashed and marching while one grows faster than its everyday rate or while its need is low, with
 its icon (snowflake, zz, fork and knife, drop) under it; it shows only when it matters, and the old *tired* / *hungry*
 / *thirsty* marks are gone. The readout says what holds the bar down: "Energy 52 % · held down by tiredness and cold ·
-up 11 h · 1.2 L in the bottle". At 0 nothing is eaten for you: the note says to eat from the pack (J), drink or rest.
+up 11 h · 1.2 L in the bottle". At 0 nothing is eaten for you: the note says to eat from the pack (I, the book), drink or rest.
 
 Every rate is per game hour, paid on the hours the clock passes, so a stretch costs what its game hours cost at any
 pace or game speed: the base (0.009 an hour), the paddle (0.045 an hour at a cruise, more for speed, hustle and a
@@ -293,12 +297,16 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 | Q | on foot, the dot on the canoe | shoulder it ("Unload it first" while anything but the paddle, the rod and the stringer rides in it: the book opens at the canoe) |
 | Q | on foot, carrying | set down what you carry (it stays there until you come back for it) · at the ring, an armload: stack it on the woodpile |
 | Q | campsite, on foot | a half-pitched tent: take it down (held) · at night: strike the tent (held), or with the fly off, sleep without it · at the canoe with things set out: launch and leave them |
-| K / E | a fish held up | keep it, in your hand (into a pack in reach with both hands full; into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
+| E / Q | a fish held up | keep it, in your hand (into a pack in reach with both hands full; into a notice's cooler when one wants it: "Keep it for “Perch wanted”") / let it go |
 | H | anywhere, day or night | the headlamp |
-| I | anywhere | the book at the pack: eat a serving of a snack when still (a meal or a fish cooked first), Drink from the bottle, move things between containers |
+| I | anywhere | the book (I or Esc closes it): your body and containers on the left, a tab for each thing within reach on the right (The canoe, a pack on the ground, Wood, The ground), the Journal a tab of its own; right-click a thing for its verbs and why one is greyed; eat a serving of a snack when still (a meal or a fish cooked first), Drink from the bottle, move things between containers |
 | Space, Shift | afloat / on foot | brace / vault, climb or hop · hustle / jog |
 | 1 2 3 | anywhere, the rod down | 1×, 2×, 4× on top of the pace (Settings › Controls › Pace: Trip or Real) |
 | `[ ] - = P` · `, . / ;` | Sandbox | the clock and the date · the wind |
+
+The whole set since the second 2026-10-25 round (the README and the title's Controls card list it): W A S D and the
+mouse, Shift, Space, E and Q on the dot, F the rod, I the book, M the map, Tab held the moment's readout, V the view, H
+the headlamp, C the camera, 1 2 3 the pace, Esc. J, L, T, R and Ctrl-click are gone (reflections are a Settings row).
 
 E belongs to the most specific context. Afloat, a lost item in reach comes first (tasks.before takes E ahead of "Go
 ashore"), then the dock's counter, then a landing's portage, then the bank. On foot, a portage's or a pack's prompt

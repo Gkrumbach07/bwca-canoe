@@ -70,6 +70,59 @@ export const TENT_KINDS = {
 export const kindOf = (item) => (item == null || item === 'aframe' ? 'aframe' : 'dome');
 export const tentOf = (item) => TENT_KINDS[kindOf(item)];
 
+// --- the checklists (fb4 E, the owner's second round of 2026-10-25, decision 2: "if I can't use something, I want to
+// know exactly why ... some sort of checklist or timer or quantity out of total") ---------------------------------------
+// The pitch's phases as steps, those done ticked, each with its minutes: [{ label, done, minutes }]
+export function tentSteps(item, stage = 0) {
+  return tentOf(item).pitch.map((ph, i) => ({ label: `${ph.name} · ${ph.minutes} min`, done: stage > i, minutes: ph.minutes }));
+}
+const minutesLeft = (item, stage) => tentOf(item).pitch.slice(stage).reduce((s, ph) => s + ph.minutes, 0);
+const bearingOf = (dx, dz) => ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round((((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360) / 45) % 8]; // (+z is south)
+const low = (s) => (/^[A-Z]-/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)); // ("A-poles" keeps its capital)
+const far = (d) => (d < 1000 ? `${Math.max(10, Math.round(d / 10) * 10)} m` : `${(d / 1000).toFixed(1)} km`);
+// camp.js tentActions() (your tent's two keys on the dot) with their checklists: E Carry on pitching / Put the fly on with
+// the steps and the minutes to go; Q Rest until… with no fly says what the fly is for; Strike the steps back down
+export function withTentNeeds(camp, ta) {
+  const c = camp && camp.camp;
+  if (!ta || !c) return ta;
+  const K = tentOf(c.item), st = c.stage;
+  const fill = (a, needs, next) => { if (a && !a.needs) Object.assign(a, { needs, next }); };
+  if (st < 4) {
+    const left = minutesLeft(c.item, st), fly = K.pitch[3];
+    const pitchA = ta.e && /pitching|fly/i.test(ta.e.verb) ? ta.e : null;
+    fill(pitchA, tentSteps(c.item, st), st === 3 ? `Hold E: the rain fly on in ${fly.minutes} min; without it the rain comes through the mesh` : `Hold E: ${low(K.pitch[st].name)} next, ${left} min to the fly on`);
+    const rest = ta.q && /Rest/.test(ta.q.verb) ? ta.q : null;
+    fill(rest, [{ label: `Rain fly on · ${fly.minutes} min`, done: false }, { label: 'A night’s rest with no fly: 90 %, and rain through the mesh', done: false }], `Put the fly on first (hold E, ${fly.minutes} min): a dry night and the full rest`);
+  }
+  const strike = [ta.e, ta.q].find((a) => a && /Strike/.test(a.verb));
+  fill(strike, K.strike.slice(4 - st).map((ph) => ({ label: `${ph.name} · ${ph.minutes} min`, done: false })), `Hold Q to strike it: ${K.strike.slice(4 - st).reduce((s, ph) => s + ph.minutes, 0)} min, back into the pack it came from`);
+  const rest = st >= 4 && ta.e && /Rest/.test(ta.e.verb) ? ta.e : null;
+  fill(rest, [{ label: 'The tent up, the fly on', done: true }], 'E opens the dial: first light, 7:00, noon, dusk or any hour by ← →');
+  return ta;
+}
+// The book's Pitch (and the bagged tent's Q): why not now, the steps, and the one thing to do. tent: camp.tentByUid(uid)
+// → { why, needs, next }
+export function pitchNeeds(camp, tent) {
+  const why = camp.pitchRefused(tent), p = camp.player, item = tent && tent.def ? tent.def.id : 'aframe';
+  const steps = tentSteps(item, 0), all = minutesLeft(item, 0);
+  if (!why) return { why: null, needs: steps, next: `The ghost goes where you look: on green ground, hold E or a click, about ${all} min` };
+  const c = camp.camp, needs = [];
+  let next = null;
+  if (/not within reach/.test(why)) { needs.push({ label: 'The tent within reach', done: false, note: 'in a pack you carry, or set down at this camp' }); next = 'Carry the pack the tent is in, or set it down here.'; }
+  else if (/on foot/.test(why)) { needs.push({ label: 'On foot, ashore', done: false }); next = 'Go ashore first.'; }
+  else if (/outfitter/.test(why)) { needs.push({ label: 'Out of the outfitter’s yard', done: false }); next = 'Pitch it at a campsite out on the lakes.'; }
+  else if (c) {
+    const d = Math.hypot(c.x - p.x, c.z - p.z);
+    needs.push({ label: 'Your tent struck', done: false, note: d > 30 ? `it stands ${far(d)} ${bearingOf(c.x - p.x, c.z - p.z)}` : tentOf(c.item).words[c.stage] || 'standing' });
+    next = d > 30 ? `Walk back to it (${far(d)} ${bearingOf(c.x - p.x, c.z - p.z)}) and hold Q at it to strike it, or pitch there.` : c.stage >= 4 ? 'Hold Q at it to strike it first.' : 'Point at it and hold E to carry on pitching, or hold Q to strike it.';
+  } else if (/campsite|another party/.test(why)) {
+    needs.push({ label: /another party/.test(why) ? 'A site no one holds' : 'At a campsite (Adventure)', done: false });
+    const n = camp.registry && camp.registry.nearestFree ? camp.registry.nearestFree(p.x, p.z, 6000) : null;
+    next = n ? `The nearest free campsite is ${far(n.d)} ${bearingOf(n.site.x - p.x, n.site.z - p.z)}.` : 'Find a free campsite on your map.';
+  } else needs.push({ label: why, done: false });
+  return { why: why.charAt(0).toUpperCase() + why.slice(1), needs: [...needs, ...steps], next };
+}
+
 // --- the dome's parts ----------------------------------------------------------------------------------------------
 function footprintGeometry() {
   const b = new PropBuilder(), S = 20, sheet = C(0x4d584c), stake = C(0x8f8c86), cord = C(0xc8c2b0);

@@ -20,67 +20,53 @@ const MODES = {
   sandbox: 'The same lakes, with no limits.',
 };
 
-// the controls reference (the Controls item), by what you are doing
+// the controls reference (the Controls item), by what you are doing. fb4 D (decision 4, the owner's second round of
+// 2026-10-25: "We need to go through all the keys again … It should just be one key, I, to get into the inventory"):
+// the whole set is W A S D and the mouse, Shift, Space, E and Q on the dot, F, I, M, Tab held, V, H, C, 1 2 3 and Esc;
+// in the book a right-click and, while dragging, R. J, L, T, K, R, N, Ctrl-click and Tab in the book are gone. A few
+// keys mean something only where they are shown (the numbers for a lure with the rod up and for a choice while you
+// talk, A D or ← → on the Rest dial). Sandbox's own keys are listed only in a Sandbox season.
 const KEYMAP = [
-  ['On the water', [
-    [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'turn the hull while held, as sweep strokes'],
-    [['Shift'], 'hustle'], [['Space'], 'brace in a sea (you cannot paddle while bracing)'],
-    [['E'], 'go ashore, at any bank and at a portage landing alike (in at the trail’s put-in: you step out by the canoe, beached, and shoulder it yourself, Q at the hull) · tie up at an outfitter’s dock and step up onto the deck · pick up a find · right the canoe after a capsize'],
-    [['I'], 'the book at the pack: right-click food to eat a serving (a snack as it is; a meal or a fish is cooked on a fire’s grate first) · Drink from the bottle in your pockets (a gulp, 0.25 L): nothing is drunk for you'], [['H'], 'the headlamp, day or night (afloat or on foot)'],
+  ['Moving', [
+    [['W', 'A', 'S', 'D'], 'afloat: W and S paddle forward and back, A and D turn the hull while held, as sweep strokes · on foot: walk where you look, W toward it, S back, A and D strafe · past your depth: swim'],
+    [['mouse'], 'look: the first key or click takes the mouse and it turns you at once (on foot the dot sits in the middle of the view); behind the canoe, drag to orbit, wheel to zoom'],
+    [['Shift'], 'jog on foot · hustle afloat · a hard stroke swimming'],
+    [['Space'], 'afloat: brace in a sea (you cannot paddle while bracing) · on foot, walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m, otherwise a hop; with the canoe overhead you only stagger · swimming: climb out onto a rock, a dock or the bank'],
+    [['E'], 'afloat: go ashore at any bank and at a portage landing alike · at an outfitter’s dock, tie up and step up onto the deck · right the canoe after a capsize'],
   ]],
-  ['On foot: the dot', [
-    [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'],
-    [['Space'], 'walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m; otherwise a hop · with the canoe overhead you only stagger'],
-    [[], 'whatever the dot in the middle of the view points at has at most two actions, both on its label: E and Q. A held one says “hold”; a greyed one says why. Pointed at nothing, E and Q do nothing'],
-    [['E'], 'pick up (wood, a pack, a barrel, a bucket, a bagged tent, a find) · take one from a pile (into what you carry, else a free hand) · open the fire (its card) · rest until… at your tent (the dial) · sit (the bench, a log seat, the latrine; E or a move key stands you up) · get in the canoe where it floats (beached: push it off first, and it slides down to the water with you; what is in your hands goes into the hull at your feet) · fill the bottle at the water’s edge (a tablet in from the tablets in reach) · talk · open a shelf, the board, the map table, the counter · held: hang the barrel at a limb, lower it, saw a down log, carry on pitching'],
-    [['Q'], 'open it (a container or a pile on the ground: the book, with it lit on the right) · light or douse the fire, held · pitch a bagged tent (the ghost, then E held) · strike your tent, held · shoulder the canoe (only the paddle, the rod and the stringer ride in it overhead; with anything else aboard “Unload it first” opens the book at the canoe) · at a trail head, fetch what is left · with the canoe overhead: set it down, or launch and leave what is left'],
-    [['W'], 'past your depth: swim (Shift harder) · Space climbs out onto a rock, a dock or the bank · E at the canoe climbs in'],
+  ['E and Q: the dot', [
+    [[], 'whatever the dot in the middle of the view points at has at most two actions, both on its label: E and Q. A held one says “hold E” or “hold Q”; a greyed one says why. Pointed at nothing, E and Q do nothing'],
+    [['E'], 'pick up (wood, a pack, a barrel, a bucket, a bagged tent, a find) · take one from a pile · open the fire (its card) · rest until… at your tent (A D or ← → pick the hour, E rests) · sit (E or a move key stands you up) · get in the canoe where it floats, as it lies (what you wear goes into the hull: back, chest and hands) · held at a beached canoe (nosed in, or on the bank): push it off, walking it out until it floats · fill the bottle at the water’s edge · talk to someone, the keeper behind the counter too (they open with what they last said to you; the numbers or a click choose, Esc leaves) · open a shelf, the board, the map table, the counter · held: hang the barrel at a limb, lower it, saw a down log, carry on pitching'],
+    [['Q'], 'open it (a container or a pile on the ground: the book, with it on the right) · light or douse the fire, held · pitch a bagged tent (the ghost, then E held) · strike your tent, held · shoulder the canoe (with anything but the paddle, the rod and the stringer aboard, “Unload it first” opens the book at the canoe) · at a trail head, fetch what is left · with the canoe overhead: set it down, or launch and leave what is left'],
   ]],
-  ['At an outfitter', [
-    [['E'], 'from the water at the dock: tie up, and up onto the deck; walk up the steps and in · inside, point at the counter (a bunk, a ride up the road, claims: no permit), the cork board, a shelf (from either side), the lure wall or the map table: yours on the left, theirs on the right. A drag buys exactly where it lands (that cell, or the first room in the tab it is dropped on), and the tag flips to “bought”'],
-    [['Q'], 'at the counter: a word with the keeper'],
-    [['M'], 'in a store or at its map table: the whole Boundary Waters with the sheets dotted over it, “$8 here” at this table and “✓ yours” in ink. A sheet bought is yours for the season, never carried'],
-    [[], 'a trip begins as you push off from an outfitter’s dock and ends by itself when you come in on foot at any outfitter’s landing: the logbook says “came in”'],
+  ['The book', [
+    [['I'], 'the book, and I or Esc closes it. Pack and Journal are tabs inside it (click them). The pack: left is you (the back, the chest, each hand, the pockets with the bottle, and a tab per container you carry), right is what is around you, a tab each (the canoe beside you, a pack or a box on the ground, the wood, the ground itself). With a card open (the fire, a shelf, the counter) the card is on the right and the left has your tabs and the ground’s'],
+    [['drag'], 'between any two tabs, either way · a pack or a barrel by its strap to your back, your chest, a hand or the canoe · anything off the page goes down at your feet · R turns a thing while you drag it (a drop that fits only turned turns by itself) · Shift-drag splits a stack'],
+    [['right-click'], 'a thing’s verbs and nothing else: Eat, Drink, Pitch, Hang, Put in hand, Put on the stringer, Change into dry clothes, Tie it on, Look at the map. A greyed verb says why, with what it needs and what to do next'],
+    [['hover'], 'what a thing is and what it does, in numbers, its weight and its state (wet, treating, cooking …) with the next step'],
   ]],
-  ['People', [
-    [['E'], 'talk to someone the dot is on (again: their task) · choose with 1–9 or a click, Esc to leave'], [['T'], 'what was said: the last six lines'],
+  ['Fishing and the camera', [
+    [['F'], 'the rod up or down: from the canoe, or on foot with the rod in a hand, facing water within a cast'],
+    [['Space', 'click'], 'with the rod up: hold to load a cast where the cursor points, let go to cast · set the hook on a bite · hold to reel in a fight; W retrieves a lure (Shift faster)'],
+    [['1', '2', '…'], 'with the rod up: the lure, from the strip of the ones with you; the bobber rig takes a leech from the bucket in reach per bite, and says “needs leeches” when there is none'],
+    [['E', 'Q'], 'a landed fish: keep it, in your hand (into a pack in reach with both hands full, or a notice’s cooler) · let it go'],
+    [['C'], 'the camera: raise it (the $25 35 mm, or the disposable a photo notice lends) · the mouse aims, the wheel zooms, Space or a click takes the picture · C or Esc lowers it'],
   ]],
-  ['The book: left is you, right is what you face', [
-    [['I'], 'the book at the pack. Left is always you: the back, the chest, each hand (anything: a thing, a pack, the rod), the pockets (the bottle with its litre bar, and four quick slots for small things), and a tab per container you carry (Pack · Barrel · Bucket · Tackle box · Armload; a box in the pack has its own tab, “in the pack”), one grid open at a time. Right is Here: everything within reach that isn’t on you, each container on the ground as its own grid, loose wood and dropped things as a pile, the canoe’s load when you stand beside it (Set everything out · Load everything here, held), and at an outfitter what they keep for you. “Nothing here” when the ground is empty'],
-    [['drag'], 'between the two panes either way · a pack or a barrel by its strap to your back, your chest, a hand, the canoe or Here · a thing onto a tab to put it in that container · anything off the page: the ground at your feet (wood alone makes a woodpile)'],
-    [['Ctrl', 'click'], 'send a thing on to the next container with room'], [['R'], 'turn a thing while dragging'], [['Shift', 'drag'], 'split a stack'],
-    [['right-click'], 'a thing’s verbs and nothing else: Eat (a serving, instant, wherever you stand still), Drink, Drink up, Pitch, Pitch over… (the tarp), Hang (“carry it to a tree and point at the limb”), Put in hand, Put on the stringer (while it is in reach), Change into dry clothes, Tie it on, Look at the map; Cook only in the fire card. A greyed verb says why'],
-    [['hover'], 'what a thing is and what it does, in numbers (the bag’s night, the tablets’ uses, a lure’s takes), its weight; the uses or servings left show on a small bar'],
-    [['Tab'], 'the next tab along · Shift-Tab the journal · J or Esc closes'],
-  ]],
-  ['At camp: E at the thing', [
-    [['E'], 'at the fire ring: the fire card, yours and what is in reach on the left (a tab each: the packs and piles on the ground about you, the wood lying about, the canoe’s load beside you) and the fire on the right: drag wood into the fuel, a pot and a meal or a fish onto the grate (“no pot” says when there is none), then Light (held), Cook, Eat (there and then), Douse (held). E or Esc closes it'],
-    [['hold'], 'a held button works while the mouse is held on it, its ring filling; let go and it stops where it got to. The same held from the dot: Q Light, Q Douse, Q Strike, Q Pitch then E, E Hang, E Lower, E Saw'],
-    [['←', '→'], 'the Rest until… dial, from E at your pitched tent: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →, day or night (a daytime rest is a nap). E rests, Esc not yet · nothing at camp is struck, put out or packed for you: what you leave stays'],
-    [['F'], 'with the rod in a hand (drag it to a hand slot, or Put in hand), on foot facing water within a cast: the rod up, the same cast, lures and fight as from the canoe. K keeps a fish in your hand (Put on the stringer from the book while the stringer is in reach); the bobber rig takes a leech per bite from the bucket in reach (a hand, a step off, the canoe), and the lure strip says “needs leeches” when there is none'],
-  ]],
-  ['The camera', [
-    [['C'], 'raise it (the $25 35 mm, or the disposable a photo notice lends) · C or Esc lowers it'], [['wheel'], 'zoom from a normal lens to a long one (Q and E held too)'],
-    [['Space', 'click'], 'take the picture: a subject near the middle, near enough and in sight counts'], [['mouse'], 'aim (the arrows and WASD too, Shift for a fine hand)'],
-  ]],
-  ['Fishing', [
-    [['F'], 'take up the rod · put it down'], [['Space', 'click'], 'hold to load a cast where the cursor points, let go to cast · set the hook · hold to reel'],
-    [['1', '2', '…'], 'change the lure: the ones you have with you, in the strip’s order'], [['E', 'K'], 'let the fish go · keep it, in your hand (into a pack in reach with both hands full)'],
-  ]],
-  ['Looking', [
-    [['Tab'], 'hold for the readout, the moment only: the place, the time and the day, sunrise and sunset, the wind and the waves, the temperature and the sky, your speed and heading · in the book: the next tab'],
-    [[], 'the energy bar, the clock and the day stay up in a strip at the top over the book, every card and the Rest dial'],
-    [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot to paddle in): in the wild only the sheets you own, blank paper elsewhere (with none, you and a compass); at an outfitter the whole map'],
-    [['J'], 'the book, on the side last open: the journal (the trip, catches, tasks, lakes, trips, photos), and the pack (left is you, right is Here) with Tab'],
-    [['I'], 'the book straight at the pack'], [['V'], 'from the paddler’s seat · behind the canoe'],
-    [['mouse'], 'look: in first person and on foot the first key or click takes the mouse and it turns you at once (on foot the dot sits in the middle of the view); behind the canoe, drag to orbit, wheel to zoom'], [['Esc'], 'frees the mouse when it is taken, closes the book, a card or the dial, puts away a tent’s ghost, otherwise this menu'],
-    [[], 'the energy bar, top left when it matters: green is the energy you have; the chunks at its end are what each need takes off how high it can go: cold (a snowflake, dotted pale blue), sleep (zz, orange), hunger (a fork and knife, yellow), thirst (a drop, blue), dashed while growing'],
-  ]],
-  ['The clock and the weather', [
-    [['1', '2', '3'], 'game speed 1× 2× 4×, on top of the pace (Settings › Controls; when the rod is down)'], [['[', ']'], 'time of day back, forward an hour (Sandbox)'], [['-', '='], 'the date back, forward a day, Shift a month (Sandbox)'],
-    [['P'], 'stop the clock (Sandbox)'], [[',', '.'], 'less, more wind (Sandbox)'], [['/'], 'veer the wind (Sandbox)'], [[';'], 'let the weather be (Sandbox)'], [['R'], 'the shore in the water'], [['N'], 'sound'],
+  ['Looking and the clock', [
+    [['M'], 'hold to glance at the map, press for the sheet (drag, wheel, click a spot): in the wild only the sheets you own, at an outfitter the whole map · M or Esc puts it away'],
+    [['Tab'], 'held: the readout, the moment only (the place, the time, the sun, the wind and the waves, the sky, your speed and heading)'],
+    [['V'], 'the view: from the paddler’s eyes · from behind'],
+    [['H'], 'the headlamp, day or night, afloat or on foot'],
+    [['1', '2', '3'], 'the pace: 1×, 2×, 4× on top of Trip or Real (Settings › Controls); a note by the corner mark says what the clock does (with the rod up the numbers pick the lure)'],
+    [['Esc'], 'frees the mouse when it is taken · closes the book, a card or the dial · puts away a tent’s ghost · otherwise this menu'],
+    [[], 'the energy bar, the clock and the day stay in a strip at the top over the book and every card. The bar: green is the energy you have, and the chunks at its end what each need takes off how high it can go: cold (a snowflake), sleep (zz), hunger (a fork and knife), thirst (a drop), dashed while growing'],
   ]],
 ];
+// Sandbox's own keys (the clock and the wind), shown only in a Sandbox season
+const SANDBOX_KEYS = ['Sandbox only', [
+  [['[', ']'], 'the time of day back, forward an hour'], [['-', '='], 'the date back, forward a day (Shift a month)'], [['P'], 'stop the clock'],
+  [[',', '.'], 'less, more wind'], [['/'], 'veer the wind'], [[';'], 'let the weather be'],
+]];
 
 export class Title {
   // targets: { world, player, chase, camera, day, hud, settings, saver, saved, trip, outfitter } — saved is the spot saved
@@ -142,7 +128,8 @@ export class Title {
   }
   buildKeymap() {
     const k = this.el.keymap; if (!k) return;
-    k.innerHTML = KEYMAP.map(([title, rows]) => `<h3>${title}</h3>${rows.map(([keys, what]) => `<div class="k"><span class="keys">${keys.map((x) => `<kbd>${x}</kbd>`).join('')}</span><span>${what}</span></div>`).join('')}`).join('');
+    const groups = this.trip && this.trip.sandbox ? [...KEYMAP, SANDBOX_KEYS] : KEYMAP;
+    k.innerHTML = groups.map(([title, rows]) => `<h3>${title}</h3>${rows.map(([keys, what]) => `<div class="k"><span class="keys">${keys.map((x) => `<kbd>${x}</kbd>`).join('')}</span><span>${what}</span></div>`).join('')}`).join('');
   }
 
   bind() {
@@ -184,7 +171,7 @@ export class Title {
     shell.classList.toggle('wide', name === 'settings');
     shell.classList.toggle('full', name === 'controls');
     if (name === 'settings') { this.panel.show(this.panel.section); const first = this.el.nav.querySelector('button'); if (first) first.focus(); }
-    else if (name === 'controls') { const k = this.el.keymap; if (k) k.scrollTop = 0; }
+    else if (name === 'controls') { this.buildKeymap(); const k = this.el.keymap; if (k) k.scrollTop = 0; } // fb4 D: Sandbox's keys only in Sandbox
     else { this.showRight(null); (this.el.go.offsetParent ? this.el.go : this.el.newTrip).focus(); }
   }
   // what stands beside the menu (fb3 C, 17): null, 'confirm' or 'entries'; New season's marker stays gold while one is up
@@ -213,8 +200,19 @@ export class Title {
     const pr = this.profile, core = this.trip, e = this.el;
     if (!e.confirmSub || !pr) return;
     const n = pr.known.length, home = pr.home != null && core && core.placeOf ? core.placeOf(pr.home) : '';
-    const bits = [core ? (core.adventure ? 'Adventure' : 'Sandbox') : '', home ? `home ${home}` : '', core && core.active ? core.dayWords() : 'between trips', `$${pr.money}`, 'the gear', `${n} ${n === 1 ? 'outfitter' : 'outfitters'} known`].filter(Boolean);
+    // fb4 D (the fork's nit on the 2026-10-25 round): the season under way in its own particulars, not "the gear": the
+    // canoe, the packs and the barrel
+    const bits = [core ? (core.adventure ? 'Adventure' : 'Sandbox') : '', home ? `home ${home}` : '', core && core.active ? core.dayWords() : 'between trips', `$${pr.money}`, this.gearWords(pr), `${n} ${n === 1 ? 'outfitter' : 'outfitters'} known`].filter(Boolean);
     e.confirmSub.textContent = `The season under way: ${bits.join(' · ')}.`;
+  }
+  // "the aluminium canoe, two packs and a barrel"
+  gearWords(pr) {
+    let canoe = '';
+    try { const k = pr.kit && pr.kit.canoe; canoe = k === 'kevlar' ? 'the Kevlar canoe' : k ? 'the aluminium canoe' : ''; } catch { canoe = ''; }
+    const has = (id) => { try { return pr.has(id); } catch { return false; } };
+    const rest = [has('pack2') ? 'two packs' : has('pack') ? 'a pack' : '', has('barrel') ? 'a barrel' : ''].filter(Boolean);
+    const all = [canoe, ...rest].filter(Boolean);
+    return all.length > 1 ? `${all.slice(0, -1).join(', ')} and ${all[all.length - 1]}` : all[0] || '';
   }
   focusEntries() {
     if (this.right !== 'entries') { this.showRight('entries'); return; }

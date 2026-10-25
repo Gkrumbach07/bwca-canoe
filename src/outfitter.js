@@ -453,11 +453,15 @@ export class Outfitter {
   }
   targetOf(h, v) {
     const [kind, name] = HOT[h.key] || ['shelf', 'The shelves'];
-    let label = name;
-    if (h.key === 'counter') { const who = this.shop ? this.shop.keeperName(v.ep) : null; if (who) label = `${name} · ${who}`; }
+    let label = name, q = null;
+    if (h.key === 'counter') {
+      const who = this.shop ? this.shop.keeperName(v.ep) : null; if (who) label = `${name} · ${who}`;
+      // fb4 join (stream D's find): Q at the counter is a word with the keeper behind it, on the dot's label
+      q = this.people && typeof this.people.keeperWord === 'function' ? this.people.keeperWord(v.ep) : null;
+    }
     else if (h.key === 'board') { const ready = this.readyHere(v.ep).length; if (ready) label = `${name} · ${ready} to claim`; }
     const box = { x: h.x, y: h.y, z: h.z, hx: h.hx, hy: h.hy, hz: h.hz, heading: h.heading };
-    return { kind, ref: h.key, label, verb: 'Open', act: () => this.openHot(h.key, v.landing), box, at: { x: h.x, y: h.y, z: h.z } };
+    return { kind, ref: h.key, label, verb: 'Open', act: () => this.openHot(h.key, v.landing), ...(q ? { q } : {}), box, at: { x: h.x, y: h.y, z: h.z } };
   }
   // what E on a hotspot opens: a shelf's two panes, the map table's screen, the counter, the board
   openHot(key, landing) {
@@ -471,8 +475,8 @@ export class Outfitter {
     this.show(landing, key === 'board' ? 'board' : 'counter');
     return true;
   }
-  // npcs.js's question (until the people are the pointer's too): the hotspot the view is on, as the old floor spot it
-  // reads ({ key, p: { x, z, at } }), so the counter keeps E and the keeper behind it is Q
+  // npcs.js's question without the pointer: the hotspot the view is on, as the old floor spot it reads ({ key, p: { x,
+  // z, at } }), so the counter keeps E and the keeper behind it is Q (with the pointer: npcs.hotSpot, the dot's target)
   spot() {
     const h = this.pointer ? null : this.aimed;
     return h ? { key: h.h.key, p: { x: this.player.x, z: this.player.z, at: { x: h.h.x, z: h.h.z } } } : null;

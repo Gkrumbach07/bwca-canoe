@@ -724,6 +724,9 @@ export class Hud {
     const box = this.el.lines;
     if (!box || !text) return;
     if (this.settings && !this.settings.showLines) return;
+    // (fb4 join: the same words said twice at once, by a verb and the book that ran it, are one line held longer)
+    const same = [...box.children].find((c) => c.textContent === text && !c._gone);
+    if (same) { clearTimeout(same._timer); same._timer = setTimeout(() => this.dropLine(same), seconds * 1000); return; }
     while (box.children.length >= 2) { const c = box.firstElementChild; clearTimeout(c._timer); c.remove(); } // the oldest goes at once: two at most
     const el = document.createElement('div'); el.className = 'line fade'; el.textContent = text;
     box.appendChild(el);
@@ -733,7 +736,7 @@ export class Hud {
   }
   dropLine(el) {
     if (!el || !el.parentNode) return;
-    clearTimeout(el._timer);
+    clearTimeout(el._timer); el._gone = true;
     el.classList.remove('show');
     setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 700);
   }

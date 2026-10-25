@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PropBuilder, propMaterial, TILE } from './prop-kit.js';
-import { itemDef } from './items.js';
+import { itemDef, NEED, check, timerWords } from './items.js';
 import { env, grains } from './audio-kit.js';
 import { smoothstep, clamp } from './rng.js';
 import { word } from './hud.js';
@@ -286,7 +286,8 @@ export class Cook {
     if (og.food) { const d = itemDef(og.food.id); return { label: `Eat the ${eatName(d)}`, hint: 'on the bench by the fire', run: () => this.eatAt(site, key) }; }
     if (P && !P.done) {
       const left = Math.max(1, Math.ceil(P.dur - P.t)), heat = this.fires.heat(this.fires.get(key));
-      return { say: `The ${P.fish ? 'fish is frying' : `${this.nameOf(itemDef(P.raw))} ${P.raw === 'meal:freeze' ? 'is soaking' : isAre(this.nameOf(itemDef(P.raw))) + ' cooking'}`} on the grate · ${heat < HEAT_MIN ? 'the fire is too low under it' : `ready in ${left} s`}` };
+      void left;
+      return { say: `The ${P.fish ? 'fish is frying' : `${this.nameOf(itemDef(P.raw))} ${P.raw === 'meal:freeze' ? 'is soaking' : isAre(this.nameOf(itemDef(P.raw))) + ' cooking'}`} on the grate · ${heat < HEAT_MIN ? 'the fire is too low under it' : `ready in ${timerWords(this.cookingNow(key).timer)}`}` };
     }
     const raw = burning ? this.rawToCook()[0] : null;
     if (raw) {
@@ -554,7 +555,7 @@ export class Cook {
   }
   cookProblem(site, key) {
     const F = this.fires, P = this.pot && this.pot.key === key ? this.pot : null;
-    if (P && !P.done) return `${P.fish ? 'frying' : 'cooking'}: ready in ${Math.max(1, Math.ceil(P.dur - P.t))} s`;
+    if (P && !P.done) { const c = this.cookingNow(key); return `${c.label.toLowerCase()}: ready in ${timerWords(c.timer)}`; } // fb4 C: game minutes
     const og = this.onGrate(key);
     if (og.food) { const n = eatName(itemDef(og.food.id)); return `the ${n} ${isAre(n)} ready: eat, or take it off the grate`; }
     const raw = this.grateRaw(key);
@@ -564,6 +565,60 @@ export class Cook {
     const K = COOK[raw.def.kind === 'fish' ? 'fish' : raw.def.id] || COOK['meal:supper'], e0 = this.energy;
     if (K.water > 0 && e0 && e0.useWater && !e0.sandbox && e0.bottle < K.water - 0.001) return `it wants ${mL(K.water)} of water and the bottle has ${e0.bottle > 0.04 ? mL(e0.bottle) : 'none'}: fill it at the shore`;
     return null;
+  }
+  // fb4 C (the owner's second round of 2026-10-25: "if I can't use something, I want to know exactly why"): Cook as a
+  // checklist. The fire burning, the pot on the grate (a meal; a fish does without, on a stick), the thing on the grate
+  // and the water it wants from the bottle, have of need; while it cooks, the timer in game seconds; done, the next step.
+  // def: a raw thing not yet on the grate that Cook would put there (the book's right-click on it). → a check
+  cookCheck(site, key, def = null) {
+    const F = this.fires, P = this.pot && this.pot.key === key ? this.pot : null;
+    if (P && !P.done) {
+      const c = this.cookingNow(key);
+      if (def) return check(false, 'Something is cooking on the grate', [NEED.timer(c.label, c.timer, c.running)], `Wait till it is done: ${timerWords(c.timer)}`);
+      return check(false, `${c.label}: ${timerWords(c.timer)}`, [NEED.timer(c.label, c.timer, c.running, c.running ? {} : { note: 'the fire is too low under it' })], c.running ? `Ready in ${timerWords(c.timer)}: the fire has to stay lit under it` : 'A branch or a log into the fuel: the fire is too low to cook on');
+    }
+    const og = this.onGrate(key);
+    if (og.food) {
+      const n = eatName(itemDef(og.food.id)), keep = og.food.data && Number.isFinite(og.food.data.until) ? (og.food.data.until - this.now) * 3600 : 0;
+      if (def) return check(false, `The ${n} ${isAre(n)} on the grate`, [NEED.step('The grate free', false)], 'Eat what is on it, or drag it into a pack first');
+      return check(false, `The ${n} ${isAre(n)} ready`, [NEED.step('Cooked', true), ...(keep > 0 ? [NEED.timer('Keeps as leftovers', keep, true)] : [])], `Eat it now, or drag it into a pack: it keeps ${timerWords(keep)}`);
+    }
+    const raw = def ? { def, e: null, c: null } : this.grateRaw(key), lit = F.isLit(key), pot = !!this.potOn(key), fish = !!(raw && raw.def.kind === 'fish');
+    const K = raw ? COOK[fish ? 'fish' : raw.def.id] || COOK['meal:supper'] : null;
+    const needs = this.needsFor(key, raw ? raw.def : null);
+    if (!def) needs.splice(fish ? 1 : 2, 0, NEED.step(raw ? `${cap(this.nameOf(raw.def, raw.e && raw.e.data))} on the grate` : 'A meal or a fish on the grate', !!raw));
+    const e0 = this.energy, short = !!(K && K.water > 0 && e0 && e0.useWater && !e0.sandbox && e0.bottle < K.water - 0.001);
+    const ok = !!raw && lit && (fish || pot) && !short;
+    if (ok) needs.push(NEED.timer(fish ? 'Frying' : raw.def.id === 'meal:freeze' ? 'Soaking' : 'Cooking', K.minutes * 60, false));
+    const why = !raw ? 'Needs a meal or a fish on the grate' : !lit ? 'Needs the fire burning' : !fish && !pot ? 'Needs the pot on the grate' : short ? `Needs ${mL(K.water)} of water in the bottle` : null;
+    const next = !raw ? (pot ? 'Drag a meal onto the grate beside the pot, or a fish' : 'Drag the pot onto the grate and a meal beside it, or a fish') : !lit ? 'Light the fire first: dry wood in the fuel, then hold Light' : !fish && !pot ? 'Drag the pot onto the grate from your pack' : short ? 'Fill the bottle at the water’s edge: on foot, face the water and press E' : `Cook: about ${K.minutes} min on the clock`;
+    return check(ok, why, needs, next);
+  }
+  // fb4 C: what cooking `def` at ring `key` needs, before it is on the grate: the fire burning, the pot on the grate (a
+  // meal; a fish does without), the water it wants from the bottle (have of need, mL)
+  needsFor(key, def = null) {
+    const F = this.fires, lit = F.isLit(key), fish = !!(def && def.kind === 'fish'), K = def ? COOK[fish ? 'fish' : def.id] || COOK['meal:supper'] : null, e0 = this.energy;
+    const needs = [NEED.step('The fire burning', lit, lit ? { note: `${timerWords(F.left(key) * 3600)} of wood left` } : {})];
+    if (!fish) needs.push(NEED.step('The pot on the grate', !!this.potOn(key)));
+    if (K && K.water > 0 && e0 && e0.useWater && !e0.sandbox) needs.push(NEED.qty('Water in the bottle', Math.floor(e0.bottle * 1000 + 1e-6), Math.round(K.water * 1000), 'mL'));
+    return needs;
+  }
+  // fb4 C: the pot cooking now, for the card's meter: { value, words, label, timer (game seconds left), running } or null
+  cookingNow(key) {
+    const P = this.pot && this.pot.key === key ? this.pot : null;
+    if (!P || P.done) return null;
+    const sec = Math.max(0, (1 - P.t / P.dur) * P.hours * 3600), running = this.fires.heat(this.fires.get(key), this.now) >= HEAT_MIN;
+    const label = P.fish ? 'Frying' : P.raw === 'meal:freeze' ? 'Soaking' : 'Cooking';
+    return { value: Math.min(1, P.t / P.dur), label, timer: Math.round(sec), running, words: running ? `${label} · ${timerWords(sec)}` : 'the fire is too low under it: a branch or a log into the fuel' };
+  }
+  // fb4 C: the pot's entry on the grate, as a status (inventory.status): cooking with its timer, or waiting for a meal
+  potStatus(c, e) {
+    const key = c && c.at ? c.at.grate : null;
+    if (!key || e.id !== 'pot') return null;
+    const now = this.cookingNow(key), og = this.onGrate(key);
+    if (now) return { label: now.label, mark: 'cooking', timer: now.timer, running: now.running, until: now.running ? this.now + now.timer / 3600 : undefined, next: now.running ? `Ready in ${timerWords(now.timer)}; the fire has to stay lit` : 'The fire is too low under it: a branch or a log into the fuel' };
+    if (og.food) return { label: 'Ready', mark: 'ready', next: 'Eat it on the fire’s card, or drag it into a pack as leftovers' };
+    return { label: 'On the grate', mark: null, next: 'Drag a meal beside it, then Cook' };
   }
   cookLabel(key) {
     const raw = this.grateRaw(key);

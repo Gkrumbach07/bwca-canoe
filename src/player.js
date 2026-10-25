@@ -529,7 +529,8 @@ export class Player {
     if (w.shoreAt(px, pz) < 0.3 || !w.isReady(px, pz)) { px = sx + lx * 3.0; pz = sz + lz * 3.0; }
     this.x = px; this.z = pz; this.heading = heading; this.speed = 0; this.yawRate = 0; this.boost = 1;
     this.mode = 'walk'; this.ashore = null; this.balance = 0; this.extraRoll = 0; this.bob = null;
-    // (fb3 A: no "choice" after stepping out: the canoe is beached, and the dot on it offers E Get in and Q Shoulder it)
+    // (fb3 A: no "choice" after stepping out: the canoe is beached, nosed in, and the dot on it offers a held E Push it
+    // off (fb4 A: it had read Get in, which put you back out at a launch point facing away) and Q Shoulder it)
     this.carry = { trail: null, drop: { x: hx, z: hz, heading }, hitCooldown: 0, from: null, choice: false };
     this.canoe.state.stroke = 0; this.canoe.state.power = 0;
     this.restHull(hx, hz, heading);
@@ -640,12 +641,14 @@ export class Player {
     // from the shore: the canoe where you left it
     const drop = this.carry && this.carry.drop, dd = drop ? Math.hypot(drop.x - this.x, drop.z - this.z) : Infinity;
     if (dd < 3.4) {
-      this.prompt = { key: 'E', text: 'Push the canoe off and climb in' };
+      // fb4 A: in where it floats (or where a push would float it: packs.js pushPlan), as it lies; no launch point
+      const pk = this.packs, floats = !!(pk && pk.afloat && pk.afloat(drop)), plan = !floats && pk && pk.pushPlan ? pk.pushPlan(drop) : null;
+      this.prompt = { key: 'E', text: floats ? 'Climb into the canoe' : 'Push the canoe off and climb in' };
       if (inp.pressed('KeyE')) {
-        const L = this.launchFrom(drop.x, drop.z, 10);
-        if (L) {
+        const at = floats ? drop : plan ? plan.to : null, L = at ? null : this.launchFrom(drop.x, drop.z, 10);
+        if (at || L) {
           const side = (this.x - drop.x) * Math.sin(drop.heading) + (this.z - drop.z) * Math.cos(drop.heading) >= 0 ? 1 : -1;
-          this.launch(L);
+          this.launch(at ? { x: at.x, z: at.z, heading: at.heading ?? drop.heading, inPlace: true } : L);
           if (this.mode === 'paddle') { st.climbSide = side; st.climb = 1.4; st.swimHull = false; }
         } else this.prompt = { key: null, text: 'The canoe lies too far up the bank — wade ashore and launch it' };
       }
@@ -1391,8 +1394,8 @@ export class Player {
     const inp = this.input, w = this.world;
     const lakeOf = (id) => w.lakeName(id) || 'the water';
     if (c.drop) {
-      // fb3 A: the canoe lying by has no keys of its own on this line: the dot on the hull offers E Get in (or Push it
-      // off first) and Q Shoulder it (packs.js hullAction, nearby.js)
+      // fb3 A: the canoe lying by has no keys of its own on this line: the dot on the hull offers E Get in (fb4 A: or,
+      // beached, a held E Push it off) and Q Shoulder it (packs.js hullAction, nearby.js)
       const d = c.drop, dd = Math.hypot(d.x - this.x, d.z - this.z);
       c.choice = false;
       this.say(note || trailText || (dd <= HULL_REACH ? null : `The canoe is ${dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`} away`));
@@ -1529,17 +1532,29 @@ export class Player {
     } finally { this.teleporting = false; }
   }
 
-  // Back in the canoe at l (a portage launch point or a spot found by launchFrom), pushed off toward deeper water.
+  // Back in the canoe at l (a portage launch point or a spot found by launchFrom), pushed off toward deeper water; or,
+  // with l.inPlace (fb4 A: E Get in at a hull that floats, packs.js getIn), in it where it lies, facing as it lies
+  // (l.heading), still: no teleport to a launch point. A spot the paddle could not move from (paddleOk: the middle or an
+  // end too near the bank, as at a dock's side) is eased out along the deeper way, a little at a time, to the first that
+  // it can.
   launch(l) {
     if (this.packs && this.packs.beforeLaunch(l) === false) return; // trip core B: the packs load up first, unless one is still back up the trail (packs.js)
     if (this.carry && this.carry.drop) this.canoe.pickUpHull();
-    const dir = this.world.deeperDir(l.x, l.z);
+    const w = this.world, inPlace = !!(l.inPlace && Number.isFinite(l.heading));
+    let x = l.x, z = l.z;
+    if (inPlace) for (let i = 0; i < 24 && !this.paddleOk(x, z, l.heading); i++) { const g = w.deeperDir(x, z); x += g.x * 0.25; z += g.z * 0.25; }
+    const dir = w.deeperDir(x, z);
     this.mode = 'paddle'; this.carry = null; this.ashore = null; this.balance = 0; this.extraRoll = 0;
-    this.x = l.x; this.z = l.z;
-    this.heading = Math.atan2(-dir.z, dir.x);
-    this.speed = 0.5; this.yawRate = 0; this.boost = 1;
+    this.x = x; this.z = z;
+    this.heading = inPlace ? l.heading : Math.atan2(-dir.z, dir.x);
+    this.speed = inPlace ? 0 : 0.5; this.yawRate = 0; this.boost = 1;
     this.canoe.state.stroke = 0; this.canoe.state.power = 0; this.canoe.state.mode = 'paddle';
     this.bob = null;
     this.placeOnWater();
+  }
+  // the paddle's own test (updatePaddle ok): the hull's middle and both ends in the water, on a tile that is in
+  paddleOk(x, z, h) {
+    const w = this.world, fx = Math.cos(h), fz = -Math.sin(h);
+    return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5;
   }
 }

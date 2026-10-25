@@ -129,6 +129,24 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #marks svg { display: block; }
 #marks > svg:not(.on) { display: none; } /* the three SVG marks: `#marks svg` out-specified the hide above, so they showed every frame */
 
+/* fb4 D (hints.js): an onboarding hint, a small card above the action line for 6 s, once a season: the key outlined as
+   Air's keys are, a few words, on a soft deep wash like the barks' so it reads over a bright sky. It keeps clear of the
+   lure strip and the balance arc when they are up. */
+#hint { left: 50%; translate: -50% 0; bottom: 100px; display: flex; align-items: center; gap: 10px; padding: 7px 15px 8px; border-radius: 8px; white-space: nowrap; font-size: 16px;
+  background: rgba(14, 27, 34, .55); box-shadow: 0 0 20px 6px rgba(14, 27, 34, .24); text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+#hint .keys { display: flex; gap: 4px; }
+#hint kbd { font-size: 12px; padding: 1px 7px; }
+#hint .words { color: rgba(243, 236, 221, .94); }
+#air.rod #hint { bottom: 160px; }
+#air.balance #hint { bottom: 262px; }
+#air.catch #hint { bottom: 120px; }
+/* the pace toast: above the status marks, at full strength for 3 s whenever the pace changes; it stays over the paper
+   as the marks do */
+#pace-toast { right: 40px; bottom: 50px; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; text-shadow: 0 1px 2px rgba(0, 0, 0, .55); max-width: min(560px, calc(100vw - 80px)); }
+#pace-toast .sc { color: var(--gold); font-size: 13px; }
+#pace-toast .line { font-size: 15px; color: rgba(243, 236, 221, .92); }
+body.paper-open #air > #pace-toast.show { visibility: visible; }
+
 /* the energy bar (fb2 F): Wild n Chill's one long thin bar, top left. Green is the energy you have; the dim track after
    it, up to the ceiling, is what rest can bring back; each need's chunk eats in from the right end in its colour (cold
    pale blue, sleep orange, hunger yellow, thirst blue), dashed and marching while it grows (cold dotted), with its icon
@@ -396,6 +414,7 @@ body.paper-open #scrim { opacity: .55; pointer-events: auto; }
   #catch { width: min(400px, calc(100vw - 48px)); }
   #compass { right: 16px; top: 16px; }
   #marks { right: 16px; bottom: 16px; }
+  #pace-toast { right: 16px; bottom: 36px; }
   #map.glance { right: 0; width: 100vw; height: 56vh; }
   #journal { grid-template-columns: 1fr; height: 92vh; overflow: auto; }
   #journal .page { padding: 24px; }

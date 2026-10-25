@@ -1,5 +1,6 @@
-// The book (J; L still opens it for a while; I opens it at the pack): one leather-bound book with two sides, Tab
-// between them. The journal side is a two-page paper spread. Its left page is the trip: the food cells, the energy
+// The book (I; fb4 B, decision 4: the one key, I or Esc closes it, Pack and Journal are tabs on its top edge; J, L,
+// Tab, Shift-Tab and the arrow keys are gone): one leather-bound book with two sides. It opens at the pack. The journal
+// side is a two-page paper spread. Its left page is the trip: the food cells, the energy
 // bar, the distances, portages, lakes and nights, the tasks on the go, a pencil note. Its right page has tabs:
 // Catches (the log, with personal bests), Tasks (the notices taken on, where each is paid, the season's earnings),
 // Lakes (where you have been), Trips (the logbook: every trip and how it ended), Photos (the prints the camera keeps,
@@ -8,8 +9,8 @@
 // Data comes from the fishing code (log, bests), the tasks, the energy, the outfitter's trip record, the trip's permit
 // and logbook (trip.js, reached through the outfitter), the trip tally (trip-stats.js) and the camera (photo.js).
 // The pack side is one screen (wc B, the world cards): the body on the left, a tab per container across the top, and
-// Here as the right pane (what lies within reach, the canoe beside you, the outfitters' keeping); Tab turns to the next
-// tab, Shift-Tab to the journal; openHere(ref) is stream A's Q.
+// since fb4 B what is around you as tabs on the right (the canoe, each container on the ground, Wood, The ground, the
+// outfitters' keeping); a click turns a tab; openHere(ref) is stream A's Q.
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { PackSide } from './inv-ui.js';
 import { KINDS } from './tasks.js'; // fb3 C: a notice's kind, for its progress and its label
@@ -23,7 +24,7 @@ const PENCIL = [
   'pike in the weedy bay by the inlet, spoons',
   'lay over tomorrow if the wind holds',
 ];
-const SIDES = ['journal', 'pack'];
+const SIDES = ['pack', 'journal'];
 // what lifts the energy bar's ceiling, by the need whose chunk is biggest (energy.chunks)
 const LIFTS = { rest: 'a night’s sleep lifts it', food: 'a meal lifts it', water: 'a drink lifts it', warmth: 'a fire, or the tent and the bag, lift it' };
 
@@ -36,38 +37,33 @@ export class Journal {
     // the book: a tab for each side on its top edge, the journal's spread and the pack's mat
     this.el.classList.add('book');
     this.el.setAttribute('aria-label', 'The book: the journal and the pack');
-    this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button></div>
-      <div class="book-key"><kbd>Tab</kbd> the next tab · <kbd>Shift</kbd>-<kbd>Tab</kbd> turns the book</div><div class="side j"></div><div class="side p"></div>`;
+    this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button></div>
+      <div class="book-key"><kbd>I</kbd> or <kbd>Esc</kbd> closes</div><div class="side j"></div><div class="side p"></div>`;
     this.jEl = this.el.querySelector('.side.j'); this.pEl = this.el.querySelector('.side.p');
     this.pack = new PackSide(this.pEl, { onUse: t.onUse || null, closeBook: () => this.close() }); // fb2 B: a nearby thing's action that wants the world (Pitch, Eat at the fire) closes the book first
     this.hud.registerPaper('journal', () => this.close());
     this.el.addEventListener('click', (e) => {
-      const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); return; }
+      const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); side.blur(); return; } // (no focus ring left on it for the next key)
       const tab = e.target.closest('[data-tab]'); if (tab) { this.tab = tab.dataset.tab; this.page = 0; this.render(true); return; }
       const pg = e.target.closest('[data-page]'); if (pg) { this.page = Math.max(0, this.page + Number(pg.dataset.page)); this.render(true); return; }
       const close = e.target.closest('[data-close]'); if (close) this.close();
     });
+    // fb4 B (decision 4; the owner, 2026-10-25: "It should just be one key, I, to get into the inventory. You can switch
+    // over to your journal"): I opens the book at the pack and closes it from either side; Esc closes it; the tabs on its
+    // top edge turn it. The counter, the shelves and a card keep the keys while they are up.
     window.addEventListener('keydown', (e) => {
       const tag = e.target && e.target.tagName;
       if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
-      const busy = this.hud.paper === 'outfitter' || this.hud.paper === 'shelf' || this.hud.paper === 'card'; // the counter, the shelves and a card keep the keys
-      if (e.code === 'KeyJ' || e.code === 'KeyL') { if (e.repeat || busy) return; this.toggle(); }
-      else if (e.code === 'KeyI') { if (e.repeat || busy) return; if (this.open && this.side === 'pack') this.close(); else { this.setSide('pack'); this.show(); } }
-      else if (!this.open) return;
-      else if (e.code === 'Escape') this.close();
-      else if (this.side === 'journal' && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) { this.page = Math.max(0, this.page + (e.code === 'ArrowRight' ? 1 : -1)); this.render(true); }
+      const busy = this.hud.paper === 'outfitter' || this.hud.paper === 'shelf' || this.hud.paper === 'card';
+      if (e.code === 'KeyI') { if (e.repeat || busy) return; if (this.open) this.close(); else this.show('pack'); }
+      else if (this.open && e.code === 'Escape') this.close();
     });
-    // Tab while the book is open (ahead of the readout's Tab, hud.js): on the pack side the next tab along (the
-    // containers), Shift-Tab the journal; on the journal side, the pack
+    // Tab does nothing while the book is open (the readout's Tab, hud.js, waits until it is shut): the tabs are clicked
     window.addEventListener('keydown', (e) => {
       if (!this.open || e.code !== 'Tab') return;
       e.preventDefault(); e.stopImmediatePropagation();
-      if (e.repeat) return;
-      if (this.side !== 'pack') this.setSide('pack');
-      else if (e.shiftKey) this.setSide('journal');
-      else this.pack.nextTab(1);
     }, true);
-    this.setSide('journal');
+    this.setSide('pack');
   }
   // the book open at the pack side, with that container's (or pile's) grid in the right pane scrolled to and lit: stream A's
   // Q "Open it" on a container on the ground and Q "Open the pile" (ref: the container's id)
@@ -76,8 +72,8 @@ export class Journal {
     this.pack.openHere(ref);
     return true;
   }
-  toggle() { if (this.open) this.close(); else this.show(); }
-  // J opens the book at the side it was last closed on
+  toggle() { if (this.open) this.close(); else this.show('pack'); }
+  // opened at a side (I: the pack), else at the side it was last turned to
   show(side = null) {
     if (side) this.setSide(side);
     if (this.open) return;
@@ -246,7 +242,7 @@ export class Journal {
     const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'photos' && this.photos ? this.photosTab() : this.catchesTab();
     const pageNo = (this.dayN || 0) * 2 + 1;
     return `<section class="page right" aria-labelledby="right-h"><div class="ribbon" aria-hidden="true"></div>${nav}<div class="tabpage">${body.html}</div>
-      <div class="foot"><span>${body.foot || ''}</span><span class="keys"><kbd>Tab</kbd> the pack · <kbd>J</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
+      <div class="foot"><span>${body.foot || ''}</span><span class="keys"><kbd>I</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
   }
   catchesTab() {
     const f = this.fishing, log = f ? f.log : [], bests = f ? Object.values(f.bests || {}) : [];

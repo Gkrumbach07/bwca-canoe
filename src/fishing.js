@@ -23,7 +23,7 @@ import { itemDef } from './items.js';
 // facing water within a cast, from the shore, a dock or a rock, and the cast, the retrieve, the bites, the fight and the
 // catch card are the canoe's; the standing figure holds it (canoe.js rodArms).
 // fb3 B (the owner, 2026-10-25: "same thing with fish on the stringer. it auto puts it there which i only want if i say
-// put on stringer and the stringer is nearby. otherwise it goes into my hand", "how do i use leaches?"): a kept fish (K)
+// put on stringer and the stringer is nearby. otherwise it goes into my hand", "how do i use leaches?"): a kept fish (E at the catch; fb4 D, was K)
 // goes into your hand (inventory.toHandNew; into a pack or a barrel in reach when both hands are full, let go when
 // nothing has room), never onto the stringer by itself: "Put on the stringer" is its verb in the book while the stringer
 // is in reach (inventory.verb). The bobber rig takes one leech from the bucket per bite, and the bucket must be in
@@ -35,6 +35,7 @@ const TAU = Math.PI * 2;
 // wc C: on foot. offShore: no further than this from the water's edge; reach: open water looked for this far ahead, in a
 // fan either side of the way you face; drag: a lure reeled this close to the tip comes up the bank to your feet
 const FOOT = { offShore: 12, reach: 24, drag: 4 };
+const STEADY = 0.4; // fb4 D: seconds the leeches' reach must say the same before the strip and the prompt change
 
 export const TUNING = {
   base: 1 / 80,          // bites per second for one species at every factor 1.0
@@ -208,6 +209,7 @@ export class Fishing {
     // tackle box, or the inventory's); without it every lure is to hand
     this.hasLure = null;
     this.owned = LURES.map((_, i) => i); this.ownedT = 0; this.ownedSig = '';
+    this.ownedNext = null; this.needsShown = null; this.needsFor = 0; // fb4 D: the steadied lure list and leeches (refreshOwned, steadyNeeds)
     this.power = 0; this.charge = 0;
     this.pitch = 0.03; this.yaw = 0; this.bend = 0; this.crank = 0;
     this.aim = 0;              // world yaw of the cast
@@ -274,18 +276,35 @@ export class Fishing {
   }
   leechCount() { const inv = this.inventory; try { return inv && inv.attached ? inv.count('leeches') : 0; } catch { return 0; } }
   // you have bait somewhere but no leech is to hand (the strip says "needs leeches"; the bobber rig can't be cast)
-  get needsLeeches() { return !!(this.inventory && this.inventory.attached && this.ownsBait() && !this.leechSource()); }
+  needsRaw() { return !!(this.inventory && this.inventory.attached && this.ownsBait() && !this.leechSource()); }
+  // fb4 D (decision 6): what the strip, the prompt and the cast go by, which changes only once the reach has said the
+  // same for STEADY seconds (a bucket at the edge of the 3 m reach, a hull swinging on the swell, must not flick the strip)
+  get needsLeeches() { return this.needsShown ?? this.needsRaw(); }
+  steadyNeeds(dt) {
+    if (!this.rodUp) { this.needsShown = null; this.needsFor = 0; return; }
+    const raw = this.needsRaw();
+    if (this.needsShown == null || raw === this.needsShown) { this.needsShown = raw; this.needsFor = 0; return; }
+    if ((this.needsFor += dt) >= STEADY) { this.needsShown = raw; this.needsFor = 0; }
+  }
   // one leech off the bucket (a bite took it): false when there was none
   takeLeech() {
     const s = this.leechSource(); if (!s) return false;
     this.inventory.take(s.c.id, s.e.uid, 1);
+    if (this.rodUp) this.needsShown = this.needsRaw(); // (the last one going is said at once)
     return true;
   }
-  // the owned list refreshed four times a second, and on a change the tied-on lure kept to one you have (between casts)
+  // the owned list refreshed four times a second, and on a change the tied-on lure kept to one you have (between casts).
+  // fb4 D (decision 6): a new list is taken once it has read the same twice running (a tackle box at the edge of the
+  // reach), and the bobber rig, listed while you own bait anywhere, is tied on and kept like any lure: the shop's own
+  // check of the box (main.js fb4 D) counts it as there too, so the two no longer tie it on and off by turns, four
+  // times a second, which flashed the bobber at the rod's tip, the strip and the "needs leeches" prompt (the owner).
   refreshOwned(dt) {
     if ((this.ownedT -= dt) > 0) return;
     this.ownedT = 0.25;
-    this.owned = this.ownedLures();
+    const next = this.ownedLures(), sig = next.join(',');
+    if (sig !== this.owned.join(',') && this.ownedNext !== sig) { this.ownedNext = sig; return; } // a first reading of a new list: wait
+    this.ownedNext = null;
+    this.owned = next;
     if (!this.owned.includes(this.lureIndex) && (this.state === 'stowed' || this.state === 'ready')) this.lureIndex = this.owned[0];
   }
   lureKeys() { const n = this.owned.length; return n > 1 ? `1–${n} change the lure` : '1 the lure'; }
@@ -558,6 +577,7 @@ export class Fishing {
     }
     if (water && !this.rodUp && !p.prompt) p.prompt = { key: 'F', text: 'Fish from here' };
     this.refreshOwned(dt);
+    this.steadyNeeds(dt); // fb4 D (decision 6)
     if (this.rodUp) {
       // fb G: 1–n pick from the lures you have, in the strip's order
       for (let k = 0; k < this.owned.length; k++) if (inp.pressed(`Digit${k + 1}`)) {
@@ -835,11 +855,12 @@ export class Fishing {
   }
 
   // The fish is held up for a look: the camera comes round to the paddler's front quarter until it is kept
-  // or let go (E or K; a stray click does not end it), or the hold-up time runs out.
+  // or let go (E keeps it, Q lets it go; a stray click does not end it), or the hold-up time runs out.
+  // fb4 D (decision 4): E and Q, the two keys of the dot, in place of K and E (K was outside the round's key set)
   updateLanded(dt) {
     const L = this.landed, p = this.player;
     L.t += dt;
-    const keep = this.input.pressed('KeyK'), rel = this.input.pressed('KeyE');
+    const keep = this.input.pressed('KeyE'), rel = this.input.pressed('KeyQ');
     if (keep && L.t > 0.4) return this.release(true);
     if ((rel && L.t > 0.4) || L.t > TUNING.holdUp) return this.release(false);
     const f = p.forward, rx = -f.z, rz = f.x, y = this.canoe.rig.position.y + (this.onFoot ? 0.62 : 0); // wc C: standing, the fish is held higher
@@ -849,7 +870,7 @@ export class Fishing {
     this.chase.focus = fx;
     const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.catchLake(L), L.length) : null; // hubs 1C: a notice taken on wants it
     const inv = this.inventory, free = inv && inv.attached && typeof inv.freeHand === 'function' ? inv.freeHand() >= 0 : true;
-    p.prompt = { key: 'E', text: `Let it go · <kbd>K</kbd>${want ? `Keep it for “${esc(want.title)}”` : free ? 'Keep it, in your hand' : 'Keep it, into a pack'}` }; // fb3 B: to the hand
+    p.prompt = { key: 'E', text: `${want ? `Keep it for “${esc(want.title)}”` : free ? 'Keep it, in your hand' : 'Keep it, into a pack'} · <kbd>Q</kbd> Let it go` }; // fb3 B: to the hand
   }
 
   release(keep) {
@@ -1046,7 +1067,12 @@ export class Fishing {
     u.fight = this.fish ? { tension: this.fish.tension, danger: this.fish.danger, slack: this.fish.slack, line: this.lineOut, run: this.fish.run > 0 } : null;
     u.message = this.message ? this.message.text : null;
     u.stringer = this.stringer.length;
-    u.needsLeeches = this.rodUp && this.needsLeeches; u.leeches = this.leechCount(); // fb3 B: the strip's "needs leeches"
+    u.needsLeeches = this.rodUp && this.needsLeeches; // fb3 B: the strip's "needs leeches"
+    // fb4 D: the leeches in reach as the strip counts them, held while the steadied reach still says they are there (a
+    // bucket at the reach's edge read 12 and 0 by turns)
+    const n = this.leechCount();
+    if (n > 0 || u.needsLeeches || this.leechesShown == null) this.leechesShown = n;
+    u.leeches = this.leechesShown;
     u.log = this.log; u.bests = this.bests; u.logVersion = this.logVersion;
     u.rate = this.rate;
     return u;

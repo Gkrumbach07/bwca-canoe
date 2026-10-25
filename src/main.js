@@ -51,7 +51,7 @@ import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
 import { inventory } from './inventory.js'; // fb A
-import { ITEMS, defineItem, itemDef } from './items.js'; // fb A
+import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
 import { ContainerView } from './containers.js'; // fb A
 import { invUI } from './inv-ui.js'; // fb B
 import { Dialogue } from './dialogue.js'; // fb F
@@ -63,6 +63,8 @@ import { FORAGE } from './forage.js'; // fb2 A
 import { KINDS } from './tasks.js'; // fb2 A
 import { cards } from './cards.js'; // wc B
 import { VERBS, verbsOf } from './items.js'; // wc D
+import { withTentNeeds, pitchNeeds } from './tent.js'; // fb4 E
+import { Hints } from './hints.js'; // fb4 D
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -228,12 +230,12 @@ async function main() {
   outfitter.shop = shop;
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
+  // fb4 D (decision 4, the keys after the owner's second round of 2026-10-25): the global keys are 1 2 3, the pace, and
+  // Sandbox's wind. R (the shore in the water) and N (sound) are gone: both are rows of Settings (Display, Sound).
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
     if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-7 pick lures while the rod is up
-    if (e.code === 'KeyR') settings.toggle('reflections');
-    if (e.code === 'KeyN') settings.toggle('mute');
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
   // trip core B: the packs and the portages (packs.js): where each pack is, the load you carry, the double portage
@@ -267,8 +269,9 @@ async function main() {
   audio.indoors = () => !!(outfitter.visit && outfitter.visit.inside);
   // fb F: dialogue (dialogue.js). What people say shows by their heads with their names, one at a time in a room, pinned
   // to the screen's edge when they are off it; E on someone opens a conversation (numbered choices; you hold still and
-  // the view turns to them, or in third person outside a store cuts over your shoulder); T shows the last six lines.
-  // Made before the title, so its Esc and number keys come first.
+  // the view turns to them, or in third person outside a store cuts over your shoulder); a conversation opens with what
+  // that person last said to you (fb4 D: T and its panel are gone). Made before the title, so its Esc and number keys
+  // come first.
   const talk = new Dialogue({ camera, player, chase, hud, day, frame: () => !(outfitter.visit && outfitter.visit.inside) });
   npcs.dialogue = talk;
 
@@ -451,6 +454,13 @@ async function main() {
   packs.openCanoe = () => (typeof journal.openHere === 'function' ? journal.openHere('canoe') : false);
   const travellingA = trip.travelling.bind(trip);
   trip.travelling = (dt) => { const r = travellingA(dt); if (!r && player.mode === 'walk' && player.lapsing && Math.abs(player.speed) > 0.1) { trip.travelT = 1; return true; } return r; };
+  // fb4 A: the shore and the figure (the owner's second round of 2026-10-25). A hull nosed in or lying on the bank is
+  // beached: E is held, "Push it off" (packs.js beginPush: you walk it out until both ends float and stand beside it in
+  // the shallows; a tap moves nothing); afloat, E "Get in" puts you in it where it floats and as it faces (player.launch
+  // in place), and what you wear goes into the hull with one note; nothing comes back out when you step out. Greyed
+  // verbs carry decision 2's why, needs and next (packs.js, nearby.js, pointer.js). The figure keeps its head in any
+  // view not at the eye (canoe.js: the pause card, the title, a close-up), however the camera was set.
+  canoe.viewer = camera;
   // fb3 B: items and their uses (the owner's 2026-10-25 round). Every item says what it does in numbers (items.js
   // stats, which the book's tooltip draws), with the effect real in code: the sleeping bag is the night's rest
   // (energy.sleep), the tarp keeps the rain off the ring or a pack (chores.js), the clothes change after a soaking
@@ -473,6 +483,119 @@ async function main() {
   const hudUpdateC = hud.update.bind(hud);
   hud.update = (c) => hudUpdateC(c && !c.weather ? { ...c, weather } : c);
   hud.stripAlso = () => !!camp.dialOpen;
+  // fb4 E: the tarp and the chores' checklists (the owner's second round of 2026-10-25). The tarp is pitched like the tent
+  // (tarp.js): on a ridge line between two trees 3–7 m apart, or a tree and two poles, or four poles, the poles found lying
+  // about or cut from a down log with the saw (chores.js); right-click Pitch the tarp shows it as a ghost where you stand
+  // and E held pitches it, or says what is missing; Q at it takes it down. What lies under its sheet stays dry
+  // (tarp.covers). Every chore's blocked action carries its checklist (decision 2: why, needs, next): the tent's steps
+  // (tent.js withTentNeeds, pitchNeeds), the hang's (hang.hangNeeds), the down log's Saw and Cut a pole
+  // (chores.downLogTarget), the latrine's (chores.latrineNeeds), the evening's wood (chores.nightWood). Stream A's nearby.js
+  // reads these itself; the wraps below fill in only what its targets do not carry yet.
+  const tarp = camp.chores.tarp;
+  window.__game.tarp = tarp;
+  pointer.register(tarp.targets); // a pitched rig (E Carry on pitching · Q Take it down, held), a loose pole (E Pick up)
+  const armedE = pointer.isArmed, cancelE = pointer.onCancel; // the armed tarp takes E and a click; Esc or a right-click lets it go
+  pointer.isArmed = () => !!tarp.armed || !!(armedE && armedE());
+  pointer.onCancel = (why) => tarp.disarm('You leave the tarp in its bag.') || (cancelE ? cancelE(why) : false);
+  const beginPitchE = camp.beginPitch.bind(camp), armHangE = camp.hang.arm.bind(camp.hang);
+  camp.beginPitch = (uid) => { tarp.disarm(); return beginPitchE(uid); };
+  camp.hang.arm = (cId) => { tarp.disarm(); return armHangE(cId); };
+  const tentActionsE = camp.tentActions.bind(camp);
+  camp.tentActions = () => withTentNeeds(camp, tentActionsE());
+  camp.pitchNeeds = (tent) => pitchNeeds(camp, tent);
+  const pointTargetsE = nearby.pointTargets.bind(nearby);
+  nearby.pointTargets = (ray, near) => camp.chores.decorateTargets(pointTargetsE(ray, near), ray, near);
+  const itemActionsE = nearby.itemActions.bind(nearby);
+  nearby.itemActions = (ref) => {
+    const out = itemActionsE(ref);
+    for (const a of out) {
+      if (a.needs) continue;
+      if (a.id === 'hang' && ref && ref.container) Object.assign(a, camp.hang.hangNeeds(ref.container), { why: a.why });
+      else if (a.id === 'pitch' && ref && ref.uid != null) { const n = camp.pitchNeeds(camp.tentByUid(ref.uid)); Object.assign(a, { needs: n.needs, next: n.next }); }
+    }
+    return out;
+  };
+  // fb4 C: needs and statuses (the owner's second round of 2026-10-25: "if I can't use something, I want to know exactly
+  // why I can't use it … some sort of checklist or timer or quantity out of total", and "things that have statuses like
+  // wet clothes … you need to know"). Every greyed verb and card button says why as a checklist with the next step
+  // (items.js check: needs have of need, steps, timers in game seconds), and inventory.status(ref) gives each item's
+  // state (wet, drying, treating, cooking, burning, hot, low, empty, ready) for the book to draw. Wood is wet piece by
+  // piece now (inventory.syncWet: the rain on an open ring, a pile or an armload; dry by a lit fire in 30 min, 3 h in dry
+  // air), and a fire lights on three dry pieces with a dry branch among them (fire.js lightCheck). The ring's checks for
+  // nearby.js (stream A passes them to the card and the dot): chores.lightCheck / douseCheck / fireState (and
+  // cook.cookCheck / cookingNow, native); chores.lightProblem says lightCheck's why, so Light refuses what the card says;
+  // the ring's pieces come dry first (binUnits), so the kindling Light takes is a dry branch. Until stream A passes the
+  // needs through, nearby.fireObject is decorated here (a no-op once its light action has needs of its own).
+  {
+    const ch4 = camp.chores, wetFlag = (u) => (u && u.e && u.e.data && u.e.data.wet > 0 ? 1 : 0);
+    const units4 = ch4.binUnits.bind(ch4);
+    // (a stable sort: the ring's order otherwise; while Light is held, only the dry pieces: it takes its kindling from them)
+    ch4.binUnits = (b) => { const u = units4(b).sort((x, y) => wetFlag(x) - wetFlag(y)); return hold.is('fire-light') ? u.filter((x) => !wetFlag(x)) : u; };
+    const rate4 = (b) => (b && typeof inventory.wetRate === 'function' ? inventory.wetRate(b) : 1);
+    ch4.lightCheck = (key) => {
+      const b = ch4.fuelBin(key), c = fires.lightCheck(key, ch4.binUnits(b), { rate: rate4(b) });
+      // (fb4 join: wet wood filling the ring leaves no room for the dry: the first step is taking it out)
+      if (!c.enabled && b && ch4.binUnits(b).some((u) => wetFlag(u)) && !inventory.firstFit(b, 'wood:branch')) {
+        c.needs = [NEED.step('Room in the ring for dry wood', false, { note: 'it is full of wet wood' }), ...c.needs];
+        c.next = 'Take the wet wood out first: drag it onto the ground by the ring (by a lit fire it dries in 30 min), then dry wood in';
+      } else if (!c.enabled && b && /^(Gather|Two|Three|One|A dry branch)/.test(c.next || '')) {
+        // (fb4 join: dry wood already within reach, on you or on a pile by you: drag it in, not "gather")
+        let dry = 0, branch = false;
+        for (const k of inventory.reachable()) if (k !== b) for (const e of k.grid) if (!e.box && /^wood:/.test(e.id) && !(e.data && e.data.wet > 0)) { dry += e.qty || 1; if (e.id === 'wood:branch') branch = true; }
+        if (dry) c.next = `${dry} ${dry === 1 ? 'piece' : 'pieces'} of dry wood within reach${branch ? '' : ' (no branch among them)'}: drag ${dry === 1 ? 'it' : 'them'} into the fuel`;
+      }
+      return c;
+    };
+    ch4.lightProblem = (key) => { const c = ch4.lightCheck(key); return c.enabled ? null : c.why; };
+    ch4.douseCheck = (key) => fires.douseCheck(key);
+    ch4.fireState = (key) => {
+      const b = ch4.fuelBin(key), rain = typeof ch4.rainNow === 'function' ? ch4.rainNow() : 0;
+      const st = fires.ringState(key, ch4.binUnits(b), { rate: rate4(b), rain, covered: !!(b && rain > 0 && inventory.rainAt(b) <= 0), cooking: ch4.cook.cookingNow(key) });
+      if (typeof ch4.nightWood === 'function') { try { st.fuel.night = ch4.nightWood(key); } catch (e) { console.warn('chores.nightWood', e); } } // stream E's
+      return st;
+    };
+    const fireObj4 = nearby.fireObject.bind(nearby);
+    nearby.fireObject = () => {
+      const o = fireObj4();
+      if (!o || !o.key || !Array.isArray(o.actions)) return o;
+      const act = (id) => o.actions.find((a) => a.id === id), light = act('light');
+      if (light && light.needs) return o; // stream A passes them through itself
+      const put = (a, c) => { if (!a || !c) return; a.needs = c.needs; a.next = c.next; if (!c.enabled) { a.enabled = false; a.why = c.why; } else if (a.enabled !== false) a.why = null; };
+      put(light, ch4.lightCheck(o.key));
+      const site = typeof nearby.site === 'function' ? nearby.site(4) : null;
+      if (site) put(act('cook'), ch4.cook.cookCheck(site, o.key));
+      put(act('douse'), ch4.douseCheck(o.key));
+      if (act('eat')) { act('eat').needs = []; act('eat').next = 'Eaten there and then, ten minutes on the clock'; }
+      if (!o.fuel) Object.assign(o, ch4.fireState(o.key));
+      const ck = ch4.cook.cookingNow(o.key);
+      if (ck) o.cooking = { ...(o.cooking || {}), ...ck };
+      return o;
+    };
+    window.__game.needs = { timerWords: (s) => inventory.timerWords(s), status: (r) => inventory.status(r), verb: (id, r) => inventory.verb(id, r) }; // for the console and the tests
+  }
+  // fb4 B: the book (the owner's second round of 2026-10-25). I opens and closes it (Pack and Journal are tabs on its
+  // edge; J, L, Tab and Ctrl-click are gone, R turns a thing only while it is dragged); its right pane is a tab per thing
+  // within reach (the canoe, each container on the ground, Wood, The ground), and a card's left pane is the body and
+  // all the tabs; a greyed verb or button draws its checklist and next step (inv-ui.js needsHtml, decision 2) and a
+  // thing's state its mark and tooltip line (inventory.status, stream C), their timers counted down with this clock.
+  invUI.attach({ day });
+  // fb4 D: the keys, the hints, the pace toast and the bobber (the owner's second round of 2026-10-25). The keys are the
+  // round's set (title.js KEYMAP; the bindings above: R and N gone, dialogue.js's T gone, fishing.js's K now E keep and
+  // Q let go). Onboarding hints, once a season each, and a toast whenever the pace changes (hints.js), run after the
+  // barks each frame. The bobber: fishing.js lists the bobber rig while you own bait anywhere ("needs leeches" when
+  // none is in reach) and ties it on, and the shop's check of what is in the tackle box took it off again in the same
+  // frame, four times a second: the bobber flashed at the tip and the strip and the prompt flashed with it. The shop's
+  // box now counts the rig while the bait is owned, so one writer decides what is tied on (fishing.js), and the leeches'
+  // reach is steadied there.
+  const boxD = shop.box.bind(shop);
+  shop.box = () => { const b = boxD(); if (typeof fishing.ownsBait === 'function' && fishing.ownsBait()) b.add('leech'); return b; };
+  // a landed fish's Q (let it go) is the rod's: the trail head's Q fetch (packs.js) waits while a fish is held up
+  const packsUpdD = packs.update.bind(packs);
+  packs.update = (dt) => { if (!fishing.landed || !input.once.has('KeyQ')) { packsUpdD(dt); return; } input.once.delete('KeyQ'); packsUpdD(dt); input.once.add('KeyQ'); };
+  const hints = new Hints({ player, hud, day, profile, pointer, outfitter, inventory, lamp, chase, title, talk, camp, photo, veil, settings, fishing });
+  const talkUpdD = talk.update.bind(talk);
+  talk.update = (dt, shell) => { talkUpdD(dt, shell); hints.update(dt, shell); };
+  window.__game.hints = hints;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
