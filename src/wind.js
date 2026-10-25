@@ -24,7 +24,7 @@ const GUST_CELL = 64;                    // metres: the gust field's lattice
 const GUST_WRAP = 1024 * GUST_CELL;      // the field repeats every 1024 cells, so the drift wraps there
 export const SWAY = {
   // xy: the unit direction the wind blows toward (world x, z); z: the load, the wind's pressure against 12 m/s
-  // (1 there, 0.03 at 2 m/s, capped at 2); w: the speed (m/s)
+  // (1 there, 0.03 at 2 m/s, steeper past 11 m/s, capped at 2.6: updateSway); w: the speed (m/s)
   uSwayWind: { value: new THREE.Vector4(0, 1, 0, 0) },
   // xy: how far the gust field has drifted (world metres, wrapped); z: the sway clock (s, wrapped); w: the gusts'
   // strength now, 1 on average (the day's gust signal)
@@ -115,7 +115,11 @@ export class Wind {
     s.x = (s.x + d.x * v * 0.8 * dt) % GUST_WRAP;
     s.z = (s.z + d.z * v * 0.8 * dt) % GUST_WRAP;
     s.t = (s.t + dt) % SWAY_PERIOD;
-    SWAY.uSwayWind.value.set(d.x, d.z, Math.min(2, (v / 12) * (v / 12)), v);
+    // the load: the wind's pressure against 12 m/s, and past a strong breeze steeper still, so a near gale leans the trees
+    // and tosses the crowns (14 m/s 1.6, 16 m/s 2.5, capped at 2.6: the grass's lean is the load times 0.4 under a gust,
+    // and past about 1.4 its tips would go under the ground, groundcover.js)
+    const load = Math.min(2.6, (v / 12) * (v / 12) * (1 + 0.6 * smoothstep(11, 18, v)));
+    SWAY.uSwayWind.value.set(d.x, d.z, load, v);
     SWAY.uSwayGust.value.set(s.x, s.z, s.t, clamp(1 + 1.6 * this.gust, 0.4, 1.6));
   }
 
