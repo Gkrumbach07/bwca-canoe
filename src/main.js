@@ -538,6 +538,11 @@ async function main() {
       if (!c.enabled && b && ch4.binUnits(b).some((u) => wetFlag(u)) && !inventory.firstFit(b, 'wood:branch')) {
         c.needs = [NEED.step('Room in the ring for dry wood', false, { note: 'it is full of wet wood' }), ...c.needs];
         c.next = 'Take the wet wood out first: drag it onto the ground by the ring (by a lit fire it dries in 30 min), then dry wood in';
+      } else if (!c.enabled && b && /^(Gather|Two|Three|One|A dry branch)/.test(c.next || '')) {
+        // (fb4 join: dry wood already within reach, on you or on a pile by you: drag it in, not "gather")
+        let dry = 0, branch = false;
+        for (const k of inventory.reachable()) if (k !== b) for (const e of k.grid) if (!e.box && /^wood:/.test(e.id) && !(e.data && e.data.wet > 0)) { dry += e.qty || 1; if (e.id === 'wood:branch') branch = true; }
+        if (dry) c.next = `${dry} ${dry === 1 ? 'piece' : 'pieces'} of dry wood within reach${branch ? '' : ' (no branch among them)'}: drag ${dry === 1 ? 'it' : 'them'} into the fuel`;
       }
       return c;
     };
