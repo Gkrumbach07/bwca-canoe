@@ -410,22 +410,19 @@ export class Packs {
     c.choice = false;
     const plan = left.length ? this.fetchPlan(left) : null, k = left[0];
     const info = k ? `${cap(names(left))} ${left.length > 1 ? 'are' : 'is'} back at the trail head, ${metres(Math.hypot(k.obj.at.x - p.x, k.obj.at.z - p.z))}` : null;
-    const far = dd > HULL_REACH ? `The canoe is ${dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`} away` : null;
     if (plan) {
       p.say(note || (dd <= HULL_REACH ? info : trailText || info), ['Q', `Fetch ${left.length > 1 ? 'them' : 'it'} (${aboutHours(plan.hours)})`]);
       if (inp.pressed('KeyQ')) this.fetch(left, plan);
       return true;
     }
     if (dd <= HULL_REACH) {
-      const a = this.hullAction(), v = a && a.e ? a.e.verb : null;
-      // (polish B: the line says what the hull offers while the dot is not yet on it, which from the dock at level it is
-      // not; once the dot is on it the label has the words and pointer.js drops this line, canoeHint)
-      const hint = !note && !info && v ? (v === 'Get in' ? 'the canoe floats: point at it to get in' : v === 'Push it off' ? `the canoe is beached: point at it and hold E to push it off${a.q && !a.q.why ? ', or Q to shoulder it' : ''}` : 'point at the canoe to shoulder it') : null;
-      p.say(note || info || hint);
-      if (hint && p.prompt) p.prompt.canoeHint = true;
+      // fb5 join (rule 5, quiet by default): no standing line about the hull ("the canoe is beached: point at it and hold
+      // E to push it off" read at a portage, where you carry it): the dot on it says its verbs, and the push and unload
+      // moments (hints.js) teach them the first time
+      p.say(note || info);
       return true;
     }
-    p.say(note || trailText || info || far);
+    p.say(note || trailText || info); // (fb5 join, rule 5: not "The canoe is 12 m away" standing at camp or in the store; the world shows the canoe)
     return true;
   }
   // wc A: what the dot offers at the canoe lying on the ground (or floated at a dock's side): { e, q, label, hint }, or
@@ -578,7 +575,7 @@ export class Packs {
   canShoulder() {
     const list = this.loadedUnits();
     if (!list.length) return { ok: true, why: null };
-    return { ok: false, why: 'Unload it first', needs: list.map((u) => ({ label: `${cap(the(u))} out of it`, done: false })), next: 'Q opens the book at the canoe: Set everything out, or drag each onto the ground' };
+    return { ok: false, why: 'Unload it first', needs: list.map((u) => ({ label: `${cap(the(u))} out of it`, done: false })), next: 'Unload it: Set everything out, or drag each thing onto The ground.' }; // (fb5 join: said as the book opens, so not "Q opens the book")
   }
   // wc A, the book's Canoe tab (stream B): everything in the canoe beside you (but the lashed things) set out on the
   // ground about the hull, at camp when at one. { n, words }

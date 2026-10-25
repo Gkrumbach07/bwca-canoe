@@ -115,7 +115,7 @@ export const MOMENTS = [
   // the way
   { id: 'portage', prio: TEACH, recur: 'once', text: 'A portage. Land beside the sign to carry the canoe over.' },
   { id: 'push', prio: TEACH, recur: 'once', learn: 'push', keyed: true, text: 'Beached. Hold {E} to push it off.' },
-  { id: 'unload', prio: TEACH, recur: 'once', text: 'Unload the canoe to carry it: {I}, then drag the gear out.' },
+  { id: 'unload', prio: TEACH, recur: 'once', text: 'Unload the canoe to carry it: {Q} on it, then Set everything out.' },
   // the rod
   { id: 'bait', prio: TEACH, recur: 'once', text: 'Bait: leeches from the bucket, within reach.' },
   { id: 'fish', prio: TEACH, recur: 'once', learn: 'fish', keyed: true, text: '{F} to fish.' },
@@ -390,7 +390,13 @@ export class Hints {
       }
       // the way
       case 'portage': return p.mode === 'paddle' && !p.landing && !!(p.prompt && /Portage: /.test(p.prompt.text || ''));
-      case 'push': { const g = t.pointer && t.pointer.target; return !!(g && g.kind === 'canoe' && g.e && g.e.verb === 'Push it off' && !g.e.why); }
+      case 'push': {
+        const g = t.pointer && t.pointer.target;
+        if (!(g && g.kind === 'canoe' && g.e && g.e.verb === 'Push it off' && !g.e.why)) return false;
+        // (fb5 join: not at a portage's end, where you came to carry it: the unload moment speaks there)
+        const tr = typeof p.nearestTrail === 'function' ? p.nearestTrail(p.x, p.z, 60) : null;
+        return !tr;
+      }
       case 'unload': {
         const g = t.pointer && t.pointer.target;
         if (!(g && g.kind === 'canoe' && g.q && g.q.why && /unload/i.test(g.q.why))) return false;

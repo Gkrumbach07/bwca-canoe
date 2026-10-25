@@ -2170,7 +2170,7 @@ export class MineSide {
     const kg = A.canoe.filter((c) => c.where === 'canoe').reduce((k, c) => k + (typeof inv.weight === 'function' && live() ? inv.weight(c.id) : weightOf(c)), 0) + A.longCanoe.reduce((k, l) => k + ((itemDef(l.id) || {}).kg || 0), 0);
     const title = `${A.stash ? 'In the canoe at the dock' : 'In the canoe'}${kg > 0.05 ? ` · ${kgText(kg)}` : ''}`;
     const z = this.zone(page, 'canoe', title, kids, kids.length ? (A.afloat ? '' : 'room to load') : A.afloat ? 'Nothing in the canoe but you.' : 'Nothing in the canoe.'); // (fb5 B: quiet, rule 5)
-    if (!A.afloat && !A.stash) z.appendChild(this.canoeActs(A.canoe, A.longCanoe));
+    if (!A.afloat && !A.stash) z.insertBefore(this.canoeActs(A.canoe, A.longCanoe), z.querySelector('.pk-flow')); // (fb5 join: at the top, where Shoulder it's word sends you, not under a loaded canoe's grids out of sight)
   }
   // Wood: the woodpiles within reach and the wood lying about (dead and down); wood dropped here is stacked
   woodPage(page, T) {

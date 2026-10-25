@@ -96,7 +96,7 @@
 .tabpage.tp-cont { overflow: hidden auto; } /* (fb3 C: a grid taller than the page, the #4 pack at 720 px, scrolls down, never sideways) */
 .tabpage > .ct { max-width: 100%; }
 .tabpage .pk-zone { align-self: stretch; margin-left: -6px; margin-right: 0; }
-.canoe-acts { margin-top: 4px; }
+.canoe-acts { margin: 2px 0 10px; }
 
 /* the slots: what you wear and hold */
 .slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 10px 12px; }
