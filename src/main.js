@@ -439,7 +439,7 @@ async function main() {
   Object.assign(window.__game.items, { VERBS, verbsOf });
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
-  renderer.compileAsync(scene, camera).catch(() => {});
+  prewarm(scene); // polish A: with the composer's target bound, as above
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -491,6 +491,7 @@ async function main() {
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
     water.update(dt * ts, player.x, player.z);
+    ripples.lapse = player.boost || 1; // polish A: the hull's bubbles age at the travel's time-lapse (wake.js)
     ripples.update(dt * ts);
     updateClouds(clouds, dt * ts, camera.position.x, camera.position.z);
     day.update(dt * ts);

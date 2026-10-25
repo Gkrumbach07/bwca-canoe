@@ -108,7 +108,7 @@ const vert = /* glsl */ `
       p.xz += aVel.xz * age;
       local = p + vec3(position.x, 0.0, position.y) * size;
       local.y = aPos.y + drawnWave(local.xz, uWaterTime) + 0.012;
-      fade = (1.0 - smoothstep(0.25, 1.0, t)) * smoothstep(0.0, 0.08, t) * smoothstep(-0.15, -0.9, shoreAt(local.xz));
+      fade = (1.0 - smoothstep(0.15, 0.85, t)) * smoothstep(0.0, 0.08, t) * smoothstep(-0.15, -0.9, shoreAt(local.xz));
     }
     vUv = position.xy;
     vFade = fade;
@@ -146,10 +146,12 @@ const frag = /* glsl */ `
     else {
       float w = mix(0.22, 0.08, vAge), c = mix(0.6, 0.86, vAge), aa = fwidth(r);
       float ring = smoothstep(c - w - aa, c - w * 0.3, r) * (1.0 - smoothstep(c + w * 0.3, c + w + aa, r));
-      // broken round its circumference, differently for each bubble, so the trail is lace and not a row of rings
+      // thinned round its circumference, differently for each bubble, so the trail is lace and not a row of rings;
+      // softly, and in more pieces than the two or three lobes that read as paw prints (polish A)
       float ang = atan(vUv.y, vUv.x);
-      ring *= smoothstep(0.15, 0.7, 0.5 + 0.5 * sin(ang * 2.0 + vSeed * 40.0) * sin(ang * 3.0 - vSeed * 23.0 + 1.3));
-      a = (ring * 0.34 + (1.0 - smoothstep(0.0, c, r)) * 0.06) * (1.0 - smoothstep(0.9, 1.0, r));
+      ring *= smoothstep(-0.1, 0.9, 0.5 + 0.5 * sin(ang * 3.0 + vSeed * 40.0) * sin(ang * 5.0 - vSeed * 23.0 + 1.3));
+      // each bubble its own strength, none as strong as they were
+      a = (ring * 0.2 + (1.0 - smoothstep(0.0, c, r)) * 0.05) * (0.55 + 0.45 * fract(vSeed * 7.7)) * (1.0 - smoothstep(0.9, 1.0, r));
     }
     a *= vFade;
     if (a < 0.01) discard;
@@ -215,9 +217,20 @@ export class Ripples {
     this.head = 0;
     this.time = 0;
     this.dirty = false;
+    // polish A: the travel's time-lapse (player.boost, main.js sets it each frame). The hull's bubbles are laid along
+    // the track at the lapsed speed while this clock runs at life, so at Trip pace a two-second bubble lay 20 m back:
+    // their life is cut by the lapse past 2.5 (their drift kept), so the trail fades within about 8 m at any pace;
+    // and only every other one is kept, so the trail is a few bubbles a metre, not a dotted line
+    this.lapse = 1;
+    this.odd = false;
   }
 
   spawn(kind, x, y, z, size0, size1, life, vx = 0, vy = 0, vz = 0) {
+    if (kind === 3) {
+      if ((this.odd = !this.odd)) return;
+      const k = Math.max(1, this.lapse / 2.5);
+      life /= k; vx *= k; vz *= k;
+    }
     const i = this.head; this.head = (this.head + 1) % MAX;
     this.pos[i * 3] = x - this.origin.x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z - this.origin.z;
     this.vel[i * 3] = vx; this.vel[i * 3 + 1] = vy; this.vel[i * 3 + 2] = vz;
