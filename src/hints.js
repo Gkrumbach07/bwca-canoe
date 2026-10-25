@@ -99,6 +99,8 @@ export const MOMENTS = [
   { id: 'treating', prio: BODY, recur: 'once', text: 'A tablet in: safe to drink in 30 min.' },
   // the day's end
   { id: 'start', prio: TEACH, recur: 'once', text: 'Paddle out, find a campsite for the night. {M} shows them.' },
+  // (fb5 join: a new player left the store with no sheet, and M showed blank paper)
+  { id: 'maps', prio: TEACH, recur: 'once', text: 'The map table sells the map of these lakes: {M} then shows the campsites.' },
   { id: 'evening', prio: TEACH, recur: 'daily', learn: 'map', text: 'Find a campsite before dark: {M} shows them.', short: 'Campsite before dark: {M}' },
   { id: 'dusk', prio: TEACH, recur: 'daily', text: 'Dark soon. Make camp.', short: 'Dark soon. Make camp.' },
   // the camp
@@ -126,9 +128,9 @@ export const MOMENTS = [
   { id: 'grey', prio: TEACH, recur: 'once', learn: 'grey', keyed: true, text: '{right-click} a thing in the book to see why' },
   { id: 'shelf', prio: TEACH, recur: 'once', learn: 'shelf', keyed: true, text: '{E} look at the shelf' },
   { id: 'book', prio: TEACH, recur: 'once', learn: 'book', keyed: true, text: '{I} your pack and what’s around you' },
-  { id: 'pace', prio: TEACH, recur: 'once', learn: 'pace', keyed: true, text: '{1}{2}{3} the pace' },
+  { id: 'pace', prio: TEACH, recur: 'once', learn: 'pace', keyed: true, text: '{1}{2}{3} how fast time runs' }, // (fb5 join: "the pace" read as paddling speed)
   { id: 'jog', prio: TEACH, recur: 'once', learn: 'jog', keyed: true, text: '{Shift} jog' },
-  { id: 'view', prio: TEACH, recur: 'once', learn: 'view', keyed: true, text: '{V} the view' },
+  { id: 'view', prio: TEACH, recur: 'once', learn: 'view', keyed: true, text: '{V} change the view' },
 ];
 const BY_ID = new Map(MOMENTS.map((m) => [m.id, m]));
 // energy.js's cues (needNotes and the bar's words) that the moments say now
@@ -303,6 +305,11 @@ export class Hints {
     let n = 0; try { n = ch && ch.fireInfo ? ch.fireInfo(key).units.length : 0; } catch { n = 0; }
     return n ? { kind: 'wood' } : { kind: 'empty' };
   }
+  // the map shows this place's campsites: a sheet of yours covers it (or Sandbox)
+  mapHere() {
+    const p = this.t.player;
+    try { return !sheets.gated || sheets.showsDetail(p.x, p.z); } catch { return true; }
+  }
   // a blue barrel of yours anywhere (on you, at camp, in the canoe, kept at an outfitter): what a hang takes
   hasBarrel() {
     const inv = this.t.inventory;
@@ -371,13 +378,23 @@ export class Hints {
       case 'tired': return need('rest');
       case 'treating': return this.live && e.treating > 0.001;
       // the day's end: on a trip under way, out of a store's yard, no tent of yours up and not at a site
-      case 'start': return this.onTrip && p.mode === 'paddle' && this.wayT >= UNDER_WAY;
+      case 'start': {
+        if (!(this.onTrip && p.mode === 'paddle' && this.wayT >= UNDER_WAY)) return false;
+        return this.mapHere() ? true : { lv: 1, text: 'Find a campsite for the night. A map sheet from the store shows them.' };
+      }
+      case 'maps': {
+        const v = t.outfitter && t.outfitter.visit;
+        // once a shelf has been used (the shopping done, about to go out), not on the way in among the shelf and V lines
+        const sh = this.rec('shelf');
+        return !!(v && v.inside && p.onFoot && sh && sh.used && !(t.outfitter && (t.outfitter.shelfOpen || t.outfitter.open)) && sheets.gated && !sheets.ownedSheets().length);
+      }
       case 'evening': case 'dusk': {
         const set = d && d.sunriseSunset ? d.sunriseSunset.set : null;
         if (set == null || !this.onTrip || this.atOutfitter || (t.camp && (t.camp.camp || t.camp.atSite)) || p.teleporting) return false;
         if (id === 'evening') {
           if (!(d.hours >= set - 2 && d.hours < set - 0.75)) return false;
           const where = this.nearestSiteWords();
+          if (!this.mapHere()) return { lv: 1, text: 'Find a campsite before dark: a clearing with a fire ring, on the shore.', short: 'No campsite on your map near here: look for one before dark.' }; // (fb5 join: M shows nothing here)
           return { lv: 1, short: where ? `Before dark: a free campsite ${where} {M}` : 'No campsite on your map near here: look for one before dark.' };
         }
         return d.hours >= set - 0.75 && d.hours < set + 0.5;
@@ -532,6 +549,7 @@ export class Hints {
     const hold = this.g.hold, inv = this.t.inventory;
     if (hold && typeof hold.is === 'function' && hold.is('pushOff') && !this.used('push')) this.learn('push');
     if (!this.used('hang') && inv && inv.attached && typeof inv.hungAtCamp === 'function') { try { if (inv.hungAtCamp().length) this.learn('hang'); } catch { /* not yet */ } }
+    const o = this.t.outfitter; if (o && o.shelfOpen && !this.used('shelf')) this.learn('shelf'); // (fb5 join: a shelf opened, the shelf learnt; the map table's moment waits for it)
   }
   // of the moments due now, the one to show: { m, text, how, rec, lv } or null. Every trigger is looked at (each keeps
   // its own episode and its time held) and the highest priority wins.

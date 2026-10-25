@@ -410,6 +410,8 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 #card header .say { font-size: 17px; font-style: italic; color: var(--ink-soft); }
 #card header .stamp { flex: none; margin-left: auto; }
 #card header .pk-note + .stamp { margin-left: 24px; }
+/* fb5 join (the owner: "on the fire, no numbers but a missing chip"): the card's side of your things drops the straps' kilograms */
+#card .cd-mine .ct-head .kg { display: none; }
 #card .cd-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 500px; gap: 22px; }
 #card .cd-thing { min-height: 0; overflow: hidden auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 12px; }
 #card .cd-thing .nb { align-self: stretch; background: rgba(36, 34, 25, .9); box-shadow: inset 0 0 0 1.5px rgba(26, 20, 12, .55), 0 6px 18px rgba(0, 0, 0, .25); color: var(--cream); }

@@ -801,7 +801,7 @@ export class Hud {
     if (!wind) return;
     const ice = !!(day && day.season && day.season.ice > 0.5); // a frozen lake has no waves (polish B)
     const H = ice ? 0 : player.waveHeightHere || 0;
-    const matters = wind.fresh || H > WAVE_MATTERS;
+    const matters = player.mode === 'paddle' && (wind.fresh || H > WAVE_MATTERS); // (fb5 join: the wind speaks on the water; "Fresh breeze · 8 m/s · waves 0.1 m" in a store doorway or at camp said nothing to do)
     const mode = s ? s.compassMode : 'always';
     const show = mode === 'always' || (mode === 'wind' && matters);
     e.compass.classList.toggle('show', show);
@@ -1228,11 +1228,13 @@ export class Hud {
       for (const i of e.map.querySelectorAll('.band.foot .leg > i.portage, .band.foot .leg > i.camp, .band.foot .leg > i.dock')) i.parentNode.style.display = bare ? 'none' : ''; // (the notices' red pencil stays: it is drawn on blank paper too)
       for (const b of e.mapLayers.querySelectorAll('.layer')) b.style.display = bare ? 'none' : ''; // and no layer toggles over blank paper (polish B)
     }
-    const detail = table ? 'click a sheet to see what is on it · the red-dotted ones are sold at this table'
-      : look === 'whole' ? 'the whole Boundary Waters, here at the outfitter · the sheets dotted over it, yours ruled in ink'
-        : look === 'owned' ? (none ? 'blank paper: the map tables at the outfitters sell the sheets, and each one you buy shows here' : 'your sheets, with everything on them · the rest is blank until you buy its sheet')
-          : 'depths in metres where the DNR has sounded';
-    if (e.mapHint) this.set('mhint', e.mapHint, table ? `drag to pan · wheel to zoom · ${detail}` : `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'} · ${detail}`);
+    // (fb5 join, rule 3: the line says what is missing, else only the keys: not "your sheets, with everything on them ·
+    // the rest is blank until you buy its sheet" every time M is pressed)
+    const detail = table ? 'click a sheet to see what is on it'
+      : look === 'whole' ? 'the sheets dotted over it, yours ruled in ink'
+        : look === 'owned' ? (none ? 'blank paper: the map tables at the outfitters sell the sheets' : '')
+          : '';
+    if (e.mapHint) this.set('mhint', e.mapHint, [table ? 'drag to pan · wheel to zoom' : `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'}`, detail].filter(Boolean).join(' · '));
     this.set('mspan', e.mapSpan, `${v.span >= 10000 ? Math.round(v.span / 1000) : (v.span / 1000).toFixed(v.span < 5000 ? 1 : 0)} km across`);
     if (this.mode === 'sheet' && this.scaleInfo) {
       const { bar, cssPx } = this.scaleInfo, txt = `${bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}`;

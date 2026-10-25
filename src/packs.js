@@ -443,7 +443,7 @@ export class Packs {
     const can = this.canShoulder();
     const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, needs: can.needs, next: can.next, run: () => { if (this.canShoulder().ok) p.pickUpHull(); }, help: () => this.openBookAtCanoe() };
     const L = this.dropLaunch(d), lake = L ? this.world.lakeName(L.lake) || 'the water' : null;
-    if (this.atDock(d)) return { e: this.getInVerb(d, L), q: shoulder, label: 'the canoe, at the dock' };
+    if (this.atDock(d)) return { e: this.getInVerb(d, L), q: can.ok ? shoulder : null, label: 'the canoe, at the dock' }; // (fb5 join: no greyed "Q Shoulder it · unload it first" at a dock, where nobody shoulders a loaded canoe)
     const frozen = !!(this.day && this.day.season && this.day.season.ice > 0.5);
     if (!L || !L.deep || frozen) return { e: shoulder, q: null, label: 'the canoe', hint: L && frozen ? `${lake} is frozen over` : L ? 'too shallow to launch here' : null };
     if (this.afloat(d)) return { e: this.getInVerb(d, L), q: shoulder, label: `the canoe, afloat on ${lake}` };
