@@ -1053,7 +1053,7 @@ function press(g, e, el, ev) {
   if (g.opts.bin && !g.opts.bin.take) return;
   const r = el.getBoundingClientRect(), ox = ev.clientX - r.left, oy = ev.clientY - r.top;
   // (fb4 B, decision 4: no Ctrl-click any more; a double-click still buys off a shelf)
-  const st = { kind: 'item', grid: g, e, el, x0: ev.clientX, y0: ev.clientY, gx: Math.min(ox, CELL * Math.floor(ox / CELL) + CELL / 2), gy: Math.min(oy, CELL * Math.floor(oy / CELL) + CELL / 2), rot: e.rot || 0, started: false,
+  const st = { kind: 'item', grid: g, e, el, x0: ev.clientX, y0: ev.clientY, gx: Math.max(0, Math.min(r.width, ox)), gy: Math.max(0, Math.min(r.height, oy)), rot: e.rot || 0, started: false, // (fb5 join: the exact grab point, so the thing lands where its ghost is under the pointer: the pot grabbed by its middle onto the grate's middle went a row low and red)
     qty: ev.shiftKey && (e.qty || 1) > 1 ? Math.ceil((e.qty || 1) / 2) : null };
   follow(st, null);
 }
