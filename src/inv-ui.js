@@ -1596,6 +1596,7 @@ function verbMenu(ref, sc = null) {
       }
       case 'hang': { const a = acts.find((x) => x.id === 'hang'); grey(label, v.why || 'carry it to a tree and point at the limb', a && (a.needs || a.next) ? { needs: a.needs, next: a.next } : null); break; } // (E at the tree; what the hang needs from E's chores)
       case 'hand': {
+        if (e && e.fixed) break; // (fb5 B: the bottle in its pocket never goes to a hand: no verb that is always grey)
         if (e && !t) { viaHook(v.id, label, v.why || 'not from here'); break; } // a plain thing into a free hand (stream B)
         if (!t) break;
         const o = t.obj;
