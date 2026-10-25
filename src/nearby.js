@@ -87,6 +87,14 @@ function checked(v, c, busy = null) {
 }
 const HANDS_FULL = { needs: [{ label: 'A free hand', done: false }], next: 'Open the book (I) and set down what you hold, or put it in the canoe' };
 const ALL_FULL = { needs: [{ label: 'Your back, your chest or a hand free', done: false }], next: 'Open the book (I) and set something down, or put it in the canoe' };
+// fb4 join: a loose thing's Pick up greys when nothing you carry has room and your hands are full (it said only after E)
+const ROOM_FULL = { needs: [{ label: 'Room in a pack on you, or a free hand', done: false }], next: 'Open the book (I): make room in your pack, or set down what you hold' };
+function roomOnYou(inv, itemId) {
+  if (!itemId) return true;
+  if (inv.freeHand() >= 0 && (typeof inv.canHand !== 'function' || inv.canHand(itemId))) return true;
+  const on = (c) => { const w = inv.rootWhere(c); return w === 'back' || w === 'chest' || w === 'hands' || w === 'pockets'; };
+  return inv.containers.some((c) => on(c) && !(itemDef(c.item) || {}).one && inv.firstFit(c, itemId));
+}
 // a container's size on the ground, for the dot: [height of its middle, radius]
 const BODY = { pack3: [0.32, 0.42], pack4: [0.34, 0.46], barrel30: [0.24, 0.3], barrel60: [0.32, 0.38], bucket: [0.14, 0.24], tacklebox: [0.1, 0.24], mapcase: [0.1, 0.24], pile: [0.12, 0.42], woodarms: [0.12, 0.4] };
 
@@ -325,7 +333,7 @@ class Nearby {
         const tent = this.baggedTent(o);
         if (tent) {
           const tt = camp.tentByUid(tent.uid), why = camp.pitchRefused(tt), pc = check(camp, 'pitchNeeds', tt);
-          push(hit, { kind: 'item', ref: o.id, label: `the ${lower(tent.def.name)}, bagged`, e: { verb: 'Pick up', run: () => packs.pickUp(u) }, q: { verb: 'Pitch', why, ...(pc ? { needs: pc.needs || null, next: pc.next || null } : {}), run: () => camp.beginPitch(tent.uid) }, mesh: view && view.objs && view.objs.get(o.id) });
+          push(hit, { kind: 'item', ref: o.id, label: `the ${lower(tent.def.name)}, bagged`, e: { verb: 'Pick up', ...(roomOnYou(inv, tent.def.id) ? { why: null } : { why: 'no room on you', ...ROOM_FULL }), run: () => packs.pickUp(u) }, q: { verb: 'Pitch', why, ...(pc ? { needs: pc.needs || null, next: pc.next || null } : {}), run: () => camp.beginPitch(tent.uid) }, mesh: view && view.objs && view.objs.get(o.id) });
           continue;
         }
         // fb4 A: the bagged tarp on the ground (a pile holding only it): E Pick up · Q Pitch the tarp (stream E's
@@ -333,11 +341,11 @@ class Nearby {
         const tarp = window.__game && window.__game.tarp, te = o.grid.length === 1 && !o.grid[0].box && tarp && typeof tarp.verb === 'function' ? o.grid[0] : null;
         const tv = te ? check(tarp, 'verb', o, te) : null;
         if (tv) {
-          push(hit, { kind: 'item', ref: o.id, label: `the ${lower((itemDef(te.id) || {}).name || 'tarp')}, bagged`, e: { verb: 'Pick up', run: () => this.takeOne(o) }, q: { verb: tv.label || 'Pitch the tarp', why: whyOf(tv), needs: tv.needs || null, next: tv.next || null, run: (o2) => tv.run(o2) }, mesh: view && view.objs && view.objs.get(o.id) });
+          push(hit, { kind: 'item', ref: o.id, label: `the ${lower((itemDef(te.id) || {}).name || 'tarp')}, bagged`, e: { verb: 'Pick up', ...(roomOnYou(inv, te.id) ? { why: null } : { why: 'no room on you', ...ROOM_FULL }), run: () => this.takeOne(o) }, q: { verb: tv.label || 'Pitch the tarp', why: whyOf(tv), needs: tv.needs || null, next: tv.next || null, run: (o2) => tv.run(o2) }, mesh: view && view.objs && view.objs.get(o.id) });
           continue;
         }
         const top = o.grid.find((q) => !q.box) || o.grid[0], n = o.grid.length, dd = top ? itemDef(top.id) : null;
-        push(hit, { kind: 'pile', ref: o.id, label: n === 1 && dd ? `the ${lower(dd.name)}, on the ground` : `the things on the ground (${n})`, e: { verb: 'Take one', why: top ? null : 'nothing there', run: () => this.takeOne(o) }, q: { verb: 'Open the pile', run: () => this.openHere(o.id) }, mesh: view && view.objs && view.objs.get(o.id) });
+        push(hit, { kind: 'pile', ref: o.id, label: n === 1 && dd ? `the ${lower(dd.name)}, on the ground` : `the things on the ground (${n})`, e: { verb: 'Take one', ...(!top ? { why: 'nothing there' } : top.box || roomOnYou(inv, top.id) ? { why: null } : { why: 'no room on you', ...ROOM_FULL }), run: () => this.takeOne(o) }, q: { verb: 'Open the pile', run: () => this.openHere(o.id) }, mesh: view && view.objs && view.objs.get(o.id) });
         continue;
       }
       const room = !!packs.slotFor(u);

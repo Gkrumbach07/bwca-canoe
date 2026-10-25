@@ -251,7 +251,8 @@ class Pointer {
       inp.once.delete(key);
       if (a.why) {
         // (fb4 A, decision 2: the reason and the one thing to do next)
-        if (this.hud) this.hud.note(a.next ? `${String(a.why).replace(/[.:]\s*$/, '')}. ${a.next}${/[.!?]$/.test(a.next) ? '' : '.'}` : a.why, a.next ? 5 : 3);
+        const why = String(a.why).replace(/^./, (c) => c.toUpperCase()); // (fb4 join: the label's lower-case why starts a sentence here)
+        if (this.hud) this.hud.note(a.next ? `${why.replace(/[.:]\s*$/, '')}. ${a.next}${/[.!?]$/.test(a.next) ? '' : '.'}` : why, a.next ? 5 : 3);
         if (typeof a.help === 'function') { try { a.help({ key, from: 'dot' }); } catch (err) { console.warn('pointer help', err); } }
         return;
       }
