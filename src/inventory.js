@@ -1215,7 +1215,7 @@ export class Inventory {
         }
       }
     }
-    if (wetted && this.hud) this.hud.note('The rain has wet the wood through: it won’t light until it dries (30 min by a lit fire, 3 h in dry air). A tarp keeps it dry.', 6);
+    if (wetted && this.hud) this.hud.note('The rain has wet the wood through.', 5); // (fb5 join: the fire says what wet wood means when it matters, the wood's tooltip has its drying time, the rain moment the tarp)
     if (dried) { if (this.hud && !this.driedNoted) this.hud.note(`The wet wood has dried${dried > 1 ? `: ${dried} pieces` : ''}.`, 4); this.emit('items'); }
     else if (wetted || dirty) { if (wetted) this.emit('items'); else this.dirty = true; }
   }

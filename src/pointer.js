@@ -351,6 +351,8 @@ class Pointer {
       if (/<kbd>E<\/kbd>/.test(q.text || '')) q = { ...q, text: stripE(q.text) };
       if (this.target && this.target.q) { if (q.key === 'Q') q = { ...q, key: null }; if (/<kbd>Q<\/kbd>/.test(q.text || '')) q = { ...q, text: stripKey(q.text, 'Q') }; }
       if (q.canoeHint && this.target && this.target.kind === 'canoe') q = { ...q, text: '' }; // "point at the canoe" (packs.js): the dot is on it, the label has its keys
+      // (fb5 join, rule 5: a line that says just what the dot's label says, "Pick up the paddle" under "E Pick up · the paddle", goes)
+      if (q.text && this.target && this.target.e && this.target.e.verb && this.target.label && sameWords(q.text, `${this.target.e.verb} ${this.target.label}`)) q = { ...q, text: '' };
       if (q !== pr) p.prompt = q.text ? q : null;
     }
   }
@@ -504,6 +506,7 @@ export function forageTargets(forage, FORAGE) {
     return out;
   };
 }
+const sameWords = (a, b) => String(a).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().toLowerCase() === String(b).replace(/\s+/g, ' ').trim().toLowerCase();
 // A lost thing a notice sent you for (tasks.js 'item'): "E Pick up"
 export function taskTargets(tasks, KINDS) {
   return (ray, near) => {

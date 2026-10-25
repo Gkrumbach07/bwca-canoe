@@ -1270,7 +1270,7 @@ export class Player {
               c.hitCooldown = 1.3;
               nx = this.x; nz = this.z; this.speed = -0.25;
               if (this.audio) this.audio.paddleDip();
-              if (Math.random() < 0.45) { this.dropHull(); note = 'The canoe came down'; } else note = 'The canoe caught a tree';
+              if (Math.random() < 0.45) { this.dropHull(); note = 'The canoe hit a tree and came down'; } else note = 'The canoe caught a tree'; // (fb5 join: the why, not only that it fell)
               break;
             }
           }

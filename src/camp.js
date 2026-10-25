@@ -456,7 +456,7 @@ export class Camp {
     if (this.audio && this.audio.paddleDip) this.audio.paddleDip();
     if (got <= 0) { this.note('The bottle is full.'); return; }
     if (wait >= 0.25 && !(this.energy.treating > 0.001) && !this.energy.sandbox) return; // no tablet in reach: energy.fill has said so
-    this.note(wait >= 0.25 ? 'You fill the bottle and drop in a tablet. Drinkable in half an hour.' : 'You pump the bottle full. Drinkable in a few minutes.');
+    this.note(wait >= 0.25 ? 'You fill the bottle and drop in a tablet.' : 'You pump the bottle full. Drinkable in a few minutes.'); // (fb5 join: the wait is the treating moment's, once; the bottle's tooltip has its timer)
   }
   // the profile (stream A), wherever it is to be had
   get profile() {
