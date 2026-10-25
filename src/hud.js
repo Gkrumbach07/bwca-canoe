@@ -3,7 +3,7 @@ import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
 import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
-import { lifeKmh } from './pace.js';
+import { lifeKmh, describe as describePace } from './pace.js';
 import './hud.css';
 
 // The HUD, in two materials (hud.css). Air: the compass top right, the readout top left while Tab is held,
@@ -901,32 +901,27 @@ export class Hud {
   }
 
 
-  // the status marks, bottom right at half strength: the pace while it time-lapses the travel ("trip ×4", pace.js), the
-  // time scale, the clock stopped, the trip's when it matters (the food down to a day, the gear wet), the GPS link, mute,
-  // tiles loading. (A need run low is no longer a word here: fb2 F, its chunk and icon on the energy bar say it.)
+  // the status marks, bottom right at half strength: the game speed while 2 or 3 has it up ("faster ▶▶", pace.js
+  // describe: words and a mark, no numbers; fb5 C), the clock stopped, the trip's when it matters (the food down to a day,
+  // the gear wet), the GPS link, mute, tiles loading. (A need run low is no longer a word here: fb2 F, its chunk and icon
+  // on the energy bar say it.)
   marksBuild() {
     const m = this.el.marks; if (!m) return;
-    m.innerHTML = `<span id="mark-pace" class="sc"></span><span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
+    m.innerHTML = `<span id="mark-pace" class="sc"></span><span id="mark-clock" class="sc">clock stopped</span>`
       + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span>'
       + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
       + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
       + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
-    this.mk = { pace: $('mark-pace'), speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+    this.mk = { pace: $('mark-pace'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
   }
   updateMarks(ctx) {
     const { ts, geo, day, trip, energy, player } = ctx, mk = this.mk, w = this.world; if (!mk) return;
-    // the pace, while its time-lapse carries you above the base (pace.js floor, twice life): up once the boost is 0.6
-    // past the floor, away again under 0.3 past it (no flicker as it eases); the number is the pace's own for where you
-    // are (6 on open water at Trip, the trail's on a portage)
-    const P = player && player.paceTable, base = (P && P.floor) || 1;
-    let pace = '';
-    if (P && P.water > base && !ctx.shell && mk.pace) {
-      this.paceUp = this.paceUp ? player.boost > base + 0.3 : player.boost > base + 0.6;
-      if (this.paceUp) pace = `${P.label.toLowerCase()} ×${Math.round(player.lapseT || player.boost)}`;
-    }
-    if (mk.pace) { this.set('mpace', mk.pace, pace); mk.pace.classList.toggle('on', !!pace); }
-    const sp = ts > 1 ? `×${ts}` : '';
-    this.set('mspeed', mk.speed, sp); mk.speed.classList.toggle('on', !!sp);
+    // fb5 C (decision 3, one clock): the corner says only that 2 or 3 has the game sped up, in words and a mark ("faster
+    // ▶▶", "fastest ▶▶▶"); at Normal it is away (quiet by default), and the canoe's time-lapse is never a mark: it is how
+    // the canoe moves, not how the clock runs. Not while the camera holds the clock at life (photo.js) or a card is up.
+    const fast = ts > 1 && !ctx.shell && !(player && player.pace === 'life'), sp = fast ? describePace(player ? player.pace : 'trip', ts) : null;
+    const pace = sp ? `${sp.name.toLowerCase()} ${sp.mark}` : '';
+    if (mk.pace) { this.set('mpace', mk.pace, pace); mk.pace.classList.toggle('on', !!pace); mk.pace.setAttribute('aria-label', sp ? `Game speed: ${sp.name}` : ''); }
     mk.clock.classList.toggle('on', !!(day && !day.running && !ctx.shell));
     const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
     const hung = adv && energy && energy.hungFood ? energy.hungFood() : null; // camp join: the barrel hung at camp is food you have

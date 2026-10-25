@@ -27,7 +27,8 @@ export class Input {
 // (the energy, a capsize, a bump on the shore, the loons, the clock's "under way") reads the speed at life.
 const PADDLE = { accel: 3.1, hustle: 4.65, reverse: 1.35, drag: 0.31, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
 // m/s at life (pace.js LIFE): a walk, Shift a jog, and a carry before the load slows it; face: how fast the walker turns
-// to where the keys point. On a portage trail the walker is time-lapsed as the canoe is on the water (SEEN, pace.js).
+// to where the keys point. On a portage trail the walker is time-lapsed as the canoe is on the water (SEEN, pace.js):
+// how he is seen to move, while the clock runs at the pace's one rate (fb5 C).
 const WALK = { speed: LIFE.walk, hustle: LIFE.jog, carry: LIFE.carry, carryHustle: LIFE.carryHustle, face: 7 };
 // fb2 E: the load on foot without the canoe: it slows the walk only past kg, as (kg / LOAD.kg) ^ -walk (it had been the
 // carry's ^ -0.6); up a flight of steps the walk slows by up to STAIRS.slow as the feet rise at STAIRS.climb m/s
@@ -95,12 +96,13 @@ export class Player {
     this.strokeCount = 0;
     this.prompt = null;
     this.timeScale = 1;
-    // the pace (pace.js, settings): 'trip' time-lapses travel, 'real' is life. boost is the time-lapse the canoe or the
-    // walker moves at this frame (1 at life); trip.js runs the clock at it while you travel
+    // the pace (pace.js, settings): 'trip' runs the clock at 4 and time-lapses travel, 'real' is life. boost is the
+    // time-lapse the canoe or the walker is seen to move at this frame (1 at life); fb5 C: it no longer moves the clock,
+    // which runs at the pace's one rate (trip.js)
     this.pace = 'trip';
-    this.boost = 1; this.lapseT = 1;
-    this.lapsing = false;        // fb3 A: on foot under the pace's time-lapse (a trail, or the woods outside a camp and a yard): the clock follows (main.js, trip.travelling)
-    this.paceSpeed = 0;          // the speed made good per hour of the game's clock while travelling (the readout's km/h)
+    this.boost = 1;
+    this.lapsing = false;        // fb3 A: on foot under the pace's time-lapse (a trail, or the woods outside a camp and a yard): trip.travelling counts it as under way
+    this.paceSpeed = 0;          // the speed made good at life, over the boost (the readout's km/h)
     this.trailCache = new Map(); // portage -> resampled trail, built on first use
     this.carry = null; // on foot: { trail, drop: { x, z, heading } | null, hitCooldown, from: { x, z } | null, choice }
     this.landing = null; // auto-pilot toward a portage launch point
@@ -307,8 +309,9 @@ export class Player {
     if (this.mode === 'paddle' || this.landing || this.ashore) this.setMove('paddle', dt, { y: this.level }); // fb C
     // the speed made good over the ground, for the GPS fix and the tally: what was actually covered this frame, not
     // what the legs or the paddle asked for (a trunk, a wall or deep water holds you while `speed` still says you are
-    // walking); a jump across the map is not a speed. paceSpeed is the same per hour of the clock (over the boost): the
-    // readout's km/h, which at either pace is the speed at life
+    // walking); a jump across the map is not a speed. paceSpeed is the same over the boost: the readout's km/h, which at
+    // either pace is the speed at life (fb5 C: on open water at full boost also the ground a game hour covers; on foot,
+    // where the clock runs ahead of the walk's time-lapse, more than it covers)
     const d = Math.hypot(this.x - x0, this.z - z0);
     if (dt > 0 && d < 4) {
       const k = 1 - Math.exp(-dt * 8);
@@ -412,7 +415,6 @@ export class Player {
     // alongside or a landing: the owner did not like it slowing there)
     const P = this.paceTable, B = P.floor || 1;
     let boostWant = B;
-    this.lapseT = P.water; // the pace's own time-lapse here (the HUD's "trip ×6")
     if (P.water > B && fwd > 0 && !idleHands) {
       const cruise = LIFE.cruise * (this.gear ? this.gear.cruise : 1);
       const k = smoothstep(BOOST.cruising[0], BOOST.cruising[1], this.speed / cruise)
@@ -1211,15 +1213,15 @@ export class Player {
         // the pace on a portage trail (pace.js): the walker time-lapsed so he is seen at about SEEN (a carry at 2.5 m/s, a
         // walk at 2.6), up to the pace's trail T. fb3 A: off a trail, outside a campsite's area, a store and its yard, he
         // is time-lapsed too, at the pace's foot T (1.8 at Trip: a walk seen at about 2.4 m/s; a jog and a loaded carry
-        // held to what the trail shows them at), the clock with him (lapsing: main.js); within a site's area or a yard he
-        // walks at life on the idle clock. The step onto a trail is a change of ground (1.8 to 3), not a wall (1 to 3).
+        // held to what the trail shows them at); within a site's area or a yard he walks at life. fb5 C: the clock runs at
+        // the pace's one rate throughout, so this is how he is seen to move and nothing more. The step onto a trail is a
+        // change of ground (1.8 to 3), not a wall (1 to 3).
         const P = this.paceTable;
         let boostWant = 1;
         const seen = carrying ? (hustle ? SEEN.carryHustle : SEEN.carry) : (hustle ? SEEN.jog : SEEN.walk);
         if (onTrail && P.trail > 1 && fwd) boostWant = clamp(seen / Math.max(0.1, base), 1, P.trail);
         else if (!onTrail && !campArea && !yard && (P.foot || 1) > 1 && fwd) boostWant = hustle || carrying ? clamp(seen / Math.max(0.1, base), 1, P.foot) : P.foot;
         this.lapsing = boostWant > 1;
-        if (boostWant > 1 || !onTrail) this.lapseT = boostWant; // (standing on a trail keeps the trail's number for the HUD)
         this.easeBoost(boostWant, dt);
         nx = this.x + mx * this.speed * this.boost * dt; nz = this.z + mz * this.speed * this.boost * dt;
         if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }

@@ -57,7 +57,7 @@ const KEYMAP = [
     [['Tab'], 'held: the readout, the moment only (the place, the time, the sun, the wind and the waves, the sky, your speed and heading)'],
     [['V'], 'the view: from the paddler’s eyes · from behind'],
     [['H'], 'the headlamp, day or night, afloat or on foot'],
-    [['1', '2', '3'], 'the pace: 1×, 2×, 4× on top of Trip or Real (Settings › Controls); a note by the corner mark says what the clock does (with the rod up the numbers pick the lure)'],
+    [['1', '2', '3'], 'the game speed: Normal, Faster ▶▶, Fastest ▶▶▶, on top of Trip or Real (Settings › Controls); the corner shows the mark while it is faster (with the rod up the numbers pick the lure)'],
     [['Esc'], 'frees the mouse when it is taken · closes the book, a card or the dial · puts away a tent’s ghost · otherwise this menu'],
     [[], 'the energy bar, the clock and the day stay in a strip at the top over the book and every card. The bar: green is the energy you have, and the chunks at its end what each need takes off how high it can go: cold (a snowflake), sleep (zz), hunger (a fork and knife), thirst (a drop), dashed while growing'],
   ]],

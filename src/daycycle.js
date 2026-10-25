@@ -156,12 +156,11 @@ export class DayCycle {
     this.hours = start?.hours ?? now.getHours() + now.getMinutes() / 60;
     this.running = true;
     this.hoursPerSecond = 1 / 3600; // the clock at life: an hour an hour
-    // the pace (pace.js): `rate` is the clock's time-lapse, set by the trip every frame (trip.js): while you travel the
-    // time-lapse the canoe or the walker moves at (about 6 on open water at Trip pace), otherwise the pace's idle rate
-    // (12 at Trip, 1 at Real); the 1/2/3 keys multiply it through dt. `jumps` counts the moves of the clock made by
+    // the pace (pace.js): `rate` is the clock's time-lapse, set by the trip every frame (trip.js): one rate everywhere at a
+    // pace (fb5 C: 4 at Trip, 1 at Real); the 1/2/3 keys multiply it through dt. `jumps` counts the moves of the clock made by
     // advance() (a night slept, a walk back fetched), so the HUD's dawn card can skip them; `locked` (Adventure) turns the
     // clock keys off
-    this.rate = 12;
+    this.rate = 4;
     this.jumps = 0;
     this.locked = false;
     this.sunDir = new THREE.Vector3(0, 1, 0);
