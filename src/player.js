@@ -753,7 +753,7 @@ export class Player {
     const target = Math.atan2(-dz, dx);
     let dh = target - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
     this.heading += dh * (1 - Math.exp(-dt * 2.5));
-    this.speed = lerp(this.speed, 1.4 + Math.min(1.6, (L.via ? d + 12 : d) * 0.1), 1 - Math.exp(-dt * 2)); // (brisker from the prompt's edge)
+    this.speed = lerp(this.speed, 1.4 + Math.min(2.4, (L.via ? d + 12 : d) * 0.14), 1 - Math.exp(-dt * 2.5)); // (brisker from the prompt's edge)
     const f = this.forward;
     this.x += f.x * this.speed * dt; this.z += f.z * this.speed * dt;
     this.canoe.state.power = 0.5; this.canoe.state.stroke = (this.canoe.state.stroke + dt * 0.8) % 1; this.canoe.state.drive = 1; this.canoe.state.turn = 0;
