@@ -1061,7 +1061,7 @@ export class Inventory {
       const hot = Number.isFinite(e.data.cooked) && now - e.data.cooked < 1;
       return { label: hot ? 'Hot' : 'Leftovers', mark: hot ? 'hot' : null, timer: Math.round(left), running: true, until: e.data.until, next: `Eat it (right-click › Eat), or it goes off in ${timerWords(left)}` };
     }
-    if (d.eat && d.eat.cook) return { label: 'Raw', mark: null, next: d.kind === 'fish' ? 'Fry it on the grate at a fire (in the pot’s lid, or on a stick); or Put on the stringer to keep it' : 'Cook it: the pot on the grate, this beside it, the fire burning (E at the ring)' };
+    if (d.eat && d.eat.cook) return { label: 'Raw', mark: null, next: d.kind === 'fish' ? `Fry it on the grate at a fire (in the pot’s lid, or on a stick)${c && c.item === 'stringer' ? ': it keeps on the stringer till then' : '; or Put on the stringer to keep it'}` : 'Cook it: the pot on the grate, this beside it, the fire burning (E at the ring)' };
     const n = Number.isFinite(d.servings) ? d.servings : Number.isFinite(d.uses) ? d.uses : 1;
     if (n > 1) {
       const left = Number.isFinite(e.left) ? e.left : n, unit = d.servings > 1 ? 'servings' : 'left';
