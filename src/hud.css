@@ -121,6 +121,7 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #marks > * { display: none; }
 #marks > .on { display: inline-flex; }
 #marks svg { display: block; }
+#marks > svg:not(.on) { display: none; } /* the three SVG marks: `#marks svg` out-specified the hide above, so they showed every frame */
 
 /* the energy bar (fb2 F): Wild n Chill's one long thin bar, top left. Green is the energy you have; the dim track after
    it, up to the ceiling, is what rest can bring back; each need's chunk eats in from the right end in its colour (cold
