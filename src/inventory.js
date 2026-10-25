@@ -67,6 +67,7 @@ const isWood = (id) => { const d = itemDef(id); return !!(d && d.kind === 'firew
 const OPEN = new Set(['firefuel', 'pile', 'woodarms', 'inhand', 'grate']); // fb4 C: containers the rain falls into
 const WET_AFTER = 1 / 3;              // game hours of rain on open wood before it is wet through (chores.js RAIN.wetAfter)
 const no = (why, words = '') => ({ ok: false, why, words });
+const WADE_REACH = 2.5;               // m: standing in the water, a thing set down goes to dry ground this near, or not at all
 
 export class Inventory {
   constructor() {
@@ -775,7 +776,8 @@ export class Inventory {
     if (!force && !this.thingReachable(t)) return no('far', `${t.def.name} is out of reach.`);
     if (!at) {
       if (!p || !p.onFoot) return no('afloat', 'Not from the canoe: go ashore first.');
-      at = this.spotNear(p.x, p.z, p.heading);
+      at = this.downSpot();
+      if (!at) return this.wadeNo();
       // within a camp's area it is set out at camp (as packs.js Q does), from the book too
       const a = this.camp && typeof this.camp.reachArea === 'function' ? this.camp.reachArea() : null;
       if (a) at = { ...at, camp: a.key || 'camp' };
@@ -831,8 +833,9 @@ export class Inventory {
     const e = c.grid.find((q) => q.uid === uid); if (!e || e.fixed) return no('gone', '');
     if (e.box) return this.setDown(e.uid);
     if (!p || !p.onFoot) return no('afloat', 'Not from the canoe: go ashore first.');
-    let pile = this.containers.find((k) => k.item === 'pile' && k.where === 'ground' && this.dist(k.at) < 1.5);
-    if (!pile) { const s = this.spotNear(p.x, p.z, p.heading); pile = this.addContainer('pile', 'ground', { x: s.x, z: s.z, y: this.groundY(s.x, s.z), heading: p.heading, left: true }, { quiet: true }); }
+    const wet = this.wading(), pk = p.packs, dry = (at) => !wet || !pk || typeof pk.dryAt !== 'function' || pk.dryAt(at.x, at.z);
+    let pile = this.containers.find((k) => k.item === 'pile' && k.where === 'ground' && this.dist(k.at) < 1.5 && dry(k.at));
+    if (!pile) { const s = this.downSpot(); if (!s) return this.wadeNo(); pile = this.addContainer('pile', 'ground', { x: s.x, z: s.z, y: this.groundY(s.x, s.z), heading: p.heading, left: true }, { quiet: true }); }
     const n = qty == null ? e.qty : Math.min(e.qty, Math.max(1, qty | 0));
     if (!this.put(pile, e.id, { qty: n, data: e.data || null, quiet: true })) return no('full', 'No room there.');
     this.take(c.id, e.uid, n);
@@ -1192,6 +1195,20 @@ export class Inventory {
     if (e.left === l && (e.treating || 0) === t) return;
     e.left = l; if (t > 0) e.treating = t; else delete e.treating;
     this.emit('bottle');
+  }
+  // fb4 join (stream A's leftover): you stand in the water (the shallows after a push-off, say)
+  wading() { const p = this.player; return !!(p && p.onFoot && typeof p.depthAt === 'function' && p.depthAt(p.x, p.z, p.altitude) > 0.02); }
+  // where a thing you set down goes: beside you (spotNear); standing in the water, the nearest dry ground within
+  // WADE_REACH m (packs.drySpotNear), or null: nothing set down in the water ends on the lake bed
+  downSpot(side = 1, fwd = 1) {
+    const p = this.player; if (!p) return null;
+    if (!this.wading()) return this.spotNear(p.x, p.z, p.heading, side, fwd);
+    const pk = p.packs;
+    return pk && typeof pk.drySpotNear === 'function' ? pk.drySpotNear(p.x, p.z, WADE_REACH) : null;
+  }
+  // why it can't be set down there, as a checklist and the next step (decision 2)
+  wadeNo() {
+    return { ...no('water', 'You’re standing in the water: step ashore to set it down, or put it in the canoe.'), needs: [NEED.step(`Dry ground within ${WADE_REACH} m`, false)], next: 'Step ashore to set it down, or put it in the canoe' };
   }
   // a clear spot beside you to set a thing down (packs.js knows the ground; without it, a step to the right)
   spotNear(x, z, heading, side = 1, fwd = 1) {

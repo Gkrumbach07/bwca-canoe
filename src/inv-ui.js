@@ -1094,7 +1094,8 @@ function over(st, x, y) {
   st.ghost.style.left = `${x - gx0}px`; st.ghost.style.top = `${y - gy0}px`;
   st.ghost.classList.toggle('off', off && res !== 'no'); st.ghost.classList.toggle('off-no', off && res === 'no');
   // the drag's own hint: where it goes off the page; R while the thing can turn (fb4 B: R is only this now)
-  if (st.tag) st.tag.innerHTML = off ? esc(res !== 'no' ? 'to the ground' : onFoot() ? 'not here' : 'go ashore first') : st.turn ? 'turns to fit · <kbd>R</kbd> turns it' : turnable(st) ? '<kbd>R</kbd> turns it' : '';
+  const wet = res === 'no' && (off || (zone && /^(ground|wood)$/.test(SPECIAL_TABS[zone.dataset.tab] || zone.dataset.dz || ''))) && onFoot() ? wadeBlock() : null;
+  if (st.tag) st.tag.innerHTML = wet ? 'you’re standing in the water · step ashore' : off ? esc(res !== 'no' ? 'to the ground' : onFoot() ? 'not here' : 'go ashore first') : st.turn ? 'turns to fit · <kbd>R</kbd> turns it' : turnable(st) ? '<kbd>R</kbd> turns it' : '';
   st.ghost.classList.toggle('hinted', !!st.tag && st.tag.innerHTML !== '');
   // the cells lit in the grid, or the zone (or the tab) lit
   if (st.hl && (!tgt || st.hl.parentNode !== tgt.el)) { st.hl.remove(); st.hl = null; }
@@ -1114,7 +1115,7 @@ function end(st, x, y) {
   const { tgt, res, cell, zone, off } = st;
   cleanup(st);
   drag = null;
-  if (res === 'no') { /* nothing */ }
+  if (res === 'no') { const gz = groundZone({ off, zone }), w = (gz === 'ground' || gz === 'wood') && onFoot() ? wadeBlock() : null; if (w) said(w); } // (in the water: say why)
   else if (zone && zone.dataset.tab != null) dropOnTab(st, zone);
   else if (zone) dropOnZone(st, zone.dataset.dz);
   else if (off) dropOnZone(st, 'ground');
@@ -1177,6 +1178,14 @@ function thingOfDrag(st) { if (st.kind === 'thing') return st.thing; const inv =
 const canFit = (c, itemId) => { const inv = model(); return typeof inv.firstFit === 'function' ? !!inv.firstFit(c.id, itemId) : !!firstFit(c, itemId); };
 // what a drop on zone z would do: 'ok' | 'swap' (what is there goes where this came from) | 'no'
 const zoneCheck = (st, z) => zoneCheckDz(st, z.dataset.dz);
+// fb4 join (stream A's leftover): standing in the water with no dry ground within reach, nothing goes down on the ground:
+// the model's why (inventory.wadeNo: "You're standing in the water", the checklist, the next step), else null
+function wadeBlock() {
+  const inv = model();
+  if (!live() || typeof inv.wading !== 'function' || !inv.wading()) return null;
+  return typeof inv.downSpot === 'function' && inv.downSpot() ? null : inv.wadeNo();
+}
+const groundZone = (st) => (st.off ? 'ground' : st.zone ? SPECIAL_TABS[st.zone.dataset.tab] || st.zone.dataset.dz || null : null);
 function zoneCheckDz(st, dz) {
   const inv = model(), src = st.grid;
   if (!live() || (src && src.opts.shelf)) return 'no';
@@ -1194,7 +1203,7 @@ function zoneCheckDz(st, dz) {
     if (o.item === 'woodarms' && dz !== 'ground' && dz !== 'wood') return 'no'; // an armload is wood in the crook of an arm: set down, it is a pile
     if (dz === 'wood') return o.item === 'woodarms' ? zoneCheckDz(st, 'ground') : 'no'; // (fb4 B: the Wood tab takes wood)
     if (dz === 'canoe') return o.where === 'canoe' ? 'no' : 'ok';
-    if (dz === 'ground') return !onFoot() || (o.where === 'ground' && typeof inv.dist === 'function' && inv.dist(o.at) < 1.6) ? 'no' : 'ok';
+    if (dz === 'ground') return !onFoot() || (o.where === 'ground' && typeof inv.dist === 'function' && inv.dist(o.at) < 1.6) || wadeBlock() ? 'no' : 'ok';
     if (dz === 'stash') return inv.atStash && o.where !== 'stash' ? 'ok' : 'no';
     return 'no';
   }
@@ -1218,7 +1227,7 @@ function itemGroundCheck(st) {
   const src = st.grid, bin = src && src.opts.bin;
   if (!live() || !src || src.opts.shelf || bin) return 'no';
   if (src.c.item === 'pile' && typeof model().dist === 'function' && src.c.at && model().dist(src.c.at) < 1.6) return 'no'; // out of the pile at your feet onto the pile at your feet
-  return onFoot() ? 'ok' : 'no';
+  return onFoot() && !wadeBlock() ? 'ok' : 'no';
 }
 function dropOnZone(st, dz) {
   const thing = st.kind === 'thing' || st.e.box, t = thing ? thingOfDrag(st) : null;
@@ -1311,12 +1320,15 @@ function toGround(cId, e, qty = null) {
   if (e.box) return inv.setDown(e.uid);
   if (!onFoot()) return { ok: false, words: 'Not from the canoe: go ashore first.' };
   const n = qty || e.qty || 1, d = itemDef(e.id), wood = d.kind === 'firewood';
+  // fb4 join: standing in the water, only onto dry ground (a pile there, or the nearest dry spot within reach), else why
+  const wet = typeof inv.wading === 'function' && inv.wading(), pk = p && p.packs, dry = (at) => !wet || !pk || typeof pk.dryAt !== 'function' || pk.dryAt(at.x, at.z);
   // a pile within a step with room: wood onto the woodpile, anything else onto a pile that is not one (a woodpile stays wood)
   const isWoodpile = (k) => nameOf(k) === 'Woodpile';
-  const piles = (inv.containers || []).filter((k) => k.item === 'pile' && k.where === 'ground' && k.at && inv.dist(k.at) < 1.6 && k.id !== cId && (wood || !isWoodpile(k))).sort((a, b) => (wood ? (isWoodpile(b) ? 1 : 0) - (isWoodpile(a) ? 1 : 0) : 0) || inv.dist(a.at) - inv.dist(b.at));
+  const piles = (inv.containers || []).filter((k) => k.item === 'pile' && k.where === 'ground' && k.at && inv.dist(k.at) < 1.6 && dry(k.at) && k.id !== cId && (wood || !isWoodpile(k))).sort((a, b) => (wood ? (isWoodpile(b) ? 1 : 0) - (isWoodpile(a) ? 1 : 0) : 0) || inv.dist(a.at) - inv.dist(b.at));
   for (const k of piles) { const f = firstFit(k, e.id, n); if (f && inv.move(cId, e.uid, k.id, f.x, f.y, f.rot, qty || undefined)) return { ok: true, words: `${d.name} on the ground.` }; }
-  let s = inv.spotNear(p.x, p.z, p.heading, piles.length ? -1 : 1, 1);
-  if (!s || Math.hypot(s.x - p.x, s.z - p.z) > 2.2) s = { x: p.x + Math.sin(p.heading) * 0.8, z: p.z + Math.cos(p.heading) * 0.8 };
+  let s = wet && typeof inv.downSpot === 'function' ? inv.downSpot(piles.length ? -1 : 1, 1) : inv.spotNear(p.x, p.z, p.heading, piles.length ? -1 : 1, 1);
+  if (wet && !s) return inv.wadeNo();
+  if (!s || Math.hypot(s.x - p.x, s.z - p.z) > (wet ? 2.6 : 2.2)) s = { x: p.x + Math.sin(p.heading) * 0.8, z: p.z + Math.cos(p.heading) * 0.8 };
   const k = inv.addContainer('pile', 'ground', { x: s.x, z: s.z, y: inv.groundY(s.x, s.z), heading: p.heading, left: true }, { quiet: true });
   const f = k && firstFit(k, e.id, n);
   return f && inv.move(cId, e.uid, k.id, f.x, f.y, f.rot, qty || undefined) ? { ok: true, words: `${d.name} on the ground.` } : { ok: false, words: 'No room to set it down here.' };

@@ -300,6 +300,27 @@ export class Packs {
     for (const [a, b] of tries) { const px = x + rx * a * side + fx * b * fwd, pz = z + rz * a * side + fz * b * fwd; if (free(px, pz)) return { x: px, z: pz }; }
     return { x: x + rx * 1.3 * side, z: z + rz * 1.3 * side };
   }
+  // fb4 join (stream A's leftover: a thing set down while you stood in the shallows went onto the lake bed): ground a
+  // thing set down at (x, z) stands on above the water
+  dryAt(x, z) {
+    const w = this.world;
+    if (!w.isReady(x, z)) return false;
+    return w.shoreAt(x, z) >= 1 || this.player.groundAt(x, z) > w.levelAt(x, z) + 0.05;
+  }
+  // the nearest dry spot within r m of (x, z), clear of trunks and rocks if one is (clearAt), free of the things set
+  // down; null when there is no dry ground that near (you stand out in the water)
+  drySpotNear(x, z, r = 2.5, taken = null) {
+    const busy = [...(taken || []), ...this.inv.groundSpots()];
+    const free = (px, pz) => !busy.some((s) => Math.hypot(s.x - px, s.z - pz) < 0.62);
+    let loose = null;
+    for (let d = 0.5; d <= r + 1e-6; d += 0.25) for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+      if (!free(px, pz) || !this.dryAt(px, pz)) continue;
+      if (this.clearAt(px, pz)) return { x: px, z: pz };
+      if (!loose) loose = { x: px, z: pz };
+    }
+    return loose;
+  }
   clearAt(x, z) {
     const w = this.world, p = this.player;
     if (!w.isReady(x, z) || w.shoreAt(x, z) < 0.8) return false;
