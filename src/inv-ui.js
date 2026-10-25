@@ -1032,11 +1032,12 @@ function ghostDims(st) {
   if (st.kind !== 'thing' || (d && d.nest)) return [w, h];
   return st.thing.isLong ? [4, 1] : [Math.min(2, w), Math.min(2, h)];
 }
-function ghostDraw(st) {
-  const [w, h] = ghostDims(st), d = itemDef(st.e.id), [uw, uh] = st.kind === 'thing' && !(d && d.nest) ? [w, h] : dims(d, 0);
+function ghostDraw(st, rot = st.rot) {
+  st.drawn = rot;
+  const [w, h] = ghostDims({ ...st, rot }), d = itemDef(st.e.id), [uw, uh] = st.kind === 'thing' && !(d && d.nest) ? [w, h] : dims(d, 0);
   st.ghost.style.width = `${w * CELL}px`; st.ghost.style.height = `${h * CELL}px`;
   st.ghost.textContent = '';
-  const pic = iconAt(st.e.id, uw * CELL - 4, uh * CELL - 4); pic.className = `ig-pic${st.rot ? ' rot' : ''}`;
+  const pic = iconAt(st.e.id, uw * CELL - 4, uh * CELL - 4); pic.className = `ig-pic${rot ? ' rot' : ''}`;
   st.ghost.appendChild(pic);
   if (st.qty) st.ghost.appendChild(mk('span', 'ig-qty', String(st.qty)));
   st.tag = mk('span', 'ig-ghost-tag', ''); st.ghost.appendChild(st.tag);
@@ -1071,7 +1072,7 @@ function over(st, x, y) {
       const r2 = st.rot ? 0 : 1;
       for (const [gx, gy] of [[st.gy, st.gx], [CELL / 2, CELL / 2]]) {
         const [tx, ty] = g.cellAt(x, y, gx, gy), r = g.check(st, tx, ty, r2);
-        if (r !== 'no') { res = r; st.turn = { rot: r2, cell: [tx, ty] }; break; }
+        if (r !== 'no') { res = r; st.turn = { rot: r2, cell: [tx, ty], g: [gx, gy] }; break; }
       }
     }
     if (res !== 'no' || !(z || tab)) tgt = g;
@@ -1087,6 +1088,10 @@ function over(st, x, y) {
   if (st.side && st.side !== side) st.side.classList.remove('dz-ok');
   st.side = res === 'buy' ? side : null; if (st.side) st.side.classList.add('dz-ok');
   st.tgt = tgt; st.zone = zone; st.res = res; st.off = off;
+  // the ghost drawn as it will land: turned where it fits only turned, back when it doesn't
+  const want = st.turn ? st.turn.rot : st.rot, [gx0, gy0] = st.turn ? st.turn.g : [st.gx, st.gy];
+  if (st.drawn !== want) ghostDraw(st, want);
+  st.ghost.style.left = `${x - gx0}px`; st.ghost.style.top = `${y - gy0}px`;
   st.ghost.classList.toggle('off', off && res !== 'no'); st.ghost.classList.toggle('off-no', off && res === 'no');
   // the drag's own hint: where it goes off the page; R while the thing can turn (fb4 B: R is only this now)
   if (st.tag) st.tag.innerHTML = off ? esc(res !== 'no' ? 'to the ground' : onFoot() ? 'not here' : 'go ashore first') : st.turn ? 'turns to fit · <kbd>R</kbd> turns it' : turnable(st) ? '<kbd>R</kbd> turns it' : '';

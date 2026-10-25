@@ -43,7 +43,7 @@ export class Journal {
     this.pack = new PackSide(this.pEl, { onUse: t.onUse || null, closeBook: () => this.close() }); // fb2 B: a nearby thing's action that wants the world (Pitch, Eat at the fire) closes the book first
     this.hud.registerPaper('journal', () => this.close());
     this.el.addEventListener('click', (e) => {
-      const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); return; }
+      const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); side.blur(); return; } // (no focus ring left on it for the next key)
       const tab = e.target.closest('[data-tab]'); if (tab) { this.tab = tab.dataset.tab; this.page = 0; this.render(true); return; }
       const pg = e.target.closest('[data-page]'); if (pg) { this.page = Math.max(0, this.page + Number(pg.dataset.page)); this.render(true); return; }
       const close = e.target.closest('[data-close]'); if (close) this.close();
