@@ -21,8 +21,14 @@ import { itemDef } from './items.js';
 // wc C (the owner, 2026-10-24: "why can't I put the fishing rod in my hand and fish with it outside of canoe"): on foot
 // with the rod in a hand (the book: drag it to a hand slot, or Put in hand; inventory.rodInHand) the same F brings it up
 // facing water within a cast, from the shore, a dock or a rock, and the cast, the retrieve, the bites, the fight and the
-// catch card are the canoe's; the standing figure holds it (canoe.js rodArms). A kept fish goes on the stringer when the
-// canoe is in reach, else into a container you carry that takes fish (inventory.js syncStringer).
+// catch card are the canoe's; the standing figure holds it (canoe.js rodArms).
+// fb3 B (the owner, 2026-10-25: "same thing with fish on the stringer. it auto puts it there which i only want if i say
+// put on stringer and the stringer is nearby. otherwise it goes into my hand", "how do i use leaches?"): a kept fish (K)
+// goes into your hand (inventory.toHandNew; into a pack or a barrel in reach when both hands are full, let go when
+// nothing has room), never onto the stringer by itself: "Put on the stringer" is its verb in the book while the stringer
+// is in reach (inventory.verb). The bobber rig takes one leech from the bucket per bite, and the bucket must be in
+// reach (in a hand, within 3 m, or in the canoe you are in or beside): without one the rig can't be cast and the strip
+// reads "needs leeches" (ui.needsLeeches). fishing.stringer is only ever rebuilt from the stringer container.
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const TAU = Math.PI * 2;
@@ -237,9 +243,43 @@ export class Fishing {
   ownedLures() {
     const has = this.hasLure;
     const out = [];
-    for (let i = 0; i < LURES.length; i++) { let ok = true; if (has) { try { ok = !!has(LURES[i].id); } catch { ok = true; } } if (ok) out.push(i); }
+    for (let i = 0; i < LURES.length; i++) {
+      let ok = true;
+      if (has) { try { ok = !!has(LURES[i].id); } catch { ok = true; } }
+      if (!ok && LURES[i].bobber && this.ownsBait()) ok = true; // fb3 B: the rig is listed while you own a bucket or leeches at all; "needs leeches" when none is in reach
+      if (ok) out.push(i);
+    }
     if (!out.length) out.push(Math.max(0, LURES.findIndex((l) => l.id === 'jig')));
     return out;
+  }
+  // --- fb3 B: the leeches ---------------------------------------------------------------------------------------------
+  // the leech bucket within reach (inventory.js inReach: in a hand, on the ground within 3 m, in the canoe you are in or
+  // beside), or null
+  bucketInReach() {
+    const inv = this.inventory;
+    if (!inv || !inv.attached || typeof inv.inReach !== 'function') return false;
+    try { const k = inv.ctx(); return inv.containers.some((c) => c.item === 'bucket' && inv.inReach(c, k)); } catch { return false; }
+  }
+  // a bucket or leeches owned anywhere (the rig stays on the strip, "needs leeches" when none is to hand)
+  ownsBait() {
+    const inv = this.inventory;
+    if (!inv || !inv.attached) return false;
+    try { return inv.containers.some((c) => c.item === 'bucket') || inv.count('leeches', { reachable: false }) > 0; } catch { return false; }
+  }
+  // the first leech in reach: { c, e } or null
+  leechSource() {
+    const inv = this.inventory;
+    if (!inv || !inv.attached || typeof inv.find !== 'function') return null;
+    try { return inv.find('leeches', { reachable: true })[0] || null; } catch { return null; }
+  }
+  leechCount() { const inv = this.inventory; try { return inv && inv.attached ? inv.count('leeches') : 0; } catch { return 0; } }
+  // you have bait somewhere but no leech is to hand (the strip says "needs leeches"; the bobber rig can't be cast)
+  get needsLeeches() { return !!(this.inventory && this.inventory.attached && this.ownsBait() && !this.leechSource()); }
+  // one leech off the bucket (a bite took it): false when there was none
+  takeLeech() {
+    const s = this.leechSource(); if (!s) return false;
+    this.inventory.take(s.c.id, s.e.uid, 1);
+    return true;
   }
   // the owned list refreshed four times a second, and on a change the tied-on lure kept to one you have (between casts)
   refreshOwned(dt) {
@@ -542,8 +582,9 @@ export class Fishing {
     const s = this.state;
     if (s === 'ready' || s === 'charging') { const reach = this.computeAim(); this.placeAimRing(reach); } else this.aimRing.visible = false;
     if (s === 'ready') {
-      if (this.buttonPressed()) { this.state = 'charging'; this.charge = 0; this.power = 0; }
-      p.prompt = { key: 'Space', text: `Hold to load a cast where ${this.onFoot ? 'you look' : 'the cursor points'} · ${this.lureKeys()} · F puts the rod down` };
+      const needs = this.lureDef.bobber && this.needsLeeches; // fb3 B: no leech to hand, no cast with the bobber rig
+      if (this.buttonPressed()) { if (needs) this.message = { text: 'Needs leeches: the bucket is out of reach, or empty', t: 2.2 }; else { this.state = 'charging'; this.charge = 0; this.power = 0; } }
+      p.prompt = needs ? { key: null, text: `Needs leeches · the bucket in a hand, by you or in the canoe · ${this.lureKeys()} · F puts the rod down` } : { key: 'Space', text: `Hold to load a cast where ${this.onFoot ? 'you look' : 'the cursor points'} · ${this.lureKeys()} · F puts the rod down` };
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
@@ -668,6 +709,7 @@ export class Fishing {
     const weight = sp.k * Math.pow(length / 100, 3);
     this.bite = { species: id, length, weight, t: 0, lure: this.lureIndex };
     this.state = 'bite';
+    if (this.lureDef.bobber) this.takeLeech(); // fb3 B: the fish has the leech, hooked or not
     if (this.audio) this.audio.bite(this.lureDef.bobber ? 1 : 0.6);
   }
 
@@ -679,7 +721,9 @@ export class Fishing {
     if (set && b.t >= w0 && b.t <= w1) { this.hook(); return; }
     if (b.t > w1 + 0.25 || (set && b.t < w0)) {
       this.state = 'inwater'; this.bite = null; this.cooldown = 2.5 + Math.random() * 4;
-      this.message = { text: set ? 'Too soon — it spat the hook' : 'Missed it', t: 2 };
+      const gone = this.lureDef.bobber; // fb3 B: the leech went with it
+      this.message = { text: `${set ? 'Too soon — it spat the hook' : 'Missed it'}${gone ? ', and took the leech' : ''}`, t: 2 };
+      if (gone && this.needsLeeches) { this.state = 'ready'; this.lineOut = 0; for (const m of this.lureMeshes) m.visible = false; this.bobber.visible = false; this.message = { text: 'The last leech is gone. Needs leeches', t: 2.5 }; }
       return;
     }
     p.prompt = { key: 'Space', text: this.lureDef.bobber ? 'Bobber down! Set the hook' : 'Tap tap… set the hook' };
@@ -804,7 +848,8 @@ export class Fishing {
     fx.look.set(p.x - f.x * 1.25, y + 0.5, p.z - f.z * 1.25);
     this.chase.focus = fx;
     const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.catchLake(L), L.length) : null; // hubs 1C: a notice taken on wants it
-    p.prompt = { key: 'E', text: `Let it go · <kbd>K</kbd>${want ? `Keep it for “${esc(want.title)}”` : 'Keep it on the stringer'}` };
+    const inv = this.inventory, free = inv && inv.attached && typeof inv.freeHand === 'function' ? inv.freeHand() >= 0 : true;
+    p.prompt = { key: 'E', text: `Let it go · <kbd>K</kbd>${want ? `Keep it for “${esc(want.title)}”` : free ? 'Keep it, in your hand' : 'Keep it, into a pack'}` }; // fb3 B: to the hand
   }
 
   release(keep) {
@@ -819,14 +864,17 @@ export class Fishing {
       const cooler = this.tasks ? this.tasks.onCatch(L.species, this.catchLake(L), L.length, keep) : null; // hubs 1C: a notice taken on wants it
       if (keep && cooler) this.message = { text: cooler, t: 3 }; // into that notice's cooler, not the stringer
       else if (keep) {
-        // wc C: on foot the stringer is the canoe's: beside it the fish goes on it (inventory.js syncStringer), away from
-        // it into a container you carry that takes fish (the barrel, a pack), or back in the water when none has room
-        const inv = this.inventory, away = this.onFoot && inv && inv.nearCanoe && inv.place && !inv.nearCanoe();
-        if (away) {
-          const r = inv.place(`fish:${L.species}`, 1, { data: { length: Math.round(L.length) } });
-          if (r && r.ok) this.message = { text: 'Kept · into your pack', t: 2 };
-          else { L.entry.kept = false; this.saveLog(); this.message = { text: 'No room to keep it: you let it go.', t: 3 }; if (Number.isFinite(L.x) && this.world.shoreAt(L.x, L.z) < 0) this.splash(L.x, this.surfaceAt(L.x, L.z), L.z, 7, 0.7); }
-        } else { this.stringer.push({ species: L.species, length: L.length }); this.message = { text: `On the stringer · ${this.stringer.length} fish`, t: 2 }; }
+        // fb3 B (decision 1): the fish goes into your hand; with both hands full, into a pack or a barrel in reach (never
+        // the stringer by itself: that is its "Put on the stringer" verb in the book); nothing with room, back it goes
+        const inv = this.inventory, id = `fish:${L.species}`, data = { length: Math.round(L.length) };
+        let r = inv && inv.attached && typeof inv.toHandNew === 'function' ? inv.toHandNew(id, { data }) : { ok: false };
+        if (r && r.ok) this.message = { text: 'Kept · in your hand', t: 2.2 };
+        else if (inv && inv.attached && typeof inv.place === 'function') {
+          const stringers = inv.containers.filter((c) => c.item === 'stringer').map((c) => c.id);
+          r = inv.place(id, 1, { data, exclude: stringers });
+          if (r && r.ok) this.message = { text: `Kept · into the ${(itemDef((inv.cont(r.cId) || {}).item) || {}).name || 'pack'}`.toLowerCase().replace(/^kept/, 'Kept'), t: 2.2 };
+        }
+        if (!(r && r.ok)) { L.entry.kept = false; this.saveLog(); this.message = { text: 'No room to keep it: you let it go.', t: 3 }; if (Number.isFinite(L.x) && this.world.shoreAt(L.x, L.z) < 0) this.splash(L.x, this.surfaceAt(L.x, L.z), L.z, 7, 0.7); }
       } else {
         // let go beside the hull, or back into the water it came from
         let x, z;
@@ -998,6 +1046,7 @@ export class Fishing {
     u.fight = this.fish ? { tension: this.fish.tension, danger: this.fish.danger, slack: this.fish.slack, line: this.lineOut, run: this.fish.run > 0 } : null;
     u.message = this.message ? this.message.text : null;
     u.stringer = this.stringer.length;
+    u.needsLeeches = this.rodUp && this.needsLeeches; u.leeches = this.leechCount(); // fb3 B: the strip's "needs leeches"
     u.log = this.log; u.bests = this.bests; u.logVersion = this.logVersion;
     u.rate = this.rate;
     return u;

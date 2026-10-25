@@ -27,7 +27,7 @@ import { GeoBridge } from './geo.js';
 import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
 import { Fishing } from './fishing.js';
-import { Energy } from './energy.js';
+import { Energy, GULP } from './energy.js';
 import { Tasks } from './tasks.js';
 import { Outfitter } from './outfitter.js';
 import { Settings, FpsCounter } from './settings.js';
@@ -440,6 +440,20 @@ async function main() {
   // describes, never the whole lake); every item says what it is for and lists its right-click verbs (items.js words
   // and verbs, which the book's tooltips and menus read). Nothing to wire: the verbs' table and lookup for the console.
   Object.assign(window.__game.items, { VERBS, verbsOf });
+  // fb3 B: items and their uses (the owner's 2026-10-25 round). Every item says what it does in numbers (items.js
+  // stats, which the book's tooltip draws), with the effect real in code: the sleeping bag is the night's rest
+  // (energy.sleep), the tarp keeps the rain off the ring or a pack (chores.js), the clothes change after a soaking
+  // (energy.changeClothes), a tablet goes in per fill (energy.fill → inventory.useOne), food is eaten a serving at a time
+  // (inventory.eat) and the bottle is an item in the pockets with Drink on it: nothing is drunk for you (energy.drink).
+  // A meal cooks only with the pot on the grate, a fish on a stick without it (cook.js); a landed fish goes to your hand,
+  // "Put on the stringer" is its verb while the stringer is in reach, and the bobber rig takes a leech from the bucket
+  // per bite (fishing.js). The inventory's verbs (inventory.verb) answer the book's right-click for hand, stringer,
+  // drink, change and tarp; the tarp's needs the chores.
+  inventory.chores = camp.chores;
+  shop.useLeech = () => {}; // the leech goes at the bite (fishing.js takeLeech): the shop's per-catch and per-snap takes step aside
+  const updShopB = shop.update.bind(shop); // the shop's word when the rig can't be tied on, in the strip's terms when you own the bait
+  shop.update = () => { updShopB(); const m = fishing.message; if (m && /^No leeches in reach/.test(m.text) && fishing.ownsBait && fishing.ownsBait()) m.text = 'Needs leeches: the bucket in a hand, within a step, or in the canoe'; };
+  window.__game.GULP = GULP;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

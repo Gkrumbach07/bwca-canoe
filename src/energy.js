@@ -37,10 +37,13 @@ function poolWords(pool) {
 //   or a fish +0.6. (The plan said 16 h: a June day is 16 h from the dawn meal to the dusk one, so two meals a day left
 //   every June evening hungry and each day starting lower; at 24 h two meals keep you fed in any month, and an empty
 //   pack still has you hungry by the next afternoon.)
-// - water: a 2 L bottle drunk on its own: a litre lasts 6 game hours, 4 when paddling hard or carrying a heavy load,
-//   or on a July or August afternoon. The need only falls once the bottle is dry (8 h to empty, 5⅓ h hard), and a
-//   parched need takes up to 1⅓ L to drink back. On foot at the shore E fills it (camp.js), with tablets drinkable
-//   after half an hour; at any outfitter's counter you drink at the tap and the bottle is filled, free and at once.
+// - water (fb3 B, the owner's 2026-10-25 round: nothing is drunk for you): the thirst need falls on its own, 8 game
+//   hours from full to empty (5⅓ paddling hard, carrying 30 kg or more, or on a July or August afternoon), and comes
+//   back only when you drink from the bottle in the book (drink: a gulp of 0.25 L, or the rest of it), BODY litres from
+//   empty to full. The 2 L bottle is an item in the pockets (inventory.js); on foot at the shore E fills it (camp.js),
+//   a tablet per fill (inventory.useOne), drinkable after half an hour; with no tablet the water is drunk as it comes
+//   and sits badly (UPSET_HOURS of hunger ×UPSET); at any outfitter's counter you drink at the tap and the bottle is
+//   filled, free and at once. A low need says to drink (needNotes).
 // - warmth (fb2 F, the owner's second 2026-10-24 round: a gentle fourth need, Wild n Chill's cold): it falls when the air
 //   you feel is colder than COMFORT (13 °C): the air (weather.js temp), less the wind afloat (half of it ashore), the rain
 //   on you, and 3 °C more after dark; twice and a half as fast wet through (rain on you, a swim; wet gear a little), a
@@ -71,6 +74,8 @@ function poolWords(pool) {
 //   | 'cold' | null), energy.chunks() ([{ key, size, growing, need }]: fb2 F), energy.heldBy ("held down by thirst",
 //   "held down by tiredness and cold", or ''), energy.soaked (0–1, wet through), energy.bottle (litres, 0–2), energy.drinkable, energy.treating,
 //   energy.fill(litres, waitHours) (→ litres added; waitHours 0: drinkable now, as at a counter), energy.bottleWords(),
+//   energy.drink(litres) → { ok, why, words } (fb3 B: a gulp; Infinity drinks the bottle up), energy.drinkCheck(),
+//   energy.changeClothes(entry) / changeCheck(entry) (the dry set on after a soaking), energy.bagInReach(),
 //   energy.meal(kind), energy.sleep(q, hours) (after the clock has jumped; without hours: a night in a bunk, with
 //   breakfast and a full bottle), energy.bunk(), energy.fresh() (a trip put in), energy.rescued() (an evacuation's
 //   food and water), energy.spend(x), energy.restBoost, energy.food (days of rations), energy.awake, energy.onEvac,
@@ -110,9 +115,13 @@ const FOOD_HOURS = 24;     // game hours awake from a full food need to an empty
 const ASLEEP = 1 / 3;      // the needs fall at this rate asleep (and across any jump of the clock longer than JUMP)
 const JUMP = 2;            // game hours: a longer jump of the clock is a night, not a stretch of the day
 export const BOTTLE = 2;   // litres
-const USE = 1 / 6, USE_HARD = 1 / 4; // litres a game hour: a litre lasts 6 h, 4 h paddling hard, carrying heavy or on a hot afternoon
-const BODY = 4 / 3;        // litres from an empty water need to a full one: with the bottle dry the need lasts 8 h (5⅓ h hard)
-const SIP = 2;             // the water need drunk back up at most this much a game hour
+const USE = 1 / 6, USE_HARD = 1 / 4; // litres a game hour the body uses: thirst falls 1/8 an hour, 3/16 paddling hard, carrying heavy or on a hot afternoon
+const BODY = 4 / 3;        // litres from an empty water need to a full one (fb3 B: drunk by hand; the need lasts 8 h, 5⅓ h hard)
+export const GULP = 0.25;  // litres a Drink takes from the bottle (thirst +19 %)
+const UPSET_HOURS = 6, UPSET = 1.5; // untreated lake water: a queasy stomach this long, hunger falling this much faster
+const NO_BAG_REST = 0.6;   // a night in the tent with no sleeping bag in reach gives this much of the night's rest
+const DRY_BOOST = 2, DRY_BOOST_HOURS = 2; // warmth comes back this much faster, this long, after a change into dry clothes
+const WET_SET_FIRE_H = 0.5, WET_SET_AIR_H = 8; // game hours the wet set takes to dry by a fire, or in the open air (a night does it too)
 const NIGHT_HOURS = 7;     // a night this long gives the tent's whole quality
 const WAKE_WINDOW = 0.1;   // game hours after waking in which the bar rises to the ceiling (needs set just after a sleep count)
 export const TABLETS = 0.5; // game hours before water treated with a tablet is drinkable
@@ -175,6 +184,9 @@ export class Energy {
     this.grow = { warmth: 0, rest: 0, food: 0, water: 0 }; this.lastChunks = null; // the chunks' rates, a game hour
     this.chill = 0;          // what the cold costs now, warmth a game hour (0 when it is coming back), for the readout
     this.drinkable = BOTTLE; this.treating = 0; this.readyAt = -1e9; // the bottle: litres drinkable, litres under a tablet, when they will be
+    this.upsetUntil = -1e9;  // fb3 B: untreated water drunk: hunger falls faster until then
+    this.dryUntil = -1e9;    // fb3 B: changed into dry clothes: warmth comes back faster until then
+    this.wetSetH = 0;        // fb3 B: game hours the wet set of clothes has been drying
     this.lastNow = this.now; this.hard = false;
     this.wokeAt = -1e9;     // when the last sleep ended: for a few minutes after, the bar comes up to whatever the needs allow
     this.noted = { rest: false, food: false, water: false, warmth: false, dry: false, spent: false };
@@ -317,6 +329,19 @@ export class Energy {
     const add = Math.min(Math.max(0, litres), BOTTLE - this.bottle);
     if (waitHours > 0) {
       if (add <= 0.001) return 0;
+      // fb3 B: a tablet per fill, from the tablets in reach (the pump and the gravity filter wait less than a tablet's half
+      // hour and use none); with no tablet the water goes in as it comes, drinkable now, and sits badly for a while
+      const tablet = waitHours >= TABLETS - 0.01 && !this.sandbox;
+      if (tablet) {
+        const i = this.inv, r = i && typeof i.useOne === 'function' ? i.useOne('tablets') : { ok: true };
+        if (!r.ok) {
+          this.drinkable = Math.min(BOTTLE, this.drinkable + add); this.upsetUntil = this.now + UPSET_HOURS;
+          this.note('No tablets left: you fill the bottle with lake water as it comes. It will sit badly for a few hours.');
+          this.noted.dry = false;
+          return add;
+        }
+        this.note(`A tablet in: ${r.left} left.`);
+      }
       this.treating += add; this.readyAt = this.now + waitHours;
     } else {
       this.drinkable = Math.min(BOTTLE, this.drinkable + this.treating + Math.max(0, add));
@@ -325,6 +350,24 @@ export class Energy {
     this.noted.dry = false;
     return Math.max(0, add);
   }
+  // fb3 B: Drink (the bottle's verb in the book): `litres` of what is drinkable (GULP a gulp; Infinity drinks it up),
+  // the thirst need up by what the body takes of it. → { ok, why, words }
+  drinkCheck() {
+    if (this.drinkable <= 0.02) return { ok: false, why: this.treating > 0.001 ? `the water is treating: ${this.treatingWords()}` : 'the bottle is dry: fill it at the shore' };
+    return { ok: true, why: null };
+  }
+  drink(litres = GULP) {
+    const d = this.drinkCheck();
+    if (!d.ok) return { ok: false, why: d.why, words: `${d.why[0].toUpperCase()}${d.why.slice(1)}.` };
+    const l = Math.min(this.drinkable, Math.max(0.01, litres));
+    this.drinkable = Math.max(0, this.drinkable - l);
+    if (this.live) this.need.water = clamp(this.need.water + l / BODY, 0, 1);
+    this.lastDrink = { l, at: this.now };
+    const words = `${l >= this.drinkable + l - 0.001 && litres > GULP ? 'You drink the bottle up' : l >= 0.9 ? `${l.toFixed(1)} L down` : 'A gulp'}: ${this.bottleWords()}.`;
+    this.note(words);
+    return { ok: true, why: null, words };
+  }
+  treatingWords() { const min = Math.max(1, Math.ceil(((this.readyAt - this.now) * 60) / 5) * 5); return `drinkable in ${min} min`; }
   // camp 2: water out of the bottle for the pot (cook.js: a dehydrated meal wants its water; boiled, lake water is safe, so
   // what is still under a tablet goes first). Returns whether there was enough (none is taken when there was not).
   useWater(litres) {
@@ -413,12 +456,17 @@ export class Energy {
     q = clamp(q, 0, 1);
     if (this.live) this.passNeeds(Math.max(0, this.now - this.lastNow), true, false);
     this.lastNow = this.now;
+    // fb3 B: the sleeping bag is the night's rest: without one in the camp's reach, NO_BAG_REST of it (its stats say so)
+    const bag = bunk || this.bagInReach();
+    if (!bag) q *= NO_BAG_REST;
     this.rest0 = q * Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS);
+    this.lastNight = { q: +q.toFixed(3), hours: bunk ? NIGHT_HOURS : hours, bag };
+    this.wetSetH = Math.max(this.wetSetH, WET_SET_AIR_H); // the wet set of clothes dries overnight
     if (bunk) { this.need.food = 1; this.need.water = 1; this.fill(BOTTLE, 0); }
     // fb2 F: a night in the bag warms you through (a bunk, or the tent with the bag in the camp's reach), less in damp
     // gear, and the clothes are dry by morning; never colder than you went in
     const wet = !bunk && !!(this.trip && this.trip.state && this.trip.state.wet);
-    this.need.warmth = Math.max(this.need.warmth, bunk ? 1 : !this.bagInReach() ? NIGHT_NO_BAG : wet ? NIGHT_WET : NIGHT_BAG);
+    this.need.warmth = Math.max(this.need.warmth, bunk ? 1 : !bag ? NIGHT_NO_BAG : wet ? NIGHT_WET : NIGHT_BAG);
     this.soaked = 0; this.lastChunks = null;
     this.awakeSince = this.now; this.warned = false; this.warnTimer = 0;
     this.unnote();
@@ -429,19 +477,15 @@ export class Energy {
   // an effort paid at once (a capsize, a walk back fetched)
   spend(amount) { this.value = clamp(this.value - amount, 0, 1); }
 
-  // the needs over dh game hours: the food falls, the bottle is drunk (and the water need falls once it is dry),
-  // tablets finish their work. asleep: at a third of the rate, and no drinking until you wake.
+  // the needs over dh game hours: the food falls (faster on a queasy stomach), the thirst falls (fb3 B: nothing is drunk
+  // for you; drink() brings it back), tablets finish their work. asleep: at a third of the rate.
   passNeeds(dh, asleep = false, hard = false) {
     if (this.treating > 0 && this.now >= this.readyAt) { this.drinkable = Math.min(BOTTLE, this.drinkable + this.treating); this.treating = 0; }
     if (!(dh > 0)) return;
-    const k = asleep ? ASLEEP : 1;
-    this.need.food = Math.max(0, this.need.food - (k * dh) / FOOD_HOURS);
+    const k = asleep ? ASLEEP : 1, upset = this.now < this.upsetUntil ? UPSET : 1;
+    this.need.food = Math.max(0, this.need.food - (k * dh * upset) / FOOD_HOURS);
     const use = (hard ? USE_HARD : USE) * k * dh;
     this.need.water = Math.max(0, this.need.water - use / BODY);
-    if (this.need.water < 1 && this.drinkable > 0) {
-      const g = Math.min(1 - this.need.water, asleep ? Infinity : SIP * dh, this.drinkable / BODY);
-      this.need.water += g; this.drinkable = Math.max(0, this.drinkable - g * BODY);
-    }
   }
   // --- warmth (fb2 F) --------------------------------------------------------------------------------------------
   // the air you feel, °C: the weather's (or, with none, the season's mean and the day's swing), less the wind (afloat;
@@ -466,15 +510,47 @@ export class Energy {
     const heat = Math.max(f.heat || 0, 0.5 * (f.embers || 0));
     return heat <= 0.05 ? 0 : heat * (1 - smoothstep(FIRE_NEAR, FIRE_FAR, Math.hypot(f.x - p.x, f.z - p.z)));
   }
-  // the sleeping bag in the camp's reach (true when you own none at all: a save from before it)
+  // the sleeping bag in the camp's reach (true with no inventory at all)
   bagInReach() {
     const i = this.inv;
     if (!i) return true;
     try {
-      if (typeof i.has === 'function' && !i.has('sleepingbag')) return true;
       const pool = typeof i.campReach === 'function' ? i.campReach() : i.reachable();
       return pool.some((c) => c.grid.some((e) => !e.box && e.id === 'sleepingbag'));
     } catch { return true; }
+  }
+  // fb3 B: the clothes bag's Change (its verb in the book): after a capsize or a soaking, the dry set on: wet through no
+  // more, the gear counts dry, and warmth comes back DRY_BOOST times as fast for DRY_BOOST_HOURS. The entry's `left`
+  // (one dry set) goes to 0 and the wet set dries by a fire, inside, or overnight (wetSetH).
+  changeCheck(e) {
+    const left = e && Number.isFinite(e.left) ? e.left : 1;
+    if (left <= 0) return { ok: false, why: 'the spare set is wet: it dries by a fire in half an hour, or overnight' };
+    const wet = this.soaked > 0.25 || !!(this.trip && this.trip.state && this.trip.state.wet);
+    if (!wet) return { ok: false, why: 'you are dry already' };
+    const p = this.player;
+    if (p && p.mode !== 'walk' && p.mode !== 'carry' && !(this.inv && this.inv.atStash)) return { ok: false, why: 'not in the canoe: go ashore first' };
+    return { ok: true, why: null };
+  }
+  changeClothes(e) {
+    const c = this.changeCheck(e);
+    if (!c.ok) return { ok: false, why: c.why, words: `${c.why[0].toUpperCase()}${c.why.slice(1)}.` };
+    this.soaked = 0;
+    if (this.trip && this.trip.state) this.trip.state.wet = false;
+    this.dryUntil = this.now + DRY_BOOST_HOURS;
+    this.wetSetH = 0;
+    if (e) { e.left = 0; if (this.inv) this.inv.emit('items'); }
+    const words = 'Dry clothes on, the wet ones wrung out and into the bag. Warmth comes back twice as fast for a couple of hours.';
+    this.note(words);
+    return { ok: true, why: null, words };
+  }
+  // the wet set of clothes drying (by a fire, inside a store, in the air): its `left` back to 1 once it is dry
+  dryWetSet(dh, fire, inside) {
+    const i = this.inv; if (!i || !(dh > 0)) return;
+    const hit = i.find('clothes', { reachable: false }).find(({ e }) => Number.isFinite(e.left) && e.left <= 0);
+    if (!hit) { this.wetSetH = 0; return; }
+    const byFire = fire > 0.3 || inside;
+    this.wetSetH += dh * (byFire ? WET_SET_AIR_H / WET_SET_FIRE_H : 1);
+    if (this.wetSetH >= WET_SET_AIR_H) { this.wetSetH = 0; delete hit.e.left; i.emit('items'); this.note('The wet clothes are dry again.'); }
   }
   // warmth over dh game hours, and how wet through you are; moving: paddling or walking under way
   passWarmth(dh, wind, moving) {
@@ -499,8 +575,10 @@ export class Energy {
       else gain = WARM_H * clamp((t - COMFORT) / 8, 0.25, 1) * (1 - 0.5 * wet);
       gain += FIRE_H * fire;
     }
+    if (this.now < this.dryUntil) gain *= DRY_BOOST; // fb3 B: just changed into dry clothes
     this.chill = Math.max(0, loss - gain);
     n.warmth = clamp(n.warmth + (gain - loss) * dh, 0, 1);
+    this.dryWetSet(dh, fire, inside);
   }
   // how fast each chunk grows, a game hour, eased over GROW_EASE seconds (a jump of the clock, a night, starts afresh)
   trackChunks(dt, dh) {
@@ -520,7 +598,7 @@ export class Energy {
       if (n[k] > LOW + 0.1) { o[k] = false; continue; }
       if (n[k] >= LOW || o[k]) continue;
       o[k] = true;
-      if (k === 'water') this.note(this.bottle > 0.001 ? 'Thirsty. The bottle is treating; half an hour.' : 'Thirsty, and the bottle is dry. Fill it at the shore.');
+      if (k === 'water') this.note(this.drinkable > 0.02 ? 'Thirsty. Drink from the bottle (I).' : this.treating > 0.001 ? `Thirsty. The bottle is treating: ${this.treatingWords()}.` : 'Thirsty, and the bottle is dry. Fill it at the shore, then drink (I).'); // fb3 B: nothing is drunk for you
       else if (k === 'food') this.note(this.inv ? (this.inv.snacks() ? 'Hungry. A snack from the pack (J, when you are still), or cook a meal at a fire.' : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and no food with you.') : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and the food pack is empty.');
       else if (k === 'warmth') this.note(this.soaked > 0.3 ? 'Cold, and wet through. Get to a fire, or into the tent and the bag.' : 'Cold. A fire would warm you, or the tent and the bag.');
       else this.note('Tired. Only a night’s sleep brings it back now: a campsite, or an outfitter’s bunk.');
@@ -624,6 +702,7 @@ export class Energy {
       value: this.value, food: this.food, fedUntil: this.fedUntil, awakeSince: this.awakeSince, lastMealAbs: this.lastMealAbs, lastMealKind: this.lastMealKind, lastMealAuto: this.lastMealAuto,
       rest0: this.rest0, need: { ...this.need }, drinkable: this.drinkable, treating: this.treating, readyIn: this.treating > 0 ? Math.max(0, this.readyAt - this.now) : 0,
       soaked: this.soaked, // fb2 F (need.warmth rides in need)
+      upsetFor: Math.max(0, this.upsetUntil - this.now), dryFor: Math.max(0, this.dryUntil - this.now), wetSetH: this.wetSetH, // fb3 B
       spentFor: this.spentAt == null ? null : Math.max(0, this.now - this.spentAt), // game hours spent so far: a reload does not restart the hour
     };
   }
@@ -639,6 +718,7 @@ export class Energy {
     this.soaked = clamp(num(d.soaked, 0), 0, 1); this.wasIn = this.player.mode === 'swim'; this.lastChunks = null; // fb2 F
     this.drinkable = clamp(num(d.drinkable, BOTTLE), 0, BOTTLE); this.treating = clamp(num(d.treating, 0), 0, BOTTLE - this.drinkable);
     this.readyAt = this.now + num(d.readyIn, 0);
+    this.upsetUntil = this.now + num(d.upsetFor, 0); this.dryUntil = this.now + num(d.dryFor, 0); this.wetSetH = num(d.wetSetH, 0); // fb3 B
     this.unnote(); const n = this.needs; for (const k of ['rest', 'food', 'water', 'warmth']) this.noted[k] = n[k] < LOW; this.noted.dry = this.bottle <= 0.001;
     this.lastHours = this.day.hours; // the saved clock is back: no dawn or dusk crossed by the reload, no meal
     this.lastNow = this.now;         // and no hours of need passed
