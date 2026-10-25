@@ -28,7 +28,7 @@
 //   const talk = new Dialogue({ camera, player, chase, hud, day, frame })   frame(): may it cut over your shoulder here
 //   talk.bark(speaker, text, { room, pri, secs, next })   speaker: { key, name, role?, pos(outVec3) → head or null }
 //   talk.open({ speaker, name, role, room, start() → node, bye() → farewell words })
-//     node: { say, by?, choices: [{ text, kind?: 'task'|'counter'|'bye', dim?,
+//     node: { say, by?, filler? (a "What else?" between answers: not kept as what they last said), choices: [{ text, kind?: 'task'|'counter'|'bye'|'arc', dim?, tag? (a small word after it: 'new'),
 //             go() → node | Promise of one | null | { end, after } }] }
 //   talk.before(dt)    after the outfitter's update, before the player moves: holds the walker, turns the view
 //   talk.update(dt, shell)   after the camera: the queue, the timers, the places on the screen
@@ -235,7 +235,7 @@ export class Dialogue {
     if (node == null) { this.leave(); return; }
     if (node.end) { const after = node.after; this.close(false); if (typeof after === 'function') after(); return; }
     c.node = node; c.t = 0;
-    if (node.say) { this.remember(node.by || c.speaker.name, c.speaker.role, node.say); if (c.you) { c.said = node.say; c.saidTo = c.you; } } // fb4 D: an answer, and what drew it
+    if (node.say) { this.remember(node.by || c.speaker.name, c.speaker.role, node.say); if (c.you && !node.filler) { c.said = node.say; c.saidTo = c.you; } } // fb4 D: an answer, and what drew it (content B: not a "What else?", node.filler)
     this.render();
   }
   choose(i) {
@@ -270,7 +270,7 @@ export class Dialogue {
   render() {
     const c = this.convo; if (!c) return;
     const n = c.node || {}, list = n.choices || [];
-    const opts = list.map((o, i) => `<li class="opt${o.kind ? ` ${o.kind}` : ''}${o.dim ? ' dim' : ''}" data-i="${i}"><kbd>${i + 1}</kbd><span>${esc(o.text)}</span>${o.kind === 'task' ? '<em>a task</em>' : o.kind === 'counter' ? '<em>the counter</em>' : ''}</li>`).join('');
+    const opts = list.map((o, i) => `<li class="opt${o.kind ? ` ${o.kind}` : ''}${o.dim ? ' dim' : ''}" data-i="${i}"><kbd>${i + 1}</kbd><span>${esc(o.text)}</span>${o.kind === 'task' ? '<em>a task</em>' : o.kind === 'counter' ? '<em>the counter</em>' : o.tag ? `<em>${esc(o.tag)}</em>` : ''}</li>`).join('');
     const L = c.last && !c.you ? c.last : null; // fb4 D: what they said to you last time, until you answer
     this.panel.innerHTML = `<div class="head"><span class="name">${esc(n.by || c.name || c.speaker.name)}</span>${c.role ? `<span class="role">${esc(c.role)}</span>` : ''}</div>`
       + (L ? `<div class="last"><span class="when">Last time · ${esc(this.whenWords(L.at))}</span>${L.you ? `<span class="you-then">You: ${esc(quote(L.you))}</span>` : ''}<span class="then">${esc(quote(L.say))}</span></div>` : '')
