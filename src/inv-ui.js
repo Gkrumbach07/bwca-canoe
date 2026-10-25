@@ -1659,7 +1659,9 @@ function openMenu(x, y, items) {
   document.body.appendChild(m);
   // fb5 B (rule 1): a greyed verb's next step is taught once, as a moment over the paper (stream E's hints.next: once a
   // season per id), never written in the menu; the first one only, so one teaching line at a time
-  const teach = items.find((it) => it.disabled && it.next);
+  // (fb5 join: only when every verb is greyed, so the player is stuck; a menu opened for its live verb taught the greyed
+  // one: "Pitch the tarp" brought "Put down or away what is in a hand…" for the Put in hand under it)
+  const teach = items.every((it) => it.disabled) ? items.find((it) => it.next) : null;
   if (teach) { try { const h = typeof window !== 'undefined' && window.__game && window.__game.hints; if (h && typeof h.next === 'function') h.next(`menu:${teach.label}|${String(teach.title || '').replace(/[\d.,½–-]+/g, '#')}`, teach.next, { card: true }); /* (the id without its numbers: a countdown is one moment) */ } catch (err) { console.warn('hints.next', err); } }
   const r = m.getBoundingClientRect();
   m.style.left = `${Math.max(8, Math.min(x, window.innerWidth - r.width - 8))}px`; m.style.top = `${Math.max(8, Math.min(y, window.innerHeight - r.height - 8))}px`;
