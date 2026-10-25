@@ -76,7 +76,8 @@ export function aboutHours(h) {
 }
 // a thing's name in a prompt: "the Duluth pack #3", "the rod"
 const SHORT = { pack3: 'pack', pack4: 'big pack', barrel30: 'small barrel', barrel60: 'barrel', bucket: 'leech bucket', tacklebox: 'tackle box', mapcase: 'map case', stringer: 'stringer', rod: 'rod', rodmh: 'rod', ash: 'paddle', bentshaft: 'paddle', carbon: 'paddle', pile: 'things on the ground' };
-const short = (u) => SHORT[u.id] || lower(u.def.name);
+// (a hand's holder, stream B's 'inhand', is named by the thing in it: "the trail mix", not "the in your hand")
+const short = (u) => { const e = u.def.one && u.obj.grid && u.obj.grid[0], d = e && itemDef(e.id); return d ? lower(d.name) : SHORT[u.id] || lower(u.def.name); };
 const the = (u) => `the ${short(u)}`;
 function names(us) {
   const n = us.map(the);

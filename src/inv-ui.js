@@ -1317,6 +1317,7 @@ const WHERE = { back: 'on your back', chest: 'on your chest', hands: 'in your ha
 // what a container is called on its strap: a pile on the ground is a woodpile when it is all wood
 const nameOf = (c) => {
   if (c.item === 'pile') { const g = c.grid || []; return g.length && g.every((e) => (itemDef(e.id) || {}).kind === 'firewood') ? 'Woodpile' : 'Set down here'; }
+  if ((itemDef(c.item) || {}).one && c.where === 'canoe') return 'At your feet'; // a hand's holder put into the hull at Get in (the fb3 join)
   return c.name || (itemDef(c.item) || {}).name || 'A container';
 };
 function whereWords(c, byId) {
