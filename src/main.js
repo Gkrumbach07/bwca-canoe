@@ -473,6 +473,51 @@ async function main() {
   const hudUpdateC = hud.update.bind(hud);
   hud.update = (c) => hudUpdateC(c && !c.weather ? { ...c, weather } : c);
   hud.stripAlso = () => !!camp.dialOpen;
+  // fb4 C: needs and statuses (the owner's second round of 2026-10-25: "if I can't use something, I want to know exactly
+  // why I can't use it … some sort of checklist or timer or quantity out of total", and "things that have statuses like
+  // wet clothes … you need to know"). Every greyed verb and card button says why as a checklist with the next step
+  // (items.js check: needs have of need, steps, timers in game seconds), and inventory.status(ref) gives each item's
+  // state (wet, drying, treating, cooking, burning, hot, low, empty, ready) for the book to draw. Wood is wet piece by
+  // piece now (inventory.syncWet: the rain on an open ring, a pile or an armload; dry by a lit fire in 30 min, 3 h in dry
+  // air), and a fire lights on three dry pieces with a dry branch among them (fire.js lightCheck). The ring's checks for
+  // nearby.js (stream A passes them to the card and the dot): chores.lightCheck / douseCheck / fireState (and
+  // cook.cookCheck / cookingNow, native); chores.lightProblem says lightCheck's why, so Light refuses what the card says;
+  // the ring's pieces come dry first (binUnits), so the kindling Light takes is a dry branch. Until stream A passes the
+  // needs through, nearby.fireObject is decorated here (a no-op once its light action has needs of its own).
+  {
+    const ch4 = camp.chores, wetFlag = (u) => (u && u.e && u.e.data && u.e.data.wet > 0 ? 1 : 0);
+    const units4 = ch4.binUnits.bind(ch4);
+    // (a stable sort: the ring's order otherwise; while Light is held, only the dry pieces: it takes its kindling from them)
+    ch4.binUnits = (b) => { const u = units4(b).sort((x, y) => wetFlag(x) - wetFlag(y)); return hold.is('fire-light') ? u.filter((x) => !wetFlag(x)) : u; };
+    const rate4 = (b) => (b && typeof inventory.wetRate === 'function' ? inventory.wetRate(b) : 1);
+    ch4.lightCheck = (key) => { const b = ch4.fuelBin(key); return fires.lightCheck(key, ch4.binUnits(b), { rate: rate4(b) }); };
+    ch4.lightProblem = (key) => { const c = ch4.lightCheck(key); return c.enabled ? null : c.why; };
+    ch4.douseCheck = (key) => fires.douseCheck(key);
+    ch4.fireState = (key) => {
+      const b = ch4.fuelBin(key), rain = typeof ch4.rainNow === 'function' ? ch4.rainNow() : 0;
+      const st = fires.ringState(key, ch4.binUnits(b), { rate: rate4(b), rain, covered: !!(b && rain > 0 && inventory.rainAt(b) <= 0), cooking: ch4.cook.cookingNow(key) });
+      if (typeof ch4.nightWood === 'function') { try { st.fuel.night = ch4.nightWood(key); } catch (e) { console.warn('chores.nightWood', e); } } // stream E's
+      return st;
+    };
+    const fireObj4 = nearby.fireObject.bind(nearby);
+    nearby.fireObject = () => {
+      const o = fireObj4();
+      if (!o || !o.key || !Array.isArray(o.actions)) return o;
+      const act = (id) => o.actions.find((a) => a.id === id), light = act('light');
+      if (light && light.needs) return o; // stream A passes them through itself
+      const put = (a, c) => { if (!a || !c) return; a.needs = c.needs; a.next = c.next; if (!c.enabled) { a.enabled = false; a.why = c.why; } else if (a.enabled !== false) a.why = null; };
+      put(light, ch4.lightCheck(o.key));
+      const site = typeof nearby.site === 'function' ? nearby.site(4) : null;
+      if (site) put(act('cook'), ch4.cook.cookCheck(site, o.key));
+      put(act('douse'), ch4.douseCheck(o.key));
+      if (act('eat')) { act('eat').needs = []; act('eat').next = 'Eaten there and then, ten minutes on the clock'; }
+      if (!o.fuel) Object.assign(o, ch4.fireState(o.key));
+      const ck = ch4.cook.cookingNow(o.key);
+      if (ck) o.cooking = { ...(o.cooking || {}), ...ck };
+      return o;
+    };
+    window.__game.needs = { timerWords: (s) => inventory.timerWords(s), status: (r) => inventory.status(r), verb: (id, r) => inventory.verb(id, r) }; // for the console and the tests
+  }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

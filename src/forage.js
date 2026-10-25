@@ -6,7 +6,7 @@ import { word, plural } from './hud.js';
 import { mulberry32, hash2 } from './rng.js';
 import { save } from './save.js';
 import { step as rustle } from './audio-voices.js';
-import { ITEMS, defineItem } from './items.js';
+import { ITEMS, defineItem, NEED, check, timerWords } from './items.js';
 
 // Berries and mushrooms (fb G, 2026-10-24). The owner: "its hard to find blueberries, also add in more of the classic
 // berries you would see and where they would show up, same with mushrooms". This replaces the one blueberry patch a
@@ -677,6 +677,23 @@ export class Forage {
     if (s.kind === 'mushroom') return pk && this.today - pk[0] < REGROW ? 0 : 1;
     return s.pick.per - (pk && pk[0] === this.today ? pk[1] : 0);
   }
+  // fb4 C (the owner's second round of 2026-10-25: "if there's some amount of time that needs to be waited … it should be
+  // very clear"): game seconds until a picked patch has fruit again (berries at midnight; a mushroom patch REGROW days
+  // after it was picked), and picking as a check (the dot's E reads it: pointer.js forageTargets)
+  regrowSec(p) {
+    const s = FORAGE[p.id], pk = this.s.picked[p.key], h = this.day.hours;
+    if (!s || !s.pick || this.leftOn(p) > 0) return 0;
+    const days = s.kind === 'mushroom' && pk ? Math.max(1, pk[0] + REGROW - this.today) : 1;
+    return Math.round(((days - 1) * 24 + (24 - h)) * 3600);
+  }
+  pickCheck(p) {
+    const s = FORAGE[p.id];
+    if (!s || !s.pick) return check(true, null, [], '');
+    const left = this.leftOn(p), P = s.pick;
+    if (left > 0) return check(true, null, [NEED.qty(s.kind === 'mushroom' ? 'Here to pick' : `${P.unit[0].toUpperCase()}${P.unit.slice(1)}s left today`, left, 1)], `${P.verb} a ${P.unit}: ${P.minutes} min`);
+    const sec = this.regrowSec(p);
+    return check(false, s.kind === 'mushroom' ? 'Picked: more come up in a few days' : 'Picked clean today', [NEED.timer(s.kind === 'mushroom' ? 'More come up in' : 'More ripen in', sec, true)], s.kind === 'mushroom' ? `More here in ${timerWords(sec)}; look along other rotten logs meanwhile` : `More ripen by tomorrow (${timerWords(sec)}); other patches nearby may have some`);
+  }
   // the fruit drawn to match what is left (the groups past it hidden)
   showLeft(p) {
     const s = FORAGE[p.id], b = p.built, left = this.leftOn(p);
@@ -800,7 +817,7 @@ export class Forage {
     if (s.kind === 'decor') { if (!p.prompt) p.prompt = { key: null, text: s.say }; return; }
     if (s.kind === 'lookalike') { p.prompt = { key: 'E', text: 'Look at the orange mushrooms · on the rotten log' }; this.armed = best; return; }
     const left = this.leftOn(best), P = s.pick;
-    if (left <= 0) { p.prompt = { key: null, text: s.kind === 'mushroom' ? `${s.name} · picked: more will come up in a few days` : `${s.name} · picked clean today; more ripen by tomorrow` }; return; }
+    if (left <= 0) { const t = timerWords(this.regrowSec(best)); p.prompt = { key: null, text: s.kind === 'mushroom' ? `${s.name} · picked: more come up in ${t}` : `${s.name} · picked clean today; more ripen in ${t}` }; return; } // fb4 C: the wait in numbers
     const tin = best.id === 'blueberries' && this.chores && this.chores.pintsWanted && this.chores.pintsWanted() > this.chores.pints;
     const more = s.kind === 'mushroom' ? 'a few here' : `${word(left)} ${plural(left, P.unit)} on the ${best.id === 'raspberries' ? 'canes' : s.tall ? 'branches' : 'plants'}`;
     p.prompt = { key: 'E', text: `${P.verb} ${s.short} · a ${P.unit}, ${P.minutes} min${tin ? ', for the notice' : ''} · ${more}` };

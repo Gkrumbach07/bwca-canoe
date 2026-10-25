@@ -33,6 +33,8 @@
 //   hold.active       // the job under way, or null
 //   hold.is(id)       // that job is under way
 //   hold.cancel()     // stop it now (calls onStop)
+//   hold.left(job?)   // fb4 C: game seconds left of the job (the one under way by default), null with none
+//   hold.minutesLeft(phases, at) // game minutes the phases still take from `at` (a checklist's timer before it starts)
 //   hold.offer(text, info, opts) // the prompt "E text · hold · info" and, on E, hold.begin(opts); true when it set the prompt
 //
 // A phase's `seconds` defaults from its minutes (0.6 s plus a second per quarter hour, at most 3 s). A phase's `doing`
@@ -135,12 +137,21 @@ class Hold {
     this.show(j);
   }
 
-  // the action line: the ring in the key's place, the label, the phase under way and how far through
+  // fb4 C (the owner's second round of 2026-10-25: "if there's some amount of time that needs to be waited … it should be
+  // very clear"): what a job still takes on the clock
+  minutesLeft(phases, at = 0) {
+    let m = 0;
+    (phases || []).forEach((ph, i) => { m += (ph.minutes || 0) * Math.max(0, Math.min(1, i + 1 - at)); });
+    return m;
+  }
+  left(j = this.active) { return j && !j.over ? Math.round(this.minutesLeft(j.phases, j.at) * 60) : null; }
+  // the action line: the ring in the key's place, the label, the phase under way, how far through and (fb4 C) the
+  // minutes it still takes on the clock
   show(j) {
     const p = this.player;
     if (!p) return;
-    const n = j.phases.length, i = Math.min(n - 1, Math.floor(j.at + 1e-9)), ph = j.phases[i];
-    p.prompt = { key: null, text: `${ring(j.at / n, n, j.auto ? null : j.key)}${j.label || ph.name} · ${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}`, hold: true };
+    const n = j.phases.length, i = Math.min(n - 1, Math.floor(j.at + 1e-9)), ph = j.phases[i], m = this.minutesLeft(j.phases, j.at);
+    p.prompt = { key: null, text: `${ring(j.at / n, n, j.auto ? null : j.key)}${j.label || ph.name} · ${ph.doing || ph.name}${n > 1 ? ` · ${i + 1} of ${n}` : ''}${m >= 0.5 ? ` · ${Math.ceil(m)} min left` : ''}`, hold: true };
   }
 
   // E, a line and "hold"; on the press, the job (opts as begin). p.prompt is set only when E is free (no key showing)

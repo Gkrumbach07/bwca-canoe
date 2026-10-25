@@ -42,6 +42,42 @@
 // drunk for you. A hand holds any item: a loose one rides in the `inhand` holder (container.one), as wood rides in the
 // armload. A fish is 1 × 3 and goes in a hand, a pack or the stringer; pockets take things of up to two cells.
 
+// fb4 C (the owner's second round of 2026-10-25: "if I can't use something, I want to know exactly why I can't use it …
+// some sort of checklist or timer or quantity out of total … there needs to be a very clear action on what needs to be
+// done next", and "when there are things that have statuses like wet clothes … you need to know that there are wet
+// clothes"). Every blocked action says why as a checklist, and every item with a state says it and the next step. The
+// shapes every stream uses (the book, the cards and the right-click menu draw them; the dot shows `why`):
+//   a check  { enabled, why, needs: [need], next, label?, run? }   why: the one line ('Needs dry wood'); next: the one
+//            thing to do now ('Gather dry wood: dead branches off the ground')
+//   a need   { label, done, have?, need?, unit?, timer?, running?, note? }   have of need ('Dry wood · 0 of 3 pieces'),
+//            a step (done), or a timer in GAME seconds (running false: what it will take once the step before is done,
+//            drawn but not counted down); note: a quieter suffix
+//   a status { label, next, mark, timer?, running?, until? }   (inventory.status): mark 'wet' | 'drying' | 'treating' |
+//            'cooking' | 'burning' | 'hot' | 'low' | 'empty' | 'ready' | null; until: the abs game hour the timer ends
+// timerWords(seconds) says a game time the one way everyone says it: "<1 min", "28 min", "1 h 10", "2 days 3 h".
+export function timerWords(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) return 'now';
+  if (sec < 60) return '<1 min';
+  if (sec < 3600) return `${Math.min(59, Math.ceil(sec / 60))} min`;
+  if (sec < 86400) {
+    let h = Math.floor(sec / 3600), m = Math.ceil((sec - h * 3600) / 60);
+    if (m >= 60) { h += 1; m = 0; }
+    return h >= 24 ? '1 day' : `${h} h${m ? ` ${String(m).padStart(2, '0')}` : ''}`;
+  }
+  const d = Math.floor(sec / 86400), h = Math.round((sec - d * 86400) / 3600);
+  return `${d} day${d > 1 ? 's' : ''}${h ? ` ${h} h` : ''}`;
+}
+// the needs, made alike everywhere
+export const NEED = {
+  qty: (label, have, need, unit = '', more = {}) => ({ label, have: +(+have).toFixed(2), need, ...(unit ? { unit } : {}), done: have >= need - 1e-9, ...more }),
+  step: (label, done, more = {}) => ({ label, done: !!done, ...more }),
+  timer: (label, sec, running = true, more = {}) => ({ label, timer: Math.max(0, Math.round(sec)), running: !!running, done: false, ...more }),
+};
+// a check: enabled, else why with its needs and the next step
+export function check(enabled, why, needs = [], next = '', more = {}) {
+  return { enabled: !!enabled, why: enabled ? null : why || 'Not now', needs: needs.filter(Boolean), next: next || '', ...more };
+}
+
 export const ITEMS = {};
 
 const KINDS = new Set(['food', 'snack', 'meal', 'fish', 'bait', 'lure', 'tool', 'gear', 'map', 'container', 'long', 'firewood', 'forage']);
@@ -60,7 +96,7 @@ export const VERBS = {
   drink: { label: 'Drink', words: 'A gulp from the bottle, about a quarter of a litre.' },
   drinkup: { label: 'Drink up', words: 'The rest of what is drinkable in the bottle.' },
   change: { label: 'Change into dry clothes', words: 'After a capsize or a soaking: the dry set on, the wet one in the bag.' },
-  tarp: { label: 'Pitch over…', words: 'Over the fire ring or a pack on the ground within a few steps: rain stays off it.' },
+  tarp: { label: 'Pitch the tarp', words: 'Between two trees 3–7 m apart, one tree and two poles, or four poles: the rain stays off what is under it.' }, // fb4 E's rig (tarp.js)
 };
 const WHY = { hang: 'carry it to a tree and point at the limb', cook: 'only in the fire card', raw: 'cook it on the grate first' };
 const verb = (id, more = {}) => ({ id, label: VERBS[id].label, ...more });
@@ -199,7 +235,7 @@ defineItem({ id: 'snack:chocolate', name: 'Chocolate bar', kind: 'snack', kg: 0.
   stats: [S('Hunger', '+6 % a half', 'eaten as it is, standing still'), S('The bar', '+6 % a half'), S('Servings', '2 halves')] });
 // kept fish, by species: 1 × 3 in a grid (fb3 B: a fish goes in a hand, a pack or the stringer); a fish of any other
 // species gets a plain one (itemDef)
-const FISH_STATS = [S('Hunger', '+60 %', 'fried on the grate: in the pot’s lid, or on a stick without the pot; 20 min'), S('The bar', '+45 %'), S('Weight', 'by its length: a 50 cm walleye 1.2 kg, a 90 cm pike 3.1 kg'), S('A notice’s cooler', 'may want it as it is: K at the catch says so')];
+const FISH_STATS = [S('Hunger', '+60 %', 'fried on the grate: in the pot’s lid, or on a stick without the pot; 20 min'), S('The bar', '+45 %'), S('Weight', 'by its length: a 50 cm walleye 1.2 kg, a 90 cm pike 3.1 kg'), S('A notice’s cooler', 'may want it as it is: E at the catch says so')];
 for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['smallmouth', 'Smallmouth bass'], ['laketrout', 'Lake trout'], ['perch', 'Yellow perch'], ['crappie', 'Crappie']]) {
   defineItem({ id: `fish:${sp}`, name, kind: 'fish', w: 1, h: 3, kg: 0.8, species: sp, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, words: 'Fry it on the grate for supper; a notice’s cooler may want it as it is.', stats: FISH_STATS });
 }
@@ -209,10 +245,16 @@ defineItem({ id: 'firewood', name: 'An armful of firewood', kind: 'firewood', w:
 // camp 2 (the camp redone, 2026-10-24): firewood is found lying about, a piece at a time (chores.js), and burns by the
 // piece (burn: game hours on a fire, fire.js); a few pieces are carried in the arms, a hand's armload (woodarms, drawn by
 // chores.js). The grate holds what is cooking or cooked and the pot (cook.js): a fixed container at the fire ring.
+// fb4 C: wood can be wet (its entry's data.wet: game hours of drying left in dry air): rain on it in the open, the ring
+// or a pile or your arms, wets it through in 20 min; wet, it won't light, and it dries by a lit fire (on it or within
+// 2 m) in WOOD_DRY.fire hours, in dry air in WOOD_DRY.air. A fire lights on LIGHT_PIECES dry pieces, a branch among them.
+export const WOOD_DRY = { air: 3, fire: 0.5 };
+export const LIGHT_PIECES = 3;
+const WET_WOOD = S('Wet', 'won’t light: dries by a lit fire in 30 min (on it or within 2 m), 3 h in dry air', 'rain on it in the open wets it through in 20 min');
 defineItem({ id: 'wood:branch', name: 'Dead branch', short: 'Branch', kind: 'firewood', w: 1, h: 2, kg: 0.7, burn: 0.6, icon: 'firewood', words: 'Kindling for the fire ring: it catches easily and burns about half an hour.',
-  stats: [S('Burns', '0.6 h'), S('Kindling', 'a fire lights only with a branch in the ring, two pieces in all'), S('On hot coals', 'brings a burnt-out fire back')] });
+  stats: [S('Burns', '0.6 h'), S('Kindling', `a fire lights only with a dry branch in the ring, ${LIGHT_PIECES} dry pieces in all`), S('On hot coals', 'brings a burnt-out fire back'), WET_WOOD] });
 defineItem({ id: 'wood:log', name: 'Short log', short: 'Log', kind: 'firewood', w: 1, h: 3, kg: 2.2, burn: 1.5, icon: 'firewood', words: 'Burns long in the fire ring, an hour and a half once the fire is going.',
-  stats: [S('Burns', '1.5 h'), S('Lighting', 'won’t catch on its own: a dead branch under it'), S('The ring holds', '4.5 h of wood at once')] });
+  stats: [S('Burns', '1.5 h'), S('Lighting', 'won’t catch on its own: a dry branch under it'), S('The ring holds', '4.5 h of wood at once'), WET_WOOD] });
 defineItem({ id: 'woodarms', name: 'Armload of wood', short: 'Armload', kind: 'container', w: 2, h: 3, kg: 0, hand: true, container: { cols: 3, rows: 3, accepts: ['firewood'] }, icon: 'firewood', verbs: [], words: 'Wood carried in the crook of an arm to the fire ring.' });
 defineItem({ id: 'grate', name: 'On the grate', short: 'The grate', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool'] }, icon: 'pot', words: 'The fire ring’s grate: the pot, the pan or a fish on a stick go on it.' });
 // what comes off the grate: a meal cooked (hot, eaten at the fire, or kept a few hours as leftovers) and a fish fried
@@ -253,8 +295,12 @@ defineItem({ id: 'clothes', name: 'Clothes bag', kind: 'gear', w: 2, h: 2, kg: 2
   stats: [S('A dry set', '1 in the bag'), S('Change', 'after a capsize or a soaking: warmth comes back twice as fast for 2 h, and the gear counts dry'), S('The wet set', 'dries by a fire in half an hour, inside a store, or overnight')] });
 defineItem({ id: 'pot', name: 'Cook pot', kind: 'tool', w: 2, h: 2, kg: 1.2, price: 0, icon: 'pot', words: 'Cooks a meal on the grate: drag it onto the grate, the meal beside it, and Cook.',
   stats: [S('A meal', 'cooks only in the pot: drag it onto the grate'), S('Water', '300–500 mL a meal from the bottle; boiled, lake water is safe'), S('A fish', 'fries in its lid in 20 min (on a stick over the coals without it)')] });
-defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, price: 0, icon: 'tarp', words: 'Pitched over the fire ring or a pack on the ground, the rain stays off it.',
-  stats: [S('Over the fire ring', 'rain neither wets the wood in it nor burns the fire down', 'without it, rain burns a fire twice as fast and wets the wood through in 20 min'), S('Over a pack on the ground', 'the gear stays dry', 'without it, half an hour of rain soaks the gear'), S('Rain fly for the tent', 'none')] });
+// fb4 (decision 7: the tarp is pitched like the tent, on a rig with anchors; stream E's tarp.js pitches it and says
+// what is missing): the tarp's words for the rig, and the pole it may need (stream E stubs the same def until this lands)
+defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, price: 0, icon: 'tarp', words: 'Pitched on a ridge line between two trees, one tree and two poles, or four poles: the rain stays off what is under it.',
+  stats: [S('Anchors', 'two trees 3–7 m apart; or one tree and two poles; or four poles'), S('Under it', 'rain wets neither the ring’s wood, the packs set out nor you, and a fire burns no faster', 'without it, rain burns a fire twice as fast and wets the wood through in 20 min; half an hour of it soaks a pack on the ground'), S('Rain fly for the tent', 'none')] });
+defineItem({ id: 'pole', name: 'Tarp pole', short: 'Pole', kind: 'gear', w: 1, h: 3, kg: 0.9, stack: 4, icon: 'pole', words: 'A straight dead pole, about two metres: holds up a tarp where the trees don’t.',
+  stats: [S('Holds up a tarp', 'two with a tree, four alone'), S('Found', 'lying by the down logs and under the trees; or cut one from a down log with the folding saw')] });
 defineItem({ id: 'pad', name: 'Sleeping pad', kind: 'gear', w: 2, h: 3, kg: 0.6, price: 30, words: 'Softens the ground under the bag for a better night.', stats: [S('Night’s rest', '+5 %', 'owned, in any tent')] });
 defineItem({ id: 'yokepads', name: 'Portage yoke pads', kind: 'gear', w: 2, h: 1, kg: 0.4, price: 15, icon: 'yoke', words: 'Eases the canoe on your shoulders over a portage.', stats: [S('Carrying the canoe', 'energy ×0.85', 'owned')] });
 defineItem({ id: 'tablets', name: 'Purifying tablets', kind: 'tool', kg: 0.05, price: 2, slot: 'filter', uses: 20, words: 'Treats the bottle: a tablet dropped in at each fill and half an hour’s wait.',

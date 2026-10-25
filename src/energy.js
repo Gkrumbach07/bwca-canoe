@@ -1,7 +1,7 @@
 import { clamp, smoothstep } from './rng.js';
 import { monthDay } from './astro.js';
 import { LIFE } from './pace.js';
-import { itemDef } from './items.js';
+import { itemDef, NEED, check, timerWords } from './items.js';
 // an item's food family for the readout: 'meal' (raw, to cook), 'snack', 'forage', 'hot' (cooked: camp 2's hot:* and
 // fried:*), or its own kind
 const FOOD_KIND = (id) => { const d = itemDef(id); return !d ? '' : d.kind === 'food' && d.cooked ? 'hot' : d.kind; };
@@ -162,6 +162,8 @@ const FIRE_NEAR = 3, FIRE_FAR = 6; // metres: the whole of a fire's warmth withi
 const INDOOR_H = 1.2;      // warmth back a game hour inside a store
 const WARM_H = 0.15;       // warmth back a game hour in air 8 °C over COMFORT (a quarter of it just over; half wet)
 const NIGHT_BAG = 1, NIGHT_WET = 0.8, NIGHT_NO_BAG = 0.6; // warmth after a night in the tent: the bag, damp gear, no bag in reach
+
+const litres = (x) => `${x >= 1.95 ? '2' : x.toFixed(1)} L`; // fb4 C
 
 export class Energy {
   constructor(player, day) {
@@ -353,9 +355,41 @@ export class Energy {
   }
   // fb3 B: Drink (the bottle's verb in the book): `litres` of what is drinkable (GULP a gulp; Infinity drinks it up),
   // the thirst need up by what the body takes of it. → { ok, why, words }
+  // fb4 C: as a checklist ({ ok, why, needs, next }: the treating's timer in game seconds, the water have of need)
   drinkCheck() {
-    if (this.drinkable <= 0.02) return { ok: false, why: this.treating > 0.001 ? `the water is treating: ${this.treatingWords()}` : 'the bottle is dry: fill it at the shore' };
-    return { ok: true, why: null };
+    if (this.drinkable <= 0.02) {
+      if (this.treating > 0.001) {
+        const sec = this.treatingSec();
+        return { ok: false, why: `Treating: drinkable in ${timerWords(sec)}`, needs: [NEED.timer('Treating', sec, true, { note: `${litres(this.treating)} under a tablet` })], next: `Wait ${timerWords(sec)}: the tablet is working` };
+      }
+      return { ok: false, why: 'The bottle is dry', needs: [NEED.qty('Water in the bottle', 0, GULP, 'L')], next: 'Fill it at the water’s edge: on foot, face the water and press E' };
+    }
+    return { ok: true, why: null, needs: [], next: '' };
+  }
+  // game seconds until what is under a tablet is drinkable
+  treatingSec() { return this.treating > 0.001 ? Math.max(0, (this.readyAt - this.now) * 3600) : 0; }
+  // fb4 C: E at the water's edge (nearby.js reads it): { enabled, why, needs, next, wait }. wait: the filter's hours
+  // (camp.filterWait: a tablet's half hour, a pump's minutes)
+  fillCheck(wait = TABLETS) {
+    const room = Math.max(0, BOTTLE - this.bottle), i = this.inv, tabletKind = wait >= TABLETS - 0.01 && !this.sandbox;
+    const tabs = tabletKind && i && typeof i.usesLeft === 'function' ? i.usesLeft('tablets') : null;
+    if (room <= 0.05) return { ...check(false, 'The bottle is full', [NEED.qty('Room in the bottle', +room.toFixed(2), GULP, 'L')], 'Drink first: the bottle in your pockets, right-click › Drink'), wait };
+    const needs = [NEED.qty('Room in the bottle', +room.toFixed(2), GULP, 'L')];
+    if (tabletKind) needs.push(NEED.qty('A tablet in reach', tabs > 0 ? 1 : 0, 1, '', { note: tabs > 0 ? `${tabs} left` : 'none: lake water as it comes, a queasy stomach for 6 h' }));
+    needs.push(NEED.timer('Drinkable after', (tabletKind && !(tabs > 0) ? 0 : wait) * 3600, false));
+    const next = !tabletKind ? `Fill it: through the filter, drinkable in ${timerWords(wait * 3600)}` : tabs > 0 ? 'Fill it: a tablet in, drinkable in 30 min' : 'Fill it as it comes, or bring the tablets within reach first (in a pack you carry)';
+    return { ...check(true, null, needs, next), wait };
+  }
+  // fb4 C: the bottle's entry as a status (inventory.status): treating with its timer, empty, low, or null when fine
+  bottleStatus() {
+    const now = this.now;
+    if (this.treating > 0.001) {
+      const sec = this.treatingSec();
+      return { label: 'Treating', mark: 'treating', timer: Math.round(sec), running: true, until: now + sec / 3600, next: `${this.drinkable > 0.02 ? `${litres(this.drinkable)} drinkable now; ` : ''}${litres(this.treating)} drinkable in ${timerWords(sec)}` };
+    }
+    if (this.bottle <= 0.02) return { label: 'Empty', mark: 'empty', next: 'Fill it at the water’s edge: on foot, face the water and press E' };
+    if (this.drinkable < 0.5) return { label: `${litres(this.drinkable)} left`, mark: 'low', next: 'Fill it at the water’s edge before you set off' };
+    return null;
   }
   drink(litres = GULP) {
     const d = this.drinkCheck();
@@ -442,7 +476,7 @@ export class Energy {
   }
   // the old G (gone from the keys): on a trip, a word about where the food is eaten now
   manualEat() {
-    if (this.trip) { this.note('Eat from the inventory (J): a snack when you are still, a meal cooked on the grate at a fire.'); return; }
+    if (this.trip) { this.note('Eat from the inventory (I): a snack when you are still, a meal cooked on the grate at a fire.'); return; }
     if (!this.still) { this.note('Hold still to eat.'); return; }
     if (!this.meal('cold', 'You eat')) this.note(this.adventure ? 'The food pack is empty.' : 'The food pack is empty. Any outfitter will fill it.');
   }
@@ -501,7 +535,12 @@ export class Energy {
     return t;
   }
   // the rain falling on you, 0–1 (snow wets you half as much; none indoors)
-  rainOn() { const L = this.day.weather && this.day.weather.look; return !L || this.inside() ? 0 : clamp((L.rain || 0) * (1 - 0.5 * (L.snow || 0)), 0, 1); }
+  // (fb4: and none under a pitched tarp, stream E's tarp.covers(x, z), when it is in the build)
+  rainOn() { const L = this.day.weather && this.day.weather.look; return !L || this.inside() || this.underTarp() ? 0 : clamp((L.rain || 0) * (1 - 0.5 * (L.snow || 0)), 0, 1); }
+  underTarp() {
+    const g = typeof window !== 'undefined' ? window.__game : null, t = g && g.tarp, p = this.player;
+    try { return !!(t && typeof t.covers === 'function' && p && p.onFoot !== false && p.mode !== 'paddle' && t.covers(p.x, p.z)); } catch { return false; }
+  }
   // inside a store (main.js energy.indoors), or at its counter
   inside() { try { return !!(this.indoors && this.indoors()) || !!(this.atCounter && this.atCounter()); } catch { return false; } }
   // a fire's warmth where you stand, 0–1: by its heat (the coals half), the whole of it within FIRE_NEAR, none past FIRE_FAR
@@ -523,14 +562,35 @@ export class Energy {
   // fb3 B: the clothes bag's Change (its verb in the book): after a capsize or a soaking, the dry set on: wet through no
   // more, the gear counts dry, and warmth comes back DRY_BOOST times as fast for DRY_BOOST_HOURS. The entry's `left`
   // (one dry set) goes to 0 and the wet set dries by a fire, inside, or overnight (wetSetH).
+  // (fb4 C: as a checklist, { ok, why, needs, next }, the wet set's drying as a timer)
   changeCheck(e) {
     const left = e && Number.isFinite(e.left) ? e.left : 1;
-    if (left <= 0) return { ok: false, why: 'the spare set is wet: it dries by a fire in half an hour, or overnight' };
+    if (left <= 0) {
+      const d = this.wetSetDrying();
+      return { ok: false, why: 'The spare set is wet', needs: [NEED.timer('The spare set drying', d.sec, true, { note: d.byFire ? 'by the fire' : 'in the air: 30 min by a lit fire' })], next: d.byFire ? `Dry in ${timerWords(d.sec)}: stay by the fire` : 'Stand by a lit fire: it dries in 30 min (8 h in the air, or overnight)' };
+    }
     const wet = this.soaked > 0.25 || !!(this.trip && this.trip.state && this.trip.state.wet);
-    if (!wet) return { ok: false, why: 'you are dry already' };
+    if (!wet) return { ok: false, why: 'You are dry already', needs: [NEED.step('Wet through, or the gear wet', false, { note: this.soaked > 0.02 ? `${Math.round(this.soaked * 100)} % wet` : 'dry' })], next: 'Keep it for after a capsize or a soaking' };
     const p = this.player;
-    if (p && p.mode !== 'walk' && p.mode !== 'carry' && !(this.inv && this.inv.atStash)) return { ok: false, why: 'not in the canoe: go ashore first' };
-    return { ok: true, why: null };
+    if (p && p.mode !== 'walk' && p.mode !== 'carry' && !(this.inv && this.inv.atStash)) return { ok: false, why: 'Not in the canoe', needs: [NEED.step('On foot', false)], next: 'Go ashore first' };
+    return { ok: true, why: null, needs: [], next: '' };
+  }
+  // fb4 C: the wet set drying now: { sec (game seconds left at the rate it dries now), byFire }
+  wetSetDrying() {
+    const inside = this.inside(), byFire = (inside ? 0 : this.fireHere()) > 0.3 || inside, rate = byFire ? WET_SET_AIR_H / WET_SET_FIRE_H : 1;
+    return { sec: Math.max(0, ((WET_SET_AIR_H - this.wetSetH) / rate) * 3600), byFire };
+  }
+  // fb4 C: the clothes bag as a status: the wet set drying (by a fire or in the air), or a dry set to change into when you
+  // are wet through; null when there is nothing to say
+  clothesStatus(e) {
+    const left = e && Number.isFinite(e.left) ? e.left : 1;
+    if (left <= 0) {
+      const d = this.wetSetDrying();
+      return { label: d.byFire ? 'Drying' : 'Wet set', mark: d.byFire ? 'drying' : 'wet', timer: Math.round(d.sec), running: true, until: this.now + d.sec / 3600, next: d.byFire ? `Dry in ${timerWords(d.sec)}: stay by the fire` : `Dries by a lit fire in 30 min (stand within 3 m of it); in the air ${timerWords(d.sec)}, or overnight` };
+    }
+    const wet = this.live && (this.soaked > 0.25 || !!(this.trip && this.trip.state && this.trip.state.wet));
+    if (wet) return { label: 'A dry set', mark: 'ready', next: 'You are wet through: right-click › Change into dry clothes (on foot)' };
+    return null;
   }
   changeClothes(e) {
     const c = this.changeCheck(e);
@@ -600,7 +660,7 @@ export class Energy {
       if (n[k] >= LOW || o[k]) continue;
       o[k] = true;
       if (k === 'water') this.note(this.drinkable > 0.02 ? 'Thirsty. Drink from the bottle (I).' : this.treating > 0.001 ? `Thirsty. The bottle is treating: ${this.treatingWords()}.` : 'Thirsty, and the bottle is dry. Fill it at the shore, then drink (I).'); // fb3 B: nothing is drunk for you
-      else if (k === 'food') this.note(this.inv ? (this.inv.snacks() ? 'Hungry. A snack from the pack (J, when you are still), or cook a meal at a fire.' : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and no food with you.') : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and the food pack is empty.');
+      else if (k === 'food') this.note(this.inv ? (this.inv.snacks() ? 'Hungry. A snack from the pack (I, when you are still), or cook a meal at a fire.' : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and no food with you.') : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and the food pack is empty.');
       else if (k === 'warmth') this.note(this.soaked > 0.3 ? 'Cold, and wet through. Get to a fire, or into the tent and the bag.' : 'Cold. A fire would warm you, or the tent and the bag.');
       else this.note('Tired. Only a night’s sleep brings it back now: a campsite, or an outfitter’s bunk.');
     }
@@ -677,7 +737,7 @@ export class Energy {
       // (polish B: drifting with a need low but not out, rest crept the bar up a sliver a minute, 0.0002 in ten seconds,
       // so it was never "at 0" again and the hour never ran). Nearly spent, a word first.
       if (this.spentAt == null) {
-        if (this.value <= 0) { this.spentAt = now; this.note('Spent. Stop now: eat from the pack (J), drink or rest, or someone will come out for you within the hour.'); }
+        if (this.value <= 0) { this.spentAt = now; this.note('Spent. Stop now: eat from the pack (I), drink or rest, or someone will come out for you within the hour.'); }
       } else if (this.value >= SPENT_OVER) this.spentAt = null;
       else if (now - this.spentAt >= SPENT_GRACE && this.onEvac) { this.spentAt = null; this.onEvac(this.spentWhy()); }
       if (this.value > 0) {
