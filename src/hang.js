@@ -377,11 +377,12 @@ export class Hang {
       if (rnd() > (BARRELS[c.item] ? 0.05 : 0.12)) continue;
       const n = Math.min(food.length, 1 + (rnd() < 0.4 ? 1 : 0));
       const gone = [];
-      for (let i = 0; i < n; i++) { const e = food[i]; const t = inv.take(c.id, e.uid, 1); if (t) gone.push(itemDef(t.id).name); }
+      for (let i = 0; i < n; i++) { const e = food[i]; const t = inv.take(c.id, e.uid, 1); if (t) gone.push(itemDef(t.id).name.replace(/, hot$/i, '')); } // ("rice and lentils", not "rice and lentils, hot")
       if (!gone.length) continue;
-      const nm = itemDef(c.item).name, where = BARRELS[c.item] ? 'pried at the blue barrel left on the ground until the lid gave' : c.item === 'pile' ? 'found the food left lying on the ground' : `got into the ${/^Duluth/.test(nm) ? nm : lower(nm)} left on the ground`;
+      const nm = itemDef(c.item).name, where = BARRELS[c.item] ? 'pried at the blue barrel left on the ground until the lid gave' : c.item === 'pile' ? 'found the food left lying on the ground' : c.item === 'grate' ? 'took the food left on the grate' : `got into the ${/^Duluth/.test(nm) ? nm : lower(nm)} left on the ground`;
       c0.log('bear', { item: c.item, gone });
-      return `A bear came through in the night and ${where}: ${gone.length > 1 ? `${lower(gone[0])} and ${lower(gone[1])}` : lower(gone[0])} gone, the wrappers in the brush. Hang the food tonight.`;
+      const tail = inv.containers.some((k) => BARRELS[k.item]) ? 'Hang the food tonight.' : 'A blue barrel hung from a limb keeps it.'; // (fb5 join: no barrel, nothing to hang)
+      return `A bear came through in the night and ${where}: ${gone.length > 1 ? `${lower(gone[0])} and ${lower(gone[1])}` : lower(gone[0])} gone, the wrappers in the brush. ${tail}`;
     }
     return null;
   }

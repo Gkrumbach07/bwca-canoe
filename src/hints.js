@@ -303,6 +303,12 @@ export class Hints {
     let n = 0; try { n = ch && ch.fireInfo ? ch.fireInfo(key).units.length : 0; } catch { n = 0; }
     return n ? { kind: 'wood' } : { kind: 'empty' };
   }
+  // a blue barrel of yours anywhere (on you, at camp, in the canoe, kept at an outfitter): what a hang takes
+  hasBarrel() {
+    const inv = this.t.inventory;
+    if (!inv || !inv.attached) return true;
+    try { return inv.containers.some((c) => /^barrel/.test(c.item || '')); } catch { return true; }
+  }
   // food with you or set out at camp, and none of it hung
   foodOut() {
     const e = this.t.energy, inv = this.t.inventory;
@@ -368,11 +374,18 @@ export class Hints {
         return d.hours >= set - 0.75 && d.hours < set + 0.5;
       }
       // the camp
-      case 'site': return this.onTrip && !!this.here && this.here.ringD <= SITE && (this.dark ? { lv: 1, text: 'A campsite. A fire, the tent, your food hung up before you sleep.' } : true);
+      case 'site': {
+        if (!(this.onTrip && !!this.here && this.here.ringD <= SITE)) return false;
+        // (fb5 join: with no barrel there is nothing to hang, so the line does not ask for it)
+        if (!this.hasBarrel()) return { lv: 1, text: this.dark ? 'A campsite. A fire and the tent before you sleep.' : 'A campsite. Before dark: a fire and the tent.' };
+        return this.dark ? { lv: 1, text: 'A campsite. A fire, the tent, your food hung up before you sleep.' } : true;
+      }
       case 'bears': {
         const set = d && d.sunriseSunset ? d.sunriseSunset.set : 20;
         if (!this.onTrip || p.mode !== 'walk' || !(t.camp && t.camp.camp) || !(this.dark || d.hours >= set)) return false;
-        return this.foodOut();
+        if (!this.foodOut()) return false;
+        // (fb5 join: only a blue barrel hangs; with none, "hang your food" asked for what can't be done)
+        return this.hasBarrel() ? true : { lv: 1, text: 'Bears raid food left out at night. A blue barrel hangs from a limb.', short: 'Food left out tonight.' };
       }
       case 'ringwood': { const h = this.here; if (!h || h.ringD > RING) return false; const n = this.ringNeed(h.key); return !!n && n.kind !== 'coals' && this.woodInHand(); }
       case 'ringempty': { const h = this.here; if (!h || h.ringD > RING || this.woodInHand()) return false; const n = this.ringNeed(h.key); return !!n && n.kind === 'empty'; }
