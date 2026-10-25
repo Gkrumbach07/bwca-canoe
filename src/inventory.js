@@ -40,6 +40,11 @@
 //   Wood is wet while its entry's data.wet (game hours of drying left in dry air) is over 0 (syncWet: rain on it in the
 //   open, the ring's wetting by chores.js; it dries WOOD_DRY.air / WOOD_DRY.fire times faster by a lit fire).
 //   inventory.now (abs game hours), inventory.timerWords(sec), inventory.wetRate(c).
+//   fb5 B (the owner's third round of 2026-10-25: "only whats relevant"): a status is a word, a short `hint` and its
+//   timer ("Wet · dries by a fire, 30 min", "Drying · 22 min", "Hot · keeps 4 h 50"); `chip` is a missing thing drawn on
+//   the icon ("needs the pot", stream A's cook.grateStatus); `bar: true` marks one the uses bar already says (drawn as
+//   the icon's mark only). `next` stays in the data for stream E's moments and is never drawn on the item. A greyed
+//   verb's needs lead with the one thing missing (items.js chipOf draws the first): no ticked steps, no repeats of why.
 //   The bottle rides fixed in the pockets' first cell (its entry's `left` is the litres in it, `treating` what is
 //   under a tablet; nothing drinks for you: energy.drink). A loose item in a hand rides in the 'inhand' holder
 //   (items.js, container.one); a fixed entry (e.fixed) is never taken, moved or dropped.
@@ -62,6 +67,20 @@ const SAVE_EVERY = 6;                 // seconds of play between saves while som
 const WHERE_RANK = { back: 0.4, chest: 0.35, hands: 0.3, pockets: 0.05, canoe: 0.2, stash: 0.1, ground: 0, hung: 0 };
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // (a name keeps its capital: "the Duluth #3")
+// fb5 B: energy.js's bottle and clothes statuses said the short way (a word and its timer; the litres bar says how much)
+function bottleWords(s) {
+  if (!s) return null;
+  if (s.mark === 'empty') return { ...s, label: 'Empty' };
+  if (s.mark === 'low') return { ...s, label: 'Low', bar: true };
+  return s;
+}
+function clothesWords(s) {
+  if (!s) return null;
+  // (the wet set in the air: how it dries is the word, not the 8 h of the air)
+  if (s.mark === 'wet') { const out = { ...s, label: 'Wet set', hint: 'dries by a fire', airSec: s.timer }; delete out.timer; delete out.running; delete out.until; return out; }
+  if (s.mark === 'ready') return { ...s, label: 'Dry set' };
+  return s;
+}
 const ok = (words = '') => ({ ok: true, why: null, words });
 const isWood = (id) => { const d = itemDef(id); return !!(d && d.kind === 'firewood'); };
 const OPEN = new Set(['firefuel', 'pile', 'woodarms', 'inhand', 'grate']); // fb4 C: containers the rain falls into
@@ -919,18 +938,18 @@ export class Inventory {
       case 'hand': {
         if (!r || !r.e) return null;
         if (r.e.fixed) return grey('It stays where it is', [], r.e.id === 'bottle' ? 'Drink from it where it is: right-click › Drink' : '');
-        if (r.c && this.spec(r.c).one) return grey('In your hand already', [NEED.step('In a hand', true)], 'Drag it into a pack to put it away, or onto the ground');
+        if (r.c && this.spec(r.c).one) return grey('In your hand already', [], 'Drag it into a pack to put it away, or onto the ground');
         if (!this.canHand(r.e.id) && !r.e.box) return grey('It won’t go in one hand', [], 'Carry it on your back or chest: drag its strap there');
-        if (p && !(p.onFoot || p.mode === 'paddle') && !this.atStash) return grey('Not now', [NEED.step('On foot, or sitting in the canoe', false)], 'Finish what you are doing first');
-        if (this.freeHand() < 0) return grey('Both hands are full', [NEED.qty('A free hand', 0, 1)], `Put down or away what is in a hand: ${this.handsWords() || 'drag it into a pack'}`);
+        if (p && !(p.onFoot || p.mode === 'paddle') && !this.atStash) return grey('Not now', [NEED.step('On foot, or sitting in the canoe', false, { chip: 'on foot' })], 'Finish what you are doing first');
+        if (this.freeHand() < 0) return grey('Both hands are full', [NEED.qty('A free hand', 0, 1, '', { chip: '' })], `Put down or away what is in a hand: ${this.handsWords() || 'drag it into a pack'}`);
         return go(() => this.toHand(r.c.id, r.e.uid), null, [NEED.qty('A free hand', 1, 1)]);
       }
       case 'stringer': {
         if (!r || !r.e) return null;
         const st = this.stringerInReach();
-        if (!st) { const w = this.stringerWhere(); return grey('The stringer is not in reach', [NEED.step('The stringer in reach', false, w.note ? { note: w.note } : {})], w.next); }
-        if (r.c === st) return grey('It is on the stringer', [NEED.step('On the stringer', true)], 'Fry it on the grate at a fire, or keep it there till supper');
-        if (!this.firstFit(st, r.e.id)) return grey('The stringer is full', [NEED.step('Room on the stringer', false, { note: `${st.grid.length} fish on it` })], 'Cook one, or let one go first');
+        if (!st) { const w = this.stringerWhere(); return grey('Stringer out of reach', [NEED.step('The stringer in reach', false, { chip: w.chip || '', ...(w.note ? { note: w.note } : {}) })], w.next); }
+        if (r.c === st) return grey('On the stringer', [], 'Fry it on the grate at a fire, or keep it there till supper');
+        if (!this.firstFit(st, r.e.id)) return grey('The stringer is full', [NEED.step('Room on the stringer', false, { chip: '', note: `${st.grid.length} fish on it` })], 'Cook one, or let one go first');
         return go(() => this.toStringer(r.c.id, r.e.uid), null, [NEED.step('The stringer in reach', true)]);
       }
       case 'drink': case 'drinkup': {
@@ -957,12 +976,14 @@ export class Inventory {
         if (!d || !d.eat) return null;
         if (d.eat.cook && !(r.e.data && r.e.data.cooked)) {
           const k = this.fireNear(), c = k && k.cook && typeof k.cook.cookCheck === 'function' ? k.cook.cookCheck(k.site, k.key, d) : null;
-          const needs = [NEED.step('Cooked first', false), ...(k && typeof k.cook.needsFor === 'function' ? k.cook.needsFor(k.key, d) : [NEED.step('A campsite’s fire ring within reach', false)])];
-          return grey('Cook it first', needs, c ? (c.enabled ? 'Right-click › Cook, or drag it onto the grate in the fire’s card' : c.next) : `Cook it at a campsite’s fire ring: E at the ring opens the fire${d.kind === 'fish' ? '; it fries in the pot’s lid, or on a stick' : ''}`);
+          // (fb5 B: "Raw", then the one thing the cooking still needs, from the fire's side: cook.needsFor)
+          let more = null; try { more = k && typeof k.cook.needsFor === 'function' ? k.cook.needsFor(k.key, d) : null; } catch { more = null; }
+          const needs = Array.isArray(more) && more.length ? more : [NEED.step('A fire ring', false, { chip: k ? '' : 'a fire ring' })];
+          return grey('Raw', needs, c ? (c.enabled ? 'Right-click › Cook, or drag it onto the grate in the fire’s card' : c.next) : `Cook it at a campsite’s fire ring: E at the ring opens the fire${d.kind === 'fish' ? '; it fries in the pot’s lid, or on a stick' : ''}`);
         }
         const reach = !!this.findUid(r.e.uid, { reachable: true }) || this.foodPool().some((c) => c.grid.includes(r.e));
-        if (!reach) return grey('Out of reach', [NEED.step('In reach', false, { note: 'carried, within 3 m, or in the canoe beside you' })], 'Walk to it, or bring it with you');
-        if (!this.still()) return grey('Hold still to eat', [NEED.step('Standing still', false)], 'Let go of the keys a moment, then Eat');
+        if (!reach) return grey('Out of reach', [], 'Walk to it, or bring it with you');
+        if (!this.still()) return grey('Hold still to eat', [], 'Let go of the keys a moment, then Eat');
         const n = d.servings || 1, left = Number.isFinite(r.e.left) ? r.e.left : n;
         return go(() => this.eat(r.e.uid), null, [], n > 1 ? `A serving now: ${left - 1 > 0 ? `${left - 1} of ${n} left after` : 'the last one'}` : '');
       }
@@ -971,15 +992,20 @@ export class Inventory {
         const d = itemDef(r.e.id);
         if (!d || !d.eat || !d.eat.cook) return null;
         const k = this.fireNear();
-        if (!k || !k.cook || typeof k.cook.cookCheck !== 'function') return grey('Only at a fire ring', [NEED.step('A campsite’s fire ring within 4 m', false)], 'Walk to a campsite’s fire ring: E at the ring opens the fire');
+        if (!k || !k.cook) return grey('At a fire ring', [], 'Walk to a campsite’s fire ring: E at the ring opens the fire');
         const onGrate = !!(r.c && r.c.item === 'grate');
-        const c = k.cook.cookCheck(k.site, k.key, onGrate ? null : d);
+        // fb5 A cooks whatever is on the grate over a lit fire by itself (cook.auto, or no cookNow to call): the verb is
+        // "Onto the grate", whatever the fire is doing; the old way (cookCheck, then cookNow) where it is still the way
+        const auto = !!k.cook.auto || typeof k.cook.cookNow !== 'function';
+        if (onGrate && auto) return grey('On the grate', [], '');
+        const c = !auto && typeof k.cook.cookCheck === 'function' ? k.cook.cookCheck(k.site, k.key, onGrate ? null : d) : { enabled: true, needs: [], next: '' };
         if (!c.enabled) return grey(c.why, c.needs, c.next);
         const g = onGrate ? r.c : k.chores.grate(k.key, k.site);
-        if (!onGrate && (!g || !this.firstFit(g, r.e.id))) return grey('The grate is full', [NEED.step('Room on the grate', false)], 'Take what is on the grate off it first');
+        if (!onGrate && (!g || !this.firstFit(g, r.e.id))) return grey('The grate is full', [], 'Take what is on the grate off it first');
         return go(() => {
           if (!onGrate) { const s2 = this.firstFit(g, r.e.id); if (!s2 || !this.move(r.c.id, r.e.uid, g.id, s2.x, s2.y, s2.rot, 1)) return no('full', 'No room on the grate.'); }
-          return k.cook.cookNow(k.site, k.key) ? ok('') : no('not', 'Not now.');
+          if (!auto) k.cook.cookNow(k.site, k.key);
+          return ok('');
         }, null, c.needs, c.next);
       }
       case 'tie': {
@@ -989,10 +1015,10 @@ export class Inventory {
         const lure = sh && typeof sh.lureOf === 'function' ? sh.lureOf(r.e.id) : null;
         if (!f.rodUp) {
           const foot = !!(p && p.onFoot), inHand = foot && typeof f.rodInHand === 'function' ? f.rodInHand() : false;
-          return grey('Take the rod up first', [...(foot ? [NEED.step('The rod in a hand', inHand)] : []), NEED.step('The rod up: F', false)], foot && !inHand ? 'The rod into a hand first (drag it to a hand), then F' : 'Press F to take the rod up, then Tie it on');
+          return grey('Take the rod up first', [...(foot ? [NEED.step('The rod in a hand', inHand)] : []), NEED.step('The rod up: F', false, { chip: 'F' })], foot && !inHand ? 'The rod into a hand first (drag it to a hand), then F' : 'Press F to take the rod up, then Tie it on');
         }
         if (!lure || typeof sh.tieOn !== 'function') return null;
-        return go(() => { sh.tieOn(lure); return ok(`Tied on: ${d.name}.`); }, null, [NEED.step('The rod up', true)]);
+        return go(() => { sh.tieOn(lure); return ok(`Tied on: ${d.name}.`); });
       }
       default: return null;
     }
@@ -1012,12 +1038,12 @@ export class Inventory {
   // where the stringer is, for its verb's checklist: { note, next }
   stringerWhere() {
     const st = this.containers.find((c) => c.item === 'stringer'), p = this.player;
-    if (!st) return { note: 'you have none', next: 'A stringer comes with the canoe at the outfitters' };
+    if (!st) return { note: 'you have none', chip: 'none', next: 'A stringer comes with the canoe at the outfitters' };
     const r = this.root(st);
-    if (r.where === 'canoe') { const sp = this.canoeSpot(), d = sp && p ? this.hullDist(sp, p.x, p.z) : null; return { note: d != null ? `in the canoe, ${d.toFixed(1)} m off: in reach within ${HULL_REACH} m` : 'in the canoe', next: 'Walk to the canoe (within 3 m of it), or take the stringer in a hand' }; }
-    if (r.where === 'ground' || r.where === 'hung') return { note: `on the ground, ${this.dist(r.at).toFixed(1)} m off: in reach within ${REACH} m`, next: 'Walk to it, or take it in a hand' };
-    if (r.where === 'stash') return { note: 'kept at the outfitters', next: 'Take it out at the counter next time in' };
-    return { note: '', next: 'Take the stringer in a hand' };
+    if (r.where === 'canoe') { const sp = this.canoeSpot(), d = sp && p ? this.hullDist(sp, p.x, p.z) : null; return { note: d != null ? `in the canoe, ${d.toFixed(1)} m off: in reach within ${HULL_REACH} m` : 'in the canoe', chip: d != null ? `in the canoe, ${Math.round(d)} m` : 'in the canoe', next: 'Walk to the canoe (within 3 m of it), or take the stringer in a hand' }; }
+    if (r.where === 'ground' || r.where === 'hung') return { note: `on the ground, ${this.dist(r.at).toFixed(1)} m off: in reach within ${REACH} m`, chip: `${Math.round(this.dist(r.at))} m off`, next: 'Walk to it, or take it in a hand' };
+    if (r.where === 'stash') return { note: 'kept at the outfitters', chip: 'at the outfitters', next: 'Take it out at the counter next time in' };
+    return { note: '', chip: '', next: 'Take the stringer in a hand' };
   }
   // the fire ring within reach (a campsite's, free or yours), for Cook and Eat: { site, key, chores, cook } or null
   fireNear(r = 4) {
@@ -1050,35 +1076,50 @@ export class Inventory {
   entryStatus(c, e) {
     const d = itemDef(e.id), en = this.energy, now = this.now;
     if (!d) return null;
-    if (e.id === 'bottle') return en && typeof en.bottleStatus === 'function' ? en.bottleStatus() : null;
-    if (e.id === 'clothes') return en && typeof en.clothesStatus === 'function' ? en.clothesStatus(e) : null;
-    if (e.id === 'sleepingbag' && this.gearWet()) { const g = this.gearDrying(); return { label: 'Damp', mark: g.byFire ? 'drying' : 'wet', timer: g.sec, running: g.byFire, ...(g.byFire ? { until: now + g.sec / 3600 } : {}), next: `Your gear is damp: a night in it is 80 % as warm. ${g.byFire ? `Dry in ${timerWords(g.sec)} by the fire` : 'It dries by a lit fire in 30 min: stand within 6 m of it'}` }; }
-    if (e.id === 'pot' && c && c.item === 'grate') { const ck = this.cookRef(); return ck && typeof ck.potStatus === 'function' ? ck.potStatus(c, e) : null; }
+    if (e.id === 'bottle') return en && typeof en.bottleStatus === 'function' ? bottleWords(en.bottleStatus()) : null;
+    if (e.id === 'clothes') return en && typeof en.clothesStatus === 'function' ? clothesWords(en.clothesStatus(e)) : null;
+    if (e.id === 'sleepingbag' && this.gearWet()) return this.dampStatus('Your gear is damp: a night in it is 80 % as warm');
+    // fb5 A: what is on the grate says its own state (cooking, ready, "needs the pot", "water 0.3 L"): cook.grateStatus,
+    // else last round's potStatus for the pot
+    if (c && c.item === 'grate') {
+      const ck = this.cookRef();
+      if (ck && typeof ck.grateStatus === 'function') { const g = ck.grateStatus(c, e); if (g || e.id === 'pot') return g || null; }
+      else if (e.id === 'pot') return ck && typeof ck.potStatus === 'function' ? ck.potStatus(c, e) : null;
+    }
     if (d.kind === 'firewood') return this.woodStatus(c, e);
     if (d.cooked && e.data && Number.isFinite(e.data.until)) {
       const left = (e.data.until - now) * 3600;
       if (left <= 0) return null;
       const hot = Number.isFinite(e.data.cooked) && now - e.data.cooked < 1;
-      return { label: hot ? 'Hot' : 'Leftovers', mark: hot ? 'hot' : null, timer: Math.round(left), running: true, until: e.data.until, next: `Eat it (right-click › Eat), or it goes off in ${timerWords(left)}` };
+      return { label: hot ? 'Hot' : 'Leftovers', mark: hot ? 'hot' : null, hint: 'keeps', timer: Math.round(left), running: true, until: e.data.until, next: `Eat it (right-click › Eat), or it goes off in ${timerWords(left)}` };
     }
     if (d.eat && d.eat.cook) return { label: 'Raw', mark: null, next: d.kind === 'fish' ? `Fry it on the grate at a fire (in the pot’s lid, or on a stick)${c && c.item === 'stringer' ? ': it keeps on the stringer till then' : '; or Put on the stringer to keep it'}` : 'Cook it: the pot on the grate, this beside it, the fire burning (E at the ring)' };
     const n = Number.isFinite(d.servings) ? d.servings : Number.isFinite(d.uses) ? d.uses : 1;
     if (n > 1) {
-      const left = Number.isFinite(e.left) ? e.left : n, unit = d.servings > 1 ? 'servings' : 'left';
-      if (left <= Math.max(1, Math.floor(n * 0.2))) return { label: `${left} of ${n} ${unit === 'left' ? 'left' : unit}`, mark: 'low', next: d.id === 'tablets' ? 'More at any outfitter’s counter; one goes in each time you fill the bottle' : `${left <= 1 ? 'The last one' : 'Running low'}: more at any outfitter’s counter` };
-      if (left < n) return { label: `${left} of ${n} ${unit === 'left' ? 'left' : unit}`, mark: null, next: d.servings > 1 ? 'A serving at a time: right-click › Eat, standing still' : d.id === 'tablets' ? 'One goes in each time you fill the bottle' : '' };
+      // (the uses bar says how many are left: low is only the icon's mark)
+      const left = Number.isFinite(e.left) ? e.left : n;
+      if (left <= Math.max(1, Math.floor(n * 0.2))) return { label: left <= 1 ? 'The last one' : 'Running low', mark: 'low', bar: true, next: d.id === 'tablets' ? 'More at any outfitter’s counter; one goes in each time you fill the bottle' : `${left <= 1 ? 'The last one' : 'Running low'}: more at any outfitter’s counter` };
     }
     return null;
+  }
+  // damp gear (a night with no fly, a pack rained on): drying by a lit fire with its timer, else the one way it dries
+  dampStatus(next = 'Your gear is damp') {
+    const g = this.gearDrying(), now = this.now;
+    if (g.byFire) return { label: 'Drying', mark: 'drying', timer: g.sec, running: true, until: now + g.sec / 3600, next: `${next}: dry in ${timerWords(g.sec)} by the fire` };
+    return { label: 'Damp', mark: 'wet', hint: `dries by a fire, ${timerWords(g.sec)}`, next: `${next}. It dries by a lit fire in 30 min: stand within 6 m of it` };
   }
   // wood: wet (with its drying at the rate it dries now), drying by a fire, or on a lit fire
   woodStatus(c, e) {
     const w = e.data && e.data.wet > 0 ? e.data.wet : 0, rate = this.wetRate(c), now = this.now;
     if (w > 0) {
-      const sec = rate > 0 ? (w / rate) * 3600 : null, byFire = rate > 1.5;
-      return { label: byFire ? 'Drying' : 'Wet', mark: byFire ? 'drying' : 'wet', ...(sec != null ? { timer: Math.round(sec), running: true, until: now + sec / 3600 } : {}), next: rate <= 0 ? 'Out of the rain first: under the tarp or into a pack, then 30 min by a lit fire' : byFire ? `Dry in ${timerWords(sec)}: it won’t light till then` : 'Wet: it won’t light. Dries by a lit fire in 30 min (on it or within 2 m), 3 h in dry air' };
+      // (fb5 B: by a fire, its countdown; in dry air, how long it would take by a fire; in the rain, that it is)
+      const sec = rate > 0 ? (w / rate) * 3600 : null, byFire = rate > 1.5, fireSec = (w * WOOD_DRY.fire / WOOD_DRY.air) * 3600;
+      const next = rate <= 0 ? 'Out of the rain first: under the tarp or into a pack, then 30 min by a lit fire' : byFire ? `Dry in ${timerWords(sec)}: it won’t light till then` : 'Wet: it won’t light. Dries by a lit fire in 30 min (on it or within 2 m), 3 h in dry air';
+      if (byFire) return { label: 'Drying', mark: 'drying', timer: Math.round(sec), running: true, until: now + sec / 3600, next };
+      return { label: 'Wet', mark: 'wet', hint: rate <= 0 ? 'in the rain' : `dries by a fire, ${timerWords(fireSec)}`, ...(sec != null ? { airSec: Math.round(sec) } : {}), next };
     }
     const F = this.firesRef();
-    if (c && c.item === 'firefuel' && c.at && F && F.isLit(c.at.fuel)) return { label: 'On the fire', mark: 'burning', next: 'Burns in turn: the fire takes the next piece itself at an hour left' };
+    if (c && c.item === 'firefuel' && c.at && F && F.isLit(c.at.fuel)) return { label: 'Burning', mark: 'burning', next: 'Burns in turn: the fire takes the next piece itself at an hour left' };
     return null;
   }
   // a container's own state: rained on, in the rain now, or damp gear
@@ -1087,11 +1128,11 @@ export class Inventory {
     const r = this.root(c), now = this.now;
     if (r.where === 'ground' && r.at && d.wear) {
       // (stream E's chores.js: at.wet once half an hour of rain is in it, at.rainH the hours of rain so far)
-      if (r.at.wet || r.at.rainH >= 0.5) return { label: 'Rained on', mark: 'wet', next: 'The gear in it is wet: it dries by a lit fire in 30 min (stand within 6 m). A tarp over it keeps the rain off' };
+      if (r.at.wet || r.at.rainH >= 0.5) return { label: 'Wet', mark: 'wet', hint: 'dries by a fire, 30 min', next: 'The gear in it is wet: it dries by a lit fire in 30 min (stand within 6 m). A tarp over it keeps the rain off' };
       const rain = this.rainAt(c);
-      if (rain > 0.3 && r.at.rainH > 0) { const sec = Math.max(0, ((0.5 - r.at.rainH) / rain) * 3600); return { label: 'In the rain', mark: 'wet', timer: Math.round(sec), running: true, until: now + sec / 3600, next: `Pick it up, or get the tarp over it: it soaks through ${sec < 60 ? 'any moment' : `in ${timerWords(sec)}`}` }; }
+      if (rain > 0.3 && r.at.rainH > 0) { const sec = Math.max(0, ((0.5 - r.at.rainH) / rain) * 3600); return { label: 'In the rain', mark: 'wet', hint: 'soaks through in', timer: Math.round(sec), running: true, until: now + sec / 3600, next: `Pick it up, or get the tarp over it: it soaks through ${sec < 60 ? 'any moment' : `in ${timerWords(sec)}`}` }; }
     }
-    if (d.wear && this.gearWet() && r.where !== 'stash') { const g = this.gearDrying(); return { label: 'Damp gear', mark: g.byFire ? 'drying' : 'wet', timer: g.sec, running: g.byFire, ...(g.byFire ? { until: now + g.sec / 3600 } : {}), next: g.byFire ? `Dry in ${timerWords(g.sec)}: stay by the fire` : 'Dries by a lit fire in 30 min: stand within 6 m of it' }; }
+    if (d.wear && this.gearWet() && r.where !== 'stash') return this.dampStatus('The gear in it is damp');
     return null;
   }
   // the trip's gear wet (trip.state.wet: rain into a pack on the ground, a night with no fly), and its drying by a fire

@@ -5,7 +5,7 @@
 //
 //   ITEMS[id] = { id, name, kind, w, h, kg, stack, price, eat?: { food, lift?, cook, hot? }, icon,
 //                 container?: { cols, rows, accepts?: [kinds], one? }, wear?: ['back', 'chest'], hand?, nest?, fixed?,
-//                 slot?, lure?, long?, sold?, hang?, words, verbs, stats, uses?, servings?, litres? }
+//                 slot?, lure?, long?, sold?, hang?, verbs, identity, onYou, uses?, servings?, serving?, litres? }
 //   defineItem(def) → the def (other streams add items: stream B's shop-only things, stream G's berries)
 //   itemDef(id) → the def, or null (a fish of a species nobody defined gets a plain one)
 //   sizeOf(id, rot) → { w, h } (rot 1 turns it a quarter)
@@ -22,19 +22,17 @@
 // slot: the kit slot it fills (tent, filter, paddle). lure: fishing.js's lure id. long: 'rod' | 'paddle' (a long item,
 // never in a grid). hang: a barrel, hung from a limb at camp.
 //
-// The world cards (the owner, 2026-10-24: "what does the pot even do, same with some other items"): every item says
-// what it is for in one line, `words` ("Cooks a meal on the grate."), which the book's tooltip shows with the name and
-// the weight; and `verbs` is the right-click list, and nothing else goes on it:
+// The world cards (the owner, 2026-10-24: "what does the pot even do, same with some other items"): `verbs` is the
+// right-click list, and nothing else goes on it (fb5 B: the item's words are its identity and its numbers, below):
 //   verbs: [{ id, label, where?, why? }]
 //   id 'eat' | 'cook' | 'pitch' | 'hang' | 'hand' | 'tie' | 'use' | 'stringer' | 'drink' | 'drinkup' | 'change' | 'tarp';
 //   label the menu's word; where: 'fire' on Cook (it works only inside the fire card); why: set when the verb is greyed
-//   in the book, the reason written under it (Hang: hanging is E at a tree with the barrel in your hands; Eat on a raw
-//   meal: cook it first). Eating is instant, standing still. The verbs from 'hand' on are the inventory's
-//   (inventory.verb(id, ref) says whether each can run now, and runs it).
+//   in the book, the reason written under it, short ('Raw', 'At a tree'). Eating is instant, standing still. The verbs
+//   from 'hand' on are the inventory's (inventory.verb(id, ref) says whether each can run now, and runs it).
 //
 // fb3 B (the owner, 2026-10-25: "i dont know the use of a lot of things … they need to show what that effect is in
 // numbers … some things should have consumption bars … trail mix you dont eat all in one sitting"): every item that does
-// something says so in numbers, `stats: [{ label, value, when? }]`, a block under the purpose line in the tooltip, and
+// something says so in numbers (fb5 B: `onYou`, one short line, below), and
 // the effects are real in code (energy.js, cook.js, chores.js, fishing.js). Things with uses carry `uses` (the tablets:
 // one per bottle, 20 new) and food `servings` (trail mix 6, jerky 4, a chocolate bar 2, a meal 1); the grid entry's
 // `left` is what is left of either (absent: all of it), drawn as a small bar on the icon; eating takes one serving. The
@@ -49,11 +47,14 @@
 // shapes every stream uses (the book, the cards and the right-click menu draw them; the dot shows `why`):
 //   a check  { enabled, why, needs: [need], next, label?, run? }   why: the one line ('Needs dry wood'); next: the one
 //            thing to do now ('Gather dry wood: dead branches off the ground')
-//   a need   { label, done, have?, need?, unit?, timer?, running?, note? }   have of need ('Dry wood · 0 of 3 pieces'),
-//            a step (done), or a timer in GAME seconds (running false: what it will take once the step before is done,
-//            drawn but not counted down); note: a quieter suffix
-//   a status { label, next, mark, timer?, running?, until? }   (inventory.status): mark 'wet' | 'drying' | 'treating' |
-//            'cooking' | 'burning' | 'hot' | 'low' | 'empty' | 'ready' | null; until: the abs game hour the timer ends
+//   a need   { label, done, have?, need?, unit?, timer?, running?, note?, chip?, item? }   have of need ('Dry wood · 0
+//            of 3 pieces'), a step (done), or a timer in GAME seconds (running false: what it will take once the step
+//            before is done, drawn but not counted down); note: a quieter suffix; fb5 B: chip, its own chip text
+//            (chipOf), item: an item id whose icon goes in front of it
+//   a status { label, next, mark, hint?, chip?, timer?, running?, until? }   (inventory.status): mark 'wet' | 'drying' |
+//            'treating' | 'cooking' | 'burning' | 'hot' | 'low' | 'empty' | 'ready' | 'need' | null; until: the abs game
+//            hour the timer ends. fb5 B: the tooltip shows label · hint · timer (and chip, also drawn on the icon); next
+//            stays in the data for stream E's moments and is never drawn on the item
 // timerWords(seconds) says a game time the one way everyone says it: "<1 min", "28 min", "1 h 10", "2 days 3 h".
 export function timerWords(sec) {
   if (!Number.isFinite(sec) || sec <= 0) return 'now';
@@ -78,31 +79,117 @@ export function check(enabled, why, needs = [], next = '', more = {}) {
   return { enabled: !!enabled, why: enabled ? null : why || 'Not now', needs: needs.filter(Boolean), next: next || '', ...more };
 }
 
+// fb5 B (the owner's third round of 2026-10-25: "item descriptions dont need to describe every little thing. only whats
+// relevant … The item doesn't say what it can be used for"): every item says only what it is and what it does to you, one
+// short line each, in one schema the tooltip draws in this order (every line optional):
+//   name                 def.name (a fish adds its length)
+//   identity             def.identity: what it is, a few words (≤ 50 chars): "Fallen deadwood, thin", "Spinning rod · 6 ft"
+//   state                inventory.status(ref): its label, a short `hint` and its timer ("Wet · dries by a fire, 30 min")
+//   on you               def.onYou: what it does to you eaten, drunk, worn or slept in. What moves the energy bar's
+//                        needs is an effect, { need, add, when? }: need 'food' | 'water' | 'rest' | 'warmth' | 'energy',
+//                        add the points it gives out of 100 (an integer), drawn as the bar's own icon and "+6", in a row
+//                        (the owner, after the first tooltips: "icons with +integers, stacked, no percent"); when, a few
+//                        words after the row ("a handful", "a night"). Anything else is a line, { label, value }: the
+//                        numbers that help choose a paddle or a rod, and a lure's or the bait's takes as a word per fish
+//                        (takesLine: "Pike great · lake trout great · walleye neutral")
+//   uses                 def.uses / def.servings / def.litres, and the entry's `left`: a small bar, "19 of 20"
+//   weight               def.kg (a fish's from its length)
+// Nothing says what it is for, how another system uses it, or what to do next: the fire, the tarp, the tent and the rod
+// say what they need (their checks' why and the first missing chip, chipOf below), and stream E's moments teach the rest
+// once. `words` and `stats` are gone from the defs (a def from another file that still brings `words` keeps it, unshown).
+//
+// chipOf(needs, why = '') → the first missing thing as a short chip ('' when nothing is missing and no why is given): the
+// one renderer of a greyed verb's need, shared by the book's menu (inv-ui.js), the fire card (cards.js) and the dot
+// (stream E's pointer.js). It takes a check too: chipOf(check). missingOf(needs) → that need itself (its `item`: an icon).
+//   need.chip           as it is ('' = nothing to show for this need: "A free hand" under "Both hands are full")
+//   a quantity          "label ×N" for things counted (pieces, poles, logs, no unit), else "label 0.3 L"; N = need − have
+//   a timer             "label 28 min"
+//   a step              its label, the first letter lower-cased, cut at the first ':' or ','
+export function missingOf(needs) {
+  const list = Array.isArray(needs) ? needs : [];
+  for (const n of list) {
+    if (!n || (!n.label && n.chip == null)) continue;
+    const q = Number.isFinite(n.need), have = Number.isFinite(+n.have) ? +n.have : 0;
+    const done = n.done != null ? !!n.done : q ? have >= n.need - 1e-9 : false;
+    if (!done) return n;
+  }
+  return null;
+}
+const COUNTED = /^(pieces?|poles?|logs?|branch(es)?|fish|tablets?|leeches|dozen|)$/i;
+const NAMED = /^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|Daredevle|[A-Z]{2,}\b|[A-Z]-|[B-Z]\b)/; // (a name, a sheet, a key: its capital stays)
+const trimmed = (s) => { const t = String(s || '').split(/[:,]/)[0].trim(); return NAMED.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1); };
+const n1 = (v) => (Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : String(+(+v).toFixed(1)));
+export function chipOf(needs, why = '') {
+  if (needs && !Array.isArray(needs) && typeof needs === 'object') { why = why || needs.why || ''; needs = needs.needs; }
+  const n = missingOf(needs);
+  if (!n) return why ? trimmed(why) : '';
+  if (n.chip != null) return String(n.chip);
+  const label = trimmed(n.label);
+  if (Number.isFinite(n.need)) {
+    const left = Math.max(0, n.need - (Number.isFinite(+n.have) ? +n.have : 0)), u = n.unit || '';
+    return COUNTED.test(u) ? `${label} ×${n1(left)}` : `${label} ${n1(left)} ${u}`;
+  }
+  if (Number.isFinite(n.timer)) return `${label} ${timerWords(n.timer)}`;
+  return label;
+}
+
 export const ITEMS = {};
+
+// --- fb5 B: a lure's takes, a word per fish -----------------------------------------------------------------------
+// fishing.js SPECIES[*].lures (and its silverminnow/lazyike additions), written out: how much more often a fish takes this
+// lure than its everyday one. The owner (2026-10-25, after the tooltips): "per fish a word, not numbers", on the scale
+// neutral · OK · good · great · excellent; anything under 1 is neutral. The thresholds spread the real values (1.0 to
+// 1.6): 1.0 OK, 1.1 good, 1.25 great, 1.4 excellent.
+export const LURE_TAKES = {
+  jig: { walleye: 1.25, smallmouth: 0.9, pike: 0.5, laketrout: 0.9, crappie: 1.1, perch: 1.0 },
+  spinner: { walleye: 0.7, smallmouth: 1.0, pike: 1.1, laketrout: 0.3, crappie: 0.5, perch: 0.4 },
+  spoon: { walleye: 0.5, smallmouth: 0.5, pike: 1.3, laketrout: 1.3, crappie: 0.2, perch: 0.2 },
+  crankbait: { walleye: 0.9, smallmouth: 1.2, pike: 1.0, laketrout: 0.5, crappie: 0.4, perch: 0.3 },
+  leech: { walleye: 1.0, smallmouth: 1.0, pike: 0.6, laketrout: 0.1, crappie: 1.3, perch: 1.3 },
+  silverminnow: { walleye: 0.5, smallmouth: 0.85, pike: 1.6, laketrout: 0.3, crappie: 0.3, perch: 0.4 },
+  lazyike: { walleye: 1.35, smallmouth: 1.0, pike: 0.9, laketrout: 0.6, crappie: 0.45, perch: 0.45 },
+};
+export const TAKE_STEPS = [[1.4, 'excellent'], [1.25, 'great'], [1.1, 'good'], [1.0, 'OK']];
+export const takeWord = (x) => { for (const [at, w] of TAKE_STEPS) if (x >= at - 1e-9) return w; return 'neutral'; };
+const FISH_WORD = { walleye: 'walleye', smallmouth: 'smallmouth', pike: 'pike', laketrout: 'lake trout', crappie: 'crappie', perch: 'perch' };
+// the fish that matter for a lure, best first: three at most, and one neutral at most (the one that shows what it isn't for)
+export function takesLine(lure) {
+  const t = LURE_TAKES[lure]; if (!t) return '';
+  const list = Object.entries(t).sort((a, b) => b[1] - a[1]), out = [];
+  for (const [sp, x] of list) {
+    if (out.length >= 3) break;
+    const w = takeWord(x);
+    out.push(`${FISH_WORD[sp] || sp} ${w}`);
+    if (w === 'neutral') break;
+  }
+  const line = out.join(' · ');
+  return line.charAt(0).toUpperCase() + line.slice(1);
+}
 
 const KINDS = new Set(['food', 'snack', 'meal', 'fish', 'bait', 'lure', 'tool', 'gear', 'map', 'container', 'long', 'firewood', 'forage']);
 export const FOOD_KINDS = ['food', 'snack', 'meal', 'fish', 'forage'];
 
-// the right-click verbs: what each is, in the book's words
+// the right-click verbs: what each is (the labels are the menu's; the words are for the console, never shown)
 export const VERBS = {
-  eat: { label: 'Eat', words: 'One serving, where you stand, afloat or on foot; no sitting down.' },
-  cook: { label: 'Cook', words: 'Onto the grate, inside the fire card.' },
+  eat: { label: 'Eat', words: 'One serving, where you stand.' },
+  cook: { label: 'Onto the grate', words: 'Onto the grate, inside the fire card: over a lit fire it cooks by itself.' },
   pitch: { label: 'Pitch', words: 'The ghost goes to the dot; a held E or click works through the phases.' },
-  hang: { label: 'Hang', words: 'Carry it to a tree and point at the limb: E hangs it.' },
-  hand: { label: 'Put in hand', words: 'Into a free hand, to carry or to use.' },
+  hang: { label: 'Hang', words: 'E at a tree with the barrel in your hands.' },
+  hand: { label: 'Put in hand', words: 'Into a free hand.' },
   tie: { label: 'Tie it on', words: 'On the line, with the rod up.' },
   use: { label: 'Use', words: 'What the thing does.' },
-  stringer: { label: 'Put on the stringer', words: 'Onto the stringer, when it is in reach: in the canoe beside you, in a hand or within a step.' },
-  drink: { label: 'Drink', words: 'A gulp from the bottle, about a quarter of a litre.' },
+  stringer: { label: 'Put on the stringer', words: 'Onto the stringer, when it is in reach.' },
+  drink: { label: 'Drink', words: 'A gulp from the bottle, a quarter of a litre.' },
   drinkup: { label: 'Drink up', words: 'The rest of what is drinkable in the bottle.' },
-  change: { label: 'Change into dry clothes', words: 'After a capsize or a soaking: the dry set on, the wet one in the bag.' },
-  tarp: { label: 'Pitch the tarp', words: 'Between two trees 3–7 m apart, one tree and two poles, or four poles: the rain stays off what is under it.' }, // fb4 E's rig (tarp.js)
+  change: { label: 'Change into dry clothes', words: 'The dry set on, the wet one in the bag.' },
+  tarp: { label: 'Pitch the tarp', words: 'Where you stand: the ghost shows if it can go up.' }, // fb4 E's rig (tarp.js)
 };
-const WHY = { hang: 'carry it to a tree and point at the limb', cook: 'only in the fire card', raw: 'cook it on the grate first' };
+// a greyed verb's why when nothing else says it (fb5 B: short, and never the how; the thing that needs it says that)
+const WHY = { hang: 'At a tree', cook: 'At a fire ring', raw: 'Raw' };
 const verb = (id, more = {}) => ({ id, label: VERBS[id].label, ...more });
-// the verbs a def gets when it names none: food is eaten (a raw meal cooked first), a tent pitched, a barrel hung, a
-// long item or a container put in a hand (and any plain item too: hands take anything), a lure tied on, a map sheet
-// looked at, a fish put on the stringer, the bottle drunk from, the clothes changed into, the tarp pitched over a thing
+// the verbs a def gets when it names none: food is eaten (a raw meal put on the grate first), a tent pitched, a barrel
+// hung, a long item or a container put in a hand (and any plain item too: hands take anything), a lure tied on, a map
+// sheet looked at, a fish put on the stringer, the bottle drunk from, the clothes changed into, the tarp pitched
 export function verbsFor(d) {
   const out = [];
   if (d.eat) { if (d.eat.cook) out.push(verb('cook', { where: 'fire', why: WHY.cook }), verb('eat', { why: WHY.raw })); else out.push(verb('eat')); }
@@ -118,44 +205,47 @@ export function verbsFor(d) {
   return out;
 }
 export function verbsOf(id) { const d = itemDef(id); return d ? d.verbs || [] : []; }
-// a purpose line for a def that gives none, by its kind (forage's and the camp's items come through defineItem too)
-const WORDS = {
-  food: 'Eat it hot, or keep it a few hours as leftovers.', snack: 'Eaten a serving at a time, anywhere you stand still.', meal: 'Cook it in the pot on the grate, then eat.',
-  fish: 'Fry it on the grate for supper.', bait: 'Bait for the bobber rig.', lure: 'Tie it on and cast.', tool: 'A tool for camp.', gear: 'Gear for the trip.',
-  map: 'A Fisher map sheet; sheets are owned now, not carried.', container: 'Holds things.', long: 'Carried in a hand or laid in the canoe.',
-  firewood: 'Burns in the fire ring.', forage: 'Picked on the trip; eat it as it is, or cook it with supper.',
-};
-const wordsFor = (d) => (d.eat && d.eat.cook && d.kind === 'forage' ? 'Cook them first, on the grate with supper.' : WORDS[d.kind] || WORDS.gear);
-// a stats line
-const S = (label, value, when = null) => (when ? { label, value, when } : { label, value });
-const pct = (x) => `${Math.round(x * 100)} %`;
-// what eating one serving does, as lines (the food need and the bar; servings when more than one)
-function eatStats(d) {
+
+// --- fb5 B: the schema's lines --------------------------------------------------------------------------------------
+// an on-you line, and an effect on the bar's needs (the points out of 100, an integer)
+const O = (label, value) => ({ label, value });
+const EF = (need, x, when = '') => ({ need, add: Math.round(x * 100), ...(when ? { when } : {}) });
+// what eating one serving does: food (the food need) and energy (the bar), the serving named when there are several
+function eatOnYou(d) {
   if (!d.eat) return [];
-  const e = d.eat, out = [];
-  const how = e.cook ? (d.kind === 'fish' ? 'fried on the grate: in the pot’s lid, or on a stick without the pot' : e.boil ? 'the pot of boiled water on the grate' : 'cooked in the pot on the grate') : d.servings > 1 ? 'a serving, eaten as it is, standing still' : 'eaten as it is, standing still';
-  out.push(S('Hunger', `+${pct(e.food)}`, how));
-  if (Number.isFinite(e.lift)) out.push(S('The bar', `+${pct(e.lift)}`));
-  if (d.servings > 1) out.push(S('Servings', String(d.servings)));
-  if (d.keep) out.push(S('Keeps', `${d.keep} h as leftovers, then goes off`));
+  const e = d.eat, out = [EF('food', e.food)];
+  if (Number.isFinite(e.lift) && e.lift > 0) out.push(EF('energy', e.lift));
+  if (d.serving) out[out.length - 1].when = d.serving;
   return out;
 }
+// the identity of a def that gives none: those defined in other files (chores.js, tarp.js, forage.js, the shop) by id,
+// then by kind
+const IDENTITY = {
+  firefuel: 'Wood laid in the ring', tarpup: 'The tarp, pitched', grate: 'The ring’s iron grate',
+};
+const KIND_IDENTITY = {
+  food: 'Hot from the pot', snack: 'Trail food', meal: 'Trail meal', fish: 'Fresh catch', bait: 'Live bait', lure: 'Lure',
+  tool: 'Camp tool', gear: 'Camp gear', map: 'Fisher map · waterproof', container: 'A container', long: 'Long gear',
+  firewood: 'Deadwood', forage: 'Picked wild',
+};
+const identityFor = (d) => IDENTITY[d.id] || KIND_IDENTITY[d.kind] || '';
 
 export function defineItem(def) {
   if (!def || !def.id) throw new Error('defineItem: an id is needed');
   const id = String(def.id), had = ITEMS[id];
   const d = {
-    id, name: id, kind: 'gear', w: 1, h: 1, kg: 0, stack: 1, price: 0, icon: null, words: '',
+    id, name: id, kind: 'gear', w: 1, h: 1, kg: 0, stack: 1, price: 0, icon: null,
     ...(had || {}), ...def,
   };
   if (!KINDS.has(d.kind)) console.warn(`defineItem ${id}: unknown kind ${d.kind}`);
   d.w = Math.max(1, Math.round(d.w || 1)); d.h = Math.max(1, Math.round(d.h || 1));
   d.stack = Math.max(1, Math.round(d.stack || 1));
   if (!d.icon) d.icon = iconFor(d);
-  if (!d.words) d.words = wordsFor(d);
   if (!Array.isArray(d.verbs)) d.verbs = verbsFor(d);
   if (d.eat && !Number.isFinite(d.servings)) d.servings = 1;
-  if (!Array.isArray(d.stats)) d.stats = eatStats(d);
+  // fb5 B: the schema (a def from another file may bring last round's `words`/`stats`: kept, never drawn)
+  if (typeof d.identity !== 'string') d.identity = identityFor(d);
+  if (!Array.isArray(d.onYou)) d.onYou = eatOnYou(d);
   ITEMS[id] = d;
   return d;
 }
@@ -174,9 +264,9 @@ export function itemDef(id) {
   const d = ITEMS[id];
   if (d) return d;
   const s = String(id);
-  if (s.startsWith('fish:')) return defineItem({ id: s, name: cap(s.slice(5)), kind: 'fish', w: 1, h: 3, kg: 0.8, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, words: 'Fry it on the grate for supper.' });
+  if (s.startsWith('fish:')) return defineItem({ id: s, name: cap(s.slice(5)), kind: 'fish', w: 1, h: 3, kg: 0.8, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Fresh catch' });
   // a map sheet the inventory restores before the shop's sheets are in (shop.js loads sheets.js later and names it fully)
-  if (s.startsWith('sheet:')) return defineItem({ id: s, name: `Fisher map ${s.slice(6)}`, short: s.slice(6), kind: 'map', w: 2, h: 2, kg: 0.1, price: 8, icon: 'map', stub: true, words: 'Opens the map at this sheet; sheets are owned now, not carried.' });
+  if (s.startsWith('sheet:')) return defineItem({ id: s, name: `Fisher map ${s.slice(6)}`, short: s.slice(6), kind: 'map', w: 2, h: 2, kg: 0.1, price: 8, icon: 'map', stub: true, identity: 'Fisher map · waterproof' });
   return null;
 }
 export function sizeOf(id, rot = 0) {
@@ -192,135 +282,106 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ---------------------------------------------------------------------------------------------------------------
 // The containers. A cell is a hand's width; a Duluth pack #3 holds about two weeks of meals besides the tent, the
-// sleeping bag, the clothes and the pot; the 60 L barrel about 14 days of food, the 30 L one 7.
+// sleeping bag, the clothes and the pot; the 60 L barrel about 14 days of food, the 30 L one 7. Their room is their
+// comparison number, in the identity.
 const FOODISH = ['food', 'snack', 'meal', 'fish', 'forage'];
-const REACH_WORDS = 'in a hand, on the ground within 3 m, or in the canoe you are in or beside';
-defineItem({ id: 'pockets', name: 'Your pockets', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 5, rows: 1 }, icon: 'pockets', words: 'The bottle, and four quick slots for small things: a snack, a lure, the tablets.',
-  stats: [S('Quick slots', '4, for things of one or two cells'), S('The bottle', 'always in the first')] });
-defineItem({ id: 'pack3', name: 'Duluth pack #3', kind: 'container', w: 4, h: 5, kg: 2.0, price: 25, wear: ['back', 'chest'], mesh: 'food', container: { cols: 6, rows: 8 }, icon: 'pack', words: 'Carries the camp on your back or chest: the tent, the bag, the pot and two weeks of meals.',
-  stats: [S('Room', '6 × 8 cells'), S('Carried', 'on the back or the chest, or in a hand; 2 kg empty'), S('Food room at the counter', '7 days')] });
-defineItem({ id: 'pack4', name: 'Duluth pack #4', kind: 'container', w: 5, h: 5, kg: 2.4, price: 35, wear: ['back', 'chest'], mesh: 'gear', container: { cols: 7, rows: 9 }, icon: 'pack', words: 'Carries more than the #3, and you feel all of it on a long carry.',
-  stats: [S('Room', '7 × 9 cells'), S('Carried', 'on the back or the chest; 2.4 kg empty'), S('Food room at the counter', '+10 days'), S('A second pack', 'the double portage: the gear pack waits at the trail head')] });
-defineItem({ id: 'barrel30', name: 'Blue barrel, 30 L', kind: 'container', w: 3, h: 4, kg: 2.2, price: 25, wear: ['back', 'chest'], hand: true, hang: true, mesh: 'barrel30', container: { cols: 4, rows: 4, accepts: FOODISH }, icon: 'barrel', words: 'Keeps a week of food dry and sealed; hang it from a limb at night and the bears go hungry.',
-  stats: [S('Room', '4 × 4 cells, food only'), S('Food room at the counter', '7 days'), S('Bears', 'seldom get into a sealed barrel on the ground; never into a hung one', 'food on the ground overnight within 60 m may be found')] });
-defineItem({ id: 'barrel60', name: 'Blue barrel, 60 L', kind: 'container', w: 4, h: 5, kg: 3.0, price: 35, wear: ['back'], hang: true, mesh: 'barrel60', container: { cols: 5, rows: 6, accepts: FOODISH }, icon: 'barrel', words: 'Keeps two weeks of food dry and sealed; hang it from a limb at night.',
-  stats: [S('Room', '5 × 6 cells, food only'), S('Food room at the counter', '14 days'), S('Bears', 'seldom get into a sealed barrel on the ground; never into a hung one')] });
-defineItem({ id: 'bucket', name: 'Leech bucket', kind: 'container', w: 2, h: 2, kg: 1.2, price: 6, hand: true, mesh: 'bucket', container: { cols: 2, rows: 2, accepts: ['bait'] }, icon: 'bucket', words: 'Keeps the leeches alive for the bobber rig; carried in a hand.',
-  stats: [S('Room', '4 dozen leeches'), S('The bobber rig', 'takes one leech from it per bite', `the bucket must be in reach: ${REACH_WORDS}`)] });
-defineItem({ id: 'tacklebox', name: 'Tackle box', kind: 'container', w: 3, h: 2, kg: 0.8, price: 12, hand: true, nest: true, mesh: 'tacklebox', container: { cols: 4, rows: 3, accepts: ['lure'] }, icon: 'tacklebox', words: 'Holds the lures you can tie on; whatever is not in it, you can’t fish with.',
-  stats: [S('Room', '4 × 3 cells, lures only'), S('Casting', 'only a lure in reach can be tied on (1–7 with the rod up)')] });
-defineItem({ id: 'mapcase', name: 'Map case', kind: 'container', w: 1, h: 3, kg: 0.2, price: 10, hand: true, nest: true, mesh: 'mapcase', container: { cols: 2, rows: 6, accepts: ['map'] }, icon: 'mapcase', words: 'Kept the map sheets dry; the sheets are owned now, not carried.' });
-defineItem({ id: 'stringer', name: 'Fish stringer', kind: 'container', w: 1, h: 2, kg: 0.2, price: 0, hand: true, nest: true, mesh: 'stringer', container: { cols: 3, rows: 5, accepts: ['fish'] }, icon: 'fish', words: 'Keeps the fish you land alive and cool until supper.',
-  stats: [S('Room', '3 × 5 cells, fish only (a fish is 1 × 3)'), S('A landed fish', 'goes to your hand; Put on the stringer is its verb while the stringer is in reach'), S('Shouldering the canoe', 'it rides lashed under the thwarts, fish and all')] });
-defineItem({ id: 'crate', name: 'Kept for you at the outfitters', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, stashOnly: true, container: { cols: 10, rows: 8 }, icon: 'crate', words: 'Keeps what you leave behind at an outfitter until you come in again, at any counter.' });
-defineItem({ id: 'pile', name: 'On the ground', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, mesh: 'pile', container: { cols: 6, rows: 4 }, icon: 'pile', words: 'Things set down on the ground here; Q opens the pile, E takes one.' });
+defineItem({ id: 'pockets', name: 'Your pockets', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 5, rows: 1 }, icon: 'pockets', identity: 'The bottle and four quick slots' });
+defineItem({ id: 'pack3', name: 'Duluth pack #3', kind: 'container', w: 4, h: 5, kg: 2.0, price: 25, wear: ['back', 'chest'], mesh: 'food', container: { cols: 6, rows: 8 }, icon: 'pack', identity: 'Canvas and leather · room 6 × 8' });
+defineItem({ id: 'pack4', name: 'Duluth pack #4', kind: 'container', w: 5, h: 5, kg: 2.4, price: 35, wear: ['back', 'chest'], mesh: 'gear', container: { cols: 7, rows: 9 }, icon: 'pack', identity: 'The big canvas pack · room 7 × 9' });
+defineItem({ id: 'barrel30', name: 'Blue barrel, 30 L', kind: 'container', w: 3, h: 4, kg: 2.2, price: 25, wear: ['back', 'chest'], hand: true, hang: true, mesh: 'barrel30', container: { cols: 4, rows: 4, accepts: FOODISH }, icon: 'barrel', identity: 'Sealed food barrel · room 4 × 4' });
+defineItem({ id: 'barrel60', name: 'Blue barrel, 60 L', kind: 'container', w: 4, h: 5, kg: 3.0, price: 35, wear: ['back'], hang: true, mesh: 'barrel60', container: { cols: 5, rows: 6, accepts: FOODISH }, icon: 'barrel', identity: 'Sealed food barrel · room 5 × 6' });
+defineItem({ id: 'bucket', name: 'Leech bucket', kind: 'container', w: 2, h: 2, kg: 1.2, price: 6, hand: true, mesh: 'bucket', container: { cols: 2, rows: 2, accepts: ['bait'] }, icon: 'bucket', identity: 'Foam bait bucket · 4 dozen' });
+defineItem({ id: 'tacklebox', name: 'Tackle box', kind: 'container', w: 3, h: 2, kg: 0.8, price: 12, hand: true, nest: true, mesh: 'tacklebox', container: { cols: 4, rows: 3, accepts: ['lure'] }, icon: 'tacklebox', identity: 'Lure trays · room 4 × 3' });
+defineItem({ id: 'mapcase', name: 'Map case', kind: 'container', w: 1, h: 3, kg: 0.2, price: 10, hand: true, nest: true, mesh: 'mapcase', container: { cols: 2, rows: 6, accepts: ['map'] }, icon: 'mapcase', identity: 'Clear vinyl, roll-top' });
+defineItem({ id: 'stringer', name: 'Fish stringer', kind: 'container', w: 1, h: 2, kg: 0.2, price: 0, hand: true, nest: true, mesh: 'stringer', container: { cols: 3, rows: 5, accepts: ['fish'] }, icon: 'fish', identity: 'Cord and clips · 5 fish' });
+defineItem({ id: 'crate', name: 'Kept for you at the outfitters', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, stashOnly: true, container: { cols: 10, rows: 8 }, icon: 'crate', identity: 'Kept at any counter' });
+defineItem({ id: 'pile', name: 'On the ground', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, mesh: 'pile', container: { cols: 6, rows: 4 }, icon: 'pile', identity: 'Set down here' });
 // fb3 B: a hand holds any item (decision 11): a loose thing in a hand rides in this holder, exactly one entry (a stack
 // counts as one), the way wood rides in the armload. The book draws the thing itself in the hand slot, not the holder.
-defineItem({ id: 'inhand', name: 'In your hand', short: 'In hand', kind: 'container', w: 1, h: 1, kg: 0, hand: true, one: true, container: { cols: 2, rows: 5, one: true }, icon: 'inhand', verbs: [], words: 'One thing, carried in a hand.' });
+defineItem({ id: 'inhand', name: 'In your hand', short: 'In hand', kind: 'container', w: 1, h: 1, kg: 0, hand: true, one: true, container: { cols: 2, rows: 5, one: true }, icon: 'inhand', verbs: [], identity: 'One thing, in a hand' });
 
 // --- food --------------------------------------------------------------------------------------------------------
 // A day of food is two meals (0.9 kg, $6): a breakfast and a supper, both cooked in the pot on the grate. Snacks are
-// eaten a serving at a time, standing still, on foot or in the canoe (fb3 B: trail mix 6 servings, jerky 4, a bar 2).
-defineItem({ id: 'meal:breakfast', name: 'Oatmeal breakfast', kind: 'meal', kg: 0.4, price: 3, eat: { food: 0.5, lift: 0.3, cook: true, hot: true }, words: 'A hot breakfast: cook it in the pot on the grate, then eat.',
-  stats: [S('Hunger', '+50 %', 'cooked in the pot on the grate: 300 mL of water from the bottle, 20 min'), S('The bar', '+30 %'), S('Needs', 'the pot on the grate, a fire burning under it')] });
-defineItem({ id: 'meal:supper', name: 'Rice and lentil supper', kind: 'meal', kg: 0.5, price: 3, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, words: 'A hot supper: cook it in the pot on the grate, then eat.',
-  stats: [S('Hunger', '+60 %', 'cooked in the pot on the grate: 400 mL of water from the bottle, 25 min'), S('The bar', '+45 %'), S('Needs', 'the pot on the grate, a fire burning under it')] });
-defineItem({ id: 'meal:freeze', name: 'Freeze-dried supper', kind: 'meal', kg: 0.2, price: 5, eat: { food: 0.6, lift: 0.45, cook: true, hot: true, boil: true }, words: 'A hot supper from boiled water alone: the pot on the grate, then eat.',
-  stats: [S('Hunger', '+60 %', 'the pot of water boiled on the grate: 500 mL from the bottle, 20 min'), S('The bar', '+45 %'), S('Needs', 'the pot on the grate, a fire burning under it')] });
-defineItem({ id: 'snack:trailmix', name: 'Trail mix', kind: 'snack', kg: 0.25, price: 2, servings: 6, eat: { food: 0.06, lift: 0.03 }, words: 'A handful at a time, afloat or on foot, standing still: six handfuls to the bag.',
-  stats: [S('Hunger', '+6 % a handful', 'eaten as it is, standing still'), S('The bar', '+3 % a handful'), S('Servings', '6 to the bag')] });
-defineItem({ id: 'snack:jerky', name: 'Beef jerky', kind: 'snack', kg: 0.12, price: 3, servings: 4, eat: { food: 0.07, lift: 0.03 }, words: 'A strip at a time, afloat or on foot; it keeps forever.',
-  stats: [S('Hunger', '+7 % a strip', 'eaten as it is, standing still'), S('The bar', '+3 % a strip'), S('Servings', '4 strips to the bag')] });
-defineItem({ id: 'snack:chocolate', name: 'Chocolate bar', kind: 'snack', kg: 0.1, price: 1, servings: 2, eat: { food: 0.06, lift: 0.06 }, words: 'Half a bar at a time; a lift on a portage.',
-  stats: [S('Hunger', '+6 % a half', 'eaten as it is, standing still'), S('The bar', '+6 % a half'), S('Servings', '2 halves')] });
+// eaten a serving at a time, standing still, on foot or in the canoe (fb3 B: trail mix 6 servings, jerky 4, a bar 2;
+// `serving` names one in the Food line).
+defineItem({ id: 'meal:breakfast', name: 'Oatmeal breakfast', kind: 'meal', kg: 0.4, price: 3, eat: { food: 0.5, lift: 0.3, cook: true, hot: true }, identity: 'Oats, sugar and powdered milk' });
+defineItem({ id: 'meal:supper', name: 'Rice and lentil supper', kind: 'meal', kg: 0.5, price: 3, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Rice, red lentils and stock' });
+defineItem({ id: 'meal:freeze', name: 'Freeze-dried supper', kind: 'meal', kg: 0.2, price: 5, eat: { food: 0.6, lift: 0.45, cook: true, hot: true, boil: true }, identity: 'Freeze-dried, in a foil pouch' });
+defineItem({ id: 'snack:trailmix', name: 'Trail mix', kind: 'snack', kg: 0.25, price: 2, servings: 6, serving: 'a handful', eat: { food: 0.06, lift: 0.03 }, identity: 'Peanuts, raisins and chocolate' });
+defineItem({ id: 'snack:jerky', name: 'Beef jerky', kind: 'snack', kg: 0.12, price: 3, servings: 4, serving: 'a strip', eat: { food: 0.07, lift: 0.03 }, identity: 'Smoked beef · keeps for ever' });
+defineItem({ id: 'snack:chocolate', name: 'Chocolate bar', kind: 'snack', kg: 0.1, price: 1, servings: 2, serving: 'half a bar', eat: { food: 0.06, lift: 0.06 }, identity: 'Milk chocolate' });
 // kept fish, by species: 1 × 3 in a grid (fb3 B: a fish goes in a hand, a pack or the stringer); a fish of any other
-// species gets a plain one (itemDef)
-const FISH_STATS = [S('Hunger', '+60 %', 'fried on the grate: in the pot’s lid, or on a stick without the pot; 20 min'), S('The bar', '+45 %'), S('Weight', 'by its length: a 50 cm walleye 1.2 kg, a 90 cm pike 3.1 kg'), S('A notice’s cooler', 'may want it as it is: E at the catch says so')];
+// species gets a plain one (itemDef). Its weight comes from its length (fishKg).
 for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['smallmouth', 'Smallmouth bass'], ['laketrout', 'Lake trout'], ['perch', 'Yellow perch'], ['crappie', 'Crappie']]) {
-  defineItem({ id: `fish:${sp}`, name, kind: 'fish', w: 1, h: 3, kg: 0.8, species: sp, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, words: 'Fry it on the grate for supper; a notice’s cooler may want it as it is.', stats: FISH_STATS });
+  defineItem({ id: `fish:${sp}`, name, kind: 'fish', w: 1, h: 3, kg: 0.8, species: sp, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Fresh catch' });
 }
-defineItem({ id: 'leeches', name: 'Leeches', kind: 'bait', kg: 0.025, stack: 12, price: 4, sold: 12, lure: 'leech', icon: 'leeches', words: 'Bait for the bobber rig, kept alive in the bucket; a walleye can’t leave one alone.',
-  stats: [S('The bobber rig', 'one leech per bite, taken from the bucket in reach', `the bucket ${REACH_WORDS}`), S('Takes', 'walleye ×1.0, crappie and perch ×1.3, smallmouth ×1.0, pike ×0.6'), S('A dozen', 'to a stack; four dozen to the bucket')] });
-defineItem({ id: 'firewood', name: 'An armful of firewood', kind: 'firewood', w: 3, h: 2, kg: 6, burn: 2.4, words: 'Burns in the fire ring for a couple of hours.', stats: [S('Burns', '2.4 h'), S('Lights', 'on its own')] });
+// the takes are fishing.js SPECIES[*].lures, the three best, written out (the comparison number of bait and lures)
+defineItem({ id: 'leeches', name: 'Leeches', kind: 'bait', kg: 0.025, stack: 12, price: 4, sold: 12, lure: 'leech', icon: 'leeches', identity: 'Live ribbon leeches · 1 a bite',
+  onYou: [O('', takesLine('leech'))] });
+defineItem({ id: 'firewood', name: 'An armful of firewood', kind: 'firewood', w: 3, h: 2, kg: 6, burn: 2.4, identity: 'Split wood, an armful' });
 // camp 2 (the camp redone, 2026-10-24): firewood is found lying about, a piece at a time (chores.js), and burns by the
 // piece (burn: game hours on a fire, fire.js); a few pieces are carried in the arms, a hand's armload (woodarms, drawn by
 // chores.js). The grate holds what is cooking or cooked and the pot (cook.js): a fixed container at the fire ring.
 // fb4 C: wood can be wet (its entry's data.wet: game hours of drying left in dry air): rain on it in the open, the ring
 // or a pile or your arms, wets it through in 20 min; wet, it won't light, and it dries by a lit fire (on it or within
 // 2 m) in WOOD_DRY.fire hours, in dry air in WOOD_DRY.air. A fire lights on LIGHT_PIECES dry pieces, a branch among them.
+// (fb5 B: none of that is the wood's to say: its state says wet, and the fire says what it needs.)
 export const WOOD_DRY = { air: 3, fire: 0.5 };
 export const LIGHT_PIECES = 3;
-const WET_WOOD = S('Wet', 'won’t light: dries by a lit fire in 30 min (on it or within 2 m), 3 h in dry air', 'rain on it in the open wets it through in 20 min');
-defineItem({ id: 'wood:branch', name: 'Dead branch', short: 'Branch', kind: 'firewood', w: 1, h: 2, kg: 0.7, burn: 0.6, icon: 'firewood', words: 'Kindling for the fire ring: it catches easily and burns about half an hour.',
-  stats: [S('Burns', '0.6 h'), S('Kindling', `a fire lights only with a dry branch in the ring, ${LIGHT_PIECES} dry pieces in all`), S('On hot coals', 'brings a burnt-out fire back'), WET_WOOD] });
-defineItem({ id: 'wood:log', name: 'Short log', short: 'Log', kind: 'firewood', w: 1, h: 3, kg: 2.2, burn: 1.5, icon: 'firewood', words: 'Burns long in the fire ring, an hour and a half once the fire is going.',
-  stats: [S('Burns', '1.5 h'), S('Lighting', 'won’t catch on its own: a dry branch under it'), S('The ring holds', '4.5 h of wood at once'), WET_WOOD] });
-defineItem({ id: 'woodarms', name: 'Armload of wood', short: 'Armload', kind: 'container', w: 2, h: 3, kg: 0, hand: true, container: { cols: 3, rows: 3, accepts: ['firewood'] }, icon: 'firewood', verbs: [], words: 'Wood carried in the crook of an arm to the fire ring.' });
-defineItem({ id: 'grate', name: 'On the grate', short: 'The grate', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool'] }, icon: 'pot', words: 'The fire ring’s grate: the pot, the pan or a fish on a stick go on it.' });
+defineItem({ id: 'wood:branch', name: 'Dead branch', short: 'Branch', kind: 'firewood', w: 1, h: 2, kg: 0.7, burn: 0.6, icon: 'firewood', identity: 'Fallen deadwood, thin' });
+defineItem({ id: 'wood:log', name: 'Short log', short: 'Log', kind: 'firewood', w: 1, h: 3, kg: 2.2, burn: 1.5, icon: 'firewood', identity: 'Fallen deadwood, thick' });
+defineItem({ id: 'woodarms', name: 'Armload of wood', short: 'Armload', kind: 'container', w: 2, h: 3, kg: 0, hand: true, container: { cols: 3, rows: 3, accepts: ['firewood'] }, icon: 'firewood', verbs: [], identity: 'Wood in the crook of an arm' });
+defineItem({ id: 'grate', name: 'On the grate', short: 'The grate', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool'] }, icon: 'pot', identity: 'The ring’s iron grate' });
 // what comes off the grate: a meal cooked (hot, eaten at the fire, or kept a few hours as leftovers) and a fish fried
 for (const [id, raw, name] of [
   ['hot:breakfast', 'meal:breakfast', 'Hot oatmeal'],
   ['hot:supper', 'meal:supper', 'Rice and lentils, hot'],
   ['hot:freeze', 'meal:freeze', 'Freeze-dried supper, ready'],
-]) defineItem({ id, name, kind: 'food', w: 1, h: 1, kg: 0.6, cooked: raw, keep: 5, eat: { ...ITEMS[raw].eat, cook: false, hot: true }, icon: 'pot', words: 'Eat it hot, or keep it a few hours as leftovers.' });
+]) defineItem({ id, name, kind: 'food', w: 1, h: 1, kg: 0.6, cooked: raw, keep: 5, eat: { ...ITEMS[raw].eat, cook: false, hot: true }, icon: 'pot', identity: 'Hot from the pot' });
 for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['smallmouth', 'Smallmouth bass'], ['laketrout', 'Lake trout'], ['perch', 'Yellow perch'], ['crappie', 'Crappie'], ['fish', 'Fish']]) {
-  defineItem({ id: `fried:${sp}`, name: `Fried ${sp === 'fish' ? 'fish' : name.toLowerCase().replace(/^northern /, '')}`, kind: 'food', w: 2, h: 1, kg: 0.5, cooked: `fish:${sp}`, keep: 4, species: sp, eat: { food: 0.6, lift: 0.45, hot: true }, icon: 'fish', words: 'Eat it hot off the grate, or keep it a few hours as leftovers.' });
+  defineItem({ id: `fried:${sp}`, name: `Fried ${sp === 'fish' ? 'fish' : name.toLowerCase().replace(/^northern /, '')}`, kind: 'food', w: 2, h: 1, kg: 0.5, cooked: `fish:${sp}`, keep: 4, species: sp, eat: { food: 0.6, lift: 0.45, hot: true }, icon: 'fish', identity: 'Fried on the grate' });
 }
 
 // --- the tackle --------------------------------------------------------------------------------------------------
-// the multipliers are fishing.js SPECIES[*].lures, written out
-defineItem({ id: 'lure:jig', name: 'Jig & twister tail', kind: 'lure', kg: 0.01, price: 3, lure: 'jig', words: 'Tie it on for walleye and hop it along the bottom.',
-  stats: [S('Takes', 'walleye ×1.25, crappie ×1.1, perch ×1.0, smallmouth ×0.9, lake trout ×0.9, pike ×0.5'), S('Worked', 'hops along the bottom; best slow (×1.0), still ×0.7, burned back ×0.5'), S('The last jig', 'is never lost to a snapped line')] });
-defineItem({ id: 'lure:mepps', name: 'Mepps spinner', kind: 'lure', kg: 0.01, price: 6, lure: 'spinner', words: 'Tie it on along the weed edge; the blade throws the light.',
-  stats: [S('Takes', 'pike ×1.1, smallmouth ×1.0, walleye ×0.7, crappie ×0.5, perch ×0.4, lake trout ×0.3'), S('Worked', 'runs a metre down; best burned back (×1.1), slow ×0.85, still ×0.15')] });
-defineItem({ id: 'lure:daredevle', name: 'Red-and-white Daredevle', kind: 'lure', kg: 0.02, price: 7, lure: 'spoon', words: 'Tie it on for pike: the spoon every pike in the country knows.',
-  stats: [S('Takes', 'pike ×1.3, lake trout ×1.3, walleye ×0.5, smallmouth ×0.5, crappie ×0.2, perch ×0.2'), S('Worked', 'runs 2.2 m down; slow or fast ×1.0, still ×0.25')] });
-defineItem({ id: 'lure:rapala', name: 'Jointed Rapala', kind: 'lure', kg: 0.02, price: 12, lure: 'crankbait', words: 'Tie it on and crank it deep: a balsa minnow that swims.',
-  stats: [S('Takes', 'smallmouth ×1.2, pike ×1.0, walleye ×0.9, lake trout ×0.5, crappie ×0.4, perch ×0.3'), S('Worked', 'dives to 3.4 m; best burned back (×1.1), slow ×0.95; it floats at rest (×0.2)')] });
-defineItem({ id: 'lure:silverminnow', name: 'Johnson Silver Minnow', kind: 'lure', kg: 0.02, price: 8, lure: 'silverminnow', words: 'Tie it on through the weeds: a weedless spoon.',
-  stats: [S('Takes', 'pike in the weed beds'), S('Worked', 'a weedless spoon: through the lily pads and the cabbage')] });
-defineItem({ id: 'lure:lazyike', name: 'Lazy Ike', kind: 'lure', kg: 0.02, price: 9, lure: 'lazyike', words: 'Tie it on for a lazy wobble: an old banana plug.',
-  stats: [S('Takes', 'walleye, trolled along a drop-off'), S('Worked', 'a slow wobble; best trolled')] });
+// the identity says how it swims; the comparison is what takes it, a word per fish (takesLine, LURE_TAKES above)
+defineItem({ id: 'lure:jig', name: 'Jig & twister tail', kind: 'lure', kg: 0.01, price: 3, lure: 'jig', identity: 'Lead-head jig · hops the bottom', onYou: [O('', takesLine('jig'))] });
+defineItem({ id: 'lure:mepps', name: 'Mepps spinner', kind: 'lure', kg: 0.01, price: 6, lure: 'spinner', identity: 'Spinner · runs 1 m down', onYou: [O('', takesLine('spinner'))] });
+defineItem({ id: 'lure:daredevle', name: 'Red-and-white Daredevle', kind: 'lure', kg: 0.02, price: 7, lure: 'spoon', identity: 'Spoon · runs 2.2 m down', onYou: [O('', takesLine('spoon'))] });
+defineItem({ id: 'lure:rapala', name: 'Jointed Rapala', kind: 'lure', kg: 0.02, price: 12, lure: 'crankbait', identity: 'Balsa crankbait · dives 3.4 m', onYou: [O('', takesLine('crankbait'))] });
+defineItem({ id: 'lure:silverminnow', name: 'Johnson Silver Minnow', kind: 'lure', kg: 0.02, price: 8, lure: 'silverminnow', identity: 'Weedless spoon', onYou: [O('', takesLine('silverminnow'))] });
+defineItem({ id: 'lure:lazyike', name: 'Lazy Ike', kind: 'lure', kg: 0.02, price: 9, lure: 'lazyike', identity: 'Banana plug · a slow wobble', onYou: [O('', takesLine('lazyike'))] });
 
 // --- camp gear and tools -----------------------------------------------------------------------------------------
-defineItem({ id: 'aframe', name: 'A-frame tent', kind: 'gear', w: 2, h: 4, kg: 3.0, price: 0, slot: 'tent', icon: 'tent', words: 'Pitch it at camp to sleep in; it sags when it rains.',
-  stats: [S('Night’s rest', '85 %', 'pitched, the fly on; no fly: 90 % of that'), S('Rain with no fly', 'the night ×0.8 and the gear soaked by morning'), S('Pitching', 'about 15 min, four phases, E held')] });
-defineItem({ id: 'dome', name: 'Dome tent', kind: 'gear', w: 2, h: 4, kg: 2.8, price: 50, slot: 'tent', icon: 'dome', words: 'Pitch it at camp to sleep in; it stands up to the wind off the lake.',
-  stats: [S('Night’s rest', '100 %', 'pitched, the fly on; no fly: 90 % of that'), S('Rain with no fly', 'the night ×0.8 and the gear soaked by morning'), S('Pitching', 'about 15 min, four phases, E held')] });
-defineItem({ id: 'fourseason', name: 'Four-season tent', kind: 'gear', w: 2, h: 5, kg: 3.6, price: 95, slot: 'tent', icon: 'dome', words: 'Pitch it at camp for the best night in any weather; the wet things dry by morning.',
-  stats: [S('Night’s rest', '100 %', 'pitched, the fly on; no fly: 90 % of that'), S('Wet gear', 'dries overnight in the vestibule'), S('Pitching', 'about 15 min, four phases, E held')] });
-defineItem({ id: 'sleepingbag', name: 'Sleeping bag', kind: 'gear', w: 2, h: 3, kg: 1.8, price: 0, icon: 'bag', words: 'Keeps you warm through the night in the tent, down to freezing.',
-  stats: [S('Night’s rest', 'full', 'in the tent, within the camp’s reach (25 m of the ring)'), S('Without it', '60 %'), S('Cold nights (under 10 °C)', 'no warmth lost; without it you wake at 60 % warmth'), S('Damp gear', 'warmth 80 %')] });
-defineItem({ id: 'clothes', name: 'Clothes bag', kind: 'gear', w: 2, h: 2, kg: 2.5, price: 0, icon: 'clothes', uses: 1, words: 'A dry set of clothes for camp: warmth again after a capsize or a wet day.',
-  stats: [S('A dry set', '1 in the bag'), S('Change', 'after a capsize or a soaking: warmth comes back twice as fast for 2 h, and the gear counts dry'), S('The wet set', 'dries by a fire in half an hour, inside a store, or overnight')] });
-defineItem({ id: 'pot', name: 'Cook pot', kind: 'tool', w: 2, h: 2, kg: 1.2, price: 0, icon: 'pot', words: 'Cooks a meal on the grate: drag it onto the grate, the meal beside it, and Cook.',
-  stats: [S('A meal', 'cooks only in the pot: drag it onto the grate'), S('Water', '300–500 mL a meal from the bottle; boiled, lake water is safe'), S('A fish', 'fries in its lid in 20 min (on a stick over the coals without it)')] });
-// fb4 (decision 7: the tarp is pitched like the tent, on a rig with anchors; stream E's tarp.js pitches it and says
-// what is missing): the tarp's words for the rig, and the pole it may need (stream E stubs the same def until this lands)
-defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, price: 0, icon: 'tarp', words: 'Pitched on a ridge line between two trees, one tree and two poles, or four poles: the rain stays off what is under it.',
-  stats: [S('Anchors', 'two trees 3–7 m apart; or one tree and two poles; or four poles'), S('Under it', 'rain wets neither the ring’s wood, the packs set out nor you, and a fire burns no faster', 'without it, rain burns a fire twice as fast and wets the wood through in 20 min; half an hour of it soaks a pack on the ground'), S('Rain fly for the tent', 'none')] });
-defineItem({ id: 'pole', name: 'Tarp pole', short: 'Pole', kind: 'gear', w: 1, h: 3, kg: 0.9, stack: 4, icon: 'pole', words: 'A straight dead pole, about two metres: holds up a tarp where the trees don’t.',
-  stats: [S('Holds up a tarp', 'two with a tree, four alone'), S('Found', 'lying by the down logs and under the trees; or cut one from a down log with the folding saw')] });
-defineItem({ id: 'pad', name: 'Sleeping pad', kind: 'gear', w: 2, h: 3, kg: 0.6, price: 30, words: 'Softens the ground under the bag for a better night.', stats: [S('Night’s rest', '+5 %', 'owned, in any tent')] });
-defineItem({ id: 'yokepads', name: 'Portage yoke pads', kind: 'gear', w: 2, h: 1, kg: 0.4, price: 15, icon: 'yoke', words: 'Eases the canoe on your shoulders over a portage.', stats: [S('Carrying the canoe', 'energy ×0.85', 'owned')] });
-defineItem({ id: 'tablets', name: 'Purifying tablets', kind: 'tool', kg: 0.05, price: 2, slot: 'filter', uses: 20, words: 'Treats the bottle: a tablet dropped in at each fill and half an hour’s wait.',
-  stats: [S('Treats', 'one bottle per tablet, drinkable in 30 min', 'E at the water’s edge; the tablets in reach'), S('Tablets', '20 to the tube'), S('Without one', 'lake water as it comes: a queasy stomach for 6 h (hunger ×1.5)')] });
-defineItem({ id: 'pump', name: 'Pump filter', kind: 'tool', w: 1, h: 2, kg: 0.4, price: 35, slot: 'filter', words: 'Fills the bottle at the shore, drinkable in a few minutes.', stats: [S('Fills the bottle', 'drinkable in 5 min', 'E at the water’s edge'), S('Tablets', 'none used')] });
-defineItem({ id: 'gravity', name: 'Gravity filter', kind: 'tool', w: 2, h: 2, kg: 0.5, price: 55, slot: 'filter', words: 'Fills the bottle by itself: hang the bag in a tree at camp.', stats: [S('Fills the bottle', 'on its own within 25 m of your camp’s ring, drinkable in 5 min'), S('At the shore', 'drinkable in 5 min; no tablets used')] });
-defineItem({ id: 'saw', name: 'Folding saw', kind: 'tool', w: 1, h: 3, kg: 0.4, price: 18, words: 'Saws a down log into short logs for the fire: hold E at the log with it in reach.',
-  stats: [S('A down log', 'three short logs (1.5 h of fire each), 5 min a cut', 'hold E at the log with the saw in reach'), S('Once in two days', 'a log')] });
-defineItem({ id: 'camera', name: 'Camera, 35 mm', kind: 'tool', w: 2, h: 1, kg: 0.6, price: 25, words: 'Takes the pictures the photo notices ask for; C raises it.', stats: [S('A photo notice', 'pays $10 a bird, $15 a beaver, $35 a moose, $12 a place', 'the subject near the middle, close, not hidden')] });
+// a tent's number is the night's rest in it (rest by morning, out of 100); the bag's and the pad's, what they add
+defineItem({ id: 'aframe', name: 'A-frame tent', kind: 'gear', w: 2, h: 4, kg: 3.0, price: 0, slot: 'tent', icon: 'tent', identity: 'Two poles and a fly', onYou: [EF('rest', 0.85, 'a night')] });
+defineItem({ id: 'dome', name: 'Dome tent', kind: 'gear', w: 2, h: 4, kg: 2.8, price: 50, slot: 'tent', icon: 'dome', identity: 'Freestanding dome', onYou: [EF('rest', 1, 'a night')] });
+defineItem({ id: 'fourseason', name: 'Four-season tent', kind: 'gear', w: 2, h: 5, kg: 3.6, price: 95, slot: 'tent', icon: 'dome', identity: 'Dome with a vestibule', onYou: [EF('rest', 1, 'a night'), O('Wet gear', 'dry by morning')] });
+defineItem({ id: 'sleepingbag', name: 'Sleeping bag', kind: 'gear', w: 2, h: 3, kg: 1.8, price: 0, icon: 'bag', identity: 'Down bag · good to 0 °C', onYou: [EF('rest', 0.4, 'a night')] });
+defineItem({ id: 'clothes', name: 'Clothes bag', kind: 'gear', w: 2, h: 2, kg: 2.5, price: 0, icon: 'clothes', uses: 1, identity: 'Fleece, wool socks and a dry shirt', onYou: [EF('warmth', 0.3, 'changed into dry')] }); // (energy.js: warmth back twice as fast for 2 h, up to 0.15 an hour more)
+defineItem({ id: 'pot', name: 'Cook pot', kind: 'tool', w: 2, h: 2, kg: 1.2, price: 0, icon: 'pot', identity: 'Blackened pot and lid' });
+// fb4 (decision 7: the tarp is pitched like the tent, on a rig with anchors; tarp.js pitches it and says what is missing)
+defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, price: 0, icon: 'tarp', identity: 'Nylon tarp · 3 × 3 m' });
+// fb5 A/B: a pole is deadwood (it burns about like a log, decision 1) that also holds up a tarp; tarp.js counts it by id
+defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'firewood', w: 1, h: 3, kg: 0.9, stack: 4, burn: 1.5, icon: 'pole', identity: 'Straight deadwood · 2 m' });
+defineItem({ id: 'pad', name: 'Sleeping pad', kind: 'gear', w: 2, h: 3, kg: 0.6, price: 30, identity: 'Closed-cell foam', onYou: [EF('rest', 0.05, 'a night')] });
+defineItem({ id: 'yokepads', name: 'Portage yoke pads', kind: 'gear', w: 2, h: 1, kg: 0.4, price: 15, icon: 'yoke', identity: 'Foam pads for the yoke', onYou: [O('Canoe carry', 'effort ×0.85')] });
+// the water treatments: how long till the bottle is drinkable is their comparison
+defineItem({ id: 'tablets', name: 'Purifying tablets', kind: 'tool', kg: 0.05, price: 2, slot: 'filter', uses: 20, identity: 'Iodine tablets · 30 min to treat' });
+defineItem({ id: 'pump', name: 'Pump filter', kind: 'tool', w: 1, h: 2, kg: 0.4, price: 35, slot: 'filter', identity: 'Hand pump · 5 min to treat' });
+defineItem({ id: 'gravity', name: 'Gravity filter', kind: 'tool', w: 2, h: 2, kg: 0.5, price: 55, slot: 'filter', identity: 'Gravity bag · fills itself at camp' });
+defineItem({ id: 'saw', name: 'Folding saw', kind: 'tool', w: 1, h: 3, kg: 0.4, price: 18, identity: 'Folding pruning saw' });
+defineItem({ id: 'camera', name: 'Camera, 35 mm', kind: 'tool', w: 2, h: 1, kg: 0.6, price: 25, identity: 'Film camera, a roll in it' });
 // fb3 B: the bottle is an item (decision 12), fixed in the first pocket cell; `left` is the litres in it. Nothing drinks
 // for you: thirst falls on its own and comes back only when you Drink (energy.drink).
-defineItem({ id: 'bottle', name: 'Water bottle', short: 'Bottle', kind: 'tool', w: 1, h: 1, kg: 0.15, price: 0, litres: 2, icon: 'bottle', words: 'Two litres. Drink from it when you are thirsty: nothing is drunk for you.',
-  stats: [S('Holds', '2 L'), S('A gulp', '0.25 L: thirst +19 %', 'Drink, standing or afloat'), S('Drink up', 'the rest of what is drinkable'), S('Thirst falls', '12.5 % an hour; 19 % paddling hard, carrying 30 kg or on a hot afternoon'), S('Fill', 'E at the water’s edge (a tablet per fill, 30 min); free at any counter')] });
+defineItem({ id: 'bottle', name: 'Water bottle', short: 'Bottle', kind: 'tool', w: 1, h: 1, kg: 0.15, price: 0, litres: 2, icon: 'bottle', identity: 'Two-litre bottle', onYou: [EF('water', 0.19, 'a gulp')] });
 
 // --- the long items: held in a hand, lying in the canoe or on the ground -------------------------------------------
-defineItem({ id: 'ash', name: 'Ash paddle', kind: 'long', w: 1, h: 6, kg: 1.1, price: 0, slot: 'paddle', long: 'paddle', icon: 'paddle', words: 'Paddles the canoe; a plain beavertail that gets you there.', stats: [S('Cruise', '4.0 km/h at life'), S('Effort', '×1')] });
-defineItem({ id: 'bentshaft', name: 'Bent-shaft laminate paddle', kind: 'long', w: 1, h: 6, kg: 0.9, price: 40, slot: 'paddle', long: 'paddle', words: 'Paddles the canoe a touch quicker and easier on the shoulders.', stats: [S('Cruise', '+5 % (4.2 km/h)'), S('Effort', '×0.95')] });
-defineItem({ id: 'carbon', name: 'Carbon bent-shaft paddle', kind: 'long', w: 1, h: 6, kg: 0.5, price: 110, slot: 'paddle', long: 'paddle', words: 'Paddles the canoe with next to no weight in your hands.', stats: [S('Cruise', '+9 % (4.4 km/h)'), S('Effort', '×0.9')] });
-defineItem({ id: 'rod', name: 'Spinning rod', kind: 'long', w: 1, h: 7, kg: 0.4, price: 0, long: 'rod', words: 'Fishes from the canoe (F), or from the shore, a dock or a rock with it in your hand.', stats: [S('Line', 'parts after about a second in the red'), S('On foot', 'F with it in a hand, water within a cast ahead')] });
-defineItem({ id: 'rodmh', name: 'Medium-heavy rod', kind: 'long', w: 1, h: 7, kg: 0.5, price: 45, long: 'rod', icon: 'rod', words: 'Fishes for the big pike: stiffer, with heavier line; from the canoe or the shore with it in hand.', stats: [S('Line', '×1.4: parts after 1.4 s in the red'), S('On foot', 'F with it in a hand, water within a cast ahead')] });
+// a paddle's comparison is its cruise and its effort; a rod's, how long its line holds in the red
+defineItem({ id: 'ash', name: 'Ash paddle', kind: 'long', w: 1, h: 6, kg: 1.1, price: 0, slot: 'paddle', long: 'paddle', icon: 'paddle', identity: 'Ash beavertail', onYou: [O('Cruise', '4.0 km/h'), O('Effort', '×1')] });
+defineItem({ id: 'bentshaft', name: 'Bent-shaft laminate paddle', kind: 'long', w: 1, h: 6, kg: 0.9, price: 40, slot: 'paddle', long: 'paddle', identity: 'Laminate, bent at the throat', onYou: [O('Cruise', '4.2 km/h'), O('Effort', '×0.95')] });
+defineItem({ id: 'carbon', name: 'Carbon bent-shaft paddle', kind: 'long', w: 1, h: 6, kg: 0.5, price: 110, slot: 'paddle', long: 'paddle', identity: 'Carbon, next to no weight', onYou: [O('Cruise', '4.4 km/h'), O('Effort', '×0.9')] });
+defineItem({ id: 'rod', name: 'Spinning rod', kind: 'long', w: 1, h: 7, kg: 0.4, price: 0, long: 'rod', identity: 'Medium action · 6 ft', onYou: [O('Line', 'holds 1 s in the red')] });
+defineItem({ id: 'rodmh', name: 'Medium-heavy rod', kind: 'long', w: 1, h: 7, kg: 0.5, price: 45, long: 'rod', icon: 'rod', identity: 'Stiff, heavier line · 7 ft', onYou: [O('Line', 'holds 1.4 s in the red')] });
 
 // The old profile's owned ids (profile.js, the hubs' shop) as items: what a save from before the items migrates to
 export const LEGACY = { pack: 'pack3', pack2: 'pack4', barrel: 'barrel60', rod: 'rodmh' };

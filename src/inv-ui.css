@@ -280,22 +280,50 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 .ig-menu button { appearance: none; text-align: left; background: none; border: none; padding: 7px 12px; font: 15px/1.2 var(--serif); color: var(--ink); cursor: pointer; border-radius: 2px; }
 .ig-menu button:hover:not(:disabled) { background: var(--paper-deep); }
 .ig-menu button:disabled { color: var(--ink-faint); cursor: default; font-style: italic; }
-.ig-menu button .why { display: block; max-width: 300px; margin-top: 2px; font: italic 13px/1.25 var(--serif); color: var(--ink-soft, var(--ink-faint)); white-space: normal; }
 .ig-menu { max-width: 340px; }
-.ig-tip { position: fixed; z-index: 35; max-width: 300px; display: flex; flex-direction: column; gap: 4px; padding: 10px 13px 11px; background: var(--paper-note); border: 1.5px solid #8a7250; border-radius: 3px; box-shadow: 0 10px 28px rgba(0, 0, 0, .45); color: var(--ink); pointer-events: none; }
-.ig-tip b { font: 600 16px/1.2 var(--serif); }
-.ig-tip .k { font: 700 10.5px/1.3 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }
-.ig-tip p { margin: 2px 0 0; font: 14px/1.38 var(--serif); }
-.ig-tip .f { font: 500 19px/1.05 var(--pencil-font); color: var(--pencil); }
-/* fb3 C (decision 9): the stats block, what a thing does in numbers: "Night's rest: full · in the tent" */
-.ig-tip .st { display: flex; flex-direction: column; gap: 3px; margin: 5px 0 2px; padding: 6px 0 0; border-top: 1px dashed rgba(138, 114, 80, .5); font: 13.5px/1.3 var(--serif); }
-.ig-tip .st b { font: 600 13.5px/1.3 var(--serif); }
-.ig-tip .st i { color: var(--ink-soft); font-size: 12.5px; }
-/* fb4 B (decision 2): its state under its name, the countdown beside it, the next step under */
-.ig-tip .stt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 1px 0 1px; padding: 4px 8px 5px; border-left: 3px solid var(--st, var(--gold)); background: rgba(138, 114, 80, .1); border-radius: 0 3px 3px 0; }
+/* fb5 B (decision 2): the tooltip in one schema, a line each and only the lines it has: the name, what it is, its
+   state, what it does to you, then the uses bar and the weight in pencil */
+.ig-tip { position: fixed; z-index: 35; max-width: 280px; display: flex; flex-direction: column; gap: 3px; padding: 9px 13px 10px; background: var(--paper-note); border: 1.5px solid #8a7250; border-radius: 3px; box-shadow: 0 10px 28px rgba(0, 0, 0, .45); color: var(--ink); pointer-events: none; }
+.ig-tip .nm { font: 600 16px/1.2 var(--serif); }
+.ig-tip .id { font: italic 14px/1.3 var(--serif); color: var(--ink-soft); }
+.ig-tip .on { display: flex; flex-wrap: wrap; gap: 1px 12px; margin-top: 1px; font: 14px/1.3 var(--serif); }
+.ig-tip .on b { font: 700 11px/1.3 var(--sc); letter-spacing: .1em; margin-right: 1px; }
+.ig-tip .f { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; margin-top: 1px; font: 500 19px/1.05 var(--pencil-font); color: var(--pencil); }
+.ig-tip .f .sep { opacity: .6; }
+.ig-tip .ub { position: relative; flex: none; width: 46px; height: 5px; border-radius: 3px; background: rgba(60, 44, 24, .18); overflow: hidden; }
+.ig-tip .ub i { position: absolute; left: 0; top: 0; bottom: 0; background: #b78a2e; border-radius: 3px; }
+/* its state: the word, a short hint and its countdown on one line, the missing thing as a chip */
+.ig-tip .stt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 1px 0; padding: 3px 8px 4px; border-left: 3px solid var(--st, var(--gold)); background: rgba(138, 114, 80, .1); border-radius: 0 3px 3px 0; font: 14px/1.3 var(--serif); }
 .ig-tip .stt b { font: 700 11.5px/1.3 var(--sc); letter-spacing: .12em; }
+.ig-tip .stt .sep { color: var(--ink-faint); }
 .ig-tip .stt .tmr { font: 600 13.5px/1.3 var(--sans); font-variant-numeric: tabular-nums; }
-.ig-tip .stt .nx { flex-basis: 100%; font: italic 14px/1.35 var(--serif); color: var(--ink-soft); }
+.ig-tip .stt .chip { margin-left: 2px; }
+/* the effects on the energy bar's needs: the HUD's dark chip, its icon in the bar's colour (hud.css #air's --e-*), +points */
+.ig-tip .eff { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 5px; margin-top: 1px; --e-green: #7fb58f; --e-warmth: #bcd8e8; --e-rest: #dd8d5b; --e-food: #dcb469; --e-water: #5f9dd2; }
+.ig-tip .ef { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 4px; border-radius: 3px; background: rgba(22, 26, 28, .86); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35); color: var(--c, #f3ecdd); }
+.ig-tip .ef svg { display: block; width: 15px; height: 15px; }
+.ig-tip .ef b { font: 700 13px/1 var(--sans); font-variant-numeric: tabular-nums; color: #f3ecdd; }
+.ig-tip .ef i { font: 700 10px/1 var(--sc); letter-spacing: .08em; color: var(--c, #f3ecdd); font-style: normal; }
+.ig-tip .ef-food { --c: var(--e-food); } .ig-tip .ef-water { --c: var(--e-water); } .ig-tip .ef-rest { --c: var(--e-rest); } .ig-tip .ef-warmth { --c: var(--e-warmth); } .ig-tip .ef-energy { --c: var(--e-green); }
+.ig-tip .eff em { font: italic 13.5px/1.2 var(--serif); color: var(--ink-soft); margin-left: 2px; }
+
+/* --- fb5 B (decision 6): the one thing missing, a chip; a greyed verb's line is its why and that chip ------------------ */
+.chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 1px 7px 2px; border-radius: 10px; border: 1px solid rgba(138, 114, 80, .55); background: rgba(138, 114, 80, .14); font: 600 12.5px/1.35 var(--sans); font-style: normal; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: baseline; }
+.chip.has-i { padding-left: 3px; }
+.chip .ci { flex: none; width: 18px; height: 18px; object-fit: contain; }
+.chip .cg { flex: none; }
+.chip .tmr { font: inherit; font-variant-numeric: tabular-nums; }
+.ig-menu button .vl { display: block; }
+.ig-menu button .why1 { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 7px; max-width: 300px; margin-top: 3px; font: italic 13px/1.3 var(--serif); color: var(--ink-soft, var(--ink-faint)); white-space: normal; }
+.ig-menu button .why1 .chip { font-size: 12px; color: var(--ink-soft, var(--ink)); }
+/* on the dark panels (the fire card): cream on the well */
+.nb .chip, .mine .chip { border-color: rgba(243, 236, 221, .32); background: rgba(243, 236, 221, .1); color: var(--cream); }
+.why1 { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 7px; }
+/* a missing thing drawn on the icon itself ("needs the pot", "water 0.3 L"), over the foot of the cell */
+.ig-item.has-chip { overflow: visible; z-index: 2; }
+.ig-chip { position: absolute; left: 50%; bottom: 2px; translate: -50% 0; z-index: 1; font: 700 8.5px/1 var(--sc); letter-spacing: .06em; white-space: nowrap; padding: 2px 4px 3px; border-radius: 3px; background: var(--st, #e0b13a); color: var(--st-ink, #2a1c06); box-shadow: 0 0 0 1px rgba(20, 16, 10, .55), 0 1px 3px rgba(0, 0, 0, .6); pointer-events: none; }
+.ig-item.has-chip.has-bar .ig-chip { bottom: 7px; }
+.st-need { --st: #e0b13a; --st-ink: #2a1c06; }
 
 /* --- fb4 B: the checklists (decision 2): a greyed verb's in the right-click menu, a card button's, the fire's state ---- */
 .needs { display: flex; flex-direction: column; gap: 4px; --nd-ink: var(--cream-86); --nd-soft: var(--cream-65); --nd-box: rgba(243, 236, 221, .55); --nd-well: rgba(0, 0, 0, .35); }
@@ -317,12 +345,6 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 .needs li.ok .qb i { background: var(--moss); }
 .needs .next { margin: 1px 0 0; font: italic 14.5px/1.35 var(--serif); color: var(--nd-ink); }
 .needs .next::before { content: '→ '; font-style: normal; color: var(--gold); }
-/* on paper: the menu */
-.ig-menu .ig-needs { padding: 0 12px 8px 22px; margin-top: -3px; }
-.ig-menu .needs { --nd-ink: var(--ink); --nd-soft: var(--ink-faint); --nd-box: rgba(60, 44, 24, .55); --nd-well: rgba(60, 44, 24, .18); max-width: 300px; }
-.ig-menu .needs li .tmr.run { color: #8a5a12; }
-.ig-menu .needs .next::before { color: var(--map-red); }
-.ig-menu .needs .qb i { background: #b78a2e; }
 
 /* --- the shelves ------------------------------------------------------------------------------------------------------ */
 #shelf { left: 50%; top: 50%; translate: -50% -50%; width: min(1320px, 95vw); height: min(830px, 93vh); padding: 26px 30px 16px; display: flex; flex-direction: column; gap: 16px; }
@@ -346,13 +368,13 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 #shelf .sh-shelf { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 #shelf .sh-top { display: flex; align-items: baseline; gap: 12px; border-bottom: 2px solid var(--ink); padding-bottom: 7px; flex: none; }
 #shelf .sh-top .sum { font-size: 14px; font-style: italic; color: var(--ink-soft); }
-#shelf .sh-stock { flex: 1 1 auto; min-height: 0; overflow: hidden auto; scrollbar-width: thin; padding: 14px 12px; border-radius: 3px; border: 1px solid var(--edge-deep); box-shadow: inset 0 2px 8px rgba(40, 24, 8, .3); }
+#shelf .sh-stock { flex: 1 1 auto; min-height: 0; overflow: hidden auto; scrollbar-width: thin; padding: 14px 9px; /* (fb5 B: ten cells and the edges in the 520 px column: at 12 px the last 6 px were cut) */ border-radius: 3px; border: 1px solid var(--edge-deep); box-shadow: inset 0 2px 8px rgba(40, 24, 8, .3); }
 #shelf .sh-receipt { flex: none; font-size: 21px; min-height: 1.2em; line-height: 1.1; }
 #shelf .sh-receipt.no { color: var(--map-red); }
 #shelf .sh-foot { flex: none; font: 700 10.5px/1.4 var(--sc); letter-spacing: .12em; color: var(--ink-faint); border-top: 1px solid var(--edge); padding-top: 8px; }
 /* the shelf's grid: pine boards, a shelf edge under every row of cells */
 #shelf .ig.ig-shelf { border: none; border-radius: 0; box-shadow: none; background: transparent; }
-#shelf .ig-board { position: absolute; left: -12px; right: -12px; height: 9px; background: linear-gradient(#7a5532, #5a3d22 70%, #3a2614); box-shadow: 0 3px 5px rgba(40, 24, 8, .35); border-radius: 1px; }
+#shelf .ig-board { position: absolute; left: -9px; right: -9px; height: 9px; background: linear-gradient(#7a5532, #5a3d22 70%, #3a2614); box-shadow: 0 3px 5px rgba(40, 24, 8, .35); border-radius: 1px; }
 #shelf.look-pegs .ig-board, #shelf.look-table .ig-board { display: none; }
 #shelf .ig-shelf .ig-item.sig { border: 1.5px solid var(--map-red); }
 #shelf .ig-shelf .ig-item.sig::after { content: 'made here'; position: absolute; right: 3px; bottom: 3px; font: 700 8.5px/1 var(--sc); letter-spacing: .08em; color: var(--paper-note); background: var(--map-red); padding: 1px 3px 2px; border-radius: 2px; }
