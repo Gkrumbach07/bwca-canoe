@@ -343,7 +343,7 @@ export class Energy {
           this.noted.dry = false;
           return add;
         }
-        this.note(`A tablet in: ${r.left} left.`);
+        if (Number.isFinite(r.left) && r.left <= 3) this.note(r.left ? `${r.left} ${r.left === 1 ? 'tablet' : 'tablets'} left.` : 'That was the last tablet.'); // fb5 E: the count only when it runs low (camp.js says the fill; the first time, the moments teach it)
       }
       this.treating += add; this.readyAt = this.now + waitHours;
     } else {
@@ -653,20 +653,20 @@ export class Energy {
     for (const k of NEED_KEYS) this.grow[k] += (clamp((c[k] - prev[k]) / dh, -2, 2) - this.grow[k]) * a;
   }
 
-  // a word, once, when the bottle runs dry or a need runs low (again once it has come back)
+  // a word, once, when the bottle runs dry or a need runs low (again once it has come back). fb5 E: these are cues; the
+  // teaching moments (hints.js, energy.onCue) say them now, the first time in full and later short or not at all, and
+  // a word of the bar's own shows only where nothing says them (a test page, Sandbox without the moments)
+  cue(id, words) { if (this.onCue) { try { if (this.onCue(id, words)) return; } catch (e) { console.warn('energy.onCue', e); } } this.note(words); }
   needNotes() {
     const n = this.needs, o = this.noted;
-    if (this.bottle <= 0.001 && !o.dry) { o.dry = true; this.note('The bottle is dry. Fill it at the shore: on foot, E at the water’s edge.'); }
+    if (this.bottle <= 0.001 && !o.dry) { o.dry = true; this.cue('dry', 'The bottle is dry. Fill it at the water’s edge: E.'); }
     for (const k of ['water', 'food', 'rest', 'warmth']) {
       if (n[k] > LOW + 0.1) { o[k] = false; continue; }
       if (n[k] >= LOW || o[k]) continue;
       o[k] = true;
-      if (k === 'water') this.note(this.drinkable > 0.02 ? 'Thirsty. Drink from the bottle (I).' : this.treating > 0.001 ? `Thirsty. The bottle is treating: ${this.treatingWords()}.` : 'Thirsty, and the bottle is dry. Fill it at the shore, then drink (I).'); // fb3 B: nothing is drunk for you
-      else if (k === 'food') this.note(this.inv ? (this.inv.snacks() ? 'Hungry. A snack from the pack (I, when you are still), or cook a meal at a fire.' : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and no food with you.') : this.hasFood ? 'Hungry. Cook a meal on the grate at a fire.' : 'Hungry, and the food pack is empty.');
-      else if (k === 'warmth') this.note(this.soaked > 0.3 ? 'Cold, and wet through. Get to a fire, or into the tent and the bag.' : 'Cold. A fire would warm you, or the tent and the bag.');
-      else this.note('Tired. Only a night’s sleep brings it back now: a campsite, or an outfitter’s bunk.');
+      this.cue(k, k === 'water' ? 'Thirsty. Drink from your bottle (I).' : k === 'food' ? 'Hungry. Eat from your pack (I).' : k === 'warmth' ? 'Cold. A fire, dry clothes or the sleeping bag.' : 'Tired. Rest in the tent.');
     }
-    if (n.rest <= EMPTY && !o.spent) { o.spent = true; this.note('Done in. Nothing brings you back now but a night’s sleep.'); }
+    if (n.rest <= EMPTY && !o.spent) { o.spent = true; this.cue('donein', 'Done in. Only a night’s sleep brings you back now.'); }
     else if (n.rest > LOW) o.spent = false;
   }
 
@@ -739,11 +739,11 @@ export class Energy {
       // (polish B: drifting with a need low but not out, rest crept the bar up a sliver a minute, 0.0002 in ten seconds,
       // so it was never "at 0" again and the hour never ran). Nearly spent, a word first.
       if (this.spentAt == null) {
-        if (this.value <= 0) { this.spentAt = now; this.note('Spent. Stop now: eat from the pack (I), drink or rest, or someone will come out for you within the hour.'); }
+        if (this.value <= 0) { this.spentAt = now; this.cue('spent', 'Spent. Eat, drink or rest now, or someone comes out for you.'); }
       } else if (this.value >= SPENT_OVER) this.spentAt = null;
       else if (now - this.spentAt >= SPENT_GRACE && this.onEvac) { this.spentAt = null; this.onEvac(this.spentWhy()); }
       if (this.value > 0) {
-        if (this.value < NEARLY && !this.noted.nearly) { this.noted.nearly = true; this.note('Nearly spent. Rest, eat or drink soon, or make for a site.'); }
+        if (this.value < NEARLY && !this.noted.nearly) { this.noted.nearly = true; this.cue('nearly', 'Nearly spent. Rest, eat or drink soon, or make for a campsite.'); }
         else if (this.value > NEARLY + 0.15) this.noted.nearly = false;
       }
     } else if (this.value <= 0) {
@@ -756,7 +756,7 @@ export class Energy {
     if (!this.warning) this.warnTimer = Math.min(this.warnTimer, 0);
     else if (this.warnTimer <= 0) {
       this.warnTimer = this.live ? 24 : 1.8; // game hours: a day on an Adventure
-      this.note(this.adventure ? 'No food and not much left in you. Make for an outfitter, or sit a while.' : 'No food and not much left in you. Any outfitter will set you up again, or sit a while.');
+      this.cue('nofood', this.adventure ? 'No food, and not much left in you. Make for an outfitter.' : 'No food and not much left in you. Any outfitter will set you up again, or sit a while.');
     }
   }
 

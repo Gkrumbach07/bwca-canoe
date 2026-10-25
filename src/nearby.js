@@ -85,10 +85,11 @@ function checked(v, c, busy = null) {
   if (!c) return busy ? { ...v, why: busy } : v;
   return { ...v, why: busy || whyOf(c), needs: c.needs || v.needs, next: c.next || v.next };
 }
-const HANDS_FULL = { needs: [{ label: 'A free hand', done: false }], next: 'Open the book (I) and set down what you hold, or put it in the canoe' };
-const ALL_FULL = { needs: [{ label: 'Your back, your chest or a hand free', done: false }], next: 'Open the book (I) and set something down, or put it in the canoe' };
+// (fb5 E: each with the chip the dot shows, pointer.js chipOf: a few words of what is missing)
+const HANDS_FULL = { needs: [{ label: 'A free hand', done: false, chip: 'hands full' }], next: 'Open the book (I) and set down what you hold, or put it in the canoe' };
+const ALL_FULL = { needs: [{ label: 'Your back, your chest or a hand free', done: false, chip: 'nowhere to carry it' }], next: 'Open the book (I) and set something down, or put it in the canoe' };
 // fb4 join: a loose thing's Pick up greys when nothing you carry has room and your hands are full (it said only after E)
-const ROOM_FULL = { needs: [{ label: 'Room in a pack on you, or a free hand', done: false }], next: 'Open the book (I): make room in your pack, or set down what you hold' };
+const ROOM_FULL = { needs: [{ label: 'Room in a pack on you, or a free hand', done: false, chip: 'no room on you' }], next: 'Open the book (I): make room in your pack, or set down what you hold' };
 function roomOnYou(inv, itemId) {
   if (!itemId) return true;
   if (inv.freeHand() >= 0 && (typeof inv.canHand !== 'function' || inv.canHand(itemId))) return true;
@@ -358,7 +359,7 @@ class Nearby {
       const hit = near.segment(pc.x - fx * L, pc.y + 0.05, pc.z - fz * L, pc.x + fx * L, pc.y + 0.05, pc.z + fz * L, r);
       if (!hit) continue;
       _m.compose(pc.pos, pc.q, _one);
-      push({ t: hit.t, miss: hit.miss * 0.85 }, { kind: 'item', ref: `piece:${pc.key}`, label: pc.kind === 'log' ? 'a short log' : 'a dead branch', e: { verb: 'Pick up', ...(ch.canTakePiece(pc) ? { why: null } : { why: 'your hands are full, and nothing you carry has room', needs: [{ label: 'A free hand, or room in what you carry', done: false }], next: 'Put the armload on the fire or a woodpile, or set something down from the book (I)' }), run: () => ch.pickUp(pc) }, shell: { geometry: ch.pieceGeos[pc.g], matrix: _m.clone() } });
+      push({ t: hit.t, miss: hit.miss * 0.85 }, { kind: 'item', ref: `piece:${pc.key}`, label: pc.kind === 'log' ? 'a short log' : 'a dead branch', e: { verb: 'Pick up', ...(ch.canTakePiece(pc) ? { why: null } : { why: 'your hands are full, and nothing you carry has room', needs: [{ label: 'A free hand, or room in what you carry', done: false, chip: 'hands full' }], next: 'Put the armload on the fire or a woodpile, or set something down from the book (I)' }), run: () => ch.pickUp(pc) }, shell: { geometry: ch.pieceGeos[pc.g], matrix: _m.clone() } });
     }
     // the canoe lying by (or floated at a dock's side): E Get in where it floats, or hold E Push it off where it is
     // beached · Q Shoulder it ("Unload it first" when loaded): packs.js hullAction, with each greyed verb's checklist
@@ -430,7 +431,7 @@ class Nearby {
     }
     // the water's edge, on foot (E Fill the bottle)
     const w = this.waterEdge();
-    if (w) push(near.box(w.box), { kind: 'water', ref: 'water', label: 'the water’s edge', hint: w.hint, e: { verb: 'Fill the bottle', why: w.why, needs: w.needs || null, next: w.next || null, run: () => camp.fillBottle(w.wait) }, box: w.box });
+    if (w) push(near.box(w.box), { kind: 'water', ref: 'water', label: 'the water’s edge', chip: w.chip || '', e: { verb: 'Fill the bottle', why: w.why, needs: w.needs || null, next: w.next || null, run: () => camp.fillBottle(w.wait) }, box: w.box });
     return out;
   }
   // the fire ring's Q: Light (held) while it is laid and not lit, Douse (held) while it burns or the coals are hot;
@@ -452,7 +453,9 @@ class Nearby {
     const fc = e && typeof e.fillCheck === 'function' ? check(e, 'fillCheck', typeof this.camp.filterWait === 'function' ? this.camp.filterWait() : undefined) : null;
     if (fc && (this.camp.bottleHere() || (e && e.live))) {
       const y0 = w.levelAt(pt.x, pt.z), b0 = this.camp.bottleHere();
-      return { box: { x: pt.x, y: y0 + 0.02, z: pt.z, hx: 0.8, hy: 0.06, hz: 0.8, heading: p.heading }, why: whyOf(fc), needs: fc.needs || null, next: fc.next || null, wait: Number.isFinite(fc.wait) ? fc.wait : b0 ? b0.wait : 0, hint: b0 ? b0.words : null };
+      // (fb5 E: the dot's chip is the one missing thing: a greyed fill's (pointer.js reads its needs), else no tablet to hand)
+      const noTab = !whyOf(fc) && (fc.needs || []).some((n) => /tablet/i.test(n.label || '') && !n.done);
+      return { box: { x: pt.x, y: y0 + 0.02, z: pt.z, hx: 0.8, hy: 0.06, hz: 0.8, heading: p.heading }, why: whyOf(fc), needs: fc.needs || null, next: fc.next || null, wait: Number.isFinite(fc.wait) ? fc.wait : b0 ? b0.wait : 0, hint: b0 ? b0.words : null, chip: noTab ? 'no tablet to hand' : '' };
     }
     const b = this.camp.bottleHere();
     let why = null;
