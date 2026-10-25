@@ -1064,8 +1064,8 @@ export class Hud {
     e.lures.classList.toggle('show', strip);
     // fb3 C: the bobber rig with no leech in reach (fishing.ui.needsLeeches, stream B: the bucket in a hand, within 3 m or
     // in the canoe) is dimmed on the strip and says so
-    const needs = !!u.needsLeeches;
-    if (u.lures && (f.lure !== u.lure || f.needs !== needs)) { e.lures.innerHTML = u.lures.map((l, i) => { const off = needs && (l.bobber || l.id === 'leech'); return `<span class="${i === u.lure ? 'on' : ''}${off ? ' off' : ''}"><b>${i + 1}</b>${esc(l.name)}${off ? '<i>needs leeches</i>' : ''}</span>`; }).join(''); f.lure = u.lure; f.needs = needs; }
+    const needs = !!u.needsLeeches, count = Number.isFinite(u.leeches) ? u.leeches : null; // and the leeches in reach, falling a leech a bite
+    if (u.lures && (f.lure !== u.lure || f.needs !== needs || f.leeches !== count)) { e.lures.innerHTML = u.lures.map((l, i) => { const rig = l.bobber || l.id === 'leech', off = needs && rig; return `<span class="${i === u.lure ? 'on' : ''}${off ? ' off' : ''}"><b>${i + 1}</b>${esc(l.name)}${off ? '<i>needs leeches</i>' : rig && count != null ? `<i class="n">${count} left</i>` : ''}</span>`; }).join(''); f.lure = u.lure; f.needs = needs; f.leeches = count; }
     // the reticle on the water, the cast ring filling round it while the cast loads
     const aim = strip && u.aim && this.camera ? u.aim : null;
     let onScreen = false;
