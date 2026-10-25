@@ -167,7 +167,7 @@ const litres = (x) => `${x >= 1.95 ? '2' : x.toFixed(1)} L`; // fb4 C
 // content C: what the kit with you does to the needs and the bar (kit.js mods; main.js sets energy.kit): the rain jacket
 // (soak, rainChill), the toque (chill), the bugs and the canoe chair (rest: the bar's recovery; drain: a game hour), the
 // headlamp after dark (night: travel's cost); and the bag's night (kit.sleepNight)
-const KIT0 = { soak: 1, rainChill: 1, chill: 1, rest: 1, drain: 0, night: 1.3 };
+const KIT0 = { soak: 1, rainChill: 1, chill: 1, rest: 1, drain: 0, night: NIGHT };
 
 export class Energy {
   constructor(player, day) {
@@ -716,7 +716,7 @@ export class Energy {
         hard = kg >= HEAVY_KG;
       } else recover = REST_H;
     } else if (p.mode === 'swim') { travel = SWIM_H; hard = true; }
-    if (travel && day.elevation < DARK_ELEV) travel *= this.kitMods.night ?? NIGHT; // after dark, by headlamp (content C: the one with you)
+    if (travel && day.elevation < DARK_ELEV) travel *= this.kitMods.night; // after dark, by headlamp (content C: the one with you, kit.js)
     this.hard = hard;
     // the needs, over the game hours since the last frame (a jump of the clock longer than JUMP counts as a night)
     let dh = now - this.lastNow; this.lastNow = now;
