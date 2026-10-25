@@ -63,6 +63,7 @@ import { FORAGE } from './forage.js'; // fb2 A
 import { KINDS } from './tasks.js'; // fb2 A
 import { cards } from './cards.js'; // wc B
 import { VERBS, verbsOf } from './items.js'; // wc D
+import { withTentNeeds, pitchNeeds } from './tent.js'; // fb4 E
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -473,6 +474,38 @@ async function main() {
   const hudUpdateC = hud.update.bind(hud);
   hud.update = (c) => hudUpdateC(c && !c.weather ? { ...c, weather } : c);
   hud.stripAlso = () => !!camp.dialOpen;
+  // fb4 E: the tarp and the chores' checklists (the owner's second round of 2026-10-25). The tarp is pitched like the tent
+  // (tarp.js): on a ridge line between two trees 3–7 m apart, or a tree and two poles, or four poles, the poles found lying
+  // about or cut from a down log with the saw (chores.js); right-click Pitch the tarp shows it as a ghost where you stand
+  // and E held pitches it, or says what is missing; Q at it takes it down. What lies under its sheet stays dry
+  // (tarp.covers). Every chore's blocked action carries its checklist (decision 2: why, needs, next): the tent's steps
+  // (tent.js withTentNeeds, pitchNeeds), the hang's (hang.hangNeeds), the down log's Saw and Cut a pole
+  // (chores.downLogTarget), the latrine's (chores.latrineNeeds), the evening's wood (chores.nightWood). Stream A's nearby.js
+  // reads these itself; the wraps below fill in only what its targets do not carry yet.
+  const tarp = camp.chores.tarp;
+  window.__game.tarp = tarp;
+  pointer.register(tarp.targets); // a pitched rig (E Carry on pitching · Q Take it down, held), a loose pole (E Pick up)
+  const armedE = pointer.isArmed, cancelE = pointer.onCancel; // the armed tarp takes E and a click; Esc or a right-click lets it go
+  pointer.isArmed = () => !!tarp.armed || !!(armedE && armedE());
+  pointer.onCancel = (why) => tarp.disarm('You leave the tarp in its bag.') || (cancelE ? cancelE(why) : false);
+  const beginPitchE = camp.beginPitch.bind(camp), armHangE = camp.hang.arm.bind(camp.hang);
+  camp.beginPitch = (uid) => { tarp.disarm(); return beginPitchE(uid); };
+  camp.hang.arm = (cId) => { tarp.disarm(); return armHangE(cId); };
+  const tentActionsE = camp.tentActions.bind(camp);
+  camp.tentActions = () => withTentNeeds(camp, tentActionsE());
+  camp.pitchNeeds = (tent) => pitchNeeds(camp, tent);
+  const pointTargetsE = nearby.pointTargets.bind(nearby);
+  nearby.pointTargets = (ray, near) => camp.chores.decorateTargets(pointTargetsE(ray, near), ray, near);
+  const itemActionsE = nearby.itemActions.bind(nearby);
+  nearby.itemActions = (ref) => {
+    const out = itemActionsE(ref);
+    for (const a of out) {
+      if (a.needs) continue;
+      if (a.id === 'hang' && ref && ref.container) Object.assign(a, camp.hang.hangNeeds(ref.container), { why: a.why });
+      else if (a.id === 'pitch' && ref && ref.uid != null) { const n = camp.pitchNeeds(camp.tentByUid(ref.uid)); Object.assign(a, { needs: n.needs, next: n.next }); }
+    }
+    return out;
+  };
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

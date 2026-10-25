@@ -47,6 +47,10 @@ export const LOWER = [
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const ease = (k) => { const t = Math.min(1, Math.max(0, k)); return t * t * (3 - 2 * t); };
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // (a name keeps its capital)
+const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']; // (hud.js's words; +z is south)
+// fb4 E: a hold's phases as checklist steps, those done ticked (each with its minutes)
+const stepsOf = (phases, done = 0) => phases.map((ph, i) => ({ label: `${ph.name} · ${ph.minutes} min`, done: i < done }));
 // a barrel as a line says it ("the small blue barrel", not "the blue barrel, 30 L")
 const barrelName = (item) => ({ barrel30: 'small blue barrel', barrel60: 'big blue barrel' })[item] || lower((itemDef(item) || { name: 'barrel' }).name);
 
@@ -223,18 +227,19 @@ export class Hang {
     const ph = this.pendingHere();
     if (ph) {
       const { pe, c } = ph;
-      return { t: pe.tree, spot: pe.spot, c, from: pe.done, label: `The ${pe.tree.name} · ${HANG[pe.done - 1].name.toLowerCase()} so far`, verb: pe.done >= 2 ? 'Carry on hoisting' : 'Carry on hanging', run: (o) => hold.begin({ ...this.hangOpts(c, pe.spot, pe.done), ...this.keys(o) }) };
+      const left = HANG.slice(pe.done).reduce((s, q) => s + q.minutes, 0);
+      return { t: pe.tree, spot: pe.spot, c, from: pe.done, label: `The ${pe.tree.name} · ${HANG[pe.done - 1].name.toLowerCase()} so far`, verb: pe.done >= 2 ? 'Carry on hoisting' : 'Carry on hanging', needs: stepsOf(HANG, pe.done), next: `Hold E: ${left} min to go, the barrel ${CLEAR} m up when done.`, run: (o) => hold.begin({ ...this.hangOpts(c, pe.spot, pe.done), ...this.keys(o) }) };
     }
     const c = this.barrelCarried(), at = c ? this.treeFor(c) : null;
     if (!c || !at) return null;
-    return { t: at.t, spot: at.spot, c, from: 0, label: `The ${at.t.name} · a limb ${Math.round(at.t.up)} m up`, verb: 'Hang', run: (o) => hold.begin({ ...this.hangOpts(c, at.spot, 0), ...this.keys(o) }) };
+    return { t: at.t, spot: at.spot, c, from: 0, label: `The ${at.t.name} · a limb ${Math.round(at.t.up)} m up`, verb: 'Hang', needs: stepsOf(HANG), next: `Hold E: about ${HANG.reduce((s, q) => s + q.minutes, 0)} min, the barrel ${CLEAR} m up and ${OUT} m out.`, run: (o) => hold.begin({ ...this.hangOpts(c, at.spot, 0), ...this.keys(o) }) };
   }
   // the hung barrel the dot offers "E Lower · hold" at: { c, tree, label, run(opts) } or null
   hungTarget() {
     const p = this.player, hung = this.hungNear(p.x, p.z);
     if (!hung) return null;
     const t = hung.at.tree;
-    return { c: hung, tree: t, label: `The ${barrelName(hung.item)}, hung from the ${t ? t.name : 'tree'}`, verb: 'Lower', run: (o) => hold.begin({ ...this.lowerOpts(hung), ...this.keys(o) }) };
+    return { c: hung, tree: t, label: `The ${barrelName(hung.item)}, hung from the ${t ? t.name : 'tree'}`, verb: 'Lower', needs: stepsOf(LOWER), next: `Hold E: it comes down at the rope's foot in ${LOWER.reduce((s, q) => s + q.minutes, 0)} min.`, run: (o) => hold.begin({ ...this.lowerOpts(hung), ...this.keys(o) }) };
   }
   // the hold's keys from the dot (opts.key KeyE, Mouse0 besides) or the book (BookHold, with E and a click)
   keys(o) { const k = (o && o.key) || 'KeyE'; return { key: k, keys: [...new Set([k, 'Mouse0', ...((o && o.keys) || []), ...(k === 'BookHold' ? ['KeyE'] : [])])] }; }
@@ -259,6 +264,32 @@ export class Hang {
     if (!this.barrels().includes(c)) return 'the barrel is not within reach';
     if (!this.treeFor(c)) return 'carry it to a tree with a good limb and point at the limb: a big pine or a birch';
     return null;
+  }
+  // fb4 E (decision 2): Hang's checklist, for the book's right-click and the dot: what is there, what is missing, and the
+  // one thing to do now (the nearest good limb, where it is). → { why, needs, next }
+  hangNeeds(cId) {
+    const p = this.player, inv = this.inv, c = inv && inv.cont(cId), why0 = this.hangRefused(cId);
+    const steps = HANG.map((ph) => ({ label: `${ph.name} · ${ph.minutes} min`, done: false }));
+    const limbWords = `A limb ${LIMB[0]}–${String(LIMB[1]).replace('.5', '½')} m up within ${String(AT_TREE).replace('.4', '½')} m`;
+    if (!c || !BARRELS[c.item]) return { why: why0, needs: [{ label: 'A blue barrel', done: false }], next: 'Only a blue food barrel is hung.' };
+    if (c.where === 'hung') return { why: why0, needs: [{ label: 'Hung', done: true }], next: 'Point at it, or the trunk it is tied off on, and hold E to lower it.' };
+    const ashore = p.mode === 'walk', within = this.barrels().includes(c), here = ashore ? this.treeFor(c) : null;
+    const needs = [
+      { label: 'On foot, ashore', done: ashore },
+      { label: 'The barrel within reach', done: within, note: within ? null : 'on you, at your feet, or in the canoe beside you' },
+      { label: limbWords, done: !!here, note: here ? `the ${here.t.name}, ${Math.round(here.t.up)} m up` : 'none here' },
+      ...steps,
+    ];
+    let next;
+    if (!ashore) next = 'Go ashore first.';
+    else if (!within) next = here ? `Carry the barrel here: the ${here.t.name}'s limb takes it.` : 'Carry the barrel, or stand by it.';
+    else if (here) next = `Point at the ${here.t.name} and hold E: about ${HANG.reduce((s, q) => s + q.minutes, 0)} min.`;
+    else {
+      const t = this.treesNear(p.x, p.z, 60).find((q) => this.spotFor(q, p.x, p.z, BARRELS[c.item]));
+      if (t) { const deg = ((Math.atan2(t.x - p.x, -(t.z - p.z)) * 180) / Math.PI + 360) % 360; next = `Walk to the ${t.name} ${Math.round(t.d)} m ${COMPASS[Math.round(deg / 45) % 8]}: a limb ${Math.round(t.up)} m up. Point at it with the barrel on you.`; }
+      else next = 'Walk to a big pine or a birch with a branch 4–7 m up: the spruces and cedars branch to the ground.';
+    }
+    return { why: why0 ? cap(why0) : null, needs, next };
   }
   // armed: E or a click at the tree, held, hangs it (camp.prompts calls aim each frame while it waits)
   arm(cId) {
