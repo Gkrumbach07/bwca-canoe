@@ -415,6 +415,19 @@ Object.assign(LURE_TAKES, {
   topwater: { walleye: 0.3, smallmouth: 1.5, pike: 1.3, laketrout: 0.05, crappie: 0.3, perch: 0.2 },
   cedarminnow: { walleye: 1.5, smallmouth: 1.3, pike: 1.15, laketrout: 0.5, crappie: 0.5, perch: 0.6 },
 });
+// a lure's On-you line: the words, and the fish as { fish, word, step } (step 1 neutral … 5 excellent) for the tooltip's
+// pips (the fb5 join's takesOn shape; a build without the pips draws the words)
+const STEP_OF = { neutral: 1, OK: 2, good: 3, great: 4, excellent: 5 };
+const lureOn = (lure) => {
+  const t = LURE_TAKES[lure] || {}, takes = [];
+  for (const [sp, x] of Object.entries(t).sort((a, b) => b[1] - a[1])) {
+    if (takes.length >= 3) break;
+    const w = takeWord(x), f = FISH_WORD[sp] || sp;
+    takes.push({ fish: f.charAt(0).toUpperCase() + f.slice(1), word: w, step: STEP_OF[w] || 1 });
+    if (w === 'neutral') break;
+  }
+  return { label: '', value: takesLine(lure), takes };
+};
 // the bags: what the night does to you when it is colder than the bag is good to (kit.js night)
 export const isBag = (id) => !!(ITEMS[id] && ITEMS[id].bag);
 const OC = (v) => `${v < 0 ? '−' : ''}${Math.abs(v)} °C`;
@@ -465,9 +478,9 @@ export const FILLET_SHARE = 0.4; // of a whole fish's weight
 for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Pike'], ['smallmouth', 'Smallmouth'], ['laketrout', 'Lake trout'], ['perch', 'Perch'], ['crappie', 'Crappie']]) {
   defineItem({ id: `fillet:${sp}`, name: `${name} fillets`, short: 'Fillets', kind: 'fish', w: 1, h: 2, kg: 0.3, species: sp, fillet: true, icon: 'fillet', eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Cleaned and skinned' });
 }
-defineItem({ id: 'lure:spinnerbait', name: 'Spinnerbait', short: 'Spinbait', kind: 'lure', kg: 0.02, price: 7, lure: 'spinnerbait', identity: 'Wire arm, willow blade · weedless', model: 'lure', tint: 0xb8d03a, onYou: [O('', takesLine('spinnerbait'))] });
-defineItem({ id: 'lure:jigminnow', name: 'Jig & minnow', short: 'Jig & min', kind: 'lure', kg: 0.01, price: 4, lure: 'jigminnow', identity: 'Lead jig tipped with a salted minnow', model: 'lure', tint: 0xd96a2a, onYou: [O('', takesLine('jigminnow'))] });
-defineItem({ id: 'lure:topwater', name: 'Topwater plug', short: 'Topwater', kind: 'lure', kg: 0.02, price: 9, lure: 'topwater', identity: 'Floats, walks on the surface', model: 'lure', tint: 0xe8e2d0, onYou: [O('', takesLine('topwater'))] });
+defineItem({ id: 'lure:spinnerbait', name: 'Spinnerbait', short: 'Spinbait', kind: 'lure', kg: 0.02, price: 7, lure: 'spinnerbait', identity: 'Wire arm, willow blade · weedless', model: 'lure', tint: 0xb8d03a, onYou: [lureOn('spinnerbait')] });
+defineItem({ id: 'lure:jigminnow', name: 'Jig & minnow', short: 'Jig & min', kind: 'lure', kg: 0.01, price: 4, lure: 'jigminnow', identity: 'Lead jig tipped with a salted minnow', model: 'lure', tint: 0xd96a2a, onYou: [lureOn('jigminnow')] });
+defineItem({ id: 'lure:topwater', name: 'Topwater plug', short: 'Topwater', kind: 'lure', kg: 0.02, price: 9, lure: 'topwater', identity: 'Floats, walks on the surface', model: 'lure', tint: 0xe8e2d0, onYou: [lureOn('topwater')] });
 
 // a waterproof pack: what is in it stays dry (rain on it set down, a capsize)
 defineItem({ id: 'packdry', name: 'Portage pack', short: 'Portage pack', kind: 'container', w: 4, h: 5, kg: 1.5, price: 55, wear: ['back', 'chest'], mesh: 'packdry', tint: 0x5d6b5a, dry: true, container: { cols: 6, rows: 8 }, identity: 'Waterproof roll-top · room 6 × 8' });
@@ -500,5 +513,5 @@ defineItem({ id: 'matchsafe', name: 'Tin match safe', short: 'Matches', kind: 't
 defineItem({ id: 'toque', name: 'Red wool toque', short: 'Toque', kind: 'gear', kg: 0.1, unique: true, identity: 'Hand-knit, lost on a portage', model: 'cap', tint: 0xa8322a, onYou: [O('Cold', 'costs ×0.8')] });
 defineItem({ id: 'luckycap', name: 'Lise’s lucky cap', short: 'Cap', kind: 'gear', kg: 0.1, unique: true, identity: 'Faded UMD Bulldogs cap · never lost a fish', model: 'cap', tint: 0x6e2630, onYou: [O('Bites', '×1.08')] });
 defineItem({ id: 'guidemap', name: 'Arvid’s guiding map', short: 'Arvid’s map', kind: 'map', w: 2, h: 2, kg: 0.05, unique: true, icon: 'guidemap', identity: 'An old Fisher sheet, pencilled', model: 'map', onYou: [O('A site', 'pencilled on your map'), EF('rest', 0.08, 'a night there')] });
-defineItem({ id: 'lure:cedarminnow', name: 'Eino’s cedar minnow', short: 'Cedar', kind: 'lure', kg: 0.02, unique: true, lure: 'cedarminnow', identity: 'Carved white cedar, painted by hand', model: 'lure', tint: 0x6f8a52, onYou: [O('', takesLine('cedarminnow'))] });
+defineItem({ id: 'lure:cedarminnow', name: 'Eino’s cedar minnow', short: 'Cedar', kind: 'lure', kg: 0.02, unique: true, lure: 'cedarminnow', identity: 'Carved white cedar, painted by hand', model: 'lure', tint: 0x6f8a52, onYou: [lureOn('cedarminnow')] });
 export const UNIQUE_IDS = ['axehead', 'tradesilver', 'brassreel', 'matchsafe', 'toque', 'luckycap', 'guidemap', 'lure:cedarminnow'];
