@@ -13,10 +13,12 @@
 //   the fire ring                         Open the fire (its card)   Light (hold) when laid · Douse (hold) when burning
 //   a pitched tent                        Rest until… (the dial)     Strike (hold)      (half pitched: E carries on)
 //   a bagged tent on the ground           Pick up                    Pitch (the ghost, then hold)
+//   a bagged tarp on the ground           Pick up                    Pitch the tarp (stream E's tarp.verb, fb4)
 //   the latrine, the bench, a log seat    Sit                        —
-//   the canoe, on foot                    Get in                     Shoulder it · "Unload it first" when loaded
+//   the canoe afloat (or at a dock)       Get in (where it floats)   Shoulder it · "Unload it first" when loaded
+//   the canoe beached (nosed in, on the bank)  Push it off (hold)    Shoulder it · "Unload it first" when loaded
 //   the water's edge, on foot             Fill the bottle            —
-//   a down log, the saw in reach          Saw (hold)                 —
+//   a down log                            Saw (hold)                 Cut a pole (hold; stream E's downLogTarget, fb4)
 //   a berry bush, mushrooms               Pick                       —        (pointer.js forageTargets)
 //   a person                              Talk                       —        (pointer.js peopleTargets)
 //   a shelf, the board, the map table, the counter   Open            —        (outfitter.js)
@@ -65,6 +67,26 @@ const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(Stri
 const thingName = (d) => (!d ? 'thing' : /^(Duluth|Johnson)/.test(d.name) ? d.name : d.id === 'pile' ? 'things on the ground' : lower(d.short && d.kind !== 'container' ? d.name : d.name));
 const hoursWords = (h) => (h < 0.75 ? 'half an hour' : h < 1.25 ? 'an hour' : `${Math.round(h * 2) / 2} h`.replace('.5 h', '½ h'));
 const _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _v = new THREE.Vector3();
+// fb4 A, the round's decision 2 (the owner, 2026-10-25: "if I can't use something, I want to know exactly why I can't use
+// it ... there needs to be a very clear action on what needs to be done next"): every verb here that can grey carries
+// why (the one line the dot shows), needs (the checklist the book and the cards draw: [{ label, have?, need?, unit?,
+// done?, timer? }]) and next (the one thing to do now). The other streams' checks are looked up when they are there
+// (stream C: chores.lightCheck / douseCheck / fireState, cook.cookCheck / cookingNow, energy.fillCheck, forage.pickCheck;
+// stream E: camp.pitchNeeds, hang.hangNeeds, chores.downLogTarget / latrineNeeds, tarp.verb), each { enabled?, why,
+// needs, next }; without them a verb keeps its own why and gains a checklist of its own where it has one.
+function check(obj, name, ...args) {
+  const f = obj && obj[name];
+  if (typeof f !== 'function') return null;
+  try { const c = f.apply(obj, args); return c && typeof c === 'object' ? c : null; } catch (e) { console.warn(`nearby ${name}`, e); return null; }
+}
+const whyOf = (c) => (c.enabled === true ? null : c.enabled === false ? c.why || 'not now' : c.why || null);
+// a verb with a check's why, needs and next laid on it; busy: a reason of the moment that outranks the check's ("a moment")
+function checked(v, c, busy = null) {
+  if (!c) return busy ? { ...v, why: busy } : v;
+  return { ...v, why: busy || whyOf(c), needs: c.needs || v.needs, next: c.next || v.next };
+}
+const HANDS_FULL = { needs: [{ label: 'A free hand', done: false }], next: 'Open the book (I) and set down what you hold, or put it in the canoe' };
+const ALL_FULL = { needs: [{ label: 'Your back, your chest or a hand free', done: false }], next: 'Open the book (I) and set something down, or put it in the canoe' };
 // a container's size on the ground, for the dot: [height of its middle, radius]
 const BODY = { pack3: [0.32, 0.42], pack4: [0.34, 0.46], barrel30: [0.24, 0.3], barrel60: [0.32, 0.38], bucket: [0.14, 0.24], tacklebox: [0.1, 0.24], mapcase: [0.1, 0.24], pile: [0.12, 0.42], woodarms: [0.12, 0.4] };
 
@@ -149,12 +171,15 @@ class Nearby {
     const info = ch.fireInfo(key), st = info.state, og = ck.onGrate(key), P = ck.pot && ck.pot.key === key ? ck.pot : null;
     const lightWhy = ch.lightProblem(key), cookWhy = ck.cookProblem(site, key);
     const sub = st === 'burning' ? `burning · about ${hoursWords(info.hours)} of wood` : st === 'coals' ? 'the coals still smoking' : info.units.length ? `laid, not lit · ${ch.woodWords(info.units)}` : 'cold';
+    // (fb4 A: each action with its check's why, needs and next where stream C has them: the card draws the checklist)
+    const act = (a, c) => { if (!c) return a; const why = whyOf(c); return { ...a, enabled: !why, why, needs: c.needs || null, next: c.next || null }; };
     const actions = [
-      { id: 'light', label: st === 'coals' ? 'Light it again' : 'Light', held: true, job: 'fire-light', enabled: !lightWhy, why: lightWhy, run: (o) => ch.light(site, key, this.keys(o)) },
-      { id: 'cook', label: ck.cookLabel(key), enabled: !cookWhy, why: cookWhy, run: () => ck.cookNow(site, key) },
+      act({ id: 'light', label: st === 'coals' ? 'Light it again' : 'Light', held: true, job: 'fire-light', enabled: !lightWhy, why: lightWhy, run: (o) => ch.light(site, key, this.keys(o)) }, check(ch, 'lightCheck', key)),
+      act({ id: 'cook', label: ck.cookLabel(key), enabled: !cookWhy, why: cookWhy, run: () => ck.cookNow(site, key) }, check(ck, 'cookCheck', site, key)),
     ];
     if (og.food) actions.push({ id: 'eat', label: `Eat the ${eatName(itemDef(og.food.id))}`, enabled: true, hint: 'there and then', run: () => ck.eatAt(site, key) });
-    actions.push({ id: 'douse', label: 'Douse', held: true, job: 'fire-out', enabled: st === 'burning' || st === 'coals', why: 'there is no fire to put out', run: (o) => ch.douse(site, key, this.keys(o)) });
+    const lit = st === 'burning' || st === 'coals';
+    actions.push(act({ id: 'douse', label: 'Douse', held: true, job: 'fire-out', enabled: lit, why: lit ? null : 'there is no fire to put out', needs: lit ? null : [{ label: 'A fire burning, or hot coals', done: false }], next: lit ? null : 'Light it first', run: (o) => ch.douse(site, key, this.keys(o)) }, check(ch, 'douseCheck', key)));
     const ash = st === 'burning' ? 'embers under the flames' : st === 'coals' ? 'hot coals under the ash' : F.get(key) && !F.get(key).laid ? 'warm ash' : 'cold ash';
     const pot = ck.potHere(key);
     return {
@@ -166,8 +191,9 @@ class Nearby {
       ],
       actions,
       meter: { value: Math.min(1, info.hours / BURN_FULL), label: 'Burn', words: st === 'burning' ? `about ${hoursWords(info.hours)} of wood` : info.fuel ? `${hoursWords(info.fuel)} of wood laid` : 'no wood' },
-      cooking: P && !P.done ? { value: Math.min(1, P.t / P.dur), words: P.cold ? 'the fire is too low under it' : `ready in ${Math.max(1, Math.ceil(P.dur - P.t))} s` } : null,
+      cooking: typeof ck.cookingNow === 'function' ? check(ck, 'cookingNow', key) : P && !P.done ? { value: Math.min(1, P.t / P.dur), words: P.cold ? 'the fire is too low under it' : `ready in ${Math.max(1, Math.ceil(P.dur - P.t))} s` } : null,
       state: st, noPot: !pot,
+      ...(check(ch, 'fireState', key) || {}), // (fb4 A: stream C's fuel { light, hour }, wet, timers and status, for the card)
     };
   }
   pileObject(c) {
@@ -182,8 +208,8 @@ class Nearby {
     if (ref.container) {
       const c = inv.cont(ref.container);
       if (c && BARRELS[c.item] && c.where !== 'hung') {
-        const why = this.camp.hang.hangRefused(c.id);
-        out.push({ id: 'hang', label: 'Hang it from a tree', closeBook: true, enabled: !why, why, run: () => this.camp.hang.arm(c.id) });
+        const why = this.camp.hang.hangRefused(c.id), hc = check(this.camp.hang, 'hangNeeds', c.id);
+        out.push({ id: 'hang', label: 'Hang it from a tree', closeBook: true, enabled: !why, why, ...(hc ? { needs: hc.needs || null, next: hc.next || null } : {}), run: () => this.camp.hang.arm(c.id) });
       }
       return out;
     }
@@ -194,8 +220,8 @@ class Nearby {
     const d = itemDef(e.id);
     if (!d) return out;
     if (d.slot === 'tent') {
-      const why = this.camp.pitchRefused(this.camp.tentByUid(e.uid));
-      out.push({ id: 'pitch', label: 'Pitch', closeBook: true, enabled: !why, why, run: () => this.camp.beginPitch(e.uid) });
+      const tent = this.camp.tentByUid(e.uid), why = this.camp.pitchRefused(tent), pc = check(this.camp, 'pitchNeeds', tent);
+      out.push({ id: 'pitch', label: 'Pitch', closeBook: true, enabled: !why, why, ...(pc ? { needs: pc.needs || null, next: pc.next || null } : {}), run: () => this.camp.beginPitch(e.uid) });
     }
     // by a fire ring: wood onto the fire, a meal or a fish onto the grate
     const site = this.site(FIRE_PANEL);
@@ -208,7 +234,7 @@ class Nearby {
   }
   moveAction(id, label, from, e, to, full) {
     const inv = this.inv, spot = inv.firstFit(to, e.id);
-    return { id, label, enabled: !!spot, why: spot ? null : full, run: () => { const s = inv.firstFit(to, e.id); return !!(s && inv.move(from.id, e.uid, to.id, s.x, s.y, s.rot, 1)); } };
+    return { id, label, enabled: !!spot, why: spot ? null : full, ...(spot ? {} : { needs: [{ label: `Room ${id === 'fuel' ? 'in the ring' : 'on the grate'}`, done: false }], next: id === 'fuel' ? 'Let it burn down a while, or take a piece off' : 'Take what is on it off first (E on it)' }), run: () => { const s = inv.firstFit(to, e.id); return !!(s && inv.move(from.id, e.uid, to.id, s.x, s.y, s.rot, 1)); } };
   }
 
   // --- the loose wood, for the book's Here pane ------------------------------------------------------------------------
@@ -283,7 +309,7 @@ class Nearby {
       if (u.kind === 'long') {
         const fx = Math.cos(at.heading || 0), fz = -Math.sin(at.heading || 0);
         const hit = near.segment(at.x - fx * 0.95, y + 0.04, at.z - fz * 0.95, at.x + fx * 0.95, y + 0.04, at.z + fz * 0.95, 0.2);
-        push(hit, { kind: 'item', ref: u.ref, label: `the ${thingName(u.def)}`, e: { verb: 'Pick up', why: inv.freeHand() >= 0 ? null : 'both hands are full', run: () => packs.pickUp(u) }, mesh: view && view.objs && view.objs.get(u.ref) });
+        push(hit, { kind: 'item', ref: u.ref, label: `the ${thingName(u.def)}`, e: { verb: 'Pick up', ...(inv.freeHand() >= 0 ? { why: null } : { why: 'both hands are full', ...HANDS_FULL }), run: () => packs.pickUp(u) }, mesh: view && view.objs && view.objs.get(u.ref) });
         continue;
       }
       const wood = ch.woodOnly(o), [h, r] = wood ? [0.18, 0.5] : BODY[u.id] || [0.2, 0.36];
@@ -292,14 +318,22 @@ class Nearby {
       if (wood) {
         const e = o.grid.find((q) => q.id === 'wood:log') || o.grid[0], n = ch.pieceCount(o), pm = ch.pileMesh(o.id);
         const room = !!(ch.armFor(e.id, false) || inv.freeHand() >= 0);
-        push(hit, { kind: 'pile', ref: o.id, label: `the woodpile (${n})`, e: { verb: 'Take one', why: room ? null : 'your hands are full', run: () => this.fromPile(o, e) }, q: { verb: 'Open the pile', run: () => this.openHere(o.id) }, box: { x: at.x, y: y + 0.18, z: at.z, hx: 0.42, hy: 0.2, hz: 0.42, heading: (at.heading || 0) }, mesh: pm ? pm.layers[0] : null });
+        push(hit, { kind: 'pile', ref: o.id, label: `the woodpile (${n})`, e: { verb: 'Take one', ...(room ? { why: null } : { why: 'your hands are full', ...HANDS_FULL }), run: () => this.fromPile(o, e) }, q: { verb: 'Open the pile', run: () => this.openHere(o.id) }, box: { x: at.x, y: y + 0.18, z: at.z, hx: 0.42, hy: 0.2, hz: 0.42, heading: (at.heading || 0) }, mesh: pm ? pm.layers[0] : null });
         continue;
       }
       if (u.id === 'pile') {
         const tent = this.baggedTent(o);
         if (tent) {
-          const why = camp.pitchRefused(camp.tentByUid(tent.uid));
-          push(hit, { kind: 'item', ref: o.id, label: `the ${lower(tent.def.name)}, bagged`, e: { verb: 'Pick up', run: () => packs.pickUp(u) }, q: { verb: 'Pitch', why, run: () => camp.beginPitch(tent.uid) }, mesh: view && view.objs && view.objs.get(o.id) });
+          const tt = camp.tentByUid(tent.uid), why = camp.pitchRefused(tt), pc = check(camp, 'pitchNeeds', tt);
+          push(hit, { kind: 'item', ref: o.id, label: `the ${lower(tent.def.name)}, bagged`, e: { verb: 'Pick up', run: () => packs.pickUp(u) }, q: { verb: 'Pitch', why, ...(pc ? { needs: pc.needs || null, next: pc.next || null } : {}), run: () => camp.beginPitch(tent.uid) }, mesh: view && view.objs && view.objs.get(o.id) });
+          continue;
+        }
+        // fb4 A: the bagged tarp on the ground (a pile holding only it): E Pick up · Q Pitch the tarp (stream E's
+        // tarp.verb(pile, entry) → { enabled, why, needs, next, label, run }: it arms the rig's ghost)
+        const tarp = window.__game && window.__game.tarp, te = o.grid.length === 1 && !o.grid[0].box && tarp && typeof tarp.verb === 'function' ? o.grid[0] : null;
+        const tv = te ? check(tarp, 'verb', o, te) : null;
+        if (tv) {
+          push(hit, { kind: 'item', ref: o.id, label: `the ${lower((itemDef(te.id) || {}).name || 'tarp')}, bagged`, e: { verb: 'Pick up', run: () => this.takeOne(o) }, q: { verb: tv.label || 'Pitch the tarp', why: whyOf(tv), needs: tv.needs || null, next: tv.next || null, run: (o2) => tv.run(o2) }, mesh: view && view.objs && view.objs.get(o.id) });
           continue;
         }
         const top = o.grid.find((q) => !q.box) || o.grid[0], n = o.grid.length, dd = top ? itemDef(top.id) : null;
@@ -307,7 +341,7 @@ class Nearby {
         continue;
       }
       const room = !!packs.slotFor(u);
-      push(hit, { kind: 'container', ref: o.id, label: `the ${thingName(u.def)}`, e: { verb: 'Pick up', why: room ? null : 'your back and hands are full', run: () => packs.pickUp(u) }, q: { verb: 'Open it', run: () => this.openHere(o.id) }, mesh: view && view.objs && view.objs.get(o.id) });
+      push(hit, { kind: 'container', ref: o.id, label: `the ${thingName(u.def)}`, e: { verb: 'Pick up', ...(room ? { why: null } : { why: 'your back and hands are full', ...ALL_FULL }), run: () => packs.pickUp(u) }, q: { verb: 'Open it', run: () => this.openHere(o.id) }, mesh: view && view.objs && view.objs.get(o.id) });
     }
     // the loose wood: E Pick up
     for (const pc of ch.near) {
@@ -316,9 +350,10 @@ class Nearby {
       const hit = near.segment(pc.x - fx * L, pc.y + 0.05, pc.z - fz * L, pc.x + fx * L, pc.y + 0.05, pc.z + fz * L, r);
       if (!hit) continue;
       _m.compose(pc.pos, pc.q, _one);
-      push({ t: hit.t, miss: hit.miss * 0.85 }, { kind: 'item', ref: `piece:${pc.key}`, label: pc.kind === 'log' ? 'a short log' : 'a dead branch', e: { verb: 'Pick up', why: ch.canTakePiece(pc) ? null : 'your hands are full, and nothing you carry has room', run: () => ch.pickUp(pc) }, shell: { geometry: ch.pieceGeos[pc.g], matrix: _m.clone() } });
+      push({ t: hit.t, miss: hit.miss * 0.85 }, { kind: 'item', ref: `piece:${pc.key}`, label: pc.kind === 'log' ? 'a short log' : 'a dead branch', e: { verb: 'Pick up', ...(ch.canTakePiece(pc) ? { why: null } : { why: 'your hands are full, and nothing you carry has room', needs: [{ label: 'A free hand, or room in what you carry', done: false }], next: 'Put the armload on the fire or a woodpile, or set something down from the book (I)' }), run: () => ch.pickUp(pc) }, shell: { geometry: ch.pieceGeos[pc.g], matrix: _m.clone() } });
     }
-    // the canoe lying by (or floated at a dock's side): E Get in · Q Shoulder it ("Unload it first" when loaded)
+    // the canoe lying by (or floated at a dock's side): E Get in where it floats, or hold E Push it off where it is
+    // beached · Q Shoulder it ("Unload it first" when loaded): packs.js hullAction, with each greyed verb's checklist
     const c = p.carry, d = c && c.drop, s = d && inv.canoeSpot();
     if (d && s && inv.hullDist(s, p.x, p.z) <= HULL_REACH) {
       const hull = this.canoe && this.canoe.hull, hy = hull ? (hull.getWorldPosition(_v), _v.y) : p.groundAt(d.x, d.z);
@@ -349,7 +384,8 @@ class Nearby {
       const b = st.box;
       if (near.flat(b.x, b.z) > POINT.seat) continue;
       const run = st.latrine ? () => ch.latrine(site, this.seatHooks()) : () => this.sitAt(st.spot);
-      push(near.box(b), { kind: 'seat', ref: `seat:${st.spot.id || `${b.x.toFixed(1)}:${b.z.toFixed(1)}`}`, label: st.label, e: { verb: 'Sit', why: hold.active || this.cook.busy ? 'a moment' : null, run }, box: b });
+      const lc = st.latrine ? check(ch, 'latrineNeeds', site) : null; // (stream E: { hint, needs, next })
+      push(near.box(b), { kind: 'seat', ref: `seat:${st.spot.id || `${b.x.toFixed(1)}:${b.z.toFixed(1)}`}`, label: st.label, hint: lc && lc.hint ? lc.hint : null, e: { verb: 'Sit', why: hold.active || this.cook.busy ? 'a moment' : null, ...(lc ? { needs: lc.needs || null, next: lc.next || null } : {}), run }, box: b });
     }
     // your tent: half pitched E Carry on pitching · Q Strike; up E Rest until… · Q Strike
     const t = camp.camp, ta = t && t.stage > 0 ? camp.tentActions() : null;
@@ -364,33 +400,39 @@ class Nearby {
     if (hung && near.flat(hung.c.at.x, hung.c.at.z) <= POINT.hung) {
       const tt = hung.tree, at = hung.c.at, ty = tt ? p.groundAt(tt.x, tt.z) : 0;
       const hits = [near.sphere(at.x, at.y, at.z, 0.45), tt ? near.segment(tt.x, ty + 0.3, tt.z, tt.x, ty + 2.4, tt.z, (tt.r || 0.25) + 0.2) : null].filter(Boolean);
-      push(hits.sort((a, b) => a.miss - b.miss)[0] || null, { kind: 'barrelHung', ref: `barrelHung:${hung.c.id}`, label: lower(hung.label), e: { verb: hung.verb, held: true, run: hung.run }, mesh: view && view.objs && view.objs.get(hung.c.id) });
+      push(hits.sort((a, b) => a.miss - b.miss)[0] || null, { kind: 'barrelHung', ref: `barrelHung:${hung.c.id}`, label: lower(hung.label), e: { verb: hung.verb, held: true, why: hung.why || null, needs: hung.needs || null, next: hung.next || null, run: hung.run }, mesh: view && view.objs && view.objs.get(hung.c.id) });
     }
     // a tree with a good limb, a barrel on you (E Hang · hold), or one with a hang let go part way
     const tr = !hung ? hg.treeTarget() : null;
     if (tr) {
       const gy = p.groundAt(tr.t.x, tr.t.z);
-      push(near.segment(tr.t.x, gy + 0.3, tr.t.z, tr.t.x, gy + 3.2, tr.t.z, 0.45), { kind: 'tree', ref: `hangTree:${tr.t.x.toFixed(1)}:${tr.t.z.toFixed(1)}`, label: lower(tr.label), e: { verb: tr.verb, held: true, run: tr.run } });
+      push(near.segment(tr.t.x, gy + 0.3, tr.t.z, tr.t.x, gy + 3.2, tr.t.z, 0.45), { kind: 'tree', ref: `hangTree:${tr.t.x.toFixed(1)}:${tr.t.z.toFixed(1)}`, label: lower(tr.label), e: { verb: tr.verb, held: true, why: tr.why || null, needs: tr.needs || null, next: tr.next || null, run: tr.run } });
     }
-    // a down log, with the saw in reach (E Saw · hold)
-    const sw = ch.sawTarget(POINT.log);
+    // a down log: stream E's downLogTarget when it is there (E Saw · Q Cut a pole, both held, greyed with their
+    // checklists without the saw), else the old one with the saw in reach (E Saw · hold)
+    const dl = check(ch, 'downLogTarget', POINT.log);
+    if (dl && dl.log) {
+      const o = dl.log, ga = p.groundAt(o.ax, o.az), gb = p.groundAt(o.bx, o.bz), r = (o.rad || 0.2) + 0.08;
+      push(near.segment(o.ax, ga + r, o.az, o.bx, gb + r, o.bz, r + 0.06), { kind: 'downLog', ref: `downLog:${dl.k}`, label: dl.label || 'a down spruce', hint: dl.hint || null, e: dl.e || null, q: dl.q || null });
+    }
+    const sw = !dl ? ch.sawTarget(POINT.log) : null;
     if (sw) {
       const o = sw.log, ga = p.groundAt(o.ax, o.az), gb = p.groundAt(o.bx, o.bz), r = (o.rad || 0.2) + 0.08;
-      push(near.segment(o.ax, ga + r, o.az, o.bx, gb + r, o.bz, r + 0.06), { kind: 'downLog', ref: `downLog:${sw.k}`, label: 'a down spruce', hint: sw.left ? `${sw.left === 3 ? 'three' : sw.left === 2 ? 'two' : 'one'} short ${sw.left === 1 ? 'log' : 'logs'} in it` : null, e: { verb: 'Saw', held: true, why: sw.left > 0 ? null : 'sawn already: it grows no more till another day', run: (o2) => ch.beginSaw(sw.log, sw.k, sw.cuts, this.keys(o2)) } });
+      push(near.segment(o.ax, ga + r, o.az, o.bx, gb + r, o.bz, r + 0.06), { kind: 'downLog', ref: `downLog:${sw.k}`, label: 'a down spruce', hint: sw.left ? `${sw.left === 3 ? 'three' : sw.left === 2 ? 'two' : 'one'} short ${sw.left === 1 ? 'log' : 'logs'} in it` : null, e: { verb: 'Saw', held: true, ...(sw.left > 0 ? { why: null } : { why: 'sawn already: it grows no more till another day', needs: [{ label: 'A down log not sawn today', done: false }], next: 'Another down log, or this one tomorrow' }), run: (o2) => ch.beginSaw(sw.log, sw.k, sw.cuts, this.keys(o2)) } });
     }
     // the water's edge, on foot (E Fill the bottle)
     const w = this.waterEdge();
-    if (w) push(near.box(w.box), { kind: 'water', ref: 'water', label: 'the water’s edge', hint: w.hint, e: { verb: 'Fill the bottle', why: w.why, run: () => camp.fillBottle(w.wait) }, box: w.box });
+    if (w) push(near.box(w.box), { kind: 'water', ref: 'water', label: 'the water’s edge', hint: w.hint, e: { verb: 'Fill the bottle', why: w.why, needs: w.needs || null, next: w.next || null, run: () => camp.fillBottle(w.wait) }, box: w.box });
     return out;
   }
   // the fire ring's Q: Light (held) while it is laid and not lit, Douse (held) while it burns or the coals are hot;
   // cold and empty, nothing
   fireQ(site, key) {
-    const ch = this.chores, info = ch.fireInfo(key), st = info.state, busy = hold.active || this.cook.busy;
-    if (st === 'burning' || st === 'coals') return { verb: 'Douse', held: true, why: busy ? 'a moment' : null, run: (o) => ch.douse(site, key, this.keys(o)) };
+    const ch = this.chores, info = ch.fireInfo(key), st = info.state, busy = hold.active || this.cook.busy ? 'a moment' : null;
+    if (st === 'burning' || st === 'coals') return checked({ verb: 'Douse', held: true, why: null, run: (o) => ch.douse(site, key, this.keys(o)) }, check(ch, 'douseCheck', key), busy);
     if (!info.units.length) return null;
     const why = ch.lightProblem(key);
-    return { verb: 'Light', held: true, why: busy ? 'a moment' : why, run: (o) => ch.light(site, key, this.keys(o)) };
+    return checked({ verb: 'Light', held: true, why, run: (o) => ch.light(site, key, this.keys(o)) }, check(ch, 'lightCheck', key), busy);
   }
   // the water within reach ahead of you (world.shoreAt < 0), as a flat box on it: { box, why, wait, hint } or null
   waterEdge() {
@@ -398,6 +440,12 @@ class Nearby {
     let pt = null;
     for (let d = 0.4; d <= POINT.water && !pt; d += 0.3) { const x = p.x + f.x * d, z = p.z + f.z * d; if (w.isReady(x, z) && w.shoreAt(x, z) < 0) pt = { x: x + f.x * 0.5, z: z + f.z * 0.5 }; }
     if (!pt) return null;
+    // fb4 A: stream C's fillCheck when it is there: { enabled, why, needs, next, wait } (wait: hours to drinkable)
+    const fc = e && typeof e.fillCheck === 'function' ? check(e, 'fillCheck', typeof this.camp.filterWait === 'function' ? this.camp.filterWait() : undefined) : null;
+    if (fc && (this.camp.bottleHere() || (e && e.live))) {
+      const y0 = w.levelAt(pt.x, pt.z), b0 = this.camp.bottleHere();
+      return { box: { x: pt.x, y: y0 + 0.02, z: pt.z, hx: 0.8, hy: 0.06, hz: 0.8, heading: p.heading }, why: whyOf(fc), needs: fc.needs || null, next: fc.next || null, wait: Number.isFinite(fc.wait) ? fc.wait : b0 ? b0.wait : 0, hint: b0 ? b0.words : null };
+    }
     const b = this.camp.bottleHere();
     let why = null;
     if (!b) {
@@ -430,8 +478,8 @@ class Nearby {
   // E at the woodpile: a piece off it, into an armload (a free hand) or what you carry
   fromPile(pile, e) {
     const inv = this.inv, ch = this.chores, arm = ch.armFor(e.id, true);
-    let ok = !!(arm && inv.put(arm, e.id, { quiet: true }));
-    if (!ok) ok = inv.place(e.id, 1, { exclude: [pile.id], quiet: true }).ok;
+    let ok = !!(arm && inv.put(arm, e.id, { quiet: true, data: e.data || null })); // (fb4: a piece's data goes with it, its wetness)
+    if (!ok) ok = inv.place(e.id, 1, { exclude: [pile.id], quiet: true, data: e.data || null }).ok;
     if (!ok) { this.camp.note('Your hands are full.', 2.5); return; }
     inv.take(pile.id, e.uid, 1);
     ch.cook.gesture = { t: 0, dur: 0.45, say: 'Taking wood off the pile…' };

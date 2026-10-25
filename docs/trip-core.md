@@ -100,14 +100,17 @@ aluminium canoe is 34 kg, the pack 16 kg plus 0.9 kg a day of food: about 55 kg 
    the book with the canoe on the right, one drag from your back, your chest or a hand. Nothing loads or stows by
    itself: what you wear stays on you. With two packs the gear pack waits at the trail head; *Q* beside it takes it
    too, for one heavy trip.
-2. **The far end.** *E Launch onto …* (what is in your hands goes into the hull at your feet, with a note: your hands
-   are for the paddle; the back and the chest stay as they are) or *Q Set the canoe down*. With a pack back at the
-   trail head, *E Set the canoe down · walk back for the gear pack*.
+2. **The far end.** *E Launch onto …* (what you wear goes into the hull, back, chest and hands, with one note:
+   paddling needs you unloaded) or *Q Set the canoe down*. With a pack back at the trail head, *E Set the canoe down ·
+   walk back for the gear pack*.
 3. **Walk back**, or *Q Fetch it (about 5 min on a 23-rod trail)*: a fade, the clock moves on by the walk and the
    second carry at life pace (what walking them yourself costs on the clock), and the walk's energy is spent. Things
    set down within 15 m of a trail count as left at it, so the fetch finds them.
 4. **Away.** A canoe set down at a trail end (to fill the bottle, say) gets in from the dot: *E Get in* where it
-   floats; beached on dry ground, *E Push it off first* slides it down to the water with you.
+   floats, both ends over water, and you are in it there, facing as it lies (no jump to a launch point); nosed in or
+   lying on the bank, *hold E Push it off*: hands on the gunwales (a tap moves nothing), then you walk it out until
+   both ends float and stand beside it in the shallows; let go and it stays where it got to (the 2026-10-25 second
+   round, `packs.js` hullAction, pushPlan, beginPush).
 
 The portage counts in the journal and the logbook when you launch at the far end.
 
@@ -188,8 +191,9 @@ ring do its prompts apply. On foot at a free site:
   food mark stays down. In Adventure, food left on the ground overnight within 60 m may be found by a bear (a note in
   the morning, a meal or two gone; a sealed barrel seldom); a hung barrel never.
 - **Repacking** (camp 1, `src/packs.js`; the 2026-10-25 round: nothing loads by itself): E at the canoe is *Get in*
-  (or *Push it off first*), and only what is in your hands goes into the hull at your feet; a pack on your back and a
-  barrel on your chest ride on you. With things set out about the camp (in its area, or within 10 m of the hull), the
+  (or, beached, *hold E Push it off*), and getting in puts what you wear into the hull (the pack on your back, the
+  barrel on your chest, what is in your hands) with one note; stepping out, nothing comes back out by itself (the
+  second 2026-10-25 round). With things set out about the camp (in its area, or within 10 m of the hull), the
   book's *Load everything here* (held) at the hull loads everything there, a thing a phase (a minute and more the
   farther it lies), while the canoe has room for eight things and 160 kg. At the ring, the armload's Q stacks it on
   the woodpile.
