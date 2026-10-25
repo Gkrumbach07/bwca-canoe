@@ -354,6 +354,9 @@ export class Hints {
       case 'hungry': {
         const v = need('food'); if (v === false) return false;
         let snacks = 0; try { snacks = inv && inv.attached ? inv.snacks() : 0; } catch { snacks = 0; }
+        // (fb5 join: food hung in the barrel at camp is food: say where it is, not "no food… an outfitter sells it")
+        const hung = snacks <= 0 && e.food <= 0.01 && typeof e.hungFood === 'function' ? e.hungFood() : null;
+        if (hung && hung.days > 0) return { lv: v, text: 'Hungry. Your food hangs in the barrel: hold {E} on it to let it down.', short: 'Hungry. The barrel.' };
         if (snacks > 0 || e.food <= 0.01) return snacks > 0 ? v : { lv: v, text: 'Hungry, and no food with you. An outfitter sells it.', short: 'Hungry, and no food.' };
         return { lv: v, text: 'Hungry. Cook a meal on the grate at a fire, or eat {I}.', short: 'Hungry. {I}' };
       }
