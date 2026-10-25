@@ -43,6 +43,7 @@
 // The pick: of the candidates the ray passes, the one it passes nearest its middle (miss), the nearer on a tie. Within
 // reach of the walker is each provider's to judge (near.flat, near.reach).
 import * as THREE from 'three';
+import * as ITEMS from './items.js'; // fb5 E: stream B's chipOf (the first missing thing), when it is there
 
 export const REACH = 2.6;          // m from the walker within which a thing on the ground is pointed at and picked up
 const RIM = 0.028;                 // m the rim stands off the thing's surface
@@ -63,6 +64,7 @@ const CSS = `
 #crosshair .ch-lab .act.off { color: rgba(243, 236, 221, .6); font-style: italic; }
 #crosshair .ch-lab .act.off kbd { border-color: rgba(243, 236, 221, .4); color: rgba(243, 236, 221, .6); }
 #crosshair .ch-lab .what { color: rgba(243, 236, 221, .78); }
+#crosshair .ch-lab .chip { font-size: 13px; padding: 1px 8px 2px; border-radius: 9px; background: rgba(14, 27, 34, .5); color: rgba(243, 236, 221, .9); font-style: normal; } /* fb5 E: the one missing thing */
 #crosshair.off .ch-lab { color: rgba(243, 236, 221, .7); font-style: italic; }
 #air.nohints #crosshair .ch-lab kbd { display: none; }
 `;
@@ -73,12 +75,43 @@ function normalize(t) {
   t.e = { verb: t.verb || 'Use', run: t.act || (() => {}), why, held: !!t.held };
   return t;
 }
-// one key's part of the label: the key, the verb (or, dimmed, why it can't be done); a held one says so before its key,
-// "hold E Push it off" (fb4 A: read as it is done, the word first)
+// one key's part of the label: the key and the verb, dimmed when it can't be done now (fb5 E: the one chip after the
+// target says what is missing; the why is said when the key is pressed); a held one says so before its key, "hold E
+// Push it off" (fb4 A: read as it is done, the word first)
 function actHtml(key, a) {
   if (!a) return '';
   const off = !!a.why;
-  return `<span class="act${off ? ' off' : ''}${a.held && !off ? ' held' : ''}">${a.held && !off ? '<span class="hold">hold</span>' : ''}<kbd>${key}</kbd><span>${esc(off ? a.why : a.verb)}</span></span>`;
+  return `<span class="act${off ? ' off' : ''}${a.held && !off ? ' held' : ''}">${a.held && !off ? '<span class="hold">hold</span>' : ''}<kbd>${key}</kbd><span>${esc(a.verb || a.why)}</span></span>`;
+}
+// fb5 E (the round's rule 3: "show only what's missing, as one short line or a chip"): the first missing thing of a
+// greyed verb, as a chip: "🪵 ×2", "pole ×2", "water 0.3 L", "both hands are full". Stream B's items.chipOf when it is
+// there (the book's menu and the cards read the same), else the same reading here: the first need not done (its own
+// `chip` verbatim; a quantity's shortfall, a timer's time left, a step's words up to the first ':' or ','), else the
+// why trimmed the same way.
+const CHIP_MAX = 34;
+const trimWords = (s) => { const t = String(s || '').split(/[:,;(]/)[0].trim().replace(/[.\s]+$/, ''); return /^(F|E|Q|I|M|H|V|Duluth|Johnson)\b/.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1); };
+const countUnit = (u) => !u || /^(pieces?|poles?|logs?|branch(es)?|tablets?|leeches?|servings?)$/.test(u);
+export function chipOf(needs, why = '') {
+  if (typeof ITEMS.chipOf === 'function') { try { const c = ITEMS.chipOf(needs, why); if (typeof c === 'string') return c; } catch (e) { /* the reading below */ } }
+  const list = Array.isArray(needs) ? needs : [];
+  const n = list.find((q) => q && q.done !== true && !(Number.isFinite(q.have) && Number.isFinite(q.need) && q.have >= q.need - 1e-9));
+  if (n) {
+    if (typeof n.chip === 'string') return n.chip;
+    const label = trimWords(n.label);
+    if (Number.isFinite(n.timer) && n.timer > 0) return `${label} ${typeof ITEMS.timerWords === 'function' ? ITEMS.timerWords(n.timer) : `${Math.ceil(n.timer / 60)} min`}`;
+    if (Number.isFinite(n.have) && Number.isFinite(n.need)) {
+      const left = Math.round((n.need - n.have) * 10) / 10;
+      return countUnit(n.unit) ? `${label} ×${left}` : `${label} ${left} ${n.unit}`;
+    }
+    if (label) return label;
+  }
+  return why ? trimWords(why) : '';
+}
+// a provider's old `hint` on the label, kept only when it is a few words of state ("used today", "2 in reach"), never an
+// explanation (a clause after ':' or ',', a list after '·') or a rate (the owner: no percentages on the screen)
+function briefHint(h) {
+  const t = String(h || '').split(' · ')[0].trim();
+  return t && t.length <= 26 && !/[:,%]/.test(t) ? t : '';
 }
 // a prompt line without its E (player.js say: "info &nbsp;·&nbsp; <kbd>E</kbd>Do this &nbsp; <kbd>Q</kbd>Do that"), or
 // without its Q (stripKey: the dot's label has the key, so the line at the bottom loses it)
@@ -250,9 +283,13 @@ class Pointer {
       if (!a) { if (e) inp.once.delete('KeyE'); return; }
       inp.once.delete(key);
       if (a.why) {
-        // (fb4 A, decision 2: the reason and the one thing to do next)
+        // (fb4 A, decision 2: the reason; fb5 E: its next step is taught once, the first time the key is pressed on it,
+        // as a moment (hints.js next), and after that the why alone)
         const why = String(a.why).replace(/^./, (c) => c.toUpperCase()); // (fb4 join: the label's lower-case why starts a sentence here)
-        if (this.hud) this.hud.note(a.next ? `${why.replace(/[.:]\s*$/, '')}. ${a.next}${/[.!?]$/.test(a.next) ? '' : '.'}` : why, a.next ? 5 : 3);
+        // (a verb whose key opens a paper, the canoe's "Unload it first" opening the book at the canoe, keeps its line
+        // over the paper it opens)
+        const taught = a.next && typeof this.teach === 'function' ? this.teach(`${t.kind}:${a.verb || a.why}`, a.next, { card: typeof a.help === 'function' }) : false;
+        if (!taught && this.hud) this.hud.note(`${why.replace(/[.:]\s*$/, '')}.`, 3);
         if (typeof a.help === 'function') { try { a.help({ key, from: 'dot' }); } catch (err) { console.warn('pointer help', err); } }
         return;
       }
@@ -352,13 +389,32 @@ class Pointer {
     const t = on ? this.target : null, e = t && t.e, q = t && t.q;
     el.classList.toggle('on', !!t);
     el.classList.toggle('off', !!(t && e && e.why && !(q && !q.why)));
+    const chip = t ? this.chipFor(t) : '';
     const part = (a) => (a ? `${a.verb}|${a.why || ''}|${a.held ? 1 : 0}` : '');
-    const sig = t ? `${part(e)}|${part(q)}|${t.label}|${t.hint || ''}` : '';
+    const sig = t ? `${part(e)}|${part(q)}|${t.label}|${chip}` : '';
     if (sig === this.sig) return;
     this.sig = sig;
     if (!t) { this.lab.innerHTML = ''; return; }
-    // both keys, always, then the thing: "E Pick up · Q Open it · the Duluth pack"
-    this.lab.innerHTML = `${actHtml('E', e)}${actHtml('Q', q)}${t.label ? `<span class="what">· ${esc(t.label)}</span>` : ''}${t.hint ? `<span class="what">· ${esc(t.hint)}</span>` : ''}`;
+    // both keys, always, then the thing, then at most one chip of what is missing: "E Pick up · Q Open it · the Duluth
+    // pack", "E Pick up · a dead branch · your hands are full", "E Fire ring · 🪵 ×2 more"
+    this.lab.innerHTML = `${actHtml('E', e)}${actHtml('Q', q)}${t.label ? `<span class="what">· ${esc(t.label)}</span>` : ''}${chip ? `<span class="chip">${esc(chip)}</span>` : ''}`;
+  }
+  // fb5 E: the one chip on the label: the target's own (stream A's fire ring: "Gather wood", "🪵 ×2 more"), else what the
+  // greyed verb is missing (E's before Q's), else a few words of state from an older provider's hint; '' for nothing
+  chipFor(t) {
+    if (typeof t.chip === 'string') return t.chip.length <= CHIP_MAX ? t.chip : trimWords(t.chip);
+    const a = t.e && t.e.why ? t.e : t.q && t.q.why ? t.q : null;
+    if (a) {
+      // a count or a time from the needs ("pole ×2", "treating 28 min"); else the why when it is a short phrase
+      // ("unload it first", "the bottle is full"); else the need's own words
+      const n = (Array.isArray(a.needs) ? a.needs : []).find((q) => q && q.done !== true);
+      const counted = n && (typeof n.chip === 'string' || (Number.isFinite(n.timer) && n.timer > 0) || (Number.isFinite(n.need) && countUnit(n.unit) && n.need > 1));
+      const why = trimWords(a.why);
+      let c = !counted && why.length <= 22 ? why : chipOf(a.needs, a.why);
+      if (c.length > CHIP_MAX) c = why;
+      return c.length > CHIP_MAX ? '' : c;
+    }
+    return briefHint(t.hint);
   }
   // the rim on the thing pointed at: its own mesh's geometry where it has one, else the shape it gave, else a box
   drawRim() {

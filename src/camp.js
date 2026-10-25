@@ -402,29 +402,10 @@ export class Camp {
     } else if (!this.wet) this.dry = 0;
   }
 
-  // an hour before sunset on an Adventure under way (not at an outfitter's: polish B, it nagged at the door before the
-  // trip): the nearest free site your map shows (on a sheet you own: sheets.js), never one off it; once dark: the headlamp
-  notes() {
-    const d = this.day, p = this.player, { set } = d.sunriseSunset;
-    const stamp = d.year * 1000 + d.doy, evening = d.hours >= 12 ? stamp : stamp - 1;
-    const out = this.adventure && this.trip.active && !(this.outfitter && this.outfitter.visit);
-    if (out && !this.camp && set != null && d.hours >= set - 1 && d.hours < set && this.nudged !== stamp && !this.atSite) {
-      this.nudged = stamp;
-      const n = this.registry.nearestFree(p.x, p.z, 6000, (c) => sheets.showsDetail(c.x, c.z));
-      if (n) {
-        const dx = n.site.x - p.x, dz = n.site.z - p.z, deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
-        const far = n.d < 1000 ? `${Math.max(50, Math.round(n.d / 50) * 50)} m` : `${(n.d / 1000).toFixed(1)} km`;
-        const id = p.nearWater ? p.nearWater(n.site.x, n.site.z, 8) : 0, lake = id ? this.world.lakeName(id) : null;
-        this.note(`An hour of light left. The nearest free campsite is ${far} ${compassLong(deg)}${lake ? `, on ${lake}` : ''}.`, 9);
-      } else this.note('An hour of light left, and no free campsite on your map near here. Find one before dark.', 9);
-    }
-    // (not under the store's lamp: the word waits until you step back out of the door)
-    const indoors = !!(this.outfitter && this.outfitter.visit && this.outfitter.visit.inside);
-    if (this.lamp && !this.lamp.on && this.dark && !indoors && this.lampHinted !== evening) {
-      this.lampHinted = evening;
-      this.note('Dark now. H for the headlamp.', 6);
-    }
-  }
+  // fb5 E: the evening's words ("an hour of light left", the nearest free site) and the headlamp's at dark are the
+  // teaching moments now (hints.js: 'evening' two hours before sunset, 'dusk' at 45 min, 'lamp' once it is dark), the
+  // full line the first time and a short one after; nothing is said here
+  notes() {}
 
   // --- prompts --------------------------------------------------------------------------------------------------
   // fb2 A: nothing at camp is done on E (E is the pointer's: pick up, talk, open, get in; the jobs are the book's,

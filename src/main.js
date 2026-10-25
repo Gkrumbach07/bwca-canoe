@@ -590,6 +590,17 @@ async function main() {
   const talkUpdD = talk.update.bind(talk);
   talk.update = (dt, shell) => { talkUpdD(dt, shell); hints.update(dt, shell); };
   window.__game.hints = hints;
+  // fb5 E: teaching moments (the owner's third round of 2026-10-25: "how do they even know to get to a campsite? … These
+  // like one-time things … you're starting to get hungry … the fire went out, but there's still hot coals … It's learned
+  // behavior"). hints.js is the moments system: each situation is taught the first time it matters, in one line with its
+  // key, then in a word or not at all, one line on the screen at a time, kept in the season. The camp's evening and
+  // headlamp words (camp.notes) and the bar's need words (energy.cue) are moments now; a greyed verb's next step is taught
+  // the first time its key is pressed (pointer.teach), its why after; the dot's line is the verb, the target and one
+  // missing chip (pointer.js chipFor); the fire's events (stream A's fires.on) and the tarp's red ghost (stream D's
+  // tarp.on) are read when they are there; the pace toast speaks stream C's plain names (pace.describe).
+  hints.attach({ energy, weather, trip, fires, cards, packs, nearby, world, tarp });
+  energy.onCue = (id) => hints.handles(id);
+  pointer.teach = (id, text, o) => hints.next(id, text, o);
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
