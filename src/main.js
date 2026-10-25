@@ -37,6 +37,7 @@ import { Journal } from './journal.js';
 import { TripStats } from './trip-stats.js';
 import { lookboard } from './lookboard.js';
 import { Trip } from './trip.js'; // trip core A
+import { PACES, SPEEDS, clockOf, speedOfKey, describe as describePace } from './pace.js'; // fb5 C
 import { Veil } from './veil.js'; // trip core A
 import { Camp, CampRegistry } from './camp.js'; // trip core C
 import { Fires } from './fire.js'; // trip core C
@@ -235,7 +236,7 @@ async function main() {
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
-    if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-7 pick lures while the rod is up
+    if (!fishing.rodUp) { const sp = speedOfKey(e.code); if (sp) player.timeScale = sp.factor; } // fb5 C: 1 2 3 Normal, Faster, Fastest (pace.js SPEEDS: 1, 2, 4 on dt); 1-7 pick lures while the rod is up
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
   // trip core B: the packs and the portages (packs.js): where each pack is, the load you carry, the double portage
@@ -449,11 +450,17 @@ async function main() {
   // on the hull shoulders it); E Get in only where the hull floats, else "Push it off first"; Q on a loaded hull reads
   // "Unload it first" and opens the book with the canoe on the right (journal.openHere('canoe'), stream C's ref); the
   // dot's rim parks when the dot goes off (pointer.js); on foot off a trail, outside a camp and a yard, the walker is
-  // time-lapsed like the trail (pace.js foot, 1.8 at Trip) and the clock follows him (trip.travelling reads the walker's
-  // lapsing, below); sitting keeps the camera's distance (camera.js); the headlamp works by day (headlamp.js).
+  // time-lapsed like the trail (pace.js foot, 1.8 at Trip); sitting keeps the camera's distance (camera.js); the
+  // headlamp works by day (headlamp.js).
   packs.openCanoe = () => (typeof journal.openHere === 'function' ? journal.openHere('canoe') : false);
-  const travellingA = trip.travelling.bind(trip);
-  trip.travelling = (dt) => { const r = travellingA(dt); if (!r && player.mode === 'walk' && player.lapsing && Math.abs(player.speed) > 0.1) { trip.travelT = 1; return true; } return r; };
+  // fb5 C: one clock (decision 3 of the owner's third round of 2026-10-25). The game clock runs at one rate everywhere
+  // at a pace (pace.js clockOf: Trip 4, Real 1, the camera's hold 1), times the 1/2/3 key's factor (Normal, Faster,
+  // Fastest: 1, 2, 4 on dt, bound above through pace.js SPEEDS): on the water, on a trail, on foot, in camp, idle and in a
+  // store alike (trip.update sets day.rate; no ×12 idle, no ×3 trail). The canoe's and the walker's time-lapse
+  // (player.boost) is only how they are seen to move. The walker's lapsing counts as travelling inside trip.travelling
+  // now (fb3 A's wrapper here is folded into it). The user sees no multipliers: describe() gives the toast (hints.js,
+  // stream E) and the corner mark (hud.js) their words; Settings and the keys' help say it the same way.
+  window.__game.pace = { PACES, SPEEDS, clockOf, describe: describePace };
   // fb4 A: the shore and the figure (the owner's second round of 2026-10-25). A hull nosed in or lying on the bank is
   // beached: E is held, "Push it off" (packs.js beginPush: you walk it out until both ends float and stand beside it in
   // the shallows; a tap moves nothing); afloat, E "Get in" puts you in it where it floats and as it faces (player.launch
