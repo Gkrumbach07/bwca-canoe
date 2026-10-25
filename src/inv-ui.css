@@ -1,4 +1,4 @@
-/* The inventory's face (inv-ui.js): the book J opens (a leather cover, the journal's paper spread on one side and a
+/* The inventory's face (inv-ui.js): the book I opens (a leather cover, the journal's paper spread on one side and a
    canvas mat with the Tarkov grids on the other), the grids themselves, and the store's two-pane shelves (yours on
    a canvas mat on the left, the shelf, the pegboard or the map table on the right). The game's palette: cream paper
    and ink, gold, moss, map red; olive canvas, dark wells for the grids, oiled leather straps, brass. */
@@ -54,18 +54,16 @@
 .pk-foot kbd, .pk-mat kbd { border-color: var(--cream-50) !important; color: var(--cream-86); }
 
 /* --- wc B: your stuff on one screen (MineSide): the body on the left, a tab per container across the top; in the book,
-   Here as the right pane (what you are facing: the ground within reach, the canoe beside you, the outfitters' keeping) */
+   fb4 B: what is around you as the right pane, tabs too (the canoe, each container on the ground, Wood, The ground,
+   Keeping), in the ground's cord where yours are leather */
 .mine { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: var(--body-col, 262px) minmax(0, 1fr); gap: 20px; }
 /* fb3 C (20): the tab column is as wide as the grid it shows (a #4 pack is seven cells), Here takes the rest, so no
    grid is ever cut and nothing scrolls sideways at 1280 or 1440 */
 .mine.with-here { grid-template-columns: var(--body-col, 262px) minmax(304px, max-content) minmax(0, 1fr); }
 .mn-here { min-height: 0; min-width: 0; display: flex; flex-direction: column; border-left: 1.5px dashed rgba(243, 236, 221, .28); padding-left: 18px; }
-.here-head { flex: none; display: flex; align-items: baseline; gap: 10px; min-height: 44px; box-sizing: border-box; padding: 0 2px 7px; border-bottom: 2px solid var(--leather-deep); align-items: flex-end; }
-.here-head b { font: 700 12px/1.2 var(--sc); letter-spacing: .14em; color: var(--cream); background: #4d5a3a; padding: 6px 14px 7px; border-radius: 6px 6px 0 0; border: 1.5px solid var(--leather-deep); border-bottom: none; box-shadow: inset 0 0 0 2px #4d5a3a, inset 0 0 0 3px rgba(201, 162, 74, .38); margin-bottom: -7px; }
-.here-head i { font: italic 12.5px/1.2 var(--serif); color: var(--cream-72); padding-bottom: 1px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.here-body { flex: 1 1 auto; min-height: 0; overflow: hidden auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .3) transparent; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; padding: 14px 8px 8px 10px; }
-.here-body .pk-zone { align-self: stretch; }
-.here-body > .pk-empty { padding: 8px 10px; }
+.mn-here .tabpage { padding-left: 10px; }
+.mn-tabs .tabpage > .pk-empty { max-width: 290px; } /* (an empty left keeps the tab column narrow, so the right has the room) */
+.ctabs-none { align-self: center; padding: 0 4px 9px; font: italic 14.5px/1.2 var(--serif); color: var(--cream-72); }
 .mn-body { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 4px; overflow: hidden; }
 .mn-pockets { display: flex; flex-direction: column; gap: 4px; }
 .mn-pockets .ig { border-radius: 3px; border-color: var(--leather); }
@@ -78,19 +76,26 @@
 .ctab:hover { color: var(--cream); filter: brightness(1.12); }
 .ctab.on { transform: none; color: var(--cream); background: var(--leather); box-shadow: inset 0 0 0 2px var(--leather), inset 0 0 0 3px rgba(201, 162, 74, .38), 0 2px 0 var(--leather); }
 .ctab.on i { color: var(--cream-86); }
-.ctab.k-keeping { background: #4a4030; margin-left: 10px; }
+.ctab.k-keeping { background: #4a4030; }
 .ctab.k-keeping.on { background: #5d5038; box-shadow: inset 0 0 0 2px #5d5038, inset 0 0 0 3px rgba(201, 162, 74, .38), 0 2px 0 #5d5038; }
-/* fb3 C (13): what is in reach at the fire, a tab each after yours, in the ground's cord rather than your leather */
-.ctab.k-ground, .ctab.k-pieces { background: #4f4a38; }
-.ctab.k-cont + .ctab.k-ground, .ctab.k-cont + .ctab.k-pieces { margin-left: 10px; }
-.ctab.k-ground.on, .ctab.k-pieces.on { background: #6b5a40; box-shadow: inset 0 0 0 2px #6b5a40, inset 0 0 0 3px rgba(243, 236, 221, .26), 0 2px 0 #6b5a40; }
+/* fb3 C (13), fb4 B (decision 1): what is around you, a tab each (the book's right, after yours on a card or a shelf),
+   in the ground's cord rather than your leather; The canoe in the blue-grey of its strap */
+.ctab.k-around { background: #4f4a38; }
+.ctab.k-cont + .ctab.k-around { margin-left: 10px; }
+.ctab.k-around.on { background: #6b5a40; box-shadow: inset 0 0 0 2px #6b5a40, inset 0 0 0 3px rgba(243, 236, 221, .26), 0 2px 0 #6b5a40; }
+.ctab.k-canoe { background: #354a53; }
+.ctab.k-canoe.on { background: #3c5560; box-shadow: inset 0 0 0 2px #3c5560, inset 0 0 0 3px rgba(201, 162, 74, .3), 0 2px 0 #3c5560; }
+.ctab.lit { animation: ct-lit 1.4s ease-out; }
+/* fb4 B (decision 2): a container's or a long thing's state on its strap */
+.ct-st { flex: none; align-self: center; font: 700 9.5px/1 var(--sc); letter-spacing: .08em; padding: 2px 5px 3px; border-radius: 2px; background: var(--st, var(--gold)); color: var(--st-ink, var(--ink)); }
+.lg .ct-st { position: absolute; left: 6px; bottom: 4px; }
 .dragging-item .ctab, .dragging-thing .ctab { box-shadow: inset 0 0 0 1.5px rgba(220, 180, 105, .35); }
 .ctab.dz-ok, .ctab.dz-buy { background: rgba(143, 191, 122, .35) !important; color: var(--cream); box-shadow: inset 0 0 0 2px var(--moss) !important; }
 .ctab.dz-no { background: rgba(180, 50, 31, .3) !important; box-shadow: inset 0 0 0 2px rgba(217, 102, 63, .8) !important; }
 .tabpage { flex: 1 1 auto; min-height: 0; overflow: hidden auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .3) transparent; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; padding: 14px 8px 8px 2px; }
 .tabpage.tp-cont { overflow: hidden auto; } /* (fb3 C: a grid taller than the page, the #4 pack at 720 px, scrolls down, never sideways) */
 .tabpage > .ct { max-width: 100%; }
-.tabpage .pk-zone { align-self: stretch; }
+.tabpage .pk-zone { align-self: stretch; margin-left: -6px; margin-right: 0; }
 .canoe-acts { margin-top: 4px; }
 
 /* the slots: what you wear and hold */
@@ -139,9 +144,10 @@
 /* a hand holds a container (its grid is its tab) or a long thing's frame, under its label */
 .slot.hand > .lg { align-self: flex-start; max-width: 100%; }
 .slot.hand, .slot.big { border-radius: 5px; padding: 3px; margin: -3px; transition: background .12s, box-shadow .12s; }
-/* the ghost off the page: a tag under it says where it goes */
-.ig-ghost-tag { position: absolute; left: 50%; bottom: -24px; translate: -50% 0; display: none; white-space: nowrap; font: 700 10.5px/1 var(--sc); letter-spacing: .12em; color: var(--cream); background: rgba(42, 41, 31, .9); padding: 4px 8px; border-radius: 3px; border: 1px solid rgba(220, 180, 105, .5); }
-.ig-ghost.off .ig-ghost-tag, .ig-ghost.off-no .ig-ghost-tag { display: block; }
+/* the ghost's own hint, under it: where it goes off the page, and R while it can turn (fb4 B: "turns to fit") */
+.ig-ghost-tag { position: absolute; left: 50%; bottom: -26px; translate: -50% 0; display: none; white-space: nowrap; font: 700 10.5px/1 var(--sc); letter-spacing: .12em; color: var(--cream); background: rgba(42, 41, 31, .92); padding: 4px 8px; border-radius: 3px; border: 1px solid rgba(220, 180, 105, .5); }
+.ig-ghost-tag kbd { font-size: 9.5px; padding: 0 4px; margin: 0 1px; border-color: var(--cream-50); color: var(--cream); }
+.ig-ghost.off .ig-ghost-tag, .ig-ghost.off-no .ig-ghost-tag, .ig-ghost.hinted .ig-ghost-tag { display: block; }
 .ig-ghost.off { border-color: var(--moss); box-shadow: 0 10px 26px rgba(0, 0, 0, .5), 0 0 0 2px rgba(143, 191, 122, .7); }
 .ig-ghost.off-no { border-color: #d9663f; box-shadow: 0 10px 26px rgba(0, 0, 0, .5), 0 0 0 2px rgba(217, 102, 63, .6); }
 .ig-ghost.off-no .ig-ghost-tag { border-color: rgba(217, 102, 63, .7); }
@@ -242,6 +248,18 @@
 .ig-mark.eat { background: var(--moss); color: #1d2a14; }
 .ig-mark.cook { background: #c9874a; color: #2a1608; }
 .ig-mark.open { background: var(--gold); color: var(--ink); }
+/* fb4 B (decision 2): an entry's state on its icon (stream C's inventory.status mark) */
+.ig-mark.st { letter-spacing: .06em; box-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+.st-wet { --st: #5d8fb0; --st-ink: #0f2230; }
+.st-drying { --st: #c9a24a; --st-ink: #2a1c06; }
+.st-treating { --st: #9fc4d8; --st-ink: #10303e; }
+.st-cooking, .st-hot { --st: #d9663f; --st-ink: #2a0e04; }
+.st-burning { --st: #e0873a; --st-ink: #2a1004; }
+.st-low { --st: #dcb469; --st-ink: #2a1c06; }
+.st-empty { --st: #8e959b; --st-ink: #1c1f22; }
+.st-ready { --st: #8fbf7a; --st-ink: #16240e; }
+.ig-mark.st { background: var(--st, var(--gold)); color: var(--st-ink, var(--ink)); }
+.ig-mark.st.dot { left: 4px; bottom: 4px; width: 10px; height: 10px; padding: 0; border-radius: 50%; font-size: 0; box-shadow: 0 0 0 1.5px rgba(20, 16, 10, .75), 0 1px 3px rgba(0, 0, 0, .6); }
 /* fb3 C (decision 9, stream B's numbers): what is left of a thing's uses, servings or litres, a thin bar along its foot
    (a paler end for the litres under a tablet); a fixed entry (the bottle in the pockets) is not dragged */
 .ig-bar { position: absolute; left: 3px; right: 3px; bottom: 2px; height: 3px; border-radius: 1px; background: rgba(0, 0, 0, .5); overflow: hidden; pointer-events: none; }
@@ -262,7 +280,8 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 .ig-menu button { appearance: none; text-align: left; background: none; border: none; padding: 7px 12px; font: 15px/1.2 var(--serif); color: var(--ink); cursor: pointer; border-radius: 2px; }
 .ig-menu button:hover:not(:disabled) { background: var(--paper-deep); }
 .ig-menu button:disabled { color: var(--ink-faint); cursor: default; font-style: italic; }
-.ig-menu button .why { display: block; max-width: 260px; margin-top: 2px; font: italic 13px/1.25 var(--serif); color: var(--ink-soft, var(--ink-faint)); white-space: normal; }
+.ig-menu button .why { display: block; max-width: 300px; margin-top: 2px; font: italic 13px/1.25 var(--serif); color: var(--ink-soft, var(--ink-faint)); white-space: normal; }
+.ig-menu { max-width: 340px; }
 .ig-tip { position: fixed; z-index: 35; max-width: 300px; display: flex; flex-direction: column; gap: 4px; padding: 10px 13px 11px; background: var(--paper-note); border: 1.5px solid #8a7250; border-radius: 3px; box-shadow: 0 10px 28px rgba(0, 0, 0, .45); color: var(--ink); pointer-events: none; }
 .ig-tip b { font: 600 16px/1.2 var(--serif); }
 .ig-tip .k { font: 700 10.5px/1.3 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }
@@ -272,6 +291,38 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 .ig-tip .st { display: flex; flex-direction: column; gap: 3px; margin: 5px 0 2px; padding: 6px 0 0; border-top: 1px dashed rgba(138, 114, 80, .5); font: 13.5px/1.3 var(--serif); }
 .ig-tip .st b { font: 600 13.5px/1.3 var(--serif); }
 .ig-tip .st i { color: var(--ink-soft); font-size: 12.5px; }
+/* fb4 B (decision 2): its state under its name, the countdown beside it, the next step under */
+.ig-tip .stt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 1px 0 1px; padding: 4px 8px 5px; border-left: 3px solid var(--st, var(--gold)); background: rgba(138, 114, 80, .1); border-radius: 0 3px 3px 0; }
+.ig-tip .stt b { font: 700 11.5px/1.3 var(--sc); letter-spacing: .12em; }
+.ig-tip .stt .tmr { font: 600 13.5px/1.3 var(--sans); font-variant-numeric: tabular-nums; }
+.ig-tip .stt .nx { flex-basis: 100%; font: italic 14px/1.35 var(--serif); color: var(--ink-soft); }
+
+/* --- fb4 B: the checklists (decision 2): a greyed verb's in the right-click menu, a card button's, the fire's state ---- */
+.needs { display: flex; flex-direction: column; gap: 4px; --nd-ink: var(--cream-86); --nd-soft: var(--cream-65); --nd-box: rgba(243, 236, 221, .55); --nd-well: rgba(0, 0, 0, .35); }
+.needs ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.needs li { display: flex; align-items: baseline; gap: 7px; font: 14px/1.3 var(--serif); color: var(--nd-ink); }
+.needs li .l { flex: 1 1 auto; min-width: 0; }
+.needs li .l em { color: var(--nd-soft); font-size: 13px; }
+.needs li .v, .needs li .tmr { flex: none; font: 600 13px/1.3 var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.needs li .tmr.run { color: var(--gold); }
+.needs .tk { flex: none; position: relative; top: 1px; width: 11px; height: 11px; box-sizing: border-box; border: 1.5px solid var(--nd-box); border-radius: 2px; }
+.needs li.ok .tk { background: var(--moss); border-color: var(--moss); }
+.needs li.ok .tk::after { content: ''; position: absolute; left: 2.5px; top: -1px; width: 3px; height: 7px; border: solid #f3ecdd; border-width: 0 1.8px 1.8px 0; rotate: 40deg; }
+.needs li.ok .l { color: var(--nd-soft); }
+.needs li.nd-t .tk { border-radius: 50%; }
+.needs li.nd-t .tk::before { content: ''; position: absolute; left: 3.5px; top: 1px; width: 1.5px; height: 4px; background: var(--nd-box); box-shadow: 1.5px 3px 0 -0.2px var(--nd-box); }
+.needs li.nd-t.ok .tk::before { display: none; }
+.needs .qb { flex: none; align-self: center; position: relative; width: 38px; height: 5px; border-radius: 3px; background: var(--nd-well); overflow: hidden; }
+.needs .qb i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--gold); border-radius: 3px; }
+.needs li.ok .qb i { background: var(--moss); }
+.needs .next { margin: 1px 0 0; font: italic 14.5px/1.35 var(--serif); color: var(--nd-ink); }
+.needs .next::before { content: '→ '; font-style: normal; color: var(--gold); }
+/* on paper: the menu */
+.ig-menu .ig-needs { padding: 0 12px 8px 22px; margin-top: -3px; }
+.ig-menu .needs { --nd-ink: var(--ink); --nd-soft: var(--ink-faint); --nd-box: rgba(60, 44, 24, .55); --nd-well: rgba(60, 44, 24, .18); max-width: 300px; }
+.ig-menu .needs li .tmr.run { color: #8a5a12; }
+.ig-menu .needs .next::before { color: var(--map-red); }
+.ig-menu .needs .qb i { background: #b78a2e; }
 
 /* --- the shelves ------------------------------------------------------------------------------------------------------ */
 #shelf { left: 50%; top: 50%; translate: -50% -50%; width: min(1320px, 95vw); height: min(830px, 93vh); padding: 26px 30px 16px; display: flex; flex-direction: column; gap: 16px; }
@@ -333,4 +384,15 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 #card .cd-thing .nb-body { gap: 14px; padding: 14px 16px 16px; }
 #card .cd-thing .nb.k-fire .nb-slots { gap: 12px 18px; }
 #card .cd-thing .nb-doing { color: var(--cream-86); }
+/* fb4 B (decision 2): the fire's state (an hour's burn, the timers, the wet wood), a greyed button's checklist */
+.nb-head .nb-st { margin-left: auto; flex: none; font: 700 10px/1 var(--sc); letter-spacing: .1em; padding: 3px 6px 4px; border-radius: 3px; background: var(--st, var(--gold)); color: var(--st-ink, var(--ink)); }
+.st-laid, .st-cold, .st-coals { --st: #b9b2a0; --st-ink: #2a2620; }
+.nb-state { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 9px; border-radius: 4px; background: rgba(0, 0, 0, .18); box-shadow: inset 0 0 0 1px rgba(243, 236, 221, .1); }
+.nb-state .stt, .nb-needs .stt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 3px 8px 4px; border-left: 3px solid var(--st, var(--gold)); background: rgba(93, 143, 176, .12); }
+.nb-state .stt b { font: 700 11px/1.3 var(--sc); letter-spacing: .12em; color: var(--cream); }
+.nb-state .stt .tmr { font: 600 13px/1.3 var(--sans); color: var(--gold); font-variant-numeric: tabular-nums; }
+.nb-state .stt .nx { flex-basis: 100%; font: italic 14px/1.3 var(--serif); color: var(--cream-86); }
+.nb-needs { display: flex; flex-direction: column; gap: 4px; padding: 7px 10px 8px; border-radius: 4px; border: 1.5px dashed rgba(243, 236, 221, .22); }
+.nb-needs .nb-lab i { font-size: 13.5px; }
+.nb-meter .tmr { font: 600 13px/1.2 var(--sans); color: var(--gold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #card .sh-foot { flex: none; font: 700 10.5px/1.4 var(--sc); letter-spacing: .12em; color: var(--ink-faint); border-top: 1px solid var(--edge); padding-top: 8px; display: flex; justify-content: space-between; gap: 18px; }
