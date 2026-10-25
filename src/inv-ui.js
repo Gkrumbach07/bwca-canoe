@@ -1721,7 +1721,6 @@ export function firePanel(o, sc) {
   const meter = (k, m, lab) => mk('div', `nb-meter m-${k}`, `<span class="lab">${esc(m.label || lab)}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`);
   if (o.meter) body.appendChild(meter('burn', o.meter, ''));
   body.appendChild(o.cooking ? meter('cook', o.cooking, 'Cooking') : mk('div', 'nb-meter m-cook none'));
-  if (o.cooking && Number.isFinite(o.cooking.timer)) { const m = body.querySelector('.nb-meter.m-cook'); if (m) m.insertAdjacentHTML('beforeend', timerHtml(o.cooking)); }
   // fb4 B (decision 2, stream C's fire): the fuel as a quantity out of what a fire wants (an hour's burn), the wet wood
   // as a state with its drying step, the burn-down, the cooking and the lighting as timers, and what to do next
   const state = fireState(o);
@@ -1763,7 +1762,8 @@ function fireState(o) {
   // (the wet wood once: when a greyed button's checklist already has its "Wet" step, not again here)
   const wetListed = (o.actions || []).some((a) => a && a.enabled === false && Array.isArray(a.needs) && a.needs.some((n) => n && /^wet\b/i.test(String(n.label || ''))));
   const wet = !wetListed && o.wet && (o.wet.pieces || o.wet.timer) ? statusHtml({ label: `Wet wood${o.wet.pieces ? ` · ${o.wet.pieces} ${o.wet.pieces === 1 ? 'piece' : 'pieces'}` : ''}`, mark: 'wet', timer: o.wet.timer, running: o.wet.running, next: o.wet.next }) : '';
-  const next = o.status && o.status.next ? o.status.next : '';
+  const said = new Set((o.actions || []).filter((a) => a && a.enabled === false && a.next).map((a) => a.next)); // (a step a button's list says already)
+  const next = o.status && o.status.next && !said.has(o.status.next) ? o.status.next : '';
   return rows.length || wet || next ? `${needsHtml(rows, next)}${wet}` : '';
 }
 const fireSig = (o) => [o.status ? `${o.status.label}${o.status.mark}${o.status.next || ''}` : '', o.fuel && o.fuel.hour ? num(Math.round((+o.fuel.hour.have || 0) * 10) / 10) : '', o.wet ? `${o.wet.pieces}${o.wet.running}${o.wet.next || ''}` : '',
