@@ -614,7 +614,7 @@ async function main() {
   // pack), camp (the filter at the water's edge); the stove, a cup, the knife and the chair are verbs in the book.
   // uniques.js lays the five finds out at real places with forage's glint, E on the dot picks one up; stream B's keepers
   // give the other three (uniques.give, or profile.give).
-  kit.attach({ player, inventory, energy, fishing, camp, fires, day, weather, wind, hud, profile, lamp, shop, world, uniques, canoe });
+  kit.attach({ player, inventory, energy, fishing, camp, fires, day, weather, wind, hud, profile, lamp, shop, world, uniques, canoe, scene });
   energy.kit = kit; fishing.kit = kit; trip.kit = kit; shop.kit = kit;
   uniques.attach({ world, scene, player, inventory, profile, hud, camp, day, pointer, audio });
   const shopUpdC = shop.update.bind(shop);

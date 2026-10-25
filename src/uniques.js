@@ -183,7 +183,7 @@ export class Uniques {
     this.glintT += dt;
     const k = (this.glintT % 2.6) / 2.6, a = k < 0.22 ? Math.sin((k / 0.22) * Math.PI) : 0;
     gl.position.set(s.x + 0.05, s.y + 0.14, s.z - 0.04);
-    gl.material.opacity = a; gl.scale.setScalar(0.18 + 0.3 * a);
+    gl.material.opacity = a; gl.scale.setScalar(0.14 + 0.2 * a);
     gl.visible = a > 0.01;
   }
 

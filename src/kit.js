@@ -23,7 +23,9 @@ import { LAMP } from './headlamp.js';
 import { FIRE_KIT } from './fire.js';
 import { COOK } from './cook.js';
 import { PADDLE_LOOKS, ROD_LOOKS, recolor } from './gear.js';
+import { itemOf } from './shop.js';
 import { clamp, smoothstep } from './rng.js';
+import * as THREE from 'three';
 
 const POLL = 0.4;            // real seconds between looks at what is with you
 // the headlamps (items.js headlamp2, headlamp3): the beam's reach (m), its brightness (× the cap's), travel after dark
@@ -34,7 +36,7 @@ const CAP_LAMP = { distance: 30, power: 1, night: 1.3 };
 const BUG = { drain: 0.02, rest: 0.5, net: 0.35, jacket: 0.1, smoke: 0.5 };
 const BUG_SEASON = [135, 158, 205, 240]; // day of year: they come mid-May, are at their worst June to mid-July, gone by late August
 // the night in the bag (kit.sleepNight): rest and warmth lost per °C the night is colder than the bag is good to
-const NIGHT = { restPer: 0.035, restMax: 0.35, warmPer: 0.05, warmMin: 0.45, dampSynth: 2, dampDown: 6, fourseason: 2, site: 0.08 };
+const NIGHT = { restPer: 0.035, restMax: 0.35, warmPer: 0.05, warmMin: 0.45, dampSynth: 2, dampDown: 6, fourseason: 2, blanket: 3, site: 0.08 };
 const GRAVITY_H = 5 / 60;    // game hours the gravity bag takes to drip a bottle through at the shore
 const BREW_L = 0.25;         // litres a cup takes from the bottle
 const RING_NEAR = 4;         // m: a lit fire this near heats a cup
@@ -51,8 +53,10 @@ Object.assign(COOK, {
 });
 for (const sp of ['walleye', 'pike', 'smallmouth', 'laketrout', 'perch', 'crappie']) COOK[`fillet:${sp}`] = { minutes: 6, water: 0 };
 
-const NETS = (id) => id === 'net' || (itemDef(id) || {}).family === 'net';
-const BUG_JACKETS = (id) => (itemDef(id) || {}).family === 'jacket';
+// a thing's family: its def's, else the shop's (an outfitter's signature item, outfitters.js: a net, a bug jacket, a blanket)
+const familyOf = (id) => (itemDef(id) || {}).family || (itemOf(id) || {}).family || null;
+const NETS = (id) => id === 'net' || familyOf(id) === 'net';
+const BUG_JACKETS = (id) => familyOf(id) === 'jacket';
 const realNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
 const bump = (h, c, w) => Math.exp(-(((h - c) / w) ** 2));
 const no = (why, needs = [], next = '') => ({ enabled: false, why, needs: needs.filter(Boolean), next, run: () => ({ ok: false, words: why }) });
@@ -70,7 +74,12 @@ export class Kit {
     this.filleted = 0;       // fish filleted this session (the moment)
     this.lamp0 = null;
   }
-  attach(o = {}) { Object.assign(this.t, o); if (this.t.lamp && !this.lamp0) this.lamp0 = { intensity: LAMP.intensity, distance: this.t.lamp.light ? this.t.lamp.light.distance : LAMP.distance }; return this; }
+  attach(o = {}) {
+    Object.assign(this.t, o);
+    if (this.t.lamp && !this.lamp0) this.lamp0 = { intensity: LAMP.intensity, distance: this.t.lamp.light ? this.t.lamp.light.distance : LAMP.distance };
+    if (this.t.scene && !this.swarm) this.swarm = new Swarm(this.t.scene);
+    return this;
+  }
   get inv() { const i = this.t.inventory; return i && i.attached ? i : null; }
 
   // --- what is with you ------------------------------------------------------------------------------------------
@@ -95,6 +104,7 @@ export class Kit {
     // the air at bedtime, the moment the night's card goes up (camp.js night)
     const cp = this.t.camp, n = cp && cp.night;
     if (n && !n.kitBed) { n.kitBed = true; const L = this.look(); this.bed = { temp: L ? L.temp : null, h: this.t.day.hours, grey: L ? L.grey || 0 : 0, doy: this.t.day.doy }; }
+    if (this.swarm) { const hb = this.t.canoe && this.t.canoe.figure && this.t.canoe.figure.bones ? this.t.canoe.figure.bones.head : null; if (hb) hb.getWorldPosition(HEAD); this.swarm.update(dt, this.bugLevel, this.t.player, n || (cp && cp.dialOpen), hb ? HEAD : null); }
   }
   look() { const W = this.t.weather || (this.t.day && this.t.day.weather); return W && W.look ? W.look : null; }
   recompute() {
@@ -108,7 +118,7 @@ export class Kit {
     m.snap = this.has('brassreel') ? 1.15 : 1;
     // the bugs and the chair: the bar's drain and its recovery
     const b = this.bugs();
-    m.bugs = b.felt;
+    m.bugs = b.felt; this.bugLevel = b.level;
     m.drain = BUG.drain * b.felt;
     const chair = !!(p && p.seat && p.seat.kind === 'chair' && p.seat.phase === 'seated');
     m.rest = (1 - BUG.rest * b.felt) * (chair ? SIT_BOOST : 1);
@@ -166,10 +176,11 @@ export class Kit {
       if (d.bag && (!bag || d.bag.rating < bag.rating)) bag = d.bag;
       if (Number.isFinite(d.pad)) pad = Math.max(pad, d.pad);
     }
+    const blanket = this.inCamp((id) => familyOf(id) === 'blanket') ? NIGHT.blanket : 0; // an outfitter's wool blanket over the bag
     const restAdd = this.atGuideSite() ? NIGHT.site : 0;
     if (!bag) { this.lastNight = null; return restAdd ? { rest: 1, warmth: null, restAdd, cold: 0 } : null; }
     const pr = this.t.profile, tent = pr && pr.kit ? pr.kit.tent : null;
-    const rating = bag.rating - pad - (tent === 'fourseason' ? NIGHT.fourseason : 0) + (wet ? (bag.down ? NIGHT.dampDown : NIGHT.dampSynth) : 0);
+    const rating = bag.rating - pad - blanket - (tent === 'fourseason' ? NIGHT.fourseason : 0) + (wet ? (bag.down ? NIGHT.dampDown : NIGHT.dampSynth) : 0);
     const low = this.nightLow(), cold = Math.max(0, rating - low);
     const out = { rest: 1 - Math.min(NIGHT.restMax, NIGHT.restPer * cold), warmth: Math.max(NIGHT.warmMin, 1 - NIGHT.warmPer * cold), restAdd, cold: +cold.toFixed(1), low: Math.round(low), rating: Math.round(bag.rating) };
     if (wet && bag.down) out.warmth = Math.min(out.warmth, 0.5); // down damp: half as warm
@@ -377,14 +388,44 @@ export class Kit {
   moments() {
     return [
       { id: 'bugs', prio: 2, recur: 'while', text: 'Mosquitoes. Wind, smoke or a head net keeps them off.', short: 'Bugs.',
-        due: (rec) => { const f = this.mods.bugs; return (rec && rec.ep ? f > 0.22 : f >= 0.4) ? 1 - f : false; } },
+        due: (rec) => { const f = this.mods.bugs, e = this.t.energy; if (!e || !e.live) return false; return (rec && rec.ep ? f > 0.22 : f >= 0.4) ? 1 - f : false; } },
       { id: 'side', prio: 1, recur: 'once', text: 'Big fish thrash at the side. A landing net holds them.',
         due: () => !!(this.lostSide && realNow() - this.lostSide < 25) },
-      { id: 'coldnight', prio: 2, recur: 'once',
-        due: () => { const n = this.lastNight, e = this.t.energy; if (!n || !(n.cold >= 2) || !e || e.now - n.at > 2) return false; return { lv: 1, text: `A cold night: the bag is good to ${n.rating} °C, and it went to ${n.low}.` }; } },
+      { id: 'coldnight', prio: 2, recur: 'once', text: 'A cold night: colder than the bag is good to.',
+        due: () => { const n = this.lastNight, e = this.t.energy; if (!n || !(n.cold >= 2) || !e || e.now - n.at > 2) return false; return { lv: 1, text: `A cold night: the bag is good to ${n.rating} °C, and it went down to ${n.low} °C.` }; } },
       { id: 'remains', prio: 1, recur: 'once', text: 'Fish remains: well back from shore and camp, where bears won’t find them.',
         due: () => this.filleted > 0 },
     ];
+  }
+}
+
+// the mosquitoes themselves (the world shows state first): a few dark specks dancing round your head while the bugs are
+// out, more the thicker they are, whether or not the net keeps them off you. One Points object, in the scene from the
+// start so the shader prewarm compiles it (main.js), hidden while there are none.
+const SWARM_N = 36, HEAD = new THREE.Vector3();
+class Swarm {
+  constructor(scene) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(SWARM_N * 3), 3));
+    this.pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x14120f, size: 0.03, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false }));
+    this.pts.frustumCulled = false; this.pts.visible = false; this.pts.name = 'mosquitoes'; this.pts.renderOrder = 14; // (after the water)
+    this.seed = Array.from({ length: SWARM_N }, (_, i) => [Math.sin(i * 12.9898) * 43758.5453 % 1, Math.sin(i * 78.233) * 12345.678 % 1, Math.sin(i * 39.425) * 24634.6345 % 1]);
+    this.t = 0;
+    scene.add(this.pts);
+  }
+  update(dt, level, p, hide, head = null) {
+    const n = !p || hide || !(level > 0.12) ? 0 : Math.round(SWARM_N * clamp((level - 0.12) / 0.7, 0.15, 1));
+    this.pts.visible = n > 0;
+    if (!n) return;
+    this.t += dt;
+    const g = this.pts.geometry, a = g.getAttribute('position'), cx = head ? head.x : p.x, cz = head ? head.z : p.z;
+    const y0 = head ? head.y + 0.1 : typeof p.groundAt === 'function' ? p.groundAt(p.x, p.z) + 1.55 : 0;
+    for (let i = 0; i < SWARM_N; i++) {
+      if (i >= n) { a.setXYZ(i, cx, -1e4, cz); continue; }
+      const [u, v, w] = this.seed[i], t = this.t * (1.6 + 2.2 * Math.abs(u)), r = 0.25 + 0.45 * Math.abs(v);
+      a.setXYZ(i, cx + r * Math.sin(t + u * 9) + 0.05 * Math.sin(t * 7.3 + v), y0 + 0.35 * Math.sin(t * 0.8 + w * 6) + 0.04 * Math.sin(t * 11 + u), cz + r * Math.cos(t * 1.13 + v * 7));
+    }
+    a.needsUpdate = true;
   }
 }
 
