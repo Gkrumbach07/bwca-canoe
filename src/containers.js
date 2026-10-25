@@ -115,7 +115,7 @@ function mapcaseGeometry() {
 }
 // a rod in its stowed state: the cork grip and the reel at the butt (y 0), the blank up to the tip
 function rodGeometry(look = ROD_COLORS.rod) {
-  const m = new Mesher(), cork = C(COL.cork), blank = C(look.blank), reel = C(look.reel);
+  const m = new Mesher(), cork = C(look.cork ?? COL.cork), blank = C(look.blank), reel = C(look.reel);
   loft(m, [[0, 0.013, blank], [0.02, 0.014, cork], [0.3, 0.012, cork], [0.34, 0.009, blank], [0.8, 0.0065, blank], [1.4, 0.0042, blank], [ROD_LEN, 0.002, blank]].map(([y, r, col]) => ringPts(V(0, y, 0), V(1, 0, 0), V(0, 0, 1), 7, r, { col })), { capStart: true, capEnd: true });
   boxAt(m, V(0.04, 0.36, 0), 0.025, 0.03, 0.022, reel, 3);
   return m.geometry();
@@ -197,24 +197,29 @@ export class ContainerView {
     else if (key === 'tacklebox') g = tackleGeometry();
     else if (key === 'mapcase') g = mapcaseGeometry();
     else if (key.startsWith('rod')) g = rodGeometry(this.rodLook(key.split(':')[1]));
-    else if (key.startsWith('paddle')) g = paddleMesher(PADDLE_LOOKS[key.split(':')[1]] || PADDLE_COLORS).geometry();
+    else if (key.startsWith('paddle')) g = paddleMesher(this.paddleLook(key.split(':')[1])).geometry();
     else if (key === 'setpole') g = poleGeometry();
     else if (key === 'rope') g = ropeGeometry();
     else g = buildPackGeometry('food');
     this.geos.set(key, g);
     return g;
   }
-  // a rod's colours: stream C's ROD_LOOKS in gear.js when it has them ({ blank, reel } by id), else ours
+  // a paddle's colours: stream C's PADDLE_LOOKS in gear.js when it has them (PADDLE_COLORS-shaped, by id), else ours
+  paddleLook(id) {
+    const L = gearKit.PADDLE_LOOKS && id ? gearKit.PADDLE_LOOKS[id] : null;
+    return L && Number.isFinite(L.blade) ? { ...PADDLE_COLORS, ...L } : PADDLE_LOOKS[id] || PADDLE_COLORS;
+  }
+  // a rod's colours: stream C's ROD_LOOKS in gear.js when it has them (ROD_COLORS-shaped: blank, reel, cork, by id), else ours
   rodLook(id) {
     const L = gearKit.ROD_LOOKS && id ? gearKit.ROD_LOOKS[id] : null;
-    if (L && (Number.isFinite(L.blank) || Number.isFinite(L.reel))) return { blank: L.blank ?? COL.rodBlank, reel: L.reel ?? COL.reel };
+    if (L && (Number.isFinite(L.blank) || Number.isFinite(L.reel))) return { blank: L.blank ?? COL.rodBlank, reel: L.reel ?? COL.reel, cork: L.cork ?? COL.cork };
     return ROD_COLORS[id] || ROD_COLORS.rod;
   }
   meshKey(id) {
     const d = itemDef(id); if (!d) return null;
     if (d.kind === 'long') {
       // content D: each long thing by its kind and its look (the paddle's wood, the rod's blank)
-      if (d.long === 'paddle') return `paddle:${PADDLE_LOOKS[id] ? id : d.icon === 'ottertail' ? 'ottertail' : 'ash'}`;
+      if (d.long === 'paddle') return `paddle:${PADDLE_LOOKS[id] || (gearKit.PADDLE_LOOKS && gearKit.PADDLE_LOOKS[id]) ? id : d.icon === 'ottertail' ? 'ottertail' : 'ash'}`;
       if (d.long === 'pole') return 'setpole';
       return `rod:${id}`;
     }
@@ -513,8 +518,11 @@ export class ContainerView {
         const m = modelGeometry(e.id, e.data, { open: true }); if (!m) continue;
         const def = itemDef(e.id) || { w: 1, h: 1 }, fw = e.rot ? def.h : def.w, fh = e.rot ? def.w : def.h;
         this.cellAt(c, e, w);
-        // its long side along the footprint's: across the pile (cols) or along it (rows); a little askew, as things lie
-        const j = hashOf(String(e.uid || e.id)), yaw = hd + (fw > fh ? -Math.PI / 2 : 0) + (j - 0.5) * 0.3;
+        // its long side along the footprint's: across the pile (cols) or along it (rows); a little askew, as things lie.
+        // The chair stands open facing the pile's heading, where stream C's "Sit in it" turns you (alone, at the spot)
+        const chair = m.key === 'chairopen';
+        if (chair && c.grid.length === 1) w.set(at.x, 0, at.z);
+        const j = hashOf(String(e.uid || e.id)), yaw = chair ? hd : hd + (fw > fh ? -Math.PI / 2 : 0) + (j - 0.5) * 0.3;
         const n = e.qty > 1 && !(def.stack >= 12) ? Math.min(3, e.qty) : 1; // (a dozen leeches is one cup)
         for (let k = 0; k < n; k++) {
           const off = (k - (n - 1) / 2) * Math.min(0.06, m.size[2] * m.scale * 1.1), sx = Math.cos(yaw + Math.PI / 2) * off, sz = -Math.sin(yaw + Math.PI / 2) * off;
