@@ -1859,6 +1859,13 @@ function fireChip(q) {
   const text = img ? String(q.text).replace(new RegExp(`^${FP_ICON}\\s*`, 'u'), '') : q.text;
   return `<span class="fp-chip k-${esc(q.kind || 'need')}">${img}<span>${esc(text)}</span></span>`;
 }
+// fb5 join: what is cooking, by its bar (a fish fries on a stick off the grate's grid, which then looked empty: "where did my
+// fish go?"): its icon, a long thing drawn lying down
+function cookIcon(ck) {
+  if (!ck || !ck.item) return '';
+  const d = itemDef(ck.item), long = d && (d.h || 1) > (d.w || 1);
+  return `<img class="ic" alt="" src="${long ? iconUrl(ck.item, 54, 18) : iconUrl(ck.item, 24, 24)}">`;
+}
 // the state line's insides: the chips, the coals, or the burn bar alone
 function fireLine(o) {
   if (o.burn) return `<span class="fp-bar${o.burn.low ? ' low' : ''}" role="meter" aria-label="Wood left" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${(+o.burn.value).toFixed(2)}"><i style="width:${pct(o.burn.value)}"></i></span>`;
@@ -1885,7 +1892,7 @@ export function firePanel(o, sc) {
       if (c) grid(g, c, { onUse: sc.onUse || null, screen: sc });
       else { const b = { ...s, obj: o.id }; grid(g, binContainer(`bin:${o.id}:${s.id}`, b), { bin: b, screen: sc }); }
       sw.appendChild(g);
-      if (s.id === 'grate') sw.appendChild(mk('span', `fp-cook${o.cooking ? '' : ' none'}`, `<i style="width:${pct(o.cooking ? o.cooking.value : 0)}"></i>`));
+      if (s.id === 'grate') sw.appendChild(mk('span', `fp-cook${o.cooking ? '' : ' none'}`, `${cookIcon(o.cooking)}<b><i style="width:${pct(o.cooking ? o.cooking.value : 0)}"></i></b>`));
       row.appendChild(sw);
     }
     body.appendChild(row);
@@ -1910,7 +1917,7 @@ export function livenPanel(el, o) {
   if (ck) { ck.classList.toggle('none', !o.cooking); const i = ck.querySelector('i'); if (i) i.style.width = pct(o.cooking ? o.cooking.value : 0); }
 }
 // the signature of a fire object: what would change its drawing (not the bars' lengths: livenPanel moves those)
-export const panelSig = (o) => [o.id, o.title, o.state || '', (o.need || []).map((q) => `${q.kind}${q.text}`).join(','), o.burn ? 1 : 0, o.coals ? 1 : 0,
+export const panelSig = (o) => [o.id, o.title, o.state || '', o.cooking ? o.cooking.item || 1 : 0, (o.need || []).map((q) => `${q.kind}${q.text}`).join(','), o.burn ? 1 : 0, o.coals ? 1 : 0,
   (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}`).join(';'),
   (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}`).join(';'), slotStates(o)].join('/');
 // the states of what is in the fire's fuel and on its grate (wet wood, the pot's chip, a meal Ready): their marks change

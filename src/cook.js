@@ -578,7 +578,7 @@ export class Cook {
     if (!P || P.done) return null;
     const sec = Math.max(0, (1 - P.k) * P.hours * 3600), running = this.fires.heat(this.fires.get(key), this.now) >= HEAT_MIN;
     const label = P.fish ? 'Frying' : P.raw === 'meal:freeze' ? 'Soaking' : 'Cooking';
-    return { value: Math.min(1, P.k), label, timer: Math.round(sec), running, words: '' };
+    return { value: Math.min(1, P.k), label, timer: Math.round(sec), running, words: '', item: P.raw }; // (item: the fb5 join's card draws it by the bar, the fish being off the grate's grid while it fries)
   }
   // fb5 A (decision 1, the grate): the state of a thing on the grate as a status (inventory.status; stream B draws the
   // chip on its icon and the label in its tooltip): the meal with no pot "needs the pot", the pot short of water

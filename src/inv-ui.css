@@ -442,8 +442,10 @@ body.ig-dragging, body.ig-dragging * { cursor: grabbing !important; }
 .fp-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: linear-gradient(90deg, #8a3a1c, var(--ember) 70%, #ec8a4a); transition: width .4s, background .6s; }
 .fp-bar.low i { background: linear-gradient(90deg, #9a6414, #e0a530 70%, #f2c34a); animation: fp-low 1.8s ease-in-out infinite; }
 @keyframes fp-low { 50% { opacity: .62; } }
-.fp-cook { display: block; height: 5px; margin-top: 3px; border-radius: 3px; background: var(--well); overflow: hidden; }
-.fp-cook i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6f7f86, #c9d4d6 70%, #f3ecdd); transition: width .4s; }
+.fp-cook { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.fp-cook img { flex: none; display: block; }
+.fp-cook b { flex: 1; display: block; height: 5px; border-radius: 3px; background: var(--well); overflow: hidden; }
+.fp-cook b i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6f7f86, #c9d4d6 70%, #f3ecdd); transition: width .4s; }
 .fp-cook.none { visibility: hidden; }
 .nb.fp.caught .nb-head { animation: fp-caught 1.8s ease-out; }
 .nb.fp.caught .fp-bar i { animation: fp-catch 1.8s ease-out; }
