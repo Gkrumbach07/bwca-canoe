@@ -461,7 +461,10 @@ export class Camp {
     const f = p.forward, edge = w.shoreAt(p.x, p.z) <= AT_WATER || w.shoreAt(p.x + f.x * 1.6, p.z + f.z * 1.6) < 0;
     if (!edge) return null;
     const wait = this.filterWait(), left = e.bottle <= 0.02 ? 'dry' : `${e.bottle.toFixed(1)} L left`;
-    return { left: e.bottle, wait, words: `${left} · ${wait >= 0.25 ? 'a tablet: drinkable in half an hour' : 'through the filter, a few minutes'}` };
+    // (the fb3 join: a tablet only from the tablets in reach, energy.fill; the tube left in the pack by the fire says so
+    // here, before the bottle is filled with lake water as it comes)
+    const inv = this.inventory, tab = wait < 0.25 || e.sandbox || !inv || typeof inv.usesLeft !== 'function' || inv.usesLeft('tablets') > 0;
+    return { left: e.bottle, wait, words: `${left} · ${wait >= 0.25 ? (tab ? 'a tablet: drinkable in half an hour' : 'no tablet in reach: lake water as it comes') : 'through the filter, a few minutes'}` };
   }
   fillBottle(wait = this.filterWait()) {
     if (this.energy.bottle >= 2 - 0.001) { this.note('The bottle is full.'); return; }
@@ -471,6 +474,7 @@ export class Camp {
     const got = this.energy.fill(2, wait);
     if (this.audio && this.audio.paddleDip) this.audio.paddleDip();
     if (got <= 0) { this.note('The bottle is full.'); return; }
+    if (wait >= 0.25 && !(this.energy.treating > 0.001) && !this.energy.sandbox) return; // no tablet in reach: energy.fill has said so
     this.note(wait >= 0.25 ? 'You fill the bottle and drop in a tablet. Drinkable in half an hour.' : 'You pump the bottle full. Drinkable in a few minutes.');
   }
   // the profile (stream A), wherever it is to be had

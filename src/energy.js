@@ -336,7 +336,8 @@ export class Energy {
         const i = this.inv, r = i && typeof i.useOne === 'function' ? i.useOne('tablets') : { ok: true };
         if (!r.ok) {
           this.drinkable = Math.min(BOTTLE, this.drinkable + add); this.upsetUntil = this.now + UPSET_HOURS;
-          this.note('No tablets left: you fill the bottle with lake water as it comes. It will sit badly for a few hours.');
+          const away = i && typeof i.usesLeft === 'function' && i.usesLeft('tablets', { reachable: false }) > 0; // (the fb3 join: the tube left in a pack out of reach)
+          this.note(`${away ? 'No tablet to hand: the tube is in a pack out of reach.' : 'No tablets left.'} You fill the bottle with lake water as it comes; it will sit badly for a few hours.`);
           this.noted.dry = false;
           return add;
         }
