@@ -1716,98 +1716,81 @@ export function tickHold(sc, all = false) {
 }
 
 // --- the fire's pane (cards.js draws it on the card's right) -------------------------------------------------------------
-// The fire ring as nearby.objects() gives it: its strap (the picture, the name, how it stands), the burn meter and the
-// cooking meter, the fuel (wood only) and the grate (the pot, a meal or a fish, what is cooked) as grids, the ash in
-// words, and Light / Cook / Eat / Douse (held where held). With no pot within reach the grate says so.
-function grateWords(o, s) {
-  const n = nearby(), inv = model(), c = s.cId && typeof inv.cont === 'function' ? inv.cont(s.cId) : null;
-  const potOn = !!(c && c.grid.some((e) => e.id === 'pot'));
-  if (potOn) return s.words || '';
-  let here = null;
-  try { here = n && n.cook && typeof n.cook.potHere === 'function' ? n.cook.potHere(o.key) : null; } catch { here = null; }
-  if (o.pot === false || o.noPot || (n && n.cook && !here)) return 'no pot';
-  return s.words || '';
+// fb5 A (the owner's third round of 2026-10-25: "fire ring got too complex … the formulas should not always be there. it
+// should only show whats missing … if lit, no tooltips needed, just show how much is left with the bar"). The fire ring as
+// nearby.objects() gives it (state, need, burn, coals, cooking, slots, actions): its strap (the picture and the name),
+// then one line of state: the chips of what it is short of while it is cold ("Gather wood"; "a dry branch", "×2 more";
+// "Wet wood won’t catch"), "Hot coals" and its chip, or, lit, only the burn bar (amber under 20 min; the owner: "just the
+// bar", no time beside it). Then the fuel and the grate as grids (a thin bar under the grate while something cooks, its
+// state on the thing's icon, inventory.status: lean on the fire's own, no timers, chores.fuelStatus / cook.grateStatus),
+// and Douse (held), the one button, while there is a fire to put out. No words or numbers besides the missing chips.
+const FP_ICON = '🪵';
+// a chip: an icon (the item's, else none) and its words (the wood glyph dropped where the icon stands for it)
+function fireChip(q) {
+  if (!q || !q.text) return '';
+  const img = q.item && !String(q.text).startsWith(FP_ICON) ? `<img class="ic" alt="" src="${iconUrl(q.item, 26, 26)}">` : ''; // (the wood's own glyph reads better than a 1 × 3 log drawn at chip size)
+  const text = img ? String(q.text).replace(new RegExp(`^${FP_ICON}\\s*`, 'u'), '') : q.text;
+  return `<span class="fp-chip k-${esc(q.kind || 'need')}">${img}<span>${esc(text)}</span></span>`;
+}
+// the state line's insides: the chips, the coals, or the burn bar alone
+function fireLine(o) {
+  if (o.burn) return `<span class="fp-bar${o.burn.low ? ' low' : ''}" role="meter" aria-label="Wood left" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${(+o.burn.value).toFixed(2)}"><i style="width:${pct(o.burn.value)}"></i></span>`;
+  const lead = o.coals ? `<span class="fp-lead">Hot coals</span>` : '';
+  return `${lead}${(o.need || []).map(fireChip).join('')}`;
 }
 export function firePanel(o, sc) {
-  const w = mk('div', `nb k-${o.kind}${!o.meter && !o.cooking && !(o.slots && o.slots.length) ? ' slim' : ''}`);
+  const w = mk('div', `nb k-${o.kind} fp st-${esc(o.state || 'none')}${o.caught ? ' caught' : ''}`);
   w.dataset.nb = o.id;
   const head = mk('div', 'nb-head');
   const ik = `nb:${o.kind}`;
   if (ICONS[ik]) { const pic = iconAt(ik, 44, 34); pic.className = 'nb-pic'; head.appendChild(pic); }
   head.appendChild(mk('span', 'nm', esc(o.title || '')));
-  head.appendChild(mk('span', 'wh', esc(o.sub || '')));
-  if (o.status && (o.status.label || o.status.mark)) head.appendChild(mk('span', `nb-st st-${esc(o.status.mark || 'none')}`, esc(o.status.label || o.status.mark))); // (fb4 B: Burning, Laid, Hot coals, Cold)
   w.appendChild(head);
   const body = mk('div', 'nb-body');
-  const meter = (k, m, lab) => mk('div', `nb-meter m-${k}`, `<span class="lab">${esc(m.label || lab)}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`);
-  if (o.meter) body.appendChild(meter('burn', o.meter, ''));
-  body.appendChild(o.cooking ? meter('cook', o.cooking, 'Cooking') : mk('div', 'nb-meter m-cook none'));
-  // fb4 B (decision 2, stream C's fire): the fuel as a quantity out of what a fire wants (an hour's burn), the wet wood
-  // as a state with its drying step, the burn-down, the cooking and the lighting as timers, and what to do next
-  const state = fireState(o);
-  if (state) body.appendChild(mk('div', 'nb-state', state));
+  const line = fireLine(o);
+  body.appendChild(mk('div', `fp-line${line ? '' : ' none'}`, line));
   if (o.slots && o.slots.length) {
     const row = mk('div', 'nb-slots');
     for (const s of o.slots) {
       const sw = mk('div', `nb-slot s-${s.id}`);
-      const words = s.id === 'grate' ? grateWords(o, s) : s.words;
-      sw.appendChild(mk('div', 'nb-lab', `${esc(s.label || s.id)}${words ? ` <i>${esc(words)}</i>` : ''}`));
+      sw.appendChild(mk('div', 'nb-lab', esc(s.label || s.id)));
       const g = mk('div'), inv = model(), c = s.cId && typeof inv.cont === 'function' ? inv.cont(s.cId) : null;
       if (c) grid(g, c, { onUse: sc.onUse || null, screen: sc });
-      else if (s.id === 'ash') { g.className = 'nb-ash'; g.textContent = ''; }
       else { const b = { ...s, obj: o.id }; grid(g, binContainer(`bin:${o.id}:${s.id}`, b), { bin: b, screen: sc }); }
       sw.appendChild(g);
+      if (s.id === 'grate') sw.appendChild(mk('span', `fp-cook${o.cooking ? '' : ' none'}`, `<i style="width:${pct(o.cooking ? o.cooking.value : 0)}"></i>`));
       row.appendChild(sw);
     }
     body.appendChild(row);
   }
-  const acts = (o.actions || []).filter((a) => a && a.label);
+  const acts = (o.actions || []).filter((a) => a && a.label && a.enabled !== false);
   if (acts.length) {
     const row = mk('div', 'nb-acts');
     for (const a of acts) row.appendChild(actButton(sc, o, a));
     body.appendChild(row);
-    // fb4 B (decision 2): under the buttons, what a greyed one needs, a checklist each (the first two: Light and Cook
-    // when the fire is cold; Douse's "a fire to put out" never crowds them out)
-    for (const a of acts.filter((q) => q.enabled === false && ((Array.isArray(q.needs) && q.needs.length) || q.next)).slice(0, 2)) {
-      body.appendChild(mk('div', 'nb-needs', `<div class="nb-lab">${esc(a.label)}${a.why ? ` <i>${esc(a.why)}</i>` : ''}</div>${needsHtml(a.needs, a.next)}`));
-    }
   }
   w.appendChild(body);
   return w;
 }
-// the fire's state block (stream C's fire.fuel, fire.wet, fire.timers, fire.status), or '' without them
-function fireState(o) {
-  const rows = [], f = o.fuel || null;
-  if (f && f.hour && Number.isFinite(f.hour.need)) rows.push({ label: 'An hour’s burn', have: f.hour.have, need: f.hour.need, unit: f.hour.unit || 'h', note: o.state === 'burning' ? 'dry wood burning and laid' : 'dry wood laid' });
-  for (const t of Array.isArray(o.timers) ? o.timers : []) if (t && t.label && Number.isFinite(t.timer)) rows.push({ label: t.label, timer: t.timer, running: t.running, until: t.until, done: false });
-  // (the wet wood once: when a greyed button's checklist already has its "Wet" step, not again here)
-  const wetListed = (o.actions || []).some((a) => a && a.enabled === false && Array.isArray(a.needs) && a.needs.some((n) => n && /^wet\b/i.test(String(n.label || ''))));
-  const wet = !wetListed && o.wet && (o.wet.pieces || o.wet.timer) ? statusHtml({ label: `Wet wood${o.wet.pieces ? ` · ${o.wet.pieces} ${o.wet.pieces === 1 ? 'piece' : 'pieces'}` : ''}`, mark: 'wet', timer: o.wet.timer, running: o.wet.running, next: o.wet.next }) : '';
-  const said = new Set((o.actions || []).filter((a) => a && a.enabled === false && a.next).map((a) => a.next)); // (a step a button's list says already)
-  const next = o.status && o.status.next && !said.has(o.status.next) ? o.status.next : '';
-  return rows.length || wet || next ? `${needsHtml(rows, next)}${wet}` : '';
-}
-const fireSig = (o) => [o.status ? `${o.status.label}${o.status.mark}${o.status.next || ''}` : '', o.fuel && o.fuel.hour ? num(Math.round((+o.fuel.hour.have || 0) * 10) / 10) : '', o.wet ? `${o.wet.pieces}${o.wet.running}${o.wet.next || ''}` : '',
-  (Array.isArray(o.timers) ? o.timers : []).map((t) => (t ? `${t.label}${t.running === false ? `s${Math.round(t.timer || 0)}` : ''}` : '')).join(','), o.cooking ? `${o.cooking.running}${Number.isFinite(o.cooking.timer) ? 't' : ''}` : ''].join('/');
-// a few times a second: the meters and the words, in place
+// a few times a second: the bars in place (the wood left, the amber under 20 min, the pot's progress)
 export function livenPanel(el, o) {
-  const wh = el.querySelector('.nb-head .wh'); if (wh && wh.textContent !== (o.sub || '')) wh.textContent = o.sub || '';
-  for (const [k, m] of [['burn', o.meter], ['cook', o.cooking]]) {
-    const row = el.querySelector(`.nb-meter.m-${k}`); if (!row) continue;
-    if (!m) { row.classList.add('none'); continue; }
-    if (row.classList.contains('none')) { row.classList.remove('none'); row.innerHTML = `<span class="lab">${esc(m.label || 'Cooking')}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`; continue; }
-    const bar = row.querySelector('i'), w = row.querySelector('.w');
-    if (bar) bar.style.width = pct(m.value);
-    if (w && w.textContent !== (m.words || '')) w.textContent = m.words || '';
+  const bar = el.querySelector('.fp-bar');
+  if (bar && o.burn) {
+    bar.classList.toggle('low', !!o.burn.low);
+    const i = bar.querySelector('i'); if (i) i.style.width = pct(o.burn.value);
   }
+  const ck = el.querySelector('.fp-cook');
+  if (ck) { ck.classList.toggle('none', !o.cooking); const i = ck.querySelector('i'); if (i) i.style.width = pct(o.cooking ? o.cooking.value : 0); }
 }
-// the signature of a fire object: what would change its drawing
-export const panelSig = (o) => [o.id, o.title, o.sub || '', (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}:${s.words || ''}`).join(';'),
-  (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}${a.why || ''}${a.enabled === false ? needsSig(a.needs, a.next) : ''}`).join(';'), o.meter ? 1 : 0, o.cooking ? 1 : 0, fireSig(o), slotStates(o)].join('/');
-// the states of what is in the fire's fuel and on its grate (wet wood, a hot meal): their marks change the drawing
+// the signature of a fire object: what would change its drawing (not the bars' lengths: livenPanel moves those)
+export const panelSig = (o) => [o.id, o.title, o.state || '', (o.need || []).map((q) => `${q.kind}${q.text}`).join(','), o.burn ? 1 : 0, o.coals ? 1 : 0,
+  (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}`).join(';'),
+  (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}`).join(';'), slotStates(o)].join('/');
+// the states of what is in the fire's fuel and on its grate (wet wood, the pot's chip, a meal Ready): their marks change
+// the drawing
 function slotStates(o) {
   const inv = model(); if (typeof inv.status !== 'function' || typeof inv.cont !== 'function') return '';
-  return (o.slots || []).map((s) => { const c = s.cId ? inv.cont(s.cId) : null; return c ? (c.grid || []).map((e) => { const q = statusOf(e); return q ? `${e.uid}${q.mark || ''}` : ''; }).join('') : ''; }).join(';');
+  return (o.slots || []).map((s) => { const c = s.cId ? inv.cont(s.cId) : null; return c ? (c.grid || []).map((e) => { const q = statusOf(e); return q ? `${e.uid}${q.mark || ''}${q.chip || ''}` : ''; }).join('') : ''; }).join(';');
 }
 
 // --- your stuff, on one screen ------------------------------------------------------------------------------------

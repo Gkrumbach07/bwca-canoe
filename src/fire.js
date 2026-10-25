@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { REFLECT_LAYER } from './water.js';
 import { PropBuilder, propMaterial, TILE } from './prop-kit.js';
 import { smoothstep } from './rng.js';
-import { NEED, check, timerWords, LIGHT_PIECES, WOOD_DRY } from './items.js';
+import { NEED, check, timerWords, LIGHT_PIECES } from './items.js';
 
-// Campfires in the steel grates of the campsites (props.js builds the ring and the grate; camp.js lights the fire).
+// Campfires in the steel grates of the campsites (props.js builds the ring and the grate; chores.js lights the fire by
+// itself once the ring holds enough dry wood, fb5 A).
 // A fire is a few split logs crossed on the ash, a handful of flames, a bed of embers, sparks going up and a thread
 // of smoke, all on two light-free shader materials (additive for what glows, plain blending for the smoke, the
 // pattern of mist.js), plus one PointLight that is always in the scene: intensity 0 when nothing burns (a light
@@ -39,16 +40,15 @@ export const FIRE = {
   decay: 1.8,
   lift: 0.45,         // the light's height over the ash (m)
 };
-// fb4 C (the owner's second round of 2026-10-25: "for the fire, I know I need to have a certain amount of wood and for it
-// not to be wet. And if it's wet, I need to do a certain thing"): what the ring needs, as a checklist and timers. The
-// ring's pieces come from chores.js's binUnits ({ id, e, burn }); a piece is wet while its entry's data.wet (game hours
-// of drying left in dry air, inventory.js syncWet) is over 0. Lighting needs LIGHT_PIECES dry pieces with a dry branch
-// among them for kindling (the old armful counts as a whole set and lights on its own); the held Light is LIGHT_MINUTES
-// on the clock (chores.js LIGHT's two phases), Douse DOUSE_MINUTES (its three).
-export const LIGHT_MINUTES = 14, DOUSE_MINUTES = 9;
+// fb5 A (the owner's third round of 2026-10-25: "it should just light when enough fuel is added automatically", "the
+// formulas should not always be there. it should only show whats missing"): the fire lights itself the moment the ring
+// holds enough dry fuel, a dry branch to catch and LIGHT_PIECES dry pieces in all (the old armful counts as a whole set);
+// a match is struck, it flares and catches (Fires.kindle with flare, drawn over real seconds in update). A dry piece on hot
+// coals brings it back. What the ring is short of is ringNeed's: chips, never a list ("Gather wood", "a dry branch",
+// "🪵 ×2 more", "Wet wood won’t catch"), and nothing once it burns. A piece is wet while its entry's data.wet (game hours
+// of drying left in dry air, inventory.js syncWet) is over 0; the ring's pieces come from chores.js binUnits ({ id, e, burn }).
+export const DOUSE_MINUTES = 9, LOW_H = 1 / 3, FULL_H = 4; // LOW_H: under this many game hours of wood in all, it is burning low
 const wetOf = (u) => (u && u.e && u.e.data && u.e.data.wet > 0 ? u.e.data.wet : 0);
-const word = (n) => ['no', 'one', 'two', 'three', 'four', 'five', 'six'][n] || String(n);
-const Cap = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 // the ring's pieces as lighting counts them: { dry, wet, kindling, armful, wetH (the wettest), dryH (hours of dry wood),
 // allH (hours of all of it), n }
 export function woodCount(units = []) {
@@ -62,20 +62,25 @@ export function woodCount(units = []) {
   }
   return c;
 }
-// the wet pieces' drying, as a need: rate is how fast they dry now (6 by a lit fire, 1 in dry air, 0 in rain on them)
-function wetNeed(c, rate) {
-  const sec = (c.wetH / Math.max(1e-6, rate || 0)) * 3600, fire = rate >= WOOD_DRY.air / WOOD_DRY.fire - 1e-6;
-  return NEED.step(`Wet: ${c.wet} ${c.wet === 1 ? 'piece' : 'pieces'}`, false, { ...(rate > 0 ? { timer: Math.round(sec), running: true } : {}), note: rate > 0 ? (fire ? 'drying by the fire' : 'dry them by a lit fire, 30 min (3 h in dry air)') : 'out of the rain first: a tarp over the ring' });
-}
-// how the next step to light it reads, by what is missing
-function lightNext(c, st) {
-  if (st === 'coals') return 'Drag a dead branch into the fuel: it catches on the hot coals by itself';
-  if (!c.n) return 'Gather dead branches off the ground (E), then drag them into the fuel';
-  if (!c.dry) return 'Gather dry wood: dead branches off the ground';
-  if (!c.kindling) return 'A dry branch under the logs for kindling: dead branches lie about the camp';
-  const n = LIGHT_PIECES - c.dry;
-  return `${Cap(word(n))} more ${n === 1 ? 'piece' : 'pieces'} of dry wood: dead branches or short logs off the ground`;
-}
+// enough dry fuel in the ring to catch
+export const lights = (c) => !!(c && (c.armful || (c.kindling && c.dry >= LIGHT_PIECES)));
+const WOOD_ICON = '🪵';
+// the chips (decision 1): { kind: 'empty' | 'branch' | 'wood' | 'wet' | 'coals', text, n?, item? }
+const CHIP = {
+  empty: () => ({ kind: 'empty', text: 'Gather wood', item: 'wood:branch' }),
+  branch: () => ({ kind: 'branch', text: 'a dry branch', item: 'wood:branch' }),
+  wood: (n) => ({ kind: 'wood', text: `${WOOD_ICON} ×${n} more`, n, item: 'wood:log' }),
+  wet: () => ({ kind: 'wet', text: 'Wet wood won’t catch' }),
+  coals: () => ({ kind: 'coals', text: `${WOOD_ICON} ×1`, n: 1, item: 'wood:branch', lead: 'Hot coals' }),
+};
+// the next step a first-time teaching line can say (stream E's moments read check.next; never drawn on the card)
+const NEXT = {
+  empty: 'Gather dead wood off the ground (E), then drag it into the fuel',
+  branch: 'A dry branch in the fuel catches the rest: dead branches lie about the camp',
+  wood: 'More dry wood in the fuel: dead branches, short logs or a pole',
+  wet: 'Wet wood dries by a lit fire in 30 min, in dry air in 3 h: take it out, put dry wood in',
+  coals: 'The coals are still hot: a dry piece of wood on them brings it back',
+};
 // A steady light (an outfitter's store lamp, props.js storeLayout lamp) borrows the same PointLight when it is the
 // lit thing nearest the eye: warm, no flicker, a smaller pool. reach: metres from the eye past which it lets it go.
 export const STEADY = { color: 0xffcf94, intensity: 7, distance: 11, decay: 1.4, reach: 70 };
@@ -396,6 +401,18 @@ export class Fires {
     this.steams = { douse: new Steam(scene, 'douse'), pot: new Steam(scene, 'pot') }; // camp 2: put out, and the pot
     this.t = 0; this.now = 0;
     this.near = null;         // the lit fire nearest the eye: { x, y, z, heat } (audio.js reads it)
+    // fb5 A: the fire's events for stream E's teaching moments (on(name, fn) → off; or drain `events`):
+    // 'lit' { key, relit, quiet } · 'low' { key, left } · 'coals' { key } · 'out' { key, doused } · 'cooking' { key, item }
+    // · 'ready' { key, item } · 'wet' { key }
+    this.events = []; this.handlers = new Map();
+    this.veiled = null;       // () => bool: a paper over the view (main.js: the fire's card, the book): a match struck under it flares when it lifts
+  }
+  on(name, fn) { let s = this.handlers.get(name); if (!s) this.handlers.set(name, (s = new Set())); s.add(fn); return () => s.delete(fn); }
+  emit(type, data = {}) {
+    const ev = { type, t: this.now, ...data };
+    this.events.push(ev); if (this.events.length > 30) this.events.splice(0, this.events.length - 30);
+    for (const fn of [...(this.handlers.get(type) || []), ...(this.handlers.get('*') || [])]) { try { fn(ev); } catch (e) { console.warn(`fires.on ${type}`, e); } }
+    return ev;
   }
 
   get(key) { return this.fires.get(key) || null; }
@@ -404,8 +421,18 @@ export class Fires {
   // being put out (f.out, 0..1: chores.js's held job), the flames go first
   heat(f, now = this.now) {
     if (!f || f.laid || now >= f.until) return 0;
-    const catchUp = smoothstep(f.lit, f.lit + 0.06, now), left = f.until - now;
-    return catchUp * (FIRE.floor + (1 - FIRE.floor) * smoothstep(0, FIRE.low, left)) * (1 - smoothstep(0, 0.45, f.out || 0));
+    const left = f.until - now; // (fb5 A: the catch is drawn over real seconds, flare(); the game's heat is full at once)
+    return (FIRE.floor + (1 - FIRE.floor) * smoothstep(0, FIRE.low, left)) * (1 - smoothstep(0, 0.45, f.out || 0));
+  }
+  // fb5 A: the match and the catch, over real seconds from f.struck (Fires.t): a small bright flame for a breath, a flare
+  // as the kindling takes, the flames building to full. → { k (0..1 of the heat), bump (a flare over it) }; none: { 1, 0 }
+  flare(f) {
+    if (!f || !Number.isFinite(f.struck)) return { k: 1, bump: 0 };
+    const t = this.t - f.struck;
+    if (t > 6) { f.struck = undefined; return { k: 1, bump: 0 }; }
+    if (f.relit) return { k: 0.3 + 0.7 * smoothstep(0, 2.2, t), bump: 0.35 * Math.exp(-(((t - 0.7) / 0.4) ** 2)) };
+    const match = t < 0.45 ? 0.1 + 0.06 * Math.sin(t * 40) : 0;
+    return { k: Math.max(match, smoothstep(0.4, 3.4, t)), bump: 0.75 * Math.exp(-(((t - 1.0) / 0.38) ** 2)) };
   }
   // how bright the bed of coals is: it grows as the wood burns down; once the wood is gone it settles to a smoulder
   // (FIRE.coals) that lasts until the coals go cold (FIRE.smoulder hours on) or the fire is put out
@@ -445,22 +472,23 @@ export class Fires {
 
   // at: { x, y, z, a } (props.js c.layout.fire: the ash's centre, its ground height, the grate's bearing); a fire laid
   // there is lit on its own wood (hours: more on top, or none)
-  kindle(key, at, now, hours = FIRE.burn) {
+  kindle(key, at, now, hours = FIRE.burn, { flare = false } = {}) {
     let f = this.fires.get(key);
     if (f && f.laid) { hours = f.laid + (hours || 0); f.laid = 0; }
     else if (f && now < f.until) { f.until = now + hours; return f; }
     f = f || this.look(key, at);
     f.lit = now; f.until = now + Math.min(FIRE.most, hours); f.out = 0;
+    f.relit = false; f.struck = flare ? this.t : undefined; f.strikeT = this.t; // (fb5 A: the match struck, drawn in update)
     return f;
   }
   // a piece of wood on a fire that burns (or on its hot coals, which it brings back): another span of burning on top
   // of what is left, up to FIRE.most hours of wood in the ring
-  feed(key, now, hours = FIRE.burn) {
+  feed(key, now, hours = FIRE.burn, { flare = false } = {}) {
     const f = this.fires.get(key);
     if (!f) return null;
     if (f.laid) { f.laid = Math.min(FIRE.most, f.laid + hours); return f; }
     if (now < f.until) f.until = Math.min(now + FIRE.most, f.until + hours);
-    else if (now < f.until + FIRE.smoulder) { f.lit = now - 0.04; f.until = now + hours; f.out = 0; } // the coals catch it at once
+    else if (now < f.until + FIRE.smoulder) { f.lit = now - 0.04; f.until = now + hours; f.out = 0; f.relit = true; f.struck = flare ? this.t : undefined; f.strikeT = this.t; } // the coals catch it at once
     return f;
   }
   // how far along being put out it is (0..1, the held job in chores.js): the flames die, then the coals
@@ -480,29 +508,27 @@ export class Fires {
     f.lit = Number.isFinite(r.lit) ? r.lit : -1e9; f.until = Number.isFinite(r.until) ? r.until : -1e9; f.laid = r.laid > 0 ? r.laid : 0; f.out = 0;
     return f;
   }
-  // --- fb4 C: the ring's checks (chores.js lightProblem and nearby.js read them through main.js's fb4 C block) -------
-  // Light: { enabled, why, needs, next }. units: the ring's pieces; rate: how fast its wet pieces dry now
-  lightCheck(key, units = [], { rate = 1 } = {}) {
-    const st = this.state(key), c = woodCount(units), now = this.now;
-    if (st === 'burning') {
-      const sec = (this.left(key) + c.allH) * 3600;
-      return check(false, 'It is burning', [], `Feed it: drag wood into the fuel; ${timerWords(sec)} of wood, it takes the next piece itself`);
-    }
-    const needs = [];
-    if (st === 'coals') {
-      const f = this.fires.get(key), cold = f ? (f.until + FIRE.smoulder - now) * 3600 : 0;
-      needs.push(NEED.qty('A dry branch on the hot coals', c.kindling ? 1 : 0, 1), NEED.timer('The coals hot for', cold, true));
-      if (c.wet) needs.push(wetNeed(c, rate));
-      return check(c.kindling, c.n && !c.dry ? 'The wood is wet' : 'Needs a dry branch on the coals', needs, lightNext(c, st));
-    }
-    needs.push(NEED.qty('A dry branch for kindling', c.kindling ? 1 : 0, 1));
-    needs.push(NEED.qty('Dry wood in the ring', Math.min(c.dry, 99), LIGHT_PIECES, 'pieces'));
-    if (c.wet) needs.push(wetNeed(c, rate));
-    const ok = c.armful || (c.kindling && c.dry >= LIGHT_PIECES);
-    if (ok) needs.push(NEED.timer('Laying and lighting it · hold Light', LIGHT_MINUTES * 60, false));
-    const short = LIGHT_PIECES - c.dry;
-    const why = !c.n ? 'Needs wood in the ring' : !c.dry ? 'Needs dry wood' : !c.kindling ? 'Needs kindling: a dry branch' : `Needs ${word(short)} more ${short === 1 ? 'piece' : 'pieces'} of dry wood`;
-    return check(ok, why, needs, ok ? `Hold Light: about ${LIGHT_MINUTES} min to lay it and put a match to it` : lightNext(c, st));
+  // --- fb5 A: what the ring is short of --------------------------------------------------------------------------
+  // The chips (decision 1, rule 3: only what is missing, as a chip): [chip] or null when nothing is missing (burning, or
+  // enough dry wood to catch). units: the ring's pieces (chores.js binUnits). A chip: { kind, text, n?, item?, lead? }
+  ringNeed(key, units = []) {
+    const st = this.state(key), c = woodCount(units);
+    if (st === 'burning') return null;
+    if (st === 'coals') return c.dry ? null : c.wet ? [CHIP.wet()] : [CHIP.coals()];
+    if (!c.n) return [CHIP.empty()];
+    if (lights(c)) return null;
+    if (c.wet) return [CHIP.wet()];
+    const out = [];
+    if (!c.kindling) out.push(CHIP.branch());
+    const more = LIGHT_PIECES - c.dry - (c.kindling ? 0 : 1);
+    if (more > 0) out.push(CHIP.wood(more));
+    return out;
+  }
+  // as a check, for whoever reads checks (the dot's chip, the moments' next line): enabled when nothing is missing
+  lightCheck(key, units = []) {
+    const need = this.ringNeed(key, units), c0 = need && need[0];
+    if (!c0) return check(true, null, [], '');
+    return check(false, c0.text, need.map((q) => NEED.step(q.text, false, { chip: q.text, ...(q.item ? { item: q.item } : {}) })), NEXT[c0.kind] || '');
   }
   // Douse: { enabled, why, needs, next }
   douseCheck(key) {
@@ -511,33 +537,20 @@ export class Fires {
       const left = DOUSE_MINUTES * 60 * (1 - Math.min(1, (f && f.out) || 0));
       return check(true, null, [NEED.timer('Putting it out · hold Douse', left, false)], `Hold Douse: three pots of water, about ${timerWords(left)}`);
     }
-    return check(false, 'No fire to put out', [NEED.step('A fire burning, or hot coals', false)], st === 'laid' ? 'It is laid, not lit: nothing to put out' : 'Nothing to put out here');
+    return check(false, 'No fire', [NEED.step('No fire', false, { chip: '' })], 'Nothing to put out here');
   }
-  // the ring for its card: { fuel: { light, hour }, wet, timers, status }. opts: { rate (the wet pieces' drying now),
-  // rain (rain falling on the ring, 0–1), covered (a tarp over it), cooking (cook.js cookingNow) }
-  ringState(key, units = [], { rate = 1, rain = 0, covered = false, cooking = null } = {}) {
-    const st = this.state(key), c = woodCount(units), f = this.fires.get(key), now = this.now, left = this.left(key);
-    const fuel = {
-      light: { have: c.dry, need: LIGHT_PIECES, unit: 'pieces', dry: c.dry, wet: c.wet, kindling: c.kindling },
-      hour: { have: +(left + c.dryH).toFixed(2), need: 1, unit: 'h' },
-    };
-    const wsec = rate > 0 ? (c.wetH / rate) * 3600 : null;
-    const wet = c.wet ? { pieces: c.wet, timer: wsec == null ? null : Math.round(wsec), running: rate > 0, next: rate > 0 ? (rate > 1.5 ? `Drying by the fire: dry in ${timerWords(wsec)}` : `Dries by a lit fire in 30 min, or in ${timerWords(wsec)} in dry air`) : 'Out of the rain first: a tarp over the ring' } : null;
-    const timers = [];
-    if (st === 'burning') timers.push({ label: 'Burns for', timer: Math.round((left + c.allH) * 3600), running: true });
-    if (st === 'burning' && f && now < f.lit + 0.06) timers.push({ label: 'Catching', timer: Math.round((f.lit + 0.06 - now) * 3600), running: true });
-    if (st === 'coals' && f) timers.push({ label: 'The coals hot for', timer: Math.round((f.until + FIRE.smoulder - now) * 3600), running: true });
-    const L = st === 'burning' ? null : this.lightCheck(key, units, { rate });
-    if (L && L.enabled && st !== 'coals') timers.push({ label: 'Laying and lighting it · hold Light', timer: LIGHT_MINUTES * 60, running: false });
-    if (cooking) timers.push({ label: cooking.label, timer: Math.round(cooking.timer), running: cooking.running });
-    const open = rain > 0.3 && !covered;
-    let status;
-    if (st === 'burning') {
-      const low = left < FIRE.low && !c.n;
-      status = { label: 'Burning', mark: 'burning', next: open ? 'Rain on the open ring: it burns twice as fast and wets the wood in 20 min; a tarp over it keeps it dry' : low ? `Burning down: wood in the fuel within ${timerWords(left * 3600)} or it goes to coals` : `${timerWords((left + c.allH) * 3600)} of wood: it takes the next piece itself` };
-    } else if (st === 'coals') status = { label: 'Hot coals', mark: 'coals', next: L.next };
-    else status = { label: c.n ? 'Laid, not lit' : 'Cold', mark: c.wet && !c.dry ? 'wet' : c.n ? 'laid' : 'cold', next: L.next };
-    return { fuel, wet, timers, status };
+  // the burn for the card's bar: { left (game hours of wood in all: burning and dry laid), value 0..1, low } or null
+  // when it is not burning (FULL_H of wood fills the bar)
+  burn(key, units = []) {
+    if (this.state(key) !== 'burning') return null;
+    const left = this.left(key) + woodCount(units).dryH;
+    return { left: +left.toFixed(3), value: Math.min(1, left / FULL_H), low: left < LOW_H };
+  }
+  // the coals' heat for the card (0..1 of how long they stay hot), or null
+  coals(key) {
+    const f = this.fires.get(key);
+    if (!f || this.state(key) !== 'coals') return null;
+    return { value: Math.max(0, Math.min(1, (f.until + FIRE.smoulder - this.now) / FIRE.smoulder)) };
   }
 
   // Steam (camp 2): name 'douse' (a fire put out) or 'pot' (the pot on the grate); at { x, y, z }; amount 0..1. Held
@@ -563,8 +576,11 @@ export class Fires {
     M.time.value = this.t % 3600;
     if (this.wind) { const d = this.wind.dir, s = Math.min(1, this.wind.speed / 8); M.wind.value.set(d.x * s, d.z * s); }
     let best = null, bd = Infinity;
+    const veiled = typeof this.veiled === 'function' && !!this.veiled();
     for (const f of [...this.fires.values()]) {
-      const h = this.heat(f, now), e = this.embers(f, now);
+      // (fb5 A: a match struck under a paper flares when the paper lifts, within a while of it)
+      if (veiled && Number.isFinite(f.struck) && this.t - f.strikeT < 45) f.struck = this.t;
+      const fl = this.flare(f), h0 = this.heat(f, now), h = h0 * fl.k + (h0 > 0 ? fl.bump : 0), e = this.embers(f, now) * (0.4 + 0.6 * fl.k);
       if (!f.laid && h <= 0 && e <= 0.001 && !(f.out > 0 && f.out < 1)) { this.douse(f.key); continue; } // gone cold (a fire being put out is let go by its job)
       f.h = h; f.e = e;
       // the lengths in the ring burn down with the wood: smaller and sunk into the coals
@@ -590,7 +606,7 @@ export class Fires {
     const h = best.h, e = best.e, t = this.t;
     const flick = 0.82 + 0.1 * Math.sin(t * 7.3) * Math.sin(t * 2.9 + 1.3) + 0.08 * Math.sin(t * 19.7 + Math.sin(t * 5.1));
     M.glow.uniforms.uHeat.value = h * (0.9 + 0.1 * flick);
-    M.glow.uniforms.uFlame.value = Math.max(0.05, h);
+    M.glow.uniforms.uFlame.value = Math.max(0.05, Math.min(1.35, h));
     M.glow.uniforms.uEmber.value = e;
     M.smoke.uniforms.uSmoke.value = best.laid ? 0 : (0.35 + 0.65 * Math.max(h, e * 0.6)) * (1 - smoothstep(0.6, 1, best.out || 0));
     const sc = M.smoke.uniforms.uColor.value;
@@ -601,6 +617,6 @@ export class Fires {
       L.position.set(best.at.x + Math.sin(t * 9.1) * 0.03, best.at.y + FIRE.lift + Math.sin(t * 6.3) * 0.03, best.at.z + Math.cos(t * 8.2) * 0.03);
       L.intensity = FIRE.intensity * (h * flick + 0.12 * e);
     }
-    this.near = { x: best.at.x, y: best.at.y, z: best.at.z, heat: h, embers: e };
+    this.near = { x: best.at.x, y: best.at.y, z: best.at.z, heat: Math.min(1, h), embers: e };
   }
 }
