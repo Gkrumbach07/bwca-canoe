@@ -130,7 +130,8 @@ export class Journal {
     const out = this.trip && this.trip.active && !(this.outfitter && this.outfitter.visit), inv = en && en.inv;
     const none = inv && typeof inv.snacks === 'function' ? inv.meals() + inv.snacks() <= 0 : en && en.food <= 0;
     if (!sand && en && out && en.food < 1 && !none) { if (en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter'; }
-    if (!sand && en && out && none) return adv ? 'pack is empty. the nearest landing, and soon' : 'pack is empty. any outfitter will fill it';
+    // (polish B: nothing to eat is worth a line once hunger is coming, not on the first stroke of a season)
+    if (!sand && en && out && none && en.needs.food < 0.6) return adv ? 'nothing to eat with you, and getting hungry. make for a landing' : 'nothing to eat with you. any outfitter will fill the pack';
     if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
     if (adv && c.state.wet) return 'everything is damp. a fire tonight to dry the gear';
     if (en && en.value < 0.3) return 'tired. find a site early and eat something';
@@ -254,7 +255,7 @@ export class Journal {
     const sub = earned ? `$${earned} from the boards this season, ${n} ${plural(n, 'notice')} claimed. Each is paid only at the counter that posted it.` : 'Every outfitter pins four notices by the door. Each is paid only at the counter that posted it.';
     const html = `<div class="lede"><h2 id="right-h">${head}</h2><div class="sub">${sub}</div></div>
       <div class="scroll notice-list">${list || '<div class="empty">Take something on at an outfitter’s board.</div>'}${claimed}</div>`;
-    return { html, foot: 'E at an outfitter’s dock opens its board' };
+    return { html, foot: 'the cork board hangs by the door inside every store' };
   }
   lakesTab() {
     const st = this.stats, w = this.world, lakes = st ? st.lakes : [];

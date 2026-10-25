@@ -237,6 +237,7 @@ export class Trip {
         if (to && o && o.onTeleport) await o.onTeleport(to.x, to.z);
         const h = this.day.hours; this.day.advance(h < 5 ? WAKE_AT - h : 24 - h + WAKE_AT); // the rest of the day is lost: the next morning
         this.close('evacuated', reason, to ? to.ep : null);
+        this.state.wet = false; // a night indoors dries the gear (polish B: it stayed "wet" into the next trip)
         if (to) this.learn(to.ep);
         if (this.fishing && this.fishing.stringer) this.fishing.stringer.length = 0;
         const en = this.energy;
