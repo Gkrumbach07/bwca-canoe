@@ -1472,7 +1472,7 @@ export class Hud {
           // what for, just inside the top of the ring (kept on the sheet when the top runs off it)
           ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
           const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
-          ctx.fillText(HINT_LABEL[h.kind] || 'a keeper’s word', tx, ty);
+          ctx.fillText(h.label || HINT_LABEL[h.kind] || 'a keeper’s word', tx, ty); // content join: a rumour's own words (npcs.js) first
         }
       }
       // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
