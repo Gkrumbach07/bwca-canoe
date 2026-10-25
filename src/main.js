@@ -262,6 +262,9 @@ async function main() {
   outfitter.people = npcs;
   npcs.quiet = () => photo.raised; // the people say nothing while the camera is up (3B)
   weather.indoors = () => !!(outfitter.visit && outfitter.visit.inside); // hubs 3 join: no rain falling inside a store
+  // polish B: the soundscape knows indoors too (audio.js): the wind, the trees, the shore and the birds through the walls,
+  // the rain on the roof, plank footfalls on the store's floor (and on a dock's deck, which it reads from the feet)
+  audio.indoors = () => !!(outfitter.visit && outfitter.visit.inside);
   // fb F: dialogue (dialogue.js). What people say shows by their heads with their names, one at a time in a room, pinned
   // to the screen's edge when they are off it; E on someone opens a conversation (numbered choices; you hold still and
   // the view turns to them, or in third person outside a store cuts over your shoulder); T shows the last six lines.

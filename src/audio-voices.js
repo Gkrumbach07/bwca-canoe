@@ -307,6 +307,12 @@ export function step(au, kind, pos, heavy = false) {
       const [o, og] = tone(v, 'sine', 480, t + 0.05, t + 0.2); o.frequency.setValueAtTime(480, t + 0.05); o.frequency.exponentialRampToValueAtTime(900, t + 0.09); env(og.gain, t + 0.05, 0.003, 0.15, 0, 0.05);
       break;
     }
+    case 'plank': { // a boot on a board: a hollow knock that rings a moment under the floor (a dock's deck, a store's floor)
+      thud(260, 0.9, 0.08);
+      const [o, g] = tone(v, 'sine', 170, t, t + 0.16); o.frequency.setValueAtTime(190 / h, t); o.frequency.exponentialRampToValueAtTime(115 / h, t + 0.09); env(g.gain, t, 0.003, 0.35, 0, 0.11);
+      crunch(1100, 1.1, 1, 0.01, 0.1, 0.02);
+      break;
+    }
     default: thud(420, 0.6, 0.09); hiss('bandpass', 1500, 0.7, 0.12, 0.01, 0.06); // needle duff: soft
   }
   return v.until(t + 0.4);

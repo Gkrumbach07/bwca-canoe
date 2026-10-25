@@ -86,7 +86,7 @@ export class Beds {
     this.fire = { pan, roar, hiss, crack, pop, t: 0, heat: 0 };
   }
 
-  // rain is built the first time the weather has any (the game has no weather yet)
+  // rain is built the first time the weather has any (weather.js: its `rain`, through audio.tick's context)
   buildRain() {
     const { G, F, au } = this, ctx = au.ctx, { white, flutter } = au.src;
     const hp = F('highpass', 1000, 0.5, white), lp = F('lowpass', 8000, 0.5, hp), hiss = G(0, au.bus); lp.connect(hiss);
@@ -107,16 +107,17 @@ export class Beds {
   levels(S, L, now) {
     const au = this.au, lv = this.lv, T = (p, v, tau = 0.35) => p.setTargetAtTime(v, now, tau);
     const w = S.wind, sw = clamp(1 + 1.8 * S.gust, 0.35, 2.2), ice = S.ice > 0.5 ? 1 : 0;
+    const walls = S.inside ? 0.25 : 1; // inside a store, the outdoors is what comes through the walls and the windows (polish B)
     // wind on the water: louder out in the open, under the trees only what comes through
-    lv.roar = 0.33 * Math.pow(smooth(0.6, 16, w), 1.25) * (0.3 + 0.7 * S.open) * sw * (1 - 0.35 * S.canopy);
+    lv.roar = 0.33 * Math.pow(smooth(0.6, 16, w), 1.25) * (0.3 + 0.7 * S.open) * sw * (1 - 0.35 * S.canopy) * walls;
     T(this.roar.gain, lv.roar, 0.5); T(this.moan.gain, lv.roar * 0.4, 0.6);
     T(this.roarLP.frequency, 120 + 30 * w * sw, 0.5); T(this.moanBP.frequency, 55 + 7 * w * sw, 0.8);
     this.roarPan.pan.setTargetAtTime(clamp(-(S.windX * L.rx + S.windZ * L.rz) * 0.45, -0.6, 0.6), now, 0.8);
     // the trees: needles hiss with any wind and swell hard in a gust; leaves rustle only when they are out (crisper
     // when dry in the fall); bare branches hiss a little
     const tr = S.trees, wf = smooth(0.4, 12, w);
-    lv.hiss = 0.3 * (tr.conifer + 0.4 * tr.decid * (1 - S.leafOn)) * Math.pow(wf, 1.1) * Math.pow(sw, 1.4);
-    lv.rustle = 0.9 * tr.decid * S.leafOn * smooth(0.2, 8, w) * sw;
+    lv.hiss = 0.3 * (tr.conifer + 0.4 * tr.decid * (1 - S.leafOn)) * Math.pow(wf, 1.1) * Math.pow(sw, 1.4) * walls;
+    lv.rustle = 0.9 * tr.decid * S.leafOn * smooth(0.2, 8, w) * sw * walls;
     T(this.hiss.gain, lv.hiss, 0.3); T(this.rustle.gain, lv.rustle, 0.3);
     T(this.hissLP.frequency, 3000 + 200 * w * sw, 0.4);
     T(this.rustleBP.frequency, 2600 + 900 * S.fall, 1);
@@ -129,21 +130,21 @@ export class Beds {
     T(this.bow.gain, lv.bow, 0.25);
     au.place(this.shorePan, { x: S.shore.x, y: S.level, z: S.shore.z });
     // the open lake's far wash
-    lv.far = 0.05 * S.open * (0.35 + 0.65 * smooth(1, 10, w)) * (1 - ice);
+    lv.far = 0.05 * S.open * (0.35 + 0.65 * smooth(1, 10, w)) * (1 - ice) * walls;
     T(this.far.gain, lv.far, 1.2);
-    // the room: the lake's long open tail out on the water, the forest's short damped one under the trees, and the
-    // echo off the far shore, its delay the round trip to the land
-    lv.lake = 0.08 + 0.92 * S.open * (1 - 0.5 * S.canopy); lv.forest = S.canopy * (1 - 0.6 * S.open);
+    // the room: the lake's long open tail out on the water, the forest's short damped one under the trees (and a plank
+    // room's, inside), and the echo off the far shore, its delay the round trip to the land
+    lv.lake = (0.08 + 0.92 * S.open * (1 - 0.5 * S.canopy)) * walls; lv.forest = S.inside ? 0.55 : S.canopy * (1 - 0.6 * S.open);
     T(au.lakeIn.gain, lv.lake, 0.8); T(au.forestIn.gain, lv.forest, 0.8);
-    T(au.echoGain.gain, 0.55 * S.open * (1 - 0.6 * S.canopy), 1);
+    T(au.echoGain.gain, 0.55 * S.open * (1 - 0.6 * S.canopy) * walls, 1);
     const ed = clamp((2 * S.landDist) / 343, 0.35, 2.2);
     T(au.echoA.delayTime, ed, 3); T(au.echoB.delayTime, ed * 1.31 + 0.11, 3);
     // frogs in the shallows at dusk and after dark; crickets on late-summer nights
     const ev = Math.max(S.night, 0.7 * S.dusk);
-    lv.peepers = peeperSeason(S.doy) * ev * S.shallowNear * (1 - ice);
+    lv.peepers = peeperSeason(S.doy) * ev * S.shallowNear * (1 - ice) * walls;
     T(this.peepBus.gain, 0.1 * lv.peepers, 1.5);
     for (let i = 0; i < 3; i++) { const sp = S.shallow[i] || S.shallow[0]; if (sp) au.place(this.peeps[i].p, { x: sp.x, y: S.level, z: sp.z }); }
-    lv.crickets = cricketSeason(S.doy) * Math.max(S.night, 0.5 * S.dusk) * (1 - 0.6 * S.open) * (1 - 0.6 * smooth(6, 12, w)) * (1 - ice);
+    lv.crickets = cricketSeason(S.doy) * Math.max(S.night, 0.5 * S.dusk) * (1 - 0.6 * S.open) * (1 - 0.6 * smooth(6, 12, w)) * (1 - ice) * walls;
     T(this.crickBus.gain, 0.05 * lv.crickets, 1.5);
     // a campfire near: its roar and hiss by how hard it burns, the embers a faint breath
     if (S.fire || this.fire) {
@@ -154,13 +155,13 @@ export class Beds {
       if (f) au.place(fb.pan, { x: f.x, y: f.y + 0.4, z: f.z });
       lv.fire = heat;
     }
-    // rain on the water and the ground, drumming on the hull or pattering in the leaves
+    // rain on the water and the ground, drumming on the hull or pattering in the leaves; inside, on the roof overhead
     if (S.rain > 0.001 || this.rain) {
       if (!this.rain) this.buildRain();
       lv.rain = S.rain;
-      T(this.rain.hiss.gain, 0.3 * S.rain * (1 - 0.3 * S.canopy), 1);
-      T(this.rain.patter.gain, 0.5 * S.rain * (S.afloat ? 1 : 0.4 + 0.6 * S.canopy), 1);
-      T(this.rain.bp.frequency, S.afloat ? 1700 : 3200, 1);
+      T(this.rain.hiss.gain, 0.3 * S.rain * (1 - 0.3 * S.canopy) * walls, 1);
+      T(this.rain.patter.gain, 0.5 * S.rain * (S.inside ? 0.8 : S.afloat ? 1 : 0.4 + 0.6 * S.canopy), 1);
+      T(this.rain.bp.frequency, S.inside ? 900 : S.afloat ? 1700 : 3200, 1);
     }
   }
 
@@ -178,12 +179,12 @@ export class Beds {
         lv.slap = a; this.au.count('hull-slap');
       }
     }
-    // waves on the shore, near enough to hear
+    // waves on the shore, near enough to hear (through the walls, inside)
     lv.wave = 0;
     if (!ice && Math.abs(S.sd) < 220) {
       if (this.waveT < now) this.waveT = now + R() * 0.8;
       while (this.waveT < ahead) {
-        const t = this.waveT, h = S.shoreWaveH, a = (0.05 + clamp01(h / 0.6)) * (0.5 + R() * 0.7);
+        const t = this.waveT, h = S.shoreWaveH, a = (0.05 + clamp01(h / 0.6)) * (0.5 + R() * 0.7) * (S.inside ? 0.25 : 1);
         swell(this.wash.gain, t, a, 0.25 + 0.2 * R(), 0.08, 0.7 + 0.5 * R());
         swell(this.fizz.gain, t + 0.2, a * (0.1 + 0.35 * smooth(0.05, 0.5, h)), 0.3, 0.15, 1.2 + 0.6 * R());
         if (h > 0.2) swell(this.boom.gain, t, a * 0.9 * clamp01((h - 0.15) / 0.6), 0.04, 0.02, 0.5);
