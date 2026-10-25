@@ -17,8 +17,13 @@ import { makeFaunaMaterials, Parts, frameMatrix, partMatrix, deeper, waterRun, s
 // five to nine minutes (the loons' clock is the frame's, not the time-lapsed day's: main.js passes dt times the
 // player's own time scale, so these are minutes as the ear hears them at any pace), a bird surfacing from a dive
 // seldom calls by day, a canoe coming close draws a tremolo from one bird in five, and an answer comes half as
-// often. The gate shortens with the twilight and is gone at dawn, dusk and night, when they call as they always
-// did: the chorus is theirs.
+// often. The gate shortens with the twilight and is gone at dawn, dusk and night.
+//
+// Dusk and night are the busiest, but not a din (the same feedback, the fb3 join: they were "way too often" after dark
+// too: 7.7 calls a minute heard at 20:36, paddling about Lake One): about one call or a short exchange every 40-60 s
+// (2.5 calls a minute heard, about 1.2 exchanges). Each bird's own call comes round every six minutes or so after dark
+// (`chatty`), an exchange is a call and the mate's answer (now and then a third on a summer night), the lake answers one
+// call in five (audio.js), and the first calls after a load are spread over minutes, not all in the first one.
 //
 // Drawn as instanced parts (fauna-kit.js): the body, the head and neck, the two wings (only while flapping)
 // and the chicks, each one call for all of them. main.js passes the frame's context as the fourth argument
@@ -48,7 +53,7 @@ export class Loons {
     this.loons = Array.from({ length: count }, (_, i) => ({
       i, alive: false, x: 0, z: 0, level: 0, levelAt: { x: NaN, z: NaN }, heading: 0, speed: 0.35, state: 'swim', t: 0,
       y: 0, pitch: 0, lead: -1, ox: 0, oz: 0, male: i % 2 === 0, chick: -1,
-      callT: 20 + this.rng() * 60, replyT: -1, replyKind: 'wail', replyDepth: 0,
+      callT: 30 + this.rng() * 420, replyT: -1, replyKind: 'wail', replyDepth: 0,
       headYaw: 0, headTarget: 0, headT: 0, peer: 0, peerT: 10 + this.rng() * 30, fishT: 40 + this.rng() * 120, showT: 120 + this.rng() * 400,
       alarmCool: 0, wake: 0, tx: 0, tz: 0, run: 0, wanderT: 0,
     }));
@@ -235,7 +240,7 @@ export class Loons {
     if (this.forced) this.applyForce(player, camera);
     const afloat = player.mode === 'paddle' || player.mode === 'swim';
     const cx = camera ? camera.position.x : player.x, cz = camera ? camera.position.z : player.z;
-    const chatty = 0.2 + 1.6 * Math.max(this.light.dusk, this.light.dawn * 0.6, this.light.night);
+    const chatty = 0.2 + 0.65 * Math.max(this.light.dusk, this.light.dawn * 0.6, this.light.night); // (was 1.6: the fb3 join)
     const hush = this.hush, tw = Math.max(this.light.dusk, this.light.dawn, this.light.night);
     this.quiet = Math.max(0, this.quiet - dt);
     const mayCall = () => this.quiet <= 0 || tw > 0.5; // (read per bird: the first one through the gate closes it)
@@ -334,7 +339,7 @@ export class Loons {
           l.callT = 160 + this.rng() * 320;
           const r = this.rng(), night = this.light.night > 0.5 || this.light.dusk > 0.5;
           const kind = night ? (r < 0.45 ? 'wail' : r < 0.7 || !l.male || l.lead >= 0 ? 'tremolo' : 'yodel') : (r < 0.45 ? 'wail' : 'tremolo');
-          this.call(l, kind, hush > 0.5 ? 1 : 2);
+          this.call(l, kind, 1); // a call and its answer (the night's chorus adds one now and then: call())
         }
       }
 
