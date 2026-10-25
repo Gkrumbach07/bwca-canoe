@@ -237,7 +237,7 @@ the energy, a dim track up to the ceiling, and the chunks from the right end (co
 yellow, thirst blue), dashed and marching while one grows faster than its everyday rate or while its need is low, with
 its icon (snowflake, zz, fork and knife, drop) under it; it shows only when it matters, and the old *tired* / *hungry*
 / *thirsty* marks are gone. The readout says what holds the bar down: "Energy 52 % · held down by tiredness and cold ·
-up 11 h · 1.2 L in the bottle". At 0 with food in the pack and hunger part of it, you stop and eat.
+up 11 h · 1.2 L in the bottle". At 0 nothing is eaten for you: the note says to eat from the pack (J), drink or rest.
 
 Every rate is per game hour, paid on the hours the clock passes, so a stretch costs what its game hours cost at any
 pace or game speed: the base (0.009 an hour), the paddle (0.045 an hour at a cruise, more for speed, hustle and a

@@ -4,7 +4,7 @@
 //  - to this page's own navigator.geolocation
 export class GeoBridge {
   constructor() {
-    this.linked = false; this.enabled = true; this.lastHello = 0; this.last = null; this.lastSent = 0;
+    this.linked = false; this.enabled = true; this.lastHello = -Infinity; this.last = null; this.lastSent = 0; // linked only after a real hello (polish B: 0 read as one for the first 9 s)
     this.watchers = new Map(); this.nextId = 1;
     window.addEventListener('message', (e) => {
       if (e.source !== window || !e.data || e.data.source !== 'bwca-geo-ext') return;

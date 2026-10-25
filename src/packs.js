@@ -382,8 +382,12 @@ export class Packs {
       return true;
     }
     if (dd <= HULL_REACH) {
-      const can = this.canShoulder();
-      p.say(note || info, ['Q', can.ok ? 'Shoulder the canoe' : `Shoulder the canoe · ${can.why}`]);
+      const can = this.canShoulder(), a = this.hullAction();
+      // (polish B: the line says the E exists while the dot is not yet on the hull, which from the dock at level it is
+      // not; once the dot is on it the label has the words and pointer.js drops this line, canoeHint)
+      const hint = !note && !info && a && a.e && a.e.verb === 'Get in' ? 'the canoe lies at the water: point at it to get in' : null;
+      p.say(note || info || hint, ['Q', can.ok ? 'Shoulder the canoe' : `Shoulder the canoe · ${can.why}`]);
+      if (hint && p.prompt) p.prompt.canoeHint = true;
       if (inp.pressed('KeyQ')) { if (can.ok) p.pickUpHull(); else if (this.hud) this.hud.note(`${can.why}: the book's Canoe tab sets everything out.`, 4); }
       return true;
     }
@@ -393,7 +397,8 @@ export class Packs {
   // wc A: what the dot offers at the canoe lying on the ground (or floated at a dock's side): { e, q, label, hint }, or
   // null. Where it lies at the water: E gets in (what you carry goes in with you, packs.beforeLaunch) and Q shoulders
   // it; up the bank, just stepped out, or with things still back at the trail head: E shoulders it. Loaded (anything in
-  // it but the paddle in use and the stringer, which ride lashed), the shoulder reads "Unload it first".
+  // it but the paddle in use and the stringer, which ride lashed), the shoulder reads "Unload it first". On a frozen
+  // lake (season.ice, a Sandbox January) nothing launches: E shoulders it (polish B).
   hullAction() {
     const p = this.player, c = p.carry, d = c && c.drop;
     if (p.mode !== 'walk' || !d || this.busy) return null;
@@ -401,8 +406,9 @@ export class Packs {
     const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, run: () => { if (this.canShoulder().ok) p.pickUpHull(); } };
     if (c.choice || this.leftHere(c, p).length) return { e: shoulder, q: null, label: 'the canoe' };
     const L = this.dropLaunch(d), lake = L ? this.world.lakeName(L.lake) || 'the water' : null;
-    if (L && L.deep) return { e: { verb: 'Get in', run: () => p.launch(L) }, q: shoulder, label: `the canoe, onto ${lake}` };
-    return { e: shoulder, q: null, label: 'the canoe', hint: L ? 'too shallow to launch here' : null };
+    const frozen = !!(this.day && this.day.season && this.day.season.ice > 0.5);
+    if (L && L.deep && !frozen) return { e: { verb: 'Get in', run: () => p.launch(L) }, q: shoulder, label: `the canoe, onto ${lake}` };
+    return { e: shoulder, q: null, label: 'the canoe', hint: L && frozen ? `${lake} is frozen over` : L ? 'too shallow to launch here' : null };
   }
   // the things riding in the canoe that are not lashed in it (the paddle in use and the stringer are): what stops the
   // shoulder and what "Set everything out" sets out

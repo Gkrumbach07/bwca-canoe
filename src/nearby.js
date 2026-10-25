@@ -322,7 +322,9 @@ class Nearby {
     const c = p.carry, d = c && c.drop, s = d && inv.canoeSpot();
     if (d && s && inv.hullDist(s, p.x, p.z) <= HULL_REACH) {
       const hull = this.canoe && this.canoe.hull, hy = hull ? (hull.getWorldPosition(_v), _v.y) : p.groundAt(d.x, d.z);
-      const box = { x: d.x, y: hy + 0.22, z: d.z, hx: 2.45, hy: 0.3, hz: 0.46, heading: d.heading || 0 };
+      // (the box stands a little taller than the hull, so from the dock's deck the dot finds the canoe floating below
+      // without looking straight down at it: polish B)
+      const box = { x: d.x, y: hy + 0.35, z: d.z, hx: 2.45, hy: 0.5, hz: 0.46, heading: d.heading || 0 };
       const hit = near.box(box), a = packs.hullAction();
       if (hit && a) push(hit, { kind: 'canoe', ref: 'canoe', label: a.label, e: a.e, q: a.q || null, hint: a.hint || null, mesh: this.hullMesh(), box });
     }

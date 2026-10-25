@@ -288,7 +288,8 @@ export class Loons {
         l.x += (l.tx - l.x) * f; l.z += (l.tz - l.z) * f;
         if (l.t >= l.under) { l.state = 'surface'; l.t = 0; l.heading = this.rng() * 6.28; this.ring(l.x, l.z, 0.3, 1.4, 2.4); }
       } else if (l.state === 'surface') {
-        if (l.t >= SURFACE) { l.state = 'swim'; l.t = 0; if (this.rng() < 0.3) l.callT = Math.min(l.callT, 2 + this.rng() * 3); }
+        // (a call on surfacing, half as often by day as at dawn, dusk and night: polish B, the lake was busy at noon)
+        if (l.t >= SURFACE) { l.state = 'swim'; l.t = 0; if (this.rng() < 0.15 + 0.15 * Math.max(this.light.dusk, this.light.dawn, this.light.night)) l.callT = Math.min(l.callT, 2 + this.rng() * 3); }
       } else if (l.state === 'flap') {
         if (l.t >= FLAP) { l.state = 'swim'; l.t = 0; }
       } else if (l.state === 'run') {

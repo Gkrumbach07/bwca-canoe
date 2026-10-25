@@ -402,12 +402,13 @@ export class Camp {
     } else if (!this.wet) this.dry = 0;
   }
 
-  // an hour before sunset in Adventure: the nearest free site your map shows (on a sheet you own: sheets.js), never one
-  // off it; once dark: the headlamp
+  // an hour before sunset on an Adventure under way (not at an outfitter's: polish B, it nagged at the door before the
+  // trip): the nearest free site your map shows (on a sheet you own: sheets.js), never one off it; once dark: the headlamp
   notes() {
     const d = this.day, p = this.player, { set } = d.sunriseSunset;
     const stamp = d.year * 1000 + d.doy, evening = d.hours >= 12 ? stamp : stamp - 1;
-    if (this.adventure && !this.camp && set != null && d.hours >= set - 1 && d.hours < set && this.nudged !== stamp && !this.atSite) {
+    const out = this.adventure && this.trip.active && !(this.outfitter && this.outfitter.visit);
+    if (out && !this.camp && set != null && d.hours >= set - 1 && d.hours < set && this.nudged !== stamp && !this.atSite) {
       this.nudged = stamp;
       const n = this.registry.nearestFree(p.x, p.z, 6000, (c) => sheets.showsDetail(c.x, c.z));
       if (n) {

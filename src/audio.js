@@ -2,8 +2,9 @@
 // (audio-beds.js), one-shots built per sound (audio-voices.js) on a shared kit (audio-kit.js), and this, the
 // engine: the mix and the room, a look at the scene every frame, and what lives in it at this hour and season.
 //
-// main calls tick(dt, { player, world, wind, day, season, camera }) each frame (a `weather: { rain }` the weather can
-// add later; update(...) is the old entry and still works); the player, the fishing and the loons call the one-shots below; anything with a place in the world
+// main calls tick(dt, { player, world, wind, day, season, camera, weather }) each frame (the weather for its rain and
+// its air temperature; update(...) is the old entry and still works) and sets `indoors` (inside a store: the walls
+// between you and the lake, the rain on the roof, plank floors); the player, the fishing and the loons call the one-shots below; anything with a place in the world
 // calls emit(kind, { x, y, z, size }). The AudioContext starts on the first key or pointer press (browser policy).
 import { GROUND } from './terrain-build.js';
 import { fbm, mulberry32 } from './rng.js';
@@ -81,6 +82,7 @@ const blankScene = () => ({
   open: 0.5, canopy: 0, landDist: 300, trees: { x: 0, z: 0, d: 400, amt: 0, conifer: 0, decid: 0 }, shore: { x: 0, z: 0 }, openDir: { x: 0, z: -1 },
   shallow: [], shallowNear: 0,
   fire: null, // the lit campfire nearest the eye (fire.js Fires.near: { x, y, z, heat, embers }), from `this.fires`
+  inside: false, onDeck: false, feetY: 0, // polish B: inside a store (main.js `indoors`); on a dock's deck over the water; where the feet are
 });
 
 export class Ambient {
@@ -91,9 +93,10 @@ export class Ambient {
     this.stats = { fired: {}, peakVoices: 0, peakNodes: 0 };
     this.S = blankScene();
     this.L = { x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: -1, ux: 0, uy: 1, uz: 0, rx: 1, rz: 0 }; // the listener: the camera
-    this.me = { mode: null, stroke: 0, side: 0, rate: 0.95, step: 0.6, swimN: 0, lastCatch: -1, lastExit: -1, lastStep: -1, creakT: 4 };
+    this.me = { mode: null, stroke: 0, side: 0, rate: 0.95, step: 0.6, swimN: 0, lastCatch: -1, lastExit: -1, lastStep: -1, lastKnock: -1, creakT: 4 };
     this.lifeT = {}; this.bout = null; this.player = null; this.world = null;
     this.fires = null; // the campfires (fire.js), set by main: the crackle bed reads the nearest lit one
+    this.indoors = null; // () => inside a store, set by main (polish B): the beds muffled, the rain on the roof, plank floors
     this.lastTick = -1; this.lastNow = null; this.probeT = 0;
     if (autoStart && typeof window !== 'undefined') {
       const start = () => { if (!this.ctx) this.init(); window.removeEventListener('keydown', start); window.removeEventListener('pointerdown', start); };
@@ -214,9 +217,12 @@ export class Ambient {
     S.sunAlt = alt; S.night = 1 - smooth(-10, -3, alt); S.day = smooth(3, 14, alt);
     S.dawn = S.hours < 13 ? tw : 0; S.dusk = S.hours < 13 ? 0 : tw;
     S.doy = se.doy ?? 190; S.leafOn = se.leafOn ?? 1; S.ice = se.ice ?? 0; S.loons = se.loons ?? 1; S.cold = se.cold ?? 0; S.fall = se.fall ?? 0;
-    S.airTemp = (se.waterTemp ?? 18) - 4 * S.night + 3 * S.day; // the air by the water's temperature, cooler at night
+    const wx = c.weather && c.weather.look; // the weather's own air (polish B: the crickets kept time by the water's temperature)
+    S.airTemp = wx && Number.isFinite(wx.temp) ? wx.temp : (se.waterTemp ?? 18) - 4 * S.night + 3 * S.day;
     S.rain = c.weather ? c.weather.rain || 0 : 0;
     S.fire = this.fires ? this.fires.near : null; // main sets `fires` (fire.js) when the campfires are made
+    S.inside = !!(this.indoors && this.indoors());
+    S.feetY = p && Number.isFinite(p.altitude) ? p.altitude : S.ground;
     // the listener is the camera: its position, and the way it faces from its quaternion; else the paddler's head
     const cam = c.camera;
     if (cam && cam.position) {
@@ -247,6 +253,7 @@ export class Ambient {
     const x = S.x, z = S.z;
     S.level = w.levelAt(x, z);
     S.depth = S.sd < 0 ? Math.max(0, S.level - S.ground) : 0;
+    S.onDeck = S.onFoot && S.sd < 0 && S.feetY > S.level + 0.25; // on foot over the water with the feet above it: a dock's deck
     const dd = w.deeperDir(x, z);
     S.shore.x = x + dd.x * S.sd; S.shore.z = z + dd.z * S.sd;
     const water = p && p.water, fetch = (fx, fz) => (water ? water.fetchAt(fx, fz) : 300);
@@ -340,11 +347,12 @@ export class Ambient {
       thrush: this.bout ? 0 : song * (S.dawn + 1.2 * S.dusk) * smooth(0.05, 0.3, woods),
       squirrel: S.day * smooth(0.1, 0.4, woods) * (1 - 0.7 * S.ice) * (1 - 0.5 * smooth(8, 14, S.wind)),
       owl: S.night * smooth(0.04, 0.25, woods) * (S.ice > 0.5 ? 0.5 : 1),
-      loon: S.loons * (1 - S.ice) * (S.night + 0.7 * S.dusk + 0.4 * S.dawn + 0.06 * S.day) * (0.3 + 0.7 * S.open),
+      loon: S.loons * (1 - S.ice) * (S.night + 0.7 * S.dusk + 0.4 * S.dawn + 0.03 * S.day) * (0.3 + 0.7 * S.open), // (by day half what it was: polish B)
       raven: S.day * (0.3 + 0.7 * S.cold),
       ice: S.ice > 0.5 ? 0.5 + 0.5 * Math.max(S.night, S.dawn) : 0,
       frog: greenFrogSeason(S.doy) * Math.max(S.night, 0.6 * S.dusk) * S.shallowNear * (1 - S.ice),
     };
+    if (S.inside) for (const k in act) act[k] *= 0.2; // inside a store the woods and the lake are through the walls
     for (const k in act) {
       if (T[k] === undefined) T[k] = MEAN[k] * (0.15 + R() * 0.85);
       if (act[k] < 0.01) continue;
@@ -431,7 +439,9 @@ export class Ambient {
         }
         if (p0 < 0.42 && p1 >= 0.42 && now - me.lastExit > 0.3) { me.lastExit = now; this.say('paddle-exit', V.paddleExit(this, blade, pw, 0.5 / me.rate)); }
       }
-      if (st.side !== me.side) { if (pw > 0.15) this.say('gunwale-knock', V.knock(this, body, 0.12)); me.side = st.side; }
+      // the knock: the paddle lifted over to the other side on a recovery, not a steering stroke's quick change
+      // (st.turn: the bow being corrected switched sides every few strokes, 68 knocks in a kilometre), and never twice in 2 s
+      if (st.side !== me.side) { if (pw > 0.15 && Math.abs(st.turn || 0) <= 0.15 && now - me.lastKnock > 2) { me.lastKnock = now; this.say('gunwale-knock', V.knock(this, body, 0.12)); } me.side = st.side; }
       // the hull working in a sea
       if ((me.creakT -= adt) <= 0) { me.creakT = 2.5 + R() * 5; if (R() < S.waveH * 1.6) this.say('hull-creak', V.creak(this, body, 0.5 + S.waveH)); }
     } else if (S.onFoot) {
@@ -453,7 +463,8 @@ export class Ambient {
 
   footfall(S, carry) {
     const c = S.cls || '', rock = c.startsWith('rock');
-    const kind = S.ice > 0.5 ? 'snow' : S.sd < 0 ? 'wade' : rock ? 'rock' : S.onTrail ? 'dirt' : S.sd < 4 ? 'gravel' : c === 'meadow' ? 'grass' : c === 'burn' ? 'burn' : 'duff';
+    // planks on a store's floor and a dock's deck (polish B: the deck stood over the water, so its steps were wading)
+    const kind = S.inside || S.onDeck ? 'plank' : S.ice > 0.5 ? 'snow' : S.sd < 0 ? 'wade' : rock ? 'rock' : S.onTrail ? 'dirt' : S.sd < 4 ? 'gravel' : c === 'meadow' ? 'grass' : c === 'burn' ? 'burn' : 'duff';
     this.say('step-' + kind, V.step(this, kind, { x: S.x, y: S.y + 0.05, z: S.z }, carry));
     if (carry && this.rand() < 0.3) this.say('yoke-creak', V.creak(this, { x: S.x, y: S.y + 1.8, z: S.z }, 0.6, true));
   }

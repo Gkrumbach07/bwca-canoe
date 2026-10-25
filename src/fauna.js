@@ -101,7 +101,7 @@ export class Fauna {
     G.eaglePair = G.eagle && doy > 110 && doy < 230;
     G.gull = s.ice < 0.3 && doy > 100 && doy < 300;
     G.gullFly = L.elev > -4; // after dark the gulls sit on their rock
-    G.fish = this.forced.fish > 0 ? 1 : open && s.waterTemp > 7 ? (L.dusk + 0.3 * L.dawn + 0.02 * L.day) * (1 - 0.8 * L.night * (1 - L.dusk)) : 0;
+    G.fish = this.forced.fish > 0 ? 1 : open && s.waterTemp > 7 ? (L.dusk + 0.3 * L.dawn + 0.01 * L.day) * (1 - 0.8 * L.night * (1 - L.dusk)) : 0; // (by day half what it was: polish B)
     G.insects = (doy >= 155 && doy <= 240 && L.elev > 12 && s.cold < 0.45 && open) || this.forced.insects > 0;
     G.raven = s.ice >= 0.5 && L.elev > -2;
     this.beavers.update(dt, G.beaver);

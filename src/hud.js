@@ -119,9 +119,11 @@ export function fmtDuration(hours) {
   if (rest < 53) return `${hw} and forty`;
   return h === 0 ? 'nearly an hour' : h === 1 ? 'nearly two hours' : `nearly ${word(h + 1)} hours`;
 }
-// a lake in a few words: "the big water: 3,900 acres, sounded to 23 m"
+// a lake in a few words: "the big water: 3,900 acres, sounded to 23 m"; a river is a river (polish B: the bake cuts a
+// river into short polygons, so its cells are no measure of it, and "a small lake: 170 acres" was wrong twice over)
 export function lakeWords(l) {
   if (!l) return '';
+  if (l.river) return `${l.creek && !/river/i.test(l.name || '') ? 'a creek' : 'a river'}${l.maxDepth ? `, sounded to ${Math.round(l.maxDepth)} m` : ''}`;
   const acres = (l.cells * 100) / 4046.86;
   const size = acres > 2000 ? 'the big water' : acres > 400 ? 'a good-sized lake' : acres > 60 ? 'a small lake' : 'a pond';
   const a = acres >= 100 ? Math.round(acres / 10) * 10 : Math.max(1, Math.round(acres));
@@ -200,6 +202,14 @@ export class Hud {
     this.mode = 'hidden';            // hidden | glance | sheet | corner
     this.view = { cx: 0, cz: 0, span: GLANCE_SPAN };
     this.layers = { lakes: true, portages: true, campsites: true, tasks: true, depths: true };
+    // polish B: the wind glyph on the compass rim comes in from the edge (the head inward, the wave at its base), so
+    // turned to the side the wind comes from it points the way the wind goes (updateCompass)
+    if (this.el.windArrow) {
+      const g = this.el.windArrow, head = g.querySelector('polygon'), shaft = g.querySelector('rect'), wave = g.querySelector('path');
+      if (head) head.setAttribute('points', '48,22 42,13 54,13');
+      if (shaft) shaft.setAttribute('y', '2');
+      if (wave) wave.setAttribute('d', 'M30 13q4 -3 8 0t8 0t8 0t8 0');
+    }
     this.pin = null;
     this.player = null;
     this.fineImages = new Map();
@@ -731,12 +741,14 @@ export class Hud {
 
   set(key, el, value, prop = 'textContent') { if (this.cache[key] !== value) { this.cache[key] = value; el[prop] = value; } }
 
-  // the compass: the needle is the canoe's heading, the gold arrow on the rim is where the wind is going;
-  // it speaks (label, waves, full strength) when the wind matters, and is faint or away otherwise
+  // the compass: the needle is the canoe's heading, the gold arrow on the rim sits on the side the wind comes from and
+  // points the way it goes, in across the dial, so it agrees with "from the south" (polish B: it sat downwind, pointing
+  // out); it speaks (label, waves, full strength) when the wind matters, and is faint or away otherwise
   updateCompass(ctx) {
-    const { player, wind } = ctx, e = this.el, s = this.settings;
+    const { player, wind, day } = ctx, e = this.el, s = this.settings;
     if (!wind) return;
-    const H = player.waveHeightHere || 0;
+    const ice = !!(day && day.season && day.season.ice > 0.5); // a frozen lake has no waves (polish B)
+    const H = ice ? 0 : player.waveHeightHere || 0;
     const matters = wind.fresh || H > WAVE_MATTERS;
     const mode = s ? s.compassMode : 'always';
     const show = mode === 'always' || (mode === 'wind' && matters);
@@ -746,14 +758,14 @@ export class Hud {
     const hdg = bearingOf(player.heading);
     this.set('needle', e.needle, `rotate(${hdg.toFixed(1)}deg)`, 'style');
     e.needle.style.transform = `rotate(${hdg.toFixed(1)}deg)`;
-    e.windArrow.style.transform = `rotate(${((wind.from + 180) % 360).toFixed(1)}deg)`;
+    e.windArrow.style.transform = `rotate(${(wind.from % 360).toFixed(1)}deg)`;
     e.compass.querySelector('svg').setAttribute('aria-label', `Compass: heading ${compassLong(hdg)}; ${wind.label.toLowerCase()} from the ${wind.compassLong}`);
     if (matters) {
       this.set('clabel', e.compassLabel, `${wind.label} · ${wind.speed.toFixed(0)} m/s`, 'innerHTML');
       e.compassLabel.innerHTML = `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s<br>from the ${wind.compassLong}`;
       const f = player.forward, wd = wind.dir, cosRel = f.x * wd.x + f.z * wd.z;
       const aspect = player.mode !== 'paddle' ? '' : Math.abs(cosRel) < 0.5 ? ' · beam on' : cosRel < 0 ? ' · on the bow' : ' · astern';
-      this.set('cwaves', e.compassWaves, `waves ${H.toFixed(1)} m${aspect}${wind.override != null ? ' · set by hand' : ''}`);
+      this.set('cwaves', e.compassWaves, `${ice ? 'frozen over' : `waves ${H.toFixed(1)} m${aspect}`}${wind.override != null ? ' · set by hand' : ''}`);
     }
   }
 
@@ -792,7 +804,7 @@ export class Hud {
         const dayW = this.dayWords(ctx);
         const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
         const hungW = energy && energy.hungFood ? energy.hungFood().words : '';
-        const food = energy && !(core && core.sandbox) ? (energy.foodWords ? `${energy.foodWords()} with you${hungW ? ` · ${hungW}` : ''}` : energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : ''; // fb A: the meals and snacks in reach (camp join: and the barrel hung)
+        const food = energy && !(core && core.sandbox) && !(outfitter && outfitter.visit) ? (energy.foodWords ? `${energy.foodWords()} with you${hungW ? ` · ${hungW}` : ''}` : energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : ''; // fb A: the meals and snacks in reach (camp join: and the barrel hung; polish B: not at a store, where the shelf is a step away)
         const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
         this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayW || 'A new day', sub);
       }
@@ -1045,7 +1057,7 @@ export class Hud {
     }
     const hdg = bearingOf(player.heading), today = stats ? stats.today : null;
     row('Way', `${((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}${today ? ` · ${fmtKm(today.km)} km and ${today.portages} ${plural(today.portages, 'portage')} today` : ''}`);
-    if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · waves ${(player.waveHeightHere || 0).toFixed(1)} m${wind.override != null ? ' · set by hand' : ''}`);
+    if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · ${day && day.season && day.season.ice > 0.5 ? 'the lake is frozen over' : `waves ${(player.waveHeightHere || 0).toFixed(1)} m`}${wind.override != null ? ' · set by hand' : ''}`);
     if (day) {
       const { rise, set } = day.sunriseSunset, h = day.hours;
       const light = set != null && h < set && (rise == null || h >= rise) ? `Sunset ${clock12(set)} · dark by ${clock12(Math.min(23.99, set + 0.8))}` : rise != null ? `Sunrise ${clock12(h < (rise || 0) ? rise : rise)}${h >= (set || 24) ? ' tomorrow' : ''}` : 'No sun today';
@@ -1159,6 +1171,7 @@ export class Hud {
     if (this.bareLegs !== bare) {
       this.bareLegs = bare;
       for (const i of e.map.querySelectorAll('.band.foot .leg > i.portage, .band.foot .leg > i.camp, .band.foot .leg > i.dock')) i.parentNode.style.display = bare ? 'none' : ''; // (the notices' red pencil stays: it is drawn on blank paper too)
+      for (const b of e.mapLayers.querySelectorAll('.layer')) b.style.display = bare ? 'none' : ''; // and no layer toggles over blank paper (polish B)
     }
     const detail = table ? 'click a sheet to see what is on it · the red-dotted ones are sold at this table'
       : look === 'whole' ? 'the whole Boundary Waters, here at the outfitter · the sheets dotted over it, yours ruled in ink'

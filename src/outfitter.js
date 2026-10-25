@@ -641,7 +641,9 @@ export class Outfitter {
     const parts = [];
     if (hint) parts.push(`<div class="word"><div class="lab">${esc(keeper.name || 'The keeper')}, leaning on the counter</div><p>“${esc(hint)}”</p></div>`);
     const price = this.sandbox ? 0 : shop ? shop.price('bunk', a.ep) : 8, short = !this.sandbox && price > this.money;
-    parts.push(`<div class="bunkrow${short ? ' dear' : ''}"><div><b>A bunk tonight</b> · <span class="soft">a real bed, soup and breakfast, up at seven</span></div>
+    // (worded for the hour: in the morning, after an evacuation's wake, the bunk is the day slept off: polish B)
+    const morning = this.day.hours < 12;
+    parts.push(`<div class="bunkrow${short ? ' dear' : ''}"><div><b>${morning ? 'The bunk, and the day off' : 'A bunk tonight'}</b> · <span class="soft">${morning ? 'sleep it off: a real bed, soup, and up at seven tomorrow' : 'a real bed, soup and breakfast, up at seven'}</span></div>
       <button type="button" class="stamp small outline" data-act="bunk" ${short ? 'disabled' : ''}>${price ? `$${price}` : 'Free'}</button></div>`);
     if (!this.layout(a.ep)) parts.push(`<div class="shelfbtns"><p class="soft">The store is being opened up: the shelves are here for now.</p>${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}</div>`);
     const rides = this.rides && typeof this.rides.section === 'function' ? this.rides.section(a.ep) : '';
@@ -743,6 +745,7 @@ export class Outfitter {
         try { if (en.needs && typeof en.needs === 'object') { en.needs.food = 1; en.needs.water = 1; } } catch { /* the needs are energy.js's own */ }
         if (typeof en.fill === 'function') en.fill(2, 0);
       }
+      if (this.core && this.core.state) this.core.state.wet = false; // the gear dries by the stove overnight (polish B)
       this.save();
     };
     const done = () => { this.bunking = false; this.lineKind = 'morning'; this.pendingShow = true; };
