@@ -1720,9 +1720,10 @@ export function tickHold(sc, all = false) {
 // should only show whats missing … if lit, no tooltips needed, just show how much is left with the bar"). The fire ring as
 // nearby.objects() gives it (state, need, burn, coals, cooking, slots, actions): its strap (the picture and the name),
 // then one line of state: the chips of what it is short of while it is cold ("Gather wood"; "a dry branch", "×2 more";
-// "Wet wood won’t catch"), "Hot coals" and its chip, or, lit, only the burn bar with the time left (amber under 20 min).
-// Then the fuel and the grate as grids (a thin bar under the grate while something cooks, its state on the thing's icon,
-// inventory.status), and Douse (held), the one button, while there is a fire to put out. No words besides.
+// "Wet wood won’t catch"), "Hot coals" and its chip, or, lit, only the burn bar (amber under 20 min; the owner: "just the
+// bar", no time beside it). Then the fuel and the grate as grids (a thin bar under the grate while something cooks, its
+// state on the thing's icon, inventory.status: lean on the fire's own, no timers, chores.fuelStatus / cook.grateStatus),
+// and Douse (held), the one button, while there is a fire to put out. No words or numbers besides the missing chips.
 const FP_ICON = '🪵';
 // a chip: an icon (the item's, else none) and its words (the wood glyph dropped where the icon stands for it)
 function fireChip(q) {
@@ -1731,12 +1732,9 @@ function fireChip(q) {
   const text = img ? String(q.text).replace(new RegExp(`^${FP_ICON}\\s*`, 'u'), '') : q.text;
   return `<span class="fp-chip k-${esc(q.kind || 'need')}">${img}<span>${esc(text)}</span></span>`;
 }
-// the state line's insides: the chips, the coals, or the burn bar and its time (data-end: tickTimers counts it down)
+// the state line's insides: the chips, the coals, or the burn bar alone
 function fireLine(o) {
-  if (o.burn) {
-    const sec = Math.max(0, o.burn.left * 3600), end = gameHours() + o.burn.left;
-    return `<span class="fp-bar${o.burn.low ? ' low' : ''}" role="meter" aria-label="Wood left" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${(+o.burn.value).toFixed(2)}"><i style="width:${pct(o.burn.value)}"></i></span><span class="fp-t tmr run" data-end="${end}">${esc(timeWords(sec))}</span>`;
-  }
+  if (o.burn) return `<span class="fp-bar${o.burn.low ? ' low' : ''}" role="meter" aria-label="Wood left" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${(+o.burn.value).toFixed(2)}"><i style="width:${pct(o.burn.value)}"></i></span>`;
   const lead = o.coals ? `<span class="fp-lead">Hot coals</span>` : '';
   return `${lead}${(o.need || []).map(fireChip).join('')}`;
 }
@@ -1774,13 +1772,12 @@ export function firePanel(o, sc) {
   w.appendChild(body);
   return w;
 }
-// a few times a second: the bars in place (the time left, the amber under 20 min, the pot's progress)
+// a few times a second: the bars in place (the wood left, the amber under 20 min, the pot's progress)
 export function livenPanel(el, o) {
   const bar = el.querySelector('.fp-bar');
   if (bar && o.burn) {
     bar.classList.toggle('low', !!o.burn.low);
     const i = bar.querySelector('i'); if (i) i.style.width = pct(o.burn.value);
-    const t = el.querySelector('.fp-t'); if (t) t.dataset.end = String(gameHours() + o.burn.left);
   }
   const ck = el.querySelector('.fp-cook');
   if (ck) { ck.classList.toggle('none', !o.cooking); const i = ck.querySelector('i'); if (i) i.style.width = pct(o.cooking ? o.cooking.value : 0); }

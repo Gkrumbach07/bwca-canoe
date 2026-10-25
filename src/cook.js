@@ -582,23 +582,24 @@ export class Cook {
   }
   // fb5 A (decision 1, the grate): the state of a thing on the grate as a status (inventory.status; stream B draws the
   // chip on its icon and the label in its tooltip): the meal with no pot "needs the pot", the pot short of water
-  // "water 0.3 L", the pot while it cooks (its timer), the cooked thing Ready; else null
+  // "water 0.3 L", the pot Cooking, the cooked thing Ready; else null. The state word and the missing chip only: no
+  // timers, no next lines (the owner, 2026-10-25: "you still seem to be exposing too much numbers and info in the fire")
   grateStatus(c, e) {
     const key = c && c.item === 'grate' && c.at ? c.at.grate : null;
     if (!key || !e || e.box) return null;
     const d = itemDef(e.id);
     if (!d) return null;
     const P = this.pot && this.pot.key === key && !this.pot.done ? this.pot : null;
-    if (d.cooked) return { label: 'Ready', mark: 'ready', ...(e.data && Number.isFinite(e.data.until) ? { timer: Math.max(0, Math.round((e.data.until - this.now) * 3600)), running: true, until: e.data.until } : {}), next: 'Take it off the grate to eat it' };
+    if (d.cooked) return { label: 'Ready', mark: 'ready' };
     const n = this.nextOnGrate(key);
     if (e.id === 'pot') {
-      if (P && !P.fish) { const now = this.cookingNow(key); return { label: now.label, mark: 'cooking', timer: now.timer, running: now.running, ...(now.running ? { until: this.now + now.timer / 3600 } : {}) }; }
-      if (n && n.wait === 'water') return { label: 'Short of water', mark: 'need', chip: `water ${litresUp(n.short)}`, need: { label: 'Water', have: +((this.energy && this.energy.bottle) || 0).toFixed(2), need: n.water, unit: 'L' }, next: 'Fill the bottle at the water’s edge: the pot draws from it' };
+      if (P && !P.fish) return { label: this.cookingNow(key).label, mark: 'cooking' }; // (fb5 A: its bar under the grate; no timer)
+      if (n && n.wait === 'water') return { label: 'Short of water', mark: 'need', chip: `water ${litresUp(n.short)}` };
       return null;
     }
     if (d.eat && d.eat.cook && (d.kind === 'meal' || d.kind === 'fish')) {
       if (P && P.fish && P.stick && d.kind === 'fish') return null;
-      if (d.kind === 'meal' && !this.potOn(key)) return { label: 'Raw', mark: 'need', chip: 'needs the pot', next: 'The pot beside it on the grate: it cooks in the pot' };
+      if (d.kind === 'meal' && !this.potOn(key)) return { label: 'Raw', mark: 'need', chip: 'needs the pot' };
       return { label: 'Raw', mark: null };
     }
     return null;

@@ -537,7 +537,7 @@ async function main() {
     const ch5 = camp.chores, ck5 = ch5.cook;
     fires.veiled = () => !!(cards.shown || journal.open);
     const statusA = inventory.entryStatus.bind(inventory);
-    inventory.entryStatus = (c, e) => (c && c.item === 'grate' && typeof ck5.grateStatus === 'function' ? ck5.grateStatus(c, e) : statusA(c, e)); // (stream B's inventory.js calls it itself once it is in)
+    inventory.entryStatus = (c, e) => (c && c.item === 'grate' && typeof ck5.grateStatus === 'function' ? ck5.grateStatus(c, e) : c && c.item === 'firefuel' && typeof ch5.fuelStatus === 'function' ? ch5.fuelStatus(c, e) : statusA(c, e)); // (the fire's own, lean: a state word and a missing chip, no timers)
     window.__game.fire = { need: (k) => ch5.fireNeed(k), needs: (k) => ch5.fireNeeds(k), on: (n, fn) => fires.on(n, fn), events: fires.events }; // for the console, the tests and stream E
   }
   // fb4 B: the book (the owner's second round of 2026-10-25). I opens and closes it (Pack and Journal are tabs on its

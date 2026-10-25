@@ -55,7 +55,7 @@ import { Tarp } from './tarp.js'; // fb4 E: the tarp pitched like the tent, on t
 // you could drag things from your inventory ... onto the fire"): the fire ring is worked from the book (nearby.js), its
 // fuel a fixed container at the ring like the grate, and the grate takes a raw meal or a fish dragged onto it. Both are
 // stations: never where a thing picked up is put away (inventory.place).
-defineItem({ id: 'firefuel', name: 'In the fire ring', short: 'Fuel', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, station: true, container: { cols: 4, rows: 3, accepts: ['firewood'] }, icon: 'firewood', words: 'Dead branches and short logs laid in the ring. They burn a piece at a time once it is lit.' });
+defineItem({ id: 'firefuel', name: 'In the fire ring', short: 'Fuel', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, station: true, container: { cols: 4, rows: 3, accepts: ['firewood'] }, icon: 'firewood', words: 'Wood laid in the ring.' });
 defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'meal', 'fish'] } });
 // fb3 B (the owner, 2026-10-25: "things like sleeping bag and tarp … feel like they have no use"): rain on a ring with no
 // tarp over it burns a fire down RAIN.burn times faster and wets the wood in it through after RAIN.wetAfter hours (it
@@ -534,6 +534,15 @@ export class Chores {
   // the ring's check (fire.js lightCheck): enabled when nothing is missing; why its first chip
   lightCheck(key) { return this.fires.lightCheck(key, this.binUnits(this.fuelBin(key))); }
   lightProblem(key) { const c = this.lightCheck(key); return c.enabled ? null : c.why; }
+  // a piece in the ring's fuel as a status (inventory.status, through main.js's fb5 A block; the owner, 2026-10-25: "i dont
+  // need to know a stick burns this much and can be used for this on hover"): its state word alone, Wet (or Drying by
+  // the lit fire), else nothing: no "on the fire", no burn time, no timer
+  fuelStatus(c, e) {
+    if (!c || c.item !== 'firefuel' || !e || e.box || !isWood(e.id)) return null;
+    if (!(e.data && e.data.wet > 0)) return null;
+    const lit = !!(c.at && this.fires && this.fires.isLit(c.at.fuel));
+    return lit ? { label: 'Drying', mark: 'drying' } : { label: 'Wet', mark: 'wet' };
+  }
   douseCheck(key) { return this.fires.douseCheck(key); }
   // held: water on it, stirred in, water again, the steam boiling up and the hiss, the coals cold; let go, it stays as
   // far as it got. What wood was still in the ring stays there, wet through, a fire laid.
