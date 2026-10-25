@@ -1685,7 +1685,7 @@ export function tipHtml(d, e, { shelf = false } = {}) {
     const f = Math.max(0, Math.min(1, left / n));
     uses = `<span class="ub" aria-hidden="true"><i style="width:${(f * 100).toFixed(0)}%"></i></span><span class="un">${d.litres ? `${num(+left.toFixed(2))} of ${n} L` : `${Math.round(left)} of ${n}`}</span>`;
   } else if (n != null && shelf && (n > 1 || d.litres)) uses = `<span class="un">${d.litres ? `${n} L` : d.servings ? `${n} servings` : `${n} uses`}</span>`;
-  const qty = st > 1 && (e.qty || 1) > 1 ? `×${e.qty}` : '';
+  const qty = st > 1 && (e.qty || 1) > 1 && !shelf ? `×${e.qty}` : ''; // (on a shelf the price says it: "$4 for 12")
   const price = shelf ? `${e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'}${e.qty > 1 ? ` for ${e.qty}` : ''}` : '';
   const foot = [uses, [price, qty, kgText(kg)].filter(Boolean).map(esc).join(' · ')].filter(Boolean).join('<span class="sep">·</span>');
   return `<b class="nm">${esc(name)}</b>${identity ? `<span class="id">${esc(identity)}</span>` : ''}${stt && !stt.bar ? statusHtml(stt) : ''}${effsHtml(effs)}${on.length ? `<div class="on">${on.map((o) => (Array.isArray(o.takes) && o.takes.length ? takesHtml(o.takes) : `<span>${o.label ? `<b>${esc(o.label)}</b> ` : ''}${esc(o.value ?? '')}</span>`)).join('')}</div>` : ''}<span class="f">${foot}</span>`;
@@ -2389,6 +2389,7 @@ export class ShelfScreen {
     if (force || sig !== this.sig) {
       this.sig = sig;
       this.el.querySelector('header .purse b').textContent = `$${money}`;
+      const yl = this.el.querySelector('.sh-mine .pk-lab'); if (yl && typeof inv.foodWords === 'function') yl.textContent = `Yours · ${inv.foodWords()}`; // (fb5 join: the food just bought counts at once, not "no food" until the shelf is reopened)
       const rc = this.el.querySelector('.sh-receipt'); rc.textContent = r ? r.words : s.hint || ''; rc.classList.toggle('no', !!(r && !r.ok)); // (fb5 B: the footer says it once)
       this.stock(money);
     }
