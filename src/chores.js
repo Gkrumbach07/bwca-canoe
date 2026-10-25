@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PropBuilder, propMaterial, TILE } from './prop-kit.js';
 import { registerKind } from './tasks.js';
 import { dayOfYear } from './astro.js';
-import { clock12, word, plural, esc } from './hud.js';
+import { word, plural } from './hud.js';
 import { mulberry32, hash2 } from './rng.js';
 import { save } from './save.js';
 import { GROUND } from './terrain-build.js';
@@ -40,7 +40,7 @@ import { Cook, hiss, woodKnock } from './cook.js';
 // for the sauna ($6 an armful of three pieces), handed over on foot at the posting outfitter's store.
 //
 // Nothing here takes E (fb2 A: E is the pointer's: pick up, talk, open, get in). What camp.js asks of it: before(),
-// update(dt), openWake(site, choice), card, ashore() (for the leaving note); nearby.js asks the fire's (fuelBin, grate,
+// update(dt), ashore() (for the leaving note); nearby.js asks the fire's (fuelBin, grate,
 // fireInfo, lightProblem, light, douse), the latrine's, the saw's and the wood's; main.js (camp 2) asks move(),
 // beforePose(), afterPose(). Everything is saved in the trip's document (trip.state.chores), or under its own key with no
 // trip.
@@ -61,7 +61,6 @@ export const SEASON = { from: [6, 10], to: [7, 20] }; // [month (0-based), day]:
 export const PAY = { pint: 10, armful: 6 };
 const ARMFUL = 3;            // pieces of wood a notice's "armful" is
 // the wake times on the card: first light (camp.js wakeTime: a quarter hour after sunrise, or later after a late night)
-export const WAKES = ['first', 7, 9];
 const LIGHT = [
   { name: 'Laid', doing: 'Laying birch bark, the kindling and the wood in the ring', minutes: 8, seconds: 1.5 },
   { name: 'Lit', doing: 'A match to the bark, blowing it into flame', minutes: 6, seconds: 1.4 },
@@ -198,79 +197,6 @@ function drawHot(fish) {
 for (const [id, fn] of [['wood:branch', drawPiece('branch')], ['wood:log', drawPiece('log')], ['hot:supper', drawHot(false)], ['hot:breakfast', drawHot(false)], ['hot:freeze', drawHot(false)]]) { const d = itemDef(id); if (d) d.draw = fn; }
 for (const id of Object.keys(itemDef('fried:fish') ? { 'fried:walleye': 1, 'fried:pike': 1, 'fried:smallmouth': 1, 'fried:laketrout': 1, 'fried:perch': 1, 'fried:crappie': 1, 'fried:fish': 1 } : {})) { const d = itemDef(id); if (d) d.draw = drawHot(true); }
 
-// --- the wake-time card ----------------------------------------------------------------------------------------------
-// A small paper slip over the camp (no scrim: the evening stays in view): first light, 7:00, 9:00; ← → chooses, E turns
-// in, Esc (or Q, or a step away) lets it be. Its keys are taken in the capture phase, ahead of the game's, the title's
-// pause and the map's (the camp is made before them, so this listener runs first).
-const CSS = `
-#wake-card { left: 50%; margin-left: -230px; bottom: 112px; width: 460px; padding: 15px 20px 13px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
-#wake-card .kick { font-size: 11.5px; letter-spacing: .16em; }
-#wake-card h4 { margin: 0; font: 500 24px/1.1 var(--serif); color: var(--ink); }
-#wake-card .row { display: flex; gap: 10px; }
-#wake-card .opt { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 6px 7px; border: 1.5px solid var(--edge); border-radius: 3px; background: transparent; color: var(--ink-soft); cursor: pointer; }
-#wake-card .opt b { font: 600 19px/1.15 var(--serif); color: var(--ink); }
-#wake-card .opt span { font: 700 11px/1.3 var(--sc); letter-spacing: .1em; }
-#wake-card .opt.on { background: var(--ink); border-color: var(--ink); color: var(--paper-card); }
-#wake-card .opt.on b { color: var(--paper); }
-#wake-card .sub { font: italic 15.5px/1.3 var(--serif); color: var(--ink-soft); min-height: 1.3em; }
-#wake-card .keys { display: flex; align-items: center; gap: 7px; font: 700 11px/1.3 var(--sc); letter-spacing: .1em; color: var(--ink-soft); }
-#wake-card .keys .stamp { margin-left: auto; }
-`;
-let cssIn = false;
-function injectCss() {
-  if (cssIn || typeof document === 'undefined') return;
-  cssIn = true;
-  const s = document.createElement('style'); s.id = 'chores-css'; s.textContent = CSS;
-  document.head.appendChild(s);
-}
-class WakeCard {
-  constructor() {
-    injectCss();
-    const el = this.el = document.createElement('div');
-    el.id = 'wake-card'; el.className = 'paper'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'When to wake');
-    el.innerHTML = '<div class="sc kick"></div><h4>Up at</h4><div class="row" role="radiogroup" aria-label="Wake at"></div><p class="sub"></p>'
-      + '<div class="keys"><kbd>←</kbd><kbd>→</kbd> the time <kbd>E</kbd> sleep <kbd>Esc</kbd> not yet<button type="button" class="stamp small" data-go="1">Sleep</button></div>';
-    document.body.appendChild(el);
-    this.kick = el.querySelector('.kick'); this.row = el.querySelector('.row'); this.sub = el.querySelector('.sub');
-    this.isOpen = false; this.i = 0; this.opts = []; this.onPick = null; this.onClose = null;
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-go]')) { this.confirm(); return; }
-      const b = e.target.closest('button[data-i]');
-      if (b) { this.set(+b.dataset.i); if (e.detail >= 2) this.confirm(); }
-    });
-    window.addEventListener('keydown', (e) => {
-      if (!this.isOpen) return;
-      const c = e.code;
-      if (c === 'ArrowLeft' || c === 'KeyA') this.set(this.i - 1);
-      else if (c === 'ArrowRight' || c === 'KeyD') this.set(this.i + 1);
-      else if (c === 'KeyE' || c === 'Enter' || c === 'Space') { if (!e.repeat) this.confirm(); }
-      else if (c === 'Escape' || c === 'KeyQ' || c === 'Backspace') this.close();
-      else { if (!/^(Shift|Control|Alt|Meta|Tab)/.test(c)) this.close(); return; } // a step away (W), the map: the card goes
-      e.preventDefault(); e.stopImmediatePropagation();
-    }, true);
-  }
-  get open() { return this.isOpen; }
-  // opts: [{ choice, label, at, hours, words }]; i: the one chosen to begin with
-  show({ kicker, opts, i = 0, onPick, onClose = null }) {
-    this.opts = opts; this.onPick = onPick; this.onClose = onClose;
-    this.kick.textContent = kicker || 'Turn in';
-    this.row.innerHTML = opts.map((o, k) => `<button type="button" class="opt" role="radio" data-i="${k}"><b>${esc(o.label)}</b><span>${esc(o.small)}</span></button>`).join('');
-    this.isOpen = true;
-    this.set(i);
-    this.el.classList.add('show');
-  }
-  set(i) {
-    this.i = Math.max(0, Math.min(this.opts.length - 1, i));
-    [...this.row.children].forEach((b, k) => { b.classList.toggle('on', k === this.i); b.setAttribute('aria-checked', String(k === this.i)); });
-    const o = this.opts[this.i];
-    this.sub.textContent = o ? o.words : '';
-  }
-  get choice() { const o = this.opts[this.i]; return o ? o.choice : 'first'; }
-  confirm() { if (!this.isOpen) return; const c = this.choice, f = this.onPick; this.hide(); if (f) f(c); }
-  close() { if (!this.isOpen) return; const f = this.onClose; this.hide(); if (f) f(); }
-  hide() { this.isOpen = false; this.el.classList.remove('show'); }
-}
-
 // --- the chores --------------------------------------------------------------------------------------------------------
 export class Chores {
   // camp: the Camp (camp.js); everything else comes through it (the world, the player, the day, the energy, the scene,
@@ -278,7 +204,6 @@ export class Chores {
   constructor(camp) {
     this.camp = camp; this.tasks = null;
     this.inv = INVENTORY;
-    this.card = new WakeCard();
     this.s = blank();           // what is saved (serialize)
     this.stateRef = undefined;  // the trip's document the saved part was read from
     this.t = 0;
@@ -920,19 +845,6 @@ export class Chores {
     this.persist();
   }
 
-  // --- the wake-time card -------------------------------------------------------------------------------------------
-  // the options at this hour (camp.wakeTime for each), the card up with `i` chosen
-  openWake(site, i = 0) {
-    const c = this.camp;
-    const opts = WAKES.map((choice) => {
-      const w = c.wakeTime(choice), h = Math.floor(w.hours + 1e-6), m = Math.round((w.hours - h) * 60);
-      const long = w.hours >= 7 ? 'a full night' : `a short night: the tent gives ${Math.round(Math.min(1, w.hours / 7) * 100)} % of its rest`;
-      const t = clock12(w.at), [hm, ap] = t.split(' ');
-      return { choice, at: w.at, hours: w.hours, label: choice === 'first' ? 'First light' : hm, small: choice === 'first' ? t : ap, words: `${h} h${m ? ` ${m} min` : ''} of sleep · ${long}` };
-    });
-    this.card.show({ kicker: `Turn in · ${site ? c.siteName(site) : 'your tent'}`, opts, i, onPick: (choice) => c.sleep('tent', choice) });
-  }
-  // (camp.tentPrompts' old hook: the wake card is the tent panel's Sleep now, nearby.js)
   offered() {}
   // the old hooks (camp.js before camp 2): the prompts are this module's own now
   spotPrompts() { return false; }

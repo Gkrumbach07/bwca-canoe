@@ -350,7 +350,7 @@ export class Camp {
     const ch = this.chores;
     if (ch && !this.busy && !this.night) ch.before();
     hold.before();
-    if (this.busy || (this.card && this.card.active) || (ch && ch.card && ch.card.open) || this.dialOpen) this.player.input.paused = true;
+    if (this.busy || (this.card && this.card.active) || this.dialOpen) this.player.input.paused = true;
   }
   get dialOpen() { return !!(this.dial && this.dial.open); }
 
@@ -384,7 +384,7 @@ export class Camp {
     if (this.morningNote && !this.night && !(this.veil && this.veil.active)) { this.note(this.morningNote, 9); this.morningNote = null; }
     if (this.busy) { this.ghost.park(); this.working(dt); return; }
     if (this.night || hold.active) { this.ghost.park(); return; }
-    if ((this.chores && this.chores.card && this.chores.card.open) || this.dialOpen) { this.ghost.park(); p.prompt = null; return; } // the wake-time card or the dial holds the keys
+    if (this.dialOpen) { this.ghost.park(); p.prompt = null; return; } // the dial holds the keys
     this.notes();
     this.still = Math.abs(p.speed) < 0.15 ? this.still + dt : 0;
     this.prompts();
@@ -850,8 +850,6 @@ export class Camp {
     this.dial.show({ kicker: `Rest · ${c.site ? this.siteName(c.site) : 'your tent'}`, opts, at: start, words, onPick: (at) => this.sleep('tent', at) });
     return true;
   }
-  // (the wake-time card's hook, chores.js: the dial is the tent's E now)
-  turnIn() { return this.restDial(); }
   // from an hour and a half before sunset to sunrise the tent takes you (night0), and by day too when worn out (sleepy)
   get night0() { const d = this.day, { rise, set } = d.sunriseSunset, h = d.hours; return h >= (set ?? 19) - SLEEP_FROM || h < (rise ?? 6); }
   get sleepy() { return this.night0 || this.wornOut; }
