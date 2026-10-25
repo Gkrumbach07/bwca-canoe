@@ -12,11 +12,20 @@ import { makeFaunaMaterials, Parts, frameMatrix, partMatrix, deeper, waterRun, s
 // canoe comes close, when most of them dive. They keep off the canoe and off the shore, and leave the lakes when
 // they freeze.
 //
+// By day they are nearly silent (the owner's feedback of 2026-10-25, decision 8: "loon noises are way too often").
+// The flock keeps one gate (`quiet`): after any call in full daylight nothing calls of its own accord for DAY_GAP,
+// five to nine minutes (the loons' clock is the frame's, not the time-lapsed day's: main.js passes dt times the
+// player's own time scale, so these are minutes as the ear hears them at any pace), a bird surfacing from a dive
+// seldom calls by day, a canoe coming close draws a tremolo from one bird in five, and an answer comes half as
+// often. The gate shortens with the twilight and is gone at dawn, dusk and night, when they call as they always
+// did: the chorus is theirs.
+//
 // Drawn as instanced parts (fauna-kit.js): the body, the head and neck, the two wings (only while flapping)
 // and the chicks, each one call for all of them. main.js passes the frame's context as the fourth argument
 // (`{ day, camera, ripples, audio }`); without it they still swim, dive and call, just with no wake and no clock.
 
 const DIVE = 1.1, SURFACE = 0.9, FLAP = 3.4;
+const DAY_GAP = [300, 540]; // seconds of quiet after a call in full daylight (see the header)
 const NECK = [0.27, 0, 0];
 const CALL = { wail: 'loon-wail', tremolo: 'loon-tremolo', yodel: 'loon-yodel' };
 const _m = new THREE.Matrix4(), _h = new THREE.Matrix4(), _w = new THREE.Matrix4(), _c = new THREE.Matrix4();
@@ -46,6 +55,8 @@ export class Loons {
     this.chicks = [0, 1].map((i) => ({ i, alive: false, parent: -1, ride: true, x: 0, z: 0, heading: 0, size: 1, bob: this.rng() * 6 }));
     this.forced = null; // a debug request (force()) waiting for the next update
     this.season = -1;   // the day the population was laid out for
+    this.quiet = 0;     // the daytime gate: game seconds until the flock may call of its own accord again
+    this.light = LIGHT;
   }
 
   // --- where they go ----------------------------------------------------------------------------------------
@@ -178,19 +189,24 @@ export class Loons {
     this.splash(l, 0.6);
     return true;
   }
+  // how much of the day's hush is on: 1 in full daylight, 0 at dawn, dusk and night
+  get hush() { const L = this.light, tw = Math.max(L.dusk, L.dawn, L.night); return (1 - tw) * (1 - tw); }
   call(l, kind, depth = 0) {
-    const light = this.light, dist = Math.hypot(l.x - this.px, l.z - this.pz);
+    const dist = Math.hypot(l.x - this.px, l.z - this.pz), hush = this.hush;
     emit(this.audio, CALL[kind], l.x, this.levelOf(l) + 0.3, l.z, 1, dist);
-    // an answer: the mate (or the bird it follows), else another bird on the lake; a yodel is answered by a rival
+    // the daytime gate closes behind every call (an answer or an alarm too)
+    this.quiet = Math.max(this.quiet, (DAY_GAP[0] + this.rng() * (DAY_GAP[1] - DAY_GAP[0])) * hush);
+    // an answer: the mate (or the bird it follows), else another bird on the lake; a yodel is answered by a rival;
+    // half as readily by day
     if (depth <= 0) return;
     let to = null;
     const mate = this.loons.find((m) => m.alive && m !== l && (m.lead === l.i || l.lead === m.i || (l.lead >= 0 && m.lead === l.lead)));
     if (kind !== 'yodel' && mate && this.rng() < 0.75) to = mate;
     else { const others = this.loons.filter((m) => m.alive && m !== l && m !== mate && m.state !== 'under'); if (others.length) to = others[(this.rng() * others.length) | 0]; }
-    if (!to || to.replyT > 0 || this.rng() > (to === mate ? 0.8 : 0.45)) return;
+    if (!to || to.replyT > 0 || this.rng() > (to === mate ? 0.8 : 0.45) * (1 - 0.5 * hush)) return;
     to.replyT = 1.5 + this.rng() * 4 + (to === mate ? 0 : 2);
     to.replyKind = kind === 'yodel' ? (to.male && to.lead < 0 ? 'yodel' : 'tremolo') : kind === 'tremolo' ? (this.rng() < 0.6 ? 'tremolo' : 'wail') : 'wail';
-    to.replyDepth = depth - 1 + (light.night > 0.5 && this.rng() < 0.25 ? 1 : 0); // a chorus now and then on a summer night
+    to.replyDepth = depth - 1 + (this.light.night > 0.5 && this.rng() < 0.25 ? 1 : 0); // a chorus now and then on a summer night
   }
   ring(x, z, s0, s1, life) { const r = this.rip; if (r) r.spawn(3, x, this.world.levelAt(x, z), z, s0, s1, life); }
   splash(l, size) {
@@ -220,6 +236,9 @@ export class Loons {
     const afloat = player.mode === 'paddle' || player.mode === 'swim';
     const cx = camera ? camera.position.x : player.x, cz = camera ? camera.position.z : player.z;
     const chatty = 0.2 + 1.6 * Math.max(this.light.dusk, this.light.dawn * 0.6, this.light.night);
+    const hush = this.hush, tw = Math.max(this.light.dusk, this.light.dawn, this.light.night);
+    this.quiet = Math.max(0, this.quiet - dt);
+    const mayCall = () => this.quiet <= 0 || tw > 0.5; // (read per bird: the first one through the gate closes it)
 
     for (const l of this.loons) {
       // a group that has drifted far behind the player is laid out again ahead of it
@@ -238,7 +257,7 @@ export class Loons {
       // the canoe coming close: most dive, a parent with a chick on its back swims off calling
       if (swimming && afloat && l.alarmCool <= 0 && (dPlayer < 26 || (dPlayer < 45 && player.speed > 0.8))) {
         l.alarmCool = 25;
-        if (this.rng() < 0.5) this.call(l, 'tremolo', 1);
+        if (this.rng() < 0.5 - 0.3 * hush) this.call(l, 'tremolo', 1); // (one bird in five by day)
         if (l.chick >= 0 || this.rng() < 0.22) { l.state = 'flee'; l.t = 0; l.flee = 10 + this.rng() * 6; l.heading = headingOf(l.x - player.x, l.z - player.z) + (this.rng() - 0.5) * 0.6; }
         else if (this.rng() < 0.12) { l.heading = headingOf(l.x - player.x, l.z - player.z); if (!this.startRun(l)) this.startDive(l, player.x, player.z, true); }
         else this.startDive(l, player.x, player.z, true);
@@ -288,8 +307,8 @@ export class Loons {
         l.x += (l.tx - l.x) * f; l.z += (l.tz - l.z) * f;
         if (l.t >= l.under) { l.state = 'surface'; l.t = 0; l.heading = this.rng() * 6.28; this.ring(l.x, l.z, 0.3, 1.4, 2.4); }
       } else if (l.state === 'surface') {
-        // (a call on surfacing, half as often by day as at dawn, dusk and night: polish B, the lake was busy at noon)
-        if (l.t >= SURFACE) { l.state = 'swim'; l.t = 0; if (this.rng() < 0.15 + 0.15 * Math.max(this.light.dusk, this.light.dawn, this.light.night)) l.callT = Math.min(l.callT, 2 + this.rng() * 3); }
+        // (a call on surfacing: seldom by day, now and then at dawn, dusk and night; it goes through the gate below)
+        if (l.t >= SURFACE) { l.state = 'swim'; l.t = 0; if (this.rng() < 0.3 - 0.27 * hush) l.callT = Math.min(l.callT, 2 + this.rng() * 3); }
       } else if (l.state === 'flap') {
         if (l.t >= FLAP) { l.state = 'swim'; l.t = 0; }
       } else if (l.state === 'run') {
@@ -306,15 +325,16 @@ export class Loons {
         if (l.t >= l.run) { l.state = 'swim'; l.t = 0; this.splash(l, 0.7); this.ring(l.x, l.z, 0.4, 2.2, 2.8); }
       }
 
-      // calls: wails, tremolos and the males' yodels, mostly at dusk and through the night
+      // calls: wails, tremolos and the males' yodels, mostly at dusk and through the night; by day a bird whose time
+      // has come waits for the flock's gate (and the first through it closes it again behind)
       if (l.state !== 'under' && l.state !== 'dive') {
         if (l.replyT > 0) { l.replyT -= dt; if (l.replyT <= 0) this.call(l, l.replyKind, l.replyDepth); }
         l.callT -= dt * chatty;
-        if (l.callT <= 0) {
+        if (l.callT <= 0 && mayCall()) {
           l.callT = 160 + this.rng() * 320;
           const r = this.rng(), night = this.light.night > 0.5 || this.light.dusk > 0.5;
           const kind = night ? (r < 0.45 ? 'wail' : r < 0.7 || !l.male || l.lead >= 0 ? 'tremolo' : 'yodel') : (r < 0.45 ? 'wail' : 'tremolo');
-          this.call(l, kind, 2);
+          this.call(l, kind, hush > 0.5 ? 1 : 2);
         }
       }
 

@@ -91,6 +91,49 @@ export const gladeShore = (sd, wet) => 1 - (1 - smoothstep(45, 120, sd)) * (1 - 
 // fern, log, stump, outcrop. The shrubs and the alder root at the waterline, the trees a pace up from it (and lean
 // out: LEAN).
 const SHORE_MIN = [0.7, 0.9, 0, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 2.0, 0.3, 0.8, 1.2, 1.5, 1.0, -3];
+// The portage trails as a green tunnel (the owner's feedback of 2026-10-25, decision 7). A portage in the Boundary
+// Waters is a trodden line through the woods with the brush crowding both edges and the canopy closed over it; the
+// first exclusion (2.2 m plus a pad of up to 1.2 m round the polyline) left a bare lane 5–7 m wide. Now the forest is
+// kept off only the tread itself plus a hand's width: TRAIL.clear from the centreline (props.js exclusionsFor passes
+// it as the trails' radius; the tread is a decal 0.95 ± 0.18 m half wide about a centreline that meanders ± 0.2 m,
+// props.js buildTrail, so its widest edge lies 1.33 m out), and each kind stands its own pad outside that
+// (TRAIL_PAD, by kind + 2 as SHORE_MIN): the ferns lean over the edge, the shrubs and the hazel root a step off it,
+// the young conifers (crowns to the ground) a pace off, and the trees far enough that a trunk never reaches the lane
+// a carried canoe needs (player.js: the hull overhead catches a trunk within its half-width of the walker's line).
+// Besides the cell's own growth, which the trailSide boost already thickens, the edges are planted on purpose
+// (TRAIL.edge, per metre of trail per side, at a lateral offset from the centreline of clear + [from, to]):
+// bracken, hazel, alder on the wet ground, the shrubs, young fir, young conifers and, further back, trees leaning
+// in over the path (birch and aspen among them: the edge species, gold in the fall), so the tunnel closes over.
+export const TRAIL = { clear: 1.35 };
+const TRAIL_PAD = [0.95, 1.2, 0, 0, 0, 0, 0, 0, 0, 0.15, 0, 0, 0.3, 0.3, 0.35, -0.25, 0.7, 0.5, 1.6];
+// [kind, from, to, lean toward the path]; the density per metre per side is trailEdgeDensity's
+const TRAIL_EDGE = [[13, -0.2, 1.4], [10, 0.3, 1.6], [11, 0.3, 1.6], [7, 0.15, 1.4], [12, 0.35, 1.8], [-2, 0.95, 2.1], [-1, 1.5, 3.4, true]];
+function trailEdgeDensity(kind, h, soil, burn, face, shoreRow, bareness) {
+  switch (kind) {
+    case 13: return 0.34 * (0.6 + 0.4 * (1 - h.dry)) * soil * (1 - 0.6 * h.wet) * (1 - burn);
+    case 10: return 0.2 * soil * (1 - 0.8 * h.wet) * (1 - burn);
+    case 11: return (0.06 + 0.35 * h.wet + 0.3 * shoreRow) * soil;
+    case 7: return (0.1 + 0.3 * shoreRow + 0.3 * burn) * (1 - bareness * 0.8);
+    case 12: return 0.16 * (0.8 + 0.4 * h.moist) * soil * (1 - 0.5 * h.wet);
+    case -2: return 0.09 * soil * (1 - face) * (1 - burn);
+    case -1: return 0.06 * (1 - face) * (1 - 0.5 * burn);
+    default: return 0;
+  }
+}
+// The part of segment (x1, z1)-(x2, z2) inside the square of half side `half` about (cx, cz), as [t0, t1] along it, or
+// null (Liang-Barsky).
+function clipToCell(x1, z1, x2, z2, cx, cz, half) {
+  const dx = x2 - x1, dz = z2 - z1;
+  let t0 = 0, t1 = 1;
+  const clip = (p, q) => {
+    if (p === 0) return q >= 0;
+    const r = q / p;
+    if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+    return true;
+  };
+  if (!clip(-dx, x1 - (cx - half)) || !clip(dx, cx + half - x1) || !clip(-dz, z1 - (cz - half)) || !clip(dz, cz + half - z1)) return null;
+  return t1 > t0 ? [t0, t1] : null;
+}
 // The forest's edge along the water (the shoreline pass): young balsam fir, spruce and cedar, 4–8 m, their crowns to
 // the ground, filling under the big trees' crowns so the shore reads as a wall from the water, not a row of trunks.
 // Per cell within `to` m of the water, fading by `fade`.
@@ -635,15 +678,35 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const eYoung = EDGE.young * (1 - smoothstep(EDGE.to, EDGE.fade, sdH)) * soil * (1 - burn) * (1 - clearing) * (1 - face) * (1 - 0.5 * h.bog);
       const plan = [[-1, trees, 1.2], [-2, count(rng, eYoung), 1.0], [7, shrubs, 0.4], [10, count(rng, eHazel), 0.4], [11, count(rng, eAlder), 0.4], [12, count(rng, eSapling), 0.4], [13, count(rng, eFern), 0.3],
         [14, count(rng, eLog), 1.5], [15, count(rng, eStump), 0.8], [16, count(rng, eOutcrop), 2.5]];
-      for (const [kind, cnt, pad] of plan) {
+      // the portage's edges (TRAIL): along each trail segment's run through this cell, per side, each kind at its
+      // lateral band (a ring cell draws the same numbers, for the canopy shade; only a core cell plants)
+      if (segs) for (const g of segs) {
+        if (g[5] >= 5 || g[6]) continue;
+        const c = clipToCell(g[0], g[1], g[2], g[3], cx, cz, cell / 2);
+        if (!c) continue;
+        const L = Math.hypot(g[2] - g[0], g[3] - g[1]), run = L * (c[1] - c[0]);
+        if (!(L > 0.01) || run < 0.2) continue;
+        const nx = -(g[3] - g[1]) / L, nz = (g[2] - g[0]) / L;
+        for (let side = -1; side <= 1; side += 2) for (const [kind, from, to, lean] of TRAIL_EDGE) {
+          const n = count(rng, trailEdgeDensity(kind, h, soil, burn, face, shoreRow, bareness) * run * (1 - 0.5 * clearing));
+          if (n) plan.push([kind, n, TRAIL_PAD[kind + 2], { g, t0: c[0], t1: c[1], nx: nx * side, nz: nz * side, from: TRAIL.clear + from, to: TRAIL.clear + to, lean: !!lean }]);
+        }
+      }
+      for (const [kind, cnt, pad, edge] of plan) {
         for (let q = 0; q < cnt; q++) {
-          const x = cx + (rng() - 0.5) * cell, z = cz + (rng() - 0.5) * cell;
+          let x, z;
+          if (edge) {
+            // a point along the trail's run through the cell, out to the side by the kind's band
+            const g = edge.g, t = edge.t0 + rng() * (edge.t1 - edge.t0), o = edge.from + rng() * (edge.to - edge.from);
+            x = g[0] + (g[2] - g[0]) * t + edge.nx * o; z = g[1] + (g[3] - g[1]) * t + edge.nz * o;
+          } else { x = cx + (rng() - 0.5) * cell; z = cz + (rng() - 0.5) * cell; }
           const s = grid.shoreAt(x, z);
           const isRock = kind === 16;
           if (s < SHORE_MIN[kind + 2]) continue;
           if (beachy && !isRock && s < 7 && site.at(site.beach, x, z) > 0.4) continue;
           if (camping && !isRock && site.at(site.camp, x, z) > 0.3) continue;
-          if (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + pad)) continue;
+          // (a trail keeps each kind off by its own pad, TRAIL_PAD; a campsite's shelf and an outfitter's lawn by the plan's)
+          if (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + (g[5] < 5 && !g[6] ? TRAIL_PAD[kind + 2] : pad))) continue;
           // nothing upright on a cliff's face (the steep step of the drawn ground)
           if (face > 0.05 && kind !== 16 && drawnSlope(grid, x, z) > 0.9) continue;
           let sp = kind;
@@ -651,6 +714,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
             const r = rng();
             if (bare) sp = rockTree(r);
             else if (burn > 0.5) sp = burnTree(r);
+            else if (edge && r < 0.38) sp = r < 0.22 ? SPECIES.birch : SPECIES.aspen; // the edge species, in the light along the path
             else sp = pickTree(w || (w = treeWeights(h, stand, aspens, thick)), r);
             shadeCount[k0] += 1;
           } else if (kind === -2) {
@@ -684,7 +748,14 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           // the cedar and the birch most (drawn before the core test: a ring cell must use up its random numbers as the
           // tile that owns it does, or the trees it counts for the canopy shade drift from that tile's)
           let az = 0, tilt = 0;
-          if (isTree && s < LEAN.reach && sp !== SPECIES.snag) {
+          if (edge && edge.lean && isTree && sp !== SPECIES.snag) {
+            // a tree at a portage's edge leans in over the path, into its light, so the canopy closes over it
+            if (rng() < 0.7) {
+              const a = Math.atan2(-edge.nz, -edge.nx) + (rng() - 0.5) * 0.5;
+              az = Math.atan2(Math.sin(a), -Math.cos(a));
+              tilt = (0.07 + rng() * 0.13) * (LEAN.by[sp] || 1);
+            }
+          } else if (isTree && s < LEAN.reach && sp !== SPECIES.snag) {
             const lean = (1 - smoothstep(LEAN.full, LEAN.reach, s)) * (rng() < LEAN.share ? 1 : 0.2);
             const e2 = 1.5, gx = grid.shoreAt(x + e2, z) - grid.shoreAt(x - e2, z), gz = grid.shoreAt(x, z + e2) - grid.shoreAt(x, z - e2);
             if (lean > 0.01 && Math.hypot(gx, gz) > 1e-4) {

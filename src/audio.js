@@ -406,8 +406,10 @@ export class Ambient {
     if (!v) return null;
     this.count('loon-' + kind);
     if (kind === 'hoot') return v;
-    const R = this.rand, d = this.distTo(pos), L = this.L;
-    if (R() < (depth === 0 ? (kind === 'tremolo' ? 0.3 : 0.45) : depth === 1 ? 0.15 : 0)) {
+    const R = this.rand, d = this.distTo(pos), L = this.L, S = this.S;
+    // (fb3 D: by day an answer from across the lake comes a third as often; the chorus is the twilight's and the night's)
+    const tw = Math.max(S.night, S.dusk, S.dawn), readily = 0.35 + 0.65 * tw;
+    if (R() < (depth === 0 ? (kind === 'tremolo' ? 0.3 : 0.45) : depth === 1 ? 0.15 : 0) * readily) {
       const a = Math.atan2(pos.z - L.z, pos.x - L.x) + (R() < 0.5 ? -1 : 1) * (0.8 + R() * 2), dd = Math.min(3000, d * (0.6 + R()) + 60);
       const q = { x: L.x + Math.cos(a) * dd, y: pos.y, z: L.z + Math.sin(a) * dd };
       const r = R(), nk = kind === 'yodel' ? (r < 0.6 ? 'yodel' : 'wail') : kind === 'tremolo' ? (r < 0.5 ? 'tremolo' : 'wail') : r < 0.8 ? 'wail' : 'tremolo';

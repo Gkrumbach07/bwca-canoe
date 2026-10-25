@@ -271,6 +271,13 @@ of the trees. Open rock belongs to campsites and some points and ledges, not to 
   azimuth and tilt). Campsite shelves and beaches are kept clear of trees and brush.
 - **The pale strip at the waterline** seen from out on the lake is the shallow bed's sand colour (`bedSand`) through
   the water, not the land: the water side owns it.
+- **Portages are a green tunnel** (the 2026-10-25 feedback, placement.js `TRAIL`): the forest is kept off only the
+  tread plus a hand's width (`TRAIL.clear`, 1.35 m from the decal's own rounded line, props.js `exclusionsFor`), each
+  kind standing its own pad outside that (`TRAIL_PAD`: ferns over the edge, brush a step off, young conifers a pace,
+  trees far enough that a carried hull never catches a trunk), and the edges are planted on purpose per metre of
+  trail per side (`TRAIL_EDGE`, `trailEdgeDensity`): bracken, hazel, alder, the shrubs, young fir and young conifers,
+  and trees leaning in over the path, birch and aspen among them, so the canopy closes and the fall is colourful.
+  The lane was 5–7 m of bare ground before; the cost is a few percent of calls and triangles at a trail.
 
 ## The ground things stand on
 

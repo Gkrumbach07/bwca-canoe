@@ -4,7 +4,7 @@ import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt, meshHeightAt } from './terrain-build.js';
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
-import { bedding, seatRock, ROCK_FOOT, ROCK_KIND } from './placement.js';
+import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
 import { RockShape } from './collide.js';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 
@@ -39,7 +39,9 @@ export function resample(pts, step) {
 // trees and brush stay off it but the grass grows through.
 export function exclusionsFor(world) {
   const segs = [];
-  for (const p of world.portages) for (let i = 1; i < p.pts.length; i++) segs.push([p.pts[i - 1][0], p.pts[i - 1][1], p.pts[i][0], p.pts[i][1], 2.2]);
+  // (fb3 D: the trails keep the forest off only the tread plus a hand's width, TRAIL.clear in placement.js, along the
+  // line the decal is drawn on, its corners rounded as buildTrail rounds them)
+  for (const p of world.portages) { const pts = rounded(p.pts); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
   for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, -36]); // the mown yard around an outfitter's dock
   return segs;
@@ -247,7 +249,7 @@ class TrailDecal {
   }
 }
 // The polyline with its corners rounded off (a fillet up to 2 m along each leg), so the path bends instead
-// of kinking and its rows never fold over on the inside of a turn; it stays inside the vegetation's 2.2 m.
+// of kinking and its rows never fold over on the inside of a turn (the vegetation's exclusion follows the same line).
 function rounded(pts) {
   if (pts.length < 3) return pts;
   const out = [pts[0]];
