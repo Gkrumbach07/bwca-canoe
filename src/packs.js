@@ -607,10 +607,10 @@ export class Packs {
     return hold.begin({ ...this.loadAllOpts(d, lo), key, keys: [...new Set([key, 'KeyE', 'Mouse0', ...((opts && opts.keys) || [])])] });
   }
   // the things set down for the second trip at the trail head away from the canoe, of the trail you (or it) are on
-  leftHere(c = this.player.carry, p = this.player) {
+  leftHere(c = this.player.carry, p = this.player, near = false) {
     const from = (c && c.drop) || p, onTrail = (q) => { const t = p.nearestTrail(q.x, q.z, 30); return t ? this.world.portages.indexOf(t.def) : -1; };
     const here = new Set([onTrail(from), onTrail(p)]);
-    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile') && u.obj.at.trail && here.has(u.obj.at.trail.i) && Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH);
+    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile') && u.obj.at.trail && here.has(u.obj.at.trail.i) && (near || Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH));
   }
   lastCarried() { const c = this.carried(); return c.find((u) => u.obj.where === 'hands') || c.find((u) => u.obj.where === 'chest') || c[0]; }
   // fb3 A: nothing is set down for the trip by itself any more, so nothing goes in at the launch (kept for the book's
@@ -738,7 +738,7 @@ export class Packs {
       if (this.hud) this.hud.note(`No paddle with you. ${pad.next}.`, 5);
       return false;
     }
-    const left = this.leftHere(p.carry, p).filter((u) => !(u.obj.at && u.obj.at.noted));
+    const left = this.leftHere(p.carry, p, true).filter((u) => !(u.obj.at && u.obj.at.noted)); // (fb5 join: near the canoe too: the leech bucket fetched over and set down 4 m off was left without a word)
     if (left.length) { for (const u of left) u.obj.at.noted = true; if (this.hud) this.hud.note(`You push off and leave ${names(left)} at the trail head.`, 5); }
     this.leaveOk = false;
     const worn = this.loadWorn(all);
