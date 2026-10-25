@@ -473,6 +473,12 @@ async function main() {
   const hudUpdateC = hud.update.bind(hud);
   hud.update = (c) => hudUpdateC(c && !c.weather ? { ...c, weather } : c);
   hud.stripAlso = () => !!camp.dialOpen;
+  // fb4 B: the book (the owner's second round of 2026-10-25). I opens and closes it (Pack and Journal are tabs on its
+  // edge; J, L, Tab and Ctrl-click are gone, R turns a thing only while it is dragged); its right pane is a tab per thing
+  // within reach (the canoe, each container on the ground, Wood, The ground), and a card's left pane is the body and
+  // all the tabs; a greyed verb or button draws its checklist and next step (inv-ui.js needsHtml, decision 2) and a
+  // thing's state its mark and tooltip line (inventory.status, stream C), their timers counted down with this clock.
+  invUI.attach({ day });
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

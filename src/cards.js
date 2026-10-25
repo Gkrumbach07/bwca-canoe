@@ -1,10 +1,15 @@
 // The world cards (the owner's third round of 2026-10-24: "the whole inventory system … confusing", "a card opens
 // only where there is something to move or a choice to make"). The book is the one screen for stuff: yours, and what
-// lies within reach in its right pane, Here (inv-ui.js MineSide; journal.openHere lights a container or a pile there).
-// A card is for a job: the fire. It is the two-pane screen the shelf uses, your stuff on the left (the body and your
-// tabs, as in the book) and the thing on the right: the fire's fuel (wood only), the grate (the pot, a meal or a fish,
-// what is cooked), the ash, a burn meter and a cooking meter, Light / Cook / Eat / Douse (held where held). Drag between
-// them. Esc or E closes it. The fire's state is nearby.objects()'s (stream A), read through inv-ui's fireObject.
+// lies within reach in its right pane, a tab each (inv-ui.js MineSide; journal.openHere lights a container or a pile
+// there). A card is for a job: the fire. It is the two-pane screen the shelf uses, and the thing is on the right: the
+// fire's fuel (wood only), the grate (the pot, a meal or a fish, what is cooked), the ash, a burn meter and a cooking
+// meter, Light / Cook / Eat / Douse (held where held). fb4 B (the owner, 2026-10-25: "if you interact with something
+// like the fire pit, the right side becomes obviously the thing you're interacting with. And the left side becomes the
+// merge body and around you tabs"): the left is the body plus all the tabs together, yours first, then what is
+// around you in the ground's cord (the canoe, each container on the ground, Wood, The ground), the same tabs as the
+// book's right; and under a greyed button its checklist (decision 2: stream C's needs and next), with the fire's fuel
+// against an hour's burn, its wet wood and its timers above the fuel. Drag between them. Esc or E closes it. The fire's
+// state is nearby.objects()'s (stream A, decorated by stream C), read through inv-ui's fireObject.
 //
 //   import { cards } from './cards.js';
 //   cards.attach({ hud, nearby, journal, player, hold, onUse })   (main.js, the wc B block)
@@ -14,7 +19,7 @@
 //   cards.update(dt)                each frame (main.js runs it with the journal's update): the ring on a held button,
 //                                   the meters, and the card put away when the fire is out of reach
 //   cards.shown (bool), cards.kind, cards.ref
-import { MineSide, firePanel, livenPanel, panelSig, fireObject, SCREENS, tickHold, stopHold, closeMenu, hideTip, refresh, destroyGridsIn, attach as invAttach } from './inv-ui.js';
+import { MineSide, firePanel, livenPanel, panelSig, fireObject, SCREENS, tickHold, stopHold, closeMenu, hideTip, refresh, destroyGridsIn, tickTimers, dragging, attach as invAttach } from './inv-ui.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
@@ -47,10 +52,9 @@ class Cards {
     el.id = 'card'; el.className = 'paper'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'A card: your stuff and the thing');
     (document.getElementById('shelf') || document.body).insertAdjacentElement('afterend', el);
     el.addEventListener('click', (ev) => { const b = ev.target.closest('button[data-act]'); if (b && b.dataset.act === 'close') this.close(); });
-    // fb3 C (13, the owner: "when I'm by the fire I can't see the items like portage pack"): the left pane lists what is
-    // in reach as Here does, as tabs beside yours: the containers and piles on the ground about you, the wood lying
-    // about, the canoe's load when it is beside you
-    this.mine = new MineSide({ owner: this.screen, onUse: this.screen.onUse, closeBook: () => this.close(), ground: true });
+    // fb3 C (13, the owner: "when I'm by the fire I can't see the items like portage pack"), fb4 B (decision 1): the left
+    // pane is the body and every tab, yours and then what is around you (MineSide without a pane of its own)
+    this.mine = new MineSide({ owner: this.screen, onUse: this.screen.onUse, closeBook: () => this.close() });
     SCREENS.add(this.screen);
     if (this.hud && this.hud.registerPaper) this.hud.registerPaper('card', () => this.close());
   }
@@ -101,12 +105,12 @@ class Cards {
         <section class="cd-mine pk-mat" aria-label="Yours"></section>
         <section class="cd-thing" aria-label="${esc(o.title || 'The fire')}"></section>
       </div>
-      <footer class="sh-foot"><span>yours and what is in reach on the left, a tab each · drag wood into the fuel, a meal or a fish onto the grate · held buttons: hold the mouse · what is cooked comes off the grate into your grid</span><span><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></footer>`;
+      <footer class="sh-foot"><span>yours, then what is around you, on the left, a tab each · drag wood into the fuel, a meal or a fish onto the grate · held buttons: hold the mouse · <kbd>R</kbd> turns a thing while dragging</span><span><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></footer>`;
       this.el.querySelector('.cd-mine').appendChild(this.mine.el);
     }
     const sub = this.el.querySelector('.cd-sub'); if (sub.textContent !== (o.sub || '')) sub.textContent = o.sub || '';
     const ps = panelSig(o);
-    if (force || ps !== this.psig) {
+    if ((force || ps !== this.psig) && !dragging()) { // (never rebuilt under a drag out of its grids)
       this.psig = ps;
       const box = this.el.querySelector('.cd-thing');
       destroyGridsIn(box);
@@ -123,6 +127,7 @@ class Cards {
   update(dt) {
     if (!this.shown) return;
     tickHold(this.screen);
+    tickTimers();
     if ((this.mt += dt) > 0.2) { this.mt = 0; const o = this.fireObj(); if (!o) { this.close(); return; } const el = this.el.querySelector('.cd-thing .nb'); if (el) livenPanel(el, o); }
     if ((this.t += dt) > 0.4) { this.t = 0; this.render(false); }
   }
