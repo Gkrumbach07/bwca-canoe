@@ -54,6 +54,7 @@ import { People } from './npcs.js'; // hubs 3C
 import { inventory } from './inventory.js'; // fb A
 import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
 import { ContainerView } from './containers.js'; // fb A
+import { modelFor, modelKeyOf, modelGeometry, MODEL_KEYS } from './item-models.js'; // content D
 import { invUI } from './inv-ui.js'; // fb B
 import { Dialogue } from './dialogue.js'; // fb F
 import { Forage } from './forage.js'; // fb G
@@ -343,6 +344,11 @@ async function main() {
     return null;
   };
   window.__game.invUI = invUI;
+  // content D: items in 3D (content pass 1; the owner, 2026-10-25: "more 3d versions of items so they show up in hand,
+  // or on ground better"). Every loose item has a model of its own (item-models.js: one material, a geometry per model
+  // and tint), and containers.js draws it in a hand, laid out in a pile at its cell, on the grate, on the stringer and in
+  // the bilge while you paddle (invView.afterPose, above). Stream C's uniques lying in the world take modelFor.
+  window.__game.itemModels = { modelFor, modelKeyOf, modelGeometry, keys: MODEL_KEYS };
   // fb E: world data. The landings stand at their real put-ins and the trails the first bake dropped are connected (world.js
   // applyFixes from src/world-fixes.json for the data-v3 release; a newer bake has both built in): { landings, portages, baked }
   window.__game.worldFixes = world.fixed;

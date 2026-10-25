@@ -1107,9 +1107,10 @@ export class Chores {
     const list = [];
     let logs = 0, brs = 0;
     for (const id of ids) {
-      const log = id === 'wood:log', i = log ? logs++ : brs++, v = (i + (log ? 1 : 2)) % 3;
+      // (content D: a dead pole is carried as the pole it is, under the arm at its middle, not as a short branch)
+      const log = id === 'wood:log', pole = id === 'pole', i = log ? logs++ : brs++, v = (i + (log ? 1 : 2)) % 3;
       const z = log ? (i - 0.5) * 0.13 : (i - 1) * 0.06, y = log ? 0 : 0.11 + (i % 2) * 0.03;
-      list.push({ g: this.pieceIdx[`${log ? 'log' : 'branch'}${v}`], pos: new THREE.Vector3(log ? 0 : 0.05, y - 0.08, z), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, (i % 2 ? 0.08 : -0.06), 0)), s: log ? _one : new THREE.Vector3(0.6, 1, 1) });
+      list.push({ g: this.pieceIdx[`${pole ? 'pole' : log ? 'log' : 'branch'}${v}`], pos: new THREE.Vector3(log ? 0 : 0.05, y - 0.08, z), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, (i % 2 ? 0.08 : -0.06), 0)), s: log || pole ? _one : new THREE.Vector3(0.6, 1, 1) });
     }
     const geo = mergePieces(list, this.pieceGeos);
     if (!b) { const mesh = new THREE.Mesh(geo, this.mat); mesh.castShadow = true; mesh.name = 'armload'; this.camp.scene.add(mesh); b = { mesh, sig }; this.bundles.set(c.id, b); }
