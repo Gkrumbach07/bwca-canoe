@@ -28,7 +28,7 @@ import { ITEMS, defineItem, NEED, check, timerWords } from './items.js';
 // a portage trail (the edges are where the light gets in). A patch is drawn in its season only, seated on the ground and
 // tilted to it, its fruit a little bigger than life so it reads from a few steps off.
 // Findable: the colours are the fruit's own and strong; walking up within RUSTLE metres a patch rustles (the soft brush
-// of leaves, audio-voices step) and a glint winks over it; the first ripe patch of a kind each day is named in a note.
+// of leaves, audio-voices step) and a glint winks over it; the first ripe patch of a kind is named in a note, once a trip.
 // Picking: E within reach, on foot. It takes its time on the clock (the walker crouched, the clock passed over a second
 // or so, like the camp's chores), and puts a pint, a handful or a bag into a container you can reach as an item (stream
 // A's inventory: window.__game.inventory.place, the items defined here through defineItem). With no inventory, or no
@@ -45,7 +45,7 @@ const DROP = 170;           // metres: cells forgotten past this
 const PER_FRAME = 6;        // cells read a frame at most
 const BASE = 0.12;          // odds a cell holds a patch, per unit of habitat weight
 const RUSTLE = 7;           // metres: a ripe patch rustles and glints when you come within this
-const NAME_AT = 14;         // metres: the first ripe patch of a kind each day is named from this far
+const NAME_AT = 14;         // metres: the first ripe patch of a kind is named from this far
 const REGROW = 5;           // days for a picked mushroom patch to come back
 const SITE_R = 70, TRAIL_R = 12;
 
@@ -761,9 +761,10 @@ export class Forage {
         if (!this.rustled.has(q.key)) { this.rustled.add(q.key); this.rustle(q); }
         if (d < gd) { gd = d; glint = q; }
       } else if (d > RUSTLE + 4) this.rustled.delete(q.key);
-      if (d < NAME_AT && s.seen && this.s.named[q.id] !== this.today && this.camp && !this.camp.busy) {
+      if (d < NAME_AT && s.seen && this.s.named[q.id] == null && this.camp && !this.camp.busy) { // (fb5 join: once a trip, not every day: the glint and the dot show them after)
         this.s.named[q.id] = this.today;
         this.note(s.seen, 5);
+        this.persist();
       }
     }
     // the glint: winks every couple of seconds over the nearest ripe patch within RUSTLE
