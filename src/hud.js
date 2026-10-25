@@ -61,7 +61,9 @@ function pencilRing(ctx, a, b, r, k, seed) {
   pass(0, 0, 1, 0.82, 2.2 * k, 0, 1);
   pass(1.4 * k, -1.1 * k, -1, 0.34, 1.3 * k, 0.06, 0.86);
 }
-const PRESS = 300;           // ms: M let go sooner than this was a press, not a hold
+const PRESS = 260;           // ms: M let go sooner than this was a press, not a hold (nothing shows until it is one or the other: fb3 C)
+const FINE_PER_FRAME = 2;    // fine tile images painted fresh in one map frame (the rest wait a frame, the far image under them)
+const PREPAINT_RANGE = 6000; // m: tiles painted ahead for the map while it is away, this far from you at most
 const HOLD_OFF = 300;        // ms: held keys hide this long after release
 const TITLE_HOLD = 4, NOTE_HOLD = 5, CATCH_HOLD = 8; // seconds
 const WAVE_MATTERS = 0.3;    // m: waves above this make the compass speak
@@ -225,6 +227,7 @@ export class Hud {
     this.bindKeys();
     this.marksBuild();
     this.energyBuild(); // fb2 F: the energy bar
+    this.stripBuild(); // fb3 C (14): the bar and the clock over the paper
     window.addEventListener('resize', () => { this.sizeCanvas(); this.placeConfirm(); });
   }
   // for the title screen: is anything of paper up (its Esc belongs to the paper, not the menu)
@@ -261,7 +264,11 @@ export class Hud {
         if (this.mode === 'sheet') { this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); return; }
         this.mKey.downAt = performance.now(); this.mKey.held = true; clearTimeout(this.mKey.timer);
         if (this.paper) { const c = this.papers.get(this.paper); if (c) c(); } // one paper object at a time
-        this.setMode('glance');
+        // fb3 C (21, "opening the map is sorta glitchy"): nothing shows until the key has said whether it is a press or a
+        // hold. The glance used to slide up at the key's down and the sheet replace it at the key's up a tenth of a second
+        // later: a corner panel flashing up and jumping to the middle at twice the size. Now a press (let go inside
+        // PRESS) opens the sheet straight from nothing, and the glance comes up only once the key has been held PRESS.
+        this.mKey.timer = setTimeout(() => { if (this.mKey.held && this.mode !== 'sheet') this.setMode('glance'); }, PRESS);
       } else if (e.code === 'Escape') {
         if (this.pin) this.clearPin(); else if (this.mode === 'sheet') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
       } else if (e.code === 'Enter' && this.pin) this.confirm();
@@ -271,13 +278,13 @@ export class Hud {
         this.tab.held = false;
         if (this.settings && this.settings.readoutMode === 'hold') { clearTimeout(this.tab.timer); this.tab.timer = setTimeout(() => { if (!this.tab.held) this.showReadout(false); }, HOLD_OFF); }
       } else if (e.code === 'KeyM' && this.mKey.held) {
-        this.mKey.held = false;
+        this.mKey.held = false; clearTimeout(this.mKey.timer);
         const press = performance.now() - this.mKey.downAt < PRESS;
-        if (press && this.mode === 'glance') this.setMode('sheet');
+        if (press && this.mode !== 'sheet') this.setMode('sheet');
         else if (this.mode === 'glance') { this.mKey.timer = setTimeout(() => { if (this.mode === 'glance' && !this.mKey.held) this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); }, HOLD_OFF); }
       }
     });
-    window.addEventListener('blur', () => { this.tab.held = false; this.mKey.held = false; if (this.settings && this.settings.readoutMode === 'hold') this.showReadout(false); if (this.mode === 'glance') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); });
+    window.addEventListener('blur', () => { this.tab.held = false; this.mKey.held = false; clearTimeout(this.mKey.timer); if (this.settings && this.settings.readoutMode === 'hold') this.showReadout(false); if (this.mode === 'glance') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); });
   }
   showReadout(on, now = false) {
     this.tab.shown = on;
@@ -376,8 +383,11 @@ export class Hud {
       this.clearPin();
       if (was === 'sheet' && this.table) { const t = this.table; this.table = null; t.closed(); } // fb2 D: the map table goes with the sheet
     }
+    // fb3 C (21): the band's words settle the body's height before the canvas is measured (the sheet's long title, left
+    // in the glance's narrow band, wrapped to two lines for a frame and the glance drew stretched); and no second sizing
+    // on the next animation frame, which ran after that frame's draw and wiped it when the size had changed
+    if (this.player && this.ctx) this.updateMapChrome();
     this.sizeCanvas();
-    requestAnimationFrame(() => this.sizeCanvas()); // once the sheet has its laid-out size
   }
   // the old API: the big map on / off
   setBig(big) { this.setMode(big ? 'sheet' : (this.settings && this.settings.cornerSheet ? 'corner' : 'hidden')); }
@@ -390,7 +400,41 @@ export class Hud {
     if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
-    if (c.width !== W || c.height !== H || !this.grain) { c.width = W; c.height = H; this.grain = this.makeGrain(); }
+    if (c.width !== W || c.height !== H || !this.grain) {
+      c.width = W; c.height = H;
+      // the paper's grain, kept per size (the glance, the sheet and the corner each have theirs): made once, not at every
+      // opening (fb3 C: thirty thousand specks a time was part of the map's hitch)
+      const key = `${W}x${H}`;
+      if (!this.grains) this.grains = new Map();
+      let g = this.grains.get(key);
+      if (!g) { g = this.makeGrain(); this.grains.set(key, g); if (this.grains.size > 4) this.grains.delete(this.grains.keys().next().value); }
+      this.grain = g;
+      this.drawn = false; // a fresh backing store is blank until the next draw (update draws in the same frame)
+    }
+  }
+  // fb3 C (21): the fine tile images painted ahead while the map is away, one tile at a time nearest you, in the browser's
+  // idle time where it gives any (requestIdleCallback; a slow timer elsewhere), so the first opening draws from the cache
+  // instead of painting six tiles in one frame (a 60 ms hitch the first time M was pressed)
+  prepaint(deadline = null) {
+    this.idleQueued = false;
+    const w = this.world, p = this.player;
+    if (!w.tiles || !p || this.mode !== 'hidden') return;
+    if (deadline && typeof deadline.timeRemaining === 'function' && deadline.timeRemaining() < 9 && !deadline.didTimeout) return;
+    const live = w.tiles.readyTiles(), alive = new Set(live.map((e) => e.key));
+    for (const key of this.fineImages.keys()) if (!alive.has(key)) this.fineImages.delete(key);
+    let best = null, bd = PREPAINT_RANGE;
+    for (const e of live) {
+      if (this.fineImages.has(e.key)) continue;
+      const [ox, oz] = w.tileOrigin(e.tx, e.ty), d = Math.hypot(ox + w.tileMetres / 2 - p.x, oz + w.tileMetres / 2 - p.z);
+      if (d < bd) { bd = d; best = e; }
+    }
+    if (best) this.fineImage(best);
+  }
+  queuePrepaint() {
+    if (this.idleQueued) return;
+    this.idleQueued = true;
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback((d) => this.prepaint(d), { timeout: 1500 });
+    else setTimeout(() => this.prepaint(null), 300);
   }
 
   // --- the pin and its pencil note ----------------------------------------------------------------
@@ -731,12 +775,17 @@ export class Hud {
     this.updateFishing(ctx);
     this.updateMarks(ctx);
     this.updateEnergy(ctx); // fb2 F
+    this.updateStrip(ctx); // fb3 C (14): the bar and the clock over the paper
     if (this.tab.shown) this.renderReadout();
     if (this.mode !== 'hidden' && !ctx.shell) {
       if (this.mode !== 'sheet') { this.view.cx = player.x; this.view.cz = player.z; this.view.span = GLANCE_SPAN; }
-      if (!this.grain) this.sizeCanvas();
-      if (this.grain) { this.drawMap(player); this.updateMapChrome(); }
-    }
+      // fb3 C (21): the bands first (their words set the body's height), then the canvas measured against its box every
+      // frame (one rect read; the backing store is reset only when the box changed), then the draw: never a frame drawn
+      // at the wrong size, never a frame wiped after its draw
+      this.updateMapChrome();
+      this.sizeCanvas();
+      if (this.grain) { this.drawMap(player); this.drawn = true; }
+    } else if (this.mode === 'hidden' && !ctx.shell) this.queuePrepaint();
   }
 
   set(key, el, value, prop = 'textContent') { if (this.cache[key] !== value) { this.cache[key] = value; el[prop] = value; } }
@@ -910,29 +959,37 @@ export class Hud {
     this.eb = { el, fill: q('.fill'), room: q('.room'), chunk: {}, icon: {}, ref: null, until: 0, sig: '', top: '' };
     for (const k of NEEDS) { this.eb.chunk[k] = q(`.chunk.${k}`); this.eb.icon[k] = q(`.icon.${k}`); }
   }
+  // the bar's numbers for a frame: the green, the room up to the ceiling, each chunk's start from the right end, and a
+  // signature that changes only when the drawing would (rounded: the DOM is spared). The Air's bar and the strip over
+  // the paper draw the same state.
+  barState(energy) {
+    const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
+    const pct = (x) => `${(Math.round(x * 1000) / 10).toFixed(1)}%`;
+    let sig = `${pct(v)}|${pct(cap)}`, x = 1;
+    const at = {};
+    for (let i = ch.length - 1; i >= 0; i--) { x -= ch[i].size; at[ch[i].key] = x; }
+    for (const c of ch) sig += `|${c.key}${pct(c.size)}${c.growing ? '*' : ''}`;
+    return { v, cap, ch, at, sig, pct };
+  }
+  barApply(eb, { v, cap, ch, at, pct }) {
+    eb.fill.style.width = pct(Math.min(v, cap + 0.001));
+    eb.room.style.left = pct(Math.min(v, cap)); eb.room.style.width = pct(Math.max(0, cap - v));
+    for (const c of ch) { const el = eb.chunk[c.key]; if (!el) continue; el.style.left = pct(at[c.key]); el.style.width = pct(c.size); el.classList.toggle('grow', c.growing); }
+  }
   updateEnergy(ctx) {
     const eb = this.eb; if (!eb) return;
     const { energy, trip, shell } = ctx, s = this.settings;
-    const on = !!(energy && trip && trip.active && !shell && !this.tab.shown);
+    // fb3 C (15): the readout has no Energy row any more (it is the moment only), so the bar stays up under it
+    const on = !!(energy && trip && trip.active && !shell);
     let show = false;
     if (on) {
-      const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
-      // the bar: the green, the room up to the ceiling, the chunks laid from the right end (rounded: the DOM is spared)
-      const pct = (x) => `${(Math.round(x * 1000) / 10).toFixed(1)}%`;
-      let sig = `${pct(v)}|${pct(cap)}`, x = 1;
-      const at = {};
-      for (let i = ch.length - 1; i >= 0; i--) { x -= ch[i].size; at[ch[i].key] = x; }
-      for (const c of ch) sig += `|${c.key}${pct(c.size)}${c.growing ? '*' : ''}`;
+      const bar = this.barState(energy), { v, cap, ch, at, sig, pct } = bar;
       if (sig !== eb.sig) {
         eb.sig = sig;
-        eb.fill.style.width = pct(Math.min(v, cap + 0.001));
-        eb.room.style.left = pct(Math.min(v, cap)); eb.room.style.width = pct(Math.max(0, cap - v));
+        this.barApply(eb, bar);
         // the icons under their chunks, nudged apart where chunks are narrow (16 px each, within the bar)
         const W = ENERGY_W, marks = [];
         for (const c of ch) {
-          const el = eb.chunk[c.key];
-          el.style.left = pct(at[c.key]); el.style.width = pct(c.size);
-          el.classList.toggle('grow', c.growing);
           const shown = c.size > 0.004 && (c.growing || c.size >= 0.1);
           eb.icon[c.key].classList.toggle('on', shown);
           if (shown) marks.push({ k: c.key, x: (at[c.key] + c.size / 2) * W });
@@ -956,18 +1013,39 @@ export class Hud {
       const spot = this.el.spot, words = spot && spot.classList.contains('show') ? `${this.cache.spotWhere}|${this.cache.spotWho}` : '';
       if (words !== eb.spotWords) { eb.spotWords = words; const top = words ? `${48 + spot.offsetHeight + 22}px` : ''; if (top !== eb.top) { eb.top = top; eb.el.style.top = top; } }
     } else eb.ref = null;
-    eb.el.classList.toggle('now', this.tab.shown); // gone at once under the readout, which has its own
     eb.el.classList.toggle('show', show);
-  }
-  // the same bar, small, for the readout's Energy row (no march: the row is redrawn as its numbers change)
-  energyBarHtml(energy) {
-    const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
-    const pct = (x) => `${(Math.round(x * 200) / 2).toFixed(1)}%`;
-    let x = 1, out = '';
-    for (let i = ch.length - 1; i >= 0; i--) { const c = ch[i]; x -= c.size; if (c.size > 0.004) out = `<i class="chunk ${c.key}${c.growing ? ' grow' : ''}" style="left:${pct(x)};width:${pct(c.size)}"></i>${out}`; }
-    return `<span class="ebar" aria-hidden="true"><i class="fill" style="width:${pct(Math.min(v, cap + 0.001))}"></i><i class="room" style="left:${pct(Math.min(v, cap))};width:${pct(Math.max(0, cap - v))}"></i>${out}</span>`;
+    this.el.air.classList.toggle('ebar', show); // the readout keeps under the bar (hud.css)
   }
 
+  // --- the strip over the paper (fb3 C, decision 14) ---------------------------------------------------------------
+  // The owner (2026-10-25): "the health bar and time should be visible pretty much all the time. even in modals bc thats
+  // when im eating and want to know if i need to keep eating". A small strip at the top of the screen, over the scrim
+  // and every paper (the book, the fire card, a shelf, the counter, the map) and the Rest dial (stripAlso, main.js): the
+  // energy bar as the Air's, its number, the clock and the day. The Air itself stays hidden under paper.
+  stripBuild() {
+    const el = document.createElement('div');
+    el.id = 'strip'; el.setAttribute('role', 'status'); el.setAttribute('aria-label', 'Energy, the time and the day');
+    el.innerHTML = `<div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div><span class="pct"></span><span class="dot">·</span><span class="clock"></span><span class="dot">·</span><span class="sc day"></span>`;
+    document.body.appendChild(el);
+    const q = (sel) => el.querySelector(sel);
+    this.strip = { el, fill: q('.fill'), room: q('.room'), chunk: {}, pct: q('.pct'), clock: q('.clock'), day: q('.day'), sig: '', shown: false };
+    for (const k of NEEDS) this.strip.chunk[k] = q(`.chunk.${k}`);
+    this.stripAlso = null; // () => true while something of paper the register does not know is up (the Rest dial)
+  }
+  updateStrip(ctx) {
+    const s = this.strip; if (!s) return;
+    const { energy, day, shell } = ctx;
+    const show = !shell && (!!this.paper || !!(this.stripAlso && this.stripAlso()));
+    if (show !== s.shown) { s.shown = show; s.el.classList.toggle('show', show); }
+    if (!show) return;
+    if (energy) {
+      const bar = this.barState(energy);
+      if (bar.sig !== s.sig) { s.sig = bar.sig; this.barApply(s, bar); s.pct.textContent = `${Math.round(bar.v * 100)} %`; }
+    }
+    const dayW = this.dayWords(ctx);
+    this.set('stripClock', s.clock, day ? clock12(day.hours) : '');
+    this.set('stripDay', s.day, `${dayW ? `${dayW} · ` : ''}${day ? `${weekdayOf(day.year, day.doy).slice(0, 3)}, ${shortDate(day.year, day.doy)}` : ''}`);
+  }
   // --- fishing: the spot card, the reticle, the lure strip, the tension line, the catch card -----------------
   updateFishing(ctx) {
     const { fishing } = ctx, e = this.el, f = this.fishUi, air = this.el.air;
@@ -984,7 +1062,10 @@ export class Hud {
     // the lure strip while the cast is ready or loading
     const strip = rod && (u.state === 'ready' || u.state === 'charging');
     e.lures.classList.toggle('show', strip);
-    if (u.lures && f.lure !== u.lure) { e.lures.innerHTML = u.lures.map((l, i) => `<span class="${i === u.lure ? 'on' : ''}"><b>${i + 1}</b>${esc(l.name)}</span>`).join(''); f.lure = u.lure; }
+    // fb3 C: the bobber rig with no leech in reach (fishing.ui.needsLeeches, stream B: the bucket in a hand, within 3 m or
+    // in the canoe) is dimmed on the strip and says so
+    const needs = !!u.needsLeeches, count = Number.isFinite(u.leeches) ? u.leeches : null; // and the leeches in reach, falling a leech a bite
+    if (u.lures && (f.lure !== u.lure || f.needs !== needs || f.leeches !== count)) { e.lures.innerHTML = u.lures.map((l, i) => { const rig = l.bobber || l.id === 'leech', off = needs && rig; return `<span class="${i === u.lure ? 'on' : ''}${off ? ' off' : ''}"><b>${i + 1}</b>${esc(l.name)}${off ? '<i>needs leeches</i>' : rig && count != null ? `<i class="n">${count} left</i>` : ''}</span>`; }).join(''); f.lure = u.lure; f.needs = needs; f.leeches = count; }
     // the reticle on the water, the cast ring filling round it while the cast loads
     const aim = strip && u.aim && this.camera ? u.aim : null;
     let onScreen = false;
@@ -1040,61 +1121,35 @@ export class Hud {
     const now = performance.now();
     if (!force && now - (this.readoutAt || 0) < 250) return;
     this.readoutAt = now;
-    const { player, geo, ts, day, wind, energy, tasks, stats, fps, trip: core } = ctx, w = this.world, s = this.settings;
-    const id = player.lakeId, lake = id > 0 ? w.lakes[id - 1] : null;
+    const { player, geo, day, wind, weather, fps } = ctx, w = this.world, s = this.settings;
+    const id = player.lakeId;
     const name = player.placeName || w.lakeName(id) || 'Open water';
     const dayW = this.dayWords(ctx);
-    const { lat, lon } = w.toLatLon(player.x, player.z);
     const rows = [];
     const row = (lab, html, cls = '') => rows.push(`<div class="sc">${lab}</div><div class="${cls}">${html}</div>`);
-    row('Where', `${lat.toFixed(5)}, ${lon < 0 ? '−' : ''}${Math.abs(lon).toFixed(5)} · ${player.altitude.toFixed(0)} m above the sea`);
-    const deep = player.onFoot ? 0 : Math.max(0, player.level - w.heightAt(player.x, player.z));
-    if (deep > 0.05 || lake) {
-      const parts = [];
-      if (deep > 0.05) parts.push(`${deep.toFixed(1)} m deep here${lake && lake.maxDepth ? `, ${Math.round(lake.maxDepth)} m at most` : ''}`);
-      if (lake && lake.secchi) parts.push(`clarity ${lake.secchi.toFixed(1)} m${lake.secchiMeasured ? ', sounded by the DNR' : ', by the look of it'}`);
-      if (parts.length) row('Water', parts.join(' · '));
-    }
-    const hdg = bearingOf(player.heading), today = stats ? stats.today : null;
-    row('Way', `${((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}${today ? ` · ${fmtKm(today.km)} km and ${today.portages} ${plural(today.portages, 'portage')} today` : ''}`);
-    if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · ${day && day.season && day.season.ice > 0.5 ? 'the lake is frozen over' : `waves ${(player.waveHeightHere || 0).toFixed(1)} m`}${wind.override != null ? ' · set by hand' : ''}`);
+    // fb3 C (15, the owner: "the info menu seems to be a lot of not needed info … it should be in the moment things"):
+    // the moment only. The place, the time and the day are the head; then the sun, the wind, the sky and the way. The
+    // season, the energy, the pack and the tasks live in the journal, the bar and the marks.
     if (day) {
       const { rise, set } = day.sunriseSunset, h = day.hours;
-      const light = set != null && h < set && (rise == null || h >= rise) ? `Sunset ${clock12(set)} · dark by ${clock12(Math.min(23.99, set + 0.8))}` : rise != null ? `Sunrise ${clock12(h < (rise || 0) ? rise : rise)}${h >= (set || 24) ? ' tomorrow' : ''}` : 'No sun today';
-      // the clock's time-lapse now (the pace's, times the game speed): "clock ×4 while you travel · Trip pace"
-      const x = (day.rate ?? 1) * ts, P = player.paceTable;
-      const rate = `×${x >= 2 ? Math.round(x) : +x.toFixed(1)} ${core && core.travel ? 'while you travel' : 'at rest'}${P ? ` · ${P.label} pace` : ''}`;
-      row('Light', `${light} · clock ${day.running ? rate : 'stopped'}`);
+      const parts = [];
+      if (rise == null && set == null) parts.push('no sun today');
+      else {
+        parts.push(rise != null ? `sunrise ${clock12(rise)}` : 'no sunrise', set != null ? `sunset ${clock12(set)}` : 'no sunset');
+        if (set != null && h < set && (rise == null || h >= rise)) parts.push(`${fmtDuration(set - h)} of light left`);
+        else if (set != null && h >= set) parts.push(`dark by ${clock12(Math.min(23.99, set + 0.8))}`);
+        else if (rise != null && h < rise) parts.push(`${fmtDuration(rise - h)} till sunrise`);
+      }
+      row('Sun', esc(parts.join(' · ')));
     }
-    // the trip: the season (its way, home, the day of the trip) and the money, then the energy, then the pack (no permit
-    // since the world cards of 2026-10-24)
-    if (core && (core.active || (core.profile && core.profile.started))) { // hubs 1A
-      const pr = core.profile, home = pr && pr.home != null ? core.placeOf(pr.home) : '';
-      const bits = [core.sandbox ? 'Sandbox' : 'Adventure', home ? `home ${home}` : '', core.active ? core.dayWords() : 'between trips', pr ? `$${pr.money} in hand` : ''];
-      row('Season', esc(bits.filter(Boolean).join(' · ')));
+    if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · ${day && day.season && day.season.ice > 0.5 ? 'the lake is frozen over' : `waves ${(player.waveHeightHere || 0).toFixed(1)} m`}${wind.override != null ? ' · set by hand' : ''}`);
+    if (weather && weather.look) {
+      const t = weather.look.temp, label = weather.label || '', rain = weather.look.rain || 0;
+      const wet = rain > 0.02 ? (weather.look.snow > 0.5 ? '' : rain > 0.5 ? ', raining hard' : ', raining') : '';
+      row('Sky', esc(`${Number.isFinite(t) ? `${Math.round(t)} °C · ` : ''}${label.toLowerCase()}${/rain|snow|storm/i.test(label) ? '' : wet}`));
     }
-    if (energy) {
-      // hubs 1B: "Energy 64 % · held down by thirst": the bar, what holds it down (or where rest brings it), the hours
-      // up, and the bottle
-      const v = energy.value, cap = energy.ceiling, awake = energy.awake, adv = !!(core && core.adventure && core.active);
-      const held = adv ? energy.heldBy || '' : '', low = adv && !!energy.low;
-      const up = adv ? ` · up ${awake < 1 ? 'less than an hour' : `${Math.round(awake)} h`}` : '';
-      let why = '';
-      if (v < cap - 0.01 && cap <= 0.995) why = ` · rest brings it to ${Math.round(cap * 100)} %${low ? `, ${held}` : ''}`;
-      else if (low || (held && cap <= 0.995 && v <= 0.97)) why = ` · ${held}`;
-      else if (cap <= 0.995 && v <= 0.97) why = ' · only sleep brings it higher';
-      const water = adv && energy.bottleWords ? ` · ${energy.bottleWords()}` : '';
-      row('Energy', `${energy.chunks ? this.energyBarHtml(energy) : `<span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span>`}${Math.round(v * 100)} %${why}${up}${water}`); // fb2 F: the bar with its chunks
-      const food = energy.food, sand = !!(core && core.sandbox);
-      const meal = energy.inventory ? '' : !sand && food <= 0 ? '' : day && day.sunriseSunset.set != null && day.hours < day.sunriseSunset.set && day.hours >= (day.sunriseSunset.rise || 0) ? 'supper at sunset' : 'breakfast at dawn'; // fb A: no meals on their own
-      const pk = core ? core.state.packs : null;
-      const packs = player.packs && player.packs.summary ? esc(player.packs.summary) : pk ? `${pk.count === 1 ? 'one pack' : 'two packs'}, ${{ kevlar: 'Kevlar', royalex: 'Royalex' }[pk.canoe] || 'aluminium'} canoe` : '';
-      const hungW = !sand && energy.hungFood ? energy.hungFood().words : '';
-      const foodW = sand ? 'food that keeps' : energy.foodWords ? `${energy.foodWords()} with you${hungW ? ` · ${hungW}` : ''}` : food > 0 ? `${foodWords(food)} of food` : 'the food pack is empty'; // fb A: the meals and snacks in reach (camp join: and the barrel hung)
-      row('Pack', [packs, foodW, meal, core && core.state.wet ? 'the gear is wet' : ''].filter(Boolean).join(' · '));
-    }
-    // the notices taken on, and where the finished ones are paid (tasks.js)
-    if (tasks) row('Tasks', esc(tasks.readout));
+    const hdg = bearingOf(player.heading);
+    row('Way', `${((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}`);
     const dev = s && s.get('devRows'), showFps = s && s.get('fps');
     if (dev && geo) row('GPS sim', `${geo.linked ? (geo.enabled ? 'broadcasting to the extension' : 'extension installed, switched off') : 'extension not detected · this tab only'} · hdg ${hdg.toFixed(0)}°`, 'soft');
     if (dev || showFps) {
@@ -1105,7 +1160,7 @@ export class Hud {
     }
     const mode = s ? s.readoutMode : 'hold';
     const foot = mode === 'always' ? 'Always on · Settings › HUD' : mode === 'toggle' ? '<kbd>Tab</kbd> hides it · Full density keeps it up' : '<kbd>Tab</kbd> held · let go to hide · Full density keeps it up';
-    const html = `<div class="head"><div class="name">${esc(name)}</div><div class="sc date">${dayW ? `${dayW} · ` : ''}${day ? `${longDate(day.year, day.doy)} · ${clock12(day.hours)}` : ''}</div></div><div class="grid">${rows.join('')}</div><div class="foot">${foot}</div>`;
+    const html = `<div class="head"><div class="name">${esc(name)}</div><div class="sc date">${day ? `${clock12(day.hours)} · ` : ''}${dayW ? `${dayW} · ` : ''}${day ? longDate(day.year, day.doy) : ''}</div></div><div class="grid">${rows.join('')}</div><div class="foot">${foot}</div>`;
     this.set('readout', this.el.readout, html, 'innerHTML');
   }
 
@@ -1339,13 +1394,16 @@ export class Hud {
           const order = [];
           for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) order.push([tx, ty, Math.hypot(tx + 0.5 - (v.cx - w.originX) / w.tileMetres, ty + 0.5 - (v.cz - w.originZ) / w.tileMetres)]);
           order.sort((p, q) => p[2] - q[2]);
-          let painted = 0;
+          let painted = 0, fresh = 0;
           for (const [tx, ty] of order) {
             const [ox, oz] = w.tileOrigin(tx, ty);
             if (!onMine(ox, oz, ox + w.tileMetres, oz + w.tileMetres)) continue;
             const key = `${tx},${ty}`, e = live.get(key);
             let img;
-            if (e) img = this.fineImage(e);
+            // a streamed tile's image is painted on first sight, a few a frame at most (fb3 C: the rest wait a frame or
+            // two with the far image under them, instead of all of them in the frame the map opens); prepaint has most
+            // of them done before M is pressed
+            if (e) { if (this.fineImages.has(key)) img = this.fineImage(e); else if (fresh < FINE_PER_FRAME) { img = this.fineImage(e); fresh++; } }
             else if (painted < 2 || this.mapTiles.get(key)?.img) { const had = this.mapTiles.get(key)?.img; img = this.mapTile(tx, ty); if (img && !had) painted++; }
             if (!img) continue;
             const [a, b] = toPx(ox, oz);
