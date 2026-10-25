@@ -1713,7 +1713,7 @@ export function effsHtml(effs) {
 }
 function showTip(el, g, e) {
   hideTip();
-  const d = itemDef(e.id); if (!d) return;
+  const d = itemDef(e.id); if (!d || !el.isConnected) return; // (fb5 join: an icon redrawn away under the pointer left its tip stuck in the corner)
   const t = tipEl = mk('div', 'ig-tip');
   t.innerHTML = tipHtml(d, e, { shelf: !!(g && g.opts.shelf) });
   document.body.appendChild(t);
@@ -1722,8 +1722,10 @@ function showTip(el, g, e) {
   if (x + tr.width > window.innerWidth - 8) x = r.left - tr.width - 8;
   if (y + tr.height > window.innerHeight - 8) y = window.innerHeight - tr.height - 8;
   t.style.left = `${Math.max(8, x)}px`; t.style.top = `${Math.max(8, y)}px`;
+  tipWatch = setInterval(() => { if (!el.isConnected) hideTip(); }, 200); // (its icon redrawn away: no pointerleave comes)
 }
-export function hideTip() { clearTimeout(tipTimer); if (tipEl) { tipEl.remove(); tipEl = null; } }
+let tipWatch = 0;
+export function hideTip() { clearTimeout(tipTimer); clearInterval(tipWatch); if (tipEl) { tipEl.remove(); tipEl = null; } }
 
 // --- the blocks the screens are made of ---------------------------------------------------------------------------
 // a container: a leather strap with its name, where it is and its weight, over its grid. The strap is its handle:
