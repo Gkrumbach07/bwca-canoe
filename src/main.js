@@ -480,6 +480,42 @@ async function main() {
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
+  // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few
+  // frames) the figure, the hull on its shoulders and the camera went NaN and stayed so, and every frame threw in the audio's
+  // listener. Each frame the walker (before the pose) and the hull and the camera (after the chase) are checked; a bad one
+  // is put back to its last finite value, the pose and the chase start afresh (canoe.heal, chase.heal), one warning says
+  // what went bad (again only after a second of good frames), and the game carries on.
+  const NG = { x: player.x, z: player.z, heading: player.heading, cam: camera.position.clone(), quat: camera.quaternion.clone(), warned: false, ok: 0 };
+  const fin3 = (v) => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+  const nanWarn = (bad) => { NG.ok = 0; if (!NG.warned) { NG.warned = true; console.warn(`fb3 join: non-finite ${bad.join(', ')}; put back to the last finite values`); } };
+  const guardWalker = () => {
+    const p = player, bad = [];
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.z)) bad.push('walker x/z');
+    if (!Number.isFinite(p.heading)) bad.push('heading');
+    if (!Number.isFinite(p.altitude)) bad.push('altitude');
+    if (!bad.length) { NG.x = p.x; NG.z = p.z; NG.heading = p.heading; return; }
+    p.x = NG.x; p.z = NG.z; p.heading = NG.heading; p.speed = 0; p.yawRate = 0;
+    if (!Number.isFinite(p.boost)) p.boost = 1;
+    if (p.foot && !Number.isFinite(p.foot.y)) p.foot = null; // (back on the ground under him)
+    canoe.rig.position.set(p.x, p.altitude + (p.onFoot ? 0.1 : 0), p.z); canoe.rig.rotation.set(0, p.heading, 0);
+    nanWarn(bad);
+  };
+  const guardView = (shell) => {
+    const e = canoe.hull.matrixWorld.elements, bad = [];
+    if (!Number.isFinite(e[12]) || !Number.isFinite(e[13]) || !Number.isFinite(e[14])) {
+      bad.push('hull');
+      const d = player.carry && player.carry.drop;
+      if (d && Number.isFinite(d.x) && Number.isFinite(d.z) && Number.isFinite(d.heading)) player.restHull(d.x, d.z, d.heading); else canoe.heal();
+    }
+    if (!fin3(camera.position)) {
+      bad.push('camera');
+      chase.heal(player); if (!shell) chase.update(1e-3, player, player.mode === 'carry');
+      if (!fin3(camera.position)) { camera.position.copy(NG.cam); camera.quaternion.copy(NG.quat); }
+    }
+    if (bad.length) nanWarn(bad);
+    else { NG.cam.copy(camera.position); NG.quat.copy(camera.quaternion); if (++NG.ok > 60) NG.warned = false; }
+  };
+
   const frame = (dt) => {
     const ts = player.timeScale;
     wind.update(dt * ts, day.hours);
@@ -518,10 +554,12 @@ async function main() {
       journal.update(dt);
     }
     veil.update(dt); // trip core A: the fade cards, behind the title card too
+    guardWalker(); // fb3 join: a NaN never freezes the game (above)
     canoe.update(dt * ts);
     player.afterRig(); // fb C: a swim from shore leaves the beached hull where it lies (canoe.js's swim pose turns it over)
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
+    guardView(shell);
     talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
     pointer.update(dt, shell); // fb2 A: the dot, its label and the rim, after the camera
     setOrigin(player.x, player.z);

@@ -443,7 +443,25 @@ export class ChaseCamera {
     this.first = true;
   }
 
+  // fb3 join: the chase eases from where it was (the lerps of pos and look, the pull's spring), so a NaN once (the eye or
+  // the walker for a frame) stayed for good: a lerp from NaN is NaN, snap() could not clear it, and every frame threw in
+  // the audio's listener. Started afresh about the walker (or where it last was), the view's look kept where it is finite.
+  heal(player) {
+    const f = Number.isFinite, h = f(player.heading) ? player.heading : f(this.viewYaw) ? this.viewYaw : 0;
+    const x = f(player.x) ? player.x : 0, z = f(player.z) ? player.z : 0, y = f(player.altitude) ? player.altitude : 0;
+    this.pos.set(x - Math.cos(h) * 4, y + 2.5, z + Math.sin(h) * 4); this.look.set(x, y + 1.5, z); this.head.copy(this.pos);
+    if (!f(this.viewYaw)) this.viewYaw = h;
+    if (!f(this.forwardYaw)) this.forwardYaw = this.viewYaw;
+    if (!f(this.viewPitch)) this.viewPitch = 0;
+    if (!f(this.userYaw)) this.userYaw = 0;
+    if (!f(this.userPitch)) this.userPitch = 0;
+    this.pull = Infinity; this.pullV = 0; this.pullHold = 0; this.sight = null; this.lastTarget = null;
+    this.first = true;
+  }
+
   update(dt, player, carrying) {
+    const P = this.pos, L = this.look; // fb3 join: never left poisoned (heal)
+    if (!Number.isFinite(P.x + P.y + P.z + L.x + L.y + L.z + this.viewYaw + this.viewPitch + this.forwardYaw + this.pullV)) this.heal(player);
     this.seeStrength = 0; // (fb2 E: on again below, in third person behind the walker or the canoe)
     if (this.focus) {
       const k = this.first ? 1 : 1 - Math.exp(-dt * 4);

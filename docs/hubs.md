@@ -1114,13 +1114,15 @@ about 1.2 exchanges a minute, the first after two minutes.
 - **A thing off a pile or the grate** goes to a free hand when nothing carried has room; item names keep their capitals
   in the notes (4bf2e7a, 6d54b30).
 - **The words** (6ed29e2): the Controls card, the README, trip-core.md and this file.
+- **The NaN after a shoulder** (seen once in the playthrough): not the push or the shoulder. The test's hull helper read
+  `carry.drop`, null once the canoe is up, so its aim went to an undefined point and `T.aim3` set the heading and the
+  view to NaN for its frames; one NaN heading poisoned the pose's eased state (`loco.grade`) and the chase's lerps, so
+  the figure, the hull on it and the camera stayed NaN after the heading came back. Now the pose heals itself
+  (`canoe.heal`, and a second pose when one comes out non-finite), so does the chase (`chase.heal`), and main.js's frame
+  puts a non-finite walker, hull or camera back to its last finite value with one warning.
 
 ### Left after the join
 
-- **Seen once, not reproduced:** after a push-off and a stale aim in a test sequence, Q shouldered the canoe and the
-  figure's pose went NaN the next frame (then the hull, then the camera; the chase's lerps never recover from NaN and
-  every frame threw in the audio's listener). A push-off then an immediate shoulder did not bring it back. A guard
-  that resets a NaN chase and pose would make it survivable.
 - *Put on the stringer* out of reach is greyed with its reason rather than gone (the world cards' rule: a greyed verb
   says why).
 - A canoe stepped out of can lie with its bow on a campsite's ledge rock (stepOut does not look for rocks).
