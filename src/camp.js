@@ -830,7 +830,7 @@ export class Camp {
     const words = (at) => {
       const w = this.wakeTime(at), M = Math.round(w.hours * 60), H = Math.floor(M / 60), m = M % 60;
       const span = `${H ? `${H} h` : ''}${m ? ` ${m} min` : ''}`.trim() || 'no time at all';
-      const kind = w.nap ? 'a nap: some of the rest comes back' : w.hours >= 7 ? 'a full night' : `a short night: the tent gives ${Math.round(Math.min(1, w.hours / 7) * 100)} % of its rest`;
+      const kind = w.nap ? 'a nap: some of the rest comes back' : w.hours >= 7 ? 'a full night' : 'a short night: not all the rest comes back'; // (fb5 join: no percent, rule 3)
       return `${span} · ${kind}${c.stage < 4 ? ' · no fly on' : ''}`;
     };
     this.dial.show({ kicker: `Rest · ${c.site ? this.siteName(c.site) : 'your tent'}`, opts, at: start, words, onPick: (at) => this.sleep('tent', at) });
