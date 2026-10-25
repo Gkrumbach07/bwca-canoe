@@ -51,7 +51,7 @@ import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
 import { inventory } from './inventory.js'; // fb A
-import { ITEMS, defineItem, itemDef } from './items.js'; // fb A
+import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
 import { ContainerView } from './containers.js'; // fb A
 import { invUI } from './inv-ui.js'; // fb B
 import { Dialogue } from './dialogue.js'; // fb F
@@ -532,7 +532,15 @@ async function main() {
     // (a stable sort: the ring's order otherwise; while Light is held, only the dry pieces: it takes its kindling from them)
     ch4.binUnits = (b) => { const u = units4(b).sort((x, y) => wetFlag(x) - wetFlag(y)); return hold.is('fire-light') ? u.filter((x) => !wetFlag(x)) : u; };
     const rate4 = (b) => (b && typeof inventory.wetRate === 'function' ? inventory.wetRate(b) : 1);
-    ch4.lightCheck = (key) => { const b = ch4.fuelBin(key); return fires.lightCheck(key, ch4.binUnits(b), { rate: rate4(b) }); };
+    ch4.lightCheck = (key) => {
+      const b = ch4.fuelBin(key), c = fires.lightCheck(key, ch4.binUnits(b), { rate: rate4(b) });
+      // (fb4 join: wet wood filling the ring leaves no room for the dry: the first step is taking it out)
+      if (!c.enabled && b && ch4.binUnits(b).some((u) => wetFlag(u)) && !inventory.firstFit(b, 'wood:branch')) {
+        c.needs = [NEED.step('Room in the ring for dry wood', false, { note: 'it is full of wet wood' }), ...c.needs];
+        c.next = 'Take the wet wood out first: drag it onto the ground by the ring (by a lit fire it dries in 30 min), then dry wood in';
+      }
+      return c;
+    };
     ch4.lightProblem = (key) => { const c = ch4.lightCheck(key); return c.enabled ? null : c.why; };
     ch4.douseCheck = (key) => fires.douseCheck(key);
     ch4.fireState = (key) => {
