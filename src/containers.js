@@ -39,8 +39,8 @@ const ROD_LEN = 1.9, POLE_LEN = 3.4;
 const COL = { blue: 0x2c5f9f, blueDark: 0x244f86, ring: 0x1d1f22, strap: 0x2b2b29, pad: 0x3b3b37, bucket: 0x3f7a62, bucketLid: 0xe9e4d4, wire: 0x9aa0a6, box: 0x3c6a49, boxDark: 0x2e5439, latch: 0xb9bdc2, mapcase: 0x9fbcc8, mapEdge: 0x5d7480, rodBlank: 0x2f2b27, cork: 0xc9a671, reel: 0x3b3f45, rope: 0xcbbf9a };
 // content D: the packs' sizes by mesh key (hull.js's two, and the dry pack), and the long things' looks by item id
 const DRY = { H: 0.6, W: 0.46, D: 0.24 };
-const packDims = (mk) => (mk === 'packdry' ? DRY : PACKS[mk] || null);
-const isPack = (mk) => mk === 'gear' || mk === 'food' || mk === 'packdry';
+const packDims = (mk) => (String(mk).startsWith('packdry') ? DRY : PACKS[mk] || null);
+const isPack = (mk) => mk === 'gear' || mk === 'food' || String(mk).startsWith('packdry'); // ('packdry:<tint>')
 const PADDLE_LOOKS = {
   ash: PADDLE_COLORS,
   bentshaft: { shaft: 0x9a7448, blade: 0x8a6440, tip: 0x2a2420, grip: 0x7e5c38 },  // laminate, darker
@@ -275,8 +275,9 @@ export class ContainerView {
         stack.set(x + z * 10, base + (mk === 'bucket' ? BUCKET.H : 0.2));
       }
     }
-    // the long items in the canoe that the rig does not draw: the rod along the port side, a spare paddle by it
-    let portRod = 0;
+    // the long items in the canoe that the rig does not draw: the rods along the port side, a spare paddle along the
+    // starboard bilge (hull.js's own spare lies along the port one), face down, blade forward
+    let portRod = 0, starPad = 0;
     for (const l of inv.long) {
       if (l.where !== 'canoe' || l.inUse) continue;
       const o = this.objFor(l.uid, l.id); if (!o) continue;
@@ -284,9 +285,10 @@ export class ContainerView {
       if (overhead || (rodUp && isRod(l.id))) { o.visible = false; continue; }
       if (o.parent !== cn.hull) cn.hull.add(o);
       o.visible = true;
-      const z = -0.24 + 0.07 * portRod++, mk = o.userData.mesh;
-      if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2 + 0.03)); o.position.set(mk === 'setpole' ? -1.7 : -1.25, floorAt(0) + 0.07, z); }
-      else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, 1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(-0.9, floorAt(0) + 0.06, z); }
+      const mk = o.userData.mesh;
+      if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2 + 0.03)); o.position.set(mk === 'setpole' ? -1.7 : -1.25, floorAt(0) + 0.07, -0.24 + 0.07 * portRod++); }
+      // (content D: a right-handed basis, as hull.js's spare: the left-handed one it had stood the paddle across the hull)
+      else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(-1.0 + 0.1 * starPad, floorAt(0) + 0.05 + 0.015 * starPad, 0.2 - 0.06 * starPad++); }
     }
     // on the body: the back, the chest, the hands
     const chest = cn.figure.bones.chest;

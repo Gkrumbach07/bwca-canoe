@@ -192,6 +192,24 @@ model('plate', {
   },
 });
 model('fillet', { hold: 'upright', tinted: true, build: (b, o) => fillets(b, o.tint || C(0xf0e2d2), (o.tint || C(0xf0e2d2)).clone().multiplyScalar(0.82), { L: 0.16 }) });
+// stream C's hot breakfasts: pancakes stacked on the tin plate, a round of bannock golden from the pan
+model('pancakes', {
+  hold: 'upright',
+  build: (b) => {
+    b.cyl(V(0, 0, 0), V(0, 0.012, 0), 0.085, 0.105, 14, TILE.PLAIN, C(0xa7a9aa), { cap0: true, cap1: true, capTile: TILE.PLAIN });
+    for (let i = 0; i < 3; i++) b.cyl(V(0.004 * i, 0.012 + i * 0.011, -0.003 * i), V(0.004 * i, 0.021 + i * 0.011, -0.003 * i), 0.068, 0.066, 12, TILE.PLAIN, C(i === 2 ? 0xc8873a : 0xd9a45a), { cap1: true, capTile: TILE.PLAIN });
+    return b;
+  },
+});
+model('bannock', {
+  hold: 'upright',
+  build: (b) => {
+    const crust = C(0xc8913e), top = C(0xb07a32);
+    b.cyl(V(0, 0, 0), V(0, 0.022, 0), 0.085, 0.09, 14, TILE.PLAIN, crust, { cap0: true, capTile: TILE.PLAIN });
+    b.cyl(V(0, 0.022, 0), V(0, 0.036, 0), 0.09, 0.06, 14, TILE.PLAIN, top, { cap1: true, capTile: TILE.PLAIN });
+    return b;
+  },
+});
 
 // a fish lying on its side, built 1 m long (scaled to its length): head +x, back toward +z, the up side +y
 model('fish', {
@@ -587,14 +605,14 @@ model('lure', {
 // wood and the woods' things -------------------------------------------------------------------------------------------
 // a dead branch, a short log, a dead pole, an armful of split wood (as chores.js's pieces, lying on the ground)
 function wood(b, kind) {
-  if (kind === 'pole') { b.tube([V(-0.95, 0.03, 0), V(-0.3, 0.031, 0.01), V(0.3, 0.028, -0.008), V(0.95, 0.024, 0)], (t) => 0.03 * (1 - 0.35 * t), 6, TILE.BARK, C(0x8b8276), { cap0: true, cap1: true }); return b; }
+  if (kind === 'pole') { b.tube([V(-1.05, 0.03, 0), V(-0.35, 0.031, 0.01), V(0.35, 0.028, -0.008), V(1.05, 0.024, 0)], (t) => 0.03 * (1 - 0.35 * t), 6, TILE.BARK, C(0x8b8276), { cap0: true, cap1: true }); return b; }
   if (kind === 'branch') {
-    const bark = C(0x6b5d50), pts = [V(-0.35, 0.024, 0), V(-0.1, 0.026, 0.02), V(0.1, 0.022, -0.015), V(0.35, 0.018, 0.01)];
+    const bark = C(0x6b5d50), pts = [V(-0.55, 0.024, 0), V(-0.16, 0.026, 0.025), V(0.16, 0.022, -0.02), V(0.55, 0.018, 0.012)];
     b.tube(pts, (t) => 0.024 * (1 - 0.5 * t), 6, TILE.BARK, bark, { cap0: true, cap1: true });
     for (const [t, s] of [[1, 1], [2, -1]]) b.tube([pts[t].clone(), pts[t].clone().add(V(0.1, 0.012, s * 0.12))], (q) => 0.01 * (1 - 0.6 * q), 4, TILE.BARK, bark, { cap1: true });
     return b;
   }
-  if (kind === 'log') { b.cyl(V(-0.2, 0.06, 0), V(0.2, 0.058, 0.01), 0.06, 0.056, 9, TILE.BARK, C(0x5d4c3c), { cap0: true, cap1: true, capCol: C(0xcdb48a) }); return b; }
+  if (kind === 'log') { b.cyl(V(-0.24, 0.06, 0), V(0.24, 0.058, 0.01), 0.06, 0.056, 9, TILE.BARK, C(0x5d4c3c), { cap0: true, cap1: true, capCol: C(0xcdb48a) }); return b; }
   for (const [z, y] of [[-0.06, 0.05], [0.06, 0.05], [0, 0.13]]) b.cyl(V(-0.22, y, z), V(0.22, y, z), 0.05, 0.05, 7, TILE.BARK, C(0x6a5644), { cap0: true, cap1: true, capCol: C(0xcdb48a), arc: [Math.PI * 0.1, Math.PI * 1.3], flatTile: TILE.SPLIT, flatCol: C(0xc6a77c) });
   return b;
 }
@@ -664,6 +682,7 @@ const KEY_OF_ID = {
   'snack:trailmix': ['trailmix'], 'snack:jerky': ['jerky'], 'snack:chocolate': ['bar'], 'snack:sausage': ['sausage', 0x9a2a22], 'snack:granola': ['granola'],
   'snack:apricots': ['bag', 0xd98a3a], 'snack:tortilla': ['tortilla'],
   'hot:breakfast': ['bowl', 0xcdb88a], 'hot:supper': ['bowl', 0xb9925a], 'hot:freeze': ['bowl', 0x9a6a3a],
+  'hot:pancakes': ['pancakes'], 'hot:chili': ['bowl', 0x8a3a24], 'hot:bannock': ['bannock'],
   leeches: ['cup'], aframe: ['tentbag', 0xb5763a], dome: ['tentbag', 0x5f7f3a], fourseason: ['tentbag', 0xc9a23a],
   sleepingbag: ['sleepbag', 0x2f5f8a], bag3: ['sleepbag', 0x4a6a3a], bagdown: ['sleepbag', 0xa8402e], clothes: ['drybag', 0x4f7d9c],
   tarp: ['tarpsack', 0x55704a], pad: ['pad'], padair: ['padroll', 0xc96a2a], yokepads: ['yokepads'], pot: ['pot'],
