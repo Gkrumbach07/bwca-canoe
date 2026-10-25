@@ -358,7 +358,7 @@ export class Hints {
         if (!this.live || this.inside) return false;
         const F = t.fires, near = F && F.near, by = near && near.heat > 0.05 && Math.hypot(near.x - p.x, near.z - p.z) < 6;
         // (fb5 join: once taught, soaked again in a summer rain is no news; it comes back when it costs warmth)
-        if (rec && rec.n > 0 && !ep && e.needs.warmth > 0.8) return false;
+        if (rec && rec.n > 0 && e.needs.warmth > 0.8) return false;
         return !by && e.soaked > (ep ? 0.3 : 0.5) ? 1 - e.soaked : false;
       }
       case 'tired': return need('rest');
