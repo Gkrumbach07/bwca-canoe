@@ -602,7 +602,7 @@ export class Energy {
     this.dryUntil = this.now + DRY_BOOST_HOURS;
     this.wetSetH = 0;
     if (e) { e.left = 0; if (this.inv) this.inv.emit('items'); }
-    const words = 'Dry clothes on, the wet ones wrung out and into the bag. Warmth comes back twice as fast for a couple of hours.';
+    const words = 'Dry clothes on, the wet ones wrung out and into the bag.'; // (fb5 join: no rate in the line, rule 3)
     this.note(words);
     return { ok: true, why: null, words };
   }
