@@ -336,7 +336,11 @@ export class Hints {
     switch (id) {
       // the danger
       case 'spent': return this.live && e.spentAt != null ? e.value : false;
-      case 'nearly': return this.live && e.spentAt == null && e.value > 0 && e.value < (ep ? 0.23 : 0.08) ? e.value : false;
+      case 'nearly': {
+        const v = this.live && e.spentAt == null && e.value > 0 && e.value < (ep ? 0.23 : 0.08) ? e.value : false;
+        // (fb5 join: at a campsite, not "or make for a campsite")
+        return v !== false && this.here && this.here.ringD <= SITE ? { lv: v, text: 'Nearly spent. Rest, eat or drink now.', short: 'Nearly spent.' } : v;
+      }
       case 'donein': return this.live && e.needs.rest <= (ep ? 0.1 : 0.005) ? e.needs.rest : false;
       case 'nofood': return this.live && e.warning;
       // the body

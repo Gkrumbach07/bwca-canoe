@@ -305,7 +305,7 @@ export class Energy {
     const { month } = monthDay(this.day.year, this.day.doy), h = this.day.hours, w = this.day.weather;
     return (month === 6 || month === 7) && h >= 12 && h < 18 && !(w && /overcast|fog|rain|storm/.test(w.state || ''));
   }
-  get warning() { return !this.hasFood && this.value < WARN_AT; }
+  get warning() { return !this.hasFood && this.value < WARN_AT && !(this.hungFood().days > 0); } // (fb5 join: not "No food… make for an outfitter" with supper hung in the barrel at camp)
   get still() { const p = this.player; return (p.mode === 'paddle' || p.mode === 'carry' || p.mode === 'walk') && !p.landing && Math.abs(p.speed) < 0.25; }
   // the rest multiplier: the camp sets it (3 at a site, 4 by a lit fire); until anything does, a campsite nearby gives 3
   get restBoost() { return this._boost; }

@@ -938,7 +938,7 @@ export class Inventory {
       case 'hand': {
         if (!r || !r.e) return null;
         if (r.e.fixed) return grey('It stays where it is', [], r.e.id === 'bottle' ? 'Drink from it where it is: right-click › Drink' : '');
-        if (r.c && this.spec(r.c).one) return grey('In your hand already', [], 'Drag it into a pack to put it away, or onto the ground');
+        if (r.c && this.spec(r.c).one && this.rootWhere(r.c) === 'hands') return grey('In your hand already', [], 'Drag it into a pack to put it away, or onto the ground'); // (fb5 join: a hand's holder in the canoe is not your hand)
         if (!this.canHand(r.e.id) && !r.e.box) return grey('It won’t go in one hand', [], 'Carry it on your back or chest: drag its strap there');
         if (p && !(p.onFoot || p.mode === 'paddle') && !this.atStash) return grey('Not now', [NEED.step('On foot, or sitting in the canoe', false, { chip: 'on foot' })], 'Finish what you are doing first');
         if (this.freeHand() < 0) return grey('Both hands are full', [NEED.qty('A free hand', 0, 1, '', { chip: '' })], `Put down or away what is in a hand: ${this.handsWords() || 'drag it into a pack'}`);

@@ -65,7 +65,7 @@ export function describe(a, b) {
   const label = (fast ? `${s.name} ${s.mark}` : s.name) + (real ? ' · Real pace' : '');
   const line = life ? 'The clock as in life while the camera is up'
     : fast ? `Time and travel run ${s.factor > 2 ? 'fastest' : 'faster'} · 1 for normal`
-      : real ? 'Time as in life' : 'One clock on the water and on land';
+      : real ? 'Time as in life' : '2 or 3 to speed it up'; // (fb5 join: not "One clock on the water and on land", news only to who knew two)
   return { key: s.key, name: s.name, mark: s.mark, label, pace: P.label, line, ...(life ? { life: true } : {}) };
 }
 // the game hours a stretch on foot takes when you walk it yourself, from its hours at life: seen at seenSpeed (no more
