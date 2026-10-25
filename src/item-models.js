@@ -692,6 +692,7 @@ const KEY_OF_ID = {
   net: ['net'], knife: ['knife'], axe: ['axe'], axehead: ['axe', 0x3a3532], tradesilver: ['brooch', 0xb9bbbd], brassreel: ['reel', 0xb8923a],
   matchsafe: ['tube', 0xa0a4a8], toque: ['toque', 0xa8322a], luckycap: ['cap', 0x6e2630], guidemap: ['map', 0xd8c9a2],
   'wood:branch': ['branch'], 'wood:log': ['log'], pole: ['pole'], firewood: ['firewood'],
+  litter: ['trashbag'], secchi: ['secchi'], // (stream A's tasks: litter packed out, the lake monitoring program's disk)
 };
 // the outfitters' signature items by their icon (inv-ui.js FAMILY)
 const KEY_OF_ICON = {
@@ -701,6 +702,35 @@ const KEY_OF_ICON = {
 const KEY_OF_KIND = { food: ['bowl'], snack: ['bag', 0xc8a46a], meal: ['pouch'], fish: ['fish'], bait: ['cup'], lure: ['lure'], tool: ['box'], gear: ['sack'], map: ['map'], firewood: ['branch'], forage: ['cup'] };
 // a small hard case: a fallback for a tool nobody named
 model('box', { hold: 'upright', tinted: true, build: (b, o) => { const c = o.tint || C(0x4a5a4a); flatBox(b, 0, 0.025, 0, 0.06, 0.025, 0.04, TILE.PLAIN, c); flatBox(b, 0, 0.051, 0, 0.055, 0.002, 0.035, TILE.PLAIN, c.clone().multiplyScalar(0.8)); return b; } });
+// stream A's: the litter packed out, in a small garbage bag twisted shut; the Secchi disk, black and white quarters on
+// its coil of marked line
+model('trashbag', {
+  hold: 'hang', up: 'y', grip: [0.05, 0.13, 0],
+  build: (b) => {
+    const bag = C(0x2a302a);
+    soft(b, 0.2, 0.11, 0.16, (t) => (t > 0.8 ? 1 - (t - 0.8) * 3.2 : t < 0.06 ? 0.7 : 1), (p) => (p.y < -0.5 ? bag.clone().multiplyScalar(0.8) : bag), { tile: TILE.PLAIN, sides: 9 });
+    b.cyl(V(0.1, 0.055, 0), V(0.14, 0.07, 0), 0.016, 0.006, 6, TILE.PLAIN, bag, { cap1: true, capTile: TILE.PLAIN });
+    for (const s of [-1, 1]) b.tube([V(0.14, 0.07, 0), V(0.16, 0.08 + s * 0.006, s * 0.02), V(0.155, 0.065, s * 0.03)], 0.005, 4, TILE.PLAIN, bag, { cap1: true });
+    return b;
+  },
+});
+model('secchi', {
+  hold: 'hang', up: 'y', grip: [0, 0.1, 0],
+  build: (b) => {
+    const R = 0.1;
+    for (let k = 0; k < 4; k++) {
+      const a0 = (k / 4) * Math.PI * 2, pts = [V(0, 0.012, 0)];
+      for (let i = 0; i <= 4; i++) { const a = a0 + (i / 4) * (Math.PI / 2); pts.push(V(Math.cos(a) * R, 0.012, Math.sin(a) * R)); }
+      b.face(pts, TILE.PLAIN, C(k % 2 ? 0xf2f0e8 : 0x1c1c1c), { ref: V(0, -1, 0) });
+    }
+    b.cyl(V(0, 0, 0), V(0, 0.012, 0), R * 1.01, R * 1.01, 16, TILE.PLAIN, C(0x8a8e92), { cap0: true, capTile: TILE.PLAIN });
+    b.cyl(V(0, 0.012, 0), V(0, 0.03, 0), 0.008, 0.008, 6, TILE.PLAIN, C(0x8a8e92), { cap1: true, capTile: TILE.PLAIN });
+    const coil = [];
+    for (let i = 0; i <= 24; i++) { const a = (i / 24) * Math.PI * 4.2; coil.push(V(0.15 + Math.cos(a) * 0.05, 0.006 + i * 0.0004, Math.sin(a) * 0.05)); }
+    b.tube(coil, 0.004, 4, TILE.ROPE, C(0xd9c9a0));
+    return b;
+  },
+});
 model('book', { hold: 'upright', build: (b) => { flatBox(b, 0, 0.012, 0, 0.09, 0.012, 0.065, TILE.CANVAS, C(0x5a3a2a)); flatBox(b, 0.004, 0.012, 0, 0.087, 0.01, 0.062, TILE.PLAIN, C(COL.paper), { skip: ['-x'] }); return b; } });
 
 const look = (id) => {

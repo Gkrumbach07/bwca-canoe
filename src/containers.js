@@ -587,13 +587,13 @@ export class ContainerView {
       // hung by the cord's end, the fish heads up under it (the merged frame's +x up, its depth across the body)
       const g = o.geometry; if (!g.boundingBox) g.computeBoundingBox();
       const bb = g.boundingBox;
-      holdMatrix({ hold: 'hang', up: 'x', size: [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z], grip: V(bb.max.x, 0.02, bb.max.z - 0.03), scale: 1 }, w, f, r, side, this._lm);
+      holdMatrix({ hold: 'hang', up: 'x', size: [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z], grip: V(bb.max.x + 0.02, 0.02, 0), scale: 1 }, w, f, r, side, this._lm);
       this._lm.decompose(o.position, o.quaternion, o.scale);
       return;
     }
     if (c.where === 'canoe') {
       if (o.parent !== cn.hull) cn.hull.add(o);
-      o.position.set(-0.55, floorAt(-0.55) + 0.012, 0); o.quaternion.setFromEuler(this._e.set(0, Math.PI / 2, 0)); o.scale.setScalar(1);
+      o.position.set(-0.25, floorAt(-0.6) + 0.012, 0); o.quaternion.identity(); o.scale.setScalar(1); // (heads forward, the bodies back along the bilge)
       return;
     }
     if (o.parent !== this.scene) this.scene.add(o);
