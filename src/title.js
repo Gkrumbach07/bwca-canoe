@@ -25,15 +25,15 @@ const KEYMAP = [
   ['On the water', [
     [['W', 'S'], 'paddle forward, back'], [['A', 'D'], 'turn the hull while held, as sweep strokes'],
     [['Shift'], 'hustle'], [['Space'], 'brace in a sea (you cannot paddle while bracing)'],
-    [['E'], 'go ashore · portage at a landing · tie up at an outfitter’s dock and step up onto the deck · pick up a find · right the canoe after a capsize'], [['Q'], 'the other choice at a shore: go ashore at a landing, leave the beached canoe'],
-    [['I'], 'the book at the pack: right-click food to eat it (a snack as it is; a meal or a fish is cooked on a fire’s grate first)'], [['H'], 'the headlamp (afloat or on foot)'],
+    [['E'], 'go ashore, at any bank and at a portage landing alike (in at the trail’s put-in: you step out by the canoe, beached, and shoulder it yourself, Q at the hull) · tie up at an outfitter’s dock and step up onto the deck · pick up a find · right the canoe after a capsize'],
+    [['I'], 'the book at the pack: right-click food to eat a serving (a snack as it is; a meal or a fish is cooked on a fire’s grate first) · Drink from the bottle in your pockets (a gulp, 0.25 L): nothing is drunk for you'], [['H'], 'the headlamp, day or night (afloat or on foot)'],
   ]],
   ['On foot: the dot', [
     [['W', 'A', 'S', 'D'], 'walk where you look: W toward it, S back, A and D strafe'], [['Shift'], 'jog'],
     [['Space'], 'walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m; otherwise a hop · with the canoe overhead you only stagger'],
     [[], 'whatever the dot in the middle of the view points at has at most two actions, both on its label: E and Q. A held one says “hold”; a greyed one says why. Pointed at nothing, E and Q do nothing'],
-    [['E'], 'pick up (wood, a pack, a barrel, a bucket, a bagged tent, a find) · take one from a pile · open the fire (its card) · rest until… at your tent (the dial) · sit (the bench, a log seat, the latrine; E or a move key stands you up) · get in the canoe · fill the bottle at the water’s edge · talk · open a shelf, the board, the map table, the counter · held: hang the barrel at a limb, lower it, saw a down log, carry on pitching'],
-    [['Q'], 'open it (a container or a pile on the ground: the book, with it lit on the right) · light or douse the fire, held · pitch a bagged tent (the ghost, then E held) · strike your tent, held · shoulder the canoe (“Unload it first” while loaded) · at a trail head, fetch what is left · with the canoe overhead: set it down, or launch and leave what is left'],
+    [['E'], 'pick up (wood, a pack, a barrel, a bucket, a bagged tent, a find) · take one from a pile (into what you carry, else a free hand) · open the fire (its card) · rest until… at your tent (the dial) · sit (the bench, a log seat, the latrine; E or a move key stands you up) · get in the canoe where it floats (beached: push it off first, and it slides down to the water with you; what is in your hands goes into the hull at your feet) · fill the bottle at the water’s edge (a tablet in from the tablets in reach) · talk · open a shelf, the board, the map table, the counter · held: hang the barrel at a limb, lower it, saw a down log, carry on pitching'],
+    [['Q'], 'open it (a container or a pile on the ground: the book, with it lit on the right) · light or douse the fire, held · pitch a bagged tent (the ghost, then E held) · strike your tent, held · shoulder the canoe (only the paddle, the rod and the stringer ride in it overhead; with anything else aboard “Unload it first” opens the book at the canoe) · at a trail head, fetch what is left · with the canoe overhead: set it down, or launch and leave what is left'],
     [['W'], 'past your depth: swim (Shift harder) · Space climbs out onto a rock, a dock or the bank · E at the canoe climbs in'],
   ]],
   ['At an outfitter', [
@@ -46,18 +46,18 @@ const KEYMAP = [
     [['E'], 'talk to someone the dot is on (again: their task) · choose with 1–9 or a click, Esc to leave'], [['T'], 'what was said: the last six lines'],
   ]],
   ['The book: left is you, right is what you face', [
-    [['I'], 'the book at the pack. Left is always you: the back, the chest, each hand, the pockets, and a tab per container you carry (Pack · Barrel · Bucket · Tackle box · Armload; a box in the pack has its own tab, “in the pack”), one grid open at a time. Right is Here: everything within reach that isn’t on you, each container on the ground as its own grid, loose wood and dropped things as a pile, the canoe’s load when you stand beside it (Set everything out · Load everything here, held), and at an outfitter what they keep for you. “Nothing here” when the ground is empty'],
+    [['I'], 'the book at the pack. Left is always you: the back, the chest, each hand (anything: a thing, a pack, the rod), the pockets (the bottle with its litre bar, and four quick slots for small things), and a tab per container you carry (Pack · Barrel · Bucket · Tackle box · Armload; a box in the pack has its own tab, “in the pack”), one grid open at a time. Right is Here: everything within reach that isn’t on you, each container on the ground as its own grid, loose wood and dropped things as a pile, the canoe’s load when you stand beside it (Set everything out · Load everything here, held), and at an outfitter what they keep for you. “Nothing here” when the ground is empty'],
     [['drag'], 'between the two panes either way · a pack or a barrel by its strap to your back, your chest, a hand, the canoe or Here · a thing onto a tab to put it in that container · anything off the page: the ground at your feet (wood alone makes a woodpile)'],
     [['Ctrl', 'click'], 'send a thing on to the next container with room'], [['R'], 'turn a thing while dragging'], [['Shift', 'drag'], 'split a stack'],
-    [['right-click'], 'a thing’s verbs and nothing else: Eat (instant, wherever you stand still), Pitch, Hang (“carry it to a tree and point at the limb”), Put in hand, Tie it on, Look at the map; Cook only in the fire card. A greyed verb says why'],
-    [['hover'], 'what a thing is: its name, what it is for, its weight'],
+    [['right-click'], 'a thing’s verbs and nothing else: Eat (a serving, instant, wherever you stand still), Drink, Drink up, Pitch, Pitch over… (the tarp), Hang (“carry it to a tree and point at the limb”), Put in hand, Put on the stringer (while it is in reach), Change into dry clothes, Tie it on, Look at the map; Cook only in the fire card. A greyed verb says why'],
+    [['hover'], 'what a thing is and what it does, in numbers (the bag’s night, the tablets’ uses, a lure’s takes), its weight; the uses or servings left show on a small bar'],
     [['Tab'], 'the next tab along · Shift-Tab the journal · J or Esc closes'],
   ]],
   ['At camp: E at the thing', [
     [['E'], 'at the fire ring: the fire card, yours and what is in reach on the left (a tab each: the packs and piles on the ground about you, the wood lying about, the canoe’s load beside you) and the fire on the right: drag wood into the fuel, a pot and a meal or a fish onto the grate (“no pot” says when there is none), then Light (held), Cook, Eat (there and then), Douse (held). E or Esc closes it'],
     [['hold'], 'a held button works while the mouse is held on it, its ring filling; let go and it stops where it got to. The same held from the dot: Q Light, Q Douse, Q Strike, Q Pitch then E, E Hang, E Lower, E Saw'],
     [['←', '→'], 'the Rest until… dial, from E at your pitched tent: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →, day or night (a daytime rest is a nap). E rests, Esc not yet · nothing at camp is struck, put out or packed for you: what you leave stays'],
-    [['F'], 'with the rod in a hand (drag it to a hand slot, or Put in hand), on foot facing water within a cast: the rod up, the same cast, lures and fight as from the canoe. A kept fish goes on the stringer when the canoe is in reach, else into your pack'],
+    [['F'], 'with the rod in a hand (drag it to a hand slot, or Put in hand), on foot facing water within a cast: the rod up, the same cast, lures and fight as from the canoe. K keeps a fish in your hand (Put on the stringer from the book while the stringer is in reach); the bobber rig takes a leech per bite from the bucket in reach (a hand, a step off, the canoe), and the lure strip says “needs leeches” when there is none'],
   ]],
   ['The camera', [
     [['C'], 'raise it (the $25 35 mm, or the disposable a photo notice lends) · C or Esc lowers it'], [['wheel'], 'zoom from a normal lens to a long one (Q and E held too)'],
@@ -65,7 +65,7 @@ const KEYMAP = [
   ]],
   ['Fishing', [
     [['F'], 'take up the rod · put it down'], [['Space', 'click'], 'hold to load a cast where the cursor points, let go to cast · set the hook · hold to reel'],
-    [['1', '2', '…'], 'change the lure: the ones you have with you, in the strip’s order'], [['E', 'K'], 'let the fish go · keep it on the stringer'],
+    [['1', '2', '…'], 'change the lure: the ones you have with you, in the strip’s order'], [['E', 'K'], 'let the fish go · keep it, in your hand (into a pack in reach with both hands full)'],
   ]],
   ['Looking', [
     [['Tab'], 'hold for the readout, the moment only: the place, the time and the day, sunrise and sunset, the wind and the waves, the temperature and the sky, your speed and heading · in the book: the next tab'],

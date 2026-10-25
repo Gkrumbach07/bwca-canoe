@@ -624,7 +624,7 @@ export class Tasks {
   }
   // The hook for the fishing code (release): a fish landed on a lake, kept or let go. A kept one that a notice
   // taken on wants goes into that notice's cooler (the best paying first), and the words come back for the catch
-  // line; otherwise null and it goes on the stringer.
+  // line; otherwise null and it goes to your hand (fb3 B; Put on the stringer is its verb in the book).
   onCatch(species, lakeId, lengthCm = 0, kept = true) {
     const ev = catchEvent(species, lakeId, lengthCm, kept);
     for (const t of this.fitting(ev)) {

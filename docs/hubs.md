@@ -885,19 +885,26 @@ everything out* · *Load everything here*, held), and at an outfitter what they 
 the book is open, never a tab; "Nothing here" when the ground is empty; only it scrolls. Q on a container or a pile on
 the ground opens the book with that thing's grid lit in Here. Drag both ways; a drag off the page is the ground at your
 feet. No Take-all and no sort button (the owner said no); Ctrl-click to the next container with room stays, and E on
-the dot stays the quick way for a single thing. The fire card and the shelf keep their own right pane, so their left
-pane is the body and the tabs alone (at a shelf the canoe's containers at the dock and Keeping are tabs too, so a thing
-is bought straight into them).
+the dot stays the quick way for a single thing. The fire card and the shelf keep their own right pane; the shelf's
+left pane is the body and the tabs (the canoe's containers at the dock and Keeping are tabs too, so a thing is bought
+straight into them), and since the 2026-10-25 round **the fire card's left pane lists what is in reach** as tabs beside
+yours (the owner: "when im by the fire i cant see the items like portage pack"): a pack set down by the ring, a pile, the
+wood about, the canoe's load beside you.
 
-**The container model** (the owner, held to): back (a pack or the 60 L barrel), chest (a second pack or barrel), each
-hand (the rod, a paddle, the bucket, the tackle box, an armload), pockets (four quick slots). Containers: pack
-(anything but a pack or barrel), barrel (food only), bucket (bait only), tackle box (lures only; nested in a pack with
-its own tab, labelled "in the pack"), stringer (fish, lashed in the canoe; on foot a kept fish goes to the pack),
-armload (wood, a hand), piles (anything), the canoe (up to its weight), the keeping. A nested container shows as an
+**The container model** (the owner, held to; hands, pockets and the bottle as of the 2026-10-25 round): back (a pack or
+the 60 L barrel), chest (a second pack or barrel), each hand (**anything**: a loose thing rides in the hand's holder, a
+container or a long thing whole), pockets (five cells: the bottle fixed in the first, with its litre bar, and four quick
+slots for small things, 1 × 1 or 1 × 2). Containers: pack (anything but a pack or barrel), barrel (food only), bucket
+(bait only), tackle box (lures only; nested in a pack with its own tab, labelled "in the pack"), stringer (fish, lashed
+in the canoe; a kept fish goes to your hand, and *Put on the stringer* is its verb while the stringer is in reach),
+armload (wood, a hand), piles (anything), the canoe (up to its weight), the keeping. A fish is 1 × 3. A nested container shows as an
 item in the parent grid and gets its own tab, "in the pack" or "in your hand"; double-clicking the item jumps to its
-tab. Right-click lists an item's verbs and nothing else (Eat, instant; Pitch; Hang, which says "carry it to a tree and
-point at the limb"; Put in hand; Use; Cook, in the fire card); a greyed verb says why. Hover: the name, the weight and
-a one-line purpose ("Cooks a meal on the grate."). The journal side is unchanged.
+tab. Right-click lists an item's verbs and nothing else (Eat, a serving, instant; Pitch; Hang, which says "carry it to a
+tree and point at the limb"; Put in hand; Use; Cook, in the fire card; since 2026-10-25 Drink and Drink up on the
+bottle, Put on the stringer, Change into dry clothes, Pitch over… on the tarp); a greyed verb says why. Hover: the name,
+the weight, a one-line purpose and the numbers (`def.stats`: what it does, by how much, when), with the uses or
+servings left on a small bar on the icon. The journal side shows the tasks' states plainly (taken, in progress, done,
+claimed).
 
 **The rest.** Eating is instant, anywhere you're still. E Sit on the bench, the log seat and the latrine (a pose; time
 passes; E or a move key stands you up; the latrine's rest bonus stays). Rest until…: first light, 7:00, 9:00, noon,
@@ -983,9 +990,8 @@ dot on the canoe and the ring, the book, the fire card; 103 through two shore ca
 - **Leftovers** (4281664): the WakeCard and its CSS, `chores.openWake`, `WAKES`, `camp.turnIn` and the checks on
   `chores.card` are gone. The Controls card and the README's rows say the final keys (f0e714e).
 
-Noted, not changed: the fire card's left pane has no Here (the owner's two panes: left is you), so at the fire you
-cook from what you carry, the pack on the back, the barrel on the chest, the armload in a hand; a barrel on the ground
-is picked up first. A reload resumes from the last save tick, so a cook under way comes back a little behind. The
+Noted, not changed then: the fire card's left pane had no Here (the owner's two panes: left is you), so at the fire you
+cooked from what you carried. The owner asked for it in the 2026-10-25 round and it lists what is in reach now. A reload resumes from the last save tick, so a cook under way comes back a little behind. The
 dock's "Tie up" is the bottom line's, as every afloat prompt is.
 
 ### Stream D: the counter, the task circles, the item words
