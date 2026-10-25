@@ -306,7 +306,7 @@ export class Hang {
     if (!c || p.mode !== 'walk' || p.teleporting || Math.hypot(p.x - A.t.x, p.z - A.t.z) > AT_TREE + 1.5) { this.disarm(); return; }
     if (c.where === 'hung' && c.at && c.at.up) { this.disarm(); return; }
     const pe = this.pending && this.pending.ref === c.id ? this.pending : null, from = pe ? pe.done : 0, spot = pe ? pe.spot : A.spot;
-    p.prompt = { key: null, text: `${from ? 'Carry on hanging' : 'Hang'} the ${barrelName(c.item)} from the ${A.t.name} &nbsp;·&nbsp; <kbd>E</kbd>or click, held &nbsp; <kbd>Esc</kbd>stop` };
+    p.prompt = { key: null, text: `${from ? 'Carry on hanging' : 'Hang'} the ${barrelName(c.item)} from the ${A.t.name} &nbsp;·&nbsp; hold <kbd>E</kbd>or click &nbsp; <kbd>Esc</kbd>stop` };
     const e = inp.pressed('KeyE'), m = inp.pressed('Mouse0');
     if (e || m) hold.begin({ ...this.hangOpts(c, spot, from), keys: ['KeyE', 'Mouse0'] });
   }
@@ -340,7 +340,7 @@ export class Hang {
         const b = inv.cont(c.id);
         if (b && b.where === 'hung' && b.at && b.at.up === false) b.at.y = low;
         if (this.pending) { this.pending.done = Math.max(1, job.done); if (job.done < 1) this.pending = null; }
-        if (job.done >= 1 && job.done < 3) this.camp.note(`${HANG[job.done - 1].name}. ${this.armed ? 'E or a click, held, carries on.' : 'Point at the limb and hold E to carry on.'}`, 3);
+        if (job.done >= 1 && job.done < 3) this.camp.note(`${HANG[job.done - 1].name}. ${this.armed ? 'Hold E or a click to carry on.' : 'Point at the limb and hold E to carry on.'}`, 3);
       },
     };
   }

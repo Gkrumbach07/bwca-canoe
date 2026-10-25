@@ -486,7 +486,7 @@ export class Tarp {
     const k = A.chk, go = () => { const e = inp.pressed('KeyE'), m = inp.pressed('Mouse0'); return e || m; };
     if (k.rig) {
       this.showGhost(k.rig);
-      p.prompt = { key: null, text: `Pitch the tarp here · ${KIND_WORDS[k.rig.kind]} &nbsp;·&nbsp; <kbd>E</kbd>or click, held &nbsp; <kbd>Esc</kbd>stop` };
+      p.prompt = { key: null, text: `Pitch the tarp here · ${KIND_WORDS[k.rig.kind]} &nbsp;·&nbsp; hold <kbd>E</kbd>or click &nbsp; <kbd>Esc</kbd>stop` };
       if (go()) hold.begin({ ...this.pitchOpts(k.rig, A.uid), keys: ['KeyE', 'Mouse0'] });
     } else {
       this.parkGhost();

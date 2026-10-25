@@ -596,7 +596,7 @@ export class Camp {
     if (c && c.item === P.item) {
       if (c.stage >= 4) { this.pitching = null; return; }
       if (Math.hypot(c.x - p.x, c.z - p.z) > 6) { this.cancelPitch(); return; }
-      this.say(`Your tent · ${tentOf(c.item).words[c.stage]} &nbsp;·&nbsp; <kbd>E</kbd>or click, held: carry on pitching &nbsp; <kbd>Esc</kbd>stop`);
+      this.say(`Your tent · ${tentOf(c.item).words[c.stage]} &nbsp;·&nbsp; hold <kbd>E</kbd>or click: carry on pitching &nbsp; <kbd>Esc</kbd>stop`);
       if (go()) hold.begin({ ...this.pitchOnOpts(), keys: ['KeyE', 'Mouse0'] });
       return;
     }
@@ -617,7 +617,7 @@ export class Camp {
     this.ghost.show(s.pose.matrix, s.ok, s.kind); this.ghostOn = true;
     const name = lower(tent.def.name);
     if (s.ok) {
-      this.say(`Pitch the ${name} here &nbsp;·&nbsp; <kbd>E</kbd>or click, held &nbsp; <kbd>Esc</kbd>stop`);
+      this.say(`Pitch the ${name} here &nbsp;·&nbsp; hold <kbd>E</kbd>or click &nbsp; <kbd>Esc</kbd>stop`);
       if (go()) hold.begin({ ...this.pitchOpts(s, tent, site), keys: ['KeyE', 'Mouse0'] });
     } else { this.say(`No tent here · ${s.why} &nbsp;·&nbsp; <kbd>Esc</kbd>stop`); go(); }
   }
@@ -707,7 +707,7 @@ export class Camp {
       onStop: (job) => {
         if (!this.camp) { this.dropDraft(); return; }
         this.setStage(this.camp, job.done);
-        this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'E or a click, held, carries on.' : 'E at the tent, held, carries on.'}`, 3);
+        this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'Hold E or a click to carry on.' : 'Hold E at the tent to carry on.'}`, 3);
       },
     };
   }
@@ -718,7 +718,7 @@ export class Camp {
       id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: c.stage, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(at); },
       onPhase: (i) => { this.setStage(c, i + 1); if (i === 3) this.pitched(); },
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'E or a click, held, carries on.' : 'E at the tent, held, carries on.'}`, 3); } },
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'Hold E or a click to carry on.' : 'Hold E at the tent to carry on.'}`, 3); } },
     };
   }
   // the hold that strikes it, from the stage it stands at back to rolled up and in a pack
