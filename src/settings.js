@@ -1,7 +1,8 @@
 // Player settings: persisted in localStorage (save.js, namespace `settings`), applied to the running game
-// the moment they change, and edited in the panel the title screen opens. The key shortcuts (R, N, V, 1-3)
-// keep working: R and N route through here so the panel shows the truth; V and 1-3 change the live value,
-// the setting is the default a trip starts with; Pace (pace.js) is live. The HUD group says how much the HUD says while you paddle
+// the moment they change, and edited in the panel the title screen opens. V and 1 2 3 change the live value, the
+// setting is the default a trip starts with; Pace (pace.js) is live. fb4 D (the owner's second round of 2026-10-25,
+// "R, which we shouldn't have anymore, and just have reflections change through the settings"): the shore in the
+// water and the sound are rows here only, no keys. The HUD group says how much the HUD says while you paddle
 // (hud.js reads it every frame); Developer gathers what left the HUD: the GPS sim, FPS and triangles, tiles.
 import { save } from './save.js';
 import { LOD_SCALE } from './vegetation.js';
@@ -57,21 +58,21 @@ export const SECTIONS = [
     { key: 'vegDensity', label: 'Undergrowth', desc: 'The shrubs, saplings, ferns and scree drawn', type: 'range', min: 0.5, max: 1, step: 0.05, format: pct },
     { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1, step: 0.05, format: pct },
     { key: 'antialias', label: 'Anti-aliasing', type: 'select', options: [['4', 'MSAA 4×'], ['2', 'MSAA 2×'], ['fxaa', 'FXAA'], ['off', 'Off']] },
-    { key: 'reflections', label: 'Shore and sky in the water', desc: 'R toggles it · the shore, its trees and the canoe mirrored with the sky, a second pass over the scene; off, the water mirrors the sky alone', type: 'toggle' },
+    { key: 'reflections', label: 'Shore and sky in the water', desc: 'The shore, its trees and the canoe mirrored with the sky, a second pass over the scene; off, the water mirrors the sky alone', type: 'toggle' },
     { key: 'reflectionScale', label: 'Reflection detail', type: 'select', parse: Number, options: [[0.15, 'Low'], [0.2, 'Medium'], [0.25, 'Standard'], [0.35, 'High']] },
     { key: 'godRays', label: 'Sun shafts', type: 'toggle' },
   ] },
   { id: 'sound', label: 'Sound', rows: [
     { key: 'volume', label: 'Volume', type: 'range', min: 0, max: 1, step: 0.05, format: pct },
-    { key: 'mute', label: 'Mute', desc: 'N toggles it', type: 'toggle' },
+    { key: 'mute', label: 'Mute', type: 'toggle' },
   ] },
   { id: 'controls', label: 'Controls', rows: [
     { key: 'sensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.3, max: 3, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
     { key: 'invertLook', label: 'Invert look', type: 'toggle' },
     { key: 'cursorSteer', label: 'Steer the canoe where you point', desc: 'While you hold W the bow turns toward the cursor’s point on the water, or toward the look in first person', type: 'toggle' },
     { key: 'pace', label: 'Pace', desc: 'Trip: travel goes faster, the clock with it, so a day covers a real day’s 20 km; camp, fishing and walking about stay at life · Real: life, the clock 1:1', type: 'radio', options: [['trip', 'Trip'], ['real', 'Real']] },
-    { key: 'speed', label: 'Game speed at the start of a trip', desc: '1 2 3 change it as you paddle, on top of the pace', type: 'select', parse: Number, options: [[1, '1×'], [2, '2×'], [4, '4×']] },
-    { key: 'camera', label: 'Camera at the start of a trip', desc: 'V switches as you paddle', type: 'select', options: [['third', 'Behind the canoe'], ['first', 'From the paddler’s seat']] },
+    { key: 'speed', label: 'Game speed at the start of a trip', desc: '1 2 3 change it as you go (1×, 2×, 4×), on top of the pace: a note by the corner mark says what the clock does', type: 'select', parse: Number, options: [[1, '1×'], [2, '2×'], [4, '4×']] },
+    { key: 'camera', label: 'Camera at the start of a trip', desc: 'V switches it as you go', type: 'select', options: [['third', 'Behind the canoe'], ['first', 'From the paddler’s seat']] },
   ] },
   { id: 'hud', label: 'HUD', rows: [
     { key: 'density', label: 'Density', desc: 'How much the HUD says while you paddle', type: 'radio', options: [['quiet', 'Quiet'], ['standard', 'Standard'], ['full', 'Full']] },

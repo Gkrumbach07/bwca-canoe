@@ -63,6 +63,7 @@ import { FORAGE } from './forage.js'; // fb2 A
 import { KINDS } from './tasks.js'; // fb2 A
 import { cards } from './cards.js'; // wc B
 import { VERBS, verbsOf } from './items.js'; // wc D
+import { Hints } from './hints.js'; // fb4 D
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -228,12 +229,12 @@ async function main() {
   outfitter.shop = shop;
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
+  // fb4 D (decision 4, the keys after the owner's second round of 2026-10-25): the global keys are 1 2 3, the pace, and
+  // Sandbox's wind. R (the shore in the water) and N (sound) are gone: both are rows of Settings (Display, Sound).
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
     if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-7 pick lures while the rod is up
-    if (e.code === 'KeyR') settings.toggle('reflections');
-    if (e.code === 'KeyN') settings.toggle('mute');
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
   // trip core B: the packs and the portages (packs.js): where each pack is, the load you carry, the double portage
@@ -267,8 +268,9 @@ async function main() {
   audio.indoors = () => !!(outfitter.visit && outfitter.visit.inside);
   // fb F: dialogue (dialogue.js). What people say shows by their heads with their names, one at a time in a room, pinned
   // to the screen's edge when they are off it; E on someone opens a conversation (numbered choices; you hold still and
-  // the view turns to them, or in third person outside a store cuts over your shoulder); T shows the last six lines.
-  // Made before the title, so its Esc and number keys come first.
+  // the view turns to them, or in third person outside a store cuts over your shoulder); a conversation opens with what
+  // that person last said to you (fb4 D: T and its panel are gone). Made before the title, so its Esc and number keys
+  // come first.
   const talk = new Dialogue({ camera, player, chase, hud, day, frame: () => !(outfitter.visit && outfitter.visit.inside) });
   npcs.dialogue = talk;
 
@@ -473,6 +475,23 @@ async function main() {
   const hudUpdateC = hud.update.bind(hud);
   hud.update = (c) => hudUpdateC(c && !c.weather ? { ...c, weather } : c);
   hud.stripAlso = () => !!camp.dialOpen;
+  // fb4 D: the keys, the hints, the pace toast and the bobber (the owner's second round of 2026-10-25). The keys are the
+  // round's set (title.js KEYMAP; the bindings above: R and N gone, dialogue.js's T gone, fishing.js's K now E keep and
+  // Q let go). Onboarding hints, once a season each, and a toast whenever the pace changes (hints.js), run after the
+  // barks each frame. The bobber: fishing.js lists the bobber rig while you own bait anywhere ("needs leeches" when
+  // none is in reach) and ties it on, and the shop's check of what is in the tackle box took it off again in the same
+  // frame, four times a second: the bobber flashed at the tip and the strip and the prompt flashed with it. The shop's
+  // box now counts the rig while the bait is owned, so one writer decides what is tied on (fishing.js), and the leeches'
+  // reach is steadied there.
+  const boxD = shop.box.bind(shop);
+  shop.box = () => { const b = boxD(); if (typeof fishing.ownsBait === 'function' && fishing.ownsBait()) b.add('leech'); return b; };
+  // a landed fish's Q (let it go) is the rod's: the trail head's Q fetch (packs.js) waits while a fish is held up
+  const packsUpdD = packs.update.bind(packs);
+  packs.update = (dt) => { if (!fishing.landed || !input.once.has('KeyQ')) { packsUpdD(dt); return; } input.once.delete('KeyQ'); packsUpdD(dt); input.once.add('KeyQ'); };
+  const hints = new Hints({ player, hud, day, profile, pointer, outfitter, inventory, lamp, chase, title, talk, camp, photo, veil, settings, fishing });
+  const talkUpdD = talk.update.bind(talk);
+  talk.update = (dt, shell) => { talkUpdD(dt, shell); hints.update(dt, shell); };
+  window.__game.hints = hints;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
