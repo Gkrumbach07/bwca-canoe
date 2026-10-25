@@ -11,6 +11,7 @@ import { inventory as INVENTORY } from './inventory.js';
 import { FIRE } from './fire.js';
 import { hold } from './hold.js';
 import { Cook, hiss, woodKnock } from './cook.js';
+import { Tarp } from './tarp.js'; // fb4 E: the tarp pitched like the tent, on trees or poles
 
 // Camp chores (hubs phase 3, stream A; redone by camp 2, the owner's feedback of 2026-10-24: "picking up firewood
 // should be actually walking around camp and finding loose branches and logs, putting them in your inventory", "need
@@ -51,14 +52,22 @@ import { Cook, hiss, woodKnock } from './cook.js';
 // stations: never where a thing picked up is put away (inventory.place).
 defineItem({ id: 'firefuel', name: 'In the fire ring', short: 'Fuel', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, station: true, container: { cols: 4, rows: 3, accepts: ['firewood'] }, icon: 'firewood', words: 'Dead branches and short logs laid in the ring. They burn a piece at a time once it is lit.' });
 defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'meal', 'fish'] } });
-// fb3 B (the owner, 2026-10-25: "things like sleeping bag and tarp … feel like they have no use"): the rain tarp is pitched
-// over the fire ring or a pack on the ground from the book (its Pitch over… verb, inventory.verb → tarpVerb): the tarp
-// goes into this container on the ground there (shown in Here; drag it out to take it down), drawn as a sheet on four
-// lines (drawTarps). Rain on a ring with no tarp burns a fire down RAIN.burn times faster and wets the wood in it through
-// after RAIN.wetAfter hours (it won't light for RAIN.wetFor); rain on a pack on the ground with no tarp soaks the gear
-// after RAIN.packAfter hours (trip.state.wet). A tarp over either keeps it dry.
-defineItem({ id: 'tarpup', name: 'Rain tarp, pitched', short: 'Tarp up', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 2, rows: 2, accepts: [] }, icon: 'tarp', verbs: [], words: 'The tarp pitched on four lines over the fire ring or a pack; drag it out to take it down.' });
-const RAIN = { on: 0.3, burn: 1, wetAfter: 1 / 3, wetFor: 3, packAfter: 0.5, dry: 0.5, reach: 2.2, verbReach: 4 };
+// fb3 B (the owner, 2026-10-25: "things like sleeping bag and tarp … feel like they have no use"): rain on a ring with no
+// tarp over it burns a fire down RAIN.burn times faster and wets the wood in it through after RAIN.wetAfter hours (it
+// won't light for RAIN.wetFor); rain on a pack on the ground with no tarp soaks the gear after RAIN.packAfter hours
+// (trip.state.wet, and the pack's at.wet). fb4 E (the owner's second round of 2026-10-25: "when you put a tarp up now, it
+// kind of just floats in the air"): the tarp is pitched like the tent, on a ridge line between trees or on poles
+// (tarp.js), and what lies under its sheet (tarp.covers) stays dry. Last round's `tarpup` (the tarp floating over the
+// ring or a pack, a container on the ground) is gone: one found in a save becomes the tarp folded in a pile there.
+defineItem({ id: 'tarpup', name: 'Rain tarp, pitched', short: 'Tarp up', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 2, rows: 2, accepts: [] }, icon: 'tarp', verbs: [], words: 'The tarp, folded where it was pitched.' });
+const RAIN = { on: 0.3, burn: 1, wetAfter: 1 / 3, wetFor: 3, packAfter: 0.5, dry: 0.5 };
+// fb4 E: the poles lying about for a tarp (tarp.js), found like the wood: a few round each site, most by the down logs and
+// under the trees, and now and then in the woods; one cut from a down log with the saw (POLE_CUT: two a log a day)
+const SITE_POLES = { n: 6, tries: 70, from: 4, to: 23 };
+const POLE_CUT = [{ name: 'Pole cut', doing: 'Sawing a straight length off the down spruce and trimming its twigs', minutes: 6, seconds: 1.6 }];
+const POLES_A_LOG = 2;
+// fb4 E (decision 2): the evening's firewood as have of need: pieces enough for about four hours of fire after supper
+const EVENING = { pieces: 8, hours: 4 };
 const KEEP = 1.1;            // fb2 A: game hours of burning left under which a fire takes its next piece from the ring
 export const WOOD = { reach: 1.45, regrow: 2, pile: 12, ringR: 2.4, near: 58, drop: 95, cell: 24 };
 // (to: inside the camp's area, camp.js AREA_R 25 m, so walking about for wood never takes you out of the camp's reach)
@@ -90,7 +99,9 @@ const keyOf = (c) => `${Math.round(c.x)}:${Math.round(c.z)}`; // camp.js campKey
 const strHash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 const isWood = (id) => { const d = itemDef(id); return !!(d && d.kind === 'firewood'); };
 const burnOf = (id) => { const d = itemDef(id); return d && Number.isFinite(d.burn) ? d.burn : FIRE.branch; };
-const LENGTH = { branch: [1.05, 1.3, 1.5], log: [0.46, 0.52, 0.5] }; // m: each variant's length
+const LENGTH = { branch: [1.05, 1.3, 1.5], log: [0.46, 0.52, 0.5], pole: [2.05, 2.2, 2.35] }; // m: each variant's length
+const pieceItem = (kind) => (kind === 'log' ? 'wood:log' : kind === 'pole' ? 'pole' : 'wood:branch');
+const pieceName = (kind) => (kind === 'log' ? 'short log' : kind === 'pole' ? 'dead pole' : 'dead branch');
 
 let current = null; // the one Chores (the notices' kinds read it)
 
@@ -130,9 +141,14 @@ function woodpileGeometry() {
 // A loose piece lying on the ground, in its own frame (along x, the bottom on y = 0): a dead branch (crooked, tapering,
 // a stub of a twig or two, grey bark or birch) or a short log (a sawn length, the pale ends showing). Variant v (0..2).
 function pieceGeometry(kind, v) {
-  const rng = mulberry32(4401 + v * 97 + (kind === 'log' ? 7 : 0)), b = new PropBuilder();
+  const rng = mulberry32(4401 + v * 97 + (kind === 'log' ? 7 : kind === 'pole' ? 13 : 0)), b = new PropBuilder();
   const len = LENGTH[kind][v];
-  if (kind === 'branch') {
+  if (kind === 'pole') { // fb4 E: a straight dead pole, grey and weathered, tapering, a broken stub or two, the butt sawn
+    const r = 0.026 + v * 0.003, bark = tone(0x8b8276, rng, 0.07), pts = [];
+    for (let i = 0; i <= 4; i++) { const t = i / 4; pts.push(V(-len / 2 + len * t, r * (1 - 0.3 * t) + Math.sin(t * 2.2 + v) * 0.006, Math.sin(t * 2.7 + v) * 0.012)); }
+    b.tube(pts, (t) => r * (1 - 0.4 * t), 6, TILE.BARK, bark, { cap0: true, cap1: true });
+    for (let k = 0; k < 2; k++) { const t = 0.35 + 0.3 * k, base = pts[Math.round(t * 4)], side = k ? 1 : -1; b.tube([base.clone(), base.clone().add(V(0.05, 0.01, side * 0.06))], (q) => r * 0.38 * (1 - 0.6 * q), 4, TILE.BARK, bark, { cap1: true }); }
+  } else if (kind === 'branch') {
     const r = 0.022 + v * 0.006, birch = v === 1, bark = birch ? tone(0xd2cbbd, rng, 0.06) : tone(0x6b5d50, rng, 0.08), pts = [];
     for (let i = 0; i <= 5; i++) { const t = i / 5; pts.push(V(-len / 2 + len * t, r * (1 - 0.35 * t) + Math.sin(t * 5 + v) * 0.012, Math.sin(t * 3.3 + v * 2) * 0.035)); }
     b.tube(pts, (t) => r * (1 - 0.55 * t), 6, TILE.BARK, bark, { cap0: true, cap1: true });
@@ -173,19 +189,6 @@ function mergePieces(list, geos) {
   return geo;
 }
 const _one = new THREE.Vector3(1, 1, 1);
-// fb3 B: the pitched tarp, in its own frame (the ring or the pack at the origin on the ground): a 2.6 m square of green
-// nylon sagging a little at 1.9 m, both faces, on four lines to pegs out at the corners
-function tarpGeometry() {
-  const b = new PropBuilder(), nylon = new THREE.Color(0x5c7a58), under = new THREE.Color(0x4a6347), cord = new THREE.Color(0xd8d2b8);
-  const W = 1.3, H = 1.9, SAG = 0.22, N = 4;
-  const pt = (u, v) => { const s = SAG * (1 - Math.pow(Math.abs(u - 0.5) * 2, 2)) * (1 - Math.pow(Math.abs(v - 0.5) * 2, 2)); return V((u - 0.5) * 2 * W, H - s, (v - 0.5) * 2 * W); };
-  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
-    const a = pt(i / N, j / N), c = pt((i + 1) / N, j / N), d = pt((i + 1) / N, (j + 1) / N), e = pt(i / N, (j + 1) / N);
-    b.quad(a, e, d, c, TILE.PLAIN, nylon); b.quad(a, c, d, e, TILE.PLAIN, under);
-  }
-  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.tube([V(sx * W, H, sz * W), V(sx * (W + 1.1), 0.03, sz * (W + 1.1))], 0.006, 4, TILE.PLAIN, cord, { cap0: true, cap1: true });
-  return shadeBy(b.build(), (py, ny) => (ny < -0.3 ? 0.68 : 0.95));
-}
 // an icon for the book: a dead branch or a short log on paper (inv-ui.js draws an item's own draw(ctx, size))
 function drawPiece(kind) {
   return (c, s) => {
@@ -236,13 +239,16 @@ export class Chores {
     this.dirty = true; this.cellT = 0; this.lastCell = '';
     this.mat = propMaterial();
     this.pieceGeos = []; this.pieceIdx = {};
-    for (const kind of ['branch', 'log']) for (let v = 0; v < 3; v++) { this.pieceIdx[`${kind}${v}`] = this.pieceGeos.length; this.pieceGeos.push(pieceGeometry(kind, v)); }
+    for (const kind of ['branch', 'log', 'pole']) for (let v = 0; v < 3; v++) { this.pieceIdx[`${kind}${v}`] = this.pieceGeos.length; this.pieceGeos.push(pieceGeometry(kind, v)); }
+    this.poleNear = [];         // fb4 E: the loose poles drawn now (apart from `near`, the wood: nearby.js lists that)
+    this.sitePoles = new Map(); // site key -> [poles] (made once its layout is in)
     this.field = new THREE.Mesh(new THREE.BufferGeometry(), this.mat);
     this.field.name = 'firewood'; this.field.castShadow = true; this.field.receiveShadow = true; this.field.matrixAutoUpdate = false; this.field.frustumCulled = false; this.field.visible = false;
     camp.scene.add(this.field);
     this.pileMeshes = [];       // fb2 A: the woodpiles drawn (piles of wood set down from the book): [{ group, layers, ref }]
     this.bundles = new Map();   // armload container id -> { mesh, sig }
     this.cook = new Cook(this);
+    this.tarp = new Tarp(this); // fb4 E: the rain tarp's rigs (main.js puts it on window.__game and the pointer)
     this.hold = hold; // the held-progress ring (hold.js), for the tests
     current = this;
   }
@@ -329,11 +335,27 @@ export class Chores {
     if (on && ((this.cellT -= dt) <= 0)) { this.cellT = 0.5; this.restoreDrops(); this.refreshWood(p.x, p.z); this.migratePiles(); }
     if (this.redrawIn > 0 && (this.redrawIn -= dt) <= 0) this.dirty = true;
     if (this.dirty) this.drawWood();
-    if ((this.fuelT = (this.fuelT || 0) - dt) <= 0) { this.fuelT = 0.25; this.syncFires(); this.syncRain(); }
-    // fb3 B: a pitched tarp's container with the tarp taken out of it is gone
-    const inv = this.inv;
-    if (inv && inv.attached) for (let i = inv.containers.length - 1; i >= 0; i--) { const c = inv.containers[i]; if (c.item === 'tarpup' && !c.grid.length) { inv.containers.splice(i, 1); inv.emit('containers'); } }
+    if ((this.fuelT = (this.fuelT || 0) - dt) <= 0) { this.fuelT = 0.25; this.syncFires(); this.syncRain(); this.migrateTarps(); }
+    this.tarp.update(dt); // fb4 E: the pitch armed, the rigs and the ghost drawn
   }
+  // fb4 E: last round's tarp floating over a ring or a pack (a `tarpup` container on the ground) becomes the tarp folded
+  // in a pile where it stood, to be pitched again on trees or poles
+  migrateTarps() {
+    const inv = this.inv;
+    if (!inv || !inv.attached) return;
+    for (let i = inv.containers.length - 1; i >= 0; i--) {
+      const c = inv.containers[i];
+      if (c.item !== 'tarpup') continue;
+      inv.containers.splice(i, 1);
+      if (c.where === 'ground' && c.at && c.grid.length) {
+        const pile = inv.addContainer('pile', 'ground', { x: c.at.x, z: c.at.z, y: Number.isFinite(c.at.y) ? c.at.y : this.player.groundAt(c.at.x, c.at.z), heading: c.at.heading || 0, left: true, ...(c.at.camp ? { camp: c.at.camp } : {}) }, { quiet: true });
+        for (const e of c.grid) if (!e.box) inv.put(pile, e.id, { qty: e.qty || 1, data: e.data || null, quiet: true });
+        inv.emit('ground');
+      } else if (c.grid.length) for (const e of c.grid) if (!e.box) inv.place(e.id, e.qty || 1, { crate: true, quiet: true });
+      inv.emit('containers');
+    }
+  }
+  covered(x, z) { return !!(this.tarp && this.tarp.covers(x, z)); }
 
   // --- fb3 B: the tarp and the rain -----------------------------------------------------------------------------------
   // the rain falling here, 0–1 (none inside a store)
@@ -344,41 +366,9 @@ export class Chores {
     try { if (en && typeof en.inside === 'function' && en.inside()) return 0; } catch { /* no store */ }
     return Math.max(0, L.rain * (1 - 0.5 * (L.snow || 0)));
   }
-  tarps() { const inv = this.inv; return inv && inv.attached ? inv.containers.filter((c) => c.item === 'tarpup' && c.where === 'ground' && c.at && c.grid.length) : []; }
-  tarpOverRing(key) { return this.tarps().find((t) => t.at.over === 'ring' && t.at.ring === key) || null; }
-  tarpOverContainer(c) { if (!c || !c.at) return null; return this.tarps().find((t) => t.at.over === 'pack' && (t.at.ref === c.id || Math.hypot(t.at.x - c.at.x, t.at.z - c.at.z) < RAIN.reach)) || null; }
-  // the book's Pitch over… on the tarp (c, e: where it is): over the fire ring you stand by, else the nearest pack on the
-  // ground within a few steps. → { enabled, why, label, run }
-  tarpVerb(c, e) {
-    const p = this.player, inv = this.inv, grey = (why) => ({ enabled: false, why, label: 'Pitch over…', run: () => {} });
-    if (!p || p.mode !== 'walk') return grey('on foot, by the fire ring or a pack on the ground');
-    if (!e || e.id !== 'tarp' || !inv) return grey('not a tarp');
-    // the nearer of the fire ring and a pack on the ground within a few steps (stand by the one you mean)
-    const site = this.camp.nearestSite(p.x, p.z, RAIN.verbReach + 2, true), cands = [];
-    if (site && site.layout && site.layout.fire) { const f = site.layout.fire, d = Math.hypot(f.x - p.x, f.z - p.z); if (d <= RAIN.verbReach) cands.push({ d, over: { kind: 'ring', key: keyOf(site), x: f.x, z: f.z, y: f.y, a: f.a || 0, label: 'the fire ring' } }); }
-    for (const k of inv.containers) {
-      if (k.where !== 'ground' || !k.at || k === c || !this.isGear(k)) continue;
-      const d = Math.hypot(k.at.x - p.x, k.at.z - p.z);
-      if (d <= RAIN.verbReach) cands.push({ d, over: { kind: 'pack', ref: k.id, x: k.at.x, z: k.at.z, y: Number.isFinite(k.at.y) ? k.at.y : null, a: k.at.heading || 0, label: `the ${lowerName(k)}` } });
-    }
-    cands.sort((a, b) => a.d - b.d);
-    const over = cands.length ? cands[0].over : null;
-    if (!over) return grey('stand by the fire ring, or by a pack set down on the ground');
-    if (over.kind === 'ring' ? this.tarpOverRing(over.key) : this.tarpOverContainer(inv.cont(over.ref))) return grey(`a tarp is over ${over.label} already`);
-    return { enabled: true, why: null, label: `Pitch over ${over.label}`, run: () => this.pitchTarp(c, e, over) };
-  }
-  pitchTarp(c, e, over) {
-    const inv = this.inv, p = this.player;
-    const got = inv.take(c.id, e.uid, 1);
-    if (!got) return { ok: false, why: 'gone' };
-    const y = Number.isFinite(over.y) ? over.y : p.groundAt(over.x, over.z);
-    const area = typeof this.camp.reachArea === 'function' ? this.camp.reachArea() : null;
-    const t = inv.addContainer('tarpup', 'ground', { x: over.x, z: over.z, y, heading: over.a, over: over.kind, ring: over.key || null, ref: over.ref || null, left: true, ...(area ? { camp: area.key || 'camp' } : {}) }, { quiet: true });
-    t.grid.push({ ...got, x: 0, y: 0, rot: 0 });
-    inv.emit('ground');
-    this.note(over.kind === 'ring' ? 'The tarp goes up over the fire ring on four lines: the wood and the fire stay dry in rain.' : `The tarp goes up over ${over.label} on four lines: the gear in it stays dry in rain.`, 5);
-    return { ok: true, why: null, words: '' };
-  }
+  // the book's right-click on the tarp (inventory.verb('tarp') calls this, or tarp.verb itself): Pitch the tarp where you
+  // stand, on trees or poles (tarp.js) → { enabled, why, needs, next, label, run }
+  tarpVerb(c, e) { return this.tarp.verb(c, e); }
   // a container that holds gear the rain can get into: a pack or a barrel (worn on the back or the chest), not the
   // bucket, the tackle box or a pile
   isGear(c) { const d = itemDef(c.item); return !!(d && d.wear && !d.fixed && !d.station); }
@@ -393,33 +383,13 @@ export class Chores {
     for (const c of inv.containers) {
       if (c.where !== 'ground' || !c.at || !this.isGear(c)) continue;
       if (Math.abs(c.at.x - p.x) > 80 || Math.abs(c.at.z - p.z) > 80) continue;
-      if (rain > RAIN.on && !this.tarpOverContainer(c)) {
+      // (fb4 E: under the tarp's sheet it stays dry; `at.wet` says the pack is wet through, for its status in the book)
+      if (rain > RAIN.on && !this.covered(c.at.x, c.at.z)) {
         c.at.rainH = (c.at.rainH || 0) + dh * rain;
-        if (c.at.rainH >= RAIN.packAfter && tr && tr.state && !tr.state.wet && tr.adventure) { tr.state.wet = true; this.note(`Rain has got into the ${lowerName(c)} on the ground: the gear is wet until a fire dries it. A tarp over it would have kept it dry.`, 6); }
-      } else if (c.at.rainH) c.at.rainH = Math.max(0, c.at.rainH - dh * RAIN.dry);
+        if (c.at.rainH >= RAIN.packAfter) c.at.wet = true;
+        if (c.at.rainH >= RAIN.packAfter && tr && tr.state && !tr.state.wet && tr.adventure) { tr.state.wet = true; this.note(`Rain has got into the ${lowerName(c)} on the ground: the gear is wet until a fire dries it. Under the tarp it would have kept dry.`, 6); }
+      } else if (c.at.rainH) { c.at.rainH = Math.max(0, c.at.rainH - dh * RAIN.dry); if (c.at.rainH < RAIN.packAfter * 0.5) delete c.at.wet; }
     }
-  }
-  // the pitched tarps near you, drawn (after the containers are posed: their bag hidden), the rest parked
-  drawTarps() {
-    const inv = this.inv, p = this.player, view = typeof window !== 'undefined' && window.__game ? window.__game.invView : null;
-    if (!inv || !inv.attached) return;
-    const want = this.tarps().filter((c) => Math.abs(c.at.x - p.x) < 150 && Math.abs(c.at.z - p.z) < 150).slice(0, 4);
-    const pool = this.tarpMeshes || (this.tarpMeshes = []);
-    want.forEach((c, i) => {
-      let m = pool[i];
-      if (!m) {
-        const mesh = new THREE.Mesh(this.tarpGeo || (this.tarpGeo = tarpGeometry()), this.mat);
-        mesh.castShadow = true; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = 'tarp';
-        this.camp.scene.add(mesh);
-        m = pool[i] = { mesh, sig: '' };
-      }
-      const y = Number.isFinite(c.at.y) ? c.at.y : this.camp.tiles.groundAt(c.at.x, c.at.z), sig = `${c.id}|${c.at.x.toFixed(2)},${c.at.z.toFixed(2)},${y.toFixed(2)}`;
-      if (m.sig !== sig) { m.sig = sig; m.ref = c.id; m.mesh.position.set(c.at.x, y, c.at.z); m.mesh.rotation.set(0, c.at.heading || 0, 0); m.mesh.updateMatrix(); m.mesh.updateMatrixWorld(true); }
-      m.mesh.visible = true;
-      const bag = view && view.objs && view.objs.get(c.id);
-      if (bag) bag.visible = false;
-    });
-    for (let i = want.length; i < pool.length; i++) { pool[i].mesh.visible = false; pool[i].ref = null; }
   }
 
   // --- the fire (fb2 A: from the book) -------------------------------------------------------------------------------
@@ -442,11 +412,11 @@ export class Chores {
     // fb3 B: rain on the ring with no tarp over it: a burning fire burns down RAIN.burn times faster, and the wood in the
     // ring is wet through after RAIN.wetAfter hours of it (it won't light for RAIN.wetFor hours); dry weather dries it
     const rain = this.rainNow(), dh = Math.max(0, Math.min(1, now - last));
-    if (rain > RAIN.on && dh > 0 && !this.tarpOverRing(key)) {
+    if (rain > RAIN.on && dh > 0 && !this.covered(at.x, at.z)) { // (fb4 E: under the tarp's sheet it stays dry)
       b.at.rainH = (b.at.rainH || 0) + dh * rain;
       if (f && !f.laid && now < f.until) f.until = Math.max(now, f.until - dh * rain * RAIN.burn);
       if (b.at.rainH >= RAIN.wetAfter) {
-        if (!(b.at.wetUntil > now) && units.length && !(f && !f.laid && now < f.until)) this.note('The rain has wet the wood in the ring through. A tarp over the ring would keep it dry.', 5);
+        if (!(b.at.wetUntil > now) && units.length && !(f && !f.laid && now < f.until)) this.note('The rain has wet the wood in the ring through. The tarp pitched over the ring would keep it dry.', 5);
         b.at.wetUntil = now + RAIN.wetFor;
       }
     } else if (b.at.rainH && dh > 0) b.at.rainH = Math.max(0, b.at.rainH - dh * RAIN.dry);
@@ -498,7 +468,7 @@ export class Chores {
     const st = this.fires.state(key), { units, bin } = this.fireInfo(key);
     if (st === 'burning') return 'it is burning';
     if (!units.length) return st === 'coals' ? 'wood in the ring first: a dead branch catches on the coals' : 'wood in the ring first: drag a branch or two into the fuel';
-    if (bin && bin.at && bin.at.wetUntil > this.now) return `the wood in the ring is wet through: ${this.tarpOverRing(key) ? 'under the tarp it dries in a few hours' : 'a tarp over the ring, and a few hours to dry'}`; // fb3 B
+    if (bin && bin.at && bin.at.wetUntil > this.now) return `the wood in the ring is wet through: ${this.covered(bin.at.x, bin.at.z) ? 'under the tarp it dries in a few hours' : 'the tarp pitched over the ring, and a few hours to dry'}`; // fb3 B
     if (units.some((u) => u.id === 'firewood')) return null;
     if (!units.some((u) => u.id === 'wood:branch')) return 'logs will not light on their own: a dead branch for kindling';
     if (units.length < 2) return 'one branch is not a fire: another piece of wood';
@@ -659,6 +629,30 @@ export class Chores {
     this.sites.set(key, list);
     return list;
   }
+  // fb4 E: a site's dead poles (SITE_POLES), by the down logs and under the trees, seeded apart from its wood (so the
+  // wood lies where it always has)
+  sitePoleList(site) {
+    const key = keyOf(site);
+    let list = this.sitePoles.get(key);
+    if (list) return list;
+    const L = site.layout; if (!L) return null;
+    const f = L.fire, rng = mulberry32(strHash(key) ^ 0x9013), near = this.camp.tiles.treesNear(f.x, f.z, SITE_POLES.to);
+    const trunks = near.filter((o) => !o.shape && !o.box && (o.r || 0) > 0.07 && Math.hypot(o.x - f.x, o.z - f.z) > SITE_POLES.from), logs = near.filter((o) => o.log);
+    list = [];
+    for (let i = 0; i < SITE_POLES.tries && list.length < SITE_POLES.n; i++) {
+      let x, z;
+      const r = rng();
+      if (logs.length && r < 0.4) { const g = logs[Math.floor(rng() * logs.length)], u = 0.2 + rng() * 0.6, side = rng() < 0.5 ? -1 : 1, dl = Math.hypot(g.bx - g.ax, g.bz - g.az) || 1; x = g.ax + (g.bx - g.ax) * u - ((g.bz - g.az) / dl) * side * ((g.rad || 0.2) + 0.5); z = g.az + (g.bz - g.az) * u + ((g.bx - g.ax) / dl) * side * ((g.rad || 0.2) + 0.5); }
+      else if (trunks.length && r < 0.9) { const g = trunks[Math.floor(rng() * trunks.length)], a = rng() * Math.PI * 2, d = (g.r || 0.2) + 1.2 + rng() * 2; x = g.x + Math.cos(a) * d; z = g.z + Math.sin(a) * d; }
+      else { const a = rng() * Math.PI * 2, d = SITE_POLES.from + 3 + rng() * (SITE_POLES.to - SITE_POLES.from - 5); x = f.x + Math.cos(a) * d; z = f.z + Math.sin(a) * d; }
+      const dd = Math.hypot(x - f.x, z - f.z);
+      if (dd < SITE_POLES.from || dd > SITE_POLES.to) continue;
+      const p = this.pieceAt(`p:${key}:${i}`, 'pole', x, z, rng, site);
+      if (p) list.push(p);
+    }
+    this.sitePoles.set(key, list);
+    return list;
+  }
   // a cell of the woods away from any site: nothing in the open, a branch or two under the trees, more in the dark spruce
   // and the old burns (undefined while its ground is not in)
   cellWood(ci, cj) {
@@ -668,7 +662,6 @@ export class Chores {
     if (this.camp.nearestSite(cx, cz, SITE_WOOD.to + 14, false)) return null; // a site's own wood covers it
     const cls = GROUND[(cv >> 16) & 255], wgt = WOODS[cls] || 0, h = (k) => hash2(ci * 7 + k, cj * 13 - k, 911 + k);
     const n = Math.floor(wgt * 1.6 + h(1) * 1.2 - 0.25);
-    if (n <= 0) return null;
     const trunks = this.camp.tiles.treesNear(cx, cz, C * 0.6).filter((o) => !o.shape && !o.box && (o.r || 0) > 0.07);
     const rng = mulberry32(Math.floor(h(2) * 4294967295)), out = [];
     for (let k = 0; k < n * 3 && out.length < n; k++) {
@@ -678,6 +671,11 @@ export class Chores {
       else { x = cx + (rng() - 0.5) * C * 0.9; z = cz + (rng() - 0.5) * C * 0.9; }
       const p = this.pieceAt(`w:${ci}:${cj}:${k}`, kind, x, z, rng);
       if (p) out.push(p);
+    }
+    // fb4 E: a dead pole now and then under the trees (its own seed: the wood above lies where it always has)
+    if (trunks.length && h(5) < wgt * 0.5) {
+      const r2 = mulberry32(Math.floor(h(6) * 4294967295));
+      for (let k = 0; k < 4; k++) { const g = trunks[Math.floor(r2() * trunks.length)], a = r2() * Math.PI * 2, d = (g.r || 0.2) + 1 + r2() * 2; const p = this.pieceAt(`wp:${ci}:${cj}:${k}`, 'pole', g.x + Math.cos(a) * d, g.z + Math.sin(a) * d, r2); if (p) { out.push(p); break; } }
     }
     return out.length ? out : null;
   }
@@ -697,6 +695,7 @@ export class Chores {
     for (const c of this.world.campsites) {
       if (Math.abs(c.x - x) > 120 || Math.abs(c.z - z) > 120 || !c.layout) continue;
       if (!this.sites.has(keyOf(c))) { this.siteWood(c); this.dirty = true; }
+      if (!this.sitePoles.has(keyOf(c))) { this.sitePoleList(c); this.dirty = true; }
     }
     const sig = `${ci0},${cj0}|${this.today}`;
     if (sig !== this.lastCell) { this.lastCell = sig; this.dirty = true; }
@@ -705,6 +704,7 @@ export class Chores {
   // every piece about, available or not
   *allPieces() {
     for (const list of this.sites.values()) yield* list;
+    for (const list of this.sitePoles.values()) yield* list;
     for (const list of this.cells.values()) if (list) yield* list;
     for (const d of this.dropped) yield d;
   }
@@ -719,14 +719,15 @@ export class Chores {
   // the pieces near you, in one geometry (rebuilt when what is there changes)
   drawWood() {
     this.dirty = false;
-    const p = this.player, tent = this.camp.camp, list = [];
+    const p = this.player, tent = this.camp.camp, list = [], poles = [];
     for (const pc of this.allPieces()) {
       if (Math.abs(pc.x - p.x) > WOOD.near || Math.abs(pc.z - p.z) > WOOD.near) continue;
       if (!this.available(pc)) continue;
       if (tent && Math.hypot(tent.x - pc.x, tent.z - pc.z) < 2.3) continue; // under your tent
-      list.push(pc);
+      (pc.kind === 'pole' ? poles : list).push(pc);
     }
-    this.near = list;
+    this.near = list.slice(); this.poleNear = poles; // (fb4 E: the poles apart: the book's Here and the dot's wood read `near`)
+    list.push(...poles); // (drawn together)
     const old = this.field.geometry;
     this.field.geometry = list.length ? mergePieces(list, this.pieceGeos) : new THREE.BufferGeometry();
     old.dispose();
@@ -735,7 +736,8 @@ export class Chores {
   get dropped() { return this._dropped || (this._dropped = []); }
   // E at a piece (the pointer, nearby.js): into an armload (a free hand), else into what you carry
   pickUp(pc) {
-    const inv = this.inv, id = pc.kind === 'log' ? 'wood:log' : 'wood:branch', name = pc.kind === 'log' ? 'short log' : 'dead branch';
+    if (pc.kind === 'pole') return this.pickUpPole(pc);
+    const inv = this.inv, id = pieceItem(pc.kind), name = pieceName(pc.kind);
     const arm = this.armFor(id, true);
     let ok = !!(arm && inv.put(arm, id, { quiet: true })), where = 'your arms';
     if (!ok) {
@@ -751,9 +753,56 @@ export class Chores {
     this.cook.gesture = { t: 0, dur: 0.5, say: `Picking up the ${name}…` };
     this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, pc.kind === 'log');
     const n = this.armloads().reduce((s, c) => s + c.grid.reduce((k, e) => k + e.qty, 0), 0);
-    this.note(where === 'your arms' ? `A ${name}, into the crook of your arm: ${word(n)} ${plural(n, 'piece')} of wood.` : `A ${name}, into ${where}.`, 2.5);
+    // (fb4 E, decision 2: at a camp, the evening's wood as have of need)
+    const ev = this.nightWood(), more = ev ? ` · ${ev.have} of ${ev.need} for the evening` : '';
+    this.note(where === 'your arms' ? `A ${name}, into the crook of your arm: ${word(n)} ${plural(n, 'piece')} of wood${more}.` : `A ${name}, into ${where}${more}.`, 2.5);
     inv.emit('items');
     this.persist();
+  }
+  // fb4 E: a dead pole off the ground: onto the poles in a hand (four to an armful), into a free hand, else into what
+  // you carry; the count for the tarp said
+  pickUpPole(pc) {
+    const inv = this.inv, d = itemDef('pole'), stack = (d && d.stack) || 1;
+    let ok = false, where = 'your hand';
+    const held = inv.containers.find((c) => c.where === 'hands' && c.grid.length === 1 && c.grid[0].id === 'pole' && c.grid[0].qty < stack);
+    if (held && inv.put(held, 'pole', { quiet: true })) ok = true;
+    else if (inv.freeHand() >= 0 && typeof inv.toHandNew === 'function' && inv.canHand('pole')) ok = inv.toHandNew('pole').ok;
+    if (!ok) {
+      const pool = inv.reachable().filter((c) => c.item !== 'grate' && c.item !== 'pockets' && c.item !== 'crate' && !(itemDef(c.item) || {}).station);
+      const r = inv.place('pole', 1, { pool, quiet: true });
+      ok = r.ok;
+      const c = r.cId && inv.cont(r.cId);
+      if (c) where = `the ${lowerName(c)}`;
+    }
+    if (!ok) { this.note('Your hands are full, and nothing you carry has room for it.', 3.5); return; }
+    this.claimPiece(pc);
+    this.redrawIn = 0.28;
+    this.cook.gesture = { t: 0, dur: 0.5, say: 'Picking up the dead pole…' };
+    this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, false);
+    const n = this.tarp.polesInReach();
+    this.note(`A dead pole, into ${where}: ${word(n)} ${plural(n, 'pole')} in reach (a tarp takes two with a tree, four alone).`, 3);
+    inv.emit('items');
+    this.persist();
+  }
+  // fb4 E (decision 2): the evening's firewood at the camp you are at, as have of need: the pieces in the ring, the
+  // woodpiles at the site and what you carry, against about four hours of fire: { have, need, unit, hours, label } or null
+  nightWood(key = null) {
+    const inv = this.inv;
+    if (!inv || !inv.attached) return null;
+    const a = this.camp.reachArea ? this.camp.reachArea() : null, k = key || (a && a.key);
+    if (!k) return null;
+    const site = this.camp.registry.site(k), f = site && site.layout ? site.layout.fire : null;
+    if (!f) return null;
+    let have = 0, hours = 0;
+    const count = (c) => { for (const e of c.grid) if (!e.box && isWood(e.id)) { have += e.qty; hours += e.qty * burnOf(e.id); } };
+    const bin = this.fuelBin(k);
+    if (bin) count(bin);
+    for (const c of inv.containers) {
+      if (c === bin) continue;
+      const r = inv.root(c), w = r.where;
+      if (['hands', 'back', 'chest', 'pockets'].includes(w) || (w === 'ground' && r.at && Math.hypot(r.at.x - f.x, r.at.z - f.z) <= 25)) count(c);
+    }
+    return { label: 'Firewood for the evening', have, need: EVENING.pieces, unit: 'pieces', hours: +hours.toFixed(1), needHours: EVENING.hours };
   }
   // a piece off the ground (into a container: E, or a drag out of the book's Ground area, nearby.takePiece): gone
   // until it grows back (the saw's lengths for good)
@@ -763,9 +812,10 @@ export class Chores {
   }
   // can you pick piece pc up now: an armload with room, a free hand, or room in what you carry
   canTakePiece(pc) {
-    const inv = this.inv, id = pc.kind === 'log' ? 'wood:log' : 'wood:branch';
+    const inv = this.inv, id = pieceItem(pc.kind);
     if (!inv || !inv.attached) return false;
-    if (this.armFor(id, false) || inv.freeHand() >= 0) return true;
+    if (pc.kind === 'pole') { const s = (itemDef('pole') || {}).stack || 1; if (inv.containers.some((c) => c.where === 'hands' && c.grid.length === 1 && c.grid[0].id === 'pole' && c.grid[0].qty < s)) return true; if (inv.freeHand() >= 0) return true; }
+    else if (this.armFor(id, false) || inv.freeHand() >= 0) return true;
     return inv.reachable().some((c) => c.item !== 'grate' && c.item !== 'pockets' && c.item !== 'crate' && !(itemDef(c.item) || {}).station && inv.firstFit(c, id));
   }
   // an armload with nothing in it is no thing at all
@@ -797,7 +847,8 @@ export class Chores {
     return hold.begin({
       id: 'saw', label: 'The folding saw', phases: SAW, at: cuts, crouch: true, near: { x: p.x, z: p.z, r: 2.5 }, ...opts,
       onPhase: (i) => {
-        this.s.sawn[k] = { day: this.today, cuts: i + 1 };
+        const was = this.s.sawn[k], keep = was && this.today - was.day < WOOD.regrow ? was.poles || 0 : 0;
+        this.s.sawn[k] = { day: this.today, cuts: i + 1, ...(keep ? { poles: keep } : {}) }; // (fb4 E: the poles cut from it today kept)
         // the length drops beside the log, on your side of it
         const u = 0.25 + 0.25 * i, lx = log.ax + (log.bx - log.ax) * u, lz = log.az + (log.bz - log.az) * u;
         const dl = Math.hypot(log.bx - log.ax, log.bz - log.az) || 1; let nx = -(log.bz - log.az) / dl, nz = (log.bx - log.ax) / dl;
@@ -811,6 +862,86 @@ export class Chores {
       },
       onDone: () => this.note('Three short lengths of dry spruce lie by the log.', 4),
     });
+  }
+  // fb4 E: the down log you stand at, saw or not (stream A's dot reads it in place of sawTarget): E Saw and Q Cut a pole,
+  // each held, each greyed with its checklist when the saw is not in reach or the log has given what it has today.
+  // → { log, k, d, label, hint, e, q } or null
+  downLogTarget(r = SAW_REACH) {
+    const p = this.player;
+    if (p.mode !== 'walk') return null;
+    const log = this.camp.tiles.treesNear(p.x, p.z, 2.4).filter((o) => o.log).map((o) => ({ o, d: capsule(p.x, p.z, o) - (o.rad || 0.2) })).sort((a, b) => a.d - b.d)[0];
+    if (!log || log.d > r) return null;
+    const k = `${Math.round(log.o.x)}:${Math.round(log.o.z)}`, s = this.s.sawn[k], fresh = !!(s && this.today - s.day < WOOD.regrow);
+    const cuts = fresh ? s.cuts || 0 : 0, poles = fresh ? s.poles || 0 : 0, saw = this.hasSaw(), left = SAW.length - cuts, pl = POLES_A_LOG - poles;
+    const keys = (o) => { const kk = (o && o.key) || 'KeyE'; return { key: kk, keys: [...new Set([kk, 'Mouse0', ...((o && o.keys) || [])])] }; };
+    const sawNeed = { label: 'The folding saw in reach', done: saw, note: saw ? null : 'in a pack you carry, a hand, or the canoe beside you' };
+    const getSaw = 'The folding saw does it ($18 at an outfitter); till then, dead branches and poles lie about the camp';
+    const e = {
+      verb: 'Saw', held: true, why: !saw ? 'Saw: needs the folding saw' : left > 0 ? null : 'Sawn already: no more till another day',
+      needs: [sawNeed, { label: 'Short logs left in it', have: left, need: SAW.length, unit: 'logs' }],
+      next: !saw ? getSaw : left > 0 ? `Hold E: ${word(left)} ${plural(left, 'cut')}, 5 min each, a short log by it at each` : 'Another down log, or dead branches off the ground',
+      run: (o) => this.beginSaw(log.o, k, cuts, keys(o)),
+    };
+    const q = {
+      verb: 'Cut a pole', held: true, why: !saw ? 'Cut a pole: needs the saw' : pl > 0 ? null : 'Two poles cut from it today already',
+      needs: [sawNeed, { label: 'Poles left in it today', have: pl, need: POLES_A_LOG, unit: 'poles' }],
+      next: !saw ? getSaw : pl > 0 ? 'Hold Q: a straight two-metre pole off its top, 6 min' : 'Another down log, or dead poles lying under the trees',
+      run: (o) => this.beginPoleCut(log.o, k, keys(o)),
+    };
+    const hint = left ? `${word(left)} short ${plural(left, 'log')} in it` : 'sawn up';
+    return { log: log.o, k, d: log.d, label: 'a down spruce', hint, e, q, cuts, left };
+  }
+  // held: a pole cut off a down log with the saw, dropped by it on your side (E picks it up)
+  beginPoleCut(log, k, opts = {}) {
+    const p = this.player;
+    if (!this.hasSaw()) { this.note('Cutting a pole needs the folding saw in reach.', 3); return null; }
+    return hold.begin({
+      id: 'pole-cut', label: 'Cutting a pole', phases: POLE_CUT, at: 0, crouch: true, near: { x: p.x, z: p.z, r: 2.5 }, ...opts,
+      onPhase: () => {
+        const s = this.s.sawn[k], fresh = !!(s && this.today - s.day < WOOD.regrow), n = (fresh ? s.poles || 0 : 0) + 1;
+        this.s.sawn[k] = { day: this.today, cuts: fresh ? s.cuts || 0 : 0, poles: n };
+        const u = 0.3 + 0.35 * (n - 1), lx = log.ax + (log.bx - log.ax) * u, lz = log.az + (log.bz - log.az) * u;
+        const dl = Math.hypot(log.bx - log.ax, log.bz - log.az) || 1; let nx = -(log.bz - log.az) / dl, nz = (log.bx - log.ax) / dl;
+        if ((p.x - lx) * nx + (p.z - lz) * nz < 0) { nx = -nx; nz = -nz; }
+        const rng = mulberry32(strHash(k) + n * 57 + this.today), key = `d:${k}:${this.today}:p${n}`;
+        let pc = null;
+        for (let t = 0; t < 6 && !pc; t++) pc = this.pieceAt(key, 'pole', lx + nx * ((log.rad || 0.2) + 0.45 + t * 0.2), lz + nz * ((log.rad || 0.2) + 0.45 + t * 0.2), rng);
+        if (!pc) pc = this.pieceAt(key, 'pole', p.x + (lx - p.x) * 0.4, p.z + (lz - p.z) * 0.4, rng, null, true);
+        if (pc) { this.dropped.push(pc); this.dirty = true; this.sound(woodKnock, { x: pc.x, y: pc.y + 0.1, z: pc.z }, false); }
+        this.note('A straight dead pole off the log, its twigs trimmed: it lies by the log. E picks it up.', 4);
+        this.persist();
+      },
+    });
+  }
+  // fb4 E (decision 2): the latrine's line on the dot: the ten minutes, and the rest it gives once a day
+  latrineNeeds() {
+    const used = this.usedLatrine();
+    return {
+      hint: used ? 'used today' : `rest +${Math.round(LATRINE_REST * 100)} %, once a day`,
+      needs: [{ label: 'Ten quiet minutes, sat', done: false }, { label: `Rest +${Math.round(LATRINE_REST * 100)} % (once a day)`, done: used }],
+      next: used ? 'E sits you down: ten quiet minutes, no rest bonus again today' : 'E sits you down for ten quiet minutes; E or a move key stands you up',
+    };
+  }
+  // fb4 E: the checklists onto the dot's targets that stream A's nearby.js does not give them yet (its own fields win):
+  // the down log's Q Cut a pole (and the log with no saw in reach, greyed), the latrine's line, the hang's steps
+  decorateTargets(list, ray, near) {
+    if (!Array.isArray(list) || hold.active || this.cook.busy || this.player.mode !== 'walk') return list;
+    const dl = this.downLogTarget(1.8), hg = this.camp.hang;
+    let logShown = false;
+    for (const c of list) {
+      const t = c && c.target;
+      if (!t) continue;
+      if (t.kind === 'downLog') { logShown = true; if (dl) { if (!t.q) t.q = dl.q; if (t.e && !t.e.needs) Object.assign(t.e, { needs: dl.e.needs, next: dl.e.next }); } }
+      else if (t.kind === 'seat' && /latrine/.test(t.label || '')) { const ln = this.latrineNeeds(); if (!t.hint) t.hint = ln.hint; if (t.e && !t.e.needs) Object.assign(t.e, { needs: ln.needs, next: ln.next }); }
+      else if (t.kind === 'tree' && t.e && !t.e.needs && hg) { const tr = hg.treeTarget(); if (tr) Object.assign(t.e, { needs: tr.needs, next: tr.next }); }
+      else if (t.kind === 'barrelHung' && t.e && !t.e.needs && hg) { const h = hg.hungTarget(); if (h) Object.assign(t.e, { needs: h.needs, next: h.next }); }
+    }
+    if (!logShown && dl && near && typeof near.segment === 'function') {
+      const o = dl.log, p = this.player, ga = p.groundAt(o.ax, o.az), gb = p.groundAt(o.bx, o.bz), r = (o.rad || 0.2) + 0.08;
+      const hit = near.segment(o.ax, ga + r, o.az, o.bx, gb + r, o.bz, r + 0.06);
+      if (hit) list.push({ dist: hit.t, miss: hit.miss, target: { kind: 'downLog', ref: `downLog:${dl.k}`, label: dl.label, hint: dl.hint, e: dl.e, q: dl.q } });
+    }
+    return list;
   }
 
   // --- the woodpiles (fb2 A) --------------------------------------------------------------------------------------------
@@ -894,7 +1025,6 @@ export class Chores {
   afterPose() {
     this.cook.afterPose();
     this.drawPiles(); // fb2 A: the woodpiles set down from the book (their bag hidden)
-    this.drawTarps(); // fb3 B: the tarps pitched over a ring or a pack
     const inv = this.inv, p = this.player, cn = p.canoe, seen = new Set(), S = this.cook.seat, sat = !!(S && S.phase !== 'walk');
     if (inv && inv.attached && cn && cn.figure) {
       for (const c of inv.containers) {
@@ -949,13 +1079,14 @@ export class Chores {
       if (st === 'burning') burning = true; else if (st === 'coals') coals = true;
     }
     if (burning) out.push('the fire is still burning'); else if (coals) out.push('the coals are still smouldering');
-    return [...out, ...this.cook.ashore()];
+    return [...out, ...this.cook.ashore(), ...this.tarp.ashore(p.x, p.z)];
   }
   // a trip ended (at a counter, or an evacuation): the fires you lit go out and the pot comes home with the rest
   tripEnded() {
     const F = this.fires, inv = this.inv;
     for (const key of this.lit) if (F.get(key)) F.douse(key);
     this.lit.clear();
+    this.tarp.tripEnded(); // fb4 E: the tarp goes to the outfitters with the tent
     this.cook.pot = null;
     if (inv && inv.attached) {
       for (let i = inv.containers.length - 1; i >= 0; i--) {
@@ -997,7 +1128,7 @@ export class Chores {
     return {
       v: 2, piles: this.s.piles, pints: this.s.pints, latrine: this.s.latrine, taken: this.s.taken, sawn: this.s.sawn,
       dropped: this.dropped.map((d) => ({ key: d.key, kind: d.kind, v: d.v, yaw: +d.yaw.toFixed(3), x: +d.x.toFixed(2), z: +d.z.toFixed(2) })),
-      fires, cook: this.cook.serialize(),
+      fires, cook: this.cook.serialize(), tarps: this.tarp.serialize(),
     };
   }
   persist() {
@@ -1010,6 +1141,7 @@ export class Chores {
     for (const key of this.lit) if (F && F.get(key)) F.douse(key); // another trip's fires
     this.lit.clear();
     this.s = blank(); this._dropped = []; this.dirty = true;
+    this.tarp.restore(d && d.v === 2 ? d.tarps || [] : []); // fb4 E: the rigs pitched on this trip (another trip's come down)
     if (d && d.v === 1) { // hubs 3A's armfuls: a stack by a ring becomes two branches and a log an armful
       this.s.pints = Math.max(0, d.pints | 0); this.s.latrine = d.latrine ?? null;
       if (d.pile && d.pile.key && d.pile.n > 0) this.s.piles[d.pile.key] = { 'wood:branch': 2 * Math.min(3, d.pile.n | 0), 'wood:log': Math.min(3, d.pile.n | 0) };
@@ -1030,7 +1162,7 @@ export class Chores {
     this.pendingDrops = [];
     for (const d of q) {
       if (!this.world.isReady(d.x, d.z)) { this.pendingDrops.push(d); continue; }
-      const kind = d.kind === 'log' ? 'log' : 'branch', yaw = Number.isFinite(d.yaw) ? d.yaw : null;
+      const kind = d.kind === 'log' ? 'log' : d.kind === 'pole' ? 'pole' : 'branch', yaw = Number.isFinite(d.yaw) ? d.yaw : null;
       const pc = this.pieceAt(d.key, kind, d.x, d.z, yaw == null ? mulberry32(strHash(d.key)) : seqRng([Number.isFinite(d.v) ? (d.v + 0.5) / 3 : 0.5, yaw / (Math.PI * 2)]), null, true);
       if (pc) { this.dropped.push(pc); this.dirty = true; }
     }
@@ -1041,7 +1173,7 @@ const blank = () => ({ piles: {}, pints: 0, latrine: null, taken: {}, sawn: {} }
 const seqRng = (xs) => { let i = 0; return () => xs[Math.min(xs.length - 1, i++)]; };
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const _v1 = new THREE.Vector3();
-const lowerName = (c) => { const d = itemDef(c.item), n = (d && (d.short || d.name)) || 'pack'; return /^(Duluth|Johnson)/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1); }; // (a name stays a name: "the Duluth pack #3")
+const lowerName = (c) => { const d = itemDef(c.item), n = (d && (d.short || d.name)) || 'pack'; return /^(Duluth|Johnson)/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1).replace(/, \d+ L$/, ''); }; // (a name stays a name: "the Duluth pack #3")
 // "an hour", "about 2 h", "half an hour"
 function hoursWords(h) { if (h < 0.75) return 'half an hour'; if (h < 1.25) return 'an hour'; return `${Math.round(h * 2) / 2} h`.replace('.5 h', '½ h'); }
 // the distance from (x, z) to a down log's stem (tiles.js: the capsule from (ax, az) to (bx, bz))
