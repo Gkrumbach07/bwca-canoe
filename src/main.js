@@ -440,6 +440,17 @@ async function main() {
   // describes, never the whole lake); every item says what it is for and lists its right-click verbs (items.js words
   // and verbs, which the book's tooltips and menus read). Nothing to wire: the verbs' table and lookup for the console.
   Object.assign(window.__game.items, { VERBS, verbsOf });
+  // fb3 A: the canoe and movement (the owner's feedback of 2026-10-25). Nothing moves by itself (packs.js: no auto-stow
+  // when the canoe goes down, no auto-load when you push off, only the lashed paddle, rod and stringer ride in it when
+  // it goes overhead); a portage landing is a landing like any other (player.js: you step out with the canoe beached, Q
+  // on the hull shoulders it); E Get in only where the hull floats, else "Push it off first"; Q on a loaded hull reads
+  // "Unload it first" and opens the book with the canoe on the right (journal.openHere('canoe'), stream C's ref); the
+  // dot's rim parks when the dot goes off (pointer.js); on foot off a trail, outside a camp and a yard, the walker is
+  // time-lapsed like the trail (pace.js foot, 1.8 at Trip) and the clock follows him (trip.travelling reads the walker's
+  // lapsing, below); sitting keeps the camera's distance (camera.js); the headlamp works by day (headlamp.js).
+  packs.openCanoe = () => (typeof journal.openHere === 'function' ? journal.openHere('canoe') : false);
+  const travellingA = trip.travelling.bind(trip);
+  trip.travelling = (dt) => { const r = travellingA(dt); if (!r && player.mode === 'walk' && player.lapsing && Math.abs(player.speed) > 0.1) { trip.travelT = 1; return true; } return r; };
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

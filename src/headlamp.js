@@ -7,8 +7,10 @@ import { smoothstep } from './rng.js';
 // moon (the mirror pass draws with no lights). Each frame it rides the figure's head bone and points along the
 // heading, a little down (third person), or sits at the eye and points along the look (first person). A small
 // unlit bead on the hat band and a faint glow round it show that it is on from behind.
-//   H toggles it (main.js reads the key through the game's input, so a card or a panel holds it); it turns itself
-//   off on sleep (camp.js) and once the sun is well up.
+//   H toggles it (camp.js reads the key through the game's input, so a card or a panel holds it); it turns itself
+//   off on sleep (camp.js). fb3 A (the owner, 2026-10-25: "why cant i use flashlight in the day"): it works any time;
+//   by day the beam is lost in the sun and shows only in the shade, as a headlamp does (it no longer switches itself
+//   off once the sun is up).
 export const LAMP = {
   color: 0xfff0dc,   // a warm LED white
   intensity: 32,     // candela at full: the path clear for a few metres ahead and the camp round you, soft past ten
@@ -19,7 +21,7 @@ export const LAMP = {
   pitchFoot: -0.24,  // the beam's tilt below the heading on foot (third person), radians: it lands about 7 m ahead
   pitchBoat: -0.16,  // and seated in the canoe
   ease: 6,           // per second: how fast it comes up and goes down
-  offAt: 5,          // sun elevation (deg) above which it switches itself off
+  offAt: 5,          // (fb3 A: unused; the lamp stays on by day) sun elevation (deg) above which it used to switch itself off
 };
 
 const glowVert = /* glsl */ `
@@ -100,7 +102,6 @@ export class Headlamp {
   // dt: real seconds. Runs every frame, behind the title card too (the light follows the figure there).
   update(dt) {
     const day = this.day;
-    if (this.on && day && day.elevation > LAMP.offAt) this.on = false; // full daylight: off by itself
     const k = 1 - Math.exp(-dt * LAMP.ease);
     this.level += ((this.on ? 1 : 0) - this.level) * k;
     if (this.level < 1e-3 && !this.on) this.level = 0;
