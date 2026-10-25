@@ -780,6 +780,8 @@ export function iconAt(itemId, wPx, hPx) { return copyOf(picture(itemId, wPx, hP
 const URLS = new Map();
 export function iconUrl(itemId, wPx = 48, hPx = wPx) { const k = `${itemId}|${wPx}x${hPx}`; let u = URLS.get(k); if (!u) { u = picture(itemId, wPx, hPx).toDataURL(); URLS.set(k, u); } return u; }
 export const ICON_KEYS = Object.keys(ICONS);
+// content C: more drawings by icon key, [design w, design h, draw(ctx)] (gear-icons.js: the new gear, food and uniques)
+export function addIcons(map) { for (const [k, v] of Object.entries(map || {})) if (!ICONS[k]) { ICONS[k] = v; ICON_KEYS.push(k); } }
 
 // --- the grid -----------------------------------------------------------------------------------------------------
 // A container drawn as cells with its items on them at their footprints. Any grid on the page takes a drop from any

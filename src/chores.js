@@ -379,7 +379,7 @@ export class Chores {
   tarpVerb(c, e) { return this.tarp.verb(c, e); }
   // a container that holds gear the rain can get into: a pack or a barrel (worn on the back or the chest), not the
   // bucket, the tackle box or a pile
-  isGear(c) { const d = itemDef(c.item); return !!(d && d.wear && !d.fixed && !d.station); }
+  isGear(c) { const d = itemDef(c.item); return !!(d && d.wear && !d.fixed && !d.station && !d.dry); } // (content C: a waterproof pack keeps the rain out)
   // a few times a second: rain on the packs set down with no tarp over them soaks the gear after a while; it dries in
   // the dry (the ring's wood is syncFire's)
   syncRain() {
@@ -879,7 +879,7 @@ export class Chores {
     const p = this.player, inv = this.inv;
     if (!(p.gear && p.gear.saw) && !(inv && inv.attached)) return false;
     if (!inv || !inv.attached) return !!(p.gear && p.gear.saw);
-    return this.campPool().some((c) => c.grid.some((e) => e.id === 'saw')) || inv.count('saw') > 0;
+    return this.campPool().some((c) => c.grid.some((e) => e.id === 'saw' || e.id === 'axehead')) || inv.count('saw') > 0 || inv.count('axehead') > 0; // (content C: the Hudson’s Bay axe cuts as the saw does)
   }
   // fb2 A: the down log you stand at with the saw to hand (the book's panel): { log, k, cuts, d } or null
   sawTarget(r = SAW_REACH) {

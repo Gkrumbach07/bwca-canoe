@@ -380,7 +380,7 @@ export class Camp {
     this.hang.update();                       // the limbs and ropes of the barrels hung
     this.drawTent();
     const cs = p.canoe && p.canoe.state; // down on your heels for the low chores (canoe.js state.crouch)
-    if (cs) cs.crouch = (this.busy && LOW_CHORES.has(this.busy.kind) && p.mode === 'walk') || (hold.active && hold.active.crouch) ? 1 : 0;
+    if (cs) cs.crouch = (this.busy && (LOW_CHORES.has(this.busy.kind) || (this.busy.spec && this.busy.spec.crouch)) && p.mode === 'walk') || (hold.active && hold.active.crouch) ? 1 : 0;
     if (this.morningNote && !this.night && !(this.veil && this.veil.active)) { this.note(this.morningNote, 9); this.morningNote = null; }
     if (this.busy) { this.ghost.park(); this.working(dt); return; }
     if (this.night || hold.active) { this.ghost.park(); return; }
@@ -843,10 +843,10 @@ export class Camp {
   get wornOut() { const e = this.energy; return !!(e && e.live && e.needs && e.needs.rest < WORN_OUT); }
 
   // a chore (CHORES): the walker holds still while its time passes on the clock, then `done`
-  chore(kind, done = null) { this.busy = { t: 0, passed: 0, kind, done }; }
+  chore(kind, done = null, spec = null) { this.busy = { t: 0, passed: 0, kind, done, spec }; } // (content C: spec { seconds, hours, say }, a chore's own length: kit.js's pump, stove, cup, knife)
   // the chore under way, per frame (real seconds): its hours spread over its seconds
   working(dt) {
-    const b = this.busy, C = CHORES[b.kind] || CHORE;
+    const b = this.busy, C = b.spec || CHORES[b.kind] || CHORE;
     b.t += dt;
     const k = Math.min(1, b.t / C.seconds), want = C.hours * k;
     this.pass(want - b.passed); b.passed = want;

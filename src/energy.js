@@ -1,7 +1,7 @@
 import { clamp, smoothstep } from './rng.js';
 import { monthDay } from './astro.js';
 import { LIFE } from './pace.js';
-import { itemDef, NEED, check, timerWords } from './items.js';
+import { itemDef, NEED, check, timerWords, isBag } from './items.js';
 // an item's food family for the readout: 'meal' (raw, to cook), 'snack', 'forage', 'hot' (cooked: camp 2's hot:* and
 // fried:*), or its own kind
 const FOOD_KIND = (id) => { const d = itemDef(id); return !d ? '' : d.kind === 'food' && d.cooked ? 'hot' : d.kind; };
@@ -164,6 +164,10 @@ const WARM_H = 0.15;       // warmth back a game hour in air 8 °C over COMFORT 
 const NIGHT_BAG = 1, NIGHT_WET = 0.8, NIGHT_NO_BAG = 0.6; // warmth after a night in the tent: the bag, damp gear, no bag in reach
 
 const litres = (x) => `${x >= 1.95 ? '2' : x.toFixed(1)} L`; // fb4 C
+// content C: what the kit with you does to the needs and the bar (kit.js mods; main.js sets energy.kit): the rain jacket
+// (soak, rainChill), the toque (chill), the bugs and the canoe chair (rest: the bar's recovery; drain: a game hour), the
+// headlamp after dark (night: travel's cost); and the bag's night (kit.sleepNight)
+const KIT0 = { soak: 1, rainChill: 1, chill: 1, rest: 1, drain: 0, night: 1.3 };
 
 export class Energy {
   constructor(player, day) {
@@ -204,6 +208,7 @@ export class Energy {
     });
   }
   get now() { return this.day.doy * 24 + this.day.hours; }
+  get kitMods() { return (this.kit && this.kit.mods) || KIT0; } // content C
   // hours since the last sleep (across a new year too)
   get awake() { let a = this.now - this.awakeSince; if (a < -1000) a += 365 * 24; return Math.max(0, a); }
   get adventure() { const t = this.trip; return !!(t && t.adventure && t.active); }
@@ -451,6 +456,7 @@ export class Energy {
   eatItem(eat = {}, name = '') {
     const food = Number.isFinite(eat.food) ? eat.food : 0.2, gain = Number.isFinite(eat.lift) ? eat.lift : food * 0.5, now = this.now;
     this.feed(food); this.lift(gain);
+    if (Number.isFinite(eat.warm) && this.live) this.need.warmth = clamp(this.need.warmth + eat.warm, 0, 1); // content C: chili mac warms you
     this.fedUntil = Math.max(this.fedUntil, now + (eat.hot ? FED_HOURS : FED_HOURS / 2));
     if (eat.hot || food >= 0.45) { this.lastMealAbs = now; this.lastMealKind = eat.hot ? 'hot' : 'cold'; this.lastMealAuto = false; }
     if (name) this.lastEaten = { name, at: now };
@@ -494,14 +500,20 @@ export class Energy {
     // fb3 B: the sleeping bag is the night's rest: without one in the camp's reach, NO_BAG_REST of it (its stats say so)
     const bag = bunk || this.bagInReach();
     if (!bag) q *= NO_BAG_REST;
+    // content C: the bag's night (kit.js sleepNight): colder than the bag is good to, less rest and colder by morning;
+    // a night at the site Arvid's map pencils rests you a little more
+    const wet0 = !bunk && !!(this.trip && this.trip.state && this.trip.state.wet);
+    let night = null; try { night = !bunk && this.kit && typeof this.kit.sleepNight === 'function' ? this.kit.sleepNight({ wet: wet0 }) : null; } catch (e) { night = null; }
+    if (night) q = clamp(q * (bag ? night.rest : 1) + (night.restAdd || 0), 0, 1);
     this.rest0 = q * Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS);
     this.lastNight = { q: +q.toFixed(3), hours: bunk ? NIGHT_HOURS : hours, bag };
     this.wetSetH = Math.max(this.wetSetH, WET_SET_AIR_H); // the wet set of clothes dries overnight
     if (bunk) { this.need.food = 1; this.need.water = 1; this.fill(BOTTLE, 0); }
     // fb2 F: a night in the bag warms you through (a bunk, or the tent with the bag in the camp's reach), less in damp
-    // gear, and the clothes are dry by morning; never colder than you went in
+    // gear, and the clothes are dry by morning; never colder than you went in (content C: unless the night was colder than the bag)
     const wet = !bunk && !!(this.trip && this.trip.state && this.trip.state.wet);
     this.need.warmth = Math.max(this.need.warmth, bunk ? 1 : !bag ? NIGHT_NO_BAG : wet ? NIGHT_WET : NIGHT_BAG);
+    if (bag && night && Number.isFinite(night.warmth)) this.need.warmth = Math.min(this.need.warmth, night.warmth); // content C: a night colder than the bag leaves you cold by morning
     this.soaked = 0; this.lastChunks = null;
     this.awakeSince = this.now; this.warned = false; this.warnTimer = 0;
     this.unnote();
@@ -530,7 +542,7 @@ export class Energy {
     let t = L && Number.isFinite(L.temp) ? L.temp : 2.5 - 16.5 * Math.cos((2 * Math.PI * (d.doy - 25)) / 365.25) + 5.5 * Math.sin((2 * Math.PI * (d.hours - 9)) / 24);
     const ws = wind && Number.isFinite(wind.speed) ? wind.speed : 0, afloat = p.mode === 'paddle' || p.mode === 'swim';
     t -= Math.min(WIND_MAX_C, Math.max(0, ws - WIND_FROM) * WIND_C) * (afloat ? 1 : 0.5);
-    t -= RAIN_C * this.rainOn();
+    t -= RAIN_C * this.rainOn() * this.kitMods.rainChill; // (content C: the rain jacket)
     if (d.elevation < DARK_ELEV) t -= DARK_C;
     return t;
   }
@@ -556,7 +568,7 @@ export class Energy {
     if (!i) return true;
     try {
       const pool = typeof i.campReach === 'function' ? i.campReach() : i.reachable();
-      return pool.some((c) => c.grid.some((e) => !e.box && e.id === 'sleepingbag'));
+      return pool.some((c) => c.grid.some((e) => !e.box && (e.id === 'sleepingbag' || isBag(e.id)))); // (content C: any bag)
     } catch { return true; }
   }
   // fb3 B: the clothes bag's Change (its verb in the book): after a capsize or a soaking, the dry set on: wet through no
@@ -626,7 +638,7 @@ export class Energy {
     const inside = this.inside(), fire = inside ? 0 : this.fireHere(), rain = this.rainOn();
     if (!swim) { // the rain soaks you; the air dries you, the sun more, a fire most
       const L = this.day.weather && this.day.weather.look, sun = Math.max(0, this.day.sunDir ? this.day.sunDir.y : 0) * (1 - ((L && L.grey) || 0));
-      if (rain > 0.02) this.soaked = Math.min(1, this.soaked + SOAK_H * rain * dh);
+      if (rain > 0.02) this.soaked = Math.min(1, this.soaked + SOAK_H * rain * dh * this.kitMods.soak); // (content C: the rain jacket)
       else this.soaked = Math.max(0, this.soaked - (DRY_H + DRY_SUN_H * Math.min(1, sun * 2) + DRY_FIRE_H * fire + (inside ? 1 : 0)) * dh);
     }
     let loss = 0, gain = 0;
@@ -634,7 +646,7 @@ export class Energy {
     else if (inside) gain = INDOOR_H;
     else {
       const t = this.feltTemp(wind), wet = Math.max(this.soaked, this.trip && this.trip.state && this.trip.state.wet ? GEAR_WET : 0);
-      if (t < COMFORT) loss = CHILL_H * ((COMFORT - t) / CHILL_SPAN) * (1 + (WET_CHILL - 1) * wet) * (moving ? MOVING_CHILL : 1) * (1 - fire);
+      if (t < COMFORT) loss = CHILL_H * ((COMFORT - t) / CHILL_SPAN) * (1 + (WET_CHILL - 1) * wet) * (moving ? MOVING_CHILL : 1) * (1 - fire) * this.kitMods.chill; // (content C: the toque)
       else gain = WARM_H * clamp((t - COMFORT) / 8, 0.25, 1) * (1 - 0.5 * wet);
       gain += FIRE_H * fire;
     }
@@ -704,7 +716,7 @@ export class Energy {
         hard = kg >= HEAVY_KG;
       } else recover = REST_H;
     } else if (p.mode === 'swim') { travel = SWIM_H; hard = true; }
-    if (travel && day.elevation < DARK_ELEV) travel *= NIGHT; // after dark, by headlamp
+    if (travel && day.elevation < DARK_ELEV) travel *= this.kitMods.night ?? NIGHT; // after dark, by headlamp (content C: the one with you)
     this.hard = hard;
     // the needs, over the game hours since the last frame (a jump of the clock longer than JUMP counts as a night)
     let dh = now - this.lastNow; this.lastNow = now;
@@ -721,10 +733,11 @@ export class Energy {
     if (this.live && now >= this.wokeAt && now - this.wokeAt < WAKE_WINDOW) this.value = Math.max(this.value, this.ceiling);
     if (recover) {
       recover *= this.boostSet ? this._boost : atCamp ? 3 : 1;
+      recover *= this.kitMods.rest; // content C: the bugs take some of it, the canoe chair gives more
       if (this.now < this.fedUntil) recover *= 2;
       if (this.live ? lowest <= EMPTY : this.warning) recover = 0; // a need run out (or, outside a trip, an empty pack): rest no longer brings it back
     }
-    let drain = BASE_H + travel; // a game hour: a day's travel costs what its hours cost, at any pace
+    let drain = BASE_H + travel + (this.live ? this.kitMods.drain : 0); // a game hour: a day's travel costs what its hours cost, at any pace (content C: and the bugs)
     if (lowest < LOW) drain *= LOW_DRAIN;
     this.exertion = travel;
     let v = this.value - drain * gh;

@@ -287,7 +287,7 @@ export class Cook {
   // what the cooked thing out of `def` is
   cookedOf(def) {
     if (def.kind === 'fish') { const sp = def.species || String(def.id).replace(/^fish:/, ''); return itemDef(`fried:${sp}`) ? `fried:${sp}` : 'fried:fish'; }
-    return { 'meal:supper': 'hot:supper', 'meal:breakfast': 'hot:breakfast', 'meal:freeze': 'hot:freeze' }[def.id] || 'hot:supper';
+    return def.cooksTo || { 'meal:supper': 'hot:supper', 'meal:breakfast': 'hot:breakfast', 'meal:freeze': 'hot:freeze' }[def.id] || 'hot:supper'; // (content C: a meal's own hot one, items.js cooksTo)
   }
   nameOf(def, data = null) {
     if (def.kind === 'fish') return `${data && data.length ? `${Math.round(data.length)} cm ` : ''}${def.name.toLowerCase().replace(/^northern /, '')}`;
@@ -306,7 +306,7 @@ export class Cook {
       if (e.box) continue;
       const d = itemDef(e.id);
       if (!d || !d.eat || !d.eat.cook || !(d.kind === 'meal' || d.kind === 'fish')) continue;
-      const fish = d.kind === 'fish', K = COOK[fish ? 'fish' : d.id] || COOK['meal:supper'];
+      const fish = d.kind === 'fish', K = COOK[d.id] || COOK[fish ? 'fish' : d.id] || COOK['meal:supper']; // (content C: a fillet's own minutes first)
       let wait = null, short = 0;
       if (!fish && !og.pot) wait = 'pot';
       else if (!fish && potBusy) wait = 'busy';
@@ -340,7 +340,7 @@ export class Cook {
   // fire's 'cooking' event
   start(key, raw) {
     const F = this.fires, inv = this.inv, e0 = this.energy, def = raw.def, fish = def.kind === 'fish';
-    const K = COOK[fish ? 'fish' : def.id] || COOK['meal:supper'];
+    const K = COOK[def.id] || COOK[fish ? 'fish' : def.id] || COOK['meal:supper'];
     if (!F.isLit(key) || (this.pot && !this.pot.done)) return false;
     const pot = this.potOn(key), stick = fish && !pot;
     if (!pot && !fish) return false;
@@ -566,7 +566,7 @@ export class Cook {
   // what cooking `def` at ring `key` needs, as needs with chips (the first not done is what a greyed verb shows): a lit
   // fire, the pot on the grate (a meal; a fish does without), the water it wants from the bottle
   needsFor(key, def = null) {
-    const F = this.fires, lit = F.isLit(key), fish = !!(def && def.kind === 'fish'), K = def ? COOK[fish ? 'fish' : def.id] || COOK['meal:supper'] : null;
+    const F = this.fires, lit = F.isLit(key), fish = !!(def && def.kind === 'fish'), K = def ? COOK[def.id] || COOK[fish ? 'fish' : def.id] || COOK['meal:supper'] : null;
     const needs = [NEED.step('A lit fire', lit, { chip: 'a lit fire' })];
     if (!fish) needs.push(NEED.step('The pot on the grate', !!this.potOn(key), { chip: 'needs the pot', item: 'pot' }));
     if (K && K.water > 0) { const short = this.waterShort(K.water); needs.push(NEED.qty('Water', +((this.energy && this.energy.bottle) || 0).toFixed(2), K.water, 'L', { done: short <= 0, chip: `water ${litresUp(short)}`, item: 'bottle' })); }
@@ -620,7 +620,7 @@ export class Cook {
     if (!d) return;
     const P = d.pot;
     // (fb5 A: k, how far along, 0..1; a save from before it kept real seconds t of dur)
-    if (P && P.key && itemDef(P.raw) && itemDef(P.out)) { const K = COOK[P.fish ? 'fish' : P.raw] || COOK['meal:supper'], k = Number.isFinite(+P.k) ? +P.k : (+P.t || 0) / (P.dur || 8); this.pot = { key: P.key, raw: P.raw, out: P.out, data: P.data || null, k: clamp(k, 0, 1), hours: K.minutes / 60, last: null, fish: !!P.fish, stick: !!P.stick, done: false, cold: false }; }
+    if (P && P.key && itemDef(P.raw) && itemDef(P.out)) { const K = COOK[P.raw] || COOK[P.fish ? 'fish' : P.raw] || COOK['meal:supper'], k = Number.isFinite(+P.k) ? +P.k : (+P.t || 0) / (P.dur || 8); this.pot = { key: P.key, raw: P.raw, out: P.out, data: P.data || null, k: clamp(k, 0, 1), hours: K.minutes / 60, last: null, fish: !!P.fish, stick: !!P.stick, done: false, cold: false }; }
     this.potFrom = d.potFrom || null;
   }
   // for the leaving note (camp.js): the pot left on a grate

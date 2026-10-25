@@ -68,6 +68,10 @@ import { chipOf, missingOf } from './items.js'; // fb5 B
 import { withTentNeeds, pitchNeeds } from './tent.js'; // fb4 E
 import { chip } from './chip.js'; // fb5 D
 import { Hints } from './hints.js'; // fb4 D
+import { MOMENTS } from './hints.js'; // content C
+import { kit } from './kit.js'; // content C
+import { uniques } from './uniques.js'; // content C
+import './gear-icons.js'; // content C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -601,6 +605,39 @@ async function main() {
   hints.attach({ energy, weather, trip, fires, cards, packs, nearby, world, tarp });
   energy.onCue = (id) => hints.handles(id);
   pointer.teach = (id, text, o) => hints.next(id, text, o);
+  // content C: gear, upgrades and unique items (content pass 1, 2026-10-25: "item upgrades, different unique items, varied
+  // items"). items.js has the defs (the bags, pads, rods, lamps, the stove and fuel, the jacket and the head net, the chair,
+  // coffee and cocoa, the net, the knife and the fillets, three lures, a waterproof pack, more food, eight uniques),
+  // shop.js the shelves (stocked by outfitter kind), gear-icons.js their pictures. kit.js is what they do with you, read
+  // by the systems they touch: energy (the bag's night, the jacket, the toque, the bugs, the chair, the lamp after dark),
+  // fishing (the cap, the reel, the net at the side, the graphite rod's strike), trip (a capsize with the bag in a dry
+  // pack), camp (the filter at the water's edge); the stove, a cup, the knife and the chair are verbs in the book.
+  // uniques.js lays the five finds out at real places with forage's glint, E on the dot picks one up; stream B's keepers
+  // give the other three (uniques.give, or profile.give).
+  kit.attach({ player, inventory, energy, fishing, camp, fires, day, weather, wind, hud, profile, lamp, shop, world, uniques, canoe });
+  energy.kit = kit; fishing.kit = kit; trip.kit = kit; shop.kit = kit;
+  uniques.attach({ world, scene, player, inventory, profile, hud, camp, day, pointer, audio });
+  const shopUpdC = shop.update.bind(shop);
+  shop.update = () => { shopUpdC(); kit.update(); uniques.update(); };
+  const fillC = camp.fillBottle.bind(camp);
+  camp.fillBottle = () => kit.fillBottle(fillC); // the pump, at once; the gravity bag in a few minutes; else a tablet
+  camp.filterWait = () => kit.filterWait();
+  const verbC = inventory.verb.bind(inventory);
+  inventory.verb = (id, ref) => kit.verb(id, ref) || verbC(id, ref); // Cook on it, Brew a cup, Fillet the catch, Sit in it
+  const raiseC = profile.raise.bind(profile);
+  profile.raise = (ep, d = 1) => raiseC(ep, d > 0 && kit.owns('tradesilver') ? d * 1.5 : d); // the keepers know trade silver
+  const taskHintsC = tasks.hints.bind(tasks);
+  tasks.hints = () => [...taskHintsC(), ...uniques.mapMarks()]; // Arvid's site, in the map's pencil
+  const onUseC = journal.pack.onUse;
+  journal.pack.onUse = (e, mode, c) => {
+    if (e && e.id === 'guidemap') { if (mode === 'label') return 'Look at the map'; const g = uniques.guideSite(); journal.close(); hud.setMode('sheet'); if (g && hud.view) { hud.view.cx = g.x; hud.view.cz = g.z; } return null; }
+    return onUseC ? onUseC(e, mode, c) : null;
+  };
+  const kitMoments = new Map(kit.moments().map((m) => [m.id, m]));
+  for (const m of kitMoments.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+  const dueC = hints.due.bind(hints);
+  hints.due = (id, rec) => (kitMoments.has(id) ? kitMoments.get(id).due(rec) : dueC(id, rec)); // the bugs, a fish at the side, a cold night, the fish remains
+  Object.assign(window.__game, { kit, uniques });
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
