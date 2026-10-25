@@ -992,17 +992,19 @@ export class Inventory {
         const d = itemDef(r.e.id);
         if (!d || !d.eat || !d.eat.cook) return null;
         const k = this.fireNear();
-        if (!k || !k.cook || typeof k.cook.cookCheck !== 'function') return grey('At a fire ring', [], 'Walk to a campsite’s fire ring: E at the ring opens the fire');
+        if (!k || !k.cook) return grey('At a fire ring', [], 'Walk to a campsite’s fire ring: E at the ring opens the fire');
         const onGrate = !!(r.c && r.c.item === 'grate');
-        const c = k.cook.cookCheck(k.site, k.key, onGrate ? null : d);
+        // fb5 A cooks whatever is on the grate over a lit fire by itself (cook.auto, or no cookNow to call): the verb is
+        // "Onto the grate", whatever the fire is doing; the old way (cookCheck, then cookNow) where it is still the way
+        const auto = !!k.cook.auto || typeof k.cook.cookNow !== 'function';
+        if (onGrate && auto) return grey('On the grate', [], '');
+        const c = !auto && typeof k.cook.cookCheck === 'function' ? k.cook.cookCheck(k.site, k.key, onGrate ? null : d) : { enabled: true, needs: [], next: '' };
         if (!c.enabled) return grey(c.why, c.needs, c.next);
         const g = onGrate ? r.c : k.chores.grate(k.key, k.site);
         if (!onGrate && (!g || !this.firstFit(g, r.e.id))) return grey('The grate is full', [], 'Take what is on the grate off it first');
-        // (fb5 A cooks whatever is on the grate over a lit fire by itself: this puts it there, and starts it only where
-        // the old cookNow is still the way)
         return go(() => {
           if (!onGrate) { const s2 = this.firstFit(g, r.e.id); if (!s2 || !this.move(r.c.id, r.e.uid, g.id, s2.x, s2.y, s2.rot, 1)) return no('full', 'No room on the grate.'); }
-          if (!k.cook.auto && typeof k.cook.cookNow === 'function') k.cook.cookNow(k.site, k.key);
+          if (!auto) k.cook.cookNow(k.site, k.key);
           return ok('');
         }, null, c.needs, c.next);
       }

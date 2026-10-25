@@ -9,7 +9,7 @@
 //   grid(el, container, { onDrop, onUse })      a container as a Tarkov grid: drag and drop between any grids on the
 //                                               page, R turns it while dragging (and a drop that fits only turned
 //                                               turns by itself), Shift-drag splits, right-click lists its verbs (and
-//                                               why one is greyed: a checklist, fb4 B)
+//                                               why one is greyed: its why and one chip, fb5 B)
 //   MineSide                                    your stuff on one screen (the owner, 2026-10-24: "having to scroll to
 //                                               see items is a struggle"): the body on the left (back, chest, hands,
 //                                               pockets), a tab per container you carry across the top, one grid at a
@@ -84,7 +84,7 @@ export function verbsFor(d, id = d && d.id) {
   if (Array.isArray(d.verbs)) return d.verbs;
   const out = [];
   if (d.eat) out.push(d.eat.cook && !d.cooked ? { id: 'eat', label: 'Eat', why: 'cook it on the grate first' } : { id: 'eat', label: 'Eat' });
-  if (d.eat && d.eat.cook && !d.cooked) out.push({ id: 'cook', label: 'Cook', where: 'fire', why: 'only in the fire card' });
+  if (d.eat && d.eat.cook && !d.cooked) out.push({ id: 'cook', label: 'Onto the grate', where: 'fire', why: 'At a fire ring' });
   if (d.slot === 'tent') out.push({ id: 'pitch', label: 'Pitch' });
   if (d.hang || /^barrel/.test(String(d.id))) out.push({ id: 'hang', label: 'Hang', why: 'carry it to a tree and point at the limb' });
   if (d.kind === 'long' || (d.hand && d.kind === 'container')) out.push({ id: 'hand', label: 'Put in hand' });
@@ -1573,7 +1573,10 @@ function verbMenu(ref, sc = null) {
       case 'cook': {
         if (!e || !g) break;
         if (no) { grey(no.label || label, no.why || v.why, no); break; }
-        if (!fire) { grey(label, v.why || 'only in the fire card', chk); break; }
+        // fb5 B: the model's verb (inventory.verb: onto the grate, which cooks by itself over a lit fire, fb5 A), in the
+        // book or the card alike; the fire card's own actions below only without it
+        if (chk) { out.push({ label: chk.label || label, run: () => { let q = null; try { q = chk.run(); } catch (err) { console.warn('verb cook', err); } if (q && q.words) note(q.words, 3.5); const n = nearby(); if (n) n.list = null; refresh(); } }); break; }
+        if (!fire) { grey(label, v.why || 'At a fire ring', chk); break; }
         const put = acts.find((a) => a.id === 'grate'), onGrate = g.c.item === 'grate', cook = (fire.actions || []).find((a) => a.id === 'cook');
         if (!onGrate && !put) grey(label, 'the grate is full');
         else if (!onGrate && put.enabled === false) grey(label, put.why || 'not now', put);
@@ -1647,6 +1650,10 @@ function openMenu(x, y, items) {
     m.appendChild(b);
   }
   document.body.appendChild(m);
+  // fb5 B (rule 1): a greyed verb's next step is taught once, as a moment over the paper (stream E's hints.next: once a
+  // season per id), never written in the menu; the first one only, so one teaching line at a time
+  const teach = items.find((it) => it.disabled && it.next);
+  if (teach) { try { const h = typeof window !== 'undefined' && window.__game && window.__game.hints; if (h && typeof h.next === 'function') h.next(`menu:${teach.label}|${String(teach.title || '').replace(/[\d.,½–-]+/g, '#')}`, teach.next, { card: true }); /* (the id without its numbers: a countdown is one moment) */ } catch (err) { console.warn('hints.next', err); } }
   const r = m.getBoundingClientRect();
   m.style.left = `${Math.max(8, Math.min(x, window.innerWidth - r.width - 8))}px`; m.style.top = `${Math.max(8, Math.min(y, window.innerHeight - r.height - 8))}px`;
   setTimeout(() => window.addEventListener('pointerdown', outside, true), 0);
