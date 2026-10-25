@@ -321,7 +321,7 @@ function portageSign(ctx, pts, end, seed) {
   let fx = x - xn, fz = z - zn; const L = Math.hypot(fx, fz) || 1; fx /= L; fz /= L; // facing out along the path, to the water
   const side = rng() < 0.5 ? 1 : -1, px = x + fz * side * 1.15, pz = z - fx * side * 1.15;
   const F = frame(ctx, px, pz, { x: fx, z: fz }), g = F.G(0, 0), b = new PropBuilder();
-  ctx.obstacles.push({ x: px, z: pz, r: 0.15 });
+  ctx.obstacles.push({ x: px, z: pz, r: 0.15, low: true }); // (low: a canoe carried overhead rides over the post, player.js)
   const post = tone(0x7f6851, rng, 0.06), top = g + 1.12, ref = F.P(0, g + 0.5, 0);
   b.box(F.P(0, (g - 0.35 + top) / 2, 0), F.X, F.Y, F.Z, 0.045, (top - g + 0.35) / 2, 0.045, TILE.WOOD, post, { grain: 'y', skip: ['+y'] });
   b.face([F.P(-0.045, top, -0.045), F.P(0.045, top, -0.045), F.P(0, top + 0.05, 0)], TILE.WOOD, post, { ref });

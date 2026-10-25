@@ -732,22 +732,37 @@ export class Player {
 
   updateLanding(dt) {
     // glide the canoe to the launch point and step out there, the canoe beached (fb3 A: it had gone straight onto
-    // your shoulders at the trail end; now the landing is a landing, and the shoulder is your own Q on the hull)
-    const L = this.landing, trail = L.land.trail;
-    const end = trail.def.pts[L.land.end === 0 ? 0 : trail.def.pts.length - 1];
-    const tx = end[0], tz = end[1];
+    // your shoulders at the trail end; now the landing is a landing, and the shoulder is your own Q on the hull).
+    // The fb3 join: in to the trail's put-in, the waterline nearest the trail's end (an end can lie a few metres up the
+    // bank), by way of the launch point off it when that is on the way. The glide had aimed at the trail's end itself and
+    // stopped after 8 s, short of it from the edge of the prompt's 28 m, and the step-out then took the nearest shore:
+    // once 23 m from the trail, off round a point, so the carry began through the trees.
+    const L = this.landing, trail = L.land.trail, w = this.world;
+    if (!L.put) {
+      const e = trail.def.pts[L.land.end === 0 ? 0 : trail.def.pts.length - 1];
+      let sx = e[0], sz = e[1], sd = w.shoreAt(sx, sz);
+      for (let i = 0; i < 24 && Math.abs(sd) > 0.15; i++) { const g = w.deeperDir(sx, sz); sx += g.x * sd; sz += g.z * sd; sd = w.shoreAt(sx, sz); }
+      if (!w.isReady(sx, sz) || Math.abs(sd) > 0.5) { sx = e[0]; sz = e[1]; }
+      const l = L.land.launch, dPut = Math.hypot(sx - this.x, sz - this.z);
+      L.put = { x: sx, z: sz };
+      L.via = l && Math.hypot(l.x - this.x, l.z - this.z) > 6 && dPut > Math.hypot(sx - l.x, sz - l.z) + 2 ? { x: l.x, z: l.z } : null;
+      L.limit = 8 + (L.via ? Math.hypot(l.x - this.x, l.z - this.z) + Math.hypot(sx - l.x, sz - l.z) : dPut) / 1.2;
+    }
+    const aim = L.via || L.put, tx = aim.x, tz = aim.z;
     const dx = tx - this.x, dz = tz - this.z, d = Math.hypot(dx, dz);
     const target = Math.atan2(-dz, dx);
     let dh = target - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
     this.heading += dh * (1 - Math.exp(-dt * 2.5));
-    this.speed = lerp(this.speed, 1.4, 1 - Math.exp(-dt * 2));
+    this.speed = lerp(this.speed, 1.4 + Math.min(1.6, (L.via ? d + 12 : d) * 0.1), 1 - Math.exp(-dt * 2)); // (brisker from the prompt's edge)
     const f = this.forward;
     this.x += f.x * this.speed * dt; this.z += f.z * this.speed * dt;
     this.canoe.state.power = 0.5; this.canoe.state.stroke = (this.canoe.state.stroke + dt * 0.8) % 1; this.canoe.state.drive = 1; this.canoe.state.turn = 0;
     this.placeOnWater(dt);
     this.emitWater(dt);
     this.prompt = { key: null, text: 'Landing…' };
-    if (d < 4.5 || this.world.shoreAt(this.x, this.z) > -0.6 || (L.t += dt) > 8) {
+    L.t += dt;
+    if (L.via) { if (d < 5 || w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6) > -0.3 || L.t > L.limit * 0.6) L.via = null; return; }
+    if (w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6) > 0.6 || d < 1.0 || L.t > L.limit) {
       this.landing = null;
       this.stepOut();
     }
@@ -1239,6 +1254,8 @@ export class Player {
         if (carrying) {
           for (const t of near) {
             if (t.shape || t.box) continue; // the hull rides above a boulder or a log; a wall already holds the walker off
+            if (t.low) continue; // and over a post shorter than the shoulders: the portage sign at a trail's end (the fb3 join: the
+            // landing now steps you out by the water, and the walk up to the trail swung the hull into the sign 1.15 m off the path)
             // the hull overhead is a 5 m log from 2.2 m behind the walker to 3 m ahead
             const px = t.x - nx, pz = t.z - nz, along = px * f.x + pz * f.z;
             if (along < -2.2 || along > 3.0) continue;
