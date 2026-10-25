@@ -28,8 +28,8 @@ export const DEFAULTS = {
   invertLook: false,
   sensitivity: 1,       // mouse look, 0.3..3
   cursorSteer: false,   // the bow seeks the cursor's point on the water while you paddle
-  pace: 'trip',         // 'trip': travel time-lapsed, a game day covers a real day's 20 km (pace.js) | 'real': life, the clock 1:1
-  speed: 1,             // default game speed 1 | 2 | 4, on top of the pace
+  pace: 'trip',         // 'trip': the one clock at 4, a day's paddle a real day's 20 km (pace.js) | 'real': life, the clock 1:1
+  speed: 1,             // default game speed, player.timeScale 1 | 2 | 4 (pace.js SPEEDS: Normal, Faster, Fastest), on top of the pace
   camera: 'third',      // default camera 'third' | 'first'
   // the HUD
   density: 'standard',  // 'quiet' | 'standard' | 'full'
@@ -70,8 +70,8 @@ export const SECTIONS = [
     { key: 'sensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.3, max: 3, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
     { key: 'invertLook', label: 'Invert look', type: 'toggle' },
     { key: 'cursorSteer', label: 'Steer the canoe where you point', desc: 'While you hold W the bow turns toward the cursor’s point on the water, or toward the look in first person', type: 'toggle' },
-    { key: 'pace', label: 'Pace', desc: 'Trip: travel goes faster, the clock with it, so a day covers a real day’s 20 km; camp, fishing and walking about stay at life · Real: life, the clock 1:1', type: 'radio', options: [['trip', 'Trip'], ['real', 'Real']] },
-    { key: 'speed', label: 'Game speed at the start of a trip', desc: '1 2 3 change it as you go (1×, 2×, 4×), on top of the pace: a note by the corner mark says what the clock does', type: 'select', parse: Number, options: [[1, '1×'], [2, '2×'], [4, '4×']] },
+    { key: 'pace', label: 'Pace', desc: 'Trip: time runs faster than life, the same on the water and on land, and a day’s paddle covers a real day’s 20 km · Real: time as in life', type: 'radio', options: [['trip', 'Trip'], ['real', 'Real']] },
+    { key: 'speed', label: 'Game speed at the start of a trip', desc: '1 2 3 change it as you go, on top of the pace; the corner shows ▶▶ or ▶▶▶ while it is faster', type: 'select', parse: Number, options: [[1, 'Normal'], [2, 'Faster ▶▶'], [4, 'Fastest ▶▶▶']] },
     { key: 'camera', label: 'Camera at the start of a trip', desc: 'V switches it as you go', type: 'select', options: [['third', 'Behind the canoe'], ['first', 'From the paddler’s seat']] },
   ] },
   { id: 'hud', label: 'HUD', rows: [
