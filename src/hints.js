@@ -111,7 +111,8 @@ export class Hints {
     this.log.push(`${id}:${how}`);
     return true;
   }
-  learn(id) { if (this.cur && this.cur.h.id === id) return; this.mark(id, 'used'); }
+  // (fb4 join: the card up goes once you press the key it shows: it has been read)
+  learn(id) { if (this.cur && this.cur.h.id === id) { if (this.cur.t > 0.4) this.hide(); return; } this.mark(id, 'used'); }
 
   // --- whether a hint applies now --------------------------------------------------------------------------------------
   due(id) {
