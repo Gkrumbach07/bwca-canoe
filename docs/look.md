@@ -216,7 +216,11 @@ baked lightmaps, no PBR, no external assets.
   calm water or a sheltered shore, a broken line on a windward shore in a breeze, more in a blow. That foam, the
   whitecaps, the wake's bubbles and splashes (wake.js) and the rise rings (fauna-rings.js) are lit as the water is
   (wake.js `foamLight`: the key by its height in the sun's shadow plus the sky fill, read from the water's
-  `uSunLight` / `uSkyLight`, `FOAM_GAIN` 2), never a fixed white, so none glows at dusk. A rise ring is a wave, not
+  `uSunLight` / `uSkyLight`, `FOAM_GAIN` 2), never a fixed white, so none glows at dusk. By night under a cloud deck
+  the fill carries the day cycle's floor (`NIGHT_GLOW`), which a near-white surface took at four to six times the water
+  beside it; there white water's fill is the water's own surface light instead (water.js `glslWaterOwn`: the dome by
+  Fresnel at that view plus the column), `NIGHT_GLOW.foam` (2.4) brighter and never more than the day's rule, as far
+  as the floor is on (`uFoamNight`: night x deck). The moon still lights it as a key. A rise ring is a wave, not
   foam: it brightens the water drawn under it (blend: colour + destination x alpha) with the low sky's colour and a
   film of lit white. Rings and bubbles are subdivided quads whose every vertex sits on the patch's drawn triangles
   (wake.js `drawnWave`: PlaneGeometry splits each quad from its (0, 1) corner to its (1, 0) one), so a crest no longer

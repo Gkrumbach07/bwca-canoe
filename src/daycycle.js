@@ -311,6 +311,7 @@ export class DayCycle {
     // brightest thing in an overcast dusk)
     const wu = t.water.uniforms;
     wu.uFoam.value.copy(this.lerpColor('foam', c));
+    if (wu.uFoamNight) wu.uFoamNight.value.set(0, NIGHT_GLOW.foam); // round A-E: no night floor until applyWeather says
     if (wu.uIce) wu.uIce.value = this.season.ice;
     wu.uSunDir.value.copy(this.sunDir.y > 0.02 ? this.sunDir : this.moonDir);
     // the grade and the god rays (post.js)
@@ -360,6 +361,11 @@ export class DayCycle {
       t.hemi.color.lerp(_glow, NIGHT_GLOW.fill * glow);
       t.hemi.intensity = Math.max(t.hemi.intensity, (NIGHT_GLOW.floor + moonFull * 0.8 * 0.6) * glow);
     }
+    // round A-E: white water (the hull's water line, the wake, the whitecaps, the lap) takes the floor as the water's own
+    // surface does, not at its albedo (water.js glslWaterOwn): it read pale blue-white, the brightest thing on the water.
+    // Fully so once the floor is NIGHT_GLOW.foamOn on (by 21:30 in July, the sun 4 degrees down under cloud)
+    const wn = t.water.uniforms.uFoamNight;
+    if (wn) wn.value.set(smoothstep(0, NIGHT_GLOW.foamOn, glow), NIGHT_GLOW.foam);
     // the cloud's own colour
     const DC = toGrey(_dc.copy(colors.cloudBase[this._seg[0]]).lerp(colors.cloudBase[this._seg[1]], this._seg[2]), 1, 1.05 * bright);
     if (glow > 0.001) DC.lerp(_glow, NIGHT_GLOW.deck * glow);
@@ -459,9 +465,11 @@ export class DayCycle {
 
 const _white = new THREE.Color(1, 1, 1), _dc = new THREE.Color(), _far = new THREE.Color(), _layer = new THREE.Color(), _g = new THREE.Color(), _anvil = new THREE.Color();
 // the glow under a cloud deck at night (applyWeather): its colour (a cool grey), how far the fill goes to it, the
-// fill's floor (intensity), how far the deck's colour goes to it; live-tunable
+// fill's floor (intensity), how far the deck's colour goes to it; live-tunable. foam (round A-E): under the floor, white
+// water is lit as the water's own surface is, this much brighter than it (water.js glslWaterOwn), wholly so from
+// foamOn of the floor (night x deck) up
 const _glow = new THREE.Color(0x7c8898);
-export const NIGHT_GLOW = { fill: 0.75, floor: 0.5, deck: 0.3, haze: 0.3 };
+export const NIGHT_GLOW = { fill: 0.75, floor: 0.5, deck: 0.3, haze: 0.3, foam: 2.4, foamOn: 0.75 };
 // a colour toward the neutral (a breath of blue in it) of its own luminance times bright, by k
 function toGrey(col, k, bright = 1) {
   const l = (0.2126 * col.r + 0.7152 * col.g + 0.0722 * col.b) * bright;

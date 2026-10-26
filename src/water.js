@@ -89,6 +89,31 @@ export const COLUMN = {
   waterAbs: new THREE.Vector3(0.25, 0.04, 0.01),
 };
 
+// round A-E (the owner, 2026-10-26: "fix Night water"): white water by night takes the water's own floor. Under a cloud
+// deck at night the day cycle lifts the sky fill toward a cool grey glow (daycycle.js NIGHT_GLOW) so the shore and the
+// hull never go black. The water's own surface takes that lift by what it is: mostly a mirror, it shows the dome by
+// Fresnel (and the dome lifts far less than the fill), over a dark column. White foam took the whole lifted fill at its
+// albedo and FOAM_GAIN, four to six times the water round it, so at 23:30 under cloud the hull's water line and the
+// stern's eddy read pale blue-white, the brightest thing on the water. waterOwnLight is that surface's light toward the
+// eye (v: unit, from the water up to the eye): the sky it mirrors (the dome's own zenith and horizon) by Fresnel, and
+// the column's glow under the fill (body: the deep water's colour, lit as water.js lights it). White water's fill is
+// that, NIGHT_GLOW.foam brighter, as far as the night floor is on (uFoamNight.x, the day cycle's night x deck), and
+// never more than it was (glslFoamLight in wake.js, the whitecaps and the shore's lap here). The key (the sun, the moon)
+// lights it as before.
+export const glslWaterOwn = /* glsl */ `
+  vec3 waterOwnLight(vec3 v, vec3 zenith, vec3 horizon, vec3 body, vec3 fill) {
+    float c = clamp(v.y, 0.0, 1.0);
+    float F = 0.02 + 0.98 * pow(1.0 - c, 5.0);
+    return F * mix(horizon, zenith, smoothstep(0.0, 0.6, c)) + (1.0 - F) * body * fill * 1.9;
+  }
+  // the fill white water takes: the sky fill at the foam's gain by day; by night under the floor (night.x) the water's
+  // own light night.y brighter (over the foam's albedo), never more than the day's rule gives
+  vec3 foamFill(vec3 fill, float gain, vec2 night, vec3 own) {
+    if (night.x <= 0.0) return fill * gain;
+    return mix(fill * gain, min(fill * gain, own * (night.y / 0.84)), night.x);
+  }
+`;
+
 // Everything that rides or stands on the surface shares this: the atlas lookups, the terrain surface
 // (shaped in the shore band exactly as the terrain mesh is), the swell, and the swell as the water patch
 // actually renders it. All positions are relative to the floating origin (uOrigin); world xz -> rel is
@@ -323,6 +348,8 @@ const frag = /* glsl */ `
   uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyIce;
   const vec3 FOAM_ALBEDO = vec3(0.86, 0.9, 0.92);   // the white of the foam; FOAM_GAIN as wake.js glslFoamLight has it
   const float FOAM_GAIN = 2.0;
+  uniform vec2 uFoamNight;   // round A-E: how far the night floor is on, and white water's lift over the water (glslWaterOwn)
+  ${glslWaterOwn}
   ${glslColumn}
   uniform vec3 uSkyZenith, uSkyMid, uSkyHorizon, uSkySun, uSkySunDir;
   #ifdef SKY_LIFT
@@ -600,8 +627,11 @@ const frag = /* glsl */ `
     float cap = min(1.0, mix(capNear * 0.95, capFarV * blow * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.9, capFar));
     float foam = max(max(edgeA, lineA), cap) * live;
     // white water lit as the splashes and the rise rings are (wake.js foamLight): the key by its height in the sun's
-    // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white
-    vec3 foamC = FOAM_ALBEDO * lit * FOAM_GAIN;
+    // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white; round A-E: by
+    // night under the floor its fill is the water's own light (glslWaterOwn), so a whitecap or the lap never outshines it
+    vec3 fillC = uSkyLight * FOAM_GAIN;
+    if (foam > 0.002 && uFoamNight.x > 0.0) fillC = foamFill(uSkyLight, FOAM_GAIN, uFoamNight, waterOwnLight(v, uSkyZenith, uSkyHorizon, uBodyDeep, uSkyLight));
+    vec3 foamC = FOAM_ALBEDO * (uSunLight * max(uSunDir.y, 0.0) * shadow * FOAM_GAIN + fillC);
     #ifdef USE_FOG
       if (foam > 0.002) foamC = fogApply(foamC, vFogDir);
     #endif
@@ -687,6 +717,7 @@ export class WaterSystem {
       uReflTexel: { value: new THREE.Vector2(1 / 4, 1 / 4) },
       uSunLight: { value: new THREE.Color(0.6, 0.55, 0.45) },
       uSkyLight: { value: new THREE.Color(0.15, 0.2, 0.28) },
+      uFoamNight: { value: new THREE.Vector2(0, 1) },   // round A-E: the day cycle writes it (glslWaterOwn)
       uBodyClear: { value: WATER_LOOK.clear },
       uBodyDeep: { value: WATER_LOOK.deep },
       uBodyStain: { value: WATER_LOOK.stain },
