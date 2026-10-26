@@ -1808,15 +1808,18 @@ export class People {
     const W = (k) => (MEM_WORDS[k] && (MEM_WORDS[k][man] || MEM_WORDS[k].warm)) || [];
     let line = null;
     const t = M.lastTrip(), ti = m.trips.length;
-    if (t && t.to === ep && today - t.end <= 1 && heard.trip !== ti) {
+    // (the content join: a job paid here since the last hello is thanked first: you come in from a trip nearly every
+    // time, and with the trip's line first the thanks in a job's own words were never heard)
+    const task = m.tasks.filter((x) => x.from === ep && x.day >= (last ?? -1e9) && x.day > (heard.task ?? -1e9)).pop();
+    if (task) {
+      heard.task = task.day; if (t && t.to === ep) heard.trip = ti;
+      line = this.fresh((man !== 'gruff' && TASK_THANKS[task.kind]) || W('task').map((s) => fillC(s, { title: task.title }))); // (stream A's new kinds in their own words)
+    }
+    if (!line && t && t.to === ep && today - t.end <= 1 && heard.trip !== ti) {
       heard.trip = ti;
       const out = t.nights ? `${num(t.nights)} ${t.nights === 1 ? 'night' : 'nights'}` : 'a day';
       const lake = theWater(t.far || t.lakes[t.lakes.length - 1] || ch.op.lake);
       line = this.fresh(W(t.swim ? 'swim' : t.nights ? 'back' : 'day').map((s) => fillC(s, { lake, out })));
-    }
-    if (!line) {
-      const task = m.tasks.filter((x) => x.from === ep && x.day >= (last ?? -1e9) && x.day > (heard.task ?? -1e9)).pop();
-      if (task) { heard.task = task.day; line = this.fresh((man !== 'gruff' && TASK_THANKS[task.kind]) || W('task').map((s) => fillC(s, { title: task.title }))); } // (stream A's new kinds in their own words)
     }
     if (!line) {
       const f = M.bigFish(Math.max(last ?? -1e9, (heard.fish ?? -1e9) + 1));
