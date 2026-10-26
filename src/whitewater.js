@@ -10,7 +10,8 @@ import { WHITE, rocksNear } from './rapids.js';
 // - the white water itself, one overlay per drop draped on the drawn surface (it reads the level atlas, as the water
 //   does): on a falls the sheet going over (glassy at the lip, then streaks falling at the speed of the slope, white
 //   at the bottom) and the boil at its foot, spreading and thinning down the pool; on a rapids the standing waves of
-//   its run, their crests broken white and flickering, and a few streaks between. Lit like any foam on the water
+//   its run, their crests broken white and flickering, and a few streaks between (a drop where the game's river is level,
+//   `flat`, is heard and not drawn). Lit like any foam on the water
 //   (wake.js foamLight: the sun by its height and shadow, the sky fill, the night floor), hazed by the fog.
 // - spray off the foot of a falls and froth drifting off it (the hull's own droplets and bubbles: wake.js Ripples).
 // - the canoe held off the lip and the foot of a falls (no running a falls: carry round it) and bumped off the rocks
@@ -32,10 +33,10 @@ export const WHITE_WATER = {
 const vert = /* glsl */ `
   uniform float uWaterTime;
   uniform vec2 uDir;        // the way the water runs (unit xz)
-  uniform vec4 uDrop;       // drop (m), half width (m), kind (0 falls, 1 rapids), level water (1: a drop the game's water has not)
+  uniform vec4 uDrop;       // drop (m), half width (m), kind (0 falls, 1 rapids), unused
   attribute vec2 aSU;       // s: metres along the flow from the drop's line (downstream +), u: metres across from its middle
   varying vec2 vSU;
-  varying float vSteep, vFell, vShore, vDist;
+  varying float vSteep, vFell, vShore;
   #include <common>
   #include <fog_pars_vertex>
   #include <shadowmap_pars_vertex>
@@ -56,7 +57,6 @@ const vert = /* glsl */ `
     float sh;
     worldPosition.y = lv + surfaceWave(rel, uWaterTime, patchBorder(rel), sh) + 0.035 + 0.7 * min(max(vSteep, max(s0, s1)), 0.8);
     vec4 mvPosition = viewMatrix * worldPosition;
-    vDist = length(mvPosition.xyz);
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
     #include <shadowmap_vertex>
@@ -70,7 +70,7 @@ const frag = /* glsl */ `
   uniform vec3 uBox;        // the overlay's own extent: s from, s to, u either side (its edges fade out)
   uniform vec3 uColor;
   varying vec2 vSU;
-  varying float vSteep, vFell, vShore, vDist;
+  varying float vSteep, vFell, vShore;
   #include <common>
   #include <packing>
   #include <fog_pars_fragment>
@@ -108,7 +108,7 @@ const frag = /* glsl */ `
       // (more of them, and longer, the steeper it runs), their tops white froth churning down; between them the water
       // only streaked; below the run, lace drifting off as at the foot of a falls
       float run = smoothstep(uRun.x - 4.0, uRun.x + 3.0, s) * (1.0 - smoothstep(uRun.y - 2.0, uRun.y + 9.0, s));
-      float lively = max(smoothstep(0.012, 0.06, st), uDrop.w * 0.75) * run;
+      float lively = smoothstep(0.012, 0.06, st) * run;
       float warp = 2.4 * (lookFbm(vec2(u * 0.12, s * 0.09), sd + 19u, 2) - 0.5);
       float ph = (s + warp) / 3.1 + 0.3 * sin(u * 0.45 + 6.0 * lookNoise(vec2(u * 0.1, s * 0.05), sd + 17u));
       float crest = pow(0.5 + 0.5 * cos(ph * 6.2832), 4.0);
@@ -119,7 +119,7 @@ const frag = /* glsl */ `
       a = max(a, lively * smoothstep(0.72, 0.86, patchN) * smoothstep(0.42, 0.7, froth) * 0.75);
       float k = lookNoise(vec2(u * 3.2, (s - t * 3.5) * 0.4), sd + 31u);
       a = max(a, lively * smoothstep(0.7, 0.9, k) * 0.35);
-      float tail = smoothstep(uRun.y - 3.0, uRun.y + 2.0, s) * exp(-max(0.0, s - uRun.y) / 10.0) * max(smoothstep(0.012, 0.05, uDrop.x / max(4.0, uRun.y - uRun.x)), uDrop.w * 0.6);
+      float tail = smoothstep(uRun.y - 3.0, uRun.y + 2.0, s) * exp(-max(0.0, s - uRun.y) / 10.0) * smoothstep(0.012, 0.05, uDrop.x / max(4.0, uRun.y - uRun.x));
       vec2 q = vec2(u * 0.9 + 1.2 * lookNoise(vec2(u * 0.3, s * 0.15 - t * 0.25), sd + 37u), (s - t * 1.0) * 0.34);
       a = max(a, tail * smoothstep(0.6, 0.7, lookFbm(q, sd + 41u, 3)) * 0.55);
     }
@@ -197,11 +197,12 @@ export class WhiteWater {
     const near = [];
     for (const w of WHITE) {
       if (w.hidden) continue;
+      if (w.flat) { const d = Math.hypot(w.x - eye.x, w.z - eye.z); if (d < W.heard.far) near.push({ w, d, quiet: true }); continue; } // level water: heard, not drawn
       const d = Math.hypot(w.x - eye.x, w.z - eye.z) - w.half;
       if (d < W.draw + 120) near.push({ w, d });
     }
     near.sort((a, b) => a.d - b.d);
-    const want = new Set(near.filter((n) => n.d < W.draw).slice(0, W.max).map((n) => n.w.id));
+    const want = new Set(near.filter((n) => n.d < W.draw && !n.quiet).slice(0, W.max).map((n) => n.w.id));
     for (const [id, o] of this.live) if (!want.has(id)) { this.scene.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); this.live.delete(id); }
     for (const n of near) {
       if (!want.has(n.w.id) || this.live.has(n.w.id)) continue;
@@ -209,7 +210,7 @@ export class WhiteWater {
       // the shared uniforms by reference (the lights, the surface, the time), the drop's own by value
       for (const [k, v] of Object.entries(this.material.uniforms)) m.uniforms[k] = v;
       m.uniforms.uDir = { value: new THREE.Vector2(w.ux, w.uz) };
-      m.uniforms.uDrop = { value: new THREE.Vector4(w.drop, w.half, w.kind === 'falls' ? 0 : 1, w.flat ? 1 : 0) };
+      m.uniforms.uDrop = { value: new THREE.Vector4(w.drop, w.half, w.kind === 'falls' ? 0 : 1, 0) };
       m.uniforms.uRun = { value: new THREE.Vector2(...(w.run || [-15, 15])) };
       m.uniforms.uSeed = { value: 1 + (w.id % 997) };
       m.uniforms.uFade = { value: 1 };

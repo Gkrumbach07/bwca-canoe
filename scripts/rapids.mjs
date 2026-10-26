@@ -12,15 +12,20 @@
 // - USGS GNIS (geonames layer 7, class Falls and Rapids) and Geographic Names Ontario (LIO, Open Government Licence -
 //   Ontario; entity Falls and Rapids): more names, and the Quetico side, which NHD stops short of.
 //
-// What it makes, against a release's own tiles (and its graded river levels, src/water-grade.bin):
-// - `white`: each falls or rapids once (the NHD points and lines within a stretch of river joined, a name matched from
-//   OSM, GNIS or Ontario within reach), snapped onto the game's water: its middle on the channel, its line across the
-//   river from shore to shore (a, b), the way the water runs (dir: radians, x east, z south; atan2(dz, dx)), the drop
-//   from the water above to the water below (m), the lakes above and below (ids of the release), and its sources.
-// - `rocks`: the rocks above the water (NHD 44101) that lie in the game's water or on its very edge, as half-metre
-//   integers delta-coded along the list (x, z, x, z, ...), with each one's depth there (dm, in a list of their own).
-// Positions are world metres of the bake's projection (config.mjs, the bwca box); the drops and lakes are this
-// release's (`for` holds its bake time; world.js / the game keep the positions for another bake, which grades its own).
+// What it makes, against a release's own tiles (and its graded river levels, src/water-grade.bin), read by src/rapids.js:
+// - `white`: each falls or rapids once (the NHD points and lines within 60 m joined, OSM's within 120 m, a name from
+//   OSM, else GNIS, Ontario or NHD), snapped onto the game's rivers: the channel through the steepest river water near
+//   it (searched outward along the river, keeping to the middle, from the lake above to the lake below), its middle
+//   where its real place projects onto that channel (a falls in the lake above: at the outlet), its line across from
+//   shore to shore (a, b), the way the water runs (dir: radians, atan2(dz, dx)), the drop (m), the lakes above and
+//   below (the release's ids). A name the game has no river for is kept where it is, `hidden` (nothing drawn).
+// - `rows`: the river levels made over so the water falls where the drops really are (the PATCH section below), as
+//   runs of cell changes the tile worker applies with the bed (rapids.js patchTile), each carrying the level its first
+//   cell had, so another bake's water is left alone.
+// - `rocks`: NHD's rocks above the water (44101), all of those in the grid, as half-metre integers delta-coded along
+//   the list (x, z, x, z, ...); the game stands those whose cell is water.
+// Positions are world metres of the bake's projection (config.mjs, the bwca box); the drops, lakes and rows are this
+// release's (`for` holds its bake time). A new bake (round D2) should take the PATCH step into its own grading.
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -113,7 +118,7 @@ try {
         q += 20;
         const runs = []; for (let k = 0; k < nRuns * 3; k++, q += 2) runs.push(pv.getUint16(q, true));
         const per = level ? 2 : 1, vals = new Int16Array(nCells);
-        for (let a = 0, c = 0; a < runs.length; a += 3) { let p0 = 0, p1 = 0; for (let m = 0; m < runs[a + 2]; m++, c++) { p0 += pv.getInt8(q++); vals[c] = p0; if (per === 2) p1 += pv.getInt8(q++); } }
+        for (let a = 0, c = 0; a < runs.length; a += 3) { let p0 = 0; for (let m = 0; m < runs[a + 2]; m++, c++) { p0 += pv.getInt8(q++); vals[c] = p0; if (per === 2) q++; } }
         if (!level) grades.set(`${tx},${ty}`, { hash, runs, vals });
       }
     }
@@ -147,7 +152,6 @@ const cx = (i) => g.originX + (i + 0.5) * g.cell, cz = (j) => g.originZ + (j + 0
 const lakeCell = (i, j) => { const c = cellOf(i, j); return c ? c[0].lake[c[1]] : 0; };
 const sdCell = (i, j) => { const c = cellOf(i, j); return c ? c[0].sd[c[1]] / 10 : 3000; };
 const lvlCell = (i, j) => { const c = cellOf(i, j); return c ? c[0].lvl[c[1]] / 10 : 0; };
-const hCell = (i, j) => { const c = cellOf(i, j); return c ? c[0].h[c[1]] / 10 : 0; };
 const bil = (f, x, z) => {
   const fx = (x - g.originX) / g.cell - 0.5, fz = (z - g.originZ) / g.cell - 0.5, i = Math.floor(fx), j = Math.floor(fz), ax = fx - i, az = fz - j;
   return (f(i, j) * (1 - ax) + f(i + 1, j) * ax) * (1 - az) + (f(i, j + 1) * (1 - ax) + f(i + 1, j + 1) * ax) * az;
@@ -333,22 +337,6 @@ function toShore(x, z, ux, uz, max = 200) {
     prev = q;
   }
   return max;
-}
-// the downhill of the graded level round a point (a wide stencil sees through what steps are left), or null
-function fallDir(x, z) {
-  let gx = 0, gz = 0;
-  for (const e of [10, 20, 35]) {
-    const l0 = levelAt(x - e, z), l1 = levelAt(x + e, z), m0 = levelAt(x, z - e), m1 = levelAt(x, z + e);
-    if (l0 != null && l1 != null) gx += (l1 - l0) / (2 * e);
-    if (m0 != null && m1 != null) gz += (m1 - m0) / (2 * e);
-  }
-  return Math.hypot(gx, gz) > 1e-4 ? Math.atan2(-gz, -gx) : null;
-}
-// across the narrowest way through a point: the unit vector [ux, uz] and the width
-function narrowest(x, z) {
-  let bw = Infinity, u = [1, 0];
-  for (let a = 0; a < 24; a++) { const vx = Math.cos((a / 24) * Math.PI), vz = Math.sin((a / 24) * Math.PI), wd = toShore(x, z, vx, vz) + toShore(x, z, -vx, -vz); if (wd < bw) { bw = wd; u = [vx, vz]; } }
-  return { u, width: bw };
 }
 // a polyline's point at arc length s, and its unit tangent there (over +-8 m)
 function along(path, s) {
@@ -567,6 +555,6 @@ log(`${white.length} falls and rapids (${white.filter((w) => w.kind === 'falls')
 const misses = groups.filter((q) => q.miss);
 if (misses.length) log(`${misses.length} not on a river: ${misses.map((q) => `${q.name || q.kind} (${q.parts.map((p) => p.src).join('+')}: ${q.miss})`).join('; ')}`);
 if (reportFile) {
-  fs.writeFileSync(reportFile, JSON.stringify(white.map(({ changes, rows: _r, ...w }) => ({ ...w, upName: lakeName(w.up), downName: lakeName(w.down), width: r1(w.width), off: r1(w.off), lat: proj.toLatLon(w.x, w.z) })), null, 1));
+  fs.writeFileSync(reportFile, JSON.stringify(white.map((w) => ({ ...w, upName: lakeName(w.up), downName: lakeName(w.down), width: r1(w.width), off: r1(w.off), lat: proj.toLatLon(w.x, w.z) })), null, 1));
   log(`report -> ${reportFile}`);
 }

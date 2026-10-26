@@ -309,7 +309,7 @@ export function meshHeightAt(grid, x, z, cache = null) {
     else h = a && b ? (grid.hCell(ci, cj) + grid.hCell(ci + 1, cj) + grid.hCell(ci, cj + 1) + grid.hCell(ci + 1, cj + 1)) / 4
       : a ? (grid.hCell(ci, cj) + grid.hCell(ci + 1, cj)) / 2 : (grid.hCell(ci, cj) + grid.hCell(ci, cj + 1)) / 2;
     const sd = grid.shoreAt(vx, vz);
-    if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(h, sd, grid.levelAt(grid.cellX(grid.cellI(vx)), grid.cellZ(grid.cellJ(vz)), 4));
+    if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(h, sd, grid.levelAt(vx, vz, 4)); // d1 rapids: the water's own level here (bilinear), as the mesh below
     if ((a || b) && (a && b ? quadFine(ci, cj) : a ? quadFine(ci, cj) && quadFine(ci, cj - 1) : quadFine(ci, cj) && quadFine(ci - 1, cj))) h += shoreBumps(vx, vz, sd);
     if (cache) cache.set(key, h);
     return h;
@@ -380,7 +380,11 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     let h = hBase;
     const sd = grid.shoreAt(x, z);
     if (fine) {
-      if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(hBase, sd, levelNear(x, z));
+      // d1 rapids: the shore band shapes toward the water's own level at the vertex (bilinear, as the water is drawn and
+      // as surfaceAt and the water shader's surfaceAt have it), not its cell's: where the level falls (a rapids, a falls
+      // made where it really is) the cell's level stood the bed up to a metre or several over the drawn water, a wall of
+      // ground across the channel. On level water the two are the same.
+      if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(hBase, sd, grid.levelAt(x, z, 4));
       if (a || b) {
         // bumps only where every quad sharing this vertex is subdivided, so band edges stay watertight
         const interior = a && b ? quadFine(i, j) : a ? quadFine(i, j) && quadFine(i, j - 1) : quadFine(i, j) && quadFine(i - 1, j);
