@@ -559,7 +559,7 @@ export class PartyMoves {
       if (water && (!path || path.none)) { b.hide(); L.pathless = !path; continue; } // (its path still being found, or none: not drawn)
       if (water) st = this.boatOnWater(L, s, c, n, h, _b, path);
       else if (s.kind === 'carry') {
-        const t = (h - s.h0) * 3600, B = s.sched.boats[c];
+        const ci = L.plan.crew.boats[c][0], t = ((L.base ?? h) - s.h0) * 3600 - ((L.dl && L.dl.get(ci)) || 0), B = s.sched.boats[c]; // (the canoe's carrier's own clock)
         if (B && t >= B.lift && t < B.down) { b.hide(); continue; }
         const o = this.slot(B && t >= B.down ? s.B : s.A, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 };
       } else { const o = this.slot(s.S, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 }; }
@@ -569,15 +569,16 @@ export class PartyMoves {
     const inBoat = s.kind === 'paddle' || s.kind === 'drift' || (s.kind === 'landing' && h >= s.inAt) || (s.kind === 'launch' && h >= s.h1 - 0.012);
     L.persons.forEach((a, i) => {
       const seat = L.seatOf.get(i);
-      if (inBoat && seat) { const b = L.boats[seat.c]; if (a.boat !== b || a.seat !== seat.seat) b.seatCrew(a, seat.seat); return; }
+      if (inBoat && seat) { a.walking = null; const b = L.boats[seat.c]; if (a.boat !== b || a.seat !== seat.seat) b.seatCrew(a, seat.seat); return; }
       if (s.kind === 'carry') {
-        const t = (h - s.h0) * 3600, walks = s.sched.people.get(i) || [];
+        const t = ((L.base ?? h) - s.h0) * 3600 - ((L.dl && L.dl.get(i)) || 0), walks = s.sched.people.get(i) || [];
         let w = null, after = null;
         for (const q of walks) { if (t >= q.s && t < q.e) { w = q; break; } if (t >= q.e) after = q; }
         if (w) {
           const line = this.walkLine(L, s, i, w.dir), f = (t - w.s) / Math.max(1e-6, w.e - w.s), q = along(line, f * line.L, _p, w.kind === 'carry' ? 1.6 : 0.9);
           const side = L.aside.get(i) || 0, x = q.x - q.tz * side, z = q.z + q.tx * side;
-          a.drive({ x, z, heading: headingOf(q.tx, q.tz), v: L.held || (side && !(L.passing && L.passing.has(i))) ? 0 : (line.L / (w.e - w.s)) * rate, mode: w.kind, pack: w.pack, hull: w.canoe != null ? crew.hulls[w.canoe] : undefined, snap: jump });
+          const still = L.held || (L.stop && L.stop.has(i)) || (side && !(L.passing && L.passing.has(i)));
+          a.drive({ x, z, heading: headingOf(q.tx, q.tz), v: still ? 0 : (line.L / (w.e - w.s)) * rate, mode: w.kind, pack: w.pack, hull: w.canoe != null ? crew.hulls[w.canoe] : undefined, snap: jump });
           a.walking = { w, s: f * line.L, line };
           return;
         }
@@ -609,14 +610,24 @@ export class PartyMoves {
       this.lags.set(L.party.id, lag);
       // the holds: the trail's etiquette, a word being said
       L.talkHold = Math.max(0, L.talkHold - dt);
-      L.held = this.holds(L, h - lag.lag, dt) || L.talkHold > 0;
+      // (a carry's delays are each person's own (L.dl, game seconds): those stopped for you wait, the rest walk on; the
+      // carry ends once the last is over, and its longest delay then goes on the party's clock)
+      L.dl = L.dl || new Map();
+      const dlMax = () => { let m = 0; for (const v of L.dl.values()) m = Math.max(m, v); return m; };
+      if (L.dl.size && L.dlSeg && this.segAt(L, h - lag.lag - dlMax() / 3600) !== L.dlSeg) { lag.lag += dlMax() / 3600; L.dl.clear(); L.dlSeg = null; }
+      L.held = this.holds(L, h - lag.lag - dlMax() / 3600, dt) || L.talkHold > 0 || this.trailBusy(L, h - lag.lag - dlMax() / 3600);
+      if (!L.held && L.stop && L.stop.size && L.seg && L.seg.kind === 'carry') {
+        L.dlSeg = L.seg;
+        for (const i of L.stop) L.dl.set(i, (L.dl.get(i) || 0) + gh * 3600);
+      }
       if (L.held) lag.lag += gh;
       else if (lag.lag > 0) {
         // made up: while you are not by them, or in a stop (the lunch, a drift)
         const s = L.seg, d = this.distTo(L);
         if (d > MOVES.near || (s && (s.kind === 'drift' || (s.kind === 'landing' && s.lunch)))) lag.lag = Math.max(0, lag.lag - gh * (d > MOVES.near ? MOVES.catchUp : 1));
       }
-      const he = h - lag.lag;
+      const he = h - lag.lag - dlMax() / 3600;
+      L.base = h - lag.lag; // (a carry's people: each on this clock less their own delay)
       // (in, and the camp has them: its canoes up the bank and its people at the fire, from this frame)
       if (he >= L.plan.end && L.plan.to.kind === 'site' && this.partyCamps) { const D = this.partyCamps.drawn.get(L.plan.to.key); if (D && D.canoesIn) { this.drop(L); continue; } }
       // (far off: only its place along the plan; the actors made as it comes into range, let go as it leaves)
@@ -651,9 +662,11 @@ export class PartyMoves {
   // the tread till you are by. The moment (hints.js 'partytrail') the first time a loaded one comes at you.
   holds(L, h, dt) {
     const s = L.seg, p = this.player;
-    for (const [i, v] of L.aside) { const want = L.asideWant && L.asideWant.get(i) || 0, nv = v + clamp(want - v, -dt * 1.6, dt * 1.6); if (Math.abs(nv) < 1e-3 && !want) L.aside.delete(i); else L.aside.set(i, nv); }
+    // (the step off the tread eased in and out: last frame's wants, over whoever is aside or wants to be)
+    for (const i of new Set([...L.aside.keys(), ...(L.asideWant ? L.asideWant.keys() : [])])) { const v = L.aside.get(i) || 0, want = (L.asideWant && L.asideWant.get(i)) || 0, nv = v + clamp(want - v, -dt * 1.6, dt * 1.6); if (Math.abs(nv) < 1e-3 && !want) L.aside.delete(i); else L.aside.set(i, nv); }
     if (L.asideWant) L.asideWant.clear();
     L.passing = L.passing || new Set(); L.passing.clear();
+    L.stop = L.stop || new Set(); L.stop.clear();
     if (!s || s.kind !== 'carry' || !p.onFoot) return false;
     const me = nearestOn(s.trail, p.x, p.z);
     if (me.d > 6 || Math.hypot(s.A.L.x - p.x, s.A.L.z - p.z) > s.trail.L + 60) return false;
@@ -668,6 +681,7 @@ export class PartyMoves {
     L.asideWant = L.asideWant || new Map();
     // your way along the trail (m/s, + their way): standing, or coming at them, or going their way ahead of them
     const fx = Math.cos(p.heading), fz = -Math.sin(p.heading), sp = Math.abs(p.speed || 0) > 0.25 ? p.speed : 0;
+    const stop = (i) => { L.stop.add(i); };
     L.persons.forEach((a, i) => {
       const W = a.walking; if (!W) return;
       const mine = nearestOn(W.line, p.x, p.z), ahead = mine.s - W.s; // (on their own line: + ahead of them)
@@ -677,20 +691,45 @@ export class PartyMoves {
       if (!near) {
         // (you by them, or off the tread: whoever stepped aside comes back once you are past)
         if (L.aside.has(i) && (ahead < -1.5 || mine.d > MOVES.clear || Math.abs(ahead) > MOVES.ahead + 4)) L.asideWant.set(i, 0);
-        else if (L.aside.has(i) && !L.wasPassing?.has(i)) { L.asideWant.set(i, L.aside.get(i) > 0 ? MOVES.aside : -MOVES.aside); hold = true; }
+        else if (L.aside.has(i) && !L.wasPassing?.has(i)) { L.asideWant.set(i, L.aside.get(i) > 0 ? MOVES.aside : -MOVES.aside); stop(i); }
         return;
       }
       // going their way ahead of them: they keep behind you (nobody passes on the trail)
-      if (same) { hold = true; return; }
+      if (same) { stop(i); return; }
       // you loaded: they step off the tread and wait till you are by
-      if (carrying) { hold = true; L.asideWant.set(i, L.aside.has(i) ? Math.sign(L.aside.get(i)) * MOVES.aside : this.asideSide(W, mine) * MOVES.aside); return; }
+      if (carrying) { stop(i); L.asideWant.set(i, L.aside.has(i) ? Math.sign(L.aside.get(i)) * MOVES.aside : this.asideSide(W, mine) * MOVES.aside); return; }
       // they loaded, you not: they stop and wait for you to step aside (the moment says it)
-      if (loaded) { hold = true; return; }
+      if (loaded) { stop(i); return; }
       // neither loaded: one walking back empty steps round you without stopping
       if (ahead < 5) { L.passing.add(i); L.asideWant.set(i, L.aside.has(i) ? Math.sign(L.aside.get(i)) * 1.1 : this.asideSide(W, mine) * 1.1); }
     });
     L.wasPassing = new Set(L.passing);
+    // (whoever is behind one stopped, going the same way, stops too: nobody passes in their own line either; and so
+    // does whoever has not set off yet)
+    if (L.stop.size) L.persons.forEach((a, i) => {
+      if (L.stop.has(i)) return;
+      const W = a.walking;
+      if (!W) { L.stop.add(i); return; }
+      for (const j of L.stop) { const V = L.persons[j].walking; if (V && V.w.dir === W.w.dir && V.s > W.s) { L.stop.add(i); break; } }
+    });
     return hold;
+  }
+  // Between parties on one carry: one about to go onto the trail waits at its landing while another party is out on it
+  // (from either end: nobody passes on the trail); two about to go at once, the one that came first goes first
+  trailBusy(L, h) {
+    const s = this.segAt(L, h);
+    if (s.kind !== 'carry') return false;
+    const on = (X, hx) => { const q = this.segAt(X, hx); if (q.kind !== 'carry' || q.p !== s.p) return null; const t = (hx - q.h0) * 3600; let walking = false, soon = false; for (const ws of q.sched.people.values()) for (const w of ws) { if (t >= w.s && t < w.e) walking = true; else if (w.s >= t && w.s < t + 30) soon = true; } return { q, walking, soon }; };
+    const me = on(L, h);
+    if (!me || me.walking || !me.soon) return false;
+    for (const X of this.active.values()) {
+      if (X === L || !X.ready) continue;
+      const o = on(X, this.now - this.lagOf(X.party.id));
+      if (!o) continue;
+      if (o.walking) return true;
+      if (o.soon && (o.q.h0 < s.h0 || (o.q.h0 === s.h0 && X.id < L.id))) return true;
+    }
+    return false;
   }
   // which side of the tread to step off to: away from you, and the side with no trunk in the way
   asideSide(W, mine) {
