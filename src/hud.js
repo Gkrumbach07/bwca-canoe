@@ -230,7 +230,10 @@ export class Hud {
     this.overview = null;
     this.scaleShown = '';
     this._v = new THREE.Vector3();
-    this.loadOverview();
+    // round A join (load time): the overview (3.6 MB, the largest download at the start, a third of it) is wanted only
+    // when the map is zoomed out past the far field; it waits until the game has been up a few seconds (update), or
+    // until the map first opens
+    this.overviewAt = 0;
     this.bindMap();
     this.bindKeys();
     this.marksBuild();
@@ -387,6 +390,7 @@ export class Hud {
     m.classList.toggle('glance', mode === 'glance'); m.classList.toggle('sheet', mode === 'sheet' || fading); m.classList.toggle('corner', mode === 'corner');
     m.classList.toggle('show', mode !== 'hidden');
     if (fading) this.sheetFade = setTimeout(() => { if (this.mode === 'hidden') m.classList.remove('sheet'); }, SHEET_FADE);
+    if (mode !== 'hidden') this.loadOverview();
     if (mode === 'sheet') {
       this.openPaper('map');
       this.view.span = this.openSpan();
@@ -564,7 +568,8 @@ export class Hud {
   // the map is zoomed out past the loaded far field.
   loadOverview() {
     const ov = this.world.meta.overview;
-    if (!ov) return;
+    if (!ov || this.overviewAt < 0) return;
+    this.overviewAt = -1; // (once)
     const img = new Image();
     img.crossOrigin = 'anonymous'; // the data may live on another origin (VITE_DATA_URL); the pixels are read back below
     img.onload = () => {
@@ -806,6 +811,7 @@ export class Hud {
     this.ctx = ctx;
     const { player, settings } = { player: ctx.player, settings: this.settings };
     this.player = player;
+    if (this.overviewAt >= 0) { const now = performance.now(); if (!this.overviewAt) this.overviewAt = now + 5000; else if (now > this.overviewAt) this.loadOverview(); } // round A join
     const air = this.el.air;
     if (settings) {
       air.classList.toggle('nohints', !settings.get('keyHints'));

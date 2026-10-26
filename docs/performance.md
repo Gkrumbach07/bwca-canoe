@@ -173,7 +173,22 @@ title card.
     gzipped by Pages), overview.png (3.7 MB), the 3 × 3 tiles and the far field.
   - Over the wire that is about 13 MB. That is 4 s at 25 Mbit/s, 1 s at 100.
   - A first visit also bakes the occlusion and caches it in IndexedDB. That costs another 0.9 s at ×1 and 3 s at ×4.
-  - Coming soon (stream P2-B's creek levels): each tile worker fetches `water-grade.bin` (818 KB gzipped) once.
+- **The round A join (load time).** Measured on production builds behind a server that holds every response 40 ms and
+  shares 20 Mbit/s between them (8 Mbit/s and 60 ms for the slow row), so the order of the downloads counts. Times
+  are to the title; medians of interleaved runs.
+
+  | | 20 Mbit/s, CPU ×1 | 8 Mbit/s, CPU ×1 | 20 Mbit/s, CPU ×4 | Downloaded before the title |
+  |---|---|---|---|---|
+  | Before | 6.2 s | 10.0 s | 11.9 s | 11.0 MB in 32 requests |
+  | After | 5.8 s | 9.2 s | 11.2 s | 6.7 MB in 52 requests |
+
+  - **P2-B's creek levels** (`src/water-grade.bin`) were one 818 KB gzip that every tile worker read whole before its
+    first tile. They are now pieces fetched by range as the tiles that need them arrive (`water-levels.js`,
+    `scripts/water-grade-pack.mjs`): 60–70 KB at the start.
+  - **overview.png** (3.6 MB, a third of the start's bytes) draws only when the map is zoomed out past the far field.
+    It now loads 5 s after the game is up, or when the map first opens (hud.js `overviewAt`).
+  - **The shader prewarm** (`prewarmPasses`, the 15 programs past the main compile) runs behind the title. It takes
+    0.4–0.6 s at ×1 and about 1 s at ×4, and adds nothing to the time to the title.
 - **Memory in play.**
   - The JS heap is 0.8–1.1 GB around Lake One and 1.5 GB after a jump to Snowbank, because 36 tiles stay cached.
   - The browser's renderer process is 0.4–0.6 GB more, and the GPU process 0.4–0.9 GB.
