@@ -395,11 +395,12 @@ for (const q of groups) {
 // (a chain: each lies within 30 m of the channel of the first), and along that channel, out to `reach` past the first
 // and the last (or to the lake it leaves or enters), the water keeps its levels at the two ends and takes its fall at
 // the drops: only `gentle` per metre (at most `share` of the fall) between them, the rest shared among the drops (a
-// falls twice a rapids' share), a falls all at its line (the cells either side of it a step apart: the water drawn
-// bilinear makes that a slope of one cell, 10 m), a rapids over a run `run` long (its fall over it at most
-// run.slope, the runs kept apart). Every river cell of the channel takes the level of its place along it (the bed with
-// it: the depth is kept); lakes never change.
-const PATCH = { reach: 220, gentle: 0.002, share: 0.25, minDrop: 0.3, pad: 12, near: 30, weight: { falls: 2, rapids: 1 }, run: { slope: 0.07, min: 25, max: 90 }, falls: { most: 10, cascade: 0.3 } };
+// falls twice a rapids' share, a named one half as much again), a falls all at its line (the cells either side of it
+// a step apart: the water drawn bilinear makes that a slope of one cell, 10 m; at most falls.most, the rest a cascade
+// below it), a rapids over a run `run` long (its fall over it at most run.slope, the runs kept apart). Every river
+// cell of the channel takes the level of its place along it (near a falls, along the falls's own straight line), the
+// bed with it (the depth is kept); lakes never change.
+const PATCH = { reach: 220, gentle: 0.002, share: 0.25, minDrop: 0.3, pad: 12, near: 30, weight: { falls: 2, rapids: 1, named: 1.5 }, run: { slope: 0.07, min: 25, max: 90 }, falls: { most: 10, cascade: 0.3 } };
 const patched = new Map(); // global cell k -> the level (dm) a chain has given it (later chains build on earlier ones)
 const lvlNow = (i, j) => { const k = j * g.width + i; return patched.has(k) ? patched.get(k) / 10 : lvlCell(i, j); };
 const white = [];
@@ -430,9 +431,10 @@ for (const ch of chains) {
   if (!(D >= PATCH.minDrop)) { for (const o of outs) o.flat = true; continue; }
   // the drops' shares, and each rapids' run (kept within half the gap to its neighbours and inside the reach)
   const len = sb - sa, gentle = Math.min(D * PATCH.share, PATCH.gentle * len), main = D - gentle;
-  const wsum = outs.reduce((s, o) => s + PATCH.weight[o.kind], 0);
+  const weight = (o) => PATCH.weight[o.kind] * (o.name ? PATCH.weight.named : 1);
+  const wsum = outs.reduce((s, o) => s + weight(o), 0);
   outs.forEach((o, n) => {
-    o.drop = (main * PATCH.weight[o.kind]) / wsum;
+    o.drop = (main * weight(o)) / wsum;
     const lo = n ? (outs[n - 1].sc + o.sc) / 2 : sa + 2, hi = n < outs.length - 1 ? (outs[n + 1].sc + o.sc) / 2 : sb - 2;
     if (o.kind === 'falls') {
       // a falls takes at most falls.most in its one step; the rest goes down a cascade below it, at most falls.cascade a metre
