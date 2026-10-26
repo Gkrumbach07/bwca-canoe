@@ -35,12 +35,13 @@
 // conversation or at the counter of the outfitter they were at; once it is paid they thank you. Who you talked to, what
 // you asked them and what they gave you is saved under `bwca-canoe:people`, cleared with a new season.
 //
-// The figures. A pool of three figures on the paddler's own model and material (figure.js buildFigure with the
-// paddler's material, so no new shader program is added and no light), each recoloured per person by vertex role (the
-// figure is built once in key colours, and each vertex's role and baked occlusion are kept), posed with figure.js's
-// Poser: standing, leaning on the counter, or sitting. Never more than three are drawn, and a store's people are drawn
-// together once you are within 40 m of its walls (so nobody appears as you come in the door, or as a tie-up puts you
-// there); the walker is held off them as off a trunk.
+// The figures. A pool of eight figures (round A-F: three before the parties' camps) on the paddler's own model and
+// material (figure.js buildFigure with the paddler's material, so no new shader program is added and no light), each
+// recoloured per person by vertex role (the figure is built once in key colours, and each vertex's role and baked
+// occlusion are kept), posed with figure.js's Poser: standing, leaning on the counter, or sitting. Never more than eight
+// are drawn (one not drawn is out of the scene graph), and a store's people are drawn together once you are within
+// 40 m of its walls (so nobody appears as you come in the door, or as a tie-up puts you there); the walker is held off
+// them as off a trunk.
 //
 // Hooks for later. A visitor going on a trip carries `party = { route, lakes, leaves, nights }` (a real chain of lakes
 // out from the landing over the portages). Later they will put in as a party on the water that claims campsites through
@@ -286,7 +287,9 @@ export class Body {
     fig.bones.head.add(bun);
     const bcol = bun.geometry.getAttribute('color');
     this.parts.push({ attr: bcol, roles: rolesOf(bcol.array), written: Float32Array.from(bcol.array) });
-    scene.add(this.group);
+    // round A-F (ra-perf): a body not drawn is out of the scene graph (r186 walks hidden objects' matrices every frame:
+    // eight parked figures would be ~250 objects in that walk); show() puts it back, park() takes it out
+    this.scene = scene;
     this.who = null; // the figure of a person: { person, fig: 0 | 1 }
     this.s = { breath: Math.random() * 6, shift: Math.random() * 6, glanceT: 2 + Math.random() * 3, glanceYaw: 0, glancePitch: 0, yaw: 0, pitch: 0, turn: 0, look: 0 };
   }
@@ -296,6 +299,8 @@ export class Body {
     this.bun.visible = !!look.wear.bun && !look.wear.hat;
     this.group.scale.setScalar(look.wear.scale || 1);
   }
+  show() { if (this.group.parent !== this.scene) this.scene.add(this.group); this.group.visible = true; }
+  park() { this.group.visible = false; if (this.group.parent) this.group.parent.remove(this.group); }
 }
 
 // The standing pose, as canoe.js stands the walker (the legs to planted feet, the arms hanging, the breath), and its two
@@ -1106,7 +1111,7 @@ export class People {
     const b = this.bodies.find((x) => !x.who && !x.lent); if (!b) return null;
     b.lent = owner; return b;
   }
-  giveBack(b) { if (b && b.lent) { b.lent = null; b.who = null; b.group.visible = false; } }
+  giveBack(b) { if (b && b.lent) { b.lent = null; b.who = null; b.park(); } }
 
   // --- per frame ---------------------------------------------------------------------------------------------------
   update(dt) {
@@ -1132,21 +1137,21 @@ export class People {
     if (this.extra) { try { for (const w of this.extra() || []) if (w && w.f) want.push(w); } catch (e) { console.warn('people.extra', e); } } // round A-F: the parties' camps
     want.sort((a, b) => a.d - b.d);
     const free = this.bodies.filter((b) => !b.lent), keep = want.slice(0, free.length); // (round A-F: a body lent out is the borrower's)
-    for (const b of free) if (b.who && !keep.some((w) => w.person === b.who.person && w.fig === b.who.fig)) { b.who = null; b.group.visible = false; }
+    for (const b of free) if (b.who && !keep.some((w) => w.person === b.who.person && w.fig === b.who.fig)) { b.who = null; b.park(); }
     for (const w of keep) {
       if (free.some((b) => b.who && b.who.person === w.person && b.who.fig === w.fig)) continue;
       const b = free.find((x) => !x.who); if (!b) break;
       b.who = { person: w.person, fig: w.fig };
       b.wear(w.f.look);
       b.s.yaw = 0; b.s.pitch = 0; b.s.turn = 0;
-      b.group.visible = true;
+      b.show();
     }
     // pose them, each looking at you when you are near
     const eye = V(p.x, (p.foot ? p.foot.y : p.altitude || 0) + 1.62, p.z), inStore = !!(this.outfitter && this.outfitter.visit && this.outfitter.visit.inside);
     for (const b of this.bodies) {
       if (!b.who || b.lent) continue;
       const v = b.who.person, f = v.figs[b.who.fig];
-      if (!f) { b.who = null; b.group.visible = false; continue; } // (round A-F: a party's figure gone in for the night)
+      if (!f) { b.who = null; b.park(); continue; } // (round A-F: a party's figure gone in for the night)
       this.look(b, v, f, eye, dt, inStore);
       b.group.position.set(f.x, f.y, f.z);
       b.group.rotation.set(0, f.heading + b.s.turn, 0);
@@ -2038,7 +2043,7 @@ export class People {
 
   // --- the console and the tests ----------------------------------------------------------------------------------------
   stats() {
-    return { drawn: this.bodies.filter((b) => b.group.visible).map((b) => `${b.who.person.name}${b.who.fig ? ' (2)' : ''}`), rosters: [...this.rosters.entries()].map(([ep, l]) => ({ ep, people: l.map((v) => `${v.name} · ${v.arch}`) })), focus: this.focus ? `${this.focus.person.name} [${this.focus.key}]` : null };
+    return { drawn: this.bodies.filter((b) => b.group.visible && b.who).map((b) => `${b.who.person.name}${b.who.fig ? ' (2)' : ''}`), rosters: [...this.rosters.entries()].map(([ep, l]) => ({ ep, people: l.map((v) => `${v.name} · ${v.arch}`) })), focus: this.focus ? `${this.focus.person.name} [${this.focus.key}]` : null };
   }
 }
 const GIFTS = { 'lure:daredevle': 'an old red-and-white Daredevle', 'lure:silverminnow': 'a Johnson Silver Minnow', 'lure:lazyike': 'a Lazy Ike', leeches: 'a dozen leeches' };
