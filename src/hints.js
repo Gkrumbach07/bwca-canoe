@@ -61,6 +61,7 @@ import * as PACE from './pace.js';
 import { itemDef } from './items.js';
 
 const SHOW = 7;        // seconds a moment is up
+const DODGE_EVERY = 0.15; // seconds between looks at the notes the card keeps clear of (dodge)
 const GAP = 3;         // seconds between two
 const TEACH_GAP = 16;  // seconds from one teaching line to the next (its SHOW, then quiet)
 const TOAST = 3;       // seconds the pace toast is up
@@ -177,6 +178,7 @@ export class Hints {
     this.pend = new Map();     // event moments waiting: id → { t (real s), data }
     this.clockT = 0;           // real seconds, for the events' ages
     this.paceSig = null; this.toastT = 0;
+    this.dx = 0; this.dy = 0; this.dodgeT = 0; // the card moved clear of the notes (dodge), Air px
     this.log = [];             // what was shown and learnt, in order (the tests)
     const air = document.getElementById('air') || document.body;
     this.el = document.createElement('div'); this.el.id = 'hint'; this.el.className = 'fade'; this.el.setAttribute('aria-live', 'polite');
@@ -545,6 +547,7 @@ export class Hints {
       this.cur.t += dt;
       const ok = this.clear(this.cur.m, this.cur.card);
       this.place(!!(ok && this.paperNow()));
+      if ((this.dodgeT -= dt) <= 0) this.dodge();
       if (this.cur.t >= SHOW || !ok) this.hide();
       return;
     }
@@ -621,11 +624,49 @@ export class Hints {
     this.el.classList.toggle('body', m.prio === BODY);
     this.place(!!this.paperNow());
     this.el.classList.add('show');
+    this.dodge();
     this.log.push({ id: m.id, how, at: this.clock(), text: plain(text) });
   }
   hide() {
     this.cur = null; this.gapT = GAP;
     this.el.classList.remove('show');
+  }
+  // the cons join (the bear's morning: "Thirsty. Drink from your bottle" over the bear's note): the card keeps clear of
+  // the notes at the bottom left (#lines, two at most, up to 720 px wide) and the place title above them. It sits in
+  // its own place, centred above the action line, unless one of them reaches under it; then it moves right, past
+  // their right edge, on the same line; if the screen is too narrow for that, up above them (and right of the title
+  // if it is in the way there, or above it too). Looked at when it
+  // shows and every DODGE_EVERY s while it is up (a note can come in under it). Screen px, the Air's zoom undone.
+  dodge() {
+    this.dodgeT = DODGE_EVERY;
+    const el = this.el, set = (x, y) => {
+      if (x === this.dx && y === this.dy) return;
+      this.dx = x; this.dy = y;
+      el.style.setProperty('--hx', `${x}px`); el.style.setProperty('--hy', `${y}px`);
+    };
+    if (!this.cur || el.classList.contains('incard') || typeof document === 'undefined') { set(0, 0); return; }
+    const air = document.getElementById('air'); if (!air) return;
+    const z = parseFloat(getComputedStyle(air).zoom) || 1, W = window.innerWidth, H = window.innerHeight;
+    const r = el.getBoundingClientRect(); if (!r.width) return;
+    const bottom = parseFloat(getComputedStyle(el).bottom); if (!Number.isFinite(bottom)) return;
+    // where it sits of itself: centred, its bottom edge `bottom` up (the translation it has now left out)
+    const home = { l: W / 2 - r.width / 2, r: W / 2 + r.width / 2, b: H - bottom * z, t: H - bottom * z - r.height };
+    const box = (id, on) => { const e = document.getElementById(id); if (!e || !on(e)) return null; const b = e.getBoundingClientRect(); return b.width && b.height ? b : null; };
+    const near = [box('lines', (e) => [...e.children].some((c) => !c._gone)), box('place', (e) => e.classList.contains('show'))].filter(Boolean);
+    const right = [box('pace-toast', (e) => e.classList.contains('show'))].filter(Boolean);
+    const G = 18 * z, hits = (a, o) => o.left < a.r + G && o.right > a.l - G && o.top < a.b + G && o.bottom > a.t - G;
+    // at its own height first, then above the notes, then above the title too: at each, where it is, or moved right
+    // past what it would cover if the screen is wide enough
+    let c = { ...home };
+    for (let k = 0; k < 4; k++) {
+      const hit = near.filter((o) => hits(c, o));
+      if (!hit.length) break;
+      const dx = Math.max(...hit.map((o) => o.right + G - c.l)), m = { ...c, l: c.l + dx, r: c.r + dx };
+      if (m.r <= W - 40 * z && !near.some((o) => hits(m, o)) && !right.some((o) => hits(m, o))) { c = m; break; }
+      const dy = c.b - (Math.min(...hit.map((o) => o.top)) - G);
+      c = { ...c, t: c.t - dy, b: c.b - dy };
+    }
+    set(Math.round((c.l - home.l) / z), Math.round((home.b - c.b) / z));
   }
   // over a card it is about (or the paper a greyed verb's key opened), the line is lifted out of the Air, which sits
   // under every paper, to the top of the screen under the strip (hud.css body > #hint.incard); back in the Air after
@@ -650,7 +691,7 @@ export class Hints {
     return true;
   }
   // a moment shown now, whatever its trigger says (the console and the tests)
-  fire(id) { const m = BY_ID.get(id); if (!m) return false; this.show(m, m.text, 'full'); return true; }
+  fire(id) { const m = BY_ID.get(id) || MOMENTS.find((q) => q.id === id); if (!m) return false; this.show(m, m.text, 'full'); return true; } // (the streams push their own into MOMENTS after the map)
 
   // --- the pace toast --------------------------------------------------------------------------------------------------
   paceToast(dt) {
