@@ -1613,11 +1613,13 @@ function verbMenu(ref, sc = null) {
       case 'hang': { const a = acts.find((x) => x.id === 'hang'); grey(label, v.why || 'carry it to a tree and point at the limb', a && (a.needs || a.next) ? { needs: a.needs, next: a.next } : null); break; } // (E at the tree; what the hang needs from E's chores)
       case 'hand': {
         if (e && e.fixed) break; // (fb5 B: the bottle in its pocket never goes to a hand: no verb that is always grey)
+        // (content join: what is in your hand already has no Put in hand, a verb that was always grey)
+        if (e && !t && g && g.c && inv.spec(g.c).one && inv.rootWhere(g.c) === 'hands') break;
         if (e && !t) { viaHook(v.id, label, v.why || 'not from here'); break; } // a plain thing into a free hand (stream B)
         if (!t) break;
         const o = t.obj;
-        if (o.where === 'hands') grey(label, 'in your hand already');
-        else if (!onFoot() && !inv.atStash) grey(label, 'not from the canoe');
+        if (o.where === 'hands') break;
+        if (!onFoot() && !inv.atStash) grey(label, 'not from the canoe');
         else if (typeof inv.freeHand === 'function' && inv.freeHand() < 0) grey(label, 'both hands are full');
         else out.push({ label, run: () => world('carry', t.id, 'hands') });
         break;
