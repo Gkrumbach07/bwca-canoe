@@ -52,6 +52,7 @@ import { MapTable } from './maptable.js'; // fb2 D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
+import { Actors } from './actors.js'; // p2 A
 import { inventory } from './inventory.js'; // fb A
 import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
 import { ContainerView } from './containers.js'; // fb A
@@ -292,6 +293,13 @@ async function main() {
   // come first.
   const talk = new Dialogue({ camera, player, chase, hud, day, frame: () => !(outfitter.visit && outfitter.visit.inside) });
   npcs.dialogue = talk;
+  // p2 A: the actor layer (actors.js): people out on the water and the trails, posed with the player's own stroke, gait and
+  // carry (poses.js). The parties drive it (people phase 2); __game.actors.demo() (test only) has two canoes crossing Lake
+  // One and a party of four carrying over the Lake One - Kawishiwi River portage. Bodies come from the people's figure pool
+  // when it lends them (npcs.js lend / giveBack: the eight are shared), else from the layer's own; hulls, figures, paddles
+  // and packs draw with the rig's material, so no program or light is added. Updated after the camera, below.
+  const actorPool = typeof npcs.lend === 'function' ? { take: (look) => { const b = npcs.lend('actors'); if (b) b.wear(look); return b; }, give: (b) => npcs.giveBack(b) } : null;
+  const actors = new Actors({ scene, ground: (x, z) => tiles.groundAt(x, z), world, water, ripples, material: canoe.material, lidMaterial: canoe.lid.material, pool: actorPool, reflectLayer: REFLECT_LAYER });
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -335,6 +343,7 @@ async function main() {
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
   window.__game.npcs = npcs; // hubs 3C
+  window.__game.actors = actors; // p2 A
   // fb A: one physical inventory (items.js, inventory.js): everything you own is an item in a container (the packs,
   // the barrels, the bucket, the tackle box, the pockets, the stringer) or a long item (the rod, the paddle), each
   // somewhere in the world, reachable only by you, the canoe or an outfitter's stash; packs.js runs its frame and the
@@ -894,6 +903,7 @@ async function main() {
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     guardView(shell);
+    { const e = camera.matrixWorld.elements; actors.update(dt * ts, camera.position.x, camera.position.z, -e[8], -e[10]); } // p2 A: the people on the water and the trails, after the camera
     talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
     pointer.update(dt, shell); // fb2 A: the dot, its label and the rim, after the camera
     setOrigin(player.x, player.z);
