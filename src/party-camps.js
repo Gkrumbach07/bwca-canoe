@@ -28,6 +28,7 @@ import { PropBuilder, propMaterial, TILE, buildHull, bakeSelf } from './prop-kit
 import { buildTentMesh, buildAFrameMesh, buildItemProp, tentPose, TENT_SIZE, AFRAME_SIZE, TENT_COLOURS } from './props.js';
 import { mulberry32 } from './rng.js';
 import { PRI } from './dialogue.js';
+import { MOVE } from './parties.js';
 
 export const CAMPS = {
   drawR: 900,      // m: camps drawn within this of you
@@ -48,6 +49,10 @@ export const CAMPS = {
   bank: 3.4,       // m from the water's edge the overturned canoes lie (their middles)
 };
 const HULLS = [0xa9aca8, 0xa9aca8, 0xa9aca8, 0xc5a46e, 0xc5a46e, 0x5b7a5a, 0x9c4b3b, 0x4d6a82]; // aluminium, Kevlar tan, green, red, blue
+// p2 C: the hull colours they paddle (parties.js crewOf, hull.js HULL_PALETTES' outsides), so a camp's canoes on the bank
+// are the ones that came in
+const HULL_HEX = { aluminium: 0xa4a9ac, kevlar: 0xc0954c, forest: 0x46542f };
+const ALL = Object.freeze({ camp: true, canoes: true, people: true });
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -124,9 +129,33 @@ export class PartyCamps {
     this.said = new Map();    // party id -> the lines said (a day)
     this.t = 0; this.built = 0; this.buildMs = 0;
     this.off = false;         // true: nothing drawn (a switch for the console and the cost test)
+    this.moves = null;        // p2 C: party-moves.js (main.js), for a party's delay on the way (lagOf)
+    this.recent = new Map();  // p2 C: line -> the hour (fire.js's clock) any party last said it
+  }
+  // p2 C: the hand-off with the parties on the move (party-moves.js). On the day they come in, the camp comes up as they
+  // land (the plan's arrival, and any delay they met on the way) and its canoes and people once they have unloaded
+  // (MOVE.land on): till then their canoes are in the water at the landing and they are the actor layer's. On the day
+  // they leave, the canoes go in the water and the people with them MOVE.launch before the leave hour; the tents and
+  // the rest go once nobody is looking (parties.js lets the site go then). A stay with no plan either side (a night
+  // with no site) keeps phase 1's hours.
+  times(stay) {
+    const P = this.parties, p = stay.party, k = p.stays.indexOf(stay);
+    const inn = k >= 0 && P.legPlan ? P.legPlan(p, k) : null, out = k >= 0 && P.legPlan ? P.legPlan(p, k + 1) : null;
+    const lag = this.moves && this.moves.lagOf ? this.moves.lagOf(p.id) : 0;
+    const arrive = inn ? inn.arrive + lag : stay.land;
+    return { arrive, landed: inn ? arrive + MOVE.land : arrive, depart: out ? out.start - MOVE.launch : Infinity };
+  }
+  // what of a camp shows now: { camp, canoes, people }
+  // (only on the days they come and go, whose plans are today's: a past day's would sweep an old week)
+  shows(stay) {
+    const T = this.parties.today, h = this.day.hours;
+    if (T !== stay.start && T !== stay.end) return ALL;
+    const t = this.times(stay);
+    if (T === stay.start) return { camp: h >= t.arrive, canoes: h >= t.landed, people: h >= t.landed };
+    return { camp: true, canoes: h < t.depart, people: h < t.depart };
   }
   // the pieces' occlusion bakes and a few of them, made behind the title (main.js) so the first camp built costs little
-  warm() { hullGeometry(HULLS[0]); hullGeometry(HULLS[3]); tentGeometry('dome', TENT_COLOURS[1]); tentGeometry('aframe', TENT_COLOURS[0]); woodpileGeometry(); itemGeometry('paddle', 3); itemGeometry('drybag', 1); itemGeometry('drybag', 2); }
+  warm() { hullGeometry(HULL_HEX.aluminium); hullGeometry(HULL_HEX.kevlar); tentGeometry('dome', TENT_COLOURS[1]); tentGeometry('aframe', TENT_COLOURS[0]); woodpileGeometry(); itemGeometry('paddle', 3); itemGeometry('drybag', 1); itemGeometry('drybag', 2); }
   get now() { const d = this.day; return d.doy * 24 + d.hours; } // fire.js's clock
   get quiet() { const h = this.day.hours; return h >= CAMPS.quiet[0] || h < CAMPS.quiet[1]; }
 
@@ -135,6 +164,7 @@ export class PartyCamps {
     const p = this.player, live = this.parties.live, want = [];
     for (const [key, c] of live) {
       if (!c.site || !c.site.layout) continue; // (its tile's props not built yet)
+      if (!this.shows(c.stay).camp) continue; // (p2 C: they are still on the way)
       const d = Math.hypot(c.site.x - p.x, c.site.z - p.z);
       if (d < CAMPS.keepR) want.push({ key, c, d });
     }
@@ -158,8 +188,9 @@ export class PartyCamps {
   letGo(key) {
     const D = this.drawn.get(key); if (!D) return;
     if (D.mesh) { this.scene.remove(D.mesh); D.mesh.geometry.dispose(); }
+    if (D.canoeMesh) { this.scene.remove(D.canoeMesh); D.canoeMesh.geometry.dispose(); }
     const dyn = this.tiles.dynamic || [];
-    for (const o of D.obstacles) { const i = dyn.indexOf(o); if (i >= 0) dyn.splice(i, 1); }
+    for (const o of [...D.obstacles, ...D.canoeObs]) { const i = dyn.indexOf(o); if (i >= 0) dyn.splice(i, 1); }
     if (this.fires.get(D.fireKey)) this.fires.douse(D.fireKey);
     D.v.live = false; D.v.figs = [];
     this.drawn.delete(key);
@@ -170,6 +201,7 @@ export class PartyCamps {
     const site = c.site, L = site.layout, F = L.fire, w = this.world, T = this.tiles, party = c.party;
     const rng = mulberry32(((c.stay.seed >>> 0) ^ 0x5eed1) >>> 0), G = (x, z) => T.groundAt(x, z);
     const ox = F.x, oz = F.z, pieces = [], obstacles = [], spots = { fire: [], seats: [], shore: [], tents: [] };
+    const canoePieces = [], canoeObs = []; // p2 C: the canoes on the bank, a mesh of their own (they go in the water)
     const toWater = w.deeperDir(F.x, F.z);
     const near = (x, z, list, r) => list.some((q) => Math.hypot(q.x - x, q.z - z) < r);
     // the canoes, overturned on the bank above the landing, lying along the shore (so a slope tips them a little across
@@ -200,11 +232,12 @@ export class PartyCamps {
     }
     for (const cn of canoes) {
       const m = new THREE.Matrix4().makeTranslation(cn.x - ox, cn.y, cn.z - oz).multiply(cn.basis).multiply(new THREE.Matrix4().makeRotationX(Math.PI));
-      pieces.push({ geo: hullGeometry(pick(rng, HULLS)), m });
-      obstacles.push({ x: cn.x, z: cn.z, ux: cn.tx, uz: cn.tz, hx: 2.5, hz: 0.45, box: true });
+      const hk = pick(rng, HULLS), crewHull = this.parties.crewOf ? this.parties.crewOf(party).hulls[canoes.indexOf(cn)] : null; // (p2 C: the colour they paddle)
+      canoePieces.push({ geo: hullGeometry(crewHull ? HULL_HEX[crewHull] : hk), m });
+      canoeObs.push({ x: cn.x, z: cn.z, ux: cn.tx, uz: cn.tz, hx: 2.5, hz: 0.45, box: true });
       // a paddle on the ground on its land side
       const px = cn.x - cn.wx * 0.85 + cn.tx * (rng() - 0.5), pz = cn.z - cn.wz * 0.85 + cn.tz * (rng() - 0.5);
-      if (w.shoreAt(px, pz) > 0.8 && this.clearFor(px, pz, cn.tx, cn.tz, 0.75, 0.12)) pieces.push({ geo: itemGeometry('paddle', 3 + Math.floor(rng() * 4)), m: new THREE.Matrix4().makeTranslation(px - ox, G(px, pz) + 0.01, pz - oz).multiply(new THREE.Matrix4().makeRotationY(headingTo(cn.tx, cn.tz) + (rng() - 0.5) * 0.3)) });
+      if (w.shoreAt(px, pz) > 0.8 && this.clearFor(px, pz, cn.tx, cn.tz, 0.75, 0.12)) canoePieces.push({ geo: itemGeometry('paddle', 3 + Math.floor(rng() * 4)), m: new THREE.Matrix4().makeTranslation(px - ox, G(px, pz) + 0.01, pz - oz).multiply(new THREE.Matrix4().makeRotationY(headingTo(cn.tx, cn.tz) + (rng() - 0.5) * 0.3)) });
     }
     // (by the canoes: a step up the bank from each of the first two, looking down to the water)
     for (const cn of canoes.slice(0, 2)) spots.shore.push({ x: cn.x - cn.wx * 1.4 + cn.tx * 0.9, z: cn.z - cn.wz * 1.4 + cn.tz * 0.9, heading: headingTo(cn.wx, cn.wz) });
@@ -257,26 +290,37 @@ export class PartyCamps {
       spots.fire.push({ x, z, heading: headingTo(F.x - x, F.z - z) });
     }
     for (const s of L.seats || []) spots.seats.push({ x: s.x, z: s.z, heading: s.heading, seat: Math.max(0.3, s.y - G(s.x, s.z)) });
-    // one mesh
-    const parts = pieces.map((q) => q.geo.clone().applyMatrix4(q.m));
-    const mesh = parts.length ? new THREE.Mesh(mergeGeometries(parts), propMaterial()) : null;
-    for (const g of parts) g.dispose();
-    if (mesh) {
-      mesh.name = `party camp ${party.id}`; mesh.castShadow = true; mesh.receiveShadow = true;
-      mesh.position.set(ox, 0, oz); mesh.matrixAutoUpdate = false; mesh.updateMatrix();
-      this.scene.add(mesh);
-    }
+    // one mesh (and the canoes' own: p2 C)
+    const merged = (list, name) => {
+      const parts = list.map((q) => q.geo.clone().applyMatrix4(q.m));
+      const m = parts.length ? new THREE.Mesh(mergeGeometries(parts), propMaterial()) : null;
+      for (const g of parts) g.dispose();
+      if (m) { m.name = name; m.castShadow = true; m.receiveShadow = true; m.position.set(ox, 0, oz); m.matrixAutoUpdate = false; m.updateMatrix(); }
+      return m;
+    };
+    const mesh = merged(pieces, `party camp ${party.id}`), canoeMesh = merged(canoePieces, `party canoes ${party.id}`);
+    if (mesh) this.scene.add(mesh);
     const dyn = this.tiles.dynamic || (this.tiles.dynamic = []);
     for (const o of obstacles) dyn.push(o);
     const v = this.people.partyPerson(party);
     v.live = true; v.hear = CAMPS.hear; v.figs = [];
-    const D = { key, c, party, stay: c.stay, site, v, mesh, obstacles, spots, fireKey: `party:${party.id}`, d: Math.hypot(site.x - this.player.x, site.z - this.player.z), canoes: canoes.length, tents: tents.length,
+    const D = { key, c, party, stay: c.stay, site, v, mesh, obstacles, spots, canoeMesh, canoeObs, canoesIn: false, fireKey: `party:${party.id}`, d: Math.hypot(site.x - this.player.x, site.z - this.player.z), canoes: canoes.length, tents: tents.length,
       figs: v.members.map((m) => ({ x: 0, z: 0, y: 0, heading: 0, look: m.look, spec: { pose: 'stand', lean: 0.02, wave: 0 } })), wave: null, fireR: mulberry32(((c.stay.seed >>> 0) ^ 0xf17e) >>> 0)() };
     this.drawn.set(key, D);
     this.place(D);
+    this.canoesOn(D, this.shows(D.stay).canoes);
     return D;
   }
 
+  // p2 C: the canoes on the bank in the scene (and in the walker's way) or not
+  canoesOn(D, on) {
+    on = !!on && !!D.canoeMesh;
+    if (on === D.canoesIn) return;
+    D.canoesIn = on;
+    const dyn = this.tiles.dynamic || (this.tiles.dynamic = []);
+    if (on) { this.scene.add(D.canoeMesh); for (const o of D.canoeObs) dyn.push(o); }
+    else { this.scene.remove(D.canoeMesh); for (const o of D.canoeObs) { const i = dyn.indexOf(o); if (i >= 0) dyn.splice(i, 1); } }
+  }
   // a box (half hx along (ux, uz), hz across) on the ground clear of what the walker meets (tiles.js treesNear): no
   // trunk in it, no rock, log or stump standing up through it
   clearFor(x, z, ux, uz, hx, hz) {
@@ -306,7 +350,10 @@ export class PartyCamps {
   }
   // the members at their spots for the phase (by member index; the rest are in the tent or out on the water)
   place(D) {
-    const T = this.parties.today, h = this.day.hours, ph = this.phase(D.stay, T, h), S = D.spots, n = Math.min(3, D.v.members.length);
+    const T = this.parties.today, h = this.day.hours, ph = this.phase(D.stay, T, h), S = D.spots, show = this.shows(D.stay);
+    const n = show.people ? Math.min(3, D.v.members.length) : 0; // (p2 C: on the way in or gone out, they are the moving party's)
+    D.arrive = T === D.stay.start ? this.times(D.stay).arrive : D.stay.land;
+    this.canoesOn(D, show.canoes);
     const wet = this.weather && /rain|storm/.test(this.weather.state || '');
     let at = [];
     if (ph === 'landing' || ph === 'packing') at = [S.shore[0], S.shore[1] || S.tents[0], S.tents[0]];
@@ -333,7 +380,7 @@ export class PartyCamps {
     const s = D.stay, T = this.parties.today, doy = this.day.doy;
     // the latest evening of the stay whose fire is lit by now
     for (let e = Math.min(T, s.end - 1); e >= s.start; e--) {
-      const litH = e === s.start ? Math.max(17.3, s.land + 0.8 + D.fireR * 0.6) : 17.4 + D.fireR, outH = 21.8 + D.fireR * 0.5;
+      const litH = e === s.start ? Math.max(17.3, (D.arrive ?? s.land) + 0.8 + D.fireR * 0.6) : 17.4 + D.fireR, outH = 21.8 + D.fireR * 0.5; // (p2 C: an hour after they really came in)
       const lit = (doy - (T - e)) * 24 + litH, until = (doy - (T - e)) * 24 + outH;
       if (this.now < lit) continue;
       const f = F.get(key);
@@ -392,27 +439,42 @@ export class PartyCamps {
   helloLine(D, rng) {
     const h = this.day.hours, st = this.weather ? this.weather.state || '' : '', windy = this.wind && this.wind.speed > 7;
     const pool = /rain|storm/.test(st) ? HELLO.wet : windy && rng() < 0.6 ? HELLO.wind : h < 11 ? HELLO.morning : h < 17 ? HELLO.day : HELLO.evening;
-    const said = this.said.get(D.party.id) || new Set(), fresh = pool.filter((s) => !said.has(s));
+    // (p2 C: and not a line another party said in the last game hour: two canoes passing with the same words)
+    const said = this.said.get(D.party.id) || new Set(), now = this.now, fresh = pool.filter((s) => !said.has(s) && !(now - (this.recent.get(s) ?? -1e9) < 1));
     return fresh.length ? pick(rng, fresh) : null;
   }
   say(D, k, text, pri) {
     let said = this.said.get(D.party.id);
     if (!said) { said = new Set(); this.said.set(D.party.id, said); if (this.said.size > 300) { this.said.clear(); this.said.set(D.party.id, said); } }
-    said.add(text);
+    said.add(text); this.recent.set(text, this.now); if (this.recent.size > 200) this.recent.clear();
     return this.people.bark(D.v, k, text, pri);
   }
   // E on one of them: a word about their trip, in their words, filled from the plan (their put-in, the nights left)
   word(v) {
     const D = [...this.drawn.values()].find((x) => x.v === v); if (!D) return null;
-    const k = this.greeter(D) ?? 0, party = D.party, T = this.parties.today, rng = mulberry32(((D.stay.seed >>> 0) ^ 0xa11ce ^ (T * 977)) >>> 0);
-    const ep = this.world.entryPoints.find((e) => e.ep === party.ep), ago = T - party.day, left = party.exit - T;
-    const fill = (s) => s.replace('{ep}', ep ? ep.name : 'the landing').replace('{ago}', ago <= 0 ? 'this morning' : ago === 1 ? 'yesterday' : `${NUM[ago] || ago} days ago`)
-      .replace('{left}', left <= 1 ? 'one more night' : `${NUM[left] || left} more nights`).replace('{Left}', cap(left <= 1 ? 'one more night' : `${NUM[left] || left} more nights`))
-      .replace('{left2}', left <= 1 ? 'tomorrow' : `in ${NUM[left] || left} days`).replace('{way}', D.stay.end === party.exit ? 'home' : 'further in').replace('{N}', cap(NUM[party.size] || String(party.size))).replace('{canoes}', NUM[party.canoes] || String(party.canoes));
-    const said = this.said.get(party.id) || new Set(), pool = (WORD[party.kind] || WORD.pair).map(fill).filter((s) => !said.has(s));
-    const line = pool.length ? pick(rng, pool) : pick(rng, ['Have a good trip!', 'Take care out there.', 'Enjoy it.']);
+    const k = this.greeter(D) ?? 0, T = this.parties.today, rng = mulberry32(((D.stay.seed >>> 0) ^ 0xa11ce ^ (T * 977)) >>> 0);
+    const line = this.tripLine(D.party, D.stay.end === D.party.exit, rng);
     this.say(D, k, line, PRI.reply);
     return line;
+  }
+  // a word about their trip, in their words, filled from the plan (their put-in, the nights left; home: on their way out)
+  // (p2 C: party-moves.js asks it for a party on the water or a trail, and helloFor for a greeting)
+  tripLine(party, home, rng) {
+    const T = this.parties.today, ep = this.world.entryPoints.find((e) => e.ep === party.ep), ago = T - party.day, left = party.exit - T;
+    const fill = (s) => s.replace('{ep}', ep ? ep.name : 'the landing').replace('{ago}', ago <= 0 ? 'this morning' : ago === 1 ? 'yesterday' : `${NUM[ago] || ago} days ago`)
+      .replace('{left}', left <= 1 ? 'one more night' : `${NUM[left] || left} more nights`).replace('{Left}', cap(left <= 1 ? 'one more night' : `${NUM[left] || left} more nights`))
+      .replace('{left2}', left <= 1 ? 'tomorrow' : `in ${NUM[left] || left} days`).replace('{way}', home ? 'home' : 'further in').replace('{N}', cap(NUM[party.size] || String(party.size))).replace('{canoes}', NUM[party.canoes] || String(party.canoes));
+    // (on the last day out, "one more night" is no night at all)
+    const pool0 = (left <= 0 ? ['Heading out today. Sad to go.', 'Last day. Back to the car.', 'On our way out.'] : (WORD[party.kind] || WORD.pair).map(fill));
+    const said = this.said.get(party.id) || new Set(), pool = pool0.filter((s) => !said.has(s));
+    return pool.length ? pick(rng, pool) : pick(rng, ['Have a good trip!', 'Take care out there.', 'Enjoy it.']);
+  }
+  helloFor(party, rng) { return this.helloLine({ party }, rng); }
+  // a line said by a party on the move (party-moves.js barks it): kept so it is not said again today
+  markSaid(party, text) {
+    let said = this.said.get(party.id);
+    if (!said) { said = new Set(); this.said.set(party.id, said); if (this.said.size > 300) { this.said.clear(); this.said.set(party.id, said); } }
+    said.add(text); this.recent.set(text, this.now); if (this.recent.size > 200) this.recent.clear();
   }
   // metres from a site to the nearest landing (a store's)
   storeDistance(site) {
