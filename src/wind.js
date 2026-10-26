@@ -90,7 +90,9 @@ export class Wind {
     const diurnal = 0.25 + 0.75 * smoothstep(8.5, 14.5, hours) * (1 - smoothstep(16.5, 21, hours));
     const wx = this.weather ? this.weather.windTarget : null;
     // under a weather the day's own character is held to a breeze at most: the blows come from the weather's floor
-    let base = 1.2 + 7.5 * (wx ? Math.min(this.day, 1.1) : this.day) * diurnal;
+    // cons B: under a weather the day's breeze is the forecast's own (weather.js dayBreeze: a still dawn, the day's
+    // afternoon peak, an all-day blow behind a front); without one, the day's rolled character as before
+    let base = wx && Number.isFinite(wx.base) ? wx.base : 1.2 + 7.5 * (wx ? Math.min(this.day, 1.1) : this.day) * diurnal;
     if (wx) base = Math.max(wx.min, base * wx.mul);
     const g = wx ? wx.gust : 1, stormy = smoothstep(1.2, 2.2, g);
     // a storm's gusts come quicker too (the second octave's phase runs faster), and its lulls never drop it below half
