@@ -3,7 +3,37 @@
 // Subclasses provide: cell, originX, originZ, hCell(i, j) (metres), sdCell(i, j) (metres, + land / - water),
 // lakeCell(i, j) (polygon id, 0 = land) and levelOf(lakeId).
 
+// ---- d2 bake: tile format v4 ----------------------------------------------------------------------------------------
+// A v4 fine tile is the v3 tile, side^2 cells of [height Int16 dm][lake Uint16][sdist Int16 dm][level Int16 dm], then one
+// Uint8 plane of side^2 cells per channel (same halo), in the order of index.json `fields` after the first four
+// (scripts/v4-products.mjs says what each holds):
+//   ground  d1-ground kind: 0 no survey (keep today's fields), 1 upland, 2 open bog, 3 conifer bog, 4 shrub swamp,
+//           5 marsh, 6 wet meadow, 7 hardwood swamp, 8 in-lake emergent, 9 aquatic bed, 10 rock outcrop, 11 boulder
+//           field, 12 sand, 13 open water (on land: a pond OpenStreetMap lacks)
+//   forest  forest type 0-23 (d1-forest-rock legend; 0 none, 1 water, 23 a tree class in Ontario)
+//   canopy  height of the life form, dm (0 none)            cover  its cover, % (0 none)
+//   rock    bedrock unit 1-19 (0 outside Minnesota)
+//   cliff   (class << 6) | strength: 0 no LiDAR here, 1 LiDAR and nothing; class 1 boulder field and 2 talus or ledge
+//           (strength = roughness / 4 cm), 3 face (strength = its relief in metres)
+//   stone   surface stone cover, 254 sqrt(fraction) (255 no survey)
+//   secchi  the water's Secchi depth, byte / 10 m (0 on land)        cdom  its CDOM, byte / 20 per m (0 on land)
+// The level field is the water's own: 0 on land in v4 (v3 copied the height there), so ask it of water cells only.
+// A v3 tile (the data-v3 release) is just the four: channels() is null and chCell answers 0, so every reader falls
+// back to today's ground.
+export const V4_FIELDS = ['height', 'lake', 'sdist', 'level', 'ground', 'forest', 'canopy', 'cover', 'rock', 'cliff', 'stone', 'secchi', 'cdom'];
+// the Uint8 channels of a tile buffer of side^2 = n cells, as { name: Uint8Array } views, or null (a v3 tile)
+export function tileChannels(buf, n, fields = V4_FIELDS) {
+  if (!buf || buf.byteLength < n * 9) return null;
+  const ch = {};
+  for (let q = 4; q < fields.length; q++) { const at = 4 + q; if (buf.byteLength >= n * (at + 1)) ch[fields[q]] = new Uint8Array(buf, n * at, n); }
+  return ch;
+}
+export const cliffClass = (c) => c >> 6;        // 0 nothing (or no LiDAR), 1 boulder field, 2 talus or ledge, 3 face
+export const cliffStrength = (c) => c & 63;
+
 export class GridQueries {
+  // d2 bake: a v4 channel's byte at a cell (0 where the tile is v3 or not in)
+  chCell() { return 0; }
   cellX(i) { return this.originX + (i + 0.5) * this.cell; }
   cellZ(j) { return this.originZ + (j + 0.5) * this.cell; }
   cellI(x) { return Math.floor((x - this.originX) / this.cell); }
@@ -93,6 +123,7 @@ export class TileGrid extends GridQueries {
     this.lvl = new Int16Array(buf, n * 6, n);
     this.levelById = levelById;
     this.clarityById = clarityById;
+    this.ch = tileChannels(buf, n, desc.fields); // d2 bake: the v4 channels (null on a v3 tile)
   }
   local(i, j) {
     let li = i - this.i0, lj = j - this.j0;
@@ -105,6 +136,7 @@ export class TileGrid extends GridQueries {
   sdCell(i, j) { return this.sd[this.local(i, j)] * 0.1; }
   lakeCell(i, j) { return this.lake[this.local(i, j)]; }
   levelCell(i, j) { return this.lvl[this.local(i, j)] * 0.1; }
+  chCell(name, i, j) { const a = this.ch && this.ch[name]; return a ? a[this.local(i, j)] : 0; } // d2 bake
   levelOf(id) { return this.levelById[id]; }
   clarityOf(id) { return this.clarityById ? this.clarityById[id] || 2.6 : 2.6; }
 }

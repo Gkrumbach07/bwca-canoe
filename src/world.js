@@ -1,8 +1,9 @@
 // The streamed world: index.json plus whatever tiles are loaded right now. Spatial queries resolve through
 // the loaded fine tiles, fall back to the 80 m far field, and finally to a flat default, so nothing ever
 // has to wait for a tile to answer a question.
-import { GridQueries, TileGrid } from './grid.js';
+import { GridQueries, TileGrid, tileChannels } from './grid.js';
 import { LakeFacts } from './lake-facts.js'; // d1 lakes
+import { useV4 as rapidsV4 } from './rapids.js'; // d2 bake: a v4 release's own drops (its levels hold them)
 
 // Where the baked data lives: VITE_DATA_URL (a bucket behind a CDN, see docs/HOSTING.md), else `data/`
 // under the app's own base path (public/data in development). Always ends in a slash.
@@ -87,13 +88,15 @@ export class World extends GridQueries {
       ? 'no map data in public/data: run `npm run bake:all` (whole BWCA) or `npm run bake` (Lake One test area)'
       : `${res.status} fetching ${base}index.json: check VITE_DATA_URL and the bucket's CORS policy (docs/HOSTING.md)`);
     const index = await res.json();
-    if (index.version !== 3) throw new Error('map data is from an older bake: run `npm run bake:all`');
+    // d2 bake: format 3 (the data-v3 release) or 4 (its channels after the four: grid.js tileChannels)
+    if (!(index.version === 3 || index.version === 4)) throw new Error(index.version > 4 ? 'map data is from a newer bake than this game reads' : 'map data is from an older bake: run `npm run bake:all`');
     // fb E: the correction table, for the release it was made from (its own chunk, fetched only then)
     // d1 lakes: and the agencies' lake facts (lake-facts.js), for the release they were joined to (their own chunk too)
     const [fixes, facts] = await Promise.all([
       index.source && index.source.baked === FIXES_FOR ? import('./world-fixes.json').then((m) => m.default, () => null) : null,
-      import('./lake-facts.json').then((m) => m.default, () => null),
+      (index.version >= 4 ? import('./lake-facts-v4.json') : import('./lake-facts.json')).then((m) => m.default, () => null), // (d2 bake: each release its own, by its lake ids)
     ]);
+    if (index.version >= 4) rapidsV4(); // d2 bake
     const w = new World(index, base, fixes);
     // d1 lakes (`?facts=off` leaves them out, for a before and after)
     const off = typeof location !== 'undefined' && /[?&]facts=off\b/.test(location.search);
@@ -141,7 +144,9 @@ export class World extends GridQueries {
       for (const [x, z] of p.pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
       p.bbox = [x0, z0, x1, z1];
     }
-    this.gridDesc = { cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo };
+    // d2 bake: the v4 channels' names, in tile order (null on v3: every channel reads 0)
+    this.fields = index.version >= 4 ? index.fields || null : null;
+    this.gridDesc = { cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: this.fields || undefined };
   }
 
   // fb E: the landings moved to their put-ins (each record's lake checked by name against this index, the bake's spot
@@ -191,7 +196,8 @@ export class World extends GridQueries {
   isReady(x, z) { const [tx, ty] = this.tileOf(x, z); return this.hasTile(tx, ty); }
   setTile(tx, ty, buf, cover = null) {
     const n = this.side * this.side;
-    this.slots[ty * this.ntx + tx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n), cover };
+    this.slots[ty * this.ntx + tx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n), cover,
+      ch: this.fields ? tileChannels(buf, n, this.fields) : null }; // d2 bake: { ground, forest, ..., secchi, cdom } or null
   }
   clearTile(tx, ty) { this.slots[ty * this.ntx + tx] = null; }
   tileGrid(tx, ty) { const s = this.slots[ty * this.ntx + tx]; return s ? new TileGrid(this.gridDesc, tx, ty, s.buf, this.levelById) : null; }
@@ -258,6 +264,13 @@ export class World extends GridQueries {
     const k = (((j % T) + this.halo) * this.side + (i % T) + this.halo) * 4;
     return (t.cover[k] | (t.cover[k + 1] << 8) | (t.cover[k + 2] << 16) | (t.cover[k + 3] << 24)) >>> 0;
   }
+  // d2 bake: a v4 channel's byte at a cell of a loaded fine tile (0 on v3 data, or where no fine tile is in)
+  chCell(name, i, j) {
+    if (i < 0 || j < 0 || i >= this.width || j >= this.height) return 0;
+    const T = this.tile, t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)], a = t && t.ch && t.ch[name];
+    return a ? a[((j % T) + this.halo) * this.side + (i % T) + this.halo] : 0;
+  }
+  chAt(name, x, z) { return this.chCell(name, this.cellI(x), this.cellJ(z)); }
   levelOf(id) { return this.levelById[id]; }
   clarityOf(id) { return this.clarityById[id] || 2.6; }
   // water clarity (Secchi depth) at a point: that of the water cell there, or the nearest within r cells
