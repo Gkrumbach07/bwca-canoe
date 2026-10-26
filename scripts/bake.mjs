@@ -26,6 +26,7 @@ import { loadOsm } from './osm-extract.mjs';
 import { loadBathymetry } from './bathymetry.mjs';
 import { loadClarity } from './clarity.mjs';
 import { makeWater, placeLandings, linkPortages, chainsFrom } from './world-links.mjs';
+import { gradeLevels } from './water-grade.mjs';
 
 // ---------- CLI ---------------------------------------------------------------------
 
@@ -699,6 +700,37 @@ async function main() {
       }
       log(`pass 2 rows ${r0}-${r1_} shaped (${((Date.now() - tb) / 1000).toFixed(1)} s)`);
     }
+  }
+  // --- p2 B: the rivers' and creeks' levels graded along their channels (water-grade.mjs: the profile fits' staircase
+  //     and the seams between two lines' fits ironed out, the rapids at the portages kept short and steep). Each graded
+  //     water cell's bed moves with its surface, the land is left as it is (the grade stays within what the land lift
+  //     above allows), and the far field and the overview take the moved cells; the release data-v3 has the same done
+  //     at runtime from src/water-grade.bin (scripts/water-grade-fix.mjs)
+  {
+    const tb = Date.now();
+    const river = [];
+    for (let k = 0; k < N; k++) if (lakeId[k] && isRiver[lakeId[k]]) river.push(k);
+    const res = gradeLevels({ W, H, cell, originX: grid.originX, originZ: grid.originZ, lake: (k) => lakeId[k], river: (id) => !!isRiver[id], level: (k) => level[k], riverCells: Int32Array.from(river), portages });
+    const touched = new Set(), ovTouched = new Set();
+    for (let a = 0; a < res.cells.length; a++) {
+      const k = res.cells[a], d = res.delta[a], i = k % W, j = (k - i) / W;
+      level[k] += d; hq[k] += d;
+      touched.add(((j / FAR) | 0) * farW + ((i / FAR) | 0));
+      if (i % OV === OV / 2 && j % OV === OV / 2) ovTouched.add(k);
+    }
+    for (const f of touched) {
+      const fi = f % farW, fj = (f - fi) / farW;
+      let sh = 0, minSd = 32767, lv = 0;
+      for (let dj = 0; dj < FAR; dj++) { const o = (fj * FAR + dj) * W + fi * FAR; for (let di = 0; di < FAR; di++) { const k = o + di; sh += hq[k]; if (sdist[k] < minSd) { minSd = sdist[k]; lv = level[k]; } } }
+      farHgt[f] = Math.round(sh / (FAR * FAR));
+      farLvl[f] = minSd < 0 ? lv : farHgt[f];
+    }
+    for (const k of ovTouched) { const i = k % W, j = (k - i) / W; ovHgt[((j - OV / 2) / OV) * ovW + (i - OV / 2) / OV] = hq[k]; }
+    const sumL = new Float64Array(nLakes + 1);
+    for (const k of river) sumL[lakeId[k]] += level[k] / 10;
+    for (let id = 1; id <= nLakes; id++) if (isRiver[id] && lakeArea[id]) lakeLevel[id] = sumL[id] / lakeArea[id];
+    const { histBefore, histAfter, sample, ...st } = res.stats; void histBefore; void histAfter; void sample;
+    log(`river and creek levels graded (${((Date.now() - tb) / 1000).toFixed(1)} s): ${JSON.stringify(st)}`);
   }
   // tiles: (tile + 2 halo)^2 cells each, edges replicated beyond the grid
   {
