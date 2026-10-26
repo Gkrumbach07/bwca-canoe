@@ -527,7 +527,11 @@ export class Energy {
     // cons C: the bugs' night (bugs.js sleepNight): the fly off, or under the stars, they cost some of it
     let bugN = null; try { bugN = !bunk && this.bugs && typeof this.bugs.sleepNight === 'function' ? this.bugs.sleepNight() : null; } catch (e) { bugN = null; }
     if (bugN && Number.isFinite(bugN.rest)) q = clamp(q * bugN.rest, 0, 1);
-    this.rest0 = q * Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS);
+    // (tuning: a short night never leaves you less rested than you lay down: a 4 h rest that crossed dusk counted as a
+    // 4 h night and took the rest need from 0.77 to 0.48; the clock has jumped already, so the bedtime rest is the
+    // ceiling of the hours awake before the night)
+    const atBed = bunk ? 0 : this.rest0 * restCeiling(Math.max(0, this.awake - (hours || 0)));
+    this.rest0 = Math.max(atBed, q * Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS));
     this.lastNight = { q: +q.toFixed(3), hours: bunk ? NIGHT_HOURS : hours, bag };
     this.wetSetH = Math.max(this.wetSetH, WET_SET_AIR_H); // the wet set of clothes dries overnight
     if (bunk) { this.need.food = 1; this.need.water = 1; this.fill(BOTTLE, 0); }

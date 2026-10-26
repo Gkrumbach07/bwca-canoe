@@ -1461,6 +1461,16 @@ export class Hud {
       }
       // the keepers' words (outfitter.js toldHints): a ring pencilled round the water they meant, as a keeper marks your
       // map across the counter, and what for in the same hand
+      // (tuning, the content join's leftover: two rumours on one lake wrote their words over each other; a label that
+      // would lie on one already written goes a line lower, up to LABEL_TRIES lines)
+      const placed = [], LABEL_TRIES = 4;
+      const place = (text, x, y, align, lh) => {
+        const w = ctx.measureText(text).width, x0 = align === 'center' ? x - w / 2 : x, box = (yy) => ({ x0, x1: x0 + w, y0: yy - lh * 0.8, y1: yy + lh * 0.2 });
+        let yy = y;
+        for (let n = 0; n < LABEL_TRIES && placed.some((q) => { const b = box(yy); return b.x0 < q.x1 && q.x0 < b.x1 && b.y0 < q.y1 && q.y0 < b.y1; }); n++) yy += lh;
+        placed.push(box(yy));
+        return yy;
+      };
       for (const h of told) {
         if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
         const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
@@ -1475,7 +1485,8 @@ export class Hud {
           // what for, just inside the top of the ring (kept on the sheet when the top runs off it)
           ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
           const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
-          ctx.fillText(h.label || HINT_LABEL[h.kind] || 'a keeper’s word', tx, ty); // content join: a rumour's own words (npcs.js) first
+          const text = h.label || HINT_LABEL[h.kind] || 'a keeper’s word';
+          ctx.fillText(text, tx, place(text, tx, ty, 'center', 19 * k)); // content join: a rumour's own words (npcs.js) first
         }
       }
       // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one

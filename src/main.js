@@ -46,7 +46,7 @@ import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
 import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
-import { sheets } from './sheets.js'; // hubs 2D
+import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
 import { MapTable } from './maptable.js'; // fb2 D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
@@ -655,7 +655,14 @@ async function main() {
   tasks.hints = () => [...taskHintsC(), ...uniques.mapMarks()]; // Arvid's site, in the map's pencil
   const onUseC = journal.pack.onUse;
   journal.pack.onUse = (e, mode, c) => {
-    if (e && e.id === 'guidemap') { if (mode === 'label') return 'Look at the map'; const g = uniques.guideSite(); journal.close(); hud.setMode('sheet'); if (g && hud.view) { hud.view.cx = g.x; hud.view.cz = g.z; } return null; }
+    if (e && e.id === 'guidemap') {
+      if (mode === 'label') return 'Look at the map';
+      const g = uniques.guideSite();
+      // (tuning, the content join's leftover: Arvid's map is an old Fisher sheet, so it is that sheet: it opened on blank paper
+      // unless you owned the sheet its site lies on)
+      const s = g ? sheetAt(g.x, g.z) : null; if (s && !sheets.owned(s.id)) profile.ownSheet(s.id);
+      journal.close(); hud.setMode('sheet'); if (g && hud.view) { hud.view.cx = g.x; hud.view.cz = g.z; } return null;
+    }
     return onUseC ? onUseC(e, mode, c) : null;
   };
   const kitMoments = new Map([...kit.moments(), ...uniques.moments()].map((m) => [m.id, m]));

@@ -77,6 +77,7 @@ const FLOATS = { sd: -0.7, mid: -1.4, depth: 0.12 };
 const END = 2.3;
 const PUSH = { brace: 0.35, secs: 0.6, perM: 0.4, step: 0.25, reach: 16, beside: 0.95, wade: 0.8 };
 const TAG_TRAIL = 15;       // m from a portage trail within which a thing set down counts as left at that trail (the fetch)
+const CARRY_EACH = { worn: 2, hands: 2 }; // tuning: what one carry takes besides the canoe (tripsFor): back and chest, both hands
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)); // (a name keeps its capital)
 const metres = (d) => (d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`);
@@ -173,14 +174,19 @@ export class Packs {
     if (tent && td > 60) s += ` · the tent ${tent.stage >= 4 ? 'up' : 'half pitched'} ${metres(td)} back`;
     return s;
   }
-  // how many carries a portage from the canoe as it is now takes
+  // how many carries a portage from the canoe as it is now takes. tuning (the brief: "a barrel on the chest isn't a
+  // second carry"): each carry, the first under the canoe too, takes CARRY_EACH.worn worn (the back and, with Q, the
+  // chest) and CARRY_EACH.hands in hand; a thing that can go either way (the 30 L barrel) is worn while there is room
   tripsFor() {
     const inCanoe = this.units().filter((u) => (u.obj.where === 'canoe' || this.isCarried(u)) && !this.lashed(u));
-    const wear = inCanoe.filter((u) => u.kind === 'container' && (u.def.wear || []).length && !u.def.hand).length;
-    const hand = inCanoe.filter((u) => u.kind === 'long' || u.def.hand).length;
-    // the first carry takes one on the back and two in hand under the canoe; each one after that two worn and two in hand
-    const restW = Math.max(0, wear - 1), restH = Math.max(0, hand - 2);
-    return restW || restH ? 1 + Math.max(Math.ceil(restW / 2), Math.ceil(restH / 2), 1) : 1;
+    const worn = (u) => u.kind === 'container' && (u.def.wear || []).length > 0, inHand = (u) => u.kind === 'long' || !!u.def.hand;
+    const wearOnly = inCanoe.filter((u) => worn(u) && !inHand(u)).length, handOnly = inCanoe.filter((u) => !worn(u) && inHand(u)).length;
+    const either = inCanoe.filter((u) => worn(u) && inHand(u)).length;
+    for (let t = 1; t < 9; t++) {
+      const W = t * CARRY_EACH.worn, H = t * CARRY_EACH.hands, roomW = W - wearOnly;
+      if (roomW >= 0 && handOnly + Math.max(0, either - roomW) <= H) return t;
+    }
+    return 9;
   }
   isCarried(u) { return u.obj.where === 'back' || u.obj.where === 'chest' || u.obj.where === 'hands'; }
 
@@ -212,9 +218,10 @@ export class Packs {
     if ((this.tagT -= dt) <= 0) { this.tagT = 1; this.tagTrailThings(); }
     const kg = this.loadKg;
     p.loadKg = kg; p.loadFactor = Math.max(1, kg / 40);
-    // from the water, a portage that takes more than one carry says so
+    // from the water, a portage that takes more than one carry says so (tuning: the landing's prompt reads "Go ashore ·
+    // Portage: …" since fb3 A, so the old "^Portage: " never matched and the word had gone)
     const pr = p.prompt;
-    if (mode === 'paddle' && pr && pr.key === 'E' && /^Portage: /.test(pr.text) && !/ trips? with /.test(pr.text)) {
+    if (mode === 'paddle' && pr && pr.key === 'E' && /Portage: /.test(pr.text) && !/ trips? with /.test(pr.text)) {
       const t = this.tripsFor();
       if (t > 1) p.prompt = { ...pr, text: pr.text.replace(/(\(\d+ m\))/, `$1 · ${t === 2 ? 'two' : t} trips with the gear`) };
     }

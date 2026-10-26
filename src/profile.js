@@ -28,7 +28,7 @@
 // and an old give keep working. An older save's 'sheet:…' entries in the owned list move into the sheets on load;
 // sheet items still in an inventory, and the map case they rode in, are migrated by sheets.js once it is attached.
 import { save } from './save.js';
-import { itemDef, LEGACY } from './items.js';
+import { itemDef, LEGACY, AFRAME_SLEEP } from './items.js';
 
 const NS = 'profile';
 const DOC_KEY = 'bwca-canoe-trip';   // the outfitter's document (outfitter.js), read for the migration
@@ -46,7 +46,7 @@ export const ITEMS = {
   pack: { label: 'Duluth pack', note: 'room for 7 days of food' },
   pack2: { label: 'A second Duluth pack', note: 'room for 10 more days; two carries on a portage' },
   barrel: { label: 'Food barrel and harness', note: 'room for 14 days' },
-  aframe: { label: 'A-frame tent', slot: 'tent', sleep: 0.85 },
+  aframe: { label: 'A-frame tent', slot: 'tent', sleep: AFRAME_SLEEP },
   tablets: { label: 'Water tablets', slot: 'filter', note: 'drinkable in half an hour' },
   'lure:jig': { label: 'Jig & twister tail' },
   'lure:mepps': { label: 'Mepps Aglia spinner' },
@@ -229,8 +229,8 @@ export class Profile {
   }
   // days of food the packs hold: a Duluth pack 7, the second one 10 more, a barrel 14
   get foodRoom() { let d = FOOD_ROOM.pack; if (this.has('pack2')) d += FOOD_ROOM.pack2; if (this.has('barrel')) d += FOOD_ROOM.barrel; return d; }
-  // the tent's night (camp.js may read it): the A-frame 0.85
-  get sleepQ() { const t = ITEMS[this.s.kit.tent]; return t && t.sleep ? t.sleep : 0.85; }
+  // the tent's night (camp.js may read it): the A-frame's (items.js AFRAME_SLEEP)
+  get sleepQ() { const t = ITEMS[this.s.kit.tent]; return t && t.sleep ? t.sleep : AFRAME_SLEEP; }
 
   // --- the outfitters you know ------------------------------------------------------------------------------
   get known() { return this.s.known.slice(); }

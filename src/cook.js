@@ -35,11 +35,14 @@ import { smoothstep, clamp } from './rng.js';
 // supper cooks). A meal waits for the pot on the grate, and for its water in the bottle; what is missing is a chip on
 // the thing (grateStatus: "needs the pot" on the meal, "water 0.3 L" on the pot). Done, it chimes and sits on the grate
 // marked Ready; you take it off to eat. The fire's events say 'cooking' and 'ready' (fire.js on / events).
+// tuning: on the one clock (fb5 C, Trip ×4) a supper's 15 game minutes were 3¾ real minutes stood at the grate with
+// nothing left to do (the tent's hold is a minute, the wood picked by then): two thirds of the old minutes, a supper
+// 2½ real minutes, breakfast and a fish under 2. kit.js's meals and fillets the same way.
 export const COOK = { // game minutes on the grate over a lit fire; litres of water from the bottle
-  'meal:supper': { minutes: 15, water: 0.4 },
-  'meal:breakfast': { minutes: 10, water: 0.3 },
-  'meal:freeze': { minutes: 10, water: 0.5 },
-  fish: { minutes: 10, water: 0 },
+  'meal:supper': { minutes: 10, water: 0.4 },
+  'meal:breakfast': { minutes: 7, water: 0.3 },
+  'meal:freeze': { minutes: 7, water: 0.5 },
+  fish: { minutes: 7, water: 0 },
 };
 const HEAT_MIN = 0.12;         // the fire's heat (fire.js) under which the pot stops cooking
 const AUTO_EVERY = 0.25;       // real seconds between the grates' looks (autoCook)

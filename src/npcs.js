@@ -229,7 +229,9 @@ const SPOTS = {
   kidLures: { a: -2.15, b: 0.62, face: [-0.6, 0.8], pose: 'stand' },
   board: { a: 2.25, b: 1.95, face: [0.85, 0.53], pose: 'stand' },
   mid: { a: 1.35, b: 2.5, face: [0.8, 0.6], pose: 'stand' },
-  aisle: { a: 1.78, b: 0.95, face: [-1, 0.1], pose: 'stand' },
+  // (tuning, the content join's leftover: at (1.78, 0.95) whoever stood in the aisle stood in the middle of the right
+  // aisle, a metre wide between the tackle shelf and the map table, and blocked it; now at its dead end by the counter)
+  aisle: { a: 1.6, b: -1.95, face: [0.25, -0.97], pose: 'stand' },
   counterEnd: { a: 2.2, b: -1.95, face: [-0.35, -0.94], pose: 'stand' },
   bench: { a: 1.45, b: 4.36, face: [0, 1], pose: 'sit', seat: 0.46, porch: true },
   bench2: { a: 2.1, b: 4.36, face: [0, 1], pose: 'sit', seat: 0.46, porch: true },
