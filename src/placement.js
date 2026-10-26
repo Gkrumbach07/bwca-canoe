@@ -835,7 +835,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
 // `riceExtra`, the share of its acres the survey did not map, grown by the old rule in the sheltered soft shallows). The
 // marsh fringe (sedge, cattail) and the submerged weed keep their rules, a little more weed in a mapped aquatic bed.
 // Kind 0 (Ontario, or a v3 release with no ground byte) keeps all the old rules.
-export const MAPPED = { rest: { raft: 0.15, stand: 0.35 }, unmapped: { raft: 0.45, stand: 0.6 }, rice: 8, rush: 5.5, raft: 16, weed: 1.6, edge: 0.3 };
+export const MAPPED = { rest: { raft: 0.15, stand: 0.35 }, unmapped: { raft: 0.7, stand: 0.8 }, rice: 8, rush: 5.5, raft: 16, weed: 1.6, edge: 0.3 };
 const _bedA = {};
 const RAPIDS_FALL = 0.02; // round A join: the slope of the water (m per m) past which no lake plant grows
 export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site = null, rice = null, riceShare = null, riceExtra = null, lakeBeds = null }) {

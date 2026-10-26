@@ -88,12 +88,14 @@ export const WATER_LOOK = {
 // a bog lake's water). The two say different things: the Secchi depth how far the eye sees down (the veil, how fast the
 // bed fades), the CDOM what colour the water is (the body, and which colours the column takes from the bed). LakeBrowser's
 // own reading of CDOM: under 1 clear blue, 1-3 light tea, 3-6 tea-brown, over 6 dark bog water. TEA puts the body's four
-// stops (WATER_LOOK clear/deep, tea, stain, bog) at those CDOMs: the body runs clear -> light tea over tea[0..1], to the
-// tea-brown by tea[2], to the bog by tea[3]; the column's spectral shape runs from clear to stained over shape[0..1].
+// stops (WATER_LOOK clear/deep, tea, stain, bog) near those CDOMs, a little up, since the Shield's clearest lakes read
+// 1.3-1.5 (Snowbank 1.26, Agnes 1.47, Kekekabic 1.49) and are the clear blue water a paddler knows: the body runs
+// clear -> light tea over tea[0..1] (Lake One, 2.98, is light tea), to the tea-brown by tea[2], to the bog by tea[3]; the
+// column's spectral shape runs from clear to stained over shape[0..1].
 // Water with no CDOM (a v3 release; cdom 0) keeps the old rule: the stain from the Secchi depth alone, 1.5 m to 5 m.
-export const TEA = { tea: [1.0, 2.6, 4.6, 8.5], shape: [1.0, 4.6] };
-// the water's colour in a word, by LakeBrowser's own reading of the CDOM (the journal's lakes); '' with none
-export const teaWord = (cdom) => (!(cdom > 0) ? '' : cdom < 1.2 ? 'clear' : cdom < 3 ? 'light tea' : cdom < 6 ? 'tea-brown' : 'dark bog water');
+export const TEA = { tea: [1.4, 3.0, 5.0, 9.0], shape: [1.2, 5.0] };
+// the water's colour in a word, by the CDOM as TEA draws it (the journal's lakes); '' with none
+export const teaWord = (cdom) => (!(cdom > 0) ? '' : cdom < 1.6 ? 'clear' : cdom < 3.2 ? 'light tea' : cdom < 6 ? 'tea-brown' : 'dark bog water');
 // The column's shape (tunable live): transmit scales the bed's path (1 is the physical round trip; less keeps a
 // shallow bed brighter under the game's fixed exposure), veil and veilPow shape the veil; the spectral shapes are
 // K over its mean per channel, for a clear and for a stained lake, and the water's own absorption per metre.
