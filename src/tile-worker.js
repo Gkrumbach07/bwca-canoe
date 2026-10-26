@@ -3,7 +3,7 @@
 // three.js objects.
 import { TileGrid } from './grid.js';
 import { buildTerrainChunk } from './terrain-build.js';
-import { buildWaterChunk } from './water-build.js';
+import { buildWaterChunk, shoalBeds } from './water-build.js'; // (d2 water: shoalBeds)
 import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
 import { Site } from './site.js';
@@ -159,6 +159,8 @@ async function buildFine(m) {
   await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
+  grid.cdomById = cfg.cdomById || null; // d2 water: the lakes' CDOM (water-build.js cellColour)
+  shoalBeds(grid); // d2 water: the bed up under the mapped rice, reeds and lilies (v4; the grid's arrays view buf)
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
   patchTile(buf, m.tx, m.ty, g); // d1 rapids: each drop where it really is, the rocks' shoals (the grid's arrays view buf)
@@ -167,7 +169,7 @@ async function buildFine(m) {
   const site = new Site(grid, cfg.exclusions);
   const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz, site });
   veg.bins.push(...lakeRockBins(grid, i0, j0, g.tile, ox, oz)); // d1 rapids: NHD's rocks above the water, as boulders
-  const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site, rice: cfg.riceById }); // (d1 lakes: rice by lake)
+  const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site, rice: cfg.riceById, riceShare: cfg.riceShare, riceExtra: cfg.riceExtra }); // (d1 lakes: rice by lake; d2 water: by its acres in the mapped beds)
   clearPlants(aquatic.bins, ox, oz); // d1 rapids: no pads or reeds where the water falls or boils
   // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
@@ -180,7 +182,7 @@ async function buildFine(m) {
   const abins = aquatic.bins.map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, ...binCentre(b), ...instanceData(b.items, 5, b.rx, b.rz) }));
   const collide = collisionOf(bins, g.tile * g.cell);
   const transfer = [buf, cover.buffer, ...terrainBuffers(terrain), collide.trunks.buffer, collide.trunkMeta.buffer, collide.trunkStart.buffer, collide.rocks.buffer, collide.rockStart.buffer];
-  if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.idx.buffer);
+  if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.cdom.buffer, water.idx.buffer); // (d2 water: cdom)
   for (const b of bins) transfer.push(b.matrices.buffer, b.colors.buffer);
   for (const b of abins) transfer.push(b.matrices.buffer);
   return { msg: { type: 'built', key: m.key, level: 'fine', tx: m.tx, ty: m.ty, data: buf, cover, terrain, water, veg: bins, aquatic: abins, collide, trees: veg.total, plants: aquatic.total }, transfer };
@@ -196,6 +198,7 @@ async function buildFar(m) {
   bowlTile(buf, 'far', cfg.grid, cfg.bowlById); // d1 lakes
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
   const grid = new TileGrid(desc, m.fx, m.fy, buf, cfg.levelById, cfg.clarityById);
+  grid.cdomById = cfg.cdomById || null; // d2 water
   const per = g.tile / f.factor; // far cells per fine tile
   const chunks = [], transfer = [buf];
   for (let cy = 0; cy < f.tile / per; cy++) for (let cx = 0; cx < f.tile / per; cx++) {
@@ -207,7 +210,7 @@ async function buildFar(m) {
     const water = buildWaterChunk(grid, i0, j0, per, ox, oz);
     chunks.push({ tx, ty, terrain, water });
     transfer.push(...terrainBuffers(terrain));
-    if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.idx.buffer);
+    if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.cdom.buffer, water.idx.buffer); // (d2 water: cdom)
   }
   return { msg: { type: 'built', key: m.key, level: 'far', fx: m.fx, fy: m.fy, data: buf, chunks }, transfer };
 }

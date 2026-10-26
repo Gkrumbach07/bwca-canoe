@@ -124,13 +124,20 @@ export class World extends GridQueries {
     this.tileFlags = index.tiles;
     this.levelById = new Float32Array(index.lakes.length + 1);
     this.clarityById = new Float32Array(index.lakes.length + 1).fill(2.6); // Secchi depth, metres
+    // d2 water: each lake's own colour, from a v4 release (the UMN LakeBrowser's summer Secchi depth and late-summer
+    // CDOM, a440 m^-1, joined by the lake's OSM id): the CDOM by id, 0 where the release gives none (v3), and the water
+    // then draws by the Secchi depth alone as it always has (water.js waterStain, waterBody). A lake with its own colour
+    // keeps its Secchi depth as measured from space; estimateSecchi stays the guess for the rest.
+    this.cdomById = new Float32Array(index.lakes.length + 1);
     // the DNR's soundings as they are, every other lake's clarity estimated (estimateSecchi below); the record's own
     // `secchi` takes the estimate too, so the HUD, the journal and the fishing read what the water shows (the bake's
     // regional figure stays as `secchiBaked`)
     for (const l of index.lakes) {
       if (!l) continue;
       this.levelById[l.id] = l.level;
-      if (!l.secchiMeasured) { l.secchiBaked = l.secchi; l.secchi = +estimateSecchi(l, g.cell * g.cell).toFixed(2); }
+      const own = l.cdom > 0 && l.secchi > 0; // d2 water
+      if (own) this.cdomById[l.id] = l.cdom;
+      if (!l.secchiMeasured && !own) { l.secchiBaked = l.secchi; l.secchi = +estimateSecchi(l, g.cell * g.cell).toFixed(2); }
       if (l.secchi) this.clarityById[l.id] = l.secchi;
     }
     this.fixed = fixes ? this.applyFixes(fixes) : null;
@@ -260,6 +267,7 @@ export class World extends GridQueries {
   }
   levelOf(id) { return this.levelById[id]; }
   clarityOf(id) { return this.clarityById[id] || 2.6; }
+  cdomOf(id) { return this.cdomById[id] || 0; } // d2 water: 0 where the release gives the lake no colour
   // water clarity (Secchi depth) at a point: that of the water cell there, or the nearest within r cells
   clarityAt(x, z, r = 3) {
     const ci = this.cellI(x), cj = this.cellJ(z);

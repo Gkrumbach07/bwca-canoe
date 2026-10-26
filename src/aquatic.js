@@ -23,6 +23,37 @@ import { REGION } from './placement.js';
 // spread, plus its half-diagonal) before the bin goes, per kind
 const CULL = [420, 560, 200, 480];
 
+// d2 water: the wild rice by each lake's DNR acres, on a v4 release (placement.js placeAquatic, MAPPED). The index counts
+// each lake's water cells in the NWI's in-lake emergent bed (`emergent`, ground kind 8); d1 lakes' facts give the DNR
+// Wildlife's rice acres for the 80 listed lakes. Per lake id:
+//   share  of the mapped emergent bed, how much is rice (in fields): a listed lake its acres over the bed (0.12-0.92), a
+//          listed lake with no acres or a surveyed lake not on the list 0.12 (the odd stand), any other water 0.45
+//          (half rice, half bulrush, as the bays of the unlisted lakes run); -1 where the lake has no mapped bed
+//   extra  the share of a listed lake's acres beyond its mapped bed, grown by the old rule in its sheltered shallows
+// null on a release with no counts (v3): the old rule everywhere.
+export const RICE_SHARE = { min: 0.12, max: 0.92, unlisted: 0.12, other: 0.45 };
+export function riceBeds(world) {
+  const lakes = world.lakes, n = lakes.length + 1, facts = world.facts, cellAcres = (world.cell * world.cell) / 4046.86;
+  if (!lakes.some((l) => l && l.emergent > 0)) return null;
+  const share = new Float32Array(n).fill(-1), extra = new Float32Array(n);
+  // a DNR lake's acres belong to all its polygons: their mapped beds summed
+  const bedOf = new Map();
+  for (const l of lakes) {
+    const f = l && facts ? facts.factsOf(l.id) : null;
+    if (f && f.rice > 0) bedOf.set(f, (bedOf.get(f) || 0) + (l.emergent || 0) * cellAcres);
+  }
+  for (const l of lakes) {
+    if (!l) continue;
+    const f = facts ? facts.factsOf(l.id) : null, bed = (l.emergent || 0) * cellAcres;
+    if (f && f.rice > 0) {
+      const mapped = bedOf.get(f) || 0;
+      share[l.id] = mapped > 0 ? Math.min(RICE_SHARE.max, Math.max(RICE_SHARE.min, f.rice / mapped)) : -1;
+      extra[l.id] = Math.max(0, Math.min(1, (f.rice - mapped) / f.rice));
+    } else if (bed > 0) share[l.id] = f ? RICE_SHARE.unlisted : RICE_SHARE.other;
+  }
+  return { share, extra };
+}
+
 // Cards: indexed quads (upright ones in rows, so the occlusion and the sway have vertices to work with), each
 // corner with its colour, its shading normal, its atlas UV and its part (0 leaf, 1 flower).
 class Cards {

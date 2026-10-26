@@ -78,7 +78,22 @@ export const WATER_LOOK = {
   deep: new THREE.Color().setRGB(0.012, 0.054, 0.056),
   stain: new THREE.Color().setRGB(0.066, 0.05, 0.012),
   ice: new THREE.Color(0xf2f6fa),
+  // d2 water: the two stops a lake with its own colour (TEA) adds: light tea between the clear and the tea-brown, and
+  // the dark bog water past it
+  tea: new THREE.Color().setRGB(0.05, 0.062, 0.026),
+  bog: new THREE.Color().setRGB(0.044, 0.026, 0.007),
 };
+// d2 water (the real-data round, 2026-10-26: "each lake its own colour"): a v4 release gives every lake, and every cell
+// of a big one, the UMN LakeBrowser's summer Secchi depth and its late-summer CDOM (a440, m^-1: the tannins that stain
+// a bog lake's water). The two say different things: the Secchi depth how far the eye sees down (the veil, how fast the
+// bed fades), the CDOM what colour the water is (the body, and which colours the column takes from the bed). LakeBrowser's
+// own reading of CDOM: under 1 clear blue, 1-3 light tea, 3-6 tea-brown, over 6 dark bog water. TEA puts the body's four
+// stops (WATER_LOOK clear/deep, tea, stain, bog) at those CDOMs: the body runs clear -> light tea over tea[0..1], to the
+// tea-brown by tea[2], to the bog by tea[3]; the column's spectral shape runs from clear to stained over shape[0..1].
+// Water with no CDOM (a v3 release; cdom 0) keeps the old rule: the stain from the Secchi depth alone, 1.5 m to 5 m.
+export const TEA = { tea: [1.0, 2.6, 4.6, 8.5], shape: [1.0, 4.6] };
+// the water's colour in a word, by LakeBrowser's own reading of the CDOM (the journal's lakes); '' with none
+export const teaWord = (cdom) => (!(cdom > 0) ? '' : cdom < 1.2 ? 'clear' : cdom < 3 ? 'light tea' : cdom < 6 ? 'tea-brown' : 'dark bog water');
 // The column's shape (tunable live): transmit scales the bed's path (1 is the physical round trip; less keeps a
 // shallow bed brighter under the game's fixed exposure), veil and veilPow shape the veil; the spectral shapes are
 // K over its mean per channel, for a clear and for a stained lake, and the water's own absorption per metre.
@@ -138,6 +153,15 @@ export const glslSurface = /* glsl */ `
   // edge); a land cell holds the level of the water nearest it (rebuildAtlas), so a lake's is flat right to its shore
   float levelAt(vec2 rel) { return bilinear(uLevelTex, rel); }
   float clarityAt(vec2 rel) { return cellSample(uClarityTex, atlasCell(rel)); }
+  // d2 water: the water's colour here, bilinear: x the Secchi depth (m), y the CDOM (m^-1; 0 where the release has none)
+  vec2 colourAt(vec2 rel) {
+    vec2 f = (rel - uAtlas.xy) * uAtlas.z - 0.5;
+    vec2 fi = floor(f), a = f - fi;
+    ivec2 c = ivec2(fi), m = ivec2(int(uAtlas.w) - 1);
+    vec2 c00 = texelFetch(uClarityTex, clamp(c, ivec2(0), m), 0).rg, c10 = texelFetch(uClarityTex, clamp(c + ivec2(1, 0), ivec2(0), m), 0).rg;
+    vec2 c01 = texelFetch(uClarityTex, clamp(c + ivec2(0, 1), ivec2(0), m), 0).rg, c11 = texelFetch(uClarityTex, clamp(c + ivec2(1, 1), ivec2(0), m), 0).rg;
+    return mix(mix(c00, c10, a.x), mix(c01, c11, a.x), a.y);
+  }
   float atlasLevel(vec2 rel) { return levelAt(rel); }
   float shoreAt(vec2 rel) { return bilinear(uShoreTex, rel); }
   // ground cover (r: grass cover, g: golden / burn) with its own bilinear filter; b holds the ground class,
@@ -200,6 +224,7 @@ const vertHead = /* glsl */ `
   varying float vShore;
   varying float vDepth;
   varying float vClarity;
+  varying float vCdom;        // d2 water: the water's CDOM (0: none in the release, the old rule)
   varying vec4 vReflectUv;
   varying vec3 vCrest;        // x: wave height over the local wind-wave height, y: that height (damped near the shore),
                               // z: the wind-wave height the shore here takes (the most exposed water round it)
@@ -229,11 +254,13 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
   attribute float aShore;
   attribute float aDepth;
   attribute float aClarity;
+  attribute float aCdom;      // d2 water
   void main() {
     vec2 rel = position.xz + (modelMatrix[3].xz - uOrigin);   // both exact multiples of 10 m: no rounding
     vShore = aShore;
     vDepth = aDepth;
     vClarity = aClarity;
+    vCdom = aCdom;
     // fetch from the atlas where it covers this vertex (exactly what the patch's lattice nodes use), a middling default beyond
     vec2 ac = (rel - uAtlas.xy) * uAtlas.z;
     bool inAtlas = ac.x >= 0.0 && ac.y >= 0.0 && ac.x < uAtlas.w && ac.y < uAtlas.w;
@@ -283,7 +310,9 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     vLevel = level;
     vFlow = vec2(levelAt(rel + vec2(2.0, 0.0)) - levelAt(rel - vec2(2.0, 0.0)), levelAt(rel + vec2(0.0, 2.0)) - levelAt(rel - vec2(0.0, 2.0))) * 0.25;
     vDepth = max(0.0, level - surfaceAt(rel));   // the bed as the terrain mesh draws it (the shore band reshaped)
-    vClarity = clarityAt(rel);
+    vec2 colour = colourAt(rel);   // d2 water: bilinear, so a big lake's bays blend (the Secchi was the cell's own)
+    vClarity = colour.x;
+    vCdom = colour.y;
     vec3 objPos = vec3(position.x, level + wave, position.z);
     vec3 flatObj = vec3(position.x, level, position.z);
     vec3 local = vec3(rel.x, level + wave, rel.y);
@@ -318,9 +347,26 @@ const glslColumn = /* glsl */ `
     float s2 = (1.0 - cosI * cosI) / 1.7769;   // sin^2 of the refracted ray (n = 1.333)
     return max(depth, 0.0) / sqrt(max(1.0 - s2, 0.3));
   }
+  // d2 water: how stained the water is, 0 clear to 1 tea-brown, for the column's spectral shape: from the CDOM where
+  // the release has it (TEA.shape), else (cdom 0) from the Secchi depth as it always was
+  uniform vec4 uTea;      // TEA.tea: the CDOM of light tea's start, light tea, tea-brown, dark bog
+  uniform vec2 uTeaShape; // TEA.shape
+  float waterStain(float secchi, float cdom) {
+    return cdom > 0.05 ? smoothstep(uTeaShape.x, uTeaShape.y, cdom) : 1.0 - smoothstep(1.5, 5.0, secchi);
+  }
+  // the body colour (the colour deep water has looking straight down, before the light): clear (and deeper, the more
+  // Secchi depths of column under it) through light tea and tea-brown to dark bog water by the CDOM; with no CDOM the
+  // old two-stop rule by the Secchi depth
+  vec3 waterBody(float secchi, float cdom, float depth) {
+    vec3 clearB = mix(uBodyClear, uBodyDeep, smoothstep(0.8, 3.0, depth / secchi));
+    if (cdom <= 0.05) return mix(uBodyStain, clearB, smoothstep(1.5, 5.0, secchi));
+    vec3 b = mix(clearB, uBodyTea, smoothstep(uTea.x, uTea.y, cdom));
+    b = mix(b, uBodyStain, smoothstep(uTea.y, uTea.z, cdom));
+    return mix(b, uBodyBog, smoothstep(uTea.z, uTea.w, cdom));
+  }
   // what the column passes of the bed's light, per channel: down to the bed and back up along the view
-  vec3 columnTint(float depth, float path, float secchi) {
-    vec3 K = (1.7 / secchi) * mix(uSpecStain, uSpecClear, smoothstep(1.5, 5.0, secchi)) + uWaterAbs;
+  vec3 columnTint(float depth, float path, float secchi, float stain) {
+    vec3 K = (1.7 / secchi) * mix(uSpecClear, uSpecStain, stain) + uWaterAbs;
     return exp(-K * max(depth + path, 0.0) * uColumn.x);
   }
   // how much of the bed the column hides
@@ -334,18 +380,20 @@ const glslColumn = /* glsl */ `
 const fragTint = /* glsl */ `
   uniform float uClarity, uIce, uPatchHalf;
   uniform vec2 uOrigin, uPatchLocal;
+  uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyTea, uBodyBog;
   varying vec3 vLocal;
   varying vec3 vWaveN;
   varying float vShore;
   varying float vDepth;
   varying float vClarity;
+  varying float vCdom;
   ${glslColumn}
   void main() {
     if (vShore > 0.6) discard;
     vec3 camRel = vec3(cameraPosition.x - uOrigin.x, cameraPosition.y, cameraPosition.z - uOrigin.y);
     vec3 v = normalize(camRel - vLocal);
     float secchi = max(0.3, vClarity * uClarity);
-    vec3 T = columnTint(vDepth, columnPath(vDepth, max(dot(normalize(vWaveN), v), 0.05)), secchi);
+    vec3 T = columnTint(vDepth, columnPath(vDepth, max(dot(normalize(vWaveN), v), 0.05)), secchi, waterStain(secchi, vCdom));
     gl_FragColor = vec4(mix(vec3(1.0), T, tintReach(vLocal, uPatchLocal, uPatchHalf) * (1.0 - uIce)), 1.0);
   }
 `;
@@ -354,7 +402,7 @@ const frag = /* glsl */ `
   uniform float uTime, uReflOn, uClarity, uIce, uRippleAmt, uRain, uGlint;
   uniform float uWhiteGain;  // d1 rapids: the rivers' flow on the white water (the spring flood whiter; main.js sets it)
   uniform vec3 uSunDir, uFoam, uSunLight, uSkyLight;
-  uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyIce;
+  uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyIce, uBodyTea, uBodyBog;
   const vec3 FOAM_ALBEDO = vec3(0.86, 0.9, 0.92);   // the white of the foam; FOAM_GAIN as wake.js glslFoamLight has it
   const float FOAM_GAIN = 2.0;
   uniform vec2 uFoamNight;   // round A-E: how far the night floor is on, and white water's lift over the water (glslWaterOwn)
@@ -377,6 +425,7 @@ const frag = /* glsl */ `
   varying float vShore;
   varying float vDepth;
   varying float vClarity;
+  varying float vCdom;
   varying vec4 vReflectUv;
   varying vec3 vCrest;
   varying float vLee;
@@ -581,7 +630,7 @@ const frag = /* glsl */ `
     // pass has already multiplied the column's colour into the bed under the near patch; past it (and over the patch's
     // last metres, where that pass gives out) the column's darkening of the bed is folded into the veil instead.
     float secchi = max(0.3, vClarity * uClarity);
-    float clear = smoothstep(1.5, 5.0, secchi);
+    float stain = waterStain(secchi, vCdom);   // d2 water: by the CDOM where the release has it
     float path = columnPath(vDepth, max(dot(n0, v), 0.05));
     float ab = columnVeil(path, secchi);
     #ifdef FAR
@@ -589,8 +638,8 @@ const frag = /* glsl */ `
     #else
       float folded = 1.0 - tintReach(vLocal, uPatchLocal, uPatchHalf);
     #endif
-    if (folded > 0.0) ab = 1.0 - (1.0 - ab) * mix(1.0, dot(columnTint(vDepth, path, secchi), vec3(0.3, 0.5, 0.2)), folded);
-    vec3 body = mix(uBodyStain, mix(uBodyClear, uBodyDeep, smoothstep(0.8, 3.0, vDepth / secchi)), clear);
+    if (folded > 0.0) ab = 1.0 - (1.0 - ab) * mix(1.0, dot(columnTint(vDepth, path, secchi, stain), vec3(0.3, 0.5, 0.2)), folded);
+    vec3 body = waterBody(secchi, vCdom, vDepth);
     vec3 lit = uSunLight * max(uSunDir.y, 0.0) * shadow + uSkyLight;
     body *= lit * 1.9;   // light reaches the column from the whole sky and the sun, not one direction
     // the mirror: the sky by the reflected ray, and over it what the reflection pass drew (shore, trees, canoe),
@@ -739,7 +788,7 @@ export class WaterSystem {
     this.shore = new Float32Array(ATLAS * ATLAS);
     this.level = new Float32Array(ATLAS * ATLAS);
     this.height = new Float32Array(ATLAS * ATLAS);
-    this.clarity = new Float32Array(ATLAS * ATLAS);
+    this.clarity = new Float32Array(ATLAS * ATLAS * 2); // d2 water: the Secchi depth and the CDOM, per cell
     this.fetch = new Float32Array(ATLAS * ATLAS);
     this.cover = new Uint8Array(ATLAS * ATLAS * 4);
     this.wind = { x: 0, z: 1, speed: 2.5, bucket: -1, w: windWeights(0, 1) };
@@ -749,7 +798,7 @@ export class WaterSystem {
     this.shoreTex = tex(this.shore, THREE.RedFormat, THREE.FloatType);
     this.levelTex = tex(this.level, THREE.RedFormat, THREE.FloatType);
     this.heightTex = tex(this.height, THREE.RedFormat, THREE.FloatType);
-    this.clarityTex = tex(this.clarity, THREE.RedFormat, THREE.FloatType);
+    this.clarityTex = tex(this.clarity, THREE.RGFormat, THREE.FloatType);
     this.fetchTex = tex(this.fetch, THREE.RedFormat, THREE.FloatType);
     this.coverTex = tex(this.cover, THREE.RGBAFormat, THREE.UnsignedByteType);
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, {
@@ -790,6 +839,10 @@ export class WaterSystem {
       uBodyDeep: { value: WATER_LOOK.deep },
       uBodyStain: { value: WATER_LOOK.stain },
       uBodyIce: { value: WATER_LOOK.ice },
+      uBodyTea: { value: WATER_LOOK.tea },   // d2 water
+      uBodyBog: { value: WATER_LOOK.bog },
+      uTea: { value: new THREE.Vector4(...TEA.tea) },
+      uTeaShape: { value: new THREE.Vector2(...TEA.shape) },
       uSkyZenith: { value: new THREE.Color(palette.zenith) },
       uSkyMid: { value: new THREE.Color(palette.horizon).lerp(new THREE.Color(palette.zenith), 0.5) },
       uSkyHorizon: { value: new THREE.Color(palette.horizon) },
@@ -804,7 +857,7 @@ export class WaterSystem {
       for (const [mine, theirs] of Object.entries(bind)) if (su[theirs]) this.uniforms[mine] = su[theirs];
     }
     // the look's colours are shared objects too, so WATER_LOOK can be tuned live
-    const look = { uBodyClear: 'clear', uBodyDeep: 'deep', uBodyStain: 'stain', uBodyIce: 'ice' };
+    const look = { uBodyClear: 'clear', uBodyDeep: 'deep', uBodyStain: 'stain', uBodyIce: 'ice', uBodyTea: 'tea', uBodyBog: 'bog' };
     for (const [k, name] of Object.entries(look)) this.uniforms[k].value = WATER_LOOK[name];
     // and the column's shape (COLUMN), the same way
     this.uniforms.uColumn = { value: new THREE.Vector3(COLUMN.transmit, COLUMN.veil, COLUMN.veilPow) };
@@ -852,6 +905,7 @@ export class WaterSystem {
     geo.setAttribute('aShore', new THREE.BufferAttribute(res.shore, 1));
     geo.setAttribute('aDepth', new THREE.BufferAttribute(res.depth, 1));
     geo.setAttribute('aClarity', new THREE.BufferAttribute(res.clarity, 1));
+    geo.setAttribute('aCdom', new THREE.BufferAttribute(res.cdom || new Float32Array(res.clarity.length), 1)); // d2 water
     geo.setIndex(new THREE.BufferAttribute(res.idx, 1));
     geo.computeBoundingSphere();
     geo.boundingSphere.radius += 0.5;
@@ -881,6 +935,7 @@ export class WaterSystem {
     this.fetchStep(); // cons B
     this.uniforms.uTime.value = this.time;
     this.uniforms.uColumn.value.set(COLUMN.transmit, COLUMN.veil, COLUMN.veilPow);
+    this.uniforms.uTea.value.set(...TEA.tea); this.uniforms.uTeaShape.value.set(...TEA.shape); // d2 water (live)
     // the bed's caustics (terrain.js) run on the water's clock and the sun the day cycle gives the water
     groundUniforms.uBedTime.value = this.time;
     groundUniforms.uBedSun.value.copy(this.uniforms.uSunDir.value);
@@ -939,9 +994,10 @@ export class WaterSystem {
       for (let li = 0; li < A;) {
         const i = i0 + li, ti = (i / T) | 0, span = Math.min(A - li, (ti + 1) * T - i), t = w.slots[tj * w.ntx + ti];
         for (let q = 0, m = row + (i % T), k = lj * A + li; q < span; q++, m++, k++) {
-          let id;
+          let id, sc = 0, cd = 0;
           if (t) {
             shore[k] = t.sd[m] * 0.1; height[k] = t.h[m] * 0.1;
+            if (t.ch && t.ch.secchi) { sc = t.ch.secchi[m] * 0.1; cd = t.ch.cdom[m] * 0.05; } // d2 water: the cell's own colour (v4)
             const cv = t.cover;
             if (cv) { cover[k * 4] = cv[m * 4]; cover[k * 4 + 1] = cv[m * 4 + 1]; cover[k * 4 + 2] = cv[m * 4 + 2]; cover[k * 4 + 3] = cv[m * 4 + 3]; }
             else { cover[k * 4] = 0; cover[k * 4 + 1] = 0; cover[k * 4 + 2] = 0; cover[k * 4 + 3] = 0; }
@@ -955,18 +1011,19 @@ export class WaterSystem {
             id = w.lakeCell(ci2, j);
             if (id) level[k] = w.levelCell(ci2, j);
           }
-          if (id) { clarity[k] = w.clarityOf(id); queue[tail++] = k; } else level[k] = -9999;
+          // d2 water: the cell's own Secchi depth and CDOM where the tile has them, else its lake's (CDOM 0 on v3)
+          if (id) { clarity[k * 2] = sc > 0 ? sc : w.clarityOf(id); clarity[k * 2 + 1] = cd > 0 ? cd : w.cdomOf(id); queue[tail++] = k; } else level[k] = -9999;
         }
         li += span;
       }
     }
     // land cells take the level and clarity of the nearest water, so the patch can rise over the beach
     while (head < tail) {
-      const k = queue[head++], x = k % A, y = (k - x) / A, L = level[k], C = clarity[k];
-      if (x > 0 && level[k - 1] === -9999) { level[k - 1] = L; clarity[k - 1] = C; queue[tail++] = k - 1; }
-      if (x < A - 1 && level[k + 1] === -9999) { level[k + 1] = L; clarity[k + 1] = C; queue[tail++] = k + 1; }
-      if (y > 0 && level[k - A] === -9999) { level[k - A] = L; clarity[k - A] = C; queue[tail++] = k - A; }
-      if (y < A - 1 && level[k + A] === -9999) { level[k + A] = L; clarity[k + A] = C; queue[tail++] = k + A; }
+      const k = queue[head++], x = k % A, y = (k - x) / A, L = level[k], C = clarity[k * 2], D = clarity[k * 2 + 1];
+      if (x > 0 && level[k - 1] === -9999) { level[k - 1] = L; clarity[k * 2 - 2] = C; clarity[k * 2 - 1] = D; queue[tail++] = k - 1; }
+      if (x < A - 1 && level[k + 1] === -9999) { level[k + 1] = L; clarity[k * 2 + 2] = C; clarity[k * 2 + 3] = D; queue[tail++] = k + 1; }
+      if (y > 0 && level[k - A] === -9999) { level[k - A] = L; clarity[(k - A) * 2] = C; clarity[(k - A) * 2 + 1] = D; queue[tail++] = k - A; }
+      if (y < A - 1 && level[k + A] === -9999) { level[k + A] = L; clarity[(k + A) * 2] = C; clarity[(k + A) * 2 + 1] = D; queue[tail++] = k + A; }
     }
     this.shoreTex.needsUpdate = true;
     this.levelTex.needsUpdate = true;
