@@ -30,6 +30,8 @@ export const groundUniforms = {
   uBedSun: { value: new THREE.Vector3(0, 1, 0) },
   uBedLook: { value: new THREE.Vector3(0.55, 1, 1) },
   uGroundTint: { value: new THREE.Vector3(1, 1, 1) },
+  // a fresh burn's ground (burns.js, terrain-build.js splatAt: the floor's w on land): the char and the pale ash in it
+  uGroundChar: { value: [new THREE.Vector3(0.022, 0.02, 0.018), new THREE.Vector3(0.2, 0.195, 0.185)] },
   // x: the blend noise's reach (in weight units), y: how soft a band is (weight units; smaller is crisper),
   // z: the blend noise's size (m), w: how far the slow field pushes it about (m)
   uSplat: { value: new THREE.Vector4(1.0, 0.2, 4.5, 6) },
@@ -61,6 +63,7 @@ uniform vec3 uBedMats[6];
 uniform float uBedTime;
 uniform vec3 uBedSun, uBedLook;
 uniform vec3 uGroundTint;
+uniform vec3 uGroundChar[2];
 uniform vec4 uSplat;
 uniform vec3 uMottle;
 uniform vec3 uSplatEdge;
@@ -258,6 +261,14 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
       + (bB.x * groundShaded(4, uGroundLit[4], s) + bB.y * groundShaded(5, uGroundLit[5], s) + bB.z * groundShaded(6, uGroundLit[6], s)) * groundRockTint + bB.w * groundShaded(7, uGroundLit[7], s);
     if (bC.x + bC.y > 0.0) c += (bC.x * groundShaded(8, uGroundLit[8] * cliffTone(p, px), s) + bC.y * groundShaded(9, uGroundLit[9] * screeTone(p, px), s)) * groundRockTint;
     if (bC.z + bC.w > 0.0) c += bC.z * groundShaded(10, uGroundLit[10], s) + bC.w * groundShaded(11, uGroundLit[11], s);
+    // a fresh burn (the real perimeters, burns.js; the floor's w on land): black char with pale ash in it over whatever
+    // the ground was, broken into patches as it thins out over the first years; bare rock only sooted
+    if (fl.w > 0.004) {
+      float ch = smoothstep(0.12, 0.55, fl.w + 0.45 * (lookFbm(p / 7.0 + vec2(2.3, 5.9), 43u, 2) - 0.5) + 0.2 * n1 * fb);
+      float ash = smoothstep(0.56, 0.8, lookFbm(p / 2.2 + vec2(8.1, 1.7), 44u, 2)) * (0.35 + 0.65 * lookFade(2.2, px));
+      vec3 charC = mix(uGroundChar[0], uGroundChar[1], ash) * (1.0 + 1.6 * groundRock);
+      c = mix(c, charC, ch * (1.0 - 0.5 * groundRock));
+    }
   }
   c *= mottle;
   c *= vec3(1.0 + 0.06 * m20, 1.0, 1.0 - 0.06 * m20); // the slow mottle drifts a touch warm and cool too

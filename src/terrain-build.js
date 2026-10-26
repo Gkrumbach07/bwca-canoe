@@ -2,7 +2,8 @@
 // out, so it runs in the build worker. Positions are relative to (originX, originZ), the tile corner, which
 // keeps every vertex small enough for float32 however far the tile sits from the world origin.
 import { fbm, lerp, smoothstep, clamp } from './rng.js';
-import { burnAt, rockAt, calmAt, meadowAt, knobAt } from './fields.js';
+import { rockAt, calmAt, meadowAt, knobAt } from './fields.js';
+import { burnLook, burnOpenAt } from './burns.js';
 
 // the cliff band strength (site.js CLIFF.band) a cell needs to be a cliff
 const CLIFF_BAND = 0.45, TALUS_MIN = 0.4;
@@ -21,8 +22,9 @@ const C = {
   rock: hex(0x9e958a), rockDark: hex(0x666a70), rockLichen: hex(0xa4a58d),
   // the forest floor is needle duff, not grass: a calm warm tan in the sun (forest), golden in the sunny
   // stands (forestLight), a cool grey-brown under a thick canopy (forestDark); moss comes in below. The
-  // meadow is a light yellow-green, the burn tawny; each lit colour has a cooler shade partner (SHADE, MOSS)
-  forest: hex(0xa28a67), forestLight: hex(0xb09a6d), forestDark: hex(0x5c544e), meadow: hex(0xa6a857), burn: hex(0xb29a62),
+  // meadow is a light yellow-green, the burn an olive (its fireweed, grass, bracken and blueberry over the old char: the
+  // real burns, burns.js); each lit colour has a cooler shade partner (SHADE, MOSS)
+  forest: hex(0xa28a67), forestLight: hex(0xb09a6d), forestDark: hex(0x5c544e), meadow: hex(0xa6a857), burn: hex(0x8f9257),
   // the bluff pass, appended so the classes before keep their indices (the cover atlas, the ground cover and
   // the footsteps read classes by index): a cliff face, the dark green-grey the Shield takes under its lichens
   // and the water that runs down it, and the scree under a cliff, a cooler, darker grey than the granite knobs
@@ -31,7 +33,7 @@ const C = {
 // moss on the forest floor, lit and in the canopy's shade: the pair the duff's own lit/shade pair is mixed with
 const MOSS = { lit: hex(0x87ad52), shade: hex(0x405f3a) };
 // the shade partner of the open ground classes (under a tree at the meadow's edge, say)
-const SHADE = { meadow: hex(0x697048), burn: hex(0x72664f) };
+const SHADE = { meadow: hex(0x697048), burn: hex(0x5d6244) };
 // bed bands by water depth (metres); the depth carries a little grain so the bands are not rulers
 export const BED_STEPS = [1.4, 3.2, 6.5, 13];
 export const bedGrain = (x, z) => (fbm(x * 0.03, z * 0.03, 2, 61) - 0.5) * 1.2;
@@ -71,7 +73,7 @@ export function classify(grid, x, z, shade, pre) {
     if (slope >= 0.55) return I.rockDark;
     return lichenField(x, z) >= 0 ? I.rockLichen : I.rock;
   }
-  if (burnAt(x, z) >= 0.5) return I.burn;
+  if (burnOpenAt(x, z, sd) >= 0.5) return I.burn; // an open burn (burns.js: a wildfire's first 25 years or so)
   if ((pre.meadow >= 0 ? pre.meadow : meadowAt(x, z, sd, pre.wet || 0)) >= 0.5) return I.meadow; // same field the forest uses for its openings (d2 land: the survey's, site.js meadow)
   if (shade >= 0.55) return I.forestDark;
   return sunnyField(x, z) >= 0 ? I.forestLight : I.forest;
@@ -215,7 +217,9 @@ const across = (v, w) => smoothstep(-w, w, v);
 
 // The splat at one point: the same fields and the same priority as classify, each threshold widened into
 // a blend. wA, wB, wC: the ten weights and two spare (sum 1); fl: [canopy shade, sunny stand, bed, bed depth /
-// BED_DEPTH_SCALE].
+// BED_DEPTH_SCALE] under water, [canopy shade, sunny stand, 0, char] on land: the char is a fresh burn's black ground
+// and ash (burns.js), laid over the rest by the shader (terrain.js).
+const _burn = {};
 export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
   wC[0] = wC[1] = wC[2] = wC[3] = 0;
   if (pre.sd < 0) {
@@ -239,8 +243,11 @@ export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
   const dark = across(pre.slope - 0.55, 0.08) * (1 - band); // a cliff's brink is the pale lichened granite
   const lichen = across(lichenField(x, z), 0.05) * (1 - dark);
   const soil = left - rock;
-  const burn = across(burnAt(x, z) - 0.5, 0.25);
-  const meadow = across((pre.meadow >= 0 ? pre.meadow : meadowAt(x, z, pre.sd, pre.wet || 0)) - 0.5, 0.15) * (1 - burn);
+  // a burn (burns.js, the real perimeters by the season's date): its open ground, tawny with grass, fern and blueberry,
+  // and, while it is fresh, the char over everything
+  const B = burnLook(x, z, _burn, pre.sd);
+  const burn = Math.min(1, B.ground);
+  const meadow = across((pre.meadow >= 0 ? pre.meadow : meadowAt(x, z, pre.sd, pre.wet || 0)) - 0.5, 0.15) * (1 - burn); // (d2 land: the survey's meadow)
   const forest = 1 - burn - meadow;
   // (no sunny stand along the water: the forest's edge there is the dark wall the shoreline pass wants)
   const sunny = across(sunnyField(x, z), 0.03) * smoothstep(8, 22, pre.sd);
@@ -258,7 +265,7 @@ export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
   wC[2] = sand; wC[3] = margin;
   // the band lies in the shade of the crowns that lean out over it (a beach is open to the sky)
   const under = (1 - smoothstep(0.6, 3.2, pre.sd)) * (1 - across((pre.beach || 0) - 0.5, 0.15));
-  fl[0] = Math.max(shade * (1 - 0.8 * sunny), 0.85 * under); fl[1] = sunny * (1 - under); fl[2] = 0; fl[3] = 0;
+  fl[0] = Math.max(shade * (1 - 0.8 * sunny), 0.85 * under); fl[1] = sunny * (1 - under); fl[2] = 0; fl[3] = B.char;
 }
 // How much of the waterline band is a granite ledge (0..1) rather than wet duff: more on the knobs, the points that
 // face open water and the steeper shores, broken along the rest by a noise some tens of metres across; none on the
