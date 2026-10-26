@@ -221,7 +221,6 @@ async function buildFar(m) {
 self.onmessage = async (e) => {
   const m = e.data;
   if (m.type === 'init') { cfg = m; if (v4()) rapidsV4(); return; } // (d2 bake: the v4 release's drops)
-  if (m.type === 'water') { Object.assign(cfg, m, { type: 'init' }); return; } // d2 water: the lakes' colour and beds (aquatic.js waterInit)
   if (m.type !== 'build') return;
   try {
     const r = m.level === 'far' ? await buildFar(m) : await buildFine(m);
@@ -230,3 +229,5 @@ self.onmessage = async (e) => {
     self.postMessage({ type: 'error', key: m.key, error: String((err && err.message) || err) });
   }
 };
+// d2 water: the lakes' colour and the beds by lake (aquatic.js waterInit), posted after init, merged into cfg
+self.addEventListener('message', (e) => { if (e.data && e.data.type === 'water' && cfg) Object.assign(cfg, e.data, { type: 'init' }); });

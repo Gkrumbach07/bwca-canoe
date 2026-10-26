@@ -429,9 +429,9 @@ export class TileManager {
       w.onmessage = (e) => this.onMessage(e.data);
       w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
         bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null }); // d1 lakes: the lakes' bowls and rice (lake-facts.js)
-      w.postMessage(waterMsg);
       return { w, key: null };
     });
+    for (const x of this.workers) x.w.postMessage(waterMsg); // d2 water (after each one's init)
   }
 
   key(tx, ty) { return `${tx},${ty}`; }
