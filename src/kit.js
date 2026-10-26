@@ -48,13 +48,14 @@ const SIT_BOOST = 1.6;       // the bar's recovery sat in the canoe chair, over 
 const SIDE = { from: 1.5, to: 5, most: 0.35 }; // kg: a fish this heavy may throw the hook at the side with no net (up to most)
 
 // the new meals' and the fillets' minutes on the grate (cook.js COOK; the stove takes STOVE_K of them)
-// (tuning: two thirds of the old minutes, as cook.js's: on the one clock a game minute at the grate is 15 real seconds)
+// (one speed, 2026-10-26: back to their full minutes, as cook.js's: at the clock's ×8 a game minute at the grate is 7½
+// real seconds; tuning had cut them to two thirds when it was 15)
 Object.assign(COOK, {
-  'meal:pancakes': { minutes: 8, water: 0.25 }, // (water, 2026-10-26: a mix takes its water, 0.3 → 0.25 L)
-  'meal:chili': { minutes: 7, water: 0.5 },
-  'meal:bannock': { minutes: 10, water: 0.2 },   // (water: flour and water, 0.1 → 0.2 L)
+  'meal:pancakes': { minutes: 12, water: 0.25 }, // (water, 2026-10-26: a mix takes its water, 0.3 → 0.25 L)
+  'meal:chili': { minutes: 10, water: 0.5 },
+  'meal:bannock': { minutes: 15, water: 0.2 },   // (water: flour and water, 0.1 → 0.2 L)
 });
-for (const sp of ['walleye', 'pike', 'smallmouth', 'laketrout', 'perch', 'crappie']) COOK[`fillet:${sp}`] = { minutes: 4, water: 0 };
+for (const sp of ['walleye', 'pike', 'smallmouth', 'laketrout', 'perch', 'crappie']) COOK[`fillet:${sp}`] = { minutes: 6, water: 0 };
 
 // a thing's family: its def's, else the shop's (an outfitter's signature item, outfitters.js: a net, a bug jacket, a blanket)
 export const familyOf = (id) => (itemDef(id) || {}).family || (itemOf(id) || {}).family || null;

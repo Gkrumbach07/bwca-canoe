@@ -48,13 +48,12 @@ const STEADY = 0.4; // fb4 D: seconds the leeches' reach must say the same befor
 export const CAST_WIND = { drag: 0.02, tail: 0.5, caps: 0.5, blow: 5, back: 0.9, word: 2.5, pend: 25 };
 
 export const TUNING = {
-  // bites per real second for one species at every factor 1.0. tuning: the one clock (fb5 C) made a game hour of
-  // fishing three times the real seconds it was (the idle clock had run ×12, now ×4), so 1/80 brought three times the
-  // bites a game hour, and the fight and the catch card (about 35 real s a fish) had shrunk to a third of the game
-  // minutes too: a scripted season landed 14–23 a game hour on a jig, 22 on leeches (a dozen gone in half an hour),
-  // where the old clock gave about 5. A fifth of the old rate brings a game hour back near that (1/240, a third, still
-  // landed 9: the handling's real seconds count for less of a game hour than they did): a bite every two real minutes.
-  base: 1 / 400,
+  // bites per game hour for one species at every factor 1.0 (one speed, 2026-10-26: on the game clock, so the catch a
+  // game hour no longer follows how fast the clock runs; it was 1/400 a real second at the clock's ×4, the same 2.25 a
+  // game hour). Measured at ×8 (three scripted morning hours on Lake One, a jig, eight runs each): 5.5 landed a game
+  // hour before; 6.4 at 2.6 (four runs), 5.0 at 2.25 and 4.6 at 2.4 (six each: a run's own luck is about ±1), so 2.5.
+  // (The retrieve's real seconds are more game minutes now: half the casts a game hour, each soaking longer.)
+  base: 2.5,
   castSpeed: [3, 21],    // lure speed off the tip at zero and full power, m/s
   castAngle: 0.66,       // radians above the horizon
   floatDepth: 2.4,       // metres of line under the bobber
@@ -388,7 +387,7 @@ export class Fishing {
     return { depth, shore, weeds, rock, dropoff, dmax, secchi: w.clarityOf(id), maxDepth: rec && rec.maxDepth ? rec.maxDepth : 0, cells: rec ? rec.cells : 0, lakeId: id, H, level };
   }
 
-  // bites per second for one species, given the water, the lure, how it is moving and the hour; fills `out`
+  // bites per game hour for one species, given the water, the lure, how it is moving and the hour; fills `out`
   rateFor(id, hab, lureDef, lureDepth, speed, hours, out = null) {
     const sp = SPECIES[id];
     if (sp.deepLake && hab.maxDepth < 20) { if (out) out.rate = 0; return 0; }
@@ -607,7 +606,7 @@ export class Fishing {
   spotAt() { const p = this.player; if (!this.onFoot) return p; return this.aimWorld || this.footWater || p; }
 
   // --- per frame -------------------------------------------------------------------------------------------------------
-  update(dt, timeScale = 1) {
+  update(dt) {
     const p = this.player, inp = this.input;
     const afloat = p.mode === 'paddle' && !p.landing && !p.ashore && !p.teleporting && !(this.canoe.state.climb > 0);
     const foot = !afloat && this.footOk(); // wc C: standing with the rod in a hand
@@ -641,7 +640,7 @@ export class Fishing {
         else this.message = { text: 'Reel in to change lures', t: 1.6 };
       }
       const warning = p.balance > 0.25 ? p.prompt : null; // the sea's warning outranks the rod's prompts
-      this.updateRodUp(dt, timeScale);
+      this.updateRodUp(dt);
       if (warning) p.prompt = warning;
     }
     this.poseRod(dt);
@@ -651,7 +650,7 @@ export class Fishing {
     this.fillUi();
   }
 
-  updateRodUp(dt, ts) {
+  updateRodUp(dt) {
     const p = this.player, l = this.lure, w = this.world;
     this.chase.orbitLocked = this.chase.mode === 'third'; // a click casts; it does not swing the camera
     const s = this.state;
@@ -702,7 +701,7 @@ export class Fishing {
       }
       p.prompt = null;
     } else if (s === 'inwater' || s === 'bite') {
-      this.updateLureInWater(dt, ts);
+      this.updateLureInWater(dt);
     } else if (s === 'fight') {
       this.updateFight(dt);
     } else if (s === 'landed') {
@@ -711,7 +710,7 @@ export class Fishing {
   }
 
   // the lure (or the bobber) sitting in the water: retrieve, sink, drift, and the bites
-  updateLureInWater(dt, ts) {
+  updateLureInWater(dt) {
     const p = this.player, l = this.lure, w = this.world, inp = this.input, def = this.lureDef;
     const t = this.tipWorld();
     const reeling = inp.held('KeyW', 'ArrowUp');
@@ -773,7 +772,7 @@ export class Fishing {
         let total = 0;
         for (const id of SPECIES_IDS) { const f = this.factors[id] || (this.factors[id] = {}); total += this.rateFor(id, hab, def, l.depth, l.speed, this.day.hours, f); }
         this.rate = total;
-        if (Math.random() < 1 - Math.exp(-total * dt * ts)) {
+        if (Math.random() < 1 - Math.exp(-total * dt * this.day.hoursPerTick)) { // (per game hour, on the clock)
           let r = Math.random() * total, id = SPECIES_IDS[0];
           for (const s of SPECIES_IDS) { r -= this.factors[s].rate; if (r <= 0) { id = s; break; } }
           this.startBite(id);
