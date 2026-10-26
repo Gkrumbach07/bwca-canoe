@@ -8,6 +8,7 @@ import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } fro
 import { hash2 } from './rng.js';
 import { Site } from './site.js';
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
+import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the lakes with no contour map
 
 let cfg = null;
 
@@ -155,6 +156,7 @@ async function buildFine(m) {
   gradeAhead('fine', m.tx, m.ty);
   const buf = await fetchTile(m.url);
   await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
+  bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
@@ -162,7 +164,7 @@ async function buildFine(m) {
   // rocks and the cliffs all read it
   const site = new Site(grid, cfg.exclusions);
   const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz, site });
-  const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site });
+  const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site, rice: cfg.riceById }); // (d1 lakes: rice by lake)
   // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);
@@ -187,6 +189,7 @@ async function buildFar(m) {
   gradeAhead('far', m.fx, m.fy);
   const buf = await fetchTile(m.url);
   await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
+  bowlTile(buf, 'far', cfg.grid, cfg.bowlById); // d1 lakes
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
   const grid = new TileGrid(desc, m.fx, m.fy, buf, cfg.levelById, cfg.clarityById);
   const per = g.tile / f.factor; // far cells per fine tile

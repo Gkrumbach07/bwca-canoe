@@ -141,7 +141,7 @@ registerKind('fish', {
       const trout = T.troutLake(c.landing, c.reach);
       if (trout && fresh('laketrout')) {
         const sizeIt = c.rng() < 0.3;
-        const W = FISH_WORDS.laketrout, lake = trout.l.name, depth = Math.round(trout.l.maxDepth);
+        const W = FISH_WORDS.laketrout, lake = trout.l.name, depth = Math.round(T.depthOf(trout.l.id)); // (d1 lakes: the DNR's depth)
         const where = trout.hops != null ? hopsText(trout.hops) : `, ${fmtKm(trout.d / 1000)} km ${compass(trout.l.cx - c.landing.x, trout.l.cz - c.landing.z)} of here`;
         minCm = sizeIt ? sizeAt('laketrout', SIZE_PCT[0] + c.rng() * (SIZE_PCT[1] - SIZE_PCT[0])) : 0;
         const [say, sign] = pickR(c.rng, W.texts), text = fill(say, { one: minCm ? `One laker of ${minCm} cm or better` : 'One laker', lake, depth, where });
@@ -176,7 +176,7 @@ registerKind('fish', {
     if (!ev.kept || t.status !== 'open') return false;
     if (t.species && t.species !== ev.species) return false;
     if (t.minCm && Math.round(ev.cm) < t.minCm) return false;
-    if (ev.species === 'laketrout') { const l = T.lakeRec(ev.lake); if (!l || (l.maxDepth || 0) < DEEP) return false; }
+    if (ev.species === 'laketrout') { const l = T.lakeRec(ev.lake); if (!l || T.depthOf(l.id) < DEEP) return false; } // (d1 lakes)
     return true;
   },
   onEvent(T, t, ev) {
@@ -337,6 +337,10 @@ export class Tasks {
   boardChanged() { if (this.onBoard) this.onBoard(); }
   today() { const d = this.day || (window.__game && window.__game.day); return d ? absDay(d.year, d.doy) : 0; }
   lakeRec(id) { return id > 0 ? this.world.lakes[id - 1] : null; }
+  // d1 lakes: how deep a lake goes (the DNR's contour map, else its max depth: lake-facts.js), and whether lake trout
+  // live in it (the DNR's survey where there is one: fishing.js bites them by it); with no facts, 20 m and deeper
+  depthOf(id) { const F = this.world.facts, l = this.lakeRec(id); return F ? F.depthOf(id) : (l && l.maxDepth) || 0; }
+  troutIn(l) { const F = this.world.facts; return F ? F.fishOf(l.id, 'laketrout') > 0.3 && F.depthOf(l.id) >= DEEP : (l.maxDepth || 0) >= TROUT_WATER; }
   basinOf(id) { const l = this.lakeRec(id); return l ? l.basin : -1; }
   lakeName(id) { return this.world.lakeName(id); }
   // an outfitter's landing: { ep, name, place, x, z, lake }
@@ -388,7 +392,7 @@ export class Tasks {
   troutLake(landing, reach) {
     let best = null;
     for (const l of this.world.lakes) {
-      if (!l || !l.name || (l.maxDepth || 0) < TROUT_WATER) continue;
+      if (!l || !l.name || !this.troutIn(l)) continue; // (d1 lakes)
       const d = Math.hypot(l.cx - landing.x, l.cz - landing.z);
       if (d > RANGE * 1.5) continue;
       const r = reach.get(l.basin), hops = r ? r.hops : null;

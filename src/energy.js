@@ -2,6 +2,7 @@ import { clamp, smoothstep } from './rng.js';
 import { monthDay } from './astro.js';
 import { LIFE } from './pace.js';
 import { itemDef, NEED, check, timerWords, isBag } from './items.js';
+import { dayMean, daySwing } from './weather.js'; // d1 lakes: the NOAA normals
 // an item's food family for the readout: 'meal' (raw, to cook), 'snack', 'forage', 'hot' (cooked: camp 2's hot:* and
 // fried:*), or its own kind
 const FOOD_KIND = (id) => { const d = itemDef(id); return !d ? '' : d.kind === 'food' && d.cooked ? 'hot' : d.kind; };
@@ -658,7 +659,7 @@ export class Energy {
   // half of it ashore), the rain on you and the dark
   feltTemp(wind) {
     const d = this.day, L = d.weather && d.weather.look, p = this.player;
-    let t = L && Number.isFinite(L.temp) ? L.temp : 2.5 - 16.5 * Math.cos((2 * Math.PI * (d.doy - 25)) / 365.25) + 5.5 * Math.sin((2 * Math.PI * (d.hours - 9)) / 24);
+    let t = L && Number.isFinite(L.temp) ? L.temp : dayMean(d.doy) + daySwing(d.doy) * Math.sin((2 * Math.PI * (d.hours - 9)) / 24); // (d1 lakes: the normals)
     const ws = wind && Number.isFinite(wind.speed) ? wind.speed : 0, afloat = p.mode === 'paddle' || p.mode === 'swim';
     t -= Math.min(WIND_MAX_C, Math.max(0, ws - WIND_FROM) * WIND_C) * (afloat ? 1 : 0.5);
     t -= RAIN_C * this.rainOn() * this.kitMods.rainChill; // (content C: the rain jacket)

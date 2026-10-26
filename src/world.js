@@ -2,6 +2,7 @@
 // the loaded fine tiles, fall back to the 80 m far field, and finally to a flat default, so nothing ever
 // has to wait for a tile to answer a question.
 import { GridQueries, TileGrid } from './grid.js';
+import { LakeFacts } from './lake-facts.js'; // d1 lakes
 
 // Where the baked data lives: VITE_DATA_URL (a bucket behind a CDN, see docs/HOSTING.md), else `data/`
 // under the app's own base path (public/data in development). Always ends in a slash.
@@ -88,8 +89,16 @@ export class World extends GridQueries {
     const index = await res.json();
     if (index.version !== 3) throw new Error('map data is from an older bake: run `npm run bake:all`');
     // fb E: the correction table, for the release it was made from (its own chunk, fetched only then)
-    const fixes = index.source && index.source.baked === FIXES_FOR ? (await import('./world-fixes.json').catch(() => null))?.default : null;
-    return new World(index, base, fixes);
+    // d1 lakes: and the agencies' lake facts (lake-facts.js), for the release they were joined to (their own chunk too)
+    const [fixes, facts] = await Promise.all([
+      index.source && index.source.baked === FIXES_FOR ? import('./world-fixes.json').then((m) => m.default, () => null) : null,
+      import('./lake-facts.json').then((m) => m.default, () => null),
+    ]);
+    const w = new World(index, base, fixes);
+    // d1 lakes (`?facts=off` leaves them out, for a before and after)
+    const off = typeof location !== 'undefined' && /[?&]facts=off\b/.test(location.search);
+    if (facts && !off && facts.for === (index.source && index.source.baked)) w.facts = new LakeFacts(facts, w);
+    return w;
   }
 
   constructor(index, base, fixes = null) {
@@ -125,6 +134,7 @@ export class World extends GridQueries {
       if (l.secchi) this.clarityById[l.id] = l.secchi;
     }
     this.fixed = fixes ? this.applyFixes(fixes) : null;
+    this.facts = null; // d1 lakes: a LakeFacts once load() has joined lake-facts.json (null on another release)
     for (const p of this.portages) {
       if (p.tread && !p.trailPts) p.trailPts = resampleLine(p.tread, 1.6); // a newer bake's connected trails (fb E)
       let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;

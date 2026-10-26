@@ -426,7 +426,8 @@ export class TileManager {
     this.workers = Array.from({ length: n }, () => {
       const w = new Worker(new URL('./tile-worker.js', import.meta.url), { type: 'module' });
       w.onmessage = (e) => this.onMessage(e.data);
-      w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed });
+      w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
+        bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null }); // d1 lakes: the lakes' bowls and rice (lake-facts.js)
       return { w, key: null };
     });
   }

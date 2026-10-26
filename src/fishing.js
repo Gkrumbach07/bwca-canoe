@@ -390,7 +390,14 @@ export class Fishing {
   // bites per game hour for one species, given the water, the lure, how it is moving and the hour; fills `out`
   rateFor(id, hab, lureDef, lureDepth, speed, hours, out = null) {
     const sp = SPECIES[id];
-    if (sp.deepLake && hab.maxDepth < 20) { if (out) out.rate = 0; return 0; }
+    // d1 lakes: how many of this species the lake holds, from the DNR's survey of it (lake-facts.js fishOf: the lake's
+    // fish as a multiplier on the base rate and a species mix; water no one surveyed takes what the surveyed lakes of its
+    // size hold). On a release the table was not made for, the old mix: every species, lake trout from 20 m, few walleye
+    // in a pond
+    const facts = this.world.facts;
+    const abundance = facts ? facts.fishOf(hab.lakeId, id) : sp.deepLake && hab.maxDepth < 20 ? 0
+      : (0.75 + 0.5 * hash2(hab.lakeId, SPECIES_IDS.indexOf(id), 5)) * (id === 'walleye' && hab.cells && hab.cells < 2500 ? 0.35 : 1);
+    if (!(abundance > 0)) { if (out) out.rate = 0; return 0; }
     const f = out || {};
     f.lure = sp.lures[lureDef.id];
     f.bed = band(hab.depth, sp.bed[0], sp.bed[1], 1.5, 0.12);
@@ -402,8 +409,7 @@ export class Fishing {
     f.clarity = lerp(lerp(sp.stained, sp.clear, smoothstep(1.5, 4.5, hab.secchi)), 1, 1 - L.day);
     f.wind = hab.H < 0.1 ? sp.calm : hab.H < 0.42 ? sp.chop : hab.H < 0.8 ? 1 : 0.55;
     f.action = speed < 0.05 ? lureDef.still : speed < 1.6 ? lureDef.slow : lureDef.fast * sp.fast;
-    f.abundance = 0.75 + 0.5 * hash2(hab.lakeId, SPECIES_IDS.indexOf(id), 5);
-    if (id === 'walleye' && hab.cells && hab.cells < 2500) f.abundance *= 0.35;
+    f.abundance = abundance; // d1 lakes (above)
     f.rate = TUNING.base * f.abundance * f.lure * f.bed * f.zone * f.shore * f.structure * f.time * f.clarity * f.wind * f.action * (this.kit ? this.kit.mods.bite : 1); // (content C: the lucky cap)
     return f.rate;
   }
