@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { glslWaves, glslRipples, waveHeight, windWeights, windHeight, N as WAVE_DIRS } from './waves.js';
+import { glslWaves, glslRipples, waveHeight, windWeights, windHeight, N as WAVE_DIRS, CHOP, CHOP_W, CHOP_PH } from './waves.js';
 import { glslNoise } from './shading.js';
 import * as Sky from './sky.js';
 import { groundUniforms } from './terrain.js';
@@ -331,6 +331,7 @@ const frag = /* glsl */ `
     uniform vec2 uSkyGlow;
   #endif
   uniform vec2 uOrigin, uReflTexel, uGustOff, uWindDir; // (uWindDir: the whitecaps' patches drift downwind)
+  uniform float uDirW[${WAVE_DIRS}];   // (the chop's weights by direction: the whitecaps break on its crests)
   uniform vec4 uRip[${RIPPLES * 2}];
   uniform sampler2D uReflection;
   uniform vec2 uPatchLocal;
@@ -410,28 +411,48 @@ const frag = /* glsl */ `
     }
     return tilt;
   }
-  // cons B: the near whitecaps, breaking crests scattered over the water: a lattice of 3.2 m cells turned off the axes,
-  // each holding at most one at a time, born at a random place in the cell on its own clock, breaking fast and fading
-  // over a few seconds as it drifts downwind, longer across the wind than along it, more cells holding one the harder
-  // it blows (as the rain's rings are drawn). blow 0..1.
-  float breakers(vec2 pw, float blow) {
-    const mat2 TURN = mat2(0.8, 0.6, -0.6, 0.8);
-    vec2 q = TURN * pw * (1.0 / 3.2);
-    vec2 id = floor(q), f = q - id - 0.5;
-    ivec2 c = ivec2(id);
-    float clock = uTime * 0.23 + lookHash(c, 51u);
-    float t = fract(clock);
-    int cyc = int(mod(floor(clock), 4096.0));
-    if (lookHash(c + ivec2(cyc, 0), 53u) > 0.12 + 0.6 * blow) return 0.0;
-    vec2 at = vec2(lookHash(c + ivec2(cyc, 7), 3u), lookHash(c + ivec2(cyc, 13), 5u)) - 0.5;
-    vec2 w = TURN * uWindDir;
-    vec2 d = f - at * 0.5 - w * (t * 0.12);
-    float along = dot(d, w), across = dot(d, vec2(-w.y, w.x));
-    float r = (0.1 + 0.12 * blow) * (0.6 + 0.8 * lookHash(c + ivec2(cyc, 21), 9u));
-    float e = (along * along) / (r * r * 0.16) + (across * across) / (r * r);
-    float life = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(0.25, 0.9, t));
-    float froth = 0.6 + 0.4 * lookNoise(TURN * pw * 5.3 + vec2(t * 3.0, 0.0), 41u);
-    return (1.0 - smoothstep(0.35, 1.0, e)) * life * froth;
+  // cons B, redrawn at the join (the brief: the whitecaps read as flat white ovals; "short foam streaks along the wave
+  // crests, oriented across the wind, which appear at the crest, run briefly and fade"). The near whitecaps break on
+  // the chop's own crests (waves.js CHOP, the phases the vertices draw): each direction that carries a good share of
+  // the wind's waves has its crests cut into 7 m cells, and on its own 4 s clock the cell's stretch of crest may
+  // break (more often the harder it blows): for 1.3 s a white line 2.5 to 5 m long rides the crest, spilling a little
+  // down its front, ragged and thinning to its ends; the foam it lays lies where it fell, streaked along the crest,
+  // and fades in a few tenths of a second as the crest runs on. share: this direction's weight against the strongest (the odd one breaks on a minor direction); streak: a
+  // noise drawn out across the wind, which breaks the laid foam into streaks.
+  float crestFoam(vec2 p, vec2 pw, vec2 k, float ph, float share, float blow, float streak, float px) {
+    float kl = length(k), L = 6.2831853 / kl, c = ${CHOP_W.toFixed(6)} / kl;   // wavelength, the crest's speed
+    vec2 u = k / kl;
+    float cyc = (dot(p, k) + ph - ${CHOP_W.toFixed(6)} * uTime - 1.5707963) * 0.15915494;   // crests at whole numbers
+    float n = floor(cyc + 0.85), s = (cyc - n) * L;   // the crest just passed (up to 0.85 L back) or about to, and metres ahead of it
+    n += floor(dot(uOrigin, k) * 0.15915494 + 0.5);   // its own number, the same from any floating origin
+    float bm = dot(pw, vec2(-u.y, u.x)), b = bm * ${(1 / 7.0).toFixed(6)}, j = floor(b);
+    ivec2 id = ivec2(int(n), int(j));
+    float clock = uTime * 0.25 + lookHash(id, 61u);
+    float age = fract(clock) * 4.0;
+    int cy = int(mod(floor(clock), 4096.0));
+    ivec2 ic = id + ivec2(cy, 3 * cy);
+    if (lookHash(ic, 67u) > (0.08 + 0.62 * blow) * share * share) return 0.0;
+    // a breaking crest is never ruled straight: it wanders a hand's width either way along its length
+    s += 0.22 * (lookNoise(vec2(bm * 0.9, n * 3.7), 83u) - 0.5);
+    float since = max(-s, 0.0) / c;   // seconds since the crest passed here (0 on it and ahead)
+    float td = age - since;           // the break's age when it passed
+    if (td < 0.0 || td > 1.3) return 0.0;
+    float env = smoothstep(0.0, 0.18, td) * (1.0 - smoothstep(0.75, 1.3, td));
+    // along the crest: the segment's middle and half-length (in cells), spreading as it breaks; x runs -1..1 over it
+    float hl = (0.18 + 0.16 * lookHash(ic, 73u)) * (0.8 + 0.25 * blow) * (0.45 + 0.55 * smoothstep(0.0, 0.6, td));
+    float x = (b - j - 0.5 - (lookHash(ic, 71u) - 0.5) * 0.2) / hl;   // (inside its cell: no end cut by a cell's edge)
+    x += 0.4 * (lookNoise(vec2(bm * 1.1, s * 1.5 + n * 5.1), 97u) - 0.5);   // ragged ends
+    float body = 1.0 - x * x;   // thickest mid-way, thinning to nothing at the ends
+    if (body <= 0.0) return 0.0;
+    // across it: a sharp spill just ahead of the crest, its width the body's, and behind it the foam laid, streaked,
+    // thinner and older further back, the ends of the break laying less
+    float soft = 0.04 + px;
+    float froth = lookNoise(vec2(bm * 2.2, s * 4.0 - n * 1.3), 101u);   // (a breaking face is froth, not paint)
+    float reach = 0.45 * body * (0.5 + 0.9 * froth);                    // (what a canoe looking upwind sees of it)
+    float front = 1.0 - smoothstep(reach - soft, reach + soft, s);
+    float laid = exp(-since * (4.0 + 4.0 * (1.0 - body))) * mix(0.62 + 0.38 * froth, 0.12 + 0.45 * streak, smoothstep(0.02, 0.12, since));
+    laid *= 1.0 - smoothstep(0.4, 0.6, -s / L);
+    return env * front * laid * smoothstep(0.0, 0.55, body);
   }
   void main() {
     #ifdef FAR
@@ -558,15 +579,25 @@ const frag = /* glsl */ `
     // sparkles once a pixel is a few centimetres): at blow 1 about a crest in six breaks, at a breeze the odd one
     float blow = smoothstep(0.18, 0.7, vCrest.y);
     float capFar = smoothstep(0.08, 0.35, px);   // (where a breaker would be under a few pixels)
-    // near: small broken patches on the crests, frothy (a cap is broken white, not a sheet)
-    float capNear = breakers(pw, blow) * mix(1.0, smoothstep(-0.2, 0.5, vCrest.x), 0.6);
+    // near: crests breaking (crestFoam), on the chop directions that carry the wind's waves, more on the swell's tops
+    float capNear = 0.0;
+    if (blow > 0.001 && capFar < 0.999) {
+      float wmax = 1e-4;
+      for (int i = 0; i < ${WAVE_DIRS}; i++) wmax = max(wmax, uDirW[i]);
+      vec2 wa = vec2(-uWindDir.y, uWindDir.x);
+      float streak = smoothstep(0.38, 0.66, lookNoise(vec2(dot(pw, wa) * 0.9, dot(pw, uWindDir) * 3.2), 79u) * 0.65 + lookNoise(vec2(dot(pw, wa) * 2.3, dot(pw, uWindDir) * 7.0), 89u) * 0.35);
+      ${CHOP.map((k, i) => `{ float sh = uDirW[${i}] / wmax; if (sh > 0.25) capNear = max(capNear, crestFoam(p, pw, vec2(${k[0].toFixed(9)}, ${k[1].toFixed(9)}), ${CHOP_PH[i].toFixed(4)}, sh, blow, streak, px)); }`).join('\n      ')}
+      capNear *= mix(1.0, smoothstep(-0.2, 0.5, vCrest.x), 0.5) * smoothstep(0.0, 0.2, blow);
+    }
     // far: what a pixel there averages of them, a fleck field on a finer noise, more of it the harder it blows
-    float capFarV = smoothstep(0.64 - 0.12 * blow, 0.76 - 0.1 * blow, lookNoise(pw * 0.6 - uWindDir * (uTime * 0.6), 37u))
+    // (drawn out across the wind, as the breaking crests are: streaks, not blobs)
+    vec2 wq = vec2(dot(pw, vec2(-uWindDir.y, uWindDir.x)) * 0.32, (dot(pw, uWindDir) - uTime * 0.6) * 1.15);
+    float capFarV = smoothstep(0.64 - 0.12 * blow, 0.76 - 0.1 * blow, lookNoise(wq, 37u))
       * smoothstep(0.1 - 0.2 * blow, 0.6, vCrest.x) * (0.16 + 0.3 * blow);
     // (seen low over the water a cap stands up off the face of its wave, where a flat patch would lie under a pixel: far
     // off and at a grazing look they count for more)
     capFarV *= mix(1.0, 2.6, smoothstep(0.35, 0.06, dot(normalize(vWaveN), v)));
-    float cap = min(1.0, mix(capNear, capFarV, capFar) * blow * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.9);
+    float cap = min(1.0, mix(capNear * 0.95, capFarV * blow * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.9, capFar));
     float foam = max(max(edgeA, lineA), cap) * live;
     // white water lit as the splashes and the rise rings are (wake.js foamLight): the key by its height in the sun's
     // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white
