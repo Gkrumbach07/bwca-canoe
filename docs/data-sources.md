@@ -80,3 +80,91 @@ The surveys found these and say no. A game shouldn't place or publish them:
 A lightning storm on 7 July 2026 burned about 78,000 acres in and around the wilderness: Bear Trap 30,804 ac, Thumb 25,015, Wolfpack, Sioux, Camp and Little Knife. The Superior National Forest has closures in force to 1 April 2027. These are in NIFC's live perimeters, not yet in the final archives.
 
 The game's season runs in the current year, so a 2026 season is set the summer these fires burned.
+
+## Fetched
+
+Round D1's source streams write grid-aligned products to `data-cache/<source>/` for round D2's bake. They all share one layout:
+- **Grid:** `AREAS.bwca` through `makeProjection`/`makeGrid`: 19,968 × 6,912 cells, 78 × 27 tiles, origin −99840, −34560.
+- **Files:** `<tx>_<ty>.<channel>.bin` holds gzip of the tile's core 256 × 256 cells, with no halo. Rows run from the north edge, cell i = tx·256 + col, little-endian.
+- **Manifest:** `manifest.json` gives the grid, channels (type, legend, nodata), the tiles written and the citations.
+- **Missing tiles:** a tile with nothing to say isn't written. Fill it with each channel's nodata.
+
+### Ground kind (D1-ground): `scripts/sources/ground.mjs`
+
+**What it makes.** Four byte channels per 10 m cell, in `data-cache/ground/`. 1,386 of the 2,106 tiles have data; the rest are wholly Ontario.
+
+| Channel | Meaning | Nodata |
+|---|---|---|
+| `kind` | What the ground is (legend below) | 0 = no survey |
+| `rock` | Rock outcrop % of the SSURGO map unit (0–35 in this box) | 255 |
+| `stone` | Surface stone and boulder cover: byte = 254·√(cover fraction), so cover % = 100·(byte/254)² | 255 |
+| `peat` | Histosol (peat and muck) % of the SSURGO map unit | 255 |
+
+**Sources.** All cached compactly in `data-cache/ground/raw/`, fetched per block of 4 × 4 tiles, and resumable:
+- **NWI for Minnesota, 2009–14 (MN DNR):** 127,816 polygons with Cowardin code and plant community, generalised to ~2 m on the server. Open water of 100 acres or more is left out, since those are the bake's own lakes.
+- **SSURGO by Soil Data Access (NRCS):** 76,086 map-unit pieces clipped per block, and a 455-map-unit table of components (rock outcrop, Histosols, stone phases, surface fragment cover).
+- **OSM:** 544 `natural=beach/sand/bare_rock/rock/scree` areas from the bake's cached Minnesota extract.
+
+**Sizes.** The raw cache is 37 MB. The products are 15 MB of gzip (kind 4.6 MB, rock 4.0, stone 4.6, peat 2.2), 63 MB on disk across 5,544 files.
+
+**Run it** from the repo root, so `data-cache/` is the main checkout's:
+- `node scripts/sources/ground.mjs` fetches (~7 min) and rasterises (~3 min). It stops if disk falls under 15 GB free.
+- `--tiles lakeone` (or `--tiles tx0-tx1,ty0-ty1`) does a test area.
+- `--no-fetch` re-derives from the cache after changing a rule.
+- `--png` draws the quick-looks.
+- `--check` compares `peat` with the DNR's own layer.
+
+**The kinds**, with area in the box:
+
+| Value | Kind | Colour | From | km² |
+|---|---|---|---|---|
+| 0 | none | `#d9d9d9` | no survey (Ontario): keep the game's own fields | — |
+| 1 | upland | `#ebe5d3` | surveyed dry land | 5,621 |
+| 2 | open bog | `#c9ae4f` | NWI "Open Bog" (scrub-shrub, Circular 39 type 8) | 196 |
+| 3 | conifer bog | `#35603d` | NWI "Coniferous Bog" (forested, type 8): black spruce, tamarack | 709 |
+| 4 | shrub swamp | `#8ea05a` | NWI "Shrub Wetland": alder, willow | 228 |
+| 5 | marsh | `#5fa596` | NWI "Shallow Marsh" (PEM1) | 142 |
+| 6 | wet meadow | `#c6d474` | NWI "Seasonally Flooded/Saturated Emergent": sedge and beaver meadows | 64 |
+| 7 | hardwood swamp | `#7b5b3b` | NWI "Hardwood Wetland": black ash | 141 |
+| 8 | in-lake emergent | `#e0453a` | NWI L2EM, R2EM and PEM2 "Deep Marsh": wild rice, bulrush, reeds | 33 |
+| 9 | aquatic bed | `#e38bd0` | NWI L2AB, R2AB, PAB: lilies, pondweed | 18 |
+| 10 | rock outcrop | `#7c7c86` | OSM bare_rock/rock areas, NWI rocky shore | 0.2 |
+| 11 | boulder field | `#9d6ad0` | OSM scree, or a map unit at least half rubbly with no NWI wetland | 97 |
+| 12 | sand | `#f0cd5e` | OSM beach/sand, NWI sand shore (US2) | 0.1 |
+| 13 | open water | `#8db6dc` | NWI open water under 100 acres, SSURGO "Water" | 1,261 |
+
+Wet meadow and open water go beyond the brief's list. Wet meadow is the game's own "meadow" (fields.js `meadowAt`: fens and beaver meadows), and NWI maps it apart from marsh.
+
+**Precedence.** The first rule that applies decides a cell:
+1. NWI aquatic bed, then in-lake emergent.
+2. OSM mapped sand, rock or scree. They're small and precisely placed, so they win over the NWI polygon they sit in.
+3. NWI palustrine wetlands (2–7).
+4. NWI rocky shore, sand shore or open water.
+5. SSURGO: "Water" gives open water, at least half rubbly gives boulder field, anything else is upland.
+6. Nothing surveyed: none.
+
+A cell takes a polygon when its centre is inside it, by even-odd across the polygon's rings, as bake.mjs rasterises lakes.
+
+**What round D2 needs to know:**
+- **Rock outcrop as a kind is nearly empty, and that's the data.** No SSURGO map unit here is more than 35 % rock (the Quetico–Rock outcrop complexes on the steep shores are 30–35 %), and a map unit doesn't say where inside it the rock lies. Place bare rock from the `rock` share together with D1-lidar's slope and roughness, and D1-forest-rock's MGS D-02 mapped outcrops. Suggested: D-02 bare rock becomes kind 10, below the NWI kinds.
+- **Sand is real only where mapped:** about 40 OSM beaches (0.1 km²). No agency maps BWCA beaches. Inferring more (gentle hydro-flat LiDAR shore, D-01 outwash sand) is D2's call.
+- **Boulder fields (97 km²)** are mostly rubbly wet lowland (Aquepts and Giese, rubbly) that NWI leaves unmapped. Elsewhere, `stone` gives the boulder density everywhere: bouldery 0.06 %, very bouldery 2 %, extremely 5 %, rubbly 25 % of the surface per component.
+- **Peat is a map-unit share, everywhere SSURGO maps.** Masked to the NWI kinds (2–9, 13), it is the DNR's "Potentially Wet Histosols".
+  - 204 km² of soil that is at least half peat lies off NWI:
+    - 153 km² is within 30 m of an NWI polygon: the two surveys' boundaries.
+    - 22.5 km² is frequently flooded creek bottom (Bowstring muck).
+    - About 29 km² is Rifle, Greenwood or Dora peat that NWI didn't map.
+  - The kind stays NWI's there. D2 may promote the last group to conifer bog.
+- **The check against the DNR layer** (`--check`): 52 % of cells are equal over Lake One, 35 % in a block near Knife Lake.
+  - The DNR built its layer from gNATSGO; SSURGO here was re-saved on 2026-09-07.
+  - Where they differ, it is mostly DNR 100/90 against our 50/45 in Lake County map units that now list a mineral component beside the peat (Bowstring and Fluvaquents; Giese, rubbly–Tacoosh–Rifle), plus slivers at boundaries.
+- **Lakes:** lake cells carry SSURGO "Water", so they read as open water. The bake's lake mask stays the authority on water. The beds (8, 9) lie in the water; place pads and reeds there instead of by `calmAt`.
+- **Ontario has no NWI or SSURGO.** Kind 0 means keep today's noise fields in Quetico.
+- **Helpers:** `ground.mjs` exports `readPack`, `rasterize`, `nwiKind`, `mapunitFacts` and `blockEnvelope` for D2, if it wants to re-derive from the raw cache.
+
+**Quick-looks:** `shots/ground-{lakeone,bwca}-{kind,rock,stone,peat}.png` and `shots/ground-legend.png`. Lake One is at 10 m per pixel, the whole box at 80 m, with the live bake's lakes in blue.
+
+**Gotchas:**
+- **NWI paging:** the NWI FeatureServer returns fewer than `resultRecordCount` (953 of 1000) with `exceededTransferLimit` set. Page by the count it returns.
+- **SDA SQL:** it rejects `DECLARE`, so inline the geometry. `STIntersection` with the block can return a GEOMETRYCOLLECTION; keep only its polygons.
+- **SSURGO stone cover:** cosurffrags `sfragcov_r` exists for nearly every phased component. The phase-class midpoints are only the fallback.
