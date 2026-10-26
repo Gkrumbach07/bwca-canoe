@@ -47,6 +47,7 @@ import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from 
 import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
 import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
+import { explored } from './explored.js'; // round A-B: the map filling in
 import { MapTable } from './maptable.js'; // fb2 D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
@@ -732,6 +733,15 @@ async function main() {
     const dueT = hints.due.bind(hints);
     hints.due = (id, rec) => (cast.has(id) ? cast.get(id).due(rec) : dueT(id, rec));
   }
+  // round A-B: the map filling in (the owner, 2026-10-26: "The map filling in"). explored.js keeps, per season, the
+  // lakes paddled (a bitset), your way (a point every 50 m), the portages walked end to end and the sites slept at; the
+  // map (hud.js drawMap) inks the lakes a deeper blue with a dark shore, pencils the way, goes over the portages solid
+  // and ticks the sites, an overlay on the sheets you own, cached per sheet and per tile. Read each frame after the
+  // sheets' own look; a night at a site is counted when the camp wakes from it (not a nap).
+  explored.attach({ world, profile, trip, camp });
+  { const su = sheets.update.bind(sheets); sheets.update = (p) => { su(p); explored.update(p); }; }
+  { const wakeB = camp.wake.bind(camp); camp.wake = () => { const n = camp.night, c = camp.camp; wakeB(); if (n && !n.nap) explored.stay(c && c.site ? c.site : { x: n.x, z: n.z }); }; }
+  window.__game.explored = explored;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

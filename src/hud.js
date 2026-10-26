@@ -3,6 +3,7 @@ import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
 import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
+import { explored, INK_WATER, INK_RIM, ROUTE_STEP } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked, your way in pencil)
 import { lifeKmh, describe as describePace } from './pace.js';
 import './hud.css';
 
@@ -39,6 +40,9 @@ const NEAT = 'rgba(74, 59, 38, 0.55)', FOLD = 'rgba(74, 59, 38, 0.4)'; // an own
 // table sells it
 const OWN_LINE = 'rgba(42, 52, 30, 0.85)', DOT_LINE = 'rgba(74, 59, 38, 0.72)', SOLD_DOT = 'rgba(180, 50, 31, 0.9)';
 const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
+// round A-B: your way in pencil, and a portage you have crossed gone over solid (explored.js has the lakes' ink)
+const PENCIL_INK = 'rgba(54, 46, 38, 0.86)', PENCIL_SOFT = 'rgba(54, 46, 38, 0.26)';
+const CROSSED = '#9a2819', CROSSED_UNDER = 'rgba(176, 52, 36, 0.62)';
 const PENCIL = 'Caveat, "Bradley Hand", "Segoe Print", cursive'; // the pencil hand (index.html --pencil-font)
 // what a keeper's ring on the map is for, in the pencil hand (outfitters.js hint kinds)
 const HINT_LABEL = { laketrout: 'lakers, deep', walleye: 'walleye at dusk', pike: 'pike in the weeds', smallmouth: 'smallmouth, rocky points', crappie: 'crappie at dusk', perch: 'perch', moose: 'moose at dawn', carry: 'a long carry' };
@@ -428,7 +432,17 @@ export class Hud {
       const [ox, oz] = w.tileOrigin(e.tx, e.ty), d = Math.hypot(ox + w.tileMetres / 2 - p.x, oz + w.tileMetres / 2 - p.z);
       if (d < bd) { bd = d; best = e; }
     }
-    if (best) this.fineImage(best);
+    if (best) { this.fineImage(best); return; }
+    // round A-B: then a fine tile's ink gone stale since a lake was paddled (one a call), and the sheet's ink under you
+    this.inkBudget = 1;
+    for (const [key, img] of this.fineImages) {
+      if (img.inkV === explored.lakeV) continue;
+      const [tx, ty] = key.split(',').map(Number);
+      this.tileInk(img, key, tx, ty, true);
+      if (!this.inkBudget) return;
+    }
+    const sh = sheetAt(p.x, p.z);
+    if (sh && explored.inkSheets().has(sh.id)) explored.sheetInk(sh);
   }
   queuePrepaint() {
     if (this.idleQueued) return;
@@ -698,7 +712,24 @@ export class Hud {
     const layer = () => { if (!c.depth) { c.depth = document.createElement('canvas'); c.depth.width = c.depth.height = FINE_PX; } return c.depth.getContext('2d'); };
     c.depth = null;
     c.labels = s.lvl ? this.paintDepthContours(layer, s, w.side, w.halo, pxPerCell, tx, ty) : [];
+    // round A-B: the lakes in it you have paddled, inked (explored.js), made with the image and kept with it
+    const ink = explored.world ? explored.inkTile(s, tx, ty) : null;
+    c.ink = ink ? ink.canvas : null; c.lakeIds = ink ? ink.ids : null; c.inkV = ink ? explored.lakeV : -1;
     return c;
+  }
+  // round A-B: a fine tile's ink, remade when a lake in it was newly paddled since it was made (explored.touches): from
+  // the streamed tile's cells, a few a frame (inkBudget); a tile fetched for the map alone has let its cells go, so it
+  // is fetched and painted again. The ink as it was is drawn meanwhile.
+  tileInk(img, key, tx, ty, streamed) {
+    if (img.inkV === explored.lakeV || !explored.world) return img.ink || null;
+    if (!explored.touches(img.lakeIds, img.inkV)) { img.inkV = explored.lakeV; return img.ink || null; }
+    if (this.inkBudget > 0) {
+      this.inkBudget--;
+      const s = streamed ? this.world.slots[ty * this.world.ntx + tx] : null;
+      if (s) { const r = explored.inkTile(s, tx, ty); img.ink = r.canvas; img.lakeIds = r.ids; img.inkV = explored.lakeV; }
+      else if (!streamed) this.mapTiles.delete(key);
+    }
+    return img.ink || null;
   }
   pruneMapTiles() {
     if (this.mapTiles.size <= MAP_TILES_MAX) return;
@@ -1333,6 +1364,53 @@ export class Hud {
     ctx.restore();
   }
 
+  // round A-B: your way in pencil (explored.js: a point every 50 m, in runs): the pieces in view only, a stride through
+  // them when the map is far out (a point about every pixel and a half), the run you are on drawn on to where you are;
+  // a graphite line and a fainter second pass a hair off it
+  drawRoute(ctx, x0, z0, mPerPx, inView, k, player) {
+    const runs = explored.runs; if (!runs.length) return;
+    const min = 1.5 * k, stride = Math.max(1, Math.floor((min * mPerPx) / ROUTE_STEP)), path = new Path2D();
+    let n = 0;
+    for (let r = 0; r < runs.length; r++) {
+      const run = runs[r], p = run.pts, tail = r === runs.length - 1 && explored.open;
+      if (run.n < 2 && !tail) continue;
+      let lx = NaN, ly = 0;
+      for (const c of run.chunks) {
+        if (!inView(c.x0, c.z0, c.x1, c.z1)) { lx = NaN; continue; }
+        for (let i = c.i0; i <= c.i1; i = i < c.i1 && i + stride > c.i1 ? c.i1 : i + stride) {
+          const a = (p[i * 2] - x0) / mPerPx, b = (p[i * 2 + 1] - z0) / mPerPx;
+          if (lx !== lx) { path.moveTo(a, b); lx = a; ly = b; continue; }
+          if (i !== c.i1 && Math.abs(a - lx) + Math.abs(b - ly) < min) continue;
+          path.lineTo(a, b); lx = a; ly = b; n++;
+        }
+      }
+      if (tail && player && lx === lx) { path.lineTo((player.x - x0) / mPerPx, (player.z - z0) / mPerPx); n++; }
+    }
+    if (!n) return;
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.setLineDash([]);
+    const lw = Math.max(1.6 * k, 1.3 * Math.min(window.devicePixelRatio || 1, 2)); // (never under a pixel and a third: the glance is small)
+    ctx.strokeStyle = PENCIL_INK; ctx.lineWidth = lw; ctx.stroke(path);
+    ctx.translate(0.9 * k, -0.7 * k); ctx.strokeStyle = PENCIL_SOFT; ctx.lineWidth = lw * 0.7; ctx.stroke(path);
+    ctx.restore();
+  }
+  // round A-B: the legend's "your way" and "paddled", once there is something of yours on the map
+  inkLegend(onWay, onLake) {
+    if (!this.inkLeg) {
+      if (!onWay && !onLake) return;
+      const way = document.createElement('span'), lake = document.createElement('span');
+      way.className = 'leg'; way.innerHTML = `<i style="width: 20px; height: 0; border-top: 1.6px solid ${PENCIL_INK}; transform: rotate(-8deg)"></i>your way`;
+      lake.className = 'leg'; lake.innerHTML = `<i style="width: 15px; height: 11px; border-radius: 45% 55% 50% 50%; background: rgb(${INK_WATER.join(',')}); border: 1.5px solid rgb(${INK_RIM.join(',')})"></i>paddled`;
+      const you = this.el.map && this.el.map.querySelector('.band.foot .leg .you');
+      if (you) you.parentNode.before(way, lake); else if (this.el.mapHint) this.el.mapHint.before(way, lake);
+      this.inkLeg = { way, lake }; this.inkLegOn = null;
+    }
+    const key = `${onWay}${onLake}`;
+    if (this.inkLegOn === key) return;
+    this.inkLegOn = key;
+    this.inkLeg.way.style.display = onWay ? '' : 'none'; this.inkLeg.lake.style.display = onLake ? '' : 'none';
+  }
+
   drawMap(player) {
     const w = this.world, ctx = this.mapCtx, W = this.canvas.width, H = this.canvas.height;
     if (!W || !H) return;
@@ -1362,6 +1440,7 @@ export class Hud {
     ctx.fillStyle = PAPER;
     ctx.fillRect(0, 0, W, H);
     ctx.imageSmoothingEnabled = true;
+    this.inkBudget = 2; let sheetBudget = 1; // round A-B: inks remade in this frame
     const depthLabels = []; // [level, x, z] from the fine tiles in view, lettered once the view is close
     const soundings = [];   // [image, x, y, size]: the fine tiles' depth contours, drawn with the rest of the detail
     if (!blank) {
@@ -1386,6 +1465,21 @@ export class Hud {
           ctx.drawImage(img, a, b, farMetres / mPerPx + 0.5, farMetres / mPerPx + 0.5);
         }
         for (const key of this.farImages.keys()) if (!aliveFar.has(key)) this.farImages.delete(key);
+        // round A-B: the lakes you have paddled, inked: a layer per sheet at the far field's 80 m (explored.js), cut to
+        // its sheet; under the fine tiles, which carry their own at 10 m
+        if (explored.lakes.count) {
+          const inked = explored.inkSheets();
+          for (const s of SHEETS) {
+            if (!inked.has(s.id) || !inView(s.x0, s.z0, s.x1, s.z1) || !onMine(s.x0, s.z0, s.x1, s.z1)) continue;
+            const made = explored.builds, L = explored.sheetInk(s, sheetBudget > 0);
+            if (explored.builds !== made) sheetBudget--; // one made a frame at most
+            if (!L) continue;
+            const [a, b] = toPx(s.x0, s.z0), [la, lb] = toPx(L.x, L.z);
+            ctx.save(); ctx.beginPath(); ctx.rect(a, b, (s.x1 - s.x0) / mPerPx, (s.z1 - s.z0) / mPerPx); ctx.clip();
+            ctx.drawImage(L.canvas, la, lb, L.w / mPerPx, L.h / mPerPx);
+            ctx.restore();
+          }
+        }
         // every tile in view at full detail once the view is close enough for contours to read: streamed
         // tiles from their own cells, the rest fetched for the map alone (in the wild, only on your sheets)
         const live = new Map(w.tiles.readyTiles().map((e) => [e.key, e]));
@@ -1411,6 +1505,8 @@ export class Hud {
             if (!img) continue;
             const [a, b] = toPx(ox, oz);
             ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
+            const ink = this.tileInk(img, key, tx, ty, !!e); // round A-B: its lakes you have paddled, inked
+            if (ink) ctx.drawImage(ink, 1, 1, ink.width - 2, ink.height - 2, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
             if (img.depth && lay.depths) soundings.push([img.depth, a, b, w.tileMetres / mPerPx + 0.5]);
             if (mPerPx < 7 && img.labels && lay.depths) depthLabels.push(...img.labels);
           }
@@ -1430,19 +1526,26 @@ export class Hud {
       if (depthLabels.length) {
         ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.lineWidth = 3 * k; ctx.strokeStyle = `rgb(${WATER.join(',')})`; ctx.fillStyle = '#2d4f66'; ctx.lineJoin = 'round';
-        for (const [lvl, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeText(String(lvl), a, b); ctx.fillText(String(lvl), a, b); }
+        const halo = `rgb(${WATER.join(',')})`, inkHalo = `rgb(${INK_WATER.join(',')})`; // round A-B: on an inked lake, haloed in its ink
+        for (const [lvl, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeStyle = explored.hasLake(w.lakeIdAt(x, z)) ? inkHalo : halo; ctx.strokeText(String(lvl), a, b); ctx.fillText(String(lvl), a, b); }
         ctx.textBaseline = 'alphabetic';
       }
-      // portages: red dashed, with the rod count beside the middle of the trail when there is room
+      // round A-B: your way, in pencil (under the portages, the sites and the names)
+      this.drawRoute(ctx, x0, z0, mPerPx, inView, k, player);
+      // portages: red dashed, with the rod count beside the middle of the trail when there is room; one you have crossed
+      // gone over solid (round A-B)
       const close = mPerPx < 16, mid = mPerPx < 60;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
-      if (lay.portages) for (const p of w.portages) {
-        const [bx0, bz0, bx1, bz1] = p.bbox;
+      if (lay.portages) for (let pi = 0; pi < w.portages.length; pi++) {
+        const p = w.portages[pi], [bx0, bz0, bx1, bz1] = p.bbox;
         if (!inView(bx0, bz0, bx1, bz1)) continue;
         ctx.beginPath();
         p.pts.forEach(([x, z], n) => { const [a, b] = toPx(x, z); if (n) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
-        ctx.setLineDash(close ? [7 * k, 4 * k] : [4 * k, 3 * k]); ctx.strokeStyle = '#c0392b'; ctx.lineWidth = (close ? 2.4 : 1.6) * k; ctx.stroke(); ctx.setLineDash([]);
+        if (explored.crossed(pi)) {
+          ctx.setLineDash([]); ctx.strokeStyle = CROSSED_UNDER; ctx.lineWidth = (close ? 3.6 : 2.6) * k; ctx.stroke();
+          ctx.setLineDash(close ? [9 * k, 3 * k] : [5 * k, 2 * k]); ctx.strokeStyle = CROSSED; ctx.lineWidth = (close ? 3 : 2.1) * k; ctx.stroke(); ctx.setLineDash([]);
+        } else { ctx.setLineDash(close ? [7 * k, 4 * k] : [4 * k, 3 * k]); ctx.strokeStyle = '#c0392b'; ctx.lineWidth = (close ? 2.4 : 1.6) * k; ctx.stroke(); ctx.setLineDash([]); }
         if (close) {
           const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
           ctx.fillStyle = '#b4321f'; ctx.textAlign = 'left';
@@ -1452,11 +1555,18 @@ export class Hud {
       // campsites: red dots with a pale centre
       if (mid && lay.campsites) {
         const r = (close ? 4.2 : 2.6) * k;
-        for (const c of w.campsites) {
+        for (let ci = 0; ci < w.campsites.length; ci++) {
+          const c = w.campsites[ci];
           if (!inView(c.x, c.z, c.x, c.z)) continue;
           const [a, b] = toPx(c.x, c.z);
           ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28); ctx.fillStyle = '#c0392b'; ctx.fill();
           if (close) { ctx.beginPath(); ctx.arc(a, b, r * 0.38, 0, 6.28); ctx.fillStyle = '#f4e9d6'; ctx.fill(); }
+          // round A-B: a night slept there, ticked in pencil beside it
+          if (explored.stayed(ci)) {
+            const t = (close ? 1 : 0.75) * k;
+            ctx.beginPath(); ctx.moveTo(a + r + 1.5 * t, b - 4.5 * t); ctx.lineTo(a + r + 4.5 * t, b - 0.8 * t); ctx.lineTo(a + r + 11 * t, b - 11 * t);
+            ctx.strokeStyle = PENCIL_INK; ctx.lineWidth = 2 * t; ctx.stroke();
+          }
         }
       }
       // the keepers' words (outfitter.js toldHints): a ring pencilled round the water they meant, as a keeper marks your
@@ -1533,6 +1643,15 @@ export class Hud {
       }
     }
     this.hintLegend(told.length > 0);
+    // round A-B: off your sheets, your pencil line is the only thing on the paper (the ink keeps to the sheets)
+    if (clipped && explored.runs.length) {
+      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H);
+      for (const s of owned) { const [a, b] = toPx(s.x0, s.z0); ctx.rect(a, b, (s.x1 - s.x0) / mPerPx, (s.z1 - s.z0) / mPerPx); }
+      ctx.clip('evenodd');
+      this.drawRoute(ctx, x0, z0, mPerPx, inView, k, player);
+      ctx.restore();
+    }
+    this.inkLegend(explored.runs.some((r) => r.n > 1), !blank && explored.lakes.count > 0);
     if (clipped) this.drawNeatlines(ctx, sh, owned, toPx, k);
     if (look === 'whole' || this.table) this.drawSheetGrid(ctx, sh, toPx, inView, k);
     // blank paper on the open sheet: a pencil word for where the rest of the map is
