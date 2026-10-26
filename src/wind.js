@@ -84,7 +84,8 @@ export class Wind {
   update(dt, hours) {
     this.t += dt;
     if (this.lastHours >= 0 && hours < this.lastHours - 12) this.rollDay(); // the clock wrapped past midnight
-    const dh = this.lastHours >= 0 ? Math.max(0, ((hours - this.lastHours + 36) % 24) - 12) : 0; // game hours this frame
+    const step = this.lastHours >= 0 ? ((hours - this.lastHours + 36) % 24) - 12 : 0, dh = Math.max(0, step); // game hours this frame
+    if (this.lastHours < 0 || Math.abs(step) > 0.2) this.snapN = 3; // (the cons join: a load, a night, a set clock; the weather's bearing is a frame behind a jump)
     this.lastHours = hours;
     // the diurnal shape: still at dawn, building late morning, strongest mid-afternoon, dying at dusk
     const diurnal = 0.25 + 0.75 * smoothstep(8.5, 14.5, hours) * (1 - smoothstep(16.5, 21, hours));
@@ -101,10 +102,15 @@ export class Wind {
     if (this.gust < -0.45) this.gust = -0.45;
     const target = this.override ?? Math.min(22, Math.max(0, base * (1 + this.gust)));
     this.speed += (target - this.speed) * (1 - Math.exp(-dt * (0.4 + 0.8 * stormy)));
-    this.from = (this.from + (noise2(this.t * 0.01, 1.5, 13) - 0.5) * 6 * dt + 360) % 360;
+    // (the cons join: under a weather with a bearing, as every hour now has, the wander is a third of what it was, so the
+    // steer below holds the wind within a few degrees of the forecast's and the lee stays where it was)
+    const steered = wx && Number.isFinite(wx.from) && this.override === null;
+    this.from = (this.from + (noise2(this.t * 0.01, 1.5, 13) - 0.5) * 6 * dt * (steered ? 0.3 : 1) + 360) % 360;
     // the weather's bearing: turn toward it the short way round, at up to 40 degrees a game hour (or a degree a
     // second, whichever is more: a jump of the clock or a debug set comes round in a minute)
     if (wx && Number.isFinite(wx.from) && this.override === null) {
+      // (the cons join: a loaded game, or a jump of the clock (a night, a set), starts on the forecast's bearing)
+      if (this.snapN > 0) { this.snapN--; this.from = wx.from; }
       const d = ((wx.from - this.from + 540) % 360) - 180;
       this.from = (this.from + Math.sign(d) * Math.min(Math.abs(d), Math.max(dt, 40 * dh)) + 360) % 360;
     }
