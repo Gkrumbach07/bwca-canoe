@@ -71,6 +71,7 @@ const LANDING_RADIUS = 28;
 const ASHORE_RADIUS = 6;      // metres of water between the hull and a shore within which you can step out
 const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like the trail
 const TRAIL_TO_WATER = 2.5;   // tuning: a trail's end farther than this up the bank runs on down to the waterline (trailFor)
+const TRAIL_PUT_MAX = 30;     // tuning: and no farther than this from the end to the waterline (a sanity bound: the Hudson–Lake Four end is 19 m)
 const HULL_REACH = 3;         // metres from a canoe on the ground within which you can shoulder or launch it
 const GROUNDS = 40;           // metres around an outfitter's landing that are its cleared yard and dock
 const CAMP_AREA = 25;         // fb3 A: metres round a campsite within which you walk at life on the idle clock (camp.js AREA_R)
@@ -208,7 +209,7 @@ export class Player {
         if (!(sd > TRAIL_TO_WATER)) return null;
         for (let i = 0; i < 24 && Math.abs(sd) > 0.15; i++) { const g = w.deeperDir(x, z); x += g.x * sd; z += g.z * sd; sd = w.shoreAt(x, z); }
         if (!w.isReady(x, z)) { ready = false; return null; }
-        return Math.abs(sd) <= 0.5 && Math.hypot(x - e[0], z - e[1]) < TRAIL_TO_WATER * 6 ? [x, z] : null;
+        return Math.abs(sd) <= 0.5 && Math.hypot(x - e[0], z - e[1]) < TRAIL_PUT_MAX ? [x, z] : null; // (the put-in updateLanding glides to, no farther than a short walk)
       };
       const a = toWater(raw[0]), b = toWater(raw[raw.length - 1]);
       if (a) raw.unshift(a);
