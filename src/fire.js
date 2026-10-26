@@ -472,6 +472,16 @@ export class Fires {
   }
   // wood laid in the ring and not lit: `hours` of it (camp 2: the first phase of lighting a fire)
   lay(key, at, hours) { const f = this.look(key, at); f.laid = Math.max(0.05, hours); f.out = 0; return f; }
+  // round A-F: a party's fire (party-camps.js): lit at abs hour `lit` and burning to `until` on their own hours, then
+  // the coals as any fire's (the thread of smoke in the morning); the same look, the same one light, never saved. Put
+  // out with douse(key) as they go. A fire already gone cold is not lit again (null).
+  partyFire(key, at, lit, until, now = this.now) {
+    let f = this.fires.get(key);
+    if (!f && now >= until + FIRE.smoulder - 0.5) return null;
+    f = f || this.look(key, at);
+    f.lit = lit; f.until = until; f.laid = 0; f.out = 0; f.party = true; f.struck = undefined;
+    return f;
+  }
 
   // at: { x, y, z, a } (props.js c.layout.fire: the ash's centre, its ground height, the grate's bearing); a fire laid
   // there is lit on its own wood (hours: more on top, or none)
