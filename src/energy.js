@@ -310,7 +310,22 @@ export class Energy {
     const { month } = monthDay(this.day.year, this.day.doy), h = this.day.hours, w = this.day.weather;
     return (month === 6 || month === 7) && h >= 12 && h < 18 && !(w && /overcast|fog|rain|storm/.test(w.state || ''));
   }
-  get warning() { return !this.hasFood && this.value < WARN_AT && !(this.hungFood().days > 0); } // (fb5 join: not "No food… make for an outfitter" with supper hung in the barrel at camp)
+  get warning() { return !this.hasFood && this.value < WARN_AT && !(this.hungFood().days > 0) && !this.foodNearby(); } // (fb5 join: not "No food… make for an outfitter" with supper hung in the barrel at camp)
+  // food of yours close by but out of reach: the pack in the canoe beside the shore, a pack set down by the fire, a fish
+  // in a hand (the content join: "No food, and not much left in you. Make for an outfitter." came 7 m from the canoe with
+  // three meals in it, and two walleyes in the hands)
+  foodNearby(r = 60) {
+    const i = this.inv, p = this.player; if (!i || !p) return false;
+    const d = p.carry && p.carry.drop, FOOD = ['meal', 'snack', 'food', 'fish', 'forage'];
+    for (const c of i.containers) {
+      const w = typeof i.rootWhere === 'function' ? i.rootWhere(c) : c.where;
+      if (w === 'stash') continue;
+      const at = w === 'canoe' ? (d || p) : (w === 'ground' || w === 'hung') ? c.at : p;
+      if (at && Math.hypot(at.x - p.x, at.z - p.z) > r) continue;
+      if (c.grid.some((e) => !e.box && FOOD.includes((itemDef(e.id) || {}).kind))) return true;
+    }
+    return false;
+  }
   get still() { const p = this.player; return (p.mode === 'paddle' || p.mode === 'carry' || p.mode === 'walk') && !p.landing && Math.abs(p.speed) < 0.25; }
   // the rest multiplier: the camp sets it (3 at a site, 4 by a lit fire); until anything does, a campsite nearby gives 3
   get restBoost() { return this._boost; }
@@ -401,7 +416,7 @@ export class Energy {
     if (!d.ok) return { ok: false, why: d.why, words: `${d.why[0].toUpperCase()}${d.why.slice(1)}.` };
     const l = Math.min(this.drinkable, Math.max(0.01, litres));
     this.drinkable = Math.max(0, this.drinkable - l);
-    if (this.live) this.need.water = clamp(this.need.water + l / BODY, 0, 1);
+    this.need.water = clamp(this.need.water + l / BODY, 0, 1); // (the content join: a drink between trips counts too)
     this.lastDrink = { l, at: this.now };
     const words = `${l >= this.drinkable + l - 0.001 && litres > GULP ? 'You drink the bottle up' : l >= 0.9 ? `${l.toFixed(1)} L down` : 'A gulp'}: ${this.bottleWords()}.`;
     this.note(words);
@@ -694,7 +709,9 @@ export class Energy {
     // an outfitter's counter: a drink at the tap, and the bottle filled, free and drinkable at once
     if (this.atCounter && this.atCounter()) {
       if (this.bottle < BOTTLE - 0.001 || this.treating > 0) this.fill(BOTTLE, 0);
-      if (this.live) this.need.water = 1;
+      // (the content join: between trips too: coming in ends the trip, and the thirst you came in with was kept for the
+      // next one, so a player who drank at the tap pushed off parched and was nearly spent by noon)
+      this.need.water = 1;
     }
     // the drain: the clock's share at the clock's own rate, the effort's per second of effort
     let travel = 0, recover = 0, hard = false;
