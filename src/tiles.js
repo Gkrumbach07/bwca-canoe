@@ -7,6 +7,7 @@ import { MeshGround } from './prop-kit.js';
 import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
 import { cascadeHooks } from './sunlight.js';
+import { burnDate } from './burns.js';
 
 // Streams the world around the player: a 5 x 5 neighbourhood of 2.56 km tiles (terrain, water, forest,
 // lake vegetation, portages, campsites) built in a pool of workers and installed one per frame, a 3 x 3
@@ -58,7 +59,7 @@ export const CULL = {
   budget: 2,         // milliseconds a frame may spend preparing meshes
   understoryShadow: true, // round A-C: the understory casts into the cascades (main.js: off at half the undergrowth, Low)
 };
-const UNDERSTORY = new Set([7, 10, 11, 12, 13, 20]); // shrub, hazel, alder, sapling, fern, talus (placement.js SPECIES)
+const UNDERSTORY = new Set([7, 10, 11, 12, 13, 20, 22]); // shrub, hazel, alder, sapling, fern, talus, a burn's regrowth (placement.js SPECIES)
 const SWAY_MARGIN = 2; // metres the wind can carry a crown past its geometry's bounds
 const CHUNK = 64;      // instances per chunk at most
 const CELL = 16;       // metres: the sort's cells (a chunk keeps to a block of 2 x 2 of them)
@@ -565,8 +566,10 @@ export class TileManager {
       const e = this.queue.shift();
       e.state = 'building';
       wk.key = e.key;
-      if (e.level === 'far') wk.w.postMessage({ type: 'build', level: 'far', key: e.key, fx: e.fx, fy: e.fy, url: w.farUrl(e.fx, e.fy) });
-      else wk.w.postMessage({ type: 'build', level: 'fine', key: e.key, tx: e.tx, ty: e.ty, url: w.tileUrl(e.tx, e.ty) });
+      // (the season's date goes with each build: the burns a tile shows are those begun by then, burns.js)
+      const bd = burnDate(), date = [bd.year, bd.doy];
+      if (e.level === 'far') wk.w.postMessage({ type: 'build', level: 'far', key: e.key, fx: e.fx, fy: e.fy, url: w.farUrl(e.fx, e.fy), date });
+      else wk.w.postMessage({ type: 'build', level: 'fine', key: e.key, tx: e.tx, ty: e.ty, url: w.tileUrl(e.tx, e.ty), date });
     }
   }
 

@@ -5,6 +5,7 @@ import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
 import { HULL, keelAt, section } from './hull.js';
 import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from './pace.js';
+import { burnLook } from './burns.js';
 
 export class Input {
   constructor() {
@@ -115,7 +116,10 @@ const HULL_BOTTOM = (() => {
   for (const u of [-0.6, -0.3, 0, 0.3, 0.6]) for (const t of [0.3, 0.6]) { section(u, t, s); pts.push([u * half, s.y, s.z], [u * half, s.y, -s.z]); }
   return pts;
 })();
-const LAND = { rock: 'Bare rock', rockDark: 'A rock face', rockLichen: 'Bare rock', meadow: 'A clearing', burn: 'Old burn', forest: 'The woods', forestLight: 'The woods', forestDark: 'Dark spruce' };
+const LAND = { rock: 'Bare rock', rockDark: 'A rock face', rockLichen: 'Bare rock', meadow: 'A clearing', burn: 'Burned ground', forest: 'The woods', forestLight: 'The woods', forestDark: 'Dark spruce' };
+// the real burns (burns.js): on foot in an open burn, its name ("The Pagami Creek burn"), when it has one
+const _burnHere = {};
+const burnPlace = (x, z) => { const b = burnLook(x, z, _burnHere), n = b.rec && b.rec.name; return n && b.kind === 1 ? `The ${n.replace(/\s+fire$/i, '')} burn` : null; };
 // wc C: sitting (sitAt / stand): a seat within reach m is walked to at walk m/s, sat down on over down s and stood up from
 // over up s; the hips sit back m behind the seat's middle, and a seat without a stand spot is stood at front m before it
 const SIT = { reach: 4.0, walk: 1.6, down: 0.45, up: 0.35, back: 0.07, front: 0.6 };
@@ -1503,7 +1507,7 @@ export class Player {
     // where you are, for the HUD header
     if (camp) { const id = this.nearWater(camp.x, camp.z, 6); this.placeName = camp.name ? `${camp.name} campsite` : `Campsite${id ? ' · ' + (w.lakeName(id) || 'unnamed water') : ''}`; }
     else if (onTrail) this.placeName = trail.def.name;
-    else { const id = this.nearWater(this.x, this.z, 8); this.placeName = id ? `${w.lakeName(id) || 'Unnamed water'} shore` : LAND[cls] || 'The woods'; }
+    else { const id = this.nearWater(this.x, this.z, 8); this.placeName = id ? `${w.lakeName(id) || 'Unnamed water'} shore` : (cls === 'burn' && burnPlace(this.x, this.z)) || LAND[cls] || 'The woods'; }
     let trailText = null;
     if (onTrail) {
       const p = this.trailPoint(trail.trail, trail.along);

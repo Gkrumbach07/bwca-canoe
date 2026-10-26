@@ -10,8 +10,13 @@ import { Site } from './site.js';
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
 import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the lakes with no contour map
 import { patchTile, lakeRockBins, clearPlants } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
+import { loadBurns, setBurnDate } from './burns.js';
 
 let cfg = null;
+// the real burns (burns.js): the table read once, as the worker starts; each build waits for it and then takes the
+// season's date its message carries (tiles.js), after its last await, so no other build can move the date under it
+let burns = null;
+const burnDate = (m) => { if (m.date) setBurnDate(m.date[0], m.date[1]); };
 
 async function fetchTile(url) {
   const res = await fetch(url);
@@ -46,7 +51,8 @@ function instanceData(items, stride, rx, rz) {
     if (x > bounds[3]) bounds[3] = x; if (y > bounds[4]) bounds[4] = y; if (z > bounds[5]) bounds[5] = z;
     const sMax = Math.max(Math.abs(sx), Math.abs(sy), Math.abs(sz));
     if (sMax > bounds[6]) bounds[6] = sMax;
-    if (c) { const tint = items[o + 5]; c[n * 3] = tint; c[n * 3 + 1] = tint * (0.97 + hash2(n, rx * 131 + rz, 2) * 0.06); c[n * 3 + 2] = tint; }
+    // (a burned trunk's char rides in the tint as whole fours over it, placement.js scorchTint: kept in the blue for the bark)
+    if (c) { const t0 = items[o + 5], k = Math.floor(t0 / 4), tint = t0 - 4 * k; c[n * 3] = tint; c[n * 3 + 1] = tint * (0.97 + hash2(n, rx * 131 + rz, 2) * 0.06); c[n * 3 + 2] = t0; }
   }
   return { count, matrices: m, colors: c, bounds };
 }
@@ -64,7 +70,7 @@ function instanceData(items, stride, rx, rz) {
 // that group of that bin is drawn with (vegetation.js makeVegetationMeshes), so the collision is always the drawn
 // shape whatever variant the bin picked.
 const COLLIDE_CELL = 16, ROCK_STRIDE_C = 15, TRUNK_META = 4;
-const NOT_TRUNKS = new Set([6, 7, 10, 11, 12, 13, 14, 15, 16, 20, 21]); // vegetation.js NOT_TRUNKS and the solids
+const NOT_TRUNKS = new Set([6, 7, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22]); // vegetation.js NOT_TRUNKS and the solids
 // the solids and their geometry's reach from the origin over the ground at unit scale (rocks.js FOOT, vegetation.js
 // outcrop, log, stump; rocks.js screeBlock; the cliff module is reached by its own frame below)
 const SOLID_REACH = { 6: 1.7, 14: 3.75, 15: 1.1, 16: 2.0, 20: 1.0, 21: 0 };
@@ -157,6 +163,7 @@ async function buildFine(m) {
   gradeAhead('fine', m.tx, m.ty);
   const buf = await fetchTile(m.url);
   await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
+  await burns; burnDate(m);
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
@@ -193,6 +200,7 @@ async function buildFar(m) {
   gradeAhead('far', m.fx, m.fy);
   const buf = await fetchTile(m.url);
   await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
+  await burns; burnDate(m);
   bowlTile(buf, 'far', cfg.grid, cfg.bowlById); // d1 lakes
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
   const grid = new TileGrid(desc, m.fx, m.fy, buf, cfg.levelById, cfg.clarityById);
@@ -214,7 +222,7 @@ async function buildFar(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; return; }
+  if (m.type === 'init') { cfg = m; burns = loadBurns(); return; }
   if (m.type !== 'build') return;
   try {
     const r = m.level === 'far' ? await buildFar(m) : await buildFine(m);

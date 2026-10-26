@@ -91,6 +91,8 @@ import { setLocalIce } from './season.js'; // d1 lakes
 import { WhiteWater } from './whitewater.js'; // d1 rapids
 import { whiteWater } from './rapids.js'; // d1 rapids
 import { bonk } from './audio-voices.js'; // d1 rapids
+import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.js'; // the real burns
+import { BurnNotes } from './burn-notes.js'; // the real burns
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -156,6 +158,11 @@ async function main() {
   world.tiles = tiles;
   const saved = TripSaver.read(); // the spot saved at the last stop: the title shows it, and Paddle in continues there
   const start = saved ? { x: saved.x, z: saved.z } : world.meta.start;
+  // the real burns (burns.js): a tile shows the burns begun by the season's date, so the date is set before the first tile
+  // is asked for: the saved trip's, else today's (a new season starts today, title.js); the frame keeps it to the clock.
+  // The main thread's own copy of the table is for the forage and the burn's name (the workers read theirs).
+  { const now = new Date(); setBurnDate(saved && Number.isFinite(saved.year) ? saved.year : now.getFullYear(), saved && Number.isFinite(saved.doy) ? saved.doy : Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000)); }
+  loadBurns();
   const setOrigin = (x, z) => { const [tx, ty] = world.tileOf(x, z); const [ox, oz] = world.tileOrigin(tx, ty); water.setOrigin(ox, oz); };
   setOrigin(start.x, start.z);
   progress(0.15, 'Loading the lakes around you…');
@@ -457,6 +464,9 @@ async function main() {
   if (shop.quietStrip) shop.quietStrip = () => {};
   const forage = new Forage({ world, player, day, tiles, scene, camp, hud, energy, audio, outfitter });
   window.__game.forage = forage;
+  // the real burns: the burn's name the first time you are in it each season (burn-notes.js); the console's look at the table
+  const burnNotes = new BurnNotes({ world, player, hud, profile });
+  window.__game.burns = { stats: burnStats, notes: burnNotes, at: (x = player.x, z = player.z) => { const o = burnLook(x, z, {}, world.shoreAt(x, z)); return { ...o, rec: undefined, before: undefined, name: o.rec ? o.rec.name : null, year: o.rec ? o.rec.year : null }; }, events: (x = player.x, z = player.z) => { const o = [{}, {}], n = eventsAt(x, z, o); return o.slice(0, n).map((e) => ({ name: e.rec.name, kind: e.rec.kind, year: e.rec.year, doy: e.rec.doy, w: +e.w.toFixed(3) })); } };
   // camp 1: the camp redone (camp.js, tent.js, hang.js, hold.js). The tent is pitched where you choose (a ghost, green or
   // red), through its phases with E held (hold.js's ring: the footprint, the poles, the tent, the fly; let go and it
   // stops there), struck the same way; the barrel hung from a real limb; nothing struck, put out or packed when you push
@@ -1065,6 +1075,10 @@ async function main() {
     updateClouds(clouds, dt, camera.position.x, camera.position.z);
     d1lakes.update(dt); // d1 lakes: the lake you are on sets the ice (above)
     day.update(dt);
+    // the real burns: the tiles built from now on show the burns begun by today (not behind the title card, whose clock is
+    // the real one until a season is picked: the date stays the saved season's set above)
+    if (!shell) setBurnDate(day.year, day.doy);
+    burnNotes.update(dt, shell);
     sky.position.copy(camera.position);
     sun.position.copy(day.sunDir);
     moonTarget.position.set(player.x, player.altitude, player.z);

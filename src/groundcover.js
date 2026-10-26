@@ -38,9 +38,12 @@ const decl = glslSway + /* glsl */ `
   uniform vec4 uSplatAtlas;    // its window: origin x, z (relative to the floating origin), 1/cell, cells per side
   attribute vec2 aOffset;
   varying vec2 vGrassUv;
-  varying float vGrassDist, vGrassH, vGrassFlower;
+  varying float vGrassDist, vGrassH, vGrassFlower, vGrassFw;
   ${glslSurface}
   ${glslGround}
+  // the share of the tufts that are fireweed in a cell (the cover's fourth byte, high nibble: placement.js coverField, from
+  // a burn's age, burns.js): tall stalks, pink in high summer
+  float fireweedAt(vec2 rel) { return floor(texelFetch(uCoverTex, atlasCell(rel), 0).a * 255.0 / 16.0 + 0.01) / 15.0; }
   // The terrain's splat under a point: each band read once, bilinear between the four cell centres round it.
   void cellSplat(vec2 rel, out vec4 wA, out vec4 wB, out vec4 wC, out vec4 fl) {
     float A = uSplatAtlas.w;
@@ -82,7 +85,10 @@ const body = /* glsl */ `
   float clump = vnoise(mod(rel + uOrigin, 4096.0) / 3.2);
   float heart = smoothstep(0.3, 0.7, clump);
   float present = step(h.x, cv.r * heart * 1.25) * edge;  // a card clump is fuller than the old three blades
-  float sc = present * (0.6 + 0.8 * h.y * h.y + 0.25 * heart);
+  // fireweed (a burn of one to six years, burns.js): that share of the clumps stand twice as tall and flower pink in high
+  // summer (uFlower is the fireweed's season, season.js)
+  float fw = step(h2.z, fireweedAt(rel) * 0.85);
+  float sc = present * (0.6 + 0.8 * h.y * h.y + 0.25 * heart) * (1.0 + 1.1 * fw);
   float yaw = h.z * 6.2832;
   vec3 p = position * sc;
   p.xz = mat2(cos(yaw), -sin(yaw), sin(yaw), cos(yaw)) * p.xz;
@@ -107,6 +113,8 @@ const body = /* glsl */ `
   vec3 base = ground * tint;
   base = mix(base, base * vec3(1.3, 1.08, 0.55), cv.g * (0.6 + 0.4 * h2.y));
   vGrassFlower = step(0.95, h.x / max(1e-3, cv.r * heart * 1.25)) * cv.g * uFlower;
+  vGrassFw = fw * uFlower;
+  base = mix(base, base * vec3(0.85, 1.05, 0.8), fw); // the stalks a darker, cooler green than the grass
   vColor.rgb *= base;
   vGrassUv = uv;
   vGrassH = (position.y - ${ROOT.toFixed(2)}) / ${(HGT - ROOT).toFixed(2)};
@@ -119,6 +127,8 @@ const frag = /* glsl */ `
   if (grass.a < mix(0.5, 0.22, smoothstep(5.0, 45.0, vGrassDist))) discard;
   diffuseColor.rgb *= mix(1.0, 1.42, smoothstep(0.35, 1.0, grass.r));
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.35, 0.6) * grass.r, vGrassFlower * step(0.72, vGrassH));
+  // fireweed in bloom (a burn's first years): the upper part of the stalks magenta, a haze of it across the burn
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.26, 0.55) * (0.8 + 0.3 * grass.r), vGrassFw * 0.9 * smoothstep(0.5, 0.64, vGrassH));
 `;
 
 // A blade is lit as the ground under it from either side: three flips the normal on a back face of a
@@ -191,7 +201,7 @@ export class GroundCover {
         .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\n' + decl)
         .replace('#include <begin_vertex>', body);
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower;')
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower, vGrassFw;')
         .replace('#include <map_fragment>', '#include <map_fragment>\n' + frag)
         .replace('#include <normal_fragment_begin>', noFlip);
       // rain (weather.js): the root wets as the ground under it does, the blade tips a little less
