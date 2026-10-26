@@ -11,6 +11,11 @@
 // The pack side is one screen (wc B, the world cards): the body on the left, a tab per container across the top, and
 // since fb4 B what is around you as tabs on the right (the canoe, each container on the ground, Wood, The ground, the
 // outfitters' keeping); a click turns a tab; openHere(ref) is stream A's Q.
+// Round A-A (a sense of progress): with the season's record attached (journal.record, record.js) the Trips tab is the
+// Record: the season's trips (a click turns the page to that trip's logbook page, the card it ended with), the lakes
+// paddled against those on your sheets, the species and the best of each, the portages, what you saw by kind, the
+// campsites stayed at, the keepers' stories finished, the photos (a link to the Photos tab), the outfitters known, what
+// the boards have paid, and the firsts in pencil. showRecord(id) opens the book there.
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { PackSide } from './inv-ui.js';
 import { KINDS } from './tasks.js'; // fb3 C: a notice's kind, for its progress and its label
@@ -34,6 +39,7 @@ export class Journal {
     Object.assign(this, t);
     this.el = document.getElementById('journal');
     this.open = false; this.tab = 'catches'; this.page = 0; this.sig = ''; this.t = 0; this.side = 'journal';
+    this.record = null; this.recTrip = null; // round A-A: the season's record (record.js), and the trip whose page is open in it
     // the book: a tab for each side on its top edge, the journal's spread and the pack's mat
     this.el.classList.add('book');
     this.el.setAttribute('aria-label', 'The book: the journal and the pack');
@@ -44,7 +50,9 @@ export class Journal {
     this.hud.registerPaper('journal', () => this.close());
     this.el.addEventListener('click', (e) => {
       const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); side.blur(); return; } // (no focus ring left on it for the next key)
-      const tab = e.target.closest('[data-tab]'); if (tab) { this.tab = tab.dataset.tab; this.page = 0; this.render(true); return; }
+      const tab = e.target.closest('[data-tab]'); if (tab) { this.tab = tab.dataset.tab; this.page = 0; this.recTrip = null; this.render(true); return; }
+      const trip = e.target.closest('[data-trip]'); if (trip) { this.recTrip = trip.dataset.trip; this.render(true); const sc = this.jEl.querySelector('.page.right .scroll'); if (sc) sc.scrollTop = 0; return; } // round A-A: a trip's page in the Record
+      if (e.target.closest('[data-back]')) { this.recTrip = null; this.render(true); return; }
       const pg = e.target.closest('[data-page]'); if (pg) { this.page = Math.max(0, this.page + Number(pg.dataset.page)); this.render(true); return; }
       const close = e.target.closest('[data-close]'); if (close) this.close();
     });
@@ -73,6 +81,15 @@ export class Journal {
     return true;
   }
   toggle() { if (this.open) this.close(); else this.show('pack'); }
+  // round A-A: the book open at the journal's Record, at a trip's page when given its id
+  showRecord(id = null) {
+    if (!this.record) return false;
+    this.tab = 'record'; this.page = 0; this.recTrip = id || null;
+    if (this.open && this.side === 'journal') { this.render(true); return true; }
+    this.show('journal');
+    if (this.side !== 'journal') this.setSide('journal');
+    return true;
+  }
   // opened at a side (I: the pack), else at the side it was last turned to
   show(side = null) {
     if (side) this.setSide(side);
@@ -168,7 +185,7 @@ export class Journal {
     const c = this.core;
     return [this.tab, this.page, f ? f.logVersion : 0, en ? Math.round(en.value * 100) : 0, en ? en.food : 0, st ? Math.round(st.km * 10) : 0, st ? st.portages : 0, st ? st.lakes.length : 0, st ? st.nights.length : 0,
       ts ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', ts ? ts.unlocks.length : 0, Math.floor(this.day.hours * 4), this.dayN,
-      c ? `${c.mode}${c.active}${c.book.trips.length}${c.state.wet}` : '', this.photos ? this.photos.version : 0].join('|');
+      c ? `${c.mode}${c.active}${c.book.trips.length}${c.state.wet}` : '', this.photos ? this.photos.version : 0, this.record ? `${this.record.version}${this.recTrip}` : ''].join('|');
   }
 
   render(force) {
@@ -236,10 +253,13 @@ export class Journal {
 
   // --- the right page -------------------------------------------------------------------------------------
   rightPage() {
-    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ...(this.core ? [['trips', 'Trips']] : []), ...(this.photos ? [['photos', 'Photos']] : [])]; // hubs 3B: the prints; the gear is the pack side's
+    // round A-A: the season's record takes the Trips tab's place (its trips list is the logbook's, with each trip's page)
+    const rec = this.record && this.record.s ? this.record : null;
+    if (rec && this.tab === 'trips') this.tab = 'record';
+    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ...(rec ? [['record', 'Record']] : this.core ? [['trips', 'Trips']] : []), ...(this.photos ? [['photos', 'Photos']] : [])]; // hubs 3B: the prints; the gear is the pack side's
     const nav = `<nav class="tabs" aria-label="Journal pages">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`;
     if (!tabs.some(([k]) => k === this.tab)) this.tab = 'catches';
-    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'photos' && this.photos ? this.photosTab() : this.catchesTab();
+    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'record' && rec ? this.recordTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'photos' && this.photos ? this.photosTab() : this.catchesTab();
     const pageNo = (this.dayN || 0) * 2 + 1;
     return `<section class="page right" aria-labelledby="right-h"><div class="ribbon" aria-hidden="true"></div>${nav}<div class="tabpage">${body.html}</div>
       <div class="foot"><span>${body.foot || ''}</span><span class="keys"><kbd>I</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
@@ -318,6 +338,49 @@ export class Journal {
     const more = trips.length - (this.page + 1) * ROWS;
     const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'what you have seen stays seen';
     return { html, foot };
+  }
+  // round A-A: the season's record (record.js view()). A trip's page when one is open (recTrip), else the season: each
+  // part as a ruled row, what is not there yet said softly, so the book shows what a season can hold.
+  recordTab() {
+    const R = this.record, d = this.day;
+    if (this.recTrip) {
+      const c = R.tripById(this.recTrip);
+      if (c) {
+        const html = `<div class="lede rec-head"><div class="sc kicker"><button type="button" class="pbtn" data-back>‹ The record</button> · trip ${c.n}</div></div>
+          <div class="scroll rec-page">${R.pageHtml(c, { book: true })}</div>`;
+        return { html, foot: c.partial ? 'begun part way through' : 'a page of the logbook' };
+      }
+      this.recTrip = null;
+    }
+    const v = R.view(), none = '<span class="soft">none yet</span>';
+    const date = (y, dd) => (Number.isFinite(y) && Number.isFinite(dd) ? shortDate(y, dd) : '');
+    const sinceD = Number.isFinite(v.since) ? new Date(v.since * 86400000) : null;
+    const sinceY = sinceD ? sinceD.getUTCFullYear() : d.year, sinceDoy = sinceD ? v.since - Math.round(Date.UTC(sinceY, 0, 0) / 86400000) : d.doy;
+    const nT = v.trips.length;
+    const head = nT ? 'The season so far' : 'Nothing logged yet';
+    const sub = nT ? `Since ${longDate(sinceY, sinceDoy)} · ${word(nT)} ${plural(nT, 'trip')}${v.nights ? `, ${word(v.nights)} ${plural(v.nights, 'night')} out` : ''}` : 'A trip goes in the record by itself when you come in at an outfitter’s landing.';
+    const rows = [];
+    // the trips, newest first: each opens its page
+    rows.push(['Trips', nT ? v.trips.map((t) => `<button type="button" class="rec-trip" data-trip="${esc(t.id)}"><span class="d">${t.entry && t.entry.year ? shortDate(t.entry.year, t.entry.doy) : ''}</span><span class="l">${esc(R.lineOf(t) || t.line || 'A trip')}</span><span class="go" aria-hidden="true">›</span></button>`).join('') : none]);
+    // the lakes, against those on your sheets
+    const nL = v.lakes.length;
+    const reach = v.sandbox ? `${word(nL)} of the ${v.reach.toLocaleString('en-US')} named` : v.reach ? (v.onSheets === nL ? `${word(nL)} of the ${v.reach} on your sheets` : `${word(nL)} paddled · ${word(v.onSheets)} of the ${v.reach} on your sheets`) : `${word(nL)} paddled`;
+    rows.push(['Lakes', nL ? `<span class="rec-n">${reach}</span><br>${v.lakes.map((l) => esc(l.name)).join(' · ')}` : none]);
+    // the species, the best of each
+    rows.push(['Fish', v.fish.length ? `<table class="rec-fish"><tbody>${v.fish.map((f) => `<tr><td>${esc(f.name)}</td><td>${f.best ? `${f.best.cm} cm` : ''}</td><td class="soft">${f.best && f.best.lake ? esc(f.best.lake) : ''}</td><td class="soft">${f.n > 1 ? `×${f.n}` : ''}</td></tr>`).join('')}</tbody></table>` : none]);
+    const crossed = v.portages.reduce((a, p) => a + (p.n || 1), 0);
+    rows.push(['Portages', v.portages.length ? `<span class="rec-n">${word(crossed)} crossed${v.rods ? ` · ${v.rods} rods` : ''}</span><br>${v.portages.map((p) => `${esc(p.name)}${p.rods ? `, ${p.rods} rods` : ''}${(p.n || 1) > 1 ? ` ×${p.n}` : ''}`).join('<br>')}` : none]);
+    rows.push(['Seen', v.seen.length ? v.seen.map((q) => esc(q.words)).join(' · ') : none]);
+    rows.push(['Campsites', v.camps.length ? v.camps.map((q) => `${esc(q.words)}${q.nights > 1 ? `, ${word(q.nights)} nights` : ''}`).join('<br>') : none]);
+    rows.push(['Stories', v.stories.length ? v.stories.map((q) => `${esc(q.who)}${q.gave ? ` · <span class="soft">${esc(q.gave)}</span>` : ''}`).join('<br>') : '<span class="soft">none told to the end yet</span>']);
+    rows.push(['Photos', v.photos ? `${word(v.photos)} taken · <button type="button" class="pbtn" data-tab="photos">the prints</button>` : none]);
+    if (v.outfitters) rows.push(['Outfitters', `${word(v.known.length)} of ${v.outfitters} known`]);
+    if (v.earned) rows.push(['Earned', `$${v.earned} this season`]);
+    const grid = rows.map(([k, val]) => `<div class="lab">${k}</div><div class="v">${val}</div>`).join('');
+    const firsts = v.firsts.length ? `<div class="rec-firsts"><div class="lab">Firsts</div><ul>${v.firsts.map((f) => `<li><span class="d">${date(f.y, f.d)}</span> ${esc(f.words)}${f.lake ? `, ${esc(f.lake)}` : ''}</li>`).join('')}</ul></div>` : '';
+    const html = `<div class="lede"><h2 id="right-h">${head}</h2><div class="sub">${esc(sub)}</div></div>
+      <div class="scroll rec"><div class="rec-grid">${grid}</div>${firsts}</div>`;
+    return { html, foot: v.built === 'old' ? 'begun from the logbook you kept before' : 'what you have seen stays seen' };
   }
   // hubs 3B: the prints (photo.js), newest first, four to a page: the picture, its caption in pencil, and the notice it
   // went to (paid, once the notice has been claimed)

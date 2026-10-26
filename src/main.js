@@ -76,6 +76,7 @@ import './gear-icons.js'; // content C
 import { attachTaskKinds } from './task-kinds.js'; // content A
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
+import { record } from './record.js'; // round A-A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -723,6 +724,27 @@ async function main() {
   for (const m of bugMoments.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
   { const due = hints.due.bind(hints); hints.due = (id, rec) => (bugMoments.has(id) ? bugMoments.get(id).due(rec) : due(id, rec)); } // the mosquitoes, the blackflies
   window.__game.bugs = bugs;
+  // round A-A: a sense of progress (the owner, 2026-10-26: "A sense of progress"). record.js: when a trip ends (at an
+  // outfitter's landing, or brought in) its card comes up once you are free, a logbook page (the days, the lakes, the
+  // portages and their rods, the nights and where, the fish, what you saw, the photos, the notices, the money, and one
+  // line of the trip in words), and goes into the season's record: the journal's Record tab (in the Trips tab's place).
+  // Nothing on the HUD. The card replaces the "Came in at …" note; a counter waiting to open waits for it; it holds the
+  // walker like the book; one moment the first time one is put away.
+  {
+    record.attach({ trip, stats: tripStats, fishing, fauna, bear, photo, tasks, npcs, profile, world, player, day, camera, hud, title, veil, outfitter, talk, camp, sheets, journal });
+    journal.record = record;
+    const updJ = journal.update.bind(journal);
+    journal.update = (dt) => { updJ(dt); record.update(dt); }; // (each frame in the game, after the trip, in real seconds)
+    const updO = outfitter.update.bind(outfitter);
+    outfitter.update = (dt) => { record.beforeOutfitter(outfitter); updO(dt); if (record.shown) player.input.paused = true; };
+    const comeInA = outfitter.comeIn.bind(outfitter);
+    outfitter.comeIn = (l) => { const note = hud.note; hud.note = (t, ...r) => (/^Came in at /.test(String(t)) ? undefined : note.call(hud, t, ...r)); try { return comeInA(l); } finally { hud.note = note; } };
+    for (const m of record.moments()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const recM = new Map(record.moments().map((m) => [m.id, m]));
+    const dueAA = hints.due.bind(hints);
+    hints.due = (id, rec) => (recM.has(id) ? recM.get(id).due(rec) : dueAA(id, rec)); // "Your trip is in the journal's Record"
+    window.__game.record = record;
+  }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

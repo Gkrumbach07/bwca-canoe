@@ -1,0 +1,60 @@
+/* Round A-A: the trip card (a logbook page, record.js) and the journal's Record tab (journal.js recordTab).
+   Paper as hud.css has it: a cream sheet, ink in the serif, small-caps labels, pencil for what is marked by hand.
+   The page is ruled like a logbook: a faint red margin line down the labels' edge and a hairline under each entry. */
+
+/* --- the card ---------------------------------------------------------------------------------------------------- */
+#tripcard { left: 50%; top: 50%; translate: -50% -50%; width: min(760px, 92vw); max-height: min(720px, 90vh); box-sizing: border-box;
+  padding: 30px 44px 24px 44px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; background: var(--paper-card); }
+#tripcard header { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex: none; }
+#tripcard header .kicker { letter-spacing: .16em; }
+#tripcard .tc-page { min-height: 0; overflow: auto; scrollbar-width: thin; }
+#tripcard .tc-foot { flex: none; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; font: 700 11px/1.4 var(--sc); letter-spacing: .14em; color: var(--ink-faint); }
+#tripcard .tc-foot .pencil { font: 500 21px/1 var(--pencil-font); letter-spacing: 0; color: var(--pencil); transform: rotate(-1.5deg); }
+#tripcard .tc-foot .keys { display: flex; align-items: center; gap: 6px; }
+
+/* --- the page (the card's, and a trip's in the Record) ------------------------------------------------------------ */
+.tc-page { display: flex; flex-direction: column; gap: 10px; }
+.tc-page .tc-line { font: 500 30px/1.12 var(--serif); color: var(--ink); margin: 0; text-wrap: balance; }
+.tc-page .tc-sub { font: italic 15px/1.4 var(--serif); color: var(--ink-soft); }
+.tc-page .tc-grid { display: grid; grid-template-columns: 96px minmax(0, 1fr); margin-top: 8px; border-top: 1px solid var(--edge);
+  background: linear-gradient(90deg, transparent 87px, rgba(180, 50, 31, .28) 87px, rgba(180, 50, 31, .28) 88px, transparent 88px); }
+.tc-page .tc-grid > div { padding: 8px 0 7px; border-bottom: 1px solid var(--paper-deep); }
+.tc-page .tc-grid > .v { font-size: 16px; line-height: 1.45; }
+.tc-page .tc-grid > .lab { font: 700 11px/1.9 var(--sc); letter-spacing: .14em; color: var(--ink-soft); padding-right: 12px; }
+.tc-page .tc-grid > .v { padding-left: 4px; }
+.tc-page .num { font-variant-numeric: tabular-nums; }
+.tc-page .day { display: inline-block; min-width: 34px; font: 700 11px/1 var(--sc); letter-spacing: .12em; color: var(--ink-faint); }
+.tc-page .soft { color: var(--ink-soft); font-style: italic; }
+.tc-page .small { font-size: 13px; }
+/* a first: pencilled in red beside the thing, by hand */
+.tc-page .first, #journal .rec .first { display: inline-block; font: 600 17px/1 var(--pencil-font); color: var(--map-red); transform: rotate(-4deg) translateY(-1px); margin-left: 3px; }
+.tc-page.in-book .tc-line { font-size: 25px; }
+.tc-page.in-book .tc-grid { grid-template-columns: 86px minmax(0, 1fr); background: linear-gradient(90deg, transparent 77px, rgba(180, 50, 31, .28) 77px, rgba(180, 50, 31, .28) 78px, transparent 78px); }
+.tc-page.in-book .tc-grid > .v { font-size: 15px; }
+
+/* --- the Record tab ------------------------------------------------------------------------------------------------ */
+#journal .rec-grid { display: grid; grid-template-columns: 92px minmax(0, 1fr); border-top: 1px solid var(--edge);
+  background: linear-gradient(90deg, transparent 83px, rgba(180, 50, 31, .28) 83px, rgba(180, 50, 31, .28) 84px, transparent 84px); }
+#journal .rec-grid > div { padding: 8px 0 7px; border-bottom: 1px solid var(--paper-deep); min-width: 0; }
+#journal .rec-grid > .lab { font: 700 11px/1.9 var(--sc); letter-spacing: .14em; color: var(--ink-soft); padding-right: 10px; }
+#journal .rec-grid > .v { font-size: 15px; line-height: 1.45; }
+#journal .rec-grid > .v { padding-left: 4px; }
+#journal .rec .soft { color: var(--ink-soft); font-style: italic; }
+#journal .rec .rec-n { font-style: italic; color: var(--ink-soft); }
+#journal .rec-trip { appearance: none; display: grid; grid-template-columns: 48px minmax(0, 1fr) 14px; gap: 8px; align-items: baseline; width: 100%; text-align: left;
+  background: none; border: none; padding: 2px 0 3px; color: var(--ink); font: 15px/1.35 var(--serif); cursor: pointer; }
+#journal .rec-trip + .rec-trip { border-top: 1px dotted var(--edge); padding-top: 4px; }
+#journal .rec-trip .d { font: 700 11px/1.6 var(--sc); letter-spacing: .1em; color: var(--ink-faint); white-space: nowrap; }
+#journal .rec-trip .go { color: var(--ink-faint); }
+#journal .rec-trip:hover .l { text-decoration: underline; text-underline-offset: 3px; }
+#journal .rec-trip:hover .go { color: var(--map-red); }
+#journal .rec-fish { width: auto; font-size: 15px; }
+#journal .rec-fish td { padding: 1px 14px 1px 0; border: none; }
+#journal .rec-fish td:first-child { padding-left: 0; }
+#journal .rec-firsts { margin-top: 14px; display: grid; grid-template-columns: 92px minmax(0, 1fr); }
+#journal .rec-firsts ul { margin: 0; padding: 0 0 0 4px; list-style: none; display: flex; flex-direction: column; gap: 1px; }
+#journal .rec-firsts li { font: 500 19px/1.15 var(--pencil-font); color: var(--pencil); }
+#journal .rec-firsts li .d { display: inline-block; min-width: 50px; font: 700 10.5px/1 var(--sc); letter-spacing: .1em; color: var(--ink-faint); }
+#journal .rec-head .kicker { display: flex; gap: 8px; align-items: baseline; }
+#journal .rec-head .pbtn { font: 700 12px/1.4 var(--sc); letter-spacing: .12em; color: var(--ink); }
+#journal .rec-page { padding-right: 4px; }

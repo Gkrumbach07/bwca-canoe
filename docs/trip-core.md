@@ -294,6 +294,19 @@ evacuation, with the reason) or left off (a new season begun). Each entry keeps 
 portages, the lakes, the nights out, the fish and the resupplies. Kept across trips and seasons: the lakes, campsites,
 portages and landings seen. The journal's **Trips** tab shows it, with the outfitters known.
 
+**The season's record** (round A, "a sense of progress": `record.js`, `bwca-canoe:record`, keyed on the profile's
+season). When a trip ends, at a landing or brought in, its card comes up once nothing else is (a counter waiting to
+open waits for it): a logbook page with one line of the trip in words ("Three days out to Lake Three and back, a moose
+at dawn on the Kawishiwi River"), the dates, the lakes, the portages and their rods, the nights and where, the fish and
+the best of them, what was seen, the photos, the notices done and the money. Firsts are pencilled in red. E or Esc
+closes it, and the first time a moment says it is in the journal's Record. The **Record** tab takes the Trips tab's
+place: the season's trips (each opens its page), the lakes paddled against the named lakes on your sheets, the
+species and the best of each, the portages, what you saw by kind, the campsites stayed at, the keepers' stories told
+to the end, the photos, the outfitters known, what the boards paid, and the firsts. A sighting is an animal from
+`fauna.subjects()` in the view, near and not behind the land for a moment (the loons, gulls and ravens once a lake a
+day); a bear at camp counts by its visit. Nothing of it is on the HUD. An older save builds its record once from what
+it knows: the logbook, the people's memory of the season, the catch log, the prints, the bear and the arcs.
+
 ## Keys
 
 | Key | Where | What |
@@ -437,6 +450,7 @@ chase camera is carried by the share of the move beyond life (`1 - 1 / (boost ×
 | `bwca-canoe-trip` | the outfitter's document: `pos`, `energy` (the needs, the bottle and its tablet timer, the meal clock), `tasks` (the boards and the notices with their coolers), `stringer`, and the trip core as `core` |
 | `bwca-canoe:trip` | the spot (save.js `TripSaver`): position, mode, the beached canoe when on foot, clock, camera, speed |
 | `bwca-canoe:logbook` | every trip's outcome, and what has been seen |
+| `bwca-canoe:record` | the season's record (record.js): the trip cards, lakes, fish, portages, sightings, campsites, stories, firsts, the trip under way's draft |
 | `bwca-canoe:stats` | the journal's tally |
 | `bwca-canoe:tripMode` | the mode the title offers first |
 
