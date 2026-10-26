@@ -26,6 +26,7 @@
 //   inventory.onChange(fn) → off               (fn(what, inventory))
 //   inventory.hasLure(lureId)                  (fishing.js's lure ids: 'jig', 'spinner', …, 'leech'; in reach)
 //   inventory.meals(), snacks(), foodWords(), takeMeal(evening)
+//   taste (2026-10-26): inventory.sealed(c), looseMeals(), sealedMeals() → { n, box }, spoilLoose(n) (trip.js capsize)
 //   fb3 B (the owner's 2026-10-25 round: hands take anything, the fish to the hand, uses and servings, the bottle):
 //   inventory.canHand(itemId), toHand(cId, uid, hand?, qty?), toHandNew(itemId, { data, qty }) → { ok, why, words, cId }
 //   inventory.stringerInReach() → the stringer container or null, toStringer(cId, uid)
@@ -52,7 +53,7 @@
 // Saved in its own namespace (`bwca-canoe:inventory`), tied to the profile's season (profile.seasonId). A season from
 // before the items migrates once (migrate()): the kit and the owned items, the packs, the days of food, the lures, the
 // leeches and the stringer become items in containers in the canoe.
-import { ITEMS, itemDef, defineItem, sizeOf, fishKg, fishEat, LEGACY, STARTER_KIT, FOOD_KINDS, NEED, check, timerWords, WOOD_DRY } from './items.js';
+import { ITEMS, itemDef, defineItem, sizeOf, fishKg, fishEat, LEGACY, STARTER_KIT, FOOD_KINDS, NEED, check, timerWords, WOOD_DRY, sealedDef } from './items.js';
 import { save } from './save.js';
 
 const NS = 'inventory';
@@ -608,6 +609,31 @@ export class Inventory {
     for (const id of want) for (const c of pool) for (const e of c.grid) if (e.id === id) { this.take(c.id, e.uid, 1); return itemDef(id); }
     for (const c of pool) for (const e of c.grid) if (!e.box && (itemDef(e.id) || {}).kind === 'meal') { const d = itemDef(e.id); this.take(c.id, e.uid, 1); return d; }
     return null;
+  }
+  // taste (the owner's call, 2026-10-26: "a capsize spares food in a sealed barrel or dry pack"): a container a capsize
+  // doesn't get into: a barrel with its lid on or the waterproof pack (items.js sealedDef), or one inside either
+  sealed(c) {
+    for (let k = c, guard = 0; k && guard < 8; guard++) { if (sealedDef(itemDef(k.item))) return true; if (k.where !== 'in') break; k = this.cont(k.in); }
+    return false;
+  }
+  // the meals in the food pool outside a sealed container (what a capsize can spoil), and those inside one with the
+  // first such container's def (for its words)
+  looseMeals() { return this.countIn(this.foodPool().filter((c) => !this.sealed(c)), 'meal'); }
+  sealedMeals() {
+    let n = 0, box = null;
+    for (const c of this.foodPool()) { if (!this.sealed(c)) continue; const k = this.countIn([c], 'meal'); if (k && !box) box = itemDef(c.item); n += k; }
+    return { n, box };
+  }
+  // a capsize: up to n meals outside a sealed container are spoiled (taken). → how many
+  spoilLoose(n) {
+    let k = 0;
+    for (const c of this.foodPool()) {
+      if (k >= n) break;
+      if (this.sealed(c)) continue;
+      for (const e of c.grid.slice()) { if (k >= n) break; if (!e.box && (itemDef(e.id) || {}).kind === 'meal') { const q = Math.min(e.qty, n - k); if (this.take(c.id, e.uid, q)) k += q; } }
+    }
+    if (k) this.emit('items');
+    return k;
   }
   // Set the meals to n (energy.food = days, written by the old counter, a capsize's spoiling, a Sandbox repack): more
   // are placed in reach (what does not fit waits in the outfitters' crate when you are at one), fewer are taken.

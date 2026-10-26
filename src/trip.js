@@ -256,14 +256,25 @@ export class Trip {
     this.log('capsize');
     if (!this.adventure) return;
     const cold = (this.day.season && this.day.season.waterTemp != null ? this.day.season.waterTemp : 15) < 12, en = this.energy;
-    const spoiled = en ? Math.min(0.5, en.food) : 0;
-    if (en) { en.spend(cold ? 0.5 : 0.25); en.food = Math.max(0, en.food - spoiled); }
+    // taste (the owner's call, 2026-10-26): only food outside a sealed container is spoiled, a meal (half a day) of it;
+    // a barrel with its lid on and the waterproof pack keep theirs dry (inventory.sealed, items.js sealedDef)
+    const inv = en && en.inv && typeof en.inv.spoilLoose === 'function' ? en.inv : null;
+    let spoiled = 0, kept = null;
+    if (inv) { kept = inv.sealedMeals(); spoiled = inv.spoilLoose(Math.min(1, inv.looseMeals())) / 2; }
+    else if (en) { spoiled = Math.min(0.5, en.food); en.food = Math.max(0, en.food - spoiled); } // (no inventory: the days of food)
+    if (en) en.spend(cold ? 0.5 : 0.25);
     // content C: the bag and the clothes rolled up in a waterproof pack stay dry (kit.js dryKit; main.js sets this.kit)
     let dry = false; try { dry = !!(this.kit && typeof this.kit.dryKit === 'function' && this.kit.dryKit()); } catch { dry = false; }
     if (!dry) this.state.wet = true;
-    const food = spoiled >= 0.5 ? 'Half a day of food is spoiled, and the gear' : spoiled > 0 ? 'The last of the food is spoiled, and the gear' : 'The gear';
-    if (dry) this.say(`Over you go${cold ? ', into cold water' : ''}.${spoiled > 0 ? ` ${spoiled >= 0.5 ? 'Half a day of food is spoiled' : 'The last of the food is spoiled'}.` : ''} The bag and the clothes stayed dry in the portage pack.`, 7);
-    else this.say(`Over you go${cold ? ', into cold water' : ''}. ${food} is wet until a fire dries it.`, 7);
+    const inPack = !!(kept && kept.n && kept.box && kept.box.dry), box = kept && kept.n ? (inPack ? 'the portage pack' : 'the barrel') : null;
+    const lost = spoiled >= 0.5 ? 'Half a day of food is spoiled' : spoiled > 0 ? 'The last of the food is spoiled' : '';
+    const over = `Over you go${cold ? ', into cold water' : ''}.`;
+    if (dry && inPack) this.say(`${over}${lost ? ` ${lost}.` : ''} The food, the bag and the clothes stayed dry in the portage pack.`, 7);
+    else {
+      const food = lost && box ? `${lost}; the food in ${box} stayed dry` : lost || (box ? `The food stayed dry in ${box}` : '');
+      if (dry) this.say(`${over}${food ? ` ${food}.` : ''} The bag and the clothes stayed dry in the portage pack.`, 7);
+      else this.say(`${over} ${food && !box ? `${food}, and the gear` : food ? `${food}. The gear` : 'The gear'} is wet until a fire dries it.`, 7);
+    }
   }
 
   // --- per frame (game seconds) ------------------------------------------------------------------------------

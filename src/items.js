@@ -306,13 +306,14 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 // ---------------------------------------------------------------------------------------------------------------
 // The containers. A cell is a hand's width; a Duluth pack #3 holds about two weeks of meals besides the tent, the
 // sleeping bag, the clothes and the pot; the 60 L barrel about 14 days of food, the 30 L one 7. Their room is their
-// comparison number, in the identity.
+// comparison number, in the identity. sealed: the barrels' screw lids keep a capsize out of the food (taste, the owner's
+// call of 2026-10-26; the dry pack's `dry` does too: sealedDef).
 const FOODISH = ['food', 'snack', 'meal', 'fish', 'forage'];
 defineItem({ id: 'pockets', name: 'Your pockets', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 5, rows: 1 }, icon: 'pockets', identity: 'The bottle and four quick slots' });
 defineItem({ id: 'pack3', name: 'Duluth pack #3', kind: 'container', w: 4, h: 5, kg: 2.0, price: 25, wear: ['back', 'chest'], mesh: 'food', container: { cols: 6, rows: 8 }, icon: 'pack', identity: 'Canvas and leather · room 6 × 8' });
 defineItem({ id: 'pack4', name: 'Duluth pack #4', kind: 'container', w: 5, h: 5, kg: 2.4, price: 35, wear: ['back', 'chest'], mesh: 'gear', container: { cols: 7, rows: 9 }, icon: 'pack', identity: 'The big canvas pack · room 7 × 9' });
-defineItem({ id: 'barrel30', name: 'Blue barrel, 30 L', kind: 'container', w: 3, h: 4, kg: 2.2, price: 25, wear: ['back', 'chest'], hand: true, hang: true, mesh: 'barrel30', container: { cols: 4, rows: 4, accepts: FOODISH }, icon: 'barrel', identity: 'Sealed food barrel · room 4 × 4' });
-defineItem({ id: 'barrel60', name: 'Blue barrel, 60 L', kind: 'container', w: 4, h: 5, kg: 3.0, price: 35, wear: ['back'], hang: true, mesh: 'barrel60', container: { cols: 5, rows: 6, accepts: FOODISH }, icon: 'barrel', identity: 'Sealed food barrel · room 5 × 6' });
+defineItem({ id: 'barrel30', name: 'Blue barrel, 30 L', kind: 'container', w: 3, h: 4, kg: 2.2, price: 25, wear: ['back', 'chest'], hand: true, hang: true, mesh: 'barrel30', sealed: true, container: { cols: 4, rows: 4, accepts: FOODISH }, icon: 'barrel', identity: 'Sealed food barrel · room 4 × 4' });
+defineItem({ id: 'barrel60', name: 'Blue barrel, 60 L', kind: 'container', w: 4, h: 5, kg: 3.0, price: 35, wear: ['back'], hang: true, mesh: 'barrel60', sealed: true, container: { cols: 5, rows: 6, accepts: FOODISH }, icon: 'barrel', identity: 'Sealed food barrel · room 5 × 6' });
 defineItem({ id: 'bucket', name: 'Leech bucket', kind: 'container', w: 2, h: 2, kg: 1.2, price: 6, hand: true, mesh: 'bucket', container: { cols: 2, rows: 2, accepts: ['bait'] }, icon: 'bucket', identity: 'Foam bait bucket · 4 dozen' });
 defineItem({ id: 'tacklebox', name: 'Tackle box', kind: 'container', w: 3, h: 2, kg: 0.8, price: 12, hand: true, nest: true, mesh: 'tacklebox', container: { cols: 4, rows: 3, accepts: ['lure'] }, icon: 'tacklebox', identity: 'Lure trays · room 4 × 3' });
 defineItem({ id: 'mapcase', name: 'Map case', kind: 'container', w: 1, h: 3, kg: 0.2, price: 10, hand: true, nest: true, mesh: 'mapcase', container: { cols: 2, rows: 6, accepts: ['map'] }, icon: 'mapcase', identity: 'Clear vinyl, roll-top' });
@@ -460,6 +461,8 @@ const lureOn = (lure) => {
 };
 // the bags: what the night does to you when it is colder than the bag is good to (kit.js night)
 export const isBag = (id) => !!(ITEMS[id] && ITEMS[id].bag);
+// taste: a container a capsize doesn't get into: a barrel with its lid on (sealed) or a waterproof pack (dry)
+export const sealedDef = (d) => !!(d && (d.sealed || d.dry));
 const OC = (v) => `${v < 0 ? '−' : ''}${Math.abs(v)} °C`;
 
 // the sleeping bags: summer → three-season → down (the starter is the summer bag)
