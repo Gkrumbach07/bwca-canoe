@@ -23,7 +23,8 @@ const MODES = {
 
 // the controls reference (the Controls item), by what you are doing. fb4 D (decision 4, the owner's second round of
 // 2026-10-25: "We need to go through all the keys again … It should just be one key, I, to get into the inventory"):
-// the whole set is W A S D and the mouse, Shift, Space, E and Q on the dot, F, I, M, Tab held, V, H, C, 1 2 3 and Esc;
+// the whole set is W A S D and the mouse, Shift, Space, E and Q on the dot, F, I, M, Tab held, V, H, C and Esc (one
+// speed, 2026-10-26: 1 2 3, the game speed, are gone);
 // in the book a right-click and, while dragging, R. J, L, T, K, R, N, Ctrl-click and Tab in the book are gone. A few
 // keys mean something only where they are shown (the numbers for a lure with the rod up and for a choice while you
 // talk, A D or ← → on the Rest dial). Sandbox's own keys are listed only in a Sandbox season.
@@ -58,7 +59,6 @@ const KEYMAP = [
     [['Tab'], 'held: the readout, the moment only (the place, the time, the sun, the wind and the waves, the sky, your speed and heading)'],
     [['V'], 'the view: from the paddler’s eyes · from behind'],
     [['H'], 'the headlamp, day or night, afloat or on foot'],
-    [['1', '2', '3'], 'the game speed: Normal, Faster ▶▶, Fastest ▶▶▶, on top of Trip or Real (Settings › Controls); the corner shows the mark while it is faster (with the rod up the numbers pick the lure)'],
     [['Esc'], 'frees the mouse when it is taken · closes the book, a card or the dial · puts away a tent’s ghost · otherwise this menu'],
     [[], 'the energy bar, the clock and the day stay in a strip at the top over the book and every card. The bar: green is the energy you have, and the chunks at its end what each need takes off how high it can go: cold (a snowflake), sleep (zz), hunger (a fork and knife), thirst (a drop), dashed while growing'],
   ]],
@@ -362,7 +362,7 @@ export class Title {
     if (t) {
       day.setClock(t.year, t.doy, t.hours); day.running = t.running !== false;
       if (t.camera && t.camera !== this.chase.mode) this.chase.setMode(t.camera);
-      if (t.timeScale) this.player.timeScale = t.timeScale;
+      // (one speed: a save's timeScale, 2 or 4 from the old 1 2 3 keys, is not read; the clock is everyone's, pace.js)
     } else {
       const now = new Date();
       day.setClock(now.getFullYear(), dayOfYear(now), now.getHours() + now.getMinutes() / 60); day.running = true;
@@ -404,7 +404,6 @@ export class Title {
     this.el.status.textContent = '';
     const now = new Date();
     this.day.setClock(now.getFullYear(), dayOfYear(now), now.getHours() + now.getMinutes() / 60); this.day.running = true;
-    this.player.timeScale = this.settings.get('speed');
     if (this.chase.mode !== this.settings.get('camera')) this.chase.setMode(this.settings.get('camera'));
     this.close();
     this.saver.write();

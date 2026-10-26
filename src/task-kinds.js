@@ -705,7 +705,7 @@ function countLoons(T, t, dt = 1 / 60) {
   const p = T.player, w = T.world, cam = ref('camera'), L = ref('loons');
   const q = tr(t);
   if (!cam || !L || !L.loons || !sameLake(T, lakeHere(T), t.lakeId) || p.teleporting) { q.dwell = null; return; }
-  const dtR = Math.min(0.25, (dt || 0) / Math.max(1, p.timeScale || 1)); // the frame's own seconds (tasks.update has them times the 1 2 3 speed)
+  const dtR = Math.min(0.25, dt || 0); // the frame's own seconds
   cam.updateMatrixWorld(); _inv.copy(cam.matrixWorld).invert();
   const keys = q.keys;
   let best = null, seenAny = false;

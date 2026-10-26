@@ -151,13 +151,6 @@ body.paper-open #air > div:not(#marks) { visibility: hidden; }
 #hint.danger { background: rgba(48, 20, 14, .66); box-shadow: 0 0 20px 6px rgba(14, 27, 34, .28), inset 3px 0 0 var(--ember); }
 body > #hint.incard { position: fixed; top: 52px; bottom: auto; z-index: 6; color: var(--cream); font: 17px/1.35 var(--sans); zoom: var(--hud); background: rgba(14, 27, 34, .9); box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
 body > #hint kbd { display: inline-block; min-width: 24px; box-sizing: border-box; padding: 1px 7px; margin: 0 2px; border: 1.5px solid rgba(243, 236, 221, .85); border-radius: 4px; font: 700 12px/1.3 var(--sans); text-align: center; text-shadow: none; vertical-align: 1px; }
-/* the pace toast: above the status marks, at full strength for 3 s whenever the pace changes; it stays over the paper
-   as the marks do */
-#pace-toast { right: 40px; bottom: 50px; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; text-shadow: 0 1px 2px rgba(0, 0, 0, .55); max-width: min(560px, calc(100vw - 80px)); }
-#pace-toast .sc { color: var(--gold); font-size: 13px; }
-#pace-toast .line { font-size: 15px; color: rgba(243, 236, 221, .92); }
-body.paper-open #air > #pace-toast.show { visibility: visible; }
-
 /* the energy bar (fb2 F): Wild n Chill's one long thin bar, top left. Green is the energy you have; the dim track after
    it, up to the ceiling, is what rest can bring back; each need's chunk eats in from the right end in its colour (cold
    pale blue, sleep orange, hunger yellow, thirst blue), dashed and marching while it grows (cold dotted), with its icon
@@ -425,7 +418,6 @@ body.paper-open #scrim { opacity: .55; pointer-events: auto; }
   #catch { width: min(400px, calc(100vw - 48px)); }
   #compass { right: 16px; top: 16px; }
   #marks { right: 16px; bottom: 16px; }
-  #pace-toast { right: 16px; bottom: 36px; }
   #map.glance { right: 0; width: 100vw; height: 56vh; }
   #journal { grid-template-columns: 1fr; height: 92vh; overflow: auto; }
   #journal .page { padding: 24px; }

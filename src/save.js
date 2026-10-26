@@ -50,7 +50,7 @@ export class TripSaver {
   }
   snapshot() {
     const p = this.player, d = this.day, drop = p.mode === 'walk' && p.carry && p.carry.drop; // on foot: where the canoe lies
-    return { v: 1, x: p.x, z: p.z, heading: p.heading, mode: p.mode, drop: drop ? { x: drop.x, z: drop.z, heading: drop.heading } : null, year: d.year, doy: d.doy, hours: d.hours, running: d.running, camera: this.chase.mode, timeScale: p.timeScale, savedAt: Date.now() };
+    return { v: 1, x: p.x, z: p.z, heading: p.heading, mode: p.mode, drop: drop ? { x: drop.x, z: drop.z, heading: drop.heading } : null, year: d.year, doy: d.doy, hours: d.hours, running: d.running, camera: this.chase.mode, savedAt: Date.now() }; // (one speed: no timeScale; an old save's is ignored on loading)
   }
   write() { if (!this.player.teleporting) save.write('trip', this.snapshot()); }
   clear() { save.clear('trip'); }
