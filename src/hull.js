@@ -423,3 +423,36 @@ export function buildLidGeometry() {
   }
   return m.geometry();
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// p2 A: other people's canoes (actors.js). The rental fleets' three hulls, each built once (buildHullGeometry with its
+// palette) and shared by every party canoe of that colour, on the rig's own material: a dented grey aluminium Grumman
+// with aluminium gunwales and seats, a gold Kevlar tripper with ash, and the Forest Service's olive green with dark
+// gunwales. (The player's own is HULL_COLORS's green.)
+export const HULL_PALETTES = {
+  aluminium: { out: 0xa4a9ac, in: 0x8b9093, ash: 0x9da2a5, ashDark: 0x7d8285, deck: 0x8a8f92, cane: 0x8a8f92, caneDark: 0x6d7275, pad: 0x2b2e2c },
+  kevlar: { ...HULL_COLORS, out: 0xc0954c, in: 0xae8541 },
+  forest: { ...HULL_COLORS, out: 0x46542f, in: 0x3b4729, ash: 0x34362f, ashDark: 0x2a2c26, deck: 0x34362f },
+};
+// The far hull: 60 triangles (the skin as six bays of four facets round from gunwale to gunwale, and a flat deck at the
+// sheer in the inside's colour, so from above it reads as an open canoe), non-indexed with flat normals and vertex
+// colours. Drawn beyond 250 m, where a hull is a few pixels.
+export function buildFarHullGeometry(cols = HULL_COLORS) {
+  const us = [-1, -0.72, -0.38, 0, 0.38, 0.72, 1], ts = [1, 0.45, 0, 0.45, 1], sides = [-1, -1, 0, 1, 1];
+  const out = C(cols.out), inn = C(cols.in), pos = [], col = [];
+  const at = (u, k) => { const s = section(u, ts[k]); return [u * half, s.y, sides[k] * s.z]; };
+  const tri = (a, b, c, k) => { pos.push(...a, ...b, ...c); for (let i = 0; i < 3; i++) col.push(k.r, k.g, k.b); };
+  for (let i = 0; i < us.length - 1; i++) {
+    for (let k = 0; k < 4; k++) { // outward, as the shell's outer skin winds
+      const a0 = at(us[i], k), a1 = at(us[i], k + 1), b0 = at(us[i + 1], k), b1 = at(us[i + 1], k + 1);
+      tri(a0, b0, b1, out); tri(a0, b1, a1, out);
+    }
+    const p0 = at(us[i], 0), s0 = at(us[i], 4), p1 = at(us[i + 1], 0), s1 = at(us[i + 1], 4); // the deck, facing up
+    tri(p0, s0, s1, inn); tri(p0, s1, p1, inn);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
