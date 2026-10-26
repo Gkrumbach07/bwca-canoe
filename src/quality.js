@@ -1,4 +1,5 @@
-// Quality presets (settings.js) and the frame measurements behind Auto and the numbers in docs/look.md.
+// Quality presets (settings.js) and the frame measurements behind Auto and the numbers in docs/look.md and
+// docs/performance.md (round A-C: the budgets per preset, and how they were measured).
 //
 // A preset only sets the individual display settings (each stays in the panel and can be changed after, which
 // makes the quality Custom): the sun's shadow map size per cascade and how far the cascades reach, the tree
@@ -10,8 +11,9 @@
 // Auto measures, once (the first run, or when Auto is picked again): a few frames of the scene behind the title
 // card at a preset that suits the machine (deviceClass: High on a discrete GPU, Medium on an integrated one, Low on a
 // small one), then the one above or below, and keeps the best that fits the budget; then it watches the frame rate
-// in play and steps down if the game runs slow (AutoWatch, round A-C). A frame is timed as the wall time of frames drawn back to back with a one-pixel read at each end, so
-// it is whichever of the CPU and the GPU is slower, the way the frame rate sees it. (The GPU timer queries of
+// in play and steps down if the game runs slow (AutoWatch, round A-C). A frame is timed as the wall time of frames
+// drawn back to back with a one-pixel read at each end, so it is whichever of the CPU and the GPU is slower, the way
+// the frame rate sees it. (The GPU timer queries of
 // EXT_disjoint_timer_query_webgl2 read two to three times high per pass on ANGLE over Metal, with gaps between
 // passes counted as GPU time, so they are not used for the decision; profile() still reports them.)
 
@@ -19,6 +21,9 @@ import * as THREE from 'three';
 import { cascadeHooks } from './sunlight.js';
 import { REFLECT_LAYER, REFLECT_SHORE_LAYER } from './water.js';
 
+// Low (round A-C) is for integrated GPUs and slow CPUs: its shadows reach 80 m (120 before), and main.js derives
+// two more savings from its rows: at half the undergrowth the understory casts no shadow (tiles.js
+// CULL.understoryShadow), at half the tree detail distance the far field ends at 8.4 km (tiles.js update).
 export const PRESETS = {
   low: { shadows: '1024', shadowReach: 80, lod: 0.5, vegDensity: 0.5, reflections: false, reflectionScale: 0.15, antialias: 'fxaa', godRays: false, renderScale: 0.75 },
   medium: { shadows: '2048', shadowReach: 180, lod: 0.75, vegDensity: 0.75, reflections: true, reflectionScale: 0.2, antialias: 'fxaa', godRays: true, renderScale: 0.9 },

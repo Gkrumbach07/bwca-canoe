@@ -356,6 +356,7 @@ class InstanceCuller {
 // view, the mirror and each shadow cascade draw only the quarters they meet. Quarters, not blocks: a block a mesh
 // cut the triangles a little more but added ~100 draw calls a frame, which cost a slow CPU more than the triangles
 // cost the GPU. TERRAIN_GROUP blocks a mesh (1, 4 or 16). A terrain built without blocks (the far chunks) stays one.
+// (Same triangles, same arrays: MeshGround and the props read the index in any order.)
 const TERRAIN_GROUP = 4, PART_STRIDE = 8;
 function terrainParts(res, material) {
   const whole = makeTerrainMesh(res, material), P = res.parts;
@@ -395,8 +396,8 @@ function freeze(group) {
   group.updateMatrixWorld = frozenWalk;
 }
 // round A-C: three r186 still recurses into every child of a group whose matrixWorldAutoUpdate is off, so the frozen
-// tiles cost the per-render walk ~25 000 calls (twice a frame: the view and the mirror), 14 % of the frame's main
-// thread at Lake One. A frozen tile's walk now goes only into its groups (the props, whose meshes keep three's own
+// tiles cost the per-render walk ~25 000 calls a frame (the main pass's; the mirror's skips the walk), 14 % of the
+// frame's main thread at Lake One. A frozen tile's walk now goes only into its groups (the props, whose meshes keep three's own
 // rule: a prop moved by hand calls updateMatrix and is picked up); the terrain, the far water, the vegetation's bins,
 // their variant groups and the culling proxies set their own matrixWorld and are never walked.
 function frozenWalk(force) {
@@ -613,7 +614,7 @@ export class TileManager {
     group.position.set(ox, 0, oz);
     group.matrixAutoUpdate = false;
     group.updateMatrix();
-    for (const m of terrainParts(r.terrain, this.terrainMaterial)) group.add(m); // round A-C: in blocks, culled one by one
+    for (const m of terrainParts(r.terrain, this.terrainMaterial)) group.add(m); // round A-C: in quarters, culled one by one
     if (r.water) group.add(this.water.makeFarMesh(r.water));
     this.scene.add(group);
     freeze(group);
@@ -855,7 +856,7 @@ export class TileManager {
   // round A-C: one of every shadow caster the tiles make, as the shadow pass draws it (a bin with its colours, a
   // cascade proxy without, the lake plants that cast), unculled, for main.js to draw a shadow pass with behind the
   // title card: three's compile skips the depth programs, so each compiled in the frame its kind first cast a shadow
-  // (and again for the other light state: see main.js round A-C). Placed by the caller; dispose() after.
+  // (and again for the other light state: see quality.js prewarmPasses). Placed by the caller; dispose() after.
   shadowPrewarmGroup() {
     const g = new THREE.Group(), kit = this.vegetation, id = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
     const add = (geo, mat, depth, colour) => {

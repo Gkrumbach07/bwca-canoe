@@ -638,7 +638,7 @@ export function farRock(rng, { scree = false } = {}) {
 }
 
 // The families by the names vegetation.js asks for: 'slab' the layered flats, 'block' the slanted rock (the
-// cheapest, so it is also every rock's far twin), 'boulder' the erratic. All are about two units across and
+// cheapest; it was every rock's far twin until farRock, round A-C), 'boulder' the erratic. All are about two units across and
 // stand on their base at y = 0 inside FOOT (the slanted rock's tail goes deep below the ground once tilted);
 // tiles.js holds the walker off a rock with a circle of 0.8 x its scale, props.js off an outcrop with 0.95 x.
 export const ROCK_FAMILIES = { slab: layeredFlats, block: slantedRock, boulder: erratic };
