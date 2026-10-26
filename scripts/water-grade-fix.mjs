@@ -8,7 +8,7 @@
 //   node --max-old-space-size=8192 scripts/water-grade-fix.mjs [--data public/data] [--out src/water-grade.bin]
 //        [--fixes src/world-fixes.json] [--box x0,z0,x1,z1 (a test: grade only the water there)] [--report file.json]
 //
-// The file (gzip of little-endian binary):
+// The table (little-endian binary; written cut into gzipped pieces, version 3: water-grade-pack.mjs):
 //   u32 magic 'WGR1', u16 version 2, u16 0, u32 fine tiles, u32 far tiles, f64 the release's bake time (ms since 1970)
 //   per tile: u8 level (0 fine, 1 far), u8 0, u16 tx, u16 ty, u16 0, u32 hash (FNV-1a of the level field's 16-bit
 //   words, the whole tile with its halo, as baked), u32 runs, u32 cells, then runs x (u16 row, u16 col, u16 length) in
@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { gradeLevels, GRADE } from './water-grade.mjs';
+import { pack } from './water-grade-pack.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const dataDir = arg('--data', 'public/data').replace(/\/?$/, '/');
@@ -169,7 +170,8 @@ for (const r of recs) {
     }
   }
 }
-const gz = zlib.gzipSync(out, { level: 9 });
-fs.writeFileSync(outFile, gz);
-log(`wrote ${outFile}: ${fine} fine tiles (${fineCells} cells with their halos), ${far} far tiles, ${(out.length / 1024).toFixed(0)} KB, ${(gz.length / 1024).toFixed(0)} KB gzipped`);
+// (round A join: written as version 3, cut into pieces fetched as they are needed: water-grade-pack.mjs)
+const packed = pack(out);
+fs.writeFileSync(outFile, packed.buf);
+log(`wrote ${outFile}: ${fine} fine tiles (${fineCells} cells with their halos), ${far} far tiles, ${(out.length / 1024).toFixed(0)} KB, ${(packed.buf.length / 1024).toFixed(0)} KB in ${packed.pieces} gzipped pieces`);
 if (reportFile) fs.writeFileSync(reportFile, JSON.stringify({ grade: GRADE, stats: res.stats, cells: Array.from(res.cells), delta: Array.from(res.delta) }));
