@@ -47,10 +47,12 @@ import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from 
 import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
 import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
+import { explored } from './explored.js'; // round A-B: the map filling in
 import { MapTable } from './maptable.js'; // fb2 D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
+import { Actors } from './actors.js'; // p2 A
 import { inventory } from './inventory.js'; // fb A
 import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
 import { ContainerView } from './containers.js'; // fb A
@@ -76,6 +78,14 @@ import './gear-icons.js'; // content C
 import { attachTaskKinds } from './task-kinds.js'; // content A
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
+import { record } from './record.js'; // round A-A
+import { slots } from './save.js'; // round A-D
+import { CULL } from './tiles.js'; // round A-C
+import { AutoWatch, prewarmPasses } from './quality.js'; // round A-C
+import { Parties } from './parties.js'; // round A-F
+import { PartyCamps } from './party-camps.js'; // round A-F
+import { PartyMoves } from './party-moves.js'; // p2 C
+import { partyTargets } from './pointer.js'; // p2 C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -171,6 +181,26 @@ async function main() {
   // vegetation's own materials, patched here before anything compiles: no new program); the camera pulls in, on a
   // spring, only for the ground, rocks, walls and a big trunk at the lens (camera.js)
   chase.seeThrough(tiles.vegetation);
+  // p2 B: the owner's two small bugs (2026-10-26). In first person under the canoe the trail shows: the hull's lid (a
+  // depth-only plane at the gunwales that keeps the water out of a floating hull) is off on the carry, as it hid the
+  // tread and the water ahead; the look tips down the trail, the bow rides higher and the near hull is seen through
+  // (camera.js FP_CARRY; seeHull before the compile below, so its program is made behind the title card). And the creeks
+  // and rivers are graded (scripts/water-grade.mjs, applied to each tile in the worker by water-levels.js; levelAt is
+  // bilinear in grid.js and water.js): the canoe pitches with the water's own slope as well, so it noses down a rapids.
+  chase.seeHull(canoe, scene);
+  const p2b = { pitch: 0, lid: canoe.lid || canoe.hull.children.find((c) => c.isMesh && c.material && c.material.colorWrite === false) };
+  p2b.afterPlayer = (dt) => {
+    if (p2b.lid) p2b.lid.visible = player.mode !== 'carry';
+    const afloat = player.mode === 'paddle' && !player.teleporting;
+    let want = 0;
+    if (afloat) {
+      const f = player.forward, L = 2.2;
+      want = Math.atan((world.levelAt(player.x + f.x * L, player.z + f.z * L) - world.levelAt(player.x - f.x * L, player.z - f.z * L)) / (2 * L));
+      if (!Number.isFinite(want)) want = 0;
+    }
+    p2b.pitch += (want - p2b.pitch) * (1 - Math.exp(-Math.max(0, dt) * 4));
+    if (afloat && Math.abs(p2b.pitch) > 1e-4) { canoe.rig.rotateZ(-p2b.pitch); canoe.rig.updateMatrixWorld(); } // (player.js sets the rig afresh each frame: bow up is -z)
+  };
   const settings = new Settings();
   const hud = new Hud(world, { onTeleport: async (x, z) => { if (trip && trip.adventure) return; if (await player.teleport(x, z)) chase.snap(); }, settings, camera }); // trip core A: the map moves you in Sandbox only
   const post = makePost(renderer, scene, camera);
@@ -285,6 +315,13 @@ async function main() {
   // come first.
   const talk = new Dialogue({ camera, player, chase, hud, day, frame: () => !(outfitter.visit && outfitter.visit.inside) });
   npcs.dialogue = talk;
+  // p2 A: the actor layer (actors.js): people out on the water and the trails, posed with the player's own stroke, gait and
+  // carry (poses.js). The parties drive it (people phase 2); __game.actors.demo() (test only) has two canoes crossing Lake
+  // One and a party of four carrying over the Lake One - Kawishiwi River portage. Bodies come from the people's figure pool
+  // when it lends them (npcs.js lend / giveBack: the eight are shared), else from the layer's own; hulls, figures, paddles
+  // and packs draw with the rig's material, so no program or light is added. Updated after the camera, below.
+  const actorPool = typeof npcs.lend === 'function' ? { take: (look) => { const b = npcs.lend('actors'); if (b) b.wear(look); return b; }, give: (b) => npcs.giveBack(b) } : null;
+  const actors = new Actors({ scene, ground: (x, z) => tiles.groundAt(x, z), world, water, ripples, material: canoe.material, lidMaterial: canoe.lid.material, pool: actorPool, reflectLayer: REFLECT_LAYER });
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -328,6 +365,7 @@ async function main() {
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
   window.__game.npcs = npcs; // hubs 3C
+  window.__game.actors = actors; // p2 A
   // fb A: one physical inventory (items.js, inventory.js): everything you own is an item in a container (the packs,
   // the barrels, the bucket, the tackle box, the pockets, the stringer) or a long item (the rod, the paddle), each
   // somewhere in the world, reachable only by you, the canoe or an outfitter's stash; packs.js runs its frame and the
@@ -732,9 +770,110 @@ async function main() {
     const dueT = hints.due.bind(hints);
     hints.due = (id, rec) => (cast.has(id) ? cast.get(id).due(rec) : dueT(id, rec));
   }
+  // round A-B: the map filling in (the owner, 2026-10-26: "The map filling in"). explored.js keeps, per season, the
+  // lakes paddled (a bitset), your way (a point every 50 m), the portages walked end to end and the sites slept at; the
+  // map (hud.js drawMap) inks the lakes a deeper blue with a dark shore, pencils the way, goes over the portages solid
+  // and ticks the sites, an overlay on the sheets you own, cached per sheet and per tile. Read each frame after the
+  // sheets' own look; a night at a site is counted when the camp wakes from it (not a nap).
+  explored.attach({ world, profile, trip, camp });
+  { const su = sheets.update.bind(sheets); sheets.update = (p) => { su(p); explored.update(p); }; }
+  { const wakeB = camp.wake.bind(camp); camp.wake = () => { const n = camp.night, c = camp.camp; wakeB(); if (n && !n.nap) explored.stay(c && c.site ? c.site : { x: n.x, z: n.z }); }; }
+  window.__game.explored = explored;
+  // round A-A: a sense of progress (the owner, 2026-10-26: "A sense of progress"). record.js: when a trip ends (at an
+  // outfitter's landing, or brought in) its card comes up once you are free, a logbook page (the days, the lakes, the
+  // portages and their rods, the nights and where, the fish, what you saw, the photos, the notices, the money, and one
+  // line of the trip in words), and goes into the season's record: the journal's Record tab (in the Trips tab's place).
+  // Nothing on the HUD. The card replaces the "Came in at …" note; a counter waiting to open waits for it; it holds the
+  // walker like the book; one moment the first time one is put away.
+  {
+    record.attach({ trip, stats: tripStats, fishing, fauna, bear, photo, tasks, npcs, profile, world, player, day, camera, hud, title, veil, outfitter, talk, camp, sheets, journal });
+    journal.record = record;
+    const updJ = journal.update.bind(journal);
+    journal.update = (dt) => { updJ(dt); record.update(dt); }; // (each frame in the game, after the trip, in real seconds)
+    const updO = outfitter.update.bind(outfitter);
+    outfitter.update = (dt) => { record.beforeOutfitter(outfitter); updO(dt); if (record.shown) player.input.paused = true; };
+    const comeInA = outfitter.comeIn.bind(outfitter);
+    outfitter.comeIn = (l) => { const note = hud.note; hud.note = (t, ...r) => (/^Came in at /.test(String(t)) ? undefined : note.call(hud, t, ...r)); try { return comeInA(l); } finally { hud.note = note; } };
+    for (const m of record.moments()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const recM = new Map(record.moments().map((m) => [m.id, m]));
+    const dueAA = hints.due.bind(hints);
+    hints.due = (id, rec) => (recM.has(id) ? recM.get(id).due(rec) : dueAA(id, rec)); // "Your trip is in the journal's Record"
+    window.__game.record = record;
+  }
+  // round A-D: saves (save.js slots, seasons.js). Three seasons side by side: the one being played is the ordinary season
+  // keys every module reads and writes (the autosave, pagehide and all, writes there), the other two are parked and
+  // packed. A switch, a new season into a slot, deleting the one being played and an import over an empty one reload the
+  // page, and save.js mounts the slot before anything reads. The title's Continue is the slot last played; Seasons
+  // (under New season) lists the three with their lines: Play, New, Copy, Export (a versioned .json) and Import, Delete
+  // asked once. What the last page asked of this load (Play: straight in; New: the season begun at its home) runs once
+  // the frames do.
+  window.__game.slots = slots;
+  { const boot = slots.takeBoot(); if (boot) setTimeout(() => title.fromBoot(boot), 0); }
+  // round A-F: wilderness people, phase 1, the camps (the owner, 2026-10-26: "wilderness people"; the people plan,
+  // docs/plans/people.md). parties.js: the other parties out there, a pure function of the entry points' real quotas,
+  // the season's fill, the weekday and the Traffic setting, seeded by the season and never saved; each night at a
+  // site, first come, never yours, held in the campsite registry within 6.5 km of you (so a site reads Taken and the
+  // dusk note's free site stays free tonight). party-camps.js draws the near ones: their canoes, tents, woodpile, the
+  // fire by evening and two or three of them from npcs.js's pool within 60 m, a greeting by day. After the camp's frame.
+  const parties = new Parties({ world, profile, day });
+  parties.attach({ registry: campsites, camp, player, camera, settings, inventory, fires });
+  const partyCamps = new PartyCamps({ world, scene, tiles, fires, parties, people: npcs, player, day, camp, weather, wind });
+  npcs.extra = () => partyCamps.extras(); npcs.partyWord = (v) => partyCamps.word(v);
+  { const campUpdF = camp.update.bind(camp); camp.update = (dt) => { campUpdF(dt); parties.update(dt); partyCamps.update(dt); }; }
+  // a party's greeting carries over the water (their speakers' hear: dialogue.js keeps a bark to 22 m of its speaker)
+  { const distF = talk.distTo.bind(talk); talk.distTo = (sp) => { const d = distF(sp); return sp && sp.hear ? (d * 22) / sp.hear : d; }; }
+  Object.assign(window.__game, { parties, partyCamps });
+  { const warm = () => { try { parties.block(parties.today); partyCamps.warm(); } catch (e) { console.warn('parties', e); } }; if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 500); } // the week's sweep and the camps' pieces, behind the title
+  // p2 C: the parties on the move (people phase 2; the owner, 2026-10-26: "move onto moving parties"). parties.js plans
+  // each one's travel day (legPlan: off their site at the leave hour, the water and the carries, lunch, in at the next
+  // site at its land hour, the same on every reload); party-moves.js follows the legs within 1.5 km of you and draws
+  // them through the actor layer (its ranges and budgets). On the water a word by day within 80 m, a soft steer off you
+  // inside 25 m, E on a canoe within 4 m (the dot, from the canoe too) a word about their trip; on a portage the loaded
+  // carry has the trail (they wait at the landing while you carry, stop if you stand on the tread, step aside for you
+  // loaded) and a moment teaches it once. Run just before the actors' own update (after the camera); party-camps.js
+  // hands their camp over as they land and push off.
+  const moves = new PartyMoves({ world, parties, actors, tiles, player, day, camera, people: npcs, dialogue: talk, partyCamps });
+  partyCamps.moves = moves;
+  if (actorPool) actorPool.free = () => npcs.bodies.filter((b) => !b.who && !b.lent).length; // (what the people leave free: the actors' budget)
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { moves.update(dt); } catch (e) { if (!moves.warned) { moves.warned = true; console.warn('party-moves', e); } } upd(dt, ...a); }; }
+  pointer.register(partyTargets(moves)); pointer.registerWater(partyTargets(moves));
+  {
+    const pm = new Map(moves.moments().map((m) => [m.id, m]));
+    for (const m of pm.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const dueP = hints.due.bind(hints);
+    hints.due = (id, rec) => (pm.has(id) ? pm.get(id).due(rec) : dueP(id, rec));
+  }
+  window.__game.moves = moves;
+  // water: two rules (the owner, 2026-10-26: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if
+  // i fill water up without a tablet, it is instantly clean even tho warnign says its not"). Every dried meal and a cup
+  // take their water from the bottle (cook.js COOK, kit.js), short of it the "water 0.3 L" chip and once the moment
+  // 'mealwater'. Lake water filled with no tablet, pump or gravity bag is untreated (energy.untreated), the whole bottle
+  // with it: its state "Untreated" and a tea-brown mark; drunk, it may turn the stomach for half a day (energy.js UPSET);
+  // a tablet afterwards (Treat it), the pump, the gravity bag at camp or a boil in the pot (Boil it) make it safe; once
+  // the moment 'untreated' (kit.js moments, registered with content C's above). Thirsty with lake water in the bottle is
+  // only thirsty, not "the bottle's empty".
+  {
+    if (!document.getElementById('water-css')) { const s = document.createElement('style'); s.id = 'water-css'; s.textContent = '.st-untreated { --st: #a5773f; --st-ink: #22140a; }'; document.head.appendChild(s); }
+    const dueW = hints.due.bind(hints);
+    hints.due = (id, rec) => { const r = dueW(id, rec); return id === 'thirsty' && r && typeof r === 'object' && energy.untreated > 0.02 ? r.lv : r; };
+  }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
-  prewarm(scene); // polish A: with the composer's target bound, as above
+  const warmed = prewarm(scene); // polish A: with the composer's target bound, as above
+  // round A-C: then, behind the title card, the programs three's compile skips: every shadow caster's depth program in
+  // both light states the shadow pass can see, the mirror's variants, the god rays and the other anti-aliasing
+  // (quality.js prewarmPasses). The count is 79 at the title and stays there; it crept from 64 to 76 over four days.
+  warmed.then(() => prewarmPasses({ renderer, scene, camera, post, water, tiles, player, world })).then((r) => { window.__game.prewarmed = r; });
+  // round A-C: Auto keeps an eye on the frame rate in play and steps down a preset when the game runs slow
+  // (quality.js AutoWatch), fed the same frame times as the FPS readout. At half the undergrowth (Low) the
+  // understory casts no shadow: a shrub's shadow is lost in the ground's own shading, and its cascade proxies were 18
+  // of the shadow pass's 121 draw calls on the Lake One-Confusion trail.
+  const autoWatch = new AutoWatch(settings, () => title.state === 'game' && !input.paused && document.visibilityState === 'visible');
+  { const end = fps.end.bind(fps); fps.end = (dt) => { end(dt); autoWatch.frame(dt); }; }
+  const undergrowth = () => { CULL.understoryShadow = settings.get('vegDensity') > 0.55; };
+  settings.onChange((k) => { if (k === 'vegDensity') undergrowth(); });
+  undergrowth();
+  window.__game.autoWatch = autoWatch;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
@@ -816,9 +955,11 @@ async function main() {
     guardWalker(); // fb3 join: a NaN never freezes the game (above)
     canoe.update(dt * ts);
     player.afterRig(); // fb C: a swim from shore leaves the beached hull where it lies (canoe.js's swim pose turns it over)
+    p2b.afterPlayer(dt * ts); // p2 B: the lid off on the carry, the hull pitched with the water's slope
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     guardView(shell);
+    { const e = camera.matrixWorld.elements; actors.update(dt * ts, camera.position.x, camera.position.z, -e[8], -e[10]); } // p2 A: the people on the water and the trails, after the camera
     talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
     pointer.update(dt, shell); // fb2 A: the dot, its label and the rim, after the camera
     setOrigin(player.x, player.z);

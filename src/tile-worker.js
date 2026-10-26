@@ -7,6 +7,7 @@ import { buildWaterChunk } from './water-build.js';
 import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
 import { Site } from './site.js';
+import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
 
 let cfg = null;
 
@@ -113,11 +114,47 @@ function collisionOf(bins, size) {
 }
 
 // the typed arrays of a terrain chunk (terrain-build.js), handed over rather than copied
-const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer];
+const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer, ...(t.parts ? [t.parts.buffer] : [])];
+
+// round A-C: a fine tile's terrain is one mesh of ~200 000 triangles, so a view, a mirror or a shadow cascade that
+// touched any corner of it drew all of it (a 300 m cascade drew three whole tiles, 1.1 M triangles). Its triangles
+// are put in order here by the PARTS x PARTS block of the tile their middle lies in, the blocks along a Morton curve
+// (so each quarter of the tile, each 2 x 2 of blocks, is one run of the index too), and `parts` lists each block's
+// run and a box round it: [start, count, x0, y0, z0, x1, y1, z1] (tile-local), so tiles.js can draw a block or a
+// quarter as a mesh of its own over the same arrays and three culls them one by one. Same triangles, same arrays;
+// MeshGround and the props read the index in any order.
+const PARTS = 4, STRIDE = 8;
+const MORTON = (() => { const m = new Uint8Array(PARTS * PARTS); for (let j = 0; j < PARTS; j++) for (let i = 0; i < PARTS; i++) { let k = 0; for (let b = 0; b < 4; b++) k |= (((i >> b) & 1) << (2 * b)) | (((j >> b) & 1) << (2 * b + 1)); m[j * PARTS + i] = k; } return m; })();
+function grow(lo, hi, o, P, v) {
+  for (let d = 0; d < 3; d++) { const p = P[v + d]; if (p < lo[o + d]) lo[o + d] = p; if (p > hi[o + d]) hi[o + d] = p; }
+}
+function partTerrain(t, size) {
+  const I = t.idx, P = t.pos, nt = I.length / 3, cs = size / PARTS, nb = PARTS * PARTS;
+  const block = new Uint8Array(nt), count = new Int32Array(nb);
+  const lo = new Float32Array(nb * 3).fill(Infinity), hi = new Float32Array(nb * 3).fill(-Infinity);
+  for (let k = 0; k < nt; k++) {
+    const a = I[k * 3] * 3, b = I[k * 3 + 1] * 3, c = I[k * 3 + 2] * 3;
+    const x = (P[a] + P[b] + P[c]) / 3, z = (P[a + 2] + P[b + 2] + P[c + 2]) / 3;
+    const q = MORTON[Math.min(PARTS - 1, Math.max(0, Math.floor(z / cs))) * PARTS + Math.min(PARTS - 1, Math.max(0, Math.floor(x / cs)))];
+    block[k] = q; count[q]++;
+    grow(lo, hi, q * 3, P, a); grow(lo, hi, q * 3, P, b); grow(lo, hi, q * 3, P, c);
+  }
+  const at = new Int32Array(nb);
+  for (let q = 1; q < nb; q++) at[q] = at[q - 1] + count[q - 1] * 3;
+  const parts = new Float32Array(nb * STRIDE), out = new I.constructor(I.length), fill = at.slice();
+  for (let k = 0; k < nt; k++) { const o = fill[block[k]]; out[o] = I[k * 3]; out[o + 1] = I[k * 3 + 1]; out[o + 2] = I[k * 3 + 2]; fill[block[k]] += 3; }
+  for (let q = 0; q < nb; q++) {
+    parts.set(count[q] ? [at[q], count[q] * 3, lo[q * 3], lo[q * 3 + 1], lo[q * 3 + 2], hi[q * 3], hi[q * 3 + 1], hi[q * 3 + 2]] : [at[q], 0, 0, 0, 0, 0, 0, 0], q * STRIDE);
+  }
+  t.idx = out; t.parts = parts;
+  return t;
+}
 
 async function buildFine(m) {
   const g = cfg.grid;
+  gradeAhead('fine', m.tx, m.ty);
   const buf = await fetchTile(m.url);
+  await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
@@ -130,7 +167,7 @@ async function buildFine(m) {
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);
   const cellSplat = cover.subarray(COVER_SPLAT_AT(grid.side));
-  const terrain = buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat });
+  const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell); // round A-C
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz) }));
@@ -147,7 +184,9 @@ async function buildFine(m) {
 // chunk can be hidden as soon as the fine tile under it is in.
 async function buildFar(m) {
   const g = cfg.grid, f = g.far;
+  gradeAhead('far', m.fx, m.fy);
   const buf = await fetchTile(m.url);
+  await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
   const grid = new TileGrid(desc, m.fx, m.fy, buf, cfg.levelById, cfg.clarityById);
   const per = g.tile / f.factor; // far cells per fine tile

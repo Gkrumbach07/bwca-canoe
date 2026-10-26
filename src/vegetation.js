@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GeoBuilder, CardBuilder, vary } from './geobuilder.js';
 import { mulberry32, hash2, smoothstep } from './rng.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { angularRock, makeRockMaterial, smoothToon, screeBlock } from './rocks.js';
+import { angularRock, makeRockMaterial, smoothToon, screeBlock, farRock } from './rocks.js';
 import { cliffModule, cliffModuleFar, makeCliffMaterial } from './cliffs.js';
 import { GROUPS } from './placement.js';
 import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
@@ -728,7 +728,7 @@ const LOW = {
   birch: (rng, I) => farTwin(I, 'farBirch', rng, { trunk: 0.35 }),
   cedar: (rng, I) => farTwin(I, 'farCedar', rng),
   snag: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.5, 0, 0.3, 0.08, 7 + rng() * 5, 4, vary(0x9a9388, rng, 0.08), rng); return g.build(); },
-  boulder: (rng) => angularRock(rng, 'block'),
+  boulder: (rng) => farRock(rng), // round A-C: a plain block of ~16 triangles (the slanted rock was 128)
   shrub: (rng, I) => (I.n ? farTwin(I, 'farShrub', rng) : lowShrub(rng)),
   tallPine: (rng, I) => farTwin(I, 'farTallPine', rng, { trunk: 0.4 }),
   jackPine: (rng, I) => farTwin(I, 'farJackPine', rng, { trunk: 0.3 }),
@@ -742,7 +742,7 @@ const LOW = {
   tamarack: (rng, I) => farTwin(I, 'farTamarack', rng, { trunk: 0.25 }),
   aspen: (rng, I) => farTwin(I, 'farAspen', rng, { trunk: 0.45 }),
   blackSpruce: (rng, I) => farTwin(I, 'farBlackSpruce', rng),
-  talus: (rng) => screeBlock(rng),
+  talus: (rng) => farRock(rng, { scree: true }), // round A-C: likewise (the near block was 76)
   cliff: (rng) => cliffModuleFar(rng),
 };
 
@@ -761,7 +761,8 @@ export const SPECIES = [
   { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS, guest: { name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 } },
   { name: 'cedar', make: cedar, variants: TREE_VARIANTS },
   { name: 'snag', make: snag, variants: TREE_VARIANTS },
-  { name: 'boulder', make: (rng, v) => angularRock(rng, ROCK_KINDS[v % 3]), rock: true, variants: 9 },
+  // round A-C: boulders (3 to 7 m across) are a pixel or two past 2 km, in the haze: culled at 2200 m, not 3200
+  { name: 'boulder', make: (rng, v) => angularRock(rng, ROCK_KINDS[v % 3]), rock: true, variants: 9, cull: 2200 },
   { name: 'shrub', make: shrub, leaves: [0.72, 0.22, 0.08], variants: 6 },
   { name: 'tallPine', guestOf: 0 },
   { name: 'jackPine', make: jackPine, variants: TREE_VARIANTS },

@@ -1,7 +1,8 @@
 // The trip's tally for the journal: kilometres paddled (today and in all), portages walked and their rods,
 // the times the canoe came down, the lakes in the order they were first paddled, the nights and where they
 // were spent, and the days with any paddling in them. Read off the player each frame; saved every few
-// seconds under `bwca-canoe:stats` (save.js); reset when a trip starts or is forgotten.
+// seconds under `bwca-canoe:stats` (save.js); reset when a trip starts or is forgotten. A night keeps the campsite it
+// was spent at (round A-A: { doy, where, key, lake }), which the season's record (record.js) reads at the trip's end.
 import { save } from './save.js';
 
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
@@ -58,11 +59,19 @@ export class TripStats {
     }
     // midnight: a night, and where it was spent
     if (this.day.doy !== this.lastDoy) {
-      if (tripActive && (this.day.doy > this.lastDoy || this.day.doy < this.lastDoy - 300)) this.nights.push({ doy: this.lastDoy, where: this.whereabouts() });
+      if (tripActive && (this.day.doy > this.lastDoy || this.day.doy < this.lastDoy - 300)) this.nights.push({ doy: this.lastDoy, where: this.whereabouts(), ...this.siteOf() });
       this.lastDoy = this.day.doy; this.dirty = true;
     }
     this.lastMode = p.mode;
     if ((this.saveT += dt) > 10) { this.saveT = 0; if (this.dirty) this.write(); }
+  }
+  // round A-A: the campsite a night was spent at, for the season's record (record.js): { key, lake } (campKey's
+  // "x:z" and the lake's name), or nothing off a site
+  siteOf() {
+    const p = this.player, w = this.world, camp = p.nearCampsite ? p.nearCampsite(p.x, p.z, 40) : null;
+    if (!camp) return {};
+    const id = p.nearWater ? p.nearWater(camp.x, camp.z, 8) : 0;
+    return { key: `${Math.round(camp.x)}:${Math.round(camp.z)}`, lake: (id > 0 && w.lakeName(id)) || null };
   }
   // "the east campsite on Hudson", "afloat on Lake Insula", "on the Insula–Alice portage"
   whereabouts() {
@@ -71,7 +80,7 @@ export class TripStats {
     if (camp) {
       const id = p.nearWater ? p.nearWater(camp.x, camp.z, 8) : 0, l = id > 0 ? w.lakes[id - 1] : null, name = w.lakeName(id);
       const side = l && l.cells >= 1500 ? `${compass(camp.x - l.cx, camp.z - l.cz)} ` : '';
-      return name ? `the ${side}campsite on ${name}` : 'a campsite';
+      return name ? `the ${side}campsite on ${/( River| Creek| Bay| Narrows| Arm| Rapids)$/.test(name) ? `the ${name}` : name}` : 'a campsite';
     }
     if (p.mode === 'paddle') { const name = w.lakeName(p.lakeId); return name ? `afloat on ${name}` : 'afloat'; }
     return p.placeName ? `on ${p.placeName}` : 'in the woods';

@@ -10,7 +10,8 @@ import { smoothstep, clamp } from './rng.js';
 //
 // - The pot. A raw meal or a fish dragged onto the grate (a fixed container at the ring: items.js 'grate', on the ground
 //   at.grate = the site's key), the cook pot (items.js 'pot') beside a meal, over a lit fire: it cooks by itself (fb5 A,
-//   below). A meal takes water from the bottle (energy.useWater: boiling it makes lake water safe, so treated or not).
+//   below). A meal takes water from the bottle (energy.useWater: boiling it makes lake water safe, so treated or not:
+//   the untreated goes first).
 //   It cooks for COOK[kind] game minutes on the clock while the fire under it burns, steaming (fire.js's pot steam) and
 //   bubbling, a fish sizzling in the pot's lid. Done, it chimes, and the cooked thing (items.js hot:* and fried:*) sits on
 //   the grate marked Ready: taken off it (E at it, or a drag), it is eaten from the book, or kept as leftovers, which keep
@@ -38,9 +39,14 @@ import { smoothstep, clamp } from './rng.js';
 // tuning: on the one clock (fb5 C, Trip ×4) a supper's 15 game minutes were 3¾ real minutes stood at the grate with
 // nothing left to do (the tent's hold is a minute, the wood picked by then): two thirds of the old minutes, a supper
 // 2½ real minutes, breakfast and a fish under 2. kit.js's meals and fillets the same way.
+// water (the owner, 2026-10-26: "shoudlt it require some water for the deharated meals and oatmeal"): every meal that is
+// dried takes its real water from the bottle, the grate's and the stove's alike (kit.js adds the content meals': pancakes,
+// chili mac, bannock), and a fish none. A supper 0.4–0.5 L, oatmeal a quarter litre (it was 0.3). Short of it, the meal
+// waits on the grate with the pot's chip "water 0.3 L" (grateStatus), the stove's Cook on it greys with the same chip,
+// and the first time the moment 'mealwater' (kit.js) says to fill the bottle. Lake water as it comes is fine: it boils.
 export const COOK = { // game minutes on the grate over a lit fire; litres of water from the bottle
   'meal:supper': { minutes: 10, water: 0.4 },
-  'meal:breakfast': { minutes: 7, water: 0.3 },
+  'meal:breakfast': { minutes: 7, water: 0.25 },
   'meal:freeze': { minutes: 7, water: 0.5 },
   fish: { minutes: 7, water: 0 },
 };

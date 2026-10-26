@@ -23,8 +23,23 @@ export class GridQueries {
   isWater(x, z) { return this.shoreAt(x, z) < 0; }
   lakeIdAt(x, z) { return this.lakeCell(this.cellI(x), this.cellJ(z)); }
 
-  // Water surface level near (x,z): the level of the nearest water cell within r cells.
+  // Water surface level at (x,z). p2 B: bilinear between the four cells round the point (the water patch draws it so,
+  // water.js levelAt), a land corner standing in with the mean of the water corners; it was the level of the nearest
+  // water cell, so on a graded river the canoe and the camera rode a 10 m staircase. With no water among the four, the
+  // level of the nearest water cell within r cells, else the ground.
   levelAt(x, z, r = 6) {
+    const fx = (x - this.originX) / this.cell - 0.5, fz = (z - this.originZ) / this.cell - 0.5;
+    const i0 = Math.floor(fx), j0 = Math.floor(fz), ax = fx - i0, az = fz - j0;
+    const w00 = this.lakeCell(i0, j0), w10 = this.lakeCell(i0 + 1, j0), w01 = this.lakeCell(i0, j0 + 1), w11 = this.lakeCell(i0 + 1, j0 + 1);
+    if (w00 || w10 || w01 || w11) {
+      let l00 = w00 ? this.levelCell(i0, j0) : 0, l10 = w10 ? this.levelCell(i0 + 1, j0) : 0;
+      let l01 = w01 ? this.levelCell(i0, j0 + 1) : 0, l11 = w11 ? this.levelCell(i0 + 1, j0 + 1) : 0;
+      if (!(w00 && w10 && w01 && w11)) {
+        const m = (l00 + l10 + l01 + l11) / ((w00 ? 1 : 0) + (w10 ? 1 : 0) + (w01 ? 1 : 0) + (w11 ? 1 : 0));
+        if (!w00) l00 = m; if (!w10) l10 = m; if (!w01) l01 = m; if (!w11) l11 = m;
+      }
+      return (l00 * (1 - ax) + l10 * ax) * (1 - az) + (l01 * (1 - ax) + l11 * ax) * az;
+    }
     const ci = this.cellI(x), cj = this.cellJ(z);
     let bi = 0, bj = 0, bestD = Infinity;
     for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {

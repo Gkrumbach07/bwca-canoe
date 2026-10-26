@@ -44,6 +44,7 @@ export const DEFAULTS = {
   // developer
   fps: false,           // FPS and triangles in the readout
   devRows: false,       // tiles and the GPS sim in the readout
+  traffic: 'usual',     // round A-F: how many other parties are out, 'quiet' | 'usual' | 'busy' (parties.js TRAFFIC)
 };
 
 const pct = (v) => `${Math.round(v * 100)} %`;
@@ -89,6 +90,7 @@ export const SECTIONS = [
     { key: 'gps', label: 'GPS simulator', desc: 'The canoe’s position as a fix for the companion extension and this tab', type: 'status', read: (t) => (t && t.geo ? (t.geo.linked ? (t.geo.enabled ? 'broadcasting to the extension' : 'extension installed, switched off') : 'extension not detected · this tab only') : '…'), live: (t) => !!(t && t.geo && t.geo.linked && t.geo.enabled) },
     { key: 'fps', label: 'FPS and triangles', desc: 'A World row in the readout (hold Tab)', type: 'toggle' },
     { key: 'devRows', label: 'Tiles and the GPS sim in the readout', type: 'toggle' },
+    { key: 'traffic', label: 'Traffic', desc: 'How many other parties are out on the water', type: 'radio', options: [['quiet', 'Quiet'], ['usual', 'Usual'], ['busy', 'Busy']] }, // round A-F
   ] },
 ];
 export const SCHEMA = SECTIONS.flatMap((s) => [{ group: s.label }, ...s.rows.filter((r) => r.key in DEFAULTS)]);

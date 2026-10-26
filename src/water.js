@@ -89,6 +89,31 @@ export const COLUMN = {
   waterAbs: new THREE.Vector3(0.25, 0.04, 0.01),
 };
 
+// round A-E (the owner, 2026-10-26: "fix Night water"): white water by night takes the water's own floor. Under a cloud
+// deck at night the day cycle lifts the sky fill toward a cool grey glow (daycycle.js NIGHT_GLOW) so the shore and the
+// hull never go black. The water's own surface takes that lift by what it is: mostly a mirror, it shows the dome by
+// Fresnel (and the dome lifts far less than the fill), over a dark column. White foam took the whole lifted fill at its
+// albedo and FOAM_GAIN, four to six times the water round it, so at 23:30 under cloud the hull's water line and the
+// stern's eddy read pale blue-white, the brightest thing on the water. waterOwnLight is that surface's light toward the
+// eye (v: unit, from the water up to the eye): the sky it mirrors (the dome's own zenith and horizon) by Fresnel, and
+// the column's glow under the fill (body: the deep water's colour, lit as water.js lights it). White water's fill is
+// that, NIGHT_GLOW.foam brighter, as far as the night floor is on (uFoamNight.x, the day cycle's night x deck), and
+// never more than it was (glslFoamLight in wake.js, the whitecaps and the shore's lap here). The key (the sun, the moon)
+// lights it as before.
+export const glslWaterOwn = /* glsl */ `
+  vec3 waterOwnLight(vec3 v, vec3 zenith, vec3 horizon, vec3 body, vec3 fill) {
+    float c = clamp(v.y, 0.0, 1.0);
+    float F = 0.02 + 0.98 * pow(1.0 - c, 5.0);
+    return F * mix(horizon, zenith, smoothstep(0.0, 0.6, c)) + (1.0 - F) * body * fill * 1.9;
+  }
+  // the fill white water takes: the sky fill at the foam's gain by day; by night under the floor (night.x) the water's
+  // own light night.y brighter (over the foam's albedo), never more than the day's rule gives
+  vec3 foamFill(vec3 fill, float gain, vec2 night, vec3 own) {
+    if (night.x <= 0.0) return fill * gain;
+    return mix(fill * gain, min(fill * gain, own * (night.y / 0.84)), night.x);
+  }
+`;
+
 // Everything that rides or stands on the surface shares this: the atlas lookups, the terrain surface
 // (shaped in the shore band exactly as the terrain mesh is), the swell, and the swell as the water patch
 // actually renders it. All positions are relative to the floating origin (uOrigin); world xz -> rel is
@@ -109,7 +134,9 @@ export const glslSurface = /* glsl */ `
     return mix(mix(cellSample(t, c), cellSample(t, c + ivec2(1, 0)), a.x), mix(cellSample(t, c + ivec2(0, 1)), cellSample(t, c + ivec2(1, 1)), a.x), a.y);
   }
   float terrainAt(vec2 rel) { return bilinear(uHeightTex, rel); }
-  float levelAt(vec2 rel) { return cellSample(uLevelTex, atlasCell(rel)); }
+  // p2 B: bilinear between the cells (it was the cell's own level, so a graded river's surface stepped at every cell
+  // edge); a land cell holds the level of the water nearest it (rebuildAtlas), so a lake's is flat right to its shore
+  float levelAt(vec2 rel) { return bilinear(uLevelTex, rel); }
   float clarityAt(vec2 rel) { return cellSample(uClarityTex, atlasCell(rel)); }
   float atlasLevel(vec2 rel) { return levelAt(rel); }
   float shoreAt(vec2 rel) { return bilinear(uShoreTex, rel); }
@@ -177,6 +204,8 @@ const vertHead = /* glsl */ `
   varying vec3 vCrest;        // x: wave height over the local wind-wave height, y: that height (damped near the shore),
                               // z: the wind-wave height the shore here takes (the most exposed water round it)
   varying float vLee;         // cons B: 0 in the lee (a short fetch upwind), 1 on open water (LEE)
+  varying float vLevel;       // p2 B: the still surface's height (no swell): its slope is a rapids' (white water)
+  varying vec2 vFlow;         // p2 B: the near patch's: that slope (the gradient of the level, m per m), smooth
   #include <common>
   #include <fog_pars_vertex>
   #include <shadowmap_pars_vertex>
@@ -227,6 +256,8 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
     vWaveN = normalize(vec3(hL - hR, 2.0 * e, hB - hF));
     vec3 objPos = vec3(position.x, position.y + wave, position.z);
     vec3 flatObj = position;
+    vLevel = position.y;
+    vFlow = vec2(0.0);
     vec3 local = vec3(rel.x, position.y + wave, rel.y);
 ` + vertTail;
 
@@ -249,6 +280,8 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     float hB = surfaceWave(rel - vec2(0.0, e), uTime, border, s2), hF = surfaceWave(rel + vec2(0.0, e), uTime, border, s2);
     vWaveN = normalize(vec3((hL - hR) * (1.0 - uIce), 2.0 * e, (hB - hF) * (1.0 - uIce)));
     float level = levelAt(rel);
+    vLevel = level;
+    vFlow = vec2(levelAt(rel + vec2(2.0, 0.0)) - levelAt(rel - vec2(2.0, 0.0)), levelAt(rel + vec2(0.0, 2.0)) - levelAt(rel - vec2(0.0, 2.0))) * 0.25;
     vDepth = max(0.0, level - surfaceAt(rel));   // the bed as the terrain mesh draws it (the shore band reshaped)
     vClarity = clarityAt(rel);
     vec3 objPos = vec3(position.x, level + wave, position.z);
@@ -323,6 +356,8 @@ const frag = /* glsl */ `
   uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyIce;
   const vec3 FOAM_ALBEDO = vec3(0.86, 0.9, 0.92);   // the white of the foam; FOAM_GAIN as wake.js glslFoamLight has it
   const float FOAM_GAIN = 2.0;
+  uniform vec2 uFoamNight;   // round A-E: how far the night floor is on, and white water's lift over the water (glslWaterOwn)
+  ${glslWaterOwn}
   ${glslColumn}
   uniform vec3 uSkyZenith, uSkyMid, uSkyHorizon, uSkySun, uSkySunDir;
   #ifdef SKY_LIFT
@@ -344,6 +379,8 @@ const frag = /* glsl */ `
   varying vec4 vReflectUv;
   varying vec3 vCrest;
   varying float vLee;
+  varying float vLevel;
+  varying vec2 vFlow;
   #include <common>
   #include <packing>
   #include <fog_pars_fragment>
@@ -476,8 +513,64 @@ const frag = /* glsl */ `
     // the normal: the swell's own (smooth, from the vertices), tilted by the wind's fine ripples
     float rough;
     vec2 pw = vLocal.xz + uOrigin;   // world xz, for the noise (a lattice relative to the origin would jump with it)
+    // p2 B: where the still surface runs downhill (a rapids kept at a portage, a creek's cascade off a perched lake;
+    // scripts/water-grade.mjs) the water is broken and white: nothing on a lake or on the half-per-cent ramps the grade
+    // made of the old steps, roughening from 2.5 % and white water by 9 %. The near patch has the slope from its vertices
+    // (vFlow, smooth); the far water from the level's screen derivatives (as the shore's below), where only a pale wash
+    // shows (a derivative's float noise would scatter streaks into salt)
+    #ifdef FAR
+      vec2 lex = dFdx(vLocal.xz), ley = dFdy(vLocal.xz);
+      float ldet = lex.x * ley.y - lex.y * ley.x, lvx = dFdx(vLevel), lvy = dFdy(vLevel);
+      vec2 lvg = abs(ldet) > 1e-9 ? vec2(lvx * ley.y - lvy * lex.y, lvy * lex.x - lvx * ley.x) / ldet : vec2(0.0);
+    #else
+      vec2 lvg = vFlow;
+    #endif
+    float fall = length(lvg), steep = smoothstep(0.025, 0.09, fall) * live;
     vec2 tilt = windRipples(vLocal.xz, pw, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore)
       * mix(${LEE.calm.toFixed(3)}, 1.0, vLee);   // cons B: the lee lies smooth
+    float rapids = 0.0;
+    if (steep > 0.001) {
+      // round A join (the brief: the rapids' white water read as big white splotches; "foam streaks along the flow, like
+      // the new whitecaps"): foam lines drawn down the flow and running with it at about 2 m/s, wandering, broken into
+      // lengths, a few centimetres to a hand across and more of them the steeper it runs; between them the water only a
+      // little paler. Two sets: lines about 0.9 m apart, and finer ones a third of that where a pixel is a centimetre or
+      // so. A line is a distance in metres from its middle, so its edge is a pixel at any range. Far off (under a few
+      // pixels) a pale wash. The lines run along the two nearest of 16 fixed world directions to the flow, crossfaded (as
+      // the wind's ripples are drawn): a direction taken per pixel and multiplied into a world position turns the least
+      // wobble of the flow into stripes
+      float fa = atan(-lvg.y, -lvg.x) * ${(32 / (2 * Math.PI)).toFixed(6)}, fk = floor(fa), fw = smoothstep(0.25, 0.75, fa - fk);
+      float fine = 1.0 - smoothstep(0.015, 0.05, px);
+      float lines = 0.0;
+      for (int k = 0; k < 2; k++) {
+        float an = (fk + float(k)) * ${(2 * Math.PI / 32).toFixed(6)};
+        vec2 dn = vec2(cos(an), sin(an)), ac = vec2(-dn.y, dn.x);
+        float along = dot(pw, dn), across = dot(pw, ac);
+        uint sk = uint(k) * 7u;
+        // the lines gather in bands a few metres wide (a tongue, an eddy line) and thin out between
+        float band = (lookNoise(vec2(across * 0.22, along * 0.05 - uTime * 0.11), 157u + sk) - 0.5) * 0.36;
+        // the lines about 0.9 m apart: each wanders, swells and thins along its length, is cut into lengths that run
+        // downstream at about 2.2 m/s, and is as white as its froth
+        float u1 = across * 1.1 + 1.1 * lookNoise(vec2(across * 0.45, along * 0.06 - uTime * 0.13), 113u + sk);
+        float id1 = floor(u1), d1 = abs(fract(u1) - 0.5) * 0.909;
+        float h1 = mix(0.025, 0.07, steep) * (0.45 + 1.1 * lookNoise(vec2(id1 * 3.1, along * 0.5 - uTime * 1.1), 117u + sk));
+        float c1 = smoothstep(0.55 - 0.08 * steep - band, 0.66 - 0.06 * steep - band, lookNoise(vec2(id1 * 1.7, along * 0.3 - uTime * 0.66), 127u + sk));
+        float l1 = (1.0 - smoothstep(h1 * 0.35, h1 + px, d1)) * c1 * (0.55 + 0.45 * lookNoise(vec2(id1 * 2.3, along * 1.2 - uTime * 2.6), 131u + sk));
+        // the finer ones a third of that apart, where a pixel is a centimetre or so
+        float u2 = across * 2.9 + 1.0 * lookNoise(vec2(across * 1.0, along * 0.15 - uTime * 0.33), 139u + sk);
+        float id2 = floor(u2), d2 = abs(fract(u2) - 0.5) * 0.345, h2 = mix(0.008, 0.02, steep);
+        float c2 = smoothstep(0.58 - 0.1 * steep - band, 0.7 - 0.08 * steep - band, lookNoise(vec2(id2 * 1.3, along * 0.6 - uTime * 1.32), 151u + sk));
+        float l2 = (1.0 - smoothstep(h2 * 0.35, h2 + px, d2)) * c2 * 0.7 * fine;
+        lines += max(l1, l2) * (k == 0 ? 1.0 - fw : fw);
+      }
+      #ifdef FAR
+        float near = 0.0;
+      #else
+        float near = 1.0 - smoothstep(0.08, 0.35, px);
+      #endif
+      float wash = steep * steep * 0.22 * (0.45 + 0.55 * lookNoise(pw * 0.12 + vec2(0.0, uTime * 0.05), 131u));
+      rapids = (min(lines, 1.0) * mix(0.6, 0.95, steep) * smoothstep(0.0, 0.5, steep) + steep * 0.07) * near + wash * (1.0 - near);
+      tilt *= 1.0 + 1.5 * steep;   // the water between broken up
+    }
     if (uRain > 0.0) tilt += rainRings(pw, px, uRain) * live;
     vec3 n0 = normalize(vWaveN);
     vec3 n = normalize(n0 - vec3(tilt.x, 0.0, tilt.y));
@@ -523,7 +616,7 @@ const frag = /* glsl */ `
     float nh = max(dot(n, H), 0.0);
     float low = 1.0 - smoothstep(0.1, 0.6, uSunDir.y);
     float glint = (pow(nh, 1200.0) * 30.0 * smoothstep(0.0, 0.6, length(tilt) * 8.0) + pow(nh, 120.0) * 0.5 * low) * mix(0.05, 1.0, low) * step(0.0, uSunDir.y);
-    vec3 G = uSunLight * 3.14159 * glint * shadow * live * (1.0 - ra) * uGlint;
+    vec3 G = uSunLight * 3.14159 * glint * shadow * live * (1.0 - ra) * uGlint * (1.0 - 0.9 * steep); // (p2 B: no sparkle on a rapids' broken water)
     // the surface: what the mirror shows (F) over what comes out of the water (1 - F); the bed shows through what
     // the column lets by. Composed for plain alpha blending over the bed the terrain drew: colour / A, alpha A.
     // The fog lies over all of it except the mirrored shore, which its own pass already hazed along the whole path.
@@ -598,10 +691,13 @@ const frag = /* glsl */ `
     // off and at a grazing look they count for more)
     capFarV *= mix(1.0, 2.6, smoothstep(0.35, 0.06, dot(normalize(vWaveN), v)));
     float cap = min(1.0, mix(capNear * 0.95, capFarV * blow * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.9, capFar));
-    float foam = max(max(edgeA, lineA), cap) * live;
+    float foam = max(max(max(edgeA, lineA), cap), rapids) * live; // p2 B: and a rapids' white water
     // white water lit as the splashes and the rise rings are (wake.js foamLight): the key by its height in the sun's
-    // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white
-    vec3 foamC = FOAM_ALBEDO * lit * FOAM_GAIN;
+    // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white; round A-E: by
+    // night under the floor its fill is the water's own light (glslWaterOwn), so a whitecap or the lap never outshines it
+    vec3 fillC = uSkyLight * FOAM_GAIN;
+    if (foam > 0.002 && uFoamNight.x > 0.0) fillC = foamFill(uSkyLight, FOAM_GAIN, uFoamNight, waterOwnLight(v, uSkyZenith, uSkyHorizon, uBodyDeep, uSkyLight));
+    vec3 foamC = FOAM_ALBEDO * (uSunLight * max(uSunDir.y, 0.0) * shadow * FOAM_GAIN + fillC);
     #ifdef USE_FOG
       if (foam > 0.002) foamC = fogApply(foamC, vFogDir);
     #endif
@@ -687,6 +783,7 @@ export class WaterSystem {
       uReflTexel: { value: new THREE.Vector2(1 / 4, 1 / 4) },
       uSunLight: { value: new THREE.Color(0.6, 0.55, 0.45) },
       uSkyLight: { value: new THREE.Color(0.15, 0.2, 0.28) },
+      uFoamNight: { value: new THREE.Vector2(0, 1) },   // round A-E: the day cycle writes it (glslWaterOwn)
       uBodyClear: { value: WATER_LOOK.clear },
       uBodyDeep: { value: WATER_LOOK.deep },
       uBodyStain: { value: WATER_LOOK.stain },

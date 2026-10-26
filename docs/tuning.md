@@ -297,6 +297,61 @@ mouse. The scripts are in session e939fbdb's scratchpad, `taste/`.
 4. **The Kevlar costs $200** (`shop.js`, `inv-ui.js`; it was $240). At the home counter (EP 30) the shelf's tag and the
    tooltip read $200. Other counters' prices run $180–210.
 
+## Water (the owner, 2026-10-26)
+
+The owner raised two water rules: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if i fill
+water up without a tablet, it is instantly clean even tho warnign says its not". Both were measured before and after in
+the headless driver at 1440 × 900, with real keys and the real mouse. The scripts are in session e939fbdb's scratchpad,
+`water/` (t1–t7).
+
+1. **Meals need water** (`cook.js COOK`, `kit.js`).
+   - Before, the grate and the stove already took water: a supper on the grate with an empty bottle waited, and the pot
+     showed "water 0.4 L". Nothing taught it, and a cup took only treated water.
+   - The amounts now:
+
+     | | Before | After |
+     |---|---|---|
+     | Rice and lentil supper | 0.4 L | 0.4 L |
+     | Freeze-dried supper | 0.5 L | 0.5 L |
+     | Chili mac | 0.5 L | 0.5 L |
+     | Oatmeal | 0.3 L | 0.25 L |
+     | Pancake mix | 0.3 L | 0.25 L |
+     | Bannock mix | 0.1 L | 0.2 L |
+     | A cup of coffee or cocoa | 0.25 L | 0.25 L |
+     | Fish and fillets | none | none |
+
+   - Short of water, a meal waits on the grate with the pot's chip, and the stove's Cook on it and a cup grey with the same
+     chip ("water 0.3 L").
+   - The first time, the moment 'mealwater' says "Meals need water: fill your bottle at the lake." It shows over the fire's
+     card, or once the book closes after the stove greyed.
+   - As played: a supper took 2.0 → 1.6 L, oatmeal 1.6 → 1.35 L on the grate. On the stove, oatmeal took 0.25 L and a
+     supper 0.4 L, and a cup 0.25 L.
+   - All of it is boiled, so lake water as it comes is fine for any of them, and is used first.
+2. **Untreated water is untreated** (`energy.js UPSET`, `untreated`).
+   - Before, a fill with no tablet was drinkable at once, the bottle showed no state, and hunger ran ×1.5 for 6 h from
+     the fill, drunk or not.
+   - Now, a fill with no tablet, pump or gravity bag is untreated, and so is the whole bottle with it: a litre treated,
+     topped up at the lake, read 2 L untreated.
+   - The bottle says "Untreated", with a tea-brown mark on its icon. The first time, the moment 'untreated' says
+     "Untreated lake water. A tablet, the filter, or a boil in the pot makes it safe."
+   - It still quenches thirst: a gulp is +19 %. Each litre drunk turns the stomach with a chance of 0.3 (`risk`): a gulp
+     about 9 %, a whole bottle 51 %.
+   - The stomach turns 0.4–1.2 game hours later (`onset`), for 10 h (`hours`), said once: "Your stomach turns: the
+     untreated water. It passes in half a day."
+   - While it lasts:
+     - 0.12 comes off the bar's ceiling, drawn with hunger's chunk; the readout says "held down by an upset stomach"
+     - hunger falls ×1.5 and thirst ×1.3. Measured over an hour: food −0.0625 against −0.042, water −0.1625 against −0.125
+     - the chunk never takes the ceiling under 0.2 by itself (`floor`). With the needs low and the ceiling at 0.10, it
+       added nothing.
+   - Ways to make it safe:
+     - **Treat it** (on the bottle or the tablets): a tablet, then the half hour.
+     - **The pump**: pours the lake water out and pumps the bottle full, drinkable at once.
+     - **The gravity bag at camp**: 5 min.
+     - **Boil it** (the bottle, with the pot in reach): 6 game min by a lit fire, or 4 on the stove with one use of fuel.
+     - At the lake, a fill with a tablet to hand takes the lake water under the tablet with the new.
+   - Old saves: a bottle filled before with no tablet (the old 6 h mark) loads as untreated, with no upset until it is
+     drunk. Any other bottle loads as it was.
+
 ## How to measure again
 
 The scripts are in session e939fbdb's scratchpad, `tuning/`. The driver is the content join's, on port 5558, with Vite

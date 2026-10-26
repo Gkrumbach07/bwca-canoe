@@ -1258,9 +1258,10 @@ export class Inventory {
   syncBottle() {
     const en = this.energy, e = this.bottleEntry;
     if (!en || !e || !Number.isFinite(en.bottle)) return;
-    const l = Math.round(en.bottle * 100) / 100, t = Math.round((en.treating || 0) * 100) / 100;
-    if (e.left === l && (e.treating || 0) === t) return;
+    const l = Math.round(en.bottle * 100) / 100, t = Math.round((en.treating || 0) * 100) / 100, u = Math.round((en.untreated || 0) * 100) / 100;
+    if (e.left === l && (e.treating || 0) === t && (e.untreated || 0) === u) return;
     e.left = l; if (t > 0) e.treating = t; else delete e.treating;
+    if (u > 0) e.untreated = u; else delete e.untreated; // (water: lake water as it comes, its mark redrawn when it changes)
     this.emit('bottle');
   }
   // fb4 join (stream A's leftover): you stand in the water (the shallows after a push-off, say)
