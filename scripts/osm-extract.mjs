@@ -125,6 +125,21 @@ export async function loadOsm(bbox, extracts = CFG.extracts) {
     const cutName = base.replace(/\.osm\.pbf$/, `-${key}.cut.osm.pbf`);
     const have = osmium ? cutDirs().map((d) => path.join(d, cutName)).find((f) => fs.existsSync(f)) : null;
     if (have) { sources.push(have); continue; }
+    // a cut of a bigger box (the whole bwca box's) is cut down again rather than fetching the province file
+    const stem = base.replace(/\.osm\.pbf$/, '-');
+    const outer = osmium && !fs.existsSync(file) ? cutDirs().flatMap((d) => (fs.existsSync(d) ? fs.readdirSync(d).map((f) => path.join(d, f)) : [])).find((f) => {
+      const b = path.basename(f);
+      if (!b.startsWith(stem) || !b.endsWith('.cut.osm.pbf')) return false;
+      const [s, w, n, e] = b.slice(stem.length, -'.cut.osm.pbf'.length).split(',').map(Number);
+      return s <= bbox.south - margin && w <= bbox.west - margin && n >= bbox.north + margin && e >= bbox.east + margin;
+    }) : null;
+    if (outer) {
+      const cut = path.join(osmDir(), cutName);
+      log('osmium extract', path.basename(cut), 'from', path.basename(outer));
+      execFileSync('osmium', ['extract', '--bbox', `${bbox.west - margin},${bbox.south - margin},${bbox.east + margin},${bbox.north + margin}`, '--strategy', 'smart', '--overwrite', '-o', cut, outer], { stdio: 'inherit' });
+      sources.push(cut);
+      continue;
+    }
     await download(CFG.geofabrik(name), file);
     if (!osmium) { sources.push(file); continue; }
     // cut each extract down to the bbox first: the scan below then runs over a few megabytes instead of hundreds
