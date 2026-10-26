@@ -5,6 +5,7 @@ import { FRESH } from './wind.js';
 import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
 import { explored, INK_WATER, INK_RIM, ROUTE_STEP } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked, your way in pencil)
 import { lifeKmh } from './pace.js';
+import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import './hud.css';
 
 // The HUD, in two materials (hud.css). Air: the compass top right, the readout top left while Tab is held,
@@ -1428,6 +1429,60 @@ export class Hud {
     this.inkLeg.way.style.display = onWay ? '' : 'none'; this.inkLeg.lake.style.display = onLake ? '' : 'none';
   }
 
+  // d1 names: the bays, points, islands, narrows, summits, the named portages no drawn trail carries and the ghost town
+  // (names.js places, from GNIS and Geographic Names Ontario), and d1 rapids' falls and rapids (this.mapPlaces, set in its
+  // main.js block: [{ kind: 'falls'|'rapids', name, x, z, a?, b? }]), in the sheet's lettering: the water's names in blue
+  // italic, the land's in brown, a summit with its little peak, white water a blue tick across the river. Each kind from
+  // its own zoom (STYLE max: metres a pixel); the first lettered keeps its place and a later one that would lie on it is
+  // left out (narrows and falls first, the points and islands last), and none on a lake's own name.
+  drawPlaceNames(ctx, { toPx, inView, onMine, k, mPerPx, lettered }) {
+    const water = `rgba(${WATER.join(',')}, 0.9)`, paper = 'rgba(233, 225, 204, 0.9)';
+    const STYLE = {
+      narrows: { size: 12, italic: true, fill: '#2d4f66', halo: water, max: 30 },
+      falls: { size: 12, italic: true, fill: '#235e86', halo: water, max: 40 },
+      rapids: { size: 11, italic: true, fill: '#235e86', halo: water, max: 16 },
+      bay: { size: 12.5, italic: true, fill: '#2d4f66', halo: water, max: 45 },
+      portage: { size: 11.5, italic: true, fill: '#b4321f', halo: paper, max: 30 },
+      summit: { size: 11, italic: true, fill: 'rgba(74, 59, 38, 0.85)', halo: paper, max: 45, peak: true },
+      place: { size: 10, fill: 'rgba(74, 59, 38, 0.8)', halo: paper, max: 45, caps: true },
+      island: { size: 10.5, fill: 'rgba(74, 59, 38, 0.88)', halo: paper, max: 14 },
+      point: { size: 10.5, fill: 'rgba(74, 59, 38, 0.88)', halo: paper, max: 12 },
+    };
+    const ORDER = ['narrows', 'falls', 'bay', 'portage', 'summit', 'place', 'rapids', 'island', 'point'];
+    let ww = [];
+    if (typeof this.mapPlaces === 'function') { try { ww = this.mapPlaces() || []; } catch { ww = []; } }
+    // white water first: the tick across the river, named or not
+    ctx.lineCap = 'round';
+    for (const q of ww) {
+      if (!q || !Number.isFinite(q.x) || !inView(q.x, q.z, q.x, q.z) || !onMine(q.x, q.z, q.x, q.z) || mPerPx > STYLE[q.kind === 'falls' ? 'falls' : 'rapids'].max * 1.5) continue;
+      ctx.strokeStyle = '#2b6d96'; ctx.lineWidth = (q.kind === 'falls' ? 2.4 : 1.6) * k;
+      const [a0, b0] = q.a ? toPx(q.a[0], q.a[1]) : toPx(q.x - 12, q.z), [a1, b1] = q.b ? toPx(q.b[0], q.b[1]) : toPx(q.x + 12, q.z);
+      const dx = a1 - a0, dy = b1 - b0, L = Math.hypot(dx, dy) || 1, ext = Math.max(0, 7 * k - L) / 2, ux = dx / L, uy = dy / L;
+      for (const o of q.kind === 'falls' ? [-1.6 * k, 1.6 * k] : [0]) { ctx.beginPath(); ctx.moveTo(a0 - ux * ext - uy * o, b0 - uy * ext + ux * o); ctx.lineTo(a1 + ux * ext - uy * o, b1 + uy * ext + ux * o); ctx.stroke(); }
+    }
+    const items = [...names.places, ...ww.filter((q) => q && q.name && Number.isFinite(q.x)).map((q) => ({ kind: q.kind === 'falls' ? 'falls' : 'rapids', name: q.name, x: q.x, z: q.z }))];
+    const fits = (bx) => !lettered.some((q) => bx.x0 < q.x1 && q.x0 < bx.x1 && bx.y0 < q.y1 && q.y0 < bx.y1);
+    ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    for (const kind of ORDER) {
+      const S = STYLE[kind], lh = S.size * k;
+      if (mPerPx > S.max) continue;
+      ctx.font = `${S.italic ? 'italic ' : ''}600 ${lh}px ${SERIF}`;
+      for (const q of items) {
+        if (q.kind !== kind || !inView(q.x, q.z, q.x, q.z) || !onMine(q.x, q.z, q.x, q.z)) continue;
+        const [a, b] = toPx(q.x, q.z), txt = S.caps ? spaced(q.name.toUpperCase()) : q.name, tw = ctx.measureText(txt).width;
+        // white water and summits are lettered beside their mark; the rest centred on the place
+        const side = kind === 'falls' || kind === 'rapids' || S.peak, tx = side ? a + 7 * k : a - tw / 2, ty = b;
+        const bx = { x0: tx - 2 * k, x1: tx + tw + 2 * k, y0: ty - lh * 0.6, y1: ty + lh * 0.6 };
+        if (!fits(bx)) continue;
+        lettered.push(bx);
+        if (S.peak) { ctx.beginPath(); ctx.moveTo(a - 3.5 * k, b + 3 * k); ctx.lineTo(a, b - 3.5 * k); ctx.lineTo(a + 3.5 * k, b + 3 * k); ctx.closePath(); ctx.fillStyle = S.fill; ctx.fill(); }
+        ctx.textAlign = 'left'; ctx.lineWidth = 3 * k; ctx.strokeStyle = S.halo; ctx.strokeText(txt, tx, ty);
+        ctx.fillStyle = S.fill; ctx.fillText(txt, tx, ty);
+      }
+    }
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+  }
+
   drawMap(player) {
     const w = this.world, ctx = this.mapCtx, W = this.canvas.width, H = this.canvas.height;
     if (!W || !H) return;
@@ -1567,6 +1622,12 @@ export class Hud {
           const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
           ctx.fillStyle = '#b4321f'; ctx.textAlign = 'left';
           ctx.fillText(`${p.rods} rods`, mx + 7 * k, my - 6 * k);
+          // d1 names: a portage with a name of its own (Height of Land, Prairie) says it under its rods, up close
+          if (p.proper && mPerPx < 9) { ctx.font = `italic 600 ${11 * k}px ${SERIF}`; ctx.fillText(p.name, mx + 7 * k, my + 8 * k); ctx.font = `italic 600 ${13 * k}px ${SERIF}`; }
+        } else if (p.proper && mid && mPerPx < 30) { // (further out, the name alone: the border route's carries)
+          const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
+          ctx.font = `italic 600 ${11 * k}px ${SERIF}`; ctx.fillStyle = '#b4321f'; ctx.textAlign = 'left';
+          ctx.fillText(p.name, mx + 6 * k, my - 5 * k); ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
         }
       }
       // campsites: red dots with a pale centre
@@ -1578,6 +1639,8 @@ export class Hud {
           const [a, b] = toPx(c.x, c.z);
           ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28); ctx.fillStyle = '#c0392b'; ctx.fill();
           if (close) { ctx.beginPath(); ctx.arc(a, b, r * 0.38, 0, 6.28); ctx.fillStyle = '#f4e9d6'; ctx.fill(); }
+          // d1 names: the Forest Service's number, small, to the left of the dot (the pencil tick goes right)
+          if (close && c.usfs != null && mPerPx < 10) { ctx.font = `600 ${9.5 * k}px ${SERIF}`; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(160, 45, 30, 0.9)'; ctx.fillText(String(c.usfs), a - r - 2 * k, b + 3.5 * k); }
           // round A-B: a night slept there, ticked in pencil beside it
           if (explored.stayed(ci)) {
             const t = (close ? 1 : 0.75) * k;
@@ -1617,14 +1680,17 @@ export class Hud {
         }
       }
       // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
+      const lettered = []; // d1 names: the boxes lettered so far, so the place names keep off them
       if (lay.lakes) {
         ctx.font = `italic 600 ${(close ? 17 : 14) * k}px ${SERIF}`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
-        const minCells = Math.max(600, (5 * mPerPx) ** 2);
+        const minCells = Math.max(600, (5 * mPerPx) ** 2), lh = (close ? 17 : 14) * k;
         for (const l of w.lakes) {
           if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz)) continue;
-          const [a, b] = toPx(l.cx, l.cz);
-          ctx.fillText(spaced(l.name.toUpperCase()), a, b + 6 * k);
+          const [a, b] = toPx(l.cx, l.cz), txt = spaced(l.name.toUpperCase());
+          ctx.fillText(txt, a, b + 6 * k);
+          const tw = ctx.measureText(txt).width; lettered.push({ x0: a - tw / 2, x1: a + tw / 2, y0: b + 6 * k - lh * 0.8, y1: b + 6 * k + lh * 0.25 });
         }
+        if (mid) this.drawPlaceNames(ctx, { toPx, inView, onMine, k, mPerPx, lettered });
       }
       // entry points: the outfitters' docks, a pier with a shack at its root
       ctx.font = `600 ${11 * k}px ${SERIF}`;

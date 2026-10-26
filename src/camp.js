@@ -323,6 +323,8 @@ export class Camp {
     return Math.max(1, n + 1); // never before the put-in (Sandbox can set the date back)
   }
   siteName(site) {
+    // d1 names: the Forest Service's number and lake or bay (names.js): "Campsite · Basswood Lake – Back Bay #91"
+    if (site.usfs != null && site.official) return `Campsite · ${site.official} #${site.usfs}`;
     const id = this.player.nearWater ? this.player.nearWater(site.x, site.z, 6) : 0;
     return site.name ? `${site.name} campsite` : `Campsite${id ? ' · ' + (this.world.lakeName(id) || 'unnamed water') : ''}`;
   }
@@ -482,12 +484,12 @@ export class Camp {
   // game hours before the water just filled is drinkable: tablets half an hour, a filter a few minutes
   filterWait() { const k = this.kitOf('filter'); return FILTERS[k] ?? (/pump|gravity|filter/.test(k) ? FILTERS.pump : FILTERS.tablets); }
 
-  // your tent standing at another site, in a few words: "your tent is up 1.2 km east, at Campsite · Lake One"
+  // your tent standing at another site, in a few words: "your tent is up 1.2 km east, at Lake One #12"
   tentAway(c) {
     const p = this.player, d = Math.hypot(c.x - p.x, c.z - p.z), deg = ((Math.atan2(c.x - p.x, -(c.z - p.z)) * 180) / Math.PI + 360) % 360;
     const far = d < 1000 ? `${Math.max(50, Math.round(d / 50) * 50)} m` : `${(d / 1000).toFixed(1)} km`;
     const id = c.site && p.nearWater ? p.nearWater(c.site.x, c.site.z, 6) : 0, lake = id ? this.world.lakeName(id) : null;
-    const at = c.site ? (c.site.name ? `, at the ${c.site.name} campsite` : lake ? `, at the campsite on ${lake}` : ', at a campsite') : '';
+    const at = c.site ? (c.site.usfs != null && c.site.official ? `, at ${c.site.official} #${c.site.usfs}` : c.site.name ? `, at the ${c.site.name} campsite` : lake ? `, at the campsite on ${lake}` : ', at a campsite') : ''; // (d1 names: the site's number)
     return `your tent is ${c.stage >= 4 ? 'up' : 'half pitched'} ${far} ${compassLong(deg)}${at}: strike it there to pitch it here`;
   }
   // the nearest site (within r of its fire ring, or of its centre with layout false) whose tile has built it

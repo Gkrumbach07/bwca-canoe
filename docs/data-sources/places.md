@@ -83,3 +83,31 @@ The NOAA monthly normals table above is worth a five-minute weather.js change, b
   - MNBBA raw data: data-sharing agreement.
   
   **No.**
+
+## Built: d1 names (2026-10-26)
+
+The first three of the top 3 above, as runtime tables for the data-v3 release (no rebake). Run in this order:
+
+```
+node scripts/names-fetch.mjs        # data-cache/names/{campsites,trails,wilderness,gnis,ontario}.json + fetched.json
+node scripts/world-fixes.mjs        # src/world-fixes.json: + the missing sites, + the clear USFS-only portages
+node scripts/names.mjs [--report f] # src/names-sites.json, src/names-portages.json, src/names-places.json
+node scripts/site-lakes.mjs         # src/site-lakes.json counts the added sites too
+```
+
+(`BWCA_CACHE` points at the main checkout's `data-cache`; `--data` at a release.) The fetch is 3.0 MB in all: campsites 549 KB, trails 1.6 MB (the box's 1,450 hiker-only TERRA segments, fields cut to five), wilderness 242 KB, GNIS 456 KB (attributes only), Ontario 143 KB (attributes only, no lake polygons). The shared code is `scripts/names-lib.mjs`; a rebake can call it from bake.mjs.
+
+**Tables** (keyed by place, a site's rounded x:z and a portage's rounded ends, so a rebake of the same OSM data still finds them):
+
+| Table | Size (gzip) | What |
+|---|---|---|
+| `src/names-sites.json` | 45 KB (19 KB) | 1,941 of the 1,947 USFS sites on a game site: 1,843 within 100 m, 98 more within 250 m on the same water (median 14.7 m) |
+| `src/names-portages.json` | 45 KB (18 KB) | 686 drawn portages with their USFS trail number, name, rods (620 take the official rods, where the drawn trail is that trail end to end: rods ratio 0.67–1.5, 60 % covered) and class, or a named portage's name |
+| `src/names-places.json` | 15 KB (6 KB) | 372 names: 184 islands, 107 bays, 44 points, 17 summits, 13 narrows, 6 named portages no drawn one carries, 1 ghost town (Forest Center) |
+| `src/world-fixes.json` | +19 KB | 107 added campsites, 11 added portages |
+
+**Campsites.** 108 USFS sites have no game site within 250 m; 107 are added (25 nudged up off the water's edge to dry ground 5–25 m from the shore, at most 65 m), and Island River #1 is off the grid. Five more have an OSM site near but on other water or already taken: Hudson Lake #1, Basswood River #15, Sea Gull Lake #5, Caribou Lake (west) #6, Lower Pauness Lake #14. 113 OSM sites inside the wilderness have no USFS site (moved or closed): they keep "Campsite · <lake>".
+
+**Portages.** Of the 664 USFS lake-to-lake portages inside the wilderness, 576 are traced by a drawn portage within a 30 m median. 18 had no drawn portage within 400 m: 11 were added (Muskrat–Fraser, Trinity–Fraser, Uranus–Conchu, Fourtown–Fourtown Pond, Gulf–Romance, Mulligan Pond–Mulligan Lake, Kelly–Peterson, a Kawishiwi River carry, Partridge–Duncan, Cherokee–Ranger, Hug–Duck), and 7 are campsite spurs or loops, not portages (Crab Lake Cut-off, Benezie–Becoosin Loop, the Powwow spurs to Quadga and Pose, the Border Route spurs to the Sock, Clearwater and Partridge sites). 45 more have no drawn portage within a 60 m median but one within 400 m (drawn elsewhere or in part). 80 drawn portages inside the wilderness have no USFS trail within 300 m: unofficial carries, river walks and winter routes (Crane–Little Vermilion 427 rods, Sunday–Crooked 373, Niswi–Neewin 324, Manomin–Basswood 461, the Border Route Trail, Vera Portage Winter…); the list comes out of `names.mjs --report`. Named portages: 17 of Ontario's and GNIS's (Height of Land, Prairie, the Cherry and Vaseux portages, Watap, Wheelbarrow, Bottle, Beatty, the Knife portages…) name the drawn portage they lie on; 18 drawn portages keep their own proper name (Stairway, Four Mile).
+
+**Place names.** Lakes, streams and towns stay with the game's own names. Falls and rapids are d1 rapids' (`src/rapids.json`), handed to the map and the place note through `hud.mapPlaces`. Left out: Picture Rock, Pictured Rocks, Painted Rocks and Warrior Hill (pictographs), and a burial name. 16 bay or narrows names lie more than 300 m from any water the game draws; 4 are a game lake's own name already.

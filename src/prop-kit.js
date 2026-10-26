@@ -157,6 +157,20 @@ GEN[TILE.FIBRE] = (u, v) => { const m = 0.95 + 0.06 * (fb(u, v, 12, 12, 2, 141) 
 
 // The portage sign: a stained board with PORTAGE routed into it, the letters picked out in cream (v = 0 at
 // its top edge). Drawn with the 2D canvas, read back into the cell.
+// d1 names: the board's word is the top band of the cell now (SIGN_HEAD_UV), and under it the same routed letters one
+// by one (SIGN_GLYPHS, a 10 x 4 grid, signGlyphUv) for the plate under the board: the lake the trail goes to and its
+// length in rods, a quad per letter (props.js portageSign). The last cell of the grid is bare board (the plate's face).
+export const SIGN_GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-'";
+const G_TOP = 88, G_COLS = 10, G_ROWS = 4, G_W = INNER / G_COLS, G_H = (INNER - G_TOP) / G_ROWS;
+export const SIGN_HEAD_UV = [[0.02, 0.03], [0.98, 0.03], [0.98, 0.35], [0.02, 0.35]];
+export const SIGN_GLYPH_ASPECT = G_W / G_H; // a letter's cell, width over height
+// the cell's uv rectangle [u0, v0, u1, v1] of a letter (bare board for a space or one not in the set)
+export function signGlyphUv(ch) {
+  let k = SIGN_GLYPHS.indexOf(ch);
+  if (k < 0) k = G_COLS * G_ROWS - 1;
+  const c = k % G_COLS, r = Math.floor(k / G_COLS), x0 = c * G_W, y0 = G_TOP + r * G_H;
+  return [(x0 + 0.8) / INNER, (y0 + 0.8) / INNER, (x0 + G_W - 0.8) / INNER, (y0 + G_H - 0.8) / INNER];
+}
 function signPixels() {
   const c = document.createElement('canvas'); c.width = INNER; c.height = INNER;
   const x = c.getContext('2d');
@@ -169,8 +183,15 @@ function signPixels() {
   x.textAlign = 'center'; x.textBaseline = 'middle';
   let size = 60; const font = () => `bold ${size}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
   x.font = font(); while (x.measureText('PORTAGE').width > INNER - 24 && size > 20) { size -= 2; x.font = font(); }
-  x.fillStyle = 'rgba(25,16,10,0.8)'; x.fillText('PORTAGE', INNER / 2 + 2, INNER / 2 + 3); // the routed groove's shadow
-  x.fillStyle = '#e0d3ac'; x.fillText('PORTAGE', INNER / 2, INNER / 2);
+  const hy = INNER * (SIGN_HEAD_UV[0][1] + SIGN_HEAD_UV[2][1]) / 2;
+  x.fillStyle = 'rgba(25,16,10,0.8)'; x.fillText('PORTAGE', INNER / 2 + 2, hy + 3); // the routed groove's shadow
+  x.fillStyle = '#e0d3ac'; x.fillText('PORTAGE', INNER / 2, hy);
+  x.font = `bold ${Math.round(G_H * 0.8)}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+  for (let k = 0; k < SIGN_GLYPHS.length; k++) {
+    const cx = (k % G_COLS + 0.5) * G_W, cy = G_TOP + (Math.floor(k / G_COLS) + 0.5) * G_H + 1, ch = SIGN_GLYPHS[k];
+    x.fillStyle = 'rgba(25,16,10,0.8)'; x.fillText(ch, cx + 1, cy + 1.5, G_W - 3);
+    x.fillStyle = '#e0d3ac'; x.fillText(ch, cx, cy, G_W - 3);
+  }
   const d = x.getImageData(0, 0, INNER, INNER).data, out = new Float32Array(INNER * INNER * 4);
   for (let i = 0; i < out.length; i++) out[i] = d[i] / 255;
   return out;
