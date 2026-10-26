@@ -29,16 +29,19 @@ Lake One landing (entry point 30) east of Ely, Minnesota.
   workers, a coarse 80 m far field underneath, and lets the rest go.
 - **GPS simulation**: the canoe's real-world latitude/longitude is broadcast as the device location,
   so other tabs that ask for geolocation see you paddling (see *GPS simulator* below).
-- **The pace** (`src/pace.js`): a game day covers a real BWCA day's distance. Everything moves at life pace (a solo
-  canoe at a tripper's 5.8 km an hour in strokes of about 1.6 m, a 3 mph walk in steps of about 0.7 m, a portage carry
-  at 3 km an hour), and while you travel the canoe and the clock are time-lapsed together: at **Trip** pace (the
-  default; Settings › Controls › Pace) ×4 on open water, a game hour of paddling in about fifteen real minutes, and up
-  to ×3 on a portage trail, so a travel day of 4 to 6 game hours covers 20 to 25 km. The canoe's boost builds once the
-  stroke is steady and eases off on a slow stroke, in a hard turn and in the last few metres before a bank dead ahead,
-  but not along a shore or into a dock. Camp, chores, fishing and walking off a trail stay at life with the clock at
-  12×. **Real** pace is 1:1 throughout. A "trip ×4" mark sits bottom right while the boost carries you, and the
-  readout (Tab) gives the clock's rate and the km an hour, averaged over a stroke or two. The game keeps to the wall
-  clock at any frame rate (a slow frame runs as several steps), so 5.8 km an hour is 5.8 km an hour.
+- **The speeds** (`src/pace.js`, one speed, 2026-10-26): one game clock for everyone, ×8 (a game hour in 7½ real
+  minutes, a game day in 3 real hours), with no key to change it: multiplayer is planned, so no player can set the
+  clock. Everything moves at true speeds at life (a solo canoe at a tripper's 5.8 km an hour in strokes of about
+  1.6 m, a 3 mph walk in steps of about 0.7 m, a portage carry at 3 km an hour) and is seen time-lapsed to each
+  activity's own speed: the canoe cruising at about 12.5 m/s (Shift about 15), with the paddle at life's calm cadence
+  and a long glide between strokes, so a game hour of paddling covers a real hour's 5.6 km; the carry about 8 m/s
+  (Shift 9); on foot on a portage trail 5 (the walk back), on open land 3.5 (a jog 6), round camp and in a store 3.
+  The gear's speed shows on top (a Kevlar hull cruises faster). The canoe's time-lapse builds once the stroke is
+  steady and eases off on a slow stroke, in a hard turn and in the last few metres before a bank dead ahead, but not
+  along a shore or into a dock. Swimming and wading are only a little time-lapsed. Days on land run longer than in
+  life; the Rest dial and sleeping are the only time skips. Each speed is a named constant at the top of `pace.js`.
+  Settings › Developer › Pace › Real runs the clock and travel as in life, for testing. The game keeps to the wall
+  clock at any frame rate (a slow frame runs as several steps).
 - **A day in the Boundary Waters**: a day/night cycle on the pace's clock with the real sun and moon for the date and
   the clock (`src/astro.js`: sunrise and sunset shift through the year, the moon shows its phase), a
   sky-matched haze, golden light at the ends of the day, the clouds, the water, stars, with dawn mist over
@@ -91,11 +94,12 @@ counter, one at a time on a scrim). The numbers live behind held keys.
 
 The whole set of keys (the owner's second round of 2026-10-25: "We need to go through all the keys again … It should
 just be one key, I, to get into the inventory"): **W A S D** and the mouse, **Shift**, **Space**, **E** and **Q** on the
-dot, **F**, **I**, **M**, **Tab** held, **V**, **H**, **C**, **1 2 3** and **Esc**; in the book a right-click, and **R**
+dot, **F**, **I**, **M**, **Tab** held, **V**, **H**, **C** and **Esc**; in the book a right-click, and **R**
 only while you drag a thing. A few keys mean something only where they are shown on the screen: the numbers pick a lure
 with the rod up and a choice while you talk, A D (or ← →) turn the Rest dial, E and Q keep or let go a landed fish.
 J, L, T, K, R (the shore in the water: Settings › Display), N (sound: Settings › Sound), Ctrl-click and Tab in the
-book are gone. The first time a key would help (6 s of walking: Shift; 10 s under way: 1 2 3; the first dusk: H; the
+book are gone, and so are 1 2 3, the game speed (one speed, 2026-10-26: see *The speeds* below). The first time a key
+would help (6 s of walking: Shift; the first dusk: H; the
 first time on foot: V; a shelf within reach: E; beside your canoe with things on the ground: I; the first greyed verb on
 the dot: a right-click in the book) a small card above the action line names it for 6 s, once a season (Settings › HUD ›
 Key hints turns them off with the keys on the action line); a key you have already pressed is not offered.
@@ -115,7 +119,6 @@ Key hints turns them off with the keys on the action line); a key you have alrea
 | V | the view: from the paddler's eyes, or from behind |
 | H | the headlamp, afloat or on foot, day or night (by day the beam shows in the shade; it goes off when you sleep) |
 | C | the camera, when you have one (the $25 35 mm from an outfitter's gear shelf, or the disposable the season's first photo notice lends you for three pictures): the view goes to the eye in the print's 16:9 frame; the mouse (or the arrows and WASD, Shift for a fine hand) aims, the wheel (or Q and E held) zooms from a 50 mm to a 300 mm lens, Space or a click takes the picture, C or Esc lowers it. You hold still while it is up, and the clock runs at life's pace. A subject counts when it is near the middle of the print, near enough and in sight; the prints are kept in the journal's Photos tab |
-| 1 2 3 | the pace: 1×, 2×, 4× on top of Trip or Real (*Settings › Controls › Pace*). Whenever it changes a note above the status marks says so for 3 s, with what the clock does ("Trip pace ×2 · the clock runs ×8 on the water, ×6 on a trail, ×24 at camp"); the ×2 mark stays bottom right while it is up. With the rod up the numbers pick a lure instead |
 | Esc | frees the mouse when the look has taken it; closes the book, a card or the Rest dial; puts away a tent's ghost; otherwise pause: the title screen with Paddle on / New season / Settings / Controls (Esc again, or Enter, resumes); Controls shows these keys in the game |
 | Sandbox only | **[ ]** the time of day back / forward an hour · **- =** the date back / forward a day (with Shift, a month) · **P** stop the clock · **, .** less / more wind · **/** veer the wind 30° · **;** hand the wind back to the weather. The map sheet: click a spot to paddle in there (teleport to the nearest open water, anywhere in the wilderness) |
 | the title's entry points | the list beside *New season* starts a season with its home at one of the BWCA entry point landings, travelling the way picked above it: *Adventure* (open trips: food to buy, notices to take, real rules) or *Sandbox* (no limits); you begin tied up at the home store's door. Over a season under way New season asks once first, naming the season it forgets ("Adventure · home Lake One · day 1 · $38 · the aluminium canoe and a pack · 1 outfitter known") |
@@ -138,9 +141,8 @@ Paddle up to any bank and press **E**: the canoe noses in, you step out, and it 
 the dot on it reads **E Get in** (where it floats, as it lies) or, beached, **hold E Push it off**, and **Q Shoulder it**. On foot WASD walks relative to the view (W into the
 screen, D to its right; with the mouse look the body faces the look and the walker strides, backs up or side-steps
 as the keys say), at life pace: 1.35 m/s (a jog at 2.9 with Shift; with the canoe on your shoulders about 0.85,
-3 km an hour, by the load). On a portage trail the walk is time-lapsed with the clock at Trip pace (seen at about
-2.5 m/s under the canoe, up to ×3), and off a trail outside a camp, a store and its yard too, ×1.8 (seen at about
-2.4 m/s, the clock following, so a game hour still covers a real walk). Only the hills cost, less on a graded trail,
+3 km an hour, by the load), seen time-lapsed (*The speeds* above): under the canoe about 8 m/s, on a portage trail 5,
+on open land 3.5, round a camp, a store and its yard 3, whatever the load. Only the hills cost, less on a graded trail,
 and a slope past 40° stops you. Everything solid holds you off at its drawn edge and you slide along it: trunks
 at their drawn girth, rocks, the bluffs' cliffs and scree, down logs, stumps, walls. One lower than a step (a
 slab, a small rock, a thin log) you step up onto. Walking into something waist high and thin (a down log, a low
@@ -166,8 +168,9 @@ line counts the rods to go along the real trail. Portage lengths are shown in ro
 The title and pause screens are keyboard-first: the arrows move between items (← → between the menu and the
 entry points), Enter picks, Esc goes back. Settings (`src/settings.js`) come in sections: Display (shadow map
 size, tree detail and cull distance, render scale, the shore and sky in the water), Sound (volume, mute),
-Controls (mouse sensitivity, inverted look, cursor steering, the pace, the game speed and camera a trip starts with),
-HUD (above) and Developer (the GPS simulator's state, FPS and triangles and the tiles as rows of the readout).
+Controls (mouse sensitivity, inverted look, cursor steering and the camera a trip starts with), HUD (above) and
+Developer (the GPS simulator's state, FPS and triangles and the tiles as rows of the readout, the traffic, and Real
+pace for testing: the clock and travel as in life).
 The canoe's position, heading, the day clock and the camera mode are saved every few seconds
 (`src/save.js`, one `localStorage` document per namespace under `bwca-canoe:`; the journal's trip tally
 is `stats`, the HUD settings `settings`) so **Continue** picks the trip up where it stopped.

@@ -27,6 +27,12 @@ From the owner (2026-10-23):
   (the 2026-10-25 round, "i still feel slow walking"): T = 1.8 at Trip, seen at about 2.4 m/s. Sleep jumps the night.
   Measured: a July day of 6.5 game hours of travel covers 23–24 km with four portages (see Balance). The details are in
   `src/pace.js` and "The pace" below.
+- **One speed** (2026-10-26, multiplayer planned; it supersedes the 1/2/3 keys below): one player cannot be allowed to
+  change the clock. It runs at **×8** for everyone (`pace.js CLOCK`: a game day in 3 real hours) and no key changes it;
+  each activity has a fixed seen speed, decoupled from the clock (`pace.js` CANOE, CARRY, TRAIL, WALK, CAMP): the canoe
+  about 12.5 m/s (Shift 15) with the stroke at life's cadence, the carry 8 (Shift 9), a trail walk 5, open land 3.5
+  (jog 6), camp and stores 3. Real pace is a Settings › Developer row. Measurements and what was retuned are in
+  `docs/tuning.md`, *One speed*.
 - **One clock** (the owner's third round of 2026-10-25, replacing the clock that followed the boost): "I don't know why
   time has to pass differently when you're on land versus when you're in the water ... If that means that days are
   longer when you're on land, I think that's fine because you can always sleep through things." The game clock runs
@@ -326,12 +332,12 @@ it knows: the logbook, the people's memory of the season, the catch log, the pri
 | H | anywhere, day or night | the headlamp |
 | I | anywhere | the book (I or Esc closes it): your body and containers on the left, a tab for each thing within reach on the right (The canoe, a pack on the ground, Wood, The ground), the Journal a tab of its own; right-click a thing for its verbs and why one is greyed; eat a serving of a snack when still (a meal or a fish cooked first), Drink from the bottle, move things between containers |
 | Space, Shift | afloat / on foot | brace / vault, climb or hop · hustle / jog |
-| 1 2 3 | anywhere, the rod down | the game speed, Normal, Faster ▶▶, Fastest ▶▶▶ (1, 2, 4 on dt), on top of the pace (Settings › Controls › Pace: Trip or Real) |
 | `[ ] - = P` · `, . / ;` | Sandbox | the clock and the date · the wind |
 
 The whole set since the second 2026-10-25 round (the README and the title's Controls card list it): W A S D and the
 mouse, Shift, Space, E and Q on the dot, F the rod, I the book, M the map, Tab held the moment's readout, V the view, H
-the headlamp, C the camera, 1 2 3 the pace, Esc. J, L, T, R and Ctrl-click are gone (reflections are a Settings row).
+the headlamp, C the camera, Esc. J, L, T, R and Ctrl-click are gone (reflections are a Settings row), and 1 2 3 (the
+game speed) since one speed (2026-10-26).
 
 E belongs to the most specific context. Afloat, a lost item in reach comes first (tasks.before takes E ahead of "Go
 ashore"), then the dock's counter, then a landing's portage, then the bank. On foot, a portage's or a pack's prompt
@@ -414,28 +420,30 @@ amount)` ('douse' or 'pot').
 
 ### daycycle.js
 
-`day.hoursPerSecond` is life (1/3600) and `day.rate` is the clock's time-lapse (the pace, set by the trip; the 1/2/3
-keys multiply it through dt); `day.hoursPerTick` is the game hours a second of dt passes while the clock runs, what
+`day.hoursPerSecond` is life (1/3600) and `day.rate` is the clock's time-lapse (the pace, set by the trip: `CLOCK`, 8,
+for everyone); `day.hoursPerTick` is the game hours a real second passes while the clock runs, what
 the energy and the weather's wetness are paid on. `day.advance(h)` jumps it forward (a night, a fetch) and counts
 `day.jumps`, so the HUD's dawn card skips the jump. `setClock` and `advance` set `day.elevation` at once.
 `day.locked` turns the clock keys off.
 
 ### pace.js and the player: the time-lapse
 
-`paceOf(name)` → `{ clock, water, trail, foot, floor, label }` (Trip 4, 4, 3, 1.8, 1; Real all 1; `idle` is kept equal
-to `clock` for old readers), `clockOf(name)`, `SPEEDS` / `speedOf(ts)` / `speedOfKey(code)` (the 1/2/3 keys: factor,
-name, mark), `describe(player)` (`{ key, name, mark, label, pace, line }`, words without numbers, for the toast and the
-corner), `footHours(lifeHours, pace, lifeSpeed, seenSpeed)` (a stretch on foot's game hours, what the pack fetch is
-charged), `LIFE` (m/s at life: cruise 1.6, Shift 2.0, walk 1.35, jog 2.9, carry 1.0 before the load), `SEEN` (the most
-the walker is seen at on a trail: 2.5 carrying, 2.6 walking), `lifeKmh(gear)`. The player keeps `pace` (the setting),
-`boost` (the time-lapse it is seen to move at this frame; it no longer moves the clock), `lapsing` (on foot under it),
-`paceSpeed` (the speed at life over the boost, the readout's km/h) and
-`feltSpeed` (the speed at life toward the old cruise under the boost: the water line, the flecks, the wash). `speed`
-is always the speed at life: the energy, a capsize, a shore bump, the loons and "under way" read it. On the water the
-boost wants `water` on a forward stroke, times smoothsteps of the speed over the cruise, the yaw rate, the shore ahead
-along the bow (15 to 65 m), the water to the side (2.5 to 9 m) and the nearest landing or dock (30 to 80 m); it comes
-up over about a second and goes in a third of one. On a trail it is `SEEN / the pace at life`, up to `trail`. The
-chase camera is carried by the share of the move beyond life (`1 - 1 / (boost × game speed)`).
+(One speed, 2026-10-26.) The table at the top of `pace.js` is the owner's: `CLOCK` 8, `CANOE` { cruise 12.5, hustle 15,
+stroke 1 }, `CARRY` { seen 8, hustle 9 }, `TRAIL` { walk 5, jog 7 }, `WALK` { seen 3.5, jog 6 }, `CAMP` { seen 3, jog
+4.5 }, `SWIM_LAPSE` 1.5, `MAX_LAPSE` 12. `paceOf(name)` → `{ clock, lapse, label }` (Trip: CLOCK, true; Real and the
+camera's 'life': 1, false), `clockOf(name)`, `canoeLapse(hustle)` (the seen cruise over life's), `footSeen(where,
+carrying, hustle)` (m/s for 'trail', 'camp' or 'land'), `footHours(lifeHours, pace, lifeSpeed, seenSpeed)` (a stretch
+on foot's game hours, what the pack fetch is charged), `LIFE` (m/s at life: cruise 1.6, Shift 2.0, walk 1.35, jog 2.9,
+carry 1.0 before the load), `lifeKmh(gear)`. There is no `player.timeScale` any more (an old save's is ignored). The
+player keeps `pace` (the setting), `boost` (the time-lapse it is seen to move at this frame; it never moves the clock),
+`lapsing` (on foot under it on a trail or open land), `paceSpeed` (the speed at life over the boost, the readout's
+km/h) and `feltSpeed` (the speed at life toward the old cruise under the boost: the water line, the flecks, the wash).
+`speed` is always the speed at life: the energy, a capsize, a shore bump, the loons and "under way" read it. On the
+water the boost wants `canoeLapse` on a forward stroke, times smoothsteps of the speed over the cruise, the yaw rate
+and the open water dead ahead along the bow (8 to 26 m); it comes up over about a second and goes in a third of one.
+The stroke runs on real seconds at life's cadence times `CANOE.stroke`. On foot it is `footSeen / the walk's own speed
+at life`, up to `MAX_LAPSE`, eased toward `SWIM_LAPSE` with the depth when wading; a swim is time-lapsed by
+`SWIM_LAPSE`. The chase camera is carried by the share of the move beyond life (`1 - 1 / boost`).
 
 ### main.js: the order of a frame
 
