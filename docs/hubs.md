@@ -11,7 +11,7 @@ joined on `claude/fb-1024`, with the camp redone after it, and the owner's secon
 ## The owner's decisions (2026-10-23)
 
 1. **Money.** Plain dollars in small numbers: $40 to start, $6 for a day of food, notices pay $8 to $60, the Kevlar
-   canoe is $240.
+   canoe is $240 ($200 since the owner's taste call of 2026-10-26, `docs/tuning.md`).
 2. **Outfitters you know.** At first only the one you start at (home). Another becomes known when you paddle to its
    landing. Each counter also sells a paid ride up the road to the nearest one you don't know, since about half the
    entry points are not joined by water.
@@ -116,7 +116,7 @@ and a click on the map counts the portages only when every one on the way is on 
 | Bent-shaft laminate paddle | 40 | cruise +5 %, effort ×0.95 |
 | Carbon bent-shaft paddle | 110 | cruise +9 %, effort ×0.9 |
 | Royalex Prospector 16′ | 160 | 29 kg, much steadier (capsize ×1.3), cruise −3 % |
-| Kevlar tripper 17′ | 240 | 20 kg, cruise +4 % |
+| Kevlar tripper 17′ | 200 (240 until 2026-10-26) | 20 kg, cruise +4 % |
 | Second Duluth pack | 25 | room for 10 more days; the double portage |
 | Food barrel and harness | 35 | 14 days, 3 kg |
 | Portage yoke pads | 15 | carrying tires you less (×0.85) |
@@ -1523,13 +1523,15 @@ it should); rides to three new outfitters.
 - **For the owner's taste.**
   - `FAIR_FROM`: fair days from 190–330°, 15 % easterly, a 25° wobble. The front's bearings are the forecast's own.
   - The head net works from any pack within reach (3 m), set down by the fire too; nothing has to be put on.
-  - Sitting still fishing costs the bar about as much as paddling (0.78 to 0.55 over five hours in the lee).
+  - Sitting still fishing costs the bar about as much as paddling (0.78 to 0.55 over five hours in the lee). (Changed
+    2026-10-26: light work, `energy.js FISHING`; `docs/tuning.md`.)
   - Rain without a stove means no fire until the wood dries (here, rain to noon, dry at dusk) and no breakfast: the
     stove's reason, as the tuning meant, but a hungry day for a new player.
   - The Rest dial has no stop between 4 pm and Dusk.
 - **Small.**
   - The bear's eyes are compiled the first time they're seen if the start's compile hasn't finished.
-  - In a blow fishing casts don't land (8 tries at 0.8 m waves). It may be meant; nothing says why.
+  - In a blow fishing casts don't land (8 tries at 0.8 m waves). It may be meant; nothing says why. (Changed
+    2026-10-26: casts land carried by the wind, and whitecaps blow them back with a word, `fishing.js CAST_WIND`.)
   - Standing (not walking) 4–5 m from the food, the bear still comes to it.
 - **Not played.** A bear on a high-activity lake (Ensign), a raid while away from camp, a capsize from swamping in
   play, the bug jacket, a breezy-point camp, September.

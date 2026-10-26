@@ -146,7 +146,7 @@ L('carbon', 'Carbon bent-shaft paddle', 'long', 1, 6, 0.5, { short: 'Carbon', ic
 // fb5 B: their comparison is speed and steadiness (shop.js CATALOG effects: cruise, stability); the weight is the carry
 L('aluminium', 'Aluminium canoe, 17 ft', 'long', 5, 1, 34, { short: 'Aluminium', icon: 'canoe', hull: true, identity: 'The outfitter’s old tripper', onYou: [{ label: 'Speed', value: '×1' }, { label: 'Steady', value: '×1' }] });
 L('royalex', 'Royalex Prospector, 16 ft', 'long', 5, 1, 29, { short: 'Royalex', icon: 'royalex', price: 160, hull: true, identity: 'Wide and forgiving', onYou: [{ label: 'Speed', value: '×0.97' }, { label: 'Steady', value: '×1.3' }] });
-L('kevlar', 'Kevlar tripper, 17 ft', 'long', 5, 1, 20, { short: 'Kevlar', icon: 'kevlar', price: 240, hull: true, identity: 'Light and quick', onYou: [{ label: 'Speed', value: '×1.04' }, { label: 'Steady', value: '×1' }] });
+L('kevlar', 'Kevlar tripper, 17 ft', 'long', 5, 1, 20, { short: 'Kevlar', icon: 'kevlar', price: 200, hull: true, identity: 'Light and quick', onYou: [{ label: 'Speed', value: '×1.04' }, { label: 'Steady', value: '×1' }] });
 
 L('stringer', 'Fish stringer', 'container', 1, 2, 0.2, { short: 'Stringer', icon: 'stringer', hand: true, nest: true, container: { cols: 3, rows: 5, accepts: ['fish'] } });
 L('crate', 'Kept for you at the outfitters', 'container', 1, 1, 0, { short: 'Crate', icon: 'crate', container: { cols: 10, rows: 8 } });

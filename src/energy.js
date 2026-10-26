@@ -127,6 +127,13 @@ const WAKE_WINDOW = 0.1;   // game hours after waking in which the bar rises to 
 export const TABLETS = 0.5; // game hours before water treated with a tablet is drinkable
 const HARD_EFFORT = 1.15;  // paddle effort (1 at a calm cruise) from which it counts as hard
 const HEAVY_KG = 30;       // a carry at least this heavy counts as hard
+// taste (the owner's call, 2026-10-26: "fishing sitting still drains energy far less than paddling"; a five-hour sit in
+// the lee had taken the bar from 0.78 to 0.55, as paddling would). The bar sits at the ceiling the needs allow, so what
+// an hour costs is what the needs lose in it: sitting still with the rod up (the canoe still, or standing to fish from
+// the shore) is light work, and the hours awake count `awake` of themselves for the rest need (awakeSince moves on, as
+// a nap's or a coffee's does), hunger falls at `food` and thirst at `water` of the awake rate. A fish on the line costs
+// a little more while the fight lasts: the needs at the full rate, `fight` a game hour of effort and no rest.
+export const FISHING = { awake: 0.35, food: 0.5, water: 0.4, fight: 0.03 };
 // the rest need, by hours awake, before the night's quality scales it: whole for the first couple of hours, about half
 // by a long day's end (16 h), a third after 20 h, empty after 31½ h; only sleep resets it
 export const restCeiling = (awake) => clamp(1.05 - awake / 30, 0, 1);
@@ -552,13 +559,24 @@ export class Energy {
 
   // the needs over dh game hours: the food falls (faster on a queasy stomach), the thirst falls (fb3 B: nothing is drunk
   // for you; drink() brings it back), tablets finish their work. asleep: at a third of the rate.
-  passNeeds(dh, asleep = false, hard = false) {
+  passNeeds(dh, asleep = false, hard = false, light = null) {
     if (this.treating > 0 && this.now >= this.readyAt) { this.drinkable = Math.min(BOTTLE, this.drinkable + this.treating); this.treating = 0; }
     if (!(dh > 0)) return;
     const k = asleep ? ASLEEP : 1, upset = this.now < this.upsetUntil ? UPSET : 1;
-    this.need.food = Math.max(0, this.need.food - (k * dh * upset) / FOOD_HOURS);
-    const use = (hard ? USE_HARD : USE) * k * dh;
+    this.need.food = Math.max(0, this.need.food - (k * dh * upset * (light ? light.food : 1)) / FOOD_HOURS);
+    const use = (hard ? USE_HARD : USE) * k * dh * (light ? light.water : 1);
     this.need.water = Math.max(0, this.need.water - use / BODY);
+    // taste: light work (FISHING): the hours awake count for less of the rest need
+    if (light && Number.isFinite(this.awakeSince)) this.awakeSince = Math.min(this.now, this.awakeSince + (1 - light.awake) * dh);
+  }
+  // taste: 'still' with the rod up and the canoe still (or standing to fish from the shore), 'fight' with a fish on the
+  // line, else null (FISHING)
+  fishingNow() {
+    const p = this.player, f = p && p.fishing;
+    if (!f || !f.rodUp || p.teleporting || p.landing) return null;
+    if (f.state === 'fight') return 'fight';
+    if (p.mode === 'paddle') return Math.abs(p.speed) < 0.3 ? 'still' : null;
+    return p.mode === 'walk' && Math.abs(p.speed) < 0.1 ? 'still' : null;
   }
   // --- warmth (fb2 F) --------------------------------------------------------------------------------------------
   // the air you feel, °C: the weather's (or, with none, the season's mean and the day's swing), less the wind (afloat;
@@ -744,6 +762,8 @@ export class Energy {
         hard = kg >= HEAVY_KG;
       } else recover = REST_H;
     } else if (p.mode === 'swim') { travel = SWIM_H; hard = true; }
+    const fishing = this.fishingNow(); // taste: a fish on the line costs a little, briefly (FISHING)
+    if (fishing === 'fight') { travel = Math.max(travel, FISHING.fight); recover = 0; }
     if (travel && day.elevation < DARK_ELEV) travel *= this.kitMods.night; // after dark, by headlamp (content C: the one with you, kit.js)
     this.hard = hard;
     // the needs, over the game hours since the last frame (a jump of the clock longer than JUMP counts as a night)
@@ -751,7 +771,7 @@ export class Energy {
     if (!(dh > 0) || dh > 24 * 3) dh = 0; // the clock set back (Sandbox), or a reload's leap
     if (this.live) {
       const jump = dh > JUMP;
-      this.passNeeds(dh, jump, !jump && (hard || this.hot));
+      this.passNeeds(dh, jump, !jump && (hard || this.hot), !jump && fishing === 'still' ? FISHING : null); // (taste: sitting to fish is light work)
       this.passWarmth(jump ? 0 : dh, wind, moving && (p.mode === 'paddle' || p.mode === 'walk' || p.mode === 'carry')); // fb2 F
       this.needNotes();
     } else if (dh > 0) this.passNeeds(0); // tablets still finish between trips

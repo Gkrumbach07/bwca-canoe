@@ -723,6 +723,15 @@ async function main() {
   for (const m of bugMoments.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
   { const due = hints.due.bind(hints); hints.due = (id, rec) => (bugMoments.has(id) ? bugMoments.get(id).due(rec) : due(id, rec)); } // the mosquitoes, the blackflies
   window.__game.bugs = bugs;
+  // taste (the owner's call, 2026-10-26): casts land in a wind, carried by it, and only whitecaps where you cast blow
+  // them back; a cast blown back says so on the action line every time, and the first time a moment says why
+  // (fishing.js CAST_WIND, fishing.moments)
+  {
+    const cast = new Map(fishing.moments().map((m) => [m.id, m]));
+    for (const m of cast.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const dueT = hints.due.bind(hints);
+    hints.due = (id, rec) => (cast.has(id) ? cast.get(id).due(rec) : dueT(id, rec));
+  }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
