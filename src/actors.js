@@ -210,7 +210,7 @@ class FarHulls {
     this.mesh.name = 'actor far hulls'; this.mesh.frustumCulled = false; this.mesh.castShadow = false; this.mesh.receiveShadow = true;
     this.mesh.matrixAutoUpdate = false;
     this.colours = new Array(FAR_SLOTS).fill(null);
-    this.count = 0;
+    this.count = 0; this.layer = layer;
   }
   write(list, origin) {
     const P = this.geo.attributes.position.array, N = this.geo.attributes.normal.array, Cc = this.geo.attributes.color.array, n = this.n;
@@ -230,7 +230,7 @@ class FarHulls {
     }
     this.count = k;
     this.geo.setDrawRange(0, k * n);
-    this.mesh.visible = k > 0;
+    if (k && !this.mesh.parent) this.layer.group.add(this.mesh); else if (!k && this.mesh.parent) this.mesh.removeFromParent();
     if (k) {
       this.geo.attributes.position.needsUpdate = true; this.geo.attributes.normal.needsUpdate = true;
       // (written about an origin near the viewer, for float32 precision at -20 km)
@@ -443,8 +443,8 @@ export class Actors {
 
   person(opts = {}) { const p = new Person(this, opts); this.people.push(p); return p; }
   boat(opts = {}) {
-    if (!this.far) { this.far = new FarHulls(this); this.group.add(this.far.mesh); }
-    const b = new Boat(this, opts); this.boats.push(b); this.group.add(b.root); return b;
+    if (!this.far) this.far = new FarHulls(this);
+    const b = new Boat(this, opts); this.boats.push(b); return b; // (its root joins the graph while it is drawn whole)
   }
   drop(a) {
     a.removed = true;
@@ -502,11 +502,11 @@ export class Actors {
     const B = p.bind; if (!B) return;
     if (B.packMesh) B.packMesh.removeFromParent();
     if (B.paddle) B.paddle.removeFromParent();
-    if (p.hull && p.hull.pivot.parent === B.root) this.group.attach(p.hull.pivot);
+    if (p.hull && p.hull.pivot.parent === B.root) p.hull.pivot.removeFromParent();
     this.reflect(B.body.group, false);
     B.body.group.visible = false;
     B.body.group.position.set(0, 0, 0); B.body.group.rotation.set(0, 0, 0);
-    this.scene.add(B.body.group); // (as a pool's body lives; it is hidden until the pool places it again)
+    B.body.group.removeFromParent(); // (out of the graph until it is drawn again: r186 walks hidden objects every frame)
     this.pool.give(B.body);
     if (B.kind === 'foot') B.root.removeFromParent();
     p.bind = null;
@@ -524,7 +524,7 @@ export class Actors {
   }
   freeHull(a) {
     const h = a.near || a.hull; if (!h) return;
-    h.owner = null; h.pivot.visible = false; this.group.attach(h.pivot);
+    h.owner = null; h.pivot.removeFromParent();
     a.near = null; if (a instanceof Person) a.hull = null;
   }
 
@@ -562,13 +562,12 @@ export class Actors {
     for (const p of figWant) if (!p.bind) this.bindFigure(p);
     // the poses
     for (const b of this.boats) {
-      if (b.near) { b.placeRoot(); b.root.visible = true; b.poseCrew(dt); }
-      else b.root.visible = false;
+      if (b.near) { if (!b.root.parent) this.group.add(b.root); b.placeRoot(); b.poseCrew(dt); }
+      else if (b.root.parent) b.root.removeFromParent();
       b.wake(dt, this.ripples, b.dist < WAKE_R && !!b.near);
     }
     for (const p of this.people) {
-      if (!p.bind) { if (p.hull) p.hull.pivot.visible = false; continue; }
-      if (p.hull) p.hull.pivot.visible = true;
+      if (!p.bind) continue; // (a carrier's hull joins the graph on its shoulders, in the carry pose)
       p.pose(dt);
     }
     // the far hulls: boats past the near ones, to 1.2 km
