@@ -231,6 +231,32 @@ baked lightmaps, no PBR, no external assets.
   `placeAquatic` grows each where it grows (the bed's softness, a marshy or rocky shore behind, shelter, an inlet, the
   lake's stain); its depths are to the drawn bed (`surfaceAt`), not the raw cells. A bin is culled by distance from
   the middle of its own instances plus their spread, not its 640 m region's centre.
+- **Falls and rapids where they really are** (d1 rapids, 2026-10-26).
+  - **The data:** `scripts/rapids.mjs` → `src/rapids.json`. NHD's rapids and falls, named from OSM, GNIS and
+    Geographic Names Ontario, each snapped onto the game's channel through it.
+  - **The levels:** each channel's river levels are made over, so the water falls at the real line. A falls is one
+    step of at most 10 m, the rest a cascade below it (`PATCH` in the script). A rapids is a run of up to 7 %.
+    Above and below, the water runs 0.2 % at most. The tile worker applies these rows with the bed, after the grade
+    (rapids.js `patchTile`), and keeps lake plants off the white water (`clearPlants`).
+  - **The water's shader** whitens the slope as for any rapids, scaled by `uWhiteGain`: the rivers' flow from
+    `season.flow`, 0.8 in late summer to 1.6 in the May flood.
+  - **The overlays** (`whitewater.js`, `WHITE_WATER`): one per drop within 650 m, at most six, one program. A falls
+    gets its sheet (streaks falling with the slope, white once it has fallen a metre) and the boil at its foot. A
+    rapids gets standing waves broken into patches. Both are lit as foam (`foamLight`).
+  - **Spray and froth** go through the wake's particles.
+  - **The hull** is held 4.5 m off a falls of 0.9 m or more, with the line "… · carry round it".
+  - **The roar** comes from `audio-beds.js`, by distance; the highs go first.
+  - A drop where the game's river is level (`flat`) is heard, not drawn. A name with no river is `hidden`: on the map
+    only.
+  - **The shore band** (terrain-build.js) shapes toward the water's bilinear level at each vertex, not its cell's.
+    The cell's level stood the bed up as a wall across a gorge at every step.
+- **Rocks above the water:** NHD's 3,145 (`rapids.js` `rockSpec`, `lakeRockBins`). Only 1,008 are on this release's
+  water; the rest are in Quetico lakes the Minnesota extract lacks.
+  - Each stands as a boulder-species rock in the tile's bins, so it is drawn, shadowed and mirrored, and the walker is
+    held off it.
+  - It sits on a shoal of its own (`SHOAL`: the bed raised to 0.55 m under the surface, 0.16 m deeper a metre out),
+    raised if need be so its top stands 0.35–0.95 m out of the water, with up to two smaller ones beside it.
+  - The hull bumps off it with a knock.
 
 ## Rocks
 
