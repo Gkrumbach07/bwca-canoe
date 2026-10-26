@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { glslSurface } from './water.js';
+import { glslSurface, glslWaterOwn } from './water.js';
 
 // GPU-driven water particles: foam bubbles shed from the hull, and splash droplets from the paddle.
 // Everything lives in instance attributes and ages in the shader; spawning is the only CPU cost.
@@ -21,8 +21,13 @@ const MAX = 1400;
 //               key (the sun, or the moon at night) by its height, in the sun's shadow, and the sky fill, all
 //               read by reference from the water's uniforms (WaterSystem.update sets them from the lights the
 //               day cycle and the weather drive), so a splash or a rise ring is lit like the water round it and
-//               goes grey at dusk and dark at night instead of glowing a fixed white.
-// Needs glslSurface (water.js) and, for the shadow, <common>, <packing> and <shadowmap_pars_fragment>.
+//               goes grey at dusk and dark at night instead of glowing a fixed white. Round A-E: by night under a
+//               cloud deck (the day cycle's floor, uFoamNight) the fill is the light the water's own surface sends
+//               back at this view (water.js glslWaterOwn: the dome by Fresnel and the column), a little brighter and
+//               never more than before, so the hull's water line, the stern's eddy, the bubbles and the splashes
+//               never outshine the water round them; the key (the moon) still lights them.
+// Needs glslSurface (water.js) and, for the shadow, <common>, <packing> and <shadowmap_pars_fragment>; for the view
+// at night, <fog_pars_fragment> before it (vFogDir; without fog it takes a look 35 degrees down).
 export const glslDrawn = /* glsl */ `
   float drawnWave(vec2 rel, float t) {
     vec2 origin = uPatchLocal - vec2(uPatchHalf);
@@ -41,6 +46,9 @@ export const glslDrawn = /* glsl */ `
 `;
 export const glslFoamLight = /* glsl */ `
   uniform vec3 uSunLight, uSkyLight, uSunDir;
+  uniform vec3 uFoamZenith, uFoamHorizon, uFoamBody;   // round A-E: the dome's stops and the deep water's colour
+  uniform vec2 uFoamNight;                             // round A-E: the night floor's share, white water's lift
+  ${glslWaterOwn}
   // white lying flat on the water: about the brightness the day tables' foam had at noon, and the light's own
   // colour and strength at every other hour and in every weather
   const float FOAM_GAIN = 2.0;
@@ -49,15 +57,24 @@ export const glslFoamLight = /* glsl */ `
     #if defined( USE_SHADOWMAP ) && NUM_SUN_LIGHT_SHADOWS > 0
       shadow = getSunShadow(sunShadowMap[0], sunLightShadows[0], 0);
     #endif
-    return (uSunLight * max(uSunDir.y, 0.0) * shadow + uSkyLight) * FOAM_GAIN;
+    vec3 own = vec3(0.0);
+    if (uFoamNight.x > 0.0) {
+      vec3 v = vec3(0.0, 0.574, 0.819);
+      #ifdef USE_FOG
+        v = -normalize(vFogDir);
+      #endif
+      own = waterOwnLight(v, uFoamZenith, uFoamHorizon, uFoamBody, uSkyLight);
+    }
+    return uSunLight * max(uSunDir.y, 0.0) * shadow * FOAM_GAIN + foamFill(uSkyLight, FOAM_GAIN, uFoamNight, own);
   }
 `;
 // The uniforms a foam material takes: the fog, the lights (for the sun's shadow map), the surface, and the
-// water's light by reference.
+// water's light by reference (round A-E: and the night floor, the dome's stops and the deep water's colour).
 export function foamUniforms(water, own) {
   const u = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, own]);
   const w = water.uniforms;
-  Object.assign(u, water.surfaceUniforms(), { uSunLight: w.uSunLight, uSkyLight: w.uSkyLight, uSunDir: w.uSunDir });
+  Object.assign(u, water.surfaceUniforms(), { uSunLight: w.uSunLight, uSkyLight: w.uSkyLight, uSunDir: w.uSunDir,
+    uFoamNight: w.uFoamNight, uFoamZenith: w.uSkyZenith, uFoamHorizon: w.uSkyHorizon, uFoamBody: w.uBodyDeep });
   return u;
 }
 // A unit quad in the xy plane, subdivided so a ring or a bubble can follow the swell across it
