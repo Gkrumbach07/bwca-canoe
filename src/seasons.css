@@ -1,0 +1,19 @@
+/* Round A-D: the title's Seasons, where the entry points and the confirm go (shell.css): three rows, a slot each, the
+   number in the margin, the line, and its actions as small capitals. The one last played has a gold number. */
+.seasons { display: flex; flex-direction: column; gap: 12px; max-width: 470px; padding-bottom: 4px; }
+.seasons[hidden] { display: none; }
+.seasons .kicker { font-size: 12px; letter-spacing: .16em; color: rgba(243, 236, 221, .7); }
+.seasons ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 16px; }
+.seasons li { display: grid; grid-template-columns: 26px 1fr; column-gap: 10px; row-gap: 5px; align-items: baseline; }
+.seasons .n { font-weight: 700; font-size: 17px; color: rgba(243, 236, 221, .6); font-variant-numeric: tabular-nums; }
+.seasons li.live .n { color: var(--gold); }
+.seasons .words { font-size: 17px; line-height: 1.35; color: rgba(243, 236, 221, .92); font-variant-numeric: tabular-nums; }
+.seasons .words small { font-size: 13.5px; color: var(--cream-72); }
+.seasons li.empty .words { color: var(--cream-50); }
+.seasons .acts { grid-column: 2; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; font: 700 12px/1.4 var(--sc); letter-spacing: .14em; }
+.seasons .acts button { appearance: none; background: none; border: none; padding: 0; margin: 0; color: rgba(243, 236, 221, .72); font: inherit; letter-spacing: inherit; cursor: pointer; text-shadow: inherit; }
+.seasons .acts button:hover, .seasons .acts button:focus-visible { color: var(--gold); outline: none; }
+.seasons .acts button:disabled { color: var(--cream-50); cursor: default; }
+.seasons .acts .ask { flex-basis: 100%; font: 15px/1.4 var(--sans); letter-spacing: 0; color: var(--cream); }
+.seasons .status { margin: 2px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--cream-72); max-width: 420px; min-height: 1.2em; }
+.seasons .status:empty { display: none; }

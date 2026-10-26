@@ -10,7 +10,8 @@ import './shell.css';
 import * as THREE from 'three';
 import { SettingsPanel } from './settings.js';
 import { clock12, shortDate } from './hud.js';
-import { save } from './save.js';
+import { save, slots } from './save.js';
+import { SeasonsPanel } from './seasons.js'; // round A-D
 
 const $ = (id) => document.getElementById(id);
 const DRIFT_RATE = 0.045;   // rad/s round the canoe
@@ -91,6 +92,7 @@ export class Title {
     // or the entry points (the way to travel and home, shown only after New season is chosen)
     this.right = null;
     this.el.newTrip.textContent = 'New season';
+    this.buildSeasons(); // round A-D
     this.buildEntries();
     this.buildKeymap();
     this.bind();
@@ -107,7 +109,7 @@ export class Title {
       const n = document.createElement('b'); n.textContent = String(ep.ep);
       b.append(n, document.createTextNode(ep.name));
       if (Math.hypot(ep.x - start.x, ep.z - start.z) < 600) { b.classList.add('current'); const s = document.createElement('small'); s.textContent = ' · the default start'; b.appendChild(s); }
-      b.addEventListener('click', () => this.newSeason(ep, { confirm: false })); // the list shows only once the confirm is given
+      b.addEventListener('click', () => this.pickEntry(ep)); // the list shows only once the confirm is given (round A-D: into its slot)
       li.appendChild(b);
       list.appendChild(li);
     }
@@ -136,6 +138,7 @@ export class Title {
     const e = this.el;
     e.go.addEventListener('click', () => (this.state === 'pause' ? this.resume() : this.continueTrip()));
     e.newTrip.addEventListener('click', () => this.askNewSeason());
+    if (e.seasons) e.seasons.addEventListener('click', () => { if (this.right === 'seasons') { this.showRight(null); e.seasons.focus(); } else this.showRight('seasons'); }); // round A-D
     e.settings.addEventListener('click', () => this.showCard('settings'));
     e.controls.addEventListener('click', () => this.showCard('controls'));
     if (e.confirmGo) e.confirmGo.addEventListener('click', () => this.confirmed());
@@ -180,21 +183,31 @@ export class Title {
     const e = this.el;
     if (e.confirm) e.confirm.hidden = which !== 'confirm';
     e.entries.hidden = which !== 'entries';
-    e.newTrip.classList.toggle('open', !!which);
+    // round A-D: Seasons stands there too; New season's marker stays gold for its own two, Seasons' for its list
+    if (this.seasons) { const on = which === 'seasons'; if (on !== this.seasons.shown || on) this.seasons.show(on); e.shell.classList.toggle('wide', on); } // (the band widens under its lines)
+    if (which !== 'entries' && which !== 'confirm') { this.newIn = 0; this.newVia = null; }
+    const fromSeasons = which === 'entries' && this.newVia === 'seasons';
+    e.newTrip.classList.toggle('open', (which === 'confirm' || which === 'entries') && !fromSeasons);
+    if (e.seasons) e.seasons.classList.toggle('open', which === 'seasons' || !!fromSeasons);
+    if (e.entryKicker) e.entryKicker.textContent = which === 'entries' && this.newIn ? `New season in slot ${this.newIn} · how you travel` : 'New season · how you travel';
     if (which === 'entries') { this.el.status.textContent = ''; this.focusEntries(); }
     else if (which === 'confirm' && e.confirmGo) { e.confirmGo.focus(); }
+    else if (which === 'seasons') this.seasons.focusFirst();
   }
   // New season: over a season under way it asks once (the confirm card); then the way to travel and the entry points
   askNewSeason() {
     if (this.busy) return;
     const pr = this.profile;
+    // round A-D: with an empty slot the season under way is kept and the new one goes there, so nothing is asked
+    const room = slots.usable && pr && pr.started ? slots.firstEmpty() : 0;
+    if (room) { this.newIn = room; this.newVia = 'menu'; this.showRight('entries'); return; }
     if (pr && pr.started && this.right !== 'entries') { this.confirmWords(); this.showRight('confirm'); return; }
     this.showRight('entries');
   }
   // the confirm given: the entry points (or, asked from outside with the pick already made, that season begins)
   confirmed() {
     const p = this.pendingEp; this.pendingEp = null;
-    if (p) this.newSeason(p, { confirm: false }); else this.showRight('entries');
+    if (p) this.pickEntry(p); else this.showRight('entries');
   }
   confirmWords() {
     const pr = this.profile, core = this.trip, e = this.el;
@@ -204,6 +217,9 @@ export class Title {
     // canoe, the packs and the barrel
     const bits = [core ? (core.adventure ? 'Adventure' : 'Sandbox') : '', home ? `home ${home}` : '', core && core.active ? core.dayWords() : 'between trips', `$${pr.money}`, this.gearWords(pr), `${n} ${n === 1 ? 'outfitter' : 'outfitters'} known`].filter(Boolean);
     e.confirmSub.textContent = `The season under way: ${bits.join(' · ')}.`;
+    // round A-D: asked only when every slot holds a season, so it says so
+    const ask = e.confirm && e.confirm.querySelector('.ask');
+    if (ask) ask.textContent = slots.usable && !slots.firstEmpty() ? 'Every slot holds a season. This forgets the one under way.' : 'This forgets the season under way.';
   }
   // "the aluminium canoe, two packs and a barrel"
   gearWords(pr) {
@@ -223,6 +239,10 @@ export class Title {
 
   back() {
     if (this.card !== 'menu') { this.showCard('menu'); return; }
+    // round A-D: a Delete being asked goes back to its row; the entry points opened from a slot go back to Seasons
+    if (this.right === 'seasons' && this.seasons.back()) return;
+    if (this.right === 'entries' && this.newVia === 'seasons') { this.showRight('seasons'); return; }
+    if (this.right === 'seasons') { this.showRight(null); this.el.seasons.focus(); return; }
     if (this.right) { this.showRight(null); this.el.newTrip.focus(); return; } // the confirm or the entry points away: the menu
     if (this.state === 'pause') this.resume();
   }
@@ -234,6 +254,7 @@ export class Title {
     let list = [];
     if (this.right === 'confirm' && this.el.confirm) list = [...this.el.confirm.querySelectorAll('button:not([disabled])')];
     else if (this.right === 'entries') { const pick = this.modeButtons().filter((b) => b.classList.contains('on')); list = [...pick, ...this.el.list.querySelectorAll('button:not([disabled])')]; }
+    else if (this.right === 'seasons') list = this.seasons.focusables(); // round A-D
     return [items, list];
   }
   focusables() {
@@ -255,8 +276,8 @@ export class Title {
   }
   switchColumn(dir) {
     const [items, list] = this.columns();
-    if (dir > 0 && items.includes(document.activeElement)) { if (this.right === 'confirm' && list[0]) list[0].focus(); else if (this.right === 'entries') this.focusEntries(); }
-    else if (dir < 0 && (list.includes(document.activeElement) || this.modeButtons().includes(document.activeElement))) this.el.newTrip.focus();
+    if (dir > 0 && items.includes(document.activeElement)) { if (this.right === 'confirm' && list[0]) list[0].focus(); else if (this.right === 'entries') this.focusEntries(); else if (this.right === 'seasons') this.seasons.focusFirst(); }
+    else if (dir < 0 && (list.includes(document.activeElement) || this.modeButtons().includes(document.activeElement))) (this.right === 'seasons' || (this.right === 'entries' && this.newVia === 'seasons') ? this.el.seasons : this.el.newTrip).focus();
   }
 
   // --- open / close -----------------------------------------------------------------------------
@@ -273,6 +294,8 @@ export class Title {
     this.camera.fov = 50; this.camera.updateProjectionMatrix();
     this.refreshMenu();
     this.showCard('menu');
+    this.describeLive(); // round A-D: the slot's line, for Seasons
+    if (mode === 'title' && slots.error && !this.toldError) { this.toldError = true; this.showRight('seasons'); this.seasons.say(slots.error === 'full' ? 'There was no room in this browser to change seasons, so this one is still here. Export a season and delete it to make room.' : 'One season couldn’t be read, so its slot starts empty.'); }
   }
 
   close() {
@@ -296,8 +319,8 @@ export class Title {
   get profile() { return this.outfitter ? this.outfitter.profile : null; }
   refreshMenu() {
     const e = this.el, pause = this.state === 'pause', trip = this.saved, core = this.trip, pr = this.profile;
-    const p = this.player, w = this.world, o = this.outfitter;
-    const here = () => p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z) || (p.nearWater ? p.nearWater(p.x, p.z, 12) : 0)) || (p.mode === 'paddle' ? 'open water' : 'ashore'); // on foot: the water beside you
+    const o = this.outfitter;
+    const here = () => this.here();
     // "Adventure · day 2 · $22", or the old words without a trip core
     const money = pr && pr.started ? ` · $${pr.money}` : '';
     const mode = core ? (core.active ? ` · ${core.menuWords(pause ? null : trip)}` : pr && pr.started ? ` · ${core.adventure ? 'Adventure' : 'Sandbox'} · between trips` : '') : o && o.trip && o.trip.active ? ` · day ${Math.floor(o.daysOut) + 1}` : '';
@@ -316,7 +339,8 @@ export class Title {
     else if (trip && season) e.hint.textContent = `${here()} · ${shortDate(trip.year, trip.doy)}, ${clock12(trip.hours)}${tripDays}`;
     else if (season) e.hint.textContent = `The season${tripDays}`;
     else e.hint.textContent = '';
-    if (e.newHint) e.newHint.textContent = season ? (pause ? '' : 'forgets the season under way') : `a fresh start: pick where, with $40 and the kit`;
+    const room = season && slots.usable ? slots.firstEmpty() : 0; // round A-D: an empty slot keeps the season under way
+    if (e.newHint) e.newHint.textContent = season ? (room ? `in slot ${room}: this season is kept` : pause ? '' : 'forgets the season under way') : `a fresh start: pick where, with $40 and the kit`;
     e.newTrip.classList.toggle('current', !pause && !season);
     this.showRight(null);
     // home, marked in the list of entry points
@@ -386,6 +410,79 @@ export class Title {
     this.saver.write();
   }
   newTrip(ep) { return this.newSeason(ep, { confirm: false }); } // the trip core's name for it (its tests call it)
+
+  // --- round A-D: the seasons (save.js slots, seasons.js) ------------------------------------
+  // the Seasons item under New season, its panel where the entry points go, and the live slot's line kept for it
+  buildSeasons() {
+    const e = this.el, nav = e.menu.querySelector('nav.menu'), newLi = e.newTrip.closest('li');
+    if (!nav || !newLi) return;
+    const li = document.createElement('li'), b = document.createElement('button');
+    b.id = 'btn-seasons'; b.className = 'item'; b.type = 'button'; b.textContent = 'Seasons';
+    li.appendChild(b); newLi.after(li);
+    e.seasons = b;
+    e.entryKicker = e.entries.querySelector('.kicker');
+    this.seasons = new SeasonsPanel(this, nav);
+    this.newIn = 0; this.newVia = null;
+    // the last thing the page writes: the slot's line (where, when, the way, the money) for the Seasons list
+    window.addEventListener('pagehide', () => this.describeLive());
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') this.describeLive(); });
+    // a second tab changed seasons: this one says so once, since it saves nothing from then on
+    setInterval(() => { if (slots.stale && !this.toldStale && this.hud && this.hud.note) { this.toldStale = true; this.hud.note('Another tab changed seasons, so this one no longer saves. Reload to carry on.', 12); } }, 3000);
+  }
+  // where the canoe (or the walker) is, in words
+  here() {
+    const p = this.player, w = this.world;
+    return p.placeName || w.lakeName(w.lakeIdAt(p.x, p.z) || (p.nearWater ? p.nearWater(p.x, p.z, 12) : 0)) || (p.mode === 'paddle' ? 'open water' : 'ashore'); // on foot: the water beside you
+  }
+  // a parked season's place, from its saved spot: the lake, else the nearest landing's name
+  placeAt(x, z) {
+    const w = this.world;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return '';
+    const lake = w.lakeName(w.lakeIdAt(x, z));
+    if (lake) return lake;
+    let best = null, bd = Infinity;
+    for (const e of w.entryPoints) { const d = Math.hypot(e.x - x, e.z - z); if (d < bd) { bd = d; best = e; } }
+    return best ? `near ${best.name}` : '';
+  }
+  // the season under way in one line, as Continue's hint says it: "Lake One · July 14, 9:20 am · Adventure · day 2 · $62"
+  lineNow() {
+    const pr = this.profile;
+    if (!pr || !pr.started) return '';
+    const core = this.trip, t = this.state === 'title' ? this.saved : null, d = this.day;
+    const when = t ? `${shortDate(t.year, t.doy)}, ${clock12(t.hours)}` : this.state === 'title' ? '' : `${shortDate(d.year, d.doy)}, ${clock12(d.hours)}`; // (the title's clock is the golden hour's, not the season's)
+    const mode = core ? (core.active ? core.menuWords(t) : `${core.adventure ? 'Adventure' : 'Sandbox'} · between trips`) : '';
+    return [this.here(), when, mode, `$${pr.money}`].filter(Boolean).join(' · ');
+  }
+  describeLive() { try { slots.describe(this.lineNow()); } catch (e) { console.warn('seasons: the line', e); } }
+  // a home picked in the entry points: in place when the season goes into the slot being played and none has begun
+  // there (the first season of all), else into its slot with a reload (save.js startNew), begun after it (fromBoot)
+  pickEntry(ep) {
+    if (this.busy) return null;
+    const n = this.newIn || slots.live, pr = this.profile;
+    if (!slots.usable || (n === slots.live && !(pr && pr.started))) {
+      return Promise.resolve(this.newSeason(ep, { confirm: false })).then(() => { if (pr && pr.started) slots.claim(); });
+    }
+    this.busy = true;
+    const buttons = [...this.el.list.querySelectorAll('button')];
+    for (const b of buttons) b.disabled = true;
+    this.el.status.textContent = `Paddling in at ${ep.name}…`;
+    this.describeLive();
+    return slots.startNew(n, { ep: ep.ep, mode: this.modePick }).then((r) => {
+      if (r && r.ok) return;
+      this.busy = false; for (const b of buttons) b.disabled = false;
+      this.el.status.textContent = (r && r.why) || 'That didn’t work.';
+    });
+  }
+  // what the last page asked of this load (save.js takeBoot): Play goes straight in; a new season begins at its home
+  fromBoot(b) {
+    if (!b) return null;
+    if (b.do === 'continue') { if (this.state === 'title' && this.profile && this.profile.started) this.continueTrip(); return null; }
+    if (b.do !== 'new') return null;
+    const ep = this.world.entryPoints.find((x) => x.ep === b.ep);
+    if (!ep) { this.showRight('entries'); return null; }
+    this.setPick(b.mode);
+    return Promise.resolve(this.newSeason(ep, { confirm: false })).then(() => slots.claim());
+  }
 
   // --- the drifting camera (called in place of the chase camera while the card is up) ----------
   update(dt) {
