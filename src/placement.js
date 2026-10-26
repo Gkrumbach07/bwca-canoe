@@ -352,16 +352,19 @@ export function seatRock(ground, foot, x, z, scale, squash, tall, yaw, az, tilt,
 // among them (scree, the cheap species); ledge (site.js ledge: steep broken bedrock) adds flats and shards lying along
 // the slope where it is too steep for today's; style (the bedrock's way of breaking, land.js STYLE_ROCKS) leans the odds
 // of the three shapes: the slates to shards and flats, the anorthosite to rounded erratics.
+// (where the survey says where the boulders are, the woods' scattered ones are fewer elsewhere: the rocks move to
+// where they are, about as many in all)
+export const ROCKS_DATA = { woods: 0.5, bare: 0.6, boulder: 0.3, ledge: 0.14 };
 function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy, face, open = 0, boulder = 0, ledge = 0, style = null }, blocked, put, scree = null) {
   const shore = sd > -3 && sd < 10;
   const gentle = 1 - smoothstep(0.32, 0.5, slope); // 18–27°: from here up a slope sheds them
   let e = 0;
   // (the boulder band at the foot of the trees: more on the points that face open water, `open` from site.js)
   if (shore) e += (0.06 + 0.12 * smoothstep(0.12, 0.3, slope) + 0.14 * rock + 0.14 * smoothstep(0.42, 0.66, open)) * gentle;
-  if (bare) e += (0.2 + 0.16 * rock) * gentle;
-  else if (sd >= 10) e += (0.012 + 0.03 * smoothstep(0.15, 0.32, slope) + 0.03 * smoothstep(0.25, 0.5, rock)) * gentle;
-  if (boulder > 0 && sd > -2) e += 0.55 * boulder * boulder * gentle;
-  if (ledge > 0 && sd > 0) e += 0.32 * ledge;
+  if (bare) e += (0.2 + 0.16 * rock) * gentle * (style ? ROCKS_DATA.bare : 1);
+  else if (sd >= 10) e += (0.012 + 0.03 * smoothstep(0.15, 0.32, slope) + 0.03 * smoothstep(0.25, 0.5, rock)) * gentle * (style ? ROCKS_DATA.woods + boulder : 1);
+  if (boulder > 0 && sd > -2) e += ROCKS_DATA.boulder * boulder * boulder * gentle;
+  if (ledge > 0 && sd > 0) e += ROCKS_DATA.ledge * ledge;
   e *= 1 - face;
   const n = Math.floor(e) + (rr() < e - Math.floor(e) ? 1 : 0);
   const K = ROCK_KIND, odds = style ? STYLE_ROCKS[style] : null;
@@ -433,7 +436,11 @@ function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy, f
         const a = a0 + (fr() - 0.5) * 0.7, d = d0 + (fr() - 0.3) * 0.5;
         const s = fr() < 0.15 ? 0.6 + fr() * 0.3 : 0.16 + fr() ** 1.5 * 0.4;
         const slab = pAz < 0 && fr() < 0.2;
-        put(slab ? K.slab : K.block, bx + Math.cos(a) * d, bz + Math.sin(a) * d, s, fr() * Math.PI * 2, pAz < 0 ? fr() * Math.PI * 2 : pAz, pAz < 0 ? fr() * 0.35 : pTilt, tint(), 0.8 + fr() * 0.4, 0.7 + fr() * 0.5);
+        const px = bx + Math.cos(a) * d, pz = bz + Math.sin(a) * d, py = fr() * Math.PI * 2, paz = pAz < 0 ? fr() * Math.PI * 2 : pAz, pt = pAz < 0 ? fr() * 0.35 : pTilt, ptint = tint(), psq = 0.8 + fr() * 0.4, ptall = 0.7 + fr() * 0.5;
+        // (d2 land: where the survey places them, the small ones are the cheap scree blocks: no shadow, a third the
+        // triangles; the same draws, so the stream runs on as before)
+        if (scree && odds && s < 0.62) scree(px, pz, s * 1.15, py, paz, pt, ptint, psq, ptall, slab ? 0 : 1);
+        else put(slab ? K.slab : K.block, px, pz, s, py, paz, pt, ptint, psq, ptall);
       }
     }
   }
@@ -746,7 +753,10 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const clump = bare || trailSide > 1 ? 1 : (0.25 + 0.75 * (1 - glade)) * (0.82 + 0.36 * smoothstep(0.35, 0.65, t) + 0.55 * thick);
       // the forest: thinner on the steep, gone from a cliff's face, sparse on its scree and on bare rock, open
       // in the wettest bog
-      const e = Math.min(2.8, treeDensity(sdH, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - burn * 0.5) * (1 - smoothstep(0.3, 0.6, bareness) * 0.88)
+      // (d2 land: a mapped outcrop keeps more of its trees than the noise's bare knobs: jack pine and spruce stand in its
+      // cracks, the moss and the lichen between)
+      const bareThin = kd === KIND.rock ? 0.55 : 0.88;
+      const e = Math.min(2.8, treeDensity(sdH, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - burn * 0.5) * (1 - smoothstep(0.3, 0.6, bareness) * bareThin)
         * (1 - 0.95 * smoothstep(0.25, 0.6, cliff)) * (1 - 0.7 * smoothstep(0.2, 0.7, talus)) * (1 - 0.35 * h.bog) * clump * dTrees);
       const trees = count(rng, e);
       // shoreline shrubs (dogwood, willow): thick at the waterline, a fringe back into the woods

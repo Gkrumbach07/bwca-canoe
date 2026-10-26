@@ -427,7 +427,8 @@ export class TileManager {
       const w = new Worker(new URL('./tile-worker.js', import.meta.url), { type: 'module' });
       w.onmessage = (e) => this.onMessage(e.data);
       w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
-        bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null }); // d1 lakes: the lakes' bowls and rice (lake-facts.js)
+        bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null, // d1 lakes: the lakes' bowls and rice (lake-facts.js)
+        land: typeof location === 'undefined' || !/[?&]land=off\b/.test(location.search) }); // d2 land: `?land=off`, the noise's land (land.js setLand)
       return { w, key: null };
     });
   }

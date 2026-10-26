@@ -25,7 +25,11 @@ export function attachLand(grid, buf, fields = V4_FIELDS) {
   grid.ch = ch;
   return ch;
 }
-export const landOf = (grid) => (grid && grid.ch) || null;
+// (`?land=off` in the page's address draws a v4 release as a v3 one is drawn, the noise's land on the new heights: a
+// before and after; tiles.js passes it to the worker, which calls setLand)
+let LAND_ON = true;
+export function setLand(on) { LAND_ON = !!on; }
+export const landOf = (grid) => (LAND_ON && grid && grid.ch) || null;
 // the ground kind of a global cell, or at a point (nearest cell): 0 on a v3 tile and where nothing was surveyed
 export function groundKindCell(grid, i, j) { const L = landOf(grid); return L && L.ground ? L.ground[grid.local(i, j)] : 0; }
 export function groundKindAt(grid, x, z) { return groundKindCell(grid, grid.cellI(x), grid.cellJ(z)); }
@@ -49,7 +53,7 @@ export const KIND_LAND = [
   { wet: 0.7, meadow: 0, trees: 0.85, sphag: 0 },           // 7 hardwood swamp: black ash
   { wet: 1, meadow: 0.6, trees: 0, sphag: 0 },              // 8 in-lake emergent (in the water: d2 water's)
   { wet: 1, meadow: 0, trees: 0, sphag: 0 },                // 9 aquatic bed (likewise)
-  { wet: -1, dry: 0.15, meadow: 0, trees: 0.3, sphag: 0 },  // 10 rock outcrop: bare rock, lichen, jack pine in the cracks
+  { wet: -1, dry: 0.15, meadow: 0, trees: 1, sphag: 0 },    // 10 rock outcrop: bare rock (site.js bare thins the trees), jack pine in the cracks
   { wet: -1, dry: 0.45, meadow: 0, trees: 0.75, sphag: 0 }, // 11 boulder field
   { wet: -1, dry: 0.2, meadow: 0, trees: 0.08, sphag: 0 },  // 12 sand
   { wet: 0.9, meadow: 0.85, trees: 0.02, sphag: 0.2 },      // 13 open water the bake has as land: a pond, a beaver flowage

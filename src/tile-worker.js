@@ -10,7 +10,7 @@ import { Site } from './site.js';
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
 import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the lakes with no contour map
 import { patchTile, lakeRockBins, clearPlants, useV4 as rapidsV4 } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
-import { unpackTint } from './land.js'; // d2 land: the rocks' bedrock tint
+import { unpackTint, setLand } from './land.js'; // d2 land: the rocks' bedrock tint; `?land=off`
 
 let cfg = null;
 
@@ -220,7 +220,7 @@ async function buildFar(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; if (v4()) rapidsV4(); return; } // (d2 bake: the v4 release's drops)
+  if (m.type === 'init') { cfg = m; if (v4()) rapidsV4(); setLand(m.land !== false); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
   if (m.type !== 'build') return;
   try {
     const r = m.level === 'far' ? await buildFar(m) : await buildFine(m);

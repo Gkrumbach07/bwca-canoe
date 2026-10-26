@@ -38,6 +38,10 @@ const tan = (deg) => Math.tan((deg * Math.PI) / 180);
 // steep: the drawn steepness (rise over run of the steepest five metres) that starts and completes a cliff;
 // rise: the step over 20 m (m) that does the same; band: the band strength a cell needs to carry a cliff face.
 export const CLIFF = { steep: [tan(42), tan(52)], rise: [4, 7], band: 0.45 };
+// d2 land: the LiDAR's faces as the band (see below): the cell's relief (m) from which a face starts to count and from which
+// it is whole; a lone face cell (no face beside it) counts `lone` of that; past `inland` metres from the water a face
+// needs `inlandAdd` metres more (the paddler sees the shore's walls; the inland ones only from a portage)
+export const FACE = { relief: [5.5, 8.5], lone: 0.6, inland: [60, 160], inlandAdd: 2.5 };
 // The cliff module's frame (cliffs.js builds every variant in it, placement.js places trees on it): the face at
 // z = 0 looking along -z, x across [-0.5, 0.5], y up [0, 1], z into the hill [0, 1]. Every variant has a bench
 // across its whole width at y = ledge: the lower tier's top, its front within z [0, 0.05], the upper tier's front
@@ -146,8 +150,8 @@ export class Site {
         if (!isFace(k) || sd[k] < -6) { cliff[k] = 0; continue; }
         let nb = 0;
         for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && isFace(at(li + di, lj + dj))) nb++;
-        const m = cliffStrength(L.cliff[k]);
-        cliff[k] = smoothstep(3.2, 6, m) * (nb ? 1 : 0.62);
+        const m = cliffStrength(L.cliff[k]), add = FACE.inlandAdd * smoothstep(FACE.inland[0], FACE.inland[1], sd[k]);
+        cliff[k] = smoothstep(FACE.relief[0] + add, FACE.relief[1] + add, m) * (nb ? 1 : FACE.lone);
         faceRise[k] = m * 1.3;
       }
     }
@@ -325,6 +329,8 @@ export class Site {
       if (kd === KIND.rock) br = Math.max(br, 0.78 + 0.2 * smoothstep(0.3, 0.7, fbm(x * 0.05, z * 0.05, 2, 253)));
       else if (K.wet >= 0 || kd === KIND.sand) br = Math.max(camp[k], talus[k] * 0.5);
       if (this.ledge && this.ledge[k] && K.wet < 0) br = Math.max(br, 0.25 + 0.4 * this.ledge[k]);
+      // a face the LiDAR found is bare rock under and round its cliff module (or on its own, where the face is too low for one)
+      if (L.cliff && L.cliff[k] > 1 && cliffClass(L.cliff[k]) === FORM.face && K.wet < 0) br = Math.max(br, 0.5 + 0.4 * smoothstep(4, 9, cliffStrength(L.cliff[k])));
       bare[k] = br;
       if (kd === KIND.sand && d < 30) beach[k] = Math.max(beach[k], 1 - smoothstep(18, 30, d));
       // the soil, as today's from the new wet and bare
