@@ -97,6 +97,8 @@ const an = (w) => {
   if (/^\d/.test(s)) { const d = String(Math.floor(parseFloat(s.replace(/,/g, '')))); return /^8/.test(d) || ((d.length === 2 || d.length === 5) && /^1[18]/.test(d)) ? 'an' : 'a'; }
   return /^(?:[aeio]|u(?!n[aeiou]|ni|s[aeiou]|r[aeiou]|ti|k)|hour|honest|heir)/i.test(s) ? 'an' : 'a';
 };
+// a list of lakes with each name once (the first kept: two waters can carry one name)
+const oneEach = (ls) => { const had = new Set(); return ls.filter((l) => { const k = l && l.name; if (!k || had.has(k)) return !k; had.add(k); return true; }); };
 // a lake's key in the season's lakes: never integer-like, so the object keeps the order they were first paddled in
 const lakeKey = (id, name) => (id ? `l${id}` : `n:${name}`);
 
@@ -670,7 +672,8 @@ class Record {
     // Lake One" over "Lakes: Lake One")
     const line = this.lineOf(c) || c.line || 'A trip';
     const said = (name) => !!name && new RegExp(`\\b${String(short(name)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(line);
-    if (c.lakes && c.lakes.length) { if (!c.lakes.every((l) => said(l.name))) rows.push(['Lakes', esc(c.lakes.map((l) => l.name).join(' · '))]); }
+    const cl = oneEach(c.lakes || []);
+    if (cl.length) { if (!cl.every((l) => said(l.name))) rows.push(['Lakes', esc(cl.map((l) => l.name).join(' · '))]); }
     else if (c.counts && c.counts.lakes) rows.push(['Lakes', `${word(c.counts.lakes)} ${plural(c.counts.lakes, 'lake')}`]);
     if (c.portages && c.portages.length) rows.push(['Portages', c.portages.map((p, i) => `${esc(p.name)}${p.rods ? `, <span class="num">${p.rods}</span> rods` : ''}${times(p.n)}${i === 0 ? mark('first portage') : ''}`).join('<br>')]);
     else if (c.counts && c.counts.portages) rows.push(['Portages', `${word(c.counts.portages)}`]);
@@ -713,7 +716,8 @@ class Record {
   view() {
     const s = this.s, w = this.world, T = this.trip, st = this.stats;
     // the lakes paddled this season, and the trip under way's
-    const lakes = Object.values(s.lakes).map((l) => ({ ...l }));
+    // (round A join: one line a name: a pond by the Lake One portage is "Lake One" too, and the list said it twice)
+    const lakes = oneEach(Object.values(s.lakes).map((l) => ({ ...l })));
     if (T && T.active && st) for (const l of st.lakes || []) if (l && l.name && !lakes.some((q) => (q.id && q.id === l.id) || q.name === l.name)) lakes.push({ id: l.id, name: l.name, y: this.day.year, d: l.doy, n: 0, now: true });
     // against the named lakes on your sheets (everything, in Sandbox)
     let reach = 0, onSheets = lakes.length;

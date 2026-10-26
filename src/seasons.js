@@ -120,7 +120,8 @@ export class SeasonsPanel {
   }
   // the file as a download: "bwca-canoe-season-lake-one-2026-10-26.json"
   download(r) {
-    const place = String(r.file.words || '').split(' · ')[0] || this.t.placeAt(r.file.facts.x, r.file.facts.z);
+    // (round A join: the place, not the kind of spot: "Campsite · Lake One · …" is saved as …-lake-one-…)
+    const parts = String(r.file.words || '').split(' · '), place = parts.find((w) => w && !/^(a )?(campsite|portage|landing)$/i.test(w)) || parts[0] || this.t.placeAt(r.file.facts.x, r.file.facts.z);
     const name = `bwca-canoe-season-${slug(place)}-${new Date().toISOString().slice(0, 10)}.json`;
     const url = URL.createObjectURL(new Blob([r.text], { type: 'application/json' }));
     const a = document.createElement('a'); a.href = url; a.download = name; a.hidden = true;

@@ -1535,3 +1535,123 @@ it should); rides to three new outfitters.
   - Standing (not walking) 4–5 m from the food, the bear still comes to it.
 - **Not played.** A bear on a high-activity lake (Ensign), a raid while away from camp, a capsize from swamping in
   play, the bug jacket, a breezy-point camp, September.
+
+## Round A and people phase 2 (2026-10-26)
+
+The owner, 2026-10-26: "A sense of progress · The map filling in · Performance and saves (do we need to switch game
+engines?) · fix Night water · wilderness people". Then: "in first person i cant see portage trail while having canoe
+on back", "creeks will have giant elevation chnages and are abrupt", "move onto moving parties". Joined on
+`claude/round-a` in this order: night water, map inking, progress, saves, performance, people camps, the actor layer,
+the carry view and creeks, moving parties, and later the water rules. The join's play and fixes are on
+`claude/round-a-play`; the load-time work is on `claude/round-a` (see `docs/performance.md`).
+
+### What is in it, and where the knobs are
+
+- **The trip card and the Record** (`record.js`, `record.css`, `journal.js` recordTab). A paper card when a trip ends,
+  with one line of the trip in words (`lineOf`, recomputed at every render, so a wording fix reaches old cards) and a
+  logbook page (`pageHtml`). The season's Record tab in the book: trips, lakes, fish, portages, sightings, campsites,
+  stories, photos, firsts. Sightings: `NEAR` (how near, by kind), `COMMON` (loons, gulls and ravens once a lake a
+  day). Moment: 'record'.
+- **The map filling in** (`explored.js`, hud.js `drawMap`). Lakes you paddle are inked, your way is a pencil line (a
+  point every 50 m, `ROUTE_STEP`), crossed portages solid, slept-at sites ticked; colours `INK_WATER`, `INK_RIM`. The
+  full map opens on you at 3 to 5 km across (hud.js `OPEN_SPAN`, `OPEN_MIN`, `OPEN_MAX`, from your lake's area) and
+  fades out where it stands (`SHEET_FADE`).
+- **Saves** (`save.js`, `seasons.js`). Three season slots; the one played is "live" (the ordinary keys), the others
+  are LZW-packed strings under `bwca-canoe@slot<n>`. Seasons on the title and the pause card: Play, New, Copy,
+  Export (a .json download named for the lake), Import, Delete. Every namespace (the record, the map, the people's
+  talk) goes with its slot without registering. Tests: `window.__game.slots`.
+- **Performance** (`quality.js`, `tiles.js`). Low (`PRESETS.low`) and Auto, which steps down when frames run slow
+  (`WATCH`: 8 s windows, 22 ms). The programs every pass needs are compiled behind the title (`prewarmPasses`): 80
+  at the title, flat through a tour. The answer to the engine question is in `docs/performance.md`: stay on three.js,
+  batch the forest next.
+- **The night water** (`water.js glslWaterOwn`, wake.js `glslFoamLight`). Foam at night is lit no brighter than the
+  water's own surface; `NIGHT_GLOW.foam` and `.foamOn` in daycycle.js.
+- **Wilderness people** (`parties.js`, `party-camps.js`, `party-moves.js`, `actors.js`, `poses.js`).
+  - The schedule (`parties.js`): a party is a pure function of the entry point, the day, its slot and the season;
+    nothing of it is saved. Quotas from recreation.gov (`QUOTA`), the fill by season and weekday (`PARTIES`), and the
+    Settings row Traffic: quiet · usual · busy (`TRAFFIC`).
+  - Camps (`party-camps.js CAMPS`): drawn from their arrival to their leaving, at most `most` 4 at once, fires at the
+    nearest `fires` 2, people within `figR` 60 m, a greeting within `greetR` 80 m by day (a hand `wave` 0.7 of the
+    time, a word more often near a store), quiet 22:00 to 6:00, "Taken" on the action line within `takenR` 55 m.
+  - On the move (`party-moves.js MOVES`): followed within 1.5 km, drawn within the actor ranges (figures 60 m, whole
+    hulls 250 m, far hulls 1.2 km); they hold off you inside 25 m; on a trail the loaded carry has the right of way,
+    and a party waits at the landing while you carry. Moment: 'partytrail'.
+  - Budgets: 8 figures for the store's people, the camps and the movers together (npcs.js `POOL`, actors.js `FIGS`),
+    6 near hulls (`NEAR_HULLS`), no new programs or lights.
+- **The first-person carry** (camera.js `FP_CARRY`): the look tips down the trail, the bow rides higher, the hull
+  is dithered near the eye.
+- **Creeks graded** (`scripts/water-grade.mjs GRADE`, `src/water-levels.js`): the release's river levels as ramps,
+  the rapids at portages kept; white water where the still surface runs downhill (water.js, from 2.5 %), drawn as
+  foam lines down the flow; no lake plants where it runs past 2 % (placement.js `RAPIDS_FALL`).
+- **Water rules** (cook.js, energy.js; `// water:` in main.js). A meal takes its water from the bottle (oatmeal
+  0.25 L, a supper 0.4 L); short of it the pot waits on the grate with the chip "water 0.3 L" and the moment
+  'mealwater'. Filled with no tablet to hand, the bottle is "lake water", untreated (moment 'untreated'); drunk, it
+  may turn the stomach (energy.js `UPSET`). Treat it (a tablet in reach), Boil it (the pot), the pump or the gravity
+  bag make it safe.
+
+### Played: two July days from EP 30, July 12–13
+
+Real keys and the real mouse through the headless driver, 1440 × 900, Adventure, Traffic usual.
+
+- **Day 1, July 12 (a Sunday).** $14 of food at Kawishiwi, out at 7:44. On Lake One four party camps within 600 m by
+  9:00, "Campsite · Lake One · Taken: another party is camped here" off a solo's site as it packed to leave. Over the
+  Lake One – Kawishiwi carry (525) in first person with everything in one trip (52 kg): the trail and its sign plain
+  under the dithered hull; a pair carrying the other way waited at the Kawishiwi landing until I was off the trail,
+  then came over (their carrier's canoe was missing until the join's fix). Down the graded Kawishiwi: the canoe's
+  level rose 0.7 m over 280 m with no step over 3 cm per half metre and no jolt (8 mm a frame). Back over 525 at
+  10:40: a group of seven waited at the Lake One landing, then carried in turn. Lunch at site 843 with the bottle
+  drunk dry: the pot waited ("water 0.3 L") and 'mealwater' said why; filled 13 m from the canoe with the tablets in
+  the pack: "No tablet to hand: lake water as it comes" and 'untreated'; a gulp of it (no upset this time); "Boil
+  it" greyed while the oatmeal cooked, then "Boiled in the pot and let cool: safe to drink." The pot had to be
+  fetched off the grate by hand after "Load everything here". The afternoon: a solo crossing, parties landing and
+  making camp, fires lit by 17:30, a family's hand raised at 19:01. 'evening' at 19:05 (first time the full line;
+  the pointer to a free site, "650 m west", comes in its short form on later evenings, and pointed at a free site).
+  Camp at 834: tent, wood, supper (0.4 L from the bottle), filled again without a tablet, "Treat it" from the book
+  with the pack by the fire. Out on the water at 23:30 under overcast: the hull's water line no brighter than the
+  water.
+- **Day 2, July 13.** Rain at first light, the coals relit for oatmeal, the pack wet where it lay. The full map at
+  5:37: opened on me at 4 km, Lake One and the river inked, my way pencilled, 525 solid, the site ticked. Seasons from
+  the pause card: a new season into slot 2, played, then slot 1 again with its map, record and place as they were;
+  exported (21 KB). Home by 7:10: the trip card ("Two days out to the Kawishiwi River and back, a moose at dusk on
+  Lake One"), then 'record' and the Record tab.
+
+### The seams
+
+| Seam | Result |
+|---|---|
+| Saves keep round A's namespaces per slot | ✓ Slot 1's explored (876 route points), record (draft, gull/loon/eagle/moose) and place came back unchanged after a new season in slot 2; slot 2 started empty |
+| Perf's tile-group rule (anything under a tile group sits in a group or sets its matrix) | ✓ Party camps and their canoes go straight into the scene; actors under their own group; the map's ink is 2D; the creek grading changes only tile data in the worker |
+| Programs flat at 80 | ✓ 80 at the title (one more than the stream's 79 before the join), and 80 after party camps, actors, the carry, the rapids, a clear and an overcast night |
+| Figures shared by 8 | ✓ At the 525 landing 8 of 8 (a pair 2, a group 6 of its 7; the seventh never drawn, nobody vanished in view); at the store a keeper and a launching pair, 3 of 8 |
+| First-person carry with the actors' carryBow and party carriers | ✓ Dithered hull, trail visible; the party carriers' hulls draw (after the fix) with carryBow 0 |
+| Old saves | ✓ The taste branch's mid-trip day-4 save (Lake Three) and the content join's end save load into slot 1 with no errors; the Record built from the logbook (7 trips, 9 lakes, 5 sites, 2 stories, $243), the map inked from the trip's lakes and ticks |
+| Console | ✓ No errors. Headless only: Web Audio warns "BiquadFilter.frequency outside nominal range [0, 8000]" (its context runs at 16 kHz) |
+| Performance as a player, 1366 × 768 | Low: 3.7 ms a frame at CPU ×1, 17 ms at ×4 (360 draws). Auto (High by then: AutoWatch had stepped it down from Ultra): 6.5 ms, 31 ms at ×4 (850–960 draws). Low loses the reflections, the most visible change |
+
+### What the join fixed
+
+- **The trip card's words** (d64feff): "an 81 cm", a Lakes row that only repeats the line dropped, no lake named
+  twice in the line.
+- **The map** (61a30e9): the full sheet fades out where it stands instead of snapping to the top left, and opens on
+  you at 3–5 km across.
+- **The rapids** (8f8e7fa, 6e08252): foam lines down the flow instead of white splotches; no lilies or reeds in them.
+- **A party's carrier carried nothing** (e343373): a figure bound at its own size while waiting kept a scaled frame
+  outside the scene, and the carried hull went into it. It is bound afresh at scale 1 when it shoulders the canoe.
+- **Lake One twice in the Record** (0da8d03): a pond by the 525 trail carries Lake One's name; each name once.
+- **The exported file's name** (6c17e7e): named for the lake, not "campsite".
+
+### Left after the join
+
+- **The rapids' water still reads as flat sheets** with straight edges: in a channel this narrow every cell is
+  within the shore band, which reshapes the drawn bed up to the waterline, so on a 10 % run the bed crosses the
+  bilinear water. Lowering the tile's bed doesn't reach it; the fix is in terrain-build's shore band (and the water
+  shader's matching `surfaceAt`) where the level slopes.
+- **"Load everything here" leaves the pot on the grate** ("Everything stays as it is until you come back"); a new
+  player will lose it.
+- **The first-person carry runs into foliage** near the trail's ends where crowns overhang the tread at eye height
+  (the tunnel keeps trunks 1.35 m off, not leaves).
+- **The trip's "Paddled" reads 50 km** for two days on Lake One and the Kawishiwi (about 25 km of paddling).
+- **A 3-hour nap left rest unchanged** (0.597 before and after); a full night raised it.
+- **Taste**: an overcast night is brighter than a clear one; the clear night is very dark. The first 'evening'
+  teaches M without pointing at a free site; later evenings point.
+- **Not played**: a third day, a party passing within 25 m on the water, E on a party's canoe, Sandbox.

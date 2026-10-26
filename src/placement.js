@@ -825,6 +825,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
 // Nothing roots off a bare rocky shore or on a cobble bed in the open; all of it is thicker where the water is calm.
 // The season (aquatic.js) grows and browns them.
 const _bedA = {};
+const RAPIDS_FALL = 0.02; // round A join: the slope of the water (m per m) past which no lake plant grows
 export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site = null }) {
   const cell = grid.cell, RICE = 3, SEDGE = 3;
   const bins = new Map();
@@ -856,6 +857,9 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
       if (sd < -40 || sd > 2) continue;
       const cx = grid.cellX(i), cz = grid.cellZ(j);
       const level = grid.levelAt(cx, cz, 3);
+      // round A join: nothing roots or floats where the water runs downhill (a rapids, a cascade: water.js draws it
+      // white from 2.5 %), RAPIDS_FALL and steeper
+      if (Math.hypot(grid.levelAt(cx + cell, cz, 3) - grid.levelAt(cx - cell, cz, 3), grid.levelAt(cx, cz + cell, 3) - grid.levelAt(cx, cz - cell, 3)) > 2 * cell * RAPIDS_FALL) continue;
       const depth = level - bedAt(cx, cz);
       // the shore this water faces: bare rock, a cliff or its scree (nothing roots off it), or wet ground (a marsh)
       let rockS = 0, wet = 0;
