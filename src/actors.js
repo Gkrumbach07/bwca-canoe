@@ -317,8 +317,17 @@ class Person {
   }
   // the pose of the frame (drawn only), as player.js writes the walker's state for canoe.js
   pose(dt) {
-    const B = this.bind, st = this.state;
+    let B = this.bind;
     if (B.kind === 'crew') return; // (the boat poses its crew)
+    // round A join: a carrier is posed at scale 1 (bindFigure's rule), so the hull rides in the drawn frame. One bound
+    // at its own size while it walked or waited (its frame then an Object3D outside the scene) is bound afresh when it
+    // shoulders the canoe: the hull went into that frame and was never drawn (the arms up round nothing)
+    if (this.mode === 'carry' && B.frame !== B.root) {
+      this.layer.unbind(this);
+      if (!this.layer.bindFigure(this)) return;
+      B = this.bind;
+    }
+    const st = this.state;
     const raw = this.v;
     st.speed += (raw - st.speed) * ease(12, dt);
     const striding = raw > 0.12;
