@@ -53,7 +53,9 @@ function splits(rng, a, b, n) {
 // (forward, an overhang, when negative), back to `back` (the module's back unless given: a loose block has its
 // own); optionally a corner knocked off its top front (`chip` metres deep). Each block gets a tone of its own
 // (B.tones).
-function block(B, rng, { x0, x1, y0, yT, zF, turn = 0, lean = 0, fall = 0.06, roll = 0, chip = 0, far = false, back = D0 * 1.02 }) {
+// (d2 land: `round`, the anorthosite's and the troctolite's: every edge it shows worn to a broad chamfer, so the block
+// reads as a dome, not a cut)
+function block(B, rng, { x0, x1, y0, yT, zF, turn = 0, lean = 0, fall = 0.06, roll = 0, chip = 0, far = false, back = D0 * 1.02, round = false }) {
   const j = () => (rng() - 0.5) * 0.05, xm = (x0 + x1) / 2;
   let planes = [
     plane(0, -1, 0, -y0),
@@ -69,6 +71,7 @@ function block(B, rng, { x0, x1, y0, yT, zF, turn = 0, lean = 0, fall = 0.06, ro
     if ((pa.y < y0 + 0.05 && pb.y < y0 + 0.05) || (pa.z > back - D0 * 0.1 && pb.z > back - D0 * 0.1)) return 0;
     if (nf.dot(ng) > Math.cos(0.3)) return 0;
     const top = Math.max(nf.y, ng.y) > 0.6, front = Math.min(nf.z, ng.z) < -0.6;
+    if (round) return top ? 1.8 + r() * 1.4 : 0.9 + r() * 0.8;
     if (top && front) return r() < 0.35 ? 2.2 + r() : 0.8 + r() * 0.6;
     return r() < 0.3 ? 0 : 0.5 + r() * 0.5;
   };
@@ -86,32 +89,41 @@ function block(B, rng, { x0, x1, y0, yT, zF, turn = 0, lean = 0, fall = 0.06, ro
 // tops and at the foot. The lower tier keeps its front within 0.4 m of z = 0 and turns little where the bench is,
 // and the upper tier's front stays behind 1.2 m there, so the bench is there in every variant (site.js
 // CLIFF_MODULE); the loose blocks stay off it.
+// d2 land: two more styles for the bedrock (land.js STYLE_FAMILY): 'slabs', the slates' and schists' steep thin plates along
+// the foliation, leaning back together at the beds' one dip, ribs standing proud of their neighbours, shelves across
+// them and few cross joints; 'rounded', the anorthosite's and the troctolite's few broad blocks worn into domes (broad
+// chamfers, tops falling away into the hill, the face leaning back), no undercuts, notches or shelves. A style the old
+// builds knew draws the very same rocks (no random number is drawn for the new ones' choices).
 function buildBlocks(B, rng, style, far = false) {
-  const cols = style === 'columns';
+  const cols = style === 'columns', slabs = style === 'slabs', round = style === 'rounded';
   const yBase = -0.14 * H0, X0 = -0.52 * W0, X1 = 0.52 * W0;
   B.tones = [];
-  const nl = far ? 2 + (rng() < 0.5 ? 1 : 0) : cols ? 3 + Math.floor(rng() * 3) : 2 + Math.floor(rng() * 3);
+  const nl = far ? 2 + (rng() < 0.5 ? 1 : 0) : cols ? 3 + Math.floor(rng() * 3) : slabs ? 5 + Math.floor(rng() * 4) : round ? 2 + (rng() < 0.4 ? 1 : 0) : 2 + Math.floor(rng() * 3);
+  const dip = slabs ? 0.1 + rng() * 0.2 : 0, strike = slabs ? (rng() - 0.5) * 0.16 : 0;
   const xl = splits(rng, X0, X1, nl), tops = [], fronts = [], under = [];
   for (let c = 0; c < nl; c++) {
-    const bench = onBench(xl[c], xl[c + 1]), undercut = !bench && !far && rng() < 0.3;
-    const zF = (bench ? rng() * 0.04 : undercut ? 0.07 + rng() * 0.06 : rng() * 0.08) * D0;
-    const top = bench || far ? LEDGE + (rng() - 0.5) * 0.02 * H0 : LEDGE * (0.55 + rng() * 0.8), turn = (rng() - 0.5) * (bench ? 0.1 : 0.34);
-    const lean = bench || far ? rng() * 0.04 : -0.02 + rng() * 0.12, chip = !far && !bench && rng() < 0.35 ? 0.3 + rng() * 0.6 : 0;
+    const bench = onBench(xl[c], xl[c + 1]), undercut = !bench && !far && !round && rng() < 0.3;
+    const zF = (bench ? rng() * 0.04 : undercut ? 0.07 + rng() * 0.06 : slabs ? (c % 2 ? 0.07 : 0) + rng() * 0.05 : rng() * 0.08) * D0;
+    const top = bench || far ? LEDGE + (rng() - 0.5) * 0.02 * H0 : LEDGE * (round ? 0.85 + rng() * 0.3 : 0.55 + rng() * 0.8), turn = (rng() - 0.5) * (bench ? 0.1 : slabs ? 0.12 : 0.34);
+    let lean = bench || far ? rng() * 0.04 : -0.02 + rng() * 0.12;
+    const chip = !far && !bench && !round && rng() < 0.35 ? 0.3 + rng() * 0.6 : 0;
+    if (slabs) lean = dip + (lean - 0.04) * 0.3; else if (round && !bench) lean = 0.08 + lean;
     tops.push(top); fronts.push(zF); under.push(undercut);
     // off the bench a column may be split down its height into two, the second standing a little back and
     // to its own height
-    const xs = !far && !bench && xl[c + 1] - xl[c] > 2.2 && rng() < 0.35 ? [xl[c], xl[c] + (xl[c + 1] - xl[c]) * (0.35 + rng() * 0.3), xl[c + 1]] : [xl[c], xl[c + 1]];
+    const xs = !far && !bench && !slabs && xl[c + 1] - xl[c] > 2.2 && rng() < 0.35 ? [xl[c], xl[c] + (xl[c + 1] - xl[c]) * (0.35 + rng() * 0.3), xl[c + 1]] : [xl[c], xl[c + 1]];
+    const fall0 = round ? 0.22 : 0.03, roll0 = slabs ? strike : 0;
     for (let s = 0; s + 1 < xs.length; s++) {
       const zs = zF + (s ? 0.15 + rng() * 0.3 : 0), ts = s ? Math.max(LEDGE * 0.5, top + (rng() - 0.5) * 1.4) : top, ts0 = s ? turn + (rng() - 0.5) * 0.2 : turn;
       // a cross joint now and then: the piece above it set back a little (a step, not the bench)
-      if (!far && rng() < (cols ? 0.28 : 0.48)) {
+      if (!far && rng() < (cols ? 0.28 : slabs ? 0.12 : round ? 0.15 : 0.48)) {
         const yj = yBase + (ts - yBase) * (0.4 + rng() * 0.35), step = 0.1 + rng() * 0.3;
-        block(B, rng, { x0: xs[s], x1: xs[s + 1], y0: yBase, yT: yj, zF: zs, turn: ts0, lean: rng() * 0.03, fall: 0.02 });
-        block(B, rng, { x0: xs[s] + 0.04, x1: xs[s + 1] - 0.04, y0: yj, yT: ts, zF: zs + step, turn: ts0 + (rng() - 0.5) * 0.12, lean, fall: 0.03, chip });
-      } else block(B, rng, { x0: xs[s], x1: xs[s + 1], y0: yBase, yT: ts, zF: zs, turn: ts0, lean, fall: 0.03, chip, far });
+        block(B, rng, { x0: xs[s], x1: xs[s + 1], y0: yBase, yT: yj, zF: zs, turn: ts0, lean: slabs ? lean : rng() * 0.03, fall: 0.02, round });
+        block(B, rng, { x0: xs[s] + 0.04, x1: xs[s + 1] - 0.04, y0: yj, yT: ts, zF: zs + step, turn: ts0 + (rng() - 0.5) * 0.12, lean, fall: fall0, roll: roll0, chip, round });
+      } else block(B, rng, { x0: xs[s], x1: xs[s + 1], y0: yBase, yT: ts, zF: zs, turn: ts0, lean, fall: fall0, roll: roll0, chip, far, round });
     }
     // a thin ledge standing proud across the column, now and then running on over the next
-    if (!far && !bench && rng() < 0.22) {
+    if (!far && !bench && !round && rng() < (slabs ? 0.3 : 0.22)) {
       const yL = yBase + (top - yBase) * (0.35 + rng() * 0.45), x1 = c + 1 < nl && rng() < 0.4 ? Math.min(X1, xl[c + 1] + (xl[c + 2] - xl[c + 1]) * 0.6) : xl[c + 1] - 0.1;
       if (!onBench(xl[c] + 0.1, x1)) block(B, rng, { x0: xl[c] + 0.1, x1, y0: yL, yT: yL + 0.5 + rng() * 0.5, zF: zF - 0.35 - rng() * 0.55, turn: turn + (rng() - 0.5) * 0.1, fall: 0.04, roll: (rng() - 0.5) * 0.08 });
     }
@@ -119,7 +131,7 @@ function buildBlocks(B, rng, style, far = false) {
   // the upper tier: set back over the bench, its own joints (they do not line up with the ones below), each
   // block turned and leaning its own way, ragged on top (corners knocked off, tops at different heights and
   // falling away into the hill), the outer ones lower and further back; over an undercut column it juts out
-  const nu = far ? 3 : cols ? 4 + Math.floor(rng() * 4) : 2 + Math.floor(rng() * 3);
+  const nu = far ? 3 : cols ? 4 + Math.floor(rng() * 4) : slabs ? 4 + Math.floor(rng() * 4) : round ? 2 : 2 + Math.floor(rng() * 3);
   const xu = splits(rng, X0, X1, nu);
   for (let c = 0; c < nu; c++) {
     const mid = (xu[c] + xu[c + 1]) / 2, end = smooth(0.3, 0.5, Math.abs(mid) / W0), bench = far || onBench(xu[c], xu[c + 1]);
@@ -128,17 +140,19 @@ function buildBlocks(B, rng, style, far = false) {
     if (!bench) for (let k = 0; k < nl; k++) if (xl[k + 1] > xu[c] && xl[k] < xu[c + 1]) { y0 = Math.min(y0, tops[k] - 0.3); over = over || (under[k] && (xl[k + 1] - xu[c]) > 0.6 && (xu[c + 1] - xl[k]) > 0.6); }
     let zF = (bench ? 0.19 + rng() * 0.08 : over ? rng() * 0.03 : rng() < 0.5 ? 0.04 + rng() * 0.14 : 0.15 + rng() * 0.15) * D0 + (over ? 0 : end * (0.3 + rng() * 0.8));
     let yT = H0 * (0.84 + rng() * 0.2 - end * (0.14 + rng() * 0.16));
+    if (round) yT -= H0 * 0.08;
     // the broken top line: a notch where a block has gone (lower, and back into the hill), or a column standing proud
     const r = rng();
-    if (!far && !over && r < 0.3) { yT -= H0 * (0.1 + rng() * 0.14); zF += (0.06 + rng() * 0.1) * D0; } else if (!far && r > 0.88) yT += H0 * (0.04 + rng() * 0.05);
-    const turn = (rng() - 0.5) * 0.44, lean = over ? -(0.06 + rng() * 0.1) : -0.03 + rng() * 0.15, fall = 0.1 + rng() * 0.25, roll = (rng() - 0.5) * 0.18;
-    const chip = !far && rng() < 0.5 ? 0.4 + rng() * 1.0 : 0;
-    if (!far && rng() < (cols ? 0.25 : 0.45)) {
+    if (!far && !over && !round && r < 0.3) { yT -= H0 * (0.1 + rng() * 0.14); zF += (0.06 + rng() * 0.1) * D0; } else if (!far && !round && r > 0.88) yT += H0 * (0.04 + rng() * 0.05);
+    let turn = (rng() - 0.5) * 0.44, lean = over ? -(0.06 + rng() * 0.1) : -0.03 + rng() * 0.15, fall = 0.1 + rng() * 0.25, roll = (rng() - 0.5) * 0.18;
+    if (slabs) { turn *= 0.3; lean = dip + (lean - 0.06) * 0.3; roll = strike + roll * 0.3; } else if (round) { lean = 0.1 + Math.max(0, lean); fall += 0.18; }
+    const chip = !far && !round && rng() < 0.5 ? 0.4 + rng() * 1.0 : 0;
+    if (!far && rng() < (cols ? 0.25 : slabs ? 0.15 : round ? 0.1 : 0.45)) {
       // a cross joint in the upper tier too, the piece above stepped back or jutting a little
       const yj = y0 + (yT - y0) * (0.35 + rng() * 0.35);
-      block(B, rng, { x0: xu[c] + 0.03, x1: xu[c + 1] - 0.03, y0, yT: yj, zF, turn, lean, fall: 0.03 });
-      block(B, rng, { x0: xu[c] + 0.06, x1: xu[c + 1] - 0.06, y0: yj, yT, zF: zF + (rng() - 0.3) * 0.6, turn: turn + (rng() - 0.5) * 0.2, lean, fall, roll, chip });
-    } else block(B, rng, { x0: xu[c] + 0.03, x1: xu[c + 1] - 0.03, y0, yT, zF, turn, lean, fall, roll, chip, far });
+      block(B, rng, { x0: xu[c] + 0.03, x1: xu[c + 1] - 0.03, y0, yT: yj, zF, turn, lean, fall: 0.03, round });
+      block(B, rng, { x0: xu[c] + 0.06, x1: xu[c + 1] - 0.06, y0: yj, yT, zF: zF + (rng() - 0.3) * 0.6, turn: turn + (rng() - 0.5) * 0.2, lean, fall, roll, chip, round });
+    } else block(B, rng, { x0: xu[c] + 0.03, x1: xu[c + 1] - 0.03, y0, yT, zF, turn, lean, fall, roll, chip, far, round });
   }
   if (far) return;
   // loose blocks: one or two come to rest on the lower tier's tops (off the bench, clear of its trees), and one
@@ -195,16 +209,19 @@ function finishModule(B, rng, bake = true) {
   return geo;
 }
 
-// A cliff module (the near variant): even variants columnar, odd ones blocky.
+// A cliff module (the near variant): even variants columnar, odd ones blocky; d2 land added the bedrock's families
+// (vegetation.js CLIFF_FAMILIES): 4 columns, 5 blocks, 6-8 slabs, 9-11 rounded.
+export const cliffStyleOf = (v) => (v < 4 ? (v % 2 ? 'blocks' : 'columns') : v === 4 ? 'columns' : v === 5 ? 'blocks' : v < 9 ? 'slabs' : 'rounded');
 export function cliffModule(rng, v) {
   const B = new RockBuilder();
-  buildBlocks(B, rng, v % 2 ? 'blocks' : 'columns');
+  buildBlocks(B, rng, cliffStyleOf(v));
   return finishModule(B, rng);
 }
-// Its far twin: two blocks below the bench and three above, no chips, no bake (the occlusion would not read).
-export function cliffModuleFar(rng) {
-  const B = new RockBuilder();
-  buildBlocks(B, rng, 'blocks', true);
+// Its far twin: two blocks below the bench and three above, no chips, no bake (the occlusion would not read); the slabs'
+// and the domes' own (d2 land)
+export function cliffModuleFar(rng, v = 0) {
+  const B = new RockBuilder(), st = cliffStyleOf(v);
+  buildBlocks(B, rng, st === 'slabs' || st === 'rounded' ? st : 'blocks', true);
   return finishModule(B, rng, false);
 }
 

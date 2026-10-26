@@ -10,6 +10,7 @@ import { Site } from './site.js';
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
 import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the lakes with no contour map
 import { patchTile, lakeRockBins, clearPlants } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
+import { attachLand, unpackTint } from './land.js'; // d2 land: the survey's bytes of a v4 tile, the rocks' bedrock tint
 
 let cfg = null;
 
@@ -25,6 +26,7 @@ async function fetchTile(url) {
 // group shares one azimuth and tilt, the flats follow the slope; a rock's height is its scale times `tall`),
 // plus an rgb tint when the stride carries one. Every column keeps its axis's scale as its length (tiles.js
 // and props.js read the footprint from it).
+const _rgb = [1, 1, 1];
 function instanceData(items, stride, rx, rz) {
   const count = items.length / stride;
   const m = new Float32Array(count * 16), c = stride > 5 ? new Float32Array(count * 3) : null;
@@ -46,7 +48,8 @@ function instanceData(items, stride, rx, rz) {
     if (x > bounds[3]) bounds[3] = x; if (y > bounds[4]) bounds[4] = y; if (z > bounds[5]) bounds[5] = z;
     const sMax = Math.max(Math.abs(sx), Math.abs(sy), Math.abs(sz));
     if (sMax > bounds[6]) bounds[6] = sMax;
-    if (c) { const tint = items[o + 5]; c[n * 3] = tint; c[n * 3 + 1] = tint * (0.97 + hash2(n, rx * 131 + rz, 2) * 0.06); c[n * 3 + 2] = tint; }
+    // (d2 land: a rock's tint carries its bedrock unit, land.js UNIT_TAG; any other tint unpacks to itself, grey)
+    if (c) { unpackTint(items[o + 5], _rgb); c[n * 3] = _rgb[0]; c[n * 3 + 1] = _rgb[1] * (0.97 + hash2(n, rx * 131 + rz, 2) * 0.06); c[n * 3 + 2] = _rgb[2]; }
   }
   return { count, matrices: m, colors: c, bounds };
 }
@@ -116,7 +119,7 @@ function collisionOf(bins, size) {
 }
 
 // the typed arrays of a terrain chunk (terrain-build.js), handed over rather than copied
-const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer, ...(t.parts ? [t.parts.buffer] : [])];
+const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer, ...(t.parts ? [t.parts.buffer] : []), ...(t.land ? [t.land.buffer] : [])];
 
 // round A-C: a fine tile's terrain is one mesh of ~200 000 triangles, so a view, a mirror or a shadow cascade that
 // touched any corner of it drew all of it (a 300 m cascade drew three whole tiles, 1.1 M triangles). Its triangles
@@ -159,6 +162,7 @@ async function buildFine(m) {
   await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
+  attachLand(grid, buf); // d2 land (a grid.js that reads the v4 fields itself has set grid.ch already)
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
   patchTile(buf, m.tx, m.ty, g); // d1 rapids: each drop where it really is, the rocks' shoals (the grid's arrays view buf)
@@ -176,7 +180,7 @@ async function buildFine(m) {
   const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell); // round A-C
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
-  const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz) }));
+  const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...(b.style !== undefined ? { style: b.style } : {}), ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz) })); // (d2 land: a cliff bin's family)
   const abins = aquatic.bins.map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, ...binCentre(b), ...instanceData(b.items, 5, b.rx, b.rz) }));
   const collide = collisionOf(bins, g.tile * g.cell);
   const transfer = [buf, cover.buffer, ...terrainBuffers(terrain), collide.trunks.buffer, collide.trunkMeta.buffer, collide.trunkStart.buffer, collide.rocks.buffer, collide.rockStart.buffer];

@@ -440,6 +440,23 @@ function aspen(rng, v) {
   for (let i = 0; i < 3; i++) leafy(cards, 'leaf', vec(T.at(0.66 + i * 0.09)), dirAt(rng() * 6.28, 0.2 + rng() * 0.4), size * 0.8, nrm, shade(cols, y0, y1, rng), rng, true);
   return finish(g, cards);
 }
+// Black ash (d2 land): the tree of the hardwood swamps and the creek bottoms the survey maps, a tall slim trunk of grey
+// corky bark, often leaning, under a narrow open crown of a few ascending limbs high on it, the leaves feathery and a
+// darker, bluer green than the aspen's (it is a guest in the birch's bins, so it yellows with the birch in the fall).
+function ash(rng, v) {
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
+  const h = 15 * P.size, bark = vary(0x7d776b, rng, 0.05), cols = crownColors(0x8fb85e, 0x3b684c, rng);
+  const lean = leanOf(P, h * 1.25), twig = bark.clone().lerp(new THREE.Color(0x3d3830), 0.5);
+  const T = g.stem(0, -0.5, 0, 0.22 * P.girth, 0.035, h * 0.95, 5, bark, rng, { lean, bow: bowOf(P, h), flare: 0.4, shade: 0.3, ts: [0, 0.1, 0.6, 1] });
+  deadBranches(g, rng, T.at, 1 + Math.floor(rng() * 2), 0.25, 0.5, 0.5, 1.1, bark);
+  const R = (1.35 + rng() * 0.5) * (0.75 + P.size * 0.3), c = T.at(0.8), C = V(c.x, c.y, c.z), ry = h * 0.2;
+  const y0 = C.y - ry, y1 = C.y + ry * 1.2, size = 2.1 * (0.8 + P.size * 0.2);
+  broadCrown(g, cards, rng, T, { R, C, ry, size, slot: 'leaf', twig, cols, y0, y1, t0: 0.62, t1: 0.93, n: 5 + Math.floor(rng() * 2), rise: [0.95, 1.35], droop: 0.15 });
+  const nrm = skyward(away(C, R * 1.15, ry, R * 1.15), C, 0.3);
+  leafy(cards, 'leaf', vec(T.at(1)), perp(UP).applyAxisAngle(UP, rng() * 6.28).addScaledVector(UP, 1.1).normalize(), size, nrm, shade(cols, y0, y1, rng), rng);
+  for (let i = 0; i < 2; i++) leafy(cards, 'leaf', vec(T.at(0.74 + i * 0.1)), dirAt(rng() * 6.28, 0.2 + rng() * 0.4), size * 0.8, nrm, shade(cols, y0, y1, rng), rng, true);
+  return finish(g, cards);
+}
 // Black spruce: the bog's spruce, a thin dark spire of short drooping branches with a dense club of them near the
 // top and dead twigs low down; a dark blue-green.
 function blackSpruce(rng, v) {
@@ -741,9 +758,10 @@ const LOW = {
   outcrop: (rng) => { const geo = angularRock(rng, 'slab'); geo.scale(0.85, 0.7, 0.85); return geo; },
   tamarack: (rng, I) => farTwin(I, 'farTamarack', rng, { trunk: 0.25 }),
   aspen: (rng, I) => farTwin(I, 'farAspen', rng, { trunk: 0.45 }),
+  ash: (rng, I) => farTwin(I, 'farAspen', rng, { trunk: 0.4 }), // d2 land: far off an ash reads as an aspen
   blackSpruce: (rng, I) => farTwin(I, 'farBlackSpruce', rng),
   talus: (rng) => farRock(rng, { scree: true }), // round A-C: likewise (the near block was 76)
-  cliff: (rng) => cliffModuleFar(rng),
+  cliff: (rng, v) => cliffModuleFar(rng, v), // d2 land: the slabs' and the domes' far twins their own
 };
 
 // index order must match placement.js SPECIES. `leaves`: deciduous, with an autumn colour (linear rgb).
@@ -758,7 +776,8 @@ export const SPECIES = [
   { name: 'whitePine', make: whitePine, variants: TREE_VARIANTS, guest: { name: 'tallPine', make: tallPine, variants: TREE_VARIANTS, fit: 16 / 20 } },
   { name: 'spruce', make: spruce, variants: TREE_VARIANTS, guest: { name: 'blackSpruce', make: blackSpruce, variants: 6, fit: 12.5 / 11 } },
   { name: 'redPine', make: redPine, variants: TREE_VARIANTS },
-  { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS, guest: { name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 } },
+  { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS, guest: { name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 },
+    guests: [{ name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 }, { name: 'ash', make: ash, variants: 6, leaves: true, fit: 10.5 / 15 }] }, // d2 land: and the black ash
   { name: 'cedar', make: cedar, variants: TREE_VARIANTS },
   { name: 'snag', make: snag, variants: TREE_VARIANTS },
   // round A-C: boulders (3 to 7 m across) are a pixel or two past 2 km, in the haze: culled at 2200 m, not 3200
@@ -784,8 +803,17 @@ export const SPECIES = [
   { name: 'aspen', guestOf: 3, roles: true },
   { name: 'blackSpruce', guestOf: 1, roles: true },
   { name: 'talus', make: (rng) => screeBlock(rng), rock: true, variants: 4, lod: 320, cull: 700, shadow: false },
-  { name: 'cliff', make: cliffModule, rock: true, cliff: true, variants: 4, lod: 1100 },
+  // (d2 land: twelve variants, by the bedrock's families: CLIFF_FAMILIES)
+  { name: 'cliff', make: cliffModule, rock: true, cliff: true, variants: 12, lod: 1100 },
+  { name: 'ash', guestOf: 3, roles: true }, // d2 land: the black ash, a guest in the birch's bins
 ];
+// d2 land: a host's guests (the birch holds the aspen and the black ash)
+const guestsOf = (S) => S.guests || (S.guest ? [S.guest] : []);
+// d2 land: the cliff modules' variants by the bedrock's family (land.js STYLE_FAMILY; cliffs.js cliffStyleOf): columns,
+// blocks, slabs, rounded. A cliff bin the survey placed (placement.js b.style) draws three of its family's; any other bin
+// the first four, as before.
+export const CLIFF_FAMILIES = [[0, 2, 4], [1, 3, 5], [6, 7, 8], [9, 10, 11]];
+const CLIFF_OLD = 4;
 const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
 const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
@@ -1070,7 +1098,7 @@ export function makeVegetationKit(seed = 3) {
   const t0 = performance.now();
   const build = (s, v) => {
     const rs = seed * 131 + v * 17 + s.name.length;
-    if (s.rock) return { full: s.make(mulberry32(rs), v), low: LOW[s.name](mulberry32(rs)) };
+    if (s.rock) return { full: s.make(mulberry32(rs), v), low: LOW[s.name](mulberry32(rs), v) };
     const full = solid(s.make(mulberry32(rs), v));
     const low = solid(LOW[s.name](mulberry32(rs + 7), crownInfo(full)));
     if (s.leaves) { tagLeaves(full); tagLeaves(low); }
@@ -1080,7 +1108,7 @@ export function makeVegetationKit(seed = 3) {
   // a host's own variants, then its guest's; a guest's own slot holds none (it is never binned)
   const variants = SPECIES.map((s) => (s.guestOf !== undefined ? [] : [
     ...Array.from({ length: s.variants || VARIANTS }, (_, v) => build(s, v)),
-    ...(s.guest ? Array.from({ length: s.guest.variants }, (_, v) => build(s.guest, v)) : []),
+    ...guestsOf(s).flatMap((gs) => Array.from({ length: gs.variants }, (_, v) => build(gs, v))),
   ]));
   const material = makeCardMaterial(null);
   const rockMaterial = makeRockMaterial();
@@ -1105,13 +1133,25 @@ export function makeVegetationKit(seed = 3) {
 // trees and the small third group any variant, so a leaner, a giant or a runt turns up now and then rather than
 // filling a whole region; the rocks step through the kinds (slab, block, boulder) in turn.
 function variantsFor(b, nv, ng) {
-  const S = SPECIES[b.sp];
-  if (S.guest && ng > 1) {
-    // the host's groups from its own variants, the guest's from its own (after the host's)
-    const own = S.variants, hg = GROUPS[b.sp], guestSp = SPECIES.findIndex((q) => q.guestOf === b.sp);
-    return [...pickVariants(b, own, Math.min(hg, ng)), ...(ng > hg ? pickVariants({ rx: b.rx, rz: b.rz, sp: guestSp }, nv - own, ng - hg).map((v) => v + own) : [])];
+  const S = SPECIES[b.sp], G = guestsOf(S);
+  if (G.length && ng > 1) {
+    // the host's groups from its own variants, each guest's from its own (after the host's and the guests' before it)
+    const out = pickVariants(b, S.variants, Math.min(GROUPS[b.sp], ng));
+    let at = S.variants, g0 = GROUPS[b.sp];
+    for (const gs of G) {
+      const gsp = SPECIES.findIndex((q) => q.name === gs.name), gn = GROUPS[gsp];
+      if (ng > g0) out.push(...pickVariants({ rx: b.rx, rz: b.rz, sp: gsp }, gs.variants, Math.min(gn, ng - g0)).map((v) => v + at));
+      at += gs.variants; g0 += gn;
+    }
+    return out;
   }
-  return pickVariants(b, S.guest ? S.variants : nv, ng);
+  if (S.cliff) {
+    // d2 land: a bin of the survey's cliffs draws its bedrock's family
+    if (b.style === undefined || !CLIFF_FAMILIES[b.style]) return pickVariants(b, CLIFF_OLD, ng);
+    const fam = CLIFF_FAMILIES[b.style], base = Math.floor(hash2(b.rx * 7919 + b.rz, b.sp, 9) * fam.length);
+    return Array.from({ length: ng }, (_, g) => fam[(base + g) % fam.length]);
+  }
+  return pickVariants(b, G.length ? S.variants : nv, ng);
 }
 function pickVariants(b, nv, ng) {
   const S = SPECIES[b.sp];

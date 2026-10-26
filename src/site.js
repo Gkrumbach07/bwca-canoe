@@ -18,7 +18,8 @@
 // the same test finds it.
 import { smoothstep, clamp, fbm } from './rng.js';
 import { surfaceAt } from './terrain-build.js';
-import { burnAt, knobAt, sandAt } from './fields.js';
+import { burnAt, knobAt, sandAt, meadowAt } from './fields.js';
+import { landOf, KIND, KIND_LAND, OPEN_FOREST, CLIFF as FORM, cliffClass, cliffStrength, ROCK_TINT } from './land.js'; // d2 land
 
 // The shore's rock (the shoreline pass). In the Boundary Waters the forest runs to the water almost everywhere; the
 // rock shows as a ledge or a boulder band a few metres wide at the foot of the trees (the paint draws that from the
@@ -70,6 +71,10 @@ export class Site {
     const H = A(), S = A(), dx = A(), dz = A(), tpi = A(), ux = A(), uz = A(), steep = A(), rise = A(), cliff = A(), talus = A();
     const wet = A(), soil = A(), bare = A(), sun = A(), sd = A(), open = A(), beach = A(), camp = A();
     Object.assign(this, { H, S, dx, dz, tpi, ux, uz, steep, rise, cliff, talus, wet, soil, bare, sun, sd, open, beach, camp });
+    // d2 land: the agencies' land under this tile (land.js), or null (a v3 tile: every field below is today's)
+    const L = landOf(grid);
+    this.land = L;
+    const form = L && L.cliff ? (k) => (L.cliff[k] > 1 ? cliffClass(L.cliff[k]) : 0) : () => 0;
     const at = (li, lj) => clamp(lj, 0, n - 1) * n + clamp(li, 0, n - 1);
     for (let k = 0; k < N; k++) { H[k] = grid.h[k] * 0.1; sd[k] = grid.sd[k] * 0.1; }
 
@@ -101,10 +106,12 @@ export class Site {
     const c0 = A();
     for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
       const k = lj * n + li;
-      if (sd[k] < -12 || (S[k] < 0.33 && Math.abs(sd[k]) > 12)) { steep[k] = S[k]; continue; }
+      // (d2 land: the LiDAR's faces and ledges want their fall line wherever they are)
+      const lidar = form(k) >= FORM.talus && sd[k] > -12;
+      if (sd[k] < -12 || (S[k] < 0.33 && Math.abs(sd[k]) > 12 && !lidar)) { steep[k] = S[k]; continue; }
       const x = grid.cellX(grid.i0 + li), z = grid.cellZ(grid.j0 + lj), s = (px, pz) => surfaceAt(grid, px, pz);
       const ex = (s(x + 10, z) - s(x - 10, z)) / 20, ez = (s(x, z + 10) - s(x, z - 10)) / 20, G = Math.hypot(ex, ez);
-      if (G < 0.15) { steep[k] = G; continue; }
+      if (G < 0.15) { steep[k] = G; if (lidar && (dx[k] || dz[k])) { ux[k] = -dx[k]; uz[k] = -dz[k]; } continue; }
       const vx = ex / G, vz = ez / G;
       ux[k] = vx; uz[k] = vz;
       let prev = s(x - vx * 10, z - vz * 10), first = prev, top = 0;
@@ -126,6 +133,24 @@ export class Site {
       }
       cliff[k] = c0[k] * Math.min(1, cnt / 2);
     }
+    // d2 land: where the LiDAR has looked (its byte is not 0), the cliff band is the faces it found (a 2 m pixel at 50°
+    // and 3 m of relief in the cell), as strong as the cell's relief makes them a wall (4–6 m), a lone face cell (a
+    // big boulder's flank, a knob) a little over half; the drawn step of a steep bank is no cliff there. Its height
+    // stands in for the drawn step's rise below (the scree's reach). Where the LiDAR saw nothing, today's band.
+    const faceRise = L && L.cliff ? A() : null;
+    if (faceRise) {
+      const isFace = (q) => L.cliff[q] > 1 && cliffClass(L.cliff[q]) === FORM.face;
+      for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+        const k = lj * n + li;
+        if (!L.cliff[k]) continue;
+        if (!isFace(k) || sd[k] < -6) { cliff[k] = 0; continue; }
+        let nb = 0;
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && isFace(at(li + di, lj + dj))) nb++;
+        const m = cliffStrength(L.cliff[k]);
+        cliff[k] = smoothstep(3.2, 6, m) * (nb ? 1 : 0.62);
+        faceRise[k] = m * 1.3;
+      }
+    }
     // the scree: at the cliff's own foot and down its fall line from it, one cell under any cliff of 4 m and
     // more, two under one of 12 m and more
     for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
@@ -140,11 +165,23 @@ export class Site {
         // against the cliff's uphill
         const L = Math.hypot(di, dj), down = (di * ux[q] + dj * uz[q]) / L;
         if (down < 0.55) continue;
-        const reach = far === 1 ? smoothstep(3, 8, rise[q]) : smoothstep(12, 22, rise[q]);
+        const rq = faceRise && faceRise[q] ? Math.max(rise[q], faceRise[q]) : rise[q];
+        const reach = far === 1 ? smoothstep(3, 8, rq) : smoothstep(12, 22, rq);
         t = Math.max(t, c * reach * smoothstep(0.55, 0.85, down));
       }
       talus[k] = t;
     }
+    // d2 land: the LiDAR's rough steep ground (30–50°, 30 cm rough and more): under a face it is the face's scree; on
+    // its own it is a ledge, the stepped rock of a steep knob or a hillside's broken bedrock, which the forest climbs
+    // (ledge: bare rock below, slabs and blocks in placement.js)
+    const ledge = faceRise ? A() : null;
+    if (ledge) for (let k = 0; k < N; k++) {
+      if (L.cliff[k] <= 1 || cliffClass(L.cliff[k]) !== FORM.talus || sd[k] < 0) continue;
+      const r = smoothstep(8, 16, cliffStrength(L.cliff[k]));
+      if (talus[k] > 0.05) talus[k] = Math.max(talus[k], 0.45 + 0.4 * r);
+      else ledge[k] = 0.35 + 0.65 * r;
+    }
+    this.ledge = ledge;
 
     // how open to the lake each cell near a shore stands (points and coves), and the sand beaches in the coves
     const [r1, r2] = OPEN.rings;
@@ -219,21 +256,82 @@ export class Site {
       // soil: thin on rock, ridges and steep ground, deep in the hollows and the wet flats (peat)
       soil[k] = d < 0 ? 0 : clamp(0.6 + 0.3 * hollow + 0.2 * wet[k] - 0.45 * ridge - 0.9 * smoothstep(0.2, 0.75, s) - bare[k], 0, 1);
     }
+    // d2 land: the agencies' ground over the noise's, cell by cell (landData below); null on a v3 tile
+    const extra = L ? this.landData(L, at) : [];
     // the lake's own cells beside a shore carry the wetness and the bare rock of the land beside them (the mean of
     // their land neighbours), so what reads these bilinearly at the waterline (the paint, the lake plants) sees the
     // shore's ground, not the lake's (wet 1, bare 0); further out wet stays 1
     const wet0 = Float32Array.from(wet), bare0 = Float32Array.from(bare), beach0 = Float32Array.from(beach), camp0 = Float32Array.from(camp);
+    const extra0 = extra.map((a) => Float32Array.from(a)), se = new Float64Array(extra.length); // d2 land: its fields too
     for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
       const k = lj * n + li;
       if (sd[k] >= 0 || sd[k] < -15) continue;
       let cnt = 0, sw = 0, sb = 0, ss = 0, sc = 0;
+      se.fill(0);
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
         const q = at(li + di, lj + dj);
         if (sd[q] < 0) continue;
         cnt++; sw += wet0[q]; sb += bare0[q]; ss += beach0[q]; sc += camp0[q];
+        for (let e = 0; e < extra.length; e++) se[e] += extra0[e][q];
       }
-      if (cnt) { wet[k] = sw / cnt; bare[k] = sb / cnt; beach[k] = ss / cnt; camp[k] = sc / cnt; }
+      if (cnt) { wet[k] = sw / cnt; bare[k] = sb / cnt; beach[k] = ss / cnt; camp[k] = sc / cnt; for (let e = 0; e < extra.length; e++) extra[e][k] = se[e] / cnt; }
     }
+  }
+
+  // d2 land: what the survey says each land cell is, over what the noise fields made of it (a cell the survey missed,
+  // ground kind 0, keeps them). New per-cell arrays, read like the others (bilinear at, by local index):
+  //   meadow   0..1, open sedge and grass: the marsh and the wet meadow, half the open bog; on dry ground the open types
+  //            of the forest map (a recent burn's grass, a clearing, a shrub field)
+  //   sphag    0..1, the bog's sphagnum floor (terrain.js: ochre and rust over the moss)
+  //   boulder  0..1, how bouldery: the LiDAR's rough gentle ground, the boulder fields, the soil survey's stony ground
+  //   tintR/G/B  the bedrock unit's tint of the rock (land.js ROCK_TINT), 1 where unmapped
+  // and over today's: wet (the wetland's own wetness; dry ground held under its kind's `dry`, so no bog where the survey
+  // found none), bare (the mapped outcrops; the ledges; none in a wetland), beach (the mapped sand) and soil. In
+  // Ontario, where nothing was surveyed, the forest map's open kinds (bog, fen, shrub swamp, marsh, wet meadow) stand
+  // for the ground kinds; everywhere else there the noise's. Returns the new arrays, for the shore's water cells.
+  landData(L, at) {
+    const n = this.n, N = n * n, grid = this.grid, { sd, wet, bare, beach, soil, talus, camp, tpi, S } = this;
+    const A = () => new Float32Array(N);
+    const meadow = A(), sphag = A(), boulder = A(), tintR = A(), tintG = A(), tintB = A(), kind = new Uint8Array(N);
+    // (kind: the ground kind each land cell is drawn as, Ontario's from the forest map's open kinds; 0 = the noise's)
+    Object.assign(this, { meadow, sphag, boulder, tintR, tintG, tintB, kind });
+    const OPEN_KIND = { 13: KIND.openBog, 14: KIND.wetMeadow, 15: KIND.shrubSwamp, 16: KIND.marsh, 17: KIND.wetMeadow };
+    for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
+      const k = lj * n + li, d = sd[k];
+      const t = ROCK_TINT[L.rock ? Math.min(ROCK_TINT.length - 1, L.rock[k]) : 0];
+      tintR[k] = t[0]; tintG[k] = t[1]; tintB[k] = t[2];
+      if (d < 0) continue;
+      const x = grid.cellX(grid.i0 + li), z = grid.cellZ(grid.j0 + lj), ft = L.forest ? L.forest[k] : 0;
+      let kd = L.ground ? L.ground[k] : 0;
+      if (!kd && OPEN_KIND[ft]) kd = OPEN_KIND[ft];
+      kind[k] = kd;
+      const K = KIND_LAND[kd];
+      // boulders: the LiDAR's rough gentle ground (25–60 cm), a boulder field, the soil survey's stone cover (to 25 %)
+      let b = 0;
+      if (L.cliff && L.cliff[k] > 1 && cliffClass(L.cliff[k]) === FORM.boulder) b = smoothstep(6, 15, cliffStrength(L.cliff[k]));
+      if (kd === KIND.boulder) b = Math.max(b, 0.8);
+      if (L.stone && L.stone[k] < 255) { const c = 100 * (L.stone[k] / 254) ** 2; b = Math.max(b, 0.5 * smoothstep(3, 25, c)); }
+      boulder[k] = b;
+      if (!K) { meadow[k] = meadowAt(x, z, d, wet[k]); continue; }
+      // wet: the wetland's own (a little uneven), or the land's lie held under the kind's dry cap
+      if (K.wet >= 0) wet[k] = clamp(K.wet * (0.92 + 0.16 * fbm(x * 0.02 + 5, z * 0.02, 2, 251)), 0, 1);
+      else wet[k] = Math.min(wet[k], K.dry);
+      let m = K.meadow;
+      if (kd === KIND.upland && OPEN_FOREST[ft]) m = Math.max(m, OPEN_FOREST[ft].meadow);
+      meadow[k] = m;
+      sphag[k] = Math.max(K.sphag, ft === 13 ? 0.8 : ft === 14 ? 0.4 : 0);
+      // bare rock: the mapped outcrop (D-02) all but bare; a ledge the LiDAR found; none in a wetland or on sand
+      let br = bare[k];
+      if (kd === KIND.rock) br = Math.max(br, 0.78 + 0.2 * smoothstep(0.3, 0.7, fbm(x * 0.05, z * 0.05, 2, 253)));
+      else if (K.wet >= 0 || kd === KIND.sand) br = Math.max(camp[k], talus[k] * 0.5);
+      if (this.ledge && this.ledge[k] && K.wet < 0) br = Math.max(br, 0.25 + 0.4 * this.ledge[k]);
+      bare[k] = br;
+      if (kd === KIND.sand && d < 30) beach[k] = Math.max(beach[k], 1 - smoothstep(18, 30, d));
+      // the soil, as today's from the new wet and bare
+      const ridge = smoothstep(0.6, 3.2, tpi[k]), hollow = smoothstep(0.4, 2.6, -tpi[k]);
+      soil[k] = clamp(0.6 + 0.3 * hollow + 0.2 * wet[k] - 0.45 * ridge - 0.9 * smoothstep(0.2, 0.75, S[k]) - bare[k], 0, 1);
+    }
+    return [meadow, sphag, boulder, tintR, tintG, tintB];
   }
 
   // local cell index of world (x, z), clamped to the tile's extent

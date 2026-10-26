@@ -32,6 +32,7 @@ import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
 import { burnAt, calmAt, rockAt, meadowAt } from './fields.js';
 import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND, CELL_SPLAT, bedPre } from './terrain-build.js';
 import { CLIFF, CLIFF_MODULE } from './site.js';
+import { KIND, KIND_LAND, FOREST, SWAMP_SPECIES, ROCK, STYLE_FAMILY, STYLE_ROCKS, UNIT_TAG, cliffStrength } from './land.js'; // d2 land
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
 // The understory, the deadfall and the scree are small and many: they are binned in finer regions so they can
@@ -39,15 +40,16 @@ export const REGION = 640;      // metres: instances are binned into regions for
 export const SMALL_REGION = 320;
 const SMALL = new Set([10, 11, 12, 13, 14, 15, 20]);
 // index order matches vegetation.js SPECIES (the bluff pass appended 17 on: the indices before are unchanged)
-export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9, hazel: 10, alder: 11, sapling: 12, fern: 13, log: 14, stump: 15, outcrop: 16, tamarack: 17, aspen: 18, blackSpruce: 19, talus: 20, cliff: 21 };
+// (d2 land appended the black ash, 22: the hardwood swamp's tree, a guest in the birch's bins)
+export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9, hazel: 10, alder: 11, sapling: 12, fern: 13, log: 14, stump: 15, outcrop: 16, tamarack: 17, aspen: 18, blackSpruce: 19, talus: 20, cliff: 21, ash: 22 };
 const SCALE = [[0.85, 1.3], [0.75, 1.2], [0.75, 1.15], [0.7, 1.15], [0.75, 1.2], [0.8, 1.2], [0.4, 2.2], [0.7, 1.5], [0.85, 1.25], [0.7, 1.1],
-  [0.7, 1.3], [0.75, 1.35], [0.6, 1.4], [0.6, 1.3], [0.8, 1.35], [0.75, 1.3], [2.6, 5.0], [0.75, 1.15], [0.75, 1.2], [0.7, 1.15], [0.15, 0.6], [1, 1]];
-const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  [0.7, 1.3], [0.75, 1.35], [0.6, 1.4], [0.6, 1.3], [0.8, 1.35], [0.75, 1.3], [2.6, 5.0], [0.75, 1.15], [0.75, 1.2], [0.7, 1.15], [0.15, 0.6], [1, 1], [0.8, 1.2]];
+const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 // How many variant groups a region's bin of each species is split into (makeVegetationMeshes draws each
 // group near the camera with its own geometry variant): three for the trees and the boulders so a stand
 // shows several trees of a kind, fewer for the small stuff, whose variety is in its scale and yaw and whose
 // draw calls would otherwise add up. GROUP_SHARE: the cumulative share of the instances each group takes.
-export const GROUPS = [3, 3, 3, 3, 3, 3, 3, 1, 3, 3, 2, 2, 2, 1, 2, 1, 1, 2, 2, 2, 2, 3];
+export const GROUPS = [3, 3, 3, 3, 3, 3, 3, 1, 3, 3, 2, 2, 2, 1, 2, 1, 1, 2, 2, 2, 2, 3, 2];
 const GROUP_SHARE = { 1: [1], 2: [0.6, 1], 3: [0.45, 0.8, 1] };
 // Guests: a species that is drawn in another's bins, in variant groups of its own after the host's (the old
 // white pines in the white pine's, aspen in the birch's, black spruce in the spruce's). A bin is one draw call
@@ -56,7 +58,8 @@ const GROUP_SHARE = { 1: [1], 2: [0.6, 1], 3: [0.45, 0.8, 1] };
 // guest's after them (SPECIES guest), the guest's made the host's height. [host, first group, the guest's
 // height over the host's]: an instance's scale carries that, so far off the host's shape stands at the
 // guest's height.
-export const GUEST = { 8: [0, 3, 20 / 16], 18: [3, 3, 13 / 10.5], 19: [1, 3, 11 / 12.5] };
+// (d2 land: the black ash after the aspen in the birch's, groups 5 and 6; vegetation.js SPECIES birch guests)
+export const GUEST = { 8: [0, 3, 20 / 16], 18: [3, 3, 13 / 10.5], 19: [1, 3, 11 / 12.5], 22: [3, 5, 15 / 10.5] };
 // how many variant groups a bin of each species holds: its own and its guests'
 export const BIN_GROUPS = GROUPS.map((n, sp) => n + Object.entries(GUEST).filter(([, [h]]) => h === sp).reduce((s, [g]) => s + GROUPS[g], 0));
 // Floats per instance: x, y, z (relative to the tile corner), yaw, scale, tint, squash; the rocks add the
@@ -216,9 +219,11 @@ function habitat(site, k, sd) {
 }
 // The tree species and their weights in a cell (cumulative over TREES). The boreal base is spruce and fir with
 // pine and birch through it; the habitat moves it (see the header).
-const TREES = [0, 1, 2, 3, 4, 5, 8, 9, 17, 18, 19];
+// (d2 land: the black ash appended, its habitat weight 0 unless the data asks for it: a cell drawn from the noise picks as before)
+const TREES = [0, 1, 2, 3, 4, 5, 8, 9, 17, 18, 19, 22];
+const TREE_NAMES = TREES.map((sp) => Object.keys(SPECIES).find((k) => SPECIES[k] === sp));
 const _w = new Float64Array(TREES.length);
-function treeWeights(h, stand, aspens, thick) {
+function treeWeights(h, stand, aspens, thick, ash = false) {
   const w = _w, dry = h.dry, wet = h.wet, up = (k) => Math.max(0, 1 - k * wet); // the upland trees give way on wet ground
   // (the shore: cedar, balsam fir and spruce make the dark wall at the water, birch and the pines through it, an old
   // white pine standing over a point)
@@ -233,8 +238,34 @@ function treeWeights(h, stand, aspens, thick) {
   w[8] = 2.0 * wet * wet * (0.4 + 0.6 * h.bog);                                                                      // tamarack
   w[9] = (0.05 + 1.3 * aspens + 0.35 * h.steep * (0.5 + 0.5 * Math.max(0, h.sun)) + 0.3 * h.scree) * up(0.8);          // quaking aspen
   w[10] = 0.01 + 2.2 * smoothstep(0.25, 0.8, wet) * (1 - 0.3 * h.shore);                                            // black spruce
+  w[11] = ash ? (0.15 + 0.85 * smoothstep(0.3, 0.75, wet) * (1 - 0.7 * h.bog)) * (0.6 + 0.4 * h.soil) : 0;              // black ash (d2 land)
   for (let i = 1; i < w.length; i++) w[i] += w[i - 1];
   return w;
+}
+// d2 land: the forest map's species mix for the cell (land.js FOREST species, or the wetland's own) laid over the habitat's
+// weights: each species' share is its prior times how well the cell suits it against the others (the habitat's own share
+// over an even one, to the power 0.6, so a ridge still favours the pines within a spruce-fir stand), and a little of the
+// habitat's own mix leaks through (the odd dead stem, an old pine on a point). w: treeWeights's cumulative weights, rewritten.
+function priorWeights(w, prior) {
+  const n = w.length;
+  let prev = 0, sum = 0;
+  for (let i = 0; i < n; i++) { const v = w[i] - prev; prev = w[i]; w[i] = v; sum += v; }
+  if (!(sum > 0)) sum = 1;
+  let acc = 0;
+  for (let i = 0; i < n; i++) {
+    const hn = w[i] / sum, p = prior[TREE_NAMES[i]] || 0;
+    acc += p * (hn * n) ** 0.6 + 0.12 * hn;
+    w[i] = acc;
+  }
+  return w;
+}
+// d2 land: how tall the woods stand (LANDFIRE's canopy height, m) as a scale on a tree's own: the trees are drawn at a
+// mature stand's height (about 16 m), so a young stand of 8 m stands at about 0.6 of it; the jack pine, drawn as the
+// short crooked pine of the bare rock (6 m), grows to the stand's height off the rock
+function canopyScale(sp, m, onRock) {
+  if (sp === SPECIES.snag || !(m > 0)) return 1;
+  if (sp === SPECIES.jackPine && !onRock) return clamp(m / 9, 0.6, 1.8);
+  return clamp((m / 16) ** 0.8, 0.55, 1.15);
 }
 function pickTree(w, r) {
   const t = r * w[w.length - 1];
@@ -316,7 +347,12 @@ export function seatRock(ground, foot, x, z, scale, squash, tall, yaw, az, tilt,
 // thrown on a wall (the cliffs carry their own blocks). Where a feature stands and what it is come from rr;
 // what it is made of from a stream of its own. canopy: how closed the woods are overhead (0..1).
 // put(kind, x, z, scale, yaw, az, tilt, tint, squash, tall) places one rock (seated on the ground).
-function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy, face, open = 0 }, blocked, put) {
+// d2 land: and from the data (all 0 / null on a v3 tile, where nothing changes): boulder (site.js boulder: the LiDAR's
+// rough gentle ground, a boulder field) adds groups, mostly erratics and shards, and on the roughest ground scree blocks
+// among them (scree, the cheap species); ledge (site.js ledge: steep broken bedrock) adds flats and shards lying along
+// the slope where it is too steep for today's; style (the bedrock's way of breaking, land.js STYLE_ROCKS) leans the odds
+// of the three shapes: the slates to shards and flats, the anorthosite to rounded erratics.
+function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy, face, open = 0, boulder = 0, ledge = 0, style = null }, blocked, put, scree = null) {
   const shore = sd > -3 && sd < 10;
   const gentle = 1 - smoothstep(0.32, 0.5, slope); // 18–27°: from here up a slope sheds them
   let e = 0;
@@ -324,15 +360,24 @@ function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy, f
   if (shore) e += (0.06 + 0.12 * smoothstep(0.12, 0.3, slope) + 0.14 * rock + 0.14 * smoothstep(0.42, 0.66, open)) * gentle;
   if (bare) e += (0.2 + 0.16 * rock) * gentle;
   else if (sd >= 10) e += (0.012 + 0.03 * smoothstep(0.15, 0.32, slope) + 0.03 * smoothstep(0.25, 0.5, rock)) * gentle;
+  if (boulder > 0 && sd > -2) e += 0.55 * boulder * boulder * gentle;
+  if (ledge > 0 && sd > 0) e += 0.32 * ledge;
   e *= 1 - face;
   const n = Math.floor(e) + (rr() < e - Math.floor(e) ? 1 : 0);
-  const K = ROCK_KIND;
+  const K = ROCK_KIND, odds = style ? STYLE_ROCKS[style] : null;
   for (let f = 0; f < n; f++) {
     const fx = cx + (rr() - 0.5) * cell, fz = cz + (rr() - 0.5) * cell;
-    if (grid.shoreAt(fx, fz) < -2.5 || blocked(fx, fz, 2.5) || drawnSlope(grid, fx, fz, 2.5) > 0.6) continue;
+    if (grid.shoreAt(fx, fz) < -2.5 || blocked(fx, fz, 2.5) || drawnSlope(grid, fx, fz, 2.5) > (ledge > 0 ? 1.0 : 0.6)) continue;
     const r = rr(), flat = slope < 0.18;
     let type;
-    if (bare) type = flat ? (r < 0.5 ? 'flats' : r < 0.8 ? 'slanted' : 'erratic') : (r < 0.6 ? 'slanted' : r < 0.85 ? 'flats' : 'erratic');
+    if (odds) {
+      // the shapes' odds as below, then leaned by the bedrock (a ledge is flats and shards; a boulder field erratics)
+      const base = bare ? (flat ? [0.3, 0.5, 0.2] : [0.6, 0.25, 0.15]) : shore ? (flat ? [0.25, 0.4, 0.35] : [0.5, 0.25, 0.25]) : [slope > 0.15 ? 0.2 : 0, slope > 0.15 ? 0 : 0.2, 0.8];
+      const bw = boulder * (1 - ledge), lw = ledge;
+      const ws = [base[0] * odds[0] * (1 + lw), base[1] * odds[1] * (1 + 2 * lw), base[2] * odds[2] * (1 + 2 * bw) * (1 - 0.7 * lw)];
+      const t = r * (ws[0] + ws[1] + ws[2]);
+      type = t < ws[0] ? 'slanted' : t < ws[0] + ws[1] ? 'flats' : 'erratic';
+    } else if (bare) type = flat ? (r < 0.5 ? 'flats' : r < 0.8 ? 'slanted' : 'erratic') : (r < 0.6 ? 'slanted' : r < 0.85 ? 'flats' : 'erratic');
     else if (shore) type = flat ? (r < 0.4 ? 'flats' : r < 0.75 ? 'erratic' : 'slanted') : (r < 0.5 ? 'slanted' : r < 0.75 ? 'flats' : 'erratic');
     else type = r < 0.8 ? 'erratic' : slope > 0.15 ? 'slanted' : 'flats';
     const fr = mulberry32((rr() * 4294967296) >>> 0);
@@ -392,6 +437,15 @@ function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy, f
       }
     }
   }
+  // d2 land: on the roughest boulder ground, stones between the boulders (the cheap scree blocks: no shadow, no collision),
+  // in loose spreads of a few; after the features, so the stream they drew is as it was
+  if (scree && boulder > 0.35 && sd > 0.5 && slope < 0.5) {
+    for (let c = Math.floor(boulder * 6 * (0.5 + rr())); c > 0; c--) {
+      const x = cx + (rr() - 0.5) * cell, z = cz + (rr() - 0.5) * cell, s = 0.25 + rr() ** 1.4 * 0.55;
+      if (grid.shoreAt(x, z) < 0.3 || blocked(x, z, 0.6)) continue;
+      scree(x, z, s, rr() * Math.PI * 2, rr() * Math.PI * 2, rr() * 0.4, (0.86 + rr() * 0.2) * (1 - 0.3 * canopy), 0.8 + rr() * 0.4, 0.7 + rr() * 0.5, rr() < 0.5 ? 0 : 1);
+    }
+  }
 }
 
 // ---- the cliffs -------------------------------------------------------------------------------------------
@@ -407,15 +461,24 @@ function cliffFeatures(grid, site, k, i, j, rng, ctx) {
   const ux = site.ux[k], uz = site.uz[k];
   if (!ux && !uz) return;
   const cx = grid.cellX(i), cz = grid.cellZ(j), ground = ctx.ground;
+  // d2 land: a face the LiDAR found here (its relief in the cell, m), else 0. The 10 m mesh draws a real face as a ramp
+  // of 20–40°, so the step is read more gently there (its steepest metre from 17°, its ends where it eases under 18°)
+  // and held to about the face's own height, so a long steep hillside is not all made one wall.
+  const fb = site.land && site.land.cliff && site.land.cliff[k] > 1 ? cliffStrength(site.land.cliff[k]) : 0;
   // the profile along the fall line, a metre apart
   const T0 = -16, NT = 43, h = new Float32Array(NT);
   for (let t = 0; t < NT; t++) h[t] = ground(cx + ux * (T0 + t), cz + uz * (T0 + t));
   let best = -1, bs = 0;
   for (let t = 0; t < NT - 1; t++) { const s = h[t + 1] - h[t]; if (s > bs) { bs = s; best = t; } }
-  if (best < 0 || bs < CLIFF.steep[0]) return;
+  if (best < 0 || bs < (fb ? 0.3 : CLIFF.steep[0])) return;
   let foot = best, top = best + 1;
-  while (foot > 0 && h[foot] - h[foot - 1] >= 0.7) foot--;
-  while (top < NT - 1 && h[top + 1] - h[top] >= 0.7) top++;
+  const ease = fb ? 0.33 : 0.7;
+  while (foot > 0 && h[foot] - h[foot - 1] >= ease) foot--;
+  while (top < NT - 1 && h[top + 1] - h[top] >= ease) top++;
+  if (fb) {
+    const want = Math.max(3.6, fb * 1.25 + 1.5);
+    while (top - foot > 1 && h[top] - h[foot] > want) { if (h[top] - h[best + 1] > h[best] - h[foot]) top--; else foot++; }
+  }
   const tStar = T0 + best + 0.5, px = cx + ux * tStar, pz = cz + uz * tStar;
   // who claims this step
   const pi = grid.cellI(px), pj = grid.cellJ(pz);
@@ -560,6 +623,10 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
   const count = (rng, e) => Math.floor(e) + (rng() < e - Math.floor(e) ? 1 : 0);
   // one instance into its (region, species) bin and variant group; a rock carries the azimuth and the angle
   // of its tilt. For the boulder species `group` is the rock's family (ROCK_KIND), put in the group drawing it.
+  // d2 land: the bedrock unit under the cell being placed (land.js ROCK), 0 where unmapped or on a v3 tile: the rocks
+  // carry it in their tint (UNIT_TAG), and a cliff bin counts its modules' families (the most it holds picks its look)
+  const L = site && site.land;
+  let unitHere = 0;
   const emit = (sp, group, x, y, z, yaw, scale, tint, squash, az = 0, tilt = 0, tall = 1) => {
     if (GUEST[sp]) { group += GUEST[sp][1]; scale *= GUEST[sp][2]; sp = GUEST[sp][0]; }
     const size = SMALL.has(sp) ? SMALL_REGION : REGION;
@@ -567,6 +634,10 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
     const key = (rx * 4096 + rz) * 32 + sp;
     let b = bins.get(key);
     if (!b) { b = { rx, rz, sp, size, parts: Array.from({ length: BIN_GROUPS[sp] }, () => []) }; bins.set(key, b); }
+    if (unitHere && ROCKS.has(sp)) {
+      tint += UNIT_TAG * unitHere;
+      if (sp === SPECIES.cliff) { b.fam = b.fam || [0, 0, 0, 0]; b.fam[STYLE_FAMILY[ROCK[unitHere].style]]++; }
+    }
     const part = b.parts[sp === SPECIES.boulder ? rockGroup(rx, rz, group) : group];
     part.push(x - originX, y, z - originZ, yaw, scale, tint, squash);
     if (TILTED(sp)) part.push(az, tilt, tall);
@@ -609,6 +680,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
     for (let i = i0 - 2; i < i0 + n + 2; i++) {
       const k0 = grid.local(i, j);
       const sd = grid.sdCell(i, j);
+      unitHere = L && L.rock ? L.rock[k0] : 0; // d2 land
       // the lake bed's stones and logs (bedFeatures), core cells only, a stream of their own
       if (sd < 0 && i >= i0 && i < i0 + n && j >= j0 && j < j0 + n) {
         const bx = grid.cellX(i), bz = grid.cellZ(j);
@@ -635,8 +707,33 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const face = Math.max(smoothstep(0.25, 0.5, cliff), smoothstep(0.3, 0.6, talus)); // a cliff or its scree
       const soil = 1 - smoothstep(0.35, 0.6, Math.max(bareness, face));
       const h = habitat(site, k, sdH);
-      // the meadows (fens and beaver meadows on the wet flats, the odd dry opening inland: fields.js meadowAt)
-      const clearing = meadowAt(cx, cz, sdH, h.wet);
+      // the meadows (fens and beaver meadows on the wet flats, the odd dry opening inland: fields.js meadowAt; d2 land:
+      // the survey's marsh, wet meadow and open ground, site.js meadow)
+      const clearing = L ? site.meadow[k] : meadowAt(cx, cz, sdH, h.wet);
+      // d2 land: what the survey says the cell is (land.js; none of it on a v3 tile): how much of the woods its ground
+      // kind and forest type keep (dTrees: the type's openness, its canopy cover against the commonest 52 %), how tall
+      // they stand (canopyM), the species mix (prior), and the brush in place of trees (the bog's leatherleaf and
+      // Labrador tea, low; the shrub swamp's alder and willow; a shrub field's hazel; the ostrich fern of a black ash swamp)
+      let kd = 0, ft = 0, canopyM = 0, treeType = false, dTrees = 1, prior = null, lowShrub = false;
+      let xShrub = 0, xAlder = 0, xHazel = 0, xSapling = 0, kFern = 1, kHazel = 1;
+      if (L) {
+        kd = site.kind[k]; ft = L.forest ? L.forest[k] : 0;
+        const F = FOREST[ft], K = KIND_LAND[kd], wetland = kd >= KIND.openBog && kd <= KIND.aquaticBed;
+        treeType = !!F && F.open === 1;
+        canopyM = treeType && L.canopy ? L.canopy[k] / 10 : 0;
+        dTrees = (K ? K.trees : 1) * (F && F.open >= 0 && !wetland ? F.open : 1);
+        if (treeType && L.cover && L.cover[k]) dTrees *= clamp(L.cover[k] / 52, 0.35, 1.3) ** 0.9;
+        prior = SWAMP_SPECIES[kd] || (F && F.species) || null;
+        switch (kd) {
+          case KIND.openBog: xShrub = 1.3; kFern = 0; kHazel = 0; lowShrub = true; break;
+          case KIND.coniferBog: xShrub = 0.5; kFern = 0.35; kHazel = 0; lowShrub = true; break;
+          case KIND.shrubSwamp: xAlder = 2.4; xShrub = 1.2; kFern = 0.5; kHazel = 0.2; break;
+          case KIND.marsh: case KIND.wetMeadow: case KIND.water: xShrub = 0.18; xAlder = 0.12; kFern = 0; kHazel = 0; break;
+          case KIND.hardwoodSwamp: xAlder = 0.8; kFern = 1.7; kHazel = 0.3; break;
+          default:
+            if (ft === 18) { xHazel = 1.5; xShrub = 0.5; xSapling = 0.5; } else if (ft === 19 || ft === 20 || ft === 22) { xShrub = 0.25; xSapling = 0.2; }
+        }
+      }
       const segs = mask.get(k0);
       // trails run through thick woods: more trees and brush right beside them
       const trailSide = segs && segs.some((g) => g[5] < 5) ? 2.6 : 1;
@@ -650,21 +747,21 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       // the forest: thinner on the steep, gone from a cliff's face, sparse on its scree and on bare rock, open
       // in the wettest bog
       const e = Math.min(2.8, treeDensity(sdH, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - burn * 0.5) * (1 - smoothstep(0.3, 0.6, bareness) * 0.88)
-        * (1 - 0.95 * smoothstep(0.25, 0.6, cliff)) * (1 - 0.7 * smoothstep(0.2, 0.7, talus)) * (1 - 0.35 * h.bog) * clump);
+        * (1 - 0.95 * smoothstep(0.25, 0.6, cliff)) * (1 - 0.7 * smoothstep(0.2, 0.7, talus)) * (1 - 0.35 * h.bog) * clump * dTrees);
       const trees = count(rng, e);
       // shoreline shrubs (dogwood, willow): thick at the waterline, a fringe back into the woods
       const shoreRow = 1 - smoothstep(3, 10, sdH);
-      const eShrub = ((sdH < 35 ? (0.45 + 1.25 * shoreRow - smoothstep(10, 35, sdH) * 0.25) * (1 - clearing * 0.5) * trailSide : (trailSide > 1 ? 0.5 : 0)) + burn * 0.5) * (1 - bareness * 0.8) * (1 - face);
+      const eShrub = ((sdH < 35 ? (0.45 + 1.25 * shoreRow - smoothstep(10, 35, sdH) * 0.25) * (1 - clearing * 0.5) * trailSide : (trailSide > 1 ? 0.5 : 0)) + burn * 0.5 + xShrub) * (1 - bareness * 0.8) * (1 - face);
       const shrubs = count(rng, eShrub);
       // the understory: hazel at the edges of the woods and in the open stands, off the wet ground; alder thick down
       // by the water, on the wet ground and round the bogs; young fir coming up in the gaps of the moist woods, at the
       // forest's edge along the water, in the glades and the burn; bracken in drifts under a moderate canopy; all of
       // it sparse under a heavy canopy and none of it on rock, a cliff, its scree or in a meadow
       const heavy = smoothstep(1.1, 2.0, e), open = 1 - heavy;
-      const eHazel = (1.6 * edge + 0.18 * open * smoothstep(0.1, 0.4, e)) * (1 - 0.8 * h.wet) * soil * (1 - burn) * (1 - clearing * 0.7) * (sdH > 3 ? trailSide : 0);
-      const eAlder = (2.1 * (1 - smoothstep(4, 16, sdH)) + 0.9 * h.wet * open + 0.6 * h.bog) * soil * (1 - burn * 0.5) * (1 - clearing);
-      const eSapling = (0.08 * open * smoothstep(0.1, 0.4, e) + 0.6 * (1 - smoothstep(4, 14, sdH)) + 0.5 * edge + 0.25 * burn + 0.25 * glade * (1 - clearing)) * (0.8 + 0.4 * h.moist) * (1 - 0.5 * h.wet) * soil;
-      const eFern = (1.6 * smoothstep(0.5, 0.64, fernAt(cx, cz)) * smoothstep(0.3, 0.9, e) * (1 - heavy * 0.6) + 0.35 * open * smoothstep(0.3, 0.9, e) * (1 - h.dry)) * (1 - 0.6 * h.wet) * soil * (1 - burn) * (1 - clearing);
+      const eHazel = ((1.6 * edge + 0.18 * open * smoothstep(0.1, 0.4, e)) * (1 - 0.8 * h.wet) * (1 - clearing * 0.7) * kHazel + xHazel) * soil * (1 - burn) * (sdH > 3 ? trailSide : 0);
+      const eAlder = ((2.1 * (1 - smoothstep(4, 16, sdH)) + 0.9 * h.wet * open + 0.6 * h.bog) * (1 - clearing) + xAlder) * soil * (1 - burn * 0.5);
+      const eSapling = (0.08 * open * smoothstep(0.1, 0.4, e) + 0.6 * (1 - smoothstep(4, 14, sdH)) + 0.5 * edge + 0.25 * burn + 0.25 * glade * (1 - clearing) + xSapling) * (0.8 + 0.4 * h.moist) * (1 - 0.5 * h.wet) * soil;
+      const eFern = (1.6 * smoothstep(0.5, 0.64, fernAt(cx, cz)) * smoothstep(0.3, 0.9, e) * (1 - heavy * 0.6) + 0.35 * open * smoothstep(0.3, 0.9, e) * (1 - h.dry)) * (1 - 0.6 * h.wet) * soil * (1 - burn) * (1 - clearing) * kFern;
       // a sand beach (site.js beach) keeps its first metres open, a campsite its shelf down to the water (site.js camp)
       const beachy = sd < 12 && site.beach[k] > 0.05, camping = site.camp[k] > 0.02 || site.camp[k0] > 0.02;
       // deadfall: a few trees in a hundred lie on the floor or stand as stumps; granite slabs where the
@@ -715,7 +812,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
             if (bare) sp = rockTree(r);
             else if (burn > 0.5) sp = burnTree(r);
             else if (edge && r < 0.38) sp = r < 0.22 ? SPECIES.birch : SPECIES.aspen; // the edge species, in the light along the path
-            else sp = pickTree(w || (w = treeWeights(h, stand, aspens, thick)), r);
+            else sp = pickTree(w || (w = prior ? priorWeights(treeWeights(h, stand, aspens, thick, !!prior.ash), prior) : treeWeights(h, stand, aspens, thick)), r);
             shadeCount[k0] += 1;
           } else if (kind === -2) {
             sp = youngTree(rng(), h);
@@ -728,6 +825,8 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           if (isTree && bare && sp !== SPECIES.jackPine) scale *= 0.7;                 // stunted on the rock
           if (isTree && h.bog > 0.3 && (sp === SPECIES.blackSpruce || sp === SPECIES.tamarack)) scale *= 1 - 0.3 * h.bog; // the muskeg's runts
           if (isTree && s > 600) scale *= 1.15;
+          if (kind === -1 && canopyM) scale *= canopyScale(sp, canopyM, bare); // d2 land: as tall as the stand
+          if (isShrub && lowShrub) scale *= 0.45 + rng() * 0.15;           // d2 land: the bog's knee-high brush
           if (kind === 12 && burn > 0.5) scale *= 0.8;
           let yaw = rng() * Math.PI * 2;
           const tint = 0.92 + rng() * 0.16, squash = isRock || kind >= 14 ? 1 : 0.9 + rng() * 0.2;
@@ -781,7 +880,9 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
         }
       }
       if (core) {
-        rockFeatures(grid, mulberry32((hash2(i, j, seed + 101) * 4294967296) >>> 0), { cx, cz, cell, sd, slope, rock: bareness, bare, canopy: smoothstep(0.5, 2.0, e), face, open: site.open[k] }, blocked, emitRock);
+        // (d2 land: the boulders, the ledges and the bedrock's way of breaking, where the data has them)
+        const dataRocks = L ? { boulder: site.boulder[k], ledge: site.ledge ? site.ledge[k] : 0, style: unitHere ? ROCK[unitHere].style : null } : null;
+        rockFeatures(grid, mulberry32((hash2(i, j, seed + 101) * 4294967296) >>> 0), { cx, cz, cell, sd, slope, rock: bareness, bare, canopy: smoothstep(0.5, 2.0, e), face, open: site.open[k], ...dataRocks }, blocked, emitRock, L ? emitScree : null);
         if (site.cliff[k0] >= CLIFF.band * 0.66 && sd > -3) cliffFeatures(grid, site, k0, i, j, mulberry32((hash2(i, j, seed + 211) * 4294967296) >>> 0), cliffCtx);
       }
     }
@@ -804,7 +905,9 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
     const items = new Float32Array(b.parts.reduce((n, a) => n + a.length, 0));
     let o = 0;
     for (const a of b.parts) { items.set(a, o); o += a.length; }
-    out.push({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, stride, groups: b.parts.map((a) => a.length / stride), items });
+    const bin = { rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, stride, groups: b.parts.map((a) => a.length / stride), items };
+    if (b.fam) bin.style = b.fam.indexOf(Math.max(...b.fam)); // d2 land: the cliff family it draws (vegetation.js)
+    out.push(bin);
   }
   return { bins: out, shade, total };
 }
@@ -978,7 +1081,10 @@ export function coverField(grid, i0, j0, n, shade, exclusions, site = null) {
       c = Math.max(c, (0.15 + 0.6 * smoothstep(0.3, 0.7, wet)) * (1 - smoothstep(5, 12, sd)));
       if (lawn[k] && cls !== G.burn) c = Math.max(c, 0.8);
       c *= soil;
-      const gold = Math.max(burn, 0.6 * smoothstep(0.2, 0.5, meadowAt(x, z, sd, wet)) * (1 - smoothstep(0.3, 0.6, wet)));
+      // d2 land: the survey's meadows (site.js meadow), and the bog's sphagnum a low mat under its sedge, not a lawn
+      const land = site && site.land, mdw = land ? site.at(site.meadow, x, z) : meadowAt(x, z, sd, wet);
+      if (land) c *= 1 - 0.55 * site.at(site.sphag, x, z);
+      const gold = Math.max(burn, 0.6 * smoothstep(0.2, 0.5, mdw) * (1 - smoothstep(0.3, 0.6, wet)));
       cover[k * 4] = Math.round(Math.min(1, c) * 255);
       cover[k * 4 + 1] = Math.round(Math.min(1, gold) * 255);
     }
