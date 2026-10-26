@@ -1,6 +1,7 @@
 // The beds: the sounds that always run and only change level. Wind on the open water, needles hissing and
 // leaves rustling in the trees, water slapping the hull and washing on the shore, the faint far wash of an open
-// lake, the frog and cricket choruses, rain when the weather has any, and a campfire's crackle once one is lit. Built once against the engine's shared
+// lake, the frog and cricket choruses, rain when the weather has any, a campfire's crackle once one is lit, and the bugs'
+// whine at your ears when they are out (cons C: bugs.js, through the engine's `bugs`, set by main.js). Built once against the engine's shared
 // noise; update() only moves parameters (throttled to 15 Hz), and the rhythmic ones (slaps, waves, peeps,
 // chirps) are scheduled a fifth of a second ahead on the same persistent gains, so a bed never creates a node.
 import { clamp01, smooth, swell, grains, shaperCurve, setPos, peeperSeason, cricketSeason } from './audio-kit.js';
@@ -86,6 +87,20 @@ export class Beds {
     this.fire = { pan, roar, hiss, crack, pop, t: 0, heat: 0 };
   }
 
+  // cons C: the bugs' whine, built the first time there are any (bugs.js `whine`, read through au.bugs): mosquitoes passing
+  // the ears, each pass a thin high whine (the wingbeat, 480-620 Hz) that swells as it comes in, its pitch falling a
+  // little as it goes by and its side changing; blackflies a lower, quicker buzz close in. Three voices on a soft low-pass.
+  buildWhine() {
+    const { G, F, au } = this, ctx = au.ctx;
+    const bus = G(0, au.bus), lp = F('lowpass', 3200, 0.5); lp.connect(bus);
+    const flies = [0, 1, 2].map(() => {
+      const o = au.mk(ctx.createOscillator()), g = G(0), sp = au.mk(ctx.createStereoPanner());
+      o.type = 'sawtooth'; o.frequency.value = 540; o.connect(g); g.connect(sp); sp.connect(lp); o.start();
+      return { o, g, sp, t: 0 };
+    });
+    this.whine = { bus, lp, flies };
+  }
+
   // rain is built the first time the weather has any (weather.js: its `rain`, through audio.tick's context)
   buildRain() {
     const { G, F, au } = this, ctx = au.ctx, { white, flutter } = au.src;
@@ -155,6 +170,13 @@ export class Beds {
       if (f) au.place(fb.pan, { x: f.x, y: f.y + 0.4, z: f.z });
       lv.fire = heat;
     }
+    // the bugs at your ears (cons C): their whine by how thick they are (a head net keeps them off you, not out of earshot)
+    const bw = au.bugs ? au.bugs() : null, wm = bw ? bw.mosq || 0 : 0, wfl = bw ? bw.fly || 0 : 0;
+    if (wm + wfl > 0.002 || this.whine) {
+      if (!this.whine) this.buildWhine();
+      lv.whine = Math.min(1, wm + 0.6 * wfl) * walls; lv.whineM = wm; lv.whineF = wfl;
+      T(this.whine.bus.gain, 0.035 * Math.sqrt(lv.whine), 0.6);
+    }
     // rain on the water and the ground, drumming on the hull or pattering in the leaves; inside, on the roof overhead
     if (S.rain > 0.001 || this.rain) {
       if (!this.rain) this.buildRain();
@@ -202,6 +224,21 @@ export class Beds {
         if (R() < 0.1) swell(fb.pop.gain, t + 0.01, 0.7 * h * (0.5 + R() * 0.5), 0.002, 0.003, 0.05);
         fb.t += (0.04 + R() * R() * 0.55) / (0.45 + h);
         this.au.count('fire-crackle');
+      }
+    }
+    // the whine: a pass by the ear now and then, more often the thicker they are (cons C)
+    const wh = this.whine, lw = lv.whine || 0;
+    if (wh) for (const c of wh.flies) {
+      if (lw < 0.01) { c.t = now + R() * 0.5; continue; }
+      while (c.t < ahead) {
+        const fly = R() * ((lv.whineM || 0) + (lv.whineF || 0)) < (lv.whineF || 0); // which kind goes by
+        const t = c.t, D = fly ? 0.3 + 0.5 * R() : 0.8 + 1.6 * R(), f = fly ? 230 + 70 * R() : 480 + 140 * R();
+        c.o.frequency.setValueAtTime(f * 1.03, t); c.o.frequency.linearRampToValueAtTime(f * 0.97, t + D);
+        const p0 = (R() < 0.5 ? -1 : 1) * (0.5 + 0.45 * R());
+        c.sp.pan.setValueAtTime(p0, t); c.sp.pan.linearRampToValueAtTime(-p0 * (0.2 + 0.6 * R()), t + D);
+        swell(c.g.gain, t, (0.35 + 0.65 * R()) * (fly ? 0.6 : 1), D * 0.45, 0.05, D * 0.5);
+        c.t = t + D + (0.6 + 3.5 * R()) / (0.3 + lw);
+        this.au.count('bug-whine');
       }
     }
     // peepers: denser as the chorus builds
