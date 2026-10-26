@@ -15,8 +15,8 @@
 // drawn here (a bare bough out from the trunk at that height, on the props' one material) with the rope tied off; the
 // barrel and its rope up to the limb are containers.js's (inventory at.limb).
 //
-// In Adventure, food left on the ground at a camp overnight may be found: a gentle, rare raid (bearNight, from camp.wake)
-// takes a meal or two and says so in the morning. A hung barrel never; a sealed barrel on the ground seldom; Sandbox never.
+// cons A (the consequences pass, 2026-10-25: "a bear at camp if the food isn't hung"): food not hung at night may bring a
+// bear (bear.js); what keeps it is a barrel hung here, hoisted (secured). A hung barrel is never visited; Sandbox never.
 import * as THREE from 'three';
 import { hold } from './hold.js';
 import { inventory as INVENTORY } from './inventory.js';
@@ -363,27 +363,10 @@ export class Hang {
   }
 
   // --- the night ----------------------------------------------------------------------------------------------------
-  // In Adventure, the morning after a night at (x, z): food left on the ground within 60 m (not hung) may have been got
-  // into: a pack or a pile now and then, a sealed barrel seldom; a meal or two goes. The morning's line, or null.
-  bearNight(x, z, rnd = Math.random) {
-    const inv = this.inv, c0 = this.camp;
-    if (!inv || !inv.attached || !c0.adventure) return null;
-    const FOOD = new Set(['meal', 'snack', 'forage', 'fish', 'food']);
-    for (const c of inv.containers) {
-      const k = inv.root(c);
-      if (k.where !== 'ground' || !k.at || Math.hypot(k.at.x - x, k.at.z - z) > 60) continue;
-      const food = c.grid.filter((e) => !e.box && FOOD.has((itemDef(e.id) || {}).kind));
-      if (!food.length) continue;
-      if (rnd() > (BARRELS[c.item] ? 0.05 : 0.12)) continue;
-      const n = Math.min(food.length, 1 + (rnd() < 0.4 ? 1 : 0));
-      const gone = [];
-      for (let i = 0; i < n; i++) { const e = food[i]; const t = inv.take(c.id, e.uid, 1); if (t) gone.push(itemDef(t.id).name.replace(/, hot$/i, '')); } // ("rice and lentils", not "rice and lentils, hot")
-      if (!gone.length) continue;
-      const nm = itemDef(c.item).name, where = BARRELS[c.item] ? 'pried at the blue barrel left on the ground until the lid gave' : c.item === 'pile' ? 'found the food left lying on the ground' : c.item === 'grate' ? 'took the food left on the grate' : `got into the ${/^Duluth/.test(nm) ? nm : lower(nm)} left on the ground`;
-      c0.log('bear', { item: c.item, gone });
-      const tail = inv.containers.some((k) => BARRELS[k.item]) ? 'Hang the food tonight.' : 'A blue barrel hung from a limb keeps it.'; // (fb5 join: no barrel, nothing to hang)
-      return `A bear came through in the night and ${where}: ${gone.length > 1 ? `${lower(gone[0])} and ${lower(gone[1])}` : lower(gone[0])} gone, the wrappers in the brush. ${tail}`;
-    }
-    return null;
+  // cons A (the consequences pass: a bear at camp, bear.js): whether a container (at the root: inventory.root) keeps its
+  // food from a bear tonight. Only hung, hoisted (not tied on at the rope's foot) from a tree's limb: a hung barrel is
+  // never visited. Everything else on the ground, in the canoe, on the grate or in the tent with you is not.
+  secured(k) {
+    return !!(k && k.where === 'hung' && k.at && k.at.up !== false && Number.isFinite(k.at.y) && (!k.at.tree || k.at.y - (k.at.tree.gy ?? k.at.y) >= CLEAR * 0.8));
   }
 }

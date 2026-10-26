@@ -74,6 +74,7 @@ import { kit } from './kit.js'; // content C
 import { uniques } from './uniques.js'; // content C
 import './gear-icons.js'; // content C
 import { attachTaskKinds } from './task-kinds.js'; // content A
+import { bear } from './bear.js'; // cons A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -686,6 +687,18 @@ async function main() {
     const dueB = hints.due.bind(hints);
     hints.due = (id, rec) => (sea.has(id) ? sea.get(id).due(rec) : dueB(id, rec));
   }
+  // cons A: a bear at camp (the consequences pass, the owner, 2026-10-25: "a bear at camp if the food isn't hung … so the
+  // camp routines matter"). bear.js: at night food not hung (hang.js secured) may bring a bear, about 30 % a night times
+  // the lake's bear activity, softened the first night ever; heard first, its eyes in the headlamp if you are up (E Make
+  // noise on the dot drives it off for less), and in the morning the barrel knocked over in the brush or the pack torn
+  // open, a third to a half of what was out gone, never the whole season. The camp asks it at bedtime and at waking; its
+  // frame runs after the camp's, its knocked barrel and torn pack are posed after containers.js; two moments.
+  bear.attach({ camp, inventory, world, tiles, player, day, scene, audio, hud, lamp, outfitter, profile, invView, chase, camera });
+  camp.bear = bear; pointer.register(bear.targets);
+  { const campUpdA = camp.update.bind(camp), poseA = canoe.update; camp.update = (dt) => { campUpdA(dt); bear.update(dt); }; canoe.update = (dt) => { poseA(dt); bear.afterPose(); }; }
+  for (const m of bear.moments()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+  { const dueA = hints.due.bind(hints); hints.due = (id, rec) => bear.due(id, rec, dueA); } // the bear's two, and "Bears: hang…" steps aside the evening after a visit
+  window.__game.bear = bear;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
