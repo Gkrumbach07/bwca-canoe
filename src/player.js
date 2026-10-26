@@ -70,7 +70,7 @@ const SWIM = { speed: 0.8, hustle: 1.2, turn: 1.6 };
 // threshold (times the hull's steadiness, less as water sloshes in it: SEA.tender) the balance builds toward a capsize.
 // cons B: 0.36 to 0.42, so a breeze on a big lake rolls you only broadside and in a real sea; the sea coming aboard
 // (SEA) is now what a long crossing in a blow costs first.
-const CAPSIZE = { threshold: 0.42, build: 1.1, recover: 0.6, beam: 2 }; // (cons B: beam, the broadside's power, 1.2 to 2: quartering the waves holds, as it does)
+const CAPSIZE = { threshold: 0.42, build: 1.1, recover: 0.6, beam: 2, still: 0.7 }; // (cons B: beam, the broadside's power, 1.2 to 2: quartering the waves holds, as it does; still: the risk sitting low with the rod up, where Space cannot brace)
 // cons B (the owner, 2026-10-25: "wind-bound days … strong wind brings spray, so water comes into the hull. It slows you,
 // and past a point it capsizes you. Simple bailing."): the sea coming aboard. On open water in a blow the waves
 // (windHeight: the wind over the fetch, so a lee shore stays calm) throw spray off the bow from `spray` and come over
@@ -490,17 +490,20 @@ export class Player {
     const H = this.waveHeightHere;
     const wd = this.wind ? this.wind.dir : { x: 0, z: 1 };
     const cosRel = f.x * wd.x + f.z * wd.z, broadside = Math.sqrt(Math.max(0, 1 - cosRel * cosRel));
-    const risk = H * Math.pow(broadside, CAPSIZE.beam) * (brace ? 0.4 : 1);
+    const risk = H * Math.pow(broadside, CAPSIZE.beam) * (brace ? 0.4 : rodUp ? CAPSIZE.still : 1); // (cons B: sitting low and still with the rod, steadier)
     const bailing = this.seaAboard(dt, H, cosRel, shelter, fwd !== 0 || turn !== 0, idleHands || brace); // cons B
-    const steady = CAPSIZE.threshold * (this.gear ? this.gear.stability : 1) * (1 - SEA.tender * this.bilge); this.balance = clamp(this.balance + (risk > steady ? (risk - steady) * CAPSIZE.build : -CAPSIZE.recover) * dt, 0, 1); // hubs 2B: a steadier hull takes more sea
+    // cons B: the roll builds in real seconds whatever the 1/2/3 keys (a reflex: at Fastest it had given a quarter of the time)
+    const dtr = dt / (this.timeScale || 1);
+    const steady = CAPSIZE.threshold * (this.gear ? this.gear.stability : 1) * (1 - SEA.tender * this.bilge); this.balance = clamp(this.balance + (risk > steady ? (risk - steady) * CAPSIZE.build : -CAPSIZE.recover) * dtr, 0, 1); // hubs 2B: a steadier hull takes more sea
     // cons B: no capsize while you haul yourself back in, and a few seconds' grace after (no capsize the moment you are in)
-    if (climbing) { this.balance = 0; this._grace = SEA.grace; } else if (this._grace > 0) { this._grace -= dt; this.balance = Math.min(this.balance, 0.6); }
+    if (climbing) { this.balance = 0; this._grace = SEA.grace; } else if (this._grace > 0) { this._grace -= dtr; this.balance = Math.min(this.balance, 0.6); }
     this.extraRoll = this.balance * 0.4 * Math.sin(this.time * 3.1) * (brace ? 0.5 : 1);
     this.placeOnWater(dt);
     this.emitWater(dt);
     if (this.balance >= 1 || this.bilge >= 1) { this.capsize(); return; }
     const warning = this.balance > 0.25;
-    if (warning) this.prompt = brace ? { key: 'Space', text: 'Bracing… · hold it until the swell passes, or turn the bow into the waves' } : { key: 'Space', text: 'Brace · broadside to the swell: turn the bow into the waves, or hold still' };
+    if (warning) this.prompt = rodUp ? { key: 'F', text: 'Rod down · broadside to the swell: then turn the bow into the waves' } // (cons B: Space is the rod's while it is up)
+      : brace ? { key: 'Space', text: 'Bracing… · hold it until the swell passes, or turn the bow into the waves' } : { key: 'Space', text: 'Brace · broadside to the swell: turn the bow into the waves, or hold still' };
     if (climbing) { this.prompt = { key: null, text: 'Climbing back in…' }; return; }
     if (rodUp) return;
     // fb3 A (the owner, 2026-10-25: "when i get off to portage it immediately puts it on my shoulder which is not
