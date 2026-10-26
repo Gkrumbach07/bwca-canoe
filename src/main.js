@@ -19,7 +19,7 @@ import { buildSky, buildClouds, updateClouds } from './sky.js';
 import { makeVegetationKit } from './vegetation.js';
 import { TileManager } from './tiles.js';
 import { buildCanoeRig } from './canoe.js';
-import { Player, Input } from './player.js';
+import { Player, Input, seaMoments } from './player.js'; // cons B: seaMoments
 import { Packs } from './packs.js'; // trip core B
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
@@ -674,6 +674,17 @@ async function main() {
   // jobs (npcs.js, talk-*.js). Four more kinds of visitor. Nothing is said twice in a visit.
   npcs.attach({ trip, fishing, loons, inventory, uniques: () => window.__game.uniques || null });
   { const pm = shop.priceMul.bind(shop); shop.priceMul = (ep) => pm(ep) * npcs.dealAt(ep); } // an arc's discount at its own counter
+  // cons B: wind-bound days (the owner's consequences pass, 2026-10-25). The wind's daily shape is the forecast's own
+  // (weather.js WIND_DAY: a still dawn, a breeze building to the afternoon, some days a blow from dawn to dusk behind a
+  // front); the waves build with the fetch and a lee shore lies calm (water.js LEE); in a blow the sea comes aboard,
+  // the water in the hull slows it and swamped it goes over, Q held still bails, a landing tips it out (player.js SEA,
+  // hullwater.js buildBilge). Two first-time moments: the first whitecaps, the first water aboard.
+  {
+    const sea = new Map(seaMoments(player, day).map((m) => [m.id, m]));
+    for (const m of sea.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const dueB = hints.due.bind(hints);
+    hints.due = (id, rec) => (sea.has(id) ? sea.get(id).due(rec) : dueB(id, rec));
+  }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

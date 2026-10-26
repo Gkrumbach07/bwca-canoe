@@ -66,7 +66,33 @@ const SPACE = { early: 0.8, ahead: 1.0, reach: [0.35, 0.65, 1.0] }; // a Space p
 // within SWIM_CLEAR of the surface (a rock out of the water, a dock).
 const SWIM_DEPTH = 1.15, STAND_DEPTH = 1.0, CARRY_DEPTH = 0.9, SWIM_CLEAR = 0.4;
 const SWIM = { speed: 0.8, hustle: 1.2, turn: 1.6 };
-const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
+// The broadside roll: risk is the wind-wave's height (waves.js windHeight, m) times how broadside the hull lies; past
+// threshold (times the hull's steadiness, less as water sloshes in it: SEA.tender) the balance builds toward a capsize.
+// cons B: 0.36 to 0.42, so a breeze on a big lake rolls you only broadside and in a real sea; the sea coming aboard
+// (SEA) is now what a long crossing in a blow costs first.
+const CAPSIZE = { threshold: 0.42, build: 1.1, recover: 0.6, beam: 2 }; // (cons B: beam, the broadside's power, 1.2 to 2: quartering the waves holds, as it does)
+// cons B (the owner, 2026-10-25: "wind-bound days … strong wind brings spray, so water comes into the hull. It slows you,
+// and past a point it capsizes you. Simple bailing."): the sea coming aboard. On open water in a blow the waves
+// (windHeight: the wind over the fetch, so a lee shore stays calm) throw spray off the bow from `spray` and come over
+// the gunwale from `ship`: `rate` of a swamped hull a game minute per metre over `ship` (to the 1.5 power), by the
+// angle the waves meet the hull (`angle`: degrees off running before them, 0 a following sea, 90 broadside, 180 head
+// on, quartering the best), head on more again at a stroke (`head`, at the cruise), less in a steadier hull (gear
+// stability). The water (this.bilge, 0 dry .. 1 swamped: hullwater.js BILGE, about 260 litres) drags (`slow`), sits
+// the hull lower (`sink`, m) and makes it tender (`tender` of the roll's threshold lost); swamped, over you go. Q held
+// with the paddle still bails `bail` a game minute; any landing tips it out; a hull righted after a capsize keeps
+// `righted`. A head sea drags too (`seaDrag` per metre over 0.25 m). In the lee the canoe feels only part of the wind
+// (water.js LEE: the drift and the weathercocking). Times are game minutes (the pace's one clock).
+const SEA = {
+  spray: 0.26, ship: 0.34, rate: 0.45, head: 0.6,
+  angle: [[0, 0.45], [40, 0.3], [90, 1], [140, 0.3], [180, 0.6]],
+  slow: 0.9, sink: 0.07, tender: 0.45, bail: 0.35, righted: 0.25, seaDrag: 0.6, grace: 4,
+};
+// the share of the sea that comes aboard at a degrees off running before it (SEA.angle, eased between its stops)
+function seaAngle(a) {
+  const T = SEA.angle;
+  for (let i = 1; i < T.length; i++) if (a <= T[i][0]) { const k = smoothstep(T[i - 1][0], T[i][0], a); return T[i - 1][1] + (T[i][1] - T[i - 1][1]) * k; }
+  return T[T.length - 1][1];
+}
 const LANDING_RADIUS = 28;
 const ASHORE_RADIUS = 6;      // metres of water between the hull and a shore within which you can step out
 const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like the trail
@@ -114,6 +140,11 @@ export class Player {
     this.placeCache = { ci: NaN, cj: NaN, id: 0 };
     this.ripples = null; this.water = null; this.audio = null; this.wind = null; // set by main
     this.balance = 0; this.extraRoll = 0; this.swim = null; // capsize meter and the swim after a capsize
+    // cons B: the water in the hull (0 dry .. 1 swamped) and the sea as the hull meets it, for the moments and the tests:
+    // { H (the wind-wave here, m), shipping (of a swamped hull a game minute), spray (0..1), bailing, shelter, swamped }
+    this.bilge = 0;
+    this.sea = { H: 0, shipping: 0, spray: 0, bailing: false, shelter: 1, swamped: false };
+    this._seaDrag = 1; this._sprayAcc = 0; this._bailAcc = 0; this._grace = 0;
     this.bubbleAcc = 0; this.prevStroke = 0; this.level = 0;
     this.teleporting = false;
     this.fishing = null; // set by main: while its rod is up the paddle rests and W / Space / E belong to it
@@ -299,6 +330,7 @@ export class Player {
     this.time += dt;
     this.prompt = null; this.placeName = null; this.campsite = null; this.onTrail = false;
     if (!this.onFoot) { this.foot = null; this.act = null; } // stepping ashore again starts from the ground
+    if (this.onFoot && this.bilge > 0) { this.bilge = 0; this.canoe.state.bilge = 0; } // cons B: a landing tips the water out
     if (this.seat && (this.mode !== 'walk' || this.teleporting)) this.seat = null; // wc C: a seat is left by anything that moves you
     if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); this.groundSpeed = 0; return; }
     const x0 = this.x, z0 = this.z;
@@ -409,7 +441,7 @@ export class Player {
     for (let k = 0; k < nSub; k++) {
       const ph = (phase0 + (k + 0.5) * h * prate) % 1;
       this.speed += thrust * (ph < 0.5 ? Math.sin((ph / 0.5) * Math.PI) : 0) * h;
-      this.speed -= ((this.speed * Math.abs(this.speed) * PADDLE.drag) / cruise + this.speed * PADDLE.lin) / cruise * h;
+      this.speed -= ((this.speed * Math.abs(this.speed) * PADDLE.drag) / cruise + this.speed * PADDLE.lin) / cruise * h * this._seaDrag; // cons B: water aboard, a head sea
     }
     const yawTarget = steer * PADDLE.yaw * (0.55 + 0.45 * clamp(Math.abs(this.speed) / 0.72, 0, 1)) * (this.speed < -0.1 ? -1 : 1);
     this.yawRate += (yawTarget - this.yawRate) * (1 - Math.exp(-dt * 3.5));
@@ -445,8 +477,9 @@ export class Player {
       else if (!w.isReady(nx, nz)) this.prompt = { text: 'Loading the lake ahead…', key: null };
     }
     // the wind pushes the hull downwind and swings the bow off the wind (a solo canoe weathercocks)
+    const shelter = this.water && this.water.shelterAt ? this.water.shelterAt(this.x, this.z) : 1; // cons B: the lee
     if (this.wind) {
-      const wd = this.wind.dir, U = this.wind.speed;
+      const wd = this.wind.dir, U = this.wind.speed * shelter;
       const drift = 0.022 * U * dt * this.boost; // the drift is time-lapsed with the hull
       const dx = this.x + wd.x * drift, dz = this.z + wd.z * drift;
       if (ok(dx, dz, this.heading)) { this.x = dx; this.z = dz; }
@@ -457,12 +490,15 @@ export class Player {
     const H = this.waveHeightHere;
     const wd = this.wind ? this.wind.dir : { x: 0, z: 1 };
     const cosRel = f.x * wd.x + f.z * wd.z, broadside = Math.sqrt(Math.max(0, 1 - cosRel * cosRel));
-    const risk = H * Math.pow(broadside, 1.2) * (brace ? 0.4 : 1);
-    const steady = CAPSIZE.threshold * (this.gear ? this.gear.stability : 1); this.balance = clamp(this.balance + (risk > steady ? (risk - steady) * CAPSIZE.build : -CAPSIZE.recover) * dt, 0, 1); // hubs 2B: a steadier hull takes more sea
+    const risk = H * Math.pow(broadside, CAPSIZE.beam) * (brace ? 0.4 : 1);
+    const bailing = this.seaAboard(dt, H, cosRel, shelter, fwd !== 0 || turn !== 0, idleHands || brace); // cons B
+    const steady = CAPSIZE.threshold * (this.gear ? this.gear.stability : 1) * (1 - SEA.tender * this.bilge); this.balance = clamp(this.balance + (risk > steady ? (risk - steady) * CAPSIZE.build : -CAPSIZE.recover) * dt, 0, 1); // hubs 2B: a steadier hull takes more sea
+    // cons B: no capsize while you haul yourself back in, and a few seconds' grace after (no capsize the moment you are in)
+    if (climbing) { this.balance = 0; this._grace = SEA.grace; } else if (this._grace > 0) { this._grace -= dt; this.balance = Math.min(this.balance, 0.6); }
     this.extraRoll = this.balance * 0.4 * Math.sin(this.time * 3.1) * (brace ? 0.5 : 1);
     this.placeOnWater(dt);
     this.emitWater(dt);
-    if (this.balance >= 1) { this.capsize(); return; }
+    if (this.balance >= 1 || this.bilge >= 1) { this.capsize(); return; }
     const warning = this.balance > 0.25;
     if (warning) this.prompt = brace ? { key: 'Space', text: 'Bracing… · hold it until the swell passes, or turn the bow into the waves' } : { key: 'Space', text: 'Brace · broadside to the swell: turn the bow into the waves, or hold still' };
     if (climbing) { this.prompt = { key: null, text: 'Climbing back in…' }; return; }
@@ -481,7 +517,66 @@ export class Player {
     } else if (gap) {
       if (!warning) this.prompt = { key: 'E', text: 'Go ashore' };
       if (inp.pressed('KeyE')) this.goAshore(gap);
-    }
+    } else if (!warning && this.bilge > 0.04 && !paddling) this.prompt = { key: 'Q', text: 'Bail · hold' }; // cons B
+    if (bailing) this.prompt = { key: 'Q', text: 'Bailing…' };
+  }
+
+  // cons B: the sea coming aboard (SEA): spray off the bow in a blow, water over the gunwale past SEA.ship, the drag and
+  // the bail. H the wind-wave here (m), cosRel the bow on the wind (1 running before it, -1 into it), shelter the lee's
+  // share of the wind, paddling a stroke or a sweep held, busy the hands on a brace, the rod or the climb. Q held with the
+  // paddle still bails. Returns whether it is bailing.
+  seaAboard(dt, H, cosRel, shelter, paddling, busy) {
+    const S = this.sea, st = this.canoe.state, gameMin = (dt * (this.paceTable.clock || 1)) / 60;
+    const steady = this.gear ? this.gear.stability : 1;
+    const a = (Math.acos(clamp(cosRel, -1, 1)) * 180) / Math.PI; // 0 running before the sea .. 180 head on
+    const cruise = LIFE.cruise * (this.gear ? this.gear.cruise : 1), pace = clamp(Math.abs(this.speed) / cruise, 0, 1.3);
+    let share = seaAngle(a);
+    if (a > 140) share *= 1 + SEA.head * smoothstep(140, 180, a) * pace; // driving into it ships it green over the bow
+    const over = Math.max(0, H - SEA.ship);
+    const shipping = (SEA.rate * Math.pow(over, 1.5) * share) / steady;
+    this.bilge = Math.min(1, this.bilge + shipping * gameMin);
+    // the bail: Q held, the paddle still, not with the camera up (its Q is the zoom)
+    const bailing = this.bilge > 0.002 && !paddling && !busy && this.pace !== 'life' && this.input.held('KeyQ');
+    if (bailing) this.bilge = Math.max(0, this.bilge - SEA.bail * gameMin);
+    // the drag: the water's weight, and a head sea
+    this._seaDrag = 1 + SEA.slow * this.bilge + SEA.seaDrag * Math.max(0, H - 0.25) * (0.5 - 0.5 * cosRel);
+    st.bilge = this.bilge;
+    S.H = H; S.shipping = shipping; S.bailing = bailing; S.shelter = shelter; S.swamped = this.bilge >= 1;
+    S.spray = smoothstep(SEA.spray, SEA.spray + 0.35, H) * (0.35 + 0.65 * Math.min(1, share));
+    this.emitSea(dt, cosRel, shipping, bailing);
+    return bailing;
+  }
+  // the sea seen and heard: bursts of spray off the bow (head on), the windward side (broadside) or the stern (a following
+  // sea), a slap when one comes aboard, and the bailer's throws over the side
+  emitSea(dt, cosRel, shipping, bailing) {
+    const S = this.sea, rp = this.ripples, f = this.forward, r = { x: -f.z, z: f.x };
+    const wd = this.wind ? this.wind.dir : { x: 0, z: 1 }, U = (this.wind ? this.wind.speed : 0) * S.shelter;
+    if (S.spray > 0.01 && rp) {
+      this._sprayAcc += dt * 1.6 * S.spray; // bursts a second (dt has the 1/2/3 keys in it)
+      while (this._sprayAcc >= 1) {
+        this._sprayAcc -= 1;
+        const along = cosRel < -0.35 ? 2.3 : cosRel > 0.55 ? -2.3 : (Math.random() - 0.5) * 2.2;
+        const side = -Math.sign(r.x * wd.x + r.z * wd.z) || 1; // the windward gunwale
+        const px = this.x + f.x * along + r.x * side * 0.35, pz = this.z + f.z * along + r.z * side * 0.35;
+        const n = 14 + Math.floor(22 * S.spray);
+        for (let i = 0; i < n; i++) { // a sheet thrown up off the hull and blown back over it, fine drops and a few big blobs
+          const k = 0.5 + Math.random() * 0.9, big = Math.random() < 0.3, sx = (Math.random() - 0.5) * 0.8;
+          this.ripples.spawn(1, px + f.x * sx + (Math.random() - 0.5) * 0.3, this.level + 0.15 + Math.random() * 0.2, pz + f.z * sx + (Math.random() - 0.5) * 0.3,
+            big ? 0.2 + Math.random() * 0.16 : 0.08 + Math.random() * 0.1, big ? 0.36 : 0.06, 0.6 + Math.random() * 0.6,
+            wd.x * (0.5 + 0.15 * U) * k - r.x * side * 0.5 + (Math.random() - 0.5) * 0.8, 1.8 + Math.random() * 2.8, wd.z * (0.5 + 0.15 * U) * k - r.z * side * 0.5 + (Math.random() - 0.5) * 0.8);
+        }
+        if (this.audio && shipping > 0.002 && Math.random() < 0.7) this.audio.splash(0.35 + Math.min(0.6, shipping * 8));
+      }
+    } else this._sprayAcc = 0;
+    if (bailing) {
+      this._bailAcc += dt;
+      if (this._bailAcc >= 0.9) { // a throw over the side
+        this._bailAcc = 0;
+        const side = this.canoe.state.side || 1, px = this.x + r.x * side * 0.6, pz = this.z + r.z * side * 0.6;
+        if (rp) for (let i = 0; i < 7; i++) rp.spawn(1, px, this.level + 0.3, pz, 0.05 + Math.random() * 0.05, 0.03, 0.45 + Math.random() * 0.2, r.x * side * (1.2 + Math.random()), 0.8 + Math.random() * 0.8, r.z * side * (1.2 + Math.random()));
+        if (this.audio) this.audio.splash(0.25);
+      }
+    } else this._bailAcc = 0.6; // the first throw comes soon after Q goes down
   }
 
   // The nearest shore to the hull (middle, bow and stern are tried): { x, z, sd } of the closest sample, or
@@ -549,7 +644,8 @@ export class Player {
     this.swim = { hull: { cx: this.x, cz: this.z, heading: this.heading }, t: 0 };
     this.x += r.x * side * 1.1; this.z += r.z * side * 1.1;
     this.mode = 'swim'; this.speed = 0; this.yawRate = 0; this.balance = 0; this.extraRoll = 0;
-    const st = this.canoe.state;
+    this.sea.swamped = this.bilge >= 1; this.bilge = 0; // cons B: (righting it leaves SEA.righted in it)
+    const st = this.canoe.state; st.bilge = 0;
     st.mode = 'swim'; st.swimHull = true; st.swimHeading = this.heading; st.power = 0; st.swimSide = side;
     if (this.audio) { this.audio.paddleDip(); this.audio.paddleDip(); }
     const h = this.swim.hull;
@@ -638,6 +734,10 @@ export class Player {
           st.climb = 1.4; // seconds of righting the hull and climbing in (canoe.js counts it down)
           this.mode = 'paddle'; this.x = hull.cx; this.z = hull.cz; this.heading = hull.heading; this.speed = 0; this.yawRate = 0;
           this.swim = null; st.mode = 'paddle'; st.swimHull = false; st.stroke = 0; st.power = 0; this.bob = null; this.balance = 0;
+          this.bilge = SEA.righted; st.bilge = this.bilge; // cons B: righted, it comes up with water in it: bail
+          // cons B: and you right it end on to the sea (bow up or down wind, whichever it lay nearer), not broadside, so
+          // a blow that put you over does not put you straight over again
+          if (this.wind) { const wd = this.wind.dir, down = Math.atan2(-wd.z, wd.x); let d = down - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); this.heading = Math.abs(d) <= Math.PI / 2 ? down : down + Math.PI; st.swimHeading = this.heading; }
           this.placeOnWater();
         }
       } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${d.toFixed(0)} m)` };
@@ -681,7 +781,7 @@ export class Player {
     // a hull averages the water under it: sample five points along the keel, pitch from the ends
     const hb = wave(f.x * 2, f.z * 2), hs = wave(-f.x * 2, -f.z * 2), hm = wave(0, 0), h1 = wave(f.x, f.z), h2 = wave(-f.x, -f.z);
     const hr = wave(r.x * 0.5, r.z * 0.5), hl = wave(-r.x * 0.5, -r.z * 0.5);
-    const y = level + FLOAT_OFFSET + (hb + hs + hm + h1 + h2) / 5;
+    const y = level + FLOAT_OFFSET - SEA.sink * this.bilge + (hb + hs + hm + h1 + h2) / 5; // cons B: lower with water aboard
     const felt = Math.sign(this.speed) * this.feltSpeed; // the bow lifts, and the water line shows, as at the old cruise
     const pitch = Math.atan2(hb - hs, 4) * 0.6 + felt * 0.012;
     const roll = Math.atan2(hr - hl, 1) * 0.5 + this.yawRate * 0.12 + st.side * st.power * 0.035 * Math.sin(st.stroke * Math.PI * 2) + this.extraRoll;
@@ -1530,7 +1630,7 @@ export class Player {
       if (!best) return false;
       if (this.carry && this.carry.drop) this.canoe.pickUpHull(); // the canoe comes along
       this.mode = 'paddle'; this.carry = null; this.landing = null; this.ashore = null; this.swim = null;
-      this.x = best.x; this.z = best.z; this.speed = 0; this.yawRate = 0; this.boost = 1;
+      this.x = best.x; this.z = best.z; this.speed = 0; this.yawRate = 0; this.boost = 1; this.bilge = 0; // (cons B)
       if (w.tiles) await w.tiles.ensure(this.x, this.z, 20);
       const dir = w.deeperDir(this.x, this.z);
       this.heading = Math.atan2(-dir.z, dir.x);
@@ -1566,4 +1666,24 @@ export class Player {
     const w = this.world, fx = Math.cos(h), fz = -Math.sin(h);
     return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5;
   }
+}
+
+// cons B: the two first-time moments of a wind-bound day (hints.js MOMENTS; main.js registers them as content C's are):
+// the first whitecaps seen from the canoe by day, and the first water coming aboard (an episode while it is in the
+// hull: the full line the first time, a short one after). SEA_CAPS: the wind-wave (m) somewhere within SEA_CAPS_R
+// metres at which the caps are plain to see (water.js's whitecaps start faintly about 0.33).
+const SEA_CAPS = 0.4, SEA_CAPS_R = 450, SEA_AWASH = [0.1, 0.03];
+export function seaMoments(player, day) {
+  const afloat = () => player.mode === 'paddle' && !player.teleporting && !player.landing && !player.ashore;
+  let awash = false;
+  return [
+    { id: 'whitecaps', prio: 1, recur: 'once', text: 'Whitecaps. Stay near the shore or wait for evening.',
+      due: () => afloat() && (!day || day.elevation > 2) && !!player.water && typeof player.water.seaNear === 'function' && player.water.seaNear(player.x, player.z, SEA_CAPS_R) >= SEA_CAPS },
+    { id: 'swamping', prio: 2, recur: 'while', text: 'Taking on water: get to the lee, or ashore. Sit still and hold {Q} to bail.', short: 'Taking on water: {Q} bails.',
+      due: () => {
+        const b = afloat() ? player.bilge : 0;
+        awash = b > SEA_AWASH[awash ? 1 : 0];
+        return awash ? 1 - b : false;
+      } },
+  ];
 }
