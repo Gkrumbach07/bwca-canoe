@@ -192,6 +192,8 @@ export const VERBS = {
   stringer: { label: 'Put on the stringer', words: 'Onto the stringer, when it is in reach.' },
   drink: { label: 'Drink', words: 'A gulp from the bottle, a quarter of a litre.' },
   drinkup: { label: 'Drink up', words: 'The rest of what is drinkable in the bottle.' },
+  treat: { label: 'Treat it', words: 'A tablet into the untreated water in the bottle: drinkable in half an hour.' }, // water
+  boil: { label: 'Boil it', words: 'The untreated water boiled in the pot, over a lit fire or the stove: safe once cool.' }, // water
   change: { label: 'Change into dry clothes', words: 'The dry set on, the wet one in the bag.' },
   tarp: { label: 'Pitch the tarp', words: 'Where you stand: the ghost shows if it can go up.' }, // fb4 E's rig (tarp.js)
 };
@@ -204,7 +206,8 @@ const verb = (id, more = {}) => ({ id, label: VERBS[id].label, ...more });
 export function verbsFor(d) {
   const out = [];
   if (d.eat) { if (d.eat.cook) out.push(verb('cook', { where: 'fire', why: WHY.cook }), verb('eat', { why: WHY.raw })); else out.push(verb('eat')); }
-  if (d.id === 'bottle') out.push(verb('drink'), verb('drinkup'));
+  if (d.id === 'bottle') out.push(verb('drink'), verb('drinkup'), verb('treat', { when: 'untreated' }), verb('boil', { when: 'untreated' }));
+  if (d.id === 'tablets') out.push(verb('treat', { when: 'untreated' }));
   if (d.slot === 'tent') out.push(verb('pitch'));
   if (d.id === 'tarp') out.push(verb('tarp'));
   if (d.id === 'clothes') out.push(verb('change'));
@@ -215,7 +218,11 @@ export function verbsFor(d) {
   if (d.kind === 'map') out.push(verb('use', { label: 'Look at the map' }));
   return out;
 }
-export function verbsOf(id) { const d = itemDef(id); return d ? d.verbs || [] : []; }
+// water: a verb with `when` is offered only while VERB_WHEN[when]() says so (kit.js sets 'untreated': the bottle holds
+// lake water as it comes), so the bottle's Treat it and Boil it are not always grey
+export const VERB_WHEN = {};
+const offered = (v) => { if (!v || !v.when) return true; const f = VERB_WHEN[v.when]; try { return typeof f === 'function' && !!f(); } catch { return false; } };
+export function verbsOf(id) { const d = itemDef(id); return d ? (d.verbs || []).filter(offered) : []; }
 
 // --- fb5 B: the schema's lines --------------------------------------------------------------------------------------
 // an on-you line, and an effect on the bar's needs (the points out of 100, an integer)

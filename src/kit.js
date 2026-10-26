@@ -17,9 +17,11 @@
 //   kit.filterHere() → 'pump' | 'gravity' | 'tablets', kit.filterWait(), kit.fillBottle()   (camp.js's bottle)
 //   kit.atTheSide(fish) → words | null   (fishing.js land: a big fish thrown at the side with no net)
 //   kit.dryKit() → bool                   (trip.js capsize: the bag and the clothes in a waterproof pack)
-//   kit.verb(id, ref) → { enabled, why, needs, next, run } | null   ('stove', 'brew', 'clean', 'sit': inventory.verb's)
+//   kit.verb(id, ref) → { enabled, why, needs, next, run } | null   ('stove', 'brew', 'clean', 'sit': inventory.verb's;
+//                       water: 'treat' and 'boil', the untreated bottle's Treat it and Boil it)
 //   kit.moments()                          the moments hints.js gets (main.js registers them)
-import { itemDef, isBag, FILLET_SHARE, fishKg, NEED } from './items.js';
+import { itemDef, isBag, FILLET_SHARE, fishKg, NEED, VERB_WHEN } from './items.js';
+import { TABLETS } from './energy.js';
 import { LAMP } from './headlamp.js';
 import { FIRE_KIT } from './fire.js';
 import { COOK } from './cook.js';
@@ -34,7 +36,11 @@ const CAP_LAMP = { distance: 30, power: 1, night: 1.3 };
 // the night in the bag (kit.sleepNight): rest and warmth lost per °C the night is colder than the bag is good to
 const NIGHT = { restPer: 0.035, restMax: 0.35, warmPer: 0.05, warmMin: 0.45, dampSynth: 2, dampDown: 6, fourseason: 2, blanket: 3, site: 0.08 };
 const GRAVITY_H = 5 / 60;    // game hours the gravity bag takes to drip a bottle through at the shore
-const BREW_L = 0.25;         // litres a cup takes from the bottle
+const BREW_L = 0.25;         // litres a cup takes from the bottle (water: any water in it: it is boiled)
+// water: lake water boiled in the pot, over a lit fire beside you or the stove: game hours, real seconds (Boil it)
+const BOIL = { fire: 6 / 60, stove: 4 / 60, seconds: 2.2 };
+const CAMP_NEAR = 25;        // m from your camp where the gravity bag set up there works on the bottle (inventory.js CAMP_REACH)
+const SHORT_SAY = 30;        // real seconds a meal greyed for water stays a moment's cue ('mealwater')
 const RING_NEAR = 4;         // m: a lit fire this near heats a cup
 const STOVE_K = 0.6;         // the stove cooks a meal in this share of the grate's minutes
 const FILLET_MIN = 3;        // game minutes a fish takes to fillet
@@ -44,9 +50,9 @@ const SIDE = { from: 1.5, to: 5, most: 0.35 }; // kg: a fish this heavy may thro
 // the new meals' and the fillets' minutes on the grate (cook.js COOK; the stove takes STOVE_K of them)
 // (tuning: two thirds of the old minutes, as cook.js's: on the one clock a game minute at the grate is 15 real seconds)
 Object.assign(COOK, {
-  'meal:pancakes': { minutes: 8, water: 0.3 },
+  'meal:pancakes': { minutes: 8, water: 0.25 }, // (water, 2026-10-26: a mix takes its water, 0.3 → 0.25 L)
   'meal:chili': { minutes: 7, water: 0.5 },
-  'meal:bannock': { minutes: 10, water: 0.1 },
+  'meal:bannock': { minutes: 10, water: 0.2 },   // (water: flour and water, 0.1 → 0.2 L)
 });
 for (const sp of ['walleye', 'pike', 'smallmouth', 'laketrout', 'perch', 'crappie']) COOK[`fillet:${sp}`] = { minutes: 4, water: 0 };
 
@@ -68,10 +74,12 @@ export class Kit {
     this.lostSide = null;    // when a fish last threw the hook at the side (real s), for the moment
     this.filleted = 0;       // fish filleted this session (the moment)
     this.lamp0 = null;
+    this.waterShortAt = -1e9; // water: when a meal was last greyed for its water (real s), the moment 'mealwater'
   }
   attach(o = {}) {
     Object.assign(this.t, o);
     if (this.t.lamp && !this.lamp0) this.lamp0 = { intensity: LAMP.intensity, distance: this.t.lamp.light ? this.t.lamp.light.distance : LAMP.distance };
+    VERB_WHEN.untreated = () => { const e = this.t.energy; return !!(e && e.untreated > 0.001); }; // water: Treat it, Boil it
     return this;
   }
   get inv() { const i = this.t.inventory; return i && i.attached ? i : null; }
@@ -94,7 +102,7 @@ export class Kit {
   // --- each frame ------------------------------------------------------------------------------------------------
   update() {
     const t1 = realNow(), dt = Math.min(0.5, Math.max(0, t1 - this.last)); this.last = t1;
-    if ((this.pollT -= dt) <= 0) { this.pollT = POLL; this.poll(); this.recompute(); }
+    if ((this.pollT -= dt) <= 0) { this.pollT = POLL; this.poll(); this.recompute(); this.gravityCamp(); }
     // the air at bedtime, the moment the night's card goes up (camp.js night)
     const cp = this.t.camp, n = cp && cp.night;
     if (n && !n.kitBed) { n.kitBed = true; const L = this.look(); this.bed = { temp: L ? L.temp : null, h: this.t.day.hours, grey: L ? L.grey || 0 : 0, doy: this.t.day.doy }; }
@@ -177,15 +185,30 @@ export class Kit {
   filterHere() { return this.has('pump') ? 'pump' : this.has('gravity') ? 'gravity' : 'tablets'; }
   filterWait() { const f = this.filterHere(); return f === 'pump' ? 0 : f === 'gravity' ? GRAVITY_H : 0.5; }
   // E at the water's edge (camp.js fillBottle, replaced in main.js): a pump is a few seconds of pumping and the water is
-  // drinkable at once; the gravity bag drips it through in a few minutes; else a tablet (camp.js's own way, `base`)
+  // drinkable at once; the gravity bag drips it through in a few minutes; else a tablet (camp.js's own way, `base`).
+  // water: lake water already in the bottle is poured out before the pump fills it, goes through the bag with the new,
+  // or takes the tablet with the new (a bottle full of it: the tablet only, as Treat it)
   fillBottle(base) {
-    const cp = this.t.camp, e = this.t.energy, f = this.filterHere();
+    const cp = this.t.camp, e = this.t.energy, f = this.filterHere(), raw = e ? e.untreated || 0 : 0;
+    if (cp && e && f === 'tablets' && raw > 0.001 && e.bottle >= 2 - 0.001 && e.treatCheck && e.treatCheck().enabled) {
+      cp.chore('fill', () => { e.treat(); if (cp.audio && cp.audio.paddleDip) cp.audio.paddleDip(); }, { seconds: 0.8, hours: 1 / 60, say: 'A tablet into the bottle…' });
+      return undefined;
+    }
     if (!cp || !e || f === 'tablets') return base ? base(0.5) : undefined;
-    if (e.bottle >= 2 - 0.001) { cp.note('The bottle is full.'); return undefined; }
+    if (e.bottle - raw >= 2 - 0.001) { cp.note('The bottle is full.'); return undefined; }
     const say = (w) => { if (cp.audio && cp.audio.paddleDip) cp.audio.paddleDip(); cp.note(w); };
-    if (f === 'pump') cp.chore('fill', () => { e.fill(2, 0); say('Pumped full through the filter: drinkable now.'); }, { seconds: 3.2, hours: 4 / 60, say: 'Pumping the bottle full…' });
+    if (f === 'pump') cp.chore('fill', () => { e.fill(2, 0); say(`${raw > 0.001 ? 'The lake water out, then p' : 'P'}umped full through the filter: drinkable now.`); }, { seconds: 3.2, hours: 4 / 60, say: 'Pumping the bottle full…' });
     else cp.chore('fill', () => { e.fill(2, GRAVITY_H); say('Into the gravity bag: the bottle drips full in 5 min.'); }, { seconds: 0.9, hours: 2 / 60, say: 'Filling the bag…' });
     return undefined;
+  }
+  // water: the gravity bag set up at your camp works on the bottle while you are there: lake water in it goes through
+  // (GRAVITY_H; shop.js tops a bottle that is down up from the bag, drinkable at once)
+  gravityCamp() {
+    const e = this.t.energy, cp = this.t.camp, c = cp && cp.camp, p = this.t.player;
+    if (!e || !e.live || !(e.untreated > 0.001) || !c || !p || typeof e.treatAll !== 'function') return;
+    if (Math.hypot(c.x - p.x, c.z - p.z) > CAMP_NEAR || !this.inCamp('gravity')) return;
+    e.treatAll(GRAVITY_H);
+    if (cp.note) cp.note('Through the gravity bag: drinkable in 5 min.');
   }
 
   // --- fishing ---------------------------------------------------------------------------------------------------
@@ -219,6 +242,8 @@ export class Kit {
     try {
       if (id === 'stove') return this.stoveVerb();
       if (id === 'brew') return this.brewVerb(ref);
+      if (id === 'treat') return this.treatVerb();
+      if (id === 'boil') return this.boilVerb();
       if (id === 'clean') return this.cleanVerb();
       if (id === 'sit') return this.sitVerb(ref);
     } catch (err) { console.warn('kit.verb', id, err); return no('Not now'); }
@@ -244,7 +269,8 @@ export class Kit {
     const m = this.mealFor(pool);
     if (!m) return no('Nothing to cook', [NEED.step('A meal to cook', false, { chip: 'a meal to cook' })], 'A meal from your food, within reach');
     const K = COOK[m.d.id] || COOK['meal:supper'], water = K.water || 0;
-    if (water > 0 && e && e.bottle < water - 0.001) return no('Not enough water', [NEED.qty('Water', +e.bottle.toFixed(2), water, 'L', { item: 'bottle' })], 'Fill the bottle at the water first');
+    // (water: the same chip as the grate's pot, "water 0.3 L", and the first time the moment 'mealwater')
+    if (water > 0 && e && !e.sandbox && e.bottle < water - 0.001) { this.waterShortAt = realNow(); return no('Not enough water', [NEED.qty('Water', +e.bottle.toFixed(2), water, 'L', { item: 'bottle', chip: `water ${litresUp(water - e.bottle)}` })], 'Fill the bottle at the water first'); }
     const minutes = Math.max(3, Math.round(K.minutes * STOVE_K));
     return go(() => this.cookOnStove(m, K, minutes), [], `${m.d.name}: ${minutes} min`);
   }
@@ -275,8 +301,42 @@ export class Kit {
     if (!this.onFoot()) return no('On foot', [NEED.step('On foot', false, { chip: 'on foot' })], 'Go ashore first');
     const fire = this.fireBeside(), stove = this.has('stove') && inv.usesLeft('fuel') > 0;
     if (!fire && !stove) return no('Needs hot water', [NEED.step('A fire or the stove', false, { chip: 'a fire or the stove' })], 'Stand by a lit fire, or have the stove and its fuel with you');
-    if (e && e.drinkable < BREW_L - 0.001) return no('Not enough water', [NEED.qty('Water', +e.drinkable.toFixed(2), BREW_L, 'L', { item: 'bottle' })], 'Fill the bottle first');
+    // (water: any water in the bottle, untreated too: it is boiled)
+    if (e && !e.sandbox && e.bottle < BREW_L - 0.001) return no('Not enough water', [NEED.qty('Water', +e.bottle.toFixed(2), BREW_L, 'L', { item: 'bottle', chip: `water ${litresUp(BREW_L - e.bottle)}` })], 'Fill the bottle first');
     return go(() => this.brew(hit, d, !fire));
+  }
+  // water: a tablet into the untreated water in the bottle (its Treat it, and the tablets'): drinkable in half an hour
+  treatVerb() {
+    const e = this.t.energy;
+    if (!e || typeof e.treatCheck !== 'function' || !(e.untreated > 0.001)) return null;
+    const c = e.treatCheck();
+    if (!c.enabled) return no(c.why, c.needs, this.has('pump') ? 'The pump makes it fresh at the water’s edge: E' : c.next);
+    return go(() => e.treat(), [], `Drinkable in ${Math.round(TABLETS * 60)} min`);
+  }
+  // water: the untreated water boiled in the pot (in reach: on the grate or in a pack by you), over a lit fire beside you
+  // or the stove with its fuel: a few game minutes, then safe
+  boilVerb() {
+    const e = this.t.energy, inv = this.inv, cp = this.t.camp;
+    if (!e || !inv || !cp || !(e.untreated > 0.001)) return null;
+    if (!this.onFoot()) return no('On foot', [NEED.step('On foot', false, { chip: 'on foot' })], 'Go ashore first');
+    if (!this.findIn(this.pool(), (q) => q.id === 'pot')) return no('No pot', [NEED.step('The pot', false, { chip: 'the pot', item: 'pot' })], 'The pot within reach');
+    const ck = cp.chores && cp.chores.cook, P = ck && ck.pot;
+    if (P && !P.done && !P.fish) return no('The pot is cooking', [NEED.step('The pot free', false, { chip: 'the pot free' })], 'Once the meal is done');
+    const fire = this.fireBeside(), stove = this.has('stove') && inv.usesLeft('fuel') > 0;
+    if (!fire && !stove) return no('Needs a fire or the stove', [NEED.step('A lit fire or the stove', false, { chip: 'a lit fire or the stove' })], 'Stand by a lit fire, or have the stove and its fuel with you');
+    const h = fire ? BOIL.fire : BOIL.stove;
+    return go(() => this.boil(!fire, h), [], `${Math.round(h * 60)} min`);
+  }
+  boil(onStove, hours) {
+    const cp = this.t.camp, e = this.t.energy, inv = this.inv;
+    if (!cp || !e) return { ok: false, words: 'Not now.' };
+    cp.chore('boil', () => {
+      if (onStove && inv) inv.useOne('fuel');
+      const l = e.treatAll(0);
+      if (inv) inv.emit('items');
+      cp.note(l > 0.001 ? 'Boiled in the pot and let cool: safe to drink.' : 'Nothing left to boil.');
+    }, { seconds: BOIL.seconds, hours, say: onStove ? 'The stove roars under the pot…' : 'The pot over the fire, coming to the boil…', crouch: true });
+    return { ok: true, words: '' };
   }
   fireBeside() {
     const F = this.t.fires, f = F && F.near, p = this.t.player;
@@ -291,7 +351,7 @@ export class Kit {
     cp.chore('brew', () => {
       const h = inv.findUid ? inv.findUid(hit.e.uid) : hit; if (!h) return;
       if (onStove) inv.useOne('fuel');
-      if (e) e.drinkable = Math.max(0, e.drinkable - BREW_L);
+      if (e) { if (typeof e.useWater === 'function') e.useWater(BREW_L); else e.drinkable = Math.max(0, e.drinkable - BREW_L); } // (water: the untreated first: boiled)
       // a serving off it (the entry's left), the last one takes the thing
       const n = d.servings || 1, left = (Number.isFinite(h.e.left) ? h.e.left : n) - 1;
       if (left > 0) h.e.left = left; else if (h.e.qty > 1) { h.e.qty -= 1; delete h.e.left; } else inv.take(h.c.id, h.e.uid, 1);
@@ -375,8 +435,29 @@ export class Kit {
         due: () => { const n = this.lastNight, e = this.t.energy; if (!n || !(n.cold >= 2) || !e || e.now - n.at > 2) return false; return { lv: 1, text: `A cold night: the bag is good to ${n.rating} °C, and it went down to ${n.low} °C.` }; } },
       { id: 'remains', prio: 1, recur: 'once', text: 'Fish remains: well back from shore and camp, where bears won’t find them.',
         due: () => this.filleted > 0 },
+      // water (the owner, 2026-10-26): lake water as it comes, the first time it is in the bottle; a meal short of its
+      // water, the first time (a grate near you waiting for it, or the stove's Cook on it greyed for it)
+      { id: 'untreated', prio: 2, recur: 'once', text: 'Untreated lake water. A tablet, the filter, or a boil in the pot makes it safe.',
+        due: () => { const e = this.t.energy; return !!(e && e.live && e.untreated > 0.001); } },
+      { id: 'mealwater', prio: 1, recur: 'once', card: 'fire', text: 'Meals need water: fill your bottle at the lake.',
+        due: () => this.mealShort() },
     ];
   }
+  // water: a meal waiting for its water now: on a grate within a few steps of you, or greyed on the stove a moment ago
+  mealShort() {
+    const e = this.t.energy, inv = this.inv, p = this.t.player, cp = this.t.camp, ck = cp && cp.chores && cp.chores.cook;
+    if (!e || !e.live) return false;
+    if (realNow() - this.waterShortAt < SHORT_SAY) return true;
+    if (!inv || !p || !ck || typeof ck.nextOnGrate !== 'function') return false;
+    for (const c of inv.containers) {
+      if (c.item !== 'grate' || !c.at || !c.at.grate || !Number.isFinite(c.at.x) || Math.hypot(c.at.x - p.x, c.at.z - p.z) > 8) continue;
+      const n = ck.nextOnGrate(c.at.grate);
+      if (n && n.wait === 'water') return true;
+    }
+    return false;
+  }
 }
+// what the bottle is short, as a chip says it: up to the next tenth of a litre ("0.3 L"; cook.js's)
+const litresUp = (l) => `${(Math.ceil(l * 10 - 1e-6) / 10).toFixed(1)} L`;
 
 export const kit = new Kit();

@@ -844,6 +844,19 @@ async function main() {
     hints.due = (id, rec) => (pm.has(id) ? pm.get(id).due(rec) : dueP(id, rec));
   }
   window.__game.moves = moves;
+  // water: two rules (the owner, 2026-10-26: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if
+  // i fill water up without a tablet, it is instantly clean even tho warnign says its not"). Every dried meal and a cup
+  // take their water from the bottle (cook.js COOK, kit.js), short of it the "water 0.3 L" chip and once the moment
+  // 'mealwater'. Lake water filled with no tablet, pump or gravity bag is untreated (energy.untreated), the whole bottle
+  // with it: its state "Untreated" and a tea-brown mark; drunk, it may turn the stomach for half a day (energy.js UPSET);
+  // a tablet afterwards (Treat it), the pump, the gravity bag at camp or a boil in the pot (Boil it) make it safe; once
+  // the moment 'untreated' (kit.js moments, registered with content C's above). Thirsty with lake water in the bottle is
+  // only thirsty, not "the bottle's empty".
+  {
+    if (!document.getElementById('water-css')) { const s = document.createElement('style'); s.id = 'water-css'; s.textContent = '.st-untreated { --st: #a5773f; --st-ink: #22140a; }'; document.head.appendChild(s); }
+    const dueW = hints.due.bind(hints);
+    hints.due = (id, rec) => { const r = dueW(id, rec); return id === 'thirsty' && r && typeof r === 'object' && energy.untreated > 0.02 ? r.lv : r; };
+  }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   const warmed = prewarm(scene); // polish A: with the composer's target bound, as above
