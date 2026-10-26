@@ -79,7 +79,8 @@ Real minutes are at Normal (the 1/2/3 keys' ×1). At Faster they are half, and a
 | Rest a night | A-frame 0.85, dome and four-season 1.0, the pad +0.05; no bag in reach ×0.6; a bag colder than its rating −0.035 a °C | A-frame 0.92 | At 0.85 every morning of a season began 15 % tired, and the rest ceiling took it lower all day | ✔ `items.js AFRAME_SLEEP` |
 | A short night | A rest of 4 h that crossed dusk counted as a 4 h night: the rest need went from 0.77 to 0.48 | never below bedtime | Sleeping can't leave you more tired than you lay down | ✔ `energy.js sleep` |
 | Portage energy | 0.04 of the bar a km of trail in one carry, 0.07 with the walk back: 4–6× a km of paddling | as it is | Up 1.6–2.1× since the one clock, but a carry should cost more than a paddle | — |
-| A capsize | −0.25 of the bar (−0.5 in cold water), a meal spoiled, soaked: three in five days of the exploring run | lighter, rarer | cons-wind made them rarer (rod-up and Fastest fixes); the cost is in trip.js | — (recommendation below) |
+| A capsize | −0.25 of the bar (−0.5 in cold water), a meal spoiled, soaked: three in five days of the exploring run | lighter, rarer | cons-wind made them rarer (rod-up and Fastest fixes); the cost is in trip.js | ✔ taste call: only a meal outside a sealed container (below) |
+| Sitting still fishing | the bar follows the ceiling, as idle or paddling: −0.07 a game hour, 0.78 to 0.55 over five hours in the lee | far less than paddling | The needs fall by the clock whatever you do, so a sit cost what a paddle did | ✔ taste call: light work (below) |
 
 ### Fishing
 
@@ -90,6 +91,7 @@ Real minutes are at Normal (the 1/2/3 keys' ×1). At Faster they are half, and a
 | Big fish | one pike in six over a metre (length = range × random^1.7): three of 104–115 cm in an hour | rarer | A metre pike is a trophy | — (taste: `LENGTH_SKEW` 2.5) |
 | The landing net | 1.5–5 kg fish throw the hook at the side up to 35 % without it | as it is | The net is worth its $20 while big fish are common | — |
 | Lures against species | the takes read as words (Neutral … Excellent); a jig fished everything well | as it is | Nothing clearly off | — |
+| Casting in a blow | the lure flew as in still air and came down on the ring in any wind | carried by the wind; blown back only in whitecaps, with a reason | The owner's taste call | ✔ `fishing.js CAST_WIND` (below) |
 | A fish's food | +30 whatever its size: an 18 cm crappie +30 | by weight | Half a supper for an eating-sized fish | ✔ `items.js fishEat`: 18 cm crappie +7, 25 cm perch +12, 45 cm walleye +30, a metre pike +45 |
 
 ### The economy
@@ -100,7 +102,7 @@ Real minutes are at Normal (the 1/2/3 keys' ×1). At Faster they are half, and a
 | Notices' pay | 240 sampled at six outfitters: local $18 on average (6–44), medium $24 (6–37), far $38 (12–55) | as it is | Two local notices pay a night's food and an upgrade's share | — |
 | How far a band lies | local up to 12.2 km out ("close by"), medium up to 12.8 km ("a day trip"; the deadfall's $45 from 13 km), far up to 16.9 | local within 7 km, medium within 9 | Close by is an hour or so each way at the pace, a day trip out and back in a day (20 km) | ✔ `tasks.js BAND_KM` |
 | A trip's money | Exploring: $108 over three trips (two local notices a trip and one far one), against $11–17 of food a trip. Scripted (only the local notices the script can do): $54 | as it is | $20–35 net a trip buys about one small upgrade a trip early on. Trip 1's money bought the stove ($41), and a third trip's would buy the dome ($50) | — |
-| The upgrade path | stove $41, dome $50, bent-shaft $40, rain jacket $30, pump $35, 3-season bag $45; Royalex $160, carbon $110, Kevlar $240 | as it is | At $20–35 net a trip the Kevlar comes after 8–10 trips of saving, and after the small upgrades nearer 20 trips: late in a season of steady work, as asked | — |
+| The upgrade path | stove $41, dome $50, bent-shaft $40, rain jacket $30, pump $35, 3-season bag $45; Royalex $160, carbon $110, Kevlar $240 | Kevlar $200 | At $20–35 net a trip the Kevlar came after 8–10 trips of saving, and after the small upgrades nearer 20 trips. At $200 it is 7–8 trips, or about 18 after the small upgrades: still late in a season | ✔ taste call: `shop.js` Kevlar $200 ($180–210 by counter) |
 | The bunk | $8: a bed, breakfast, a full bar, up at 7:00 | as it is | The cheap answer to coming home spent | — |
 | Rides | the outfitters you know and the next unknown one only: Saganaga four rides from Moose on $29 | the three nearest unknown | Fewer rides to reach a new country | ✔ `rides.js UNKNOWN_RIDES 3` |
 
@@ -207,19 +209,21 @@ waits for "Portage:" in the prompt lands at the put-in.
 
 ## Left for the owner's taste
 
-These are recommendations; nothing here was changed.
+These are recommendations; nothing here was changed in this pass. The owner's answers of 2026-10-26 follow the list.
 
 - **The bar between trips.** Coming in doesn't rest you. A trip that comes home at noon and sets off again starts at the
   bar it came in with. In the exploring run that was 0.34, and a capsize then made it an evacuation. The $8 bunk
   answers it, at the cost of the rest of the day. The scripted season takes the bunk below 0.45. Two options:
   - let the counter's tap and an hour in the store bring the bar up a little
   - have a keeper say "you look done in" once
+
+  (Kept as it is, 2026-10-26: the bunk is the answer.)
 - **Big fish.** One pike in six is over a metre (`fishing.js startBite`: length = the range × random^1.7), and the size
   notices ask for the 60th–75th percentile. 2.5 would make a metre pike one in nine or ten. `tasks.js LENGTH_SKEW`
-  has to move with it.
+  has to move with it. (Kept, 2026-10-26.)
 - **The capsize's cost.** It takes 0.25 of the bar (0.5 in cold water) and up to half a day of food, wherever the food
   is. Food in a sealed blue barrel should come through dry, as the barrel's own words say. The 0.25 seems fair now that
-  cons-wind makes capsizes rarer and swamping comes first.
+  cons-wind makes capsizes rarer and swamping comes first. (Taken, 2026-10-26: below.)
 - **Treating water.** Tablets take 30 game minutes, which is 7½ real minutes. It's a timer, not a wait, unless the bottle
   is dry. If it drags, 20 minutes keeps the pump ($35, 5 min) worth having.
 - **Real time on land.** A game day is 1½ to 3 real hours at Normal, and two thirds of that is the water and the
@@ -228,8 +232,70 @@ These are recommendations; nothing here was changed.
 - **The far notices pay least by the hour.** A local notice pays $14–24 for an hour or two. A far one pays $31–45 for a
   day and more, with three portages each way. The km pay could go up a little for the far band only (`KM_PAY` and the
   kinds' 1.5–2 a km). That would bring the Kevlar sooner, which the brief didn't want.
-- **The Kevlar** comes after 8–10 trips of saving, or near 20 trips after the small upgrades. That is late in a season
-  of steady work, as asked. If it feels too far, $200 is the number to try.
+- **The Kevlar** came after 8–10 trips of saving, or near 20 trips after the small upgrades. That is late in a season
+  of steady work, as asked. If it feels too far, $200 is the number to try. (Taken: below.)
+
+## The owner's taste calls (2026-10-26)
+
+The owner answered the list above with yes, no or ok, read as "is it fine as it is?".
+
+**Kept as they are:**
+- coming home doesn't rest you (the $8 bunk does)
+- metre-long pike
+- rain with no stove means no breakfast
+- the head net works from a pack within 3 m
+
+**Changed.** Each was measured before and after in the headless driver at 1440 × 900, with real keys and the real
+mouse. The scripts are in session e939fbdb's scratchpad, `taste/`.
+
+1. **A capsize spares the food in a sealed container.**
+   - Before, the capsize took a meal from whatever food was in reach, sealed or not. A barrel holding three meals, and
+     a breakfast loose in the Duluth pack, came out with two in the barrel and the loose one kept.
+   - Now only a meal outside a sealed container is spoiled. A sealed container is a barrel (its screw lid is always on:
+     `items.js sealed`), the waterproof portage pack (`dry`), or anything inside either (`inventory.sealed`).
+   - The same capsize now leaves three meals in the barrel and loses the loose breakfast: "Half a day of food is
+     spoiled; the food in the barrel stayed dry." With only the barrel's food, or the rest in the dry pack, nothing is
+     lost: "The food stayed dry in the barrel." The bar's cost is unchanged.
+2. **Casting in a blow** (`fishing.js CAST_WIND`).
+   - Before, the lure flew as in still air. Every cast came down on the ring, 12.8–13.1 m out with no drift, in 4, 8
+     and 12 m/s and in waves to 0.64 m. The join's "casts don't land" (8 tries at 0.8 m waves) didn't come up again in
+     30-odd casts at 4–15 m/s, with frames drawn or stepped as the join's script stepped them.
+   - Now the lure feels the wind where you cast: the wind's speed × the lee's shelter. The drag against the moving air
+     is less the still air's, so a calm cast still lands on the ring. A tail wind carries it on by half its push.
+   - Results for a 12.9 m cast, against 4 / 8 / 12 m/s:
+     - into the wind: 11.0, 8.8 and 6.4 m (−15 %, −32 %, −50 %)
+     - with it: 13.6, 13.9 and 14.0 m
+     - across it: drifted 0.9, 2.1 and 3.8 m
+   - In the lee under a windward shore at 12 m/s (a fetch of 50 m, 4.5 m/s felt), into the wind: 10.6 m.
+   - Past 0.5 m of wind-wave where you cast (`caps`: whitecaps on open water) the cast is blown back to the rod.
+     Snowbank's open water at 12 m/s (0.64 m) blew back all three casts. Lake Two at 12 m/s (0.49 m, 530 m of fetch)
+     still landed.
+   - Every cast blown back says "Blown back by the wind" on the action line. The first one also brings the moment
+     'castwind': "Too windy to cast here. Fish the lee."
+   - From the shore at 4–12 m/s the casts land too. On a 26 m cast with the wind 70° off they drift 2, 4.3 and 6.6 m
+     from where the same cast lands in still air.
+3. **Sitting still fishing is light work** (`energy.js FISHING`).
+   - The bar sits at the ceiling the needs allow, so an hour costs what the needs lose in it, whatever you do.
+   - Now, with the rod up and the canoe still, or standing to fish from the shore:
+     - the hours awake count a third of themselves for the rest need (`awake` 0.35: awakeSince moves on, as a nap's or
+       a coffee's does)
+     - hunger falls at half the rate (`food` 0.5), thirst at 0.4 (`water`)
+   - A fish on the line costs a little more while the fight lasts: the needs at the full rate, and 0.03 of the bar a
+     game hour of effort (`fight`) with no rest.
+   - Each case ran a game hour from the same start, with the bar at the ceiling and the water full:
+
+     | | Before | After |
+     |---|---|---|
+     | Fishing afloat at dawn (Lake Two, 06:24, a jig, 6–8 fish, a quarter of the hour in fights) | −0.074 | −0.040 |
+     | Fishing from the shore mid-morning (10:08) | −0.071 (the ceiling −0.100) | −0.040 |
+     | Sitting idle afloat, the rod down | −0.070 | −0.070 |
+     | Paddling, 5.5 km | −0.091 | −0.091 |
+
+   - By these rates the join's five hours in the lee would take the bar from 0.78 to about 0.68, not 0.55. Idling with
+     the rod down is as it was. Whether sitting on the bench or in the canoe should count as light work too is the
+     owner's call.
+4. **The Kevlar costs $200** (`shop.js`, `inv-ui.js`; it was $240). At the home counter (EP 30) the shelf's tag and the
+   tooltip read $200. Other counters' prices run $180–210.
 
 ## How to measure again
 
