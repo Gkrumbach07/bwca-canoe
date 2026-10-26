@@ -186,6 +186,7 @@ export class PartyCamps {
       const ex = d2.x * 2.3, ez = d2.z * 2.3, gb = G(x + ex, z + ez), gs = G(x - ex, z - ez);
       if (!(w.shoreAt(x + ex, z + ez) > 0.3) || Math.abs(gb - gs) / 4.6 > 0.5 || Math.hypot(x - F.x, z - F.z) < 2.2 || near(x, z, canoes, 1.05)) continue;
       if (L.bench && Math.hypot(x - L.bench.x, z - L.bench.z) < 1.8) continue;
+      if (!this.clearFor(x, z, d2.x, d2.z, 2.5, 0.45)) continue; // (off the ledge's rocks, the trunks and the logs)
       canoes.push({ x, z, dx: d2.x, dz: d2.z, gb, gs });
     }
     for (const cn of canoes) {
@@ -266,6 +267,26 @@ export class PartyCamps {
     this.drawn.set(key, D);
     this.place(D);
     return D;
+  }
+
+  // a box (half hx along (ux, uz), hz across) on the ground clear of what the walker meets (tiles.js treesNear): no
+  // trunk in it, no rock, log or stump standing up through it
+  clearFor(x, z, ux, uz, hx, hz) {
+    const T = this.tiles;
+    if (typeof T.treesNear !== 'function') return true;
+    for (const t of T.treesNear(x, z, Math.hypot(hx, hz) + 0.6)) {
+      if (t.tent || t.box) { const dx = t.x - x, dz = t.z - z; if (Math.abs(dx * ux + dz * uz) < hx + (t.hx || 0.5) && Math.abs(-dx * uz + dz * ux) < hz + (t.hz || 0.5)) return false; continue; }
+      if (t.shape) {
+        for (const u of [-0.9, -0.45, 0, 0.45, 0.9]) for (const v of [-1, 0, 1]) {
+          const px = x + ux * hx * u - uz * hz * v, pz = z + uz * hx * u + ux * hz * v;
+          if (t.shape.heightAt(px, pz) > T.groundAt(px, pz) + 0.08) return false;
+        }
+        continue;
+      }
+      const dx = t.x - x, dz = t.z - z, r = (t.r || 0.3) + 0.1;
+      if (Math.abs(dx * ux + dz * uz) < hx + r && Math.abs(-dx * uz + dz * ux) < hz + r) return false;
+    }
+    return true;
   }
 
   // --- the hours of a camp ------------------------------------------------------------------------------------------

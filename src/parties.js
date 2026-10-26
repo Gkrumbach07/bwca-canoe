@@ -14,11 +14,12 @@
 // another client or the same day replayed gives the same people in the same places; a new season gives new people.
 //
 // Where they camp. Their nights in one basin are a stay at one site. Every stay in a week's block of days (and the
-// three weeks before it, so a long trip is counted) is given its site in order of arrival, first come: the free site
+// four weeks before it, so a long trip is counted) is given its site in order of arrival, first come: the free site
 // nearest the way they came in and the way they go on (a little seeded jitter), never one already taken that night,
-// never yours (camp.js: your pitched or saved tent's site is an input, so a party never camps on you, and a reload
-// with your camp gives the same camps). A stay holds its site from the hour they land (15:00–18:30; the first night
-// after the put-in) to the hour they leave (8:00–10:30). Which water a site is on comes from src/site-lakes.json
+// never yours. Yours (mine()) are your pitched or saved tent's site, and a site where you have set things down or lit
+// a fire, from the hour they were first there: a party landing after that goes on to another site, so a party never
+// camps on you, and a reload with your camp gives the same camps. A stay holds its site from the hour they land
+// (15:00–18:30; the first night after the put-in) to the hour they leave (8:00–10:30). Which water a site is on comes from src/site-lakes.json
 // (scripts/site-lakes.mjs reads the release's own tiles), so the schedule never depends on what is loaded round you.
 //
 // What the world sees. The camps within PARTIES.claimR of you (the dusk note looks 6 km out) hold their sites in the
@@ -28,7 +29,7 @@
 // across the bay as you look. party-camps.js draws them.
 //
 //   const parties = new Parties({ world, profile, day })
-//   parties.attach({ registry, camp, player, camera, settings })   main.js round A-F
+//   parties.attach({ registry, camp, player, camera, settings, inventory, fires })   main.js round A-F
 //   parties.update(dt)          after camp.update: the claims within claimR, the registry's spoken hook
 //   parties.entering(ep, absDay)   the parties put in at ep on a day: [{ id, ep, day, kind, size, members, canoes,
 //                                  tents, nights, stays: [{ id, basin, start, end, land, leave, in, out }], words }]
@@ -39,9 +40,9 @@ import { mulberry32 } from './rng.js';
 import { seasonAt } from './season.js';
 import SITE_LAKES from './site-lakes.json';
 
-// The daily overnight paddle quotas (May 1 – Sep 30) by entry point number, as recreation.gov lists them (2024–25;
-// a few of the small ones rounded). Moose Lake 27, Lake One 18, Sawbill 14; Trout, Fall and Little Vermilion count
-// their motor permits in.
+// The daily overnight paddle quotas (May 1 – Sep 30) by entry point number, after recreation.gov's list as far as it was
+// known when this was written (Moose Lake 27, Lake One 18, Sawbill 14, as the plan has them; Trout, Fall and Little
+// Vermilion with their motor permits in): the small ones are estimates, to check against the current year's list.
 export const QUOTA = {
   1: 14, 4: 4, 6: 2, 7: 2, 8: 1, 9: 2, 12: 7, 14: 9, 16: 7, 19: 1, 20: 2, 22: 3, 24: 14, 25: 27, 26: 4, 27: 8, 29: 1, 30: 18,
   31: 4, 32: 2, 33: 2, 34: 3, 35: 5, 36: 5, 37: 9, 38: 14, 39: 2, 40: 2, 41: 8, 43: 1, 44: 1, 45: 1, 47: 4, 48: 3, 49: 3,
@@ -281,18 +282,21 @@ export class Parties {
   }
 
   // --- the sweep: every stay of a block given its site, first come -----------------------------------------------
-  // your site: the pitched tent's (or the saved one waiting for its ground), and the abs day you took it
+  // abs game hours from the day cycle's (doy * 24 + hours, as camp.js and fire.js keep them) and back
+  absHours(h) { const d = this.day; return h + (this.today - d.doy) * 24; }
+  // your site: the pitched tent's (or the saved one waiting for its ground), and since when (abs game hours)
   playerSite() {
     const c = this.camp, t = c && (c.camp || c.pending), key = t && t.key;
     if (!key) return null;
     const i = this.siteOfKey.get(key); if (i == null) return null;
-    const d = this.day, since = Number.isFinite(t.since) ? this.today - (d.doy - Math.floor(t.since / 24)) : this.today;
-    return { i, key, since };
+    return { i, key, since: Number.isFinite(t.since) ? this.absHours(t.since) : this.today * 24 };
   }
-  // Every site that is yours tonight: your tent's, and a free one where you have left things (set down on the ground
-  // within its area, the canoe lying there, a fire of yours in its ring): you were there first. [{ i, key, since }]
+  // Every site that is yours: your tent's, and one where you have left things (set down on the ground within its area,
+  // or a fire of yours in its ring), from the hour they were first seen there: a party landing after that goes on to
+  // another site, one camped there before keeps it (first come). A thing set down is stamped with that hour in its own
+  // record (at.firstAt, saved with the inventory), so a reload knows who was first. [{ i, key, since (abs hours) }]
   mine() {
-    const out = [], me = this.playerSite(), inv = this.inventory, reg = this.registry;
+    const out = [], me = this.playerSite(), inv = this.inventory, nowH = this.today * 24 + (this.day ? this.day.hours : 0);
     if (me) out.push(me);
     const spots = [];
     if (inv && inv.attached) {
@@ -300,20 +304,19 @@ export class Parties {
         const k = inv.root ? inv.root(c) : c;
         if (!k || k.where !== 'ground' || !k.at || !Number.isFinite(k.at.x)) continue;
         if ((c.item === 'firefuel' || c.item === 'grate') && !c.grid.length) continue; // (an empty ring's bin is the site's, not yours)
-        spots.push(k.at);
+        spots.push({ x: k.at.x, z: k.at.z, at: k.at });
       }
-      const s = inv.canoeSpot ? inv.canoeSpot() : null;
-      if (s && !s.afloat && !s.overhead && Number.isFinite(s.x)) spots.push(s);
     }
-    if (this.fires) for (const f of this.fires.fires.values()) if (!f.party && f.at) spots.push(f.at);
+    if (this.fires) for (const f of this.fires.fires.values()) if (!f.party && f.at && f.lit > -1e8) spots.push({ x: f.at.x, z: f.at.z, since: this.absHours(f.lit) });
     const p = this.player, near = PARTIES.claimR + 500;
-    for (const at of spots) {
-      if (p && (Math.abs(at.x - p.x) > near || Math.abs(at.z - p.z) > near)) continue; // (only round you: further off, it waits till you come)
-      const i = this.siteNear(at.x, at.z, AREA);
-      if (i < 0 || out.some((o) => o.i === i)) continue;
-      const key = this.keyOf[i], h = reg ? reg.holder(key) : null;
-      if (h && h !== 'player') continue; // (things left in a party's camp don't move them)
-      out.push({ i, key, since: this.today });
+    for (const s of spots) {
+      if (p && (Math.abs(s.x - p.x) > near || Math.abs(s.z - p.z) > near)) continue; // (only round you: further off, it waits till you come)
+      const i = this.siteNear(s.x, s.z, AREA);
+      if (i < 0) continue;
+      if (s.at && !Number.isFinite(s.at.firstAt)) { s.at.firstAt = nowH; inv.dirty = true; } // (written with the inventory's next save)
+      const since = s.at ? s.at.firstAt : s.since, o = out.find((q) => q.i === i);
+      if (o) { o.since = Math.min(o.since, since); continue; }
+      out.push({ i, key: this.keyOf[i], since });
     }
     return out;
   }
@@ -344,7 +347,7 @@ export class Parties {
         let pick = -1, best = Infinity;
         for (let k = 0; k < sites.length; k++) {
           const i = sites[k];
-          if (score[k] >= best || occ.has(i) || (mine.length && mine.some((m) => m.i === i && s.end > m.since))) continue;
+          if (score[k] >= best || occ.has(i) || (mine.length && mine.some((m) => m.i === i && s.start * 24 + s.land > m.since))) continue;
           best = score[k]; pick = i;
         }
         site.set(s, pick);
