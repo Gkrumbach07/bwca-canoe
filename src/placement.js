@@ -828,15 +828,17 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
 // its two beds in the water say where the plants are: kind 8, in-lake emergent (wild rice, bulrush, reeds), and kind 9,
 // aquatic bed (the lilies, pondweed). Where the ground is surveyed (any kind but 0: Minnesota) the rice, the bulrush
 // fields and the lily rafts grow in the mapped beds, their edges ragged by a noise at the bed's 10 m cells, and only a
-// remnant of the old fields beyond them (MAPPED.rest: the odd small bed the survey's polygons miss). The rice follows each
+// remnant of the old fields beyond them (MAPPED.rest: the odd small bed the survey's polygons miss; MAPPED.unmapped in a
+// lake where the survey mapped no bed at all, Lake One among them, which the NWI's photos left unread more likely than
+// bare, so it keeps more of them). The rice follows each
 // lake's DNR acres (aquatic.js riceBeds: `riceShare`, the share of the lake's mapped emergent bed that is rice, in fields;
 // `riceExtra`, the share of its acres the survey did not map, grown by the old rule in the sheltered soft shallows). The
 // marsh fringe (sedge, cattail) and the submerged weed keep their rules, a little more weed in a mapped aquatic bed.
 // Kind 0 (Ontario, or a v3 release with no ground byte) keeps all the old rules.
-export const MAPPED = { rest: { raft: 0.15, stand: 0.35 }, rice: 8, rush: 5.5, raft: 16, weed: 1.6, edge: 0.3 };
+export const MAPPED = { rest: { raft: 0.15, stand: 0.35 }, unmapped: { raft: 0.45, stand: 0.6 }, rice: 8, rush: 5.5, raft: 16, weed: 1.6, edge: 0.3 };
 const _bedA = {};
 const RAPIDS_FALL = 0.02; // round A join: the slope of the water (m per m) past which no lake plant grows
-export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site = null, rice = null, riceShare = null, riceExtra = null }) {
+export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site = null, rice = null, riceShare = null, riceExtra = null, lakeBeds = null }) {
   const cell = grid.cell, RICE = 3, SEDGE = 3;
   const bins = new Map();
   let total = 0;
@@ -912,6 +914,7 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
       // (d2 water: by the water's CDOM where the release has it, the Secchi depth else)
       const cdom = grid.cdomById ? grid.cdomById[id] || 0 : 0;
       const stained = cdom > 0 ? smoothstep(1.4, 4.0, cdom) : 1 - smoothstep(1.4, 3.0, bed.clarity);
+      const rest = lakeBeds && id < lakeBeds.length && !lakeBeds[id] ? MAPPED.unmapped : MAPPED.rest; // (d2 water)
       const rng = mulberry32((hash2(i, j, seed + 1) * 4294967296) >>> 0);
       const rx = Math.floor((cx - grid.originX) / REGION), rz = Math.floor((cz - grid.originZ) / REGION);
       // gate (d2 water): a further test of the plant's own spot (inBed), after the depth's
@@ -931,7 +934,7 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
         }
       };
       // beds of wild rice: 50-100 m fields in the soft shallows where water runs through, and in the quiet stained bays
-      const riceField = smoothstep(0.42, 0.56, fbm(cx * 0.012 + 7, cz * 0.012, 2, 113));
+      const riceN = fbm(cx * 0.012 + 7, cz * 0.012, 2, 113), riceField = smoothstep(0.42, 0.56, riceN);
       // d1 lakes: and by the lake (lake-facts.js riceById): a lake on the DNR's wild rice list grows more and wider, a
       // surveyed lake that is not on it a third as much, other water as it was
       const riceK = rice && id < rice.length ? rice[id] : 1;
@@ -943,8 +946,10 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
         bedR *= riceExtra && id < riceExtra.length ? riceExtra[id] : 0;
         if (em) {
           const share = riceShare && id < riceShare.length && riceShare[id] >= 0 ? riceShare[id] : 0.45;
-          const thr = 0.5 + 0.36 * (0.5 - share); // (fbm's spread: about half its values lie within 0.36 of the middle)
-          riceIn = share >= 0.98 ? 1 : share <= 0.02 ? 0 : smoothstep(thr - 0.05, thr + 0.05, riceField);
+          // the fields: where the rice noise is over its (1 - share) quantile (two-octave fbm: 0.5 + 0.56 (0.5 - share)
+          // within a percent or two from 0.1 to 0.9), so `share` of the bed is rice
+          const thr = 0.5 + 0.56 * (0.5 - share);
+          riceIn = share >= 0.98 ? 1 : share <= 0.02 ? 0 : smoothstep(thr - 0.03, thr + 0.03, riceN);
           const gate8 = (x, z) => inBed(x, z, 8);
           if (riceIn > 0.01 && sd < -1 && depth > 0.15)
             place(RICE, MAPPED.rice * (em / 9) * riceIn, () => (rng() < 0.5 ? 0 : 1), (s, d) => s < -0.8 && d > 0.15 && d < 1.7, 0.07, () => 0.85 + rng() * 0.4, gate8);
@@ -959,7 +964,7 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
       let raft = smoothstep(0.26, 0.48, fbm(cx * 0.025 + 3, cz * 0.025, 2, 77)) ** 0.7 * clamp(smoothstep(0.1, 0.5, shelt) + 0.8 * inlet, 0, 1) * (0.3 + 0.7 * rooting) * (1 - 0.6 * bedR) * (1 - 0.9 * rockS);
       const padPick = (d) => { const r = rng(); return d < 1.6 && r < 0.38 + 0.25 * stained ? 1 : d > 0.9 && r < 0.6 ? 2 : r < 0.75 ? 0 : 3; };
       if (mapped) {
-        raft *= MAPPED.rest.raft; // d2 water: the rafts live in the mapped aquatic bed, a remnant beyond it
+        raft *= rest.raft; // d2 water: the rafts live in the mapped aquatic bed, a remnant beyond it
         // the mapped aquatic bed: rafts throughout it, thinner where its edge cuts the cell
         if (aq && sd < -0.4 && depth > 0.2)
           place(AQUATIC.pad, MAPPED.raft * (aq / 9) * (0.55 + 0.45 * rooting), padPick, (s, d) => s < -0.4 && d > 0.25 && d < 3.2, 0.035, () => 0.8 + rng() * 0.5, (x, z) => inBed(x, z, 9));
@@ -980,7 +985,7 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
       // bulrush out to a metre and a half on the soft bottoms, and reed and grass at the edge (d2 water: on surveyed
       // water a remnant of them outside the mapped emergent bed)
       if (sd > -16 && sd < 1)
-        place(AQUATIC.reed, 4.5 * stand * rooting * (0.4 + 0.6 * shelt) * (mapped ? MAPPED.rest.stand : 1), (d) => (d > 0.5 ? 0 : rng() < 0.55 ? 1 : 0), (s, d) => s < 0.9 && d > -0.04 && d < 1.5, 0.07, () => 0.8 + rng() * 0.45);
+        place(AQUATIC.reed, 4.5 * stand * rooting * (0.4 + 0.6 * shelt) * (mapped ? rest.stand : 1), (d) => (d > 0.5 ? 0 : rng() < 0.55 ? 1 : 0), (s, d) => s < 0.9 && d > -0.04 && d < 1.5, 0.07, () => 0.8 + rng() * 0.45);
       // pondweed and milfoil on the soft bed, in the weed beds (d2 water: thicker in a mapped aquatic bed)
       if (sd < -2 && sd > -38 && depth > 0.4 && depth < 3.8)
         place(AQUATIC.weed, (0.8 + 7 * bed.weed) * rooting * (0.5 + 0.5 * shelt) * (aq ? 1 + (MAPPED.weed - 1) * (aq / 9) : 1), () => Math.floor(rng() * 2), (s, d) => s < -1.5 && d > 0.35 && d < 3.8, 0, (d) => Math.min(0.45 + d * 0.45 * rng() + 0.25, d * 0.8));

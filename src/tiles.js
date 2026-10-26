@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { makeTerrainMesh } from './terrain.js';
 import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as VEG_SPECIES } from './vegetation.js';
-import { makeAquaticMeshes, riceBeds } from './aquatic.js'; // (d2 water: riceBeds)
+import { makeAquaticMeshes, waterInit } from './aquatic.js'; // (d2 water: waterInit)
 import { tilePropsSteps, exclusionsFor } from './props.js';
 import { MeshGround } from './prop-kit.js';
 import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
@@ -423,13 +423,13 @@ export class TileManager {
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2));
-    const rice = riceBeds(world); // d2 water
+    const waterMsg = { type: 'water', ...waterInit(world) }; // d2 water: the lakes' colour and beds, a message of its own after init
     this.workers = Array.from({ length: n }, () => {
       const w = new Worker(new URL('./tile-worker.js', import.meta.url), { type: 'module' });
       w.onmessage = (e) => this.onMessage(e.data);
-      w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, cdomById: world.cdomById, exclusions, seed, // (d2 water: cdomById)
-        bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null, // d1 lakes: the lakes' bowls and rice (lake-facts.js)
-        riceShare: rice ? rice.share : null, riceExtra: rice ? rice.extra : null }); // d2 water: the rice by each lake's acres in the mapped beds (aquatic.js riceBeds)
+      w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
+        bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null }); // d1 lakes: the lakes' bowls and rice (lake-facts.js)
+      w.postMessage(waterMsg);
       return { w, key: null };
     });
   }

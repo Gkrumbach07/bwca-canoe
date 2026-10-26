@@ -172,7 +172,7 @@ async function buildFine(m) {
   const site = new Site(grid, cfg.exclusions);
   const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz, site });
   veg.bins.push(...lakeRockBins(grid, i0, j0, g.tile, ox, oz)); // d1 rapids: NHD's rocks above the water, as boulders
-  const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site, rice: cfg.riceById, riceShare: cfg.riceShare, riceExtra: cfg.riceExtra }); // (d1 lakes: rice by lake; d2 water: by its acres in the mapped beds)
+  const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site, rice: cfg.riceById, riceShare: cfg.riceShare, riceExtra: cfg.riceExtra, lakeBeds: cfg.lakeBeds }); // (d1 lakes: rice by lake; d2 water: by its acres in the mapped beds)
   clearPlants(aquatic.bins, ox, oz); // d1 rapids: no pads or reeds where the water falls or boils
   // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
@@ -221,6 +221,7 @@ async function buildFar(m) {
 self.onmessage = async (e) => {
   const m = e.data;
   if (m.type === 'init') { cfg = m; if (v4()) rapidsV4(); return; } // (d2 bake: the v4 release's drops)
+  if (m.type === 'water') { Object.assign(cfg, m, { type: 'init' }); return; } // d2 water: the lakes' colour and beds (aquatic.js waterInit)
   if (m.type !== 'build') return;
   try {
     const r = m.level === 'far' ? await buildFar(m) : await buildFine(m);
