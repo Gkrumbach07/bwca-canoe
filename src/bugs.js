@@ -42,6 +42,11 @@ const SMOKE = { near: 3.5, drift: 5 };
 const BUG_GONE = 0.5;       // game hours the bugs must be gone before their moment's episode ends (content join)
 const SWAT = { from: 0.25, gap: [3, 9], dur: 0.62, hit: 0.22 }; // felt over `from`: a swat every gap s (fewer when felt is low)
 const SWAT_MOVES = new Set(['idle', 'walk', 'wade', 'sit']); // player.move kinds a swat goes with
+// (the cons join) the head net worn: a dark mesh veil from under the hat's brim to the collar, in head-bone space (the
+// hat's brim is at about 0.15 up, 0.18 out), shown while the bugs are out (level over `from`) and the net is with you
+// (not with a bug jacket, not asleep, not in first person, where the camera is inside it). Before, the net in reach let
+// a third of them through and nothing on the walker showed it was on.
+export const VEIL = { top: 0.152, bottom: -0.07, rTop: 0.172, rBot: 0.128, x: -0.006, color: 0x26261f, opacity: 0.4, from: 0.12 };
 
 // --- the curves ---------------------------------------------------------------------------------------------------
 const bump = (h, c, w) => Math.exp(-(((h - c) / w) ** 2));
@@ -95,6 +100,7 @@ export class Bugs {
   attach(o = {}) {
     Object.assign(this.t, o);
     if (this.t.scene && !this.swarm) this.swarm = new Swarm(this.t.scene);
+    if (!this.veil) this.veil = buildVeil();
     TENT_BUGS.out = () => this.now.level > 0.25; // tent.js: the Rest with no fly says the bugs get in
     return this;
   }
@@ -109,10 +115,16 @@ export class Bugs {
     // the night ahead, the moment the night's card goes up (camp.js night)
     const cp = this.t.camp, n = cp && cp.night;
     if (n && !n.bugBed) { n.bugBed = true; this.bed = this.nightAhead(n); }
+    const c = this.t.canoe, hb = c && c.figure && c.figure.bones ? c.figure.bones.head : null;
     if (this.swarm) {
-      const c = this.t.canoe, hb = c && c.figure && c.figure.bones ? c.figure.bones.head : null;
       if (hb) hb.getWorldPosition(HEAD);
       this.swarm.update(dt, this.now, this.t.player, !!(n || (cp && cp.dialOpen)), hb ? HEAD : null);
+    }
+    // the head net on while they are out (VEIL)
+    if (this.veil && hb) {
+      if (this.veil.parent !== hb) hb.add(this.veil);
+      const k = this.t.kit, ch = typeof window !== 'undefined' && window.__game ? window.__game.chase : null;
+      this.veil.visible = !!(k && k.has('headnet') && !k.has(JACKET) && this.now.level > VEIL.from && !n && !(ch && ch.mode === 'first'));
     }
   }
   reckon(t1) {
@@ -362,6 +374,14 @@ const Q0 = ARM.R.map(() => new THREE.Quaternion()), Q1 = new THREE.Quaternion();
 // thicker they are, whether or not the net keeps them off you. Mosquitoes dance loosely about the head; blackflies are a
 // tight, jittery knot close in at the ears and the neck. One Points object (content C's), in the scene from the start so
 // the shader prewarm compiles it, hidden while there are none.
+function buildVeil() {
+  const V = VEIL, h = V.top - V.bottom;
+  const geo = new THREE.CylinderGeometry(V.rTop, V.rBot, h, 22, 1, true);
+  // (the tent's ghost's material: the same program, compiled at the start)
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: V.color, transparent: true, opacity: V.opacity, depthWrite: false, side: THREE.DoubleSide }));
+  m.position.set(V.x, V.bottom + h / 2, 0); m.name = 'head net'; m.visible = false; m.castShadow = false; m.renderOrder = 2;
+  return m;
+}
 const SWARM_N = 40;
 class Swarm {
   constructor(scene) {
