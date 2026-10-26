@@ -529,7 +529,14 @@ registerKind('secchi', {
   onTake(T, t) {
     const i = inv(); if (!i) return;
     if (i.count('secchi', { reachable: false }) > 0) return;
-    try { if (i.give('secchi')) { t.lent = true; T.note('The keeper lends you the Secchi disk on its marked line.'); } } catch (e) { console.warn('secchi: lend', e); }
+    try {
+      if (i.give('secchi')) {
+        t.lent = true;
+        // (the content join: with the packs full it went to Keeping without a word, and a player paddled off without it)
+        const h = i.find('secchi', { reachable: false })[0], kept = !!(h && h.c && (h.c.item === 'crate' || h.c.where === 'stash'));
+        T.note(`The keeper lends you the Secchi disk on its marked line.${kept ? ' No room on you: it waits in Keeping (I).' : ''}`);
+      }
+    } catch (e) { console.warn('secchi: lend', e); }
   },
   onDrop(T, t) { const i = inv(); if (i && t.lent) { try { if (i.remove('secchi', 1)) T.note('You hand the Secchi disk back.'); } catch { /* gone */ } } t.lent = false; },
   onClaim(T, t) { const i = inv(); if (i && t.lent) { try { i.remove('secchi', 1); } catch { /* gone */ } } },
