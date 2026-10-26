@@ -926,7 +926,8 @@ export class Hud {
     const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
     const hung = adv && energy && energy.hungFood ? energy.hungFood() : null; // camp join: the barrel hung at camp is food you have
     const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 1 ? (energy.food <= 0 ? (energy.foodWords && energy.foodWords() !== 'no food' ? energy.foodWords() : hung && hung.words ? hung.words : 'no food') : energy.foodWords ? energy.foodWords() : `${foodWords(energy.food)} of food`) : ''; // fb A
-    this.set('mfood', mk.food, food); mk.food.classList.toggle('on', !!food);
+    const shown = food === 'no food' && energy && typeof energy.foodNearby === 'function' && energy.foodNearby() ? '' : food; // (the content join: not "no food" 6 m from the canoe with meals in it)
+    this.set('mfood', mk.food, shown); mk.food.classList.toggle('on', !!shown);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
     mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
     mk.mute.classList.toggle('on', !!(this.settings && this.settings.get('mute')));
