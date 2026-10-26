@@ -172,35 +172,43 @@ export class PartyCamps {
     const ox = F.x, oz = F.z, pieces = [], obstacles = [], spots = { fire: [], seats: [], shore: [], tents: [] };
     const toWater = w.deeperDir(F.x, F.z);
     const near = (x, z, list, r) => list.some((q) => Math.hypot(q.x - x, q.z - z) < r);
-    // the canoes, overturned on the bank, side by side, bows to the water, a paddle by each
+    // the canoes, overturned on the bank above the landing, lying along the shore (so a slope tips them a little across
+    // the beam, never stands them on end), one up the bank behind another, the next pair along the shore; flat clear
+    // ground only (off the ledge's rocks, the trunks and the logs), a paddle on the ground by each
     const canoes = [];
     let t = 0;
     while (t < 40 && w.shoreAt(F.x + toWater.x * t, F.z + toWater.z * t) > CAMPS.bank) t += 0.5;
     const bx = F.x + toWater.x * t, bz = F.z + toWater.z * t, along = { x: -toWater.z, z: toWater.x };
-    const offs = []; for (let k = 0; k < 9; k++) offs.push((k % 2 ? 1 : -1) * Math.ceil(k / 2) * 1.25);
-    for (const off of offs) {
+    const cands = [];
+    for (const a of [0, 5.6, -5.6, 11.2, -11.2]) for (const row of [0, 1, 2]) cands.push([a, row]);
+    for (const [a, row] of cands) {
       if (canoes.length >= party.canoes) break;
-      let x = bx + along.x * (off + (rng() - 0.5) * 0.2), z = bz + along.z * (off + (rng() - 0.5) * 0.2);
-      let d2 = w.deeperDir(x, z);
-      for (let s = 0; s < 10; s++) { const sd = w.shoreAt(x, z), e = sd - CAMPS.bank; if (Math.abs(e) < 0.35) break; const st = clamp(e, -1.5, 1.5); x += d2.x * st; z += d2.z * st; d2 = w.deeperDir(x, z); }
-      const ex = d2.x * 2.3, ez = d2.z * 2.3, gb = G(x + ex, z + ez), gs = G(x - ex, z - ez);
-      if (!(w.shoreAt(x + ex, z + ez) > 0.3) || Math.abs(gb - gs) / 4.6 > 0.5 || Math.hypot(x - F.x, z - F.z) < 2.2 || near(x, z, canoes, 1.05)) continue;
-      if (L.bench && Math.hypot(x - L.bench.x, z - L.bench.z) < 1.8) continue;
-      if (!this.clearFor(x, z, d2.x, d2.z, 2.5, 0.45)) continue; // (off the ledge's rocks, the trunks and the logs)
-      canoes.push({ x, z, dx: d2.x, dz: d2.z, gb, gs });
+      let x = bx + along.x * a, z = bz + along.z * a, d2 = w.deeperDir(x, z);
+      for (let s = 0; s < 10; s++) { const e = w.shoreAt(x, z) - CAMPS.bank; if (Math.abs(e) < 0.35) break; const st = clamp(e, -1.5, 1.5); x += d2.x * st; z += d2.z * st; d2 = w.deeperDir(x, z); }
+      x -= d2.x * row * 1.25; z -= d2.z * row * 1.25; // (up the bank)
+      const tx = -d2.z, tz = d2.x, P = (u, v) => { const px = x + tx * u + d2.x * v, pz = z + tz * u + d2.z * v; return V(px, G(px, pz), pz); };
+      const A = P(2.3, 0.45), B = P(2.3, -0.45), Cc = P(-2.3, -0.45), D = P(-2.3, 0.45);
+      const pitch = Math.abs((A.y + B.y) - (Cc.y + D.y)) / 2 / 4.6, roll = Math.abs((A.y + D.y) - (B.y + Cc.y)) / 2 / 0.9;
+      if (pitch > 0.22 || roll > 0.5 || !(w.shoreAt(x + tx * 2.4, z + tz * 2.4) > 0.6) || !(w.shoreAt(x - tx * 2.4, z - tz * 2.4) > 0.6)) continue;
+      if (Math.hypot(x - F.x, z - F.z) < 3.2 || (L.bench && Math.hypot(x - L.bench.x, z - L.bench.z) < 3)) continue;
+      if (canoes.some((q) => { const dx = q.x - x, dz = q.z - z; return Math.abs(dx * tx + dz * tz) < 5.1 && Math.abs(-dx * tz + dz * tx) < 1.05; })) continue;
+      if (!this.clearFor(x, z, tx, tz, 2.5, 0.45)) continue;
+      // the frame of the ground under it: along the shore, the slope's own up
+      const up = A.clone().sub(Cc).cross(B.clone().sub(D)).normalize(); if (up.y < 0) up.negate();
+      const X = V(tx, 0, tz).addScaledVector(up, -tx * up.x - tz * up.z).normalize(), Z = X.clone().cross(up).normalize();
+      canoes.push({ x, z, tx, tz, wx: d2.x, wz: d2.z, y: (A.y + B.y + Cc.y + D.y) / 4 + 0.4, basis: new THREE.Matrix4().makeBasis(X, up, Z) });
     }
     for (const cn of canoes) {
-      const yaw = headingTo(cn.dx, cn.dz), pitch = Math.atan2(cn.gb - cn.gs, 4.6), y = (cn.gb + cn.gs) / 2 + 0.4;
-      const m = new THREE.Matrix4().makeTranslation(cn.x - ox, y, cn.z - oz).multiply(new THREE.Matrix4().makeRotationY(yaw)).multiply(new THREE.Matrix4().makeRotationZ(pitch)).multiply(new THREE.Matrix4().makeRotationX(Math.PI));
+      const m = new THREE.Matrix4().makeTranslation(cn.x - ox, cn.y, cn.z - oz).multiply(cn.basis).multiply(new THREE.Matrix4().makeRotationX(Math.PI));
       pieces.push({ geo: hullGeometry(pick(rng, HULLS)), m });
-      obstacles.push({ x: cn.x, z: cn.z, ux: cn.dx, uz: cn.dz, hx: 2.5, hz: 0.45, box: true });
-      // a paddle on the ground beside it
-      const sx = -cn.dz * 0.72, sz = cn.dx * 0.72, px = cn.x + sx, pz = cn.z + sz;
-      if (w.shoreAt(px, pz) > 0.8) pieces.push({ geo: itemGeometry('paddle', 3 + Math.floor(rng() * 4)), m: new THREE.Matrix4().makeTranslation(px - ox, G(px, pz) + 0.005, pz - oz).multiply(new THREE.Matrix4().makeRotationY(yaw + (rng() - 0.5) * 0.3)).multiply(new THREE.Matrix4().makeRotationZ(pitch)) });
+      obstacles.push({ x: cn.x, z: cn.z, ux: cn.tx, uz: cn.tz, hx: 2.5, hz: 0.45, box: true });
+      // a paddle on the ground on its land side
+      const px = cn.x - cn.wx * 0.85 + cn.tx * (rng() - 0.5), pz = cn.z - cn.wz * 0.85 + cn.tz * (rng() - 0.5);
+      if (w.shoreAt(px, pz) > 0.8 && this.clearFor(px, pz, cn.tx, cn.tz, 0.75, 0.12)) pieces.push({ geo: itemGeometry('paddle', 3 + Math.floor(rng() * 4)), m: new THREE.Matrix4().makeTranslation(px - ox, G(px, pz) + 0.01, pz - oz).multiply(new THREE.Matrix4().makeRotationY(headingTo(cn.tx, cn.tz) + (rng() - 0.5) * 0.3)) });
     }
-    // (by the canoes: one a step behind each stern, looking down to the water; a lone canoe has one at its side too)
-    for (const cn of canoes.slice(0, 2)) spots.shore.push({ x: cn.x - cn.dx * 3.1, z: cn.z - cn.dz * 3.1, heading: headingTo(cn.dx, cn.dz) });
-    if (canoes.length === 1) { const cn = canoes[0]; spots.shore.push({ x: cn.x - cn.dz * 1.1 - cn.dx * 0.8, z: cn.z + cn.dx * 1.1 - cn.dz * 0.8, heading: headingTo(-cn.dz, cn.dx) }); }
+    // (by the canoes: a step up the bank from each of the first two, looking down to the water)
+    for (const cn of canoes.slice(0, 2)) spots.shore.push({ x: cn.x - cn.wx * 1.4 + cn.tx * 0.9, z: cn.z - cn.wz * 1.4 + cn.tz * 0.9, heading: headingTo(cn.wx, cn.wz) });
+    if (canoes.length === 1) { const cn = canoes[0]; spots.shore.push({ x: cn.x - cn.wx * 1.3 - cn.tx * 1.2, z: cn.z - cn.wz * 1.3 - cn.tz * 1.2, heading: headingTo(cn.wx, cn.wz) }); }
     // the tents: the site's pad first, then where a tent can stand round the ring, door to the fire
     const tents = [], cp = this.camp;
     const fits = (x, z, fdx, fdz, size) => {
