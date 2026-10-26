@@ -133,14 +133,22 @@ Cold and hunger never reached their first lines in three July days: warmth staye
 
 ## What needs the owner's call
 
+The owner approved all six on 2026-10-25. They were built at the content join on `claude/content-1`, and each was played.
+
 1. **The home sheet.** A new season starts with no map. Even with the new map-table moment, a player who skips it has blank paper on night one.
    - Recommend: give the home sheet at a new season. `sheets.giveHome()` exists for the old unlock.
+   - **Done (owner approved 2026-10-25), 0b3602d.** A new season owns the home table's first sheet (F-24 at EP 30). M on the water shows its campsites from the first minute, and the map-table moment stays quiet.
 2. **A barrel in the first kit.** The bears line, the raid and the hang all assume a barrel, and it costs $25 of the $40.
    - Recommend: the 30 L barrel comes in the starting pack.
+   - **Done (owner approved 2026-10-25), 8174552.** The barrel rides in the canoe, empty, and bought food goes into it. Two suppers, an oatmeal and trail mix leave $29, enough for the saw and a head net.
 3. **Portage verbs.** Recommend E Shoulder it at trail heads (item 2 above).
+   - **Done (owner approved 2026-10-25), c16adbd.** At a trail's end the dot reads "E Shoulder it · hold Q Push it off". Loaded, E opens the book at the canoe. The portage and unload moments name E, and elsewhere the held-E push stays.
 4. **A fish's food.** Recommend +30 (item 5).
+   - **Done (owner approved 2026-10-25), 2ea9577.** A fish, fried or whole, and its fillets give +30 food. The +45 lift is left for the balance pass.
 5. **Thirst asleep.** Recommend half rate (item 6).
+   - **Already a third of the waking rate while asleep; no change (owner approved 2026-10-25).** Measured: a 7.3 h night in the tent took the water need from 0.59 to 0.29, a third of the waking rate (energy.js ASLEEP). That is already gentler than the half asked for. You wake thirsty when you go to bed under about 0.6, which is what happened in the run above. The review's own case, checked: thirst at 0 and the bar at 0.11 at 21:00, the bottle drunk up (need back to 1.0), then rest to first light (8.6 h). You wake at 0.64 water and 0.55 bar, well clear of spent, so it was no bug.
 6. **Shoulder drops.** Recommend 15 %, jogging only (item 1).
+   - **Done (owner approved 2026-10-25), 177df3b.** Walked into a lone trunk 29 times, the canoe never came down. Jogged into it 119 times, it came down 18 times (15 %).
 
 ## The commits (on `claude/fb5-1025c`, over the five streams' merge 13cf3fe)
 
