@@ -153,6 +153,7 @@ export class Journal {
   get dayN() { const c = this.core; if (c) return c.active ? c.dayN : 0; const t = this.trip; return t && t.active ? Math.floor(this.outfitter.daysOut) + 1 : 0; }
   lakeList(lakes) {
     if (!lakes.length) return 'none yet';
+    lakes = lakes.filter((l, i) => lakes.findIndex((q) => q.name === l.name) === i); // (round A join: a name once: "Lake One, One")
     return lakes.map((l, i) => (i === 0 ? l.name : l.name.replace(/^Lake /, '').replace(/ Lake$/, ''))).join(', ');
   }
   catchTime(c) {
