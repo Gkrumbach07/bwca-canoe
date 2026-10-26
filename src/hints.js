@@ -58,6 +58,7 @@ import { esc, compassLong } from './hud.js';
 import { sheets } from './sheets.js';
 import { campKey } from './camp.js';
 import * as PACE from './pace.js';
+import { itemDef } from './items.js';
 
 const SHOW = 7;        // seconds a moment is up
 const GAP = 3;         // seconds between two
@@ -323,7 +324,12 @@ export class Hints {
   foodOut() {
     const e = this.t.energy, inv = this.t.inventory;
     if (!e || !inv || !inv.attached) return false;
-    try { if (typeof inv.hungAtCamp === 'function' && inv.hungAtCamp().length) return false; return e.food > 0 || inv.snacks() > 0; } catch { return false; }
+    try {
+      // (the content join: the food left out, not hung: stood under the limb the hung barrel was in reach, hungAtCamp
+      // left it out, and at dusk the bears moment asked to hang what hung there)
+      if (typeof inv.campReach === 'function' && typeof inv.root === 'function') return inv.campReach().some((c) => inv.root(c).where !== 'hung' && c.grid.some((q) => !q.box && ['meal', 'snack', 'food'].includes((itemDef(q.id) || {}).kind)));
+      if (typeof inv.hungAtCamp === 'function' && inv.hungAtCamp().length) return false; return e.food > 0 || inv.snacks() > 0;
+    } catch { return false; }
   }
   // the nearest free campsite on your map, in words ("1.2 km north-east"), or ''
   nearestSiteWords() {
