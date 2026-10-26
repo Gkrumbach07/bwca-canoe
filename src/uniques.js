@@ -123,6 +123,7 @@ export class Uniques {
       }
       if (spot) this.spots.push({ id: f.id, kind: f.kind, ep: f.ep, ...spot, artifact: !!f.artifact, lost: !!f.lost, settled: f.kind === 'portage' });
     }
+    for (const sp of this.spots) if (sp.site) this.resolveLake(sp);
     return this.spots;
   }
   // a spot's last word, once the ground there is loaded: the ring's ash at a campsite, the shallows at a landing
@@ -307,10 +308,28 @@ export class Uniques {
   dayStamp() { const d = this.t.day; return d ? d.doy : 0; }
   note(w) { const h = this.t.hud; if (h && typeof h.note === 'function') h.note(w, 6); }
 
+  sitePlace(s) { return `the campsite${s.site.name && !/#\d/.test(s.site.name) ? ` at ${s.site.name}` : ''}${s.lake ? ` on ${s.lake}` : ''}`; }
+  // a site's lake from its fine tile's grid (tasks.peek fetches one that is not loaded), once: far from the player the
+  // live cells are empty, and the brooch's place read "the campsite" in a rumour or at a counter after a reload (the
+  // content join)
+  resolveLake(s) {
+    const T = this.t.tasks;
+    if (s.lakeAsked || !s.site || !T || typeof T.peek !== 'function') return;
+    s.lakeAsked = true;
+    T.peek(s.site.x, s.site.z).then((tg) => {
+      if (!tg || s.lake) return;
+      const ci = tg.cellI(s.site.x), cj = tg.cellJ(s.site.z);
+      let best = 0, bestD = Infinity;
+      for (let dj = -9; dj <= 9; dj++) for (let di = -9; di <= 9; di++) { const d = di * di + dj * dj; if (d >= bestD) continue; const id = tg.lakeCell(ci + di, cj + dj); if (id) { bestD = d; best = id; } }
+      const name = this.lakeName(best);
+      if (name) { s.lake = name; s.place = this.sitePlace(s); }
+    }, () => {});
+  }
+
   // --- for the others: the list (stream B's rumours), Arvid's site, the map's pencil ---------------------------------
   list() {
     return this.places().map((s) => {
-      if (s.site && !s.lake) { s.lake = this.lakeNear(s.site.x, s.site.z); s.place = `the campsite${s.site.name && !/#\d/.test(s.site.name) ? ` at ${s.site.name}` : ''}${s.lake ? ` on ${s.lake}` : ''}`; }
+      if (s.site && !s.lake) { s.lake = this.lakeNear(s.site.x, s.site.z); s.place = this.sitePlace(s); if (!s.lake) this.resolveLake(s); }
       return { id: s.id, name: (itemDef(s.id) || {}).name || s.id, x: s.x, z: s.z, kind: s.kind, ep: s.ep, place: s.place, lake: s.lake, found: this.found(s.id), ...(s.artifact ? { artifact: true, noted: !!this.s.noted[s.id], reported: !!this.s.reported[s.id] } : {}), ...(s.lost ? { lost: true } : {}) };
     });
   }

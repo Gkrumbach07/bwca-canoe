@@ -625,7 +625,7 @@ async function main() {
   // the Forest Service for a reward and the keepers' goodwill; stream B's keepers give three more (uniques.give).
   kit.attach({ player, inventory, energy, fishing, camp, fires, day, weather, wind, hud, profile, lamp, shop, world, uniques, canoe, scene });
   energy.kit = kit; fishing.kit = kit; trip.kit = kit; shop.kit = kit;
-  uniques.attach({ world, scene, player, inventory, profile, hud, camp, day, pointer, audio });
+  uniques.attach({ world, scene, player, inventory, profile, hud, camp, day, pointer, audio, tasks }); // (content join: tasks.peek names a far site's lake)
   const shopUpdC = shop.update.bind(shop);
   shop.update = () => { shopUpdC(); kit.update(); uniques.update(); };
   const fillC = camp.fillBottle.bind(camp);
