@@ -1,7 +1,8 @@
 // Rides up the road (hubs phase 2, stream C): fast travel between the outfitters, by truck, from a counter. About half
 // the entry points are not joined to another by water within a dozen portages, so the road is how a season reaches
-// them. From any counter the truck goes to the outfitters you know, and up the road to the nearest one you don't (on
-// the same road while there is one, else the nearest anywhere); arriving makes that one known. No rides from the wild.
+// them. From any counter the truck goes to the outfitters you know, and up the road to the nearest few you don't
+// (UNKNOWN_RIDES; on the same road while there are any, else the nearest anywhere); arriving makes that one known. No
+// rides from the wild.
 //
 // A ride costs money and game time: the road is about 1.4 × the straight line, the time 0.5 h + km / 40, the price
 // $5 + $0.50 a km, rounded to $5. The canoe rides on the roof and the packs in the back: you arrive with everything
@@ -25,6 +26,7 @@ const BASE_H = 0.5, KMH = 40;     // the time: half an hour, then 40 km an hour
 const BASE_$ = 5, PER_KM = 0.5, ROUND = 5;
 const LATE = 21, EARLY = 5, WAKE = 7.5; // a ride in after 21:00 (or before 5:00) is a bunk night, up at 7:30
 const AT_COUNTER = 40;            // metres from a landing that count as at its counter, when no counter is open
+const UNKNOWN_RIDES = 3;          // tuning: the outfitters you don't know yet that a counter offers rides to, the nearest up the road
 
 export function quoteBetween(a, b) {
   const km = (Math.hypot(b.x - a.x, b.z - a.z) * ROAD) / 1000;
@@ -61,19 +63,19 @@ export class Rides {
   }
 
   quote(fromEp, toEp) { const a = this.landing(fromEp), b = this.landing(toEp); return a && b ? quoteBetween(a, b) : null; }
-  // the nearest outfitter you don't know, up the same road while there is one there
-  nextUnknown(fromEp) {
-    const a = this.landing(fromEp), o = this.outfitter; if (!a || !o) return null;
-    const road = roadOf(a.ep);
-    let best = null;
+  // the nearest outfitters you don't know, up the same road while there are any there (the nearest first): UNKNOWN_RIDES
+  // of them (tuning: one only made Saganaga four rides from Moose on $29)
+  unknownNear(fromEp, n = UNKNOWN_RIDES) {
+    const a = this.landing(fromEp), o = this.outfitter; if (!a || !o) return [];
+    const road = roadOf(a.ep), out = [];
     for (const l of o.landings) {
       if (l.ep === a.ep || this.knows(l.ep)) continue;
-      const d = Math.hypot(l.x - a.x, l.z - a.z) * (roadOf(l.ep) === road ? 1 : 1e3);
-      if (!best || d < best.d) best = { l, d };
+      out.push({ l, d: Math.hypot(l.x - a.x, l.z - a.z) * (roadOf(l.ep) === road ? 1 : 1e3) });
     }
-    return best ? best.l : null;
+    return out.sort((x, y) => x.d - y.d).slice(0, n).map((x) => x.l);
   }
-  // the rides from a counter: the outfitters you know (every one in Sandbox), and the next unknown one up the road first
+  nextUnknown(fromEp) { return this.unknownNear(fromEp, 1)[0] || null; }
+  // the rides from a counter: the outfitters you know (every one in Sandbox), and the nearest unknown ones up the road first
   offer(fromEp) {
     const a = this.landing(fromEp), o = this.outfitter; if (!a || !o) return [];
     const row = (l, unknown) => {
@@ -82,8 +84,8 @@ export class Rides {
         price: this.sandbox ? 0 : q.price, unknown, late: !this.sandbox && (at >= LATE || at < EARLY) };
     };
     const known = o.landings.filter((l) => l.ep !== a.ep && (this.sandbox || this.knows(l.ep))).map((l) => row(l, !this.knows(l.ep))).sort((x, y) => x.km - y.km);
-    const next = this.nextUnknown(fromEp);
-    return next && !known.some((r) => r.ep === next.ep) ? [row(next, true), ...known] : known;
+    const next = this.unknownNear(fromEp).filter((l) => !known.some((r) => r.ep === l.ep)).map((l) => row(l, true));
+    return [...next, ...known];
   }
 
   // --- taking one ------------------------------------------------------------------------------------------------
@@ -93,7 +95,7 @@ export class Rides {
     if (this.busy || !o || !to) return false;
     if (!from) { this.note('The truck goes from an outfitter’s counter. No rides from the wild.'); return false; }
     const r = this.offer(from.ep).find((x) => x.ep === to.ep);
-    if (!r) { this.note(`No ride to ${to.name} from here: the truck goes to the outfitters you know, and up the road to the next one.`); return false; }
+    if (!r) { this.note(`No ride to ${to.name} from here: the truck goes to the outfitters you know, and up the road to the next few.`); return false; }
     if (!this.sandbox && r.price > 0) {
       if (!pr || !pr.spend(r.price, `the ride to ${to.name}`)) { this.note(`The ride to ${to.name} is $${r.price}: not enough in hand.`); if (o.open) o.render(); return false; }
     }

@@ -26,6 +26,11 @@ import { esc, word, plural, fmtKm, shortDate } from './hud.js';
 
 const HOPS = 4;              // portages out from the landing a notice may send you
 const RANGE = 14000;         // metres from the landing, as the crow flies
+// tuning (the content join's leftover: "the deadfall pays $45, as for a day trip, 13 km out"): the bands go by portages, so
+// a medium notice ("a day trip") could lie 13 km out, a full day each way at the pace; a medium one now lies within
+// BAND_KM.medium m (out and back in a day: 20 km at the pace), the others within RANGE
+const BAND_KM = { medium: 9000 };
+const rangeOf = (band) => Math.min(RANGE, BAND_KM[band] ?? RANGE);
 const PICKUP = 4;            // metres within which E picks an item up
 const ARRIVE = 28;           // metres within which a survey point counts as reached
 const SLOTS = ['local', 'local', 'medium', 'far']; // the four pins on every board
@@ -110,7 +115,7 @@ export function sizeAt(species, q) { const s = FISH[species]; return s ? Math.ro
 const district = (ep) => (ep <= 20 ? 'LaCroix' : ep <= 33 ? 'Kawishiwi' : ep >= 40 && ep <= 70 ? 'Gunflint' : 'Tofte');
 // content A: the clue writer's words and numbers, for the kinds written in other modules (task-kinds.js)
 export const WORDS = { hopsText, compass, pickR, kmFrom, cap, fill, poss, district, fishName, absDay };
-export const NUMBERS = { HOPS, RANGE, DEEP, TROUT_WATER, SPECIES_PAY, PAY_MAX, KM_PAY, TIGHT, AREA, SITE_LABEL, AREA_LABEL, BAND_WORDS, STANDING };
+export const NUMBERS = { HOPS, RANGE, BAND_KM, DEEP, TROUT_WATER, SPECIES_PAY, PAY_MAX, KM_PAY, TIGHT, AREA, SITE_LABEL, AREA_LABEL, BAND_WORDS, STANDING };
 
 // --- the kinds ---------------------------------------------------------------------------------------------------
 // A kind: { label, weight: { local, medium, far }, make(tasks, ctx) → fields | null (may be async), pay(t) → dollars,
@@ -194,7 +199,7 @@ registerKind('item', {
     const w = T.world, L = c.landing, [h0, h1] = BAND_HOPS.item[c.band], cands = [];
     w.campsites.forEach((s, i) => {
       const d = Math.hypot(s.x - L.x, s.z - L.z);
-      if (d > RANGE || T.used('item', i)) return;
+      if (d > rangeOf(c.band) || T.used('item', i)) return;
       const r = c.reach.get(T.basinOf(T.lakeNear(s.x, s.z)));
       if (r && r.hops >= h0 && r.hops <= h1) cands.push({ s, i, d, hops: r.hops });
     });
@@ -259,7 +264,7 @@ registerKind('survey', {
     w.portages.forEach((p, i) => {
       if (p.rods < 15 || T.used('survey', i)) return;
       const d = Math.hypot(p.pts[0][0] - L.x, p.pts[0][1] - L.z);
-      if (d > RANGE) return;
+      if (d > rangeOf(c.band)) return;
       const ra = c.reach.get(T.basinOf(p.launch[0].lake)), rb = c.reach.get(T.basinOf(p.launch[1].lake));
       if (!ra && !rb) return;
       const near = (ra ? ra.hops : 99) <= (rb ? rb.hops : 99) ? 0 : 1, hops = Math.min(ra ? ra.hops : 99, rb ? rb.hops : 99);
