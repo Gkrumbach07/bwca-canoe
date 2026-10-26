@@ -1129,7 +1129,7 @@ export class Chores {
       if (st === 'burning') burning = true; else if (st === 'coals') coals = true;
     }
     if (burning) out.push('the fire is still burning'); else if (coals) out.push('the coals are still smouldering');
-    return [...out, ...this.cook.ashore(), ...this.tarp.ashore(p.x, p.z)];
+    return [...out, ...this.cook.ashore(null, { x: p.x, z: p.z, r: 400 }), ...this.tarp.ashore(p.x, p.z)];
   }
   // a trip ended (at a counter, or an evacuation): the fires you lit go out and the pot comes home with the rest
   tripEnded() {

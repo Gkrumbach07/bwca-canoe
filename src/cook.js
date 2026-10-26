@@ -625,10 +625,12 @@ export class Cook {
     this.potFrom = d.potFrom || null;
   }
   // for the leaving note (camp.js): the pot left on a grate
-  ashore(key = null) {
+  ashore(key = null, near = null) {
     const inv = this.inv;
     if (!inv || !inv.attached) return [];
-    const gs = inv.containers.filter((c) => c.item === 'grate' && c.at && (!key || c.at.grate === key));
+    // (near { x, z, r }: only the grates there; the content join: a pot left on a grate 5 km back was said again at
+    // every launch, a portage away, as if it were on the grate here)
+    const gs = inv.containers.filter((c) => c.item === 'grate' && c.at && (!key || c.at.grate === key) && (!near || Math.hypot(c.at.x - near.x, c.at.z - near.z) <= near.r));
     const out = [];
     if (gs.some((g) => g.grid.some((e) => e.id === 'pot'))) out.push(gs.some((g) => g.grid.some((e) => (itemDef(e.id) || {}).cooked)) ? 'the pot is on the grate with food in it' : 'the pot is on the grate');
     return out;
