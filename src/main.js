@@ -78,6 +78,7 @@ import { attachTaskKinds } from './task-kinds.js'; // content A
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
 import { record } from './record.js'; // round A-A
+import { slots } from './save.js'; // round A-D
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -764,6 +765,15 @@ async function main() {
     hints.due = (id, rec) => (recM.has(id) ? recM.get(id).due(rec) : dueAA(id, rec)); // "Your trip is in the journal's Record"
     window.__game.record = record;
   }
+  // round A-D: saves (save.js slots, seasons.js). Three seasons side by side: the one being played is the ordinary season
+  // keys every module reads and writes (the autosave, pagehide and all, writes there), the other two are parked and
+  // packed. A switch, a new season into a slot, deleting the one being played and an import over an empty one reload the
+  // page, and save.js mounts the slot before anything reads. The title's Continue is the slot last played; Seasons
+  // (under New season) lists the three with their lines: Play, New, Copy, Export (a versioned .json) and Import, Delete
+  // asked once. What the last page asked of this load (Play: straight in; New: the season begun at its home) runs once
+  // the frames do.
+  window.__game.slots = slots;
+  { const boot = slots.takeBoot(); if (boot) setTimeout(() => title.fromBoot(boot), 0); }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
