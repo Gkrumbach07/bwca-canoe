@@ -22,6 +22,7 @@ const FAR_DRAW_DISTANCE = 12000; // far chunks are cheap (2k triangles): keep di
 // then the props a trail, a yard or a campsite at a time, then the rest), as many a frame as fit in INSTALL_BUDGET
 // ms and at least one, so a tile coming in spreads its main-thread work over a few frames instead of one long one.
 const INSTALL_BUDGET = 3;
+const LOD_STEP = 1; // round A-C: metres the camera moves in the tile underfoot before its LOD is looked at again (update)
 
 // ---------- per-instance culling ---------------------------------------------------------------------------------
 // A vegetation bin is one instanced mesh over a 640 m (or 320 m) region, so three can only cull it whole: a bin
@@ -55,6 +56,7 @@ export const CULL = {
   farSmall: 0,       // far cascade: instances whose sphere is under this radius (m) cast no shadow past farSmallFrom metres
   farSmallFrom: 60,
   budget: 2,         // milliseconds a frame may spend preparing meshes
+  understoryShadow: true, // round A-C: the understory casts into the cascades (main.js: off at half the undergrowth, Low)
 };
 const UNDERSTORY = new Set([7, 10, 11, 12, 13, 20]); // shrub, hazel, alder, sapling, fern, talus (placement.js SPECIES)
 const SWAY_MARGIN = 2; // metres the wind can carry a crown past its geometry's bounds
@@ -335,6 +337,7 @@ class InstanceCuller {
     for (const D of this.managed) {
       const st = D.userData.cull;
       if (!D.visible || !D.castShadow || !D.count) continue;
+      if (st.understory && !CULL.understoryShadow) continue; // round A-C: its proxies stay hidden (beforeRender)
       if (!st.c0) { st.c0 = makeProxy(D, true); st.c1 = makeProxy(D, true); this.shadowProxies.push(st.c0, st.c1); }
       const P0 = st.c0, P1 = st.c1, keep = st.understory ? CULL.understory : 1;
       if (P0.geometry !== D.geometry) { P0.geometry = D.geometry; P1.geometry = D.geometry; }
@@ -348,13 +351,57 @@ class InstanceCuller {
   }
 }
 
+// round A-C: the fine terrain as one mesh per quarter of the tile (four of the worker's 4 x 4 blocks, one run of the
+// index: tile-worker.js partTerrain), each over the same arrays and index with its own draw range and sphere, so the
+// view, the mirror and each shadow cascade draw only the quarters they meet. Quarters, not blocks: a block a mesh
+// cut the triangles a little more but added ~100 draw calls a frame, which cost a slow CPU more than the triangles
+// cost the GPU. TERRAIN_GROUP blocks a mesh (1, 4 or 16). A terrain built without blocks (the far chunks) stays one.
+const TERRAIN_GROUP = 4, PART_STRIDE = 8;
+function terrainParts(res, material) {
+  const whole = makeTerrainMesh(res, material), P = res.parts;
+  if (!P) return [whole];
+  const out = [], src = whole.geometry, n = P.length / PART_STRIDE, box = new THREE.Box3(), b = new THREE.Box3();
+  for (let q0 = 0; q0 < n; q0 += TERRAIN_GROUP) {
+    let start = Infinity, end = 0;
+    box.makeEmpty();
+    for (let q = q0; q < Math.min(n, q0 + TERRAIN_GROUP); q++) {
+      const o = q * PART_STRIDE, count = P[o + 1];
+      if (!count) continue;
+      start = Math.min(start, P[o]); end = Math.max(end, P[o] + count);
+      box.union(b.set(new THREE.Vector3(P[o + 2], P[o + 3], P[o + 4]), new THREE.Vector3(P[o + 5], P[o + 6], P[o + 7])));
+    }
+    if (end <= start) continue;
+    const geo = new THREE.BufferGeometry();
+    for (const k of Object.keys(src.attributes)) geo.setAttribute(k, src.attributes[k]);
+    geo.setIndex(src.index);
+    geo.setDrawRange(start, end - start);
+    geo.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+    geo.boundingSphere.radius += 0.5;
+    const m = new THREE.Mesh(geo, material);
+    m.receiveShadow = whole.receiveShadow; m.castShadow = whole.castShadow; m.matrixAutoUpdate = false;
+    m.name = 'terrain';
+    out.push(m);
+  }
+  return out;
+}
+
 // A tile never moves once installed and nothing in it is animated by its transform, so its world matrices are
 // worked out once here and the scene's update walk (every frame, over some 24 000 objects with 25 tiles in) skips
 // the whole subtree. What the tile gains later sets its own: a bin's variant-group meshes and the culling proxies
 // copy the bin's, and updateVegetationLOD places a bin from the group's matrix.
 function freeze(group) {
-  group.updateMatrixWorld(true);
+  THREE.Object3D.prototype.updateMatrixWorld.call(group, true);
   group.matrixWorldAutoUpdate = false;
+  group.updateMatrixWorld = frozenWalk;
+}
+// round A-C: three r186 still recurses into every child of a group whose matrixWorldAutoUpdate is off, so the frozen
+// tiles cost the per-render walk ~25 000 calls (twice a frame: the view and the mirror), 14 % of the frame's main
+// thread at Lake One. A frozen tile's walk now goes only into its groups (the props, whose meshes keep three's own
+// rule: a prop moved by hand calls updateMatrix and is picked up); the terrain, the far water, the vegetation's bins,
+// their variant groups and the culling proxies set their own matrixWorld and are never walked.
+function frozenWalk(force) {
+  const ch = this.children;
+  for (let i = 0; i < ch.length; i++) if (ch[i].isGroup) ch[i].updateMatrixWorld(force);
 }
 
 export class TileManager {
@@ -470,19 +517,34 @@ export class TileManager {
     this.install();
     this.evict();
     // draw only what the fog lets through; far chunks stand in wherever a fine tile is missing
+    // round A-C: a tile's LOD is worked out again only once the camera has moved a step that could change a decision
+    // there: LOD_STEP metres in the tile underfoot, a fiftieth of the distance to a tile farther off (a choice made at
+    // 2 km is the same choice 40 m on), or at once when the tile's meshes or the LOD scale changed. It
+    // walked all ~16 000 bins of 25 tiles every frame (9 % of the main thread at Lake One).
+    CARD.uEye.value.copy(camPos);
+    const half = w.tileMetres / 2;
     for (const e of this.tiles.values()) {
       if (e.state !== 'ready') continue;
       const [ox, oz] = w.tileOrigin(e.tx, e.ty);
-      const d = Math.hypot(ox + w.tileMetres / 2 - px, oz + w.tileMetres / 2 - pz);
+      const d = Math.hypot(ox + half - px, oz + half - pz);
       e.group.visible = d < DRAW_DISTANCE;
-      if (e.group.visible) updateVegetationLOD(e.veg, camPos);
+      if (!e.group.visible) continue;
+      const L = e.lodAt || (e.lodAt = { x: NaN, z: NaN, s: -1, n: -1 });
+      const edge = Math.hypot(Math.max(0, Math.abs(camPos.x - ox - half) - half), Math.max(0, Math.abs(camPos.z - oz - half) - half));
+      const moved = Math.hypot(camPos.x - L.x, camPos.z - L.z);
+      if (L.n === e.veg.length && L.s === LOD_SCALE.value && moved < Math.max(LOD_STEP, edge * 0.02)) continue;
+      updateVegetationLOD(e.veg, camPos);
+      L.x = camPos.x; L.z = camPos.z; L.s = LOD_SCALE.value; L.n = e.veg.length;
     }
     this.culler.update(this.tiles, w, camPos);
+    // round A-C: at a short tree detail distance (Low's 0.5) the far field ends sooner too, past the haze's thick part
+    // (8.4 km, not 12): the far chunks are two draw calls each, and Low drew some thirty of them
+    const farReach = FAR_DRAW_DISTANCE * Math.min(1, 0.4 + 0.6 * LOD_SCALE.value);
     for (const [key, g] of this.farChunks) {
       const fine = this.tiles.get(key);
       if (fine && fine.state === 'ready') { g.visible = false; continue; }
       const d = Math.hypot(g.userData.cx - px, g.userData.cz - pz);
-      g.visible = d < FAR_DRAW_DISTANCE;
+      g.visible = d < farReach;
     }
   }
 
@@ -551,7 +613,7 @@ export class TileManager {
     group.position.set(ox, 0, oz);
     group.matrixAutoUpdate = false;
     group.updateMatrix();
-    group.add(makeTerrainMesh(r.terrain, this.terrainMaterial));
+    for (const m of terrainParts(r.terrain, this.terrainMaterial)) group.add(m); // round A-C: in blocks, culled one by one
     if (r.water) group.add(this.water.makeFarMesh(r.water));
     this.scene.add(group);
     freeze(group);
@@ -787,6 +849,32 @@ export class TileManager {
     });
     const aq = this.aquatic;
     if (aq) aq.geos.forEach((set, k) => { if (set && set.length && aq.mats[k]) g.add(new THREE.InstancedMesh(set[0], aq.mats[k], 1)); });
+    return g;
+  }
+
+  // round A-C: one of every shadow caster the tiles make, as the shadow pass draws it (a bin with its colours, a
+  // cascade proxy without, the lake plants that cast), unculled, for main.js to draw a shadow pass with behind the
+  // title card: three's compile skips the depth programs, so each compiled in the frame its kind first cast a shadow
+  // (and again for the other light state: see main.js round A-C). Placed by the caller; dispose() after.
+  shadowPrewarmGroup() {
+    const g = new THREE.Group(), kit = this.vegetation, id = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    const add = (geo, mat, depth, colour) => {
+      const m = new THREE.InstancedMesh(geo, mat, 1);
+      m.instanceMatrix.array.set(id);
+      if (colour) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(3).fill(1), 3);
+      if (depth) m.customDepthMaterial = depth;
+      m.castShadow = true; m.frustumCulled = false; m.scale.setScalar(0.01);
+      g.add(m);
+    };
+    kit.variants.forEach((vs, sp) => {
+      if (!vs || !vs.length || VEG_SPECIES[sp].shadow === false) return;
+      const mat = VEG_SPECIES[sp].cliff ? kit.cliffMaterial : kit.materialFor(sp), depth = kit.depthFor(sp);
+      add(vs[0].full, mat, depth, true);  // the bin, drawn whole
+      add(vs[0].full, mat, depth, false); // its cascade proxy (tiles.js makeProxy: no colours)
+    });
+    const aq = this.aquatic;
+    if (aq && aq.geos[1] && aq.geos[1].length) add(aq.geos[1][0], aq.mats[1], aq.depth, false);
+    g.dispose = () => { for (const m of g.children) if (m.dispose) m.dispose(); };
     return g;
   }
 }
