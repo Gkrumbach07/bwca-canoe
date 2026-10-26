@@ -19,6 +19,7 @@
 //   leadIn(manner, text, i) → the rumour in the keeper's mouth ("Word is the walleye are on…")
 //   adviceFor(ctx, given) → [{ id, text(manner) }], best first; ctx: { st, last, doy, wet, storm, rain, sheets, fishN }
 import { FORAGE, inSeason } from './forage.js';
+import { BURNS, eventsAt, burnDate, KIND as BURN } from './burns.js';
 
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const theWater = (name) => (/\bRiver$/.test(name || '') ? `the ${name}` : name);
@@ -99,6 +100,33 @@ const RUMOURS = {
     const l = H.water('eagle'); if (!l) return null;
     return { id: `eagle:${l.name}`, kind: 'eagle', text: `The eagles are nesting again on ${theWater(l.name)}${H.where(l)}: the big white pine on a point. They’ll scold you if you stop under it.` };
   },
+  // the burns pass (2026-10-26): a named wildfire near the landing that still shows (burns.js, by the season's date), told
+  // as a keeper would, by what it is like now: black, pink with fireweed, blue with berries, or grown back thick. Its
+  // place is a lake on its shores (one whose middle lies in the burn).
+  burn(H, c) {
+    const L = H.landing;
+    if (!L || !BURNS.records.length) return null;
+    const d = burnDate(), Y = c.year ?? d.year, D = c.doy ?? d.doy, hits = [{}, {}];
+    const lakes = H.lakes(15000);
+    const cands = [];
+    for (const r of BURNS.records) {
+      if (r.kind !== BURN.wildfire || !r.name || r.acres < 300) continue;
+      const age = Y - r.year + (D - r.doy) / 365.25;
+      if (age < 0 || age > 30) continue;
+      const [x0, z0, x1, z1] = r.box, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      if (Math.hypot(cx - L.x, cz - L.z) > 15000 + Math.max(x1 - x0, z1 - z0) / 2) continue;
+      const lake = lakes.find((l) => { const n = eventsAt(l.x, l.z, hits); for (let i = 0; i < n; i++) if (hits[i].rec === r) return true; return false; });
+      if (lake) cands.push({ r, age, lake });
+    }
+    if (!cands.length) return null;
+    const { r, age, lake } = cands.sort((a, b) => a.age - b.age)[0];
+    const name = r.name.replace(/\s+fire$/i, ''), on = theWater(lake.name), summer = D >= 182 && D <= 235;
+    const text = age < 1 ? `The ${name} fire went through round ${on} this summer. It’s out, but it’s all black in there, and the snags come down in any wind. Don’t camp under them.`
+      : age < 3 ? `The ${name} burn round ${on} ${summer ? 'is pink with fireweed this month. Worth the paddle just to see it.' : 'is coming back green already, fireweed and little aspen everywhere.'}`
+        : age < 12 ? (D >= 191 && D <= 232 ? `The blueberries are thick in the old ${name} burn on ${on}. Bring a pail and watch for bear.` : `The ${name} burn round ${on} has come back thick with jack pine and aspen, head high. The blueberries there are something in July.`)
+          : `The ${name} burn round ${on} has grown back so thick with jack pine and aspen you can’t walk it. The old snags make good dry firewood.`;
+    return { id: `burn:${r.name}:${r.year}`, kind: 'burn', text };
+  },
   // stream C's one-of-a-kind finds, when they are in the build: an old thing someone lost, near by, not found yet
   find(H, c) {
     const U = c.uniques, list = U && typeof U.list === 'function' ? (() => { try { return U.list() || []; } catch { return []; } })() : [];
@@ -121,6 +149,7 @@ const RUMOURS = {
     return { id: `find:${u.id}`, kind: 'find', text, ring: { kind: 'find', lake: u.lake || '', x: Math.round(u.x + (H.rng() - 0.5) * 500), z: Math.round(u.z + (H.rng() - 0.5) * 500), r: 650, label: 'an old story' } }; // (the ring is the area, not the spot)
   },
 };
+export const RUMOURS_BY_KIND = RUMOURS; // (each kind alone, for the console and the tests)
 // the week's draw: a fish first when there is one, then two of the rest, by the week's seed (H.rng)
 // c.avoid: the ids this keeper told you in weeks before (a fish rumour then moves on to the next lake)
 export function rumoursFor(H, c) {
@@ -133,7 +162,7 @@ export function rumoursFor(H, c) {
     if (r && r.text && !out.some((x) => x.text === r.text)) out.push(r);
   };
   add('fish');
-  const rest = ['view', 'bear', 'trail', 'moose', 'berries', 'clarity', 'loons', 'eagle', 'fish2', 'find'];
+  const rest = ['view', 'bear', 'trail', 'moose', 'berries', 'clarity', 'loons', 'eagle', 'fish2', 'find', 'burn'];
   for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(H.rng() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
   if (c.uniques && H.rng() < 0.5) rest.unshift('find'); // half the weeks an old story leads the rest, when there are finds
   for (const k of rest) { if (out.length >= 3) break; add(k); }

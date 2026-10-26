@@ -29,7 +29,8 @@
 // and spruce along their top; scree at their foot, a few big blocks against the wall and many small ones
 // thinning out away from it.
 import { mulberry32, fbm, hash2, clamp, smoothstep } from './rng.js';
-import { burnAt, calmAt, rockAt, meadowAt } from './fields.js';
+import { calmAt, rockAt, meadowAt } from './fields.js';
+import { burnLook, KIND as BURN } from './burns.js';
 import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND, CELL_SPLAT, bedPre } from './terrain-build.js';
 import { CLIFF, CLIFF_MODULE } from './site.js';
 
@@ -37,17 +38,17 @@ export const REGION = 640;      // metres: instances are binned into regions for
 // The understory, the deadfall and the scree are small and many: they are binned in finer regions so they can
 // be drawn only near the camera without dragging a whole 640 m region of them along.
 export const SMALL_REGION = 320;
-const SMALL = new Set([10, 11, 12, 13, 14, 15, 20]);
+const SMALL = new Set([10, 11, 12, 13, 14, 15, 20, 22]);
 // index order matches vegetation.js SPECIES (the bluff pass appended 17 on: the indices before are unchanged)
-export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9, hazel: 10, alder: 11, sapling: 12, fern: 13, log: 14, stump: 15, outcrop: 16, tamarack: 17, aspen: 18, blackSpruce: 19, talus: 20, cliff: 21 };
+export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9, hazel: 10, alder: 11, sapling: 12, fern: 13, log: 14, stump: 15, outcrop: 16, tamarack: 17, aspen: 18, blackSpruce: 19, talus: 20, cliff: 21, regrowth: 22 };
 const SCALE = [[0.85, 1.3], [0.75, 1.2], [0.75, 1.15], [0.7, 1.15], [0.75, 1.2], [0.8, 1.2], [0.4, 2.2], [0.7, 1.5], [0.85, 1.25], [0.7, 1.1],
-  [0.7, 1.3], [0.75, 1.35], [0.6, 1.4], [0.6, 1.3], [0.8, 1.35], [0.75, 1.3], [2.6, 5.0], [0.75, 1.15], [0.75, 1.2], [0.7, 1.15], [0.15, 0.6], [1, 1]];
-const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  [0.7, 1.3], [0.75, 1.35], [0.6, 1.4], [0.6, 1.3], [0.8, 1.35], [0.75, 1.3], [2.6, 5.0], [0.75, 1.15], [0.75, 1.2], [0.7, 1.15], [0.15, 0.6], [1, 1], [1, 1]];
+const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 // How many variant groups a region's bin of each species is split into (makeVegetationMeshes draws each
 // group near the camera with its own geometry variant): three for the trees and the boulders so a stand
 // shows several trees of a kind, fewer for the small stuff, whose variety is in its scale and yaw and whose
 // draw calls would otherwise add up. GROUP_SHARE: the cumulative share of the instances each group takes.
-export const GROUPS = [3, 3, 3, 3, 3, 3, 3, 1, 3, 3, 2, 2, 2, 1, 2, 1, 1, 2, 2, 2, 2, 3];
+export const GROUPS = [3, 3, 3, 3, 3, 3, 3, 1, 3, 3, 2, 2, 2, 1, 2, 1, 1, 2, 2, 2, 2, 3, 2];
 const GROUP_SHARE = { 1: [1], 2: [0.6, 1], 3: [0.45, 0.8, 1] };
 // Guests: a species that is drawn in another's bins, in variant groups of its own after the host's (the old
 // white pines in the white pine's, aspen in the birch's, black spruce in the spruce's). A bin is one draw call
@@ -90,7 +91,7 @@ export const gladeShore = (sd, wet) => 1 - (1 - smoothstep(45, 120, sd)) * (1 - 
 // young conifers of the forest's edge kind -2): young, tree, -, -, -, -, -, -, -, shrub, -, -, hazel, alder, sapling,
 // fern, log, stump, outcrop. The shrubs and the alder root at the waterline, the trees a pace up from it (and lean
 // out: LEAN).
-const SHORE_MIN = [0.7, 0.9, 0, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 2.0, 0.3, 0.8, 1.2, 1.5, 1.0, -3];
+const SHORE_MIN = [0.7, 0.9, 0, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 2.0, 0.3, 0.8, 1.2, 1.5, 1.0, -3, 0, 0, 0, 0, 0, 0.8];
 // The portage trails as a green tunnel (the owner's feedback of 2026-10-25, decision 7). A portage in the Boundary
 // Waters is a trodden line through the woods with the brush crowding both edges and the canopy closed over it; the
 // first exclusion (2.2 m plus a pad of up to 1.2 m round the polyline) left a bare lane 5–7 m wide. Now the forest is
@@ -105,18 +106,19 @@ const SHORE_MIN = [0.7, 0.9, 0, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 2.0, 0.3, 0.8, 1.2
 // bracken, hazel, alder on the wet ground, the shrubs, young fir, young conifers and, further back, trees leaning
 // in over the path (birch and aspen among them: the edge species, gold in the fall), so the tunnel closes over.
 export const TRAIL = { clear: 1.35 };
-const TRAIL_PAD = [0.95, 1.2, 0, 0, 0, 0, 0, 0, 0, 0.15, 0, 0, 0.3, 0.3, 0.35, -0.25, 0.7, 0.5, 1.6];
+const TRAIL_PAD = [0.95, 1.2, 0, 0, 0, 0, 0, 0, 0, 0.15, 0, 0, 0.3, 0.3, 0.35, -0.25, 0.7, 0.5, 1.6, 0, 0, 0, 0, 0, 0.4];
 // [kind, from, to, lean toward the path]; the density per metre per side is trailEdgeDensity's
 const TRAIL_EDGE = [[13, -0.2, 1.4], [10, 0.3, 1.6], [11, 0.3, 1.6], [7, 0.15, 1.4], [12, 0.35, 1.8], [-2, 0.95, 2.1], [-1, 1.5, 3.4, true]];
-function trailEdgeDensity(kind, h, soil, burn, face, shoreRow, bareness) {
+// (in a burn the trees by what of the old forest stands, the rest by what is left of its understory: placeVegetation)
+function trailEdgeDensity(kind, h, soil, face, shoreRow, bareness) {
   switch (kind) {
-    case 13: return 0.34 * (0.6 + 0.4 * (1 - h.dry)) * soil * (1 - 0.6 * h.wet) * (1 - burn);
-    case 10: return 0.2 * soil * (1 - 0.8 * h.wet) * (1 - burn);
+    case 13: return 0.34 * (0.6 + 0.4 * (1 - h.dry)) * soil * (1 - 0.6 * h.wet);
+    case 10: return 0.2 * soil * (1 - 0.8 * h.wet);
     case 11: return (0.06 + 0.35 * h.wet + 0.3 * shoreRow) * soil;
-    case 7: return (0.1 + 0.3 * shoreRow + 0.3 * burn) * (1 - bareness * 0.8);
+    case 7: return (0.1 + 0.3 * shoreRow) * (1 - bareness * 0.8);
     case 12: return 0.16 * (0.8 + 0.4 * h.moist) * soil * (1 - 0.5 * h.wet);
-    case -2: return 0.09 * soil * (1 - face) * (1 - burn);
-    case -1: return 0.06 * (1 - face) * (1 - 0.5 * burn);
+    case -2: return 0.09 * soil * (1 - face);
+    case -1: return 0.06 * (1 - face);
     default: return 0;
   }
 }
@@ -241,11 +243,32 @@ function pickTree(w, r) {
   for (let i = 0; i < w.length; i++) if (t < w[i]) return TREES[i];
   return SPECIES.spruce;
 }
-// On bare rock and in a burn the choice is the ground's, not the stand's: jack pine in the cracks of the rock
-// with a few pines, spruce and birch, the odd dead stem; a burn is standing snags over the regrowth of jack
-// pine, aspen and birch.
+// On bare rock the choice is the ground's, not the stand's: jack pine in the cracks of the rock with a few pines,
+// spruce and birch, the odd dead stem.
 function rockTree(r) { return r < 0.5 ? SPECIES.jackPine : r < 0.62 ? SPECIES.whitePine : r < 0.72 ? SPECIES.redPine : r < 0.82 ? SPECIES.spruce : r < 0.9 ? SPECIES.birch : SPECIES.snag; }
-function burnTree(r) { return r < 0.45 ? SPECIES.snag : r < 0.66 ? SPECIES.jackPine : r < 0.85 ? SPECIES.aspen : SPECIES.birch; }
+
+// ---- the burns -------------------------------------------------------------------------------------------------
+// The real fires, prescribed burns and the 1999 blowdown (burns.js, by the season's date) decide a cell's forest where
+// they reach: burnLook gives what the event left at its age, and the cell grows it. The old forest's trees stand alive
+// as `mature` of them, dead as `snags` of them (black, then grey with a black foot), and lie down as deadfall; the young
+// trees and the thicket of regrowth come up by the event's age, as dense as the forest is at that distance from the
+// water; what is left of the understory, and the bracken and the shrubs that come in, follow. Unburned, a cell draws
+// exactly the random numbers it always did.
+// The young trees: aspen, jack pine and birch come in first (jack pine from the cones the fire opened, aspen from its
+// roots), spruce and fir under them later; through the blowdown's down trunks come balsam fir, birch and aspen. Their
+// geometry's height at unit scale (vegetation.js), to stand them at the age's height.
+const NOMINAL = { 0: 16, 1: 12.5, 2: 15, 3: 10.5, 4: 8, 9: 6, 17: 13, 18: 13, 19: 11 };
+function youngBurnTree(r, kind) {
+  if (kind === BURN.blowdown) return r < 0.38 ? SPECIES.spruce : r < 0.66 ? SPECIES.birch : r < 0.94 ? SPECIES.aspen : SPECIES.whitePine;
+  return r < 0.3 ? SPECIES.aspen : r < 0.75 ? SPECIES.jackPine : r < 0.9 ? SPECIES.birch : SPECIES.spruce;
+}
+// The blowdown of 4 July 1999 came out of the west-northwest: its trunks lie tops to the east-southeast, the root plate
+// (a log's +x end, vegetation.js) to the west-northwest; an instance's Ry(yaw) turns +x to (cos, -sin).
+const BLOW_YAW = Math.atan2(0.383, -0.924);
+// A trunk's char up from its foot rides in its tint as whole fours over it, a quarter metre each (tile-worker.js
+// instanceData splits them; the bark draws it, vegetation.js SCORCH).
+const scorchTint = (tint, metres) => tint + 4 * Math.min(15, Math.max(0, Math.round(metres * 4)));
+const _B = {}, _Bc = {};
 
 // The lie of the ground at a point, for a rock that rests along it: the azimuth that turns a rock's +x up the
 // slope (the instance's Ry(azimuth) takes +x to (cos, 0, -sin)) and the slope's angle, over a few metres of
@@ -629,7 +652,8 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
         sdH = Math.max(sd, 1);
       }
       const slope = site.S[k];
-      const burn = burnAt(cx, cz);
+      // a burn or the blowdown here (burns.js): what it left at its age, blended at its edge and with the one before
+      const B = burnLook(cx, cz, _B, sdH), burnt = B.kind !== 0;
       const cliff = site.cliff[k], talus = site.talus[k], bareness = site.bare[k];
       const bare = bareness > 0.5;
       const face = Math.max(smoothstep(0.25, 0.5, cliff), smoothstep(0.3, 0.6, talus)); // a cliff or its scree
@@ -649,35 +673,45 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const clump = bare || trailSide > 1 ? 1 : (0.25 + 0.75 * (1 - glade)) * (0.82 + 0.36 * smoothstep(0.35, 0.65, t) + 0.55 * thick);
       // the forest: thinner on the steep, gone from a cliff's face, sparse on its scree and on bare rock, open
       // in the wettest bog
-      const e = Math.min(2.8, treeDensity(sdH, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - burn * 0.5) * (1 - smoothstep(0.3, 0.6, bareness) * 0.88)
+      const e = Math.min(2.8, treeDensity(sdH, slope, trailSide > 1 ? 0 : clearing) * 1.05 * trailSide * (1 - smoothstep(0.3, 0.6, bareness) * 0.88)
         * (1 - 0.95 * smoothstep(0.25, 0.6, cliff)) * (1 - 0.7 * smoothstep(0.2, 0.7, talus)) * (1 - 0.35 * h.bog) * clump);
-      const trees = count(rng, e);
+      const trees = count(rng, e * B.mature);
+      // in a burn: what comes up after it, as dense as the forest is at this distance from the water (a burn far inland
+      // is as sparse as the forest there), and the live canopy left over the floor
+      const dens = burnt ? Math.min(1.6, treeDensity(sdH, slope, clearing) / 0.88) : 0;
+      const eLive = burnt ? e * B.mature + B.young * dens * 0.8 : e;
       // shoreline shrubs (dogwood, willow): thick at the waterline, a fringe back into the woods
       const shoreRow = 1 - smoothstep(3, 10, sdH);
-      const eShrub = ((sdH < 35 ? (0.45 + 1.25 * shoreRow - smoothstep(10, 35, sdH) * 0.25) * (1 - clearing * 0.5) * trailSide : (trailSide > 1 ? 0.5 : 0)) + burn * 0.5) * (1 - bareness * 0.8) * (1 - face);
+      const eShrub = ((sdH < 35 ? (0.45 + 1.25 * shoreRow - smoothstep(10, 35, sdH) * 0.25) * (1 - clearing * 0.5) * trailSide : (trailSide > 1 ? 0.5 : 0)) * B.under + B.shrubs * Math.min(1, dens)) * (1 - bareness * 0.8) * (1 - face);
       const shrubs = count(rng, eShrub);
       // the understory: hazel at the edges of the woods and in the open stands, off the wet ground; alder thick down
       // by the water, on the wet ground and round the bogs; young fir coming up in the gaps of the moist woods, at the
       // forest's edge along the water, in the glades and the burn; bracken in drifts under a moderate canopy; all of
       // it sparse under a heavy canopy and none of it on rock, a cliff, its scree or in a meadow
-      const heavy = smoothstep(1.1, 2.0, e), open = 1 - heavy;
-      const eHazel = (1.6 * edge + 0.18 * open * smoothstep(0.1, 0.4, e)) * (1 - 0.8 * h.wet) * soil * (1 - burn) * (1 - clearing * 0.7) * (sdH > 3 ? trailSide : 0);
-      const eAlder = (2.1 * (1 - smoothstep(4, 16, sdH)) + 0.9 * h.wet * open + 0.6 * h.bog) * soil * (1 - burn * 0.5) * (1 - clearing);
-      const eSapling = (0.08 * open * smoothstep(0.1, 0.4, e) + 0.6 * (1 - smoothstep(4, 14, sdH)) + 0.5 * edge + 0.25 * burn + 0.25 * glade * (1 - clearing)) * (0.8 + 0.4 * h.moist) * (1 - 0.5 * h.wet) * soil;
-      const eFern = (1.6 * smoothstep(0.5, 0.64, fernAt(cx, cz)) * smoothstep(0.3, 0.9, e) * (1 - heavy * 0.6) + 0.35 * open * smoothstep(0.3, 0.9, e) * (1 - h.dry)) * (1 - 0.6 * h.wet) * soil * (1 - burn) * (1 - clearing);
+      const heavy = smoothstep(1.1, 2.0, eLive), open = 1 - heavy;
+      const eHazel = (1.6 * edge + 0.18 * open * smoothstep(0.1, 0.4, eLive)) * (1 - 0.8 * h.wet) * soil * B.under * (1 - clearing * 0.7) * (sdH > 3 ? trailSide : 0);
+      const eAlder = (2.1 * (1 - smoothstep(4, 16, sdH)) + 0.9 * h.wet * open + 0.6 * h.bog) * soil * Math.min(1, 1.5 * B.under) * (1 - clearing); // (alder sprouts again from its roots)
+      const eSapling = (0.08 * open * smoothstep(0.1, 0.4, eLive) + 0.6 * (1 - smoothstep(4, 14, sdH)) + 0.5 * edge + 0.25 * glade * (1 - clearing)) * (0.8 + 0.4 * h.moist) * (1 - 0.5 * h.wet) * soil * B.under;
+      const eFern = ((1.6 * smoothstep(0.5, 0.64, fernAt(cx, cz)) * smoothstep(0.3, 0.9, eLive) * (1 - heavy * 0.6) + 0.35 * open * smoothstep(0.3, 0.9, eLive) * (1 - h.dry)) * B.under + B.bracken) * (1 - 0.6 * h.wet) * soil * (1 - clearing);
       // a sand beach (site.js beach) keeps its first metres open, a campsite its shelf down to the water (site.js camp)
       const beachy = sd < 12 && site.beach[k] > 0.05, camping = site.camp[k] > 0.02 || site.camp[k0] > 0.02;
       // deadfall: a few trees in a hundred lie on the floor or stand as stumps; granite slabs where the
       // bedrock comes through on gentle ground
-      const eLog = e * 0.035 * (1 - face), eStump = e * 0.02;
+      const eLog = e * 0.035 * (1 - face) * B.logsKeep, eStump = e * 0.02;
       const eOutcrop = sd > 4 ? (0.1 * smoothstep(0.22, 0.42, bareness) * (1 - smoothstep(0.5, 0.8, bareness)) + 0.03 * smoothstep(0.5, 0.7, bareness)) * (1 - smoothstep(0.3, 0.5, slope)) * (1 - face) : 0;
       const core = i >= i0 && i < i0 + n && j >= j0 && j < j0 + n;
       let w = null;
       const stand = smoothstep(0.56, 0.66, standAt(cx, cz)), aspens = smoothstep(0.6, 0.7, aspenAt(cx, cz)) * (1 - stand);
       // one pass over everything the cell grows: [species or -1 for a tree, count, exclusion pad]
-      const eYoung = EDGE.young * (1 - smoothstep(EDGE.to, EDGE.fade, sdH)) * soil * (1 - burn) * (1 - clearing) * (1 - face) * (1 - 0.5 * h.bog);
+      const eYoung = EDGE.young * (1 - smoothstep(EDGE.to, EDGE.fade, sdH)) * soil * B.under * (1 - clearing) * (1 - face) * (1 - 0.5 * h.bog);
       const plan = [[-1, trees, 1.2], [-2, count(rng, eYoung), 1.0], [7, shrubs, 0.4], [10, count(rng, eHazel), 0.4], [11, count(rng, eAlder), 0.4], [12, count(rng, eSapling), 0.4], [13, count(rng, eFern), 0.3],
         [14, count(rng, eLog), 1.5], [15, count(rng, eStump), 0.8], [16, count(rng, eOutcrop), 2.5]];
+      // the burn's own: the old trees dead on their feet, the young trees, the thicket of regrowth, the down trunks
+      if (burnt) {
+        const room = soil * (1 - face);
+        plan.push([-1, count(rng, e * B.snags), 1.2, null, 'snag'], [-1, count(rng, B.young * dens * room * (1 - 0.5 * h.bog)), 1.2, null, 'young'],
+          [22, count(rng, B.thicket * dens * room * (1 - 0.6 * h.wet) * (1 - 0.7 * clearing)), 0.4, null, 'thicket'], [14, count(rng, B.logs * Math.min(1, dens) * (1 - face)), 1.5, null, 'down']);
+      }
       // the portage's edges (TRAIL): along each trail segment's run through this cell, per side, each kind at its
       // lateral band (a ring cell draws the same numbers, for the canopy shade; only a core cell plants)
       if (segs) for (const g of segs) {
@@ -688,11 +722,11 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
         if (!(L > 0.01) || run < 0.2) continue;
         const nx = -(g[3] - g[1]) / L, nz = (g[2] - g[0]) / L;
         for (let side = -1; side <= 1; side += 2) for (const [kind, from, to, lean] of TRAIL_EDGE) {
-          const n = count(rng, trailEdgeDensity(kind, h, soil, burn, face, shoreRow, bareness) * run * (1 - 0.5 * clearing));
+          const n = count(rng, trailEdgeDensity(kind, h, soil, face, shoreRow, bareness) * run * (1 - 0.5 * clearing) * (kind === -1 ? B.mature : B.under));
           if (n) plan.push([kind, n, TRAIL_PAD[kind + 2], { g, t0: c[0], t1: c[1], nx: nx * side, nz: nz * side, from: TRAIL.clear + from, to: TRAIL.clear + to, lean: !!lean }]);
         }
       }
-      for (const [kind, cnt, pad, edge] of plan) {
+      for (const [kind, cnt, pad, edge, role] of plan) {
         for (let q = 0; q < cnt; q++) {
           let x, z;
           if (edge) {
@@ -712,30 +746,47 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           let sp = kind;
           if (kind === -1) {
             const r = rng();
-            if (bare) sp = rockTree(r);
-            else if (burn > 0.5) sp = burnTree(r);
+            if (role === 'snag') sp = SPECIES.snag;
+            else if (role === 'young') sp = B.age > 30 && rng() < Math.min(0.7, (B.age - 30) / 50) ? pickTree(w || (w = treeWeights(h, stand, aspens, thick)), r) : youngBurnTree(r, B.kind);
+            else if (bare) sp = rockTree(r);
             else if (edge && r < 0.38) sp = r < 0.22 ? SPECIES.birch : SPECIES.aspen; // the edge species, in the light along the path
             else sp = pickTree(w || (w = treeWeights(h, stand, aspens, thick)), r);
-            shadeCount[k0] += 1;
+            // an underburn killed the fir and spruce under the pines (burns.js pines); the pines stand
+            if (burnt && !role && B.pines > 0 && (sp === SPECIES.spruce || sp === SPECIES.cedar || sp === SPECIES.blackSpruce) && rng() < B.pines) sp = rng() < 0.55 ? SPECIES.redPine : SPECIES.whitePine;
+            shadeCount[k0] += role === 'snag' ? 0.15 : role === 'young' ? 0.25 + 0.06 * B.youngH : 1;
           } else if (kind === -2) {
             sp = youngTree(rng(), h);
             shadeCount[k0] += 0.5;
+          } else if (kind === 22) {
+            if (B.kind === BURN.blowdown && rng() < 0.5) sp = SPECIES.sapling; // the blowdown's balsam fir among the aspen
+            shadeCount[k0] += 0.06;
           }
           const isTree = kind < 0, isShrub = kind === 7;
           let scale = kind === -2 ? EDGE.scale[0] + rng() * (EDGE.scale[1] - EDGE.scale[0]) : SCALE[sp][0] + (isRock ? rng() ** 1.7 : rng()) * (SCALE[sp][1] - SCALE[sp][0]); // rocks: many small, a few big
           if (GIANT[sp] && rng() < GIANT[sp]) scale *= 1.45;
-          if (isTree && burn > 0.5) scale *= sp === SPECIES.snag ? 1.25 : 0.45;        // tall dead stems, small regrowth
+          if (role === 'snag') scale *= 1.3;                                           // the old canopy, dead on its feet
+          else if (role === 'young') scale = (B.youngH * (0.7 + 0.6 * rng())) / (NOMINAL[sp] || 12); // as tall as the burn is old
+          else if (kind === 22) scale = (B.regrow * (0.55 + 0.7 * rng())) / (sp === SPECIES.sapling ? 2.6 : 2);
           if (isTree && bare && sp !== SPECIES.jackPine) scale *= 0.7;                 // stunted on the rock
           if (isTree && h.bog > 0.3 && (sp === SPECIES.blackSpruce || sp === SPECIES.tamarack)) scale *= 1 - 0.3 * h.bog; // the muskeg's runts
           if (isTree && s > 600) scale *= 1.15;
-          if (kind === 12 && burn > 0.5) scale *= 0.8;
           let yaw = rng() * Math.PI * 2;
-          const tint = 0.92 + rng() * 0.16, squash = isRock || kind >= 14 ? 1 : 0.9 + rng() * 0.2;
+          let tint = 0.92 + rng() * 0.16;
+          const squash = isRock || (kind >= 14 && kind !== 22) ? 1 : 0.9 + rng() * 0.2;
+          if (burnt) {
+            // the snags black, then silver-grey with the char on their foot; the old trees left alive scorched at the foot;
+            // the down wood charred in a fresh burn, grey later, mossy grey in the blowdown
+            if (role === 'snag') tint = scorchTint(tint * (1 - 0.8 * B.black) * (1 + 0.3 * (1 - B.black)), B.black < 0.85 ? B.scorch * (2.2 + rng() * 2.6) : 0);
+            else if (kind === -1 && !role && B.scorch > 0.05) tint = scorchTint(tint, B.scorch * (0.7 + rng() * 1.3));
+            else if (role === 'down') tint *= B.black > 0.4 ? 0.3 : B.kind === BURN.blowdown ? 0.84 : 0.97;
+          }
           if (kind === 14) {
             // a fallen trunk lies along the hillside (an instance has no pitch, so across the slope it
             // rests on the ground end to end), any way at all on the flat
             const hx = grid.heightAt(x + cell, z) - grid.heightAt(x - cell, z), hz = grid.heightAt(x, z + cell) - grid.heightAt(x, z - cell);
             if (Math.hypot(hx, hz) / (2 * cell) > 0.05) yaw = Math.atan2(-hx, -hz) + (rng() - 0.5) * 0.5 + (rng() < 0.5 ? Math.PI : 0);
+            // the blowdown's trunks all one way (but on a hillside they lie along it)
+            if (role === 'down' && B.kind === BURN.blowdown && Math.hypot(hx, hz) / (2 * cell) < 0.12) yaw = BLOW_YAW + (rng() - 0.5) * 0.7;
           }
           let group = 0;
           if (GROUPS[sp] > 1) { const r = rng(), share = GROUP_SHARE[GROUPS[sp]]; while (r >= share[group]) group++; }
@@ -781,7 +832,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
         }
       }
       if (core) {
-        rockFeatures(grid, mulberry32((hash2(i, j, seed + 101) * 4294967296) >>> 0), { cx, cz, cell, sd, slope, rock: bareness, bare, canopy: smoothstep(0.5, 2.0, e), face, open: site.open[k] }, blocked, emitRock);
+        rockFeatures(grid, mulberry32((hash2(i, j, seed + 101) * 4294967296) >>> 0), { cx, cz, cell, sd, slope, rock: bareness, bare, canopy: smoothstep(0.5, 2.0, eLive), face, open: site.open[k] }, blocked, emitRock);
         if (site.cliff[k0] >= CLIFF.band * 0.66 && sd > -3) cliffFeatures(grid, site, k0, i, j, mulberry32((hash2(i, j, seed + 211) * 4294967296) >>> 0), cliffCtx);
       }
     }
@@ -961,7 +1012,7 @@ export function coverField(grid, i0, j0, n, shade, exclusions, site = null) {
       const cls = groundClass(grid, x, z, canopy, site);
       cover[k * 4 + 2] = cls;
       if (sd <= 2.6 || bare[k]) continue;
-      const burn = burnAt(x, z), wet = site ? site.at(site.wet, x, z) : 0, beach = site && sd < 20 ? site.at(site.beach, x, z) : 0;
+      const B = burnLook(x, z, _Bc, sd), wet = site ? site.at(site.wet, x, z) : 0, beach = site && sd < 20 ? site.at(site.beach, x, z) : 0;
       // the forest floor is duff, not lawn: a few tufts, fewer under a thick canopy, more where the woods
       // open into a glade; the meadows are grass, the burns mostly; along the water a sedge fringe on the wet
       // shores, a few tufts under the trees on the rest (the forest runs to the water: no strip of grass); bare rock
@@ -970,14 +1021,18 @@ export function coverField(grid, i0, j0, n, shade, exclusions, site = null) {
       const soil = (1 - smoothstep(0.4, 0.6, rock)) * (1 - smoothstep(0.3, 0.6, beach));
       let c = 0;
       if (cls === G.meadow) c = 1;
-      else if (cls === G.burn) c = 0.6;
+      else if (cls === G.burn) c = 0.3;
       else if (cls === G.forest || cls === G.forestLight || cls === G.forestDark) c = 0.12 * (1 - 0.6 * canopy) + 0.45 * gladeAt(x, z) * gladeShore(sd, wet) * (1 - canopy);
       c = Math.max(c, (0.15 + 0.6 * smoothstep(0.3, 0.7, wet)) * (1 - smoothstep(5, 12, sd)));
+      // a burn (burns.js): little or nothing in a fresh one, then grass and fireweed thick on the open ground
+      if (B.kind) c = c * B.under + B.grass;
       if (lawn[k] && cls !== G.burn) c = Math.max(c, 0.8);
       c *= soil;
-      const gold = Math.max(burn, 0.6 * smoothstep(0.2, 0.5, meadowAt(x, z, sd, wet)) * (1 - smoothstep(0.3, 0.6, wet)));
+      const gold = Math.max(B.ground * 0.3 * (1 - 0.6 * B.fireweed), 0.6 * smoothstep(0.2, 0.5, meadowAt(x, z, sd, wet)) * (1 - smoothstep(0.3, 0.6, wet)));
       cover[k * 4] = Math.round(Math.min(1, c) * 255);
       cover[k * 4 + 1] = Math.round(Math.min(1, gold) * 255);
+      // the fireweed's share of the tufts in the high nibble (groundcover.js; the low one is read as shade by audio.js and bugs.js)
+      cover[k * 4 + 3] = Math.round(Math.min(1, B.fireweed) * 15) << 4;
     }
   }
   return cover;

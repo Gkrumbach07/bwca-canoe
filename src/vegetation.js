@@ -536,6 +536,40 @@ function fern(rng) {
   return finish(null, cards, { ground: 0, reach: 0.5 });
 }
 
+// ---------- the regrowth after a burn (the burns pass, 2026-10-26) ---------------------
+// What comes up first and thickest after a fire (burns.js, placement.js: a thicket of it in a burn of 3 to 12 years):
+// even variants are aspen suckers, pale whips with round leaves bunched up them, from the roots of the aspen the fire
+// killed; odd ones young jack pine, stiff stems with tufts of needles in whorls, from the cones the fire opened. Each is
+// a clump of three to five stems a metre or so across, so a few to a cell make a thicket. Two metres at unit scale;
+// placement.js scales them by the burn's age (knee-high the second summer, over your head by ten years). About as cheap
+// as the understory: thin stems, two or three cards each. The jack pine keeps its needles (SPECIES evergreen).
+function regrowth(rng, v) {
+  const pine = v % 2 === 1, g = new GeoBuilder(), cards = new CardBuilder();
+  const bark = pine ? vary(0x6b5644, rng, 0.06) : vary(0xb4b8a3, rng, 0.04);
+  const cols = pine ? crownColors(0x7da94c, 0x355f45, rng) : crownColors(0xb3cf5c, 0x4c7a4c, rng);
+  const C = V(0, 1.2, 0), nrm = away(C, 1.2, 1.1, 1.2), col = () => shade(cols, 0, 2.2, rng);
+  const n = pine ? 3 + Math.floor(rng() * 2) : 4 + Math.floor(rng() * 2), a0 = rng() * 6.28;
+  for (let k = 0; k < n; k++) {
+    const a = a0 + (k / n) * 6.28 + SPREAD(rng) * 0.5, d = k === 0 ? 0.06 : 0.25 + rng() * 0.55;
+    const h = 2 * (pine ? 0.55 + rng() * 0.4 : k === 0 ? 1 : 0.7 + rng() * 0.35), x = Math.cos(a) * d, z = Math.sin(a) * d;
+    const T = g.stem(x, -0.2, z, pine ? 0.04 : 0.03, 0.01, h + 0.2, 3, bark, rng, { lean: [Math.cos(a) * 0.14 * h + SPREAD(rng) * 0.05 * h, Math.sin(a) * 0.14 * h + SPREAD(rng) * 0.05 * h], flare: 0, shade: 0.2, ts: [0, 0.5, 1] });
+    if (pine) {
+      // a bushy little pine: two whorls of needle tufts and a leader, the lowest widest
+      for (const [t, len] of [[0.35, 0.62], [0.65, 0.48]]) {
+        const o = vec(T.at(t)), b0 = rng() * 6.28;
+        for (let i = 0; i < 2; i++) needles(cards, 'tuft', o, dirAt(b0 + i * 3.14 + SPREAD(rng) * 0.5, 0.25 + rng() * 0.3), len * h * 0.55, len * h * 0.38, nrm, col(), rng);
+      }
+      needles(cards, 'tuft', vec(T.at(0.88)), UP.clone().addScaledVector(perp(UP).applyAxisAngle(UP, rng() * 6.28), 0.35).normalize(), 0.42 * h * 0.55, 0.3 * h * 0.55, nrm, col(), rng);
+    } else {
+      // an aspen whip leafed out down its upper two thirds, the leaves bunched on short twigs
+      for (const [t, sz, single] of [[0.42, 0.55, true], [0.6, 0.7, false], [0.78, 0.7, true], [0.96, 0.62, false]]) {
+        leafy(cards, 'leaf', vec(T.at(t)), dirAt(rng() * 6.28, 0.25 + rng() * 0.6), sz * h * 0.6, nrm, col(), rng, single);
+      }
+    }
+  }
+  return finish(g, cards, { ground: 0, reach: 1.1 });
+}
+
 // ---------- the deadfall and the outcrops (pass 5; solid, see solid()) ----------------
 
 // A fallen trunk lying along local x on the ground, about 6.8 m: bark weathered silver-brown, a few broken
@@ -735,6 +769,7 @@ const LOW = {
   hazel: (rng, I) => farTwin(I, 'farClump', rng),
   alder: (rng, I) => farTwin(I, 'farClump', rng),
   sapling: (rng, I) => farTwin(I, 'farSpruce', rng),
+  regrowth: (rng, I) => farTwin(I, 'farClump', rng),
   fern: (rng, I) => farTwin(I, 'frond', rng),
   log: (rng) => { const g = new GeoBuilder(); g.trunk(0, -3.4, 0, 0.32, 0.2, 6.8, 3, vary(0x857360, rng, 0.07), rng); const geo = g.build(); geo.rotateZ(Math.PI / 2); geo.translate(0, 0.26, 0); return geo; },
   stump: (rng) => { const g = new GeoBuilder(); g.trunk(0, -0.4, 0, 0.32, 0.26, 1.1, 4, vary(0x625040, rng, 0.06), rng); return g.build(); },
@@ -760,7 +795,8 @@ export const SPECIES = [
   { name: 'redPine', make: redPine, variants: TREE_VARIANTS },
   { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS, guest: { name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 } },
   { name: 'cedar', make: cedar, variants: TREE_VARIANTS },
-  { name: 'snag', make: snag, variants: TREE_VARIANTS },
+  // (the burns pass: a burn stands thick with snags, so they go at 2400 m, in the haze, not at 3200)
+  { name: 'snag', make: snag, variants: TREE_VARIANTS, cull: 2400 },
   // round A-C: boulders (3 to 7 m across) are a pixel or two past 2 km, in the haze: culled at 2200 m, not 3200
   { name: 'boulder', make: (rng, v) => angularRock(rng, ROCK_KINDS[v % 3]), rock: true, variants: 9, cull: 2200 },
   { name: 'shrub', make: shrub, leaves: [0.72, 0.22, 0.08], variants: 6 },
@@ -785,6 +821,9 @@ export const SPECIES = [
   { name: 'blackSpruce', guestOf: 1, roles: true },
   { name: 'talus', make: (rng) => screeBlock(rng), rock: true, variants: 4, lod: 320, cull: 700, shadow: false },
   { name: 'cliff', make: cliffModule, rock: true, cliff: true, variants: 4, lod: 1100 },
+  // the burns pass: the regrowth after a fire (aspen suckers and young jack pine in turn: a bin's two groups take
+  // variants three apart, so one of each), small and near only like the understory; the jack pine's needles stay on
+  { name: 'regrowth', make: regrowth, leaves: [0.92, 0.7, 0.14], evergreen: (v) => v % 2 === 1, variants: 6, lod: 260, cull: 520 },
 ];
 const VARIANTS = 4;
 const LOD_DISTANCE = 750;  // metres from the camera to a region centre before its low-detail twin is used
@@ -792,7 +831,7 @@ const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
 // The understory is walked through, and the fallen logs, stumps and outcrops are held off by their own
 // footprints (props.js reads them from the meshes; a carried canoe rides over a stump as over a boulder), so
 // none of them are trunks for the collision in tiles.js.
-const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16, 20, 21]);
+const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22]);
 const NORMS = [...Array(TREE_VARIANTS).keys()].filter((v) => ROLES[v % ROLES.length] === 'norm');
 // A bin's variant groups are drawn apart while the camera is within NEAR_GROUPS metres of the bin's region
 // (its nearest edge, not its centre, so the region underfoot always is); further out one mesh draws them all.
@@ -803,9 +842,9 @@ export const LOD_SCALE = { value: 1 }; // the settings panel scales both distanc
 
 // Marks foliage vertices (greens and yellows with some saturation; bark, snow-white birch and grey are not)
 // so the season can recolour and drop the leaves and leave the trunk alone.
-function tagLeaves(geo) {
+function tagLeaves(geo, evergreen = false) {
   const col = geo.getAttribute('color'), leaf = new Float32Array(col.count), c = new THREE.Color(), hsl = { h: 0, s: 0, l: 0 };
-  for (let i = 0; i < col.count; i++) {
+  for (let i = 0; i < (evergreen ? 0 : col.count); i++) {
     c.setRGB(col.getX(i), col.getY(i), col.getZ(i)).getHSL(hsl);
     leaf[i] = hsl.s > 0.2 && hsl.h > 0.1 && hsl.h < 0.47 ? 1 : 0;
   }
@@ -1000,6 +1039,24 @@ const glowAt = `
 // changes, so once per pass).
 const coverFor = (renderer) => { const t = renderer.getRenderTarget(); CARD.uCardCover.value = t && t.samples > 0 ? 1 : 0; };
 
+// The burns (placement.js scorchTint): an instance colour's blue carries the char up a trunk's foot as whole fours over
+// the tint, a quarter metre each; the true blue is what is left over. The vertex passes the height over the instance's
+// foot and the char's line to the fragment (a trunk has few rings: a line drawn per vertex smeared the char up half a
+// snag), which takes the bark, and anything else of the tree that low, to char below it along a ragged line. No burn,
+// no fours: nothing changes.
+const SCORCH = `
+  vScorch = vec2( 0.0, -1.0 );
+#ifdef USE_INSTANCING_COLOR
+  { float scorchK = floor( instanceColor.b * 0.25 );
+    if ( scorchK > 0.0 ) {
+      vColor.b *= ( instanceColor.b - 4.0 * scorchK ) / instanceColor.b;
+      float scorchY = ( instanceMatrix * vec4( position, 1.0 ) ).y - instanceMatrix[ 3 ].y;
+      vScorch = vec2( scorchY + 0.35 * sin( position.x * 23.0 + position.z * 17.0 ), scorchK * 0.25 );
+    } }
+#endif`;
+const SCORCH_FRAG = `
+  if ( vScorch.y > 0.0 ) diffuseColor.rgb *= mix( 0.12, 1.0, smoothstep( vScorch.y - 0.3, vScorch.y + 0.3, vScorch.x ) );`;
+
 // `species` names the sway (SWAY_BY): one material per species, all sharing one program
 function makeCardMaterial(autumn, species = null) {
   const u = autumn ? { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } } : {};
@@ -1008,12 +1065,14 @@ function makeCardMaterial(autumn, species = null) {
     wrap: 'varying', name: autumn ? 'look-cards-leaves' : 'look-cards',
     compile: (shader) => {
       Object.assign(shader.uniforms, CARD, u, SWAY, sw);
-      let vs = shader.vertexShader.replace('#include <common>', '#include <common>\n' + cardPars + '\nattribute float aOcc;\nvarying float vCardOpen;' + (autumn ? '\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;' : ''))
+      let vs = shader.vertexShader.replace('#include <common>', '#include <common>\n' + cardPars + '\nattribute float aOcc;\nvarying float vCardOpen;\nvarying vec2 vScorch;' + (autumn ? '\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;' : ''))
         .replace('#include <begin_vertex>', cardBegin('cameraPosition') + '\n  vCardOpen = aOcc;');
       if (autumn) vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
+      vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n' + SCORCH); // (before the autumn's turn: it reads the true colour)
       shader.vertexShader = vs;
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\nuniform float uCardCover;\n' + cardVarying + (autumn ? '\nvarying float vLeaf;\nuniform float uLeafOn;' : ''))
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\nuniform float uCardCover;\nvarying vec2 vScorch;\n' + cardVarying + (autumn ? '\nvarying float vLeaf;\nuniform float uLeafOn;' : ''))
+        .replace('#include <color_fragment>', '#include <color_fragment>\n' + SCORCH_FRAG)
         .replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n' + glowPars)
         .replace('#include <map_fragment>', '#include <map_fragment>\n' + cardCut + (autumn ? '\n  if (vLeaf > 0.5 && uLeafOn < 0.5) discard;' : '') + '\n  if ( vCardUv.x >= 0.0 ) diffuseColor.rgb *= cardTex.rgb;\n  #ifdef ALPHA_TO_COVERAGE\n    diffuseColor.a = cardCover;\n  #endif' + glowAt)
         .replace('#include <normal_fragment_begin>', noFlip);
@@ -1073,7 +1132,7 @@ export function makeVegetationKit(seed = 3) {
     if (s.rock) return { full: s.make(mulberry32(rs), v), low: LOW[s.name](mulberry32(rs)) };
     const full = solid(s.make(mulberry32(rs), v));
     const low = solid(LOW[s.name](mulberry32(rs + 7), crownInfo(full)));
-    if (s.leaves) { tagLeaves(full); tagLeaves(low); }
+    if (s.leaves) { const ev = !!(s.evergreen && s.evergreen(v)); tagLeaves(full, ev); tagLeaves(low, ev); }
     if (s.fit) for (const geo of [full, low]) fitGuest(geo, s.fit);
     return { full, low };
   };

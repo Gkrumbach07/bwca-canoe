@@ -12,6 +12,7 @@ import { windHeight } from './waves.js';
 import { TAU, clamp01, smooth, bump, noiseBuffer, roomBuffer, setPos, Voice, songSeason, greenFrogSeason, env } from './audio-kit.js';
 import { Beds } from './audio-beds.js';
 import * as V from './audio-voices.js';
+import { burnLook } from './burns.js';
 
 const MASTER = 0.9;            // master gain at full volume, after the compressor
 const MAX_VOICES = 40;         // one-shots alive at once; past it only the important ones (pri >= 2) start
@@ -71,7 +72,10 @@ function treesAt(w, x, z) {
     : cls === 'meadow' ? 0.12 : cls === 'burn' ? 0.4 : cls === 'rockDark' ? 0.15 + 0.4 * shade : cls === 'rock' || cls === 'rockLichen' ? 0.2 + 0.5 * shade : 0;
   const st = smooth(0.5, 0.68, standAt(x, z)); // dark canopy is mostly spruce and fir; the burns grow back aspen and birch
   _dec = cls === 'burn' ? 0.75 : cls === 'forestDark' ? 0.08 + 0.35 * st : 0.12 + 0.6 * st;
+  // a fresh burn (burns.js): black snags and no leaves to move, so the land there is all but silent and dry
+  if (cls === 'burn') _tw *= 1 - 0.85 * burnLook(x, z, _burn).char;
 }
+const _burn = {};
 
 const blankScene = () => ({
   x: 0, z: 0, y: 0, level: 0, ground: 0, jump: true, mode: 'paddle', afloat: true, onFoot: false, heading: 0, speed: 0, st: null, onTrail: false,

@@ -7,6 +7,7 @@ import { mulberry32, hash2 } from './rng.js';
 import { save } from './save.js';
 import { step as rustle } from './audio-voices.js';
 import { ITEMS, defineItem, NEED, check, timerWords } from './items.js';
+import { burnLook } from './burns.js';
 
 // Berries and mushrooms (fb G, 2026-10-24). The owner: "its hard to find blueberries, also add in more of the classic
 // berries you would see and where they would show up, same with mushrooms". This replaces the one blueberry patch a
@@ -48,6 +49,7 @@ const RUSTLE = 7;           // metres: a ripe patch rustles and glints when you 
 const NAME_AT = 14;         // metres: the first ripe patch of a kind is named from this far
 const REGROW = 5;           // days for a picked mushroom patch to come back
 const SITE_R = 70, TRAIL_R = 12;
+const _burn = {};
 
 const D = (m, d) => [m - 1, d]; // a date as [month 0-based, day]
 const tone = (hex, rng, dl = 0.06, dh = 0.015) => new THREE.Color(hex).offsetHSL((rng() - 0.5) * dh, 0, (rng() - 0.5) * dl);
@@ -573,13 +575,16 @@ export class Forage {
       if (!(sd > 1.5)) continue;
       const site = this.nearestSite(x, z), trail = this.nearestTrail(x, z);
       if (!id) {
+        // a burn (burns.js, the real perimeters by today's date): the berries thick in a burn of 3 to 12 years (blueberries
+        // and raspberries famously), next to none in a fresh one; the mushrooms only where the old forest floor is left
+        const B = burnLook(x, z, _burn, sd);
         // the cell's one roll, at its first spot on land: the weights there (the ground, a campsite near, a trail near,
         // the shore) give the odds of a patch and which kind
         const ws = [];
         let sum = 0;
         for (const sid of season) {
           const S = FORAGE[sid];
-          let wgt = (S.ground[cls] || 0) * (S.weight ?? 1);
+          let wgt = (S.ground[cls] || 0) * (S.weight ?? 1) * (S.kind === 'berry' ? B.berries : S.kind === 'decor' ? 1 : B.under);
           if (!wgt) continue;
           if (site && site.d < SITE_R) wgt *= 1 + (S.site - 1) * (1 - Math.max(0, Math.min(1, (site.d - 25) / (SITE_R - 25))));
           if (trail) wgt *= 1 + (S.trail - 1) * (1 - Math.max(0, Math.min(1, (trail.d - 4) / (TRAIL_R - 4))));
