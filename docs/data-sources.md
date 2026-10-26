@@ -80,3 +80,87 @@ The surveys found these and say no. A game shouldn't place or publish them:
 A lightning storm on 7 July 2026 burned about 78,000 acres in and around the wilderness: Bear Trap 30,804 ac, Thumb 25,015, Wolfpack, Sioux, Camp and Little Knife. The Superior National Forest has closures in force to 1 April 2027. These are in NIFC's live perimeters, not yet in the final archives.
 
 The game's season runs in the current year, so a 2026 season is set the summer these fires burned.
+
+## Fetched
+
+Round D1's source streams write grid-aligned products to `data-cache/<source>/` for round D2's bake. They all share one layout:
+- **Grid:** the bake's `bwca` grid (`scripts/config.mjs`: 19,968 × 6,912 cells of 10 m, 78 × 27 tiles of 256, origin −99,840, −34,560).
+- **Files:** `data-cache/<source>/<tx>_<ty>.<channel>.bin`. Each is the gzip of the tile's core 256 × 256 cells (no halo), row-major, with row 0 at the tile's north edge (cell j = ty·256 + row, i = tx·256 + col), little-endian.
+- **Manifest:** `manifest.json` gives the grid, the channels (type, unit, nodata, legend), the tiles written and the citation. A tile that isn't listed has no data.
+
+### D1-lidar: MnTOPO 2 m LiDAR on the 10 m grid
+
+`node scripts/sources/lidar.mjs` reads the six 2 m COG chunks by window through a GDAL VRT and keeps only the derived cells.
+- **Run:** one 4 × 4-tile window at a time, about 10.5 km and 110 MB of Float32, deleted as soon as it is derived.
+- **Needs:** GDAL (`brew install gdal`) and the bake's OSM cut, for the border.
+- **Resumable:** a re-run skips tiles already in the manifest. `--force` redoes them.
+- **Testing:** `--tiles 29-34:19-22` or `--area lakeone` limits it to a few tiles.
+- **After a run:** `--report` and `--shots` make the comparison and the pictures.
+
+The whole US side took 6 minutes: 114 windows, 9.7 GB of 2 m pixels read and thrown away. Free disk never dropped below 155 GB, so the 15 GB stop never fired.
+
+**What it wrote:** 1,436 tiles, 220 MB (`height` 80 MB, `slope` 45, `relief` 47, `rough` 45, `level` 1.3, `mask` 1.4), plus `manifest.json` (230 KB) and `report.json`.
+
+| Channel | Type | Meaning | Nodata |
+|---|---|---|---|
+| `height` | Int16, dm (NAVD88) | mean of the 2 m pixels whose centres fall in the cell (on water, the flat surface) | −32768 |
+| `slope` | Uint8, degrees | steepest 2 m pixel in the cell (Horn 3 × 3 on the 2 m grid) | 255 |
+| `relief` | Uint8, dm | highest minus lowest 2 m pixel in the cell; 254 = 25.4 m or more | 255 |
+| `rough` | Uint8, cm | RMS residual of the cell's pixels from their least-squares plane: boulders, talus and ledges (a cliff step reads rough too); 254 = 2.54 m or more | 255 |
+| `level` | Int16, dm | the hydro-flattened water surface: the mean of the cell's flat pixels (4 neighbours within 1 mm), wherever it holds two or more | −32768 |
+| `mask` | Uint8, bits | 1 LiDAR (over half the cell covered; the other channels valid) · 2 water (half or more of its pixels hydro-flat) · 4 edge (some pixels missing) · 8 shore (some flat water, under half) · 16 US side of the border | 0 |
+
+**Coverage.**
+- The flight covers the whole US side: 84.0 M cells, 12.7 M of them water (Lake Superior included).
+- It also runs up to about 3 km into Ontario in blocky steps: 5.1 M cells, 65 tiles with Ontario only. Bit 16 marks the US side, from OSM's Minnesota–Ontario boundary.
+- **Use the LiDAR only where bits 1 and 16 are both set.** Ontario stays on today's terrain.
+- There are two voids south of the wilderness, near Ely (around −91.75, 47.80–47.86) and near Tower (around −92.4, 47.81). Nothing there is in the wilderness.
+- The flight ends a few hundred metres out into Lake Superior.
+
+**Lake One against today's heights** (`data-cache/lidar/report.json`):
+- **Heights barely move at 10 m.** On land more than 30 m from the shore, the LiDAR mean minus the game's height is −0.08 m on average (RMS 0.35 m, 5–95 % −0.4 to +0.2 m). Against the raw 3DEP the bake samples, it is −0.05 m (RMS 0.22 m). Here, 3DEP at 10 m is itself lidar-derived. Within 30 m of the shore the RMS is 0.78 m: the bake's bank shaping raises the banks a little.
+- **Lake levels sit 0–0.9 m higher than the game's** (median +0.3 m; one creek is 0.2 m lower):
+  - Lake One 447.1 m against 446.4 m
+  - Lakes Two, Three and Four 452.6 m against 452.3 m
+  - Clearwater 458.8 m against 458.6 m
+
+  The bake takes a low percentile of the DEM's water cells. The LiDAR surface is the water on the flight days (April–May 2021).
+- **Part of "Lake Four" is a separate water body.** 1,760 of its cells, around 47.901, −91.387, lie flat at 454.2 m, 1.6 m above the rest at 452.6 m. Today they share one level. The level channel separates them.
+- **Water:** 160,066 cells are water in both. 12,233 are OSM-only: creeks rasterised as channels (streams under about 30 m wide aren't flattened) and small ponds. 5,504 are LiDAR-only (`lakeone-water-vs-osm.png`).
+- **Slopes:** the steepest 10 m cell in the game is 44.7°. The LiDAR averaged to 10 m tops out at 44.3°, and its steepest 2 m pixel at 72°.
+  - Cells holding a 2 m pixel over 45°: 0.88 %, against 0 % today.
+  - Over 55°: 0.17 %.
+- **Roughness on land:** median 9 cm, 95th percentile 34 cm. 7 % of cells are over 30 cm. On 35–50° slopes the median is 43 cm.
+
+**The cliffs it finds.** A cliff here is a connected group of cells whose steepest 2 m pixel is 50° or more, with 3 m of relief.
+- **Over Lake One:** 1,197 groups, 3,731 cells. The biggest:
+  - 264 m long at 68°, inland at 47.920, −91.433, with a 27 m face. Beside it, 32 m from Bridge Lake, a 163 m group has the area's tallest face (31 m).
+  - 314 m at 68°, 28 m from Plukesley Lake (47.919, −91.519)
+  - 192 m at 65°, 10 m from Lake One (47.932, −91.483)
+  - 122 m at 69°, 63 m from Lake Four (47.911, −91.384)
+
+  `lakeone-cliffs.png` shows them in red over the hillshade.
+- **On the whole US side:** 68,732 groups.
+  - Land cells holding a 2 m pixel over 35°: 2.6 %; over 45°: 0.80 %; over 55°: 0.21 %; over 65°: 0.04 %.
+  - The tallest faces, 70–98 m at 67–85°, are in the east:
+    - the Border Route palisades: Clearwater Lake (East), Watap, Rose and Mountain lakes
+    - the Fowl Lakes country: South Fowl, John, McFarland, Royal, Drag and Canuck lakes
+    - the hills above the Pigeon River near 47.88, −89.92
+    - in the west, the bluffs on Kekekabic Lake (48.07, −91.17)
+  - "Face" is the height range of the group and its ring of cells, an upper bound for a long group on a hillside.
+
+**For round D2:**
+- Read `height` only where `mask & 17 == 17`. Blend to today's heights over the last 50–100 m inside the mask edge. The flight's edge is blocky and the border runs through lakes, but the two sources agree to about 0.3 m, so a short ramp is enough.
+- Take each lake's level as the median of `level` over the lake's own cells, not per cell, so a border lake doesn't step at the edge of the flight. Expect lakes to rise about 0.3 m, so check the shore shaping.
+- Cliffs, talus and boulder fields can come from data rather than from the drawn-shore step in `site.js`:
+  - A face is `slope` ≥ 50 with `relief` ≥ 30 (3 m).
+  - Talus or ledges are 30–50° with `rough` ≥ 30.
+  - A boulder field is `slope` < 30 with `rough` ≥ 25.
+
+  These are suggestions to tune against the shots.
+- Shipping all three detail bytes adds about 140 MB gzipped across the tiles. The game may want one combined "rock" byte: a cliff, talus or boulder class plus the face height.
+- Horizontal NAD83(2011) is treated as the game's WGS84 (about 1 m apart here). Heights are NAVD88, the same as 3DEP.
+
+**Quick looks:** `shots/d1-lidar/` in the main checkout (gitignored), one PNG per channel:
+- `lakeone-*.png` at 10 m, including `lakeone-diff-vs-today.png`, `lakeone-today-slope.png`, `lakeone-water-vs-osm.png` and `lakeone-cliffs.png`
+- `box-*.png` at 80 m (block max for slope and relief, mean for rough)
