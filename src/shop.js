@@ -38,7 +38,7 @@ import { ITEMS } from './profile.js';
 import { LURES, SPECIES } from './fishing.js';
 import { save } from './save.js';
 import { model, itemFor, itemDef, firstFit, acceptsKind, refresh } from './inv-ui.js';
-import { LURE_TAKES } from './items.js'; // content C: the new lures' takes
+import { LURE_TAKES, AFRAME_SLEEP } from './items.js'; // content C: the new lures' takes (tuning: the A-frame's night)
 
 const NS = 'shop';
 export const SHEET_PRICE = 8;
@@ -51,7 +51,7 @@ const CAMP_REACH = 40;     // metres from your pitched tent within which the gra
 // lazily so this file builds and runs without them, and so nothing they import is read before it is ready.
 const LATER = import.meta.glob(['./outfitters.js', './sheets.js']);
 
-export const GEAR0 = Object.freeze({ cruise: 1, effort: 1, stability: 1, carry: 1, sleep: 0.85, sleepDry: false, snap: 1, saw: false, filter: 'tablets', camera: false, canoeKg: 34, foodRoom: 7,
+export const GEAR0 = Object.freeze({ cruise: 1, effort: 1, stability: 1, carry: 1, sleep: AFRAME_SLEEP, sleepDry: false, snap: 1, saw: false, filter: 'tablets', camera: false, canoeKg: 34, foodRoom: 7,
   feel: 1, night: 1.3 }); // content C: feel scales the strike window after a take (the graphite rod), night what travel after dark costs (kit.js: the headlamp with you)
 
 // Two more lures on the wall: the tackle the plan names as new. Each species reads a lure by its id, so every one of
@@ -89,7 +89,7 @@ const BASE = {
   pack: { id: 'pack', name: 'Duluth pack', kind: 'gear', price: 0, kg: 2, family: 'pack', words: 'Canvas and leather, room for a week of food.', effect: {} },
   pack2: { id: 'pack2', name: 'A second Duluth pack', kind: 'gear', price: 0, kg: 2, family: 'pack2', effect: {} },
   barrel: { id: 'barrel', name: 'Food barrel and harness', kind: 'food', price: 0, kg: 3, family: 'barrel', effect: {} },
-  aframe: { id: 'aframe', name: 'A-frame tent', kind: 'gear', price: 0, kg: 3, slot: 'tent', words: 'Two poles and a fly. It sags when it rains.', effect: { sleep: 0.85 } },
+  aframe: { id: 'aframe', name: 'A-frame tent', kind: 'gear', price: 0, kg: 3, slot: 'tent', words: 'Two poles and a fly. It sags when it rains.', effect: { sleep: AFRAME_SLEEP } },
 };
 
 export const CATALOG = [

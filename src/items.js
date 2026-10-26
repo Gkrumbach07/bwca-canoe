@@ -271,6 +271,17 @@ function iconFor(d) {
 }
 
 const FISH_EAT = { food: 0.3, lift: 0.45 }; // a fish's food: half a supper's (content join, the owner's call)
+// tuning (the content join's leftover: "an 18 cm crappie gives +30"): a fish feeds you by its weight. FISH_EAT is what
+// an eating-sized fish gives (FISH_REF_KG: a 45 cm walleye, a 40 cm smallmouth, a 60 cm pike); a smaller or bigger one
+// gives that × (kg / FISH_REF_KG) ^ FISH_EAT_POW, from FISH_EAT_MIN to FISH_EAT_MAX of the food need: an 18 cm crappie
+// +7, a 25 cm perch +12, a 30 cm crappie +18, a metre pike +45. Fried and as fillets the same (the length rides along).
+export const FISH_REF_KG = 0.9, FISH_EAT_POW = 0.6, FISH_EAT_MIN = 0.04, FISH_EAT_MAX = 0.45;
+export function fishEat(d, data) {
+  const len = data && Number(data.length);
+  if (!d || !d.eat || !d.species || !(len > 0)) return d ? d.eat : null;
+  const k = Math.pow(fishKg(d.species, len) / FISH_REF_KG, FISH_EAT_POW), food = Math.min(FISH_EAT_MAX, Math.max(FISH_EAT_MIN, FISH_EAT.food * k));
+  return { ...d.eat, food: +food.toFixed(3), lift: +(FISH_EAT.lift * (food / FISH_EAT.food)).toFixed(3) };
+}
 export function itemDef(id) {
   if (id == null) return null;
   const d = ITEMS[id];
@@ -367,7 +378,10 @@ defineItem({ id: 'lure:lazyike', name: 'Lazy Ike', kind: 'lure', kg: 0.02, price
 
 // --- camp gear and tools -----------------------------------------------------------------------------------------
 // a tent's number is the night's rest in it (rest by morning, out of 100); the bag's and the pad's, what they add
-defineItem({ id: 'aframe', name: 'A-frame tent', kind: 'gear', w: 2, h: 4, kg: 3.0, price: 0, slot: 'tent', icon: 'tent', identity: 'Two poles and a fly', onYou: [EF('rest', 0.85, 'a night')] });
+// tuning (the content join's leftover: "the A-frame's night leaves rest at 0.85"): the starting tent's night. At 0.85 every
+// morning of a season began 15 % tired and the rest ceiling took it lower all day; 0.92 keeps the dome (1) the better night
+export const AFRAME_SLEEP = 0.92;
+defineItem({ id: 'aframe', name: 'A-frame tent', kind: 'gear', w: 2, h: 4, kg: 3.0, price: 0, slot: 'tent', icon: 'tent', identity: 'Two poles and a fly', onYou: [EF('rest', AFRAME_SLEEP, 'a night')] });
 defineItem({ id: 'dome', name: 'Dome tent', kind: 'gear', w: 2, h: 4, kg: 2.8, price: 50, slot: 'tent', icon: 'dome', identity: 'Freestanding dome', onYou: [EF('rest', 1, 'a night')] });
 defineItem({ id: 'fourseason', name: 'Four-season tent', kind: 'gear', w: 2, h: 5, kg: 3.6, price: 95, slot: 'tent', icon: 'dome', identity: 'Dome with a vestibule', onYou: [EF('rest', 1, 'a night'), O('Wet gear', 'dry by morning')] });
 defineItem({ id: 'sleepingbag', name: 'Sleeping bag', kind: 'gear', w: 2, h: 3, kg: 1.8, price: 0, icon: 'bag', identity: 'Down bag · good to 0 °C', onYou: [EF('rest', 0.4, 'a night')] });
