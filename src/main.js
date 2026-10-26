@@ -79,6 +79,8 @@ import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
 import { record } from './record.js'; // round A-A
 import { slots } from './save.js'; // round A-D
+import { CULL } from './tiles.js'; // round A-C
+import { AutoWatch, prewarmPasses } from './quality.js'; // round A-C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -776,7 +778,21 @@ async function main() {
   { const boot = slots.takeBoot(); if (boot) setTimeout(() => title.fromBoot(boot), 0); }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
-  prewarm(scene); // polish A: with the composer's target bound, as above
+  const warmed = prewarm(scene); // polish A: with the composer's target bound, as above
+  // round A-C: then, behind the title card, the programs three's compile skips: every shadow caster's depth program in
+  // both light states the shadow pass can see, the mirror's variants, the god rays and the other anti-aliasing
+  // (quality.js prewarmPasses). The count is 79 at the title and stays there; it crept from 64 to 76 over four days.
+  warmed.then(() => prewarmPasses({ renderer, scene, camera, post, water, tiles, player, world })).then((r) => { window.__game.prewarmed = r; });
+  // round A-C: Auto keeps an eye on the frame rate in play and steps down a preset when the game runs slow
+  // (quality.js AutoWatch), fed the same frame times as the FPS readout. At half the undergrowth (Low) the
+  // understory casts no shadow: a shrub's shadow is lost in the ground's own shading, and its cascade proxies were 18
+  // of the shadow pass's 121 draw calls on the Lake One-Confusion trail.
+  const autoWatch = new AutoWatch(settings, () => title.state === 'game' && !input.paused && document.visibilityState === 'visible');
+  { const end = fps.end.bind(fps); fps.end = (dt) => { end(dt); autoWatch.frame(dt); }; }
+  const undergrowth = () => { CULL.understoryShadow = settings.get('vegDensity') > 0.55; };
+  settings.onChange((k) => { if (k === 'vegDensity') undergrowth(); });
+  undergrowth();
+  window.__game.autoWatch = autoWatch;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);

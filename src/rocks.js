@@ -609,8 +609,36 @@ export function screeBlock(rng) {
   return fallbackRock(rng);
 }
 
+// round A-C: the far twin of the boulders and the scree (vegetation.js LOW, past their LOD distance): one plain
+// convex block of seven to nine faces round the same footprint, no chamfers, no splits, painted as the near ones
+// are (the granite, its lichen and its foot, by finish(); or the scree's grey): 10 to 20 triangles where the far
+// twin was a slanted rock of 128 (229 000 boulders in a 5 x 5 tiles' reach, 1.7 M triangles in Lake One's view).
+export function farRock(rng, { scree = false } = {}) {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const X = scree ? 0.7 : 0.92 + rng() * 0.12, Z = scree ? 0.58 : 0.78 + rng() * 0.12, top = scree ? 0.62 + rng() * 0.2 : 0.55 + rng() * 0.3;
+    const planes = roundPlanes(rng, 7 + Math.floor(rng() * 3), X, top, Z, 0, -0.1, 0.12);
+    planes.push(plane(0, -1, 0, 0));
+    const poly = polytope(planes);
+    if (!poly) continue;
+    const B = new RockBuilder();
+    for (const f of poly.faces) B.poly(f.ids.map((q) => B.vert(poly.verts[q], f.n, 0)), f.n);
+    if (!scree) return finish(B, rng, { ground: 0, reach: 0.9 });
+    const base = SCREE[Math.floor(rng() * SCREE.length)].clone().multiplyScalar(0.92 + rng() * 0.14), col = new Float32Array(B.count * 3);
+    for (let i = 0; i < B.count; i++) { const k = 0.9 + 0.12 * Math.max(0, B.n[i].y); col[i * 3] = base.r * k; col[i * 3 + 1] = base.g * k; col[i * 3 + 2] = base.b * k; }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(B.p.flatMap((p) => [p.x, p.y, p.z]), 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(B.n.flatMap((n) => [n.x, n.y, n.z]), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setIndex(B.idx);
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
+    return geo;
+  }
+  return fallbackRock(rng);
+}
+
 // The families by the names vegetation.js asks for: 'slab' the layered flats, 'block' the slanted rock (the
-// cheapest, so it is also every rock's far twin), 'boulder' the erratic. All are about two units across and
+// cheapest; it was every rock's far twin until farRock, round A-C), 'boulder' the erratic. All are about two units across and
 // stand on their base at y = 0 inside FOOT (the slanted rock's tail goes deep below the ground once tilted);
 // tiles.js holds the walker off a rock with a circle of 0.8 x its scale, props.js off an outcrop with 0.95 x.
 export const ROCK_FAMILIES = { slab: layeredFlats, block: slantedRock, boulder: erratic };
