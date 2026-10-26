@@ -34,7 +34,7 @@ function poolWords(pool) {
 // - rest: what the last night gave (the tent's quality × min(1, hours slept / 7)), falling the longer you are awake;
 //   only sleep brings it back.
 // - food: falls from full to empty over 24 game hours awake (a third as fast asleep). A cold meal gives +0.5, a hot one
-//   or a fish +0.6. (The plan said 16 h: a June day is 16 h from the dawn meal to the dusk one, so two meals a day left
+//   +0.6, a fish +0.3 (the content join). (The plan said 16 h: a June day is 16 h from the dawn meal to the dusk one, so two meals a day left
 //   every June evening hungry and each day starting lower; at 24 h two meals keep you fed in any month, and an empty
 //   pack still has you hungry by the next afternoon.)
 // - water (fb3 B, the owner's 2026-10-25 round: nothing is drunk for you): the thirst need falls on its own, 8 game

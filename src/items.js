@@ -270,12 +270,13 @@ function iconFor(d) {
   return d.id;
 }
 
+const FISH_EAT = { food: 0.3, lift: 0.45 }; // a fish's food: half a supper's (content join, the owner's call)
 export function itemDef(id) {
   if (id == null) return null;
   const d = ITEMS[id];
   if (d) return d;
   const s = String(id);
-  if (s.startsWith('fish:')) return defineItem({ id: s, name: cap(s.slice(5)), kind: 'fish', w: 1, h: 3, kg: 0.8, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Fresh catch' });
+  if (s.startsWith('fish:')) return defineItem({ id: s, name: cap(s.slice(5)), kind: 'fish', w: 1, h: 3, kg: 0.8, eat: { ...FISH_EAT, cook: true, hot: true }, identity: 'Fresh catch' });
   // a map sheet the inventory restores before the shop's sheets are in (shop.js loads sheets.js later and names it fully)
   if (s.startsWith('sheet:')) return defineItem({ id: s, name: `Fisher map ${s.slice(6)}`, short: s.slice(6), kind: 'map', w: 2, h: 2, kg: 0.1, price: 8, icon: 'map', stub: true, identity: 'Fisher map · waterproof' });
   return null;
@@ -323,8 +324,10 @@ defineItem({ id: 'snack:jerky', name: 'Beef jerky', kind: 'snack', kg: 0.12, pri
 defineItem({ id: 'snack:chocolate', name: 'Chocolate bar', kind: 'snack', kg: 0.1, price: 1, servings: 2, serving: 'half a bar', eat: { food: 0.06, lift: 0.06 }, identity: 'Milk chocolate' });
 // kept fish, by species: 1 × 3 in a grid (fb3 B: a fish goes in a hand, a pack or the stringer); a fish of any other
 // species gets a plain one (itemDef). Its weight comes from its length (fishKg).
+// content join (the owner's call on the new-player review, 2026-10-25): a fish feeds you +30, half a supper's +60 (the
+// review caught four from shore in half an hour, each a $3 supper); fried, and as fillets, the same
 for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['smallmouth', 'Smallmouth bass'], ['laketrout', 'Lake trout'], ['perch', 'Yellow perch'], ['crappie', 'Crappie']]) {
-  defineItem({ id: `fish:${sp}`, name, kind: 'fish', w: 1, h: 3, kg: 0.8, species: sp, eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Fresh catch' });
+  defineItem({ id: `fish:${sp}`, name, kind: 'fish', w: 1, h: 3, kg: 0.8, species: sp, eat: { ...FISH_EAT, cook: true, hot: true }, identity: 'Fresh catch' });
 }
 // the takes are fishing.js SPECIES[*].lures, the three best, written out (the comparison number of bait and lures)
 defineItem({ id: 'leeches', name: 'Leeches', kind: 'bait', kg: 0.025, stack: 12, price: 4, sold: 12, lure: 'leech', icon: 'leeches', identity: 'Live ribbon leeches · 1 a bite',
@@ -350,7 +353,7 @@ for (const [id, raw, name] of [
   ['hot:freeze', 'meal:freeze', 'Freeze-dried supper, ready'],
 ]) defineItem({ id, name, kind: 'food', w: 1, h: 1, kg: 0.6, cooked: raw, keep: 5, eat: { ...ITEMS[raw].eat, cook: false, hot: true }, icon: 'pot', identity: 'Hot from the pot' });
 for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['smallmouth', 'Smallmouth bass'], ['laketrout', 'Lake trout'], ['perch', 'Yellow perch'], ['crappie', 'Crappie'], ['fish', 'Fish']]) {
-  defineItem({ id: `fried:${sp}`, name: `Fried ${sp === 'fish' ? 'fish' : name.toLowerCase().replace(/^northern /, '')}`, kind: 'food', w: 2, h: 1, kg: 0.5, cooked: `fish:${sp}`, keep: 4, species: sp, eat: { food: 0.6, lift: 0.45, hot: true }, icon: 'fish', identity: 'Fried on the grate' });
+  defineItem({ id: `fried:${sp}`, name: `Fried ${sp === 'fish' ? 'fish' : name.toLowerCase().replace(/^northern /, '')}`, kind: 'food', w: 2, h: 1, kg: 0.5, cooked: `fish:${sp}`, keep: 4, species: sp, eat: { ...FISH_EAT, hot: true }, icon: 'fish', identity: 'Fried on the grate' });
 }
 
 // --- the tackle --------------------------------------------------------------------------------------------------
@@ -489,7 +492,7 @@ defineItem({ id: 'knife', name: 'Fillet knife', short: 'Knife', kind: 'tool', w:
   verbs: [{ id: 'clean', label: 'Fillet the catch' }, { id: 'hand', label: 'Put in hand' }] });
 export const FILLET_SHARE = 0.4; // of a whole fish's weight
 for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Pike'], ['smallmouth', 'Smallmouth'], ['laketrout', 'Lake trout'], ['perch', 'Perch'], ['crappie', 'Crappie']]) {
-  defineItem({ id: `fillet:${sp}`, name: `${name} fillets`, short: 'Fillets', kind: 'fish', w: 1, h: 2, kg: 0.3, species: sp, fillet: true, icon: 'fillet', eat: { food: 0.6, lift: 0.45, cook: true, hot: true }, identity: 'Cleaned and skinned' });
+  defineItem({ id: `fillet:${sp}`, name: `${name} fillets`, short: 'Fillets', kind: 'fish', w: 1, h: 2, kg: 0.3, species: sp, fillet: true, icon: 'fillet', eat: { ...FISH_EAT, cook: true, hot: true }, identity: 'Cleaned and skinned' });
 }
 defineItem({ id: 'lure:spinnerbait', name: 'Spinnerbait', short: 'Spinbait', kind: 'lure', kg: 0.02, price: 7, lure: 'spinnerbait', identity: 'Wire arm, willow blade · weedless', model: 'lure', tint: 0xb8d03a, onYou: [lureOn('spinnerbait')] });
 defineItem({ id: 'lure:jigminnow', name: 'Jig & minnow', short: 'Jig & min', kind: 'lure', kg: 0.01, price: 4, lure: 'jigminnow', identity: 'Lead jig tipped with a salted minnow', model: 'lure', tint: 0xd96a2a, onYou: [lureOn('jigminnow')] });
