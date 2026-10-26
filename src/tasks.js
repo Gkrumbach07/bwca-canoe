@@ -27,9 +27,10 @@ import { esc, word, plural, fmtKm, shortDate } from './hud.js';
 const HOPS = 4;              // portages out from the landing a notice may send you
 const RANGE = 14000;         // metres from the landing, as the crow flies
 // tuning (the content join's leftover: "the deadfall pays $45, as for a day trip, 13 km out"): the bands go by portages, so
-// a medium notice ("a day trip") could lie 13 km out, a full day each way at the pace; a medium one now lies within
-// BAND_KM.medium m (out and back in a day: 20 km at the pace), the others within RANGE
-const BAND_KM = { medium: 9000 };
+// a medium notice ("a day trip") could lie 13 km out, a full day each way at the pace, and a local one ("close by") 12 km
+// (240 sampled at six outfitters); a medium one now lies within BAND_KM.medium m (out and back in a day: 20 km at the
+// pace), a local one within BAND_KM.local (an hour or so each way), a far one anywhere in RANGE
+const BAND_KM = { local: 7000, medium: 9000 };
 const rangeOf = (band) => Math.min(RANGE, BAND_KM[band] ?? RANGE);
 const PICKUP = 4;            // metres within which E picks an item up
 const ARRIVE = 28;           // metres within which a survey point counts as reached
