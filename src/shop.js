@@ -449,6 +449,15 @@ export class Shop {
       if (!cId) break;
       got++; into.set(cId, (into.get(cId) || 0) + 1);
     }
+    // (the content join: a big thing (the canoe chair, the landing net) with no gap for it in the packs rides loose in
+    // the canoe at the dock, as a tent's bag or a bucket does, rather than going unsold)
+    if (!got && !spot && n === 1 && typeof inv.addContainer === 'function' && inv.containers && this.canoeAtDock() && inv.containers.filter((c) => c.where === 'canoe').length < 8) {
+      const h = inv.addContainer('inhand', 'canoe'); // (not quiet: the change is saved with the inventory)
+      if (h && inv.put(h.id, it.id, { qty })) {
+        pr.spend(it.price, `${it.name}${at}`); this.apply(); refresh();
+        return { ok: true, cId: h.id, words: `${it.name}${paid(1)}: loose in the canoe at the dock. $${pr.money} in hand.` };
+      }
+    }
     if (!got) {
       const name = lowerA(it.name);
       return { ok: false, why: 'room', words: spot ? `${cap(name)} won’t go there.` : `No room for ${name} in anything you have. Make some room, or a bigger pack or barrel is on the shelves.` };
@@ -459,6 +468,11 @@ export class Shop {
     const cs = [...into.keys()].map((c) => containerWord(inv, c));
     const what = got > 1 ? `${got} × ${lowerName(it.name)}` : it.name;
     return { ok: true, cId: [...into.keys()][0], words: `${cap(what)}${paid(got)}, into the ${cs.join(' and the ')}.${got < n ? ' No room for more.' : ''} $${pr.money} in hand.` };
+  }
+  // the canoe tied at this store's dock (outfitter.js tieUp: set down at the layout's dockSide)
+  canoeAtDock() {
+    const o = this.outfitter, v = o && o.visit, s = v && v.L && v.L.dockSide, d = this.player && this.player.carry && this.player.carry.drop;
+    return !!(s && d && Math.hypot(d.x - s.x, d.z - s.z) < 1.5);
   }
   // how many of a thing your reachable containers could take now (stacks with room, then free spots)
   room(id, want = 1) {

@@ -1451,6 +1451,7 @@ function tabCheck(st, tabEl) {
     if (key === 'canoe' && k === 'container' && !e.hull && !e.owned && !e.dear) return (inv.containers || []).filter((c) => c.where === 'canoe').length < 8 ? 'buy' : 'no';
     if (e.hull || e.owned || e.dear || k === 'long' || k === 'container') return 'no';
     const c = key === 'keeping' ? inv.crate : key === 'canoe' ? canoeFor(e.id) : inv.cont(key);
+    if (!(c && canFit(c, e.id)) && key === 'canoe' && (inv.containers || []).filter((q) => q.where === 'canoe').length < 8) return 'buy'; // (the content join: loose in the canoe, shop.js buyItem)
     return c && canFit(c, e.id) ? 'buy' : 'no';
   }
   if (SPECIAL_TABS[key]) return zoneCheckDz(st, SPECIAL_TABS[key]);
@@ -1473,7 +1474,12 @@ function dropOnTab(st, tabEl) {
     if (r && r.ok) { const words = `${itemDef(e.id).name}, $${e.price || 0}: in the canoe at the dock. $${sc.money()} in hand.`; sc.receipt = { ok: true, words }; note(words, 4); sc.mine.openAt('canoe'); sc.render(true); }
     return;
   }
-  if (src && src.opts.shelf) { const c = key === 'keeping' ? inv.crate : key === 'canoe' ? canoeFor(e.id) : inv.cont(key), f = c && inv.firstFit(c.id, e.id); if (f) src.opts.screen.buy(e.id, { cId: c.id, x: f.x, y: f.y, rot: f.rot }); return; }
+  if (src && src.opts.shelf) {
+    const c = key === 'keeping' ? inv.crate : key === 'canoe' ? canoeFor(e.id) : inv.cont(key), f = c && inv.firstFit(c.id, e.id);
+    if (f) src.opts.screen.buy(e.id, { cId: c.id, x: f.x, y: f.y, rot: f.rot });
+    else if (key === 'canoe') src.opts.screen.buy(e.id, null); // (the content join: no gap in the canoe's packs: the shop says so, or it rides loose in the canoe; it was a drop that did nothing)
+    return;
+  }
   if (SPECIAL_TABS[key]) { dropOnZone(st, SPECIAL_TABS[key]); return; }
   const c = inv.cont(key); if (!c) return;
   if (st.kind === 'thing' || e.box) { const t = thingOfDrag(st), f = t && inv.firstFit(c.id, t.obj.item); if (!f || !inv.move(null, t.id, c.id, f.x, f.y, f.rot)) note('It won’t go in there.', 2.5); else note(`${t.def.name}: into the ${lower(short(itemDef(c.item)) || nameOf(c))}.`, 3); return; }
