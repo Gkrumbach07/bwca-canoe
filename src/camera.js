@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clamp, smoothstep } from './rng.js';
 import { storeLayouts } from './props.js';
+import { makeLookMaterial } from './shading.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -97,6 +98,38 @@ function patchSee(m, camera, chase) {
     SEE.uSee.value.x = cam === camera && cam.position.distanceToSquared(SEE.uSeeA.value) < 0.01 ? chase.seeStrength : 0;
   };
   m.userData.see = true;
+}
+// p2 B (the owner, 2026-10-26: "in first person i cant see portage trail while having canoe on back"): from the eyes
+// under the canoe. The view had come up level (half the screen the hull's inside), and the hull's invisible lid at the
+// gunwales (canoe.js: a depth-only plane that keeps the water out of a floating hull) hid everything drawn after it,
+// the trail's tread and the water among them (main.js hides it on the carry). Now, as a portager looks: taking the canoe
+// up in first person (or turning to first person under it) the look tips down the trail (FP_CARRY.pitch, about 17
+// degrees; the mouse moves it as ever), the bow rides higher on the shoulders (FP_CARRY.bow, canoe.js state.carryBow,
+// over its own 5 degrees), and the hull near the eye is seen through: the player's hull draws with a copy of its
+// material dithered out (the 4 x 4 screen door of SEE) within FP_CARRY.near metres of the eye, fading back in by
+// FP_CARRY.far, and only above the eye, never quite gone (FP_CARRY.ghost), so the hull's inside overhead stops filling
+// the screen while the gunwales at the shoulders, running forward to the bow, and the bow itself stay. Third person is
+// as it was.
+export const FP_CARRY = { pitch: -0.3, bow: 0.08, near: 0.9, far: 2.4, ghost: 0.82 };
+const HULL_SEE = { uHullSee: { value: new THREE.Vector4(0, 0, 0, 0) }, uHullSeeR: { value: new THREE.Vector2(FP_CARRY.near, FP_CARRY.far) } };
+function hullSeeMaterial(from) {
+  return makeLookMaterial({ vertexColors: from.vertexColors, color: from.color }, {
+    wrap: from.userData && from.userData.look ? from.userData.look.wrap : 0, name: 'look-solid-see',
+    compile: (shader) => {
+      Object.assign(shader.uniforms, HULL_SEE);
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vSeeW;').replace('#include <project_vertex>', '#include <project_vertex>' + seeVert);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
+uniform vec4 uHullSee;
+uniform vec2 uHullSeeR;
+varying vec3 vSeeW;
+float seeBayer( vec2 p ) {
+  ivec2 q = ivec2( mod( floor( p ), 4.0 ) );
+  float b[16] = float[16]( 0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0 );
+  return ( b[ q.x + q.y * 4 ] + 0.5 ) / 16.0;
+}`).replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+  if ( uHullSee.w > 0.0 && uHullSee.w * ( 1.0 - smoothstep( uHullSeeR.x, uHullSeeR.y, length( vSeeW - uHullSee.xyz ) ) ) * smoothstep( -0.06, 0.1, vSeeW.y - uHullSee.y ) > seeBayer( gl_FragCoord.xy ) ) discard;`);
+    },
+  });
 }
 const _seg = { ax: 0, ay: 0, az: 0, dx: 0, dy: 0, dz: 0, L: 0 };
 // the first t in [0, 1] where the 2D segment enters a circle of radius r round (cx, cz), or Infinity (inside at the
@@ -404,6 +437,31 @@ export class ChaseCamera {
     for (const m of mats) patchSee(m, this.camera, this);
   }
 
+  // p2 B: the player's hull, seen through near the eye on a first-person carry (FP_CARRY). Its see-through copy of the
+  // material is made now and hung on a hidden mesh in the scene, so the compile behind the title card makes its program
+  // (main.js, before the prewarm); the hull takes it only while it is overhead in first person (carryView).
+  seeHull(canoe, scene) {
+    const mesh = canoe && canoe.hull && canoe.hull.children.find((c) => c.isMesh && c.material && c.material.colorWrite !== false);
+    if (!mesh) return;
+    this.hullSee = { mesh, base: mesh.material, see: hullSeeMaterial(mesh.material), canoe, on: false, carried: false };
+    const warm = new THREE.Mesh(mesh.geometry, this.hullSee.see);
+    warm.visible = false; warm.frustumCulled = false; warm.name = 'p2b-hull-see-prewarm';
+    if (scene) scene.add(warm);
+  }
+
+  // p2 B: the first-person carry view, each frame (update): the look tipped down the trail as the carry starts in first
+  // person, the bow lifted, the near hull seen through; all of it off in third person or once the canoe is down
+  carryView(player, first, carry) {
+    const H = this.hullSee, on = first && carry && !this.focus;
+    if (on && (!H || !H.carried)) this.viewPitch = Math.min(this.viewPitch, FP_CARRY.pitch); // (a look already further down stays)
+    if (H) H.carried = on;
+    if (player.canoe && player.canoe.state) player.canoe.state.carryBow = on ? FP_CARRY.bow : 0;
+    if (!H) return;
+    if (H.mesh.material !== H.see && H.mesh.material !== H.base) { H.base = H.mesh.material; H.see = hullSeeMaterial(H.base); } // (the hull's material was swapped elsewhere)
+    H.mesh.material = on ? H.see : H.base;
+    HULL_SEE.uHullSee.value.set(this.head.x, this.head.y, this.head.z, on ? FP_CARRY.ghost : 0);
+  }
+
   get mouseLook() { return this.mode === 'first' || this.footLook; }
   get wantsLock() { return this.allowLock && this.mouseLook; }
 
@@ -469,6 +527,7 @@ export class ChaseCamera {
       this.first = false;
       this.camera.position.copy(this.pos);
       this.camera.lookAt(this.look);
+      this.carryView(player, false, false); // p2 B
       return;
     }
     const onFoot = carrying || player.mode === 'carry' || player.mode === 'walk';
@@ -477,7 +536,8 @@ export class ChaseCamera {
     this.footLook = footLook;
     if (this.locked && !this.wantsLock) { try { document.exitPointerLock(); } catch (_) { /* nothing to release */ } }
     this.lastHeading = player.heading;
-    if (this.mode === 'first') return this.updateFirst(dt, player);
+    if (this.mode === 'first') { const r = this.updateFirst(dt, player); this.carryView(player, true, carrying || player.mode === 'carry'); return r; } // p2 B
+    this.carryView(player, false, false); // p2 B
     let yaw, pitch;
     const carry = carrying || player.mode === 'carry';
     if (footLook) {

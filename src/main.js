@@ -179,6 +179,26 @@ async function main() {
   // vegetation's own materials, patched here before anything compiles: no new program); the camera pulls in, on a
   // spring, only for the ground, rocks, walls and a big trunk at the lens (camera.js)
   chase.seeThrough(tiles.vegetation);
+  // p2 B: the owner's two small bugs (2026-10-26). In first person under the canoe the trail shows: the hull's lid (a
+  // depth-only plane at the gunwales that keeps the water out of a floating hull) is off on the carry, as it hid the
+  // tread and the water ahead; the look tips down the trail, the bow rides higher and the near hull is seen through
+  // (camera.js FP_CARRY; seeHull before the compile below, so its program is made behind the title card). And the creeks
+  // and rivers are graded (scripts/water-grade.mjs, applied to each tile in the worker by water-levels.js; levelAt is
+  // bilinear in grid.js and water.js): the canoe pitches with the water's own slope as well, so it noses down a rapids.
+  chase.seeHull(canoe, scene);
+  const p2b = { pitch: 0, lid: canoe.lid || canoe.hull.children.find((c) => c.isMesh && c.material && c.material.colorWrite === false) };
+  p2b.afterPlayer = (dt) => {
+    if (p2b.lid) p2b.lid.visible = player.mode !== 'carry';
+    const afloat = player.mode === 'paddle' && !player.teleporting;
+    let want = 0;
+    if (afloat) {
+      const f = player.forward, L = 2.2;
+      want = Math.atan((world.levelAt(player.x + f.x * L, player.z + f.z * L) - world.levelAt(player.x - f.x * L, player.z - f.z * L)) / (2 * L));
+      if (!Number.isFinite(want)) want = 0;
+    }
+    p2b.pitch += (want - p2b.pitch) * (1 - Math.exp(-Math.max(0, dt) * 4));
+    if (afloat && Math.abs(p2b.pitch) > 1e-4) { canoe.rig.rotateZ(-p2b.pitch); canoe.rig.updateMatrixWorld(); } // (player.js sets the rig afresh each frame: bow up is -z)
+  };
   const settings = new Settings();
   const hud = new Hud(world, { onTeleport: async (x, z) => { if (trip && trip.adventure) return; if (await player.teleport(x, z)) chase.snap(); }, settings, camera }); // trip core A: the map moves you in Sandbox only
   const post = makePost(renderer, scene, camera);
@@ -900,6 +920,7 @@ async function main() {
     guardWalker(); // fb3 join: a NaN never freezes the game (above)
     canoe.update(dt * ts);
     player.afterRig(); // fb C: a swim from shore leaves the beached hull where it lies (canoe.js's swim pose turns it over)
+    p2b.afterPlayer(dt * ts); // p2 B: the lid off on the carry, the hull pitched with the water's slope
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     guardView(shell);

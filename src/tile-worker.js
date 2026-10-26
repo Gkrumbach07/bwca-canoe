@@ -7,6 +7,7 @@ import { buildWaterChunk } from './water-build.js';
 import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
 import { Site } from './site.js';
+import { gradeTile } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js)
 
 let cfg = null;
 
@@ -152,6 +153,7 @@ function partTerrain(t, size) {
 async function buildFine(m) {
   const g = cfg.grid;
   const buf = await fetchTile(m.url);
+  await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
@@ -182,6 +184,7 @@ async function buildFine(m) {
 async function buildFar(m) {
   const g = cfg.grid, f = g.far;
   const buf = await fetchTile(m.url);
+  await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
   const grid = new TileGrid(desc, m.fx, m.fy, buf, cfg.levelById, cfg.clarityById);
   const per = g.tile / f.factor; // far cells per fine tile

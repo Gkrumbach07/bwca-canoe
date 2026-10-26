@@ -134,7 +134,9 @@ export const glslSurface = /* glsl */ `
     return mix(mix(cellSample(t, c), cellSample(t, c + ivec2(1, 0)), a.x), mix(cellSample(t, c + ivec2(0, 1)), cellSample(t, c + ivec2(1, 1)), a.x), a.y);
   }
   float terrainAt(vec2 rel) { return bilinear(uHeightTex, rel); }
-  float levelAt(vec2 rel) { return cellSample(uLevelTex, atlasCell(rel)); }
+  // p2 B: bilinear between the cells (it was the cell's own level, so a graded river's surface stepped at every cell
+  // edge); a land cell holds the level of the water nearest it (rebuildAtlas), so a lake's is flat right to its shore
+  float levelAt(vec2 rel) { return bilinear(uLevelTex, rel); }
   float clarityAt(vec2 rel) { return cellSample(uClarityTex, atlasCell(rel)); }
   float atlasLevel(vec2 rel) { return levelAt(rel); }
   float shoreAt(vec2 rel) { return bilinear(uShoreTex, rel); }
@@ -202,6 +204,8 @@ const vertHead = /* glsl */ `
   varying vec3 vCrest;        // x: wave height over the local wind-wave height, y: that height (damped near the shore),
                               // z: the wind-wave height the shore here takes (the most exposed water round it)
   varying float vLee;         // cons B: 0 in the lee (a short fetch upwind), 1 on open water (LEE)
+  varying float vLevel;       // p2 B: the still surface's height (no swell): its slope is a rapids' (white water)
+  varying vec2 vFlow;         // p2 B: the near patch's: that slope (the gradient of the level, m per m), smooth
   #include <common>
   #include <fog_pars_vertex>
   #include <shadowmap_pars_vertex>
@@ -252,6 +256,8 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
     vWaveN = normalize(vec3(hL - hR, 2.0 * e, hB - hF));
     vec3 objPos = vec3(position.x, position.y + wave, position.z);
     vec3 flatObj = position;
+    vLevel = position.y;
+    vFlow = vec2(0.0);
     vec3 local = vec3(rel.x, position.y + wave, rel.y);
 ` + vertTail;
 
@@ -274,6 +280,8 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     float hB = surfaceWave(rel - vec2(0.0, e), uTime, border, s2), hF = surfaceWave(rel + vec2(0.0, e), uTime, border, s2);
     vWaveN = normalize(vec3((hL - hR) * (1.0 - uIce), 2.0 * e, (hB - hF) * (1.0 - uIce)));
     float level = levelAt(rel);
+    vLevel = level;
+    vFlow = vec2(levelAt(rel + vec2(2.0, 0.0)) - levelAt(rel - vec2(2.0, 0.0)), levelAt(rel + vec2(0.0, 2.0)) - levelAt(rel - vec2(0.0, 2.0))) * 0.25;
     vDepth = max(0.0, level - surfaceAt(rel));   // the bed as the terrain mesh draws it (the shore band reshaped)
     vClarity = clarityAt(rel);
     vec3 objPos = vec3(position.x, level + wave, position.z);
@@ -371,6 +379,8 @@ const frag = /* glsl */ `
   varying vec4 vReflectUv;
   varying vec3 vCrest;
   varying float vLee;
+  varying float vLevel;
+  varying vec2 vFlow;
   #include <common>
   #include <packing>
   #include <fog_pars_fragment>
@@ -503,8 +513,47 @@ const frag = /* glsl */ `
     // the normal: the swell's own (smooth, from the vertices), tilted by the wind's fine ripples
     float rough;
     vec2 pw = vLocal.xz + uOrigin;   // world xz, for the noise (a lattice relative to the origin would jump with it)
+    // p2 B: where the still surface runs downhill (a rapids kept at a portage, a creek's cascade off a perched lake;
+    // scripts/water-grade.mjs) the water is broken and white: nothing on a lake or on the half-per-cent ramps the grade
+    // made of the old steps, roughening from 2.5 % and white water by 9 %. The near patch has the slope from its vertices
+    // (vFlow, smooth); the far water from the level's screen derivatives (as the shore's below), where only a pale wash
+    // shows (a derivative's float noise would scatter streaks into salt)
+    #ifdef FAR
+      vec2 lex = dFdx(vLocal.xz), ley = dFdy(vLocal.xz);
+      float ldet = lex.x * ley.y - lex.y * ley.x, lvx = dFdx(vLevel), lvy = dFdy(vLevel);
+      vec2 lvg = abs(ldet) > 1e-9 ? vec2(lvx * ley.y - lvy * lex.y, lvy * lex.x - lvx * ley.x) / ldet : vec2(0.0);
+    #else
+      vec2 lvg = vFlow;
+    #endif
+    float fall = length(lvg), steep = smoothstep(0.025, 0.09, fall) * live;
     vec2 tilt = windRipples(vLocal.xz, pw, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore)
       * mix(${LEE.calm.toFixed(3)}, 1.0, vLee);   // cons B: the lee lies smooth
+    float rapids = 0.0;
+    if (steep > 0.001) {
+      // froth drawn out downhill and running with the water, in streaks a hand or two across and a couple of metres
+      // long; far off (under a few pixels) a pale wash. The streaks run along the two nearest of 16 fixed world
+      // directions to the flow, crossfaded (as the wind's ripples are drawn): a direction taken per pixel and multiplied
+      // into a world position turns the least wobble of the flow into stripes
+      float fa = atan(-lvg.y, -lvg.x) * ${(16 / (2 * Math.PI)).toFixed(6)}, fk = floor(fa), fw = fa - fk;
+      float fine = 1.0 - smoothstep(0.01, 0.04, px);   // (the finer streaks only where a pixel is a centimetre or two)
+      float froth = 0.0;
+      for (int k = 0; k < 2; k++) {
+        float an = (fk + float(k)) * ${(2 * Math.PI / 16).toFixed(6)};
+        vec2 dn = vec2(cos(an), sin(an)), ac = vec2(-dn.y, dn.x);
+        float along = dot(pw, dn), across = dot(pw, ac);
+        float f = lookNoise(vec2(across * 2.6, along * 0.55 - uTime * 1.6), 113u + uint(k)) * mix(1.0, 0.65, fine) + lookNoise(vec2(across * 6.0, along * 1.4 - uTime * 3.4), 127u + uint(k)) * 0.35 * fine;
+        froth += f * (k == 0 ? 1.0 - fw : fw);
+      }
+      froth = 0.5 + (froth - 0.5) / max(0.6, sqrt(fw * fw + (1.0 - fw) * (1.0 - fw)));   // (a crossfade's middle keeps its contrast)
+      #ifdef FAR
+        float near = 0.0;
+      #else
+        float near = 1.0 - smoothstep(0.05, 0.3, px);
+      #endif
+      float wash = steep * steep * 0.22 * (0.45 + 0.55 * lookNoise(pw * 0.12 + vec2(0.0, uTime * 0.05), 131u));
+      rapids = smoothstep(0.6 - 0.06 * steep, 0.78 - 0.04 * steep, froth) * steep * 0.75 * near + wash * (1.0 - near);
+      tilt *= 1.0 + 1.5 * steep;   // the water between broken up
+    }
     if (uRain > 0.0) tilt += rainRings(pw, px, uRain) * live;
     vec3 n0 = normalize(vWaveN);
     vec3 n = normalize(n0 - vec3(tilt.x, 0.0, tilt.y));
@@ -550,7 +599,7 @@ const frag = /* glsl */ `
     float nh = max(dot(n, H), 0.0);
     float low = 1.0 - smoothstep(0.1, 0.6, uSunDir.y);
     float glint = (pow(nh, 1200.0) * 30.0 * smoothstep(0.0, 0.6, length(tilt) * 8.0) + pow(nh, 120.0) * 0.5 * low) * mix(0.05, 1.0, low) * step(0.0, uSunDir.y);
-    vec3 G = uSunLight * 3.14159 * glint * shadow * live * (1.0 - ra) * uGlint;
+    vec3 G = uSunLight * 3.14159 * glint * shadow * live * (1.0 - ra) * uGlint * (1.0 - 0.9 * steep); // (p2 B: no sparkle on a rapids' broken water)
     // the surface: what the mirror shows (F) over what comes out of the water (1 - F); the bed shows through what
     // the column lets by. Composed for plain alpha blending over the bed the terrain drew: colour / A, alpha A.
     // The fog lies over all of it except the mirrored shore, which its own pass already hazed along the whole path.
@@ -625,7 +674,7 @@ const frag = /* glsl */ `
     // off and at a grazing look they count for more)
     capFarV *= mix(1.0, 2.6, smoothstep(0.35, 0.06, dot(normalize(vWaveN), v)));
     float cap = min(1.0, mix(capNear * 0.95, capFarV * blow * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.9, capFar));
-    float foam = max(max(edgeA, lineA), cap) * live;
+    float foam = max(max(max(edgeA, lineA), cap), rapids) * live; // p2 B: and a rapids' white water
     // white water lit as the splashes and the rise rings are (wake.js foamLight): the key by its height in the sun's
     // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white; round A-E: by
     // night under the floor its fill is the water's own light (glslWaterOwn), so a whitecap or the lap never outshines it
