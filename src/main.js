@@ -75,6 +75,7 @@ import { uniques } from './uniques.js'; // content C
 import './gear-icons.js'; // content C
 import { attachTaskKinds } from './task-kinds.js'; // content A
 import { bear } from './bear.js'; // cons A
+import { bugs } from './bugs.js'; // cons C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -699,6 +700,22 @@ async function main() {
   for (const m of bear.moments()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
   { const dueA = hints.due.bind(hints); hints.due = (id, rec) => bear.due(id, rec, dueA); } // the bear's two, and "Bears: hang…" steps aside the evening after a visit
   window.__game.bear = bear;
+  // cons C: bugs at dusk (the consequences pass; the owner, 2026-10-25: "a bear at camp if the food isn't hung, wind-bound
+  // days, and bugs at dusk, so the camp routines matter"). bugs.js: blackflies by day in late May and June, mosquitoes at
+  // dusk and dawn from June to August (a few in September), by the season, the hour, the air, the wind where you stand and
+  // the site (worst in the woods by still water, light on a breezy point). The world shows them first: the whine
+  // (audio-beds.js, through audio.bugs), specks round the head and the walker's swat (after the pose); then the small cost
+  // (energy.js bugMods) and a worse night in a tent left open or under the stars (energy.sleep, then the morning's line).
+  // The counters: the head net or a bug jacket (content C's kit), a smoky fire near, the wind, and the tent closed (tent.js).
+  bugs.attach({ player, day, weather, wind, world, energy, camp, fires, kit, canoe, scene, audio, inventory });
+  energy.bugs = bugs; audio.bugs = () => bugs.whine;
+  { const upd = shop.update; shop.update = () => { upd(); bugs.update(); }; } // after the kit's look at what is with you, before energy
+  { const pose = canoe.update; canoe.update = (dt) => { pose(dt); bugs.afterPose(dt); }; } // the swat, over the pose
+  { const wake = camp.wake.bind(camp); camp.wake = () => { wake(); const w = bugs.morning(); if (w) camp.morningNote = camp.morningNote ? `${camp.morningNote} ${w}` : w; }; }
+  const bugMoments = new Map(bugs.moments().map((m) => [m.id, m]));
+  for (const m of bugMoments.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+  { const due = hints.due.bind(hints); hints.due = (id, rec) => (bugMoments.has(id) ? bugMoments.get(id).due(rec) : due(id, rec)); } // the mosquitoes, the blackflies
+  window.__game.bugs = bugs;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
