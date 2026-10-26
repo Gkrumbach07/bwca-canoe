@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mulberry32, smoothstep, noise2 } from './rng.js';
 import { daysInYear, monthDay, MONTHS, sunTimes } from './astro.js';
 import { Precip } from './rain.js';
+import { monthlyCurve } from './season.js'; // d1 lakes: the normals' smooth year
 
 // The weather (docs/roadmap.md, phase 3): seven states, a seeded forecast that evolves over hours, and the look of
 // each one handed to the day cycle, which keys it with the sun so the light, the sky, the fog, the clouds and the
@@ -111,11 +112,26 @@ const warmth = (d) => smoothstep(110, 160, d) * (1 - smoothstep(250, 290, d));  
 const summer = (d) => smoothstep(150, 172, d) * (1 - smoothstep(232, 252, d));          // thunderstorms
 const fogSeason = (d) => smoothstep(215, 240, d) * (1 - smoothstep(300, 322, d)) + 0.3 * smoothstep(128, 140, d) * (1 - smoothstep(160, 175, d));
 const greySeason = (d) => 0.12 + 0.33 * smoothstep(290, 312, d) * (1 - smoothstep(345, 360, d)) + 0.12 * (1 - smoothstep(90, 120, d));
-// air temperature, C: a fit to Ely's monthly means (-14 in late January, 19 in late July), the day's swing (smaller
-// under cloud), a slow seeded anomaly of a few degrees, and the chill of rain
+// d1 lakes: the NOAA 1991-2020 monthly normals for Ely 25E (USC00212555, beside Lake One; scripts/lake-facts.mjs
+// fetches and prints them), daily high and low, °C. The year was a cosine fit (2.5 - 16.5 cos), 2.3-2.6 °C too cold
+// from March to May (the real spring warms faster than a cosine) and 1.5 °C too warm in December and January, with
+// one 11 °C day's swing all year; now each day's mean and swing come from the month's (a smooth year through them,
+// season.js monthlyCurve): the swing 12-14 °C from March to August, 7-9 in the winter.
+export const NORMALS = {
+  high: [-9.4, -6.3, 1.1, 8.2, 16.7, 22.2, 25.1, 23.9, 18.7, 9.9, 0.7, -6.6],
+  low: [-21.5, -19.9, -12.9, -4.4, 3.4, 9.8, 12.6, 11.4, 6.8, 0.1, -7.4, -16.4],
+};
+const meanOf = monthlyCurve(NORMALS.high.map((h, m) => (h + NORMALS.low[m]) / 2));
+const rangeOf = monthlyCurve(NORMALS.high.map((h, m) => h - NORMALS.low[m]));
+// the normal day, °C: its mean, and half its range (the swing either side of the mean), for a day of the year (kit.js's
+// night low and energy.js's air with no weather read these, as airTemp does)
+export const dayMean = (doy) => meanOf(doy);
+export const daySwing = (doy) => 0.5 * rangeOf(doy);
+// air temperature, C: the day's mean from the normals, the day's swing about it (high at three in the afternoon, low at
+// three in the morning, smaller under cloud), a slow seeded anomaly of a few degrees, and the chill of rain
 function airTemp(seed, year, doy, hours, grey = 0, rain = 0) {
-  const mean = 2.5 - 16.5 * Math.cos((2 * Math.PI * (doy - 25)) / 365.25);
-  const swing = 5.5 * (1 - 0.65 * grey) * Math.sin((2 * Math.PI * (hours - 9)) / 24);
+  const mean = meanOf(doy);
+  const swing = 0.5 * rangeOf(doy) * (1 - 0.65 * grey) * Math.sin((2 * Math.PI * (hours - 9)) / 24);
   const anomaly = (noise2((year * 366 + doy + hours / 24) / 3.2, 0.5, seed) - 0.5) * 6;
   return mean + swing + anomaly - 1.5 * rain;
 }

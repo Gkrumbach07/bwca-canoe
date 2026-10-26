@@ -28,6 +28,7 @@ import { COOK } from './cook.js';
 import { PADDLE_LOOKS, ROD_LOOKS, recolor } from './gear.js';
 import { itemOf } from './shop.js';
 import { smoothstep } from './rng.js';
+import { dayMean, daySwing } from './weather.js'; // d1 lakes: the normals
 
 const POLL = 0.4;            // real seconds between looks at what is with you
 // the headlamps (items.js headlamp2, headlamp3): the beam's reach (m), its brightness (× the cap's), travel after dark
@@ -169,10 +170,11 @@ export class Kit {
   // the season's mean night
   nightLow() {
     const b = this.bed, d = this.t.day;
-    const swing = (h, grey) => 5.5 * (1 - 0.65 * grey) * Math.sin((2 * Math.PI * (h - 9)) / 24);
-    if (b && Number.isFinite(b.temp) && Math.abs(d.doy - b.doy) <= 1) return b.temp - swing(b.h, b.grey) - 5.5 * (1 - 0.65 * b.grey);
-    const mean = 2.5 - 16.5 * Math.cos((2 * Math.PI * (d.doy - 25)) / 365.25);
-    return mean - 5.5;
+    // d1 lakes: the day's swing is the NOAA normals' for the date (weather.js daySwing; it was 5.5 °C all year)
+    const amp = daySwing(b && Number.isFinite(b.doy) ? b.doy : d.doy);
+    const swing = (h, grey) => amp * (1 - 0.65 * grey) * Math.sin((2 * Math.PI * (h - 9)) / 24);
+    if (b && Number.isFinite(b.temp) && Math.abs(d.doy - b.doy) <= 1) return b.temp - swing(b.h, b.grey) - amp * (1 - 0.65 * b.grey);
+    return dayMean(d.doy) - daySwing(d.doy);
   }
   // the camp's site is the one Arvid's map pencils (uniques.js)
   atGuideSite() {

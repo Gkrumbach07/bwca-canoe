@@ -86,6 +86,7 @@ import { Parties } from './parties.js'; // round A-F
 import { PartyCamps } from './party-camps.js'; // round A-F
 import { PartyMoves } from './party-moves.js'; // p2 C
 import { partyTargets } from './pointer.js'; // p2 C
+import { setLocalIce } from './season.js'; // d1 lakes
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -398,6 +399,31 @@ async function main() {
   // applyFixes from src/world-fixes.json for the data-v3 release; a newer bake has both built in): { landings, portages, baked }
   window.__game.worldFixes = world.fixed;
   if (world.fixed) console.log(`fb E: ${world.fixed.landings} landings at their put-ins, ${world.fixed.portages} portages connected to the ${world.fixed.baked} baked`);
+  // d1 lakes: what the agencies publish about each lake (lake-facts.js, src/lake-facts.json): the DNR's fish by lake
+  // (fishing.js rateFor), its depth for the lakes with no contour map (the tile worker's bowlTile), wild rice by lake
+  // (placement.js), and each lake's own ice-out and ice-in: the lake under you, or the nearest within 300 m, sets the
+  // season's (season.js setLocalIce), looked at once a second. The weather's temperatures are NOAA's normals and the
+  // water's the Kawishiwi gauge's (weather.js, season.js). window.__game.lakeFacts: the table (factsOf, fishOf, iceOf)
+  const d1lakes = { t: 0, id: -1, ice: null };
+  d1lakes.update = (dt) => {
+    if ((d1lakes.t -= dt) > 0 || !world.facts) return;
+    d1lakes.t = 1;
+    let id = world.lakeIdAt(player.x, player.z);
+    if (!id) {
+      const ci = world.cellI(player.x), cj = world.cellJ(player.z);
+      for (let r = 1, bd = Infinity; r <= 30 && !id; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+        if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+        const q = world.lakeCell(ci + di, cj + dj), d = di * di + dj * dj;
+        if (q && d < bd) { bd = d; id = q; }
+      }
+    }
+    if (!id || id === d1lakes.id) return;
+    d1lakes.id = id;
+    d1lakes.ice = world.facts.iceOf(id);
+    if (d1lakes.ice) setLocalIce(d1lakes.ice.out, d1lakes.ice.in);
+  };
+  window.__game.lakeFacts = world.facts; window.__game.d1lakes = d1lakes;
+  if (world.facts) console.log(`d1 lakes: ${world.facts.stats.lakes} DNR lakes on ${world.facts.stats.polygons} polygons, ${world.facts.stats.bowls} bowls from the DNR's depth`);
   window.__game.dialogue = talk; // fb F
   // hubs 2D: map sheets (sheets.js). The sheets you own gate the map's campsites, portages and soundings (hud.js; fb2 D
   // below); Sandbox shows everything. The map table sells the sheets from SHEETS and stockFor.
@@ -965,6 +991,7 @@ async function main() {
     ripples.lapse = player.boost || 1; // polish A: the hull's bubbles age at the travel's time-lapse (wake.js)
     ripples.update(dt);
     updateClouds(clouds, dt, camera.position.x, camera.position.z);
+    d1lakes.update(dt); // d1 lakes: the lake you are on sets the ice (above)
     day.update(dt);
     sky.position.copy(camera.position);
     sun.position.copy(day.sunDir);
