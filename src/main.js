@@ -679,6 +679,7 @@ async function main() {
   // front); the waves build with the fetch and a lee shore lies calm (water.js LEE); in a blow the sea comes aboard,
   // the water in the hull slows it and swamped it goes over, Q held still bails, a landing tips it out (player.js SEA,
   // hullwater.js buildBilge). Two first-time moments: the first whitecaps, the first water aboard.
+  player.day = day; // (the sea's game minutes run on the day's clock: none behind the pause card)
   {
     const sea = new Map(seaMoments(player, day).map((m) => [m.id, m]));
     for (const m of sea.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }

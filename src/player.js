@@ -484,7 +484,7 @@ export class Player {
       const dx = this.x + wd.x * drift, dz = this.z + wd.z * drift;
       if (ok(dx, dz, this.heading)) { this.x = dx; this.z = dz; }
       let dh = Math.atan2(-wd.z, wd.x) - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-      this.heading += Math.sin(dh) * 0.004 * U * dt;
+      if (!this.sea.bailing) this.heading += Math.sin(dh) * 0.004 * U * dt; // (cons B: bailing, you hold her where she points)
     }
     // broadside to a big sea the canoe rolls; quartering the waves or bracing keeps it under you
     const H = this.waveHeightHere;
@@ -526,7 +526,9 @@ export class Player {
   // share of the wind, paddling a stroke or a sweep held, busy the hands on a brace, the rod or the climb. Q held with the
   // paddle still bails. Returns whether it is bailing.
   seaAboard(dt, H, cosRel, shelter, paddling, busy) {
-    const S = this.sea, st = this.canoe.state, gameMin = (dt * (this.paceTable.clock || 1)) / 60;
+    // game minutes this frame: the day's own clock (main.js sets this.day), stopped behind the pause card
+    const d = this.day, gameMin = d && 'hoursPerTick' in d ? dt * d.hoursPerTick * 60 : (dt * (this.paceTable.clock || 1)) / 60;
+    const S = this.sea, st = this.canoe.state;
     const steady = this.gear ? this.gear.stability : 1;
     const a = (Math.acos(clamp(cosRel, -1, 1)) * 180) / Math.PI; // 0 running before the sea .. 180 head on
     const cruise = LIFE.cruise * (this.gear ? this.gear.cruise : 1), pace = clamp(Math.abs(this.speed) / cruise, 0, 1.3);
