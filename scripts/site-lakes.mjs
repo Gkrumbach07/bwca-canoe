@@ -38,7 +38,11 @@ const lakeCell = (i, j) => {
 const R = 40; // cells (10 m each)
 const out = [];
 let found = 0;
-for (const c of index.campsites) {
+// d1 names: the official sites OpenStreetMap lacks, appended by world.js from src/world-fixes.json for this release
+let fixes = null;
+try { fixes = JSON.parse(fs.readFileSync('src/world-fixes.json', 'utf8')); } catch { fixes = null; }
+const added = fixes && index.source && fixes.for === index.source.baked ? fixes.campsites || [] : [];
+for (const c of [...index.campsites, ...added]) {
   const ci = Math.floor((c.x - g.originX) / g.cell), cj = Math.floor((c.z - g.originZ) / g.cell);
   let best = 0, bd = Infinity;
   for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
@@ -48,6 +52,6 @@ for (const c of index.campsites) {
   if (best) found++;
   out.push(best);
 }
-const doc = { about: 'round A-F (2026-10-26): the lake id of the nearest water cell to each campsite, in index.campsites order (0: none within 400 m). Made by scripts/site-lakes.mjs from the release baked at `for`; parties.js reads it.', for: index.source && index.source.baked, n: out.length, lakes: out };
+const doc = { about: 'round A-F (2026-10-26): the lake id of the nearest water cell to each campsite, in index.campsites order and then world-fixes.json\'s added sites (d1 names) (0: none within 400 m). Made by scripts/site-lakes.mjs from the release baked at `for`; parties.js reads it.', for: index.source && index.source.baked, n: out.length, lakes: out };
 fs.writeFileSync(outFile, JSON.stringify(doc));
 console.log(`${found} of ${out.length} sites on a lake; wrote ${outFile} (${fs.statSync(outFile).size} bytes)`);

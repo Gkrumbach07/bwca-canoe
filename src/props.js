@@ -7,6 +7,7 @@ import { outfitterName } from './outfitter.js';
 import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
 import { RockShape } from './collide.js';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
+import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
@@ -309,10 +310,20 @@ function buildTrail(ctx, p, decal, pieces) {
   for (const end of [0, 1]) {
     const e = end ? p.pts[p.pts.length - 1] : p.pts[0];
     if (!inside(e[0], e[1])) continue;
-    pieces.push(portageSign(ctx, pts, end, seed + end));
+    pieces.push(portageSign(ctx, pts, end, seed + end, p));
   }
 }
-function portageSign(ctx, pts, end, seed) {
+// d1 names: the words on the plate under a landing's board: the water the trail goes to and its length, "CONFUSION L." over
+// "45 RODS" (the Forest Service's rods where names.js has them: p.rods). Few words, the way an old routed sign has them.
+export function signWords(world, p, end) {
+  const far = p && p.launch && p.launch[end ? 0 : 1], nm = far && world && world.lakeName ? world.lakeName(far.lake) : null;
+  const short = (n) => String(n).toUpperCase().replace(/[–—]/g, '-').replace(/\s+LAKE$/, ' L.').replace(/\s+RIVER$/, ' R.').replace(/\s+CREEK$/, ' CR.').replace(/[^A-Z0-9.' -]/g, '').replace(/\s+/g, ' ').trim();
+  const lines = [];
+  if (nm) lines.push(short(nm));
+  if (p && p.rods > 0) lines.push(`${p.rods} ${p.rods === 1 ? 'ROD' : 'RODS'}`);
+  return lines;
+}
+function portageSign(ctx, pts, end, seed, p = null) {
   const m = pts.length, idx = (k) => (end ? m - 1 - k : k), rng = mulberry32(seed);
   // up the path from the landing until the ground is dry and firm, at most ten rows
   let k = 0;
@@ -332,7 +343,32 @@ function portageSign(ctx, pts, end, seed) {
   const by = top - 0.16, bb = 0.045 + 0.017, board = tone(0x75573d, rng, 0.04);
   b.box(F.P(0, by, bb), F.X, F.Y, F.Z, 0.29, 0.105, 0.017, TILE.WOOD, board, { grain: 'x', skip: ['+z'] });
   b.face([F.P(-0.29, by + 0.105, bb + 0.017), F.P(0.29, by + 0.105, bb + 0.017), F.P(0.29, by - 0.105, bb + 0.017), F.P(-0.29, by - 0.105, bb + 0.017)], TILE.SIGN, C(0xffffff),
-    { ref: F.P(0, by, 0), uvs: [[0.02, 0.3], [0.98, 0.3], [0.98, 0.7], [0.02, 0.7]] });
+    { ref: F.P(0, by, 0), uvs: SIGN_HEAD_UV });
+  // d1 names: the plate under the board, its face bare board (the cell's blank letter) and a quad per routed letter
+  const lines = signWords(ctx.world, p, end);
+  if (lines.length) {
+    const LH = 0.058, GAP = 0.012, longest = Math.max(...lines.map((l) => l.length));
+    const gw = Math.max(0.02, Math.min(LH * SIGN_GLYPH_ASPECT, 0.5 / longest)), gh = Math.min(LH, gw / SIGN_GLYPH_ASPECT * 1.12);
+    const hw = Math.max(0.12, (longest * gw) / 2 + 0.025), hh = (lines.length * gh + (lines.length - 1) * GAP) / 2 + 0.02;
+    const py = by - 0.105 - 0.018 - hh, pz = 0.045 + 0.012, face = pz + 0.012;
+    b.box(F.P(0, py, pz), F.X, F.Y, F.Z, hw, hh, 0.012, TILE.WOOD, board, { grain: 'x', skip: ['+z'] });
+    const blank = signGlyphUv(' '), q = (u0, v0, u1, v1) => [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    b.face([F.P(-hw, py + hh, face), F.P(hw, py + hh, face), F.P(hw, py - hh, face), F.P(-hw, py - hh, face)], TILE.SIGN, C(0xffffff), { ref: F.P(0, py, 0), uvs: q(...blank) });
+    // (the narrow letters take less room: the middle of their cell, so "NORTH L." reads as one word and a stop)
+    const fw = (ch) => (ch === '.' || ch === "'" ? 0.42 : ch === ' ' ? 0.55 : ch === 'I' || ch === '1' ? 0.62 : 1);
+    lines.forEach((line, li) => {
+      const top = py + hh - 0.02 - li * (gh + GAP), z = face + 0.0015;
+      let a = -[...line].reduce((t, ch) => t + fw(ch) * gw, 0) / 2;
+      for (const ch of line) {
+        const f = fw(ch), wd = f * gw;
+        if (ch !== ' ') {
+          const [u0, v0, u1, v1] = signGlyphUv(ch), du = ((u1 - u0) * (1 - f)) / 2;
+          b.face([F.P(a, top, z), F.P(a + wd, top, z), F.P(a + wd, top - gh, z), F.P(a, top - gh, z)], TILE.SIGN, C(0xffffff), { ref: F.P(0, py, 0), uvs: q(u0 + du, v0, u1 - du, v1) });
+        }
+        a += wd;
+      }
+    });
+  }
   const geo = b.build();
   occlude(geo, [obb(F.P(0, (g + top) / 2, 0), F.X, F.Y, F.Z, 0.045, (top - g) / 2, 0.045)], { ground: localGround(ctx), rays: 8, reach: 0.6 });
   return geo;

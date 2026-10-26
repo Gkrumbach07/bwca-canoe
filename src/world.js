@@ -156,7 +156,15 @@ export class World extends GridQueries {
       this.portages.push(q);
       portages++;
     }
-    return { landings, portages, baked: this.portages.length - portages };
+    // d1 names: the official USFS campsites OpenStreetMap lacks (Lake Four #11, Basswood – Back Bay #95…), appended
+    // after the release's own so saved site indices hold (src/site-lakes.json counts them too)
+    let campsites = 0;
+    for (const c of f.campsites || []) {
+      if (!Number.isFinite(c.x) || !Number.isFinite(c.z)) continue;
+      this.campsites.push({ x: c.x, z: c.z, name: c.name || null, onWater: !!c.onWater, shore: c.shore ?? 10, usfs: c.usfs ?? null, added: true });
+      campsites++;
+    }
+    return { landings, portages, baked: this.portages.length - portages, campsites };
   }
 
   // --- tiles ----------------------------------------------------------------

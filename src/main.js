@@ -86,6 +86,7 @@ import { Parties } from './parties.js'; // round A-F
 import { PartyCamps } from './party-camps.js'; // round A-F
 import { PartyMoves } from './party-moves.js'; // p2 C
 import { partyTargets } from './pointer.js'; // p2 C
+import { names } from './names.js'; // d1 names
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -94,6 +95,9 @@ const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if
 
 async function main() {
   const world = await World.load(progress);
+  // d1 names: the official names on the world's records before the tiles build (the trail signs read them): the sites'
+  // USFS numbers, the portages' trails, rods and classes, the place names (names.js; the rest of it below)
+  const named = await names.attach(world).catch((e) => { console.warn('d1 names', e); return null; });
   await occlusionCacheReady; // the occlusion bakes cached by the last start (occlusion.js), read while the world loaded
   // no multisampling on the canvas: the scene renders into the post chain's multisampled target (post.js) and the
   // canvas only ever takes the grade's full-screen quad
@@ -856,6 +860,47 @@ async function main() {
     if (!document.getElementById('water-css')) { const s = document.createElement('style'); s.id = 'water-css'; s.textContent = '.st-untreated { --st: #a5773f; --st-ink: #22140a; }'; document.head.appendChild(s); }
     const dueW = hints.due.bind(hints);
     hints.due = (id, rec) => { const r = dueW(id, rec); return id === 'thirsty' && r && typeof r === 'object' && energy.untreated > 0.02 ? r.lv : r; };
+  }
+  // d1 names (the real-data round; the owner, 2026-10-26: "i honestly would like to do all of this"): the Forest Service's
+  // and the place-name authorities' names (names.js, attached above before the tiles). A numbered site reads "Campsite ·
+  // Basswood Lake – Back Bay #91" where you stand, on the action line (camp.siteName), in the dusk note ("a free campsite
+  // 1.2 km north-east · Lake One #12"), the journal's nights and the record's sites. A portage's landing says its trail,
+  // its rods and its class ("Portage: Lake One – Confusion Lake · 45 rods · a good trail"; no metres); its sign's plate the
+  // water it goes to and the rods (props.js). Passing a named bay, point, island, narrows, summit or named portage (and a
+  // named falls or rapids from d1 rapids' hud.mapPlaces) shows a small place note, at most one each 25 s, never over a
+  // lake's card; the map letters them all (hud.js drawPlaceNames). __game.names: the tables, near(x, z, r), the last note.
+  {
+    if (!document.getElementById('names-css')) { const s = document.createElement('style'); s.id = 'names-css'; s.textContent = '#place.minor .name { font-size: 46px; } #place.minor { gap: 8px; } @media (max-width: 720px) { #place.minor .name { font-size: 32px; } }'; document.head.appendChild(s); }
+    const showP = hud.showPlace.bind(hud);
+    hud.showPlace = (kicker, name, sub, seconds, minor = false) => { names.minorShown = !!minor; if (hud.el && hud.el.place) hud.el.place.classList.toggle('minor', !!minor); showP(kicker, name, sub, seconds); };
+    const portageAt = () => { let best = null, bd = 40; for (const p of world.portages) for (const l of p.launch || []) { const d = Math.hypot(l.x - player.x, l.z - player.z); if (d < bd) { bd = d; best = p; } } return best; };
+    const updP = player.update.bind(player);
+    player.update = (dt) => {
+      updP(dt);
+      const c = player.campsite; if (c && c.usfs != null) player.placeName = names.siteLine(c);
+      const pr = player.prompt;
+      if (pr && pr.key === 'E' && /^Go ashore · Portage: /.test(pr.text || '')) { const p = portageAt(); if (p) pr.text = `Go ashore · ${names.portageLine(p)}`; }
+    };
+    const siteWordsH = hints.nearestSiteWords.bind(hints);
+    hints.nearestSiteWords = () => {
+      const w = siteWordsH(); if (!w) return w;
+      let n = null; try { n = camp.registry.nearestFree(player.x, player.z, 6000, (s) => !sheets.showsDetail || sheets.showsDetail(s.x, s.z)); } catch { n = null; }
+      const nm = n && names.siteWords(n.site); return nm ? `${w} · ${nm}` : w;
+    };
+    const whereT = tripStats.whereabouts.bind(tripStats);
+    tripStats.whereabouts = () => { const c = player.nearCampsite ? player.nearCampsite(player.x, player.z, 40) : null; return (c && names.siteLine(c)) || whereT(); };
+    const campW = record.campWords.bind(record);
+    record.campWords = (key, lake) => { const [x, z] = String(key).split(':').map(Number); const s = Number.isFinite(x) ? world.campsites.find((c) => Math.round(c.x) === x && Math.round(c.z) === z) : null; return (s && names.siteLine(s)) || campW(key, lake); };
+    const hudUpd = hud.update.bind(hud);
+    hud.update = (ctx) => {
+      // landing at a numbered site, which one (after the parties' "… is taken", party-camps.js, which reads a bare "Go ashore")
+      const pr = player.prompt;
+      if (pr && pr.key === 'E' && pr.text === 'Go ashore' && player.mode === 'paddle') { const s = player.nearCampsite(player.x, player.z, 45); const nm = s && names.siteLine(s); if (nm) pr.text = `Go ashore · ${nm}`; }
+      hudUpd(ctx);
+      try { names.update({ player, hud, world, shell: ctx.shell }); } catch (e) { if (!names.warned) { names.warned = true; console.warn('d1 names', e); } }
+    };
+    window.__game.names = names;
+    if (named) console.log(`d1 names: ${named.sites} sites numbered (${named.added} added), ${named.portages} portages on a USFS trail (${named.rods} with its rods), ${named.places} place names`);
   }
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
