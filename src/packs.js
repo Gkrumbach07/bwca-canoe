@@ -394,6 +394,15 @@ export class Packs {
         else if (inp.pressed('KeyE')) { if (L) p.launch(L); else p.dropHull(true); }
         return true;
       }
+      // (the content join: a thing set down a few steps off at this end, past your reach under the canoe and short of
+      // "back at the trail head", was left behind without a word as E launched: twice, the leech bucket)
+      const here = !left.length && L ? ground.filter((u) => u.obj.at.trail && u.obj.at.trail.i === this.world.portages.indexOf(trail && trail.def) && Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) <= LOAD_REACH) : [];
+      if (here.length) {
+        p.say(note || trailText, ['E', `Set the canoe down · ${names(here)} ${here.length > 1 ? 'are' : 'is'} here`], ['Q', 'Launch and leave it']);
+        if (inp.pressed('KeyE')) p.dropHull(true);
+        else if (inp.pressed('KeyQ')) { this.leaveOk = true; for (const u of here) u.obj.at.noted = false; p.launch(L); }
+        return true;
+      }
       if (left.length && L) {
         p.say(note || trailText, ['E', `Set the canoe down · walk back for ${names(left)}`], ['Q', 'Launch and leave it']);
         if (inp.pressed('KeyE')) p.dropHull(true);
@@ -748,7 +757,7 @@ export class Packs {
       if (this.hud) this.hud.note(`No paddle with you. ${pad.next}.`, 5);
       return false;
     }
-    const left = this.leftHere(p.carry, p, true).filter((u) => !(u.obj.at && u.obj.at.noted)); // (fb5 join: near the canoe too: the leech bucket fetched over and set down 4 m off was left without a word)
+    const left = this.leftHere(p.carry, p, true).filter((u) => !(u.obj.at && u.obj.at.noted) || Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) <= LOAD_REACH); // (fb5 join: near the canoe too: the leech bucket fetched over and set down 4 m off was left without a word; the content join: and again when you come back to it and leave it a second time)
     if (left.length) { for (const u of left) u.obj.at.noted = true; if (this.hud) this.hud.note(`You push off and leave ${names(left)} at the trail head.`, 5); }
     this.leaveOk = false;
     const worn = this.loadWorn(all);
