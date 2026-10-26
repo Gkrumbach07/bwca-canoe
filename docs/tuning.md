@@ -352,6 +352,101 @@ the headless driver at 1440 × 900, with real keys and the real mouse. The scrip
    - Old saves: a bottle filled before with no tablet (the old 6 h mark) loads as untreated, with no upset until it is
      drunk. Any other bottle loads as it was.
 
+## One speed (2026-10-26)
+
+**Why.** Multiplayer is planned, so one player can't be allowed to change the clock. The 1/2/3 keys multiplied
+everything by 1, 2 or 4: the clock, the motion and the paddle's stroke. The owner played walking at 1–2, portaging at
+3 and canoeing at 3, which they called "really unrealistically fast" (about 25 m/s, with a frantic stroke). Approved:
+"adjust the speed and thats it for now."
+
+**What changed.**
+- The 1/2/3 keys are gone, with their moment (the hint), the pace toast and the corner mark. `player.timeScale` is
+  gone. An old save's `timeScale` (1, 2 or 4) is ignored, and a stored *speed* setting is too.
+- One clock, ×8, for everyone. A game hour is 7½ real minutes and a game day is 3 real hours. The Rest dial and
+  sleeping are the only time skips. The camera's life-pace hold (photo.js) stays.
+- Each activity has a fixed seen speed, decoupled from the clock. The paddle's stroke runs at life's cadence.
+- Real pace moved from Settings › Controls to Settings › Developer, for testing.
+
+**The constants** (the table at the top of `src/pace.js`):
+
+| what | constant | value | gives |
+|---|---|---|---|
+| clock | `CLOCK` | 8 | a game hour in 7½ real min, a day in 3 real h |
+| canoe | `CANOE.cruise` / `.hustle` | 12.5 / 15 m/s | the time-lapse is these over life's 1.6 / 2.0; the gear's cruise shows on top |
+| | `CANOE.stroke` | 1 | the paddle's cadence over life's (0.95 strokes a second; Shift 1.33) |
+| carry | `CARRY.seen` / `.hustle` | 8 / 9 m/s | the canoe overhead, on a trail or off it |
+| trail | `TRAIL.walk` / `.jog` | 5 / 7 m/s | on foot on a portage trail: the walk back, a pack carried over |
+| walk | `WALK.seen` / `.jog` | 3.5 / 6 m/s | on foot on open land |
+| camp | `CAMP.seen` / `.jog` | 3 / 4.5 m/s | a campsite's area, a store and its yard |
+| swim | `SWIM_LAPSE` | 1.5 | a swim 0.8 → 1.2 m/s; wading eases toward it with the depth |
+| | `MAX_LAPSE` | 12 | the most the walker is time-lapsed (the heaviest carry) |
+
+On foot the seen speed holds whatever the load, as the old trails did. A hill and the water still slow it.
+
+**Measured** (headless, the real keys, calm air, the content join's driver; scripts in session da7a347d's scratchpad
+`one-speed/`). Before is at Normal (1) and at the key the owner used (3, or 2 for walking). Real seconds are of the
+wall clock. Speeds are made good over the stretch, including the start.
+
+| | before, Normal | before, the owner's key | after |
+|---|---|---|---|
+| Lake One crossing, 2 km | 6.3 m/s, 5.3 real min | (3) 25 m/s, 1.3 real min | 12.3 m/s, 2.75 real min |
+| the same with Shift | 7.9 m/s, 4.3 min | (3) 31 m/s, 1.1 min | 14.7 m/s, 2.3 min |
+| the 2 km in game minutes | 21 | 21 | 22 |
+| strokes a real second | 0.95 (Shift 1.33) | (3) 3.8 (Shift 5.4) | 0.95 (Shift 1.33) |
+| a median portage, 226 m, double (carry, walk back, carry) | carry 2.45 m/s, walk 2.55; 4.5 real min | (3) carry 9.8, walk 10.2; 1.1 real min | carry 7.6 (Shift 8.6), walk 4.8 (Shift 6.8); 2.0 real min |
+| the portage in game minutes | 18 | 18 | 16 |
+| a walk round camp (53 m, the Lake One site) | 1.3 m/s, 41 s | (2) 2.6 m/s, 20 s | 2.8 m/s, 19 s (Shift 4.2, 13 s) |
+| a walk in the woods (70 m) | 2.3 m/s, 30 s | (2) 4.6 m/s, 15 s | 3.3 m/s, 21 s (Shift 5.5, 13 s) |
+| swimming | 0.8 m/s | (3) 3.2 | 1.2 (wading waist-deep about 1.6) |
+| a game hour of fishing | 15 real min; 5.5 fish (8 runs, 3.7–7.6) | (3, set before the rod went up) 3¾ real min, the same fish | 7.5 real min; 5.6 fish (6 runs, 4.9–6.3) |
+
+The fishing runs were three game hours from 9:00, from the canoe off the Lake One campsite, hopping a jig and letting
+every fish go (fish2.js).
+
+**Retuned** (before → after):
+- `fishing.js TUNING.base`: 1/400 bites a real second → 2.5 bites a game hour. The bites are now counted on the game
+  clock. The old rate at ×4 was the same 2.25 a game hour. At ×8 a cast's retrieve and a fish's handling take twice
+  the game minutes, so there are half the casts a game hour, each soaking longer. Measured: 6.4 a game hour at 2.6,
+  5.0 at 2.25, 4.6 at 2.4, 5.6 at 2.5, against 5.5 before. A run's own luck is about ±1.
+- `cook.js COOK`: supper 10 → 15 game min, breakfast 7 → 10, freeze-dried 7 → 10, a fish 7 → 10. `kit.js`: pancakes
+  8 → 12, chili 7 → 10, bannock 10 → 15, a fillet 4 → 6. These restore the minutes before tuning's two-thirds cut. A
+  supper is under 2 real minutes (it was 2½).
+- `player.js BOOST`: the bank-ahead easing went from 5–16 m to 8–26 m and its reach from 30 to 40. The canoe now runs
+  at twice the old cruise, so the easing starts about as many seconds out as before.
+- `packs.js` fetch: the walk is charged at the trail's seen walk (`TRAIL.walk`, 5 m/s at ×8). It was the old `SEEN.walk`
+  (2.6 at ×4). A fetch costs about what it did in game hours.
+- `player.lapsing` (travelling on foot) still counts only a trail and open land. A camp's or a store's walk is now
+  time-lapsed (3 m/s) but is not travel.
+
+**Checked, left as they are** (all on the game clock already, or real-time reflexes):
+- **The energy drain** is per game hour, so per km it follows the game seconds a metre takes:
+  - paddling 0.64 → 0.65 game s a metre
+  - a carry 1.63 → 1.05 (−36 %)
+  - a trail walk 1.57 → 1.65
+  - the woods 1.72 → 2.44 (+42 %)
+  - round camp 3.05 → 2.83
+
+  So a portage carry costs less, and a walk off a trail more, in game hours and energy. That fits "days on land run
+  longer, the Rest dial sleeps through them" (the owner, 2026-10-25). Left for the owner's taste.
+- **The fight, the catch card, the bite window, the capsize roll, bracing and the bear's "work" (20 real s at the
+  food)** are reflexes in real seconds and are unchanged. A fight now passes twice the game minutes.
+- **Treating water** (a tablet's 30 game min) is 3¾ real min (it was 7½). The gravity bag's 5 min and boiling are game
+  minutes too.
+- **The fire** burns on the game clock: a log's game hours are unchanged, so it lasts about 11 real min (it was 22).
+- **The bugs, the bear's nights, the wind's daily shape and the weather** all follow game hours. The bugs' swat and
+  look timers are real seconds.
+- **Parties** move on the clock at life speeds, so they are seen at ×8: a canoe about 11 m/s, next to the player's 12.5;
+  a carry about 6.6; a walk back about 11. Their stroke is clamped at 1.1 a second. Their trail walk reads faster than
+  the player's 5: left for the owner.
+- **Held jobs** (hold.js: the tent, the saw, the fire's light) pass their game minutes over their own real seconds and
+  are unchanged.
+- **The walker's legs** follow the seen speed (feet planted). The stride shown is capped at 5 m/s, so a carry at 8 m/s
+  steps at about 2 cycles a second. That is half of what Fastest showed, and twice Normal's.
+
+**Shots** (session da7a347d's scratchpad, `one-speed/shots/`): `after-cruise.png` (the chase view at a steady 12.5 m/s),
+`after-stroke.png` (the side view mid-stroke, the wake modest), `after-carry.png` and `after-carry-side.png` (the carry
+on the Lake One–Confusion trail at 8 m/s).
+
 ## How to measure again
 
 The scripts are in session e939fbdb's scratchpad, `tuning/`. The driver is the content join's, on port 5558, with Vite

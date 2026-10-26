@@ -7,10 +7,11 @@
 // "what is the stamp for at the counter, i thought we got rid of that"): the season is just the season, home is the
 // profile's, and a saved core that still carries a permit drops it on loading.
 //
-// The clock in either mode runs at the pace's one rate (fb5 C, pace.js clockOf: 4 at Trip, 1 at Real, 1 while the camera
-// is up), the same on the water, on a trail, on foot, in camp and standing about; the canoe's and the walker's
-// time-lapse (player.boost) is how they are seen to move and no longer moves the clock. The 1/2/3 keys multiply it
-// (main.js scales dt). `travel` still says whether you are under way (paddling, carrying, walking a trail or the woods).
+// The clock in either mode runs at the pace's one rate (fb5 C, pace.js clockOf: CLOCK, 8, at Trip; 1 at Real, a developer
+// setting, and while the camera is up), the same on the water, on a trail, on foot, in camp and standing about, and for
+// every player (one speed, 2026-10-26: no key changes it); the canoe's and the walker's time-lapse (player.boost) is how
+// they are seen to move and does not move the clock. `travel` still says whether you are under way (paddling, carrying,
+// walking a trail or the woods).
 //
 // In Adventure it keeps the rules: the clock and wind keys and the map's "Paddle in" are off, a capsize costs energy and food and wets the gear, and a
 // calm evacuation comes only when the energy bar is spent with nothing left to eat or drink (energy.onEvac): a fade, a

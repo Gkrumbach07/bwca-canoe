@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { fogState, setFogColor, sampleRamp, FOG_REACH } from './fog.js';
 import { CURVE_STEPS } from './post.js';
 import { smoothstep } from './rng.js';
+import { CLOCK } from './pace.js';
 import { MONTHS, monthDay, julianDay, utcOffsetHours, sunPosition, moonPosition, skyVector, daysInYear, sunTimes, siderealDeg } from './astro.js';
 import { orientStars } from './stars.js';
 import { seasonAt } from './season.js';
@@ -157,10 +158,10 @@ export class DayCycle {
     this.running = true;
     this.hoursPerSecond = 1 / 3600; // the clock at life: an hour an hour
     // the pace (pace.js): `rate` is the clock's time-lapse, set by the trip every frame (trip.js): one rate everywhere at a
-    // pace (fb5 C: 4 at Trip, 1 at Real); the 1/2/3 keys multiply it through dt. `jumps` counts the moves of the clock made by
+    // pace (pace.js CLOCK: 8 at Trip, 1 at Real and with the camera up), for everyone alike. `jumps` counts the moves of the clock made by
     // advance() (a night slept, a walk back fetched), so the HUD's dawn card can skip them; `locked` (Adventure) turns the
     // clock keys off
-    this.rate = 4;
+    this.rate = CLOCK;
     this.jumps = 0;
     this.locked = false;
     this.sunDir = new THREE.Vector3(0, 1, 0);
@@ -214,7 +215,7 @@ export class DayCycle {
     this._times = null;
   }
 
-  // game hours that pass in a second of dt (dt already carries the 1/2/3 keys' speed), while the clock runs
+  // game hours that pass in a real second, while the clock runs
   get hoursPerTick() { return this.running ? this.hoursPerSecond * this.rate : 0; }
   get date() { const { month, day } = monthDay(this.year, this.doy); return `${MONTHS[month]} ${day}`; }
   get time() { const h = Math.floor(this.hours), m = Math.floor((this.hours - h) * 60); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }

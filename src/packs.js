@@ -49,7 +49,7 @@
 // drain read, and runs the inventory's frame (inventory.update). Two hooks in player.js call in: footPrompts (the
 // prompts on foot, where the things you carry change them) and beforeLaunch.
 
-import { LIFE, SEEN, footHours } from './pace.js';
+import { LIFE, TRAIL, footHours } from './pace.js';
 import { BASE_H, CARRY_H } from './energy.js';
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
@@ -209,11 +209,11 @@ export class Packs {
   // ---------------------------------------------------------------------------------------------------------------
   update(dt) {
     const p = this.player, mode = p.mode;
-    this.clock += dt / (p.timeScale || 1);
+    this.clock += dt;
     if (mode !== this.prevMode) this.onMode(this.prevMode, mode);
     this.prevMode = mode;
     this.inv.update(dt);
-    if (this.fade) this.updateFade(dt / (p.timeScale || 1));
+    if (this.fade) this.updateFade(dt);
     if (this.push && !hold.is('pushOff')) this.push = null; // (the held job moves it: beginPush's onTick)
     if ((this.tagT -= dt) <= 0) { this.tagT = 1; this.tagTrailThings(); }
     const kg = this.loadKg;
@@ -804,9 +804,9 @@ export class Packs {
     const back1 = Math.abs(you.along - a.along) + you.dist + a.dist, over = Math.abs(a.along - b.along) + a.dist + b.dist;
     const back = back1 + (trips - 1) * over; // the first walk back from where you stand, then from the canoe each time
     const walk = LIFE.walk * TRAIL_GOING, laden = Math.max(LIFE.carry, walk / Math.pow(Math.max(1, kg / 40), 0.35));
-    // game hours: the walks' own time, as walking them yourself takes on the clock (fb5 C: the one clock runs ahead of a
-    // walk's time-lapse on a trail, so the hours at life are scaled by the pace's clock over the walk's seen time-lapse)
-    const backH = footHours(back / walk / 3600, p.pace, walk, SEEN.walk), overH = footHours((over * trips) / laden / 3600, p.pace, laden, SEEN.walk), hours = backH + overH;
+    // game hours: the walks' own time, as walking them yourself takes on the clock (one speed: the clock against the
+    // trail's seen walk, pace.js TRAIL; a pack carried over on foot is seen at the same walk)
+    const backH = footHours(back / walk / 3600, p.pace, walk, TRAIL.walk), overH = footHours((over * trips) / laden / 3600, p.pace, laden, TRAIL.walk), hours = backH + overH;
     return { back, over, trips, seconds: hours * 3600, hours, cost: BASE_H * hours + CARRY_H * (kg / 40) * overH, trail: def.name, units: these };
   }
 

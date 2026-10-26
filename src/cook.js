@@ -37,18 +37,19 @@ import { smoothstep, clamp } from './rng.js';
 // the thing (grateStatus: "needs the pot" on the meal, "water 0.3 L" on the pot). Done, it chimes and sits on the grate
 // marked Ready; you take it off to eat. The fire's events say 'cooking' and 'ready' (fire.js on / events).
 // tuning: on the one clock (fb5 C, Trip ×4) a supper's 15 game minutes were 3¾ real minutes stood at the grate with
-// nothing left to do (the tent's hold is a minute, the wood picked by then): two thirds of the old minutes, a supper
-// 2½ real minutes, breakfast and a fish under 2. kit.js's meals and fillets the same way.
+// nothing left to do (the tent's hold is a minute, the wood picked by then), so they were cut to two thirds. One speed
+// (2026-10-26, the clock at ×8) puts them back: a supper's 15 game minutes are under 2 real minutes, breakfast and a
+// fish 1¼. kit.js's meals and fillets the same way.
 // water (the owner, 2026-10-26: "shoudlt it require some water for the deharated meals and oatmeal"): every meal that is
 // dried takes its real water from the bottle, the grate's and the stove's alike (kit.js adds the content meals': pancakes,
 // chili mac, bannock), and a fish none. A supper 0.4–0.5 L, oatmeal a quarter litre (it was 0.3). Short of it, the meal
 // waits on the grate with the pot's chip "water 0.3 L" (grateStatus), the stove's Cook on it greys with the same chip,
 // and the first time the moment 'mealwater' (kit.js) says to fill the bottle. Lake water as it comes is fine: it boils.
 export const COOK = { // game minutes on the grate over a lit fire; litres of water from the bottle
-  'meal:supper': { minutes: 10, water: 0.4 },
-  'meal:breakfast': { minutes: 7, water: 0.25 },
-  'meal:freeze': { minutes: 7, water: 0.5 },
-  fish: { minutes: 7, water: 0 },
+  'meal:supper': { minutes: 15, water: 0.4 },
+  'meal:breakfast': { minutes: 10, water: 0.25 },
+  'meal:freeze': { minutes: 10, water: 0.5 },
+  fish: { minutes: 10, water: 0 },
 };
 const HEAT_MIN = 0.12;         // the fire's heat (fire.js) under which the pot stops cooking
 const AUTO_EVERY = 0.25;       // real seconds between the grates' looks (autoCook)

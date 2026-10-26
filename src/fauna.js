@@ -14,7 +14,7 @@ import { RiseRings } from './fauna-rings.js';
 //
 //   const fauna = new Fauna(world, water, scene, { loons });            // shares the loons' materials
 //   const ctx = { player, world, water, day, camera, ripples, audio };   // made once, passed every frame
-//   fauna.update(dt * timeScale, ctx);
+//   fauna.update(dt, ctx);
 //   fauna.force('moose');   // debug: summon one near the player (see force()); fauna.stats: what is out
 //
 // Every species is a small fixed pool of instanced parts (fauna-kit.js), drawn in one call per part however

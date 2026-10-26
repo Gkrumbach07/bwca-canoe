@@ -71,7 +71,7 @@ export async function lookboard(game, opts = {}, loop = {}) {
     pixelRatio: renderer.getPixelRatio(), camMode: chase.mode, distance: chase.distance, pitch: chase.pitch,
     clock: [day.year, day.doy, day.hours], running: day.running, windOverride: wind.override, windSpeed: wind.speed, windFrom: wind.from,
     weather: weather ? weather.forced : null, strikeIn: weather ? weather._strikeIn : 0,
-    timeScale: player.timeScale, saver: game.saver ? game.saver.enabled : null,
+    saver: game.saver ? game.saver.enabled : null,
     body: { mode: player.mode, x: player.x, z: player.z, heading: player.heading, drop: player.carry && player.carry.drop ? { ...player.carry.drop } : null },
   };
   const advance = (n) => { if (game.advance) game.advance(STEP, n); else game.step(STEP, n); };
@@ -83,7 +83,7 @@ export async function lookboard(game, opts = {}, loop = {}) {
     renderer.setSize(o.width, o.height, false);
     post.resize(o.width, o.height);
     camera.aspect = o.width / o.height; camera.updateProjectionMatrix();
-    day.running = false; player.timeScale = 1;
+    day.running = false;
     const cw = Math.round(o.width * o.scale), ch = Math.round(o.height * o.scale);
     const sheet = makeSheet(list, sets, cw, ch, o);
     const frames = [];
@@ -131,7 +131,6 @@ export async function lookboard(game, opts = {}, loop = {}) {
     day.setClock(saved.clock[0], saved.clock[1], saved.clock[2]); day.running = saved.running;
     wind.override = saved.windOverride; wind.speed = saved.windSpeed; wind.from = saved.windFrom;
     if (weather) { weather.release(); if (saved.weather) weather.forced = saved.weather; weather._strikeIn = saved.strikeIn; }
-    player.timeScale = saved.timeScale;
     const b = saved.body;
     try {
       if (b.mode === 'paddle' || b.mode === 'swim') place(game, { mode: 'paddle', x: b.x, z: b.z, heading: b.heading });
