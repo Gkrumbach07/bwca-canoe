@@ -88,11 +88,15 @@ const theW = (name) => { const n = short(name); return /( River| Creek| Bay| Nar
 const onW = (name) => `on ${theW(name)}`;
 // a water's full name, with "the" before a river's: "Wind Lake", "the Kawishiwi River"
 const full = (name) => (/( River| Creek| Bay| Narrows| Arm| Rapids)$/.test(String(name || '')) ? `the ${name}` : name);
-const countWords = (n, k) => { const S = SEEN[k] || { one: `a ${k}`, many: `${k}s` }; return n === 1 ? S.one : `${word(n)} ${S.many}`; };
+const countWords = (n, k) => { const S = SEEN[k] || { one: `${an(k)} ${k}`, many: `${k}s` }; return n === 1 ? S.one : `${word(n)} ${S.many}`; };
 const times = (n) => (n === 1 ? '' : n === 2 ? ', twice' : `, ${word(n)} times`);
 const money = (n) => `$${Math.round(n)}`;
-// "a 42 cm", "an 81 cm", "an 18 cm"
-const an = (n) => (/^8/.test(String(n)) || n === 11 || n === 18 ? 'an' : 'a');
+// the article as it is said: "a 42 cm", "an 81 cm", "an 18 cm", "an 8 kg", "an 11,000"; "an otter", "a unicorn", "an hour"
+const an = (w) => {
+  const s = String(w == null ? '' : w).trim();
+  if (/^\d/.test(s)) { const d = String(Math.floor(parseFloat(s.replace(/,/g, '')))); return /^8/.test(d) || ((d.length === 2 || d.length === 5) && /^1[18]/.test(d)) ? 'an' : 'a'; }
+  return /^(?:[aeio]|u(?!n[aeiou]|ni|s[aeiou]|r[aeiou]|ti|k)|hour|honest|heir)/i.test(s) ? 'an' : 'a';
+};
 // a lake's key in the season's lakes: never integer-like, so the object keeps the order they were first paddled in
 const lakeKey = (id, name) => (id ? `l${id}` : `n:${name}`);
 
@@ -431,17 +435,19 @@ class Record {
     else if (back || c.to == null) shape = far && far !== home ? `out to ${theW(far)} and back` : home ? onW(home) : 'out and back';
     else if (far && far !== to && far !== home) shape = `out to ${theW(far)}, in at ${theW(to)}`;
     else shape = home && to ? `from ${theW(home)} to ${theW(to)}` : `in at ${theW(to) || 'a landing'}`;
-    const hi = this.highlight(c);
+    const hi = this.highlight(c, shape);
     return `${days} ${shape}${hi ? `, ${hi}` : ''}`;
   }
-  highlight(c) {
+  // (shape: the line's words so far; a lake it names is not named again: "A day on Lake One, an 81 cm northern")
+  highlight(c, shape = '') {
+    const onW2 = (lake) => (lake && !String(shape).includes(theW(lake)) ? ` ${onW(lake)}` : '');
     if (c.k === 'evacuated') return BROUGHT[c.evac] || 'brought in';
     const seen = c.seen || [], bear = seen.find((q) => q.kind === 'bear'), moose = seen.find((q) => q.kind === 'moose');
-    if (bear) return bear.lake ? `a bear ${onW(bear.lake)}` : 'a bear at camp';
-    if (moose) { const when = this.whenWords(moose.h); return `a moose${when}${moose.lake ? ` ${onW(moose.lake)}` : ''}`; }
+    if (bear) return bear.lake ? `a bear${onW2(bear.lake)}` : 'a bear at camp';
+    if (moose) { const when = this.whenWords(moose.h); return `a moose${when}${onW2(moose.lake)}`; }
     if (c.capsizes) return c.capsizes === 1 ? 'over once' : `over ${word(c.capsizes)} times`;
     const b = c.fish && c.fish.best;
-    if (b && b.cm >= (GOOD_CM[b.sp] || 999)) return `${an(b.cm)} ${b.cm} cm ${FISH_SHORT[b.sp] || b.name}${b.lake && b.lake !== c.far ? ` ${onW(b.lake)}` : ''}`;
+    if (b && b.cm >= (GOOD_CM[b.sp] || 999)) return `${an(b.cm)} ${b.cm} cm ${FISH_SHORT[b.sp] || b.name}${b.lake !== c.far ? onW2(b.lake) : ''}`;
     const f = (c.firsts || []).find((w) => /^first (?!portage|night)/.test(w) && !/at camp$/.test(w));
     if (f) return `the ${f}`;
     if (c.fish && c.fish.n >= 3) return `${word(c.fish.n)} fish`;
@@ -660,8 +666,11 @@ class Record {
     const dates = e && f ? (e.year === f.year && e.doy === f.doy ? longDate(e.year, e.doy) : `${longDate(e.year, e.doy)} to ${longDate(f.year, f.doy)}`) : '';
     const whereW = c.k === 'evacuated' ? `out from ${from ? from.name : 'a landing'}; brought ${c.to != null && c.to === c.from ? 'back in' : `in to ${to ? to.name : 'the nearest outfitter'}`}`
       : c.to != null && c.to === c.from ? `out from ${from ? from.name : 'a landing'} and back` : `out from ${from ? from.name : 'a landing'}, in at ${to ? to.name : 'a landing'}`;
-    // the lakes, the portages, the nights
-    if (c.lakes && c.lakes.length) rows.push(['Lakes', esc(c.lakes.map((l) => l.name).join(' · '))]);
+    // the lakes, the portages, the nights (no Lakes row that only says again what the line above it says: "A day on
+    // Lake One" over "Lakes: Lake One")
+    const line = this.lineOf(c) || c.line || 'A trip';
+    const said = (name) => !!name && new RegExp(`\\b${String(short(name)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(line);
+    if (c.lakes && c.lakes.length) { if (!c.lakes.every((l) => said(l.name))) rows.push(['Lakes', esc(c.lakes.map((l) => l.name).join(' · '))]); }
     else if (c.counts && c.counts.lakes) rows.push(['Lakes', `${word(c.counts.lakes)} ${plural(c.counts.lakes, 'lake')}`]);
     if (c.portages && c.portages.length) rows.push(['Portages', c.portages.map((p, i) => `${esc(p.name)}${p.rods ? `, <span class="num">${p.rods}</span> rods` : ''}${times(p.n)}${i === 0 ? mark('first portage') : ''}`).join('<br>')]);
     else if (c.counts && c.counts.portages) rows.push(['Portages', `${word(c.counts.portages)}`]);
@@ -696,7 +705,7 @@ class Record {
     if (c.capsizes) rows.push(['Over', `${c.capsizes === 1 ? 'Once' : cap(word(c.capsizes)) + ' times'}, and the gear wet`]);
     const grid = rows.map(([k, v]) => `<div class="lab">${k}</div><div class="v">${v}</div>`).join('');
     const note = c.partial ? '<div class="soft small">The record began part way through this trip.</div>' : c.old ? '<div class="soft small">From the logbook kept before the record.</div>' : '';
-    return `<div class="tc-page${book ? ' in-book' : ''}"><h2 class="tc-line">${esc(this.lineOf(c) || c.line || 'A trip')}</h2><div class="tc-sub">${esc(dates)}${dates ? ' · ' : ''}${esc(whereW)}</div>
+    return `<div class="tc-page${book ? ' in-book' : ''}"><h2 class="tc-line">${esc(line)}</h2><div class="tc-sub">${esc(dates)}${dates ? ' · ' : ''}${esc(whereW)}</div>
       <div class="tc-grid">${grid}</div>${note}</div>`;
   }
 
