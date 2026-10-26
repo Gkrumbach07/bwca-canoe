@@ -277,7 +277,7 @@ export class Dialogue {
       + (c.you ? `<div class="you">${esc(quote(c.you))}</div>` : '')
       + `<div class="say${c.wait ? ' wait' : ''}">${esc(c.wait ? '…' : quote(n.say || '…'))}</div>`
       + (list.length ? `<ol class="opts">${opts}</ol>` : '')
-      + `<div class="foot"><kbd>1</kbd>–<kbd>${Math.max(1, list.length)}</kbd> or click &nbsp;·&nbsp; <kbd>Esc</kbd> to leave</div>`;
+      + `<div class="foot">${list.length > 1 ? `<kbd>1</kbd>–<kbd>${list.length}</kbd>` : '<kbd>1</kbd>'} or click &nbsp;·&nbsp; <kbd>Esc</kbd> to leave</div>`;
     document.body.style.setProperty('--talk-h', `${Math.ceil(this.panel.getBoundingClientRect().height || 240)}px`);
   }
 
