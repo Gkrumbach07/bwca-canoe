@@ -21,12 +21,14 @@
 //   outfitterProfile(ep, world) → { ep, name, place, lake, area, kind, kindWords, post, keeper: { name, manner,
 //     lines: { hello, goodbye, chat: [...] }, moments: { hello: [...], stranger: [...], …each moment }, hint(world,
 //     profile, n) }, priceMul, signature,
-//     boardWeights { fish, photo, lost, fetch, survey, berries, firewood }, look { stain, roof, roofKind, trim, door,
+//     boardWeights { fish, photo, lost, fetch, survey, berries, firewood, deadfall, litter, secchi, loons, report, canoe,
+//     lunch }, look { stain, roof, roofKind, trim, door,
 //     porch, stainName }, hints [{ kind, text, lake, x, z, r }], facts, hand }
 //   keeperLine(profile, moment, ctx) → words; moments: hello stranger season passing morning after bunk ride goodbye chat
 //   signatureItem(ep, world) → { id, name, kind, family, slot?, lure?, price, kg, words, effect }; SIGNATURES fills as
 //     profiles are made (signatures(world) makes all 55)
-//   boardLean(ep, world) → weights by tasks.js kind key (fish, item, survey, photo, fetch, berries, firewood)
+//   boardLean(ep, world) → weights by tasks.js kind key (fish, item, survey, photo, fetch, berries, firewood; content A:
+//     deadfall, litter, secchi, loons, report, canoe, lunch)
 //   allProfiles(world), speakAtCounter(outfitter, world): the phase-1 counter's header in the keeper's voice, until the
 //     shop's counter speaks for itself (outfitter.keeperVoice)
 //
@@ -157,10 +159,11 @@ export function placeFacts(ep, world) {
 
 // --- the kinds -------------------------------------------------------------------------------------------------------
 export const KINDS = ['lodge', 'river post', 'trout camp', 'bait shop'];
+const NEW_KINDS = new Set(['deadfall', 'litter', 'secchi', 'loons', 'report', 'canoe', 'lunch']); // content A's notices (task-kinds.js)
 const KIND = {
   lodge: {
     words: (f) => (f.ha >= 1500 ? 'a lodge on big water' : 'a lodge'),
-    board: { fish: 1.6, photo: 1.5, lost: 0.9, fetch: 1.0, survey: 0.6, berries: 0.8, firewood: 0.7 },
+    board: { fish: 1.6, photo: 1.5, lost: 0.9, fetch: 1.0, survey: 0.6, berries: 0.8, firewood: 0.7, deadfall: 0.5, litter: 0.8, secchi: 0.8, loons: 1.3, report: 1.1, canoe: 0.9, lunch: 1.5 },
     chat: ['The café buys what you keep: walleye best, but the cook won’t turn up her nose at a perch.', '{lake} is big water. When the whitecaps come up, get off it and wait.', 'Cabins are full this week. You’d be amazed who can’t paddle.'],
   },
   'river post': {
@@ -168,17 +171,17 @@ const KIND = {
       const r = /\b(River|Creek)\b/.test(f.name) ? f.name.replace(/\s+(North|South)$/, '') : /\b(River|Creek)$/.test(f.landing) ? f.landing : null;
       return r && r !== f.landing ? `a river post on ${theWater(r)}` : 'a river post';
     },
-    board: { fish: 0.8, photo: 0.9, lost: 1.5, fetch: 1.2, survey: 1.6, berries: 0.9, firewood: 0.9 },
+    board: { fish: 0.8, photo: 0.9, lost: 1.5, fetch: 1.2, survey: 1.6, berries: 0.9, firewood: 0.9, deadfall: 1.5, litter: 1.0, secchi: 0.6, loons: 0.7, report: 1.4, canoe: 1.3, lunch: 0.6 },
     chat: ['A river isn’t a lake: read the current at the bends and keep off the rocks at the riffles.', 'River trips are portages with a bit of water in between.', 'The board here is mostly surveys and lost things. The river eats paddles.'],
   },
   'trout camp': {
     words: () => 'a trout camp by deep, cold water',
-    board: { fish: 1.8, photo: 1.0, lost: 0.8, fetch: 0.8, survey: 0.9, berries: 0.7, firewood: 0.8 },
+    board: { fish: 1.8, photo: 1.0, lost: 0.8, fetch: 0.8, survey: 0.9, berries: 0.7, firewood: 0.8, deadfall: 0.8, litter: 0.8, secchi: 1.5, loons: 1.0, report: 0.9, canoe: 0.8, lunch: 1.2 },
     chat: ['Lakers come up in the spring and go deep by July. Down there, a spoon on a long line, slow.', 'The deep lakes here stay cold all summer. That’s the trout’s whole secret.', 'Bring a laker back cold and the kitchen pays well for it.'],
   },
   'bait shop': {
     words: (f) => `a bait shop ${f.townKm >= 30 ? 'at the end of the road' : 'by the landing'}`,
-    board: { fish: 1.1, photo: 0.7, lost: 0.9, fetch: 1.0, survey: 0.8, berries: 1.6, firewood: 1.6 },
+    board: { fish: 1.1, photo: 0.7, lost: 0.9, fetch: 1.0, survey: 0.8, berries: 1.6, firewood: 1.6, deadfall: 0.9, litter: 1.4, secchi: 0.7, loons: 0.9, report: 0.8, canoe: 0.7, lunch: 1.0 },
     chat: ['Leeches, crawlers and the odd minnow. That’s the whole shop, near enough.', 'Berries in season: bring me a pint and I’ll pay for it.', 'Firewood’s picked over at the sites round here; an armful is worth something to me.'],
   },
 };
@@ -529,7 +532,16 @@ export function outfitterProfile(ep, world) {
   if (f.camps >= 100) bw.lost *= 1.15;
   if (f.ha >= 1000) bw.fish *= 1.1;
   if (f.deep.length) bw.fish *= 1.05;
-  for (const k of Object.keys(bw)) bw[k] = +(bw[k] * (0.92 + rng() * 0.16)).toFixed(2);
+  // content A: the new notices by the place too: long carries want sawing, busy sites want cleaning up, clear lakes are
+  // read for the monitors, big water has the loons and the shore lunches
+  if (f.carries.length && f.carries[0].rods >= 120) bw.deadfall *= 1.25;
+  if (f.camps >= 100) bw.litter *= 1.15;
+  if (f.clear >= 2) bw.secchi *= 1.2;
+  if (f.ha >= 1000) { bw.loons *= 1.1; bw.lunch *= 1.1; }
+  // (content A: the new kinds' touch of their own from a seed of their own, so the old draws, and the building's look
+  // drawn after them, stay as they were)
+  const rngA = mulberry32(((e.ep * 2246822519) ^ 0xc0a7e1) >>> 0);
+  for (const k of Object.keys(bw)) bw[k] = +(bw[k] * (0.92 + (NEW_KINDS.has(k) ? rngA() : rng()) * 0.16)).toFixed(2);
   const look = makeLook(kind, rng, H ? H.look : {});
   const shared = world.entryPoints.filter((o) => outfitterName(o) === outfitterName(e)).length > 1;
   const profile = {
@@ -548,7 +560,9 @@ export function signatures(world) { allProfiles(world); return { ...SIGNATURES }
 export function boardLean(ep, world) {
   const p = outfitterProfile(ep, world); if (!p) return null;
   const w = p.boardWeights;
-  return { fish: w.fish, item: w.lost, survey: w.survey, photo: w.photo, fetch: w.fetch, berries: w.berries, firewood: w.firewood };
+  return { fish: w.fish, item: w.lost, survey: w.survey, photo: w.photo, fetch: w.fetch, berries: w.berries, firewood: w.firewood,
+    // content A (task-kinds.js)
+    deadfall: w.deadfall ?? 1, litter: w.litter ?? 1, secchi: w.secchi ?? 1, loons: w.loons ?? 1, report: w.report ?? 1, canoe: w.canoe ?? 1, lunch: w.lunch ?? 1 };
 }
 
 // --- what the keeper says ------------------------------------------------------------------------------------------

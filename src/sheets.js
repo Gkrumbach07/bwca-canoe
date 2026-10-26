@@ -132,7 +132,13 @@ class Sheets {
     if (outfitter) this.outfitter = outfitter;
     if (profile && profile !== this.profile) {
       this.profile = profile;
-      profile.onChange((what) => { if (what === 'sheets' || what === 'season' || what === 'gear') { this.ownedList = null; this.version++; } });
+      profile.onChange((what) => {
+        if (what === 'sheets' || what === 'season' || what === 'gear') { this.ownedList = null; this.version++; }
+        // content join (the owner's call on the new-player review, 2026-10-25): a new season comes with the home sheet, the
+        // one the starting outfitter's table sells first, so M shows the campsites on the first night (a new player who
+        // walked past the map table had blank paper)
+        if (what === 'season' && profile.started && !profile.sheets().length) this.giveHome();
+      });
       if (save.has('sheets')) save.clear('sheets'); // the corridor's cells, gone with it
       // an old "Fisher map sheets" unlock: the home sheet
       if (profile.started && profile.has('maps:fisher') && !profile.sheets().length) this.giveHome();

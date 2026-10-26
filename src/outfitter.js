@@ -723,7 +723,7 @@ export class Outfitter {
     this.save();
   }
   // the food you can reach, in the inventory's words ("1 meal and 2 snacks"), else in days
-  foodWords() { const inv = invModel(); if (inv && typeof inv.foodWords === 'function') { const w = inv.foodWords(), h = this.energy && this.energy.hungFood ? this.energy.hungFood().words : ''; if (h) return w === 'no food' ? h : `${w} · ${h}`; return w === 'no food' ? 'no food with you' : w; } return `${fmtDaysWords(this.energy ? this.energy.food : 0)} of food`; }
+  foodWords() { const inv = invModel(); if (inv && typeof inv.foodWords === 'function') { const w = inv.foodWords(), h = this.energy && this.energy.hungFood ? this.energy.hungFood().words : ''; if (h) return w === 'no food' ? h : `${w} · ${h}`; return w === 'no food' ? (this.energy && typeof this.energy.foodNearby === 'function' && this.energy.foodNearby() ? 'your food close by' : 'no food with you') : w; } return `${fmtDaysWords(this.energy ? this.energy.food : 0)} of food`; }
   // a night in the bunkhouse for its price (free in Sandbox)
   bunk() {
     const a = this.at, shop = this.shop; if (!a) return;

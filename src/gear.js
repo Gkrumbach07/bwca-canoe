@@ -18,6 +18,15 @@ export const PADDLE = {
   lower: 0.63,       // the lower hand, down the shaft
 };
 export const PADDLE_COLORS = { shaft: 0xc9a46c, blade: 0xbd935c, tip: 0x3a2a1d, grip: 0xb48c58 };
+// content C: each paddle its own look (items.js ash, bentshaft, carbon; an outfitter's carved ottertail by its family):
+// the laminate darker in the shaft and pale in the blade, the carbon near black, the ottertail cherry. kit.js swaps the
+// paddler's paddle to the one in use; stream D draws a lying paddle from these (feature-detected)
+export const PADDLE_LOOKS = {
+  ash: PADDLE_COLORS,
+  bentshaft: { shaft: 0x9a6a3c, blade: 0xcfa264, tip: 0x26231f, grip: 0x6e4a2a },
+  carbon: { shaft: 0x2c2d30, blade: 0x222326, tip: 0x3e3f42, grip: 0x34363a },
+  ottertail: { shaft: 0xa8603a, blade: 0x9c5636, tip: 0x3a2a1d, grip: 0x8a4a2a },
+};
 
 export function paddleMesher(colors = PADDLE_COLORS) {
   const m = new Mesher();
@@ -69,6 +78,30 @@ export function paddleMesher(colors = PADDLE_COLORS) {
 // the seat (its foot between the fingers of the right hand) with a body, rotor, spool of line, bail wire and a
 // crank on its left side for the left hand. Returns the same parts fishing.js poses, plus the knob.
 export const ROD_COLORS = { blank: 0x2f2b27, cork: 0xc9a671, corkDark: 0xa98756, seat: 0x26292c, butt: 0x1f1f1f, reel: 0x3b3f45, spool: 0xb9bdc2, line: 0xe2ddd0, guide: 0x9aa0a6, thread: 0x6b2a22 };
+// content C: each rod its own look (items.js rod, rodmh, rodpro): the medium-heavy a burgundy blank, the graphite dark
+// olive with a gold reel (stream D draws a stowed or lying rod from these, feature-detected)
+export const ROD_LOOKS = {
+  rod: ROD_COLORS,
+  rodmh: { ...ROD_COLORS, blank: 0x4a2426, thread: 0xc9a24a },
+  rodpro: { ...ROD_COLORS, blank: 0x3f4a38, reel: 0xb8923a, spool: 0xd9b45a, seat: 0x2c3328, thread: 0x26231f },
+};
+
+// content C: a built rod (or paddle) turned from one look to another in place: every vertex coloured exactly as a part of
+// `from` takes that part's colour in `to` (the geometry, the bones and the material are kept: no rebuild, no new program)
+export function recolor(root, from, to) {
+  if (!root || !from || !to || from === to) return 0;
+  const pairs = Object.keys(from).filter((k) => to[k] !== undefined && to[k] !== from[k]).map((k) => [C(from[k]), C(to[k])]);
+  let n = 0;
+  root.traverse((o) => {
+    const a = o.isMesh && o.geometry && o.geometry.getAttribute('color'); if (!a) return;
+    for (let i = 0; i < a.count; i++) {
+      const r = a.getX(i), g = a.getY(i), b = a.getZ(i);
+      for (const [f, t] of pairs) if (Math.abs(r - f.r) < 1e-4 && Math.abs(g - f.g) < 1e-4 && Math.abs(b - f.b) < 1e-4) { a.setXYZ(i, t.r, t.g, t.b); n++; break; }
+    }
+    a.needsUpdate = true;
+  });
+  return n;
+}
 
 function tubeMesh(m, y0, y1, r0, r1, col, n = 8) {
   const rings = [ringPts(V3(0, y0, 0), V3(1, 0, 0), V3(0, 0, 1), n, r0, { col }), ringPts(V3(0, y1, 0), V3(1, 0, 0), V3(0, 0, 1), n, r1, { col })];

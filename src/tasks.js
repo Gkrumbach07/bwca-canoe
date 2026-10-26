@@ -108,12 +108,20 @@ const fishName = (sp) => (FISH[sp] ? FISH[sp].name.toLowerCase() : 'fish');
 export function sizeAt(species, q) { const s = FISH[species]; return s ? Math.round(s.length[0] + (s.length[1] - s.length[0]) * Math.pow(q, LENGTH_SKEW)) : 0; }
 // the band districts of the Superior National Forest, for the trail crew's notices
 const district = (ep) => (ep <= 20 ? 'LaCroix' : ep <= 33 ? 'Kawishiwi' : ep >= 40 && ep <= 70 ? 'Gunflint' : 'Tofte');
+// content A: the clue writer's words and numbers, for the kinds written in other modules (task-kinds.js)
+export const WORDS = { hopsText, compass, pickR, kmFrom, cap, fill, poss, district, fishName, absDay };
+export const NUMBERS = { HOPS, RANGE, DEEP, TROUT_WATER, SPECIES_PAY, PAY_MAX, KM_PAY, TIGHT, AREA, SITE_LABEL, AREA_LABEL, BAND_WORDS, STANDING };
 
 // --- the kinds ---------------------------------------------------------------------------------------------------
 // A kind: { label, weight: { local, medium, far }, make(tasks, ctx) → fields | null (may be async), pay(t) → dollars,
 // update(tasks, t, dt) while taken on, onEvent(tasks, t, ev) → words when it took the event, progress(t) → words }.
 // ctx: { ep, band, rng, landing, reach, board }. A kind with an E action sets tasks.inReach in update and acts in
 // use(tasks, t). Phase 2 and 3 kinds (photos, fetch, berries) register the same way.
+// Content pass 1 (stream A) added hooks a kind may have: onTake(tasks, t) when it is taken on (a disk lent), onDrop(t)
+// when let go, onClaim(tasks, t) when it is paid (the disk handed back, the litter into the bin), cleanup(tasks, t)
+// when its prop leaves the scene (an obstacle off the trail), target(tasks, t) → its one pencil ring and targets(tasks,
+// t) → several (a route's lakes), fraction(t) → 0..1 for the book, doneWords(t) for the notice once done. The new kinds
+// are in task-kinds.js.
 export const KINDS = {};
 export function registerKind(key, def) { KINDS[key] = { key, label: key, weight: { local: 1, medium: 1, far: 1 }, ...def }; return KINDS[key]; }
 
@@ -424,6 +432,8 @@ export class Tasks {
   // landing is ringed tight and named; an unknown one by the area the notice describes; a lake-only notice by its
   // saved area (an old save's whole-lake hint is cut to 700 m).
   targetOf(t) {
+    const own = KINDS[t.kind] && KINDS[t.kind].target; // content A: a kind's own ring (the Secchi station, the next lake of a route)
+    if (own) { try { const r = own(this, t); if (r !== undefined) return r; } catch (e) { console.warn('the board: target', t.kind, e); } }
     const w = this.world, s = t.site;
     const site = typeof s === 'number' ? w.campsites[s] || null : s && Number.isFinite(s.x) && Number.isFinite(s.z) ? s : null;
     const at = site || t.spot || t.target || null;
@@ -532,6 +542,8 @@ export class Tasks {
     if (!t || t.status !== 'offered') return false;
     t.status = 'open'; t.taken = this.today();
     if (t.kind === 'fish') t.cooler = [];
+    const k = KINDS[t.kind];
+    if (k && k.onTake) { try { k.onTake(this, t); } catch (e) { console.warn('the board: take', t.kind, e); } } // content A: a disk lent, a cooler set
     this.changed();
     return true;
   }
@@ -541,6 +553,8 @@ export class Tasks {
     const t = this.ads.get(+id);
     if (!t || t.status !== 'open') return false;
     this.removeProp(t.id);
+    const k = KINDS[t.kind];
+    if (k && k.onDrop) { try { k.onDrop(this, t); } catch (e) { console.warn('the board: drop', t.kind, e); } } // content A: its state back to the notice's
     t.status = 'offered'; delete t.taken; if (t.cooler) t.cooler = [];
     const b = this.boards[t.from];
     if (!b || !b.slots.includes(t.id)) this.ads.delete(t.id); // not on a pin (an old save's task): gone
@@ -572,7 +586,8 @@ export class Tasks {
     return { ok: true, pay, words };
   }
   pay(t, ep) {
-    const pay = t.pay || 0, p = this.profile;
+    const pay = t.pay || 0, p = this.profile, k = KINDS[t.kind];
+    if (k && k.onClaim) { try { k.onClaim(this, t); } catch (e) { console.warn('the board: claim', t.kind, e); } } // content A: the disk handed back, the litter in the bin
     if (p && typeof p.earn === 'function') p.earn(pay, `the board: ${t.title}`); else this.purse += pay;
     if (p && typeof p.raise === 'function') p.raise(ep, STANDING);
     this.earned += pay;
@@ -652,7 +667,17 @@ export class Tasks {
   // a notice's state in a few words ("the cooler is empty", "the paddle is still out there")
   progressOf(t) { const k = KINDS[t.kind]; return t.status === 'done' ? 'done' : k && k.progress ? k.progress(t) : 'on the go'; }
   // the map: the keeper's red pencil per notice on the go (targetOf)
-  hints() { return this.active.filter((t) => t.status === 'open').map((t) => this.targetOf(t)).filter(Boolean); }
+  hints() {
+    const out = [];
+    for (const t of this.active) {
+      if (t.status !== 'open') continue;
+      const k = KINDS[t.kind];
+      // content A: a kind with several places (a route's lakes) rings each one still to do
+      if (k && k.targets) { try { for (const r of k.targets(this, t) || []) if (r) out.push(r); continue; } catch (e) { console.warn('the board: targets', t.kind, e); } }
+      const r = this.targetOf(t); if (r) out.push(r);
+    }
+    return out;
+  }
   // the readout's words (hud.js may read them)
   get readout() {
     const a = this.active, done = a.filter((t) => t.status === 'done');
@@ -679,7 +704,16 @@ export class Tasks {
       if (k && k.update) k.update(this, t, dt);
     }
   }
-  removeProp(id) { const m = this.props.get(id); if (m) { this.scene.remove(m); m.geometry.dispose(); this.props.delete(id); } }
+  removeProp(id) {
+    const t = this.ads.get(id), k = t && KINDS[t.kind];
+    if (k && k.cleanup) { try { k.cleanup(this, t); } catch (e) { console.warn('the board: cleanup', t.kind, e); } } // content A: an obstacle off the trail
+    const m = this.props.get(id);
+    if (!m) return;
+    this.scene.remove(m);
+    // (content A: a kind's prop may be a group; a geometry shared between props, userData.shared, stays)
+    m.traverse((o) => { if (o.geometry && !(o.userData && o.userData.shared)) o.geometry.dispose(); });
+    this.props.delete(id);
+  }
 
   // --- the board at the counter (outfitter.js renders it in its middle column) -------------------------------
   boardSection(ep) {
@@ -727,7 +761,8 @@ export class Tasks {
     if (t.status === 'offered') btn = `<button type="button" class="stamp" data-act="task" data-id="take:${t.id}">Take it on</button>`;
     else if (t.status === 'done') {
       btn = `<button type="button" class="stamp" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>`;
-      state = `<div class="state done">Done${t.kind === 'fish' && k.progress ? ` · ${esc(k.progress(t))}` : ''}</div>`;
+      const dw = k.doneWords ? k.doneWords(t) : t.kind === 'fish' && k.progress ? k.progress(t) : ''; // content A: "Done · 4.4 m"
+      state = `<div class="state done">Done${dw ? ` · ${esc(dw)}` : ''}</div>`;
     } else {
       btn = `<button type="button" class="stamp quiet" data-act="task" data-id="drop:${t.id}">Let it go</button>`;
       state = `<div class="state">Taken on ${t.taken ? esc(this.dayWords(t.taken)) : ''} · ${esc(k.progress ? k.progress(t) : '')}</div>`;

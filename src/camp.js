@@ -380,7 +380,7 @@ export class Camp {
     this.hang.update();                       // the limbs and ropes of the barrels hung
     this.drawTent();
     const cs = p.canoe && p.canoe.state; // down on your heels for the low chores (canoe.js state.crouch)
-    if (cs) cs.crouch = (this.busy && LOW_CHORES.has(this.busy.kind) && p.mode === 'walk') || (hold.active && hold.active.crouch) ? 1 : 0;
+    if (cs) cs.crouch = (this.busy && (LOW_CHORES.has(this.busy.kind) || (this.busy.spec && this.busy.spec.crouch)) && p.mode === 'walk') || (hold.active && hold.active.crouch) ? 1 : 0;
     if (this.morningNote && !this.night && !(this.veil && this.veil.active)) { this.note(this.morningNote, 9); this.morningNote = null; }
     if (this.busy) { this.ghost.park(); this.working(dt); return; }
     if (this.night || hold.active) { this.ghost.park(); return; }
@@ -402,29 +402,10 @@ export class Camp {
     } else if (!this.wet) this.dry = 0;
   }
 
-  // an hour before sunset on an Adventure under way (not at an outfitter's: polish B, it nagged at the door before the
-  // trip): the nearest free site your map shows (on a sheet you own: sheets.js), never one off it; once dark: the headlamp
-  notes() {
-    const d = this.day, p = this.player, { set } = d.sunriseSunset;
-    const stamp = d.year * 1000 + d.doy, evening = d.hours >= 12 ? stamp : stamp - 1;
-    const out = this.adventure && this.trip.active && !(this.outfitter && this.outfitter.visit);
-    if (out && !this.camp && set != null && d.hours >= set - 1 && d.hours < set && this.nudged !== stamp && !this.atSite) {
-      this.nudged = stamp;
-      const n = this.registry.nearestFree(p.x, p.z, 6000, (c) => sheets.showsDetail(c.x, c.z));
-      if (n) {
-        const dx = n.site.x - p.x, dz = n.site.z - p.z, deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
-        const far = n.d < 1000 ? `${Math.max(50, Math.round(n.d / 50) * 50)} m` : `${(n.d / 1000).toFixed(1)} km`;
-        const id = p.nearWater ? p.nearWater(n.site.x, n.site.z, 8) : 0, lake = id ? this.world.lakeName(id) : null;
-        this.note(`An hour of light left. The nearest free campsite is ${far} ${compassLong(deg)}${lake ? `, on ${lake}` : ''}.`, 9);
-      } else this.note('An hour of light left, and no free campsite on your map near here. Find one before dark.', 9);
-    }
-    // (not under the store's lamp: the word waits until you step back out of the door)
-    const indoors = !!(this.outfitter && this.outfitter.visit && this.outfitter.visit.inside);
-    if (this.lamp && !this.lamp.on && this.dark && !indoors && this.lampHinted !== evening) {
-      this.lampHinted = evening;
-      this.note('Dark now. H for the headlamp.', 6);
-    }
-  }
+  // fb5 E: the evening's words ("an hour of light left", the nearest free site) and the headlamp's at dark are the
+  // teaching moments now (hints.js: 'evening' two hours before sunset, 'dusk' at 45 min, 'lamp' once it is dark), the
+  // full line the first time and a short one after; nothing is said here
+  notes() {}
 
   // --- prompts --------------------------------------------------------------------------------------------------
   // fb2 A: nothing at camp is done on E (E is the pointer's: pick up, talk, open, get in; the jobs are the book's,
@@ -475,7 +456,7 @@ export class Camp {
     if (this.audio && this.audio.paddleDip) this.audio.paddleDip();
     if (got <= 0) { this.note('The bottle is full.'); return; }
     if (wait >= 0.25 && !(this.energy.treating > 0.001) && !this.energy.sandbox) return; // no tablet in reach: energy.fill has said so
-    this.note(wait >= 0.25 ? 'You fill the bottle and drop in a tablet. Drinkable in half an hour.' : 'You pump the bottle full. Drinkable in a few minutes.');
+    this.note(wait >= 0.25 ? 'You fill the bottle and drop in a tablet.' : 'You pump the bottle full. Drinkable in a few minutes.'); // (fb5 join: the wait is the treating moment's, once; the bottle's tooltip has its timer)
   }
   // the profile (stream A), wherever it is to be had
   get profile() {
@@ -849,7 +830,7 @@ export class Camp {
     const words = (at) => {
       const w = this.wakeTime(at), M = Math.round(w.hours * 60), H = Math.floor(M / 60), m = M % 60;
       const span = `${H ? `${H} h` : ''}${m ? ` ${m} min` : ''}`.trim() || 'no time at all';
-      const kind = w.nap ? 'a nap: some of the rest comes back' : w.hours >= 7 ? 'a full night' : `a short night: the tent gives ${Math.round(Math.min(1, w.hours / 7) * 100)} % of its rest`;
+      const kind = w.nap ? 'a nap: some of the rest comes back' : w.hours >= 7 ? 'a full night' : 'a short night: not all the rest comes back'; // (fb5 join: no percent, rule 3)
       return `${span} · ${kind}${c.stage < 4 ? ' · no fly on' : ''}`;
     };
     this.dial.show({ kicker: `Rest · ${c.site ? this.siteName(c.site) : 'your tent'}`, opts, at: start, words, onPick: (at) => this.sleep('tent', at) });
@@ -862,10 +843,10 @@ export class Camp {
   get wornOut() { const e = this.energy; return !!(e && e.live && e.needs && e.needs.rest < WORN_OUT); }
 
   // a chore (CHORES): the walker holds still while its time passes on the clock, then `done`
-  chore(kind, done = null) { this.busy = { t: 0, passed: 0, kind, done }; }
+  chore(kind, done = null, spec = null) { this.busy = { t: 0, passed: 0, kind, done, spec }; } // (content C: spec { seconds, hours, say }, a chore's own length: kit.js's pump, stove, cup, knife)
   // the chore under way, per frame (real seconds): its hours spread over its seconds
   working(dt) {
-    const b = this.busy, C = CHORES[b.kind] || CHORE;
+    const b = this.busy, C = b.spec || CHORES[b.kind] || CHORE;
     b.t += dt;
     const k = Math.min(1, b.t / C.seconds), want = C.hours * k;
     this.pass(want - b.passed); b.passed = want;
@@ -909,7 +890,14 @@ export class Camp {
       // (fb4 join: "some things on the ground is set out" said the plural with "is"; a woodpile is named as one)
       const piles = out.filter((k) => k.item === 'pile'), woodpiles = piles.filter((k) => k.grid.length && k.grid.every((e) => /^wood:/.test(e.id)));
       if (woodpiles.length) named.push(woodpiles.length > 1 ? 'woodpiles' : 'a woodpile');
-      if (piles.length > woodpiles.length) named.push('some things on the ground');
+      // (the content join: a tent struck with no room lay in a pile, and "some things on the ground" let you paddle off
+      // without it: a pile's things are named while they are one or two, a tent always)
+      for (const k of piles) {
+        if (woodpiles.includes(k) || !k.grid.length) continue;
+        const things = k.grid.filter((e) => !e.box), tents = things.filter((e) => (itemDef(e.id) || {}).slot === 'tent');
+        if (things.length <= 2) named.push(...things.map((e) => `the ${thingName(itemDef(e.id))}`));
+        else named.push(...tents.map((e) => `the ${thingName(itemDef(e.id))}`), 'some things on the ground');
+      }
       const plural = named.length > 1 || /^(some |woodpiles)/.test(named[0] || '');
       if (named.length) parts.push(`${listOf(named)} ${plural ? 'are' : 'is'} set out`);
       for (const k of [...hung, ...out]) if (k.at) k.at.noted = true;

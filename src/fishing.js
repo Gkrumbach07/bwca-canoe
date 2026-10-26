@@ -388,7 +388,7 @@ export class Fishing {
     f.action = speed < 0.05 ? lureDef.still : speed < 1.6 ? lureDef.slow : lureDef.fast * sp.fast;
     f.abundance = 0.75 + 0.5 * hash2(hab.lakeId, SPECIES_IDS.indexOf(id), 5);
     if (id === 'walleye' && hab.cells && hab.cells < 2500) f.abundance *= 0.35;
-    f.rate = TUNING.base * f.abundance * f.lure * f.bed * f.zone * f.shore * f.structure * f.time * f.clarity * f.wind * f.action;
+    f.rate = TUNING.base * f.abundance * f.lure * f.bed * f.zone * f.shore * f.structure * f.time * f.clarity * f.wind * f.action * (this.kit ? this.kit.mods.bite : 1); // (content C: the lucky cap)
     return f.rate;
   }
 
@@ -736,7 +736,7 @@ export class Fishing {
   updateBite(dt) {
     const b = this.bite, p = this.player;
     b.t += dt;
-    const [w0, w1] = TUNING.hookWindow;
+    const w0 = TUNING.hookWindow[0], w1 = TUNING.hookWindow[1] * (p.gear && p.gear.feel ? p.gear.feel : 1); // content C: the graphite rod feels the take sooner
     const set = this.buttonPressed() || this.input.pressed('KeyW');
     if (set && b.t >= w0 && b.t <= w1) { this.hook(); return; }
     if (b.t > w1 + 0.25 || (set && b.t < w0)) {
@@ -782,7 +782,7 @@ export class Fishing {
     f.tension += (target - f.tension) * (1 - Math.exp(-dt * 2.8));
     if (f.tension > 0.8) f.danger += (f.tension - 0.8) * dt * 7; else f.danger = Math.max(0, f.danger - dt * 0.45);
     if (f.tension < 0.1) f.slack += dt; else f.slack = 0;
-    if (f.danger > TUNING.snapDanger * (p.gear ? p.gear.snap : 1)) { this.endFight('snap'); if (this.onSnap) this.onSnap(this.lureDef, f); return; } // hubs 2B: the rod (shop.js player.gear); the lure is lost (shop.js onSnap)
+    if (f.danger > TUNING.snapDanger * (p.gear ? p.gear.snap : 1) * (this.kit ? this.kit.mods.snap : 1)) { this.endFight('snap'); if (this.onSnap) this.onSnap(this.lureDef, f); return; } // hubs 2B: the rod (shop.js player.gear); the lure is lost (shop.js onSnap); content C: the brass reel (kit.js)
     if (f.slack > TUNING.slackLimit) return this.endFight('thrown');
     // line: in against the reel, out with the run
     let dLine = 0;
@@ -837,6 +837,9 @@ export class Fishing {
 
   land() {
     const f = this.fish;
+    // content C: a big fish at the side thrashes and may throw the hook, with no landing net to get under it (kit.js)
+    const side = this.kit && typeof this.kit.atTheSide === 'function' ? this.kit.atTheSide(f) : null;
+    if (side) { this.endFight('thrown'); this.message = { text: side, t: 3 }; return; }
     this.fish = null;
     this.state = 'landed';
     const sp = SPECIES[f.species];
@@ -870,6 +873,12 @@ export class Fishing {
     this.chase.focus = fx;
     const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.catchLake(L), L.length) : null; // hubs 1C: a notice taken on wants it
     const inv = this.inventory, free = inv && inv.attached && typeof inv.freeHand === 'function' ? inv.freeHand() >= 0 : true;
+    // (the content join: both hands full and nothing with room said "Keep it, into a pack", and E then let it go)
+    if (!want && !free && inv && inv.attached && typeof inv.firstFit === 'function' && !(L.roomAt > L.t - 0.5)) {
+      const id = `fish:${L.species}`, d = itemDef(id); L.roomAt = L.t;
+      L.room = inv.reachable().some((c) => !['stringer', 'crate', 'pile', 'inhand'].includes(c.item) && (typeof inv.accepts !== 'function' || inv.accepts(c, d)) && !!inv.firstFit(c.id, id));
+    }
+    if (!want && !free && L.room === false) { p.prompt = { key: 'Q', text: 'Let it go · no room on you to keep it' }; return; }
     p.prompt = { key: 'E', text: `${want ? `Keep it for “${esc(want.title)}”` : free ? 'Keep it, in your hand' : 'Keep it, into a pack'} · <kbd>Q</kbd> Let it go` }; // fb3 B: to the hand
   }
 
@@ -893,7 +902,8 @@ export class Fishing {
         else if (inv && inv.attached && typeof inv.place === 'function') {
           const stringers = inv.containers.filter((c) => c.item === 'stringer').map((c) => c.id);
           r = inv.place(id, 1, { data, exclude: stringers });
-          if (r && r.ok) this.message = { text: `Kept · into the ${(itemDef((inv.cont(r.cId) || {}).item) || {}).name || 'pack'}`.toLowerCase().replace(/^kept/, 'Kept'), t: 2.2 };
+          const nm = (itemDef((inv.cont(r.cId) || {}).item) || {}).name || 'pack'; // (the content join: "the duluth pack #3": a name keeps its capital)
+          if (r && r.ok) this.message = { text: `Kept · into the ${/^(Duluth|Johnson)/.test(nm) ? nm : nm.charAt(0).toLowerCase() + nm.slice(1)}`, t: 2.2 };
         }
         if (!(r && r.ok)) { L.entry.kept = false; this.saveLog(); this.message = { text: 'No room to keep it: you let it go.', t: 3 }; if (Number.isFinite(L.x) && this.world.shoreAt(L.x, L.z) < 0) this.splash(L.x, this.surfaceAt(L.x, L.z), L.z, 7, 0.7); }
       } else {

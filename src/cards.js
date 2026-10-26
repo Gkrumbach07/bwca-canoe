@@ -9,7 +9,11 @@
 // around you in the ground's cord (the canoe, each container on the ground, Wood, The ground), the same tabs as the
 // book's right; and under a greyed button its checklist (decision 2: stream C's needs and next), with the fire's fuel
 // against an hour's burn, its wet wood and its timers above the fuel. Drag between them. Esc or E closes it. The fire's
-// state is nearby.objects()'s (stream A, decorated by stream C), read through inv-ui's fireObject.
+// state is nearby.objects()'s, read through inv-ui's fireObject.
+// fb5 A (the owner's third round of 2026-10-25: "fire ring got too complex"): the fire lights itself once the fuel holds
+// enough dry wood, and what sits on the grate over it cooks by itself, so the card is the fuel, the grate and one line
+// of state: what is missing as chips while it is cold, the burn bar alone while it is lit; Douse (held) the one button.
+// No help words on the card (stream E's moments teach it once, at the moment of need); E or Esc steps back.
 //
 //   import { cards } from './cards.js';
 //   cards.attach({ hud, nearby, journal, player, hold, onUse })   (main.js, the wc B block)
@@ -97,18 +101,16 @@ class Cards {
       this.fresh = false;
       this.el.className = 'paper show look-card';
       this.el.innerHTML = `<header>
-        <div class="lede"><div class="sc kicker">${esc(this.where())}</div><h2>${esc(o.title || 'The fire ring')}</h2><div class="say cd-sub"></div></div>
+        <div class="lede"><div class="sc kicker">${esc(this.where())}</div><h2>${esc(o.title || 'Fire ring')}</h2></div>
         <div class="pk-note pencil" aria-live="polite"></div>
         <button type="button" class="stamp outline" data-act="close" aria-label="Step back from the fire (E or Esc)">Step back · E</button>
       </header>
       <div class="cd-body">
         <section class="cd-mine pk-mat" aria-label="Yours"></section>
         <section class="cd-thing" aria-label="${esc(o.title || 'The fire')}"></section>
-      </div>
-      <footer class="sh-foot"><span>yours, then what is around you, on the left, a tab each · drag wood into the fuel, a meal or a fish onto the grate · held buttons: hold the mouse · <kbd>R</kbd> turns a thing while dragging</span><span><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></footer>`;
+      </div>`;
       this.el.querySelector('.cd-mine').appendChild(this.mine.el);
     }
-    const sub = this.el.querySelector('.cd-sub'); if (sub.textContent !== (o.sub || '')) sub.textContent = o.sub || '';
     const ps = panelSig(o);
     if ((force || ps !== this.psig) && !dragging()) { // (never rebuilt under a drag out of its grids)
       this.psig = ps;

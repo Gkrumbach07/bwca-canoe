@@ -7,10 +7,10 @@
 // "what is the stamp for at the counter, i thought we got rid of that"): the season is just the season, home is the
 // profile's, and a saved core that still carries a permit drops it on loading.
 //
-// The clock in either mode follows the pace (pace.js): while you travel (paddling under way, carrying the canoe, walking a
-// portage trail) it runs at the time-lapse the canoe or the walker moves at (player.boost: about 6 on open water at Trip
-// pace, up to 3 on a trail, 1 at Real), so a game hour covers what an hour covers in life; otherwise at the pace's gentle
-// idle rate (12 at Trip, 1 at Real). The 1/2/3 keys multiply both (main.js scales dt).
+// The clock in either mode runs at the pace's one rate (fb5 C, pace.js clockOf: 4 at Trip, 1 at Real, 1 while the camera
+// is up), the same on the water, on a trail, on foot, in camp and standing about; the canoe's and the walker's
+// time-lapse (player.boost) is how they are seen to move and no longer moves the clock. The 1/2/3 keys multiply it
+// (main.js scales dt). `travel` still says whether you are under way (paddling, carrying, walking a trail or the woods).
 //
 // In Adventure it keeps the rules: the clock and wind keys and the map's "Paddle in" are off, a capsize costs energy and food and wets the gear, and a
 // calm evacuation comes only when the energy bar is spent with nothing left to eat or drink (energy.onEvac): a fade, a
@@ -30,10 +30,10 @@
 //   'camp' 'sleep' 'capsize' 'offsite' 'bunk' 'ride' 'known' 'evac' 'exit'
 import { save } from './save.js';
 import { plural } from './hud.js';
+import { clockOf } from './pace.js';
 
 const DOC_KEY = 'bwca-canoe-trip';  // the outfitter's document
 const BOOK = 'logbook';             // save.js namespace
-const IDLE_EASE = 1.5;              // per second: how fast the clock eases to the idle rate once you stop travelling
 const WAKE_AT = 7.5;               // the hour you wake at the landing after an evacuation
 const LOG_MAX = 300;
 const CANOES = ['aluminium', 'royalex', 'kevlar']; // the hulls a season can own (shop.js); anything else reads as the aluminium
@@ -258,27 +258,28 @@ export class Trip {
     const cold = (this.day.season && this.day.season.waterTemp != null ? this.day.season.waterTemp : 15) < 12, en = this.energy;
     const spoiled = en ? Math.min(0.5, en.food) : 0;
     if (en) { en.spend(cold ? 0.5 : 0.25); en.food = Math.max(0, en.food - spoiled); }
-    this.state.wet = true;
+    // content C: the bag and the clothes rolled up in a waterproof pack stay dry (kit.js dryKit; main.js sets this.kit)
+    let dry = false; try { dry = !!(this.kit && typeof this.kit.dryKit === 'function' && this.kit.dryKit()); } catch { dry = false; }
+    if (!dry) this.state.wet = true;
     const food = spoiled >= 0.5 ? 'Half a day of food is spoiled, and the gear' : spoiled > 0 ? 'The last of the food is spoiled, and the gear' : 'The gear';
-    this.say(`Over you go${cold ? ', into cold water' : ''}. ${food} is wet until a fire dries it.`, 7);
+    if (dry) this.say(`Over you go${cold ? ', into cold water' : ''}.${spoiled > 0 ? ` ${spoiled >= 0.5 ? 'Half a day of food is spoiled' : 'The last of the food is spoiled'}.` : ''} The bag and the clothes stayed dry in the portage pack.`, 7);
+    else this.say(`Over you go${cold ? ', into cold water' : ''}. ${food} is wet until a fire dries it.`, 7);
   }
 
   // --- per frame (game seconds) ------------------------------------------------------------------------------
   update(dt) {
     const p = this.player, d = this.day, s = this.state, adv = this.adventure;
     d.locked = adv;
-    // the pace: travelling, the clock runs at the time-lapse the canoe or the walker moves at, so the game's hour is the
-    // hour the way takes in life; otherwise it eases to the pace's idle rate
-    const pace = p.paceTable || { idle: 1 };
-    if (this.travelling(dt)) d.rate = Math.max(1, p.boost || 1);
-    else d.rate += (pace.idle - d.rate) * (1 - Math.exp(-dt * IDLE_EASE));
-    this.travel = this.travelT > 0;
+    // fb5 C: one clock, the pace's own rate wherever you are and whatever you do (pace.js); the boost is the motion's
+    d.rate = clockOf(p.pace);
+    this.travel = this.travelling(dt);
     if ((this.bookT += dt) > 5) { this.bookT = 0; if (this.bookDirty) this.saveBook(); }
     if (!s.active || p.teleporting) { this.lastMode = p.mode; return; }
     this.watch(dt);
   }
-  // travelling, for the clock: paddling under way, carrying the canoe, walking a portage trail (a stop of under a
-  // second between strokes or steps still counts)
+  // travelling: paddling under way, carrying the canoe, walking a portage trail or the woods outside a camp and a yard
+  // (player.lapsing, fb3 A; folded in here from main.js's wrapper by fb5 C). A stop of under a second between strokes or
+  // steps still counts. It no longer sets the clock (one clock, above).
   travelling(dt) {
     const p = this.player;
     let moving = false;
@@ -286,7 +287,7 @@ export class Trip {
     else if (p.landing) moving = true;
     else if (p.mode === 'paddle') moving = Math.abs(p.speed) > 0.3 && !(p.fishing && p.fishing.rodUp);
     else if (p.mode === 'carry') moving = Math.abs(p.speed) > 0.1;
-    else if (p.mode === 'walk') moving = Math.abs(p.speed) > 0.1 && !!p.onTrail;
+    else if (p.mode === 'walk') moving = Math.abs(p.speed) > 0.1 && (!!p.onTrail || !!p.lapsing);
     this.travelT = moving ? 1 : Math.max(0, this.travelT - dt);
     return this.travelT > 0;
   }

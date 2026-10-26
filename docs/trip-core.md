@@ -24,12 +24,24 @@ From the owner (2026-10-23):
   paddling in about ten real minutes) and up to 3 on a portage trail (the carry seen at 2.5 m/s). **Real** pace:
   T = 1. The boost fades to life near a shore ahead, in a narrow channel, near a landing or a dock, on a slow stroke
   and in a hard turn. On foot off a trail outside a camp's area, a store and its yard, the walker is time-lapsed too
-  (the 2026-10-25 round, "i still feel slow walking"): T = 1.8 at Trip, seen at about 2.4 m/s with the clock at the same
-  factor, so a game hour still covers a real walk (measured: 200 m into the woods at 2.1–2.2 m/s seen, the clock ×1.8
-  once out of the camp). Camp, chores, fishing, swimming and a counter have no boost and a gentle clock (12× at Trip,
-  1× at Real). The 1/2/3 keys (1×, 2×, 4×) multiply all of it. Sleep jumps the night. Measured:
-  a July day of 6.5 game hours of travel covers 23–24 km with four portages (see Balance). The details are in
+  (the 2026-10-25 round, "i still feel slow walking"): T = 1.8 at Trip, seen at about 2.4 m/s. Sleep jumps the night.
+  Measured: a July day of 6.5 game hours of travel covers 23–24 km with four portages (see Balance). The details are in
   `src/pace.js` and "The pace" below.
+- **One clock** (the owner's third round of 2026-10-25, replacing the clock that followed the boost): "I don't know why
+  time has to pass differently when you're on land versus when you're in the water ... If that means that days are
+  longer when you're on land, I think that's fine because you can always sleep through things." The game clock runs
+  at one rate everywhere at a pace: **Trip ×4** (what the water had), **Real ×1**, times the 1/2/3 key's factor (1, 2,
+  4), on the water, on a trail, on foot, in camp, idle, fishing and in a store alike. There is no ×12 idle and no ×3
+  trail any more. The canoe's and the walker's time-lapse (`player.boost`) stays as it was, but it is now only how they
+  are seen to move: on open water at full boost a game hour still covers life's 5.8 km, while a carry (about 2.2 km a
+  game hour) and a walk (about 2.2 in the woods, 1.2 about a campsite) cover less than life's ground, so days on land
+  run longer and the Rest dial sleeps through them. The user sees no multipliers: the keys are **Normal**, **Faster ▶▶**
+  and **Fastest ▶▶▶** (`pace.describe`), the corner shows the mark only while it is faster, and the pace toast names it.
+  Measured (fb5 C, headless, the real keys): 4 / 8 / 16 game seconds a real second at Trip and 1 / 2 / 4 at Real, the
+  same paddling, drifting, walking and carrying on a trail, walking in the woods, idle and walking at camp, sat on the
+  bench, idle and walking in a store and in its yard; three pieces of wood gathered at camp cost 5 game minutes (78
+  real seconds; the old ×12 made 16 of the same walk). Held jobs (hold.js) still pass their minutes over their seconds,
+  as the Rest dial jumps: a chore is a short skip, not a rate.
 - **Open trips.** No nights, no "out by", no exit place. Live out there as long as you can; come in when you need to,
   at any outfitter.
 - **A season.** A new save starts at the entry point you pick (home), with $40 and the starting kit.
@@ -301,7 +313,7 @@ portages and landings seen. The journal's **Trips** tab shows it, with the outfi
 | H | anywhere, day or night | the headlamp |
 | I | anywhere | the book (I or Esc closes it): your body and containers on the left, a tab for each thing within reach on the right (The canoe, a pack on the ground, Wood, The ground), the Journal a tab of its own; right-click a thing for its verbs and why one is greyed; eat a serving of a snack when still (a meal or a fish cooked first), Drink from the bottle, move things between containers |
 | Space, Shift | afloat / on foot | brace / vault, climb or hop · hustle / jog |
-| 1 2 3 | anywhere, the rod down | 1×, 2×, 4× on top of the pace (Settings › Controls › Pace: Trip or Real) |
+| 1 2 3 | anywhere, the rod down | the game speed, Normal, Faster ▶▶, Fastest ▶▶▶ (1, 2, 4 on dt), on top of the pace (Settings › Controls › Pace: Trip or Real) |
 | `[ ] - = P` · `, . / ;` | Sandbox | the clock and the date · the wind |
 
 The whole set since the second 2026-10-25 round (the README and the title's Controls card list it): W A S D and the
@@ -336,8 +348,8 @@ trip.on(kind, fn)      // → off; '*' hears every kind
 trip.start(f), trip.callIt(ep), trip.resupply(ep), trip.evacuate(why), trip.nearestKnownOutfitter(x, z), trip.learn(ep)
 ```
 
-Each frame `trip.update` sets `day.rate` (the pace: `player.boost` while travelling, easing to the pace's idle rate
-otherwise; `trip.travel` says which), `day.locked`, and watches for a capsize, new lakes, portages, campsites and
+Each frame `trip.update` sets `day.rate` (fb5 C: the pace's one clock, `clockOf(player.pace)`: 4 at Trip, 1 at Real, 1
+while the camera is up; `trip.travel` still says whether you are under way, the walker's lapsing included), `day.locked`, and watches for a capsize, new lakes, portages, campsites and
 landings (within 30 m of one its outfitter becomes known, with a note).
 
 ### energy.js (`Energy`)
@@ -397,10 +409,14 @@ the energy and the weather's wetness are paid on. `day.advance(h)` jumps it forw
 
 ### pace.js and the player: the time-lapse
 
-`paceOf(name)` → `{ water, trail, idle, label }` (Trip 6, 3, 12; Real 1, 1, 1), `LIFE` (m/s at life: cruise 1.11, Shift
-1.41, walk 1.35, jog 2.9, carry 1.0 before the load), `SEEN` (the most the walker is seen at on a trail: 2.5 carrying,
-2.3 walking), `lifeKmh(gear)`. The player keeps `pace` (the setting), `boost` (the time-lapse it moves at this frame),
-`lapseT` (the pace's own for where you are, the HUD's number), `paceSpeed` (km per game hour, the readout's) and
+`paceOf(name)` → `{ clock, water, trail, foot, floor, label }` (Trip 4, 4, 3, 1.8, 1; Real all 1; `idle` is kept equal
+to `clock` for old readers), `clockOf(name)`, `SPEEDS` / `speedOf(ts)` / `speedOfKey(code)` (the 1/2/3 keys: factor,
+name, mark), `describe(player)` (`{ key, name, mark, label, pace, line }`, words without numbers, for the toast and the
+corner), `footHours(lifeHours, pace, lifeSpeed, seenSpeed)` (a stretch on foot's game hours, what the pack fetch is
+charged), `LIFE` (m/s at life: cruise 1.6, Shift 2.0, walk 1.35, jog 2.9, carry 1.0 before the load), `SEEN` (the most
+the walker is seen at on a trail: 2.5 carrying, 2.6 walking), `lifeKmh(gear)`. The player keeps `pace` (the setting),
+`boost` (the time-lapse it is seen to move at this frame; it no longer moves the clock), `lapsing` (on foot under it),
+`paceSpeed` (the speed at life over the boost, the readout's km/h) and
 `feltSpeed` (the speed at life toward the old cruise under the boost: the water line, the flecks, the wash). `speed`
 is always the speed at life: the energy, a capsize, a shore bump, the loons and "under way" read it. On the water the
 boost wants `water` on a forward stroke, times smoothsteps of the speed over the cruise, the yaw rate, the shore ahead
@@ -511,7 +527,8 @@ aluminium canoe, one pack, $40, played headlessly through the real keys at 4×. 
   `world.shoreAt` between waypoints. The lake mask joins waters that a portage joins in the game: the Kawishiwi River
   meets Farm Lake by a 13-rod portage and Farm Lake's two arms by a 10-rod one, which the mask shows as open water.
 - The fishing reticle follows the mouse; headless, set `chase.cursor` ({ inside: true, x: 0, y: 0.3 } is about 20 m
-  off) or the cast lands at the bow. A cast and retrieve costs about ten minutes of game time at the pace's idle clock
-  (12×); it was about an hour at the old 72×.
+  off) or the cast lands at the bow. A cast and retrieve costs about three minutes of game time at the one clock (4×,
+  fb5 C); it was ten at the idle 12× and about an hour at the old 72×. The bites come per real second (fishing.js), so a
+  game hour of fishing now brings about three times the bites it did at 12×.
 - The lights: 5 in the scene, always. Check `renderer.info.programs.length` before and after `lamp.toggle()` and after
   lighting a fire: it must not change.

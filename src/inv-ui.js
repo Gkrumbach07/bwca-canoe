@@ -9,7 +9,7 @@
 //   grid(el, container, { onDrop, onUse })      a container as a Tarkov grid: drag and drop between any grids on the
 //                                               page, R turns it while dragging (and a drop that fits only turned
 //                                               turns by itself), Shift-drag splits, right-click lists its verbs (and
-//                                               why one is greyed: a checklist, fb4 B)
+//                                               why one is greyed: its why and one chip, fb5 B)
 //   MineSide                                    your stuff on one screen (the owner, 2026-10-24: "having to scroll to
 //                                               see items is a struggle"): the body on the left (back, chest, hands,
 //                                               pockets), a tab per container you carry across the top, one grid at a
@@ -27,6 +27,10 @@
 //   firePanel, startHold, tickHold, SCREENS     the fire card's pieces (cards.js)
 //   needsHtml, statusOf, tickTimers             fb4 B (decision 2): a greyed action's checklist (ticks, quantities,
 //                                               countdowns, the next step) and an entry's state (inventory.status)
+//   whyHtml, chipHtml, firstMissing, tipHtml    fb5 B (decisions 2 and 6): a greyed verb's why and the one thing
+//                                               missing as a chip (items.js chipOf; the menu and the fire card), and
+//                                               an item's tooltip in the one schema (name, identity, state, on you,
+//                                               uses, weight)
 //   invUI.attach({ inventory, profile, player, energy, hud, shop, outfitter, nearby, hold, audio, journal, packs, cards, day })
 import './inv-ui.css';
 
@@ -40,6 +44,9 @@ const A_INV = import.meta.glob('./inventory.js', { eager: true })['./inventory.j
 // camp.js and tent.js, and pulling them in this early (journal.js imports this file) reads tent.js's TENT_SIZE before it
 // is set (the merge test, 2026-10-24)
 const A_HOLD = import.meta.glob('./hold.js', { eager: true })['./hold.js'] || null;
+// fb5 B: the energy bar's own need icons (hud.js NEED_ICON: a snowflake, zz, a fork and knife, a drop), so an item's
+// effect reads as the bar it moves
+const A_HUD = import.meta.glob('./hud.js', { eager: true })['./hud.js'] || null;
 // what the screens work with: main.js's fb B block (attach), else stream A's singleton, else the stand-in
 const ctx = { inventory: null, profile: null, player: null, energy: null, hud: null, shop: null, outfitter: null, stub: null, nearby: null, hold: null, audio: null, journal: null, packs: null, cards: null, day: null };
 export function attach(o) { Object.assign(ctx, o); return ctx; }
@@ -80,7 +87,7 @@ export function verbsFor(d, id = d && d.id) {
   if (Array.isArray(d.verbs)) return d.verbs;
   const out = [];
   if (d.eat) out.push(d.eat.cook && !d.cooked ? { id: 'eat', label: 'Eat', why: 'cook it on the grate first' } : { id: 'eat', label: 'Eat' });
-  if (d.eat && d.eat.cook && !d.cooked) out.push({ id: 'cook', label: 'Cook', where: 'fire', why: 'only in the fire card' });
+  if (d.eat && d.eat.cook && !d.cooked) out.push({ id: 'cook', label: 'Onto the grate', where: 'fire', why: 'At a fire ring' });
   if (d.slot === 'tent') out.push({ id: 'pitch', label: 'Pitch' });
   if (d.hang || /^barrel/.test(String(d.id))) out.push({ id: 'hang', label: 'Hang', why: 'carry it to a tree and point at the limb' });
   if (d.kind === 'long' || (d.hand && d.kind === 'container')) out.push({ id: 'hand', label: 'Put in hand' });
@@ -136,9 +143,10 @@ L('ash', 'Ash paddle', 'long', 1, 6, 1.1, { short: 'Ash', icon: 'paddle' });
 L('bentshaft', 'Bent-shaft laminate paddle', 'long', 1, 6, 0.9, { short: 'Bent-shaft', icon: 'bentshaft', price: 40 });
 L('carbon', 'Carbon bent-shaft paddle', 'long', 1, 6, 0.5, { short: 'Carbon', icon: 'carbon', price: 110 });
 // the hulls: not carried in anything (the canoe itself)
-L('aluminium', 'Aluminium canoe, 17 ft', 'long', 5, 1, 34, { short: 'Aluminium', icon: 'canoe', hull: true });
-L('royalex', 'Royalex Prospector, 16 ft', 'long', 5, 1, 29, { short: 'Royalex', icon: 'royalex', price: 160, hull: true });
-L('kevlar', 'Kevlar tripper, 17 ft', 'long', 5, 1, 20, { short: 'Kevlar', icon: 'kevlar', price: 240, hull: true });
+// fb5 B: their comparison is speed and steadiness (shop.js CATALOG effects: cruise, stability); the weight is the carry
+L('aluminium', 'Aluminium canoe, 17 ft', 'long', 5, 1, 34, { short: 'Aluminium', icon: 'canoe', hull: true, identity: 'The outfitter’s old tripper', onYou: [{ label: 'Speed', value: '×1' }, { label: 'Steady', value: '×1' }] });
+L('royalex', 'Royalex Prospector, 16 ft', 'long', 5, 1, 29, { short: 'Royalex', icon: 'royalex', price: 160, hull: true, identity: 'Wide and forgiving', onYou: [{ label: 'Speed', value: '×0.97' }, { label: 'Steady', value: '×1.3' }] });
+L('kevlar', 'Kevlar tripper, 17 ft', 'long', 5, 1, 20, { short: 'Kevlar', icon: 'kevlar', price: 240, hull: true, identity: 'Light and quick', onYou: [{ label: 'Speed', value: '×1.04' }, { label: 'Steady', value: '×1' }] });
 
 L('stringer', 'Fish stringer', 'container', 1, 2, 0.2, { short: 'Stringer', icon: 'stringer', hand: true, nest: true, container: { cols: 3, rows: 5, accepts: ['fish'] } });
 L('crate', 'Kept for you at the outfitters', 'container', 1, 1, 0, { short: 'Crate', icon: 'crate', container: { cols: 10, rows: 8 } });
@@ -148,6 +156,25 @@ L('firewood', 'An armful of firewood', 'firewood', 3, 2, 6, { short: 'Firewood',
 const FAMILY = { yoke: [3, 1, 'cedaryoke'], paddle: [1, 5, 'ottertail'], net: [2, 3, 'net'], blanket: [2, 2, 'blanket'], jacket: [2, 1, 'jacket'], sail: [1, 4, 'sail'], cover: [2, 2, 'cover'],
   pole: [1, 5, 'pole'], spoon: [1, 1, 'copperspoon'], tump: [1, 1, 'tump'], leaders: [1, 1, 'leaders'], kneelers: [2, 1, 'kneelers'] };
 const LONG_FAMILY = new Set(['paddle', 'pole']);
+// fb5 B: what a signature item is (outfitters.js FAMILIES), and its effect in player.gear's terms as on-you lines
+const FAMILY_ID = { yoke: 'Carved cedar yoke', paddle: 'Carved ottertail paddle', net: 'Ash and cotton landing net', blanket: 'Heavy wool blanket', jacket: 'Mesh bug jacket',
+  sail: 'Square sail on two poles', cover: 'Canvas spray cover', pole: 'Iron-shod setting pole · 12 ft', spoon: 'Hammered copper spoon', tump: 'Leather tumpline', leaders: 'Steel leaders, a dozen', kneelers: 'Sheepskin kneeling pads' };
+const times = (v) => `×${+(+v).toFixed(2)}`;
+export function effectOnYou(f, { paddle = false } = {}) {
+  if (!f) return [];
+  const out = [];
+  if (paddle && Number.isFinite(f.cruise)) out.push({ label: 'Cruise', value: `${(4.0 * f.cruise).toFixed(1)} km/h` }); // (as items.js says the paddles: 4.0 km/h the ash)
+  else if (Number.isFinite(f.cruise) && f.cruise !== 1) out.push({ label: 'Cruise', value: times(f.cruise) });
+  if (Number.isFinite(f.effort) && f.effort !== 1) out.push({ label: 'Effort', value: times(f.effort) });
+  if (Number.isFinite(f.stability) && f.stability !== 1) out.push({ label: 'Steady', value: times(f.stability) });
+  if (Number.isFinite(f.carry) && f.carry !== 1) out.push({ label: 'Carrying', value: `energy ${times(f.carry)}` });
+  if (Number.isFinite(f.snap) && f.snap !== 1) out.push({ label: 'Line', value: times(f.snap) });
+  if (Number.isFinite(f.sleepAdd) && f.sleepAdd) out.push({ need: 'rest', add: Math.round(f.sleepAdd * 100), when: 'a night' });
+  return out;
+}
+// a lure's takes as a word per fish (items.js takesLine), for a signature spoon
+const takesOf = (lure) => (lure && A_ITEMS && typeof A_ITEMS.takesLine === 'function' ? A_ITEMS.takesLine(lure) : '');
+const takesOn = (lure) => (A_ITEMS && typeof A_ITEMS.takesOn === 'function' ? A_ITEMS.takesOn(lure) : { label: '', value: takesOf(lure) });
 
 // an item's definition: A's, then the stand-in's or the shop's own
 export function itemDef(id) {
@@ -167,16 +194,17 @@ export function itemFor(it) {
   if (!it) return null;
   const have = itemDef(it.id); if (have && !have.stub) return have;
   if (String(it.id).startsWith('sheet:')) { // a stub (items.js, a sheet restored before the shop knew it) takes its full name
-    const def = { id: it.id, name: it.name, short: String(it.sheet || it.id.slice(6)), kind: 'map', w: 2, h: 2, kg: it.kg || 0.1, price: it.price || 8, icon: 'map', words: it.words || '', stub: false };
+    const def = { id: it.id, name: it.name, short: String(it.sheet || it.id.slice(6)), kind: 'map', w: 2, h: 2, kg: it.kg || 0.1, price: it.price || 8, icon: 'map', identity: 'Fisher map · waterproof', stub: false };
     return have && A_ITEMS ? A_ITEMS.defineItem(def) : defineItem(def);
   }
   const f = FAMILY[it.family];
   if (f) {
     const long = LONG_FAMILY.has(it.family);
-    return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: long ? 'long' : it.lure ? 'lure' : 'gear', w: f[0], h: f[1], kg: it.kg || 0.5, price: it.price || 0, icon: f[2], words: it.words || '', stack: it.lure ? 3 : 1,
+    return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: long ? 'long' : it.lure ? 'lure' : 'gear', w: f[0], h: f[1], kg: it.kg || 0.5, price: it.price || 0, icon: f[2], stack: it.lure ? 3 : 1,
+      identity: FAMILY_ID[it.family] || '', onYou: [...(takesOf(it.lure) ? [takesOn(it.lure)] : []), ...effectOnYou(it.effect, { paddle: it.family === 'paddle' })],
       ...(long ? { long: it.family === 'paddle' ? 'paddle' : it.family } : {}), ...(it.slot ? { slot: it.slot } : {}), ...(it.lure ? { lure: it.lure } : {}) });
   }
-  return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: it.kind === 'lure' ? 'lure' : 'gear', w: 1, h: 1, kg: it.kg || 0.2, price: it.price || 0, icon: it.id, words: it.words || '' });
+  return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: it.kind === 'lure' ? 'lure' : 'gear', w: 1, h: 1, kg: it.kg || 0.2, price: it.price || 0, icon: it.id, onYou: effectOnYou(it.effect) });
 }
 export const shortOf = (name) => { const s = String(name || '').replace(/^(A|An|The) /, '').replace(/,.*$/, ''); const w = s.split(' '); return w.length > 2 ? w.slice(-2).join(' ') : s; };
 // the short name in an item's corner: its own, the stand-in's, else the last words of its name
@@ -753,6 +781,8 @@ export function iconAt(itemId, wPx, hPx) { return copyOf(picture(itemId, wPx, hP
 const URLS = new Map();
 export function iconUrl(itemId, wPx = 48, hPx = wPx) { const k = `${itemId}|${wPx}x${hPx}`; let u = URLS.get(k); if (!u) { u = picture(itemId, wPx, hPx).toDataURL(); URLS.set(k, u); } return u; }
 export const ICON_KEYS = Object.keys(ICONS);
+// content C: more drawings by icon key, [design w, design h, draw(ctx)] (gear-icons.js: the new gear, food and uniques)
+export function addIcons(map) { for (const [k, v] of Object.entries(map || {})) if (!ICONS[k]) { ICONS[k] = v; ICON_KEYS.push(k); } }
 
 // --- the grid -----------------------------------------------------------------------------------------------------
 // A container drawn as cells with its items on them at their footprints. Any grid on the page takes a drop from any
@@ -830,10 +860,56 @@ export function statusOf(ref) {
   const inv = model(); if (!ref || typeof inv.status !== 'function') return null;
   try { const s = inv.status(ref); return s && (s.label || s.mark) ? s : null; } catch (err) { if (!statusWarned) { statusWarned = true; console.warn('inventory.status', err); } return null; }
 }
+// fb5 B: the state as one short line, "Wet · dries by a fire, 30 min", "Drying · 22 min", "Hot · keeps 4 h 50", with
+// the missing thing as a chip ("needs the pot"); its next step is stream E's to teach, never drawn here
 export function statusHtml(s, cls = 'stt') {
   if (!s) return '';
-  const t = Number.isFinite(s.timer) && s.timer > 0 ? ` ${timerHtml(s)}` : '';
-  return `<div class="${cls}${s.mark ? ` st-${esc(s.mark)}` : ''}"><b>${esc(s.label || s.mark || '')}</b>${t}${s.next ? `<span class="nx">${esc(s.next)}</span>` : ''}</div>`;
+  const t = Number.isFinite(s.timer) && s.timer > 0 ? timerHtml(s) : '';
+  const hint = s.hint ? esc(s.hint) : '', tail = hint && t ? `${hint} ${t}` : hint || t;
+  const chip = s.chip ? `<span class="chip">${esc(s.chip)}</span>` : s.need ? chipHtml(s.need) : '';
+  return `<div class="${cls}${s.mark ? ` st-${esc(s.mark)}` : ''}"><b>${esc(s.label || s.mark || '')}</b>${tail ? `<span class="sep">·</span><span class="h">${tail}</span>` : ''}${chip}</div>`;
+}
+
+// --- fb5 B: the one thing missing (decision 6) ------------------------------------------------------------------------
+// The owner, the third round of 2026-10-25: "the formulas should not always be there. it should only show whats
+// missing". A greyed verb shows its why and the first missing thing as a chip, never a list of ticked steps; the chip's
+// words are items.js chipOf's, which the fire card (cards.js) and the dot (stream E) read too. `next` is stream E's to
+// teach once, as a moment.
+const chipWords = (needs, why = '') => {
+  if (A_ITEMS && typeof A_ITEMS.chipOf === 'function') { try { return String(A_ITEMS.chipOf(needs, why) || ''); } catch { /* ours, below */ } }
+  const n = firstMissing(needs); if (!n) return why ? String(why).split(/[:,]/)[0].trim() : '';
+  if (n.chip != null) return String(n.chip);
+  const l = String(n.label || '').split(/[:,]/)[0].trim(), lab = l.charAt(0).toLowerCase() + l.slice(1);
+  if (Number.isFinite(n.need)) { const left = Math.max(0, n.need - (+n.have || 0)); return /^(pieces?|poles?|logs?|)$/.test(n.unit || '') ? `${lab} ×${num(left)}` : `${lab} ${num(left)} ${n.unit}`; }
+  return Number.isFinite(n.timer) ? `${lab} ${timeWords(n.timer)}` : lab;
+};
+// the first need not done (a check, or its needs)
+export function firstMissing(c) {
+  const needs = Array.isArray(c) ? c : c && Array.isArray(c.needs) ? c.needs : [];
+  if (A_ITEMS && typeof A_ITEMS.missingOf === 'function') { try { return A_ITEMS.missingOf(needs); } catch { /* ours, below */ } }
+  return needs.find((n) => n && !(n.done != null ? n.done : Number.isFinite(n.need) ? (+n.have || 0) >= n.need : false)) || null;
+}
+// a need as a chip: its words, the icon of the thing it wants in front (need.item), a running timer counting down
+export function chipHtml(n) {
+  if (!n) return '';
+  let t = '';
+  if (n.chip == null && Number.isFinite(n.timer) && n.running !== false && n.timer > 0) t = `${esc(chipWords([{ label: n.label, done: false }]))} ${timerHtml(n)}`;
+  else { const w = chipWords([n]); if (!w) return ''; t = esc(w); }
+  const d = n.item ? itemDef(n.item) : null;
+  const pic = d ? `<img class="ci" src="${iconUrl(n.item, 36)}" alt="">` : n.icon ? `<span class="cg" aria-hidden="true">${esc(n.icon)}</span>` : '';
+  return `<span class="chip${pic ? ' has-i' : ''}">${pic}${t}</span>`;
+}
+// a greyed check as one line: its why and the first missing chip ('' when it can be done). The chip goes when it only
+// says the why again. cls: the line's class; tag: 'span' inside a button, 'div' in a pane
+export function whyHtml(c, { cls = 'why1', tag = 'div' } = {}) {
+  if (!c || c.enabled !== false) return '';
+  const why = String(c.why || '').trim(), n = firstMissing(c.needs);
+  // (the chip goes when every word of it is in the why already: "Treating: drinkable in 22 min" needs no "treating 22 min")
+  const words = (t) => t.toLowerCase().replace(/[^a-z0-9.½ ]/g, ' ').split(/\s+/).filter(Boolean);
+  const w = n ? chipWords([n]) : '', inWhy = new Set(words(why)), same = !!(w && why && words(w).every((k) => inWhy.has(k)));
+  const chip = n && !same ? chipHtml(n) : '';
+  if (!why && !chip) return '';
+  return `<${tag} class="${cls}">${why ? `<span class="w">${esc(why.charAt(0).toUpperCase() + why.slice(1))}</span>` : ''}${chip}</${tag}>`;
 }
 // every countdown on the page, counted down with the clock a few times a second (the screens' update calls it)
 let tickAt = 0;
@@ -902,7 +978,9 @@ class Grid {
     // fb4 B (decision 2): a thing with a state says so on its icon (wet, drying, treating, cooking, burning, hot, low,
     // empty, ready: stream C's inventory.status), in place of the eat or raw mark
     const stt = !shelf ? statusOf(e) : null;
-    if (stt && stt.mark) { const m = mk('span', `ig-mark st st-${esc(stt.mark)}${w < 2 ? ' dot' : ''}`, esc(stt.mark)); if (w < 2) m.title = stt.label || stt.mark; it.appendChild(m); it.classList.add('has-st'); if (w < 2) it.classList.add('st-dot'); } // (one cell wide: a dot, the word in its tooltip)
+    // fb5 B: a missing thing is a chip on the icon itself, over its foot (stream A's grate: "needs the pot", "water 0.3 L")
+    if (stt && stt.chip) { it.appendChild(mk('span', `ig-chip st-${esc(stt.mark || 'need')}`, esc(stt.chip))); it.classList.add('has-chip'); }
+    else if (stt && stt.mark) { const m = mk('span', `ig-mark st st-${esc(stt.mark)}${w < 2 ? ' dot' : ''}`, esc(stt.mark)); if (w < 2) m.title = stt.label || stt.mark; it.appendChild(m); it.classList.add('has-st'); if (w < 2) it.classList.add('st-dot'); } // (one cell wide: a dot, the word in its tooltip)
     else if (d && d.eat && !shelf) it.appendChild(mk('span', `ig-mark ${d.eat.cook && !d.cooked ? 'cook' : 'eat'}`, d.eat.cook && !d.cooked ? 'raw' : 'eat'));
     if (e.box) it.appendChild(mk('span', 'ig-mark open', 'open'));
     if (shelf) it.appendChild(mk('span', 'ig-price', e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'));
@@ -977,7 +1055,7 @@ function press(g, e, el, ev) {
   if (g.opts.bin && !g.opts.bin.take) return;
   const r = el.getBoundingClientRect(), ox = ev.clientX - r.left, oy = ev.clientY - r.top;
   // (fb4 B, decision 4: no Ctrl-click any more; a double-click still buys off a shelf)
-  const st = { kind: 'item', grid: g, e, el, x0: ev.clientX, y0: ev.clientY, gx: Math.min(ox, CELL * Math.floor(ox / CELL) + CELL / 2), gy: Math.min(oy, CELL * Math.floor(oy / CELL) + CELL / 2), rot: e.rot || 0, started: false,
+  const st = { kind: 'item', grid: g, e, el, x0: ev.clientX, y0: ev.clientY, gx: Math.max(0, Math.min(r.width, ox)), gy: Math.max(0, Math.min(r.height, oy)), rot: e.rot || 0, started: false, // (fb5 join: the exact grab point, so the thing lands where its ghost is under the pointer: the pot grabbed by its middle onto the grate's middle went a row low and red)
     qty: ev.shiftKey && (e.qty || 1) > 1 ? Math.ceil((e.qty || 1) / 2) : null };
   follow(st, null);
 }
@@ -1004,8 +1082,19 @@ function follow(st, onClick) {
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
 }
+// fb5 B (rule 1): R is taught on the first few drags of a thing that turns, then it's learned
+const R_HINTS = 3, R_KEY = 'bwca-canoe:fb5-rturn';
+let rTaught = null;
+function rHintNow() {
+  if (rTaught == null) { try { rTaught = +(localStorage.getItem(R_KEY) || 0) || 0; } catch { rTaught = 0; } }
+  if (rTaught >= R_HINTS) return false;
+  rTaught++; try { localStorage.setItem(R_KEY, String(rTaught)); } catch { /* a nicety */ }
+  return true;
+}
+export function rTurned() { rTaught = R_HINTS; try { localStorage.setItem(R_KEY, String(R_HINTS)); } catch { /* a nicety */ } } // R pressed: learned
 function begin(st) {
   st.started = true; drag = st; hideTip();
+  st.rHint = turnable(st) && rHintNow();
   st.el.classList.add('lifted');
   st.ghost = mk('div', `ig-ghost${st.kind === 'thing' ? ' thing' : ''}`);
   st.fromShelf = !!(st.grid && st.grid.opts.shelf) || !!st.el.closest('#shelf');
@@ -1095,7 +1184,7 @@ function over(st, x, y) {
   st.ghost.classList.toggle('off', off && res !== 'no'); st.ghost.classList.toggle('off-no', off && res === 'no');
   // the drag's own hint: where it goes off the page; R while the thing can turn (fb4 B: R is only this now)
   const wet = res === 'no' && (off || (zone && /^(ground|wood)$/.test(SPECIAL_TABS[zone.dataset.tab] || zone.dataset.dz || ''))) && onFoot() ? wadeBlock() : null;
-  if (st.tag) st.tag.innerHTML = wet ? 'you’re standing in the water · step ashore' : off ? esc(res !== 'no' ? 'to the ground' : onFoot() ? 'not here' : 'go ashore first') : st.turn ? 'turns to fit · <kbd>R</kbd> turns it' : turnable(st) ? '<kbd>R</kbd> turns it' : '';
+  if (st.tag) st.tag.innerHTML = wet ? 'step ashore first' : off ? esc(res !== 'no' ? 'to the ground' : onFoot() ? 'not here' : 'go ashore first') : st.turn ? 'turned to fit' : st.rHint ? '<kbd>R</kbd> turns it' : '';
   st.ghost.classList.toggle('hinted', !!st.tag && st.tag.innerHTML !== '');
   // the cells lit in the grid, or the zone (or the tab) lit
   if (st.hl && (!tgt || st.hl.parentNode !== tgt.el)) { st.hl.remove(); st.hl = null; }
@@ -1152,6 +1241,7 @@ if (typeof window !== 'undefined') {
       ev.preventDefault(); ev.stopImmediatePropagation();
       if (ev.repeat) return;
       if (!turnable(drag)) return;
+      rTurned(); drag.rHint = false; // (fb5 B: pressed, so learned)
       drag.rot = drag.rot ? 0 : 1; drag.gx = CELL / 2; drag.gy = CELL / 2;
       ghostDraw(drag); if (drag.x != null) over(drag, drag.x, drag.y);
     } else if (ev.code === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); cleanup(drag); drag = null; if (dirty) { dirty = false; refresh(); } }
@@ -1361,6 +1451,7 @@ function tabCheck(st, tabEl) {
     if (key === 'canoe' && k === 'container' && !e.hull && !e.owned && !e.dear) return (inv.containers || []).filter((c) => c.where === 'canoe').length < 8 ? 'buy' : 'no';
     if (e.hull || e.owned || e.dear || k === 'long' || k === 'container') return 'no';
     const c = key === 'keeping' ? inv.crate : key === 'canoe' ? canoeFor(e.id) : inv.cont(key);
+    if (!(c && canFit(c, e.id)) && key === 'canoe' && (inv.containers || []).filter((q) => q.where === 'canoe').length < 8) return 'buy'; // (the content join: loose in the canoe, shop.js buyItem)
     return c && canFit(c, e.id) ? 'buy' : 'no';
   }
   if (SPECIAL_TABS[key]) return zoneCheckDz(st, SPECIAL_TABS[key]);
@@ -1383,7 +1474,12 @@ function dropOnTab(st, tabEl) {
     if (r && r.ok) { const words = `${itemDef(e.id).name}, $${e.price || 0}: in the canoe at the dock. $${sc.money()} in hand.`; sc.receipt = { ok: true, words }; note(words, 4); sc.mine.openAt('canoe'); sc.render(true); }
     return;
   }
-  if (src && src.opts.shelf) { const c = key === 'keeping' ? inv.crate : key === 'canoe' ? canoeFor(e.id) : inv.cont(key), f = c && inv.firstFit(c.id, e.id); if (f) src.opts.screen.buy(e.id, { cId: c.id, x: f.x, y: f.y, rot: f.rot }); return; }
+  if (src && src.opts.shelf) {
+    const c = key === 'keeping' ? inv.crate : key === 'canoe' ? canoeFor(e.id) : inv.cont(key), f = c && inv.firstFit(c.id, e.id);
+    if (f) src.opts.screen.buy(e.id, { cId: c.id, x: f.x, y: f.y, rot: f.rot });
+    else if (key === 'canoe') src.opts.screen.buy(e.id, null); // (the content join: no gap in the canoe's packs: the shop says so, or it rides loose in the canoe; it was a drop that did nothing)
+    return;
+  }
   if (SPECIAL_TABS[key]) { dropOnZone(st, SPECIAL_TABS[key]); return; }
   const c = inv.cont(key); if (!c) return;
   if (st.kind === 'thing' || e.box) { const t = thingOfDrag(st), f = t && inv.firstFit(c.id, t.obj.item); if (!f || !inv.move(null, t.id, c.id, f.x, f.y, f.rot)) note('It won’t go in there.', 2.5); else note(`${t.def.name}: into the ${lower(short(itemDef(c.item)) || nameOf(c))}.`, 3); return; }
@@ -1444,7 +1540,9 @@ const WHERE = { back: 'on your back', chest: 'on your chest', hands: 'in your ha
 // what a container is called on its strap: a pile on the ground is a woodpile when it is all wood
 const nameOf = (c) => {
   if (c.item === 'pile') { const g = c.grid || []; return g.length && g.every((e) => (itemDef(e.id) || {}).kind === 'firewood') ? 'Woodpile' : 'Set down here'; }
-  if ((itemDef(c.item) || {}).one && c.where === 'canoe') return 'At your feet'; // a hand's holder put into the hull at Get in (the fb3 join)
+  // a hand's holder put into the hull at Get in (the fb3 join): named for what it holds (fb5 join: "At your feet · in the
+  // canoe" read wrong ashore at a portage), else loose
+  if ((itemDef(c.item) || {}).one && c.where === 'canoe') { const e = (c.grid || []).find((q) => !q.box), d = e && itemDef(e.id); return d ? d.name : 'Loose in the canoe'; }
   return c.name || (itemDef(c.item) || {}).name || 'A container';
 };
 function whereWords(c, byId) {
@@ -1491,7 +1589,10 @@ function verbMenu(ref, sc = null) {
       case 'cook': {
         if (!e || !g) break;
         if (no) { grey(no.label || label, no.why || v.why, no); break; }
-        if (!fire) { grey(label, v.why || 'only in the fire card', chk); break; }
+        // fb5 B: the model's verb (inventory.verb: onto the grate, which cooks by itself over a lit fire, fb5 A), in the
+        // book or the card alike; the fire card's own actions below only without it
+        if (chk) { out.push({ label: chk.label || label, run: () => { let q = null; try { q = chk.run(); } catch (err) { console.warn('verb cook', err); } if (q && q.words) note(q.words, 3.5); const n = nearby(); if (n) n.list = null; refresh(); } }); break; }
+        if (!fire) { grey(label, v.why || 'At a fire ring', chk); break; }
         const put = acts.find((a) => a.id === 'grate'), onGrate = g.c.item === 'grate', cook = (fire.actions || []).find((a) => a.id === 'cook');
         if (!onGrate && !put) grey(label, 'the grate is full');
         else if (!onGrate && put.enabled === false) grey(label, put.why || 'not now', put);
@@ -1511,11 +1612,14 @@ function verbMenu(ref, sc = null) {
       }
       case 'hang': { const a = acts.find((x) => x.id === 'hang'); grey(label, v.why || 'carry it to a tree and point at the limb', a && (a.needs || a.next) ? { needs: a.needs, next: a.next } : null); break; } // (E at the tree; what the hang needs from E's chores)
       case 'hand': {
+        if (e && e.fixed) break; // (fb5 B: the bottle in its pocket never goes to a hand: no verb that is always grey)
+        // (content join: what is in your hand already has no Put in hand, a verb that was always grey)
+        if (e && !t && g && g.c && inv.spec(g.c).one && inv.rootWhere(g.c) === 'hands') break;
         if (e && !t) { viaHook(v.id, label, v.why || 'not from here'); break; } // a plain thing into a free hand (stream B)
         if (!t) break;
         const o = t.obj;
-        if (o.where === 'hands') grey(label, 'in your hand already');
-        else if (!onFoot() && !inv.atStash) grey(label, 'not from the canoe');
+        if (o.where === 'hands') break;
+        if (!onFoot() && !inv.atStash) grey(label, 'not from the canoe');
         else if (typeof inv.freeHand === 'function' && inv.freeHand() < 0) grey(label, 'both hands are full');
         else out.push({ label, run: () => world('carry', t.id, 'hands') });
         break;
@@ -1556,49 +1660,86 @@ function openMenu(x, y, items) {
   if (!items || !items.length) return;
   const m = menuEl = mk('div', 'ig-menu');
   for (const it of items) {
-    const b = mk('button', '', esc(it.label)); b.type = 'button'; b.disabled = !!it.disabled;
-    if (it.title) { b.title = it.title; if (it.disabled) b.appendChild(mk('small', 'why', esc(it.title))); } // why not, written under it (a hover tip alone is never seen)
+    const b = mk('button', '', `<span class="vl">${esc(it.label)}</span>`); b.type = 'button'; b.disabled = !!it.disabled;
+    if (it.title) b.title = it.title;
+    // fb5 B (decision 6): under a greyed verb, one line: why, and the first thing missing as a chip (a hover tip alone
+    // is never seen; the old checklist and its next step are gone)
+    if (it.disabled) { const line = whyHtml({ enabled: false, why: it.title || '', needs: it.needs }, { tag: 'span' }); if (line) b.insertAdjacentHTML('beforeend', line); }
     b.addEventListener('click', (ev) => { ev.stopPropagation(); closeMenu(); if (it.run) it.run(); });
     m.appendChild(b);
-    // fb4 B (decision 2): under a greyed verb, what it needs (ticks, "2 of 4 pieces", a countdown) and the next step
-    const list = it.disabled ? needsHtml(it.needs, it.next) : '';
-    if (list) { const n = mk('div', 'ig-needs', list); m.appendChild(n); }
   }
   document.body.appendChild(m);
+  // fb5 B (rule 1): a greyed verb's next step is taught once, as a moment over the paper (stream E's hints.next: once a
+  // season per id), never written in the menu; the first one only, so one teaching line at a time
+  // (fb5 join: only when every verb is greyed, so the player is stuck; a menu opened for its live verb taught the greyed
+  // one: "Pitch the tarp" brought "Put down or away what is in a hand…" for the Put in hand under it)
+  const teach = items.every((it) => it.disabled) ? items.find((it) => it.next) : null;
+  if (teach) { try { const h = typeof window !== 'undefined' && window.__game && window.__game.hints; if (h && typeof h.next === 'function') h.next(`menu:${teach.label}|${String(teach.title || '').replace(/[\d.,½–-]+/g, '#')}`, teach.next, { card: true }); /* (the id without its numbers: a countdown is one moment) */ } catch (err) { console.warn('hints.next', err); } }
   const r = m.getBoundingClientRect();
   m.style.left = `${Math.max(8, Math.min(x, window.innerWidth - r.width - 8))}px`; m.style.top = `${Math.max(8, Math.min(y, window.innerHeight - r.height - 8))}px`;
   setTimeout(() => window.addEventListener('pointerdown', outside, true), 0);
 }
 function outside(ev) { if (menuEl && !menuEl.contains(ev.target)) closeMenu(); }
 export function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } window.removeEventListener('pointerdown', outside, true); }
-// the tag: the name, its weight, and the one line that says what it is for (items.js words, stream D)
+// the tag: fb5 B (decision 2; the owner: "only whats relevant … The item doesn't say what it can be used for"), one
+// schema for every item, each line only when it has one: the name; what it is in a few words (def.identity); its state
+// with its timer (inventory.status); what it does to you, in numbers, with the numbers that compare it to its kind
+// (def.onYou); what is left of its uses, servings or litres as a bar; its weight (on a shelf: the price first)
+export function tipHtml(d, e, { shelf = false } = {}) {
+  if (!d) return '';
+  // (content join: a fish weighs what its length makes it, as the pack counts it: an 18 cm crappie read 800 g)
+  const fishW = d.kind === 'fish' && e.data && e.data.length && A_ITEMS && typeof A_ITEMS.fishKg === 'function' ? A_ITEMS.fishKg(d.species || String(e.id || d.id).slice(5), e.data.length) : null;
+  const kg = e.data && Number.isFinite(e.data.kg) ? e.data.kg * (e.qty || 1) : Number.isFinite(fishW) ? fishW * (e.qty || 1) : (d.kg || 0) * (e.qty || 1), st = d.stack || 1;
+  const name = `${d.name}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}`;
+  const identity = typeof d.identity === 'string' ? d.identity : e.hull ? 'A canoe' : '';
+  const stt = !shelf ? statusOf(e) : null;
+  const all = (Array.isArray(d.onYou) ? d.onYou : []).filter(Boolean), effs = all.filter((o) => o.need && Number.isFinite(o.add));
+  const on = all.filter((o) => !o.need && (o.label || o.value));
+  const n = d.uses ?? d.servings ?? d.litres ?? null, left = n != null ? (Number.isFinite(e.left) ? e.left : n) : null;
+  let uses = '';
+  if (n != null && !shelf && (n > 1 || d.litres)) {
+    const f = Math.max(0, Math.min(1, left / n));
+    uses = `<span class="ub" aria-hidden="true"><i style="width:${(f * 100).toFixed(0)}%"></i></span><span class="un">${d.litres ? `${num(+left.toFixed(2))} of ${n} L` : `${Math.round(left)} of ${n}`}</span>`;
+  } else if (n != null && shelf && (n > 1 || d.litres)) uses = `<span class="un">${d.litres ? `${n} L` : d.servings ? `${n} servings` : `${n} uses`}</span>`;
+  const qty = st > 1 && (e.qty || 1) > 1 && !shelf ? `×${e.qty}` : ''; // (on a shelf the price says it: "$4 for 12")
+  const price = shelf ? `${e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'}${e.qty > 1 ? ` for ${e.qty}` : ''}` : '';
+  const foot = [uses, [price, qty, kgText(kg)].filter(Boolean).map(esc).join(' · ')].filter(Boolean).join('<span class="sep">·</span>');
+  return `<b class="nm">${esc(name)}</b>${identity ? `<span class="id">${esc(identity)}</span>` : ''}${stt && !stt.bar ? statusHtml(stt) : ''}${effsHtml(effs)}${on.length ? `<div class="on">${on.map((o) => (Array.isArray(o.takes) && o.takes.length ? takesHtml(o.takes) : `<span>${o.label ? `<b>${esc(o.label)}</b> ` : ''}${esc(o.value ?? '')}</span>`)).join('')}</div>` : ''}<span class="f">${foot}</span>`;
+}
+// the owner (2026-10-25: "the lure description can use icons for the neutral, great, etc"): a lure's or the bait's takes
+// as the fish's name and five pips, as many filled as the step (neutral 1 … excellent 5, items.js TAKE_STEP); excellent
+// in the warm accent; the word is the title and the label read aloud
+function takesHtml(list) {
+  return list.map((q) => { const n = Math.max(1, Math.min(5, q.step | 0)); return `<span class="take${n === 5 ? ' top' : ''}" title="${esc(`${q.fish}: ${q.word}`)}" aria-label="${esc(`${q.fish}: ${q.word}`)}"><span class="fw">${esc(q.fish)}</span><span class="pips" aria-hidden="true">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= n ? 'on' : ''}"></i>`).join('')}</span></span>`; }).join('');
+}
+// fb5 B (the owner, after the first tooltips: "icons with +integers, stacked, no percent"): what an item does to the
+// energy bar's needs, a chip each in a row, the bar's own icon and the points out of 100, then when ("a handful")
+const ENERGY_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="5" width="14" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2.6" y="6.6" width="7" height="2.8" fill="currentColor"/></svg>'; // (the bar itself, its green)
+const NEED_WORD = { food: 'Food', water: 'Water', rest: 'Rest', warmth: 'Warmth', energy: 'Energy' };
+function needIcon(k) {
+  if (k === 'energy') return ENERGY_ICON;
+  const I = A_HUD && A_HUD.NEED_ICON; return I && I[k] ? I[k] : '';
+}
+export function effsHtml(effs) {
+  if (!effs || !effs.length) return '';
+  const when = effs.map((o) => o.when).filter(Boolean)[0] || '';
+  return `<div class="eff">${effs.map((o) => { const ic = needIcon(o.need); return `<span class="ef ef-${esc(o.need)}" title="${esc(NEED_WORD[o.need] || o.need)}">${ic || `<i>${esc(NEED_WORD[o.need] || o.need)}</i>`}<b>${o.add >= 0 ? '+' : '−'}${Math.abs(o.add)}</b></span>`; }).join('')}${when ? `<em>${esc(when)}</em>` : ''}</div>`;
+}
 function showTip(el, g, e) {
   hideTip();
-  const d = itemDef(e.id); if (!d) return;
+  const d = itemDef(e.id); if (!d || !el.isConnected) return; // (fb5 join: an icon redrawn away under the pointer left its tip stuck in the corner)
   const t = tipEl = mk('div', 'ig-tip');
-  const kg = e.data && Number.isFinite(e.data.kg) ? e.data.kg * (e.qty || 1) : (d.kg || 0) * (e.qty || 1), st = d.stack || 1;
-  const words = e.words || d.words || (e.hull ? 'A canoe: it waits at the dock.' : e.box ? 'A container: double-click to open it.' : '');
-  let foot = `${kgText(kg)}${st > 1 ? ` · ${e.qty || 1} of ${st} in a stack` : ''}`;
-  if (g.opts.shelf) foot = `${e.owned ? 'yours' : e.price ? `$${e.price}` : 'free'}${e.qty > 1 ? ` for ${e.qty}` : ''} · ${foot}`;
-  else if (d.cooked) foot += ' · keeps a few hours';
-  // fb3 C (decision 9, stream B's numbers): what is left of its uses, servings or litres; and the stats block, what it
-  // does, by how much and when ("Night's rest: full · in the tent"), under the purpose line
-  const n = d.uses ?? d.servings ?? d.litres ?? null, left = n != null ? (Number.isFinite(e.left) ? e.left : n) : null;
-  if (n != null && !g.opts.shelf) foot += d.litres ? ` · ${+left.toFixed(2)} of ${n} L` : d.servings ? ` · ${Math.round(left)} of ${n} ${n === 1 ? 'serving' : 'servings'}` : ` · ${Math.round(left)} of ${n} left`;
-  else if (n != null && g.opts.shelf) foot += d.litres ? ` · holds ${n} L` : d.servings ? ` · ${n} ${n === 1 ? 'serving' : 'servings'}` : ` · ${n} uses`;
-  const stats = Array.isArray(d.stats) ? d.stats.filter((s) => s && (s.label || s.value)) : [];
-  const statsHtml = stats.length ? `<div class="st">${stats.map((s) => `<div><b>${esc(s.label || '')}${s.label ? ':' : ''}</b> ${esc(s.value ?? '')}${s.when ? ` <i>${esc(s.when)}</i>` : ''}</div>`).join('')}</div>` : '';
-  // fb4 B (decision 2): its state and the next step, under its name ("Wet · 2 h 40 · Dries by a lit fire in 30 min")
-  const stt = !g.opts.shelf ? statusOf(e) : null;
-  t.innerHTML = `<b>${esc(d.name)}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}</b>${statusHtml(stt)}${words ? `<p>${esc(words)}</p>` : ''}${statsHtml}<span class="f">${esc(foot)}</span>`;
+  t.innerHTML = tipHtml(d, e, { shelf: !!(g && g.opts.shelf) });
   document.body.appendChild(t);
   const r = el.getBoundingClientRect(), tr = t.getBoundingClientRect();
   let x = r.right + 8, y = r.top;
   if (x + tr.width > window.innerWidth - 8) x = r.left - tr.width - 8;
   if (y + tr.height > window.innerHeight - 8) y = window.innerHeight - tr.height - 8;
   t.style.left = `${Math.max(8, x)}px`; t.style.top = `${Math.max(8, y)}px`;
+  tipWatch = setInterval(() => { if (!el.isConnected) hideTip(); }, 200); // (its icon redrawn away: no pointerleave comes)
 }
-export function hideTip() { clearTimeout(tipTimer); if (tipEl) { tipEl.remove(); tipEl = null; } }
+let tipWatch = 0;
+export function hideTip() { clearTimeout(tipTimer); clearInterval(tipWatch); if (tipEl) { tipEl.remove(); tipEl = null; } }
 
 // --- the blocks the screens are made of ---------------------------------------------------------------------------
 // a container: a leather strap with its name, where it is and its weight, over its grid. The strap is its handle:
@@ -1613,10 +1754,10 @@ function block(c, byId, opts = {}) {
   w.style.width = `${wide}px`; if (wide < 250) w.classList.add('narrow');
   const used = (c.grid || []).reduce((n, e) => { const [a, b] = dims(itemDef(e.id), e.rot); return n + a * b; }, 0);
   const head = mk('div', 'ct-head', `<span class="nm">${esc(nameOf(c))}</span><span class="wh">${esc(whereWords(c, byId))}</span><span class="kg">${kgText(kg)}${used >= cols * rows ? ' · full' : ''}</span>`);
-  head.title = `${nameOf(c)} · ${whereWords(c, byId)} · ${kgText(kg)}${!fixedThing(c) && c.where !== 'hung' ? ' · drag the strap to carry it, set it down or load it' : ''}`;
+  head.title = `${nameOf(c)} · ${whereWords(c, byId)} · ${kgText(kg)}`;
   // fb4 B (decision 2): a container's own state on its strap (a pack left out in the rain: "Damp"), the next step in its title
   const cs = fixedThing(c) ? null : statusOf({ container: c.id });
-  if (cs) { head.querySelector('.nm').insertAdjacentElement('afterend', mk('span', `ct-st st-${esc(cs.mark || 'none')}`, esc(cs.label || cs.mark))); head.title += ` · ${cs.label || cs.mark}${cs.next ? `: ${cs.next}` : ''}`; }
+  if (cs) { head.querySelector('.nm').insertAdjacentElement('afterend', mk('span', `ct-st st-${esc(cs.mark || 'none')}`, esc(cs.label || cs.mark))); head.title += ` · ${cs.label || cs.mark}${cs.hint ? ` · ${cs.hint}` : ''}`; }
   if (!fixedThing(c) && c.where !== 'hung') { head.classList.add('grab'); head.addEventListener('pointerdown', (ev) => pressThing(thingOf(c), w, ev)); }
   const menu = () => thingMenu(c, false, opts.screen);
   if (menu().length) { head.classList.add('acts'); head.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); }); }
@@ -1631,10 +1772,14 @@ function longBlock(l, { inHand = false, screen = null } = {}) {
   w.dataset.uid = l.uid;
   const pic = iconAt(l.id, 4 * CELL, CELL - 8); pic.className = 'lg-pic';
   w.append(pic, mk('span', 'lg-nm', `${esc(d ? d.name : l.id)}<i>${esc(inHand ? (l.inUse ? 'in use' : '') : `${WHERE[l.where] || l.where}${l.inUse ? ' · in use' : ''}`)}</i>`));
-  w.title = 'Drag it to a hand, the canoe or the ground';
+  w.title = d ? d.name : l.id;
   const ls = statusOf({ long: l.uid }); // (fb4 B: a long thing's state, as a container's)
-  if (ls) { w.appendChild(mk('span', `ct-st st-${esc(ls.mark || 'none')}`, esc(ls.label || ls.mark))); w.title += ` · ${ls.label || ls.mark}${ls.next ? `: ${ls.next}` : ''}`; }
+  if (ls) { w.appendChild(mk('span', `ct-st st-${esc(ls.mark || 'none')}`, esc(ls.label || ls.mark))); w.title += ` · ${ls.label || ls.mark}${ls.hint ? ` · ${ls.hint}` : ''}`; }
   w.addEventListener('pointerdown', (ev) => pressThing(longOf(l), w, ev));
+  // fb5 B: its tag as any item's (the comparison a rod or a paddle carries), not a hover title
+  w.removeAttribute('title');
+  w.addEventListener('pointerenter', () => { clearTimeout(tipTimer); tipTimer = setTimeout(() => { if (!drag) showTip(w, null, { id: l.id, long: l.uid }); }, 260); });
+  w.addEventListener('pointerleave', () => { clearTimeout(tipTimer); hideTip(); });
   const menu = () => thingMenu(l, true, screen);
   if (menu().length) w.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
   return w;
@@ -1716,98 +1861,88 @@ export function tickHold(sc, all = false) {
 }
 
 // --- the fire's pane (cards.js draws it on the card's right) -------------------------------------------------------------
-// The fire ring as nearby.objects() gives it: its strap (the picture, the name, how it stands), the burn meter and the
-// cooking meter, the fuel (wood only) and the grate (the pot, a meal or a fish, what is cooked) as grids, the ash in
-// words, and Light / Cook / Eat / Douse (held where held). With no pot within reach the grate says so.
-function grateWords(o, s) {
-  const n = nearby(), inv = model(), c = s.cId && typeof inv.cont === 'function' ? inv.cont(s.cId) : null;
-  const potOn = !!(c && c.grid.some((e) => e.id === 'pot'));
-  if (potOn) return s.words || '';
-  let here = null;
-  try { here = n && n.cook && typeof n.cook.potHere === 'function' ? n.cook.potHere(o.key) : null; } catch { here = null; }
-  if (o.pot === false || o.noPot || (n && n.cook && !here)) return 'no pot';
-  return s.words || '';
+// fb5 A (the owner's third round of 2026-10-25: "fire ring got too complex … the formulas should not always be there. it
+// should only show whats missing … if lit, no tooltips needed, just show how much is left with the bar"). The fire ring as
+// nearby.objects() gives it (state, need, burn, coals, cooking, slots, actions): its strap (the picture and the name),
+// then one line of state: the chips of what it is short of while it is cold ("Gather wood"; "a dry branch", "×2 more";
+// "Wet wood won’t catch"), "Hot coals" and its chip, or, lit, only the burn bar (amber under 20 min; the owner: "just the
+// bar", no time beside it). Then the fuel and the grate as grids (a thin bar under the grate while something cooks, its
+// state on the thing's icon, inventory.status: lean on the fire's own, no timers, chores.fuelStatus / cook.grateStatus),
+// and Douse (held), the one button, while there is a fire to put out. No words or numbers besides the missing chips.
+const FP_ICON = '🪵';
+// a chip: an icon (the item's, else none) and its words (the wood glyph dropped where the icon stands for it)
+function fireChip(q) {
+  if (!q || !q.text) return '';
+  const img = q.item && !String(q.text).startsWith(FP_ICON) ? `<img class="ic" alt="" src="${iconUrl(q.item, 26, 26)}">` : ''; // (the wood's own glyph reads better than a 1 × 3 log drawn at chip size)
+  const text = img ? String(q.text).replace(new RegExp(`^${FP_ICON}\\s*`, 'u'), '') : q.text;
+  return `<span class="fp-chip k-${esc(q.kind || 'need')}">${img}<span>${esc(text)}</span></span>`;
+}
+// fb5 join: what is cooking, by its bar (a fish fries on a stick off the grate's grid, which then looked empty: "where did my
+// fish go?"): its icon, a long thing drawn lying down
+function cookIcon(ck) {
+  if (!ck || !ck.item) return '';
+  const d = itemDef(ck.item), long = d && (d.h || 1) > (d.w || 1);
+  return `<img class="ic" alt="" src="${long ? iconUrl(ck.item, 54, 18) : iconUrl(ck.item, 24, 24)}">`;
+}
+// the state line's insides: the chips, the coals, or the burn bar alone
+function fireLine(o) {
+  if (o.burn) return `<span class="fp-bar${o.burn.low ? ' low' : ''}" role="meter" aria-label="Wood left" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${(+o.burn.value).toFixed(2)}"><i style="width:${pct(o.burn.value)}"></i></span>`;
+  const lead = o.coals ? `<span class="fp-lead">Hot coals</span>` : '';
+  return `${lead}${(o.need || []).map(fireChip).join('')}`;
 }
 export function firePanel(o, sc) {
-  const w = mk('div', `nb k-${o.kind}${!o.meter && !o.cooking && !(o.slots && o.slots.length) ? ' slim' : ''}`);
+  const w = mk('div', `nb k-${o.kind} fp st-${esc(o.state || 'none')}${o.caught ? ' caught' : ''}`);
   w.dataset.nb = o.id;
   const head = mk('div', 'nb-head');
   const ik = `nb:${o.kind}`;
   if (ICONS[ik]) { const pic = iconAt(ik, 44, 34); pic.className = 'nb-pic'; head.appendChild(pic); }
   head.appendChild(mk('span', 'nm', esc(o.title || '')));
-  head.appendChild(mk('span', 'wh', esc(o.sub || '')));
-  if (o.status && (o.status.label || o.status.mark)) head.appendChild(mk('span', `nb-st st-${esc(o.status.mark || 'none')}`, esc(o.status.label || o.status.mark))); // (fb4 B: Burning, Laid, Hot coals, Cold)
   w.appendChild(head);
   const body = mk('div', 'nb-body');
-  const meter = (k, m, lab) => mk('div', `nb-meter m-${k}`, `<span class="lab">${esc(m.label || lab)}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`);
-  if (o.meter) body.appendChild(meter('burn', o.meter, ''));
-  body.appendChild(o.cooking ? meter('cook', o.cooking, 'Cooking') : mk('div', 'nb-meter m-cook none'));
-  // fb4 B (decision 2, stream C's fire): the fuel as a quantity out of what a fire wants (an hour's burn), the wet wood
-  // as a state with its drying step, the burn-down, the cooking and the lighting as timers, and what to do next
-  const state = fireState(o);
-  if (state) body.appendChild(mk('div', 'nb-state', state));
+  const line = fireLine(o);
+  body.appendChild(mk('div', `fp-line${line ? '' : ' none'}`, line));
   if (o.slots && o.slots.length) {
     const row = mk('div', 'nb-slots');
     for (const s of o.slots) {
       const sw = mk('div', `nb-slot s-${s.id}`);
-      const words = s.id === 'grate' ? grateWords(o, s) : s.words;
-      sw.appendChild(mk('div', 'nb-lab', `${esc(s.label || s.id)}${words ? ` <i>${esc(words)}</i>` : ''}`));
+      sw.appendChild(mk('div', 'nb-lab', esc(s.label || s.id)));
       const g = mk('div'), inv = model(), c = s.cId && typeof inv.cont === 'function' ? inv.cont(s.cId) : null;
       if (c) grid(g, c, { onUse: sc.onUse || null, screen: sc });
-      else if (s.id === 'ash') { g.className = 'nb-ash'; g.textContent = ''; }
       else { const b = { ...s, obj: o.id }; grid(g, binContainer(`bin:${o.id}:${s.id}`, b), { bin: b, screen: sc }); }
       sw.appendChild(g);
+      if (s.id === 'grate') sw.appendChild(mk('span', `fp-cook${o.cooking ? '' : ' none'}`, `${cookIcon(o.cooking)}<b><i style="width:${pct(o.cooking ? o.cooking.value : 0)}"></i></b>`));
       row.appendChild(sw);
     }
     body.appendChild(row);
   }
-  const acts = (o.actions || []).filter((a) => a && a.label);
+  const acts = (o.actions || []).filter((a) => a && a.label && a.enabled !== false);
   if (acts.length) {
     const row = mk('div', 'nb-acts');
     for (const a of acts) row.appendChild(actButton(sc, o, a));
     body.appendChild(row);
-    // fb4 B (decision 2): under the buttons, what a greyed one needs, a checklist each (the first two: Light and Cook
-    // when the fire is cold; Douse's "a fire to put out" never crowds them out)
-    for (const a of acts.filter((q) => q.enabled === false && ((Array.isArray(q.needs) && q.needs.length) || q.next)).slice(0, 2)) {
-      body.appendChild(mk('div', 'nb-needs', `<div class="nb-lab">${esc(a.label)}${a.why ? ` <i>${esc(a.why)}</i>` : ''}</div>${needsHtml(a.needs, a.next)}`));
-    }
   }
   w.appendChild(body);
   return w;
 }
-// the fire's state block (stream C's fire.fuel, fire.wet, fire.timers, fire.status), or '' without them
-function fireState(o) {
-  const rows = [], f = o.fuel || null;
-  if (f && f.hour && Number.isFinite(f.hour.need)) rows.push({ label: 'An hour’s burn', have: f.hour.have, need: f.hour.need, unit: f.hour.unit || 'h', note: o.state === 'burning' ? 'dry wood burning and laid' : 'dry wood laid' });
-  for (const t of Array.isArray(o.timers) ? o.timers : []) if (t && t.label && Number.isFinite(t.timer)) rows.push({ label: t.label, timer: t.timer, running: t.running, until: t.until, done: false });
-  // (the wet wood once: when a greyed button's checklist already has its "Wet" step, not again here)
-  const wetListed = (o.actions || []).some((a) => a && a.enabled === false && Array.isArray(a.needs) && a.needs.some((n) => n && /^wet\b/i.test(String(n.label || ''))));
-  const wet = !wetListed && o.wet && (o.wet.pieces || o.wet.timer) ? statusHtml({ label: `Wet wood${o.wet.pieces ? ` · ${o.wet.pieces} ${o.wet.pieces === 1 ? 'piece' : 'pieces'}` : ''}`, mark: 'wet', timer: o.wet.timer, running: o.wet.running, next: o.wet.next }) : '';
-  const said = new Set((o.actions || []).filter((a) => a && a.enabled === false && a.next).map((a) => a.next)); // (a step a button's list says already)
-  const next = o.status && o.status.next && !said.has(o.status.next) ? o.status.next : '';
-  return rows.length || wet || next ? `${needsHtml(rows, next)}${wet}` : '';
-}
-const fireSig = (o) => [o.status ? `${o.status.label}${o.status.mark}${o.status.next || ''}` : '', o.fuel && o.fuel.hour ? num(Math.round((+o.fuel.hour.have || 0) * 10) / 10) : '', o.wet ? `${o.wet.pieces}${o.wet.running}${o.wet.next || ''}` : '',
-  (Array.isArray(o.timers) ? o.timers : []).map((t) => (t ? `${t.label}${t.running === false ? `s${Math.round(t.timer || 0)}` : ''}` : '')).join(','), o.cooking ? `${o.cooking.running}${Number.isFinite(o.cooking.timer) ? 't' : ''}` : ''].join('/');
-// a few times a second: the meters and the words, in place
+// a few times a second: the bars in place (the wood left, the amber under 20 min, the pot's progress)
 export function livenPanel(el, o) {
-  const wh = el.querySelector('.nb-head .wh'); if (wh && wh.textContent !== (o.sub || '')) wh.textContent = o.sub || '';
-  for (const [k, m] of [['burn', o.meter], ['cook', o.cooking]]) {
-    const row = el.querySelector(`.nb-meter.m-${k}`); if (!row) continue;
-    if (!m) { row.classList.add('none'); continue; }
-    if (row.classList.contains('none')) { row.classList.remove('none'); row.innerHTML = `<span class="lab">${esc(m.label || 'Cooking')}</span><span class="bar"><i style="width:${pct(m.value)}"></i></span><span class="w">${esc(m.words || '')}</span>`; continue; }
-    const bar = row.querySelector('i'), w = row.querySelector('.w');
-    if (bar) bar.style.width = pct(m.value);
-    if (w && w.textContent !== (m.words || '')) w.textContent = m.words || '';
+  const bar = el.querySelector('.fp-bar');
+  if (bar && o.burn) {
+    bar.classList.toggle('low', !!o.burn.low);
+    const i = bar.querySelector('i'); if (i) i.style.width = pct(o.burn.value);
   }
+  const ck = el.querySelector('.fp-cook');
+  if (ck) { ck.classList.toggle('none', !o.cooking); const i = ck.querySelector('i'); if (i) i.style.width = pct(o.cooking ? o.cooking.value : 0); }
 }
-// the signature of a fire object: what would change its drawing
-export const panelSig = (o) => [o.id, o.title, o.sub || '', (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}:${s.words || ''}`).join(';'),
-  (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}${a.why || ''}${a.enabled === false ? needsSig(a.needs, a.next) : ''}`).join(';'), o.meter ? 1 : 0, o.cooking ? 1 : 0, fireSig(o), slotStates(o)].join('/');
-// the states of what is in the fire's fuel and on its grate (wet wood, a hot meal): their marks change the drawing
+// the signature of a fire object: what would change its drawing (not the bars' lengths: livenPanel moves those)
+export const panelSig = (o) => [o.id, o.title, o.state || '', o.cooking ? o.cooking.item || 1 : 0, (o.need || []).map((q) => `${q.kind}${q.text}`).join(','), o.burn ? 1 : 0, o.coals ? 1 : 0,
+  (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}`).join(';'),
+  (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}`).join(';'), slotStates(o)].join('/');
+// the states of what is in the fire's fuel and on its grate (wet wood, the pot's chip, a meal Ready): their marks change
+// the drawing
 function slotStates(o) {
   const inv = model(); if (typeof inv.status !== 'function' || typeof inv.cont !== 'function') return '';
-  return (o.slots || []).map((s) => { const c = s.cId ? inv.cont(s.cId) : null; return c ? (c.grid || []).map((e) => { const q = statusOf(e); return q ? `${e.uid}${q.mark || ''}` : ''; }).join('') : ''; }).join(';');
+  return (o.slots || []).map((s) => { const c = s.cId ? inv.cont(s.cId) : null; return c ? (c.grid || []).map((e) => { const q = statusOf(e); return q ? `${e.uid}${q.mark || ''}${q.chip || ''}` : ''; }).join('') : ''; }).join(';');
 }
 
 // --- your stuff, on one screen ------------------------------------------------------------------------------------
@@ -1987,7 +2122,7 @@ export class MineSide {
   }
   pageFor(page, t, T, right) {
     const sc = this.owner;
-    if (!t) { page.appendChild(mk('p', 'pk-empty', right ? 'Nothing within reach. What you leave behind stays where you left it.' : 'Nothing on you. Drag a pack by its strap to the slots on the left, or E at it on the ground.')); return; }
+    if (!t) { page.appendChild(mk('p', 'pk-empty', right ? 'Nothing within reach.' : 'Nothing on you.')); return; } // (fb5 B: quiet, rule 5)
     if (t.kind === 'cont' || t.kind === 'ground') page.appendChild(block(t.c, T.byId, { onUse: this.onUse, screen: sc }));
     else if (t.kind === 'canoe') this.canoePage(page, T);
     else if (t.kind === 'wood') this.woodPage(page, T);
@@ -2016,7 +2151,7 @@ export class MineSide {
     const t = inHand(i), s = mk('div', `slot hand${t ? '' : ' empty'}${t && t.isLong ? ' long' : ''}`), sc = this.owner;
     s.dataset.dz = `hand${i}`;
     s.appendChild(mk('div', 'slot-lab', i ? 'Left hand' : 'Right hand'));
-    if (!t || !t.def) { const f = mk('div', 'slot-frame'); f.appendChild(mk('span', 'slot-none', typeof model().canHand === 'function' ? 'anything: a thing, a pack, the rod' : 'the rod, a paddle, the bucket')); s.appendChild(f); return s; }
+    if (!t || !t.def) { const f = mk('div', 'slot-frame'); f.appendChild(mk('span', 'slot-none', 'empty')); s.appendChild(f); return s; } // (fb5 B: quiet, rule 5)
     if (t.isLong) { s.appendChild(longBlock(t.obj, { inHand: true, screen: sc })); return s; }
     // fb3 C (decision 11, stream B's holder): a hand holding one plain thing (def.one) shows the thing itself, at its own
     // footprint, dragged out of it as from any grid, its verbs on the right-click
@@ -2059,8 +2194,8 @@ export class MineSide {
     const kids = [...order.map((c) => block(c, T.byId, { onUse: this.onUse, screen: sc })), ...A.longCanoe.map((l) => longBlock(l, { screen: sc }))];
     const kg = A.canoe.filter((c) => c.where === 'canoe').reduce((k, c) => k + (typeof inv.weight === 'function' && live() ? inv.weight(c.id) : weightOf(c)), 0) + A.longCanoe.reduce((k, l) => k + ((itemDef(l.id) || {}).kg || 0), 0);
     const title = `${A.stash ? 'In the canoe at the dock' : 'In the canoe'}${kg > 0.05 ? ` · ${kgText(kg)}` : ''}`;
-    const z = this.zone(page, 'canoe', title, kids, kids.length ? (A.afloat ? '' : 'drag a pack, or a thing, here to load it') : A.afloat ? 'Nothing in the canoe but you.' : 'Nothing in the canoe. Drag a pack, or a thing, here to load it.');
-    if (!A.afloat && !A.stash) z.appendChild(this.canoeActs(A.canoe, A.longCanoe));
+    const z = this.zone(page, 'canoe', title, kids, kids.length ? (A.afloat ? '' : 'room to load') : A.afloat ? 'Nothing in the canoe but you.' : 'Nothing in the canoe.'); // (fb5 B: quiet, rule 5)
+    if (!A.afloat && !A.stash) z.insertBefore(this.canoeActs(A.canoe, A.longCanoe), z.querySelector('.pk-flow')); // (fb5 join: at the top, where Shoulder it's word sends you, not under a loaded canoe's grids out of sight)
   }
   // Wood: the woodpiles within reach and the wood lying about (dead and down); wood dropped here is stacked
   woodPage(page, T) {
@@ -2168,7 +2303,7 @@ export class PackSide {
     // at a camp the food words count the camp's reach (inventory.campReach: the barrel in the canoe on the shore)
     const atCamp = !stash && !!(inv.camp && typeof inv.camp.reachArea === 'function' && inv.camp.reachArea());
     return {
-      kicker: `The pack · ${stash ? 'at the outfitter’s: what you carry, the canoe at the dock, and what they keep for you' : 'what you carry, and what is around you within reach'}`,
+      kicker: `The pack · ${stash ? 'at the outfitter’s' : 'on you and within reach'}`,
       h2: kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light',
       sub: `${loadWords(kgOn)}${food ? ` · ${food} ${atCamp ? 'about the camp' : 'within reach'}` : ''}${hungW ? ` · ${hungW}` : ''}`,
       money: pr ? `$${pr.money}` : '',
@@ -2186,7 +2321,7 @@ export class PackSide {
         <div class="purse"${w.money ? '' : ' hidden'}><span class="sc">In hand</span><b></b></div>
       </header>
       <div class="pk-body"></div>
-      <footer class="pk-foot"><span>drag between any tab on the left and any on the right, or onto a tab · a strap carries a pack to a slot · off the page to the ground · right-click: what a thing is for, and why not</span><span><kbd>I</kbd> or <kbd>Esc</kbd> closes</span></footer>`;
+      <footer class="pk-foot"><span>drag between the tabs · off the page sets it down</span><span><kbd>I</kbd> or <kbd>Esc</kbd> closes</span></footer>`;
       this.el.querySelector('.pk-body').appendChild(this.mine.el);
       this.sig = '';
     }
@@ -2272,14 +2407,15 @@ export class ShelfScreen {
         <section class="sh-shelf" aria-label="${esc(s.title)}"><div class="sh-top"><h3>${esc(s.shelfName || s.title)}</h3><span class="sum">${esc(s.sub || '')}</span></div><div class="sh-stock"></div>
           <div class="sh-receipt pencil"></div></section>
       </div>
-      <footer class="sh-foot"><span>drag onto a slot or a tab to buy it there · double-click buys into the first with room · <kbd>R</kbd> turns it while dragging · right-click for more</span></footer>`;
+      <footer class="sh-foot"><span>drag it where you want it · double-click buys one</span></footer>`;
       this.el.querySelector('.sh-mine').appendChild(this.mine.el);
       this.sig = '';
     }
     if (force || sig !== this.sig) {
       this.sig = sig;
       this.el.querySelector('header .purse b').textContent = `$${money}`;
-      const rc = this.el.querySelector('.sh-receipt'); rc.textContent = r ? r.words : s.hint || 'Drag a thing into one of yours, or double-click it to buy one.'; rc.classList.toggle('no', !!(r && !r.ok));
+      const yl = this.el.querySelector('.sh-mine .pk-lab'); if (yl && typeof inv.foodWords === 'function') yl.textContent = `Yours · ${inv.foodWords()}`; // (fb5 join: the food just bought counts at once, not "no food" until the shelf is reopened)
+      const rc = this.el.querySelector('.sh-receipt'); rc.textContent = r ? r.words : s.hint || ''; rc.classList.toggle('no', !!(r && !r.ok)); // (fb5 B: the footer says it once)
       this.stock(money);
     }
     this.mine.render(force);
@@ -2340,4 +2476,4 @@ function chime() {
 
 // for the tests and the console
 export const dragging = () => !!drag;
-export const invUI = { icon, iconAt, iconUrl, grid, itemDef, defineItem, model, attach, refresh, placeCheck, firstFit, CELL, GRIDS, SCREENS, openHere, verbsFor, fireObject, needsHtml, statusOf, timeWords, gameHours, get drag() { return drag; } };
+export const invUI = { icon, iconAt, iconUrl, grid, itemDef, defineItem, model, attach, refresh, placeCheck, firstFit, CELL, GRIDS, SCREENS, openHere, verbsFor, fireObject, needsHtml, statusOf, timeWords, gameHours, whyHtml, chipHtml, firstMissing, tipHtml, statusHtml, effsHtml, get drag() { return drag; } };

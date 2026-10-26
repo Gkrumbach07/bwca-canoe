@@ -3,7 +3,7 @@ import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
 import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
-import { lifeKmh } from './pace.js';
+import { lifeKmh, describe as describePace } from './pace.js';
 import './hud.css';
 
 // The HUD, in two materials (hud.css). Air: the compass top right, the readout top left while Tab is held,
@@ -84,7 +84,7 @@ const flake = () => {
   }
   return d;
 };
-const NEED_ICON = {
+export const NEED_ICON = { // (exported for fb5 B: the item tooltips draw the same icons)
   warmth: `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="${flake()}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   rest: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 7.5h6l-6 6.5h6M9.5 2h5l-5 5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="square"/></svg>',
   food: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v4.2M5.25 1.5v4.2M7.5 1.5v4.2M3 5.7c0 1.9 4.5 1.9 4.5 0M5.25 7v7.5M12 14.5V1.5c2.2 1.3 2.6 5.6 0 7.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -801,7 +801,7 @@ export class Hud {
     if (!wind) return;
     const ice = !!(day && day.season && day.season.ice > 0.5); // a frozen lake has no waves (polish B)
     const H = ice ? 0 : player.waveHeightHere || 0;
-    const matters = wind.fresh || H > WAVE_MATTERS;
+    const matters = player.mode === 'paddle' && (wind.fresh || H > WAVE_MATTERS); // (fb5 join: the wind speaks on the water; "Fresh breeze · 8 m/s · waves 0.1 m" in a store doorway or at camp said nothing to do)
     const mode = s ? s.compassMode : 'always';
     const show = mode === 'always' || (mode === 'wind' && matters);
     e.compass.classList.toggle('show', show);
@@ -901,37 +901,33 @@ export class Hud {
   }
 
 
-  // the status marks, bottom right at half strength: the pace while it time-lapses the travel ("trip ×4", pace.js), the
-  // time scale, the clock stopped, the trip's when it matters (the food down to a day, the gear wet), the GPS link, mute,
-  // tiles loading. (A need run low is no longer a word here: fb2 F, its chunk and icon on the energy bar say it.)
+  // the status marks, bottom right at half strength: the game speed while 2 or 3 has it up ("faster ▶▶", pace.js
+  // describe: words and a mark, no numbers; fb5 C), the clock stopped, the trip's when it matters (the food down to a day,
+  // the gear wet), the GPS link, mute, tiles loading. (A need run low is no longer a word here: fb2 F, its chunk and icon
+  // on the energy bar say it.)
   marksBuild() {
     const m = this.el.marks; if (!m) return;
-    m.innerHTML = `<span id="mark-pace" class="sc"></span><span id="mark-speed"></span><span id="mark-clock" class="sc">clock stopped</span>`
+    m.innerHTML = `<span id="mark-pace" class="sc"></span><span id="mark-clock" class="sc">clock stopped</span>`
       + '<span id="mark-food" class="sc"></span><span id="mark-wet" class="sc">gear wet</span>'
       + `<svg id="mark-gps" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="GPS link to the extension is live"><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>`
       + `<svg id="mark-mute" width="16" height="14" viewBox="0 0 16 14" role="img" aria-label="Sound is off"><polygon points="1,5 4,5 8,2 8,12 4,9 1,9" fill="currentColor"/><path d="M10 4l5 6M15 4l-5 6" stroke="currentColor" stroke-width="1.4"/></svg>`
       + `<svg id="mark-tiles" width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="Tiles loading"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="8 24"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="1.6s" repeatCount="indefinite"/></circle></svg>`;
-    this.mk = { pace: $('mark-pace'), speed: $('mark-speed'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
+    this.mk = { pace: $('mark-pace'), clock: $('mark-clock'), food: $('mark-food'), wet: $('mark-wet'), gps: $('mark-gps'), mute: $('mark-mute'), tiles: $('mark-tiles') };
   }
   updateMarks(ctx) {
     const { ts, geo, day, trip, energy, player } = ctx, mk = this.mk, w = this.world; if (!mk) return;
-    // the pace, while its time-lapse carries you above the base (pace.js floor, twice life): up once the boost is 0.6
-    // past the floor, away again under 0.3 past it (no flicker as it eases); the number is the pace's own for where you
-    // are (6 on open water at Trip, the trail's on a portage)
-    const P = player && player.paceTable, base = (P && P.floor) || 1;
-    let pace = '';
-    if (P && P.water > base && !ctx.shell && mk.pace) {
-      this.paceUp = this.paceUp ? player.boost > base + 0.3 : player.boost > base + 0.6;
-      if (this.paceUp) pace = `${P.label.toLowerCase()} ×${Math.round(player.lapseT || player.boost)}`;
-    }
-    if (mk.pace) { this.set('mpace', mk.pace, pace); mk.pace.classList.toggle('on', !!pace); }
-    const sp = ts > 1 ? `×${ts}` : '';
-    this.set('mspeed', mk.speed, sp); mk.speed.classList.toggle('on', !!sp);
+    // fb5 C (decision 3, one clock): the corner says only that 2 or 3 has the game sped up, in words and a mark ("faster
+    // ▶▶", "fastest ▶▶▶"); at Normal it is away (quiet by default), and the canoe's time-lapse is never a mark: it is how
+    // the canoe moves, not how the clock runs. Not while the camera holds the clock at life (photo.js) or a card is up.
+    const fast = ts > 1 && !ctx.shell && !(player && player.pace === 'life'), sp = fast ? describePace(player ? player.pace : 'trip', ts) : null;
+    const pace = sp ? `${sp.name.toLowerCase()} ${sp.mark}` : '';
+    if (mk.pace) { this.set('mpace', mk.pace, pace); mk.pace.classList.toggle('on', !!pace); mk.pace.setAttribute('aria-label', sp ? `Game speed: ${sp.name}` : ''); }
     mk.clock.classList.toggle('on', !!(day && !day.running && !ctx.shell));
     const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
     const hung = adv && energy && energy.hungFood ? energy.hungFood() : null; // camp join: the barrel hung at camp is food you have
     const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 1 ? (energy.food <= 0 ? (energy.foodWords && energy.foodWords() !== 'no food' ? energy.foodWords() : hung && hung.words ? hung.words : 'no food') : energy.foodWords ? energy.foodWords() : `${foodWords(energy.food)} of food`) : ''; // fb A
-    this.set('mfood', mk.food, food); mk.food.classList.toggle('on', !!food);
+    const shown = food === 'no food' && energy && typeof energy.foodNearby === 'function' && energy.foodNearby() ? '' : food; // (the content join: not "no food" 6 m from the canoe with meals in it)
+    this.set('mfood', mk.food, shown); mk.food.classList.toggle('on', !!shown);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
     mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
     mk.mute.classList.toggle('on', !!(this.settings && this.settings.get('mute')));
@@ -1233,11 +1229,13 @@ export class Hud {
       for (const i of e.map.querySelectorAll('.band.foot .leg > i.portage, .band.foot .leg > i.camp, .band.foot .leg > i.dock')) i.parentNode.style.display = bare ? 'none' : ''; // (the notices' red pencil stays: it is drawn on blank paper too)
       for (const b of e.mapLayers.querySelectorAll('.layer')) b.style.display = bare ? 'none' : ''; // and no layer toggles over blank paper (polish B)
     }
-    const detail = table ? 'click a sheet to see what is on it · the red-dotted ones are sold at this table'
-      : look === 'whole' ? 'the whole Boundary Waters, here at the outfitter · the sheets dotted over it, yours ruled in ink'
-        : look === 'owned' ? (none ? 'blank paper: the map tables at the outfitters sell the sheets, and each one you buy shows here' : 'your sheets, with everything on them · the rest is blank until you buy its sheet')
-          : 'depths in metres where the DNR has sounded';
-    if (e.mapHint) this.set('mhint', e.mapHint, table ? `drag to pan · wheel to zoom · ${detail}` : `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'} · ${detail}`);
+    // (fb5 join, rule 3: the line says what is missing, else only the keys: not "your sheets, with everything on them ·
+    // the rest is blank until you buy its sheet" every time M is pressed)
+    const detail = table ? 'click a sheet to see what is on it'
+      : look === 'whole' ? 'the sheets dotted over it, yours ruled in ink'
+        : look === 'owned' ? (none ? 'blank paper: the map tables at the outfitters sell the sheets' : '')
+          : '';
+    if (e.mapHint) this.set('mhint', e.mapHint, [table ? 'drag to pan · wheel to zoom' : `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'}`, detail].filter(Boolean).join(' · '));
     this.set('mspan', e.mapSpan, `${v.span >= 10000 ? Math.round(v.span / 1000) : (v.span / 1000).toFixed(v.span < 5000 ? 1 : 0)} km across`);
     if (this.mode === 'sheet' && this.scaleInfo) {
       const { bar, cssPx } = this.scaleInfo, txt = `${bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}`;
@@ -1477,7 +1475,7 @@ export class Hud {
           // what for, just inside the top of the ring (kept on the sheet when the top runs off it)
           ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
           const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
-          ctx.fillText(HINT_LABEL[h.kind] || 'a keeper’s word', tx, ty);
+          ctx.fillText(h.label || HINT_LABEL[h.kind] || 'a keeper’s word', tx, ty); // content join: a rumour's own words (npcs.js) first
         }
       }
       // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one

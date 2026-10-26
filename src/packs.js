@@ -49,7 +49,7 @@
 // drain read, and runs the inventory's frame (inventory.update). Two hooks in player.js call in: footPrompts (the
 // prompts on foot, where the things you carry change them) and beforeLaunch.
 
-import { LIFE } from './pace.js';
+import { LIFE, SEEN, footHours } from './pace.js';
 import { BASE_H, CARRY_H } from './energy.js';
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
@@ -62,7 +62,8 @@ const LOAD_REACH = 10;      // m from the canoe within which a thing set down fo
 const CANOE_KG = 160;       // kg of gear a tripping canoe takes besides its paddler ("Load everything here" stops there)
 const CANOE_ROOM = 8;       // containers a canoe takes (inventory.js CANOE_ROOM)
 const LOAD_EACH = { minutes: 1, seconds: 0.45, per100m: 2.5 }; // a thing carried down and loaded: its minutes (more the farther it lies), its real seconds
-// the fetch is charged at life pace (pace.js), as walking it yourself is: the walk back at a walk on the trail's going,
+// the fetch is charged what walking it yourself costs on the clock (pace.js footHours: life's hours times the clock over
+// the trail's seen time-lapse, fb5 C): the walk back at a walk on the trail's going,
 // the carry over at a walk slowed by the load (player.js LOAD: / (kg / 40) ^ 0.35 past 40 kg, and no slower than a
 // canoe carry)
 const TRAIL_GOING = 0.9;    // a portage trail's roots, rocks and grades against a walk on the flat
@@ -264,6 +265,9 @@ export class Packs {
     for (const e of [...pile.grid]) {
       const r = inv.place(e.id, e.qty, { data: e.data || null, exclude: [pile.id], quiet: true });
       if (r.placed) { inv.take(pile.id, e.uid, r.placed); moved++; }
+      // (fb5 join: no room in the packs, a free hand takes it, as hands take anything: the struck tent with the left hand
+      // free said "No room for all of it")
+      if (!r.ok && pile.grid.includes(e) && typeof inv.canHand === 'function' && inv.canHand(e.id) && inv.freeHand() >= 0 && inv.toHand(pile.id, e.uid).ok) { moved++; continue; }
       if (!r.ok) stuck++;
     }
     if (this.hud) this.hud.note(stuck ? 'No room for all of it in what you have with you.' : moved ? 'Picked up.' : 'Nothing to pick up.', 3);
@@ -390,6 +394,15 @@ export class Packs {
         else if (inp.pressed('KeyE')) { if (L) p.launch(L); else p.dropHull(true); }
         return true;
       }
+      // (the content join: a thing set down a few steps off at this end, past your reach under the canoe and short of
+      // "back at the trail head", was left behind without a word as E launched: twice, the leech bucket)
+      const here = !left.length && L ? ground.filter((u) => u.obj.at.trail && u.obj.at.trail.i === this.world.portages.indexOf(trail && trail.def) && Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) <= LOAD_REACH) : [];
+      if (here.length) {
+        p.say(note || trailText, ['E', `Set the canoe down · ${names(here)} ${here.length > 1 ? 'are' : 'is'} here`], ['Q', 'Launch and leave it']);
+        if (inp.pressed('KeyE')) p.dropHull(true);
+        else if (inp.pressed('KeyQ')) { this.leaveOk = true; for (const u of here) u.obj.at.noted = false; p.launch(L); }
+        return true;
+      }
       if (left.length && L) {
         p.say(note || trailText, ['E', `Set the canoe down · walk back for ${names(left)}`], ['Q', 'Launch and leave it']);
         if (inp.pressed('KeyE')) p.dropHull(true);
@@ -409,22 +422,19 @@ export class Packs {
     c.choice = false;
     const plan = left.length ? this.fetchPlan(left) : null, k = left[0];
     const info = k ? `${cap(names(left))} ${left.length > 1 ? 'are' : 'is'} back at the trail head, ${metres(Math.hypot(k.obj.at.x - p.x, k.obj.at.z - p.z))}` : null;
-    const far = dd > HULL_REACH ? `The canoe is ${dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`} away` : null;
     if (plan) {
       p.say(note || (dd <= HULL_REACH ? info : trailText || info), ['Q', `Fetch ${left.length > 1 ? 'them' : 'it'} (${aboutHours(plan.hours)})`]);
       if (inp.pressed('KeyQ')) this.fetch(left, plan);
       return true;
     }
     if (dd <= HULL_REACH) {
-      const a = this.hullAction(), v = a && a.e ? a.e.verb : null;
-      // (polish B: the line says what the hull offers while the dot is not yet on it, which from the dock at level it is
-      // not; once the dot is on it the label has the words and pointer.js drops this line, canoeHint)
-      const hint = !note && !info && v ? (v === 'Get in' ? 'the canoe floats: point at it to get in' : v === 'Push it off' ? `the canoe is beached: point at it and hold E to push it off${a.q && !a.q.why ? ', or Q to shoulder it' : ''}` : 'point at the canoe to shoulder it') : null;
-      p.say(note || info || hint);
-      if (hint && p.prompt) p.prompt.canoeHint = true;
+      // fb5 join (rule 5, quiet by default): no standing line about the hull ("the canoe is beached: point at it and hold
+      // E to push it off" read at a portage, where you carry it): the dot on it says its verbs, and the push and unload
+      // moments (hints.js) teach them the first time
+      p.say(note || info);
       return true;
     }
-    p.say(note || trailText || info || far);
+    p.say(note || trailText || info); // (fb5 join, rule 5: not "The canoe is 12 m away" standing at camp or in the store; the world shows the canoe)
     return true;
   }
   // wc A: what the dot offers at the canoe lying on the ground (or floated at a dock's side): { e, q, label, hint }, or
@@ -432,7 +442,7 @@ export class Packs {
   // "Get in" puts you in it where it floats and as it faces (getIn; greyed, with its checklist, without a paddle);
   // beached, nosed in or on the bank with the water near, E is held: "Push it off" (beginPush) walks it out until it
   // floats, and a tap does nothing; with no water to launch into (up the bank, a frozen lake, a shallow flat) E shoulders
-  // it. Q is always the shoulder: loaded (anything in it but the lashed things) it reads "Unload it first" with the
+  // it; at a trail head the two swap (E Shoulder it, a held Q Push it off: the content join). Q is otherwise the shoulder: loaded (anything in it but the lashed things) it reads "Unload it first" with the
   // things still in it as its checklist, and pressed it opens the book with the canoe on the right (help). Every greyed
   // verb carries decision 2's why, needs and next.
   hullAction() {
@@ -442,14 +452,24 @@ export class Packs {
     const can = this.canShoulder();
     const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, needs: can.needs, next: can.next, run: () => { if (this.canShoulder().ok) p.pickUpHull(); }, help: () => this.openBookAtCanoe() };
     const L = this.dropLaunch(d), lake = L ? this.world.lakeName(L.lake) || 'the water' : null;
-    if (this.atDock(d)) return { e: this.getInVerb(d, L), q: shoulder, label: 'the canoe, at the dock' };
+    if (this.atDock(d)) return { e: this.getInVerb(d, L), q: can.ok ? shoulder : null, label: 'the canoe, at the dock' }; // (fb5 join: no greyed "Q Shoulder it · unload it first" at a dock, where nobody shoulders a loaded canoe)
     const frozen = !!(this.day && this.day.season && this.day.season.ice > 0.5);
     if (!L || !L.deep || frozen) return { e: shoulder, q: null, label: 'the canoe', hint: L && frozen ? `${lake} is frozen over` : L ? 'too shallow to launch here' : null };
     if (this.afloat(d)) return { e: this.getInVerb(d, L), q: shoulder, label: `the canoe, afloat on ${lake}` };
-    const plan = this.pushPlan(d);
+    const plan = this.pushPlan(d), head = this.atTrailHead(d);
     const push = plan ? { verb: 'Push it off', held: true, run: (o) => this.beginPush(d, o) }
-      : { verb: 'Push it off', held: true, why: 'Too shallow to float it here', needs: [{ label: 'A hand’s depth of water under both ends', done: false }], next: 'Shoulder it (Q) and carry it along the shore to deeper water', run: () => {} };
+      : { verb: 'Push it off', held: true, why: 'Too shallow to float it here', needs: [{ label: 'A hand’s depth of water under both ends', done: false }], next: `Shoulder it (${head ? 'E' : 'Q'}) and carry it along the shore to deeper water`, run: () => {} };
+    // content join (the owner's call on the new-player review, 2026-10-25): at a trail head you landed to carry, so E is
+    // Shoulder it and the push off is a held Q; everywhere else a held E pushes off and Q shoulders
+    if (head) return { e: shoulder, q: push, label: 'the canoe, beached' };
     return { e: push, q: shoulder, label: 'the canoe, beached' };
+  }
+  // the canoe lying at d at a portage's end (the trail starts within 12 m of it: dropLaunch's test)
+  atTrailHead(d) {
+    const tr = d && this.player.nearestTrail(d.x, d.z, 15);
+    if (!tr) return false;
+    const pts = tr.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
+    return Math.min(Math.hypot(e0[0] - d.x, e0[1] - d.z), Math.hypot(e1[0] - d.x, e1[1] - d.z)) < 12;
   }
   // E Get in, or greyed with its checklist: no paddle with you (in the canoe or in a hand)
   getInVerb(d, L) {
@@ -577,7 +597,7 @@ export class Packs {
   canShoulder() {
     const list = this.loadedUnits();
     if (!list.length) return { ok: true, why: null };
-    return { ok: false, why: 'Unload it first', needs: list.map((u) => ({ label: `${cap(the(u))} out of it`, done: false })), next: 'Q opens the book at the canoe: Set everything out, or drag each onto the ground' };
+    return { ok: false, why: 'Unload it first', needs: list.map((u) => ({ label: `${cap(the(u))} out of it`, done: false })), next: 'Unload it: Set everything out, or drag each thing onto The ground.' }; // (fb5 join: said as the book opens, so not "Q opens the book")
   }
   // wc A, the book's Canoe tab (stream B): everything in the canoe beside you (but the lashed things) set out on the
   // ground about the hull, at camp when at one. { n, words }
@@ -588,12 +608,13 @@ export class Packs {
     const list = this.loadedUnits();
     if (!list.length) return { n: 0, words: 'Nothing but the paddle and the stringer in it.' };
     const camp = inv.camp, a = camp && camp.areaAt ? camp.areaAt(d.x, d.z) : null, taken = [];
+    const words = `${cap(names(list))} set out beside the canoe.`; // (the content join: named before they go down: a hand's holder set down empties into a pile, and was "the in your hand")
     for (const u of list) {
       const s = this.spotNear(d.x, d.z, d.heading || 0, 1, -1, taken); taken.push(s);
       inv.setDown(u.ref, { x: s.x, z: s.z, y: this.groundUnder(s.x, s.z, d.heading || 0, u), heading: Math.atan2(-(d.z - s.z), d.x - s.x), ...(a ? { camp: a.key || 'camp' } : {}) }, { left: false, quiet: true, force: true });
     }
     inv.emit('ground');
-    return { n: list.length, words: `${cap(names(list))} set out beside the canoe.` };
+    return { n: list.length, words };
   }
   // wc A, the book's Canoe tab: everything lying about the canoe loaded, held (hold.js: a thing a phase). opts: the
   // hold's keys ({ key: 'BookHold' }). The job, or null with nothing to load.
@@ -606,10 +627,10 @@ export class Packs {
     return hold.begin({ ...this.loadAllOpts(d, lo), key, keys: [...new Set([key, 'KeyE', 'Mouse0', ...((opts && opts.keys) || [])])] });
   }
   // the things set down for the second trip at the trail head away from the canoe, of the trail you (or it) are on
-  leftHere(c = this.player.carry, p = this.player) {
+  leftHere(c = this.player.carry, p = this.player, near = false) {
     const from = (c && c.drop) || p, onTrail = (q) => { const t = p.nearestTrail(q.x, q.z, 30); return t ? this.world.portages.indexOf(t.def) : -1; };
     const here = new Set([onTrail(from), onTrail(p)]);
-    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile') && u.obj.at.trail && here.has(u.obj.at.trail.i) && Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH);
+    return this.units().filter((u) => u.obj.where === 'ground' && u.obj.at && (!u.def.fixed || u.id === 'pile') && u.obj.at.trail && here.has(u.obj.at.trail.i) && (near || Math.hypot(u.obj.at.x - from.x, u.obj.at.z - from.z) > LOAD_REACH));
   }
   lastCarried() { const c = this.carried(); return c.find((u) => u.obj.where === 'hands') || c.find((u) => u.obj.where === 'chest') || c[0]; }
   // fb3 A: nothing is set down for the trip by itself any more, so nothing goes in at the launch (kept for the book's
@@ -737,7 +758,7 @@ export class Packs {
       if (this.hud) this.hud.note(`No paddle with you. ${pad.next}.`, 5);
       return false;
     }
-    const left = this.leftHere(p.carry, p).filter((u) => !(u.obj.at && u.obj.at.noted));
+    const left = this.leftHere(p.carry, p, true).filter((u) => !(u.obj.at && u.obj.at.noted) || Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) <= LOAD_REACH); // (fb5 join: near the canoe too: the leech bucket fetched over and set down 4 m off was left without a word; the content join: and again when you come back to it and leave it a second time)
     if (left.length) { for (const u of left) u.obj.at.noted = true; if (this.hud) this.hud.note(`You push off and leave ${names(left)} at the trail head.`, 5); }
     this.leaveOk = false;
     const worn = this.loadWorn(all);
@@ -776,7 +797,9 @@ export class Packs {
     const back1 = Math.abs(you.along - a.along) + you.dist + a.dist, over = Math.abs(a.along - b.along) + a.dist + b.dist;
     const back = back1 + (trips - 1) * over; // the first walk back from where you stand, then from the canoe each time
     const walk = LIFE.walk * TRAIL_GOING, laden = Math.max(LIFE.carry, walk / Math.pow(Math.max(1, kg / 40), 0.35));
-    const backH = back / walk / 3600, overH = (over * trips) / laden / 3600, hours = backH + overH; // game hours: the walks' own time at life
+    // game hours: the walks' own time, as walking them yourself takes on the clock (fb5 C: the one clock runs ahead of a
+    // walk's time-lapse on a trail, so the hours at life are scaled by the pace's clock over the walk's seen time-lapse)
+    const backH = footHours(back / walk / 3600, p.pace, walk, SEEN.walk), overH = footHours((over * trips) / laden / 3600, p.pace, laden, SEEN.walk), hours = backH + overH;
     return { back, over, trips, seconds: hours * 3600, hours, cost: BASE_H * hours + CARRY_H * (kg / 40) * overH, trail: def.name, units: these };
   }
 

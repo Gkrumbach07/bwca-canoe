@@ -1260,3 +1260,144 @@ Real keys and the real mouse through the headless driver, 1440 × 900, Adventure
 - Left alone as decided: the camp clock at ×12 while walking; the "two trips" hint; a beached canoe's bow on a ledge
   rock. A reload on foot at this site came back on foot both times.
 - The tooling: my route follower stalled once on a long paddle (T.travel reroutes).
+
+## Content pass 1 (2026-10-25)
+
+The owner, while the new-player review ran: "start filling in content. this means, more varied tasks, npc convos, item
+upgrades, different unique items, varied items. also more 3d versions of items so they show up in hand, or on ground
+better." People met out in the wild, companions and co-op come later (`npcs.js` keeps `JOIN_US = false`). Four
+streams over the third 10-25 round, joined with the new player's 25 fixes and the owner's six calls on
+`claude/content-1`.
+
+### What is in it, and where it lives
+
+- **Seven more notices** (A: `task-kinds.js`; kind hooks in `tasks.js`; the boards' lean in `outfitters.js`; one
+  `// content A:` line in main.js). Each is real Boundary Waters work with a clear end, paid where it was posted:
+  - `deadfall`: a spruce across a named portage, solid in `tiles.dynamic`; hold E on it with the saw (or the camp
+    hatchet) in reach.
+  - `litter`: pieces at a named site. E packs each out (the `litter` item), and the counter takes it.
+  - `secchi`: the disk is lent. Still at the lake's deep spot, between 10 and 4, hold E. The reading is
+    `estimateSecchi`'s.
+  - `loons`: keep a loon in the middle of the view a second, 30–120 m off.
+  - `report`: a chain of lakes, each noted as you paddle onto it.
+  - `canoe`: a rental turned over at a site. E reads its number.
+  - `lunch`: two or three of one fish into the cooler.
+
+  Each kind's first need is a moment (pushed onto `hints.js` MOMENTS), and the keeper thanks you in that kind's words.
+- **Conversations** (B: the engine in `npcs.js`; the words in `talk-keepers.js`, `talk-rumours.js`, `talk-memory.js`
+  and `talk-visitors.js`; arcs and tags in `dialogue.js`; the save `bwca-canoe:people`).
+  - Who: six hand-written keepers (Ruth, Gus, Bev, Arvid, Lise, Leon) and 49 written by manner.
+  - How it reads: four choices at most, and nothing said twice in a visit.
+  - Arcs: four beats a keeper, each waiting a day and a need, ending in a lure, a cap, a map, a discount or a site.
+  - The week's word: rumours from the world data, pencilled on the map in their own words.
+  - Also advice, and a memory of your season (trips, fish, jobs, time out).
+- **Gear and uniques** (C: the defs in items.js's "content C" section; what they do in `kit.js`; the finds in
+  `uniques.js`; the pictures in `gear-icons.js`; stock by outfitter kind in `shop.js`).
+  - New gear: bags and pads for the night, rods, lamps, the pump and the gravity bag, the stove and fuel, the rain
+    jacket and the head net, the chair, coffee and cocoa, the landing net and the fillet knife, three lures, a dry pack,
+    more food.
+  - Finds with a glint: the tin match safe, the camp hatchet (it saws), the red toque and the brass reel.
+  - History: the old axe head and the trade-silver brooch are left where they lie. You note them with E or a photo and
+    report them at a counter ($10 and the keepers' goodwill).
+  - Keepers' gifts: the cedar minnow, the lucky cap and Arvid's map come from the arcs (`uniques.give`).
+  - The finds' save is `bwca-canoe:uniques`, kept per season.
+- **Items in 3D** (D: `item-models.js`, every loose item on the props' one material; `containers.js` draws them in a
+  hand, piled on the ground, on the grate, on the stringer and in the bilge).
+
+### The owner's calls, built at the join
+
+The six recommendations of `docs/new-player-review.md`, approved on 2026-10-25. Each was played, and the review notes
+each one.
+
+- A new season owns the home sheet (0b3602d, `sheets.giveHome` on the profile's 'season').
+- The 30 L barrel rides in the starting canoe (8174552). Food bought goes into it, and $29 is left for the saw.
+- At a trail's end the dot reads "E Shoulder it · hold Q Push it off" (c16adbd, `packs.atTrailHead`). The portage and
+  unload moments name E.
+- A fish, fried, whole or as fillets, gives +30 food (2ea9577, `items.js FISH_EAT`). A fried pike on Sea Gull took the
+  need from 0.41 to 0.71.
+- The canoe comes off your shoulders only at a jog, 15 % a tree (177df3b). Walking: 0 of 29. Jogging: 18 of 119.
+- Thirst while asleep was already a third of the waking rate, so nothing changed. Drunk full at 21:00 and asleep to
+  first light, you wake at 0.64.
+
+### Played: a season from EP 30, July 12–18
+
+Real keys and the real mouse through the headless driver, 1440 × 900, Adventure. There were five trips:
+
+1. Lake One and Lake Two.
+2. The Kawishiwi chain.
+3. A ride to Snowbank and Moose, with a bunk night.
+4. Out of Moose to Sea Gull and back.
+5. An hour fishing on Moose Lake.
+
+Two shortcuts, both teleports. The Sea Gull leg in both directions was a hop, because the road from Moose reaches only
+the nearest outfitter you don't know, and $29 doesn't buy four rides. The toque's portage end on Moose (below) was a
+step onto the trail.
+
+| What | Result |
+|---|---|
+| The seven new notices | ✓ All taken, done and claimed. The deadfall paid $45, the litter $16, the Secchi $17, the loons $14, the route report $29, the canoe $19, the lunch $20. Each keeper's next hello thanks you first, in the kind's words ("“Landing report wanted”. Good work.") |
+| Ruth's arc | ✓ Four beats over three days. Eino's cedar minnow comes to your right hand, and it caught pike and smallmouth |
+| Gus's arc | ✓ The photo, the Wind Lake site (pencilled "the site"), camped there, then a day later "Ten off": `dealAt(25)` 0.9, `priceMul(25)` 0.855 |
+| Rumours | ✓ Pencilled in their own words: "pike in the weeds", "moose at dawn", "lakers, deep", "a long carry", "walleye at dusk". A find's rumour says to leave it and tell the ranger |
+| Gear | ✓ Used: the saw, the map, the head net (bugs felt 0.33), the rain jacket, the fillet knife, the stove and fuel (oatmeal in 5 min), coffee, the landing net and the match safe. ✗ Not used: the pump, the pads and the bags. The chair was lost to a fixed bug before use |
+| Finds | ✓ The match safe, the hatchet (it saws a down log, so the saw can stay home) and the toque, each found by its glint. The axe head was noted on Lake Two–Rifle and reported at Lake One. The brooch was noted in the Sea Gull ring's ash and reported at Moose: $10, and goodwill rises to ×1.5 with both reported. ✗ Not found: the brass reel (Sawbill) |
+| Models | ✓ 115 items in a hand, on the ground, in the canoe and on the grate (the survey in `shots/`). ✗ The old axe head is drawn with its handle. ✗ The retired map case draws nothing |
+| Teaching moments | ✓ Logged with their times. None repeated wrongly or overlapped. The unload moment no longer repeats the dot's line at a trail head |
+
+### The seams
+
+| Seam | Result |
+|---|---|
+| B's gifts are C's uniques | ✓ `give:` names lure:cedarminnow, luckycap and guidemap, all in `UNIQUE_IDS`. Given at run time: the cap to a hand, the map to Keeping. The map's Look at the map opens on "Arvid's site" |
+| B's rumours read `uniques.list()` | ✓ A find's rumour names its place and says to leave it and tell the ranger. Far away, the brooch's place read "the campsite" with no lake. Fixed (225e469): "the campsite on Sea Gull Lake" |
+| D draws C's and A's items | ✓ In the survey: the hatchet, saw, toque, brooch, match safe, reel, stove, fuel, landing net, Secchi disk, litter, head net, chair and pads |
+| The review's fixes | ✓ Held through the season |
+| Horizontal scroll | ✓ None at 1440 × 900 or 1280 × 720 in the book (with all three tabs), the gear, food and tackle shelves, the map table, the counter with Finds to report, or the board |
+| Programs | 64 fresh at a store, then 65 once wildlife draws (one lambert variant). The count stays 65 through the map and fishing. After a day and a night out it is 70: the god-ray pass's three programs compile the first time the sun is in view, and two more lambert variants come with them |
+| Old saves | ✓ A save from main b7d927d loads with no errors. Many mid-trip reloads came back where they were |
+| Console | ✓ No errors |
+
+### What the join fixed
+
+- **Keepers** (198c96e, 66c5dc9). A catch is remembered once, not once a reload. The thanks for a job come before the
+  trip line.
+- **Things in the canoe** (814e7d8, 28845d9, cdecb80). A big thing bought with no gap rides loose in the canoe. A thing
+  a few steps off at a trail's end is named before you launch. Set everything out names a hand's thing.
+- **Needs between trips** (0ac5593, b6f9818, 1460c1f). The tap and a drink count between trips. There is no "no food"
+  a few steps from the canoe with meals in it, and the counter says "your food close by". The bears moment counts food
+  left out, not the barrel hung on the limb.
+- **Moments** (aa9e81e, c16adbd). The bugs moment stays one episode through a gust. The dot's line isn't taught twice
+  at a trail head.
+- **Fish** (83e81b8, 757432c, 36b44e4). The tooltip weighs what the length makes it. With both hands full and no room,
+  a landed fish offers only Q Let it go. "Kept · into the Duluth pack #3" keeps its capital.
+- **Notices** (fc28ba4, 35347e5). A canoe set down across a blowdown rests on the log and comes down when the log is
+  cut. A Secchi disk lent with no room says it waits in Keeping.
+- **Finds far off** (225e469). A find at a far campsite is placed on its lake from the fine tile's grid, which is
+  fetched when it isn't loaded.
+- **Leaving camp** (16a257a, b5bc423). The pot is named only on a grate at this camp. A struck tent lying in a pile is
+  named.
+- **Small things** (904294a, 39353ae, 76cee3f). There is no always-grey Put in hand on what you hold. One answer reads
+  "1 or click". The mosquitoes are specks of a few pixels; one near the camera used to be a black square 30–50 px
+  across.
+
+### Left after the join
+
+- **World.**
+  - The Moose end of the Jasper–Moose portage sits 5 m under a drawn cliff (the bluff pass), so the toque can't be
+    reached on foot from Moose.
+  - The Sea Gull site's own tent pad is on a 19° slope. The tent pitches 6 m off it, and 80 spots on the site take it.
+  - Sue stands in the Lake One store's right aisle.
+- **Balance**, to list rather than tune:
+  - A fish's food doesn't depend on its size (an 18 cm crappie gives +30).
+  - The deadfall pays $45, as for a day trip, 13 km out.
+  - The A-frame's night is q 0.85, so a full night leaves rest at 0.85.
+  - Rides from a counter offer only the next outfitter you don't know, so Saganaga is four rides from Moose.
+- **Words and drawing.**
+  - Coffee greys "Needs hot water" while a fire is just lit.
+  - Two rumours on one lake pencil their labels on top of each other.
+  - "RAW cm" overlaps in a fish's cell.
+  - The old axe head is drawn with a handle.
+  - Arvid's map opens on blank paper unless you own that sheet.
+- **Packing.** A struck tent with full packs lies in a pile, now named in the leaving note. The packs fill fast.
+- **Not played.** The pump, the pads, the bags, the brass reel, the chair in use, and the beats of Bev, Arvid, Lise and
+  Leon.

@@ -37,6 +37,7 @@ import { Journal } from './journal.js';
 import { TripStats } from './trip-stats.js';
 import { lookboard } from './lookboard.js';
 import { Trip } from './trip.js'; // trip core A
+import { PACES, SPEEDS, clockOf, speedOfKey, describe as describePace } from './pace.js'; // fb5 C
 import { Veil } from './veil.js'; // trip core A
 import { Camp, CampRegistry } from './camp.js'; // trip core C
 import { Fires } from './fire.js'; // trip core C
@@ -53,6 +54,7 @@ import { People } from './npcs.js'; // hubs 3C
 import { inventory } from './inventory.js'; // fb A
 import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
 import { ContainerView } from './containers.js'; // fb A
+import { modelFor, modelKeyOf, modelGeometry, MODEL_KEYS } from './item-models.js'; // content D
 import { invUI } from './inv-ui.js'; // fb B
 import { Dialogue } from './dialogue.js'; // fb F
 import { Forage } from './forage.js'; // fb G
@@ -63,8 +65,15 @@ import { FORAGE } from './forage.js'; // fb2 A
 import { KINDS } from './tasks.js'; // fb2 A
 import { cards } from './cards.js'; // wc B
 import { VERBS, verbsOf } from './items.js'; // wc D
+import { chipOf, missingOf } from './items.js'; // fb5 B
 import { withTentNeeds, pitchNeeds } from './tent.js'; // fb4 E
+import { chip } from './chip.js'; // fb5 D
 import { Hints } from './hints.js'; // fb4 D
+import { MOMENTS } from './hints.js'; // content C
+import { kit } from './kit.js'; // content C
+import { uniques } from './uniques.js'; // content C
+import './gear-icons.js'; // content C
+import { attachTaskKinds } from './task-kinds.js'; // content A
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -235,7 +244,7 @@ async function main() {
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
-    if (!fishing.rodUp) { if (e.code === 'Digit1') player.timeScale = 1; if (e.code === 'Digit2') player.timeScale = 2; if (e.code === 'Digit3') player.timeScale = 4; } // 1-7 pick lures while the rod is up
+    if (!fishing.rodUp) { const sp = speedOfKey(e.code); if (sp) player.timeScale = sp.factor; } // fb5 C: 1 2 3 Normal, Faster, Fastest (pace.js SPEEDS: 1, 2, 4 on dt); 1-7 pick lures while the rod is up
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
   // trip core B: the packs and the portages (packs.js): where each pack is, the load you carry, the double portage
@@ -340,6 +349,11 @@ async function main() {
     return null;
   };
   window.__game.invUI = invUI;
+  // content D: items in 3D (content pass 1; the owner, 2026-10-25: "more 3d versions of items so they show up in hand,
+  // or on ground better"). Every loose item has a model of its own (item-models.js: one material, a geometry per model
+  // and tint), and containers.js draws it in a hand, laid out in a pile at its cell, on the grate, on the stringer and in
+  // the bilge while you paddle (invView.afterPose, above). Stream C's uniques lying in the world take modelFor.
+  window.__game.itemModels = { modelFor, modelKeyOf, modelGeometry, keys: MODEL_KEYS };
   // fb E: world data. The landings stand at their real put-ins and the trails the first bake dropped are connected (world.js
   // applyFixes from src/world-fixes.json for the data-v3 release; a newer bake has both built in): { landings, portages, baked }
   window.__game.worldFixes = world.fixed;
@@ -449,11 +463,17 @@ async function main() {
   // on the hull shoulders it); E Get in only where the hull floats, else "Push it off first"; Q on a loaded hull reads
   // "Unload it first" and opens the book with the canoe on the right (journal.openHere('canoe'), stream C's ref); the
   // dot's rim parks when the dot goes off (pointer.js); on foot off a trail, outside a camp and a yard, the walker is
-  // time-lapsed like the trail (pace.js foot, 1.8 at Trip) and the clock follows him (trip.travelling reads the walker's
-  // lapsing, below); sitting keeps the camera's distance (camera.js); the headlamp works by day (headlamp.js).
+  // time-lapsed like the trail (pace.js foot, 1.8 at Trip); sitting keeps the camera's distance (camera.js); the
+  // headlamp works by day (headlamp.js).
   packs.openCanoe = () => (typeof journal.openHere === 'function' ? journal.openHere('canoe') : false);
-  const travellingA = trip.travelling.bind(trip);
-  trip.travelling = (dt) => { const r = travellingA(dt); if (!r && player.mode === 'walk' && player.lapsing && Math.abs(player.speed) > 0.1) { trip.travelT = 1; return true; } return r; };
+  // fb5 C: one clock (decision 3 of the owner's third round of 2026-10-25). The game clock runs at one rate everywhere
+  // at a pace (pace.js clockOf: Trip 4, Real 1, the camera's hold 1), times the 1/2/3 key's factor (Normal, Faster,
+  // Fastest: 1, 2, 4 on dt, bound above through pace.js SPEEDS): on the water, on a trail, on foot, in camp, idle and in a
+  // store alike (trip.update sets day.rate; no ×12 idle, no ×3 trail). The canoe's and the walker's time-lapse
+  // (player.boost) is only how they are seen to move. The walker's lapsing counts as travelling inside trip.travelling
+  // now (fb3 A's wrapper here is folded into it). The user sees no multipliers: describe() gives the toast (hints.js,
+  // stream E) and the corner mark (hud.js) their words; Settings and the keys' help say it the same way.
+  window.__game.pace = { PACES, SPEEDS, clockOf, describe: describePace };
   // fb4 A: the shore and the figure (the owner's second round of 2026-10-25). A hull nosed in or lying on the bank is
   // beached: E is held, "Push it off" (packs.js beginPush: you walk it out until both ends float and stand beside it in
   // the shallows; a tap moves nothing); afloat, E "Get in" puts you in it where it floats and as it faces (player.launch
@@ -500,6 +520,18 @@ async function main() {
   const beginPitchE = camp.beginPitch.bind(camp), armHangE = camp.hang.arm.bind(camp.hang);
   camp.beginPitch = (uid) => { tarp.disarm(); return beginPitchE(uid); };
   camp.hang.arm = (cId) => { tarp.disarm(); return armHangE(cId); };
+  // fb5 D: the tarp, pitched anywhere (the owner's third round of 2026-10-25: "let them pitch it no matter what … there
+  // should be some icon at the bottom saying its missing x number of poles"). Pitch the tarp is always on, ashore, with
+  // no checklist; its ghost follows you (tarp.js), green where it can stand (E or a click, held, pitches it) and red where
+  // it can't, the bottom chip (chip.js) saying what is missing: "pole ×2", "a tree or pole ×2", "Too near the water".
+  // While it is red the dot is yours (pick up a pole): the pointer is armed only while it is green, and tarp.js's own
+  // listeners take Esc and a right-click then. The chip is anyone's: hud.chip(text, icon) / hud.chip(null), and
+  // window.__game.chip for an owner of its own (chip.set(key, …) / chip.clear(key)).
+  const armedD = pointer.isArmed;
+  pointer.isArmed = () => (tarp.armed && !tarp.armed.ok ? !!(armedE && armedE()) : armedD());
+  if (typeof hud.chip !== 'function') hud.chip = (text, icon = null) => chip.set('hud', text, icon);
+  if (!('chipShown' in hud)) Object.defineProperty(hud, 'chipShown', { get: () => chip.shown });
+  window.__game.chip = chip;
   const tentActionsE = camp.tentActions.bind(camp);
   camp.tentActions = () => withTentNeeds(camp, tentActionsE());
   camp.pitchNeeds = (tent) => pitchNeeds(camp, tent);
@@ -517,61 +549,28 @@ async function main() {
   };
   // fb4 C: needs and statuses (the owner's second round of 2026-10-25: "if I can't use something, I want to know exactly
   // why I can't use it … some sort of checklist or timer or quantity out of total", and "things that have statuses like
-  // wet clothes … you need to know"). Every greyed verb and card button says why as a checklist with the next step
-  // (items.js check: needs have of need, steps, timers in game seconds), and inventory.status(ref) gives each item's
-  // state (wet, drying, treating, cooking, burning, hot, low, empty, ready) for the book to draw. Wood is wet piece by
-  // piece now (inventory.syncWet: the rain on an open ring, a pile or an armload; dry by a lit fire in 30 min, 3 h in dry
-  // air), and a fire lights on three dry pieces with a dry branch among them (fire.js lightCheck). The ring's checks for
-  // nearby.js (stream A passes them to the card and the dot): chores.lightCheck / douseCheck / fireState (and
-  // cook.cookCheck / cookingNow, native); chores.lightProblem says lightCheck's why, so Light refuses what the card says;
-  // the ring's pieces come dry first (binUnits), so the kindling Light takes is a dry branch. Until stream A passes the
-  // needs through, nearby.fireObject is decorated here (a no-op once its light action has needs of its own).
+  // wet clothes … you need to know"). Every greyed verb carries why with its needs and next (items.js check), and
+  // inventory.status(ref) gives each item's state (wet, drying, treating, cooking, burning, hot, low, empty, ready) for
+  // the book to draw. Wood is wet piece by piece (inventory.syncWet: the rain on an open ring, a pile or an armload; dry
+  // by a lit fire in 30 min, 3 h in dry air). The fire's own checks moved into chores.js and fire.js (fb5 A, below).
+  window.__game.needs = { timerWords: (s) => inventory.timerWords(s), status: (r) => inventory.status(r), verb: (id, r) => inventory.verb(id, r) }; // for the console and the tests
+  // fb5 A: the fire made simple (the owner's third round of 2026-10-25: "fire ring got too complex … it should just light
+  // when enough fuel is added automatically. cooking is automatic when you put something over a active fire, no extra
+  // button. douse is a extra button", "why cant i burn a pole?", "it should only show whats missing"). The ring lights
+  // itself the moment its fuel holds a dry branch and three dry pieces in all, with a match struck, a flare and the catch
+  // (chores.js catchFire, fire.js flare); a dry piece on hot coals brings it back; a pole burns like a log. What sits on
+  // the grate over a lit fire cooks by itself, the pot drawing its water from the bottle (cook.js autoCook), and is
+  // marked Ready on the grate (cook.grateStatus, through inventory.status: "needs the pot", "water 0.3 L", Ready). The
+  // card and the dot show only what is missing (chores.fireNeed / fireNeeds: "Gather wood", "a dry branch", "🪵 ×2 more",
+  // "Wet wood won’t catch"); lit, only the burn bar. The fire's events for stream E's moments: fires.on('lit' | 'low' |
+  // 'coals' | 'out' | 'cooking' | 'ready' | 'wet', fn), or the fires.events queue. A match struck while the card or the book
+  // covers the view flares when the paper lifts (fires.veiled).
   {
-    const ch4 = camp.chores, wetFlag = (u) => (u && u.e && u.e.data && u.e.data.wet > 0 ? 1 : 0);
-    const units4 = ch4.binUnits.bind(ch4);
-    // (a stable sort: the ring's order otherwise; while Light is held, only the dry pieces: it takes its kindling from them)
-    ch4.binUnits = (b) => { const u = units4(b).sort((x, y) => wetFlag(x) - wetFlag(y)); return hold.is('fire-light') ? u.filter((x) => !wetFlag(x)) : u; };
-    const rate4 = (b) => (b && typeof inventory.wetRate === 'function' ? inventory.wetRate(b) : 1);
-    ch4.lightCheck = (key) => {
-      const b = ch4.fuelBin(key), c = fires.lightCheck(key, ch4.binUnits(b), { rate: rate4(b) });
-      // (fb4 join: wet wood filling the ring leaves no room for the dry: the first step is taking it out)
-      if (!c.enabled && b && ch4.binUnits(b).some((u) => wetFlag(u)) && !inventory.firstFit(b, 'wood:branch')) {
-        c.needs = [NEED.step('Room in the ring for dry wood', false, { note: 'it is full of wet wood' }), ...c.needs];
-        c.next = 'Take the wet wood out first: drag it onto the ground by the ring (by a lit fire it dries in 30 min), then dry wood in';
-      } else if (!c.enabled && b && /^(Gather|Two|Three|One|A dry branch)/.test(c.next || '')) {
-        // (fb4 join: dry wood already within reach, on you or on a pile by you: drag it in, not "gather")
-        let dry = 0, branch = false;
-        for (const k of inventory.reachable()) if (k !== b) for (const e of k.grid) if (!e.box && /^wood:/.test(e.id) && !(e.data && e.data.wet > 0)) { dry += e.qty || 1; if (e.id === 'wood:branch') branch = true; }
-        if (dry) c.next = `${dry} ${dry === 1 ? 'piece' : 'pieces'} of dry wood within reach${branch ? '' : ' (no branch among them)'}: drag ${dry === 1 ? 'it' : 'them'} into the fuel`;
-      }
-      return c;
-    };
-    ch4.lightProblem = (key) => { const c = ch4.lightCheck(key); return c.enabled ? null : c.why; };
-    ch4.douseCheck = (key) => fires.douseCheck(key);
-    ch4.fireState = (key) => {
-      const b = ch4.fuelBin(key), rain = typeof ch4.rainNow === 'function' ? ch4.rainNow() : 0;
-      const st = fires.ringState(key, ch4.binUnits(b), { rate: rate4(b), rain, covered: !!(b && rain > 0 && inventory.rainAt(b) <= 0), cooking: ch4.cook.cookingNow(key) });
-      if (typeof ch4.nightWood === 'function') { try { st.fuel.night = ch4.nightWood(key); } catch (e) { console.warn('chores.nightWood', e); } } // stream E's
-      return st;
-    };
-    const fireObj4 = nearby.fireObject.bind(nearby);
-    nearby.fireObject = () => {
-      const o = fireObj4();
-      if (!o || !o.key || !Array.isArray(o.actions)) return o;
-      const act = (id) => o.actions.find((a) => a.id === id), light = act('light');
-      if (light && light.needs) return o; // stream A passes them through itself
-      const put = (a, c) => { if (!a || !c) return; a.needs = c.needs; a.next = c.next; if (!c.enabled) { a.enabled = false; a.why = c.why; } else if (a.enabled !== false) a.why = null; };
-      put(light, ch4.lightCheck(o.key));
-      const site = typeof nearby.site === 'function' ? nearby.site(4) : null;
-      if (site) put(act('cook'), ch4.cook.cookCheck(site, o.key));
-      put(act('douse'), ch4.douseCheck(o.key));
-      if (act('eat')) { act('eat').needs = []; act('eat').next = 'Eaten there and then, ten minutes on the clock'; }
-      if (!o.fuel) Object.assign(o, ch4.fireState(o.key));
-      const ck = ch4.cook.cookingNow(o.key);
-      if (ck) o.cooking = { ...(o.cooking || {}), ...ck };
-      return o;
-    };
-    window.__game.needs = { timerWords: (s) => inventory.timerWords(s), status: (r) => inventory.status(r), verb: (id, r) => inventory.verb(id, r) }; // for the console and the tests
+    const ch5 = camp.chores, ck5 = ch5.cook;
+    fires.veiled = () => !!(cards.shown || journal.open);
+    const statusA = inventory.entryStatus.bind(inventory);
+    inventory.entryStatus = (c, e) => (c && c.item === 'grate' && typeof ck5.grateStatus === 'function' ? ck5.grateStatus(c, e) : c && c.item === 'firefuel' && typeof ch5.fuelStatus === 'function' ? ch5.fuelStatus(c, e) : statusA(c, e)); // (the fire's own, lean: a state word and a missing chip, no timers)
+    window.__game.fire = { need: (k) => ch5.fireNeed(k), needs: (k) => ch5.fireNeeds(k), on: (n, fn) => fires.on(n, fn), events: fires.events }; // for the console, the tests and stream E
   }
   // fb4 B: the book (the owner's second round of 2026-10-25). I opens and closes it (Pack and Journal are tabs on its
   // edge; J, L, Tab and Ctrl-click are gone, R turns a thing only while it is dragged); its right pane is a tab per thing
@@ -579,6 +578,12 @@ async function main() {
   // all the tabs; a greyed verb or button draws its checklist and next step (inv-ui.js needsHtml, decision 2) and a
   // thing's state its mark and tooltip line (inventory.status, stream C), their timers counted down with this clock.
   invUI.attach({ day });
+  // fb5 B: the items' words (the owner's third round of 2026-10-25: "only whats relevant … The item doesn't say what it
+  // can be used for"). Every item is the one schema (items.js: identity, onYou, uses or servings, kg; the tooltip draws
+  // name, identity, state, on you, uses, weight and nothing else), a state is a word, a hint and a timer (inventory.js),
+  // and a greyed verb shows its why and the first thing missing as a chip (items.js chipOf, inv-ui.js whyHtml), which
+  // the fire card and the dot read too. Nothing to wire: the chip's words for the console and the tests.
+  Object.assign(window.__game.items, { chipOf, missingOf });
   // fb4 D: the keys, the hints, the pace toast and the bobber (the owner's second round of 2026-10-25). The keys are the
   // round's set (title.js KEYMAP; the bindings above: R and N gone, dialogue.js's T gone, fishing.js's K now E keep and
   // Q let go). Onboarding hints, once a season each, and a toast whenever the pace changes (hints.js), run after the
@@ -596,6 +601,79 @@ async function main() {
   const talkUpdD = talk.update.bind(talk);
   talk.update = (dt, shell) => { talkUpdD(dt, shell); hints.update(dt, shell); };
   window.__game.hints = hints;
+  // fb5 E: teaching moments (the owner's third round of 2026-10-25: "how do they even know to get to a campsite? … These
+  // like one-time things … you're starting to get hungry … the fire went out, but there's still hot coals … It's learned
+  // behavior"). hints.js is the moments system: each situation is taught the first time it matters, in one line with its
+  // key, then in a word or not at all, one line on the screen at a time, kept in the season. The camp's evening and
+  // headlamp words (camp.notes) and the bar's need words (energy.cue) are moments now; a greyed verb's next step is taught
+  // the first time its key is pressed (pointer.teach), its why after; the dot's line is the verb, the target and one
+  // missing chip (pointer.js chipFor); the fire's events (stream A's fires.on) and the tarp's red ghost (stream D's
+  // tarp.on) are read when they are there; the pace toast speaks stream C's plain names (pace.describe).
+  hints.attach({ energy, weather, trip, fires, cards, packs, nearby, world, tarp });
+  energy.onCue = (id) => hints.handles(id);
+  pointer.teach = (id, text, o) => hints.next(id, text, o);
+  // content C: gear, upgrades and unique items (content pass 1, 2026-10-25: "item upgrades, different unique items, varied
+  // items"). items.js has the defs (the bags, pads, rods, lamps, the stove and fuel, the jacket and the head net, the chair,
+  // coffee and cocoa, the net, the knife and the fillets, three lures, a waterproof pack, more food, the uniques),
+  // shop.js the shelves (stocked by outfitter kind), gear-icons.js their pictures. kit.js is what they do with you, read
+  // by the systems they touch: energy (the bag's night, the jacket, the toque, the bugs, the chair, the lamp after dark),
+  // fishing (the cap, the reel, the net at the side, the graphite rod's strike), trip (a capsize with the bag in a dry
+  // pack), camp (the filter at the water's edge); the stove, a cup, the knife and the chair are verbs in the book.
+  // uniques.js lays six finds out at real places with forage's glint: four E on the dot picks up, and two pieces of
+  // history (an old axe head, a trade-silver brooch: the owner, "finds you leave where they lie and report to the ranger
+  // at a counter") that E or a photo notes where they lie, the journal keeps, and a counter's "Report a find" passes to
+  // the Forest Service for a reward and the keepers' goodwill; stream B's keepers give three more (uniques.give).
+  kit.attach({ player, inventory, energy, fishing, camp, fires, day, weather, wind, hud, profile, lamp, shop, world, uniques, canoe, scene });
+  energy.kit = kit; fishing.kit = kit; trip.kit = kit; shop.kit = kit;
+  uniques.attach({ world, scene, player, inventory, profile, hud, camp, day, pointer, audio, tasks }); // (content join: tasks.peek names a far site's lake)
+  const shopUpdC = shop.update.bind(shop);
+  shop.update = () => { shopUpdC(); kit.update(); uniques.update(); };
+  const fillC = camp.fillBottle.bind(camp);
+  camp.fillBottle = () => kit.fillBottle(fillC); // the pump, at once; the gravity bag in a few minutes; else a tablet
+  camp.filterWait = () => kit.filterWait();
+  const verbC = inventory.verb.bind(inventory);
+  inventory.verb = (id, ref) => kit.verb(id, ref) || verbC(id, ref); // Cook on it, Brew a cup, Fillet the catch, Sit in it
+  const raiseC = profile.raise.bind(profile);
+  profile.raise = (ep, d = 1) => raiseC(ep, d > 0 ? d * uniques.goodwill() : d); // both finds reported: word gets round the counters
+  const claimsC = outfitter.claimsSection.bind(outfitter), actC = outfitter.act.bind(outfitter);
+  outfitter.claimsSection = (a) => claimsC(a) + uniques.counterSection(); // "Report a find: an old axe head"
+  outfitter.act = (act, id, ev) => {
+    if (act !== 'report') return actC(act, id, ev);
+    const r = uniques.report(id, outfitter.at && outfitter.at.ep);
+    if (r.ok) outfitter.greeting = r.words;
+    outfitter.receipt = { text: r.ok ? `Reported to the Forest Service: +$10${r.both ? ' · the counters think well of you' : ''}` : r.words, ok: r.ok };
+    outfitter.save(); outfitter.render();
+    return r;
+  };
+  const leftPageC = journal.leftPage.bind(journal);
+  journal.leftPage = () => { const html = leftPageC(), rows = uniques.journalRows(); return rows ? html.replace(/(<div class="lab">On the go<\/div>)(<div class="empty">[^<]*<\/div>)?/, (m, head) => head + rows) : html; }; // a find noted, till it is reported
+  const captureC = photo.capture.bind(photo);
+  photo.capture = () => { const rec = captureC(); try { uniques.fromPhoto(photo); } catch (e) { console.warn('uniques.fromPhoto', e); } return rec; }; // a photo of an old thing notes it
+  const taskHintsC = tasks.hints.bind(tasks);
+  tasks.hints = () => [...taskHintsC(), ...uniques.mapMarks()]; // Arvid's site, in the map's pencil
+  const onUseC = journal.pack.onUse;
+  journal.pack.onUse = (e, mode, c) => {
+    if (e && e.id === 'guidemap') { if (mode === 'label') return 'Look at the map'; const g = uniques.guideSite(); journal.close(); hud.setMode('sheet'); if (g && hud.view) { hud.view.cx = g.x; hud.view.cz = g.z; } return null; }
+    return onUseC ? onUseC(e, mode, c) : null;
+  };
+  const kitMoments = new Map([...kit.moments(), ...uniques.moments()].map((m) => [m.id, m]));
+  for (const m of kitMoments.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+  const dueC = hints.due.bind(hints);
+  hints.due = (id, rec) => (kitMoments.has(id) ? kitMoments.get(id).due(rec) : dueC(id, rec)); // the bugs, a fish at the side, a cold night, the fish remains, an old thing
+  Object.assign(window.__game, { kit, uniques });
+  // content A: more kinds of notice for the boards (task-kinds.js, the owner's content pass of 2026-10-25: "more varied
+  // tasks"): a blowdown across a portage sawn clear, litter packed out of a campsite, a Secchi reading at a lake's deep
+  // spot, the midsummer loon count, a route report, a rental canoe left behind, fish for the shore lunch class. Their
+  // things on the trail and the sites are on the dot (pointer), a blowdown is solid to the walker (tiles.dynamic), and
+  // the first time each new action matters it is a moment (hints).
+  attachTaskKinds({ tasks, pointer, hints, inventory, chores: camp.chores, tiles, camera, loons, wind, weather, hud, player });
+  // content B: conversations (the owner's content pass of 2026-10-25: "npc convos"). The keepers are people: a past, things
+  // to talk about that open over the season, an arc of three or four beats with a payoff (a discount at their counter, a
+  // site nobody knows pencilled on the map, or one of stream C's one-of-a-kind things), the week's word from their own
+  // country (real lakes, sites and portages, pencilled), advice in their words, and a memory of your trips, catches and
+  // jobs (npcs.js, talk-*.js). Four more kinds of visitor. Nothing is said twice in a visit.
+  npcs.attach({ trip, fishing, loons, inventory, uniques: () => window.__game.uniques || null });
+  { const pm = shop.priceMul.bind(shop); shop.priceMul = (ep) => pm(ep) * npcs.dealAt(ep); } // an arc's discount at its own counter
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

@@ -38,6 +38,7 @@ import { ITEMS } from './profile.js';
 import { LURES, SPECIES } from './fishing.js';
 import { save } from './save.js';
 import { model, itemFor, itemDef, firstFit, acceptsKind, refresh } from './inv-ui.js';
+import { LURE_TAKES } from './items.js'; // content C: the new lures' takes
 
 const NS = 'shop';
 export const SHEET_PRICE = 8;
@@ -50,7 +51,8 @@ const CAMP_REACH = 40;     // metres from your pitched tent within which the gra
 // lazily so this file builds and runs without them, and so nothing they import is read before it is ready.
 const LATER = import.meta.glob(['./outfitters.js', './sheets.js']);
 
-export const GEAR0 = Object.freeze({ cruise: 1, effort: 1, stability: 1, carry: 1, sleep: 0.85, sleepDry: false, snap: 1, saw: false, filter: 'tablets', camera: false, canoeKg: 34, foodRoom: 7 });
+export const GEAR0 = Object.freeze({ cruise: 1, effort: 1, stability: 1, carry: 1, sleep: 0.85, sleepDry: false, snap: 1, saw: false, filter: 'tablets', camera: false, canoeKg: 34, foodRoom: 7,
+  feel: 1, night: 1.3 }); // content C: feel scales the strike window after a take (the graphite rod), night what travel after dark costs (kit.js: the headlamp with you)
 
 // Two more lures on the wall: the tackle the plan names as new. Each species reads a lure by its id, so every one of
 // them gets a word for these two (fishing.js rateFor).
@@ -62,11 +64,21 @@ if (!LURES.some((l) => l.id === 'silverminnow')) {
   const add = { walleye: [0.5, 1.35], smallmouth: [0.85, 1.0], pike: [1.6, 0.9], laketrout: [0.3, 0.6], crappie: [0.3, 0.45], perch: [0.4, 0.45] };
   for (const [id, sp] of Object.entries(SPECIES)) { const [m, z] = add[id] || [0.5, 0.5]; sp.lures.silverminnow ??= m; sp.lures.lazyike ??= z; }
 }
+// content C: three more on the wall (a spinnerbait for the weed edges, the jig and minnow every walleye guide ties on, a
+// topwater plug for the evening calm) and Eino's carved minnow (a keeper's arc, stream B). What each species thinks of
+// them is items.js LURE_TAKES (the words the tooltips say), copied into each species' lures here.
+for (const L of [
+  { id: 'spinnerbait', name: 'Spinnerbait', short: 'spinnerbait', sink: 0.5, run: 1.2, still: 0.15, slow: 0.95, fast: 1.1, colour: 0xb8d03a, weedless: true },
+  { id: 'jigminnow', name: 'Jig & minnow', short: 'jig & minnow', sink: 0.9, run: 'bottom', still: 0.8, slow: 1.05, fast: 0.45, colour: 0xd96a2a },
+  { id: 'topwater', name: 'Topwater plug', short: 'topwater', sink: -0.6, run: 0.1, still: 0.5, slow: 1.2, fast: 0.7, colour: 0xe8e2d0 },
+  { id: 'cedarminnow', name: 'Cedar minnow', short: 'cedar minnow', sink: -0.2, run: 1.6, still: 0.25, slow: 1.1, fast: 0.95, colour: 0x6f8a52, unique: true },
+]) if (!LURES.some((l) => l.id === L.id)) LURES.push(L);
+for (const [id, sp] of Object.entries(SPECIES)) for (const lure of ['spinnerbait', 'jigminnow', 'topwater', 'cedarminnow']) { const t = LURE_TAKES[lure]; sp.lures[lure] ??= t && Number.isFinite(t[id]) ? t[id] : 0.5; }
 // the rod's lures as the keeper says them
-const LURE_WORD = { jig: 'jig', spinner: 'Mepps', spoon: 'Daredevle', crankbait: 'Rapala', leech: 'leech', silverminnow: 'Silver Minnow', lazyike: 'Lazy Ike' };
+const LURE_WORD = { jig: 'jig', spinner: 'Mepps', spoon: 'Daredevle', crankbait: 'Rapala', leech: 'leech', silverminnow: 'Silver Minnow', lazyike: 'Lazy Ike', spinnerbait: 'spinnerbait', jigminnow: 'jig and minnow', topwater: 'topwater plug', cedarminnow: 'cedar minnow' };
 const lureWord = (def) => (def ? LURE_WORD[def.id] || lower(def.name) : 'lure');
 // the profile's items that are the rod's lures, by fishing.js's lure id
-export const LURE_ITEM = { jig: 'lure:jig', spinner: 'lure:mepps', spoon: 'lure:daredevle', crankbait: 'lure:rapala', leech: 'leeches', silverminnow: 'lure:silverminnow', lazyike: 'lure:lazyike' };
+export const LURE_ITEM = { jig: 'lure:jig', spinner: 'lure:mepps', spoon: 'lure:daredevle', crankbait: 'lure:rapala', leech: 'leeches', silverminnow: 'lure:silverminnow', lazyike: 'lure:lazyike', spinnerbait: 'lure:spinnerbait', jigminnow: 'lure:jigminnow', topwater: 'lure:topwater', cedarminnow: 'lure:cedarminnow' };
 
 // What the season starts with and what was always there: in the kit, never on a shelf (and the old ids an old save
 // still owns: their effects stay what they were)
@@ -92,12 +104,28 @@ export const CATALOG = [
   { id: 'barrel60', name: 'Blue barrel, 60 L', shelf: 'food', price: 35, kg: 3.0, words: 'The big blue barrel: two weeks of food. Heavy on the first portage, light on the last.' },
   { id: 'tablets', name: 'Purifying tablets', shelf: 'food', price: 2, kg: 0.05, slot: 'filter', words: 'A tablet in the bottle and half an hour’s wait. Cheap, and they always work.', effect: { filter: 'tablets' } },
   { id: 'pump', name: 'Pump filter', shelf: 'food', price: 35, kg: 0.4, slot: 'filter', words: 'Pump it full at the shore and drink it then and there. No waiting on a tablet.', effect: { filter: 'pump' } },
-  { id: 'gravity', name: 'Gravity filter', shelf: 'food', price: 55, kg: 0.5, slot: 'filter', words: 'Hang the bag in a tree at camp and the bottle fills itself while you see to the fire.', effect: { filter: 'gravity' } },
+  { id: 'gravity', name: 'Gravity filter', shelf: 'food', price: 55, kg: 0.5, slot: 'filter', at: ['lodge', 'trout camp', 'river post'], words: 'Hang the bag in a tree at camp and the bottle fills itself while you see to the fire.', effect: { filter: 'gravity' } },
+  // content C: more to eat and drink, the stove and its fuel
+  { id: 'meal:pancakes', name: 'Pancake breakfast', shelf: 'food', price: 4, kg: 0.35, words: 'Mix, water, a hot pot lid. Syrup’s in the little bottle.' },
+  { id: 'meal:chili', name: 'Chili mac', shelf: 'food', price: 6, kg: 0.22, words: 'Freeze-dried. Boil the water and it warms you right down to the feet.' },
+  { id: 'meal:bannock', name: 'Bannock mix', shelf: 'food', price: 2, kg: 0.3, words: 'Flour, baking powder and lard. Fry it in the pot lid like the old guides did.' },
+  { id: 'snack:sausage', name: 'Summer sausage', shelf: 'food', price: 4, kg: 0.35, words: 'Dry-cured. It keeps the whole trip and slices on a paddle blade.' },
+  { id: 'snack:granola', name: 'Granola bars', shelf: 'food', price: 3, kg: 0.2, words: 'Four bars. One at the top of every portage.' },
+  { id: 'snack:apricots', name: 'Dried apricots', shelf: 'food', price: 3, kg: 0.2, words: 'Dried fruit. Something that isn’t peanuts.' },
+  { id: 'snack:tortilla', name: 'Tortillas & peanut butter', shelf: 'food', price: 4, kg: 0.45, words: 'Lunch without a fire: roll it up and eat it in the canoe.' },
+  { id: 'coffee', name: 'Coffee bags', shelf: 'food', price: 4, kg: 0.12, words: 'Steep one in a cup of hot water. Mornings make more sense after.' },
+  { id: 'cocoa', name: 'Hot cocoa', shelf: 'food', price: 3, kg: 0.15, words: 'For the cold evenings. A cup of it and you stop shivering.' },
+  { id: 'stove', name: 'Canister stove', shelf: 'food', price: 35, kg: 0.12, words: 'Screws onto a gas canister. Supper in the rain, no fire needed.' },
+  { id: 'fuel', name: 'Fuel canister', shelf: 'food', price: 6, kg: 0.36, words: 'Ten boils, near enough. The stove wants one.' },
   // --- the tackle shelf ------------------------------------------------------------------------------------------
   { id: 'leeches', name: 'A dozen leeches', shelf: 'tackle', price: 4, kg: 0.3, qty: 12, words: 'Fresh from the bait fridge, for the bobber rig. They want the bucket: a walleye can’t leave one alone.' },
   { id: 'bucket', name: 'Leech bucket', shelf: 'tackle', price: 6, kg: 0.6, words: 'A foam bucket with a lid. The leeches stay lively in it for days if you change the water.' },
   { id: 'tacklebox', name: 'Tackle box', shelf: 'tackle', price: 12, kg: 0.8, words: 'A green box with trays that fold out. The lures you own ride in here.' },
   { id: 'rodmh', name: 'Medium-heavy rod', shelf: 'tackle', price: 45, kg: 0.5, family: 'rod', words: 'A stiffer rod and heavier line. A big pike can make his run and you’ll still have him.', effect: { snap: 1.4 } },
+  // content C: the graphite rod, the net, the knife
+  { id: 'rodpro', name: 'Graphite rod', shelf: 'tackle', price: 85, kg: 0.35, family: 'rod', at: ['lodge', 'trout camp', 'bait shop'], words: 'Graphite and a reel with a drag like butter. You feel every tap down there.', effect: { snap: 1.8, feel: 1.35 } },
+  { id: 'net', name: 'Landing net', shelf: 'tackle', price: 20, kg: 0.7, family: 'net', words: 'The big ones come off right at the gunwale. Not with this under them.' },
+  { id: 'knife', name: 'Fillet knife', shelf: 'tackle', price: 14, kg: 0.15, words: 'Two fillets off a walleye in a minute, once you have the knack.' },
   // --- the lure wall ---------------------------------------------------------------------------------------------
   { id: 'lure:jig', name: 'Jig & twister tail', shelf: 'lure', price: 3, kg: 0.01, words: 'A lead head and a curly tail. Hop it along the bottom for walleye.' },
   { id: 'lure:mepps', name: 'Mepps spinner', shelf: 'lure', price: 6, kg: 0.01, words: 'The blade throws the light. Cast it along the weed edge and the bass come up for it.' },
@@ -105,19 +133,34 @@ export const CATALOG = [
   { id: 'lure:rapala', name: 'Jointed Rapala', shelf: 'lure', price: 12, kg: 0.02, words: 'A balsa minnow that swims deep on a steady crank. Trout and walleye both.' },
   { id: 'lure:silverminnow', name: 'Johnson Silver Minnow', shelf: 'lure', price: 8, kg: 0.02, words: 'A weedless spoon. Drag it right through the cabbage where the pike lie.' },
   { id: 'lure:lazyike', name: 'Lazy Ike', shelf: 'lure', price: 9, kg: 0.02, words: 'An old banana plug with a lazy wobble. Walleye in the dark-water lakes like it slow.' },
+  // content C: three more
+  { id: 'lure:spinnerbait', name: 'Spinnerbait', shelf: 'lure', price: 7, kg: 0.02, words: 'Run it over the cabbage. It comes through the weeds and the pike come out of them.' },
+  { id: 'lure:jigminnow', name: 'Jig & minnow', shelf: 'lure', price: 4, kg: 0.01, words: 'A jig with a salted minnow on it. Every walleye guide on the border ties one on.' },
+  { id: 'lure:topwater', name: 'Topwater plug', shelf: 'lure', price: 9, kg: 0.02, words: 'Walk it across a flat calm at dusk and hold on. The bass hit it like a dropped rock.' },
   // --- the gear shelf and the rafters ----------------------------------------------------------------------------
   { id: 'pack3', name: 'Duluth pack #3', shelf: 'gear', price: 25, kg: 2, words: 'Canvas and leather, the old #3: a week of food, or the tent and the cook kit. Two packs, two carries.' },
   { id: 'pack4', name: 'Duluth pack #4', shelf: 'gear', price: 35, kg: 2.6, words: 'The big #4. Everything goes in, and you’ll feel every bit of it on the long carries.' },
   { id: 'bentshaft', name: 'Bent-shaft laminate paddle', shelf: 'gear', price: 40, kg: 0.9, slot: 'paddle', words: 'A bent-shaft laminate: easier on the shoulders, a touch quicker.', effect: { cruise: 1.05, effort: 0.95 } },
-  { id: 'carbon', name: 'Carbon bent-shaft paddle', shelf: 'gear', price: 110, kg: 0.5, slot: 'paddle', words: 'Carbon, bent at the throat and next to no weight. You’ll feel it by the second lake.', effect: { cruise: 1.09, effort: 0.9 } },
-  { id: 'royalex', name: 'Royalex Prospector, 16 ft', shelf: 'gear', price: 160, kg: 29, slot: 'canoe', hull: true, words: 'Wide and forgiving. It shrugs off a beam sea, though it’s a little slower to push. On the rack outside.', effect: { canoeKg: 29, stability: 1.3, cruise: 0.97 } },
-  { id: 'kevlar', name: 'Kevlar tripper, 17 ft', shelf: 'gear', price: 240, kg: 20, slot: 'canoe', hull: true, words: 'Light enough to carry one-handed down the dock, and she runs a little quicker. Up on the rafters.', effect: { canoeKg: 20, cruise: 1.04 } },
+  { id: 'carbon', name: 'Carbon bent-shaft paddle', shelf: 'gear', price: 110, kg: 0.5, slot: 'paddle', at: ['lodge', 'trout camp'], words: 'Carbon, bent at the throat and next to no weight. You’ll feel it by the second lake.', effect: { cruise: 1.09, effort: 0.9 } },
+  { id: 'royalex', name: 'Royalex Prospector, 16 ft', shelf: 'gear', price: 160, kg: 29, slot: 'canoe', hull: true, at: ['lodge', 'river post'], words: 'Wide and forgiving. It shrugs off a beam sea, though it’s a little slower to push. On the rack outside.', effect: { canoeKg: 29, stability: 1.3, cruise: 0.97 } },
+  { id: 'kevlar', name: 'Kevlar tripper, 17 ft', shelf: 'gear', price: 240, kg: 20, slot: 'canoe', hull: true, at: ['lodge', 'trout camp'], words: 'Light enough to carry one-handed down the dock, and she runs a little quicker. Up on the rafters.', effect: { canoeKg: 20, cruise: 1.04 } },
   { id: 'yokepads', name: 'Portage yoke pads', shelf: 'gear', price: 15, kg: 0.4, family: 'yoke', words: 'Foam pads for the yoke. The canoe sits easier on the neck over a long carry.', effect: { carry: 0.85 } },
   { id: 'dome', name: 'Dome tent', shelf: 'gear', price: 50, kg: 2.8, slot: 'tent', words: 'Stands up to the wind off the lake. You’ll sleep the whole night through.', effect: { sleep: 1 } },
-  { id: 'fourseason', name: 'Four-season tent', shelf: 'gear', price: 95, kg: 3.6, slot: 'tent', words: 'A good night in any weather, and room in the vestibule to hang the wet things: dry by morning.', effect: { sleep: 1, sleepDry: true } },
-  { id: 'pad', name: 'Sleeping pad', shelf: 'gear', price: 30, kg: 0.6, family: 'pad', words: 'Foam between you and the cold ground. A better night in any tent.', effect: { sleepAdd: 0.05 } },
+  { id: 'fourseason', name: 'Four-season tent', shelf: 'gear', price: 95, kg: 3.6, slot: 'tent', at: ['lodge', 'trout camp'], words: 'A good night in any weather, and room in the vestibule to hang the wet things: dry by morning.', effect: { sleep: 1, sleepDry: true } },
+  { id: 'pad', name: 'Foam pad', shelf: 'gear', price: 20, kg: 0.6, family: 'pad', words: 'Foam between you and the cold ground. A better night in any tent.', effect: { sleepAdd: 0.05 } },
   { id: 'saw', name: 'Folding saw', shelf: 'gear', price: 18, kg: 0.4, family: 'saw', words: 'For the dead and down wood. An armful in no time at all.', effect: { saw: true } },
   { id: 'camera', name: 'Camera, 35 mm', shelf: 'gear', price: 25, kg: 0.6, family: 'camera', words: 'A good little camera and a roll of film. The magazines pay for a sharp picture.', effect: { camera: true } },
+  // content C: the bags, the pad, the headlamps, the waterproof pack, the weather and the bugs, a chair (what each does
+  // with you is kit.js's: the bag on a cold night, the lamp after dark, the jacket in rain, the net at dusk)
+  { id: 'bag3', name: 'Three-season bag', shelf: 'gear', price: 45, kg: 1.6, words: 'Good down to a hard frost, and still warm if it gets damp.' },
+  { id: 'bagdown', name: 'Down bag', shelf: 'gear', price: 95, kg: 0.95, at: ['lodge', 'trout camp'], words: 'Goose down: light, small, warm as toast. Keep it dry, mind.' },
+  { id: 'padair', name: 'Self-inflating pad', shelf: 'gear', price: 50, kg: 0.9, family: 'pad', at: ['lodge', 'trout camp', 'river post'], words: 'Open the valve and it blows itself up. The ground stops stealing your heat.', effect: { sleepAdd: 0.1 } },
+  { id: 'headlamp2', name: 'LED headlamp', shelf: 'gear', price: 15, kg: 0.08, words: 'Brighter than the one on your cap, and the batteries last.' },
+  { id: 'headlamp3', name: 'Rechargeable headlamp', shelf: 'gear', price: 35, kg: 0.11, at: ['lodge', 'river post'], words: 'Lights the far shore. You can paddle by it if you must.' },
+  { id: 'packdry', name: 'Portage pack', shelf: 'gear', price: 55, kg: 1.5, at: ['lodge', 'river post'], words: 'Roll the top three times and clip it: tip over and your bag stays dry.' },
+  { id: 'rainjacket', name: 'Rain jacket', shelf: 'gear', price: 30, kg: 0.45, words: 'It’ll rain. It always does. This keeps you dry under it.' },
+  { id: 'headnet', name: 'Head net', shelf: 'gear', price: 5, kg: 0.04, words: 'Five dollars against the June mosquitoes. Best money you’ll spend.' },
+  { id: 'chair', name: 'Canoe chair', shelf: 'gear', price: 25, kg: 0.7, words: 'Folds flat in the pack, opens into a seat with a back. Your back thanks you by the fire.' },
   // --- the map table ---------------------------------------------------------------------------------------------
   // the map sheets of each outfitter's country (sheets.js stockFor, added in stock()); no map case since fb2 D: a sheet
   // bought is yours for the season (profile.ownSheet), not a thing in a pack
@@ -145,7 +188,8 @@ function register(it) {
 }
 const NOTE = { bentshaft: 'easier on the shoulders, a touch quicker', carbon: 'light and quick', royalex: 'steady in a sea', kevlar: '20 kg on the portages', pack2: 'room for more food; two carries',
   barrel: 'two weeks of food', yokepads: 'an easier carry', dome: 'a whole night’s sleep', fourseason: 'sleeps well; dries the gear', pad: 'a better night', pump: 'drinkable at once', gravity: 'fills itself at camp',
-  rod: 'the line holds longer', saw: 'firewood in no time', camera: 'for the photo notices', 'lure:silverminnow': 'weedless', 'lure:lazyike': 'walleye, slow' };
+  rod: 'the line holds longer', saw: 'firewood in no time', camera: 'for the photo notices', 'lure:silverminnow': 'weedless', 'lure:lazyike': 'walleye, slow',
+  rodpro: 'feels every tap', bag3: 'good to −4 °C', bagdown: 'good to −9 °C', padair: 'a warmer night', headlamp2: 'a 40 m beam', headlamp3: 'a 55 m beam', packdry: 'stays dry', rainjacket: 'dry in the rain', headnet: 'keeps the bugs off', stove: 'supper without a fire' }; // (content C)
 function shortWords(it) { return NOTE[it.id] || ''; }
 for (const it of [...Object.values(BASE), ...CATALOG]) if (!it.use) register(it);
 // the catalogue's things as items (inv-ui.js: the stand-in's, or stream A's)
@@ -153,8 +197,8 @@ for (const it of CATALOG) if (!it.use && !it.hull) itemFor(it);
 
 // --- what the gear does ---------------------------------------------------------------------------------------------
 // the better way for each field that stacks across families, and is the best of one within it
-const BETTER = { cruise: 'max', stability: 'max', snap: 'max', effort: 'min', carry: 'min', sleepAdd: 'max' };
-const MULT = ['cruise', 'effort', 'stability', 'carry', 'snap'];
+const BETTER = { cruise: 'max', stability: 'max', snap: 'max', effort: 'min', carry: 'min', sleepAdd: 'max', feel: 'max' }; // (content C: feel, the graphite rod's)
+const MULT = ['cruise', 'effort', 'stability', 'carry', 'snap', 'feel'];
 let signatures = null;   // stream C's SIGNATURES (id → item), once its module is in
 export function itemOf(id) {
   return BY_ID.get(id) || BASE[id] || (signatures && signatures[id]) || null;
@@ -298,7 +342,11 @@ export class Shop {
       const owned = !it.use && one && !!(pr && pr.has(it.id));
       out.push({ ...it, price, owned, inUse: !!(owned && it.slot && kit[it.slot] === it.id), afford: price <= money });
     };
-    for (const it of CATALOG) add(it);
+    // content C: the stock follows the outfitter (it.at: the kinds that carry it; none: every counter). The lodges carry
+    // everything, a trout camp the light kit and the cold-water tackle, a river post the river gear, a bait shop the
+    // basics and the rods; Sandbox's shelves have it all
+    const kind = this.free ? null : (this.outfitterProfile(ep) || {}).kind || null;
+    for (const it of CATALOG) if (!kind || !it.at || it.at.includes(kind) || (pr && pr.has(it.id) && it.hull)) add(it);
     const sig = this.signature(ep);
     if (sig) add(sig);
     for (const s of this.sheetsFor(ep)) add({ ...s, shelf: 'map' });
@@ -401,6 +449,15 @@ export class Shop {
       if (!cId) break;
       got++; into.set(cId, (into.get(cId) || 0) + 1);
     }
+    // (the content join: a big thing (the canoe chair, the landing net) with no gap for it in the packs rides loose in
+    // the canoe at the dock, as a tent's bag or a bucket does, rather than going unsold)
+    if (!got && !spot && n === 1 && typeof inv.addContainer === 'function' && inv.containers && this.canoeAtDock() && inv.containers.filter((c) => c.where === 'canoe').length < 8) {
+      const h = inv.addContainer('inhand', 'canoe'); // (not quiet: the change is saved with the inventory)
+      if (h && inv.put(h.id, it.id, { qty })) {
+        pr.spend(it.price, `${it.name}${at}`); this.apply(); refresh();
+        return { ok: true, cId: h.id, words: `${it.name}${paid(1)}: loose in the canoe at the dock. $${pr.money} in hand.` };
+      }
+    }
     if (!got) {
       const name = lowerA(it.name);
       return { ok: false, why: 'room', words: spot ? `${cap(name)} won’t go there.` : `No room for ${name} in anything you have. Make some room, or a bigger pack or barrel is on the shelves.` };
@@ -411,6 +468,11 @@ export class Shop {
     const cs = [...into.keys()].map((c) => containerWord(inv, c));
     const what = got > 1 ? `${got} × ${lowerName(it.name)}` : it.name;
     return { ok: true, cId: [...into.keys()][0], words: `${cap(what)}${paid(got)}, into the ${cs.join(' and the ')}.${got < n ? ' No room for more.' : ''} $${pr.money} in hand.` };
+  }
+  // the canoe tied at this store's dock (outfitter.js tieUp: set down at the layout's dockSide)
+  canoeAtDock() {
+    const o = this.outfitter, v = o && o.visit, s = v && v.L && v.L.dockSide, d = this.player && this.player.carry && this.player.carry.drop;
+    return !!(s && d && Math.hypot(d.x - s.x, d.z - s.z) < 1.5);
   }
   // how many of a thing your reachable containers could take now (stacks with room, then free spots)
   room(id, want = 1) {
@@ -464,6 +526,8 @@ export class Shop {
     if (def.id === 'leech') {
       this.useLeech();
       words = `The line parted. The ${name} took the leech${this.leeches ? `: ${this.leeches} left in the bucket` : ', the last one'}.`;
+    } else if (def.unique) { // content C: a one-of-a-kind lure (Eino's carved minnow) comes back: cedar floats
+      words = `The line parted at the knot. The ${lureWord(def)} bobs up beside the canoe, and you have it back.`;
     } else {
       const item = LURE_ITEM[def.id], sig = pr.owned.find((id) => { const it = itemOf(id); return it && it.lure === def.id; });
       const others = [...this.box()].filter((l) => l !== def.id && l !== 'leech');
@@ -510,7 +574,9 @@ export class Shop {
       } else if (n < this.fishSeen) this.fishSeen = n;
     }
     const e = this.energy, c = this.camp && this.camp.camp, p = this.player;
-    if (e && c && this.gear.filter === 'gravity' && e.live && Math.hypot(c.x - p.x, c.z - p.z) < CAMP_REACH && e.bottle < 1.9) {
+    // (content C: the bag must be at the camp, set out or in a pack there: inventory.campReach, not just owned)
+    const k = this.kit, bagHere = k && typeof k.inCamp === 'function' ? k.inCamp('gravity') : this.gear.filter === 'gravity';
+    if (e && c && bagHere && e.live && Math.hypot(c.x - p.x, c.z - p.z) < CAMP_REACH && e.bottle < 1.9) {
       const now = e.now;
       if (now - this.gravityAt > 0.5) { this.gravityAt = now; if (e.fill(2, 0) > 0.05 && this.hud) this.hud.note('The gravity bag in the spruce has filled the bottle.', 4); }
     }
@@ -523,7 +589,7 @@ const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const lowerName = (s) => (/^[A-Z][a-z]+ [A-Z]/.test(s) ? s : lower(s));
 const lowerA = (s) => { const t = lowerName(s); return /^(a|an|the) /i.test(t) ? t : `${/^[aeiou]/i.test(t) ? 'an' : 'a'} ${t}`; };
 // the container a thing went into, as words ("barrel", "Duluth pack")
-const CWORD = { pack3: 'Duluth pack', pack4: 'big Duluth pack', barrel30: 'barrel', barrel60: 'big barrel', bucket: 'leech bucket', tacklebox: 'tackle box', pockets: 'pockets', mapcase: 'map case', stringer: 'stringer', crate: 'outfitters’ crate' };
+const CWORD = { pack3: 'Duluth pack', pack4: 'big Duluth pack', barrel30: 'barrel', barrel60: 'big barrel', bucket: 'leech bucket', tacklebox: 'tackle box', pockets: 'pockets', mapcase: 'map case', stringer: 'stringer', crate: 'outfitters’ crate', packdry: 'portage pack' };
 function containerWord(inv, cId) {
   const c = (inv.containers || []).find((k) => k.id === cId) || (inv.reachable ? inv.reachable().find((k) => k.id === cId) : null);
   const d = c ? itemDef(c.item) : null;
