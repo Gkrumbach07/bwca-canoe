@@ -76,6 +76,8 @@ import './gear-icons.js'; // content C
 import { attachTaskKinds } from './task-kinds.js'; // content A
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
+import { Parties } from './parties.js'; // round A-F
+import { PartyCamps } from './party-camps.js'; // round A-F
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -732,6 +734,21 @@ async function main() {
     const dueT = hints.due.bind(hints);
     hints.due = (id, rec) => (cast.has(id) ? cast.get(id).due(rec) : dueT(id, rec));
   }
+  // round A-F: wilderness people, phase 1, the camps (the owner, 2026-10-26: "wilderness people"; the people plan,
+  // docs/plans/people.md). parties.js: the other parties out there, a pure function of the entry points' real quotas,
+  // the season's fill, the weekday and the Traffic setting, seeded by the season and never saved; each night at a
+  // site, first come, never yours, held in the campsite registry within 6.5 km of you (so a site reads Taken and the
+  // dusk note's free site stays free tonight). party-camps.js draws the near ones: their canoes, tents, woodpile, the
+  // fire by evening and two or three of them from npcs.js's pool within 60 m, a greeting by day. After the camp's frame.
+  const parties = new Parties({ world, profile, day });
+  parties.attach({ registry: campsites, camp, player, camera, settings, inventory, fires });
+  const partyCamps = new PartyCamps({ world, scene, tiles, fires, parties, people: npcs, player, day, camp, weather, wind });
+  npcs.extra = () => partyCamps.extras(); npcs.partyWord = (v) => partyCamps.word(v);
+  { const campUpdF = camp.update.bind(camp); camp.update = (dt) => { campUpdF(dt); parties.update(dt); partyCamps.update(dt); }; }
+  // a party's greeting carries over the water (their speakers' hear: dialogue.js keeps a bark to 22 m of its speaker)
+  { const distF = talk.distTo.bind(talk); talk.distTo = (sp) => { const d = distF(sp); return sp && sp.hear ? (d * 22) / sp.hear : d; }; }
+  Object.assign(window.__game, { parties, partyCamps });
+  { const warm = () => { try { parties.block(parties.today); partyCamps.warm(); } catch (e) { console.warn('parties', e); } }; if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 500); } // the week's sweep and the camps' pieces, behind the title
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above
