@@ -530,28 +530,45 @@ const frag = /* glsl */ `
       * mix(${LEE.calm.toFixed(3)}, 1.0, vLee);   // cons B: the lee lies smooth
     float rapids = 0.0;
     if (steep > 0.001) {
-      // froth drawn out downhill and running with the water, in streaks a hand or two across and a couple of metres
-      // long; far off (under a few pixels) a pale wash. The streaks run along the two nearest of 16 fixed world
-      // directions to the flow, crossfaded (as the wind's ripples are drawn): a direction taken per pixel and multiplied
-      // into a world position turns the least wobble of the flow into stripes
-      float fa = atan(-lvg.y, -lvg.x) * ${(16 / (2 * Math.PI)).toFixed(6)}, fk = floor(fa), fw = fa - fk;
-      float fine = 1.0 - smoothstep(0.01, 0.04, px);   // (the finer streaks only where a pixel is a centimetre or two)
-      float froth = 0.0;
+      // round A join (the brief: the rapids' white water read as big white splotches; "foam streaks along the flow, like
+      // the new whitecaps"): foam lines drawn down the flow and running with it at about 2 m/s, wandering, broken into
+      // lengths, a few centimetres to a hand across and more of them the steeper it runs; between them the water only a
+      // little paler. Two sets: lines about 0.9 m apart, and finer ones a third of that where a pixel is a centimetre or
+      // so. A line is a distance in metres from its middle, so its edge is a pixel at any range. Far off (under a few
+      // pixels) a pale wash. The lines run along the two nearest of 16 fixed world directions to the flow, crossfaded (as
+      // the wind's ripples are drawn): a direction taken per pixel and multiplied into a world position turns the least
+      // wobble of the flow into stripes
+      float fa = atan(-lvg.y, -lvg.x) * ${(32 / (2 * Math.PI)).toFixed(6)}, fk = floor(fa), fw = smoothstep(0.25, 0.75, fa - fk);
+      float fine = 1.0 - smoothstep(0.015, 0.05, px);
+      float lines = 0.0;
       for (int k = 0; k < 2; k++) {
-        float an = (fk + float(k)) * ${(2 * Math.PI / 16).toFixed(6)};
+        float an = (fk + float(k)) * ${(2 * Math.PI / 32).toFixed(6)};
         vec2 dn = vec2(cos(an), sin(an)), ac = vec2(-dn.y, dn.x);
         float along = dot(pw, dn), across = dot(pw, ac);
-        float f = lookNoise(vec2(across * 2.6, along * 0.55 - uTime * 1.6), 113u + uint(k)) * mix(1.0, 0.65, fine) + lookNoise(vec2(across * 6.0, along * 1.4 - uTime * 3.4), 127u + uint(k)) * 0.35 * fine;
-        froth += f * (k == 0 ? 1.0 - fw : fw);
+        uint sk = uint(k) * 7u;
+        // the lines gather in bands a few metres wide (a tongue, an eddy line) and thin out between
+        float band = (lookNoise(vec2(across * 0.22, along * 0.05 - uTime * 0.11), 157u + sk) - 0.5) * 0.36;
+        // the lines about 0.9 m apart: each wanders, swells and thins along its length, is cut into lengths that run
+        // downstream at about 2.2 m/s, and is as white as its froth
+        float u1 = across * 1.1 + 1.1 * lookNoise(vec2(across * 0.45, along * 0.06 - uTime * 0.13), 113u + sk);
+        float id1 = floor(u1), d1 = abs(fract(u1) - 0.5) * 0.909;
+        float h1 = mix(0.025, 0.07, steep) * (0.45 + 1.1 * lookNoise(vec2(id1 * 3.1, along * 0.5 - uTime * 1.1), 117u + sk));
+        float c1 = smoothstep(0.55 - 0.08 * steep - band, 0.66 - 0.06 * steep - band, lookNoise(vec2(id1 * 1.7, along * 0.3 - uTime * 0.66), 127u + sk));
+        float l1 = (1.0 - smoothstep(h1 * 0.35, h1 + px, d1)) * c1 * (0.55 + 0.45 * lookNoise(vec2(id1 * 2.3, along * 1.2 - uTime * 2.6), 131u + sk));
+        // the finer ones a third of that apart, where a pixel is a centimetre or so
+        float u2 = across * 2.9 + 1.0 * lookNoise(vec2(across * 1.0, along * 0.15 - uTime * 0.33), 139u + sk);
+        float id2 = floor(u2), d2 = abs(fract(u2) - 0.5) * 0.345, h2 = mix(0.008, 0.02, steep);
+        float c2 = smoothstep(0.58 - 0.1 * steep - band, 0.7 - 0.08 * steep - band, lookNoise(vec2(id2 * 1.3, along * 0.6 - uTime * 1.32), 151u + sk));
+        float l2 = (1.0 - smoothstep(h2 * 0.35, h2 + px, d2)) * c2 * 0.7 * fine;
+        lines += max(l1, l2) * (k == 0 ? 1.0 - fw : fw);
       }
-      froth = 0.5 + (froth - 0.5) / max(0.6, sqrt(fw * fw + (1.0 - fw) * (1.0 - fw)));   // (a crossfade's middle keeps its contrast)
       #ifdef FAR
         float near = 0.0;
       #else
-        float near = 1.0 - smoothstep(0.05, 0.3, px);
+        float near = 1.0 - smoothstep(0.08, 0.35, px);
       #endif
       float wash = steep * steep * 0.22 * (0.45 + 0.55 * lookNoise(pw * 0.12 + vec2(0.0, uTime * 0.05), 131u));
-      rapids = smoothstep(0.6 - 0.06 * steep, 0.78 - 0.04 * steep, froth) * steep * 0.75 * near + wash * (1.0 - near);
+      rapids = (min(lines, 1.0) * mix(0.6, 0.95, steep) * smoothstep(0.0, 0.5, steep) + steep * 0.07) * near + wash * (1.0 - near);
       tilt *= 1.0 + 1.5 * steep;   // the water between broken up
     }
     if (uRain > 0.0) tilt += rainRings(pw, px, uRain) * live;
