@@ -88,7 +88,7 @@ import { FORAGE, inSeason } from './forage.js'; // content B: the berries in sea
 import { itemDef } from './items.js'; // content B: a keeper's one-of-a-kind (stream C's), given when its def is in the build
 
 const NS = 'people';
-const POOL = 3;               // figures drawn at most, at once
+const POOL = 8;               // figures drawn at most, at once (round A-F: 8, the people plan's budget, the parties' camps and a store's people together)
 const DRAW_R = 40;            // metres from you to a store's walls within which its people are drawn
 const DRAW_OUT = 44;          // and beyond which they are put away again
 const STORE_R = 5;            // metres from a store's middle to its walls, about (8 x 6 m, and the porch)
@@ -165,7 +165,7 @@ const HATS = [0x9d8b61, 0x6a5a40, 0x4a4a3a, 0x7a6a4a, 0x3a4436];
 const FEMALE = new Set(['Ada', 'Agnes', 'Alma', 'Carol', 'Clara', 'Dot', 'Edna', 'Elsie', 'Ellen', 'Esther', 'Greta', 'Hazel', 'Helga', 'Ida', 'Inga', 'Ione', 'Joanne', 'June', 'Kari', 'Lois', 'Mae', 'Myrna', 'Nora', 'Sigrid', 'Sonja', 'Tess', 'Thea', 'Vi', 'Wilma', 'Ruth', 'Bev', 'Lise', 'Marit', 'Deb', 'Marge', 'Lorna', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail']);
 // a palette: { skin, shirt, cuff, pants, belt, pfd, pfdDark, boot, sole, lace, hair, beard, hat, band } and how the
 // figure wears it: hat (bool), bun (bool), scale
-function dress(rng, { female = false, age = 'adult', shirt, pfd, pants, hat, hatChance = 0.5, beardChance = 0.35, hair } = {}) {
+export function dress(rng, { female = false, age = 'adult', shirt, pfd, pants, hat, hatChance = 0.5, beardChance = 0.35, hair } = {}) {
   const skin = pickR(rng, SKIN);
   const hairC = hair != null ? hair : age === 'old' ? pickR(rng, [HAIR.white, HAIR.grey, HAIR.grey]) : pickR(rng, [HAIR.dark, HAIR.brown, HAIR.brown, HAIR.fair, HAIR.red, HAIR.black]);
   const sh = shirt != null ? shirt : pickR(rng, SHIRTS);
@@ -275,7 +275,7 @@ function bunGeometry() {
   return m.geometry();
 }
 
-class Body {
+export class Body {
   constructor(mat, scene, i) {
     const fig = this.fig = buildFigure(mat, KEY);
     this.group = fig.group; this.group.name = `person ${i}`; this.group.visible = false;
@@ -346,6 +346,13 @@ function posePerson(body, spec, dt, sc = 1) {
     const df = V(Math.sin(sw + bend), -Math.cos(sw + bend), sg * 0.06).normalize().applyQuaternion(cq);
     const elbow = sh.clone().addScaledVector(du, 0.315), target = elbow.clone().addScaledVector(df, 0.335);
     P.arm(k, target, V(1, 0, -sg * 0.15).applyQuaternion(cq), elbow.clone().add(V(-0.3, 0, sg * 0.05).applyQuaternion(cq)), V(0, 0, -sg).applyQuaternion(cq));
+  }
+  // round A-F: a hand lifted to you from a party's camp (spec.wave 0..1, eased in and out by party-camps.js), the
+  // open hand up by the head, side to side
+  if (spec.wave > 0.01) {
+    const w = Math.min(1, spec.wave), sh = J.armR.p, t = s.breath * 3.4;
+    const up = V(sh.x + 0.1, sh.y + 0.5 * w - 0.55 * (1 - w), sh.z + 0.22 + 0.08 * Math.sin(t) * w);
+    P.arm('R', up, V(0, 1, 0), V(sh.x - 0.05, sh.y - 0.15, sh.z + 0.5), V(1, 0, 0));
   }
 }
 
@@ -898,6 +905,10 @@ export class People {
     this.qFocus = null;         // at the counter: the keeper, Q's (whoever else has E)
     this.claimsE = false;       // outfitter.js: a visitor takes E from the hotspot you also stand at
     this.onParty = null;        // later: (party) when a visitor's party puts in
+    // round A-F: the parties out there (parties.js, party-camps.js). extra(): the party figures to draw this frame,
+    // [{ person, fig, f, d }] with person from partyPerson(party), drawn from the same pool, nearest first with a
+    // store's; partyWord(person, fig): what E on one of them says (a bark: their talk trees are a later phase)
+    this.extra = null; this.partyWord = null; this.partyPeople = new WeakMap(); // (by the party itself: a new season makes new parties)
     this.preparing = new Map(); // person key -> the promise writing up their task
     this.checkT = 0;
     this.quiet = null;          // () => true while something else owns the keys (the camera raised: stream B)
@@ -1065,6 +1076,38 @@ export class People {
   // everyone at ep's store as now settled (the console and the tests)
   at(ep) { return this.rosters.get(Number(ep)) || this.roster(Number(ep)); }
 
+  // --- round A-F: the parties out there (parties.js, party-camps.js) -------------------------------------------
+  // A party as people: one record per party (key and room 'party:<id>'), each member's look and name seeded by the
+  // party (dress, the visitors' names), who they are in a few words. party-camps.js fills in figs (where each member
+  // stands or sits this hour, by member index; null for one in the tent or out on the water), live (the camp is
+  // drawn) and hear (how far a greeting carries).
+  partyPerson(party) {
+    let v = this.partyPeople.get(party);
+    if (v) return v;
+    const rng = seeded(party.ep, party.day, party.slot, 0x7a11), used = new Set();
+    const nameFor = (m) => { const list = m.age === 'kid' ? KID_NAMES : m.age === 'old' ? OLD_NAMES : m.female ? F_NAMES : M_NAMES; let n = pickR(rng, list); for (let k = 0; k < 6 && used.has(n); k++) n = pickR(rng, list); used.add(n); return n; };
+    const guidePfd = pickR(rng, [0xd65428, 0xc8a22a, 0x2f6aa0]), troop = pickR(rng, [0xc8a22a, 0xd65428, 0x2f6aa0, 0x3f6a4a]);
+    const members = party.members.map((m, i) => ({
+      ...m, name: nameFor(m),
+      look: dress(rng, { female: m.female, age: m.age === 'young' ? 'adult' : m.age, hatChance: m.age === 'kid' ? 0.15 : 0.5, pfd: party.kind === 'group' ? (i === 0 ? guidePfd : troop) : undefined }),
+    }));
+    for (const m of members) if (m.age === 'young') m.look.wear.scale = Math.min(m.look.wear.scale, 0.9); // the troop's teenagers
+    const last = pickR(rng, SURNAMES), city = pickR(rng, CITIES), n = party.size;
+    const who = party.kind === 'solo' ? `a solo paddler from ${city}` : party.kind === 'pair' ? `two paddlers from ${city}` : party.kind === 'family' ? `the ${last}s, from ${city}`
+      : party.kind === 'group' ? `${pickR(rng, ['a scout troop', 'a church group', 'a youth group'])} out of ${city}, ${word(n)} of them` : `a party of ${word(n)} from ${city}`;
+    v = { key: `party:${party.id}`, room: `party:${party.id}`, party: true, partyId: party.id, kind: party.kind, arch: 'party', ep: party.ep, name: members[0].name, first: members[0].name, last, city, who,
+      members, figNames: members.map((m) => m.name), figs: [], live: false, hear: null, vars: { city, last } };
+    this.partyPeople.set(party, v);
+    return v;
+  }
+  // round A-F, for the actor layer (people phase 2): a body of the pool lent out, hidden from this module's drawing
+  // and posing until it is given back; null when none is free
+  lend(owner = true) {
+    const b = this.bodies.find((x) => !x.who && !x.lent); if (!b) return null;
+    b.lent = owner; return b;
+  }
+  giveBack(b) { if (b && b.lent) { b.lent = null; b.who = null; b.group.visible = false; } }
+
   // --- per frame ---------------------------------------------------------------------------------------------------
   update(dt) {
     const p = this.player;
@@ -1086,12 +1129,13 @@ export class People {
         if (ds < DRAW_R || (drawn && ds < DRAW_OUT)) want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) - (v.keeper ? 5 : 0) });
       });
     }
+    if (this.extra) { try { for (const w of this.extra() || []) if (w && w.f) want.push(w); } catch (e) { console.warn('people.extra', e); } } // round A-F: the parties' camps
     want.sort((a, b) => a.d - b.d);
-    const keep = want.slice(0, POOL);
-    for (const b of this.bodies) if (b.who && !keep.some((w) => w.person === b.who.person && w.fig === b.who.fig)) { b.who = null; b.group.visible = false; }
+    const free = this.bodies.filter((b) => !b.lent), keep = want.slice(0, free.length); // (round A-F: a body lent out is the borrower's)
+    for (const b of free) if (b.who && !keep.some((w) => w.person === b.who.person && w.fig === b.who.fig)) { b.who = null; b.group.visible = false; }
     for (const w of keep) {
-      if (this.bodies.some((b) => b.who && b.who.person === w.person && b.who.fig === w.fig)) continue;
-      const b = this.bodies.find((x) => !x.who); if (!b) break;
+      if (free.some((b) => b.who && b.who.person === w.person && b.who.fig === w.fig)) continue;
+      const b = free.find((x) => !x.who); if (!b) break;
       b.who = { person: w.person, fig: w.fig };
       b.wear(w.f.look);
       b.s.yaw = 0; b.s.pitch = 0; b.s.turn = 0;
@@ -1100,8 +1144,9 @@ export class People {
     // pose them, each looking at you when you are near
     const eye = V(p.x, (p.foot ? p.foot.y : p.altitude || 0) + 1.62, p.z), inStore = !!(this.outfitter && this.outfitter.visit && this.outfitter.visit.inside);
     for (const b of this.bodies) {
-      if (!b.who) continue;
+      if (!b.who || b.lent) continue;
       const v = b.who.person, f = v.figs[b.who.fig];
+      if (!f) { b.who = null; b.group.visible = false; continue; } // (round A-F: a party's figure gone in for the night)
       this.look(b, v, f, eye, dt, inStore);
       b.group.position.set(f.x, f.y, f.z);
       b.group.rotation.set(0, f.heading + b.s.turn, 0);
@@ -1146,7 +1191,7 @@ export class People {
   holdOff() {
     const p = this.player;
     for (const b of this.bodies) {
-      if (!b.who) continue;
+      if (!b.who || b.lent || !b.who.person.figs[b.who.fig]) continue;
       const f = b.who.person.figs[b.who.fig], sit = f.spec.pose === 'sit', fx = Math.cos(f.heading), fz = -Math.sin(f.heading);
       const cx = f.x + (sit ? fx * 0.25 : 0), cz = f.z + (sit ? fz * 0.25 : 0), keep = (sit ? SEAT_KEEP : BODY_KEEP) * (f.look.wear.scale || 1);
       if (b.who.person.keeper) continue; // behind the counter: the counter holds you off
@@ -1166,8 +1211,9 @@ export class People {
     const fw = p.forward;
     let best = null, keeper = null;
     for (const b of this.bodies) {
-      if (!b.who) continue;
+      if (!b.who || b.lent) continue;
       const v = b.who.person, f = v.figs[b.who.fig];
+      if (!f) continue;
       const dx = f.x - p.x, dz = f.z - p.z, d = Math.hypot(dx, dz), reach = v.keeper ? TALK_R + 0.6 : TALK_R;
       if (d > reach) continue;
       const dot = d > 1e-3 ? (dx * fw.x + dz * fw.z) / d : 1;
@@ -1229,6 +1275,7 @@ export class People {
   talkTo(key) {
     const v = typeof key === 'string' ? this.find(key) : key;
     if (!v) return null;
+    if (v.party) return this.partyWord ? this.partyWord(v) : null; // round A-F: a word from a party out there (a bark)
     if (this.dialogue) return v.keeper ? this.keeperConverse(v) : this.converse(v);
     return v.keeper ? this.keeperTalk(v) : this.visitorTalk(v);
   }
@@ -1243,9 +1290,10 @@ export class People {
     const self = this, names = v.figNames || [v.first];
     return (list[fig] = {
       key: `${v.key}#${fig}`, person: v.key, name: v.keeper ? v.first : names[fig] || v.first, role: roleOf(v, fig),
+      hear: v.party ? v.hear || null : null, // round A-F: a party's greeting carries over the water (main.js: dialogue's reach)
       pos(out) {
-        const f = v.figs[fig], roster = self.rosters.get(v.ep);
-        if (!f || !roster || !roster.includes(v)) return null;
+        const f = v.figs[fig], roster = v.party ? null : self.rosters.get(v.ep);
+        if (!f || (v.party ? !v.live : !roster || !roster.includes(v))) return null; // (round A-F: a party's, while its camp is drawn)
         const sc = f.look.wear.scale || 1, b = self.bodies.find((x) => x.who && x.who.person === v && x.who.fig === fig);
         if (b) { b.fig.bones.head.getWorldPosition(out); out.y += 0.16 * sc; return out; }
         return out.set(f.x, f.y + (f.spec.pose === 'sit' ? f.spec.seat + 0.78 : 1.66) * sc, f.z);
@@ -1256,7 +1304,7 @@ export class People {
   bark(v, fig, text, pri = PRI.ambient, next = null) {
     if (!text) return null;
     if (this.dialogue) {
-      const id = this.dialogue.bark(this.speakerOf(v, fig), text, { room: v.ep, pri, next });
+      const id = this.dialogue.bark(this.speakerOf(v, fig), text, { room: v.room ?? v.ep, pri, next }); // (round A-F: a party's room is 'party:<id>')
       if (id != null) { this.mark(text); if (next && next.text) this.mark(next.text); } // content B: said (a line dropped for a more pressing one is not)
       return id;
     }
@@ -1296,7 +1344,7 @@ export class People {
     if (!D || D.talking || !p.onFoot || p.teleporting || (this.quiet && this.quiet()) || (o && (o.open || o.bunking)) || (this.hud && this.hud.paper)) return;
     const inside = !!(vis && vis.inside);
     for (const b of this.bodies) {
-      if (!b.who) continue;
+      if (!b.who || b.lent || b.who.person.party) continue; // (round A-F: a party's greeting is party-camps.js's)
       const v = b.who.person, fi = b.who.fig, f = v.figs[fi];
       const m = v._m || (v._m = { near: false, last: -1e9, n: 0, pair: false, idle: false });
       const d = Math.hypot(f.x - p.x, f.z - p.z), here = inside && this.roomEp === v.ep;

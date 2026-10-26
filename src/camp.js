@@ -99,7 +99,12 @@ export class CampRegistry {
     this.holders = new Map(); // key -> holder id
     this.onChange = null;     // (key, holder or null) after a claim or a release
     this._sites = null;
+    // round A-F: the parties (parties.js). spoken(key): a party lands there later today, so nearestFree (the dusk note's
+    // free site) leaves it be; it is not held, and a tent of yours pitched there first sends them on to another site
+    this.spoken = null;
   }
+  // round A-F: the keys a holder whose id starts with `prefix` holds ('party:' for every party's camp)
+  heldBy(prefix) { const out = []; for (const [k, h] of this.holders) if (String(h).startsWith(prefix)) out.push(k); return out; }
   key(site) { return campKey(site); }
   // the world's site under a key, or null
   site(key) {
@@ -131,7 +136,7 @@ export class CampRegistry {
       const dx = c.x - x, dz = c.z - z;
       if (dx > r || dx < -r || dz > r || dz < -r) continue;
       const d = Math.hypot(dx, dz);
-      if (d < r && (!best || d < best.d)) { const key = campKey(c); if (this.isFree(key) && (!ok || ok(c))) best = { site: c, key, d }; }
+      if (d < r && (!best || d < best.d)) { const key = campKey(c); if (this.isFree(key) && !(this.spoken && this.spoken(key)) && (!ok || ok(c))) best = { site: c, key, d }; }
     }
     return best;
   }
