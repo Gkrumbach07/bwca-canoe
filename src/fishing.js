@@ -902,7 +902,8 @@ export class Fishing {
         else if (inv && inv.attached && typeof inv.place === 'function') {
           const stringers = inv.containers.filter((c) => c.item === 'stringer').map((c) => c.id);
           r = inv.place(id, 1, { data, exclude: stringers });
-          if (r && r.ok) this.message = { text: `Kept · into the ${(itemDef((inv.cont(r.cId) || {}).item) || {}).name || 'pack'}`.toLowerCase().replace(/^kept/, 'Kept'), t: 2.2 };
+          const nm = (itemDef((inv.cont(r.cId) || {}).item) || {}).name || 'pack'; // (the content join: "the duluth pack #3": a name keeps its capital)
+          if (r && r.ok) this.message = { text: `Kept · into the ${/^(Duluth|Johnson)/.test(nm) ? nm : nm.charAt(0).toLowerCase() + nm.slice(1)}`, t: 2.2 };
         }
         if (!(r && r.ok)) { L.entry.kept = false; this.saveLog(); this.message = { text: 'No room to keep it: you let it go.', t: 3 }; if (Number.isFinite(L.x) && this.world.shoreAt(L.x, L.z) < 0) this.splash(L.x, this.surfaceAt(L.x, L.z), L.z, 7, 0.7); }
       } else {
