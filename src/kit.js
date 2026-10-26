@@ -424,7 +424,9 @@ class Swarm {
   constructor(scene) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(SWARM_N * 3), 3));
-    this.pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x14120f, size: 0.03, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false }));
+    // (the content join: a speck a few pixels across at any distance: sized in the world, one that came within a hand's
+    // breadth of the camera was drawn as a black square 30 to 50 px across)
+    this.pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x14120f, size: 3, sizeAttenuation: false, transparent: true, opacity: 0.9, depthWrite: false }));
     this.pts.frustumCulled = false; this.pts.visible = false; this.pts.name = 'mosquitoes'; this.pts.renderOrder = 14; // (after the water)
     this.seed = Array.from({ length: SWARM_N }, (_, i) => [Math.sin(i * 12.9898) * 43758.5453 % 1, Math.sin(i * 78.233) * 12345.678 % 1, Math.sin(i * 39.425) * 24634.6345 % 1]);
     this.t = 0;
