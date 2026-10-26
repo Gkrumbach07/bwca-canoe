@@ -34,6 +34,7 @@ const CAP_LAMP = { distance: 30, power: 1, night: 1.3 };
 // the bugs (June and July, worst at dusk; real Boundary Waters mosquitoes and blackflies): what they cost unguarded at
 // full strength, a game hour, and what a head net or a bug jacket lets through
 const BUG = { drain: 0.02, rest: 0.5, net: 0.35, jacket: 0.1, smoke: 0.5 };
+const BUG_GONE = 0.5;       // game hours the bugs must be gone before their moment's episode ends
 const BUG_SEASON = [135, 158, 205, 240]; // day of year: they come mid-May, are at their worst June to mid-July, gone by late August
 // the night in the bag (kit.sleepNight): rest and warmth lost per °C the night is colder than the bag is good to
 const NIGHT = { restPer: 0.035, restMax: 0.35, warmPer: 0.05, warmMin: 0.45, dampSynth: 2, dampDown: 6, fourseason: 2, blanket: 3, site: 0.08 };
@@ -397,7 +398,14 @@ export class Kit {
   moments() {
     return [
       { id: 'bugs', prio: 2, recur: 'while', text: 'Mosquitoes. Wind, smoke or a head net keeps them off.', short: 'Bugs.',
-        due: (rec) => { const f = this.mods.bugs, e = this.t.energy; if (!e || !e.live) return false; return (rec && rec.ep ? f > 0.22 : f >= 0.4) ? 1 - f : false; } },
+        // (content join: a gust thins them for a minute and they're back, so an episode ends only once they've been gone
+        // BUG_GONE game hours; at dusk the short line had come back every few minutes)
+        due: (rec) => {
+          const f = this.mods.bugs, e = this.t.energy; if (!e || !e.live) return false;
+          if (f > 0.22) this.bugsAt = e.now;
+          if (rec && rec.ep) return e.now - (this.bugsAt ?? -1e9) < BUG_GONE ? 1 - Math.max(f, 0.22) : false;
+          return f >= 0.4 ? 1 - f : false;
+        } },
       { id: 'side', prio: 1, recur: 'once', text: 'Big fish thrash at the side. A landing net holds them.',
         due: () => !!(this.lostSide && realNow() - this.lostSide < 25) },
       { id: 'coldnight', prio: 2, recur: 'once', text: 'A cold night: colder than the bag is good to.',
