@@ -24,7 +24,11 @@ import './hud.css';
 // (outfitter.js) are paper too; one paper object is up at a time, on a scrim, and the HUD keeps the register of which.
 
 const GLANCE_SPAN = 5000;    // metres across the glance and the corner sheet
-const BIG_SPAN = 25600;      // metres across the sheet when it opens
+// round A join (the owner, 2026-10-26: "map full screen mode should start more zoomed in"): the sheet opens on you, on
+// your lake and the waters round it: about twice the lake's reach (from its area), 3 to 5 km across; the wheel still
+// goes out to the whole map
+const OPEN_SPAN = 4000, OPEN_MIN = 3000, OPEN_MAX = 5000;
+const SHEET_FADE = 720;      // ms: the sheet keeps its place while it fades (.paper's opacity .7s), then lets it go
 const MIN_SPAN = 2000, MAX_SPAN = 240000;
 const FINE_PX = 512;         // image pixels per fine tile edge (5 m per pixel)
 const FAR_PX = 256;          // image pixels per far tile edge (80 m per pixel)
@@ -375,11 +379,17 @@ export class Hud {
     const was = this.mode;
     this.mode = mode;
     const m = this.el.map;
-    m.classList.toggle('glance', mode === 'glance'); m.classList.toggle('sheet', mode === 'sheet'); m.classList.toggle('corner', mode === 'corner');
+    // round A join (the owner, 2026-10-26: "map on close snaps to top left before fading"): the sheet's place and size
+    // are its class, so taking the class off with the show snapped it to the paper's corner for the whole fade. Closed
+    // to nothing, it keeps its class (and its last drawing: nothing draws while hidden) until the fade is over.
+    clearTimeout(this.sheetFade);
+    const fading = mode === 'hidden' && was === 'sheet';
+    m.classList.toggle('glance', mode === 'glance'); m.classList.toggle('sheet', mode === 'sheet' || fading); m.classList.toggle('corner', mode === 'corner');
     m.classList.toggle('show', mode !== 'hidden');
+    if (fading) this.sheetFade = setTimeout(() => { if (this.mode === 'hidden') m.classList.remove('sheet'); }, SHEET_FADE);
     if (mode === 'sheet') {
       this.openPaper('map');
-      this.view.span = BIG_SPAN;
+      this.view.span = this.openSpan();
       if (this.player) { this.view.cx = this.player.x; this.view.cz = this.player.z; }
     } else {
       if (was === 'sheet') this.closePaper('map');
@@ -390,8 +400,15 @@ export class Hud {
     // fb3 C (21): the band's words settle the body's height before the canvas is measured (the sheet's long title, left
     // in the glance's narrow band, wrapped to two lines for a frame and the glance drew stretched); and no second sizing
     // on the next animation frame, which ran after that frame's draw and wiped it when the size had changed
-    if (this.player && this.ctx) this.updateMapChrome();
+    if (this.player && this.ctx && mode !== 'hidden') this.updateMapChrome(); // (a fading sheet keeps its own words)
     this.sizeCanvas();
+  }
+  // the span the sheet opens at: your lake and the waters round it (OPEN_SPAN on land or off the lakes' list)
+  openSpan() {
+    const p = this.player, w = this.world;
+    const id = p && w && w.lakeIdAt ? w.lakeIdAt(p.x, p.z) : 0, L = id > 0 && w.lakes ? w.lakes[id - 1] : null;
+    const reach = L && L.cells ? Math.sqrt(L.cells) * (w.cell || 10) * 2.2 : OPEN_SPAN;
+    return clamp(reach, OPEN_MIN, OPEN_MAX);
   }
   // the old API: the big map on / off
   setBig(big) { this.setMode(big ? 'sheet' : (this.settings && this.settings.cornerSheet ? 'corner' : 'hidden')); }
