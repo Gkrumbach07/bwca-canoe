@@ -873,6 +873,12 @@ export class Fishing {
     this.chase.focus = fx;
     const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.catchLake(L), L.length) : null; // hubs 1C: a notice taken on wants it
     const inv = this.inventory, free = inv && inv.attached && typeof inv.freeHand === 'function' ? inv.freeHand() >= 0 : true;
+    // (the content join: both hands full and nothing with room said "Keep it, into a pack", and E then let it go)
+    if (!want && !free && inv && inv.attached && typeof inv.firstFit === 'function' && !(L.roomAt > L.t - 0.5)) {
+      const id = `fish:${L.species}`, d = itemDef(id); L.roomAt = L.t;
+      L.room = inv.reachable().some((c) => !['stringer', 'crate', 'pile', 'inhand'].includes(c.item) && (typeof inv.accepts !== 'function' || inv.accepts(c, d)) && !!inv.firstFit(c.id, id));
+    }
+    if (!want && !free && L.room === false) { p.prompt = { key: 'Q', text: 'Let it go · no room on you to keep it' }; return; }
     p.prompt = { key: 'E', text: `${want ? `Keep it for “${esc(want.title)}”` : free ? 'Keep it, in your hand' : 'Keep it, into a pack'} · <kbd>Q</kbd> Let it go` }; // fb3 B: to the hand
   }
 
