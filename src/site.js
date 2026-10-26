@@ -296,15 +296,19 @@ export class Site {
   landData(L, at) {
     const n = this.n, N = n * n, grid = this.grid, { sd, wet, bare, beach, soil, talus, camp, tpi, S } = this;
     const A = () => new Float32Array(N);
-    const meadow = A(), sphag = A(), boulder = A(), tintR = A(), tintG = A(), tintB = A(), kind = new Uint8Array(N);
-    // (kind: the ground kind each land cell is drawn as, Ontario's from the forest map's open kinds; 0 = the noise's)
-    Object.assign(this, { meadow, sphag, boulder, tintR, tintG, tintB, kind });
+    const meadow = A(), sphag = A(), boulder = A(), tintR = A(), tintG = A(), tintB = A(), kind = new Uint8Array(N), wallK = A().fill(1);
+    // (kind: the ground kind each land cell is drawn as, Ontario's from the forest map's open kinds; 0 = the noise's.
+    // wallK: how much of a steep drawn wall the paint shows as the cliff's rock (terrain-build.js groundPre): all of it
+    // at a face the LiDAR found and where it did not look, most at its ledges, little elsewhere, where the LiDAR's 10 m
+    // ground is steep but its 2 m ground found no rock: a wooded hillside)
+    Object.assign(this, { meadow, sphag, boulder, tintR, tintG, tintB, kind, wallK });
     const OPEN_KIND = { 13: KIND.openBog, 14: KIND.wetMeadow, 15: KIND.shrubSwamp, 16: KIND.marsh, 17: KIND.wetMeadow };
     for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
       const k = lj * n + li, d = sd[k];
       const t = ROCK_TINT[L.rock ? Math.min(ROCK_TINT.length - 1, L.rock[k]) : 0];
       tintR[k] = t[0]; tintG[k] = t[1]; tintB[k] = t[2];
       if (d < 0) continue;
+      if (L.cliff && L.cliff[k]) { const c = L.cliff[k] > 1 ? cliffClass(L.cliff[k]) : 0; wallK[k] = c === FORM.face ? 1 : c === FORM.talus ? 0.75 : 0.15; }
       const x = grid.cellX(grid.i0 + li), z = grid.cellZ(grid.j0 + lj), ft = L.forest ? L.forest[k] : 0;
       let kd = L.ground ? L.ground[k] : 0;
       if (!kd && OPEN_KIND[ft]) kd = OPEN_KIND[ft];
@@ -312,7 +316,7 @@ export class Site {
       const K = KIND_LAND[kd];
       // boulders: the LiDAR's rough gentle ground (25–60 cm), a boulder field, the soil survey's stone cover (to 25 %)
       let b = 0;
-      if (L.cliff && L.cliff[k] > 1 && cliffClass(L.cliff[k]) === FORM.boulder) b = smoothstep(6, 15, cliffStrength(L.cliff[k]));
+      if (L.cliff && L.cliff[k] > 1 && cliffClass(L.cliff[k]) === FORM.boulder) b = 0.7 * smoothstep(5.5, 11, cliffStrength(L.cliff[k]));
       if (kd === KIND.boulder) b = Math.max(b, 0.8);
       if (L.stone && L.stone[k] < 255) { const c = 100 * (L.stone[k] / 254) ** 2; b = Math.max(b, 0.5 * smoothstep(3, 25, c)); }
       boulder[k] = b;
@@ -344,7 +348,7 @@ export class Site {
       const ridge = smoothstep(0.6, 3.2, tpi[k]), hollow = smoothstep(0.4, 2.6, -tpi[k]);
       soil[k] = clamp(0.6 + 0.3 * hollow + 0.2 * wet[k] - 0.45 * ridge - 0.9 * smoothstep(0.2, 0.75, S[k]) - bare[k], 0, 1);
     }
-    return [meadow, sphag, boulder, tintR, tintG, tintB];
+    return [meadow, sphag, boulder, tintR, tintG, tintB, wallK];
   }
 
   // local cell index of world (x, z), clamped to the tile's extent

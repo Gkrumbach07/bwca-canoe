@@ -142,7 +142,12 @@ const rgb = (h) => [lin(((h >> 16) & 255) / 255), lin(((h >> 8) & 255) / 255), l
 // A unit's tint over the game's granite, in linear light, eased toward 1 (TINT_K) and held to TINT_RANGE, so the darkest
 // slates still read as rock in the shade and the anorthosite does not go white in the sun
 export const TINT_K = 0.6, TINT_RANGE = [0.5, 1.16];
-export const ROCK_TINT = ROCK.map((u) => { const a = rgb(u.face), b = rgb(ROCK[0].face); return a.map((v, i) => Math.min(TINT_RANGE[1], Math.max(TINT_RANGE[0], (v / b[i]) ** TINT_K))); });
+export const ROCK_TINT = ROCK.map((u) => {
+  const a = rgb(u.face), b = rgb(ROCK[0].face), t = a.map((v, i) => (v / b[i]) ** TINT_K);
+  // (held to the range as a whole, so a pale unit keeps its own cast: the anorthosite cool, the sandstone warm)
+  const hi = Math.max(...t), lo = Math.min(...t), k = hi > TINT_RANGE[1] ? TINT_RANGE[1] / hi : lo < TINT_RANGE[0] ? TINT_RANGE[0] / lo : 1;
+  return t.map((v) => v * k);
+});
 
 // ---- the LiDAR's form byte -------------------------------------------------------------------------------------
 // class 3 a face (a 2 m pixel at 50° or more and 3 m of relief in the cell): strength the cell's relief, m (to 25);

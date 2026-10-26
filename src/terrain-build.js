@@ -103,6 +103,7 @@ export function groundPre(grid, x, z, sd, site, pre) {
     if (site.at(site.steep, x, z) > 0.55) {
       const e = 2.5, gx = surfaceAt(grid, x + e, z) - surfaceAt(grid, x - e, z), gz = surfaceAt(grid, x, z + e) - surfaceAt(grid, x, z - e), d = Math.hypot(gx, gz) / (2 * e);
       pre.wall = smoothstep(0.95, 1.25, d); pre.brink = smoothstep(0.55, 0.85, d);
+      if (site.wallK) pre.wall *= site.at(site.wallK, x, z); // d2 land: rock only where the LiDAR found it (site.js wallK)
     }
   } else { pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z); pre.cliff = 0; pre.talus = 0; }
   return pre;
