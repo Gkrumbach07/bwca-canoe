@@ -433,7 +433,7 @@ export class Packs {
   // "Get in" puts you in it where it floats and as it faces (getIn; greyed, with its checklist, without a paddle);
   // beached, nosed in or on the bank with the water near, E is held: "Push it off" (beginPush) walks it out until it
   // floats, and a tap does nothing; with no water to launch into (up the bank, a frozen lake, a shallow flat) E shoulders
-  // it. Q is always the shoulder: loaded (anything in it but the lashed things) it reads "Unload it first" with the
+  // it; at a trail head the two swap (E Shoulder it, a held Q Push it off: the content join). Q is otherwise the shoulder: loaded (anything in it but the lashed things) it reads "Unload it first" with the
   // things still in it as its checklist, and pressed it opens the book with the canoe on the right (help). Every greyed
   // verb carries decision 2's why, needs and next.
   hullAction() {
@@ -447,10 +447,20 @@ export class Packs {
     const frozen = !!(this.day && this.day.season && this.day.season.ice > 0.5);
     if (!L || !L.deep || frozen) return { e: shoulder, q: null, label: 'the canoe', hint: L && frozen ? `${lake} is frozen over` : L ? 'too shallow to launch here' : null };
     if (this.afloat(d)) return { e: this.getInVerb(d, L), q: shoulder, label: `the canoe, afloat on ${lake}` };
-    const plan = this.pushPlan(d);
+    const plan = this.pushPlan(d), head = this.atTrailHead(d);
     const push = plan ? { verb: 'Push it off', held: true, run: (o) => this.beginPush(d, o) }
-      : { verb: 'Push it off', held: true, why: 'Too shallow to float it here', needs: [{ label: 'A hand’s depth of water under both ends', done: false }], next: 'Shoulder it (Q) and carry it along the shore to deeper water', run: () => {} };
+      : { verb: 'Push it off', held: true, why: 'Too shallow to float it here', needs: [{ label: 'A hand’s depth of water under both ends', done: false }], next: `Shoulder it (${head ? 'E' : 'Q'}) and carry it along the shore to deeper water`, run: () => {} };
+    // content join (the owner's call on the new-player review, 2026-10-25): at a trail head you landed to carry, so E is
+    // Shoulder it and the push off is a held Q; everywhere else a held E pushes off and Q shoulders
+    if (head) return { e: shoulder, q: push, label: 'the canoe, beached' };
     return { e: push, q: shoulder, label: 'the canoe, beached' };
+  }
+  // the canoe lying at d at a portage's end (the trail starts within 12 m of it: dropLaunch's test)
+  atTrailHead(d) {
+    const tr = d && this.player.nearestTrail(d.x, d.z, 15);
+    if (!tr) return false;
+    const pts = tr.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
+    return Math.min(Math.hypot(e0[0] - d.x, e0[1] - d.z), Math.hypot(e1[0] - d.x, e1[1] - d.z)) < 12;
   }
   // E Get in, or greyed with its checklist: no paddle with you (in the canoe or in a hand)
   getInVerb(d, L) {

@@ -115,9 +115,9 @@ export const MOMENTS = [
   { id: 'wetwood', prio: TEACH, recur: 'once', card: 'fire', text: 'Wet wood won’t catch. Find dry pieces; wet ones dry by a fire.' },
   { id: 'tarpred', prio: TEACH, recur: 'once', text: 'Red: it can’t stand here. Between two trees it needs no poles.' },
   // the way
-  { id: 'portage', prio: TEACH, recur: 'once', text: 'A portage. Land beside the sign to carry the canoe over.' },
+  { id: 'portage', prio: TEACH, recur: 'once', text: 'A portage. Land beside the sign, then {E} on the canoe to carry it over.' }, // (content join: E shoulders it at a trail head, the owner's call)
   { id: 'push', prio: TEACH, recur: 'once', learn: 'push', keyed: true, text: 'Beached. Hold {E} to push it off.' },
-  { id: 'unload', prio: TEACH, recur: 'once', text: 'Unload the canoe to carry it: {Q} on it, then Set everything out.' },
+  { id: 'unload', prio: TEACH, recur: 'once', text: 'Unload the canoe to carry it: {E} on it, then Set everything out.' },
   // the rod
   { id: 'bait', prio: TEACH, recur: 'once', text: 'Bait: leeches from the bucket, within reach.' },
   { id: 'fish', prio: TEACH, recur: 'once', learn: 'fish', keyed: true, text: '{F} to fish.' },
@@ -138,6 +138,9 @@ const CUES = new Set(['water', 'food', 'warmth', 'rest', 'dry', 'spent', 'nearly
 // the keys that teach a concept (before or after its moment)
 const LEARNS = { ShiftLeft: 'jog', ShiftRight: 'jog', KeyV: 'view', KeyH: 'lamp', KeyI: 'book', KeyM: 'map', KeyF: 'fish', Digit1: 'pace', Digit2: 'pace', Digit3: 'pace' };
 const FIRE_EVENTS = ['lit', 'low', 'coals', 'out', 'ready', 'wet'];
+// a greyed verb's next step that a moment already teaches: not said again when the book opens (the content join: the
+// unload moment, then "Unload it: Set everything out…" a second later)
+const SAID_BY = { 'next:canoe:shoulder-it': 'unload' };
 
 // metres from (x, z) to a store hotspot's box, on the ground (outfitter.js reachTo)
 function reachTo(h, x, z) {
@@ -437,8 +440,8 @@ export class Hints {
         return !tr;
       }
       case 'unload': {
-        const g = t.pointer && t.pointer.target;
-        if (!(g && g.kind === 'canoe' && g.q && g.q.why && /unload/i.test(g.q.why))) return false;
+        const g = t.pointer && t.pointer.target, sh = g && g.kind === 'canoe' ? [g.e, g.q].find((a) => a && a.verb === 'Shoulder it') : null;
+        if (!(sh && sh.why && /unload/i.test(sh.why))) return false; // (content join: on E at a trail head)
         const tr = typeof p.nearestTrail === 'function' ? p.nearestTrail(p.x, p.z, 60) : null;
         return !!tr;
       }
@@ -633,6 +636,7 @@ export class Hints {
     const key = `next:${String(id).toLowerCase().replace(/\s+/g, '-')}`;
     const rec = this.rec(key);
     if (!rec || rec.n > 0) return false;
+    const by = SAID_BY[key] && this.rec(SAID_BY[key]); if (by && by.n > 0) return false; // (content join: a moment said it already)
     if (this.cur && this.cur.m.prio > TEACH) return false;
     if (!this.clear({ prio: TEACH }, card ? 'paper' : null)) return false;
     const words = String(text).replace(/\s*\.\s*$/, '');
