@@ -9,7 +9,7 @@ import { hash2 } from './rng.js';
 import { Site } from './site.js';
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
 import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the lakes with no contour map
-import { patchTile, lakeRockBins, clearPlants } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
+import { patchTile, lakeRockBins, clearPlants, useV4 as rapidsV4 } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
 
 let cfg = null;
 
@@ -152,13 +152,16 @@ function partTerrain(t, size) {
   return t;
 }
 
+// d2 bake: a v4 release grades its rivers and makes its drops in the bake (no water-grade.bin pieces asked for)
+const v4 = () => !!(cfg && cfg.grid && cfg.grid.format >= 4);
+
 async function buildFine(m) {
   const g = cfg.grid;
-  gradeAhead('fine', m.tx, m.ty);
+  if (!v4()) gradeAhead('fine', m.tx, m.ty);
   const buf = await fetchTile(m.url);
-  await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
+  if (!v4()) await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
-  const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
+  const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
   grid.cdomById = cfg.cdomById || null; // d2 water: the lakes' CDOM (water-build.js cellColour)
   shoalBeds(grid); // d2 water: the bed up under the mapped rice, reeds and lilies (v4; the grid's arrays view buf)
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
@@ -192,9 +195,9 @@ async function buildFine(m) {
 // chunk can be hidden as soon as the fine tile under it is in.
 async function buildFar(m) {
   const g = cfg.grid, f = g.far;
-  gradeAhead('far', m.fx, m.fy);
+  if (!v4()) gradeAhead('far', m.fx, m.fy);
   const buf = await fetchTile(m.url);
-  await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
+  if (!v4()) await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
   bowlTile(buf, 'far', cfg.grid, cfg.bowlById); // d1 lakes
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
   const grid = new TileGrid(desc, m.fx, m.fy, buf, cfg.levelById, cfg.clarityById);
@@ -217,7 +220,7 @@ async function buildFar(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; return; }
+  if (m.type === 'init') { cfg = m; if (v4()) rapidsV4(); return; } // (d2 bake: the v4 release's drops)
   if (m.type !== 'build') return;
   try {
     const r = m.level === 'far' ? await buildFar(m) : await buildFine(m);

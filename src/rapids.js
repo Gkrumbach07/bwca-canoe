@@ -18,11 +18,21 @@ import { SPECIES, ROCK_KIND, ROCK_FOOT, seatRock, BIN_GROUPS, ROCK_STRIDE, REGIO
 import { meshHeightAt } from './terrain-build.js';
 
 // ---- the drops ------------------------------------------------------------------------------------------------
-export const WHITE = TABLE.white.map((w, id) => {
+const mapWhite = (list) => list.map((w, id) => {
   const ux = Math.cos(w.dir || 0), uz = Math.sin(w.dir || 0);
   const half = w.a ? Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) / 2 : 0;
   return { ...w, id, ux, uz, half, drop: w.drop || 0, flat: !!w.flat, hidden: !!w.hidden };
 });
+export let WHITE = mapWhite(TABLE.white);
+// d2 bake: a v4 release has every drop baked into its own levels (scripts/rapids-bake.mjs) and its own list of drops
+// (TABLE.v4: its lake ids, Quetico's drops on the rivers it now has). useV4() swaps that list in and lets go of the
+// rows, which were made over data-v3's levels; world.js calls it as a v4 index loads, the tile worker on its init.
+let ROW_LIST = TABLE.rows || [];
+export function useV4() {
+  if (TABLE.v4 && TABLE.v4.white) WHITE = mapWhite(TABLE.v4.white);
+  ROW_LIST = (TABLE.v4 && TABLE.v4.rows) || [];
+  ROWS = null;
+}
 // the list the map draws and the place note reads (hud.mapPlaces, d1 names): { kind, name, x, z, a, b, drop }
 export function whiteWater() {
   return WHITE.map((w) => ({ kind: w.kind, name: w.name, x: w.x, z: w.z, ...(w.a ? { a: w.a, b: w.b } : {}), drop: w.drop }));
@@ -70,7 +80,7 @@ let ROWS = null;
 const rowsByJ = () => {
   if (ROWS) return ROWS;
   ROWS = new Map();
-  for (const r of TABLE.rows || []) { let a = ROWS.get(r[0]); if (!a) ROWS.set(r[0], (a = [])); a.push(r); }
+  for (const r of ROW_LIST) { let a = ROWS.get(r[0]); if (!a) ROWS.set(r[0], (a = [])); a.push(r); }
   return ROWS;
 };
 // The rocks' shoals: a rock above the water stands on a shoal, and the bed the bake made is often metres down there

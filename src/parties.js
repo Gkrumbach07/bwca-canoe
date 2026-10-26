@@ -168,7 +168,9 @@ export class Parties {
     this.basinOfLake = (id) => { const l = id > 0 ? lakes[id - 1] : null; return l ? l.basin : -1; };
     // which lake each site is on: the release's table (scripts/site-lakes.mjs), else the nearest lake by its size
     const table = SITE_LAKES && SITE_LAKES.for === (w.meta && w.meta.source && w.meta.source.baked) && SITE_LAKES.n === w.campsites.length ? SITE_LAKES.lakes : null;
-    this.siteLake = table ? Int32Array.from(table) : this.guessLakes();
+    // d2 bake: a v4 index carries each site's lake itself (bake.mjs, as site-lakes.mjs made the table for data-v3)
+    const own = w.campsites.length && w.campsites.every((c) => Number.isInteger(c.lake)) ? w.campsites.map((c) => c.lake) : null;
+    this.siteLake = own ? Int32Array.from(own) : table ? Int32Array.from(table) : this.guessLakes();
     this.basinSites = new Map();
     w.campsites.forEach((c, i) => {
       const b = this.basinOfLake(this.siteLake[i]); if (b < 0) return;
