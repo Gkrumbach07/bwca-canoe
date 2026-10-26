@@ -397,8 +397,10 @@ defineItem({ id: 'rodmh', name: 'Medium-heavy rod', kind: 'long', w: 1, h: 7, kg
 // The old profile's owned ids (profile.js, the hubs' shop) as items: what a save from before the items migrates to
 export const LEGACY = { pack: 'pack3', pack2: 'pack4', barrel: 'barrel60', rod: 'rodmh' };
 // the season's starting kit as items: where each goes (inventory.newSeason)
+// content join (the owner's call on the new-player review, 2026-10-25): the 30 L blue barrel comes in the starting kit; the
+// bears' line, the raid and the hang all asked for one, and it was $25 of the $40
 export const STARTER_KIT = {
-  canoe: ['pack3', 'bucket', 'stringer'],
+  canoe: ['pack3', 'barrel30', 'bucket', 'stringer'],
   pack3: ['aframe', 'sleepingbag', 'clothes', 'pot', 'tarp', 'tablets', 'tacklebox'],
   tacklebox: ['lure:jig', 'lure:mepps'],
   bucket: [['leeches', 12]],

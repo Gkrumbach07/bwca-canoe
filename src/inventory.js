@@ -174,8 +174,8 @@ export class Inventory {
 
   // --- a new season, and the migration of an older one -------------------------------------------------------------
   // The starting kit (items.js STARTER_KIT): a Duluth pack #3 with the tent, the bag, the clothes, the pot, the tarp,
-  // the tablets and the tackle box (a jig and a Mepps); the leech bucket with a dozen; the stringer; the ash paddle and
-  // the rod. All of it in the canoe, tied up at the home store's dock.
+  // the tablets and the tackle box (a jig and a Mepps); the 30 L food barrel, empty (the content join); the leech bucket
+  // with a dozen; the stringer; the ash paddle and the rod. All of it in the canoe, tied up at the home store's dock.
   newSeason() {
     this.containers = []; this.long = []; this.n = 1;
     this.season = this.profile ? this.profile.seasonId : null;
