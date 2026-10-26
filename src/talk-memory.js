@@ -77,14 +77,18 @@ export class Memory {
     const m = this.state, F = this.fishing, C = this.P.tasks && this.P.tasks.claimed;
     if (F && Array.isArray(F.log)) {
       if (m.n.fishSeen < 0 || m.n.fishSeen > F.log.length) m.n.fishSeen = F.log.length; // (a log cut back: from here)
-      for (let i = m.n.fishSeen; i < F.log.length; i++) this.addFish(m, F.log[i]);
+      // (the content join: the count moved on before addFish writes the save; written after, a reload read the same
+      // catch again, and the 76 cm walleye was remembered four times over)
+      for (let i = m.n.fishSeen; i < F.log.length; i++) { m.n.fishSeen = i + 1; this.addFish(m, F.log[i]); }
       m.n.fishSeen = F.log.length;
     }
     if (Array.isArray(C)) {
       if (m.n.claimSeen < 0 || m.n.claimSeen > C.length) m.n.claimSeen = C.length;
+      const had = m.n.claimSeen;
       for (let i = m.n.claimSeen; i < C.length; i++) { const c = C[i]; m.tasks.push({ kind: c.kind, title: c.title, from: c.from, pay: c.pay, day: c.day ?? this.today }); }
       if (m.tasks.length > KEEP_TASKS) m.tasks.splice(0, m.tasks.length - KEEP_TASKS);
       m.n.claimSeen = C.length;
+      if (C.length > had) this.P.write(); // (and saved with the count, so a reload does not count the claims twice)
     }
     if ((this.loonT -= 0.5) <= 0) { this.loonT = 2; this.watchLoons(m); }
   }
