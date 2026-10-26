@@ -283,6 +283,29 @@ of the trees. Open rock belongs to campsites and some points and ledges, not to 
   and trees leaning in over the path, birch and aspen among them, so the canopy closes and the fall is colourful.
   The lane was 5–7 m of bare ground before; the cost is a few percent of calls and triangles at a trail.
 
+## Burns (the real ones, 2026-10-26)
+
+The data, the lookup and the ages are in `docs/data-sources.md` ("Burns: how they work now"). What draws them:
+- **The char:** on land the terrain's floor `w` is free. It carries a fresh burn's char, laid over the ground by
+  `glslGround` as black with pale ash in patches (`uGroundChar`), and sooting bare rock only lightly. The cell splat
+  the grass reads does not carry it.
+- **The burn material:** splat slot 3 is the burn's open ground. It is olive now (fireweed, grass, bracken and
+  blueberry), not the old tawny.
+- **Fireweed:** the cover's fourth byte, high nibble, is fireweed's share of the tufts (`coverField`). Its low nibble
+  is still read as shade by audio.js and bugs.js. In groundcover.js those tufts stand twice as tall and turn magenta
+  over their upper part while `uFlower` (fireweed's season) is up.
+- **Scorch:** a trunk's char rides in its instance tint as whole fours over it, each a quarter metre up the trunk
+  (`placement.js scorchTint`). The worker keeps it in the colour's blue (`tile-worker.js instanceData`), and the card
+  material's fragment draws the char line (`vegetation.js SCORCH`). Do it per fragment: a trunk has few rings, and a
+  line drawn per vertex smeared the char up half a snag.
+- **Snags:** snags are the snag species tinted, black (tint × 0.2) while fresh and silver-grey later. They are culled
+  at 2400 m (it was 3200).
+- **Regrowth:** a new small species, 22 (`regrowth`). Each instance is a clump of three to five aspen whips (even
+  variants) or young jack pines (odd, evergreen). A bin's two groups take variants three apart, so one of each. It is
+  near only (LOD 260 m, cull 520 m), understory for the shadow cull, and not a trunk.
+- **Young trees** are the ordinary species at the height of the burn's age (`placement.js NOMINAL`).
+- **Deadfall** is the log species. The blowdown's logs lie to `BLOW_YAW` on gentle ground.
+
 ## The ground things stand on
 
 - The terrain mesh is not the height field: the shore band's rock bumps and the flat triangles between vertices
