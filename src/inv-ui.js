@@ -1679,7 +1679,9 @@ export function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } wi
 // (def.onYou); what is left of its uses, servings or litres as a bar; its weight (on a shelf: the price first)
 export function tipHtml(d, e, { shelf = false } = {}) {
   if (!d) return '';
-  const kg = e.data && Number.isFinite(e.data.kg) ? e.data.kg * (e.qty || 1) : (d.kg || 0) * (e.qty || 1), st = d.stack || 1;
+  // (content join: a fish weighs what its length makes it, as the pack counts it: an 18 cm crappie read 800 g)
+  const fishW = d.kind === 'fish' && e.data && e.data.length && A_ITEMS && typeof A_ITEMS.fishKg === 'function' ? A_ITEMS.fishKg(d.species || String(e.id || d.id).slice(5), e.data.length) : null;
+  const kg = e.data && Number.isFinite(e.data.kg) ? e.data.kg * (e.qty || 1) : Number.isFinite(fishW) ? fishW * (e.qty || 1) : (d.kg || 0) * (e.qty || 1), st = d.stack || 1;
   const name = `${d.name}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}`;
   const identity = typeof d.identity === 'string' ? d.identity : e.hull ? 'A canoe' : '';
   const stt = !shelf ? statusOf(e) : null;
