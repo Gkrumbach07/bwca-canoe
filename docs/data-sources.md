@@ -463,3 +463,97 @@ Products:
 **Licence.** LakeBrowser's services state no licence. Cite the lab, and ask Leif Olmanson (olman002@umn.edu) before the values ship in a public release.
 
 Quick looks (`shots/d1-quetico/`, copied to each source's `quicklook/`): `osm-box.png`, `osm-quetico.png`, `osm-lakeone.png`, `colour-secchi-box.png`, `colour-cdom-box.png`, `colour-secchi-lakeone.png`, `colour-cdom-lakeone.png`.
+
+## Baked: tile format v4 (round D2)
+
+Round D2's bake reads the four products above onto the bake's grid (`scripts/v4-products.mjs`) and writes a v4 release. Rebake it with `BWCA_CACHE=<main checkout>/data-cache npm run rebake:v4` (`scripts/rebake-v4.mjs`).
+- **The run:** about 2.5 minutes: the bake, the rapids, the lake facts and the checks. It builds `public-data-v4.next` beside the target and swaps it in by rename.
+- **Safety:** the bake refuses to write a `public/data` folder (the live release came from there). A test area (`--area lakeone`) bakes to `public-data-v4-lakeone`.
+
+### The format
+
+`index.json` is version 4.
+- `fields` names the tile's fields in order. `channels` holds `{ name, at, type, nodata }`, where plane *q* starts at byte *at* × side². `grid.format` is 4 and `grid.fields` repeats the list, so the tile worker sees them.
+- **A fine tile** is the v3 tile followed by nine Uint8 planes. Each plane covers the same (256 + 2·6)² cells as the v3 fields, halo included.
+- **The level field is 0 on land.** v3 copied the height there. Every reader asks for the level only on water cells. Dropping the copy saved 120 MB.
+- **Far tiles** keep the v3 four.
+- **A v3 tile** is just the four fields: `tileChannels` gives null and `chCell` gives 0, so the game falls back to today's ground.
+
+| Plane | at | Holds |
+|---|---|---|
+| `ground` | 8 | d1-ground's kind 0–13. MGS `bare` outcrop becomes 10 where the kind is 0, 1 or 11: 233 km². On the bake's water: 8, 9 or 13. On its land, 13 marks a pond OSM lacks (88 km²). |
+| `forest` | 9 | Forest type 0–23. A land cell LANDFIRE calls water takes its nearest land cell's type, canopy and cover, within 100 m (1.5 M cells). The bake's water is 1. |
+| `canopy` | 10 | Height of the life form, dm (0 = none) |
+| `cover` | 11 | Its cover, % in 5 % steps (0 = none) |
+| `rock` | 12 | Bedrock unit 1–19 (0 outside Minnesota) |
+| `cliff` | 13 | `(class << 6) \| strength` from the LiDAR. **0** no LiDAR here. **1** LiDAR, nothing. **Class 1** boulder field: under 30° with roughness ≥ 25 cm; strength = roughness / 4 cm. **Class 2** talus or ledge: 30–50° with roughness ≥ 30 cm; strength the same. **Class 3** face: ≥ 50° with relief ≥ 3 m; strength = the cell's relief in metres (25 means 25.4 m or more). Whole box: 2.24 M boulder cells, 1.74 M talus, 291 k face. |
+| `stone` | 14 | Surface stone cover, 254·√fraction (255 = no survey) |
+| `secchi` | 15 | Secchi depth, byte / 10 m, on the bake's water only |
+| `cdom` | 16 | CDOM, byte / 20 m⁻¹, on the bake's water only |
+
+**Readers.** `grid.js` has `V4_FIELDS`, `tileChannels`, `cliffClass` and `cliffStrength`.
+- `TileGrid.ch` holds the planes and `TileGrid.chCell(name, i, j)` reads one cell.
+- The World's slots carry `.ch` too; read them with `world.chCell(name, i, j)` and `world.chAt(name, x, z)`.
+
+### What the bake does with the products
+
+- **Heights:** the LiDAR's cell mean where `mask & 17` (LiDAR and the US side), blended into 3DEP over 80 m at the flight's edge and the border. That covers 84 M cells.
+- **Lake levels:** each basin with 8 or more LiDAR cells takes the median of the LiDAR's hydro-flattened surface over its own cells (4,035 basins). Lakes of 20 ha or more rose a median 0.30 m; 5–95 % ran −0.10 to +0.90 m. The old 3DEP level stays as `level3dep` on lakes and basins. Rivers fit their profiles over the blended heights, then grade as before.
+- **The lake table** adds, per polygon:
+  - `secchi`, `cdom`, `chla` and `colourSrc`, joined by osm id to d1-quetico-lakes' table (24,526 polygons, every one under the id it expected). `secchiMeasured` is set where the source is `lake` or `dnr`.
+  - `dow`: the DNR numbers.
+  - `emergent` and `aqBed`: the lake's own cells with ground kind 8 or 9.
+- **Ontario:** `CFG.extracts` lists Ontario first, then Minnesota. `osm-extract.mjs` has d1-quetico-lakes' four fixes:
+  - the cache file is named for its extracts;
+  - a cut already made skips the province download, and a cut of a bigger box is cut down again;
+  - a tagged node is reported once;
+  - the later file wins.
+
+  Its output equals the drop-in extract exactly. Lake ids all change: Lake One is 103.
+- **Official sites and portages:** the bake appends the 107 USFS sites OSM lacks and the 11 USFS-only portages (`official-adds.mjs`, shared with `world-fixes.mjs`). Each campsite carries `lake`, the nearest water within 400 m; parties.js reads it.
+- **The rapids:** `rapids.mjs` runs over the new levels and `rapids-bake.mjs` bakes its drops into the tiles (2,239 runs, 11,992 cells). The index's `rapids` records that. The release's own list of drops goes into `src/rapids.json` as `v4`: 115 drops, Quetico's included. rapids.js `useV4()` swaps it in and drops data-v3's rows. `rapids.mjs` is not a fixed point (a second pass still moves 4,174 cells), so a release is baked once.
+
+### Tables per release
+
+The game reads both releases.
+
+| Table | data-v3 | v4 |
+|---|---|---|
+| `world-fixes.json` | applied (its `for`) | not needed: the bake does it |
+| `site-lakes.json` | parties.js | the index's `campsite.lake` |
+| `water-grade.bin` | the worker grades | the bake grades; the worker skips it (`grid.format` ≥ 4) |
+| `lake-facts.json` / `lake-facts-v4.json` | the first | the second (world.js picks by version) |
+| `rapids.json` | `white`, `rows` | `v4.white`, no rows |
+| `names-*.json` | keyed by place | the same keys: 1,941 sites numbered on both |
+
+### Sizes, times, checks (2026-10-26)
+
+**Times and sizes:**
+- The bake takes 1.9 min at 8.3 GB peak. The rapids take 2 s, the lake facts 5 s and the check 30 s.
+- The release is 364 MB: tiles 338 MB, index 7.9 MB, far 10 MB. data-v3 is 380 MB, with tiles at 359 MB.
+
+**Channel costs (gzip in the tiles):** ground 6.2 MB, forest 10.4, canopy 17.8, cover 16 (24 before the 5 % steps), rock 0.7, cliff 7.3, stone 5.3, secchi 2.7, cdom 2.8.
+
+**Checks (`scripts/v4-check.mjs`):**
+- **Water:** no water cell has its bed at or above its surface.
+- **Lakes:** none of data-v3's 1,558 named lakes is lost, and none shrank by over 10 %. 1,828 are named now.
+- **Entry points:** all 55 lie on the same lake as data-v3's corrected landings, within 50 m. No portage launch is off the water.
+- **The LiDAR's edge:** steps across it are no bigger than anywhere else (p95 1.7 m against 2.1).
+- **Land below the river beside it:** 28 k shore cells sit below the river next to them (p50 0.5 m), from the grading and the drops. data-v3 as the game plays it (graded and patched at load) has 22.7 k. terrain-build's shore band draws both.
+
+### The release step (needs the owner's OK)
+
+1. Merge the code first. It reads both releases, so the live game keeps running on data-v3.
+2. Pack the data with `tar -cf bwca-data-v4.tar -C public-data-v4 .` (about 364 MB) and attach it to a new release, `data-v4`. Then set the Pages variable `DATA_RELEASE` to `data-v4` and rerun the workflow.
+3. **Saves don't record the release.** They hold lake ids (explored lakes, tasks' `lakeId`), campsite indices (`t.site`) and portage indices (`t.portage`), and v4 moves all three:
+   - Lake One is 103, not 78.
+   - Ontario's 5 sites come first.
+   - The portage list has Quetico's 263 chains in OSM order.
+
+   Before the switch, saves need either a migration or a reset of those parts. A migration would map lakes by osm id, sites by rounded position and portages by their ends.
+4. **Mixed tiles for a few minutes.** Pages serves the data with a 10-minute max-age, so just after the switch a browser can hold data-v3 tiles under the v4 index. Serving the release under its own path would avoid that.
+5. **Licences:**
+   - Ask Leif Olmanson (UMN) before LakeBrowser's colour ships.
+   - Cite MGS for the bedrock.
+   - LANDFIRE, NHD, MnTOPO and NWI are public; SSURGO is public domain.
+   - OSM, Ontario's included, is ODbL.

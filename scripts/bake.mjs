@@ -4,7 +4,8 @@
 //   - lakes, portages, campsites and entry points from an offline OpenStreetMap extract (Geofabrik)
 //
 //   index.json             grid/projection, per-tile flags, lake table (names, levels), portages, campsites, entry points
-//   tiles/{tx}_{ty}.bin    gzip of [height Int16 dm][lake Uint16][shore distance Int16 dm], (tile+2*halo)^2 cells each
+//   tiles/{tx}_{ty}.bin    gzip of [height Int16 dm][lake Uint16][shore distance Int16 dm][level Int16 dm], (tile+2*halo)^2
+//                          cells each; format v4 (d2 bake) adds a Uint8 plane per channel after them (v4-products.mjs)
 //   far/{fx}_{fy}.bin      the same at 80 m resolution for the far field (no trees, distant shores only)
 //   overview.png           40 m/px map of the whole area for the minimap
 //
@@ -13,7 +14,15 @@
 // to a whole-grid computation and continuous across band and tile edges. Water basins, levels and names
 // are computed on the full grid with compact typed arrays.
 //
-// Usage: node scripts/bake.mjs [--all | --area lakeone|bwca | --bbox S,W,N,E] [--out public/data]
+// Usage: node scripts/bake.mjs [--all | --area lakeone|bwca | --bbox S,W,N,E] [--out public-data-v4] [--tiles x0-x1,y0-y1]
+//
+// d2 bake (round D2 of the real data, 2026-10-26): on the bwca grid the bake reads round D1's source products
+// (data-cache/{lidar,ground,forest-rock,lake-colour}: v4-products.mjs) and writes tile format v4 (index version 4):
+// heights from the MnTOPO LiDAR where it covers the US side (blended into 3DEP over 80 m at its edge), each lake's level
+// the LiDAR's median water surface, the ground, forest, canopy, cover, rock, cliff, stone and water colour channels,
+// Quetico from the Ontario extract (config.mjs CFG.extracts), and the official campsites and USFS portages
+// (official-adds.mjs). It never writes the main checkout's public/data unless told (--force-public-data): the live
+// release came from there and every worktree links to it.
 
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -27,6 +36,8 @@ import { loadBathymetry } from './bathymetry.mjs';
 import { loadClarity } from './clarity.mjs';
 import { makeWater, placeLandings, linkPortages, chainsFrom } from './world-links.mjs';
 import { gradeLevels } from './water-grade.mjs';
+import { loadProducts, lidarWeight, makeChannels, lidarBasinLevels, V4_CHANNELS, V4_FIELDS } from './v4-products.mjs'; // d2 bake
+import { officialAdds } from './official-adds.mjs'; // d2 bake (d1 names' sites and portages)
 
 // ---------- CLI ---------------------------------------------------------------------
 
@@ -38,10 +49,17 @@ function parseArgs(argv) {
     else if (a === '--area') o.area = argv[++i];
     else if (a === '--bbox') { const [s, w, n, e] = argv[++i].split(',').map(Number); o.bbox = { south: s, west: w, north: n, east: e }; }
     else if (a === '--out') o.out = argv[++i];
-    else if (a === '--help') { console.log('node scripts/bake.mjs [--all | --area name | --bbox S,W,N,E] [--out dir]'); process.exit(0); }
+    else if (a === '--tiles') { const [x, y] = argv[++i].split(',').map((r) => r.split('-').map(Number)); o.tiles = { x0: x[0], x1: x[1] ?? x[0], y0: y[0], y1: y[1] ?? y[0] }; }
+    else if (a === '--force-public-data') o.forcePublic = true;
+    else if (a === '--help') { console.log('node scripts/bake.mjs [--all | --area name | --bbox S,W,N,E] [--out dir] [--tiles x0-x1,y0-y1 (fine tiles written)] [--force-public-data]'); process.exit(0); }
   }
   o.bbox = o.bbox || AREAS[o.area];
   if (!o.bbox) throw new Error('unknown area ' + o.area);
+  // d2 bake: a test area's bake goes beside the whole box's, never over it
+  if (!argv.includes('--out') && (o.area !== 'bwca' || argv.includes('--bbox'))) o.out = `${CFG.outDir}-${argv.includes('--bbox') ? 'bbox' : o.area}`;
+  // d2 bake: the main checkout's public/data holds the live release's data, and every worktree links to it
+  const real = (() => { try { return fs.realpathSync(o.out); } catch { return path.resolve(o.out); } })();
+  if (/\/public\/data\/?$/.test(real) && !o.forcePublic) throw new Error(`refusing to write ${real} (the release's data, linked from every worktree): pass --out public-data-v4, or --force-public-data`);
   return o;
 }
 
@@ -204,6 +222,10 @@ async function main() {
   const gridBox = { south: latS - 0.005, west: lonW - 0.01, north: latN + 0.005, east: lonE + 0.01 };
   const [osm, bathy, clarityData] = await Promise.all([loadOsm(gridBox), loadBathymetry(gridBox), loadClarity(gridBox), prefetchTerrarium(gridBox)]);
   const sampler = makeSampler();
+  // d2 bake: round D1's products on this grid (null on any other grid: the bake comes out as format v3)
+  const P = loadProducts(grid, CFG.cacheDir, log);
+  const lidar = P && P.lidar, lidW = lidar ? lidarWeight(grid, lidar) : null;
+  if (lidar) { let n = 0, full = 0; for (let k = 0; k < N; k++) if (lidW[k]) { n++; if (lidW[k] === 255) full++; } log(`d2 bake: LiDAR heights on ${n} cells (${full} wholly, the rest blended into 3DEP within ${80} m of its edge)`); }
 
   // --- lakes in local metres, big first (small ponds and islands' inner lakes drawn later win)
   const lakes = [];
@@ -242,6 +264,7 @@ async function main() {
 
   // --- pass 1: elevation, distance field (in bands with a halo wider than the clamp distance)
   const hraw = new Int16Array(N);   // DEM height, decimetres
+  const h3dep = lidar ? new Int16Array(N) : null; // d2 bake: 3DEP alone, for each lake's old level (level3dep)
   const sdist = new Int16Array(N);  // signed shore distance, decimetres (+ land, - water)
   const EDT_HALO = Math.ceil(maxDist / cell) + 20;
   const clampCells = maxDist / cell;
@@ -262,7 +285,12 @@ async function main() {
       const [lat, lon0] = proj.toLatLon(grid.cx(0), grid.cz(j));
       sampler.sampleRow(lat, lon0, cell / proj.mPerDegLon, W, rowBuf);
       const o = j * W;
-      for (let i = 0; i < W; i++) { const h = rowBuf[i]; hraw[o + i] = Math.round(h * 10); if (h < hmin) hmin = h; if (h > hmax) hmax = h; }
+      for (let i = 0; i < W; i++) {
+        let h = rowBuf[i];
+        // d2 bake: the LiDAR's cell mean where it covers the US side, blended into 3DEP at its edge
+        if (lidar) { h3dep[o + i] = Math.round(h * 10); const w = lidW[o + i]; if (w) h += (lidar.h[o + i] / 10 - h) * (w / 255); }
+        hraw[o + i] = Math.round(h * 10); if (h < hmin) hmin = h; if (h > hmax) hmax = h;
+      }
     }
     // distance to land (for water cells) and to water (for land cells)
     const gw = g.subarray(0, rows * W), dl = dLand.subarray(0, rows * W), dw = dWater.subarray(0, rows * W);
@@ -326,8 +354,8 @@ async function main() {
   log(`${basins.length} water basins`);
 
   // water level per basin: a low percentile of interior cells (shoreline trees leak into the DEM and bias it upward)
-  {
-    const nb = basins.length;
+  const basinPercentiles = (hraw) => {
+    const nb = basins.length, out = new Float32Array(nb);
     const count = new Int32Array(nb + 1);
     for (let k = 0; k < N; k++) if (lakeId[k] && sdist[k] <= -140) count[basin[k] + 1]++;
     for (let b = 0; b < nb; b++) count[b + 1] += count[b];
@@ -337,7 +365,7 @@ async function main() {
     const small = new Uint8Array(nb);
     for (let b = 0; b < nb; b++) {
       const seg = samples.subarray(count[b], count[b + 1]);
-      if (seg.length >= 8) { seg.sort(); basins[b].level = seg[Math.floor(seg.length * 0.3)] / 10; } else small[b] = 1;
+      if (seg.length >= 8) { seg.sort(); out[b] = seg[Math.floor(seg.length * 0.3)] / 10; } else small[b] = 1;
     }
     // small basins: all of their cells, at a lower percentile
     const count2 = new Int32Array(nb + 1);
@@ -349,8 +377,29 @@ async function main() {
     for (let b = 0; b < nb; b++) if (small[b]) {
       const seg = samples2.subarray(count2[b], count2[b + 1]);
       seg.sort();
-      basins[b].level = seg.length ? seg[Math.floor(seg.length * 0.12)] / 10 : 0;
+      out[b] = seg.length ? seg[Math.floor(seg.length * 0.12)] / 10 : 0;
     }
+    return out;
+  };
+  {
+    const lv = basinPercentiles(hraw);
+    for (let b = 0; b < basins.length; b++) basins[b].level = lv[b];
+  }
+  // d2 bake: where the LiDAR covers a basin (8 cells or more), its level is the median of the LiDAR's hydro-flattened
+  // surface over the basin's own cells, not per cell, so a border lake doesn't step at the edge of the flight (about
+  // 0.3 m over the 3DEP percentile: the water on the flight days, April-May 2021); the 3DEP percentile stays as
+  // `level3dep`
+  if (lidar) {
+    const l3 = basinPercentiles(h3dep), L = lidarBasinLevels(N, basin, basins.length, lidar);
+    let used = 0, rise = [];
+    for (let b = 0; b < basins.length; b++) {
+      basins[b].level3dep = l3[b];
+      if (Number.isNaN(L.level[b])) continue;
+      basins[b].level = L.level[b]; basins[b].lidar = L.cells[b]; used++;
+      if (!basins[b].river && basins[b].cells >= 2000) rise.push(L.level[b] - l3[b]);
+    }
+    rise.sort((a, b) => a - b);
+    log(`d2 bake: ${used} of ${basins.length} basins levelled by the LiDAR; lakes of 20 ha or more rose by a median ${(rise[rise.length >> 1] || 0).toFixed(2)} m (5-95 %: ${(rise[Math.floor(rise.length * 0.05)] || 0).toFixed(2)} to ${(rise[Math.floor(rise.length * 0.95)] || 0).toFixed(2)})`);
   }
   // each polygon takes the level of the basin holding most of its cells
   const lakeBasin = new Int32Array(nLakes + 1).fill(-1);
@@ -732,15 +781,31 @@ async function main() {
     const { histBefore, histAfter, sample, ...st } = res.stats; void histBefore; void histAfter; void sample;
     log(`river and creek levels graded (${((Date.now() - tb) / 1000).toFixed(1)} s): ${JSON.stringify(st)}`);
   }
-  // tiles: (tile + 2 halo)^2 cells each, edges replicated beyond the grid
+  // --- d2 bake: the v4 channels (v4-products.mjs), now the water is known; each polygon's colour from d1-quetico-lakes'
+  //     table, joined by its osm id
+  const colourOf = new Array(nLakes + 1).fill(null);
+  if (P && P.colourTable) {
+    let hit = 0, sameId = 0;
+    lakes.forEach((l, i) => { const r = P.colourTable.get(l.osm); if (r) { colourOf[i + 1] = r; hit++; if (r.id === i + 1) sameId++; } });
+    log(`d2 bake: water colour for ${hit} of ${nLakes} polygons (${sameId} under the same id the colour table expected)`);
+  }
+  const V4 = P ? makeChannels(grid, P, lakeId, (id) => colourOf[id], log).ch : null;
+  const NCH = V4 ? V4_CHANNELS.length : 0;
+  // the beds in each lake (ground kinds 8 and 9 on its own cells), for the rice and the lilies (d2 water)
+  const emergent = new Uint32Array(nLakes + 1), aqBed = new Uint32Array(nLakes + 1);
+  if (V4) for (let k = 0; k < N; k++) { const id = lakeId[k]; if (!id) continue; const g = V4.ground[k]; if (g === 8) emergent[id]++; else if (g === 9) aqBed[id]++; }
+  // tiles: (tile + 2 halo)^2 cells each, edges replicated beyond the grid; v4: a Uint8 plane per channel after the four
   {
     const tb = Date.now();
-    const buf = Buffer.alloc(SIDE * SIDE * 8);
-    const th = new Int16Array(buf.buffer, buf.byteOffset, SIDE * SIDE);
-    const tl = new Uint16Array(buf.buffer, buf.byteOffset + SIDE * SIDE * 2, SIDE * SIDE);
-    const ts = new Int16Array(buf.buffer, buf.byteOffset + SIDE * SIDE * 4, SIDE * SIDE);
-    const tv = new Int16Array(buf.buffer, buf.byteOffset + SIDE * SIDE * 6, SIDE * SIDE);
-    let written = 0;
+    const n = SIDE * SIDE;
+    const buf = Buffer.alloc(n * (8 + NCH));
+    const th = new Int16Array(buf.buffer, buf.byteOffset, n);
+    const tl = new Uint16Array(buf.buffer, buf.byteOffset + n * 2, n);
+    const ts = new Int16Array(buf.buffer, buf.byteOffset + n * 4, n);
+    const tv = new Int16Array(buf.buffer, buf.byteOffset + n * 6, n);
+    const planes = V4 ? V4_CHANNELS.map((c, q) => [new Uint8Array(buf.buffer, buf.byteOffset + n * (8 + q), n), V4[c.name]]) : [];
+    const keep = opt.tiles ? (tx, ty) => tx >= opt.tiles.x0 && tx <= opt.tiles.x1 && ty >= opt.tiles.y0 && ty <= opt.tiles.y1 : () => true;
+    let written = 0, bytes = 0;
     for (let ty = 0; ty < nty; ty++) for (let tx = 0; tx < ntx; tx++) {
       let water = 0, mn = 32767, mx = -32768;
       for (let lj = 0; lj < SIDE; lj++) {
@@ -748,15 +813,21 @@ async function main() {
         for (let li = 0; li < SIDE; li++) {
           const i = Math.max(0, Math.min(W - 1, tx * T - HALO + li));
           const k = j * W + i, m = lj * SIDE + li;
-          th[m] = hq[k]; tl[m] = lakeId[k]; ts[m] = sdist[k]; tv[m] = lakeId[k] ? level[k] : hq[k];
+          // (d2 bake: v4's level is 0 on land, where v3 copied the height: every reader asks it of water cells only, and
+          // the copy cost 120 MB of the release)
+          th[m] = hq[k]; tl[m] = lakeId[k]; ts[m] = sdist[k]; tv[m] = lakeId[k] ? level[k] : V4 ? 0 : hq[k];
+          for (let q = 0; q < planes.length; q++) planes[q][0][m] = planes[q][1][k];
           if (lj >= HALO && lj < HALO + T && li >= HALO && li < HALO + T) { if (lakeId[k]) water = 1; if (hq[k] < mn) mn = hq[k]; if (hq[k] > mx) mx = hq[k]; }
         }
       }
       tileMeta[ty * ntx + tx] = [water, mn, mx];
-      fs.writeFileSync(path.join(opt.out, 'tiles', `${tx}_${ty}.bin`), zlib.gzipSync(buf, { level: 6 }));
+      if (!keep(tx, ty)) continue;
+      const gz = zlib.gzipSync(buf, { level: 6 });
+      bytes += gz.length;
+      fs.writeFileSync(path.join(opt.out, 'tiles', `${tx}_${ty}.bin`), gz);
       if (++written % 200 === 0) log(`  ${written}/${ntx * nty} tiles written`);
     }
-    log(`${written} tiles written (${((Date.now() - tb) / 1000).toFixed(1)} s)`);
+    log(`${written} tiles written, ${(bytes / 1048576).toFixed(1)} MB (${((Date.now() - tb) / 1000).toFixed(1)} s)`);
   }
   // far tiles: same layout on the 80 m grid
   const nfx = Math.ceil(farW / FT), nfy = Math.ceil(farH / FT);
@@ -807,14 +878,42 @@ async function main() {
 
   // --- entry points: the hand list's real put-ins (scripts/entrypoints.json), on the water put into there (world-links.mjs)
   const entryPoints = [];
+  let landings = [];
   {
     const handList = JSON.parse(await fsp.readFile(new URL('./entrypoints.json', import.meta.url), 'utf8'));
-    for (const L of placeLandings(handList, water, proj, { portages, campsites })) {
+    landings = placeLandings(handList, water, proj, { portages, campsites });
+    for (const L of landings) {
       if (L.missing) { log(`  entry point ${L.ep} ${L.name}: no water near its put-in`); continue; }
       entryPoints.push({ ep: L.ep, name: L.name, x: L.x, z: L.z, lake: L.lake });
       log(`  entry point ${L.ep} ${L.name} -> ${displayName[L.lake] || 'unnamed'}, ${L.off} m from the put-in (${L.how})`);
     }
     entryPoints.sort((a, b) => a.ep - b.ep);
+  }
+  // --- d2 bake: d1 names' official campsites OpenStreetMap lacks and the clear USFS-only portages (official-adds.mjs),
+  //     appended after the extract's own as world-fixes.json appended them to data-v3; then each site's water: the lake
+  //     of the nearest water cell within 400 m (as scripts/site-lakes.mjs made src/site-lakes.json for data-v3)
+  let namesAdded = null;
+  if (P) {
+    const lakeAt = (i, j) => (i < 0 || j < 0 || i >= W || j >= H ? 0 : lakeId[j * W + i]);
+    const sdAt = (i, j) => (i < 0 || j < 0 || i >= W || j >= H ? 3000 : sdist[j * W + i] / 10);
+    namesAdded = officialAdds({ grid, proj, lakeAt, sdAt, water, portages, landings, campsites, cacheDir: CFG.cacheDir, log });
+    if (namesAdded) {
+      for (const c of namesAdded.campsites) campsites.push({ x: c.x, z: c.z, name: c.name, onWater: false, shore: c.shore, usfs: c.usfs, added: true });
+      for (const p of namesAdded.portages) portages.push(p);
+    }
+    const R = 40;
+    let found = 0;
+    for (const c of campsites) {
+      const ci = grid.ci(c.x), cj = grid.cj(c.z);
+      let best = 0, bd = Infinity;
+      for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
+        const d = di * di + dj * dj; if (d >= bd || d > R * R) continue;
+        const id = lakeAt(ci + di, cj + dj); if (id) { bd = d; best = id; }
+      }
+      c.lake = best;
+      if (best) found++;
+    }
+    log(`d2 bake: ${campsites.length} campsites (${namesAdded ? namesAdded.campsites.length : 0} official ones added), ${found} with water within 400 m; ${portages.length} portages (${namesAdded ? namesAdded.portages.length : 0} USFS-only added)`);
   }
 
   // --- start position: the Lake One landing when it is in the area, else the first entry point, else the biggest lake
@@ -850,19 +949,36 @@ async function main() {
   const lakeMeta = lakes.map((l, i) => {
     const id = i + 1;
     if (!lakeArea[id]) return null;
-    return { id, name: l.name, displayName: displayName[id], river: l.river || undefined, creek: l.creek || undefined, basin: lakeBasin[id], level: +lakeLevel[id].toFixed(2), cells: lakeArea[id], maxDepth: bathyLake[id] ? +(maxDepth[id] / 10).toFixed(1) : undefined,
+    const rec = { id, name: l.name, displayName: displayName[id], river: l.river || undefined, creek: l.creek || undefined, basin: lakeBasin[id], level: +lakeLevel[id].toFixed(2), cells: lakeArea[id], maxDepth: bathyLake[id] ? +(maxDepth[id] / 10).toFixed(1) : undefined,
       secchi: +secchi[id].toFixed(2), secchiMeasured: secchiSrc[id] === 1 || undefined, tp: tpById[id] ? +tpById[id].toFixed(1) : undefined,
       cx: r1(grid.cx(sumI[id] / lakeArea[id])), cz: r1(grid.cz(sumJ[id] / lakeArea[id])), osm: l.osm };
+    // d2 bake: the water's colour (UMN LakeBrowser through d1-quetico-lakes: secchi m, cdom a440 per m, chla ug/L, where
+    // it came from), the DNR's DOW numbers, the beds' cells (ground 8 and 9) and the 3DEP level before the LiDAR's
+    const c = colourOf[id];
+    if (c && c.secchi > 0 && c.cdom > 0) {
+      rec.secchi = +c.secchi.toFixed(2); rec.secchiMeasured = c.src === 'lake' || c.src === 'dnr' || undefined;
+      rec.cdom = +c.cdom.toFixed(2); if (c.chla > 0) rec.chla = +c.chla.toFixed(1); rec.colourSrc = c.src;
+    }
+    const dow = c && Array.isArray(c.dow) ? c.dow.filter((d) => /^\d{6,}$/.test(String(d).trim())).map((d) => String(d).trim()) : [];
+    if (dow.length) rec.dow = dow;
+    if (emergent[id]) rec.emergent = emergent[id];
+    if (aqBed[id]) rec.aqBed = aqBed[id];
+    const b = basins[lakeBasin[id]];
+    if (b && b.level3dep !== undefined && !l.river) rec.level3dep = +b.level3dep.toFixed(2);
+    return rec;
   });
-  const basinMeta = basins.map((b, i) => ({ id: i, name: b.name || null, level: +b.level.toFixed(2), cells: b.cells, river: b.river || undefined }));
+  const basinMeta = basins.map((b, i) => ({ id: i, name: b.name || null, level: +b.level.toFixed(2), cells: b.cells, river: b.river || undefined, level3dep: b.level3dep !== undefined ? +b.level3dep.toFixed(2) : undefined, lidar: b.lidar || undefined }));
   const index = {
-    version: 3,
-    fields: ['height', 'lake', 'sdist', 'level'],
-    source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extract)', bathymetry: 'Minnesota DNR Lake Bathymetric Contours (MN Geospatial Commons)', clarity: 'Minnesota DNR Lakes of Phosphorus Sensitivity / Watershed Health lake scores (mean Secchi depth)', baked: new Date().toISOString() },
+    version: V4 ? 4 : 3,
+    fields: V4 ? V4_FIELDS : ['height', 'lake', 'sdist', 'level'],
+    // d2 bake: the Uint8 planes after the four (v4-products.mjs): plane `at` starts at byte at x side^2 of a fine tile
+    channels: V4 ? V4_CHANNELS.map((c, q) => ({ ...c, at: 8 + q })) : undefined,
+    source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extracts: ' + (osm.source || CFG.extracts).join(', ') + ')', bathymetry: 'Minnesota DNR Lake Bathymetric Contours (MN Geospatial Commons)', clarity: 'Minnesota DNR Lakes of Phosphorus Sensitivity / Watershed Health lake scores (mean Secchi depth)', baked: new Date().toISOString(),
+      ...(P ? { d1: P.citations } : {}) },
     bbox, area: opt.area,
     proj: { lat0: proj.lat0, lon0: proj.lon0, mPerDegLat: proj.mPerDegLat, mPerDegLon: proj.mPerDegLon },
     grid: { width: W, height: H, cell, originX: grid.originX, originZ: grid.originZ, tile: T, halo: HALO, ntx, nty,
-      far: { factor: FAR, tile: FT, halo: HALO, width: farW, height: farH, ntx: nfx, nty: nfy } },
+      far: { factor: FAR, tile: FT, halo: HALO, width: farW, height: farH, ntx: nfx, nty: nfy }, format: V4 ? 4 : 3, fields: V4 ? V4_FIELDS : undefined },
     tiles: tileMeta,
     overview: { file: 'overview.png', cellsPerPx: OV, width: ovW, height: ovH },
     heightRange: [hmin, hmax],
@@ -873,6 +989,7 @@ async function main() {
     entryPoints,
     start: { x: r1(start.x), z: r1(start.z), lake: start.lake },
   };
+  if (namesAdded) index.namesReport = namesAdded.report;
   await fsp.writeFile(path.join(opt.out, 'index.json'), JSON.stringify(index));
   // the old single-area files are superseded
   for (const f of ['world.json', 'height.bin', 'lake.bin', 'sdist.bin']) await fsp.rm(path.join(opt.out, f), { force: true });
