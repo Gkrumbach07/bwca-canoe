@@ -54,6 +54,9 @@ const _push = { x: 0, z: 0 }, _held = { x: 0, z: 0, hit: false, trunk: null };
 const VAULT = { max: 1.15, thin: 1.3, dur: 0.62 };
 const CLIMB = { max: 2.05, fromWater: 1.05, dur: [0.8, 1.5] };
 const DROP_MAX = 2.6;
+// content join (the owner's call on the new-player review, 2026-10-25): the chance a tree knocks the canoe off your
+// shoulders, only while you jog under it; at a walk it catches and you stop, but it stays up (it was 45 % at any pace)
+const HULL_DROP = 0.15;
 // LOW_OVER: the lowest thing Space gets over rather than hops at, a little under a step: the collision holds the body
 // off a log whose top only peaks over a step at a ring of its stem, and that must be vaulted, not hopped into (the join)
 const LOW_OVER = STEP_UP - 0.1;
@@ -1270,7 +1273,7 @@ export class Player {
               c.hitCooldown = 1.3;
               nx = this.x; nz = this.z; this.speed = -0.25;
               if (this.audio) this.audio.paddleDip();
-              if (Math.random() < 0.45) { this.dropHull(); note = 'The canoe hit a tree and came down'; } else note = 'The canoe caught a tree'; // (fb5 join: the why, not only that it fell)
+              if (hustle && Math.random() < HULL_DROP) { this.dropHull(); note = 'The canoe hit a tree and came down'; } else note = 'The canoe caught a tree'; // (fb5 join: the why, not only that it fell; content join: only at a jog, the owner's call)
               break;
             }
           }
