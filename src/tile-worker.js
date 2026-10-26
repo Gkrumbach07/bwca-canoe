@@ -8,6 +8,7 @@ import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } fro
 import { hash2 } from './rng.js';
 import { Site } from './site.js';
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
+import { patchTile, lakeRockBins, clearPlants } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
 
 let cfg = null;
 
@@ -158,11 +159,14 @@ async function buildFine(m) {
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
+  patchTile(buf, m.tx, m.ty, g); // d1 rapids: each drop where it really is, the rocks' shoals (the grid's arrays view buf)
   // what the ground is like at every cell (cliffs, scree, ridges, wet ground, soil): the paint, the forest, the
   // rocks and the cliffs all read it
   const site = new Site(grid, cfg.exclusions);
   const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz, site });
+  veg.bins.push(...lakeRockBins(grid, i0, j0, g.tile, ox, oz)); // d1 rapids: NHD's rocks above the water, as boulders
   const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site });
+  clearPlants(aquatic.bins, ox, oz); // d1 rapids: no pads or reeds where the water falls or boils
   // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);

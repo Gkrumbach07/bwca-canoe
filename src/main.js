@@ -86,6 +86,9 @@ import { Parties } from './parties.js'; // round A-F
 import { PartyCamps } from './party-camps.js'; // round A-F
 import { PartyMoves } from './party-moves.js'; // p2 C
 import { partyTargets } from './pointer.js'; // p2 C
+import { WhiteWater } from './whitewater.js'; // d1 rapids
+import { whiteWater } from './rapids.js'; // d1 rapids
+import { bonk } from './audio-voices.js'; // d1 rapids
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -857,6 +860,30 @@ async function main() {
     const dueW = hints.due.bind(hints);
     hints.due = (id, rec) => { const r = dueW(id, rec); return id === 'thirsty' && r && typeof r === 'object' && energy.untreated > 0.02 ? r.lv : r; };
   }
+  // d1 rapids: the real white water (the owner, 2026-10-26, real data "for everything"). NHD's rapids and falls, named
+  // from OSM, GNIS and Geographic Names Ontario (scripts/rapids.mjs -> src/rapids.json): the tile worker makes each
+  // drop's river levels over so the water falls where the falls really is, and stands NHD's rocks above the water as
+  // boulders on shoals of their own (rapids.js patchTile, lakeRockBins, clearPlants). Here: the white water drawn over
+  // the drops near you, their spray, the hull held off a falls's line and bumped off a rock (whitewater.js), the roar by
+  // distance (audio-beds.js, through audio.whiteWater), the spring flood's whiter water (water.js uWhiteGain, from
+  // season.flow when the season has it), and the names for the map and the place note (hud.mapPlaces: d1 names draws
+  // and says them; unused without it).
+  const white = new WhiteWater({ world, water, ripples, scene });
+  white.knock = (pos, amt) => { if (audio.ctx && audio.enabled) bonk(audio, pos, amt); };
+  audio.whiteWater = () => white.heard;
+  hud.mapPlaces = () => whiteWater();
+  {
+    const upd = water.update.bind(water);
+    water.update = (dt, x, z) => {
+      upd(dt, x, z);
+      const flow = day.season && Number.isFinite(day.season.flow) ? day.season.flow : 1;
+      white.update(dt, camera.position, flow);
+      water.uniforms.uWhiteGain.value = white.gain;
+    };
+    const pu = player.update.bind(player);
+    player.update = (dt) => { pu(dt); if (white.afterPlayer(player) && !player.prompt) player.prompt = { key: null, text: `${white.hold.name || 'A falls'} · carry round it` }; };
+  }
+  window.__game.white = white;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   const warmed = prewarm(scene); // polish A: with the composer's target bound, as above

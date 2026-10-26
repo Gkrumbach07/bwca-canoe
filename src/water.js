@@ -352,6 +352,7 @@ const fragTint = /* glsl */ `
 
 const frag = /* glsl */ `
   uniform float uTime, uReflOn, uClarity, uIce, uRippleAmt, uRain, uGlint;
+  uniform float uWhiteGain;  // d1 rapids: the rivers' flow on the white water (the spring flood whiter; main.js sets it)
   uniform vec3 uSunDir, uFoam, uSunLight, uSkyLight;
   uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyIce;
   const vec3 FOAM_ALBEDO = vec3(0.86, 0.9, 0.92);   // the white of the foam; FOAM_GAIN as wake.js glslFoamLight has it
@@ -525,7 +526,7 @@ const frag = /* glsl */ `
     #else
       vec2 lvg = vFlow;
     #endif
-    float fall = length(lvg), steep = smoothstep(0.025, 0.09, fall) * live;
+    float fall = length(lvg) * uWhiteGain, steep = smoothstep(0.025, 0.09, fall) * live;
     vec2 tilt = windRipples(vLocal.xz, pw, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore)
       * mix(${LEE.calm.toFixed(3)}, 1.0, vLee);   // cons B: the lee lies smooth
     float rapids = 0.0;
@@ -777,6 +778,7 @@ export class WaterSystem {
       uRippleAmt: { value: 0.3 },
       uRain: { value: 0 },   // drops on the surface, 0..1 (weather.js)
       uGlint: { value: 1 },  // the sun's glint, 0..1: cloud over the sun takes it (weather.js)
+      uWhiteGain: { value: 1 }, // d1 rapids: white water's slope scaled by the rivers' flow (0.8 late summer to 1.6 in the May flood)
       uWindDir: { value: new THREE.Vector2(0, 1) },
       uRip: { value: new Float32Array(RIPPLES * 2 * 4) },
       uGustOff: { value: new THREE.Vector2(this.origin.x, this.origin.z) },

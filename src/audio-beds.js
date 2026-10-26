@@ -101,6 +101,22 @@ export class Beds {
     this.whine = { bus, lp, flies };
   }
 
+  // d1 rapids: the falls and the rapids heard by distance (au.whiteWater(), set by main.js: the nearest drops, from
+  // whitewater.js `heard`, each { x, y, z, size, kind, d }). A voice for each of the nearest three, panned where it is:
+  // the deep roar of the falling water (brown noise under 240 Hz, a falls deeper), which carries furthest; the rush
+  // (pink, about 800 Hz); and, close to it, the hiss of the spray (white over 2.6 kHz). Each filter's centre a little
+  // apart from the next voice's, so two drops do not sound as one. Built the first time one is in earshot.
+  buildWhite() {
+    const { G, F, P, au } = this, { white, pink, brown } = au.src;
+    this.whiteV = [0, 1, 2].map((i) => {
+      const pan = P(20, 0, au.bus); pan.connect(this.wet);
+      const roarLP = F('lowpass', 210 + 25 * i, 0.6, brown), roar = G(0, pan); roarLP.connect(roar);
+      const rushBP = F('bandpass', 760 + 90 * i, 0.55, pink), rush = G(0, pan); rushBP.connect(rush);
+      const hissHP = F('highpass', 2600 + 300 * i, 0.5, white), hissLP = F('lowpass', 7000, 0.5, hissHP), hiss = G(0, pan); hissLP.connect(hiss);
+      return { pan, roar, rush, hiss, roarLP };
+    });
+  }
+
   // rain is built the first time the weather has any (weather.js: its `rain`, through audio.tick's context)
   buildRain() {
     const { G, F, au } = this, ctx = au.ctx, { white, flutter } = au.src;
@@ -169,6 +185,27 @@ export class Beds {
       T(fb.roar.gain, 0.16 * heat + 0.025 * emb * (1 - heat), 0.5); T(fb.hiss.gain, 0.025 * heat, 0.6);
       if (f) au.place(fb.pan, { x: f.x, y: f.y + 0.4, z: f.z });
       lv.fire = heat;
+    }
+    // d1 rapids: the white water near (the nearest three drops): full within `ref` of one (more for a bigger drop),
+    // the inverse law past it, the highs going first with the distance (far off a falls is a rumble); through the walls
+    // indoors, muffled under the ice
+    const ww = au.whiteWater ? au.whiteWater() : null;
+    if ((ww && ww.length) || this.whiteV) {
+      if (!this.whiteV) this.buildWhite();
+      let loud = 0;
+      for (let i = 0; i < 3; i++) {
+        const v = this.whiteV[i], h = ww && ww[i];
+        if (!h) { T(v.roar.gain, 0, 0.8); T(v.rush.gain, 0, 0.8); T(v.hiss.gain, 0, 0.8); continue; }
+        const ref = 22 * Math.sqrt(Math.max(0.3, h.size)), d = Math.max(1, h.d), near = Math.min(1, ref / d);
+        const k = Math.min(1.4, h.size) * walls * (S.ice > 0.5 ? 0.35 : 1), falls = h.kind === 'falls' ? 1 : 0;
+        T(v.roar.gain, 0.15 * k * (0.75 + 0.35 * falls) * Math.pow(near, 0.9), 0.6);
+        T(v.rush.gain, 0.09 * k * Math.pow(Math.min(1, (ref * 2.5) / d), 1.6), 0.6);
+        T(v.hiss.gain, 0.035 * k * Math.pow(near, 2.2), 0.6);
+        T(v.roarLP.frequency, (falls ? 190 : 260) + 120 * near, 0.8);
+        au.place(v.pan, { x: h.x, y: h.y + 0.5, z: h.z });
+        loud = Math.max(loud, k * near);
+      }
+      lv.white = loud;
     }
     // the bugs at your ears (cons C): their whine by how thick they are (a head net keeps them off you, not out of earshot)
     const bw = au.bugs ? au.bugs() : null, wm = bw ? bw.mosq || 0 : 0, wfl = bw ? bw.fly || 0 : 0;
