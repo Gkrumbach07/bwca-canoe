@@ -265,6 +265,7 @@ const CARD = {
   pack: 'Past midnight, a woof outside, and something heavy in the brush. Then nylon tearing, and wrappers.',
   canoe: 'Past midnight, a woof down by the canoe, and something heavy in the brush. Then nylon tearing.',
   tent: 'Past midnight, a woof right by the door, and the tent shaking. Something drags your pack off into the dark.',
+  tentHand: 'Past midnight, a woof right by the door, and the tent shaking. Something noses in at the door and is gone with what you had by you.', // (the join: food in a hand or a pocket, no pack to drag)
   grate: 'Past midnight, a woof outside, and the grate rattling on its stones.',
   pile: 'Past midnight, a woof outside, and something heavy in the brush, nosing through the food.',
   stringer: 'Past midnight, a woof down at the water, and something heavy in the brush.',
@@ -501,6 +502,10 @@ class Bear {
     if (g.kind === 'grate') { this.litterAt(at.x, at.z, 2, rng, ['pouch', 'wrapper']); return 'The grate is licked clean.'; }
     if (g.kind === 'pile') { this.litterAt(at.x, at.z, 4, rng, ['wrapper', 'bag', 'oats', 'pouch']); return 'The food left on the ground is scattered and chewed.'; }
     if (g.kind === 'stringer') return 'The stringer lies empty on the rocks.';
+    // (the join: fish on a stringer in the canoe, or a fish held into the tent, leave no wrappers)
+    const fishOnly = g.items.length && g.items.every(({ e }) => (itemDef(e.id) || {}).kind === 'fish');
+    if (fishOnly && k.item === 'stringer') return 'The stringer hangs empty over the gunwale.';
+    if (fishOnly && !barrel && !/pack/.test(k.item)) return g.kind === 'tent' ? 'Fish scales and slime at the tent door.' : `Fish scales about the ${name}.`;
     if (!barrel && !/pack/.test(k.item)) { this.litterAt(at.x, at.z, 2, rng, ['wrapper', 'bag']); return g.kind === 'tent' ? 'Wrappers outside the tent door, chewed.' : `Wrappers about the ${name}, chewed.`; }
     if (barrel) {
       const sp = (far ? this.spotNear(at.x, at.z, 2.5, 5, rng, toward) : this.spotNear(at.x, at.z, 0.6, 1.6, rng, toward)) || { x: at.x, z: at.z };
@@ -551,7 +556,8 @@ class Bear {
     const main = groups[0];
     this.tonight = { N, here, kind: main.kind };
     const at = main.at || here, h = N.at - N.d * 24;
-    const text = (CARD[main.kind] || CARD.other).replace(/^Past midnight/, h < 23.75 ? 'Late in the night' : h < 24.25 ? 'Around midnight' : 'Past midnight');
+    const card = main.kind === 'tent' && !/pack|barrel/.test(main.k.item) ? 'tentHand' : main.kind;
+    const text = (CARD[card] || CARD.other).replace(/^Past midnight/, h < 23.75 ? 'Late in the night' : h < 24.25 ? 'Around midnight' : 'Past midnight');
     return { text, hold: 6.5, onDark: () => this.nightSounds(main.kind, at) };
   }
   // in the dark of the card: the woof, the brush, then what it got into, then the woof going away
