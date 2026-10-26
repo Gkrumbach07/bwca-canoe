@@ -410,6 +410,29 @@ const frag = /* glsl */ `
     }
     return tilt;
   }
+  // cons B: the near whitecaps, breaking crests scattered over the water: a lattice of 3.2 m cells turned off the axes,
+  // each holding at most one at a time, born at a random place in the cell on its own clock, breaking fast and fading
+  // over a few seconds as it drifts downwind, longer across the wind than along it, more cells holding one the harder
+  // it blows (as the rain's rings are drawn). blow 0..1.
+  float breakers(vec2 pw, float blow) {
+    const mat2 TURN = mat2(0.8, 0.6, -0.6, 0.8);
+    vec2 q = TURN * pw * (1.0 / 3.2);
+    vec2 id = floor(q), f = q - id - 0.5;
+    ivec2 c = ivec2(id);
+    float clock = uTime * 0.23 + lookHash(c, 51u);
+    float t = fract(clock);
+    int cyc = int(mod(floor(clock), 4096.0));
+    if (lookHash(c + ivec2(cyc, 0), 53u) > 0.12 + 0.6 * blow) return 0.0;
+    vec2 at = vec2(lookHash(c + ivec2(cyc, 7), 3u), lookHash(c + ivec2(cyc, 13), 5u)) - 0.5;
+    vec2 w = TURN * uWindDir;
+    vec2 d = f - at * 0.5 - w * (t * 0.12);
+    float along = dot(d, w), across = dot(d, vec2(-w.y, w.x));
+    float r = (0.1 + 0.12 * blow) * (0.6 + 0.8 * lookHash(c + ivec2(cyc, 21), 9u));
+    float e = (along * along) / (r * r * 0.16) + (across * across) / (r * r);
+    float life = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(0.25, 0.9, t));
+    float froth = 0.6 + 0.4 * lookNoise(TURN * pw * 5.3 + vec2(t * 3.0, 0.0), 41u);
+    return (1.0 - smoothstep(0.35, 1.0, e)) * life * froth;
+  }
   void main() {
     #ifdef FAR
       if (abs(vLocal.x - uPatchLocal.x) < uPatchHalf && abs(vLocal.z - uPatchLocal.y) < uPatchHalf) discard;
@@ -534,14 +557,16 @@ const frag = /* glsl */ `
     // reads white-flecked from the canoe and from the shore, and far off a coarser field of patches (the fine one only
     // sparkles once a pixel is a few centimetres): at blow 1 about a crest in six breaks, at a breeze the odd one
     float blow = smoothstep(0.18, 0.7, vCrest.y);
-    float capFar = smoothstep(0.03, 0.25, px);
+    float capFar = smoothstep(0.08, 0.35, px);   // (where a breaker would be under a few pixels)
     // near: small broken patches on the crests, frothy (a cap is broken white, not a sheet)
-    float capNear = smoothstep(0.6 - 0.12 * blow, 0.72 - 0.1 * blow, lookNoise(pw * 2.2 - uWindDir * (uTime * 0.9), 31u))
-      * smoothstep(0.58 - 0.16 * blow, 0.76 - 0.12 * blow, vCrest.x) * (0.3 + 0.7 * lookNoise(pw * 6.0 + vec2(uTime * 0.31, -uTime * 0.23), 41u));
+    float capNear = breakers(pw, blow) * mix(1.0, smoothstep(-0.2, 0.5, vCrest.x), 0.6);
     // far: what a pixel there averages of them, a fleck field on a finer noise, more of it the harder it blows
     float capFarV = smoothstep(0.64 - 0.12 * blow, 0.76 - 0.1 * blow, lookNoise(pw * 0.6 - uWindDir * (uTime * 0.6), 37u))
-      * smoothstep(0.1 - 0.2 * blow, 0.6, vCrest.x) * (0.15 + 0.25 * blow);
-    float cap = mix(capNear, capFarV, capFar) * blow * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.9;
+      * smoothstep(0.1 - 0.2 * blow, 0.6, vCrest.x) * (0.16 + 0.3 * blow);
+    // (seen low over the water a cap stands up off the face of its wave, where a flat patch would lie under a pixel: far
+    // off and at a grazing look they count for more)
+    capFarV *= mix(1.0, 2.6, smoothstep(0.35, 0.06, dot(normalize(vWaveN), v)));
+    float cap = min(1.0, mix(capNear, capFarV, capFar) * blow * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.9);
     float foam = max(max(edgeA, lineA), cap) * live;
     // white water lit as the splashes and the rise rings are (wake.js foamLight): the key by its height in the sun's
     // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white

@@ -562,7 +562,7 @@ export class Player {
         for (let i = 0; i < n; i++) { // a sheet thrown up off the hull and blown back over it, fine drops and a few big blobs
           const k = 0.5 + Math.random() * 0.9, big = Math.random() < 0.3, sx = (Math.random() - 0.5) * 0.8;
           this.ripples.spawn(1, px + f.x * sx + (Math.random() - 0.5) * 0.3, this.level + 0.15 + Math.random() * 0.2, pz + f.z * sx + (Math.random() - 0.5) * 0.3,
-            big ? 0.2 + Math.random() * 0.16 : 0.08 + Math.random() * 0.1, big ? 0.36 : 0.06, 0.6 + Math.random() * 0.6,
+            big ? 0.14 + Math.random() * 0.1 : 0.07 + Math.random() * 0.08, big ? 0.26 : 0.05, 0.6 + Math.random() * 0.6,
             wd.x * (0.5 + 0.15 * U) * k - r.x * side * 0.5 + (Math.random() - 0.5) * 0.8, 1.8 + Math.random() * 2.8, wd.z * (0.5 + 0.15 * U) * k - r.z * side * 0.5 + (Math.random() - 0.5) * 0.8);
         }
         if (this.audio && shipping > 0.002 && Math.random() < 0.7) this.audio.splash(0.35 + Math.min(0.6, shipping * 8));
