@@ -377,7 +377,7 @@ export function seatRock(ground, foot, x, z, scale, squash, tall, yaw, az, tilt,
 // of the three shapes: the slates to shards and flats, the anorthosite to rounded erratics.
 // (where the survey says where the boulders are, the woods' scattered ones are fewer elsewhere: the rocks move to
 // where they are, about as many in all)
-export const ROCKS_DATA = { woods: 0.5, bare: 0.6, boulder: 0.3, ledge: 0.14 };
+export const ROCKS_DATA = { woods: 0.5, bare: 0.6, boulder: 0.45, ledge: 0.14, scree: 9 };
 function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy, face, open = 0, boulder = 0, ledge = 0, style = null }, blocked, put, scree = null) {
   const shore = sd > -3 && sd < 10;
   const gentle = 1 - smoothstep(0.32, 0.5, slope); // 18–27°: from here up a slope sheds them
@@ -470,7 +470,7 @@ function rockFeatures(grid, rr, { cx, cz, cell, sd, slope, rock, bare, canopy, f
   // d2 land: on the roughest boulder ground, stones between the boulders (the cheap scree blocks: no shadow, no collision),
   // in loose spreads of a few; after the features, so the stream they drew is as it was
   if (scree && boulder > 0.35 && sd > 0.5 && slope < 0.5) {
-    for (let c = Math.floor(boulder * 6 * (0.5 + rr())); c > 0; c--) {
+    for (let c = Math.floor(boulder * boulder * ROCKS_DATA.scree * (0.5 + rr())); c > 0; c--) {
       const x = cx + (rr() - 0.5) * cell, z = cz + (rr() - 0.5) * cell, s = 0.25 + rr() ** 1.4 * 0.55;
       if (grid.shoreAt(x, z) < 0.3 || blocked(x, z, 0.6)) continue;
       scree(x, z, s, rr() * Math.PI * 2, rr() * Math.PI * 2, rr() * 0.4, (0.86 + rr() * 0.2) * (1 - 0.3 * canopy), 0.8 + rr() * 0.4, 0.7 + rr() * 0.5, rr() < 0.5 ? 0 : 1);

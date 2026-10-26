@@ -182,7 +182,7 @@ export class Site {
     if (ledge) for (let k = 0; k < N; k++) {
       if (L.cliff[k] <= 1 || cliffClass(L.cliff[k]) !== FORM.talus || sd[k] < 0) continue;
       const r = smoothstep(8, 16, cliffStrength(L.cliff[k]));
-      if (talus[k] > 0.05) talus[k] = Math.max(talus[k], 0.45 + 0.4 * r);
+      if (talus[k] > 0.05) talus[k] = Math.max(talus[k], (0.45 + 0.4 * r) * smoothstep(0.05, 0.4, talus[k]));
       else ledge[k] = 0.35 + 0.65 * r;
     }
     this.ledge = ledge;
@@ -326,11 +326,18 @@ export class Site {
       sphag[k] = Math.max(K.sphag, ft === 13 ? 0.8 : ft === 14 ? 0.4 : 0);
       // bare rock: the mapped outcrop (D-02) all but bare; a ledge the LiDAR found; none in a wetland or on sand
       let br = bare[k];
-      if (kd === KIND.rock) br = Math.max(br, 0.78 + 0.2 * smoothstep(0.3, 0.7, fbm(x * 0.05, z * 0.05, 2, 253)));
+      // (a mapped outcrop is bare in patches: knobs and ledges of rock with moss, blueberry and pine between, barest on the
+      // rises and along the water)
+      if (kd === KIND.rock) {
+        const ridge = smoothstep(0.4, 2.4, tpi[k]), patch = smoothstep(0.36, 0.62, fbm(x * 0.03 + 9, z * 0.03, 3, 253));
+        br = Math.max(br, clamp(0.32 + 0.6 * patch + 0.3 * ridge + 0.35 * (1 - smoothstep(4, 16, d)), 0, 0.98));
+      }
       else if (K.wet >= 0 || kd === KIND.sand) br = Math.max(camp[k], talus[k] * 0.5);
-      if (this.ledge && this.ledge[k] && K.wet < 0) br = Math.max(br, 0.25 + 0.4 * this.ledge[k]);
-      // a face the LiDAR found is bare rock under and round its cliff module (or on its own, where the face is too low for one)
-      if (L.cliff && L.cliff[k] > 1 && cliffClass(L.cliff[k]) === FORM.face && K.wet < 0) br = Math.max(br, 0.5 + 0.4 * smoothstep(4, 9, cliffStrength(L.cliff[k])));
+      // a ledge the LiDAR found is broken rock in patches (the forest climbs the rest); a face is bare round its cliff module,
+      // as much as it is a wall (site.js cliff), so a steep hillside of low faces stays wooded between its walls
+      const lp = smoothstep(0.4, 0.6, fbm(x * 0.04 - 3, z * 0.04, 2, 257));
+      if (this.ledge && this.ledge[k] && K.wet < 0) br = Math.max(br, (0.2 + 0.4 * this.ledge[k]) * (0.55 + 0.6 * lp));
+      if (L.cliff && L.cliff[k] > 1 && cliffClass(L.cliff[k]) === FORM.face && K.wet < 0) br = Math.max(br, 0.2 + 0.55 * this.cliff[k]);
       bare[k] = br;
       if (kd === KIND.sand && d < 30) beach[k] = Math.max(beach[k], 1 - smoothstep(18, 30, d));
       // the soil, as today's from the new wet and bare
