@@ -36,6 +36,16 @@ const TAU = Math.PI * 2;
 // fan either side of the way you face; drag: a lure reeled this close to the tip comes up the bank to your feet
 const FOOT = { offShore: 12, reach: 24, drag: 4 };
 const STEADY = 0.4; // fb4 D: seconds the leeches' reach must say the same before the strip and the prompt change
+// taste (the owner's call, 2026-10-26: "casts in wind land, shorter into it, and are blown back only in whitecaps, with
+// a reason given"). In flight the lure feels the wind where you cast (the wind's speed × water.js shelterAt, so a lee
+// shore's calm carries it less): `drag` (1/m) is its drag against the moving air, less the still air's, so a calm cast
+// still lands on the ring. A head wind shortens a cast (a 13 m cast by 15 % at 4 m/s, a third at 8, half at 12), a
+// tail wind carries it on by `tail` of its push (+6 %, +8 %, +9 %), a cross wind drifts it (1, 2 and 4 m).
+// Past `caps` metres of wind-wave where you cast (waves.js windHeight: the whitecaps on open water; player.js's
+// whitecaps moment is at 0.4) the line bellies and the lure is blown back to the rod: `blow` × the drag, all of the wind
+// as a head wind, for `back` seconds at most. The action line says so for `word` seconds every time, and the first
+// time the 'castwind' moment says why (moments(); main.js registers it), held `pend` seconds for its turn.
+export const CAST_WIND = { drag: 0.02, tail: 0.5, caps: 0.5, blow: 5, back: 0.9, word: 2.5, pend: 25 };
 
 export const TUNING = {
   // bites per real second for one species at every factor 1.0. tuning: the one clock (fb5 C) made a game hour of
@@ -225,6 +235,7 @@ export class Fishing {
     this.bite = null; this.fish = null; this.landed = null; this.pending = null;
     this.cooldown = 0;
     this.message = null;
+    this.castWind = null; this.blownWord = 0; this.blownFresh = 0; this.blownN = 0; // taste: the wind on a cast (CAST_WIND)
     this.spot = { text: '', t: 0, hab: null };
     this.lureHab = { hab: null, t: 0 };
     this.factors = {};
@@ -436,7 +447,7 @@ export class Fishing {
   stow(silent = false) {
     if (this.state === 'landed') this.release(false);
     this.rodUp = false; this.onFoot = false; this.state = 'stowed'; this.lineOut = 0; this.power = 0;
-    this.bite = null; this.fish = null; this.pending = null;
+    this.bite = null; this.fish = null; this.pending = null; this.castWind = null;
     this.bobber.visible = false; this.line.visible = false; this.aimRing.visible = false;
     this.chase.orbitLocked = false; this.chase.focus = null;
     for (const m of this.lureMeshes) m.visible = false;
@@ -511,7 +522,44 @@ export class Fishing {
     l.vx = Math.cos(yaw) * Math.cos(a) * sp; l.vz = -Math.sin(yaw) * Math.cos(a) * sp; l.vy = Math.sin(a) * sp;
     l.depth = 0; l.onLand = false; l.speed = 0;
     this.state = 'flying'; this.sinceCast = 0;
+    this.castWind = this.windOnCast(yaw);
     if (this.audio) this.audio.reelClick(1.4);
+  }
+  // taste: the wind on this cast (CAST_WIND): the air's velocity felt where you cast, the cast's way, and whether it is
+  // blown back (whitecaps where you cast). Afloat that is the canoe's spot; on foot the water you cast to.
+  windOnCast(yaw) {
+    const w = this.wind, p = this.player;
+    if (!w || !(w.speed > 0.05)) return null;
+    const at = this.onFoot ? (this.aimWorld || this.footWater || p) : p;
+    const fetch = this.water && this.water.fetchAt ? this.water.fetchAt(at.x, at.z) : 400;
+    const H = windHeight(w.speed, fetch), felt = w.speed * (this.water && this.water.shelterAt ? this.water.shelterAt(at.x, at.z) : 1);
+    const fx = Math.cos(yaw), fz = -Math.sin(yaw), blown = H >= CAST_WIND.caps;
+    let wx = w.dir.x * felt, wz = w.dir.z * felt;
+    if (blown) { const cross = wx * -fz + wz * fx; wx = -fx * felt + -fz * cross; wz = -fz * felt + fx * cross; } // all of it a head wind, its cross part kept
+    return { wx, wz, fx, fz, felt, H, blown, c: CAST_WIND.drag * (blown ? CAST_WIND.blow : 1), t: 0 };
+  }
+  // taste: the wind's push on the lure for h seconds of flight: its drag against the moving air less the still air's
+  windPush(l, h) {
+    const cw = this.castWind;
+    const rx = l.vx - cw.wx, rz = l.vz - cw.wz, r = Math.hypot(rx, l.vy, rz), s = Math.hypot(l.vx, l.vy, l.vz);
+    let ax = -cw.c * (r * rx - s * l.vx), az = -cw.c * (r * rz - s * l.vz);
+    const ay = -cw.c * (r - s) * l.vy;
+    const along = ax * cw.fx + az * cw.fz; // a tail wind's push along the cast carries it on only by CAST_WIND.tail of it
+    if (along > 0 && !cw.blown) { ax -= along * (1 - CAST_WIND.tail) * cw.fx; az -= along * (1 - CAST_WIND.tail) * cw.fz; }
+    l.vx += ax * h; l.vy += ay * h; l.vz += az * h;
+  }
+  // taste: the wind took the cast (past CAST_WIND.caps): the lure is back at the rod, ready to cast again; the action
+  // line says so, and the moment's trigger is set (moments())
+  blownBack() {
+    this.state = 'ready'; this.lineOut = 0; this.bite = null; this.castWind = null;
+    for (const m of this.lureMeshes) m.visible = false;
+    this.bobber.visible = false;
+    this.blownWord = CAST_WIND.word; this.blownFresh = CAST_WIND.pend; this.blownN = (this.blownN || 0) + 1;
+    if (this.audio) this.audio.reelClick(1.1);
+  }
+  // taste: the moment a cast blown back brings, the first time (hints.js MOMENTS; main.js registers it as the streams' are)
+  moments() {
+    return [{ id: 'castwind', prio: 1, recur: 'once', text: 'Too windy to cast here. Fish the lee.', due: () => this.blownFresh > 0 }];
   }
 
   splash(x, y, z, n, size = 1) {
@@ -573,6 +621,7 @@ export class Fishing {
       else this.stow();
     }
     if (this.message && (this.message.t -= dt) <= 0) this.message = null;
+    if (this.blownWord > 0) this.blownWord -= dt; if (this.blownFresh > 0) this.blownFresh -= dt; // taste
     if (this.cooldown > 0) this.cooldown -= dt;
     // the spot readout, refreshed twice a second while the rod is up
     if (this.rodUp && (this.spot.t -= dt) <= 0) {
@@ -611,6 +660,7 @@ export class Fishing {
       const needs = this.lureDef.bobber && this.needsLeeches; // fb3 B: no leech to hand, no cast with the bobber rig
       if (this.buttonPressed()) { if (needs) this.message = { text: 'Needs leeches: the bucket is out of reach, or empty', t: 2.2 }; else { this.state = 'charging'; this.charge = 0; this.power = 0; } }
       p.prompt = needs ? { key: null, text: `Needs leeches · the bucket in a hand, by you or in the canoe · ${this.lureKeys()} · F puts the rod down` } : { key: 'Space', text: `Hold to load a cast where ${this.onFoot ? 'you look' : 'the cursor points'} · ${this.lureKeys()} · F puts the rod down` };
+      if (this.blownWord > 0 && !needs) p.prompt = { key: null, text: 'Blown back by the wind' }; // taste: never without a word
     } else if (s === 'charging') {
       this.charge += dt;
       this.power = 1 - Math.exp(-this.charge * 1.6);
@@ -628,9 +678,12 @@ export class Fishing {
         l.vy -= 9.81 * h;
         const drag = 1 - 0.08 * h;
         l.vx *= drag; l.vz *= drag; l.vy *= drag;
+        if (this.castWind) this.windPush(l, h); // taste: the wind carries it
         l.x += l.vx * h; l.y += l.vy * h; l.z += l.vz * h;
         const water = w.shoreAt(l.x, l.z) < 0;
         const surf = water ? this.surfaceAt(l.x, l.z) : w.heightAt(l.x, l.z) + 0.05;
+        const cw = this.castWind;
+        if (cw && cw.blown && ((cw.t += h) >= CAST_WIND.back || l.y <= surf)) { this.blownBack(); break; } // taste: whitecaps: blown back
         if (l.y <= surf || !w.inBounds(l.x, l.z, 10)) {
           l.y = surf; l.onLand = !water; l.depth = 0; l.speed = 0;
           l.bed = water ? Math.max(0.2, w.levelAt(l.x, l.z) - w.heightAt(l.x, l.z)) : 0;
@@ -641,9 +694,12 @@ export class Fishing {
           break;
         }
       }
-      const t = this.tipWorld();
-      this.lineOut = Math.hypot(l.x - t.x, l.y - t.y, l.z - t.z);
-      if (this.lineOut > 70) { l.vx *= 0.5; l.vz *= 0.5; }
+      if (this.state !== 'ready') { // (taste: not after a cast blown back)
+        const t = this.tipWorld();
+        this.lineOut = Math.hypot(l.x - t.x, l.y - t.y, l.z - t.z);
+        if (this.lineOut > 70) { l.vx *= 0.5; l.vz *= 0.5; }
+        if (this.state === 'inwater') this.castWind = null;
+      }
       p.prompt = null;
     } else if (s === 'inwater' || s === 'bite') {
       this.updateLureInWater(dt, ts);
