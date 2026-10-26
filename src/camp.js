@@ -277,7 +277,8 @@ export class Camp {
     this.spot = null;         // the ghost's last reading: { x, z, fdx, fdz, pose, ok, why, t, site, kind }
     this.pitching = null;     // fb2 A: a Pitch from the book under way: { uid, item, x, z } (the ghost follows the dot)
     this.pointer = null;      // fb2 A: pointer.js (main.js): where the dot meets the ground
-    this.morningNote = null;  // a line for the morning (a bear in the night)
+    this.morningNote = null;  // a line for the morning (rain through the mesh; a bear says its own: bear.js)
+    this.bear = this.bear || null; // cons A: bear.js (main.js), asked at bedtime and at waking
     hold.attach({ input: this.player.input, day: this.day, player: this.player });
     this.hang = new Hang(this, { inventory: this.inventory });
     this.chores = new Chores(this); // the fire, the wood, the pot, the latrine, the wake-time card (main.js sets .tasks)
@@ -956,14 +957,19 @@ export class Camp {
       sub: `${clock12(d.hours)} to ${clock12(wakeAt)} · ${night}`,
       ...(nap ? { fadeIn: 1.0, hold: 1.6, fadeOut: 1.6 } : {}),
     };
-    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap };
-    const onDark = () => this.wake();
+    // cons A: a bear in the night (bear.js, main.js sets camp.bear): decided now, for a night's sleep (not a nap or a sleep
+    // by day) whose hours hold the night's hour, with food not hung; the card is the visit, held while its sounds play
+    const B = !nap && !byDay && this.bear && typeof this.bear.bedtime === 'function' ? this.bear.bedtime({ x: p.x, z: p.z, from: this.now, to: this.now + hours }) : null;
+    if (B) { card.text = B.text; card.hold = B.hold; }
+    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, bear: !!B };
+    const onDark = () => { if (B && B.onDark) { try { B.onDark(); } catch (e) { console.warn('bear: the night', e); } } this.wake(); };
     const done = () => this.morning();
     if (this.veil && this.veil.card) this.veil.card({ ...card, onDark }).then(done, done);
     else { if (!this.card) this.card = new NightCard(); this.card.show({ ...card, onDark }).then(done, done); }
   }
   // at full dark: the clock to the waking hour (sunrise + a quarter hour, or later after a late night), the energy
-  // back, the lamp off; rain through the mesh soaks the gear when the fly was off; a bear may find food on the ground
+  // back, the lamp off; rain through the mesh soaks the gear when the fly was off; a bear may have got into food not
+  // hung (bear.js, cons A)
   wake() {
     const n = this.night, d = this.day;
     if (!n) return;
@@ -977,8 +983,8 @@ export class Camp {
     const lines = [];
     if (n.rain && this.state) { this.state.wet = true; lines.push('Rain came through the mesh in the night with no fly on: your gear is soaked.'); }
     else if (this.wet && this.player.gear && this.player.gear.sleepDry) { this.state.wet = false; lines.push('The gear dried overnight in the vestibule.'); } // hubs 2B: the four-season tent
-    const bear = this.hang.bearNight(n.x, n.z);
-    if (bear) lines.push(bear);
+    // cons A: the bear decided at bedtime does its damage now; its line waits for the mess to be seen (bear.js)
+    if (n.bear && this.bear && typeof this.bear.morning === 'function') { try { this.bear.morning(n); } catch (e) { console.warn('bear: the morning', e); } }
     this.morningNote = lines.length ? lines.join(' ') : null;
     this.log('sleep', { kind: n.kind, key: this.camp ? this.camp.key : null, q: +n.q.toFixed(2), hours: Math.round(n.hours * 10) / 10, fly: !n.rain && (!this.camp || this.camp.stage >= 4) });
     this.persist();
