@@ -37,7 +37,7 @@ import { Journal } from './journal.js';
 import { TripStats } from './trip-stats.js';
 import { lookboard } from './lookboard.js';
 import { Trip } from './trip.js'; // trip core A
-import { PACES, SPEEDS, clockOf, speedOfKey, describe as describePace } from './pace.js'; // fb5 C
+import * as PACE from './pace.js'; // one speed: the clock and the seen speeds, for the console
 import { Veil } from './veil.js'; // trip core A
 import { Camp, CampRegistry } from './camp.js'; // trip core C
 import { Fires } from './fire.js'; // trip core C
@@ -271,12 +271,12 @@ async function main() {
   outfitter.shop = shop;
   const nearCamp = (x, z) => { for (const c of world.campsites) if (Math.abs(c.x - x) < 40 && Math.abs(c.z - z) < 40 && Math.hypot(c.x - x, c.z - z) < 40) return true; return false; };
   let campTimer = 0, atCamp = false;
-  // fb4 D (decision 4, the keys after the owner's second round of 2026-10-25): the global keys are 1 2 3, the pace, and
-  // Sandbox's wind. R (the shore in the water) and N (sound) are gone: both are rows of Settings (Display, Sound).
+  // fb4 D (decision 4, the keys after the owner's second round of 2026-10-25): the global keys are Sandbox's wind. R (the
+  // shore in the water) and N (sound) are gone: both are rows of Settings (Display, Sound). One speed (2026-10-26): 1 2 3,
+  // the game speed, are gone too (the clock is everyone's, pace.js); the numbers only pick lures while the rod is up.
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
     if (trip.sandbox) { if (e.code === 'Comma') wind.nudgeSpeed(-1); if (e.code === 'Period') wind.nudgeSpeed(1); if (e.code === 'Slash') wind.nudgeDirection(30); if (e.code === 'Semicolon') wind.release(); } // trip core A: the wind keys are Sandbox's
-    if (!fishing.rodUp) { const sp = speedOfKey(e.code); if (sp) player.timeScale = sp.factor; } // fb5 C: 1 2 3 Normal, Faster, Fastest (pace.js SPEEDS: 1, 2, 4 on dt); 1-7 pick lures while the rod is up
   });
   window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); post.resize(window.innerWidth, window.innerHeight); });
   // trip core B: the packs and the portages (packs.js): where each pack is, the load you carry, the double portage
@@ -506,14 +506,12 @@ async function main() {
   // time-lapsed like the trail (pace.js foot, 1.8 at Trip); sitting keeps the camera's distance (camera.js); the
   // headlamp works by day (headlamp.js).
   packs.openCanoe = () => (typeof journal.openHere === 'function' ? journal.openHere('canoe') : false);
-  // fb5 C: one clock (decision 3 of the owner's third round of 2026-10-25). The game clock runs at one rate everywhere
-  // at a pace (pace.js clockOf: Trip 4, Real 1, the camera's hold 1), times the 1/2/3 key's factor (Normal, Faster,
-  // Fastest: 1, 2, 4 on dt, bound above through pace.js SPEEDS): on the water, on a trail, on foot, in camp, idle and in a
-  // store alike (trip.update sets day.rate; no ×12 idle, no ×3 trail). The canoe's and the walker's time-lapse
-  // (player.boost) is only how they are seen to move. The walker's lapsing counts as travelling inside trip.travelling
-  // now (fb3 A's wrapper here is folded into it). The user sees no multipliers: describe() gives the toast (hints.js,
-  // stream E) and the corner mark (hud.js) their words; Settings and the keys' help say it the same way.
-  window.__game.pace = { PACES, SPEEDS, clockOf, describe: describePace };
+  // fb5 C: one clock (decision 3 of the owner's third round of 2026-10-25), and one speed (2026-10-26, multiplayer
+  // planned): the game clock runs at one rate everywhere and for everyone (pace.js CLOCK, 8: trip.update sets day.rate),
+  // on the water, on a trail, on foot, in camp, idle and in a store alike; no key changes it. The canoe's and the
+  // walker's time-lapse (player.boost) is only how they are seen to move, to each activity's speed (pace.js). The
+  // walker's lapsing counts as travelling inside trip.travelling. The Rest dial and sleeping are the only time skips.
+  window.__game.pace = PACE;
   // fb4 A: the shore and the figure (the owner's second round of 2026-10-25). A hull nosed in or lying on the bank is
   // beached: E is held, "Push it off" (packs.js beginPush: you walk it out until both ends float and stand beside it in
   // the shallows; a tap moves nothing); afloat, E "Get in" puts you in it where it floats and as it faces (player.launch
@@ -915,8 +913,7 @@ async function main() {
   };
 
   const frame = (dt) => {
-    const ts = player.timeScale;
-    wind.update(dt * ts, day.hours);
+    wind.update(dt, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
     const shell = title.state !== 'game';
     if (shell) { // the card is up: no input, the canoe rides the water but stays put, the camera drifts
@@ -924,68 +921,68 @@ async function main() {
       const fx = player.x, fz = player.z, fh = player.heading;
       player.update(dt);
       if (!player.teleporting) { player.x = fx; player.z = fz; player.heading = fh; }
-      fishing.update(dt, ts); // its HUD state must exist even behind the card; the cleared input keeps the rod still
+      fishing.update(dt); // its HUD state must exist even behind the card; the cleared input keeps the rod still
     } else {
       if (!booted) { booted = true; outfitter.boot(); } // resume a trip or open the start panel, now that the card is away
       photo.before(dt); // hubs 3B: with the camera up, its keys (the aim, Space) come before anyone else's E and Space
       pointer.before(); // fb2 A: E on what the dot points at (and only that), before anyone else reads it (the store's too)
-      outfitter.update(dt * ts);
+      outfitter.update(dt);
       talk.before(dt); // fb F: a conversation holds the walker and turns the view to the speaker
       camp.before(); // trip core C: the walker holds still while the tent goes up or the night card is up
       forage.before(); // fb G: E for the berry patch whose prompt showed; the walker holds still while picking
       tasks.before(); // hubs 1C: E at a lost item picks it up, ahead of the shore's "Go ashore"
       player.update(dt);
-      packs.update(dt * ts); // trip core B: after the player moves, before anything else reads the prompt or the load
-      fishing.update(dt, ts);
+      packs.update(dt); // trip core B: after the player moves, before anything else reads the prompt or the load
+      fishing.update(dt);
       shop.update(); // hubs 2B: the tackle box (a lure not in it is refused), the supper, the leeches, the gravity bag
       outfitter.prompt();
       npcs.update(dt); // hubs 3C: who is drawn and how they stand, the talk prompt and its E / Q, after the store's own prompt
       camp.update(dt); // trip core C: the camp's prompts (on foot at a site, after dark off one), H, the strike on launch
       nearby.update(dt); // fb2 A: the book's panels for what is near (their change signal), the stations tidied
       forage.update(dt); // fb G: the patches near you, drawn in season; their prompt and the picking (after the camp's)
-      tasks.update(dt * ts);
+      tasks.update(dt);
       sheets.update(player); // fb2 D: an old save's sheet items and map case migrate out, once the inventory is in
       if ((campTimer += dt) > 0.5) { campTimer = 0; atCamp = nearCamp(player.x, player.z); }
-      energy.update(dt * ts, wind, atCamp);
-      tripStats.update(dt * ts, outfitter.trip.active);
-      trip.update(dt * ts); // trip core A: the clock's rate, the rules, the log
+      energy.update(dt, wind, atCamp);
+      tripStats.update(dt, outfitter.trip.active);
+      trip.update(dt); // trip core A: the clock's rate, the rules, the log
       journal.update(dt);
     }
     veil.update(dt); // trip core A: the fade cards, behind the title card too
     guardWalker(); // fb3 join: a NaN never freezes the game (above)
-    canoe.update(dt * ts);
+    canoe.update(dt);
     player.afterRig(); // fb C: a swim from shore leaves the beached hull where it lies (canoe.js's swim pose turns it over)
-    p2b.afterPlayer(dt * ts); // p2 B: the lid off on the carry, the hull pitched with the water's slope
+    p2b.afterPlayer(dt); // p2 B: the lid off on the carry, the hull pitched with the water's slope
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     guardView(shell);
-    { const e = camera.matrixWorld.elements; actors.update(dt * ts, camera.position.x, camera.position.z, -e[8], -e[10]); } // p2 A: the people on the water and the trails, after the camera
+    { const e = camera.matrixWorld.elements; actors.update(dt, camera.position.x, camera.position.z, -e[8], -e[10]); } // p2 A: the people on the water and the trails, after the camera
     talk.update(dt, shell); // fb F: the barks' queue and their places on the screen, after the camera
     pointer.update(dt, shell); // fb2 A: the dot, its label and the rim, after the camera
     setOrigin(player.x, player.z);
     tiles.update(player.x, player.z, camera.position);
-    water.update(dt * ts, player.x, player.z);
+    water.update(dt, player.x, player.z);
     ripples.lapse = player.boost || 1; // polish A: the hull's bubbles age at the travel's time-lapse (wake.js)
-    ripples.update(dt * ts);
-    updateClouds(clouds, dt * ts, camera.position.x, camera.position.z);
-    day.update(dt * ts);
+    ripples.update(dt);
+    updateClouds(clouds, dt, camera.position.x, camera.position.z);
+    day.update(dt);
     sky.position.copy(camera.position);
     sun.position.copy(day.sunDir);
     moonTarget.position.set(player.x, player.altitude, player.z);
     moon.position.copy(moonTarget.position).addScaledVector(day.moonDir, 700);
     player.season = day.season;
     tiles.setSeason(day.season);
-    wind.updateSway(dt * ts); // trees, understory, grass and reeds sway with the wind the water reads
+    wind.updateSway(dt); // trees, understory, grass and reeds sway with the wind the water reads
     cover.setSeason(day.season);
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
     fires.update(dt, day.doy * 24 + day.hours, camera.position); lamp.update(dt); // trip core C: the fires burn on the clock, the lamp rides the head
-    cover.update(dt * ts, player.x, player.z, hemi, sun);
-    mist.update(dt * ts, player.x, player.z);
-    loons.update(dt * ts, player, day.season, faunaCtx);
-    fauna.update(dt * ts, faunaCtx);
+    cover.update(dt, player.x, player.z, hemi, sun);
+    mist.update(dt, player.x, player.z);
+    loons.update(dt, player, day.season, faunaCtx);
+    fauna.update(dt, faunaCtx);
     audio.tick(dt, { player, world, wind, day, season: day.season, camera, weather }); // the soundscape reads the whole scene
     geo.update(player, world);
-    hud.update({ player, geo, ts, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell, trip }); // trip core A: trip
+    hud.update({ player, geo, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell, trip }); // trip core A: trip
     saver.update(dt);
     input.endFrame();
   };

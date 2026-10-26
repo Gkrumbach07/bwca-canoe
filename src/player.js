@@ -4,7 +4,7 @@ import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
 import { HULL, keelAt, section } from './hull.js';
-import { paceOf, LIFE, SEEN } from './pace.js';
+import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from './pace.js';
 
 export class Input {
   constructor() {
@@ -22,23 +22,25 @@ export class Input {
 // The paddle at life pace (pace.js LIFE): a steady stroke holds 1.6 m/s (5.8 km an hour, a tripper's steady cruise)
 // with the aluminium canoe and the ash paddle, Shift 2.0; about 57 strokes a minute of 1.6 m each. (It had been 1.11 m/s,
 // a dawdle of 1.2 m strokes, the owner, 2026-10-23.) The thrust is pulsed over the first half of each stroke, so its mean
-// is accel / pi, and the cruise is where that meets the drag: 0.31 v^2 + 0.12 v. While you travel at Trip pace each
-// stroke glides farther: the hull is moved at `speed` times the boost (updatePaddle), and everything that reads `speed`
-// (the energy, a capsize, a bump on the shore, the loons, the clock's "under way") reads the speed at life.
+// is accel / pi, and the cruise is where that meets the drag: 0.31 v^2 + 0.12 v. Under way each stroke glides farther:
+// the hull is moved at `speed` times the boost (updatePaddle; pace.js CANOE, about 7.8 at a steady stroke), while the
+// stroke keeps life's cadence (times pace.js CANOE.stroke), and everything that reads `speed` (the energy, a capsize, a
+// bump on the shore, the loons, the clock's "under way") reads the speed at life.
 const PADDLE = { accel: 3.1, hustle: 4.65, reverse: 1.35, drag: 0.31, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
 // m/s at life (pace.js LIFE): a walk, Shift a jog, and a carry before the load slows it; face: how fast the walker turns
-// to where the keys point. On a portage trail the walker is time-lapsed as the canoe is on the water (SEEN, pace.js):
-// how he is seen to move, while the clock runs at the pace's one rate (fb5 C).
+// to where the keys point. On foot the walker is time-lapsed to the seen speed of where he is (pace.js footSeen: a carry,
+// a trail, open land, a camp or a store): how he is seen to move, while the clock runs at its one rate.
 const WALK = { speed: LIFE.walk, hustle: LIFE.jog, carry: LIFE.carry, carryHustle: LIFE.carryHustle, face: 7 };
 // fb2 E: the load on foot without the canoe: it slows the walk only past kg, as (kg / LOAD.kg) ^ -walk (it had been the
 // carry's ^ -0.6); up a flight of steps the walk slows by up to STAIRS.slow as the feet rise at STAIRS.climb m/s
 const LOAD = { kg: 40, walk: 0.35 };
 const STAIRS = { slow: 0.25, climb: [0.2, 0.6] };
-// The boost on the water (pace.js) eases back to the pace's floor only where the hull needs it: a bank dead ahead (AHEAD:
+// The boost on the water (pace.js) eases back to life only where the hull needs it: a bank dead ahead (AHEAD:
 // the metres of open water along the bow, from AHEAD[0] none to AHEAD[1] all, so it does not hit the shore at speed), a
 // slow stroke (the speed at life over the cruise, CRUISING) and a hard turn (the yaw rate over the paddle's, TURNING).
 // A shore alongside, a creek, a landing or a dock leave it alone. It comes up over about a second and goes in a third.
-const BOOST = { ahead: [5, 16], reach: 30, cruising: [0.35, 0.85], turning: [0.35, 0.9], up: 1.1, down: 3.5 };
+// (one speed: AHEAD 5-16 m to 8-26 m and the reach 30 to 40, for a cruise seen at 12.5 m/s where it had been 6.3)
+const BOOST = { ahead: [8, 26], reach: 40, cruising: [0.35, 0.85], turning: [0.35, 0.9], up: 1.1, down: 3.5 };
 // On foot the walker has a height of his own (this.foot): the drawn ground, or the top of a rock, a log or a stump he
 // has stepped, hopped, vaulted or climbed onto. STEP_UP is how high a step he takes without a hop (a low slab, a small
 // rock, a thin log); BODY_R the body's reach round its centre, which every solid holds off (a trunk, a rock's or a
@@ -126,13 +128,12 @@ export class Player {
     this.heading = 0; this.speed = 0; this.groundSpeed = 0; this.yawRate = 0; this.time = 0;
     this.strokeCount = 0;
     this.prompt = null;
-    this.timeScale = 1;
-    // the pace (pace.js, settings): 'trip' runs the clock at 4 and time-lapses travel, 'real' is life. boost is the
-    // time-lapse the canoe or the walker is seen to move at this frame (1 at life); fb5 C: it no longer moves the clock,
-    // which runs at the pace's one rate (trip.js)
+    // the pace (pace.js): 'trip' runs the one clock (pace.js CLOCK) and time-lapses travel; 'real' (a developer setting)
+    // and 'life' (the camera raised) are life. boost is the time-lapse the canoe or the walker is seen to move at this
+    // frame (1 at life); it never moves the clock, which runs at the pace's one rate (trip.js)
     this.pace = 'trip';
     this.boost = 1;
-    this.lapsing = false;        // fb3 A: on foot under the pace's time-lapse (a trail, or the woods outside a camp and a yard): trip.travelling counts it as under way
+    this.lapsing = false;        // fb3 A: on foot under the time-lapse on a trail or open land (not a camp's area, a store or its yard): trip.travelling counts it as under way
     this.paceSpeed = 0;          // the speed made good at life, over the boost (the readout's km/h)
     this.trailCache = new Map(); // portage -> resampled trail, built on first use
     this.carry = null; // on foot: { trail, drop: { x, z, heading } | null, hitCooldown, from: { x, z } | null, choice }
@@ -346,7 +347,6 @@ export class Player {
   }
 
   update(dt) {
-    dt *= this.timeScale;
     this.time += dt;
     this.prompt = null; this.placeName = null; this.campsite = null; this.onTrail = false;
     if (!this.onFoot) { this.foot = null; this.act = null; } // stepping ashore again starts from the ground
@@ -354,7 +354,8 @@ export class Player {
     if (this.seat && (this.mode !== 'walk' || this.teleporting)) this.seat = null; // wc C: a seat is left by anything that moves you
     if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); this.groundSpeed = 0; return; }
     const x0 = this.x, z0 = this.z;
-    if (this.landing || this.ashore || this.mode === 'swim') this.easeBoost(1, dt); // nosing in, a landing, a swim: at life
+    if (this.landing || this.ashore) this.easeBoost(1, dt); // nosing in, a landing: at life
+    else if (this.mode === 'swim') this.easeBoost(this.paceTable.lapse ? SWIM_LAPSE : 1, dt); // one speed: a swim a little time-lapsed (pace.js)
     if (this.landing) this.updateLanding(dt);
     else if (this.ashore) this.updateAshore(dt);
     else if (this.seat) this.updateSeat(dt); // wc C: on a seat (or walking to it, or getting up)
@@ -438,8 +439,9 @@ export class Player {
       this.assist += (want - this.assist) * (1 - Math.exp(-dt * 8));
       if (turn === 0) steer = this.assist;
     } else this.assist = 0;
-    // stroke cycle drives both the animation and the thrust pulses
-    const rate = hustle ? PADDLE.hustleRate : PADDLE.strokeRate;
+    // stroke cycle drives both the animation and the thrust pulses: life's cadence (pace.js CANOE.stroke over it), calm
+    // however fast the time-lapse carries the hull
+    const rate = (hustle ? PADDLE.hustleRate : PADDLE.strokeRate) * CANOE.stroke;
     const biased = Math.abs(steer) > 0.15; // the paddle stays on the side that holds the course
     const phase0 = st.stroke, prate = paddling || st.stroke > 0.02 ? rate * (fwd < 0 ? 0.8 : 1) : 0; // for the thrust's steps
     if (paddling || st.stroke > 0.02) {
@@ -454,7 +456,7 @@ export class Player {
     st.turn = steer;
     st.power += ((paddling ? 1 : 0) - st.power) * (1 - Math.exp(-dt * 6));
     // the stroke's thrust pulses (the catch to the exit, the first half of the cycle) and the hull's drag, in steps of
-    // no more than 1/40 s, so the 2 and 4 keys (a longer dt) cruise as fast as 1× does
+    // no more than 1/40 s, so a slow frame (a longer dt) cruises as fast as a quick one
     const thrust = fwd > 0 ? (hustle ? PADDLE.hustle : PADDLE.accel) : fwd < 0 ? -PADDLE.reverse : turn !== 0 ? 0.29 : 0; // sweep strokes still push a little
     const cruise = this.gear ? this.gear.cruise : 1; // hubs 2B: the paddle and the hull's cruise (shop.js player.gear)
     const nSub = Math.max(1, Math.ceil(dt * 40)), h = dt / nSub;
@@ -465,17 +467,17 @@ export class Player {
     }
     const yawTarget = steer * PADDLE.yaw * (0.55 + 0.45 * clamp(Math.abs(this.speed) / 0.72, 0, 1)) * (this.speed < -0.1 ? -1 : 1);
     this.yawRate += (yawTarget - this.yawRate) * (1 - Math.exp(-dt * 3.5));
-    // the pace (pace.js): under way on a forward stroke the hull is time-lapsed up to the pace's T on open water (from its
-    // floor, life), eased off by a slow stroke, a hard turn and the last few metres of a bank dead ahead (not by a shore
-    // alongside or a landing: the owner did not like it slowing there)
-    const P = this.paceTable, B = P.floor || 1;
-    let boostWant = B;
-    if (P.water > B && fwd > 0 && !idleHands) {
+    // the pace (pace.js CANOE): under way on a forward stroke the hull is time-lapsed to the seen cruise (or hustle) over
+    // life's on open water, eased off by a slow stroke, a hard turn and the last few metres of a bank dead ahead (not by a
+    // shore alongside or a landing: the owner did not like it slowing there)
+    const P = this.paceTable;
+    let boostWant = 1;
+    if (P.lapse && fwd > 0 && !idleHands) {
       const cruise = LIFE.cruise * (this.gear ? this.gear.cruise : 1);
       const k = smoothstep(BOOST.cruising[0], BOOST.cruising[1], this.speed / cruise)
         * (1 - 0.85 * smoothstep(BOOST.turning[0], BOOST.turning[1], Math.abs(this.yawRate) / PADDLE.yaw))
         * this.clearAhead();
-      boostWant = B + (P.water - B) * k;
+      boostWant = 1 + (canoeLapse(hustle) - 1) * k;
     }
     this.easeBoost(boostWant, dt);
     const vb = this.speed * this.boost; // the speed the hull is moved at
@@ -512,8 +514,8 @@ export class Player {
     const cosRel = f.x * wd.x + f.z * wd.z, broadside = Math.sqrt(Math.max(0, 1 - cosRel * cosRel));
     const risk = H * Math.pow(broadside, CAPSIZE.beam) * (brace ? 0.4 : rodUp ? CAPSIZE.still : 1); // (cons B: sitting low and still with the rod, steadier)
     const bailing = this.seaAboard(dt, H, cosRel, shelter, fwd !== 0 || turn !== 0, idleHands || brace); // cons B
-    // cons B: the roll builds in real seconds whatever the 1/2/3 keys (a reflex: at Fastest it had given a quarter of the time)
-    const dtr = dt / (this.timeScale || 1);
+    // cons B: the roll builds in real seconds (a reflex)
+    const dtr = dt;
     const steady = CAPSIZE.threshold * (this.gear ? this.gear.stability : 1) * (1 - SEA.tender * this.bilge); this.balance = clamp(this.balance + (risk > steady ? (risk - steady) * CAPSIZE.build : -CAPSIZE.recover) * dtr, 0, 1); // hubs 2B: a steadier hull takes more sea
     // cons B: no capsize while you haul yourself back in, and a few seconds' grace after (no capsize the moment you are in)
     if (climbing) { this.balance = 0; this._grace = SEA.grace; } else if (this._grace > 0) { this._grace -= dtr; this.balance = Math.min(this.balance, 0.6); }
@@ -577,7 +579,7 @@ export class Player {
     const S = this.sea, rp = this.ripples, f = this.forward, r = { x: -f.z, z: f.x };
     const wd = this.wind ? this.wind.dir : { x: 0, z: 1 }, U = (this.wind ? this.wind.speed : 0) * S.shelter;
     if (S.spray > 0.01 && rp) {
-      this._sprayAcc += dt * 1.6 * S.spray; // bursts a second (dt has the 1/2/3 keys in it)
+      this._sprayAcc += dt * 1.6 * S.spray; // bursts a second
       while (this._sprayAcc >= 1) {
         this._sprayAcc -= 1;
         const along = cosRel < -0.35 ? 2.3 : cosRel > 0.55 ? -2.3 : (Math.random() - 0.5) * 2.2;
@@ -695,7 +697,7 @@ export class Player {
     const wd = this.wind ? this.wind.dir : { x: 0, z: 0 }, U = this.wind ? this.wind.speed : 0;
     // after a capsize you stay out where the hull is (no wading off and leaving it upside down); from the shore anywhere
     const swimOk = (x, z) => w.inBounds(x, z, 40) && w.isReady(x, z) && (!hull || w.shoreAt(x, z) < -0.5);
-    let nx = this.x + (mx * this.speed + wd.x * 0.01 * U) * dt, nz = this.z + (mz * this.speed + wd.z * 0.01 * U) * dt;
+    let nx = this.x + (mx * this.speed * this.boost + wd.x * 0.01 * U) * dt, nz = this.z + (mz * this.speed * this.boost + wd.z * 0.01 * U) * dt;
     if (!swimOk(nx, nz)) { nx = this.x; nz = this.z; this.speed *= 0.5; }
     this.level = w.levelAt(nx, nz);
     // held off whatever stands within SWIM_CLEAR of the surface (as if his feet were there: clearOf holds off what
@@ -831,7 +833,7 @@ export class Player {
     // the hull itself is canoe.js's water line)
     if (sp > 0.35) {
       const r = { x: -f.z, z: f.x };
-      this.bubbleAcc += dt * (5 + 17 * Math.min(1, sp / 2.5)) * this.timeScale * (this.boost / Math.min(this.boost, 2.1));
+      this.bubbleAcc += dt * (5 + 17 * Math.min(1, sp / 2.5)) * (this.boost / Math.min(this.boost, 2.1));
       while (this.bubbleAcc >= 1) {
         this.bubbleAcc -= 1;
         let t = Math.random() * 2 - 1;
@@ -1338,18 +1340,20 @@ export class Player {
       if (!started) {
         const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade;
         this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
-        // the pace on a portage trail (pace.js): the walker time-lapsed so he is seen at about SEEN (a carry at 2.5 m/s, a
-        // walk at 2.6), up to the pace's trail T. fb3 A: off a trail, outside a campsite's area, a store and its yard, he
-        // is time-lapsed too, at the pace's foot T (1.8 at Trip: a walk seen at about 2.4 m/s; a jog and a loaded carry
-        // held to what the trail shows them at); within a site's area or a yard he walks at life. fb5 C: the clock runs at
-        // the pace's one rate throughout, so this is how he is seen to move and nothing more. The step onto a trail is a
-        // change of ground (1.8 to 3), not a wall (1 to 3).
+        // one speed (pace.js footSeen): the walker time-lapsed so he is seen at the speed of where he is, whatever the
+        // load: a carry (8 m/s), a trail on foot (5), open land (3.5), a campsite's area, a store and its yard (3), and
+        // Shift's for each; the hill and the water still slow what is seen (they are in `want`, not `base`). The clock runs
+        // at its one rate throughout, so this is how he is seen to move and nothing more. Wading, the time-lapse eases
+        // toward the swimmer's (pace.js SWIM_LAPSE), so the water reads as slow going.
         const P = this.paceTable;
         let boostWant = 1;
-        const seen = carrying ? (hustle ? SEEN.carryHustle : SEEN.carry) : (hustle ? SEEN.jog : SEEN.walk);
-        if (onTrail && P.trail > 1 && fwd) boostWant = clamp(seen / Math.max(0.1, base), 1, P.trail);
-        else if (!onTrail && !campArea && !yard && (P.foot || 1) > 1 && fwd) boostWant = hustle || carrying ? clamp(seen / Math.max(0.1, base), 1, P.foot) : P.foot;
-        this.lapsing = boostWant > 1;
+        if (P.lapse && fwd) {
+          const seen = footSeen(onTrail ? 'trail' : campArea || yard ? 'camp' : 'land', carrying, hustle);
+          boostWant = clamp(seen / Math.max(0.1, base), 1, MAX_LAPSE);
+          const wet = smoothstep(0.25, SWIM_DEPTH, this.depthAt(this.x, this.z, ft.y));
+          if (wet > 0) boostWant += (Math.min(boostWant, SWIM_LAPSE) - boostWant) * wet;
+        }
+        this.lapsing = boostWant > 1 && (onTrail || (!campArea && !yard)); // (travelling: a trail or open land, as before; a camp's and a store's walk is not)
         this.easeBoost(boostWant, dt);
         nx = this.x + mx * this.speed * this.boost * dt; nz = this.z + mz * this.speed * this.boost * dt;
         if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }

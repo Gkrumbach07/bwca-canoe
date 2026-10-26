@@ -325,12 +325,12 @@ export class PhotoCamera {
     const c = this.chase, cam = this.camera, p = this.player;
     cam.getWorldDirection(_dir);
     const first = c.mode === 'first';
-    this.prev = { mode: c.mode, sens: c.sensitivity, ts: p.timeScale, pace: p.pace, pmode: p.mode };
+    this.prev = { mode: c.mode, sens: c.sensitivity, pace: p.pace, pmode: p.mode };
     if (!first) c.setMode('first');
     this.baseFov = cam.fov;
     if (!first) { const yaw = Math.atan2(-_dir.z, _dir.x); c.viewYaw = yaw; c.forwardYaw = yaw; c.viewPitch = 0; c.first = false; } // up to the eye where the view was
     this.lens();
-    p.timeScale = 1; p.pace = 'life'; p.boost = 1; // life (pace.js 'life'): no time-lapse, not even either pace's floor of twice life; the clock 1:1
+    p.pace = 'life'; p.boost = 1; // life (pace.js 'life'): no time-lapse; the clock 1:1
     this.raised = true; this.hadLock = c.locked; this.wind = 0.25; this.pending = false; this.lookT = 0; this.sayKey = '';
     document.body.classList.add('photo-up');
     this.placeFrame(); this.paintFrame();
@@ -344,7 +344,6 @@ export class PhotoCamera {
     if (pr.mode && pr.mode !== 'first') c.setMode(pr.mode);
     else { cam.fov = this.baseFov; cam.updateProjectionMatrix(); }
     c.sensitivity = pr.sens || c.sensitivity;
-    if (pr.ts) p.timeScale = pr.ts;
     if (pr.pace) p.pace = pr.pace;
     document.body.classList.remove('photo-up');
     this.el.classList.remove('show');
@@ -374,7 +373,6 @@ export class PhotoCamera {
       || (this.veil && this.veil.active) || (this.camp && this.camp.busy) || (this.fishing && this.fishing.rodUp) || p.mode !== this.prev.pmode) { this.lower(); return; }
     // the camera's hands are full (and the arrows aim it: at the tent ← → would open the wake-time card, chores.js)
     for (const k of ['KeyE', 'KeyQ', 'KeyF', 'KeyK', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) inp.once.delete(k);
-    if (p.timeScale !== 1) { this.prev.ts = p.timeScale; p.timeScale = 1; } // 1 2 3 wait until it is down
     if (p.pace !== 'life') { this.prev.pace = p.pace; p.pace = 'life'; } // a setting changed meanwhile is kept for the lowering
     // the zoom ring held (Q out, E in), and the lens comes round to it over a quarter second
     const d = inp.down, zk = (d.has('KeyE') ? 1 : 0) - (d.has('KeyQ') ? 1 : 0);

@@ -88,7 +88,7 @@ function poolWords(pool) {
 //   inside a store); it reads the weather from day.weather, the wind from update's, wet gear from trip.state.wet.
 
 // Every rate is per game hour, paid on the hours the clock passes (day.hoursPerTick: the pace's time-lapse, pace.js), so
-// what a stretch of travel costs follows the game hours it takes, whichever the pace and the game speed.
+// what a stretch of travel costs follows the game hours it takes, whichever the pace.
 // Balance (the pace, 2026-10-23): a day of travel is now 6 to 8 game hours for 20 to 25 km (it was 12 to 14 for 4 or 5),
 // so an hour of it costs about twice what it did, and a day of it still ends tired: 0.4 to 0.5 by the end of the paddle
 // from the 0.85 an A-frame gives, the camp's rest bringing it back up to what the rest need allows by supper.

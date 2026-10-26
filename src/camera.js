@@ -579,9 +579,9 @@ export class ChaseCamera {
       const need = ty + (ground - ty) / s;
       if (py < need) py = need;
     }
-    // the time-lapse (pace.js) and the game speed: the camera is carried by the share of the move beyond life, so it
-    // trails the canoe or the walker by what it would at life pace, not six (or twenty-four) times as far at Trip pace
-    const lapse = Math.max(1, (player.boost || 1) * (player.timeScale || 1)), last = this.lastTarget;
+    // the time-lapse (pace.js): the camera is carried by the share of the move beyond life, so it trails the canoe or
+    // the walker by what it would at life pace, not eight times as far
+    const lapse = Math.max(1, player.boost || 1), last = this.lastTarget;
     if (last && !this.first && lapse > 1) {
       const dx = tx - last.x, dz = tz - last.z;
       if (dx * dx + dz * dz < 2500) { const s = 1 - 1 / lapse; this.pos.x += dx * s; this.pos.z += dz * s; this.look.x += dx * s; this.look.z += dz * s; }

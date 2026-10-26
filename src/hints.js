@@ -43,9 +43,7 @@
 // pressed on it (pointer.js), or a card or the book asks (hints.next(id, text)), its `next` shows here as a teaching line;
 // after that only its why.
 //
-// The pace toast (#pace-toast, bottom right above the status marks, 3 s): whenever the pace changes (1 2 3, or the
-// Settings' Trip / Real), its plain name ("Faster ▶▶", stream C's pace.describe), no numbers. The camera's own hold on
-// the clock (photo.js 'life') is not a change.
+// (One speed, 2026-10-26: the pace toast and the 1 2 3 moment are gone with the keys; the clock is everyone's, pace.js.)
 //
 //   const hints = new Hints({ player, hud, day, profile, pointer, outfitter, inventory, lamp, chase, title, talk, camp,
 //     photo, veil, settings, fishing })
@@ -57,18 +55,15 @@
 import { esc, compassLong } from './hud.js';
 import { sheets } from './sheets.js';
 import { campKey } from './camp.js';
-import * as PACE from './pace.js';
 import { itemDef } from './items.js';
 
 const SHOW = 7;        // seconds a moment is up
 const DODGE_EVERY = 0.15; // seconds between looks at the notes the card keeps clear of (dodge)
 const GAP = 3;         // seconds between two
 const TEACH_GAP = 16;  // seconds from one teaching line to the next (its SHOW, then quiet)
-const TOAST = 3;       // seconds the pace toast is up
 const PEND = 25;       // seconds an event waits for its moment
 const EVAL = 0.25;     // seconds between two looks at the triggers
 const WALK = 6;        // seconds walking before Shift is offered
-const PADDLE = 10;     // seconds under way before 1 2 3 is offered
 const ON_FOOT = 1;     // seconds on foot before V is offered (not the frame you step out)
 const UNDER_WAY = 3;   // seconds under way on a new trip before the first word of it
 const STILL_AFLOAT = 6; // seconds sitting still afloat before F is offered
@@ -130,7 +125,6 @@ export const MOMENTS = [
   { id: 'grey', prio: TEACH, recur: 'once', learn: 'grey', keyed: true, text: '{right-click} a thing in the book to see why' },
   { id: 'shelf', prio: TEACH, recur: 'once', learn: 'shelf', keyed: true, text: '{E} look at the shelf' },
   { id: 'book', prio: TEACH, recur: 'once', learn: 'book', keyed: true, text: '{I} your pack and what’s around you' },
-  { id: 'pace', prio: TEACH, recur: 'once', learn: 'pace', keyed: true, text: '{1}{2}{3} how fast time runs' }, // (fb5 join: "the pace" read as paddling speed)
   { id: 'jog', prio: TEACH, recur: 'once', learn: 'jog', keyed: true, text: '{Shift} jog' },
   { id: 'view', prio: TEACH, recur: 'once', learn: 'view', keyed: true, text: '{V} change the view' },
 ];
@@ -138,7 +132,7 @@ const BY_ID = new Map(MOMENTS.map((m) => [m.id, m]));
 // energy.js's cues (needNotes and the bar's words) that the moments say now
 const CUES = new Set(['water', 'food', 'warmth', 'rest', 'dry', 'spent', 'nearly', 'donein', 'nofood', 'tablet']);
 // the keys that teach a concept (before or after its moment)
-const LEARNS = { ShiftLeft: 'jog', ShiftRight: 'jog', KeyV: 'view', KeyH: 'lamp', KeyI: 'book', KeyM: 'map', KeyF: 'fish', Digit1: 'pace', Digit2: 'pace', Digit3: 'pace' };
+const LEARNS = { ShiftLeft: 'jog', ShiftRight: 'jog', KeyV: 'view', KeyH: 'lamp', KeyI: 'book', KeyM: 'map', KeyF: 'fish' };
 const FIRE_EVENTS = ['lit', 'low', 'coals', 'out', 'ready', 'wet'];
 // a greyed verb's next step that a moment already teaches: not said again when the book opens (the content join: the
 // unload moment, then "Unload it: Set everything out…" a second later)
@@ -156,17 +150,6 @@ export function momentHtml(text) {
 }
 const plain = (text) => String(text || '').replace(/\{([^}]+)\}/g, '$1');
 
-// the pace's plain words: stream C's pace.describe when it is there ({ label: 'Faster ▶▶', line }), else from the
-// game speed; never a number
-export function paceLabel(player) {
-  const ts = (player && player.timeScale) || 1, real = player && player.pace === 'real';
-  if (typeof PACE.describe === 'function') {
-    try { const d = PACE.describe(player); if (d && !d.life && (d.label || d.name)) return { label: d.label || `${d.name}${d.mark && d.key > 1 ? ` ${d.mark}` : ''}`, line: d.line || '' }; } catch (e) { /* the fallback */ }
-  }
-  const name = ts >= 4 ? 'Fastest ▶▶▶' : ts >= 2 ? 'Faster ▶▶' : 'Normal';
-  return { label: `${name}${real ? ' · Real pace' : ''}`, line: '' };
-}
-
 export class Hints {
   constructor(t) {
     this.t = t;
@@ -177,20 +160,16 @@ export class Hints {
     this.evalT = 0; this.held = new Map(); // id → real seconds its trigger has held true since it was last shown
     this.pend = new Map();     // event moments waiting: id → { t (real s), data }
     this.clockT = 0;           // real seconds, for the events' ages
-    this.paceSig = null; this.toastT = 0;
     this.dx = 0; this.dy = 0; this.dodgeT = 0; // the card moved clear of the notes (dodge), Air px
     this.log = [];             // what was shown and learnt, in order (the tests)
     const air = document.getElementById('air') || document.body;
     this.el = document.createElement('div'); this.el.id = 'hint'; this.el.className = 'fade'; this.el.setAttribute('aria-live', 'polite');
-    this.toastEl = document.createElement('div'); this.toastEl.id = 'pace-toast'; this.toastEl.className = 'fade'; this.toastEl.setAttribute('aria-live', 'polite');
-    air.append(this.el, this.toastEl);
+    air.append(this.el);
     // a key pressed before its moment: learnt (bubble phase on the window: a conversation's numbers and the title card's
     // keys are taken before they get here)
     window.addEventListener('keydown', (e) => {
       if (e.repeat || this.shell) return;
       const id = LEARNS[e.code]; if (!id) return;
-      const f = this.t.fishing;
-      if (id === 'pace' && f && f.rodUp) return; // the numbers pick a lure then
       this.learn(id);
     });
     // a right-click in the book (or any paper): the greyed verb's why is found there
@@ -477,7 +456,6 @@ export class Hints {
         return !!(v.L && Array.isArray(v.L.hot) && v.L.hot.some((h) => SHELVES.has(h.key) && reachTo(h, p.x, p.z) <= SHELF_REACH));
       }
       case 'book': return p.mode === 'walk' && this.besideCanoeWithThings();
-      case 'pace': return this.paddleT >= PADDLE;
       case 'jog': return this.walkT >= WALK;
       case 'view': return this.footT >= ON_FOOT;
       default: return false;
@@ -530,7 +508,6 @@ export class Hints {
     if (p.mode === 'paddle' && moving && !(f && f.rodUp) && !p.landing) this.paddleT += dt;
     if (this.onTrip && p.mode === 'paddle' && moving && !p.landing) this.wayT += dt;
     this.stillT = p.mode === 'paddle' && !moving && !p.landing && !p.teleporting ? this.stillT + dt : 0;
-    this.paceToast(dt);
     // the world looked at four times a second: the site you are at, the ring (without stream A's events), what was learnt
     // by doing
     let step = 0;
@@ -653,7 +630,6 @@ export class Hints {
     const home = { l: W / 2 - r.width / 2, r: W / 2 + r.width / 2, b: H - bottom * z, t: H - bottom * z - r.height };
     const box = (id, on) => { const e = document.getElementById(id); if (!e || !on(e)) return null; const b = e.getBoundingClientRect(); return b.width && b.height ? b : null; };
     const near = [box('lines', (e) => [...e.children].some((c) => !c._gone)), box('place', (e) => e.classList.contains('show'))].filter(Boolean);
-    const right = [box('pace-toast', (e) => e.classList.contains('show'))].filter(Boolean);
     const G = 18 * z, hits = (a, o) => o.left < a.r + G && o.right > a.l - G && o.top < a.b + G && o.bottom > a.t - G;
     // at its own height first, then above the notes, then above the title too: at each, where it is, or moved right
     // past what it would cover if the screen is wide enough
@@ -662,7 +638,7 @@ export class Hints {
       const hit = near.filter((o) => hits(c, o));
       if (!hit.length) break;
       const dx = Math.max(...hit.map((o) => o.right + G - c.l)), m = { ...c, l: c.l + dx, r: c.r + dx };
-      if (m.r <= W - 40 * z && !near.some((o) => hits(m, o)) && !right.some((o) => hits(m, o))) { c = m; break; }
+      if (m.r <= W - 40 * z && !near.some((o) => hits(m, o))) { c = m; break; }
       const dy = c.b - (Math.min(...hit.map((o) => o.top)) - G);
       c = { ...c, t: c.t - dy, b: c.b - dy };
     }
@@ -693,26 +669,10 @@ export class Hints {
   // a moment shown now, whatever its trigger says (the console and the tests)
   fire(id) { const m = BY_ID.get(id) || MOMENTS.find((q) => q.id === id); if (!m) return false; this.show(m, m.text, 'full'); return true; } // (the streams push their own into MOMENTS after the map)
 
-  // --- the pace toast --------------------------------------------------------------------------------------------------
-  paceToast(dt) {
-    const t = this.t, p = t.player;
-    if (this.toastT > 0 && (this.toastT -= dt) <= 0) this.toastEl.classList.remove('show');
-    if (p.pace === 'life' || (t.photo && t.photo.raised)) return; // the camera's hold on the clock is not a change
-    const sig = `${p.pace}:${p.timeScale}`;
-    if (this.paceSig === null) { this.paceSig = sig; return; } // the pace the game came back with
-    if (sig === this.paceSig) return;
-    this.paceSig = sig;
-    const { label, line } = paceLabel(p);
-    this.toastEl.innerHTML = `<div class="sc">${esc(label)}</div>${line ? `<div class="line">${esc(line)}</div>` : ''}`;
-    this.toastEl.classList.add('show');
-    this.toastT = TOAST;
-    this.lastToast = line ? `${label} · ${line}` : label;
-  }
-
   // --- the console and the tests ---------------------------------------------------------------------------------------
   stats() {
     const s = this.store;
-    return { up: this.cur ? `${this.cur.m.id} ${this.cur.how} ${this.cur.t.toFixed(1)}s` : null, text: this.cur ? this.el.textContent : null, onboard: s ? JSON.parse(JSON.stringify(s)) : null, log: this.log.slice(), walkT: +this.walkT.toFixed(1), paddleT: +this.paddleT.toFixed(1), footT: +this.footT.toFixed(1), toast: this.toastT > 0 ? this.lastToast : null, lastToast: this.lastToast || null };
+    return { up: this.cur ? `${this.cur.m.id} ${this.cur.how} ${this.cur.t.toFixed(1)}s` : null, text: this.cur ? this.el.textContent : null, onboard: s ? JSON.parse(JSON.stringify(s)) : null, log: this.log.slice(), walkT: +this.walkT.toFixed(1), paddleT: +this.paddleT.toFixed(1), footT: +this.footT.toFixed(1) };
   }
   // the season's moments forgotten (the tests): they will show again
   forget() { const pr = this.t.profile; if (pr && pr.s) { pr.s.onboard = {}; pr.write(); } this.log = []; this.walkT = this.paddleT = this.footT = this.wayT = this.stillT = 0; this.held.clear(); this.pend.clear(); if (this.cur) this.hide(); }

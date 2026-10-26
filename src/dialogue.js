@@ -75,8 +75,8 @@ export class Dialogue {
     document.body.appendChild(root);
     this.panel.addEventListener('click', (e) => { const o = e.target.closest('[data-i]'); if (o) this.choose(Number(o.dataset.i)); });
     this.panel.addEventListener('pointerdown', (e) => e.stopPropagation()); // a click on a choice is not a look or a cast
-    // capture phase, so the keys a conversation takes (the numbers, Esc) reach nothing else: not the game speed, not
-    // the pause card
+    // capture phase, so the keys a conversation takes (the numbers, Esc) reach nothing else: not the lures, not the
+    // pause card
     window.addEventListener('keydown', (e) => {
       if (document.body.classList.contains('shell-open')) return;
       const tag = e.target && e.target.tagName;

@@ -278,7 +278,7 @@ export class Bugs {
     if (!p || !c || !c.figure || !c.figure.poser) return;
     // behind the title card update() does not run: no swarm frozen where it was, and no swat
     if (realNow() - this.last > 1) { if (this.swarm) this.swarm.pts.visible = false; this.swat = null; return; }
-    const rdt = Math.min(0.1, Math.max(0, dt / (p.timeScale || 1)));
+    const rdt = Math.min(0.1, Math.max(0, dt));
     if (!this.swat) {
       const f = this.now.felt;
       if (f < SWAT.from || !this.canSwat()) { this.swatIn = Math.max(this.swatIn, 1.5); return; }
