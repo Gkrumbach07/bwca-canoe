@@ -608,12 +608,13 @@ export class Packs {
     const list = this.loadedUnits();
     if (!list.length) return { n: 0, words: 'Nothing but the paddle and the stringer in it.' };
     const camp = inv.camp, a = camp && camp.areaAt ? camp.areaAt(d.x, d.z) : null, taken = [];
+    const words = `${cap(names(list))} set out beside the canoe.`; // (the content join: named before they go down: a hand's holder set down empties into a pile, and was "the in your hand")
     for (const u of list) {
       const s = this.spotNear(d.x, d.z, d.heading || 0, 1, -1, taken); taken.push(s);
       inv.setDown(u.ref, { x: s.x, z: s.z, y: this.groundUnder(s.x, s.z, d.heading || 0, u), heading: Math.atan2(-(d.z - s.z), d.x - s.x), ...(a ? { camp: a.key || 'camp' } : {}) }, { left: false, quiet: true, force: true });
     }
     inv.emit('ground');
-    return { n: list.length, words: `${cap(names(list))} set out beside the canoe.` };
+    return { n: list.length, words };
   }
   // wc A, the book's Canoe tab: everything lying about the canoe loaded, held (hold.js: a thing a phase). opts: the
   // hold's keys ({ key: 'BookHold' }). The job, or null with nothing to load.
