@@ -826,7 +826,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
 // The season (aquatic.js) grows and browns them.
 const _bedA = {};
 const RAPIDS_FALL = 0.02; // round A join: the slope of the water (m per m) past which no lake plant grows
-export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site = null }) {
+export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site = null, rice = null }) {
   const cell = grid.cell, RICE = 3, SEDGE = 3;
   const bins = new Map();
   let total = 0;
@@ -899,7 +899,10 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
       };
       // beds of wild rice: 50-100 m fields in the soft shallows where water runs through, and in the quiet stained bays
       const riceField = smoothstep(0.42, 0.56, fbm(cx * 0.012 + 7, cz * 0.012, 2, 113));
-      const bedR = clamp(Math.max(1.4 * inlet, riceField * smoothstep(0.3, 0.7, shelt) * (0.45 + 0.55 * stained)), 0, 1) * rooting;
+      // d1 lakes: and by the lake (lake-facts.js riceById): a lake on the DNR's wild rice list grows more and wider, a
+      // surveyed lake that is not on it a third as much, other water as it was
+      const riceK = rice && id < rice.length ? rice[id] : 1;
+      const bedR = clamp(Math.max(1.4 * inlet, riceField * smoothstep(0.3, 0.7, shelt) * (0.45 + 0.55 * stained)) * riceK, 0, 1) * rooting;
       if (bedR > 0.01 && sd < -1.5 && depth > 0.2 && depth < 1.6)
         place(RICE, 7 * bedR, () => (rng() < 0.5 ? 0 : 1), (s, d) => s < -1.2 && d > 0.25 && d < 1.5, 0.07, () => 0.85 + rng() * 0.4);
       // rafts of lily pads, gathered into patches 30-60 m across, dense in the quiet soft bays and the inlets, thinner
