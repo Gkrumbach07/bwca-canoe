@@ -70,6 +70,7 @@ const CAPSIZE = { threshold: 0.36, build: 1.1, recover: 0.6 };
 const LANDING_RADIUS = 28;
 const ASHORE_RADIUS = 6;      // metres of water between the hull and a shore within which you can step out
 const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like the trail
+const TRAIL_TO_WATER = 2.5;   // tuning: a trail's end farther than this up the bank runs on down to the waterline (trailFor)
 const HULL_REACH = 3;         // metres from a canoe on the ground within which you can shoulder or launch it
 const GROUNDS = 40;           // metres around an outfitter's landing that are its cleared yard and dock
 const CAMP_AREA = 25;         // fb3 A: metres round a campsite within which you walk at life on the idle clock (camp.js AREA_R)
@@ -193,11 +194,29 @@ export class Player {
 
   trailFor(p) {
     let t = this.trailCache.get(p);
+    if (t && t.partial) { const e0 = p.pts[0], e1 = p.pts[p.pts.length - 1]; if (this.world.isReady(e0[0], e0[1]) && this.world.isReady(e1[0], e1[1])) t = null; }
     if (!t) {
-      const pts = resample(p.pts, 1.5);
+      // tuning (the coordinator's check of content pass 1: "Go ashore · Portage" left the beached hull 8.1 m from the
+      // trail at Lake One's 23-rod portage, whose end lies 7.9 m up the bank): an end more than TRAIL_TO_WATER m up the
+      // bank runs on down to the waterline, the put-in updateLanding glides to, so the carry starts at the hull. Cached
+      // once the ground there is in (a trail asked for before its tiles are has no put-in yet: partial, built again then)
+      const w = this.world, raw = p.pts.slice();
+      let ready = true;
+      const toWater = (e) => {
+        let x = e[0], z = e[1], sd = w.shoreAt(x, z);
+        if (!w.isReady(x, z)) { ready = false; return null; }
+        if (!(sd > TRAIL_TO_WATER)) return null;
+        for (let i = 0; i < 24 && Math.abs(sd) > 0.15; i++) { const g = w.deeperDir(x, z); x += g.x * sd; z += g.z * sd; sd = w.shoreAt(x, z); }
+        if (!w.isReady(x, z)) { ready = false; return null; }
+        return Math.abs(sd) <= 0.5 && Math.hypot(x - e[0], z - e[1]) < TRAIL_TO_WATER * 6 ? [x, z] : null;
+      };
+      const a = toWater(raw[0]), b = toWater(raw[raw.length - 1]);
+      if (a) raw.unshift(a);
+      if (b) raw.push(b);
+      const pts = resample(raw, 1.5);
       const cum = [0];
       for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-      t = { def: p, pts, cum, length: cum[cum.length - 1] };
+      t = { def: p, pts, cum, length: cum[cum.length - 1], partial: !ready };
       this.trailCache.set(p, t);
     }
     return t;
