@@ -70,6 +70,19 @@ export const TENT_KINDS = {
 export const kindOf = (item) => (item == null || item === 'aframe' ? 'aframe' : 'dome');
 export const tentOf = (item) => TENT_KINDS[kindOf(item)];
 
+// --- the bugs' refuge (cons C, "bugs at dusk": bugs.js) ---------------------------------------------------------------
+// The tent closed is the one place the mosquitoes and the blackflies can't follow: the fly on and zipped down, and you
+// inside it (the Rest dial open, or the night). Up without its fly the door's mesh is left open to them, and with no
+// tent standing the night is under the stars. → 'closed' | 'open' | 'stars'
+export function shelterOf(camp) {
+  const c = camp && camp.camp;
+  return !c || !(c.stage >= 3) ? 'stars' : c.stage >= 4 ? 'closed' : 'open';
+}
+export const insideTent = (camp) => !!(camp && (camp.night || camp.dialOpen));
+// bugs.js sets `out`: () => the bugs are out where you stand (the Rest with no fly then says they get in)
+export const TENT_BUGS = { out: null };
+const bugsOut = () => { try { return !!(TENT_BUGS.out && TENT_BUGS.out()); } catch { return false; } };
+
 // --- the checklists (fb4 E, the owner's second round of 2026-10-25, decision 2: "if I can't use something, I want to
 // know exactly why ... some sort of checklist or timer or quantity out of total") ---------------------------------------
 // The pitch's phases as steps, those done ticked, each with its minutes: [{ label, done, minutes }]
@@ -92,7 +105,8 @@ export function withTentNeeds(camp, ta) {
     const pitchA = ta.e && /pitching|fly/i.test(ta.e.verb) ? ta.e : null;
     fill(pitchA, tentSteps(c.item, st), st === 3 ? `Hold E: the rain fly on in ${fly.minutes} min; without it the rain comes through the mesh` : `Hold E: ${low(K.pitch[st].name)} next, ${left} min to the fly on`);
     const rest = ta.q && /Rest/.test(ta.q.verb) ? ta.q : null;
-    fill(rest, [{ label: `Rain fly on · ${fly.minutes} min`, done: false }, { label: 'A night’s rest with no fly: 90 %, and rain through the mesh', done: false }], `Put the fly on first (hold E, ${fly.minutes} min): a dry night and the full rest`);
+    const bugs = bugsOut(); // (cons C: and in bug season the mosquitoes come in at the open door)
+    fill(rest, [{ label: `Rain fly on · ${fly.minutes} min`, done: false }, { label: 'A night’s rest with no fly: 90 %, and rain through the mesh', done: false }, ...(bugs ? [{ label: 'No fly: the bugs get in', done: false, chip: 'bugs get in' }] : [])], `Put the fly on first (hold E, ${fly.minutes} min): a dry night${bugs ? ', no bugs' : ''} and the full rest`);
   }
   const strike = [ta.e, ta.q].find((a) => a && /Strike/.test(a.verb));
   fill(strike, K.strike.slice(4 - st).map((ph) => ({ label: `${ph.name} · ${ph.minutes} min`, done: false })), `Hold Q to strike it: ${K.strike.slice(4 - st).reduce((s, ph) => s + ph.minutes, 0)} min, back into the pack it came from`);

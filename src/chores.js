@@ -388,6 +388,11 @@ export class Chores {
     if (!inv || !inv.attached) return;
     const dh = Math.max(0, Math.min(1, now - last)), rain = this.rainNow(), tr = this.camp.trip;
     if (!(dh > 0)) return;
+    // tuning (a leftover of the earlier rounds: "dead wood lying out in rain stays dry"): the deadwood lying about soaks
+    // as a piece in the open does (RAIN.wetAfter of rain wets it through) and dries as one does in dry air (WOOD_DRY.air);
+    // a piece picked up meanwhile is that wet (pickUp)
+    if (rain > RAIN.on) { this.soakH = (this.soakH || 0) + dh * rain; if (this.soakH >= RAIN.wetAfter) this.deadWet = WOOD_DRY.air; }
+    else { if (this.soakH) this.soakH = Math.max(0, this.soakH - dh * RAIN.dry); if (this.deadWet > 0) this.deadWet = Math.max(0, this.deadWet - dh); }
     for (const c of inv.containers) {
       if (c.where !== 'ground' || !c.at || !this.isGear(c)) continue;
       if (Math.abs(c.at.x - p.x) > 80 || Math.abs(c.at.z - p.z) > 80) continue;
@@ -789,11 +794,11 @@ export class Chores {
   pickUp(pc) {
     if (pc.kind === 'pole') return this.pickUpPole(pc);
     const inv = this.inv, id = pieceItem(pc.kind), name = pieceName(pc.kind);
-    const arm = this.armFor(id, true);
-    let ok = !!(arm && inv.put(arm, id, { quiet: true })), where = 'your arms';
+    const arm = this.armFor(id, true), data = this.deadWet > 0 ? { wet: +this.deadWet.toFixed(3) } : null; // (tuning: it lay out in the rain)
+    let ok = !!(arm && inv.put(arm, id, { quiet: true, data })), where = 'your arms';
     if (!ok) {
       const pool = inv.reachable().filter((c) => c.item !== 'grate' && c.item !== 'pockets' && c.item !== 'crate');
-      const r = inv.place(id, 1, { pool, quiet: true });
+      const r = inv.place(id, 1, { pool, quiet: true, data });
       ok = r.ok;
       const c = r.cId && inv.cont(r.cId);
       if (c) where = `the ${lowerName(c)}`;

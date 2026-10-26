@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { glslWaves, glslRipples, waveHeight, windWeights, N as WAVE_DIRS } from './waves.js';
+import { glslWaves, glslRipples, waveHeight, windWeights, windHeight, N as WAVE_DIRS, CHOP, CHOP_W, CHOP_PH } from './waves.js';
 import { glslNoise } from './shading.js';
 import * as Sky from './sky.js';
 import { groundUniforms } from './terrain.js';
@@ -27,11 +27,19 @@ const PATCH_HALF = 160;   // metres; multiple of the 10 m lattice
 const PATCH_RES = 3.2;    // metres per vertex
 const ATLAS = 256;        // cells (2.56 km) of shore distance, level, height and cover around the canoe
 const ATLAS_SLACK = 48;   // re-centre once the canoe gets this close to the atlas edge
+const FETCH_RING = 100;   // cons B: cells round the atlas the fetch's march runs on over (rebuildFetch)
+const FETCH_ROWS = 48;    // cons B: atlas rows of the fetch marched a frame after the wind veers (fetchStep)
 // The mirror pass (tunable live): its size as a fraction of the drawing buffer, how far out it draws trees (metres
 // from the camera to the nearest edge of a bin's region; the fog has the far shore by then), and inside what
 // distance a bin keeps its full geometry (beyond, the mirror draws the trees' far twin: a few big cards, which is
 // all a blurred reflection can show)
 export const REFLECTION = { scale: 0.25, reach: 1400, full: 120 };
+// cons B (the owner, 2026-10-25: "hug the lee"): the lee. Off a shore the wind blows from, the water is sheltered for a
+// few hundred metres: the fetch (open water upwind, rebuildFetch) is short, so the waves are small (waves.js windHeight)
+// and the wind's fine ripples lie down too, a dark smooth band that mirrors the trees along the upwind shore, the way a
+// lee reads from out on a windy lake. reach: the fetch (m) over which the ripples come back, from calm (their share in the
+// lee) to all of them; drift: the share of the wind the canoe feels in the lee (player.js reads shelterAt).
+export const LEE = { reach: [20, 260], calm: 0.22, drift: 0.35 };
 // vegetation.js SPECIES indices that stand tall enough to mirror: the trees, the snags and the outcrops
 const MIRRORED = new Set([0, 1, 2, 3, 4, 5, 8, 9, 16]);
 // The wind's fine ripples (windRipples in the shader): six wavelengths, 0.11 m to 0.84 m, each heading off the wind
@@ -168,6 +176,7 @@ const vertHead = /* glsl */ `
   varying vec4 vReflectUv;
   varying vec3 vCrest;        // x: wave height over the local wind-wave height, y: that height (damped near the shore),
                               // z: the wind-wave height the shore here takes (the most exposed water round it)
+  varying float vLee;         // cons B: 0 in the lee (a short fetch upwind), 1 on open water (LEE)
   #include <common>
   #include <fog_pars_vertex>
   #include <shadowmap_pars_vertex>
@@ -211,6 +220,7 @@ const vertFar = vertHead + glslWaves + /* glsl */ `
         max(max(texelFetch(uFetchTex, clamp(c + ivec2(0, 1), ivec2(0), m), 0).r, texelFetch(uFetchTex, clamp(c - ivec2(0, 1), ivec2(0), m), 0).r), fetch));
     }
     vCrest = vec3(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -aShore), windHeight(reach) * (1.0 - uIce));
+    vLee = smoothstep(${LEE.reach[0].toFixed(1)}, ${LEE.reach[1].toFixed(1)}, reach);
     const float e = 5.0;
     float hL = lowWave(rel - vec2(e, 0.0), uTime) * damp, hR = lowWave(rel + vec2(e, 0.0), uTime) * damp;
     float hB = lowWave(rel - vec2(0.0, e), uTime) * damp, hF = lowWave(rel + vec2(0.0, e), uTime) * damp;
@@ -233,6 +243,7 @@ const vertPatch = vertHead + glslSurface + /* glsl */ `
     ivec2 fc = atlasCell(rel);
     float reach = max(max(max(cellSample(uFetchTex, fc), cellSample(uFetchTex, fc + ivec2(1, 0))), max(cellSample(uFetchTex, fc - ivec2(1, 0)), cellSample(uFetchTex, fc + ivec2(0, 1)))), cellSample(uFetchTex, fc - ivec2(0, 1)));
     vCrest = vec3(wave / max(0.05, 0.5 * Hw), Hw * smoothstep(0.0, 25.0, -shore), windHeight(reach) * (1.0 - uIce));
+    vLee = smoothstep(${LEE.reach[0].toFixed(1)}, ${LEE.reach[1].toFixed(1)}, reach);
     const float e = 1.6;
     float hL = surfaceWave(rel - vec2(e, 0.0), uTime, border, s2), hR = surfaceWave(rel + vec2(e, 0.0), uTime, border, s2);
     float hB = surfaceWave(rel - vec2(0.0, e), uTime, border, s2), hF = surfaceWave(rel + vec2(0.0, e), uTime, border, s2);
@@ -320,6 +331,7 @@ const frag = /* glsl */ `
     uniform vec2 uSkyGlow;
   #endif
   uniform vec2 uOrigin, uReflTexel, uGustOff, uWindDir; // (uWindDir: the whitecaps' patches drift downwind)
+  uniform float uDirW[${WAVE_DIRS}];   // (the chop's weights by direction: the whitecaps break on its crests)
   uniform vec4 uRip[${RIPPLES * 2}];
   uniform sampler2D uReflection;
   uniform vec2 uPatchLocal;
@@ -331,6 +343,7 @@ const frag = /* glsl */ `
   varying float vClarity;
   varying vec4 vReflectUv;
   varying vec3 vCrest;
+  varying float vLee;
   #include <common>
   #include <packing>
   #include <fog_pars_fragment>
@@ -398,6 +411,49 @@ const frag = /* glsl */ `
     }
     return tilt;
   }
+  // cons B, redrawn at the join (the brief: the whitecaps read as flat white ovals; "short foam streaks along the wave
+  // crests, oriented across the wind, which appear at the crest, run briefly and fade"). The near whitecaps break on
+  // the chop's own crests (waves.js CHOP, the phases the vertices draw): each direction that carries a good share of
+  // the wind's waves has its crests cut into 7 m cells, and on its own 4 s clock the cell's stretch of crest may
+  // break (more often the harder it blows): for 1.3 s a white line 2.5 to 5 m long rides the crest, spilling a little
+  // down its front, ragged and thinning to its ends; the foam it lays lies where it fell, streaked along the crest,
+  // and fades in a few tenths of a second as the crest runs on. share: this direction's weight against the strongest (the odd one breaks on a minor direction); streak: a
+  // noise drawn out across the wind, which breaks the laid foam into streaks.
+  float crestFoam(vec2 p, vec2 pw, vec2 k, float ph, float share, float blow, float streak, float px) {
+    float kl = length(k), L = 6.2831853 / kl, c = ${CHOP_W.toFixed(6)} / kl;   // wavelength, the crest's speed
+    vec2 u = k / kl;
+    float cyc = (dot(p, k) + ph - ${CHOP_W.toFixed(6)} * uTime - 1.5707963) * 0.15915494;   // crests at whole numbers
+    float n = floor(cyc + 0.85), s = (cyc - n) * L;   // the crest just passed (up to 0.85 L back) or about to, and metres ahead of it
+    n += floor(dot(uOrigin, k) * 0.15915494 + 0.5);   // its own number, the same from any floating origin
+    float bm = dot(pw, vec2(-u.y, u.x)), b = bm * ${(1 / 7.0).toFixed(6)}, j = floor(b);
+    ivec2 id = ivec2(int(n), int(j));
+    float clock = uTime * 0.25 + lookHash(id, 61u);
+    float age = fract(clock) * 4.0;
+    int cy = int(mod(floor(clock), 4096.0));
+    ivec2 ic = id + ivec2(cy, 3 * cy);
+    if (lookHash(ic, 67u) > (0.08 + 0.62 * blow) * share * share) return 0.0;
+    // a breaking crest is never ruled straight: it wanders a hand's width either way along its length
+    s += 0.22 * (lookNoise(vec2(bm * 0.9, n * 3.7), 83u) - 0.5);
+    float since = max(-s, 0.0) / c;   // seconds since the crest passed here (0 on it and ahead)
+    float td = age - since;           // the break's age when it passed
+    if (td < 0.0 || td > 1.3) return 0.0;
+    float env = smoothstep(0.0, 0.18, td) * (1.0 - smoothstep(0.75, 1.3, td));
+    // along the crest: the segment's middle and half-length (in cells), spreading as it breaks; x runs -1..1 over it
+    float hl = (0.18 + 0.16 * lookHash(ic, 73u)) * (0.8 + 0.25 * blow) * (0.45 + 0.55 * smoothstep(0.0, 0.6, td));
+    float x = (b - j - 0.5 - (lookHash(ic, 71u) - 0.5) * 0.2) / hl;   // (inside its cell: no end cut by a cell's edge)
+    x += 0.4 * (lookNoise(vec2(bm * 1.1, s * 1.5 + n * 5.1), 97u) - 0.5);   // ragged ends
+    float body = 1.0 - x * x;   // thickest mid-way, thinning to nothing at the ends
+    if (body <= 0.0) return 0.0;
+    // across it: a sharp spill just ahead of the crest, its width the body's, and behind it the foam laid, streaked,
+    // thinner and older further back, the ends of the break laying less
+    float soft = 0.04 + px;
+    float froth = lookNoise(vec2(bm * 2.2, s * 4.0 - n * 1.3), 101u);   // (a breaking face is froth, not paint)
+    float reach = 0.45 * body * (0.5 + 0.9 * froth);                    // (what a canoe looking upwind sees of it)
+    float front = 1.0 - smoothstep(reach - soft, reach + soft, s);
+    float laid = exp(-since * (4.0 + 4.0 * (1.0 - body))) * mix(0.62 + 0.38 * froth, 0.12 + 0.45 * streak, smoothstep(0.02, 0.12, since));
+    laid *= 1.0 - smoothstep(0.4, 0.6, -s / L);
+    return env * front * laid * smoothstep(0.0, 0.55, body);
+  }
   void main() {
     #ifdef FAR
       if (abs(vLocal.x - uPatchLocal.x) < uPatchHalf && abs(vLocal.z - uPatchLocal.y) < uPatchHalf) discard;
@@ -420,7 +476,8 @@ const frag = /* glsl */ `
     // the normal: the swell's own (smooth, from the vertices), tilted by the wind's fine ripples
     float rough;
     vec2 pw = vLocal.xz + uOrigin;   // world xz, for the noise (a lattice relative to the origin would jump with it)
-    vec2 tilt = windRipples(vLocal.xz, pw, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore);
+    vec2 tilt = windRipples(vLocal.xz, pw, px, rough) * uRippleAmt * mix(0.3, 1.0, rough) * live * smoothstep(-0.3, 2.5, shore)
+      * mix(${LEE.calm.toFixed(3)}, 1.0, vLee);   // cons B: the lee lies smooth
     if (uRain > 0.0) tilt += rainRings(pw, px, uRain) * live;
     vec3 n0 = normalize(vWaveN);
     vec3 n = normalize(n0 - vec3(tilt.x, 0.0, tilt.y));
@@ -452,7 +509,7 @@ const frag = /* glsl */ `
       vec2 uv = vReflectUv.xy / vReflectUv.w + (n.xz - n0.xz * 0.5) * (0.012 + 1.2 / dist);
       // the roughness the ripples no longer resolve far off still smears the image: a breeze blurs the far
       // shore's reflection into a soft band, a blow all but wipes it
-      float unresolved = min(1.0, uRippleAmt + uRain * 0.6) * (1.0 - lookFade(0.84, px));
+      float unresolved = min(1.0, uRippleAmt * mix(${LEE.calm.toFixed(3)}, 1.0, vLee) + uRain * 0.6) * (1.0 - lookFade(0.84, px));
       vec2 tx = uReflTexel * vec2(1.0 + 3.0 * unresolved, 1.0 + 10.0 * length(tilt) + 9.0 * unresolved);
       refl = texture2D(uReflection, uv) * 0.36
         + texture2D(uReflection, uv + tx * vec2(1.1, 0.7)) * 0.16 + texture2D(uReflection, uv - tx * vec2(1.1, 0.7)) * 0.16
@@ -517,9 +574,30 @@ const frag = /* glsl */ `
     // of about 0.25 m), many in a blow (0.6 m and up, a near gale over open water). The swell's height is bilinear
     // between its lattice nodes, so a crest is a broad blob: a cap is a patch a metre or two across on it, picked by a
     // noise drifting downwind, never the whole crest at once (polish A: the old thresholds showed none under 0.6 m)
+    // cons B (the owner, 2026-10-25: "read the lake: whitecaps"): more of them the harder it blows, so a lake in a blow
+    // reads white-flecked from the canoe and from the shore, and far off a coarser field of patches (the fine one only
+    // sparkles once a pixel is a few centimetres): at blow 1 about a crest in six breaks, at a breeze the odd one
     float blow = smoothstep(0.18, 0.7, vCrest.y);
-    float capN = smoothstep(0.63 - 0.14 * blow, 0.76 - 0.09 * blow, lookNoise(pw * 1.5 - uWindDir * (uTime * 0.9), 31u));
-    float cap = smoothstep(0.64 - 0.12 * blow, 0.86 - 0.1 * blow, vCrest.x) * blow * capN * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.8;
+    float capFar = smoothstep(0.08, 0.35, px);   // (where a breaker would be under a few pixels)
+    // near: crests breaking (crestFoam), on the chop directions that carry the wind's waves, more on the swell's tops
+    float capNear = 0.0;
+    if (blow > 0.001 && capFar < 0.999) {
+      float wmax = 1e-4;
+      for (int i = 0; i < ${WAVE_DIRS}; i++) wmax = max(wmax, uDirW[i]);
+      vec2 wa = vec2(-uWindDir.y, uWindDir.x);
+      float streak = smoothstep(0.38, 0.66, lookNoise(vec2(dot(pw, wa) * 0.9, dot(pw, uWindDir) * 3.2), 79u) * 0.65 + lookNoise(vec2(dot(pw, wa) * 2.3, dot(pw, uWindDir) * 7.0), 89u) * 0.35);
+      ${CHOP.map((k, i) => `{ float sh = uDirW[${i}] / wmax; if (sh > 0.25) capNear = max(capNear, crestFoam(p, pw, vec2(${k[0].toFixed(9)}, ${k[1].toFixed(9)}), ${CHOP_PH[i].toFixed(4)}, sh, blow, streak, px)); }`).join('\n      ')}
+      capNear *= mix(1.0, smoothstep(-0.2, 0.5, vCrest.x), 0.5) * smoothstep(0.0, 0.2, blow);
+    }
+    // far: what a pixel there averages of them, a fleck field on a finer noise, more of it the harder it blows
+    // (drawn out across the wind, as the breaking crests are: streaks, not blobs)
+    vec2 wq = vec2(dot(pw, vec2(-uWindDir.y, uWindDir.x)) * 0.32, (dot(pw, uWindDir) - uTime * 0.6) * 1.15);
+    float capFarV = smoothstep(0.64 - 0.12 * blow, 0.76 - 0.1 * blow, lookNoise(wq, 37u))
+      * smoothstep(0.1 - 0.2 * blow, 0.6, vCrest.x) * (0.16 + 0.3 * blow);
+    // (seen low over the water a cap stands up off the face of its wave, where a flat patch would lie under a pixel: far
+    // off and at a grazing look they count for more)
+    capFarV *= mix(1.0, 2.6, smoothstep(0.35, 0.06, dot(normalize(vWaveN), v)));
+    float cap = min(1.0, mix(capNear * 0.95, capFarV * blow * (0.6 + 0.4 * sin(dot(p, RIP1) * 3.0 + uTime * 1.7)) * 0.9, capFar));
     float foam = max(max(edgeA, lineA), cap) * live;
     // white water lit as the splashes and the rise rings are (wake.js foamLight): the key by its height in the sun's
     // shadow and the sky fill, so it greys at dusk and is dark at night instead of keeping the day's white
@@ -701,6 +779,7 @@ export class WaterSystem {
 
   update(dt, cx, cz) {
     this.time += dt;
+    this.fetchStep(); // cons B
     this.uniforms.uTime.value = this.time;
     this.uniforms.uColumn.value.set(COLUMN.transmit, COLUMN.veil, COLUMN.veilPow);
     // the bed's caustics (terrain.js) run on the water's clock and the sun the day cycle gives the water
@@ -796,6 +875,7 @@ export class WaterSystem {
     this.clarityTex.needsUpdate = true;
     this.coverTex.needsUpdate = true;
     this.uniforms.uAtlas.value.set(w.originX + i0 * w.cell - this.origin.x, w.originZ + j0 * w.cell - this.origin.z, 1 / w.cell, A);
+    this._atlasStamp = (this._atlasStamp || 0) + 1; // cons B: the fetch's ring is built again with the atlas
     this.rebuildFetch();
   }
 
@@ -811,26 +891,57 @@ export class WaterSystem {
     this.uniforms.uWindDir.value.set(dirX / l, dirZ / l);
     windWeights(dirX, dirZ, w.w);
     this.uniforms.uDirW.value.set(w.w);
-    const bucket = Math.round(Math.atan2(dirZ, dirX) / (Math.PI / 12));
-    if (bucket !== w.bucket) { w.bucket = bucket; if (!Number.isNaN(this.atlasI)) this.rebuildFetch(); }
+    // cons B: a new bucket only once the wind is well into it (a wind wavering on a bucket's edge re-marched every frame)
+    const at = Math.atan2(dirZ, dirX) / (Math.PI / 12), off = w.held ? ((at - w.bucket) % 24 + 36) % 24 - 12 : 1;
+    if (Math.abs(off) > 0.65) { w.bucket = Math.round(at); w.held = true; if (!Number.isNaN(this.atlasI)) this.startFetch(); } // (over a few frames)
   }
 
-  // Fetch: how far open water extends upwind of each water cell in the atlas, in metres (capped at the atlas).
-  rebuildFetch() {
-    const A = ATLAS, shore = this.shore, fetch = this.fetch, w = this.wind, cell = this.world.cell;
-    const ux = -w.x, uz = -w.z; // upwind
-    for (let lj = 0; lj < A; lj++) for (let li = 0; li < A; li++) {
+  // Fetch: how far open water extends upwind of each water cell in the atlas, in metres (up to 300 cells, 3 km).
+  // cons B: the march runs on past the atlas's edge over a ring of FETCH_RING cells round it (the world's own shore
+  // distance, the far data where no fine tile is in), so water near the upwind edge of the atlas is not taken for a lee
+  // (a false calm band, straight along the atlas's edge, a kilometre off); past the ring the ray ends as open water.
+  // rows: the rows to march now (all of them at once when the atlas moves; a few a frame after a veer, fetchStep)
+  rebuildFetch(rows = null) {
+    const A = ATLAS, M = FETCH_RING, E = A + 2 * M, shore = this.shore, w = this.wind, cell = this.world.cell;
+    if (this._ringAt !== this._atlasStamp || !this._ring) this.buildFetchRing();
+    const ring = this._ring;
+    const job = rows ? this._fetchJob : null, fetch = job ? job.out : this.fetch;
+    if (!job) this._fetchJob = null; // (a whole march supersedes one under way)
+    const ux = job ? job.ux : -w.x, uz = job ? job.uz : -w.z; // upwind
+    const j0 = job ? job.lj : 0, j1 = job ? Math.min(A, j0 + rows) : A;
+    for (let lj = j0; lj < j1; lj++) for (let li = 0; li < A; li++) {
       const k = lj * A + li;
       if (shore[k] >= 0) { fetch[k] = 0; continue; }
-      let x = li + 0.5, y = lj + 0.5, steps = 0;
+      let x = li + M + 0.5, y = lj + M + 0.5, steps = 0;
       while (steps < 300) {
         x += ux; y += uz; steps++;
-        if (x < 0 || y < 0 || x >= A || y >= A) break;
-        if (shore[(y | 0) * A + (x | 0)] >= 0) break;
+        if (x < 0 || y < 0 || x >= E || y >= E) break; // past the ring: open water as far as is known
+        if (ring[(y | 0) * E + (x | 0)]) break;
       }
       fetch[k] = steps * cell;
     }
+    if (job) { job.lj = j1; if (j1 < A) return; this.fetch.set(job.out); this._fetchJob = null; }
     this.fetchTex.needsUpdate = true;
+  }
+  // cons B: a march after the wind veers into a new bucket runs over a few frames (FETCH_ROWS rows each, into a copy
+  // swapped in whole when done), so a veer never costs one frame the whole march; called from update
+  fetchStep() {
+    if (this._fetchJob) this.rebuildFetch(FETCH_ROWS);
+  }
+  startFetch() {
+    if (Number.isNaN(this.atlasI)) return;
+    const j = this._fetchJob || (this._fetchJob = { out: this._fetchOut || (this._fetchOut = new Float32Array(ATLAS * ATLAS)) });
+    j.lj = 0; j.ux = -this.wind.x; j.uz = -this.wind.z;
+  }
+  // cons B: the land mask for the fetch's march: the atlas's own shore inside, the world's round it (rebuilt with the atlas)
+  buildFetchRing() {
+    const A = ATLAS, M = FETCH_RING, E = A + 2 * M, w = this.world, shore = this.shore;
+    const ring = this._ring && this._ring.length === E * E ? this._ring : new Uint8Array(E * E);
+    for (let j = 0; j < E; j++) for (let i = 0; i < E; i++) {
+      const li = i - M, lj = j - M;
+      ring[j * E + i] = li >= 0 && lj >= 0 && li < A && lj < A ? (shore[lj * A + li] >= 0 ? 1 : 0) : (w.sdCell(this.atlasI + li, this.atlasJ + lj) >= 0 ? 1 : 0);
+    }
+    this._ring = ring; this._ringAt = this._atlasStamp;
   }
 
   fetchAt(x, z) {
@@ -839,6 +950,24 @@ export class WaterSystem {
     const li = w.cellI(x) - this.atlasI, lj = w.cellJ(z) - this.atlasJ;
     if (!(li >= 0 && lj >= 0 && li < A && lj < A)) return 400;
     return this.fetch[lj * A + li];
+  }
+  // cons B: the share of the wind felt on the water here, 1 on open water down to LEE.drift close under a lee shore
+  shelterAt(x, z) {
+    const f = this.fetchAt(x, z), k = Math.min(1, Math.max(0, (f - LEE.reach[0]) / (LEE.reach[1] - LEE.reach[0])));
+    return LEE.drift + (1 - LEE.drift) * k * k * (3 - 2 * k);
+  }
+  // cons B: the biggest wind-wave (windHeight, m) on the water within r metres: whitecaps show from about 0.33 (the
+  // fragment shader's blow) — what the eye sees from the canoe, for the first whitecaps' moment
+  seaNear(x, z, r = 400) {
+    if (Number.isNaN(this.atlasI)) return 0;
+    let best = 0;
+    for (const rr of [0, r * 0.15, r * 0.35, r * 0.65, r]) for (let a = 0; a < 12; a++) {
+      const px = x + Math.cos((a * Math.PI) / 6) * rr, pz = z + Math.sin((a * Math.PI) / 6) * rr;
+      const f = this.fetchAt(px, pz);
+      if (f > 0) best = Math.max(best, windHeight(this.wind.speed, f));
+      if (rr === 0) break;
+    }
+    return best;
   }
 
   waveAt(x, z) {

@@ -1908,6 +1908,9 @@ function buildRack(ctx, F, rng, ra, rb) {
 // heading, ax, az }], latrine?: { x, z } } in world metres (fire.a: the grate's bearing; pad.fd: the way the door faces,
 // to the fire; bench.a: along the log; seats: where you sit, wc C). Recorded when the site's tile builds its props (the
 // same every time: the search reads the drawn ground).
+// tuning: a tent pad steeper than PAD_STEEP m of rise across its 2.4 m square (about 10°) is looked for again PAD_RINGS m
+// out from the ring, all the way round
+const PAD_STEEP = 0.6, PAD_RINGS = [6, 8, 10];
 function buildCampsite(ctx, c, pieces, ledges) {
   const { tg, ox, oz, H } = ctx;
   const crng = mulberry32(7 + Math.round(c.x) * 31 + Math.round(c.z) * 17);
@@ -1975,6 +1978,19 @@ function buildCampsite(ctx, c, pieces, ledges) {
     for (const [u, v] of [[-1.2, -1.2], [1.2, -1.2], [1.2, 1.2], [-1.2, 1.2], [0, 0]]) { const h = H(cx + u, cz + v); lo = Math.min(lo, h); hi = Math.max(hi, h); }
     const score = hi - lo + k * 0.02;
     if (!best || score < best.score) best = { score, x: cx, z: cz };
+  }
+  // tuning (the content join's leftover: the Sea Gull site's pad lay on a 19° slope): where the best of those is still
+  // steep (PAD_STEEP m of rise across the pad), a wider look, PAD_RINGS m out from the ring all the way round
+  if (!best || best.score > PAD_STEEP) {
+    for (const r of PAD_RINGS) for (let k = 0; k < 24; k++) {
+      const ta = a + (k / 24) * Math.PI * 2, cx = fx + Math.cos(ta) * r, cz = fz + Math.sin(ta) * r;
+      if (tg.shoreAt(cx, cz) < 2.5) continue;
+      if (rocks.some((q) => Math.hypot(q.x - cx, q.z - cz) < q.r + 1.7)) continue;
+      let lo = Infinity, hi = -Infinity;
+      for (const [u, v] of [[-1.2, -1.2], [1.2, -1.2], [1.2, 1.2], [-1.2, 1.2], [0, 0]]) { const h = H(cx + u, cz + v); lo = Math.min(lo, h); hi = Math.max(hi, h); }
+      const score = hi - lo + Math.abs(r - 6) * 0.03;
+      if (!best || score < best.score) best = { score, x: cx, z: cz };
+    }
   }
   const tx = best ? best.x : fx + Math.cos(a + 2.2) * 6, tz = best ? best.z : fz + Math.sin(a + 2.2) * 6;
   let fdx = fx - tx, fdz = fz - tz; const fl = Math.hypot(fdx, fdz) || 1; fdx /= fl; fdz /= fl;

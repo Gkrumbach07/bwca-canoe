@@ -52,7 +52,7 @@
 // Saved in its own namespace (`bwca-canoe:inventory`), tied to the profile's season (profile.seasonId). A season from
 // before the items migrates once (migrate()): the kit and the owned items, the packs, the days of food, the lures, the
 // leeches and the stringer become items in containers in the canoe.
-import { ITEMS, itemDef, defineItem, sizeOf, fishKg, LEGACY, STARTER_KIT, FOOD_KINDS, NEED, check, timerWords, WOOD_DRY } from './items.js';
+import { ITEMS, itemDef, defineItem, sizeOf, fishKg, fishEat, LEGACY, STARTER_KIT, FOOD_KINDS, NEED, check, timerWords, WOOD_DRY } from './items.js';
 import { save } from './save.js';
 
 const NS = 'inventory';
@@ -638,7 +638,7 @@ export class Inventory {
     if (d.eat.cook && !(hit.e.data && hit.e.data.cooked)) return no('cook', d.kind === 'fish' ? 'Cook it first: on the grate, over a fire.' : `${d.name}: cook it first, on the grate over a fire.`);
     if (!this.still()) return no('moving', 'Hold still to eat.');
     const en = this.energy, sand = !!(en && en.sandbox);
-    if (en && typeof en.eatItem === 'function') en.eatItem(d.eat, d.name);
+    if (en && typeof en.eatItem === 'function') en.eatItem(d.species ? fishEat(d, hit.e.data) : d.eat, d.name); // (tuning: a fish feeds you by its size, items.js fishEat)
     if (sand) return ok(`${d.name}. The food keeps in Sandbox.`);
     // fb3 B: a serving at a time (trail mix 6, jerky 4, a bar 2): the entry's `left` falls, and the last one eats the thing
     const n = d.servings || 1, e = hit.e;

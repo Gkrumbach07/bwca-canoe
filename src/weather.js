@@ -120,6 +120,31 @@ function airTemp(seed, year, doy, hours, grey = 0, rain = 0) {
   return mean + swing + anomaly - 1.5 * rain;
 }
 
+// cons B (the owner, 2026-10-25: "wind-bound days"): the wind's daily shape. Each day of the forecast has its own wind:
+// a still night and dawn (`floor`, m/s), a breeze building through the late morning to the afternoon's `peak` and
+// easing in the evening (WIND_DAY.shape, by the clock). Most days are a breeze, some calm, about one in four blows hard
+// enough by afternoon to put whitecaps on the big lakes; and behind a cold front, now and then, a day that blows from
+// the north-west from dawn to dusk (`blow`: the floor itself is a fresh breeze). A function of the date like the
+// states, from its own seeded stream, so the states' sequence is as it was. The hour's weather still bends it
+// (Wind.update: a state's floor, its gain, a foggy dawn's calm, a storm's blow).
+export const WIND_DAY = {
+  shape: { up: [8, 12.5], down: [16.5, 20.5] },   // hours: the breeze builds over up, eases over down
+  kinds: [ // the afternoon peak of a fair day, m/s, by share of the days: [share, from, to]
+    [0.25, 1.5, 3.5],    // calm
+    [0.45, 3.5, 6.0],    // a breeze
+    [0.22, 6.0, 8.5],    // windy by afternoon: whitecaps on the big lakes
+    [0.08, 8.5, 10.0],   // a hard afternoon
+  ],
+  floor: [0.3, 1.4],     // the night and the dawn on a fair day
+  // a day behind a cold front (chance, more in spring and fall by `fall`): the hour's gain behind the front (1.1 to 1.2)
+  // takes the peak to 8 to 12 m/s
+  blow: { chance: 0.4, fall: 0.25, peak: [7.5, 10], floor: [4, 6], from: [295, 330] },
+};
+export function windShape(hours) {
+  const S = WIND_DAY.shape;
+  return smoothstep(S.up[0], S.up[1], hours) * (1 - smoothstep(S.down[0], S.down[1], hours));
+}
+
 // The forecast for a year, hour by hour from 1 January 00:00 into the first two days of the next: the state and the
 // wind it brings (from: the bearing it steers toward, NaN to let the day's wind wander; min: a floor, m/s; mul: on the
 // day's wind; gust: on the gusts).
@@ -168,9 +193,11 @@ function buildYear(seed, year, place) {
     if (rng() < 0.5 * sm + 0.1 * warmth(doy)) h = run(h, I(1, 3), S.storm, R(270, 300), 8.5, 1.3, 2.3);
     h = run(h, I(0, 2), S.lightRain, 290, 5, 1.15, 1.3);
     h = run(h, I(1, 4), S.overcast, 300, 5, 1.15, 1.3);
+    tails.push(h); // cons B: the clearing behind the front begins (a blow day may follow, below)
     h = run(h, I(6, 14), S.fair, R(305, 330), 6, 1.2, 1.6);
     return run(h, I(3, 8), S.clear, 320, 3.5, 1.1, 1.3);
   };
+  const tails = [];
   // a grey spell: low overcast and drizzle on an east wind
   const grey = (h) => {
     const n = I(14, 44), f = R(55, 95);
@@ -183,8 +210,43 @@ function buildYear(seed, year, place) {
     h = rng() < greySeason(doyOf(h)) ? grey(h) : front(h);
     afterFront = true;
   }
-  return { st, from, min, mul, gust, N };
+  // cons B: each day's own wind (WIND_DAY), from a stream of its own so the states above are as they were
+  const nd = days + 2, peak = new Float32Array(nd), floor = new Float32Array(nd), blow = new Uint8Array(nd);
+  const wr = mulberry32((Math.imul(seed, 2246822519) ^ Math.imul(year, 3266489917) ^ 0x5bd1e995) >>> 0);
+  const WR = (a, b) => a + (b - a) * wr();
+  for (let d = 0; d < nd; d++) {
+    const doy = Math.min(days, d + 1), r = wr();
+    let k = 0, acc = WIND_DAY.kinds[0][0];
+    while (k < WIND_DAY.kinds.length - 1 && r >= acc) acc += WIND_DAY.kinds[++k][0];
+    const [, lo, hi] = WIND_DAY.kinds[k];
+    peak[d] = WR(lo, hi) * (1 + 0.12 * (1 - warmth(doy))); // spring and fall blow a little harder
+    floor[d] = WR(WIND_DAY.floor[0], WIND_DAY.floor[1]) + (k >= 2 ? 0.5 : 0);
+  }
+  // the day behind a cold front: its north-west wind blows from dawn to dusk, and the hours' floor holds it up
+  const B = WIND_DAY.blow;
+  for (const t of tails) {
+    const d = Math.floor((t + 10) / 24); // the day whose daylight the clearing blows over
+    if (d < 0 || d >= nd || blow[d] || wr() > B.chance + B.fall * (1 - warmth(Math.min(days, d + 1)))) continue;
+    blow[d] = 1; peak[d] = WR(B.peak[0], B.peak[1]); floor[d] = WR(B.floor[0], B.floor[1]);
+    const bearing = WR(B.from[0], B.from[1]);
+    for (let hh = d * 24 + 5; hh < d * 24 + 20 && hh < N; hh++) {
+      if (st[hh] === S.clear || st[hh] === S.fair || st[hh] === S.fog) { if (st[hh] === S.fog) st[hh] = S.clear; from[hh] = bearing; gust[hh] = Math.max(gust[hh], 1.3); mul[hh] = Math.max(mul[hh], 1); }
+    }
+  }
+  // the cons join: a fair day's wind comes from somewhere. The hours with no bearing of their own (NaN above) let the wind
+  // wander, and it spun right round in an afternoon, the lee and the whitecaps going round with it. Each day has its
+  // own (dayFrom), mostly the south-west to the north-west, now and then the east; Weather.fairFrom wobbles it a little
+  // over the hours and turns it to the next day's over the night. A stream of its own: the days above are as they were.
+  const fr = mulberry32((Math.imul(seed, 0x27d4eb2f) ^ Math.imul(year, 0x165667b1) ^ 0x2c1b3c6d) >>> 0);
+  const dayFrom = new Float32Array(nd);
+  for (let d = 0; d < nd; d++) { const r = fr(); dayFrom[d] = r < FAIR_FROM.east ? FAIR_FROM.e[0] + (FAIR_FROM.e[1] - FAIR_FROM.e[0]) * fr() : FAIR_FROM.w[0] + (FAIR_FROM.w[1] - FAIR_FROM.w[0]) * fr(); }
+  return { st, from, min, mul, gust, N, peak, floor, blow, dayFrom };
 }
+// (the cons join) a fair day's bearing: east or west of south (degrees from), the share of easterly days, and how far it
+// wobbles about it over the hours (± deg, over a few game hours)
+export const FAIR_FROM = { w: [190, 330], e: [60, 170], east: 0.15, wobble: 25 };
+// a bearing k of the way from a to b, the short way round (degrees)
+const arcMix = (a, b, k) => { const f = a + ((((b - a) % 360) + 540) % 360 - 180) * k; return ((f % 360) + 360) % 360; };
 
 export class Weather {
   // opts: { day, wind, scene, camera, audio, water, player, world, seed }. Attaches itself to the day cycle (which calls
@@ -195,7 +257,7 @@ export class Weather {
     if (scene) scene.add(this.precip.mesh);
     this.look = { ...LOOKS[0], snow: 0, flash: 0, level: 446, temp: 10, snap: true }; // snap: the look jumped (a set, a clock change): the clouds follow at once
     this.flashColor = new THREE.Color(0.75, 0.8, 1.0);
-    this.windTarget = { min: 0, mul: 1, gust: 1, from: NaN };
+    this.windTarget = { min: 0, mul: 1, gust: 1, from: NaN, base: NaN }; // cons B: base, the day's breeze now (dayBreeze)
     this.forced = null;          // { state, snow, from (look), t, blend }
     this.stateIndex = 0; this.publicIndex = 0;
     this.wetness = 0;
@@ -228,6 +290,37 @@ export class Weather {
     if (h < 0) { y = this._year(year - 1); h += daysInYear(year - 1) * 24; }
     h = Math.min(h, y.N - 1);
     return { s: y.st[h], from: y.from[h], min: y.min[h], mul: y.mul[h], gust: y.gust[h] };
+  }
+  // cons B: day d of the year's wind (0 = 1 January; it may run a day either side of the year): { peak, floor, blow }
+  _dayWind(year, d) {
+    let y = this._year(year);
+    if (d < 0) { y = this._year(year - 1); d += daysInYear(year - 1); }
+    d = Math.min(d, y.peak.length - 1);
+    return { peak: y.peak[d], floor: y.floor[d], blow: !!y.blow[d] };
+  }
+  // The breeze the day's shape gives at an hour of a day (m/s), before the hour's weather bends it: the night's floor
+  // carried across midnight into the next day's over 21:00..03:00, rising to the afternoon's peak and back (windShape)
+  dayBreeze(year, doy, hours) {
+    const d = doy - 1, cur = this._dayWind(year, d);
+    let fl;
+    if (hours >= 12) { const nx = this._dayWind(year, d + 1); fl = cur.floor + (nx.floor - cur.floor) * smoothstep(21, 27, hours); }
+    else { const pv = this._dayWind(year, d - 1); fl = pv.floor + (cur.floor - pv.floor) * smoothstep(21, 27, hours + 24); }
+    return fl + Math.max(0, cur.peak - fl) * windShape(hours);
+  }
+  // (the cons join) the bearing a fair hour's wind steers toward: the day's own (dayFrom), wobbling FAIR_FROM.wobble over
+  // the hours, turned to the next day's the short way round over the night (21:00 to 03:00, as the breeze's floor)
+  fairFrom(year, doy, hours) {
+    const at = (d) => { let y = this._year(year), dd = d; if (dd < 0) { y = this._year(year - 1); dd += daysInYear(year - 1); } dd = Math.min(Math.max(0, dd), y.dayFrom.length - 1); return y.dayFrom[dd]; };
+    const d = doy - 1;
+    let f = hours >= 12 ? arcMix(at(d), at(d + 1), smoothstep(21, 27, hours)) : arcMix(at(d - 1), at(d), smoothstep(21, 27, hours + 24));
+    f += 2 * FAIR_FROM.wobble * (noise2((doy * 24 + hours) * 0.3, 2.3, 17) - 0.5);
+    return ((f % 360) + 360) % 360;
+  }
+  // today's wind as the forecast has it, for whoever wants to say it (a keeper, a hint): { peak, floor, blow, word }
+  windDay(year = this.day.year, doy = this.day.doy) {
+    const w = this._dayWind(year, doy - 1);
+    const word = w.blow ? 'a blow all day' : w.peak < 3.5 ? 'calm' : w.peak < 6 ? 'a breeze by afternoon' : w.peak < 8.5 ? 'windy by afternoon' : 'a hard wind by afternoon';
+    return { peak: Math.round(w.peak * 10) / 10, floor: Math.round(w.floor * 10) / 10, blow: w.blow, word };
   }
 
   // A state's look now: the fog thins and lifts as the sun climbs (gone by about 14 degrees, mid-morning in October),
@@ -274,7 +367,7 @@ export class Weather {
   get precipitation() { return this.look.rain < 0.02 ? null : this.look.snow > 0.5 ? 'snow' : 'rain'; }
   info() {
     const L = this.look, r = (v) => Math.round(v * 100) / 100;
-    return { state: this.state, label: this.label, forced: !!this.forced, temp: r(L.temp), precipitation: this.precipitation, rain: r(L.rain), snow: r(L.snow), cover: r(L.cover), deck: r(L.deck), fog: r(L.fog), wetness: r(this.wetness), wind: this.wind ? r(this.wind.speed) : null, next: this.forecast(12).slice(1, 3) };
+    return { state: this.state, label: this.label, forced: !!this.forced, temp: r(L.temp), precipitation: this.precipitation, rain: r(L.rain), snow: r(L.snow), cover: r(L.cover), deck: r(L.deck), fog: r(L.fog), wetness: r(this.wetness), wind: this.wind ? r(this.wind.speed) : null, windDay: this.day ? this.windDay().word : null, next: this.forecast(12).slice(1, 3) };
   }
   // lightning now (debug): dist metres off (random if not given)
   strike(dist) {
@@ -296,9 +389,13 @@ export class Weather {
     const a = this._lookOf(A.s, this._la || (this._la = {}), elev), b = this._lookOf(B.s, this._lb || (this._lb = {}), elev);
     for (const f of FIELDS) L[f] = a[f] + (b[f] - a[f]) * k;
     let s = k < 0.5 ? A.s : B.s, snowForced = null;
-    const near = k < 0.5 ? A : B;
-    this.windTarget.from = near.from; this.windTarget.min = A.min + (B.min - A.min) * k;
+    // (the cons join: never NaN, and turned across the hour from this hour's bearing to the next's, not at the half hour:
+    // a front's backing wind comes round over the hour instead of in a minute, and the lee with it)
+    const fair = () => this.fairFrom(year, doy, hours);
+    this.windTarget.from = arcMix(Number.isFinite(A.from) ? A.from : fair(), Number.isFinite(B.from) ? B.from : fair(), k);
+    this.windTarget.min = A.min + (B.min - A.min) * k;
     this.windTarget.mul = A.mul + (B.mul - A.mul) * k; this.windTarget.gust = A.gust + (B.gust - A.gust) * k;
+    this.windTarget.base = this.dayBreeze(year, doy, hours); // cons B: the day's shape (Wind.update reads it)
     const F = this.forced;
     if (F) {
       const t = this._lookOf(F.s, this._lf || (this._lf = {}), elev);
@@ -306,7 +403,7 @@ export class Weather {
       const m = F.blend > 0 ? smoothstep(0, 1, F.t / F.blend) : 1;
       for (const f of FIELDS) L[f] = F.from[f] + (t[f] - F.from[f]) * m;
       s = F.s; snowForced = F.snow ? 1 : null;
-      this.windTarget.from = F.s === S.storm ? 290 : F.s === S.lightRain || F.s === S.rain ? 210 : NaN;
+      this.windTarget.from = F.s === S.storm ? 290 : F.s === S.lightRain || F.s === S.rain ? 210 : this.fairFrom(year, doy, hours);
       this.windTarget.min = L.windMin; this.windTarget.mul = L.windMul; this.windTarget.gust = L.gust;
     }
     // the fog state reads as clear once burnt off

@@ -16,6 +16,7 @@ export const SWELL = DIRS.map(([c, s]) => [q(SWELL_K * c), q(SWELL_K * s)]);
 export const CHOP = DIRS.map(([c, s]) => [q(CHOP_K * c), q(CHOP_K * s)]);
 export const SWELL_W = Math.sqrt(G * SWELL_K), CHOP_W = Math.sqrt(G * CHOP_K);   // deep-water dispersion
 const PH = [0, 1.7, 3.1, 4.4, 0.9, 2.6, 5.3, 3.9], PH2 = [2.2, 0.4, 4.1, 1.3, 5.0, 2.9, 0.7, 3.6];
+export const CHOP_PH = PH2; // (the chop's phases: water.js's whitecaps break on the crests the vertices draw)
 const CALM = [[q(0.7), q(0.1), 1.1, 0.03], [q(0.2), q(1.05), 0.95, 0.025], [q(0.45), q(0.45), 0.8, 0.02]];
 export const K = { r1x: q(0.217), r1z: q(0.161), r2x: q(0.0713), r2z: q(0.0529), r3x: q(0.403), r3z: q(0.299) };
 

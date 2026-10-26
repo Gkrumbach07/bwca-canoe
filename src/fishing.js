@@ -38,7 +38,13 @@ const FOOT = { offShore: 12, reach: 24, drag: 4 };
 const STEADY = 0.4; // fb4 D: seconds the leeches' reach must say the same before the strip and the prompt change
 
 export const TUNING = {
-  base: 1 / 80,          // bites per second for one species at every factor 1.0
+  // bites per real second for one species at every factor 1.0. tuning: the one clock (fb5 C) made a game hour of
+  // fishing three times the real seconds it was (the idle clock had run ×12, now ×4), so 1/80 brought three times the
+  // bites a game hour, and the fight and the catch card (about 35 real s a fish) had shrunk to a third of the game
+  // minutes too: a scripted season landed 14–23 a game hour on a jig, 22 on leeches (a dozen gone in half an hour),
+  // where the old clock gave about 5. A fifth of the old rate brings a game hour back near that (1/240, a third, still
+  // landed 9: the handling's real seconds count for less of a game hour than they did): a bite every two real minutes.
+  base: 1 / 400,
   castSpeed: [3, 21],    // lure speed off the tip at zero and full power, m/s
   castAngle: 0.66,       // radians above the horizon
   floatDepth: 2.4,       // metres of line under the bobber

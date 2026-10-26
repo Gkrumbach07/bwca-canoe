@@ -19,7 +19,7 @@ import { buildSky, buildClouds, updateClouds } from './sky.js';
 import { makeVegetationKit } from './vegetation.js';
 import { TileManager } from './tiles.js';
 import { buildCanoeRig } from './canoe.js';
-import { Player, Input } from './player.js';
+import { Player, Input, seaMoments } from './player.js'; // cons B: seaMoments
 import { Packs } from './packs.js'; // trip core B
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
@@ -46,7 +46,7 @@ import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
 import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
-import { sheets } from './sheets.js'; // hubs 2D
+import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
 import { MapTable } from './maptable.js'; // fb2 D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
@@ -74,6 +74,8 @@ import { kit } from './kit.js'; // content C
 import { uniques } from './uniques.js'; // content C
 import './gear-icons.js'; // content C
 import { attachTaskKinds } from './task-kinds.js'; // content A
+import { bear } from './bear.js'; // cons A
+import { bugs } from './bugs.js'; // cons C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -653,7 +655,14 @@ async function main() {
   tasks.hints = () => [...taskHintsC(), ...uniques.mapMarks()]; // Arvid's site, in the map's pencil
   const onUseC = journal.pack.onUse;
   journal.pack.onUse = (e, mode, c) => {
-    if (e && e.id === 'guidemap') { if (mode === 'label') return 'Look at the map'; const g = uniques.guideSite(); journal.close(); hud.setMode('sheet'); if (g && hud.view) { hud.view.cx = g.x; hud.view.cz = g.z; } return null; }
+    if (e && e.id === 'guidemap') {
+      if (mode === 'label') return 'Look at the map';
+      const g = uniques.guideSite();
+      // (tuning, the content join's leftover: Arvid's map is an old Fisher sheet, so it is that sheet: it opened on blank paper
+      // unless you owned the sheet its site lies on)
+      const s = g ? sheetAt(g.x, g.z) : null; if (s && !sheets.owned(s.id)) profile.ownSheet(s.id);
+      journal.close(); hud.setMode('sheet'); if (g && hud.view) { hud.view.cx = g.x; hud.view.cz = g.z; } return null;
+    }
     return onUseC ? onUseC(e, mode, c) : null;
   };
   const kitMoments = new Map([...kit.moments(), ...uniques.moments()].map((m) => [m.id, m]));
@@ -674,6 +683,46 @@ async function main() {
   // jobs (npcs.js, talk-*.js). Four more kinds of visitor. Nothing is said twice in a visit.
   npcs.attach({ trip, fishing, loons, inventory, uniques: () => window.__game.uniques || null });
   { const pm = shop.priceMul.bind(shop); shop.priceMul = (ep) => pm(ep) * npcs.dealAt(ep); } // an arc's discount at its own counter
+  // cons B: wind-bound days (the owner's consequences pass, 2026-10-25). The wind's daily shape is the forecast's own
+  // (weather.js WIND_DAY: a still dawn, a breeze building to the afternoon, some days a blow from dawn to dusk behind a
+  // front); the waves build with the fetch and a lee shore lies calm (water.js LEE); in a blow the sea comes aboard,
+  // the water in the hull slows it and swamped it goes over, Q held still bails, a landing tips it out (player.js SEA,
+  // hullwater.js buildBilge). Two first-time moments: the first whitecaps, the first water aboard.
+  player.day = day; // (the sea's game minutes run on the day's clock: none behind the pause card)
+  {
+    const sea = new Map(seaMoments(player, day).map((m) => [m.id, m]));
+    for (const m of sea.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const dueB = hints.due.bind(hints);
+    hints.due = (id, rec) => (sea.has(id) ? sea.get(id).due(rec) : dueB(id, rec));
+  }
+  // cons A: a bear at camp (the consequences pass, the owner, 2026-10-25: "a bear at camp if the food isn't hung … so the
+  // camp routines matter"). bear.js: at night food not hung (hang.js secured) may bring a bear, about 30 % a night times
+  // the lake's bear activity, softened the first night ever; heard first, its eyes in the headlamp if you are up (E Make
+  // noise on the dot drives it off for less), and in the morning the barrel knocked over in the brush or the pack torn
+  // open, a third to a half of what was out gone, never the whole season. The camp asks it at bedtime and at waking; its
+  // frame runs after the camp's, its knocked barrel and torn pack are posed after containers.js; two moments.
+  bear.attach({ camp, inventory, world, tiles, player, day, scene, audio, hud, lamp, outfitter, profile, invView, chase, camera });
+  camp.bear = bear; pointer.register(bear.targets);
+  { const campUpdA = camp.update.bind(camp), poseA = canoe.update; camp.update = (dt) => { campUpdA(dt); bear.update(dt); }; canoe.update = (dt) => { poseA(dt); bear.afterPose(); }; }
+  for (const m of bear.moments()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+  { const dueA = hints.due.bind(hints); hints.due = (id, rec) => bear.due(id, rec, dueA); } // the bear's two, and "Bears: hang…" steps aside the evening after a visit
+  window.__game.bear = bear;
+  // cons C: bugs at dusk (the consequences pass; the owner, 2026-10-25: "a bear at camp if the food isn't hung, wind-bound
+  // days, and bugs at dusk, so the camp routines matter"). bugs.js: blackflies by day in late May and June, mosquitoes at
+  // dusk and dawn from June to August (a few in September), by the season, the hour, the air, the wind where you stand and
+  // the site (worst in the woods by still water, light on a breezy point). The world shows them first: the whine
+  // (audio-beds.js, through audio.bugs), specks round the head and the walker's swat (after the pose); then the small cost
+  // (energy.js bugMods) and a worse night in a tent left open or under the stars (energy.sleep, then the morning's line).
+  // The counters: the head net or a bug jacket (content C's kit), a smoky fire near, the wind, and the tent closed (tent.js).
+  bugs.attach({ player, day, weather, wind, world, energy, camp, fires, kit, canoe, scene, audio, inventory });
+  energy.bugs = bugs; audio.bugs = () => bugs.whine;
+  { const upd = shop.update; shop.update = () => { upd(); bugs.update(); }; } // after the kit's look at what is with you, before energy
+  { const pose = canoe.update; canoe.update = (dt) => { pose(dt); bugs.afterPose(dt); }; } // the swat, over the pose
+  { const wake = camp.wake.bind(camp); camp.wake = () => { wake(); const w = bugs.morning(); if (w) camp.morningNote = camp.morningNote ? `${camp.morningNote} ${w}` : w; }; }
+  const bugMoments = new Map(bugs.moments().map((m) => [m.id, m]));
+  for (const m of bugMoments.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+  { const due = hints.due.bind(hints); hints.due = (id, rec) => (bugMoments.has(id) ? bugMoments.get(id).due(rec) : due(id, rec)); } // the mosquitoes, the blackflies
+  window.__game.bugs = bugs;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   prewarm(scene); // polish A: with the composer's target bound, as above

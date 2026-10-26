@@ -974,7 +974,7 @@ class Grid {
     it.appendChild(mk('span', 'ig-nm', esc(short(d) || e.id)));
     const st = d ? d.stack || 1 : 1;
     if ((e.qty || 1) > 1 || st > 1) it.appendChild(mk('span', 'ig-qty', String(e.qty || 1)));
-    if (e.data && Number.isFinite(e.data.length)) it.appendChild(mk('span', 'ig-qty', `${Math.round(e.data.length)} cm`));
+    if (e.data && Number.isFinite(e.data.length)) it.appendChild(mk('span', 'ig-qty ig-len', `${Math.round(e.data.length)} cm`)); // (tuning, the content join's leftover: a line above the raw or eat mark, not on it)
     // fb4 B (decision 2): a thing with a state says so on its icon (wet, drying, treating, cooking, burning, hot, low,
     // empty, ready: stream C's inventory.status), in place of the eat or raw mark
     const stt = !shelf ? statusOf(e) : null;
@@ -1634,6 +1634,10 @@ function verbMenu(ref, sc = null) {
       default: viaHook(v.id, label, v.why || '');
     }
   }
+  // (tuning, the coordinator's check of content pass 1: a branch's right-click by a fire offered only Put in hand, so the
+  // fuel took only a drag): wood by a ring has the ring's own "Put it on the fire" (nearby.itemActions' fuel) first
+  const fuel = e && d.kind === 'firewood' ? acts.find((a) => a.id === 'fuel') : null;
+  if (fuel) out.unshift(fuel.enabled === false ? { label: fuel.label, disabled: true, title: fuel.why || '', needs: fuel.needs, next: fuel.next } : { label: fuel.label, run: () => { runNear(fuel); const n = nearby(); if (n) n.list = null; refresh(); } });
   return out;
 }
 function itemMenu(g, e) {
@@ -1693,7 +1697,10 @@ export function tipHtml(d, e, { shelf = false } = {}) {
   const name = `${d.name}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}`;
   const identity = typeof d.identity === 'string' ? d.identity : e.hull ? 'A canoe' : '';
   const stt = !shelf ? statusOf(e) : null;
-  const all = (Array.isArray(d.onYou) ? d.onYou : []).filter(Boolean), effs = all.filter((o) => o.need && Number.isFinite(o.add));
+  const all = (Array.isArray(d.onYou) ? d.onYou : []).filter(Boolean);
+  let effs = all.filter((o) => o.need && Number.isFinite(o.add));
+  // (tuning: a fish feeds you by its size, items.js fishEat: its food and energy points from its length)
+  if (d.species && e.data && e.data.length && A_ITEMS && typeof A_ITEMS.fishEat === 'function') { const fe = A_ITEMS.fishEat(d, e.data); if (fe) effs = effs.map((o) => (o.need === 'food' ? { ...o, add: Math.round(fe.food * 100) } : o.need === 'energy' ? { ...o, add: Math.round(fe.lift * 100) } : o)); }
   const on = all.filter((o) => !o.need && (o.label || o.value));
   const n = d.uses ?? d.servings ?? d.litres ?? null, left = n != null ? (Number.isFinite(e.left) ? e.left : n) : null;
   let uses = '';

@@ -1401,3 +1401,135 @@ step onto the trail.
 - **Packing.** A struck tent with full packs lies in a pile, now named in the leaving note. The packs fill fast.
 - **Not played.** The pump, the pads, the bags, the brass reel, the chair in use, and the beats of Bev, Arvid, Lise and
   Leon.
+
+## Consequences and tuning (2026-10-25/26)
+
+The owner, 2026-10-25: "After content, start with consequences: a bear at camp if the food isn't hung, wind-bound
+days, and bugs at dusk, so the camp routines matter." And "also once content is in, do tunning". Four streams on
+content pass 1, joined in this order on `claude/consequences`: wind (f8a30d2), bear (2fb2b77), bugs (2beec43), tuning
+(dca79a4). The tuning has its own page, `docs/tuning.md`: the table (current, target, why), the season before and
+after, and what is left for taste.
+
+### What is in it, and where the knobs are
+
+- **A bear at camp** (`bear.js`; `// cons A:` in main.js; the old `hang.js bearNight` is gone).
+  - Food not hung and hoisted (`hang.secured`) is out: on the ground within 60 m of the tent, in the canoe at camp,
+    on the grate, or carried to bed.
+  - The night's chance is `BEAR.chance` 0.3 × the lake's activity (`BEAR_LAKES`: Ensign 1.8, Basswood 1.5, Lake One
+    and Two 1.1; a keeper's bear rumour within 600 m makes it 2), half on the first night ever (`BEAR.first`), never
+    over `BEAR.most` 0.6. The die is seeded by the season and the night, so a reload never rolls again.
+  - Asleep: the night card tells the visit; in the morning the barrel lies knocked into the brush or the pack torn
+    open, with litter (E Pack it out), and a third to a half of what was out is gone (`BEAR.take`, a barrel's lid
+    ×0.7), never past half of all your food (`BEAR.keep`).
+  - Awake within 90 m (`BEAR.hear`): it comes in from the land side (`BEAR.from` 22 m), eyeshine in the headlamp, the
+    dot "E Make noise · a black bear"; walking within 4 m (`BEAR.scare`) also runs it off. The loss scales with the
+    seconds it worked (`BEAR.work` 20).
+  - Moments: 'bearnoise' (danger, at a live visit) and 'bearback' ("Hang the food tonight.", the dusk after a visit).
+- **Wind-bound days** (`weather.js WIND_DAY`, `water.js LEE`, `player.js SEA` and `CAPSIZE`, `hullwater.js BILGE`;
+  `// cons B:` in main.js).
+  - Each day has its wind: still at dawn, building 8:00–12:30, easing 16:30–20:30 (`WIND_DAY.shape`); a quarter of
+    fair days calm, a fifth windy or hard by afternoon (`WIND_DAY.kinds`); some days behind a front blow from the
+    north-west all day (`WIND_DAY.blow`). Each day's bearing is the forecast's (`FAIR_FROM`, the join's: below).
+  - The waves build with the fetch (`windHeight`); a lee off a windward shore lies smooth and the canoe feels a third
+    of the wind there (`LEE`).
+  - Whitecaps break on the chop's crests (the join's `crestFoam`, below), flecks far off.
+  - Past 0.34 m of wave (`SEA.ship`) water comes aboard, most broadside or head on (`SEA.angle`); it slows the canoe,
+    sits it lower and makes it tender; a full hull (263 L) goes over. Q held with the paddle still bails 0.35 of a hull
+    a game minute (`SEA.bail`); a landing tips it out. The roll's threshold is `CAPSIZE.threshold` 0.42, steadier
+    with the rod up (`CAPSIZE.still`), in real seconds at any 1/2/3 speed.
+  - Moments: 'whitecaps' and 'swamping'.
+- **Bugs** (`bugs.js`; `energy.js bugMods`; `tent.js shelterOf`; `audio-beds.js` the whine; `// cons C:` in main.js).
+  - Blackflies by day from mid-May to the end of June (`flySeason`, `flyTime`), mosquitoes at dusk and dawn from late
+    May to August (`mosqSeason`, `mosqTime`); cut by cold, rain and the wind where you stand; worst in the woods by
+    still water, light on a breezy point; afloat only near shore.
+  - What gets through: a bug jacket 10 %, the head net 35 % (`BUG.jacket`, `BUG.net`); a fire's smoke cuts up to 75 %
+    (`BUG.smoke`); the closed tent keeps them all out. They cost a little (`BUG.drain`, `.rest`, `.comfort`) and a worse
+    night with the fly off or under the stars (`NIGHT_BUG`). The head net shows on the walker while it works (`VEIL`).
+  - Moments: 'bugs' (the mosquitoes) and 'blackflies'.
+- **The tuning** (numbers only, each a named constant): fishing's `TUNING.base` 1/400, cooking at two thirds
+  (`cook.js COOK`), the A-frame's night 0.92 (`AFRAME_SLEEP`), a short night never lowers rest, a fish feeds by its
+  size, notice bands (`BAND_KM`), rides to the three nearest new outfitters (`UNKNOWN_RIDES`), the trail runs to the
+  water (`TRAIL_TO_WATER`), wet deadwood after rain, and the small leftovers. `docs/tuning.md` has every number.
+
+**The numbers to tune first:** `BEAR.chance`, `BEAR.first` and `BEAR_LAKES` (how often), `BEAR.take` and `BEAR.keep`
+(how much it costs); `SEA.ship` and `SEA.rate` (when and how fast water comes aboard), `SEA.bail`, `CAPSIZE.threshold`;
+`WIND_DAY.kinds` and `.blow` (how many windy days), `FAIR_FROM` (where the fair days' wind comes from); the bugs'
+season and hour curves and `BUG`, `NIGHT_BUG`; and the tuning table in `docs/tuning.md`.
+
+### Played: four June days from EP 30, June 16–19
+
+Real keys and the real mouse through the headless driver, 1440 × 900, Adventure, a fresh season. The forecast: a
+breeze, windy by afternoon, a front with rain overnight, then a blow all day from the north-west.
+
+- **Day 1, June 16.** The head net and two days' food at Kawishiwi, out over the two portages to Lake Two. An hour off
+  site 827: 5 fish (perch, a 96 cm pike, walleye, smallmouth). Ashore at 10:08: blackflies in the trees (felt 0.5) and
+  their moment. Camp: the tent pitched with E held, wood by E, "Put it on the fire" by the right-click in the book. At
+  dusk, the mosquitoes' moment; away from the fire felt 0.61 bare and 0.21 with the net dragged into the pockets, 0.15
+  by the fire's smoke, none in the closed tent. Supper 1.9 real min. The food left out: the barrel by the fire, a perch
+  in hand, two fish on the stringer in the beached canoe.
+- **Night 1.** Lake Two's roll came up a visit by itself (0.036 against 0.165). The card: a woof at the door, the tent
+  shaking. In the morning the barrel lay on its side four metres off in the brush, the perch, the pike and some trail
+  mix gone; litter packed out with E. The rest after the A-frame's night: 0.92.
+- **Day 2, June 17.** East to Lake Three. The whitecaps moment at 10:20. The bottle ran dry on the water ("fill it at
+  the water, E"), filled ashore without the tablets to hand. Midday on the bench. The afternoon crossing of Lake
+  Three's open water into an 8–10 m/s wind: waves to 0.62 m, spray to 0.86, a quarter hull aboard, the swamping moment,
+  Q held: 0.35 of a hull a game minute out, then into the lee under the south shore (fetch 30–70 m, waves 0.14). Fished
+  the lee waiting it out. The same crossing at 20:15: waves 0.15, no spray, nothing aboard. At dusk, ashore at 856:
+  "Hang the food tonight." The barrel hung from a white pine with E held, 3 m up.
+- **Night 2.** Hung: nothing ("A light rain came and went on the fly"). Rest 0.92.
+- **Day 3, June 18.** Rain behind the front: no dry wood, no stove, no breakfast; soaked, a change of clothes. The
+  crossing back north at 6:20 in a 5–7 m/s south-south-west wind: waves to 0.49, spray 0.47, a little aboard (the
+  front's dawn is not a calm one). The storm rested out in the tent. The wood wet until dusk ("Wet wood won't catch"),
+  then dry; the fire lit itself; supper once the bottle was filled (a meal takes its water from it).
+- **Night 3.** Up late at 846 with the barrel by the fire and the lamp on: at 00:15 the bear at the barrel, the danger
+  moment, the dot "E Make noise · a black bear", E: "It woofs and crashes off into the dark", the perch gone. A second
+  visit staged for the eyeshine (I stood on its far side the first time): it ran when walked to within 4 m.
+- **Day 4, June 19.** A blow all day from 328°. The morning fished in the lee (spinner, 2 fish in 5 hours), then out
+  into Lake Two's open water at 11:00: 9–11 m/s, waves 0.55–0.62, the breakers round the canoe. Home over the two
+  portages; at the counter the rides offer Piragis, LaTourell's and Ely Outfitting ($10 each).
+
+The tuned numbers as played: 4–9 fish a game hour on a jig or leeches at dawn and dusk, 1–2 on the spinner at midday;
+supper 1.9–2.5 real minutes, breakfast 1.5–1.8; rest 0.92 after each A-frame night; "Put it on the fire" first on wood
+by a ring; one carry over each portage with a pack on the back and the barrel on the chest (no "two trips" word, as
+it should); rides to three new outfitters.
+
+### The seams
+
+| Seam | Result |
+|---|---|
+| Bear and bugs both wrap `camp.wake`, `canoe.update` and the frame; sea, bear and bugs wrap `hints.due` | ✓ Over 60 drawn frames each wrapped hook ran 60 times; each moment's trigger 8 times (every 0.25 s); `camp.wake` ran the bugs' morning once, and the bear's only after a bear night |
+| Moments from bear, bugs, sea and content | ✓ One at a time in the log, a minute or more apart (bears 21:09, bugs 21:10); none over a card |
+| The night card with a bear and the bugs' morning line | ✓ Night 1 restored with the fly off and no net: the bear's card, then two lines, the bugs' "With the fly off, the mosquitoes found a way in" and the bear's note, the hint card beside them (q 0.784) |
+| Wind's fishing-broadside and Fastest fixes with the tuned bites | ✓ Rod up broadside at 10 m/s: "F Rod down" before it goes over (5.7 real s); unbraced it goes in 2.3 s at Normal and 2.2 at Fastest. Fishing bow-on in that sea the casts don't land, the rod is stowed and nothing goes over |
+| Programs | 69 fresh at a store (content pass 1: 64): the god rays' three are compiled at once now the sun is up, and two are the streams' (the bilge's sheet and the bear's eyes). The bear, its litter and the rain add none. After the four days 76 against 70 after one day: four more shadow-depth variants of the scenery, not the streams' |
+| Old saves | ✓ Content pass 1's last save (4a10a25), its mid-trip save and main b7d927d's load with no errors, the wind on the forecast's bearing |
+| Console | ✓ No errors |
+
+### What the join fixed
+
+- **The hint card over the morning notes** (1d23340). `hints.js dodge()`: the card moves right past the notes and the
+  place title on its own line, or above them on a narrow screen.
+- **The whitecaps as flat ovals** (dfabb18). They break on the chop's crests: a ragged white line 2.5–5 m long across
+  the wind spills down the front, and the foam it lays streaks and fades as the crest runs on. The far flecks are drawn
+  out across the wind. None in the lee; the same programs; the frame within noise.
+- **The wind spun round** (284dc8b). On a fair day the bearing had no target and turned 360° in 40 game minutes, the
+  lee going round the lake with it; a front's hour switched at the half hour. Now each day has a bearing of its own
+  (`FAIR_FROM`), turned across the hour, and the wind starts on it after a load or a night.
+- **The bear's words** (33e984d). No wrappers from a perch, and no pack dragged when there was none.
+- **The head net shows** (fdd4032). A dark mesh veil under the hat while it keeps the bugs off.
+
+### Left after the join
+
+- **For the owner's taste.**
+  - `FAIR_FROM`: fair days from 190–330°, 15 % easterly, a 25° wobble. The front's bearings are the forecast's own.
+  - The head net works from any pack within reach (3 m), set down by the fire too; nothing has to be put on.
+  - Sitting still fishing costs the bar about as much as paddling (0.78 to 0.55 over five hours in the lee).
+  - Rain without a stove means no fire until the wood dries (here, rain to noon, dry at dusk) and no breakfast: the
+    stove's reason, as the tuning meant, but a hungry day for a new player.
+  - The Rest dial has no stop between 4 pm and Dusk.
+- **Small.**
+  - The bear's eyes are compiled the first time they're seen if the start's compile hasn't finished.
+  - In a blow fishing casts don't land (8 tries at 0.8 m waves). It may be meant; nothing says why.
+  - Standing (not walking) 4–5 m from the food, the bear still comes to it.
+- **Not played.** A bear on a high-activity lake (Ensign), a raid while away from camp, a capsize from swamping in
+  play, the bug jacket, a breezy-point camp, September.

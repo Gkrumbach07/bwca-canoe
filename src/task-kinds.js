@@ -43,7 +43,9 @@ import { MOMENTS, TEACH } from './hints.js';
 
 const { hopsText, compass, pickR, kmFrom, cap, district, fishName } = WORDS;
 const { RANGE, SPECIES_PAY, PAY_MAX, TIGHT, AREA, SITE_LABEL, AREA_LABEL } = NUMBERS;
+const rangeOf = (band) => Math.min(RANGE, (NUMBERS.BAND_KM || {})[band] ?? RANGE); // (tuning: a medium notice within a day's reach, tasks.js BAND_KM)
 const BAND = { local: [0, 1], medium: [1, 2], far: [2, 4] };
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const UP = new THREE.Vector3(0, 1, 0);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -70,7 +72,7 @@ function siteCands(T, c, kind, band = BAND[c.band]) {
   w.campsites.forEach((s, i) => {
     if (Math.abs(s.x - L.x) > RANGE || Math.abs(s.z - L.z) > RANGE) return;
     const d = Math.hypot(s.x - L.x, s.z - L.z);
-    if (d > RANGE || T.used(kind, i)) return;
+    if (d > rangeOf(c.band) || T.used(kind, i)) return;
     const h = hopsOf(T, c, T.lakeNear(s.x, s.z));
     if (inBand(h, band)) out.push({ s, i, d, hops: h });
   });
@@ -104,7 +106,7 @@ function portageCands(T, c, kind, minRods) {
   w.portages.forEach((p, i) => {
     if (p.rods < minRods || T.used(kind, i) || !p.pts || p.pts.length < 3) return;
     const d = Math.hypot(p.pts[0][0] - L.x, p.pts[0][1] - L.z);
-    if (d > RANGE) return;
+    if (d > rangeOf(c.band)) return;
     const ra = hopsOf(T, c, p.launch[0].lake), rb = hopsOf(T, c, p.launch[1].lake);
     if (ra == null && rb == null) return;
     const near = (ra ?? 99) <= (rb ?? 99) ? 0 : 1, hops = Math.min(ra ?? 99, rb ?? 99);
@@ -512,7 +514,7 @@ registerKind('secchi', {
       if (!l || !l.name || l.cells < 3000 || l.river || l.creek || /\b(River|Creek)\b/.test(l.name) || T.used('secchi', l.id)) continue;
       if (Math.abs(l.cx - L.x) > RANGE || Math.abs(l.cz - L.z) > RANGE) continue;
       const d = Math.hypot(l.cx - L.x, l.cz - L.z), h = hopsOf(T, c, l.id);
-      if (d <= RANGE && inBand(h, band)) cands.push({ l, d, h });
+      if (d <= rangeOf(c.band) && inBand(h, band)) cands.push({ l, d, h });
     }
     const pool = (c.band === 'far' ? cands.sort((a, b) => b.h - a.h || a.d - b.d) : cands.sort((a, b) => a.d - b.d)).slice(0, 10);
     for (let k = 0; k < 4 && pool.length; k++) {
@@ -663,7 +665,7 @@ registerKind('loons', {
       if (!l || !l.name || l.cells < 5000 || l.river || /\b(River|Creek)\b/.test(l.name) || T.used('loons', l.id)) continue;
       if (Math.abs(l.cx - L.x) > RANGE || Math.abs(l.cz - L.z) > RANGE) continue;
       const d = Math.hypot(l.cx - L.x, l.cz - L.z), h = hopsOf(T, c, l.id);
-      if (d <= RANGE && inBand(h, band)) cands.push({ l, d, h });
+      if (d <= rangeOf(c.band) && inBand(h, band)) cands.push({ l, d, h });
     }
     if (!cands.length) return null;
     const cand = pickR(c.rng, cands.sort((a, b) => (c.band === 'far' ? b.h - a.h : 0) || a.d - b.d).slice(0, 8)), l = cand.l;

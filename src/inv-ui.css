@@ -267,6 +267,9 @@
 .ig-bar em { position: absolute; top: 0; bottom: 0; background: rgba(159, 196, 216, .9); }
 .ig-item.has-bar .ig-mark { bottom: 7px; }
 .ig-item.has-bar .ig-qty { bottom: 5px; }
+/* a fish's length, a line above its raw or eat mark (one cell wide, "RAW" and "42 cm" lay on each other) */
+.ig-qty.ig-len { bottom: 15px; font-size: 11px; }
+.ig-item.has-bar .ig-qty.ig-len { bottom: 19px; }
 .ig-item.fixed { cursor: default; }
 .ig-ghost { position: fixed; z-index: 30; pointer-events: none; box-sizing: border-box; border: 1px solid rgba(220, 180, 105, .9); background: rgba(42, 41, 31, .55); box-shadow: 0 10px 26px rgba(0, 0, 0, .5); }
 .ig-hl { position: absolute; pointer-events: none; box-sizing: border-box; z-index: 2; border: 2px solid; }

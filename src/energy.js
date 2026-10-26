@@ -165,9 +165,12 @@ const NIGHT_BAG = 1, NIGHT_WET = 0.8, NIGHT_NO_BAG = 0.6; // warmth after a nigh
 
 const litres = (x) => `${x >= 1.95 ? '2' : x.toFixed(1)} L`; // fb4 C
 // content C: what the kit with you does to the needs and the bar (kit.js mods; main.js sets energy.kit): the rain jacket
-// (soak, rainChill), the toque (chill), the bugs and the canoe chair (rest: the bar's recovery; drain: a game hour), the
+// (soak, rainChill), the toque (chill), the canoe chair (rest: the bar's recovery; drain: a game hour), the
 // headlamp after dark (night: travel's cost); and the bag's night (kit.sleepNight)
 const KIT0 = { soak: 1, rainChill: 1, chill: 1, rest: 1, drain: 0, night: NIGHT };
+// cons C: the bugs where you are (bugs.js mods; main.js sets energy.bugs): the bar's drain a game hour, the share of
+// rest's recovery left, the share of warm air's comfort they take; and the night's (bugs.sleepNight: a tent left open)
+const BUG0 = { drain: 0, rest: 1, comfort: 0 };
 
 export class Energy {
   constructor(player, day) {
@@ -209,6 +212,7 @@ export class Energy {
   }
   get now() { return this.day.doy * 24 + this.day.hours; }
   get kitMods() { return (this.kit && this.kit.mods) || KIT0; } // content C
+  get bugMods() { return (this.bugs && this.bugs.mods) || BUG0; } // cons C
   // hours since the last sleep (across a new year too)
   get awake() { let a = this.now - this.awakeSince; if (a < -1000) a += 365 * 24; return Math.max(0, a); }
   get adventure() { const t = this.trip; return !!(t && t.adventure && t.active); }
@@ -520,7 +524,14 @@ export class Energy {
     const wet0 = !bunk && !!(this.trip && this.trip.state && this.trip.state.wet);
     let night = null; try { night = !bunk && this.kit && typeof this.kit.sleepNight === 'function' ? this.kit.sleepNight({ wet: wet0 }) : null; } catch (e) { night = null; }
     if (night) q = clamp(q * (bag ? night.rest : 1) + (night.restAdd || 0), 0, 1);
-    this.rest0 = q * Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS);
+    // cons C: the bugs' night (bugs.js sleepNight): the fly off, or under the stars, they cost some of it
+    let bugN = null; try { bugN = !bunk && this.bugs && typeof this.bugs.sleepNight === 'function' ? this.bugs.sleepNight() : null; } catch (e) { bugN = null; }
+    if (bugN && Number.isFinite(bugN.rest)) q = clamp(q * bugN.rest, 0, 1);
+    // (tuning: a short night never leaves you less rested than you lay down: a 4 h rest that crossed dusk counted as a
+    // 4 h night and took the rest need from 0.77 to 0.48; the clock has jumped already, so the bedtime rest is the
+    // ceiling of the hours awake before the night)
+    const atBed = bunk ? 0 : this.rest0 * restCeiling(Math.max(0, this.awake - (hours || 0)));
+    this.rest0 = Math.max(atBed, q * Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS));
     this.lastNight = { q: +q.toFixed(3), hours: bunk ? NIGHT_HOURS : hours, bag };
     this.wetSetH = Math.max(this.wetSetH, WET_SET_AIR_H); // the wet set of clothes dries overnight
     if (bunk) { this.need.food = 1; this.need.water = 1; this.fill(BOTTLE, 0); }
@@ -662,7 +673,7 @@ export class Energy {
     else {
       const t = this.feltTemp(wind), wet = Math.max(this.soaked, this.trip && this.trip.state && this.trip.state.wet ? GEAR_WET : 0);
       if (t < COMFORT) loss = CHILL_H * ((COMFORT - t) / CHILL_SPAN) * (1 + (WET_CHILL - 1) * wet) * (moving ? MOVING_CHILL : 1) * (1 - fire) * this.kitMods.chill; // (content C: the toque)
-      else gain = WARM_H * clamp((t - COMFORT) / 8, 0.25, 1) * (1 - 0.5 * wet);
+      else gain = WARM_H * clamp((t - COMFORT) / 8, 0.25, 1) * (1 - 0.5 * wet) * (1 - this.bugMods.comfort); // (cons C: the bugs spoil a warm evening)
       gain += FIRE_H * fire;
     }
     if (this.now < this.dryUntil) gain *= DRY_BOOST; // fb3 B: just changed into dry clothes
@@ -750,11 +761,11 @@ export class Energy {
     if (this.live && now >= this.wokeAt && now - this.wokeAt < WAKE_WINDOW) this.value = Math.max(this.value, this.ceiling);
     if (recover) {
       recover *= this.boostSet ? this._boost : atCamp ? 3 : 1;
-      recover *= this.kitMods.rest; // content C: the bugs take some of it, the canoe chair gives more
+      recover *= this.kitMods.rest * this.bugMods.rest; // content C: the canoe chair gives more (cons C: the bugs take some of it)
       if (this.now < this.fedUntil) recover *= 2;
       if (this.live ? lowest <= EMPTY : this.warning) recover = 0; // a need run out (or, outside a trip, an empty pack): rest no longer brings it back
     }
-    let drain = BASE_H + travel + (this.live ? this.kitMods.drain : 0); // a game hour: a day's travel costs what its hours cost, at any pace (content C: and the bugs)
+    let drain = BASE_H + travel + (this.live ? this.kitMods.drain + this.bugMods.drain : 0); // a game hour: a day's travel costs what its hours cost, at any pace (cons C: and the bugs)
     if (lowest < LOW) drain *= LOW_DRAIN;
     this.exertion = travel;
     let v = this.value - drain * gh;

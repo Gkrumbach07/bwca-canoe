@@ -3,7 +3,7 @@ import { makeLookMaterial } from './shading.js';
 import { buildHullGeometry, buildLidGeometry, buildPackGeometry, PACK_AT, PACK2_AT, PACKS, HULL, SEATS, YOKE_X, sheerY, floorAt, outerAt } from './hull.js';
 import { buildFigure, LT, LS } from './figure.js';
 import { paddleMesher, PADDLE } from './gear.js';
-import { buildHullWater } from './hullwater.js';
+import { buildHullWater, buildBilge } from './hullwater.js';
 
 // The canoe rig: the hull (hull.js), its water line (hullwater.js), the paddler (figure.js, one skinned
 // figure), the paddle (gear.js) and the Duluth packs. player.js writes `state` (the mode, the stroke, the walk) and
@@ -79,6 +79,10 @@ export function buildCanoeRig({ water = null } = {}) {
   const contact = buildHullWater(water, FLOAT_OFFSET);
   hullPivot.add(contact);
   rig.userData.foam = contact;
+  // cons B: the water in the hull (hullwater.js buildBilge), as deep as player.js's bilge says (state.bilge)
+  const bilge = buildBilge(water);
+  hullPivot.add(bilge);
+  rig.userData.bilge = bilge;
   rig.add(hullPivot);
   // the packs (hull.js): the gear pack (0) and the food pack (1), each with its own place in the hull, flap up
   const KINDS = ['gear', 'food'], SEAT_AT = [PACK_AT, PACK2_AT];
@@ -118,6 +122,7 @@ export function buildCanoeRig({ water = null } = {}) {
     swimHeading: 0,
     swimSide: 1,         // which side of the hull you went over on (player.js, at the capsize)
     climb: 0,            // seconds left of righting the hull and climbing back in after a capsize (player.js sets it)
+    bilge: 0,            // cons B: the water in the hull, 0 dry .. 1 swamped (player.js; hullwater.js draws it)
     climbSide: 1,        // which gunwale you come in over
     packOnBack: undefined, // which pack rides on the back (0 the gear pack, 1 the food pack) or null (packs.js sets it);
                          // left unset, the hull's first pack goes on the back with the canoe overhead
@@ -1239,6 +1244,7 @@ export function buildCanoeRig({ water = null } = {}) {
     blendPose(kind, dt);
     seatPacks(mode);
     contact.userData.update(dt, mode === 'paddle' ? state.speed : 0);
+    bilge.userData.update(dt, state.climb > 0 || hullPivot.parent !== rig ? 0 : state.bilge); // cons B (none while it is righted, or set down)
     // the head, neck and hat collapse out of the way from the paddler's eyes, and only while the camera is at them
     // (fb4 A, the owner, 2026-10-25: "if I'm in first person mode and I pause, the person has no head"): the pause card's
     // drifting view, the title's, a close-up, any view pulled back from the eye (api.viewer, the camera, set by main.js:
