@@ -177,6 +177,10 @@ Run it from the repo root. From a worktree, set `BWCA_CACHE` to the main checkou
 - **Water and wetlands:** the bake's lakes stay the authority for water. d1-ground's ground kind stays the authority for wetlands. Where they disagree with `forest`, take the nearest land or wetland class.
 - **Height and cover:** these are the life form's, so read them with `forest`. Both are 0 on water, developed and barren cells.
 - **Rock:** colour and cliff style come from `rock`. Where `bare` is set, place open ledges, and let d1-lidar's slope and relief place the rest.
+- **Bare rock and the ground kind:** `bare` is the main mapped bare rock. d1-ground's ground kind has almost none of its own (0.2 km², from OSM), and no SSURGO map unit in the box is over 35 % rock outcrop. The rule:
+  - Set ground kind 10 (rock outcrop) where `bare` is on.
+  - Don't override the NWI wetland kinds 2–9.
+  - Place the rest from the SSURGO rock share (`data-cache/ground/<t>.rock.bin`) with d1-lidar's slope and roughness.
 - **Date:** LF2024 reflects disturbance to about 2023. The 2026 fires are the burns stream's.
 - **Quick-looks:** in the main checkout's `shots/`: `forest-rock-{lakeone,box}-{forest,height,cover,rock,bare}.png`. Lake One is drawn at 1 px per cell, the box at 1 px per 80 m.
 - **Sources:**
