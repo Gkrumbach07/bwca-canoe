@@ -41,9 +41,10 @@ function poolWords(pool) {
 //   hours from full to empty (5⅓ paddling hard, carrying 30 kg or more, or on a July or August afternoon), and comes
 //   back only when you drink from the bottle in the book (drink: a gulp of 0.25 L, or the rest of it), BODY litres from
 //   empty to full. The 2 L bottle is an item in the pockets (inventory.js); on foot at the shore E fills it (camp.js),
-//   a tablet per fill (inventory.useOne), drinkable after half an hour; with no tablet the water is drunk as it comes
-//   and sits badly (UPSET_HOURS of hunger ×UPSET); at any outfitter's counter you drink at the tap and the bottle is
-//   filled, free and at once. A low need says to drink (needNotes).
+//   a tablet per fill (inventory.useOne), drinkable after half an hour; with no tablet the water goes in untreated (water,
+//   2026-10-26: the whole bottle, until a tablet, the filter or a boil in the pot makes it safe; drunk, it may turn the
+//   stomach for half a day, UPSET); at any outfitter's counter you drink at the tap and the bottle is filled, free and at
+//   once. A low need says to drink (needNotes).
 // - warmth (fb2 F, the owner's second 2026-10-24 round: a gentle fourth need, Wild n Chill's cold): it falls when the air
 //   you feel is colder than COMFORT (13 °C): the air (weather.js temp), less the wind afloat (half of it ashore), the rain
 //   on you, and 3 °C more after dark; twice and a half as fast wet through (rain on you, a swim; wet gear a little), a
@@ -75,6 +76,8 @@ function poolWords(pool) {
 //   "held down by tiredness and cold", or ''), energy.soaked (0–1, wet through), energy.bottle (litres, 0–2), energy.drinkable, energy.treating,
 //   energy.fill(litres, waitHours) (→ litres added; waitHours 0: drinkable now, as at a counter), energy.bottleWords(),
 //   energy.drink(litres) → { ok, why, words } (fb3 B: a gulp; Infinity drinks the bottle up), energy.drinkCheck(),
+//   energy.untreated (water: litres of lake water as it comes), energy.treatAll(hours), energy.treatCheck(), energy.treat()
+//   (a tablet in afterwards), energy.upsetNow (an upset stomach under way: UPSET),
 //   energy.changeClothes(entry) / changeCheck(entry) (the dry set on after a soaking), energy.bagInReach(),
 //   energy.meal(kind), energy.sleep(q, hours) (after the clock has jumped; without hours: a night in a bunk, with
 //   breakfast and a full bottle), energy.bunk(), energy.fresh() (a trip put in), energy.rescued() (an evacuation's
@@ -118,7 +121,15 @@ export const BOTTLE = 2;   // litres
 const USE = 1 / 6, USE_HARD = 1 / 4; // litres a game hour the body uses: thirst falls 1/8 an hour, 3/16 paddling hard, carrying heavy or on a hot afternoon
 const BODY = 4 / 3;        // litres from an empty water need to a full one (fb3 B: drunk by hand; the need lasts 8 h, 5⅓ h hard)
 export const GULP = 0.25;  // litres a Drink takes from the bottle (thirst +19 %)
-const UPSET_HOURS = 6, UPSET = 1.5; // untreated lake water: a queasy stomach this long, hunger falling this much faster
+// water (the owner, 2026-10-26: "if i fill water up without a tablet, it is instantly clean even tho warnign says its
+// not"): lake water as it comes is untreated (energy.untreated, litres) until a tablet, the filter or a boil in the pot
+// makes it safe, and a drop of it in the bottle makes the whole bottle untreated. It quenches thirst like any water, with
+// a real risk: each litre drunk may turn the stomach (`risk` a litre), `onset` game hours later, for `hours`: a chunk off
+// the bar's ceiling (`chunk`, drawn with hunger's, never taking the ceiling under `floor` by itself, so it never spends
+// you), hunger and thirst falling `food` and `water` times as fast. Said once, plainly, when it hits. (It was: a fill
+// with no tablet drinkable at once, and hunger ×1.5 for 6 h whether you drank it or not.)
+export const UPSET = { risk: 0.3, onset: [0.4, 1.2], hours: 10, chunk: 0.12, floor: 0.2, food: 1.5, water: 1.3 };
+const UPSET_WORDS = 'Your stomach turns: the untreated water. It passes in half a day.';
 const NO_BAG_REST = 0.6;   // a night in the tent with no sleeping bag in reach gives this much of the night's rest
 const DRY_BOOST = 2, DRY_BOOST_HOURS = 2; // warmth comes back this much faster, this long, after a change into dry clothes
 const WET_SET_FIRE_H = 0.5, WET_SET_AIR_H = 8; // game hours the wet set takes to dry by a fire, or in the open air (a night does it too)
@@ -200,7 +211,8 @@ export class Energy {
     this.grow = { warmth: 0, rest: 0, food: 0, water: 0 }; this.lastChunks = null; // the chunks' rates, a game hour
     this.chill = 0;          // what the cold costs now, warmth a game hour (0 when it is coming back), for the readout
     this.drinkable = BOTTLE; this.treating = 0; this.readyAt = -1e9; // the bottle: litres drinkable, litres under a tablet, when they will be
-    this.upsetUntil = -1e9;  // fb3 B: untreated water drunk: hunger falls faster until then
+    this.untreated = 0;      // water: litres of lake water as it comes (the whole bottle when any: drinkable and treating 0)
+    this.upsetAt = -1e9; this.upsetUntil = -1e9; this.upsetSaid = true; // water: an upset stomach from it, from when to when (UPSET)
     this.dryUntil = -1e9;    // fb3 B: changed into dry clothes: warmth comes back faster until then
     this.wetSetH = 0;        // fb3 B: game hours the wet set of clothes has been drying
     this.lastNow = this.now; this.hard = false;
@@ -275,7 +287,17 @@ export class Energy {
   }
   get restNeed() { return clamp(this.rest0 * restCeiling(this.awake), 0, 1); }
   // fb2 F: what a need takes off the bar's top end now (0 when it is full, its weight when it has run out)
-  chunkOf(key) { return this.live ? CHUNK_W[key] * (1 - clamp(this.needs[key], 0, 1)) : 0; }
+  // (water: an upset stomach adds its chunk to hunger's, drawn under the hunger icon)
+  chunkOf(key) { return this.needChunk(key) + (key === 'food' ? this.upsetChunk() : 0); }
+  needChunk(key) { return this.live ? CHUNK_W[key] * (1 - clamp(this.needs[key], 0, 1)) : 0; }
+  // water: the upset stomach under way now, and its chunk: UPSET.chunk, less where the needs' own chunks leave the
+  // ceiling under UPSET.floor (it never spends you by itself)
+  get upsetNow() { const n = this.now; return n >= this.upsetAt && n < this.upsetUntil; }
+  upsetChunk() {
+    if (!this.live || !this.upsetNow) return 0;
+    let c = 1; for (const k of NEED_KEYS) c -= this.needChunk(k);
+    return clamp(Math.min(UPSET.chunk, c - UPSET.floor), 0, UPSET.chunk);
+  }
   // the need with the biggest chunk
   biggest() { let k = 'rest'; for (const key of NEED_KEYS) if (this.chunkOf(key) > this.chunkOf(k)) k = key; return k; }
   // what rest can bring the bar back to now: the bar less every need's chunk
@@ -313,9 +335,10 @@ export class Energy {
       if (k === 'rest' && this.awake < 4 && !(by[1].c >= 0.08)) return 'held down by last night'; // the tent's quality, or the hours slept
     }
     const second = by.find((b) => b.key !== k && b.c >= 0.08);
-    return `held down by ${HELD_WORD[k]}${second ? ` and ${HELD_WORD[second.key]}` : ''}`;
+    const word = (key) => (key === 'food' && this.upsetChunk() > this.needChunk('food') ? 'an upset stomach' : HELD_WORD[key]); // (water)
+    return `held down by ${word(k)}${second ? ` and ${word(second.key)}` : ''}`;
   }
-  get bottle() { return this.drinkable + this.treating; }
+  get bottle() { return this.drinkable + this.treating + this.untreated; }
   // a hot afternoon: July and August, noon to six, under the sun (not under cloud, fog or rain: weather.js)
   get hot() {
     const { month } = monthDay(this.day.year, this.day.doy), h = this.day.hours, w = this.day.weather;
@@ -343,11 +366,11 @@ export class Energy {
   set restBoost(v) { this._boost = Number.isFinite(v) ? Math.max(0, v) : 1; this.boostSet = true; }
 
   note(t) { if (this.onNote) this.onNote(t); }
-  reset() { this.value = 1; this.food = 0; this.fedUntil = -1; this.warned = false; this.awakeSince = this.now; this.lastMealAbs = -1e9; this.fresh(); }
+  reset() { this.value = 1; this.food = 0; this.fedUntil = -1; this.warned = false; this.awakeSince = this.now; this.lastMealAbs = -1e9; this.upsetAt = this.upsetUntil = -1e9; this.upsetSaid = true; this.fresh(); }
   // the needs full and the bottle filled (a trip put in, a new season)
   fresh() {
     this.rest0 = 1; this.need.food = 1; this.need.water = 1; this.need.warmth = 1; this.soaked = 0;
-    this.drinkable = BOTTLE; this.treating = 0; this.readyAt = -1e9;
+    this.drinkable = BOTTLE; this.treating = 0; this.readyAt = -1e9; this.untreated = 0;
     this.lastNow = this.now; this.unnote(); this.lastChunks = null; this.spentAt = null;
   }
   unnote() { for (const k in this.noted) this.noted[k] = false; }
@@ -357,38 +380,71 @@ export class Energy {
   // --- the bottle ----------------------------------------------------------------------------------------------
   // Fill it: up to `litres` more, to the 2 L it holds. waitHours: how long the water takes to be drinkable (tablets
   // half an hour); 0 for water that is drinkable now (an outfitter's tap), which also clears what was being treated.
-  // Returns the litres added.
+  // Returns the litres added (water: or put through the filter or under the tablet).
+  // water: untreated water in the bottle goes through the filter or under the tablet with the new (the whole bottle is
+  // treated); at a tap or a pump it is poured out first. With no tablet the new water goes in as it comes, and the whole
+  // bottle is untreated.
   fill(litres = BOTTLE, waitHours = TABLETS) {
-    const add = Math.min(Math.max(0, litres), BOTTLE - this.bottle);
-    if (waitHours > 0) {
-      if (add <= 0.001) return 0;
-      // fb3 B: a tablet per fill, from the tablets in reach (the pump and the gravity filter wait less than a tablet's half
-      // hour and use none); with no tablet the water goes in as it comes, drinkable now, and sits badly for a while
-      const tablet = waitHours >= TABLETS - 0.01 && !this.sandbox;
-      if (tablet) {
-        const i = this.inv, r = i && typeof i.useOne === 'function' ? i.useOne('tablets') : { ok: true };
-        if (!r.ok) {
-          this.drinkable = Math.min(BOTTLE, this.drinkable + add); this.upsetUntil = this.now + UPSET_HOURS;
-          const away = i && typeof i.usesLeft === 'function' && i.usesLeft('tablets', { reachable: false }) > 0; // (the fb3 join: the tube left in a pack out of reach)
-          this.note(`${away ? 'No tablet to hand: the tube is in a pack out of reach.' : 'No tablets left.'} You fill the bottle with lake water as it comes; it will sit badly for a few hours.`);
-          this.noted.dry = false;
-          return add;
-        }
-        if (Number.isFinite(r.left) && r.left <= 3) this.note(r.left ? `${r.left} ${r.left === 1 ? 'tablet' : 'tablets'} left.` : 'That was the last tablet.'); // fb5 E: the count only when it runs low (camp.js says the fill; the first time, the moments teach it)
-      }
-      this.treating += add; this.readyAt = this.now + waitHours;
-    } else {
+    if (!(waitHours > 0)) { // drinkable now: the tap, the pump
+      this.untreated = 0;
+      const add = Math.min(Math.max(0, litres), BOTTLE - this.bottle);
       this.drinkable = Math.min(BOTTLE, this.drinkable + this.treating + Math.max(0, add));
       this.treating = 0;
+      this.noted.dry = false;
+      return Math.max(0, add);
     }
+    const add = Math.min(Math.max(0, litres), BOTTLE - this.bottle), raw = this.untreated;
+    if (add <= 0.001 && raw <= 0.001) return 0;
+    // fb3 B: a tablet per fill, from the tablets in reach (the pump and the gravity filter wait less than a tablet's half
+    // hour and use none)
+    const tablet = waitHours >= TABLETS - 0.01 && !this.sandbox;
+    if (tablet) {
+      const i = this.inv, r = i && typeof i.useOne === 'function' ? i.useOne('tablets') : { ok: true };
+      if (!r.ok) {
+        if (add <= 0.001) return 0;
+        // water: no tablet: lake water as it comes, and the whole bottle with it (the moment 'untreated' says what to do)
+        this.untreated = this.bottle + add; this.drinkable = 0; this.treating = 0;
+        const away = i && typeof i.usesLeft === 'function' && i.usesLeft('tablets', { reachable: false }) > 0; // (the fb3 join: the tube left in a pack out of reach)
+        this.note(`${away ? 'No tablet to hand' : 'No tablets left'}: lake water as it comes.`);
+        this.noted.dry = false;
+        return add;
+      }
+      if (Number.isFinite(r.left) && r.left <= 3) this.note(r.left ? `${r.left} ${r.left === 1 ? 'tablet' : 'tablets'} left.` : 'That was the last tablet.'); // fb5 E: the count only when it runs low (camp.js says the fill; the first time, the moments teach it)
+    }
+    this.treating += add + raw; this.untreated = 0; this.readyAt = this.now + waitHours;
     this.noted.dry = false;
-    return Math.max(0, add);
+    return Math.max(0, add) + raw;
+  }
+  // water: what is untreated, made safe: in `hours` (under a tablet, through the gravity bag), or now (0: boiled)
+  treatAll(hours = TABLETS) {
+    const raw = this.untreated;
+    if (!(raw > 0.001)) return 0;
+    this.untreated = 0;
+    if (hours > 0) { this.treating += raw; this.readyAt = this.now + hours; } else this.drinkable = Math.min(BOTTLE, this.drinkable + raw);
+    return raw;
+  }
+  // water: a tablet dropped in afterwards (the bottle's or the tablets' Treat it): { enabled, why, needs, next }
+  treatCheck() {
+    if (!(this.untreated > 0.001)) return check(false, 'Nothing to treat', [], '');
+    const i = this.inv, tabs = i && typeof i.usesLeft === 'function' ? i.usesLeft('tablets') : 1;
+    if (!(tabs > 0)) return check(false, 'No tablet to hand', [NEED.qty('A tablet', 0, 1, '', { chip: 'a tablet', item: 'tablets' })], 'A boil in the pot makes it safe too, or tablets from any outfitter');
+    return check(true, null, [], '');
+  }
+  treat() {
+    const c = this.treatCheck();
+    if (!c.enabled) return { ok: false, why: c.why, words: `${c.why}.` };
+    const i = this.inv, r = this.sandbox || !i || typeof i.useOne !== 'function' ? { ok: true } : i.useOne('tablets');
+    if (!r.ok) return { ok: false, why: 'No tablet to hand', words: 'No tablet to hand.' };
+    this.treatAll(TABLETS);
+    const words = Number.isFinite(r.left) && r.left <= 3 ? `A tablet in. ${r.left ? `${r.left} ${r.left === 1 ? 'tablet' : 'tablets'} left.` : 'That was the last tablet.'}` : 'A tablet in.';
+    this.note(words);
+    return { ok: true, why: null, words };
   }
   // fb3 B: Drink (the bottle's verb in the book): `litres` of what is drinkable (GULP a gulp; Infinity drinks it up),
   // the thirst need up by what the body takes of it. → { ok, why, words }
   // fb4 C: as a checklist ({ ok, why, needs, next }: the treating's timer in game seconds, the water have of need)
   drinkCheck() {
-    if (this.drinkable <= 0.02) {
+    if (this.drinkable <= 0.02 && !(this.untreated > 0.02)) { // (water: lake water as it comes is drunk too, with its risk)
       if (this.treating > 0.001) {
         const sec = this.treatingSec();
         return { ok: false, why: `Treating: drinkable in ${timerWords(sec)}`, needs: [NEED.timer('Treating', sec, true, { note: `${litres(this.treating)} under a tablet` })], next: `Wait ${timerWords(sec)}: the tablet is working` };
@@ -402,11 +458,13 @@ export class Energy {
   // fb4 C: E at the water's edge (nearby.js reads it): { enabled, why, needs, next, wait }. wait: the filter's hours
   // (camp.filterWait: a tablet's half hour, a pump's minutes)
   fillCheck(wait = TABLETS) {
-    const room = Math.max(0, BOTTLE - this.bottle), i = this.inv, tabletKind = wait >= TABLETS - 0.01 && !this.sandbox;
+    const i = this.inv, tabletKind = wait >= TABLETS - 0.01 && !this.sandbox;
     const tabs = tabletKind && i && typeof i.usesLeft === 'function' ? i.usesLeft('tablets') : null;
+    // (water: untreated water in the bottle is room where a filter or a tablet is to hand: it goes through with the new)
+    const room = Math.max(0, BOTTLE - this.bottle + (!tabletKind || tabs > 0 ? this.untreated : 0));
     if (room <= 0.05) return { ...check(false, 'The bottle is full', [NEED.qty('Room in the bottle', +room.toFixed(2), GULP, 'L')], 'Drink first: the bottle in your pockets, right-click › Drink'), wait };
     const needs = [NEED.qty('Room in the bottle', +room.toFixed(2), GULP, 'L')];
-    if (tabletKind) needs.push(NEED.qty('A tablet in reach', tabs > 0 ? 1 : 0, 1, '', { note: tabs > 0 ? `${tabs} left` : 'none: lake water as it comes, a queasy stomach for 6 h' }));
+    if (tabletKind) needs.push(NEED.qty('A tablet in reach', tabs > 0 ? 1 : 0, 1, '', { note: tabs > 0 ? `${tabs} left` : 'none: lake water as it comes, untreated' }));
     needs.push(NEED.timer('Drinkable after', (tabletKind && !(tabs > 0) ? 0 : wait) * 3600, false));
     const next = !tabletKind ? `Fill it: through the filter, drinkable in ${timerWords(wait * 3600)}` : tabs > 0 ? 'Fill it: a tablet in, drinkable in 30 min' : 'Fill it as it comes, or bring the tablets within reach first (in a pack you carry)';
     return { ...check(true, null, needs, next), wait };
@@ -419,35 +477,52 @@ export class Energy {
       return { label: 'Treating', mark: 'treating', timer: Math.round(sec), running: true, until: now + sec / 3600, next: `${this.drinkable > 0.02 ? `${litres(this.drinkable)} drinkable now; ` : ''}${litres(this.treating)} drinkable in ${timerWords(sec)}` };
     }
     if (this.bottle <= 0.02) return { label: 'Needs filling', mark: 'empty', next: 'Empty: fill it at the water’s edge (on foot, face the water and press E), or free at any counter' };
+    // water: lake water as it comes, the word and its mark (no standing line: the moment 'untreated' says it once)
+    if (this.untreated > 0.001) return { label: 'Untreated', mark: 'untreated', next: 'A tablet, the filter, or a boil in the pot makes it safe' };
     if (this.drinkable < 0.5) return { label: `${litres(this.drinkable)} left`, mark: 'low', next: 'Fill it at the water’s edge before you set off' };
     return null;
   }
   drink(litres = GULP) {
     const d = this.drinkCheck();
     if (!d.ok) return { ok: false, why: d.why, words: `${d.why[0].toUpperCase()}${d.why.slice(1)}.` };
-    const l = Math.min(this.drinkable, Math.max(0.01, litres));
-    this.drinkable = Math.max(0, this.drinkable - l);
+    // (water: the bottle untreated, its lake water is what you drink, and the risk with it)
+    const raw = this.drinkable <= 0.02 && this.untreated > 0.02, had = raw ? this.untreated : this.drinkable;
+    const l = Math.min(had, Math.max(0.01, litres));
+    if (raw) { this.untreated = Math.max(0, this.untreated - l); if (this.untreated <= 0.001) this.untreated = 0; this.risk(l); } else this.drinkable = Math.max(0, this.drinkable - l);
     this.need.water = clamp(this.need.water + l / BODY, 0, 1); // (the content join: a drink between trips counts too)
-    this.lastDrink = { l, at: this.now };
-    const words = `${l >= this.drinkable + l - 0.001 && litres > GULP ? 'You drink the bottle up' : l >= 0.9 ? `${l.toFixed(1)} L down` : 'A gulp'}: ${this.bottleWords()}.`;
+    this.lastDrink = { l, at: this.now, raw };
+    const words = `${l >= had - 0.001 && litres > GULP ? 'You drink the bottle up' : l >= 0.9 ? `${l.toFixed(1)} L down` : 'A gulp'}: ${this.bottleWords()}.`;
     this.note(words);
     return { ok: true, why: null, words };
+  }
+  // water: `l` litres of untreated water drunk: the stomach may turn (UPSET), an hour or so on; nothing more while it is
+  // coming or under way
+  risk(l) {
+    if (this.sandbox || !(l > 0) || this.now < this.upsetUntil) return false;
+    if (Math.random() >= 1 - Math.pow(1 - UPSET.risk, l)) return false;
+    const [a, b] = UPSET.onset;
+    this.upsetAt = this.now + a + Math.random() * (b - a); this.upsetUntil = this.upsetAt + UPSET.hours; this.upsetSaid = false;
+    return true;
   }
   treatingWords() { const min = Math.max(1, Math.ceil(((this.readyAt - this.now) * 60) / 5) * 5); return `drinkable in ${min} min`; }
   // camp 2: water out of the bottle for the pot (cook.js: a dehydrated meal wants its water; boiled, lake water is safe, so
   // what is still under a tablet goes first). Returns whether there was enough (none is taken when there was not).
+  // (water: the untreated first, then what is under a tablet, then what is drinkable: all of it is boiled)
   useWater(litres) {
     const l = Math.max(0, Number(litres) || 0);
     if (this.bottle < l - 0.001) return false;
-    const a = Math.min(this.treating, l);
-    this.treating -= a; this.drinkable = Math.max(0, this.drinkable - (l - a));
+    const u = Math.min(this.untreated, l), a = Math.min(this.treating, l - u);
+    this.untreated -= u; this.treating -= a; this.drinkable = Math.max(0, this.drinkable - (l - u - a));
+    if (this.untreated <= 0.001) this.untreated = 0;
     if (this.treating <= 0.001) this.treating = 0;
     return true;
   }
-  // "1.4 L in the bottle", "2 L in the bottle, drinkable in 20 min", "the bottle is dry"
+  // "1.4 L in the bottle", "2 L in the bottle, drinkable in 20 min", "the bottle is dry" (water: "1.8 L of lake water in
+  // the bottle")
   bottleWords() {
     const l = (x) => `${x >= 1.95 ? '2' : x.toFixed(1)} L`;
     if (this.bottle <= 0.02) return 'the bottle is dry';
+    if (this.untreated > 0.001) return `${l(this.untreated)} of lake water in the bottle`;
     if (this.treating > 0.001) {
       const min = Math.max(1, Math.ceil(((this.readyAt - this.now) * 60) / 5) * 5);
       return `${l(this.bottle)} in the bottle${this.drinkable > 0.05 ? ` (${l(this.treating)} drinkable in ${min} min)` : `, drinkable in ${min} min`}`;
@@ -562,9 +637,9 @@ export class Energy {
   passNeeds(dh, asleep = false, hard = false, light = null) {
     if (this.treating > 0 && this.now >= this.readyAt) { this.drinkable = Math.min(BOTTLE, this.drinkable + this.treating); this.treating = 0; }
     if (!(dh > 0)) return;
-    const k = asleep ? ASLEEP : 1, upset = this.now < this.upsetUntil ? UPSET : 1;
-    this.need.food = Math.max(0, this.need.food - (k * dh * upset * (light ? light.food : 1)) / FOOD_HOURS);
-    const use = (hard ? USE_HARD : USE) * k * dh * (light ? light.water : 1);
+    const k = asleep ? ASLEEP : 1, upset = this.upsetNow; // (water: an upset stomach, UPSET)
+    this.need.food = Math.max(0, this.need.food - (k * dh * (upset ? UPSET.food : 1) * (light ? light.food : 1)) / FOOD_HOURS);
+    const use = (hard ? USE_HARD : USE) * k * dh * (light ? light.water : 1) * (upset ? UPSET.water : 1);
     this.need.water = Math.max(0, this.need.water - use / BODY);
     // taste: light work (FISHING): the hours awake count for less of the rest need
     if (light && Number.isFinite(this.awakeSince)) this.awakeSince = Math.min(this.now, this.awakeSince + (1 - light.awake) * dh);
@@ -737,7 +812,7 @@ export class Energy {
     this.lastHours = h;
     // an outfitter's counter: a drink at the tap, and the bottle filled, free and drinkable at once
     if (this.atCounter && this.atCounter()) {
-      if (this.bottle < BOTTLE - 0.001 || this.treating > 0) this.fill(BOTTLE, 0);
+      if (this.bottle < BOTTLE - 0.001 || this.treating > 0 || this.untreated > 0) this.fill(BOTTLE, 0); // (water: the lake water poured out)
       // (the content join: between trips too: coming in ends the trip, and the thirst you came in with was kept for the
       // next one, so a player who drank at the tap pushed off parched and was nearly spent by noon)
       this.need.water = 1;
@@ -769,6 +844,8 @@ export class Energy {
     // the needs, over the game hours since the last frame (a jump of the clock longer than JUMP counts as a night)
     let dh = now - this.lastNow; this.lastNow = now;
     if (!(dh > 0) || dh > 24 * 3) dh = 0; // the clock set back (Sandbox), or a reload's leap
+    // water: the stomach turns, said once when it does (asleep, in the morning)
+    if (!this.upsetSaid && this.upsetNow) { this.upsetSaid = true; this.note(UPSET_WORDS); }
     if (this.live) {
       const jump = dh > JUMP;
       this.passNeeds(dh, jump, !jump && (hard || this.hot), !jump && fishing === 'still' ? FISHING : null); // (taste: sitting to fish is light work)
@@ -827,6 +904,7 @@ export class Energy {
       rest0: this.rest0, need: { ...this.need }, drinkable: this.drinkable, treating: this.treating, readyIn: this.treating > 0 ? Math.max(0, this.readyAt - this.now) : 0,
       soaked: this.soaked, // fb2 F (need.warmth rides in need)
       upsetFor: Math.max(0, this.upsetUntil - this.now), dryFor: Math.max(0, this.dryUntil - this.now), wetSetH: this.wetSetH, // fb3 B
+      untreated: this.untreated, upsetIn: Math.max(0, this.upsetAt - this.now), upsetSaid: this.upsetSaid, // water
       spentFor: this.spentAt == null ? null : Math.max(0, this.now - this.spentAt), // game hours spent so far: a reload does not restart the hour
     };
   }
@@ -842,7 +920,17 @@ export class Energy {
     this.soaked = clamp(num(d.soaked, 0), 0, 1); this.wasIn = this.player.mode === 'swim'; this.lastChunks = null; // fb2 F
     this.drinkable = clamp(num(d.drinkable, BOTTLE), 0, BOTTLE); this.treating = clamp(num(d.treating, 0), 0, BOTTLE - this.drinkable);
     this.readyAt = this.now + num(d.readyIn, 0);
-    this.upsetUntil = this.now + num(d.upsetFor, 0); this.dryUntil = this.now + num(d.dryFor, 0); this.wetSetH = num(d.wetSetH, 0); // fb3 B
+    this.dryUntil = this.now + num(d.dryFor, 0); this.wetSetH = num(d.wetSetH, 0); // fb3 B
+    // water: the lake water as it comes, and an upset stomach coming or under way. A save from before (no `untreated`)
+    // marked a fill with no tablet by its 6 h of upset, drunk or not: that bottle's water is untreated now, and nothing
+    // is upset until some of it is drunk
+    this.untreated = clamp(num(d.untreated, 0), 0, Math.max(0, BOTTLE - this.drinkable - this.treating));
+    if (d.untreated === undefined && num(d.upsetFor, 0) > 0) {
+      if (this.treating <= 0.001 && this.drinkable > 0.001) { this.untreated = this.drinkable; this.drinkable = 0; }
+      this.upsetAt = this.upsetUntil = -1e9; this.upsetSaid = true;
+    } else if (num(d.upsetFor, 0) > 0) { this.upsetAt = this.now + num(d.upsetIn, 0); this.upsetUntil = this.now + num(d.upsetFor, 0); this.upsetSaid = d.upsetSaid !== false; }
+    else { this.upsetAt = this.upsetUntil = -1e9; this.upsetSaid = true; }
+    if (this.untreated > 0.001) { this.drinkable = 0; this.treating = 0; } // (the whole bottle)
     this.unnote(); const n = this.needs; for (const k of ['rest', 'food', 'water', 'warmth']) this.noted[k] = n[k] < LOW; this.noted.dry = this.bottle <= 0.001;
     this.lastHours = this.day.hours; // the saved clock is back: no dawn or dusk crossed by the reload, no meal
     this.lastNow = this.now;         // and no hours of need passed
