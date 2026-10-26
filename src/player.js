@@ -1448,7 +1448,11 @@ export class Player {
   // bilges, sampled) rests on the drawn ground without cutting into it. Over water an end rests on the water.
   restHull(x, z, heading, pitchExtra = 0) {
     const w = this.world, fx = Math.cos(heading), fz = -Math.sin(heading), rx = -fz, rz = fx; // bow, starboard
-    const under = (px, pz) => { const s = this.groundAt(px, pz); return w.shoreAt(px, pz) < 0 ? Math.max(s, w.levelAt(px, pz)) : s; };
+    // (content join: and on top of a solid laid since the tiles were built, a notice's blowdown across a trail: set down
+    // where the log held you, the hull lay through it)
+    const dyn = ((w.tiles && w.tiles.dynamic) || []).filter((o) => o.box && Number.isFinite(o.top) && Math.hypot(o.x - x, o.z - z) < 4 + o.hx);
+    const onTop = (px, pz, s) => { for (const o of dyn) { const dx = px - o.x, dz = pz - o.z; if (Math.abs(dx * o.ux + dz * o.uz) <= o.hx && Math.abs(-dx * o.uz + dz * o.ux) <= o.hz + 0.05) s = Math.max(s, o.top); } return s; };
+    const under = (px, pz) => { const s = onTop(px, pz, this.groundAt(px, pz)); return w.shoreAt(px, pz) < 0 ? Math.max(s, w.levelAt(px, pz)) : s; };
     const hb = under(x + fx * 2.2, z + fz * 2.2), hs = under(x - fx * 2.2, z - fz * 2.2);
     let cross = 0;
     for (const a of [-1.4, 0, 1.4]) cross += under(x + fx * a + rx * 0.45, z + fz * a + rz * 0.45) - under(x + fx * a - rx * 0.45, z + fz * a - rz * 0.45);

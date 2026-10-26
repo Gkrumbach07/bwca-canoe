@@ -381,6 +381,9 @@ function beginSaw(T, t, o = {}) {
     onDone: () => {
       t.cuts = SAW.length; t.status = 'done';
       unblock(T, t); T.removeProp(t.id); placeDeadfall(T, t); // the cut look, and the trail open
+      // (the content join: a canoe set down across the log comes down onto the ground with it)
+      const d = p.carry && p.carry.drop;
+      if (d && typeof p.restHull === 'function' && Math.hypot(d.x - t.at.x, d.z - t.at.z) < 8) p.restHull(d.x, d.z, d.heading || 0);
       T.note(`The trail is clear. ${tell(T, t)}`);
       T.changed(); T.boardChanged();
     },
