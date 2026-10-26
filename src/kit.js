@@ -47,12 +47,13 @@ const SIT_BOOST = 1.6;       // the bar's recovery sat in the canoe chair, over 
 const SIDE = { from: 1.5, to: 5, most: 0.35 }; // kg: a fish this heavy may throw the hook at the side with no net (up to most)
 
 // the new meals' and the fillets' minutes on the grate (cook.js COOK; the stove takes STOVE_K of them)
+// (tuning: two thirds of the old minutes, as cook.js's: on the one clock a game minute at the grate is 15 real seconds)
 Object.assign(COOK, {
-  'meal:pancakes': { minutes: 12, water: 0.3 },
-  'meal:chili': { minutes: 10, water: 0.5 },
-  'meal:bannock': { minutes: 15, water: 0.1 },
+  'meal:pancakes': { minutes: 8, water: 0.3 },
+  'meal:chili': { minutes: 7, water: 0.5 },
+  'meal:bannock': { minutes: 10, water: 0.1 },
 });
-for (const sp of ['walleye', 'pike', 'smallmouth', 'laketrout', 'perch', 'crappie']) COOK[`fillet:${sp}`] = { minutes: 6, water: 0 };
+for (const sp of ['walleye', 'pike', 'smallmouth', 'laketrout', 'perch', 'crappie']) COOK[`fillet:${sp}`] = { minutes: 4, water: 0 };
 
 // a thing's family: its def's, else the shop's (an outfitter's signature item, outfitters.js: a net, a bug jacket, a blanket)
 const familyOf = (id) => (itemDef(id) || {}).family || (itemOf(id) || {}).family || null;
@@ -312,6 +313,9 @@ export class Kit {
   }
   fireBeside() {
     const F = this.t.fires, f = F && F.near, p = this.t.player;
+    // (tuning, the content join's leftover: the game's heat, not the drawn flare: with the book up, a fire just lit kept
+    // its match's flare low for 45 s, so coffee read "Needs hot water" beside it)
+    if (F && p && F.fires && typeof F.heat === 'function') for (const q of F.fires.values()) if (!q.laid && q.at && F.heat(q) > 0.3 && Math.hypot(q.at.x - p.x, q.at.z - p.z) < RING_NEAR) return true;
     return !!(f && p && (f.heat || 0) > 0.3 && Math.hypot(f.x - p.x, f.z - p.z) < RING_NEAR);
   }
   brew(hit, d, onStove) {
