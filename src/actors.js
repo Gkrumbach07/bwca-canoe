@@ -43,6 +43,9 @@ const FAR_SLOTS = 32;
 const WAKE_R = 150;            // m: the wake's flecks shed only this near the viewer
 const SWITCH_EVERY = 14;       // strokes on a side before the crew switch over (the bow calls it)
 const HULL_PIVOT = 0;          // a hull's pivot sits at the canoe frame's origin (FLOAT_OFFSET above the water)
+const SEAT_ORDER = ['stern', 'bow', 'mid']; // p2 C: a third kneels in the middle, behind the yoke (a family's kid, a group's third)
+const MID_X = -0.42;
+const seatX = (seat) => (seat === 'stern' ? SEATS.stern.x : seat === 'bow' ? SEATS.bow.x : MID_X);
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const ease = (k, dt) => 1 - Math.exp(-k * dt);
@@ -254,16 +257,16 @@ class Person {
   }
   get drawn() { return !!this.bind; }
   standAt({ x, z, heading = this.heading, y = null }) {
-    this.leaveBoat(); this.mover = null; this.mode = 'stand'; this.x = x; this.z = z; this.heading = heading; this.v = 0;
+    this.leaveBoat(); this.mover = null; this.ext = false; this.mode = 'stand'; this.x = x; this.z = z; this.heading = heading; this.v = 0;
     this.y = y ?? this.layer.ground(x, z); return this;
   }
   walkAlong(pts, mps = 1.3, { from = 0, onEnd = null, pack = this.pack, wait = 0 } = {}) {
-    this.leaveBoat(); this.mode = 'walk'; this.pack = !!pack; this.hullColour = null;
+    this.leaveBoat(); this.ext = false; this.mode = 'walk'; this.pack = !!pack; this.hullColour = null;
     this.mover = new PathMover(pts, mps, { from, onEnd, wait, ahead: 0.9, accel: 0.9 });
     this.placeOnPath(); return this;
   }
   carryAlong(pts, mps = 1.1, { hull = 'aluminium', from = 0, onEnd = null, pack = this.pack, wait = 0 } = {}) {
-    this.leaveBoat(); this.mode = 'carry'; this.pack = !!pack; this.hullColour = HULL_PALETTES[hull] ? hull : 'aluminium';
+    this.leaveBoat(); this.ext = false; this.mode = 'carry'; this.pack = !!pack; this.hullColour = HULL_PALETTES[hull] ? hull : 'aluminium';
     // the hull's middle walks the line and its ends swing (the plan's Risks: a bend's inside corner is tight with 5 m)
     this.mover = new PathMover(pts, mps, { from, onEnd, wait, ahead: 1.6, accel: 0.6 });
     this.placeOnPath(); return this;
@@ -274,10 +277,37 @@ class Person {
     this.x = m.p[0]; this.z = m.p[1]; if (h !== null) this.heading = h;
     this.y = this.layer.ground(this.x, this.z);
   }
-  leaveBoat() { if (this.boat) { const b = this.boat; b.crew = b.crew.filter((c) => c !== this); this.boat = null; this.seat = null; } }
+  // p2 C: driven from outside (the parties' plans, party-moves.js), a place a frame: { x, z, heading, v (m/s as seen),
+  // mode: 'stand' | 'walk' | 'carry', pack, hull (the carried canoe's colour) }; the heading eases to the one given
+  drive({ x, z, heading = this.heading, v = 0, mode = 'stand', pack = false, hull = 'aluminium', snap = false }) {
+    this.leaveBoat(); this.mover = null; this.ext = true;
+    if (snap) this.heading = heading;
+    this.mode = mode === 'carry' ? 'carry' : mode === 'walk' ? 'walk' : 'stand';
+    this.hullColour = this.mode === 'carry' ? (HULL_PALETTES[hull] ? hull : 'aluminium') : null;
+    this.pack = !!pack; this.x = x; this.z = z; this.want = heading; this.vExt = v;
+    return this;
+  }
+  // where the head is (the bone while drawn, else a guess over the feet): a speaker's place for dialogue.js
+  headAt(out) {
+    const B = this.bind;
+    if (B && B.body && B.body.fig && B.body.fig.bones && B.body.fig.bones.head) { B.body.fig.bones.head.getWorldPosition(out); out.y += 0.16; return out; }
+    if (this.boat) return out.set(this.boat.x, this.boat.y + 0.95, this.boat.z);
+    return out.set(this.x, this.y + 1.66, this.z);
+  }
+  leaveBoat() { if (this.boat) { const b = this.boat; b.crew = b.crew.filter((c) => c !== this); this.boat = null; this.seat = null; if (this.mode === 'crew') this.mode = 'stand'; } }
   remove() { this.layer.drop(this); }
   // the simulation, every frame wherever it is (cheap: a place along a line)
   tick(dt) {
+    if (this.ext && this.mode !== 'crew') {
+      // (p2 C) placed from outside: the heading eases round to the one wanted, the feet on the ground
+      this.v = this.vExt || 0;
+      const e = wrapPi((this.want ?? this.heading) - this.heading), rate = this.mode === 'carry' ? 1.6 : 3.5;
+      this.heading = wrapPi(this.heading + clamp(e, -rate * Math.max(dt, 0), rate * Math.max(dt, 0)));
+      if (!(dt > 0)) this.heading = this.want ?? this.heading;
+      // (the ground under the feet only while drawn or near: a hundred people far off cost nothing a frame)
+      if (this.bind || this.hull || this.dist < 80 || !Number.isFinite(this.y)) this.y = this.layer.ground(this.x, this.z);
+      return;
+    }
     if (this.mode === 'crew' || !this.mover) { this.v = 0; return; }
     const h = this.mover.step(dt);
     this.v = this.mover.v;
@@ -315,11 +345,21 @@ class Boat {
     this.root = new THREE.Group(); this.root.name = 'actor boat';
     this.stroke = { phase: 0, side: 1, count: 0, power: 0, prev: 0 };
     this.crew = [];
-    crew.slice(0, 2).forEach((p, i) => this.seatCrew(p, i === 0 ? 'stern' : 'bow'));
+    crew.slice(0, 3).forEach((p, i) => this.seatCrew(p, SEAT_ORDER[i]));
     this.wakeAcc = 0;
+    this.hidden = false; this.ext = null; // p2 C: hidden while carried over a trail; ext: driven from outside (drive())
   }
+  // p2 C: placed from outside, a frame at a time: { x, z, heading (the bow's, as the player's), v (m/s as seen) }; the
+  // heading eases to it as a canoe turns (snap: at once)
+  drive({ x, z, heading = this.heading, v = 0, snap = false }) {
+    this.mover = null; this.hidden = false;
+    if (snap || !this.ext) { this.heading = heading; this.bobY = null; }
+    this.ext = { heading, v }; this.x = x; this.z = z;
+    return this;
+  }
+  hide() { this.hidden = true; this.ext = null; this.v = 0; return this; }
   seatCrew(p, seat) {
-    p.leaveBoat(); p.mover = null; p.mode = 'crew'; p.boat = this; p.seat = seat; p.hullColour = null;
+    p.leaveBoat(); p.mover = null; p.mode = 'crew'; p.boat = this; p.seat = seat; p.hullColour = null; p.pack = false;
     this.crew.push(p);
   }
   placeAt({ x, z, heading = this.heading }) { this.mover = null; this.x = x; this.z = z; this.heading = heading; this.v = 0; this.settle(0); return this; }
@@ -331,7 +371,13 @@ class Boat {
   }
   remove() { this.layer.drop(this); }
   tick(dt) {
-    if (this.mover) {
+    if (this.ext) {
+      // (p2 C) placed from outside: the heading eases round as a canoe turns
+      const h0 = this.heading, e = wrapPi(this.ext.heading - this.heading);
+      this.heading = wrapPi(this.heading + clamp(e * 1.5, -0.6, 0.6) * Math.max(0, dt));
+      this.v = this.ext.v || 0;
+      this.yawRate += ((dt > 0 ? wrapPi(this.heading - h0) / dt : 0) - this.yawRate) * ease(4, dt);
+    } else if (this.mover) {
       const h = this.mover.step(dt);
       this.v = this.mover.v; this.x = this.mover.p[0]; this.z = this.mover.p[1];
       const h0 = this.heading;
@@ -352,7 +398,11 @@ class Boat {
   // on the water: the level, the swell under the hull (three points along the keel), the roll of the strokes
   settle(dt) {
     const L = this.layer, f = { x: Math.cos(this.heading), z: -Math.sin(this.heading) };
-    const level = L.levelAt(this.x, this.z), w = (a) => L.waveAt(this.x + f.x * a, this.z + f.z * a);
+    // (p2 C: the level looked up again only after a few metres moved (a search of the cells round it); the swell only
+    // for a hull drawn whole: a far hull rides the level)
+    const lc = this.lvl;
+    if (!lc || Math.abs(lc.x - this.x) + Math.abs(lc.z - this.z) > 4) this.lvl = { x: this.x, z: this.z, v: L.levelAt(this.x, this.z) };
+    const level = this.lvl.v, full = !!this.near || this.dist < 260, w = (a) => (full ? L.waveAt(this.x + f.x * a, this.z + f.z * a) : 0);
     const hb = w(2), hs = w(-2), hm = w(0);
     const y = level + FLOAT_OFFSET + (hb + hs + hm) / 3, pitch = Math.atan2(hb - hs, 4) * 0.6 + this.v * 0.01;
     const roll = this.yawRate * 0.1 + 0.012 * this.stroke.power * Math.sin(this.stroke.phase * Math.PI * 2);
@@ -372,11 +422,20 @@ class Boat {
     const S = this.stroke;
     for (const p of this.crew) {
       const B = p.bind; if (!B || B.kind !== 'crew') continue;
-      const st = p.state, stern = p.seat === 'stern';
-      st.mode = 'paddle'; st.stroke = S.phase; st.side = stern ? S.side : -S.side; st.power = S.power; st.drive = this.v > 0.08 ? 1 : 0;
+      const st = p.state, stern = p.seat === 'stern', bow = p.seat === 'bow';
+      // (p2 C: a third in the middle paddles on the stern's side, a beat behind)
+      st.mode = 'paddle'; st.stroke = bow || stern ? S.phase : (S.phase + 0.92) % 1; st.side = bow ? -S.side : S.side; st.power = S.power; st.drive = this.v > 0.08 ? 1 : 0;
       st.turn = stern ? clamp(this.yawRate * 3, -1, 1) : 0; st.hustle = false; st.fishing = null; st.speed = this.v;
-      placeFigure(B.pb, stern ? SEATS.stern.x : SEATS.bow.x, 0, 0);
+      const f = B.pb.paddler; f.scale.setScalar(1);
+      placeFigure(B.pb, seatX(p.seat), 0, 0);
       B.stroke.pose(dt, B.paddle);
+      // (p2 C: a kid kneels smaller, the paddle with them: the pose made full size, then figure and paddle shrunk about
+      // the seat, so the hands keep the grip)
+      const k = clamp((p.look && p.look.wear && p.look.wear.scale) || 1, 0.6, 1);
+      if (k < 0.97) {
+        f.scale.setScalar(k); f.updateMatrix();
+        if (B.paddle) { const P = B.paddle.position; P.x = f.position.x + (P.x - f.position.x) * k; P.y = f.position.y + (P.y - f.position.y) * k; P.z = f.position.z + (P.z - f.position.z) * k; B.paddle.scale.setScalar(k); }
+      } else if (B.paddle && B.paddle.scale.x !== 1) B.paddle.scale.setScalar(1);
     }
   }
   // a small wake: flecks shed along the hull's sides as the player's, fewer
@@ -480,7 +539,7 @@ export class Actors {
     const pb = makeBody(body.fig, frame, p.state, { ground });
     const B = { body, pb, root, frame, s, kind: crew ? 'crew' : 'foot', gait: null, stroke: null, paddle: null, packMesh: null };
     if (crew) {
-      B.stroke = makeStroke(pb, { seatX: p.seat === 'stern' ? SEATS.stern.x : SEATS.bow.x });
+      B.stroke = makeStroke(pb, { seatX: seatX(p.seat) });
       B.paddle = new THREE.Mesh(this.paddleGeo, this.material); B.paddle.castShadow = true;
       root.add(B.paddle);
       this.reflect(body.group, true); this.reflect(B.paddle, true);
@@ -488,15 +547,19 @@ export class Actors {
       B.gait = makeGait(pb);
       this.reflect(body.group, false);
     }
-    if (p.pack && !crew) {
-      // a Duluth pack on the back, as the player's rides (canoe.js seatPacks)
-      const P = PACKS.gear, m = new THREE.Mesh(this.packGeo[0], this.material);
-      m.castShadow = true; m.receiveShadow = true;
-      m.quaternion.copy(BACK_Q); m.position.set(-0.135 - P.D * 0.36, 0.1 - P.H / 2, 0);
-      body.fig.bones.chest.add(m); B.packMesh = m;
-    }
     p.bind = B;
+    if (p.pack && !crew) this.packOn(p, true);
     return true;
+  }
+  // a Duluth pack on the back, as the player's rides (canoe.js seatPacks), or taken off
+  packOn(p, on) {
+    const B = p.bind; if (!B) return;
+    if (!on) { if (B.packMesh) { B.packMesh.removeFromParent(); B.packMesh = null; } return; }
+    if (B.packMesh) return;
+    const P = PACKS.gear, m = new THREE.Mesh(this.packGeo[0], this.material);
+    m.castShadow = true; m.receiveShadow = true;
+    m.quaternion.copy(BACK_Q); m.position.set(-0.135 - P.D * 0.36, 0.1 - P.H / 2, 0);
+    B.body.fig.bones.chest.add(m); B.packMesh = m;
   }
   unbind(p) {
     const B = p.bind; if (!B) return;
@@ -517,8 +580,8 @@ export class Actors {
     if (!h && this.hulls.length < NEAR_HULLS) { h = new NearHull(this); this.hulls.push(h); }
     if (!h) return false;
     h.owner = a; a.near = h;
-    if (a instanceof Boat) { h.pivot.position.set(0, HULL_PIVOT, 0); h.pivot.rotation.set(0, 0, 0); a.root.add(h.pivot); h.dress(this, a.hullColour, a.packs, false); this.reflect(h.pivot, true); }
-    else { a.hull = h; h.dress(this, a.hullColour, 0, true); this.reflect(h.pivot, false); }
+    if (a instanceof Boat) { h.pivot.position.set(0, HULL_PIVOT, 0); h.pivot.rotation.set(0, 0, 0); a.root.add(h.pivot); h.packsShown = a.crew.some((c) => c.seat === 'mid') ? Math.min(1, a.packs) : a.packs; h.dress(this, a.hullColour, h.packsShown, false); this.reflect(h.pivot, true); }
+    else { a.hull = h; h.packsShown = -1; h.dress(this, a.hullColour, 0, true); this.reflect(h.pivot, false); }
     h.pivot.visible = true;
     return true;
   }
@@ -541,7 +604,7 @@ export class Actors {
     for (const p of this.people) { p.dist = p.boat ? p.boat.dist : Math.hypot(p.x - vx, p.z - vz); p.pri = p.boat ? p.boat.pri : pri(p.x, p.z, p.dist); }
     // the near hulls: boats within 250 m and carriers within a figure's reach, nearest first, six at most
     const hullWant = [];
-    for (const b of this.boats) if (b.dist < (b.near ? NEAR_R[1] : NEAR_R[0])) hullWant.push(b);
+    for (const b of this.boats) if (!b.hidden && b.dist < (b.near ? NEAR_R[1] : NEAR_R[0])) hullWant.push(b);
     for (const p of this.people) if (p.mode === 'carry' && p.dist < (p.hull ? FIG_R[1] : FIG_R[0])) hullWant.push(p);
     hullWant.sort((a, b) => a.pri - b.pri);
     const keepH = new Set(hullWant.slice(0, NEAR_HULLS));
@@ -551,29 +614,42 @@ export class Actors {
     // (a boat's crew all together or none, so no hull goes by with half its crew)
     const units = [];
     for (const p of this.people) if (!p.boat && p.dist < (p.bind ? FIG_R[1] : FIG_R[0])) units.push({ pri: p.pri, ps: [p] });
-    for (const b of this.boats) if (b.near && b.crew.length && b.dist < (b.crew.some((c) => c.bind) ? FIG_R[1] : FIG_R[0])) units.push({ pri: b.pri, ps: b.crew });
+    for (const b of this.boats) if (b.near && !b.hidden && b.crew.length && b.dist < (b.crew.some((c) => c.bind) ? FIG_R[1] : FIG_R[0])) units.push({ pri: b.pri, ps: b.crew });
     units.sort((a, b) => a.pri - b.pri);
+    // (p2 C: as many as the pool has free besides those already drawn: a shared pool, npcs.js's eight, lends what the
+    // store's people and the parties' camps leave; a unit that cannot be drawn whole is not drawn at all)
+    const cap = Math.min(FIGS, typeof this.pool.free === 'function' ? this.people.filter((p) => p.bind).length + this.pool.free() : FIGS);
     const figWant = [];
-    for (const u of units) if (figWant.length + u.ps.length <= FIGS) figWant.push(...u.ps);
+    for (const u of units) if (figWant.length + u.ps.length <= cap) figWant.push(...u.ps);
     const keepF = new Set(figWant);
     for (const p of this.people) {
       if (p.bind && (!keepF.has(p) || (p.bind.kind === 'crew') !== (p.mode === 'crew' && !!p.boat) || (p.bind.kind === 'crew' && p.bind.root !== (p.boat && p.boat.root)))) this.unbind(p);
     }
-    for (const p of figWant) if (!p.bind) this.bindFigure(p);
+    for (const u of units) {
+      if (!keepF.has(u.ps[0])) continue;
+      for (const p of u.ps) if (!p.bind) this.bindFigure(p);
+      if (u.ps.length > 1 && !u.ps.every((p) => p.bind)) for (const p of u.ps) if (p.bind) this.unbind(p);
+    }
     // the poses
     for (const b of this.boats) {
-      if (b.near) { if (!b.root.parent) this.group.add(b.root); b.placeRoot(); b.poseCrew(dt); }
-      else if (b.root.parent) b.root.removeFromParent();
+      if (b.near) {
+        if (!b.root.parent) this.group.add(b.root);
+        // (p2 C: one pack in the hull with someone kneeling in the middle, two without)
+        const n = b.crew.some((c) => c.seat === 'mid') ? Math.min(1, b.packs) : b.packs;
+        if (b.near.packsShown !== n) { b.near.packsShown = n; b.near.dress(this, b.hullColour, n, false); }
+        b.placeRoot(); b.poseCrew(dt);
+      } else if (b.root.parent) b.root.removeFromParent();
       b.wake(dt, this.ripples, b.dist < WAKE_R && !!b.near);
     }
     for (const p of this.people) {
       if (!p.bind) continue; // (a carrier's hull joins the graph on its shoulders, in the carry pose)
+      if (p.bind.kind === 'foot' && !!p.bind.packMesh !== !!p.pack) this.packOn(p, p.pack); // (p2 C: a pack taken up or set down)
       p.pose(dt);
     }
     // the far hulls: boats past the near ones, to 1.2 km
     if (this.far) {
       this.origin.set(Math.round(vx / 64) * 64, 0, Math.round(vz / 64) * 64);
-      const far = this.boats.filter((b) => !b.near && b.dist < FAR_R).sort((a, b) => a.dist - b.dist);
+      const far = this.boats.filter((b) => !b.near && !b.hidden && b.dist < FAR_R).sort((a, b) => a.dist - b.dist);
       this.far.write(far, this.origin);
     }
     const ms = performance.now() - t0;

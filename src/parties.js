@@ -36,17 +36,32 @@
 //   parties.campsAt(absDay, hours)  the stays at a site then: [{ stay, party, site (the world's record), i, key, d? }]
 //   parties.live                Map key -> camp: the ones holding their sites now (party-camps.js draws these)
 //   parties.partyAt(key), parties.partiesOn(lakeId, absDay), parties.partiesNear(x, z, r), parties.stats()
+//
+// p2 C, their days on the move (people phase 2; party-moves.js draws them): each stay records the carries of the day
+// they came (viaIn) and the party those home (viaOut), without drawing on the schedule's rng. legPlan(party, k) is
+// leg k's day as movement, fitted to the schedule's hours: off at the leave hour (the canoes in the water MOVE.launch
+// before), the water legs at their pace, each carry in a line (a second trip back for the packs where they outnumber
+// the hands), lunch at the carry nearest midday or a stop afloat, in at the next stay's land hour. A pure function of
+// the index (the sites, the launches, the trails' lengths), so a reload or another client has them where they were.
+//   parties.legsOn(absDay) -> [{ party, k }]   parties.legPlan(party, k)   parties.crewOf(party)
+//   parties.arrivalOf(stay), parties.departureOf(stay)   (party-camps.js: the camp comes up as they land)
+//   parties.seenIn   stays whose landing you see (party-moves.js): their camp may come up while you look
 import { mulberry32 } from './rng.js';
 import { seasonAt } from './season.js';
 import SITE_LAKES from './site-lakes.json';
 
-// The daily overnight paddle quotas (May 1 – Sep 30) by entry point number, after recreation.gov's list as far as it was
-// known when this was written (Moose Lake 27, Lake One 18, Sawbill 14, as the plan has them; Trout, Fall and Little
-// Vermilion with their motor permits in): the small ones are estimates, to check against the current year's list.
+// The daily overnight paddle quotas (May 1 – Sep 30) by entry point number. p2 C: checked against the real numbers,
+// recreation.gov permit 233396 (BWCAW Overnight Paddle, Motor and Hiking, Superior National Forest): each entry point's
+// overnight paddle (OP) division, its daily permit total over June–August 2026, read 2026-10-26 from
+// https://www.recreation.gov/api/permits/233396/availability/month joined to /api/permitcontent/233396's divisions.
+// Phase 1's table, written from memory, had Lake One 18 (it is 13), Sawbill 14 (11), Seagull 13 (8), Saganaga 12 (15)
+// and most small ones a little high. The motor (OM) permits are left out (no motorboats in the game); a restricted
+// permit from the same landing is added in: Mudro Lake 22 with 23 (2 + 5), Snowbank 27 with 28 (8 + 1), Little
+// Vermilion 12 with 12A, Lac La Croix only (6 + 6).
 export const QUOTA = {
-  1: 14, 4: 4, 6: 2, 7: 2, 8: 1, 9: 2, 12: 7, 14: 9, 16: 7, 19: 1, 20: 2, 22: 3, 24: 14, 25: 27, 26: 4, 27: 8, 29: 1, 30: 18,
-  31: 4, 32: 2, 33: 2, 34: 3, 35: 5, 36: 5, 37: 9, 38: 14, 39: 2, 40: 2, 41: 8, 43: 1, 44: 1, 45: 1, 47: 4, 48: 3, 49: 3,
-  50: 3, 51: 4, 52: 3, 54: 13, 55: 12, 57: 2, 58: 2, 60: 5, 61: 2, 62: 3, 64: 4, 66: 1, 67: 1, 68: 2, 69: 2, 70: 2, 75: 2,
+  1: 12, 4: 3, 6: 2, 7: 2, 8: 1, 9: 1, 12: 12, 14: 4, 16: 5, 19: 1, 20: 2, 22: 7, 24: 14, 25: 27, 26: 2, 27: 9, 29: 1, 30: 13,
+  31: 3, 32: 2, 33: 2, 34: 2, 35: 2, 36: 4, 37: 7, 38: 11, 39: 2, 40: 2, 41: 7, 43: 1, 44: 1, 45: 1, 47: 3, 48: 2, 49: 2,
+  50: 3, 51: 5, 52: 4, 54: 8, 55: 15, 57: 3, 58: 2, 60: 2, 61: 1, 62: 2, 64: 3, 66: 1, 67: 1, 68: 1, 69: 1, 70: 2, 75: 1,
   77: 2, 80: 1, 84: 1,
 };
 const QUOTA_ELSE = 3;          // an entry point not in the table
@@ -79,6 +94,23 @@ export const KINDS = {
 // stayIn: how often the first night is on the entry lake itself, where it has sites (more for a late put-in, PARTIES.late)
 const KIND_LIST = Object.keys(KINDS);
 
+// p2 C: a party's travel day as movement (legPlan below; party-moves.js draws it). Speeds are of game time, so a party
+// is time-lapsed with the clock as the player is: 4 km/h on the water at life (seen at about 4.4 m/s at Trip, slower
+// than you), and on a trail what the player's carry makes good per game hour (0.62 m/s: seen at 2.5 m/s at Trip)
+export const MOVE = {
+  paddle: 4 / 3.6, paddleMin: 2.8 / 3.6, paddleMax: 5.6 / 3.6, // m/s on the water
+  carry: 0.65, back: 0.8,  // m/s on a trail: loaded (a canoe or a pack), and walking back empty for the second load
+  detour: 1.22, add: 60,   // a water leg's length: the straight line times this, plus this (m)
+  ramp: 25,                // game seconds to get under way and to stop (each end of a water leg)
+  launch: 0.25,            // h at the landing before they push off (the canoes in the water, loading)
+  land: 0.3,               // h at the landing after they come in, unloading (the camp comes up)
+  out: 0.06, in: 0.08,     // h: out of the canoes at a carry, and in again at the far end
+  gap: 9,                  // m between carriers on a trail, all at one pace (nobody passes)
+  turn: 0.02,              // h at the far end before walking back for the second load
+  lunch: [0.4, 1.0], noon: 12.5, // h of lunch, at the carry nearest midday (or drifting on a long crossing)
+  pace: { pair: 1, friends: 1, family: 0.86, group: 0.9, solo: 1.08 },
+};
+
 export const PARTY = 'party:';
 const AREA = 25; // m round a site's ring that are its area (camp.js AREA_R)
 export const absDay = (year, doy) => Math.round(Date.UTC(year, 0, doy) / 86400000); // as trip.js and tasks.js
@@ -87,6 +119,7 @@ const seeded = (...n) => mulberry32(n.reduce((h, x, i) => (Math.imul(h ^ ((x | 0
 const hashStr = (s) => { let h = 2166136261; for (const c of String(s || '')) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 const between = (rng, [a, b]) => a + Math.floor(rng() * (b - a + 1));
 const lerp = (a, b, t) => a + (b - a) * t;
+const polyLen = (pts) => { let s = 0; for (let i = 1; i < (pts || []).length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return s; };
 export const siteKey = (c) => `${Math.round(c.x)}:${Math.round(c.z)}`; // camp.js campKey
 const FILLS = new Map();
 export function fillOn(doy) {
@@ -110,6 +143,7 @@ export class Parties {
     this.cache = new Map();  // `${ep}:${day}` -> the parties put in there that day
     this.blocks = new Map(); // block key -> the sweep
     this.t = 0; this.lastNow = null; this.lastAt = null; this.spokenSet = new Set(); this.blocked = new Set();
+    this.seenIn = new Set(); // p2 C: stays whose party you see land (party-moves.js): their camp comes up as they unload
     this.sig = '';
     this.index();
   }
@@ -203,7 +237,8 @@ export class Parties {
       const kid = kind === 'family' && i >= 2, young = kind === 'group' && i >= 1;
       members.push({ female: rng() < (kid ? 0.5 : 0.45), age: kid ? 'kid' : young ? (rng() < 0.6 ? 'young' : 'adult') : kind === 'solo' && rng() < 0.3 ? 'old' : 'adult' });
     }
-    const canoes = size === 1 ? 1 : Math.min(4, Math.ceil(size / (size >= 7 ? 2.5 : 2)));
+    // (p2 C: a family's kids ride in the middle, so three or five of them take two canoes, not three)
+    const canoes = size === 1 ? 1 : Math.min(4, Math.ceil(size / (size >= 7 || kind === 'family' ? 2.5 : 2)));
     const tents = size === 1 ? 1 : Math.min(4, Math.ceil(size / 2));
     const id = `${e.ep}-${d}-${k}`;
     const party = { id, holder: PARTY + id, ep: e.ep, day: d, slot: k, kind, size, members, canoes, tents, nights, stays: [], putIn: 8.5 + rng() * 4, look: rng() };
@@ -215,35 +250,48 @@ export class Parties {
   route(party, e, rng) {
     const K = KINDS[party.kind], visited = new Set([e.basin]), out = Math.ceil(party.nights / 2), O = [];
     let b = e.basin, at = { x: e.x, z: e.z };
+    // (p2 C: each outbound entry keeps the carries that brought it from the one before, `via`; a layover none. None of
+    // this draws on the rng, so the schedule is what phase 1 made)
+    const stay = (o) => ({ ...o, via: [] });
     for (let i = 0; i < out; i++) {
-      if (i > 0 && rng() < K.layover) { O.push({ ...O[O.length - 1] }); continue; } // a day at the same site
+      if (i > 0 && rng() < K.layover) { O.push(stay(O[O.length - 1])); continue; } // a day at the same site
       const km = i === 0 ? between(rng, K.first) : between(rng, K.km);
       // (a busy landing on a lake of few sites, Moose Lake's 27 a day for seven, sends most of them on)
       const room = Math.min(1, this.sitesIn(b).length / Math.max(1, (QUOTA[e.ep] ?? QUOTA_ELSE) * 0.6));
       const stayIn = i === 0 && this.sitesIn(b).length && rng() < (K.stayIn + (party.putIn > PARTIES.late[0] ? PARTIES.late[1] : 0)) * room;
-      const w = stayIn ? { basin: b, in: null, firstOut: null } : this.walk(b, km * 1000, visited, rng, at, i === 0 ? room : 1, e);
-      if (!this.sitesIn(w.basin).length) { if (!O.length) return []; O.push({ ...O[O.length - 1] }); continue; } // nowhere to camp out there: a layover
+      const w = stayIn ? { basin: b, in: null, firstOut: null, via: [] } : this.walk(b, km * 1000, visited, rng, at, i === 0 ? room : 1, e);
+      if (!this.sitesIn(w.basin).length) { if (!O.length) return []; O.push(stay(O[O.length - 1])); continue; } // nowhere to camp out there: a layover
       if (O.length && w.basin !== b) O[O.length - 1].out = w.firstOut;
-      if (w.basin === b && O.length) { O.push({ ...O[O.length - 1] }); continue; }
-      O.push({ basin: w.basin, in: w.in || at, out: null });
+      if (w.basin === b && O.length) { O.push(stay(O[O.length - 1])); continue; }
+      O.push({ basin: w.basin, in: w.in || at, out: null, via: w.basin === b ? [] : w.via });
       b = w.basin; at = w.in || at;
     }
     for (const o of O) o.out = o.out || o.in;
     // night by night: out, then back (a layover at the far end, then the outbound basins in turn)
     const nightly = [];
     for (let i = 0; i < party.nights; i++) {
-      if (i < out) nightly.push(O[i]);
-      else { const o = O[Math.max(0, out - 1 - (i - out))]; nightly.push({ basin: o.basin, in: o.out, out: o.in }); }
+      if (i < out) nightly.push({ ...O[i], oi: i });
+      else { const oi = Math.max(0, out - 1 - (i - out)), o = O[oi]; nightly.push({ basin: o.basin, in: o.out, out: o.in, oi }); }
     }
+    // p2 C: the carries from the outbound entry a to b (b > a: on out; b < a: back the way they came, each carry turned)
+    const between2 = (a, b2) => {
+      const out2 = [];
+      if (b2 > a) for (let j = a + 1; j <= b2; j++) out2.push(...O[j].via);
+      else for (let j = a; j > b2; j--) for (const c of O[j].via.slice().reverse()) out2.push({ p: c.p, end: 1 - c.end });
+      return out2;
+    };
     // a run of nights in one basin is one stay at one site
     const stays = [];
     for (let i = 0; i < nightly.length; i++) {
       const n = nightly[i], last = stays[stays.length - 1];
-      if (last && last.basin === n.basin) { last.end++; continue; }
+      if (last && last.basin === n.basin) { last.end++; last.oi = n.oi; continue; }
       const land = i === 0 ? Math.min(18.5, Math.max(party.putIn + 2, 14.5 + rng() * 3.5)) : 15 + rng() * 3.5;
-      stays.push({ id: `${party.id}/${i}`, party, basin: n.basin, start: party.day + i, end: party.day + i + 1, land, leave: 0, in: n.in, out: n.out, seed: rng() * 1e9 });
+      // (p2 C: viaIn, the carries of the day they came: from the landing, or from the stay before)
+      const viaIn = last ? between2(last.oi, n.oi) : between2(-1, n.oi);
+      stays.push({ id: `${party.id}/${i}`, party, basin: n.basin, start: party.day + i, end: party.day + i + 1, land, leave: 0, in: n.in, out: n.out, seed: rng() * 1e9, oi: n.oi, viaIn });
     }
     for (const s of stays) s.leave = 8 + rng() * 2.5;
+    party.viaOut = stays.length ? between2(stays[stays.length - 1].oi, -1) : []; // p2 C: the carries home
     return stays;
   }
   // A day's travel: about `metres` on from `at` in basin b (across the water to a portage's landing, over the carry),
@@ -251,6 +299,7 @@ export class Parties {
   // it stops short rather than run far past the day's distance where it can camp
   walk(b, metres, visited, rng, at, room = 1, home = at) {
     let cur = b, firstOut = null, inPt = null, pos = at, gone = 0;
+    const via = []; // p2 C: the carries crossed, in order ({ p: portage index, end: the launch they start from })
     for (let s = 0; s < 10; s++) {
       const camps = this.sitesIn(cur).length > 0;
       if (camps && gone >= metres * 0.6) break;
@@ -270,8 +319,9 @@ export class Parties {
       if (!firstOut) firstOut = { x: here.x, z: here.z };
       inPt = { x: there.x, z: there.z }; pos = inPt; gone += leg;
       visited.add(q.to); cur = q.to;
+      via.push({ p: q.portage, end: q.end });
     }
-    return { basin: cur, in: inPt, firstOut, gone };
+    return { basin: cur, in: inPt, firstOut, gone, via };
   }
   // how much a stay likes each site of its basin (lower is better): nearest the way in and the way on, a little jitter
   prefs(s) {
@@ -413,12 +463,175 @@ export class Parties {
       if (this.live.has(key)) continue;
       const hd = reg.holder(key);
       if (hd) { if (hd !== c.party.holder) this.blocked.add(c.stay.id); else this.live.set(key, c); continue; }
-      if (!jump && this.watched(c.site)) continue;
+      if (!jump && this.watched(c.site) && !this.seenIn.has(c.stay.id)) continue; // (p2 C: unless you saw them come in)
       if (reg.claim(key, c.party.holder)) this.live.set(key, c);
     }
     this.spokenSet = this.spokenOn(T, h);
     for (const key of this.live.keys()) this.spokenSet.delete(key);
   }
+
+  // --- p2 C: the days on the move ------------------------------------------------------------------------------
+  // Who sits where and who carries what, from the party's id (its own rng, so the schedule's is untouched): boats
+  // [[member index, ...]] (stern, bow, then the middle: the able ones in the sterns first, the kids in the middle), the
+  // packs, whether a canoe's carrier wears a pack too (yoke and pack), each canoe's hull, and the carry: who takes what
+  // over first, and who walks back for the second load where the packs outnumber the hands
+  crewOf(party) {
+    if (party.crew) return party.crew;
+    const r = seeded(hashStr(party.id), 0xc4e3), n = Math.max(1, party.canoes), M = party.members;
+    const able = M.map((m, i) => i).filter((i) => M[i].age !== 'kid'), kids = M.map((m, i) => i).filter((i) => M[i].age === 'kid');
+    const order = [...able, ...kids], boats = Array.from({ length: n }, () => []);
+    order.forEach((i, j) => boats[j % n].push(i));
+    const light = /^(pair|solo|friends)$/.test(party.kind) && r() < 0.35;
+    const packs = Math.max(1, Math.round(M.length * (light ? 0.75 : 1.1) + (light ? 0 : 0.5)));
+    const yokePack = r() < 0.6, same = party.kind === 'group' && r() < 0.7; // (a group's canoes from one outfitter)
+    const hullOf = () => { const x = r(); return x < 0.55 ? 'aluminium' : x < 0.86 ? 'kevlar' : 'forest'; };
+    const h0 = hullOf(), hulls = boats.map(() => (same ? h0 : hullOf()));
+    // the carry: the sterns take the canoes (a pack on their backs too when yokePack), the other able ones a pack each,
+    // the kids walk; the packs left over go on a second trip, carried by the pack carriers first, then the canoes'
+    let left = packs;
+    const loads = new Map(), first = [];
+    boats.forEach((b, c) => { const i = b[0]; const pk = yokePack && left > 0 && M[i].age !== 'kid'; if (pk) left--; loads.set(i, { canoe: c, pack: pk }); first.push(i); });
+    for (const i of able) if (!loads.has(i)) { const pk = left > 0; if (pk) left--; loads.set(i, { canoe: null, pack: pk }); first.push(i); }
+    for (const i of kids) if (!loads.has(i)) { loads.set(i, { canoe: null, pack: false }); first.push(i); }
+    const second = [];
+    for (const i of [...able.filter((i) => loads.get(i).canoe == null), ...able.filter((i) => loads.get(i).canoe != null)]) { if (left <= 0) break; second.push(i); left--; }
+    return (party.crew = { boats, hulls, packs, light, yokePack, loads, first, second, pace: (MOVE.pace[party.kind] || 1) * (0.92 + 0.16 * r()), lunch: MOVE.lunch[0] + r() * (MOVE.lunch[1] - MOVE.lunch[0]), r: r() });
+  }
+  // one carry's own clock (seconds from the moment they land at its near end): each person's walks, the canoes lifted and
+  // set down, and when the last of them is over. Everyone loaded goes at one pace in a line MOVE.gap apart, so nobody
+  // passes; the second trip walks back as each comes in, and goes over again in the order they came
+  carrySchedule(crew, L) {
+    const v = MOVE.carry, vb = MOVE.back, u = MOVE.out * 3600, gap = MOVE.gap / v, people = new Map(), boats = [];
+    let done = u, lastStart = u;
+    crew.first.forEach((i, j) => {
+      const ld = crew.loads.get(i), s = u + j * gap, e = s + L / v;
+      people.set(i, [{ kind: ld.canoe != null ? 'carry' : 'walk', dir: 1, s, e, canoe: ld.canoe, pack: ld.pack }]);
+      if (ld.canoe != null) boats[ld.canoe] = { lift: s, down: e };
+      done = Math.max(done, e); lastStart = s;
+    });
+    let prev = -Infinity;
+    const back = crew.second.slice().sort((a, b) => people.get(a)[0].e - people.get(b)[0].e);
+    for (const i of back) {
+      const w = people.get(i), b0 = w[0].e + MOVE.turn * 3600, b1 = b0 + L / vb;
+      const s2 = Math.max(b1, prev + gap, lastStart + gap), e2 = s2 + L / v;
+      w.push({ kind: 'walk', dir: -1, s: b0, e: b1, canoe: null, pack: false }, { kind: 'walk', dir: 1, s: s2, e: e2, canoe: null, pack: true });
+      prev = s2; done = Math.max(done, e2);
+    }
+    return { L, people, boats, done, trips: back.length ? 2 : 1 };
+  }
+  // the day each leg is paddled: leg k of a party runs from the landing (k 0) or stay k-1's site, to stay k's site or,
+  // for k = stays.length, home to the landing. On (abs day T): [{ party, k }]
+  legsOn(T) {
+    const blk = this.block(T), key = `${blk.key}|${T}`;
+    if (this.legsKey === key) return this.legsList;
+    const out = [], seen = new Set();
+    for (const s of blk.stays) {
+      const p = s.party;
+      if (s.start === T) out.push({ party: p, k: p.stays.indexOf(s) });
+      if (p.exit === T && !seen.has(p)) { seen.add(p); out.push({ party: p, k: p.stays.length }); }
+    }
+    this.legsKey = key; this.legsList = out;
+    return out;
+  }
+  // The plan of leg k: where they push off and land, the water legs and the carries between, and the clock of it, fitted
+  // to the schedule's hours: away at the stay's leave hour (the put-in's for the first) and in at the next stay's land
+  // hour, at their pace with lunch at the carry nearest midday (or drifting, on a day of one long crossing); slower where
+  // the day is long, faster (to MOVE.paddleMax) where it is short, and in late only past that. Pure of the world's index
+  // (the sites, the carries' launches and lengths), so a reload or another client has them at the same place at the same
+  // hour; party-moves.js puts the water legs on the lakes. Null when an end has no site (a night with nowhere free).
+  //   { id, party, k, day, from, to, start, arrive, end, v, crew, segs: [{ kind: 'launch' | 'paddle' | 'drift' | 'carry' |
+  //     'landing' | 'land', h0, h1, ... }], box: [x0, z0, x1, z1] }  (hours of the day)
+  legPlan(party, k) {
+    const n = party.stays.length;
+    if (!(k >= 0 && k <= n)) return null;
+    const day = k < n ? party.stays[k].start : party.exit, blk = this.block(day);
+    const memo = party.legPlans || (party.legPlans = []), m = memo[k];
+    if (m && m.key === blk.key) return m.plan;
+    const plan = this.makeLeg(party, k, day, blk);
+    memo[k] = { key: blk.key, plan };
+    return plan;
+  }
+  makeLeg(party, k, day, blk) {
+    const w = this.world, n = party.stays.length, e = this.eps.find((x) => x.ep === party.ep);
+    if (!e) return null;
+    const siteEnd = (s) => { const i = blk.site.get(s); if (i == null || i < 0) return null; const c = w.campsites[i]; return { kind: 'site', i, x: c.x, z: c.z, stay: s, key: this.keyOf[i] }; };
+    const from = k === 0 ? { kind: 'ep', ep: e.ep, x: e.x, z: e.z } : siteEnd(party.stays[k - 1]);
+    const to = k === n ? { kind: 'ep', ep: e.ep, x: e.x, z: e.z } : siteEnd(party.stays[k]);
+    if (!from || !to) return null;
+    const crew = this.crewOf(party), chain = k < n ? party.stays[k].viaIn : party.viaOut || [];
+    const start = k === 0 ? party.putIn : party.stays[k - 1].leave, due = k < n ? party.stays[k].land : null;
+    // the parts in order: water, a carry, water, ... water
+    const parts = [], waterLeg = (a, b) => { const d = Math.hypot(b.x - a.x, b.z - a.z); return { kind: 'paddle', a: { x: a.x, z: a.z }, b: { x: b.x, z: b.z }, dist: d < 25 ? 0 : d * MOVE.detour + MOVE.add }; };
+    let at = from;
+    for (const c of chain) {
+      const P = w.portages[c.p]; if (!P || !P.launch) return null;
+      const near = P.launch[c.end], far = P.launch[1 - c.end];
+      parts.push(waterLeg(at, near));
+      const L = P.lengthM > 0 ? P.lengthM : polyLen(P.pts);
+      parts.push({ kind: 'carry', p: c.p, end: c.end, a: { x: near.x, z: near.z }, b: { x: far.x, z: far.z }, L, sched: this.carrySchedule(crew, L) });
+      at = far;
+    }
+    parts.push(waterLeg(at, to));
+    const water = parts.filter((q) => q.kind === 'paddle' && q.dist > 0), carries = parts.filter((q) => q.kind === 'carry');
+    const P = water.reduce((s, q) => s + q.dist, 0);
+    const fixed = carries.reduce((s, q) => s + q.sched.done + MOVE.in * 3600, 0) + water.length * MOVE.ramp * 2;
+    const v0 = MOVE.paddle * crew.pace, wantLunch = carries.length > 0 || P > 2500;
+    let v = v0, rest = 0, late = 0;
+    if (due != null) {
+      const W = (due - start) * 3600, slack = W - fixed - P / v0;
+      if (slack >= 0) {
+        // half the time to spare goes into an easier pace (to MOVE.paddleMin), the rest into stops
+        v = P > 0 ? Math.max(MOVE.paddleMin, P / (P / v0 + slack / 2)) : v0;
+        rest = Math.max(0, W - fixed - (P > 0 ? P / v : 0));
+      } else {
+        v = P > 0 ? Math.min(MOVE.paddleMax, Math.max(v0, P / Math.max(60, W - fixed))) : v0;
+        late = Math.max(0, fixed + (P > 0 ? P / v : 0) - W);
+      }
+    } else if (wantLunch && start < MOVE.noon - 1) rest = crew.lunch * 0.6 * 3600;
+    // the stops: lunch at the far end of the carry nearest midday (by the times without it), up to an hour and a half;
+    // the rest afloat on the longest water leg, a line over the side (up to three stops)
+    let lunchAt = null, lunch = 0;
+    if (rest > 0 && carries.length) {
+      let t = start * 3600, best = Infinity;
+      for (const q of parts) {
+        if (q.kind === 'paddle') t += q.dist > 0 ? q.dist / v + MOVE.ramp * 2 : 0;
+        else { t += q.sched.done; const d = Math.abs(t / 3600 - MOVE.noon); if (d < best) { best = d; lunchAt = q; } t += MOVE.in * 3600; }
+      }
+      lunch = Math.min(rest, Math.max(crew.lunch, 1.5) * 3600);
+    }
+    if (rest - lunch > 60 && water.length) water.reduce((a, b) => (b.dist > a.dist ? b : a), water[0]).drift = rest - lunch;
+    else lunch = rest; // (a minute left over: at the landing)
+    // the clock of it
+    const segs = [], H = (s) => s / 3600;
+    let t = start;
+    segs.push({ kind: 'launch', h0: start - MOVE.launch, h1: start, at: from });
+    for (const q of parts) {
+      if (q.kind === 'paddle') {
+        if (!(q.dist > 0)) continue;
+        const stops = q.drift > 0 ? (q.drift > 3 * 3600 ? 3 : q.drift > 1.5 * 3600 ? 2 : 1) : 0;
+        // the leg in stops + 1 pieces with a drift between each (lunch afloat, a line over the side)
+        for (let j = 0; j <= stops; j++) {
+          const u0 = j / (stops + 1), u1 = (j + 1) / (stops + 1);
+          segs.push({ kind: 'paddle', h0: t, h1: (t += H((q.dist * (u1 - u0)) / v + MOVE.ramp * 2)), a: q.a, b: q.b, u0, u1, dist: q.dist, v });
+          if (j < stops) segs.push({ kind: 'drift', h0: t, h1: (t += H(Math.max(0, q.drift - stops * MOVE.ramp * 2) / stops)), a: q.a, b: q.b, u: u1 }); // (each stop's own ramps come out of it)
+        }
+      } else {
+        segs.push({ kind: 'carry', h0: t, h1: (t += H(q.sched.done)), p: q.p, end: q.end, a: q.a, b: q.b, L: q.L, sched: q.sched });
+        const stay = q === lunchAt ? lunch : 0, h0 = t;
+        t += H(stay + MOVE.in * 3600);
+        segs.push({ kind: 'landing', h0, h1: t, p: q.p, end: q.end, at: q.b, inAt: t - MOVE.in, lunch: stay > 0 });
+      }
+    }
+    const arrive = t;
+    segs.push({ kind: 'land', h0: arrive, h1: arrive + MOVE.land, at: to });
+    let x0 = Math.min(from.x, to.x), z0 = Math.min(from.z, to.z), x1 = Math.max(from.x, to.x), z1 = Math.max(from.z, to.z);
+    for (const q of carries) for (const pt of [q.a, q.b]) { x0 = Math.min(x0, pt.x); z0 = Math.min(z0, pt.z); x1 = Math.max(x1, pt.x); z1 = Math.max(z1, pt.z); }
+    return { id: `${party.id}#${k}`, party, k, day, from, to, start, arrive, end: arrive + MOVE.land, due, late: H(late), v, crew, segs, box: [x0, z0, x1, z1] };
+  }
+  // when a stay's party comes in to its site (the hour of the day its plan lands; the schedule's land hour without one)
+  // and when they push off from it (the canoes go in the water MOVE.launch before the leave hour): party-camps.js
+  arrivalOf(stay) { const p = stay.party, k = p.stays.indexOf(stay), plan = k >= 0 ? this.legPlan(p, k) : null; return plan ? plan.arrive : stay.land; }
+  departureOf(stay) { const p = stay.party, k = p.stays.indexOf(stay), plan = k >= 0 ? this.legPlan(p, k + 1) : null; return plan ? plan.start - MOVE.launch : stay.leave; }
 
   // --- what the others ask ------------------------------------------------------------------------------------
   partyAt(key) { const c = this.live.get(key); return c ? c.party : null; }

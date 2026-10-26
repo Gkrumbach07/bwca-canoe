@@ -15,6 +15,8 @@
 //   import { pointer } from './pointer.js';
 //   pointer.attach({ camera, player, scene, renderer, hud, chase, outfitter, fishing, photo, dialogue })
 //   pointer.register((ray, near) => [{ dist, miss?, target }]) -> off
+//   pointer.registerWater((ray, near) => [...]) -> off   p2 C: what the dot can point at from the canoe (a party's canoe
+//                           within talking reach): paddling, the dot shows only while one of these is pointed at
 //     ray   a THREE.Ray from the camera through the dot, the middle of the view (unit direction)
 //     near  { x, y, z (the walker's feet), reach (m), flat(x, z) (m from the walker, level),
 //             sphere(x, y, z, r), segment(ax, ay, az, bx, by, bz, r), box({ x, y, z, hx, hy, hz, heading }) }
@@ -128,6 +130,7 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _o = new THREE.Vector3
 class Pointer {
   constructor() {
     this.providers = new Set();
+    this.waterProviders = new Set(); // p2 C
     this.target = null; this.last = null;
     this.ray = new THREE.Ray();
     this.groundHit = null;
@@ -198,6 +201,7 @@ class Pointer {
     return this;
   }
   register(fn) { this.providers.add(fn); return () => this.providers.delete(fn); }
+  registerWater(fn) { this.waterProviders.add(fn); return () => this.waterProviders.delete(fn); }
   armed() { return !!(this.isArmed && this.isArmed()); }
 
   // --- the tests a provider uses ---------------------------------------------------------------------------------
@@ -262,12 +266,30 @@ class Pointer {
     return true;
   }
   inStore() { const o = this.outfitter; return !!(o && o.visit); }
+  // p2 C: in the canoe, in the game, nothing on the paper, no conversation, no camera to the eye, no rod up: the dot
+  // looks for a party's canoe to talk to (the water's providers), and shows only when it finds one
+  usableWater(shell = false) {
+    const p = this.player, h = this.hud, f = this.fishing;
+    if (!this.attached || shell || !p || p.mode !== 'paddle' || p.teleporting || !this.waterProviders.size) return false;
+    if (h && (h.paper || h.big)) return false;
+    if (this.dialogue && this.dialogue.talking) return false;
+    if (this.photo && this.photo.raised) return false;
+    if (this.quiet && this.quiet()) return false;
+    if (f && (f.rodUp || f.landed)) return false;
+    return true;
+  }
 
   // before player.update and everyone else's E and Q: E does the target's first, Q its second (both taken). Pointed at
   // nothing, E does nothing (in a store, until stream C's hotspots are here, it is left to the store); Q is left to
   // travel (packs.js: leave the canoe where you stepped out, the fetch). Sat down, E is the walker's: it stands him up.
   before() {
     const inp = this.input;
+    // p2 C: in the canoe, E on a party's canoe the dot is on (and nothing else of the dot's)
+    if (!this.usable() && this.usableWater() && this.target && this.target.e && inp.once.has('KeyE') && !inp.paused) {
+      inp.once.delete('KeyE');
+      try { this.target.e.run({ key: 'KeyE', keys: ['KeyE'], from: 'dot' }); } catch (err) { console.warn('pointer act', err); }
+      return;
+    }
     if (!this.usable()) return;
     // sat down: E stands you up (the fallback holds the input paused while you sit, so this comes before that)
     if (this.seated && this.seated()) { if (inp.once.has('KeyE') && this.stand) { inp.once.delete('KeyE'); this.stand(); } return; }
@@ -308,6 +330,7 @@ class Pointer {
     // fb3 A (the owner, 2026-10-25: "when i get in and paddle away, or pick up and walk away with the boat, the ghost
     // outline stays"): off the dot, the rim and the pool go too. The rim had kept the hull's geometry at the hull's
     // last matrix while you paddled or carried it away, a ghost of the canoe where it had lain.
+    if (!ok && this.usableWater(shell)) { this.updateWater(); return; } // p2 C
     if (!ok) { this.setTarget(null); this.groundHit = null; this.show(false); this.park(); return; }
     const cam = this.camera;
     cam.updateMatrixWorld();
@@ -355,6 +378,33 @@ class Pointer {
       if (q.text && this.target && this.target.e && this.target.e.verb && this.target.label && sameWords(q.text, `${this.target.e.verb} ${this.target.label}`)) q = { ...q, text: '' };
       if (q !== pr) p.prompt = q.text ? q : null;
     }
+  }
+  // p2 C: paddling, the ray through the middle of the view against the water's providers (a party's canoe within
+  // talking reach): the dot, its label and the pool under the canoe while one is pointed at, else nothing at all; the
+  // action line's E (Go ashore, by a bank) loses its key while the dot's E is a word with them
+  updateWater() {
+    const cam = this.camera, p = this.player;
+    cam.updateMatrixWorld(); cam.getWorldPosition(_o); cam.getWorldDirection(_d);
+    this.ray.origin.copy(_o); this.ray.direction.copy(_d).normalize();
+    const n = this.near;
+    n.x = p.x; n.z = p.z; n.y = p.altitude || 0; n.reach = REACH;
+    let best = null;
+    for (const fn of this.waterProviders) {
+      let list;
+      try { list = fn(this.ray, n, true); } catch (e) { if (!this.warned) { this.warned = true; console.warn('pointer provider', e); } continue; }
+      for (const c of list || []) {
+        if (!c || !c.target || !Number.isFinite(c.dist)) continue;
+        const miss = Number.isFinite(c.miss) ? c.miss : 0.5;
+        if (!best || miss < best.miss - 0.04 || (Math.abs(miss - best.miss) <= 0.04 && c.dist < best.dist)) best = { ...c, miss };
+      }
+    }
+    this.setTarget(best ? normalize(best.target) : null);
+    this.groundHit = null;
+    this.on = !!best;
+    if (!best) { this.show(false); this.park(); return; }
+    this.show(true); this.drawRim();
+    const pr = p.prompt;
+    if (pr && !pr.hold && pr.key === 'E') p.prompt = { ...pr, key: null, text: pr.text || '' };
   }
   setTarget(t) {
     const was = this.target;
@@ -484,6 +534,11 @@ export function peopleTargets(people) {
     }
     return out;
   };
+}
+// p2 C: the parties on the move (party-moves.js): one of them on foot within reach is "E Talk", and from the canoe one
+// of their canoes within talking reach (registered for the water too: registerWater)
+export function partyTargets(moves) {
+  return (ray, near, water = false) => (moves && typeof moves.targets === 'function' ? moves.targets(ray, near, water) : null);
 }
 // The berries and mushrooms (forage.js): a ripe patch pointed at within its reach is "E Pick" (a lookalike "E Look")
 export function forageTargets(forage, FORAGE) {

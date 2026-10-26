@@ -84,6 +84,8 @@ import { CULL } from './tiles.js'; // round A-C
 import { AutoWatch, prewarmPasses } from './quality.js'; // round A-C
 import { Parties } from './parties.js'; // round A-F
 import { PartyCamps } from './party-camps.js'; // round A-F
+import { PartyMoves } from './party-moves.js'; // p2 C
+import { partyTargets } from './pointer.js'; // p2 C
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -822,6 +824,26 @@ async function main() {
   { const distF = talk.distTo.bind(talk); talk.distTo = (sp) => { const d = distF(sp); return sp && sp.hear ? (d * 22) / sp.hear : d; }; }
   Object.assign(window.__game, { parties, partyCamps });
   { const warm = () => { try { parties.block(parties.today); partyCamps.warm(); } catch (e) { console.warn('parties', e); } }; if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 500); } // the week's sweep and the camps' pieces, behind the title
+  // p2 C: the parties on the move (people phase 2; the owner, 2026-10-26: "move onto moving parties"). parties.js plans
+  // each one's travel day (legPlan: off their site at the leave hour, the water and the carries, lunch, in at the next
+  // site at its land hour, the same on every reload); party-moves.js follows the legs within 1.5 km of you and draws
+  // them through the actor layer (its ranges and budgets). On the water a word by day within 80 m, a soft steer off you
+  // inside 25 m, E on a canoe within 4 m (the dot, from the canoe too) a word about their trip; on a portage the loaded
+  // carry has the trail (they wait at the landing while you carry, stop if you stand on the tread, step aside for you
+  // loaded) and a moment teaches it once. Run just before the actors' own update (after the camera); party-camps.js
+  // hands their camp over as they land and push off.
+  const moves = new PartyMoves({ world, parties, actors, tiles, player, day, camera, people: npcs, dialogue: talk, partyCamps });
+  partyCamps.moves = moves;
+  if (actorPool) actorPool.free = () => npcs.bodies.filter((b) => !b.who && !b.lent).length; // (what the people leave free: the actors' budget)
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { moves.update(dt); } catch (e) { if (!moves.warned) { moves.warned = true; console.warn('party-moves', e); } } upd(dt, ...a); }; }
+  pointer.register(partyTargets(moves)); pointer.registerWater(partyTargets(moves));
+  {
+    const pm = new Map(moves.moments().map((m) => [m.id, m]));
+    for (const m of pm.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const dueP = hints.due.bind(hints);
+    hints.due = (id, rec) => (pm.has(id) ? pm.get(id).due(rec) : dueP(id, rec));
+  }
+  window.__game.moves = moves;
   // camp join: and what the modules made after the compile above added to the scene (forage's glint, a sprite, compiled
   // the first time it winked over a ripe patch); programs already made are only looked up
   const warmed = prewarm(scene); // polish A: with the composer's target bound, as above
