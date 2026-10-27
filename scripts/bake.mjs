@@ -326,6 +326,28 @@ async function main() {
   //     between lakes do not merge lakes at different heights into one surface
   const isRiver = new Uint8Array(nLakes + 1);
   lakes.forEach((l, i) => { isRiver[i + 1] = l.river ? 1 : 0; });
+  // holes pass: a polygon mapped as plain water (no water=river tag) whose own ground falls a long way is a river reach,
+  // not a lake: the Louse River below Bug Lake (way/1528042253) falls 37 m, and levelled as one lake at its basin's
+  // level it sat in a trench 37 m deep at its head. The DEM over a lake is flat (hydro-flattened, LiDAR and 3DEP alike):
+  // over RIVER_SPREAD m between the 10th and the 60th percentile of its cells' heights, with RIVER_CELLS cells or more,
+  // it is levelled as a river.
+  {
+    const RIVER_SPREAD = 8, RIVER_CELLS = 30;
+    const count = new Int32Array(nLakes + 2);
+    for (let k = 0; k < N; k++) { const id = lakeId[k]; if (id && !isRiver[id]) count[id + 1]++; }
+    for (let id = 0; id <= nLakes; id++) count[id + 1] += count[id];
+    const fill = new Int32Array(nLakes + 1), samples = new Int16Array(count[nLakes + 1]);
+    for (let k = 0; k < N; k++) { const id = lakeId[k]; if (id && !isRiver[id]) samples[count[id] + fill[id]++] = hraw[k]; }
+    const made = [];
+    for (let id = 1; id <= nLakes; id++) {
+      const seg = samples.subarray(count[id], count[id + 1]);
+      if (seg.length < RIVER_CELLS) continue;
+      seg.sort();
+      const spread = (seg[Math.floor(seg.length * 0.6)] - seg[Math.floor(seg.length * 0.1)]) / 10;
+      if (spread > RIVER_SPREAD) { isRiver[id] = 1; lakes[id - 1].river = true; made.push(`${lakes[id - 1].osm} ${lakes[id - 1].name || ''} ${spread.toFixed(1)} m`); }
+    }
+    log(`${made.length} water polygons levelled as rivers (their ground falls over ${RIVER_SPREAD} m): ${made.slice(0, 40).join('; ')}`);
+  }
   const basin = new Int32Array(N).fill(-1);
   const basins = [];
   const riverBasin = new Int32Array(nLakes + 1).fill(-1);
@@ -495,7 +517,12 @@ async function main() {
       const nb = [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, y > 0 ? k - W : -1, y < H - 1 ? k + W : -1];
       for (const q of nb) if (q >= 0 && !assigned[q] && lakeId[q] && isRiver[lakeId[q]]) { assigned[q] = 1; level[q] = L; queue[tail++] = q; }
     }
-    log(`${fitted} waterway profiles fitted (${reversed} drawn upstream), ${tail} river cells levelled (${perched} line cells left to the spread: the fit stood over ${PERCH_MAX} m above their ground)`);
+    // and whatever no line nor the spread reached keeps its polygon's level (a river basin's one median, 530.5 m for the
+    // Louse River, which falls 40 m): never more than PERCH_MAX over the cell's own ground either; over it, the ground
+    // (the LiDAR's hydro-flattened surface, or the 3DEP's) is the water's level
+    let clamped = 0;
+    for (let k = 0; k < N; k++) if (lakeId[k] && isRiver[lakeId[k]] && level[k] > hraw[k] + PERCH_MAX * 10) { level[k] = hraw[k]; clamped++; }
+    log(`${fitted} waterway profiles fitted (${reversed} drawn upstream), ${tail} river cells levelled (${perched} line cells left to the spread, ${clamped} cells brought down to their ground: the level stood over ${PERCH_MAX} m above it)`);
   }
   // display level per polygon: lakes keep the basin level, rivers and creeks the mean of their cells
   {
