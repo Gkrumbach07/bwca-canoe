@@ -455,6 +455,7 @@ async function main() {
     const WIN = 15; // nodes (150 m) either side for the running low percentile
     let fitted = 0, reversed = 0, perched = 0;
     const PERCH_MAX = 6; // m a waterway's fitted level may stand over the DEM of a river cell it is laid on
+    const SUNK_MAX = 4; // m a river cell's level may lie under its DEM
     const win = [];
     for (const wway of waterways) {
       const pts = resample(wway.pts, cell);
@@ -520,9 +521,16 @@ async function main() {
     // and whatever no line nor the spread reached keeps its polygon's level (a river basin's one median, 530.5 m for the
     // Louse River, which falls 40 m): never more than PERCH_MAX over the cell's own ground either; over it, the ground
     // (the LiDAR's hydro-flattened surface, or the 3DEP's) is the water's level
-    let clamped = 0;
-    for (let k = 0; k < N; k++) if (lakeId[k] && isRiver[lakeId[k]] && level[k] > hraw[k] + PERCH_MAX * 10) { level[k] = hraw[k]; clamped++; }
-    log(`${fitted} waterway profiles fitted (${reversed} drawn upstream), ${tail} river cells levelled (${perched} line cells left to the spread, ${clamped} cells brought down to their ground: the level stood over ${PERCH_MAX} m above it)`);
+    // Nor more than SUNK_MAX under it: the fit's running low percentile lags the ground down a steep creek (150 m of
+    // window on a 5 % fall is 7 m), and a creek levelled 11 m under the LiDAR's ground was carved a trench that deep (the
+    // LiDAR's 10 m mean over a narrow creek is its banks' height, a metre or three over the water, so a little under it
+    // is right)
+    let clamped = 0, raised = 0;
+    for (let k = 0; k < N; k++) {
+      if (!lakeId[k] || !isRiver[lakeId[k]]) continue;
+      if (level[k] > hraw[k] + PERCH_MAX * 10) { level[k] = hraw[k]; clamped++; } else if (level[k] < hraw[k] - SUNK_MAX * 10) { level[k] = hraw[k] - SUNK_MAX * 10; raised++; }
+    }
+    log(`${fitted} waterway profiles fitted (${reversed} drawn upstream), ${tail} river cells levelled (${perched} line cells left to the spread, ${clamped} cells brought down to their ground: the level stood over ${PERCH_MAX} m above it, ${raised} up to ${SUNK_MAX} m under it)`);
   }
   // display level per polygon: lakes keep the basin level, rivers and creeks the mean of their cells
   {
