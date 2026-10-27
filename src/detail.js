@@ -12,12 +12,16 @@
 //   - the ground query (heightAt, tiles.js groundAt) answers from the finest chunk in: the walker, the canoe, the
 //     camera, the props and the lost items stand on what is drawn
 //   - the trees, the rocks, the props and the collision were placed on the 10 m ground; a chunk coming in (or
-//     going) re-seats them on what is drawn now, a few hundred a frame (reseat), and hides the cliff modules where the
-//     2 m ground carries the face itself (carriesFace)
+//     going) re-seats them on what is drawn now, a few hundred a frame (reseat); the cliff modules stay (HIDE_CLIFFS, carriesFace)
 //   - the grass is lifted onto it by a small offset map round the player (detailGrass)
 // `?detail=10` (or `?detail=off`) turns it off; without a `detail/` folder (older data, Quetico) nothing changes.
 // `__game.tiles.detail.setEnabled(false | true)` switches at runtime.
 import * as THREE from 'three';
+
+// The owner's call (2026-10-27): the cliff modules stay everywhere, over the 2 m ground too. The 2 m DEM rounds the
+// tall columnar walls (the Border Route palisades) into smooth slopes, so the modules keep drawing them, and the
+// doubled bands where a face is short (Lake One) are the accepted cost. true hides them where the ground carries the face.
+const HIDE_CLIFFS = false;
 import { surfaceAt } from './terrain-build.js';
 import { REFLECT_SHORE_LAYER } from './water.js';
 import { smoothstep } from './rng.js';
@@ -394,7 +398,7 @@ export class DetailStreamer {
   // up). Along its fall line, from 4 m in front of the foot to its back, the ground must rise by 0.6 of its height and
   // be 42 degrees or steeper over 4 m somewhere (the 2 m DEM draws a real face at 45-70 degrees: the palisades, Lake One).
   carriesFace(x, z, dx, dz, tall, deep) {
-    if (!this.installed[2].size) return false;
+    if (!HIDE_CLIFFS || !this.installed[2].size) return false;
     const c = this.at(x, z);
     if (!c || c.r !== 2) return false;
     const l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l, end = Math.max(8, Math.min(30, deep || l));

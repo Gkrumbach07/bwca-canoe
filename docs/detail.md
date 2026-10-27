@@ -134,6 +134,11 @@ item. This covers:
 
 ## The cliff modules
 
+**They stay everywhere** (the owner's call, 2026-10-27; `HIDE_CLIFFS = false` in `src/detail.js`). The 2 m DEM rounds
+the tall columnar walls, the Border Route palisades above all, into smooth 50–60° slopes, so the modules keep drawing
+them; where a face is short (Lake One) module and LiDAR face double up, the accepted cost. With `HIDE_CLIFFS = true`
+the test below applies again.
+
 A cliff module (`cliffs.js`, placed from the 10 m cliff channel by `placement.js cliffFeatures`) is hidden where a
 2 m chunk is in and the LiDAR already carries the face (`carriesFace`). The test runs along the module's fall line,
 from 4 m in front of its foot to its back:
