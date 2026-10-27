@@ -14,6 +14,15 @@ Pages' 1 GB, so v4 is served from **Cloudflare R2 at `https://data.gagekrumbach.
 The app finds the data through one build-time variable, `VITE_DATA_URL` (default `data/` next to the
 app). Everything below is about filling that in.
 
+## What is live from v4: the app on Pages, the data on R2
+
+`.github/workflows/pages.yml` builds `main` with `VITE_DATA_URL` set to its `DATA_URL_DEFAULT`,
+`https://data.gagekrumbach.com/bwca/v4/`, so the app fetches every tile, far tile and detail chunk from the bucket
+and nothing is unpacked next to it. A `DATA_URL` repository variable overrides that address; `DATA_URL=release`
+goes back to the release archive below. The upload: `DATA_SYNC_SRC=public-data-v4
+DATA_SYNC_DEST=r2:bwca-data/bwca/v4 npm run data:sync` (rclone; set `RCLONE_RETRIES=10`, since R2 answers an
+occasional 501 that a retry clears).
+
 ## What was live through v3: GitHub Pages with the data from a release
 
 v4 with the LiDAR detail (1.4 GB) does not fit Pages' 1 GB; it goes to R2 (below) under `bwca/v4/`. The

@@ -1,8 +1,7 @@
-# Builds the app and deploys it to GitHub Pages on every push to main. The map data (381 MB, gitignored) is
-# not in the repository. By default it comes from a GitHub release: the archive attached to the release named
-# by the DATA_RELEASE repository variable (default data-v3) is unpacked into dist/data, next to the app, which
-# is where the app looks when no DATA_URL is set. Set the DATA_URL variable instead to serve the data from a
-# bucket (then nothing is unpacked). See docs/HOSTING.md.
+# Builds the app and deploys it to GitHub Pages on every push to main. The map data (gitignored) is not in the
+# repository: since v4 (1.4 GB with the 2 m detail, past Pages' 1 GB) it is served from Cloudflare R2 at
+# DATA_URL_DEFAULT below, which the DATA_URL repository variable overrides. Set DATA_URL to 'release' to go back
+# to unpacking a GitHub release's archive (DATA_RELEASE, default data-v3) into dist/data. See docs/HOSTING.md.
 name: Deploy to GitHub Pages
 
 on:
@@ -14,6 +13,9 @@ permissions:
   contents: read
   pages: write
   id-token: write
+
+env:
+  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v4/
 
 concurrency:
   group: pages
@@ -36,9 +38,9 @@ jobs:
         env:
           # '/<repo>/' for a project site, '/' for a user site or a custom domain
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
-          VITE_DATA_URL: ${{ vars.DATA_URL }}
+          VITE_DATA_URL: ${{ vars.DATA_URL != 'release' && (vars.DATA_URL || env.DATA_URL_DEFAULT) || '' }}
       - name: Fetch the map data from the release
-        if: ${{ !vars.DATA_URL }}
+        if: ${{ vars.DATA_URL == 'release' }}
         env:
           GH_TOKEN: ${{ github.token }}
           DATA_RELEASE: ${{ vars.DATA_RELEASE || 'data-v3' }}
