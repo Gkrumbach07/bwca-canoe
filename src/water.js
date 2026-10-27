@@ -152,24 +152,8 @@ export const glslSurface = /* glsl */ `
   }
   float terrainAt(vec2 rel) { return bilinear(uHeightTex, rel); }
   // p2 B: bilinear between the cells (it was the cell's own level, so a graded river's surface stepped at every cell
-  // edge); a land cell holds the level of the water nearest it (rebuildAtlas), so a lake's is flat right to its shore.
-  // Holes pass: where water and land share the four cells, a land corner takes the lowest of the water corners instead.
-  // Beside a step (a falls, a creek against a perched pond) the flood's level stood the sheet's rim metres over the bank
-  // the terrain shapes to the water (grid.levelAt: the mean of the water corners), a ribbon of water in the air with the
-  // void under it; the lowest runs in under the bank. On level water it is the same level.
-  float levelAt(vec2 rel) {
-    vec2 f = (rel - uAtlas.xy) * uAtlas.z - 0.5;
-    vec2 fi = floor(f), a = f - fi;
-    ivec2 c = ivec2(fi);
-    vec4 l = vec4(cellSample(uLevelTex, c), cellSample(uLevelTex, c + ivec2(1, 0)), cellSample(uLevelTex, c + ivec2(0, 1)), cellSample(uLevelTex, c + ivec2(1, 1)));
-    vec4 w = step(vec4(cellSample(uShoreTex, c), cellSample(uShoreTex, c + ivec2(1, 0)), cellSample(uShoreTex, c + ivec2(0, 1)), cellSample(uShoreTex, c + ivec2(1, 1))), vec4(-1e-4));
-    float nw = dot(w, vec4(1.0));
-    if (nw > 0.5 && nw < 3.5) {
-      vec4 lw = mix(vec4(1e9), l, w);
-      l = mix(vec4(min(min(lw.x, lw.y), min(lw.z, lw.w))), l, w);
-    }
-    return mix(mix(l.x, l.y, a.x), mix(l.z, l.w, a.x), a.y);
-  }
+  // edge); a land cell holds the level of the water nearest it (rebuildAtlas), so a lake's is flat right to its shore
+  float levelAt(vec2 rel) { return bilinear(uLevelTex, rel); }
   float clarityAt(vec2 rel) { return cellSample(uClarityTex, atlasCell(rel)); }
   // d2 water: the water's colour here, bilinear: x the Secchi depth (m), y the CDOM (m^-1; 0 where the release has none)
   vec2 colourAt(vec2 rel) {
@@ -1003,6 +987,7 @@ export class WaterSystem {
     this.atlasI = i0; this.atlasJ = j0; this.atlasDirty = false;
     const shore = this.shore, level = this.level, height = this.height, cover = this.cover, clarity = this.clarity;
     const queue = this._queue || (this._queue = new Int32Array(N));
+    const wet = this._wet || (this._wet = new Uint8Array(N)); // (holes pass) the atlas's water cells
     let head = 0, tail = 0;
     // a row at a time, a fine tile's span of it read straight from the tile's arrays (the cell accessors cost a
     // division and a lookup a call, six calls a cell: 15-50 ms a rebuild); cells with no fine tile through them
@@ -1030,6 +1015,7 @@ export class WaterSystem {
             if (id) level[k] = w.levelCell(ci2, j);
           }
           // d2 water: the cell's own Secchi depth and CDOM where the tile has them, else its lake's (CDOM 0 on v3)
+          wet[k] = id ? 1 : 0;
           if (id) { clarity[k * 2] = sc > 0 ? sc : w.clarityOf(id); clarity[k * 2 + 1] = cd > 0 ? cd : w.cdomOf(id); queue[tail++] = k; } else level[k] = -9999;
         }
         li += span;
@@ -1043,6 +1029,26 @@ export class WaterSystem {
       if (y > 0 && level[k - A] === -9999) { level[k - A] = L; clarity[(k - A) * 2] = C; clarity[(k - A) * 2 + 1] = D; queue[tail++] = k - A; }
       if (y < A - 1 && level[k + A] === -9999) { level[k + A] = L; clarity[(k + A) * 2] = C; clarity[(k + A) * 2 + 1] = D; queue[tail++] = k + A; }
     }
+    // Holes pass: a land cell beside water (any of the eight round it) holds the lowest level of that water instead of the
+    // flood's. Beside a step (a falls, a rapids, a creek against a perched pond) the flood's level stood the patch's rim
+    // metres over the bank the terrain shapes to the water (grid.levelAt: the mean of the water corners), a ribbon of
+    // water in the air with the void under it; the lowest runs in under the bank, and the field stays one value a cell,
+    // so the surface stays continuous. On level water it is the same level.
+    const low = this._low || (this._low = new Float32Array(N));
+    for (let k = 0; k < N; k++) {
+      low[k] = level[k];
+      if (wet[k]) continue;
+      const x = k % A, y = (k - x) / A;
+      let m = Infinity;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= A || yy >= A) continue;
+        const q = yy * A + xx;
+        if (wet[q] && level[q] < m) m = level[q];
+      }
+      if (m < Infinity) low[k] = m;
+    }
+    level.set(low);
     this.shoreTex.needsUpdate = true;
     this.levelTex.needsUpdate = true;
     this.heightTex.needsUpdate = true;

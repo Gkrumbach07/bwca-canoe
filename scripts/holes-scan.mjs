@@ -4,7 +4,8 @@
 // core cell along the water:
 //   edge     the near water patch (water.js) is drawn where the shore distance is under 0.6 m, at the level of its atlas
 //            (bilinear; a land cell holds the level of the water a flood fill reaches it from first: --rule new, a land
-//            corner takes the mean of the water corners round it, as grid.levelAt; --rule min, the lowest); the terrain
+//            corner takes the mean of the water corners round it, as grid.levelAt; --rule min, a land cell beside water
+//            holds the lowest of the water in the eight round it, as water.js now does); the terrain
 //            mesh there is the shore band shaped to grid.levelAt. Where the sheet's rim (shore distance 0 to 0.6 m, on the
 //            land side of the waterline) stands over the terrain mesh it hangs in the air with the void under it: W - T.
 //   farEdge  the same for the far water mesh's rim (water-build.js: a land vertex takes the highest level of the water
@@ -56,6 +57,17 @@ function floodLevel(grid) {
     if (x < S - 1 && Number.isNaN(L[k + 1])) { L[k + 1] = v; q[tail++] = k + 1; }
     if (y > 0 && Number.isNaN(L[k - S])) { L[k - S] = v; q[tail++] = k - S; }
     if (y < S - 1 && Number.isNaN(L[k + S])) { L[k + S] = v; q[tail++] = k + S; }
+  }
+  if (RULE === 'min') { // water.js rebuildAtlas (holes pass): a land cell beside water holds the lowest of it
+    const low = L.slice();
+    for (let m = 0; m < N; m++) {
+      if (grid.lake[m]) continue;
+      const x = m % S, y = (m - x) / S;
+      let v = Infinity;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= S || yy >= S) continue; const q = yy * S + xx; if (grid.lake[q] && L[q] < v) v = L[q]; }
+      if (v < Infinity) low[m] = v;
+    }
+    return low;
   }
   return L;
 }
@@ -161,11 +173,10 @@ for (const f of files) {
     const fx = (x - grid.originX) / grid.cell - 0.5, fz = (z - grid.originZ) / grid.cell - 0.5;
     const i = Math.floor(fx), j = Math.floor(fz), ax = fx - i, az = fz - j;
     let l00 = fl(i, j), l10 = fl(i + 1, j), l01 = fl(i, j + 1), l11 = fl(i + 1, j + 1);
-    if (RULE !== 'old') { // a land corner of a quad with water takes the mean of its water corners (grid.levelAt's rule), or the lowest
+    if (RULE === 'new') { // a land corner of a quad with water takes the mean of its water corners (grid.levelAt's rule)
       const w00 = grid.sdCell(i, j) < 0, w10 = grid.sdCell(i + 1, j) < 0, w01 = grid.sdCell(i, j + 1) < 0, w11 = grid.sdCell(i + 1, j + 1) < 0, nw = w00 + w10 + w01 + w11;
       if (nw && nw < 4) {
-        const m = RULE === 'min' ? Math.min(w00 ? l00 : Infinity, w10 ? l10 : Infinity, w01 ? l01 : Infinity, w11 ? l11 : Infinity)
-          : ((w00 ? l00 : 0) + (w10 ? l10 : 0) + (w01 ? l01 : 0) + (w11 ? l11 : 0)) / nw;
+        const m = ((w00 ? l00 : 0) + (w10 ? l10 : 0) + (w01 ? l01 : 0) + (w11 ? l11 : 0)) / nw;
         if (!w00) l00 = m; if (!w10) l10 = m; if (!w01) l01 = m; if (!w11) l11 = m;
       }
     }
