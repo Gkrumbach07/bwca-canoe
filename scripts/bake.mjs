@@ -326,6 +326,28 @@ async function main() {
   //     between lakes do not merge lakes at different heights into one surface
   const isRiver = new Uint8Array(nLakes + 1);
   lakes.forEach((l, i) => { isRiver[i + 1] = l.river ? 1 : 0; });
+  // holes pass: a polygon mapped as plain water (no water=river tag) whose own ground falls a long way is a river reach,
+  // not a lake: the Louse River below Bug Lake (way/1528042253) falls 37 m, and levelled as one lake at its basin's
+  // level it sat in a trench 37 m deep at its head. The DEM over a lake is flat (hydro-flattened, LiDAR and 3DEP alike):
+  // over RIVER_SPREAD m between the 10th and the 60th percentile of its cells' heights, with RIVER_CELLS cells or more,
+  // it is levelled as a river.
+  {
+    const RIVER_SPREAD = 8, RIVER_CELLS = 30;
+    const count = new Int32Array(nLakes + 2);
+    for (let k = 0; k < N; k++) { const id = lakeId[k]; if (id && !isRiver[id]) count[id + 1]++; }
+    for (let id = 0; id <= nLakes; id++) count[id + 1] += count[id];
+    const fill = new Int32Array(nLakes + 1), samples = new Int16Array(count[nLakes + 1]);
+    for (let k = 0; k < N; k++) { const id = lakeId[k]; if (id && !isRiver[id]) samples[count[id] + fill[id]++] = hraw[k]; }
+    const made = [];
+    for (let id = 1; id <= nLakes; id++) {
+      const seg = samples.subarray(count[id], count[id + 1]);
+      if (seg.length < RIVER_CELLS) continue;
+      seg.sort();
+      const spread = (seg[Math.floor(seg.length * 0.6)] - seg[Math.floor(seg.length * 0.1)]) / 10;
+      if (spread > RIVER_SPREAD) { isRiver[id] = 1; lakes[id - 1].river = true; made.push(`${lakes[id - 1].osm} ${lakes[id - 1].name || ''} ${spread.toFixed(1)} m`); }
+    }
+    log(`${made.length} water polygons levelled as rivers (their ground falls over ${RIVER_SPREAD} m): ${made.slice(0, 40).join('; ')}`);
+  }
   const basin = new Int32Array(N).fill(-1);
   const basins = [];
   const riverBasin = new Int32Array(nLakes + 1).fill(-1);
@@ -431,7 +453,9 @@ async function main() {
   {
     const assigned = new Uint8Array(N);
     const WIN = 15; // nodes (150 m) either side for the running low percentile
-    let fitted = 0, reversed = 0;
+    let fitted = 0, reversed = 0, perched = 0;
+    const PERCH_MAX = 6; // m a waterway's fitted level may stand over the DEM of a river cell it is laid on
+    const SUNK_MAX = 4; // m a river cell's level may lie under its DEM
     const win = [];
     for (const wway of waterways) {
       const pts = resample(wway.pts, cell);
@@ -471,9 +495,17 @@ async function main() {
       for (let i = 0; i < n; i++) { if (anchor[i]) hi = raw[i]; else if (v[i] > hi) v[i] = hi; }
       let lo = -Infinity;
       for (let i = n - 1; i >= 0; i--) { if (anchor[i]) lo = raw[i]; else if (v[i] < lo) v[i] = lo; }
+      // holes pass: never a level far over the ground under the cell itself. A line whose ends the fit takes the wrong way
+      // round (a creek out of a perched lake read as running into it) is clamped up to that lake's level all along, so
+      // where it crossed the Louse River the river's cells took a level 65 m over their ground, and the shore lift below
+      // stood the land round them up to it: a canyon of land walls round the real river. Such a node is left to the
+      // spread from the river's other cells.
       for (let i = 0; i < n; i++) {
         const k = cells[i];
-        if (k >= 0 && lakeId[k] && isRiver[lakeId[k]]) { level[k] = Math.round(v[i] * 10); assigned[k] = 1; }
+        if (k >= 0 && lakeId[k] && isRiver[lakeId[k]]) {
+          if (v[i] > hraw[k] / 10 + PERCH_MAX) { perched++; continue; }
+          level[k] = Math.round(v[i] * 10); assigned[k] = 1;
+        }
       }
       fitted++;
     }
@@ -486,7 +518,19 @@ async function main() {
       const nb = [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, y > 0 ? k - W : -1, y < H - 1 ? k + W : -1];
       for (const q of nb) if (q >= 0 && !assigned[q] && lakeId[q] && isRiver[lakeId[q]]) { assigned[q] = 1; level[q] = L; queue[tail++] = q; }
     }
-    log(`${fitted} waterway profiles fitted (${reversed} drawn upstream), ${tail} river cells levelled`);
+    // and whatever no line nor the spread reached keeps its polygon's level (a river basin's one median, 530.5 m for the
+    // Louse River, which falls 40 m): never more than PERCH_MAX over the cell's own ground either; over it, the ground
+    // (the LiDAR's hydro-flattened surface, or the 3DEP's) is the water's level
+    // Nor more than SUNK_MAX under it: the fit's running low percentile lags the ground down a steep creek (150 m of
+    // window on a 5 % fall is 7 m), and a creek levelled 11 m under the LiDAR's ground was carved a trench that deep (the
+    // LiDAR's 10 m mean over a narrow creek is its banks' height, a metre or three over the water, so a little under it
+    // is right)
+    let clamped = 0, raised = 0;
+    for (let k = 0; k < N; k++) {
+      if (!lakeId[k] || !isRiver[lakeId[k]]) continue;
+      if (level[k] > hraw[k] + PERCH_MAX * 10) { level[k] = hraw[k]; clamped++; } else if (level[k] < hraw[k] - SUNK_MAX * 10) { level[k] = hraw[k] - SUNK_MAX * 10; raised++; }
+    }
+    log(`${fitted} waterway profiles fitted (${reversed} drawn upstream), ${tail} river cells levelled (${perched} line cells left to the spread, ${clamped} cells brought down to their ground: the level stood over ${PERCH_MAX} m above it, ${raised} up to ${SUNK_MAX} m under it)`);
   }
   // display level per polygon: lakes keep the basin level, rivers and creeks the mean of their cells
   {
@@ -687,6 +731,7 @@ async function main() {
   const ovHgt = new Int16Array(ovW * ovH), ovSd = new Int16Array(ovW * ovH);
   const tileMeta = new Array(ntx * nty);
   const LIFT = 5; // cells: land this close to water is lifted above the neighbouring water level
+  const LIFT_MAX = 8; // m: the most that lift raises any land cell (holes pass)
   const lvlRow = new Float32Array(W);
   {
     const outRows = BAND + 2 * LIFT;
@@ -725,8 +770,10 @@ async function main() {
           let m = -Infinity;
           for (let dj = -LIFT; dj <= LIFT; dj++) { const jj = j + dj; if (jj >= w0 && jj < w1) { const v = rowMax[(jj - w0) * W + i]; if (v > m) m = v; } }
           if (m > -Infinity) {
-            const dToWater = sdist[k] / 10 / cell + 0.5;
-            out[ow + i] = Math.max(out[ow + i], m + 0.3 + Math.max(0, dToWater - 1) * 1.1);
+            // (holes pass: by LIFT_MAX at most: a level that stands far over the ground, wrong in the data, made walls of
+            // land tens of metres high round it, a canyon with the real river at its foot)
+            const dToWater = sdist[k] / 10 / cell + 0.5, h0 = out[ow + i];
+            out[ow + i] = Math.max(h0, Math.min(h0 + LIFT_MAX, m + 0.3 + Math.max(0, dToWater - 1) * 1.1));
           }
         }
       }
