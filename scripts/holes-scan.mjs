@@ -14,6 +14,9 @@
 //   bed      a water cell whose bed stands over its own surface
 //   bank     a land cell beside water lower than that water (the bake's shoreLandUnderWater)
 //   nodata   a water cell whose level is no level (outside 100-800 m)
+//   lidar    against the LiDAR (data-cache/lidar, --lidar dir): land within 60 m of water, the drawn ground's departure
+//            from the LiDAR's ground; water, its level's from the LiDAR's water; walls, a drop over 8 m between
+//            neighbouring land cells where the LiDAR's is under 4 m
 //   seam     a tile's halo cells that differ from the core of the tile owning them (a crack along the tile edge)
 // Sites: the worst cells, merged within 250 m, named for the nearest drop (rapids.json v4) and the water there.
 //   node scripts/holes-scan.mjs [data dir] [--top 30] [--json out.json] [--only tx_ty,...] [--rule old|new]
@@ -59,7 +62,16 @@ function floodLevel(grid) {
 
 const stats = { tiles: 0, edge: { n: 0, over05: 0, over2: 0, over5: 0, max: 0 }, farEdge: { n: 0, over05: 0, over2: 0, over5: 0, max: 0 },
   step: { over1: 0, over3: 0, nearDrop: 0, awayOver1: 0, max: 0, kinds: {} }, bed: 0, bank: { n: 0, over2: 0, max: 0 },
-  nodata: 0, seam: { cells: 0, h: 0, lake: 0, sd: 0, lvl: 0 } };
+  nodata: 0, seam: { cells: 0, h: 0, lake: 0, sd: 0, lvl: 0 },
+  lidar: { land: 0, landOver5: 0, landOver10: 0, landOver20: 0, landMax: 0, water: 0, waterOver2: 0, waterOver5: 0, waterOver10: 0, waterMax: 0, walls: 0 } };
+// the ground truth (the coordinator, 2026-10-27): the LiDAR's own 10 m products (data-cache/lidar/<tx>_<ty>.height.bin and
+// .level.bin, Int16 dm, the 256-cell core of the same tiles; .mask.bin, valid where mask & 17 is 17), read where present
+const LIDAR = opt('--lidar', path.join(process.env.BWCA_CACHE || path.join(here, '../../../../data-cache'), 'lidar'));
+const lidarTile = (tx, ty) => {
+  const rd = (ch, Type) => { const f = path.join(LIDAR, `${tx}_${ty}.${ch}.bin`); if (!fs.existsSync(f)) return null; const r = zlib.gunzipSync(fs.readFileSync(f)); return new Type(r.buffer.slice(r.byteOffset, r.byteOffset + r.byteLength)); };
+  const h = rd('height', Int16Array), mask = rd('mask', Uint8Array);
+  return h && mask ? { h, lvl: rd('level', Int16Array), mask } : null;
+};
 // a tile's four fields, for the seams: each halo cell against the core of the tile that owns it (a tile's edge vertices
 // are built from its halo, its neighbour's from its core: any difference is a crack along the tile edge)
 const fieldsCache = new Map();
@@ -108,6 +120,41 @@ for (const f of files) {
   for (let m = 0; m < S * S; m++) if (grid.lake[m]) { any = true; break; }
   if (!any) continue;
   stats.tiles++;
+  const idsNear = (i, j, r = 1) => { const o = new Set(); for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const id = grid.lakeCell(i + di, j + dj); if (id) o.add(id); } return [...o].slice(0, 3); };
+  { // the LiDAR check: within 60 m of water, the drawn ground (the terrain mesh at each cell centre) against the LiDAR's
+    // ground, the water's level against the LiDAR's water, and drops between neighbouring land cells the LiDAR lacks
+    const Ld = lidarTile(tx, ty), mc = new Map();
+    if (Ld) {
+      const T = G.tile, ok = (m) => (Ld.mask[m] & 17) === 17 && Ld.h[m] !== -32768;
+      const drawn = (i, j) => meshHeightAt(grid, grid.cellX(i), grid.cellZ(j), mc);
+      for (let lj = 0; lj < T; lj++) for (let li = 0; li < T; li++) {
+        const m = lj * T + li, i = tx * T + li, j = ty * T + lj;
+        if (!ok(m)) continue;
+        const sdc = grid.sdCell(i, j), id = grid.lakeCell(i, j), x = grid.cellX(i), z = grid.cellZ(j);
+        if (id) {
+          if (!Ld.lvl || Ld.lvl[m] === -32768) continue;
+          const d = Math.abs(grid.levelCell(i, j) - Ld.lvl[m] / 10);
+          stats.lidar.water++;
+          if (d > 2) { stats.lidar.waterOver2++; if (d > 5) stats.lidar.waterOver5++; if (d > 10) stats.lidar.waterOver10++; }
+          if (d > stats.lidar.waterMax) stats.lidar.waterMax = d;
+          if (d > 5) keep('lidarWater', d, x, z, [id]);
+          continue;
+        }
+        if (sdc > 60) continue;
+        const hd = drawn(i, j), d = Math.abs(hd - Ld.h[m] / 10);
+        stats.lidar.land++;
+        if (d > 5) { stats.lidar.landOver5++; if (d > 10) stats.lidar.landOver10++; if (d > 20) stats.lidar.landOver20++; }
+        if (d > stats.lidar.landMax) stats.lidar.landMax = d;
+        if (d > 5) keep('lidarLand', d, x, z, idsNear(i, j, 6));
+        for (const [di, dj] of [[1, 0], [0, 1]]) {
+          const li2 = li + di, lj2 = lj + dj;
+          if (li2 >= T || lj2 >= T || !ok(lj2 * T + li2) || grid.lakeCell(i + di, j + dj)) continue;
+          const dg = Math.abs(drawn(i + di, j + dj) - hd), dl = Math.abs(Ld.h[lj2 * T + li2] - Ld.h[m]) / 10;
+          if (dg > 8 && dl < 4) { stats.lidar.walls++; keep('wall', dg - dl, x, z, idsNear(i, j, 6)); }
+        }
+      }
+    }
+  }
   const FL = floodLevel(grid);
   const fl = (i, j) => FL[grid.local(i, j)];
   const patchLevel = (x, z) => { // water.js levelAt: bilinear over the atlas
@@ -143,7 +190,7 @@ for (const f of files) {
     return out;
   };
   const fo = [0, 0];
-  const idsNear = (i, j) => { const o = new Set(); for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const id = grid.lakeCell(i + di, j + dj); if (id) o.add(id); } return [...o]; };
+
   const cache = new Map();
   const i0 = tx * G.tile, j0 = ty * G.tile;
   for (let j = j0; j < j0 + G.tile; j++) for (let i = i0; i < i0 + G.tile; i++) {
@@ -225,9 +272,10 @@ const named = (s) => {
     water: s.ids ? s.ids.map((id) => `${lakeName.get(id) || '?'} [${isRiver.get(id)} ${id}]`).join(' / ') : null };
 };
 for (const k of ['edge', 'farEdge']) { const e = stats[k]; e.max = +e.max.toFixed(1); }
+stats.lidar.landMax = +stats.lidar.landMax.toFixed(1); stats.lidar.waterMax = +stats.lidar.waterMax.toFixed(1);
 stats.step.max = +stats.step.max.toFixed(1); stats.bank.max = +stats.bank.max.toFixed(1);
 const out = { data: DATA, rule: RULE, stats, top: {} };
-for (const k of ['edge', 'farEdge', 'step']) out.top[k] = sites.filter((s) => s.kind === k).slice(0, TOP).map(named);
+for (const k of ['edge', 'farEdge', 'step', 'lidarLand', 'lidarWater', 'wall']) out.top[k] = sites.filter((s) => s.kind === k).slice(0, TOP).map(named);
 console.log(JSON.stringify(stats, null, 1));
 for (const k of Object.keys(out.top)) { console.log(`\n${k}:`); for (const s of out.top[k]) console.log(`  ${s.gap} m  x${s.cells}  (${s.x}, ${s.z})  ${s.latLon.join(',')}  ${s.drop || ''}${s.water ? '  ' + s.water : ''}`); }
 if (opt('--json')) fs.writeFileSync(opt('--json'), JSON.stringify(out, null, 1));
