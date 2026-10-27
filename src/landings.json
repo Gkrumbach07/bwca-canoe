@@ -1,0 +1,8 @@
+{
+  "about": "Per entry point corrections to the outfitters' landings (props.js landingPlan), by entry point number. Everything else about a landing is read off the release's ground, shore distance and water level. from: [x, z], a spot on the same water where the walk to the shore starts instead of the put-in; dockLen: the dock's length in metres. Each row says why; scripts/landing-check.mjs --search finds a `from`.",
+  "landings": {
+    "6": { "from": [-55274, 10563], "why": "Slim Lake: the shore nearest the put-in is a bank 3.5 m high under the store; 43 m along it the ground rises 1.2 m (data-v3 and v4 alike)" },
+    "52": { "from": [27570, 2270], "why": "Brant Lake (on Round Lake): a store 2.6 to 2.9 m over its lowest ground at the put-in; 48 m along the shore 0.9 m" },
+    "66": { "from": [70180, 6135], "why": "Crocodile River: the put-in's own bank stands 6 to 9 m over the river under the store; 20 m along it 0.8 m" }
+  }
+}

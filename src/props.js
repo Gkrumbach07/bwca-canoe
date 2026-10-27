@@ -6,6 +6,7 @@ import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
 import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
 import { RockShape } from './collide.js';
+import LANDINGS_DATA from './landings.json';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
 
@@ -419,34 +420,103 @@ function shelfSignMaterial(text) {
   return m;
 }
 
+// --- the outfitters' landings --------------------------------------------------------------------------------------
+// The heights a landing is built to, over the water's own level where it stands (never fixed heights or offsets: a new
+// bake moves the levels). The dock's deck stands DOCK.deck over the highest water under it and runs DOCK.len out, or on
+// over the shallows to DOCK.maxLen until its end stands in DOCK.wade of water (no further than the middle of a creek,
+// and no shorter than DOCK.minLen); the store's floor stands at least
+// STORE_CLEAR over the highest water near it, and no part of its footprint on ground within STORE_DRY of that water.
+const DOCK = { deck: 0.55, minLen: 5, len: 10.5, maxLen: 18, wade: 0.5 };
+const STORE_CLEAR = 0.9, STORE_DRY = 0.2;
+// Per entry point corrections (src/landings.json, by entry point number): `from` [x, z], where the walk to the shore
+// starts instead of the put-in (when the nearest shore to it is the wrong one); `dockLen`, the dock's length. Each row
+// says why.
+const LANDINGS = Object.fromEntries(Object.entries(LANDINGS_DATA.landings || {}).map(([k, v]) => [Number(k), v]));
+
 // A dock out from the landing and, up the yard from it, the outfitter's store (buildStore) with its door to the
 // lake and the outfitter's name over it, a canoe rack beside it. The frame: from the landing up onto dry ground and
 // back to the edge, d out to the water.
 function* buildOutfitter(ctx, ep, rng, pieces, group) {
-  const tg = ctx.tg;
-  let x = ep.x, z = ep.z, d = tg.deeperDir(x, z);
-  for (let i = 0; i < 300 && tg.shoreAt(x, z) < 1.0; i++) { x -= d.x * 0.5; z -= d.z * 0.5; if (i % 10 === 9) d = tg.deeperDir(x, z); }
-  for (let i = 0; i < 300 && tg.shoreAt(x, z) > 1.2; i++) { x += d.x * 0.5; z += d.z * 0.5; if (i % 10 === 9) d = tg.deeperDir(x, z); }
-  d = tg.deeperDir(x, z);
-  const F = frame(ctx, x, z, d), level = tg.levelAt(x, z);
-  const dock = buildDock(ctx, F, level, rng);
+  const plan = landingPlan(ctx, ep);
+  const dock = buildDock(ctx, plan.F, plan.dock, rng);
   pieces.push(dock.geo);
   yield;
-  yield* buildStore(ctx, F, rng, ep, group, pieces, dock);
+  yield* buildStore(ctx, plan.F, rng, ep, group, pieces, dock, plan.site);
+}
+
+// Where entry point ep's landing goes, from the data alone (no geometry): the anchor on the shore (x, z) and d out to
+// the water, the frame F, the water's level there, the dock's plan (dockPlan) and the store's site (storeSite).
+// ctx: { tg, H, world } (H the drawn ground); scripts/landing-check.mjs reads the same plan.
+// Everything is read off the release's own ground, shore distance and water level, so it holds when a new bake moves the
+// lakes' levels or their shores (data-v4's LiDAR: levels up 0.2 m on the median, 0.8 m at p95). The walk to the shore
+// steps by the shore distance itself (most of the way at once from a put-in far out: Clearwater's is 180 m out), and an
+// entry point whose nearest shore is the wrong one starts from its row in LANDINGS instead.
+export function landingPlan(ctx, ep) {
+  const tg = ctx.tg, fix = LANDINGS[ep.ep] || null;
+  let x = fix && fix.from ? fix.from[0] : ep.x, z = fix && fix.from ? fix.from[1] : ep.z, d = tg.deeperDir(x, z);
+  const stepTo = (sd) => Math.min(25, Math.max(0.5, Math.abs(sd - 1.1) * 0.6));
+  for (let i = 0; i < 400; i++) {
+    const sd = tg.shoreAt(x, z);
+    if (sd >= 1.0) break;
+    const s = stepTo(sd); x -= d.x * s; z -= d.z * s; d = tg.deeperDir(x, z);
+  }
+  for (let i = 0; i < 400; i++) {
+    const sd = tg.shoreAt(x, z);
+    if (sd <= 1.2) break;
+    const s = stepTo(sd); x += d.x * s; z += d.z * s; d = tg.deeperDir(x, z);
+  }
+  d = tg.deeperDir(x, z);
+  const F = frame(ctx, x, z, d), level = tg.levelAt(x, z);
+  const dock = dockPlan(ctx, F, level, fix);
+  const porch = !!lookOf(ep, ctx.world).porch, pd = porch ? 1.8 : 1.2;
+  const site = storeSite(ctx, F, ep, dock, pd);
+  return { x, z, d, F, level, dock, porch, pd, site };
+}
+
+// The highest level of the water whose drawn surface reaches within r cells of world (x, z) (a lake cell's quads reach a
+// cell past it, water-build.js), or -Infinity with none: what a building near it has to stand clear of.
+function waterNear(tg, x, z, r = 3) {
+  const ci = tg.cellI(x), cj = tg.cellJ(z);
+  let best = -Infinity;
+  for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) if (tg.lakeCell(ci + di, cj + dj)) best = Math.max(best, tg.levelCell(ci + di, cj + dj));
+  return best;
 }
 
 // The dock: weathered cedar planks of uneven width and tone across three stringers, a few out of line;
 // the stringers on cap beams bolted to pairs of round piles with a dark band at the waterline, braced along
 // the sides; two posts at the end, cleats and a coil of line; the land end on a sill in the bank.
-function buildDock(ctx, F, level, rng) {
-  const b = new PropBuilder(), occ = [];
-  const hw = 0.9, deckY = level + 0.55, pT = 0.045, strH = 0.18, capH = 0.12, len = 10.5;
-  const strTop = deckY - pT, strBot = strTop - strH, capTop = strBot, capBot = capTop - capH;
+// The dock's plan in the landing's frame F (b out from the anchor): its deck's height (DOCK.deck over the highest water
+// under it: a river's falls along it), its length (DOCK.len, longer over shallows until its end stands in DOCK.wade of
+// water, never past the middle of a narrow water) and its land end (the sill).
+function dockPlan(ctx, F, level0, fix = null) {
+  const tg = ctx.tg, hw = 0.9, pT = 0.045, strH = 0.18, capH = 0.12;
+  const sd = (b) => { const [x, z] = F.W(0, b); return tg.shoreAt(x, z); };
+  const lv = (b) => { const [x, z] = F.W(0, b); return tg.levelAt(x, z, 2); };
+  // a narrow water (a creek, a channel): no further than its middle, where the shore distance stops falling
+  let mid = DOCK.minLen;
+  for (let l = DOCK.minLen; l <= DOCK.len && sd(l + 0.5) < sd(l) - 0.02; l += 0.5) mid = l + 0.5;
+  let len = Math.min(DOCK.len, mid);
+  if (fix && fix.dockLen) len = fix.dockLen;
+  else if (len >= DOCK.len) for (let l = DOCK.len; l <= DOCK.maxLen; l += 0.5) {
+    len = l;
+    if (lv(l) - Math.max(F.G(-hw, l), F.G(hw, l), F.G(0, l)) >= DOCK.wade && sd(l) < -0.5) break;
+    if (sd(l + 0.5) > sd(l) - 0.05) break; // the bottom flattens out, or the middle of the water: no further
+  }
+  let level = level0;
+  for (let b = 0; b <= len; b += 1) if (sd(b) < 0.5) level = Math.max(level, lv(b));
+  const deckY = level + DOCK.deck;
+  const strBot = deckY - pT - strH;
   // the sill goes where the bank comes up under the stringers; the deck runs a little past it
   let sill = -6;
   for (let s = 0.8; s >= -6; s -= 0.1) if (Math.max(F.G(-hw, s), F.G(0, s), F.G(hw, s)) >= strBot - 0.17) { sill = s; break; }
   let back = sill - 0.3;
   if (Math.max(F.G(-hw, back), F.G(hw, back)) > deckY - 0.08) back = sill - 0.08;
+  return { hw, len, deckY, level, pT, strH, capH, sill, back };
+}
+function buildDock(ctx, F, P, rng) {
+  const b = new PropBuilder(), occ = [];
+  const { hw, len, deckY, level, pT, strH, capH, sill, back } = P;
+  const strTop = deckY - pT, strBot = strTop - strH, capTop = strBot, capBot = capTop - capH;
   // the deck to the walker: a box with a top, stepped onto from the bank and held off from the water
   ctx.obstacles.push({ x: F.W(0, (back + len) / 2)[0], z: F.W(0, (back + len) / 2)[1], ux: F.Z.x, uz: F.Z.z, hx: (len - back) / 2, hz: hw, box: true, top: deckY });
   // planks
@@ -1690,7 +1760,7 @@ function storeSite(ctx, F, ep, dock, pd) {
     return front + Math.max(0, Math.ceil(rise / SITE_RISE) - 1) * STEP_RUN; // (the riser the sites were chosen with: a store stays where it stood)
   };
   let best = null;
-  for (let b0 = -10.5; b0 >= -26; b0 -= 1) for (const ao of [0, -2.5, 2.5, -5, 5, -7.5, 7.5, -10, 10]) {
+  for (let b0 = -10.5; b0 >= -32; b0 -= 1) for (const ao of [0, -2.5, 2.5, -5, 5, -7.5, 7.5, -10, 10, -12.5, 12.5]) {
     let gmax = -Infinity, gmin = Infinity, bad = false, wild = 0;
     for (let a = -ST.hW - 0.2; a <= ST.hW + 0.25 && !bad; a += 1.6) for (let c = -ST.hD; c <= ST.hD + pd + 0.01; c += 1.45) {
       const [wx, wz] = F.W(ao + a, b0 + c);
@@ -1699,7 +1769,9 @@ function storeSite(ctx, F, ep, dock, pd) {
       if (c <= ST.hD) { const y = F.G(ao + a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
     }
     if (bad) continue;
-    const floorY = Math.max(gmax + 0.3, gmin + 0.45), foot = steps(floorY, ao, b0);
+    const [cx, cz] = F.W(ao, b0 + pd / 2), wl = waterNear(ctx.tg, cx, cz, 4);
+    if (gmin < wl + STORE_DRY) continue; // ground at the water's level: under it, or awash
+    const floorY = Math.max(gmax + 0.3, gmin + 0.45, wl + STORE_CLEAR), foot = steps(floorY, ao, b0);
     const [fx, fz] = F.W(ao + DOOR.a, foot + 0.3);
     if (ctx.tg.shoreAt(fx, fz) < 0.5) continue; // the steps' foot in the water
     if (foot > dock.back - 1.5 && Math.abs(ao + DOOR.a) < dock.hw + 1.6) continue; // onto the dock
@@ -1712,7 +1784,8 @@ function storeSite(ctx, F, ep, dock, pd) {
   for (let it = 0; it < 6; it++) {
     let gmax = -Infinity, gmin = Infinity;
     for (let a = -ST.hW; a <= ST.hW + 1e-6; a += 1) for (let c = -ST.hD; c <= ST.hD + 1e-6; c += 1) { const y = F.G(a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
-    floorY = Math.max(gmax + 0.3, gmin + 0.45);
+    const [cx, cz] = F.W(0, b0);
+    floorY = Math.max(gmax + 0.3, gmin + 0.45, waterNear(ctx.tg, cx, cz, 4) + STORE_CLEAR);
     const foot = steps(floorY, 0, b0);
     if (foot <= dock.back - 1.5) return { ao: 0, b0, floorY, rise: +(floorY - gmin).toFixed(2), fallback: true };
     b0 -= foot - (dock.back - 1.5) + 0.05;
@@ -1723,14 +1796,14 @@ function storeSite(ctx, F, ep, dock, pd) {
 // The store at its landing: where it stands (back from the dock's land end by the porch or stoop, its steps and a path's
 // width; the floor a little over the highest ground under it), the kit turned into place and recoloured, the parts
 // built here, the sign over the door and the cork board, the walker's obstacles and the layout.
-function* buildStore(ctx, F, rng, ep, group, pieces, dock) {
+function* buildStore(ctx, F, rng, ep, group, pieces, dock, site) {
   if (!storeKit) yield* buildStoreKit();
   const t0 = performance.now(), took = storeStats.stores[ep.ep] = [];
   const look = lookOf(ep, ctx.world), porch = !!look.porch, name = outfitterName(ep), K = storeKit;
   // Where it stands: of the spots back from the dock and to either side of it, the one whose floor stands least over the
   // ground under it, that is dry, inside the outfitter's mown yard (exclusionsFor: 36 m round the landing, so no tree
   // stands in it), and whose steps come down behind the dock's land end or beside it. ao: across, b0: back (its centre).
-  const pd = porch ? 1.8 : 1.2, site = storeSite(ctx, F, ep, dock, pd);
+  // (landingPlan chose the site: storeSite)
   const { ao, b0, floorY } = site;
   const G = (a, bb) => F.G(ao + a, bb);
   const gC = (a, c) => G(a, b0 + c) - floorY; // the ground in the store's frame

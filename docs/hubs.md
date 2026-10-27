@@ -267,6 +267,11 @@ Four streams joined on `claude/hubs-2`:
   own cleared yard on the flattest dry spot behind or beside the dock (on fieldstone with railed porch posts on a steep
   bank), coloured by the outfitter's `look`; `props.storeLayout(ep)` and `onStore`; the lamp borrows the campfires' one
   light (`Fires.steady`), and after sunset the glass goes so the store glows through its windows.
+  Since data-v4 (2026-10-27: "the cabins I saw are under water for some") the landing is placed from the release's own
+  data alone (`props.landingPlan`): the walk in to the shore by the shore distance, the dock's deck 0.55 m over the
+  highest water under it and its length out to wading depth (never past a creek's middle), the store's floor at least
+  0.9 m over the water near it and never on ground within 0.2 m of it; per-site corrections in `src/landings.json`.
+  `node scripts/landing-check.mjs --data <release>` checks all 55 against a release.
 - **Walking in and the shop** (B, `src/shop.js`, `src/outfitter.js`): *Tie up and go in* (walked since the second
   round), first person inside, the hotspots, the counter in four tabs (the counter, the board, the shelves, the lure
   wall; since then a shelf of its own each, and the counter services only), the full catalogue,
