@@ -79,9 +79,12 @@ export const WATER_LOOK = {
   stain: new THREE.Color().setRGB(0.066, 0.05, 0.012),
   ice: new THREE.Color(0xf2f6fa),
   // d2 water: the two stops a lake with its own colour (TEA) adds: light tea between the clear and the tea-brown, and
-  // the dark bog water past it
+  // the dark bog water past it. More CDOM takes blue most, green less and red hardly at all, so from the tea-brown
+  // to the bog the blue goes (a quarter of it left), the green drops a tenth and the red stays: a darker, redder
+  // brown. (The bog once lost a third of its red too; dimmed that far, the sky the surface mirrors (blue over green)
+  // outweighed it and Bollar's water read mauve, red and blue over green, where it met the mirrored sky.)
   tea: new THREE.Color().setRGB(0.05, 0.062, 0.026),
-  bog: new THREE.Color().setRGB(0.044, 0.026, 0.007),
+  bog: new THREE.Color().setRGB(0.066, 0.045, 0.003),
 };
 // d2 water (the real-data round, 2026-10-26: "each lake its own colour"): a v4 release gives every lake, and every cell
 // of a big one, the UMN LakeBrowser's summer Secchi depth and its late-summer CDOM (a440, m^-1: the tannins that stain
