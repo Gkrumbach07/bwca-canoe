@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { makeTerrainMesh } from './terrain.js';
 import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as VEG_SPECIES } from './vegetation.js';
-import { makeAquaticMeshes } from './aquatic.js';
+import { makeAquaticMeshes, waterInit } from './aquatic.js'; // (d2 water: waterInit)
 import { tilePropsSteps, exclusionsFor } from './props.js';
 import { MeshGround } from './prop-kit.js';
 import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
@@ -424,6 +424,7 @@ export class TileManager {
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2));
+    const waterMsg = { type: 'water', ...waterInit(world) }; // d2 water: the lakes' colour and beds, a message of its own after init
     this.workers = Array.from({ length: n }, () => {
       const w = new Worker(new URL('./tile-worker.js', import.meta.url), { type: 'module' });
       w.onmessage = (e) => this.onMessage(e.data);
@@ -432,6 +433,7 @@ export class TileManager {
         land: typeof location === 'undefined' || !/[?&]land=off\b/.test(location.search) }); // d2 land: `?land=off`, the noise's land (land.js setLand)
       return { w, key: null };
     });
+    for (const x of this.workers) x.w.postMessage(waterMsg); // d2 water (after each one's init)
   }
 
   key(tx, ty) { return `${tx},${ty}`; }

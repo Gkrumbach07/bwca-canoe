@@ -19,6 +19,7 @@
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
 import { PackSide } from './inv-ui.js';
 import { KINDS } from './tasks.js'; // fb3 C: a notice's kind, for its progress and its label
+import { teaWord } from './water.js'; // d2 water: the water's colour in a word
 
 const ROWS = 8;        // catches per page
 const PENCIL = [
@@ -306,11 +307,13 @@ export class Journal {
       const l = w.lakes[e.id - 1], d = this.day;
       const ago = d.doy - e.doy;
       const when = this.trip && this.trip.active && this.trip.startDoy != null ? `day ${Math.max(1, e.doy - this.trip.startDoy + 1)}` : ago === 0 ? 'today' : ago === 1 ? 'yesterday' : shortDate(d.year, e.doy);
-      return `<tr><td>${esc(e.name)}</td><td>${when}</td><td class="soft">${l ? esc(lakeWords(l)) : ''}</td><td>${l && l.secchi ? `${l.secchi.toFixed(1)} m` : '—'}</td></tr>`;
+      const tea = l ? teaWord(l.cdom) : ''; // d2 water: and its colour, where the release has it
+      return `<tr><td>${esc(e.name)}</td><td>${when}</td><td class="soft">${l ? esc(lakeWords(l)) : ''}</td><td>${l && l.secchi ? `${l.secchi.toFixed(1)} m${tea ? `, ${tea}` : ''}` : '—'}</td></tr>`;
     }).join('');
     const html = `<div class="lede"><h2 id="right-h">${lakes.length ? `${lakes.length} ${plural(lakes.length, 'lake')}` : 'No lakes yet'}</h2><div class="sub">In the order you first paddled them.</div></div>
       ${lakes.length ? `<div class="scroll"><table><thead><tr><th>Lake</th><th>First paddled</th><th>What it is</th><th>Clarity</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Push off and they will be written here.</div>'}`;
-    return { html, foot: 'clarity: Secchi depth, from the DNR where it has one' };
+    // d2 water: a v4 release's clarity and colour are the UMN LakeBrowser's, from Landsat and Sentinel-2
+    return { html, foot: w.cdomById && w.cdomById.some((c) => c > 0) ? 'clarity: Secchi depth and the water’s tea-stain, from satellite (UMN LakeBrowser) and the DNR' : 'clarity: Secchi depth, from the DNR where it has one' };
   }
   // the logbook: every trip, newest first, and how it ended; what has been seen across them, and the outfitters known
   tripsTab() {
