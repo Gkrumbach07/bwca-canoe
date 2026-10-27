@@ -1,39 +1,44 @@
-// Detail prototype, the worker's half (docs/detail-proto.md; the main thread's is detail.js). With `?detail=2` or
-// `?detail=5`, a fine tile near the player that has a LiDAR detail file (scripts/detail-proto.mjs) is built from it:
-// its ground is a regular lattice r metres apart through the 10 m cell centres instead of one vertex per cell, and
-// every height query the build makes (the trees, the rocks, the props, the site's steepness, the paint's walls) reads
-// that lattice, so nothing floats or sinks. The 10 m tile still says where the water is, what the ground is made of
-// and how it is painted (its channels, sampled bilinear as before); the detail only moves the ground up and down.
-//   - under water (the 10 m shore distance below 0) and at the waterline the ground is the 10 m tile's, shaped as
-//     today, so the shore meets the water sheet exactly where it does now; the LiDAR takes over within 2 m inland
-//   - within BLEND metres of the tile's edge the ground eases back to the 10 m mesh, and on the edge it is that mesh
-//     exactly (its own triangles, read at each lattice point), so the neighbour built at 10 m meets it without a crack
-// Nothing here runs unless the tile's build message carries a detail file.
+// LiDAR detail, the worker's half (docs/detail.md; the main thread's is detail.js). The tile workers build one detail
+// chunk at a time (tile-worker.js, message 'chunk'): a 640 m chunk of the 2 m lattice or a 1280 m chunk of the 5 m
+// lattice (scripts/detail-bake.mjs cuts them), as a terrain mesh with three heights per vertex: its own level's, the
+// 5 m surface's (a 2 m chunk only) and the 10 m mesh's. The main thread blends them per vertex by which neighbours are
+// in (detail.js blend), so a chunk eases into whatever coarser ground it meets over its last BLEND metres and is
+// exactly that ground on its edge, without being built again when a neighbour comes or goes.
+//   - the 10 m tile still says where the water is, what the ground is made of and how it is painted (its channels,
+//     the site, the forest's shade); the LiDAR only moves the land up and down
+//   - under water (the 10 m shore distance below 0) the ground is the 10 m mesh's (the lake bed), and within 2 m
+//     inland it rises from the waterline to the LiDAR, so a face at the shore stands straight out of the water
+//   - deep water (every sample of a 10 m quad over 30 m from the shore) is drawn as the 10 m mesh's own two triangles
+//   - a skirt hangs from the chunk's edge to close the slits where two lattices meet (the T-junctions of a 2 m edge
+//     against a 5 m one, a one-unit difference between neighbours' shared samples)
 import { lerp, smoothstep } from './rng.js';
-import { meshHeightAt, groundPre, bedPre, bedGrain, splatAt, CELL_SPLAT } from './terrain-build.js';
+import { meshHeightAt, groundPre, bedPre, bedGrain, splatAt } from './terrain-build.js';
 
-export const BLEND = 60; // metres inside the tile's edge over which the detail eases into the 10 m mesh
-const SKIRT = 1.5;       // metres the edge's skirt hangs down (buildDetailChunk)
+const HEADER = 56, MAGIC = 0x43445742; // 'BWDC' (scripts/detail-bake.mjs)
+const DEEP = 30; // metres from the shore past which a 10 m quad of lake bed is drawn as the 10 m mesh draws it
+export const SKIRT = { 2: 2, 5: 3 }; // metres a chunk's skirt hangs below its edge, by level
 
-// <tx>_<ty>.<r>m.bin (gzip already undone by the fetch): header and the delta-coded centimetres -> Float32 metres
-export function decodeDetail(buf) {
-  const v = new DataView(buf);
-  if (v.getUint32(0, true) !== 0x54445742) throw new Error('not a detail file'); // 'BWDT'
-  const n = v.getUint32(16, true), r = v.getFloat32(24, true), base = v.getFloat32(28, true);
-  const x0 = v.getFloat64(32, true), z0 = v.getFloat64(40, true);
-  const d = new Int16Array(buf, 48, n * n), h = new Float32Array(n * n);
-  let acc = 0, rowStart = 0;
-  for (let l = 0; l < n; l++) {
-    acc = rowStart + d[l * n]; rowStart = acc; h[l * n] = acc;
-    for (let k = 1; k < n; k++) { acc += d[l * n + k]; h[l * n + k] = acc; }
+// A chunk file (gzip already undone): the reference decoder is scripts/detail-bake.mjs decodeChunk.
+export function decodeChunk(buf) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0, true) !== MAGIC) throw new Error('not a detail chunk');
+  const n = dv.getUint16(20, true), pred = dv.getUint16(22, true), r = dv.getFloat32(24, true), unit = dv.getFloat32(28, true), base = dv.getFloat32(32, true);
+  const d = new Int16Array(buf, HEADER, n * n), v = new Int32Array(n * n);
+  for (let l = 0; l < n; l++) for (let k = 0; k < n; k++) {
+    const q = l * n + k;
+    let p = 0;
+    if (pred === 2) p = l && k ? v[q - 1] + v[q - n] - v[q - n - 1] : k ? v[q - 1] : l ? v[q - n] : 0;
+    else if (pred === 1) p = k ? v[q - 1] : l ? v[q - n] : 0;
+    v[q] = p + d[q];
   }
-  for (let q = 0; q < n * n; q++) h[q] = base + h[q] * 0.01;
-  return { n, r, x0, z0, h };
+  const h = new Float32Array(n * n);
+  for (let q = 0; q < n * n; q++) h[q] = base + v[q] * unit;
+  return { n, r, x0: dv.getFloat64(40, true), z0: dv.getFloat64(48, true), h };
 }
 
-// The lattice's height at a point, the way the mesh draws it: two triangles per lattice square, split alternately
-// (buildDetailChunk); NaN off the lattice.
-function latticeHeight(L, x, z) {
+// A lattice's height at a point as its mesh draws it: two triangles per square, split alternately; NaN off it.
+// L: { n, r, x0, z0, v } (x0, z0: sample (0, 0)).
+export function latticeAt(L, x, z) {
   const fx = (x - L.x0) / L.r, fz = (z - L.z0) / L.r, K = Math.floor(fx), M = Math.floor(fz);
   if (K < 0 || M < 0 || K >= L.n - 1 || M >= L.n - 1) return NaN;
   const u = fx - K, w = fz - M, V = L.v, n = L.n, q = M * n + K;
@@ -42,55 +47,159 @@ function latticeHeight(L, x, z) {
   return u >= w ? h00 + (h10 - h00) * u + (h11 - h10) * w : h00 + (h01 - h00) * w + (h11 - h01) * u;
 }
 
-// A view of the 10 m TileGrid whose ground is the detail lattice: every query of the grid is the grid's own (it is the
-// grid's prototype child, sharing its arrays), and `detail.height` is what terrain-build.js surfaceAt and meshHeightAt
-// answer with where it is not NaN. tx, ty: the tile; file: decodeDetail's.
-export function withDetail(grid, file, tx, ty) {
-  const T = grid.tileSize, cell = grid.cell, n = file.n, r = file.r;
-  const i0 = tx * T, j0 = ty * T;
-  // the tile's mesh runs from the centre of its first cell to the centre of the next tile's first (tiles.js locate)
-  const ex0 = grid.cellX(i0), ex1 = grid.cellX(i0 + T), ez0 = grid.cellZ(j0), ez1 = grid.cellZ(j0 + T);
-  const v = new Float32Array(n * n);
-  const t0 = Date.now();
+// The ground a chunk's samples draw: the LiDAR on land, the 10 m mesh under water and at the waterline, easing up to
+// the LiDAR over the first 2 m inland, and never under its own water's level near the shore (where the LiDAR's shore
+// lies a few metres inland of the game's, its low ground would sit under the water with no water drawn over it).
+// Returns { L (the lattice of the drawn heights), base (the 10 m mesh at each sample), sd (the shore distance) }.
+export function chunkGround(grid, D, cache) {
+  const n = D.n, r = D.r, N = n * n;
+  const v = new Float32Array(N), base = new Float32Array(N), sdA = new Float32Array(N);
   for (let l = 0; l < n; l++) {
-    const z = file.z0 + l * r;
+    const z = D.z0 + l * r;
     for (let k = 0; k < n; k++) {
-      const x = file.x0 + k * r, q = l * n + k;
-      const edge = Math.min(x - ex0, ex1 - x, z - ez0, ez1 - z);
-      const sd = grid.shoreAt(x, z);
-      const near = edge < BLEND || sd < 2;
-      const base = near ? meshHeightAt(grid, x, z) : 0;
-      if (sd <= 0) { v[q] = base; continue; }
-      let h = file.h[q];
-      if (sd < 2) h = lerp(base, h, smoothstep(0, 2, sd)); // a face at the waterline rises straight out of it
-      // land stays above its water: where the LiDAR's shore lies a few metres inland of the game's, its low ground
-      // would sit under the water's level with no water drawn over it
+      const x = D.x0 + k * r, q = l * n + k;
+      const sd = grid.shoreAt(x, z), b = meshHeightAt(grid, x, z, cache);
+      base[q] = b; sdA[q] = sd;
+      if (sd <= 0) { v[q] = b; continue; }
+      let h = D.h[q];
+      if (sd < 2) h = lerp(b, h, smoothstep(0, 2, sd));
       if (sd < 30) { const lv = grid.levelAt(x, z, 3); if (lv === lv) h = Math.max(h, lv + 0.04 * Math.min(sd, 5)); }
-      v[q] = edge < BLEND ? lerp(base, h, smoothstep(0, BLEND, edge)) : h;
+      v[q] = h;
     }
   }
-  const L = { n, r, x0: file.x0, z0: file.z0, v };
-  const dg = Object.create(grid);
-  dg.detail = { r, n, x0: file.x0, z0: file.z0, v, i0, j0, ms: Date.now() - t0, height: (x, z) => latticeHeight(L, x, z) };
-  return dg;
+  return { L: { n, r, x0: D.x0, z0: D.z0, v }, base, sd: sdA };
 }
 
-// The detail terrain of tile (tx, ty): buildTerrainChunk's output (terrain-build.js; the same arrays, the same paint,
-// the same smooth normals over a one-cell ring, the waterline cut the same way) on the detail lattice. grid: withDetail's.
-export function buildDetailChunk(grid, i0, j0, n, { shade = null, originX, originZ, site = null, cellSplat = null }) {
-  const D = grid.detail, N = D.n, r = D.r, s = Math.round(grid.cell / r), V = D.v;
-  const tStart = Date.now();
-  // capacity: every lattice point, plus the waterline's twin vertices
-  let cap = N * N + 65536;
-  let pos = new Float32Array(cap * 3), sdv = new Float32Array(cap), sa = new Uint8Array(cap * 4), sb = new Uint8Array(cap * 4), sc = new Uint8Array(cap * 4), fl = new Uint8Array(cap * 4);
-  const hasLand = !!(site && site.land);
-  let lnd = hasLand ? new Int8Array(cap * 4) : null;
-  let nv = 0;
+// The mesh of one chunk. grid: the 10 m tile's (its own grid, halo'd); site: its Site; shade: its forest shade (per
+// local cell); G: chunkGround's for this chunk; P: chunkGround's for the 5 m chunk over it (a 2 m chunk), else null;
+// cell0: [i, j], the 10 m cell whose centre is the chunk's corner (sample (1, 1)).
+// Vertices: the lattice's n x n samples first, row by row (so the main thread reads the lattice straight off the
+// arrays), then the waterline's twins, then the skirt. pos is chunk-local (the corner at 0), y its own level's height;
+// own, h5, h10 are the three heights (h5 null on a 5 m chunk), nOwn, n5, n10 the normals over each.
+export function buildChunk(grid, site, shade, G, P, cell0) {
+  const L = G.L, n = L.n, r = L.r, s = Math.round(grid.cell / r), N = n * n;
+  const ox = L.x0 + r, oz = L.z0 + r; // the chunk's corner, sample (1, 1)
+  const t0 = Date.now();
+  // a view of the grid whose ground is this chunk's lattice (the paint's slope and walls read it)
+  const dg = Object.create(grid);
+  const own = (x, z) => latticeAt(L, x, z);
+  dg.detail = { height: own };
+  dg.heightAt = (x, z) => { const h = own(x, z); return h === h ? h : grid.heightAt(x, z); };
+  let cap = N + 16384, nv = N;
+  let pos = new Float32Array(cap * 3), hOwn = new Float32Array(cap), h5 = P ? new Float32Array(cap) : null, h10 = new Float32Array(cap), sdv = new Float32Array(cap);
   const grow = () => {
     cap *= 2;
     const g = (a, k) => { const b = new a.constructor(cap * k); b.set(a); return b; };
-    pos = g(pos, 3); sdv = g(sdv, 1); sa = g(sa, 4); sb = g(sb, 4); sc = g(sc, 4); fl = g(fl, 4); if (lnd) lnd = g(lnd, 4);
+    pos = g(pos, 3); hOwn = g(hOwn, 1); if (h5) h5 = g(h5, 1); h10 = g(h10, 1); sdv = g(sdv, 1);
   };
+  for (let M = 0; M < n; M++) for (let K = 0; K < n; K++) {
+    const q = M * n + K, x = L.x0 + K * r, z = L.z0 + M * r;
+    pos[q * 3] = x - ox; pos[q * 3 + 1] = L.v[q]; pos[q * 3 + 2] = z - oz;
+    hOwn[q] = L.v[q]; h10[q] = G.base[q]; sdv[q] = G.sd[q];
+    if (h5) { const y = latticeAt(P.L, x, z); h5[q] = y === y ? y : G.base[q]; }
+  }
+  // the waterline: where it crosses a lattice edge, two vertices at the crossing, one painted land and one lake bed
+  const crossMap = new Map(), twins = [], paintAs = new Map(); // vertex -> the shore distance it is painted with
+  const crossing = (a, b) => {
+    const key = a < b ? a * 4194304 + b : b * 4194304 + a;
+    let m = crossMap.get(key);
+    if (m !== undefined) return m;
+    const t = sdv[a] / (sdv[a] - sdv[b]);
+    const pair = [];
+    for (const sd of [0, -1e-3]) {
+      if (nv >= cap) grow();
+      const v = nv++;
+      for (let c = 0; c < 3; c++) pos[v * 3 + c] = lerp(pos[a * 3 + c], pos[b * 3 + c], t);
+      hOwn[v] = lerp(hOwn[a], hOwn[b], t); h10[v] = lerp(h10[a], h10[b], t); if (h5) h5[v] = lerp(h5[a], h5[b], t);
+      sdv[v] = sd; paintAs.set(v, sd); pair.push(v);
+    }
+    m = { land: pair[0], bed: pair[1] };
+    twins.push(pair[0], pair[1]);
+    crossMap.set(key, m);
+    return m;
+  };
+  // every square (the apron's ring too, for the normals); the core's, less the deep quads, are drawn
+  let all = new Uint32Array(N * 6 + 65536), na = 0, core = new Uint32Array(N * 6 + 65536), nc = 0, isCore = true;
+  const tri = (a, b, c) => {
+    if (na + 3 > all.length) { const t = new Uint32Array(all.length * 2); t.set(all); all = t; }
+    all[na++] = a; all[na++] = b; all[na++] = c;
+    if (isCore) { if (nc + 3 > core.length) { const t = new Uint32Array(core.length * 2); t.set(core); core = t; } core[nc++] = a; core[nc++] = b; core[nc++] = c; }
+  };
+  const fan = (poly) => { for (let k = 1; k < poly.length - 1; k++) tri(poly[k], poly[k + 1], poly[0]); };
+  const quad = (a, b, c2, d, flip) => {
+    const Pq = [a, c2, d, b];
+    let changes = 0;
+    for (let k = 0; k < 4; k++) if ((sdv[Pq[k]] >= 0) !== (sdv[Pq[(k + 1) % 4]] >= 0)) changes++;
+    if (changes !== 2) { if (flip) { tri(a, c2, b); tri(b, c2, d); } else { tri(a, c2, d); tri(a, d, b); } return; }
+    const inside = [], outside = [];
+    for (let k = 0; k < 4; k++) {
+      const v = Pq[k], w = Pq[(k + 1) % 4], vin = sdv[v] >= 0;
+      (vin ? inside : outside).push(v);
+      if (vin !== (sdv[w] >= 0)) { const m = crossing(v, w); inside.push(m.land); outside.push(m.bed); }
+    }
+    fan(inside); fan(outside);
+  };
+  // the deep quads: 10 m quads (s x s squares from sample (1 + a s, 1 + b s)) whose every sample is far out in a lake
+  const nq = (n - 3) / s, deep = new Uint8Array(nq * nq);
+  for (let b = 0; b < nq; b++) for (let a = 0; a < nq; a++) {
+    let all2 = true;
+    for (let M = 1 + b * s; all2 && M <= 1 + (b + 1) * s; M++) for (let K = 1 + a * s; K <= 1 + (a + 1) * s; K++) if (!(sdv[M * n + K] < -DEEP)) { all2 = false; break; }
+    deep[b * nq + a] = all2 ? 1 : 0;
+  }
+  for (let M = 0; M < n - 1; M++) for (let K = 0; K < n - 1; K++) {
+    const inCore = K >= 1 && M >= 1 && K <= n - 3 && M <= n - 3;
+    isCore = inCore && !deep[Math.floor((M - 1) / s) * nq + Math.floor((K - 1) / s)];
+    const q = M * n + K;
+    quad(q, q + 1, q + n, q + n + 1, ((K + M) & 1) === 0);
+  }
+  isCore = true;
+  // a deep quad: the 10 m mesh's two triangles (its split: terrain-build.js buildTerrainChunk)
+  const deepTri = [];
+  for (let b = 0; b < nq; b++) for (let a = 0; a < nq; a++) {
+    if (!deep[b * nq + a]) continue;
+    const K = 1 + a * s, M = 1 + b * s, A = M * n + K, B = A + s, C = A + s * n, Dd = C + s;
+    if (((cell0[0] + a + cell0[1] + b) & 1) === 0) deepTri.push(A, C, B, B, C, Dd); else deepTri.push(A, C, Dd, A, Dd, B);
+  }
+  // smooth normals over a surface (y from hy), as buildTerrainChunk: area-weighted face normals over every triangle
+  // (the apron's ring too, so the light runs on across the chunk's edge), the waterline twins joined, two passes of
+  // a one-ring smoothing
+  const normals = (hy) => {
+    const acc = new Float32Array(nv * 3);
+    for (let t = 0; t < na; t += 3) {
+      const a = all[t], b = all[t + 1], d = all[t + 2];
+      const ax = pos[a * 3], ay = hy[a], az = pos[a * 3 + 2];
+      const ux = pos[b * 3] - ax, uy = hy[b] - ay, uz = pos[b * 3 + 2] - az;
+      const vx = pos[d * 3] - ax, vy = hy[d] - ay, vz = pos[d * 3 + 2] - az;
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      acc[a * 3] += nx; acc[a * 3 + 1] += ny; acc[a * 3 + 2] += nz;
+      acc[b * 3] += nx; acc[b * 3 + 1] += ny; acc[b * 3 + 2] += nz;
+      acc[d * 3] += nx; acc[d * 3 + 1] += ny; acc[d * 3 + 2] += nz;
+    }
+    const join = (a3) => { for (let k = 0; k < twins.length; k += 2) { const a = twins[k] * 3, b = twins[k + 1] * 3; for (let c = 0; c < 3; c++) { const sum = a3[a + c] + a3[b + c]; a3[a + c] = sum; a3[b + c] = sum; } } };
+    const unit = (a3) => { for (let k = 0; k < nv; k++) { const x = a3[k * 3], y = a3[k * 3 + 1], z = a3[k * 3 + 2], l = Math.hypot(x, y, z) || 1; a3[k * 3] = x / l; a3[k * 3 + 1] = y / l; a3[k * 3 + 2] = z / l; } };
+    join(acc); unit(acc);
+    let cur = acc, nxt = new Float32Array(nv * 3);
+    for (let pass = 0; pass < 2; pass++) {
+      for (let k = 0; k < nv * 3; k++) nxt[k] = cur[k] * 2;
+      for (let t = 0; t < na; t += 3) {
+        const a = all[t] * 3, b = all[t + 1] * 3, d = all[t + 2] * 3;
+        for (let c = 0; c < 3; c++) { const sum = cur[a + c] + cur[b + c] + cur[d + c]; nxt[a + c] += sum; nxt[b + c] += sum; nxt[d + c] += sum; }
+      }
+      join(nxt); unit(nxt);
+      const tmp = cur; cur = nxt; nxt = tmp;
+    }
+    return cur;
+  };
+  const nBody = nv;
+  const NO = normals(hOwn), N10 = normals(h10), N5 = h5 ? normals(h5) : null;
+  // the paint, for the vertices drawn: the 10 m tile's site and shade at each, its slope and walls off the lattice
+  const used = new Uint8Array(nBody);
+  for (let t = 0; t < nc; t++) used[core[t]] = 1;
+  for (const v of deepTri) used[v] = 1;
+  let sa = new Uint8Array(cap * 4), sb = new Uint8Array(cap * 4), sc = new Uint8Array(cap * 4), fl = new Uint8Array(cap * 4);
+  const hasLand = !!(site && site.land);
+  let lnd = hasLand ? new Int8Array(cap * 4) : null;
   const s8 = (v) => Math.round(Math.min(1, Math.max(-1, v)) * 127);
   const q8 = (v) => Math.round(Math.min(1, Math.max(0, v)) * 255);
   const levelCache = new Map();
@@ -103,159 +212,86 @@ export function buildDetailChunk(grid, i0, j0, n, { shade = null, originX, origi
   const shadeAt = (x, z) => (shade ? shade[grid.local(grid.cellI(x), grid.cellJ(z))] : 0);
   const pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, depth: -1, bedDepth: 0, bed: {} };
   const wA = [0, 0, 0, 0], wB = [0, 0, 0, 0], wC = [0, 0, 0, 0], wf = [0, 0, 0, 0];
-  const add = (x, h, z, sd) => {
-    if (nv >= cap) grow();
-    const v = nv++;
-    pos[v * 3] = x - originX; pos[v * 3 + 1] = h; pos[v * 3 + 2] = z - originZ; sdv[v] = sd;
-    groundPre(grid, x, z, sd, site, pre);
+  for (let v = 0; v < nBody; v++) {
+    if (!used[v]) continue;
+    const x = pos[v * 3] + ox, z = pos[v * 3 + 2] + oz, h = hOwn[v];
+    const sd = paintAs.has(v) ? paintAs.get(v) : sdv[v];
+    groundPre(dg, x, z, sd, site, pre);
     if (sd < 0) {
       pre.bedDepth = Math.max(0, levelNear(x, z) - h);
       pre.depth = pre.bedDepth + bedGrain(x, z);
-      bedPre(grid, x, z, sd, pre.bedDepth, site, pre.bed);
+      bedPre(dg, x, z, sd, pre.bedDepth, site, pre.bed);
     } else pre.depth = -1;
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
     for (let k = 0; k < 4; k++) { sa[v * 4 + k] = q8(wA[k]); sb[v * 4 + k] = q8(wB[k]); sc[v * 4 + k] = q8(wC[k]); fl[v * 4 + k] = q8(wf[k]); }
     if (lnd) { lnd[v * 4] = s8(pre.tR - 1); lnd[v * 4 + 1] = s8(pre.tG - 1); lnd[v * 4 + 2] = s8(pre.tB - 1); lnd[v * 4 + 3] = sd < 0 ? 0 : s8(pre.sphag); }
-    return v;
-  };
-  // lattice point (K, M) of the file's lattice (K = 0 is the centre of cell i0 - 1)
-  const map = new Int32Array(N * N).fill(-1);
-  const vert = (K, M) => {
-    const q = M * N + K;
-    let v = map[q];
-    if (v >= 0) return v;
-    const x = D.x0 + K * r, z = D.z0 + M * r;
-    v = add(x, V[q], z, grid.shoreAt(x, z));
-    map[q] = v;
-    return v;
-  };
-  const crossMap = new Map(), twins = [];
-  const crossing = (v, w) => {
-    const key = v < w ? v * 4194304 + w : w * 4194304 + v;
-    let m = crossMap.get(key);
-    if (m !== undefined) return m;
-    const rv = sdv[v], rw = sdv[w], t = rv / (rv - rw);
-    const px = lerp(pos[v * 3], pos[w * 3], t), py = lerp(pos[v * 3 + 1], pos[w * 3 + 1], t), pz = lerp(pos[v * 3 + 2], pos[w * 3 + 2], t);
-    const land = add(px + originX, py, pz + originZ, 0), bedV = add(px + originX, py, pz + originZ, -1e-3);
-    m = { land, bed: bedV };
-    twins.push(land, bedV);
-    crossMap.set(key, m);
-    return m;
-  };
-  let tris = new Uint32Array(N * N * 6 + 65536), nt3 = 0, coreFlag = new Uint8Array(tris.length / 3), core = true;
-  const tri = (a, b, c) => {
-    if (nt3 + 3 > tris.length) { const t = new Uint32Array(tris.length * 2); t.set(tris); tris = t; const f = new Uint8Array(tris.length / 3); f.set(coreFlag); coreFlag = f; }
-    coreFlag[nt3 / 3] = core ? 1 : 0;
-    tris[nt3++] = a; tris[nt3++] = b; tris[nt3++] = c;
-  };
-  const fan = (poly) => { for (let k = 1; k < poly.length - 1; k++) tri(poly[k], poly[k + 1], poly[0]); };
-  const quad = (a, b, c2, d, flip) => {
-    const P = [a, c2, d, b];
-    let changes = 0;
-    for (let k = 0; k < 4; k++) if ((sdv[P[k]] >= 0) !== (sdv[P[(k + 1) % 4]] >= 0)) changes++;
-    if (changes !== 2) {
-      if (flip) { tri(a, c2, b); tri(b, c2, d); } else { tri(a, c2, d); tri(a, d, b); }
-      return;
-    }
-    const inside = [], outside = [];
-    for (let k = 0; k < 4; k++) {
-      const v = P[k], w = P[(k + 1) % 4], vin = sdv[v] >= 0;
-      (vin ? inside : outside).push(v);
-      if (vin !== (sdv[w] >= 0)) { const m = crossing(v, w); inside.push(m.land); outside.push(m.bed); }
-    }
-    fan(inside); fan(outside);
-  };
-  // the 10 m quads of the tile and a ring of one round it, each as s x s lattice squares, quad by quad and row by
-  // row (prop-kit.js MeshGround buckets the triangles by 10 m quad)
-  const K0 = (i0 - 1 - (D.i0 - 1)) * s, M0 = (j0 - 1 - (D.j0 - 1)) * s;
-  for (let j = j0 - 1; j < j0 + n + 1; j++) {
-    for (let i = i0 - 1; i < i0 + n + 1; i++) {
-      core = i >= i0 && i < i0 + n && j >= j0 && j < j0 + n;
-      const Kq = K0 + (i - (i0 - 1)) * s, Mq = M0 + (j - (j0 - 1)) * s;
-      for (let b = 0; b < s; b++) for (let a = 0; a < s; a++) {
-        const K = Kq + a, M = Mq + b;
-        if (K < 0 || M < 0 || K >= N - 1 || M >= N - 1) continue;
-        quad(vert(K, M), vert(K + 1, M), vert(K, M + 1), vert(K + 1, M + 1), ((K + M) & 1) === 0);
-      }
-    }
   }
-  if (cellSplat) {
-    for (let j = j0; j < j0 + n; j++) for (let i = i0; i < i0 + n; i++) {
-      const v = map[(M0 + (j - j0 + 1) * s) * N + K0 + (i - i0 + 1) * s];
-      if (v < 0) continue;
-      const o = grid.local(i, j) * CELL_SPLAT;
-      for (let c = 0; c < 4; c++) { cellSplat[o + c] = sa[v * 4 + c]; cellSplat[o + 4 + c] = sb[v * 4 + c]; }
-      cellSplat[o + 8] = sc[v * 4]; cellSplat[o + 9] = sc[v * 4 + 1]; cellSplat[o + 10] = fl[v * 4]; cellSplat[o + 11] = fl[v * 4 + 1];
-    }
-  }
-  // smooth normals, as buildTerrainChunk: area-weighted face normals, the waterline twins joined, then two passes of
-  // a one-ring smoothing (on the finer lattice that ring is narrower, so the light keeps more of the detail's relief)
-  const acc = new Float32Array(nv * 3);
-  for (let t = 0; t < nt3; t += 3) {
-    const a = tris[t], b = tris[t + 1], d = tris[t + 2];
-    const ax = pos[a * 3], ay = pos[a * 3 + 1], az = pos[a * 3 + 2];
-    const ux = pos[b * 3] - ax, uy = pos[b * 3 + 1] - ay, uz = pos[b * 3 + 2] - az;
-    const vx = pos[d * 3] - ax, vy = pos[d * 3 + 1] - ay, vz = pos[d * 3 + 2] - az;
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
-    acc[a * 3] += nx; acc[a * 3 + 1] += ny; acc[a * 3 + 2] += nz;
-    acc[b * 3] += nx; acc[b * 3 + 1] += ny; acc[b * 3 + 2] += nz;
-    acc[d * 3] += nx; acc[d * 3 + 1] += ny; acc[d * 3 + 2] += nz;
-  }
-  const joinTwins = (a3) => {
-    for (let k = 0; k < twins.length; k += 2) {
-      const a = twins[k] * 3, b = twins[k + 1] * 3;
-      for (let c = 0; c < 3; c++) { const sum = a3[a + c] + a3[b + c]; a3[a + c] = sum; a3[b + c] = sum; }
-    }
+  // the skirt: a strip hung SKIRT metres down from each edge, painted and lit as the edge, both windings
+  const S = SKIRT[r] || 2, drop = new Map(), skirtTris = [];
+  const growAll = () => {
+    grow();
+    const g = (a, k) => { const b = new a.constructor(cap * k); b.set(a); return b; };
+    sa = g(sa, 4); sb = g(sb, 4); sc = g(sc, 4); fl = g(fl, 4); if (lnd) lnd = g(lnd, 4);
   };
-  const unit = (a3) => { for (let k = 0; k < nv; k++) { const x = a3[k * 3], y = a3[k * 3 + 1], z = a3[k * 3 + 2], L = Math.hypot(x, y, z) || 1; a3[k * 3] = x / L; a3[k * 3 + 1] = y / L; a3[k * 3 + 2] = z / L; } };
-  joinTwins(acc); unit(acc);
-  let cur = acc, nxt = new Float32Array(nv * 3);
-  for (let pass = 0; pass < 2; pass++) {
-    for (let k = 0; k < nv * 3; k++) nxt[k] = cur[k] * 2;
-    for (let t = 0; t < nt3; t += 3) {
-      const a = tris[t] * 3, b = tris[t + 1] * 3, d = tris[t + 2] * 3;
-      for (let c = 0; c < 3; c++) { const sum = cur[a + c] + cur[b + c] + cur[d + c]; nxt[a + c] += sum; nxt[b + c] += sum; nxt[d + c] += sum; }
-    }
-    joinTwins(nxt); unit(nxt);
-    const tmp = cur; cur = nxt; nxt = tmp;
-  }
-  // Skirts: the 10 m neighbour's edge has a vertex every 5 m in the shore band (its 2 x 2 subdivision, with the shore
-  // bumps on them), which a 2 m lattice does not land on, so the two edges part by up to a few decimetres there. A
-  // strip hung SKIRT metres down from the tile's edge, painted and lit as the edge, closes any such slit from either
-  // side. (Its triangles have no area seen from above: the ground queries never land on them.)
-  const nBody = nv, skirt = [];
-  const edgeRun = (K, M, dK, dM) => { const out = []; for (let t = 0; t <= n * s; t++) { const v = map[(M + dM * t) * N + K + dK * t]; if (v >= 0) out.push(v); } return out; };
-  const Ka = K0 + s, Ma = M0 + s, Kb = K0 + s + n * s, Mb = M0 + s + n * s;
-  for (const run of [edgeRun(Ka, Ma, 1, 0), edgeRun(Ka, Mb, 1, 0), edgeRun(Ka, Ma, 0, 1), edgeRun(Kb, Ma, 0, 1)]) skirt.push(run);
-  const drop = new Map();
   const dropped = (v) => {
     let d = drop.get(v);
     if (d !== undefined) return d;
-    if (nv >= cap) grow();
+    if (nv >= cap) growAll();
     d = nv++;
-    pos[d * 3] = pos[v * 3]; pos[d * 3 + 1] = pos[v * 3 + 1] - SKIRT; pos[d * 3 + 2] = pos[v * 3 + 2]; sdv[d] = sdv[v];
+    pos[d * 3] = pos[v * 3]; pos[d * 3 + 1] = pos[v * 3 + 1] - S; pos[d * 3 + 2] = pos[v * 3 + 2];
+    hOwn[d] = hOwn[v] - S; h10[d] = h10[v] - S; if (h5) h5[d] = h5[v] - S; sdv[d] = sdv[v];
     for (let k = 0; k < 4; k++) { sa[d * 4 + k] = sa[v * 4 + k]; sb[d * 4 + k] = sb[v * 4 + k]; sc[d * 4 + k] = sc[v * 4 + k]; fl[d * 4 + k] = fl[v * 4 + k]; if (lnd) lnd[d * 4 + k] = lnd[v * 4 + k]; }
     drop.set(v, d);
     return d;
   };
-  const skirtTris = [];
-  for (const run of skirt) for (let k = 0; k + 1 < run.length; k++) {
+  const runs = [[], [], [], []]; // north, south, west, east
+  for (let t = 1; t <= n - 2; t++) { runs[0].push(1 * n + t); runs[1].push((n - 2) * n + t); runs[2].push(t * n + 1); runs[3].push(t * n + n - 2); }
+  for (const run of runs) for (let k = 0; k + 1 < run.length; k++) {
     const a = run[k], b = run[k + 1], da = dropped(a), db = dropped(b);
-    skirtTris.push(a, b, db, a, db, da, a, db, b, a, da, db); // both windings: the strip shows from either side
+    skirtTris.push(a, b, db, a, db, da, a, db, b, a, da, db);
   }
-  const nrm = new Int8Array(nv * 3);
-  for (let k = 0; k < nBody * 3; k++) nrm[k] = Math.round(cur[k] * 127);
-  for (const [v, d] of drop) for (let c = 0; c < 3; c++) nrm[d * 3 + c] = nrm[v * 3 + c];
-  let nc = 0;
-  for (let t = 0; t < nt3 / 3; t++) nc += coreFlag[t];
-  const idx = new Uint32Array(nc * 3 + skirtTris.length);
+  const i8 = (src, k) => Math.round(src[k] * 127);
+  const nrmOf = (src) => {
+    const out = new Int8Array(nv * 3);
+    for (let k = 0; k < nBody * 3; k++) out[k] = i8(src, k);
+    for (const [v, d] of drop) for (let c = 0; c < 3; c++) out[d * 3 + c] = out[v * 3 + c];
+    return out;
+  };
+  // the index, in four runs by quarter (the 5 m chunk is drawn as four 640 m meshes, one per 2 m chunk's footprint, so
+  // the one a 2 m chunk covers can be hidden); a triangle goes to the quarter its first vertex's square lies in
+  const half = (n - 3) / 2;
+  const quarterSquare = (a, b, c) => { // the centroid's quarter (a triangle never straddles: the halves are whole squares)
+    const x = (pos[a * 3] + pos[b * 3] + pos[c * 3]) / (3 * r), z = (pos[a * 3 + 2] + pos[b * 3 + 2] + pos[c * 3 + 2]) / (3 * r);
+    return (x >= half ? 1 : 0) + (z >= half ? 2 : 0);
+  };
+  const lists = [[], [], [], []];
+  for (let t = 0; t < nc; t += 3) lists[quarterSquare(core[t], core[t + 1], core[t + 2])].push(core[t], core[t + 1], core[t + 2]);
+  for (let t = 0; t < deepTri.length; t += 3) lists[quarterSquare(deepTri[t], deepTri[t + 1], deepTri[t + 2])].push(deepTri[t], deepTri[t + 1], deepTri[t + 2]);
+  const dropOf = new Map(); for (const [v, d] of drop) dropOf.set(d, v);
+  for (let t = 0; t < skirtTris.length; t += 3) {
+    const a = skirtTris[t], b = skirtTris[t + 1], base = dropOf.has(a) ? dropOf.get(a) : a, base2 = dropOf.has(b) ? dropOf.get(b) : b;
+    const x = (pos[base * 3] + pos[base2 * 3]) / (2 * r), z = (pos[base * 3 + 2] + pos[base2 * 3 + 2]) / (2 * r);
+    lists[(x >= half ? 1 : 0) + (z >= half ? 2 : 0)].push(a, b, skirtTris[t + 2]);
+  }
+  let total = 0;
+  for (const l of lists) total += l.length;
+  const idx = new Uint32Array(total), parts = new Float32Array(4 * 8);
   let o = 0;
-  for (let t = 0; t < nt3 / 3; t++) if (coreFlag[t]) { idx[o++] = tris[t * 3]; idx[o++] = tris[t * 3 + 1]; idx[o++] = tris[t * 3 + 2]; }
-  idx.set(skirtTris, o);
+  lists.forEach((l, k) => {
+    idx.set(l, o);
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (const v of l) {
+      const x = pos[v * 3], z = pos[v * 3 + 2], ya = Math.min(hOwn[v], h10[v], h5 ? h5[v] : Infinity), yb = Math.max(hOwn[v], h10[v], h5 ? h5[v] : -Infinity);
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; if (ya < y0) y0 = ya; if (yb > y1) y1 = yb;
+    }
+    parts.set([o, l.length, x0, y0, z0, x1, y1, z1], k * 8);
+    o += l.length;
+  });
   return {
-    pos: pos.slice(0, nv * 3), nrm, splatA: sa.slice(0, nv * 4), splatB: sb.slice(0, nv * 4), splatC: sc.slice(0, nv * 4), floor: fl.slice(0, nv * 4), idx,
-    ...(lnd ? { land: lnd.slice(0, nv * 4) } : {}), detail: { r, vertices: nv, triangles: idx.length / 3, buildMs: Date.now() - tStart, latticeMs: D.ms },
+    n, r, s, ox, oz, nv, nBody, nq, deep,
+    pos: pos.slice(0, nv * 3), own: hOwn.slice(0, nv), h10: h10.slice(0, nv), ...(h5 ? { h5: h5.slice(0, nv), n5: nrmOf(N5) } : {}),
+    nOwn: nrmOf(NO), n10: nrmOf(N10),
+    splatA: sa.slice(0, nv * 4), splatB: sb.slice(0, nv * 4), splatC: sc.slice(0, nv * 4), floor: fl.slice(0, nv * 4), ...(lnd ? { land: lnd.slice(0, nv * 4) } : {}),
+    idx, parts, ms: Date.now() - t0,
   };
 }
-

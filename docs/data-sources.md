@@ -660,10 +660,10 @@ The game reads both releases.
 
 ## 2 m detail (LiDAR near the player)
 
-The owner compared 10 m, 5 m and 2 m ground in the game ([detail-proto.md](detail-proto.md)) and chose **2 m near
-the player**. `scripts/detail-bake.mjs` cuts it for the whole US side. It is bake only: the game does not read it
-yet. The game side will stream 2 m within about 300 m of the player and 5 m out to about 900 m, to hide the step
-down to the 10 m tiles. The data is hosted on Cloudflare R2 with the rest of v4, under `detail/`
+The owner compared 10 m, 5 m and 2 m ground in the game (the prototype, [detail.md](detail.md#history-the-prototype))
+and chose **2 m near the player**. `scripts/detail-bake.mjs` cuts it for the whole US side. The game streams 2 m
+within about 300 m of the player and 5 m out to about 900 m, to hide the step down to the 10 m tiles
+([detail.md](detail.md)). The data is hosted on Cloudflare R2 with the rest of v4, under `detail/`
 (`https://data.gagekrumbach.com/bwca/v4/detail/`).
 
 ### Running it
@@ -822,7 +822,5 @@ Every US tile with LiDAR was baked: 1,371 tiles, of which 1,353 have at least on
 - **The Ontario edge.** On the Ontario side, and off the flight, the samples take the v4 tile's height. Where a chunk
   holds both, the LiDAR meets that height in a step of up to the v4 blend's difference, at the border. The border
   mostly runs through lakes.
-- **The cliff modules** (`cliffs.js`) still come from the 10 m cliff channel. Where the 2 m ground carries the face,
-  they double it up (detail-proto.md).
-- **The prototype's `?detail=` flag** reads `scripts/detail-proto.mjs`'s per-tile files, not these chunks. The game
-  side of the production format is still to come.
+- **The cliff modules** (`cliffs.js`) still come from the 10 m cliff channel. Where a 2 m chunk is in and carries
+  the face, the game hides them (detail.md, "The cliff modules").

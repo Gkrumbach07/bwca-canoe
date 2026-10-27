@@ -12,7 +12,7 @@ import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the
 import { patchTile, lakeRockBins, clearPlants, useV4 as rapidsV4 } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
 import { unpackTint, setLand } from './land.js'; // d2 land: the rocks' bedrock tint; `?land=off`
 import { loadBurns, setBurnDate } from './burns.js';
-import { decodeDetail, withDetail, buildDetailChunk } from './detail-build.js'; // detail proto (`?detail=2|5`, detail.js)
+import { decodeChunk, chunkGround, buildChunk } from './detail-build.js'; // LiDAR detail (docs/detail.md)
 
 let cfg = null;
 // the real burns (burns.js): the table read once, as the worker starts; each build waits for it and then takes the
@@ -141,13 +141,15 @@ const MORTON = (() => { const m = new Uint8Array(PARTS * PARTS); for (let j = 0;
 function grow(lo, hi, o, P, v) {
   for (let d = 0; d < 3; d++) { const p = P[v + d]; if (p < lo[o + d]) lo[o + d] = p; if (p > hi[o + d]) hi[o + d] = p; }
 }
-function partTerrain(t, size) {
+function partTerrain(t, size, cell = 0) {
   const I = t.idx, P = t.pos, nt = I.length / 3, cs = size / PARTS, nb = PARTS * PARTS;
   const block = new Uint8Array(nt), count = new Int32Array(nb);
   const lo = new Float32Array(nb * 3).fill(Infinity), hi = new Float32Array(nb * 3).fill(-Infinity);
   for (let k = 0; k < nt; k++) {
     const a = I[k * 3] * 3, b = I[k * 3 + 1] * 3, c = I[k * 3 + 2] * 3;
-    const x = (P[a] + P[b] + P[c]) / 3, z = (P[a + 2] + P[b + 2] + P[c + 2]) / 3;
+    // (by the quad it lies in: the mesh's quads join cell centres, so block k holds quads 64k .. 64k + 63, exactly the
+    // footprint of a 2 m detail chunk and, by quarters, of a 5 m one: detail.js hides a quarter under a 5 m chunk)
+    const x = (P[a] + P[b] + P[c]) / 3 - cell / 2, z = (P[a + 2] + P[b + 2] + P[c + 2]) / 3 - cell / 2;
     const q = MORTON[Math.min(PARTS - 1, Math.max(0, Math.floor(z / cs))) * PARTS + Math.min(PARTS - 1, Math.max(0, Math.floor(x / cs)))];
     block[k] = q; count[q]++;
     grow(lo, hi, q * 3, P, a); grow(lo, hi, q * 3, P, b); grow(lo, hi, q * 3, P, c);
@@ -170,17 +172,15 @@ async function buildFine(m) {
   const g = cfg.grid;
   if (!v4()) gradeAhead('fine', m.tx, m.ty);
   const buf = await fetchTile(m.url);
-  const dbuf = m.detail ? await fetchTile(m.detail.url) : null; // detail proto: the LiDAR lattice (detail-build.js)
   if (!v4()) await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   await burns; burnDate(m);
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
-  let grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
+  const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
   grid.cdomById = cfg.cdomById || null; // d2 water: the lakes' CDOM (water-build.js cellColour)
   shoalBeds(grid); // d2 water: the bed up under the mapped rice, reeds and lilies (v4; the grid's arrays view buf)
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
   patchTile(buf, m.tx, m.ty, g); // d1 rapids: each drop where it really is, the rocks' shoals (the grid's arrays view buf)
-  if (dbuf) grid = withDetail(grid, decodeDetail(dbuf), m.tx, m.ty); // detail proto: every ground query below reads the lattice
   // what the ground is like at every cell (cliffs, scree, ridges, wet ground, soil): the paint, the forest, the
   // rocks and the cliffs all read it
   const site = new Site(grid, cfg.exclusions);
@@ -192,7 +192,7 @@ async function buildFine(m) {
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);
   const cellSplat = cover.subarray(COVER_SPLAT_AT(grid.side));
-  const terrain = partTerrain((grid.detail ? buildDetailChunk : buildTerrainChunk)(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell); // round A-C
+  const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell, g.cell); // round A-C
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...(b.style !== undefined ? { style: b.style } : {}), ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz, b.sp) })); // (d2 land: a cliff bin's family; the rocks' tint by species)
@@ -202,7 +202,10 @@ async function buildFine(m) {
   if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.cdom.buffer, water.idx.buffer); // (d2 water: cdom)
   for (const b of bins) transfer.push(b.matrices.buffer, b.colors.buffer);
   for (const b of abins) transfer.push(b.matrices.buffer);
-  return { msg: { type: 'built', key: m.key, level: 'fine', tx: m.tx, ty: m.ty, data: buf, cover, terrain, water, veg: bins, aquatic: abins, collide, trees: veg.total, plants: aquatic.total }, transfer };
+  // the forest's shade per cell, kept by the main thread for the detail chunks' paint (detail.js)
+  const shade = veg.shade ? Float32Array.from(veg.shade) : null;
+  if (shade) transfer.push(shade.buffer);
+  return { msg: { type: 'built', key: m.key, level: 'fine', tx: m.tx, ty: m.ty, data: buf, cover, terrain, water, veg: bins, aquatic: abins, collide, shade, trees: veg.total, plants: aquatic.total }, transfer };
 }
 
 // A far tile covers 8 x 8 fine tiles; it is cut into chunks with the footprint of one fine tile each so a
@@ -233,9 +236,52 @@ async function buildFar(m) {
   return { msg: { type: 'built', key: m.key, level: 'far', fx: m.fx, fy: m.fy, data: buf, chunks }, transfer };
 }
 
+// ---- the LiDAR detail chunks (detail-build.js, docs/detail.md) ------------------------------------------------------
+// The main thread sends a tile's data (its baked buffer as installed, its forest shade) with the first chunk of that tile
+// this worker builds; the grid and its site are kept for the next few chunks. The 5 m chunk over a 2 m one is kept too.
+const detailTiles = new Map(), detailParents = new Map(), TILES_KEPT = 3, PARENTS_KEPT = 6;
+const keep = (map, key, val, max) => { map.delete(key); map.set(key, val); while (map.size > max) map.delete(map.keys().next().value); return val; };
+function detailTile(m) {
+  const key = `${m.tx},${m.ty}`;
+  let t = detailTiles.get(key);
+  if (m.tile) {
+    const g = cfg.grid;
+    const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, m.tile.data, cfg.levelById, cfg.clarityById);
+    grid.cdomById = cfg.cdomById || null;
+    t = { grid, site: new Site(grid, cfg.exclusions), shade: m.tile.shade, cache: new Map() };
+  }
+  if (!t) throw new Error(`detail: tile ${key} not sent`);
+  return keep(detailTiles, key, t, TILES_KEPT);
+}
+async function buildDetail(m) {
+  const t0 = Date.now();
+  const T = detailTile(m);
+  if (T.cache.size > 400000) T.cache.clear();
+  const buf = await fetchTile(m.url);
+  let P = null;
+  if (m.parent) {
+    P = detailParents.get(m.parent.url);
+    if (!P) P = chunkGround(T.grid, decodeChunk(await fetchTile(m.parent.url)), T.cache);
+    keep(detailParents, m.parent.url, P, PARENTS_KEPT);
+  }
+  await burns; burnDate(m);
+  const G = chunkGround(T.grid, decodeChunk(buf), T.cache);
+  if (m.r === 5) keep(detailParents, m.url, G, PARENTS_KEPT); // the 2 m chunks under it will want it
+  const c = buildChunk(T.grid, T.site, T.shade, G, P, m.cell0);
+  c.buildMs = Date.now() - t0; c.bytes = buf.byteLength;
+  const transfer = [c.pos.buffer, c.own.buffer, c.h10.buffer, c.nOwn.buffer, c.n10.buffer, c.splatA.buffer, c.splatB.buffer, c.splatC.buffer, c.floor.buffer, c.idx.buffer, c.parts.buffer, c.deep.buffer];
+  if (c.h5) transfer.push(c.h5.buffer, c.n5.buffer);
+  if (c.land) transfer.push(c.land.buffer);
+  return { msg: { type: 'chunk', key: m.key, chunk: c }, transfer };
+}
+
 self.onmessage = async (e) => {
   const m = e.data;
   if (m.type === 'init') { cfg = m; if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
+  if (m.type === 'chunk') {
+    try { const r = await buildDetail(m); self.postMessage(r.msg, r.transfer); } catch (err) { self.postMessage({ type: 'error', key: m.key, error: String((err && err.message) || err) }); }
+    return;
+  }
   if (m.type !== 'build') return;
   try {
     const r = m.level === 'far' ? await buildFar(m) : await buildFine(m);
