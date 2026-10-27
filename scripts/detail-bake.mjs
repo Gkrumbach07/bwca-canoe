@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Detail bake (docs/data-sources.md "2 m detail"): the Minnesota LiDAR (MnTOPO 2 m DEM) cut at 2 m onto the game's
 // grid for the whole US side, in 640 m chunks the game streams within a few hundred metres of the player, plus a 5 m
-// set in 1280 m chunks for a mid ring that hides the step down to the 10 m tiles. The successor of the prototype
-// (docs/detail-proto.md); bake only, the game reads none of it yet.
+// set in 1280 m chunks for a mid ring that hides the step down to the 10 m tiles. The successor of the prototype;
+// the game streams them (src/detail.js, docs/detail.md).
 //
 // The lattice. Samples r metres apart whose rows and columns run through the 10 m cell centres (the prototype's
 // lattice: zero offset from the 10 m grid). A chunk (cx, cy) of tile (tx, ty) at r covers C cells a side (64 at 2 m,

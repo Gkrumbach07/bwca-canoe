@@ -378,3 +378,64 @@ Stay on three.js and WebGL2, and keep the game a static page on GitHub Pages. Th
     state through `__game` or the settings, not through a fresh import.
   - The GPU timer queries read high on ANGLE over Metal (above).
   - The shadow pass doesn't run with the sun down (main.js `draw`), so a dusk scene has no shadow cost.
+
+## LiDAR detail: 2 m near the player (2026-10-27)
+
+The 2 m and 5 m ground round the player ([detail.md](detail.md)), against `?detail=10` (the 10 m game), measured
+with the same camera.
+- **Where:** this sandbox: 4 cores, no GPU, headless Chromium on SwiftShader, 960 × 600, Ultra defaults, 12:30 in
+  July, clear.
+- **The triangle counts are exact.** Read the frame times only as ratios: a SwiftShader frame is seconds.
+- **Drawn** is one frame's `renderer.info`: the view, the shadow cascades and the mirror together.
+
+| Spot | | Drawn triangles | Draw calls | Frame (median of 9) | Terrain shown | Terrain arrays | JS heap |
+|---|---|---|---|---|---|---|---|
+| Lake One cliff, canoe 40 m out (47.932, −91.483) | 10 m | 2.92 M | 338 | 2.86 s | 1.95 M | 57 MB | 0.94 GB |
+| | detail | **4.10 M (1.41×)** | 348 | 3.01 s (+5 %) | 3.11 M | 97 MB | 1.00 GB |
+| Border Route palisade, foot of the face (48.0743, −90.4204) | 10 m | 2.39 M | 307 | 1.48 s | 2.21 M | 65 MB | 1.54 GB |
+| | detail | **3.37 M (1.41×)** | 309 | 1.37 s (noise) | 2.96 M | 103 MB | 1.54 GB |
+
+The budget was at most 2× the 10 m triangles in view. Both spots draw 1.41×.
+
+**What is in at a spot:**
+- 3 or 4 chunks of 2 m and 6 or 7 of 5 m;
+- 1.1–1.7 M triangles of detail loaded;
+- 50–66 MB of chunk arrays installed, held once on the CPU (the blend rewrites them) and once on the GPU;
+- another 24–40 MB of chunks built ahead and not yet installed.
+
+| | Size |
+|---|---|
+| 2 m chunk | ~105 k vertices, ~200 k triangles (less in deep water), ~7 MB of arrays |
+| 5 m chunk | ~67 k vertices, ~130 k triangles |
+
+For comparison, the prototype's single 2 m tile was 3.3 M triangles and 88 MB.
+
+**Building a chunk** in a tile worker, with the fetch, decode, 10 m and 5 m heights, paint, normals and skirt:
+- median 0.42–0.59 s, max 1.2 s;
+- the first chunk of a tile also builds the tile's grid and site.
+
+**The main thread, travelling.** The player moved 2.88 km across Lake One's tile corner at 8 m a frame (360 frames).
+Each frame, the detail's `tick` was timed: installs, blends and re-seating.
+
+| | Time |
+|---|---|
+| Median frame | 2 ms |
+| p99 | 32 ms |
+| Worst frame | 43 ms |
+| Frames over 50 ms | **0** |
+| One install (geometry, cover, re-blend of the neighbours), median | 18–22 ms |
+| One install, worst | 52 ms (once, while settling after a teleport) |
+
+The tile installs (unchanged) peaked at 141 ms in the same run.
+
+**Downloads:** **0.30 MB a km** (gzip, from the index's sizes): 20 chunks over the 2.88 km. On arrival at Lake One
+it was 0.65 MB for the first chunks, and about 2.9 MB once every ring was filled and built ahead. The bake's
+estimate was 0.27 MB a km.
+
+**Where the time goes:**
+- the install's blend of the neighbours' 50 m bands (each 2 m chunk's band is ~30 % of its vertices, each 5 m one's
+  ~15 %);
+- `sortBin` the first time a bin is re-seated (a large bin's sort is up to ~30 ms in one step; the re-seat is
+  otherwise sliced to 2 ms a frame).
+
+On real hardware the triangles carry over, and the frame cost should follow them, not these SwiftShader seconds.

@@ -8,7 +8,7 @@ import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
 import { cascadeHooks } from './sunlight.js';
 import { burnDate } from './burns.js';
-import { DetailRing } from './detail.js'; // detail proto: `?detail=2|5` (docs/detail-proto.md)
+import { DetailStreamer } from './detail.js'; // the LiDAR detail near the player (docs/detail.md)
 
 // Streams the world around the player: a 5 x 5 neighbourhood of 2.56 km tiles (terrain, water, forest,
 // lake vegetation, portages, campsites) built in a pool of workers and installed one per frame, a 3 x 3
@@ -383,6 +383,7 @@ function terrainParts(res, material) {
     const m = new THREE.Mesh(geo, material);
     m.receiveShadow = whole.receiveShadow; m.castShadow = whole.castShadow; m.matrixAutoUpdate = false;
     m.name = 'terrain';
+    m.userData.quarter = q0 / TERRAIN_GROUP; // (a 5 m detail chunk covers exactly this quarter: detail.js cover)
     out.push(m);
   }
   return out;
@@ -421,7 +422,7 @@ export class TileManager {
     this.playerTile = [0, 0];
     this.stats = { built: 0, trees: 0, plants: 0 };
     this.culler = new InstanceCuller(scene);
-    this.detail = new DetailRing(this); // detail proto (inert without the flag)
+    this.detail = new DetailStreamer(this); // the LiDAR detail (inert where the data has none, or with ?detail=10)
     const ex = exclusionsFor(world);
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
@@ -488,7 +489,6 @@ export class TileManager {
 
   // Initial load: the 3 x 3 fine tiles and the far field around (x, z), with progress.
   async prime(x, z, onProgress = () => {}) {
-    await this.detail.ready; // detail proto: its index, so the first tiles are built at the right resolution
     const w = this.world;
     const [ptx, pty] = w.tileOf(x, z);
     const entries = [];
@@ -538,7 +538,7 @@ export class TileManager {
     const hidden = typeof document !== 'undefined' && document.hidden;
     this.install(hidden || gap > 500 ? Math.min(100, Math.max(INSTALL_BUDGET, gap / 4, hidden ? 50 : 0)) : INSTALL_BUDGET);
     this.evict();
-    this.detail.tick(px, pz); // detail proto: tiles into or out of its ring built again
+    this.detail.tick(px, pz); // the detail chunks: in and out by distance, the ground re-seated under the budget
     // draw only what the fog lets through; far chunks stand in wherever a fine tile is missing
     // round A-C: a tile's LOD is worked out again only once the camera has moved a step that could change a decision
     // there: LOD_STEP metres in the tile underfoot, a fiftieth of the distance to a tile farther off (a choice made at
@@ -573,7 +573,7 @@ export class TileManager {
 
   dispatch(px, pz) {
     this.lastPos = [px, pz];
-    if (!this.queue.length) return;
+    if (!this.queue.length && !this.detail.active) return;
     const w = this.world;
     const dist = (e) => {
       if (e.level === 'far') return -1; // far tiles are cheap and cover the gaps: first
@@ -582,15 +582,29 @@ export class TileManager {
       return Math.hypot(ox + w.tileMetres / 2 - px, oz + w.tileMetres / 2 - pz);
     };
     this.queue.sort((a, b) => dist(a) - dist(b));
+    // the detail chunks share the workers: one wanted in its ring now goes before a tile farther than the next one
+    // round the player's, one built ahead after the tiles
+    const [ptx, pty] = w.tileOf(px, pz);
+    const tileRank = (e) => (e.level === 'far' || e.ensured || Math.max(Math.abs(e.tx - ptx), Math.abs(e.ty - pty)) <= 1 ? 0 : 1);
     for (const wk of this.workers) {
-      if (wk.key || !this.queue.length) continue;
+      if (wk.key) continue;
+      const dj = this.detail.peek();
+      if (dj && (!this.queue.length || (dj.rank === 0 && tileRank(this.queue[0]) > 0))) {
+        const { m, transfer } = this.detail.message(dj.c, wk);
+        const bd = burnDate(); m.date = [bd.year, bd.doy];
+        wk.key = m.key; wk.entry = dj.c; wk.detail = true;
+        wk.w.postMessage(m, transfer);
+        continue;
+      }
+      if (!this.queue.length) continue;
+      wk.detail = false;
       const e = this.queue.shift();
       e.state = 'building';
       wk.key = e.key; wk.entry = e;
       // (the season's date goes with each build: the burns a tile shows are those begun by then, burns.js)
       const bd = burnDate(), date = [bd.year, bd.doy];
       if (e.level === 'far') wk.w.postMessage({ type: 'build', level: 'far', key: e.key, fx: e.fx, fy: e.fy, url: w.farUrl(e.fx, e.fy), date });
-      else wk.w.postMessage({ type: 'build', level: 'fine', key: e.key, tx: e.tx, ty: e.ty, url: w.tileUrl(e.tx, e.ty), date, detail: this.detail.msg(e, px, pz) }); // (detail proto)
+      else wk.w.postMessage({ type: 'build', level: 'fine', key: e.key, tx: e.tx, ty: e.ty, url: w.tileUrl(e.tx, e.ty), date });
     }
   }
 
@@ -600,6 +614,11 @@ export class TileManager {
     const wk = this.workers.find((x) => x.key === m.key);
     const e = wk ? wk.entry : null;
     if (wk) { wk.key = null; wk.entry = null; }
+    if (m.type === 'chunk' || (m.key && m.key.startsWith('detail:'))) { // a detail chunk (detail.js)
+      if (e) this.detail.built(e, m);
+      if (this.lastPos) this.dispatch(this.lastPos[0], this.lastPos[1]);
+      return;
+    }
     const map = e && e.level === 'far' ? this.farTiles : this.tiles;
     const live = !!e && e.state === 'building' && map.get(e.key) === e;
     if (m.type === 'error') {
@@ -609,7 +628,6 @@ export class TileManager {
     } else if (live) {
       e.result = m;
       e.state = 'built';
-      if (m.terrain && m.terrain.detail) e.detailInfo = m.terrain.detail; // detail proto
       if (e.level === 'far') this.installFar(e); else this.pending.push(e);
     }
     // the next build goes out now, not at the next frame (which a hidden window may not draw for a second)
@@ -650,6 +668,7 @@ export class TileManager {
     // registered before the props are built so they stand on it too
     e.ground = new MeshGround(r.terrain, w.cell, w.tile);
     this.grounds.set(e.ty * w.ntx + e.tx, { mesh: e.ground, ox, oz });
+    e.shade = r.shade || null; // (the detail chunks' paint: detail.js)
     const group = new THREE.Group();
     group.name = `tile ${e.key}`;
     group.position.set(ox, 0, oz);
@@ -739,6 +758,7 @@ export class TileManager {
       const victims = [...this.tiles.values()].filter((e) => e.state === 'ready' && !wanted(e) && e.readyTick !== this.tick).sort((a, b) => a.lastWanted - b.lastWanted);
       for (let i = 0; i < victims.length && this.tiles.size > MAX_LOADED; i++) {
         const e = victims[i];
+        this.detail.dropTile(e.tx, e.ty);
         this.disposeGroup(e.group);
         w.clearTile(e.tx, e.ty);
         this.grounds.delete(e.ty * w.ntx + e.tx); e.ground = null;
@@ -772,6 +792,8 @@ export class TileManager {
   // there), from `grid` when given (a tile's own halo'd grid while it installs), else from the world where it
   // has the cells, else the world's smooth height.
   groundAt(x, z, grid = null) {
+    const d = this.detail.heightAt(x, z); // a LiDAR detail chunk drawn here (detail.js)
+    if (d === d) return d;
     const g = this.locate(x, z);
     if (g) { const y = g.mesh.height(x - g.ox, z - g.oz); if (y === y) return y; }
     const w = this.world;
@@ -787,6 +809,31 @@ export class TileManager {
     const tx = Math.floor(qi / T), ty = Math.floor(qj / T);
     if (tx < 0 || ty < 0 || tx >= w.ntx || ty >= w.nty) return undefined;
     return this.grounds.get(ty * w.ntx + tx);
+  }
+
+  // detail.js re-seats a bin's instances by index: their order is fixed here first (the sort prepare would make)
+  sortBin(D) {
+    const l = D.userData.lod;
+    if (!l || l.sorted) return;
+    const A = D.instanceMatrix.array, C = D.instanceColor ? D.instanceColor.array : null;
+    const counts = l.groups ? l.groups.counts : [l.total];
+    for (let g = 0, a = 0; g < counts.length; a += counts[g], g++) sortRange(A, C, a, a + counts[g]);
+    l.sorted = true;
+    D.instanceMatrix.needsUpdate = true;
+    if (D.instanceColor) D.instanceColor.needsUpdate = true;
+    if (l.groups && l.groups.meshes) for (const k of l.groups.meshes) { k.instanceMatrix.needsUpdate = true; if (k.instanceColor) k.instanceColor.needsUpdate = true; if (k.userData.cull) k.userData.cull.ready = false; }
+    if (D.userData.cull) D.userData.cull.ready = false;
+  }
+  // ... and has moved some of them (up or down by at most `grow` metres, or hidden): uploaded, bounds widened, the
+  // culling's spheres made again
+  binMoved(D, grow) {
+    const l = D.userData.lod, all = [D, ...(l && l.groups && l.groups.meshes ? l.groups.meshes : [])];
+    for (const k of all) {
+      k.instanceMatrix.needsUpdate = true;
+      if (k.boundingSphere && grow > 0) k.boundingSphere.radius += grow;
+      const st = k.userData.cull;
+      if (st) { st.ready = false; for (const P of [st.view, st.c0, st.c1]) if (P) P.userData.sigN = -1; }
+    }
   }
 
   // for the HUD: ready tiles with their data (minimap drawing)
@@ -826,7 +873,7 @@ export class TileManager {
       const R = C.rocks, ST = 15; // tile-worker.js ROCK_STRIDE_C
       scan(r + C.maxR, C.rockStart, (i) => {
         const o = i * ST, dx = R[o] - lx, dz = R[o + 2] - lz, rr = r + R[o + 3];
-        if (dx * dx + dz * dz > rr * rr) return;
+        if (dx * dx + dz * dz > rr * rr || (e.rockHidden && e.rockHidden[i])) return; // (a cliff module the detail ground replaced: detail.js)
         const s = this.rockShape(e, i, o);
         if (!s || (R[o + 3] > 3 && s.shape.boundsDist(x, z) > r)) return; // a big one: near its bounds, not just its reach
         out.push(s);
