@@ -657,3 +657,172 @@ The game reads both releases.
    - Cite MGS for the bedrock.
    - LANDFIRE, NHD, MnTOPO and NWI are public; SSURGO is public domain.
    - OSM, Ontario's included, is ODbL.
+
+## 2 m detail (LiDAR near the player)
+
+The owner compared 10 m, 5 m and 2 m ground in the game ([detail-proto.md](detail-proto.md)) and chose **2 m near
+the player**. `scripts/detail-bake.mjs` cuts it for the whole US side. It is bake only: the game does not read it
+yet. The game side will stream 2 m within about 300 m of the player and 5 m out to about 900 m, to hide the step
+down to the 10 m tiles. The data is hosted on Cloudflare R2 with the rest of v4, under `detail/`
+(`https://data.gagekrumbach.com/bwca/v4/detail/`).
+
+### Running it
+
+```bash
+npm run bake:detail                          # the whole US side into public-data-v4/detail/
+npm run bake:detail -- --area lakeone        # one tile (lakeone, palisade, fowl), or --tiles 31_20,62_14 or 30-34:18-22
+npm run bake:detail -- --check               # no cutting: do neighbours' shared samples match?
+npm run bake:detail -- --shots shots/detail  # no cutting: hillshade quick-looks, 10 | 5 | 2 m
+```
+
+- **Needs:**
+  - GDAL (`brew install gdal`).
+  - The v4 tiles in `--data` (default `public-data-v4`).
+  - The D1-lidar cache in `data-cache/lidar/` (its `mask` channel), with `BWCA_CACHE=<main checkout>/data-cache` from
+    a worktree.
+- **The DEM.** It reads the state's 2 m DEM by window over HTTP. If the GDAL VRT of the six COGs
+  (`data-cache/lidar/raw/dem2m.vrt`) is missing, the script builds it.
+- **Resumable.** A tile that is done is skipped unless you pass `--force`. Each finished tile has a state file in
+  `data-cache/detail/<output folder>/state/`. The index is written every 50 tiles and at the end.
+- **Parallel.**
+  - `--jobs 2` runs two warps at once, which is the default.
+  - Two runs can share the list. Each claims a tile with a lock file.
+  - Scratch rasters (6.7 MB a tile) are deleted as soon as they are read.
+  - The run stops if the disk has under 4 GB free.
+- **Time.** The whole US side here took 64 minutes: 1,371 tiles at about 5 s each, two at a time, on a shared
+  4-core machine. Node's heap stays under 0.3 GB.
+- **Output.** `--out` sets it, and the default is `<data>/detail/`. Data is git-ignored, so never commit it.
+  `npm run data:sync` uploads `detail/` when the bake has one. The chunks are immutable and `detail/index.json` gets
+  the short max-age.
+
+### The lattice
+
+The lattice is the prototype's, which has zero offset from the 10 m grid. Samples sit *r* metres apart, and their rows
+and columns run through the 10 m cell centres.
+- **A chunk.** Chunk (cx, cy) of tile (tx, ty) covers C cells a side: 64 at 2 m (640 m, 4 × 4 a tile) and 128 at
+  5 m (1280 m, 2 × 2 a tile).
+- **Its extent.** It runs from the centre of its first cell to the centre of the next chunk's first cell, plus one
+  sample of apron on each side. That makes n = 323 samples a side at 2 m and 259 at 5 m.
+- **Sample (0, 0)** sits at `(x0, z0)`, which is the centre of cell `tx·256 + cx·C` less *r*. Row 0 is the north row.
+- **Neighbours stitch.** Neighbouring chunks share their edge rows and columns. Sample n − 2 of one is sample 1 of
+  the next, and they overlap by the apron.
+
+### How it is cut
+
+**The warp.** For each tile, `gdalwarp` cuts the DEM bilinearly onto the tile's 2 m lattice plus one cell all round.
+The target is EPSG:6318 at r / mPerDeg degrees a pixel, because the game's projection is a plain lat/lon grid. Then,
+for each sample:
+- **Water.** Where the v4 tile's shore distance, read bilinearly, is under 0, the sample is set to the tile's own
+  water level (the mean of the lake cells round it). The detail's shores then meet the game's water sheet. The lake
+  bed stays the 10 m tile's bathymetry.
+- **No US LiDAR.** Where the sample is off the flight, or on the Ontario side (mask bit 16 clear), it takes the v4
+  tile's height, read bilinearly. Ontario stays on today's terrain.
+
+**The 5 m set** is the box mean of the 2 m lattice over each 5 m sample's footprint, with the same water rule. It
+needs no second read of the DEM.
+
+**Which chunks are written.** A chunk is written only if at least one of its cells is US LiDAR on land: mask bits 1
+and 16 set, and not lake in the v4 tile. Chunks that are all water, Ontario, or off the flight are left out, and the
+game keeps the 10 m ground there.
+
+### The format
+
+**Each chunk** is `detail/<r>m/<tx>_<ty>_<cx>_<cy>.bin`. It is gzip bytes, which the client inflates itself, as it
+does for the tiles. Inside is a 56-byte header, then n × n Int16 values, row-major, little-endian:
+
+| Byte | Field |
+|---|---|
+| 0 | `'BWDC'` |
+| 4 | u32 version (1) |
+| 8, 12 | i32 tx, ty |
+| 16, 18 | u16 cx, cy |
+| 20 | u16 n |
+| 22 | u16 predictor (2) |
+| 24 | f32 r (m) |
+| 28 | f32 unit (m): 0.05 at 2 m, 0.1 at 5 m |
+| 32 | f32 base (m) |
+| 36, 38 | i16 min, max (dm) |
+| 40, 48 | f64 x0, z0 (game metres) |
+
+**Heights.** The height of a sample is `base + v · unit`.
+- The file stores `v` less a plane prediction: `v[q−1] + v[q−n] − v[q−n−1]`.
+- On row 0 the prediction is `v[q−1]`, on column 0 it is `v[q−n]`, and at q = 0 it is 0.
+- `decodeChunk` in the script is the reference decoder, about 15 lines.
+
+**`detail/index.json`** is 764 KB, 245 KB gzipped. It holds:
+- `levels`: for each resolution, `r`, `size` (m), `perTile`, `n`, `unit`, `dir`, `count` and `bytes`;
+- `chunks[r]`: a map from `"<tx>_<ty>_<cx>_<cy>"` to `[bytes, min dm, max dm]`, so the game never asks for a chunk
+  that isn't there;
+- `grid`, `source` and `check`.
+
+**Why this encoding.** Sizes were measured on the 46 chunks of the Lake One, palisade and Fowl Lakes tiles, at gzip
+−6, as the mean per 2 m chunk:
+
+| Encoding | KB / chunk |
+|---|---|
+| cm, row deltas (the prototype's) | 76.0 |
+| cm, plane predictor | 66.8 |
+| 2 cm, plane | 54.7 |
+| **5 cm, plane (chosen for 2 m)** | **40.0** |
+| dm, row deltas | 35.0 |
+| dm, plane | 30.7 |
+| dm, no prediction | 52.0 |
+
+- **The plane predictor** gzips 41 % smaller than plain decimetres and 12 % smaller than row deltas.
+- **5 cm costs 30 % more than dm.** Its rounding error (±2.5 cm) is under the LiDAR's own noise. dm would draw 10 cm
+  terraces on gentle 2 m slopes, which are visible in low light. On a typical visit the extra is about 0.1 MB.
+- **At 5 m, dm** is used (26.9 KB a chunk against 33.9 at 5 cm). A 10 cm step over 5 m is only a 1° tilt.
+
+### Numbers (the run of 2026-10-27)
+
+Every US tile with LiDAR was baked: 1,371 tiles, of which 1,353 have at least one chunk.
+
+**Sizes:**
+
+| | 2 m | 5 m |
+|---|---|---|
+| Chunks written (of 21,936 and 5,484 possible) | 20,459 | 5,241 |
+| Total | 876 MB | 151 MB |
+| Per chunk (median, max) | 45.9 KB, 67 KB | 30.2 KB, 46 KB |
+
+- **Index:** 764 KB, or 245 KB gzipped.
+- **All of `detail/`:** 1.03 GB. With the 366 MB of v4, R2 holds about 1.4 GB, which is free up to 10 GB.
+
+**Downloads.** These are upper bounds: a chunk over open water is skipped, so a canoe route costs less.
+- **On arrival** (2 m within about 300 m, 5 m to about 900 m):
+  - 2 m: a 640 m chunk is wider than the 600 m ring, so at most 2 × 2 chunks are needed at once, and the 3 × 3 round the player with the next row prefetched is 9 chunks, **about 0.4 MB**.
+  - 5 m: the 1.8 km ring spans at most 3 × 3 chunks of 1280 m, **about 0.27 MB**.
+  - The index: 0.25 MB.
+  - With all three, **under 1 MB** on top of the visit's 9 MB.
+- **Travelling:**
+  - 2 m: a new row of 3 chunks every 640 m, so 4.7 chunks a km, **about 0.2 MB a km**.
+  - 5 m: 3 chunks every 1280 m, **about 0.07 MB a km**.
+  - Together that is about 0.27 MB a km, against about 0.35 MB a km for today's 10 m tiles (5 tiles every 2.56 km).
+  - A whole visit (20 MB today) grows by perhaps 2–4 MB.
+
+**Checks:**
+- **10 m agreement.** The 2 m lattice (the raw LiDAR, before the water and fill rules) was averaged back onto each
+  10 m cell, with weights [½ 1 1 1 ½] / 4 a side round the cell centre. This covers 70.7 M full-LiDAR US land cells.
+  - Against the D1 cell mean (`data-cache/lidar` height): mean +0.1 mm, RMS 9 cm, median 0, |d| p95 19 cm, p99
+    34 cm, p99.9 61 cm. The lattice sits on the 10 m grid with no offset, and what's left is LiDAR noise and the
+    bilinear resampling.
+  - Against the v4 tile's height: mean −4 cm, RMS 0.60 m, p95 0.59 m, p99 2.9 m. The difference is the v4 bake's own:
+    it sits within about 30 m of the water (the shore shaping, the river grading, the blend at the LiDAR's edge).
+    Inland, v4 is 0.35–0.45 m RMS off the LiDAR mean. Seams to the 10 m mesh should blend, as the prototype did
+    over 60 m.
+- **Stitch** (`--check`). Over 20,141 east–west neighbour pairs at 2 m (4,991 of them across a tile edge), 4,232 of
+  19.5 M shared samples differ, each by one unit (5 cm). Across a tile edge it comes from the two warps' float
+  rounding. Inside a tile it comes from the per-chunk base. At 5 m, 2,031 of 4.0 M differ by one unit (10 cm). The
+  game should take one side's value for the shared edge.
+- **Quick looks** (`--shots`): 1.2 km hillshades, 10 | 5 | 2 m, round Lake One's cliff, the Border Route palisade
+  and the cliffs west of North Fowl Lake.
+
+### Caveats
+
+- **The Ontario edge.** On the Ontario side, and off the flight, the samples take the v4 tile's height. Where a chunk
+  holds both, the LiDAR meets that height in a step of up to the v4 blend's difference, at the border. The border
+  mostly runs through lakes.
+- **The cliff modules** (`cliffs.js`) still come from the 10 m cliff channel. Where the 2 m ground carries the face,
+  they double it up (detail-proto.md).
+- **The prototype's `?detail=` flag** reads `scripts/detail-proto.mjs`'s per-tile files, not these chunks. The game
+  side of the production format is still to come.

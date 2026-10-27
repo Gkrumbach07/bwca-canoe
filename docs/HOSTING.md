@@ -2,17 +2,22 @@
 
 The game is a static site (about 1 MB after the build, 250 KB over the wire) plus a map data set it
 fetches on demand: `index.json`, `overview.png`, 2,106 fine tiles under `tiles/` and 40 far-field tiles
-under `far/`, 381 MB in all. The two have different needs, so they live in different places:
+under `far/` (v4: 366 MB), and from v4 on the LiDAR detail under `detail/`: 20,459 chunks at 2 m and 5,241
+at 5 m, 1.03 GB (docs/data-sources.md, "2 m detail"). About **1.4 GB in 27,800 objects** in all, past GitHub
+Pages' 1 GB, so v4 is served from **Cloudflare R2 at `https://data.gagekrumbach.com/bwca/v4/`**. The two have different needs, so they live in different places:
 
 | | What | Where | Why |
 |---|---|---|---|
 | App | `dist/` from `npm run build` | **GitHub Pages** (or Vercel / Netlify) | free, deploys from a push, tiny |
-| Data | `public/data/` from `npm run bake:all` | **Cloudflare R2** behind Cloudflare's CDN (alternative: **S3 + CloudFront**) | 381 MB of objects fetched piecemeal by every player; needs an object store with cheap egress and a cache in front |
+| Data | `public/data/` from `npm run bake:all` (and `npm run bake:detail` for `detail/`) | **Cloudflare R2** behind Cloudflare's CDN (alternative: **S3 + CloudFront**) | 1.4 GB of objects (v4 with the detail) fetched piecemeal by every player; needs an object store with cheap egress and a cache in front |
 
 The app finds the data through one build-time variable, `VITE_DATA_URL` (default `data/` next to the
 app). Everything below is about filling that in.
 
-## What is live now: GitHub Pages with the data from a release
+## What was live through v3: GitHub Pages with the data from a release
+
+v4 with the LiDAR detail (1.4 GB) does not fit Pages' 1 GB; it goes to R2 (below) under `bwca/v4/`. The
+release-archive route here is for v3 and for a v4 without `detail/`.
 
 The public site is the `main` branch built by `.github/workflows/pages.yml` and served by GitHub Pages. The
 data rides along with it: the bake is attached as one archive, `bwca-data-v3.tar`, to the GitHub release
@@ -43,6 +48,9 @@ stops unpacking the release.
   most 96 of them (17 MB) before the oldest are dropped.
 - A visit therefore costs **about 20 MB** on average and 50 MB for a long or map-happy one, in roughly
   120 requests. Tiles average 178 KB (max 272 KB); far tiles 240 KB.
+- The LiDAR detail (v4, once the game reads it): `detail/index.json` (764 KB, 245 KB compressed), then 2 m
+  chunks (median 46 KB) within about 300 m and 5 m chunks (median 30 KB) to about 900 m: under 1 MB on arrival
+  and about 0.27 MB a km paddled, so **2–4 MB more a visit**, in some 20–60 more requests.
 
 The fetches come from web workers as well as the page, so the data host must answer with CORS headers
 for the app's origin. The tiles are gzip bytes that the client inflates itself (`DecompressionStream`).
@@ -110,21 +118,24 @@ Cloudflare-proxied hostname gets the CDN for free. A free Cloudflare account is 
    ```bash
    AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=… DATA_SYNC_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com DATA_SYNC_DEST=s3://bwca-data/bwca/v3 npm run data:sync
    ```
-   Add `-- --dry-run` to see what would change. The first full upload is 381 MB in 2,150 objects; later
-   runs only send what differs.
+   Add `-- --dry-run` to see what would change. The first full upload of v4 is about 1.4 GB in 27,800
+   objects with `detail/` (366 MB in 2,150 without); later runs only send what differs. Put the detail bake
+   in `public-data-v4/detail/` first (or point `DATA_SYNC_SRC` at a folder that has it): data:sync uploads
+   `detail/2m`, `detail/5m` immutable and `detail/index.json` short, before the main index.
 7. **Point the app at it**: `VITE_DATA_URL=https://data.example.com/bwca/v3/` (trailing slash). Check it
    locally with `VITE_DATA_URL=… npm run dev`, then set it for the deployment (below).
 
-**Cost.** Storage $0.015 per GB-month beyond 10 GB free (we use 0.4 GB: free). Reads (Class B) $0.36
+**Cost.** Storage $0.015 per GB-month beyond 10 GB free (we use 1.4 GB with v4's detail, 1.8 GB while v3
+stays beside it: free). Reads (Class B) $0.36
 per million beyond 10 million a month free, and with the CDN in front only cache misses reach the
 bucket. Egress $0.
 
 | | 100 players | 10,000 players |
 |---|---|---|
-| Egress per month (20 MB a visit, one visit each) | 2 GB | 200 GB |
-| Egress, busy (3 visits of 20 MB) | 6 GB | 600 GB |
-| Requests to the bucket (120 a visit, before the cache) | 12,000–36,000 | 1.2–3.6 million |
-| **R2 bill** | **$0** | **$0** (reads stay inside the free 10 M; a domain is about $10 a year) |
+| Egress per month (20 MB a visit, one visit each; 23 MB with the detail) | 2 GB | 200–230 GB |
+| Egress, busy (3 visits) | 6–7 GB | 600–700 GB |
+| Requests to the bucket (120 a visit, 160 with the detail, before the cache) | 12,000–48,000 | 1.2–4.8 million |
+| **R2 bill** | **$0** | **$0** (reads stay inside the free 10 M; storage inside the free 10 GB; a domain is about $10 a year) |
 
 It would take about 30,000 players a month, with no cache in front at all, to pass the free reads and
 reach a dollar.
@@ -191,7 +202,7 @@ bucket.
 
 ## Checklist for a new bake
 
-1. `npm run bake:all`
+1. `npm run bake:all`, then `npm run bake:detail` (about an hour; writes `<data>/detail/`)
 2. `DATA_SYNC_DEST=r2:bwca-data/bwca/v4 npm run data:sync`
 3. Set `DATA_URL` to the new prefix, `git push` (or *Run workflow* on the Actions page).
 4. Leave `v3` in the bucket until the old app version has aged out of browser caches (a day), then

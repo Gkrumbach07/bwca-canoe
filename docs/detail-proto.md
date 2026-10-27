@@ -1,5 +1,11 @@
 # LiDAR detail prototype: 2 m and 5 m ground near the player (2026-10-27)
 
+> **Decided, and superseded for the data.** The owner chose **2 m near the player**. The production bake is
+> `scripts/detail-bake.mjs` (`npm run bake:detail`): 640 m chunks at 2 m and 1280 m chunks at 5 m for the whole US
+> side. Its format, numbers and how to run it are in [data-sources.md, "2 m detail"](data-sources.md#2-m-detail-lidar-near-the-player).
+> This page stays as the record of the comparison; the `?detail=` flag below still reads the prototype's own
+> per-tile files from `scripts/detail-proto.mjs`, not the production chunks.
+
 The owner asked to **see** what the Minnesota LiDAR looks like at 2 m and at 5 m near the player, next to today's
 10 m, before choosing one. This is a prototype behind a URL flag. With the flag off the game is unchanged.
 
