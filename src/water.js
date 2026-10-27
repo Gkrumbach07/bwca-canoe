@@ -152,8 +152,24 @@ export const glslSurface = /* glsl */ `
   }
   float terrainAt(vec2 rel) { return bilinear(uHeightTex, rel); }
   // p2 B: bilinear between the cells (it was the cell's own level, so a graded river's surface stepped at every cell
-  // edge); a land cell holds the level of the water nearest it (rebuildAtlas), so a lake's is flat right to its shore
-  float levelAt(vec2 rel) { return bilinear(uLevelTex, rel); }
+  // edge); a land cell holds the level of the water nearest it (rebuildAtlas), so a lake's is flat right to its shore.
+  // Holes pass: where water and land share the four cells, a land corner takes the lowest of the water corners instead.
+  // Beside a step (a falls, a creek against a perched pond) the flood's level stood the sheet's rim metres over the bank
+  // the terrain shapes to the water (grid.levelAt: the mean of the water corners), a ribbon of water in the air with the
+  // void under it; the lowest runs in under the bank. On level water it is the same level.
+  float levelAt(vec2 rel) {
+    vec2 f = (rel - uAtlas.xy) * uAtlas.z - 0.5;
+    vec2 fi = floor(f), a = f - fi;
+    ivec2 c = ivec2(fi);
+    vec4 l = vec4(cellSample(uLevelTex, c), cellSample(uLevelTex, c + ivec2(1, 0)), cellSample(uLevelTex, c + ivec2(0, 1)), cellSample(uLevelTex, c + ivec2(1, 1)));
+    vec4 w = step(vec4(cellSample(uShoreTex, c), cellSample(uShoreTex, c + ivec2(1, 0)), cellSample(uShoreTex, c + ivec2(0, 1)), cellSample(uShoreTex, c + ivec2(1, 1))), vec4(-1e-4));
+    float nw = dot(w, vec4(1.0));
+    if (nw > 0.5 && nw < 3.5) {
+      vec4 lw = mix(vec4(1e9), l, w);
+      l = mix(vec4(min(min(lw.x, lw.y), min(lw.z, lw.w))), l, w);
+    }
+    return mix(mix(l.x, l.y, a.x), mix(l.z, l.w, a.x), a.y);
+  }
   float clarityAt(vec2 rel) { return cellSample(uClarityTex, atlasCell(rel)); }
   // d2 water: the water's colour here, bilinear: x the Secchi depth (m), y the CDOM (m^-1; 0 where the release has none)
   vec2 colourAt(vec2 rel) {

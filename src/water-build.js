@@ -19,10 +19,14 @@ export function buildWaterChunk(grid, i0, j0, n, originX, originZ) {
   const w = n + 1;
   const map = new Int32Array(w * w).fill(-1);
   const pos = [], shore = [], depth = [], clarity = [], cdom = [], idx = [];
+  // a land corner takes the lowest level of the water round it (holes pass: it took the highest, so beside a step, a falls
+  // or a creek against a perched pond, the low water's sheet climbed to the high water's level over its bank and hung
+  // there in the air; the lowest never stands over the bank the terrain shapes to the water, it runs in under it). On
+  // level water it is the same level.
   const vertexLevel = (i, j) => {
     if (grid.lakeCell(i, j)) return grid.levelCell(i, j);
-    let best = -Infinity;
-    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (grid.lakeCell(i + di, j + dj)) best = Math.max(best, grid.levelCell(i + di, j + dj));
+    let best = Infinity;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (grid.lakeCell(i + di, j + dj)) best = Math.min(best, grid.levelCell(i + di, j + dj));
     return best;
   };
   const vid = (i, j) => {
