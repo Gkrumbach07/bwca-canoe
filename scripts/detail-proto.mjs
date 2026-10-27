@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// The production bake is scripts/detail-bake.mjs (640 m chunks for the whole US side; docs/data-sources.md "2 m
+// detail"). This prototype stays because the prototype's game code (src/detail.js, ?detail=) reads its per-tile files.
+//
 // Detail prototype (docs/detail-proto.md): the Minnesota LiDAR (MnTOPO 2 m DEM) cut at 2 m and 5 m straight onto the
 // game's grid for a few test tiles, so the game can draw the ground near the player finer than the 10 m tiles
 // (`?detail=2` / `?detail=5`). A prototype to choose a resolution by: nothing reads these files unless the flag is on.

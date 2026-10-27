@@ -10,6 +10,7 @@
     "bake": "node --max-old-space-size=8192 scripts/bake.mjs",
     "bake:all": "node --max-old-space-size=12288 scripts/bake.mjs --all",
     "rebake:v4": "node scripts/rebake-v4.mjs",
+    "bake:detail": "node --max-old-space-size=3072 scripts/detail-bake.mjs",
     "data:sync": "node scripts/data-sync.mjs"
   },
   "dependencies": {

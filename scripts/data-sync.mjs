@@ -13,7 +13,8 @@
 // max-age and last, so a new bake's tiles are all in place before the index that names them. Put each
 // bake under its own prefix (v3, v4, …) rather than overwriting: the tiles are then truly immutable and
 // the CDN never serves a stale one. The tiles are stored as they are (gzip bytes, application/octet-stream,
-// no Content-Encoding): the client gunzips them, exactly as it does from the dev server.
+// no Content-Encoding): the client gunzips them, exactly as it does from the dev server. The LiDAR detail
+// (detail/: scripts/detail-bake.mjs), when the bake has one, goes the same way: its chunks immutable, its index short.
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -43,13 +44,17 @@ function run(cmd, argv) {
 console.log(`data:sync: ${src} -> ${dest} with ${tool}${dryRun ? ' (dry run)' : ''}`);
 if (tool === 'rclone') {
   const common = ['--transfers', '32', '--checkers', '32', '--checksum', '--fast-list', '--stats-one-line', '--stats', '10s', ...(dryRun ? ['--dry-run'] : [])];
-  for (const sub of ['tiles', 'far']) run('rclone', ['sync', resolve(src, sub), `${dest}/${sub}`, '--header-upload', `Cache-Control: ${IMMUTABLE}`, ...common]);
+  const subs = ['tiles', 'far', ...['detail/2m', 'detail/5m'].filter((d) => existsSync(resolve(src, d)))];
+  for (const sub of subs) run('rclone', ['sync', resolve(src, sub), `${dest}/${sub}`, '--header-upload', `Cache-Control: ${IMMUTABLE}`, ...common]);
   run('rclone', ['copyto', resolve(src, 'overview.png'), `${dest}/overview.png`, '--header-upload', `Cache-Control: ${IMMUTABLE}`, ...common]);
+  if (existsSync(resolve(src, 'detail/index.json'))) run('rclone', ['copyto', resolve(src, 'detail/index.json'), `${dest}/detail/index.json`, '--header-upload', `Cache-Control: ${SHORT}`, ...common]);
   run('rclone', ['copyto', resolve(src, 'index.json'), `${dest}/index.json`, '--header-upload', `Cache-Control: ${SHORT}`, ...common]);
 } else {
   const common = [...(endpoint ? ['--endpoint-url', endpoint] : []), ...(dryRun ? ['--dryrun'] : [])];
-  for (const sub of ['tiles', 'far']) run('aws', ['s3', 'sync', resolve(src, sub), `${dest}/${sub}`, '--delete', '--cache-control', IMMUTABLE, '--content-type', 'application/octet-stream', ...common]);
+  const subs = ['tiles', 'far', ...['detail/2m', 'detail/5m'].filter((d) => existsSync(resolve(src, d)))];
+  for (const sub of subs) run('aws', ['s3', 'sync', resolve(src, sub), `${dest}/${sub}`, '--delete', '--cache-control', IMMUTABLE, '--content-type', 'application/octet-stream', ...common]);
   run('aws', ['s3', 'cp', resolve(src, 'overview.png'), `${dest}/overview.png`, '--cache-control', IMMUTABLE, '--content-type', 'image/png', ...common]);
+  if (existsSync(resolve(src, 'detail/index.json'))) run('aws', ['s3', 'cp', resolve(src, 'detail/index.json'), `${dest}/detail/index.json`, '--cache-control', SHORT, '--content-type', 'application/json', ...common]);
   run('aws', ['s3', 'cp', resolve(src, 'index.json'), `${dest}/index.json`, '--cache-control', SHORT, '--content-type', 'application/json', ...common]);
 }
 console.log(`\ndata:sync: done. Point VITE_DATA_URL at the public URL of ${dest.replace(/^[^:]+:(\/\/)?/, '')}/ and rebuild the app.`);
