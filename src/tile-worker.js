@@ -12,6 +12,7 @@ import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the
 import { patchTile, lakeRockBins, clearPlants, useV4 as rapidsV4 } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
 import { unpackTint, setLand } from './land.js'; // d2 land: the rocks' bedrock tint; `?land=off`
 import { loadBurns, setBurnDate } from './burns.js';
+import { decodeDetail, withDetail, buildDetailChunk } from './detail-build.js'; // detail proto (`?detail=2|5`, detail.js)
 
 let cfg = null;
 // the real burns (burns.js): the table read once, as the worker starts; each build waits for it and then takes the
@@ -169,15 +170,17 @@ async function buildFine(m) {
   const g = cfg.grid;
   if (!v4()) gradeAhead('fine', m.tx, m.ty);
   const buf = await fetchTile(m.url);
+  const dbuf = m.detail ? await fetchTile(m.detail.url) : null; // detail proto: the LiDAR lattice (detail-build.js)
   if (!v4()) await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   await burns; burnDate(m);
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
-  const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
+  let grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
   grid.cdomById = cfg.cdomById || null; // d2 water: the lakes' CDOM (water-build.js cellColour)
   shoalBeds(grid); // d2 water: the bed up under the mapped rice, reeds and lilies (v4; the grid's arrays view buf)
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
   patchTile(buf, m.tx, m.ty, g); // d1 rapids: each drop where it really is, the rocks' shoals (the grid's arrays view buf)
+  if (dbuf) grid = withDetail(grid, decodeDetail(dbuf), m.tx, m.ty); // detail proto: every ground query below reads the lattice
   // what the ground is like at every cell (cliffs, scree, ridges, wet ground, soil): the paint, the forest, the
   // rocks and the cliffs all read it
   const site = new Site(grid, cfg.exclusions);
@@ -189,7 +192,7 @@ async function buildFine(m) {
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);
   const cellSplat = cover.subarray(COVER_SPLAT_AT(grid.side));
-  const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell); // round A-C
+  const terrain = partTerrain((grid.detail ? buildDetailChunk : buildTerrainChunk)(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell); // round A-C
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...(b.style !== undefined ? { style: b.style } : {}), ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz, b.sp) })); // (d2 land: a cliff bin's family; the rocks' tint by species)

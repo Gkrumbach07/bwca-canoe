@@ -8,6 +8,7 @@ import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
 import { cascadeHooks } from './sunlight.js';
 import { burnDate } from './burns.js';
+import { DetailRing } from './detail.js'; // detail proto: `?detail=2|5` (docs/detail-proto.md)
 
 // Streams the world around the player: a 5 x 5 neighbourhood of 2.56 km tiles (terrain, water, forest,
 // lake vegetation, portages, campsites) built in a pool of workers and installed one per frame, a 3 x 3
@@ -420,6 +421,7 @@ export class TileManager {
     this.playerTile = [0, 0];
     this.stats = { built: 0, trees: 0, plants: 0 };
     this.culler = new InstanceCuller(scene);
+    this.detail = new DetailRing(this); // detail proto (inert without the flag)
     const ex = exclusionsFor(world);
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
@@ -486,6 +488,7 @@ export class TileManager {
 
   // Initial load: the 3 x 3 fine tiles and the far field around (x, z), with progress.
   async prime(x, z, onProgress = () => {}) {
+    await this.detail.ready; // detail proto: its index, so the first tiles are built at the right resolution
     const w = this.world;
     const [ptx, pty] = w.tileOf(x, z);
     const entries = [];
@@ -535,6 +538,7 @@ export class TileManager {
     const hidden = typeof document !== 'undefined' && document.hidden;
     this.install(hidden || gap > 500 ? Math.min(100, Math.max(INSTALL_BUDGET, gap / 4, hidden ? 50 : 0)) : INSTALL_BUDGET);
     this.evict();
+    this.detail.tick(px, pz); // detail proto: tiles into or out of its ring built again
     // draw only what the fog lets through; far chunks stand in wherever a fine tile is missing
     // round A-C: a tile's LOD is worked out again only once the camera has moved a step that could change a decision
     // there: LOD_STEP metres in the tile underfoot, a fiftieth of the distance to a tile farther off (a choice made at
@@ -586,7 +590,7 @@ export class TileManager {
       // (the season's date goes with each build: the burns a tile shows are those begun by then, burns.js)
       const bd = burnDate(), date = [bd.year, bd.doy];
       if (e.level === 'far') wk.w.postMessage({ type: 'build', level: 'far', key: e.key, fx: e.fx, fy: e.fy, url: w.farUrl(e.fx, e.fy), date });
-      else wk.w.postMessage({ type: 'build', level: 'fine', key: e.key, tx: e.tx, ty: e.ty, url: w.tileUrl(e.tx, e.ty), date });
+      else wk.w.postMessage({ type: 'build', level: 'fine', key: e.key, tx: e.tx, ty: e.ty, url: w.tileUrl(e.tx, e.ty), date, detail: this.detail.msg(e, px, pz) }); // (detail proto)
     }
   }
 
@@ -605,6 +609,7 @@ export class TileManager {
     } else if (live) {
       e.result = m;
       e.state = 'built';
+      if (m.terrain && m.terrain.detail) e.detailInfo = m.terrain.detail; // detail proto
       if (e.level === 'far') this.installFar(e); else this.pending.push(e);
     }
     // the next build goes out now, not at the next frame (which a hidden window may not draw for a second)
