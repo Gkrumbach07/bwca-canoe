@@ -20,10 +20,12 @@ export const CFG = {
   band: 1024,              // rows processed at once (4 tile rows)
   ua: 'bwca-canoe-game/0.2 (local bake script)',
   cacheDir: process.env.BWCA_CACHE || 'data-cache',
-  outDir: 'public/data',
   tileUrl: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
   geofabrik: (name) => `https://download.geofabrik.de/${name}-latest.osm.pbf`,
-  extracts: ['north-america/us/minnesota'],
+  // d2 bake: Quetico with the Minnesota side, Ontario first so Minnesota wins on what both cuts hold (osm-extract.mjs);
+  // the data-v3 release was baked from Minnesota alone (world-fixes.mjs reads that extract for it)
+  extracts: ['north-america/canada/ontario', 'north-america/us/minnesota'],
+  outDir: 'public-data-v4',
   // the portage rules (what the first bake kept, how the rest are connected) are world-links.mjs PORTAGE
   startLatLon: [47.9417, -91.4645], // Lake One landing at the end of the Fernberg road
 };

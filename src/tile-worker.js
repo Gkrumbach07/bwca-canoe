@@ -9,7 +9,8 @@ import { hash2 } from './rng.js';
 import { Site } from './site.js';
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
 import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the lakes with no contour map
-import { patchTile, lakeRockBins, clearPlants } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
+import { patchTile, lakeRockBins, clearPlants, useV4 as rapidsV4 } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
+import { unpackTint, setLand } from './land.js'; // d2 land: the rocks' bedrock tint; `?land=off`
 import { loadBurns, setBurnDate } from './burns.js';
 
 let cfg = null;
@@ -30,7 +31,8 @@ async function fetchTile(url) {
 // group shares one azimuth and tilt, the flats follow the slope; a rock's height is its scale times `tall`),
 // plus an rgb tint when the stride carries one. Every column keeps its axis's scale as its length (tiles.js
 // and props.js read the footprint from it).
-function instanceData(items, stride, rx, rz) {
+const _rgb = [1, 1, 1], ROCK_SP = new Set([6, 16, 20, 21]); // (d2 land: the rock species, placement.js ROCKS)
+function instanceData(items, stride, rx, rz, sp = -1) {
   const count = items.length / stride;
   const m = new Float32Array(count * 16), c = stride > 5 ? new Float32Array(count * 3) : null;
   // the instances' extent and their largest scale, so the main thread can bound a bin without walking it
@@ -51,8 +53,10 @@ function instanceData(items, stride, rx, rz) {
     if (x > bounds[3]) bounds[3] = x; if (y > bounds[4]) bounds[4] = y; if (z > bounds[5]) bounds[5] = z;
     const sMax = Math.max(Math.abs(sx), Math.abs(sy), Math.abs(sz));
     if (sMax > bounds[6]) bounds[6] = sMax;
-    // (a burned trunk's char rides in the tint as whole fours over it, placement.js scorchTint: kept in the blue for the bark)
-    if (c) { const t0 = items[o + 5], k = Math.floor(t0 / 4), tint = t0 - 4 * k; c[n * 3] = tint; c[n * 3 + 1] = tint * (0.97 + hash2(n, rx * 131 + rz, 2) * 0.06); c[n * 3 + 2] = t0; }
+    // (a burned trunk's char rides in the tint as whole fours over it, placement.js scorchTint: kept in the blue for the bark;
+    // d2 land: a rock's carries its bedrock unit the same way, land.js UNIT_TAG, unpacked here into the unit's colour)
+    if (c && ROCK_SP.has(sp)) { unpackTint(items[o + 5], _rgb); c[n * 3] = _rgb[0]; c[n * 3 + 1] = _rgb[1] * (0.97 + hash2(n, rx * 131 + rz, 2) * 0.06); c[n * 3 + 2] = _rgb[2]; }
+    else if (c) { const t0 = items[o + 5], k = Math.floor(t0 / 4), tint = t0 - 4 * k; c[n * 3] = tint; c[n * 3 + 1] = tint * (0.97 + hash2(n, rx * 131 + rz, 2) * 0.06); c[n * 3 + 2] = t0; }
   }
   return { count, matrices: m, colors: c, bounds };
 }
@@ -122,7 +126,7 @@ function collisionOf(bins, size) {
 }
 
 // the typed arrays of a terrain chunk (terrain-build.js), handed over rather than copied
-const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer, ...(t.parts ? [t.parts.buffer] : [])];
+const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer, ...(t.parts ? [t.parts.buffer] : []), ...(t.land ? [t.land.buffer] : [])];
 
 // round A-C: a fine tile's terrain is one mesh of ~200 000 triangles, so a view, a mirror or a shadow cascade that
 // touched any corner of it drew all of it (a 300 m cascade drew three whole tiles, 1.1 M triangles). Its triangles
@@ -158,14 +162,17 @@ function partTerrain(t, size) {
   return t;
 }
 
+// d2 bake: a v4 release grades its rivers and makes its drops in the bake (no water-grade.bin pieces asked for)
+const v4 = () => !!(cfg && cfg.grid && cfg.grid.format >= 4);
+
 async function buildFine(m) {
   const g = cfg.grid;
-  gradeAhead('fine', m.tx, m.ty);
+  if (!v4()) gradeAhead('fine', m.tx, m.ty);
   const buf = await fetchTile(m.url);
-  await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
+  if (!v4()) await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   await burns; burnDate(m);
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
-  const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById);
+  const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
   patchTile(buf, m.tx, m.ty, g); // d1 rapids: each drop where it really is, the rocks' shoals (the grid's arrays view buf)
@@ -183,7 +190,7 @@ async function buildFine(m) {
   const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell); // round A-C
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
-  const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz) }));
+  const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...(b.style !== undefined ? { style: b.style } : {}), ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz, b.sp) })); // (d2 land: a cliff bin's family; the rocks' tint by species)
   const abins = aquatic.bins.map((b) => ({ rx: b.rx, rz: b.rz, kind: b.kind, variant: b.variant, ...binCentre(b), ...instanceData(b.items, 5, b.rx, b.rz) }));
   const collide = collisionOf(bins, g.tile * g.cell);
   const transfer = [buf, cover.buffer, ...terrainBuffers(terrain), collide.trunks.buffer, collide.trunkMeta.buffer, collide.trunkStart.buffer, collide.rocks.buffer, collide.rockStart.buffer];
@@ -197,9 +204,9 @@ async function buildFine(m) {
 // chunk can be hidden as soon as the fine tile under it is in.
 async function buildFar(m) {
   const g = cfg.grid, f = g.far;
-  gradeAhead('far', m.fx, m.fy);
+  if (!v4()) gradeAhead('far', m.fx, m.fy);
   const buf = await fetchTile(m.url);
-  await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
+  if (!v4()) await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
   await burns; burnDate(m);
   bowlTile(buf, 'far', cfg.grid, cfg.bowlById); // d1 lakes
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
@@ -222,7 +229,7 @@ async function buildFar(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; burns = loadBurns(); return; }
+  if (m.type === 'init') { cfg = m; if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
   if (m.type !== 'build') return;
   try {
     const r = m.level === 'far' ? await buildFar(m) : await buildFine(m);

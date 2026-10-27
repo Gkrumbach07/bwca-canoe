@@ -74,7 +74,7 @@ export function classify(grid, x, z, shade, pre) {
     return lichenField(x, z) >= 0 ? I.rockLichen : I.rock;
   }
   if (burnOpenAt(x, z, sd) >= 0.5) return I.burn; // an open burn (burns.js: a wildfire's first 25 years or so)
-  if (meadowAt(x, z, sd, pre.wet || 0) >= 0.5) return I.meadow; // same field the forest uses for its openings
+  if ((pre.meadow >= 0 ? pre.meadow : meadowAt(x, z, sd, pre.wet || 0)) >= 0.5) return I.meadow; // same field the forest uses for its openings (d2 land: the survey's, site.js meadow)
   if (shade >= 0.55) return I.forestDark;
   return sunnyField(x, z) >= 0 ? I.forestLight : I.forest;
 }
@@ -85,22 +85,30 @@ const sunnyField = (x, z) => fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few b
 // the shore alone (the far terrain, a grid with no site). `wall`: how much the drawn ground there is a wall (the
 // step the shore band makes of a steep bank, 44–51° and up over a few metres); `brink`: the same from 29°, the
 // convex edge above a wall where the bare rock runs out over the top; both read only near the steep cells.
+// d2 land: and from the survey where the tile has it (site.js landData), else as before: meadow (-1: the noise's meadowAt),
+// sphag (the bog's sphagnum, 0..1) and the bedrock's tint of the rock (tR, tG, tB; 1 = the granite as drawn)
 export function groundPre(grid, x, z, sd, site, pre) {
   pre.sd = sd;
   pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z);
   pre.wall = 0; pre.brink = 0; pre.bog = 0; pre.wet = 0; pre.open = 0; pre.beach = 0;
+  pre.meadow = -1; pre.sphag = 0; pre.tR = 1; pre.tG = 1; pre.tB = 1;
+  if (site && site.land) {
+    pre.tR = site.at(site.tintR, x, z); pre.tG = site.at(site.tintG, x, z); pre.tB = site.at(site.tintB, x, z);
+    if (sd >= 0) { pre.meadow = site.at(site.meadow, x, z); pre.sphag = site.at(site.sphag, x, z); }
+  }
   if (sd >= 0 && site) {
     pre.rock = site.at(site.bare, x, z); pre.cliff = site.at(site.cliff, x, z); pre.talus = site.at(site.talus, x, z);
-    pre.wet = site.at(site.wet, x, z); pre.bog = bogMoss(pre.wet);
+    pre.wet = site.at(site.wet, x, z); pre.bog = Math.max(bogMoss(pre.wet), 0.85 * pre.sphag);
     if (sd < 25) { pre.open = site.at(site.open, x, z); pre.beach = site.at(site.beach, x, z); }
     if (site.at(site.steep, x, z) > 0.55) {
       const e = 2.5, gx = surfaceAt(grid, x + e, z) - surfaceAt(grid, x - e, z), gz = surfaceAt(grid, x, z + e) - surfaceAt(grid, x, z - e), d = Math.hypot(gx, gz) / (2 * e);
       pre.wall = smoothstep(0.95, 1.25, d); pre.brink = smoothstep(0.55, 0.85, d);
+      if (site.wallK) pre.wall *= site.at(site.wallK, x, z); // d2 land: rock only where the LiDAR found it (site.js wallK)
     }
   } else { pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z); pre.cliff = 0; pre.talus = 0; }
   return pre;
 }
-const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1 };
+const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1, meadow: -1, sphag: 0, tR: 1, tG: 1, tB: 1 };
 // the wet ground's moss: a bog's floor is sphagnum, not needle duff (the ground cover reads it too, tile-worker.js)
 export const bogMoss = (wet) => 0.8 * smoothstep(0.55, 0.9, wet);
 export function groundClass(grid, x, z, shade = 0, site = null) {
@@ -143,6 +151,9 @@ export const SPLAT = [
   { name: 'margin', lit: hex(0x5b4c3c), shade: hex(0x3a3129), shadeK: 0.6 },
 ];
 export const SPLAT_SUNNY = C.forestLight; // the duff's lit colour in the broad sunny stands
+// d2 land: an open bog's floor, where the survey maps one (site.js sphag; terrain.js lays it over the moss): the ochre and
+// olive of sphagnum and leatherleaf in summer, patches of the red sphagnum through it, and their shade
+export const SPHAGNUM = { lit: hex(0xa59b55), rust: hex(0x9a5e3f), shade: hex(0x5a5733) };
 export const BED_PALETTE = [C.bedSand, C.bedShelf, C.bedWeed, C.bedDeep, C.bedHole];
 export const BED_DEPTH_SCALE = 16; // aFloor.w is the bed depth over this many metres
 
@@ -237,7 +248,7 @@ export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
   // and, while it is fresh, the char over everything
   const B = burnLook(x, z, _burn, pre.sd);
   const burn = Math.min(1, B.ground);
-  const meadow = across(meadowAt(x, z, pre.sd, pre.wet || 0) - 0.5, 0.15) * (1 - burn);
+  const meadow = across((pre.meadow >= 0 ? pre.meadow : meadowAt(x, z, pre.sd, pre.wet || 0)) - 0.5, 0.15) * (1 - burn); // (d2 land: the survey's meadow)
   const forest = 1 - burn - meadow;
   // (no sunny stand along the water: the forest's edge there is the dark wall the shoreline pass wants)
   const sunny = across(sunnyField(x, z), 0.03) * smoothstep(8, 22, pre.sd);
@@ -347,6 +358,10 @@ export function meshHeightAt(grid, x, z, cache = null) {
 export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, originX, originZ, site = null, cellSplat = null }) {
   const cell = grid.cell;
   const pos = [], sa = [], sb = [], sc = [], fl = [], sdv = [], idx = [], idxAll = [];
+  // d2 land: per vertex, the bedrock's tint of the rock over the granite (- 1, signed) and the bog's sphagnum (terrain.js
+  // aLand); all 0 where the tile has no survey (a v3 tile, the far terrain), which draws exactly as before
+  const lnd = site && site.land ? [] : null;
+  const s8 = (v) => Math.round(Math.min(1, Math.max(-1, v)) * 127);
   const twins = []; // [land, bed] vertex pairs at the waterline: they share one normal
   const tees = [];  // [mid, end, end]: a subdivided cell's mid-edge vertex against an undivided neighbour
   const stride = 2 * n + 7;
@@ -373,6 +388,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     } else pre.depth = -1;
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
     for (let k = 0; k < 4; k++) { sa.push(q8(wA[k])); sb.push(q8(wB[k])); sc.push(q8(wC[k])); fl.push(q8(wf[k])); }
+    if (lnd) lnd.push(s8(pre.tR - 1), s8(pre.tG - 1), s8(pre.tB - 1), sd < 0 ? 0 : s8(pre.sphag));
   };
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));
@@ -433,6 +449,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
       for (let c = 0; c < 4; c++) {
         sa[m * 4 + c] = (sa[e0 * 4 + c] + sa[e1 * 4 + c]) >> 1; sb[m * 4 + c] = (sb[e0 * 4 + c] + sb[e1 * 4 + c]) >> 1;
         sc[m * 4 + c] = (sc[e0 * 4 + c] + sc[e1 * 4 + c]) >> 1; fl[m * 4 + c] = (fl[e0 * 4 + c] + fl[e1 * 4 + c]) >> 1;
+        if (lnd) lnd[m * 4 + c] = (lnd[e0 * 4 + c] + lnd[e1 * 4 + c]) >> 1; // d2 land
       }
     }
   };
@@ -525,5 +542,5 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   }
   const nrm = new Int8Array(nv * 3);
   for (let k = 0; k < nv * 3; k++) nrm[k] = Math.round(cur[k] * 127);
-  return { pos: new Float32Array(pos), nrm, splatA: new Uint8Array(sa), splatB: new Uint8Array(sb), splatC: new Uint8Array(sc), floor: new Uint8Array(fl), idx: new Uint32Array(idx) };
+  return { pos: new Float32Array(pos), nrm, splatA: new Uint8Array(sa), splatB: new Uint8Array(sb), splatC: new Uint8Array(sc), floor: new Uint8Array(fl), idx: new Uint32Array(idx), ...(lnd ? { land: new Int8Array(lnd) } : {}) };
 }

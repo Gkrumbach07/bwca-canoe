@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { applyLook } from './shading.js';
 import { applyWet } from './weather.js';
-import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE, BED_MATS } from './terrain-build.js';
+import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE, BED_MATS, SPHAGNUM } from './terrain-build.js';
 
 // The ground as a painted splat (docs/look.md, pass 1). Every vertex carries the weights of twelve ground
 // materials (the bluff pass added the cliff and the scree, the shoreline pass a beach's sand and the wet margin at the
@@ -40,6 +40,8 @@ export const groundUniforms = {
   // about, y how soft the edge it cuts is (weight units; widened to stay a pixel or two wide), z strength
   uSplatEdge: { value: new THREE.Vector3(0.38, 0.03, 1) },
   uRelief: { value: 0.22 },  // how far the fine relief tilts the shading normal
+  // d2 land: the bog's sphagnum (terrain-build.js SPHAGNUM): its ochre, its rust patches, its shade
+  uSphag: { value: [v3(SPHAGNUM.lit), v3(SPHAGNUM.rust), v3(SPHAGNUM.shade)] },
 };
 export function setGroundTint(r, g, b) { groundUniforms.uGroundTint.value.set(r, g, b); }
 
@@ -65,6 +67,12 @@ uniform vec3 uGroundChar[2];
 uniform vec4 uSplat;
 uniform vec3 uMottle;
 uniform vec3 uSplatEdge;
+uniform vec3 uSphag[3];
+// d2 land: what the terrain's own vertices say of the survey (terrain-build.js aLand) before it calls groundColor: the
+// bedrock's tint of the rock (1 = the granite as drawn) and the bog's sphagnum over the moss. The ground cover and the trail
+// decal leave them as they are, and so draw as before.
+vec3 groundRockTint = vec3(1.0);
+float groundSphagnum = 0.0;
 // what groundColor leaves for the wet look (weather.js applyWet): how porous the ground that shows is (the duff, the
 // moss, the meadow, the burn and the shore's soil soak the rain up, 1; the rock, the cliff and the scree half as
 // much; the lake bed is under water already, 0), how much of it is rock, and the canopy's shade over it
@@ -241,10 +249,17 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     groundRock = bB.x + bB.y + bB.z + bC.x + bC.y;
     groundPorosity = 1.0 - 0.5 * groundRock;
     groundCanopy = s;
+    // (d2 land: the moss goes to the bog's sphagnum, ochre with rust patches a few metres across, where the survey says bog)
+    vec3 mossC = groundShaded(1, uGroundLit[1], s);
+    if (groundSphagnum > 0.004) {
+      float rust = smoothstep(0.55, 0.72, lookFbm(p / 5.5 + vec2(2.3, -6.1), 61u, 2) + 0.15 * n1 * fb);
+      vec3 sph = mix(mix(uSphag[0], uSphag[1], rust * 0.85), uSphag[2], s * 0.8);
+      mossC = mix(mossC, sph, groundSphagnum);
+    }
     c = bA.x * groundShaded(0, mix(uGroundLit[0], uGroundSunny, sunny), s)
-      + bA.y * groundShaded(1, uGroundLit[1], s) + bA.z * groundShaded(2, uGroundLit[2], s) + bA.w * groundShaded(3, uGroundLit[3], s)
-      + bB.x * groundShaded(4, uGroundLit[4], s) + bB.y * groundShaded(5, uGroundLit[5], s) + bB.z * groundShaded(6, uGroundLit[6], s) + bB.w * groundShaded(7, uGroundLit[7], s);
-    if (bC.x + bC.y > 0.0) c += bC.x * groundShaded(8, uGroundLit[8] * cliffTone(p, px), s) + bC.y * groundShaded(9, uGroundLit[9] * screeTone(p, px), s);
+      + bA.y * mossC + bA.z * groundShaded(2, uGroundLit[2], s) + bA.w * groundShaded(3, uGroundLit[3], s)
+      + (bB.x * groundShaded(4, uGroundLit[4], s) + bB.y * groundShaded(5, uGroundLit[5], s) + bB.z * groundShaded(6, uGroundLit[6], s)) * groundRockTint + bB.w * groundShaded(7, uGroundLit[7], s);
+    if (bC.x + bC.y > 0.0) c += (bC.x * groundShaded(8, uGroundLit[8] * cliffTone(p, px), s) + bC.y * groundShaded(9, uGroundLit[9] * screeTone(p, px), s)) * groundRockTint;
     if (bC.z + bC.w > 0.0) c += bC.z * groundShaded(10, uGroundLit[10], s) + bC.w * groundShaded(11, uGroundLit[11], s);
     // a fresh burn (the real perimeters, burns.js; the floor's w on land): black char with pale ash in it over whatever
     // the ground was, broken into patches as it thins out over the first years; bare rock only sooted
@@ -264,16 +279,16 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 fl, float px) { return groundCol
 
 export function makeTerrainMaterial() {
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const vary = 'varying vec4 vSplatA;\nvarying vec4 vSplatB;\nvarying vec4 vSplatC;\nvarying vec4 vFloor;\nvarying vec3 vLookWorld;';
+  const vary = 'varying vec4 vSplatA;\nvarying vec4 vSplatB;\nvarying vec4 vSplatC;\nvarying vec4 vFloor;\nvarying vec4 vLand;\nvarying vec3 vLookWorld;';
   m.onBeforeCompile = (shader) => {
     applyLook(shader, { wrap: 0 });
     Object.assign(shader.uniforms, groundUniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nattribute vec4 aSplatA;\nattribute vec4 aSplatB;\nattribute vec4 aSplatC;\nattribute vec4 aFloor;\n' + vary)
-      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvSplatA = aSplatA; vSplatB = aSplatB; vSplatC = aSplatC; vFloor = aFloor;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+      .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nattribute vec4 aSplatA;\nattribute vec4 aSplatB;\nattribute vec4 aSplatC;\nattribute vec4 aFloor;\nattribute vec4 aLand;\n' + vary)
+      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvSplatA = aSplatA; vSplatB = aSplatB; vSplatC = aSplatC; vFloor = aFloor; vLand = aLand;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n' + vary + '\n' + glslGround)
-      .replace('#include <color_fragment>', '\tfloat lookPx = length( fwidth( vLookWorld.xz ) );\n\tdiffuseColor.rgb *= groundColor( vLookWorld.xz, vSplatA, vSplatB, vSplatC, vFloor, lookPx );')
+      .replace('#include <color_fragment>', '\tfloat lookPx = length( fwidth( vLookWorld.xz ) );\n\tgroundRockTint = vec3( 1.0 ) + vLand.xyz; groundSphagnum = vLand.w;\n\tdiffuseColor.rgb *= groundColor( vLookWorld.xz, vSplatA, vSplatB, vSplatC, vFloor, lookPx );')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); }');
     // rain: the soil darkens most, the rock half as much and shines a little more; less sheen under the canopy
     applyWet(shader, { porosity: 'groundPorosity', gloss: '( 0.3 + 0.4 * groundRock ) * ( 1.0 - 0.7 * groundCanopy ) * ( 1.0 - vFloor.z )' });
@@ -291,6 +306,8 @@ export function makeTerrainMesh(res, material) {
   geo.setAttribute('aSplatB', new THREE.BufferAttribute(res.splatB, 4, true));
   geo.setAttribute('aSplatC', new THREE.BufferAttribute(res.splatC || new Uint8Array(res.splatB.length), 4, true));
   geo.setAttribute('aFloor', new THREE.BufferAttribute(res.floor, 4, true));
+  // d2 land: the survey's tint and sphagnum per vertex (signed, 0 = none: a v3 tile and the far terrain carry zeros)
+  geo.setAttribute('aLand', new THREE.BufferAttribute(res.land || new Int8Array((res.pos.length / 3) * 4), 4, true));
   geo.setIndex(new THREE.BufferAttribute(res.idx, 1));
   geo.computeBoundingSphere();
   const mesh = new THREE.Mesh(geo, material);
