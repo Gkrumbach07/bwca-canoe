@@ -151,7 +151,7 @@ module.
 
 ## Numbers
 
-See [performance.md, "LiDAR detail"](performance.md#lidar-detail-2-m-near-the-player-2026-10-27).
+See [performance.md, "LiDAR detail"](performance.md#lidar-detail-2-m-near-the-player-2026-10-27). In short: 1.41× the 10 m triangles drawn at Lake One and the palisade, no frame over 50 ms from the detail while travelling (worst 43 ms), 0.30 MB a km downloaded, 50–66 MB of chunk arrays installed.
 
 ## Not done / caveats
 
@@ -161,6 +161,11 @@ See [performance.md, "LiDAR detail"](performance.md#lidar-detail-2-m-near-the-pl
 - **Tents pitched before a chunk came in** (`camp.js`) stay where they were pitched.
 - **The pop at 300 m.** The cliff modules disappear when the 2 m chunk comes in, so a palisade's blocky modules give
   way to the LiDAR face at that distance.
+- **The palisades lose their drama up close.** At the Border Route palisade every module within the 2 m ring passes
+  the test, so the face is the LiDAR's alone. At 2 m the DEM smooths a vertical face into a rounded 50–60° slope,
+  and the blocky 30 m columns of the modules are gone. The low shore faces (Lake One) gain the most. If the
+  palisades should keep their modules, raise the steepness in `carriesFace` (0.9 now) or keep modules taller than
+  about 20 m.
 - **The Ontario edge.** On the Ontario side the chunk's samples are the v4 heights (data-sources.md), so nothing
   changes there.
 
