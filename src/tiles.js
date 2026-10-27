@@ -431,7 +431,7 @@ export class TileManager {
       w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
         bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null, // d1 lakes: the lakes' bowls and rice (lake-facts.js)
         land: typeof location === 'undefined' || !/[?&]land=off\b/.test(location.search) }); // d2 land: `?land=off`, the noise's land (land.js setLand)
-      return { w, key: null };
+      return { w, key: null, entry: null }; // entry: the request this worker's build answers (onMessage)
     });
     for (const x of this.workers) x.w.postMessage(waterMsg); // d2 water (after each one's init)
   }
@@ -466,15 +466,22 @@ export class TileManager {
   }
 
   // Resolves once every fine tile touching the square of half-size r around (x, z) is installed.
-  ensure(x, z, r = 0) {
+  async ensure(x, z, r = 0) {
     const w = this.world;
     const [tx0, ty0] = w.tileOf(x - r, z - r), [tx1, ty1] = w.tileOf(x + r, z + r);
-    const waits = [];
-    // asked for outright (a teleport's target): kept in the queue even while it lies outside the player's
-    // neighbourhood, so busy workers cannot let it be forgotten and the wait resolve on nothing
-    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { const e = this.request(tx, ty); if (e.state === 'queued') e.ensured = true; waits.push(e.ready); }
-    this.dispatch(x, z);
-    return Promise.all(waits);
+    // asked for outright (a teleport's target): kept in the queue and the installs even while it lies outside the
+    // player's neighbourhood, so busy workers cannot let it be forgotten and the wait resolve on nothing. A tile that
+    // still is not in when the wait ends (its build failed, or it was let go) is asked for again, a couple of times.
+    for (let round = 0; round < 3; round++) {
+      const waits = [];
+      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+        const e = this.request(tx, ty);
+        if (e.state !== 'ready') { e.ensured = true; waits.push(e.ready); }
+      }
+      if (!waits.length) return;
+      this.dispatch(x, z);
+      await Promise.all(waits);
+    }
   }
 
   // Initial load: the 3 x 3 fine tiles and the far field around (x, z), with progress.
@@ -520,7 +527,13 @@ export class TileManager {
     }
     this.camPos = camPos;
     this.dispatch(px, pz);
-    this.install();
+    // frames far apart (a hidden or throttled window, where a frame may come once a second): nobody is watching them
+    // be smooth, so the installs take a quarter of the gap (to 100 ms) instead of 3 ms, or a teleport's wait stretches
+    // to a minute and more at a step of a tile a frame
+    const now = performance.now(), gap = this.lastUpdate ? now - this.lastUpdate : 0;
+    this.lastUpdate = now;
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    this.install(hidden || gap > 500 ? Math.min(100, Math.max(INSTALL_BUDGET, gap / 4, hidden ? 50 : 0)) : INSTALL_BUDGET);
     this.evict();
     // draw only what the fog lets through; far chunks stand in wherever a fine tile is missing
     // round A-C: a tile's LOD is worked out again only once the camera has moved a step that could change a decision
@@ -555,6 +568,7 @@ export class TileManager {
   }
 
   dispatch(px, pz) {
+    this.lastPos = [px, pz];
     if (!this.queue.length) return;
     const w = this.world;
     const dist = (e) => {
@@ -568,7 +582,7 @@ export class TileManager {
       if (wk.key || !this.queue.length) continue;
       const e = this.queue.shift();
       e.state = 'building';
-      wk.key = e.key;
+      wk.key = e.key; wk.entry = e;
       // (the season's date goes with each build: the burns a tile shows are those begun by then, burns.js)
       const bd = burnDate(), date = [bd.year, bd.doy];
       if (e.level === 'far') wk.w.postMessage({ type: 'build', level: 'far', key: e.key, fx: e.fx, fy: e.fy, url: w.farUrl(e.fx, e.fy), date });
@@ -577,18 +591,24 @@ export class TileManager {
   }
 
   onMessage(m) {
+    // the build answers the request its worker was given (the entry, not the key: a key let go and asked for again
+    // is a new request); a result for a request no longer in the map is dropped, never installed over another
     const wk = this.workers.find((x) => x.key === m.key);
-    if (wk) wk.key = null;
-    const e = m.level === 'far' || m.key.startsWith('far:') ? this.farTiles.get(m.key) : this.tiles.get(m.key);
+    const e = wk ? wk.entry : null;
+    if (wk) { wk.key = null; wk.entry = null; }
+    const map = e && e.level === 'far' ? this.farTiles : this.tiles;
+    const live = !!e && e.state === 'building' && map.get(e.key) === e;
     if (m.type === 'error') {
       console.warn('tile build failed', m.key, m.error);
-      if (e) { (e.level === 'far' ? this.farTiles : this.tiles).delete(m.key); e.resolve(); }
-      return;
+      if (live) { map.delete(e.key); e.state = 'failed'; }
+      if (e) e.resolve(); // (an ensure asks again)
+    } else if (live) {
+      e.result = m;
+      e.state = 'built';
+      if (e.level === 'far') this.installFar(e); else this.pending.push(e);
     }
-    if (!e || e.state !== 'building') return; // evicted while building
-    e.result = m;
-    e.state = 'built';
-    if (e.level === 'far') this.installFar(e); else this.pending.push(e);
+    // the next build goes out now, not at the next frame (which a hidden window may not draw for a second)
+    if (this.lastPos) this.dispatch(this.lastPos[0], this.lastPos[1]);
   }
 
   // budget: ms this frame may spend (prime passes more: no frame is waiting on it)
@@ -596,6 +616,15 @@ export class TileManager {
     const t0 = performance.now();
     let steps = 0;
     while (this.pending.length && (steps === 0 || performance.now() - t0 < budget)) {
+      // a tile not begun yet: the one asked for outright first, then the nearest (not the first built, which after a
+      // jump is often one of the neighbourhood left behind)
+      if (!this.pending[0].steps && this.pending.length > 1 && this.lastPos) {
+        const [px, pz] = this.lastPos, w = this.world;
+        const rank = (e) => { if (e.ensured) return -1; const [ox, oz] = w.tileOrigin(e.tx, e.ty); return Math.hypot(ox + w.tileMetres / 2 - px, oz + w.tileMetres / 2 - pz); };
+        let best = 0;
+        for (let i = 1; i < this.pending.length; i++) if (rank(this.pending[i]) < rank(this.pending[best])) best = i;
+        if (best) this.pending.unshift(...this.pending.splice(best, 1));
+      }
       const e = this.pending[0];
       if (e.state !== 'built') { this.pending.shift(); continue; }
       if (!e.steps) e.steps = this.installSteps(e);
@@ -652,6 +681,9 @@ export class TileManager {
     e.obstacles = props.userData.obstacles; // docks, shacks, tents and the like, in world coordinates
     freeze(group);
     e.group = group; e.state = 'ready'; e.result = null;
+    // in this frame (evict runs after the installs, before an ensure's waiter can stand on it): the newest wanted
+    e.readyTick = this.tick;
+    if (e.ensured) { e.lastWanted = this.tick; e.ensured = false; }
     this.stats.built++; this.stats.trees += r.trees; this.stats.plants += r.plants;
     this.water.invalidateAtlas(e.tx * w.tile, e.ty * w.tile, w.tile);
     e.resolve();
@@ -699,7 +731,7 @@ export class TileManager {
     const w = this.world, [ptx, pty] = this.playerTile;
     const wanted = (e) => Math.max(Math.abs(e.tx - ptx), Math.abs(e.ty - pty)) <= NEIGHBOURHOOD;
     if (this.tiles.size > MAX_LOADED) {
-      const victims = [...this.tiles.values()].filter((e) => e.state === 'ready' && !wanted(e)).sort((a, b) => a.lastWanted - b.lastWanted);
+      const victims = [...this.tiles.values()].filter((e) => e.state === 'ready' && !wanted(e) && e.readyTick !== this.tick).sort((a, b) => a.lastWanted - b.lastWanted);
       for (let i = 0; i < victims.length && this.tiles.size > MAX_LOADED; i++) {
         const e = victims[i];
         this.disposeGroup(e.group);
@@ -712,7 +744,10 @@ export class TileManager {
       }
     }
     // queued tiles that fell out of the neighbourhood are forgotten rather than built
-    this.queue = this.queue.filter((e) => { if (e.level === 'far' || wanted(e) || e.ensured) return true; this.tiles.delete(e.key); e.resolve(); return false; });
+    this.queue = this.queue.filter((e) => { if (e.level === 'far' || wanted(e) || e.ensured) return true; this.tiles.delete(e.key); e.state = 'dropped'; e.resolve(); return false; });
+    // and so are the built ones not begun installing: installed only to be evicted the same frame, they held the
+    // installs (and the new neighbourhood) up after a jump; one begun finishes (its ground is already registered)
+    this.pending = this.pending.filter((e) => { if (e.steps || e.state !== 'built' || wanted(e) || e.ensured) return true; this.tiles.delete(e.key); e.state = 'dropped'; e.result = null; e.resolve(); return false; });
     // far tiles: keep the neighbourhood plus a ring
     const [pfx, pfy] = this.farOf(ptx, pty);
     for (const e of [...this.farTiles.values()]) {
