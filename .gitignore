@@ -9,3 +9,6 @@ public/data
 # agent and session worktrees, and their screenshot folders
 .claude/worktrees
 shots/
+
+# map data bakes (shipped as release archives, never committed; docs/HOSTING.md)
+public-data-v4*
