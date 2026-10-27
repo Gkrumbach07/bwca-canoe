@@ -2,6 +2,7 @@ node_modules
 dist
 data-cache
 public/data
+public/data-detail
 .DS_Store
 .env.local
 .env.*.local
