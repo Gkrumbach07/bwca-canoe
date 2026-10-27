@@ -80,6 +80,7 @@ import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
 import { record } from './record.js'; // round A-A
 import { slots } from './save.js'; // round A-D
+import { migrateSeason } from './migrate.js'; // d2 join
 import { CULL } from './tiles.js'; // round A-C
 import { AutoWatch, prewarmPasses } from './quality.js'; // round A-C
 import { Parties } from './parties.js'; // round A-F
@@ -101,6 +102,9 @@ const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if
 
 async function main() {
   const world = await World.load(progress);
+  // d2 join: a season made on another map release carried to this one's lake, site and trail numbers, before anything
+  // reads it (migrate.js)
+  await migrateSeason(world.meta);
   // d1 names: the official names on the world's records before the tiles build (the trail signs read them): the sites'
   // USFS numbers, the portages' trails, rods and classes, the place names (names.js; the rest of it below)
   const named = await names.attach(world).catch((e) => { console.warn('d1 names', e); return null; });
