@@ -7,6 +7,7 @@ import { buildStars } from './stars.js';
 import { makePost } from './post.js';
 import { makeAquaticKit } from './aquatic.js';
 import { GroundCover } from './groundcover.js';
+import { detailGrass } from './detail.js'; // detail proto: `?detail=2|5`
 import { Loons } from './loons.js';
 import { Fauna } from './fauna.js';
 import { Weather } from './weather.js';
@@ -173,6 +174,7 @@ async function main() {
   scene.add(ripples.mesh);
   const cover = new GroundCover(water);
   scene.add(cover.mesh);
+  tiles.detail.grass = detailGrass(cover, tiles, world); // detail proto (null without the flag)
   const mist = new Mist(water);
   scene.add(mist.group);
   const audio = new Ambient();

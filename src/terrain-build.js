@@ -290,6 +290,7 @@ function shoreShape(hBase, sd, level) {
 
 // The height things should stand on: the DEM reshaped in the shore band exactly as the mesh is.
 export function surfaceAt(grid, x, z) {
+  if (grid.detail) { const d = grid.detail.height(x, z); if (d === d) return d; } // detail proto (detail-build.js): the LiDAR lattice
   const h = grid.heightAt(x, z), sd = grid.shoreAt(x, z);
   if (Math.abs(sd) >= SHAPE_BAND) return h;
   return shoreShape(h, sd, grid.levelAt(x, z, 4));
@@ -310,6 +311,7 @@ function shoreBumps(x, z, sd) {
 // the waterline cuts is fanned along the cut; there this is the plain split, a few centimetres off.)
 // `cache`: an optional Map of vertex heights by lattice index, for many queries close together.
 export function meshHeightAt(grid, x, z, cache = null) {
+  if (grid.detail) { const d = grid.detail.height(x, z); if (d === d) return d; } // detail proto (detail-build.js): the LiDAR lattice
   const cell = grid.cell;
   const fx = (x - grid.originX) / cell - 0.5, fz = (z - grid.originZ) / cell - 0.5;
   const i = Math.floor(fx), j = Math.floor(fz);
