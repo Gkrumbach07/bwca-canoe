@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { makeLookMaterial } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
-import { groundUniforms, glslGround } from './terrain.js';
+import { groundUniforms, glslGround, mireSheen } from './terrain.js';
 import { SPLAT } from './terrain-build.js';
 import { applyWet } from './weather.js';
 
@@ -760,7 +760,7 @@ export function trailMaterial() {
         .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nattribute vec4 aSplatA;\nattribute vec4 aSplatB;\nattribute vec4 aFloor;\nattribute vec4 aTrail;\n' + vary)
         .replace('#include <project_vertex>', '#include <project_vertex>\n\tvSplatA = aSplatA; vSplatB = aSplatB; vFloor = aFloor; vTrail = aTrail;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n' + vary + '\nuniform vec3 uTrailSoil;\nuniform float uTrailEdge;\n' + glslGround)
+        .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n' + vary + '\nuniform vec3 uTrailSoil;\nuniform float uTrailEdge;\nfloat trailPool = 0.0;\n' + glslGround)
         .replace('#include <color_fragment>', `
 	float lookPx = length( fwidth( vLookWorld.xz ) );
 	vec3 groundC = groundColor( vLookWorld.xz, vSplatA, vSplatB, vFloor, lookPx );
@@ -778,9 +778,24 @@ export function trailMaterial() {
 	float peb = smoothstep( 0.62, 0.78, lookFbm( mat2( 0.8, 0.6, -0.6, 0.8 ) * q / 0.12 + vec2( 3.3, 1.7 ), 35u, 2 ) ) * lookFade( 0.12, lookPx );
 	soil *= 1.0 + 0.18 * peb * core;                          // pebbles and roots worn pale
 	vec3 col = mix( groundC * mix( 1.0, uTrailEdge, worn ), soil, core * vTrail.w );
+	float alpha = worn;
+	// across wet ground (vTrail.y, land.js MIRE: props.js buildTrail) the tread is churned to black peat and mud,
+	// wider than the dry path, with water standing in the boot holes and the ruts down the middle
+	trailPool = 0.0;
+	if ( vTrail.y > 0.02 ) {
+		float mk = smoothstep( 0.05, 0.6, vTrail.y );
+		float mudW = 1.0 - smoothstep( 0.45, 1.05, a );
+		vec3 mud = vec3( 0.045, 0.034, 0.024 ) * ( 0.75 + 0.5 * lookFbm( q / 0.6 + vec2( 4.1, -1.3 ), 36u, 2 ) );
+		col = mix( col, mud, mudW * mk * mix( 0.6, 1.0, vTrail.w ) );
+		float pn = lookFbm( q / 1.1 + vec2( -2.7, 5.5 ), 37u, 2 ) + 0.25 * ( lookFbm( q / 0.3, 38u, 2 ) - 0.5 ) * lookFade( 0.3, lookPx );
+		trailPool = smoothstep( 0.66 - 0.16 * vTrail.y, 0.7 - 0.16 * vTrail.y, pn ) * core * smoothstep( 0.3, 0.8, vTrail.y );
+		col = mix( col, vec3( 0.02, 0.02, 0.016 ), trailPool );
+		alpha = max( alpha, mudW * mk );
+	}
 	diffuseColor.rgb = col;
-	diffuseColor.a = worn * vTrail.z;`)
-        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); }');
+	diffuseColor.a = alpha * vTrail.z;`)
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ) * ( 1.0 - trailPool ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); normal = normalize( mix( normal, mat3( viewMatrix ) * vec3( 0.0, 1.0, 0.0 ), trailPool ) ); }')
+        .replace('#include <opaque_fragment>', mireSheen('trailPool * 0.9 + 0.25 * smoothstep( 0.2, 0.7, vTrail.y ) * ( 1.0 - trailPool )')); // (the mud's wet shine, and the puddles')
       applyWet(shader, { porosity: '1.0', gloss: '0.3 * ( 1.0 - 0.7 * groundCanopy )' }); // the packed soil wets as the ground round it does
     },
   });

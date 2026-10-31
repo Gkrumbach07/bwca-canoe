@@ -388,9 +388,9 @@ for (const [sp, name] of [['walleye', 'Walleye'], ['pike', 'Northern pike'], ['s
 // --- the tackle --------------------------------------------------------------------------------------------------
 // the identity says how it swims; the comparison is what takes it, a word per fish (takesLine, LURE_TAKES above)
 defineItem({ id: 'lure:jig', name: 'Jig & twister tail', kind: 'lure', kg: 0.01, price: 3, lure: 'jig', identity: 'Lead-head jig · hops the bottom', onYou: [takesOn('jig')] });
-defineItem({ id: 'lure:mepps', name: 'Mepps spinner', kind: 'lure', kg: 0.01, price: 6, lure: 'spinner', identity: 'Spinner · runs 1 m down', onYou: [takesOn('spinner')] });
-defineItem({ id: 'lure:daredevle', name: 'Red-and-white Daredevle', kind: 'lure', kg: 0.02, price: 7, lure: 'spoon', identity: 'Spoon · runs 2.2 m down', onYou: [takesOn('spoon')] });
-defineItem({ id: 'lure:rapala', name: 'Jointed Rapala', kind: 'lure', kg: 0.02, price: 12, lure: 'crankbait', identity: 'Balsa crankbait · dives 3.4 m', onYou: [takesOn('crankbait')] });
+defineItem({ id: 'lure:mepps', name: 'Mepps spinner', kind: 'lure', kg: 0.01, price: 6, lure: 'spinner', identity: 'Spinner · runs 3 ft down', onYou: [takesOn('spinner')] });
+defineItem({ id: 'lure:daredevle', name: 'Red-and-white Daredevle', kind: 'lure', kg: 0.02, price: 7, lure: 'spoon', identity: 'Spoon · runs 7 ft down', onYou: [takesOn('spoon')] });
+defineItem({ id: 'lure:rapala', name: 'Jointed Rapala', kind: 'lure', kg: 0.02, price: 12, lure: 'crankbait', identity: 'Balsa crankbait · dives 11 ft', onYou: [takesOn('crankbait')] });
 defineItem({ id: 'lure:silverminnow', name: 'Johnson Silver Minnow', kind: 'lure', kg: 0.02, price: 8, lure: 'silverminnow', identity: 'Weedless spoon', onYou: [takesOn('silverminnow')] });
 defineItem({ id: 'lure:lazyike', name: 'Lazy Ike', kind: 'lure', kg: 0.02, price: 9, lure: 'lazyike', identity: 'Banana plug · a slow wobble', onYou: [takesOn('lazyike')] });
 
@@ -402,7 +402,7 @@ export const AFRAME_SLEEP = 0.92;
 defineItem({ id: 'aframe', name: 'A-frame tent', kind: 'gear', w: 2, h: 4, kg: 3.0, price: 0, slot: 'tent', icon: 'tent', identity: 'Two poles and a fly', onYou: [EF('rest', AFRAME_SLEEP, 'a night')] });
 defineItem({ id: 'dome', name: 'Dome tent', kind: 'gear', w: 2, h: 4, kg: 2.8, price: 50, slot: 'tent', icon: 'dome', identity: 'Freestanding dome', onYou: [EF('rest', 1, 'a night')] });
 defineItem({ id: 'fourseason', name: 'Four-season tent', kind: 'gear', w: 2, h: 5, kg: 3.6, price: 95, slot: 'tent', icon: 'dome', identity: 'Dome with a vestibule', onYou: [EF('rest', 1, 'a night'), O('Wet gear', 'dry by morning')] });
-defineItem({ id: 'sleepingbag', name: 'Sleeping bag', kind: 'gear', w: 2, h: 3, kg: 1.8, price: 0, icon: 'bag', identity: 'Down bag · good to 0 °C', onYou: [EF('rest', 0.4, 'a night')] });
+defineItem({ id: 'sleepingbag', name: 'Sleeping bag', kind: 'gear', w: 2, h: 3, kg: 1.8, price: 0, icon: 'bag', identity: 'Down bag · good to 32 °F', onYou: [EF('rest', 0.4, 'a night')] });
 defineItem({ id: 'clothes', name: 'Clothes bag', kind: 'gear', w: 2, h: 2, kg: 2.5, price: 0, icon: 'clothes', uses: 1, identity: 'Fleece, wool socks and a dry shirt', onYou: [EF('warmth', 0.3, 'changed into dry')] }); // (energy.js: warmth back twice as fast for 2 h, up to 0.15 an hour more)
 // The pots (2026-10-31, the owner: "pot should also be like something you could put something in … Food goes in pot. So
 // then this encourages you to potentially bring more than one pot, or bring smaller pots"): small containers that nest
@@ -419,9 +419,9 @@ export const isPot = (id) => !!(ITEMS[id] && ITEMS[id].pot);
 defineItem({ id: 'water:lake', name: 'Lake water', short: 'Lake water', kind: 'water', w: 1, h: 1, kg: 0, litres: 2, icon: 'waterlake', identity: 'As it comes from the lake · untreated' });
 defineItem({ id: 'water:clean', name: 'Clean water', short: 'Clean water', kind: 'water', w: 1, h: 1, kg: 0, litres: 2, icon: 'waterclean', identity: 'Boiled · safe to drink' });
 // fb4 (decision 7: the tarp is pitched like the tent, on a rig with anchors; tarp.js pitches it and says what is missing)
-defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, price: 0, icon: 'tarp', identity: 'Nylon tarp · 3 × 3 m' });
+defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, price: 0, icon: 'tarp', identity: 'Nylon tarp · 10 × 10 ft' });
 // fb5 A/B: a pole is deadwood (it burns about like a log, decision 1) that also holds up a tarp; tarp.js counts it by id
-defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'firewood', w: 1, h: 3, kg: 0.9, stack: 4, burn: 1.5, icon: 'pole', identity: 'Straight deadwood · 2 m' });
+defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'firewood', w: 1, h: 3, kg: 0.9, stack: 4, burn: 1.5, icon: 'pole', identity: 'Straight deadwood · 6 ft' });
 defineItem({ id: 'pad', name: 'Sleeping pad', kind: 'gear', w: 2, h: 3, kg: 0.6, price: 30, identity: 'Closed-cell foam', onYou: [EF('rest', 0.05, 'a night')] });
 // the owner, 2026-10-31: the yoke you carry the canoe on, upgraded (shop.js effect yokeFree: under the canoe both hands
 // may carry, the canoe balanced on the shoulders, at a higher risk of it tipping: balance.js), and the bungee dilly
@@ -442,9 +442,9 @@ defineItem({ id: 'bottle', name: 'Water bottle', short: 'Bottle', kind: 'tool', 
 
 // --- the long items: held in a hand, lying in the canoe or on the ground -------------------------------------------
 // a paddle's comparison is its cruise and its effort; a rod's, how long its line holds in the red
-defineItem({ id: 'ash', name: 'Ash paddle', kind: 'long', w: 1, h: 6, kg: 1.1, price: 0, slot: 'paddle', long: 'paddle', icon: 'paddle', identity: 'Ash beavertail', onYou: [O('Cruise', '4.0 km/h'), O('Effort', '×1')] });
-defineItem({ id: 'bentshaft', name: 'Bent-shaft laminate paddle', kind: 'long', w: 1, h: 6, kg: 0.9, price: 40, slot: 'paddle', long: 'paddle', identity: 'Laminate, bent at the throat', onYou: [O('Cruise', '4.2 km/h'), O('Effort', '×0.95')] });
-defineItem({ id: 'carbon', name: 'Carbon bent-shaft paddle', kind: 'long', w: 1, h: 6, kg: 0.5, price: 110, slot: 'paddle', long: 'paddle', identity: 'Carbon, next to no weight', onYou: [O('Cruise', '4.4 km/h'), O('Effort', '×0.9')] });
+defineItem({ id: 'ash', name: 'Ash paddle', kind: 'long', w: 1, h: 6, kg: 1.1, price: 0, slot: 'paddle', long: 'paddle', icon: 'paddle', identity: 'Ash beavertail', onYou: [O('Cruise', '2.5 mph'), O('Effort', '×1')] });
+defineItem({ id: 'bentshaft', name: 'Bent-shaft laminate paddle', kind: 'long', w: 1, h: 6, kg: 0.9, price: 40, slot: 'paddle', long: 'paddle', identity: 'Laminate, bent at the throat', onYou: [O('Cruise', '2.6 mph'), O('Effort', '×0.95')] });
+defineItem({ id: 'carbon', name: 'Carbon bent-shaft paddle', kind: 'long', w: 1, h: 6, kg: 0.5, price: 110, slot: 'paddle', long: 'paddle', identity: 'Carbon, next to no weight', onYou: [O('Cruise', '2.7 mph'), O('Effort', '×0.9')] });
 defineItem({ id: 'rod', name: 'Spinning rod', kind: 'long', w: 1, h: 7, kg: 0.4, price: 0, long: 'rod', identity: 'Medium action · 6 ft', onYou: [O('Line', 'holds 1 s in the red')] });
 defineItem({ id: 'rodmh', name: 'Medium-heavy rod', kind: 'long', w: 1, h: 7, kg: 0.5, price: 45, long: 'rod', icon: 'rod', identity: 'Stiff, heavier line · 7 ft', onYou: [O('Line', 'holds 1.4 s in the red')] });
 
@@ -500,15 +500,15 @@ const lureOn = (lure) => {
 export const isBag = (id) => !!(ITEMS[id] && ITEMS[id].bag);
 // taste: a container a capsize doesn't get into: a barrel with its lid on (sealed) or a waterproof pack (dry)
 export const sealedDef = (d) => !!(d && (d.sealed || d.dry));
-const OC = (v) => `${v < 0 ? '−' : ''}${Math.abs(v)} °C`;
+const OC = (v) => { const f = Math.round(v * 9 / 5 + 32); return `${f < 0 ? '−' : ''}${Math.abs(f)} °F`; }; // (ratings are kept in °C; shown in °F)
 
 // the sleeping bags: summer → three-season → down (the starter is the summer bag)
-defineItem({ id: 'sleepingbag', name: 'Summer bag', short: 'Summer bag', kg: 1.2, bag: { rating: 7 }, identity: 'Synthetic, light · good to 7 °C', model: 'sack', tint: 0x7a2f2a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(7))] });
-defineItem({ id: 'bag3', name: 'Three-season bag', short: '3-season', kind: 'gear', w: 2, h: 3, kg: 1.6, price: 45, bag: { rating: -4 }, identity: 'Synthetic, warm when damp · good to −4 °C', model: 'sack', tint: 0x4a6a3a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(-4))] });
-defineItem({ id: 'bagdown', name: 'Down bag', short: 'Down bag', kind: 'gear', w: 2, h: 2, kg: 0.95, price: 95, bag: { rating: -9, down: true }, identity: 'Goose down, packs small · good to −9 °C', model: 'sack', tint: 0x2f5f8a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(-9)), O('Damp', 'half as warm')] });
+defineItem({ id: 'sleepingbag', name: 'Summer bag', short: 'Summer bag', kg: 1.2, bag: { rating: 7 }, identity: 'Synthetic, light · good to 45 °F', model: 'sack', tint: 0x7a2f2a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(7))] });
+defineItem({ id: 'bag3', name: 'Three-season bag', short: '3-season', kind: 'gear', w: 2, h: 3, kg: 1.6, price: 45, bag: { rating: -4 }, identity: 'Synthetic, warm when damp · good to 25 °F', model: 'sack', tint: 0x4a6a3a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(-4))] });
+defineItem({ id: 'bagdown', name: 'Down bag', short: 'Down bag', kind: 'gear', w: 2, h: 2, kg: 0.95, price: 95, bag: { rating: -9, down: true }, identity: 'Goose down, packs small · good to 16 °F', model: 'sack', tint: 0x2f5f8a, onYou: [EF('rest', 0.4, 'a night'), O('Good to', OC(-9)), O('Damp', 'half as warm')] });
 // the pads: foam → self-inflating
-defineItem({ id: 'pad', name: 'Foam pad', short: 'Foam pad', price: 20, pad: 1.5, identity: 'Closed-cell foam, rolled', onYou: [EF('rest', 0.05, 'a night'), O('Bag', '+1.5 °C')] });
-defineItem({ id: 'padair', name: 'Self-inflating pad', short: 'Air pad', kind: 'gear', w: 1, h: 3, kg: 0.9, price: 50, pad: 3, identity: 'Foam and air, 4 cm thick', model: 'sack', tint: 0xc96a2a, onYou: [EF('rest', 0.1, 'a night'), O('Bag', '+3 °C')] });
+defineItem({ id: 'pad', name: 'Foam pad', short: 'Foam pad', price: 20, pad: 1.5, identity: 'Closed-cell foam, rolled', onYou: [EF('rest', 0.05, 'a night'), O('Bag', '+3 °F')] });
+defineItem({ id: 'padair', name: 'Self-inflating pad', short: 'Air pad', kind: 'gear', w: 1, h: 3, kg: 0.9, price: 50, pad: 3, identity: 'Foam and air, 1½ in thick', model: 'sack', tint: 0xc96a2a, onYou: [EF('rest', 0.1, 'a night'), O('Bag', '+5 °F')] });
 
 // the rods: medium → medium-heavy → graphite; the hook sets within the strike window after a take (fishing.js)
 defineItem({ id: 'rod', onYou: [O('Line', 'holds 1 s in the red'), O('Hook set', 'within 1.3 s')] });
@@ -516,8 +516,8 @@ defineItem({ id: 'rodmh', onYou: [O('Line', 'holds 1.4 s in the red'), O('Hook s
 defineItem({ id: 'rodpro', name: 'Graphite rod', short: 'Graphite', kind: 'long', w: 1, h: 7, kg: 0.35, price: 85, long: 'rod', identity: 'Graphite, smooth drag · 6½ ft', onYou: [O('Line', 'holds 1.8 s in the red'), O('Hook set', 'within 1.8 s')] });
 
 // the headlamps: the one on your cap (no item: 30 m, travel after dark ×1.3) → LED → rechargeable
-defineItem({ id: 'headlamp2', name: 'LED headlamp', short: 'Headlamp', kind: 'tool', kg: 0.08, price: 15, identity: 'Three AAA, 200 lumens', model: 'headlamp', onYou: [O('Beam', '40 m'), O('After dark', 'travel ×1.2')] });
-defineItem({ id: 'headlamp3', name: 'Rechargeable headlamp', short: 'Lamp 400', kind: 'tool', kg: 0.11, price: 35, identity: '400 lumens, a red night mode', model: 'headlamp', tint: 0xb4321f, onYou: [O('Beam', '55 m'), O('After dark', 'travel ×1.1')] });
+defineItem({ id: 'headlamp2', name: 'LED headlamp', short: 'Headlamp', kind: 'tool', kg: 0.08, price: 15, identity: 'Three AAA, 200 lumens', model: 'headlamp', onYou: [O('Beam', '130 ft'), O('After dark', 'travel ×1.2')] });
+defineItem({ id: 'headlamp3', name: 'Rechargeable headlamp', short: 'Lamp 400', kind: 'tool', kg: 0.11, price: 35, identity: '400 lumens, a red night mode', model: 'headlamp', tint: 0xb4321f, onYou: [O('Beam', '180 ft'), O('After dark', 'travel ×1.1')] });
 
 // the water: tablets → a pump (drinkable at once) → a gravity bag (fills the bottle at camp)
 defineItem({ id: 'pump', identity: 'Hand pump · drinkable at once', model: 'pump' });
@@ -526,7 +526,7 @@ defineItem({ id: 'gravity', identity: 'Gravity bag · fills the bottle at camp',
 // the stove and its fuel (a canister's uses are its boils: a meal or a cup)
 defineItem({ id: 'stove', name: 'Canister stove', short: 'Stove', kind: 'tool', kg: 0.12, price: 35, identity: 'A brass burner on a gas canister', model: 'stove',
   verbs: [{ id: 'stove', label: 'Light it under the pot' }, { id: 'hand', label: 'Put in hand' }] });
-defineItem({ id: 'fuel', name: 'Fuel canister', short: 'Fuel', kind: 'tool', kg: 0.36, price: 6, uses: 10, identity: 'Isobutane, 230 g', model: 'canister', tint: 0x2f68a8 });
+defineItem({ id: 'fuel', name: 'Fuel canister', short: 'Fuel', kind: 'tool', kg: 0.36, price: 6, uses: 10, identity: 'Isobutane, 8 oz', model: 'canister', tint: 0x2f68a8 });
 
 // clothes for the weather and the bugs
 defineItem({ id: 'rainjacket', name: 'Rain jacket', short: 'Rain jacket', kind: 'gear', w: 2, h: 1, kg: 0.45, price: 30, identity: 'Coated nylon, a hood', model: 'jacket', tint: 0xc99a2e, onYou: [O('In rain', 'wet through ×0.15')] });

@@ -321,7 +321,7 @@ export class Hints {
     try { n = reg.nearestFree(p.x, p.z, 6000, (s) => !sheets.showsDetail || sheets.showsDetail(s.x, s.z)); } catch { n = null; }
     if (!n) return '';
     const dx = n.site.x - p.x, dz = n.site.z - p.z, deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
-    const far = n.d < 1000 ? `${Math.max(50, Math.round(n.d / 50) * 50)} m` : `${(n.d / 1000).toFixed(1)} km`;
+    const far = n.d < 300 ? `${Math.max(150, Math.round(n.d * 3.28084 / 50) * 50)} ft` : `${(n.d / 1609.344).toFixed(1)} mi`; // (imperial on screen)
     return `${far} ${compassLong(deg)}`;
   }
 

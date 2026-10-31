@@ -1,5 +1,6 @@
 import { FLOAT_OFFSET, LENGTH } from './canoe.js';
-import { resample } from './props.js';
+import { resample, PUNCHEON_TOP } from './props.js';
+import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
 import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
@@ -7,6 +8,7 @@ import { HULL, keelAt, section } from './hull.js';
 import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from './pace.js';
 import { burnLook } from './burns.js';
 import { CarryBalance, BALANCE } from './balance.js'; // the canoe's balance on the shoulders (the owner, 2026-10-31)
+import { fmtDist } from './units.js';
 
 export class Input {
   constructor() {
@@ -100,6 +102,13 @@ function seaAngle(a) {
 const LANDING_RADIUS = 28;
 const ASHORE_RADIUS = 6;      // metres of water between the hull and a shore within which you can step out
 const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like the trail
+// The wetlands underfoot (land.js MIRE; the owner, 2026-10-31: "When I'm in a swamp, it shouldn't be like I'm walking
+// over a nice rocky trail"): at a mire of 1 (an open bog, a marsh) the walk is slowed by `slow` (the trail's mud by
+// `trail`), the boots sink `sink` metres into the moss (half that in a trail's mud), and the gait lifts the knees and
+// sways (poses.js state.mire). On a trail's puncheon (props.js) the going is firm and the feet stand on the boards.
+const MIRE_WALK = { slow: 0.42, trail: 0.25, board: 0.04, sink: 0.13, ease: 2.5 };
+// what the HUD calls wet ground off the trails, by ground kind
+const MIRE_PLACE = { [KIND.openBog]: 'Open bog', [KIND.coniferBog]: 'Spruce bog', [KIND.shrubSwamp]: 'Alder swamp', [KIND.marsh]: 'Marsh', [KIND.wetMeadow]: 'Wet meadow', [KIND.hardwoodSwamp]: 'Ash swamp', [KIND.water]: 'Beaver flowage' };
 const TRAIL_TO_WATER = 2.5;   // tuning: a trail's end farther than this up the bank runs on down to the waterline (trailFor)
 const TRAIL_PUT_MAX = 30;     // tuning: and no farther than this from the end to the waterline (a sanity bound: the Hudson–Lake Four end is 19 m)
 const HULL_REACH = 3;         // metres from a canoe on the ground within which you can shoulder or launch it
@@ -144,6 +153,7 @@ export class Player {
     this.carry = null; // on foot: { trail, drop: { x, z, heading } | null, hitCooldown, from: { x, z } | null, choice }
     this.landing = null; // auto-pilot toward a portage launch point
     this.ashore = null;  // auto-pilot nosing in to a bank: { sx, sz, t }
+    this.suppressNoseIn = 0; // seconds after a called-off nose-in before E noses in again (backOff)
     this.placeName = null; this.campsite = null; this.onTrail = false; // where you are on foot, for the HUD
     this.placeCache = { ci: NaN, cj: NaN, id: 0 };
     this.ripples = null; this.water = null; this.audio = null; this.wind = null; // set by main
@@ -231,7 +241,35 @@ export class Player {
     return Math.hypot(one(d(e, 0), d(-e, 0)), one(d(0, e), d(0, -e)));
   }
   // the ground under a foot of the walker's (canoe.js plants the feet on it)
-  footGround(x, z) { const ft = this.foot; return ft && ft.near && this.onFoot ? this.supportAt(x, z, ft.y + STEP_UP, ft.near) : this.groundAt(x, z); }
+  footGround(x, z) {
+    const ft = this.foot;
+    if (!(ft && ft.near && this.onFoot)) return this.groundAt(x, z);
+    const s = this.supportAt(x, z, ft.y + STEP_UP, ft.near), M = this.mire;
+    // the wetlands: the feet sink into the moss and the muck, or stand on the puncheon (on the bare ground only: a rock
+    // or a log underfoot holds them up as ever)
+    return M && M.sink && s <= this.groundAt(x, z) + 0.02 ? s - M.sink : s;
+  }
+  // The wetlands underfoot this frame (land.js MIRE), eased: { k soft 0..1, board on a trail's puncheon, sink metres,
+  // kind the ground kind }. On a portage the trail's own (smoothed along it, as props.js lays its mud and its puncheon).
+  updateMire(dt, trail) {
+    const w = this.world, M = this.mire || (this.mire = { k: 0, board: false, sink: 0, kind: 0, onTrail: false });
+    if (!w.chAt) return M;
+    const read = this._mireRead || (this._mireRead = (n, x, z) => w.chAt(n, x, z));
+    let want = mireAt(read, this.x, this.z), board = false;
+    const pts = trail && trail.def.trailPts;
+    if (pts && pts.length) {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < pts.length; i++) { const dx = pts[i][0] - this.x, dz = pts[i][1] - this.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; bi = i; } }
+      const tm = trailMireAt(read, pts, bi);
+      if (trail.dist < 1.6) { want = tm; board = tm >= BOARDWALK && trail.dist < 0.75 && bi < pts.length - 1; }
+    }
+    M.k += (want - M.k) * (1 - Math.exp(-dt * MIRE_WALK.ease));
+    M.board = board; M.onTrail = !!trail && trail.dist < 1.6;
+    M.kind = w.chAt('ground', this.x, this.z);
+    const sinkWant = board ? -PUNCHEON_TOP : MIRE_WALK.sink * M.k * (M.onTrail ? 0.5 : 1);
+    M.sink += (sinkWant - M.sink) * (1 - Math.exp(-dt * (board ? 12 : 3)));
+    return M;
+  }
 
   trailFor(p) {
     let t = this.trailCache.get(p);
@@ -362,6 +400,7 @@ export class Player {
     if (this.seat && (this.mode !== 'walk' || this.teleporting)) this.seat = null; // wc C: a seat is left by anything that moves you
     if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); this.groundSpeed = 0; return; }
     const x0 = this.x, z0 = this.z;
+    if (this.suppressNoseIn > 0) this.suppressNoseIn -= dt;
     if (this.landing || this.ashore) this.easeBoost(1, dt); // nosing in, a landing: at life
     else if (this.mode === 'swim') this.easeBoost(this.paceTable.lapse ? SWIM_LAPSE : 1, dt); // one speed: a swim a little time-lapsed (pace.js)
     if (this.landing) this.updateLanding(dt);
@@ -545,11 +584,11 @@ export class Player {
     const gap = this.shoreGap();
     if (land) {
       const p = land.def;
-      if (!warning) this.prompt = { key: 'E', text: `Go ashore · Portage: ${p.name} · ${p.rods} rods (${p.lengthM} m)` }; // the sea's warning outranks the shore
-      if (inp.pressed('KeyE')) this.landing = { land, t: 0 };
+      if (!warning) this.prompt = { key: 'E', text: `Go ashore · Portage: ${p.name} · ${p.rods} rods (${fmtDist(p.lengthM)})` }; // the sea's warning outranks the shore
+      if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.landing = { land, t: 0 };
     } else if (gap) {
       if (!warning) this.prompt = { key: 'E', text: 'Go ashore' };
-      if (inp.pressed('KeyE')) this.goAshore(gap);
+      if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.goAshore(gap);
     } else if (!warning && this.bilge > 0.04 && !paddling) this.prompt = { key: 'Q', text: 'Bail · hold' }; // cons B
     if (bailing) this.prompt = { key: 'Q', text: 'Bailing…' };
   }
@@ -632,9 +671,23 @@ export class Player {
     this.ashore = { sx: at.x + g.x * at.sd, sz: at.z + g.z * at.sd, t: 0 };
   }
 
+  // The owner: "I want to be able to escape a nose in. Sometimes I'll start to nose in when I didn't want to."
+  // S (back-paddle, as on the water) or E again calls off a nose-in or a landing: you keep the canoe, backing off a
+  // little. S counts only once it has been let go after the nose-in began (so a back-paddle held into it is no cancel).
+  backOff(A) {
+    const inp = this.input, back = inp.held('KeyS', 'ArrowDown');
+    if (!back) A.armed = true;
+    if (!((A.armed && back) || (A.t > 0.15 && inp.pressed('KeyE')))) return false;
+    this.ashore = null; this.landing = null;
+    this.speed = Math.min(this.speed, 0) - 0.4; // a back stroke off the bank
+    this.suppressNoseIn = 1.0;                  // and a moment before E noses in again
+    return true;
+  }
+
   updateAshore(dt) {
     const A = this.ashore, w = this.world, st = this.canoe.state;
     A.t += dt;
+    if (this.backOff(A)) return;
     const dx = A.sx - this.x, dz = A.sz - this.z, d = Math.hypot(dx, dz);
     const target = Math.atan2(-dz, dx);
     let dh = target - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
@@ -645,7 +698,7 @@ export class Player {
     st.power = 0.5; st.stroke = (st.stroke + dt * 0.8) % 1; st.drive = 1; st.turn = 0;
     this.placeOnWater(dt);
     this.emitWater(dt);
-    this.prompt = { key: null, text: 'Nosing in…' };
+    this.prompt = { key: 'S', text: 'Nosing in… · back-paddle (or E) to call it off' };
     const bowSd = w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6);
     if (bowSd > 0.6 || d < 1.0 || A.t > 8) this.stepOut();
   }
@@ -775,7 +828,7 @@ export class Player {
           if (this.wind) { const wd = this.wind.dir, down = Math.atan2(-wd.z, wd.x); let d = down - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); this.heading = Math.abs(d) <= Math.PI / 2 ? down : down + Math.PI; st.swimHeading = this.heading; }
           this.placeOnWater();
         }
-      } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${d.toFixed(0)} m)` };
+      } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${fmtDist(d)})` };
       return;
     }
     // from the shore: the canoe where you left it
@@ -794,7 +847,7 @@ export class Player {
       }
       return;
     }
-    const far = drop ? (dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`) : null;
+    const far = drop ? fmtDist(dd) : null;
     this.prompt = { key: null, text: `Swimming${far ? ` · the canoe is ${far} away` : ''}` };
   }
 
@@ -881,6 +934,7 @@ export class Player {
     // stopped after 8 s, short of it from the edge of the prompt's 28 m, and the step-out then took the nearest shore:
     // once 23 m from the trail, off round a point, so the carry began through the trees.
     const L = this.landing, trail = L.land.trail, w = this.world;
+    if (this.backOff(L)) return;
     if (!L.put) {
       const e = trail.def.pts[L.land.end === 0 ? 0 : trail.def.pts.length - 1];
       let sx = e[0], sz = e[1], sd = w.shoreAt(sx, sz);
@@ -902,7 +956,7 @@ export class Player {
     this.canoe.state.power = 0.5; this.canoe.state.stroke = (this.canoe.state.stroke + dt * 0.8) % 1; this.canoe.state.drive = 1; this.canoe.state.turn = 0;
     this.placeOnWater(dt);
     this.emitWater(dt);
-    this.prompt = { key: null, text: 'Landing…' };
+    this.prompt = { key: 'S', text: 'Landing… · back-paddle (or E) to call it off' };
     L.t += dt;
     if (L.via) { if (d < 5 || w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6) > -0.3 || L.t > L.limit * 0.6) L.via = null; return; }
     if (w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6) > 0.6 || d < 1.0 || L.t > L.limit) {
@@ -1282,6 +1336,8 @@ export class Player {
     const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
     const campArea = camp || this.nearCampsite(this.x, this.z, CAMP_AREA); // fb3 A: a site's area walks at life (pace.js)
     this.onTrail = onTrail; this.campsite = camp;
+    const mire = this.updateMire(dt, onTrail ? trail : null);
+    st.mire = mire.board ? 0 : mire.k; // (poses.js: the knees up out of the muck, the sway)
     const cls = GROUND[(w.coverCell(w.cellI(this.x), w.cellJ(this.z)) >> 16) & 255];
     let note = null, moving = false, mx = 0, mz = 0, nx = this.x, nz = this.z, swimNow = false, stepUp = -1;
     const f = this.forward;
@@ -1346,7 +1402,8 @@ export class Player {
         }
       }
       if (!started) {
-        const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade;
+        const soft = 1 - (mire.board ? MIRE_WALK.board : mire.onTrail ? MIRE_WALK.trail : MIRE_WALK.slow) * mire.k; // the wetlands' going
+        const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade * soft;
         this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
         // one speed (pace.js footSeen): the walker time-lapsed so he is seen at the speed of where he is, whatever the
         // load: a carry (8 m/s), a trail on foot (5), open land (3.5), a campsite's area, a store and its yard (3), and
@@ -1512,7 +1569,7 @@ export class Player {
     // where you are, for the HUD header
     if (camp) { const id = this.nearWater(camp.x, camp.z, 6); this.placeName = camp.name ? `${camp.name} campsite` : `Campsite${id ? ' · ' + (w.lakeName(id) || 'unnamed water') : ''}`; }
     else if (onTrail) this.placeName = trail.def.name;
-    else { const id = this.nearWater(this.x, this.z, 8); this.placeName = id ? `${w.lakeName(id) || 'Unnamed water'} shore` : (cls === 'burn' && burnPlace(this.x, this.z)) || LAND[cls] || 'The woods'; }
+    else { const id = this.nearWater(this.x, this.z, 8); this.placeName = id ? `${w.lakeName(id) || 'Unnamed water'} shore` : (cls === 'burn' && burnPlace(this.x, this.z)) || (mire.k > 0.3 && MIRE_PLACE[mire.kind]) || LAND[cls] || 'The woods'; }
     let trailText = null;
     if (onTrail) {
       const p = this.trailPoint(trail.trail, trail.along);
@@ -1572,7 +1629,7 @@ export class Player {
       // beached, a held E Push it off) and Q Shoulder it (packs.js hullAction, nearby.js)
       const d = c.drop, dd = Math.hypot(d.x - this.x, d.z - this.z);
       c.choice = false;
-      this.say(note || trailText || (dd <= HULL_REACH ? null : `The canoe is ${dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`} away`));
+      this.say(note || trailText || (dd <= HULL_REACH ? null : `The canoe is ${fmtDist(dd)} away`));
       return;
     }
     // carrying: launch at a trail end where the map says, or at any shore with a metre of water within reach,

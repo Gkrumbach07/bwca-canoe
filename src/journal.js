@@ -20,6 +20,7 @@
 // Data comes from the fishing code (log, bests), the tasks, the outfitter's trip, the trip core's logbook, the season's
 // record (journal.record) and the camera (journal.photos). showRecord(id) opens the book at a trip's page.
 import { clock12, longDate, shortDate, weekdayOf, esc, plural, word } from './hud.js';
+import { fmtIn, fmtLbOz, fmtFt } from './units.js';
 import { PackSide } from './inv-ui.js';
 import { KINDS } from './tasks.js'; // fb3 C: a notice's kind, for its progress and its label
 import { WATERS } from './fishing.js';

@@ -20,6 +20,7 @@
 // It hides the counter itself before the fade (so the counter's own close afterwards does nothing), and on arrival
 // sets outfitter.arrivedBy = 'ride' for the counter's greeting (keeperLine(profile, 'ride')).
 import { outfitterProfile, keeperLine, roadOf } from './outfitters.js';
+import { miles } from './units.js';
 
 export const ROAD = 1.4;          // road km for a km of straight line
 const BASE_H = 0.5, KMH = 40;     // the time: half an hour, then 40 km an hour
@@ -38,7 +39,7 @@ export function rideTime(h) {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, '0')}` : ''}`;
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const kmWords = (k) => (k < 10 ? k.toFixed(1) : String(Math.round(k)));
+const kmWords = (k) => miles(k); // (miles now, from km)
 const miWords = (k) => { const m = k * 0.621371; return m < 10 ? m.toFixed(1) : String(Math.round(m)); }; // the counter's rows, in miles
 
 export class Rides {
@@ -106,7 +107,7 @@ export class Rides {
     const lake = r.lake || to.place;
     const sub = this.sandbox
       ? `Sandbox: the truck is free and the road takes no time. ${lake}, entry point ${to.ep}.`
-      : `${kmWords(r.km)} km up ${r.road === roadOf(from.ep) ? r.road : 'the roads'} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${r.late ? ` It’s late when you get in: a bunk at ${to.name}, and you’re up at half past seven.` : ''}`;
+      : `${kmWords(r.km)} miles up ${r.road === roadOf(from.ep) ? r.road : 'the roads'} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${r.late ? ` It’s late when you get in: a bunk at ${to.name}, and you’re up at half past seven.` : ''}`;
     const card = {
       kicker: `${from.name} → ${to.name} · entry point ${to.ep}`,
       text: `“${keeperLine(fromP, 'goodbye', { hours: this.day ? this.day.hours : undefined })}”`,

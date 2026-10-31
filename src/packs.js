@@ -53,6 +53,7 @@ import { LIFE, TRAIL, footHours } from './pace.js';
 import { BASE_H, CARRY_H } from './energy.js';
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
+import { fmtDist, pounds } from './units.js';
 import { hold } from './hold.js'; // camp 1: the held "Load everything here"
 
 export const WEIGHTS = { aluminium: 34, royalex: 29, kevlar: 20, gear: 16, foodPack: 2, foodDay: 0.9 }; // kg (the canoes; the rest is the items' own)
@@ -80,7 +81,7 @@ const TAG_TRAIL = 15;       // m from a portage trail within which a thing set d
 const CARRY_EACH = { worn: 2, hands: 2 }; // tuning: what one carry takes besides the canoe (tripsFor): back and chest, both hands
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)); // (a name keeps its capital)
-const metres = (d) => (d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`);
+const metres = (d) => fmtDist(d); // (feet, then miles, on screen)
 // game hours as the prompt says them: "about 35 min", "about 1 h 10"
 export function aboutHours(h) {
   const m = Math.max(5, Math.round((h * 60) / 5) * 5);
@@ -169,8 +170,8 @@ export class Packs {
     const p = this.player, on = this.carried(), left = this.left, kg = Math.round(this.loadKg);
     const worn = on.filter((u) => u.obj.where !== 'hands'), hand = on.filter((u) => u.obj.where === 'hands');
     let s;
-    if (p.mode === 'carry') s = `The canoe${on.length ? ', ' + names(on) : ''} · ${kg} kg`;
-    else if (on.length) s = `${cap(names(worn.length ? worn : hand))}${worn.length ? ' on you' : ' in hand'}${worn.length && hand.length ? `, ${names(hand)} in hand` : ''} · ${kg} kg`;
+    if (p.mode === 'carry') s = `The canoe${on.length ? ', ' + names(on) : ''} · ${pounds(kg)} lb`;
+    else if (on.length) s = `${cap(names(worn.length ? worn : hand))}${worn.length ? ' on you' : ' in hand'}${worn.length && hand.length ? `, ${names(hand)} in hand` : ''} · ${pounds(kg)} lb`;
     else {
       const all = this.units(), inCanoe = all.filter((u) => u.obj.where === 'canoe');
       s = all.some((u) => u.obj.where === 'ground' && u.obj.at && u.obj.at.camp) ? 'Packs out at camp' : inCanoe.length === all.length ? (inCanoe.length ? 'Everything in the canoe' : 'Nothing with you') : `${inCanoe.length} ${inCanoe.length === 1 ? 'thing' : 'things'} in the canoe`;
@@ -269,7 +270,7 @@ export class Packs {
   // Q beside a thing with the canoe overhead: it comes too
   takeToo(u) {
     const r = this.inv.carry(u.ref, this.slotFor(u) || 'auto');
-    if (this.hud) this.hud.note(r.ok ? `Everything in one trip: ${Math.round(this.loadKg)} kg.` : r.words || 'No room on you for it.');
+    if (this.hud) this.hud.note(r.ok ? `Everything in one trip: ${pounds(this.loadKg)} lb.` : r.words || 'No room on you for it.');
   }
   // E beside a thing on foot: onto your back, your chest or into a hand; a pile's things into what you carry
   pickUp(u) {
@@ -714,7 +715,7 @@ export class Packs {
       // (fb4 join: and what to do about it: a loose thing goes in a pack in the canoe, so make room in one)
       const loose = skipped.some((s) => s.why === 'full' && s.id === 'pile'), kg = skipped.some((s) => s.why === 'kg');
       const next = !skipped.length ? '' : kg ? ' Take something heavy out, or make two trips.' : loose ? ' A loose thing rides in a pack in the canoe: make room in one, or carry it on you.' : ' The canoe takes eight packs and barrels: carry the rest.';
-      if (this.hud) this.hud.note(`${inN ? `${inN === list.length ? 'Everything is' : `${inN} ${inN === 1 ? 'thing' : 'things'}`} in the canoe` : 'Nothing went in'}${skipped.length ? `; no room for ${names(skipped)}${kg ? ` (the canoe has its ${CANOE_KG} kg)` : ''}` : ''}.${next}`, skipped.length ? 6 : 4);
+      if (this.hud) this.hud.note(`${inN ? `${inN === list.length ? 'Everything is' : `${inN} ${inN === 1 ? 'thing' : 'things'}`} in the canoe` : 'Nothing went in'}${skipped.length ? `; no room for ${names(skipped)}${kg ? ` (the canoe takes ${pounds(CANOE_KG)} lb)` : ''}` : ''}.${next}`, skipped.length ? 6 : 4);
     };
     return {
       id: 'load', label: 'Loading the canoe', phases, at: 0, near: { x: p.x, z: p.z, r: 1.5 },

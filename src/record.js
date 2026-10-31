@@ -41,6 +41,7 @@ import { Vector3 } from 'three';
 import { save } from './save.js';
 import { esc, plural, word, longDate, shortDate, weekdayOf } from './hud.js';
 import { itemDef } from './items.js';
+import { inches } from './units.js';
 import './record.css';
 
 const NS = 'record';
@@ -449,7 +450,7 @@ class Record {
     if (moose) { const when = this.whenWords(moose.h); return `a moose${when}${onW2(moose.lake)}`; }
     if (c.capsizes) return c.capsizes === 1 ? 'over once' : `over ${word(c.capsizes)} times`;
     const b = c.fish && c.fish.best;
-    if (b && b.cm >= (GOOD_CM[b.sp] || 999)) return `${an(b.cm)} ${b.cm} cm ${FISH_SHORT[b.sp] || b.name}${b.lake !== c.far ? onW2(b.lake) : ''}`;
+    if (b && b.cm >= (GOOD_CM[b.sp] || 999)) return `${an(inches(b.cm))} ${inches(b.cm)}-inch ${FISH_SHORT[b.sp] || b.name}${b.lake !== c.far ? onW2(b.lake) : ''}`;
     const f = (c.firsts || []).find((w) => /^first (?!portage|night)/.test(w) && !/at camp$/.test(w));
     if (f) return `the ${f}`;
     if (c.fish && c.fish.n >= 3) return `${word(c.fish.n)} fish`;
@@ -684,7 +685,7 @@ class Record {
     const F = c.fish;
     if (F && F.n) {
       const kept = F.kept ? `, ${F.kept === F.n ? (F.n === 1 ? 'kept' : 'all kept') : `${word(F.kept)} kept`}` : ', all let go';
-      const best = F.best ? ` The best, ${an(F.best.cm)} <span class="num">${F.best.cm}</span> cm ${esc(F.best.name)}${F.best.lake ? ` on ${esc(F.best.lake)}` : ''}.` : '';
+      const best = F.best ? ` The best, ${an(inches(F.best.cm))} <span class="num">${inches(F.best.cm)}</span>-inch ${esc(F.best.name)}${F.best.lake ? ` on ${esc(F.best.lake)}` : ''}.` : '';
       const kinds = F.sp.length > 1 || firsts.has(`first ${F.sp[0].name}`) ? `<br><span class="soft">${F.sp.map((q) => `${esc(q.name)}${q.n > 1 ? ` ×${q.n}` : ''}${mark(`first ${q.name}`)}`).join(' · ')}</span>` : '';
       rows.push(['Fish', `${cap(word(F.n))} ${plural(F.n, 'fish', 'fish')}${kept}.${best}${kinds}`]);
     }

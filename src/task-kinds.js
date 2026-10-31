@@ -5,6 +5,8 @@ import { groundAt } from './props.js';
 import { defineItem, itemDef } from './items.js';
 import { hold } from './hold.js';
 import { word, plural, esc } from './hud.js';
+import { fmtIn, fmtDepth } from './units.js';
+const ft1 = (m) => (m * 3.28084).toFixed(1); // a Secchi reading in feet, to the tenth (the monitors' own unit)
 import { mulberry32 } from './rng.js';
 import { SPECIES as FISH } from './fishing.js';
 import { outfitterProfile, abundanceOf } from './outfitters.js';
@@ -502,8 +504,8 @@ const HOURS = [10, 16];  // the program's window: the sun high
 const SECCHI_WORDS = {
   titles: ['A Secchi reading', 'Lake clarity wanted', 'For the lake monitors'],
   texts: [
-    ['The lake monitoring program wants a Secchi reading on {lake}{hops}. We lend the disk. Out at the deep spot, {d} m, lower it till it’s gone. Between ten and four.', 'the Citizen Lake Monitoring Program'],
-    ['The state’s lake monitors want a clarity reading on {lake}{hops}. The disk is on loan from us: the deep spot, {d} m of water, between ten and four, and sit still.', 'MPCA lake monitoring, by letter'],
+    ['The lake monitoring program wants a Secchi reading on {lake}{hops}. We lend the disk. Out at the deep spot, {d} feet, lower it till it’s gone. Between ten and four.', 'the Citizen Lake Monitoring Program'],
+    ['The state’s lake monitors want a clarity reading on {lake}{hops}. The disk is on loan from us: the deep spot, {d} feet of water, between ten and four, and sit still.', 'MPCA lake monitoring, by letter'],
   ],
 };
 registerKind('secchi', {
@@ -522,7 +524,7 @@ registerKind('secchi', {
       const st = await deepSpot(T, l);
       if (!st || st.depth < Math.max(4, (l.secchi || 2.6) + 1.2)) continue;
       const [say, sign] = pickR(c.rng, SECCHI_WORDS.texts);
-      const text = WORDS.fill(say, { lake: l.name, hops: hopsText(cand.h), d: Math.round(st.depth) });
+      const text = WORDS.fill(say, { lake: l.name, hops: hopsText(cand.h), d: Math.round(st.depth * 3.28084) }); // feet
       return { key: l.id, lakeId: l.id, station: st, hops: cand.h, km: kmFrom(L, st.x, st.z), title: pickR(c.rng, SECCHI_WORDS.titles), text, sign };
     }
     return null;
@@ -544,9 +546,9 @@ registerKind('secchi', {
   onClaim(T, t) { const i = inv(); if (i && t.lent) { try { i.remove('secchi', 1); } catch { /* gone */ } } },
   update(T, t) { atStation(T, t); },
   use(T, t) { return beginSecchi(T, t); },
-  target(T, t) { const s = t.station; return s ? { x: s.x, z: s.z, r: STATION_R, label: `the deep spot, ${Math.round(s.depth)} m`, tight: true } : undefined; },
-  progress(t) { return t.reading ? `${t.reading.toFixed(1)} m` : 'no reading yet'; },
-  doneWords(t) { return t.reading ? `${t.reading.toFixed(1)} m` : ''; },
+  target(T, t) { const s = t.station; return s ? { x: s.x, z: s.z, r: STATION_R, label: `the deep spot, ${fmtDepth(s.depth)}`, tight: true } : undefined; },
+  progress(t) { return t.reading ? `${ft1(t.reading)} ft` : 'no reading yet'; },
+  doneWords(t) { return t.reading ? `${ft1(t.reading)} ft` : ''; },
 });
 // the deepest water of a lake in the tile under its middle (the sounding the program reads at)
 async function deepSpot(T, l) {
@@ -626,15 +628,15 @@ function beginSecchi(T, t) {
     onTick: (at, j) => {
       const i = Math.min(j.phases.length - 1, Math.floor(at + 1e-9)), f = at - i;
       if (i === 0) poseDisk(T, -0.4 * (1 - f));
-      else if (i === 1) { j.phases[1].doing = `Down ${(gone * f).toFixed(1)} m`; poseDisk(T, gone * f); }
-      else if (i === 2) { j.phases[1].doing = `Gone at ${gone.toFixed(1)} m`; j.phases[2].doing = `Up to ${(gone - (gone - back) * f).toFixed(1)} m`; poseDisk(T, gone - (gone - back) * f); }
-      else if (i === 3) { j.phases[2].doing = `In sight at ${back.toFixed(1)} m`; poseDisk(T, back * (1 - f) - 0.35 * f); }
+      else if (i === 1) { j.phases[1].doing = `Down ${ft1(gone * f)} ft`; poseDisk(T, gone * f); }
+      else if (i === 2) { j.phases[1].doing = `Gone at ${ft1(gone)} ft`; j.phases[2].doing = `Up to ${ft1(gone - (gone - back) * f)} ft`; poseDisk(T, gone - (gone - back) * f); }
+      else if (i === 3) { j.phases[2].doing = `In sight at ${ft1(back)} ft`; poseDisk(T, back * (1 - f) - 0.35 * f); }
     },
     onStop: () => { if (diskProp) diskProp.visible = false; },
     onDone: () => {
       if (diskProp) diskProp.visible = false;
       t.reading = Math.round(((gone + back) / 2) * 10) / 10; t.status = 'done';
-      T.note(`Gone at ${gone.toFixed(1)} m, back in sight at ${back.toFixed(1)}: ${t.reading.toFixed(1)} m on ${T.lakeName(t.lakeId) || 'the lake'}. Take it to ${backTo(T, t)}.`);
+      T.note(`Gone at ${ft1(gone)} ft, back in sight at ${ft1(back)}: ${ft1(t.reading)} ft on ${T.lakeName(t.lakeId) || 'the lake'}. Take it to ${backTo(T, t)}.`);
       T.changed(); T.boardChanged();
     },
   });

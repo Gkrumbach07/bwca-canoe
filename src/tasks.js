@@ -5,6 +5,7 @@ import { buildItemProp, groundAt } from './props.js';
 import { SPECIES as FISH } from './fishing.js';
 import { esc, word, plural, fmtKm, shortDate } from './hud.js';
 import { itemDef } from './items.js';
+import { fmtIn, fmtInUp } from './units.js';
 
 // The board: notices pinned up at each outfitter, the tasks they set, and the money they pay.
 //
@@ -87,7 +88,7 @@ const FISH_WORDS = {
   crappie: { short: 'crappie', title: 'Crappie wanted', texts: [['Crappie for the fry pan. One will do. They hang in the weeds at dusk; a small jig.', 'Marge, in the kitchen']] },
   perch: { short: 'perch', title: 'Perch wanted', texts: [['The cook wants a yellow perch for her chowder. Any size. Leeches on a bobber in the shallows.', 'the cook']] },
   laketrout: { short: 'laker', title: 'Lake trout wanted',
-    texts: [["{one} for the lodge's anniversary supper. They hold deep and cold in {lake}{where}, down to {depth} m. A spoon, deep, and bring it back cold.", 'the lodge kitchen'], ['{one} for the smoker. Deep water only, like {lake}{where}: it goes down {depth} m. Let the spoon sink.', 'Arnie, smokehouse']] },
+    texts: [["{one} for the lodge's anniversary supper. They hold deep and cold in {lake}{where}, down to {depth} feet. A spoon, deep, and bring it back cold.", 'the lodge kitchen'], ['{one} for the smoker. Deep water only, like {lake}{where}: it goes down {depth} feet. Let the spoon sink.', 'Arnie, smokehouse']] },
 };
 const SURVEY_WORDS = {
   walk: { titles: ['Portage report wanted', 'Trail crew: a portage to walk'],
@@ -143,10 +144,10 @@ registerKind('fish', {
       const trout = T.troutLake(c.landing, c.reach);
       if (trout && fresh('laketrout')) {
         const sizeIt = c.rng() < 0.3;
-        const W = FISH_WORDS.laketrout, lake = trout.l.name, depth = Math.round(T.depthOf(trout.l.id)); // (d1 lakes: the DNR's depth)
-        const where = trout.hops != null ? hopsText(trout.hops) : `, ${fmtKm(trout.d / 1000)} km ${compass(trout.l.cx - c.landing.x, trout.l.cz - c.landing.z)} of here`;
+        const W = FISH_WORDS.laketrout, lake = trout.l.name, depth = Math.round(T.depthOf(trout.l.id) * 3.28084); // (d1 lakes: the DNR's depth; in feet for the words)
+        const where = trout.hops != null ? hopsText(trout.hops) : `, ${fmtKm(trout.d / 1000)} miles ${compass(trout.l.cx - c.landing.x, trout.l.cz - c.landing.z)} of here`;
         minCm = sizeIt ? sizeAt('laketrout', SIZE_PCT[0] + c.rng() * (SIZE_PCT[1] - SIZE_PCT[0])) : 0;
-        const [say, sign] = pickR(c.rng, W.texts), text = fill(say, { one: minCm ? `One laker of ${minCm} cm or better` : 'One laker', lake, depth, where });
+        const [say, sign] = pickR(c.rng, W.texts), text = fill(say, { one: minCm ? `One laker of ${fmtInUp(minCm)} or better` : 'One laker', lake, depth, where });
         return { species: 'laketrout', minCm, need: 1, lakeHint: trout.l.id, km: +(trout.d / 1000).toFixed(1), title: minCm ? 'A big laker' : W.title, text, sign, hint: T.hintFor(trout.l.id, null, 'lakers, deep') };
       }
       species = pickR(c.rng, ['walleye', 'pike'].filter(fresh)) || 'walleye';
@@ -167,7 +168,7 @@ registerKind('fish', {
     const W = FISH_WORDS[species];
     if (minCm) {
       const [why, sign] = pickR(c.rng, W.size || FISH_WORDS.smallmouth.size);
-      return { species, minCm, need: 1, title: `A big ${W.short}`, text: `One ${fishName(species)} of ${minCm} cm or better, kept. ${why}`, sign };
+      return { species, minCm, need: 1, title: `A big ${W.short}`, text: `One ${fishName(species)} of ${fmtInUp(minCm)} or better, kept. ${why}`, sign };
     }
     const [text, sign] = pickR(c.rng, W.texts);
     return { species, minCm: 0, need: 1, title: W.title, text, sign };
@@ -188,7 +189,7 @@ registerKind('fish', {
   // still claims as it did.
   progress(t) {
     const c = t.cooler || [];
-    if (t.status === 'done' && c.length) return `in the cooler: ${c.map((f) => `${fishName(f.species)}, ${f.cm} cm`).join('; ')}`;
+    if (t.status === 'done' && c.length) return `in the cooler: ${c.map((f) => `${fishName(f.species)}, ${fmtIn(f.cm)}`).join('; ')}`;
     const f = LIVE && LIVE.fishFor(t), L = LIVE && LIVE.landing(t.from);
     const there = L ? `${L.name}, entry point ${L.ep}` : 'the outfitter';
     return f ? `a ${f.words} with you: bring it to ${there}` : `not caught yet · it goes to ${there}`;
@@ -587,7 +588,7 @@ export class Tasks {
     const L = this.landing(t.from), here = ep != null ? this.landing(ep) : null;
     if (!L) return t.npc ? 'That was asked of you at another outfitter.' : 'That notice came off another board.';
     const d = here ? Math.hypot(L.x - here.x, L.z - here.z) : 0;
-    const far = here && d > 500 ? `, about ${fmtKm(d / 1000)} km ${compass(L.x - here.x, L.z - here.z)} of here` : '';
+    const far = here && d > 500 ? `, about ${fmtKm(d / 1000)} miles ${compass(L.x - here.x, L.z - here.z)} of here` : '';
     // a visitor's task (npcs.js): theirs, asked at their outfitter, and paid by them or that counter
     if (t.npc) return `That is ${poss(t.npcName || 'a visitor')}, asked of you at ${L.name}. They pay it, or the counter there does: entry point ${L.ep}, ${L.place}${far}.`;
     return `That notice came off ${poss(L.name)} board. They pay it at their own counter: entry point ${L.ep}, ${L.place}${far}.`;
@@ -627,7 +628,7 @@ export class Tasks {
     if (!out.length) return null;
     const want = Math.max(1, (t.need || 1) - (t.cooler ? t.cooler.length : 0)), list = out.sort((a, b) => a.cm - b.cm).slice(0, want);
     const f = list[0];
-    list.words = list.length === 1 ? `${f.cm ? `${Math.round(f.cm)} cm ` : ''}${fishName(f.species)}` : `${word(list.length)} ${fishName(f.species)}`;
+    list.words = list.length === 1 ? `${f.cm ? `${fmtIn(f.cm)} ` : ''}${fishName(f.species)}` : `${word(list.length)} ${fishName(f.species)}`;
     return list;
   }
   // the catch notices this board posted that you can hand fish over for now

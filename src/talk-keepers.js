@@ -129,9 +129,9 @@ export const MANNER = {
     past: ['I came up from {city} for one summer in ’{yy}. I’m still waiting for it to end.', 'Before this I sold insurance. Now I sell leeches. The leeches are more honest.', 'Winters it’s me, the woodstove and a dog who doesn’t like me either.'],
     topics: [{ id: 'winter', ask: 'What do you do in winter?', gate: { visits: 3 }, say: ['Shovel. Complain. Shovel.', 'In March I start telling people the fishing will be good. It’s a long game.'] }],
     arc: { id: 'bet', places: { goal: { fish: true }, secret: { secret: {} } }, beats: [
-      { ask: 'The fish on the wall?', gap: 0, say: ['A {sp}, {cmWall} centimetres, out of {goal}. I’ve been insufferable since ’{yy}.', 'Nobody’s beaten it. Nobody tries hard enough.'] },
-      { ask: 'Is that a challenge?', need: { trips: 1 }, say: ['Bring me a {sp} over {cm} centimetres and I’ll stop telling that story.', '{goal}{goalWhere}, if you want a head start. You didn’t hear it from me.'], ring: 'goal:fish' },
-      { ask: 'I had a {sp} over {cm}.', need: { bigger: { sp: '{spId}', cm: '{cm}' } }, say: ['{cmGot}? Hm. Fine. The story’s retired.', 'The fish on the wall is a liar anyway. Come back tomorrow.'] },
+      { ask: 'The fish on the wall?', gap: 0, say: ['A {sp}, {lenWall} inches, out of {goal}. I’ve been insufferable since ’{yy}.', 'Nobody’s beaten it. Nobody tries hard enough.'] },
+      { ask: 'Is that a challenge?', need: { trips: 1 }, say: ['Bring me a {sp} over {len} inches and I’ll stop telling that story.', '{goal}{goalWhere}, if you want a head start. You didn’t hear it from me.'], ring: 'goal:fish' },
+      { ask: 'I had a {sp} over {len} inches.', need: { bigger: { sp: '{spId}', cm: '{cm}' } }, say: ['{cmGot} inches? Hm. Fine. The story’s retired.', 'The fish on the wall is a liar anyway. Come back tomorrow.'] },
       { ask: 'You said tomorrow.', gap: 1, say: ['Here’s what that fish never told anyone: {secret}{secretWhere}.', 'Best site in the country. Don’t bring a radio.'], ring: 'secret', done: { secret: true } },
     ] },
   },
@@ -209,7 +209,7 @@ export const ASK_DONE = {
 };
 
 // --- the memory of you in their mouths (talk-memory.js), by manner ----------------------------------------------------
-// {lake} where you went, {out} "four nights" or "a day", {fish} the fish's word, {cm}, {flake} its lake, {title} a notice,
+// {lake} where you went, {out} "four nights" or "a day", {fish} the fish's word, {len} its length in inches ({cm} in cm), {flake} its lake, {title} a notice,
 // {n} days
 export const MEM = {
   back: {
@@ -237,12 +237,12 @@ export const MEM = {
     precise: ['A capsize on {lake}, I’m told. Wind out of the west?', 'You went over on {lake}. It happens on the open stretches after noon.'],
   },
   fish: {
-    warm: ['Word got here about your {fish}, {cm} centimetres out of {flake}!', 'Is it true? A {cm} centimetre {fish}?'],
-    dry: ['A {cm} centimetre {fish}, I hear. Out of {flake}. I’ll believe it when I see the photo.', 'Heard about the {fish}. Every time it’s told it gets bigger.'],
-    gruff: ['{Fish}. {cm} centimetres. Not bad.', 'Heard about the {fish}.'],
-    'old hand': ['A {fish} out of {flake}, {cm} centimetres? That’s a fish.', 'I hear you had a good {fish}. {cm}? I had one like that in ’71.'],
-    keen: ['Is it true about the {fish}? {cm} centimetres? That’s huge!', 'Everybody’s talking about your {fish}!'],
-    precise: ['A {fish}, {cm} centimetres, {flake}. That’s in the top tenth.', 'Noted: one {fish}, {cm} centimetres, out of {flake}.'],
+    warm: ['Word got here about your {fish}, {len} inches out of {flake}!', 'Is it true? A {len}-inch {fish}?'],
+    dry: ['A {len}-inch {fish}, I hear. Out of {flake}. I’ll believe it when I see the photo.', 'Heard about the {fish}. Every time it’s told it gets bigger.'],
+    gruff: ['{Fish}. {len} inches. Not bad.', 'Heard about the {fish}.'],
+    'old hand': ['A {fish} out of {flake}, {len} inches? That’s a fish.', 'I hear you had a good {fish}. {len} inches? I had one like that in ’71.'],
+    keen: ['Is it true about the {fish}? {len} inches? That’s huge!', 'Everybody’s talking about your {fish}!'],
+    precise: ['A {fish}, {len} inches, {flake}. That’s in the top tenth.', 'Noted: one {fish}, {len} inches, out of {flake}.'],
   },
   task: {
     warm: ['That “{title}”: you’re a dear.', 'Thank you again for “{title}”.'], dry: ['“{title}”: done, and properly. Unusual.', 'You did “{title}”. Don’t let it go to your head.'],

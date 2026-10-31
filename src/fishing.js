@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clock12, esc } from './hud.js';
+import { fmtFt } from './units.js';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, clamp, lerp, smoothstep, hash2 } from './rng.js';
 import { makeToonMaterial, smoothToon } from './rocks.js';
@@ -445,8 +446,8 @@ export class Fishing {
     else if (d < 2) place = 'Shallow flat';
     else if (hab.dropoff > 0.5) place = 'Edge of a drop-off';
     else place = hab.shore < 45 ? 'Wooded shore' : 'A gentle shelf';
-    let depthTxt = `${d < 10 ? d.toFixed(1) : d.toFixed(0)} m`;
-    if (hab.dmax - d > 3) depthTxt += `, drop-off to ${hab.dmax.toFixed(0)} m`;
+    let depthTxt = fmtFt(d);
+    if (hab.dmax - d > 3) depthTxt += `, drop-off to ${fmtFt(hab.dmax)}`;
     // who lives here: habitat and hour, with the best lure of the box for each
     const scored = SPECIES_IDS.map((id) => {
       let best = 0;
@@ -458,7 +459,7 @@ export class Fishing {
     const who = top.length ? top.join(' and ') + ' water' : 'slow water';
     const L = lightAt(hours);
     const when = L.day > 0.7 && scored[0] && scored[0].id === 'walleye' && scored[0].s < 1.2 ? ', better at dusk' : '';
-    const clarity = hab.secchi ? ` · ${hab.secchi < 1.8 ? 'stained' : hab.secchi < 3 ? 'fair' : 'clear'} water, ${hab.secchi.toFixed(1)} m` : '';
+    const clarity = hab.secchi ? ` · ${hab.secchi < 1.8 ? 'stained' : hab.secchi < 3 ? 'fair' : 'clear'} water, ${fmtFt(hab.secchi)}` : '';
     const whoLine = top.length ? `${who[0].toUpperCase()}${who.slice(1)}${when}.` : `Slow water${when}.`;
     return { where: `${place} · ${depthTxt}${clarity}`, who: whoLine, text: `${place} · ${depthTxt} · ${who}${when}` };
   }
@@ -807,7 +808,7 @@ export class Fishing {
       }
     }
     if (l.onLand) p.prompt = { key: 'W', text: 'The lure is on the rocks — reel it back' };
-    else p.prompt = { key: 'W', text: `${def.bobber ? 'Watch the bobber' : 'Retrieve'} · ${this.lineOut.toFixed(0)} m out${def.bobber ? '' : ` · ${l.depth.toFixed(1)} m down`}` };
+    else p.prompt = { key: 'W', text: `${def.bobber ? 'Watch the bobber' : 'Retrieve'} · ${fmtFt(this.lineOut)} out${def.bobber ? '' : ` · ${fmtFt(l.depth)} down`}` };
   }
 
   startBite(id, lengthCm = null) {
@@ -905,7 +906,7 @@ export class Fishing {
     const shoreD = this.onFoot ? Math.max(0, w.shoreAt(t.x, t.z)) : 0; // wc C: from a bank the fish comes to the water's edge below you
     if (this.lineOut <= TUNING.landAt + shoreD && horiz < 3.5 + shoreD) return this.land();
     const sp = SPECIES[f.species];
-    p.prompt = { key: null, text: f.danger > 0.35 ? 'Ease off — the line is singing' : f.slack > 1 ? 'Reel! The line has gone slack' : f.run > 0 ? 'It is running — let it go' : `Reel it in · ${this.lineOut.toFixed(0)} m${f.t > 6 ? ` · feels like a ${sp.name.toLowerCase()}` : ''}` };
+    p.prompt = { key: null, text: f.danger > 0.35 ? 'Ease off — the line is singing' : f.slack > 1 ? 'Reel! The line has gone slack' : f.run > 0 ? 'It is running — let it go' : `Reel it in · ${fmtFt(this.lineOut)}${f.t > 6 ? ` · feels like a ${sp.name.toLowerCase()}` : ''}` };
   }
 
   endFight(how) {

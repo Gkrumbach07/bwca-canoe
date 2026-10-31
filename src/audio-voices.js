@@ -307,6 +307,14 @@ export function step(au, kind, pos, heavy = false) {
       const [o, og] = tone(v, 'sine', 480, t + 0.05, t + 0.2); o.frequency.setValueAtTime(480, t + 0.05); o.frequency.exponentialRampToValueAtTime(900, t + 0.09); env(og.gain, t + 0.05, 0.003, 0.15, 0, 0.05);
       break;
     }
+    case 'squelch': { // a boot in the bog's moss or a marsh's muck: a soft wet smack going in, then the suck as it pulls out
+      const [g] = nz(v, 'pink', 'lowpass', 520 / h, 0.9); env(g.gain, t, 0.012, 0.75, 0.03, 0.12);
+      const [gs, sf] = nz(v, 'pink', 'bandpass', 900, 2.2);
+      sf.frequency.setValueAtTime(1300, t + 0.16); sf.frequency.exponentialRampToValueAtTime(420, t + 0.3);
+      env(gs.gain, t + 0.16, 0.03, 0.32 + 0.15 * R(), 0.02, 0.07);
+      const [o, og] = tone(v, 'sine', 260, t + 0.2, t + 0.34); o.frequency.setValueAtTime(220, t + 0.2); o.frequency.exponentialRampToValueAtTime(520, t + 0.27); env(og.gain, t + 0.2, 0.004, 0.08, 0, 0.04);
+      return v.until(t + 0.5);
+    }
     case 'plank': { // a boot on a board: a hollow knock that rings a moment under the floor (a dock's deck, a store's floor)
       thud(260, 0.9, 0.08);
       const [o, g] = tone(v, 'sine', 170, t, t + 0.16); o.frequency.setValueAtTime(190 / h, t); o.frequency.exponentialRampToValueAtTime(115 / h, t + 0.09); env(g.gain, t, 0.003, 0.35, 0, 0.11);

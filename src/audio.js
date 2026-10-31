@@ -221,6 +221,7 @@ export class Ambient {
     S.afloat = S.mode === 'paddle'; S.onFoot = S.mode === 'walk' || S.mode === 'carry';
     S.heading = p ? p.heading || 0 : 0; S.speed = Math.abs(p ? (p.feltSpeed ?? p.speed) || 0 : c.speed || 0); // the wash as the water line shows it (player.js feltSpeed: the pace's time-lapse)
     S.st = this.player ? p.canoe.state : null; S.onTrail = !!(p && p.onTrail);
+    S.mire = p && p.mire ? (p.mire.board ? -1 : p.mire.k) : 0; // the wetlands underfoot (player.js updateMire; -1 on puncheon)
     if (this.world) {
       S.sd = w.shoreAt(x, z); S.ground = w.heightAt(x, z);
       const cv = w.coverCell(w.cellI(x), w.cellJ(z));
@@ -484,7 +485,7 @@ export class Ambient {
   footfall(S, carry) {
     const c = S.cls || '', rock = c.startsWith('rock');
     // planks on a store's floor and a dock's deck (polish B: the deck stood over the water, so its steps were wading)
-    const kind = S.inside || S.onDeck ? 'plank' : S.ice > 0.5 ? 'snow' : S.sd < 0 ? 'wade' : rock ? 'rock' : S.onTrail ? 'dirt' : S.sd < 4 ? 'gravel' : c === 'meadow' ? 'grass' : c === 'burn' ? 'burn' : 'duff';
+    const kind = S.inside || S.onDeck || S.mire < 0 ? 'plank' : S.ice > 0.5 ? 'snow' : S.sd < 0 ? 'wade' : S.mire > 0.3 ? 'squelch' : rock ? 'rock' : S.onTrail ? 'dirt' : S.sd < 4 ? 'gravel' : c === 'meadow' ? 'grass' : c === 'burn' ? 'burn' : 'duff';
     this.say('step-' + kind, V.step(this, kind, { x: S.x, y: S.y + 0.05, z: S.z }, carry));
     if (carry && this.rand() < 0.3) this.say('yoke-creak', V.creak(this, { x: S.x, y: S.y + 1.8, z: S.z }, 0.6, true));
   }

@@ -418,7 +418,7 @@ export class Outfitter {
     if (core) core.comeIn(l.ep);
     this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
     this.at = l; this.summary = null;
-    const kmW = km > 0.05 ? `, ${km < 10 ? km.toFixed(1) : Math.round(km)} km paddled` : '';
+    const kmW = km > 0.05 ? `, ${(km * 0.621371 < 10 ? (km * 0.621371).toFixed(1) : Math.round(km * 0.621371))} mi paddled` : '';
     this.hud.note(`Came in at ${l.name}: ${days} ${plural(days, 'day')} out from ${from}${kmW}. The trip is in your logbook.`, 6);
     this.save();
   }

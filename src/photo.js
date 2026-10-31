@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { registerKind, KINDS, siteFeature, lakeNearGrid } from './tasks.js';
 import { esc, word } from './hud.js';
+import { fmtDist } from './units.js';
 import { monthDay } from './astro.js';
 import { save } from './save.js';
 import { names, KINDS_NOTE } from './names.js';
@@ -713,9 +714,9 @@ export class PhotoCamera {
     let say = '', cls = '';
     const forT = t ? `<span class="for">for “${esc(t.title)}”</span>` : '';
     const best = L.counts[0];
-    if (best) say = `${esc(best.label)} · ${Math.round(best.d)} m${forT}`;
+    if (best) say = `${esc(best.label)} · ${fmtDist(best.d)}${forT}`;
     else if (t && t.want === 'place') say = `${esc(placeWords(t.target))}${forT}`;
-    else if (L.far[0]) { say = `${esc(L.far[0].label)}, a long way off · ${Math.round(L.far[0].d)} m`; cls = 'dim'; }
+    else if (L.far[0]) { say = `${esc(L.far[0].label)}, a long way off · ${fmtDist(L.far[0].d)}`; cls = 'dim'; }
     else if (L.edge[0]) { say = `${esc(L.edge[0].label)}, off to the side`; cls = 'dim'; }
     else if (L.also && L.also[0]) { say = esc(cap(L.also[0].label)); cls = 'dim'; }
     const lens = `${Math.round(this.focal / 5) * 5} mm lens`;

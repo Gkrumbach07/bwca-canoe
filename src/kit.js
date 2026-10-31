@@ -358,7 +358,7 @@ export class Kit {
       { id: 'side', prio: 1, recur: 'once', text: 'Big fish thrash at the side. A landing net holds them.',
         due: () => !!(this.lostSide && realNow() - this.lostSide < 25) },
       { id: 'coldnight', prio: 2, recur: 'once', text: 'A cold night: colder than the bag is good to.',
-        due: () => { const n = this.lastNight, e = this.t.energy; if (!n || !(n.cold >= 2) || !e || e.now - n.at > 2) return false; return { lv: 1, text: `A cold night: the bag is good to ${n.rating} °C, and it went down to ${n.low} °C.` }; } },
+        due: () => { const n = this.lastNight, e = this.t.energy; if (!n || !(n.cold >= 2) || !e || e.now - n.at > 2) return false; return { lv: 1, text: `A cold night: the bag is good to ${Math.round(n.rating * 9 / 5 + 32)} °F, and it went down to ${Math.round(n.low * 9 / 5 + 32)} °F.` }; } },
       { id: 'remains', prio: 1, recur: 'once', text: 'Fish remains: well back from shore and camp, where bears won’t find them.',
         due: () => this.filleted > 0 },
       // water (the owner, 2026-10-26): lake water as it comes, the first time it is in the bottle; a meal short of its

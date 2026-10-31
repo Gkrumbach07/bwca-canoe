@@ -23,6 +23,7 @@
 // bear (bear.js); what keeps it is a barrel hung here, hoisted (secured). A hung barrel is never visited; Sandbox never.
 import * as THREE from 'three';
 import { hold } from './hold.js';
+import { feet } from './units.js';
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
 import { TILE, PropBuilder, propMaterial } from './prop-kit.js';
@@ -243,11 +244,11 @@ export class Hang {
     if (ph) {
       const { pe, c } = ph;
       const left = heldWords(HANG.slice(pe.done));
-      return { t: pe.tree, spot: pe.spot, c, from: pe.done, label: `The ${pe.tree.name} · ${HANG[pe.done - 1].name.toLowerCase()} so far`, verb: pe.done >= 2 ? 'Carry on hoisting' : 'Carry on hanging', needs: stepsOf(HANG, pe.done), next: `Hold E: ${left} to go, the barrel ${pe.spot.clear || CLEAR} m up when done.`, run: (o) => hold.begin({ ...this.hangOpts(c, pe.spot, pe.done), ...this.keys(o) }) };
+      return { t: pe.tree, spot: pe.spot, c, from: pe.done, label: `The ${pe.tree.name} · ${HANG[pe.done - 1].name.toLowerCase()} so far`, verb: pe.done >= 2 ? 'Carry on hoisting' : 'Carry on hanging', needs: stepsOf(HANG, pe.done), next: `Hold E: ${left} to go, the barrel ${feet(pe.spot.clear || CLEAR)} ft up when done.`, run: (o) => hold.begin({ ...this.hangOpts(c, pe.spot, pe.done), ...this.keys(o) }) };
     }
     const c = this.barrelCarried(), at = c ? this.treeFor(c) : null;
     if (!c || !at) return null;
-    return { t: at.t, spot: at.spot, c, from: 0, label: `The ${at.t.name} · a limb ${Math.round(at.t.up)} m up`, verb: 'Hang', needs: stepsOf(HANG), next: `Hold E: about ${heldWords(HANG)}, the barrel ${at.spot.clear || CLEAR} m up and ${OUT} m out.`, run: (o) => hold.begin({ ...this.hangOpts(c, at.spot, 0), ...this.keys(o) }) };
+    return { t: at.t, spot: at.spot, c, from: 0, label: `The ${at.t.name} · a limb ${feet(at.t.up)} ft up`, verb: 'Hang', needs: stepsOf(HANG), next: `Hold E: about ${heldWords(HANG)}, the barrel ${feet(at.spot.clear || CLEAR)} ft up and ${feet(OUT)} ft out.`, run: (o) => hold.begin({ ...this.hangOpts(c, at.spot, 0), ...this.keys(o) }) };
   }
   // the hung barrel the dot offers "E Lower · hold" at: { c, tree, label, run(opts) } or null
   hungTarget() {
@@ -292,7 +293,7 @@ export class Hang {
     const needs = [
       { label: 'On foot, ashore', done: ashore },
       { label: 'The barrel within reach', done: within, note: within ? null : 'on you, at your feet, or in the canoe beside you' },
-      { label: limbWords, done: !!here, note: here ? `the ${here.t.name}, ${Math.round(here.t.up)} m up` : 'none here' },
+      { label: limbWords, done: !!here, note: here ? `the ${here.t.name}, ${feet(here.t.up)} ft up` : 'none here' },
       ...steps,
     ];
     let next;
@@ -301,7 +302,7 @@ export class Hang {
     else if (here) next = `Point at the ${here.t.name} and hold E: about ${heldWords(HANG)}.`;
     else {
       const t = this.treesNear(p.x, p.z, 60).find((q) => this.spotFor(q, p.x, p.z, BARRELS[c.item]));
-      if (t) { const deg = ((Math.atan2(t.x - p.x, -(t.z - p.z)) * 180) / Math.PI + 360) % 360; next = `Walk to the ${t.name} ${Math.round(t.d)} m ${COMPASS[Math.round(deg / 45) % 8]}: a limb ${Math.round(t.up)} m up. Point at it with the barrel on you.`; }
+      if (t) { const deg = ((Math.atan2(t.x - p.x, -(t.z - p.z)) * 180) / Math.PI + 360) % 360; next = `Walk to the ${t.name} ${feet(t.d)} ft ${COMPASS[Math.round(deg / 45) % 8]}: a limb ${feet(t.up)} ft up. Point at it with the barrel on you.`; }
       else next = 'Walk to a bigger tree, a pine, a spruce or a birch, with a stout limb well over your head.';
     }
     return { why: why0 ? cap(why0) : null, needs, next };
@@ -345,7 +346,7 @@ export class Hang {
           k.at.y = high; k.at.up = true; this.pending = null; this.armed = null;
           inv.emit('hung');
           const tag = this.camp.reachArea ? this.camp.reachArea() : null; if (tag && k.at) k.at.camp = tag.key || 'camp';
-          this.camp.note(`The ${barrelName(c.item)} hangs from the ${spot.tree.name}, ${spot.clear || CLEAR} m up and ${OUT.toFixed(1).replace('.0', '')} m out from the trunk.`, 5);
+          this.camp.note(`The ${barrelName(c.item)} hangs from the ${spot.tree.name}, ${feet(spot.clear || CLEAR)} ft up and ${feet(OUT)} ft out from the trunk.`, 5);
           this.camp.log('hang', { item: c.item, tree: spot.tree.name, x: Math.round(spot.x), z: Math.round(spot.z) });
         }
       },
