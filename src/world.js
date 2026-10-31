@@ -146,6 +146,8 @@ export class World extends GridQueries {
       if (!l.secchiMeasured && !own) { l.secchiBaked = l.secchi; l.secchi = +estimateSecchi(l, g.cell * g.cell).toFixed(2); }
       if (l.secchi) this.clarityById[l.id] = l.secchi;
     }
+    // wetlands round 2: the seasonal creeks, whose water stands lower from late July (water-build.js lowCreeks)
+    this.lowIds = Int32Array.from(index.lakes.filter((l) => l && l.creek && l.seasonal).map((l) => l.id));
     this.fixed = fixes ? this.applyFixes(fixes) : null;
     this.facts = null; // d1 lakes: a LakeFacts once load() has joined lake-facts.json (null on another release)
     this.creeks = null; // the wetlands round: a creeks.js Creeks once load() has read creeks.json (null on an older release)
@@ -205,16 +207,16 @@ export class World extends GridQueries {
   tileHasWater(tx, ty) { const t = this.tileFlags[ty * this.ntx + tx]; return !!(t && t[0]); }
   hasTile(tx, ty) { return !!this.slots[ty * this.ntx + tx]; }
   isReady(x, z) { const [tx, ty] = this.tileOf(x, z); return this.hasTile(tx, ty); }
-  setTile(tx, ty, buf, cover = null) {
+  setTile(tx, ty, buf, cover = null, low = null) { // (wetlands round 2: low, a seasonal creek's drop per cell in cm)
     const n = this.side * this.side;
-    this.slots[ty * this.ntx + tx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n), cover,
+    this.slots[ty * this.ntx + tx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n), cover, low,
       ch: this.fields ? tileChannels(buf, n, this.fields) : null }; // d2 bake: { ground, forest, ..., secchi, cdom } or null
   }
   clearTile(tx, ty) { this.slots[ty * this.ntx + tx] = null; }
   tileGrid(tx, ty) { const s = this.slots[ty * this.ntx + tx]; return s ? new TileGrid(this.gridDesc, tx, ty, s.buf, this.levelById) : null; }
-  setFar(fx, fy, buf) {
+  setFar(fx, fy, buf, low = null) {
     const n = this.farSide * this.farSide;
-    this.farSlots[fy * this.far.ntx + fx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n) };
+    this.farSlots[fy * this.far.ntx + fx] = { buf, h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n), low };
   }
   clearFar(fx, fy) { this.farSlots[fy * this.far.ntx + fx] = null; }
   hasFar(fx, fy) { return !!this.farSlots[fy * this.far.ntx + fx]; }
@@ -256,14 +258,15 @@ export class World extends GridQueries {
     const f = this._farIndex(i, j);
     return f ? f.s.lake[f.m] : 0;
   }
-  // water level of a water cell (per cell: rivers and creeks descend along their course)
+  // water level of a water cell (per cell: rivers and creeks descend along their course); a seasonal creek's lower in
+  // late summer (the tile's low plane, water-build.js lowCreeks)
   levelCell(i, j) {
     if (i < 0) i = 0; else if (i >= this.width) i = this.width - 1;
     if (j < 0) j = 0; else if (j >= this.height) j = this.height - 1;
     const T = this.tile, t = this.slots[((j / T) | 0) * this.ntx + ((i / T) | 0)];
-    if (t) return t.lvl[((j % T) + this.halo) * this.side + (i % T) + this.halo] * 0.1;
+    if (t) { const m = ((j % T) + this.halo) * this.side + (i % T) + this.halo; return t.low ? t.lvl[m] * 0.1 - t.low[m] * 0.01 : t.lvl[m] * 0.1; }
     const f = this._farIndex(i, j);
-    return f ? f.s.lvl[f.m] * 0.1 : 0;
+    return f ? f.s.lvl[f.m] * 0.1 - (f.s.low ? f.s.low[f.m] * 0.01 : 0) : 0;
   }
   // ground cover of a cell (cover | gold << 8 | ground class << 16 | moss and canopy shade nibbles << 24, see
   // placement.js coverField and tile-worker.js packFloor; the grass's per-cell splat bytes follow these four);

@@ -4,13 +4,13 @@ import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetland
 import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
-import { HULL, keelAt, section } from './hull.js';
+import { HULL, keelAt, section, SEATS, floorAt } from './hull.js'; // (wetlands round 2: SEATS, floorAt, the haul's walk through the hull)
 import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from './pace.js';
 import { burnLook } from './burns.js';
 import { CarryBalance, BALANCE } from './balance.js'; // the canoe's balance on the shoulders (the owner, 2026-10-31)
 import { fmtDist } from './units.js';
 import { hold } from './hold.js'; // the wetlands round: the haul over a beaver dam is a held E
-import { DAM, lowWater, brookWater } from './creeks.js'; // the beaver dams, the low creeks of late summer, the brooks underfoot
+import { DAM, lowWater, brookWater, damShape } from './creeks.js'; // the beaver dams, the low creeks of late summer, the brooks underfoot
 
 export class Input {
   constructor() {
@@ -247,6 +247,7 @@ export class Player {
   }
   // the ground under a foot of the walker's (canoe.js plants the feet on it)
   footGround(x, z) {
+    if (this.haul && this.haul.ground) return this.haul.ground(x, z); // wetlands round 2: the hull's floor, the dam's top
     const ft = this.foot;
     if (!(ft && ft.near && this.onFoot)) return this.groundAt(x, z);
     const s = this.supportAt(x, z, ft.y + STEP_UP, ft.near), M = this.mire;
@@ -417,7 +418,7 @@ export class Player {
     else if (this.mode === 'swim') this.updateSwim(dt);
     else if (this.haul) this.updateHaul(dt);
     else this.updatePaddle(dt);
-    if (this.mode === 'paddle' || this.landing || this.ashore) this.setMove('paddle', dt, { y: this.level }); // fb C
+    if ((this.mode === 'paddle' && !this.haul) || this.landing || this.ashore) this.setMove('paddle', dt, { y: this.level }); // fb C (wetlands round 2: the haul sets its own)
     // the speed made good over the ground, for the GPS fix and the tally: what was actually covered this frame, not
     // what the legs or the paddle asked for (a trunk, a wall or deep water holds you while `speed` still says you are
     // walking); a jump across the map is not a speed. paceSpeed is the same over the boost: the readout's km/h, which at
@@ -1844,37 +1845,163 @@ export class Player {
     hold.offer('Haul over the beaver dam', null, {
       id: 'haul', key: 'KeyE', keys: ['KeyE', 'Mouse0'], label: 'Hauling over the dam', clock: true, still: true,
       phases: [
-        { name: 'Out on the dam', doing: 'Stepping out onto the dam', minutes: 2, seconds: 1.0 },
-        { name: 'Over', doing: 'Hauling the canoe over', minutes: 5, seconds: 2.4 },
-        { name: 'Back in', doing: 'Back in below the dam', minutes: 1, seconds: 0.7 },
+        { name: 'Out on the dam', doing: 'Stepping out onto the dam', minutes: 2, seconds: 1.8 },
+        { name: 'Over', doing: 'Hauling the canoe over', minutes: 5, seconds: 3.4 },
+        { name: 'Back in', doing: 'Back in below the dam', minutes: 2, seconds: 2.0 },
       ],
       onTick: (at) => { if (this.haul) this.haul.at = at; },
       onDone: () => {
         const H = this.haul; this.haul = null;
         if (!H) return;
-        this.x = H.to.x; this.z = H.to.z; this.heading = H.to.heading; this.speed = 0.3; this.yawRate = 0; this.bob = null;
+        this.endHaul();
+        this.x = H.to.x; this.z = H.to.z; this.heading = H.to.heading; this.speed = 0.3; this.yawRate = 0;
         this.placeOnWater();
         if (this.audio) this.audio.paddleDip();
       },
       onStop: () => { // let go before it is over: back where you were, still above the dam
         const H = this.haul; this.haul = null;
+        this.endHaul();
         if (H) { this.x = H.from.x; this.z = H.from.z; this.heading = H.from.heading; this.speed = 0; this.bob = null; this.placeOnWater(); }
       },
     });
-    if (hold.is('haul') && !this.haul) { this.haul = { ...plan, at: 0 }; this.speed = 0; this.yawRate = 0; if (this.audio) this.audio.emit('scrape', { x: this.x, z: this.z }); }
+    if (hold.is('haul') && !this.haul) { this.haul = this.haulStart(plan); this.speed = 0; this.yawRate = 0; if (this.audio) this.audio.emit('scrape', { x: this.x, z: this.z }); }
   }
-  // the haul under way: the canoe drawn up over the crest and down to the water below as the middle phase runs, lifted
-  // clear of the sticks (the hold's own ring and words are the prompt)
+  // Wetlands round 2: the haul played out by the paddler (the owner: "the paddler steps out onto the dam, drags the canoe
+  // over by the bow, gets back in on the far side"). The figure is the canoe rig's own, on foot (canoe.state.mode
+  // 'walk'), the hull set down off its shoulders (canoe.dropHull) and moved here:
+  //   out on the dam  up the hull from the stern seat, past the bow and onto the crest beside where the bow lies
+  //   over            stooped on the dam beside it, he draws the hull up by the bow: it rides up the sticks, tips over
+  //                   the crest (each end on the water or the dam, whichever is higher there) and slides down onto the
+  //                   water below, swung round to lie as it will go on
+  //   back in         down the dam's face (wading where it is deep), along the hull to the stern seat, and sat down in it
+  // His feet stand on the hull's floor, the dam's top or the bed (footGround reads haul.ground).
+  haulStart(plan) {
+    const d = plan.dam, C = this.world.creeks, w = this.world;
+    const S = damShape(d, (x, z) => w.levelAt(x, z), (x, z) => w.lakeIdAt(x, z), (x, z) => this.groundAt(x, z));
+    const f0 = { x: Math.cos(plan.from.heading), z: -Math.sin(plan.from.heading) }, f1 = { x: Math.cos(plan.to.heading), z: -Math.sin(plan.to.heading) };
+    // where the bow meets the dam, and the crest there (on the bow's line, the dam's bow taken in)
+    const bx = plan.from.x + f0.x * 2.3, bz = plan.from.z + f0.z * 2.3, fb = C.frame(d, bx, bz);
+    const u0 = clamp(fb.u, -S.half + 0.6, S.half - 0.6), s0 = S.bow(u0);
+    const cx = d.x + d.ax * u0 + d.az * s0, cz = d.z + d.az * u0 - d.ax * s0;
+    // he stands beside the bow, on the side with more dam, just back from its tip
+    const r0 = { x: -f0.z, z: f0.x }, lat = (d.ax * r0.x + d.az * r0.z) * (u0 > 0 ? -1 : 1) >= 0 ? 1 : -1;
+    const stand = { x: bx + r0.x * lat * 0.95 - f0.x * 0.3, z: bz + r0.z * lat * 0.95 - f0.z * 0.3 };
+    const H = { ...plan, at: 0, S, f0, f1, stand, lat, crest: { x: cx, z: cz }, hull: { x: plan.from.x, z: plan.from.z, y: 0, heading: plan.from.heading, pitch: 0 }, fig: { x: this.x, z: this.z, heading: this.heading }, seated: false };
+    H.level0 = w.levelAt(plan.from.x, plan.from.z); H.level1 = w.levelAt(plan.to.x, plan.to.z);
+    // the walk out: the stern seat, up the middle of the hull past the bow, onto the dam
+    const st0 = { x: plan.from.x + f0.x * SEATS.stern.x, z: plan.from.z + f0.z * SEATS.stern.x };
+    H.out = [[st0.x, st0.z], [plan.from.x + f0.x * 1.7, plan.from.z + f0.z * 1.7], [stand.x, stand.z]];
+    H.ground = (x, z) => this.haulGround(H, x, z);
+    return H;
+  }
+  // what the feet stand on during the haul: the hull's floor inside it (while it floats), else the higher of the dam's
+  // top and the ground (the bed under the water)
+  haulGround(H, x, z) {
+    const g = this.groundAt(x, z), d = H.dam, fr = this.world.creeks.frame(d, x, z);
+    let y = H.S.top(fr.u, fr.s, g);
+    const hl = H.hull, hf = { x: Math.cos(hl.heading), z: -Math.sin(hl.heading) }, lx = (x - hl.x) * hf.x + (z - hl.z) * hf.z, lz = -(x - hl.x) * hf.z + (z - hl.z) * hf.x;
+    if (H.inHull && Math.abs(lx) < 2.2 && Math.abs(lz) < 0.36) y = Math.max(y, hl.y + floorAt(lx) + lx * Math.sin(hl.pitch) + 0.02);
+    return y;
+  }
+  // the hull's place at a point of its way over: each end on the water (afloat) or the dam's top, whichever is higher
+  haulHull(H, x, z, heading) {
+    const w = this.world, C = w.creeks, f = { x: Math.cos(heading), z: -Math.sin(heading) };
+    const rest = (px, pz) => {
+      const fr = C.frame(H.dam, px, pz), g = this.groundAt(px, pz), top = H.S.top(fr.u, fr.s, g) + 0.12;
+      return Math.max(top, w.lakeIdAt(px, pz) ? w.levelAt(px, pz) + FLOAT_OFFSET : g + 0.12);
+    };
+    const yb = rest(x + f.x * 2.0, z + f.z * 2.0), ys = rest(x - f.x * 2.0, z - f.z * 2.0), ym = rest(x, z);
+    return { x, z, heading, y: Math.max((yb + ys) / 2, ym), pitch: Math.atan2(yb - ys, 4.0) };
+  }
+  // the end of a haul, whichever way: the hull back on the rig, the paddler kneeling
+  endHaul() {
+    const c = this.canoe, st = c.state;
+    if (c.hull.parent !== c.rig) c.pickUpHull();
+    st.crouch = 0; st.moveFwd = 0; st.moveLat = 0; st.mode = 'paddle'; this.bob = null;
+  }
+  // along a polyline by a fraction: { x, z, tx, tz } (its way there)
+  alongPts(pts, k) {
+    let L = 0; const seg = [];
+    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(l); L += l; }
+    let d = clamp(k, 0, 1) * L;
+    for (let i = 1; i < pts.length; i++) {
+      const l = seg[i - 1];
+      if (d <= l || i === pts.length - 1) { const t = l > 0 ? clamp(d / l, 0, 1) : 1, ax = pts[i - 1][0], az = pts[i - 1][1], dx = pts[i][0] - ax, dz = pts[i][1] - az; return { x: ax + dx * t, z: az + dz * t, tx: dx / (l || 1), tz: dz / (l || 1) }; }
+      d -= l;
+    }
+    return { x: pts[0][0], z: pts[0][1], tx: 1, tz: 0 };
+  }
+  // the haul under way (the hold's own ring and words are the prompt)
   updateHaul(dt) {
-    const H = this.haul, st = this.canoe.state;
-    if (!hold.is('haul')) { this.haul = null; return; }
-    const k = smoothstep(1, 2, H.at), dh = Math.atan2(Math.sin(H.to.heading - H.from.heading), Math.cos(H.to.heading - H.from.heading));
-    this.x = H.from.x + (H.to.x - H.from.x) * k; this.z = H.from.z + (H.to.z - H.from.z) * k;
-    this.heading = H.from.heading + dh * k;
+    const H = this.haul, c = this.canoe, st = c.state;
+    if (!hold.is('haul')) { this.haul = null; this.endHaul(); this.placeOnWater(dt); return; }
+    const a = H.at, f0 = H.f0, f1 = H.f1, w = this.world;
     this.speed = 0; this.yawRate = 0; st.power = 0; st.drive = 0; st.turn = 0;
-    this.placeOnWater(dt);
-    this.canoe.rig.position.y += Math.sin(Math.PI * k) * 0.8;
-    if (k > 0.05 && k < 0.95 && this.audio && (this._scrapeT -= dt) <= 0) { this._scrapeT = 0.9 + Math.random() * 0.6; this.audio.emit('scrape', { x: this.x, z: this.z }); }
+    const wrap = (v) => Math.atan2(Math.sin(v), Math.cos(v));
+    // the hull: afloat where it was, then drawn over (phase 1), afloat below
+    let hx = H.from.x, hz = H.from.z, hh = H.from.heading, ok = 0;
+    if (a >= 1) {
+      // the bow drawn to the crest first (the canoe straightens to come at it square), then the whole hull over
+      ok = smoothstep(1.05, 1.95, a);
+      hx = lerp(H.from.x, H.to.x, ok); hz = lerp(H.from.z, H.to.z, ok);
+      hh = H.from.heading + wrap(H.to.heading - H.from.heading) * smoothstep(0.55, 1, ok);
+    }
+    const hp = a < 1 ? { x: hx, z: hz, heading: hh, y: w.levelAt(hx, hz) + FLOAT_OFFSET, pitch: 0 } : this.haulHull(H, hx, hz, hh);
+    // eased into its new rest, so a step in the support (an end coming off the crest) settles rather than jumps
+    if (H.hull.y && a >= 1) { const k = 1 - Math.exp(-dt * 10); hp.y = H.hull.y + (hp.y - H.hull.y) * k; hp.pitch = H.hull.pitch + (hp.pitch - H.hull.pitch) * k; }
+    H.hull = hp;
+    H.inHull = a < 0.75 || a > 2.2;
+    // the figure
+    const prev = { x: H.fig.x, z: H.fig.z };
+    let fx, fz, face = null, crouch = 0;
+    if (a < 1) {
+      const p = this.alongPts(H.out, smoothstep(0, 1, a));
+      fx = p.x; fz = p.z; face = Math.atan2(-p.tz, p.tx);
+    } else if (a < 2) {
+      // beside the bow, stooped to it, drawing it on over the dam and down the far side (wading where it goes in)
+      const k = smoothstep(1, 2, a), hf = { x: Math.cos(hp.heading), z: -Math.sin(hp.heading) };
+      fx = hp.x + hf.x * 2.0 - hf.z * H.lat * 0.95; fz = hp.z + hf.z * 2.0 + hf.x * H.lat * 0.95;
+      const mv = Math.hypot(fx - prev.x, fz - prev.z);
+      face = mv > 0.004 ? Math.atan2(-(fz - prev.z), fx - prev.x) : Math.atan2(-(hp.z + hf.z * 2.3 - fz), hp.x + hf.x * 2.3 - fx);
+      crouch = 0.6 * Math.sin(Math.PI * Math.min(1, k * 1.1));
+      if (this.audio && k > 0.08 && k < 0.92 && (this._scrapeT -= dt) <= 0) { this._scrapeT = 0.7 + Math.random() * 0.5; this.audio.emit('scrape', { x: hp.x, z: hp.z }); }
+    } else {
+      // down off the dam and along the hull to the stern seat
+      if (!H.back) {
+        const seat = { x: H.to.x + f1.x * SEATS.stern.x, z: H.to.z + f1.z * SEATS.stern.x }, side = { x: -f1.z, z: f1.x };
+        const sg = (H.fig.x - H.to.x) * side.x + (H.fig.z - H.to.z) * side.z >= 0 ? 1 : -1;
+        H.back = [[H.fig.x, H.fig.z], [H.to.x + side.x * sg * 0.75, H.to.z + side.z * sg * 0.75], [seat.x + side.x * sg * 0.7, seat.z + side.z * sg * 0.7], [seat.x, seat.z]];
+      }
+      const k = smoothstep(2, 2.8, a), p = this.alongPts(H.back, k);
+      fx = p.x; fz = p.z; face = k < 0.98 ? Math.atan2(-p.tz, p.tx) : H.to.heading;
+      if (a > 2.82 && !H.seated) H.seated = true;
+    }
+    if (H.seated) {
+      // in: the hull back on the rig, kneeling at the seat (the pose blends down into it)
+      if (c.hull.parent !== c.rig) c.pickUpHull();
+      st.crouch = 0; this.x = H.to.x; this.z = H.to.z; this.heading = H.to.heading;
+      this.placeOnWater(dt);
+      this.setMove('paddle', dt, { y: this.level });
+      return;
+    }
+    if (c.hull.parent === c.rig) c.dropHull(hp.x, hp.y - 0.3, hp.z, hp.heading, hp.pitch);
+    else { c.hull.position.set(hp.x, hp.y, hp.z); c.hull.rotation.set(0, hp.heading, hp.pitch); c.hull.updateMatrixWorld(); }
+    // the walker at (fx, fz), turned toward `face` (easing), on what haulGround stands him on
+    H.fig.x = fx; H.fig.z = fz;
+    let dh = wrap((face ?? H.fig.heading) - H.fig.heading);
+    H.fig.heading += dh * (1 - Math.exp(-dt * 8));
+    this.x = fx; this.z = fz; this.heading = H.fig.heading;
+    const gy = this.haulGround(H, fx, fz), depth = Math.max(0, w.levelAt(fx, fz) - gy);
+    c.rig.position.set(fx, gy + 0.1, fz); c.rig.rotation.set(0, H.fig.heading, 0);
+    st.mode = 'walk'; st.crouch = crouch; st.air = false; st.stagger = 0; st.hustle = false;
+    const moved = Math.hypot(fx - prev.x, fz - prev.z), raw = dt > 0 && moved < 1 ? Math.min(5, moved / dt) : 0;
+    st.speed += (raw - st.speed) * (1 - Math.exp(-dt * 12));
+    st.walkSpeed += ((raw > 0.12 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 8));
+    st.walk += raw * dt * 4.2;
+    const fh = { x: Math.cos(H.fig.heading), z: -Math.sin(H.fig.heading) }, mx = raw > 0.12 ? (fx - prev.x) / moved : 0, mz = raw > 0.12 ? (fz - prev.z) / moved : 0, kd = 1 - Math.exp(-dt * 10);
+    st.moveFwd += ((mx * fh.x + mz * fh.z) - st.moveFwd) * kd; st.moveLat += ((mx * -fh.z + mz * fh.x) - st.moveLat) * kd;
+    this.level = w.levelAt(fx, fz);
+    this.setMove(depth > 0.12 && !H.inHull ? 'wade' : raw > 0.12 ? 'walk' : 'idle', dt, { y: gy, depth });
   }
   // A creek the bake marked seasonal runs low from late July through September (creeks.js lowWater): the hull drags
   // (a factor on the drag, as the sea's is) and scrapes the stones now and then; shallow is what the moment reads.

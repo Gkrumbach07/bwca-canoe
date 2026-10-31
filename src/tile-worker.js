@@ -3,7 +3,7 @@
 // three.js objects.
 import { TileGrid } from './grid.js';
 import { buildTerrainChunk } from './terrain-build.js';
-import { buildWaterChunk, shoalBeds } from './water-build.js'; // (d2 water: shoalBeds)
+import { buildWaterChunk, shoalBeds, lowCreeks } from './water-build.js'; // (d2 water: shoalBeds; wetlands round 2: lowCreeks)
 import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
 import { Site } from './site.js';
@@ -13,12 +13,20 @@ import { patchTile, lakeRockBins, clearPlants, useV4 as rapidsV4 } from './rapid
 import { unpackTint, setLand } from './land.js'; // d2 land: the rocks' bedrock tint; `?land=off`
 import { loadBurns, setBurnDate } from './burns.js';
 import { decodeChunk, chunkGround, buildChunk } from './detail-build.js'; // LiDAR detail (docs/detail.md)
+import { setBrookSegs } from './brook-cut.js'; // wetlands round 2: the brooks' lines, for their cut in the detail
 
 let cfg = null;
 // the real burns (burns.js): the table read once, as the worker starts; each build waits for it and then takes the
 // season's date its message carries (tiles.js), after its last await, so no other build can move the date under it
 let burns = null;
 const burnDate = (m) => { if (m.date) setBurnDate(m.date[0], m.date[1]); };
+// wetlands round 2: the seasonal creeks (cfg.lowIds from tiles.js), their channels and their water by the date the build
+// was asked for (water-build.js lowCreeks)
+let lowSet = null;
+const lowOf = (m, buf, side, cell) => {
+  if (!lowSet) lowSet = new Set(cfg.lowIds || []);
+  return lowCreeks(buf, side, cell, lowSet, m.date ? m.date[1] : 0);
+};
 
 async function fetchTile(url) {
   const res = await fetch(url);
@@ -175,6 +183,7 @@ async function buildFine(m) {
   if (!v4()) await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
   await burns; burnDate(m);
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
+  const low = lowOf(m, buf, g.tile + 2 * g.halo, g.cell); // wetlands round 2 (before anything reads the shore distance)
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
   grid.cdomById = cfg.cdomById || null; // d2 water: the lakes' CDOM (water-build.js cellColour)
   shoalBeds(grid); // d2 water: the bed up under the mapped rice, reeds and lilies (v4; the grid's arrays view buf)
@@ -193,6 +202,7 @@ async function buildFine(m) {
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);
   const cellSplat = cover.subarray(COVER_SPLAT_AT(grid.side));
   const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell, g.cell); // round A-C
+  grid.low = low; // wetlands round 2: the water lower, the terrain's bank as it was
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...(b.style !== undefined ? { style: b.style } : {}), ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz, b.sp) })); // (d2 land: a cliff bin's family; the rocks' tint by species)
@@ -205,7 +215,8 @@ async function buildFine(m) {
   // the forest's shade per cell, kept by the main thread for the detail chunks' paint (detail.js)
   const shade = veg.shade ? Float32Array.from(veg.shade) : null;
   if (shade) transfer.push(shade.buffer);
-  return { msg: { type: 'built', key: m.key, level: 'fine', tx: m.tx, ty: m.ty, data: buf, cover, terrain, water, veg: bins, aquatic: abins, collide, shade, trees: veg.total, plants: aquatic.total }, transfer };
+  if (low) transfer.push(low.buffer);
+  return { msg: { type: 'built', key: m.key, level: 'fine', tx: m.tx, ty: m.ty, data: buf, low, cover, terrain, water, veg: bins, aquatic: abins, collide, shade, trees: veg.total, plants: aquatic.total }, transfer };
 }
 
 // A far tile covers 8 x 8 fine tiles; it is cut into chunks with the footprint of one fine tile each so a
@@ -217,9 +228,11 @@ async function buildFar(m) {
   if (!v4()) await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
   await burns; burnDate(m);
   bowlTile(buf, 'far', cfg.grid, cfg.bowlById); // d1 lakes
+  const low = lowOf(m, buf, f.tile + 2 * f.halo, g.cell * f.factor); // wetlands round 2
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
   const grid = new TileGrid(desc, m.fx, m.fy, buf, cfg.levelById, cfg.clarityById);
   grid.cdomById = cfg.cdomById || null; // d2 water
+  grid.low = low; // wetlands round 2 (buildTerrainChunk never reads it: only the water drops)
   const per = g.tile / f.factor; // far cells per fine tile
   const chunks = [], transfer = [buf];
   for (let cy = 0; cy < f.tile / per; cy++) for (let cx = 0; cx < f.tile / per; cx++) {
@@ -233,7 +246,8 @@ async function buildFar(m) {
     transfer.push(...terrainBuffers(terrain));
     if (water) transfer.push(water.pos.buffer, water.shore.buffer, water.depth.buffer, water.clarity.buffer, water.cdom.buffer, water.idx.buffer); // (d2 water: cdom)
   }
-  return { msg: { type: 'built', key: m.key, level: 'far', fx: m.fx, fy: m.fy, data: buf, chunks }, transfer };
+  if (low) transfer.push(low.buffer);
+  return { msg: { type: 'built', key: m.key, level: 'far', fx: m.fx, fy: m.fy, data: buf, low, chunks }, transfer };
 }
 
 // ---- the LiDAR detail chunks (detail-build.js, docs/detail.md) ------------------------------------------------------
@@ -277,7 +291,7 @@ async function buildDetail(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
+  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
   if (m.type === 'chunk') {
     try { const r = await buildDetail(m); self.postMessage(r.msg, r.transfer); } catch (err) { self.postMessage({ type: 'error', key: m.key, error: String((err && err.message) || err) }); }
     return;

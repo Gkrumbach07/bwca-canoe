@@ -13,6 +13,7 @@
 //     against a 5 m one, a one-unit difference between neighbours' shared samples)
 import { lerp, smoothstep } from './rng.js';
 import { meshHeightAt, groundPre, bedPre, bedGrain, splatAt, landW } from './terrain-build.js';
+import { brookCut } from './brook-cut.js'; // wetlands round 2: the brooks cut into the 2 m ground
 
 const HEADER = 56, MAGIC = 0x43445742; // 'BWDC' (scripts/detail-bake.mjs)
 const DEEP = 30; // metres from the shore past which a 10 m quad of lake bed is drawn as the 10 m mesh draws it
@@ -63,6 +64,7 @@ export function chunkGround(grid, D, cache) {
       if (sd <= 0) { v[q] = b; continue; }
       let h = D.h[q];
       if (sd < 2) h = lerp(b, h, smoothstep(0, 2, sd));
+      if (r <= 2) h -= brookCut(x, z, sd); // wetlands round 2: a brook's little V (brook-cut.js), on the 2 m lattice only
       if (sd < 30) { const lv = grid.levelAt(x, z, 3); if (lv === lv) h = Math.max(h, lv + 0.04 * Math.min(sd, 5)); }
       v[q] = h;
     }

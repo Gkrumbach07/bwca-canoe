@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeTerrainMesh, setLandSeason } from './terrain.js';
 import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as VEG_SPECIES } from './vegetation.js';
 import { makeAquaticMeshes, waterInit } from './aquatic.js'; // (d2 water: waterInit)
-import { tilePropsSteps, exclusionsFor } from './props.js';
+import { tilePropsSteps, exclusionsFor, rounded } from './props.js'; // (wetlands round 2: rounded, the brooks' lines as their beds draw them)
 import { MeshGround } from './prop-kit.js';
 import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
@@ -427,13 +427,18 @@ export class TileManager {
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2));
+    // wetlands round 2: the brooks' lines for their cut in the LiDAR detail (brook-cut.js), as segments
+    const bs = [];
+    if (world.creeks) for (const b of world.creeks.brooks) { const p = rounded(b.pts); for (let i = 1; i < p.length; i++) bs.push(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]); }
+    const brooks = new Float32Array(bs);
     const waterMsg = { type: 'water', ...waterInit(world) }; // d2 water: the lakes' colour and beds, a message of its own after init
     this.workers = Array.from({ length: n }, () => {
       const w = new Worker(new URL('./tile-worker.js', import.meta.url), { type: 'module' });
       w.onmessage = (e) => this.onMessage(e.data);
       w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
         bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null, // d1 lakes: the lakes' bowls and rice (lake-facts.js)
-        land: typeof location === 'undefined' || !/[?&]land=off\b/.test(location.search) }); // d2 land: `?land=off`, the noise's land (land.js setLand)
+        land: typeof location === 'undefined' || !/[?&]land=off\b/.test(location.search), // d2 land: `?land=off`, the noise's land (land.js setLand)
+        lowIds: world.lowIds, brooks }); // wetlands round 2: the seasonal creeks, whose water stands lower in late summer (water-build.js lowCreeks)
       return { w, key: null, entry: null }; // entry: the request this worker's build answers (onMessage)
     });
     for (const x of this.workers) x.w.postMessage(waterMsg); // d2 water (after each one's init)
@@ -663,7 +668,7 @@ export class TileManager {
 
   *installSteps(e) {
     const w = this.world, r = e.result;
-    w.setTile(e.tx, e.ty, r.data, r.cover);
+    w.setTile(e.tx, e.ty, r.data, r.cover, r.low); // (wetlands round 2: r.low)
     const [ox, oz] = w.tileOrigin(e.tx, e.ty);
     // the drawn ground, from the terrain arrays the mesh is made of (shared with its geometry, not copied);
     // registered before the props are built so they stand on it too
@@ -716,7 +721,7 @@ export class TileManager {
 
   installFar(e) {
     const w = this.world, r = e.result;
-    w.setFar(e.fx, e.fy, r.data);
+    w.setFar(e.fx, e.fy, r.data, r.low); // (wetlands round 2: r.low)
     for (const c of r.chunks) {
       const key = this.key(c.tx, c.ty);
       const [ox, oz] = w.tileOrigin(c.tx, c.ty);
