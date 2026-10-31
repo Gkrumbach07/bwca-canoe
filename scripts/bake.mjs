@@ -36,6 +36,7 @@ import { loadBathymetry } from './bathymetry.mjs';
 import { loadClarity } from './clarity.mjs';
 import { makeWater, placeLandings, linkPortages, chainsFrom } from './world-links.mjs';
 import { gradeLevels } from './water-grade.mjs';
+import { loadSources, usfsTrails, wildernessTest } from './names-lib.mjs';
 import { loadNhd, classifyCreeks, rasterizeClassified, brooksOf, beaverDams, lakeFlow } from './creeks.mjs'; // wetlands
 import { loadProducts, lidarWeight, makeChannels, lidarBasinLevels, V4_CHANNELS, V4_FIELDS } from './v4-products.mjs'; // d2 bake
 import { officialAdds } from './official-adds.mjs'; // d2 bake (d1 names' sites and portages)
@@ -235,6 +236,26 @@ async function main() {
   // wetlands: each creek's stretches told river, marsh channel or brook (creeks.mjs); only the paddled ones are water
   let brooks = [];
   if (P) { const nhd = loadNhd(CFG.cacheDir, grid, proj, log); const ends = []; for (const pg of osm.portages || []) for (const e of [pg.pts[0], pg.pts[pg.pts.length - 1]]) ends.push(proj.toLocal(e[0], e[1]));
+    // and the USFS portages (official-adds.mjs adds the ones OSM lacks): every line's ends
+    try {
+      const src = loadSources(CFG.cacheDir), T = usfsTrails(src, (la, lo) => proj.toLocal(la, lo), wildernessTest(src.wilderness));
+      for (const t of T) for (const ln of t.lines || []) if (ln.length) ends.push(ln[0], ln[ln.length - 1]);
+    } catch (e) { log(`wetlands: no USFS trails for the creek anchors (${e.message})`); }
+    // a portage that ends on an unnamed pond: the creeks out of the pond are the route on (to a named lake), so the
+    // pond's shore anchors them too
+    {
+      const inRing = (r, x, z) => { let c = false; for (let q = 0, w = r.length - 1; q < r.length; w = q++) { const [xi, zi] = r[q], [xj, zj] = r[w]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
+      const ponds = new Set(), n0 = ends.length;
+      for (let e = 0; e < n0; e++) {
+        const [x, z] = ends[e];
+        for (const l of lakes) {
+          if (l.creek || l.name || x < l.minX - 60 || x > l.maxX + 60 || z < l.minZ - 60 || z > l.maxZ + 60 || ponds.has(l)) continue;
+          if (inRing(l.rings[0], x, z) || l.rings[0].some(([px, pz]) => (px - x) ** 2 + (pz - z) ** 2 < 3600)) ponds.add(l);
+        }
+      }
+      for (const l of ponds) for (const r of l.rings) for (let q = 0; q < r.length; q += 2) ends.push(r[q]);
+      log(`wetlands: ${ponds.size} unnamed ponds a portage ends on, their shores anchoring the creeks out`);
+    }
     classifyCreeks(waterways, grid, P, nhd, log, ends); brooks = brooksOf(waterways, grid, nhd); }
   rasterizeClassified(waterways, grid, lakeId);
   rasterizeLakes(lakes, grid, lakeId);

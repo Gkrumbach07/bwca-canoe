@@ -22,10 +22,12 @@ import { readPack, parseNwi } from './sources/ground.mjs';
 export const STEP = 10;          // m between the points a waterway is read at
 const SMOOTH = 3;                // points either side in the majority filter (a 70 m window)
 const MIN_RUN = 5;               // points: a shorter run joins its neighbour (50 m)
-export const MARSH_HW = 6;       // m: a marsh channel's half-width (a cell or two of water, unbroken on a diagonal)
+export const MARSH_HW = 7.5;     // m: a marsh channel's half-width: over 7.07 m so a diagonal line's cells meet edge to edge on
+                                 // the 10 m grid (at 6 m they touched only at the corners and the water broke)
 const NHD_REACH = 2;             // cells an NHD line is felt beside it (20 m)
 const BROOK_STEP = 20;           // m between a brook's points in creeks.json
-const ANCHOR_M = 60;             // m: a brook stretch this near a portage's end is paddled
+const ANCHOR_M = 60;             // m: a creek this near a portage's end is paddled from there
+const ANCHOR_REACH = 1500;       // m: how far along the creek from a portage's end, to the next open water
 const GAP_M = 500;               // m: a brook stretch no longer than this between paddled ones is paddled too
 
 const C = { brook: 0, marsh: 1, river: 2, none: 3 };
@@ -131,13 +133,18 @@ export function classifyCreeks(waterways, grid, P, nhd, log, anchors = []) {
         if (run[a] === C.brook && a > 0 && b < n - 1 && (b - a + 1) * STEP <= GAP_M && run[a - 1] !== C.none && run[b + 1] !== C.none) for (let q = a; q <= b; q++) run[q] = C.marsh;
         a = b + 1;
       } }
-    // a brook stretch a portage ends on is paddled (narrow)
-    if (abk.size) { let a = 0;
-      while (a < n) {
-        let b = a; while (b + 1 < n && run[b + 1] === run[a]) b++;
-        if (run[a] === C.brook) { let hit = false; for (let q = a; q <= b && !hit; q++) hit = nearAnchor(walk[q][0], walk[q][1]); if (hit) { for (let q = a; q <= b; q++) run[q] = C.marsh; anchored++; } }
-        a = b + 1;
-      } }
+    // a portage ends at water you paddle: from a portage's end, the creek is paddled along the line both ways (to the
+    // next lake, or ANCHOR_REACH), its dry stretches narrow channels
+    if (abk.size) {
+      const hits = [];
+      for (let q = 0; q < n; q++) if (nearAnchor(walk[q][0], walk[q][1])) hits.push(q);
+      const reach = Math.round(ANCHOR_REACH / STEP);
+      for (const h of hits) for (const dir of [-1, 1]) {
+        for (let q = h, d = 0; q >= 0 && q < n && d <= reach; q += dir, d++) {
+          if (run[q] === C.brook) { run[q] = C.marsh; anchored++; } else if (run[q] === C.river && d * STEP > 80) break; // (open water past the start: the lake or the river)
+        }
+      }
+    }
     c.walk = walk; c.run = run;
     let seas = 0, wet = 0;
     for (let q = 0; q < n; q++) {
@@ -148,7 +155,7 @@ export function classifyCreeks(waterways, grid, P, nhd, log, anchors = []) {
     c.paddle = wet > 0;
     c.seasonal = wet > 0 && seas / wet >= 0.5; // the paddled part mostly intermittent or seasonally flooded
   }
-  log(`wetlands: ${anchored} brook stretches kept paddled where a portage ends on them`);
+  log(`wetlands: ${(anchored * STEP / 1000).toFixed(1)} km of brook kept paddled from portage ends`);
   log(`wetlands: creeks walked: river ${stats.km[2].toFixed(0)} km, marsh channel ${stats.km[1].toFixed(0)} km, brook ${stats.km[0].toFixed(0)} km, unsurveyed ${stats.km[3].toFixed(0)} km; ${stats.seasonalKm.toFixed(0)} km of the paddled part seasonal`);
   return stats;
 }
@@ -211,6 +218,7 @@ export function brooksOf(waterways, grid, nhd) {
 // polygon at its lowest crossing, else the polygon's lowest edge.
 const LODGE_M2 = 2000;
 const DAM_MIN_M2 = 400;
+const DUP_M = 25;                // m: an old dam this near a live one is the same outlet
 export function beaverDams(cacheDir, grid, proj, hraw, waterways, log) {
   const dir = path.join(cacheDir, 'ground', 'raw', 'nwi');
   if (!fs.existsSync(dir)) return [];
@@ -276,6 +284,15 @@ export function beaverDams(cacheDir, grid, proj, hraw, waterways, log) {
       dams.push(dam);
     }
   }
+  // an old dam on the same outlet as a live one (two NWI polygons, the pond and its drained meadow, share it): the live one
+  const live = dams.filter((d) => !d.old), keep = [];
+  let dup = 0;
+  for (const d of dams) {
+    if (d.old && live.some((l) => (l.x - d.x) ** 2 + (l.z - d.z) ** 2 < DUP_M * DUP_M)) { dup++; old--; continue; }
+    keep.push(d);
+  }
+  dams.length = 0; dams.push(...keep);
+  log(`wetlands: ${dup} old dams dropped on a live dam's outlet`);
   log(`wetlands: ${active} beaver dams on ponds (${lodges} lodges, ${onRoute} across a paddled creek), ${old} old dams on drained beaver meadows`);
   return dams;
 }
