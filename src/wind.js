@@ -75,6 +75,7 @@ export class Wind {
     this.gustPhase = 0;        // the quick gusts' phase, integrated so a change of pace never jumps it
     this.sway = { x: 0, z: 0, t: 0 }; // the gust field's drift and the sway clock (see SWAY)
     this.weather = null;       // weather.js attaches itself here; its windTarget bends the day's wind
+    this.puffRng = mulberry32(seed * 7 + 3); // (its own, so the days' rolls are as they were)
     this.puff = 0; this.puffT = 20; this.puffEv = null; this.puffVeer = 0;
   }
   // the wind with the puff in it (m/s) and the way it blows now (the puff veers a little)
@@ -137,7 +138,7 @@ export class Wind {
       const k = smoothstep(P.calm, P.windy, v), every = (P.every[0] + (P.every[1] - P.every[0]) * k) / Math.max(0.5, g);
       this.puffT -= dt;
       if (this.puffT <= 0) {
-        const r = this.rng;
+        const r = this.puffRng;
         this.puffEv = { t: 0, hold: P.hold[0] + r() * (P.hold[1] - P.hold[0]), peak: Math.min(1, (P.peak[0] + r() * (P.peak[1] - P.peak[0])) * (0.8 + 0.2 * g)), veer: (r() * 2 - 1) * P.veer };
         this.puffT = every * (0.4 + 1.2 * r());
       }
