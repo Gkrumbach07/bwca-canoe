@@ -361,7 +361,8 @@ export class Hud {
       const span = clamp(this.view.span * Math.exp(e.deltaY * 0.0015), MIN_SPAN, MAX_SPAN);
       // keep the point under the cursor where it is
       const mPerPx = span / c.width;
-      this.view.span = span;
+      this.view.span = span; this.zoomT = performance.now();
+      if (this.hover) this.hoverAt(-1, -1, null);
       this.setCentre(wx - (px - c.width / 2) * mPerPx, wz - (py - c.height / 2) * mPerPx);
     }, { passive: false });
     if (this.el.mapLayers) this.el.mapLayers.addEventListener('click', (e) => {
@@ -514,6 +515,7 @@ export class Hud {
     if (span) this.view.span = clamp(span, MIN_SPAN, MAX_SPAN);
     this.setCentre(x, z);
     this.focus = { x, z, r, t: performance.now() };
+    this.hoverAt(-1, -1, null);
   }
 
   // The backing store follows the displayed size (sharp on retina when the map fills the screen).
@@ -564,6 +566,7 @@ export class Hud {
   propose(x, z, recentre) {
     if (!this.world.inBounds(x, z, 50)) return;
     this.pin = { x, z };
+    this.hoverAt(-1, -1, null);
     if (this.mode !== 'sheet') this.setMode('sheet');
     if (recentre) { this.view.cx = x; this.view.cz = z; }
     const w = this.world, p = this.player, ctx = this.ctx, sh = this.sheetsOn;
@@ -1419,10 +1422,21 @@ export class Hud {
       const cv = document.createElement('canvas'); cv.width = W + 2 * M; cv.height = H + 2 * M;
       b = this.base = { canvas: cv, ctx: cv.getContext('2d'), W: cv.width, H: cv.height, key: null, cx: 0, cz: 0, t: 0, pending: false };
     }
+    // while the wheel is turning, the last base scaled (remade once the zoom rests)
+    const rest = key.replace(/^(\d+\|\d+\|)[^|]*/, '$1');
+    if (b.key && b.rest === rest && b.mPerPx !== mPerPx && now - (this.zoomT || 0) < 160) {
+      const s = b.mPerPx / mPerPx, vx0 = v.cx - (W / 2) * mPerPx, vz0 = v.cz - (H / 2) * mPerPx;
+      ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(b.canvas, (b.x0 - vx0) / mPerPx, (b.z0 - vz0) / mPerPx, b.W * s, b.H * s);
+      ctx.drawImage(this.grain, 0, 0);
+      this.drawOverlays(ctx, W, H, { x0: vx0, z0: vz0, mPerPx }, W / 1040, player);
+      return;
+    }
     const offX = (v.cx - b.cx) / mPerPx, offY = (v.cz - b.cz) / mPerPx;
     const stale = b.key !== key || Math.abs(offX) > M * 0.9 || Math.abs(offY) > M * 0.9 || (b.pending && now - b.t > 140) || now - b.t > 2500;
     if (stale) {
-      b.cx = v.cx; b.cz = v.cz; b.key = key; b.t = now;
+      b.cx = v.cx; b.cz = v.cz; b.key = key; b.t = now; b.rest = rest; b.mPerPx = mPerPx;
       const x0 = v.cx - (b.W / 2) * mPerPx, z0 = v.cz - (b.H / 2) * mPerPx;
       b.pending = !this.drawLayers(b.ctx, b.W, b.H, { x0, z0, mPerPx }, W / 1040, player);
       b.x0 = x0; b.z0 = z0;
@@ -1514,7 +1528,7 @@ export class Hud {
       const close = mPerPx < 16, mid = mPerPx < 60;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
-      if (lay.portages) for (let pi = 0; pi < w.portages.length; pi++) {
+      if (lay.portages && mPerPx < 40) for (let pi = 0; pi < w.portages.length; pi++) { // (further out the red dashes were all you saw)
         const p = w.portages[pi], [bx0, bz0, bx1, bz1] = p.bbox;
         if (!inView(bx0, bz0, bx1, bz1) || !onMine(bx0, bz0, bx1, bz1)) continue;
         ctx.beginPath();

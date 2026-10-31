@@ -20,7 +20,7 @@ export const FT = 0.3048;
 export const INK = {
   paper: '#ece4cf', water: 'rgb(186, 210, 219)', shore: 'rgba(54, 92, 116, 0.95)', inked: 'rgb(132, 172, 199)', inkShore: 'rgba(30, 62, 94, 1)',
   contour: 'rgba(146, 116, 70, 0.42)', index: 'rgba(128, 98, 56, 0.72)', sound: 'rgba(62, 104, 136, 0.62)', soundIndex: 'rgba(46, 86, 118, 0.85)',
-  burn: 'rgba(150, 70, 34, 0.75)', blow: 'rgba(92, 104, 62, 0.75)', rx: 'rgba(150, 90, 50, 0.5)', bound: 'rgba(46, 92, 52, 0.9)', boundBand: 'rgba(70, 120, 60, 0.13)',
+  burn: 'rgba(150, 70, 34, 0.75)', blow: 'rgba(92, 104, 62, 0.75)', rx: 'rgba(150, 90, 50, 0.38)', bound: 'rgba(46, 92, 52, 0.9)', boundBand: 'rgba(70, 120, 60, 0.13)',
   lakeName: '#2d4f66', red: '#b4321f', ink: '#2a2016',
 };
 export const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
@@ -257,8 +257,8 @@ function hatch(ctx, color, gap) {
 export function burnsInView(v, W, H) {
   if (!BURNS.ready || !BURNS.records.length) return [];
   const { year, doy } = burnDate(), now = year + (doy - 1) / 365.25, x1 = v.x0 + W * v.mPerPx, z1 = v.z0 + H * v.mPerPx;
-  const minAcres = v.mPerPx > 40 ? 300 : v.mPerPx > 15 ? 40 : 0;
-  return BURNS.records.filter((r) => r.t <= now && (r.acres >= minAcres || r.kind === 3) && !(r.box[2] < v.x0 || r.box[0] > x1 || r.box[3] < v.z0 || r.box[1] > z1));
+  const minAcres = v.mPerPx > 40 ? 800 : v.mPerPx > 15 ? 40 : 0, rx = v.mPerPx < 10; // (far out, the big fires and the blowdown only; the prescribed burns up close)
+  return BURNS.records.filter((r) => r.t <= now && (r.acres >= minAcres || r.kind === 3) && (rx || r.kind !== 2) && !(r.box[2] < v.x0 || r.box[0] > x1 || r.box[3] < v.z0 || r.box[1] > z1));
 }
 export function paintBurns(ctx, v, recs, k = 1) {
   if (!recs.length) return;
@@ -268,9 +268,11 @@ export function paintBurns(ctx, v, recs, k = 1) {
   const px = v.mPerPx;
   for (const r of recs) {
     const p = burnPath(r), col = r.kind === 3 ? INK.blow : r.kind === 2 ? INK.rx : INK.burn;
-    const pat = hatch(ctx, col.replace(/[\d.]+\)$/, '0.28)'), Math.round(9 * k));
-    pat.setTransform(new DOMMatrix([px, 0, 0, px, 0, 0]));
-    ctx.fillStyle = pat; ctx.fill(p, 'evenodd');
+    if (r.kind !== 2) { // (a prescribed burn is its dotted edge alone: hatched, the small ones were all you saw)
+      const pat = hatch(ctx, col.replace(/[\d.]+\)$/, '0.28)'), Math.round(9 * k));
+      pat.setTransform(new DOMMatrix([px, 0, 0, px, 0, 0]));
+      ctx.fillStyle = pat; ctx.fill(p, 'evenodd');
+    }
     ctx.setLineDash(r.kind === 2 ? [2 * k * px, 3 * k * px] : [7 * k * px, 3 * k * px]);
     ctx.strokeStyle = col; ctx.lineWidth = (r.kind === 2 ? 0.9 : 1.2) * k * px; ctx.stroke(p);
   }
