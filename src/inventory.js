@@ -1311,11 +1311,13 @@ export class Inventory {
     // a word, once, as you paddle away from something left on the shore (it stays there until you come back for it)
     if (p && p.mode === 'paddle' && this.hud && (this.noteT = (this.noteT || 0) + dt) > 1) {
       this.noteT = 0;
-      const left = [...this.containers.filter((c) => c.where === 'ground' && c.item !== 'pile'), ...this.long.filter((l) => l.where === 'ground')].filter((t) => t.at && !t.at.camp && !t.at.noted && this.dist(t.at) > 60);
+      // (the owner, 2026-10-31: "it should tell me what that item is or items": a pile set down is named by what is in it)
+      const left = [...this.containers.filter((c) => c.where === 'ground' && (c.item !== 'pile' || c.grid.length)), ...this.long.filter((l) => l.where === 'ground')].filter((t) => t.at && !t.at.camp && !t.at.noted && this.dist(t.at) > 60);
       if (left.length) {
         for (const t of left) t.at.noted = true;
-        const n = left.map((t) => { const nm = itemDef(t.item || t.id).name; return `the ${/^(Duluth|Johnson)/.test(nm) ? nm : lower(nm)}`; });
-        this.hud.note(`Left behind on the shore: ${n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0]}. ${left.length > 1 ? 'They stay' : 'It stays'} there until you come back.`, 6);
+        const nm1 = (id) => { const nm = itemDef(id).name; return `the ${/^(Duluth|Johnson)/.test(nm) ? nm : lower(nm)}`; };
+        const n = left.flatMap((t) => (t.item === 'pile' ? t.grid.filter((e) => itemDef(e.id)).map((e) => nm1(e.id)) : [nm1(t.item || t.id)]));
+        this.hud.note(`Left behind on the shore: ${n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0]}. ${n.length > 1 ? 'They stay' : 'It stays'} there until you come back.`, 6);
       }
     }
     // empty piles go

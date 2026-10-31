@@ -93,7 +93,8 @@ const SHORT = { pack3: 'pack', pack4: 'big pack', barrel30: 'small barrel', barr
 const short = (u) => { const g = u.obj.grid, e = (u.def.one || (u.id === 'pile' && g && g.length === 1)) && g && g[0], d = e && itemDef(e.id); return d ? lower(d.name) : SHORT[u.id] || lower(u.def.name); };
 const the = (u) => `the ${short(u)}`;
 function names(us) {
-  const n = us.map(the);
+  // (the owner, 2026-10-31: say what each thing is: a pile of several is named by what is in it, not "the things on the ground")
+  const n = us.flatMap((u) => (u.id === 'pile' && u.obj.grid && u.obj.grid.length > 1 ? u.obj.grid.filter((e) => itemDef(e.id)).map((e) => `the ${lower(itemDef(e.id).name)}`) : [the(u)]));
   return n.length <= 1 ? n[0] || '' : n.length === 2 ? `${n[0]} and ${n[1]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
 }
 

@@ -92,6 +92,13 @@ const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(Stri
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const listOf = (a) => (a.length <= 1 ? a[0] || '' : a.length === 2 ? `${a[0]} and ${a[1]}` : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
 const thingName = (d) => (d ? (/^(Duluth|Johnson|Blue)/.test(d.name) ? d.name.replace(/^Blue barrel.*/, 'blue barrel') : lower(d.name)) : 'thing');
+// a grid's things as they are said, the same ones counted together: ['the foam pad', 'three pieces of firewood']
+function entryNames(grid) {
+  const by = new Map();
+  for (const e of grid) { const d = itemDef(e.id); if (!d) continue; const n = thingName(d); by.set(n, (by.get(n) || 0) + (e.box ? 1 : e.qty || 1)); }
+  const many = (n) => (/ of /.test(n) ? n.replace(/^(\S+?)s?( of )/, '$1s$2') : /s$/.test(n) ? n : `${n}s`); // ("pieces of birch bark")
+  return [...by].map(([n, q]) => (q > 1 ? `${word(q)} ${many(n)}` : `the ${n}`));
+}
 
 export class CampRegistry {
   constructor(world) {
@@ -900,13 +907,10 @@ export class Camp {
       if (woodpiles.length) named.push(woodpiles.length > 1 ? 'woodpiles' : 'a woodpile');
       // (the content join: a tent struck with no room lay in a pile, and "some things on the ground" let you paddle off
       // without it: a pile's things are named while they are one or two, a tent always)
-      for (const k of piles) {
-        if (woodpiles.includes(k) || !k.grid.length) continue;
-        const things = k.grid.filter((e) => !e.box), tents = things.filter((e) => (itemDef(e.id) || {}).slot === 'tent');
-        if (things.length <= 2) named.push(...things.map((e) => `the ${thingName(itemDef(e.id))}`));
-        else named.push(...tents.map((e) => `the ${thingName(itemDef(e.id))}`), 'some things on the ground');
-      }
-      const plural = named.length > 1 || /^(some |woodpiles)/.test(named[0] || '');
+      // (the owner, 2026-10-31: "when I leave a site and it says I'm missing something, it should tell me what that item
+      // is or items": every thing in a pile is named, the same ones counted together)
+      for (const k of piles) if (!woodpiles.includes(k) && k.grid.length) named.push(...entryNames(k.grid));
+      const plural = named.length > 1 || /^(woodpiles|two|three|four|five|six|seven|eight|nine|ten|\d)/.test(named[0] || '');
       if (named.length) parts.push(`${listOf(named)} ${plural ? 'are' : 'is'} set out`);
       for (const k of [...hung, ...out]) if (k.at) k.at.noted = true;
     }
