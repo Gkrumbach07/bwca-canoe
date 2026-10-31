@@ -338,7 +338,9 @@ export class DetailStreamer {
   }
   touched(c) {
     this.version++;
-    this.dirty.push([c.x0 - BLEND, c.z0 - BLEND, c.x0 + c.size + BLEND, c.z0 + c.size + BLEND]);
+    const rect = [c.x0 - BLEND, c.z0 - BLEND, c.x0 + c.size + BLEND, c.z0 + c.size + BLEND];
+    this.dirty.push(rect);
+    if (this.onTouched) this.onTouched(rect); // (tiles.js: the outfitters there are built again on the new ground)
   }
   // every chunk of tile (tx, ty) let go (the tile is going: tiles.js evict)
   dropTile(tx, ty) {
@@ -494,7 +496,10 @@ export class DetailStreamer {
     const props = e.group && e.group.children.find((o) => o.name === 'props');
     if (props) {
       const list = [];
-      props.traverse((o) => { if (o.isMesh) list.push(o); });
+      // (a rigid group, an outfitter's dock and store, is never bent vertex by vertex: it is built again whole on the
+      // new ground, its obstacles with it: props.js outfitterGroundMoved, told by touched)
+      const walk = (o) => { if (o.userData.rigid) return; if (o.isMesh) list.push(o); for (const ch of o.children) walk(ch); };
+      walk(props);
       for (const m of list) { yield* this.reseatMesh(m, inside); yield; }
     }
   }
@@ -538,7 +543,7 @@ export class DetailStreamer {
   // how many chunks still have something to do where the player is (0: settled; the shots and tests wait on it)
   pending() {
     if (!this.active) return 0;
-    let k = this.dirty.length + (this.job ? 1 : 0);
+    let k = this.dirty.length + (this.job ? 1 : 0) + (this.onPending ? this.onPending() : 0); // (and the outfitters being built again: props.js)
     for (const c of this.chunks.values()) {
       const R = RING[c.r];
       if (c.state === 'building') k++;

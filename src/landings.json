@@ -1,8 +1,12 @@
 {
-  "about": "Per entry point corrections to the outfitters' landings (props.js landingPlan), by entry point number. Everything else about a landing is read off the release's ground, shore distance and water level. from: [x, z], a spot on the same water where the walk to the shore starts instead of the put-in; dockLen: the dock's length in metres. Each row says why; scripts/landing-check.mjs --search finds a `from`.",
+  "about": "Per entry point corrections to the outfitters' landings (props.js landingPlan), by entry point number. Everything else about a landing is read off the release's ground, shore distance and water level. from: [x, z], a spot on the same water where the walk to the shore starts instead of the put-in; dockLen: the dock's length in metres; store: [across, back], the store's site in the landing's frame (props.js storeSite's ao, b0). Each row says why; scripts/landing-check.mjs --search finds a `from`.",
   "landings": {
-    "6": { "from": [-55274, 10563], "why": "Slim Lake: the shore nearest the put-in is a bank 3.5 m high under the store; 43 m along it the ground rises 1.2 m (data-v3 and v4 alike)" },
+    "6": { "from": [-55274, 10563], "store": [10, -25.5], "why": "Slim Lake: the shore nearest the put-in is a bank 3.5 m high under the store; 43 m along it the ground rises 1.2 m (data-v3 and v4 alike). cabins-2: on the 2 m ground the search's site stood 2.6 m over its lowest ground; up the yard to the right 0.8 m" },
+    "33": { "from": [-30796, 26050], "store": [0, -19.5], "why": "Little Gabbro Lake (cabins-2): with the store's steps counted as built, the site by the put-in stood 2.8 m over its lowest ground (10 m) and 2.5 m (2 m LiDAR); 104 m along the shore 0.5 m. The store 3 m further back than the search's: on the 2 m ground the bank falls away in front of it and its flight ran on onto the dock" },
+    "45": { "from": [58602, 10848], "why": "Morgan Lake (cabins-2): the store by the put-in had its steps running down into the water; the next site back stood 2.7 m over its lowest ground; 100 m along the shore 0.8 m" },
+    "50": { "store": [-2.5, -20.5], "why": "Cross Bay Lake (cabins-2): on the 2 m ground the bank in front of the search's site falls to the river and the store's flight ran on onto the dock; 3 m further back" },
     "52": { "from": [27570, 2270], "why": "Brant Lake (on Round Lake): a store 2.6 to 2.9 m over its lowest ground at the put-in; 48 m along the shore 0.9 m" },
-    "66": { "from": [70180, 6135], "why": "Crocodile River: the put-in's own bank stands 6 to 9 m over the river under the store; 20 m along it 0.8 m" }
+    "66": { "from": [70180, 6135], "why": "Crocodile River: the put-in's own bank stands 6 to 9 m over the river under the store; 20 m along it 0.8 m" },
+    "80": { "store": [7.5, -11.5], "why": "Larch Creek (cabins-2): on the 2 m ground the search's site stood 2.7 m over its lowest ground; beside the dock 1.3 m" }
   }
 }

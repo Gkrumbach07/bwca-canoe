@@ -272,6 +272,18 @@ Four streams joined on `claude/hubs-2`:
   highest water under it and its length out to wading depth (never past a creek's middle), the store's floor at least
   0.9 m over the water near it and never on ground within 0.2 m of it; per-site corrections in `src/landings.json`.
   `node scripts/landing-check.mjs --data <release>` checks all 55 against a release.
+  Since the 2 m LiDAR ground (2026-10-31, "cabins need better placement, and even with the placement it seems the hit
+  box is not in the right place"): the whole outfitter (dock, store, rack and their obstacles) is planned and built
+  from the ground as drawn when it is built, and built again whole when a LiDAR chunk comes or goes under it
+  ([detail.md](detail.md), "Re-seating"), so the drawn building and what the walker meets never part. The site
+  counts the store's steps as they are built (they ran on onto the dock, or into the water at Morgan Lake), keeps the
+  canoe rack on dry ground too, stays 3 m clear of any portage trail, and turns the door from the way down to the
+  dock by no more than 75° (`SITE`); the dock has plank steps up from the bank where its deck stands more than a step
+  over it, and a walled flight has its handrails drawn. An outfitter whose store stands in the next tile from its
+  entry point is found by the walker and the camera there (`props.outfittersNear`). The check now builds every
+  outfitter in node on both grounds (the 10 m and the release's 2 m chunks) and holds the obstacles to the meshes
+  (each top on the boards drawn there, nothing that stops with nothing drawn in it, no wall drawn outside the
+  obstacles), the floor clear of the ground under it, and the way from the door to the dock open.
 - **Walking in and the shop** (B, `src/shop.js`, `src/outfitter.js`): *Tie up and go in* (walked since the second
   round), first person inside, the hotspots, the counter in four tabs (the counter, the board, the shelves, the lure
   wall; since then a shelf of its own each, and the counter services only), the full catalogue,

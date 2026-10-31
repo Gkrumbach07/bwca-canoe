@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeTerrainMesh } from './terrain.js';
 import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as VEG_SPECIES } from './vegetation.js';
 import { makeAquaticMeshes, waterInit } from './aquatic.js'; // (d2 water: waterInit)
-import { tilePropsSteps, exclusionsFor } from './props.js';
+import { tilePropsSteps, exclusionsFor, outfitterGroundMoved, stepOutfitters, outfittersPending, outfittersNear } from './props.js';
 import { MeshGround } from './prop-kit.js';
 import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
@@ -408,6 +408,8 @@ function frozenWalk(force) {
   for (let i = 0; i < ch.length; i++) if (ch[i].isGroup) ch[i].updateMatrixWorld(force);
 }
 
+const OUTFITTER_BUDGET = 4; // ms a frame building an outfitter again on the ground drawn now (props.js stepOutfitters)
+
 export class TileManager {
   constructor(world, scene, { terrainMaterial, water, vegetation, aquatic, seed = 3 }) {
     this.world = world; this.scene = scene;
@@ -423,6 +425,8 @@ export class TileManager {
     this.stats = { built: 0, trees: 0, plants: 0 };
     this.culler = new InstanceCuller(scene);
     this.detail = new DetailStreamer(this); // the LiDAR detail (inert where the data has none, or with ?detail=10)
+    this.detail.onTouched = outfitterGroundMoved; // an outfitter under a chunk in or out is built again on it (props.js)
+    this.detail.onPending = outfittersPending;
     const ex = exclusionsFor(world);
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
@@ -539,6 +543,7 @@ export class TileManager {
     this.install(hidden || gap > 500 ? Math.min(100, Math.max(INSTALL_BUDGET, gap / 4, hidden ? 50 : 0)) : INSTALL_BUDGET);
     this.evict();
     this.detail.tick(px, pz); // the detail chunks: in and out by distance, the ground re-seated under the budget
+    stepOutfitters(OUTFITTER_BUDGET); // the outfitters whose ground changed, built again on it and swapped in whole
     // draw only what the fog lets through; far chunks stand in wherever a fine tile is missing
     // round A-C: a tile's LOD is worked out again only once the camera has moved a step that could change a decision
     // there: LOD_STEP metres in the tile underfoot, a fiftieth of the distance to a tile farther off (a choice made at
@@ -879,6 +884,11 @@ export class TileManager {
         out.push(s);
       });
       if (e.obstacles) for (const o of e.obstacles) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o);
+    }
+    // an outfitter's obstacles kept by a tile past those looked into (its store stands far from its entry point: props.js)
+    for (const O of outfittersNear(x, z, r)) {
+      if (O.tx >= tx0 && O.tx <= tx1 && O.ty >= ty0 && O.ty <= ty1) continue;
+      for (const o of O.obs) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o);
     }
     for (const o of this.dynamic || []) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o); // pitched since the tiles were built: camp.js's tents
     return out;

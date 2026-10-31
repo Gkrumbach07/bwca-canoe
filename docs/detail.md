@@ -128,6 +128,14 @@ item. This covers:
   their radii measured again.
 - **The props.** Every vertex of a merged campsite or a trail decal, and every ledge instance, moves by the dy
   where it stands.
+- **Not the outfitters.** An outfitter's dock, store and rack are one rigid group (`outfitter <ep>`,
+  `userData.rigid`), never moved a vertex at a time: bent that way the store's floor, walls and steps sank or rose
+  with the LiDAR under each vertex (Lake One's by up to 1.1 m) while its obstacles stayed at the 10 m heights, so the
+  walker stood on air over the drawn floor and could not climb the drawn steps (cabins-2, 2026-10-31). Instead a
+  chunk coming in or going (`touched`, `onTouched`) marks the outfitters whose rect it covers, and `props.js
+  stepOutfitters` (4 ms a frame, from `tiles.update`) plans each again on the ground drawn now (`landingPlan` with
+  `tiles.groundAt`), builds it and swaps the group and its obstacles in together in one frame. One whose ground moved
+  less than 3 cm is left as it is. `detail.pending()` counts them.
 
 **The grass.** The grass clumps stand on the 10 m surface in their shader. `detailGrass` adds a 2 m offset map
 (192 m square) round the player. It is rebuilt every 32 m walked, or when the chunks change.
@@ -160,9 +168,9 @@ See [performance.md, "LiDAR detail"](performance.md#lidar-detail-2-m-near-the-pl
 
 ## Not done / caveats
 
-- **Props on a tile's edge.** A prop reaching over a tile edge onto a neighbour's installed chunk is built on the
-  detail ground and never re-seated when that chunk goes. This is rare, and it is off by the chunk's dy, a few
-  decimetres.
+- **Props on a tile's edge** (not the outfitters: they are built again whole). A prop reaching over a tile edge onto
+  a neighbour's installed chunk is built on the detail ground and never re-seated when that chunk goes. This is rare,
+  and it is off by the chunk's dy, a few decimetres.
 - **Tents pitched before a chunk came in** (`camp.js`) stay where they were pitched.
 - **The pop at 300 m.** The cliff modules disappear when the 2 m chunk comes in, so a palisade's blocky modules give
   way to the LiDAR face at that distance.
