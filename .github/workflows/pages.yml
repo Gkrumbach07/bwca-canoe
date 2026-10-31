@@ -15,7 +15,8 @@ permissions:
   id-token: write
 
 env:
-  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v4/
+  # wetlands (2026-10-31): v5 is v4 plus the wet and wcls planes and creeks.json; bwca/v4/ is kept for rollback
+  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v5/
 
 concurrency:
   group: pages
