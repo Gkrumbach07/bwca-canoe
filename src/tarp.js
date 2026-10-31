@@ -44,7 +44,7 @@ import { compassLong, plural, word } from './hud.js';
 import { chip } from './chip.js';
 
 // --- the pole (items.js defines it; this stands in until it does) ----------------------------------------------------------
-if (!itemDef('pole')) defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'gear', w: 1, h: 3, kg: 0.9, stack: 4, icon: 'pole', price: 0, identity: 'Dead pole · 2 m', words: 'Dead pole · 2 m' });
+if (!itemDef('pole')) defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'gear', w: 1, h: 3, kg: 0.9, stack: 4, icon: 'pole', price: 0, identity: 'Dead pole · 6 ft', words: 'Dead pole · 6 ft' });
 // its icon in the book where the book has none: a grey pole on the diagonal, a stub or two
 { const d = itemDef('pole'); if (d && typeof d.draw !== 'function') d.draw = drawPole; }
 function drawPole(c, s) {
@@ -119,7 +119,7 @@ const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const lower = (s) => (/^(Duluth|Johnson)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1));
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const bearing = (dx, dz) => compassLong(((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360); // +z is south
-const metres = (d) => (d < 10 ? `${Math.max(1, Math.round(d))} m` : `${Math.round(d / 5) * 5} m`);
+const metres = (d) => { const f = d * 3.28084; return `${f < 30 ? Math.max(1, Math.round(f)) : Math.round(f / 5) * 5} ft`; }; // (feet on screen)
 // the angle the sheet falls from the ridge at drawn stage k (1: thrown over, 2: hanging, 3: guyed out taut)
 const thetaAt = (k) => (k < 2 ? lerp(THETA.thrown, THETA.hung, ease(k - 1)) : lerp(THETA.hung, THETA.taut, ease(k - 2)));
 // how far out the sheet reaches from the ridge on each side at stage k (the footprint's half width)
@@ -452,9 +452,9 @@ export class Tarp {
   redNext(k) {
     if (!k || k.ok || !k.rig) return null;
     const p = this.player;
-    if (!k.missing) return 'Step a few metres and try again';
+    if (!k.missing) return 'Step a few yards and try again';
     const pair = this.nearestPair(p.x, p.z), pole = this.nearestPole(p.x, p.z), saw = this.ch.hasSaw();
-    if (pair && (pair.d < 25 || k.missing > 1)) return `Two trees ${pair.gap.toFixed(0)} m apart stand ${metres(pair.d)} ${bearing(pair.x - p.x, pair.z - p.z)}: between them it needs no poles`;
+    if (pair && (pair.d < 25 || k.missing > 1)) return `Two trees ${Math.round(pair.gap * 3.28084)} ft apart stand ${metres(pair.d)} ${bearing(pair.x - p.x, pair.z - p.z)}: between them it needs no poles`;
     return `${cap(word(k.missing))} more ${plural(k.missing, 'pole')}: ${pole ? `a dead one lies ${metres(pole.d)} ${bearing(pole.x - p.x, pole.z - p.z)}` : 'dead ones lie by the down logs'}${saw ? ', or the saw cuts one from a down log' : ''}`;
   }
   // the nearest two trees 3–7 m apart within 30 m of you: { x, z, d, gap } (their middle)

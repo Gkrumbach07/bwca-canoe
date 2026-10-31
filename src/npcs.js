@@ -79,6 +79,7 @@ import { storeLayout, storeLayouts } from './props.js';
 import { mulberry32 } from './rng.js';
 import { save } from './save.js';
 import { esc, word, fmtKm } from './hud.js';
+import { inches, fmtDepth, miles } from './units.js';
 import { monthDay } from './astro.js';
 import { PRI } from './dialogue.js';
 import { HAND as KEEPER_HAND, MANNER as KEEPER_MANNER, OPEN as KEEPER_OPEN, NO_WORD, NO_PAST, ASK_PROMPT, ASK_DONE, TASK_THANKS, MEM as MEM_WORDS, HOW as HOW_WORDS, RELS, COLLEGES, SUBJECTS, CITIES as K_CITIES } from './talk-keepers.js'; // content B
@@ -145,7 +146,7 @@ function whereWords(l) {
   if (l.hops === 0) return ', on this water';
   if (l.hops === 1) return ', one portage in';
   if (l.hops != null && l.hops <= 4) return `, ${word(l.hops)} portages in`;
-  return `, ${kmOf(l.d)} km ${l.dir} of here`;
+  return `, ${kmOf(l.d)} miles ${l.dir} of here`;
 }
 const _e = new THREE.Euler();
 // a body rotation as canoe.js has it: yaw (+ turns left), lean (+ forward), side (+ tips right)
@@ -396,7 +397,7 @@ function fetchFields(T, c, { thing = null, ranges = null, sign = null, lead = nu
   const to = T.landing(tg.e.ep), op = outfitterProfile(tg.e.ep, T.world), from = outfitterProfile(c.ep, T.world);
   const who = op && op.keeper ? op.keeper.name : `the keeper at ${to.name}`;
   const [what, short] = thing || pickR(c.rng, THINGS[op ? op.kind : 'lodge'] || THINGS.lodge);
-  const km = +(tg.d / 1000).toFixed(1), way = tg.hops == null ? ` (a ride up the road from the counter, ${fmtKm(km)} km as the crow flies)` : tg.hops === 0 ? ' (on this water)' : ` (${word(tg.hops)} ${tg.hops === 1 ? 'portage' : 'portages'} over)`;
+  const km = +(tg.d / 1000).toFixed(1), way = tg.hops == null ? ` (a ride up the road from the counter, ${fmtKm(km)} mi as the crow flies)` : tg.hops === 0 ? ' (on this water)' : ` (${word(tg.hops)} ${tg.hops === 1 ? 'portage' : 'portages'} over)`;
   const text = `${lead ? `${lead} ` : ''}${who} at ${to.name}, ${to.place}${way}, has ${what} for ${forWhom}. Pick it up at their dock and bring it back here.`;
   const title = fill(pickR(c.rng, FETCH_TITLES), { place: to.place });
   return { to: tg.e.ep, toName: to.name, toPlace: to.place, toKeeper: who, thing: what, short, hops: tg.hops, road: tg.hops == null, km, title, text, sign: sign || (from && from.keeper ? `${from.keeper.first}, behind the counter` : 'the counter'), hint: { x: to.x, z: to.z, r: 600 } };
@@ -678,7 +679,7 @@ const HINTS = {
   history(H) {
     const l = (H.f.deep || []).find((x) => !H.taken.has(x.name)) || H.water('eagle');
     if (!l) return null;
-    return { text: `In ’58 we carried a wood-canvas Chestnut into ${theWater(l.name)}${l.depth ? `. It goes down ${Math.round(l.depth)} metres` : ''}, and we fished it a week and never saw another soul.` };
+    return { text: `In ’58 we carried a wood-canvas Chestnut into ${theWater(l.name)}${l.depth ? `. It goes down ${fmtDepth(l.depth).replace('ft', 'feet')}` : ''}, and we fished it a week and never saw another soul.` };
   },
   route(H, v) {
     const r = v.party && v.party.route ? v.party : null; if (!r) return null;
@@ -696,7 +697,7 @@ const HINTS = {
   },
   road(H) {
     const f = H.f;
-    return { text: `${f.town || 'Town'}’s ${f.townKm || 'a long way'} km back down ${f.road || 'the road'}. Washboard past the gravel pit, so tie your canoe down twice.` };
+    return { text: `${f.town || 'Town'}’s ${f.townKm ? `${miles(f.townKm)} miles` : 'a long way'} back down ${f.road || 'the road'}. Washboard past the gravel pit, so tie your canoe down twice.` };
   },
   dock(H) {
     const L = H.P.landingOf(H.ep), name = H.world.lakeName(L.lake) || 'the lake';
@@ -1625,7 +1626,7 @@ export class People {
     if (v._place) return v._place;
     const op = outfitterProfile(v.ep, this.world); if (!op) return [];
     const f = op.facts || {}, out = [];
-    out.push(`We’re ${op.kindWords} on ${theWater(op.lake)}${op.area ? `, up ${op.area}` : ''}.${f.town ? ` ${f.town}’s ${f.townKm} km back down the road.` : ''}`);
+    out.push(`We’re ${op.kindWords} on ${theWater(op.lake)}${op.area ? `, up ${op.area}` : ''}.${f.town ? ` ${f.town}’s ${miles(f.townKm)} miles back down the road.` : ''}`);
     if (f.longest) out.push(`The long carry round here is ${f.longest}. It sorts people out.`);
     if (f.deep && f.deep.length) out.push(`Deep water near by: ${listWords(f.deep)}. That’s lake trout country.`);
     if (f.camps >= 10) out.push(`There are ${f.camps >= 100 ? 'over a hundred' : `${Math.floor(f.camps / 10) * 10}-odd`} campsites within a day of here. You’ll find one.`);
@@ -1650,7 +1651,7 @@ export class People {
       if (st.nights) bits.push(`${num(st.nights)} ${st.nights === 1 ? 'night' : 'nights'} out`);
       if (st.fish) bits.push(`${num(st.fish)} fish`);
       if (st.tasks) bits.push(`${num(st.tasks)} ${st.tasks === 1 ? 'job' : 'jobs'} done`);
-      const b = st.biggest, best = b && b.cm >= 30 ? `, the best a ${b.cm}-centimetre ${FISH_WORD[b.sp] || b.name}${b.lake ? ` out of ${theWater(b.lake)}` : ''}` : '';
+      const b = st.biggest, best = b && b.cm >= 30 ? `, the best a ${inches(b.cm)}-inch ${FISH_WORD[b.sp] || b.name}${b.lake ? ` out of ${theWater(b.lake)}` : ''}` : '';
       const head = bits.length > 1 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : cap(bits[0] || '');
       const rough = st.evacs > 0 || st.swims * 2 > st.trips || (st.trips >= 2 && !st.fish);
       say = `${cap(head)}${best}. ${(rough ? HOW_WORDS.rough : HOW_WORDS.good)[m] || HOW_WORDS.good.warm}`;
@@ -1727,7 +1728,7 @@ export class People {
       if (!list.length) return null;
       const l = list[Math.floor(H.rng() * Math.min(3, list.length))], sp = fishOf(l).find(([s]) => s === 'walleye' || s === 'pike' || s === 'smallmouth')[0];
       const wall = (GOOD_CM[sp] || 50) + 3;
-      Object.assign(out.vars, { spId: sp, sp: FISH_WORD[sp] || sp, cmWall: wall + 6, cm: wall });
+      Object.assign(out.vars, { spId: sp, sp: FISH_WORD[sp] || sp, cmWall: wall + 6, cm: wall, lenWall: inches(wall + 6), len: inches(wall) }); // (cm for the check, len in inches for the words)
       return lakeOf(l);
     }
     if (spec.site) {
@@ -1803,7 +1804,7 @@ export class People {
       v.loonWord = l && l.chick ? `With a chick! That’s the first chick on ${theWater(l.lake)} this year.` : 'Two adults. That counts. That totally counts.';
     }
     if (/lakesWords/.test(t)) v.lakesWords = listWords(m.lakes.slice(-3));
-    if (/cmGot/.test(t)) { const sp = v.spId, best = m.fish.filter((f) => f.sp === sp).sort((a, b) => b.cm - a.cm)[0]; v.cmGot = String(best ? best.cm : v.cm); }
+    if (/cmGot/.test(t)) { const sp = v.spId, best = m.fish.filter((f) => f.sp === sp).sort((a, b) => b.cm - a.cm)[0]; v.cmGot = inches(best ? best.cm : v.cm); } // in inches
     return fillC(t, v);
   }
   // a beat: it is done as you ask it (the next waits a day or more); what it gives, it gives now
@@ -1878,7 +1879,7 @@ export class People {
     }
     if (!line) {
       const f = M.bigFish(Math.max(last ?? -1e9, (heard.fish ?? -1e9) + 1));
-      if (f) { heard.fish = f.day; line = this.fresh(W('fish').map((s) => fillC(s, { fish: FISH_WORD[f.sp] || f.name, cm: f.cm, flake: f.lake ? theWater(f.lake) : 'the lake' }))); }
+      if (f) { heard.fish = f.day; line = this.fresh(W('fish').map((s) => fillC(s, { fish: FISH_WORD[f.sp] || f.name, cm: f.cm, len: inches(f.cm), flake: f.lake ? theWater(f.lake) : 'the lake' }))); }
     }
     if (!line && last != null && today - last >= 7) { const n = today - last; line = this.fresh(W('long').map((s) => fillC(s, { n: num(n) }))); }
     m.greet[ep] = today;

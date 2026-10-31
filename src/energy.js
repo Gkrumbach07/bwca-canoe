@@ -720,7 +720,7 @@ export class Energy {
       const d = this.wetSetDrying();
       // (fb4 join: by a fire, what is left of it, not always the 30 min a soaked set takes)
       const fireSec = (d.sec * WET_SET_FIRE_H) / WET_SET_AIR_H;
-      return { label: d.byFire ? 'Drying' : 'Wet set', mark: d.byFire ? 'drying' : 'wet', timer: Math.round(d.sec), running: true, until: this.now + d.sec / 3600, next: d.byFire ? `Dry in ${timerWords(d.sec)}: stay by the fire` : `Dries by a lit fire in ${timerWords(fireSec)} (stand within 3 m of it); in the air ${timerWords(d.sec)}, or overnight` };
+      return { label: d.byFire ? 'Drying' : 'Wet set', mark: d.byFire ? 'drying' : 'wet', timer: Math.round(d.sec), running: true, until: this.now + d.sec / 3600, next: d.byFire ? `Dry in ${timerWords(d.sec)}: stay by the fire` : `Dries by a lit fire in ${timerWords(fireSec)} (stand within 10 ft of it); in the air ${timerWords(d.sec)}, or overnight` };
     }
     const wet = this.live && (this.soaked > 0.25 || !!(this.trip && this.trip.state && this.trip.state.wet));
     if (wet) return { label: 'A dry set', mark: 'ready', next: 'You are wet through: right-click › Change into dry clothes (on foot)' };

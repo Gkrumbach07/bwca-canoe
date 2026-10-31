@@ -55,6 +55,7 @@
 // leeches and the stringer become items in containers in the canoe.
 import { ITEMS, itemDef, defineItem, sizeOf, fishKg, fishEat, LEGACY, STARTER_KIT, FOOD_KINDS, NEED, check, timerWords, WOOD_DRY, sealedDef } from './items.js';
 import { save } from './save.js';
+import { feet } from './units.js';
 
 const NS = 'inventory';
 const VERSION = 1;
@@ -1066,8 +1067,8 @@ export class Inventory {
     const st = this.containers.find((c) => c.item === 'stringer'), p = this.player;
     if (!st) return { note: 'you have none', chip: 'none', next: 'A stringer comes with the canoe at the outfitters' };
     const r = this.root(st);
-    if (r.where === 'canoe') { const sp = this.canoeSpot(), d = sp && p ? this.hullDist(sp, p.x, p.z) : null; return { note: d != null ? `in the canoe, ${d.toFixed(1)} m off: in reach within ${HULL_REACH} m` : 'in the canoe', chip: d != null ? `in the canoe, ${Math.round(d)} m` : 'in the canoe', next: 'Walk to the canoe (within 3 m of it), or take the stringer in a hand' }; }
-    if (r.where === 'ground' || r.where === 'hung') return { note: `on the ground, ${this.dist(r.at).toFixed(1)} m off: in reach within ${REACH} m`, chip: `${Math.round(this.dist(r.at))} m off`, next: 'Walk to it, or take it in a hand' };
+    if (r.where === 'canoe') { const sp = this.canoeSpot(), d = sp && p ? this.hullDist(sp, p.x, p.z) : null; return { note: d != null ? `in the canoe, ${feet(d)} ft off: in reach within ${feet(HULL_REACH)} ft` : 'in the canoe', chip: d != null ? `in the canoe, ${feet(d)} ft` : 'in the canoe', next: 'Walk to the canoe (within 10 ft of it), or take the stringer in a hand' }; }
+    if (r.where === 'ground' || r.where === 'hung') return { note: `on the ground, ${feet(this.dist(r.at))} ft off: in reach within ${feet(REACH)} ft`, chip: `${feet(this.dist(r.at))} ft off`, next: 'Walk to it, or take it in a hand' };
     if (r.where === 'stash') return { note: 'kept at the outfitters', chip: 'at the outfitters', next: 'Take it out at the counter next time in' };
     return { note: '', chip: '', next: 'Take the stringer in a hand' };
   }
@@ -1132,7 +1133,7 @@ export class Inventory {
   dampStatus(next = 'Your gear is damp') {
     const g = this.gearDrying(), now = this.now;
     if (g.byFire) return { label: 'Drying', mark: 'drying', timer: g.sec, running: true, until: now + g.sec / 3600, next: `${next}: dry in ${timerWords(g.sec)} by the fire` };
-    return { label: 'Damp', mark: 'wet', hint: `dries by a fire, ${timerWords(g.sec)}`, next: `${next}. It dries by a lit fire in 30 min: stand within 6 m of it` };
+    return { label: 'Damp', mark: 'wet', hint: `dries by a fire, ${timerWords(g.sec)}`, next: `${next}. It dries by a lit fire in 30 min: stand within 20 ft of it` };
   }
   // wood: wet (with its drying at the rate it dries now), drying by a fire, or on a lit fire
   woodStatus(c, e) {
@@ -1140,7 +1141,7 @@ export class Inventory {
     if (w > 0) {
       // (fb5 B: by a fire, its countdown; in dry air, how long it would take by a fire; in the rain, that it is)
       const sec = rate > 0 ? (w / rate) * 3600 : null, byFire = rate > 1.5, fireSec = (w * WOOD_DRY.fire / WOOD_DRY.air) * 3600;
-      const next = rate <= 0 ? 'Out of the rain first: under the tarp or into a pack, then 30 min by a lit fire' : byFire ? `Dry in ${timerWords(sec)}: it won’t light till then` : 'Wet: it won’t light. Dries by a lit fire in 30 min (on it or within 2 m), 3 h in dry air';
+      const next = rate <= 0 ? 'Out of the rain first: under the tarp or into a pack, then 30 min by a lit fire' : byFire ? `Dry in ${timerWords(sec)}: it won’t light till then` : 'Wet: it won’t light. Dries by a lit fire in 30 min (on it or within 6 ft), 3 h in dry air';
       if (byFire) return { label: 'Drying', mark: 'drying', timer: Math.round(sec), running: true, until: now + sec / 3600, next };
       return { label: 'Wet', mark: 'wet', hint: rate <= 0 ? 'in the rain' : `dries by a fire, ${timerWords(fireSec)}`, ...(sec != null ? { airSec: Math.round(sec) } : {}), next };
     }
@@ -1154,7 +1155,7 @@ export class Inventory {
     const r = this.root(c), now = this.now;
     if (r.where === 'ground' && r.at && d.wear) {
       // (stream E's chores.js: at.wet once half an hour of rain is in it, at.rainH the hours of rain so far)
-      if (r.at.wet || r.at.rainH >= 0.5) return { label: 'Wet', mark: 'wet', hint: 'dries by a fire, 30 min', next: 'The gear in it is wet: it dries by a lit fire in 30 min (stand within 6 m). A tarp over it keeps the rain off' };
+      if (r.at.wet || r.at.rainH >= 0.5) return { label: 'Wet', mark: 'wet', hint: 'dries by a fire, 30 min', next: 'The gear in it is wet: it dries by a lit fire in 30 min (stand within 20 ft). A tarp over it keeps the rain off' };
       const rain = this.rainAt(c);
       if (rain > 0.3 && r.at.rainH > 0) { const sec = Math.max(0, ((0.5 - r.at.rainH) / rain) * 3600); return { label: 'In the rain', mark: 'wet', hint: 'soaks through in', timer: Math.round(sec), running: true, until: now + sec / 3600, next: `Pick it up, or get the tarp over it: it soaks through ${sec < 60 ? 'any moment' : `in ${timerWords(sec)}`}` }; }
     }
@@ -1276,7 +1277,7 @@ export class Inventory {
   }
   // why it can't be set down there, as a checklist and the next step (decision 2)
   wadeNo() {
-    return { ...no('water', 'You’re standing in the water: step ashore to set it down, or put it in the canoe.'), needs: [NEED.step(`Dry ground within ${WADE_REACH} m`, false)], next: 'Step ashore to set it down, or put it in the canoe' };
+    return { ...no('water', 'You’re standing in the water: step ashore to set it down, or put it in the canoe.'), needs: [NEED.step(`Dry ground within ${feet(WADE_REACH)} ft`, false)], next: 'Step ashore to set it down, or put it in the canoe' };
   }
   // a clear spot beside you to set a thing down (packs.js knows the ground; without it, a step to the right)
   spotNear(x, z, heading, side = 1, fwd = 1) {

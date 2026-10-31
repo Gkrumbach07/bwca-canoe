@@ -40,8 +40,8 @@ const LEDGER = 40;                    // money entries kept
 
 // what can be owned: the label, its slot in the kit, and what it does where something reads it
 export const ITEMS = {
-  aluminium: { label: 'Aluminium canoe, 17 ft', slot: 'canoe', note: '34 kg on the portages' },
-  kevlar: { label: 'Kevlar tripper, 17 ft', slot: 'canoe', note: '20 kg on the portages' },
+  aluminium: { label: 'Aluminium canoe, 17 ft', slot: 'canoe', note: '75 lb on the portages' },
+  kevlar: { label: 'Kevlar tripper, 17 ft', slot: 'canoe', note: '44 lb on the portages' },
   ash: { label: 'Ash paddle', slot: 'paddle' },
   pack: { label: 'Duluth pack', note: 'room for 7 days of food' },
   pack2: { label: 'A second Duluth pack', note: 'room for 10 more days; two carries on a portage' },

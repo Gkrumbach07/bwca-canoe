@@ -487,7 +487,7 @@ export class Camp {
   // your tent standing at another site, in a few words: "your tent is up 1.2 km east, at Lake One #12"
   tentAway(c) {
     const p = this.player, d = Math.hypot(c.x - p.x, c.z - p.z), deg = ((Math.atan2(c.x - p.x, -(c.z - p.z)) * 180) / Math.PI + 360) % 360;
-    const far = d < 1000 ? `${Math.max(50, Math.round(d / 50) * 50)} m` : `${(d / 1000).toFixed(1)} km`;
+    const far = d < 300 ? `${Math.max(150, Math.round(d * 3.28084 / 50) * 50)} ft` : `${(d / 1609.344).toFixed(1)} mi`; // (imperial on screen)
     const id = c.site && p.nearWater ? p.nearWater(c.site.x, c.site.z, 6) : 0, lake = id ? this.world.lakeName(id) : null;
     const at = c.site ? (c.site.usfs != null && c.site.official ? `, at ${c.site.official} #${c.site.usfs}` : c.site.name ? `, at the ${c.site.name} campsite` : lake ? `, at the campsite on ${lake}` : ', at a campsite') : ''; // (d1 names: the site's number)
     return `your tent is ${c.stage >= 4 ? 'up' : 'half pitched'} ${far} ${compassLong(deg)}${at}: strike it there to pitch it here`;

@@ -5,6 +5,7 @@ import { FRESH } from './wind.js';
 import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
 import { explored, INK_WATER, INK_RIM, ROUTE_STEP } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked, your way in pencil)
 import { lifeKmh } from './pace.js';
+import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fmtDist, scaleBar } from './units.js'; // imperial on screen; the game itself stays metric
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import './hud.css';
 
@@ -111,7 +112,7 @@ export function weekdayOf(year, doy) { const { month, day } = monthDay(year, doy
 export function longDate(year, doy) { const { month, day } = monthDay(year, doy); return `${weekdayOf(year, doy)}, ${MONTHS_LONG[month]} ${day}`; }
 export function shortDate(year, doy) { const { month, day } = monthDay(year, doy); return `${MONTHS[month]} ${day}`; }
 export const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-export const fmtKm = (km) => (km < 10 ? km.toFixed(1) : String(Math.round(km)));
+export const fmtKm = (km) => miles(km); // (kept its name: it gives miles now, from km; the callers say "mi")
 export const fmtDays = (d) => { if (d <= 0) return 'no'; const w = Math.floor(d + 1e-6), half = d - w >= 0.5 - 1e-6 && d - w < 0.99; return half ? `${w || ''}½` : String(Math.round(d)); };
 // "3½ days", "1 day", "½ day"
 export const foodWords = (d) => `${fmtDays(d)} ${d <= 1 ? 'day' : 'days'}`;
@@ -134,11 +135,11 @@ export function fmtDuration(hours) {
 // river into short polygons, so its cells are no measure of it, and "a small lake: 170 acres" was wrong twice over)
 export function lakeWords(l) {
   if (!l) return '';
-  if (l.river) return `${l.creek && !/river/i.test(l.name || '') ? 'a creek' : 'a river'}${l.maxDepth ? `, sounded to ${Math.round(l.maxDepth)} m` : ''}`;
+  if (l.river) return `${l.creek && !/river/i.test(l.name || '') ? 'a creek' : 'a river'}${l.maxDepth ? `, sounded to ${fmtDepth(l.maxDepth)}` : ''}`;
   const acres = (l.cells * 100) / 4046.86;
   const size = acres > 2000 ? 'the big water' : acres > 400 ? 'a good-sized lake' : acres > 60 ? 'a small lake' : 'a pond';
   const a = acres >= 100 ? Math.round(acres / 10) * 10 : Math.max(1, Math.round(acres));
-  return `${size}: ${a.toLocaleString('en-US')} ${plural(a, 'acre')}${l.maxDepth ? `, sounded to ${Math.round(l.maxDepth)} m` : ''}`;
+  return `${size}: ${a.toLocaleString('en-US')} ${plural(a, 'acre')}${l.maxDepth ? `, sounded to ${fmtDepth(l.maxDepth)}` : ''}`;
 }
 // the Fisher-style sheet code for a point: letters east across the wilderness, numbers south
 export function sheetCode(world, x, z) {
@@ -501,7 +502,7 @@ export class Hud {
       // the hours on the game's own clock, which follows the way at life pace (pace.js): the canoe's cruise at life (5.8 km
       // an hour with an aluminium hull and an ash paddle, times the gear's cruise: shop.js), less with a fresh wind
       const hours = km / (lifeKmh(p.gear) * (wind && wind.fresh ? 0.8 : 1));
-      text = `${walk ? '' : 'Paddle in here? '}${name ? `${name}, ` : ''}about ${fmtKm(km)} km ${dir}, ${fmtDuration(hours)}${walk ? ' by the clock' : ''}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
+      text = `${walk ? '' : 'Paddle in here? '}${name ? `${name}, ` : ''}about ${fmtKm(km)} mi ${dir}, ${fmtDuration(hours)}${walk ? ' by the clock' : ''}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
       if (walk) text = text[0].toUpperCase() + text.slice(1);
     } else if (name) text = `${walk ? '' : 'Paddle in here? '}${name}.`;
     if (this.el.pinGo) this.el.pinGo.hidden = walk;
@@ -661,13 +662,14 @@ export class Hud {
       if (d > 0) { depth[gj * N + gi] = d; if (d > maxD) maxD = d; }
     }
     if (maxD < 2) return [];
+    // imperial: in feet, every 5 ft to 30, every 10 ft to 100, every 25 ft beyond, heavier every 50 ft
     const levels = [];
-    for (let d = 2; d <= maxD; d += d < 10 ? 2 : d < 30 ? 5 : 10) levels.push(d);
+    for (let f = 5; f / 3.28084 <= maxD; f += f < 30 ? 5 : f < 100 ? 10 : 25) levels.push(f);
     const px = (g) => (g + 0.5) * pxPerCell;
     const [ox, oz] = w.tileOrigin(tx, ty), mPerPx = w.tileMetres / FINE_PX;
     const labels = [];
-    for (const lvl of levels) {
-      const segs = [];
+    for (const ft of levels) {
+      const lvl = ft / 3.28084, segs = [];
       for (let gj = 0; gj < N - 1; gj++) for (let gi = 0; gi < N - 1; gi++) {
         const h00 = depth[gj * N + gi], h10 = depth[gj * N + gi + 1], h11 = depth[(gj + 1) * N + gi + 1], h01 = depth[(gj + 1) * N + gi];
         const b = (h00 >= lvl ? 1 : 0) | (h10 >= lvl ? 2 : 0) | (h11 >= lvl ? 4 : 0) | (h01 >= lvl ? 8 : 0);
@@ -682,11 +684,11 @@ export class Hud {
       const ctx = layer();
       ctx.beginPath();
       for (let q = 0; q < segs.length; q += 2) { ctx.moveTo(segs[q][0], segs[q][1]); ctx.lineTo(segs[q + 1][0], segs[q + 1][1]); }
-      const index = lvl % 10 === 0;
+      const index = ft % 50 === 0;
       ctx.strokeStyle = index ? 'rgba(52, 92, 122, 0.9)' : 'rgba(70, 112, 142, 0.7)';
       ctx.lineWidth = index ? 1.7 : 1.0;
       ctx.stroke();
-      if (segs.length >= 40) { const m = segs[Math.floor(segs.length / 8) * 2]; labels.push([lvl, ox + m[0] * mPerPx, oz + m[1] * mPerPx]); }
+      if (segs.length >= 40) { const m = segs[Math.floor(segs.length / 8) * 2]; labels.push([ft, ox + m[0] * mPerPx, oz + m[1] * mPerPx]); }
     }
     return labels;
   }
@@ -868,11 +870,11 @@ export class Hud {
     e.windArrow.style.transform = `rotate(${(wind.from % 360).toFixed(1)}deg)`;
     e.compass.querySelector('svg').setAttribute('aria-label', `Compass: heading ${compassLong(hdg)}; ${wind.label.toLowerCase()} from the ${wind.compassLong}`);
     if (matters) {
-      this.set('clabel', e.compassLabel, `${wind.label} · ${wind.speed.toFixed(0)} m/s`, 'innerHTML');
-      e.compassLabel.innerHTML = `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s<br>from the ${wind.compassLong}`;
+      this.set('clabel', e.compassLabel, `${wind.label} · ${fmtMphMs(wind.speed)}`, 'innerHTML');
+      e.compassLabel.innerHTML = `${esc(wind.label)} · ${fmtMphMs(wind.speed)}<br>from the ${wind.compassLong}`;
       const f = player.forward, wd = wind.dir, cosRel = f.x * wd.x + f.z * wd.z;
       const aspect = player.mode !== 'paddle' ? '' : Math.abs(cosRel) < 0.5 ? ' · beam on' : cosRel < 0 ? ' · on the bow' : ' · astern';
-      this.set('cwaves', e.compassWaves, `${ice ? 'frozen over' : `waves ${H.toFixed(1)} m${aspect}`}${wind.override != null ? ' · set by hand' : ''}`);
+      this.set('cwaves', e.compassWaves, `${ice ? 'frozen over' : `waves ${fmtFtIn(H)}${aspect}`}${wind.override != null ? ' · set by hand' : ''}`);
     }
   }
 
@@ -896,7 +898,7 @@ export class Hud {
         const kicker = `${dayW ? `${dayW} · ` : ''}${clock12(day.hours)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`;
         const parts = [];
         if (trip && trip.active && stats) parts.push(stats.portages ? `${word(stats.portages)[0].toUpperCase()}${word(stats.portages).slice(1)} ${plural(stats.portages, 'portage')} from ${trip.fromName || 'the landing'}` : `Out from ${trip.fromName || 'the landing'}`);
-        if (stats && stats.km > 0.05) parts.push(`${fmtKm(stats.km)} km paddled`);
+        if (stats && stats.km > 0.05) parts.push(`${fmtKm(stats.km)} mi paddled`);
         parts.push(lakeWords(l));
         this.showPlace(kicker, name, parts.join(' · '));
       }
@@ -912,7 +914,7 @@ export class Hud {
         const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
         const hungW = energy && energy.hungFood ? energy.hungFood().words : '';
         const food = energy && !(core && core.sandbox) && !(outfitter && outfitter.visit) ? (energy.foodWords ? `${energy.foodWords()} with you${hungW ? ` · ${hungW}` : ''}` : energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : ''; // fb A: the meals and snacks in reach (camp join: and the barrel hung; polish B: not at a store, where the shelf is a step away)
-        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
+        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} mi paddled so far` : '', food].filter(Boolean).join(' · ');
         this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayW || 'A new day', sub);
       }
       this.lastHours = h;
@@ -1128,7 +1130,7 @@ export class Hud {
         e.reticle.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px)`;
         const C = 2 * Math.PI * 44, fill = u.power != null ? clamp(u.power, 0, 1) : 0;
         e.reticleRing.setAttribute('stroke-dasharray', `${(C * fill).toFixed(1)} ${C.toFixed(1)}`);
-        this.set('rdist', e.reticleDist, aim.dist > 0 ? `about ${Math.round(aim.dist)} m` : '');
+        this.set('rdist', e.reticleDist, aim.dist > 0 ? `about ${fmtDist(aim.dist)}` : '');
         e.reticle.style.opacity = aim.inReach ? '1' : '.55';
       }
     }
@@ -1140,7 +1142,7 @@ export class Hud {
       const pct = `${(clamp(ft.tension, 0, 1) * 100).toFixed(1)}%`;
       e.tensionFill.style.width = pct; e.tensionEnd.style.width = pct;
       e.tension.classList.toggle('hot', ft.danger > 0.3); e.tension.classList.toggle('slack', ft.danger <= 0.3 && ft.slack > 0.8);
-      const html = `<span>Tension</span><span class="dot">·</span><span>${ft.line.toFixed(0)} m of line out</span>${ft.run ? '<span class="dot">·</span><span class="run">it is running</span>' : ft.slack > 0.8 ? '<span class="dot">·</span><span class="run">slack</span>' : ''}`;
+      const html = `<span>Tension</span><span class="dot">·</span><span>${Math.round(ft.line * 3.28084)} ft of line out</span>${ft.run ? '<span class="dot">·</span><span class="run">it is running</span>' : ft.slack > 0.8 ? '<span class="dot">·</span><span class="run">slack</span>' : ''}`;
       this.set('tlabel', e.tensionLabel, html, 'innerHTML');
     }
     // the catch card: on a landing, for the hold-up or 8 s, whichever is longer
@@ -1150,7 +1152,7 @@ export class Hud {
       f.catchKey = L.key; f.catchUntil = now + CATCH_HOLD * 1000;
       e.catchFish.innerHTML = fishSilhouette(L.species);
       e.catchName.textContent = L.name;
-      e.catchSize.textContent = `${L.length} cm · ${L.weight} kg / ${(L.weight * 2.2046).toFixed(1)} lb`;
+      e.catchSize.textContent = `${fmtIn(L.length)} · ${fmtLbOz(L.weight)}`;
       e.catchMeta.textContent = `${L.lake} · ${String(L.lure).toLowerCase()} · ${L.time}`;
       e.catch.classList.toggle('pb', !!L.best);
     }
@@ -1192,14 +1194,14 @@ export class Hud {
       }
       row('Sun', esc(parts.join(' · ')));
     }
-    if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · ${day && day.season && day.season.ice > 0.5 ? 'the lake is frozen over' : `waves ${(player.waveHeightHere || 0).toFixed(1)} m`}${wind.override != null ? ' · set by hand' : ''}`);
+    if (wind) row('Wind', `${esc(wind.label)} · ${fmtMphMs(wind.speed)} from the ${wind.compassLong} · ${day && day.season && day.season.ice > 0.5 ? 'the lake is frozen over' : `waves ${fmtFtIn(player.waveHeightHere || 0)}`}${wind.override != null ? ' · set by hand' : ''}`);
     if (weather && weather.look) {
       const t = weather.look.temp, label = weather.label || '', rain = weather.look.rain || 0;
       const wet = rain > 0.02 ? (weather.look.snow > 0.5 ? '' : rain > 0.5 ? ', raining hard' : ', raining') : '';
-      row('Sky', esc(`${Number.isFinite(t) ? `${Math.round(t)} °C · ` : ''}${label.toLowerCase()}${/rain|snow|storm/i.test(label) ? '' : wet}`));
+      row('Sky', esc(`${Number.isFinite(t) ? `${fmtF(t)} · ` : ''}${label.toLowerCase()}${/rain|snow|storm/i.test(label) ? '' : wet}`));
     }
     const hdg = bearingOf(player.heading);
-    row('Way', `${((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}`);
+    row('Way', `${fmtMphKmh((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6)} · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}`);
     const dev = s && s.get('devRows'), showFps = s && s.get('fps');
     if (dev && geo) row('GPS sim', `${geo.linked ? (geo.enabled ? 'broadcasting to the extension' : 'extension installed, switched off') : 'extension not detected · this tab only'} · hdg ${hdg.toFixed(0)}°`, 'soft');
     if (dev || showFps) {
@@ -1285,9 +1287,9 @@ export class Hud {
         : look === 'owned' ? (none ? 'blank paper: the map tables at the outfitters sell the sheets' : '')
           : '';
     if (e.mapHint) this.set('mhint', e.mapHint, [table ? 'drag to pan · wheel to zoom' : `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'}`, detail].filter(Boolean).join(' · '));
-    this.set('mspan', e.mapSpan, `${v.span >= 10000 ? Math.round(v.span / 1000) : (v.span / 1000).toFixed(v.span < 5000 ? 1 : 0)} km across`);
+    this.set('mspan', e.mapSpan, `${miles(v.span / 1000)} mi across`);
     if (this.mode === 'sheet' && this.scaleInfo) {
-      const { bar, cssPx } = this.scaleInfo, txt = `${bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}`;
+      const { label, cssPx } = this.scaleInfo, txt = label;
       if (this.scaleShown !== txt + cssPx) { this.scaleShown = txt + cssPx; e.mapScalebar.style.width = `${cssPx.toFixed(0)}px`; e.mapScale.textContent = txt; }
       const far = v.span / this.canvas.width >= 7;
       const d = e.mapLayers.querySelector('[data-layer=depths]'); if (d) d.classList.toggle('far', far);
@@ -1790,12 +1792,12 @@ export class Hud {
     ctx.restore();
     // the scale: a round distance close to 150 px, drawn on the glance, carried by the footer band on the sheet
     const want = (sheet ? 96 * (W / this.canvas.getBoundingClientRect().width || 1) : 150 * k) * mPerPx;
-    const bar = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].reduce((best, d) => (Math.abs(d - want) < Math.abs(best - want) ? d : best), 500);
+    const { m: bar, label } = scaleBar(want); // a round imperial distance (feet, then miles)
     const bpx = bar / mPerPx;
-    if (sheet) this.scaleInfo = { bar, cssPx: bpx / (W / (this.canvas.getBoundingClientRect().width || W)) };
+    if (sheet) this.scaleInfo = { bar, label, cssPx: bpx / (W / (this.canvas.getBoundingClientRect().width || W)) };
     else if (!blank) {
       ctx.fillStyle = '#4a3b26'; ctx.fillRect(24 * k, H - 28 * k, bpx, 3 * k); ctx.fillRect(24 * k, H - 34 * k, 2 * k, 9 * k); ctx.fillRect(24 * k + bpx - 2 * k, H - 34 * k, 2 * k, 9 * k);
-      ctx.font = `600 ${12 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.fillText(bar >= 1000 ? `${bar / 1000} km` : `${bar} m`, 24 * k + bpx + 8 * k, H - 26 * k);
+      ctx.font = `600 ${12 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.fillText(label, 24 * k + bpx + 8 * k, H - 26 * k);
     }
   }
 }

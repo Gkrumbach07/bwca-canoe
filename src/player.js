@@ -6,6 +6,7 @@ import { GROUND, surfaceAt } from './terrain-build.js';
 import { HULL, keelAt, section } from './hull.js';
 import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from './pace.js';
 import { burnLook } from './burns.js';
+import { fmtDist } from './units.js';
 
 export class Input {
   constructor() {
@@ -541,7 +542,7 @@ export class Player {
     const gap = this.shoreGap();
     if (land) {
       const p = land.def;
-      if (!warning) this.prompt = { key: 'E', text: `Go ashore · Portage: ${p.name} · ${p.rods} rods (${p.lengthM} m)` }; // the sea's warning outranks the shore
+      if (!warning) this.prompt = { key: 'E', text: `Go ashore · Portage: ${p.name} · ${p.rods} rods (${fmtDist(p.lengthM)})` }; // the sea's warning outranks the shore
       if (inp.pressed('KeyE')) this.landing = { land, t: 0 };
     } else if (gap) {
       if (!warning) this.prompt = { key: 'E', text: 'Go ashore' };
@@ -771,7 +772,7 @@ export class Player {
           if (this.wind) { const wd = this.wind.dir, down = Math.atan2(-wd.z, wd.x); let d = down - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); this.heading = Math.abs(d) <= Math.PI / 2 ? down : down + Math.PI; st.swimHeading = this.heading; }
           this.placeOnWater();
         }
-      } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${d.toFixed(0)} m)` };
+      } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${fmtDist(d)})` };
       return;
     }
     // from the shore: the canoe where you left it
@@ -790,7 +791,7 @@ export class Player {
       }
       return;
     }
-    const far = drop ? (dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`) : null;
+    const far = drop ? fmtDist(dd) : null;
     this.prompt = { key: null, text: `Swimming${far ? ` · the canoe is ${far} away` : ''}` };
   }
 
@@ -1536,7 +1537,7 @@ export class Player {
       // beached, a held E Push it off) and Q Shoulder it (packs.js hullAction, nearby.js)
       const d = c.drop, dd = Math.hypot(d.x - this.x, d.z - this.z);
       c.choice = false;
-      this.say(note || trailText || (dd <= HULL_REACH ? null : `The canoe is ${dd < 1000 ? `${dd.toFixed(0)} m` : `${(dd / 1000).toFixed(1)} km`} away`));
+      this.say(note || trailText || (dd <= HULL_REACH ? null : `The canoe is ${fmtDist(dd)} away`));
       return;
     }
     // carrying: launch at a trail end where the map says, or at any shore with a metre of water within reach,

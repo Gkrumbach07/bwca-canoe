@@ -17,6 +17,7 @@
 // campsites stayed at, the keepers' stories finished, the photos (a link to the Photos tab), the outfitters known, what
 // the boards have paid, and the firsts in pencil. showRecord(id) opens the book there.
 import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
+import { fmtIn, fmtLbOz, fmtFt } from './units.js';
 import { PackSide } from './inv-ui.js';
 import { KINDS } from './tasks.js'; // fb3 C: a notice's kind, for its progress and its label
 import { teaWord } from './water.js'; // d2 water: the water's colour in a word
@@ -243,7 +244,7 @@ export class Journal {
       <div class="grid">
         <div class="lab">Food</div><div class="with"><span class="cells" aria-hidden="true">${cells}</span><span>${foodTxt}</span></div>
         <div class="lab">Energy</div><div class="with"><span class="ebar"><i style="width:${ev}%"></i></span><span>${ev} % · ${energyTxt}</span></div>
-        <div class="lab">Paddled</div><div>${st ? `${fmtKm(st.km)} km · ${daysOn} ${plural(daysOn, 'day')} on the water` : '—'}</div>
+        <div class="lab">Paddled</div><div>${st ? `${fmtKm(st.km)} mi · ${daysOn} ${plural(daysOn, 'day')} on the water` : '—'}</div>
         <div class="lab">Portages</div><div>${st ? `${st.portages} walked${st.rods ? ` · ${st.rods} rods` : ''}${dropTxt}` : '—'}</div>
         <div class="lab">Lakes</div><div>${st ? esc(this.lakeList(st.lakes)) : '—'}</div>
         <div class="lab">Nights</div><div>${nightTxt}</div>
@@ -269,10 +270,10 @@ export class Journal {
   catchesTab() {
     const f = this.fishing, log = f ? f.log : [], bests = f ? Object.values(f.bests || {}) : [];
     const kept = log.filter((c) => c.kept).length;
-    const bestTxt = bests.length ? `Personal bests: ${bests.sort((a, b) => b.length - a.length).map((b) => `${esc(String(b.name || '').toLowerCase())} ${b.length} cm`).join(' · ')}` : 'No personal bests yet. F takes up the rod in the canoe; hold Space to cast.';
+    const bestTxt = bests.length ? `Personal bests: ${bests.sort((a, b) => b.length - a.length).map((b) => `${esc(String(b.name || '').toLowerCase())} ${fmtIn(b.length)}`).join(' · ')}` : 'No personal bests yet. F takes up the rod in the canoe; hold Space to cast.';
     const all = log.slice().reverse(), pages = Math.max(1, Math.ceil(all.length / ROWS));
     this.page = Math.min(this.page, pages - 1);
-    const rows = all.slice(this.page * ROWS, this.page * ROWS + ROWS).map((c) => `<tr><td>${this.catchTime(c)}</td><td class="${c.best ? 'best' : ''}">${esc(c.name)}${c.best ? ' ★' : ''}</td><td>${c.length} cm</td><td>${c.weight} kg</td><td>${esc(String(c.lake).replace(/^Lake /, ''))}</td><td>${esc(c.lureShort || c.lure || '')}</td><td class="soft">${c.kept ? 'kept' : 'released'}</td></tr>`).join('');
+    const rows = all.slice(this.page * ROWS, this.page * ROWS + ROWS).map((c) => `<tr><td>${this.catchTime(c)}</td><td class="${c.best ? 'best' : ''}">${esc(c.name)}${c.best ? ' ★' : ''}</td><td>${fmtIn(c.length)}</td><td>${fmtLbOz(c.weight)}</td><td>${esc(String(c.lake).replace(/^Lake /, ''))}</td><td>${esc(c.lureShort || c.lure || '')}</td><td class="soft">${c.kept ? 'kept' : 'released'}</td></tr>`).join('');
     const table = log.length ? `<div class="scroll"><table><thead><tr><th>Time</th><th>Fish</th><th>Length</th><th>Weight</th><th>Lake</th><th>Lure</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Nothing in the log yet.</div>';
     const more = all.length - (this.page + 1) * ROWS;
     const foot = `★ personal best${more > 0 ? ` · <button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? ` · <button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}`;
@@ -308,7 +309,7 @@ export class Journal {
       const ago = d.doy - e.doy;
       const when = this.trip && this.trip.active && this.trip.startDoy != null ? `day ${Math.max(1, e.doy - this.trip.startDoy + 1)}` : ago === 0 ? 'today' : ago === 1 ? 'yesterday' : shortDate(d.year, e.doy);
       const tea = l ? teaWord(l.cdom) : ''; // d2 water: and its colour, where the release has it
-      return `<tr><td>${esc(e.name)}</td><td>${when}</td><td class="soft">${l ? esc(lakeWords(l)) : ''}</td><td>${l && l.secchi ? `${l.secchi.toFixed(1)} m${tea ? `, ${tea}` : ''}` : '—'}</td></tr>`;
+      return `<tr><td>${esc(e.name)}</td><td>${when}</td><td class="soft">${l ? esc(lakeWords(l)) : ''}</td><td>${l && l.secchi ? `${fmtFt(l.secchi)}${tea ? `, ${tea}` : ''}` : '—'}</td></tr>`;
     }).join('');
     const html = `<div class="lede"><h2 id="right-h">${lakes.length ? `${lakes.length} ${plural(lakes.length, 'lake')}` : 'No lakes yet'}</h2><div class="sub">In the order you first paddled them.</div></div>
       ${lakes.length ? `<div class="scroll"><table><thead><tr><th>Lake</th><th>First paddled</th><th>What it is</th><th>Clarity</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Push off and they will be written here.</div>'}`;
@@ -332,7 +333,7 @@ export class Journal {
     const rows = trips.slice(this.page * ROWS, this.page * ROWS + ROWS).map((t) => {
       const e = t.entry || {}, when = e.year ? shortDate(e.year, e.doy) : '';
       const rs = t.resupplies ? ` · ${t.resupplies} ${plural(t.resupplies, 'resupply', 'resupplies')}` : '';
-      return `<tr><td>${when}</td><td>${esc(place(t.from))}</td><td>${t.days || '—'}</td><td>${fmtKm(t.km || 0)} km${rs}</td><td class="${t.k === 'evacuated' ? 'best' : ''}">${how(t)}</td><td class="soft">${t.mode === 'sandbox' ? 'sandbox' : ''}</td></tr>`;
+      return `<tr><td>${when}</td><td>${esc(place(t.from))}</td><td>${t.days || '—'}</td><td>${fmtKm(t.km || 0)} mi${rs}</td><td class="${t.k === 'evacuated' ? 'best' : ''}">${how(t)}</td><td class="soft">${t.mode === 'sandbox' ? 'sandbox' : ''}</td></tr>`;
     }).join('');
     const all = o ? o.landings.length : 0, known = pr ? pr.known.length : 0;
     const counts = `${seen.lakes.length} ${plural(seen.lakes.length, 'lake')}, ${seen.camps.length} ${plural(seen.camps.length, 'campsite')} and ${seen.portages.length} ${plural(seen.portages.length, 'portage')} seen${pr ? `; ${known} of ${all} outfitters known` : `, ${seen.eps.length} ${plural(seen.eps.length, 'landing')}`}.`;
@@ -371,7 +372,7 @@ export class Journal {
     const reach = v.sandbox ? `${word(nL)} of the ${v.reach.toLocaleString('en-US')} named` : v.reach ? (v.onSheets === nL ? `${word(nL)} of the ${v.reach} on your sheets` : `${word(nL)} paddled · ${word(v.onSheets)} of the ${v.reach} on your sheets`) : `${word(nL)} paddled`;
     rows.push(['Lakes', nL ? `<span class="rec-n">${reach}</span><br>${v.lakes.map((l) => esc(l.name)).join(' · ')}` : none]);
     // the species, the best of each
-    rows.push(['Fish', v.fish.length ? `<table class="rec-fish"><tbody>${v.fish.map((f) => `<tr><td>${esc(f.name)}</td><td>${f.best ? `${f.best.cm} cm` : ''}</td><td class="soft">${f.best && f.best.lake ? esc(f.best.lake) : ''}</td><td class="soft">${f.n > 1 ? `×${f.n}` : ''}</td></tr>`).join('')}</tbody></table>` : none]);
+    rows.push(['Fish', v.fish.length ? `<table class="rec-fish"><tbody>${v.fish.map((f) => `<tr><td>${esc(f.name)}</td><td>${f.best ? `${fmtIn(f.best.cm)}` : ''}</td><td class="soft">${f.best && f.best.lake ? esc(f.best.lake) : ''}</td><td class="soft">${f.n > 1 ? `×${f.n}` : ''}</td></tr>`).join('')}</tbody></table>` : none]);
     const crossed = v.portages.reduce((a, p) => a + (p.n || 1), 0);
     rows.push(['Portages', v.portages.length ? `<span class="rec-n">${word(crossed)} crossed${v.rods ? ` · ${v.rods} rods` : ''}</span><br>${v.portages.map((p) => `${esc(p.name)}${p.rods ? `, ${p.rods} rods` : ''}${(p.n || 1) > 1 ? ` ×${p.n}` : ''}`).join('<br>')}` : none]);
     rows.push(['Seen', v.seen.length ? v.seen.map((q) => esc(q.words)).join(' · ') : none]);

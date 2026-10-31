@@ -92,7 +92,7 @@ export function tentSteps(item, stage = 0) {
 const minutesLeft = (item, stage) => tentOf(item).pitch.slice(stage).reduce((s, ph) => s + ph.minutes, 0);
 const bearingOf = (dx, dz) => ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round((((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360) / 45) % 8]; // (+z is south)
 const low = (s) => (/^[A-Z]-/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)); // ("A-poles" keeps its capital)
-const far = (d) => (d < 1000 ? `${Math.max(10, Math.round(d / 10) * 10)} m` : `${(d / 1000).toFixed(1)} km`);
+const far = (d) => { const f = d * 3.28084; return f < 1000 ? `${Math.max(30, Math.round(f / 10) * 10)} ft` : `${(d / 1609.344).toFixed(1)} mi`; }; // (imperial on screen)
 // camp.js tentActions() (your tent's two keys on the dot) with their checklists: E Carry on pitching / Put the fly on with
 // the steps and the minutes to go; Q Rest until… with no fly says what the fly is for; Strike the steps back down
 export function withTentNeeds(camp, ta) {

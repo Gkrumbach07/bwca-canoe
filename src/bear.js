@@ -511,7 +511,7 @@ class Bear {
       const sp = (far ? this.spotNear(at.x, at.z, 2.5, 5, rng, toward) : this.spotNear(at.x, at.z, 0.6, 1.6, rng, toward)) || { x: at.x, z: at.z };
       putAt(sp, 'knocked');
       const d = Math.round(Math.hypot(sp.x - at.x, sp.z - at.z));
-      return `The ${name} lies on its side ${d >= 2 ? `${WORDS[d] || d} metres off ` : ''}in the brush, the lid still on, tooth holes through it.`;
+      return `The ${name} lies on its side ${d >= 2 ? `${Math.round(d * 3.28084 / 5) * 5 || d * 3} feet off ` : ''}in the brush, the lid still on, tooth holes through it.`;
     }
     const sp = this.spotNear(at.x, at.z, g.kind === 'tent' ? 3 : g.kind === 'canoe' ? 2 : 0.5, g.kind === 'tent' ? 6 : g.kind === 'canoe' ? 3.5 : 1.6, rng, toward) || { x: at.x + 1, z: at.z };
     putAt(sp, 'torn');

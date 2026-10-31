@@ -186,10 +186,10 @@ function register(it) {
   const e = it.effect || {};
   ITEMS[it.id] = { label: it.name, ...(it.slot ? { slot: it.slot } : {}), ...(Number.isFinite(e.sleep) ? { sleep: e.sleep } : {}), note: it.note || shortWords(it) };
 }
-const NOTE = { bentshaft: 'easier on the shoulders, a touch quicker', carbon: 'light and quick', royalex: 'steady in a sea', kevlar: '20 kg on the portages', pack2: 'room for more food; two carries',
+const NOTE = { bentshaft: 'easier on the shoulders, a touch quicker', carbon: 'light and quick', royalex: 'steady in a sea', kevlar: '44 lb on the portages', pack2: 'room for more food; two carries',
   barrel: 'two weeks of food', yokepads: 'an easier carry', dome: 'a whole night’s sleep', fourseason: 'sleeps well; dries the gear', pad: 'a better night', pump: 'drinkable at once', gravity: 'fills itself at camp',
   rod: 'the line holds longer', saw: 'firewood in no time', camera: 'for the photo notices', 'lure:silverminnow': 'weedless', 'lure:lazyike': 'walleye, slow',
-  rodpro: 'feels every tap', bag3: 'good to −4 °C', bagdown: 'good to −9 °C', padair: 'a warmer night', headlamp2: 'a 40 m beam', headlamp3: 'a 55 m beam', packdry: 'stays dry', rainjacket: 'dry in the rain', headnet: 'keeps the bugs off', stove: 'supper without a fire' }; // (content C)
+  rodpro: 'feels every tap', bag3: 'good to 25 °F', bagdown: 'good to 16 °F', padair: 'a warmer night', headlamp2: 'a 130 ft beam', headlamp3: 'a 180 ft beam', packdry: 'stays dry', rainjacket: 'dry in the rain', headnet: 'keeps the bugs off', stove: 'supper without a fire' }; // (content C)
 function shortWords(it) { return NOTE[it.id] || ''; }
 for (const it of [...Object.values(BASE), ...CATALOG]) if (!it.use) register(it);
 // the catalogue's things as items (inv-ui.js: the stand-in's, or stream A's)

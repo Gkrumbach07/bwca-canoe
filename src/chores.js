@@ -939,7 +939,7 @@ export class Chores {
     const q = {
       verb: 'Cut a pole', held: true, why: !saw ? 'Cut a pole: needs the saw' : pl > 0 ? null : 'Two poles cut from it today already',
       needs: [sawNeed, { label: 'Poles left in it today', have: pl, need: POLES_A_LOG, unit: 'poles' }],
-      next: !saw ? getSaw : pl > 0 ? 'Hold Q: a straight two-metre pole off its top, 6 min' : 'Another down log, or dead poles lying under the trees',
+      next: !saw ? getSaw : pl > 0 ? 'Hold Q: a straight six-foot pole off its top, 6 min' : 'Another down log, or dead poles lying under the trees',
       run: (o) => this.beginPoleCut(log.o, k, keys(o)),
     };
     const hint = left ? `${word(left)} short ${plural(left, 'log')} in it` : 'sawn up';

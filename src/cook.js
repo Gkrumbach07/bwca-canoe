@@ -301,7 +301,7 @@ export class Cook {
     return def.cooksTo || { 'meal:supper': 'hot:supper', 'meal:breakfast': 'hot:breakfast', 'meal:freeze': 'hot:freeze' }[def.id] || 'hot:supper'; // (content C: a meal's own hot one, items.js cooksTo)
   }
   nameOf(def, data = null) {
-    if (def.kind === 'fish') return `${data && data.length ? `${Math.round(data.length)} cm ` : ''}${def.name.toLowerCase().replace(/^northern /, '')}`;
+    if (def.kind === 'fish') return `${data && data.length ? `${Math.round(data.length * 0.393701)}-inch ` : ''}${def.name.toLowerCase().replace(/^northern /, '')}`;
     return { 'meal:supper': 'rice and lentils', 'meal:breakfast': 'oatmeal', 'meal:freeze': 'freeze-dried supper' }[def.id] || def.name.toLowerCase();
   }
 

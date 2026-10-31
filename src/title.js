@@ -33,7 +33,7 @@ const KEYMAP = [
     [['W', 'A', 'S', 'D'], 'afloat: W and S paddle forward and back, A and D turn the hull while held, as sweep strokes · on foot: walk where you look, W toward it, S back, A and D strafe · past your depth: swim'],
     [['mouse'], 'look: the first key or click takes the mouse and it turns you at once (on foot the dot sits in the middle of the view); behind the canoe, drag to orbit, wheel to zoom'],
     [['Shift'], 'jog on foot · hustle afloat · a hard stroke swimming'],
-    [['Space'], 'afloat: brace in a sea (you cannot paddle while bracing) · on foot, walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m, otherwise a hop; with the canoe overhead you only stagger · swimming: climb out onto a rock, a dock or the bank'],
+    [['Space'], 'afloat: brace in a sea (you cannot paddle while bracing) · on foot, walking into it: vault a log or a low rock, climb a rock or a ledge up to about 6 ft, otherwise a hop; with the canoe overhead you only stagger · swimming: climb out onto a rock, a dock or the bank'],
     [['E'], 'afloat: go ashore at any bank and at a portage landing alike · at an outfitter’s dock, tie up and step up onto the deck · right the canoe after a capsize'],
   ]],
   ['E and Q: the dot', [

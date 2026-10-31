@@ -33,6 +33,7 @@
 //                                               uses, weight)
 //   invUI.attach({ inventory, profile, player, energy, hud, shop, outfitter, nearby, hold, audio, journal, packs, cards, day })
 import './inv-ui.css';
+import { fmtLb, fmtIn, fmtDist, fmtMphKmh } from './units.js';
 
 // --- the model ----------------------------------------------------------------------------------------------------
 // Stream A's items, when they are in the build (an eager glob: no import fails without them). items.js must not import
@@ -163,7 +164,7 @@ const times = (v) => `×${+(+v).toFixed(2)}`;
 export function effectOnYou(f, { paddle = false } = {}) {
   if (!f) return [];
   const out = [];
-  if (paddle && Number.isFinite(f.cruise)) out.push({ label: 'Cruise', value: `${(4.0 * f.cruise).toFixed(1)} km/h` }); // (as items.js says the paddles: 4.0 km/h the ash)
+  if (paddle && Number.isFinite(f.cruise)) out.push({ label: 'Cruise', value: fmtMphKmh(4.0 * f.cruise) }); // (as items.js says the paddles: 4.0 km/h the ash)
   else if (Number.isFinite(f.cruise) && f.cruise !== 1) out.push({ label: 'Cruise', value: times(f.cruise) });
   if (Number.isFinite(f.effort) && f.effort !== 1) out.push({ label: 'Effort', value: times(f.effort) });
   if (Number.isFinite(f.stability) && f.stability !== 1) out.push({ label: 'Steady', value: times(f.stability) });
@@ -220,7 +221,7 @@ export function weightOf(c) {
   for (const e of c.grid || []) { if (e.box) continue; const d = itemDef(e.id); kg += (d ? d.kg || 0 : 0) * (e.qty || 1); }
   return kg;
 }
-export const kgText = (kg) => (kg < 1 ? `${Math.round(kg * 1000)} g` : `${kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`);
+export const kgText = (kg) => fmtLb(kg); // (the name kept: pounds and ounces now, from kg)
 // a load in words: light, fair, heavy, a real load
 export function loadWords(kg) {
   if (kg < 0.05) return 'nothing to speak of';
@@ -974,7 +975,7 @@ class Grid {
     it.appendChild(mk('span', 'ig-nm', esc(short(d) || e.id)));
     const st = d ? d.stack || 1 : 1;
     if ((e.qty || 1) > 1 || st > 1) it.appendChild(mk('span', 'ig-qty', String(e.qty || 1)));
-    if (e.data && Number.isFinite(e.data.length)) it.appendChild(mk('span', 'ig-qty ig-len', `${Math.round(e.data.length)} cm`)); // (tuning, the content join's leftover: a line above the raw or eat mark, not on it)
+    if (e.data && Number.isFinite(e.data.length)) it.appendChild(mk('span', 'ig-qty ig-len', fmtIn(e.data.length))); // (tuning, the content join's leftover: a line above the raw or eat mark, not on it)
     // fb4 B (decision 2): a thing with a state says so on its icon (wet, drying, treating, cooking, burning, hot, low,
     // empty, ready: stream C's inventory.status), in place of the eat or raw mark
     const stt = !shelf ? statusOf(e) : null;
@@ -1549,7 +1550,7 @@ function whereWords(c, byId) {
   if (c.where === 'in') { const p = byId && byId.get(c.in); return p ? `in the ${lower(short(itemDef(p.item)) || nameOf(p))}` : 'inside'; }
   if (c.item === 'crate') return 'what is left with them';
   const p = ctx.player, w = c.item === 'pile' ? 'on the ground' : c.where === 'hands' ? (c.hand === 1 ? 'in your left hand' : 'in your right hand') : WHERE[c.where] || c.where || '';
-  if ((c.where === 'ground' || c.where === 'hung') && c.at && p) { const d = Math.hypot(c.at.x - p.x, c.at.z - p.z); return `${w}${d > 1.2 ? `, ${Math.round(d)} m off` : ''}`; }
+  if ((c.where === 'ground' || c.where === 'hung') && c.at && p) { const d = Math.hypot(c.at.x - p.x, c.at.z - p.z); return `${w}${d > 1.2 ? `, ${fmtDist(d)} off` : ''}`; }
   return w;
 }
 
@@ -1694,7 +1695,7 @@ export function tipHtml(d, e, { shelf = false } = {}) {
   // (content join: a fish weighs what its length makes it, as the pack counts it: an 18 cm crappie read 800 g)
   const fishW = d.kind === 'fish' && e.data && e.data.length && A_ITEMS && typeof A_ITEMS.fishKg === 'function' ? A_ITEMS.fishKg(d.species || String(e.id || d.id).slice(5), e.data.length) : null;
   const kg = e.data && Number.isFinite(e.data.kg) ? e.data.kg * (e.qty || 1) : Number.isFinite(fishW) ? fishW * (e.qty || 1) : (d.kg || 0) * (e.qty || 1), st = d.stack || 1;
-  const name = `${d.name}${e.data && e.data.length ? `, ${Math.round(e.data.length)} cm` : ''}`;
+  const name = `${d.name}${e.data && e.data.length ? `, ${fmtIn(e.data.length)}` : ''}`;
   const identity = typeof d.identity === 'string' ? d.identity : e.hull ? 'A canoe' : '';
   const stt = !shelf ? statusOf(e) : null;
   const all = (Array.isArray(d.onYou) ? d.onYou : []).filter(Boolean);
@@ -2031,7 +2032,7 @@ export class MineSide {
     if (stash) tabs.push({ key: 'keeping', kind: 'keeping', label: 'Keeping', sub: 'at the outfitter’s' });
     for (const { c, label } of labelled(ground, AROUND_NAMES, AROUND_TWO)) {
       const t = top(c), d = c.at && p ? Math.hypot(c.at.x - p.x, c.at.z - p.z) : 0;
-      tabs.push({ key: c.id, kind: 'ground', c, label, sub: c.where === 'in' ? `in the ${lower(AROUND_NAMES[t.item] || short(itemDef(t.item)) || 'pack')}` : d > 1.2 ? `${Math.round(d)} m off` : 'on the ground' });
+      tabs.push({ key: c.id, kind: 'ground', c, label, sub: c.where === 'in' ? `in the ${lower(AROUND_NAMES[t.item] || short(itemDef(t.item)) || 'pack')}` : d > 1.2 ? `${fmtDist(d)} off` : 'on the ground' });
     }
     const pcs = woodpiles.reduce((n, c) => n + (c.grid || []).reduce((k, e) => k + (e.qty || 1), 0), 0) + pieces.length;
     if (foot && (woodpiles.length || pieces.length)) tabs.push({ key: 'wood', kind: 'wood', label: 'Wood', sub: `${pcs} ${pcs === 1 ? 'piece' : 'pieces'}` });
