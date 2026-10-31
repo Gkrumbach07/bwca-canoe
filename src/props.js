@@ -10,6 +10,7 @@ import { gridReader, trailMireAt, BOARDWALK } from './land.js'; // the wetlands 
 import LANDINGS_DATA from './landings.json';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
+import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, beaver dams and lodges
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
@@ -47,6 +48,8 @@ export function exclusionsFor(world) {
   for (const p of world.portages) { const pts = rounded(p.pts); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
   for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, -36]); // the mown yard around an outfitter's dock
+  // the brooks' stony beds (creeks.js): the trees and brush kept off the line the bed is drawn on
+  if (world.creeks) for (const b of world.creeks.brooks) { const pts = rounded(b.pts); for (let i = 1; i < pts.length; i++) if (pts[i - 1][0] !== pts[i][0] || pts[i - 1][1] !== pts[i][1]) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], BROOK.clear]); } // (never a point: site.js reads those as campsites)
   return segs;
 }
 
@@ -135,6 +138,8 @@ export function* tilePropsSteps(tg, world, tx, ty) {
 
   const ledges = [[], []]; // the ledge rocks' matrices, flats and slanted
   for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
+
+  yield* tileCreeks(ctx, group, pieces, rounded); // the brooks' beds, the beaver dams and lodges (creeks.js)
 
   const built = propMesh(pieces);
   if (built) group.add(built);
@@ -254,7 +259,7 @@ class TrailDecal {
 }
 // The polyline with its corners rounded off (a fillet up to 2 m along each leg), so the path bends instead
 // of kinking and its rows never fold over on the inside of a turn (the vegetation's exclusion follows the same line).
-function rounded(pts) {
+export function rounded(pts) {
   if (pts.length < 3) return pts;
   const out = [pts[0]];
   for (let i = 1; i < pts.length - 1; i++) {
