@@ -59,6 +59,33 @@ export const KIND_LAND = [
   { wet: 0.9, meadow: 0.85, trees: 0.02, sphag: 0.2 },      // 13 open water the bake has as land: a pond, a beaver flowage
 ];
 
+// ---- underfoot: the wetlands as walked (the owner, 2026-10-31: "When I'm in a swamp, it shouldn't be like I'm walking
+// over a nice rocky trail ... I'm walking down the side of a river where I imagine it should be pretty boggy, and I'm
+// running across it like I'm portaging") ---------------------------------------------------------------------------
+// MIRE: how soft each kind is underfoot, 0 firm .. 1 a quaking open bog or a marsh: the walk slows, the boots sink and
+// squelch (player.js), the ground shows standing water (terrain.js), and a portage across it is mud, or puncheon
+// (split-log boardwalk) where it is softest (props.js). The swamps with trees stand on roots and hummocks: softer
+// than the woods, firmer than the open bog.
+export const MIRE = [0, 0, 1, 0.6, 0.55, 0.9, 0.5, 0.45, 1, 1, 0, 0, 0, 0.85];
+// where a portage is laid with puncheon rather than walked through the muck (a trail's mire, smoothed, over this)
+export const BOARDWALK = 0.78;
+// Ontario's forest map stands for the ground kinds where nothing was surveyed (site.js landData's OPEN_KIND)
+const OPEN_KIND = { 13: KIND.openBog, 14: KIND.wetMeadow, 15: KIND.shrubSwamp, 16: KIND.marsh, 17: KIND.wetMeadow };
+// the mire at a point, from read(name, x, z): a v4 channel's byte there (World.chAt, or gridReader below)
+export function mireAt(read, x, z) {
+  let kd = read('ground', x, z);
+  if (!kd) kd = OPEN_KIND[read('forest', x, z)] || 0;
+  return MIRE[kd] || 0;
+}
+export const gridReader = (grid) => { const L = landOf(grid); return L ? (n, x, z) => (L[n] ? L[n][grid.local(grid.cellI(x), grid.cellJ(z))] : 0) : () => 0; };
+// a portage's mire at its point i (pts: its rows), over the rows within reach (a 10 m cell is 6 rows of 1.6 m), so the
+// mud and the puncheon start and stop with the wet ground and not with each cell
+export function trailMireAt(read, pts, i, reach = 3) {
+  let s = 0, n = 0;
+  for (let k = Math.max(0, i - reach); k <= Math.min(pts.length - 1, i + reach); k++) { s += mireAt(read, pts[k][0], pts[k][1]); n++; }
+  return n ? s / n : 0;
+}
+
 // ---- the forest types (d1-forest-rock's legend) ------------------------------------------------------------------
 // Each tree type's species mix, in placement.js SPECIES names (spruce = white spruce and balsam fir; tallPine = the old
 // white pine over the canopy; ash = black ash), from the NatureServe descriptions behind the EVT classes (forest-rock

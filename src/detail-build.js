@@ -12,7 +12,7 @@
 //   - a skirt hangs from the chunk's edge to close the slits where two lattices meet (the T-junctions of a 2 m edge
 //     against a 5 m one, a one-unit difference between neighbours' shared samples)
 import { lerp, smoothstep } from './rng.js';
-import { meshHeightAt, groundPre, bedPre, bedGrain, splatAt } from './terrain-build.js';
+import { meshHeightAt, groundPre, bedPre, bedGrain, splatAt, landW } from './terrain-build.js';
 
 const HEADER = 56, MAGIC = 0x43445742; // 'BWDC' (scripts/detail-bake.mjs)
 const DEEP = 30; // metres from the shore past which a 10 m quad of lake bed is drawn as the 10 m mesh draws it
@@ -224,7 +224,7 @@ export function buildChunk(grid, site, shade, G, P, cell0) {
     } else pre.depth = -1;
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
     for (let k = 0; k < 4; k++) { sa[v * 4 + k] = q8(wA[k]); sb[v * 4 + k] = q8(wB[k]); sc[v * 4 + k] = q8(wC[k]); fl[v * 4 + k] = q8(wf[k]); }
-    if (lnd) { lnd[v * 4] = s8(pre.tR - 1); lnd[v * 4 + 1] = s8(pre.tG - 1); lnd[v * 4 + 2] = s8(pre.tB - 1); lnd[v * 4 + 3] = sd < 0 ? 0 : s8(pre.sphag); }
+    if (lnd) { lnd[v * 4] = s8(pre.tR - 1); lnd[v * 4 + 1] = s8(pre.tG - 1); lnd[v * 4 + 2] = s8(pre.tB - 1); lnd[v * 4 + 3] = s8(landW(pre, sd)); }
   }
   // the skirt: a strip hung SKIRT metres down from each edge, painted and lit as the edge, both windings
   const S = SKIRT[r] || 2, drop = new Map(), skirtTris = [];

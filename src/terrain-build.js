@@ -87,6 +87,9 @@ const sunnyField = (x, z) => fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few b
 // convex edge above a wall where the bare rock runs out over the top; both read only near the steep cells.
 // d2 land: and from the survey where the tile has it (site.js landData), else as before: meadow (-1: the noise's meadowAt),
 // sphag (the bog's sphagnum, 0..1) and the bedrock's tint of the rock (tR, tG, tB; 1 = the granite as drawn)
+// d2 land: aLand's w, the sphagnum (0..1) where there is any, else minus how much water stands on the ground (the marsh's
+// and the swamp's: their wetness over 0.62, site.js wet), for terrain.js's pools; 0 under water and in the dry woods
+export const landW = (pre, sd) => (sd < 0 ? 0 : pre.sphag > 0.05 ? pre.sphag : -smoothstep(0.62, 0.95, pre.wet));
 export function groundPre(grid, x, z, sd, site, pre) {
   pre.sd = sd;
   pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z);
@@ -390,7 +393,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     } else pre.depth = -1;
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
     for (let k = 0; k < 4; k++) { sa.push(q8(wA[k])); sb.push(q8(wB[k])); sc.push(q8(wC[k])); fl.push(q8(wf[k])); }
-    if (lnd) lnd.push(s8(pre.tR - 1), s8(pre.tG - 1), s8(pre.tB - 1), sd < 0 ? 0 : s8(pre.sphag));
+    if (lnd) lnd.push(s8(pre.tR - 1), s8(pre.tG - 1), s8(pre.tB - 1), s8(landW(pre, sd)));
   };
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));

@@ -1,5 +1,6 @@
 import { FLOAT_OFFSET, LENGTH } from './canoe.js';
-import { resample } from './props.js';
+import { resample, PUNCHEON_TOP } from './props.js';
+import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
 import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
@@ -100,6 +101,13 @@ function seaAngle(a) {
 const LANDING_RADIUS = 28;
 const ASHORE_RADIUS = 6;      // metres of water between the hull and a shore within which you can step out
 const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like the trail
+// The wetlands underfoot (land.js MIRE; the owner, 2026-10-31: "When I'm in a swamp, it shouldn't be like I'm walking
+// over a nice rocky trail"): at a mire of 1 (an open bog, a marsh) the walk is slowed by `slow` (the trail's mud by
+// `trail`), the boots sink `sink` metres into the moss (half that in a trail's mud), and the gait lifts the knees and
+// sways (poses.js state.mire). On a trail's puncheon (props.js) the going is firm and the feet stand on the boards.
+const MIRE_WALK = { slow: 0.42, trail: 0.25, board: 0.04, sink: 0.13, ease: 2.5 };
+// what the HUD calls wet ground off the trails, by ground kind
+const MIRE_PLACE = { [KIND.openBog]: 'Open bog', [KIND.coniferBog]: 'Spruce bog', [KIND.shrubSwamp]: 'Alder swamp', [KIND.marsh]: 'Marsh', [KIND.wetMeadow]: 'Wet meadow', [KIND.hardwoodSwamp]: 'Ash swamp', [KIND.water]: 'Beaver flowage' };
 const TRAIL_TO_WATER = 2.5;   // tuning: a trail's end farther than this up the bank runs on down to the waterline (trailFor)
 const TRAIL_PUT_MAX = 30;     // tuning: and no farther than this from the end to the waterline (a sanity bound: the Hudson–Lake Four end is 19 m)
 const HULL_REACH = 3;         // metres from a canoe on the ground within which you can shoulder or launch it
@@ -229,7 +237,35 @@ export class Player {
     return Math.hypot(one(d(e, 0), d(-e, 0)), one(d(0, e), d(0, -e)));
   }
   // the ground under a foot of the walker's (canoe.js plants the feet on it)
-  footGround(x, z) { const ft = this.foot; return ft && ft.near && this.onFoot ? this.supportAt(x, z, ft.y + STEP_UP, ft.near) : this.groundAt(x, z); }
+  footGround(x, z) {
+    const ft = this.foot;
+    if (!(ft && ft.near && this.onFoot)) return this.groundAt(x, z);
+    const s = this.supportAt(x, z, ft.y + STEP_UP, ft.near), M = this.mire;
+    // the wetlands: the feet sink into the moss and the muck, or stand on the puncheon (on the bare ground only: a rock
+    // or a log underfoot holds them up as ever)
+    return M && M.sink && s <= this.groundAt(x, z) + 0.02 ? s - M.sink : s;
+  }
+  // The wetlands underfoot this frame (land.js MIRE), eased: { k soft 0..1, board on a trail's puncheon, sink metres,
+  // kind the ground kind }. On a portage the trail's own (smoothed along it, as props.js lays its mud and its puncheon).
+  updateMire(dt, trail) {
+    const w = this.world, M = this.mire || (this.mire = { k: 0, board: false, sink: 0, kind: 0, onTrail: false });
+    if (!w.chAt) return M;
+    const read = this._mireRead || (this._mireRead = (n, x, z) => w.chAt(n, x, z));
+    let want = mireAt(read, this.x, this.z), board = false;
+    const pts = trail && trail.def.trailPts;
+    if (pts && pts.length) {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < pts.length; i++) { const dx = pts[i][0] - this.x, dz = pts[i][1] - this.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; bi = i; } }
+      const tm = trailMireAt(read, pts, bi);
+      if (trail.dist < 1.6) { want = tm; board = tm >= BOARDWALK && trail.dist < 0.75 && bi < pts.length - 1; }
+    }
+    M.k += (want - M.k) * (1 - Math.exp(-dt * MIRE_WALK.ease));
+    M.board = board; M.onTrail = !!trail && trail.dist < 1.6;
+    M.kind = w.chAt('ground', this.x, this.z);
+    const sinkWant = board ? -PUNCHEON_TOP : MIRE_WALK.sink * M.k * (M.onTrail ? 0.5 : 1);
+    M.sink += (sinkWant - M.sink) * (1 - Math.exp(-dt * (board ? 12 : 3)));
+    return M;
+  }
 
   trailFor(p) {
     let t = this.trailCache.get(p);
@@ -1296,6 +1332,8 @@ export class Player {
     const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
     const campArea = camp || this.nearCampsite(this.x, this.z, CAMP_AREA); // fb3 A: a site's area walks at life (pace.js)
     this.onTrail = onTrail; this.campsite = camp;
+    const mire = this.updateMire(dt, onTrail ? trail : null);
+    st.mire = mire.board ? 0 : mire.k; // (poses.js: the knees up out of the muck, the sway)
     const cls = GROUND[(w.coverCell(w.cellI(this.x), w.cellJ(this.z)) >> 16) & 255];
     let note = null, moving = false, mx = 0, mz = 0, nx = this.x, nz = this.z, swimNow = false, stepUp = -1;
     const f = this.forward;
@@ -1360,7 +1398,8 @@ export class Player {
         }
       }
       if (!started) {
-        const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade;
+        const soft = 1 - (mire.board ? MIRE_WALK.board : mire.onTrail ? MIRE_WALK.trail : MIRE_WALK.slow) * mire.k; // the wetlands' going
+        const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade * soft;
         this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
         // one speed (pace.js footSeen): the walker time-lapsed so he is seen at the speed of where he is, whatever the
         // load: a carry (8 m/s), a trail on foot (5), open land (3.5), a campsite's area, a store and its yard (3), and
@@ -1525,7 +1564,7 @@ export class Player {
     // where you are, for the HUD header
     if (camp) { const id = this.nearWater(camp.x, camp.z, 6); this.placeName = camp.name ? `${camp.name} campsite` : `Campsite${id ? ' · ' + (w.lakeName(id) || 'unnamed water') : ''}`; }
     else if (onTrail) this.placeName = trail.def.name;
-    else { const id = this.nearWater(this.x, this.z, 8); this.placeName = id ? `${w.lakeName(id) || 'Unnamed water'} shore` : (cls === 'burn' && burnPlace(this.x, this.z)) || LAND[cls] || 'The woods'; }
+    else { const id = this.nearWater(this.x, this.z, 8); this.placeName = id ? `${w.lakeName(id) || 'Unnamed water'} shore` : (cls === 'burn' && burnPlace(this.x, this.z)) || (mire.k > 0.3 && MIRE_PLACE[mire.kind]) || LAND[cls] || 'The woods'; }
     let trailText = null;
     if (onTrail) {
       const p = this.trailPoint(trail.trail, trail.along);

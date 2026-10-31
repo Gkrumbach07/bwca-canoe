@@ -352,6 +352,8 @@ export function makeGait(body) {
   const ground = body.ground;
   let crouchK = 0; // state.crouch, eased: the hips sink over the planted feet (the knees forward), the back bends over
   let wadeK = 0;   // wading (player.move 'wade'), eased: the knees lifted high out of the water, the arms out from the sides
+  let mireK = 0;   // the wetlands underfoot (player.js state.mire, 0..1), eased: each boot pulled up out of the muck (a higher
+                   // knee, a slower step), the body rolling over the foot that takes it and the arms a little out for balance
   const loco = { init: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, feet: {}, rigPos: V(), h: 0, grade: 0, tilt: 0, want: HIP_H - 0.05 };
   for (const h of ['L', 'R']) loco.feet[h] = { pos: V(), yaw: 0, lift: V(), liftYaw: 0, target: V(), targetYaw: 0, swing: false, s: 0, dur: 0.3, cyc: -1, planted: 1, clear: 0.05, slope: 0, pitch: 0 };
   const toWorld = (local, out = V()) => { const h = rig.rotation.y, c = Math.cos(h), s = Math.sin(h); return out.set(rig.position.x + local.x * c + local.z * s, rig.position.y + local.y, rig.position.z - local.x * s + local.z * c); };
@@ -431,6 +433,7 @@ export function makeGait(body) {
     if (state.air && !carry) { loco.rigPos.copy(rig.position); loco.h = rig.rotation.y; return airFeet(dt); }
     if (!loco.init || loco.air || rig.position.distanceTo(loco.rigPos) > 1.5) { initFeet(); loco.air = false; }
     loco.rigPos.copy(rig.position); loco.h = rig.rotation.y;
+    mireK += ((state.mire || 0) - mireK) * damp(3, dt);
     const v = Math.max(0, state.speed);
     const mf = state.moveFwd, ml = state.moveLat, mag = Math.hypot(mf, ml);
     const moving = state.walkSpeed > 0.25 && v > 0.12 && mag > 0.1;
@@ -449,13 +452,15 @@ export function makeGait(body) {
     // times too quick, so every step came out some 0.45 m long and a 4.8 km/h walk read as a shuffle at half that:
     // the owner, 2026-10-23, "you say its 4.8 but it feels like 2.4".)
     let c, fs, clear;
-    if (carry) { c = 0.55 + 0.3 * v; fs = 0.6; clear = 0.05 + 0.02 * sp; }
+    if (carry) { c = 0.55 + 0.3 * v; fs = 0.6; clear = 0.05 + 0.02 * sp + 0.06 * mireK; }
     else {
       // the jog upright, the knee lifting lightly: a shorter flight and a lower swing than the sprinter's it had been
       c = lerp(0.6 + 0.24 * v, 1.2 + 0.08 * v, jog);
       fs = lerp(lerp(0.58, 0.5, hustle), 0.36, jog);
-      clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.16, jog) + 0.12 * wadeK;
+      clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.16, jog) + 0.12 * wadeK + 0.09 * mireK;
     }
+    c *= 1 - 0.14 * mireK; // (the muck: fewer, heavier steps; player.js slows the walk itself)
+    fs = Math.min(0.7, fs + 0.06 * mireK); // (and longer on each foot)
     c *= 1 + 0.2 * Math.abs(mz);
     // world velocity of the body, for where a swinging foot will land
     const h = rig.rotation.y, ch = Math.cos(h), shh = Math.sin(h);
@@ -638,11 +643,11 @@ export function makeGait(body) {
     loco.hipY = Math.min(loco.hipY, cap + 0.008); // never past what the planted legs reach
     loco.hipW = loco.hipY + ry;
     // standing: the weight drifts slowly from foot to foot, the hips rolling a touch over the one that takes it
-    const swayZ = lerp(0.014 * Math.sin(idle.shift), -0.024 * sp * Math.sin(twoPi * (phi - 0.03)), mw);
-    const roll = lerp(-0.025 * Math.sin(idle.shift), 0.06 * sp * Math.sin(twoPi * (phi - 0.03)), mw);
+    const swayZ = lerp(0.014 * Math.sin(idle.shift), -(0.024 * sp + 0.03 * mireK) * Math.sin(twoPi * (phi - 0.03)), mw);
+    const roll = lerp(-0.025 * Math.sin(idle.shift), (0.06 * sp + 0.07 * mireK) * Math.sin(twoPi * (phi - 0.03)), mw);
     const pYaw = -0.11 * sp * Math.cos(twoPi * phi) * (g.backF ? -1 : 1);
     // the jog upright: a few degrees forward of the walk, no more
-    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog + SLOPE.lean * smooth(0.05, SLOPE.full, loco.grade)) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK
+    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog + SLOPE.lean * smooth(0.05, SLOPE.full, loco.grade)) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK + 0.04 * mireK
       + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck;
     const fy = fz ? 0.35 * (fz.yaw || 0) : 0, fl = fz ? 0.6 * (fz.lean || 0) : 0, fh = fz ? -0.18 * (fz.look || 0) : 0;
     const pelvis = bodyQ(yaw + pYaw + 0.25 * fy, 0.03 + lean * 0.3, roll);
@@ -676,7 +681,7 @@ export function makeGait(body) {
       const held = state.held && state.held[k] ? 1 : 0;
       const sw = A * (1 - 0.6 * held) * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd * (1 - 0.5 * held) + (k === 'L' ? work : -work) * (1 - held);
       const sh = J['arm' + k].p;
-      const du = V(Math.sin(sw), -Math.cos(sw), sg * (0.13 + 0.55 * wadeK)).normalize().applyQuaternion(cq);
+      const du = V(Math.sin(sw), -Math.cos(sw), sg * (0.13 + 0.55 * wadeK + 0.18 * mireK)).normalize().applyQuaternion(cq);
       const df = V(Math.sin(sw + bend * (1 - 0.7 * held)), -Math.cos(sw + bend * (1 - 0.7 * held)), sg * (0.06 + 0.3 * wadeK)).normalize().applyQuaternion(cq);
       const elbow = sh.clone().addScaledVector(du, 0.315);
       const target = elbow.clone().addScaledVector(df, 0.265 + 0.07);
@@ -728,7 +733,7 @@ export function makeGait(body) {
   function heal() {
     Object.assign(loco, { init: false, air: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, grade: 0, tilt: 0, want: HIP_H - 0.05 });
     for (const k of ['L', 'R']) Object.assign(loco.feet[k], { swing: false, s: 0, dur: 0.3, cyc: -1, planted: 1, slope: 0, pitch: 0 });
-    crouchK = 0; wadeK = 0;
+    crouchK = 0; wadeK = 0; mireK = 0;
   }
 
   return { loco, fq, tq, ankles, toWorld, toLocal, restLocal, flatDist, ankleAt, footFrameQ, reachOf, locomote, standingBody, swingArms, walk, carry, heal };
