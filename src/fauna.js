@@ -166,6 +166,21 @@ class Beavers {
   // yielding every few candidates, so the scan spreads it over frames (evaluate runs it at once, for force()).
   *lodgeGen(ci, cj, forced = false) {
     const w = this.f.world, rng = mulberry32((hash2(ci, cj, 41) * 4294967296) >>> 0);
+    // the wetlands round: with the release's beaver dams (creeks.js), the beavers live in the real lodges, those that
+    // stand in water the canoe can reach (props.js builds the lodge itself; this one draws only the beaver)
+    if (w.creeks && !forced) {
+      const x0 = w.originX + ci * LODGE_CELL, z0 = w.originZ + cj * LODGE_CELL;
+      for (const d of w.creeks.damsIn(x0 - 200, z0 - 200, x0 + LODGE_CELL + 200, z0 + LODGE_CELL + 200)) {
+        if (!d.lodge || d.old) continue;
+        const [x, z] = d.lodge;
+        if (x < x0 || x >= x0 + LODGE_CELL || z < z0 || z >= z0 + LODGE_CELL) continue;
+        if (!w.isReady(x, z)) return undefined;
+        if (w.shoreAt(x, z) > -1.5) continue;
+        deeper(w, x, z, _d);
+        return { x, z, yaw: headingOf(_d.x, _d.z), level: w.levelAt(x, z), key: `${ci},${cj}`, real: true };
+      }
+      return null;
+    }
     if (!forced && rng() > 0.6) return null;
     const cands = [];
     for (let k = 0; k < 40; k++) {
@@ -270,7 +285,7 @@ class Beavers {
     this.scanT -= dt;
     if (this.scanT <= 0) { this.scanT = 1.5; this.scan(); }
     this.search.step(0.4);
-    for (const L of this.near) if (Math.hypot(L.x - f.cx, L.z - f.cz) < 1200) this.lodge.push(frameMatrix(_m, L.x, L.level, L.z, L.yaw));
+    for (const L of this.near) if (!L.real && Math.hypot(L.x - f.cx, L.z - f.cz) < 1200) this.lodge.push(frameMatrix(_m, L.x, L.level, L.z, L.yaw)); // (a real lodge is the props')
     // each beaver keeps its lodge while that lodge is among the near ones; a lodge left free goes to a beaver
     // without one
     const [b0, b1] = this.list, n0 = this.near[0] || null, n1 = this.near[1] || null;

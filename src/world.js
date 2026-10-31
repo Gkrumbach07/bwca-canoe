@@ -4,6 +4,7 @@
 import { GridQueries, TileGrid, tileChannels } from './grid.js';
 import { LakeFacts } from './lake-facts.js'; // d1 lakes
 import { useV4 as rapidsV4 } from './rapids.js'; // d2 bake: a v4 release's own drops (its levels hold them)
+import { Creeks } from './creeks.js'; // the wetlands round: brooks and beaver dams (index.creeks)
 
 // Where the baked data lives: VITE_DATA_URL (a bucket behind a CDN, see docs/HOSTING.md), else `data/`
 // under the app's own base path (public/data in development). Always ends in a slash.
@@ -101,6 +102,8 @@ export class World extends GridQueries {
     // d1 lakes (`?facts=off` leaves them out, for a before and after)
     const off = typeof location !== 'undefined' && /[?&]facts=off\b/.test(location.search);
     if (facts && !off && facts.for === (index.source && index.source.baked)) w.facts = new LakeFacts(facts, w);
+    // the wetlands round: the brooks (land now, a stony bed) and the beaver dams, from a release that has them
+    if (index.creeks) { onProgress(0.08, 'Reading the creeks…'); w.creeks = await Creeks.load(w, base); }
     return w;
   }
 
@@ -145,6 +148,7 @@ export class World extends GridQueries {
     }
     this.fixed = fixes ? this.applyFixes(fixes) : null;
     this.facts = null; // d1 lakes: a LakeFacts once load() has joined lake-facts.json (null on another release)
+    this.creeks = null; // the wetlands round: a creeks.js Creeks once load() has read creeks.json (null on an older release)
     for (const p of this.portages) {
       if (p.tread && !p.trailPts) p.trailPts = resampleLine(p.tread, 1.6); // a newer bake's connected trails (fb E)
       let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;

@@ -198,9 +198,10 @@ export class Beds {
         if (!h) { T(v.roar.gain, 0, 0.8); T(v.rush.gain, 0, 0.8); T(v.hiss.gain, 0, 0.8); continue; }
         const ref = 22 * Math.sqrt(Math.max(0.3, h.size)), d = Math.max(1, h.d), near = Math.min(1, ref / d);
         const k = Math.min(1.4, h.size) * walls * (S.ice > 0.5 ? 0.35 : 1), falls = h.kind === 'falls' ? 1 : 0;
-        T(v.roar.gain, 0.15 * k * (0.75 + 0.35 * falls) * Math.pow(near, 0.9), 0.6);
+        const brook = h.kind === 'brook' ? 1 : 0; // the wetlands round (creeks.js heard): a brook's trickle, no roar, its chatter close
+        T(v.roar.gain, 0.15 * k * (0.75 + 0.35 * falls) * Math.pow(near, 0.9) * (1 - brook), 0.6);
         T(v.rush.gain, 0.09 * k * Math.pow(Math.min(1, (ref * 2.5) / d), 1.6), 0.6);
-        T(v.hiss.gain, 0.035 * k * Math.pow(near, 2.2), 0.6);
+        T(v.hiss.gain, 0.035 * k * Math.pow(near, 2.2) * (1 + 2.5 * brook), 0.6);
         T(v.roarLP.frequency, (falls ? 190 : 260) + 120 * near, 0.8);
         au.place(v.pan, { x: h.x, y: h.y + 0.5, z: h.z });
         loud = Math.max(loud, k * near);
