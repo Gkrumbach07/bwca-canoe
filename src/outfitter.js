@@ -482,8 +482,13 @@ export class Outfitter {
     const h = this.pointer ? null : this.aimed;
     return h ? { key: h.h.key, p: { x: this.player.x, z: this.player.z, at: { x: h.h.x, z: h.h.z } } } : null;
   }
-  // the notices done that this outfitter pays
-  readyHere(ep) { try { return (this.tasks && this.tasks.active ? this.tasks.active : []).filter((t) => t.from === ep && t.status === 'done'); } catch { return []; } }
+  // the notices done that this outfitter pays, and its fish notices whose fish you have with you (handed over at the board)
+  readyHere(ep) {
+    try {
+      const T = this.tasks, done = (T && T.active ? T.active : []).filter((t) => t.from === ep && t.status === 'done');
+      return T && typeof T.deliverable === 'function' ? [...done, ...T.deliverable(ep)] : done;
+    } catch { return []; }
+  }
   // Without the pointer: the hotspot the walker looks at, along the look from his eyes (the bearing and tilt of the
   // view, camera.js viewYaw and viewPitch), whichever way the camera itself stands
   viewRay() {
@@ -608,7 +613,7 @@ export class Outfitter {
     else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
       const r = this.tasks.act(id, this.at.ep);
-      if (r && r.words && /^claim/.test(String(id))) this.greeting = r.words;
+      if (r && r.words && /^(claim|give)/.test(String(id))) this.greeting = r.words;
       this.save(); this.render();
     }
   }

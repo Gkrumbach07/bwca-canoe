@@ -4,6 +4,7 @@ import { mulberry32 } from './rng.js';
 import { buildItemProp, groundAt } from './props.js';
 import { SPECIES as FISH } from './fishing.js';
 import { esc, word, plural, fmtKm, shortDate } from './hud.js';
+import { itemDef } from './items.js';
 
 // The board: notices pinned up at each outfitter, the tasks they set, and the money they pay.
 //
@@ -15,7 +16,8 @@ import { esc, word, plural, fmtKm, shortDate } from './hud.js';
 // - a portage to survey (walk it to its far landing, or find its landing).
 // Clues are written from the real data: lakes, portage rods, how many portages in, which side of the lake, and whether
 // the site is on an island, a point or in a bay, worked out from the tile's own cells. A kept fish that a notice
-// wants goes into that notice's cooler on its own (fishing.js calls onCatch). A finished notice is paid only at the
+// wants is kept like any other (in your hand, then the stringer) and the notice is done when you hand it over at the
+// board that posted it (fishFor, handIn: the owner, 2026-10-31). A finished notice is paid only at the
 // counter that posted it, through the profile (profile.js: earn) or, without one, a purse kept here. Each board is
 // saved with the tasks, keyed by entry point.
 //
@@ -171,26 +173,32 @@ registerKind('fish', {
     return { species, minCm: 0, need: 1, title: W.title, text, sign };
   },
   pay(t) { return t.species ? Math.min(PAY_MAX, (SPECIES_PAY[t.species] || 12) + (t.minCm ? SIZE_PAY : 0) + (t.species === 'laketrout' ? Math.round(KM_PAY.laketrout * (t.km || 0)) : 0)) : 8; },
-  // a kept fish this notice wants: the species, the size, and lake trout only from deep water
+  // a kept fish this notice wants: the species, the size, and lake trout only from deep water (a fish kept before the
+  // lake was written on it is taken at its word: fishing.js bites lake trout only in deep water anyway)
   fits(T, t, ev) {
     if (!ev.kept || t.status !== 'open') return false;
     if (t.species && t.species !== ev.species) return false;
     if (t.minCm && Math.round(ev.cm) < t.minCm) return false;
-    if (ev.species === 'laketrout') { const l = T.lakeRec(ev.lake); if (!l || T.depthOf(l.id) < DEEP) return false; } // (d1 lakes)
+    if (ev.species === 'laketrout' && ev.lake) { const l = T.lakeRec(ev.lake); if (!l || T.depthOf(l.id) < DEEP) return false; } // (d1 lakes)
     return true;
   },
-  onEvent(T, t, ev) {
-    if (ev.type !== 'catch' || !this.fits(T, t, ev)) return null;
-    (t.cooler || (t.cooler = [])).push({ species: ev.species, cm: Math.round(ev.cm), lake: T.lakeName(ev.lake) || 'unnamed water', day: T.today() });
-    const full = t.cooler.length >= (t.need || 1);
-    if (full) t.status = 'done';
-    const L = T.landing(t.from);
-    return `A ${Math.round(ev.cm)} cm ${fishName(ev.species)} into the cooler for ${L ? L.name : 'the outfitter'}. ${full ? `Claim it at their counter, entry point ${t.from}.` : ''}`.trim();
-  },
+  // The owner (2026-10-31): "keep the fish on the stringer like normal and require the user to bring that fish back to
+  // wherever it needs to go instead of it just disappearing". A catch no longer fills a cooler: the fish is yours, and
+  // the notice is done when you hand a fitting one over at its own board (Tasks.handIn). An old save's full cooler
+  // still claims as it did.
   progress(t) {
-    const c = t.cooler || [], n = t.need || 1;
-    if (!c.length) return n === 1 ? 'the cooler is empty' : `0 of ${n} in the cooler`;
-    return `in the cooler: ${c.map((f) => `${fishName(f.species)}, ${f.cm} cm`).join('; ')}`;
+    const c = t.cooler || [];
+    if (t.status === 'done' && c.length) return `in the cooler: ${c.map((f) => `${fishName(f.species)}, ${f.cm} cm`).join('; ')}`;
+    const f = LIVE && LIVE.fishFor(t), L = LIVE && LIVE.landing(t.from);
+    const there = L ? `${L.name}, entry point ${L.ep}` : 'the outfitter';
+    return f ? `a ${f.words} with you: bring it to ${there}` : `not caught yet · bring it to ${there}`;
+  },
+  fraction(t) { return t.status === 'done' ? 1 : LIVE && LIVE.fishFor(t) ? 0.5 : 0; },
+  // with a fitting fish on you, the pencil rings the outfitter it goes to; else the notice's own water
+  target(T, t) {
+    if (t.status !== 'open' || !T.fishFor(t)) return undefined;
+    const L = T.landing(t.from);
+    return L ? { x: Math.round(L.x), z: Math.round(L.z), r: TIGHT, label: `the fish to ${L.name}`, tight: true } : undefined;
   },
 });
 
@@ -307,8 +315,11 @@ registerKind('survey', {
 });
 
 // --- the tasks ----------------------------------------------------------------------------------------------------
+// the tasks the page runs (the fish kind's progress reads what you carry through it)
+let LIVE = null;
 export class Tasks {
   constructor(world, scene, player, { audio = null, water = null } = {}) {
+    LIVE = this;
     this.world = world; this.scene = scene; this.player = player; this.audio = audio; this.water = water;
     this.day = null; this.fishing = null; this.outfitter = null; // attach()
     this.ads = new Map();       // id -> notice (offered, open or done); claimed ones leave
@@ -551,7 +562,6 @@ export class Tasks {
     const t = this.ads.get(+id);
     if (!t || t.status !== 'offered') return false;
     t.status = 'open'; t.taken = this.today();
-    if (t.kind === 'fish') t.cooler = [];
     const k = KINDS[t.kind];
     if (k && k.onTake) { try { k.onTake(this, t); } catch (e) { console.warn('the board: take', t.kind, e); } } // content A: a disk lent, a cooler set
     this.changed();
@@ -595,6 +605,44 @@ export class Tasks {
     this.changed(); this.boardChanged();
     return { ok: true, pay, words };
   }
+  // A fish notice's fish, with you (anything in reach: at an outfitter that is all you own outside the wild): the
+  // smallest raw, whole fish that fits it, so a bigger one stays for a bigger notice. { c, e, cm, species, words } or null.
+  fishFor(t) {
+    if (!t || t.kind !== 'fish' || t.status !== 'open') return null;
+    const g = typeof window !== 'undefined' ? window.__game : null, inv = g && g.inventory;
+    if (!inv || !inv.attached || typeof inv.reachable !== 'function') return null;
+    let best = null;
+    try {
+      for (const c of inv.reachable()) for (const e of c.grid) {
+        if (e.box || !/^fish:/.test(e.id) || (e.data && e.data.cooked)) continue;
+        const d = itemDef(e.id); if (!d || d.kind !== 'fish' || d.fillet) continue;
+        const cm = e.data && e.data.length ? e.data.length : 0, ev = catchEvent(e.id.slice(5), e.data && e.data.lake ? e.data.lake : 0, cm, true);
+        if (!KINDS.fish.fits(this, t, ev)) continue;
+        if (!best || cm < best.cm) best = { c, e, cm, species: ev.species };
+      }
+    } catch { return null; }
+    if (best) best.words = `${best.cm ? `${Math.round(best.cm)} cm ` : ''}${fishName(best.species)}`;
+    return best;
+  }
+  // the fish notices this board posted that you can hand a fish over for now
+  deliverable(ep) { return this.active.filter((t) => t.kind === 'fish' && t.status === 'open' && t.from === ep && this.fishFor(t)); }
+  // hand the fish over at the board that posted the notice: it leaves your hands (or the stringer), and the notice is paid
+  handIn(id, ep) {
+    const t = this.ads.get(+id);
+    let words = null;
+    if (!t || t.kind !== 'fish' || t.status !== 'open') words = 'There is nothing to hand over for that one.';
+    else if (t.from !== ep) words = this.whereToClaim(t, ep).replace(/They pay it/, 'The fish goes to them, and they pay for it');
+    const f = words ? null : this.fishFor(t);
+    if (!words && !f) words = `Nothing on you fits “${t.title}”.`;
+    if (words) { this.note(words); return { ok: false, words }; }
+    const g = window.__game, inv = g && g.inventory;
+    if (!inv || !inv.take(f.c.id, f.e.uid, 1)) { words = 'The fish would not come loose.'; this.note(words); return { ok: false, words }; }
+    t.cooler = [{ species: f.species, cm: Math.round(f.cm), lake: f.e.data && f.e.data.lake ? this.lakeName(f.e.data.lake) || '' : '', day: this.today() }];
+    t.status = 'done';
+    const r = this.claim(t.id, ep);
+    if (r && r.ok) r.words = `You hand over the ${f.words}. ${r.words}`;
+    return r;
+  }
   pay(t, ep) {
     const pay = t.pay || 0, p = this.profile, k = KINDS[t.kind];
     if (k && k.onClaim) { try { k.onClaim(this, t); } catch (e) { console.warn('the board: claim', t.kind, e); } } // content A: the disk handed back, the litter in the bin
@@ -636,6 +684,7 @@ export class Tasks {
     else if (verb === 'drop') r = this.drop(id);
     else if (verb === 'claim') r = this.claim(id, ep);
     else if (verb === 'claimall') r = this.turnIn(ep);
+    else if (verb === 'give') r = this.handIn(id, ep);
     this.boardChanged();
     return r;
   }
@@ -647,21 +696,17 @@ export class Tasks {
     this.seed = (Date.now() & 0xffff) || 1;
     this.changed(); this.boardChanged();
   }
-  // The hook for the fishing code (release): a fish landed on a lake, kept or let go. A kept one that a notice
-  // taken on wants goes into that notice's cooler (the best paying first), and the words come back for the catch
-  // line; otherwise null and it goes to your hand (fb3 B; Put on the stringer is its verb in the book).
+  // The hook for the fishing code (release): a fish landed on a lake, kept or let go. A kept one that a fish notice
+  // taken on wants is kept like any other (fishing.js puts it in your hand); the words for the catch line say where it
+  // goes (handIn pays it there). Other kinds may hear the catch too.
   onCatch(species, lakeId, lengthCm = 0, kept = true) {
     const ev = catchEvent(species, lakeId, lengthCm, kept);
-    for (const t of this.fitting(ev)) {
-      const words = KINDS[t.kind].onEvent(this, t, ev);
-      if (!words) continue;
-      this.note(words);
-      this.changed(); this.boardChanged();
-      const L = this.landing(t.from);
-      return `Into the cooler · for ${L ? L.name : 'the outfitter'}`;
-    }
     for (const t of this.active) { const k = KINDS[t.kind]; if (k && !k.fits && k.onEvent) k.onEvent(this, t, ev); }
-    return null;
+    const t = this.fitting(ev)[0];
+    if (!t) return null;
+    const L = this.landing(t.from);
+    this.changed();
+    return `Wanted for “${t.title}” · bring it to ${L ? L.name : 'the outfitter'}, entry point ${t.from}`;
   }
   // the notices taken on that a catch fits, the best paying first
   fitting(ev) { return this.active.filter((t) => KINDS[t.kind] && KINDS[t.kind].fits && KINDS[t.kind].fits(this, t, ev)).sort((a, b) => b.pay - a.pay || a.id - b.id); }
@@ -749,7 +794,9 @@ export class Tasks {
       const where = t.npc ? `done · ${first} pays it, or the counter at ${esc(L ? L.name : 'their outfitter')}, entry point ${t.from}` : `done · claim at ${esc(L ? L.name : 'its outfitter')}, entry point ${t.from}`;
       const state = t.status === 'done' ? (t.from === ep ? '' : where) : esc(k && k.progress ? k.progress(t) : 'on the go');
       // done, from this board (off its pins) or asked here: claim it; done, from elsewhere: the keeper says where it is paid
-      const btn = t.status === 'done' ? ` <button type="button" class="stamp small${t.from === ep ? '' : ' quiet'}" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>` : '';
+      const f = t.status === 'open' && t.kind === 'fish' && t.from === ep ? this.fishFor(t) : null; // its fish with you, at its own board
+      const btn = t.status === 'done' ? ` <button type="button" class="stamp small${t.from === ep ? '' : ' quiet'}" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>`
+        : f ? ` <button type="button" class="stamp small" data-act="task" data-id="give:${t.id}">Hand over · $${t.pay}</button>` : '';
       return `<li><b>${esc(t.title)}</b>${whose} · $${t.pay}${state ? ` · <span class="soft">${state}</span>` : ''}${btn}</li>`;
     };
     const asked = away.filter((t) => t.npc), taken = away.filter((t) => !t.npc);
@@ -775,7 +822,10 @@ export class Tasks {
       state = `<div class="state done">Done${dw ? ` · ${esc(dw)}` : ''}</div>`;
     } else {
       btn = `<button type="button" class="stamp quiet" data-act="task" data-id="drop:${t.id}">Let it go</button>`;
-      state = `<div class="state">Taken on ${t.taken ? esc(this.dayWords(t.taken)) : ''} · ${esc(k.progress ? k.progress(t) : '')}</div>`;
+      // a fish notice of this board's, its fish with you: hand it over here, and it is paid
+      const f = t.kind === 'fish' && t.from === ep ? this.fishFor(t) : null;
+      if (f) btn = `<span class="give"><button type="button" class="stamp" data-act="task" data-id="give:${t.id}">Hand over the ${esc(f.words)} · $${t.pay}</button>${btn}</span>`;
+      state = `<div class="state">Taken on ${t.taken ? esc(this.dayWords(t.taken)) : ''} · ${esc(f ? `the ${f.words} is with you` : k.progress ? k.progress(t) : '')}</div>`;
     }
     return `<article class="notice${t.status === 'offered' ? '' : ' mine'}${t.status === 'done' ? ' done' : ''}" style="--tilt:${tilt}deg">
       <i class="tack" aria-hidden="true"></i>
