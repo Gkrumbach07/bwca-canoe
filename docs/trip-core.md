@@ -308,9 +308,15 @@ the best of them, what was seen, the photos, the notices done and the money. Fir
 closes it, and the first time a moment says it is in the journal's Record. The **Record** tab takes the Trips tab's
 place: the season's trips (each opens its page), the lakes paddled against the named lakes on your sheets, the
 species and the best of each, the portages, what you saw by kind, the campsites stayed at, the keepers' stories told
-to the end, the photos, the outfitters known, what the boards paid, and the firsts. A sighting is an animal from
-`fauna.subjects()` in the view, near and not behind the land for a moment (the loons, gulls and ravens once a lake a
-day); a bear at camp counts by its visit. Nothing of it is on the HUD. An older save builds its record once from what
+to the end, the photos, the outfitters known, what the boards paid, and the firsts. A sighting is a deliberate look
+(the owner, 2026-10-31: "to see it, we need to have more of an event"): an animal from `fauna.subjects()` (or the bear
+on a live visit) within 13° of the middle of the view, near enough to make out for its size (100 m a metre of it: a
+moose 300 m, an eagle 150, a beaver 80; further through the long lens, a tenth of that in the dark, the lamp's beam
+35 m), not behind the land, and held there 1.5 real seconds (a wavering look loses a little, not the lot). The loons,
+gulls and ravens count once a lake a day. A bear that came to camp unseen is the trip's line, not a sighting. A look at
+something worth it says a short thought on the lines ("Oh, an eagle.", "A beaver, there by the lodge.", "Loon,
+close."): the moose, bear, beaver and eagle each new sighting, a loon when it is close, the commoner birds the first
+time a trip. Falls in are not written. Nothing of the record is on the HUD. An older save builds its record once from what
 it knows: the logbook, the people's memory of the season, the catch log, the prints, the bear and the arcs.
 
 ## Keys

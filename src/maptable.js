@@ -16,7 +16,7 @@
 import { sheets, sheetAt, sheetById, stockFor } from './sheets.js';
 import { esc, plural } from './hud.js';
 
-const PANEL = 300;       // css px: the table's list at the right of the map
+// (the table's list is the left page of an open book now, beside the sheet, not a card over it: map.css #mtbook)
 const FIT = 0.86;        // of the free paper: this table's sheets fill it when it opens
 
 export class MapTable {
@@ -45,6 +45,7 @@ export class MapTable {
     hud.table = this;
     hud.setMode('sheet');
     hud.el.map.classList.add('table');
+    this.book.classList.add('show');
     this.fit();
     requestAnimationFrame(() => { if (this.open) this.fit(); }); // once the sheet has its laid-out size
     this.render();
@@ -64,6 +65,7 @@ export class MapTable {
     sheets.forced = null;
     if (this.hud.table === this) this.hud.table = null;
     this.hud.el.map.classList.remove('table');
+    if (this.book) this.book.classList.remove('show');
     this.hud.canvas.style.cursor = ''; this.hover = null;
     const f = this.onClose; this.onClose = null;
     if (f) { try { f(); } catch (e) { console.warn('maptable onClose', e); } }
@@ -77,21 +79,18 @@ export class MapTable {
     for (const s of this.stock) { x0 = Math.min(x0, s.x0); z0 = Math.min(z0, s.z0); x1 = Math.max(x1, s.x1); z1 = Math.max(z1, s.z1); }
     const w = this.world || hud.world; // the sheets on the wilderness's edge run off the baked country
     if (w) { x0 = Math.max(x0, w.minX); z0 = Math.max(z0, w.minZ); x1 = Math.min(x1, w.maxX); z1 = Math.min(z1, w.maxZ); }
-    const free = Math.max(200, r.width - PANEL - 28);
-    const mPerCss = Math.max((x1 - x0) / (free * FIT), (z1 - z0) / (r.height * FIT));
+    const mPerCss = Math.max((x1 - x0) / (r.width * FIT), (z1 - z0) / (r.height * FIT));
     hud.view.span = Math.min(240000, Math.max(20000, mPerCss * r.width));
-    const m = hud.view.span / r.width; // metres per css px, as set
-    hud.setCentre((x0 + x1) / 2 + ((PANEL + 28) / 2) * m, (z0 + z1) / 2);
+    hud.setCentre((x0 + x1) / 2, (z0 + z1) / 2);
   }
   // centre the map on a sheet, keeping the zoom
   look(id) {
     const s = sheetById(id), hud = this.hud; if (!s) return;
-    const r = hud.canvas.getBoundingClientRect(), m = hud.view.span / Math.max(1, r.width);
-    hud.setCentre(s.cx + ((PANEL + 28) / 2) * m, s.cz);
+    hud.setCentre(s.cx, s.cz);
   }
 
   // --- for hud.js ----------------------------------------------------------------------------------------------------
-  get cover() { return PANEL + 28; } // css px of the map the list covers at its right (the north arrow moves left of it)
+  get cover() { return 0; } // css px of the map the list covers at its right (none now: the list is the facing page)
   // the sheet the header names: the one under the pointer, else the one picked
   get named() { return this.hover || this.selected; }
   pick(x, z) { const s = sheetAt(x, z); this.selected = s ? s.id : null; this.receipt = null; this.render(); }
@@ -117,10 +116,15 @@ export class MapTable {
   // --- the panel -----------------------------------------------------------------------------------------------------
   build() {
     if (this.el) return;
-    const body = this.hud.el.mapBody || this.hud.el.map;
+    // the open book the table's sheets are written in; the HUD's sheet lies over its right page (map.css)
+    const book = this.book = document.createElement('div');
+    book.id = 'mtbook';
+    book.innerHTML = '<div class="mt-pages"><section class="mt-page left"></section><section class="mt-page right"></section></div>';
+    const map = this.hud.el.map;
+    map.parentNode.insertBefore(book, map);
     const el = this.el = document.createElement('div');
     el.id = 'maptable';
-    body.appendChild(el);
+    book.querySelector('.mt-page.left').appendChild(el);
     // clicks on the panel stay off the map underneath
     for (const ev of ['pointerdown', 'pointerup', 'wheel']) el.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     el.addEventListener('click', (e) => {
@@ -141,7 +145,7 @@ export class MapTable {
   act(id) {
     if (this.owned(id)) return '<span class="mark">✓ yours</span>';
     const p = this.price(id), short = !this.free && this.profile && p > this.profile.money;
-    return `<button class="stamp small${short ? ' quiet' : ''}" type="button" data-buy="${esc(id)}"${short ? ' title="Not enough in hand"' : ''}>${this.free ? 'Take it' : `Buy $${p}`}</button>`;
+    return `<button class="buy${short ? ' quiet' : ''}" type="button" data-buy="${esc(id)}"${short ? ' title="Not enough in hand"' : ''}>${this.free ? 'Take it' : `Buy · $${p}`}</button>`;
   }
   render() {
     const el = this.el; if (!el || !this.landing) return;
@@ -170,6 +174,6 @@ export class MapTable {
     el.innerHTML = `<div class="mt-head"><div class="sc">The map table · entry point ${this.ep}${place ? ` · ${esc(place)}` : ''}</div><h3>${esc(l.name || 'The outfitter')}</h3>`
       + `<p class="pencil say">“The sheets are on the table. Take the one you’re paddling, and the next one over.”</p>${who ? `<div class="who">${esc(who)}</div>` : ''}</div>`
       + `<div class="sc lab">Sheets at this table</div><div class="mt-list">${rows}</div>${card}${rc}`
-      + `<div class="mt-foot"><span class="money">${this.free ? 'Sandbox · the sheets are free' : `$${money} in hand`}</span><button class="stamp outline small" type="button" data-close>Done</button></div>`;
+      + `<div class="mt-foot"><span class="money">${this.free ? 'the sheets are free' : `$${money} in hand`}</span><button class="done" type="button" data-close>Done</button></div>`;
   }
 }
