@@ -44,7 +44,7 @@ export const groundUniforms = {
   uSphag: { value: [v3(SPHAGNUM.lit), v3(SPHAGNUM.rust), v3(SPHAGNUM.shade)] },
   // the wetlands' standing water (groundMire): the tea-dark water of a bog pool or a marsh's open water, and the wet
   // peat round it (a multiplier on the ground's colour)
-  uMirePool: { value: new THREE.Vector3(0.018, 0.017, 0.012) },
+  uMirePool: { value: new THREE.Vector3(0.03, 0.024, 0.014) },
   uMirePeat: { value: new THREE.Vector3(0.74, 0.74, 0.66) },
 };
 // The water standing on wet ground mirrors the sky, wet weather or not (weather.js wetSheen is only the rain's film):
@@ -56,7 +56,7 @@ export const mireSheen = (gloss) => `
 		vec3 mv = normalize( vViewPosition ), mup = hemisphereLights[ 0 ].direction;
 		float mf = 0.02 + 0.98 * pow( 1.0 - saturate( dot( normal, mv ) ), 5.0 );
 		float msky = smoothstep( -0.1, 0.4, dot( reflect( -mv, normal ), mup ) );
-		outgoingLight = mix( outgoingLight, mix( hemisphereLights[ 0 ].groundColor, hemisphereLights[ 0 ].skyColor, msky ) * 0.42 * lookSky, mf * mk );
+		outgoingLight = mix( outgoingLight, mix( hemisphereLights[ 0 ].groundColor, hemisphereLights[ 0 ].skyColor, msky ) * 0.55 * lookSky, mf * mk );
 	} }
 	#endif
 	#include <opaque_fragment>`;
@@ -284,7 +284,7 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     if (groundMire > 0.004) {
       poolK = smoothstep(0.2, 0.7, groundMire) * (1.0 - groundRock);
       poolN = lookFbm(p / 3.4 + vec2(-4.7, 8.3), 62u, 3) + 0.24 * (lookFbm(p / 0.8 + vec2(1.9, -2.2), 63u, 2) - 0.5) * lookFade(0.8, px);
-      poolT = 0.75 - 0.2 * groundMire;
+      poolT = 0.77 - 0.2 * groundMire;
     }
     c = bA.x * groundShaded(0, mix(uGroundLit[0], uGroundSunny, sunny), s)
       + bA.y * mossC + bA.z * groundShaded(2, uGroundLit[2], s) + bA.w * groundShaded(3, uGroundLit[3], s)
