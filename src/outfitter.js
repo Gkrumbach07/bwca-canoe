@@ -34,26 +34,27 @@ import { ShelfScreen, model as invModel } from './inv-ui.js';
 // without it, E in the store reads the same boxes along the view (aimAt)
 const POINTER = import.meta.glob('./pointer.js', { eager: true })['./pointer.js'] || null;
 
-// Real outfitters by entry area where they are well known (Ely and the Fernberg Road, the Echo Trail, the
-// Sawbill Trail, the Gunflint Trail); invented but plausible names elsewhere.
+// Every entry point's outfitter has its own sign: invented North Woods names, one per entry point and never a real
+// business's (the owner, 2026-10-31: "come up with random names that aren't actually linked to real ones. So then we
+// have a unique one for each"). Display only: everything is keyed by the entry point number, so saves are unaffected.
 const NAMES = {
-  30: 'Kawishiwi Lodge & Outfitters', 25: "LaTourell's Moose Lake Outfitters", 27: 'Piragis Northwoods Company',
-  24: 'Spirit of the Wilderness', 26: 'Voyageur North Outfitters', 29: 'Ely Outfitting Company', 31: 'Canoe Country Outfitters',
-  32: "Cliff Wold's Outfitting", 33: "Cliff Wold's Outfitting", 22: 'Piragis Northwoods Company', 20: 'Voyageur North Outfitters',
-  77: 'Voyageur North Outfitters', 4: 'Spirit of the Wilderness', 6: 'Spirit of the Wilderness', 7: 'Ely Outfitting Company',
-  1: 'Trout Lake Landing Outfitters', 8: 'Spirit of the Wilderness', 9: 'Voyageur North Outfitters', 14: 'Voyageur North Outfitters',
-  16: 'Spirit of the Wilderness', 19: 'Ely Outfitting Company', 80: 'Seagull Outfitters', 12: "Anderson's Canoe Outfitters",
-  34: 'Sawbill Canoe Outfitters', 35: 'Sawbill Canoe Outfitters', 36: 'Sawbill Canoe Outfitters', 37: 'Sawbill Canoe Outfitters',
-  38: 'Sawbill Canoe Outfitters', 39: 'Sawbill Canoe Outfitters', 67: 'Sawbill Canoe Outfitters', 75: 'Sawbill Canoe Outfitters',
-  84: 'Sawbill Canoe Outfitters', 40: 'Sawtooth Outfitters', 41: 'Sawtooth Outfitters',
-  43: 'Golden Eagle Lodge', 44: 'Golden Eagle Lodge', 45: 'Golden Eagle Lodge', 47: 'Rockwood Lodge & Outfitters',
-  48: 'Rockwood Lodge & Outfitters', 49: 'Rockwood Lodge & Outfitters', 50: 'Tuscarora Lodge & Canoe Outfitters',
-  51: 'Tuscarora Lodge & Canoe Outfitters', 52: 'Tuscarora Lodge & Canoe Outfitters', 54: 'Seagull Outfitters',
-  55: 'Voyageur Canoe Outfitters', 57: 'Gunflint Northwoods Outfitters', 58: 'Gunflint Northwoods Outfitters',
-  60: 'Hungry Jack Outfitters', 61: 'Hungry Jack Outfitters', 62: 'Clearwater Historic Lodge', 64: 'Bearskin Lodge',
-  66: 'Bearskin Lodge', 68: 'Arrowhead Trail Outfitters', 69: 'Arrowhead Trail Outfitters', 70: 'Arrowhead Trail Outfitters',
+  1: 'Cold Spring Canoe Co.', 4: 'Two Otters Outfitting', 6: 'Thimbleberry Outfitters', 7: 'Ironwood Canoe Livery',
+  8: 'Beaver Slide Outfitters', 9: 'Wild Rice Landing Post', 12: 'Grey Jay Outfitters', 14: 'Red Pine Canoe Base',
+  16: 'Cattail Creek Outfitters', 19: 'Cedar Knee Outfitting', 20: 'Fiddlehead Trading Post', 22: 'Black Spruce Outfitters',
+  24: 'Pickerel Point Outfitters', 25: 'Loon Narrows Outfitters', 26: 'Woodsmoke Outfitting', 27: 'Snowshoe Hare Outfitters',
+  29: 'Kingfisher Canoe Co.', 30: 'Birch Point Canoe Co.', 31: 'Hayfield Landing Outfitters', 32: 'Riverbend Portage House',
+  33: 'Bedrock Outfitters', 34: 'Islander Canoe Post', 35: 'Tamarack Bog Outfitters', 36: 'Muskrat Run Outfitters',
+  37: 'Headwaters Canoe Co.', 38: 'Saw-whet Owl Outfitters', 39: 'Lady Slipper Outfitters', 40: 'Blueberry Hill Outfitters',
+  41: 'High Bluff Canoe Co.', 43: 'Old Cabin Outfitters', 44: 'Juneberry Outfitters', 45: 'Lichen Ledge Outfitters',
+  47: 'Marsh Marigold Outfitters', 48: 'Stonefly Canoe Co.', 49: 'Long Carry Outfitting', 50: 'Crossed Paddles Outfitters',
+  51: 'Lost Chain Outfitters', 52: 'Snow Goose Canoe Co.', 54: 'Gull Rock Outfitters', 55: 'Far Shore Trading Post',
+  57: 'Lodestone Outfitters', 58: 'Height of Land Outfitters', 60: 'Bearberry Outfitters', 61: 'Spruce Hen Outfitting',
+  62: 'Glass Water Canoe Co.', 64: 'Cub Creek Outfitters', 66: 'Snapping Turtle Outfitters', 67: 'Pitcher Plant Outfitters',
+  68: 'Jack Pine Canoe Co.', 69: 'Old Mill Outfitters', 70: 'Mallard Point Outfitters', 75: 'Brook Trout Outfitters',
+  77: 'Painted Rock Outfitters', 80: 'Larchwood Canoe Post', 84: 'Switchback Outfitters',
 };
-export function outfitterName(ep) { return NAMES[ep.ep] || `${ep.name} Outfitters`; }
+// (an entry point not in the table, should a later release add one: its place's own name, unique as the places are)
+export function outfitterName(ep) { return NAMES[ep.ep] || `${ep.name} Canoe Post`; }
 // the road each stretch of entry points is reached by, for the counter's kicker
 const AREAS = [[1, 20, 'the Echo Trail'], [22, 33, 'the Fernberg Road'], [34, 39, 'the Sawbill Trail'], [40, 70, 'the Gunflint Trail'], [75, 84, 'the Sawbill Trail']];
 export function areaOf(ep) { const a = AREAS.find(([lo, hi]) => ep >= lo && ep <= hi); return a ? a[2] : ''; }
