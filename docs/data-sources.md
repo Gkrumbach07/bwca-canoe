@@ -878,3 +878,26 @@ their four neighbours; (c) every 2 m along every waterway line, whether the cano
   0.44 m; steeper would sink the mesh's waterline vertex, the straight line between two lattice vertices, under the
   water); lakes are as they were. The rapids overlay thins to a narrow channel's own middle. `migrate.js`
   `sameNumbering` lets a release append lakes after the ones the table numbered.
+
+**Numbers** (`water-scan.mjs`, v4 → v5; `public-data-v5` is the rebake, its `detail/` the v4 one: the 2 m chunks hold
+land samples, which the new water only covers, so they need no re-bake):
+
+| | v4 | v5 |
+|---|---|---|
+| route lines blocked (blocks, km) | 469 (776, 15.7 km) | 7 (7, 0.55 km) |
+| streams between portages blocked | 254 (1,018, 12.0 km) | 6 (12, 0.22 km) |
+| route lines drawn under 0.6 m deep somewhere | 6,209 | 3,973 |
+| river and creek cells drawn under 15 cm / 30 cm | 33,937 / 444,227 | 5,679 / 18,472 |
+| land within 20 m of water that is the LiDAR's flattened water | 320,082 | 11,746 |
+| land within 20 m with LiDAR ground 0.3 m+ under the nearest water | 108,254 | 108,531 |
+
+- The rebake: 6,824 cells of route channel (552 gaps of land crossed, 8.4 km), 423,694 cells of LiDAR edge (373,084 of
+  them its flattened water). Lakes: none lost or shrunk, 99 grew; levels as v4. Campsites, portages and every v4 lake
+  id as v4 (`migrate-check.mjs` all good, `landing-check.mjs` 55 of 55).
+- `holes-scan.mjs --rule min`, v4 → v5: the far rim over 0.5 m 6 → 14, steps over 1 m away from a drop 4,465 → 4,780,
+  shore land over 2 m under its water 459 → 519, walls against the LiDAR 33,559 → 34,963; no bed over its water, no
+  seams.
+- **Left:** the last route blocks are three gaps of land over 400 m (`NAV_GAP`) and short pinches where the LiDAR's
+  edge stopped at a step; the 108 k cells of low LiDAR ground are mostly beside steep creeks whose level the bake fits
+  metres over the real water (Pine Lake's outlet, the Devil Track), a level problem, not an edge one; untagged streams
+  (11,822 lines; 1,070 km blocked in v4, 973 km in v5) are left as they were.
