@@ -34,7 +34,7 @@ const KEYMAP = [
     [['mouse'], 'look: the first key or click takes the mouse and it turns you at once (on foot the dot sits in the middle of the view); behind the canoe, drag to orbit, wheel to zoom'],
     [['Shift'], 'jog on foot · hustle afloat · a hard stroke swimming'],
     [['Space'], 'afloat: brace in a sea (you cannot paddle while bracing) · on foot, walking into it: vault a log or a low rock, climb a rock or a ledge up to about 6 ft, otherwise a hop; with the canoe overhead you only stagger · swimming: climb out onto a rock, a dock or the bank'],
-    [['E'], 'afloat: go ashore at any bank and at a portage landing alike · at an outfitter’s dock, tie up and step up onto the deck · right the canoe after a capsize'],
+    [['E'], 'afloat: go ashore at any bank and at a portage landing alike (S, back-paddling, or E again calls off the nose-in) · at an outfitter’s dock, tie up and step up onto the deck · right the canoe after a capsize'],
   ]],
   ['E and Q: the dot', [
     [[], 'whatever the dot in the middle of the view points at has at most two actions, both on its label: E and Q. A held one says “hold E” or “hold Q”; a greyed one says why. Pointed at nothing, E and Q do nothing'],

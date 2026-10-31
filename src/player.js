@@ -144,6 +144,7 @@ export class Player {
     this.carry = null; // on foot: { trail, drop: { x, z, heading } | null, hitCooldown, from: { x, z } | null, choice }
     this.landing = null; // auto-pilot toward a portage launch point
     this.ashore = null;  // auto-pilot nosing in to a bank: { sx, sz, t }
+    this.suppressNoseIn = 0; // seconds after a called-off nose-in before E noses in again (backOff)
     this.placeName = null; this.campsite = null; this.onTrail = false; // where you are on foot, for the HUD
     this.placeCache = { ci: NaN, cj: NaN, id: 0 };
     this.ripples = null; this.water = null; this.audio = null; this.wind = null; // set by main
@@ -359,6 +360,7 @@ export class Player {
     if (this.seat && (this.mode !== 'walk' || this.teleporting)) this.seat = null; // wc C: a seat is left by anything that moves you
     if (this.teleporting) { this.prompt = { key: null, text: 'Loading the map…' }; this.placeOnWater(); this.groundSpeed = 0; return; }
     const x0 = this.x, z0 = this.z;
+    if (this.suppressNoseIn > 0) this.suppressNoseIn -= dt;
     if (this.landing || this.ashore) this.easeBoost(1, dt); // nosing in, a landing: at life
     else if (this.mode === 'swim') this.easeBoost(this.paceTable.lapse ? SWIM_LAPSE : 1, dt); // one speed: a swim a little time-lapsed (pace.js)
     if (this.landing) this.updateLanding(dt);
@@ -543,10 +545,10 @@ export class Player {
     if (land) {
       const p = land.def;
       if (!warning) this.prompt = { key: 'E', text: `Go ashore · Portage: ${p.name} · ${p.rods} rods (${fmtDist(p.lengthM)})` }; // the sea's warning outranks the shore
-      if (inp.pressed('KeyE')) this.landing = { land, t: 0 };
+      if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.landing = { land, t: 0 };
     } else if (gap) {
       if (!warning) this.prompt = { key: 'E', text: 'Go ashore' };
-      if (inp.pressed('KeyE')) this.goAshore(gap);
+      if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.goAshore(gap);
     } else if (!warning && this.bilge > 0.04 && !paddling) this.prompt = { key: 'Q', text: 'Bail · hold' }; // cons B
     if (bailing) this.prompt = { key: 'Q', text: 'Bailing…' };
   }
@@ -629,9 +631,23 @@ export class Player {
     this.ashore = { sx: at.x + g.x * at.sd, sz: at.z + g.z * at.sd, t: 0 };
   }
 
+  // The owner: "I want to be able to escape a nose in. Sometimes I'll start to nose in when I didn't want to."
+  // S (back-paddle, as on the water) or E again calls off a nose-in or a landing: you keep the canoe, backing off a
+  // little. S counts only once it has been let go after the nose-in began (so a back-paddle held into it is no cancel).
+  backOff(A) {
+    const inp = this.input, back = inp.held('KeyS', 'ArrowDown');
+    if (!back) A.armed = true;
+    if (!((A.armed && back) || (A.t > 0.15 && inp.pressed('KeyE')))) return false;
+    this.ashore = null; this.landing = null;
+    this.speed = Math.min(this.speed, 0) - 0.4; // a back stroke off the bank
+    this.suppressNoseIn = 1.0;                  // and a moment before E noses in again
+    return true;
+  }
+
   updateAshore(dt) {
     const A = this.ashore, w = this.world, st = this.canoe.state;
     A.t += dt;
+    if (this.backOff(A)) return;
     const dx = A.sx - this.x, dz = A.sz - this.z, d = Math.hypot(dx, dz);
     const target = Math.atan2(-dz, dx);
     let dh = target - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
@@ -642,7 +658,7 @@ export class Player {
     st.power = 0.5; st.stroke = (st.stroke + dt * 0.8) % 1; st.drive = 1; st.turn = 0;
     this.placeOnWater(dt);
     this.emitWater(dt);
-    this.prompt = { key: null, text: 'Nosing in…' };
+    this.prompt = { key: 'S', text: 'Nosing in… · back-paddle (or E) to call it off' };
     const bowSd = w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6);
     if (bowSd > 0.6 || d < 1.0 || A.t > 8) this.stepOut();
   }
@@ -878,6 +894,7 @@ export class Player {
     // stopped after 8 s, short of it from the edge of the prompt's 28 m, and the step-out then took the nearest shore:
     // once 23 m from the trail, off round a point, so the carry began through the trees.
     const L = this.landing, trail = L.land.trail, w = this.world;
+    if (this.backOff(L)) return;
     if (!L.put) {
       const e = trail.def.pts[L.land.end === 0 ? 0 : trail.def.pts.length - 1];
       let sx = e[0], sz = e[1], sd = w.shoreAt(sx, sz);
@@ -899,7 +916,7 @@ export class Player {
     this.canoe.state.power = 0.5; this.canoe.state.stroke = (this.canoe.state.stroke + dt * 0.8) % 1; this.canoe.state.drive = 1; this.canoe.state.turn = 0;
     this.placeOnWater(dt);
     this.emitWater(dt);
-    this.prompt = { key: null, text: 'Landing…' };
+    this.prompt = { key: 'S', text: 'Landing… · back-paddle (or E) to call it off' };
     L.t += dt;
     if (L.via) { if (d < 5 || w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6) > -0.3 || L.t > L.limit * 0.6) L.via = null; return; }
     if (w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6) > 0.6 || d < 1.0 || L.t > L.limit) {
