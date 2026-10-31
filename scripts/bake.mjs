@@ -38,6 +38,7 @@ import { makeWater, placeLandings, linkPortages, chainsFrom } from './world-link
 import { gradeLevels } from './water-grade.mjs';
 import { loadProducts, lidarWeight, makeChannels, lidarBasinLevels, V4_CHANNELS, V4_FIELDS } from './v4-products.mjs'; // d2 bake
 import { officialAdds } from './official-adds.mjs'; // d2 bake (d1 names' sites and portages)
+import { loadCanoeLines, taggedRoute, PORTAGE_REACH } from './canoe-routes.mjs'; // water edges
 
 // ---------- CLI ---------------------------------------------------------------------
 
@@ -114,6 +115,65 @@ function rasterizeCreeks(creeks, grid, lakeId) {
       }
     }
   }
+}
+
+// water edges: the canoe routes' channel. A route line (canoe-routes.mjs) is a channel the canoe can pass: every land cell
+// within NAV_HW m of it becomes water wherever the line is on water or crosses a gap of land between water (a narrows
+// the polygons pinch shut, a creek the map draws only as the route's flowline), up to NAV_GAP m of land. NAV_HW 10 m
+// leaves at least two cells across at any angle, which player.js updatePaddle's shore test always passes (one cell
+// does not: the shore distance in its middle is -1.25 m, and a diagonal one is land between the cells). A cell widened
+// beside a lake takes that lake's id when no other lake touches it (it is the lake's own narrows, at its level), else
+// the line's own channel id, levelled along the line like any creek. Returns the cells made water and those ids'
+// cells (carved: 1 the line's own channel, 2 a lake's widening).
+const NAV_HW = 10, NAV_GAP = 400, NAV_SIDE = 15;
+function carveNavChannels(navLines, grid, lakeId, isLakePoly, carved) {
+  const { width: W, height: H } = grid;
+  const ends = new Map(), key = ([x, z]) => `${Math.round(x)},${Math.round(z)}`;
+  for (const l of navLines) for (const e of [l.pts[0], l.pts[l.pts.length - 1]]) ends.set(key(e), (ends.get(key(e)) || 0) + 1);
+  let cells = 0, gaps = 0, gapM = 0, skipped = 0;
+  const set = (k, id, how) => { if (lakeId[k]) return; lakeId[k] = id; carved[k] = how; cells++; };
+  for (const l of navLines) {
+    const pts = resample(l.pts, 2.5), n = pts.length;
+    const cellOf = (p) => { const i = grid.ci(p[0]), j = grid.cj(p[1]); return i < 0 || j < 0 || i >= W || j >= H ? -1 : j * W + i; };
+    const wet = pts.map((p) => { const k = cellOf(p); return k >= 0 && lakeId[k] ? lakeId[k] : 0; });
+    const use = new Uint8Array(n);
+    for (let a = 0; a < n;) {
+      if (wet[a]) { use[a] = 1; a++; continue; }
+      let b = a; while (b < n && !wet[b]) b++;
+      const startJ = a > 0 || (ends.get(key(l.pts[0])) || 0) > 1, endJ = b < n || (ends.get(key(l.pts[l.pts.length - 1])) || 0) > 1;
+      const len = (b - a) * 2.5;
+      if ((a > 0 || b < n) && startJ && endJ && len <= NAV_GAP) { for (let q = a; q < b; q++) use[q] = 2; gaps++; gapM += len; } else if (a > 0 && b < n) skipped++;
+      a = b;
+    }
+    const hw2 = NAV_HW * NAV_HW;
+    for (let q = 0; q < n; q++) {
+      if (!use[q]) continue;
+      const [x, z] = pts[q], own = use[q] === 1 ? wet[q] : 0;
+      if (use[q] === 1) {
+        // on water: widened only where it is narrow (land on both sides within NAV_SIDE m), not along every shore it passes
+        const pa = pts[Math.max(0, q - 1)], pb = pts[Math.min(n - 1, q + 1)], L = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]) || 1;
+        const px = -(pb[1] - pa[1]) / L, pz = (pb[0] - pa[0]) / L;
+        const landSide = (sgn) => { for (let d = 2.5; d <= NAV_SIDE; d += 2.5) { const k = cellOf([x + px * d * sgn, z + pz * d * sgn]); if (k >= 0 && !lakeId[k]) return true; } return false; };
+        if (!(landSide(1) && landSide(-1))) continue;
+      }
+      const i0 = Math.max(0, grid.ci(x - NAV_HW)), i1 = Math.min(W - 1, grid.ci(x + NAV_HW)), j0 = Math.max(0, grid.cj(z - NAV_HW)), j1 = Math.min(H - 1, grid.cj(z + NAV_HW));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const k = j * W + i;
+        if (lakeId[k]) continue;
+        const dx = grid.cx(i) - x, dz = grid.cz(j) - z;
+        if (dx * dx + dz * dz > hw2) continue;
+        // a lake's own narrows: its id, unless another lake touches the cell
+        let id = l.id, how = 1;
+        if (own && isLakePoly(own)) {
+          let other = false;
+          for (const nb of [k - 1, k + 1, k - W, k + W]) { const v = nb >= 0 && nb < W * H ? lakeId[nb] : 0; if (v && v !== own && isLakePoly(v)) other = true; }
+          if (!other) { id = own; how = 2; }
+        }
+        set(k, id, how);
+      }
+    }
+  }
+  return { cells, gaps, gapM: Math.round(gapM), skipped };
 }
 
 // Resample a polyline at roughly `step` metre spacing.
@@ -249,22 +309,59 @@ async function main() {
     waterways.push(c);
     lakes.push(c);
   }
+  // water edges: which lines are canoe routes (canoe-routes.mjs): a waterway line that is one is rasterized NAV_HW wide;
+  // the canoe network's own lines (flowlines, links) the extract leaves out come in after every other polygon (so no id
+  // before them moves: the saves' lake ids, src/migrate-v3-v4.json) as channels of their own, laid only where the water
+  // has none (carveNavChannels)
+  const navExtra = [];
+  {
+    const canoe = loadCanoeLines(), byWay = new Map(canoe.map((l) => [l.id, l]));
+    const portEnds = [];
+    for (const p of osm.portages || []) for (const e of [p.pts[0], p.pts[p.pts.length - 1]]) portEnds.push(proj.toLocal(e[0], e[1]));
+    const portNear = ([x, z]) => portEnds.some(([px, pz]) => Math.abs(px - x) < PORTAGE_REACH && Math.abs(pz - z) < PORTAGE_REACH && Math.hypot(px - x, pz - z) < PORTAGE_REACH);
+    const navigable = (l, pts) => { const t = taggedRoute(l); return t > 0 || (t === 0 && portNear(pts[0]) && portNear(pts[pts.length - 1])); };
+    const have = new Set();
+    let navWays = 0;
+    for (const c of waterways) {
+      const id = +c.osm.slice(4); have.add(id);
+      const l = byWay.get(id);
+      if (l && navigable(l, c.pts)) { c.nav = true; navWays++; }
+    }
+    for (const l of canoe) {
+      if (have.has(l.id) || !['flowline', 'link', 'fairway', 'river', 'stream', 'canal'].includes(l.kind) || taggedRoute(l) <= 0) continue;
+      const pts = l.pts.map(([lat, lon]) => proj.toLocal(lat, lon));
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const [x, z] of pts) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (z < minZ) minZ = z; if (z > maxZ) maxZ = z; }
+      if (!inGrid(minX, maxX, minZ, maxZ)) continue;
+      const c = { osm: `way/${l.id}`, name: l.name || null, kind: l.kind, river: true, creek: true, nav: true, navOnly: true, rings: [], pts, minX, maxX, minZ, maxZ };
+      navExtra.push(c); lakes.push(c);
+    }
+    log(`water edges: ${navWays} of ${waterways.length} waterway lines are canoe routes (widened to ${NAV_HW} m where narrow); ${navExtra.length} canoe-network lines (flowlines, links) carve where the water has no channel`);
+  }
   lakes.forEach((l, i) => { l.id = i + 1; });
   if (lakes.length >= 65535) throw new Error('too many water polygons for Uint16 ids');
   const lakeId = new Uint16Array(N);
   rasterizeCreeks(waterways, grid, lakeId);
   rasterizeLakes(lakes, grid, lakeId);
+  // the water as OpenStreetMap draws it, before the canoe routes' channels and the LiDAR's edges: the campsites and the
+  // official adds are placed on it exactly as data-v4 placed them (a save keys its sites by their place)
+  // (carved: 0 where the cell is as OpenStreetMap drew it; the channels and the edges only ever make land water)
+  const carved = new Uint8Array(N);
+  {
+    const r = carveNavChannels([...waterways.filter((c) => c.nav), ...navExtra], grid, lakeId, (id) => !lakes[id - 1].creek && !lakes[id - 1].river, carved);
+    log(`water edges: the canoe routes' channels: ${r.cells} cells made water, ${r.gaps} gaps of land crossed (${r.gapM} m), ${r.skipped} gaps over ${NAV_GAP} m left`);
+  }
   const nLakes = lakes.length;
   const lakeArea = new Uint32Array(nLakes + 1);
   const sumI = new Float64Array(nLakes + 1), sumJ = new Float64Array(nLakes + 1);
   for (let k = 0; k < N; k++) { const id = lakeId[k]; if (id) { lakeArea[id]++; sumI[id] += k % W; sumJ[id] += (k - (k % W)) / W; } }
-  let waterCells = 0;
+  let waterCells = 0; // (water edges: let, the edges add to it)
   for (let id = 1; id <= nLakes; id++) waterCells += lakeArea[id];
   log(`${nLakes} water polygons rasterized, water covers ${(100 * waterCells / N).toFixed(1)}% of ${N} cells`);
 
   // --- pass 1: elevation, distance field (in bands with a halo wider than the clamp distance)
   const hraw = new Int16Array(N);   // DEM height, decimetres
-  const h3dep = lidar ? new Int16Array(N) : null; // d2 bake: 3DEP alone, for each lake's old level (level3dep)
+  let h3dep = lidar ? new Int16Array(N) : null; // d2 bake: 3DEP alone, for each lake's old level (level3dep)
   const sdist = new Int16Array(N);  // signed shore distance, decimetres (+ land, - water)
   const EDT_HALO = Math.ceil(maxDist / cell) + 20;
   const clampCells = maxDist / cell;
@@ -275,6 +372,36 @@ async function main() {
   const rowBuf = new Float32Array(W);
   const n1 = Math.max(W, maxRows);
   const scratch = { f: new Float64Array(n1), d: new Float64Array(n1), v: new Int32Array(n1), z: new Float64Array(n1 + 1) };
+  // the signed shore distance over rows r0..r1_ (water edges: a function, run again once the water's edges have moved)
+  const shoreDistance = (r0, r1_, lakeId_ = lakeId, sdist_ = sdist) => {
+    const w0 = Math.max(0, r0 - EDT_HALO), w1 = Math.min(H, r1_ + EDT_HALO), rows = w1 - w0;
+    // distance to land (for water cells) and to water (for land cells)
+    const gw = g.subarray(0, rows * W), dl = dLand.subarray(0, rows * W), dw = dWater.subarray(0, rows * W);
+    for (let k = 0; k < rows * W; k++) gw[k] = lakeId_[w0 * W + k] ? EDT_INF : 0;
+    edt2d(gw, W, rows, dl, clampCells, scratch);
+    for (let k = 0; k < rows * W; k++) gw[k] = lakeId_[w0 * W + k] ? 0 : EDT_INF;
+    edt2d(gw, W, rows, dw, clampCells, scratch);
+    // signed metres, then a light 3x3 blur so the rasterized shoreline loses its staircase
+    const s0 = Math.max(0, r0 - 1), s1 = Math.min(H, r1_ + 1);
+    for (let j = s0; j < s1; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i, kw = (j - w0) * W + i;
+      sraw[(j - s0) * W + i] = lakeId_[k] ? -(dl[kw] - 0.5) * cell : Math.min(maxDist, (dw[kw] - 0.5) * cell);
+    }
+    for (let j = r0; j < r1_; j++) for (let i = 0; i < W; i++) {
+      let acc = 0, wsum = 0;
+      for (let dj = -1; dj <= 1; dj++) {
+        const jj = j + dj;
+        if (jj < s0 || jj >= s1) continue;
+        for (let di = -1; di <= 1; di++) {
+          const ii = i + di;
+          if (ii < 0 || ii >= W) continue;
+          const w = dj === 0 && di === 0 ? 4 : (dj === 0 || di === 0 ? 1 : 0.5);
+          acc += sraw[(jj - s0) * W + ii] * w; wsum += w;
+        }
+      }
+      sdist_[j * W + i] = Math.round(Math.max(-maxDist, Math.min(maxDist, acc / wsum)) * 10);
+    }
+  };
   let hmin = Infinity, hmax = -Infinity;
   for (let r0 = 0; r0 < H; r0 += BAND) {
     const r1_ = Math.min(H, r0 + BAND);
@@ -292,32 +419,7 @@ async function main() {
         hraw[o + i] = Math.round(h * 10); if (h < hmin) hmin = h; if (h > hmax) hmax = h;
       }
     }
-    // distance to land (for water cells) and to water (for land cells)
-    const gw = g.subarray(0, rows * W), dl = dLand.subarray(0, rows * W), dw = dWater.subarray(0, rows * W);
-    for (let k = 0; k < rows * W; k++) gw[k] = lakeId[w0 * W + k] ? EDT_INF : 0;
-    edt2d(gw, W, rows, dl, clampCells, scratch);
-    for (let k = 0; k < rows * W; k++) gw[k] = lakeId[w0 * W + k] ? 0 : EDT_INF;
-    edt2d(gw, W, rows, dw, clampCells, scratch);
-    // signed metres, then a light 3x3 blur so the rasterized shoreline loses its staircase
-    const s0 = Math.max(0, r0 - 1), s1 = Math.min(H, r1_ + 1);
-    for (let j = s0; j < s1; j++) for (let i = 0; i < W; i++) {
-      const k = j * W + i, kw = (j - w0) * W + i;
-      sraw[(j - s0) * W + i] = lakeId[k] ? -(dl[kw] - 0.5) * cell : Math.min(maxDist, (dw[kw] - 0.5) * cell);
-    }
-    for (let j = r0; j < r1_; j++) for (let i = 0; i < W; i++) {
-      let acc = 0, wsum = 0;
-      for (let dj = -1; dj <= 1; dj++) {
-        const jj = j + dj;
-        if (jj < s0 || jj >= s1) continue;
-        for (let di = -1; di <= 1; di++) {
-          const ii = i + di;
-          if (ii < 0 || ii >= W) continue;
-          const w = dj === 0 && di === 0 ? 4 : (dj === 0 || di === 0 ? 1 : 0.5);
-          acc += sraw[(jj - s0) * W + ii] * w; wsum += w;
-        }
-      }
-      sdist[j * W + i] = Math.round(Math.max(-maxDist, Math.min(maxDist, acc / wsum)) * 10);
-    }
+    shoreDistance(r0, r1_);
     log(`pass 1 rows ${r0}-${r1_} of ${H} (${((Date.now() - tb) / 1000).toFixed(1)} s)`);
   }
   log(`elevation range ${hmin.toFixed(1)} .. ${hmax.toFixed(1)} m`);
@@ -348,7 +450,7 @@ async function main() {
     }
     log(`${made.length} water polygons levelled as rivers (their ground falls over ${RIVER_SPREAD} m): ${made.slice(0, 40).join('; ')}`);
   }
-  const basin = new Int32Array(N).fill(-1);
+  let basin = new Int32Array(N).fill(-1); // (water edges: let go after the names)
   const basins = [];
   const riverBasin = new Int32Array(nLakes + 1).fill(-1);
   const stack = [];
@@ -413,6 +515,7 @@ async function main() {
   // `level3dep`
   if (lidar) {
     const l3 = basinPercentiles(h3dep), L = lidarBasinLevels(N, basin, basins.length, lidar);
+    h3dep = null; // (water edges: let go, for the memory the edges' arrays take)
     let used = 0, rise = [];
     for (let b = 0; b < basins.length; b++) {
       basins[b].level3dep = l3[b];
@@ -457,7 +560,7 @@ async function main() {
     const PERCH_MAX = 6; // m a waterway's fitted level may stand over the DEM of a river cell it is laid on
     const SUNK_MAX = 4; // m a river cell's level may lie under its DEM
     const win = [];
-    for (const wway of waterways) {
+    for (const wway of [...waterways, ...navExtra]) {
       const pts = resample(wway.pts, cell);
       const n = pts.length;
       if (n < 2) continue;
@@ -502,7 +605,7 @@ async function main() {
       // spread from the river's other cells.
       for (let i = 0; i < n; i++) {
         const k = cells[i];
-        if (k >= 0 && lakeId[k] && isRiver[lakeId[k]]) {
+        if (k >= 0 && lakeId[k] && isRiver[lakeId[k]] && (!wway.navOnly || lakeId[k] === wway.id)) {
           if (v[i] > hraw[k] / 10 + PERCH_MAX) { perched++; continue; }
           level[k] = Math.round(v[i] * 10); assigned[k] = 1;
         }
@@ -518,6 +621,24 @@ async function main() {
       const nb = [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, y > 0 ? k - W : -1, y < H - 1 ? k + W : -1];
       for (const q of nb) if (q >= 0 && !assigned[q] && lakeId[q] && isRiver[lakeId[q]]) { assigned[q] = 1; level[q] = L; queue[tail++] = q; }
     }
+    // water edges: a canoe route's channel cell no line nor the spread reached (beside a lake's narrows) takes the level of
+    // the water it touches first, lake or river, not its line's polygon level (the mean of its banks' heights)
+    {
+      let h2 = 0, t2 = 0, n2 = 0;
+      const q2 = new Int32Array(waterCells), lev = new Uint8Array(N);
+      for (let k = 0; k < N; k++) if (lakeId[k] && (assigned[k] || !isRiver[lakeId[k]])) lev[k] = 1;
+      for (let k = 0; k < N; k++) if (lev[k] && carved[k]) q2[t2++] = k;
+      for (let k = 0; k < N; k++) {
+        if (!carved[k] || lev[k]) continue;
+        const x = k % W;
+        for (const q of [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W]) if (q >= 0 && q < N && lev[q] && !carved[q]) { q2[t2++] = q; break; }
+      }
+      while (h2 < t2) {
+        const k = q2[h2++], x = k % W;
+        for (const q of [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W]) if (q >= 0 && q < N && carved[q] && !lev[q]) { lev[q] = 1; level[q] = level[k]; assigned[q] = 1; q2[t2++] = q; n2++; }
+      }
+      log(`water edges: ${n2} channel cells levelled from the water beside them`);
+    }
     // and whatever no line nor the spread reached keeps its polygon's level (a river basin's one median, 530.5 m for the
     // Louse River, which falls 40 m): never more than PERCH_MAX over the cell's own ground either; over it, the ground
     // (the LiDAR's hydro-flattened surface, or the 3DEP's) is the water's level
@@ -532,6 +653,66 @@ async function main() {
     }
     log(`${fitted} waterway profiles fitted (${reversed} drawn upstream), ${tail} river cells levelled (${perched} line cells left to the spread, ${clamped} cells brought down to their ground: the level stood over ${PERCH_MAX} m above it, ${raised} up to ${SUNK_MAX} m under it)`);
   }
+  // --- water edges: the water out to the LiDAR's own edge. The 2 m ground (detail-build.js chunkGround) draws the LiDAR on
+  //     land and holds it at the water's level near the shore, so where OSM's water stops short of the real channel or
+  //     shore (a creek's line a cell off its bed, a narrow channel rasterized one cell wide in a 20 m bed, a lake's mapped
+  //     edge inside its flattened surface, a pond on a canoe route OpenStreetMap lacks) the bed stood beside the water as a
+  //     flat dry shelf at its level, no water over it. The LiDAR's hydro-flattened water at the level of the water it
+  //     joins (within EDGE_FLAT m), up to EDGE_FLAT_REACH cells out, becomes that water: its id, its basin and its level;
+  //     so does a land cell within EDGE_REACH cells of it whose LiDAR ground lies EDGE_LOW to EDGE_DEEP m under that level
+  //     (a creek's bed, not flattened). Only on the US LiDAR, never round an entry point's put-in. The shore distance is
+  //     then worked out again.
+  if (lidar) {
+    const EDGE_REACH = 3, EDGE_FLAT_REACH = 40, EDGE_LOW = 0.15, EDGE_DEEP = 1.5, EDGE_FLAT = 0.25, EDGE_KEEP = 200, EDGE_STEP = 0.5;
+    const dist = new Uint8Array(N);
+    // not within EDGE_KEEP m of an entry point's put-in (its landing, the outfitter's store and the dock stand there)
+    {
+      const eps = JSON.parse(fs.readFileSync(new URL('./entrypoints.json', import.meta.url), 'utf8'));
+      const R = Math.ceil(EDGE_KEEP / cell);
+      for (const e of eps) for (const ll of [[e.lat, e.lon], e.usfs]) {
+        if (!ll) continue;
+        const [x, z] = proj.toLocal(ll[0], ll[1]), ci = grid.ci(x), cj = grid.cj(z);
+        for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < W && j < H && di * di + dj * dj <= R * R) dist[j * W + i] = 255; }
+      }
+    }
+    let q = [];
+    for (let k = 0; k < N; k++) if (lakeId[k]) { const x = k % W; if ((x > 0 && !lakeId[k - 1]) || (x < W - 1 && !lakeId[k + 1]) || (k >= W && !lakeId[k - W]) || (k + W < N && !lakeId[k + W])) q.push(k); }
+    let added = 0, byFlat = 0;
+    for (let r = 1; r <= EDGE_FLAT_REACH && q.length; r++) {
+      const next = [];
+      for (const k of q) {
+        const x = k % W, L = level[k] / 10;
+        for (const n of [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W]) {
+          if (n < 0 || n >= N || lakeId[n] || dist[n] === 255 || (lidar.mask[n] & 17) !== 17 || lidar.h[n] === -32768) continue;
+          const g = lidar.h[n] / 10, flat = (lidar.mask[n] & 2) !== 0;
+          if (!((r <= EDGE_REACH && g <= L - EDGE_LOW && g >= L - EDGE_DEEP) || (flat && Math.abs(g - L) <= EDGE_FLAT))) continue; // (not the foot of a falls: a bed metres under the water above it)
+          // (not where it would meet other water a step of over EDGE_STEP m from this: a beaver dam, a ledge)
+          const nx = n % W;
+          let step = false;
+          for (const m of [nx > 0 ? n - 1 : -1, nx < W - 1 ? n + 1 : -1, n - W, n + W]) if (m >= 0 && m < N && lakeId[m] && lakeId[m] !== lakeId[k] && Math.abs(level[m] - level[k]) > EDGE_STEP * 10) step = true;
+          if (step) continue;
+          lakeId[n] = lakeId[k]; level[n] = level[k]; basin[n] = basin[k]; dist[n] = r; carved[n] = 3;
+          lakeArea[lakeId[n]]++; sumI[lakeId[n]] += n % W; sumJ[lakeId[n]] += (n - (n % W)) / W; added++; if (flat) byFlat++;
+          next.push(n);
+        }
+      }
+      q = next;
+    }
+    waterCells += added;
+    for (let r0 = 0; r0 < H; r0 += BAND) shoreDistance(r0, Math.min(H, r0 + BAND));
+    log(`water edges: ${added} land cells beside the water made water where the LiDAR's ground lies under its level (${byFlat} of them the LiDAR's flattened water); shore distance redone`);
+  }
+  const sdist0 = new Int16Array(N);
+  {
+    let lakeId0 = new Uint16Array(N);
+    for (let k = 0; k < N; k++) if (!carved[k]) lakeId0[k] = lakeId[k];
+    for (let r0 = 0; r0 < H; r0 += BAND) shoreDistance(r0, Math.min(H, r0 + BAND), lakeId0, sdist0);
+    lakeId0 = null;
+  }
+  const lakeId0At = (k) => (carved[k] ? 0 : lakeId[k]);
+  // (and each polygon's centre as mapped: the index's cx, cz, which a save's migration checks a lake by)
+  const lakeArea0 = new Uint32Array(nLakes + 1), sumI0 = new Float64Array(nLakes + 1), sumJ0 = new Float64Array(nLakes + 1);
+  for (let k = 0; k < N; k++) { const id = lakeId0At(k); if (id) { lakeArea0[id]++; sumI0[id] += k % W; sumJ0[id] += (k - (k % W)) / W; } }
   // display level per polygon: lakes keep the basin level, rivers and creeks the mean of their cells
   {
     const sumL = new Float64Array(nLakes + 1);
@@ -656,7 +837,7 @@ async function main() {
     const DEFAULT = 2.6;
     for (let id = 1; id <= nLakes; id++) {
       if (secchiSrc[id] || !lakeArea[id]) continue;
-      const cx = grid.cx(sumI[id] / lakeArea[id]), cz = grid.cz(sumJ[id] / lakeArea[id]);
+      const a0 = lakeArea0[id], cx = grid.cx(a0 ? sumI0[id] / a0 : sumI[id] / lakeArea[id]), cz = grid.cz(a0 ? sumJ0[id] / a0 : sumJ[id] / lakeArea[id]); // (water edges: the mapped centre)
       let ws = 0, wsum = 0;
       for (const mz of measured) { const d = Math.hypot(mz.x - cx, mz.z - cz); if (d < 15000) { const wgt = 1 / (1000 + d); ws += wgt * mz.secchi; wsum += wgt; } }
       secchi[id] = wsum ? ws / wsum : DEFAULT;
@@ -700,13 +881,19 @@ async function main() {
       displayName[id] = lakes[id - 1].name || (src[k] ? lakes[src[k] - 1].name : null);
     }
   }
+  basin = null; // (water edges: no longer read; let go for the memory)
   log(`levels and names assigned (${((Date.now() - t0) / 1000).toFixed(0)} s so far)`);
 
   // --- portages: the first bake's 969 as they were, then the ones it dropped, connected (world-links.mjs)
   const water = makeWater({ grid, lakeAt: (i, j) => lakeId[j * W + i], sdAt: (i, j) => sdist[j * W + i] / 10, name: (id) => displayName[id] || null, basin: (id) => lakeBasin[id], big: (id) => !lakes[id - 1].creek && lakeArea[id] >= 50 });
+  // (water edges: the trails are linked on the mapped water, before the routes' channels and the LiDAR's edges, so every
+  // trail keeps data-v4's ends: a save keys a trail by them; the water only grew, so each end is still on the water)
+  const lakeAt0 = (i, j) => (i < 0 || j < 0 || i >= W || j >= H ? 0 : lakeId0At(j * W + i));
+  const sdAt0 = (i, j) => (i < 0 || j < 0 || i >= W || j >= H ? 3000 : sdist0[j * W + i] / 10);
+  const water0 = makeWater({ grid, lakeAt: lakeAt0, sdAt: sdAt0, name: (id) => displayName[id] || null, basin: (id) => lakeBasin[id], big: (id) => !lakes[id - 1].creek && lakeArea0[id] >= 50 });
   let portages;
   {
-    const { kept, added, report } = linkPortages(chainsFrom(osm.portages, proj), water);
+    const { kept, added, report } = linkPortages(chainsFrom(osm.portages, proj), water0);
     portages = [...kept, ...added];
     log(`${report.candidates} candidate trails: ${report.kept} kept as they are, ${report.added} of the ${report.dropped} the first bake dropped connected (${JSON.stringify(report.done)}), ${report.left.length} left out`);
     for (const l of report.left) log(`  left out: ${l.names.join('/') || 'unnamed'}: ${l.why}`);
@@ -719,7 +906,7 @@ async function main() {
     const i = grid.ci(x), j = grid.cj(z);
     if (i < 1 || j < 1 || i >= W - 1 || j >= H - 1) continue;
     const k = j * W + i;
-    campsites.push({ x: r1(x), z: r1(z), name: c.name || null, onWater: !!lakeId[k], shore: sdist[k] / 10 });
+    campsites.push({ x: r1(x), z: r1(z), name: c.name || null, onWater: !!lakeId0At(k), shore: sdist0[k] / 10 }); // (water edges: on the mapped water)
   }
   log(`${campsites.length} campsites`);
 
@@ -941,9 +1128,9 @@ async function main() {
   //     of the nearest water cell within 400 m (as scripts/site-lakes.mjs made src/site-lakes.json for data-v3)
   let namesAdded = null;
   if (P) {
-    const lakeAt = (i, j) => (i < 0 || j < 0 || i >= W || j >= H ? 0 : lakeId[j * W + i]);
-    const sdAt = (i, j) => (i < 0 || j < 0 || i >= W || j >= H ? 3000 : sdist[j * W + i] / 10);
-    namesAdded = officialAdds({ grid, proj, lakeAt, sdAt, water, portages, landings, campsites, cacheDir: CFG.cacheDir, log });
+    // (water edges: on the mapped water, before the routes' channels and the LiDAR's edges: data-v4's sites exactly)
+    const lakeAt = lakeAt0, sdAt = sdAt0;
+    namesAdded = officialAdds({ grid, proj, lakeAt, sdAt, water: water0, portages, landings, campsites, cacheDir: CFG.cacheDir, log });
     if (namesAdded) {
       for (const c of namesAdded.campsites) campsites.push({ x: c.x, z: c.z, name: c.name, onWater: false, shore: c.shore, usfs: c.usfs, added: true });
       for (const p of namesAdded.portages) portages.push(p);
@@ -998,7 +1185,7 @@ async function main() {
     if (!lakeArea[id]) return null;
     const rec = { id, name: l.name, displayName: displayName[id], river: l.river || undefined, creek: l.creek || undefined, basin: lakeBasin[id], level: +lakeLevel[id].toFixed(2), cells: lakeArea[id], maxDepth: bathyLake[id] ? +(maxDepth[id] / 10).toFixed(1) : undefined,
       secchi: +secchi[id].toFixed(2), secchiMeasured: secchiSrc[id] === 1 || undefined, tp: tpById[id] ? +tpById[id].toFixed(1) : undefined,
-      cx: r1(grid.cx(sumI[id] / lakeArea[id])), cz: r1(grid.cz(sumJ[id] / lakeArea[id])), osm: l.osm };
+      cx: r1(grid.cx(lakeArea0[id] ? sumI0[id] / lakeArea0[id] : sumI[id] / lakeArea[id])), cz: r1(grid.cz(lakeArea0[id] ? sumJ0[id] / lakeArea0[id] : sumJ[id] / lakeArea[id])), osm: l.osm };
     // d2 bake: the water's colour (UMN LakeBrowser through d1-quetico-lakes: secchi m, cdom a440 per m, chla ug/L, where
     // it came from), the DNR's DOW numbers, the beds' cells (ground 8 and 9) and the 3DEP level before the LiDAR's
     const c = colourOf[id];

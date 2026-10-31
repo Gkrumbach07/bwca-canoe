@@ -280,20 +280,41 @@ export function ledgeAt(x, z, pre) {
 
 // Height in the shore band follows the distance field, so the waterline, the ripple lines and the
 // collision all agree on where the shore is. Outside the band the baked DEM height is used.
-function shoreShape(hBase, sd, level) {
+// Under water the band's bed falls 0.12 m a metre off the shore: a lake's beach. Water edges (the owner: "some narrow
+// rapids barely have any water"): a creek or a narrows one or two 10 m cells wide never gets more than 1.25-3.75 m from
+// its shore, so the band drew it 0.15-0.45 m deep from bank to bank (the bake's bed, a metre down, never showed), and the
+// bed stood within a ripple of the water. Where the water round a point is that narrow (its deepest shore distance in
+// the 4 x 4 cells round it, `narrowAt`), the bed falls NARROW.slope m a metre off the shore to NARROW.depth: a channel
+// two cells wide (every canoe route's, the bake's carveNavChannels) is 0.9 m deep in its middle, one cell wide 0.44 m.
+// (Not steeper: the mesh's waterline vertex is the straight line between its two lattice vertices, and a steeper bed
+// would sink it under the water.) Water wider than NARROW.wide m from the shore is as it was, easing in from NARROW.from.
+export const NARROW = { depth: 0.9, slope: 0.35, from: 5, wide: 10 };
+export function narrowAt(grid, x, z) {
+  const fi = Math.floor((x - grid.originX) / grid.cell - 0.5), fj = Math.floor((z - grid.originZ) / grid.cell - 0.5);
+  let half = 0;
+  for (let dj = -1; dj <= 2; dj++) for (let di = -1; di <= 2; di++) { const v = -grid.sdCell(fi + di, fj + dj); if (v > half) half = v; }
+  return half;
+}
+export function bedDepth(sd, half) {
+  const a = -sd, beach = 0.12 * a;
+  if (half >= NARROW.wide) return beach;
+  return lerp(Math.max(beach, Math.min(NARROW.depth, NARROW.slope * a)), beach, smoothstep(NARROW.from, NARROW.wide, half));
+}
+function shoreShape(hBase, sd, level, half = NARROW.wide) {
   const a = Math.abs(sd);
   if (a >= SHAPE_BAND || !Number.isFinite(level)) return hBase;
-  const target = level + (sd > 0 ? 0.16 * sd : 0.12 * sd);
+  const target = sd > 0 ? level + 0.16 * sd : level - bedDepth(sd, half);
   const w = 1 - smoothstep(SHAPE_BAND * 0.5, SHAPE_BAND, a);
   return lerp(hBase, target, w);
 }
+const halfAt = (grid, x, z, sd) => (sd < 0 ? narrowAt(grid, x, z) : NARROW.wide);
 
 // The height things should stand on: the DEM reshaped in the shore band exactly as the mesh is.
 export function surfaceAt(grid, x, z) {
   if (grid.detail) { const d = grid.detail.height(x, z); if (d === d) return d; } // LiDAR detail (detail-build.js): a chunk's lattice, in the worker's view of a grid
   const h = grid.heightAt(x, z), sd = grid.shoreAt(x, z);
   if (Math.abs(sd) >= SHAPE_BAND) return h;
-  return shoreShape(h, sd, grid.levelAt(x, z, 4));
+  return shoreShape(h, sd, grid.levelAt(x, z, 4), halfAt(grid, x, z, sd));
 }
 
 // Gentle bumps a little way from the waterline (never across it): hummocks and roots under the shore's trees, low
@@ -329,7 +350,7 @@ export function meshHeightAt(grid, x, z, cache = null) {
     else h = a && b ? (grid.hCell(ci, cj) + grid.hCell(ci + 1, cj) + grid.hCell(ci, cj + 1) + grid.hCell(ci + 1, cj + 1)) / 4
       : a ? (grid.hCell(ci, cj) + grid.hCell(ci + 1, cj)) / 2 : (grid.hCell(ci, cj) + grid.hCell(ci, cj + 1)) / 2;
     const sd = grid.shoreAt(vx, vz);
-    if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(h, sd, grid.levelAt(vx, vz, 4)); // d1 rapids: the water's own level here (bilinear), as the mesh below
+    if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(h, sd, grid.levelAt(vx, vz, 4), halfAt(grid, vx, vz, sd)); // d1 rapids: the water's own level here (bilinear), as the mesh below
     if ((a || b) && (a && b ? quadFine(ci, cj) : a ? quadFine(ci, cj) && quadFine(ci, cj - 1) : quadFine(ci, cj) && quadFine(ci - 1, cj))) h += shoreBumps(vx, vz, sd);
     if (cache) cache.set(key, h);
     return h;
@@ -409,7 +430,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
       // as surfaceAt and the water shader's surfaceAt have it), not its cell's: where the level falls (a rapids, a falls
       // made where it really is) the cell's level stood the bed up to a metre or several over the drawn water, a wall of
       // ground across the channel. On level water the two are the same.
-      if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(hBase, sd, grid.levelAt(x, z, 4));
+      if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(hBase, sd, grid.levelAt(x, z, 4), halfAt(grid, x, z, sd));
       if (a || b) {
         // bumps only where every quad sharing this vertex is subdivided, so band edges stay watertight
         const interior = a && b ? quadFine(i, j) : a ? quadFine(i, j) && quadFine(i, j - 1) : quadFine(i, j) && quadFine(i - 1, j);
