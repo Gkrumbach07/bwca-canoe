@@ -19,7 +19,7 @@
 import { smoothstep, clamp, fbm } from './rng.js';
 import { surfaceAt } from './terrain-build.js';
 import { burnAt, knobAt, sandAt, meadowAt } from './fields.js';
-import { landOf, KIND, KIND_LAND, OPEN_FOREST, CLIFF as FORM, cliffClass, cliffStrength, ROCK_TINT, wetlandMix, standingWater, mireOf, wetRegime, wetBeaver } from './land.js'; // d2 land
+import { landOf, KIND, KIND_LAND, OPEN_FOREST, CLIFF as FORM, cliffClass, cliffStrength, ROCK_TINT, wetlandMix, standingWater, mireOf, wetRegime, wetBeaver, wclass1, emergentGrow } from './land.js'; // d2 land
 import { burnDate } from './burns.js'; // (the wetlands round: the season's date the tile is built for)
 
 // The shore's rock (the shoreline pass). In the Boundary Waters the forest runs to the water almost everywhere; the
@@ -338,6 +338,8 @@ export class Site {
       if (wcls && wcls[k] && K.wet >= 0) {
         const mx = wetlandMix(wcls[k], x, z);
         if (mx) { mix[k] = mx; meadow[k] = mx.meadow; sphag[k] = mx.sphag; }
+        // (wetlands round 2: an EM2 meadow dies back like the rice, to the mud and the stubble under it)
+        if (mx && wclass1(wcls[k]) === 11) meadow[k] *= 0.2 + 0.8 * emergentGrow(doy);
       }
       // bare rock: the mapped outcrop (D-02) all but bare; a ledge the LiDAR found; none in a wetland or on sand
       let br = bare[k];

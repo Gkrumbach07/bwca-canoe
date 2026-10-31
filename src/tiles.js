@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeTerrainMesh } from './terrain.js';
+import { makeTerrainMesh, setLandSeason } from './terrain.js';
 import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as VEG_SPECIES } from './vegetation.js';
 import { makeAquaticMeshes, waterInit } from './aquatic.js'; // (d2 water: waterInit)
 import { tilePropsSteps, exclusionsFor } from './props.js';
@@ -60,7 +60,7 @@ export const CULL = {
   budget: 2,         // milliseconds a frame may spend preparing meshes
   understoryShadow: true, // round A-C: the understory casts into the cascades (main.js: off at half the undergrowth, Low)
 };
-const UNDERSTORY = new Set([7, 10, 11, 12, 13, 20, 22]); // shrub, hazel, alder, sapling, fern, talus, a burn's regrowth (placement.js SPECIES)
+const UNDERSTORY = new Set([7, 10, 11, 12, 13, 20, 22, 24]); // shrub, hazel, alder, sapling, fern, talus, a burn's regrowth, the bog's leatherleaf mat (placement.js SPECIES)
 const SWAY_MARGIN = 2; // metres the wind can carry a crown past its geometry's bounds
 const CHUNK = 64;      // instances per chunk at most
 const CELL = 16;       // metres: the sort's cells (a chunk keeps to a block of 2 x 2 of them)
@@ -444,6 +444,7 @@ export class TileManager {
   setSeason(season) {
     if (this.vegetation.setSeason) this.vegetation.setSeason(season);
     if (this.aquatic && this.aquatic.setSeason) this.aquatic.setSeason(season);
+    setLandSeason(season); // wetlands round 2: the pools' ice, the meadows' season
   }
 
   // --- requests ------------------------------------------------------------------
