@@ -2,7 +2,7 @@
 // placement and its ground-cover map as transferable typed arrays. The main thread only wraps them into
 // three.js objects.
 import { TileGrid } from './grid.js';
-import { buildTerrainChunk } from './terrain-build.js';
+import { buildTerrainChunk, setLowCreeks } from './terrain-build.js'; // (wetlands round 2: setLowCreeks, the seasonal creeks' mud)
 import { buildWaterChunk, shoalBeds, lowCreeks } from './water-build.js'; // (d2 water: shoalBeds; wetlands round 2: lowCreeks)
 import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
@@ -291,7 +291,7 @@ async function buildDetail(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
+  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); setLowCreeks(new Set(m.lowIds || [])); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
   if (m.type === 'chunk') {
     try { const r = await buildDetail(m); self.postMessage(r.msg, r.transfer); } catch (err) { self.postMessage({ type: 'error', key: m.key, error: String((err && err.message) || err) }); }
     return;

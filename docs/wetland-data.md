@@ -152,8 +152,14 @@ All of this needs a rebake, and a new map-data release uploaded to R2 (data.gage
 - **Game, the water** (`creeks.js`, `world.js`, `props.js`, `player.js`, `map-*.js`, `fauna.js`, audio): brooks on the
   land (dry by midsummer when intermittent), seasonal creeks shallow late in summer, beaver dams and lodges with a hold-E
   haul-over, beavers at the real lodges, brooks and dams on the map, the lake page's Water line.
-- **Not yet:** a low creek isn't drawn lower; the haul has no walking figure; brooks aren't cut into the ground; land
-  marshes don't change their plants through the seasons; ice doesn't cover the marsh pools; the leatherleaf mat uses the
-  game's one broadleaf shrub; walking in mud ignores the season.
-- **Release:** a new data release (`bwca/v5/` on R2) goes out with this code: `src/rapids.json` and
-  `src/lake-facts-v4.json` now belong to it.
+- **Round 2 (claude/wetlands-2, data v6):** marsh channels cut 7.5 m wide so diagonals stay joined (at 6 m the water
+  broke); creeks paddled from every portage end (OSM, USFS, and the creeks out of an unnamed pond a portage ends on) to
+  open water; duplicate old dams dropped; a seasonal creek's water 1.3 ft lower in August with a mud bank; the haul over
+  a dam walked (the paddler out on the dam, dragging the canoe over); brooks cut into the 2 m ground with damp banks; a
+  leatherleaf / Labrador tea mat; marsh pools frozen and snow-dusted in winter, slush at ice-out; meadows through the
+  seasons; the walk in a marsh firmer as it dries and frozen.
+- **Not yet:** land marshes have no standing cattail and sedge plants (only the ground colour and tufts); no snow on the
+  ground anywhere in the game; pools freeze on the nearest lake's dates (a real pool a week or two earlier); a tile shows
+  the low water and the pools for the date it was built.
+- **Release:** data `bwca/v6/` on R2 goes out with this code (`src/rapids.json` and `src/lake-facts-v4.json` belong to it);
+  v5 and v4 kept for rollback.

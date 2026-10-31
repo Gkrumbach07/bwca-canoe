@@ -178,8 +178,14 @@ export const BED_MATS = [hex(0xb3a27c), hex(0x786e5d), hex(0x584833), hex(0x625d
 //   sand     only in the odd sandy cove (the site's beaches, else a sparse slow field): the shallows are dark
 //   weed     a bed of pondweed and milfoil over the soft bottom from half a metre to three or four
 // The rocks and logs placement puts on the bed read the same (placement.js placeVegetation, bedFeatures).
+// wetlands round 2: the seasonal creeks (tile-worker.js sets them once): their bed is mud, never a sandy cove, so the
+// bank their late-summer low water bares is the muck of a marsh creek
+let LOW_CREEKS = null;
+export function setLowCreeks(set) { LOW_CREEKS = set && set.size ? set : null; }
 export function bedPre(grid, x, z, sd, depth, site, out = {}) {
-  out.clarity = grid.clarityOf ? grid.clarityOf(grid.lakeIdAt(x, z)) : 2.6;
+  const lid = grid.lakeIdAt ? grid.lakeIdAt(x, z) : 0;
+  out.clarity = grid.clarityOf ? grid.clarityOf(lid) : 2.6;
+  if (LOW_CREEKS && LOW_CREEKS.has(lid)) { out.sand = 0; out.cobble = 0.08; out.silt = 0.92; out.bedrock = 0; out.weed = 0; out.rock = 0; out.soft = 1; return out; }
   if (depth > 14) { out.sand = 0; out.cobble = 0; out.silt = 1; out.bedrock = 0; out.weed = 0; out.rock = 0; out.soft = 1; return out; }
   let rock = 0.3, wet = 0, beach = 0;
   if (site) {
