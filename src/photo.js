@@ -3,6 +3,7 @@ import { registerKind, KINDS, siteFeature, lakeNearGrid } from './tasks.js';
 import { esc, word } from './hud.js';
 import { monthDay } from './astro.js';
 import { save } from './save.js';
+import { names, KINDS_NOTE } from './names.js';
 
 // The camera and the photo notices (hubs phase 3, stream B). The owner: "need nature photos, need a picture of a bird
 // for magazine", "take a really cool picture of a moose".
@@ -60,6 +61,18 @@ const hopsText = (h) => (h == null ? '' : h === 0 ? ', right off this landing' :
 const kmFrom = (L, x, z) => +(Math.hypot(x - L.x, z - L.z) / 1000).toFixed(1);
 const labelOf = (s) => (s.kind === 'moose' ? (s.calf ? 'a moose calf' : s.bull ? 'a bull moose' : 'a cow moose')
   : { beaver: 'a beaver', loon: 'a loon', eagle: 'a bald eagle', gull: 'a herring gull', raven: 'a raven' }[s.kind] || 'something');
+const MANY = { moose: 'moose', beaver: 'beavers', loon: 'loons', eagle: 'bald eagles', gull: 'herring gulls', raven: 'ravens' };
+// The caption (the owner, 2026-10-31: "They always say an unnamed lake. Even if I have like an animal in the picture or
+// I'm taking a picture of something else, it just is not getting it right"). The caption used to name an animal only
+// when it also counted for a notice (near enough and in the middle), and the water only by the polygon under you, which
+// for a bay, a pond or a creek mouth the map has no name for read "an unnamed lake". Now it names what is in the frame
+// (an animal anywhere in it within FRAME_REACH × its notice reach, a bear, people, a campsite, the sun going down or
+// coming up, the stars), and the water the subject is on: the lake's name, a GNIS bay or narrows within its note
+// radius, else the named lake it opens onto (same basin) or the nearest named lake (NEAR_NAMED m): "a pond by Lake One".
+const FRAME_REACH = 3;                 // × REACH: an animal this far is still what the picture is of, "in the distance"
+const SIGHT = { people: 250, bear: 120, camp: 260 }; // m: people, a bear, a campsite in the frame
+const NEAR_NAMED = 2500;               // m: the named lake an unnamed one is "by"
+const PLACE_WORDS = new Set(['bay', 'narrows', 'island', 'point']); // GNIS places that name the water at a spot
 
 // --- the notices ----------------------------------------------------------------------------------------------------
 // [what it says, who signed it]
@@ -427,7 +440,7 @@ export class PhotoCamera {
   // What the frame holds now: the subjects that count (near the middle, near enough, in sight), those too far, those
   // off to the side, and the place notices on the go that this view would do.
   survey() {
-    const cam = this.camera, out = { counts: [], far: [], edge: [], places: [] };
+    const cam = this.camera, out = { counts: [], far: [], edge: [], places: [], seen: [], also: [] };
     cam.updateMatrixWorld();
     _inv.copy(cam.matrixWorld).invert();
     const eye = _eye.setFromMatrixPosition(cam.matrixWorld), g = this.geom(), f = this.fauna;
@@ -443,12 +456,83 @@ export class PhotoCamera {
       const e = { kind: s.kind, bull: !!s.bull, calf: !!s.calf, x: s.x, y: s.y, z: s.z, d, u: at.u, v: at.v, label: labelOf(s) };
       const mid = at.u * at.u + at.v * at.v <= ZONE * ZONE;
       if (mid && d <= r) out.counts.push(e); else if (mid) out.far.push(e); else if (d <= r) out.edge.push(e);
+      if (d <= r * FRAME_REACH) out.seen.push(e); // in the print at all: what the caption names
     }
     const rank = (s) => (VALUE[s.kind] || 0) + (s.bull ? 0.5 : 0) - (s.calf ? 0.5 : 0); // a bull before a cow before a calf
     out.counts.sort((a, b) => rank(b) - rank(a) || a.d - b.d);
     out.far.sort((a, b) => a.d - b.d); out.edge.sort((a, b) => a.d - b.d);
+    // the caption's: the nearest first (by its reach), the middle of the print before its edge
+    out.seen.sort((a, b) => (a.u * a.u + a.v * a.v <= ZONE * ZONE ? 0 : 1) - (b.u * b.u + b.v * b.v <= ZONE * ZONE ? 0 : 1) || a.d / (REACH[a.kind] || 60) - b.d / (REACH[b.kind] || 60));
+    try { out.also = this.others(eye, g); } catch { out.also = []; }
     for (const t of this.onTheGo()) if (t.want === 'place' && t.target && this.placeFits(t.target, eye, g)) out.places.push(t.id);
     return out;
+  }
+  // What else the print is of, for its caption (none of it counts for a notice): a bear, people (a canoe of them, a
+  // walker on a trail), a campsite, the sun low over the water, the stars. Each { kind, label, x, z, d }, the likeliest
+  // subject first.
+  others(eye, g) {
+    const out = [], w = this.world, G = (typeof window !== 'undefined' && window.__game) || {};
+    const inFrame = (x, y, z, k = 1) => { const at = this.inPrint(x, y, z, g); return !!at && Math.abs(at.u) <= k && Math.abs(at.v) <= k; };
+    const B = G.bear && G.bear.visit;
+    if (B && Number.isFinite(B.x)) {
+      const y = w.heightAt(B.x, B.z) + 0.6, d = Math.hypot(B.x - eye.x, B.z - eye.z);
+      if (d < SIGHT.bear && inFrame(B.x, y, B.z) && this.clear(eye, { x: B.x, y, z: B.z })) out.push({ kind: 'bear', label: 'a black bear', x: B.x, z: B.z, d });
+    }
+    const A = G.actors;
+    if (A) {
+      for (const b of A.boats || []) {
+        if (b.removed || !Number.isFinite(b.x)) continue;
+        const d = Math.hypot(b.x - eye.x, b.z - eye.z), n = (b.crew || []).length;
+        if (d < SIGHT.people && inFrame(b.x, (b.y || this.world.levelAt(b.x, b.z)) + 0.8, b.z)) out.push({ kind: 'people', label: n > 1 ? `${word(n)} paddlers in a canoe` : 'a paddler in a canoe', x: b.x, z: b.z, d });
+      }
+      for (const q of A.people || []) {
+        if (q.removed || q.boat || !Number.isFinite(q.x)) continue;
+        const d = Math.hypot(q.x - eye.x, q.z - eye.z), y = w.heightAt(q.x, q.z) + 1;
+        if (d < SIGHT.people * 0.6 && inFrame(q.x, y, q.z) && this.clear(eye, { x: q.x, y, z: q.z })) out.push({ kind: 'people', label: q.mode === 'carry' ? 'someone carrying a canoe' : 'another camper', x: q.x, z: q.z, d });
+      }
+    }
+    for (const s of w.campsites || []) {
+      const d = Math.hypot(s.x - eye.x, s.z - eye.z);
+      if (d > SIGHT.camp || d < 6) continue;
+      const y = w.heightAt(s.x, s.z) + 1.5;
+      if (inFrame(s.x, y, s.z, ZONE) && this.clear(eye, { x: s.x, y, z: s.z })) out.push({ kind: 'camp', label: 'the campsite', x: s.x, z: s.z, d, site: s });
+    }
+    out.sort((a, b) => a.d - b.d);
+    const d = this.day;
+    if (d && d.sunDir && d.elevation > -3 && d.elevation < 10) {
+      const q = _q.copy(d.sunDir).transformDirection(_inv);
+      if (q.z < -0.05 && Math.abs(q.x / -q.z / g.tanH) <= 1 && Math.abs(q.y / -q.z / g.tanV) <= 1.1) out.push({ kind: 'sun', label: d.hours < 12 ? 'sunrise' : 'sunset', d: Infinity });
+    }
+    if (d && d.elevation < -10) { this.camera.getWorldDirection(_dir); if (_dir.y > 0.35) out.push({ kind: 'stars', label: 'the stars', d: Infinity }); }
+    return out;
+  }
+  // the water at (x, z) in words: "Lake One", "Grassy Bay, Sand Point Lake", "a bay off Lake One", "a pond by Lake One",
+  // "a lake with no name"; null on land with no water near
+  waterWords(x, z) {
+    const w = this.world, id = w.lakeIdAt(x, z) || (this.tasks ? this.tasks.lakeNear(x, z, 15) : 0);
+    if (!id) return null;
+    const l = w.lakes[id - 1], name = w.lakeName(id);
+    // a bay, a narrows, a point or an island of the GNIS's near the spot names it more closely
+    let place = null, best = Infinity;
+    for (const p of names.places || []) {
+      if (!PLACE_WORDS.has(p.kind)) continue;
+      const dd = Math.hypot(p.x - x, p.z - z);
+      if (dd < (KINDS_NOTE[p.kind] || 200) && dd < best && (!name || !p.lake || p.lake === name)) { best = dd; place = p; }
+    }
+    if (name) return place && (place.kind === 'bay' || place.kind === 'narrows') ? `${place.name}, ${name}` : name;
+    if (place && place.lake) return place.kind === 'bay' || place.kind === 'narrows' ? `${place.name}, ${place.lake}` : `by ${place.name}, ${place.lake}`;
+    // no name of its own: the named water it opens onto, else the nearest named lake
+    const small = l && l.cells < 400, what = l && (l.river || l.creek) ? 'a creek' : small ? 'a pond' : 'a lake';
+    let off = null, od = Infinity, by = null, bd = NEAR_NAMED;
+    for (const q of w.lakes) {
+      if (!q || !q.name || q.id === id) continue;
+      const dd = Math.hypot(q.cx - x, q.cz - z);
+      if (l && l.basin != null && q.basin === l.basin && dd < od && dd < NEAR_NAMED * 3) { off = q; od = dd; } // the same water, joined
+      if (dd < bd) { by = q; bd = dd; }
+    }
+    if (off) return `${l.river || l.creek ? 'a creek' : 'a bay'} off ${w.lakeName(off.id) || off.name}`;
+    if (by) return `${what} by ${w.lakeName(by.id) || by.name}`;
+    return `${what} with no name`;
   }
   onTheGo() { const ts = this.tasks; return ts ? ts.active.filter((t) => t.kind === 'photo' && t.status === 'open') : []; }
   // a place counts by where you stand and which way you face
@@ -493,7 +577,9 @@ export class PhotoCamera {
     const best = look.counts[0] || null, place = t && t.want === 'place' ? t.target : null;
     const img = this.grab();
     const rec = { id: this.state.nextId++, at: Date.now(), year: d ? d.year : 0, doy: d ? d.doy : 0, hours: d ? +d.hours.toFixed(3) : 0, film: this.film,
-      kind: best ? best.kind : place ? 'place' : null, subjects: [...new Set(look.counts.map((s) => s.kind))], caption: this.caption(best, place), notice: null };
+      kind: best ? best.kind : place ? 'place' : null, subjects: [...new Set(look.counts.map((s) => s.kind))], caption: this.caption(look, place), notice: null };
+    const of = this.subjectOf(look); if (of) rec.of = of.kind; // (what the print shows, counted or not: the journal's Photos)
+    rec.where = this.waterWords(this.player.x, this.player.z) || null;
     if (t) {
       t.status = 'done'; t.photo = rec.id; t.print = rec.caption;
       rec.notice = { id: t.id, title: t.title, from: t.from };
@@ -540,15 +626,33 @@ export class PhotoCamera {
     return out.toDataURL('image/jpeg', 0.84);
   }
   // "A bull moose, Hudson Lake, July 14, dawn"
-  caption(best, place) {
-    const d = this.day, p = this.player, w = this.world;
-    const lakeId = w.lakeIdAt(p.x, p.z) || (this.tasks ? this.tasks.lakeNear(p.x, p.z, 15) : 0);
-    const lake = lakeId ? w.lakeName(lakeId) || 'an unnamed lake' : 'in the woods';
+  // look: a survey(); place: the place notice's target the picture goes to
+  caption(look, place) {
+    const d = this.day, p = this.player;
+    const here = this.waterWords(p.x, p.z) || 'in the woods';
     const date = d ? dateOf(d.year, d.doy) : '', when = this.partOfDay();
-    if (place && place.type === 'sunset') return `Sunset, ${place.name || lake}, ${date}`;
-    if (place && place.type === 'island') return `The island site, ${place.name || lake}, ${date}, ${when}`;
-    if (place && place.type === 'trail') return `${place.name || cap(lake)} from the end of the ${place.rods}-rod portage, ${date}, ${when}`;
-    return `${best ? `${cap(best.label)}, ${lake}` : cap(lake)}, ${date}, ${when}`;
+    if (place && place.type === 'sunset') return `Sunset, ${place.name || here}, ${date}`;
+    if (place && place.type === 'island') return `The island site, ${place.name || here}, ${date}, ${when}`;
+    if (place && place.type === 'trail') return `${place.name || cap(here)} from the end of the ${place.rods}-rod portage, ${date}, ${when}`;
+    const s = this.subjectOf(look);
+    if (!s) return `${cap(here)}, ${date}, ${when}`;
+    if (s.kind === 'sun' || s.kind === 'stars') return `${cap(s.label)} over ${here.startsWith('in the woods') ? 'the woods' : here}, ${date}`;
+    // the water the subject is on (a moose across the bay is on that bay), else where you stand
+    const at = Number.isFinite(s.x) ? this.waterWords(s.x, s.z) || here : here;
+    const site = s.site && s.site.name ? s.site.name : null;
+    return `${cap(s.label)}${site ? ` at ${site}` : `, ${at}`}, ${date}, ${when}`;
+  }
+  // what the print is of: { kind, label, x, z } or null. An animal in the middle that counts, else any in the print
+  // (two of a kind "two loons"; far off "in the distance"), else a bear, people, a campsite, the sun, the stars.
+  subjectOf(look) {
+    if (!look) return null;
+    const a = look.counts[0] || (look.seen || [])[0];
+    if (a) {
+      const same = (look.seen || []).filter((q) => q.kind === a.kind).length, far = a.d > (REACH[a.kind] || 60);
+      const label = same > 1 && MANY[a.kind] ? `${word(same)} ${MANY[a.kind]}` : a.label;
+      return { kind: a.kind, label: `${label}${far ? ' in the distance' : ''}`, x: a.x, z: a.z };
+    }
+    return (look.also || [])[0] || null;
   }
   partOfDay() {
     const d = this.day;
@@ -613,6 +717,7 @@ export class PhotoCamera {
     else if (t && t.want === 'place') say = `${esc(placeWords(t.target))}${forT}`;
     else if (L.far[0]) { say = `${esc(L.far[0].label)}, a long way off · ${Math.round(L.far[0].d)} m`; cls = 'dim'; }
     else if (L.edge[0]) { say = `${esc(L.edge[0].label)}, off to the side`; cls = 'dim'; }
+    else if (L.also && L.also[0]) { say = esc(cap(L.also[0].label)); cls = 'dim'; }
     const lens = `${Math.round(this.focal / 5) * 5} mm lens`;
     const meta = this.film === 'disposable' ? `Disposable · ${word(this.state.disposable)} left · ${lens}` : `35 mm · ${lens} · ${this.state.list.length} ${this.state.list.length === 1 ? 'print' : 'prints'}`;
     const key = `${say}|${cls}|${meta}`;
@@ -688,12 +793,6 @@ body.shell-open #photo, body.shell-open #photo-print, body.paper-open #photo-pri
 #photo-print img { display: block; width: 240px; height: 135px; background: #2a2016; }
 #photo-print .cap { margin-top: 7px; font: 500 18px/1.1 var(--pencil-font); color: var(--pencil); }
 #photo-print .for { margin-top: 3px; font: 700 10px/1.35 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }
-#journal .prints { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 24px; align-content: start; padding: 6px 6px 0; }
-#journal .print { margin: 0; padding: 7px 7px 9px; background: #f6f1e4; border: 1px solid var(--edge); box-shadow: 0 3px 8px rgba(40, 24, 8, .26); transform: rotate(var(--tilt, 0deg)); }
-#journal .print img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #d8ccae; }
-#journal .print .blank { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; background: #d8ccae; font: italic 14px/1.2 var(--serif); color: var(--ink-soft); }
-#journal .print figcaption { margin-top: 6px; font: 500 17px/1.1 var(--pencil-font); color: var(--pencil); }
-#journal .print .for { display: block; margin-top: 3px; font: 700 10px/1.35 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }
 `;
 let cssIn = false;
 function injectCss() {

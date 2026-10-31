@@ -735,8 +735,7 @@ async function main() {
     outfitter.save(); outfitter.render();
     return r;
   };
-  const leftPageC = journal.leftPage.bind(journal);
-  journal.leftPage = () => { const html = leftPageC(), rows = uniques.journalRows(); return rows ? html.replace(/(<div class="lab">On the go<\/div>)(<div class="empty">[^<]*<\/div>)?/, (m, head) => head + rows) : html; }; // a find noted, till it is reported
+  journal.notes = () => uniques.journalNotes(); // a find noted, till it is reported: an entry on the journal's Tasks page
   const captureC = photo.capture.bind(photo);
   photo.capture = () => { const rec = captureC(); try { uniques.fromPhoto(photo); } catch (e) { console.warn('uniques.fromPhoto', e); } return rec; }; // a photo of an old thing notes it
   const taskHintsC = tasks.hints.bind(tasks);
