@@ -11,6 +11,8 @@
 // On a v3 tile (or anywhere a field says "nothing here") everything that reads these falls back to the noise fields it
 // used before (fields.js, site.js), so the release in use draws exactly as it did. Pure data: it runs in the build worker.
 
+import { smoothstep, fbm } from './rng.js';
+
 export const V4_FIELDS = ['height', 'lake', 'sdist', 'level', 'ground', 'forest', 'canopy', 'cover', 'rock', 'cliff', 'stone', 'secchi', 'cdom'];
 
 // The byte fields of a tile grid (grid.js TileGrid): `grid.ch` = { ground, forest, ... } Uint8Arrays over the grid's side²
@@ -84,6 +86,101 @@ export function trailMireAt(read, pts, i, reach = 3) {
   let s = 0, n = 0;
   for (let k = Math.max(0, i - reach); k <= Math.min(pts.length - 1, i + reach); k++) { s += mireAt(read, pts[k][0], pts[k][1]); n++; }
   return n ? s / n : 0;
+}
+
+// ---- the whole NWI code (the wetlands round, 2026-10-31: docs/wetland-data.md) ------------------------------------
+// A v5 tile carries two more bytes per cell (scripts/v4-products.mjs), `wet` and `wcls`, 0 where no NWI polygon lies
+// (upland, and all of Ontario). On the bake's water they keep the NWI's code too (a creek through a marsh reads EM1).
+//   wet   bits 0-2 the water regime (REGIME), bit 3 beaver-made, bits 4-5 the system (SYSTEM), bits 6-7 where it sits (HGM)
+//   wcls  (class1 << 4) | class2 (WCLASS), class2 = class1 when the code has one class
+export const REGIME = [null, { code: 'A', name: 'temporarily flooded' }, { code: 'C', name: 'seasonally flooded' }, { code: 'F', name: 'semipermanently flooded' },
+  { code: 'H', name: 'permanently flooded' }, { code: 'D', name: 'saturated' }, { code: 'K', name: 'artificially flooded' }, { code: '', name: 'other regime' }];
+export const RG = { none: 0, temp: 1, seasonal: 2, semi: 3, perm: 4, saturated: 5, artificial: 6, other: 7 };
+export const SYSTEM = ['', 'P', 'L', 'R'];
+export const HGM = ['', 'terrene', 'lentic', 'lotic'];
+export const wetRegime = (b) => b & 7;
+export const wetBeaver = (b) => (b >> 3) & 1;
+export const wetSystem = (b) => (b >> 4) & 3;
+export const wetHgm = (b) => (b >> 6) & 3;
+export const wclass1 = (b) => b >> 4;
+export const wclass2 = (b) => b & 15;
+// The classes and what each grows (placement.js, site.js): the NWI says what kind of plant, LANDFIRE how tall and how
+// close where the two agree. Per class:
+//   trees   how much of the woods it keeps (the woods' own density times this, as KIND_LAND trees)
+//   cap     the tallest a tree stands there, m (a shrub class's runts: under ~18 ft); 0 = the stand's own height
+//   species the tree mix (placement.js SPECIES names)
+//   alder, shrub, low, fern, hazel   the brush: alder and willow, the shrubs (low: the bog's brush, leatherleaf and
+//           Labrador tea, low over 0: 1 the bog's usual knee height, less a lower mat), the ferns' and the hazel's share
+//   meadow  open sedge and grass (site.js meadow); sphag  sphagnum on the floor
+export const WCLASS = [
+  null,
+  { code: 'FO1', name: 'hardwood swamp', trees: 0.85, cap: 0, species: { ash: 0.55, cedar: 0.12, birch: 0.1, aspen: 0.08, tamarack: 0.08, blackSpruce: 0.07 }, alder: 0.8, shrub: 0, low: 0, fern: 1.7, hazel: 0.3, meadow: 0, sphag: 0 },
+  { code: 'FO2', name: 'tamarack swamp', trees: 0.92, cap: 0, species: { tamarack: 0.8, blackSpruce: 0.2 }, alder: 0.3, shrub: 0.4, low: 1, fern: 0.3, hazel: 0, meadow: 0.08, sphag: 0.5 },
+  { code: 'FO4', name: 'black spruce bog', trees: 0.85, cap: 0, species: { blackSpruce: 0.86, tamarack: 0.14 }, alder: 0, shrub: 0.5, low: 1, fern: 0.35, hazel: 0, meadow: 0, sphag: 0.6 },
+  { code: 'FO', name: 'swamp forest', trees: 0.8, cap: 0, species: { blackSpruce: 0.45, tamarack: 0.25, cedar: 0.15, ash: 0.1, birch: 0.05 }, alder: 0.5, shrub: 0.3, low: 0, fern: 0.8, hazel: 0.1, meadow: 0, sphag: 0.2 },
+  { code: 'SS1', name: 'alder thicket', trees: 0.07, cap: 5.5, species: { tamarack: 0.35, blackSpruce: 0.25, ash: 0.2, aspen: 0.2 }, alder: 2.8, shrub: 1.3, low: 0, fern: 0.5, hazel: 0.2, meadow: 0.12, sphag: 0 },
+  { code: 'SS2', name: 'stunted tamarack', trees: 0.38, cap: 4.5, species: { tamarack: 0.88, blackSpruce: 0.12 }, alder: 0.2, shrub: 1.1, low: 1, fern: 0, hazel: 0, meadow: 0.3, sphag: 0.75 },
+  { code: 'SS3', name: 'leatherleaf bog', trees: 0.03, cap: 3, species: { blackSpruce: 0.6, tamarack: 0.4 }, alder: 0, shrub: 2.8, low: 0.62, fern: 0, hazel: 0, meadow: 0.45, sphag: 1 },
+  { code: 'SS4', name: 'stunted black spruce', trees: 0.42, cap: 4.5, species: { blackSpruce: 0.88, tamarack: 0.12 }, alder: 0, shrub: 1.2, low: 1, fern: 0, hazel: 0, meadow: 0.22, sphag: 0.85 },
+  { code: 'SS', name: 'shrub swamp', trees: 0.12, cap: 5.5, species: { tamarack: 0.4, blackSpruce: 0.35, aspen: 0.25 }, alder: 1.6, shrub: 1.2, low: 0, fern: 0.4, hazel: 0.1, meadow: 0.2, sphag: 0 },
+  { code: 'EM1', name: 'sedge and cattail', trees: 0, cap: 3, species: null, alder: 0.12, shrub: 0.18, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0 },
+  { code: 'EM2', name: 'wild rice and pickerelweed', trees: 0, cap: 3, species: null, alder: 0.05, shrub: 0.1, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0 },
+  { code: 'AB', name: 'lily bed' }, { code: 'UB', name: 'open water' }, { code: 'US', name: 'sand shore' }, { code: 'RS', name: 'rock shore' },
+];
+// The code as the NWI writes it, short: "PSS1/EM1Cb" (system, classes, regime, beaver); '' where no polygon lies
+export function nwiCode(wet, wcls) {
+  if (!wet && !wcls) return '';
+  const a = WCLASS[wclass1(wcls)], b = WCLASS[wclass2(wcls)], r = REGIME[wetRegime(wet)];
+  let s = SYSTEM[wetSystem(wet)] + (a ? a.code : '');
+  if (b && b !== a) s += '/' + (b.code.slice(0, 2) === (a && a.code.slice(0, 2)) ? b.code.slice(2) : b.code);
+  return s + (r ? r.code : '') + (wetBeaver(wet) ? 'b' : '');
+}
+// A cell's plants from its classes (null where its first class grows nothing of its own: the open water, the beds, the
+// shores; and on a cell with no code). A two-class code is a patchwork, not an average: the second class takes about
+// 30 % of the ground in patches a few cells across (a noise field over the cell's centre, the same in the two tiles that
+// share a cell), and shows a little everywhere (alder under the trees, the odd runt in the sedge). `out` is reused.
+const MIX_KEYS = ['trees', 'cap', 'alder', 'shrub', 'low', 'fern', 'hazel', 'meadow', 'sphag'];
+export function wetlandMix(wcls, x, z, out = {}) {
+  const A = WCLASS[wclass1(wcls)], B0 = WCLASS[wclass2(wcls)];
+  if (!A || A.trees === undefined) return null;
+  const B = B0 && B0.trees !== undefined ? B0 : A;
+  let w = 0;
+  if (B !== A) w = 0.1 + 0.85 * smoothstep(0.59, 0.64, fbm(x * 0.022 + 31, z * 0.022 - 17, 2, 263));
+  for (const k of MIX_KEYS) out[k] = A[k] * (1 - w) + B[k] * w;
+  // a cap is the shrub class's: under trees (FO over SS) the trees keep their height; in the sedge (SS over EM) the runts' cap
+  out.cap = A.cap && (B.cap || !B.trees) ? Math.max(A.cap, B.cap) : A.cap && w < 0.5 ? A.cap : 0;
+  const sp = out.species || (out.species = {});
+  for (const k in sp) sp[k] = 0;
+  const add = (S, f) => { if (S) for (const k in S) sp[k] = (sp[k] || 0) + S[k] * f; };
+  const ta = A.trees * (1 - w), tb = B.trees * w, tt = ta + tb;
+  if (tt > 0) { add(A.species, ta / tt); add(B.species, tb / tt); } else add(A.species || B.species, 1);
+  out.c1 = A; out.c2 = B; out.w = w;
+  return out;
+}
+// The water standing on a wetland by its regime and the date (the owner: "some of it is seasonal too"), 0 dry .. 1 the
+// full standing water it always drew; -1 = no regime to go by (upland, a saturated bog, no survey): the ground's own.
+//   H, K   always;  F  always, a little lower in a late summer;  C  from ice-out to about early July, drying to wet mud by
+//   August, a little water again in the late fall rains;  A  only the May melt;  D (saturated)  never standing: the soaked
+//   moss as before. A beaver's marsh holds its water longer and never quite dries.
+// Tiles bake the date's level in when they are built (site.js), so it moves as tiles rebuild, not day by day in place.
+export function standingWater(regime, beaver, doy) {
+  const bv = beaver ? 1 : 0;
+  switch (regime) {
+    case RG.perm: case RG.artificial: return 1;
+    case RG.semi: return 1 - 0.25 * smoothstep(205, 240, doy) * (1 - smoothstep(270, 300, doy)) * (1 - 0.6 * bv);
+    case RG.seasonal: {
+      const floor = bv ? 0.45 : 0.1;
+      const dry = smoothstep(178 + 25 * bv, 222 + 30 * bv, doy), rewet = 0.3 * smoothstep(272, 305, doy);
+      return Math.min(1, 1 - (1 - floor) * dry + rewet);
+    }
+    case RG.temp: return Math.max(bv ? 0.2 : 0, 1 - smoothstep(140 + 15 * bv, 165 + 20 * bv, doy));
+    default: return -1;
+  }
+}
+// how much water stands on the ground (terrain.js groundMire, 0..1) from its wetness (site.js wet) and the level above
+export function mireOf(wet, level) {
+  const base = smoothstep(0.62, 0.95, wet);
+  return level < 0 ? base : base * (0.18 + 0.82 * level) + 0.6 * level * (1 - base);
 }
 
 // ---- the forest types (d1-forest-rock's legend) ------------------------------------------------------------------

@@ -17,7 +17,9 @@ import { REGION } from './placement.js';
 //   2 submerged weed: pondweed swaying on the bed, seen through clear shallow water
 //   3 wild rice: patches of thin cards, soft fields in the shallow bays
 // The season: pads and rice grow in with the summer and go in the fall, the lilies bloom in high summer, the
-// reeds and the rice turn tan, and nothing stands above a frozen lake.
+// reeds and the rice turn tan. The wetlands round (2026-10-31): the rice and the other EM2 plants (the NWI's
+// nonpersistent emergents) die back from mid-September and are gone by the ice; the bulrush, the cattail and the sedge
+// (EM1, persistent) stand brown through the winter, over the ice; the pads and the weed are under it.
 
 // metres from the camera to the nearest of a bin's instances (makeAquaticMeshes measures from the middle of their
 // spread, plus its half-diagonal) before the bin goes, per kind
@@ -215,7 +217,8 @@ function occluded(g) { return bakeOcclusion(g, { rays: 20, reach: 0.55, ground: 
 // so thin stems hold up far off), the flowers out of season cut, the leaves turning tan.
 export const AQUA = {
   uAquaMap: { value: null },
-  uGrow: { value: 1 },    // pads and rice: 0 gone, 1 full grown
+  uGrow: { value: 1 },    // pads: 0 gone, 1 full grown
+  uRiceGrow: { value: 1 }, // the wild rice likewise, on its own calendar
   uBloom: { value: 1 },   // the lilies
   uTan: { value: 0 },     // reeds and rice: 0 green, 1 tan
   uIceHide: { value: 0 }, // 1 over a frozen lake
@@ -248,11 +251,11 @@ const windSway = (kind) => kind === 2
 const vertexBody = (kind) => INSTANCE_ORIGIN + /* glsl */ `
   {
     vAqUv = uv; vAqPart = aPart;
-    ${kind === 0 || kind === 3 ? 'transformed *= uGrow;' : ''}
+    ${kind === 0 ? 'transformed *= uGrow;' : kind === 3 ? 'transformed *= uRiceGrow;' : ''}
     ${windSway(kind)}
-    ${kind === 2 ? '' : 'transformed *= 1.0 - step(0.5, uIceHide);\n    transformed.y += renderedWave(ipRel, uWaterTime) / sy;'}
+    ${kind === 2 ? '' : kind === 1 ? 'transformed.y += renderedWave(ipRel, uWaterTime) * (1.0 - uIceHide) / sy;' : 'transformed *= 1.0 - step(0.5, uIceHide);\n    transformed.y += renderedWave(ipRel, uWaterTime) / sy;'}
   }`;
-const PLANT_DECL = 'uniform float uGrow, uIceHide;\nattribute float aPart;\nvarying vec2 vAqUv;\nvarying float vAqPart;\n' + glslSway;
+const PLANT_DECL = 'uniform float uGrow, uRiceGrow, uIceHide;\nattribute float aPart;\nvarying vec2 vAqUv;\nvarying float vAqPart;\n' + glslSway;
 const fragCut = /* glsl */ `
   vec4 aq = texture2D( uAquaMap, vAqUv );
   vec2 tsz = vAqUv * 1024.0;
@@ -309,6 +312,8 @@ export function makeAquaticKit(water, seed = 9) {
   const setSeason = (s) => {
     const d = s.doy;
     AQUA.uGrow.value = s.pads;
+    // the rice up through June, standing by July, lodging from mid-September, gone by freeze-up
+    AQUA.uRiceGrow.value = THREE.MathUtils.smoothstep(d, 148, 172) * (1 - THREE.MathUtils.smoothstep(d, 260, 316));
     AQUA.uBloom.value = THREE.MathUtils.smoothstep(d, 168, 176) * (1 - THREE.MathUtils.smoothstep(d, 236, 246));
     // the reeds stand tan from the fall through to the new growth; the rice ripens from late August
     AQUA.uTan.value = Math.max(s.fall, s.bare, 1 - s.leaf, THREE.MathUtils.smoothstep(d, 228, 252) * 0.7);

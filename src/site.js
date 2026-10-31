@@ -19,7 +19,8 @@
 import { smoothstep, clamp, fbm } from './rng.js';
 import { surfaceAt } from './terrain-build.js';
 import { burnAt, knobAt, sandAt, meadowAt } from './fields.js';
-import { landOf, KIND, KIND_LAND, OPEN_FOREST, CLIFF as FORM, cliffClass, cliffStrength, ROCK_TINT } from './land.js'; // d2 land
+import { landOf, KIND, KIND_LAND, OPEN_FOREST, CLIFF as FORM, cliffClass, cliffStrength, ROCK_TINT, wetlandMix, standingWater, mireOf, wetRegime, wetBeaver } from './land.js'; // d2 land
+import { burnDate } from './burns.js'; // (the wetlands round: the season's date the tile is built for)
 
 // The shore's rock (the shoreline pass). In the Boundary Waters the forest runs to the water almost everywhere; the
 // rock shows as a ledge or a boulder band a few metres wide at the foot of the trees (the paint draws that from the
@@ -289,6 +290,9 @@ export class Site {
   //   sphag    0..1, the bog's sphagnum floor (terrain.js: ochre and rust over the moss)
   //   boulder  0..1, how bouldery: the LiDAR's rough gentle ground, the boulder fields, the soil survey's stony ground
   //   tintR/G/B  the bedrock unit's tint of the rock (land.js ROCK_TINT), 1 where unmapped
+  //   mire     0..1, how much water stands on the ground (terrain-build.js landW: the pools), from the wetness and, on a
+  //            v5 tile, the NWI's water regime by the date the tile is built for (land.js standingWater)
+  //   mix      per cell, the NWI classes' plants (land.js wetlandMix) where a wetland has them, else null (placement.js)
   // and over today's: wet (the wetland's own wetness; dry ground held under its kind's `dry`, so no bog where the survey
   // found none), bare (the mapped outcrops; the ledges; none in a wetland), beach (the mapped sand) and soil. In
   // Ontario, where nothing was surveyed, the forest map's open kinds (bog, fen, shrub swamp, marsh, wet meadow) stand
@@ -297,11 +301,12 @@ export class Site {
     const n = this.n, N = n * n, grid = this.grid, { sd, wet, bare, beach, soil, talus, camp, tpi, S } = this;
     const A = () => new Float32Array(N);
     const meadow = A(), sphag = A(), boulder = A(), tintR = A(), tintG = A(), tintB = A(), kind = new Uint8Array(N), wallK = A().fill(1);
+    const mire = A(), mix = new Array(N).fill(null), wcls = L.wcls || null, wetB = L.wet || null, doy = burnDate().doy;
     // (kind: the ground kind each land cell is drawn as, Ontario's from the forest map's open kinds; 0 = the noise's.
     // wallK: how much of a steep drawn wall the paint shows as the cliff's rock (terrain-build.js groundPre): all of it
     // at a face the LiDAR found and where it did not look, most at its ledges, little elsewhere, where the LiDAR's 10 m
     // ground is steep but its 2 m ground found no rock: a wooded hillside)
-    Object.assign(this, { meadow, sphag, boulder, tintR, tintG, tintB, kind, wallK });
+    Object.assign(this, { meadow, sphag, boulder, tintR, tintG, tintB, kind, wallK, mire, mix });
     const OPEN_KIND = { 13: KIND.openBog, 14: KIND.wetMeadow, 15: KIND.shrubSwamp, 16: KIND.marsh, 17: KIND.wetMeadow };
     for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
       const k = lj * n + li, d = sd[k];
@@ -328,6 +333,12 @@ export class Site {
       if (kd === KIND.upland && OPEN_FOREST[ft]) m = Math.max(m, OPEN_FOREST[ft].meadow);
       meadow[k] = m;
       sphag[k] = Math.max(K.sphag, ft === 13 ? 0.8 : ft === 14 ? 0.4 : 0);
+      // the wetlands round: a wetland's own classes (the NWI wins on what grows: a tamarack swamp, a leatherleaf mat, an
+      // alder thicket with sedge openings), its sedge and its sphagnum
+      if (wcls && wcls[k] && K.wet >= 0) {
+        const mx = wetlandMix(wcls[k], x, z);
+        if (mx) { mix[k] = mx; meadow[k] = mx.meadow; sphag[k] = mx.sphag; }
+      }
       // bare rock: the mapped outcrop (D-02) all but bare; a ledge the LiDAR found; none in a wetland or on sand
       let br = bare[k];
       // (a mapped outcrop is bare in patches: knobs and ledges of rock with moss, blueberry and pine between, barest on the
@@ -348,7 +359,13 @@ export class Site {
       const ridge = smoothstep(0.6, 3.2, tpi[k]), hollow = smoothstep(0.4, 2.6, -tpi[k]);
       soil[k] = clamp(0.6 + 0.3 * hollow + 0.2 * wet[k] - 0.45 * ridge - 0.9 * smoothstep(0.2, 0.75, S[k]) - bare[k], 0, 1);
     }
-    return [meadow, sphag, boulder, tintR, tintG, tintB, wallK];
+    // the standing water, from the final wetness (the wetlands round: by the regime and the date where the NWI has one)
+    for (let k = 0; k < N; k++) {
+      if (sd[k] < 0) continue;
+      const lv = wetB && wetB[k] && kind[k] !== KIND.upland ? standingWater(wetRegime(wetB[k]), wetBeaver(wetB[k]), doy) : -1;
+      mire[k] = mireOf(wet[k], lv);
+    }
+    return [meadow, sphag, boulder, tintR, tintG, tintB, wallK, mire];
   }
 
   // local cell index of world (x, z), clamped to the tile's extent
