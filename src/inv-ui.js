@@ -1747,7 +1747,7 @@ function takesHtml(list) {
 // fb5 B (the owner, after the first tooltips: "icons with +integers, stacked, no percent"): what an item does to the
 // energy bar's needs, a chip each in a row, the bar's own icon and the points out of 100, then when ("a handful")
 const ENERGY_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="5" width="14" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2.6" y="6.6" width="7" height="2.8" fill="currentColor"/></svg>'; // (the bar itself, its green)
-const NEED_WORD = { food: 'Food', water: 'Water', rest: 'Rest', warmth: 'Warmth', energy: 'Energy' };
+const NEED_WORD = { food: 'Food', water: 'Water', rest: 'Rest', warmth: 'Warmth', energy: 'Stamina' };
 function needIcon(k) {
   if (k === 'energy') return ENERGY_ICON;
   const I = A_HUD && A_HUD.NEED_ICON; return I && I[k] ? I[k] : '';

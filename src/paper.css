@@ -197,3 +197,8 @@
 :is(.pp-spread, .pp) .pp-foot kbd { font-size: 10px; }
 
 @media (prefers-reduced-motion: reduce) { .pp-tile, .pp-tab { transition: none; } }
+
+/* a task's number, the same as its red tag on the map; and the one picked there, lit */
+:is(.pp-spread, .pp) .pp-task .who .no { display: inline-block; min-width: 1.5em; padding: 0 4px; border: 1.5px solid #a33a2a; border-radius: 9px; color: #a33a2a; font-weight: 700; text-align: center; line-height: 1.25; }
+:is(.pp-spread, .pp) .pp-task.focus { background: rgba(232, 196, 92, .28); box-shadow: 0 0 0 2px rgba(232, 196, 92, .45); border-radius: 4px; animation: pp-focus 2.4s ease-out 1 forwards; }
+@keyframes pp-focus { 0%, 60% { background: rgba(232, 196, 92, .38); } 100% { background: rgba(232, 196, 92, .12); } }

@@ -198,6 +198,8 @@ export class Journal {
       <section class="pp-page right${body.rightCls ? ` ${body.rightCls}` : ''}" aria-labelledby="right-h">${nav}${body.right}
         <div class="pp-foot"><span>${body.foot || ''}</span><span><kbd>I</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
     [...this.jEl.querySelectorAll('.pp-scroll, .pp-index')].forEach((n, i) => { if (scrolls[i]) n.scrollTop = scrolls[i]; });
+    // a task picked on the map: scrolled to and lit once, then let go
+    if (this.focusTask != null) { const f = this.jEl.querySelector('.pp-task.focus'); if (f) f.scrollIntoView({ block: 'center' }); this.focusTask = null; }
   }
   // the index tabs down the right page's edge: [key, label, colour]
   tabs() {
@@ -218,8 +220,9 @@ export class Journal {
     const entry = (t) => {
       const st = this.taskState(t), who = t.npc ? `Asked by ${esc(String(t.npcName || 'a visitor'))}` : esc(kinds[t.kind] || (KINDS[t.kind] && KINDS[t.kind].label) || t.kind || 'Notice');
       const box = st.cls === 'done' ? 'pp-box done' : st.cls === 'half' ? 'pp-box half' : 'pp-box';
-      return `<div class="pp-task ${st.cls}"><span class="${box}" aria-hidden="true"></span>
-        <span class="who">${who} · ${esc(at(t.from))}</span>
+      const no = ts.active.indexOf(t) + 1, focus = this.focusTask != null && this.focusTask === t.id; // the number is the map's tag (map-book.js)
+      return `<div class="pp-task ${st.cls}${focus ? ' focus' : ''}"><span class="${box}" aria-hidden="true"></span>
+        <span class="who">${no && t.status !== 'done' ? `<b class="no">${no}</b> ` : ''}${who} · ${esc(at(t.from))}</span>
         <div class="t"><span class="pp-hand pen">${esc(t.title || t.clue || 'A notice')}</span><span class="pay">$${t.pay || 0}</span></div>
         ${t.text || t.clue ? `<div class="pp-hand small">${esc(t.text || t.clue)}</div>` : ''}
         <div class="pp-hand small st">${st.cls === 'done' ? 'done! ' : '— '}${esc(st.words)}</div></div>`;
