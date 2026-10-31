@@ -7,7 +7,7 @@ import { explored, INK_WATER, INK_RIM, ROUTE_STEP } from './explored.js'; // rou
 import { lifeKmh } from './pace.js';
 import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fmtDist, scaleBar } from './units.js'; // imperial on screen; the game itself stays metric
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
-import { KIND, FOREST } from './land.js'; // 2026-10-31: the land under you, in the developer rows
+import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
 import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt } from './map-render.js'; // the map as vectors
 import './hud.css';
@@ -1251,6 +1251,16 @@ export class Hud {
     const cls = typeof w.coverCell === 'function' ? GROUND[(w.coverCell(i, j) >> 16) & 255] : null;
     const parts = [];
     if (kind > 0 && KIND_NAMES[kind]) parts.push(`${words(KIND_NAMES[kind])}${kind >= KIND.openBog && kind <= KIND.aquaticBed ? ' (wetland)' : ''}`);
+    // the wetlands round: the whole NWI code, as "NWI PSS1/EM1Cb · alder thicket · seasonally flooded · beaver · lotic"
+    const wb = typeof w.chCell === 'function' ? w.chCell('wet', i, j) : 0, wc = typeof w.chCell === 'function' ? w.chCell('wcls', i, j) : 0;
+    if (wb || wc) {
+      const r = REGIME[wetRegime(wb)], c1 = WCLASS[wclass1(wc)], nwi = [`NWI ${nwiCode(wb, wc)}`];
+      if (c1) nwi.push(c1.name);
+      if (r) nwi.push(r.name);
+      if (wetBeaver(wb)) nwi.push('beaver');
+      if (wetHgm(wb)) nwi.push(HGM[wetHgm(wb)]);
+      parts.push(nwi.join(' · '));
+    }
     if (ft > 0 && FOREST[ft]) parts.push(`${words(FOREST[ft].key)} cover`);
     if (cls) parts.push(`ground: ${words(cls)}`);
     return parts.join(' · ');

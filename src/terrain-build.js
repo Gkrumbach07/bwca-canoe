@@ -89,15 +89,16 @@ const sunnyField = (x, z) => fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few b
 // sphag (the bog's sphagnum, 0..1) and the bedrock's tint of the rock (tR, tG, tB; 1 = the granite as drawn)
 // d2 land: aLand's w, the sphagnum (0..1) where there is any, else minus how much water stands on the ground (the marsh's
 // and the swamp's: their wetness over 0.62, site.js wet), for terrain.js's pools; 0 under water and in the dry woods
-export const landW = (pre, sd) => (sd < 0 ? 0 : pre.sphag > 0.05 ? pre.sphag : -smoothstep(0.62, 0.95, pre.wet));
+// (the wetlands round: the site's mire where it has one, the water the regime leaves standing on the tile's date)
+export const landW = (pre, sd) => (sd < 0 ? 0 : pre.sphag > 0.05 ? pre.sphag : -(pre.mire >= 0 ? pre.mire : smoothstep(0.62, 0.95, pre.wet)));
 export function groundPre(grid, x, z, sd, site, pre) {
   pre.sd = sd;
   pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z);
   pre.wall = 0; pre.brink = 0; pre.bog = 0; pre.wet = 0; pre.open = 0; pre.beach = 0;
-  pre.meadow = -1; pre.sphag = 0; pre.tR = 1; pre.tG = 1; pre.tB = 1;
+  pre.meadow = -1; pre.sphag = 0; pre.tR = 1; pre.tG = 1; pre.tB = 1; pre.mire = -1;
   if (site && site.land) {
     pre.tR = site.at(site.tintR, x, z); pre.tG = site.at(site.tintG, x, z); pre.tB = site.at(site.tintB, x, z);
-    if (sd >= 0) { pre.meadow = site.at(site.meadow, x, z); pre.sphag = site.at(site.sphag, x, z); }
+    if (sd >= 0) { pre.meadow = site.at(site.meadow, x, z); pre.sphag = site.at(site.sphag, x, z); if (site.mire) pre.mire = site.at(site.mire, x, z); }
   }
   if (sd >= 0 && site) {
     pre.rock = site.at(site.bare, x, z); pre.cliff = site.at(site.cliff, x, z); pre.talus = site.at(site.talus, x, z);
@@ -111,7 +112,7 @@ export function groundPre(grid, x, z, sd, site, pre) {
   } else { pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z); pre.cliff = 0; pre.talus = 0; }
   return pre;
 }
-const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1, meadow: -1, sphag: 0, tR: 1, tG: 1, tB: 1 };
+const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1, meadow: -1, sphag: 0, tR: 1, tG: 1, tB: 1, mire: -1 };
 // the wet ground's moss: a bog's floor is sphagnum, not needle duff (the ground cover reads it too, tile-worker.js)
 export const bogMoss = (wet) => 0.8 * smoothstep(0.55, 0.9, wet);
 export function groundClass(grid, x, z, shade = 0, site = null) {
