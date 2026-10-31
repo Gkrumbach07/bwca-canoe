@@ -25,7 +25,7 @@
 //     yelling and banging the pot drive it off, and it has taken only what it got to (less the sooner). Walk up on it and
 //     it runs the same way. Left alone it works at the food for BEAR.work seconds, then ambles off with its share.
 //   - Away from camp when it comes: it raids quietly; the mess and the line wait for you to come back and see them.
-// The loss: a third to a half of the food that was out (a barrel on the ground, lid held, less), taken by what a bear goes
+// The loss: a third to a half of the food in the one thing it went for (a barrel on the ground, lid held, less), taken by what a bear goes
 // for first (the cooked food, the fish, the meals, the snacks), and never more than half of all the food with you, so a
 // visit is never the whole season and never an evacuation by itself.
 //

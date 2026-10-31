@@ -781,7 +781,7 @@ async function main() {
     hints.due = (id, rec) => (sea.has(id) ? sea.get(id).due(rec) : dueB(id, rec));
   }
   // cons A: a bear at camp (the consequences pass, the owner, 2026-10-25: "a bear at camp if the food isn't hung … so the
-  // camp routines matter"). bear.js: at night food not hung (hang.js secured) may bring a bear, about 30 % a night times
+  // camp routines matter"). bear.js: at night food not hung (hang.js secured) may bring a bear, a few in a hundred a night (BEAR.chance) times
   // the lake's bear activity, softened the first night ever; heard first, its eyes in the headlamp if you are up (E Make
   // noise on the dot drives it off for less), and in the morning the barrel knocked over in the brush or the pack torn
   // open, a third to a half of what was out gone, never the whole season. The camp asks it at bedtime and at waking; its
