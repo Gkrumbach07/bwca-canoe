@@ -1,7 +1,7 @@
 # The wetland data: what it holds, what the game uses, what it could do
 
-2026-10-31. A survey of the Minnesota NWI (National Wetlands Inventory, 2009–14 update, MN DNR) over the game's map
-area, plus the NHD (National Hydrography Dataset) streams, against what the bake keeps today. Nothing here is built yet.
+2026-10-31. **Built** on branch `claude/wetlands` (see "Built" at the end). A survey of the Minnesota NWI (National Wetlands Inventory, 2009–14 update, MN DNR) over the game's map
+area, plus the NHD (National Hydrography Dataset) streams, against what the bake kept before this round.
 
 Numbers come from the bake's own cache (`data-cache/ground/raw/nwi`, 118,600 polygons, 451,000 acres, every polygon
 the bake fetched) and from server-side counts on the live services (120,836 polygons in the map's bounding box,
@@ -135,3 +135,25 @@ All of this needs a rebake, and a new map-data release uploaded to R2 (data.gage
    - beaver dams at the outlets of beaver ponds, with a short haul-over on a creek route
    - the lake page's type line (chain, headwater, landlocked, pond)
    - the developer HUD's Land row shows the full code
+
+## Built (claude/wetlands)
+
+- **Data:** `scripts/sources/ground.mjs` (the `wet` and `wcls` bytes), `scripts/sources/streams.mjs` (NHD flowlines),
+  `scripts/creeks.mjs` (creek classes, brooks, beaver dams, lake flow), `scripts/v4-products.mjs` / `bake.mjs` (two
+  more tile planes; `creeks.json`). Baked to `public-data-v5/` (374 MB).
+  - Creeks: river 1,836 km, marsh channel 2,056 km, brook 1,174 km, unsurveyed (Ontario, as before) 1,136 km.
+  - A brook stretch under 500 m between two paddled ones, or one a portage ends on, is kept paddled.
+  - Beaver: 6,433 dams on ponds (3,449 lodges, 2,539 across a paddled creek), 4,419 old dams.
+  - Lakes: chain 3,118, headwater 1,330, terminal 409, landlocked 4,343; 7,460 ponds.
+- **Game, the wetlands drawn** (`land.js`, `site.js`, `placement.js`, `terrain-build.js`, `aquatic.js`): tree
+  species and shrubs from the class, shrub classes held under ~18 ft, two-class codes as 70/30 patches, wild rice dying
+  back in fall and cattail standing over the ice, standing water by regime and date (baked into a tile when it's built),
+  the developer Land row with the full code.
+- **Game, the water** (`creeks.js`, `world.js`, `props.js`, `player.js`, `map-*.js`, `fauna.js`, audio): brooks on the
+  land (dry by midsummer when intermittent), seasonal creeks shallow late in summer, beaver dams and lodges with a hold-E
+  haul-over, beavers at the real lodges, brooks and dams on the map, the lake page's Water line.
+- **Not yet:** a low creek isn't drawn lower; the haul has no walking figure; brooks aren't cut into the ground; land
+  marshes don't change their plants through the seasons; ice doesn't cover the marsh pools; the leatherleaf mat uses the
+  game's one broadleaf shrub; walking in mud ignores the season.
+- **Release:** a new data release (`bwca/v5/` on R2) goes out with this code: `src/rapids.json` and
+  `src/lake-facts-v4.json` now belong to it.
