@@ -25,9 +25,8 @@
 #journal .book-key kbd { border-color: var(--cream-50); color: var(--cream-72); }
 #journal .side { position: absolute; inset: 12px; border-radius: 4px; overflow: hidden; display: none; }
 #journal .side.on { display: grid; }
-#journal .side.j { grid-template-columns: 1fr 1fr; box-shadow: 0 0 0 1px var(--edge-deep); }
-/* the spine down the middle of the paper spread */
-#journal .side.j::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 26px; translate: -50% 0; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(60, 40, 20, .16) 45%, rgba(60, 40, 20, .2) 50%, rgba(60, 40, 20, .16) 55%, transparent); }
+#journal .side.j { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); box-shadow: 0 0 0 1px var(--edge-deep); }
+/* (the spine down the middle of the paper spread is paper.css's .pp-spread) */
 #journal .side.p { display: none; }
 #journal .side.p.on { display: flex; }
 

@@ -272,6 +272,10 @@ export class Uniques {
   journalRows() {
     return this.toReport().map((id) => { const s = this.spots.find((q) => q.id === id), n = this.aName(id); return `<div class="todo"><i aria-hidden="true"></i><span>${esc(n.charAt(0).toUpperCase() + n.slice(1))} <span class="soft"><span class="sc">noted</span> · ${esc(this.whereOf(s))}; tell the ranger at a counter</span></span></div>`; }).join('');
   }
+  // the same, for the journal's Tasks page (journal.js tasksTab): [{ title, words }]
+  journalNotes() {
+    return this.toReport().map((id) => { const s = this.spots.find((q) => q.id === id), n = this.aName(id); return { title: n.charAt(0).toUpperCase() + n.slice(1), words: `noted ${this.whereOf(s)}; tell the ranger at a counter` }; });
+  }
   // the moment (hints.js): the first time you come on one, unnoted
   moments() {
     return [{ id: 'artifact', prio: 1, recur: 'once', text: 'Old things stay where they lie. Note it {E}, then tell the ranger at a counter.',

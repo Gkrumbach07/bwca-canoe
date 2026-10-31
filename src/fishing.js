@@ -108,6 +108,24 @@ export const SPECIES = {
   crappie: { name: 'Black crappie', bed: [2, 7], zone: [1, 5], shore: [5, 70], weeds: 1.7, rock: 0.8, dropoff: 1.0, day: 0.6, lowLight: 2.0, night: 0.7, stained: 1.0, clear: 1.0, chop: 1.0, calm: 1.1, fast: 0.4, lures: { jig: 1.1, spinner: 0.5, spoon: 0.2, crankbait: 0.4, leech: 1.3 }, length: [18, 38], k: 16, colour: 0x9ea39a, belly: 0xdcdcd2 },
   perch: { name: 'Yellow perch', bed: [1, 6], zone: [0.5, 5], shore: [3, 70], weeds: 1.4, rock: 0.9, dropoff: 1.0, day: 1.2, lowLight: 1.0, night: 0.2, stained: 1.0, clear: 1.0, chop: 1.0, calm: 1.1, fast: 0.4, lures: { jig: 1.0, spinner: 0.4, spoon: 0.2, crankbait: 0.3, leech: 1.3 }, length: [15, 36], k: 12, colour: 0xc9a84a, belly: 0xe8dca8 },
 };
+// The journal's fish page (journal.js fishTab; the owner, 2026-10-31: "it shows you a picture as well as some
+// information on how to catch it, typical sizes and stuff like that"): each species' `about`. water: the kind of water it
+// is grouped under on the index page (WATERS); where / when / how: a line each, in the book's words; rarity: how often
+// it comes to the net in the Boundary Waters; latin: its name in the field guide. Sizes come from `length` and `k`.
+export const WATERS = {
+  reef: { name: 'Rocks & reefs', sub: 'points, boulders, the drop-offs' },
+  weeds: { name: 'Weeds & bays', sub: 'the shallows, the weed edges' },
+  deep: { name: 'Deep & cold', sub: 'the big clear lakes, far down' },
+};
+const ABOUT = {
+  walleye: { water: 'reef', rarity: 'Common', latin: 'Sander vitreus', where: 'Rocky reefs, points and drop-offs, 10 to 35 ft down. Likes stained water and a chop.', when: 'Dawn and dusk, and on into the night; slow in bright sun.', how: 'Hop a jig and twister along the bottom, or hang a leech under a bobber off the drop.' },
+  smallmouth: { water: 'reef', rarity: 'Common', latin: 'Micropterus dolomieu', where: 'Rocky shorelines and boulders, 5 to 25 ft. Clear water.', when: 'The warm of the day, all summer.', how: 'Throw a jointed Rapala or a spinner tight along the rocks and bring it back brisk.' },
+  pike: { water: 'weeds', rarity: 'Common', latin: 'Esox lucius', where: 'Weedy bays and the edges of the weed beds, 3 to 18 ft.', when: 'All day; best when the light is low.', how: 'Burn a Daredevle spoon or a spinner back past the weed edge. Mind the teeth.' },
+  laketrout: { water: 'deep', rarity: 'Rare', latin: 'Salvelinus namaycush', where: 'Only the deep, cold, clear lakes, 50 ft down and deeper, far from shore.', when: 'Early in the day; up shallow just after ice-out.', how: 'Let a spoon sink a long way and work it slowly back. Little else will do.' },
+  crappie: { water: 'weeds', rarity: 'Uncommon', latin: 'Pomoxis nigromaculatus', where: 'Weedy bays, brush and sunken wood, 7 to 23 ft.', when: 'Dusk and after dark.', how: 'A small jig or a leech under a bobber, fished slow and still.' },
+  perch: { water: 'weeds', rarity: 'Common', latin: 'Perca flavescens', where: 'Weedy shallows and sandy flats, 3 to 20 ft.', when: 'The middle of the day.', how: 'A leech under a bobber, or a small jig dropped among the weeds.' },
+};
+for (const [id, a] of Object.entries(ABOUT)) if (SPECIES[id]) SPECIES[id].about = a;
 const SPECIES_IDS = Object.keys(SPECIES);
 
 // a soft band: 1 inside [lo, hi], falling to `floor` a little outside it
@@ -337,11 +355,14 @@ export class Fishing {
   saveLog() {
     try { localStorage.setItem('bwca-canoe-catchlog', JSON.stringify({ catches: this.log.slice(-200), bests: this.bests })); } catch { /* storage may be off */ }
   }
+  // the rod fished with, by the line it holds (shop.js player.gear.snap: the graphite 1.8, the medium-heavy 1.4)
+  rodName() { const g = this.player.gear, k = g && Number.isFinite(g.snap) ? g.snap : 1; return k >= 1.75 ? 'Graphite rod' : k >= 1.35 ? 'Medium-heavy rod' : 'Spinning rod'; }
   // the lake a fish came out of: under the fish (on foot you stand on the shore), else under you
   catchLake(f) { const w = this.world; return (f && Number.isFinite(f.x) ? w.lakeIdAt(f.x, f.z) : 0) || w.lakeIdAt(this.player.x, this.player.z); }
   record(fish, kept) {
     const w = this.world, id = this.catchLake(fish);
     const entry = { species: fish.species, name: SPECIES[fish.species].name, length: Math.round(fish.length), weight: Math.round(fish.weight * 100) / 100, lake: w.lakeName(id) || 'Unnamed water', time: this.day.clock, hours: this.day.hours, doy: this.day.doy, year: this.day.year, lure: LURES[fish.lure].name, lureShort: LURES[fish.lure].short, kept, at: Date.now() };
+    entry.rod = this.rodName(); // (the journal's biggest catch: "rod | lure")
     this.log.push(entry);
     const b = this.bests[fish.species];
     entry.best = !b || entry.length > b.length;
