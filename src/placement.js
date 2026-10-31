@@ -71,7 +71,10 @@ const ROCKS = new Set([6, 16, 20, 21]);
 // The trees' bins (by host species: the guests are drawn in these) carry the rocks' stride too: a tree on the shore
 // leans out over the water (the shoreline pass), its lean the azimuth and tilt of the instance matrix, its tall 1.
 const LEANS = new Set([0, 1, 2, 3, 4, 5, 9, 17]);
-const TILTED = (sp) => ROCKS.has(sp) || LEANS.has(sp);
+// The down logs carry it too: a log lies any way at all and is pitched along its length to the ground (the owner:
+// "a lot of the fallen trees, at least on a hill, all kind of face the same direction"; they all lay along the contour).
+const LOGS = new Set([14]);
+const TILTED = (sp) => ROCKS.has(sp) || LEANS.has(sp) || LOGS.has(sp);
 export const AQUATIC = { pad: 0, reed: 1, weed: 2 };
 const G = Object.fromEntries(GROUND.map((k, i) => [k, i])); // ground class name -> index
 
@@ -296,6 +299,8 @@ function youngBurnTree(r, kind) {
 // The blowdown of 4 July 1999 came out of the west-northwest: its trunks lie tops to the east-southeast, the root plate
 // (a log's +x end, vegetation.js) to the west-northwest; an instance's Ry(yaw) turns +x to (cos, -sin).
 const BLOW_YAW = Math.atan2(0.383, -0.924);
+// the steepest a down log lies along its length (rise over run) before it is turned toward the contour
+const LOG_PITCH = 0.32;
 // A trunk's char up from its foot rides in its tint as whole fours over it, a quarter metre each (tile-worker.js
 // instanceData splits them; the bark draws it, vegetation.js SCORCH).
 const scorchTint = (tint, metres) => tint + 4 * Math.min(15, Math.max(0, Math.round(metres * 4)));
@@ -891,13 +896,26 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
             else if (kind === -1 && !role && B.scorch > 0.05) tint = scorchTint(tint, B.scorch * (0.7 + rng() * 1.3));
             else if (role === 'down') tint *= B.black > 0.4 ? 0.3 : B.kind === BURN.blowdown ? 0.84 : 0.97;
           }
+          let logPitch = 0, logAlong = 0;
           if (kind === 14) {
-            // a fallen trunk lies along the hillside (an instance has no pitch, so across the slope it
-            // rests on the ground end to end), any way at all on the flat
-            const hx = grid.heightAt(x + cell, z) - grid.heightAt(x - cell, z), hz = grid.heightAt(x, z + cell) - grid.heightAt(x, z - cell);
-            if (Math.hypot(hx, hz) / (2 * cell) > 0.05) yaw = Math.atan2(-hx, -hz) + (rng() - 0.5) * 0.5 + (rng() < 0.5 ? Math.PI : 0);
-            // the blowdown's trunks all one way (but on a hillside they lie along it)
-            if (role === 'down' && B.kind === BURN.blowdown && Math.hypot(hx, hz) / (2 * cell) < 0.12) yaw = BLOW_YAW + (rng() - 0.5) * 0.7;
+            // a fallen trunk lies any way at all and is pitched along its length to the ground there (its instance's
+            // Rz tilt): many lie down the fall line, as trees fall. Only where that would be steeper than LOG_PITCH
+            // is it turned toward the contour, each log by its own amount, so a hillside's logs don't all line up.
+            // (Measured at the log's own ends: the old pass read the slope a whole cell across, so every log in a
+            // cell lay the same way.)
+            const half = 3.4 * scale, lie = (a) => (grid.heightAt(x + Math.cos(a) * half, z - Math.sin(a) * half) - grid.heightAt(x - Math.cos(a) * half, z + Math.sin(a) * half)) / (2 * half);
+            // the blowdown's trunks all one way, give or take
+            if (role === 'down' && B.kind === BURN.blowdown) yaw = BLOW_YAW + (rng() - 0.5) * 0.7;
+            let g = lie(yaw);
+            if (Math.abs(g) > LOG_PITCH) {
+              const hx = grid.heightAt(x + 2, z) - grid.heightAt(x - 2, z), hz = grid.heightAt(x, z + 2) - grid.heightAt(x, z - 2);
+              const along = Math.atan2(-hx, -hz) + (Math.cos(yaw - Math.atan2(-hx, -hz)) < 0 ? Math.PI : 0); // the contour's way nearer the drawn yaw
+              const t = 0.45 + rng() * 0.55; // how far toward the contour this one turns
+              yaw = yaw + Math.atan2(Math.sin(along - yaw), Math.cos(along - yaw)) * t;
+              g = lie(yaw);
+            }
+            logPitch = Math.atan(Math.max(-LOG_PITCH * 1.4, Math.min(LOG_PITCH * 1.4, g)));
+            logAlong = g;
           }
           let group = 0;
           if (GROUPS[sp] > 1) { const r = rng(), share = GROUP_SHARE[GROUPS[sp]]; while (r >= share[group]) group++; }
@@ -932,13 +950,14 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           // the drawn mesh itself (meshHeightAt), the rocks seated whole on it (rockFeatures, and below for an
           // outcrop, which also lies along the slope)
           let sink = 0;
-          if (kind === 14) sink = 0.02 * scale + slopeHere * 0.25 * scale;
+          if (kind === 14) sink = 0.02 * scale + Math.sqrt(Math.max(0, slopeHere * slopeHere - logAlong * logAlong)) * 0.3 * scale; // (the slope across it)
           else if (kind === 15) sink = 0.35 + slopeHere * 0.8 * scale;
           else if (kind >= 10 && kind !== 16) sink = 0.05 + slopeHere * 1.0 * scale;
           else if (kind < 10) sink = (isShrub ? 0.45 : 0.35) + slopeHere * (isShrub ? 1.0 : 1.2) * scale + tilt * 0.5;
           // an outcrop lies along the slope like the bedrock it breaks out of, darker under a canopy
           const outcrop = kind === 16, bed = outcrop ? bedding(grid, x, z) : null;
           const y = outcrop ? seatRock(ground, OUTCROP_FOOT, x, z, scale, 1, 1, yaw, bed.az, bed.angle * 0.85, slopeHere) : ground(x, z) - sink;
+          if (kind === 14) { emit(sp, group, x, y, z, 0, scale, tint, squash, yaw, logPitch); continue; } // (the heading in the azimuth, its pitch the tilt)
           emit(sp, group, x, y, z, yaw, scale, outcrop ? tint * (1 - 0.32 * smoothstep(0.5, 2.0, e)) : tint, squash, outcrop ? bed.az : az, outcrop ? bed.angle * 0.85 : tilt);
         }
       }
