@@ -239,6 +239,7 @@ async function main() {
   // the trip: outfitters at the landings, the food and the energy, the task board
   const teleport = async (x, z) => { const ok = await player.teleport(x, z); if (ok) chase.snap(); return ok; };
   const energy = new Energy(player, day);
+  player.energy = energy; // 2026-10-31: winded, Shift does nothing (player.hustleKey)
   const tasks = new Tasks(world, scene, player, { audio, water });
   const tripStats = new TripStats(world, player, day);
   // trip core A: the veil (fade cards stepped per frame) and the trip (the mode, the permit, the rules), before the outfitter
@@ -349,6 +350,7 @@ async function main() {
   settings.attach({ renderer, scene, sun, water, post, audio, chase, player, stats: fps, geo });
   const saver = new TripSaver(player, day, chase);
   const title = new Title({ world, player, chase, camera, day, hud, settings, saver, saved, trip, outfitter });
+  title.photo = photo; // (Esc with the camera up lowers it: no pause)
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
   // (on foot with the canoe set down somewhere, at a camp say, you come back on foot beside it)
   // camp 1: one saved in the middle of a carry comes back on the trail, the canoe overhead and the carry on you (packs.js)
@@ -1100,6 +1102,7 @@ async function main() {
     loons.update(dt, player, day.season, faunaCtx);
     fauna.update(dt, faunaCtx);
     audio.tick(dt, { player, world, wind, day, season: day.season, camera, weather }); // the soundscape reads the whole scene
+    audio.setPaused(title.state === 'pause'); // the pause card ducks and muffles the mix
     geo.update(player, world);
     hud.update({ player, geo, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell, trip }); // trip core A: trip
     saver.update(dt);

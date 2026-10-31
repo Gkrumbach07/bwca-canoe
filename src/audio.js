@@ -15,6 +15,8 @@ import * as V from './audio-voices.js';
 import { burnLook } from './burns.js';
 
 const MASTER = 0.9;            // master gain at full volume, after the compressor
+// paused (the owner, 2026-10-31: "it doesn't feel paused because the same sound is persisting"): the mix ducked and muffled
+const PAUSE = { gain: 0.35, cut: 520, open: 20000, ease: 0.25 };
 const MAX_VOICES = 40;         // one-shots alive at once; past it only the important ones (pri >= 2) start
 const PROBE = 0.4;             // seconds between looks around (trees, open water, shallows)
 const RINGS = [15, 40, 100, 240], RING_OPEN = [0.1, 0.2, 0.3, 0.4];
@@ -92,6 +94,7 @@ const blankScene = () => ({
 export class Ambient {
   constructor({ autoStart = true, seed = 7 } = {}) {
     this.enabled = true; this.volume = 1; this.ctx = null; this.master = null; // volume 0..1 scales the master
+    this.paused = false; this.muffle = null; // the pause card is up: ducked and muffled (PAUSE)
     this.seed = seed; this.rand = mulberry32(seed);
     this.voices = []; this.later = []; this.persist = 0;
     this.stats = { fired: {}, peakVoices: 0, peakNodes: 0 };
@@ -117,9 +120,11 @@ export class Ambient {
     const G = (v, to) => { const g = mk(ctx.createGain()); g.gain.value = v; if (to) g.connect(to); return g; };
     // the mix: everything into one bus, a gentle compressor, the master
     this.master = G(this.level, ctx.destination);
+    const muffle = this.muffle = mk(ctx.createBiquadFilter()); // the pause's muffle, wide open in play
+    muffle.type = 'lowpass'; muffle.frequency.value = this.paused ? PAUSE.cut : PAUSE.open; muffle.Q.value = 0.5; muffle.connect(this.master);
     const comp = this.comp = mk(ctx.createDynamicsCompressor());
     comp.threshold.value = -20; comp.knee.value = 10; comp.ratio.value = 4; comp.attack.value = 0.01; comp.release.value = 0.3;
-    comp.connect(this.master);
+    comp.connect(muffle);
     this.bus = this.dry = G(1, comp);
     // the room: one send split between a lake (long and open, darkening slowly, a few late reflections off the far
     // shores) and a forest (short, damped, dense early reflections off the trunks); the beds crossfade them
@@ -155,7 +160,7 @@ export class Ambient {
     return this;
   }
 
-  get level() { return this.enabled ? MASTER * this.volume : 0; }
+  get level() { return this.enabled ? MASTER * this.volume * (this.paused ? PAUSE.gain : 1) : 0; }
   applyLevel() {
     if (!this.master) return;
     this.master.gain.setTargetAtTime(this.level, this.ctx.currentTime, 0.1);
@@ -168,6 +173,13 @@ export class Ambient {
   toggle() { return this.setEnabled(!this.enabled); }
   setEnabled(on) { this.enabled = !!on; this.applyLevel(); return this.enabled; }
   setVolume(v) { this.volume = Math.max(0, Math.min(1, v)); this.applyLevel(); }
+  // the pause card up or down (main.js): the whole mix ducked and muffled, as if heard from indoors
+  setPaused(on) {
+    on = !!on; if (on === this.paused) return;
+    this.paused = on;
+    if (this.muffle && !this.offline) this.muffle.frequency.setTargetAtTime(on ? PAUSE.cut : PAUSE.open, this.ctx.currentTime, PAUSE.ease);
+    this.applyLevel();
+  }
 
   // The old entry (shore distance, speed, afloat). While main still calls it, the scene is read off window.__game
   // when the game is up, so the whole soundscape runs before the wiring moves to tick().
