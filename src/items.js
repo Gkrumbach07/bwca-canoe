@@ -177,13 +177,13 @@ export function takesLine(lure) {
 // a lure's or the bait's On-you line: the words, and the list the tooltip draws as pips
 export const takesOn = (lure) => ({ label: '', value: takesLine(lure), takes: takesList(lure) });
 
-const KINDS = new Set(['food', 'snack', 'meal', 'fish', 'bait', 'lure', 'tool', 'gear', 'map', 'container', 'long', 'firewood', 'forage']);
+const KINDS = new Set(['food', 'snack', 'meal', 'fish', 'bait', 'lure', 'tool', 'gear', 'map', 'container', 'long', 'firewood', 'forage', 'water']);
 export const FOOD_KINDS = ['food', 'snack', 'meal', 'fish', 'forage'];
 
 // the right-click verbs: what each is (the labels are the menu's; the words are for the console, never shown)
 export const VERBS = {
   eat: { label: 'Eat', words: 'One serving, where you stand.' },
-  cook: { label: 'Onto the grate', words: 'Onto the grate, inside the fire card: over a lit fire it cooks by itself.' },
+  cook: { label: 'Into the pot', words: 'Into a pot with room (one on the grate first): with its water, over a lit fire, it cooks by itself.' },
   pitch: { label: 'Pitch', words: 'The ghost goes to the dot; a held E or click works through the phases.' },
   hang: { label: 'Hang', words: 'E at a tree with the barrel in your hands.' },
   hand: { label: 'Put in hand', words: 'Into a free hand.' },
@@ -193,7 +193,13 @@ export const VERBS = {
   drink: { label: 'Drink', words: 'A gulp from the bottle, a quarter of a litre.' },
   drinkup: { label: 'Drink up', words: 'The rest of what is drinkable in the bottle.' },
   treat: { label: 'Treat it', words: 'A tablet into the untreated water in the bottle: drinkable in half an hour.' }, // water
-  boil: { label: 'Boil it', words: 'The untreated water boiled in the pot, over a lit fire or the stove: safe once cool.' }, // water
+  boil: { label: 'Boil it', words: 'The untreated water boiled in the pot, over a lit fire or the stove: safe once cool.' }, // water (2026-10-31: off the bottle now: pour it into a pot, recipes.js)
+  // crafting (2026-10-31, recipes.js): water moves by hand between the bottle, the pots and the lake
+  pourpot: { label: 'Pour into a pot', words: 'The bottle emptied into a pot in reach, as much as it holds.' },
+  pourbottle: { label: 'Pour into the bottle', words: 'Clean water from the pot into the bottle.' },
+  tipout: { label: 'Tip it out', words: 'The water in the pot poured out on the ground.' },
+  fillpot: { label: 'Fill it at the water', words: 'The pot dipped full of lake water, at the water’s edge.' },
+  potgrate: { label: 'Onto the grate', words: 'The pot onto the grate of the fire ring by you.' },
   change: { label: 'Change into dry clothes', words: 'The dry set on, the wet one in the bag.' },
   tarp: { label: 'Pitch the tarp', words: 'Where you stand: the ghost shows if it can go up.' }, // fb4 E's rig (tarp.js)
 };
@@ -206,14 +212,18 @@ const verb = (id, more = {}) => ({ id, label: VERBS[id].label, ...more });
 export function verbsFor(d) {
   const out = [];
   if (d.eat) { if (d.eat.cook) out.push(verb('cook', { where: 'fire', why: WHY.cook }), verb('eat', { why: WHY.raw })); else out.push(verb('eat')); }
-  if (d.id === 'bottle') out.push(verb('drink'), verb('drinkup'), verb('treat', { when: 'untreated' }), verb('boil', { when: 'untreated' }));
+  // (2026-10-31, the owner: "I don't want it to automatically put a tablet in because there are options. I might want
+  // to use the fire and boil the water instead": Treat it is the tablet, Pour into a pot the boil, recipes.js)
+  if (d.id === 'bottle') out.push(verb('drink'), verb('drinkup'), verb('treat', { when: 'untreated' }), verb('pourpot', { when: 'pot' }));
+  if (d.pot) out.push(verb('potgrate', { when: 'fire' }), verb('fillpot', { when: 'shore' }));
+  if (d.kind === 'water') out.push(verb('pourbottle', { when: 'cleanwater' }), verb('tipout'));
   if (d.id === 'tablets') out.push(verb('treat', { when: 'untreated' }));
   if (d.slot === 'tent') out.push(verb('pitch'));
   if (d.id === 'tarp') out.push(verb('tarp'));
   if (d.id === 'clothes') out.push(verb('change'));
   if (d.hang) out.push(verb('hang', { why: WHY.hang }));
   if (d.kind === 'fish') out.push(verb('stringer'));
-  if (d.long || (d.kind === 'container' && !d.fixed && !d.station) || (d.kind !== 'container' && d.kind !== 'long' && !d.fixed)) out.push(verb('hand'));
+  if (d.long || (d.kind === 'container' && !d.fixed && !d.station) || (d.kind !== 'container' && d.kind !== 'long' && d.kind !== 'water' && !d.fixed)) out.push(verb('hand'));
   if (d.lure && (d.kind === 'lure' || d.kind === 'bait')) out.push(verb('tie'));
   if (d.kind === 'map') out.push(verb('use', { label: 'Look at the map' }));
   return out;
@@ -364,7 +374,7 @@ export const LIGHT_PIECES = 3;
 defineItem({ id: 'wood:branch', name: 'Dead branch', short: 'Branch', kind: 'firewood', w: 1, h: 2, kg: 0.7, burn: 0.6, icon: 'firewood', identity: 'Fallen deadwood, thin' });
 defineItem({ id: 'wood:log', name: 'Short log', short: 'Log', kind: 'firewood', w: 1, h: 3, kg: 2.2, burn: 1.5, icon: 'firewood', identity: 'Fallen deadwood, thick' });
 defineItem({ id: 'woodarms', name: 'Armload of wood', short: 'Armload', kind: 'container', w: 2, h: 3, kg: 0, hand: true, container: { cols: 3, rows: 3, accepts: ['firewood'] }, icon: 'firewood', verbs: [], identity: 'Wood in the crook of an arm' });
-defineItem({ id: 'grate', name: 'On the grate', short: 'The grate', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool'] }, icon: 'pot', identity: 'The ring’s iron grate' });
+defineItem({ id: 'grate', name: 'On the grate', short: 'The grate', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'fish', 'container'] }, icon: 'pot', identity: 'The ring’s iron grate' }); // ('container': a pot only, inventory.accepts)
 // what comes off the grate: a meal cooked (hot, eaten at the fire, or kept a few hours as leftovers) and a fish fried
 for (const [id, raw, name] of [
   ['hot:breakfast', 'meal:breakfast', 'Hot oatmeal'],
@@ -394,7 +404,20 @@ defineItem({ id: 'dome', name: 'Dome tent', kind: 'gear', w: 2, h: 4, kg: 2.8, p
 defineItem({ id: 'fourseason', name: 'Four-season tent', kind: 'gear', w: 2, h: 5, kg: 3.6, price: 95, slot: 'tent', icon: 'dome', identity: 'Dome with a vestibule', onYou: [EF('rest', 1, 'a night'), O('Wet gear', 'dry by morning')] });
 defineItem({ id: 'sleepingbag', name: 'Sleeping bag', kind: 'gear', w: 2, h: 3, kg: 1.8, price: 0, icon: 'bag', identity: 'Down bag · good to 0 °C', onYou: [EF('rest', 0.4, 'a night')] });
 defineItem({ id: 'clothes', name: 'Clothes bag', kind: 'gear', w: 2, h: 2, kg: 2.5, price: 0, icon: 'clothes', uses: 1, identity: 'Fleece, wool socks and a dry shirt', onYou: [EF('warmth', 0.3, 'changed into dry')] }); // (energy.js: warmth back twice as fast for 2 h, up to 0.15 an hour more)
-defineItem({ id: 'pot', name: 'Cook pot', kind: 'tool', w: 2, h: 2, kg: 1.2, price: 0, icon: 'pot', identity: 'Blackened pot and lid' });
+// The pots (2026-10-31, the owner: "pot should also be like something you could put something in … Food goes in pot. So
+// then this encourages you to potentially bring more than one pot, or bring smaller pots"): small containers that nest
+// in a pack and stand on the grate (or over the stove), holding the raw things and the water a recipe wants (recipes.js).
+// pot.litres: the water it holds; pot.scale: its look on the grate (cook.js). A save from before has the cook pot as a
+// plain entry; cook.js makes it a container when it finds one.
+const POT_TAKES = ['meal', 'fish', 'food', 'water'];
+defineItem({ id: 'potsmall', name: 'Small pot', short: 'Small pot', kind: 'container', w: 2, h: 1, kg: 0.35, price: 14, nest: true, hand: true, pot: { litres: 1, scale: 0.78 }, icon: 'pot', container: { cols: 2, rows: 1, accepts: POT_TAKES }, identity: 'Titanium pot · 1 L, one meal' });
+defineItem({ id: 'pot', name: 'Cook pot', kind: 'container', w: 2, h: 2, kg: 1.2, price: 18, nest: true, hand: true, pot: { litres: 2, scale: 1 }, icon: 'pot', container: { cols: 2, rows: 2, accepts: POT_TAKES }, identity: 'Blackened pot and lid · 2 L' });
+defineItem({ id: 'potbig', name: 'Big camp pot', short: 'Big pot', kind: 'container', w: 3, h: 2, kg: 1.7, price: 24, nest: true, hand: true, pot: { litres: 4, scale: 1.3 }, icon: 'pot', container: { cols: 3, rows: 3, accepts: POT_TAKES }, identity: 'Aluminium group pot · 4 L, a whole fish' });
+export const POT_IDS = ['potsmall', 'pot', 'potbig'];
+export const isPot = (id) => !!(ITEMS[id] && ITEMS[id].pot);
+// water in a pot (recipes.js WATER): one entry, its `left` the litres (its bar reads against the cook pot's 2 L)
+defineItem({ id: 'water:lake', name: 'Lake water', short: 'Lake water', kind: 'water', w: 1, h: 1, kg: 0, litres: 2, icon: 'waterlake', identity: 'As it comes from the lake · untreated' });
+defineItem({ id: 'water:clean', name: 'Clean water', short: 'Clean water', kind: 'water', w: 1, h: 1, kg: 0, litres: 2, icon: 'waterclean', identity: 'Boiled · safe to drink' });
 // fb4 (decision 7: the tarp is pitched like the tent, on a rig with anchors; tarp.js pitches it and says what is missing)
 defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, price: 0, icon: 'tarp', identity: 'Nylon tarp · 3 × 3 m' });
 // fb5 A/B: a pole is deadwood (it burns about like a log, decision 1) that also holds up a tarp; tarp.js counts it by id
@@ -496,7 +519,7 @@ defineItem({ id: 'gravity', identity: 'Gravity bag · fills the bottle at camp',
 
 // the stove and its fuel (a canister's uses are its boils: a meal or a cup)
 defineItem({ id: 'stove', name: 'Canister stove', short: 'Stove', kind: 'tool', kg: 0.12, price: 35, identity: 'A brass burner on a gas canister', model: 'stove',
-  verbs: [{ id: 'stove', label: 'Cook on it' }, { id: 'hand', label: 'Put in hand' }] });
+  verbs: [{ id: 'stove', label: 'Light it under the pot' }, { id: 'hand', label: 'Put in hand' }] });
 defineItem({ id: 'fuel', name: 'Fuel canister', short: 'Fuel', kind: 'tool', kg: 0.36, price: 6, uses: 10, identity: 'Isobutane, 230 g', model: 'canister', tint: 0x2f68a8 });
 
 // clothes for the weather and the bugs

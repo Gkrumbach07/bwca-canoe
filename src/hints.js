@@ -105,8 +105,8 @@ export const MOMENTS = [
   { id: 'bears', prio: TEACH, recur: 'daily', learn: 'hang', keyed: true, text: 'Bears: hang your food from a high limb before you sleep.', short: 'Hang the food before you sleep.' },
   { id: 'ringwood', prio: TEACH, recur: 'once', stuck: 45, text: 'Drop wood in the ring: {E} on it, then drag the wood in.' },
   { id: 'ringempty', prio: TEACH, recur: 'once', stuck: 50, text: 'Gather dead wood: branches and logs lie around the site.' },
-  { id: 'lit', prio: TEACH, recur: 'once', card: 'fire', text: 'It caught. Put food on the grate to cook it.' },
-  { id: 'cooked', prio: TEACH, recur: 'once', card: 'fire', text: 'Cooked. Take it off the grate to eat: {E} on it.' },
+  { id: 'lit', prio: TEACH, recur: 'once', card: 'fire', text: 'It caught. A pot on the grate, the food and its water in the pot: it cooks.' }, // (crafting, 2026-10-31: recipes.js)
+  { id: 'cooked', prio: TEACH, recur: 'once', card: 'fire', text: 'Cooked: it is in the pot. Eat it from there, or take it out.' },
   { id: 'low', prio: TEACH, recur: 'once', card: 'fire', text: 'Burning low: add wood.' },
   { id: 'coals', prio: TEACH, recur: 'once', card: 'fire', stuck: 60, text: 'The coals are still hot: a dry branch brings it back.' },
   { id: 'wetwood', prio: TEACH, recur: 'once', card: 'fire', text: 'Wet wood won’t catch. Find dry pieces; wet ones dry by a fire.' },

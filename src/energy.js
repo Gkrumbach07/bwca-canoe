@@ -416,6 +416,34 @@ export class Energy {
     this.noted.dry = false;
     return Math.max(0, add) + raw;
   }
+  // crafting (2026-10-31, the owner: "I fill up water at the shore. I don't want it to automatically put a tablet in
+  // because there are options"): E at the water's edge fills the bottle with lake water as it comes, and nothing more.
+  // What makes it safe is a choice made after: Treat it (a tablet, half an hour), or poured into a pot and boiled on
+  // the fire (recipes.js), or the pump or the gravity bag (kit.js, a Q at the shore). A drop of lake water in the bottle
+  // makes the whole bottle untreated. Returns the litres added.
+  fillRaw(litres = BOTTLE) {
+    const add = Math.min(Math.max(0, litres), BOTTLE - this.bottle);
+    if (add <= 0.001) return 0;
+    this.untreated = this.bottle + add; this.drinkable = 0; this.treating = 0;
+    this.noted.dry = false;
+    return add;
+  }
+  // clean water poured in (out of a pot, boiled): drinkable, unless the bottle holds lake water (then it is too)
+  addClean(litres) {
+    const add = Math.min(Math.max(0, litres), BOTTLE - this.bottle);
+    if (add <= 0.001) return 0;
+    if (this.untreated > 0.001) this.untreated += add; else this.drinkable += add;
+    this.noted.dry = false;
+    return add;
+  }
+  // the bottle poured out into a pot: up to `litres`, → { l, lake } (lake: untreated, or still under its tablet)
+  pourOut(litres = BOTTLE) {
+    const l = Math.min(Math.max(0, litres), this.bottle);
+    if (l <= 0.001) return { l: 0, lake: false };
+    const lake = this.untreated > 0.001 || this.treating > 0.001;
+    this.useWater(l);
+    return { l, lake };
+  }
   // water: what is untreated, made safe: in `hours` (under a tablet, through the gravity bag), or now (0: boiled)
   treatAll(hours = TABLETS) {
     const raw = this.untreated;
@@ -459,6 +487,12 @@ export class Energy {
   // fb4 C: E at the water's edge (nearby.js reads it): { enabled, why, needs, next, wait }. wait: the filter's hours
   // (camp.filterWait: a tablet's half hour, a pump's minutes)
   fillCheck(wait = TABLETS) {
+    // (crafting, 2026-10-31: E fills it as it comes; the tablet is the bottle's own Treat it, after)
+    if (wait >= TABLETS - 0.01) {
+      const room = Math.max(0, BOTTLE - this.bottle);
+      if (room <= 0.05) return { ...check(false, 'The bottle is full', [NEED.qty('Room in the bottle', +room.toFixed(2), GULP, 'L')], 'Drink first: the bottle in your pockets, right-click › Drink'), wait: 0 };
+      return { ...check(true, null, [NEED.qty('Room in the bottle', +room.toFixed(2), GULP, 'L')], 'Fill it: lake water as it comes. Treat it after: a tablet, or boil it in a pot'), wait: 0 };
+    }
     const i = this.inv, tabletKind = wait >= TABLETS - 0.01 && !this.sandbox;
     const tabs = tabletKind && i && typeof i.usesLeft === 'function' ? i.usesLeft('tablets') : null;
     // (water: untreated water in the bottle is room where a filter or a tablet is to hand: it goes through with the new)

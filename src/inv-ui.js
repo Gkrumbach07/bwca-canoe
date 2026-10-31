@@ -666,6 +666,12 @@ function drawBottle(c) {
   c.globalAlpha = 0.5; rr(c, 20, 34, 6, 60, 3); fill(c, '#fff'); c.globalAlpha = 1;
   for (const y of [48, 66, 84]) { shape(c, [42, y, 50, y]); stroke(c, 1.3, 'rgba(50, 70, 80, .55)'); }
 }
+// water in a pot (crafting, 2026-10-31): a drop, tea-brown as it comes from the lake, clear blue once boiled
+function drawWaterDrop(c, col, rim) {
+  c.beginPath(); c.moveTo(40, 6); c.bezierCurveTo(52, 30, 70, 46, 70, 64); c.bezierCurveTo(70, 82, 56, 94, 40, 94); c.bezierCurveTo(24, 94, 10, 82, 10, 64); c.bezierCurveTo(10, 46, 28, 30, 40, 6); c.closePath();
+  fill(c, col); stroke(c, 2.2, rim);
+  c.globalAlpha = 0.45; c.beginPath(); c.ellipse(28, 62, 5, 13, -0.3, 0, Math.PI * 2); fill(c, '#fff'); c.globalAlpha = 1;
+}
 // the things near you, for their panels' straps (fb2): the fire ring, a pitched tent, the latrine, a limb with a rope, the
 // canoe ashore, the water's edge, a down log
 function drawFireRing(c) {
@@ -720,6 +726,7 @@ const ICONS = {
   breakfast: [60, 104, (c) => drawBag(c, '#d6c08a', [['#a88a52', 30], ['#f0e6c8', 12]], PAL.blue)],
   sleepingbag: [100, 108, (c) => drawBagSack(c, '#7a2f2a', '#4a1a16')], bag: [100, 108, (c) => drawBagSack(c, '#7a2f2a', '#4a1a16')], clothes: [100, 100, drawDryBag],
   fish: [120, 50, (c) => drawFish(c, 'walleye')], // a fish on the stringer (picture() draws it by its species) and a fried one
+  waterlake: [80, 100, (c) => drawWaterDrop(c, 'rgba(165, 119, 63, .85)', '#5a3e1e')], waterclean: [80, 100, (c) => drawWaterDrop(c, 'rgba(120, 178, 214, .9)', PAL.blueD)], // (crafting)
   pot: [100, 96, drawPot], tarp: [100, 100, drawTarp], crate: [100, 100, drawCrate], pile: [100, 100, drawCrate], stringer: [60, 104, drawStringer], yoke: [110, 52, drawYokePads],
   map: [100, 102, drawMap], berries: [80, 80, drawBerries], blueberries: [80, 80, drawBerries], mushroom: [80, 80, drawMushroom], firewood: [112, 54, drawFirewood],
   cedaryoke: [150, 52, drawCedarYoke], net: [80, 120, drawNet], blanket: [100, 90, drawBlanket], jacket: [100, 80, drawJacket], sail: [50, 110, drawSail], cover: [100, 90, drawCover],
@@ -1930,7 +1937,8 @@ export function firePanel(o, sc) {
       if (c) grid(g, c, { onUse: sc.onUse || null, screen: sc });
       else { const b = { ...s, obj: o.id }; grid(g, binContainer(`bin:${o.id}:${s.id}`, b), { bin: b, screen: sc }); }
       sw.appendChild(g);
-      if (s.id === 'grate') sw.appendChild(mk('span', `fp-cook${o.cooking ? '' : ' none'}`, `${cookIcon(o.cooking)}<b><i style="width:${pct(o.cooking ? o.cooking.value : 0)}"></i></b>`));
+      // (crafting, 2026-10-31: a pot on the grate is a slot of its own, its own bar under its grid)
+      if (s.id === 'grate' || s.pot) { const ck = s.pot ? s.cooking : o.cooking, bar = mk('span', `fp-cook${ck ? '' : ' none'}`, `${cookIcon(ck)}<b><i style="width:${pct(ck ? ck.value : 0)}"></i></b>`); bar.dataset.slot = s.id; sw.appendChild(bar); }
       row.appendChild(sw);
     }
     body.appendChild(row);
@@ -1951,12 +1959,14 @@ export function livenPanel(el, o) {
     bar.classList.toggle('low', !!o.burn.low);
     const i = bar.querySelector('i'); if (i) i.style.width = pct(o.burn.value);
   }
-  const ck = el.querySelector('.fp-cook');
-  if (ck) { ck.classList.toggle('none', !o.cooking); const i = ck.querySelector('i'); if (i) i.style.width = pct(o.cooking ? o.cooking.value : 0); }
+  for (const ck of el.querySelectorAll('.fp-cook')) {
+    const s = (o.slots || []).find((q) => q.id === ck.dataset.slot), q = s && s.pot ? s.cooking : o.cooking;
+    ck.classList.toggle('none', !q); const i = ck.querySelector('i'); if (i) i.style.width = pct(q ? q.value : 0);
+  }
 }
 // the signature of a fire object: what would change its drawing (not the bars' lengths: livenPanel moves those)
 export const panelSig = (o) => [o.id, o.title, o.state || '', o.cooking ? o.cooking.item || 1 : 0, (o.need || []).map((q) => `${q.kind}${q.text}`).join(','), o.burn ? 1 : 0, o.coals ? 1 : 0,
-  (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}`).join(';'),
+  (o.slots || []).map((s) => `${s.id}:${s.cId || ''}:${s.pot && s.cooking ? s.cooking.item || 1 : ''}:${(s.items || []).map((i) => `${i.uid}x${i.qty || 1}`).join('.')}`).join(';'),
   (o.actions || []).map((a) => `${a.id}${a.enabled === false ? 0 : 1}${a.label}`).join(';'), slotStates(o)].join('/');
 // the states of what is in the fire's fuel and on its grate (wet wood, the pot's chip, a meal Ready): their marks change
 // the drawing

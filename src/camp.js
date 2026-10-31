@@ -463,17 +463,20 @@ export class Camp {
     const wait = this.filterWait(), left = e.bottle <= 0.02 ? 'dry' : `${e.bottle.toFixed(1)} L left`;
     // (the fb3 join: a tablet only from the tablets in reach, energy.fill; the tube left in the pack by the fire says so
     // here, before the bottle is filled with lake water as it comes)
-    const inv = this.inventory, tab = wait < 0.25 || e.sandbox || !inv || typeof inv.usesLeft !== 'function' || inv.usesLeft('tablets') > 0;
-    return { left: e.bottle, wait, words: `${left} · ${wait >= 0.25 ? (tab ? 'a tablet: drinkable in half an hour' : 'no tablet in reach: lake water as it comes') : 'through the filter, a few minutes'}` };
+    // (crafting, 2026-10-31: no tablet goes in by itself: lake water as it comes, treated after by choice)
+    return { left: e.bottle, wait, words: `${left} · ${wait >= 0.25 ? 'lake water as it comes' : 'through the filter, a few minutes'}` };
   }
   fillBottle(wait = this.filterWait()) {
     if (this.energy.bottle >= 2 - 0.001) { this.note('The bottle is full.'); return; }
     this.chore('fill', () => this.filled(wait));
   }
   filled(wait) {
-    const got = this.energy.fill(2, wait);
+    // (crafting, 2026-10-31: the tablet's wait means no filter: lake water as it comes, the bottle's Treat it after)
+    const raw = wait >= 0.25 && typeof this.energy.fillRaw === 'function';
+    const got = raw ? this.energy.fillRaw(2) : this.energy.fill(2, wait);
     if (this.audio && this.audio.paddleDip) this.audio.paddleDip();
     if (got <= 0) { this.note('The bottle is full.'); return; }
+    if (raw) { this.note('Filled with lake water, untreated.'); return; }
     if (wait >= 0.25 && !(this.energy.treating > 0.001) && !this.energy.sandbox) return; // no tablet in reach: energy.fill has said so
     this.note(wait >= 0.25 ? 'You fill the bottle and drop in a tablet.' : 'You pump the bottle full. Drinkable in a few minutes.'); // (fb5 join: the wait is the treating moment's, once; the bottle's tooltip has its timer)
   }
