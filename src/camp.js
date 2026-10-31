@@ -1029,7 +1029,12 @@ export class Camp {
     const B = !nap && !byDay && this.bear && typeof this.bear.bedtime === 'function' ? this.bear.bedtime({ x: p.x, z: p.z, from: this.now, to: this.now + hours }) : null;
     if (B) { card.text = B.text; card.hold = B.hold; }
     this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null };
-    const onDark = () => { if (B && B.onDark) { try { B.onDark(); } catch (e) { console.warn('bear: the night', e); } } this.wake(); };
+    // (the bear at the tent: its onDark is a promise, the card held while you have the moment to shout: bear.js tentNight)
+    const onDark = () => {
+      let w = null;
+      if (B && B.onDark) { try { w = B.onDark(); } catch (e) { console.warn('bear: the night', e); } }
+      return Promise.resolve(w).catch((e) => console.warn('bear: the night', e)).then(() => this.wake());
+    };
     const done = () => this.morning();
     if (this.veil && this.veil.card) this.veil.card({ ...card, onDark }).then(done, done);
     else { if (!this.card) this.card = new NightCard(); this.card.show({ ...card, onDark }).then(done, done); }
@@ -1044,8 +1049,10 @@ export class Camp {
     this.jump(n.hours);
     if (Number.isFinite(n.wakeAt)) d.setClock(d.year, d.doy, n.wakeAt);
     const e = this.energy;
+    // a bear at the tent in the night breaks it (bear.js restFactor: shouted off, a little; let in, most of it)
+    n.bearRest = n.bear && this.bear && typeof this.bear.restFactor === 'function' ? this.bear.restFactor() : 1;
     if (n.nap) this.nap(n.q * (n.bag ? 1 : NAP_NO_BAG), n.hours);
-    else if (e.sleep) e.sleep(n.q, n.hours, { bag: n.bag }); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
+    else if (e.sleep) e.sleep(n.q * n.bearRest, n.hours, { bag: n.bag }); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
     if (n.nap) { this.log('nap', { key: this.camp ? this.camp.key : null, hours: Math.round(n.hours * 10) / 10 }); this.persist(); return; }
     const lines = [];
     if (this.morningIn) { lines.push(this.morningIn); this.morningIn = null; }
@@ -1074,11 +1081,19 @@ export class Camp {
     if (this.wet || n.rain) why.push('wet gear');
     if (K && K.cold >= 2) why.push('a night colder than the bag');
     if (L.bugs) why.push('the bugs');
+    if (n.bearRest < 0.99) why.push('the bear at the tent');
     const how = r >= 0.95 ? 'Fully rested' : r >= 0.8 ? 'Well rested' : r >= 0.55 ? 'Rested, but not fully' : 'Barely rested';
     let words = `${how}${why.length && r < 0.95 ? `: ${listOf(why)}` : ''}.`;
     const nd = e.needs, held = nd.food < 0.35 ? 'hungry' : nd.water < 0.35 ? 'thirsty' : nd.warmth < 0.35 ? 'cold' : null;
     if (held) words += ` You're ${held}, and that holds you down until you ${held === 'hungry' ? 'eat' : held === 'thirsty' ? 'drink' : 'warm up'}.`;
     return words;
+  }
+  // the night card's words changed while it is up (bear.js: the bear at the tent), on the veil or the camp's own card
+  cardSay(text, sub = null) {
+    const v = this.veil;
+    if (v && v.cur) { if (v.text) v.text.textContent = text; if (sub !== null && v.sub) v.sub.textContent = sub; return; }
+    const c = this.card;
+    if (c && c.run) { c.t.textContent = text; if (sub !== null) c.s.textContent = sub; }
   }
   // wc A: a nap (energy.js has only the night's sleep): the rest need comes back by NAP_GAIN of a night's share for the
   // hours napped, the hours awake fall by NAP_AWAKE an hour (the rest's ceiling), warmth comes back some in the bag, and

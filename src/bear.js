@@ -29,6 +29,17 @@
 // for first (the cooked food, the fish, the meals, the snacks), and never more than half of all the food with you, so a
 // visit is never the whole season and never an evacuation by itself.
 //
+// The owner, 2026-10-31: "this is for all food and fish, even if it's not inside your food barrel … the percent chance
+// that a bear does come needs to be much lower … If it's in a bag or a stringer or something, they will rummage through
+// just that object … If you leave it in your tent, then you have to potentially deal with a bear trying to get in your
+// tent". So: any food not hung, wherever it is (a pack, the barrel on the ground, the stringer, the canoe lying ashore,
+// the tent: inventory.js, the tent as a container), may bring one; the chance is a few in a hundred a night (BEAR); a
+// visit goes for one thing (the easiest smell) and only that; and the food at a camp you are away from may be visited
+// too (awayNight: its word waits for you there). Food in the tent with you brings it to the tent (tentNight): on the
+// night card it sniffs along the wall, and Space or E in time (BEAR.tentWindow s) shouts it off, the night a little
+// broken (BEAR.tentRest.scared). Too slow, and it claws in at the door: all the food in the tent is gone, the litter
+// at the door, and the night is mostly lost (BEAR.tentRest.raid). A hung barrel is never visited.
+//
 // Teaching (hints.js moments, pushed from main.js cons A): the first live visit, "A bear at the food. Face it and E to
 // make noise."; the dusk after a visit, with food still out at camp, "Hang the food tonight." (hints.js's own "Bears: hang
 // your food…" at dusk stays, and steps aside that evening).
@@ -55,9 +66,11 @@ import { env, grains } from './audio-kit.js';
 import { PACKS } from './hull.js';
 
 export const BEAR = {
-  chance: 0.3,          // a night with food out, at a lake of ordinary bear activity
-  first: 0.5,           // the first night ever: half of that (about 15 %)
-  most: 0.6,            // never likelier than this
+  chance: 0.06,         // a night with food out, at a lake of ordinary bear activity (it was 0.3: "much lower")
+  first: 0.5,           // the first night ever: half of that (about 3 %)
+  most: 0.2,            // never likelier than this
+  tentWindow: 4.5,      // real seconds, on the night card, to shout off a bear at the tent (Space or E)
+  tentRest: { scared: 0.85, raid: 0.4 }, // the night's rest left after a bear at the tent: shouted off, or let in
   take: [1 / 3, 1 / 2], // the share of the food left out a visit takes, undisturbed
   barrel: 0.7,          // a barrel on the ground holds its lid: what it ruins through the tooth holes is this much of that
   keep: 0.5,            // never more than this share of all the food with you goes
@@ -81,7 +94,7 @@ const RUMOUR = 2.0, RUMOUR_R = 600; // a keeper's word of a bear at a site (outf
 const NS = 'bear';
 const DANGER = 3, BODY = 2;          // hints.js priorities
 const PREF = { food: 0, fish: 1, meal: 2, snack: 3, forage: 4 }; // what it goes for first (a cooked thing is kind 'food')
-const RANK = { grate: 0, tent: 1, pile: 2, pack: 3, canoe: 3, stringer: 4, other: 5, barrel: 6 }; // the easiest smell first
+const RANK = { tent: -1, grate: 0, pile: 2, pack: 3, canoe: 3, stringer: 4, other: 5, barrel: 6 }; // the easiest smell first
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const C = (h) => new THREE.Color(h);
@@ -302,17 +315,17 @@ class Bear {
   // counts and clears the rest.
   load() {
     const s = save.read(NS);
-    const fresh = { v: 1, season: this.season, nights: 0, visits: 0, night: null, last: null, mess: [] };
+    const fresh = { v: 1, season: this.season, nights: 0, visits: 0, night: null, last: null, mess: [], away: [], awayKey: null };
     if (!s || s.v !== 1) { this.s = fresh; return; }
     this.s = { ...fresh, nights: s.nights | 0, visits: s.visits | 0 };
-    if (s.season === this.season) Object.assign(this.s, { night: s.night || null, last: s.last || null, mess: Array.isArray(s.mess) ? s.mess.slice(0, 40) : [] });
+    if (s.season === this.season) Object.assign(this.s, { night: s.night || null, last: s.last || null, mess: Array.isArray(s.mess) ? s.mess.slice(0, 40) : [], away: Array.isArray(s.away) ? s.away.slice(0, 6) : [], awayKey: s.awayKey || null });
     this.ver++;
   }
   write() { save.write(NS, this.s); }
   // a new season under way (profile.seasonId changed): the night and the mess start again
   seasonCheck() {
     if (this.s.season === this.season) return;
-    this.s = { v: 1, season: this.season, nights: this.s.nights, visits: this.s.visits, night: null, last: null, mess: [] };
+    this.s = { v: 1, season: this.season, nights: this.s.nights, visits: this.s.visits, night: null, last: null, mess: [], away: [], awayKey: null };
     this.ver++; this.write();
   }
 
@@ -390,6 +403,7 @@ class Bear {
       if (k.where === 'ground' && d <= r) { at = k.at; kind = k.item === 'grate' ? 'grate' : /^barrel/.test(k.item) ? 'barrel' : k.item === 'pile' ? 'pile' : k.item === 'stringer' ? 'stringer' : /pack/.test(k.item) ? 'pack' : 'other'; }
       else if (k.where === 'hung' && d <= r) { at = k.at; kind = 'barrel'; } // tied on at the rope's foot, never hoisted
       else if (k.where === 'canoe' && canoe) { at = canoe; kind = 'canoe'; }
+      else if (k.where === 'tent' && tent && Math.hypot(tent.x - x, tent.z - z) <= r) { at = tent; kind = 'tent'; } // (in the tent: inventory.js)
       else if (asleep && (k.where === 'back' || k.where === 'chest' || k.where === 'hands' || k.where === 'pockets')) { at = tent || { x, z }; kind = 'tent'; }
       if (!kind) continue;
       let g = groups.get(k.id);
@@ -549,16 +563,106 @@ class Bear {
     const N = this.nightAt();
     if (this.resolved(N) || N.at < from - 1e-6 || N.at > to + 1e-6) return null;
     const here = this.campHere(x, z);
+    this.awayNight(N, here);
     const groups = this.exposed(here.x, here.z, { asleep: true });
     if (!groups.length) { this.resolve(N, 'safe', true); return null; }
     if (N.u >= this.chanceAt(here.x, here.z)) { this.resolve(N, 'none', true); return null; }
     this.resolve(N, 'card', true);
-    const main = groups[0];
-    this.tonight = { N, here, kind: main.kind };
-    const at = main.at || here, h = N.at - N.d * 24;
-    const card = main.kind === 'tent' && !/pack|barrel/.test(main.k.item) ? 'tentHand' : main.kind;
-    const text = (CARD[card] || CARD.other).replace(/^Past midnight/, h < 23.75 ? 'Late in the night' : h < 24.25 ? 'Around midnight' : 'Past midnight');
+    const main = groups[0]; // (the one thing it goes for: the easiest smell, RANK; the tent's food before all)
+    this.tonight = { N, here, kind: main.kind, main: main.k.id };
+    const at = main.at || here, h = N.at - N.d * 24, when = h < 23.75 ? 'Late in the night' : h < 24.25 ? 'Around midnight' : 'Past midnight';
+    if (main.kind === 'tent') { this.tonight.tent = true; return { text: `${when}, you come awake. Something heavy in the brush, close by the tent.`, hold: 0.5, onDark: () => this.tentNight(at, when) }; }
+    const text = (CARD[main.kind] || CARD.other).replace(/^Past midnight/, when);
     return { text, hold: 6.5, onDark: () => this.nightSounds(main.kind, at) };
+  }
+  // The bear at the tent, on the night card (camp.sleep holds it on the promise): it sniffs along the wall, and Space or
+  // E within BEAR.tentWindow real seconds shouts it off; else it claws in at the door (morning: raidTent).
+  tentNight(at, when) {
+    const T = this.tonight, c = this.camp, say = (t, sub = null) => { if (c && typeof c.cardSay === 'function') c.cardSay(t, sub); };
+    const P = (dt, dx = 0, dz = 0) => this.at3(at.x + dx, at.z + dz, dt);
+    this.play('bear-brush', P(0.1, 5, 3), 0.9, 2.2);
+    this.play('bear-rummage', P(1.4, 1.2, 0.6), 1);
+    this.play('bear-rummage', P(3.0, 0.8, -0.9), 1);
+    say(`${when}: something big outside, sniffing along the tent wall. The fly bellies in under its nose. It smells the food in here.`, 'Space or E · shout and bang the pot!');
+    return new Promise((resolve) => {
+      let done = false, tm = null;
+      const onKey = (ev) => { if (ev.code === 'Space' || ev.code === 'KeyE') { ev.preventDefault(); ev.stopPropagation(); finish(true); } };
+      const finish = (scared) => {
+        if (done) return;
+        done = true;
+        if (typeof window !== 'undefined') window.removeEventListener('keydown', onKey, true);
+        clearTimeout(tm);
+        if (T) T.scared = scared;
+        this.restK = scared ? BEAR.tentRest.scared : BEAR.tentRest.raid;
+        if (scared) {
+          const au = this.audio; if (au && au.ctx && au.enabled) au.say('bear-yell', yell(au));
+          this.play('bear-woof', P(0.9, 1.5, 1), 1.1); this.play('bear-brush', P(1.3, 5, 4), 1.1, 1.8);
+          say('You yell and bang the pot. A woof, and it crashes off into the dark. Sleep comes back slowly.', '');
+        } else {
+          this.play('pack-tear', P(0), 1); this.play('bear-rummage', P(1.5), 1); this.play('bear-woof', P(4.0, -4, 5), 0.8);
+          say('The tent wall rips at the door. A bear’s head and shoulders come in, and then it is gone into the dark with the food.', 'You lie awake until first light.');
+        }
+        setTimeout(resolve, 2800);
+      };
+      if (typeof window === 'undefined') { finish(false); return; }
+      window.addEventListener('keydown', onKey, true);
+      tm = setTimeout(() => finish(false), BEAR.tentWindow * 1000);
+    });
+  }
+  // what the night left of the rest (camp.wake, once, after a night card): a bear at the tent breaks it
+  restFactor() { const k = Number.isFinite(this.restK) ? this.restK : 1; this.restK = 1; return k; }
+  // Let in at the tent: every bit of food in it (and on you) is gone, not a share; the litter outside the door
+  raidTent(groups, N) {
+    const inv = this.inv, rng = mulberry32(seedOf(`${N.key}:tent`)), lost = new Map();
+    for (const g of groups) for (const { c, e } of g.items) {
+      if (!c.grid.includes(e)) continue;
+      const d = itemDef(e.id), n = e.qty || 1;
+      if (!inv.take(c.id, e.uid, n)) continue;
+      const r = lost.get(d.id) || { id: d.id, name: foodName(d), whole: 0, some: false, n: 1 };
+      r.whole += n; lost.set(d.id, r);
+    }
+    inv.emit('items');
+    const at = groups[0].at || { x: this.player.x, z: this.player.z };
+    this.litterAt(at.x, at.z, 6, rng, ['shred', 'pouch', 'wrapper', 'bag', 'oats']);
+    const L = [...lost.values()];
+    this.log({ how: 'tent', scared: false, lost: L.map((r) => r.id) });
+    return { words: `A bear clawed in at the tent door in the night: the food in the tent is gone, wrappers strewn outside. ${this.lostWords(L)} Food stays out of the tent: hang it.`, lost: L, x: at.x, z: at.z };
+  }
+  // The food at another camp, or set down anywhere you are not, at the night's hour: each thing it is in has its own die
+  // at that place's chance, and a visit there waits as a word for when you come back (sayAway). Once a night.
+  awayNight(N, here) {
+    const inv = this.inv, p = this.player;
+    if (!inv || this.s.awayKey === N.key) return;
+    this.s.awayKey = N.key;
+    const roots = new Set();
+    for (const c of inv.containers) {
+      if (c.item === 'crate' || !c.grid.some(isFood)) continue;
+      const k = inv.root(c);
+      if (!k.at || !(k.where === 'ground' || k.where === 'hung') || this.secured(k)) continue;
+      if (here && Math.hypot(k.at.x - here.x, k.at.z - here.z) <= BEAR.reach) continue; // (the camp you are at: bedtime or watch)
+      if (p && Math.hypot(k.at.x - p.x, k.at.z - p.z) <= BEAR.hear) continue;
+      roots.add(k);
+    }
+    for (const k of roots) {
+      const u = mulberry32(seedOf(`${N.key}:${k.id}:away`))();
+      if (u >= this.chanceAt(k.at.x, k.at.z)) continue;
+      const g = this.exposed(k.at.x, k.at.z, { r: 1 }).find((q) => q.k === k);
+      if (!g) continue;
+      const r = this.raid([g], N);
+      this.s.away.push({ text: r.words.replace('in the night', 'while you were away'), x: r.x, z: r.z });
+      if (this.s.away.length > 6) this.s.away.shift();
+      this.s.visits++;
+    }
+    this.write();
+  }
+  // a visit while you were away, said once you are back there on foot
+  sayAway() {
+    const a = this.s && this.s.away, p = this.player, c = this.camp;
+    if (!a || !a.length || !p || !p.onFoot || (c && (c.night || (c.veil && c.veil.active)))) return;
+    const i = a.findIndex((n) => Math.hypot(n.x - p.x, n.z - p.z) < 30);
+    if (i < 0) return;
+    if (this.hud) this.hud.note(a[i].text, 10);
+    a.splice(i, 1); this.write();
   }
   // in the dark of the card: the woof, the brush, then what it got into, then the woof going away
   nightSounds(kind, at) {
@@ -576,9 +680,23 @@ class Bear {
   morning() {
     const T = this.tonight; if (!T) return null;
     this.tonight = null;
-    const groups = this.exposed(T.here.x, T.here.z, { asleep: true });
-    if (!groups.length) return null;
-    const r = this.raid(groups, T.N);
+    const all = this.exposed(T.here.x, T.here.z, { asleep: true });
+    if (T.tent) {
+      const tent = all.filter((g) => g.kind === 'tent');
+      if (T.scared || !tent.length) {
+        const w = 'Big tracks in the dirt by the tent door. Food in the tent brings them in: hang it.';
+        this.note = { text: w, x: T.here.x, z: T.here.z, t: null, max: 5 };
+        this.log({ how: 'tent', scared: true });
+        return w;
+      }
+      const r = this.raidTent(tent, T.N);
+      this.note = { text: r.words, x: r.x, z: r.z, t: null, max: 5 };
+      return r.words;
+    }
+    // it went for one thing and rummaged through just that (the owner, 2026-10-31)
+    const main = all.find((g) => g.k.id === T.main) || all.find((g) => g.kind !== 'tent');
+    if (!main) return null;
+    const r = this.raid([main], T.N);
     this.note = { text: r.words, x: r.x, z: r.z, t: null, max: 8 };
     return r.words;
   }
@@ -591,6 +709,7 @@ class Bear {
     if (this.resolved(N) || this.nowAbs < N.at) return;
     if (this.nowAbs > N.at + 6) { this.resolve(N, 'late', false); return; } // (a save picked up long after: let it be)
     const here = this.campHere();
+    this.awayNight(N, here);
     if (!here) { this.resolve(N, 'away', false); return; }
     const groups = this.exposed(here.x, here.z, { asleep: false });
     if (!groups.length) { this.resolve(N, 'safe', true); return; }
@@ -598,8 +717,8 @@ class Bear {
     const main = groups[0], at = main.at || here;
     const there = p.onFoot && Math.hypot(p.x - at.x, p.z - at.z) <= BEAR.hear;
     this.resolve(N, there ? 'live' : 'raid', true);
-    if (there) this.startVisit(main, groups, at, N);
-    else { const r = this.raid(groups, N); this.note = { text: r.words.replace('in the night', 'while you were away'), x: r.x, z: r.z, t: null, max: Infinity }; }
+    if (there) this.startVisit(main, [main], at, N);
+    else { const r = this.raid([main], N); this.note = { text: r.words.replace('in the night', 'while you were away'), x: r.x, z: r.z, t: null, max: Infinity }; }
   }
 
   // --- a live visit ------------------------------------------------------------------------------------------------------
@@ -685,7 +804,7 @@ class Bear {
     const share = how === 'done' ? full : v.state === 'work' ? full * clamp(v.workT / BEAR.work, 0, 1) : 0;
     const groups = this.exposed(v.fx, v.fz, { asleep: false });
     const main = groups.find((g) => g.k.id === v.main) || null;
-    const order = main ? [main, ...groups.filter((g) => g !== main)] : groups;
+    const order = main ? [main] : []; // (just the one thing it went for)
     const lost = share > 0.02 && order.length ? this.take(order, share, { min: how === 'done' || v.workT > 3 }) : [];
     let mess = '';
     if (main && (v.state === 'work' || how === 'done')) mess = this.mess(main, mulberry32(seedOf(`${v.N.key}:mess`)), { far: how === 'done' });
@@ -877,6 +996,7 @@ class Bear {
     this.stepVisit(dt);
     this.drawMess();
     this.sayMorning();
+    this.sayAway();
   }
 
   // --- the moments (hints.js) ----------------------------------------------------------------------------------------------
