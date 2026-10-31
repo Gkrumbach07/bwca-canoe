@@ -92,6 +92,8 @@ export function buildCanoeRig({ water = null } = {}) {
     airT: 0, vy: 0,
     land: 0,             // 0..1: a landing sinking into the knees, fading
     stagger: 0,          // 0..1: Space with the canoe overhead, fading
+    carryLean: 0,        // radians: the canoe's roll on the yoke, + toward the right (player.js balanceCarry, balance.js)
+    carryWobble: 0,      // 1 while it wobbles (stop to steady it)
     walk: 0,             // walk / swim cycle phase written by player.js (the swim uses it)
     walkSpeed: 0,        // 0..1: moving or not, eased
     moveFwd: 0,          // -1..1: the legs go ahead (1) or back (-1), in the body's frame (player.js, on foot)
@@ -582,7 +584,7 @@ export function buildCanoeRig({ water = null } = {}) {
   const heal = () => {
     gait.heal(); // (the feet, the hips, the crouch and the wading)
     resetIdle(idle);
-    for (const k of ['speed', 'walkSpeed', 'moveFwd', 'moveLat', 'walk', 'stagger', 'land', 'airT', 'vy', 'crouch', 'cadence']) if (!Number.isFinite(state[k])) state[k] = 0;
+    for (const k of ['speed', 'walkSpeed', 'moveFwd', 'moveLat', 'walk', 'stagger', 'land', 'airT', 'vy', 'crouch', 'cadence', 'carryLean']) if (!Number.isFinite(state[k])) state[k] = 0;
     eyeInit = false; eyeY.on = false; eyeY.v = 0;
     pb.t = 1; pb.has = false;
     hullPivot.scale.set(1, 1, 1);

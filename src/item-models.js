@@ -630,6 +630,18 @@ model('cedaryoke', {
     return b;
   },
 });
+// the bungee dilly bobs (the owner, 2026-10-31): two loops of shock cord, each through a turned wooden toggle
+model('dillybobs', {
+  build: (b) => {
+    for (const [z, col] of [[-0.035, 0x2f5f8a], [0.035, 0x2a2a28]]) {
+      const loop = [];
+      for (let i = 0; i <= 16; i++) { const a = (i / 16) * Math.PI * 2; loop.push(V(Math.cos(a) * 0.07, 0.008, z + Math.sin(a) * 0.025)); }
+      cord(b, loop, 0.0045, C(col), 5);
+      b.cyl(V(0.07, 0.01, z - 0.018), V(0.07, 0.01, z + 0.018), 0.008, 0.008, 6, TILE.WOOD, C(0xb08a5a), { cap0: true, cap1: true });
+    }
+    return b;
+  },
+});
 model('tump', {
   build: (b) => {
     const coil = [];
@@ -685,7 +697,7 @@ const KEY_OF_ID = {
   'hot:pancakes': ['pancakes'], 'hot:chili': ['bowl', 0x8a3a24], 'hot:bannock': ['bannock'],
   leeches: ['cup'], aframe: ['tentbag', 0xb5763a], dome: ['tentbag', 0x5f7f3a], fourseason: ['tentbag', 0xc9a23a],
   sleepingbag: ['sleepbag', 0x2f5f8a], bag3: ['sleepbag', 0x4a6a3a], bagdown: ['sleepbag', 0xa8402e], clothes: ['drybag', 0x4f7d9c],
-  tarp: ['tarpsack', 0x55704a], pad: ['pad'], padair: ['padroll', 0xc96a2a], yokepads: ['yokepads'], pot: ['pot'],
+  tarp: ['tarpsack', 0x55704a], pad: ['pad'], padair: ['padroll', 0xc96a2a], yokepads: ['yokepads'], pot: ['pot'], yokecontour: ['cedaryoke'], dillybobs: ['dillybobs'],
   tablets: ['tube'], pump: ['pump'], gravity: ['gravity'], saw: ['saw'], camera: ['camera'], bottle: ['bottle'],
   stove: ['stove'], fuel: ['canister', 0x2f68a8], rainjacket: ['jacket', 0xc99a2e], headnet: ['headnet'], chair: ['chair', 0x3f5443],
   coffee: ['coffee'], cocoa: ['coffee', 0x6a3a22], headlamp: ['headlamp'], headlamp2: ['headlamp'], headlamp3: ['headlamp', 0xb4321f],

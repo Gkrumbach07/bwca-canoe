@@ -423,6 +423,12 @@ defineItem({ id: 'tarp', name: 'Rain tarp', kind: 'gear', w: 2, h: 2, kg: 1.0, p
 // fb5 A/B: a pole is deadwood (it burns about like a log, decision 1) that also holds up a tarp; tarp.js counts it by id
 defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'firewood', w: 1, h: 3, kg: 0.9, stack: 4, burn: 1.5, icon: 'pole', identity: 'Straight deadwood · 2 m' });
 defineItem({ id: 'pad', name: 'Sleeping pad', kind: 'gear', w: 2, h: 3, kg: 0.6, price: 30, identity: 'Closed-cell foam', onYou: [EF('rest', 0.05, 'a night')] });
+// the owner, 2026-10-31: the yoke you carry the canoe on, upgraded (shop.js effect yokeFree: under the canoe both hands
+// may carry, the canoe balanced on the shoulders, at a higher risk of it tipping: balance.js), and the bungee dilly
+// bobs (effect dilly: the paddles and the rods ride lashed in the canoe overhead, packs.js lashed). Both are gear you
+// own: in a pack, they count as on the canoe.
+defineItem({ id: 'yokecontour', name: 'Contoured portage yoke', kind: 'gear', w: 3, h: 1, kg: 1.3, price: 45, icon: 'cedaryoke', identity: 'Shaped and padded to the shoulders', onYou: [O('Canoe carry', 'hands-free'), O('Carrying', 'energy ×0.85')] });
+defineItem({ id: 'dillybobs', name: 'Bungee dilly bobs', kind: 'gear', w: 1, h: 1, kg: 0.15, price: 9, icon: 'dillybobs', identity: 'Bungee cords with toggles, for the thwarts', onYou: [O('Canoe carry', 'paddle and rod lashed in')] });
 defineItem({ id: 'yokepads', name: 'Portage yoke pads', kind: 'gear', w: 2, h: 1, kg: 0.4, price: 15, icon: 'yoke', identity: 'Foam pads for the yoke', onYou: [O('Canoe carry', 'effort ×0.85')] });
 // the water treatments: how long till the bottle is drinkable is their comparison
 defineItem({ id: 'tablets', name: 'Purifying tablets', kind: 'tool', kg: 0.05, price: 2, slot: 'filter', uses: 20, identity: 'Iodine tablets · 30 min to treat' });

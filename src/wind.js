@@ -11,6 +11,13 @@ import { mulberry32, noise2, smoothstep, clamp } from './rng.js';
 const POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const POINTS_LONG = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 export const FRESH = 8;        // m/s: a fresh breeze (Beaufort 5) and up is when the wind matters
+// Gusts as events (the owner, 2026-10-31: "we should add wind gusts because that seems like it's an important thing"): over
+// the slow gust signal, a puff now and then, a few seconds of harder wind that comes in, holds and dies away. every: the
+// mean seconds between puffs at a breeze of calm (m/s) and at a blow (windy); peak: the puff's extra share of the
+// steady wind (a random pick in the range, more on a gusty weather); rise, hold, fall: its shape (s); veer: how far it
+// swings off the wind (degrees). Under min m/s there are none. wind.puff is the puff now (0..1 of its peak's shape times
+// the peak), wind.gustSpeed the wind with it (wind.speed stays the steady wind the waves and the paddle read).
+export const PUFF = { min: 2.5, calm: 3, windy: 10, every: [45, 12], peak: [0.3, 0.75], rise: 0.9, hold: [1, 3.5], fall: 2.2, veer: 18 };
 
 // The sway: the wind as everything that bends in it reads it (the trees and the understory in vegetation.js, the
 // grass in groundcover.js, the reeds, the rice and the pads in aquatic.js), shared uniforms that Wind.updateSway
@@ -68,7 +75,12 @@ export class Wind {
     this.gustPhase = 0;        // the quick gusts' phase, integrated so a change of pace never jumps it
     this.sway = { x: 0, z: 0, t: 0 }; // the gust field's drift and the sway clock (see SWAY)
     this.weather = null;       // weather.js attaches itself here; its windTarget bends the day's wind
+    this.puffRng = mulberry32(seed * 7 + 3); // (its own, so the days' rolls are as they were)
+    this.puff = 0; this.puffT = 20; this.puffEv = null; this.puffVeer = 0;
   }
+  // the wind with the puff in it (m/s) and the way it blows now (the puff veers a little)
+  get gustSpeed() { return this.speed * (1 + this.puff); }
+  get gustDir() { const a = ((this.from + this.puffVeer + 180) * Math.PI) / 180; return { x: Math.sin(a), z: -Math.cos(a) }; }
 
   // unit vector the wind blows TOWARD, in world xz (x east, z south)
   get dir() { const a = ((this.from + 180) * Math.PI) / 180; return { x: Math.sin(a), z: -Math.cos(a) }; }
@@ -102,6 +114,7 @@ export class Wind {
     if (this.gust < -0.45) this.gust = -0.45;
     const target = this.override ?? Math.min(22, Math.max(0, base * (1 + this.gust)));
     this.speed += (target - this.speed) * (1 - Math.exp(-dt * (0.4 + 0.8 * stormy)));
+    this.updatePuff(dt, g);
     // (the cons join: under a weather with a bearing, as every hour now has, the wander is a third of what it was, so the
     // steer below holds the wind within a few degrees of the forecast's and the lee stays where it was)
     const steered = wx && Number.isFinite(wx.from) && this.override === null;
@@ -116,6 +129,28 @@ export class Wind {
     }
   }
 
+  // a puff now and then (PUFF): none under a set wind (the debug keys, the look board) or a light air
+  updatePuff(dt, g = 1) {
+    const P = PUFF, v = this.speed;
+    if (this.override !== null || v < P.min || !(dt > 0)) { this.puff = 0; this.puffVeer = 0; this.puffEv = null; return; }
+    const e = this.puffEv;
+    if (!e) {
+      const k = smoothstep(P.calm, P.windy, v), every = (P.every[0] + (P.every[1] - P.every[0]) * k) / Math.max(0.5, g);
+      this.puffT -= dt;
+      if (this.puffT <= 0) {
+        const r = this.puffRng;
+        this.puffEv = { t: 0, hold: P.hold[0] + r() * (P.hold[1] - P.hold[0]), peak: Math.min(1, (P.peak[0] + r() * (P.peak[1] - P.peak[0])) * (0.8 + 0.2 * g)), veer: (r() * 2 - 1) * P.veer };
+        this.puffT = every * (0.4 + 1.2 * r());
+      }
+      this.puff = 0; this.puffVeer = 0;
+      return;
+    }
+    e.t += dt;
+    const env = e.t < P.rise ? smoothstep(0, P.rise, e.t) : e.t < P.rise + e.hold ? 1 : 1 - smoothstep(P.rise + e.hold, P.rise + e.hold + P.fall, e.t);
+    this.puff = e.peak * env; this.puffVeer = e.veer * env;
+    if (e.t > P.rise + e.hold + P.fall) { this.puffEv = null; this.puff = 0; this.puffVeer = 0; }
+  }
+
   // Hands the wind to everything that sways (SWAY): its direction, speed and gusts, the gust field carried
   // downwind (a little slower than the wind itself) and the sway clock moved on by dt. Once a frame, after update.
   updateSway(dt) {
@@ -128,7 +163,7 @@ export class Wind {
     // and past about 1.4 its tips would go under the ground, groundcover.js)
     const load = Math.min(2.6, (v / 12) * (v / 12) * (1 + 0.6 * smoothstep(11, 18, v)));
     SWAY.uSwayWind.value.set(d.x, d.z, load, v);
-    SWAY.uSwayGust.value.set(s.x, s.z, s.t, clamp(1 + 1.6 * this.gust, 0.4, 1.6));
+    SWAY.uSwayGust.value.set(s.x, s.z, s.t, clamp(1 + 1.6 * this.gust + 1.2 * this.puff, 0.4, 2.1)); // (a puff bends them harder)
   }
 
   // debug nudges from the keyboard

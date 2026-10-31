@@ -227,7 +227,7 @@ export class Inventory {
     for (const t of tents) if (t !== kitTent && owned.has(t)) putIn(t, 1, null, [this.crate]);
     for (const id of ['sleepingbag', 'clothes', 'pot', 'tarp']) putIn(id);
     for (const id of ['tablets', 'pump', 'gravity']) if (owned.has(id) || (id === 'tablets' && (kit.filter || 'tablets') === 'tablets')) putIn(id);
-    for (const id of ['pad', 'saw', 'camera', 'yokepads']) if (owned.has(id)) putIn(id);
+    for (const id of ['pad', 'saw', 'camera', 'yokepads', 'yokecontour', 'dillybobs']) if (owned.has(id)) putIn(id);
     // the tackle box and the lures in it
     const box = this.nestNew(gear, 'tacklebox') || this.addContainer('tacklebox', 'canoe', null, q);
     for (const id of [...owned]) if (id.startsWith('lure:') && itemDef(id)) { if (!this.put(box.id, id, q)) putIn(id); }
@@ -346,7 +346,10 @@ export class Inventory {
     for (const l of this.long) if (l.where === 'hands' && (l.hand === 0 || l.hand === 1)) out[l.hand] = { long: l.uid };
     return out;
   }
-  freeHand() { const h = this.hands; return h[0] ? h[1] ? -1 : 1 : 0; }
+  // the owner, 2026-10-31: under the canoe one hand stays on a gunwale unless the yoke lets you go hands-free (packs.js
+  // sets handLimit each frame: 1 then, else 2), so a second thing will not go in a hand
+  freeHand() { const h = this.hands; if ((this.handLimit ?? 2) < 2 && (h[0] || h[1])) return -1; return h[0] ? h[1] ? -1 : 1 : 0; }
+  get handsFullWords() { return (this.handLimit ?? 2) < 2 && !(this.hands[0] && this.hands[1]) ? 'Your other hand is on the canoe.' : 'Both hands are full.'; }
   worn(slot) { return this.containers.find((c) => c.where === slot) || null; }
 
   // --- the grid --------------------------------------------------------------------------------------------------------
@@ -819,7 +822,7 @@ export class Inventory {
       const on = this.worn(slot); if (on && on !== o) return no('full', `${on.name} is on your ${slot} already.`);
     } else if (slot === 'hands') {
       if (!canHand) return no('wear', `${t.def.name} won’t go in one hand.`);
-      if (o.where !== 'hands') { const h = this.freeHand(); if (h < 0) return no('full', 'Both hands are full.'); o.hand = h; }
+      if (o.where !== 'hands') { const h = this.freeHand(); if (h < 0) return no('full', this.handsFullWords); o.hand = h; }
     } else return no('slot', '');
     if (t.kind === 'container' && o.where === 'in') this.unnest(o);
     o.where = slot; o.at = null;
@@ -1010,7 +1013,7 @@ export class Inventory {
     if (e.box) { const k = this.cont(e.uid); const r = k ? this.carry(k.id, 'hands') : no('gone', ''); if (r.ok && hand != null && k) k.hand = this.handOf(k, hand); return r; }
     if (!this.canHand(e.id)) return no('wear', `${itemDef(e.id).name} won’t go in one hand.`);
     if (hand == null) hand = this.freeHand();
-    if (hand < 0 || this.hands[hand]) return no('full', hand < 0 ? 'Both hands are full.' : 'That hand is full.');
+    if (hand < 0 || this.hands[hand] || this.freeHand() < 0) return no('full', hand < 0 || this.freeHand() < 0 ? this.handsFullWords : 'That hand is full.');
     const h = this.addContainer(this.holderFor(e.id), 'hands', null, { quiet: true, hand });
     const spot = h ? this.firstFit(h, e.id) : null;
     if (!spot || !this.move(c.id, uid, h.id, spot.x, spot.y, spot.rot, qty)) { if (h) this.containers.splice(this.containers.indexOf(h), 1); return no('full', 'It won’t go in a hand.'); }
@@ -1021,7 +1024,7 @@ export class Inventory {
   toHandNew(itemId, { data = null, qty = 1, hand = null } = {}) {
     if (!this.canHand(itemId)) return no('wear', '');
     if (hand == null) hand = this.freeHand();
-    if (hand < 0 || this.hands[hand]) return no('full', 'Both hands are full.');
+    if (hand < 0 || this.hands[hand] || this.freeHand() < 0) return no('full', this.handsFullWords);
     const h = this.addContainer(this.holderFor(itemId), 'hands', null, { quiet: true, hand });
     if (!h || !this.put(h, itemId, { qty, data, quiet: true })) { if (h) this.containers.splice(this.containers.indexOf(h), 1); return no('full', ''); }
     this.emit('carry');
@@ -1072,7 +1075,7 @@ export class Inventory {
         if (r.c && this.spec(r.c).one && this.rootWhere(r.c) === 'hands') return grey('In your hand already', [], 'Drag it into a pack to put it away, or onto the ground'); // (fb5 join: a hand's holder in the canoe is not your hand)
         if (!this.canHand(r.e.id) && !r.e.box) return grey('It won’t go in one hand', [], 'Carry it on your back or chest: drag its strap there');
         if (p && !(p.onFoot || p.mode === 'paddle') && !this.atStash) return grey('Not now', [NEED.step('On foot, or sitting in the canoe', false, { chip: 'on foot' })], 'Finish what you are doing first');
-        if (this.freeHand() < 0) return grey('Both hands are full', [NEED.qty('A free hand', 0, 1, '', { chip: '' })], `Put down or away what is in a hand: ${this.handsWords() || 'drag it into a pack'}`);
+        if (this.freeHand() < 0) return grey(this.handsFullWords.replace(/\.$/, ''), [NEED.qty('A free hand', 0, 1, '', { chip: '' })], `Put down or away what is in a hand: ${this.handsWords() || 'drag it into a pack'}`);
         return go(() => this.toHand(r.c.id, r.e.uid), null, [NEED.qty('A free hand', 1, 1)]);
       }
       case 'stringer': {

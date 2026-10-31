@@ -52,6 +52,7 @@ const CAMP_REACH = 40;     // metres from your pitched tent within which the gra
 const LATER = import.meta.glob(['./outfitters.js', './sheets.js']);
 
 export const GEAR0 = Object.freeze({ cruise: 1, effort: 1, stability: 1, carry: 1, sleep: AFRAME_SLEEP, sleepDry: false, snap: 1, saw: false, filter: 'tablets', camera: false, canoeKg: 34, foodRoom: 7,
+  yokeFree: false, dilly: false, // the owner, 2026-10-31: a yoke that balances the canoe hands-free; the paddle and rod lashed in it (packs.js)
   feel: 1, night: 1.3 }); // content C: feel scales the strike window after a take (the graphite rod), night what travel after dark costs (kit.js: the headlamp with you)
 
 // Two more lures on the wall: the tackle the plan names as new. Each species reads a lure by its id, so every one of
@@ -149,6 +150,9 @@ export const CATALOG = [
   { id: 'royalex', name: 'Royalex Prospector, 16 ft', shelf: 'gear', price: 160, kg: 29, slot: 'canoe', hull: true, at: ['lodge', 'river post'], words: 'Wide and forgiving. It shrugs off a beam sea, though it’s a little slower to push. On the rack outside.', effect: { canoeKg: 29, stability: 1.3, cruise: 0.97 } },
   { id: 'kevlar', name: 'Kevlar tripper, 17 ft', shelf: 'gear', price: 200, kg: 20, slot: 'canoe', hull: true, at: ['lodge', 'trout camp'], words: 'Light enough to carry one-handed down the dock, and she runs a little quicker. Up on the rafters.', effect: { canoeKg: 20, cruise: 1.04 } },
   { id: 'yokepads', name: 'Portage yoke pads', shelf: 'gear', price: 15, kg: 0.4, family: 'yoke', words: 'Foam pads for the yoke. The canoe sits easier on the neck over a long carry.', effect: { carry: 0.85 } },
+  // the owner, 2026-10-31: upgraded yokes that let you carry things in both hands, and the dilly bobs (items.js)
+  { id: 'yokecontour', name: 'Contoured portage yoke', shelf: 'gear', price: 45, kg: 1.3, family: 'yoke', words: 'Shaped to the shoulders and padded: she balances up there with no hands on her, so you can carry a thing in each. Mind the wind, though.', effect: { carry: 0.85, yokeFree: true } },
+  { id: 'dillybobs', name: 'Bungee dilly bobs', shelf: 'gear', price: 9, kg: 0.15, family: 'dilly', words: 'Bungee loops for the thwarts. The paddle and the rod ride lashed in the canoe on the portage: fewer trips, but she’s top-heavy.', effect: { dilly: true } },
   { id: 'dome', name: 'Dome tent', shelf: 'gear', price: 50, kg: 2.8, slot: 'tent', words: 'Stands up to the wind off the lake. You’ll sleep the whole night through.', effect: { sleep: 1 } },
   { id: 'fourseason', name: 'Four-season tent', shelf: 'gear', price: 95, kg: 3.6, slot: 'tent', at: ['lodge', 'trout camp'], words: 'A good night in any weather, and room in the vestibule to hang the wet things: dry by morning.', effect: { sleep: 1, sleepDry: true } },
   { id: 'pad', name: 'Foam pad', shelf: 'gear', price: 20, kg: 0.6, family: 'pad', words: 'Foam between you and the cold ground. A better night in any tent.', effect: { sleepAdd: 0.05 } },
@@ -191,7 +195,7 @@ function register(it) {
   ITEMS[it.id] = { label: it.name, ...(it.slot ? { slot: it.slot } : {}), ...(Number.isFinite(e.sleep) ? { sleep: e.sleep } : {}), note: it.note || shortWords(it) };
 }
 const NOTE = { bentshaft: 'easier on the shoulders, a touch quicker', carbon: 'light and quick', royalex: 'steady in a sea', kevlar: '20 kg on the portages', pack2: 'room for more food; two carries',
-  barrel: 'two weeks of food', yokepads: 'an easier carry', dome: 'a whole night’s sleep', fourseason: 'sleeps well; dries the gear', pad: 'a better night', pump: 'drinkable at once', gravity: 'fills itself at camp',
+  barrel: 'two weeks of food', yokepads: 'an easier carry', yokecontour: 'carry the canoe hands-free', dillybobs: 'the paddle and rod lashed in', dome: 'a whole night’s sleep', fourseason: 'sleeps well; dries the gear', pad: 'a better night', pump: 'drinkable at once', gravity: 'fills itself at camp',
   rod: 'the line holds longer', saw: 'firewood in no time', camera: 'for the photo notices', 'lure:silverminnow': 'weedless', 'lure:lazyike': 'walleye, slow',
   rodpro: 'feels every tap', bag3: 'good to −4 °C', bagdown: 'good to −9 °C', padair: 'a warmer night', headlamp2: 'a 40 m beam', headlamp3: 'a 55 m beam', packdry: 'stays dry', rainjacket: 'dry in the rain', headnet: 'keeps the bugs off', stove: 'supper without a fire' }; // (content C)
 function shortWords(it) { return NOTE[it.id] || ''; }
@@ -224,6 +228,8 @@ export function applyGear(profile, player) {
       if (e.sleepDry) g.sleepDry = true;
       if (e.saw) g.saw = true;
       if (e.camera) g.camera = true;
+      if (e.yokeFree) g.yokeFree = true;
+      if (e.dilly) g.dilly = true;
       const f = it.family || it.slot || id, best = fam.get(f) || {};
       for (const k in BETTER) if (Number.isFinite(e[k])) best[k] = best[k] === undefined ? e[k] : BETTER[k] === 'max' ? Math.max(best[k], e[k]) : Math.min(best[k], e[k]);
       fam.set(f, best);

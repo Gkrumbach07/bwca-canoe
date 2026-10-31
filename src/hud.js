@@ -883,14 +883,14 @@ export class Hud {
     const hdg = bearingOf(player.heading);
     this.set('needle', e.needle, `rotate(${hdg.toFixed(1)}deg)`, 'style');
     e.needle.style.transform = `rotate(${hdg.toFixed(1)}deg)`;
-    e.windArrow.style.transform = `rotate(${(wind.from % 360).toFixed(1)}deg)`;
+    e.windArrow.style.transform = `rotate(${((wind.from + (wind.puffVeer || 0) + 360) % 360).toFixed(1)}deg)`; // (a gust swings it a little: wind.js PUFF)
     e.compass.querySelector('svg').setAttribute('aria-label', `Compass: heading ${compassLong(hdg)}; ${wind.label.toLowerCase()} from the ${wind.compassLong}`);
     if (matters) {
       this.set('clabel', e.compassLabel, `${wind.label} · ${wind.speed.toFixed(0)} m/s`, 'innerHTML');
       e.compassLabel.innerHTML = `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s<br>from the ${wind.compassLong}`;
       const f = player.forward, wd = wind.dir, cosRel = f.x * wd.x + f.z * wd.z;
       const aspect = player.mode !== 'paddle' ? '' : Math.abs(cosRel) < 0.5 ? ' · beam on' : cosRel < 0 ? ' · on the bow' : ' · astern';
-      this.set('cwaves', e.compassWaves, `${ice ? 'frozen over' : `waves ${H.toFixed(1)} m${aspect}`}${wind.override != null ? ' · set by hand' : ''}`);
+      this.set('cwaves', e.compassWaves, `${ice ? 'frozen over' : `waves ${H.toFixed(1)} m${aspect}`}${wind.puff > 0.15 ? ' · gusting' : ''}${wind.override != null ? ' · set by hand' : ''}`);
     }
   }
 
