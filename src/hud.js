@@ -8,6 +8,7 @@ import { lifeKmh } from './pace.js';
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import { KIND, FOREST } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt } from './map-render.js'; // the map as vectors
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -33,16 +34,13 @@ const GLANCE_SPAN = 5000;    // metres across the glance and the corner sheet
 // goes out to the whole map
 const OPEN_SPAN = 4000, OPEN_MIN = 3000, OPEN_MAX = 5000;
 const SHEET_FADE = 720;      // ms: the sheet keeps its place while it fades (.paper's opacity .7s), then lets it go
-const MIN_SPAN = 2000, MAX_SPAN = 240000;
-const FINE_PX = 512;         // image pixels per fine tile edge (5 m per pixel)
-const FAR_PX = 256;          // image pixels per far tile edge (80 m per pixel)
-const FINE_M_PER_PX = 20;    // draw tiles at full detail once the view is this close
-const MAP_TILES_MAX = 96;    // map-only tile images kept (about 1 MB each)
-const MAP_FETCHES = 4;       // map-only tile downloads in flight
+const MIN_SPAN = 700, MAX_SPAN = 240000; // (the vector sheet stays sharp in close: 2 km was the raster's limit)
+const BASE_MARGIN = 256;     // canvas px: the base drawing reaches this far past the view on each side (drawMap)
+// the scale bar's round distances (m, words): feet under a quarter mile, then miles
+const SCALE_STEPS = [[152.4, '500 ft'], [304.8, '1,000 ft'], [402.34, '¼ mi'], [804.67, '½ mi'], [1609.34, '1 mi'], [3218.69, '2 mi'], [8046.72, '5 mi'], [16093.4, '10 mi'], [32186.9, '20 mi'], [80467.2, '50 mi']];
 const WATER = [184, 208, 216], RIM = [84, 118, 136];
-const TINT_LOW = [224, 216, 182], TINT_HIGH = [160, 166, 112];
-const BANDS = 14;
-const PAPER = '#e9e1cc';
+const TINT_LOW = [234, 226, 202], TINT_HIGH = [206, 204, 168]; // the overview's relief, as map-render.js tints the tiles
+const PAPER = '#ece4cf';
 const NEAT = 'rgba(74, 59, 38, 0.55)', FOLD = 'rgba(74, 59, 38, 0.4)'; // an owned sheet's neatline, and where two of yours meet
 // fb2 D: the printed sheets over the whole map (at an outfitter): yours ruled in ink, the rest dotted, red where this
 // table sells it
@@ -73,9 +71,19 @@ function pencilRing(ctx, a, b, r, k, seed) {
   pass(0, 0, 1, 0.82, 2.2 * k, 0, 1);
   pass(1.4 * k, -1.1 * k, -1, 0.34, 1.3 * k, 0.06, 0.86);
 }
+// a notice's tag on the map: its number in a red disc (open), or a gold seal with $ (done, paid at that dock)
+function taskTag(ctx, a, b, text, k, gold) {
+  const r = 8.5 * k;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(a, b, r, 0, 6.2832);
+  ctx.fillStyle = gold ? '#c9a24a' : '#b8302a'; ctx.fill();
+  ctx.lineWidth = 1.5 * k; ctx.strokeStyle = gold ? '#5b3a12' : '#f4e9d6'; ctx.stroke();
+  ctx.font = `700 ${(String(text).length > 1 ? 9.5 : 11) * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = gold ? '#3a2410' : '#f8efdc'; ctx.fillText(String(text), a, b + 0.5 * k);
+  ctx.restore();
+}
 const PRESS = 260;           // ms: M let go sooner than this was a press, not a hold (nothing shows until it is one or the other: fb3 C)
-const FINE_PER_FRAME = 2;    // fine tile images painted fresh in one map frame (the rest wait a frame, the far image under them)
-const PREPAINT_RANGE = 6000; // m: tiles painted ahead for the map while it is away, this far from you at most
+const PREPAINT_RANGE = 6000; // m: tiles traced ahead for the map while it is away, this far from you at most
 const HOLD_OFF = 300;        // ms: held keys hide this long after release
 const TITLE_HOLD = 4, NOTE_HOLD = 5, CATCH_HOLD = 8; // seconds
 const WAVE_MATTERS = 0.3;    // m: waves above this make the compass speak
@@ -173,21 +181,6 @@ export function fishSilhouette(species) {
   return `<polygon points="${body}" fill="#2a2016"/><polygon points="10,28 2,16 6,28 2,40" fill="#2a2016"/><polygon points="46,10 56,0 70,8" fill="#2a2016"/><polygon points="62,46 70,56 80,46" fill="#2a2016"/><circle cx="90" cy="24" r="3" fill="#ebe2cb"/>`;
 }
 
-// marching squares: the segments through a cell for a corner bitmask (1 top-left, 2 top-right, 4 bottom-right, 8 bottom-left)
-function msSegments(b, top, right, bottom, left) {
-  switch (b) {
-    case 1: case 14: return [left, top];
-    case 2: case 13: return [top, right];
-    case 3: case 12: return [left, right];
-    case 4: case 11: return [right, bottom];
-    case 5: return [left, top, right, bottom];
-    case 6: case 9: return [top, bottom];
-    case 7: case 8: return [left, bottom];
-    case 10: return [top, right, bottom, left];
-    default: return [];
-  }
-}
-
 const $ = (id) => document.getElementById(id);
 // letter-spaced capitals for the map's lettering (hair spaces between the letters)
 const spaced = (s) => String(s).split('').join(String.fromCharCode(8202));
@@ -230,7 +223,7 @@ export class Hud {
     this.mapCtx = this.canvas.getContext('2d');
     this.mode = 'hidden';            // hidden | glance | sheet | corner
     this.view = { cx: 0, cz: 0, span: GLANCE_SPAN };
-    this.layers = { lakes: true, portages: true, campsites: true, tasks: true, depths: true };
+    this.layers = { lakes: true, portages: true, campsites: true, tasks: true, depths: true, notes: true, burns: true, boundary: true };
     // polish B: the wind glyph on the compass rim comes in from the edge (the head inward, the wave at its base), so
     // turned to the side the wind comes from it points the way the wind goes (updateCompass)
     if (this.el.windArrow) {
@@ -241,11 +234,11 @@ export class Hud {
     }
     this.pin = null;
     this.player = null;
-    this.fineImages = new Map();
-    this.farImages = new Map();
-    this.mapTiles = new Map();   // tiles fetched for the map alone, beyond the streamed neighbourhood
-    this.fetching = 0;
-    this.tick = 0;
+    this.base = null;            // the sheet drawn a margin past the view (drawMap)
+    this.hits = [];              // what the pointer can point at on it (drawLayers)
+    this.hover = null; this.focus = null;
+    this.host = null;            // 'book' while the sheet lies in the book's map tab (map-book.js)
+    this.bookHost = null;        // the book, which M opens at its map tab (map-book.js sets it)
     this.overview = null;
     this.scaleShown = '';
     this._v = new THREE.Vector3();
@@ -291,7 +284,11 @@ export class Hud {
         else if (mode === 'hold') { this.tab.held = true; clearTimeout(this.tab.timer); this.showReadout(true, true); }
       } else if (e.code === 'KeyM') {
         if (e.repeat || this.paper === 'outfitter') return;
+        // the map is a tab of the book (the owner, 2026-10-31: "pack, journal, map. You could still open map with just M"):
+        // M on the map tab closes the book, on another tab turns to the map
+        if (this.host === 'book' && this.bookHost) { this.bookHost.closeMap(); return; }
         if (this.mode === 'sheet') { this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); return; }
+        if (this.paper === 'journal' && this.bookHost) { this.bookHost.showMap(); return; }
         this.mKey.downAt = performance.now(); this.mKey.held = true; clearTimeout(this.mKey.timer);
         if (this.paper) { const c = this.papers.get(this.paper); if (c) c(); } // one paper object at a time
         // fb3 C (21, "opening the map is sorta glitchy"): nothing shows until the key has said whether it is a press or a
@@ -300,7 +297,8 @@ export class Hud {
         // PRESS) opens the sheet straight from nothing, and the glance comes up only once the key has been held PRESS.
         this.mKey.timer = setTimeout(() => { if (this.mKey.held && this.mode !== 'sheet') this.setMode('glance'); }, PRESS);
       } else if (e.code === 'Escape') {
-        if (this.pin) this.clearPin(); else if (this.mode === 'sheet') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
+        if (this.pin) { this.clearPin(); e.mapPin = true; } // (the book leaves its Esc to the pin: journal.js)
+        else if (this.mode === 'sheet' && this.host !== 'book') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
       } else if (e.code === 'Enter' && this.pin) this.confirm();
     });
     window.addEventListener('keyup', (e) => {
@@ -339,7 +337,9 @@ export class Hud {
     });
     c.addEventListener('pointermove', (e) => {
       if (!drag && this.table && this.mode === 'sheet') { const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py); this.table.hoverAt(x, z); return; } // fb2 D: the sheet under the pointer
+      if (!drag && this.mode === 'sheet') { const [px, py] = rectPx(e); this.hoverAt(px, py, e); return; } // what is under the pointer (map-book.js says what)
       if (!drag || this.mode !== 'sheet') return;
+      if (this.hover) this.hoverAt(-1, -1, null);
       const [px, py] = rectPx(e);
       const dx = px - drag.px, dy = py - drag.py;
       if (Math.hypot(dx, dy) > 4) drag.moved = true;
@@ -356,8 +356,18 @@ export class Hud {
       const [px, py] = rectPx(e);
       const [x, z] = this.worldAt(px, py);
       if (this.table) { this.table.pick(x, z); return; } // fb2 D: at the map table a click picks a sheet
+      // a notice's tag or ring, a seal on a dock, a pencilled word: the book's map side takes it (map-book.js)
+      const hit = this.hitAt(px, py);
+      if (hit && typeof this.onMarkClick === 'function' && this.onMarkClick(hit)) return;
       this.propose(x, z, false);
     };
+    c.addEventListener('pointerleave', () => { if (this.hover) this.hoverAt(-1, -1, null); });
+    // a lake's page straight from the sheet (map-book.js)
+    c.addEventListener('dblclick', (e) => {
+      if (this.mode !== 'sheet' || this.table || typeof this.onLakePage !== 'function') return;
+      const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py), id = lakeAt(this.world, x, z);
+      if (id > 0 && this.lakeShown(x, z)) { this.clearPin(); this.onLakePage(id); }
+    });
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', () => { drag = null; c.classList.remove('grabbing'); });
     c.addEventListener('wheel', (e) => {
@@ -368,7 +378,8 @@ export class Hud {
       const span = clamp(this.view.span * Math.exp(e.deltaY * 0.0015), MIN_SPAN, MAX_SPAN);
       // keep the point under the cursor where it is
       const mPerPx = span / c.width;
-      this.view.span = span;
+      this.view.span = span; this.zoomT = performance.now();
+      if (this.hover) this.hoverAt(-1, -1, null);
       this.setCentre(wx - (px - c.width / 2) * mPerPx, wz - (py - c.height / 2) * mPerPx);
     }, { passive: false });
     if (this.el.mapLayers) this.el.mapLayers.addEventListener('click', (e) => {
@@ -378,6 +389,17 @@ export class Hud {
     if (this.el.mapClose) this.el.mapClose.addEventListener('click', () => this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'));
     if (this.el.pinGo) this.el.pinGo.addEventListener('click', () => this.confirm());
     if (this.el.pinCancel) this.el.pinCancel.addEventListener('click', () => this.clearPin());
+    // the pin's third stamp: the lake's page in the book (map-book.js onLakePage), when the pin is on a lake you can see
+    if (this.el.pinGo && this.el.pinGo.parentNode) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'stamp outline'; b.id = 'pin-lake'; b.textContent = 'The lake’s page'; b.hidden = true;
+      this.el.pinGo.parentNode.insertBefore(b, this.el.pinCancel);
+      b.addEventListener('click', () => { const id = this.pin && this.pin.lake; this.clearPin(); if (id && typeof this.onLakePage === 'function') this.onLakePage(id); });
+      this.el.pinLake = b;
+      // the tip under the pointer (hoverAt)
+      const tip = document.createElement('div'); tip.id = 'map-tip'; tip.setAttribute('role', 'status');
+      (this.el.mapBody || this.el.map).appendChild(tip);
+      this.el.tip = tip;
+    }
     const scrim = $('scrim');
     if (scrim) scrim.addEventListener('click', () => { if (this.paper === 'map') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); else if (this.paper && this.paper !== 'outfitter') { const c = this.papers.get(this.paper); if (c) c(); } });
     this.registerPaper('map', () => { if (this.mode === 'sheet') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); });
@@ -386,6 +408,53 @@ export class Hud {
   worldAt(px, py) {
     const v = this.view, mPerPx = v.span / this.canvas.width;
     return [v.cx + (px - this.canvas.width / 2) * mPerPx, v.cz + (py - this.canvas.height / 2) * mPerPx];
+  }
+
+  // what is under canvas pixel (px, py) on the sheet: a notice's tag, a seal, a ring, a pencilled word, a dock, a campsite
+  // or a portage (drawLayers keeps them in this.hits), nearest first by kind; null for open paper or water
+  hitAt(px, py) {
+    const [x, z] = this.worldAt(px, py), mPerPx = this.view.span / this.canvas.width, k = this.canvas.width / 1040, w = this.world;
+    let best = null, bd = Infinity;
+    const take = (h, d, pri) => { const s = d + pri; if (s < bd) { bd = s; best = h; } };
+    for (const h of this.hits) {
+      if (h.tag) { const d = Math.hypot(h.tag[0] - x, h.tag[1] - z) / mPerPx; if (d < 11 * k) take(h, d, 0); }
+      const d = Math.hypot(h.x - x, h.z - z) / mPerPx;
+      if (h.kind === 'claim' && d < 18 * k) take(h, d, 1);
+      else if (h.kind === 'dock' && d < 10 * k) take(h, d, 4);
+      else if (h.kind === 'site' && d < 8 * k) take(h, d, 3);
+      else if ((h.kind === 'task' || h.kind === 'note') && d < Math.max(h.r / mPerPx, 9 * k)) take(h, 40 + d / 8, h.kind === 'task' ? 0 : 6);
+      else if (h.kind === 'portage') {
+        const p = w.portages[h.i]; if (!p) continue;
+        let m = Infinity;
+        for (let i = 1; i < p.pts.length; i++) {
+          const [ax, az] = p.pts[i - 1], [bx, bz] = p.pts[i], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz;
+          const t = L2 ? clamp(((x - ax) * dx + (z - az) * dz) / L2, 0, 1) : 0;
+          m = Math.min(m, Math.hypot(x - ax - dx * t, z - az - dz * t));
+        }
+        if (m / mPerPx < 7 * k) take(h, m / mPerPx, 5);
+      }
+    }
+    return best;
+  }
+  // whether the map shows what is at (x, z): Sandbox, an outfitter's whole map, or a sheet of yours
+  lakeShown(x, z) { const sh = this.sheetsOn; return !sh || sh.view() !== 'owned' || sh.showsDetail(x, z); }
+  // the tip under the pointer: map-book.js onHover says what it is ({ html, ring } or null); px < 0 hides it
+  hoverAt(px, py, e) {
+    const tip = this.el.tip;
+    if (px < 0 || this.pin || typeof this.onHover !== 'function') { this.hover = null; if (tip) tip.classList.remove('show'); return; }
+    const [x, z] = this.worldAt(px, py), hit = this.hitAt(px, py);
+    let r = null;
+    try { r = this.onHover({ x, z, hit, shown: this.lakeShown(x, z) }); } catch (err) { console.warn('map: hover', err); }
+    this.hover = r;
+    if (!tip) return;
+    if (!r || !r.html) { tip.classList.remove('show'); return; }
+    if (tip._html !== r.html) { tip.innerHTML = r.html; tip._html = r.html; }
+    const box = (this.el.mapBody || this.canvas).getBoundingClientRect(), cr = this.canvas.getBoundingClientRect();
+    const lx = e.clientX - box.left, ly = e.clientY - box.top, tw = tip.offsetWidth || 260, th = tip.offsetHeight || 60;
+    tip.style.left = `${clamp(lx + 16, 6, cr.width - tw - 6)}px`;
+    tip.style.top = `${ly + 18 + th > cr.height ? ly - th - 12 : ly + 18}px`;
+    tip.classList.add('show');
+    this.canvas.style.cursor = r.click ? 'pointer' : '';
   }
 
   setCentre(cx, cz) {
@@ -397,6 +466,9 @@ export class Hud {
 
   // hidden | glance (held M) | sheet (pressed M, on the scrim) | corner (a small sheet that stays up)
   setMode(mode) {
+    // the sheet opens in the book's map tab when the book has one (M, "Look at the map", the old setBig); the map table
+    // keeps the sheet on its own in the store (maptable.js)
+    if (mode === 'sheet' && this.bookHost && !this.table && this.host !== 'book' && this.bookHost.showMap()) return;
     if (mode === this.mode) return;
     const was = this.mode;
     this.mode = mode;
@@ -411,11 +483,11 @@ export class Hud {
     if (fading) this.sheetFade = setTimeout(() => { if (this.mode === 'hidden') m.classList.remove('sheet'); }, SHEET_FADE);
     if (mode !== 'hidden') this.loadOverview();
     if (mode === 'sheet') {
-      this.openPaper('map');
+      if (this.host !== 'book') this.openPaper('map');
       this.view.span = this.openSpan();
       if (this.player) { this.view.cx = this.player.x; this.view.cz = this.player.z; }
     } else {
-      if (was === 'sheet') this.closePaper('map');
+      if (was === 'sheet' && this.host !== 'book') this.closePaper('map');
       this.view.span = GLANCE_SPAN;
       this.clearPin();
       if (was === 'sheet' && this.table) { const t = this.table; this.table = null; t.closed(); } // fb2 D: the map table goes with the sheet
@@ -435,6 +507,33 @@ export class Hud {
   }
   // the old API: the big map on / off
   setBig(big) { this.setMode(big ? 'sheet' : (this.settings && this.settings.cornerSheet ? 'corner' : 'hidden')); }
+  // The sheet laid in the book's map tab (map-book.js): the map's paper moves into the page and is the sheet there, under
+  // the book's own paper register; unmount puts it back for the glance, the corner and the map table.
+  mountIn(el) {
+    const m = this.el.map;
+    if (this.mode === 'sheet' && this.host !== 'book') this.setMode('hidden');
+    clearTimeout(this.sheetFade); m.classList.remove('sheet');
+    if (this.mode !== 'hidden') this.setMode('hidden');
+    this.host = 'book';
+    el.appendChild(m); m.classList.add('in-book');
+    this.setMode('sheet');
+  }
+  unmount() {
+    if (this.host !== 'book') return;
+    const m = this.el.map;
+    this.setMode('hidden');
+    clearTimeout(this.sheetFade); m.classList.remove('sheet', 'show', 'in-book');
+    this.host = null;
+    const j = $('journal'); if (j && j.parentNode) j.parentNode.insertBefore(m, j);
+    this.hoverAt(-1, -1, null);
+  }
+  // the view put on a place (the book's search, a notice in its list): centred there at a span that shows it
+  lookAt(x, z, span = null, r = 0) {
+    if (span) this.view.span = clamp(span, MIN_SPAN, MAX_SPAN);
+    this.setCentre(x, z);
+    this.focus = { x, z, r, t: performance.now() };
+    this.hoverAt(-1, -1, null);
+  }
 
   // The backing store follows the displayed size (sharp on retina when the map fills the screen).
   sizeCanvas() {
@@ -464,25 +563,14 @@ export class Hud {
     const w = this.world, p = this.player;
     if (!w.tiles || !p || this.mode !== 'hidden') return;
     if (deadline && typeof deadline.timeRemaining === 'function' && deadline.timeRemaining() < 9 && !deadline.didTimeout) return;
-    const live = w.tiles.readyTiles(), alive = new Set(live.map((e) => e.key));
-    for (const key of this.fineImages.keys()) if (!alive.has(key)) this.fineImages.delete(key);
     let best = null, bd = PREPAINT_RANGE;
-    for (const e of live) {
-      if (this.fineImages.has(e.key)) continue;
+    for (const e of w.tiles.readyTiles()) {
+      const t = tileCache.fine.get(`${e.tx},${e.ty}`);
+      if (t && t.geo && t.geo.inkV === explored.lakeV) continue;
       const [ox, oz] = w.tileOrigin(e.tx, e.ty), d = Math.hypot(ox + w.tileMetres / 2 - p.x, oz + w.tileMetres / 2 - p.z);
       if (d < bd) { bd = d; best = e; }
     }
-    if (best) { this.fineImage(best); return; }
-    // round A-B: then a fine tile's ink gone stale since a lake was paddled (one a call), and the sheet's ink under you
-    this.inkBudget = 1;
-    for (const [key, img] of this.fineImages) {
-      if (img.inkV === explored.lakeV) continue;
-      const [tx, ty] = key.split(',').map(Number);
-      this.tileInk(img, key, tx, ty, true);
-      if (!this.inkBudget) return;
-    }
-    const sh = sheetAt(p.x, p.z);
-    if (sh && explored.inkSheets().has(sh.id)) explored.sheetInk(sh);
+    if (best) tileGeo(w, best.tx, best.ty, false, { build: 1 }, explored.world ? explored.lakes : null, explored.lakeV);
   }
   queuePrepaint() {
     if (this.idleQueued) return;
@@ -495,10 +583,11 @@ export class Hud {
   propose(x, z, recentre) {
     if (!this.world.inBounds(x, z, 50)) return;
     this.pin = { x, z };
+    this.hoverAt(-1, -1, null);
     if (this.mode !== 'sheet') this.setMode('sheet');
     if (recentre) { this.view.cx = x; this.view.cz = z; }
     const w = this.world, p = this.player, ctx = this.ctx, sh = this.sheetsOn;
-    const name = !sh || sh.view() !== 'owned' || sh.showsDetail(x, z) ? w.lakeName(w.lakeIdAt(x, z)) : null; // fb2 D: blank paper names nothing
+    const name = !sh || sh.view() !== 'owned' || sh.showsDetail(x, z) ? w.lakeName(lakeAt(w, x, z)) : null; // fb2 D: blank paper names nothing
     const walk = this.pinLocked; // Adventure: the pin measures the way, it does not move you
     let text = 'Paddle in here?';
     if (p) {
@@ -523,6 +612,9 @@ export class Hud {
       if (walk) text = text[0].toUpperCase() + text.slice(1);
     } else if (name) text = `${walk ? '' : 'Paddle in here? '}${name}.`;
     if (this.el.pinGo) this.el.pinGo.hidden = walk;
+    const lid = lakeAt(w, x, z), L = lid > 0 ? w.lakes[lid - 1] : null;
+    this.pin.lake = L && L.name && name && typeof this.onLakePage === 'function' ? lid : 0;
+    if (this.el.pinLake) this.el.pinLake.hidden = !this.pin.lake;
     if (this.el.pinCancel) this.el.pinCancel.textContent = walk ? 'Close' : 'Not now';
     const keys = this.el.pin && this.el.pin.querySelector('.keys'); if (keys) keys.textContent = walk ? 'Esc' : 'Enter · Esc';
     if (this.el.pinText) this.el.pinText.textContent = text;
@@ -577,11 +669,10 @@ export class Hud {
   }
 
   tint(t, out) {
-    const q = Math.floor(clamp(t, 0, 0.999) * BANDS) / (BANDS - 1);
+    const q = clamp(t, 0, 1) ** 0.8;
     for (let k = 0; k < 3; k++) out[k] = TINT_LOW[k] + (TINT_HIGH[k] - TINT_LOW[k]) * q;
     return out;
   }
-  tintH(h, out) { const [hmin, hmax] = this.world.meta.heightRange; return this.tint((h - hmin) / (hmax - hmin + 0.01), out); }
 
   // The bake's overview (water by depth, land hill-shaded) repainted as paper: it is the bottom layer when
   // the map is zoomed out past the loaded far field.
@@ -616,178 +707,6 @@ export class Hud {
       this.overview = c;
     };
     img.src = this.world.base + ov.file;
-  }
-
-  // Paper rendering of one slot's cells (fine tile or far tile): water with a dark rim, tinted land.
-  paintCells(ctx, s, side, halo, px, cellsPerPx) {
-    const data = ctx.createImageData(px, px), c = [0, 0, 0];
-    const isWater = (li, lj) => s.lake[clamp(lj, 0, side - 1) * side + clamp(li, 0, side - 1)] > 0;
-    for (let py = 0; py < px; py++) {
-      const lj = halo + Math.floor((py + 0.5) * cellsPerPx);
-      for (let qx = 0; qx < px; qx++) {
-        const li = halo + Math.floor((qx + 0.5) * cellsPerPx), k = lj * side + li, o = (py * px + qx) * 4;
-        let col;
-        if (s.lake[k]) col = (!isWater(li - 1, lj) || !isWater(li + 1, lj) || !isWater(li, lj - 1) || !isWater(li, lj + 1)) ? RIM : WATER;
-        else col = this.tintH(s.h[k] * 0.1, c);
-        data.data[o] = col[0]; data.data[o + 1] = col[1]; data.data[o + 2] = col[2]; data.data[o + 3] = 255;
-      }
-    }
-    ctx.putImageData(data, 0, 0);
-  }
-
-  // Contours every 10 m (marching squares on a 2-cell grid), heavier every 50 m, land only.
-  paintContours(ctx, s, side, halo, hmin, hmax, pxPerCell) {
-    const step = 2, gw = Math.floor((FINE_PX / pxPerCell) / step);
-    const hAt = (gi, gj) => s.h[(halo + gj * step) * side + halo + gi * step] * 0.1;
-    const wAt = (gi, gj) => s.lake[(halo + gj * step) * side + halo + gi * step] > 0;
-    const px = (gi) => (gi * step + 0.5) * pxPerCell;
-    const first = Math.ceil(hmin / 10) * 10;
-    for (let lvl = first; lvl <= hmax; lvl += 10) {
-      ctx.beginPath();
-      for (let gj = 0; gj < gw - 1; gj++) for (let gi = 0; gi < gw - 1; gi++) {
-        if (wAt(gi, gj) || wAt(gi + 1, gj + 1) || wAt(gi + 1, gj) || wAt(gi, gj + 1)) continue;
-        const h00 = hAt(gi, gj), h10 = hAt(gi + 1, gj), h11 = hAt(gi + 1, gj + 1), h01 = hAt(gi, gj + 1);
-        const b = (h00 >= lvl ? 1 : 0) | (h10 >= lvl ? 2 : 0) | (h11 >= lvl ? 4 : 0) | (h01 >= lvl ? 8 : 0);
-        if (b === 0 || b === 15) continue;
-        const x0 = px(gi), y0 = px(gj), x1 = px(gi + 1), y1 = px(gj + 1);
-        const lerp = (a, c) => (lvl - a) / (c - a || 1e-6);
-        const top = [x0 + (x1 - x0) * lerp(h00, h10), y0], right = [x1, y0 + (y1 - y0) * lerp(h10, h11)];
-        const bottom = [x0 + (x1 - x0) * lerp(h01, h11), y1], left = [x0, y0 + (y1 - y0) * lerp(h00, h01)];
-        const segs = msSegments(b, top, right, bottom, left);
-        for (let q = 0; q < segs.length; q += 2) { ctx.moveTo(segs[q][0], segs[q][1]); ctx.lineTo(segs[q + 1][0], segs[q + 1][1]); }
-      }
-      const index = lvl % 50 === 0;
-      ctx.strokeStyle = index ? 'rgba(128, 104, 62, 0.8)' : 'rgba(140, 118, 76, 0.45)';
-      ctx.lineWidth = index ? 2.0 : 1.1;
-      ctx.stroke();
-    }
-  }
-
-  // Depth contours on the lakes the DNR has sounded (the lake table carries a maxDepth for them; lakes with a
-  // synthetic bed get none): every 2 m to 10 m, every 5 m to 30 m, every 10 m beyond, heavier every 10 m, on
-  // the full 10 m grid. Returns label spots [level, x, z] in world metres for drawMap to letter up close.
-  paintDepthContours(layer, s, side, halo, pxPerCell, tx, ty) {
-    const w = this.world, n = Math.round(FINE_PX / pxPerCell), N = n + 1, lakes = w.lakes;
-    const mapped = new Map();
-    const isMapped = (id) => { let m = mapped.get(id); if (m === undefined) { const l = id > 0 ? lakes[id - 1] : null; m = !!(l && l.maxDepth); mapped.set(id, m); } return m; };
-    const depth = new Float32Array(N * N);
-    let maxD = 0;
-    for (let gj = 0; gj < N; gj++) for (let gi = 0; gi < N; gi++) {
-      const k = (halo + gj) * side + halo + gi, id = s.lake[k];
-      if (!id || !isMapped(id)) continue;
-      const d = (s.lvl[k] - s.h[k]) * 0.1;
-      if (d > 0) { depth[gj * N + gi] = d; if (d > maxD) maxD = d; }
-    }
-    if (maxD < 2) return [];
-    const levels = [];
-    for (let d = 2; d <= maxD; d += d < 10 ? 2 : d < 30 ? 5 : 10) levels.push(d);
-    const px = (g) => (g + 0.5) * pxPerCell;
-    const [ox, oz] = w.tileOrigin(tx, ty), mPerPx = w.tileMetres / FINE_PX;
-    const labels = [];
-    for (const lvl of levels) {
-      const segs = [];
-      for (let gj = 0; gj < N - 1; gj++) for (let gi = 0; gi < N - 1; gi++) {
-        const h00 = depth[gj * N + gi], h10 = depth[gj * N + gi + 1], h11 = depth[(gj + 1) * N + gi + 1], h01 = depth[(gj + 1) * N + gi];
-        const b = (h00 >= lvl ? 1 : 0) | (h10 >= lvl ? 2 : 0) | (h11 >= lvl ? 4 : 0) | (h01 >= lvl ? 8 : 0);
-        if (b === 0 || b === 15) continue;
-        const x0 = px(gi), y0 = px(gj), x1 = px(gi + 1), y1 = px(gj + 1);
-        const t = (a, c) => (lvl - a) / (c - a || 1e-6);
-        const top = [x0 + (x1 - x0) * t(h00, h10), y0], right = [x1, y0 + (y1 - y0) * t(h10, h11)];
-        const bottom = [x0 + (x1 - x0) * t(h01, h11), y1], left = [x0, y0 + (y1 - y0) * t(h00, h01)];
-        segs.push(...msSegments(b, top, right, bottom, left));
-      }
-      if (!segs.length) continue;
-      const ctx = layer();
-      ctx.beginPath();
-      for (let q = 0; q < segs.length; q += 2) { ctx.moveTo(segs[q][0], segs[q][1]); ctx.lineTo(segs[q + 1][0], segs[q + 1][1]); }
-      const index = lvl % 10 === 0;
-      ctx.strokeStyle = index ? 'rgba(52, 92, 122, 0.9)' : 'rgba(70, 112, 142, 0.7)';
-      ctx.lineWidth = index ? 1.7 : 1.0;
-      ctx.stroke();
-      if (segs.length >= 40) { const m = segs[Math.floor(segs.length / 8) * 2]; labels.push([lvl, ox + m[0] * mPerPx, oz + m[1] * mPerPx]); }
-    }
-    return labels;
-  }
-
-  // one image per loaded fine tile, from the tile's own cells, with contours
-  fineImage(e) {
-    let img = this.fineImages.get(e.key);
-    if (img) return img;
-    const w = this.world, s = w.slots[e.ty * w.ntx + e.tx];
-    if (!s) return null;
-    const c = this.paintSlot(s, e.tx, e.ty);
-    this.fineImages.set(e.key, c);
-    this.mapTiles.delete(e.key); // the streamed copy supersedes a map-only one
-    return c;
-  }
-
-  // A tile the 3D world has not streamed, fetched for the map alone: the same bytes, decoded here and
-  // painted once. Downloads are limited and images are let go least recently drawn first.
-  mapTile(tx, ty) {
-    const key = `${tx},${ty}`;
-    let t = this.mapTiles.get(key);
-    if (t) { t.used = this.tick; if (t.slot && !t.img) { t.img = this.paintSlot(t.slot, tx, ty); t.slot = null; } return t.img; }
-    if (this.fetching >= MAP_FETCHES) return null;
-    t = { used: this.tick, img: null, slot: null };
-    this.mapTiles.set(key, t);
-    this.fetching++;
-    fetch(this.world.tileUrl(tx, ty))
-      .then((r) => { if (!r.ok) throw new Error(r.status); return new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(); })
-      .then((buf) => { const n = this.world.side * this.world.side; t.slot = { h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n) }; })
-      .catch(() => this.mapTiles.delete(key))
-      .finally(() => { this.fetching--; });
-    return null;
-  }
-  paintSlot(s, tx, ty) {
-    const w = this.world;
-    const c = document.createElement('canvas'); c.width = FINE_PX; c.height = FINE_PX;
-    const ctx = c.getContext('2d');
-    const pxPerCell = FINE_PX / w.tile;
-    this.paintCells(ctx, s, w.side, w.halo, FINE_PX, 1 / pxPerCell);
-    const f = w.tileFlags[ty * w.ntx + tx];
-    let hmin = f ? f[1] * 0.1 : Infinity, hmax = f ? f[2] * 0.1 : -Infinity;
-    if (!Number.isFinite(hmin) || !Number.isFinite(hmax)) { for (let k = 0; k < s.h.length; k++) { const h = s.h[k] * 0.1; if (h < hmin) hmin = h; if (h > hmax) hmax = h; } }
-    this.paintContours(ctx, s, w.side, w.halo, hmin, hmax, pxPerCell);
-    // the soundings on a layer of their own (made only for a tile that has some): the map shows them only where you
-    // know the water (sheets.js)
-    const layer = () => { if (!c.depth) { c.depth = document.createElement('canvas'); c.depth.width = c.depth.height = FINE_PX; } return c.depth.getContext('2d'); };
-    c.depth = null;
-    c.labels = s.lvl ? this.paintDepthContours(layer, s, w.side, w.halo, pxPerCell, tx, ty) : [];
-    // round A-B: the lakes in it you have paddled, inked (explored.js), made with the image and kept with it
-    const ink = explored.world ? explored.inkTile(s, tx, ty) : null;
-    c.ink = ink ? ink.canvas : null; c.lakeIds = ink ? ink.ids : null; c.inkV = ink ? explored.lakeV : -1;
-    return c;
-  }
-  // round A-B: a fine tile's ink, remade when a lake in it was newly paddled since it was made (explored.touches): from
-  // the streamed tile's cells, a few a frame (inkBudget); a tile fetched for the map alone has let its cells go, so it
-  // is fetched and painted again. The ink as it was is drawn meanwhile.
-  tileInk(img, key, tx, ty, streamed) {
-    if (img.inkV === explored.lakeV || !explored.world) return img.ink || null;
-    if (!explored.touches(img.lakeIds, img.inkV)) { img.inkV = explored.lakeV; return img.ink || null; }
-    if (this.inkBudget > 0) {
-      this.inkBudget--;
-      const s = streamed ? this.world.slots[ty * this.world.ntx + tx] : null;
-      if (s) { const r = explored.inkTile(s, tx, ty); img.ink = r.canvas; img.lakeIds = r.ids; img.inkV = explored.lakeV; }
-      else if (!streamed) this.mapTiles.delete(key);
-    }
-    return img.ink || null;
-  }
-  pruneMapTiles() {
-    if (this.mapTiles.size <= MAP_TILES_MAX) return;
-    const old = [...this.mapTiles.entries()].filter(([, t]) => t.img || t.slot).sort((a, b) => a[1].used - b[1].used);
-    for (let i = 0; i < old.length && this.mapTiles.size > MAP_TILES_MAX; i++) this.mapTiles.delete(old[i][0]);
-  }
-
-  // one image per loaded far tile (80 m cells), tints and water only
-  farImage(e) {
-    let img = this.farImages.get(e.key);
-    if (img) return img;
-    const w = this.world, s = w.farSlots[e.fy * w.far.ntx + e.fx];
-    if (!s) return null;
-    const c = document.createElement('canvas'); c.width = FAR_PX; c.height = FAR_PX;
-    this.paintCells(c.getContext('2d'), s, w.farSide, w.far.halo, FAR_PX, w.far.tile / FAR_PX);
-    this.farImages.set(e.key, c);
-    return c;
   }
 
   // --- the journal lines, the place title, the catch card -----------------------------------------------------
@@ -1407,9 +1326,10 @@ export class Hud {
         : look === 'owned' ? (none ? 'blank paper: the map tables at the outfitters sell the sheets' : '')
           : '';
     if (e.mapHint) this.set('mhint', e.mapHint, [table ? 'drag to pan · wheel to zoom' : `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'}`, detail].filter(Boolean).join(' · '));
-    this.set('mspan', e.mapSpan, `${v.span >= 10000 ? Math.round(v.span / 1000) : (v.span / 1000).toFixed(v.span < 5000 ? 1 : 0)} km across`);
+    const mi = v.span / 1609.34;
+    this.set('mspan', e.mapSpan, `${mi >= 10 ? Math.round(mi) : mi.toFixed(mi < 3 ? 1 : 0)} mi across`);
     if (this.mode === 'sheet' && this.scaleInfo) {
-      const { bar, cssPx } = this.scaleInfo, txt = `${bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}`;
+      const { bar, cssPx } = this.scaleInfo, txt = bar[1];
       if (this.scaleShown !== txt + cssPx) { this.scaleShown = txt + cssPx; e.mapScalebar.style.width = `${cssPx.toFixed(0)}px`; e.mapScale.textContent = txt; }
       const far = v.span / this.canvas.width >= 7;
       const d = e.mapLayers.querySelector('[data-layer=depths]'); if (d) d.classList.toggle('far', far);
@@ -1423,7 +1343,7 @@ export class Hud {
   // the sheet's number and lakes in small letter-spaced capitals in its margin.
   drawNeatlines(ctx, sh, owned, toPx, k) {
     if (!owned.length) return;
-    const W = this.canvas.width, H = this.canvas.height;
+    const W = this.dw || this.canvas.width, H = this.dh || this.canvas.height;
     ctx.save();
     ctx.lineCap = 'butt';
     for (const s of owned) {
@@ -1461,6 +1381,7 @@ export class Hud {
   // ink where it is yours, and in its corner its number, its lakes and whether it is yours (at the table, its price
   // here, or where it is sold). The map table's pick and the sheet under the pointer are washed red.
   drawSheetGrid(ctx, sh, toPx, inView, k) {
+    const W = this.dw || this.canvas.width, H = this.dh || this.canvas.height;
     const t = this.table, sel = t ? t.selected : null, hov = t ? t.hover : null;
     const here = t ? t.stockIds : sh ? sh.hereIds() : null;
     ctx.save();
@@ -1478,13 +1399,13 @@ export class Hud {
       ctx.setLineDash([]);
       // the corner label in the part of the sheet in view: the number, the lakes where it is wide enough, and yours /
       // its price / where it is sold
-      const vw = Math.min(c, this.canvas.width) - Math.max(a, 0), vh = Math.min(e, this.canvas.height) - Math.max(b, 0);
+      const vw = Math.min(c, W) - Math.max(a, 0), vh = Math.min(e, H) - Math.max(b, 0);
       if (w < 44 * k || vw < 60 * k || vh < 64 * k) continue;
       const lx = Math.max(a, 0) + 9 * k, ly = Math.max(b, 0) + 9 * k;
       const status = mine ? 'yours' : t ? (sold ? t.priceWords(s.id) : t.soldWords(s.id)) : sold ? 'sold here' : '';
       ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
       const halo = (txt, x, y) => { ctx.lineWidth = 3.5 * k; ctx.strokeStyle = 'rgba(233, 225, 204, 0.92)'; ctx.strokeText(txt, x, y); ctx.fillText(txt, x, y); };
-      const big = vw > 150 * k, room = Math.min(c, this.canvas.width) - lx - 9 * k;
+      const big = vw > 150 * k, room = Math.min(c, W) - lx - 9 * k;
       ctx.font = `700 ${(big ? 15 : 12) * k}px ${SERIF}`; ctx.fillStyle = mine ? 'rgba(42, 32, 22, 0.92)' : sold || pick ? 'rgba(160, 45, 30, 0.95)' : 'rgba(74, 59, 38, 0.8)';
       halo(s.id, lx, ly);
       let y = ly + (big ? 18 : 15) * k;
@@ -1605,15 +1526,76 @@ export class Hud {
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
   }
 
+  // The sheet, in two parts (the owner, 2026-10-31: crisp at every zoom, and quick): the paper and everything printed
+  // or pencilled on it drawn into a base canvas a margin bigger than the view (drawLayers, from map-render.js's
+  // vectors), remade only when the view leaves the margin, the zoom or what is on it changes, or tiles were still coming
+  // in; each frame that base is laid down where the view now is and the things that move go over it (drawOverlays).
   drawMap(player) {
-    const w = this.world, ctx = this.mapCtx, W = this.canvas.width, H = this.canvas.height;
+    const W = this.canvas.width, H = this.canvas.height;
     if (!W || !H) return;
-    const v = this.view, spanX = v.span, mPerPx = spanX / W, spanZ = mPerPx * H;
-    const x0 = v.cx - spanX / 2, z0 = v.cz - spanZ / 2;
-    const k = W / 1040; // stroke and type scale: the sheet is designed at 1040 px across
+    const ctx = this.mapCtx, v = this.view, mPerPx = v.span / W, now = performance.now();
+    const M = BASE_MARGIN, sh = this.sheetsOn, lay = this.layers, c = this.ctx || {};
+    const ts = c.tasks, told = this.marks();
+    const key = [W, H, v.span.toFixed(2), sh ? `${sh.view()}${sh.version}${sh.ownedSheets().length}` : 'open', Object.values(lay).join(''), explored.version, explored.lakeV,
+      ts && ts.active ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', told.sig, this.table ? `${this.table.selected}${this.table.hover}` : '', this.mode, BOUNDARY.ready, this.focus ? this.focus.t : ''].join('|');
+    let b = this.base;
+    if (!b || b.W !== W + 2 * M || b.H !== H + 2 * M) {
+      const cv = document.createElement('canvas'); cv.width = W + 2 * M; cv.height = H + 2 * M;
+      b = this.base = { canvas: cv, ctx: cv.getContext('2d'), W: cv.width, H: cv.height, key: null, cx: 0, cz: 0, t: 0, pending: false };
+    }
+    // while the wheel is turning, the last base scaled (remade once the zoom rests)
+    const rest = key.replace(/^(\d+\|\d+\|)[^|]*/, '$1');
+    if (b.key && b.rest === rest && b.mPerPx !== mPerPx && now - (this.zoomT || 0) < 160) {
+      const s = b.mPerPx / mPerPx, vx0 = v.cx - (W / 2) * mPerPx, vz0 = v.cz - (H / 2) * mPerPx;
+      ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(b.canvas, (b.x0 - vx0) / mPerPx, (b.z0 - vz0) / mPerPx, b.W * s, b.H * s);
+      ctx.drawImage(this.grain, 0, 0);
+      this.drawOverlays(ctx, W, H, { x0: vx0, z0: vz0, mPerPx }, W / 1040, player);
+      return;
+    }
+    const offX = (v.cx - b.cx) / mPerPx, offY = (v.cz - b.cz) / mPerPx;
+    const stale = b.key !== key || Math.abs(offX) > M * 0.9 || Math.abs(offY) > M * 0.9 || (b.pending && now - b.t > 140) || now - b.t > 2500;
+    if (stale) {
+      b.cx = v.cx; b.cz = v.cz; b.key = key; b.t = now; b.rest = rest; b.mPerPx = mPerPx;
+      const x0 = v.cx - (b.W / 2) * mPerPx, z0 = v.cz - (b.H / 2) * mPerPx;
+      b.pending = !this.drawLayers(b.ctx, b.W, b.H, { x0, z0, mPerPx }, W / 1040, player);
+      b.x0 = x0; b.z0 = z0;
+    }
+    const dx = -M - (v.cx - b.cx) / mPerPx, dy = -M - (v.cz - b.cz) / mPerPx;
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(b.canvas, dx, dy);
+    ctx.drawImage(this.grain, 0, 0);
+    this.drawOverlays(ctx, W, H, { x0: v.cx - (W / 2) * mPerPx, z0: v.cz - (H / 2) * mPerPx, mPerPx }, W / 1040, player);
+  }
+
+  // The marks the map carries for you, from the book's map side when it is attached (map-book.js markSource): the
+  // notices on the go and where each sends you ({ open }), the ones done and where they are paid ({ claim }), and the
+  // words pencilled on the map at your asking ({ notes }); sig changes when any of them does.
+  marks() {
+    const now = performance.now();
+    if (this._marks && now - this._marksT < 400) return this._marks;
+    let m = null;
+    try { m = typeof this.markSource === 'function' ? this.markSource() : null; } catch (e) { console.warn('map: marks', e); }
+    if (!m) {
+      const c = this.ctx || {}, hs = c.tasks && typeof c.tasks.hints === 'function' ? c.tasks.hints() : [];
+      const told = c.outfitter && typeof c.outfitter.toldHints === 'function' ? c.outfitter.toldHints() : [];
+      m = { open: hs.map((h, i) => ({ ...h, n: i + 1, title: h.label })), claim: [], notes: told.map((h) => ({ ...h, label: h.label || HINT_LABEL[h.kind] || 'a word' })) };
+    }
+    m.sig = `${m.open.length}:${m.claim.length}:${m.notes.length}:${m.open.map((q) => q.x | 0).join()}`;
+    this._marks = m; this._marksT = now;
+    return m;
+  }
+
+  // everything printed or pencilled on the sheet, into ctx (W x H, the view v: { x0, z0, mPerPx }); k the line and type
+  // scale. Returns whether every tile in view was in. Fills this.hits with what the pointer can point at.
+  drawLayers(ctx, W, H, v, k, player) {
+    const w = this.world, { x0, z0, mPerPx } = v, spanX = W * mPerPx, spanZ = H * mPerPx;
     const sheet = this.mode === 'sheet', lay = this.layers;
+    this.dw = W; this.dh = H;
     const toPx = (x, z) => [(x - x0) / mPerPx, (z - z0) / mPerPx];
     const inView = (ax, az, bx, bz) => !(bx < x0 || ax > x0 + spanX || bz < z0 || az > z0 + spanZ);
+    const hits = []; this.hits = hits;
     // What the map may show (sheets.js view): Sandbox everything; at an outfitter the whole wilderness, the sheets dotted
     // over it; in the wild only the sheets you own, everything on them cut to their neatlines, and blank paper round
     // them (with none in view, only you and the north arrow).
@@ -1621,8 +1603,8 @@ export class Hud {
     const clipped = look === 'owned', owned = clipped ? sh.ownedSheets().filter((s) => inView(s.x0, s.z0, s.x1, s.z1)) : [];
     const blank = clipped && !owned.length;
     const onMine = (ax, az, bx, bz) => !clipped || owned.some((s) => !(bx < s.x0 || ax > s.x1 || bz < s.z0 || az > s.z1));
-    // the paint is cut to your sheets (in the wild), and always to the baked country (past its edge the far tiles' halos
-    // would show as stripes)
+    this.blank = blank;
+    // the paint is cut to your sheets (in the wild), and always to the baked country
     const clip = () => {
       ctx.save();
       ctx.beginPath();
@@ -1631,97 +1613,33 @@ export class Hud {
       else rect(w.minX, w.minZ, w.maxX, w.maxZ);
       ctx.clip();
     };
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = PAPER;
     ctx.fillRect(0, 0, W, H);
-    ctx.imageSmoothingEnabled = true;
-    this.inkBudget = 2; let sheetBudget = 1; // round A-B: inks remade in this frame
-    const depthLabels = []; // [level, x, z] from the fine tiles in view, lettered once the view is close
-    const soundings = [];   // [image, x, y, size]: the fine tiles' depth contours, drawn with the rest of the detail
+    let ready = true;
+    const depthLabels = []; // [feet, x, z] from the fine tiles in view, lettered once the view is close
     if (!blank) {
       clip();
-      // the whole wilderness underneath
+      // the whole wilderness underneath, where the vector tiles are not in yet
       if (this.overview) {
-        const mpp = w.meta.overview.cellsPerPx * w.cell;
         const [a, b] = toPx(w.minX, w.minZ);
-        ctx.drawImage(this.overview, a, b, (w.sizeX / mpp) * (mpp / mPerPx), (w.sizeZ / mpp) * (mpp / mPerPx));
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(this.overview, a, b, w.sizeX / mPerPx, w.sizeZ / mPerPx);
       }
-      if (w.tiles) {
-        // the far field
-        const farMetres = w.far.tile * w.cell * w.far.factor;
-        const aliveFar = new Set();
-        for (const e of w.tiles.readyFarTiles()) {
-          aliveFar.add(e.key);
-          const ox = w.originX + e.fx * farMetres, oz = w.originZ + e.fy * farMetres;
-          if (!inView(ox, oz, ox + farMetres, oz + farMetres) || !onMine(ox, oz, ox + farMetres, oz + farMetres)) continue;
-          const img = this.farImage(e);
-          if (!img) continue;
-          const [a, b] = toPx(ox, oz);
-          ctx.drawImage(img, a, b, farMetres / mPerPx + 0.5, farMetres / mPerPx + 0.5);
-        }
-        for (const key of this.farImages.keys()) if (!aliveFar.has(key)) this.farImages.delete(key);
-        // round A-B: the lakes you have paddled, inked: a layer per sheet at the far field's 80 m (explored.js), cut to
-        // its sheet; under the fine tiles, which carry their own at 10 m
-        if (explored.lakes.count) {
-          const inked = explored.inkSheets();
-          for (const s of SHEETS) {
-            if (!inked.has(s.id) || !inView(s.x0, s.z0, s.x1, s.z1) || !onMine(s.x0, s.z0, s.x1, s.z1)) continue;
-            const made = explored.builds, L = explored.sheetInk(s, sheetBudget > 0);
-            if (explored.builds !== made) sheetBudget--; // one made a frame at most
-            if (!L) continue;
-            const [a, b] = toPx(s.x0, s.z0), [la, lb] = toPx(L.x, L.z);
-            ctx.save(); ctx.beginPath(); ctx.rect(a, b, (s.x1 - s.x0) / mPerPx, (s.z1 - s.z0) / mPerPx); ctx.clip();
-            ctx.drawImage(L.canvas, la, lb, L.w / mPerPx, L.h / mPerPx);
-            ctx.restore();
-          }
-        }
-        // every tile in view at full detail once the view is close enough for contours to read: streamed
-        // tiles from their own cells, the rest fetched for the map alone (in the wild, only on your sheets)
-        const live = new Map(w.tiles.readyTiles().map((e) => [e.key, e]));
-        for (const key of this.fineImages.keys()) if (!live.has(key)) this.fineImages.delete(key);
-        if (mPerPx < FINE_M_PER_PX) {
-          this.tick++;
-          const [tx0, ty0] = w.tileOf(x0, z0), [tx1, ty1] = w.tileOf(x0 + spanX, z0 + spanZ);
-          // nearest the centre first, so the middle of the view sharpens before the edges
-          const order = [];
-          for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) order.push([tx, ty, Math.hypot(tx + 0.5 - (v.cx - w.originX) / w.tileMetres, ty + 0.5 - (v.cz - w.originZ) / w.tileMetres)]);
-          order.sort((p, q) => p[2] - q[2]);
-          let painted = 0, fresh = 0;
-          for (const [tx, ty] of order) {
-            const [ox, oz] = w.tileOrigin(tx, ty);
-            if (!onMine(ox, oz, ox + w.tileMetres, oz + w.tileMetres)) continue;
-            const key = `${tx},${ty}`, e = live.get(key);
-            let img;
-            // a streamed tile's image is painted on first sight, a few a frame at most (fb3 C: the rest wait a frame or
-            // two with the far image under them, instead of all of them in the frame the map opens); prepaint has most
-            // of them done before M is pressed
-            if (e) { if (this.fineImages.has(key)) img = this.fineImage(e); else if (fresh < FINE_PER_FRAME) { img = this.fineImage(e); fresh++; } }
-            else if (painted < 2 || this.mapTiles.get(key)?.img) { const had = this.mapTiles.get(key)?.img; img = this.mapTile(tx, ty); if (img && !had) painted++; }
-            if (!img) continue;
-            const [a, b] = toPx(ox, oz);
-            ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
-            const ink = this.tileInk(img, key, tx, ty, !!e); // round A-B: its lakes you have paddled, inked
-            if (ink) ctx.drawImage(ink, 1, 1, ink.width - 2, ink.height - 2, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
-            if (img.depth && lay.depths) soundings.push([img.depth, a, b, w.tileMetres / mPerPx + 0.5]);
-            if (mPerPx < 7 && img.labels && lay.depths) depthLabels.push(...img.labels);
-          }
-          this.pruneMapTiles();
-        }
-      }
+      if (w.tiles) ready = paintGround(ctx, w, v, W, H, { k, budget: { build: 2 }, depths: lay.depths, ink: explored.world ? explored.lakes : null, inkV: explored.lakeV, detail: clipped ? onMine : null, labels: depthLabels });
+      // the burns by the season's date, and the wilderness's own edge
+      if (lay.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
+      if (lay.boundary) { if (BOUNDARY.path) paintBoundary(ctx, v, k); else loadBoundary(); }
       ctx.restore();
     }
-    ctx.drawImage(this.grain, 0, 0);
-    // the detail a paddler has the sheet for: the soundings, the portages with their rods, the campsites, the task
-    // areas and the keepers' rings, the lake names and the docks (in the wild, on your sheets only)
-    const told = !blank && lay.tasks && this.ctx && this.ctx.outfitter && typeof this.ctx.outfitter.toldHints === 'function' ? this.ctx.outfitter.toldHints() : [];
+    const told = this.marks();
     if (!blank) {
       clip();
-      for (const [img, a, b, size] of soundings) ctx.drawImage(img, a, b, size, size);
-      // depth figures on the sounded lakes, in metres, haloed in the water colour
-      if (depthLabels.length) {
-        ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.lineWidth = 3 * k; ctx.strokeStyle = `rgb(${WATER.join(',')})`; ctx.fillStyle = '#2d4f66'; ctx.lineJoin = 'round';
-        const halo = `rgb(${WATER.join(',')})`, inkHalo = `rgb(${INK_WATER.join(',')})`; // round A-B: on an inked lake, haloed in its ink
-        for (const [lvl, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeStyle = explored.hasLake(w.lakeIdAt(x, z)) ? inkHalo : halo; ctx.strokeText(String(lvl), a, b); ctx.fillText(String(lvl), a, b); }
+      // depth figures on the sounded lakes, in feet as the outfitters' maps letter them, haloed in the water colour
+      if (depthLabels.length && mPerPx < 6) {
+        ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+        ctx.lineWidth = 3 * k; ctx.fillStyle = '#2d4f66';
+        for (const [ft, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeStyle = explored.hasLake(w.lakeIdAt(x, z)) ? INK.inked : INK.water; ctx.strokeText(String(ft), a, b); ctx.fillText(String(ft), a, b); }
         ctx.textBaseline = 'alphabetic';
       }
       // round A-B: your way, in pencil (under the portages, the sites and the names)
@@ -1731,23 +1649,23 @@ export class Hud {
       const close = mPerPx < 16, mid = mPerPx < 60;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
-      if (lay.portages) for (let pi = 0; pi < w.portages.length; pi++) {
+      if (lay.portages && mPerPx < 40) for (let pi = 0; pi < w.portages.length; pi++) { // (further out the red dashes were all you saw)
         const p = w.portages[pi], [bx0, bz0, bx1, bz1] = p.bbox;
-        if (!inView(bx0, bz0, bx1, bz1)) continue;
+        if (!inView(bx0, bz0, bx1, bz1) || !onMine(bx0, bz0, bx1, bz1)) continue;
         ctx.beginPath();
         p.pts.forEach(([x, z], n) => { const [a, b] = toPx(x, z); if (n) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
         if (explored.crossed(pi)) {
           ctx.setLineDash([]); ctx.strokeStyle = CROSSED_UNDER; ctx.lineWidth = (close ? 3.6 : 2.6) * k; ctx.stroke();
           ctx.setLineDash(close ? [9 * k, 3 * k] : [5 * k, 2 * k]); ctx.strokeStyle = CROSSED; ctx.lineWidth = (close ? 3 : 2.1) * k; ctx.stroke(); ctx.setLineDash([]);
         } else { ctx.setLineDash(close ? [7 * k, 4 * k] : [4 * k, 3 * k]); ctx.strokeStyle = '#c0392b'; ctx.lineWidth = (close ? 2.4 : 1.6) * k; ctx.stroke(); ctx.setLineDash([]); }
+        const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
+        if (mid) hits.push({ kind: 'portage', i: pi, x: m[0], z: m[1], px: 12 });
         if (close) {
-          const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
           ctx.fillStyle = '#b4321f'; ctx.textAlign = 'left';
           ctx.fillText(`${p.rods} rods`, mx + 7 * k, my - 6 * k);
           // d1 names: a portage with a name of its own (Height of Land, Prairie) says it under its rods, up close
           if (p.proper && mPerPx < 9) { ctx.font = `italic 600 ${11 * k}px ${SERIF}`; ctx.fillText(p.name, mx + 7 * k, my + 8 * k); ctx.font = `italic 600 ${13 * k}px ${SERIF}`; }
         } else if (p.proper && mid && mPerPx < 30) { // (further out, the name alone: the border route's carries)
-          const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
           ctx.font = `italic 600 ${11 * k}px ${SERIF}`; ctx.fillStyle = '#b4321f'; ctx.textAlign = 'left';
           ctx.fillText(p.name, mx + 6 * k, my - 5 * k); ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
         }
@@ -1757,10 +1675,11 @@ export class Hud {
         const r = (close ? 4.2 : 2.6) * k;
         for (let ci = 0; ci < w.campsites.length; ci++) {
           const c = w.campsites[ci];
-          if (!inView(c.x, c.z, c.x, c.z)) continue;
+          if (!inView(c.x, c.z, c.x, c.z) || !onMine(c.x, c.z, c.x, c.z)) continue;
           const [a, b] = toPx(c.x, c.z);
           ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28); ctx.fillStyle = '#c0392b'; ctx.fill();
           if (close) { ctx.beginPath(); ctx.arc(a, b, r * 0.38, 0, 6.28); ctx.fillStyle = '#f4e9d6'; ctx.fill(); }
+          hits.push({ kind: 'site', i: ci, x: c.x, z: c.z, px: 8 });
           // d1 names: the Forest Service's number, small, to the left of the dot (the pencil tick goes right)
           if (close && c.usfs != null && mPerPx < 10) { ctx.font = `600 ${9.5 * k}px ${SERIF}`; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(160, 45, 30, 0.9)'; ctx.fillText(String(c.usfs), a - r - 2 * k, b + 3.5 * k); }
           // round A-B: a night slept there, ticked in pencil beside it
@@ -1771,83 +1690,103 @@ export class Hud {
           }
         }
       }
-      // the keepers' words (outfitter.js toldHints): a ring pencilled round the water they meant, as a keeper marks your
-      // map across the counter, and what for in the same hand
-      // (tuning, the content join's leftover: two rumours on one lake wrote their words over each other; a label that
-      // would lie on one already written goes a line lower, up to LABEL_TRIES lines)
-      const placed = [], LABEL_TRIES = 4;
-      const place = (text, x, y, align, lh) => {
-        const w = ctx.measureText(text).width, x0 = align === 'center' ? x - w / 2 : x, box = (yy) => ({ x0, x1: x0 + w, y0: yy - lh * 0.8, y1: yy + lh * 0.2 });
-        let yy = y;
-        for (let n = 0; n < LABEL_TRIES && placed.some((q) => { const b = box(yy); return b.x0 < q.x1 && q.x0 < b.x1 && b.y0 < q.y1 && q.y0 < b.y1; }); n++) yy += lh;
-        placed.push(box(yy));
-        return yy;
-      };
-      for (const h of told) {
-        if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
-        const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
-        ctx.beginPath(); ctx.ellipse(a, b, r * 1.04, r * 0.97, 0.3, 0, 6.28);
-        ctx.fillStyle = 'rgba(74, 64, 54, 0.07)'; ctx.fill();
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = 'rgba(74, 64, 54, 0.62)'; ctx.lineWidth = 1.7 * k; ctx.stroke();
-        // a second, lighter pass a hair off the first, the way a pencil goes round twice
-        ctx.beginPath(); ctx.ellipse(a + 1.5 * k, b - 1 * k, r * 1.01, r * 1.0, 0.9, 0.4, 5.9);
-        ctx.strokeStyle = 'rgba(74, 64, 54, 0.3)'; ctx.lineWidth = 1.1 * k; ctx.stroke();
-        if (mid || r > 30 * k) {
-          // what for, just inside the top of the ring (kept on the sheet when the top runs off it)
-          ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
-          const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
-          const text = h.label || HINT_LABEL[h.kind] || 'a keeper’s word';
-          ctx.fillText(text, tx, place(text, tx, ty, 'center', 19 * k)); // content join: a rumour's own words (npcs.js) first
-        }
-      }
       // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
       const lettered = []; // d1 names: the boxes lettered so far, so the place names keep off them
       if (lay.lakes) {
         ctx.font = `italic 600 ${(close ? 17 : 14) * k}px ${SERIF}`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
+        ctx.lineJoin = 'round'; ctx.lineWidth = 3 * k;
         const minCells = Math.max(600, (5 * mPerPx) ** 2), lh = (close ? 17 : 14) * k;
         for (const l of w.lakes) {
-          if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz)) continue;
+          if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz) || !onMine(l.cx, l.cz, l.cx, l.cz)) continue;
           const [a, b] = toPx(l.cx, l.cz), txt = spaced(l.name.toUpperCase());
-          ctx.fillText(txt, a, b + 6 * k);
+          ctx.strokeStyle = explored.hasLake(l.id) ? INK.inked : INK.water;
+          ctx.strokeText(txt, a, b + 6 * k); ctx.fillText(txt, a, b + 6 * k);
           const tw = ctx.measureText(txt).width; lettered.push({ x0: a - tw / 2, x1: a + tw / 2, y0: b + 6 * k - lh * 0.8, y1: b + 6 * k + lh * 0.25 });
         }
         if (mid) this.drawPlaceNames(ctx, { toPx, inView, onMine, k, mPerPx, lettered });
+      }
+      // burn names, in the burn's own brown, once the view is close enough to letter them
+      if (lay.burns && mPerPx < 45) {
+        ctx.font = `italic 600 ${11.5 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(236, 228, 207, 0.9)';
+        for (const r of burnsInView(v, W, H)) {
+          if (r.kind === 2 || r.acres < 200) continue;
+          const bw = (r.box[2] - r.box[0]) / mPerPx, bh = (r.box[3] - r.box[1]) / mPerPx;
+          if (bw < 90 * k || bh < 30 * k) continue;
+          const [a, b] = toPx((r.box[0] + r.box[2]) / 2, (r.box[1] + r.box[3]) / 2), txt = burnWords(r);
+          const box = { x0: a - 60 * k, x1: a + 60 * k, y0: b - 8 * k, y1: b + 8 * k };
+          if (lettered.some((q) => box.x0 < q.x1 && q.x0 < box.x1 && box.y0 < q.y1 && q.y0 < box.y1)) continue;
+          lettered.push(box);
+          ctx.fillStyle = r.kind === 3 ? '#4e5a34' : '#7a3a1c'; ctx.strokeText(txt, a, b); ctx.fillText(txt, a, b);
+        }
+        ctx.textBaseline = 'alphabetic';
       }
       // entry points: the outfitters' docks, a pier with a shack at its root
       ctx.font = `600 ${11 * k}px ${SERIF}`;
       for (const ep of w.entryPoints) {
         if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
         const [a, b] = toPx(ep.x, ep.z);
-        ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
-        ctx.fillStyle = '#5e4630';
-        ctx.fillRect(-1.6, -9, 3.2, 12);
-        for (const y of [-7, -3, 1]) ctx.fillRect(-3.2, y, 6.4, 1.4);
-        ctx.fillStyle = '#b4321f';
-        ctx.fillRect(-4.5, 3, 9, 5);
-        ctx.beginPath(); ctx.moveTo(-5.5, 3); ctx.lineTo(0, -1.5); ctx.lineTo(5.5, 3); ctx.closePath(); ctx.fill();
-        ctx.restore();
+        paintDock(ctx, a, b, k);
+        hits.push({ kind: 'dock', ep: ep.ep, x: ep.x, z: ep.z, px: 10 });
         if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
       }
       ctx.restore();
     }
-    // The notices' places (tasks.js hints, the world cards of 2026-10-24): the keeper's red pencil, a wobbly ring not
-    // quite closed, as if annotated by hand across the counter, with its word in the same hand. Tight round a campsite
-    // or landing you know (named in the notice, or on a map you can see) and named ("the island site"); else round the
-    // bay, arm or stretch the notice describes, never the whole lake. Drawn over blank paper too, outside the sheets'
-    // clip: the pencil goes where the keeper pointed, sheet or no sheet.
-    const hints = lay.tasks && this.ctx && this.ctx.tasks && typeof this.ctx.tasks.hints === 'function' ? this.ctx.tasks.hints() : [];
-    for (const h of hints) {
+    // The words pencilled on your map at your asking (map-book.js marks: a keeper's or a visitor's word, each with who
+    // said it): a soft grey ring round the water they meant, what for in the pencil hand and, under it, who said so.
+    // (the owner, 2026-10-31: "I'm discovering them without even knowing where they came from")
+    const placed = [], LABEL_TRIES = 4;
+    const place = (text, x, y, align, lh) => {
+      const tw = ctx.measureText(text).width, bx0 = align === 'center' ? x - tw / 2 : x, box = (yy) => ({ x0: bx0, x1: bx0 + tw, y0: yy - lh * 0.8, y1: yy + lh * 0.2 });
+      let yy = y;
+      for (let n = 0; n < LABEL_TRIES && placed.some((q) => { const bb = box(yy); return bb.x0 < q.x1 && q.x0 < bb.x1 && bb.y0 < q.y1 && q.y0 < bb.y1; }); n++) yy += lh;
+      placed.push(box(yy));
+      return yy;
+    };
+    const mid = mPerPx < 60;
+    if (!blank && lay.notes) for (const h of told.notes) {
       if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
-      const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 7 * k);
-      pencilRing(ctx, a, b, r, k, Math.abs(Math.round(h.x * 7 + h.z * 13)));
-      if (h.label && (mPerPx < 60 || h.tight)) {
-        ctx.font = `600 ${16 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(176, 40, 30, 0.9)';
-        if (r > 44 * k) { ctx.textAlign = 'center'; ctx.fillText(h.label, clamp(a, 70 * k, W - 70 * k), clamp(b - r + 20 * k, 24 * k, H - 12 * k)); }
-        else { ctx.textAlign = 'left'; ctx.fillText(h.label, clamp(a + r * 0.78, 8 * k, W - 120 * k), clamp(b - r * 0.82 - 4 * k, 24 * k, H - 12 * k)); }
+      const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
+      ctx.beginPath(); ctx.ellipse(a, b, r * 1.04, r * 0.97, 0.3, 0, 6.28);
+      ctx.fillStyle = 'rgba(74, 64, 54, 0.07)'; ctx.fill();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(74, 64, 54, 0.62)'; ctx.lineWidth = 1.7 * k; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(a + 1.5 * k, b - 1 * k, r * 1.01, r * 1.0, 0.9, 0.4, 5.9);
+      ctx.strokeStyle = 'rgba(74, 64, 54, 0.3)'; ctx.lineWidth = 1.1 * k; ctx.stroke();
+      hits.push({ kind: 'note', note: h, x: h.x, z: h.z, r: h.r, px: 10 });
+      if (mid || r > 30 * k) {
+        ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
+        const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
+        const text = h.label || HINT_LABEL[h.kind] || 'a keeper’s word', y = place(text, tx, ty, 'center', 19 * k);
+        ctx.fillText(text, tx, y);
+        if (h.who && mPerPx < 30) { ctx.font = `600 ${13 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.7)'; ctx.fillText(`— ${h.who}`, tx, y + 14 * k); placed.push({ x0: tx - 50 * k, x1: tx + 50 * k, y0: y + 4 * k, y1: y + 18 * k }); }
       }
     }
-    this.hintLegend(told.length > 0);
+    // The notices (the owner, 2026-10-31: "we need to be able to see which tasks we need to go claim and which ones are
+    // open"). Open: the keeper's red pencil round where it sends you, a wobbly ring not quite closed, with its number in
+    // a red tag on the ring (the same number as the book's list). Done: a gold seal on the dock of the outfitter that
+    // pays it, with how many wait there. Drawn over blank paper too: the pencil goes where the keeper pointed.
+    if (lay.tasks) {
+      for (const h of told.open) {
+        if (!Number.isFinite(h.x) || !inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
+        const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 7 * k);
+        pencilRing(ctx, a, b, r, k, Math.abs(Math.round(h.x * 7 + h.z * 13)));
+        const ta = a - r * 0.71, tb = b - r * 0.71;
+        taskTag(ctx, ta, tb, h.n, k, false);
+        hits.push({ kind: 'task', task: h, x: h.x, z: h.z, r: h.r, px: 12, tag: [x0 + ta * mPerPx, z0 + tb * mPerPx] });
+        if (h.label && (mPerPx < 60 || h.tight)) {
+          ctx.font = `600 ${16 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(176, 40, 30, 0.9)';
+          if (r > 44 * k) { ctx.textAlign = 'center'; ctx.fillText(h.label, clamp(a, 70 * k, W - 70 * k), clamp(b - r + 20 * k, 24 * k, H - 12 * k)); }
+          else { ctx.textAlign = 'left'; ctx.fillText(h.label, clamp(a + r * 0.78, 8 * k, W - 120 * k), clamp(b - r * 0.82 - 4 * k, 24 * k, H - 12 * k)); }
+        }
+      }
+      for (const q of told.claim) {
+        if (!inView(q.x, q.z, q.x, q.z)) continue;
+        const [a, b] = toPx(q.x, q.z);
+        taskTag(ctx, a + 11 * k, b - 15 * k, q.items.length > 1 ? `$${q.items.length}` : '$', k, true);
+        hits.push({ kind: 'claim', claim: q, x: q.x, z: q.z, px: 16, tag: [q.x + 11 * k * mPerPx, q.z - 15 * k * mPerPx] });
+      }
+    }
+    this.hintLegend(told.notes.length > 0);
     // round A-B: off your sheets, your pencil line is the only thing on the paper (the ink keeps to the sheets)
     if (clipped && explored.runs.length) {
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H);
@@ -1859,15 +1798,43 @@ export class Hud {
     this.inkLegend(explored.runs.some((r) => r.n > 1), !blank && explored.lakes.count > 0);
     if (clipped) this.drawNeatlines(ctx, sh, owned, toPx, k);
     if (look === 'whole' || this.table) this.drawSheetGrid(ctx, sh, toPx, inView, k);
+    return ready;
+  }
+
+  // what moves over the base: the paper's grain is laid by drawMap; here the words on blank paper, the canoe where it
+  // was left, you, the pin and its pencil line, a found place's ring, the north arrow and (on the glance) the scale
+  drawOverlays(ctx, W, H, v, k, player) {
+    const { x0, z0, mPerPx } = v, sheet = this.mode === 'sheet', sh = this.sheetsOn, blank = this.blank;
+    const toPx = (x, z) => [(x - x0) / mPerPx, (z - z0) / mPerPx];
+    const inView = (x, z) => x >= x0 && x <= x0 + W * mPerPx && z >= z0 && z <= z0 + H * mPerPx;
     // blank paper on the open sheet: a pencil word for where the rest of the map is
-    if (blank && sheet) {
+    if (blank && sheet && sh) {
       const none = !sh.ownedSheets().length;
       ctx.font = `600 ${24 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.62)'; ctx.textAlign = 'center';
       ctx.fillText(none ? 'No sheets yet. The map tables at the outfitters sell them.' : 'None of your sheets covers this.', W / 2, H * 0.74);
     }
+    // a place found in the book's search (map-book.js): a ring that draws itself round it for a few seconds
+    const f = this.focus;
+    if (f && sheet) {
+      const age = (performance.now() - f.t) / 1000;
+      if (age > 6) this.focus = null;
+      else if (inView(f.x, f.z)) {
+        const [a, b] = toPx(f.x, f.z), r = Math.max((f.r || 0) / mPerPx, 16 * k), grow = Math.min(1, age / 0.6);
+        ctx.save(); ctx.globalAlpha = age > 4.5 ? Math.max(0, 1 - (age - 4.5) / 1.5) : 1;
+        ctx.beginPath(); ctx.arc(a, b, r * 1.15, -Math.PI / 2, -Math.PI / 2 + 6.2832 * grow);
+        ctx.strokeStyle = 'rgba(42, 32, 22, 0.85)'; ctx.lineWidth = 2.4 * k; ctx.lineCap = 'round'; ctx.stroke();
+        ctx.restore();
+      }
+    }
+    // the thing under the pointer, lit (map-book.js hover)
+    const hv = this.hover;
+    if (hv && hv.ring && sheet) {
+      const [a, b] = toPx(hv.ring.x, hv.ring.z), r = Math.max((hv.ring.r || 0) / mPerPx, (hv.ring.px || 9) * k);
+      ctx.beginPath(); ctx.arc(a, b, r + 3 * k, 0, 6.2832); ctx.strokeStyle = 'rgba(176, 40, 30, 0.55)'; ctx.lineWidth = 2 * k; ctx.setLineDash([3 * k, 3 * k]); ctx.stroke(); ctx.setLineDash([]);
+    }
     // the canoe where it was left (beached or set down), so you can find your way back to it
     const hull = player.hullDown;
-    if (hull && inView(hull.x, hull.z, hull.x, hull.z)) {
+    if (hull && inView(hull.x, hull.z)) {
       const [a, b] = toPx(hull.x, hull.z);
       ctx.save(); ctx.translate(a, b); ctx.rotate(-hull.heading + Math.PI / 2); ctx.scale(k, k);
       ctx.fillStyle = '#e8562f'; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.4;
@@ -1875,7 +1842,7 @@ export class Hud {
       ctx.restore();
     }
     // you: the canoe when it is with you, a walker's dot with a heading tick when it is not
-    if (inView(player.x, player.z, player.x, player.z)) {
+    if (inView(player.x, player.z)) {
       const [a, b] = toPx(player.x, player.z);
       ctx.save(); ctx.translate(a, b); ctx.rotate(-player.heading + Math.PI / 2); ctx.scale(k, k);
       ctx.fillStyle = '#e8562f'; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.6;
@@ -1890,7 +1857,7 @@ export class Hud {
     // the pin waiting for a confirmation, and the pencil line from the canoe to it
     if (this.pin && sheet) {
       const [a, b] = toPx(this.pin.x, this.pin.z);
-      if (inView(player.x, player.z, player.x, player.z)) {
+      if (inView(player.x, player.z)) {
         const [pa, pb] = toPx(player.x, player.z);
         ctx.save(); ctx.strokeStyle = '#4a4036'; ctx.lineWidth = 1.4 * k; ctx.setLineDash([2 * k, 5 * k]); ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(pa, pb); ctx.quadraticCurveTo((pa + a) / 2, Math.min(pb, b) - Math.abs(a - pa) * 0.25, a, b); ctx.stroke(); ctx.restore();
@@ -1910,14 +1877,15 @@ export class Hud {
     ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(-6, -10); ctx.lineTo(6, -10); ctx.closePath(); ctx.fill();
     ctx.font = `600 12px ${SERIF}`; ctx.textAlign = 'center'; ctx.fillText('N', 0, -30);
     ctx.restore();
-    // the scale: a round distance close to 150 px, drawn on the glance, carried by the footer band on the sheet
+    // the scale: a round distance close to 150 px, drawn on the glance, carried by the footer band on the sheet (in
+    // miles, feet under a quarter mile)
     const want = (sheet ? 96 * (W / this.canvas.getBoundingClientRect().width || 1) : 150 * k) * mPerPx;
-    const bar = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].reduce((best, d) => (Math.abs(d - want) < Math.abs(best - want) ? d : best), 500);
-    const bpx = bar / mPerPx;
+    const bar = SCALE_STEPS.reduce((best, d) => (Math.abs(d[0] - want) < Math.abs(best[0] - want) ? d : best), SCALE_STEPS[4]);
+    const bpx = bar[0] / mPerPx;
     if (sheet) this.scaleInfo = { bar, cssPx: bpx / (W / (this.canvas.getBoundingClientRect().width || W)) };
     else if (!blank) {
       ctx.fillStyle = '#4a3b26'; ctx.fillRect(24 * k, H - 28 * k, bpx, 3 * k); ctx.fillRect(24 * k, H - 34 * k, 2 * k, 9 * k); ctx.fillRect(24 * k + bpx - 2 * k, H - 34 * k, 2 * k, 9 * k);
-      ctx.font = `600 ${12 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.fillText(bar >= 1000 ? `${bar / 1000} km` : `${bar} m`, 24 * k + bpx + 8 * k, H - 26 * k);
+      ctx.font = `600 ${12 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.fillText(bar[1], 24 * k + bpx + 8 * k, H - 26 * k);
     }
   }
 }

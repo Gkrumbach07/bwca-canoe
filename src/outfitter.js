@@ -371,8 +371,7 @@ export class Outfitter {
       if (kind === 'season' || this.arrivedBy) this.lineKind = 'welcome';
       this.arrivedBy = null;
       if (fresh) this.core.fresh = null;
-      const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, kind);
-      this.heard(v.ep, words);
+      const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, kind); // (said, not pencilled: the counter's "Mark it on my map" does that)
       if (!(this.people && this.people.keeperSays && this.people.keeperSays(v.ep, words, kind))) this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7); // fb F: said by the keeper's head
     }
   }
@@ -565,7 +564,6 @@ export class Outfitter {
     const rode = this.arrivedBy === 'ride'; this.arrivedBy = null; // stream C's rides: the keeper's words for one come up the road
     const kind = this.lineKind === 'welcome' ? (stranger ? 'stranger' : rode ? 'ride' : this.trip.active ? 'passing' : 'welcome') : this.lineKind;
     this.greeting = this.say(landing.ep, kind);
-    this.heard(landing.ep, this.greeting);
     this.who = this.shop ? this.shop.keeperName(landing.ep) : null;
     this.lineKind = 'welcome';
     if (this.energy && typeof this.energy.fill === 'function') this.energy.fill(2, 0); // the counter's tap: a full bottle, free
@@ -612,6 +610,7 @@ export class Outfitter {
     else if (act === 'shelf') this.openShelf(id, this.at);
     else if (act === 'bunk') this.bunk();
     else if (act === 'tab' && MODES.includes(id)) { this.tab = id; this.render(); } // a landing with no store yet: the board from the counter
+    else if (act === 'mark' && this.at && this.deskHint) { this.heard(this.at.ep, this.deskHint); if (this.hud) this.hud.note(`${(this.shop && this.shop.keeperName(this.at.ep)) || 'The keeper'} pencils a ring on your map.`, 4); this.render(); }
     else if (act === 'ride' && this.rides) this.rides.act(id);
     else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
@@ -674,10 +673,15 @@ export class Outfitter {
     if (keeper && typeof keeper.hint === 'function' && rep >= 2) {
       const hs = op.hints || [], n = hs.length ? this.day.doy % hs.length : 0;
       try { hint = keeper.hint(this.world, op, n) || ''; } catch { hint = ''; }
-      if (hint) this.heard(a.ep, hint);
     }
     const parts = [];
-    if (hint) parts.push(`<div class="word"><div class="lab">${esc(keeper.name || 'The keeper')}, leaning on the counter</div><p>“${esc(hint)}”</p></div>`);
+    // the map is pencilled only when you ask (the owner, 2026-10-31: "be a little more deliberate about it ... you
+    // deliberately ask him to give you some information"): the word, and a stamp to have it marked on your map
+    if (hint) {
+      const marked = this.isHeard(a.ep, hint), ringed = this.hintAt(a.ep, hint);
+      parts.push(`<div class="word"><div class="lab">${esc(keeper.name || 'The keeper')}, leaning on the counter</div><p>“${esc(hint)}”</p>${ringed ? (marked ? '<p class="soft">✓ pencilled on your map</p>' : '<button type="button" class="stamp small outline" data-act="mark">Mark it on my map</button>') : ''}</div>`);
+      this.deskHint = hint;
+    }
     const price = this.sandbox ? 0 : shop ? shop.price('bunk', a.ep) : 8, short = !this.sandbox && price > this.money;
     // (worded for the hour: in the morning, after an evacuation's wake, the bunk is the day slept off: polish B)
     const morning = this.day.hours < 12;
@@ -699,6 +703,14 @@ export class Outfitter {
     if (!pr || typeof pr.tell !== 'function' || !op || !Array.isArray(op.hints) || !words) return;
     const i = op.hints.findIndex((h) => h && h.text === words);
     if (i >= 0) pr.tell(ep, i);
+  }
+  // whether a keeper's words are one of their hints with water to ring, and whether it is on your map already
+  hintAt(ep, words) { const op = this.shop ? this.shop.outfitterProfile(ep) : null, h = op && Array.isArray(op.hints) ? op.hints.find((q) => q && q.text === words) : null; return !!(h && Number.isFinite(h.x)); }
+  isHeard(ep, words) {
+    const pr = this.profile, op = this.shop ? this.shop.outfitterProfile(ep) : null;
+    if (!pr || !Array.isArray(pr.told) || !op || !Array.isArray(op.hints)) return false;
+    const i = op.hints.findIndex((h) => h && h.text === words);
+    return i >= 0 && pr.told.some((k) => String(k) === `${ep}:${i}`);
   }
   // the hints you have been told, with the water each one means: { kind, text, lake, x, z, r, ep } (hud.js rings them)
   toldHints() {

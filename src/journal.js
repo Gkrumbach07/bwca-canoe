@@ -27,7 +27,9 @@ import { itemDef } from './items.js';
 import { fishPicture } from './fish-portrait.js';
 import './paper.css';
 
-const SIDES = ['pack', 'journal'];
+import { MapBook } from './map-book.js'; // the map as the book's third tab
+
+const SIDES = ['pack', 'journal', 'map']; // (the owner, 2026-10-31: "pack, journal, map": map-book.js)
 
 export class Journal {
   // t: { hud, world, player, day, fishing, tasks, energy, outfitter, stats, wind, onUse }
@@ -39,12 +41,13 @@ export class Journal {
     this.fishSel = null; this.fishSort = 'water'; this.tripSel = null; this.printSel = null; // what is picked on each tab
     // the book: a tab for each side on its top edge, the journal's spread and the pack's mat
     this.el.classList.add('book');
-    this.el.setAttribute('aria-label', 'The book: the journal and the pack');
-    this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button></div>
-      <div class="book-key"><kbd>I</kbd> or <kbd>Esc</kbd> closes</div><div class="side j"></div><div class="side p"></div>`;
+    this.el.setAttribute('aria-label', 'The book: the pack, the journal and the map');
+    this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button><button type="button" class="book-tab m" data-side="map" role="tab">Map<kbd>M</kbd></button></div>
+      <div class="book-key"><kbd>I</kbd> or <kbd>Esc</kbd> closes</div><div class="side j"></div><div class="side p"></div><div class="side m"></div>`;
     this.jEl = this.el.querySelector('.side.j'); this.pEl = this.el.querySelector('.side.p');
     this.jEl.classList.add('pp-spread'); // the journal's paper (paper.css)
     this.pack = new PackSide(this.pEl, { onUse: t.onUse || null, closeBook: () => this.close() }); // fb2 B: a nearby thing's action that wants the world (Pitch, Eat at the fire) closes the book first
+    this.map = new MapBook(this.el.querySelector('.side.m'), { hud: this.hud, journal: this, world: this.world, tasks: this.tasks, outfitter: this.outfitter });
     this.hud.registerPaper('journal', () => this.close());
     this.el.addEventListener('click', (e) => {
       const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); side.blur(); return; } // (no focus ring left on it for the next key)
@@ -66,7 +69,7 @@ export class Journal {
       if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
       const busy = this.hud.paper === 'outfitter' || this.hud.paper === 'shelf' || this.hud.paper === 'card';
       if (e.code === 'KeyI') { if (e.repeat || busy) return; if (this.open) this.close(); else this.show('pack'); }
-      else if (this.open && e.code === 'Escape') this.close();
+      else if (this.open && e.code === 'Escape' && !e.mapPin) { if (this.side === 'map' && this.map.lake) this.map.closeLake(); else this.close(); } // (the map's pin takes its own Esc: hud.js)
     });
     // Tab does nothing while the book is open (the readout's Tab, hud.js, waits until it is shut): the tabs are clicked
     window.addEventListener('keydown', (e) => {
@@ -99,12 +102,15 @@ export class Journal {
     this.open = true;
     this.hud.openPaper('journal');
     this.el.classList.add('show');
-    if (this.side === 'pack') this.pack.show(); else this.render(true);
+    if (this.side === 'pack') this.pack.show(); else if (this.side === 'map') this.map.show(); else this.render(true);
   }
+  // M (hud.js): the book open at the map
+  showMap() { if (this.open && this.side === 'map') return true; this.show('map'); return true; }
   close() {
     if (!this.open) return;
     this.open = false;
     this.pack.hide();
+    this.map.hide();
     this.el.classList.remove('show');
     this.hud.closePaper('journal');
   }
@@ -113,13 +119,16 @@ export class Journal {
     this.side = side;
     for (const b of this.el.querySelectorAll('.book-tab')) { const on = b.dataset.side === side; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
     this.jEl.classList.toggle('on', side === 'journal'); this.pEl.classList.toggle('on', side === 'pack');
+    this.el.querySelector('.side.m').classList.toggle('on', side === 'map');
     if (!this.open) return;
-    if (side === 'pack') this.pack.show(); else { this.pack.hide(); this.render(true); }
+    if (side !== 'map') this.map.hide();
+    if (side === 'pack') this.pack.show(); else if (side === 'map') { this.pack.hide(); this.map.show(); } else { this.pack.hide(); this.render(true); }
   }
   // while it is up, the page follows the game (a meal, a fish, the clock) at a gentle rate
   update(dt) {
     if (!this.open) return;
     if (this.side === 'pack') { this.pack.update(dt); return; }
+    if (this.side === 'map') { this.map.update(dt); return; }
     if ((this.t += dt) > 0.5) { this.t = 0; this.render(false); }
   }
 
