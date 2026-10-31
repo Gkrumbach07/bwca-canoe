@@ -7,7 +7,9 @@
 //   brooks   a narrow stony bed on the ground along the line (2-4 ft), wet stones and a thin moving sheen of water
 //            down a perennial one; an intermittent one (NHD's 46003) runs in the May melt and June, a dry bed of stones
 //            from mid-July. One decal mesh a tile (BrookDecal, the trail's way: the terrain's own splats under it) and
-//            a few stones in the tile's prop mesh. Underfoot a wading step (player.js brookAt, audio.js footfall); the
+//            a few stones in the tile's prop mesh. Cut into the ground (round 2): on the 2 m LiDAR detail a little V
+//            (brook-cut.js), the decal draped into it; its banks darker and damp, a lip of stones, so on the 10 m
+//            ground (too coarse for a channel a metre wide) it still reads as cut. Underfoot a wading step (player.js brookAt, audio.js footfall); the
 //            nearest running one trickles (main.js, through audio.whiteWater).
 //   dams     a low curved mound of peeled sticks and mud across `yaw`, `len` long; an `old` one (a drained beaver
 //            meadow) lower, grassed over and breached in the middle. A lodge, a dome of sticks about 6 m across and
@@ -15,7 +17,8 @@
 //            A `route` dam lies across a paddled creek: the canoe is held off it, and a held E hauls it over onto the
 //            water below (player.js damsNear, haul).
 //   seasons  a creek record `seasonal` (its paddled part mostly intermittent or seasonally flooded) runs shallow from
-//            late July through September: the canoe drags and scrapes (player.js creekDrag), still passable.
+//            late July through September: the canoe drags and scrapes (player.js creekDrag), still passable, and its
+//            water stands up to 1.3 ft lower, the mud of the bank showing (water-build.js lowCreeks).
 import * as THREE from 'three';
 import { mulberry32, hash2, noise2, smoothstep, clamp } from './rng.js';
 import { makeLookMaterial } from './shading.js';
@@ -27,7 +30,8 @@ import { PropBuilder, TILE, chunkStone, occlude } from './prop-kit.js';
 export const BROOK = {
   hw: [0.36, 0.56],     // half width of the stony bed (the decal's margin fades past it): 2-4 ft of stones
   step: 1.2,            // rows along it
-  clear: 1.1,           // the trees and brush kept off the bed (props.js exclusionsFor)
+  clear: 1.8,           // the trees and brush kept off the bed (props.js exclusionsFor; wetlands round 2: wider, fewer crowns over it)
+  bank: 2.4,            // wetlands round 2: the decal's banks reach this many half widths out (brook-cut.js: the cut itself)
   stones: 0.5,          // stones a metre of bed, at most
   heard: 45,            // a running brook heard within this
 };
@@ -47,8 +51,9 @@ export function brookWater(season, perennial) {
   const spring = smoothstep(118, 130, d) * (1 - smoothstep(178, 198, d)), fall = 0.35 * smoothstep(262, 280, d) * (1 - smoothstep(300, 315, d));
   return (1 - ice) * Math.max(spring, fall);
 }
-// how low a seasonal marsh channel runs (0 normal .. 1 at its lowest): late July through September
-export function lowWater(doy) { return smoothstep(198, 214, doy) * (1 - smoothstep(266, 282, doy)); }
+// how low a seasonal marsh channel runs (0 normal .. 1 at its lowest): late July through September (water-build.js, so
+// the tile worker draws the low water by the same curve)
+export { lowWater } from './water-build.js';
 
 // ---- the data -------------------------------------------------------------------------------------------------------
 // creeks.json in world metres; bucketed per world tile so a tile's props, the walker and the map find theirs quickly.
@@ -136,8 +141,9 @@ export class Creeks {
 // ---- the brook's bed: a decal over the drawn ground ------------------------------------------------------------------
 // Rows across it every BROOK.step metres, five vertices a row, each carrying the terrain's splat weights, floor and
 // normal there (so the shader paints the ground under it exactly, as the trail's does: prop-kit.js trailMaterial), and
-// aBrook: x across (-1 .. 1), y metres along it (downstream), z the fade (its ends, the lake it runs into), w perennial.
-const ACROSS = [-1, -0.5, 0, 0.5, 1];
+// aBrook: x across (-1 .. 1 the bed, out to +-BROOK.bank its banks), y metres along it (downstream), z the fade (its
+// ends, the lake it runs into), w perennial.
+const ACROSS = [-BROOK.bank, -1.45, -1, -0.5, 0, 0.5, 1, 1.45, BROOK.bank];
 const brookU = { uBrookWater: { value: new THREE.Vector2(0.7, 0.3) } }; // x a perennial brook's water, y an intermittent one's
 let brookMat = null;
 export function brookMaterial() {
@@ -154,12 +160,16 @@ export function brookMaterial() {
         .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n' + vary + '\nuniform vec2 uBrookWater;\nfloat brookSheen = 0.0;\nvec2 brookTilt = vec2( 0.0 );\n' + glslGround)
         .replace('#include <color_fragment>', `
 	float lookPx = length( fwidth( vLookWorld.xz ) );
-	vec3 groundC = groundColor( vLookWorld.xz, vSplatA, vSplatB, vFloor, lookPx );
 	vec2 q = vLookWorld.xz;
 	float water = mix( uBrookWater.y, uBrookWater.x, vBrook.w );
 	// across the bed (0 the middle, 1 the margin), its edges pushed about so they never run straight
 	float a = abs( vBrook.x ) + ( lookFbm( q / 0.6, 51u, 2 ) - 0.5 ) * 0.4 + ( lookFbm( q / 2.5, 52u, 2 ) - 0.5 ) * 0.25;
 	float bed = 1.0 - smoothstep( 0.55, 0.95, a );
+	// round 2, the banks: the cut's face dark and damp just past the stones, easing out into the ground round it; a
+	// little moss at their top. (On the LiDAR detail the decal lies in the cut; on the 10 m ground this is the cut.)
+	float bankW = ${BROOK.bank.toFixed(2)};
+	float face = ( 1.0 - smoothstep( 0.9, 1.7, a ) ) * smoothstep( 0.55, 0.9, a );
+	float bank = 1.0 - smoothstep( 1.1, bankW, a );
 	// the stones: rounded cobbles over grit, grey to tan, set close in the middle of the bed
 	float cob = lookFbm( q / 0.16, 53u, 2 ), cob2 = lookFbm( q / 0.07 + vec2( 2.1, -3.7 ), 54u, 2 );
 	float stone = smoothstep( 0.5, 0.6, cob ) * lookFade( 0.16, lookPx ) + smoothstep( 0.62, 0.7, cob2 ) * 0.6 * lookFade( 0.07, lookPx );
@@ -174,14 +184,18 @@ export function brookMaterial() {
 	// running water: tea-brown over the stones, ripples carried downstream (along vBrook.y) on the bed's clock
 	float t = uBedTime;
 	float r1 = lookFbm( vec2( vBrook.y * 1.6 - t * 2.2, vBrook.x * 2.6 ) , 57u, 2 ), r2 = lookFbm( vec2( vBrook.y * 4.0 - t * 3.5, vBrook.x * 5.0 + 3.0 ), 58u, 2 );
-	vec3 col = mix( groundC, bedC, bed );
+	// (laid over the ground drawn under it as a shade, not a colour of its own: the LiDAR detail paints its ground apart)
+	float moss = smoothstep( 0.55, 0.75, lookFbm( q / 0.35, 59u, 2 ) ) * ( 1.0 - face );
+	vec3 bankC = mix( vec3( 0.045, 0.04, 0.028 ), vec3( 0.06, 0.075, 0.035 ), moss );
+	float bankA = clamp( 0.38 * bank + 0.3 * face, 0.0, 0.62 );
+	vec3 col = mix( bankC, bedC, bed );
 	vec3 tea = vec3( 0.05, 0.036, 0.018 ) + bedC * vec3( 0.22, 0.17, 0.1 ) * ( 1.0 - 0.6 * water ); // the stones show through a shallow run
 	col = mix( col, tea, chan );
 	col += vec3( 0.05, 0.055, 0.05 ) * chan * smoothstep( 0.62, 0.8, r2 ) * lookFade( 0.25, lookPx ); // a fleck of foam on a riffle
 	brookSheen = chan * ( 0.75 + 0.25 * r1 );
 	brookTilt = vec2( r1 - 0.5, r2 - 0.5 ) * 0.5 * chan;
 	diffuseColor.rgb = col;
-	diffuseColor.a = bed * vBrook.z;`)
+	diffuseColor.a = ( bed + ( 1.0 - bed ) * bankA ) * vBrook.z;`)
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ) * ( 1.0 - brookSheen ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); normal = normalize( mix( normal, mat3( viewMatrix ) * normalize( vec3( brookTilt.x, 1.0, brookTilt.y ) ), brookSheen ) ); }')
         .replace('#include <opaque_fragment>', mireSheen('brookSheen'));
       applyWet(shader, { porosity: '0.6', gloss: '0.6' });
@@ -307,6 +321,12 @@ function buildBrook(ctx, b, decal, bits, rounded) {
       const wet = per && edge < 0.6, col = tone(wet ? 0x77726a : 0xa39d92, rng, 0.12);
       const mat = new THREE.Matrix4().makeRotationY(rng() * 6.28).scale(V(s0, s0 * 0.55, s0 * 0.8)).setPosition(V(px - ctx.ox, ctx.H(px, pz) - s0 * 0.25, pz - ctx.oz));
       chunkStone(bits, mat, rng, col);
+    }
+    // round 2: a lip of small stones along the top of the cut, mossy and dry
+    if (rng() < 0.45 * BROOK.step) {
+      const off = (rng() < 0.5 ? -1 : 1) * (1.05 + rng() * 0.4) * hw, px = cx + nx * off, pz = cz + nz * off, s0 = 0.04 + rng() * 0.06;
+      const mat = new THREE.Matrix4().makeRotationY(rng() * 6.28).scale(V(s0, s0 * 0.5, s0 * 0.8)).setPosition(V(px - ctx.ox, ctx.H(px, pz) - s0 * 0.2, pz - ctx.oz));
+      chunkStone(bits, mat, rng, tone(rng() < 0.4 ? 0x6f7356 : 0x8f8a80, rng, 0.12));
     }
   }
 }
