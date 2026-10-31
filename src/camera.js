@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp, smoothstep } from './rng.js';
-import { storeLayouts } from './props.js';
+import { storeLayouts, outfittersNear } from './props.js';
 import { makeLookMaterial } from './shading.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -243,6 +243,7 @@ function propsNear(world, x, z, r) {
     if (e && e.obstacles) for (const o of e.obstacles) _props.add(o);
   }
   for (const o of T.dynamic || []) _props.add(o);
+  for (const O of outfittersNear(x, z, r)) for (const o of O.obs) _props.add(o); // a store standing in the next tile (props.js)
   return _props;
 }
 export function sightLine(world, ax, ay, az, bx, by, bz, out = {}, opts = {}) {

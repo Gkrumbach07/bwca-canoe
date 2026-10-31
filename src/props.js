@@ -115,7 +115,8 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     return hit ? { mesh: g.mesh, hit } : null;
   };
   if (entry) clearYards(entry, yards, size); // the yards of stores built before this tile came in
-  const ctx = { tg, world, ox, oz, H, locate, obstacles, inside, entry };
+  const Hsite = (x, z) => (world.isReady && world.isReady(x, z) ? meshHeightAt(world, x, z) : meshHeightAt(tg, x, z)); // (landingPlan)
+  const ctx = { tg, world, ox, oz, H, Hsite, locate, obstacles, inside, entry };
   const pieces = [];
   const rng = mulberry32(42 + tx * 1000 + ty);
 
@@ -130,7 +131,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   const trail = decal.mesh();
   if (trail) group.add(trail);
 
-  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) { yield; yield* buildOutfitter(ctx, ep, rng, pieces, group); yield; }
+  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) { yield; yield* buildOutfitter(ctx, ep, group); yield; }
 
   const ledges = [[], []]; // the ledge rocks' matrices, flats and slanted
   for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
@@ -166,6 +167,8 @@ function frame(ctx, x, z, d) {
     P: (a, y, b) => V(x - ox + X.x * a + Z.x * b, y, z - oz + X.z * a + Z.z * b),
     D: (a, y, b) => V(X.x * a + Z.x * b, y, X.z * a + Z.z * b).normalize(),
     G: (a, b) => { const [wx, wz] = [x + X.x * a + Z.x * b, z + X.z * a + Z.z * b]; return ctx.H(wx, wz); },
+    // the ground a site is chosen on (ctx.Hsite, the 10 m mesh: landingPlan), else the drawn one
+    S: (a, b) => { const [wx, wz] = [x + X.x * a + Z.x * b, z + X.z * a + Z.z * b]; return (ctx.Hsite || ctx.H)(wx, wz); },
   };
 }
 // a stone (prop-kit.js chunkStone, about two units across) at tile-local p, scaled (s, s * up, s * deep) and
@@ -426,22 +429,121 @@ function shelfSignMaterial(text) {
 // over the shallows to DOCK.maxLen until its end stands in DOCK.wade of water (no further than the middle of a creek,
 // and no shorter than DOCK.minLen); the store's floor stands at least
 // STORE_CLEAR over the highest water near it, and no part of its footprint on ground within STORE_DRY of that water.
-const DOCK = { deck: 0.55, minLen: 5, len: 10.5, maxLen: 18, wade: 0.5 };
+const DOCK = { deck: 0.55, minLen: 5, len: 10.5, maxLen: 18, wade: 0.5, rise: 0.17, run: 0.32, treads: 6 };
 const STORE_CLEAR = 0.9, STORE_DRY = 0.2;
 // Per entry point corrections (src/landings.json, by entry point number): `from` [x, z], where the walk to the shore
-// starts instead of the put-in (when the nearest shore to it is the wrong one); `dockLen`, the dock's length. Each row
-// says why.
+// starts instead of the put-in (when the nearest shore to it is the wrong one); `dockLen`, the dock's length; `store`
+// [ao, b0], the store's site in the landing's frame (across, back: storeSite's), where the search's own will not do. Each
+// row says why.
 const LANDINGS = Object.fromEntries(Object.entries(LANDINGS_DATA.landings || {}).map(([k, v]) => [Number(k), v]));
 
 // A dock out from the landing and, up the yard from it, the outfitter's store (buildStore) with its door to the
 // lake and the outfitter's name over it, a canoe rack beside it. The frame: from the landing up onto dry ground and
 // back to the edge, d out to the water.
-function* buildOutfitter(ctx, ep, rng, pieces, group) {
-  const plan = landingPlan(ctx, ep);
-  const dock = buildDock(ctx, plan.F, plan.dock, rng);
+// The whole outfitter (its dock, store, rack and their obstacles) is one rigid group of its own, `outfitter <ep>`
+// (userData.rigid: detail.js's re-seat leaves it alone, so no vertex of a wall or a deck is moved on its own), built
+// from one plan on the ground as it is drawn when it is built. When that ground changes under it (a LiDAR chunk in or
+// out: outfitterGroundMoved), the whole of it is planned and built again on the new ground and swapped in, its
+// obstacles with it (stepOutfitters), so what is drawn and what the walker meets always come from the same plan.
+const outfitters = new Map(); // ep -> { ep, rec, ctx, sub, obs, rect, sig, stale, entry }
+function* buildOutfitter(ctx, ep, parent) {
+  const o = yield* outfitterSteps(ctx, ep);
+  parent.add(o.sub);
+  for (const ob of o.obs) ctx.obstacles.push(ob);
+  const old = outfitters.get(ep.ep);
+  if (old && old.sub !== o.sub && old.sub.parent) { old.sub.parent.remove(old.sub); disposeSub(old.sub); }
+  outfitters.set(ep.ep, { ep: ep.ep, rec: ep, ctx, sub: o.sub, obs: o.obs, rect: o.rect, sig: o.sig, stale: false, entry: ctx.entry });
+}
+function* outfitterSteps(ctx, ep) {
+  const sub = new THREE.Group();
+  sub.name = `outfitter ${ep.ep}`; sub.userData.rigid = true;
+  const obs = [], c = { ...ctx, obstacles: obs }, rng = mulberry32(7001 + ep.ep * 31), pieces = [];
+  const plan = landingPlan(c, ep, siteKept.get(ep.ep) || null);
+  if (!siteKept.has(ep.ep)) siteKept.set(ep.ep, { ao: plan.site.ao, b0: plan.site.b0, fallback: plan.site.fallback, turn: plan.site.turn });
+  const dock = buildDock(c, plan.F, plan.dock, rng);
   pieces.push(dock.geo);
   yield;
-  yield* buildStore(ctx, plan.F, rng, ep, group, pieces, dock, plan.site);
+  yield* buildStore(c, plan.F, rng, ep, sub, pieces, dock, plan.site);
+  const m = propMesh(pieces);
+  if (m) { m.name = `outfitter ${ep.ep} dock and rack`; sub.add(m); }
+  // what it covers (for the ground's changes) and the ground it was built on (to tell a change that matters)
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const o of obs) { const r = o.box ? Math.hypot(o.hx, o.hz) : o.r; x0 = Math.min(x0, o.x - r); z0 = Math.min(z0, o.z - r); x1 = Math.max(x1, o.x + r); z1 = Math.max(z1, o.z + r); }
+  const rect = [x0 - 6, z0 - 6, x1 + 6, z1 + 6];
+  return { sub, obs, rect, sig: groundSig(ctx, rect), plan };
+}
+// The same at once, for scripts/landing-check.mjs (which builds every outfitter in node and holds its obstacles to its
+// meshes): { sub, obs, rect, plan, layout }.
+export function buildOutfitterNow(ctx, ep) {
+  const it = outfitterSteps(ctx, ep);
+  let r = it.next();
+  while (!r.done) r = it.next();
+  return { ...r.value, layout: stores.get(ep.ep) || null };
+}
+// the drawn ground over an outfitter's rect, on a 2 m lattice: what it was built on
+function groundSig(ctx, [x0, z0, x1, z1]) {
+  const out = [];
+  for (let z = z0; z <= z1; z += 2) for (let x = x0; x <= x1; x += 2) out.push(ctx.H(x, z));
+  return Float32Array.from(out);
+}
+// The outfitters built whose rect reaches within r of world (x, z), for the obstacle queries (tiles.js treesNear, camera.js):
+// a store can stand 150 m and more from its entry point, so in the next tile, past the reach those queries look into
+// the tiles round them for. Each { ep, tx, ty, obs }.
+export function outfittersNear(x, z, r) {
+  const out = [];
+  for (const o of outfitters.values()) {
+    if (x + r < o.rect[0] || x - r > o.rect[2] || z + r < o.rect[1] || z - r > o.rect[3] || !alive(o)) continue;
+    out.push({ ep: o.ep, tx: o.entry.tx, ty: o.entry.ty, obs: o.obs });
+  }
+  return out;
+}
+// an outfitter's tile still in (an evicted tile's entry leaves the manager's map)
+function alive(o) {
+  const e = o.entry, T = o.ctx.world.tiles;
+  return !!(e && e.state === 'ready' && (!T || !T.tiles || T.tiles.get(T.key(e.tx, e.ty)) === e));
+}
+function disposeSub(sub) { sub.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); }
+// The ground changed in world rect [x0, z0, x1, z1] (detail.js, a chunk in or out): the outfitters there are built
+// again on it (stepOutfitters), those whose drawn ground moved by more than 3 cm.
+export function outfitterGroundMoved(rect) {
+  for (const o of outfitters.values()) if (!(rect[2] < o.rect[0] || rect[0] > o.rect[2] || rect[3] < o.rect[1] || rect[1] > o.rect[3])) o.stale = true;
+}
+let outfitterJob = null;
+export function outfittersPending() { let n = outfitterJob ? 1 : 0; for (const o of outfitters.values()) if (o.stale) n++; return n; }
+// Rebuild the stale outfitters a step at a time, under budget ms a frame (tiles.js update). The new build is swapped in
+// whole, in one frame: the old group and its obstacles out of the tile's lists, the new ones in.
+export function stepOutfitters(budget = 3) {
+  const t0 = performance.now();
+  while (performance.now() - t0 < budget) {
+    if (!outfitterJob) {
+      let next = null;
+      for (const o of outfitters.values()) {
+        if (!o.stale) continue;
+        if (!alive(o)) { outfitters.delete(o.ep); continue; } // its tile went
+        next = o; break;
+      }
+      if (!next) return;
+      next.stale = false;
+      const sig = groundSig(next.ctx, next.rect);
+      let moved = 0;
+      for (let i = 0; i < sig.length; i++) moved = Math.max(moved, Math.abs(sig[i] - next.sig[i]));
+      if (!(moved > 0.03)) continue;
+      outfitterJob = { o: next, it: outfitterSteps(next.ctx, next.rec) };
+    }
+    const { o, it } = outfitterJob, r = it.next();
+    if (!r.done) continue;
+    outfitterJob = null;
+    if (outfitters.get(o.ep) !== o || !o.sub.parent || !alive(o)) { disposeSub(r.value.sub); continue; }
+    const parent = o.sub.parent, list = o.ctx.obstacles, gone = new Set(o.obs);
+    for (let i = list.length - 1; i >= 0; i--) if (gone.has(list[i])) list.splice(i, 1);
+    for (const ob of r.value.obs) list.push(ob);
+    parent.remove(o.sub); parent.add(r.value.sub);
+    r.value.sub.updateMatrixWorld(true);
+    disposeSub(o.sub);
+    Object.assign(o, { sub: r.value.sub, obs: r.value.obs, rect: r.value.rect, sig: r.value.sig });
+    if (o.entry) o.entry.obsBox = null;
+    flushStoreNews();
+  }
 }
 
 // Where entry point ep's landing goes, from the data alone (no geometry): the anchor on the shore (x, z) and d out to
@@ -451,7 +553,7 @@ function* buildOutfitter(ctx, ep, rng, pieces, group) {
 // lakes' levels or their shores (data-v4's LiDAR: levels up 0.2 m on the median, 0.8 m at p95). The walk to the shore
 // steps by the shore distance itself (most of the way at once from a put-in far out: Clearwater's is 180 m out), and an
 // entry point whose nearest shore is the wrong one starts from its row in LANDINGS instead.
-export function landingPlan(ctx, ep) {
+export function landingPlan(ctx, ep, keep = null) {
   const tg = ctx.tg, fix = LANDINGS[ep.ep] || null;
   let x = fix && fix.from ? fix.from[0] : ep.x, z = fix && fix.from ? fix.from[1] : ep.z, d = tg.deeperDir(x, z);
   const stepTo = (sd) => Math.min(25, Math.max(0.5, Math.abs(sd - 1.1) * 0.6));
@@ -469,8 +571,21 @@ export function landingPlan(ctx, ep) {
   const F = frame(ctx, x, z, d), level = tg.levelAt(x, z);
   const dock = dockPlan(ctx, F, level, fix);
   const porch = !!lookOf(ep, ctx.world).porch, pd = porch ? 1.8 : 1.2;
-  const site = storeSite(ctx, F, ep, dock, pd);
+  const site = fitSite(ctx, F, keep || (fix && fix.store ? { ao: fix.store[0], b0: fix.store[1], fixed: true } : storeSite(ctx, F, ep, dock, pd)), dock, pd);
   return { x, z, d, F, level, dock, porch, pd, site };
+}
+// cabins-2: where an outfitter stands is chosen once, on the 10 m ground (ctx.Hsite: the same whether or not a LiDAR
+// chunk is in, so a store never jumps sideways when one comes), and kept for the session (siteKept); what stands on the
+// ground (the floor's height, the steps, the foundation, the dock's sill and steps) is fitted to the ground drawn now.
+const siteKept = new Map();
+// the floor of a kept site on the ground drawn now: over the highest ground under it (a 1 m lattice), clear of the water
+function fitSite(ctx, F, keep, dock, pd) {
+  const { ao, b0 } = keep;
+  let gmax = -Infinity, gmin = Infinity;
+  for (let a = -ST.hW; a <= ST.hW + 1e-6; a += 1) for (let c = -ST.hD; c <= ST.hD + 1e-6; c += 1) { const y = F.G(ao + a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
+  const [cx, cz] = F.W(ao, b0 + pd / 2), wl = waterNear(ctx.tg, cx, cz, 4);
+  const floorY = Math.max(gmax + 0.3, gmin + 0.45, wl + STORE_CLEAR);
+  return { ...keep, floorY, rise: +(floorY - gmin).toFixed(2) };
 }
 
 // The highest level of the water whose drawn surface reaches within r cells of world (x, z) (a lake cell's quads reach a
@@ -499,7 +614,7 @@ function dockPlan(ctx, F, level0, fix = null) {
   if (fix && fix.dockLen) len = fix.dockLen;
   else if (len >= DOCK.len) for (let l = DOCK.len; l <= DOCK.maxLen; l += 0.5) {
     len = l;
-    if (lv(l) - Math.max(F.G(-hw, l), F.G(hw, l), F.G(0, l)) >= DOCK.wade && sd(l) < -0.5) break;
+    if (lv(l) - Math.max(F.S(-hw, l), F.S(hw, l), F.S(0, l)) >= DOCK.wade && sd(l) < -0.5) break;
     if (sd(l + 0.5) > sd(l) - 0.05) break; // the bottom flattens out, or the middle of the water: no further
   }
   let level = level0;
@@ -511,7 +626,17 @@ function dockPlan(ctx, F, level0, fix = null) {
   for (let s = 0.8; s >= -6; s -= 0.1) if (Math.max(F.G(-hw, s), F.G(0, s), F.G(hw, s)) >= strBot - 0.17) { sill = s; break; }
   let back = sill - 0.3;
   if (Math.max(F.G(-hw, back), F.G(hw, back)) > deckY - 0.08) back = sill - 0.08;
-  return { hw, len, deckY, level, pT, strH, capH, sill, back };
+  // steps up onto the deck from the bank behind it: the deck stands up to 0.4 m over the ground at its land end (the sill
+  // sits under the stringers), more than the walker's step (player.js STEP_UP 0.35), so a tread or a few, DOCK.rise
+  // apart, down to where the ground is within a riser of the last
+  const treads = [], gB = (b) => Math.min(F.G(-0.55, b), F.G(0, b), F.G(0.55, b));
+  for (let k = 1, top = deckY; k <= DOCK.treads; k++) {
+    const b1 = back - (k - 1) * DOCK.run, b0 = b1 - DOCK.run;
+    if (top - gB(b0 - 0.15) <= DOCK.rise + 0.02) break;
+    top = Math.max(gB(b0 - 0.15) + 0.04, top - DOCK.rise);
+    treads.push({ b0, b1, y: top });
+  }
+  return { hw, len, deckY, level, pT, strH, capH, sill, back, treads };
 }
 function buildDock(ctx, F, P, rng) {
   const b = new PropBuilder(), occ = [];
@@ -568,6 +693,17 @@ function buildDock(ctx, F, P, rng) {
     const g = F.G(a, sill);
     if (g < sillBot - 0.03) stone(b, F.P(a, g - 0.06, sill), Math.min(0.28, (sillBot - g + 0.08) / 1.1 + 0.08), rng() * 6.28, rng, { up: 2.2 });
   }
+  // the steps up from the bank (dockPlan treads): a plank tread on two blocks, a riser board under its front
+  for (const t of P.treads) {
+    const mid = (t.b0 + t.b1) / 2, half = 0.62, g = Math.min(F.G(-half, mid), F.G(half, mid)) - 0.08;
+    b.box(F.P(0, t.y - 0.025, mid), F.X, F.Y, F.Z, half, 0.025, (t.b1 - t.b0) / 2 + 0.01, TILE.WOOD, dryA.clone().lerp(dryB, rng()), { grain: 'x' });
+    if (t.y - 0.05 > g) {
+      for (const a of [-half + 0.08, half - 0.08]) b.box(F.P(a, (g + t.y - 0.05) / 2, mid), F.X, F.Y, F.Z, 0.06, (t.y - 0.05 - g) / 2, (t.b1 - t.b0) / 2 - 0.02, TILE.WOOD, C(0x6a6255), { grain: 'y' });
+      b.box(F.P(0, (g + t.y - 0.05) / 2, t.b1 - 0.02), F.X, F.Y, F.Z, half - 0.02, (t.y - 0.05 - g) / 2, 0.015, TILE.WOOD, C(0x5f574b), { grain: 'x' });
+    }
+    const [x, z] = F.W(0, mid);
+    ctx.obstacles.push({ x, z, ux: F.Z.x, uz: F.Z.z, hx: (t.b1 - t.b0) / 2, hz: half, box: true, top: t.y, stair: true });
+  }
   // cleats at the end, and a coil of line by one of them
   const iron = C(0x37342f);
   for (const side of [-1, 1]) {
@@ -581,7 +717,7 @@ function buildDock(ctx, F, P, rng) {
   b.tube(coil, 0.011, 5, TILE.ROPE, rope);
   const geo = b.build();
   occlude(geo, occ, { ground: localGround(ctx), rays: 12, reach: 0.9, floor: 0.32 });
-  return { geo, back, sill, hw, len, deckY };
+  return { geo, back, sill, hw, len, deckY, foot: P.treads.length ? P.treads[P.treads.length - 1].b0 : back };
 }
 
 // --- the outfitter's store ------------------------------------------------------------------------------------
@@ -1532,7 +1668,12 @@ function roofCover(b, kind, col, rng) {
 
 // fb2 C: risers of at most 15 cm (agreed with stream E, player.js: the walker's circle reaches into the tread two up,
 // 0.30 m over his feet, inside his 0.35 m step with room for the feet's easing), treads 28 cm deep
-const STEP_RISE = 0.15, STEP_RUN = 0.28, SITE_RISE = 0.165;
+const STEP_RISE = 0.15, STEP_RUN = 0.28;
+// the store's site (storeSite, cabins-2): no nearer a portage trail than `trail` m; the door turned from the way down to
+// the dock by no more than `turn` degrees, and each degree past 25 costing `turnCost` (as much as a metre of foundation
+// for 50 degrees); the foot of its steps `gap` m short of the dock's (the site is chosen on the 10 m ground, and the 2 m
+// ground under the flight can lengthen it by a few treads)
+const SITE = { trail: 3, turn: 75, turnCost: 0.02, gap: 3.2 };
 const STAIR_LOW = 0.75;   // a deck no higher than this over the ground at its front has no rails, and steps across its front
 const RAIL_H = 0.92;      // a rail's (and a flight's side wall's) height over what it stands on, for the walker and the camera
 // The porch across the front (look.porch) or a stoop at the door, at the floor's height less 4 cm, and its steps down to
@@ -1624,6 +1765,18 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
     for (const t of out.treads) if (t.b0 < bEnd) out.walls.push({ a0, a1, b0: t.b0 - 0.01, b1: Math.min(t.b1 + 0.01, bEnd), top: t.y + RAIL_H });
     const last = out.treads[out.treads.length - 1];
     out.walls.push({ a: ca + side * (sw + 0.04), b: bEnd, r: NEWEL, top: last.y + RAIL_H });
+    // and drawn: a post at the deck and the newel at the foot, a handrail and a mid rail between them over the walls
+    // (cabins-2: the walls stood there with nothing drawn, a walker held off the flight's edge by air)
+    const pa = ca + side * (sw + 0.04), rail = tone(0x8a7c68, rng, 0.04);
+    const yTop = ys + RAIL_H, yFoot = last.y + RAIL_H, gN = g(pa, bEnd) - 0.1, b0r = s1 + 0.04;
+    sbox(b, pa - 0.04, pa + 0.04, ys - 0.2, yTop, b0r - 0.04, b0r + 0.04, TILE.WOOD, rail, { grain: 'y', endTile: TILE.END });
+    sbox(b, pa - 0.06, pa + 0.06, gN, yFoot + 0.04, bEnd - 0.06, bEnd + 0.06, TILE.WOOD, rail, { grain: 'y', endTile: TILE.END });
+    for (const [y0, y1, h] of [[yTop, yFoot, 0.03], [yTop - 0.44, yFoot - 0.44, 0.022]]) {
+      const p0 = V(pa, y0, b0r), p1 = V(pa, y1, bEnd), along = p1.clone().sub(p0), L = along.length(); along.normalize();
+      const up = AX.clone().cross(along).normalize(); if (up.y < 0) up.negate();
+      b.box(p0.clone().add(p1).multiplyScalar(0.5), along, up, AX, L / 2, h, 0.025, TILE.WOOD, rail, { grain: 'x', endTile: TILE.END });
+    }
+    for (const t of out.treads) { const c = (t.b0 + t.b1) / 2; if (c > b0r + 0.3 && c < bEnd - 0.3 && Math.round((c - b0r) / run) % 3 === 0) sbox(b, pa - 0.025, pa + 0.025, t.y, t.y + RAIL_H - 0.03, c - 0.025, c + 0.025, TILE.WOOD, rail, { grain: 'y' }); }
   }
   if (treads) for (const side of [-1, 1]) {
     const p0 = V(ca + side * (sw - 0.03), ys - 0.06, s1), p1 = V(ca + side * (sw - 0.03), gFront - 0.05, s1 + treads * run + 0.05), along = p1.clone().sub(p0), L = along.length(); along.normalize();
@@ -1756,9 +1909,26 @@ function clearYards(e, list, size) {
 // Where a store stands in its landing's frame F: { ao, b0, floorY, rise } (see buildStore).
 function storeSite(ctx, F, ep, dock, pd) {
   const lawn = 31, steps = (floorY, ao, b0) => {
-    const ys = floorY - 0.04, front = b0 + ST.hD + pd, rise = ys - F.G(ao + DOOR.a, front + 0.4);
-    return front + Math.max(0, Math.ceil(rise / SITE_RISE) - 1) * STEP_RUN; // (the riser the sites were chosen with: a store stays where it stood)
+    // where the flight down from the door ends, as porchAndSteps builds it (risers of STEP_RISE to the lowest ground across
+    // it), and a tread more (cabins-2: the old estimate's taller risers let the real flight run on onto the dock)
+    const ys = floorY - 0.04, front = b0 + ST.hD + pd, gLow = (c) => Math.min(F.S(ao + DOOR.a - 0.63, c), F.S(ao + DOOR.a, c), F.S(ao + DOOR.a + 0.63, c));
+    let n = 1;
+    for (; n < 32; n++) if ((ys - gLow(front + (n - 1) * STEP_RUN + 0.25)) / n <= STEP_RISE) break;
+    return front + n * STEP_RUN;
   };
+  // (cabins-2) the portage trails near the landing, as points a metre apart: no store, porch, steps or rack within
+  // SITE.trail of one (none stands in a portage's way); and the dock's foot, where the way from the door goes
+  const trail = [], [lx, lz] = F.W(0, 0);
+  for (const p of ctx.world.portages || []) {
+    const pts = p.pts || [];
+    for (let k = 0; k + 1 < pts.length; k++) {
+      const [x0, z0] = pts[k], [x1, z1] = pts[k + 1];
+      if (Math.min(Math.hypot(x0 - lx, z0 - lz), Math.hypot(x1 - lx, z1 - lz)) > 90 + Math.hypot(x1 - x0, z1 - z0)) continue;
+      const m = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0)));
+      for (let j = 0; j <= m; j++) trail.push([x0 + ((x1 - x0) * j) / m, z0 + ((z1 - z0) * j) / m]);
+    }
+  }
+  const dockFoot = dock.back - DOCK.treads * DOCK.run; // (as far as the dock's steps can reach on any ground drawn)
   let best = null;
   for (let b0 = -10.5; b0 >= -32; b0 -= 1) for (const ao of [0, -2.5, 2.5, -5, 5, -7.5, 7.5, -10, 10, -12.5, 12.5]) {
     let gmax = -Infinity, gmin = Infinity, bad = false, wild = 0;
@@ -1766,29 +1936,43 @@ function storeSite(ctx, F, ep, dock, pd) {
       const [wx, wz] = F.W(ao + a, b0 + c);
       if (ctx.tg.shoreAt(wx, wz) < 1.5) { bad = true; break; }
       if (Math.hypot(wx - ep.x, wz - ep.z) > lawn) wild = 0.3; // out of the mown yard: the woods are cleared for it
-      if (c <= ST.hD) { const y = F.G(ao + a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
+      if (c <= ST.hD) { const y = F.S(ao + a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
     }
     if (bad) continue;
+    // the rack beside it (buildStore: on the side away from the dock) on dry ground too
+    const ra = ao + (ao > 1 ? ST.hW + 2.3 : -(ST.hW + 2.3)), rb = b0 + 1.2;
+    let rmin = Infinity;
+    for (const a of [-0.7, 0.7]) for (const c of [-2.6, 0, 2.6]) { const [wx, wz] = F.W(ra + a, rb + c); if (ctx.tg.shoreAt(wx, wz) < 1.0) bad = true; rmin = Math.min(rmin, F.S(ra + a, rb + c)); }
+    if (bad) continue;
     const [cx, cz] = F.W(ao, b0 + pd / 2), wl = waterNear(ctx.tg, cx, cz, 4);
-    if (gmin < wl + STORE_DRY) continue; // ground at the water's level: under it, or awash
+    if (Math.min(gmin, rmin) < wl + STORE_DRY) continue; // ground at the water's level: under it, or awash
     const floorY = Math.max(gmax + 0.3, gmin + 0.45, wl + STORE_CLEAR), foot = steps(floorY, ao, b0);
     const [fx, fz] = F.W(ao + DOOR.a, foot + 0.3);
     if (ctx.tg.shoreAt(fx, fz) < 0.5) continue; // the steps' foot in the water
-    if (foot > dock.back - 1.5 && Math.abs(ao + DOOR.a) < dock.hw + 1.6) continue; // onto the dock
-    const score = floorY - gmin + wild + 0.06 * Math.abs(b0 + 12) + 0.05 * Math.abs(ao);
-    if (!best || score < best.score) best = { score, ao, b0, floorY, rise: +(floorY - gmin).toFixed(2) };
+    if (foot > dockFoot - SITE.gap && Math.abs(ao + DOOR.a) < dock.hw + 1.6) continue; // onto the dock or its steps (SITE.gap: room for the flight the LiDAR ground may make longer)
+    // clear of the trails: the store with its porch and steps, and the rack, SITE.trail and more from every point
+    if (trail.length) {
+      const [sx, sz] = F.W(ao, b0), [rx, rz] = F.W(ra, rb), X = F.X, Z = F.Z;
+      const off = (px, pz, x, z, ha, hb0, hb1) => { const dx = px - x, dz = pz - z, a = Math.abs(dx * X.x + dz * X.z) - ha, b = dx * Z.x + dz * Z.z; return Math.hypot(Math.max(0, a), Math.max(0, hb0 - b, b - hb1)); };
+      if (trail.some(([px, pz]) => off(px, pz, sx, sz, ST.hW + 0.3, -ST.hD, foot - b0 + 0.3) < SITE.trail || off(px, pz, rx, rz, 0.75, -2.6, 2.6) < SITE.trail)) continue;
+    }
+    // the door toward the dock: the way from the foot of the steps to the foot of the dock's, against the store's front
+    const turn = (Math.atan2(Math.abs(ao + DOOR.a), dockFoot - foot) * 180) / Math.PI;
+    if (turn > SITE.turn) continue;
+    const score = floorY - gmin + wild + 0.06 * Math.abs(b0 + 12) + 0.05 * Math.abs(ao) + SITE.turnCost * Math.max(0, turn - 25);
+    if (!best || score < best.score) best = { score, ao, b0, floorY, rise: +(floorY - gmin).toFixed(2), turn: +turn.toFixed(0) };
   }
   if (best) return best;
   // nowhere fits: straight back from the dock, far enough for its steps
-  let b0 = Math.min(-11, dock.back - 2.4 - pd - ST.hD), floorY = 0;
+  let b0 = Math.min(-11, dockFoot - 2.4 - pd - ST.hD), floorY = 0;
   for (let it = 0; it < 6; it++) {
     let gmax = -Infinity, gmin = Infinity;
-    for (let a = -ST.hW; a <= ST.hW + 1e-6; a += 1) for (let c = -ST.hD; c <= ST.hD + 1e-6; c += 1) { const y = F.G(a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
+    for (let a = -ST.hW; a <= ST.hW + 1e-6; a += 1) for (let c = -ST.hD; c <= ST.hD + 1e-6; c += 1) { const y = F.S(a, b0 + c); gmax = Math.max(gmax, y); gmin = Math.min(gmin, y); }
     const [cx, cz] = F.W(0, b0);
     floorY = Math.max(gmax + 0.3, gmin + 0.45, waterNear(ctx.tg, cx, cz, 4) + STORE_CLEAR);
     const foot = steps(floorY, 0, b0);
-    if (foot <= dock.back - 1.5) return { ao: 0, b0, floorY, rise: +(floorY - gmin).toFixed(2), fallback: true };
-    b0 -= foot - (dock.back - 1.5) + 0.05;
+    if (foot <= dockFoot - SITE.gap) return { ao: 0, b0, floorY, rise: +(floorY - gmin).toFixed(2), fallback: true };
+    b0 -= foot - (dockFoot - SITE.gap) + 0.05;
   }
   return { ao: 0, b0, floorY, fallback: true };
 }
@@ -1928,6 +2112,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock, site) {
     lamp: at3(I.lamp.a, I.lamp.y, I.lamp.b),
     dockSide: (() => { const [x, z] = F.W(dock.hw + 1.3, dock.len * 0.65); return { x, z }; })(),
     dockLand: (() => { const [x, z] = F.W(0, dock.back + 0.5); return { x, z }; })(),
+    dockFoot: (() => { const [x, z] = F.W(0, dock.foot - 0.6); return { x, z }; })(), // on the bank at the foot of the dock's steps
     // fb2 C: tying up at the dock (outfitter.js): where you step out onto its deck beside a canoe tied at dockSide, and
     // the way the dock runs out to the water (a heading, as player.heading's)
     dockDeck: (() => { const [x, z] = F.W(dock.hw - 0.45, dock.len * 0.65); return { x, z, y: dock.deckY }; })(),
