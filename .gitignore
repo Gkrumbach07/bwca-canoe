@@ -11,4 +11,4 @@ public/data
 shots/
 
 # map data bakes (shipped as release archives, never committed; docs/HOSTING.md)
-public-data-v4*
+public-data-v*
