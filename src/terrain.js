@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { applyLook } from './shading.js';
 import { applyWet } from './weather.js';
 import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE, BED_MATS, SPHAGNUM } from './terrain-build.js';
+import { mireIce } from './land.js';
+import { smoothstep } from './rng.js';
 
 // The ground as a painted splat (docs/look.md, pass 1). Every vertex carries the weights of twelve ground
 // materials (the bluff pass added the cliff and the scree, the shoreline pass a beach's sand and the wet margin at the
@@ -46,6 +48,12 @@ export const groundUniforms = {
   // peat round it (a multiplier on the ground's colour)
   uMirePool: { value: new THREE.Vector3(0.03, 0.024, 0.014) },
   uMirePeat: { value: new THREE.Vector3(0.74, 0.74, 0.66) },
+  // wetlands round 2: the pools' ice (land.js mireIce: x frozen, y the slush of the melt, z the snow on it), and the
+  // meadow's season (setLandSeason): [0] the multiplier on the meadow for the terrain, [1] for everything else that
+  // draws the ground (the grass tufts, which take the season's tint of their own, groundcover.js uGrassTint, so theirs
+  // is this over that)
+  uMireIce: { value: new THREE.Vector3(0, 0, 0) },
+  uMeadowSeason: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
 };
 // The water standing on wet ground mirrors the sky, wet weather or not (weather.js wetSheen is only the rain's film):
 // a GLSL statement for a look material's main at opaque_fragment, `gloss` an expression in scope (0..1). Schlick on
@@ -61,6 +69,25 @@ export const mireSheen = (gloss) => `
 	#endif
 	#include <opaque_fragment>`;
 export function setGroundTint(r, g, b) { groundUniforms.uGroundTint.value.set(r, g, b); }
+
+// The land's season (wetlands round 2), each frame from the day cycle's (tiles.js setSeason): the pools' ice, and the
+// sedge and the grass of the meadows (the marsh's EM1 sedge and cattail, the wet meadow's bluejoint, a dry opening's
+// grass): green through the summer, tawny from late September, a weathered brown standing through the winter and the
+// thaw, the new green coming up through it from mid-May. Multipliers on the meadow's colour (#a6a857), linear.
+const MEADOW_SEASON = { summer: [0.95, 1.02, 0.86], tawny: [1.22, 0.84, 0.98], brown: [0.78, 0.56, 0.86] };
+export function setLandSeason(season) {
+  const ice = mireIce(season), u = groundUniforms;
+  u.uMireIce.value.set(ice.ice, ice.slush, ice.snow);
+  const d = season.doy, M = MEADOW_SEASON, out = [0, 0, 0];
+  if (d < 200) { const g = smoothstep(132, 168, d); for (let c = 0; c < 3; c++) out[c] = M.brown[c] + (M.summer[c] - M.brown[c]) * g; }
+  else {
+    const t = smoothstep(256, 282, d), b = smoothstep(292, 322, d);
+    for (let c = 0; c < 3; c++) out[c] = (M.summer[c] + (M.tawny[c] - M.summer[c]) * t) * (1 - b) + M.brown[c] * b;
+  }
+  const gt = season.grassTint || [1, 1, 1];
+  u.uMeadowSeason.value[0].set(out[0], out[1], out[2]);
+  u.uMeadowSeason.value[1].set(out[0] / gt[0], out[1] / gt[1], out[2] / gt[2]);
+}
 
 // groundRelief(world xz, metres per pixel) -> a small world-space tilt (x, z) for the shading normal: the
 // slope of a soft noise a few metres across, so the light ripples over the ground as it does over real
@@ -92,8 +119,12 @@ vec3 groundRockTint = vec3(1.0);
 float groundSphagnum = 0.0;
 // the wetlands (terrain-build.js landW): how much water stands on the ground here (0 dry .. 1 a marsh), and what
 // groundColor made of it: the share of this pixel that is a pool (flat and mirroring; terrain.js mireSheen)
-uniform vec3 uMirePool, uMirePeat;
+uniform vec3 uMirePool, uMirePeat, uMireIce;
+uniform vec3 uMeadowSeason[2];
 float groundMire = 0.0, groundPool = 0.0;
+// (wetlands round 2: 1 where the terrain itself calls groundColor, which takes the meadow's season in full; how glossy a
+// pool is, 1 open water .. matt ice)
+float groundSeasonK = 0.0, groundPoolGloss = 1.0;
 float poolN = 0.0, poolT = 0.0, poolK = 0.0; // (groundColor's, from the land's branch to its end)
 // what groundColor leaves for the wet look (weather.js applyWet): how porous the ground that shows is (the duff, the
 // moss, the meadow, the burn and the shore's soil soak the rain up, 1; the rock, the cliff and the scree half as
@@ -287,7 +318,7 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
       poolT = 0.77 - 0.2 * groundMire;
     }
     c = bA.x * groundShaded(0, mix(uGroundLit[0], uGroundSunny, sunny), s)
-      + bA.y * mossC + bA.z * groundShaded(2, uGroundLit[2], s) + bA.w * groundShaded(3, uGroundLit[3], s)
+      + bA.y * mossC + bA.z * groundShaded(2, uGroundLit[2], s) * mix(uMeadowSeason[1], uMeadowSeason[0], groundSeasonK) + bA.w * groundShaded(3, uGroundLit[3], s)
       + (bB.x * groundShaded(4, uGroundLit[4], s) + bB.y * groundShaded(5, uGroundLit[5], s) + bB.z * groundShaded(6, uGroundLit[6], s)) * groundRockTint + bB.w * groundShaded(7, uGroundLit[7], s);
     if (bC.x + bC.y > 0.0) c += (bC.x * groundShaded(8, uGroundLit[8] * cliffTone(p, px), s) + bC.y * groundShaded(9, uGroundLit[9] * screeTone(p, px), s)) * groundRockTint;
     if (bC.z + bC.w > 0.0) c += bC.z * groundShaded(10, uGroundLit[10], s) + bC.w * groundShaded(11, uGroundLit[11], s);
@@ -307,7 +338,18 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     float edge = max(0.02, px * 0.06);
     groundPool = smoothstep(poolT, poolT + edge, poolN) * poolK;
     c *= 1.0 - 0.3 * smoothstep(poolT - 0.07, poolT, poolN) * poolK * (1.0 - groundPool);
-    c = mix(c, uMirePool / max(uGroundTint, vec3(0.05)), groundPool);
+    // (wetlands round 2: frozen from freeze-up to ice-out, the lake's dates: pale matt ice with snow drifted on it in the
+    // winter, and as it goes out the slush, dark and wet, the melt opening first round the edges)
+    vec3 poolC = uMirePool;
+    if (uMireIce.x > 0.004 && groundPool > 0.0) {
+      float drift = smoothstep(0.62, 0.74, lookFbm(p / 1.1 + vec2(5.1, -3.3), 64u, 2) - 0.6 * max(poolN - poolT - 0.05, 0.0));
+      vec3 iceC = mix(vec3(0.3, 0.33, 0.36), vec3(0.72, 0.74, 0.78), uMireIce.z * drift);
+      float melt = min(1.0, 1.6 * uMireIce.y) * (1.0 - smoothstep(poolT + 0.02, poolT + 0.16, poolN));
+      iceC = mix(iceC, vec3(0.075, 0.08, 0.078), 0.9 * sqrt(uMireIce.y));
+      poolC = mix(poolC, iceC, uMireIce.x * (1.0 - melt));
+      groundPoolGloss = 1.0 - uMireIce.x * (1.0 - melt) * (0.9 - 0.6 * uMireIce.y);
+    }
+    c = mix(c, poolC / max(uGroundTint, vec3(0.05)), groundPool);
     groundPorosity = mix(groundPorosity, 0.0, groundPool);
   }
   return c * uGroundTint;
@@ -326,9 +368,9 @@ export function makeTerrainMaterial() {
       .replace('#include <project_vertex>', '#include <project_vertex>\n\tvSplatA = aSplatA; vSplatB = aSplatB; vSplatC = aSplatC; vFloor = aFloor; vLand = aLand;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n' + vary + '\n' + glslGround)
-      .replace('#include <color_fragment>', '\tfloat lookPx = length( fwidth( vLookWorld.xz ) );\n\tgroundRockTint = vec3( 1.0 ) + vLand.xyz; groundSphagnum = max( vLand.w, 0.0 ); groundMire = max( -vLand.w, 0.0 ) + 0.85 * smoothstep( 0.55, 0.95, vLand.w );\n\tdiffuseColor.rgb *= groundColor( vLookWorld.xz, vSplatA, vSplatB, vSplatC, vFloor, lookPx );')
+      .replace('#include <color_fragment>', '\tfloat lookPx = length( fwidth( vLookWorld.xz ) );\n\tgroundRockTint = vec3( 1.0 ) + vLand.xyz; groundSeasonK = 1.0; groundSphagnum = max( vLand.w, 0.0 ); groundMire = max( -vLand.w, 0.0 ) + 0.85 * smoothstep( 0.55, 0.95, vLand.w );\n\tdiffuseColor.rgb *= groundColor( vLookWorld.xz, vSplatA, vSplatB, vSplatC, vFloor, lookPx );')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) * ( 1.0 - groundPool ) ); normal = normalize( mix( normal, mat3( viewMatrix ) * vec3( 0.0, 1.0, 0.0 ), groundPool ) ); }')
-      .replace('#include <opaque_fragment>', mireSheen('groundPool * 0.9'));
+      .replace('#include <opaque_fragment>', mireSheen('groundPool * 0.9 * groundPoolGloss'));
     // rain: the soil darkens most, the rock half as much and shines a little more; less sheen under the canopy
     applyWet(shader, { porosity: 'groundPorosity', gloss: '( 0.3 + 0.4 * groundRock ) * ( 1.0 - 0.7 * groundCanopy ) * ( 1.0 - vFloor.z )' });
   };

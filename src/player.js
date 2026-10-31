@@ -260,13 +260,15 @@ export class Player {
     const w = this.world, M = this.mire || (this.mire = { k: 0, board: false, sink: 0, kind: 0, onTrail: false });
     if (!w.chAt) return M;
     const read = this._mireRead || (this._mireRead = (n, x, z) => w.chAt(n, x, z));
-    let want = mireAt(read, this.x, this.z), board = false;
+    // (wetlands round 2: the going by the season, land.js mireAt: a marsh firmer once its water has gone down, frozen firm;
+    // the puncheon stays where props.js laid it, by the ground's own softness)
+    let want = mireAt(read, this.x, this.z, this.season), board = false;
     const pts = trail && trail.def.trailPts;
     if (pts && pts.length) {
       let bi = 0, bd = Infinity;
       for (let i = 0; i < pts.length; i++) { const dx = pts[i][0] - this.x, dz = pts[i][1] - this.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; bi = i; } }
       const tm = trailMireAt(read, pts, bi);
-      if (trail.dist < 1.6) { want = tm; board = tm >= BOARDWALK && trail.dist < 0.75 && bi < pts.length - 1; }
+      if (trail.dist < 1.6) { board = tm >= BOARDWALK && trail.dist < 0.75 && bi < pts.length - 1; want = board ? tm : trailMireAt(read, pts, bi, 3, this.season); }
     }
     M.k += (want - M.k) * (1 - Math.exp(-dt * MIRE_WALK.ease));
     M.board = board; M.onTrail = !!trail && trail.dist < 1.6;

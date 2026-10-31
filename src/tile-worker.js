@@ -75,7 +75,7 @@ function instanceData(items, stride, rx, rz, sp = -1) {
 // that group of that bin is drawn with (vegetation.js makeVegetationMeshes), so the collision is always the drawn
 // shape whatever variant the bin picked.
 const COLLIDE_CELL = 16, ROCK_STRIDE_C = 15, TRUNK_META = 4;
-const NOT_TRUNKS = new Set([6, 7, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22]); // vegetation.js NOT_TRUNKS and the solids
+const NOT_TRUNKS = new Set([6, 7, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22, 24]); // vegetation.js NOT_TRUNKS and the solids
 // the solids and their geometry's reach from the origin over the ground at unit scale (rocks.js FOOT, vegetation.js
 // outcrop, log, stump; rocks.js screeBlock; the cliff module is reached by its own frame below)
 const SOLID_REACH = { 6: 1.7, 14: 3.75, 15: 1.1, 16: 2.0, 20: 1.0, 21: 0 };

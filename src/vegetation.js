@@ -553,6 +553,59 @@ function fern(rng) {
   return finish(null, cards, { ground: 0, reach: 0.5 });
 }
 
+// ---------- the leatherleaf mat (wetlands round 2) ----------------------------------------
+// The open bog's and the leatherleaf bog's (NWI SS3) shrub layer: not bushes but a knee-high (1–2 ft) mat of low
+// woody stems, close and even, of small leathery leaves held up toward the light, a bronzed olive green. Leatherleaf
+// keeps its leaves through the winter and they go a dull red-bronze from the fall to the spring (MAT_LEAF: the
+// material's uMatTurn); odd variants are Labrador tea (MAT_TEA), darker and bluer, a little rusty in the winter, with its
+// white flower heads in June
+// (MAT_FLOWER: shown by uMatBloom). A mat 2.2 m or so across, 0.45 m high at unit scale (placement.js scales it to
+// 0.35–0.6 m); no stems drawn, only cards, about thirty, and no shadow (it is near the ground and many).
+const MAT_LEAF = 0.42, MAT_TEA = 0.34, MAT_FLOWER = 0.15;
+function leatherleaf(rng, v) {
+  const cards = new CardBuilder(), tea = v % 2 === 1, R = 1.0 + rng() * 0.25, H = 0.45;
+  const cols = tea ? crownColors(0x587340, 0x2d4029, rng) : crownColors(0x7c8540, 0x434b2b, rng);
+  const C = V(0, H * 0.4, 0), nrm = skyward(away(C, R, H, R), C, 0.45);
+  const n = 26 + Math.floor(rng() * 5), a0 = rng() * 6.28, tops = [];
+  for (let i = 0; i < n; i++) {
+    // spread over the disc (the golden angle, out to its rim), highest in the middle and ragged at the edge
+    const r = R * Math.sqrt((i + 0.5) / n) * (0.85 + rng() * 0.25), a = a0 + i * 2.39996 + SPREAD(rng) * 0.3;
+    const h = H * (0.62 + 0.38 * (1 - (r / R) ** 2)) * (0.8 + rng() * 0.35);
+    const p = V(Math.cos(a) * r, h * 0.7, Math.sin(a) * r), out = V(Math.cos(a) * 0.45, 1, Math.sin(a) * 0.45).normalize();
+    leafy(cards, 'leaf', p, out, 0.56 + rng() * 0.18, nrm, shade(cols, 0, H, rng, 0.3), rng, rng() < 0.55);
+    tops.push(V(p.x, h, p.z));
+  }
+  if (tea) {
+    // the flower heads: small white domes on the tallest shoots
+    tops.sort((p, q) => q.y - p.y);
+    const white = new THREE.Color(0xf2efe2);
+    for (let i = 0; i < 6; i++) {
+      const t = tops[i * 2 % tops.length];
+      leafy(cards, 'leafRound', V(t.x, t.y + 0.04, t.z), V(SPREAD(rng) * 0.3, 1, SPREAD(rng) * 0.3).normalize(), 0.17 + rng() * 0.05, nrm, white, rng, true);
+    }
+  }
+  return finish(null, cards, { ground: 0, reach: 0.4 });
+}
+// Its far twin: one flattened lump of its colour (it is culled at a few hundred metres; the bog's ground carries it on)
+function lowMat(rng, v) {
+  const g = new GeoBuilder(), base = v % 2 === 1 ? 0x506a3f : 0x7f7c42;
+  g.blob(0, 0.22, 0, 0.85, vary(base, rng, 0.06), rng, 0.35, 1.0, 0.3, 1.0);
+  return g.build();
+}
+// Its leaves turn without falling (MAT_LEAF) and its flowers come and go (MAT_FLOWER), as the tags say (the bake has
+// darkened the cards inside the mat, so the flowers are told by their whiteness, not their brightness)
+function tagMat(geo, v) {
+  const leaf = v % 2 === 1 ? MAT_TEA : MAT_LEAF;
+  const col = geo.getAttribute('color'), tag = new Float32Array(col.count), c = new THREE.Color(), hsl = { h: 0, s: 0, l: 0 };
+  for (let i = 0; i < col.count; i++) {
+    c.setRGB(col.getX(i), col.getY(i), col.getZ(i)).getHSL(hsl);
+    const hi = Math.max(c.r, c.g, c.b), lo = Math.min(c.r, c.g, c.b);
+    tag[i] = hi > 0.2 && lo > 0.7 * hi ? MAT_FLOWER : hsl.s > 0.12 && hsl.h > 0.08 && hsl.h < 0.47 ? leaf : 0;
+  }
+  geo.setAttribute('aLeaf', new THREE.BufferAttribute(tag, 1));
+  return geo;
+}
+
 // ---------- the regrowth after a burn (the burns pass, 2026-10-26) ---------------------
 // What comes up first and thickest after a fire (burns.js, placement.js: a thicket of it in a burn of 3 to 12 years):
 // even variants are aspen suckers, pale whips with round leaves bunched up them, from the roots of the aspen the fire
@@ -797,6 +850,7 @@ const LOW = {
   blackSpruce: (rng, I) => farTwin(I, 'farBlackSpruce', rng),
   talus: (rng) => farRock(rng, { scree: true }), // round A-C: likewise (the near block was 76)
   cliff: (rng, v) => cliffModuleFar(rng, v), // d2 land: the slabs' and the domes' far twins their own
+  leatherleaf: (rng, I, v) => lowMat(rng, v),
 };
 
 // index order must match placement.js SPECIES. `leaves`: deciduous, with an autumn colour (linear rgb).
@@ -844,6 +898,8 @@ export const SPECIES = [
   // variants three apart, so one of each), small and near only like the understory; the jack pine's needles stay on
   { name: 'regrowth', make: regrowth, leaves: [0.92, 0.7, 0.14], evergreen: (v) => v % 2 === 1, variants: 6, lod: 260, cull: 520 },
   { name: 'ash', guestOf: 3, roles: true }, // d2 land: the black ash, a guest in the birch's bins
+  // wetlands round 2: the bog's leatherleaf and Labrador tea mat, small and many: near only, no shadows (mat: tagMat)
+  { name: 'leatherleaf', make: leatherleaf, leaves: [0.6, 0.25, 0.1], mat: true, variants: 6, lod: 150, cull: 340, shadow: false },
 ];
 // d2 land: a host's guests (the birch holds the aspen and the black ash)
 const guestsOf = (S) => S.guests || (S.guest ? [S.guest] : []);
@@ -858,7 +914,7 @@ const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
 // The understory is walked through, and the fallen logs, stumps and outcrops are held off by their own
 // footprints (props.js reads them from the meshes; a carried canoe rides over a stump as over a boulder), so
 // none of them are trunks for the collision in tiles.js.
-const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22]);
+const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22, 24]);
 const NORMS = [...Array(TREE_VARIANTS).keys()].filter((v) => ROLES[v % ROLES.length] === 'norm');
 // A bin's variant groups are drawn apart while the camera is within NEAR_GROUPS metres of the bin's region
 // (its nearest edge, not its centre, so the region underfoot always is); further out one mesh draws them all.
@@ -954,6 +1010,7 @@ const SWAY_BY = {
   alder: [0.09, 0.065, 0.65, 3.0, 2.6],
   sapling: [0.07, 0.025, 0.8, 2.6, 2.6],
   fern: [0.15, 0.06, 1.0, 2.8, 1.0],
+  leatherleaf: [0.05, 0.04, 1.0, 3.2, 0.5],
 };
 const swayUniforms = (name) => {
   const s = SWAY_BY[name] || [0, 0, 0.3, 1, 10];
@@ -1086,22 +1143,22 @@ const SCORCH_FRAG = `
 
 // `species` names the sway (SWAY_BY): one material per species, all sharing one program
 function makeCardMaterial(autumn, species = null) {
-  const u = autumn ? { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) } } : {};
+  const u = autumn ? { uFall: { value: 0 }, uSpring: { value: 0 }, uLeafOn: { value: 1 }, uAutumn: { value: new THREE.Vector3(autumn[0], autumn[1], autumn[2]) }, uMatTurn: { value: 0 }, uMatBloom: { value: 0 } } : {};
   const sw = swayUniforms(species);
   const m = makeLookMaterial({ side: THREE.DoubleSide, alphaToCoverage: true }, {
     wrap: 'varying', name: autumn ? 'look-cards-leaves' : 'look-cards',
     compile: (shader) => {
       Object.assign(shader.uniforms, CARD, u, SWAY, sw);
-      let vs = shader.vertexShader.replace('#include <common>', '#include <common>\n' + cardPars + '\nattribute float aOcc;\nvarying float vCardOpen;\nvarying vec2 vScorch;' + (autumn ? '\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring;\nuniform vec3 uAutumn;' : ''))
+      let vs = shader.vertexShader.replace('#include <common>', '#include <common>\n' + cardPars + '\nattribute float aOcc;\nvarying float vCardOpen;\nvarying vec2 vScorch;' + (autumn ? '\nattribute float aLeaf;\nvarying float vLeaf;\nuniform float uFall, uSpring, uMatTurn;\nuniform vec3 uAutumn;' : ''))
         .replace('#include <begin_vertex>', cardBegin('cameraPosition') + '\n  vCardOpen = aOcc;');
-      if (autumn) vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }');
+      if (autumn) vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n vLeaf = aLeaf;\n if (aLeaf > 0.5) { float lum = dot(vColor.rgb, vec3(0.3, 0.5, 0.2)); vColor.rgb = mix(vColor.rgb, uAutumn * (0.5 + 1.2 * lum), uFall); vColor.rgb = mix(vColor.rgb, vColor.rgb * vec3(1.05, 1.12, 0.72), uSpring); }\n else if (aLeaf > 0.3) vColor.rgb = mix(vColor.rgb, vec3(dot(vColor.rgb, vec3(0.3, 0.5, 0.2))) * vec3(1.6, 0.76, 0.56), uMatTurn * smoothstep(0.32, 0.42, aLeaf));');
       vs = vs.replace('#include <color_vertex>', '#include <color_vertex>\n' + SCORCH); // (before the autumn's turn: it reads the true colour)
       shader.vertexShader = vs;
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\nuniform float uCardCover;\nvarying vec2 vScorch;\n' + cardVarying + (autumn ? '\nvarying float vLeaf;\nuniform float uLeafOn;' : ''))
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uCardMap;\nuniform vec4 uCardCut;\nuniform float uCardCover;\nvarying vec2 vScorch;\n' + cardVarying + (autumn ? '\nvarying float vLeaf;\nuniform float uLeafOn, uMatBloom;' : ''))
         .replace('#include <color_fragment>', '#include <color_fragment>\n' + SCORCH_FRAG)
         .replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n' + glowPars)
-        .replace('#include <map_fragment>', '#include <map_fragment>\n' + cardCut + (autumn ? '\n  if (vLeaf > 0.5 && uLeafOn < 0.5) discard;' : '') + '\n  if ( vCardUv.x >= 0.0 ) diffuseColor.rgb *= cardTex.rgb;\n  #ifdef ALPHA_TO_COVERAGE\n    diffuseColor.a = cardCover;\n  #endif' + glowAt)
+        .replace('#include <map_fragment>', '#include <map_fragment>\n' + cardCut + (autumn ? '\n  if (vLeaf > 0.5 && uLeafOn < 0.5) discard;\n  if (vLeaf > 0.1 && vLeaf < 0.3 && uMatBloom < 0.5) discard;' : '') + '\n  if ( vCardUv.x >= 0.0 ) diffuseColor.rgb *= cardTex.rgb;\n  #ifdef ALPHA_TO_COVERAGE\n    diffuseColor.a = cardCover;\n  #endif' + glowAt)
         .replace('#include <normal_fragment_begin>', noFlip);
       // rain (weather.js): bark soaks it up and darkens (porosity 1), the leaves and needles shed it (0.3) and take
       // a faint sheen
@@ -1158,8 +1215,9 @@ export function makeVegetationKit(seed = 3) {
     const rs = seed * 131 + v * 17 + s.name.length;
     if (s.rock) return { full: s.make(mulberry32(rs), v), low: LOW[s.name](mulberry32(rs), v) };
     const full = solid(s.make(mulberry32(rs), v));
-    const low = solid(LOW[s.name](mulberry32(rs + 7), crownInfo(full)));
-    if (s.leaves) { const ev = !!(s.evergreen && s.evergreen(v)); tagLeaves(full, ev); tagLeaves(low, ev); }
+    const low = solid(LOW[s.name](mulberry32(rs + 7), crownInfo(full), v));
+    if (s.mat) { tagMat(full, v); tagMat(low, v); }
+    else if (s.leaves) { const ev = !!(s.evergreen && s.evergreen(v)); tagLeaves(full, ev); tagLeaves(low, ev); }
     if (s.fit) for (const geo of [full, low]) fitGuest(geo, s.fit);
     return { full, low };
   };
@@ -1180,6 +1238,11 @@ export function makeVegetationKit(seed = 3) {
       if (!m) return;
       const s = SPECIES[sp].season === 'tamarack' ? tamarackSeason(season) : season;
       m.userData.u.uFall.value = s.fall; m.userData.u.uSpring.value = s.spring; m.userData.u.uLeafOn.value = s.leafOn;
+      // (wetlands round 2: the leatherleaf's leaves red-bronze from the fall to the new growth, the Labrador tea in
+      // flower through June; only the mat's tagged cards read them)
+      const d = season.doy;
+      m.userData.u.uMatTurn.value = 0.78 * Math.max(smoothstep(256, 286, d), d < 200 ? 1 - smoothstep(136, 166, d) : 0);
+      m.userData.u.uMatBloom.value = smoothstep(150, 156, d) * (1 - smoothstep(186, 192, d));
     });
   };
   const ms = performance.now() - t0;
