@@ -29,6 +29,79 @@ const TINT_LOW = [234, 226, 202], TINT_HIGH = [206, 204, 168];
 // the soundings, in feet (the outfitters' maps letter depths in feet): every 5 to 30, every 10 to 100, every 20 beyond
 export const DEPTH_FT = (() => { const a = []; for (let f = 5; f <= 30; f += 5) a.push(f); for (let f = 40; f <= 100; f += 10) a.push(f); for (let f = 120; f <= 400; f += 20) a.push(f); return a; })();
 
+// --- the zoom's levels of detail -----------------------------------------------------------------------------------------
+// (the owner, 2026-10-31: "I also don't like the way the map gets super messy as I zoom all the way out ... especially the
+// burn areas and BWCA boundaries, they kind of turn into these craggly blobs. It should have different zoom levels that
+// make things a little bit more legible on full zoom out.") A paper map series generalises its overview sheets, and so
+// does this one, by dp, the metres a design pixel (mPerPx / k: the sheet taken as 1040 across, so a retina screen
+// generalises just as a plain one does; the book's sheet at full zoom out is about 230):
+//   under LOD_NEAR   the sheet as it always was (everything up close is untouched)
+//   level 1          (32..64) the burns' and the boundary's rings simplified (Douglas-Peucker, TOL_DP design pixels) and
+//                    those too small to read dropped, the hatching fading, the lines a little thinner, the ponds' rims
+//                    (under TINY_LAKE) fading out
+//   level 2 and up   (64.., 128..) each kind of burn drawn as one generalised area: its patches rasterised at the level's
+//                    cell, blurred and cut at a density, so the 1999 blowdown's thousand specks read as one tinted
+//                    country with a clean edge, no hatching and no dashes; the boundary simplified harder, its band
+//                    narrower; the small lakes' rims (under SMALL_LAKE) fading out, their water left as a pale fleck
+// Each level's shapes are made once and kept (simplifying every frame would be the hitch the vector sheet was to end).
+export const LOD_NEAR = 32, LOD_LEVELS = 3;
+const TOL_DP = 1.6, RING_MIN_DP = 3; // the simplification's tolerance, and the smallest ring kept (its side), in design px
+export const TINY_LAKE = 60000, SMALL_LAKE = 300000; // m²: a pond (about 250 m across), a small lake (about 550 m)
+const ramp = (x, a, b) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// { dp, level, cell (the level's metres a design px at its near end), tol (m), gen (0 up close .. 1 at the overview) }
+export function lodOf(mPerPx, k = 1) {
+  const dp = mPerPx / (k || 1), level = dp < LOD_NEAR ? 0 : Math.min(LOD_LEVELS, 1 + Math.floor(Math.log2(dp / LOD_NEAR)));
+  const cell = level ? LOD_NEAR * 2 ** (level - 1) : 0;
+  return { dp, level, cell, tol: cell * TOL_DP, gen: ramp(dp, LOD_NEAR, LOD_NEAR * 4) };
+}
+// how much of a lake's rim is left at this zoom, by its size class (far tiles' shoreSmall / shoreTiny)
+export const rimLeft = (dp, small) => (small ? 1 - ramp(dp, LOD_NEAR * 2, LOD_NEAR * 4) : 1 - ramp(dp, LOD_NEAR, LOD_NEAR * 2));
+const segD2 = (px, pz, ax, az, bx, bz) => {
+  const dx = bx - ax, dz = bz - az, L = dx * dx + dz * dz;
+  const t = L ? Math.min(1, Math.max(0, ((px - ax) * dx + (pz - az) * dz) / L)) : 0, ex = ax + dx * t - px, ez = az + dz * t - pz;
+  return ex * ex + ez * ez;
+};
+// a closed ring (flat [x, z, ...]) simplified to within tol metres (Douglas-Peucker, split at the point furthest from the
+// first so the ring's two halves go separately)
+export function simplifyRing(pts, tol) {
+  const n = pts.length >> 1;
+  if (n < 5) return pts;
+  let far = 0, fd = -1;
+  for (let i = 1; i < n; i++) { const d = (pts[2 * i] - pts[0]) ** 2 + (pts[2 * i + 1] - pts[1]) ** 2; if (d > fd) { fd = d; far = i; } }
+  const keep = new Uint8Array(n), t2 = tol * tol, st = [0, far, far, n];
+  keep[0] = 1; keep[far] = 1;
+  while (st.length) {
+    const b = st.pop(), a = st.pop();
+    if (b - a < 2) continue;
+    const bi = b % n, ax = pts[2 * a], az = pts[2 * a + 1], bx = pts[2 * bi], bz = pts[2 * bi + 1];
+    let m = -1, md = t2;
+    for (let i = a + 1; i < b; i++) { const d = segD2(pts[2 * i], pts[2 * i + 1], ax, az, bx, bz); if (d > md) { md = d; m = i; } }
+    if (m > 0) { keep[m] = 1; st.push(a, m, m, b); }
+  }
+  const out = [];
+  for (let i = 0; i < n; i++) if (keep[i]) out.push(pts[2 * i], pts[2 * i + 1]);
+  return out;
+}
+export function ringArea(pts) {
+  let s = 0;
+  for (let n = pts.length >> 1, i = 0, j = n - 1; i < n; j = i++) s += (pts[2 * j] + pts[2 * i]) * (pts[2 * i + 1] - pts[2 * j + 1]);
+  return Math.abs(s) / 2;
+}
+// rings simplified for a level into one Path2D (null when none is big enough to keep)
+function genPath(rings, lod) {
+  const minA = (RING_MIN_DP * lod.cell) ** 2;
+  let p = null;
+  for (const pts of rings) {
+    if (ringArea(pts) < minA) continue;
+    const q = simplifyRing(pts, lod.tol);
+    if (q.length < 6) continue;
+    p = p || new Path2D();
+    for (let i = 0; i < q.length; i += 2) { if (i) p.lineTo(q[i], q[i + 1]); else p.moveTo(q[i], q[i + 1]); }
+    p.closePath();
+  }
+  return p;
+}
+
 // --- marching squares, chained into rings ------------------------------------------------------------------------------
 // F: ni x nj samples, sample (i, j) at (ox + i * step, oz + j * step). Outside the grid counts as above the level (pad
 // true) or below it. Every iso-line closes (along the padding when it leaves the grid), so the rings fill even-odd; the
@@ -43,8 +116,9 @@ export function padGrid(F, ni, nj) {
   return { P, W, H, lo, hi };
 }
 // path gets the closed rings (to fill), line (when given) the same lines without the stretches along the padding (to
-// stroke: a thick pen on the padding's line showed past the tile's edge)
-export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats = null, smooth = 0, line = null) {
+// stroke: a thick pen on the padding's line showed past the tile's edge). bins ([{ max, path }], smallest first): a whole
+// ring (one off the padding) under max m² goes to that bin's path instead of line, so the overview can let it fade (lodOf)
+export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats = null, smooth = 0, line = null, bins = null) {
   const { P, W, H } = G, NE = W * H * 2;
   if (scratch.n < NE) scratch = { n: NE, link: new Int32Array(NE * 2), seen: new Uint8Array(NE) };
   const link = scratch.link, seen = scratch.seen;
@@ -108,13 +182,20 @@ export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats
       for (let q = 0; q < L; q++) if (!es[q]) { s0 = q; break; }
       if (s0 >= 0) {
         const whole = !es.includes(1);
+        let to = line;
+        if (whole && bins) {
+          let A = 0;
+          for (let q = 0, r = L - 1; q < L; r = q++) A += (xs[r] + xs[q]) * (zs[q] - zs[r]);
+          A = Math.abs(A) / 2;
+          for (const bn of bins) if (A < bn.max) { to = bn.path; break; }
+        }
         let open = false;
         for (let c = 0; c <= L; c++) {
           const q = (s0 + c) % L;
           if (es[q]) { open = false; continue; }
-          if (!open) { line.moveTo(xs[q], zs[q]); open = true; } else line.lineTo(xs[q], zs[q]);
+          if (!open) { to.moveTo(xs[q], zs[q]); open = true; } else to.lineTo(xs[q], zs[q]);
         }
-        if (whole) line.closePath();
+        if (whole) to.closePath();
       }
     }
     n += L; rings++;
@@ -136,8 +217,13 @@ export function buildTile(world, slot, { fine = true, ink = null, ox = 0, oz = 0
   let wet = false;
   for (let j = 0; j < ni; j++) for (let i = 0; i < ni; i++) { const k = at(i, j), s = slot.sd[k]; F[j * ni + i] = s; if (s < 0) { wet = true; const id = slot.lake[k]; if (id) ids.add(id); } }
   const o = -0.5 * cell; // sample (i, j) is the middle of cell (i - 1, j - 1) of the tile
-  const out = { fine, ids, water: null, shore: null, ink: null, inkLine: null, inkV: -1, contours: null, index: null, sound: [], labels: [], tint: null, ms: 0, n: 0 };
-  if (wet) { out.shore = new Path2D(); out.water = isoRings(padGrid(F, ni, ni), 0, true, o, o, cell, new Path2D(), stats, 0, out.shore).path; }
+  const out = { fine, ids, water: null, shore: null, shoreSmall: null, shoreTiny: null, ink: null, inkLine: null, inkV: -1, contours: null, index: null, sound: [], labels: [], tint: null, ms: 0, n: 0 };
+  if (wet) {
+    out.shore = new Path2D();
+    // the far field's ponds and small lakes have rims of their own, which the overview lets fade (paintTile: rimLeft)
+    const bins = fine ? null : [{ max: TINY_LAKE, path: (out.shoreTiny = new Path2D()) }, { max: SMALL_LAKE, path: (out.shoreSmall = new Path2D()) }];
+    out.water = isoRings(padGrid(F, ni, ni), 0, true, o, o, cell, new Path2D(), stats, 0, out.shore, bins).path;
+  }
   if (ink) traceInk(out, slot, F, ni, at, o, cell, ink);
   // the relief tint: a small soft image (it has no edges to blur)
   const tp = fine ? 64 : 128, per = T / tp, c = document.createElement('canvas'); c.width = c.height = tp;
@@ -243,7 +329,15 @@ export function paintTile(ctx, v, ox, oz, size, geo, { k = 1, depths = true, con
         ctx.strokeStyle = q.index ? INK.soundIndex : INK.sound; ctx.lineWidth = (q.index ? 1.25 : 0.8) * k * px; ctx.stroke(q.path);
       }
     }
-    if (geo.shore) { ctx.strokeStyle = INK.shore; ctx.lineWidth = (v.mPerPx < 6 ? 1.35 : 1.05) * k * px; ctx.stroke(geo.shore); }
+    if (geo.shore) {
+      // (the overview: the rims a touch finer, and the ponds' and small lakes' let go, their water a pale fleck: lodOf)
+      const dp = v.mPerPx / k, lw = (v.mPerPx < 6 ? 1.35 : 1.05) * k * px * (1 - 0.25 * ramp(dp, LOD_NEAR, LOD_NEAR * 4));
+      ctx.strokeStyle = INK.shore; ctx.lineWidth = lw; ctx.stroke(geo.shore);
+      for (const [p, small] of [[geo.shoreSmall, true], [geo.shoreTiny, false]]) {
+        const a = p ? rimLeft(dp, small) : 0;
+        if (a > 0.02) { ctx.globalAlpha = a; ctx.stroke(p); ctx.globalAlpha = 1; }
+      }
+    }
     if (geo.inkLine) { ctx.strokeStyle = INK.inkShore; ctx.lineWidth = 1.5 * k * px; ctx.stroke(geo.inkLine); }
   }
   ctx.restore();
