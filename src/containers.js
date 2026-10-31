@@ -22,7 +22,7 @@
 //   - the dry pack (stream C's 'packdry': a roll-top portage pack), and the long things by kind: the paddles in their
 //     woods (or carbon), the rods in their blanks, a setting pole as a pole
 import * as THREE from 'three';
-import { buildPackGeometry, PACKS, floorAt } from './hull.js';
+import { buildPackGeometry, PACKS, floorAt, sheerY } from './hull.js';
 import { Mesher, ringPts, loft } from './loft.js';
 import { paddleMesher, PADDLE_COLORS } from './gear.js';
 import * as gearKit from './gear.js';
@@ -176,6 +176,9 @@ const BILGE = [[-0.98, 0.13], [-0.98, -0.13]];
 // swings (radians); bounce: its spring (1/s²), damping, how much of the fist's jolt it takes and the most it moves (m).
 // A long thing (the rod, a paddle) or a tool held by its handle turns with the forearm instead (tilt: of the forearm's
 // swing ahead, how much the thing's pitch follows).
+// the bungee dilly bobs (packs.js lashed; the owner, 2026-10-31): under the canoe the paddles and the rods ride lashed up
+// under the thwarts, fore and aft along the hull a little to either side of the keel (hull frame: y under the sheer)
+const LASH = { y: -0.075, z: [0.15, -0.15, 0.24, -0.24], rodX: -0.9, padX: -0.8 };
 const SWING = { w2: 30, c: 3.2, max: 0.55, bounce: { k: 260, c: 9, gain: 0.5, max: 0.035 }, tilt: 0.7 };
 const hashOf = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return ((h >>> 0) % 10000) / 10000; };
 
@@ -311,6 +314,14 @@ export class ContainerView {
     const pad = inv.long.find((l) => l.inUse);
     if ((mode === 'walk' || mode === 'carry') && pad && pad.where !== 'canoe') cn.paddle.visible = false;
     else if (mode === 'walk' || mode === 'carry') cn.paddle.visible = true;
+    // overhead with the dilly bobs, it is lashed under the thwarts (LASH); back on the ground, stowed in the bilge again
+    // (canoe.js stowPaddle's place)
+    let lashN = 0;
+    const lashAt = () => LASH.z[Math.min(LASH.z.length - 1, lashN++)];
+    if (cn.paddle.parent === cn.hull) {
+      if (overhead && cn.paddle.visible) { cn.paddle.position.set(LASH.padX + 0.05, sheerY(0) + LASH.y, lashAt()); cn.paddle.userData.lashed = true; }
+      else if (cn.paddle.userData.lashed) { cn.paddle.position.set(-1.08, floorAt(0) + 0.055, 0.22); cn.paddle.userData.lashed = false; }
+    }
     // the hull's places, filled in order
     const flat = [...FLAT], stand = [...STAND], small = [...SMALL];
     const stack = new Map();
@@ -345,10 +356,16 @@ export class ContainerView {
       if (l.where !== 'canoe' || l.inUse) continue;
       const o = this.objFor(l.uid, l.id); if (!o) continue;
       seen.add(l.uid);
-      if (overhead || (rodUp && isRod(l.id))) { o.visible = false; continue; }
+      if ((overhead && !this.player.gear?.dilly) || (rodUp && isRod(l.id))) { o.visible = false; continue; }
       if (o.parent !== cn.hull) cn.hull.add(o);
       o.visible = true;
       const mk = o.userData.mesh;
+      if (overhead) { // lashed under the thwarts (LASH)
+        const z = lashAt(), y = sheerY(0) + LASH.y;
+        if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2)); o.position.set(mk === 'setpole' ? -1.6 : LASH.rodX, y, z); }
+        else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(LASH.padX, y, z); }
+        continue;
+      }
       if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2 + 0.03)); o.position.set(mk === 'setpole' ? -1.7 : -1.25, floorAt(0) + 0.07, -0.24 + 0.07 * portRod++); }
       // (content D: a right-handed basis, as hull.js's spare: the left-handed one it had stood the paddle across the hull)
       else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(-1.0 + 0.1 * starPad, floorAt(0) + 0.05 + 0.015 * starPad, 0.2 - 0.06 * starPad++); }

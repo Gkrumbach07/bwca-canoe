@@ -627,6 +627,10 @@ function drawCopperSpoon(c) {
   dots(c, 'rgba(255,220,180,.6)', [[22, 30], [28, 46], [21, 60], [27, 74]], 3);
 }
 function drawTump(c) { ell(c, 45, 30, 34, 18); stroke(c, 8, PAL.leather); ell(c, 45, 30, 34, 18); stroke(c, 2); rr(c, 32, 6, 26, 14, 4); fill(c, '#7a5030'); stroke(c, 1.6); }
+// two bungee loops, each with its wooden toggle (the dilly bobs)
+function drawDillyBobs(c) {
+  for (const [x, col] of [[8, '#2f5f8a'], [46, '#2a2a28']]) { c.beginPath(); c.ellipse(x + 18, 34, 16, 26, 0, 0, Math.PI * 2); stroke(c, 3.2, col); rr(c, x + 10, 54, 16, 9, 4); fill(c, '#b08a5a'); stroke(c, 1.3); }
+}
 function drawLeaders(c) { rr(c, 10, 6, 50, 80, 3); fill(c, PAL.cream); stroke(c); for (let y = 16; y < 80; y += 10) { shape(c, [16, y, 54, y]); stroke(c, 1.4, PAL.steel); } }
 function drawKneelers(c) { for (const x of [8, 56]) { rr(c, x, 10, 44, 34, 12); fill(c, '#e8dfca'); stroke(c); const r = rng(x); for (let i = 0; i < 10; i++) dots(c, '#cfc3a6', [[x + 6 + r() * 32, 16 + r() * 22]], 2); } }
 function drawBagSack(c, col, band) {
@@ -723,7 +727,7 @@ const ICONS = {
   pot: [100, 96, drawPot], tarp: [100, 100, drawTarp], crate: [100, 100, drawCrate], pile: [100, 100, drawCrate], stringer: [60, 104, drawStringer], yoke: [110, 52, drawYokePads],
   map: [100, 102, drawMap], berries: [80, 80, drawBerries], blueberries: [80, 80, drawBerries], mushroom: [80, 80, drawMushroom], firewood: [112, 54, drawFirewood],
   cedaryoke: [150, 52, drawCedarYoke], net: [80, 120, drawNet], blanket: [100, 90, drawBlanket], jacket: [100, 80, drawJacket], sail: [50, 110, drawSail], cover: [100, 90, drawCover],
-  pole: [176, 42, drawPole], copperspoon: [50, 100, drawCopperSpoon], tump: [90, 60, drawTump], leaders: [70, 92, drawLeaders], kneelers: [110, 54, drawKneelers],
+  dillybobs: [90, 70, drawDillyBobs], pole: [176, 42, drawPole], copperspoon: [50, 100, drawCopperSpoon], tump: [90, 60, drawTump], leaders: [70, 92, drawLeaders], kneelers: [110, 54, drawKneelers],
   'nb:fire': [100, 92, drawFireRing], 'nb:tent': [100, 92, drawTentUp], 'nb:latrine': [100, 92, drawLatrine], 'nb:hangTree': [100, 100, drawHangTree], 'nb:barrelHung': [100, 100, drawHangTree],
   'nb:water': [100, 92, drawWater], 'nb:downLog': [100, 92, drawDownLog], 'nb:canoe': [170, 50, (c) => drawCanoe(c, '#b9c0c4', '#7d868c')],
 };
@@ -2220,7 +2224,7 @@ export class MineSide {
   canoeActs(canoe, longCanoe) {
     const pk = packsOf(), p = ctx.player, d = p && p.carry && p.carry.drop, sc = this.owner, row = mk('div', 'nb-acts canoe-acts');
     const loadable = pk && d && typeof pk.loadables === 'function' ? pk.loadables(d).filter((u) => !(typeof pk.autoLoads === 'function' && pk.autoLoads(u))) : [];
-    const out = canoe.filter((c) => c.where === 'canoe').length + longCanoe.filter((l) => !l.inUse && l.id !== 'stringer').length;
+    const out = pk && typeof pk.loadedUnits === 'function' ? pk.loadedUnits().length : canoe.filter((c) => c.where === 'canoe').length + longCanoe.filter((l) => !l.inUse && l.id !== 'stringer').length; // (packs.js: all but what is lashed; without dilly bobs the paddle comes out too)
     const o = { id: 'canoe' };
     row.appendChild(actButton(sc, o, { id: 'setout', label: 'Set everything out', enabled: out > 0, why: 'nothing in the canoe to set out', run: () => setOutAll() }));
     row.appendChild(actButton(sc, o, { id: 'load', label: 'Load everything here', held: true, job: 'load', enabled: loadable.length > 0, why: 'nothing lies about to load', run: (opts) => loadAll(d, loadable, opts) }));
