@@ -941,12 +941,13 @@ export class Fishing {
     const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.catchLake(L), L.length) : null; // hubs 1C: a notice taken on wants it
     const inv = this.inventory, free = inv && inv.attached && typeof inv.freeHand === 'function' ? inv.freeHand() >= 0 : true;
     // (the content join: both hands full and nothing with room said "Keep it, into a pack", and E then let it go)
-    if (!want && !free && inv && inv.attached && typeof inv.firstFit === 'function' && !(L.roomAt > L.t - 0.5)) {
+    if (!free && inv && inv.attached && typeof inv.firstFit === 'function' && !(L.roomAt > L.t - 0.5)) {
       const id = `fish:${L.species}`, d = itemDef(id); L.roomAt = L.t;
       L.room = inv.reachable().some((c) => !['stringer', 'crate', 'pile', 'inhand'].includes(c.item) && (typeof inv.accepts !== 'function' || inv.accepts(c, d)) && !!inv.firstFit(c.id, id));
     }
-    if (!want && !free && L.room === false) { p.prompt = { key: 'Q', text: 'Let it go · no room on you to keep it' }; return; }
-    p.prompt = { key: 'E', text: `${want ? `Keep it for “${esc(want.title)}”` : free ? 'Keep it, in your hand' : 'Keep it, into a pack'} · <kbd>Q</kbd> Let it go` }; // fb3 B: to the hand
+    if (!free && L.room === false) { p.prompt = { key: 'Q', text: 'Let it go · no room on you to keep it' }; return; }
+    // (a notice that wants it: kept like any other, and handed over at that notice's board: tasks.js handIn)
+    p.prompt = { key: 'E', text: `${free ? 'Keep it, in your hand' : 'Keep it, into a pack'}${want ? ` · wanted for “${esc(want.title)}”` : ''} · <kbd>Q</kbd> Let it go` }; // fb3 B: to the hand
   }
 
   release(keep) {
@@ -958,12 +959,13 @@ export class Fishing {
     if (mesh) { this.canoe.paddler.remove(mesh); this.scene.add(mesh); mesh.visible = false; mesh.scale.setScalar(1); }
     if (L) {
       L.entry.kept = keep; this.logVersion++; this.saveLog();
-      const cooler = this.tasks ? this.tasks.onCatch(L.species, this.catchLake(L), L.length, keep) : null; // hubs 1C: a notice taken on wants it
-      if (keep && cooler) this.message = { text: cooler, t: 3 }; // into that notice's cooler, not the stringer
-      else if (keep) {
+      // hubs 1C: a notice taken on wants it. The owner (2026-10-31): the fish is no longer whisked into a cooler; it is
+      // kept like any other, the lake it came from written on it, and handed over at the notice's board (tasks.js handIn)
+      const lake = this.catchLake(L), wanted = this.tasks ? this.tasks.onCatch(L.species, lake, L.length, keep) : null;
+      if (keep) {
         // fb3 B (decision 1): the fish goes into your hand; with both hands full, into a pack or a barrel in reach (never
         // the stringer by itself: that is its "Put on the stringer" verb in the book); nothing with room, back it goes
-        const inv = this.inventory, id = `fish:${L.species}`, data = { length: Math.round(L.length) };
+        const inv = this.inventory, id = `fish:${L.species}`, data = { length: Math.round(L.length), ...(lake ? { lake } : {}) };
         let r = inv && inv.attached && typeof inv.toHandNew === 'function' ? inv.toHandNew(id, { data }) : { ok: false };
         if (r && r.ok) this.message = { text: 'Kept · in your hand', t: 2.2 };
         else if (inv && inv.attached && typeof inv.place === 'function') {
@@ -972,6 +974,7 @@ export class Fishing {
           const nm = (itemDef((inv.cont(r.cId) || {}).item) || {}).name || 'pack'; // (the content join: "the duluth pack #3": a name keeps its capital)
           if (r && r.ok) this.message = { text: `Kept · into the ${/^(Duluth|Johnson)/.test(nm) ? nm : nm.charAt(0).toLowerCase() + nm.slice(1)}`, t: 2.2 };
         }
+        if (r && r.ok && wanted) this.message = { text: `${this.message.text} · ${wanted}`, t: 4.5 };
         if (!(r && r.ok)) { L.entry.kept = false; this.saveLog(); this.message = { text: 'No room to keep it: you let it go.', t: 3 }; if (Number.isFinite(L.x) && this.world.shoreAt(L.x, L.z) < 0) this.splash(L.x, this.surfaceAt(L.x, L.z), L.z, 7, 0.7); }
       } else {
         // let go beside the hull, or back into the water it came from

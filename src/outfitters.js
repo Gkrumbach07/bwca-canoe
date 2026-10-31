@@ -16,7 +16,7 @@
 //     points, moose on a river at dawn, the carry that sorts people out. A hint's lake is the real one, and where it
 //     says the fish are thick this year, fishing.js's own abundance for that lake and species says so too;
 //   - the building's look (props.js, stream A): the stain, the roof and its kind, the trim, the door, a porch or not.
-// The signs keep the real business names (outfitter.js outfitterName); the keepers are made up.
+// The signs' names are invented, one per entry point (outfitter.js outfitterName), and so are the keepers.
 //
 //   outfitterProfile(ep, world) → { ep, name, place, lake, area, kind, kindWords, post, keeper: { name, manner,
 //     lines: { hello, goodbye, chat: [...] }, moments: { hello: [...], stranger: [...], …each moment }, hint(world,

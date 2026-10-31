@@ -1,7 +1,7 @@
 // Outfitters at the entry point landings: a name for each, the store you walk into, its shelves, the counter, the board,
 // the trip's old record (where you are, when it started) and its persistence. The outfitter is where a season starts
 // and where you come in: its shelves sell the food and the gear, its counter fills the bottle and offers the services.
-// There is no permit and no stamp (the world cards, 2026-10-24): the counter is the bunk, the rides and the claims, and
+// There is no permit and no stamp (the world cards, 2026-10-24): the counter is the bunk and the rides, and
 // the season is just the season. Sandbox's shelves are free. The board is the tasks' own (tasks.js boardSection), the shop
 // and what the gear does are shop.js's, the rides up the road rides.js's (set on outfitter.rides), the keepers' words
 // outfitters.js's (through the shop). The rules of the trip and its saved core live in trip.js, the money and the gear
@@ -20,12 +20,14 @@
 // round each whole shelf unit, so either side of one opens it), E opens the provisions, tackle or gear shelf, or the
 // lure wall, as two panes (inv-ui.js ShelfScreen: your containers on the left, the shelf on the right); the map table
 // opens its own screen (maptable.js, stream D: outfitter.mapTable); the counter opens the counter, which offers only a
-// bunk night, the rides up the road and the notices you've done to claim; the cork board opens
-// the board, and only the board. The keeper greets you, signed with the keeper's name, on the first visit of a day.
+// bunk night and the rides up the road, beside a side map of where the truck goes; the cork board opens the board,
+// and only the board, which also pays the notices you've done. The keeper greets you, signed with the keeper's name, on the first visit of a day.
 // Without a store (its tile not built yet) E by the landing opens the counter from the water. A new season begins at
 // the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
 // store comes back on its floor (updateArrival).
-import { esc, plural } from './hud.js';
+import { esc, plural, word } from './hud.js';
+import { drawCounterMap, markerAt } from './counter-map.js';
+import './store.css';
 import { FOOD_PRICE } from './profile.js';
 import * as props from './props.js';
 import { SHELVES, itemOf } from './shop.js';
@@ -34,26 +36,27 @@ import { ShelfScreen, model as invModel } from './inv-ui.js';
 // without it, E in the store reads the same boxes along the view (aimAt)
 const POINTER = import.meta.glob('./pointer.js', { eager: true })['./pointer.js'] || null;
 
-// Real outfitters by entry area where they are well known (Ely and the Fernberg Road, the Echo Trail, the
-// Sawbill Trail, the Gunflint Trail); invented but plausible names elsewhere.
+// Every entry point's outfitter has its own sign: invented North Woods names, one per entry point and never a real
+// business's (the owner, 2026-10-31: "come up with random names that aren't actually linked to real ones. So then we
+// have a unique one for each"). Display only: everything is keyed by the entry point number, so saves are unaffected.
 const NAMES = {
-  30: 'Kawishiwi Lodge & Outfitters', 25: "LaTourell's Moose Lake Outfitters", 27: 'Piragis Northwoods Company',
-  24: 'Spirit of the Wilderness', 26: 'Voyageur North Outfitters', 29: 'Ely Outfitting Company', 31: 'Canoe Country Outfitters',
-  32: "Cliff Wold's Outfitting", 33: "Cliff Wold's Outfitting", 22: 'Piragis Northwoods Company', 20: 'Voyageur North Outfitters',
-  77: 'Voyageur North Outfitters', 4: 'Spirit of the Wilderness', 6: 'Spirit of the Wilderness', 7: 'Ely Outfitting Company',
-  1: 'Trout Lake Landing Outfitters', 8: 'Spirit of the Wilderness', 9: 'Voyageur North Outfitters', 14: 'Voyageur North Outfitters',
-  16: 'Spirit of the Wilderness', 19: 'Ely Outfitting Company', 80: 'Seagull Outfitters', 12: "Anderson's Canoe Outfitters",
-  34: 'Sawbill Canoe Outfitters', 35: 'Sawbill Canoe Outfitters', 36: 'Sawbill Canoe Outfitters', 37: 'Sawbill Canoe Outfitters',
-  38: 'Sawbill Canoe Outfitters', 39: 'Sawbill Canoe Outfitters', 67: 'Sawbill Canoe Outfitters', 75: 'Sawbill Canoe Outfitters',
-  84: 'Sawbill Canoe Outfitters', 40: 'Sawtooth Outfitters', 41: 'Sawtooth Outfitters',
-  43: 'Golden Eagle Lodge', 44: 'Golden Eagle Lodge', 45: 'Golden Eagle Lodge', 47: 'Rockwood Lodge & Outfitters',
-  48: 'Rockwood Lodge & Outfitters', 49: 'Rockwood Lodge & Outfitters', 50: 'Tuscarora Lodge & Canoe Outfitters',
-  51: 'Tuscarora Lodge & Canoe Outfitters', 52: 'Tuscarora Lodge & Canoe Outfitters', 54: 'Seagull Outfitters',
-  55: 'Voyageur Canoe Outfitters', 57: 'Gunflint Northwoods Outfitters', 58: 'Gunflint Northwoods Outfitters',
-  60: 'Hungry Jack Outfitters', 61: 'Hungry Jack Outfitters', 62: 'Clearwater Historic Lodge', 64: 'Bearskin Lodge',
-  66: 'Bearskin Lodge', 68: 'Arrowhead Trail Outfitters', 69: 'Arrowhead Trail Outfitters', 70: 'Arrowhead Trail Outfitters',
+  1: 'Cold Spring Canoe Co.', 4: 'Two Otters Outfitting', 6: 'Thimbleberry Outfitters', 7: 'Ironwood Canoe Livery',
+  8: 'Beaver Slide Outfitters', 9: 'Wild Rice Landing Post', 12: 'Grey Jay Outfitters', 14: 'Red Pine Canoe Base',
+  16: 'Cattail Creek Outfitters', 19: 'Cedar Knee Outfitting', 20: 'Fiddlehead Trading Post', 22: 'Black Spruce Outfitters',
+  24: 'Pickerel Point Outfitters', 25: 'Loon Narrows Outfitters', 26: 'Woodsmoke Outfitting', 27: 'Snowshoe Hare Outfitters',
+  29: 'Kingfisher Canoe Co.', 30: 'Birch Point Canoe Co.', 31: 'Hayfield Landing Outfitters', 32: 'Riverbend Portage House',
+  33: 'Bedrock Outfitters', 34: 'Islander Canoe Post', 35: 'Tamarack Bog Outfitters', 36: 'Muskrat Run Outfitters',
+  37: 'Headwaters Canoe Co.', 38: 'Saw-whet Owl Outfitters', 39: 'Lady Slipper Outfitters', 40: 'Blueberry Hill Outfitters',
+  41: 'High Bluff Canoe Co.', 43: 'Old Cabin Outfitters', 44: 'Juneberry Outfitters', 45: 'Lichen Ledge Outfitters',
+  47: 'Marsh Marigold Outfitters', 48: 'Stonefly Canoe Co.', 49: 'Long Carry Outfitting', 50: 'Crossed Paddles Outfitters',
+  51: 'Lost Chain Outfitters', 52: 'Snow Goose Canoe Co.', 54: 'Gull Rock Outfitters', 55: 'Far Shore Trading Post',
+  57: 'Lodestone Outfitters', 58: 'Height of Land Outfitters', 60: 'Bearberry Outfitters', 61: 'Spruce Hen Outfitting',
+  62: 'Glass Water Canoe Co.', 64: 'Cub Creek Outfitters', 66: 'Snapping Turtle Outfitters', 67: 'Pitcher Plant Outfitters',
+  68: 'Jack Pine Canoe Co.', 69: 'Old Mill Outfitters', 70: 'Mallard Point Outfitters', 75: 'Brook Trout Outfitters',
+  77: 'Painted Rock Outfitters', 80: 'Larchwood Canoe Post', 84: 'Switchback Outfitters',
 };
-export function outfitterName(ep) { return NAMES[ep.ep] || `${ep.name} Outfitters`; }
+// (an entry point not in the table, should a later release add one: its place's own name, unique as the places are)
+export function outfitterName(ep) { return NAMES[ep.ep] || `${ep.name} Canoe Post`; }
 // the road each stretch of entry points is reached by, for the counter's kicker
 const AREAS = [[1, 20, 'the Echo Trail'], [22, 33, 'the Fernberg Road'], [34, 39, 'the Sawbill Trail'], [40, 70, 'the Gunflint Trail'], [75, 84, 'the Sawbill Trail']];
 export function areaOf(ep) { const a = AREAS.find(([lo, hi]) => ep >= lo && ep <= hi); return a ? a[2] : ''; }
@@ -481,8 +484,13 @@ export class Outfitter {
     const h = this.pointer ? null : this.aimed;
     return h ? { key: h.h.key, p: { x: this.player.x, z: this.player.z, at: { x: h.h.x, z: h.h.z } } } : null;
   }
-  // the notices done that this outfitter pays
-  readyHere(ep) { try { return (this.tasks && this.tasks.active ? this.tasks.active : []).filter((t) => t.from === ep && t.status === 'done'); } catch { return []; } }
+  // the notices done that this outfitter pays, and its fish notices whose fish you have with you (handed over at the board)
+  readyHere(ep) {
+    try {
+      const T = this.tasks, done = (T && T.active ? T.active : []).filter((t) => t.from === ep && t.status === 'done');
+      return T && typeof T.deliverable === 'function' ? [...done, ...T.deliverable(ep)] : done;
+    } catch { return []; }
+  }
   // Without the pointer: the hotspot the walker looks at, along the look from his eyes (the bearing and tilt of the
   // view, camera.js viewYaw and viewPitch), whichever way the camera itself stands
   viewRay() {
@@ -545,7 +553,7 @@ export class Outfitter {
   }
 
   // --- the counter and the board ----------------------------------------------------------------------------
-  // the paper at the counter ('counter': a bunk, the rides, the notices to claim) or at the board ('board')
+  // the paper at the counter ('counter': a bunk and the rides, beside the side map) or at the board ('board')
   show(landing, tab = null, focus = null) {
     const pr = this.profile, core = this.core, st = this.staged; // staged: the face a hotspot asked for, should a wrapper drop the arguments
     this.staged = null;
@@ -603,32 +611,58 @@ export class Outfitter {
     if (act === 'close') this.close();
     else if (act === 'shelf') this.openShelf(id, this.at);
     else if (act === 'bunk') this.bunk();
+    else if (act === 'tab' && MODES.includes(id)) { this.tab = id; this.render(); } // a landing with no store yet: the board from the counter
     else if (act === 'ride' && this.rides) this.rides.act(id);
     else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
       const r = this.tasks.act(id, this.at.ep);
-      if (r && r.words && /^claim/.test(String(id))) this.greeting = r.words;
+      if (r && r.words && /^(claim|give)/.test(String(id))) this.greeting = r.words;
       this.save(); this.render();
     }
   }
   // (The season permit, its stamp and its date stepper stood here until the world cards of 2026-10-24: "what is the
   // stamp for at the counter, i thought we got rid of that. no permit". Home is the profile's; the season starts on
   // the title.)
-  // The notices you've done: this outfitter's, to claim here (one by one, or all at once), and the others', with where
-  // each is paid (tasks.js pays a notice only at the counter that posted it)
-  claimsSection(a) {
-    const t = this.tasks, done = (t && t.active ? [...t.active] : []).filter((n) => n.status === 'done');
-    const here = done.filter((n) => n.from === a.ep), there = done.filter((n) => n.from !== a.ep);
-    const rows = here.map((n) => `<li><span class="nm">${esc(n.title)}</span><b class="fare">$${n.pay || 0}</b><button type="button" class="stamp small" data-act="task" data-id="claim:${n.id}">Claim</button></li>`);
-    for (const n of there) {
-      const l = this.landing(n.from);
-      rows.push(`<li class="far"><span class="nm">${esc(n.title)}</span><span class="soft">${n.npc ? `${esc(n.npcName || 'a visitor')}’s: ` : ''}paid at ${esc(l ? l.name : 'its outfitter')}${l ? `, entry point ${l.ep}` : ''}</span></li>`);
-    }
-    const all = here.length > 1 ? `<button type="button" class="stamp small outline" data-act="task" data-id="claimall">Claim all · $${here.reduce((s, n) => s + (n.pay || 0), 0)}</button>` : '';
-    return `<section class="claims" aria-labelledby="claims-h">
-      <div class="top"><h3 id="claims-h">Notices done</h3>${all}</div>
-      ${rows.length ? `<ul>${rows.join('')}</ul>` : '<p class="soft">Nothing to claim. The board is by the door when you want work.</p>'}
+  // The side map (the owner, 2026-10-31: "a small custom map that just shows the different outfitters that he could
+  // take you to and the price for each"): where the truck goes from here, pencilled on the counter's own sheet
+  // (counter-map.js), in the column the notices done had ("I don't know why there's like a little left-hand side that
+  // has the notices that I can pick up. I don't like that": the board pays them now, tasks.js boardSection).
+  mapSection(a) {
+    const n = this.rides && typeof this.rides.offer === 'function' ? this.rides.offer(a.ep).length : 0;
+    return `<section class="sidemap" aria-labelledby="sidemap-h">
+      <div class="top"><h3 id="sidemap-h">Where the truck goes</h3><span class="sum">${n ? `${word(n)} ${plural(n, 'outfitter')} from entry point ${a.ep}` : `from entry point ${a.ep}`}</span></div>
+      <div class="sheet"><canvas aria-label="A sketch map of the outfitters the truck goes to, with each one's entry point number and fare"></canvas><i class="tape l" aria-hidden="true"></i><i class="tape r" aria-hidden="true"></i></div>
+      <p class="key"><span class="k here"><i>★</i>you are here</span><span class="k known"><i>${a.ep}</i>entry point</span><span class="k new"><i>${a.ep}</i>new to you</span><span class="k fare"><b>$</b>the fare</span></p>
     </section>`;
+  }
+  // draws the side map into the open counter, and ties its rings to the rides' rows (a hover lights both; a ring
+  // clicked brings its row up)
+  drawSideMap() {
+    const el = this.el.panel, cv = el && el.querySelector('.sidemap canvas'), a = this.at;
+    if (!cv || !a || !this.rides || typeof this.rides.offer !== 'function') return;
+    const money = this.money, sandbox = this.sandbox;
+    const rows = this.rides.offer(a.ep).map((r) => { const l = this.landing(r.ep) || {}; return { ep: r.ep, x: l.x, z: l.z, price: r.price, unknown: r.unknown, short: !sandbox && r.price > money }; });
+    const here = { ep: a.ep, x: a.x, z: a.z };
+    const draw = () => {
+      if (!this.open || this.tab !== 'counter' || !cv.isConnected) return;
+      this.mapMarks = drawCounterMap(cv, { world: this.world, here, rows, hot: this.mapHot, sandbox, onReady: draw });
+      for (const li of el.querySelectorAll('.rides li[data-ep]')) li.classList.toggle('hot', Number(li.dataset.ep) === this.mapHot);
+    };
+    const hover = (ep) => { if (ep !== this.mapHot) { this.mapHot = ep; draw(); } };
+    const at = (e) => { const b = cv.getBoundingClientRect(); return markerAt(this.mapMarks, e.clientX - b.left, e.clientY - b.top); };
+    cv.addEventListener('mousemove', (e) => { const ep = at(e); cv.style.cursor = ep ? 'pointer' : ''; hover(ep); });
+    cv.addEventListener('mouseleave', () => hover(null));
+    cv.addEventListener('click', (e) => {
+      const ep = at(e), li = ep ? el.querySelector(`.rides li[data-ep="${ep}"]`) : null; if (!li) return;
+      li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      li.classList.remove('flash'); void li.offsetWidth; li.classList.add('flash');
+    });
+    for (const li of el.querySelectorAll('.rides li[data-ep]')) {
+      li.addEventListener('mouseenter', () => hover(Number(li.dataset.ep)));
+      li.addEventListener('mouseleave', () => hover(null));
+    }
+    draw();
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(draw); // the pencil's font, once it is in
   }
   // the keeper's word (an insider's, to a friend of the house), a bunk tonight, and the rides up the road (rides.js);
   // at a landing whose store is not built yet, its shelves from here
@@ -649,13 +683,16 @@ export class Outfitter {
     const morning = this.day.hours < 12;
     parts.push(`<div class="bunkrow${short ? ' dear' : ''}"><div><b>${morning ? 'The bunk, and the day off' : 'A bunk tonight'}</b> · <span class="soft">${morning ? 'sleep it off: a real bed, soup, and up at seven tomorrow' : 'a real bed, soup and breakfast, up at seven'}</span></div>
       <button type="button" class="stamp small outline" data-act="bunk" ${short ? 'disabled' : ''}>${price ? `$${price}` : 'Free'}</button></div>`);
-    if (!this.layout(a.ep)) parts.push(`<div class="shelfbtns"><p class="soft">The store is being opened up: the shelves are here for now.</p>${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}</div>`);
+    if (!this.layout(a.ep)) parts.push(`<div class="shelfbtns"><p class="soft">The store is being opened up: the shelves and the board are here for now.</p>${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}<button type="button" class="stamp small outline" data-act="tab" data-id="board">The board</button></div>`);
     const rides = this.rides && typeof this.rides.section === 'function' ? this.rides.section(a.ep) : '';
     return `<section class="desk" aria-labelledby="desk-h">
       <div class="top"><h3 id="desk-h">At the counter</h3></div>
-      ${parts.join('')}${rides || ''}
+      ${parts.join('')}${this.claimsSection(a) || ''}${rides || ''}
     </section>`;
   }
+  // The counter's other business, on the rate card under the bunk: nothing of its own now (the notices are paid at the
+  // board), but main.js adds the uniques' "Report a find" here
+  claimsSection() { return ''; }
   // a keeper's words that are one of their insider hints (outfitters.js profile.hints) are told: the map rings the water
   heard(ep, words) {
     const pr = this.profile, op = this.shop ? this.shop.outfitterProfile(ep) : null;
@@ -679,8 +716,9 @@ export class Outfitter {
     if (t && typeof t.boardSection === 'function') return t.boardSection(a.ep);
     return '<section class="board" aria-labelledby="board-h"><div class="top"><h3 id="board-h">The board</h3><span class="sum">adverts from this outfitter</span></div><div class="cards"><p class="muted">The board is being written up.</p></div></section>';
   }
-  // The paper: at the counter, the notices done on the left, the keeper's desk (a bunk, the rides) on the right, and
-  // nothing else (no permit, no stamp); at the cork board, the board and nothing else
+  // The paper: at the counter, the side map on the left (where the truck goes, and the fares), the keeper's desk (a
+  // bunk, the rides) on the right, and nothing else (no permit, no stamp, no notices: the owner, 2026-10-31, "really
+  // what he's offering is a bunk and a ride"); at the cork board, the board and nothing else (it pays the notices)
   render() {
     if (!this.open || !this.el.panel) return;
     const a = this.at, board = this.tab === 'board';
@@ -691,14 +729,18 @@ export class Outfitter {
     const receipt = this.receipt ? `<div class="receipt pencil${this.receipt.ok ? '' : ' no'}">${esc(this.receipt.text)}</div>` : '';
     const kicker = `Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && (op.kindWords || op.kind) ? ` · ${esc(op.kindWords || op.kind)}` : ''}`;
     const lede = board
-      ? `<div class="lede"><div class="sc kicker">${esc(a.name)} · ${kicker}</div><h2>The board</h2><div class="say">Notices pinned up by the door. Take one on; it’s paid at the counter when it’s done.</div></div>`
+      ? `<div class="lede"><div class="sc kicker">${esc(a.name)} · ${kicker}</div><h2>The board</h2><div class="say">Notices pinned up by the door. Take one on, and come back to this board when it’s done: it’s paid here.</div></div>`
       : `<div class="lede"><div class="sc kicker">${kicker}</div><h2>${esc(a.name)}</h2><div class="say">“${esc(this.greeting)}”${this.who ? ` <span class="who">— ${esc(this.who)}</span>` : ''}</div></div>`;
     const body = board ? `<div class="counter one">${this.boardSection(a)}</div>`
-      : `<div class="counter two"><div class="col">${this.claimsSection(a)}</div>${this.deskSection(a)}</div>`;
+      : `<div class="counter two">${this.mapSection(a)}${this.deskSection(a)}</div>`;
+    const toCounter = board && !this.layout(a.ep) ? '<button type="button" class="stamp outline" data-act="tab" data-id="counter">The counter</button>' : '';
     this.el.panel.classList.toggle('simple', !board);
-    this.el.panel.innerHTML = `<header>${lede}${purse}<button type="button" class="stamp outline" data-act="close" aria-label="Leave (E or Esc)">${leave}</button></header>${receipt}${body}`;
+    // (store.css: the counter is a sheet on the counter top, the board a cork board)
+    this.el.panel.classList.toggle('st-counter', !board); this.el.panel.classList.toggle('st-board', board);
+    this.el.panel.innerHTML = `<header>${lede}${purse}${toCounter}<button type="button" class="stamp outline" data-act="close" aria-label="Leave (E or Esc)">${leave}</button></header>${receipt}${body}`;
     const now = this.el.panel.querySelector('.desk, .col, .cards');
     if (scroll && now && now.className === wasCls) now.scrollTop = scroll;
+    if (!board) this.drawSideMap();
   }
 
   // --- the trip ----------------------------------------------------------------------------------------------
@@ -886,7 +928,7 @@ function boxHit(ray, h) {
   return { t: t0, miss: 0 };
 }
 
-// the counter's two columns, the notices done, the desk (the counter's own look is hud.css's; tasks.js adds the board's,
+// the counter's two columns, the side map and the desk (the counter's own look is hud.css's and store.css's; tasks.js adds the board's,
 // rides.js the rides')
 const CSS = `
 #outfitter { gap: 16px; }
@@ -895,17 +937,6 @@ const CSS = `
 #outfitter > .receipt.no { color: var(--map-red); }
 #outfitter .counter.one { grid-template-columns: minmax(0, 1fr); }
 #outfitter .counter.two { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); }
-#outfitter .counter .col { display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow: auto; scrollbar-width: thin; padding-right: 4px; }
-#outfitter .claims { display: flex; flex-direction: column; gap: 10px; flex: none; }
-#outfitter .claims .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--edge); padding-bottom: 8px; }
-#outfitter .claims .top .stamp { font-size: 10.5px; padding: 4px 10px; }
-#outfitter .claims ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-#outfitter .claims li { display: flex; align-items: center; gap: 10px; font-size: 15px; padding: 6px 8px; border: 1px solid var(--edge); border-left: 3px solid var(--moss); border-radius: 2px; background: var(--paper-card); }
-#outfitter .claims li .nm { flex: 1 1 auto; min-width: 0; }
-#outfitter .claims li.far { flex-direction: column; align-items: flex-start; gap: 1px; border-left-color: var(--edge-deep); }
-#outfitter .claims .fare { font: 500 21px/0.95 var(--pencil-font); color: var(--pencil); flex: none; }
-#outfitter .claims .stamp.small { font-size: 10.5px; padding: 4px 10px; flex: none; }
-#outfitter .claims .soft { font-size: 13.5px; font-style: italic; color: var(--ink-soft); margin: 0; }
 #outfitter .desk .shelfbtns { display: flex; flex-wrap: wrap; gap: 6px; }
 #outfitter .desk .shelfbtns p { flex: 1 0 100%; margin: 0; }
 #outfitter .desk .shelfbtns .stamp { font-size: 10.5px; padding: 4px 9px; }

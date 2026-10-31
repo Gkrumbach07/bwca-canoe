@@ -1241,7 +1241,7 @@ function capsule(x, z, o) {
 // --- the notices -------------------------------------------------------------------------------------------------------
 // Blueberries for the kitchen ($10 a pint) and an armful for the stove ($6 an armful of three pieces), each posted at an
 // outfitter and handed over on foot at its store (tasks.update while taken on: the store's visit is that outfitter's),
-// then claimed at its counter. The berries are posted only in their season.
+// then claimed at its board. The berries are posted only in their season.
 const BERRY_WORDS = [
   { need: 3, title: 'Blueberries for pies', text: 'Three pints of wild blueberries for the pies. They come on in the burns and on the lichen rock above the campsites.', sign: 'Deb, in the café' },
   { need: 1, title: 'A pint of blueberries', text: 'One pint for the Sunday pancakes. The open rock by the campsites is where they grow.', sign: 'the cook' },
@@ -1274,7 +1274,7 @@ registerKind('berries', {
   },
   pay(t) { return PAY.pint * (t.need || 1); },
   update(T, t) {
-    handOver(T, t, current ? current.s.pints : 0, (n) => { current.s.pints -= n; }, (n, done, more) => `You hand over ${word(n)} ${plural(n, 'pint')} of blueberries. ${done ? 'Claim it at the counter.' : `${cap(word(more))} more wanted.`}`);
+    handOver(T, t, current ? current.s.pints : 0, (n) => { current.s.pints -= n; }, (n, done, more) => `You hand over ${word(n)} ${plural(n, 'pint')} of blueberries. ${done ? 'Claim it at the board.' : `${cap(word(more))} more wanted.`}`);
   },
   progress(t) { const n = t.need || 1, g = t.got || 0, tin = current ? Math.min(current.s.pints, n - g) : 0; return g ? `${word(g)} of ${word(n)} ${plural(n, 'pint')} handed over${tin ? `, ${word(tin)} in the tin` : ''}` : tin ? `${word(tin)} of ${word(n)} in the tin` : `${word(n)} ${plural(n, 'pint')} to pick, in season`; },
 });
@@ -1288,7 +1288,7 @@ registerKind('firewood', {
   pay(t) { return PAY.armful * (t.need || 1); },
   update(T, t) {
     const wood = current ? current.carriedWood() : [];
-    handOver(T, t, Math.floor(wood.length / ARMFUL), (n) => { for (const u of wood.slice(0, n * ARMFUL)) current.inv.take(u.c.id, u.e.uid, 1); current.inv.emit('items'); }, (n, done, more) => `You stack ${word(n)} ${plural(n, 'armful')} of wood by the door. ${done ? 'Claim it at the counter.' : `${cap(word(more))} more wanted.`}`);
+    handOver(T, t, Math.floor(wood.length / ARMFUL), (n) => { for (const u of wood.slice(0, n * ARMFUL)) current.inv.take(u.c.id, u.e.uid, 1); current.inv.emit('items'); }, (n, done, more) => `You stack ${word(n)} ${plural(n, 'armful')} of wood by the door. ${done ? 'Claim it at the board.' : `${cap(word(more))} more wanted.`}`);
   },
   progress(t) { const n = t.need || 1, g = t.got || 0; return g ? `${word(g)} of ${word(n)} handed over` : `${word(n)} ${plural(n, 'armful')} to bring in (three pieces an armful)`; },
 });

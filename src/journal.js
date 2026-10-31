@@ -296,7 +296,7 @@ export class Journal {
     const claimed = paid.length ? `<div class="lab">Claimed lately</div>${paid.map((c) => `<div class="todo claimed"><i aria-hidden="true"></i><span><b>${esc(c.title)}</b> · <span class="soft">${esc(at(c.from))}</span><span class="pay">$${c.pay}</span><br><span class="soft state"><span class="sc">Claimed</span> · $${c.pay} paid at ${esc(at(c.from))}</span></span></div>`).join('')}` : '';
     const n = (ts.claimed || []).length, earned = ts.earned || 0;
     const head = open.length || done.length ? `${open.length ? `${word(open.length)[0].toUpperCase()}${word(open.length).slice(1)} on the go` : 'Nothing on the go'}${done.length ? `, ${word(done.length)} to claim` : ''}` : 'Nothing on the go';
-    const sub = earned ? `$${earned} from the boards this season, ${n} ${plural(n, 'notice')} claimed. Each is paid only at the counter that posted it.` : 'Every outfitter pins four notices by the door. Each is paid only at the counter that posted it.';
+    const sub = earned ? `$${earned} from the boards this season, ${n} ${plural(n, 'notice')} claimed. Each is paid only at the board that posted it.` : 'Every outfitter pins four notices by the door. Each is paid only at the board that posted it.';
     const html = `<div class="lede"><h2 id="right-h">${head}</h2><div class="sub">${sub}</div></div>
       <div class="scroll notice-list">${list || '<div class="empty">Take something on at an outfitter’s board.</div>'}${claimed}</div>`;
     return { html, foot: 'the cork board hangs by the door inside every store' };

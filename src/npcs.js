@@ -1902,7 +1902,7 @@ export class People {
   }
   mark(t) { if (!t || t === '…' || this.said.has(t)) return; this.said.add(t); this.visitLines.push(t); }
   fresh(pool, rng = Math.random) { const list = (pool || []).filter((t) => t && !this.said.has(t)); return list.length ? list[Math.floor(rng() * list.length)] : null; }
-  // the keeper's services: the counter opens (its counter tab: the bunk, the rides, the notices to claim)
+  // the keeper's services: the counter opens (its counter tab: the bunk and the rides)
   openCounter(v) {
     const o = this.outfitter; if (!o || typeof o.show !== 'function') return;
     const l = typeof o.landing === 'function' ? o.landing(v.ep) : null;

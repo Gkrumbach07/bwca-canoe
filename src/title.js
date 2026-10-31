@@ -51,7 +51,7 @@ const KEYMAP = [
     [['F'], 'the rod up or down: from the canoe, or on foot with the rod in a hand, facing water within a cast'],
     [['Space', 'click'], 'with the rod up: hold to load a cast where the cursor points, let go to cast · set the hook on a bite · hold to reel in a fight; W retrieves a lure (Shift faster)'],
     [['1', '2', '…'], 'with the rod up: the lure, from the strip of the ones with you; the bobber rig takes a leech from the bucket in reach per bite, and says “needs leeches” when there is none'],
-    [['E', 'Q'], 'a landed fish: keep it, in your hand (into a pack in reach with both hands full, or a notice’s cooler) · let it go'],
+    [['E', 'Q'], 'a landed fish: keep it, in your hand (into a pack in reach with both hands full; a notice’s fish is handed over at its board) · let it go'],
     [['C'], 'the camera: raise it (the $25 35 mm, or the disposable a photo notice lends) · the mouse aims, the wheel zooms, Space or a click takes the picture · C or Esc lowers it'],
   ]],
   ['Looking and the clock', [
