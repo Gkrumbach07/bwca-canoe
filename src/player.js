@@ -6,6 +6,7 @@ import { GROUND, surfaceAt } from './terrain-build.js';
 import { HULL, keelAt, section } from './hull.js';
 import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from './pace.js';
 import { burnLook } from './burns.js';
+import { CarryBalance, BALANCE } from './balance.js'; // the canoe's balance on the shoulders (the owner, 2026-10-31)
 
 export class Input {
   constructor() {
@@ -147,6 +148,7 @@ export class Player {
     this.placeCache = { ci: NaN, cj: NaN, id: 0 };
     this.ripples = null; this.water = null; this.audio = null; this.wind = null; // set by main
     this.balance = 0; this.extraRoll = 0; this.swim = null; // capsize meter and the swim after a capsize
+    this.carryBal = new CarryBalance(); this.lashedN = 0; // the canoe's roll on the yoke (balance.js); things lashed in it (packs.js)
     // cons B: the water in the hull (0 dry .. 1 swamped) and the sea as the hull meets it, for the moments and the tests:
     // { H (the wind-wave here, m), shipping (of a swamped hull a game minute), spray (0..1), bailing, shelter, swamped }
     this.bilge = 0;
@@ -505,7 +507,7 @@ export class Player {
     // the wind pushes the hull downwind and swings the bow off the wind (a solo canoe weathercocks)
     const shelter = this.water && this.water.shelterAt ? this.water.shelterAt(this.x, this.z) : 1; // cons B: the lee
     if (this.wind) {
-      const wd = this.wind.dir, U = this.wind.speed * shelter;
+      const wd = this.wind.gustDir || this.wind.dir, U = (this.wind.gustSpeed ?? this.wind.speed) * shelter; // (a gust pushes harder: wind.js PUFF)
       const drift = 0.022 * U * dt * this.boost; // the drift is time-lapsed with the hull
       const dx = this.x + wd.x * drift, dz = this.z + wd.z * drift;
       if (ok(dx, dz, this.heading)) { this.x = dx; this.z = dz; }
@@ -1329,7 +1331,7 @@ export class Player {
         if (a) { this.startAct(a, ft.y); started = true; ft.spaceT = 0; }
       }
       if (!started && tap && !ft.air) {
-        if (carrying) st.stagger = 1;
+        if (carrying) { st.stagger = 1; this.carryBal.bump(1.2); } // (a stagger rocks it on the yoke: balance.js)
         else {
           // something to get over a stride or so ahead keeps the press for when he reaches it. Looked for from a few
           // points short of the stride, read from the feet there (downhill to a log they are lower): from a full stride
@@ -1404,7 +1406,7 @@ export class Player {
             const hullHalf = 0.46 * Math.pow(Math.max(0, 1 - Math.pow(Math.abs((along - 0.35) / 2.6), 4)), 0.6) + 0.05;
             if (across < t.r + hullHalf && c.hitCooldown <= 0) {
               c.hitCooldown = 1.3;
-              nx = this.x; nz = this.z; this.speed = -0.25;
+              nx = this.x; nz = this.z; this.speed = -0.25; this.carryBal.bump(2.2); // (and sets it rocking: balance.js)
               if (this.audio) this.audio.paddleDip();
               if (hustle && Math.random() < HULL_DROP) { this.dropHull(); note = 'The canoe hit a tree and came down'; } else note = 'The canoe caught a tree'; // (fb5 join: the why, not only that it fell; content join: only at a jog, the owner's call)
               break;
@@ -1480,6 +1482,7 @@ export class Player {
     ft.land = Math.max(0, ft.land - dt * 3);
     st.air = ft.air; st.airT = ft.t; st.vy = ft.vy; st.land = ft.land;
     st.stagger = Math.max(0, (st.stagger || 0) - dt * 1.6);
+    if (!c.drop && this.mode === 'carry') { const bn = this.balanceCarry(dt, hustle, onTrail, ft.near); if (bn) note = c.drop ? bn : note || bn; } // (a fall's words over a tree's)
     this.x = nx; this.z = nz;
     // the gait from the ground the feet actually cover (a trunk or a wall holds you while `speed` still walks; a vault
     // or a climb is not a stride)
@@ -1518,6 +1521,37 @@ export class Player {
     if (A || rodUp) this.prompt = null; // (the rod's own prompts follow, fishing.js)
     else this.footPrompts(c, trail, note, trailText);
     if (swimNow) this.enterSwim();
+  }
+
+  // The canoe's roll on the yoke (balance.js): the hands on the gunwales (what is not in a hand is on one: packs.js
+  // canoe.state.held), the pace, the trail, the slope across and along the way, the wind across the hull under the trees
+  // or in the open, and the things lashed in it (packs.js lashedN). Sets canoe.state.carryLean (radians) and
+  // carryWobble; brings the canoe down past saving. Returns a note for the prompt line, or null.
+  balanceCarry(dt, hustle, onTrail, near) {
+    const st = this.canoe.state, f = this.forward, rx = -f.z, rz = f.x, held = st.held || {};
+    const hands = (held.R ? 0 : 1) + (held.L ? 0 : 1);
+    const wd = this.wind ? this.wind.gustDir || this.wind.dir : { x: 0, z: 0 }, U = this.wind ? this.wind.speed : 0;
+    const side = (wd.x * rx + wd.z * rz) * U; // toward your right, m/s
+    // the open: under trees the wind is less (a trunk within 4.5 m takes a share), by the water it is all there
+    let trunks = 0;
+    for (const t of near || []) if (!t.shape && !t.box && !t.low) trunks++;
+    const shore = this.world.shoreAt(this.x, this.z);
+    const exposure = Math.max(clamp(1 - 0.09 * trunks, 0, 1), shore < 25 ? 1 - shore / 50 : 0);
+    const g = (a, b) => this.groundAt(this.x + a, this.z + b);
+    const cross = (g(-rx * 0.6, -rz * 0.6) - g(rx * 0.6, rz * 0.6)) / 1.2; // + the ground falls away to the right
+    const grade = (g(f.x * 1.5, f.z * 1.5) - g(0, 0)) / 1.5;
+    const B = this.carryBal || (this.carryBal = new CarryBalance());
+    const r = B.update(dt, { hands, moving: this.speed > 0.35, hustle, onTrail, side, gust: this.wind ? this.wind.puff || 0 : 0, exposure, cross, grade, lashed: this.lashedN || 0 });
+    st.carryLean = r.lean * BALANCE.roll; st.carryWobble = r.wobbly ? 1 : 0;
+    const au = this.audio;
+    if (r.wobbly && au && typeof au.yokeCreak === 'function' && (this._creakT = (this._creakT ?? 0) - dt) <= 0) { this._creakT = 0.5 + Math.random() * 0.5; au.yokeCreak(0.5 + Math.min(0.6, Math.abs(r.lean))); }
+    if (r.fall) {
+      const gust = this.wind && this.wind.puff > 0.2 && Math.abs(side) > 3 && Math.sign(side) === r.side;
+      this.dropHull(false, r.side);
+      return gust ? 'A gust took the canoe off your shoulders' : 'The canoe tipped off your shoulders';
+    }
+    if (r.wobbly) return hands ? 'The canoe is wobbling · stop to steady it' : 'The canoe is wobbling, no hand on it · stop to steady it';
+    return null;
   }
 
   // one prompt line: a note or where you are, then the keys that do something here
@@ -1603,12 +1637,12 @@ export class Player {
     this.restAt = { p: this.canoe.hull.position.clone(), r: this.canoe.hull.rotation.clone() }; // fb C: kept there through a swim (afterRig)
   }
 
-  dropHull(set = false) {
+  dropHull(set = false, side = 0) { // (side: tipped off to the right (1) or the left (-1), it lands that way: balance.js)
     const c = this.carry, f = this.forward;
-    const x = this.x + f.x * (set ? 1.4 : 0.9), z = this.z + f.z * (set ? 1.4 : 0.9), heading = this.heading + (set ? 0 : (Math.random() - 0.5) * 0.8);
+    const x = this.x + f.x * (set ? 1.4 : 0.9) - f.z * side * 0.9, z = this.z + f.z * (set ? 1.4 : 0.9) + f.x * side * 0.9, heading = this.heading + (set ? 0 : (Math.random() - 0.5) * 0.8);
     c.drop = { x, z, heading }; c.choice = false;
     this.restHull(x, z, heading, set ? 0 : 0.2);
-    this.mode = 'walk'; this.canoe.state.mode = 'walk';
+    this.mode = 'walk'; this.canoe.state.mode = 'walk'; this.canoe.state.carryLean = 0;
     if (!set) this.dropCount = (this.dropCount || 0) + 1; // the journal counts the times the hull came down
     this.prompt = { key: null, text: set ? 'You set the canoe down' : 'The canoe came down' };
   }
@@ -1631,6 +1665,7 @@ export class Player {
     const c = this.carry;
     c.drop = null; c.hitCooldown = 1.0; c.choice = false; c.from = { x: this.x, z: this.z };
     this.mode = 'carry'; this.canoe.state.mode = 'carry';
+    if (this.carryBal) this.carryBal.reset(); this.canoe.state.carryLean = 0; // (it comes up level)
   }
 
   // Jump to the nearest open water around a map point (minimap click, entry point). The tiles around the

@@ -1029,6 +1029,7 @@ async function main() {
   const frame = (dt) => {
     wind.update(dt, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
+    if (wind.puff > 0) water.uniforms.uRippleAmt.value = Math.min(1.35, water.uniforms.uRippleAmt.value + 0.4 * wind.puff); // a gust darkens the ripples (wind.js PUFF); the waves keep the steady wind
     const shell = title.state !== 'game';
     if (shell) { // the card is up: no input, the canoe rides the water but stays put, the camera drifts
       input.down.clear(); input.once.clear();

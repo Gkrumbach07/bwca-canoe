@@ -661,8 +661,9 @@ export function makeGait(body) {
     return { pYaw };
   }
 
-  // arms hanging and swinging against the legs; the elbows bend more as the pace picks up
-  function swingArms(g) {
+  // arms hanging and swinging against the legs; the elbows bend more as the pace picks up. only: the arms to pose
+  // ('L', 'R'; all when null): under the canoe the hand with a thing in it hangs and swings so, the other is on a gunwale
+  function swingArms(g, only = null) {
     const phi = g.phase, mw = g.mw, sp = g.sp * mw, jog = g.jog * mw;
     // jogging, the arms are carried bent at about a right angle, a little forward, and swing higher
     const A = lerp(0.32 + 0.22 * sp + 0.12 * g.hustle, 0.56, jog) * mw * (1 - 0.6 * Math.abs(g.mz)) * (g.backF ? 0.6 : 1);
@@ -672,6 +673,7 @@ export function makeGait(body) {
     const fwd = 0.04 + 0.12 * jog + (g.air ? 0.25 * g.tuck : 0) + 0.75 * ck;
     const cq = J.chest.q;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
+      if (only && !only.includes(k)) continue;
       // a hand carrying something (stream A's state.held: the bucket, the tackle box, the rod) hangs straighter and swings less
       const held = state.held && state.held[k] ? 1 : 0;
       const sw = A * (1 - 0.6 * held) * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd * (1 - 0.5 * held) + (k === 'L' ? work : -work) * (1 - held);
@@ -697,6 +699,10 @@ export function makeGait(body) {
   // the canoe overhead: the same feet under a heavier, shorter gait; the yoke's pads on the shoulders, the bow up a little
   // (p2 B: and state.carryBow more, set in first person so the tread ahead shows under it), riding the chest; the hands
   // on the gunwales ahead of the yoke. hull: the hull's pivot (hull.js geometry, +x the bow), brought into the rig.
+  // The owner, 2026-10-31 ("the items kind of just float at your sides, but your hands are up on the canoe"): a hand
+  // with a thing in it (state.held) hangs at your side carrying it, and only the empty hands are on the gunwales; the
+  // canoe rolls on the yoke by state.carryLean (balance.js: radians, + toward the right), and the stride rolls it more
+  // with fewer hands on it.
   function carry(dt, hull) {
     updateIdle(idle, dt, false);
     const g = locomote(dt, true);
@@ -707,12 +713,19 @@ export function makeGait(body) {
     const yawC = 2 * Math.atan2(cq.y, cq.w) * 0.6;
     const padTop = sheerY(YOKE_X) + 0.0095;
     const shoulder = neck.y - 0.032;
-    hull.position.set(neck.x - 0.02, shoulder + padTop, 0);
+    const lean = state.carryLean || 0, held = state.held || {};
+    hull.position.set(neck.x - 0.02, shoulder + padTop, 0.06 * lean); // (rolling, it slides a little on the pads that way)
     const stg = state.stagger, wob = Math.sin(Math.PI * stg) * Math.sin(stg * 19);   // a stagger: the hull lurches and is caught
-    hull.rotation.set(Math.PI + 0.015 * Math.sin(Math.PI * 2 * g.phase) * g.mw + 0.07 * wob, yawC, 0.09 + (state.carryBow || 0) + 0.05 * Math.sin(Math.PI * stg), 'YZX');
+    // the stride's roll, more with no hand to damp it
+    const free = (held.R ? 1 : 0) + (held.L ? 1 : 0), strideRoll = (0.015 + 0.01 * free) * Math.sin(Math.PI * 2 * g.phase) * g.mw;
+    hull.rotation.set(Math.PI + strideRoll + 0.07 * wob + lean, yawC, 0.09 + (state.carryBow || 0) + 0.05 * Math.sin(Math.PI * stg) + 0.03 * Math.abs(lean), 'YZX');
     hull.updateMatrix();
-    // hands on the gunwales ahead of the yoke
+    // a thing in a hand: that arm hangs and carries it
+    const hang = ['L', 'R'].filter((k) => held[k]);
+    if (hang.length) swingArms(g, hang);
+    // the empty hands on the gunwales ahead of the yoke
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
+      if (held[k]) continue;
       const x = YOKE_X + 0.45, ys = sheerY(x) - 0.009, zg = outerAt(x, sheerY(x) - 0.002).z - 0.004;
       // hull space (upright) -> rig: the pivot is inverted, so the hull's port gunwale is on the paddler's right;
       // the fist closes round the gunwale itself

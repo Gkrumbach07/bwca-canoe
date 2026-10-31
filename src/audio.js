@@ -214,7 +214,7 @@ export class Ambient {
       const cv = w.coverCell(w.cellI(x), w.cellJ(z));
       S.cls = cv ? GROUND[(cv >> 16) & 255] || null : null;
     } else { S.sd = c.shoreDist ?? 200; S.cls = null; }
-    S.wind = wind ? wind.speed : 2; S.gust = wind ? wind.gust || 0 : 0;
+    S.wind = wind ? wind.speed : 2; S.gust = wind ? (wind.gust || 0) + 0.7 * (wind.puff || 0) : 0; // (a puff swells the wind's beds: wind.js PUFF)
     if (wind) { const d = wind.dir; S.windX = d.x; S.windZ = d.z; }
     S.hours = day ? day.hours : 12;
     const alt = Math.asin(Math.max(-1, Math.min(1, day && day.sunDir ? day.sunDir.y : 0.6))) * DEG, tw = bump(alt, -11, 0, 12);
@@ -501,6 +501,8 @@ export class Ambient {
     if (p.mode === 'carry') this.say('hull-bonk', V.bonk(this, pos, 0.8));
     else this.say('dip', V.dip(this, pos));
   }
+  // the yoke creaking as the canoe rocks on the shoulders (player.js balanceCarry)
+  yokeCreak(amt = 1) { if (this.ctx && this.enabled) { const S = this.S; this.say('yoke-creak', V.creak(this, { x: S.x, y: S.y + 1.8, z: S.z }, amt, true)); } }
   reelClick(pitch = 1) { if (this.ctx && this.enabled) V.reel(this, pitch); }
   splash(size = 1) { if (this.ctx && this.enabled) this.say('splash', V.splash(this, null, size)); }
   bite(strength = 1) { if (this.ctx && this.enabled) this.say('bite', V.bite(this, strength)); }
