@@ -651,8 +651,11 @@ export class Inventory {
   still() {
     const p = this.player; if (!p) return false;
     if (!(p.mode === 'walk' || p.mode === 'paddle') || p.landing || p.ashore || p.teleporting) return false;
+    // in the canoe the paddle is down while the book is open: the drift is not "moving" (the owner, 2026-10-31: "it keeps
+    // saying I'm moving when I'm in my canoe")
+    if (p.mode === 'paddle') return true;
     if (p.foot && p.foot.air) return false;
-    return Math.abs(p.speed || 0) < STILL;
+    return Math.abs(p.speed || 0) < STILL || !!(p.input && p.input.paused); // (the book open: you have stopped)
   }
   // Eat one: a snack or a berry as it is, a meal or a fish only once it is cooked; standing still, on foot or in the
   // canoe. Sandbox's food keeps (nothing is used up) and you are never hungry there.
