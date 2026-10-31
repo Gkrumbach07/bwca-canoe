@@ -110,7 +110,8 @@
 #outfitter.paper.st-board .board.cork > .top .sum { color: var(--cream-72); }
 #outfitter.paper.st-board .board.cork > .top .stamp { color: var(--paper); }
 #outfitter.paper.st-board .cork .elsewhere { background: var(--paper-note); border: 1px solid var(--edge); padding: 8px 12px; box-shadow: 0 4px 10px rgba(20, 10, 0, .35); transform: rotate(-.3deg); }
-#outfitter .cork .notice .foot .give { display: flex; flex-wrap: wrap; gap: 5px; }
+#outfitter .cork .notice .foot:has(.give) { flex-wrap: wrap; }
+#outfitter .cork .notice .foot .give { display: flex; flex-wrap: wrap; gap: 5px; flex: 1 0 100%; }
 
 /* --- a shelf: its sign over it, the labels in chalk-white ------------------------------------------------------ */
 #shelf.paper .sh-top { border-bottom-color: rgba(243, 236, 221, .35); }
@@ -121,3 +122,12 @@
 #shelf.paper .sh-foot { color: var(--cream-65); border-top-color: rgba(243, 236, 221, .2); }
 #shelf.paper .sh-receipt { color: var(--pencil); }
 #shelf.paper .sh-receipt.no { color: var(--map-red); }
+
+/* the counter's other business on the rate card (uniques.js: "Report a find") */
+#outfitter .desk .claims { display: flex; flex-direction: column; gap: 6px; flex: none; }
+#outfitter .desk .claims ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+#outfitter .desk .claims li { display: flex; align-items: center; gap: 10px; font-size: 14.5px; padding: 5px 2px; border-bottom: 1px dotted var(--edge-deep); }
+#outfitter .desk .claims li .nm { flex: 1 1 auto; min-width: 0; }
+#outfitter .desk .claims .soft { font-size: 13px; font-style: italic; color: var(--ink-soft); }
+#outfitter .desk .claims .fare { font: 500 21px/0.95 var(--pencil-font); color: var(--pencil); flex: none; }
+#outfitter .desk .claims .stamp.small { font-size: 10.5px; padding: 4px 10px; flex: none; }

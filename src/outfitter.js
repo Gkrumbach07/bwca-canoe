@@ -662,6 +662,7 @@ export class Outfitter {
       li.addEventListener('mouseleave', () => hover(null));
     }
     draw();
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(draw); // the pencil's font, once it is in
   }
   // the keeper's word (an insider's, to a friend of the house), a bunk tonight, and the rides up the road (rides.js);
   // at a landing whose store is not built yet, its shelves from here
@@ -686,9 +687,12 @@ export class Outfitter {
     const rides = this.rides && typeof this.rides.section === 'function' ? this.rides.section(a.ep) : '';
     return `<section class="desk" aria-labelledby="desk-h">
       <div class="top"><h3 id="desk-h">At the counter</h3></div>
-      ${parts.join('')}${rides || ''}
+      ${parts.join('')}${this.claimsSection(a) || ''}${rides || ''}
     </section>`;
   }
+  // The counter's other business, on the rate card under the bunk: nothing of its own now (the notices are paid at the
+  // board), but main.js adds the uniques' "Report a find" here
+  claimsSection() { return ''; }
   // a keeper's words that are one of their insider hints (outfitters.js profile.hints) are told: the map rings the water
   heard(ep, words) {
     const pr = this.profile, op = this.shop ? this.shop.outfitterProfile(ep) : null;

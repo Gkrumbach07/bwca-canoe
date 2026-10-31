@@ -842,7 +842,7 @@ export class Tasks {
       btn = `<button type="button" class="stamp quiet" data-act="task" data-id="drop:${t.id}">Let it go</button>`;
       // a fish notice of this board's, its fish with you: hand it over here, and it is paid
       const f = t.from === ep ? this.fishFor(t) : null;
-      if (f) btn = `<span class="give"><button type="button" class="stamp" data-act="task" data-id="give:${t.id}">Hand over the ${esc(f.words)} · $${t.pay}</button>${btn}</span>`;
+      if (f) btn = `<span class="give"><button type="button" class="stamp" data-act="task" data-id="give:${t.id}">Hand ${f.length > 1 ? 'them' : 'it'} over · $${t.pay}</button>${btn}</span>`;
       state = `<div class="state">Taken on ${t.taken ? esc(this.dayWords(t.taken)) : ''} · ${esc(f ? `the ${f.words} with you: hand ${f.length > 1 ? 'them' : 'it'} over here` : k.progress ? k.progress(t) : '')}</div>`;
     }
     return `<article class="notice${t.status === 'offered' ? '' : ' mine'}${t.status === 'done' ? ' done' : ''}" style="--tilt:${tilt}deg">

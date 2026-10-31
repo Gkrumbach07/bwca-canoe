@@ -2,7 +2,8 @@
 // small custom map that just shows the different outfitters that he could take you to and the price for each, kind of
 // like a side map. Keep it in the style"). A small pencil-and-ink sketch on the counter's paper: the water from the
 // bake's overview (index.json overview, the same picture hud.js repaints for the big map), the outfitter you are at,
-// and each outfitter the truck goes to with its entry point number and the fare.
+// and each outfitter the truck goes to with its entry point number and the fare (framed on the nearest few; the far
+// ones pinned at the edge, the way they lie).
 //
 // Self-contained on purpose: it reads only world.meta.overview, world.base and the rides' rows, so the shared map
 // renderer can take its place later (drawCounterMap's arguments are the whole contract).
@@ -16,6 +17,8 @@ const PAD = 0.14;             // the margin round the outfitters, as a share of 
 const MIN_SPAN = 16000;       // m: the smallest stretch of country the sketch shows
 const R = 11;                 // css px: an outfitter's ring
 const HIT = 16;               // css px: how near the pointer must be to a ring to pick it
+const FRAME = 8;              // the nearest outfitters the sketch is framed on; the rest are pinned at its edge
+const EDGE = 24;              // css px: the margin the pinned ones sit in
 const INK = '#2a2016', SOFT = '#6a5a45', FAINT = '#9a8a70', RED = '#b4321f', PENCIL = '#4a4036';
 const WATER = [86, 120, 138], RIM = [45, 79, 102]; // the water's wash and its shore line
 
@@ -65,12 +68,41 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cw, ch);
 
-  // the stretch of country: here and every outfitter offered, padded, at one scale both ways (north up)
-  const pts = [here, ...rows].filter((p) => Number.isFinite(p.x) && Number.isFinite(p.z));
+  // the stretch of country: here and the nearest FRAME outfitters offered, padded, at one scale both ways (north up);
+  // the ones further off are pinned at the sheet's edge, the way they lie, with an arrow
+  rows = rows.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.z));
+  const near = [...rows].sort((a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z)).slice(0, FRAME);
+  const pts = [here, ...near];
   const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x)), z0 = Math.min(...pts.map((p) => p.z)), z1 = Math.max(...pts.map((p) => p.z));
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, inner = 1 - 2 * PAD;
   const s = Math.min((cw * inner) / Math.max(MIN_SPAN, x1 - x0), (ch * inner) / Math.max(MIN_SPAN * (ch / cw), z1 - z0));
   const X = (x) => cw / 2 + (x - cx) * s, Y = (z) => ch / 2 + (z - cz) * s;
+  const hx = X(here.x), hy = Y(here.z);
+  // where each one is drawn: its place, or off the sheet, where the line to it from here leaves the edge's margin
+  const at = new Map();
+  for (const r of rows) {
+    let x = X(r.x), y = Y(r.z), out = false;
+    const lo = EDGE, hiX = cw - EDGE, hiY = ch - EDGE - 26; // (the scale bar keeps the foot clear)
+    if (x < lo || x > hiX || y < lo || y > hiY) {
+      const dx = x - hx, dy = y - hy;
+      let t = 1;
+      if (dx) t = Math.min(t, ((dx > 0 ? hiX : lo) - hx) / dx);
+      if (dy) t = Math.min(t, ((dy > 0 ? hiY : lo) - hy) / dy);
+      x = hx + dx * t; y = hy + dy * t; out = true;
+    }
+    at.set(r.ep, { x, y, out, a: Math.atan2(Y(r.z) - hy, X(r.x) - hx) });
+  }
+  // pinned ones that would sit on each other are spread along their edge, the nearest keeping its place
+  const pinned = rows.filter((r) => at.get(r.ep).out).sort((a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z));
+  const placed = [];
+  for (const r of pinned) {
+    const q = at.get(r.ep), side = q.x <= EDGE + 0.5 || q.x >= cw - EDGE - 0.5; // on a side edge it moves up and down, else across
+    for (let k = 0; k < 40 && placed.some((p) => Math.hypot(p.x - q.x, p.y - q.y) < 2 * R + 2); k++) {
+      const step = (2 * R + 3) * (k % 2 ? -1 : 1) * Math.ceil((k + 1) / 2), base = side ? 'y' : 'x';
+      q[base] = Math.max(EDGE, Math.min((side ? ch - EDGE - 26 : cw - EDGE), (base === 'y' ? q.y0 ?? (q.y0 = q.y) : q.x0 ?? (q.x0 = q.x)) + step));
+    }
+    placed.push(q);
+  }
 
   // the water
   const wv = loadWash(world, onReady);
@@ -81,22 +113,25 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   }
 
   // the roads as the truck goes: a faint pencil line out to each one (the hovered one firm)
-  const hx = X(here.x), hy = Y(here.z);
   ctx.lineCap = 'round';
   for (const r of rows) {
-    const on = r.ep === hot;
-    ctx.setLineDash(on ? [] : [3, 5]); ctx.lineWidth = on ? 1.8 : 1; ctx.strokeStyle = on ? RED : 'rgba(74, 64, 54, .45)';
-    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(X(r.x), Y(r.z)); ctx.stroke();
+    const on = r.ep === hot, q = at.get(r.ep);
+    ctx.setLineDash(on ? [] : [3, 5]); ctx.lineWidth = on ? 1.8 : 1; ctx.strokeStyle = on ? RED : q.out ? 'rgba(74, 64, 54, .22)' : 'rgba(74, 64, 54, .45)';
+    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(q.x, q.y); ctx.stroke();
   }
   ctx.setLineDash([]);
 
   // the outfitters: a ring with the entry point number, the fare in pencil under it; labels kept off each other
-  const marks = [], taken = [];
+  const marks = [], taken = [{ x0: hx - R - 3, x1: hx + R + 130, y0: hy - R - 3, y1: hy + R + 3 }]; // (here and its label)
   const clear = (b) => taken.every((t) => b.x1 < t.x0 || b.x0 > t.x1 || b.y1 < t.y0 || b.y0 > t.y1);
   const order = [...rows].sort((a, b) => (a.ep === hot) - (b.ep === hot)); // the hovered one drawn last, on top
-  for (const r of order) taken.push({ x0: X(r.x) - R, x1: X(r.x) + R, y0: Y(r.z) - R, y1: Y(r.z) + R });
+  for (const r of order) { const q = at.get(r.ep); taken.push({ x0: q.x - R, x1: q.x + R, y0: q.y - R, y1: q.y + R }); }
   for (const r of order) {
-    const x = X(r.x), y = Y(r.z), on = r.ep === hot, col = r.unknown ? RED : INK;
+    const q = at.get(r.ep), x = q.x, y = q.y, on = r.ep === hot, col = r.unknown ? RED : INK;
+    if (q.out) { // a pencil arrowhead past the ring, the way it lies
+      ctx.save(); ctx.translate(x + Math.cos(q.a) * (R + 3), y + Math.sin(q.a) * (R + 3)); ctx.rotate(q.a);
+      ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(0, -4); ctx.lineTo(0, 4); ctx.closePath(); ctx.fillStyle = r.short ? FAINT : col; ctx.fill(); ctx.restore();
+    }
     ctx.beginPath(); ctx.arc(x, y, on ? R + 2 : R, 0, Math.PI * 2);
     ctx.fillStyle = on ? '#f4ecd8' : 'rgba(241, 233, 212, .94)'; ctx.fill();
     ctx.lineWidth = on ? 2.2 : 1.4; ctx.strokeStyle = r.short ? FAINT : col; ctx.stroke();
