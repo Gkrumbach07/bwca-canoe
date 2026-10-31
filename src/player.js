@@ -1881,9 +1881,10 @@ export class Player {
     const bx = plan.from.x + f0.x * 2.3, bz = plan.from.z + f0.z * 2.3, fb = C.frame(d, bx, bz);
     const u0 = clamp(fb.u, -S.half + 0.6, S.half - 0.6), s0 = S.bow(u0);
     const cx = d.x + d.ax * u0 + d.az * s0, cz = d.z + d.az * u0 - d.ax * s0;
-    // he stands to the side of the bow with more dam (along the dam, 0.8 m off its line)
-    const lat = u0 > 0 ? -1 : 1, stand = { x: cx + d.ax * lat * 0.8, z: cz + d.az * lat * 0.8 };
-    const H = { ...plan, at: 0, S, f0, f1, stand, crest: { x: cx, z: cz }, hull: { x: plan.from.x, z: plan.from.z, y: 0, heading: plan.from.heading, pitch: 0 }, fig: { x: this.x, z: this.z, heading: this.heading }, seated: false };
+    // he stands beside the bow, on the side with more dam, just back from its tip
+    const r0 = { x: -f0.z, z: f0.x }, lat = (d.ax * r0.x + d.az * r0.z) * (u0 > 0 ? -1 : 1) >= 0 ? 1 : -1;
+    const stand = { x: bx + r0.x * lat * 0.95 - f0.x * 0.3, z: bz + r0.z * lat * 0.95 - f0.z * 0.3 };
+    const H = { ...plan, at: 0, S, f0, f1, stand, lat, crest: { x: cx, z: cz }, hull: { x: plan.from.x, z: plan.from.z, y: 0, heading: plan.from.heading, pitch: 0 }, fig: { x: this.x, z: this.z, heading: this.heading }, seated: false };
     H.level0 = w.levelAt(plan.from.x, plan.from.z); H.level1 = w.levelAt(plan.to.x, plan.to.z);
     // the walk out: the stern seat, up the middle of the hull past the bow, onto the dam
     const st0 = { x: plan.from.x + f0.x * SEATS.stern.x, z: plan.from.z + f0.z * SEATS.stern.x };
@@ -1955,13 +1956,12 @@ export class Player {
       const p = this.alongPts(H.out, smoothstep(0, 1, a));
       fx = p.x; fz = p.z; face = Math.atan2(-p.tz, p.tx);
     } else if (a < 2) {
-      // beside the bow on the dam, stooped to it, stepping back down the far side as it comes over
-      const k = smoothstep(1, 2, a), bowX = hp.x + Math.cos(hp.heading) * 2.1, bowZ = hp.z - Math.sin(hp.heading) * 2.1;
-      const away = { x: (H.to.x - H.crest.x), z: (H.to.z - H.crest.z) }, al = Math.hypot(away.x, away.z) || 1;
-      const back = Math.min(1.6, al * 0.4) * smoothstep(0.1, 0.9, k);
-      fx = H.stand.x + (away.x / al) * back; fz = H.stand.z + (away.z / al) * back;
-      face = Math.atan2(-(bowZ - fz), bowX - fx);
-      crouch = 0.75 * Math.sin(Math.PI * Math.min(1, k * 1.15));
+      // beside the bow, stooped to it, drawing it on over the dam and down the far side (wading where it goes in)
+      const k = smoothstep(1, 2, a), hf = { x: Math.cos(hp.heading), z: -Math.sin(hp.heading) };
+      fx = hp.x + hf.x * 2.0 - hf.z * H.lat * 0.95; fz = hp.z + hf.z * 2.0 + hf.x * H.lat * 0.95;
+      const mv = Math.hypot(fx - prev.x, fz - prev.z);
+      face = mv > 0.004 ? Math.atan2(-(fz - prev.z), fx - prev.x) : Math.atan2(-(hp.z + hf.z * 2.3 - fz), hp.x + hf.x * 2.3 - fx);
+      crouch = 0.6 * Math.sin(Math.PI * Math.min(1, k * 1.1));
       if (this.audio && k > 0.08 && k < 0.92 && (this._scrapeT -= dt) <= 0) { this._scrapeT = 0.7 + Math.random() * 0.5; this.audio.emit('scrape', { x: hp.x, z: hp.z }); }
     } else {
       // down off the dam and along the hull to the stern seat
