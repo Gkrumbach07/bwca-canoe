@@ -36,9 +36,8 @@ const BASE_MARGIN = 256;     // canvas px: the base drawing reaches this far pas
 // the scale bar's round distances (m, words): feet under a quarter mile, then miles
 const SCALE_STEPS = [[152.4, '500 ft'], [304.8, '1,000 ft'], [402.34, '¼ mi'], [804.67, '½ mi'], [1609.34, '1 mi'], [3218.69, '2 mi'], [8046.72, '5 mi'], [16093.4, '10 mi'], [32186.9, '20 mi'], [80467.2, '50 mi']];
 const WATER = [184, 208, 216], RIM = [84, 118, 136];
-const TINT_LOW = [224, 216, 182], TINT_HIGH = [160, 166, 112];
-const BANDS = 14;
-const PAPER = '#e9e1cc';
+const TINT_LOW = [234, 226, 202], TINT_HIGH = [206, 204, 168]; // the overview's relief, as map-render.js tints the tiles
+const PAPER = '#ece4cf';
 const NEAT = 'rgba(74, 59, 38, 0.55)', FOLD = 'rgba(74, 59, 38, 0.4)'; // an owned sheet's neatline, and where two of yours meet
 // fb2 D: the printed sheets over the whole map (at an outfitter): yours ruled in ink, the rest dotted, red where this
 // table sells it
@@ -652,7 +651,7 @@ export class Hud {
   }
 
   tint(t, out) {
-    const q = Math.floor(clamp(t, 0, 0.999) * BANDS) / (BANDS - 1);
+    const q = clamp(t, 0, 1) ** 0.8;
     for (let k = 0; k < 3; k++) out[k] = TINT_LOW[k] + (TINT_HIGH[k] - TINT_LOW[k]) * q;
     return out;
   }

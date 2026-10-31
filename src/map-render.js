@@ -42,7 +42,9 @@ export function padGrid(F, ni, nj) {
   for (let j = 0; j < nj; j++) for (let i = 0; i < ni; i++) { const x = F[j * ni + i]; P[(j + 1) * W + i + 1] = x; if (x < lo) lo = x; if (x > hi) hi = x; }
   return { P, W, H, lo, hi };
 }
-export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats = null, smooth = 0) {
+// path gets the closed rings (to fill), line (when given) the same lines without the stretches along the padding (to
+// stroke: a thick pen on the padding's line showed past the tile's edge)
+export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats = null, smooth = 0, line = null) {
   const { P, W, H } = G, NE = W * H * 2;
   if (scratch.n < NE) scratch = { n: NE, link: new Int32Array(NE * 2), seen: new Uint8Array(NE) };
   const link = scratch.link, seen = scratch.seen;
@@ -72,9 +74,10 @@ export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats
   }
   if (!any) return { path, n: 0, rings: 0, spot: null, longest: 0 };
   // an edge's point: along its two samples where the field crosses the level (padded index i, j is sample i - 1, j - 1)
-  const X = [], Z = [];
+  const X = [], Z = [], E = [];
   const put = (e) => {
     const d = e & 1, p = e >> 1, i = p % W, j = (p - i) / W, a = P[p], b = d ? P[p + W] : P[p + 1];
+    E.push(i === 0 || j === 0 || (d ? j + 1 === H - 1 || i === W - 1 : i + 1 === W - 1 || j === H - 1) ? 1 : 0);
     const t = Math.min(1, Math.max(0, (level - a) / (b - a || 1e-6)));
     X.push(ox + (i - 1 + (d ? 0 : t)) * step); Z.push(oz + (j - 1 + (d ? t : 0)) * step);
   };
@@ -82,23 +85,38 @@ export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats
   for (let e0 = 0; e0 < NE; e0++) {
     if (seen[e0] || link[e0 * 2] < 0) continue;
     let prev = -1, cur = e0;
-    X.length = 0; Z.length = 0;
+    X.length = 0; Z.length = 0; E.length = 0;
     for (let guard = 0; guard < NE; guard++) {
       seen[cur] = 1; put(cur);
       const l0 = link[cur * 2], nx = l0 !== prev ? l0 : link[cur * 2 + 1];
       prev = cur; cur = nx;
       if (cur < 0 || cur === e0 || seen[cur]) break;
     }
-    let xs = X, zs = Z;
+    let xs = X, zs = Z, es = E;
     for (let s2 = 0; s2 < smooth && xs.length > 3; s2++) { // Chaikin, closed
-      const nx = [], nz = [], L = xs.length;
-      for (let q = 0; q < L; q++) { const r = (q + 1) % L; nx.push(0.75 * xs[q] + 0.25 * xs[r], 0.25 * xs[q] + 0.75 * xs[r]); nz.push(0.75 * zs[q] + 0.25 * zs[r], 0.25 * zs[q] + 0.75 * zs[r]); }
-      xs = nx; zs = nz;
+      const nx = [], nz = [], ne = [], L = xs.length;
+      for (let q = 0; q < L; q++) { const r = (q + 1) % L, f = es[q] | es[r]; nx.push(0.75 * xs[q] + 0.25 * xs[r], 0.25 * xs[q] + 0.75 * xs[r]); nz.push(0.75 * zs[q] + 0.25 * zs[r], 0.25 * zs[q] + 0.75 * zs[r]); ne.push(f, f); }
+      xs = nx; zs = nz; es = ne;
     }
     const L = xs.length;
     path.moveTo(xs[0], zs[0]);
     for (let q = 1; q < L; q++) path.lineTo(xs[q], zs[q]);
     path.closePath();
+    if (line) {
+      // from a point off the padding round the ring, a run of lines broken wherever it touches the padding
+      let s0 = -1;
+      for (let q = 0; q < L; q++) if (!es[q]) { s0 = q; break; }
+      if (s0 >= 0) {
+        const whole = !es.includes(1);
+        let open = false;
+        for (let c = 0; c <= L; c++) {
+          const q = (s0 + c) % L;
+          if (es[q]) { open = false; continue; }
+          if (!open) { line.moveTo(xs[q], zs[q]); open = true; } else line.lineTo(xs[q], zs[q]);
+        }
+        if (whole) line.closePath();
+      }
+    }
     n += L; rings++;
     if (L > best) { best = L; spot = [xs[L >> 1], zs[L >> 1]]; }
   }
@@ -118,8 +136,8 @@ export function buildTile(world, slot, { fine = true, ink = null, ox = 0, oz = 0
   let wet = false;
   for (let j = 0; j < ni; j++) for (let i = 0; i < ni; i++) { const k = at(i, j), s = slot.sd[k]; F[j * ni + i] = s; if (s < 0) { wet = true; const id = slot.lake[k]; if (id) ids.add(id); } }
   const o = -0.5 * cell; // sample (i, j) is the middle of cell (i - 1, j - 1) of the tile
-  const out = { fine, ids, water: null, ink: null, inkV: -1, contours: null, index: null, sound: [], labels: [], tint: null, ms: 0, n: 0 };
-  if (wet) out.water = isoRings(padGrid(F, ni, ni), 0, true, o, o, cell, new Path2D(), stats).path;
+  const out = { fine, ids, water: null, shore: null, ink: null, inkLine: null, inkV: -1, contours: null, index: null, sound: [], labels: [], tint: null, ms: 0, n: 0 };
+  if (wet) { out.shore = new Path2D(); out.water = isoRings(padGrid(F, ni, ni), 0, true, o, o, cell, new Path2D(), stats, 0, out.shore).path; }
   if (ink) traceInk(out, slot, F, ni, at, o, cell, ink);
   // the relief tint: a small soft image (it has no edges to blur)
   const tp = fine ? 64 : 128, per = T / tp, c = document.createElement('canvas'); c.width = c.height = tp;
@@ -145,7 +163,7 @@ export function buildTile(world, slot, { fine = true, ink = null, ox = 0, oz = 0
       H[j * nc + i] = h; if (h < lo) lo = h; if (h > hi) hi = h;
     }
     const oc = (-2 + 0.5) * cell, minor = new Path2D(), major = new Path2D(), HG = padGrid(H, nc, nc);
-    for (let lvl = Math.ceil(lo / 10) * 10; lvl <= hi; lvl += 10) isoRings(HG, lvl, false, oc, oc, cell * step, lvl % 50 === 0 ? major : minor, stats);
+    for (let lvl = Math.ceil(lo / 10) * 10; lvl <= hi; lvl += 10) isoRings(HG, lvl, false, oc, oc, cell * step, new Path2D(), stats, 0, lvl % 50 === 0 ? major : minor);
     out.contours = minor; out.index = major;
     // the soundings, on the DNR-mapped lakes only (a lake with a synthetic bed has none)
     let anyMapped = false;
@@ -165,10 +183,10 @@ export function buildTile(world, slot, { fine = true, ink = null, ox = 0, oz = 0
       for (const ft of DEPTH_FT) {
         const lvl = ft * FT;
         if (lvl > maxD) break;
-        const r = isoRings(DG, lvl, false, o, o, cell, new Path2D(), stats, 2);
+        const ln = new Path2D(), r = isoRings(DG, lvl, false, o, o, cell, new Path2D(), stats, 2, ln);
         if (!r.n) continue;
         const index = ft % 50 === 0 || ft === 20;
-        out.sound.push({ ft, path: r.path, index });
+        out.sound.push({ ft, path: ln, index });
         if (r.longest >= 30 && r.spot) out.labels.push([ft, ox + r.spot[0], oz + r.spot[1]]);
       }
     }
@@ -181,11 +199,12 @@ export function buildTile(world, slot, { fine = true, ink = null, ox = 0, oz = 0
 export function traceInk(out, slot, F, ni, at, o, cell, ink) {
   let any = false;
   for (const id of out.ids) if (ink.has(id)) { any = true; break; }
-  out.ink = null;
+  out.ink = null; out.inkLine = null;
   if (!any) return out;
   const G = new Float32Array(ni * ni);
   for (let j = 0; j < ni; j++) for (let i = 0; i < ni; i++) { const k = at(i, j), s = F[j * ni + i], id = slot.lake[k]; G[j * ni + i] = s < 0 && id && ink.has(id) ? s : Math.max(5, Math.abs(s)); }
-  out.ink = isoRings(padGrid(G, ni, ni), 0, true, o, o, cell, new Path2D()).path;
+  out.inkLine = new Path2D();
+  out.ink = isoRings(padGrid(G, ni, ni), 0, true, o, o, cell, new Path2D(), null, 0, out.inkLine).path;
   return out;
 }
 // remake a tile's ink from its slot (when the lakes paddled have changed)
@@ -220,12 +239,12 @@ export function paintTile(ctx, v, ox, oz, size, geo, { k = 1, depths = true, con
     }
     if (depths && geo.sound.length && (all || v.mPerPx < 9)) {
       for (const q of geo.sound) {
-        if (!q.index && v.mPerPx > 5 && !all) continue;
+        if (!q.index && v.mPerPx > 5 && !(all && (q.ft % 20 === 0 || q.ft === 10))) continue;
         ctx.strokeStyle = q.index ? INK.soundIndex : INK.sound; ctx.lineWidth = (q.index ? 1.25 : 0.8) * k * px; ctx.stroke(q.path);
       }
     }
-    if (geo.water) { ctx.strokeStyle = INK.shore; ctx.lineWidth = (v.mPerPx < 6 ? 1.35 : 1.05) * k * px; ctx.stroke(geo.water); }
-    if (geo.ink) { ctx.strokeStyle = INK.inkShore; ctx.lineWidth = 1.5 * k * px; ctx.stroke(geo.ink); }
+    if (geo.shore) { ctx.strokeStyle = INK.shore; ctx.lineWidth = (v.mPerPx < 6 ? 1.35 : 1.05) * k * px; ctx.stroke(geo.shore); }
+    if (geo.inkLine) { ctx.strokeStyle = INK.inkShore; ctx.lineWidth = 1.5 * k * px; ctx.stroke(geo.inkLine); }
   }
   ctx.restore();
 }
