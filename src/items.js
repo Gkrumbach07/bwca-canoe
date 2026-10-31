@@ -426,7 +426,8 @@ export const LEGACY = { pack: 'pack3', pack2: 'pack4', barrel: 'barrel60', rod: 
 // bears' line, the raid and the hang all asked for one, and it was $25 of the $40
 export const STARTER_KIT = {
   canoe: ['pack3', 'barrel30', 'bucket', 'stringer'],
-  pack3: ['aframe', 'sleepingbag', 'clothes', 'pot', 'tarp', 'tablets', 'tacklebox'],
+  // (the camp pass, 2026-10-31: and the foam pad: the bag and the pad in the tent make a whole night's rest, camp.js)
+  pack3: ['aframe', 'sleepingbag', 'pad', 'clothes', 'pot', 'tarp', 'tablets', 'tacklebox'],
   tacklebox: ['lure:jig', 'lure:mepps'],
   bucket: [['leeches', 12]],
   long: ['ash', 'rod'],
