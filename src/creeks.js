@@ -344,8 +344,32 @@ function mudColour(ctx, hex, lv, seed) {
     return c;
   };
 }
-// The water level a little way off (x, z) on either side of a dam, or the ground there
-function sideLevel(tg, x, z) { return tg.lakeIdAt(x, z) ? tg.levelAt(x, z) : null; }
+// A dam's shape (buildDam draws it; player.js stands the haul on it): which side the pond is (up, along the frame's s),
+// the crest's height, its section and its bow upstream. level/lakeId/ground: functions of (x, z) (a tile's grid when it
+// is built; the world and the drawn ground for the walker).
+export function damShape(d, level, lakeId, ground) {
+  const old = !!d.old, half = d.len / 2, nx = d.az, nz = -d.ax; // across it
+  // the two sides' water (the pond above, the creek below) decide which way it bows and how high the crest stands
+  const side = (x, z) => (lakeId(x, z) ? level(x, z) : null);
+  const la = side(d.x + nx * 5, d.z + nz * 5), lb = side(d.x - nx * 5, d.z - nz * 5);
+  const gMid = ground(d.x, d.z), lv = Math.max(la ?? -Infinity, lb ?? -Infinity, lakeId(d.x, d.z) ? level(d.x, d.z) : -Infinity);
+  const up = la !== null && lb !== null ? (la >= lb ? 1 : -1) : la !== null ? 1 : -1;
+  const crest = (Number.isFinite(lv) ? Math.max(lv, gMid) : gMid) + (old ? 0.25 : 0.3 + Math.min(0.3, 0.015 * d.len));
+  // its section: steep on the pond's side (wUp), a long slope of sticks down the other (wDn); an old one broad and low
+  const wUp = old ? 1.8 : 0.9, wDn = old ? 2.2 : 2.1, ext = half + 1.6;
+  const prof = (v) => { const w = v * up; return w > 0 ? Math.max(0, 1 - (w / wUp) ** 2) ** 0.55 : Math.max(0, 1 - (w / wDn) ** 2) ** 1.3; };
+  const bow = (u) => up * 0.07 * d.len * (1 - Math.min(1, (u / ext) ** 2));
+  // the crest's height at u over ground g (the ends run down into the banks; an old dam breached in the middle)
+  const crestAt = (u, g) => {
+    const e = smoothstep(half - 0.6, ext, Math.abs(u));
+    let c = crest * (1 - e) + g * e;
+    if (old) c = g + (c - g) * smoothstep(0.5, 2.2, Math.abs(u));
+    return c;
+  };
+  // the mound's top (without its lumps) at frame (u, s) over ground g there
+  const top = (u, s, g) => (Math.abs(u) > ext ? g : g + Math.max(0, crestAt(u, g) - g) * prof(s - bow(u)));
+  return { old, half, up, lv, crest, wUp, wDn, ext, prof, bow, crestAt, top };
+}
 
 // A dam: a mound along its axis (u, -len/2 - 1.5 .. len/2 + 1.5) bowed a little upstream, its cross-section a soft
 // arch (v across), standing to its crest over the ground or the bed; the sticks laid over it mostly the way the water
@@ -353,21 +377,14 @@ function sideLevel(tg, x, z) { return tg.lakeIdAt(x, z) ? tg.levelAt(x, z) : nul
 function buildDam(ctx, b, d, rng) {
   const { tg } = ctx, old = !!d.old, half = d.len / 2;
   const ax = d.ax, az = d.az, nx = az, nz = -ax; // along the dam, and across it
-  // the two sides' water (the pond above, the creek below) decide which way it bows and how high the crest stands
-  const la = sideLevel(tg, d.x + nx * 5, d.z + nz * 5), lb = sideLevel(tg, d.x - nx * 5, d.z - nz * 5);
-  const gMid = ctx.H(d.x, d.z), lv = Math.max(la ?? -Infinity, lb ?? -Infinity, tg.lakeIdAt(d.x, d.z) ? tg.levelAt(d.x, d.z) : -Infinity);
-  const up = la !== null && lb !== null ? (la >= lb ? 1 : -1) : la !== null ? 1 : -1;
-  const crest = (Number.isFinite(lv) ? Math.max(lv, gMid) : gMid) + (old ? 0.25 : 0.3 + Math.min(0.3, 0.015 * d.len));
-  // its section: steep on the pond's side (wUp), a long slope of sticks down the other (wDn); an old one broad and low
-  const wUp = old ? 1.8 : 0.9, wDn = old ? 2.2 : 2.1, ext = half + 1.6;
+  const S = damShape(d, (x, z) => tg.levelAt(x, z), (x, z) => tg.lakeIdAt(x, z), ctx.H);
+  const { up, lv, crest, wUp, wDn, ext, prof } = S;
   const nu = Math.max(6, Math.ceil((2 * ext) / 0.5)), nv = 12;
-  const prof = (v) => { const w = v * up; return w > 0 ? Math.max(0, 1 - (w / wUp) ** 2) ** 0.55 : Math.max(0, 1 - (w / wDn) ** 2) ** 1.3; };
   const at = (u, v) => {
-    const bow = up * 0.07 * d.len * (1 - Math.min(1, (u / ext) ** 2));
+    const bow = S.bow(u);
     const x = d.x + ax * u + nx * (v + bow), z = d.z + az * u + nz * (v + bow);
     const g = ctx.H(x, z);
-    let c = crest * (1 - smoothstep(half - 0.6, ext, Math.abs(u))) + g * smoothstep(half - 0.6, ext, Math.abs(u));
-    if (old) c = g + (c - g) * smoothstep(0.5, 2.2, Math.abs(u)); // the breach the water cut
+    const c = S.crestAt(u, g); // (an old dam: the breach the water cut)
     const k = prof(v), lump = (noise2(u * 1.3, v * 1.3 + d.i, 17) - 0.5) * (old ? 0.12 : 0.3);
     return { x, z, y: Math.max(g + 0.02, g + Math.max(0, c - g) * k + lump * k), g, k };
   };
