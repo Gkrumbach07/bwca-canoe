@@ -6,6 +6,11 @@
 //                             emergent and aquatic beds, rock, boulders, sand, open water, upland; 0 = no survey
 //   <tx>_<ty>.rock.bin    u8  SSURGO map unit rock outcrop % (0..100); 255 = no SSURGO
 //   <tx>_<ty>.stone.bin   u8  SSURGO surface stone and boulder cover, 254*sqrt(cover fraction); 255 = no SSURGO
+//   <tx>_<ty>.wet.bin     u8  the NWI polygon's water: regime (bits 0-2: WET_REGIME), beaver (bit 3), system (bits
+//                             4-5: 1 palustrine, 2 lake, 3 river), HGM landscape (bits 6-7: 1 terrene, 2 lentic,
+//                             3 lotic); 0 = no NWI polygon (wetlands.md)
+//   <tx>_<ty>.wcls.bin    u8  the NWI polygon's classes: (class1 << 4) | class2, each WCLS (0 none), class2 = class1
+//                             when the code has one class
 //   <tx>_<ty>.peat.bin    u8  SSURGO map unit Histosol (peat and muck) %; 255 = no SSURGO. Masked by the NWI
 //                             kinds it is MN DNR's "Potentially Wet Histosols" (NWI x soils) on the grid
 //   manifest.json             grid, layout, legends, precedence, citations, tiles written
@@ -36,7 +41,8 @@ const NWI_URL = 'https://enterprise.gisdata.mn.gov/aghost/rest/services/us_mn_st
 const HIST_URL = 'https://enterprise.gisdata.mn.gov/aghost/rest/services/us_mn_state_dnr/geos_potentially_wet_histosols/FeatureServer/0';
 const SDA_URL = 'https://sdmdataaccess.sc.egov.usda.gov/Tabular/post.rest';
 // open water bigger than this is a lake the bake already has from OSM: leave it out of the fetch (it is heavy)
-const NWI_WHERE = "cow_class1 <> 'UB' OR acres < 100";
+// (wetlands 2026-10-31: every river polygon too, whatever its size: the river channels the creeks are told by)
+const NWI_WHERE = "cow_class1 <> 'UB' OR acres < 100 OR attribute LIKE 'R%'";
 const SIMPLIFY_DEG = 0.00002; // ~2 m: server-side generalisation, well under the 10 m cell
 const MIN_FREE_GB = 15;
 
@@ -87,6 +93,7 @@ function parseArgs(argv) {
     else if (a === '--fetch-only') o.raster = false;
     else if (a === '--no-fetch') o.fetch = false;
     else if (a === '--refetch') o.refetch = true;
+    else if (a === '--refetch-nwi') o.refetch = 'nwi';
     else if (a === '--png') o.png = true;
     else if (a === '--png-only') { o.png = true; o.fetch = false; o.raster = false; }
     else if (a === '--check') o.check = true;
@@ -235,7 +242,8 @@ async function fetchArcgisBlock(url, where, fields, env, attrs) {
   }
   return feats;
 }
-const fetchNwiBlock = (env) => fetchArcgisBlock(NWI_URL, NWI_WHERE, 'objectid,attribute,spcc_desc', env, (a) => ({ key: a.objectid, a: a.attribute || '', b: a.spcc_desc || '' }));
+// b is "plant community|HGM code" (nwiParts splits it; a pack from before the HGM has the community alone)
+const fetchNwiBlock = (env) => fetchArcgisBlock(NWI_URL, NWI_WHERE, 'objectid,attribute,spcc_desc,hgm_code', env, (a) => ({ key: a.objectid, a: a.attribute || '', b: `${a.spcc_desc || ''}|${a.hgm_code || ''}` }));
 
 // Minimal WKT reader: the polygons of a POLYGON, MULTIPOLYGON or GEOMETRYCOLLECTION (lines and points
 // from a clip are dropped). Returns one flat ring list (even-odd fill makes parts and holes work).
@@ -347,8 +355,36 @@ function extractOsm(file) {
 
 // ---------- classification ----------------------------------------------------------------------------
 
+// ---- the whole code, kept (wetlands 2026-10-31, docs/wetland-data.md) ------------------------------------------
+export const nwiParts = (b) => { const s = String(b || ''), i = s.indexOf('|'); return i < 0 ? { spcc: s, hgm: '' } : { spcc: s.slice(0, i), hgm: s.slice(i + 1) }; };
+// water regime, bits 0-2 of the wet byte
+export const WET_REGIME = { A: 1, C: 2, F: 3, H: 4, D: 5, K: 6 }; // 7 = any other letter
+export const WET_SYSTEM = { P: 1, L: 2, R: 3 };
+export const WET_HGM = { TE: 1, LE: 2, LO: 3 };
+// a class with its subclass, a nibble (0 = none)
+export const WCLS = { FO1: 1, FO2: 2, FO4: 3, FO: 4, SS1: 5, SS2: 6, SS3: 7, SS4: 8, SS: 9, EM1: 10, EM2: 11, AB: 12, UB: 13, US: 14, RS: 15 };
+const clsNib = (c, sub) => (!c ? 0 : WCLS[c + sub] || WCLS[c] || (c === 'EM' ? WCLS.EM1 : c === 'RB' ? WCLS.UB : 0));
+// "PFO2/4Dq" -> { sys P, c1 FO2, c2 FO4, regime D, mods q }; null when it isn't a Cowardin code
+export function parseNwi(attr) {
+  const m = /^([LPR])(\d?)([A-Z]{2})(\d?)(?:\/([A-Z]{2})?(\d?))?([A-Z])?([a-z]*)$/.exec(attr || '');
+  if (!m) return null;
+  const c1 = m[3], s1 = m[4], c2 = m[5] || (m[6] ? c1 : ''), s2 = m[6] || '';
+  return { sys: m[1], sub: m[2], c1, s1, c2, s2, regime: m[7] || '', mods: m[8] || '' };
+}
+// the wet and wcls bytes of a polygon (0, 0 when its code doesn't parse)
+export function nwiBytes(attr, b) {
+  const p = parseNwi(attr);
+  if (!p) return [0, 0];
+  const { hgm } = nwiParts(b);
+  const reg = p.regime ? WET_REGIME[p.regime] || 7 : 0;
+  const wet = reg | (p.mods.includes('b') ? 8 : 0) | ((WET_SYSTEM[p.sys] || 0) << 4) | ((WET_HGM[hgm.slice(0, 2)] || 0) << 6);
+  const n1 = clsNib(p.c1, p.s1), n2 = p.c2 ? clsNib(p.c2, p.s2) : n1;
+  return [wet, (n1 << 4) | n2];
+}
+
 // NWI polygon -> kind, from its Cowardin code (attribute) and Minnesota plant community (spcc_desc).
 export function nwiKind(attr, spcc) {
+  spcc = nwiParts(spcc).spcc;
   const sys = attr[0], cls = /^[LPR]\d?([A-Z]{2})(\d?)/.exec(attr) || [];
   const c = cls[1], sub = cls[2];
   if (c === 'AB') return KIND.aquaticBed;
@@ -432,6 +468,8 @@ const CHANNELS = {
   rock: { type: 'u8', nodata: 255 },
   stone: { type: 'u8', nodata: 255 },
   peat: { type: 'u8', nodata: 255 },
+  wet: { type: 'u8', nodata: 0 },
+  wcls: { type: 'u8', nodata: 0 },
 };
 
 function readManifest() {
@@ -497,7 +535,7 @@ async function main() {
       const env = blockEnvelope(bx, by);
       for (const [src, fn] of [['nwi', fetchNwiBlock], ['ssurgo', fetchSsurgoBlock]]) {
         const file = path.join(RAW, src, `${key}.gpk.gz`);
-        if (fs.existsSync(file) && !opt.refetch) continue;
+        if (fs.existsSync(file) && !(opt.refetch === true || opt.refetch === src)) continue;
         guardDisk();
         const t0 = Date.now();
         const feats = await fn(env);
@@ -509,7 +547,7 @@ async function main() {
       }
     }
     const osmFile = path.join(RAW, 'osm.gpk.gz');
-    if (!fs.existsSync(osmFile) || opt.refetch) {
+    if (!fs.existsSync(osmFile) || opt.refetch === true) {
       const pbf = osmPbfFile();
       if (pbf) {
         const feats = extractOsm(pbf);
@@ -545,16 +583,19 @@ async function main() {
       const nf = path.join(RAW, 'nwi', `${key}.gpk.gz`), sf = path.join(RAW, 'ssurgo', `${key}.gpk.gz`);
       if (!fs.existsSync(nf) || !fs.existsSync(sf)) { log(`  block ${key}: not fetched, skipped`); continue; }
       for (const f of readPack(sf)) { const m = muIndex.get(String(f.key)) || 0; if (m) rasterize(f, env, (c) => { mu[c] = m; }); }
-      for (const f of readPack(nf)) {
+      const nwiFeats = readPack(nf), win = new Int32Array(N).fill(-1); // the polygon whose kind the cell took
+      nwiFeats.forEach((f, fi) => {
         const k = nwiKind(f.a, f.b);
-        if (!k) { stats.unknownNwi[`${f.a}|${f.b}`] = (stats.unknownNwi[`${f.a}|${f.b}`] || 0) + 1; continue; }
+        if (!k) { stats.unknownNwi[`${f.a}|${f.b}`] = (stats.unknownNwi[`${f.a}|${f.b}`] || 0) + 1; return; }
         const rk = NWI_RANK[k] + 1;
-        rasterize(f, env, (c) => { if (!nwi[c] || NWI_RANK[nwi[c]] + 1 < rk) nwi[c] = k; });
-      }
+        rasterize(f, env, (c) => { if (!nwi[c] || NWI_RANK[nwi[c]] + 1 < rk) { nwi[c] = k; win[c] = fi; } });
+      });
+      const fBytes = nwiFeats.map((f) => nwiBytes(f.a, f.b));
       const OSM_RANK = { [KIND.sand]: 3, [KIND.rock]: 2, [KIND.boulders]: 1 };
       for (const f of osmFeats) { const k = OSM_KIND[f.a]; rasterize(f, env, (c) => { if (!osm[c] || OSM_RANK[osm[c]] < OSM_RANK[k]) osm[c] = k; }); }
 
       const kind = new Uint8Array(N), rock = new Uint8Array(N), stone = new Uint8Array(N), peat = new Uint8Array(N);
+      const wet = new Uint8Array(N), wcls = new Uint8Array(N);
       for (let c = 0; c < N; c++) {
         const n = nwi[c], o = osm[c], m = mu[c] ? muList[mu[c]].facts : null;
         let k;
@@ -565,6 +606,7 @@ async function main() {
         else if (m) k = m.isWater ? KIND.water : m.rubbly >= 50 ? KIND.boulders : KIND.upland;
         else k = KIND.none;
         kind[c] = k;
+        if (win[c] >= 0) { const fb = fBytes[win[c]]; wet[c] = fb[0]; wcls[c] = fb[1]; }
         rock[c] = m ? Math.round(m.rock) : 255;
         stone[c] = m ? encStone(m.stone) : 255;
         peat[c] = m ? Math.round(m.hist) : 255;
@@ -572,7 +614,7 @@ async function main() {
       }
       for (const [tx, ty] of btiles) {
         const li0 = tx * T - env.i0, lj0 = ty * T - env.j0;
-        const bufs = {}, out = { kind, rock, stone, peat };
+        const bufs = {}, out = { kind, rock, stone, peat, wet, wcls };
         let any = false;
         for (const ch of Object.keys(CHANNELS)) bufs[ch] = Buffer.alloc(T * T);
         for (let r = 0; r < T; r++) for (let q = 0; q < T; q++) {
