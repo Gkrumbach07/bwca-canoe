@@ -17,10 +17,11 @@ app). Everything below is about filling that in.
 ## What is live from v4: the app on Pages, the data on R2
 
 `.github/workflows/pages.yml` builds `main` with `VITE_DATA_URL` set to its `DATA_URL_DEFAULT`,
-`https://data.gagekrumbach.com/bwca/v4/`, so the app fetches every tile, far tile and detail chunk from the bucket
+`https://data.gagekrumbach.com/bwca/v5/` (v5: the v4 bake again with the water-edges fixes, its `detail/` the same
+chunks; v4 stays in the bucket under `bwca/v4/`), so the app fetches every tile, far tile and detail chunk from the bucket
 and nothing is unpacked next to it. A `DATA_URL` repository variable overrides that address; `DATA_URL=release`
-goes back to the release archive below. The upload: `DATA_SYNC_SRC=public-data-v4
-DATA_SYNC_DEST=r2:bwca-data/bwca/v4 npm run data:sync` (rclone; set `RCLONE_RETRIES=10`, since R2 answers an
+goes back to the release archive below. The upload: `DATA_SYNC_SRC=public-data-v5
+DATA_SYNC_DEST=r2:bwca-data/bwca/v5 npm run data:sync` (rclone; set `RCLONE_RETRIES=10`, since R2 answers an
 occasional 501 that a retry clears).
 
 ## What was live through v3: GitHub Pages with the data from a release
