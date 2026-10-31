@@ -42,7 +42,7 @@
   --pp-line: 28px;                       /* the ruling */
   --pp-margin: 64px;                     /* the red margin line, from the page's left edge */
   --pp-rule: rgba(64, 104, 150, .17);
-  --pp-margin-col: rgba(180, 50, 31, .32);
+  --pp-margin-col: rgba(180, 50, 31, .5);
   --pp-brown: #8a4a24;                   /* the ink-brown of the headings */
   --pp-brown-deep: #5e321a;
   --pp-panel: #dfd2b0;                   /* a darker paper: the frame, the tiles */
@@ -182,7 +182,7 @@
 :is(.pp-spread, .pp) .pp-pad { padding: 0 10px 0 calc(var(--pp-margin) + 10px); }
 :is(.pp-spread, .pp) .pp-index.pp-lines { gap: 0; padding-right: 0; }
 :is(.pp-spread, .pp) .pp-index.pp-lines .pp-entry { padding-left: calc(var(--pp-margin) - 52px); }
-:is(.pp-spread, .pp) .pp-fishpic { flex: none; height: clamp(150px, 31vh, 250px); }
+:is(.pp-spread, .pp) .pp-fishpic { flex: none; height: clamp(140px, 27vh, 250px); }
 :is(.pp-spread, .pp) .pp-fishpic img { width: 92%; height: 100%; object-fit: contain; filter: drop-shadow(0 6px 6px rgba(70, 45, 20, .22)); }
 :is(.pp-spread, .pp) .pp-latin { margin-top: -6px; text-align: center; font-size: 14px; }
 :is(.pp-spread, .pp) .pp-tip { margin: 10px 0 2px; padding-left: 36px; transform: rotate(-.6deg); color: var(--pencil); }

@@ -793,12 +793,6 @@ body.shell-open #photo, body.shell-open #photo-print, body.paper-open #photo-pri
 #photo-print img { display: block; width: 240px; height: 135px; background: #2a2016; }
 #photo-print .cap { margin-top: 7px; font: 500 18px/1.1 var(--pencil-font); color: var(--pencil); }
 #photo-print .for { margin-top: 3px; font: 700 10px/1.35 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }
-#journal .prints { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 24px; align-content: start; padding: 6px 6px 0; }
-#journal .print { margin: 0; padding: 7px 7px 9px; background: #f6f1e4; border: 1px solid var(--edge); box-shadow: 0 3px 8px rgba(40, 24, 8, .26); transform: rotate(var(--tilt, 0deg)); }
-#journal .print img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #d8ccae; }
-#journal .print .blank { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; background: #d8ccae; font: italic 14px/1.2 var(--serif); color: var(--ink-soft); }
-#journal .print figcaption { margin-top: 6px; font: 500 17px/1.1 var(--pencil-font); color: var(--pencil); }
-#journal .print .for { display: block; margin-top: 3px; font: 700 10px/1.35 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }
 `;
 let cssIn = false;
 function injectCss() {

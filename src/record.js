@@ -647,7 +647,7 @@ class Record {
     if (this.hud && this.hud.openPaper) this.hud.openPaper('tripcard');
     this.shown = id;
     this.el.innerHTML = `<header><div class="sc kicker">The logbook · trip ${c.n}</div><button type="button" class="stamp outline" data-act="close" aria-label="Close (E or Esc)">Close · E</button></header>${this.pageHtml(c)}
-      <div class="tc-foot"><span class="pencil">in the journal’s Record</span><span class="keys"><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></div>`;
+      <div class="tc-foot"><span class="pencil">in the journal’s Trips</span><span class="keys"><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></div>`;
     this.el.classList.add('show');
     return true;
   }
@@ -744,7 +744,7 @@ class Record {
 
   // --- the moment: the first time a trip's card is put away -----------------------------------------------------------------
   moments() {
-    return [{ id: 'record', prio: 1, recur: 'once', text: 'Your trip is in the journal’s Record: {I}, then Journal.',
+    return [{ id: 'record', prio: 1, recur: 'once', text: 'Your trip is in the journal’s Trips: {I}, then Journal.',
       due: () => !this.shown && realNow() - this.closedAt < MOMENT_FOR }];
   }
 }
