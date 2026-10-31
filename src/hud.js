@@ -9,7 +9,7 @@ import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fm
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import { KIND, FOREST } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt } from './map-render.js'; // the map as vectors
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -423,6 +423,7 @@ export class Hud {
       if (h.kind === 'claim' && d < 18 * k) take(h, d, 1);
       else if (h.kind === 'dock' && d < 10 * k) take(h, d, 4);
       else if (h.kind === 'site' && d < 8 * k) take(h, d, 3);
+      else if (h.kind === 'dam' && d < 7 * k) take(h, d, 4.5); // the wetlands round
       else if ((h.kind === 'task' || h.kind === 'note') && d < Math.max(h.r / mPerPx, 9 * k)) take(h, 40 + d / 8, h.kind === 'task' ? 0 : 6);
       else if (h.kind === 'portage') {
         const p = w.portages[h.i]; if (!p) continue;
@@ -1627,6 +1628,7 @@ export class Hud {
         ctx.drawImage(this.overview, a, b, w.sizeX / mPerPx, w.sizeZ / mPerPx);
       }
       if (w.tiles) ready = paintGround(ctx, w, v, W, H, { k, budget: { build: 2 }, depths: lay.depths, ink: explored.world ? explored.lakes : null, inkV: explored.lakeV, detail: clipped ? onMine : null, labels: depthLabels });
+      paintCreeks(ctx, w, v, W, H, { k, onMine: clipped ? onMine : null, hits }); // the wetlands round: the brooks, the beaver dams
       // the burns by the season's date, and the wilderness's own edge
       if (lay.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
       if (lay.boundary) { if (BOUNDARY.path) paintBoundary(ctx, v, k); else loadBoundary(); }
