@@ -491,6 +491,7 @@ export class Packs {
     if (!pads.length || pads.some((u) => u.obj.where === 'canoe' || u.obj.where === 'hands')) return { ok: true, next: null };
     const p = this.player, ground = pads.filter((u) => u.obj.where === 'ground' && u.obj.at).map((u) => ({ u, m: Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) })).sort((a, b) => a.m - b.m)[0];
     if (ground) return { ok: false, next: `${cap(the(ground.u))} lies ${metres(ground.m)} from here: point at it and E to pick it up` };
+    if (pads.some((u) => u.obj.where === 'tent')) return { ok: false, next: 'Your paddle is in the tent: take it out from the book (I), The tent' };
     if (pads.some((u) => u.obj.where === 'stash')) return { ok: false, next: 'Your paddle is kept at the outfitters: fetch it there' };
     return { ok: false, next: 'Put a paddle in the canoe from the book (I)' };
   }

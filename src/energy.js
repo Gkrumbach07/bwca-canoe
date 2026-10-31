@@ -594,13 +594,15 @@ export class Energy {
   // hours slept. The rest need starts the day at q × min(1, hours / 7), the needs have fallen over the night at a third
   // of their waking rate, and the bar is back up to the ceiling. Without hours it is a night in a bunk at an outfitter
   // (an evacuation, or the end of a trip): a full night, then breakfast and a full bottle.
-  sleep(q = 1, hours = null) {
+  // opts.bag: whether the bag was in the tent (camp.js tentGear: the owner, 2026-10-31, the bag counts only inside the
+  // pitched tent); left out, a bag in the camp's reach counts (the rides, a bunk).
+  sleep(q = 1, hours = null, opts = {}) {
     const bunk = !Number.isFinite(hours);
     q = clamp(q, 0, 1);
     if (this.live) this.passNeeds(Math.max(0, this.now - this.lastNow), true, false);
     this.lastNow = this.now;
     // fb3 B: the sleeping bag is the night's rest: without one in the camp's reach, NO_BAG_REST of it (its stats say so)
-    const bag = bunk || this.bagInReach();
+    const bag = bunk || (typeof opts.bag === 'boolean' ? opts.bag : this.bagInReach());
     if (!bag) q *= NO_BAG_REST;
     // content C: the bag's night (kit.js sleepNight): colder than the bag is good to, less rest and colder by morning;
     // a night at the site Arvid's map pencils rests you a little more
@@ -613,9 +615,15 @@ export class Energy {
     // (tuning: a short night never leaves you less rested than you lay down: a 4 h rest that crossed dusk counted as a
     // 4 h night and took the rest need from 0.77 to 0.48; the clock has jumped already, so the bedtime rest is the
     // ceiling of the hours awake before the night)
-    const atBed = bunk ? 0 : this.rest0 * restCeiling(Math.max(0, this.awake - (hours || 0)));
-    this.rest0 = Math.max(atBed, q * Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS));
-    this.lastNight = { q: +q.toFixed(3), hours: bunk ? NIGHT_HOURS : hours, bag };
+    // The sleep pass (the owner, 2026-10-31: "sometimes it doesn't do anything"): it was max(the bedtime rest, q × the
+    // share of a night), so a night whose quality was under the bedtime rest (no bag in reach, a cold night, the bugs:
+    // 0.92 × 0.6 × …) or a short one gave nothing at all. Now the night brings the rest from where you lay down toward
+    // its quality by its share of a night: a whole night in the tent with the bag and the pad is a whole night's rest,
+    // a short one some of the way, and a poor one never takes you lower than you lay down.
+    const atBed = bunk ? 0 : clamp(this.rest0 * restCeiling(Math.max(0, this.awake - (hours || 0))), 0, 1);
+    const share = Math.min(1, (bunk ? NIGHT_HOURS : hours) / NIGHT_HOURS);
+    this.rest0 = Math.max(atBed, atBed + (q - atBed) * share);
+    this.lastNight = { q: +q.toFixed(3), hours: bunk ? NIGHT_HOURS : hours, bag, bugs: !!(bugN && Number.isFinite(bugN.rest) && bugN.rest < 0.97) };
     this.wetSetH = Math.max(this.wetSetH, WET_SET_AIR_H); // the wet set of clothes dries overnight
     if (bunk) { this.need.food = 1; this.need.water = 1; this.fill(BOTTLE, 0); }
     // fb2 F: a night in the bag warms you through (a bunk, or the tent with the bag in the camp's reach), less in damp

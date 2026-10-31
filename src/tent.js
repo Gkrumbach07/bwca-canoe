@@ -119,7 +119,10 @@ export function withTentNeeds(camp, ta) {
   const strike = [ta.e, ta.q].find((a) => a && /Strike/.test(a.verb));
   fill(strike, K.strike.slice(4 - st).map((ph) => ({ label: `${ph.name} · ${heldWords([ph])}`, done: false })), `Hold Q to strike it: ${heldWords(K.strike.slice(4 - st))}, back into the pack it came from`);
   const rest = st >= 4 && ta.e && /Rest/.test(ta.e.verb) ? ta.e : null;
-  fill(rest, [{ label: 'The tent up, the fly on', done: true }], 'E opens the dial: first light, 7:00, noon, dusk or any hour by ← →');
+  // (the owner, 2026-10-31: the bag and the pad count only inside the tent: inventory.js, the tent as a container)
+  const g = typeof camp.tentGear === 'function' ? camp.tentGear() : { bag: true, pad: true };
+  fill(rest, [{ label: 'The tent up, the fly on', done: true }, { label: 'A sleeping bag in the tent', done: !!g.bag, note: g.bag ? null : 'a night without one rests you far less' }, { label: 'A pad in the tent', done: !!g.pad }],
+    g.bag && g.pad ? 'E opens the dial: first light, 7:00, noon, dusk or any hour by ← →' : `Put the ${!g.bag ? 'sleeping bag' : 'pad'} in the tent first (the book: drag it onto The tent), or rest anyway`);
   return ta;
 }
 // The book's Pitch (and the bagged tent's Q): why not now, the steps, and the one thing to do. tent: camp.tentByUid(uid)

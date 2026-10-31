@@ -1293,6 +1293,7 @@ function zoneCheckDz(st, dz) {
     if (o.item === 'woodarms' && dz !== 'ground' && dz !== 'wood') return 'no'; // an armload is wood in the crook of an arm: set down, it is a pile
     if (dz === 'wood') return o.item === 'woodarms' ? zoneCheckDz(st, 'ground') : 'no'; // (fb4 B: the Wood tab takes wood)
     if (dz === 'canoe') return o.where === 'canoe' ? 'no' : 'ok';
+    if (dz === 'tent') return typeof inv.intoTent !== 'function' || !inv.nearTent() || o.where === 'tent' ? 'no' : t.isLong || d.one || (inv.tentRoom().n < inv.tentRoom().max) ? 'ok' : 'no'; // (the tent as a container: inventory.js)
     if (dz === 'ground') return !onFoot() || (o.where === 'ground' && typeof inv.dist === 'function' && inv.dist(o.at) < 1.6) || wadeBlock() ? 'no' : 'ok';
     if (dz === 'stash') return inv.atStash && o.where !== 'stash' ? 'ok' : 'no';
     return 'no';
@@ -1303,6 +1304,7 @@ function zoneCheckDz(st, dz) {
   if (dz === 'ground') return itemGroundCheck(st);
   if (dz === 'wood') return d.kind === 'firewood' ? itemGroundCheck(st) : 'no'; // (fb4 B: wood onto the woodpile)
   if (dz === 'canoe') return canoeFor(st.e.id, src && src.c ? src.c.id : null) ? 'ok' : 'no'; // (fb4 B: into the best one in the canoe)
+  if (dz === 'tent') return typeof inv.tentFor === 'function' && inv.tentFor(st.e.id, src && src.c ? src.c.id : null) ? 'ok' : 'no'; // (into the best one in the tent, or its floor)
   if (dz === 'stash') return inv.atStash && inv.crate && canFit(inv.crate, st.e.id) ? 'ok' : 'no';
   if (!isSlot(dz)) return 'no';
   const occ = occupant(dz);
@@ -1348,6 +1350,7 @@ function thingTo(t, dz) {
     return { ok: true, words: `${r.words}${back}`.trim() };
   }
   if (dz === 'canoe') return inv.load(t.id);
+  if (dz === 'tent') return inv.intoTent(t.id);
   if (dz === 'ground' || dz === 'wood') return o.item === 'woodarms' ? armloadDown(t) : inv.setDown(t.id);
   if (dz === 'stash') return inv.stow(t.id);
   return { ok: false };
@@ -1358,6 +1361,7 @@ function clearSlot(occ, from) {
   const inv = model(), w = from.where;
   let r = { ok: false };
   if (w === 'canoe') r = inv.load(occ.id);
+  else if (w === 'tent' && typeof inv.intoTent === 'function') r = inv.intoTent(occ.id);
   else if (w === 'stash') r = inv.stow(occ.id);
   else if (w === 'ground' && from.at) r = inv.setDown(occ.id, from.at, { force: true });
   if (!r.ok) r = inv.setDown(occ.id);
@@ -1386,6 +1390,14 @@ function itemTo(st, dz) {
     const where = `into the ${lower(short(itemDef(to.item)) || nameOf(to))} in the canoe`;
     if (bin) return binTake(bin, e, to.id, { qty: st.qty }) ? { ok: true, words: `${itemDef(e.id).name}: ${where}.` } : { ok: false };
     return moveInto(src, e, to, st.qty) ? { ok: true, words: `${itemDef(e.id).name}: ${where}.` } : { ok: false, words: 'No room for it in the canoe.' };
+  }
+  if (dz === 'tent') {
+    let to = typeof inv.tentFor === 'function' ? inv.tentFor(e.id, src.c.id) : null;
+    if (to && to.make) to = inv.tentPile(true);
+    if (!to) return { ok: false, words: 'No room for it in the tent.' };
+    const where = to.item === 'pile' ? 'on the tent floor' : `into the ${lower(short(itemDef(to.item)) || nameOf(to))} in the tent`;
+    if (bin) return binTake(bin, e, to.id, { qty: st.qty }) ? { ok: true, words: `${itemDef(e.id).name}: ${where}.` } : { ok: false };
+    return moveInto(src, e, to, st.qty) ? { ok: true, words: `${itemDef(e.id).name}: ${where}.` } : { ok: false, words: 'No room for it in the tent.' };
   }
   if (dz === 'stash') return inv.crate && moveInto(src, e, inv.crate, st.qty) ? { ok: true, words: `${itemDef(e.id).name}: kept for you.` } : { ok: false, words: 'No room on their shelf.' };
   const occ = occupant(dz), hand = dz.startsWith('hand');
@@ -1441,7 +1453,7 @@ function binTake(b, e, toCId, { x, y, rot, qty } = {}) {
 // canoe takes a pack (loaded) or an item (into the best one in it with room); Wood takes wood (stacked on the woodpile);
 // The ground takes anything (set down at your feet); Keeping takes anything into the outfitters' keeping; from a shelf,
 // a drop on a tab buys into it
-const SPECIAL_TABS = { canoe: 'canoe', ground: 'ground', wood: 'wood', keeping: 'stash' };
+const SPECIAL_TABS = { canoe: 'canoe', tent: 'tent', ground: 'ground', wood: 'wood', keeping: 'stash' };
 function tabCheck(st, tabEl) {
   const key = tabEl.dataset.tab, inv = model(), src = st.grid, e = st.e;
   if (!live()) return 'no';
@@ -1536,9 +1548,10 @@ export function runNear(a, opts = {}) {
   return r;
 }
 function closeBooks() { for (const s of SCREENS) if (s.open && typeof s.closeBook === 'function') s.closeBook(); }
-const WHERE = { back: 'on your back', chest: 'on your chest', hands: 'in your hands', pockets: 'on you', canoe: 'in the canoe', ground: 'on the ground', hung: 'hung in a tree', stash: 'kept by the outfitters', pile: 'on the ground' };
+const WHERE = { back: 'on your back', chest: 'on your chest', hands: 'in your hands', pockets: 'on you', canoe: 'in the canoe', tent: 'in the tent', ground: 'on the ground', hung: 'hung in a tree', stash: 'kept by the outfitters', pile: 'on the ground' };
 // what a container is called on its strap: a pile on the ground is a woodpile when it is all wood
 const nameOf = (c) => {
+  if (c.item === 'pile' && c.where === 'tent') return 'Loose in the tent';
   if (c.item === 'pile') { const g = c.grid || []; return g.length && g.every((e) => (itemDef(e.id) || {}).kind === 'firewood') ? 'Woodpile' : 'Set down here'; }
   // a hand's holder put into the hull at Get in (the fb3 join): named for what it holds (fb5 join: "At your feet · in the
   // canoe" read wrong ashore at a portage), else loose
@@ -2022,12 +2035,14 @@ export class MineSide {
     const pileKids = groundAll.filter((c) => c.item !== 'pile' && top(c).item === 'pile'); // (a thing nested in a pile: drawn with the ground)
     const ground = groundAll.filter((c) => c.item !== 'pile' && top(c).item !== 'pile');
     const canoe = list.filter((c) => top(c).where === 'canoe');
+    const tent = list.filter((c) => top(c).where === 'tent'), atTent = typeof inv.nearTent === 'function' && inv.nearTent();
     const atCanoe = !!(stash || canoe.length > 0 || afloat || (typeof inv.nearCanoe === 'function' && inv.nearCanoe()));
     const near3 = (l) => l.at && p && Math.hypot(l.at.x - p.x, l.at.z - p.z) < 3;
-    const longs = inv.long || [], longCanoe = atCanoe ? longs.filter((l) => l.where === 'canoe') : [], longGround = foot ? longs.filter((l) => l.where === 'ground' && near3(l)) : [];
+    const longs = inv.long || [], longCanoe = atCanoe ? longs.filter((l) => l.where === 'canoe') : [], longTent = atTent ? longs.filter((l) => l.where === 'tent') : [], longGround = foot ? longs.filter((l) => l.where === 'ground' && near3(l)) : [];
     const pieces = foot ? this.pieces : [];
     const tabs = [];
     if (atCanoe) tabs.push({ key: 'canoe', kind: 'canoe', label: 'The canoe', sub: afloat ? 'you are in it' : stash ? 'at the dock' : p && p.mode === 'carry' ? 'on your shoulders' : 'beside you' });
+    if (atTent) { const R = inv.tentRoom(); tabs.push({ key: 'tent', kind: 'tent', label: 'The tent', sub: `${R.n} of ${R.max} packs` }); }
     if (stash) tabs.push({ key: 'keeping', kind: 'keeping', label: 'Keeping', sub: 'at the outfitter’s' });
     for (const { c, label } of labelled(ground, AROUND_NAMES, AROUND_TWO)) {
       const t = top(c), d = c.at && p ? Math.hypot(c.at.x - p.x, c.at.z - p.z) : 0;
@@ -2037,7 +2052,7 @@ export class MineSide {
     if (foot && (woodpiles.length || pieces.length)) tabs.push({ key: 'wood', kind: 'wood', label: 'Wood', sub: `${pcs} ${pcs === 1 ? 'piece' : 'pieces'}` });
     const n = loose.reduce((k, c) => k + (c.grid || []).length, 0) + pileKids.length + longGround.length;
     if (foot) tabs.push({ key: 'ground', kind: 'loose', label: 'The ground', sub: n ? `${n} ${n === 1 ? 'thing' : 'things'}` : 'at your feet' });
-    return { tabs, ground, woodpiles, loose, pileKids, canoe, longCanoe, longGround, atCanoe, afloat, stash };
+    return { tabs, ground, woodpiles, loose, pileKids, canoe, longCanoe, longGround, atCanoe, afloat, stash, tent, longTent, atTent };
   }
   // the tab open on a side: the one chosen while it is still there, else (yours) the back's, else the first
   current(tabs, cur, mine) {
@@ -2055,7 +2070,7 @@ export class MineSide {
     const root = c ? (typeof inv.root === 'function' ? inv.root(c) : c) : null, where = root ? root.where : null;
     const wood = (k) => !!(k && k.item === 'pile' && nameOf(k) === 'Woodpile');
     this.pendLit = ref;
-    const keys = [ref, c && c.where === 'in' ? c.in : null, ref === 'canoe' || where === 'canoe' ? 'canoe' : null,
+    const keys = [ref, c && c.where === 'in' ? c.in : null, ref === 'canoe' || where === 'canoe' ? 'canoe' : null, ref === 'tent' || where === 'tent' ? 'tent' : null,
       String(ref).startsWith('piece:') || ref === 'pieces' || wood(c) || wood(root) ? 'wood' : null, root && root.item === 'pile' ? 'ground' : null, where === 'stash' ? 'keeping' : null].filter(Boolean);
     this.litTab = null;
     for (const k of keys) {
@@ -2072,7 +2087,7 @@ export class MineSide {
     const sl = (s) => (s ? `${s.mark || ''}${s.label}` : '');
     const st = typeof inv.status === 'function' ? list.map((c) => `${fixedThing(c) ? '' : sl(statusOf({ container: c.id }))}${(c.grid || []).map((e) => { const s = statusOf(e); return s ? `${e.uid}${sl(s)}` : ''; }).join('')}`).join('') + (inv.long || []).map((l) => sl(statusOf({ long: l.uid }))).join('') : '';
     return [version, this.tab, this.rtab, list.map((c) => `${c.id}:${c.where}:${c.hand ?? ''}:${c.in || ''}:${(c.grid || []).length}`).join(), (inv.long || []).map((l) => `${l.uid}:${l.where}:${l.hand ?? ''}`).join(), inv.atStash ? 1 : 0,
-      p ? p.mode : '', onFoot() ? 1 : 0, typeof inv.nearCanoe === 'function' && inv.nearCanoe() ? 1 : 0, this.pieces.map((q) => q.uid).join(), lo, this.pendLit || '', st].join('|');
+      p ? p.mode : '', onFoot() ? 1 : 0, typeof inv.nearCanoe === 'function' && inv.nearCanoe() ? 1 : 0, typeof inv.nearTent === 'function' && inv.nearTent() ? 1 : 0, this.pieces.map((q) => q.uid).join(), lo, this.pendLit || '', st].join('|');
   }
   render(force) {
     if (drag) { dirty = true; return; }
@@ -2132,6 +2147,7 @@ export class MineSide {
     if (!t) { page.appendChild(mk('p', 'pk-empty', right ? 'Nothing within reach.' : 'Nothing on you.')); return; } // (fb5 B: quiet, rule 5)
     if (t.kind === 'cont' || t.kind === 'ground') page.appendChild(block(t.c, T.byId, { onUse: this.onUse, screen: sc }));
     else if (t.kind === 'canoe') this.canoePage(page, T);
+    else if (t.kind === 'tent') this.tentPage(page, T);
     else if (t.kind === 'wood') this.woodPage(page, T);
     else if (t.kind === 'loose') this.groundPage(page, T);
     else if (t.kind === 'keeping') this.keepingPage(page, T.list, T.byId);
@@ -2203,6 +2219,16 @@ export class MineSide {
     const title = `${A.stash ? 'In the canoe at the dock' : 'In the canoe'}${kg > 0.05 ? ` · ${kgText(kg)}` : ''}`;
     const z = this.zone(page, 'canoe', title, kids, kids.length ? (A.afloat ? '' : 'room to load') : A.afloat ? 'Nothing in the canoe but you.' : 'Nothing in the canoe.'); // (fb5 B: quiet, rule 5)
     if (!A.afloat && !A.stash) z.insertBefore(this.canoeActs(A.canoe, A.longCanoe), z.querySelector('.pk-flow')); // (fb5 join: at the top, where Shoulder it's word sends you, not under a loaded canoe's grids out of sight)
+  }
+  // The tent (inventory.js: the tent as a container): what is in it, each container with its grid, the loose things on its
+  // floor, the long things; a drop on the page puts a pack in, or an item in the best one in it (else on the floor)
+  tentPage(page, T) {
+    const A = T.A, inv = model(), sc = this.owner, top = (c) => topOf(c, T.byId);
+    const tops = A.tent.filter((c) => c.where === 'tent').sort((a, b) => (a.item === 'pile') - (b.item === 'pile'));
+    const order = [...tops.flatMap((t) => A.tent.filter((c) => top(c) === t)), ...A.tent.filter((c) => !tops.includes(top(c)))];
+    const kids = [...order.map((c) => block(c, T.byId, { onUse: this.onUse, screen: sc })), ...A.longTent.map((l) => longBlock(l, { screen: sc }))];
+    const R = inv.tentRoom();
+    this.zone(page, 'tent', `In the tent · room for ${R.max} packs and barrels`, kids, kids.length ? 'drag here to put it in the tent' : 'Nothing in the tent. Drag a pack, the sleeping bag or the pad here: they rest you only inside it.');
   }
   // Wood: the woodpiles within reach and the wood lying about (dead and down); wood dropped here is stacked
   woodPage(page, T) {

@@ -8,8 +8,13 @@
 //
 //   inventory.containers   [{ id, item, name, grid: [{ uid, id, x, y, rot, qty, data?, box? }], where, at, in, hand? }]
 //                          where: 'back' | 'chest' | 'hands' | 'pockets' | 'canoe' | 'ground' | 'hung' | 'stash' | 'in'
-//                          ('in': nested in the container `in`, whose grid has an entry { uid: this id, box: true })
-//   inventory.long         [{ uid, id, where: 'hands' | 'canoe' | 'ground' | 'stash', at, inUse, hand? }]
+//                          | 'tent' ('in': nested in the container `in`, whose grid has an entry { uid: this id, box: true })
+//   inventory.long         [{ uid, id, where: 'hands' | 'canoe' | 'ground' | 'stash' | 'tent', at, inUse, hand? }]
+//   the tent (the owner, 2026-10-31: "I kind of want a tent to be a container in a way where I can put things inside the
+//   tent … The tent is pretty spacious, but does have a limit … It should also sort of work like a canoe"): your tent,
+//   up (stage 3 or more), holds TENT_ROOM containers and any long things, where 'tent', and loose things in a pile in it.
+//   In reach within TENT_REACH of it, or from inside (asleep, the Rest dial). intoTent(ref), tentFor(itemId), tentPile(),
+//   tentRoom(), stowIntoTent() (what you carry, as the canoe's Get in does), emptyTent(at, { stash }) (struck), inTent(c)
 //   inventory.hands        [thing | null, thing | null]: what is in each hand ({ long: uid } or { container: id })
 //   inventory.reachable(player?), isReachable(cId), atStash, nearCanoe()
 //   inventory.fits(cId, itemId, x, y, rot, ignoreUid), firstFit(cId, itemId)
@@ -65,7 +70,9 @@ export const CAMP_REACH = 25;         // m: food set out at your camp counts for
 const CANOE_ROOM = 8;                 // containers a canoe takes (besides the long items)
 const STILL = 0.25;                   // m/s: still enough to eat
 const SAVE_EVERY = 6;                 // seconds of play between saves while something is dirty
-const WHERE_RANK = { back: 0.4, chest: 0.35, hands: 0.3, pockets: 0.05, canoe: 0.2, stash: 0.1, ground: 0, hung: 0 };
+const WHERE_RANK = { back: 0.4, chest: 0.35, hands: 0.3, pockets: 0.05, canoe: 0.2, stash: 0.1, ground: 0, hung: 0, tent: 0 };
+const TENT_REACH = 4;                 // m from your tent's middle within which what is in it is in reach
+const TENT_ROOM = { aframe: 4, dome: 5, fourseason: 6 }; // containers a tent takes (a pack, a barrel, the bucket …), by its item
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // (a name keeps its capital: "the Duluth #3")
 // fb5 B: energy.js's bottle and clothes statuses said the short way (a word and its timer; the litres bar says how much)
@@ -302,7 +309,7 @@ export class Inventory {
     return Math.hypot(dx - fx * t, dz - fz * t);
   }
   dist(at) { const p = this.player; return at && p ? Math.hypot(at.x - p.x, at.z - p.z) : Infinity; }
-  ctx() { return { stash: this.atStash, canoe: this.nearCanoe() }; }
+  ctx() { return { stash: this.atStash, canoe: this.nearCanoe(), tent: this.nearTent() }; }
   inReach(c, k = this.ctx()) {
     const r = this.root(c);
     switch (r.where) {
@@ -310,6 +317,7 @@ export class Inventory {
       case 'canoe': return k.canoe || k.stash;
       case 'stash': return k.stash;
       case 'ground': case 'hung': return this.dist(r.at) <= REACH;
+      case 'tent': return !!k.tent;
       default: return false;
     }
   }
@@ -326,6 +334,7 @@ export class Inventory {
       case 'canoe': return k.canoe || k.stash;
       case 'stash': return k.stash;
       case 'ground': return this.dist(l.at) <= REACH;
+      case 'tent': return !!k.tent;
       default: return false;
     }
   }
@@ -572,10 +581,11 @@ export class Inventory {
     const r = this.reachable(), cp = this.camp, a = cp && typeof cp.reachArea === 'function' ? cp.reachArea() : null;
     if (!a) return r;
     const s = this.canoeSpot(), canoeIn = !!(s && !s.afloat && !s.overhead && Math.hypot(s.x - a.x, s.z - a.z) <= a.r), has = new Set(r);
+    const t = this.tentSpot(), tentIn = !!(t && Math.hypot(t.x - a.x, t.z - a.z) <= a.r + 5);
     for (const c of this.containers) {
       if (has.has(c)) continue;
       const k = this.root(c);
-      if ((k.where === 'ground' && k.at && Math.hypot(k.at.x - a.x, k.at.z - a.z) <= a.r) || (k.where === 'canoe' && canoeIn)) r.push(c);
+      if ((k.where === 'ground' && k.at && Math.hypot(k.at.x - a.x, k.at.z - a.z) <= a.r) || (k.where === 'canoe' && canoeIn) || (k.where === 'tent' && tentIn)) r.push(c);
     }
     return r;
   }
@@ -862,6 +872,96 @@ export class Inventory {
     o.where = 'stash'; o.at = null; o.hand = null;
     this.emit('stash');
     return ok(`${t.def.name}: kept for you at the outfitters.`);
+  }
+  // --- the tent ------------------------------------------------------------------------------------------------------
+  // your tent while it stands up (camp.js camp: stage 3, the tent up, or 4, the fly on), or null
+  tentSpot() { const cp = this.camp, t = cp && cp.camp; return t && t.stage >= 3 ? t : null; }
+  // beside it on foot, or inside it (asleep, the Rest dial open)
+  nearTent() {
+    const t = this.tentSpot(), p = this.player, cp = this.camp;
+    if (!t || !p) return false;
+    if (cp && (cp.night || cp.dialOpen)) return true;
+    return !!p.onFoot && Math.hypot(t.x - p.x, t.z - p.z) <= TENT_REACH;
+  }
+  inTent(c) { const r = c && this.root(c); return !!(r && r.where === 'tent'); }
+  // { n, max }: the containers in it (the loose pile not counted) and how many it takes
+  tentRoom() {
+    const t = this.tentSpot();
+    return { n: this.containers.filter((c) => c.where === 'tent' && c.item !== 'pile').length, max: TENT_ROOM[t && t.item] || TENT_ROOM.aframe };
+  }
+  // the loose things' pile on the tent's floor (made when asked with make)
+  tentPile(make = false) {
+    let k = this.containers.find((c) => c.where === 'tent' && c.item === 'pile');
+    if (!k && make && this.tentSpot()) { k = this.addContainer('pile', 'tent', null, { quiet: true }); if (k) k.name = 'Loose in the tent'; }
+    return k || null;
+  }
+  // the best container in the tent for an item (the ones that take its kind first), else the floor's pile when it has room
+  tentFor(itemId, not = null) {
+    const d = itemDef(itemId); if (!d || !this.tentSpot()) return null;
+    const list = this.containers.filter((c) => c.id !== not && c.item !== 'pile' && this.inTent(c) && !this.spec(c).one && (c.item !== 'stringer' || d.kind === 'fish') && this.accepts(c, d) && this.firstFit(c, itemId));
+    const best = list.sort((a, b) => this.score(b, d) - this.score(a, d))[0];
+    if (best) return best;
+    const pile = this.tentPile(false);
+    if (pile) return pile.id !== not && this.firstFit(pile, itemId) ? pile : null;
+    return this.firstFit({ id: 'tent-pile', item: 'pile', grid: [] }, itemId) ? { make: true } : null;
+  }
+  // Into your tent (a pack, a barrel, the rod; a thing in a hand into something in it, or onto its floor)
+  intoTent(ref) {
+    const t = this.thing(ref), tent = this.tentSpot();
+    if (!t) return no('gone', 'That is not here.');
+    if (t.def.fixed) return no('fixed', '');
+    if (!tent) return no('far', 'Your tent is not up.');
+    if (!this.nearTent()) return no('far', 'Your tent is not here.');
+    if (!this.thingReachable(t)) return no('far', `${t.def.name} is out of reach.`);
+    const o = t.obj;
+    if (t.def.one) { const e = o.grid[0], to = e && this.tentFor(e.id, o.id); if (!to) return no('full', 'No room for it in the tent.'); const k = to.make ? this.tentPile(true) : to; return this.holderInto(o, [k], 'the tent'); }
+    if (o.where === 'tent') return ok();
+    if (t.kind === 'container') { const r = this.tentRoom(); if (r.n >= r.max) return no('full', `The tent is full: room for ${r.max} packs and barrels.`); }
+    if (t.kind === 'container' && o.where === 'in') this.unnest(o);
+    o.where = 'tent'; o.at = null; o.hand = null;
+    this.emit('load');
+    return ok(`${t.def.name} in the tent.`);
+  }
+  // getting in (camp.js, at Rest): what you carry goes in with you, as the canoe's Get in loads it (packs.js loadWorn):
+  // the back, the chest, then the hands; what the tent has no room for is set down by the door. → { moved, out }
+  stowIntoTent() {
+    const tent = this.tentSpot(), moved = [], out = [];
+    if (!tent) return { moved, out };
+    const order = { back: 0, chest: 1, hands: 2 };
+    const on = [...this.containers.filter((c) => c.where in order), ...this.long.filter((l) => l.where === 'hands')].sort((a, b) => order[a.where] - order[b.where]);
+    for (const o of on) {
+      const t = this.thing(o.id || o.uid); if (!t || t.def.fixed) continue;
+      const r = this.intoTent(o.id || o.uid);
+      if (r.ok) { moved.push(t.def.one && o.grid[0] ? itemDef(o.grid[0].id) || t.def : t.def); continue; }
+      if (t.kind === 'container' && this.setDown(o.id, this.doorSpot(tent, out.length), { left: false, quiet: true, force: true }).ok) out.push(t.def);
+    }
+    if (moved.length || out.length) this.emit('load');
+    return { moved, out };
+  }
+  // a spot outside the tent's door, the k-th along it
+  doorSpot(t, k = 0) {
+    const fx = t.fdx || 0, fz = t.fdz || 1, sx = -fz, sz = fx, d = 1.8 + Math.floor(k / 3) * 0.6, s = ((k % 3) - 1) * 0.7;
+    const x = t.x + fx * d + sx * s, z = t.z + fz * d + sz * s;
+    return { x, z, y: this.groundY(x, z), heading: Math.atan2(-fz, fx), ...(t.key ? { camp: t.key } : { camp: 'camp' }) };
+  }
+  // struck (camp.js packTent): everything in it comes out by the door (stash: to the outfitters, a trip ended). → n
+  emptyTent(t, { stash = false } = {}) {
+    let n = 0;
+    for (const c of this.containers) {
+      if (c.where !== 'tent') continue;
+      if (stash) { c.where = 'stash'; c.at = null; n++; continue; }
+      const at = this.doorSpot(t, n++);
+      c.where = 'ground'; c.hand = null; c.at = { x: at.x, z: at.z, y: at.y, heading: at.heading, camp: at.camp };
+    }
+    for (const l of this.long) {
+      if (l.where !== 'tent') continue;
+      if (stash) { l.where = 'stash'; l.at = null; n++; continue; }
+      const at = this.doorSpot(t, n++);
+      l.where = 'ground'; l.at = { x: at.x, z: at.z, y: at.y, heading: at.heading, camp: at.camp };
+    }
+    for (const c of this.containers) if (c.item === 'pile' && c.where === 'ground' && c.name === 'Loose in the tent') c.name = itemDef('pile').name;
+    if (n) this.emit('ground');
+    return n;
   }
   // Hang a container from a tree (the food barrel, phase 2): at { x, y, z } (y the barrel's middle), the rope over a limb
   hang(ref, at) {
@@ -1372,7 +1472,7 @@ export class Inventory {
   describe(c) {
     const k = this.root(c), w = k.where;
     if (c.where === 'in') return `in the ${lower(this.cont(c.in) ? this.cont(c.in).name : 'pack')}`;
-    return { back: 'on your back', chest: 'on your chest', hands: 'in hand', pockets: 'on you', canoe: 'in the canoe', stash: 'at the outfitters', hung: 'hung in a tree', ground: k.at && k.at.camp ? 'set out at camp' : 'on the ground' }[w] || w;
+    return { back: 'on your back', chest: 'on your chest', hands: 'in hand', pockets: 'on you', canoe: 'in the canoe', tent: 'in the tent', stash: 'at the outfitters', hung: 'hung in a tree', ground: k.at && k.at.camp ? 'set out at camp' : 'on the ground' }[w] || w;
   }
   report() {
     return {

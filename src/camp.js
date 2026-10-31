@@ -8,7 +8,7 @@ import { hold } from './hold.js'; // camp 1: held work, with its ring
 import { TentStages, TentGhost, TENT_FLY, kindOf, tentOf } from './tent.js'; // camp 1: the tent in its phases (the A-frame's own, camp join)
 import { Hang } from './hang.js'; // camp 1: the barrel hung from a limb
 import { inventory as INVENTORY } from './inventory.js';
-import { itemDef } from './items.js';
+import { itemDef, isBag } from './items.js';
 
 // Camp and night (the trip core, stream C; redone on the owner's feedback of 2026-10-24: "setting up your camp in your
 // own little way"). Nothing at camp happens by itself.
@@ -77,10 +77,14 @@ const SLEEP_IN_BY = 9;      // and up by this hour at the latest (a site reached
 const WORN_OUT = 0.3;       // a rest need under this (the 'tired' mark) lets the tent take you by day too, for SLEEP_IN hours
 const NAP_UNDER = 5;        // wc A: a rest shorter than this many hours is a nap, not a night (nap())
 const NAP_GAIN = 0.7;       // a nap gives this share of a night's rest for its hours (a 3 h nap about 0.3)
+const NAP_NO_BAG = 0.6;     // a nap with no bag in the tent (energy.js NO_BAG_REST)
 const NAP_AWAKE = 1.5;      // and takes this many hours off the hours awake for each hour napped (the rest's ceiling)
 const TENTS = { aframe: 0.85, 'a-frame': 0.85, dome: 1, fourseason: 1, 'four-season': 1, '4season': 1 }; // sleep quality by the profile's kit.tent
 const START_TENT = 0.85;    // the starting kit's A-frame, when there is no profile to ask
-const PAD = 0.05;           // a sleeping pad adds this
+const PAD = 0.08;           // a sleeping pad in the tent adds this (the A-frame's 0.92 with a pad is a whole night's rest)
+const NO_PAD = 0.88;        // and a night on the bare floor, no pad in the tent, sleeps this much as well
+// (the bag: energy.js NO_BAG_REST, a night with no sleeping bag in the tent; the owner, 2026-10-31: the bag and the pad
+// count only inside the pitched tent)
 const WET = 0.8;            // a night in damp gear sleeps this much as well
 const NO_FLY = 0.9;         // and a night with no fly on (dew through the mesh)
 const RAINY = new Set(['light-rain', 'rain', 'storm']);
@@ -484,9 +488,40 @@ export class Camp {
     const k = this.kitOf('tent'), pr = this.profile, g = this.player.gear;
     if (g && Number.isFinite(g.sleep)) return Math.max(0, Math.min(1, g.sleep)); // hubs 2B: the tent and the pad (shop.js player.gear)
     if (pr && Number.isFinite(pr.sleepQ)) return Math.max(0, Math.min(1, pr.sleepQ));
-    let q = k ? (TENTS[k] ?? (/four|dome/.test(k) ? 1 : START_TENT)) : START_TENT;
-    if (pr && pr.has && (pr.has('pad') || pr.has('sleeping-pad'))) q += PAD;
+    const q = k ? (TENTS[k] ?? (/four|dome/.test(k) ? 1 : START_TENT)) : START_TENT;
     return Math.min(1, q);
+  }
+  // What is in your tent to sleep on (inventory.js: the tent as a container), or on you to take in: { bag, pad } (the
+  // defs, or null). The owner,
+  // 2026-10-31: "I want that to be a requirement for getting the benefits of things like the sleeping bag and the sleeping
+  // pad". Without an inventory (the tests) both are there.
+  tentGear() {
+    const inv = this.inv;
+    if (!inv) return { bag: itemDef('sleepingbag'), pad: itemDef('pad') };
+    let bag = null, pad = null;
+    const ON = new Set(['back', 'chest', 'hands', 'pockets']); // (what you carry goes in with you: stowIntoTent)
+    for (const c of inv.containers) {
+      if (!inv.inTent(c) && !ON.has(inv.rootWhere(c))) continue;
+      for (const e of c.grid) {
+        if (e.box) continue;
+        const d = itemDef(e.id); if (!d) continue;
+        if (!bag && (e.id === 'sleepingbag' || isBag(e.id))) bag = d;
+        if (!pad && (Number.isFinite(d.pad) || e.id === 'pad' || e.id === 'padair')) pad = d;
+      }
+    }
+    return { bag, pad };
+  }
+  // the night's quality in the tent as it stands now, before the bag (energy.sleep): the tent, the pad, the fly, damp gear
+  nightQuality(fly, rain) {
+    const g = this.tentGear(), t = this.tentQuality();
+    return (g.pad ? Math.min(1, t + PAD) : t * NO_PAD) * (this.wet ? WET : 1) * (fly ? 1 : NO_FLY) * (rain ? WET : 1);
+  }
+  // what is missing in the tent for a whole night's rest, in a few words each: ['no sleeping bag in the tent', …]
+  tentShort() {
+    const g = this.tentGear(), out = [];
+    if (!g.bag) out.push('no sleeping bag in the tent');
+    if (!g.pad) out.push('no pad in the tent');
+    return out;
   }
   // game hours before the water just filled is drinkable: tablets half an hour, a filter a few minutes
   filterWait() { const k = this.kitOf('filter'); return FILTERS[k] ?? (/pump|gravity|filter/.test(k) ? FILTERS.pump : FILTERS.tablets); }
@@ -770,6 +805,7 @@ export class Camp {
   setStage(c, k) {
     if (!c) return;
     c.stage = Math.max(0, Math.min(4, k));
+    if (c.stage < 3) this.tentOut(c); // (taken down past the tent: what was in it comes out by the door)
     c.stages.set(c.stage);
     const i = this.tiles.dynamic.indexOf(c.obstacle), want = c.stage >= 2;
     if (want && i < 0) this.tiles.dynamic.push(c.obstacle);
@@ -788,6 +824,7 @@ export class Camp {
   packTent({ quiet = false, stash = false } = {}) {
     const c = this.camp;
     if (!c) return;
+    this.tentOut(c, { stash, quiet });
     c.stages.hide(); this.pool.push(c.stages);
     const i = this.tiles.dynamic.indexOf(c.obstacle);
     if (i >= 0) this.tiles.dynamic.splice(i, 1);
@@ -813,6 +850,14 @@ export class Camp {
     if (!quiet) this.note(`The tent is down and rolled up.${words}${c.key ? ' The site is free again.' : ''}`, 5);
   }
 
+  // the things in the tent out by its door (inventory.emptyTent), a word of it; stash: to the outfitters with the tent
+  tentOut(c, { stash = false, quiet = false } = {}) {
+    const inv = this.inv;
+    if (!inv || typeof inv.emptyTent !== 'function') return 0;
+    const n = inv.emptyTent(c, { stash });
+    if (n && !quiet && !stash) this.note(`What was in the tent is out by the door: ${n === 1 ? 'one thing' : `${word(n)} things`}.`, 4);
+    return n;
+  }
   // wc A: your tent's two keys on the dot (nearby.js draws the target within TENT_PANEL of it): { e, q, label, hint,
   // stage }. Half pitched: E carries on pitching (held), Q strikes (held). The fly still off: E puts it on (held), Q
   // rests without it (rain comes through the mesh). Up: E Rest until… (the dial), Q strikes (held). o.key: the key held.
@@ -846,7 +891,8 @@ export class Camp {
       const w = this.wakeTime(at), M = Math.round(w.hours * 60), H = Math.floor(M / 60), m = M % 60;
       const span = `${H ? `${H} h` : ''}${m ? ` ${m} min` : ''}`.trim() || 'no time at all';
       const kind = w.nap ? 'a nap: some of the rest comes back' : w.hours >= 7 ? 'a full night' : 'a short night: not all the rest comes back'; // (fb5 join: no percent, rule 3)
-      return `${span} · ${kind}${c.stage < 4 ? ' · no fly on' : ''}`;
+      const short = this.tentShort(); // (what the night is short of, said before it, not after)
+      return `${span} · ${kind}${c.stage < 4 ? ' · no fly on' : ''}${short.length ? ` · ${short.join(', ')}` : ''}`;
     };
     this.dial.show({ kicker: `Rest · ${c.site ? this.siteName(c.site) : 'your tent'}`, opts, at: start, words, onPick: (at) => this.sleep('tent', at) });
     return true;
@@ -888,7 +934,11 @@ export class Camp {
     hold.cancel(); this.dropDraft(); this.pitching = null; if (this.hang.armed) this.hang.disarm();
     const camp = c && Math.hypot(c.x - p.x, c.z - p.z) < ASHORE_NOTE ? c : null;
     const area = this.areaAt(p.x, p.z, AREA_R + 15) || (camp ? { x: camp.site ? camp.site.layout.fire.x : camp.x, z: camp.site ? camp.site.layout.fire.z : camp.z, r: AREA_R } : null);
-    if (camp) parts.push(camp.stage >= 4 ? 'the tent is still up' : `the tent stands half pitched, ${tentOf(camp.item).words[camp.stage]}`);
+    if (camp) {
+      // (what is in it, named: the owner, 2026-10-31, "it should tell me what that item is or items")
+      const inside = inv ? [...inv.containers.filter((k) => k.where === 'tent').flatMap((k) => (k.item === 'pile' ? entryNames(k.grid) : [`the ${thingName(itemDef(k.item))}`])), ...inv.long.filter((l) => l.where === 'tent').map((l) => `the ${thingName(itemDef(l.id))}`)] : [];
+      parts.push(camp.stage >= 4 ? `the tent is still up${inside.length ? `, ${listOf(inside)} in it` : ''}` : `the tent stands half pitched, ${tentOf(camp.item).words[camp.stage]}`);
+    }
     if (this.chores && typeof this.chores.ashore === 'function') { try { for (const s of this.chores.ashore() || []) if (s) parts.push(s); } catch (e) { console.warn('chores.ashore', e); } }
     if (inv && area) {
       const near = (at) => at && Math.hypot(at.x - area.x, at.z - area.z) <= area.r + 10;
@@ -952,8 +1002,14 @@ export class Camp {
     // breakfast of a jump), so supper is eaten now, unless one was had in the last few hours (a cooked one, say)
     const { at: wakeAt, hours, day: byDay, nap } = this.wakeTime(choice);
     if (!byDay && set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
+    // in you go, and what you carry with you, as into the canoe (inventory.stowIntoTent)
+    const inv = this.inv, S = kind === 'tent' && inv && typeof inv.stowIntoTent === 'function' ? inv.stowIntoTent() : null;
+    if (S && (S.moved.length || S.out.length)) {
+      const nm = (ds) => listOf(ds.map((d) => `the ${thingName(d)}`));
+      this.morningIn = `${S.moved.length ? `${cap(nm(S.moved))} went into the tent with you.` : ''}${S.out.length ? ` No room inside for ${nm(S.out)}: left by the door.` : ''}`.trim();
+    } else this.morningIn = null;
     const fly = !c || c.stage >= 4, rain = !fly && this.rainyNight(hours);
-    const q = this.tentQuality() * (this.wet ? WET : 1) * (fly ? 1 : NO_FLY) * (rain ? WET : 1);
+    const gear = this.tentGear(), q = this.nightQuality(fly, rain);
     const W = this.weather, fc0 = W && W.forecast ? W.forecast(Math.max(1, Math.ceil(hours))) : [];
     // the weather now leads the night's line (as rainyNight counts it): rain falling at bedtime is a wet night's first
     const fc = W && W.state && (!fc0.length || fc0[0].state !== W.state) ? [{ state: W.state }, ...fc0] : fc0;
@@ -972,7 +1028,7 @@ export class Camp {
     // by day) whose hours hold the night's hour, with food not hung; the card is the visit, held while its sounds play
     const B = !nap && !byDay && this.bear && typeof this.bear.bedtime === 'function' ? this.bear.bedtime({ x: p.x, z: p.z, from: this.now, to: this.now + hours }) : null;
     if (B) { card.text = B.text; card.hold = B.hold; }
-    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, bear: !!B };
+    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null };
     const onDark = () => { if (B && B.onDark) { try { B.onDark(); } catch (e) { console.warn('bear: the night', e); } } this.wake(); };
     const done = () => this.morning();
     if (this.veil && this.veil.card) this.veil.card({ ...card, onDark }).then(done, done);
@@ -988,10 +1044,13 @@ export class Camp {
     this.jump(n.hours);
     if (Number.isFinite(n.wakeAt)) d.setClock(d.year, d.doy, n.wakeAt);
     const e = this.energy;
-    if (n.nap) this.nap(n.q, n.hours);
-    else if (e.sleep) e.sleep(n.q, n.hours); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
+    if (n.nap) this.nap(n.q * (n.bag ? 1 : NAP_NO_BAG), n.hours);
+    else if (e.sleep) e.sleep(n.q, n.hours, { bag: n.bag }); else e.value = Math.max(e.value, n.q); // the night's quality and its hours (energy.js)
     if (n.nap) { this.log('nap', { key: this.camp ? this.camp.key : null, hours: Math.round(n.hours * 10) / 10 }); this.persist(); return; }
     const lines = [];
+    if (this.morningIn) { lines.push(this.morningIn); this.morningIn = null; }
+    const rested = this.restWords(n);
+    if (rested) lines.push(rested);
     if (n.rain && this.state) { this.state.wet = true; lines.push('Rain came through the mesh in the night with no fly on: your gear is soaked.'); }
     else if (this.wet && this.player.gear && this.player.gear.sleepDry) { this.state.wet = false; lines.push('The gear dried overnight in the vestibule.'); } // hubs 2B: the four-season tent
     // cons A: the bear decided at bedtime does its damage now; its line waits for the mess to be seen (bear.js)
@@ -999,6 +1058,27 @@ export class Camp {
     this.morningNote = lines.length ? lines.join(' ') : null;
     this.log('sleep', { kind: n.kind, key: this.camp ? this.camp.key : null, q: +n.q.toFixed(2), hours: Math.round(n.hours * 10) / 10, fly: !n.rain && (!this.camp || this.camp.stage >= 4) });
     this.persist();
+  }
+  // The morning's word on the night's rest (the owner, 2026-10-31: "Sleep feels weird. Like, I'd expect if I slept a full
+  // night, my sleep would be pretty much 100% restored, but sometimes it doesn't do anything"): how rested, and what held
+  // it back (no bag or pad in the tent, the fly off, a short night, wet gear, a cold night, the bugs), and when the bar
+  // stays low for hunger or thirst rather than sleep, that. No percent (fb5 join, rule 3).
+  restWords(n) {
+    const e = this.energy;
+    if (!e || !e.live || !e.needs) return null;
+    const r = e.needs.rest, why = [], L = e.lastNight || {}, K = e.kit && e.kit.lastNight;
+    if (!n.bag) why.push('no sleeping bag in the tent');
+    if (!n.pad) why.push('no pad under you');
+    if (!n.fly) why.push('no fly on');
+    if (n.hours < 6.5) why.push(`only ${word(Math.max(1, Math.floor(n.hours + 0.01)))} ${plural(Math.max(1, Math.floor(n.hours + 0.01)), 'hour')}`);
+    if (this.wet || n.rain) why.push('wet gear');
+    if (K && K.cold >= 2) why.push('a night colder than the bag');
+    if (L.bugs) why.push('the bugs');
+    const how = r >= 0.95 ? 'Fully rested' : r >= 0.8 ? 'Well rested' : r >= 0.55 ? 'Rested, but not fully' : 'Barely rested';
+    let words = `${how}${why.length && r < 0.95 ? `: ${listOf(why)}` : ''}.`;
+    const nd = e.needs, held = nd.food < 0.35 ? 'hungry' : nd.water < 0.35 ? 'thirsty' : nd.warmth < 0.35 ? 'cold' : null;
+    if (held) words += ` You're ${held}, and that holds you down until you ${held === 'hungry' ? 'eat' : held === 'thirsty' ? 'drink' : 'warm up'}.`;
+    return words;
   }
   // wc A: a nap (energy.js has only the night's sleep): the rest need comes back by NAP_GAIN of a night's share for the
   // hours napped, the hours awake fall by NAP_AWAKE an hour (the rest's ceiling), warmth comes back some in the bag, and
@@ -1055,7 +1135,7 @@ export class Camp {
     let site = null;
     if (s.key) {
       site = this.registry.site(s.key);
-      if (!site || !this.registry.claim(s.key, PLAYER)) { this.pending = null; this.persist(); return; }
+      if (!site || !this.registry.claim(s.key, PLAYER)) { this.pending = null; if (this.inv) this.inv.emptyTent(s); this.persist(); return; }
     }
     this.pending = null;
     const item = s.item === undefined ? null : s.item, stages = this.stagesFor(item || 'aframe');
