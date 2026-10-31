@@ -449,7 +449,7 @@ export class Cook {
     const at = site && site.layout ? this.grateSpot(site) : this.spotOf(c);
     if (at) this.sound(chime, at);
     const name = made.length ? cap(eatName(made[0])) : pl.left >= MIN_WATER ? 'The water' : 'It';
-    this.note(made.length ? `${name}: ready, in the ${lower(potName(c))}.` : `${name}: boiled. Safe to drink, hot for a while.`, 3);
+    this.note(made.length ? `${name}: ready, ${isPot(c.item) ? `in the ${lower(potName(c))}` : `on the grate`}.` : `${name}: boiled. Safe to drink, hot for a while.`, 3);
     if (j.stove) this.stoveOut(null);
     inv.emit('items');
     this.ch.persist();
