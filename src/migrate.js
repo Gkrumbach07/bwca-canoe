@@ -31,7 +31,7 @@ export function sameNumbering(meta, table) {
   const c = table && table.check;
   if (!meta || !c || meta.version !== table.to.version) return false;
   const L = meta.lakes || [], S = meta.campsites || [], P = meta.portages || [];
-  if (L.length !== c.lakes || S.length !== c.campsites || P.length < c.portages) return false; // (world-fixes may append trails)
+  if (L.length < c.lakes || S.length !== c.campsites || P.length < c.portages) return false; // (world-fixes may append trails; water edges: a rebake may append water, the canoe routes' channels, after every lake it numbered)
   const near = (a, b) => Math.abs(a - b) <= 2;
   return c.lake.every(([id, x, z]) => { const l = L[id - 1]; return l && l.id === id && near(l.cx, x) && near(l.cz, z); })
     && c.site.every(([i, x, z]) => S[i] && near(S[i].x, x) && near(S[i].z, z))

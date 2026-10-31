@@ -36,7 +36,7 @@ const vert = /* glsl */ `
   uniform vec4 uDrop;       // drop (m), half width (m), kind (0 falls, 1 rapids), unused
   attribute vec2 aSU;       // s: metres along the flow from the drop's line (downstream +), u: metres across from its middle
   varying vec2 vSU;
-  varying float vSteep, vFell, vShore;
+  varying float vSteep, vFell, vShore, vHalf;
   #include <common>
   #include <fog_pars_vertex>
   #include <shadowmap_pars_vertex>
@@ -49,6 +49,7 @@ const vert = /* glsl */ `
     vSteep = max(0.0, (levelAt(rel - uDir * 2.0) - levelAt(rel + uDir * 2.0)) * 0.25);
     vFell = max(0.0, levelAt(rel - uDir * 7.0) - lv);
     vShore = shoreAt(rel);
+    vHalf = max(narrowAt(rel), 0.5);
     vSU = aSU;
     // on the swell as the water patch draws it at its own vertices, and lifted more near a steep run: the patch's 3.2 m
     // triangles cut straight across the foot of a slope, up to a fifth of the slope's fall over a vertex step above the
@@ -70,7 +71,7 @@ const frag = /* glsl */ `
   uniform vec3 uBox;        // the overlay's own extent: s from, s to, u either side (its edges fade out)
   uniform vec3 uColor;
   varying vec2 vSU;
-  varying float vSteep, vFell, vShore;
+  varying float vSteep, vFell, vShore, vHalf;
   #include <common>
   #include <packing>
   #include <fog_pars_fragment>
@@ -125,7 +126,9 @@ const frag = /* glsl */ `
     }
     // ragged against the banks, thinned where the water is shallow at its edge, gone on land; fine detail fades with
     // distance (a pixel over a few centimetres), the whole overlay past the fade
-    a *= smoothstep(-0.2, -1.6, vShore) * (0.75 + 0.25 * lookNoise(vec2(u * 0.8, s * 0.8), sd + 43u));
+    // (water edges: thinned to the water's edge as far out as a narrow channel's middle goes, water.js narrowAt: a
+    // creek one cell wide is never 1.6 m from its shore, and its white water came and went in patches)
+    a *= smoothstep(-0.2, -min(1.6, 0.7 * vHalf), vShore) * (0.75 + 0.25 * lookNoise(vec2(u * 0.8, s * 0.8), sd + 43u));
     float edge = min(min(s - uBox.x, uBox.y - s), uBox.z - abs(u)) + 2.5 * (lookNoise(vec2(u * 0.4, s * 0.4), sd + 47u) - 0.5);
     a *= smoothstep(0.0, 5.0, edge);
     a *= 1.0 - 0.4 * smoothstep(0.08, 0.4, px);

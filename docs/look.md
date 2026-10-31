@@ -250,6 +250,10 @@ baked lightmaps, no PBR, no external assets.
     only.
   - **The shore band** (terrain-build.js) shapes toward the water's bilinear level at each vertex, not its cell's.
     The cell's level stood the bed up as a wall across a gorge at every step.
+- **Narrow water has a channel's bed** (water edges, 2026-10-31): the shore band draws a lake's beach, 0.12 m deeper a
+  metre out; where the deepest shore distance round a point is under 10 m (a creek, a narrows) the bed is a channel
+  instead, falling `NARROW.slope` (0.35 m a metre) to `NARROW.depth` (0.9 m) (terrain-build.js `narrowAt`, `bedDepth`; the
+  water shader's `surfaceAt` and the white water's fade read the same). See data-sources.md, "Water edges".
 - **Rocks above the water:** NHD's 3,145 (`rapids.js` `rockSpec`, `lakeRockBins`). Only 1,008 are on this release's
   water; the rest are in Quetico lakes the Minnesota extract lacks.
   - Each stands as a boulder-species rock in the tile's bins, so it is drawn, shadowed and mirrored, and the walker is

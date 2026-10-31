@@ -3,6 +3,7 @@ import { glslWaves, glslRipples, waveHeight, windWeights, windHeight, N as WAVE_
 import { glslNoise } from './shading.js';
 import * as Sky from './sky.js';
 import { groundUniforms } from './terrain.js';
+import { NARROW } from './terrain-build.js'; // water edges: the narrow water's channel bed
 
 // Water in two parts that share one fragment shader:
 //  - far field: static 10 m meshes, one per tile, carrying only the long swell, with a hole cut where the patch sits
@@ -182,10 +183,22 @@ export const glslSurface = /* glsl */ `
   }
   int groundClassAt(vec2 rel) { return int(texelFetch(uCoverTex, atlasCell(rel), 0).b * 255.0 + 0.5); }
   // the terrain mesh reshapes the shore band from the distance field (see terrain-build.js shoreShape)
+  // (water edges: under narrow water the bed is a channel, terrain-build.js narrowAt and bedDepth)
+  float narrowAt(vec2 rel) {
+    ivec2 c = ivec2(floor((rel - uAtlas.xy) * uAtlas.z - 0.5));
+    float half_ = 0.0;
+    for (int dj = -1; dj <= 2; dj++) for (int di = -1; di <= 2; di++) half_ = max(half_, -cellSample(uShoreTex, c + ivec2(di, dj)));
+    return half_;
+  }
+  float bedDepth(float sd, float half_) {
+    float a = -sd, beach = 0.12 * a;
+    if (half_ >= ${NARROW.wide.toFixed(1)}) return beach;
+    return mix(max(beach, min(${NARROW.depth.toFixed(2)}, ${NARROW.slope.toFixed(2)} * a)), beach, smoothstep(${NARROW.from.toFixed(1)}, ${NARROW.wide.toFixed(1)}, half_));
+  }
   float surfaceAt(vec2 rel) {
     float h = terrainAt(rel), sd = shoreAt(rel), a = abs(sd);
     if (a >= 9.0) return h;
-    float target = levelAt(rel) + (sd > 0.0 ? 0.16 * sd : 0.12 * sd);
+    float target = sd > 0.0 ? levelAt(rel) + 0.16 * sd : levelAt(rel) - bedDepth(sd, narrowAt(rel));
     return mix(h, target, 1.0 - smoothstep(4.5, 9.0, a));
   }
   // short swell exists only on the near patch; anything riding the water must fade it the same way

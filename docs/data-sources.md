@@ -824,3 +824,57 @@ Every US tile with LiDAR was baked: 1,371 tiles, of which 1,353 have at least on
   mostly runs through lakes.
 - **The cliff modules** (`cliffs.js`) still come from the 10 m cliff channel. Where a 2 m chunk is in and carries
   the face, the game hides them (detail.md, "The cliff modules").
+
+## Water edges and the canoe routes (2026-10-31)
+
+The owner, playing v4 with the 2 m ground: "Water does not go to the edge of what the lake bottom is", "some narrow
+rapids barely have any water and you get intermittent chunks of ripple", "narrow waterways (lakes and streams) are
+completely unnavigable … is there data saying which ones are navigable? The depths seem off."
+
+**Measured** with `scripts/water-scan.mjs <data dir>` (it reads the tiles with the game's own decoders and
+`terrain-build.js` `meshHeightAt`): (a) land within 20 m of the water where the LiDAR has hydro-flattened water or
+ground under the water's level; (b) river and creek cells drawn under 15 cm deep, and water cells with no water among
+their four neighbours; (c) every 2 m along every waterway line, whether the canoe passes as `player.js`
+`updatePaddle` lets it (the shore distance under −1.2 m at the middle, −0.5 m 2.3 m ahead and behind).
+
+**Which waterways are navigable** (`scripts/canoe-routes.mjs`, from the OSM cuts already in `data-cache`):
+- OSM carries the BWCA and Quetico canoe network itself: `waterway=flowline` (3,181 in the box) and `waterway=link`
+  (2,595) run through the lakes, the narrows and the channels between the portages, nearly all `canoe=yes` or
+  `canoe=designated`. The bake's extract left them out.
+- Rivers and streams carry `canoe=yes|designated` (471), `canoe=no|discouraged` (409, mostly the rapids beside a
+  portage) and `intermittent=yes`. No `width=`, `boat=` or `CEMT=` worth using. 12 `route=canoe` relations (Hunter
+  Island Loop, Minnesota Mountains Route, Circle Route, …).
+- **The rule:** a canoe route is a flowline, a link, a line tagged `canoe=yes|designated|permissive`, a member of a
+  `route=canoe`, or an untagged `waterway=river`; or an untagged stream with a portage end within 60 m of both its
+  ends. Not one: `canoe=no|discouraged`, `intermittent=yes`. Other streams are left as they are. In the box: 9,826
+  route lines (5,843 km), 334 streams between portages, 794 not, 11,822 other streams.
+
+**Why** (each at its source):
+- *Unnavigable:* the canoe's test reads the 10 m shore distance, and a channel one cell wide never gets past −1.25 m
+  in its middle (a diagonal one is land between its cells); a narrows the polygons pinch shut is land. v4: 469 route
+  lines blocked (776 blocks, 15.7 km), 254 of the streams between portages.
+- *Shallow and patchy:* `terrain-build.js` `shoreShape` drew every bed within 4.5 m of a shore at 0.12 m a metre
+  off it, a beach; a creek one or two cells wide is never further out than 1.25–3.75 m, so it was 0.15–0.45 m deep
+  from bank to bank and the bed stood within a ripple of the surface. The rapids overlay (`whitewater.js`) faded to
+  nothing where the shore distance was over −1.6 m, so on a creek it came and went in patches. v4: 33,937 river and
+  creek cells drawn under 15 cm deep.
+- *The edge:* the 2 m ground (`detail-build.js` `chunkGround`) holds land near the water at the water's level, so
+  where OSM's water stops short of the LiDAR's channel or flattened shore the real bed stood beside the water as a
+  flat dry shelf. v4: 320,082 land cells within 20 m of the water are the LiDAR's flattened water.
+
+**The fixes:**
+- **The bake** (`bake.mjs`, rebaked as `public-data-v5`): every route line is a channel: where it is narrow (land on
+  both sides within 15 m) or crosses up to 400 m of land between water, every land cell within 10 m of it becomes water
+  (`carveNavChannels`; two cells across at any angle, which the canoe always passes). A cell beside a lake takes the
+  lake's id; the rest the line's own, appended after every v4 id, levelled along the line. Then the water goes out to
+  the LiDAR's edge: hydro-flattened water at the level of the water it joins (within 0.25 m, up to 400 m out), and
+  ground 0.15–1.5 m under it within 30 m, become that water (not within 200 m of an entry point's put-in, nor where it
+  would meet other water a step of over 0.5 m away). The
+  campsites, the official adds and the portages are placed on the water as mapped, so every site and trail keeps
+  v4's place, and each lake's `cx, cz` is its mapped centre (a save's migration checks lakes by it).
+- **The game:** under narrow water the bed is a channel (`terrain-build.js` `NARROW`, `narrowAt`, `bedDepth`; the
+  water shader's `surfaceAt` the same): where the deepest shore distance round a point is under 10 m, the bed falls
+  0.35 m a metre off the shore to 0.9 m (a route's two-cell channel is 0.9 m deep in its middle, a one-cell creek
+  0.44 m; steeper would sink the mesh's waterline vertex, the straight line between two lattice vertices, under the
+  water); lakes are as they were. The rapids overlay thins to a narrow channel's own middle. `migrate.js`
+  `sameNumbering` lets a release append lakes after the ones the table numbered.
