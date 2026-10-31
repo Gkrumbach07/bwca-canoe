@@ -682,7 +682,7 @@ export class Camp {
   pitchOpts(spot, tent, site) {
     const p = this.player, K = tentOf(tent.def.id);
     return {
-      id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: 0, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => {
         if (!this.camp && !this.draft) { const st = this.stagesFor(tent.def.id); st.place(spot.pose.matrix); this.draft = { spot, stages: st, item: tent.def.id }; }
         const st = this.camp ? this.camp.stages : this.draft && this.draft.stages;
@@ -704,7 +704,7 @@ export class Camp {
   pitchOnOpts() {
     const c = this.camp, p = this.player, K = tentOf(c.item);
     return {
-      id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: c.stage, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: c.stage, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(at); },
       onPhase: (i) => { this.setStage(c, i + 1); if (i === 3) this.pitched(); },
       onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'Hold E or a click to carry on.' : 'Hold E at the tent to carry on.'}`, 3); } },
@@ -714,7 +714,7 @@ export class Camp {
   strikeOpts() {
     const c = this.camp, from = c.stage, p = this.player, K = tentOf(c.item);
     return {
-      id: 'strike', label: 'Striking the tent', phases: K.strike.slice(4 - from), at: 0, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'strike', label: 'Striking the tent', phases: K.strike.slice(4 - from), at: 0, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(from - at); },
       onPhase: (i) => { const st = from - (i + 1); if (st <= 0) this.packTent(); else this.setStage(c, st); },
       // (half struck: the panel's Strike takes the rest down, Carry on pitching puts it back up)

@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import { buildTentMesh, buildAFrameMesh, TENT_SIZE, AFRAME_SIZE, aframeRidge } from './props.js';
 import { TILE, PropBuilder } from './prop-kit.js';
+import { CLOCK } from './pace.js';
 
 const { a: TA, b: TB, h: TH } = TENT_SIZE;
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -31,34 +32,41 @@ const ease = (k) => { const t = Math.min(1, Math.max(0, k)); return t * t * (3 -
 const foot = (t) => { const c = Math.cos(t), s = Math.sin(t); return [TA * Math.sign(c) * Math.abs(c) ** 0.62, TB * Math.sign(s) * Math.abs(s) ** 0.62]; };
 const hY = (r) => TH * Math.max(0, 1 - r ** 2.6) ** 0.55;
 
-// The pitch, phase by phase: its name once done, what is being done meanwhile, its game minutes (a quarter hour in all,
-// as the old pitch took) and its real seconds while E is held. The strike runs the other way, a phase per phase stood.
+// The pitch, phase by phase: its name once done, what is being done meanwhile and its real seconds while E is held. The
+// owner, 2026-10-31: "Setting up camp. The time it takes to do that fast forwards time, which is going to be incompatible
+// with our clock stays the same rule … So we'll just have to live with setting the tent up takes whatever time our normal
+// clock is." So no phase passes time of its own (camp.js holds it with clock: false): it takes its seconds on the one
+// clock (pace.js CLOCK), and `minutes` is what those seconds are on it, for hold.js's "min left". The strike runs the
+// other way, a phase per phase stood.
+const P = (name, doing, seconds) => ({ name, doing, seconds, minutes: (seconds * CLOCK) / 60 });
 export const PITCH = [
-  { name: 'Footprint staked', doing: 'Staking out the footprint', minutes: 4, seconds: 1.3 },
-  { name: 'Poles up', doing: 'Raising the poles', minutes: 4, seconds: 1.3 },
-  { name: 'Tent up', doing: 'Clipping the tent to the poles', minutes: 4, seconds: 1.3 },
-  { name: 'Rain fly on', doing: 'Throwing the fly over and staking it out', minutes: 3, seconds: 1.2 },
+  P('Footprint staked', 'Staking out the footprint', 2.6),
+  P('Poles up', 'Raising the poles', 2.6),
+  P('Tent up', 'Clipping the tent to the poles', 2.6),
+  P('Rain fly on', 'Throwing the fly over and staking it out', 2.4),
 ];
 export const STRIKE = [ // STRIKE[i] takes the tent from stage 4 - i to 3 - i
-  { name: 'Fly off', doing: 'Unstaking the fly and folding it', minutes: 3, seconds: 1.1 },
-  { name: 'Tent down', doing: 'Unclipping the tent from the poles', minutes: 3, seconds: 1.1 },
-  { name: 'Poles down', doing: 'Folding the poles', minutes: 2, seconds: 1.0 },
-  { name: 'Rolled up', doing: 'Pulling the stakes and rolling it all up', minutes: 3, seconds: 1.2 },
+  P('Fly off', 'Unstaking the fly and folding it', 2.0),
+  P('Tent down', 'Unclipping the tent from the poles', 2.0),
+  P('Poles down', 'Folding the poles', 1.8),
+  P('Rolled up', 'Pulling the stakes and rolling it all up', 2.2),
 ];
 export const STAGE_WORDS = ['not pitched', 'the footprint staked', 'the poles up', 'the tent up, no fly', 'pitched, the fly on'];
 const PITCH_A = [
-  { name: 'Floor staked', doing: 'Staking out the floor, a corner at a time', minutes: 4, seconds: 1.3 },
-  { name: 'A-poles up', doing: 'Standing up the A-poles at each end, the ridge pole between', minutes: 4, seconds: 1.3 },
-  { name: 'Tent hung', doing: 'Hanging the tent from the ridge and guying out the walls', minutes: 4, seconds: 1.3 },
-  { name: 'Rain fly on', doing: 'Throwing the fly over the ridge and staking out the vestibule', minutes: 3, seconds: 1.2 },
+  P('Floor staked', 'Staking out the floor, a corner at a time', 2.6),
+  P('A-poles up', 'Standing up the A-poles at each end, the ridge pole between', 2.6),
+  P('Tent hung', 'Hanging the tent from the ridge and guying out the walls', 2.6),
+  P('Rain fly on', 'Throwing the fly over the ridge and staking out the vestibule', 2.4),
 ];
 const STRIKE_A = [
-  { name: 'Fly off', doing: 'Unstaking the vestibule and folding the fly', minutes: 3, seconds: 1.1 },
-  { name: 'Tent down', doing: 'Unhooking the tent from the ridge', minutes: 3, seconds: 1.1 },
-  { name: 'Poles down', doing: 'Taking down the ridge pole and the A-poles', minutes: 2, seconds: 1.0 },
-  { name: 'Rolled up', doing: 'Pulling the stakes and rolling it all up', minutes: 3, seconds: 1.2 },
+  P('Fly off', 'Unstaking the vestibule and folding the fly', 2.0),
+  P('Tent down', 'Unhooking the tent from the ridge', 2.0),
+  P('Poles down', 'Taking down the ridge pole and the A-poles', 1.8),
+  P('Rolled up', 'Pulling the stakes and rolling it all up', 2.2),
 ];
 const STAGE_WORDS_A = ['not pitched', 'the floor staked', 'the A-poles up', 'the tent hung, no fly', 'pitched, the fly on'];
+// a hold's length as it is said: its seconds held ("about 10 s")
+export const heldWords = (phases) => `${Math.max(1, Math.round(phases.reduce((s, ph) => s + (ph.seconds || 0), 0)))} s`;
 // the fly's colour by the tent (items.js): the A-frame rust, the dome green, the four-season blue
 export const TENT_FLY = { aframe: 0xa8693f, dome: 0x5c7a55, fourseason: 0x56708a };
 // each kind's phases, words and size (props.js: half across, half along the door's way; the A-frame's vestibule)
@@ -85,11 +93,11 @@ const bugsOut = () => { try { return !!(TENT_BUGS.out && TENT_BUGS.out()); } cat
 
 // --- the checklists (fb4 E, the owner's second round of 2026-10-25, decision 2: "if I can't use something, I want to
 // know exactly why ... some sort of checklist or timer or quantity out of total") ---------------------------------------
-// The pitch's phases as steps, those done ticked, each with its minutes: [{ label, done, minutes }]
+// The pitch's phases as steps, those done ticked, each with its seconds held: [{ label, done, minutes }]
 export function tentSteps(item, stage = 0) {
-  return tentOf(item).pitch.map((ph, i) => ({ label: `${ph.name} · ${ph.minutes} min`, done: stage > i, minutes: ph.minutes }));
+  return tentOf(item).pitch.map((ph, i) => ({ label: `${ph.name} · ${heldWords([ph])}`, done: stage > i, minutes: ph.minutes }));
 }
-const minutesLeft = (item, stage) => tentOf(item).pitch.slice(stage).reduce((s, ph) => s + ph.minutes, 0);
+const minutesLeft = (item, stage) => heldWords(tentOf(item).pitch.slice(stage));
 const bearingOf = (dx, dz) => ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round((((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360) / 45) % 8]; // (+z is south)
 const low = (s) => (/^[A-Z]-/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)); // ("A-poles" keeps its capital)
 const far = (d) => (d < 1000 ? `${Math.max(10, Math.round(d / 10) * 10)} m` : `${(d / 1000).toFixed(1)} km`);
@@ -103,13 +111,13 @@ export function withTentNeeds(camp, ta) {
   if (st < 4) {
     const left = minutesLeft(c.item, st), fly = K.pitch[3];
     const pitchA = ta.e && /pitching|fly/i.test(ta.e.verb) ? ta.e : null;
-    fill(pitchA, tentSteps(c.item, st), st === 3 ? `Hold E: the rain fly on in ${fly.minutes} min; without it the rain comes through the mesh` : `Hold E: ${low(K.pitch[st].name)} next, ${left} min to the fly on`);
+    fill(pitchA, tentSteps(c.item, st), st === 3 ? `Hold E: the rain fly on in ${heldWords([fly])}; without it the rain comes through the mesh` : `Hold E: ${low(K.pitch[st].name)} next, ${left} to the fly on`);
     const rest = ta.q && /Rest/.test(ta.q.verb) ? ta.q : null;
     const bugs = bugsOut(); // (cons C: and in bug season the mosquitoes come in at the open door)
-    fill(rest, [{ label: `Rain fly on · ${fly.minutes} min`, done: false }, { label: 'A night’s rest with no fly: 90 %, and rain through the mesh', done: false }, ...(bugs ? [{ label: 'No fly: the bugs get in', done: false, chip: 'bugs get in' }] : [])], `Put the fly on first (hold E, ${fly.minutes} min): a dry night${bugs ? ', no bugs' : ''} and the full rest`);
+    fill(rest, [{ label: `Rain fly on · ${heldWords([fly])}`, done: false }, { label: 'A night’s rest with no fly: 90 %, and rain through the mesh', done: false }, ...(bugs ? [{ label: 'No fly: the bugs get in', done: false, chip: 'bugs get in' }] : [])], `Put the fly on first (hold E, ${heldWords([fly])}): a dry night${bugs ? ', no bugs' : ''} and the full rest`);
   }
   const strike = [ta.e, ta.q].find((a) => a && /Strike/.test(a.verb));
-  fill(strike, K.strike.slice(4 - st).map((ph) => ({ label: `${ph.name} · ${ph.minutes} min`, done: false })), `Hold Q to strike it: ${K.strike.slice(4 - st).reduce((s, ph) => s + ph.minutes, 0)} min, back into the pack it came from`);
+  fill(strike, K.strike.slice(4 - st).map((ph) => ({ label: `${ph.name} · ${heldWords([ph])}`, done: false })), `Hold Q to strike it: ${heldWords(K.strike.slice(4 - st))}, back into the pack it came from`);
   const rest = st >= 4 && ta.e && /Rest/.test(ta.e.verb) ? ta.e : null;
   fill(rest, [{ label: 'The tent up, the fly on', done: true }], 'E opens the dial: first light, 7:00, noon, dusk or any hour by ← →');
   return ta;
@@ -119,7 +127,7 @@ export function withTentNeeds(camp, ta) {
 export function pitchNeeds(camp, tent) {
   const why = camp.pitchRefused(tent), p = camp.player, item = tent && tent.def ? tent.def.id : 'aframe';
   const steps = tentSteps(item, 0), all = minutesLeft(item, 0);
-  if (!why) return { why: null, needs: steps, next: `The ghost goes where you look: on green ground, hold E or a click, about ${all} min` };
+  if (!why) return { why: null, needs: steps, next: `The ghost goes where you look: on green ground, hold E or a click, about ${all}` };
   const c = camp.camp, needs = [];
   let next = null;
   if (/not within reach/.test(why)) { needs.push({ label: 'The tent within reach', done: false, note: 'in a pack you carry, or set down at this camp' }); next = 'Carry the pack the tent is in, or set it down here.'; }
