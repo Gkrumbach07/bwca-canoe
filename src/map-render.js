@@ -199,7 +199,7 @@ export function reinkTile(world, slot, out, ink, fine = true) {
 // --- painting a tile ---------------------------------------------------------------------------------------------------
 // view: { x0, z0, mPerPx } (the canvas's top-left in world metres, and metres a canvas pixel); k: the line scale (canvas
 // pixels for a design pixel). The tile at world (ox, oz), size metres across.
-export function paintTile(ctx, v, ox, oz, size, geo, { k = 1, depths = true, contours = true, layer = 'fill' } = {}) {
+export function paintTile(ctx, v, ox, oz, size, geo, { k = 1, depths = true, contours = true, layer = 'fill', all = false } = {}) {
   const s = 1 / v.mPerPx, a = (ox - v.x0) * s, b = (oz - v.z0) * s, px = v.mPerPx;
   ctx.save();
   ctx.beginPath();
@@ -218,9 +218,9 @@ export function paintTile(ctx, v, ox, oz, size, geo, { k = 1, depths = true, con
       if (v.mPerPx < 7) { ctx.strokeStyle = INK.contour; ctx.lineWidth = 0.9 * k * px; ctx.stroke(geo.contours); }
       ctx.strokeStyle = INK.index; ctx.lineWidth = 1.3 * k * px; ctx.stroke(geo.index);
     }
-    if (depths && geo.sound.length && v.mPerPx < 9) {
+    if (depths && geo.sound.length && (all || v.mPerPx < 9)) {
       for (const q of geo.sound) {
-        if (!q.index && v.mPerPx > 5) continue;
+        if (!q.index && v.mPerPx > 5 && !all) continue;
         ctx.strokeStyle = q.index ? INK.soundIndex : INK.sound; ctx.lineWidth = (q.index ? 1.25 : 0.8) * k * px; ctx.stroke(q.path);
       }
     }
@@ -392,7 +392,8 @@ export const farMetres = (world) => world.far.tile * world.cell * world.far.fact
 //   view: { cx, cz, span } (span: metres across the canvas) or { x0, z0, x1, z1 } (fitted, with a margin)
 //   opts: { markers: [{ x, z, kind: 'dock' | 'dot' | 'you' | 'ring' | 'flag' | 'star', label, color, r }],
 //           route: [[x, z], …] (a pencil line), names: true (lake names), docks: true (the outfitters' docks),
-//           boundary: true, burns: false, detail: (x, z) => bool (what may be shown; default everything), k (line scale) }
+//           boundary: true, burns: false, detail: (x0, z0, x1, z1) => bool (what may be shown; default everything),
+//           k (line scale), fine: true (the 10 m tiles at any zoom), soundAll: true (every sounding at any zoom) }
 // Water and names come from the far field (80 m) when the view is wide, from the fine tiles when it is close; tiles not
 // in yet are fetched, and ready is false until they are: call it again (on a timer or the next frame) until it is true.
 export function drawRegion(canvas, world, view, opts = {}) {
@@ -406,7 +407,7 @@ export function drawRegion(canvas, world, view, opts = {}) {
   tileCache.tick++;
   ctx.save();
   ctx.fillStyle = INK.paper; ctx.fillRect(0, 0, W, H);
-  const ready = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail });
+  const ready = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
   if (opts.names !== false) paintLakeNames(ctx, world, v, W, H, { k, detail });
@@ -421,7 +422,7 @@ export function drawRegion(canvas, world, view, opts = {}) {
 }
 // the ground under a view: the tints, the water, the ink, the contours and soundings, from the fine tiles up close and
 // the far ones further out. Returns whether every tile in view was in.
-export function paintGround(ctx, world, v, W, H, { k = 1, budget = { build: 2 }, depths = true, contours = true, ink = null, inkV = 0, detail = null, labels = null, far = null } = {}) {
+export function paintGround(ctx, world, v, W, H, { k = 1, budget = { build: 2 }, depths = true, contours = true, ink = null, inkV = 0, detail = null, labels = null, far = null, all = false } = {}) {
   const x1 = v.x0 + W * v.mPerPx, z1 = v.z0 + H * v.mPerPx;
   const useFine = far === null ? v.mPerPx < 22 : !far;
   let ready = true;
@@ -438,7 +439,7 @@ export function paintGround(ctx, world, v, W, H, { k = 1, budget = { build: 2 },
       if (!g) { ready = false; continue; }
       jobs.push([ox, oz, FM, g, false]);
     }
-    paintJobs(ctx, v, jobs, k, depths, contours);
+    paintJobs(ctx, v, jobs, k, depths, contours, all);
     return ready;
   }
   const TM = world.tileMetres;
@@ -461,14 +462,14 @@ export function paintGround(ctx, world, v, W, H, { k = 1, budget = { build: 2 },
     jobs.push([ox, oz, TM, g, true]);
     if (labels && g.labels.length) labels.push(...g.labels);
   }
-  paintJobs(ctx, v, jobs, k, depths, contours);
+  paintJobs(ctx, v, jobs, k, depths, contours, all);
   return ready;
 }
-function paintJobs(ctx, v, jobs, k, depths, contours) {
+function paintJobs(ctx, v, jobs, k, depths, contours, all = false) {
   for (const layer of ['fill', 'line']) {
     for (const [ox, oz, size, g, fine, cut] of jobs) {
       if (cut) { ctx.save(); ctx.beginPath(); ctx.rect((cut[0] - v.x0) / v.mPerPx - (layer === 'fill' ? 1 : 0), (cut[1] - v.z0) / v.mPerPx - (layer === 'fill' ? 1 : 0), cut[2] / v.mPerPx + (layer === 'fill' ? 2 : 0), cut[2] / v.mPerPx + (layer === 'fill' ? 2 : 0)); ctx.clip(); }
-      paintTile(ctx, v, ox, oz, size, g, { k, depths: fine && depths, contours: fine && contours, layer });
+      paintTile(ctx, v, ox, oz, size, g, { k, depths: fine && depths, contours: fine && contours, layer, all });
       if (cut) ctx.restore();
     }
   }

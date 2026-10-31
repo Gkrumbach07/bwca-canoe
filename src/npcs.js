@@ -1439,10 +1439,11 @@ export class People {
   vArea(v) {
     const a = this.asked(v), list = this.hintList(v);
     let say;
-    if (a.area < list.length) { const h = list[a.area++]; if (h.ring) this.tell(v, h); say = h.text; this.write(); }
+    let h = null;
+    if (a.area < list.length) { h = list[a.area++]; say = h.text; this.write(); }
     else say = this.fresh([NO_MORE[v.arch] || 'That’s about all I know. The rest you find out on the water.', ...NO_MORE2]) || NO_MORE2[0];
     this.mark(say);
-    return { say, choices: this.vChoices(v) };
+    return { say, choices: this.markChoice(v, h && h.ring ? h : null, () => this.vChoices(v)) };
   }
   // about them: their lore lines, their route or their history where those are hints of theirs
   loreOf(v) {
@@ -1564,19 +1565,18 @@ export class People {
   }
   kWord(v) {
     const ch = this.charOf(v.ep), m = ch ? ch.manner : 'warm', ws = this.wordState(v.ep), list = this.wordList(v);
-    let say = null;
+    let say = null, mark = null;
     while (ws.n < list.length && !say) {
       const it = list[ws.n++];
       if (this.said.has(it.text)) continue;
       say = it.text;
-      if (it.ring) this.tell(v, it);
+      if (it.ring || it.heard) mark = it; // (pencilled only when you ask: markChoice)
       if (it.kind !== 'chat' && it.kind !== 'weather' && it.id) { const r = this.s.rumoured[v.ep] || (this.s.rumoured[v.ep] = []); if (!r.includes(it.id)) { r.push(it.id); if (r.length > 15) r.shift(); } }
-      if (it.heard && this.outfitter && typeof this.outfitter.heard === 'function') this.outfitter.heard(v.ep, it.text); // an insider hint goes on the map
     }
     this.write();
     if (!say) say = this.fresh(NO_WORD[m] || NO_WORD.warm) || (NO_WORD[m] || NO_WORD.warm)[0];
     this.mark(say);
-    return { say, choices: this.kChoices(v) };
+    return { say, choices: this.markChoice(v, mark, () => this.kChoices(v)) };
   }
 
   // "Ask about…": up to three things to ask, the newest first, and "That's all."
@@ -1954,6 +1954,25 @@ export class People {
     const h = out[n % out.length];
     if (h.ring) this.tell(v, h);
     return h;
+  }
+  // The map is pencilled only when you ask (the owner, 2026-10-31: "a lot of times I'm discovering them without even knowing
+  // where they came from ... maybe it's something that you like deliberately ask him to give you some information"): a
+  // word that means some water comes with "Could you mark that on my map?" first among the choices; asked, they ring it,
+  // and the ring carries their name (map-book.js). An insider hint (it.heard) is the outfitter's to pencil.
+  markChoice(v, it, rest) {
+    const out = rest();
+    if (!it) return out;
+    const id = it.ring ? `${v.key}:${it.ring.kind}:${it.ring.lake}` : null;
+    if (id && this.s.told.some((x) => x.id === id)) return out;
+    out.unshift({ text: 'Could you mark that on my map?', kind: 'map', tag: 'your map', go: () => {
+      if (it.ring) this.tell(v, it);
+      if (it.heard && this.outfitter && typeof this.outfitter.heard === 'function') this.outfitter.heard(v.ep, it.text);
+      const say = this.fresh(['There. A ring round it, in pencil.', 'Here, give it over. ... There.', 'Sure. Just about there.', 'I’ll ring it for you. There.']) || 'There.';
+      this.mark(say);
+      if (this.hud) this.hud.note(`${v.name.split(' ')[0]} pencils it on your map.`, 4);
+      return { say, choices: rest() };
+    } });
+    return out;
   }
   tell(v, h) {
     const id = `${v.key}:${h.ring.kind}:${h.ring.lake}`;
