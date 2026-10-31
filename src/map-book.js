@@ -23,7 +23,7 @@ import { explored } from './explored.js';
 import { teaWord } from './water.js';
 import { eventsAt } from './burns.js';
 import { BURNS } from './burns.js';
-import { drawRegion, burnWords, inWilderness, loadBoundary, BOUNDARY, FT, INK } from './map-render.js';
+import { drawRegion, burnWords, inWilderness, loadBoundary, BOUNDARY, FT, INK, lakeAt, lakeBox } from './map-render.js';
 import './map.css';
 
 const FISH = { walleye: 'Walleye', pike: 'Northern pike', smallmouth: 'Smallmouth bass', laketrout: 'Lake trout', perch: 'Yellow perch', crappie: 'Crappie' };
@@ -36,6 +36,7 @@ const ft = (m) => Math.round(m / FT);
 const acresOf = (l, w) => (l.cells * w.cell * w.cell) / ACRE;
 const acreWords = (a) => `${(a >= 100 ? Math.round(a / 10) * 10 : Math.max(1, Math.round(a))).toLocaleString('en-US')} ${a < 1.5 ? 'acre' : 'acres'}`;
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const burnAt = (x, z) => { const out = [{ rec: null, w: 0 }, { rec: null, w: 0 }]; return BURNS.ready && eventsAt(x, z, out) > 0 && out[0].rec && out[0].w > 0.2 ? out[0].rec : null; };
 
 export class MapBook {
   // { hud, journal, world, tasks, outfitter }; el: the book's map side
@@ -151,9 +152,10 @@ export class MapBook {
       }
     }
     if (!shown) return null;
-    const id = w.lakeIdAt(x, z), L = id > 0 ? w.lakes[id - 1] : null;
+    const id = lakeAt(w, x, z), L = id > 0 ? w.lakes[id - 1] : null;
     const bits = [];
-    if (lay.burns && BURNS.ready) { const out = []; if (eventsAt(x, z, out) > 0 && out[0].rec && out[0].w > 0.2 && !(id > 0)) bits.push(`<span class="burn">${esc(burnWords(out[0].rec))}</span>`); }
+    const br = lay.burns && !(id > 0) ? burnAt(x, z) : null;
+    if (br) bits.push(`<span class="burn">${esc(burnWords(br))}</span>`);
     if (L && L.name) {
       const fish = f && typeof f.fishList === 'function' ? f.fishList(id).slice(0, 3).map((s) => (FISH[s] || s).toLowerCase()) : [];
       const d = f && typeof f.depthOf === 'function' ? f.depthOf(id) : L.maxDepth || 0;
@@ -297,18 +299,18 @@ export class MapBook {
   }
 
   // --- a lake's page -------------------------------------------------------------------------------------------------
-  // the lake's extent: its water sampled on a grid round its middle (lakeIdAt), out to a few times its size
+  // the lake's water (every piece the bake cut it in: the same name within reach), and the box round it
+  pieces(id) {
+    const w = this.w, L = w.lakes[id - 1], ids = new Set([id]);
+    if (L && L.name) for (const q of w.lakes) if (q && q.name === L.name && Math.hypot(q.cx - L.cx, q.cz - L.cz) < 25000) ids.add(q.id);
+    return ids;
+  }
   extent(id) {
-    const w = this.w, L = w.lakes[id - 1], R = Math.sqrt((L.cells * w.cell * w.cell) / Math.PI), reach = Math.min(25000, R * 4 + 400), N = 70;
-    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
-      const x = L.cx - reach + (2 * reach * i) / N, z = L.cz - reach + (2 * reach * j) / N;
-      if (w.lakeIdAt(x, z) !== id) continue;
-      if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
-    }
-    if (!(x1 > x0)) return { x0: L.cx - R, z0: L.cz - R, x1: L.cx + R, z1: L.cz + R };
-    const pad = (2 * reach) / N;
-    return { x0: x0 - pad, z0: z0 - pad, x1: x1 + pad, z1: z1 + pad };
+    const w = this.w, L = w.lakes[id - 1], ids = this.pieces(id);
+    let cells = 0; for (const k of ids) cells += w.lakes[k - 1].cells;
+    const R = Math.sqrt((cells * w.cell * w.cell) / Math.PI), reach = Math.min(30000, R * 4 + 600);
+    const r = lakeBox(w, ids, L.cx, L.cz, reach);
+    return { ...(r.box || { x0: L.cx - R, z0: L.cz - R, x1: L.cx + R, z1: L.cz + R }), ready: r.ready };
   }
   showLake(id) {
     const w = this.w, L = id > 0 ? w.lakes[id - 1] : null;
@@ -318,9 +320,10 @@ export class MapBook {
     const depth = f && f.depthOf ? f.depthOf(id) : L.maxDepth || 0;
     const surveyed = !!(rec && rec.fish), fish = f && f.fishList ? f.fishList(id) : [];
     const ice = f && f.iceOf ? f.iceOf(id) : null, year = (this.journal.day && this.journal.day.year) || 2026;
-    const sites = w.campsites.map((c, i) => [c, i]).filter(([c]) => (c.lake ?? w.lakeIdAt(c.x, c.z)) === id);
-    const portages = w.portages.map((p, i) => [p, i]).filter(([p]) => p.launch && p.launch.some((l) => l.lake === id));
-    const eps = w.entryPoints.filter((e) => e.lake === id);
+    const ids = this.pieces(id);
+    const sites = w.campsites.map((c, i) => [c, i]).filter(([c]) => ids.has(c.lake ?? lakeAt(w, c.x, c.z)));
+    const portages = w.portages.map((p, i) => [p, i]).filter(([p]) => p.launch && p.launch.some((l) => ids.has(l.lake)) && !p.launch.every((l) => ids.has(l.lake)));
+    const eps = w.entryPoints.filter((e) => ids.has(e.lake));
     const tea = teaWord(L.cdom);
     const rows = [];
     rows.push(['Size', L.river ? (L.creek ? 'a creek' : 'a river') : `${acreWords(acres)}${acres > 2000 ? ' · big water: mind the wind' : ''}`]);
@@ -329,10 +332,15 @@ export class MapBook {
     rows.push(['Fish', fish.length ? `<span class="mb-fish">${fish.map((s) => `<span><svg viewBox="0 0 110 56" aria-hidden="true">${fishSilhouette(s)}</svg>${FISH[s] || s}</span>`).join('')}</span><span class="soft">${surveyed ? 'from the DNR’s last survey nets' : 'not surveyed: what lakes like it hold'}</span>` : '<span class="soft">none recorded</span>']);
     if (ice) rows.push(['Ice', `out about ${shortDate(year, ice.out)}, in about ${shortDate(year, ice.in > 365 ? ice.in - 365 : ice.in)}${ice.measured ? '' : ' <span class="soft">(estimated)</span>'}`]);
     if (rec && rec.rice !== undefined) rows.push(['Wild rice', `a DNR rice lake${rec.rice ? `, about ${Math.round(rec.rice)} acres` : ''}`]);
-    rows.push(['Campsites', sites.length ? `${word(sites.length)}: ${sites.slice(0, 14).map(([c, i]) => `${c.usfs != null ? `#${c.usfs}` : 'one'}${explored.stayed(i) ? ' ✓' : ''}`).join(', ')}${sites.length > 14 ? '…' : ''}` : '<span class="soft">none</span>']);
-    rows.push(['Portages', portages.length ? portages.slice(0, 10).map(([p, i]) => { const other = p.launch.find((l) => l.lake !== id); return `to ${esc(other ? w.lakeName(other.lake) || 'unnamed water' : 'the same water')}, ${p.rods} rods${explored.crossed(i) ? ' ✓' : ''}`; }).join('<br>') : '<span class="soft">none</span>']);
+    const numbered = sites.filter(([c]) => c.usfs != null).sort((p, q) => p[0].usfs - q[0].usfs), slept = sites.filter(([, i]) => explored.stayed(i)).length;
+    rows.push(['Campsites', sites.length ? `${sites.length}${slept ? ` · ${word(slept)} slept at ✓` : ''}${numbered.length ? `<br><span class="soft">${numbered.slice(0, 24).map(([c]) => `#${c.usfs}`).join(' ')}${numbered.length > 24 ? ' …' : ''}</span>` : ''}` : '<span class="soft">none</span>']);
+    // the portages out, by where they go (the shortest first)
+    const dest = new Map();
+    for (const [p, i] of portages) { const o = p.launch.find((l) => !ids.has(l.lake)), nm = (o && w.lakeName(o.lake)) || 'unnamed water'; const d = dest.get(nm) || []; d.push([p.rods, explored.crossed(i)]); dest.set(nm, d); }
+    const dl = [...dest.entries()].sort((p, q) => Math.min(...p[1].map((r) => r[0])) - Math.min(...q[1].map((r) => r[0])));
+    rows.push(['Portages', dl.length ? dl.slice(0, 12).map(([nm, rs]) => `to ${esc(nm)}, ${rs.sort((p, q) => p[0] - q[0]).map(([r, x]) => `${r}${x ? ' ✓' : ''}`).join(', ')} rods`).join('<br>') + (dl.length > 12 ? `<br><span class="soft">and ${dl.length - 12} more</span>` : '') : '<span class="soft">none</span>']);
     if (eps.length) rows.push(['Landings', eps.map((e) => `entry point ${e.ep}${e.name ? `, ${esc(e.name)}` : ''}`).join('<br>')]);
-    const burn = (() => { const out = []; return BURNS.ready && eventsAt(L.cx, L.cz, out) > 0 && out[0].rec ? burnWords(out[0].rec) : ''; })();
+    const br = burnAt(L.cx, L.cz), burn = br ? `${burnWords(br)} nearby` : '';
     const inside = BOUNDARY.ready ? inWilderness(L.cx, L.cz) : null;
     const yours = [explored.hasLake(id) ? 'paddled' : 'not paddled yet', inside === true ? 'inside the wilderness' : inside === false ? 'outside the wilderness' : '', burn].filter(Boolean).join(' · ');
     const sheet = sheetAt(L.cx, L.cz);
@@ -358,7 +366,7 @@ export class MapBook {
     const box = cv.parentNode.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
     if (box.width < 10) { this.portraitT = setTimeout(() => this.drawPortrait(id, tries + 1), 60); return; }
     cv.width = Math.round(box.width * dpr); cv.height = Math.round(box.height * dpr);
-    const w = this.w, ext = this.extent(id), sites = w.campsites.filter((c) => (c.lake ?? 0) === id);
+    const w = this.w, ext = this.extent(id), ids = this.pieces(id), sites = w.campsites.filter((c) => ids.has(c.lake ?? 0));
     const r = drawRegion(cv, w, { ...ext, margin: 0.14 }, { names: false, docks: true, boundary: true, build: 3, ink: null, k: (cv.width / 620), fine: true, soundAll: true,
       markers: sites.map((c) => ({ x: c.x, z: c.z, kind: 'dot', color: '#c0392b', r: 3.6 })) });
     // the lake's own name across it, the rest of the water left unlettered
@@ -367,6 +375,6 @@ export class MapBook {
     ctx.lineWidth = 4 * k; ctx.strokeStyle = 'rgba(186, 210, 219, 0.9)'; ctx.fillStyle = INK.lakeName;
     const txt = String(L.name || '').toUpperCase().split('').join(String.fromCharCode(8202));
     ctx.strokeText(txt, a, b); ctx.fillText(txt, a, b); ctx.restore();
-    if (!r.ready && tries < 80) this.portraitT = setTimeout(() => this.drawPortrait(id, tries + 1), 200);
+    if ((!r.ready || !ext.ready) && tries < 80) this.portraitT = setTimeout(() => this.drawPortrait(id, tries + 1), 200);
   }
 }

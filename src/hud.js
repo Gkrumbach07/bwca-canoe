@@ -6,7 +6,7 @@ import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb
 import { explored, INK_WATER, INK_RIM, ROUTE_STEP } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked, your way in pencil)
 import { lifeKmh } from './pace.js';
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK } from './map-render.js'; // the map as vectors
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt } from './map-render.js'; // the map as vectors
 import './hud.css';
 
 // The HUD, in two materials (hud.css). Air: the compass top right, the readout top left while Tab is held,
@@ -348,7 +348,7 @@ export class Hud {
     // a lake's page straight from the sheet (map-book.js)
     c.addEventListener('dblclick', (e) => {
       if (this.mode !== 'sheet' || this.table || typeof this.onLakePage !== 'function') return;
-      const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py), id = this.world.lakeIdAt(x, z);
+      const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py), id = lakeAt(this.world, x, z);
       if (id > 0 && this.lakeShown(x, z)) { this.clearPin(); this.onLakePage(id); }
     });
     c.addEventListener('pointerup', up);
@@ -567,7 +567,7 @@ export class Hud {
     if (this.mode !== 'sheet') this.setMode('sheet');
     if (recentre) { this.view.cx = x; this.view.cz = z; }
     const w = this.world, p = this.player, ctx = this.ctx, sh = this.sheetsOn;
-    const name = !sh || sh.view() !== 'owned' || sh.showsDetail(x, z) ? w.lakeName(w.lakeIdAt(x, z)) : null; // fb2 D: blank paper names nothing
+    const name = !sh || sh.view() !== 'owned' || sh.showsDetail(x, z) ? w.lakeName(lakeAt(w, x, z)) : null; // fb2 D: blank paper names nothing
     const walk = this.pinLocked; // Adventure: the pin measures the way, it does not move you
     let text = 'Paddle in here?';
     if (p) {
@@ -592,7 +592,7 @@ export class Hud {
       if (walk) text = text[0].toUpperCase() + text.slice(1);
     } else if (name) text = `${walk ? '' : 'Paddle in here? '}${name}.`;
     if (this.el.pinGo) this.el.pinGo.hidden = walk;
-    const lid = w.lakeIdAt(x, z), L = lid > 0 ? w.lakes[lid - 1] : null;
+    const lid = lakeAt(w, x, z), L = lid > 0 ? w.lakes[lid - 1] : null;
     this.pin.lake = L && L.name && name && typeof this.onLakePage === 'function' ? lid : 0;
     if (this.el.pinLake) this.el.pinLake.hidden = !this.pin.lake;
     if (this.el.pinCancel) this.el.pinCancel.textContent = walk ? 'Close' : 'Not now';

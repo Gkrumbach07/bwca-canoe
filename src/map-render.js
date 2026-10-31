@@ -340,6 +340,7 @@ export function paintBoundary(ctx, v, k = 1) {
 
 // --- tiles fetched for the map alone (shared by every map that draws) --------------------------------------------------
 const FETCHES = 4;
+const FINE_BELOW = 12; // m a canvas pixel: the 10 m tiles under this, the far field's 80 m ones over it
 export const tileCache = { fine: new Map(), far: new Map(), fetching: 0, tick: 0, MAX_FINE: 160, MAX_FAR: 48 };
 function decode(world, buf, far) {
   const s = far ? world.farSide : world.side, n = s * s;
@@ -386,6 +387,42 @@ function prune(cache, max) {
   for (let i = 0; i < old.length && cache.size > max; i++) cache.delete(old[i][0]);
 }
 export const farMetres = (world) => world.far.tile * world.cell * world.far.factor;
+// the lake id at (x, z) from whatever the map or the world has in: the streamed tiles, else the ones fetched for the
+// map (fine first, then the far field's 80 m); 0 for land or where nothing is in yet
+export function lakeAt(world, x, z) {
+  if (!world.inBounds(x, z)) return 0;
+  const TM = world.tileMetres, tx = Math.floor((x - world.originX) / TM), ty = Math.floor((z - world.originZ) / TM);
+  const fine = world.slots[ty * world.ntx + tx] || (tileCache.fine.get(`${tx},${ty}`) || {}).slot;
+  if (fine) { const i = Math.floor((x - world.originX - tx * TM) / world.cell), j = Math.floor((z - world.originZ - ty * TM) / world.cell); return fine.lake[(j + world.halo) * world.side + i + world.halo]; }
+  const FM = farMetres(world), fx = Math.floor((x - world.originX) / FM), fy = Math.floor((z - world.originZ) / FM), fc = world.cell * world.far.factor;
+  const far = world.farSlots[fy * world.far.ntx + fx] || (tileCache.far.get(`${fx},${fy}`) || {}).slot;
+  if (far) { const i = Math.floor((x - world.originX - fx * FM) / fc), j = Math.floor((z - world.originZ - fy * FM) / fc); return far.lake[(j + world.far.halo) * world.farSide + i + world.far.halo]; }
+  return 0;
+}
+// the box round a lake's water (ids: a has(id) set: a lake the bake cut in pieces is one lake), from the far field's 80 m
+// cells within reach of (cx, cz); { box, ready } (ready false while a far tile under it is still being fetched)
+export function lakeBox(world, ids, cx, cz, reach) {
+  const FM = farMetres(world), fc = world.cell * world.far.factor, T = world.far.tile, halo = world.far.halo, side = world.farSide;
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, ready = true;
+  const fx0 = Math.max(0, Math.floor((cx - reach - world.originX) / FM)), fx1 = Math.min(world.far.ntx - 1, Math.floor((cx + reach - world.originX) / FM));
+  const fy0 = Math.max(0, Math.floor((cz - reach - world.originZ) / FM)), fy1 = Math.min(world.far.nty - 1, Math.floor((cz + reach - world.originZ) / FM));
+  for (let fy = fy0; fy <= fy1; fy++) for (let fx = fx0; fx <= fx1; fx++) {
+    let s = world.farSlots[fy * world.far.ntx + fx];
+    if (!s) { const t = tileCache.far.get(`${fx},${fy}`); s = t && t.slot; }
+    if (!s) { ready = false; tileGeo(world, fx, fy, true, { build: 0 }); continue; }
+    const ox = world.originX + fx * FM, oz = world.originZ + fy * FM;
+    for (let j = 0; j < T; j++) {
+      const z = oz + (j + 0.5) * fc; if (Math.abs(z - cz) > reach) continue;
+      const row = (j + halo) * side + halo;
+      for (let i = 0; i < T; i++) {
+        const id = s.lake[row + i]; if (!id || !ids.has(id)) continue;
+        const x = ox + (i + 0.5) * fc; if (Math.abs(x - cx) > reach) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
+      }
+    }
+  }
+  return { box: x1 >= x0 ? { x0: x0 - fc, z0: z0 - fc, x1: x1 + fc, z1: z1 + fc } : null, ready };
+}
 
 // --- a region of the map on a canvas, for anyone ------------------------------------------------------------------------
 // drawRegion(canvas, world, view, opts) → { ready, toPx(x, z), worldAt(px, py), mPerPx }
@@ -424,7 +461,7 @@ export function drawRegion(canvas, world, view, opts = {}) {
 // the far ones further out. Returns whether every tile in view was in.
 export function paintGround(ctx, world, v, W, H, { k = 1, budget = { build: 2 }, depths = true, contours = true, ink = null, inkV = 0, detail = null, labels = null, far = null, all = false } = {}) {
   const x1 = v.x0 + W * v.mPerPx, z1 = v.z0 + H * v.mPerPx;
-  const useFine = far === null ? v.mPerPx < 22 : !far;
+  const useFine = far === null ? v.mPerPx < FINE_BELOW : !far;
   let ready = true;
   const visible = (ox, oz, size) => !detail || detail(ox, oz, ox + size, oz + size);
   const jobs = []; // [ox, oz, size, geo, fine, clip?]
