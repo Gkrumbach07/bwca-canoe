@@ -176,7 +176,7 @@ export class Journal {
     if (!sand && en && out && none && en.needs.food < 0.6) return adv ? 'nothing to eat with you, and getting hungry. make for a landing' : 'nothing to eat with you. any outfitter will fill the pack';
     if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
     if (adv && c.state.wet) return 'everything is damp. a fire tonight to dry the gear';
-    if (en && en.value < 0.3) return 'tired. find a site early and eat something';
+    if (en && en.ceiling < 0.3) return 'tired. find a site early and eat something'; // (2026-10-31: the ceiling is your energy, the green stamina)
     if (w && w.fresh && h < 16) return 'wind should drop by evening — stay in the lee till then';
     if (w && w.speed < 2 && h < 10) return 'glassy this morning — make the miles before the wind gets up';
     if (set != null && h > set - 1 && h < set + 1) return 'sun is going. find a site, get the tent up';
@@ -185,7 +185,7 @@ export class Journal {
   signature() {
     const f = this.fishing, en = this.energy, st = this.stats, ts = this.tasks;
     const c = this.core;
-    return [this.tab, this.page, f ? f.logVersion : 0, en ? Math.round(en.value * 100) : 0, en ? en.food : 0, st ? Math.round(st.km * 10) : 0, st ? st.portages : 0, st ? st.lakes.length : 0, st ? st.nights.length : 0,
+    return [this.tab, this.page, f ? f.logVersion : 0, en ? Math.round(en.ceiling * 100) : 0, en ? en.food : 0, st ? Math.round(st.km * 10) : 0, st ? st.portages : 0, st ? st.lakes.length : 0, st ? st.nights.length : 0,
       ts ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', ts ? ts.unlocks.length : 0, Math.floor(this.day.hours * 4), this.dayN,
       c ? `${c.mode}${c.active}${c.book.trips.length}${c.state.wet}` : '', this.photos ? this.photos.version : 0, this.record ? `${this.record.version}${this.recTrip}` : ''].join('|');
   }
@@ -221,7 +221,7 @@ export class Journal {
     // with the inventory (fb A), its own words: the meals and snacks within reach, eaten from the pack (no meal comes on the clock)
     const words = en && en.inv && typeof en.foodWords === 'function' ? en.foodWords() : null;
     const foodTxt = !active ? 'no trip under way' : sand ? `the pack keeps · ${meal}` : words ? `${words === 'no food' ? 'nothing to eat' : words} within reach · eaten from the pack` : `${fmtDays(left)} ${left <= 1 ? 'day' : 'days'} of ${total} · ${meal}`;
-    const ev = en ? Math.round(en.value * 100) : 100;
+    const ev = en ? Math.round(en.ceiling * 100) : 100;
     const cap = en ? Math.round(en.ceiling * 100) : 100;
     // at its ceiling the bar goes no higher until the need that holds it down is met (fb2 F: the ceiling is the bar less
     // each need's chunk, sleep, hunger, thirst and cold): the biggest chunk says what lifts it
