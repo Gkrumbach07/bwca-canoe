@@ -542,19 +542,17 @@ export class ContainerView {
     const f = site.layout.fire, a = f.a || 0, gx = -Math.sin(a), gz = Math.cos(a), top = f.y + GRATE.top;
     const d = itemDef('grate'), cols = d && d.container ? d.container.cols : 4, rows = d && d.container ? d.container.rows : 2;
     const cellOf = (e) => { const def = itemDef(e.id) || { w: 1, h: 1 }, w = e.rot ? def.h : def.w, h = e.rot ? def.w : def.h; const u = -GRATE.u + ((e.x + w / 2) / cols) * 2 * GRATE.u, v = -GRATE.w + ((e.y + h / 2) / rows) * 2 * GRATE.w; return { u, v, long: w >= h }; };
-    // what cook.js draws: the pot (lid on, or the lid as a pan) and the cooked thing in it, or a fish on its stick
-    const looks = cook ? ['potLid', 'panRaw', 'panFried', 'stickRaw', 'stickFried'].filter((k) => cook[k] && cook[k].visible) : [];
-    const pot = c.grid.find((e) => e.id === 'pot');
-    const og = cook && looks.length ? cook.onGrate(c.at.grate) : null, inCook = og && og.food ? og.food.uid : null;
-    if (pot && looks.length && !looks[0].startsWith('stick')) { const q = cellOf(pot), m = cook[looks[0]]; m.position.x = f.x + gx * q.u + gz * q.v; m.position.z = f.z + gz * q.u - gx * q.v; }
-    const sig = `${c.grid.map((e) => `${e.uid}:${e.id}:${e.x},${e.y},${e.rot ? 1 : 0}`).join('|')}|${inCook || ''}|${f.x.toFixed(2)},${f.z.toFixed(2)}`;
+    // what cook.js draws itself (crafting, 2026-10-31): each pot at its cell, and a fish on the grate on its stick
+    void cook;
+    const inCook = null, onStick = (e) => { const d = itemDef(e.id); return !!(d && (d.kind === 'fish' || /^fried:/.test(e.id))); };
+    const sig =`${c.grid.map((e) => `${e.uid}:${e.id}:${e.x},${e.y},${e.rot ? 1 : 0}`).join('|')}|${inCook || ''}|${f.x.toFixed(2)},${f.z.toFixed(2)}`;
     if (o.parent !== this.scene) this.scene.add(o);
     o.position.set(f.x, top, f.z); o.quaternion.identity(); o.scale.setScalar(1);
     o.visible = true;
     this.remerge(o, sig, () => {
       const list = [], base = Math.atan2(-gz, gx);
       for (const e of c.grid) {
-        if (e.box || e.id === 'pot' || e.uid === inCook) continue;
+        if (e.box || e.id === 'pot' || e.uid === inCook || onStick(e)) continue;
         const m = modelGeometry(e.id, e.data); if (!m) continue;
         const q = cellOf(e), j = hashOf(String(e.uid || e.id));
         const yaw = base + (q.long ? 0 : Math.PI / 2) + (j - 0.5) * 0.2;

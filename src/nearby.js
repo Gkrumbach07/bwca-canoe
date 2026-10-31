@@ -200,13 +200,15 @@ class Nearby {
       id: `fire:${key}`, kind: 'fire', title: 'Fire ring', key, state: st,
       slots: [
         { id: 'fuel', label: 'Fuel', cId: bin.id, accepts: ['firewood'] },
-        { id: 'grate', label: 'Grate', cId: grate.id, accepts: ['meal', 'fish', 'food', 'tool'] },
+        { id: 'grate', label: 'Grate', cId: grate.id, accepts: ['fish', 'food', 'tool', 'container'] },
+        // crafting (2026-10-31): each pot on the grate, its own grid (the food and the water go in it) and its own bar
+        ...(typeof ck.potsOn === 'function' ? ck.potsOn(key) : []).map((c) => ({ id: `pot:${c.id}`, label: (itemDef(c.item) || {}).short || (itemDef(c.item) || {}).name || 'Pot', cId: c.id, pot: true, accepts: ['meal', 'fish', 'food', 'water'], cooking: ck.cookingOf(c.id) })),
       ],
       actions,
       need: this.askWood(F.ringNeed(key, units)),
       burn: F.burn(key, units),
       coals: F.coals(key),
-      cooking: ck.cookingNow(key),
+      cooking: typeof ck.potsOn === 'function' ? ck.cookingNow(key, { grateOnly: true }) : ck.cookingNow(key),
       caught: !!(st === 'burning' && f0 && Number.isFinite(f0.strikeT) && F.t - f0.strikeT < 2.5), // (it has just caught: the card flares)
     };
   }
@@ -242,7 +244,7 @@ class Nearby {
     if (site && site.layout) {
       const key = campKey(site), ch = this.chores, bin = ch.fuelBin(key, site), grate = ch.grate(key, site);
       if (d.kind === 'firewood' && bin && c !== bin) out.push(this.moveAction('fuel', 'Put it on the fire', c, e, bin, 'the ring is full'));
-      if (FOOD.has(d.kind) && d.eat && d.eat.cook && grate && c !== grate) out.push(this.moveAction('grate', 'Put it on the grate', c, e, grate, 'the grate is full'));
+      if (d.kind === 'fish' && d.eat && d.eat.cook && grate && c !== grate) out.push(this.moveAction('grate', 'Put it on the grate', c, e, grate, 'the grate is full')); // (crafting: a meal goes into a pot; a fish may go on a stick)
     }
     return out;
   }
@@ -383,11 +385,13 @@ class Nearby {
       const L = site.layout, key = campKey(site), f = L.fire;
       if (near.flat(f.x, f.z) <= POINT.fire) {
         // what is on the grate, to take off it: the cooked thing first, a raw one, the pot
-        const og = this.cook.onGrate(key), gs = this.cook.grateSpot(site), P = this.cook.pot && this.cook.pot.key === key && !this.cook.pot.done;
-        const top = og.food || (!P && og.g && og.g.grid.find((q) => !q.box && q.id !== 'pot')) || (!P && og.pot) || null;
+        // (crafting: a cooked thing in a pot or on the grate first, then a raw thing on the grate, then a pot not working)
+        const og = this.cook.onGrate(key), gs = this.cook.grateSpot(site), jobs = this.cook.jobs || {};
+        const idle = og.g ? og.g.grid.find((q) => q.box && !jobs[q.uid] && (itemDef(q.id) || {}).pot) : null;
+        const top = og.food || (!jobs[og.g && og.g.id] && og.g && og.g.grid.find((q) => !q.box)) || idle || null;
         const gh = top ? near.sphere(gs.x, gs.y + 0.07, gs.z, 0.2) : null;
         if (gh) {
-          const dd = itemDef(top.id), name = top.id === 'pot' ? 'the cook pot' : dd && dd.cooked ? `the ${eatName(dd)}` : `the ${lower(dd ? dd.name : 'thing')}`;
+          const dd = itemDef(top.id), name = top.box ? `the ${lower(dd ? dd.name : 'pot')}` : dd && dd.cooked ? `the ${eatName(dd)}` : `the ${lower(dd ? dd.name : 'thing')}`;
           push({ t: gh.t, miss: gh.miss * 0.7 }, { kind: 'item', ref: `grate:${top.uid}`, label: `${name}, off the grate`, e: { verb: 'Pick up', run: () => this.offGrate(key, top) }, box: { x: gs.x, y: gs.y + 0.06, z: gs.z, hx: 0.11, hy: 0.07, hz: 0.11, heading: 0 } });
         }
         // (fb5 A, decision 1: "E Fire ring", plus at most the one missing chip, or nothing when lit; stream E's pointer.js
@@ -441,7 +445,12 @@ class Nearby {
     }
     // the water's edge, on foot (E Fill the bottle)
     const w = this.waterEdge();
-    if (w) push(near.box(w.box), { kind: 'water', ref: 'water', label: 'the water’s edge', chip: w.chip || '', e: { verb: 'Fill the bottle', why: w.why, needs: w.needs || null, next: w.next || null, run: () => camp.fillBottle(w.wait) }, box: w.box });
+    // (crafting, 2026-10-31: E is lake water as it comes; a filter with you is its own choice, Q)
+    if (w) {
+      const fw = typeof camp.filterWait === 'function' ? camp.filterWait() : 0.5, full = !!w.why;
+      const q = fw < 0.25 ? { verb: fw <= 0 ? 'Pump it full' : 'Through the gravity bag', why: full && !(camp.energy && camp.energy.untreated > 0.001) ? w.why : null, run: () => camp.fillBottle('filter') } : null; // (lake water in it is poured out first)
+      push(near.box(w.box), { kind: 'water', ref: 'water', label: 'the water’s edge', chip: w.chip || '', e: { verb: 'Fill the bottle', why: w.why, needs: w.needs || null, next: w.next || null, run: () => camp.fillBottle('raw') }, q, box: w.box });
+    }
     return out;
   }
   // the fire ring's Q: Douse (held) while it burns or the coals are hot; else none (fb5 A: it lights itself)
@@ -457,7 +466,7 @@ class Nearby {
     for (let d = 0.4; d <= POINT.water && !pt; d += 0.3) { const x = p.x + f.x * d, z = p.z + f.z * d; if (w.isReady(x, z) && w.shoreAt(x, z) < 0) pt = { x: x + f.x * 0.5, z: z + f.z * 0.5 }; }
     if (!pt) return null;
     // fb4 A: stream C's fillCheck when it is there: { enabled, why, needs, next, wait } (wait: hours to drinkable)
-    const fc = e && typeof e.fillCheck === 'function' ? check(e, 'fillCheck', typeof this.camp.filterWait === 'function' ? this.camp.filterWait() : undefined) : null;
+    const fc = e && typeof e.fillCheck === 'function' ? check(e, 'fillCheck', undefined) : null; // (crafting: E's fill is lake water as it comes, whatever filter you have)
     if (fc && (this.camp.bottleHere() || (e && e.live))) {
       const y0 = w.levelAt(pt.x, pt.z), b0 = this.camp.bottleHere();
       // (fb5 E: the dot's chip is the one missing thing: a greyed fill's (pointer.js reads its needs), else no tablet to hand)
@@ -525,8 +534,9 @@ class Nearby {
   // E at the grate: the cooked thing (or a raw one, or the pot) off it, into what you carry
   offGrate(key, e) {
     const inv = this.inv, ck = this.cook;
-    if (e.id === 'pot') { ck.putAway(key, true); return; }
-    const g = ck.grate(key), r = inv.place(e.id, 1, { data: e.data || null, quiet: true });
+    if (e.box || e.id === 'pot') { ck.putAway(key, true, e.box ? e.uid : null); return; }
+    // (crafting: the cooked thing may be in a pot on the grate)
+    const hit = inv.findUid(e.uid), g = hit ? hit.c : ck.grate(key), r = inv.place(e.id, 1, { data: e.data || null, quiet: true });
     if (!r.ok) { if (!this.toFreeHand(g.id, e)) this.camp.note('No room for it in anything you carry, and your hands are full.', 3); return; }
     inv.take(g.id, e.uid, 1);
     const d = itemDef(e.id);

@@ -117,6 +117,10 @@ export const CATALOG = [
   { id: 'cocoa', name: 'Hot cocoa', shelf: 'food', price: 3, kg: 0.15, words: 'For the cold evenings. A cup of it and you stop shivering.' },
   { id: 'stove', name: 'Canister stove', shelf: 'food', price: 35, kg: 0.12, words: 'Screws onto a gas canister. Supper in the rain, no fire needed.' },
   { id: 'fuel', name: 'Fuel canister', shelf: 'food', price: 6, kg: 0.36, words: 'Ten boils, near enough. The stove wants one.' },
+  // crafting (2026-10-31): the pots (items.js def.pot): food and its water go in one, so a second pot is a second dish
+  { id: 'potsmall', name: 'Small pot', shelf: 'food', price: 14, kg: 0.35, words: 'Titanium, a litre. One breakfast, or water for the coffee while the supper cooks.' },
+  { id: 'pot', name: 'Cook pot', shelf: 'food', price: 18, kg: 1.2, words: 'The blackened two-litre pot every crew has. A supper, or a boil of water for the bottles.' },
+  { id: 'potbig', name: 'Big camp pot', shelf: 'food', price: 24, kg: 1.7, words: 'Four litres. A whole walleye fits, or supper for the crew.' },
   // --- the tackle shelf ------------------------------------------------------------------------------------------
   { id: 'leeches', name: 'A dozen leeches', shelf: 'tackle', price: 4, kg: 0.3, qty: 12, words: 'Fresh from the bait fridge, for the bobber rig. They want the bucket: a walleye can’t leave one alone.' },
   { id: 'bucket', name: 'Leech bucket', shelf: 'tackle', price: 6, kg: 0.6, words: 'A foam bucket with a lid. The leeches stay lively in it for days if you change the water.' },

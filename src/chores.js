@@ -56,7 +56,7 @@ import { Tarp } from './tarp.js'; // fb4 E: the tarp pitched like the tent, on t
 // fuel a fixed container at the ring like the grate, and the grate takes a raw meal or a fish dragged onto it. Both are
 // stations: never where a thing picked up is put away (inventory.place).
 defineItem({ id: 'firefuel', name: 'In the fire ring', short: 'Fuel', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, station: true, container: { cols: 4, rows: 3, accepts: ['firewood'] }, icon: 'firewood', words: 'Wood laid in the ring.' });
-defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'meal', 'fish'] } });
+defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'fish', 'container'] } }); // (crafting, 2026-10-31: a pot stands on it, the meal goes in the pot; 'container' takes only a pot, inventory.accepts)
 // fb3 B (the owner, 2026-10-25: "things like sleeping bag and tarp … feel like they have no use"): rain on a ring with no
 // tarp over it burns a fire down RAIN.burn times faster and wets the wood in it through after RAIN.wetAfter hours (it
 // won't light for RAIN.wetFor); rain on a pack on the ground with no tarp soaks the gear after RAIN.packAfter hours
@@ -1142,12 +1142,15 @@ export class Chores {
     for (const key of this.lit) if (F.get(key)) F.douse(key);
     this.lit.clear();
     this.tarp.tripEnded(); // fb4 E: the tarp goes to the outfitters with the tent
-    this.cook.pot = null;
+    this.cook.pot = null; this.cook.jobs = {}; this.cook.stove = null;
     if (inv && inv.attached) {
       for (let i = inv.containers.length - 1; i >= 0; i--) {
         const c = inv.containers[i];
         if (c.item !== 'grate') continue;
-        for (const e of c.grid) if (e.id === 'pot' && inv.crate) inv.put(inv.crate, 'pot', { quiet: true });
+        for (const e of [...c.grid]) {
+          if (e.box) { const k = inv.cont(e.uid); if (k && inv.crate && !inv.nest(k, inv.crate)) { k.where = 'stash'; k.in = null; } continue; } // (crafting: a pot on the grate goes to the outfitters with what is in it)
+          if (e.id === 'pot' && inv.crate) inv.put(inv.crate, 'pot', { quiet: true });
+        }
         inv.containers.splice(i, 1);
       }
       inv.emit('containers');

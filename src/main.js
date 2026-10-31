@@ -69,6 +69,7 @@ import { KINDS } from './tasks.js'; // fb2 A
 import { cards } from './cards.js'; // wc B
 import { VERBS, verbsOf } from './items.js'; // wc D
 import { chipOf, missingOf } from './items.js'; // fb5 B
+import { isPot } from './items.js'; // crafting (2026-10-31)
 import { withTentNeeds, pitchNeeds } from './tent.js'; // fb4 E
 import { chip } from './chip.js'; // fb5 D
 import { Hints } from './hints.js'; // fb4 D
@@ -656,7 +657,7 @@ async function main() {
     const ch5 = camp.chores, ck5 = ch5.cook;
     fires.veiled = () => !!(cards.shown || journal.open);
     const statusA = inventory.entryStatus.bind(inventory);
-    inventory.entryStatus = (c, e) => (c && c.item === 'grate' && typeof ck5.grateStatus === 'function' ? ck5.grateStatus(c, e) : c && c.item === 'firefuel' && typeof ch5.fuelStatus === 'function' ? ch5.fuelStatus(c, e) : statusA(c, e)); // (the fire's own, lean: a state word and a missing chip, no timers)
+    inventory.entryStatus = (c, e) => (c && (c.item === 'grate' || isPot(c.item)) && typeof ck5.grateStatus === 'function' ? ck5.grateStatus(c, e) : c && c.item === 'firefuel' && typeof ch5.fuelStatus === 'function' ? ch5.fuelStatus(c, e) : statusA(c, e)); // (the fire's own, lean: a state word and a missing chip, no timers; crafting: what is in a pot too)
     window.__game.fire = { need: (k) => ch5.fireNeed(k), needs: (k) => ch5.fireNeeds(k), on: (n, fn) => fires.on(n, fn), events: fires.events }; // for the console, the tests and stream E
   }
   // fb4 B: the book (the owner's second round of 2026-10-25). I opens and closes it (Pack and Journal are tabs on its
@@ -716,7 +717,7 @@ async function main() {
   const shopUpdC = shop.update.bind(shop);
   shop.update = () => { shopUpdC(); kit.update(); uniques.update(); };
   const fillC = camp.fillBottle.bind(camp);
-  camp.fillBottle = () => kit.fillBottle(fillC); // the pump, at once; the gravity bag in a few minutes; else a tablet
+  camp.fillBottle = (how) => kit.fillBottle(fillC, how); // crafting (2026-10-31): E lake water as it comes; Q 'filter' the pump at once, the gravity bag in a few minutes
   camp.filterWait = () => kit.filterWait();
   const verbC = inventory.verb.bind(inventory);
   inventory.verb = (id, ref) => kit.verb(id, ref) || verbC(id, ref); // Cook on it, Brew a cup, Fillet the catch, Sit in it

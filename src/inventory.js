@@ -346,8 +346,10 @@ export class Inventory {
   accepts(c, d) {
     if (!c || !d) return false;
     const s = this.spec(c);
-    if (d.kind === 'container') return !!d.nest && c.item !== 'pockets' && !s.one && !s.accepts;
+    // (crafting, 2026-10-31: a pot goes where 'container' is taken, the grate; water only into what takes water, a pot)
+    if (d.kind === 'container') return !!d.nest && c.item !== 'pockets' && !s.one && (!s.accepts || (!!d.pot && s.accepts.includes('container')));
     if (d.kind === 'long') return false;
+    if (d.kind === 'water') return !!(s.accepts && s.accepts.includes('water'));
     if (c.item === 'pockets' && d.w * d.h > 2) return false;
     if (d.id === 'bottle' && c.item !== 'pockets') return false;
     return !s.accepts || s.accepts.includes(d.kind);
@@ -433,7 +435,7 @@ export class Inventory {
     if (d.kind === 'long') { const l = this.addLong(itemId, this.atStash || !this.attached ? 'stash' : 'canoe', null, { quiet }); return { ok: true, placed: 1, cId: null, uid: l.uid, why: null }; }
     // (fb2 A: never into a station, the fire ring's fuel or the grate, unless asked for by name in `prefer`; fb3 B: never
     // into a hand's holder either: a hand takes only what you put in it)
-    const pool = (within || (all || !this.attached ? this.containers : this.reachable())).filter((c) => c.item !== 'crate' && c.item !== 'pile' && !exclude.includes(c.id) && this.accepts(c, d) && !this.spec(c).one && (!(itemDef(c.item) || {}).station || prefer.includes(c.id)));
+    const pool = (within || (all || !this.attached ? this.containers : this.reachable())).filter((c) => c.item !== 'crate' && c.item !== 'pile' && !exclude.includes(c.id) && this.accepts(c, d) && !this.spec(c).one && (!((itemDef(c.item) || {}).station || (itemDef(c.item) || {}).pot) || prefer.includes(c.id))); // (a pot only by name too: food is never put away into one)
     const pre = prefer.map((id) => this.cont(id)).filter((c) => c && pool.includes(c));
     const rest = pool.filter((c) => !pre.includes(c)).sort((a, b) => this.score(b, d) - this.score(a, d));
     let left = Math.max(1, qty | 0), first = null, uid = null;
@@ -661,7 +663,7 @@ export class Inventory {
     if (!hit) return no('gone', 'That is not within reach.');
     const d = itemDef(hit.e.id);
     if (!d || !d.eat) return no('inedible', `${d ? d.name : 'That'} isn’t for eating.`);
-    if (d.eat.cook && !(hit.e.data && hit.e.data.cooked)) return no('cook', d.kind === 'fish' ? 'Cook it first: on the grate, over a fire.' : `${d.name}: cook it first, on the grate over a fire.`);
+    if (d.eat.cook && !(hit.e.data && hit.e.data.cooked)) return no('cook', d.kind === 'fish' ? 'Cook it first: in a pot or on the grate, over a fire.' : `${d.name}: cook it first, in a pot with its water, over a fire.`);
     if (!this.still()) return no('moving', 'Hold still to eat.');
     const en = this.energy, sand = !!(en && en.sandbox);
     if (en && typeof en.eatItem === 'function') en.eatItem(d.species ? fishEat(d, hit.e.data) : d.eat, d.name); // (tuning: a fish feeds you by its size, items.js fishEat)
@@ -1107,7 +1109,7 @@ export class Inventory {
     if ((e.id === 'sleepingbag' || d.bag) && this.gearWet()) return this.dampStatus(d.bag && d.bag.down ? 'Your gear is damp: a night in down is half as warm' : 'Your gear is damp: a night in it is 80 % as warm'); // (content C: any bag)
     // fb5 A: what is on the grate says its own state (cooking, ready, "needs the pot", "water 0.3 L"): cook.grateStatus,
     // else last round's potStatus for the pot
-    if (c && c.item === 'grate') {
+    if (c && (c.item === 'grate' || (itemDef(c.item) || {}).pot)) { // (crafting: what is in a pot says its state too)
       const ck = this.cookRef();
       if (ck && typeof ck.grateStatus === 'function') { const g = ck.grateStatus(c, e); if (g || e.id === 'pot') return g || null; }
       else if (e.id === 'pot') return ck && typeof ck.potStatus === 'function' ? ck.potStatus(c, e) : null;
@@ -1119,7 +1121,7 @@ export class Inventory {
       const hot = Number.isFinite(e.data.cooked) && now - e.data.cooked < 1;
       return { label: hot ? 'Hot' : 'Leftovers', mark: hot ? 'hot' : null, hint: 'keeps', timer: Math.round(left), running: true, until: e.data.until, next: `Eat it (right-click › Eat), or it goes off in ${timerWords(left)}` };
     }
-    if (d.eat && d.eat.cook) return { label: 'Raw', mark: null, next: d.kind === 'fish' ? `Fry it on the grate at a fire (in the pot’s lid, or on a stick)${c && c.item === 'stringer' ? ': it keeps on the stringer till then' : '; or Put on the stringer to keep it'}` : 'Cook it: the pot on the grate, this beside it, the fire burning (E at the ring)' };
+    if (d.eat && d.eat.cook) return { label: 'Raw', mark: null, next: d.kind === 'fish' ? `Fry it on the grate at a fire (in the pot’s lid, or on a stick)${c && c.item === 'stringer' ? ': it keeps on the stringer till then' : '; or Put on the stringer to keep it'}` : 'Cook it: into a pot with its water, the pot on the grate over a lit fire (E at the ring)' };
     const n = Number.isFinite(d.servings) ? d.servings : Number.isFinite(d.uses) ? d.uses : 1;
     if (n > 1) {
       // (the uses bar says how many are left: low is only the icon's mark)
@@ -1151,6 +1153,7 @@ export class Inventory {
   // a container's own state: rained on, in the rain now, or damp gear
   containerStatus(c) {
     const d = itemDef(c.item); if (!d) return null;
+    if (d.pot) { const ck = this.cookRef(); return ck && typeof ck.potState === 'function' ? ck.potState(c) : null; } // (crafting: Boiling, Cooking, "water 0.3 L")
     const r = this.root(c), now = this.now;
     if (r.where === 'ground' && r.at && d.wear) {
       // (stream E's chores.js: at.wet once half an hour of rain is in it, at.rainH the hours of rain so far)
