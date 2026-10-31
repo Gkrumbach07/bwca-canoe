@@ -2341,14 +2341,10 @@ export class PackSide {
   headWords() {
     const inv = model(), pr = ctx.profile, stash = !!inv.atStash;
     const kgOn = typeof inv.weight === 'function' ? inv.weight() : 0;
-    const hungW = !stash && ctx.energy && typeof ctx.energy.hungFood === 'function' ? ctx.energy.hungFood().words : ''; // (the barrel hung at camp, as the HUD says it)
-    const food = typeof inv.foodWords === 'function' ? inv.foodWords() : '';
-    // at a camp the food words count the camp's reach (inventory.campReach: the barrel in the canoe on the shore)
-    const atCamp = !stash && !!(inv.camp && typeof inv.camp.reachArea === 'function' && inv.camp.reachArea());
     return {
       kicker: `The pack · ${stash ? 'at the outfitter’s' : 'on you and within reach'}`,
       h2: kgOn > 0.05 ? `${kgText(kgOn)} on you` : 'Travelling light',
-      sub: `${loadWords(kgOn)}${food ? ` · ${food} ${atCamp ? 'about the camp' : 'within reach'}` : ''}${hungW ? ` · ${hungW}` : ''}`,
+      sub: '', // (the owner, 2026-10-31: no "a light load · 2 meals to cook and 2 snacks within reach" under it: chatter)
       money: pr ? `$${pr.money}` : '',
     };
   }

@@ -194,6 +194,8 @@ export class Player {
   get onFoot() { return this.mode === 'carry' || this.mode === 'walk'; }
   get altitude() { return this.onFoot ? (this.foot ? this.foot.y : this.groundAt(this.x, this.z)) : this.world.levelAt(this.x, this.z); }
   get waveHeightHere() { return this.wind && this.water ? windHeight(this.wind.speed, this.water.fetchAt(this.x, this.z)) : 0.05; }
+  // Shift held, unless the stamina has run out (energy.js STAMINA: winded until it comes back some; main.js sets energy)
+  hustleKey() { return this.input.held('ShiftLeft', 'ShiftRight') && !(this.energy && this.energy.winded); }
   // where the canoe lies when it is not with you (beached or set down), for the map
   get hullDown() { return this.carry && this.carry.drop ? this.carry.drop : null; }
   get modeLabel() {
@@ -417,7 +419,7 @@ export class Player {
     const idleHands = rodUp || climbing;
     let fwd = idleHands ? 0 : (inp.held('KeyW', 'ArrowUp') ? 1 : 0) - (inp.held('KeyS', 'ArrowDown') ? 1 : 0);
     const turn = idleHands ? 0 : (inp.held('KeyA', 'ArrowLeft') ? 1 : 0) - (inp.held('KeyD', 'ArrowRight') ? 1 : 0);
-    const hustle = inp.held('ShiftLeft', 'ShiftRight');
+    const hustle = this.hustleKey();
     const brace = !rodUp && inp.held('Space');           // a low brace steadies the hull but you cannot paddle
     if (brace) fwd = 0;
     const paddling = fwd !== 0 || turn !== 0;
@@ -695,7 +697,7 @@ export class Player {
   updateSwim(dt) {
     const inp = this.input, w = this.world, sw = this.swim, st = this.canoe.state, rig = this.canoe.rig, hull = sw.hull;
     sw.t += dt;
-    const hustle = inp.held('ShiftLeft', 'ShiftRight');
+    const hustle = this.hustleKey();
     const { moving, mx, mz } = this.steerOnFoot(dt, SWIM.turn * 3);
     this.speed += ((moving ? 1 : 0) * (hustle ? SWIM.hustle : SWIM.speed) - this.speed) * (1 - Math.exp(-dt * 3));
     const wd = this.wind ? this.wind.dir : { x: 0, z: 0 }, U = this.wind ? this.wind.speed : 0;
@@ -1270,7 +1272,7 @@ export class Player {
   updateFoot(dt) {
     const inp = this.input, c = this.carry, st = this.canoe.state, w = this.world;
     const carrying = !c.drop;
-    const hustle = inp.held('ShiftLeft', 'ShiftRight');
+    const hustle = this.hustleKey();
     c.hitCooldown -= dt;
     const ft = this.foot || (this.foot = { y: this.groundAt(this.x, this.z), vy: 0, air: false, t: 0, land: 0, near: null, peak: 0 });
     const footY0 = ft.y;

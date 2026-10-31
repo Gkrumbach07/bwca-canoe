@@ -332,9 +332,9 @@ export class Hints {
     const need = (k) => { if (!this.live || !e) return false; const v = e.needs[k]; return v < (ep ? CLEAR : LOW) ? v : false; };
     switch (id) {
       // the danger
-      case 'spent': return this.live && e.spentAt != null ? e.value : false;
+      case 'spent': return this.live && e.spentAt != null ? e.ceiling : false; // (2026-10-31: the ceiling is your energy; the green is stamina)
       case 'nearly': {
-        const v = this.live && e.spentAt == null && e.value > 0 && e.value < (ep ? 0.23 : 0.08) ? e.value : false;
+        const v = this.live && e.spentAt == null && e.ceiling > 0 && e.ceiling < (ep ? 0.23 : 0.08) ? e.ceiling : false;
         // (fb5 join: at a campsite, not "or make for a campsite")
         return v !== false && this.here && this.here.ringD <= SITE ? { lv: v, text: 'Nearly spent. Rest, eat or drink now.', short: 'Nearly spent.' } : v;
       }

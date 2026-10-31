@@ -758,9 +758,9 @@ export class Outfitter {
     this.summary = null; this.port = null;
     if (this.open) this.hide();
     // the push-off, as a title over the water
-    const lake = this.lakeOf(a), purse = pr ? ` · $${pr.money} in hand` : '';
-    if (core && adv) this.hud.showPlace(`${first ? 'The season begins' : 'Pushing off'} · ${a.name}`, lake, `${this.foodWords()}${purse} · come in at any outfitter`, 6);
-    else if (core) this.hud.showPlace(`Sandbox · ${a.name}`, lake, `${core.packWords(food)} · no dates`, 6);
+    const lake = this.lakeOf(a);
+    if (core && adv) this.hud.showPlace(`${first ? 'The season begins' : 'Pushing off'} · ${a.name}`, lake, 'Come in at any outfitter', 6); // (2026-10-31: no food or purse count: chatter)
+    else if (core) this.hud.showPlace(`Sandbox · ${a.name}`, lake, 'No dates', 6);
     else this.hud.note(`${fmtDaysWords(food)} of food in the pack. Off you go.`);
     this.save();
   }
@@ -890,7 +890,7 @@ export class Outfitter {
       const core = this.core, dw = core && core.active ? core.dayWords() : '';
       if (moved === 'v2') this.hud.note('An older trip, back as an open one: no dates, no exit and no permit. Come in when you like; any counter sells food.', 8);
       else if (moved === 'v1') this.hud.note('An older trip, back as Sandbox: the same lakes with no limits.', 7);
-      else this.hud.note(`${vis ? 'Back at the outfitter' : this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}: ${this.foodWords()}, energy ${Math.round(this.energy.value * 100)} %${pr ? `, $${pr.money} in hand` : ''}.`);
+      else this.hud.note(`${vis ? 'Back at the outfitter' : this.player.mode === 'paddle' ? 'Back on the water' : 'Back ashore'}${dw ? `, ${dw}` : ''}.`); // (2026-10-31: no food, energy or purse in the line: the bar and the book show them)
       return;
     }
     this.pendingShow = false;

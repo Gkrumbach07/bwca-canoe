@@ -6,7 +6,10 @@ import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb
 import { explored, INK_WATER, INK_RIM, ROUTE_STEP } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked, your way in pencil)
 import { lifeKmh } from './pace.js';
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
+import { KIND, FOREST } from './land.js'; // 2026-10-31: the land under you, in the developer rows
+import { GROUND } from './terrain-build.js';
 import './hud.css';
+const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
 // The HUD, in two materials (hud.css). Air: the compass top right, the readout top left while Tab is held,
 // the place title and the journal lines bottom left, one action line bottom centre with the balance arc,
@@ -99,6 +102,21 @@ export const NEED_ICON = { // (exported for fb5 B: the item tooltips draw the sa
   food: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v4.2M5.25 1.5v4.2M7.5 1.5v4.2M3 5.7c0 1.9 4.5 1.9 4.5 0M5.25 7v7.5M12 14.5V1.5c2.2 1.3 2.6 5.6 0 7.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   water: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2C8 1.2 3 7 3 10a5 5 0 0 0 10 0C13 7 8 1.2 8 1.2Z" fill="currentColor"/><path d="M5.6 10.2a2.5 2.5 0 0 0 1.9 2.4" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2" stroke-linecap="round"/></svg>',
 };
+// 2026-10-31: the cold's trend beside its icon (energy.warmthTrend): an arrow, up warming, down chilling, and what does
+// it: a flame (the fire), a roof (indoors), a sun (mild air, dry clothes), the wind, a moon (the night), rain, waves (in
+// the water, wading), a drop (wet through); 12 px, currentColor
+const TREND_GLYPH = {
+  fire: '<path d="M6 1.2c.4 2-1.8 3-1.8 5.3a1.8 1.8 0 0 0 3.6 0c0-.9-.5-1.5-.5-1.5 1.6.8 2.5 2.4 2.5 3.8a3.8 3.8 0 0 1-7.6 0C2.2 5.6 5.4 4.2 6 1.2Z" fill="currentColor"/>',
+  indoors: '<path d="M1.5 6.2 6 2l4.5 4.2M3 5.2v5.3h6V5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>',
+  sun: '<circle cx="6" cy="6" r="2.3" fill="currentColor"/><path d="M6 .8v1.5M6 9.7v1.5M.8 6h1.5M9.7 6h1.5M2.3 2.3l1 1M8.7 8.7l1 1M2.3 9.7l1-1M8.7 3.3l1-1" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>',
+  wind: '<path d="M1 4h6.2a1.6 1.6 0 1 0-1.6-1.6M1 7h8.6a1.6 1.6 0 1 1-1.6 1.6M1 10h4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  night: '<path d="M8.6 1.6a4.6 4.6 0 1 0 1.8 6.6A3.8 3.8 0 0 1 8.6 1.6Z" fill="currentColor"/>',
+  rain: '<path d="M3 2.5 2 5.5M6.5 2.5l-1 3M10 2.5l-1 3M4.5 7 3.5 10M8 7l-1 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  swim: '<path d="M.8 4.5c1.3-1.2 2.4-1.2 3.5 0s2.3 1.2 3.5 0 2.3-1.2 3.4 0M.8 8.5c1.3-1.2 2.4-1.2 3.5 0s2.3 1.2 3.5 0 2.3-1.2 3.4 0" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  wet: '<path d="M6 1.2S2.6 5 2.6 7.3a3.4 3.4 0 0 0 6.8 0C9.4 5 6 1.2 6 1.2Z" fill="currentColor"/>',
+};
+TREND_GLYPH.wade = TREND_GLYPH.swim; TREND_GLYPH.dry = TREND_GLYPH.sun;
+const trendIcon = (tr) => `<svg class="arrow" width="8" height="12" viewBox="0 0 8 12" aria-hidden="true"><path d="${tr.dir > 0 ? 'M4 1.5 7 6H5v4.5H3V6H1Z' : 'M4 10.5 1 6h2V1.5h2V6h2Z'}" fill="currentColor"/></svg>${TREND_GLYPH[tr.why] ? `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">${TREND_GLYPH[tr.why]}</svg>` : ''}`;
 
 // --- time and words ----------------------------------------------------------------------------------------
 export function clock12(hours) {
@@ -894,11 +912,9 @@ export class Hud {
         const l = w.lakes[id - 1], trip = outfitter && outfitter.trip;
         const dayW = this.dayWords(ctx);
         const kicker = `${dayW ? `${dayW} · ` : ''}${clock12(day.hours)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`;
-        const parts = [];
-        if (trip && trip.active && stats) parts.push(stats.portages ? `${word(stats.portages)[0].toUpperCase()}${word(stats.portages).slice(1)} ${plural(stats.portages, 'portage')} from ${trip.fromName || 'the landing'}` : `Out from ${trip.fromName || 'the landing'}`);
-        if (stats && stats.km > 0.05) parts.push(`${fmtKm(stats.km)} km paddled`);
-        parts.push(lakeWords(l));
-        this.showPlace(kicker, name, parts.join(' · '));
+        // (the owner, 2026-10-31: the lake's name, not "two portages from the landing · 12 km paddled": the trip's count
+        // is chatter here)
+        this.showPlace(kicker, name, lakeWords(l));
       }
       this.lastLakeId = id;
     } else if (id > 0) this.lastLakeId = id;
@@ -910,9 +926,7 @@ export class Hud {
         this.lastDawnDoy = day.doy;
         const dayW = this.dayWords(ctx);
         const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
-        const hungW = energy && energy.hungFood ? energy.hungFood().words : '';
-        const food = energy && !(core && core.sandbox) && !(outfitter && outfitter.visit) ? (energy.foodWords ? `${energy.foodWords()} with you${hungW ? ` · ${hungW}` : ''}` : energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : ''; // fb A: the meals and snacks in reach (camp join: and the barrel hung; polish B: not at a store, where the shelf is a step away)
-        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
+        const sub = here; // (2026-10-31: no km so far or food count on the day card: chatter)
         this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayW || 'A new day', sub);
       }
       this.lastHours = h;
@@ -974,8 +988,9 @@ export class Hud {
     mk.clock.classList.toggle('on', !!(day && !day.running && !ctx.shell));
     const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
     const hung = adv && energy && energy.hungFood ? energy.hungFood() : null; // camp join: the barrel hung at camp is food you have
-    const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 1 ? (energy.food <= 0 ? (energy.foodWords && energy.foodWords() !== 'no food' ? energy.foodWords() : hung && hung.words ? hung.words : 'no food') : energy.foodWords ? energy.foodWords() : `${foodWords(energy.food)} of food`) : ''; // fb A
-    const shown = food === 'no food' && energy && typeof energy.foodNearby === 'function' && energy.foodNearby() ? '' : food; // (the content join: not "no food" 6 m from the canoe with meals in it)
+    // (the owner, 2026-10-31: no "2 meals to cook and 2 snacks" down here; only nothing to eat at all is worth a mark)
+    const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 0 && !(energy.foodWords && energy.foodWords() !== 'no food') && !(hung && hung.words) ? 'no food' : '';
+    const shown = food && energy && typeof energy.foodNearby === 'function' && energy.foodNearby() ? '' : food; // (the content join: not "no food" 6 m from the canoe with meals in it)
     this.set('mfood', mk.food, shown); mk.food.classList.toggle('on', !!shown);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
     mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
@@ -986,111 +1001,203 @@ export class Hud {
     mk.tiles.classList.toggle('on', loading > 0);
   }
 
-  // --- the energy bar (fb2 F) -----------------------------------------------------------------------------------
-  // Wild n Chill's bar, as the owner asked (2026-10-24, second round): one long thin bar, top left in the Air. Green is
-  // the energy you have; the dim track after it, up to the ceiling, is what rest can still bring back; and each need's
+  // --- the energy bar (fb2 F; the stamina bar, 2026-10-31) --------------------------------------------------------
+  // Wild n Chill's bar, as the owner asked (2026-10-24, second round): one long thin bar, top left in the Air. Each need's
   // chunk eats into it from the right end, in the bar's order cold (pale blue), sleep (orange), hunger (yellow), thirst
-  // (blue): energy.chunks(). A chunk is dashed and marching while it grows faster than its everyday rate (energy.js),
-  // and its icon (snowflake, zz, fork and knife, drop) sits under it while it grows or is a tenth of the bar or more.
-  // Shown only when it matters, as the marks are: on a trip, while a chunk grows, a need is low, the bar is under half,
-  // the ceiling under 0.6 or a chunk other than sleep 0.15 or more, and for a few seconds after it changes (a meal, a
-  // capsize); in Quiet only when it is urgent (a chunk growing, a need low, the bar under a quarter). Hidden at once while
-  // the readout is up (Tab, or always at Full density): its Energy row draws the same bar.
+  // (blue): energy.chunks(); what is left is the ceiling. The green under the ceiling is stamina (the owner, 2026-10-31:
+  // "it's basically like your stamina bar"): a jog, paddling hard or a hard swim spends it and it comes back in a few
+  // seconds; the dim track after it is what is coming back. A chunk is dashed and marching while it grows faster than its
+  // everyday rate; a chunk that shrinks at once (a meal, a drink) leaves a bright ghost of what it was, fading. The icons
+  // sit under their chunks while they grow or are a tenth of the bar or more, the cold's with its trend beside it (a
+  // flame by the fire, the wind, the night, the water; energy.warmthTrend). Hovering the bar or an icon, with the mouse
+  // free (the book open, a paper, or the third-person paddle), says what each part is. Always up on a trip, with the
+  // clock and the date beside it (the owner: "I find myself having to tab to see that information all the time").
   energyBuild() {
     const air = this.el.air; if (!air) return;
     const el = document.createElement('div');
     el.id = 'energy'; el.className = 'fade'; el.setAttribute('role', 'img'); el.setAttribute('aria-label', 'Energy');
-    el.innerHTML = `<div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div>`
-      + `<div class="icons">${NEEDS.map((k) => `<span class="icon ${k}">${NEED_ICON[k]}</span>`).join('')}</div>`;
+    el.innerHTML = `<div class="ebar"><div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div>`
+      + `<div class="icons">${NEEDS.map((k) => `<span class="icon ${k}">${NEED_ICON[k]}</span>`).join('')}<span class="trend"></span></div><div class="hit"></div></div>`
+      + '<div class="when"><span class="clock"></span><span class="dot">·</span><span class="sc day"></span></div>';
     air.appendChild(el);
     const q = (sel) => el.querySelector(sel);
-    this.eb = { el, fill: q('.fill'), room: q('.room'), chunk: {}, icon: {}, ref: null, until: 0, sig: '', top: '' };
+    this.eb = { el, track: q('.track'), fill: q('.fill'), room: q('.room'), chunk: {}, icon: {}, trend: q('.trend'), clock: q('.when .clock'), day: q('.when .day'), ref: null, until: 0, sig: '', top: '', prev: null, trendSig: '' };
     for (const k of NEEDS) { this.eb.chunk[k] = q(`.chunk.${k}`); this.eb.icon[k] = q(`.icon.${k}`); }
+    this.tipBind(this.eb, q('.hit'), true);
   }
-  // the bar's numbers for a frame: the green, the room up to the ceiling, each chunk's start from the right end, and a
-  // signature that changes only when the drawing would (rounded: the DOM is spared). The Air's bar and the strip over
-  // the paper draw the same state.
+  // the bar's numbers for a frame: the green (stamina), the room up to the ceiling, each chunk's start from the right
+  // end, and a signature that changes only when the drawing would (rounded: the DOM is spared). The Air's bar and the
+  // strip over the paper draw the same state.
   barState(energy) {
-    const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
+    const cap = clamp(energy.ceiling, 0, 1), v = Math.min(clamp(energy.value, 0, 1), cap), ch = energy.chunks ? energy.chunks() : [];
     const pct = (x) => `${(Math.round(x * 1000) / 10).toFixed(1)}%`;
-    let sig = `${pct(v)}|${pct(cap)}`, x = 1;
+    let sig = `${pct(v)}|${pct(cap)}|${energy.winded ? 'w' : ''}`, x = 1;
     const at = {};
     for (let i = ch.length - 1; i >= 0; i--) { x -= ch[i].size; at[ch[i].key] = x; }
     for (const c of ch) sig += `|${c.key}${pct(c.size)}${c.growing ? '*' : ''}`;
-    return { v, cap, ch, at, sig, pct };
+    return { v, cap, ch, at, sig, pct, winded: !!energy.winded };
   }
-  barApply(eb, { v, cap, ch, at, pct }) {
-    eb.fill.style.width = pct(Math.min(v, cap + 0.001));
-    eb.room.style.left = pct(Math.min(v, cap)); eb.room.style.width = pct(Math.max(0, cap - v));
-    for (const c of ch) { const el = eb.chunk[c.key]; if (!el) continue; el.style.left = pct(at[c.key]); el.style.width = pct(c.size); el.classList.toggle('grow', c.growing); }
+  barApply(eb, { v, cap, ch, at, pct, winded }) {
+    eb.fill.style.width = pct(v);
+    eb.room.style.left = pct(v); eb.room.style.width = pct(Math.max(0, cap - v));
+    if (eb.track) eb.track.classList.toggle('winded', winded);
+    const prev = eb.prev;
+    for (const c of ch) {
+      const el = eb.chunk[c.key]; if (!el) continue;
+      el.style.left = pct(at[c.key]); el.style.width = pct(c.size); el.classList.toggle('grow', c.growing);
+      // a meal or a drink: the chunk shrinks at once, and a ghost of what it was flashes and fades (the owner, 2026-10-31)
+      const was = prev && prev[c.key];
+      if (was && was.size - c.size >= 0.012 && eb.track) this.barGhost(eb, c.key, was, pct);
+    }
+    eb.prev = Object.fromEntries(ch.map((c) => [c.key, { size: c.size, left: at[c.key] }]));
+    eb.last = { v, cap, ch, at };
+  }
+  barGhost(eb, key, was, pct) {
+    const g = document.createElement('i');
+    g.className = `ghost ${key}`; g.style.left = pct(was.left); g.style.width = pct(was.size);
+    eb.track.appendChild(g);
+    setTimeout(() => g.remove(), 1300);
+    const icon = eb.icon && eb.icon[key];
+    if (icon) { icon.classList.remove('met'); void icon.offsetWidth; icon.classList.add('met'); setTimeout(() => icon.classList.remove('met'), 1300); }
   }
   updateEnergy(ctx) {
     const eb = this.eb; if (!eb) return;
-    const { energy, trip, shell } = ctx, s = this.settings;
-    // fb3 C (15): the readout has no Energy row any more (it is the moment only), so the bar stays up under it
+    const { energy, trip, shell, day } = ctx;
     const on = !!(energy && trip && trip.active && !shell);
-    let show = false;
+    eb.el.classList.toggle('nobar', !on);
     if (on) {
-      const bar = this.barState(energy), { v, cap, ch, at, sig, pct } = bar;
-      if (sig !== eb.sig) {
+      const bar = this.barState(energy), { v, ch, at, sig } = bar;
+      const tr = energy.warmthTrend ? energy.warmthTrend() : { dir: 0, why: '' }, tsig = tr.dir ? `${tr.dir}${tr.why}` : '';
+      if (sig !== eb.sig || tsig !== eb.trendSig) {
         eb.sig = sig;
         this.barApply(eb, bar);
-        // the icons under their chunks, nudged apart where chunks are narrow (16 px each, within the bar)
+        // the icons under their chunks, nudged apart where chunks are narrow (16 px each, the cold's wider with its
+        // trend beside it), within the bar
+        if (tsig !== eb.trendSig) { eb.trendSig = tsig; eb.trend.innerHTML = tr.dir ? trendIcon(tr) : ''; eb.trend.className = `trend${tr.dir ? ` on ${tr.dir > 0 ? 'up' : 'down'} ${tr.why}` : ''}`; }
         const W = ENERGY_W, marks = [];
         for (const c of ch) {
-          const shown = c.size > 0.004 && (c.growing || c.size >= 0.1);
+          const shown = (c.size > 0.004 && (c.growing || c.size >= 0.1)) || (c.key === 'warmth' && !!tr.dir);
           eb.icon[c.key].classList.toggle('on', shown);
-          if (shown) marks.push({ k: c.key, x: (at[c.key] + c.size / 2) * W });
+          if (shown) marks.push({ k: c.key, x: (at[c.key] + c.size / 2) * W, w: c.key === 'warmth' && tr.dir ? 34 : 18 });
         }
-        for (let i = 1; i < marks.length; i++) marks[i].x = Math.max(marks[i].x, marks[i - 1].x + 18);
-        for (let i = marks.length - 1; i >= 0; i--) marks[i].x = Math.min(marks[i].x, i === marks.length - 1 ? W - 8 : marks[i + 1].x - 18);
-        for (const m of marks) eb.icon[m.k].style.left = `${Math.max(8, m.x).toFixed(1)}px`;
+        for (let i = 1; i < marks.length; i++) marks[i].x = Math.max(marks[i].x, marks[i - 1].x + marks[i - 1].w);
+        for (let i = marks.length - 1; i >= 0; i--) marks[i].x = Math.min(marks[i].x, i === marks.length - 1 ? W - marks[i].w + 10 : marks[i + 1].x - marks[i].w);
+        for (const m of marks) {
+          const x = Math.max(8, m.x);
+          eb.icon[m.k].style.left = `${x.toFixed(1)}px`;
+          if (m.k === 'warmth') eb.trend.style.left = `${(x + 9).toFixed(1)}px`;
+        }
         const held = energy.heldBy || '';
-        eb.el.setAttribute('aria-label', `Energy ${Math.round(v * 100)} %${held ? `, ${held}` : ''}`);
+        eb.el.setAttribute('aria-label', `Stamina ${Math.round(v * 100)} %${held ? `, ${held}` : ''}${tr.words ? `, ${tr.words.toLowerCase()}` : ''}`);
       }
-      // whether it matters now
-      const growing = ch.some((c) => c.growing), low = !!energy.low;
-      const urgent = growing || low || v < 0.25;
-      const ref = eb.ref, now = performance.now();
-      const moved = !ref || Math.abs(v - ref.v) >= 0.1 || ch.some((c) => Math.abs(c.size - (ref.c[c.key] || 0)) >= 0.05);
-      if (moved) { if (ref) eb.until = now + 6000; eb.ref = { v, c: Object.fromEntries(ch.map((c) => [c.key, c.size])) }; }
-      const big = ch.some((c) => c.key !== 'rest' && c.size >= 0.15); // a fifth or so of a need gone (the day's tiredness shows by the ceiling)
-      const density = s ? s.get('density') : 'standard';
-      show = urgent || (density !== 'quiet' && (v < 0.5 || cap < 0.6 || big || now < eb.until));
       // under the spot card while the rod is up (both keep the top left), measured only when its words change
       const spot = this.el.spot, words = spot && spot.classList.contains('show') ? `${this.cache.spotWhere}|${this.cache.spotWho}` : '';
       if (words !== eb.spotWords) { eb.spotWords = words; const top = words ? `${48 + spot.offsetHeight + 22}px` : ''; if (top !== eb.top) { eb.top = top; eb.el.style.top = top; } }
-    } else eb.ref = null;
+      if (eb.tipKey) this.tipShow(eb, eb.tipKey); // the tip under the mouse follows the bar
+    } else { eb.ref = null; eb.prev = null; }
+    // the clock and the date beside it, always (not on the title card)
+    const dayW = day ? this.dayWords(ctx) : '';
+    this.set('ebClock', eb.clock, day ? clock12(day.hours) : '');
+    this.set('ebDay', eb.day, `${dayW ? `${dayW} · ` : ''}${day ? `${weekdayOf(day.year, day.doy).slice(0, 3)}, ${shortDate(day.year, day.doy)}` : ''}`);
+    const show = !shell && !!day;
     eb.el.classList.toggle('show', show);
-    this.el.air.classList.toggle('ebar', show); // the readout keeps under the bar (hud.css)
+    this.el.air.classList.toggle('ebar', show && on); // the readout keeps under the bar (hud.css)
+  }
+
+  // --- the bar's tip (2026-10-31: "I want to be able to hover over the effects to see what they are") -------------------
+  // One paper note for both bars, under the mouse: which part of the bar is under it (the green, the room, a chunk) or
+  // which icon, and what it means now.
+  tipBind(bar, hit, icons) {
+    if (!hit) return;
+    if (!this.etip) { const t = document.createElement('div'); t.id = 'etip'; t.setAttribute('role', 'tooltip'); document.body.appendChild(t); this.etip = t; }
+    const pick = (ev) => {
+      const tr = bar.track.getBoundingClientRect(), last = bar.last; if (!last || !tr.width) return null;
+      // an icon under the mouse (the Air's bar), else the part of the track over it
+      if (icons && bar.icon && ev.clientY > tr.bottom + 2) {
+        let best = null, bd = 14;
+        for (const k of NEEDS) { const el = bar.icon[k]; if (!el.classList.contains('on')) continue; const r = el.getBoundingClientRect(), d = Math.abs(ev.clientX - (r.left + r.width / 2)); if (d < bd) { bd = d; best = k; } }
+        if (bar.trend && bar.trend.classList.contains('on')) { const r = bar.trend.getBoundingClientRect(); if (ev.clientX >= r.left - 2 && ev.clientX <= r.right + 2) best = 'warmth'; }
+        if (best) return best;
+      }
+      const f = clamp((ev.clientX - tr.left) / tr.width, 0, 1);
+      if (f < last.v) return 'stamina';
+      if (f < last.cap) return 'room';
+      for (const c of last.ch) if (c.size > 0 && f >= last.at[c.key] && f <= last.at[c.key] + c.size + 0.002) return c.key;
+      return last.cap > 0.995 ? 'stamina' : null;
+    };
+    hit.addEventListener('pointermove', (ev) => { const k = pick(ev); this.tipAt = { x: ev.clientX, y: ev.clientY }; bar.tipKey = k; if (k) this.tipShow(bar, k); else this.tipHide(bar); });
+    hit.addEventListener('pointerleave', () => this.tipHide(bar));
+  }
+  tipHide(bar) { if (bar) bar.tipKey = null; if (this.etip) this.etip.classList.remove('show'); }
+  tipShow(bar, key) {
+    const t = this.etip, ctx = this.ctx, energy = ctx && ctx.energy; if (!t || !energy) return;
+    const html = this.tipHtml(energy, key);
+    if (html !== this.tipSig) { this.tipSig = html; t.innerHTML = html; }
+    const at = this.tipAt || { x: 0, y: 0 }, w = t.offsetWidth || 260;
+    t.style.left = `${Math.round(clamp(at.x - 30, 8, window.innerWidth - w - 8))}px`; t.style.top = `${Math.round(at.y + 22)}px`;
+    t.classList.add('show');
+  }
+  tipHtml(energy, key) {
+    const n = energy.needs || {}, pc = (x) => `${Math.round(clamp(x, 0, 1) * 100)} %`;
+    const line = (name, val, say, extra = '') => `<div class="nm">${name}${val ? ` <span class="v">${val}</span>` : ''}</div>${extra}<div class="id">${say}</div>`;
+    const ch = (energy.chunks ? energy.chunks() : []).find((c) => c.key === key);
+    const out = Number.isFinite(n[key]) && n[key] <= 0.005;
+    const grow = ch && ch.growing ? '<div class="st">growing</div>' : '';
+    switch (key) {
+      case 'stamina': case 'room': {
+        const cap = energy.ceiling, v = Math.min(energy.value, cap);
+        const say = energy.winded ? 'Winded: catch your breath. Shift does nothing until it comes back some.'
+          : key === 'room' ? 'Catching your breath: the stamina comes back up to here in a few seconds.'
+          : 'Jogging, paddling hard and swimming hard spend it; ease off and it comes back in a few seconds. Its reach is what your needs leave you: fed, watered, warm and rested, you go further.';
+        return line('Stamina', `${pc(v)} of ${pc(cap)}`, say);
+      }
+      case 'warmth': {
+        const tr = energy.warmthTrend ? energy.warmthTrend() : null;
+        const trend = tr && tr.dir ? `<div class="st ${tr.dir > 0 ? 'up' : 'down'}">${trendIcon(tr)}${esc(tr.words)}</div>` : '';
+        return line('Cold', `${pc(n.warmth)} warm`, out ? 'Frozen through: it is eating into you. A fire now, dry clothes, the bag.' : 'The wind, the night, the rain and the water chill you, wet through faster. A fire, a store, dry clothes and a night in the bag warm you.', trend + grow);
+      }
+      case 'rest': return line('Tiredness', `${pc(n.rest)} rested`, out ? 'Done in: only a night’s sleep brings you back.' : 'Falls the longer you are awake and the harder the day. Only sleep brings it back: the tent, or the Rest dial for a nap.', grow);
+      case 'food': {
+        const upset = energy.upsetNow ? '<div class="st down">an upset stomach: the untreated water</div>' : '';
+        return line('Hunger', `${pc(n.food)} fed`, out ? 'Starving: it is eating into you. Eat now (I).' : 'Eat from the pack (I): a snack anywhere you are still, a meal cooked on the grate at a fire.', upset + grow);
+      }
+      case 'water': {
+        const b = typeof energy.bottleWords === 'function' ? `<div class="st">${esc(energy.bottleWords())}</div>` : '';
+        return line('Thirst', `${pc(n.water)}`, out ? 'Parched: it is eating into you. Drink now (I).' : 'Drink from the bottle in the book (I); fill it at the water’s edge (E), a tablet in.', b + grow);
+      }
+      default: return '';
+    }
   }
 
   // --- the strip over the paper (fb3 C, decision 14) ---------------------------------------------------------------
   // The owner (2026-10-25): "the health bar and time should be visible pretty much all the time. even in modals bc thats
   // when im eating and want to know if i need to keep eating". A small strip at the top of the screen, over the scrim
   // and every paper (the book, the fire card, a shelf, the counter, the map) and the Rest dial (stripAlso, main.js): the
-  // energy bar as the Air's, its number, the clock and the day. The Air itself stays hidden under paper.
+  // energy bar as the Air's, its number, the clock and the day. The Air itself stays hidden under paper. (2026-10-31:
+  // hover it for the tips, with the cold's trend beside the number.)
   stripBuild() {
     const el = document.createElement('div');
     el.id = 'strip'; el.setAttribute('role', 'status'); el.setAttribute('aria-label', 'Energy, the time and the day');
-    el.innerHTML = `<div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div><span class="pct"></span><span class="dot">·</span><span class="clock"></span><span class="dot">·</span><span class="sc day"></span>`;
+    el.innerHTML = `<div class="sbar"><div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div><div class="hit"></div></div><span class="pct"></span><span class="trend"></span><span class="dot">·</span><span class="clock"></span><span class="dot">·</span><span class="sc day"></span>`;
     document.body.appendChild(el);
     const q = (sel) => el.querySelector(sel);
-    this.strip = { el, fill: q('.fill'), room: q('.room'), chunk: {}, pct: q('.pct'), clock: q('.clock'), day: q('.day'), sig: '', shown: false };
+    this.strip = { el, track: q('.track'), fill: q('.fill'), room: q('.room'), chunk: {}, pct: q('.pct'), trend: q('.trend'), clock: q('.clock'), day: q('.day'), sig: '', shown: false, prev: null, trendSig: '' };
     for (const k of NEEDS) this.strip.chunk[k] = q(`.chunk.${k}`);
     this.stripAlso = null; // () => true while something of paper the register does not know is up (the Rest dial)
+    this.tipBind(this.strip, q('.hit'), false);
   }
   updateStrip(ctx) {
     const s = this.strip; if (!s) return;
     const { energy, day, shell } = ctx;
     const show = !shell && (!!this.paper || !!(this.stripAlso && this.stripAlso()));
-    if (show !== s.shown) { s.shown = show; s.el.classList.toggle('show', show); }
+    if (show !== s.shown) { s.shown = show; s.el.classList.toggle('show', show); if (!show) { s.prev = null; this.tipHide(s); } }
     if (!show) return;
     if (energy) {
       const bar = this.barState(energy);
-      // (the number is what the fill shows: the value held to the ceiling while it is pulled down to it; the fb3 join
-      // read "72 %" over a fill at 58 % as a supper went in)
-      if (bar.sig !== s.sig) { s.sig = bar.sig; this.barApply(s, bar); s.pct.textContent = `${Math.round(Math.min(bar.v, bar.cap) * 100)} %`; }
+      if (bar.sig !== s.sig) { s.sig = bar.sig; this.barApply(s, bar); s.pct.textContent = `${Math.round(bar.cap * 100)} %`; } // (the number: the energy the needs leave you)
+      const tr = energy.warmthTrend ? energy.warmthTrend() : { dir: 0 }, tsig = tr.dir ? `${tr.dir}${tr.why}` : '';
+      if (tsig !== s.trendSig) { s.trendSig = tsig; s.trend.innerHTML = tr.dir ? `${NEED_ICON.warmth}${trendIcon(tr)}` : ''; s.trend.className = `trend${tr.dir ? ` on ${tr.dir > 0 ? 'up' : 'down'} ${tr.why}` : ''}`; s.trend.title = tr.words || ''; }
+      if (s.tipKey) this.tipShow(s, s.tipKey);
     }
     const dayW = this.dayWords(ctx);
     this.set('stripClock', s.clock, day ? clock12(day.hours) : '');
@@ -1186,9 +1293,7 @@ export class Hud {
       if (rise == null && set == null) parts.push('no sun today');
       else {
         parts.push(rise != null ? `sunrise ${clock12(rise)}` : 'no sunrise', set != null ? `sunset ${clock12(set)}` : 'no sunset');
-        if (set != null && h < set && (rise == null || h >= rise)) parts.push(`${fmtDuration(set - h)} of light left`);
-        else if (set != null && h >= set) parts.push(`dark by ${clock12(Math.min(23.99, set + 0.8))}`);
-        else if (rise != null && h < rise) parts.push(`${fmtDuration(rise - h)} till sunrise`);
+        // (the owner, 2026-10-31: no "hours of light left": the sunrise and sunset say it)
       }
       row('Sun', esc(parts.join(' · ')));
     }
@@ -1201,6 +1306,7 @@ export class Hud {
     const hdg = bearingOf(player.heading);
     row('Way', `${((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}`);
     const dev = s && s.get('devRows'), showFps = s && s.get('fps');
+    if (dev) { const land = this.landWords(player); if (land) row('Land', `${esc(land)} <span class="dev">(Developer rows)</span>`, 'soft'); } // (the owner, 2026-10-31: what biome, wetland or bog we are in)
     if (dev && geo) row('GPS sim', `${geo.linked ? (geo.enabled ? 'broadcasting to the extension' : 'extension installed, switched off') : 'extension not detected · this tab only'} · hdg ${hdg.toFixed(0)}°`, 'soft');
     if (dev || showFps) {
       const parts = [];
@@ -1212,6 +1318,22 @@ export class Hud {
     const foot = mode === 'always' ? 'Always on · Settings › HUD' : mode === 'toggle' ? '<kbd>Tab</kbd> hides it · Full density keeps it up' : '<kbd>Tab</kbd> held · let go to hide · Full density keeps it up';
     const html = `<div class="head"><div class="name">${esc(name)}</div><div class="sc date">${day ? `${clock12(day.hours)} · ` : ''}${dayW ? `${dayW} · ` : ''}${day ? longDate(day.year, day.doy) : ''}</div></div><div class="grid">${rows.join('')}</div><div class="foot">${foot}</div>`;
     this.set('readout', this.el.readout, html, 'innerHTML');
+  }
+
+  // the land under you, for the developer rows: the survey's ground kind (NWI wetlands, d1-ground: land.js KIND), the
+  // forest type over it (LANDFIRE, land.js FOREST) and the ground class the game drew there (terrain-build.js GROUND);
+  // '' until the fine tile is in
+  landWords(player) {
+    const w = this.world; if (!w || !player) return '';
+    const words = (k) => String(k || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+    const i = w.cellI(player.x), j = w.cellJ(player.z);
+    const kind = typeof w.chCell === 'function' ? w.chCell('ground', i, j) : 0, ft = typeof w.chCell === 'function' ? w.chCell('forest', i, j) : 0;
+    const cls = typeof w.coverCell === 'function' ? GROUND[(w.coverCell(i, j) >> 16) & 255] : null;
+    const parts = [];
+    if (kind > 0 && KIND_NAMES[kind]) parts.push(`${words(KIND_NAMES[kind])}${kind >= KIND.openBog && kind <= KIND.aquaticBed ? ' (wetland)' : ''}`);
+    if (ft > 0 && FOREST[ft]) parts.push(`${words(FOREST[ft].key)} cover`);
+    if (cls) parts.push(`ground: ${words(cls)}`);
+    return parts.join(' · ');
   }
 
   // --- the map's chrome: the header band, the layer toggles, the footer scale -----------------------------------

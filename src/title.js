@@ -143,6 +143,17 @@ export class Title {
     e.controls.addEventListener('click', () => this.showCard('controls'));
     if (e.confirmGo) e.confirmGo.addEventListener('click', () => this.confirmed());
     if (e.confirmKeep) e.confirmKeep.addEventListener('click', () => { this.showRight(null); (this.el.go.offsetParent ? this.el.go : this.el.newTrip).focus(); });
+    // one Esc pauses (the owner, 2026-10-31: "pausing usually takes 2 escape presses"): while the mouse is locked to the
+    // look, the browser keeps the first Esc for itself and only lets go of the mouse. A lock let go that the game did not
+    // ask for (the chase still wants it: no panel, map or card up, the view still mouse-look) is that Esc: pause.
+    // (capture, so it runs before photo.js's own, which lowers a raised camera instead)
+    document.addEventListener('pointerlockchange', () => {
+      if (this.state !== 'game' || document.pointerLockElement || !this.chase || !this.chase.wantsLock) return;
+      if (this.hud.paperOpen || this.hud.big || this.hud.pin || this.player.teleporting || (this.photo && this.photo.raised)) return;
+      if (document.visibilityState === 'hidden') return;
+      this.lockPausedAt = performance.now();
+      this.open('pause');
+    }, true);
     // capture phase: fires before every other key handler on the window and, while the card is up, ends the event there
     window.addEventListener('keydown', (ev) => {
       if (this.state === 'game') {
@@ -150,7 +161,7 @@ export class Title {
         return;
       }
       ev.stopImmediatePropagation();
-      if (ev.code === 'Escape') { ev.preventDefault(); this.back(); return; }
+      if (ev.code === 'Escape') { ev.preventDefault(); if (performance.now() - (this.lockPausedAt || 0) < 300) return; this.back(); return; } // (the same Esc that let go of the mouse)
       const tag = ev.target && ev.target.tagName;
       if (ev.code === 'Tab') return; // the browser's own focus order, within the card
       if (tag === 'SELECT' || tag === 'INPUT') { if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') { ev.preventDefault(); this.moveFocus(ev.code === 'ArrowDown' ? 1 : -1); } return; } // ← → belong to the control
