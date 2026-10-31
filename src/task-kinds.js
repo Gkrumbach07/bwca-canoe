@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { registerKind, KINDS, WORDS, NUMBERS, siteFeature, lakeNearGrid, shoreSpot } from './tasks.js';
+import { registerKind, KINDS, WORDS, NUMBERS, siteFeature, lakeNearGrid, shoreSpot, fishWith } from './tasks.js';
 import { PropBuilder, propMaterial, TILE, bakeSelf, buildHull } from './prop-kit.js';
 import { groundAt } from './props.js';
 import { defineItem, itemDef } from './items.js';
@@ -882,7 +882,8 @@ function foundCanoe(T, t) {
 }
 
 // =======================================================================================================================
-// lunch: fish for the shore lunch class, into the cooler as the fish notices
+// lunch: fish for the shore lunch class. As the fish notices (the owner, 2026-10-31): the fish are kept like any
+// other and handed over at the board that posted it (tasks.js handIn), into its cooler there
 const LUNCH_WORDS = {
   titles: ['Fish for the shore lunch', 'The shore lunch class', 'Shore lunch on Saturday'],
   texts: [
@@ -893,7 +894,7 @@ const LUNCH_WORDS = {
 const LUNCH_FISH = ['walleye', 'walleye', 'perch', 'smallmouth'];
 const plFish = (sp, n) => (n === 1 ? fishName(sp) : sp === 'perch' ? 'perch' : sp === 'walleye' ? 'walleye' : `${fishName(sp)}`);
 registerKind('lunch', {
-  label: 'For the kitchen', weight: { local: 0.45, medium: 0.4, far: 0 },
+  label: 'For the kitchen', weight: { local: 0.45, medium: 0.4, far: 0 }, handsIn: true,
   make(T, c) {
     const held = new Set(c.board.map((t) => t && (t.kind === 'lunch' || t.kind === 'fish') && t.species).filter(Boolean));
     const sp = pickR(c.rng, LUNCH_FISH.filter((s) => !held.has(s))) || 'perch';
@@ -922,17 +923,14 @@ registerKind('lunch', {
   pay(t) { return Math.min(PAY_MAX, 4 + (t.need || 2) * Math.round(0.55 * (SPECIES_PAY[t.species] || 12))); },
   onTake(T, t) { t.cooler = []; },
   fits(T, t, ev) { return !!ev.kept && t.status === 'open' && (!t.species || t.species === ev.species); },
-  onEvent(T, t, ev) {
-    if (ev.type !== 'catch' || !this.fits(T, t, ev)) return null;
-    (t.cooler || (t.cooler = [])).push({ species: ev.species, cm: Math.round(ev.cm), lake: T.lakeName(ev.lake) || 'unnamed water', day: T.today() });
-    const n = t.need || 2, full = t.cooler.length >= n;
-    if (full) t.status = 'done';
-    return `A ${Math.round(ev.cm)} cm ${fishName(ev.species)} into the cooler for the shore lunch: ${word(t.cooler.length)} of ${word(n)}. ${full ? `Claim it at ${backTo(T, t)}.` : ''}`.trim();
-  },
   target(T, t) { return t.hint && Number.isFinite(t.hint.x) ? { ...t.hint } : null; },
-  progress(t) { const c = t.cooler || [], n = t.need || 2; return c.length ? `${word(c.length)} of ${word(n)} in the cooler` : `${word(n)} ${plFish(t.species, n)} to catch`; },
-  fraction(t) { return (t.cooler || []).length / (t.need || 2); },
-  doneWords(t) { return `${word((t.cooler || []).length)} in the cooler`; },
+  progress(t) {
+    const c = t.cooler || [], n = t.need || 2, f = t.status === 'open' ? fishWith(t) : null;
+    const given = c.length ? `${word(c.length)} of ${word(n)} handed over` : '', have = f ? `${f.words} with you` : '';
+    return [given, have].filter(Boolean).join(', ') || `${word(n)} ${plFish(t.species, n)} to catch and bring back`;
+  },
+  fraction(t) { const f = t.status === 'open' ? fishWith(t) : null; return Math.min(1, ((t.cooler || []).length + (f ? f.length * 0.5 : 0)) / (t.need || 2)); },
+  doneWords(t) { return `${word((t.cooler || []).length)} handed over`; },
 });
 
 // =======================================================================================================================

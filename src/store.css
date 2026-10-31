@@ -1,0 +1,123 @@
+/* The store's screens as the store itself (the owner, 2026-10-31: "the counter and the shelves and all that stuff
+   should get the same kind of treatment the journal and the map is getting ... so they don't just look like modals").
+   The counter is the counter top: the outfitter's painted sign across the back, and two sheets laid on the wood, the
+   side map (counter-map.js) taped down on the left and the keeper's rate card, a ruled ledger page, on the right. The
+   board is the cork in its wooden frame under the same sign; a shelf is the shelf's own wood with its sign. The
+   paper, the ink, the pencil and the type are the game's tokens (index.html :root, inv-ui.css); nothing here changes
+   what the screens hold, only what they are made of. */
+:root {
+  --st-wood: #6b4729; --st-wood-deep: #3a2615; --st-wood-edge: #2b1b0e;
+  --st-sign: #2f4535; --st-sign-deep: #1d2c22;
+  --st-tape: rgba(236, 224, 188, .78);
+}
+
+/* --- the wood: the counter top, the board's frame, the shelf's back ------------------------------------------------ */
+#outfitter.paper.st-counter, #outfitter.paper.st-board, #shelf.paper {
+  background-color: var(--st-wood);
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, .2) 0 2px, transparent 2px 86px),
+    repeating-linear-gradient(0deg, rgba(255, 226, 180, .045) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .05) 0 1px, transparent 1px 37px),
+    radial-gradient(ellipse at 30% 0%, rgba(255, 220, 170, .14), transparent 65%),
+    linear-gradient(rgba(255, 220, 170, .05), rgba(0, 0, 0, .16));
+  border: 2px solid var(--st-wood-edge); border-radius: 6px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(255, 225, 180, .08), inset 0 -30px 50px rgba(0, 0, 0, .18);
+}
+#outfitter.paper.st-counter { height: min(740px, 91vh); max-height: none; width: min(1120px, 95vw); padding: 16px 22px 26px; gap: 14px; }
+#outfitter.paper.st-board { padding: 16px 22px 20px; gap: 14px; }
+#shelf.paper { padding: 16px 22px 12px; gap: 14px; }
+/* the counter's front edge */
+#outfitter.paper.st-counter::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 12px; border-radius: 0 0 5px 5px; pointer-events: none;
+  background: linear-gradient(rgba(0, 0, 0, .35), rgba(0, 0, 0, .1) 30%, rgba(255, 225, 180, .08)); }
+
+/* --- the sign: the outfitter's name painted on a board ------------------------------------------------------------ */
+#outfitter.paper.st-counter > header, #outfitter.paper.st-board > header, #shelf.paper > header {
+  position: relative; padding: 13px 20px 13px; align-items: center;
+  background: var(--st-sign); background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 5px), linear-gradient(rgba(255, 255, 255, .06), rgba(0, 0, 0, .14));
+  border: 3px solid var(--st-sign-deep); border-radius: 4px; box-shadow: 0 5px 12px rgba(10, 6, 2, .45), inset 0 0 0 1px rgba(220, 180, 105, .28);
+  color: var(--cream);
+}
+/* the two nails it hangs by */
+#outfitter.paper.st-counter > header::before, #outfitter.paper.st-counter > header::after,
+#outfitter.paper.st-board > header::before, #outfitter.paper.st-board > header::after,
+#shelf.paper > header::before, #shelf.paper > header::after {
+  content: ''; position: absolute; top: 7px; width: 6px; height: 6px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #d8cdb4, #6e6458 70%); box-shadow: 0 1px 1px rgba(0, 0, 0, .5); }
+#outfitter.paper.st-counter > header::before, #outfitter.paper.st-board > header::before, #shelf.paper > header::before { left: 7px; }
+#outfitter.paper.st-counter > header::after, #outfitter.paper.st-board > header::after, #shelf.paper > header::after { right: 7px; }
+#outfitter.paper.st-counter > header .sc, #outfitter.paper.st-board > header .sc, #shelf.paper > header .sc { color: var(--cream-72); }
+#outfitter.paper.st-counter > header h2, #outfitter.paper.st-board > header h2, #shelf.paper > header h2 { color: var(--cream); text-shadow: 0 1px 0 rgba(0, 0, 0, .35); }
+#outfitter.paper.st-counter > header h2 { font-size: 36px; letter-spacing: .01em; }
+#outfitter.paper.st-counter > header .say, #outfitter.paper.st-board > header .say, #shelf.paper > header .say { color: var(--cream-86); }
+#outfitter.paper.st-counter > header .say .who, #shelf.paper > header .say .who { color: var(--gold); }
+#outfitter.paper.st-counter > header .purse b, #outfitter.paper.st-board > header .purse b, #shelf.paper > header .purse b { color: var(--gold); }
+#outfitter.paper.st-counter > header .stamp.outline, #outfitter.paper.st-board > header .stamp.outline, #shelf.paper > header .stamp.outline { color: var(--cream); border-color: var(--cream-50); }
+#outfitter.paper.st-counter > header .stamp.outline:hover, #outfitter.paper.st-board > header .stamp.outline:hover, #shelf.paper > header .stamp.outline:hover { border-color: var(--cream); }
+#outfitter.paper.st-board > header .stamp + .stamp { margin-left: 0; }
+
+/* --- a slip of paper for the pencilled receipt ------------------------------------------------------------------- */
+#outfitter.paper.st-counter > .receipt, #outfitter.paper.st-board > .receipt { align-self: flex-start; margin: -2px 0 -4px 18px; padding: 3px 14px 4px; background: var(--paper-note); border: 1px solid var(--edge);
+  border-radius: 1px; box-shadow: 0 3px 6px rgba(20, 10, 0, .35); transform: rotate(-.8deg); }
+#shelf.paper .sh-receipt:not(:empty) { align-self: flex-start; padding: 2px 12px 3px; background: var(--paper-note); border: 1px solid var(--edge); box-shadow: 0 3px 6px rgba(20, 10, 0, .35); transform: rotate(-.8deg); }
+
+/* --- the counter's two sheets --------------------------------------------------------------------------------- */
+#outfitter.paper.st-counter .counter.two { grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 26px; padding: 4px 6px 0; }
+#outfitter.paper.st-counter .sidemap, #outfitter.paper.st-counter .desk { box-sizing: border-box; border: 1px solid var(--edge-deep); border-radius: 2px; box-shadow: 0 8px 18px rgba(20, 10, 0, .42), 0 1px 2px rgba(20, 10, 0, .3); }
+#outfitter.paper.st-counter .sidemap .top, #outfitter.paper.st-counter .desk .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--edge-deep); padding-bottom: 6px; flex: none; }
+#outfitter.paper.st-counter .sidemap .top .sum, #outfitter.paper.st-counter .desk .top .sum { font-size: 13.5px; font-style: italic; color: var(--ink-soft); }
+
+/* the side map, taped down */
+#outfitter.paper.st-counter .sidemap { position: relative; display: flex; flex-direction: column; gap: 8px; min-height: 0; padding: 12px 14px 10px; transform: rotate(-.7deg);
+  background-color: #eee5cd; background-image: radial-gradient(ellipse at 70% 80%, rgba(150, 110, 50, .1), transparent 55%), radial-gradient(ellipse at 15% 20%, rgba(150, 110, 50, .07), transparent 40%); }
+#outfitter.paper.st-counter .sidemap .sheet { flex: 1 1 auto; min-height: 0; display: flex; border: 1px solid rgba(42, 32, 22, .55); outline: 1px solid rgba(42, 32, 22, .25); outline-offset: 2px; margin: 3px;
+  background-color: #efe7d0; background-image: repeating-linear-gradient(0deg, rgba(45, 79, 102, .07) 0 1px, transparent 1px 28px), repeating-linear-gradient(90deg, rgba(45, 79, 102, .07) 0 1px, transparent 1px 28px); }
+#outfitter.paper.st-counter .sidemap canvas { display: block; flex: 1 1 auto; width: 100%; height: 100%; min-height: 280px; }
+#outfitter.paper.st-counter .sidemap .tape { position: absolute; top: -10px; width: 74px; height: 22px; background: var(--st-tape); box-shadow: 0 1px 2px rgba(0, 0, 0, .18); pointer-events: none; }
+#outfitter.paper.st-counter .sidemap .tape.l { left: 18px; transform: rotate(-6deg); }
+#outfitter.paper.st-counter .sidemap .tape.r { right: 22px; transform: rotate(5deg); }
+#outfitter.paper.st-counter .sidemap .key { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 700 10.5px/1.4 var(--sc); letter-spacing: .1em; color: var(--ink-soft); flex: none; }
+#outfitter.paper.st-counter .sidemap .key .k { display: inline-flex; align-items: center; gap: 5px; }
+#outfitter.paper.st-counter .sidemap .key i { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; border: 1.3px solid var(--ink); font: 700 8.5px/1 var(--sc); font-style: normal; color: var(--ink); letter-spacing: 0; background: var(--paper-card); }
+#outfitter.paper.st-counter .sidemap .key .here i { border-color: var(--map-red); color: var(--map-red); font-size: 10px; }
+#outfitter.paper.st-counter .sidemap .key .new i { border-color: var(--map-red); color: var(--map-red); }
+#outfitter.paper.st-counter .sidemap .key .fare b { font: 600 17px/1 var(--pencil-font); color: var(--pencil); letter-spacing: 0; }
+
+/* the keeper's rate card: a ruled ledger page with a red margin */
+#outfitter.paper.st-counter .desk { padding: 12px 16px 14px 44px; gap: 12px; transform: rotate(.45deg);
+  background-color: var(--paper-card);
+  background-image: linear-gradient(90deg, transparent 32px, rgba(180, 50, 31, .38) 32px 33.5px, transparent 33.5px), repeating-linear-gradient(0deg, transparent 0 27px, rgba(45, 79, 102, .14) 27px 28px); background-attachment: local; }
+#outfitter.paper.st-counter .desk .bunkrow { border-top: none; padding: 4px 0 8px; border-bottom: 1px dotted var(--edge-deep); }
+#outfitter.paper.st-counter .desk .word { padding: 6px 10px 8px; background: var(--paper-note); border: 1px solid var(--edge); box-shadow: 0 2px 4px rgba(20, 10, 0, .18); transform: rotate(-.6deg); }
+#outfitter.paper.st-counter .desk .word .lab { font: 500 17px/1.1 var(--pencil-font); color: var(--pencil); }
+
+/* the rides as the rate card's rows: the entry point's number in a ring, the outfitter, the fare in pencil */
+#outfitter.paper.st-counter .rides { border-top: none; padding-top: 2px; }
+#outfitter.paper.st-counter .rides ul { max-height: none; overflow: visible; gap: 0; }
+#outfitter.paper.st-counter .rides li { background: transparent; border: none; border-bottom: 1px dotted var(--edge-deep); border-radius: 0; padding: 6px 4px 6px 2px; transition: background .15s; }
+#outfitter.paper.st-counter .rides li.new { border-left: none; }
+#outfitter.paper.st-counter .rides li.hot { background: rgba(180, 50, 31, .07); }
+#outfitter.paper.st-counter .rides li.flash { animation: st-flash 1.2s ease-out; }
+@keyframes st-flash { 0%, 30% { background: rgba(220, 180, 105, .45); } 100% { background: transparent; } }
+#outfitter .rides .epno { flex: none; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 36px; height: 36px; box-sizing: border-box; border-radius: 50%;
+  border: 1.6px solid var(--ink); color: var(--ink); font: 700 14px/1 var(--sc); letter-spacing: 0; font-variant-numeric: tabular-nums; background: rgba(244, 236, 216, .7); }
+#outfitter .rides .epno small { font: 700 7.5px/1 var(--sc); letter-spacing: .12em; color: var(--ink-soft); margin-bottom: 1px; }
+#outfitter .rides li.new .epno { border-color: var(--map-red); color: var(--map-red); }
+#outfitter .rides li.short .epno { border-color: var(--ink-faint); color: var(--ink-faint); }
+
+/* --- the board: its cork in a frame of its own ---------------------------------------------------------------- */
+#outfitter.paper.st-board .cork .notices { border: 6px solid #5a3c22; border-radius: 3px; box-shadow: inset 0 2px 8px rgba(40, 24, 8, .4), 0 6px 14px rgba(10, 6, 2, .4); }
+#outfitter.paper.st-board .board.cork > .top { border-bottom: none; padding: 0 2px; }
+#outfitter.paper.st-board .board.cork > .top h3 { color: var(--cream); }
+#outfitter.paper.st-board .board.cork > .top .sum { color: var(--cream-72); }
+#outfitter.paper.st-board .board.cork > .top .stamp { color: var(--paper); }
+#outfitter.paper.st-board .cork .elsewhere { background: var(--paper-note); border: 1px solid var(--edge); padding: 8px 12px; box-shadow: 0 4px 10px rgba(20, 10, 0, .35); transform: rotate(-.3deg); }
+#outfitter .cork .notice .foot .give { display: flex; flex-wrap: wrap; gap: 5px; }
+
+/* --- a shelf: its sign over it, the labels in chalk-white ------------------------------------------------------ */
+#shelf.paper .sh-top { border-bottom-color: rgba(243, 236, 221, .35); }
+#shelf.paper .sh-top h3 { color: var(--cream); }
+#shelf.paper .sh-top .sum { color: var(--cream-72); }
+#shelf.paper .sh-stock { border-color: var(--st-wood-edge); box-shadow: inset 0 2px 10px rgba(20, 10, 0, .45), 0 1px 0 rgba(255, 225, 180, .1); }
+#shelf.paper .sh-mine { border-color: var(--st-wood-edge); }
+#shelf.paper .sh-foot { color: var(--cream-65); border-top-color: rgba(243, 236, 221, .2); }
+#shelf.paper .sh-receipt { color: var(--pencil); }
+#shelf.paper .sh-receipt.no { color: var(--map-red); }

@@ -1,7 +1,7 @@
 // Outfitters at the entry point landings: a name for each, the store you walk into, its shelves, the counter, the board,
 // the trip's old record (where you are, when it started) and its persistence. The outfitter is where a season starts
 // and where you come in: its shelves sell the food and the gear, its counter fills the bottle and offers the services.
-// There is no permit and no stamp (the world cards, 2026-10-24): the counter is the bunk, the rides and the claims, and
+// There is no permit and no stamp (the world cards, 2026-10-24): the counter is the bunk and the rides, and
 // the season is just the season. Sandbox's shelves are free. The board is the tasks' own (tasks.js boardSection), the shop
 // and what the gear does are shop.js's, the rides up the road rides.js's (set on outfitter.rides), the keepers' words
 // outfitters.js's (through the shop). The rules of the trip and its saved core live in trip.js, the money and the gear
@@ -20,12 +20,14 @@
 // round each whole shelf unit, so either side of one opens it), E opens the provisions, tackle or gear shelf, or the
 // lure wall, as two panes (inv-ui.js ShelfScreen: your containers on the left, the shelf on the right); the map table
 // opens its own screen (maptable.js, stream D: outfitter.mapTable); the counter opens the counter, which offers only a
-// bunk night, the rides up the road and the notices you've done to claim; the cork board opens
-// the board, and only the board. The keeper greets you, signed with the keeper's name, on the first visit of a day.
+// bunk night and the rides up the road, beside a side map of where the truck goes; the cork board opens the board,
+// and only the board, which also pays the notices you've done. The keeper greets you, signed with the keeper's name, on the first visit of a day.
 // Without a store (its tile not built yet) E by the landing opens the counter from the water. A new season begins at
 // the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
 // store comes back on its floor (updateArrival).
-import { esc, plural } from './hud.js';
+import { esc, plural, word } from './hud.js';
+import { drawCounterMap, markerAt } from './counter-map.js';
+import './store.css';
 import { FOOD_PRICE } from './profile.js';
 import * as props from './props.js';
 import { SHELVES, itemOf } from './shop.js';
@@ -551,7 +553,7 @@ export class Outfitter {
   }
 
   // --- the counter and the board ----------------------------------------------------------------------------
-  // the paper at the counter ('counter': a bunk, the rides, the notices to claim) or at the board ('board')
+  // the paper at the counter ('counter': a bunk and the rides, beside the side map) or at the board ('board')
   show(landing, tab = null, focus = null) {
     const pr = this.profile, core = this.core, st = this.staged; // staged: the face a hotspot asked for, should a wrapper drop the arguments
     this.staged = null;
@@ -609,6 +611,7 @@ export class Outfitter {
     if (act === 'close') this.close();
     else if (act === 'shelf') this.openShelf(id, this.at);
     else if (act === 'bunk') this.bunk();
+    else if (act === 'tab' && MODES.includes(id)) { this.tab = id; this.render(); } // a landing with no store yet: the board from the counter
     else if (act === 'ride' && this.rides) this.rides.act(id);
     else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
@@ -620,21 +623,45 @@ export class Outfitter {
   // (The season permit, its stamp and its date stepper stood here until the world cards of 2026-10-24: "what is the
   // stamp for at the counter, i thought we got rid of that. no permit". Home is the profile's; the season starts on
   // the title.)
-  // The notices you've done: this outfitter's, to claim here (one by one, or all at once), and the others', with where
-  // each is paid (tasks.js pays a notice only at the counter that posted it)
-  claimsSection(a) {
-    const t = this.tasks, done = (t && t.active ? [...t.active] : []).filter((n) => n.status === 'done');
-    const here = done.filter((n) => n.from === a.ep), there = done.filter((n) => n.from !== a.ep);
-    const rows = here.map((n) => `<li><span class="nm">${esc(n.title)}</span><b class="fare">$${n.pay || 0}</b><button type="button" class="stamp small" data-act="task" data-id="claim:${n.id}">Claim</button></li>`);
-    for (const n of there) {
-      const l = this.landing(n.from);
-      rows.push(`<li class="far"><span class="nm">${esc(n.title)}</span><span class="soft">${n.npc ? `${esc(n.npcName || 'a visitor')}’s: ` : ''}paid at ${esc(l ? l.name : 'its outfitter')}${l ? `, entry point ${l.ep}` : ''}</span></li>`);
-    }
-    const all = here.length > 1 ? `<button type="button" class="stamp small outline" data-act="task" data-id="claimall">Claim all · $${here.reduce((s, n) => s + (n.pay || 0), 0)}</button>` : '';
-    return `<section class="claims" aria-labelledby="claims-h">
-      <div class="top"><h3 id="claims-h">Notices done</h3>${all}</div>
-      ${rows.length ? `<ul>${rows.join('')}</ul>` : '<p class="soft">Nothing to claim. The board is by the door when you want work.</p>'}
+  // The side map (the owner, 2026-10-31: "a small custom map that just shows the different outfitters that he could
+  // take you to and the price for each"): where the truck goes from here, pencilled on the counter's own sheet
+  // (counter-map.js), in the column the notices done had ("I don't know why there's like a little left-hand side that
+  // has the notices that I can pick up. I don't like that": the board pays them now, tasks.js boardSection).
+  mapSection(a) {
+    const n = this.rides && typeof this.rides.offer === 'function' ? this.rides.offer(a.ep).length : 0;
+    return `<section class="sidemap" aria-labelledby="sidemap-h">
+      <div class="top"><h3 id="sidemap-h">Where the truck goes</h3><span class="sum">${n ? `${word(n)} ${plural(n, 'outfitter')} from entry point ${a.ep}` : `from entry point ${a.ep}`}</span></div>
+      <div class="sheet"><canvas aria-label="A sketch map of the outfitters the truck goes to, with each one's entry point number and fare"></canvas><i class="tape l" aria-hidden="true"></i><i class="tape r" aria-hidden="true"></i></div>
+      <p class="key"><span class="k here"><i>★</i>you are here</span><span class="k known"><i>${a.ep}</i>entry point</span><span class="k new"><i>${a.ep}</i>new to you</span><span class="k fare"><b>$</b>the fare</span></p>
     </section>`;
+  }
+  // draws the side map into the open counter, and ties its rings to the rides' rows (a hover lights both; a ring
+  // clicked brings its row up)
+  drawSideMap() {
+    const el = this.el.panel, cv = el && el.querySelector('.sidemap canvas'), a = this.at;
+    if (!cv || !a || !this.rides || typeof this.rides.offer !== 'function') return;
+    const money = this.money, sandbox = this.sandbox;
+    const rows = this.rides.offer(a.ep).map((r) => { const l = this.landing(r.ep) || {}; return { ep: r.ep, x: l.x, z: l.z, price: r.price, unknown: r.unknown, short: !sandbox && r.price > money }; });
+    const here = { ep: a.ep, x: a.x, z: a.z };
+    const draw = () => {
+      if (!this.open || this.tab !== 'counter' || !cv.isConnected) return;
+      this.mapMarks = drawCounterMap(cv, { world: this.world, here, rows, hot: this.mapHot, sandbox, onReady: draw });
+      for (const li of el.querySelectorAll('.rides li[data-ep]')) li.classList.toggle('hot', Number(li.dataset.ep) === this.mapHot);
+    };
+    const hover = (ep) => { if (ep !== this.mapHot) { this.mapHot = ep; draw(); } };
+    const at = (e) => { const b = cv.getBoundingClientRect(); return markerAt(this.mapMarks, e.clientX - b.left, e.clientY - b.top); };
+    cv.addEventListener('mousemove', (e) => { const ep = at(e); cv.style.cursor = ep ? 'pointer' : ''; hover(ep); });
+    cv.addEventListener('mouseleave', () => hover(null));
+    cv.addEventListener('click', (e) => {
+      const ep = at(e), li = ep ? el.querySelector(`.rides li[data-ep="${ep}"]`) : null; if (!li) return;
+      li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      li.classList.remove('flash'); void li.offsetWidth; li.classList.add('flash');
+    });
+    for (const li of el.querySelectorAll('.rides li[data-ep]')) {
+      li.addEventListener('mouseenter', () => hover(Number(li.dataset.ep)));
+      li.addEventListener('mouseleave', () => hover(null));
+    }
+    draw();
   }
   // the keeper's word (an insider's, to a friend of the house), a bunk tonight, and the rides up the road (rides.js);
   // at a landing whose store is not built yet, its shelves from here
@@ -655,7 +682,7 @@ export class Outfitter {
     const morning = this.day.hours < 12;
     parts.push(`<div class="bunkrow${short ? ' dear' : ''}"><div><b>${morning ? 'The bunk, and the day off' : 'A bunk tonight'}</b> · <span class="soft">${morning ? 'sleep it off: a real bed, soup, and up at seven tomorrow' : 'a real bed, soup and breakfast, up at seven'}</span></div>
       <button type="button" class="stamp small outline" data-act="bunk" ${short ? 'disabled' : ''}>${price ? `$${price}` : 'Free'}</button></div>`);
-    if (!this.layout(a.ep)) parts.push(`<div class="shelfbtns"><p class="soft">The store is being opened up: the shelves are here for now.</p>${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}</div>`);
+    if (!this.layout(a.ep)) parts.push(`<div class="shelfbtns"><p class="soft">The store is being opened up: the shelves and the board are here for now.</p>${SHELVES.map((k) => `<button type="button" class="stamp small outline" data-act="shelf" data-id="${k.kind}">${esc(k.name)}</button>`).join('')}<button type="button" class="stamp small outline" data-act="tab" data-id="board">The board</button></div>`);
     const rides = this.rides && typeof this.rides.section === 'function' ? this.rides.section(a.ep) : '';
     return `<section class="desk" aria-labelledby="desk-h">
       <div class="top"><h3 id="desk-h">At the counter</h3></div>
@@ -685,8 +712,9 @@ export class Outfitter {
     if (t && typeof t.boardSection === 'function') return t.boardSection(a.ep);
     return '<section class="board" aria-labelledby="board-h"><div class="top"><h3 id="board-h">The board</h3><span class="sum">adverts from this outfitter</span></div><div class="cards"><p class="muted">The board is being written up.</p></div></section>';
   }
-  // The paper: at the counter, the notices done on the left, the keeper's desk (a bunk, the rides) on the right, and
-  // nothing else (no permit, no stamp); at the cork board, the board and nothing else
+  // The paper: at the counter, the side map on the left (where the truck goes, and the fares), the keeper's desk (a
+  // bunk, the rides) on the right, and nothing else (no permit, no stamp, no notices: the owner, 2026-10-31, "really
+  // what he's offering is a bunk and a ride"); at the cork board, the board and nothing else (it pays the notices)
   render() {
     if (!this.open || !this.el.panel) return;
     const a = this.at, board = this.tab === 'board';
@@ -697,14 +725,18 @@ export class Outfitter {
     const receipt = this.receipt ? `<div class="receipt pencil${this.receipt.ok ? '' : ' no'}">${esc(this.receipt.text)}</div>` : '';
     const kicker = `Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && (op.kindWords || op.kind) ? ` · ${esc(op.kindWords || op.kind)}` : ''}`;
     const lede = board
-      ? `<div class="lede"><div class="sc kicker">${esc(a.name)} · ${kicker}</div><h2>The board</h2><div class="say">Notices pinned up by the door. Take one on; it’s paid at the counter when it’s done.</div></div>`
+      ? `<div class="lede"><div class="sc kicker">${esc(a.name)} · ${kicker}</div><h2>The board</h2><div class="say">Notices pinned up by the door. Take one on, and come back to this board when it’s done: it’s paid here.</div></div>`
       : `<div class="lede"><div class="sc kicker">${kicker}</div><h2>${esc(a.name)}</h2><div class="say">“${esc(this.greeting)}”${this.who ? ` <span class="who">— ${esc(this.who)}</span>` : ''}</div></div>`;
     const body = board ? `<div class="counter one">${this.boardSection(a)}</div>`
-      : `<div class="counter two"><div class="col">${this.claimsSection(a)}</div>${this.deskSection(a)}</div>`;
+      : `<div class="counter two">${this.mapSection(a)}${this.deskSection(a)}</div>`;
+    const toCounter = board && !this.layout(a.ep) ? '<button type="button" class="stamp outline" data-act="tab" data-id="counter">The counter</button>' : '';
     this.el.panel.classList.toggle('simple', !board);
-    this.el.panel.innerHTML = `<header>${lede}${purse}<button type="button" class="stamp outline" data-act="close" aria-label="Leave (E or Esc)">${leave}</button></header>${receipt}${body}`;
+    // (store.css: the counter is a sheet on the counter top, the board a cork board)
+    this.el.panel.classList.toggle('st-counter', !board); this.el.panel.classList.toggle('st-board', board);
+    this.el.panel.innerHTML = `<header>${lede}${purse}${toCounter}<button type="button" class="stamp outline" data-act="close" aria-label="Leave (E or Esc)">${leave}</button></header>${receipt}${body}`;
     const now = this.el.panel.querySelector('.desk, .col, .cards');
     if (scroll && now && now.className === wasCls) now.scrollTop = scroll;
+    if (!board) this.drawSideMap();
   }
 
   // --- the trip ----------------------------------------------------------------------------------------------
@@ -892,7 +924,7 @@ function boxHit(ray, h) {
   return { t: t0, miss: 0 };
 }
 
-// the counter's two columns, the notices done, the desk (the counter's own look is hud.css's; tasks.js adds the board's,
+// the counter's two columns, the side map and the desk (the counter's own look is hud.css's and store.css's; tasks.js adds the board's,
 // rides.js the rides')
 const CSS = `
 #outfitter { gap: 16px; }
@@ -901,17 +933,6 @@ const CSS = `
 #outfitter > .receipt.no { color: var(--map-red); }
 #outfitter .counter.one { grid-template-columns: minmax(0, 1fr); }
 #outfitter .counter.two { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); }
-#outfitter .counter .col { display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow: auto; scrollbar-width: thin; padding-right: 4px; }
-#outfitter .claims { display: flex; flex-direction: column; gap: 10px; flex: none; }
-#outfitter .claims .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--edge); padding-bottom: 8px; }
-#outfitter .claims .top .stamp { font-size: 10.5px; padding: 4px 10px; }
-#outfitter .claims ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-#outfitter .claims li { display: flex; align-items: center; gap: 10px; font-size: 15px; padding: 6px 8px; border: 1px solid var(--edge); border-left: 3px solid var(--moss); border-radius: 2px; background: var(--paper-card); }
-#outfitter .claims li .nm { flex: 1 1 auto; min-width: 0; }
-#outfitter .claims li.far { flex-direction: column; align-items: flex-start; gap: 1px; border-left-color: var(--edge-deep); }
-#outfitter .claims .fare { font: 500 21px/0.95 var(--pencil-font); color: var(--pencil); flex: none; }
-#outfitter .claims .stamp.small { font-size: 10.5px; padding: 4px 10px; flex: none; }
-#outfitter .claims .soft { font-size: 13.5px; font-style: italic; color: var(--ink-soft); margin: 0; }
 #outfitter .desk .shelfbtns { display: flex; flex-wrap: wrap; gap: 6px; }
 #outfitter .desk .shelfbtns p { flex: 1 0 100%; margin: 0; }
 #outfitter .desk .shelfbtns .stamp { font-size: 10.5px; padding: 4px 9px; }
