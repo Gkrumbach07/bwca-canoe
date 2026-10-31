@@ -362,7 +362,7 @@ export function paintBoundary(ctx, v, k = 1) {
 // --- tiles fetched for the map alone (shared by every map that draws) --------------------------------------------------
 const FETCHES = 4;
 const FINE_BELOW = 12; // m a canvas pixel: the 10 m tiles under this, the far field's 80 m ones over it
-export const tileCache = { fine: new Map(), far: new Map(), fetching: 0, tick: 0, MAX_FINE: 160, MAX_FAR: 48 };
+export const tileCache = { fine: new Map(), far: new Map(), fetching: 0, tick: 0, MAX_FINE: 72, MAX_FAR: 48 };
 function decode(world, buf, far) {
   const s = far ? world.farSide : world.side, n = s * s;
   return { h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n) };
@@ -388,7 +388,7 @@ export function tileGeo(world, tx, ty, far, budget, ink = null, inkV = 0) {
     budget.build--;
     const [ox, oz] = far ? [world.originX + tx * world.far.tile * world.cell * world.far.factor, world.originZ + ty * world.far.tile * world.cell * world.far.factor] : world.tileOrigin(tx, ty);
     t.geo = buildTile(world, slot, { fine: !far, ink, ox, oz }); t.geo.inkV = inkV;
-    t.slot = live ? null : slot; // a fetched slot is kept for its ink
+    t.slot = live ? null : { sd: slot.sd.slice(), lake: slot.lake.slice() }; // a fetched tile keeps what its ink and the lake lookups read
     prune(cache, far ? tileCache.MAX_FAR : tileCache.MAX_FINE);
     return t.geo;
   }
