@@ -290,6 +290,44 @@ a Cloudflare account the owner creates once, ten minutes) and a two-browser test
 - **Not yet:** the wind is each screen's own (it differs by a few mph; phase 3 sends it), swimming is drawn as walking,
   and a guest who loses the relay stays in the world alone until a reload.
 
+### Phase 2 as designed (2026-11-01)
+
+The owner, after playing phase 1: "each has their own inventory", and "money is not shared, but we need a way to give
+money". The code surveyed (both builds on 296eef3) puts nearly every camp thing inside the player's own inventory: the
+fire's fuel bin (`firefuel`, where 'ground', `at.fuel` the ring's key), the grate, the woodpiles, the hung barrel
+(where 'hung'), the tent's contents (where 'tent'), the tent itself (`camp.camp`, one per client) and the tarps
+(`tarp.rigs`). So phase 2 is not the host-owned document of the table above; it is simpler:
+
+- **A thing belongs to whoever put it there, and its owner's browser is its authority.** Nothing about your own
+  inventory changes: your pack, your canoe, your tent and your fire run exactly as in single player, with no wait.
+- **Everyone sees everyone's things.** Each browser publishes the public part of its world (`pub`): the containers
+  and long things not on its body (ground, hung, tent, canoe, and what is nested in them), its tent (`camp.serialize()`),
+  its tarps (`tarp.serialize()`), and its fires (`fires.record(key)` for the fires it owns). Sent whole on a change, at
+  most 4 Hz, a few KB. A receiver keeps each friend's `pub` with ids prefixed by the friend (`p<peer>:c12`), so ids
+  never collide, nothing of a friend's enters `inventory.containers`, saves, weight or `reachable()`, and it is drawn
+  by a second `ContainerView` fed by a mirror object, a remote `TentStages`, the tarp's rig drawing and
+  `fires.restoreRecord`.
+- **Reaching into a friend's thing is a request to its owner.** A friend's container within reach is a tab in the
+  book (the bin adapter that already serves the fire's ash and the wood: `binContainer`). Taking from it: `op take`
+  to the owner, who applies `inventory.take` and replies with the entry, which lands where you dropped it (or the first
+  fit, or your hands, or a pile at your feet). Putting into it: you take it locally, `op put` to the owner, who
+  `put`s it (a refusal sends it back). The verb shows pending for the round trip.
+- **One fire per ring.** A ring with a friend's fuel bin is that friend's fire: the fire card and the drag feed their
+  bin by request instead of making a second bin of your own.
+- **What is taken from the world merges.** `chores.s.taken`, `chores.s.sawn` and `forage.s.picked` are grow-only maps
+  (piece → day): each browser sends what it adds and takes the union. Two friends grabbing one stick in the same
+  instant both get it, which does not matter.
+- **One group, one site.** The campsite registry holds the group (`'player'` covers every player's tent), so friends
+  pitch at one site.
+- **A purse each, and giving.** Each player's own `profile.money`. *Give money* on the dot at a friend within 3 m
+  (an amount: $5, $10, $20, all), *Give* on an item's right-click to a friend within 3 m (into their hands, else the
+  best fit, else a pile at their feet). Both are messages to the friend's browser: `profile.earn(n, 'from Ada')`.
+- **A guest's things are kept by the host.** A guest's inventory and purse live in the host's season, under the
+  visitor's id (`coop-guests` in the host's save), sent by the guest every 30 s and on leave; a guest who joins again
+  gets theirs back, and a first visit starts from the starter kit in a canoe beside the host.
+- **Not in phase 2:** Adventure (trips, stores, boards and rides need the group's trip: phase 3 with the night), and
+  holding the host's simulation for a friend out of sight (each browser simulates its own things wherever it is).
+
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
 on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real test of the relay and the actor.
