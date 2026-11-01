@@ -163,3 +163,28 @@ All of this needs a rebake, and a new map-data release uploaded to R2 (data.gage
   the low water and the pools for the date it was built.
 - **Release:** data `bwca/v6/` on R2 goes out with this code (`src/rapids.json` and `src/lake-facts-v4.json` belong to it);
   v5 and v4 kept for rollback.
+
+## The season round (2026-11-01, data v8)
+
+- **Portages break the creek beside them** (`scripts/creeks.mjs portageBreaks`; the owner on Indiana Lake: "we are
+  cutting a river through it?"). A portage is the evidence the water beside it isn't paddled: a creek stretch within
+  110 m of a portage's line, more than 18 m (a fifth of a short portage) from either end, and running along the trail
+  rather than across it, becomes a brook (`creeks.json` brooks with `port`), or boulder white water (`rapids`) where
+  the NHD, GNIS, Ontario or OSM mark rapids or falls within 90 m. Past the ends the creek is untouched. The canoe
+  network's own lines and the LiDAR's water edges are kept off those stretches too (`breaks.mask`). Portage-end
+  anchors now reach only away from their portage. Measured with the scratchpad's `fix/bypass.py` (portages whose ends
+  are joined by water in the trail's box + 150 m, through creek cells): v7-water 666 of 1,295, v8 see the report.
+- **Flowages** (`index.json` lake `regime`: C for a pond mostly under the NWI's C or A regime, F for F; `beaver` when
+  mostly beaver-made): full from ice-out into early July, drawn down by August (C 0.95 m, F 0.45 m), some back with the
+  October rains (`src/water-build.js waterDrop`, `flowageLow`). Their beds are capped shallow at tile build
+  (`flowageBeds`: 0.75 m C, 1.15 m F, with a slow noise) so the drawdown bares mud flats with pools; the creek's line
+  through each (`creeks.json` `chans`) keeps a 1.7 m channel. The hull grounds where under 0.1 m of water is left
+  (`player.js floats`) and drags in the shallows (`creekDrag`).
+- **Lake levels by the date** (`waterDrop`): the bake's levels are the spring LiDAR's (flown 17 April to 17 May 2021),
+  so water only drops from them. The regional curve is the MN DNR's lake-level readings (LakeFinder
+  `water_levels_export.cgi?format=csv&id=<DOW>`, cached in `data-cache/lakefinder/levels/`) of 17 lakes with 4-75 years
+  of records, each year against its own mean: high mid-May, lowest mid-September, a little back in October. Falls:
+  chain lakes, rivers and creeks 0.2 m, headwater 0.24, landlocked and ponds 0.2, the border lakes on rock outlets (Sea
+  Gull, Saganaga, Gunflint, ...) 0.48; the Namakan chain (Crane, Sand Point) on the IJC 2018 rule curve's shape held to
+  0.6 m; Lake Superior not at all. The drop is per cell in the tile's `low` plane (cm), eased where two waters meet (a
+  creek follows the lake it runs into).
