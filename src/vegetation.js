@@ -458,17 +458,43 @@ function ash(rng, v) {
   return finish(g, cards);
 }
 // Black spruce: the bog's spruce, a thin dark spire of short drooping branches with a dense club of them near the
-// top and dead twigs low down; a dark blue-green.
+// top and dead twigs low down; a dark blue-green. (The density round: narrower, its branches shorter and hanging more:
+// it read as a white spruce.)
 function blackSpruce(rng, v) {
   const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
   const h = 11 * P.size, bark = vary(0x4f4339, rng), cols = crownColors(0x467a5c, 0x2c4d45, rng);
   const T = g.stem(0, -0.5, 0, 0.2 * P.girth, 0.03, h, 4, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.3, shade: 0.3 });
   deadBranches(g, rng, T.at, 2 + Math.floor(rng() * 3), 0.05, 0.3, 0.4, 0.9, bark);
-  const R = (0.95 + rng() * 0.3) * (0.85 + P.size * 0.2), nrm = outward(T, -0.5, h, 0.9);
-  whorls(g, cards, rng, T, { t0: 0.18, t1: 0.78, count: 8 + Math.floor(rng() * 2), nb: () => 4, R: (f) => R * (1 - f * 0.55) + 0.15, droop: (f) => 0.4 + 0.25 * (1 - f), tube: (f) => f < 0.1, nrm, cols, y0: 0, y1: h, bark, wid: 0.9, fan: 0.1, lo: 0.4 });
+  const R = (0.62 + rng() * 0.2) * (0.85 + P.size * 0.2), nrm = outward(T, -0.5, h, 0.9);
+  whorls(g, cards, rng, T, { t0: 0.3, t1: 0.78, count: 7 + Math.floor(rng() * 2), nb: () => 4, R: (f) => R * (1 - f * 0.45) + 0.1, droop: (f) => 0.55 + 0.25 * (1 - f), tube: (f) => f < 0.1, nrm, cols, y0: 0, y1: h, bark, wid: 0.9, fan: 0.1, lo: 0.4 });
   whorls(g, cards, rng, T, { t0: 0.82, t1: 0.92, count: 2, nb: () => 5, R: () => R * 0.55, droop: () => 0.3, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 1.0, lo: 0.55 });
   const a = T.at(0.93), b = T.at(1), d = vec(b).sub(vec(a));
   needles(cards, 'spray', vec(a), d.clone().normalize(), d.length() * 1.4, 0.4, nrm, shade(cols, 0, h, rng), rng);
+  return finish(g, cards);
+}
+
+// The bog's black spruce as it stands in its thousands (the density round, 2026-11-01: "a sea of skinny spire spruce
+// at mixed heights, many dead tops and grey snags, no round crowns"): a thin grey pole with dead twigs up its lower
+// half, short drooping sprays close to the stem above, a club of them near the top and a spindly leader. Variants by
+// v % 6: 0, 2, 3 live (2 a leaner), 1 and 4 dead-topped (the top fifth a bare spike over the club), 5 a grey snag with
+// its top broken off. Cheap: no branch tubes, a handful of sprays. Seven metres at unit scale.
+function bogPole(rng, v) {
+  const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng), kind = v % 6, dead = kind === 5, spike = kind === 1 || kind === 4;
+  const h = 7 * P.size * (dead ? 0.6 + rng() * 0.25 : 1);
+  const bark = dead ? vary(0x9a958c, rng, 0.05) : vary(0x6f6860, rng, 0.05), cols = crownColors(0x3f6e55, 0x26443d, rng);
+  const T = g.stem(0, -0.5, 0, 0.075 * P.girth, dead ? 0.035 : 0.014, h, 4, bark, rng, { lean: leanOf(P, h * 1.3), bow: bowOf(P, h * 1.5), flare: 0.2, shade: 0.2, jag: dead ? 0.25 : 0, cap: dead });
+  // the dead twigs: short and fine, all up a snag
+  for (let i = 0, n = dead ? 6 + Math.floor(rng() * 4) : 3 + Math.floor(rng() * 3); i < n; i++) {
+    const t = 0.08 + rng() * (dead ? 0.75 : 0.4), a = rng() * 6.28, L = 0.25 + rng() * 0.35, s = T.at(t);
+    g.limb(V(s.x, s.y, s.z), V(s.x + Math.cos(a) * L, s.y - L * (0.1 + rng() * 0.3), s.z + Math.sin(a) * L), 0.018, 0.006, 3, bark, rng);
+  }
+  if (dead) return finish(g, cards);
+  const top = spike ? 0.74 + rng() * 0.08 : 0.95, R = 0.34 + rng() * 0.12, nrm = outward(T, -0.5, h, 0.9);
+  // short drooping sprays close up the stem, thinning upward to the club
+  whorls(g, cards, rng, T, { t0: 0.38 + rng() * 0.1, t1: top - 0.13, count: 6 + Math.floor(rng() * 2), nb: () => 3, R: (f) => R * (1.1 - f * 0.4), droop: () => 0.75, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 0.95, lo: 0.3 });
+  // the club: a knot of sprays a little below the top
+  whorls(g, cards, rng, T, { t0: top - 0.11, t1: top - 0.03, count: 3, nb: () => 3, R: () => R * 1.15, droop: () => 0.45, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 1.15, lo: 0.55 });
+  if (!spike) { const a = T.at(top - 0.02), b = T.at(1), d = vec(b).sub(vec(a)); needles(cards, 'spray', vec(a), d.clone().normalize(), d.length() * 1.3, 0.25, nrm, shade(cols, 0, h, rng), rng); }
   return finish(g, cards);
 }
 
@@ -851,6 +877,7 @@ const LOW = {
   talus: (rng) => farRock(rng, { scree: true }), // round A-C: likewise (the near block was 76)
   cliff: (rng, v) => cliffModuleFar(rng, v), // d2 land: the slabs' and the domes' far twins their own
   leatherleaf: (rng, I, v) => lowMat(rng, v),
+  bogPole: (rng, I, v) => (v % 6 === 5 || !I.n ? LOW.snag(rng) : farTwin(I, 'farBlackSpruce', rng, { trunk: 0.5 })),
 };
 
 // index order must match placement.js SPECIES. `leaves`: deciduous, with an autumn colour (linear rgb).
@@ -900,6 +927,9 @@ export const SPECIES = [
   { name: 'ash', guestOf: 3, roles: true }, // d2 land: the black ash, a guest in the birch's bins
   // wetlands round 2: the bog's leatherleaf and Labrador tea mat, small and many: near only, no shadows (mat: tagMat)
   { name: 'leatherleaf', make: leatherleaf, leaves: [0.6, 0.25, 0.1], mat: true, variants: 6, lod: 150, cull: 340, shadow: false },
+  // the density round: the bog's black spruce poles, live, dead-topped and dead (bogPole); also drawn by the near ring
+  // (thicket.js) in their thousands
+  { name: 'bogPole', make: bogPole, variants: 6, roles: true },
 ];
 // d2 land: a host's guests (the birch holds the aspen and the black ash)
 const guestsOf = (S) => S.guests || (S.guest ? [S.guest] : []);
@@ -914,7 +944,7 @@ const CULL_DISTANCE = 3200; // beyond this a region's trees are not drawn at all
 // The understory is walked through, and the fallen logs, stumps and outcrops are held off by their own
 // footprints (props.js reads them from the meshes; a carried canoe rides over a stump as over a boulder), so
 // none of them are trunks for the collision in tiles.js.
-const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22, 24]);
+const NOT_TRUNKS = new Set([7, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22, 24]); // (the bog's poles, 25, are trunks)
 const NORMS = [...Array(TREE_VARIANTS).keys()].filter((v) => ROLES[v % ROLES.length] === 'norm');
 // A bin's variant groups are drawn apart while the camera is within NEAR_GROUPS metres of the bin's region
 // (its nearest edge, not its centre, so the region underfoot always is); further out one mesh draws them all.
@@ -1011,6 +1041,7 @@ const SWAY_BY = {
   sapling: [0.07, 0.025, 0.8, 2.6, 2.6],
   fern: [0.15, 0.06, 1.0, 2.8, 1.0],
   leatherleaf: [0.05, 0.04, 1.0, 3.2, 0.5],
+  bogPole: [0.03, 0.02, 0.38, 2.4, 8], // a thin pole: it whips more than a spruce
 };
 const swayUniforms = (name) => {
   const s = SWAY_BY[name] || [0, 0, 0.3, 1, 10];

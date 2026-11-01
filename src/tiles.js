@@ -9,6 +9,7 @@ import { meshHeightAt } from './terrain-build.js';
 import { cascadeHooks } from './sunlight.js';
 import { burnDate } from './burns.js';
 import { DetailStreamer } from './detail.js'; // the LiDAR detail near the player (docs/detail.md)
+import { Thicket } from './thicket.js'; // the density round: the wetlands filled in round the camera
 
 // Streams the world around the player: a 5 x 5 neighbourhood of 2.56 km tiles (terrain, water, forest,
 // lake vegetation, portages, campsites) built in a pool of workers and installed one per frame, a 3 x 3
@@ -428,6 +429,10 @@ export class TileManager {
     this.detail.onTouched = outfitterGroundMoved; // an outfitter under a chunk in or out is built again on it (props.js)
     this.detail.onPending = outfittersPending;
     const ex = exclusionsFor(world);
+    // the density round: the near ring of the wetlands' plants (thicket.js), off the same trails, sites and yards; re-seated
+    // where the detail ground comes in under it
+    this.thicket = new Thicket(this, scene, ex, { kit: vegetation, aquatic });
+    this.detail.onTouched = (rect) => { outfitterGroundMoved(rect); this.thicket.touched(rect); };
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2));
@@ -453,6 +458,7 @@ export class TileManager {
   setSeason(season) {
     if (this.vegetation.setSeason) this.vegetation.setSeason(season);
     if (this.aquatic && this.aquatic.setSeason) this.aquatic.setSeason(season);
+    if (this.thicket) this.thicket.setSeason(season);
     setLandSeason(season); // wetlands round 2: the pools' ice, the meadows' season
   }
 
@@ -571,6 +577,7 @@ export class TileManager {
       L.x = camPos.x; L.z = camPos.z; L.s = LOD_SCALE.value; L.n = e.veg.length;
     }
     this.culler.update(this.tiles, w, camPos);
+    this.thicket.update(camPos);
     // round A-C: at a short tree detail distance (Low's 0.5) the far field ends sooner too, past the haze's thick part
     // (8.4 km, not 12): the far chunks are two draw calls each, and Low drew some thirty of them
     const farReach = FAR_DRAW_DISTANCE * Math.min(1, 0.4 + 0.6 * LOD_SCALE.value);

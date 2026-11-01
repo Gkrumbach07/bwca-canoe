@@ -122,19 +122,20 @@ export const wclass2 = (b) => b & 15;
 //           Labrador tea, low over 0: 1 the bog's usual knee height, less a lower mat), the ferns' and the hazel's share
 //   meadow  open sedge and grass (site.js meadow); sphag  sphagnum on the floor
 //   mat     the leatherleaf and Labrador tea mat, knee-high (vegetation.js leatherleaf; wetlands round 2): mats a cell
+//   poles   the black spruce poles, live, dead-topped and dead (vegetation.js bogPole; the density round): poles a cell
 export const WCLASS = [
   null,
-  { code: 'FO1', name: 'hardwood swamp', trees: 0.85, cap: 0, species: { ash: 0.55, cedar: 0.12, birch: 0.1, aspen: 0.08, tamarack: 0.08, blackSpruce: 0.07 }, alder: 0.8, shrub: 0, low: 0, fern: 1.7, hazel: 0.3, meadow: 0, sphag: 0, mat: 0 },
-  { code: 'FO2', name: 'tamarack swamp', trees: 0.92, cap: 0, species: { tamarack: 0.8, blackSpruce: 0.2 }, alder: 0.3, shrub: 0.3, low: 1, fern: 0.3, hazel: 0, meadow: 0.08, sphag: 0.5, mat: 1.0 },
-  { code: 'FO4', name: 'black spruce bog', trees: 0.85, cap: 0, species: { blackSpruce: 0.86, tamarack: 0.14 }, alder: 0, shrub: 0.3, low: 1, fern: 0.35, hazel: 0, meadow: 0, sphag: 0.6, mat: 1.4 },
-  { code: 'FO', name: 'swamp forest', trees: 0.8, cap: 0, species: { blackSpruce: 0.45, tamarack: 0.25, cedar: 0.15, ash: 0.1, birch: 0.05 }, alder: 0.5, shrub: 0.3, low: 0, fern: 0.8, hazel: 0.1, meadow: 0, sphag: 0.2, mat: 0.3 },
-  { code: 'SS1', name: 'alder thicket', trees: 0.07, cap: 5.5, species: { tamarack: 0.35, blackSpruce: 0.25, ash: 0.2, aspen: 0.2 }, alder: 2.8, shrub: 1.3, low: 0, fern: 0.5, hazel: 0.2, meadow: 0.12, sphag: 0, mat: 0 },
-  { code: 'SS2', name: 'stunted tamarack', trees: 0.38, cap: 4.5, species: { tamarack: 0.88, blackSpruce: 0.12 }, alder: 0.2, shrub: 0.6, low: 1, fern: 0, hazel: 0, meadow: 0.3, sphag: 0.75, mat: 2.6 },
-  { code: 'SS3', name: 'leatherleaf bog', trees: 0.03, cap: 3, species: { blackSpruce: 0.6, tamarack: 0.4 }, alder: 0, shrub: 0.5, low: 0.62, fern: 0, hazel: 0, meadow: 0.45, sphag: 1, mat: 6 },
-  { code: 'SS4', name: 'stunted black spruce', trees: 0.42, cap: 4.5, species: { blackSpruce: 0.88, tamarack: 0.12 }, alder: 0, shrub: 0.6, low: 1, fern: 0, hazel: 0, meadow: 0.22, sphag: 0.85, mat: 2.8 },
-  { code: 'SS', name: 'shrub swamp', trees: 0.12, cap: 5.5, species: { tamarack: 0.4, blackSpruce: 0.35, aspen: 0.25 }, alder: 1.6, shrub: 1.2, low: 0, fern: 0.4, hazel: 0.1, meadow: 0.2, sphag: 0, mat: 0.4 },
-  { code: 'EM1', name: 'sedge and cattail', trees: 0, cap: 3, species: null, alder: 0.12, shrub: 0.18, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0, mat: 0 },
-  { code: 'EM2', name: 'wild rice and pickerelweed', trees: 0, cap: 3, species: null, alder: 0.05, shrub: 0.1, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0, mat: 0 },
+  { code: 'FO1', name: 'hardwood swamp', trees: 0.85, cap: 0, species: { ash: 0.55, cedar: 0.12, birch: 0.1, aspen: 0.08, tamarack: 0.08, blackSpruce: 0.07 }, alder: 0.8, shrub: 0, low: 0, fern: 1.7, hazel: 0.3, meadow: 0, sphag: 0, mat: 0, poles: 0.1 },
+  { code: 'FO2', name: 'tamarack swamp', trees: 0.92, cap: 0, species: { tamarack: 0.8, blackSpruce: 0.2 }, alder: 0.3, shrub: 0.3, low: 1, fern: 0.3, hazel: 0, meadow: 0.08, sphag: 0.5, mat: 1.0, poles: 0.35 },
+  { code: 'FO4', name: 'black spruce bog', trees: 0.85, cap: 0, species: { blackSpruce: 0.86, tamarack: 0.14 }, alder: 0, shrub: 0.3, low: 1, fern: 0.35, hazel: 0, meadow: 0, sphag: 0.6, mat: 1.4, poles: 1.1 },
+  { code: 'FO', name: 'swamp forest', trees: 0.8, cap: 0, species: { blackSpruce: 0.45, tamarack: 0.25, cedar: 0.15, ash: 0.1, birch: 0.05 }, alder: 0.5, shrub: 0.3, low: 0, fern: 0.8, hazel: 0.1, meadow: 0, sphag: 0.2, mat: 0.3, poles: 0.5 },
+  { code: 'SS1', name: 'alder thicket', trees: 0.07, cap: 5.5, species: { tamarack: 0.35, blackSpruce: 0.25, ash: 0.2, aspen: 0.2 }, alder: 3.8, shrub: 1.3, low: 0, fern: 0.5, hazel: 0.2, meadow: 0.12, sphag: 0, mat: 0, poles: 0.12 },
+  { code: 'SS2', name: 'stunted tamarack', trees: 0.38, cap: 4.5, species: { tamarack: 0.88, blackSpruce: 0.12 }, alder: 0.2, shrub: 0.6, low: 1, fern: 0, hazel: 0, meadow: 0.3, sphag: 0.75, mat: 2.6, poles: 0.15 },
+  { code: 'SS3', name: 'leatherleaf bog', trees: 0.03, cap: 3, species: { blackSpruce: 0.6, tamarack: 0.4 }, alder: 0, shrub: 0.5, low: 0.62, fern: 0, hazel: 0, meadow: 0.45, sphag: 1, mat: 6, poles: 0.15 },
+  { code: 'SS4', name: 'stunted black spruce', trees: 0.42, cap: 4.5, species: { blackSpruce: 0.88, tamarack: 0.12 }, alder: 0, shrub: 0.6, low: 1, fern: 0, hazel: 0, meadow: 0.22, sphag: 0.85, mat: 2.8, poles: 0.9 },
+  { code: 'SS', name: 'shrub swamp', trees: 0.12, cap: 5.5, species: { tamarack: 0.4, blackSpruce: 0.35, aspen: 0.25 }, alder: 1.6, shrub: 1.2, low: 0, fern: 0.4, hazel: 0.1, meadow: 0.2, sphag: 0, mat: 0.4, poles: 0.15 },
+  { code: 'EM1', name: 'sedge and cattail', trees: 0, cap: 3, species: null, alder: 0.12, shrub: 0.18, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0, mat: 0, poles: 0.02 },
+  { code: 'EM2', name: 'wild rice and pickerelweed', trees: 0, cap: 3, species: null, alder: 0.05, shrub: 0.1, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0, mat: 0, poles: 0 },
   { code: 'AB', name: 'lily bed' }, { code: 'UB', name: 'open water' }, { code: 'US', name: 'sand shore' }, { code: 'RS', name: 'rock shore' },
 ];
 // EM2, the nonpersistent emergents (wild rice, pickerelweed, arrowhead), on the rice's calendar (aquatic.js uRiceGrow):
@@ -153,7 +154,7 @@ export function nwiCode(wet, wcls) {
 // shores; and on a cell with no code). A two-class code is a patchwork, not an average: the second class takes about
 // 30 % of the ground in patches a few cells across (a noise field over the cell's centre, the same in the two tiles that
 // share a cell), and shows a little everywhere (alder under the trees, the odd runt in the sedge). `out` is reused.
-const MIX_KEYS = ['trees', 'cap', 'alder', 'shrub', 'low', 'fern', 'hazel', 'meadow', 'sphag', 'mat'];
+const MIX_KEYS = ['trees', 'cap', 'alder', 'shrub', 'low', 'fern', 'hazel', 'meadow', 'sphag', 'mat', 'poles'];
 export function wetlandMix(wcls, x, z, out = {}) {
   const A = WCLASS[wclass1(wcls)], B0 = WCLASS[wclass2(wcls)];
   if (!A || A.trees === undefined) return null;
