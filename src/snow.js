@@ -48,17 +48,23 @@ export function snowDepthHere(season) {
 export const glslSnow = /* glsl */ `
 uniform vec4 uSnow;
 const vec3 SNOW_C = vec3(${SNOW_COLOR.map((c) => c.toFixed(3)).join(', ')});
+// (the noise turned off the lattice's axes and warped a few metres, and the edge of a thin snow soft: a hard edge on
+// the value noise, or on the canopy's shelter between the ground's vertices, drew squares)
+const mat2 SNOW_TURN = mat2(0.788, 0.616, -0.616, 0.788);
 float snowPatch(vec3 wp, vec3 wn, float shelter, float px) {
-  float n = lookFbm(wp.xz / 11.0, 71u, 2);
-  n += 0.22 * (lookNoise(wp.xz / 1.7 + vec2(3.1, -1.7), 72u) - 0.5) * lookFade(1.7, px);
+  vec2 q = SNOW_TURN * wp.xz;
+  q += 3.0 * (vec2(lookNoise(q / 6.3, 75u), lookNoise(q / 6.3 + vec2(5.2, 1.3), 76u)) - 0.5);
+  float n = lookFbm(q / 11.0, 71u, 2);
+  n += 0.22 * (lookFbm(q / 2.3 + vec2(3.1, -1.7), 72u, 2) - 0.5) * lookFade(2.3, px);
   // the melt: north slopes (z is south) and the shade keep it, south slopes lose it; before it the canopy holds it off
   // (the melt's last patches go with the cover: none left once the record's has gone, early May)
   float bias = uSnow.z * (1.4 * -wn.z + 0.28 * shelter) * smoothstep(0.0, 0.15, uSnow.x) - (1.0 - uSnow.z) * 0.22 * shelter;
-  float cov = smoothstep(-0.05, 0.05, uSnow.x * 1.12 - 0.06 + bias - n);
+  float soft = mix(0.14, 0.05, smoothstep(0.03, 0.2, uSnow.y));
+  float cov = smoothstep(-soft, soft, uSnow.x * 1.12 - 0.06 + bias - n);
   // a thin snow lets the ground through in grains; a pack covers it
   if (uSnow.y < 0.05) {
-    float grain = lookNoise(wp.xz / 0.21 + vec2(-2.7, 5.3), 73u);
-    cov *= mix(mix(0.62, smoothstep(0.3, 0.62, grain) * 0.85 + 0.15, lookFade(0.21, px)), 1.0, smoothstep(0.0, 0.05, uSnow.y));
+    float grain = lookFbm(q / 0.33 + vec2(-2.7, 5.3), 73u, 2);
+    cov *= mix(mix(0.62, smoothstep(0.28, 0.66, grain) * 0.85 + 0.15, lookFade(0.33, px)), 1.0, smoothstep(0.0, 0.05, uSnow.y));
   }
   // the fresh snow from the sky, over everything that faces up, a little less under the canopy
   return max(cov, uSnow.w * (0.6 + 0.4 * n) * (1.0 - 0.45 * shelter));
