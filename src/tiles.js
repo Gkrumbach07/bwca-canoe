@@ -904,6 +904,7 @@ export class TileManager {
       for (const o of O.obs) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o);
     }
     for (const o of this.dynamic || []) if (Math.hypot(o.x - x, o.z - z) <= r + (o.box ? Math.hypot(o.hx, o.hz) : o.r)) out.push(o); // pitched since the tiles were built: camp.js's tents
+    if (this.thicket && this.thicket.enabled) this.thicket.trunksNear(x, z, r, out); // the density round: the near ring's canopy
     return out;
   }
   // the geometry the worker's key names (bin * 64 + group): the variant that group of that bin is drawn with

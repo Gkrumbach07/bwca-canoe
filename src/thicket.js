@@ -44,9 +44,18 @@ export const LAYERS = {
   // stood taller), jack pine poles, the aspen suckers and young jack pine of a burn's regrowth, the old forest's snags
   fir: { sp: 12, variants: [0, 1, 2, 3], reach: 95, pad: 0.6, shore: 0.8, sink: 0.1 },
   hazel: { sp: 10, variants: [0, 1, 2, 3], reach: 85, pad: 0.4, shore: 1.5, sink: 0.08 },
-  jack: { sp: 9, variants: [0, 1, 3, 4], reach: 115, pad: 1.2, shore: 0.9, sink: 0.35 },
+  jack: { sp: 9, variants: [0, 1, 3, 4], reach: 95, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.16 },
   regrow: { sp: 22, variants: [0, 1, 2, 3], reach: 85, pad: 0.4, shore: 0.8, sink: 0.1 },
   snag: { sp: 5, variants: [0, 1, 3], reach: 115, pad: 1.2, shore: 0.9, sink: 0.35 },
+  // stage 2, the canopy from the data (canopyOf): the trees of the stand's own species, as many as its cover and its
+  // crowns' size make, less what the tiles stand there already; their trunks are held off like the tiles' (trunksNear)
+  cWhitePine: { sp: 0, variants: [0, 1], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.3 },
+  cSpruce: { sp: 1, variants: [0, 3], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.22 },
+  cBSpruce: { sp: 1, variants: [12, 13], scale: GUEST[19][2], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.15 },
+  cRedPine: { sp: 2, variants: [0, 1], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.26 },
+  cBirch: { sp: 3, variants: [0, 1], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.17 },
+  cAspen: { sp: 3, variants: [12, 13], scale: GUEST[18][2], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.16 },
+  cCedar: { sp: 4, variants: [0, 1], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.25 },
   // stage 3, the shore seen from the canoe: dogwood and willow at the waterline, young fir and cedar's like a pace up,
   // alder on the wet banks; reaching further than the rest, as far as a canoe sees a bank clearly
   shoreShrub: { sp: 7, variants: [0, 1], shadow: false, reach: 170, pad: 0.4, shore: 0.2, sink: 0.25, band: [0.2, 5] },
@@ -96,6 +105,49 @@ export const GROWS = {
   // the shore band, on top of whatever the cell grows (stage 3): per hectare of the band itself
   shore: [['shoreShrub', 2600, 1.3, 2.0], ['shoreFir', 1000, 1.3, 2.6], ['shoreAlder', 550, 0.9, 1.4]],
 };
+// The canopy from the agency data (the owner, stage 2: "the density should come from the data, not a guess"):
+// LANDFIRE's cover (EVC, %) over the crown area of the type's trees at its height (EVH): crowns standing at random
+// cover 1 - exp(-N a) of the ground, so trees a hectare N = -ln(1 - cover) x 10,000 m2 / a, a the mean crown area over
+// the type's species mix (land.js FOREST species), each species' crown radius at 15 m (CROWN: a black spruce's 0.85 m,
+// a jack pine's 1.0, a spruce's 1.4, an aspen's or a birch's 2.0-2.2, an old red or white pine's 2.3-3.0) scaled
+// with the stand's height. At 55 % cover that is about 1,100 a hectare in jack pine and black spruce, 650 in aspen
+// and birch, 340 under the old pines (USFS and UMN: 1,100-2,500; 400-800 overstory; fewer and bigger). Thinner on a ridge, on bare rock, a boulder
+// field and stony ground (the bedrock and the soil survey's planes), a little thicker in a hollow. The tiles already
+// stand TILE_TREES a hectare there (measured on the live site, 2026-11-01), so the ring adds the rest; a share of it
+// is the subcanopy, the same species at half the height.
+const CROWN = { whitePine: 3.0, tallPine: 3.5, spruce: 1.4, redPine: 2.3, birch: 2.2, cedar: 1.6, jackPine: 1.0, tamarack: 1.3, aspen: 2.0, blackSpruce: 0.85, ash: 2.2 };
+const CANOPY_LAYER = { whitePine: 'cWhitePine', tallPine: 'cWhitePine', spruce: 'cSpruce', redPine: 'cRedPine', birch: 'cBirch', cedar: 'cCedar', jackPine: 'jack', tamarack: 'tamarack', aspen: 'cAspen', blackSpruce: 'cBSpruce', ash: 'ash' };
+const NOMINAL_H = { cWhitePine: 16, cSpruce: 12.5, cRedPine: 15, cBirch: 10.5, cCedar: 8, jack: 9, tamarack: 13, cAspen: 13, cBSpruce: 11, ash: 15 };
+export const TILE_TREES = 60, SUBCANOPY = 0.3;
+export function canopyOf(world, tiles, x, z) {
+  const F = FOREST[world.chAt('forest', x, z)];
+  if (!F || F.open !== 1 || !F.species) return null;
+  const cover = world.chAt('cover', x, z), m = world.chAt('canopy', x, z) / 10;
+  if (!(cover > 0) || !(m > 0)) return null;
+  const hs = Math.min(1.1, Math.max(0.5, (m / 15) ** 0.7));
+  let a2 = 0, sum = 0;
+  for (const k in F.species) if (CROWN[k]) { a2 += F.species[k] * (CROWN[k] * hs) ** 2; sum += F.species[k]; }
+  if (!(a2 > 0)) return null;
+  const area = Math.PI * a2 / sum;
+  // the ground: a ridge (the cell over the mean of four points 25 m off), bare rock, a boulder field, stony soil
+  const h0 = tiles.groundAt(x, z), mean = (tiles.groundAt(x + 25, z) + tiles.groundAt(x - 25, z) + tiles.groundAt(x, z + 25) + tiles.groundAt(x, z - 25)) / 4;
+  const tpi = h0 - mean, kd = world.chAt('ground', x, z), cb = world.chAt('cliff', x, z), st = world.chAt('stone', x, z);
+  let k = (1 - 0.5 * smoothstep(1.5, 6, tpi)) * (1 + 0.15 * smoothstep(1.5, 5, -tpi));
+  if (kd === KIND.rock) k *= 0.35;
+  if (cb > 1 && (cliffClass(cb) === CLIFF.boulder || cliffClass(cb) === CLIFF.talus)) k *= 0.6;
+  if (st > 0 && st < 255) k *= 1 - 0.5 * smoothstep(0.1, 0.5, st / 254);
+  const n = -Math.log(1 - Math.min(0.95, cover / 100)) * 10000 / area * k, add = Math.max(0, n - TILE_TREES);
+  const rows = [];
+  for (const sp in F.species) {
+    const L = CANOPY_LAYER[sp];
+    if (!L || !F.species[sp]) continue;
+    const share = F.species[sp] / sum, nom = NOMINAL_H[L];
+    const s = L === 'jack' ? Math.min(1.8, Math.max(0.6, m / 9)) : Math.min(1.3, Math.max(0.5, m / nom));
+    rows.push([L, add * share * (1 - SUBCANOPY), s * 0.8, s * 1.12], [L, add * share * SUBCANOPY, s * 0.4, s * 0.7]);
+  }
+  return { n, add, cover, m, crown: Math.sqrt(area / Math.PI), k, tpi, rows };
+}
+
 // the ground kind's class where the NWI gives no code (Ontario, and the odd cell)
 const KIND_CLASS = { [KIND.openBog]: 'SS3', [KIND.coniferBog]: 'FO4', [KIND.shrubSwamp]: 'SS1', [KIND.marsh]: 'EM1', [KIND.wetMeadow]: 'meadow', [KIND.hardwoodSwamp]: 'FO1', [KIND.water]: 'meadow' };
 // how much of each layer is in the way of a walker, per plant a hectare at the class's numbers (brushAt)
@@ -232,13 +284,16 @@ export class Thicket {
       const steep = 1 - 0.8 * smoothstep(0.45, 1.0, w.slopeAt ? w.slopeAt(cx, cz) : 0);
       // patches: the stand thicker and thinner over a few tens of metres (0.55 .. 1.35)
       const patch = 0.55 + 0.8 * smoothstep(0.3, 0.7, fbm(cx * 0.035 + 7, cz * 0.035 - 3, 2, 911));
-      const all = shore ? [...(G || []), ...GROWS.shore] : G;
+      let all = shore ? [...(G || []), ...GROWS.shore] : G;
+      // the canopy from the data, on the upland's forest (not in a burn: its trees are the burn's)
+      if (G && !burnt && !WET.has(cls)) { const C = canopyOf(w, this.tiles, cx, cz); if (C) all = [...C.rows, ...all]; }
+      const nc = all.length - (shore ? GROWS.shore.length : 0);
       // (a shore of bare rock or sand keeps its band open: the ledges and the beaches)
       const kd = shore ? w.chAt('ground', cx, cz) : 0, shoreK = kd === KIND.rock ? 0.25 : kd === KIND.sand ? 0.2 : 1;
       for (let li = 0; li < all.length; li++) {
         const [name, perHa, s0, s1, mix] = all[li], L = LAYERS[name];
         let e = (perHa / 100) * patch * steep * (name === 'reed' && cls === 'EM2' ? em2 : 1);
-        if (li >= (G ? G.length : 0)) e *= shoreK;
+        if (li >= nc) e *= shoreK;
         if (burnt) e *= name === 'regrow' ? B.thicket * (1 - 0.6 * smoothstep(0.6, 0.9, w.chAt('cover', cx, cz) / 100)) : name === 'snag' ? B.snags : 1;
         if (name === 'mat' || name === 'reed') e *= 0.75 + 0.25 * patch; // (the low layers more even)
         const n = Math.floor(e) + (hash2(gi * 7 + li, gj, 4001) < e - Math.floor(e) ? 1 : 0);
@@ -358,6 +413,22 @@ export class Thicket {
         mesh.instanceColor.needsUpdate = true;
       }
     }
+  }
+  // The canopy's trunks within r of (x, z), as tiles.js treesNear gives the tiles' ({ x, z, r }), the trunk's radius a
+  // little over the ground at the tree's scale
+  trunksNear(x, z, r, out) {
+    for (const c of this.chunks.values()) {
+      if (Math.abs((c.ci + 0.5) * CHUNK - x) > CHUNK + r || Math.abs((c.cj + 0.5) * CHUNK - z) > CHUNK + r) continue;
+      for (const [bi, a] of c.lists) {
+        const L = this.buckets[bi].layer;
+        if (!L.trunk) continue;
+        for (let o = 0; o < a.length; o += 9) {
+          const tr = L.trunk * a[o + 4] / (L.scale || 1), d = Math.hypot(a[o] - x, a[o + 2] - z);
+          if (d <= r + tr) out.push({ x: a[o], z: a[o + 2], r: tr });
+        }
+      }
+    }
+    return out;
   }
   // how many standing stems (not the low mat, the reeds or the logs) stand within r of (x, z): a camera kept out of them
   near(x, z, r) {
