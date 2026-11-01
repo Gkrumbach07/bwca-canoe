@@ -903,6 +903,8 @@ async function main() {
   { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { coop.update(dt); } catch (e) { if (!coop.warned) { coop.warned = true; console.warn('coop', e); } } upd(dt, ...a); try { coop.labels(); } catch { /* the names only */ } }; }
   coop.fromUrl();
   window.__game.coop = coop;
+  coop.g.more = (m) => Object.assign(coop.g, m); // phase 2: the camp modules (chores, tarp, forage, fires, energy, …)
+  coop.g.more({ inventory, fires, camp, chores: camp.chores, tarp, forage, energy, shop, tiles, scene, registry: campsites, hold });
   // water: two rules (the owner, 2026-10-26: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if
   // i fill water up without a tablet, it is instantly clean even tho warnign says its not"). Every dried meal and a cup
   // take their water from the bottle (cook.js COOK, kit.js), short of it the "water 0.3 L" chip and once the moment

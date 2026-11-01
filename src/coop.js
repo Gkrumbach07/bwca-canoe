@@ -26,6 +26,15 @@
 //   coop.update(dt)   every frame, before the actors' own update (main.js wraps actors.update)
 //   coop.invite({ name, shirt }) → Promise<code> · coop.join(code, { name, shirt }) → Promise · coop.leave()
 //   coop.role ('host' | 'guest' | null) · coop.code · coop.live · coop.stats() (for the console and the tests)
+//
+// Phase 2's hooks (docs/plans/coop.md, "Phase 2 as designed"): the shared things and the gifts live in their own modules
+// and talk through these, so this file stays the connection and the bodies:
+//   coop.on(type, fn(m, at)) → off      a message type of their own ('pub', 'op', 'gift', …); m.from is the sender's id
+//   coop.send(m) → bool                 to all the others, or to one with m.to = their id (the relay routes it)
+//   coop.onPeers(fn(what, peer)) → off  what: 'welcome' (in a room: every peer there), 'join', 'leave', 'gone' (we left)
+//   coop.tick(fn(now)) → off            every frame while in a room, after the poses
+//   coop.peers()                        [{ id, name, host, x, z, near(m) }] the others, where they are drawn now
+//   coop.g.more(modules)                main.js hands the camp modules over once they are built
 import * as THREE from 'three';
 import { kv } from './store.js';
 import { dress, SHIRTS } from './npcs.js';
@@ -238,11 +247,26 @@ export class Coop {
     this.status = '';
     this.namesEl = document.createElement('div'); this.namesEl.id = 'coop-names'; document.body.appendChild(this.namesEl);
     this.v3 = new THREE.Vector3();
+    this.handlers = new Map(); this.peerFns = new Set(); this.tickFns = new Set();
     if (g.title) { g.title.coop = this; this.attachTitle(g.title); }
   }
   get live() { return !!this.relay && !this.relay.ended; }
   get guest() { return this.role === 'guest'; }
   get sandbox() { const t = this.g.trip; return !!(t && t.sandbox); }
+  // --- phase 2's hooks -------------------------------------------------------------------------------------------------
+  on(type, fn) { let set = this.handlers.get(type); if (!set) this.handlers.set(type, set = new Set()); set.add(fn); return () => set.delete(fn); }
+  send(m) { return this.live && this.relay.state === 'open' ? this.relay.send(m) : false; }
+  onPeers(fn) { this.peerFns.add(fn); return () => this.peerFns.delete(fn); }
+  tick(fn) { this.tickFns.add(fn); return () => this.tickFns.delete(fn); }
+  peerEvent(what, peer = null) { for (const fn of this.peerFns) { try { fn(what, peer); } catch (e) { console.warn('coop.onPeers', e); } } }
+  peers() {
+    const me = this.g.player, out = [];
+    for (const r of this.remotes.values()) {
+      const a = r.boat && r.boat.ext ? r.boat : r.person, x = a ? a.x : NaN, z = a ? a.z : NaN;
+      out.push({ id: r.id, name: r.name, host: r.host, x, z, near: (m = 3) => Number.isFinite(x) && Math.hypot(x - me.x, z - me.z) <= m });
+    }
+    return out;
+  }
   canInvite() { const pr = this.g.profile; return !!this.url && this.sandbox && !!(pr && pr.started) && !this.role; }
 
   // --- opening a room (the host) ------------------------------------------------------------------------------------
@@ -353,6 +377,7 @@ export class Coop {
     this.relay = null; this.role = null; this.code = null; this.id = null;
     for (const r of this.remotes.values()) r.remove();
     this.remotes.clear();
+    this.peerEvent('gone');
     this.refresh();
   }
   lost(why) {
@@ -375,6 +400,7 @@ export class Coop {
     const keep = new Set();
     for (const p of m.peers || []) { this.addPeer(p); keep.add(p.id); if (p.pose) this.remotes.get(p.id).push(p.pose, at); }
     for (const [id, r] of this.remotes) if (!keep.has(id)) { r.remove(); this.remotes.delete(id); }
+    this.peerEvent('welcome');
     this.refresh();
   }
   addPeer(p) {
@@ -385,18 +411,22 @@ export class Coop {
     return r;
   }
   message(m, at) {
+    if (m.to != null && m.to !== this.id) return;
+    const own = this.handlers.get(m.t);
+    if (own && own.size) { for (const fn of own) { try { fn(m, at); } catch (e) { console.warn(`coop ${m.t}`, e); } } return; }
     if (m.t === 'pose') { const r = this.remotes.get(m.from); if (r) r.push(m, at); return; }
     if (m.t === 'clock') { if (this.role === 'guest') this.applyClock(m, false, at); return; }
     if (m.t === 'join') {
       const r = this.addPeer(m);
       if (r) this.say(this.role === 'host' ? `${r.name} has joined your trip.` : `${r.name} has joined.`);
       if (m.host && this.role === 'guest') { this.hostName = r ? r.name : this.hostName; this.clockTs = null; }
+      if (r) this.peerEvent('join', { id: r.id, name: r.name, host: r.host });
       this.refresh();
       return;
     }
     if (m.t === 'leave') {
       const r = this.remotes.get(m.id);
-      if (r) { r.remove(); this.remotes.delete(m.id); this.say(m.host && this.role === 'guest' ? `${r.name} has left. The trip waits for them.` : `${r.name} has left.`); }
+      if (r) { r.remove(); this.remotes.delete(m.id); this.peerEvent('leave', { id: r.id, name: r.name, host: r.host }); this.say(m.host && this.role === 'guest' ? `${r.name} has left. The trip waits for them.` : `${r.name} has left.`); }
       this.refresh();
       return;
     }
@@ -454,6 +484,7 @@ export class Coop {
     }
     if (this.guest) this.g.day.locked = true; // the Sandbox clock keys are the host's
     for (const r of this.remotes.values()) r.update(now);
+    if (this.live) for (const fn of this.tickFns) { try { fn(now); } catch (e) { if (!fn.warned) { fn.warned = true; console.warn('coop.tick', e); } } }
     if (this.trace) for (const r of this.remotes.values()) if (r.drawnAt) this.trace.push({ t: performance.timeOrigin + now, id: r.id, x: r.boat.ext ? r.boat.x : r.person.x, z: r.boat.ext ? r.boat.z : r.person.z, h: r.drawnAt.h, ahead: r.seen ? r.seen.ahead : 0 });
   }
   // the names over the heads, after the camera has moved

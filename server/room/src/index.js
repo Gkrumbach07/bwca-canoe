@@ -11,6 +11,8 @@
 //   { t: 'pose', ... }            forwarded to the others as { ...pose, from: id }; the last kept for joiners
 //   { t: 'clock', ... }           the host's only: forwarded, and kept as the snapshot
 //   { t: 'ping', c }              answered { t: 'pong', c } (through the same delay as the rest)
+//   { t: <any other>, to?, ... }  co-op phase 2 (the shared things, the requests, the gifts): forwarded as
+//                                 { ...m, from: id }, to the one client `to` names, else to all the others. Not kept.
 // The room's:
 //   { t: 'welcome', id, host, peers: [{ id, name, look, host, pose }], snap }
 //   { t: 'join', id, name, look, host } · { t: 'leave', id, host } · { t: 'error', why } (then the socket closes)
@@ -23,9 +25,11 @@ import { DurableObject } from 'cloudflare:workers';
 
 const MAX_CLIENTS = 4;
 const LINGER_MS = 10 * 60 * 1000;
-const MAX_MSG = 2048;     // bytes: a pose is about 120, the clock about 150
+const MAX_MSG = 256 * 1024; // bytes: a pose is about 120, the clock about 150; a player's things (phase 2) a few KB,
+                           // a guest's whole inventory handed to the host up to some tens of KB
 const MAX_NAME = 24;
 const MAX_LOOK = 400;
+const RESERVED = new Set(['welcome', 'join', 'leave', 'error', 'pong', 'down']);
 
 export default {
   async fetch(req, env) {
@@ -114,7 +118,12 @@ export class Room extends DurableObject {
       const out = { ...m, from: a.id };
       a.snap = out; ws.serializeAttachment(a);
       this.broadcast(out, ws);
+      return;
     }
+    if (typeof m.t !== 'string' || !/^[a-z][a-z0-9-]{0,15}$/.test(m.t) || RESERVED.has(m.t)) return;
+    const out = { ...m, from: a.id };
+    if (m.to != null) { const to = this.live(ws).find((w) => att(w).id === m.to); if (to) this.send(to, out); return; }
+    this.broadcast(out, ws);
   }
 
   async webSocketClose(ws) { await this.gone(ws); try { ws.close(); } catch { /* closed */ } }

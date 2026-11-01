@@ -58,6 +58,18 @@ ok(p.from === w2.id && p.x === 5, `a guest's pose reaches the host (${(performan
 guest.send({ t: 'clock', hours: 1 });
 let stray = null; try { stray = await host.next((m) => m.t === 'clock', 400); } catch { stray = null; }
 ok(!stray, 'a guest cannot send the clock');
+
+// phase 2: any other type is forwarded with its sender, to everyone or to the one `to` names; reserved ones are not
+guest.send({ t: 'pub', n: 3, big: 'x'.repeat(40000) });
+const pub = await host.next((m) => m.t === 'pub');
+ok(pub.from === w2.id && pub.n === 3 && pub.big.length === 40000, 'a large phase 2 message reaches the others');
+host.send({ t: 'op', to: w2.id, op: 'take' });
+const op = await guest.next((m) => m.t === 'op');
+ok(op.from === w1.id && op.op === 'take', 'a message with `to` reaches that client');
+host.send({ t: 'op', to: 999, op: 'lost' });
+host.send({ t: 'join', id: 77, name: 'Fake' });
+let fake = null; try { fake = await guest.next((m) => (m.t === 'op' && m.op === 'lost') || (m.t === 'join' && m.id === 77), 400); } catch { fake = null; }
+ok(!fake, 'a `to` nobody holds goes nowhere, and the room\'s own types cannot be forged')
 guest.send({ t: 'ping', c: 42 });
 const pong = await guest.next((m) => m.t === 'pong');
 ok(pong.c === 42, 'ping answered');
