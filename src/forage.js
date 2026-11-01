@@ -62,42 +62,42 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 // ground: weight by the tile's ground class (the berries mostly in the open: the burns, the rock, the clearings, a little
 // under the trees); weight: the whole kind's share; site, trail, shore: how much likelier within SITE_R of a campsite
 // (their clearings), TRAIL_R of a portage trail (its edges), 15 m of the water (the open shore rock); reach: metres from the
-// patch's centre at which E picks; tall: casts a shadow. pick: { unit, per (a patch a day), minutes, food (eaten as
+// patch's centre at which E picks; tall: casts a shadow. pick: { unit, per (a patch a day), food (eaten as
 // picked: the food need), item } (none for the decor and the lookalike). seen: the note for the first ripe patch of a
 // kind each day.
 export const FORAGE = {
   strawberries: {
     name: 'Wild strawberries', short: 'strawberries', kind: 'berry', from: D(6, 10), to: D(7, 8), look: 'strawberry',
     ground: { meadow: 1, burn: 0.6, rockLichen: 0.55, rock: 0.3, forestLight: 0.25, forest: 0.1, forestDark: 0.06 }, site: 3.5, trail: 3, shore: 1, reach: 1.9,
-    pick: { unit: 'handful', per: 2, minutes: 15, food: 0.06, verb: 'Pick' },
+    pick: { unit: 'handful', per: 2, food: 0.06, verb: 'Pick' },
     seen: 'Wild strawberries in the grass here, tiny and red.',
     got: 'A handful of wild strawberries, no bigger than a fingernail and sweeter than any you can buy.',
   },
   juneberries: {
     name: 'Juneberries', short: 'juneberries', kind: 'berry', from: D(6, 25), to: D(7, 25), look: 'juneberry', tall: true,
     ground: { forestLight: 0.8, rockLichen: 0.7, rock: 0.6, meadow: 0.5, burn: 0.5, forest: 0.2, forestDark: 0.12 }, site: 2.2, trail: 1.6, shore: 2.5, reach: 2.2,
-    pick: { unit: 'pint', per: 2, minutes: 20, food: 0.13, verb: 'Pick' },
+    pick: { unit: 'pint', per: 2, food: 0.13, verb: 'Pick' },
     seen: 'A juneberry bush, hung with dark ripe berries.',
     got: 'A pint of juneberries, purple and seedy-sweet, like a small blueberry that grew up into a bush.',
   },
   blueberries: {
     name: 'Wild blueberries', short: 'blueberries', kind: 'berry', from: D(7, 10), to: D(8, 20), look: 'blueberry',
     ground: { burn: 1.2, rockLichen: 1.2, rock: 0.9, forestLight: 0.7, meadow: 0.3, forest: 0.35, forestDark: 0.2 }, site: 4, trail: 2.2, shore: 2, reach: 2.3,
-    pick: { unit: 'pint', per: 3, minutes: 20, food: 0.15, verb: 'Pick' },
+    pick: { unit: 'pint', per: 3, food: 0.15, verb: 'Pick' },
     seen: 'Blueberries! The low bushes here are blue with them.',
     got: 'A pint of blueberries, warm from the sun. Most of them go in by the handful.',
   },
   raspberries: {
     name: 'Raspberries', short: 'raspberries', kind: 'berry', from: D(7, 15), to: D(8, 25), look: 'raspberry', tall: true,
     ground: { meadow: 1, burn: 1, forestLight: 0.4, rockLichen: 0.2, forest: 0.15, forestDark: 0.08 }, site: 2.5, trail: 4.5, shore: 1, reach: 2.2,
-    pick: { unit: 'pint', per: 3, minutes: 20, food: 0.14, verb: 'Pick' },
+    pick: { unit: 'pint', per: 3, food: 0.14, verb: 'Pick' },
     seen: 'Raspberry canes, red with ripe berries.',
     got: 'A pint of raspberries, and a few scratches on the wrists for them.',
   },
   pincherries: {
     name: 'Pin cherries', short: 'pin cherries', kind: 'berry', from: D(8, 1), to: D(8, 31), look: 'pincherry', tall: true,
     ground: { burn: 1, meadow: 0.7, forestLight: 0.5, forest: 0.15, forestDark: 0.08 }, site: 2, trail: 3, shore: 1, reach: 2.3,
-    pick: { unit: 'handful', per: 2, minutes: 15, food: 0.05, verb: 'Pick' },
+    pick: { unit: 'handful', per: 2, food: 0.05, verb: 'Pick' },
     seen: 'A pin cherry, its little clusters bright red.',
     got: 'A handful of pin cherries: sour, and mostly stone. Better as jelly, but they go down.',
   },
@@ -110,21 +110,21 @@ export const FORAGE = {
   chanterelles: {
     name: 'Chanterelles', short: 'chanterelles', kind: 'mushroom', from: D(7, 10), to: D(8, 31), look: 'chanterelle',
     ground: { forestDark: 1, forest: 0.8, forestLight: 0.3 }, site: 1.4, trail: 1.4, shore: 1, reach: 1.7, weight: 0.35,
-    pick: { unit: 'bag', per: 1, minutes: 10, food: 0.1, verb: 'Gather' },
+    pick: { unit: 'bag', per: 1, food: 0.1, verb: 'Gather' },
     seen: 'A flash of gold in the moss: chanterelles.',
     got: 'A bag of chanterelles, smelling faintly of apricots. They want a pan and a little butter.',
   },
   hedgehogs: {
     name: 'Hedgehog mushrooms', short: 'hedgehogs', kind: 'mushroom', from: D(8, 10), to: D(9, 30), look: 'hedgehog',
     ground: { forest: 1, forestDark: 0.8, forestLight: 0.4 }, site: 1.3, trail: 1.3, shore: 1, reach: 1.7, weight: 0.3,
-    pick: { unit: 'bag', per: 1, minutes: 10, food: 0.1, verb: 'Gather' },
+    pick: { unit: 'bag', per: 1, food: 0.1, verb: 'Gather' },
     seen: 'Hedgehog mushrooms, pale under the spruce.',
     got: 'A bag of hedgehogs: little teeth underneath where the gills should be, and nothing poisonous looks like them.',
   },
   lobsters: {
     name: 'Lobster mushrooms', short: 'lobster mushrooms', kind: 'mushroom', from: D(8, 1), to: D(8, 31), look: 'lobster',
     ground: { forest: 1, forestLight: 0.7, forestDark: 0.5 }, site: 1.3, trail: 1.3, shore: 1, reach: 1.7, weight: 0.25,
-    pick: { unit: 'bag', per: 1, minutes: 10, food: 0.12, verb: 'Gather' },
+    pick: { unit: 'bag', per: 1, food: 0.12, verb: 'Gather' },
     seen: 'Something bright orange-red on the forest floor: lobster mushrooms.',
     got: 'A bag of lobster mushrooms, hard and orange as a boiled claw. Firm enough to keep a day or two.',
   },
@@ -695,7 +695,7 @@ export class Forage {
     const s = FORAGE[p.id];
     if (!s || !s.pick) return check(true, null, [], '');
     const left = this.leftOn(p), P = s.pick;
-    if (left > 0) return check(true, null, [NEED.qty(s.kind === 'mushroom' ? 'Here to pick' : `${P.unit[0].toUpperCase()}${P.unit.slice(1)}s left today`, left, 1)], `${P.verb} a ${P.unit}: ${P.minutes} min`);
+    if (left > 0) return check(true, null, [NEED.qty(s.kind === 'mushroom' ? 'Here to pick' : `${P.unit[0].toUpperCase()}${P.unit.slice(1)}s left today`, left, 1)], `${P.verb} a ${P.unit}`);
     const sec = this.regrowSec(p);
     return check(false, s.kind === 'mushroom' ? 'Picked: more come up in a few days' : 'Picked clean today', [NEED.timer(s.kind === 'mushroom' ? 'More come up in' : 'More ripen in', sec, true)], s.kind === 'mushroom' ? `More here in ${timerWords(sec)}; look along other rotten logs meanwhile` : `More ripen by tomorrow (${timerWords(sec)}); other patches nearby may have some`);
   }
@@ -826,7 +826,7 @@ export class Forage {
     if (left <= 0) { const t = timerWords(this.regrowSec(best)); p.prompt = { key: null, text: s.kind === 'mushroom' ? `${s.name} · picked: more come up in ${t}` : `${s.name} · picked clean today; more ripen in ${t}` }; return; } // fb4 C: the wait in numbers
     const tin = best.id === 'blueberries' && this.chores && this.chores.pintsWanted && this.chores.pintsWanted() > this.chores.pints;
     const more = s.kind === 'mushroom' ? 'a few here' : `${word(left)} ${plural(left, P.unit)} on the ${best.id === 'raspberries' ? 'canes' : s.tall ? 'branches' : 'plants'}`;
-    p.prompt = { key: 'E', text: `${P.verb} ${s.short} · a ${P.unit}, ${P.minutes} min${tin ? ', for the notice' : ''} · ${more}` };
+    p.prompt = { key: 'E', text: `${P.verb} ${s.short} · a ${P.unit}${tin ? ', for the notice' : ''} · ${more}` };
     this.armed = best;
   }
 
@@ -835,16 +835,14 @@ export class Forage {
     const s = FORAGE[q.id];
     if (s.kind === 'lookalike') { this.lookalike(q); return; }
     if (!s.pick || this.leftOn(q) <= 0) return;
-    this.busy = { t: 0, q, s, hours: s.pick.minutes / 60, passed: 0, seconds: s.kind === 'mushroom' ? 1.0 : 1.4 };
+    this.busy = { t: 0, q, s, seconds: s.kind === 'mushroom' ? 1.0 : 1.4 };
     this.rustle(q);
   }
   working(dt) {
     const b = this.busy, p = this.player, cs = p.canoe && p.canoe.state;
     if (cs) cs.crouch = 1; // down on the heels (canoe.js state.crouch: the camp sets it back each frame)
     b.t += dt;
-    const k = Math.min(1, b.t / b.seconds), want = b.hours * k;
-    if (this.camp && this.camp.pass) this.camp.pass(want - b.passed);
-    b.passed = want;
+    const k = Math.min(1, b.t / b.seconds); // (one clock, 2026-11-01: the pick takes its seconds, no minutes skipped)
     p.prompt = { key: null, text: `${b.s.kind === 'mushroom' ? 'Gathering' : 'Picking'} ${b.s.short}…` };
     if (k >= 1) { this.busy = null; if (cs) cs.crouch = 0; this.picked(b.q); }
   }
