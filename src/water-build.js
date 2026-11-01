@@ -27,10 +27,14 @@ export function lowWater(doy) { return ease(198, 214, doy) * (1 - ease(266, 282,
 //   (Burntside 0.75, Vermilion 0.9, Shagawa 1.1) least, the small headwater lakes (Hungry Jack, Bearskin, Caribou
 //   0.6-0.8) and landlocked ones about the same, the border lakes on their rock-ledge outlets most (Sea Gull 1.8 ft,
 //   Gunflint 1.6, Saganaga 1.5). Lake Superior doesn't move. Rivers and creeks fall with the chain lakes.
-// - The Namakan chain (Namakan, Sand Point, Crane, Kabetogama) is a reservoir held by the dams at Kettle Falls on the
-//   IJC's 2018 rule curve: drawn down over the winter, still filling at ice-out, full by mid-June, eased down from
-//   September (NAMAKAN, m under full). The curve's winter drawdown is metres; here it is held to 0.6 m (2 ft) so the
-//   docks and the landing at Crane Lake still meet the water at ice-out.
+// - The Namakan chain (Namakan, Sand Point, Crane, Kabetogama, Little Vermilion) is a reservoir held by the dams at
+//   Kettle Falls on the IJC's rule curve: the International Joint Commission, Official Compilation of the Order for
+//   regulation of levels of Rainy and Namakan Lakes, 13 September 2018 (Docket 50), paragraph 1(a), "Namakan Lake
+//   Elevations" (NAMAKAN_BAND, m above sea level). The dam owners aim for the middle of the band: drawn down over the
+//   winter, lowest from the end of March to ice-out, filled through May, full from mid-June, eased down from
+//   September. The middle stands 1.35 m under its summer full at its lowest; here every point is scaled by 0.6 / 1.35
+//   (held to 0.6 m, 2 ft) so the docks and the landing at Crane Lake still meet the water at ice-out. Only the
+//   reservoir's own water (level 339.5-340.6 m): a pond that shares a name keeps its own level.
 // - Flowages (the NWI's C, A and F regimes under most of a pond, beaver-made or not: the bake's lake `regime`): full
 //   from ice-out into early July, then drawn down: by August a seasonally flooded one (C) is mud flats with pools and
 //   the creek's channel (FLOW.c m down), a semipermanent one (F) half that; the October rains bring some back.
@@ -38,7 +42,12 @@ export function lowWater(doy) { return ease(198, 214, doy) * (1 - ease(266, 282,
 export const WK = { still: 0, seasonal: 1, chain: 2, head: 3, land: 4, border: 5, namakan: 6, flowC: 7, flowF: 8, creek: 16 };
 const LAKE_CURVE = [[1, 0.92], [95, 0.97], [108, 0.5], [122, 0.12], [136, 0], [152, 0.06], [167, 0.22], [182, 0.4], [197, 0.56], [213, 0.72], [228, 0.88], [244, 0.97], [259, 1], [274, 0.97], [289, 0.88], [305, 0.86], [335, 0.88], [366, 0.92]];
 export const LAKE_FALL = { [WK.chain]: 0.2, [WK.head]: 0.24, [WK.land]: 0.2, [WK.border]: 0.48, [WK.seasonal]: 0.2 };
-const NAMAKAN = [[1, 0.6], [100, 0.6], [122, 0.5], [136, 0.36], [152, 0.15], [167, 0], [228, 0], [259, 0.08], [289, 0.2], [320, 0.4], [366, 0.6]];
+// [doy, minimum, maximum] (m), the Order's dates (1 Jan, 15 Mar, 31 Mar, 15 Apr, 22 Apr, 31 May, 8 Jun, 15 Jun,
+// 30 Sep, 15 Nov), each bound filled in on the other's dates by the straight line between its own, as the Order says
+const NAMAKAN_BAND = [[1, 339.66, 339.93], [74, 339.56, 339.9], [90, 338.95, 339.948], [105, 338.95, 339.99], [112, 338.95, 340.133],
+  [151, 340.47, 340.93], [159, 340.582, 340.94], [166, 340.68, 340.919], [273, 340.4, 340.6], [319, 339.73, 339.98], [366, 339.66, 339.93]];
+const NAMAKAN_FULL = 340.8, NAMAKAN_CAP = 0.6 / 1.35; // the summer's middle of the band; the drawdown held to 0.6 m
+const NAMAKAN = NAMAKAN_BAND.map(([d, lo, hi]) => [d, Math.max(0, NAMAKAN_FULL - (lo + hi) / 2) * NAMAKAN_CAP]);
 export const FLOW = { c: 0.95, f: 0.45, bedC: 0.75, bedF: 1.15, chan: 1.7, chanW: 7 };
 const BORDER = /^(Sea Gull|Saganaga|Gunflint|Northern Light|Magnetic|Granite|Clove|Gneiss) Lake$/;
 const NAMAKAN_LAKES = /^(Namakan|Sand Point|Crane|Kabetogama|Little Vermilion) Lake$/;
@@ -68,7 +77,7 @@ export function waterKinds(lakes) {
     let k;
     if (l.creek || l.river) k = (l.seasonal ? WK.seasonal : WK.chain) | WK.creek;
     else if (name === 'Lake Superior') k = WK.still;
-    else if (NAMAKAN_LAKES.test(name)) k = WK.namakan;
+    else if (NAMAKAN_LAKES.test(name) && l.level > 339.5 && l.level < 340.6) k = WK.namakan;
     else if (l.regime === 'C') k = WK.flowC;
     else if (l.regime === 'F') k = WK.flowF;
     else if (BORDER.test(name)) k = WK.border;
