@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { hash2, fbm, smoothstep } from './rng.js';
-import { KIND, WCLASS, FOREST, CLIFF, cliffClass, wclass1, wclass2, emergentGrow } from './land.js';
+import { KIND, WCLASS, FOREST, CLIFF, cliffClass, cliffStrength, wclass1, wclass2, emergentGrow } from './land.js';
 import { burnLook } from './burns.js';
 import { GUEST } from './placement.js';
+import { mirePoolAt } from './mire-relief.js';
 
 // The near ring (the density round, 2026-11-01). The owner: "the biggest thing i notice is how much more open our game
 // is compared to real life ... I don't want to walk through that vs that looks walkable. right now everything seems
@@ -88,7 +89,8 @@ export const GROWS = {
   spruceFir: [['fir', 1000, 0.8, 2.2], ['hazel', 420, 0.8, 1.2], ['shrub', 240, 1.3, 1.9], ['snag', 14, 0.7, 1.1], ['log', 60, 0.6, 0.95]],
   aspenBirch: [['hazel', 1000, 0.85, 1.3], ['regrow', 340, 1.2, 2.2, [1]], ['fir', 300, 0.6, 1.6], ['shrub', 200, 1.3, 1.9], ['log', 50, 0.6, 0.95]],
   northernHardwood: [['hazel', 700, 0.85, 1.3], ['shrub', 380, 1.3, 2.0], ['fir', 350, 0.6, 1.7], ['log', 50, 0.6, 0.95]],
-  redWhitePine: [['hazel', 260, 0.8, 1.2], ['fir', 120, 0.6, 1.5], ['shrub', 80, 1.1, 1.6], ['log', 25, 0.7, 1.0]],
+  // (the old pines read open: big straight trunks over a needle floor and ferns, a little hazel and young fir, low)
+  redWhitePine: [['hazel', 110, 0.6, 0.95], ['fir', 80, 0.5, 1.3], ['shrub', 20, 0.8, 1.2], ['log', 25, 0.7, 1.0]],
   jackRedPine: [['jack', 450, 0.7, 1.3], ['fir', 120, 0.6, 1.4], ['hazel', 200, 0.8, 1.2], ['regrow', 150, 1.0, 1.8, [0.2]], ['snag', 10, 0.6, 1.0]],
   pineBlackSpruce: [['jack', 300, 0.7, 1.3], ['pole', 350, 0.6, 1.2], ['hazel', 150, 0.8, 1.2], ['fir', 100, 0.6, 1.4]],
   pineSpruceHardwood: [['fir', 400, 0.6, 1.8], ['hazel', 450, 0.8, 1.25], ['jack', 150, 0.7, 1.2], ['regrow', 150, 1.1, 2.0, [0.6]], ['shrub', 150, 1.3, 1.9], ['log', 40, 0.6, 0.95]],
@@ -99,7 +101,9 @@ export const GROWS = {
   forestUnknown: [['fir', 450, 0.6, 1.7], ['hazel', 500, 0.8, 1.25], ['shrub', 150, 1.2, 1.8], ['log', 40, 0.6, 0.95]],
   uplandShrub: [['hazel', 1300, 0.85, 1.3], ['regrow', 300, 1.0, 2.0, [0.7]], ['shrub', 300, 1.2, 1.8]],
   openMeadow: [['shrub', 60, 1.0, 1.5], ['hazel', 60, 0.8, 1.1]],
-  rock: [['jack', 50, 0.5, 1.0], ['shrub', 60, 0.8, 1.2]],
+  // bare rock, a ledge, talus, a boulder field (bareAt): a few wind-bent jack and white pine and birch in its cracks,
+  // juniper and blueberry low; the granite shows between (a BWCA rock point, not a wall)
+  rock: [['jack', 60, 0.45, 1.0], ['cWhitePine', 9, 0.45, 0.95], ['cRedPine', 5, 0.5, 0.9], ['cBirch', 10, 0.4, 0.8], ['shrub', 45, 0.4, 0.75]],
   // a burn (burns.js): the regrowth as thick as the burn's thicket and as tall as its age, the old forest's snags standing
   burn: [['regrow', 2600, 1, 1, [0.45]], ['snag', 120, 1.0, 1.35]],
   // the shore band, on top of whatever the cell grows (stage 3): per hectare of the band itself
@@ -119,6 +123,8 @@ const CROWN = { whitePine: 3.0, tallPine: 3.5, spruce: 1.4, redPine: 2.3, birch:
 const CANOPY_LAYER = { whitePine: 'cWhitePine', tallPine: 'cWhitePine', spruce: 'cSpruce', redPine: 'cRedPine', birch: 'cBirch', cedar: 'cCedar', jackPine: 'jack', tamarack: 'tamarack', aspen: 'cAspen', blackSpruce: 'cBSpruce', ash: 'ash' };
 const NOMINAL_H = { cWhitePine: 16, cSpruce: 12.5, cRedPine: 15, cBirch: 10.5, cCedar: 8, jack: 9, tamarack: 13, cAspen: 13, cBSpruce: 11, ash: 15 };
 export const TILE_TREES = 60, SUBCANOPY = 0.3;
+// (under the old pines the young growth is a few pines and fir, not birch and aspen at eye level)
+const SUB_BY_TYPE = { redWhitePine: 0.08 }, SUB_BROADLEAF = { redWhitePine: 0 };
 export function canopyOf(world, tiles, x, z) {
   const F = FOREST[world.chAt('forest', x, z)];
   if (!F || F.open !== 1 || !F.species) return null;
@@ -143,7 +149,8 @@ export function canopyOf(world, tiles, x, z) {
     if (!L || !F.species[sp]) continue;
     const share = F.species[sp] / sum, nom = NOMINAL_H[L];
     const s = L === 'jack' ? Math.min(1.8, Math.max(0.6, m / 9)) : Math.min(1.3, Math.max(0.5, m / nom));
-    rows.push([L, add * share * (1 - SUBCANOPY), s * 0.8, s * 1.12], [L, add * share * SUBCANOPY, s * 0.4, s * 0.7]);
+    const sub = SUB_BY_TYPE[F.key] ?? SUBCANOPY, broad = L === 'cBirch' || L === 'cAspen' ? SUB_BROADLEAF[F.key] ?? 1 : 1;
+    rows.push([L, add * share * (1 - sub), s * 0.8, s * 1.12], [L, add * share * sub * broad, s * 0.4, s * 0.7]);
   }
   return { n, add, cover, m, crown: Math.sqrt(area / Math.PI), k, tpi, rows };
 }
@@ -181,13 +188,29 @@ function wetClassOf(world, x, z) {
 // is the caller's (it knows where the trail is)
 export function brushAt(world, x, z) {
   if (!world.chAt) return 0;
-  const c = classOf(world, x, z), G = c && GROWS[c];
+  const c = bareAt(world, x, z) ? 'rock' : classOf(world, x, z), G = c && GROWS[c];
   if (!G) return 0;
   let b = 0;
   for (const [layer, n] of G) b += n * (BRUSH[layer] || 0);
   return Math.min(1, b);
 }
 
+// Bare ground the ring keeps off (but for GROWS.rock's few): rock outcrop and a boulder field (the ground kinds), a cliff's
+// face, talus and the boulders under it (the cliff plane), and a stony shore (the soil survey's stone over a third of
+// the ground within 12 m of the water). Asked of every plant's own spot, so a neighbour's plants don't spill onto it.
+export function bareAt(world, x, z) {
+  const kd = world.chAt('ground', x, z);
+  if (kd === KIND.rock || kd === KIND.boulder) return true;
+  const cb = world.chAt('cliff', x, z), cc = cb > 1 ? cliffClass(cb) : CLIFF.none;
+  if (cc === CLIFF.face || cc === CLIFF.talus) return true;
+  const st = world.chAt('stone', x, z), stony = st > 150 && st < 255;
+  if (!stony && cc !== CLIFF.boulder) return false;
+  // (a boulder field or stony ground bare at the water, or where the LiDAR found it rough, 48 cm or more)
+  return world.shoreAt(x, z) < 12 || (cc === CLIFF.boulder && cliffStrength(cb) >= 12);
+}
+const ON_ROCK = new Set(['jack', 'cWhitePine', 'cRedPine', 'cBirch', 'shrub']);
+// the standing plants a pool keeps out of (mirePoolAt): they give way to the sedge and cattail at its rim
+const POOL_SHY = new Set(['pole', 'alder', 'shrub', 'mat', 'tamarack', 'ash', 'log', 'fir', 'hazel', 'snag', 'cBSpruce']);
 const WET = new Set([...Object.keys(KIND_CLASS).map((k) => KIND_CLASS[k]), 'FO4', 'FO2', 'FO', 'FO1', 'SS1', 'SS', 'SS2', 'SS3', 'SS4', 'EM1', 'EM2', 'meadow']);
 const _B = {};
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _c = new THREE.Color();
@@ -272,13 +295,14 @@ export class Thicket {
       if (!w.isReady(cx, cz)) { ready = false; continue; }
       const gi = Math.round(cx / 10), gj = Math.round(cz / 10);
       let cls = classOf(w, cx, cz);
-      const sd = w.shoreAt(cx, cz);
+      const sd = w.shoreAt(cx, cz), bare = bareAt(w, cx, cz);
+      if (bare) cls = 'rock';
       // a burn (stage 2): its regrowth and its snags in place of the stand's own understory, as far as the burn reached
       const B = cls && !WET.has(cls) && sd > -4 ? burnLook(cx, cz, _B, Math.max(1, sd)) : null;
       const burnt = B && B.kind !== 0 && (B.thicket > 0.05 || B.snags > 0.05);
       if (burnt) cls = 'burn';
-      const G = cls ? GROWS[cls] : null;
-      const shore = sd > -8 && sd < 16; // the shore band (stage 3)
+      const G = cls ? GROWS[cls] : null, wet = WET.has(cls);
+      const shore = !bare && sd > -8 && sd < 16; // the shore band (stage 3; not on a ledge)
       if (!G && !shore) continue;
       // nothing on a cliff's face, thinner up a steep slope
       const cb = w.chAt('cliff', cx, cz);
@@ -288,7 +312,7 @@ export class Thicket {
       const patch = 0.55 + 0.8 * smoothstep(0.3, 0.7, fbm(cx * 0.035 + 7, cz * 0.035 - 3, 2, 911));
       let all = shore ? [...(G || []), ...GROWS.shore] : G;
       // the canopy from the data, on the upland's forest (not in a burn: its trees are the burn's)
-      if (G && !burnt && !WET.has(cls)) { const C = canopyOf(w, this.tiles, cx, cz); if (C) all = [...C.rows, ...all]; }
+      if (G && !burnt && !bare && !WET.has(cls)) { const C = canopyOf(w, this.tiles, cx, cz); if (C) all = [...C.rows, ...all]; }
       const nc = all.length - (shore ? GROWS.shore.length : 0);
       // (a shore of bare rock or sand keeps its band open: the ledges and the beaches)
       const kd = shore ? w.chAt('ground', cx, cz) : 0, shoreK = kd === KIND.rock ? 0.25 : kd === KIND.sand ? 0.2 : 1;
@@ -305,11 +329,26 @@ export class Thicket {
           const x = cx + (H(1) - 0.5) * 16, z = cz + (H(2) - 0.5) * 16;
           const sx = w.shoreAt(x, z);
           if (sx < L.shore || (L.band && sx > L.band[1]) || this.blocked(x, z, L.pad)) continue;
+          // (off the bare rock, but for the rock's own; the rock's own only on it)
+          const onRock = bare || bareAt(w, x, z);
+          if (onRock && !(bare && ON_ROCK.has(name))) continue;
+          // a pool in the mire's hollows (mire-relief.js): nothing stands in it; a stem at its rim gives way to sedge
+          let reedAt = -1;
+          if (wet && POOL_SHY.has(name)) {
+            const pool = mirePoolAt(w, x, z);
+            if (pool > 0.85) continue;
+            if (pool > 0.3) { reedAt = H(11) < 0.3 ? 0 : 2; if (LAYERS.reed.index[reedAt] === undefined) continue; }
+          }
           // (a burn's regrowth as tall as the burn is old: placement.js's thicket, 2 m at unit scale)
           let scale = (s0 + (s1 - s0) * H(3) ** 1.3) * (L.scale || 1);
           if (burnt && name === 'regrow') scale = Math.max(0.15, B.regrow * (0.55 + 0.7 * H(3)) / 2);
           const yaw = H(4) * Math.PI * 2, tint = 0.86 + H(5) * 0.2, fade = H(6);
           let k;
+          if (reedAt >= 0) {
+            const RL = LAYERS.reed, sc = 0.8 + 0.4 * H(3);
+            add(RL.index[reedAt], [x, this.tiles.groundAt(x, z) - RL.sink * sc, z, yaw, sc, tint, fade, 0, 0]);
+            continue;
+          }
           if (L.reeds) { const r = H(7), m = mix || [1, 0, 0], t = m[0] + m[1] + m[2]; k = r * t < m[0] ? 0 : r * t < m[0] + m[1] ? 1 : 2; }
           else if (name === 'regrow') k = (H(7) < (mix ? mix[0] : 0.5) ? 0 : 1) + (H(10) < 0.5 ? 0 : 2); // (even variants aspen, odd jack pine)
           else k = L.pick ? L.pick(H(7)) : Math.floor(H(7) * L.variants.length);
@@ -317,7 +356,8 @@ export class Thicket {
           if (bi === undefined) continue;
           // a log lies along the ground; the rest stand, the leaning ones a little off plumb
           let y = this.tiles.groundAt(x, z) - L.sink * (L.log ? 1 : scale);
-          const lean = L.log ? 0 : (H(8) - 0.5) * (name === 'alder' ? 0.3 : name === 'pole' ? 0.12 : 0.06);
+          // (on bare rock the pines and birch wind-bent, 7-16 degrees off plumb)
+          const lean = L.log ? 0 : bare ? (0.12 + 0.16 * H(8)) * (H(12) < 0.5 ? -1 : 1) : (H(8) - 0.5) * (name === 'alder' ? 0.3 : name === 'pole' ? 0.12 : 0.06);
           if (L.log) y += 0.05;
           add(bi, [x, y, z, yaw, scale, tint, fade, lean, H(9) * Math.PI * 2]);
         }
