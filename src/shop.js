@@ -481,7 +481,7 @@ export class Shop {
   }
   // the canoe tied at this store's dock (outfitter.js tieUp: set down at the layout's dockSide)
   canoeAtDock() {
-    const o = this.outfitter, v = o && o.visit, s = v && v.L && v.L.dockSide, d = this.player && this.player.carry && this.player.carry.drop;
+    const o = this.outfitter, s = o && o.berthSide, d = this.player && this.player.carry && this.player.carry.drop;
     return !!(s && d && Math.hypot(d.x - s.x, d.z - s.z) < 1.5);
   }
   // how many of a thing your reachable containers could take now (stacks with room, then free spots)

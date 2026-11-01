@@ -2158,6 +2158,12 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock, site) {
     // the way the dock runs out to the water (a heading, as player.heading's)
     dockDeck: (() => { const [x, z] = F.W(dock.hw - 0.45, dock.len * 0.65); return { x, z, y: dock.deckY }; })(),
     dockHeading: Math.atan2(-F.Z.z, F.Z.x),
+    // co-op (the owner, 2026-11-01: two friends tied up in one spot, one canoe drawn in the other): the dock's berths,
+    // the first the old dockSide/dockDeck, then the other side, then both sides further out (outfitter.js berthFor)
+    dockBerths: [[1, 0.65], [-1, 0.65], [1, 0.9], [-1, 0.9]].map(([s, u]) => {
+      const [x, z] = F.W(s * (dock.hw + 1.3), dock.len * u), [dx, dz] = F.W(s * (dock.hw - 0.45), dock.len * u);
+      return { side: { x, z }, deck: { x: dx, z: dz, y: dock.deckY } };
+    }),
     stepsFoot: W2(pr.ca, pr.foot + 0.6),
     // wc C: the porch bench under the front window (porchAndSteps out.bench: a0, a1, c0, c1 in the store's frame, its seat
     // 0.46 over the floor), two spots facing out to the yard, in c.layout.seats's shape (player.js sitAt)

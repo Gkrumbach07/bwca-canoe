@@ -516,7 +516,7 @@ export class Packs {
   // tied alongside a store's dock (outfitter.js tieUp: the canoe set down at its dockSide): afloat, whatever the
   // waterline says under its inner end
   atDock(d) {
-    const o = window.__game && window.__game.outfitter, v = o && o.visit, s = v && v.L && v.L.dockSide;
+    const o = window.__game && window.__game.outfitter, s = o && o.berthSide;
     return !!(s && Math.hypot(d.x - s.x, d.z - s.z) < 1.2);
   }
   // the book with the canoe on the right (main.js wires journal.openHere('canoe'); else the book at the pack)

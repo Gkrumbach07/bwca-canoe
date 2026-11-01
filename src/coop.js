@@ -249,6 +249,8 @@ export class Coop {
     this.namesEl = document.createElement('div'); this.namesEl.id = 'coop-names'; document.body.appendChild(this.namesEl);
     this.v3 = new THREE.Vector3();
     this.handlers = new Map(); this.peerFns = new Set(); this.tickFns = new Set();
+    // a dock's free berth (outfitter.js berthFor): never tie up in a friend's canoe
+    if (g.outfitter) g.outfitter.otherCanoes = () => [...this.remotes.values()].filter((r) => r.boat && !r.boat.hidden).map((r) => ({ x: r.boat.x, z: r.boat.z }));
     if (g.title) { g.title.coop = this; this.attachTitle(g.title); }
   }
   get live() { return !!this.relay && !this.relay.ended; }

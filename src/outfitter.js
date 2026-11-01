@@ -270,14 +270,28 @@ export class Outfitter {
   // The canoe tied alongside the dock (a hull set down on the water, as player.js sets one down on the ground), and you
   // at the door facing in (a season begun, a ride's end, a page reloaded: placed by the game, never on a key), or on
   // the dock's deck beside the canoe facing the land (at: 'deck', the end of tying up from the water: dockUp)
-  tieUp(l, L, quiet = false, at = 'door') {
-    const p = this.player, w = this.world, ds = L.dockSide || L.dockLand || L.door;
+  // The dock's berths in the water (props.js dockBerths; a stub's one dockSide), and the first no friend's canoe lies in
+  // (coop-share.js sets otherCanoes in a room: [{ x, z }]); alone, always the first, as before
+  berths(L) {
+    const w = this.world, list = Array.isArray(L.dockBerths) ? L.dockBerths.filter((b) => !w || !w.shoreAt || w.shoreAt(b.side.x, b.side.z) < -0.6) : [];
+    if (!list.length || (L.dockSide && Math.hypot(list[0].side.x - L.dockSide.x, list[0].side.z - L.dockSide.z) > 0.01)) list.unshift({ side: L.dockSide || L.dockLand || L.door, deck: L.dockDeck || null });
+    return list;
+  }
+  berthFor(L) {
+    const list = this.berths(L), others = typeof this.otherCanoes === 'function' ? this.otherCanoes() : [];
+    return list.find((b) => !others.some((c) => Math.hypot(c.x - b.side.x, c.z - b.side.z) < 2.6)) || list[0];
+  }
+  // where this visit's canoe is tied (packs.js atDock, shop.js canoeAtDock)
+  get berthSide() { const v = this.visit; return v ? (v.berth && v.berth.side) || (v.L && v.L.dockSide) || null : null; }
+  tieUp(l, L, quiet = false, at = 'door', berth = null) {
+    berth = berth || this.berthFor(L);
+    const p = this.player, w = this.world, ds = berth.side;
     const dd = w.deeperDir(ds.x, ds.z), hh = Number.isFinite(this.docking && this.docking.h1) ? this.docking.h1 : Math.atan2(-dd.z, dd.x);
     p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.yawRate = 0; p.bob = null; p.balance = 0; p.extraRoll = 0;
     p.mode = 'walk';
     p.carry = { trail: null, drop: { x: ds.x, z: ds.z, heading: hh }, hitCooldown: 0, from: null, choice: false };
     p.restHull(ds.x, ds.z, hh);
-    const deck = at === 'deck' && L.dockDeck ? L.dockDeck : null;
+    const deck = at === 'deck' && berth.deck ? berth.deck : null;
     if (deck) { p.x = deck.x; p.z = deck.z; p.heading = Number.isFinite(L.dockHeading) ? L.dockHeading + Math.PI : L.door.heading; }
     else { p.x = L.door.x; p.z = L.door.z; p.heading = L.door.heading; }
     const y = deck && Number.isFinite(deck.y) ? deck.y : !deck && Number.isFinite(L.door.y) ? L.door.y : p.groundAt(p.x, p.z);
@@ -286,7 +300,7 @@ export class Outfitter {
     p.placeOnGround();
     const ch = p.chase;
     if (ch) { ch.viewYaw = p.heading; ch.forwardYaw = p.heading; ch.viewPitch = 0; ch.snap(); }
-    this.visit = { ep: l.ep, landing: l, L, inside: false, switched: false, settled: false, bye: false };
+    this.visit = { ep: l.ep, landing: l, L, berth, inside: false, switched: false, settled: false, bye: false };
     this.port = l;
     if (this.core) this.core.learn(l.ep); else if (this.profile) this.profile.learn(l.ep);
     if (!quiet) this.hud.note(deck ? `Tied up at the ${l.name} dock. The store is up the yard.` : `Tied up at the ${l.name} dock. The door is open.`, 4);
@@ -294,14 +308,14 @@ export class Outfitter {
   // E afloat by a store's dock: the canoe comes alongside it, paddled in over DOCK_TIME (updateDocking), and you step
   // out onto the deck. Like going ashore anywhere, only onto the dock: no door, no teleport.
   dockUp(l, L) {
-    const p = this.player, ds = L.dockSide;
+    const p = this.player, berth = this.berthFor(L), ds = berth.side;
     let h1 = Number.isFinite(L.dockHeading) ? L.dockHeading : p.heading;
     const turn = (a) => Math.abs(Math.atan2(Math.sin(a - p.heading), Math.cos(a - p.heading)));
     if (turn(h1 + Math.PI) < turn(h1)) h1 += Math.PI; // bow out or bow in, whichever is less of a turn
-    this.docking = { l, L, t: 0, x0: p.x, z0: p.z, h0: p.heading, h1, d: Math.hypot(ds.x - p.x, ds.z - p.z) };
+    this.docking = { l, L, berth, t: 0, x0: p.x, z0: p.z, h0: p.heading, h1, d: Math.hypot(ds.x - p.x, ds.z - p.z) };
   }
   updateDocking(dt) {
-    const D = this.docking, p = this.player, ds = D.L.dockSide;
+    const D = this.docking, p = this.player, ds = D.berth.side;
     if (p.mode !== 'paddle' || p.teleporting) { this.docking = null; return; }
     D.t += dt;
     const dur = Math.max(0.6, Math.min(DOCK_TIME, 0.35 + D.d * 0.3)), u = Math.min(1, D.t / dur), k = u * u * (3 - 2 * u);
@@ -309,7 +323,7 @@ export class Outfitter {
     p.heading = D.h0 + Math.atan2(Math.sin(D.h1 - D.h0), Math.cos(D.h1 - D.h0)) * k;
     p.speed = 0; p.yawRate = 0;
     const st = p.canoe.state; st.power = 0.35 * (1 - k); st.stroke = (st.stroke + dt * 0.8) % 1;
-    if (u >= 1) { this.tieUp(D.l, D.L, false, 'deck'); this.docking = null; }
+    if (u >= 1) { this.tieUp(D.l, D.L, false, 'deck', D.berth); this.docking = null; }
   }
   // A season begun at a landing with a store, or a page reloaded in one (boot): once the store is built (its tile
   // streams in), the canoe is tied up at its dock and you stand at the door, or back where you were on the floor.
@@ -508,7 +522,7 @@ export class Outfitter {
     const L = this.near ? this.layout(this.near.ep) : null;
     // the dock's side within reach afloat: E ties up there (the shore's "Go ashore" steps aside for it); a landing
     // whose store is not built yet: E opens its counter from the water
-    this.dockAt = L && L.dockSide && L.dockDeck && Math.hypot(L.dockSide.x - p.x, L.dockSide.z - p.z) < DOCK_R ? this.near : null;
+    this.dockAt = L && L.dockSide && L.dockDeck && this.berths(L).some((b) => b.deck && Math.hypot(b.side.x - p.x, b.side.z - p.z) < DOCK_R) ? this.near : null;
     p.suppressLanding = !!this.dockAt || (!!this.near && !L) || !!this.docking;
     p.input.paused = this.open || this.shelfOpen || !!this.evac || veil || this.bunking || !!this.docking || (this.hud && this.hud.paper === 'journal');
     if (!p.packs) p.loadFactor = this.loadFactor; // the packs (packs.js) set it from the load once they are there
