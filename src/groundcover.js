@@ -100,7 +100,7 @@ const body = /* glsl */ `
   float wcode = wetCover(rel + (h2.xy - 0.5) * 9.0), wk = floor(wcode / 64.0 + 0.01), wd = (wcode - 64.0 * wk) / 63.0;
   int wi = int(wk);
   float dens = cv.r * heart;
-  if (wi > 0) dens = max(dens, wd * smoothstep(1.2, 3.5, shoreAt(rel)) * (wi == 1 ? 0.8 + 0.2 * heart : wi == 2 ? heart : 0.55 + 0.45 * heart));
+  if (wi > 0) dens = (wd * smoothstep(1.2, 3.5, shoreAt(rel)) * (wi == 1 ? 0.8 + 0.2 * heart : wi == 2 ? heart : 0.55 + 0.45 * heart));
   float present = step(h.x, dens * 1.25) * edge;  // a card clump is fuller than the old three blades
   // fireweed (a burn of one to six years, burns.js): that share of the clumps stand twice as tall and flower pink in high
   // summer (uFlower is the fireweed's season, season.js)
@@ -110,6 +110,7 @@ const body = /* glsl */ `
   ${WET_SIZE.map((v, k) => `const vec2 WS${k} = vec2(${v[0].toFixed(2)}, ${v[1].toFixed(2)});`).join(' ')}
   vec2 ws = wi == 1 ? WS1 * (0.85 + 0.35 * h2.y) : wi == 2 ? WS2 : wi == 3 ? WS3 * (0.8 + 0.4 * h3.x) : WS0;
   vec3 p = position * sc * vec3(ws.x, ws.y, ws.x);
+  if (wi == 3) p.xz *= 1.0 + 1.6 * max(position.y, 0.0) / ${HGT.toFixed(2)}; // a fern's fronds arch out from the crown
   p.xz = mat2(cos(yaw), -sin(yaw), sin(yaw), cos(yaw)) * p.xz;
   // the wind (wind.js SWAY, as the trees and the reeds have it): the clump bends downwind from its root, deeper as
   // a gust rolls over, and the blades shiver about that, the tips furthest and a little lower; a calm leaves it be
@@ -136,7 +137,7 @@ const body = /* glsl */ `
   base = mix(base, base * vec3(0.85, 1.05, 0.8), fw); // the stalks a darker, cooler green than the grass
   vColor.rgb *= base;
   vGrassUv = wi == 3 ? ${slotRect('frond')}.xy + (uv - ${slotRect('grass')}.xy) * ${slotRect('frond')}.zw / ${slotRect('grass')}.zw : uv;
-  if (wi == 3) vColor.rgb *= vec3(0.86, 1.06, 0.74); // a fern's green over the swamp's floor
+  vColor.rgb *= wi == 1 ? vec3(0.86, 1.0, 0.8) * (0.9 + 0.2 * h3.y) : wi == 2 ? vec3(0.64, 0.68, 0.46) * (0.85 + 0.3 * h3.y) : wi == 3 ? vec3(0.62, 0.84, 0.5) * (0.85 + 0.3 * h3.y) : vec3(1.0); // the sedge greener, the bog's darker, a fern's deeper green
   vGrassCotton = wi == 2 ? step(h3.x, 0.35) * uFlower : 0.0; // cottongrass in the bog through the summer
   vGrassH = (position.y - ${ROOT.toFixed(2)}) / ${(HGT - ROOT).toFixed(2)};
   vGrassDist = distance((modelMatrix * vec4(transformed, 1.0)).xyz, cameraPosition);

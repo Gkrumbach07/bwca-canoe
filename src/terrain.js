@@ -57,7 +57,7 @@ export const groundUniforms = {
   // moss, last year's leaves and fern; the bog's sphagnum by the hummocks: the tops paler and redder (S. fuscum, S.
   // magellanicum), the hollows a wet green (multipliers on the sphagnum's colour)
   uSwampFloor: { value: [v3(SWAMP_FLOOR.moss), v3(SWAMP_FLOOR.litter), v3(SWAMP_FLOOR.fern)] },
-  uHummock: { value: [new THREE.Vector3(1.12, 0.92, 0.86), new THREE.Vector3(0.78, 0.9, 0.7)] },
+  uHummock: { value: [new THREE.Vector3(1.12, 0.92, 0.86), new THREE.Vector3(0.84, 0.97, 0.8)] },
   uMeadowSeason: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
 };
 // The water standing on wet ground mirrors the sky, wet weather or not (weather.js wetSheen is only the rain's film):
@@ -316,15 +316,15 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     // (d2 land: the moss goes to the bog's sphagnum, ochre with rust patches a few metres across, where the survey says bog)
     vec3 mossC = groundShaded(1, uGroundLit[1], s);
     if (groundSphagnum > 0.004) {
-      float rust = smoothstep(0.6, 0.74, lookFbm(p / 2.4 + vec2(2.3, -6.1), 61u, 2) + 0.12 * n1 * fb + 0.12 * groundHummock);
-      vec3 sph = mix(mix(uSphag[0], uSphag[1], rust * 0.6), uSphag[2], s * 0.8);
+      float rust = smoothstep(0.66, 0.78, lookFbm(p / 1.6 + vec2(2.3, -6.1), 61u, 2) + 0.1 * n1 * fb) * smoothstep(0.05, 0.45, groundHummock);
+      vec3 sph = mix(mix(uSphag[0], uSphag[1], rust * 0.45), uSphag[2], s * 0.8);
       // (the density round: the hummocks' tops paler and redder, the hollows a wet green)
       sph *= mix(vec3(1.0), uHummock[0], max(groundHummock, 0.0)) * mix(vec3(1.0), uHummock[1], max(-groundHummock, 0.0));
       mossC = mix(mossC, sph, groundSphagnum);
     }
     // (the density round: a swamp's floor, dark moss with last year's leaves in drifts and the fern's green through it)
     if (groundSwamp > 0.004) {
-      float lit = smoothstep(0.5, 0.68, lookFbm(p / 2.6 + vec2(-3.1, 4.4), 65u, 2) + 0.15 * n2 * fb);
+      float lit = 0.55 * smoothstep(0.58, 0.72, lookFbm(p / 1.8 + vec2(-3.1, 4.4), 65u, 2) + 0.12 * n2 * fb);
       float fern = smoothstep(0.55, 0.7, lookFbm(p / 1.7 + vec2(6.2, 1.3), 66u, 2));
       vec3 sw = mix(mix(uSwampFloor[0], uSwampFloor[1], lit), uSwampFloor[2], fern * (1.0 - lit));
       mossC = mix(mossC, mix(sw, uGroundShade[1], s * 0.6), groundSwamp);

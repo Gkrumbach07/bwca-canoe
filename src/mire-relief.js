@@ -25,19 +25,19 @@ export const STYLE = { lawn: 0, tussock: 1, mounds: 2 };
 // the NWI class (land.js WCLASS index) and, where no class is mapped, by the ground kind (land.js KIND)
 const BY_CLASS = {
   1: [0.3, STYLE.mounds, 1],      // FO1 black ash swamp
-  2: [0.22, STYLE.lawn, 0.3],     // FO2 tamarack swamp
-  3: [0.26, STYLE.lawn, 0],       // FO4 black spruce bog
+  2: [0.26, STYLE.lawn, 0.3],     // FO2 tamarack swamp
+  3: [0.3, STYLE.lawn, 0],        // FO4 black spruce bog
   4: [0.2, STYLE.lawn, 0.5],      // FO swamp forest
   5: [0.12, STYLE.tussock, 1],    // SS1 alder thicket
-  6: [0.24, STYLE.lawn, 0],       // SS2 stunted tamarack
-  7: [0.3, STYLE.lawn, 0],        // SS3 leatherleaf bog
-  8: [0.26, STYLE.lawn, 0],       // SS4 stunted black spruce
+  6: [0.3, STYLE.lawn, 0],       // SS2 stunted tamarack
+  7: [0.36, STYLE.lawn, 0],       // SS3 leatherleaf bog
+  8: [0.3, STYLE.lawn, 0],       // SS4 stunted black spruce
   9: [0.12, STYLE.tussock, 0.8],  // SS shrub swamp
   10: [0.05, STYLE.tussock, 0],   // EM1 sedge and cattail: water and muck
   11: [0.03, STYLE.tussock, 0],   // EM2 wild rice
 };
 const BY_KIND = {
-  [KIND.openBog]: [0.28, STYLE.lawn, 0], [KIND.coniferBog]: [0.24, STYLE.lawn, 0], [KIND.shrubSwamp]: [0.12, STYLE.tussock, 1],
+  [KIND.openBog]: [0.34, STYLE.lawn, 0], [KIND.coniferBog]: [0.28, STYLE.lawn, 0], [KIND.shrubSwamp]: [0.12, STYLE.tussock, 1],
   [KIND.marsh]: [0.05, STYLE.tussock, 0], [KIND.wetMeadow]: [0.15, STYLE.tussock, 0], [KIND.hardwoodSwamp]: [0.3, STYLE.mounds, 1],
   [KIND.water]: [0.04, STYLE.tussock, 0],
 };
@@ -49,7 +49,7 @@ export const FADE = { shore: [1.5, 9], clear: [0.4, 4], brook: [0, 3] };
 const FLOOR = -0.55, FLOOR_K = 0.3;
 // the water's line in the shape's units, by how much stands (land.js standingWater, 0 .. 1); a saturated bog's
 // (no standing water) at SATURATED: pools only in the deepest hollows, a few in a hectare
-const POOL = { dry: -0.72, wet: 0.45, saturated: -0.8, edge: 0.12 };
+const POOL = { dry: -0.72, wet: 0.15, saturated: -0.8, edge: 0.12 };
 
 // ---- the cut-outs: the trails, the campsites and the yards (props.js exclusionsFor), binned --------------------------
 let ex = null, bins = null;
@@ -215,8 +215,8 @@ export function mirePoolAt(grid, x, z) {
 // cover map's spare splat byte (terrain-build.js buildTerrainChunk). Off the trails, the sites and the yards with their
 // pad (as placement.js coverField keeps the grass off them), and off the waterline.
 export const COVER = { sedge: 1, bog: 2, fern: 3 };
-const COVER_OF_CLASS = { 1: [3, 1], 2: [2, 0.35], 3: [2, 0.3], 4: [3, 0.6], 5: [3, 0.65], 6: [2, 0.45], 7: [2, 0.4], 8: [2, 0.4], 9: [3, 0.55], 10: [1, 1], 11: [1, 0.75] };
-const COVER_OF_KIND = { [KIND.openBog]: [2, 0.4], [KIND.coniferBog]: [2, 0.3], [KIND.shrubSwamp]: [3, 0.6], [KIND.marsh]: [1, 1], [KIND.wetMeadow]: [1, 0.95], [KIND.hardwoodSwamp]: [3, 0.9], [KIND.water]: [1, 0.6] };
+const COVER_OF_CLASS = { 1: [3, 0.8], 2: [2, 0.55], 3: [2, 0.45], 4: [3, 0.6], 5: [3, 0.65], 6: [2, 0.6], 7: [2, 0.6], 8: [2, 0.55], 9: [3, 0.55], 10: [1, 1], 11: [1, 0.75] };
+const COVER_OF_KIND = { [KIND.openBog]: [2, 0.6], [KIND.coniferBog]: [2, 0.45], [KIND.shrubSwamp]: [3, 0.6], [KIND.marsh]: [1, 1], [KIND.wetMeadow]: [1, 0.95], [KIND.hardwoodSwamp]: [3, 0.75], [KIND.water]: [1, 0.6] };
 export function coverByte(grid, i, j) {
   const L = landOf(grid);
   if (!L || !L.ground || grid.sdCell(i, j) < 3) return 0;
