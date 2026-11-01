@@ -286,7 +286,9 @@ export class Thicket {
     if (Math.abs(d - this.doy) >= 4) { this.doy = d; this.reset(); }
   }
   // every chunk worked out again (the date moved, or a test asks)
-  reset() { this.chunks.clear(); this.want.length = 0; this.dirty = true; }
+  // (and planned again from where the camera stands: without it a camera that stays in its chunk, asleep at camp, keeps
+  // an empty ring)
+  reset() { this.chunks.clear(); this.want.length = 0; this.at = null; this.dirty = true; }
   // the detail ground moved under rect [x0, z0, x1, z1] (detail.js): the chunks there are seated again
   touched(rect) {
     for (const [key, c] of this.chunks) {
