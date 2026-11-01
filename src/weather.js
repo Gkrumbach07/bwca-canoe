@@ -290,6 +290,15 @@ export class Weather {
     if (wind) wind.weather = this;
   }
 
+  // co-op phase 3 (coop-sky.js): a guest's sky from the host's seed. The forecast is built afresh from it, and the look
+  // and the wetness are worked out again at the next frame as after a jump of the clock
+  setSeed(seed) {
+    if (!Number.isInteger(seed) || seed === this.seed) return false;
+    this.seed = seed; this._years.clear(); this._rng = mulberry32(seed * 977 + 1);
+    this._lastAbs = NaN; this.look.snap = true;
+    return true;
+  }
+
   // ---- the forecast
   _year(year) {
     let y = this._years.get(year);

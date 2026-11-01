@@ -4,7 +4,7 @@ import { buildHullGeometry, buildLidGeometry, buildPackGeometry, PACK_AT, PACK2_
 import { buildFigure, LT, LS } from './figure.js';
 import { paddleMesher } from './gear.js';
 import { buildHullWater, buildBilge } from './hullwater.js';
-import { FLOAT_OFFSET, ROOT_UP, V, sat, smooth, lerp, damp, ease, bodyQ, frameQ, spine, updateIdle as idleStep, resetIdle, fromRig as fromRigOf, placeFigure, placePaddle as placePaddleOf, makeStroke, makeGait, makeBody } from './poses.js'; // p2 A: the poses, lifted
+import { FLOAT_OFFSET, ROOT_UP, V, sat, smooth, lerp, damp, ease, bodyQ, frameQ, spine, updateIdle as idleStep, resetIdle, fromRig as fromRigOf, placeFigure, placePaddle as placePaddleOf, makeStroke, makeGait, makeBody, swimPose } from './poses.js'; // p2 A: the poses, lifted
 
 // The canoe rig: the hull (hull.js), its water line (hullwater.js), the paddler (figure.js, one skinned
 // figure), the paddle (gear.js) and the Duluth packs. player.js writes `state` (the mode, the stroke, the walk) and
@@ -193,49 +193,7 @@ export function buildCanoeRig({ water = null } = {}) {
     const loc = rig.worldToLocal(swimmer.clone());
     placePaddler(loc.x, loc.y, loc.z, state.swimHeading - rig.rotation.y);
     updateIdle(dt, state.walkSpeed < 0.3);
-    const m = state.walkSpeed, ph = state.walk;
-    const bob = 0.025 * Math.sin(ph * 2);
-    // the body pitches forward as it swims; the head stays up
-    const lean = lerp(0.18, 1.05, m);
-    const pelvis = bodyQ(0, lean * 0.95, 0), chest = bodyQ(0, lean, 0.05 * Math.sin(ph));
-    const head = bodyQ(idle.yaw * (1 - m), lean - lerp(0.25, 1.15, m), 0);
-    // the neck just above the surface (the swimmer's origin is 0.15 under it)
-    const neckH = 0.15 + 0.03 + bob;
-    const spineLen = 1.495 - 0.975;
-    const root = V(-Math.sin(lean) * spineLen, neckH - Math.cos(lean) * spineLen, 0);
-    body(root, pelvis, chest, head);
-    // arms: sculling out to the sides when treading, a breaststroke sweep when swimming
-    const cq = J.chest.q;
-    const brA = ph % (Math.PI * 2) / (Math.PI * 2);
-    for (const [k, sg] of [['L', -1], ['R', 1]]) {
-      const sh = J['arm' + k].p;
-      // treading: hands sweep in and out at shoulder depth
-      const sc = Math.sin(ph * 2 + (k === 'L' ? 0 : 0.5));
-      const tread = V(0.32 + 0.05 * sc, -0.12, sg * (0.42 + 0.12 * sc));
-      // breaststroke: out-sweep, in-sweep under the chest, then shoot forward
-      let bs;
-      if (brA < 0.35) { const u = brA / 0.35; bs = V(0.55 - 0.15 * u, -0.05, sg * (0.12 + 0.38 * ease(u))); }
-      else if (brA < 0.6) { const u = (brA - 0.35) / 0.25; bs = V(0.4 - 0.25 * u, -0.2 + 0.1 * u, sg * (0.5 - 0.38 * ease(u))); }
-      else { const u = (brA - 0.6) / 0.4; bs = V(0.15 + 0.42 * ease(u), -0.1 + 0.05 * u, sg * 0.12); }
-      const local = tread.lerp(bs, m);
-      // in the chest's frame for the swimmer
-      const target = sh.clone().add(local.applyQuaternion(_q2.copy(cq)));
-      const pole = sh.clone().add(V(-0.2, -0.3, sg * 0.5).applyQuaternion(cq));
-      P.arm(k, target, V(1, 0, 0).applyQuaternion(cq), pole, V(0, -1, 0));
-    }
-    // legs: a slow bicycle treading, a frog kick swimming
-    for (const [k, sg] of [['L', -1], ['R', 1]]) {
-      const hip = J['thigh' + k].p;
-      const pq = J.root.q;
-      const cyc = ph * 1.3 + (k === 'L' ? 0 : Math.PI);
-      const tread = V(0.18 + 0.12 * Math.sin(cyc), -0.68 + 0.12 * Math.cos(cyc), sg * 0.16);
-      // the frog kick, in the pelvis's frame: the heels drawn up with the knees out, then driven back together
-      const kick = brA < 0.5 ? V(-0.12 * ease(brA / 0.5), -0.78 + 0.3 * ease(brA / 0.5), sg * (0.12 + 0.2 * ease(brA / 0.5))) : V(-0.12 + 0.12 * ease((brA - 0.5) / 0.5), -0.48 - 0.32 * ease((brA - 0.5) / 0.5), sg * (0.32 - 0.2 * ease((brA - 0.5) / 0.5)));
-      const ankle = hip.clone().add(tread.lerp(kick, m).applyQuaternion(_q2.copy(pq)));
-      const pole = hip.clone().add(V(0.6, -0.2, sg * 0.3).applyQuaternion(pq));
-      const fwd = V(0.3, -1, 0).applyQuaternion(pq);
-      P.leg(k, ankle, pole, frameQ(fwd, V(1, 0, 0).applyQuaternion(pq)));
-    }
+    swimPose(me, state.walkSpeed, state.walk); // (poses.js: the body, shared with a friend swimming in actors.js)
   }
 
   // ---------------------------------------------------------------------------------------------------------

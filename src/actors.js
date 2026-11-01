@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildFigure } from './figure.js';
 import { buildHullGeometry, buildLidGeometry, buildPackGeometry, buildFarHullGeometry, HULL_PALETTES, PACK_AT, PACK2_AT, PACKS, SEATS, floorAt } from './hull.js';
 import { paddleMesher } from './gear.js';
-import { FLOAT_OFFSET, makeBody, makeGait, makeStroke, newState, placeFigure, wrapPi } from './poses.js';
+import { FLOAT_OFFSET, makeBody, makeGait, makeStroke, newState, placeFigure, wrapPi, swimPose, sitPose, updateIdle } from './poses.js';
 import { mulberry32 } from './rng.js';
 import { resample } from './props.js';
 
@@ -248,7 +248,7 @@ class Person {
     this.layer = layer; this.key = key || `actor:${layer.seq++}`; this.look = look || tripperLook(layer.seq * 7 + 3); this.name = name;
     this.x = 0; this.y = 0; this.z = 0; this.heading = 0; this.v = 0;
     this.state = newState({ mode: 'walk' });
-    this.mode = 'stand';     // stand | walk | carry | crew
+    this.mode = 'stand';     // stand | walk | carry | crew | swim (co-op phase 3: a friend in the water, driven)
     this.mover = null; this.boat = null; this.seat = null;
     this.hullColour = null; this.pack = false;
     this.bind = null;        // the figure while drawn: { body, pb, gait, stroke, root, frame, s, kind, paddle, packMesh }
@@ -278,11 +278,14 @@ class Person {
     this.y = this.layer.ground(this.x, this.z);
   }
   // p2 C: driven from outside (the parties' plans, party-moves.js), a place a frame: { x, z, heading, v (m/s as seen),
-  // mode: 'stand' | 'walk' | 'carry', pack, hull (the carried canoe's colour) }; the heading eases to the one given
-  drive({ x, z, heading = this.heading, v = 0, mode = 'stand', pack = false, hull = 'aluminium', snap = false }) {
-    this.leaveBoat(); this.mover = null; this.ext = true;
+  // mode: 'stand' | 'walk' | 'carry' | 'swim', pack, hull (the carried canoe's colour) }; the heading eases to the one given
+  // co-op phase 3: anim, what the body is doing beyond the stride (coop-anim.js): { air, airT, vy, y (the frame's height
+  // in the air), land, crouch, mk (the move: 'wade'), sit (a seat's top), fz (the rod's hands, poses.js rodArms) } or null
+  drive({ x, z, heading = this.heading, v = 0, mode = 'stand', pack = false, hull = 'aluminium', snap = false, anim = null }) {
+    this.leaveBoat(); this.mover = null; this.ext = true; this.anim = anim;
     if (snap) this.heading = heading;
-    this.mode = mode === 'carry' ? 'carry' : mode === 'walk' ? 'walk' : 'stand';
+    this.mode = mode === 'carry' ? 'carry' : mode === 'walk' ? 'walk' : mode === 'swim' ? 'swim' : 'stand';
+    if (this.mode === 'swim') pack = false;
     this.hullColour = this.mode === 'carry' ? (HULL_PALETTES[hull] ? hull : 'aluminium') : null;
     this.pack = !!pack; this.x = x; this.z = z; this.want = heading; this.vExt = v;
     return this;
@@ -305,7 +308,8 @@ class Person {
       this.heading = wrapPi(this.heading + clamp(e, -rate * Math.max(dt, 0), rate * Math.max(dt, 0)));
       if (!(dt > 0)) this.heading = this.want ?? this.heading;
       // (the ground under the feet only while drawn or near: a hundred people far off cost nothing a frame)
-      if (this.bind || this.hull || this.dist < 80 || !Number.isFinite(this.y)) this.y = this.layer.ground(this.x, this.z);
+      // (a swimmer's y is the water's level, not the bed's)
+      if (this.bind || this.hull || this.dist < 80 || !Number.isFinite(this.y)) this.y = this.mode === 'swim' ? this.layer.levelAt(this.x, this.z) : this.layer.ground(this.x, this.z);
       return;
     }
     if (this.mode === 'crew' || !this.mover) { this.v = 0; return; }
@@ -329,19 +333,51 @@ class Person {
     }
     const st = this.state;
     const raw = this.v;
+    if (this.mode === 'swim') { this.wasSwim = true; this.poseSwim(dt, raw); return; }
+    if (this.wasSwim) { this.wasSwim = false; B.gait.heal(); } // (out of the water: the feet planted afresh)
+    const an = this.mode === 'carry' ? null : this.anim; // (phase 3: a friend's jump, crouch, seat, rod)
+    if (an && Number.isFinite(an.sit)) { this.wasSit = true; this.poseSit(dt, an.sit); return; }
+    if (this.wasSit) { this.wasSit = false; B.gait.heal(); }
     st.speed += (raw - st.speed) * ease(12, dt);
     const striding = raw > 0.12;
     st.walkSpeed += ((striding ? 1 : 0) - st.walkSpeed) * ease(8, dt);
     st.walk += raw * dt * 4.2;
     st.moveFwd += ((striding ? 1 : 0) - st.moveFwd) * ease(10, dt); st.moveLat += (0 - st.moveLat) * ease(10, dt);
-    st.air = false; st.land = Math.max(0, st.land - dt * 3); st.stagger = Math.max(0, st.stagger - dt * 1.6);
+    const air = !!(an && an.air);
+    st.air = air; st.airT = air ? an.airT || 0 : 0; st.vy = air ? an.vy || 0 : 0;
+    st.land = an && Number.isFinite(an.land) ? an.land : Math.max(0, st.land - dt * 3); st.stagger = Math.max(0, st.stagger - dt * 1.6);
+    st.crouch = an ? an.crouch || 0 : 0;
     st.hustle = false; st.mode = this.mode === 'carry' ? 'carry' : 'walk';
-    const s = B.s, F = B.frame, R = B.root;
-    F.position.set(this.x / s, (this.y + 0.1) / s, this.z / s); F.rotation.set(0, this.heading, 0);
-    if (F !== R) { R.position.set(this.x, this.y + 0.1, this.z); R.rotation.set(0, this.heading, 0); R.scale.setScalar(s); }
+    const s = B.s, F = B.frame, R = B.root, yb = (air && Number.isFinite(an.y) ? an.y : this.y) + 0.1;
+    F.position.set(this.x / s, yb / s, this.z / s); F.rotation.set(0, this.heading, 0);
+    if (F !== R) { R.position.set(this.x, yb, this.z); R.rotation.set(0, this.heading, 0); R.scale.setScalar(s); }
     placeFigure(B.pb, 0, 0, 0);
     if (this.mode === 'carry' && this.hull) B.gait.carry(dt, this.hull.pivot);
-    else B.gait.walk(dt, null, null);
+    else B.gait.walk(dt, an ? an.mk || null : null, an ? an.fz || null : null);
+    if (air) this.airN = (this.airN || 0) + 1; // (the rig: frames posed in the air)
+  }
+  // co-op phase 3: on a seat (poses.js sitPose), its top at world height top
+  poseSit(dt, top) {
+    const B = this.bind, s = B.s, F = B.frame, R = B.root;
+    F.position.set(this.x / s, (this.y + 0.1) / s, this.z / s); F.rotation.set(0, this.heading, 0);
+    if (F !== R) { R.position.set(this.x, this.y + 0.1, this.z); R.rotation.set(0, this.heading, 0); R.scale.setScalar(s); }
+    sitPose(B.pb, B.gait, dt, (top + 0.1) / s); // (+0.1: this frame stands that much over the ground, as the walk's; / s: a figure at its own size is posed in a world scaled to it)
+    this.sitN = (this.sitN || 0) + 1;
+  }
+  // co-op phase 3: in the water (poses.js swimPose, the player's own swim): the figure's origin 0.15 under the surface, a
+  // breaststroke while moving, treading water while still; the cycle as player.js runs it
+  poseSwim(dt, raw) {
+    const B = this.bind, st = this.state, s = B.s, F = B.frame, R = B.root;
+    st.speed = raw; st.mode = 'swim';
+    st.walkSpeed += ((raw > 0.05 ? 1 : 0) - st.walkSpeed) * (1 - Math.exp(-dt * 6));
+    st.walk += (0.6 + raw) * dt * 3.0;
+    const y = this.y - 0.15 + 0.03 * Math.sin(st.walk * 0.9);
+    F.position.set(this.x / s, y / s, this.z / s); F.rotation.set(0, this.heading, 0);
+    if (F !== R) { R.position.set(this.x, y, this.z); R.rotation.set(0, this.heading, 0); R.scale.setScalar(s); }
+    placeFigure(B.pb, 0, 0, 0);
+    updateIdle(B.pb.idle, dt, st.walkSpeed < 0.3);
+    swimPose(B.pb, st.walkSpeed, st.walk);
+    this.swimN = (this.swimN || 0) + 1; // (the rig: frames posed swimming)
   }
 }
 
@@ -429,6 +465,8 @@ class Boat {
     const R = this.root;
     R.position.set(this.x, this.y, this.z);
     R.rotation.set(0, this.heading, 0); R.rotateZ(-this.pitch); R.rotateX(this.roll);
+    // co-op phase 3: a friend's capsized canoe, upside down and low in the water beside them (canoe.js poseSwim's hull)
+    if (this.over) { R.position.y -= FLOAT_OFFSET + 0.25; R.rotateX(Math.PI); }
     R.updateMatrix();
   }
   // the crew's pose (each drawn one): kneeling at their seats, the stroke from poses.js on the boat's phase, the stern
@@ -440,7 +478,7 @@ class Boat {
       const st = p.state, stern = p.seat === 'stern', bow = p.seat === 'bow';
       // (p2 C: a third in the middle paddles on the stern's side, a beat behind)
       st.mode = 'paddle'; st.stroke = bow || stern ? S.phase : (S.phase + 0.92) % 1; st.side = bow ? -S.side : S.side; st.power = S.power; st.drive = this.v > 0.08 ? 1 : 0;
-      st.turn = stern ? clamp(this.yawRate * 3, -1, 1) : 0; st.hustle = false; st.fishing = null; st.speed = this.v;
+      st.turn = stern ? clamp(this.yawRate * 3, -1, 1) : 0; st.hustle = false; st.fishing = (p.anim && p.anim.fz) || null; st.speed = this.v; // (co-op phase 3: a friend's rod up afloat)
       const f = B.pb.paddler; f.scale.setScalar(1);
       placeFigure(B.pb, seatX(p.seat), 0, 0);
       B.stroke.pose(dt, B.paddle);

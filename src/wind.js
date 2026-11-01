@@ -76,7 +76,8 @@ export class Wind {
     this.sway = { x: 0, z: 0, t: 0 }; // the gust field's drift and the sway clock (see SWAY)
     this.weather = null;       // weather.js attaches itself here; its windTarget bends the day's wind
     this.puffRng = mulberry32(seed * 7 + 3); // (its own, so the days' rolls are as they were)
-    this.puff = 0; this.puffT = 20; this.puffEv = null; this.puffVeer = 0;
+    this.puff = 0; this.puffT = 20; this.puffEv = null; this.puffVeer = 0; this.puffN = 0;
+    this.follow = false;       // co-op phase 3: a guest's wind follows the host's (setState): no day of its own, no puffs of its own
   }
   // the wind with the puff in it (m/s) and the way it blows now (the puff veers a little)
   get gustSpeed() { return this.speed * (1 + this.puff); }
@@ -95,7 +96,7 @@ export class Wind {
 
   update(dt, hours) {
     this.t += dt;
-    if (this.lastHours >= 0 && hours < this.lastHours - 12) this.rollDay(); // the clock wrapped past midnight
+    if (this.lastHours >= 0 && hours < this.lastHours - 12 && !this.follow) this.rollDay(); // the clock wrapped past midnight
     const step = this.lastHours >= 0 ? ((hours - this.lastHours + 36) % 24) - 12 : 0, dh = Math.max(0, step); // game hours this frame
     if (this.lastHours < 0 || Math.abs(step) > 0.2) this.snapN = 3; // (the cons join: a load, a night, a set clock; the weather's bearing is a frame behind a jump)
     this.lastHours = hours;
@@ -109,7 +110,8 @@ export class Wind {
     if (wx) base = Math.max(wx.min, base * wx.mul);
     const g = wx ? wx.gust : 1, stormy = smoothstep(1.2, 2.2, g);
     // a storm's gusts come quicker too (the second octave's phase runs faster), and its lulls never drop it below half
-    this.gustPhase += dt * (0.6 + 0.5 * stormy);
+    this.gpRate = 0.6 + 0.5 * stormy;
+    this.gustPhase += dt * this.gpRate;
     this.gust = ((noise2(this.t * 0.07, 3.1, 5) - 0.5) * 0.5 + (noise2(this.gustPhase, 7.7, 8) - 0.5) * 0.25) * g;
     if (this.gust < -0.45) this.gust = -0.45;
     const target = this.override ?? Math.min(22, Math.max(0, base * (1 + this.gust)));
@@ -137,9 +139,10 @@ export class Wind {
     if (!e) {
       const k = smoothstep(P.calm, P.windy, v), every = (P.every[0] + (P.every[1] - P.every[0]) * k) / Math.max(0.5, g);
       this.puffT -= dt;
-      if (this.puffT <= 0) {
+      if (this.puffT <= 0 && this.follow) this.puffT = 1; // (a guest's puffs are the host's: setState)
+      else if (this.puffT <= 0) {
         const r = this.puffRng;
-        this.puffEv = { t: 0, hold: P.hold[0] + r() * (P.hold[1] - P.hold[0]), peak: Math.min(1, (P.peak[0] + r() * (P.peak[1] - P.peak[0])) * (0.8 + 0.2 * g)), veer: (r() * 2 - 1) * P.veer };
+        this.puffEv = { n: ++this.puffN, t: 0, hold: P.hold[0] + r() * (P.hold[1] - P.hold[0]), peak: Math.min(1, (P.peak[0] + r() * (P.peak[1] - P.peak[0])) * (0.8 + 0.2 * g)), veer: (r() * 2 - 1) * P.veer };
         this.puffT = every * (0.4 + 1.2 * r());
       }
       this.puff = 0; this.puffVeer = 0;
@@ -165,6 +168,38 @@ export class Wind {
     SWAY.uSwayWind.value.set(d.x, d.z, load, v);
     SWAY.uSwayGust.value.set(s.x, s.z, s.t, clamp(1 + 1.6 * this.gust + 1.2 * this.puff, 0.4, 2.1)); // (a puff bends them harder)
   }
+
+  // Co-op phase 3 (coop-sky.js): the host's live wind, sent once a second, and a guest's set from it. The gusts are a
+  // function of t and gustPhase, so with those the guest's own update makes the host's gusts between messages; the
+  // smoothed speed and the bearing are pulled halfway on each message (a jump of more than SNAP is taken at once), and a
+  // puff is the host's, its own clock moved on by the message's time on the way. lag: seconds since the host sent it.
+  state() {
+    const e = this.puffEv;
+    return { t: +this.t.toFixed(3), gp: +this.gustPhase.toFixed(4), sp: +this.speed.toFixed(3), fr: +this.from.toFixed(2), ov: this.override,
+      pe: e ? { n: e.n, t: +e.t.toFixed(3), hold: +e.hold.toFixed(3), peak: +e.peak.toFixed(4), veer: +e.veer.toFixed(2) } : null };
+  }
+  setState(s, lag = 0) {
+    if (!s || !Number.isFinite(s.t) || !Number.isFinite(s.sp) || !Number.isFinite(s.fr)) return false;
+    const SNAP = { sp: 2, fr: 25 };
+    this.follow = true;
+    const rate = this.gpRate || 0.6;
+    this.t = s.t + lag;
+    if (Number.isFinite(s.gp)) this.gustPhase = s.gp + lag * rate;
+    this.override = Number.isFinite(s.ov) ? s.ov : null;
+    const dsp = s.sp - this.speed, dfr = ((s.fr - this.from + 540) % 360) - 180;
+    if (Math.abs(dsp) > SNAP.sp) this.speed = s.sp; else this.speed += dsp * 0.5;
+    if (Math.abs(dfr) > SNAP.fr) this.from = s.fr; else this.from = (this.from + dfr * 0.5 + 360) % 360;
+    const e = s.pe;
+    if (e && Number.isFinite(e.t)) {
+      if (!this.puffEv || this.puffEv.n !== e.n) this.puffEv = { n: e.n, t: e.t + lag, hold: e.hold, peak: e.peak, veer: e.veer };
+    } else if (this.puffEv && !e) {
+      // the host's is over: ours ends with it (it ran on the same clock, so it is all but over here too)
+      this.puffEv = null; this.puff = 0; this.puffVeer = 0;
+    }
+    return true;
+  }
+  // back to a wind of its own (the room left)
+  unfollow() { this.follow = false; this.puffT = 10; }
 
   // debug nudges from the keyboard
   nudgeSpeed(d) { this.override = clamp((this.override ?? this.speed) + d, 0, 16); }

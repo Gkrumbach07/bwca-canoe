@@ -765,3 +765,84 @@ export function newState(over = {}) {
     fishing: null, crouch: 0, held: null, carryBow: 0, ...over,
   };
 }
+
+// Sitting on a seat whose top is at world height top (as canoe.js poseSit, for a figure posed by its gait: co-op phase
+// 3, a friend sitting on a bench, a stump, the latrine): the hips on the seat, the feet a knee's reach ahead on the
+// ground, the hands on the knees, breathing. The figure is placed at the frame's origin.
+const _sw = V(), _sl = V();
+export function sitPose(me, gait, dt, top) {
+  const { P, J, rig, idle, ground } = me;
+  placeFigure(me, 0, 0, 0);
+  updateIdle(idle, dt, true);
+  const gy = ground(rig.position.x, rig.position.z), seat = Number.isFinite(top) ? top : gy + 0.45;
+  const br = Math.sin(idle.breath), hipY = seat + 0.1 - rig.position.y;
+  const pelvis = bodyQ(0, -0.05, 0), chest = bodyQ(idle.yaw * 0.15, 0.22 + 0.012 * br, 0), head = bodyQ(idle.yaw * 0.85, 0.02 - idle.pitch, 0);
+  spine(P, V(-0.06, hipY + ROOT_UP, 0), pelvis, chest, head, { shrugL: 0.012 * br, shrugR: 0.012 * br });
+  const h = rig.rotation.y;
+  const above = hipY + rig.position.y - gy, reach = (LT + LS) * 0.93;
+  const ahead = Math.min(0.45, Math.max(0.22, Math.sqrt(Math.max(0.04, reach * reach - above * above))));
+  for (const [k, sg] of [['L', -1], ['R', 1]]) {
+    const p = gait.toWorld(V(ahead, 0, sg * 0.16), _sw); p.y = ground(p.x, p.z);
+    // the foot set there (canoe.js footTo)
+    const yawW = h + sg * -0.12;
+    gait.ankleAt(p, yawW, 0, gait.ankles[k]);
+    const a = gait.toLocal(gait.ankles[k], _sl), yl = yawW - h;
+    gait.footFrameQ(yawW, 0, gait.fq[k]);
+    const hip = J['thigh' + k].p;
+    const pole = V((hip.x + a.x) / 2 + Math.cos(yl) * 0.6, (hip.y + a.y) / 2, (hip.z + a.z) / 2 - Math.sin(yl) * 0.6 + sg * 0.1);
+    P.leg(k, a.clone(), pole, gait.fq[k]);
+    const knee = V(ahead - 0.06, hipY + 0.02 + 0.1 * (0.45 - ahead), sg * 0.16);
+    const sh = J['arm' + k].p;
+    P.arm(k, knee.add(V(-0.05, 0.06, -sg * 0.02)), V(0, 0, -sg), V(sh.x - 0.25, sh.y - 0.3, sh.z + sg * 0.3), V(0, -1, 0));
+  }
+  gait.loco.init = false;
+}
+
+// In the water (lifted from canoe.js poseSwim; co-op phase 3: a friend swimming is drawn swimming, actors.js): treading
+// water when still (m 0), a breaststroke when moving (m 1); ph the swim's cycle phase (state.walk). The figure is placed
+// first with its origin 0.15 under the surface; the body pitches forward as it swims, the head stays up.
+const _qs = new THREE.Quaternion();
+export function swimPose(me, m, ph) {
+  const { P, J, idle } = me;
+  const bob = 0.025 * Math.sin(ph * 2);
+  const lean = lerp(0.18, 1.05, m);
+  const pelvis = bodyQ(0, lean * 0.95, 0), chest = bodyQ(0, lean, 0.05 * Math.sin(ph));
+  const head = bodyQ(idle.yaw * (1 - m), lean - lerp(0.25, 1.15, m), 0);
+  // the neck just above the surface (the swimmer's origin is 0.15 under it)
+  const neckH = 0.15 + 0.03 + bob;
+  const spineLen = 1.495 - 0.975;
+  const root = V(-Math.sin(lean) * spineLen, neckH - Math.cos(lean) * spineLen, 0);
+  spine(P, root, pelvis, chest, head);
+  // arms: sculling out to the sides when treading, a breaststroke sweep when swimming
+  const cq = J.chest.q;
+  const brA = ph % (Math.PI * 2) / (Math.PI * 2);
+  for (const [k, sg] of [['L', -1], ['R', 1]]) {
+    const sh = J['arm' + k].p;
+    // treading: hands sweep in and out at shoulder depth
+    const sc = Math.sin(ph * 2 + (k === 'L' ? 0 : 0.5));
+    const tread = V(0.32 + 0.05 * sc, -0.12, sg * (0.42 + 0.12 * sc));
+    // breaststroke: out-sweep, in-sweep under the chest, then shoot forward
+    let bs;
+    if (brA < 0.35) { const u = brA / 0.35; bs = V(0.55 - 0.15 * u, -0.05, sg * (0.12 + 0.38 * ease(u))); }
+    else if (brA < 0.6) { const u = (brA - 0.35) / 0.25; bs = V(0.4 - 0.25 * u, -0.2 + 0.1 * u, sg * (0.5 - 0.38 * ease(u))); }
+    else { const u = (brA - 0.6) / 0.4; bs = V(0.15 + 0.42 * ease(u), -0.1 + 0.05 * u, sg * 0.12); }
+    const local = tread.lerp(bs, m);
+    // in the chest's frame for the swimmer
+    const target = sh.clone().add(local.applyQuaternion(_qs.copy(cq)));
+    const pole = sh.clone().add(V(-0.2, -0.3, sg * 0.5).applyQuaternion(cq));
+    P.arm(k, target, V(1, 0, 0).applyQuaternion(cq), pole, V(0, -1, 0));
+  }
+  // legs: a slow bicycle treading, a frog kick swimming
+  for (const [k, sg] of [['L', -1], ['R', 1]]) {
+    const hip = J['thigh' + k].p;
+    const pq = J.root.q;
+    const cyc = ph * 1.3 + (k === 'L' ? 0 : Math.PI);
+    const tread = V(0.18 + 0.12 * Math.sin(cyc), -0.68 + 0.12 * Math.cos(cyc), sg * 0.16);
+    // the frog kick, in the pelvis's frame: the heels drawn up with the knees out, then driven back together
+    const kick = brA < 0.5 ? V(-0.12 * ease(brA / 0.5), -0.78 + 0.3 * ease(brA / 0.5), sg * (0.12 + 0.2 * ease(brA / 0.5))) : V(-0.12 + 0.12 * ease((brA - 0.5) / 0.5), -0.48 - 0.32 * ease((brA - 0.5) / 0.5), sg * (0.32 - 0.2 * ease((brA - 0.5) / 0.5)));
+    const ankle = hip.clone().add(tread.lerp(kick, m).applyQuaternion(_qs.copy(pq)));
+    const pole = hip.clone().add(V(0.6, -0.2, sg * 0.3).applyQuaternion(pq));
+    const fwd = V(0.3, -1, 0).applyQuaternion(pq);
+    P.leg(k, ankle, pole, frameQ(fwd, V(1, 0, 0).applyQuaternion(pq)));
+  }
+}

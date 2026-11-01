@@ -55,6 +55,8 @@ const MAX_PEERS = 3;
 const GLIDE_K = 6;            // 1/s: how fast a catch-up's correction dies away
 const GLIDE_MAX = 40;         // m: a step bigger than this is a teleport, taken at once
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // the code's letters (no I or O)
+const RETRY_FOR = 2 * 60 * 1000;   // ms: a dropped socket that had been in keeps trying this long (phase 3), then the choice
+const STAMP_EVERY = 30000;          // ms between the visitor profile's stamps while in a room (Rejoin, a host's code back)
 const ROOM_KEEP_MS = 10 * 60 * 1000; // the relay keeps a room this long after the last one leaves: a host's code is reused within it
 
 const r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
@@ -89,9 +91,11 @@ export function readVisitor() {
     seed: ok && Number.isInteger(v.seed) ? v.seed >>> 0 : (Math.random() * 2 ** 31) >>> 0,
     id: ok && typeof v.id === 'string' && /^[0-9a-f]{24}$/.test(v.id) ? v.id : newKey(), // phase 2: the host keeps a guest's things by it (coop-give.js)
     room: ok && v.room && codeOk(v.room.code) && typeof v.room.key === 'string' ? v.room : null,
+    // phase 3: the trip this browser last visited as a guest, for Rejoin on the title while the room lives
+    visit: ok && v.visit && codeOk(v.visit.code) && Number.isFinite(v.visit.at) ? { code: v.visit.code, host: clean(v.visit.host), at: v.visit.at } : null,
   };
 }
-export function writeVisitor(v) { try { kv.setItem(VISITOR_KEY, JSON.stringify({ name: clean(v.name), shirt: v.shirt, seed: v.seed, id: v.id, room: v.room || null })); } catch { /* full */ } }
+export function writeVisitor(v) { try { kv.setItem(VISITOR_KEY, JSON.stringify({ name: clean(v.name), shirt: v.shirt, seed: v.seed, id: v.id, room: v.room || null, visit: v.visit || null })); } catch { /* full */ } }
 // what a visitor looks like to the others: npcs.js's dress() from their seed, in the shirt they picked
 export function lookOf(l) {
   const shirt = l && Number.isInteger(l.s) ? SHIRTS[((l.s % SHIRTS.length) + SHIRTS.length) % SHIRTS.length] : SHIRTS[0];
@@ -104,7 +108,10 @@ class Relay {
   constructor({ url, code, role, key, name, look, on }) {
     Object.assign(this, { url, code, role, key, name, look, on });
     this.ws = null; this.state = 'idle'; this.tries = 0; this.rtt = null; this.minRtt = null; this.ended = false; this.pingT = null;
+    this.joined = false; this.downAt = null; // phase 3: in once (welcomed); when the socket went
   }
+  // welcomed (again): the next drop counts afresh
+  welcomed() { this.joined = true; this.downAt = null; this.tries = 0; }
   open() {
     const u = new URL(`${this.url}/room/${this.code}`);
     u.searchParams.set('role', this.role); u.searchParams.set('name', this.name); u.searchParams.set('look', JSON.stringify(this.look));
@@ -117,16 +124,27 @@ class Relay {
     ws.addEventListener('message', (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === 'pong') { const rtt = performance.now() - m.c; this.rtt = this.rtt == null ? rtt : this.rtt + (rtt - this.rtt) * 0.3; this.minRtt = this.minRtt == null ? rtt : Math.min(this.minRtt, rtt); return; }
-      if (m.t === 'error') this.ended = true; // refused: no retry (a wrong code, a full room, the host replaced)
+      // refused: no retry (a wrong code, a full room, the host replaced). Phase 3: a guest coming back after a drop is told
+      // 'no trip' while the relay has restarted and the host is not back yet, or 'full' while its old socket lingers:
+      // it keeps trying (the close below) until RETRY_FOR is up
+      if (m.t === 'error') {
+        if (this.joined && this.role === 'guest' && (m.why === 'no trip' || m.why === 'full')) { this.on({ t: 'down', why: m.why }); return; }
+        this.ended = true;
+      }
       this.on(m, performance.now());
     });
     ws.addEventListener('close', () => {
       if (this.ws !== ws) return;
       this.state = 'closed'; clearTimeout(this.pingT);
       if (this.ended) return;
-      // dropped: try again a few times (the room keeps the host's snapshot for a joiner), then give up
-      if (this.tries++ < 6) { this.on({ t: 'down' }); setTimeout(() => { if (!this.ended) this.open(); }, Math.min(8000, 500 * 2 ** this.tries)); }
-      else this.on({ t: 'error', why: 'lost' });
+      // dropped: try again (the room keeps the host's snapshot for a joiner), then give up. Once in, for RETRY_FOR (the
+      // relay restarting, a laptop's wifi coming back); before, a few times
+      const now = Date.now();
+      if (this.joined && this.downAt == null) this.downAt = now;
+      const more = this.joined ? now - this.downAt < RETRY_FOR : this.tries < 6;
+      this.tries++;
+      if (more) { this.on({ t: 'down' }); setTimeout(() => { if (!this.ended) this.open(); }, Math.min(this.joined ? 4000 : 8000, 500 * 2 ** this.tries)); }
+      else { this.ended = true; this.on({ t: 'error', why: 'lost' }); }
     });
   }
   ping() { clearTimeout(this.pingT); if (this.state !== 'open') return; this.send({ t: 'ping', c: performance.now() }); this.pingT = setTimeout(() => this.ping(), PING_EVERY); }
@@ -210,12 +228,16 @@ class Remote {
       if (P.boat !== B) B.seatCrew(P, 'stern');
       B.drive({ x: s.x, z: s.z, heading: s.h, v: s.stale ? 0 : s.v, exact: true, stroke: { phase: frac(s.sk || 0), side: s.sd === -1 ? -1 : 1, power: s.stale ? 0 : Math.max(0, Math.min(1, s.pw || 0)) } });
     } else {
-      // on foot: the canoe overhead (carry), or left where it was beached
-      P.drive({ x: s.x, z: s.z, heading: s.h, v: s.stale ? 0 : Math.min(s.v, 12), mode: s.m === 'carry' ? 'carry' : 'walk', pack: s.m !== 'carry' && B.packs > 0 && !s.d, hull });
+      // on foot: the canoe overhead (carry), or left where it was beached; in the water (phase 3), swimming, their canoe
+      // where they left it or upside down beside them after a capsize (ov)
+      const swim = s.m === 'swim';
+      P.drive({ x: s.x, z: s.z, heading: s.h, v: s.stale ? 0 : Math.min(s.v, 12), mode: s.m === 'carry' ? 'carry' : swim ? 'swim' : 'walk', pack: s.m !== 'carry' && !swim && B.packs > 0 && !s.d, hull });
+      B.over = swim && !!s.ov;
       if (s.m !== 'carry' && Array.isArray(s.d) && s.d.every(Number.isFinite)) { B.ext = null; B.hidden = false; B.placeAt({ x: s.d[0], z: s.d[1], heading: s.d[2] }); }
       else B.hide();
     }
     this.drawnAt = { x: s.x, z: s.z, h: s.h, m: s.m };
+    for (const fn of this.coop.drawFns) { try { fn(this, s, now - this.offset - BACK_MS, dt); } catch (e) { if (!fn.warned) { fn.warned = true; console.warn('coop draw', e); } } }
   }
   // the name over the head (after the camera)
   label(cam, W, H, me) {
@@ -249,9 +271,13 @@ export class Coop {
     this.namesEl = document.createElement('div'); this.namesEl.id = 'coop-names'; document.body.appendChild(this.namesEl);
     this.v3 = new THREE.Vector3();
     this.handlers = new Map(); this.peerFns = new Set(); this.tickFns = new Set();
+    this.poseFns = new Set(); this.drawFns = new Set(); // phase 3: more in the pose (fn(m)), and drawn from it (fn(remote, s, T, dt))
     // a dock's free berth (outfitter.js berthFor): never tie up in a friend's canoe
     if (g.outfitter) g.outfitter.otherCanoes = () => [...this.remotes.values()].filter((r) => r.boat && !r.boat.hidden).map((r) => ({ x: r.boat.x, z: r.boat.z }));
     if (g.title) { g.title.coop = this; this.attachTitle(g.title); }
+    // phase 3: the visitor profile stamped as the page goes, so a reload finds the room (Rejoin, a host's code back)
+    this.stampT = 0; this.reopenTried = false;
+    if (typeof window !== 'undefined') window.addEventListener('pagehide', () => this.stamp());
   }
   get live() { return !!this.relay && !this.relay.ended; }
   get guest() { return this.role === 'guest'; }
@@ -284,7 +310,7 @@ export class Coop {
     for (let tries = 0; tries < 4; tries++) {
       if (!room) room = { code: newCode(), key: newKey() };
       const r = await this.connect({ code: room.code, role: 'host', key: room.key });
-      if (r.ok) { this.visitor.room = { ...room, at: Date.now() }; writeVisitor(this.visitor); return room.code; }
+      if (r.ok) { this.visitor.room = { ...room, at: Date.now(), live: true }; writeVisitor(this.visitor); return room.code; }
       if (r.why !== 'taken') throw new Error(r.why || 'unreachable');
       room = null;
     }
@@ -292,7 +318,7 @@ export class Coop {
   }
   stopSharing() {
     if (this.role !== 'host') return;
-    if (this.visitor.room) this.visitor.room.at = Date.now();
+    if (this.visitor.room) { this.visitor.room.at = Date.now(); this.visitor.room.live = false; }
     writeVisitor(this.visitor);
     this.disconnect();
     this.say('You stopped sharing the trip.');
@@ -316,6 +342,7 @@ export class Coop {
     kv.freeze((k) => k !== VISITOR_KEY);
     const host = (w.peers || []).find((p) => p.host);
     this.hostName = host ? host.name : 'your friend';
+    this.visitor.visit = { code: this.code, host: host ? clean(host.name) : '', at: Date.now() }; writeVisitor(this.visitor); // (phase 3: Rejoin)
     if (outfitter) {
       const pr = outfitter.profile;
       if (pr && !pr.started && outfitter.newSeason) outfitter.newSeason(outfitter.nearest(player.x, player.z).l.ep, 'sandbox');
@@ -340,10 +367,31 @@ export class Coop {
   leave() {
     if (this.role === 'host') { this.stopSharing(); return; }
     if (this.role !== 'guest') return;
+    this.visitor.visit = null; writeVisitor(this.visitor);
     this.disconnect();
     // back to this browser's own season, untouched: the page again without the code
     const u = new URL(location.href); u.searchParams.delete('join');
     location.replace(u.toString());
+  }
+
+  // phase 3: back into the room this guest lost (the pause card's Rejoin): the same world, the same things (coop-give's
+  // stay loaded, so nothing is claimed again), only the socket new
+  async rejoin() {
+    if (this.role !== 'guest' || this.live || !this.code) throw new Error('Not out of a trip.');
+    const r = await this.connect({ code: this.code, role: 'guest' });
+    if (!r.ok) throw new Error(({ 'no trip': 'That trip has ended.', full: 'That trip is full (four at most).', unreachable: 'The relay can’t be reached.' })[r.why] || `Couldn’t rejoin (${r.why}).`);
+    this.say(`Back on ${this.hostName || 'your friend'}’s trip.`);
+    this.status = '';
+    this.refresh();
+    return true;
+  }
+  // the trip this browser last visited, while its room may still live (the title's Rejoin after a reload)
+  lastVisit() { const v = this.visitor.visit; return v && Date.now() - v.at < ROOM_KEEP_MS ? v : null; }
+  // the visitor profile stamped: a host's room (its code back after a reload), a guest's visit (Rejoin)
+  stamp() {
+    const v = this.visitor, now = Date.now();
+    if (this.role === 'host' && this.live && v.room) { v.room.at = now; v.room.live = true; writeVisitor(v); }
+    else if (this.role === 'guest' && v.visit && this.live) { v.visit.at = now; writeVisitor(v); }
   }
 
   setVisitor({ name, shirt } = {}) {
@@ -359,9 +407,13 @@ export class Coop {
       const done = (r) => { if (!settled) { settled = true; res(r); } };
       const relay = new Relay({ url: this.url, code, role, key, name: this.visitor.name, look: { s: this.visitor.shirt, k: this.visitor.seed }, on: (m, at) => {
         if (m.t === 'welcome') {
+          const back = settled || role === this.role; // (back after a drop, or Rejoin after a lost room: phase 3)
+          relay.welcomed();
           if (!settled) { this.relay = relay; this.role = role; this.code = code; this.id = m.id; done({ ok: true, welcome: m }); }
-          else this.id = m.id; // (back after a drop)
+          else this.id = m.id;
           this.welcome(m, at);
+          if (back && this.status === 'reconnecting') this.say(role === 'guest' ? `Back on ${this.hostName || 'your friend'}’s trip.` : 'Back in touch with the trip.');
+          if (back) this.status = '';
           return;
         }
         if (m.t === 'error') {
@@ -391,6 +443,10 @@ export class Coop {
       this.remotes.clear();
       if (this.relay) this.relay.close();
       this.say(why === 'lost' ? 'Lost the connection to the trip.' : 'The trip has ended.');
+      this.status = 'lost';
+      // phase 3: a clear choice on the pause card: Rejoin, or back to my own season
+      const t = this.title;
+      if (t) { if (t.state === 'game' && t.open) t.open('pause'); this.openCard('lost'); this.refresh(); }
       return;
     }
     this.disconnect();
@@ -443,9 +499,7 @@ export class Coop {
     if (!day || !Number.isFinite(c.hours) || !Number.isFinite(c.doy) || !Number.isFinite(c.year)) return;
     if (Number.isFinite(c.ts)) { if (this.clockTs != null && c.ts <= this.clockTs) return; this.clockTs = c.ts; } // (an old one, overtaken)
     const rate = Number.isFinite(c.rate) ? c.rate : day.rate, running = c.running !== false;
-    const R = this.relay, base = R && R.minRtt != null ? R.minRtt / 2 : R && R.rtt != null ? R.rtt / 2 : 50;
-    const host = this.remotes.get(c.from), late = host && host.offset != null && Number.isFinite(c.ts) ? Math.max(0, at - c.ts - host.offset) : 0;
-    const lag = (base + late) / 1000;
+    const lag = this.lagOf(c, at);
     const hps = (day.hoursPerSecond || 1 / 3600) * rate;
     let hours = c.hours + (running ? lag * hps : 0), doy = c.doy, year = c.year;
     if (hours >= 24) { hours -= 24; doy++; }
@@ -458,20 +512,30 @@ export class Coop {
     }
     day.running = running;
   }
+  // how long (s) a message from a peer was on the way: half the quickest round trip, and how much later than that peer's
+  // quickest pose this one came (its timeline, from its poses' ts). The clock's and the wind's (coop-sky.js)
+  lagOf(m, at = performance.now()) {
+    const R = this.relay, base = R && R.minRtt != null ? R.minRtt / 2 : R && R.rtt != null ? R.rtt / 2 : 50;
+    const from = this.remotes.get(m.from), late = from && from.offset != null && Number.isFinite(m.ts) ? Math.max(0, at - m.ts - from.offset) : 0;
+    return (base + late) / 1000;
+  }
   // what this browser says about itself, 15 times a second
   poseMsg() {
     const g = this.g, p = g.player, st = (g.canoe && g.canoe.state) || {};
     const s = Number.isFinite(st.stroke) ? st.stroke : 0;
     if (s < this.lastStroke - 0.5) this.strokeN++;
     this.lastStroke = s;
-    const drop = p.carry && p.carry.drop;
+    const drop = p.carry && p.carry.drop, cap = p.mode === 'swim' && p.swim && p.swim.hull; // (a capsize: the hull beside you)
     let pk = 1; try { pk = g.packs ? g.packs.count : 1; } catch { pk = 1; }
-    return {
+    const m = {
       t: 'pose', ts: Math.round(performance.now()), x: r2(p.x), z: r2(p.z), h: r3(p.heading), m: p.mode,
       sk: r3(this.strokeN + s), sd: st.side === -1 ? -1 : 1, pw: r2(Number.isFinite(st.power) ? st.power : 0),
       hull: 'green', pk, // (canoe.js draws the player's own canoe in HULL_COLORS whatever the kit)
-      d: drop && Number.isFinite(drop.x) ? [r2(drop.x), r2(drop.z), r3(drop.heading || 0)] : null,
+      d: cap && Number.isFinite(cap.cx) ? [r2(cap.cx), r2(cap.cz), r3(cap.heading || 0)] : drop && Number.isFinite(drop.x) ? [r2(drop.x), r2(drop.z), r3(drop.heading || 0)] : null,
+      ...(cap ? { ov: 1 } : null),
     };
+    for (const fn of this.poseFns) { try { fn(m); } catch (e) { if (!fn.warned) { fn.warned = true; console.warn('coop pose', e); } } } // (phase 3: coop-anim.js adds what the body is doing)
+    return m;
   }
 
   // --- every frame ----------------------------------------------------------------------------------------------------
@@ -486,9 +550,21 @@ export class Coop {
       }
     }
     if (this.guest) this.g.day.locked = true; // the Sandbox clock keys are the host's
+    if (this.live && now - this.stampT > STAMP_EVERY) { this.stampT = now; this.stamp(); }
+    this.reopen();
     for (const r of this.remotes.values()) r.update(now);
     if (this.live) for (const fn of this.tickFns) { try { fn(now); } catch (e) { if (!fn.warned) { fn.warned = true; console.warn('coop.tick', e); } } }
     if (this.trace) for (const r of this.remotes.values()) if (r.drawnAt) this.trace.push({ t: performance.timeOrigin + now, id: r.id, x: r.boat.ext ? r.boat.x : r.person.x, z: r.boat.ext ? r.boat.z : r.person.z, h: r.drawnAt.h, ahead: r.seen ? r.seen.ahead : 0 });
+  }
+  // phase 3: a host who reloads (or whose page went) while the trip was open opens it again with the same code once their
+  // season is back in play, so the guests, still in the room, go on without a reload
+  reopen() {
+    if (this.reopenTried || this.role || !this.url) return;
+    const v = this.visitor, room = v.room, t = this.g.title;
+    if (!room || !room.live || Date.now() - (room.at || 0) > ROOM_KEEP_MS) { this.reopenTried = true; return; }
+    if (!t || t.state !== 'game' || !this.canInvite()) return;
+    this.reopenTried = true;
+    this.invite({}).then((code) => this.say(`The trip is open again: code ${code}.`)).catch((e) => console.warn('coop reopen', e));
   }
   // the names over the heads, after the camera has moved
   labels() {
@@ -504,7 +580,7 @@ export class Coop {
   link() { const u = new URL(location.href); u.search = ''; u.hash = ''; u.searchParams.set('join', this.code || ''); return u.toString(); }
   stats() {
     return {
-      role: this.role, code: this.code, id: this.id, rtt: this.relay && this.relay.rtt != null ? Math.round(this.relay.rtt) : null, clockErr: this.clockErr, clockSnaps: this.clockSnaps,
+      role: this.role, code: this.code, id: this.id, live: this.live, status: this.status, rtt: this.relay && this.relay.rtt != null ? Math.round(this.relay.rtt) : null, clockErr: this.clockErr, clockSnaps: this.clockSnaps,
       peers: [...this.remotes.values()].map((r) => ({ id: r.id, name: r.name, host: r.host, stale: r.stale, buf: r.buf.length, offset: r.offset == null ? null : Math.round(r.offset), at: r.drawnAt })),
     };
   }
@@ -515,14 +591,17 @@ export class Coop {
     if (!nav || !ul) return;
     const item = (id, text) => { const li = document.createElement('li'), b = document.createElement('button'), h = document.createElement('div'); b.id = id; b.className = 'item'; b.type = 'button'; b.textContent = text; h.className = 'hint'; li.append(b, h); li.hidden = true; return { li, b, h }; };
     this.joinItem = item('btn-join', 'Join a trip');
+    this.rejoinItem = item('btn-rejoin', 'Rejoin the trip'); // phase 3: the last visit, after a reload
     this.inviteItem = item('btn-invite', 'Invite friends');
     const settingsLi = title.el.settings.closest('li');
-    ul.insertBefore(this.joinItem.li, settingsLi); ul.insertBefore(this.inviteItem.li, settingsLi);
+    ul.insertBefore(this.rejoinItem.li, settingsLi); ul.insertBefore(this.joinItem.li, settingsLi); ul.insertBefore(this.inviteItem.li, settingsLi);
     const card = this.card = document.createElement('div');
     card.className = 'confirm coop-card'; card.id = 'coop-card'; card.hidden = true;
     nav.appendChild(card);
     this.joinItem.b.addEventListener('click', () => this.openCard('join'));
+    this.rejoinItem.b.addEventListener('click', () => { const v = this.lastVisit(); if (v) this.openCard('rejoin', { code: v.code }); });
     this.inviteItem.b.addEventListener('click', () => {
+      if (this.role === 'guest' && !this.live) { this.openCard('lost'); return; } // (phase 3: out of the room: the choice)
       if (this.role === 'guest') { this.leave(); return; }
       this.openCard(this.role === 'host' ? 'shared' : 'invite');
     });
@@ -533,7 +612,8 @@ export class Coop {
       const on = which === 'coop';
       card.hidden = !on;
       this.joinItem.b.classList.toggle('open', on && this.cardMode === 'join');
-      this.inviteItem.b.classList.toggle('open', on && this.cardMode !== 'join');
+      this.rejoinItem.b.classList.toggle('open', on && this.cardMode === 'rejoin');
+      this.inviteItem.b.classList.toggle('open', on && this.cardMode !== 'join' && this.cardMode !== 'rejoin');
       if (on) { const f = card.querySelector('input:not([value]), input, button.go'); if (f) f.focus(); }
     };
     const columns = title.columns.bind(title);
@@ -547,11 +627,15 @@ export class Coop {
     const t = this.title; if (!t) return;
     const pause = t.state === 'pause', titleUp = t.state === 'title';
     this.joinItem.li.hidden = !(this.url && titleUp && !this.role);
+    const visit = this.lastVisit();
+    this.rejoinItem.li.hidden = !(this.url && titleUp && !this.role && visit);
+    if (visit) { this.rejoinItem.b.textContent = visit.host ? `Rejoin ${visit.host}’s trip` : 'Rejoin the trip'; this.rejoinItem.h.textContent = `code ${visit.code} · as ${this.visitor.name || 'you'}`; }
     const showInvite = !!this.url && pause && (this.role || this.canInvite());
     this.inviteItem.li.hidden = !showInvite;
-    this.inviteItem.b.textContent = this.role === 'guest' ? 'Leave the trip' : this.role === 'host' ? 'Friends' : 'Invite friends';
+    const out = this.role === 'guest' && !this.live;
+    this.inviteItem.b.textContent = out ? 'Rejoin the trip' : this.role === 'guest' ? 'Leave the trip' : this.role === 'host' ? 'Friends' : 'Invite friends';
     const n = this.remotes.size;
-    this.inviteItem.h.textContent = this.role === 'guest' ? `on ${this.hostName || 'a friend'}’s trip` : this.role === 'host' ? `code ${this.code} · ${n ? `${n} with you` : 'waiting for friends'}` : 'share this Sandbox season';
+    this.inviteItem.h.textContent = out ? `lost touch with ${this.hostName || 'a friend'}’s trip` : this.role === 'guest' ? `on ${this.hostName || 'a friend'}’s trip` : this.role === 'host' ? `code ${this.code} · ${n ? `${n} with you` : 'waiting for friends'}` : 'share this Sandbox season';
     // a guest's season is not theirs to change while visiting
     const guest = this.role === 'guest';
     for (const b of [t.el.newTrip, t.el.seasons]) if (b) { const li = b.closest('li'); if (li) li.hidden = guest || (b === t.el.newTrip ? false : li.hidden); }
@@ -567,7 +651,21 @@ export class Coop {
     const swatches = SHIRTS.map((c, i) => `<button type="button" class="swatch${i === v.shirt ? ' on' : ''}" data-shirt="${i}" style="--c:${hex(c)}" aria-label="Shirt ${i + 1}" aria-pressed="${i === v.shirt}"></button>`).join('');
     const who = `<label class="field"><span>Your name</span><input id="coop-name" maxlength="24" autocomplete="nickname" spellcheck="false" value="${esc(v.name)}" placeholder="what the others call you"></label>
       <div class="field"><span>Your shirt</span><div class="swatches" role="group" aria-label="Your shirt">${swatches}</div></div>`;
-    if (mode === 'join') {
+    if (mode === 'rejoin') {
+      // phase 3: after a reload, the trip last visited (its code kept in the visitor profile)
+      const vis = this.lastVisit() || { code: this.cardCode, host: '' };
+      card.innerHTML = `<div class="sc kicker">Rejoin · Sandbox</div>
+        <p class="ask">Back to ${esc(vis.host ? `${vis.host}’s` : 'the')} trip, code ${esc(vis.code)}.</p>
+        <p class="sub status" id="coop-status"></p>
+        <div class="row"><button type="button" class="item go" id="coop-go">Rejoin</button></div>
+        <p class="sub">As ${esc(v.name || 'Paddler')}, with the things you had there. Your own season stays as it is.</p>`;
+    } else if (mode === 'lost') {
+      card.innerHTML = `<div class="sc kicker">Out of the trip</div>
+        <p class="ask">Lost touch with ${esc(this.hostName || 'your friend')}’s trip.</p>
+        <p class="sub status" id="coop-status"></p>
+        <div class="row"><button type="button" class="item go" id="coop-go">Rejoin</button><button type="button" class="item" id="coop-home">Back to my own season</button></div>
+        <p class="sub">Rejoin while the trip is open (ten minutes after the last one leaves). Your own season stays as it was.</p>`;
+    } else if (mode === 'join') {
       card.innerHTML = `<div class="sc kicker">Join a trip · Sandbox</div>
         <p class="ask">A friend’s trip, by its code.</p>
         <label class="field"><span>The code</span><input id="coop-code" class="code" maxlength="6" autocomplete="off" spellcheck="false" value="${esc(this.cardCode)}" placeholder="ABCDEF"></label>
@@ -597,11 +695,13 @@ export class Coop {
     const go = card.querySelector('#coop-go');
     const submit = async () => {
       if (!go || go.disabled) return;
-      const name = (card.querySelector('#coop-name') || {}).value;
+      const name = mode === 'rejoin' || mode === 'lost' ? v.name || 'Paddler' : (card.querySelector('#coop-name') || {}).value;
       if (!clean(name)) { status('Pick a name first.'); card.querySelector('#coop-name').focus(); return; }
       go.disabled = true;
       try {
-        if (mode === 'join') { status('Paddling over…'); await this.join(code ? code.value : this.cardCode, { name, shirt: v.shirt }); }
+        if (mode === 'lost') { status('Paddling back…'); await this.rejoin(); this.title.showRight(null); this.title.close(); }
+        else if (mode === 'rejoin') { status('Paddling over…'); await this.join(this.cardCode, { name, shirt: v.shirt }); }
+        else if (mode === 'join') { status('Paddling over…'); await this.join(code ? code.value : this.cardCode, { name, shirt: v.shirt }); }
         else { status('Opening the trip…'); await this.invite({ name, shirt: v.shirt }); this.cardMode = 'shared'; this.renderCard(); this.title.refreshMenu(); this.title.showRight('coop'); }
       } catch (e) { status(e.message || String(e)); go.disabled = false; }
     };
@@ -609,6 +709,8 @@ export class Coop {
     for (const i of card.querySelectorAll('input')) i.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); submit(); } });
     const copy = card.querySelector('#coop-copy');
     if (copy) copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(this.link()); status('The link is copied.'); } catch { status('Copy it from the line above.'); } });
+    const home = card.querySelector('#coop-home');
+    if (home) home.addEventListener('click', () => this.leave());
     const stop = card.querySelector('#coop-stop');
     if (stop) stop.addEventListener('click', () => { this.stopSharing(); this.title.showRight(null); this.title.refreshMenu(); });
   }
