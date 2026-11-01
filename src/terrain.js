@@ -315,6 +315,7 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     groundCanopy = s;
     // (d2 land: the moss goes to the bog's sphagnum, ochre with rust patches a few metres across, where the survey says bog)
     vec3 mossC = groundShaded(1, uGroundLit[1], s);
+    mossC *= mix(vec3(1.0), vec3(0.78, 0.82, 0.7), groundMireK); // (the density round: a wetland's moss is darker and wetter than the woods' cushions)
     if (groundSphagnum > 0.004) {
       float rust = smoothstep(0.66, 0.78, lookFbm(p / 1.6 + vec2(2.3, -6.1), 61u, 2) + 0.1 * n1 * fb) * smoothstep(0.05, 0.45, groundHummock);
       vec3 sph = mix(mix(uSphag[0], uSphag[1], rust * 0.45), uSphag[2], s * 0.8);

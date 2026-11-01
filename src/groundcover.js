@@ -33,7 +33,7 @@ const WID = 0.72, HGT = 0.58, ROOT = -0.12; // a clump's cards: width, height, t
 // The density round: a wetland's own cover (mire-relief.js coverByte, in the splat's spare byte): the marsh's and the
 // meadow's sedge and bluejoint knee to chest high and unbroken, the bog's few low sedges with cottongrass heads in the
 // summer, the ferns under the alder and the ash (the frond sprite on the same cards). [width, height] of each.
-const WET_SIZE = [[1, 1], [1.25, 1.9], [0.8, 0.75], [0.75, 1.5]];
+const WET_SIZE = [[1, 1], [1.25, 1.9], [0.8, 0.75], [0.7, 1.25]];
 const slotRect = (n) => { const S = SLOTS[n], I = 2.5, A = ATLAS_SIZE; return `vec4(${((S.x + I) / A).toFixed(6)}, ${((S.y + I) / A).toFixed(6)}, ${((S.w - 2 * I) / A).toFixed(6)}, ${((S.h - 2 * I) / A).toFixed(6)})`; };
 const decl = glslSway + /* glsl */ `
   uniform vec2 uCenterLocal;   // patch centre relative to the floating origin, snapped to the lattice
@@ -99,6 +99,7 @@ const body = /* glsl */ `
   // the wetland's own cover (the cell looked up a few metres off, by the tuft's hash, so the 10 m cells don't show)
   float wcode = wetCover(rel + (h2.xy - 0.5) * 9.0), wk = floor(wcode / 64.0 + 0.01), wd = (wcode - 64.0 * wk) / 63.0;
   int wi = int(wk);
+  if (wi == 3 && h3.z < 0.4) wi = 1; // (a swamp's floor is ferns with bluejoint and sedge between them)
   float dens = cv.r * heart;
   if (wi > 0) dens = (wd * smoothstep(1.2, 3.5, shoreAt(rel)) * (wi == 1 ? 0.8 + 0.2 * heart : wi == 2 ? heart : 0.55 + 0.45 * heart));
   float present = step(h.x, dens * 1.25) * edge;  // a card clump is fuller than the old three blades
@@ -137,7 +138,7 @@ const body = /* glsl */ `
   base = mix(base, base * vec3(0.85, 1.05, 0.8), fw); // the stalks a darker, cooler green than the grass
   vColor.rgb *= base;
   vGrassUv = wi == 3 ? ${slotRect('frond')}.xy + (uv - ${slotRect('grass')}.xy) * ${slotRect('frond')}.zw / ${slotRect('grass')}.zw : uv;
-  vColor.rgb *= wi == 1 ? vec3(0.86, 1.0, 0.8) * (0.9 + 0.2 * h3.y) : wi == 2 ? vec3(0.64, 0.68, 0.46) * (0.85 + 0.3 * h3.y) : wi == 3 ? vec3(0.62, 0.84, 0.5) * (0.85 + 0.3 * h3.y) : vec3(1.0); // the sedge greener, the bog's darker, a fern's deeper green
+  vColor.rgb *= wi == 1 ? vec3(0.86, 1.0, 0.8) * (0.9 + 0.2 * h3.y) : wi == 2 ? vec3(0.56, 0.58, 0.38) * (0.85 + 0.3 * h3.y) : wi == 3 ? vec3(0.44, 0.6, 0.34) * (0.8 + 0.35 * h3.y) : vec3(1.0); // the sedge greener, the bog's darker, a fern's deeper green
   vGrassCotton = wi == 2 ? step(h3.x, 0.35) * uFlower : 0.0; // cottongrass in the bog through the summer
   vGrassH = (position.y - ${ROOT.toFixed(2)}) / ${(HGT - ROOT).toFixed(2)};
   vGrassDist = distance((modelMatrix * vec4(transformed, 1.0)).xyz, cameraPosition);
