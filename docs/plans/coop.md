@@ -331,7 +331,7 @@ fire's fuel bin (`firefuel`, where 'ground', `at.fuel` the ring's key), the grat
 ### Phase 2 as built (2026-11-01)
 
 `src/coop-share.js` (stream A) and `src/coop-give.js` (stream B), joined on `claude/coop-phase2`; the relay forwards any
-other lowercase type, to one client with `to`, up to 256 KB (**redeploy it**: `cd server/room && npx wrangler deploy`).
+other lowercase type, to one client with `to`, up to 256 KB (deployed 2026-11-01).
 - **Wire:** `pub` (a player's public things, ≤4 Hz), `op`/`opr` (take or put in a friend's container, answered by its
   owner; 3 s timeout, undone), `gift`/`giftack` (money or a loose item; refunded on a refusal or no answer), `claim`,
   `yours`, `keep` (a guest's inventory and purse, kept by the host under `coop-guests` by the visitor's id, every 30 s,
@@ -340,10 +340,16 @@ other lowercase type, to one client with `to`, up to 256 KB (**redeploy it**: `c
   (a friend's pack drawn in 226 ms, a stick gone on the other screen in 174 ms, a tent in 324 ms, a tarp in 227 ms, take
   and put through the book's bin ~210 ms) and 9/9 in `scripts/coop/give.mjs` (money both ways with ledgers, an item to a
   friend's hand, refunds, a rejoin gets the same things back, the guest's own season untouched).
-- **Not yet:** giving a container with its contents or a long thing (loose items only); Give money on foot only; Douse
-  and "Put it on the fire" at a friend's ring (the drag into the card works); a friend's canoe load and tent contents are
-  not drawn (they are reachable as tabs); a lost ack on a gift duplicates it; `coop-guests` never forgets a visitor; two
-  grates can overlap at a friend's ring (yours cooks over their fire). Details: the stream notes `stream-a.md`, `stream-b.md`.
+- **The gaps round** (same day): a container is given whole with what is nested in it, and long things (rod, paddle);
+  Give money from the canoe (6 m afloat, the water dot); gifts carry ids (`giftq`), refunded only on a refusal, `never`
+  or a friend gone; `coop-guests` keeps 16 visitors seen in the last 30 real days; Douse and "Put it on the fire" at a
+  friend's ring (`op douse`); one grate per ring (a friend's grate is theirs, cooked by their browser, its progress in
+  their `pub`); a friend's canoe load drawn in their hull; their canoe and hung barrel reachable as tabs. After the
+  join: `share.mjs` 17/17, `give.mjs` 15/15.
+- **Still not:** dropping onto a friend's tab button (its grid works); containers by request (a pot onto a friend's
+  grate, a pack into their canoe); a pitch spot checked against a friend's tent; a gift's ack lost and the receiver
+  reloaded can duplicate once; a friend's pub can flash their flames back during your douse. Details: `stream-a.md`,
+  `stream-b.md` in the notes.
 
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
