@@ -246,6 +246,7 @@ class Nearby {
       const key = campKey(site), ch = this.chores, bin = ch.fuelBin(key, site), grate = ch.grate(key, site);
       if (d.kind === 'firewood' && bin && c !== bin) out.push(this.moveAction('fuel', 'Put it on the fire', c, e, bin, 'the ring is full'));
       if (d.kind === 'fish' && d.eat && d.eat.cook && grate && c !== grate) out.push(this.moveAction('grate', 'Put it on the grate', c, e, grate, 'the grate is full')); // (crafting: a meal goes into a pot; a fish may go on a stick)
+      if ((!bin || !grate) && this.hooks.friendFeed) out.push(...(this.hooks.friendFeed(key, c, e, { bin: !!bin, grate: !!grate }) || [])); // co-op: a friend's ring (coop-share.js)
     }
     return out;
   }

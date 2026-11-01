@@ -283,7 +283,7 @@ export class Chores {
     const inv = this.inv;
     if (!inv || !inv.attached) return null;
     let g = inv.containers.find((c) => c.item === 'grate' && c.at && c.at.grate === key);
-    if (!g && site && site.layout) {
+    if (!g && site && site.layout && !(this.friendRing && this.friendRing(key, 'grate'))) { // (co-op: a friend's grate there is the ring's)
       const f = site.layout.fire;
       g = inv.addContainer('grate', 'ground', { x: f.x, z: f.z, y: f.y + 0.32, heading: 0, camp: true, grate: key }, { quiet: true });
     }
@@ -568,6 +568,7 @@ export class Chores {
           const g = F.get(key); if (g && g.until > this.now) g.until = this.now; this.sound(hiss, pos, 1.2);
           const b = this.fuelBin(key);
           if (b) { b.at.armed = false; for (const e of b.grid) if (!e.box && isWood(e.id)) e.data = { ...(e.data || {}), wet: WOOD_DRY.air }; this.inv.emit('items'); }
+          if (!b && this.friendDoused) this.friendDoused(key, 'drown'); // (co-op: a friend's fire, put out on their screen too)
         }
         if (i === 1) this.sound(hiss, pos, 0.7);
       },
@@ -578,6 +579,7 @@ export class Chores {
         this.dousedNow = true;
         this.syncFire(key, b);
         this.persist();
+        if (!b && this.friendDoused) this.friendDoused(key, 'out');
       },
       onStop: (job) => {
         F.douseK(key, job.done / DOUSE.length);
@@ -585,6 +587,25 @@ export class Chores {
         this.persist();
       },
     });
+  }
+
+  // co-op (coop-share.js): a friend at our ring has put our fire out on their screen: 'drown' (no wood burning, the
+  // ring's wood wet through), then 'out' (cold), as douse's held job does here
+  douseFrom(key, stage) {
+    const F = this.fires, f = F && F.get(key), b = this.fuelBin(key), site = this.camp.registry ? this.camp.registry.site(key) : null;
+    if (!f || !b) return false;
+    const at = site && site.layout ? this.ringAt(site) : b.at.ring || b.at;
+    if (stage === 'drown') {
+      if (f.until > this.now) f.until = this.now;
+      b.at.armed = false; for (const e of b.grid) if (!e.box && isWood(e.id)) e.data = { ...(e.data || {}), wet: WOOD_DRY.air };
+      this.steamAt = { x: at.x, y: at.y + 0.05, z: at.z }; this.steamT = Math.max(this.steamT, 1.4);
+      this.inv.emit('items');
+    } else {
+      F.douse(key); this.lit.delete(key); this.steamT = 2.6; b.at.syncT = this.now;
+      this.dousedNow = true; this.syncFire(key, b);
+    }
+    this.persist();
+    return true;
   }
 
   // --- the latrine ---------------------------------------------------------------------------------------------------

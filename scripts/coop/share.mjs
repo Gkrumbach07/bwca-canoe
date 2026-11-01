@@ -207,6 +207,7 @@ try {
     const g = window.__game, ch = g.chores || g.camp.chores, inv = g.inventory, site = g.camp.registry.site(L.key), key = L.key;
     const p = g.player; p.x = L.fire.x + 2; p.z = L.fire.z + 0.3;
     const b = ch.fuelBin(key, site);
+    ch.grate(key, site); // (the host's grate at its ring, as its own fire card makes it)
     for (let i = 0; i < 6; i++) inv.put(b, 'wood:branch', { quiet: true });
     b.at.armed = true; inv.emit('items');
     window.__fireBin = b.id;
@@ -233,6 +234,52 @@ try {
   const hostBin = await A.evaluate(() => { const g = window.__game, b = g.inventory.cont(window.__fireBin); return { pieces: b.grid.reduce((n, e) => n + e.qty, 0) }; });
   const refused = await B.evaluate(() => window.__game.coopShare.n.timeouts);
   result('4b the guest feeds the host’s fire a stick into the host’s bin', !!(feed.binIsFriends && feed.r && feed.r.ok && !guestOwnBin && refused === 0), { card: feed.title, guestMadeOwnBin: guestOwnBin, roundTripMs: feedRtt, hostOpsSeen: hostOps0, hostBinPiecesAfter: hostBin.pieces });
+
+  // --- 4c: "Put it on the fire" from an item's right-click at the host's ring -----------------------------------------
+  const rc = await B.evaluate(() => {
+    const g = window.__game, inv = g.inventory, r0 = inv.place('wood:branch', 1), hit = inv.findUid(r0.uid);
+    const acts = g.nearby.itemActions({ cId: hit.c.id, uid: hit.e.uid });
+    const a = acts.find((q) => q.id === 'fuel');
+    if (!a) return { none: acts.map((q) => q.label) };
+    const before = inv.count('wood:branch', { reachable: false });
+    const ok = a.run();
+    return { label: a.label, ok, before, after: inv.count('wood:branch', { reachable: false }) };
+  });
+  await until(B, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+  result('4c “Put it on the fire” on an item at the host’s ring feeds the host’s bin', !!(rc.ok && rc.after === rc.before - 1), { ...rc, roundTripMs: await B.evaluate(() => window.__game.coopShare.n.rtt.slice(-1)[0]), timeouts: await B.evaluate(() => window.__game.coopShare.n.timeouts) });
+
+  // --- 4d: one grate: the host's grate is the card's, the guest makes none of its own -----------------------------------
+  const gr = await B.evaluate((L) => {
+    const g = window.__game, inv = g.inventory, o = g.nearby.fireObject(), s = o && o.slots.find((q) => q.id === 'grate');
+    const own = inv.containers.some((c) => c.item === 'grate' && c.at && c.at.grate === L.key);
+    let put = null;
+    const def = g.items.itemDef;
+    if (s && s.drop) {
+      const fish = Object.keys(g.items.ITEMS).find((k) => (def(k) || {}).kind === 'fish' && (def(k).eat || {}).cook);
+      if (fish) inv.place(fish, 1, { data: { length: 34 } }); // (a fish of the rig's for the grate)
+      for (const c of inv.reachable()) { if (put) break; const e = c.grid.find((x) => !x.box && !x.fixed && ['food', 'fish', 'tool'].includes((def(x.id) || {}).kind)); if (e) put = { id: e.id, r: s.drop({ cId: c.id, uid: e.uid, itemId: e.id, qty: 1 }) }; }
+    }
+    return { friendsGrate: !!(s && !s.cId && s.drop), ownGrate: own, put };
+  }, L);
+  await until(B, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+  const onGrate = gr.put ? await A.evaluate(({ key, id }) => { const c = window.__game.inventory.containers.find((k) => k.item === 'grate' && k.at && k.at.grate === key); return !!(c && c.grid.some((e) => e.id === id)); }, { key: L.key, id: gr.put.id }) : null;
+  result('4d one grate: the host’s on the guest’s card, none of the guest’s own', !!(gr.friendsGrate && !gr.ownGrate && (gr.put ? onGrate : true)), { ...gr, onHostGrate: onGrate });
+
+  // --- 4e: the guest douses the host's fire (held, then the request): out on both screens ---------------------------------
+  const dz = await B.evaluate((L) => {
+    const g = window.__game, o = g.nearby.fireObject(), a = o && o.actions.find((q) => q.id === 'douse');
+    if (!a) return { none: true, state: g.fires.state(L.key) };
+    g.chores.douse(g.camp.registry.site(L.key), L.key, { auto: true, book: true }); // (the card's Douse, held: auto stands for the key held down)
+    return { offered: a.label };
+  }, L);
+  let dMs = null;
+  if (!dz.none) {
+    const t0 = Date.now();
+    await until(A, (key) => !['burning', 'coals'].includes(window.__game.fires.state(key)), L.key, 30000).catch(() => null);
+    dMs = Date.now() - t0;
+  }
+  const after = { host: await A.evaluate((key) => window.__game.fires.state(key), L.key), guest: await B.evaluate((key) => window.__game.fires.state(key), L.key), wet: await A.evaluate(() => { const b = window.__game.inventory.cont(window.__fireBin); return b.grid.filter((e) => e.data && e.data.wet > 0).length; }) };
+  result('4e the guest douses the host’s fire: out on both screens', !dz.none && !['burning', 'coals'].includes(after.host) && after.guest === after.host, { ...dz, msHeldJobPlusRequest: dMs, hostState: after.host, guestState: after.guest, hostWetPieces: after.wet });
 
   // --- 5: a stick the guest picks up is gone on the host's screen -------------------------------------------------------
   const stick = await B.evaluate(() => {
@@ -280,6 +327,86 @@ try {
     T.rigs.push(r); return !!r;
   }, L), A, (gid) => { const T = window.__game.tarp, id = `p${gid}:ttest1`, m = T.meshes.get(id); return !!(T.others.some((r) => r.id === id) && m && m.mesh.visible); }, ids.guest);
   result('6b a tarp the guest rigs shows on the host’s screen', ms6b != null, { ms: ms6b });
+  await B.evaluate(() => { const T = window.__game.tarp; T.rigs = T.rigs.filter((r) => r.id !== 'ttest1'); }); // (taken down: out of the canoe shot)
+
+  // --- 5b: the berries and the sawn logs merge (grow-only; a log cut on both sides converges) ----------------------------
+  const today = await B.evaluate(() => window.__game.chores.today);
+  const mg = await timed(() => Promise.all([
+    B.evaluate((d) => { const g = window.__game; g.forage.s.picked['test:berries'] = [d, 2]; g.chores.s.sawn['-1:-1'] = { day: d, cuts: 2 }; }, today),
+    A.evaluate((d) => { const g = window.__game; g.forage.s.picked['test:berries'] = [d, 1]; g.chores.s.sawn['-1:-1'] = { day: d, cuts: 1, poles: 1 }; }, today),
+  ]), A, () => { const g = window.__game, s = g.chores.s.sawn['-1:-1'], p = g.forage.s.picked['test:berries']; return !!(s && s.cuts === 2 && s.poles === 1 && p && p[1] === 2); });
+  await sleep(800);
+  const gm = await B.evaluate(() => ({ sawn: window.__game.chores.s.sawn['-1:-1'], picked: window.__game.forage.s.picked['test:berries'] }));
+  const hm = await A.evaluate(() => ({ sawn: window.__game.chores.s.sawn['-1:-1'], picked: window.__game.forage.s.picked['test:berries'] }));
+  result('5b berries and sawn logs merge to the same on both screens', mg != null && JSON.stringify(gm) === JSON.stringify(hm), { ms: mg, host: hm, guest: gm });
+
+  // --- 10: through a friend's canoe: the guest's load drawn in the guest's canoe, a tab beside it, a take ------------------
+  const cnv = await B.evaluate(() => {
+    const g = window.__game, inv = g.inventory, p = g.player, d = p.carry && p.carry.drop;
+    let c = inv.containers.find((k) => k.where === 'canoe' && k.grid.some((e) => !e.box));
+    if (!c) { c = inv.containers.find((k) => /^(pack|barrel|packdry)/.test(k.item) && ['back', 'chest', 'stash'].includes(k.where) && k.grid.some((e) => !e.box)); if (c) { c.where = 'canoe'; c.at = null; inv.emit('containers'); } }
+    return c ? { id: c.id, item: c.item, drop: d ? { x: d.x, z: d.z, heading: d.heading } : null, inCanoe: inv.containers.filter((k) => k.where === 'canoe').map((k) => k.item) } : { none: inv.containers.map((k) => `${k.item}:${k.where}`) };
+  });
+  log('[guest] canoe', cnv);
+  if (cnv.id && cnv.drop) {
+    const cpid = `p${ids.guest}:${cnv.id}`;
+    await A.evaluate((d) => { const p = window.__game.player; p.x = d.x + Math.sin(d.heading) * 1.2; p.z = d.z + Math.cos(d.heading) * 1.2; }, cnv.drop);
+    await sleep(1500);
+    const seen = await A.evaluate(({ gid, cpid }) => {
+      const g = window.__game, f = g.coopShare.friends.get(gid), r = g.coop.remotes.get(gid), o = f && f.view && f.view.objs.get(cpid);
+      const t = g.coopShare.tabs().find((q) => q.key === cpid);
+      return { drawn: !!(o && o.visible && r && r.boat.near && o.parent === r.boat.near.pivot), stockPacks: r ? r.boat.packs : null, tab: t ? `${t.label} · ${t.sub}` : null, items: t ? t.bin.items.map((i) => ({ uid: i.uid, id: i.id, qty: i.qty })) : [] };
+    }, { gid: ids.guest, cpid });
+    let took = null;
+    if (seen.items.length) {
+      const it = seen.items[seen.items.length - 1];
+      const before = await A.evaluate((id) => window.__game.inventory.count(id, { reachable: false }), it.id);
+      await A.evaluate(({ cpid, it }) => { const t = window.__game.coopShare.tabs().find((q) => q.key === cpid); t.bin.take({ uid: it.uid, itemId: it.id, toCId: null, qty: it.qty }); }, { cpid, it });
+      await until(A, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+      took = { id: it.id, gained: (await A.evaluate((id) => window.__game.inventory.count(id, { reachable: false }), it.id)) - before, rtt: await A.evaluate(() => window.__game.coopShare.n.rtt.slice(-1)[0]) };
+    }
+    result('10 the guest’s canoe: its load drawn in it, a tab beside it, a take through it', !!(seen.drawn && seen.tab && took && took.gained > 0), { drawnInTheirHull: seen.drawn, stockPacks: seen.stockPacks, tab: seen.tab, took });
+    await A.evaluate(({ gid }) => {
+      const g = window.__game, T = g.THREE, r = g.coop.remotes.get(gid), w = new T.Vector3();
+      r.boat.root.getWorldPosition(w);
+      g.player.x = w.x + 6; g.player.z = w.z + 6; // (out of the way)
+      g.chase.focus = { pos: new T.Vector3(w.x - 2.6, w.y + 3.2, w.z - 2.6), look: new T.Vector3(w.x, w.y, w.z) };
+    }, { gid: ids.guest });
+    await sleep(1500);
+    await A.screenshot({ path: path.join(OUT, 'host-sees-guest-canoe-load.png') });
+    await A.evaluate(() => { window.__game.chase.focus = null; });
+  } else result('10 the guest’s canoe: its load drawn in it, a tab beside it, a take through it', false, cnv);
+
+  // --- 11: a friend's hung barrel: a tab within reach of it, a take ------------------------------------------------------
+  const hb = await B.evaluate((L) => {
+    const g = window.__game, inv = g.inventory, F = L.fire;
+    const c = inv.containers.find((k) => /^barrel/.test(k.item) && k.where !== 'in' && k.where !== 'canoe') || inv.containers.find((k) => /^barrel/.test(k.item));
+    if (!c) return { none: inv.containers.map((k) => `${k.item}:${k.where}`) };
+    if (!c.grid.some((e) => !e.box)) { // (an empty barrel: a meal of ours into it)
+      const def = g.items.itemDef;
+      for (const k of inv.containers) { if (k === c) continue; const e = k.grid.find((x) => !x.box && !x.fixed && inv.accepts(c, def(x.id))); if (e) { const f = inv.firstFit(c, e.id); if (f && inv.move(k.id, e.uid, c.id, f.x, f.y, f.rot, 1)) break; } }
+    }
+    if (!c.grid.some((e) => !e.box)) { const def = g.items.itemDef, id = Object.keys(g.items.ITEMS).find((k) => { const d = def(k); return d && d.kind !== 'container' && (d.w || 1) * (d.h || 1) === 1 && inv.accepts(c, d); }); if (id) inv.put(c, id, { qty: 1 }); } // (the rig's: a food of the game's into it)
+    const x = F.x + 3.5, z = F.z - 3, y = g.tiles.groundAt(x, z) + 2.4;
+    inv.hang(c.id, { x, z, y, limb: y + 1.2, heading: 0 });
+    return { id: c.id, item: c.item, at: { x, z }, things: c.grid.map((e) => e.id) };
+  }, L);
+  log('[guest] hung', hb);
+  if (hb.id) {
+    const bpid = `p${ids.guest}:${hb.id}`;
+    await A.evaluate((a) => { const p = window.__game.player; p.x = a.x + 1.5; p.z = a.z + 0.5; }, hb.at);
+    await sleep(1200);
+    const t = await A.evaluate((bpid) => { const t = window.__game.coopShare.tabs().find((q) => q.key === bpid); return t ? { label: `${t.label} · ${t.sub}`, items: t.bin.items.map((i) => ({ uid: i.uid, id: i.id, qty: i.qty })) } : null; }, bpid);
+    let took = null;
+    if (t && t.items.length) {
+      const it = t.items[0], before = await A.evaluate((id) => window.__game.inventory.count(id, { reachable: false }), it.id);
+      await A.evaluate(({ bpid, it }) => { const q = window.__game.coopShare.tabs().find((k) => k.key === bpid); q.bin.take({ uid: it.uid, itemId: it.id, toCId: null, qty: 1 }); }, { bpid, it });
+      await until(A, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+      took = { id: it.id, gained: (await A.evaluate((id) => window.__game.inventory.count(id, { reachable: false }), it.id)) - before, rtt: await A.evaluate(() => window.__game.coopShare.n.rtt.slice(-1)[0]) };
+    }
+    const stillHung = await B.evaluate((id) => window.__game.inventory.cont(id).where, hb.id);
+    result('11 the guest’s hung barrel: a tab within reach, a take from it', !!(t && took && took.gained > 0), { tab: t && t.label, took, guestBarrelNow: stillHung });
+  } else result('11 the guest’s hung barrel: a tab within reach, a take from it', false, hb);
 
   // --- 9: no answer: a put the owner never answers comes back after the timeout ------------------------------------------
   await A.evaluate(() => { const s = window.__game.coopShare; s.gotOp = () => {}; }); // (the host's browser deaf to requests)
