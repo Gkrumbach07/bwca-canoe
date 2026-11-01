@@ -72,7 +72,7 @@ const RAIN = { on: 0.3, burn: 1, wetAfter: 1 / 3, wetFor: 3, packAfter: 0.5, dry
 // fb4 E: the poles lying about for a tarp (tarp.js), found like the wood: a few round each site, most by the down logs and
 // under the trees, and now and then in the woods; one cut from a down log with the saw (POLE_CUT: two a log a day)
 const SITE_POLES = { n: 6, tries: 70, from: 4, to: 23 };
-const POLE_CUT = [{ name: 'Pole cut', doing: 'Sawing a straight length off the down spruce and trimming its twigs', minutes: 6, seconds: 1.6 }];
+const POLE_CUT = [{ name: 'Pole cut', doing: 'Sawing a straight length off the down spruce and trimming its twigs', seconds: 1.6 }];
 const POLES_A_LOG = 2;
 // fb4 E (decision 2): the evening's firewood as have of need: pieces enough for about four hours of fire after supper
 const EVENING = { pieces: 8, hours: 4 };
@@ -87,12 +87,12 @@ export const PAY = { pint: 10, armful: 6 };
 const ARMFUL = 3;            // pieces of wood a notice's "armful" is
 // the wake times on the card: first light (camp.js wakeTime: a quarter hour after sunrise, or later after a late night)
 const DOUSE = [
-  { name: 'Drowned', doing: 'Pouring a pot of lake water on it', minutes: 3, seconds: 1.1 },
-  { name: 'Stirred', doing: 'Stirring the ash in with a stick', minutes: 3, seconds: 1.0 },
-  { name: 'Cold', doing: 'More water, and the back of a hand to the ash', minutes: 3, seconds: 0.9 },
+  { name: 'Drowned', doing: 'Pouring a pot of lake water on it', seconds: 1.1 },
+  { name: 'Stirred', doing: 'Stirring the ash in with a stick', seconds: 1.0 },
+  { name: 'Cold', doing: 'More water, and the back of a hand to the ash', seconds: 0.9 },
 ];
-const SAW = [1, 2, 3].map((i) => ({ name: `${['First', 'Second', 'Third'][i - 1]} length`, doing: 'Sawing through the dead spruce', minutes: 5, seconds: 1.25 }));
-const LATRINE = [{ name: 'Done', doing: 'A quiet few minutes back in the trees', minutes: 10, seconds: 3.4 }];
+const SAW = [1, 2, 3].map((i) => ({ name: `${['First', 'Second', 'Third'][i - 1]} length`, doing: 'Sawing through the dead spruce', seconds: 1.25 }));
+const LATRINE = [{ name: 'Done', doing: 'A quiet sit back in the trees', seconds: 3.4 }];
 
 const absDay = (year, doy) => Math.round(Date.UTC(year, 0, doy) / 86400000);
 export function berrySeason(year, doy) { return doy >= dayOfYear(year, ...SEASON.from) && doy <= dayOfYear(year, ...SEASON.to); }
@@ -613,7 +613,7 @@ export class Chores {
           if (Number.isFinite(e.awakeSince)) e.awakeSince = Math.min(e.now, e.awakeSince + LATRINE_REST * 30);
           e.needs.rest = want;
         }
-        this.note(first ? 'Ten quiet minutes on the box back in the trees, a red squirrel scolding. A little more rested.' : 'Ten quiet minutes on the box back in the trees.', 5);
+        this.note(first ? 'A quiet sit on the box back in the trees, a red squirrel scolding. A little more rested.' : 'A quiet sit on the box back in the trees.', 5);
         up();
         this.persist();
       },
@@ -933,13 +933,13 @@ export class Chores {
     const e = {
       verb: 'Saw', held: true, why: !saw ? 'Saw: needs the folding saw' : left > 0 ? null : 'Sawn already: no more till another day',
       needs: [sawNeed, { label: 'Short logs left in it', have: left, need: SAW.length, unit: 'logs' }],
-      next: !saw ? getSaw : left > 0 ? `Hold E: ${word(left)} ${plural(left, 'cut')}, 5 min each, a short log by it at each` : 'Another down log, or dead branches off the ground',
+      next: !saw ? getSaw : left > 0 ? `Hold E: ${word(left)} ${plural(left, 'cut')}, a short log by it at each` : 'Another down log, or dead branches off the ground',
       run: (o) => this.beginSaw(log.o, k, cuts, keys(o)),
     };
     const q = {
       verb: 'Cut a pole', held: true, why: !saw ? 'Cut a pole: needs the saw' : pl > 0 ? null : 'Two poles cut from it today already',
       needs: [sawNeed, { label: 'Poles left in it today', have: pl, need: POLES_A_LOG, unit: 'poles' }],
-      next: !saw ? getSaw : pl > 0 ? 'Hold Q: a straight six-foot pole off its top, 6 min' : 'Another down log, or dead poles lying under the trees',
+      next: !saw ? getSaw : pl > 0 ? 'Hold Q: a straight six-foot pole off its top' : 'Another down log, or dead poles lying under the trees',
       run: (o) => this.beginPoleCut(log.o, k, keys(o)),
     };
     const hint = left ? `${word(left)} short ${plural(left, 'log')} in it` : 'sawn up';
@@ -972,7 +972,7 @@ export class Chores {
     const used = this.usedLatrine();
     return {
       hint: used ? 'used today' : `rest +${Math.round(LATRINE_REST * 100)} %, once a day`,
-      needs: [{ label: 'Ten quiet minutes, sat', done: false }, { label: `Rest +${Math.round(LATRINE_REST * 100)} % (once a day)`, done: used }],
+      needs: [{ label: 'A quiet sit', done: false }, { label: `Rest +${Math.round(LATRINE_REST * 100)} % (once a day)`, done: used }],
       next: used ? 'E sits you down: ten quiet minutes, no rest bonus again today' : 'E sits you down for ten quiet minutes; E or a move key stands you up',
     };
   }

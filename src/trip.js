@@ -29,6 +29,7 @@
 //   trip.nearestKnownOutfitter(x, z)
 //   kinds: 'start' (the season's first push-off: the needs fresh, main.js) 'leave' (a later one) 'lake' 'portage'
 //   'camp' 'sleep' 'capsize' 'offsite' 'bunk' 'ride' 'known' 'evac' 'exit'
+import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import { save } from './save.js';
 import { plural } from './hud.js';
 import { clockOf } from './pace.js';
@@ -62,7 +63,7 @@ function blank(mode = 'adventure') {
   };
 }
 const blankBook = () => ({ trips: [], seen: { lakes: [], camps: [], eps: [], portages: [] } });
-function readDoc() { try { const s = localStorage.getItem(DOC_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
+function readDoc() { try { const s = kv.getItem(DOC_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 // an older core's permit carried the push-off: its date and its entry point are all that is kept of it
 const stampDate = (p) => (p && p.entry ? { year: p.entry.year, doy: p.entry.doy, hours: +(p.entry.hours ?? 8) } : null);
 

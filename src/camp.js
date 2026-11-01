@@ -65,9 +65,9 @@ const SHOW_TENT = 2500;     // m: a tent farther than this is not drawn (it stil
 const ASHORE_NOTE = 400;    // m: launching within this of your camp, the note says what is still there
 // the chores that still take a moment while the walker holds still (the fire's, the pot's and the wood's are chores.js's)
 const CHORES = {
-  fill: { seconds: 0.7, hours: 5 / 60, say: 'Filling the bottle…' },
+  fill: { seconds: 0.7, say: 'Filling the bottle…' },
 };
-const CHORE = { seconds: 1, hours: 0.1, say: 'Working…' }; // any other a stream asks for (chores.js, forage.js)
+const CHORE = { seconds: 1, say: 'Working…' }; // any other a stream asks for (chores.js, forage.js)
 const LOW_CHORES = new Set(['fill']); // done crouched (canoe.js state.crouch)
 const SLEEP_FROM = 1.5;     // hours before sunset the tent will take you
 const WAKE_AT = 0.25;       // hours after sunrise you wake
@@ -317,13 +317,6 @@ export class Camp {
     let hours = d.hours + h, days = 0;
     while (hours >= 24) { hours -= 24; days++; }
     d.setClock(d.year, d.doy + days, hours);
-  }
-  // a little time passing, not a jump (a chore's minutes, spread over its frames)
-  pass(h) {
-    const d = this.day;
-    if (h <= 0) return;
-    if (d.hours + h < 24) d.hours += h;
-    else d.setClock(d.year, d.doy + 1, d.hours + h - 24);
   }
   // the trip's calendar day for day-of-year doy (1 on the day it was put in), or 0 with no trip under way
   tripDay(doy) {
@@ -906,14 +899,14 @@ export class Camp {
   // done in by day (a site reached at dawn after a night on the water): the tent takes you anyway
   get wornOut() { const e = this.energy; return !!(e && e.live && e.needs && e.needs.rest < WORN_OUT); }
 
-  // a chore (CHORES): the walker holds still while its time passes on the clock, then `done`
-  chore(kind, done = null, spec = null) { this.busy = { t: 0, passed: 0, kind, done, spec }; } // (content C: spec { seconds, hours, say }, a chore's own length: kit.js's pump, stove, cup, knife)
-  // the chore under way, per frame (real seconds): its hours spread over its seconds
+  // a chore (CHORES): the walker holds still for its real seconds, then `done`. One clock (2026-11-01): a chore never
+  // moves the clock on by itself, its seconds run on the shared ×8 clock (co-op: one time for everyone)
+  chore(kind, done = null, spec = null) { this.busy = { t: 0, passed: 0, kind, done, spec }; } // (content C: spec { seconds, say }, a chore's own length: kit.js's pump, stove, cup, knife)
+  // the chore under way, per frame (real seconds)
   working(dt) {
     const b = this.busy, C = b.spec || CHORES[b.kind] || CHORE;
     b.t += dt;
-    const k = Math.min(1, b.t / C.seconds), want = C.hours * k;
-    this.pass(want - b.passed); b.passed = want;
+    const k = Math.min(1, b.t / C.seconds);
     this.say(C.say);
     if (k >= 1) {
       this.busy = null;

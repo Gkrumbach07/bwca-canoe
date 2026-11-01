@@ -25,6 +25,7 @@
 // Without a store (its tile not built yet) E by the landing opens the counter from the water. A new season begins at
 // the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
 // store comes back on its floor (updateArrival).
+import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import { esc, plural, word } from './hud.js';
 import { drawCounterMap, markerAt } from './counter-map.js';
 import './store.css';
@@ -881,10 +882,10 @@ export class Outfitter {
     if (v && p.onFoot) data.visit = { ep: v.ep, inside: !!v.inside, x: +p.x.toFixed(2), z: +p.z.toFixed(2), heading: +p.heading.toFixed(3), switched: !!v.switched };
     const f = p.fishing;
     if (f && Array.isArray(f.stringer)) data.stringer = f.stringer.map((s) => ({ species: s.species, length: s.length })); // the fish kept for supper
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage full or private mode */ }
+    try { kv.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage full or private mode */ }
   }
   load() {
-    try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+    try { const s = kv.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
   }
   // On load: resume a trip where it was left, or open the counter at the landing. A document without a trip core
   // is from before it and comes back as Sandbox, and an older core's permit is dropped (trip.js). The food

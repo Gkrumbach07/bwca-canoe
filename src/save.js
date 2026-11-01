@@ -1,4 +1,5 @@
-// Saved state in localStorage, one JSON document per namespace under `bwca-canoe:<ns>`. Any feature keeps
+// Saved state, one JSON document per namespace under `bwca-canoe:<ns>`, in the game's store (store.js: IndexedDB, read
+// into memory before anything reads; localStorage only as its fallback). Any feature keeps
 // its own namespace (`save.read('fishing')`, `save.write('fishing', {...})`) so nothing steps on anything
 // else; `trip` (position, heading, clock, camera) and `settings` are the shell's. Reads never throw: a
 // missing or unparsable entry gives the fallback, and a browser that refuses storage (private mode, quota)
@@ -8,28 +9,29 @@
 // `bwca-canoe-<name>`, all but the few GLOBAL_KEYS that belong to the player) is the season being played, so no module
 // needs to know about slots: the slot is mounted before anything reads.
 import { pack, unpack } from './lzw.js';
+import { kv } from './store.js';
 
 const PREFIX = 'bwca-canoe:';
 
 export const save = {
   key(ns) { return PREFIX + ns; },
-  has(ns) { try { return localStorage.getItem(this.key(ns)) != null; } catch { return false; } },
+  has(ns) { try { return kv.getItem(this.key(ns)) != null; } catch { return false; } },
   read(ns, fallback = null) {
     try {
-      const raw = localStorage.getItem(this.key(ns));
+      const raw = kv.getItem(this.key(ns));
       return raw == null ? fallback : JSON.parse(raw);
     } catch { return fallback; }
   },
   write(ns, value) {
-    try { localStorage.setItem(this.key(ns), JSON.stringify(value)); return true; } catch { return false; }
+    try { kv.setItem(this.key(ns), JSON.stringify(value)); return true; } catch { return false; }
   },
   // merge a few fields into the namespace's document
   patch(ns, fields) { return this.write(ns, Object.assign(this.read(ns, {}) || {}, fields)); },
-  clear(ns) { try { localStorage.removeItem(this.key(ns)); } catch { /* nothing to clear */ } },
+  clear(ns) { try { kv.removeItem(this.key(ns)); } catch { /* nothing to clear */ } },
   // every namespace we hold
   namespaces() {
     const out = [];
-    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(PREFIX)) out.push(k.slice(PREFIX.length)); } } catch { /* no storage */ }
+    try { for (let i = 0; i < kv.length; i++) { const k = kv.key(i); if (k && k.startsWith(PREFIX)) out.push(k.slice(PREFIX.length)); } } catch { /* no storage */ }
     return out;
   },
 };
@@ -91,14 +93,15 @@ export const GLOBAL_KEYS = new Set(['bwca-canoe:settings', 'bwca-canoe:tripMode'
 const SEASON_KEY = /^bwca-canoe[:-]/;
 export const isSeasonKey = (k) => typeof k === 'string' && SEASON_KEY.test(k) && !GLOBAL_KEYS.has(k);
 const DOC = 'bwca-canoe@slots', PARKED = (n) => `bwca-canoe@slot${n}`, PACKED = 'Z1:';
-const QUOTA = 5 * 1024 * 1024;   // chars a browser keeps per site, about (Chrome, Firefox and Safari: 5 M)
+const QUOTA = 5 * 1024 * 1024;   // chars localStorage keeps per site, about (Chrome, Firefox and Safari: 5 M): the fallback's room
+const IDB_ROOM = 200 * 1024 * 1024; // chars counted as room in IndexedDB (browsers give a site far more; this is a soft cap)
 const FILE_MAX = 6e6;            // chars of an import, at most
 const SEASON_MAX = 2.5e6;        // chars of a season's keys in an import, at most
 const PRINT_MAX = 400e3;         // chars of one print's data URL
 const PHOTOS = 'bwca-canoe:photos';
 const PRINT_ID = /^\d+$/;
 
-const store = () => { try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; } };
+const store = () => (kv.backend === 'memory' ? null : kv);
 const parse = (s) => { try { return s == null ? null : JSON.parse(s); } catch { return null; } };
 const nums = () => Array.from({ length: SLOT_COUNT }, (_, i) => i + 1);
 function blankDoc() { return { v: 1, active: 1, live: 1, gen: 1, pending: null, boot: null, error: null, slots: Object.fromEntries(nums().map((n) => [n, null])) }; }
@@ -111,7 +114,7 @@ function readDoc() {
   for (const n of nums()) if (!(n in d.slots)) d.slots[n] = null;
   return d;
 }
-function writeDoc(d) { try { store().setItem(DOC, JSON.stringify(d)); return true; } catch { return false; } }
+function writeDoc(d) { try { store().setItem(DOC, JSON.stringify(d)); kv.tell({ type: 'doc', gen: d.gen, live: d.live }); return true; } catch { return false; } }
 // the live season's keys, raw
 function liveMap() {
   const st = store(), out = {};
@@ -200,17 +203,16 @@ try { mounted = mount(); } catch (e) { console.warn('save slots: the mount faile
 const myGen = mounted ? mounted.gen : 0, myLive = mounted ? mounted.live : 1;
 const bootError = mounted ? mounted.error : null;
 if (mounted && mounted.error) { mounted.error = null; writeDoc(mounted); }
-// another tab changed seasons: from now on its keys are not ours to write
+// another tab changed seasons, or opened the game (the newest tab owns the season): from now on its keys are not ours
+// to write (store.js kv.freeze drops them)
 if (mounted && typeof window !== 'undefined') {
-  window.addEventListener('storage', (e) => {
-    if (stale || e.key !== DOC || e.storageArea !== store()) return;
-    const d = parse(e.newValue);
-    if (d && d.gen === myGen && d.live === myLive) return;
+  kv.onTab((m) => {
+    if (stale) return;
+    if (m.type === 'doc' && m.gen === myGen && m.live === myLive) return;
+    if (m.type !== 'doc' && m.type !== 'open') return;
     stale = true;
-    const set = Storage.prototype.setItem, rem = Storage.prototype.removeItem;
-    Storage.prototype.setItem = function (k, v) { if (this === store() && isSeasonKey(k)) return undefined; return set.call(this, k, v); };
-    Storage.prototype.removeItem = function (k) { if (this === store() && isSeasonKey(k)) return undefined; return rem.call(this, k); };
-    console.warn('save slots: another tab changed seasons; this tab no longer saves');
+    kv.freeze(isSeasonKey);
+    console.warn(m.type === 'open' ? 'saves: the game was opened in another tab; this tab no longer saves' : 'save slots: another tab changed seasons; this tab no longer saves');
   });
 }
 
@@ -313,9 +315,9 @@ export function readSeasonFile(text) {
 
 const liveStarted = () => factsOf(liveMap()).started;
 let leaving = false; // a change of season is under way: the page's last writes leave the slots document alone
-const reload = () => { leaving = true; try { location.reload(); } catch { /* not a page */ } };
+const reload = () => { leaving = true; kv.flush().finally(() => { try { location.reload(); } catch { /* not a page */ } }); }; // (every write in IndexedDB first)
 const refused = (w) => ({ ok: false, why: w });
-const STALE = 'Another tab changed seasons. Reload this one to carry on.';
+const STALE = 'The game is open in another tab. Reload this one to carry on here.';
 
 export const slots = {
   count: SLOT_COUNT,
@@ -323,6 +325,7 @@ export const slots = {
   get stale() { return stale; },
   get error() { return bootError; },     // what the mount ran into ('full', 'damaged:<n>'), once
   get usable() { return !!mounted; },
+  get backend() { return kv.backend; }, // where the saves are: 'idb', 'local' (the fallback) or 'memory' (none kept)
   // every slot: the live one is occupied once its season has begun
   list() {
     const d = readDoc() || blankDoc();
@@ -462,9 +465,10 @@ export const slots = {
     await dropPrints(n); await writePrints(n, r.prints);
     return { ok: true, reload: false, n };
   },
-  // localStorage in chars: every key the game holds, the live season's, each parked slot's
+  // the store in chars: every key the game holds, the live season's, each parked slot's (limit: the fallback's
+  // localStorage, or a soft cap in IndexedDB)
   usage() {
-    const st = store(), out = { total: 0, limit: QUOTA, live: 0, parked: {} };
+    const st = store(), out = { total: 0, limit: kv.backend === 'idb' ? IDB_ROOM : QUOTA, live: 0, parked: {}, backend: kv.backend };
     if (!st) return out;
     for (let i = 0; i < st.length; i++) {
       const k = st.key(i), v = st.getItem(k) || '', c = k.length + v.length;

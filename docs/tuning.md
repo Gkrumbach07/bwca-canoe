@@ -66,7 +66,7 @@ Real minutes are at Normal (the 1/2/3 keys' ×1). At Faster they are half, and a
 | Treating water (tablets) | 30 game min, 7½ real | as it is | It's a timer, and you paddle or cook meanwhile; real iodine takes 30 min; the pump ($35) is the upgrade that drinks at once | — (taste: 20 min if it drags) |
 | A log's burn | 1.5 game h, 22 real min; a branch 0.6 h, 9 real; a pole as a log | as it is | An evening's 8–14 pieces burn 4–6 game hours | — |
 | A night | a card of a few seconds, the clock to first light | as it is | | — |
-| The camp clock | one clock: every chore runs at the clock's 4, the held jobs (pitch, strike, douse, saw) pass their minutes in a second or two | holds | Checked: no per-place rate left | — |
+| The camp clock | one clock: every chore runs at the clock's 4, the held jobs (pitch, strike, douse, saw) pass their minutes in a second or two | holds | Checked: no per-place rate left. **2026-11-01:** no held job, chore or pick passes time of its own any more (hold.js clock off by default, camp.js chores and forage.js picks pass nothing, the raised camera keeps ×8): their real seconds run on the one ×8 clock, so a camp evening costs less game time, energy and food than before | — |
 
 ### Energy and the needs, a travel day
 

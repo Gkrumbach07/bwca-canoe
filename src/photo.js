@@ -14,7 +14,7 @@ import { names, KINDS_NOTE } from './names.js';
 // thin Air frame that marks the print's 16:9; the mouse aims (or the arrows and WASD, Shift for a fine hand), the wheel
 // (or Q and E held) zooms out to a long lens (LENS: 50 to 300 mm on 35 mm film, the print cut across the frame's width),
 // Space or a click takes the picture, C or Esc lowers it. While it is up the paddle and the feet rest and the pace is
-// life's (pace.js 'life': no time-lapse, not even the floor of twice life both paces keep, and the clock 1:1), at 1×.
+// life's (pace.js 'life': no time-lapse, not even the floor of twice life both paces keep; the clock stays the one clock).
 //
 // A subject counts when it is near the middle of the print (within ZONE of the half field of view as the lens is set
 // at the moment, an ellipse on the 16:9: zoomed in, the middle narrows with it), close enough (REACH: a moose 120 m, a beaver or a loon 60 m, a gull or a raven 30 m) and not hidden by the
@@ -344,7 +344,7 @@ export class PhotoCamera {
     this.baseFov = cam.fov;
     if (!first) { const yaw = Math.atan2(-_dir.z, _dir.x); c.viewYaw = yaw; c.forwardYaw = yaw; c.viewPitch = 0; c.first = false; } // up to the eye where the view was
     this.lens();
-    p.pace = 'life'; p.boost = 1; // life (pace.js 'life'): no time-lapse; the clock 1:1
+    p.pace = 'life'; p.boost = 1; // life (pace.js 'life'): no time-lapse; the clock runs on at the one rate
     this.raised = true; this.hadLock = c.locked; this.wind = 0.25; this.pending = false; this.lookT = 0; this.sayKey = '';
     document.body.classList.add('photo-up');
     this.placeFrame(); this.paintFrame();

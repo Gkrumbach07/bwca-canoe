@@ -286,9 +286,9 @@ defineItem({ id: 'secchi', name: 'Secchi disk', short: 'Secchi', kind: 'tool', w
 // =======================================================================================================================
 // deadfall: a spruce across a named portage, cleared with the saw
 const SAW = [
-  { name: 'First cut', doing: 'Sawing through beside the trail', minutes: 7, seconds: 2.6 },
-  { name: 'Second cut', doing: 'Sawing through on the far side', minutes: 7, seconds: 2.6 },
-  { name: 'Off the trail', doing: 'Rolling the length off the trail', minutes: 3, seconds: 1.6 },
+  { name: 'First cut', doing: 'Sawing through beside the trail', seconds: 2.6 },
+  { name: 'Second cut', doing: 'Sawing through on the far side', seconds: 2.6 },
+  { name: 'Off the trail', doing: 'Rolling the length off the trail', seconds: 1.6 },
 ];
 const DEADFALL = {
   titles: ['Blowdown on the portage', 'A tree across the trail', 'Saw work wanted'],
@@ -494,10 +494,10 @@ function pickLitter(T, t, k) {
 // =======================================================================================================================
 // secchi: a clarity reading at a named lake's deep spot, for the Citizen Lake Monitoring Program
 const SECCHI = [
-  { name: 'Over the side', doing: 'Over the shady side', minutes: 1, seconds: 1.0 },
-  { name: 'Gone', doing: 'Lowering it', minutes: 3, seconds: 3.2 },
-  { name: 'Back in sight', doing: 'Raising it slowly', minutes: 2, seconds: 2.0 },
-  { name: 'Noted', doing: 'Reading the marks on the line', minutes: 1, seconds: 1.0 },
+  { name: 'Over the side', doing: 'Over the shady side', seconds: 1.0 },
+  { name: 'Gone', doing: 'Lowering it', seconds: 3.2 },
+  { name: 'Back in sight', doing: 'Raising it slowly', seconds: 2.0 },
+  { name: 'Noted', doing: 'Reading the marks on the line', seconds: 1.0 },
 ];
 const STATION_R = 170;   // metres from the deep spot that are the station
 const HOURS = [10, 16];  // the program's window: the sun high

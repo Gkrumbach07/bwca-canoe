@@ -58,6 +58,7 @@
 // Saved in its own namespace (`bwca-canoe:inventory`), tied to the profile's season (profile.seasonId). A season from
 // before the items migrates once (migrate()): the kit and the owned items, the packs, the days of food, the lures, the
 // leeches and the stringer become items in containers in the canoe.
+import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import { ITEMS, itemDef, defineItem, sizeOf, fishKg, fishEat, LEGACY, STARTER_KIT, FOOD_KINDS, NEED, check, timerWords, WOOD_DRY, sealedDef } from './items.js';
 import { save } from './save.js';
 import { feet } from './units.js';
@@ -1493,7 +1494,7 @@ export class Inventory {
   }
 }
 
-function readJSON(key) { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : null; } catch { return null; } }
+function readJSON(key) { try { const s = kv.getItem(key); return s ? JSON.parse(s) : null; } catch { return null; } }
 
 // the one inventory (stream B's inv-ui.js and the others import it; main.js attaches it)
 export const inventory = new Inventory();

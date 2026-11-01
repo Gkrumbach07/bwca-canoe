@@ -27,6 +27,7 @@
 // without the 'sheet:' prefix); has('sheet:F-24') and give('sheet:F-24') answer through them, so the shop's "owned"
 // and an old give keep working. An older save's 'sheet:…' entries in the owned list move into the sheets on load;
 // sheet items still in an inventory, and the map case they rode in, are migrated by sheets.js once it is attached.
+import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import { save } from './save.js';
 import { itemDef, LEGACY, AFRAME_SLEEP } from './items.js';
 
@@ -69,7 +70,7 @@ function blank() {
 }
 // fb2 D: a sheet's id without its item prefix ('sheet:F-24' → 'F-24')
 const sheetId = (id) => { const k = String(id ?? '').replace(/^sheet:/, ''); return /^F-\d+$/.test(k) ? k : null; };
-function readDoc() { try { const s = localStorage.getItem(DOC_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
+function readDoc() { try { const s = kv.getItem(DOC_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 const dollars = (n) => Math.max(0, Math.round(Number(n) || 0));
 
 export class Profile {
