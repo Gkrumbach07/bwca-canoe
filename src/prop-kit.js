@@ -4,6 +4,7 @@ import { bakeOcclusion } from './occlusion.js';
 import { groundUniforms, glslGround, mireSheen } from './terrain.js';
 import { SPLAT } from './terrain-build.js';
 import { applyWet } from './weather.js';
+import { applySnow } from './snow.js';
 
 // The kit the built things are made from (props.js): generated textures, one material, a geometry builder
 // with texture coordinates, a cheap occlusion bake against a few boxes, the terrain mesh's exact height, a
@@ -284,6 +285,9 @@ float propRock = 0.0;`)
           'vec3 propIrr = mix( irradiance, mix( vec3( dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) ) ), irradiance, uPropFill.x ) * uPropFill.y, propRock );\n  reflectedLight.indirectDiffuse += propIrr * lookSky');
       // rain: the wood soaks it up (porosity 1), a rock half as much and shines more
       applyWet(shader, { porosity: 'mix( 1.0, 0.5, propRock )', gloss: 'mix( 0.35, 0.7, propRock )' });
+      // snow (snow.js) on the stones, and on the boards out under the sky (a puncheon, a dock, a roof); the baked occlusion
+      // says which: a floor under a roof is in its shade and keeps none
+      applySnow(shader, { amount: 'max( propRock, smoothstep( 0.62, 0.88, vOcc ) )' });
     },
   });
   material.userData.u = u;
@@ -797,6 +801,7 @@ export function trailMaterial() {
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ) * ( 1.0 - trailPool ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); normal = normalize( mix( normal, mat3( viewMatrix ) * vec3( 0.0, 1.0, 0.0 ), trailPool ) ); }')
         .replace('#include <opaque_fragment>', mireSheen('trailPool * 0.9 + 0.25 * smoothstep( 0.2, 0.7, vTrail.y ) * ( 1.0 - trailPool )')); // (the mud's wet shine, and the puddles')
       applyWet(shader, { porosity: '1.0', gloss: '0.3 * ( 1.0 - 0.7 * groundCanopy )' }); // the packed soil wets as the ground round it does
+      applySnow(shader, { shelter: 'groundCanopy', amount: '0.9' }); // and snows as it does, a trodden track a shade greyer
     },
   });
   return trailMat;

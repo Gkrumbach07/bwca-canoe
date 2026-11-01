@@ -194,8 +194,8 @@ export function standingWater(regime, beaver, doy) {
 }
 // The pools' ice (wetlands round 2), from the season (season.js seasonAt: the lake's own ice-out and freeze-up, which
 // the day cycle follows): ice 0 open .. 1 frozen; slush the dark melt as it goes out (and the first thin ice as it
-// comes in); snow how much lies on it, once the winter has set in and until the melt starts. The game draws no snow on
-// the ground, so it is only a dusting on the ice, in drifts. terrain.js draws it, player.js walks on it.
+// comes in); snow how much lies on it, once the winter has set in and until the melt starts. A dusting on the
+// ice, in drifts; the season's snow (snow.js) lies over it. terrain.js draws it, player.js walks on it.
 const _ice = { ice: 0, slush: 0, snow: 0 };
 export function mireIce(season, out = _ice) {
   const ice = season ? season.ice || 0 : 0, d = season ? season.doy : 180;

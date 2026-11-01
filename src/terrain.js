@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { applyLook } from './shading.js';
 import { applyWet } from './weather.js';
+import { applySnow, setSnowSeason } from './snow.js';
 import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE, BED_MATS, SPHAGNUM, SWAMP_FLOOR } from './terrain-build.js';
 import { mireIce } from './land.js';
 import { smoothstep } from './rng.js';
@@ -79,6 +80,7 @@ export function setGroundTint(r, g, b) { groundUniforms.uGroundTint.value.set(r,
 // thaw, the new green coming up through it from mid-May. Multipliers on the meadow's colour (#a6a857), linear.
 const MEADOW_SEASON = { summer: [0.95, 1.02, 0.86], tawny: [1.22, 0.84, 0.98], brown: [0.78, 0.56, 0.86] };
 export function setLandSeason(season) {
+  setSnowSeason(season); // the snow on everything (snow.js), by the same date
   const ice = mireIce(season), u = groundUniforms;
   u.uMireIce.value.set(ice.ice, ice.slush, ice.snow);
   const d = season.doy, M = MEADOW_SEASON, out = [0, 0, 0];
@@ -407,6 +409,10 @@ export function makeTerrainMaterial() {
       .replace('#include <opaque_fragment>', mireSheen('groundPool * 0.9 * groundPoolGloss'));
     // rain: the soil darkens most, the rock half as much and shines a little more; less sheen under the canopy
     applyWet(shader, { porosity: 'groundPorosity', gloss: '( 0.3 + 0.4 * groundRock ) * ( 1.0 - 0.7 * groundCanopy ) * ( 1.0 - vFloor.z )' });
+    // the snow (snow.js): on the land, and on the pools and the lake bed once the ice is in (under the ice the bed is
+    // hidden; a drawn-down flowage's bared mud, which is bed, snows with the winter), never through open water; the
+    // canopy's shade is its shelter
+    applySnow(shader, { shelter: 'groundCanopy', amount: 'mix( 1.0, uMireIce.x, step( 0.5, vFloor.z ) ) * ( 1.0 - groundPool * ( 1.0 - uMireIce.x ) )' });
   };
   m.customProgramCacheKey = () => 'look-terrain';
   return m;
