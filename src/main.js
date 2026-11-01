@@ -58,6 +58,7 @@ import { Actors } from './actors.js'; // p2 A
 import { Coop } from './coop.js'; // co-op phase 1
 import { CoopGive } from './coop-give.js'; // co-op phase 2, stream B: purses, giving, a guest's things kept by the host
 import { CoopShare } from './coop-share.js'; // co-op phase 2: the shared world things
+import { CoopTrip } from './coop-trip.js'; // co-op phase 3, stream C: Adventure in co-op
 import { inventory } from './inventory.js'; // fb A
 import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
 import { ContainerView } from './containers.js'; // fb A
@@ -909,6 +910,8 @@ async function main() {
   coop.g.more({ inventory, fires, camp, chores: camp.chores, tarp, forage, energy, shop, tiles, scene, registry: campsites, hold });
   window.__game.coopGive = new CoopGive(coop, { pointer, talk }); // (stream B: Give money on the dot, Give to … in the book)
   window.__game.coopShare = new CoopShare(coop); // phase 2 stream A: the shared world things (coop-share.js)
+  coop.g.more({ rides, tasks, veil, fishing, stats: tripStats });
+  window.__game.coopTrip = new CoopTrip(coop); // phase 3 stream C: Adventure in co-op (coop-trip.js): the group's trip, boards, rides
   // water: two rules (the owner, 2026-10-26: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if
   // i fill water up without a tablet, it is instantly clean even tho warnign says its not"). Every dried meal and a cup
   // take their water from the bottle (cook.js COOK, kit.js), short of it the "water 0.3 L" chip and once the moment
