@@ -406,6 +406,7 @@ export class CoopTrip {
         if (!l) { T.ads.set(id, { ...h }); continue; }
         // the taker's own progress is theirs; a done here is never undone by an older word from the host
         if (l.byId === this.myVid && l.status === 'open' && h.status === 'open') continue;
+        if (l.status === 'offered' && h.status === 'open' && h.by === this.myName) { Object.assign(l, h); l.status = 'offered'; (this.adoptLater || (this.adoptLater = [])).push(l); continue; } // (the host's answer to a take was slow)
         if (l.status === 'done' && h.status === 'open') { this.coop.send({ t: 'tprog', to: m.from, n: l }); continue; }
         if (h.status === 'offered' && l.status !== 'offered') { delete l.taken; delete l.by; delete l.byId; }
         Object.assign(l, h);
@@ -418,6 +419,8 @@ export class CoopTrip {
       this.hostAds = new Map((m.d.ads || []).map((t) => [t.id, JSON.stringify(T.ads.get(t.id) || t)]));
       T.boardChanged();
     } finally { this.applying = false; }
+    const later = this.adoptLater || []; this.adoptLater = null;
+    for (const t of later) this.adopt(t);
     const o = this.g.outfitter; if (o && o.open) o.render();
   }
   // a guest: what changed here goes to the host (a notice moved on, done, let go; one claimed here is gone)
@@ -438,22 +441,29 @@ export class CoopTrip {
   askTake(id) {
     const rid = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
     const T = this.g.tasks;
-    new Promise((resolve) => { this.takes.set(rid, { id, resolve }); setTimeout(() => { if (this.takes.delete(rid)) resolve(false); }, 4000); })
+    new Promise((resolve) => { this.takes.set(rid, { id, resolve }); setTimeout(() => { if (this.takes.delete(rid)) resolve(null); }, 20000); }) // (no answer in 20 s: the host's tasks say, onTasks)
       .then((ok) => {
         const t = T.ads.get(id);
-        if (!ok || !t) { this.note('Someone has that notice already.', 4); T.boardChanged(); return; }
-        this.applying = true;
-        try {
-          t.status = 'open'; t.taken = T.today(); t.by = this.myName; t.byId = this.myVid;
-          const k = T.kinds[t.kind];
-          if (k && k.onTake) { try { k.onTake(T, t); } catch (e) { console.warn('the board: take', t.kind, e); } }
-        } finally { this.applying = false; }
-        if (this.hostAds) this.hostAds.set(id, JSON.stringify(t));
-        this.toHost({ t: 'tprog', n: t });
-        T.boardChanged();
-        const o = this.g.outfitter; if (o && o.open) o.render();
+        if (ok === null || !t) { T.boardChanged(); return; }
+        if (!ok) { this.note('Someone has that notice already.', 4); T.boardChanged(); return; }
+        if (t.status !== 'offered' && t.byId === this.myVid) return; // (the host's tasks said so first: adopted in onTasks)
+        this.adopt(t);
       });
     this.toHost({ t: 'ttake', id, rid });
+  }
+  // a notice the host gave this player: theirs here too, the kind's onTake run on this browser (a Secchi disk lent)
+  adopt(t) {
+    const T = this.g.tasks, id = t.id;
+    this.applying = true;
+    try {
+      t.status = 'open'; t.taken = t.taken || T.today(); t.by = this.myName; t.byId = this.myVid;
+      const k = T.kinds[t.kind];
+      if (k && k.onTake) { try { k.onTake(T, t); } catch (e) { console.warn('the board: take', t.kind, e); } }
+    } finally { this.applying = false; }
+    if (this.hostAds) this.hostAds.set(id, JSON.stringify(t));
+    this.toHost({ t: 'tprog', n: t });
+    T.boardChanged();
+    const o = this.g.outfitter; if (o && o.open) o.render();
   }
   onTake(m) {
     if (!this.host) return;

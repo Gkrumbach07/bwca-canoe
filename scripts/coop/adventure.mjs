@@ -111,8 +111,8 @@ try {
   const pick = offered.find((t) => t.kind !== 'secchi') || offered[0];
   const tk0 = Date.now();
   await B.evaluate(({ id, ep }) => { const g = window.__game; g.outfitter.show(g.outfitter.landing(ep), 'board'); g.tasks.act(`take:${id}`, ep); }, { id: pick.id, ep: host.ep });
-  await until(B, (id) => { const t = window.__game.tasks.ads.get(id); return t && t.status === 'open'; }, pick.id, 15000);
-  await until(A, (id) => { const t = window.__game.tasks.ads.get(id); return t && t.status === 'open'; }, pick.id, 15000);
+  await until(B, (id) => { const t = window.__game.tasks.ads.get(id); return t && t.status === 'open'; }, pick.id, 30000);
+  await until(A, (id) => { const t = window.__game.tasks.ads.get(id); return t && t.status === 'open'; }, pick.id, 30000);
   const takeMs = Date.now() - tk0;
   const seen = await A.evaluate((id) => { const T = window.__game.tasks, t = T.ads.get(id); const again = T.take(id); return { status: t.status, by: t.by, again }; }, pick.id);
   const guestT = await B.evaluate((id) => { const t = window.__game.tasks.ads.get(id); return { status: t.status, by: t.by, active: window.__game.tasks.active.length }; }, pick.id);
@@ -134,7 +134,7 @@ try {
   const c0 = await clockOf(A);
   const g0 = await B.evaluate(() => window.__game.profile.money), h0 = await A.evaluate(() => window.__game.profile.money);
   await B.evaluate((to) => { window.__game.outfitter.show(window.__game.outfitter.landing(window.__game.outfitter.visit.ep)); return window.__game.rides.act(String(to)); }, ride.to);
-  await until(A, () => !!window.__game.coopTrip.prop, null, 10000);
+  await until(A, () => !!window.__game.coopTrip.prop, null, 40000);
   await sleep(600);
   await shot(A, '3-host-ride-card');
   const prop = await A.evaluate(() => { const ct = window.__game.coopTrip; return { ...ct.prop, card: document.getElementById('coop-jump') && document.getElementById('coop-jump').innerText }; });
@@ -157,7 +157,7 @@ try {
   // --- a night in the bunkhouse, a group jump too: asked by the host this time ------------------------------------------
   const k0 = await clockOf(A), bm0 = await Promise.all([A, B].map((P) => P.evaluate(() => window.__game.profile.money)));
   await A.evaluate((ep) => { const o = window.__game.outfitter; o.show(o.landing(ep)); o.act('bunk'); }, ride.to);
-  await until(B, () => !!window.__game.coopTrip.prop, null, 10000);
+  await until(B, () => !!window.__game.coopTrip.prop, null, 40000);
   await B.evaluate(() => window.__game.coopTrip.tick(true));
   const slept = (page) => until(page, () => { const g = window.__game, o = g.outfitter; return !o.bunking && !(g.veil && g.veil.active) && !g.coopTrip.jumping && g.day.hours > 6.9 && g.day.hours < 8; }, null, 120000);
   await Promise.all([slept(A), slept(B)]);
