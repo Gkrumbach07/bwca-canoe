@@ -15,9 +15,11 @@ permissions:
   id-token: write
 
 env:
-  # wetlands (2026-10-31): v6 is v4 plus the wet and wcls planes and creeks.json (round 2: unbroken channels, portage
-  # creeks, no duplicate dams); bwca/v5/ and bwca/v4/ kept for rollback
-  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v6/
+  # v7-water (2026-11-01): v6's wetlands plus the water edges (canoe routes carved, narrow water deep enough, the water
+  # out to the LiDAR's edge); saves from v3, v4, v5 and v6 carried by src/migrate/ (docs/migration.md). bwca/v6/ and
+  # bwca/v4/ kept for rollback; bwca/v5/ is mixed (overwritten 2026-10-31) and not a rollback. A new release always
+  # goes to a new folder name: list the bucket first.
+  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v7-water/
 
 concurrency:
   group: pages
