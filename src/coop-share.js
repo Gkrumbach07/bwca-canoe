@@ -33,6 +33,29 @@ const unpfx = (s) => String(s).replace(/^p[^:]*:/, '');
 const pickAt = (at) => { if (!at) return null; const o = {}; for (const k of AT_KEYS) if (at[k] !== undefined) o[k] = at[k]; return o; };
 const possessive = (name) => `${name}’${/s$/i.test(name) ? '' : 's'}`;
 
+const HULL_HALF = 2.3, HULL_R = 0.42, WALKER_R = 0.32; // m: a hull as a capsule along its heading; the walker a circle
+const APART = { most: 2.5, brake: 6 };                  // m/s the overlap is taken out at most; 1/s the speed into it lost
+// a hull as a segment: heading h has the bow at (cos h, -sin h)
+const hullSeg = (x, z, h) => { const fx = Math.cos(h) * HULL_HALF, fz = -Math.sin(h) * HULL_HALF; return { ax: x - fx, az: z - fz, bx: x + fx, bz: z + fz }; };
+// the nearest points of two segments and their distance: { d, px, pz (on a), qx, qz (on b) }
+function segSeg(a, b) {
+  const ux = a.bx - a.ax, uz = a.bz - a.az, vx = b.bx - b.ax, vz = b.bz - b.az, wx = a.ax - b.ax, wz = a.az - b.az;
+  const A = ux * ux + uz * uz, Bv = ux * vx + uz * vz, C = vx * vx + vz * vz, D = ux * wx + uz * wz, E = vx * wx + vz * wz;
+  const cl = (t) => Math.max(0, Math.min(1, t));
+  let s = 0, t = 0;
+  const den = A * C - Bv * Bv;
+  if (A < 1e-9 && C < 1e-9) { s = 0; t = 0; }
+  else if (A < 1e-9) { s = 0; t = cl(E / C); }
+  else if (C < 1e-9) { t = 0; s = cl(-D / A); }
+  else {
+    s = den > 1e-9 ? cl((Bv * E - C * D) / den) : 0;
+    t = (Bv * s + E) / C;
+    if (t < 0) { t = 0; s = cl(-D / A); } else if (t > 1) { t = 1; s = cl((Bv - D) / A); }
+  }
+  const px = a.ax + ux * s, pz = a.az + uz * s, qx = b.ax + vx * t, qz = b.az + vz * t;
+  return { d: Math.hypot(px - qx, pz - qz), px, pz, qx, qz };
+}
+
 // A friend's things on the ground, hung, in piles and on grates, drawn as ours are (containers.js), from their pub
 class FriendView extends ContainerView {
   afterPose() {
@@ -41,7 +64,7 @@ class FriendView extends ContainerView {
     for (const c of inv.containers) {
       if (!((c.where === 'ground' || c.where === 'hung') && c.at)) continue;
       if (Math.abs(c.at.x - p.x) > 200 || Math.abs(c.at.z - p.z) > 200) continue;
-      if (c.item === 'pile') { if (c.grid.length) { const o = this.looseMesh(c.id, { inObjs: true }); seen.add(c.id); this.drawPile(o, c); } continue; }
+      if (c.item === 'pile') { if (c.grid.length && !(this.woodOnly && this.woodOnly(c))) { const o = this.looseMesh(c.id, { inObjs: true }); seen.add(c.id); this.drawPile(o, c); } continue; }
       if (c.item === 'grate') { if (c.at.grate) { const k = `grate:${c.id}`; const o = this.looseMesh(k); used.add(k); this.drawGrate(o, c, null); } continue; }
       const o = this.objFor(c.id, c.item); if (!o) continue;
       seen.add(c.id);
@@ -119,6 +142,7 @@ export class CoopShare {
     if (g.chores) {
       g.chores.friendRing = (key, kind = 'fuel') => !!this.friendThing(key, kind);
       g.chores.friendDoused = (key, stage) => this.douseFriend(key, stage);
+      g.chores.friendPiles = () => this.groundOf((c) => c.item === 'pile'); // (their woodpiles drawn as ours: chores.drawPiles)
     }
     uiAttach({ coopTabs: { tabs: () => this.tabs(), sig: () => this.tabSig() } });
     this.hookNearby();
@@ -128,6 +152,8 @@ export class CoopShare {
     const nb = window.__game && window.__game.nearby;
     if (nb && nb.hooks && !nb.hooks.friendFire) nb.hooks.friendFire = (key, site) => this.fireObject(key, site);
     if (nb && nb.hooks && !nb.hooks.friendFeed) nb.hooks.friendFeed = (key, c, e, has) => this.feedActions(key, c, e, has);
+    const pt = window.__game && window.__game.pointer;
+    if (pt && typeof pt.register === 'function' && !this.offPointer) this.offPointer = pt.register((ray, near) => this.pointTargets(ray, near));
     return !!nb;
   }
 
@@ -181,6 +207,7 @@ export class CoopShare {
       const view = g.canoe && g.scene ? new FriendView({ inventory: mirror, canoe: g.canoe, scene: g.scene, player: g.player }) : null;
       f = { id, pub: null, mirror, view, tent: null, tarps: [], fires: new Map(), claims: new Set() };
       if (view) view.boatOf = () => { const r = this.coop.remotes.get(id); return r ? r.boat : null; };
+      if (view && g.chores) view.woodOnly = (c) => g.chores.woodOnly(c);
       this.friends.set(id, f);
     }
     const r = this.coop.remotes.get(id);
@@ -340,6 +367,7 @@ export class CoopShare {
       try { this.drawTent(f); } catch (e) { if (!this.warnedT) { this.warnedT = true; console.warn('coop-share: a friend’s tent', e); } }
     }
     for (const [rid, q] of this.pending) if (now - q.t0 > OP_TIMEOUT) this.expire(rid, 'timeout');
+    try { this.keepApart(now); } catch (e) { if (!this.warnedK) { this.warnedK = true; console.warn('coop-share: keeping apart', e); } }
     // our own registry's claim for a friend's site goes when our own tent there is struck: keep it for them
     for (const f of this.friends.values()) if (f.tent && f.tent.key && !f.claims.has(f.tent.key)) this.claim(f, f.tent.key);
   }
@@ -391,19 +419,20 @@ export class CoopShare {
     return {
       id: c.id, items, cols: spec.cols, rows: spec.rows, accepts: accepts || spec.accepts || null,
       take: ({ uid, toCId, x, y, rot, qty }) => this.requestTake(f, c, uid, { toCId, x, y, rot, qty }),
+      toHand: (e, hand, qty) => this.requestTake(f, c, e.uid, { hand, qty: qty || e.qty }),
       drop: ({ cId, uid, itemId, qty }) => this.requestPut(f, c, { cId, uid, itemId, qty }),
     };
   }
 
   // --- requests to a thing's owner ----------------------------------------------------------------------------------
-  requestTake(f, c, uid, { toCId = null, x = null, y = null, rot = 0, qty = null } = {}) {
+  requestTake(f, c, uid, { toCId = null, x = null, y = null, rot = 0, qty = null, hand = null } = {}) {
     if (String(uid).startsWith('pend:')) return { ok: false, words: 'A moment: it is on its way.' };
     const e = c.grid.find((q) => q.uid === uid);
     if (!e) return { ok: false, words: 'That is gone.' };
     const rid = `${this.coop.id}:${this.rid++}`;
     const sent = this.coop.send({ t: 'op', to: f.id, rid, op: 'take', cId: unpfx(c.id), uid: unpfx(uid), qty: qty || e.qty });
     if (!sent) return { ok: false, words: 'Not now: the connection is down.' };
-    this.pending.set(rid, { rid, op: 'take', to: f.id, cId: c.id, uid, t0: performance.now(), toCId, x, y, rot, qty: qty || e.qty, itemId: e.id });
+    this.pending.set(rid, { rid, op: 'take', to: f.id, cId: c.id, uid, t0: performance.now(), toCId, x, y, rot, hand, qty: qty || e.qty, itemId: e.id });
     this.ver++;
     return { ok: true, words: `Asking ${f.name} for the ${(itemDef(e.id) || {}).name || 'thing'}…` };
   }
@@ -411,6 +440,7 @@ export class CoopShare {
     const inv = this.g.inventory, d = itemDef(itemId), spec = (itemDef(c.item) || {}).container || {};
     if (!d || d.kind === 'container' || d.kind === 'long') return { ok: false, words: 'That does not go in there.' };
     if (spec.accepts && !spec.accepts.includes(d.kind)) return { ok: false, words: `The ${NAMES[c.item] || 'container'} won’t take that.` };
+    if (String(cId).startsWith('bin:')) return { ok: false, words: 'Take it out first, then put it in.' }; // (from one of their bins to another)
     const from = inv.cont(cId), was = from && from.grid.find((q) => q.uid === uid);
     if (!was) return { ok: false, words: 'That is gone.' };
     const back = { cId, x: was.x, y: was.y, rot: was.rot };
@@ -491,9 +521,10 @@ export class CoopShare {
   }
   // a thing come to us: where it was dropped, else the first room there, else the best place on us, else a hand, else a
   // pile at our feet. → the words
-  land(entry, { toCId = null, x = null, y = null, rot = 0 } = {}) {
+  land(entry, { toCId = null, x = null, y = null, rot = 0, hand = null } = {}) {
     const inv = this.g.inventory, p = this.g.player, id = entry.id, data = entry.data || null, name = (itemDef(id) || {}).name || 'It';
     let left = Math.max(1, entry.qty | 0);
+    if (hand != null) { const h = inv.toHandNew(id, { data, qty: left, hand }); if (h && h.ok) return `${name}: in your ${hand === 1 ? 'left' : 'right'} hand.`; } // (dropped on a free hand)
     const to = toCId && inv.cont(toCId);
     if (to && x != null && inv.put(to, id, { x, y, rot, qty: left, data })) return `${name}: yours now.`;
     if (to && inv.put(to, id, { qty: left, data })) return `${name}: yours now.`;
@@ -596,6 +627,76 @@ export class CoopShare {
     if (!fb) return;
     const rid = `${this.coop.id}:${this.rid++}`;
     if (this.coop.send({ t: 'op', to: fb.f.id, rid, op: 'douse', key, stage })) this.pending.set(rid, { rid, op: 'douse', to: fb.f.id, t0: performance.now(), key, stage });
+  }
+
+  // --- friends' things on the ground: a list, and the dot on them ------------------------------------------------------
+  groundOf(test) {
+    const out = [];
+    if (!this.coop.live) return out;
+    for (const f of this.friends.values()) for (const c of f.mirror.containers) if (c.where === 'ground' && c.at && test(c)) out.push(c);
+    return out;
+  }
+  ownerOf(cId) { for (const f of this.friends.values()) if (f.mirror.cont(cId)) return f; return null; }
+  // pointer.js provider: a friend's pile or woodpile (E Take one · Q Open it, the book at its tab), a friend's pack on the
+  // ground (E Open it): each a request to its owner, as in the book
+  pointTargets(ray, near) {
+    const out = [], g = this.g, p = g.player;
+    if (!this.coop.live || !this.friends.size || !p || p.mode !== 'walk') return out;
+    const nb = window.__game && window.__game.nearby, ch = g.chores;
+    const open = (c) => { if (nb && typeof nb.openHere === 'function') nb.openHere(c.id); };
+    for (const f of this.friends.values()) for (const c of f.mirror.containers) {
+      if (c.where !== 'ground' || !c.at || c.item === 'firefuel' || c.item === 'grate') continue;
+      if (near.flat(c.at.x, c.at.z) > near.reach) continue;
+      const y = Number.isFinite(c.at.y) ? c.at.y : p.groundAt(c.at.x, c.at.z);
+      const wood = !!(ch && ch.woodOnly(c)), pile = c.item === 'pile';
+      const hit = near.sphere(c.at.x, y + (wood ? 0.18 : 0.2), c.at.z, wood ? 0.5 : pile ? 0.42 : 0.36);
+      if (!hit) continue;
+      const who = possessive(f.name);
+      if (pile) {
+        const top = (wood ? c.grid.find((q) => q.id === 'wood:log') : null) || c.grid.find((q) => !q.box) || null, n = wood ? ch.pieceCount(c) : c.grid.length;
+        if (!c.grid.length) continue;
+        const label = wood ? `${who} woodpile (${n})` : n === 1 && top ? `${who} ${String((itemDef(top.id) || {}).name || 'thing').toLowerCase()}, on the ground` : `${who} things on the ground (${n})`;
+        const pm = wood && ch.pileMesh ? ch.pileMesh(c.id) : null;
+        out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'pile', ref: c.id, label, e: { verb: 'Take one', why: top ? null : 'nothing there', run: () => { const r = this.requestTake(f, c, top.uid, { qty: 1 }); if (r && r.words) uiNote(r.words, 2.5); return !!(r && r.ok); } }, q: { verb: 'Open it', run: () => open(c) }, mesh: pm ? pm.layers[0] : f.view && f.view.objs.get(c.id) } });
+        continue;
+      }
+      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'container', ref: c.id, label: `${who} ${NAMES[c.item] || String((itemDef(c.item) || {}).name || 'pack').toLowerCase()}`, e: { verb: 'Open it', why: null, run: () => open(c) }, mesh: f.view && f.view.objs.get(c.id) } });
+    }
+    return out;
+  }
+
+  // --- canoes kept apart -------------------------------------------------------------------------------------------
+  // The owner: "canoes overlap when docking". A friend's canoe (paddled, or set down where they left it) is solid to ours
+  // and to our walker as a soft push apart, never a wall: each screen moves only its own, out of the overlap a little each
+  // frame (the friend's screen does the same with theirs), the speed into it taken off; never pushed onto land afloat
+  // or into the water on foot.
+  keepApart(now) {
+    const g = this.g, p = g.player, w = g.world;
+    if (!p || p.teleporting || !w || typeof w.shoreAt !== 'function') return;
+    const dt = this.apartT ? Math.min(0.1, Math.max(0, (now - this.apartT) / 1000)) : 0;
+    this.apartT = now;
+    if (!(dt > 0)) return;
+    const afloat = p.mode === 'paddle' && !p.landing && !p.ashore, foot = p.mode === 'walk' || p.mode === 'carry';
+    if (!afloat && !foot) return;
+    const mine = afloat ? hullSeg(p.x, p.z, p.heading) : { ax: p.x, az: p.z, bx: p.x, bz: p.z };
+    const r0 = afloat ? HULL_R : WALKER_R;
+    this.n.pushes = this.n.pushes || 0;
+    for (const f of this.friends.values()) {
+      const R = this.coop.remotes.get(f.id), B = R && R.boat;
+      if (!B || B.hidden || !Number.isFinite(B.x)) continue;
+      if (Math.abs(B.x - p.x) > 8 || Math.abs(B.z - p.z) > 8) continue;
+      const theirs = hullSeg(B.x, B.z, B.heading);
+      const q = segSeg(mine, theirs), need = r0 + HULL_R;
+      if (q.d >= need) continue;
+      let nx = q.px - q.qx, nz = q.pz - q.qz, n = Math.hypot(nx, nz);
+      if (n < 1e-4) { nx = Math.sin(p.heading); nz = Math.cos(p.heading); n = 1; } // (centre on centre: out to the side)
+      nx /= n; nz /= n;
+      const step = Math.min(need - q.d, APART.most * dt) * (afloat ? 1 : 0.8);
+      const x = p.x + nx * step, z = p.z + nz * step, sd = w.shoreAt(x, z);
+      if (afloat ? sd > -0.6 : sd < -0.3) continue; // (not onto land afloat, nor into the lake on foot)
+      p.x = x; p.z = z; this.n.pushes++;
+      if (afloat && Number.isFinite(p.speed)) { const into = -(Math.cos(p.heading) * nx - Math.sin(p.heading) * nz); if (into > 0) p.speed *= Math.max(0, 1 - APART.brake * dt * into); }
+    }
   }
 
   stats() {

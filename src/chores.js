@@ -1063,6 +1063,7 @@ export class Chores {
     const inv = this.inv, p = this.player, view = typeof window !== 'undefined' && window.__game ? window.__game.invView : null;
     const want = [];
     if (inv && inv.attached) for (const c of inv.containers) if (this.woodOnly(c) && Math.abs(c.at.x - p.x) < 150 && Math.abs(c.at.z - p.z) < 150) want.push(c);
+    if (this.friendPiles) for (const c of this.friendPiles()) if (this.woodOnly(c) && Math.abs(c.at.x - p.x) < 150 && Math.abs(c.at.z - p.z) < 150) want.push(c); // (co-op: a friend's woodpiles, coop-share.js)
     want.sort((a, b) => Math.hypot(a.at.x - p.x, a.at.z - p.z) - Math.hypot(b.at.x - p.x, b.at.z - p.z));
     const pool = this.pileMeshes || (this.pileMeshes = []);
     want.length = Math.min(want.length, 6);
