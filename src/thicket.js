@@ -186,10 +186,11 @@ function wetClassOf(world, x, z) {
   }
   return KIND_CLASS[world.chAt('ground', x, z)];
 }
-// how thick the brush is at a point, 0 open .. 1 a wall: the walk slows through it (player.js); 0 on a trail's tread
-// is the caller's (it knows where the trail is)
+// how thick the brush is at a point, 0 open .. 1 a wall: the walk slows through it (player.js); 0 in the clearings
+// (the trails', sites' and yards'), the tread itself the caller's too
+let ring = null; // the Thicket, for its clearings (a yard, a site, a landing walk clear)
 export function brushAt(world, x, z) {
-  if (!world.chAt) return 0;
+  if (!world.chAt || (ring && ring.blocked(x, z, 0))) return 0;
   const c = bareAt(world, x, z) ? 'rock' : classOf(world, x, z), G = c && GROWS[c];
   if (!G) return 0;
   let b = 0;
@@ -222,7 +223,8 @@ export class Thicket {
   // exclusionsFor: [x1, z1, x2, z2, radius], a negative radius a yard)
   constructor(tiles, scene, exclusions, { kit, aquatic, cull = null }) {
     this.tiles = tiles; this.world = tiles.world; this.scene = scene;
-    this.cull = cull; this.under = cull ? cull.understory : 1; // (tiles.js CULL: the Undergrowth setting thins the ring too)
+    this.cull = cull; this.under = cull ? cull.understory : 1;
+    ring = this; // (tiles.js CULL: the Undergrowth setting thins the ring too)
     this.group = new THREE.Group();
     this.group.name = 'thicket';
     this.group.matrixAutoUpdate = false;
