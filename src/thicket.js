@@ -28,25 +28,27 @@ import { mirePoolAt } from './mire-relief.js';
 
 export const CHUNK = 20;
 const SHADOW_R = 30;          // only the plants within this of the camera's chunk cast shadows
-const BUDGET = 3;             // ms a frame may spend working out chunks (a teleport fills the ring over a few frames)
+const BUDGET = 3;
+const FAR = 2;                // the variants a layer draws past SHADOW_R (LAYERS far: its own)             // ms a frame may spend working out chunks (a teleport fills the ring over a few frames)
 // The layers: the geometry they draw (kit species index and the variants, or the land reeds), how far they reach (m),
 // the most a hectare holds anywhere (their candidates per cell), their pad off a trail or a site (m), the shore distance
 // they keep (m), how deep they sink, and how they scale. `pick(h)` chooses a variant from a number in [0, 1).
 export const LAYERS = {
-  pole: { sp: 1, variants: [18, 19, 20, 21, 22, 23], scale: GUEST[25][2], reach: 100, pad: 1.1, shore: 0.9, sink: 0.35, pick: (h) => (h < 0.13 ? 5 : h < 0.25 ? 1 : h < 0.36 ? 4 : h < 0.6 ? 0 : h < 0.82 ? 3 : 2) },
+  pole: { sp: 1, variants: [18, 19, 20, 21, 22, 23], far: 3, scale: GUEST[25][2], reach: 100, pad: 1.1, shore: 0.9, sink: 0.35, pick: (h) => (h < 0.13 ? 5 : h < 0.25 ? 1 : h < 0.36 ? 4 : h < 0.6 ? 0 : h < 0.82 ? 3 : 2) },
   alder: { sp: 11, variants: [0, 1, 2, 3, 4, 5], reach: 85, pad: 0.5, shore: 0.2, sink: 0.12 },
-  shrub: { sp: 7, variants: [0, 1, 2, 3], shadow: false, reach: 60, pad: 0.4, shore: 0.25, sink: 0.3 },
+  shrub: { sp: 7, variants: [0, 1, 2, 3], shadow: false, reach: 50, pad: 0.4, shore: 0.25, sink: 0.3 },
   mat: { sp: 24, variants: [0, 1, 2, 3], shadow: false, reach: 55, pad: 0.3, shore: 0.4, sink: 0.08 },
   tamarack: { sp: 17, variants: [0, 1, 3, 4], reach: 100, pad: 1.2, shore: 0.9, sink: 0.35 },
   ash: { sp: 3, variants: [18, 19, 20, 21], reach: 95, pad: 1.2, shore: 0.9, sink: 0.35, scale: GUEST[23][2] }, // (the birch's bins hold the ash's variants after the aspen's, the spruce's the poles' after the black spruce's)
   log: { sp: 14, variants: [0, 1], shadow: false, reach: 60, pad: 1.6, shore: 0.6, sink: 0.04, log: true },
-  reed: { reeds: [2, 0, 3], reach: 70, pad: 0.4, shore: -0.2, sink: 0.05 }, // cattail, bulrush, sedge
-  // stage 2, the upland: young balsam fir (the sapling, up to 6 m), beaked hazel, mountain maple and the like (the shrub,
+  reed: { reeds: [2, 0, 3], far: 3, reach: 70, pad: 0.4, shore: -0.2, sink: 0.05 }, // cattail, bulrush, sedge
+  // stage 2, the upland: (the join: the understory's reach shortened, 60-80 m to 50-62: under a canopy nothing past
+  // 40 m shows, and it was the ring's biggest draw) young balsam fir (the sapling, up to 6 m), beaked hazel, mountain maple and the like (the shrub,
   // stood taller), jack pine poles, the aspen suckers and young jack pine of a burn's regrowth, the old forest's snags
-  fir: { sp: 12, variants: [0, 1, 2, 3], reach: 80, pad: 0.6, shore: 0.8, sink: 0.1 },
-  hazel: { sp: 10, variants: [0, 1, 2, 3], reach: 70, pad: 0.4, shore: 1.5, sink: 0.08 },
+  fir: { sp: 12, variants: [0, 1, 2, 3], reach: 62, pad: 0.6, shore: 0.8, sink: 0.1 },
+  hazel: { sp: 10, variants: [0, 1, 2, 3], reach: 55, pad: 0.4, shore: 1.5, sink: 0.08 },
   jack: { sp: 9, variants: [0, 1, 3, 4], reach: 85, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.16 },
-  regrow: { sp: 22, variants: [0, 1, 2, 3], reach: 75, pad: 0.4, shore: 0.8, sink: 0.1 },
+  regrow: { sp: 22, variants: [0, 1, 2, 3], reach: 62, pad: 0.4, shore: 0.8, sink: 0.1 },
   snag: { sp: 5, variants: [0, 1, 3], reach: 100, pad: 1.2, shore: 0.9, sink: 0.35 },
   // stage 2, the canopy from the data (canopyOf): the trees of the stand's own species, as many as its cover and its
   // crowns' size make, less what the tiles stand there already; their trunks are held off like the tiles' (trunksNear)
@@ -218,8 +220,9 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vect
 export class Thicket {
   // tiles: the TileManager (groundAt, the world); exclusions: the trails', sites' and yards' segments (props.js
   // exclusionsFor: [x1, z1, x2, z2, radius], a negative radius a yard)
-  constructor(tiles, scene, exclusions, { kit, aquatic }) {
+  constructor(tiles, scene, exclusions, { kit, aquatic, cull = null }) {
     this.tiles = tiles; this.world = tiles.world; this.scene = scene;
+    this.cull = cull; this.under = cull ? cull.understory : 1; // (tiles.js CULL: the Undergrowth setting thins the ring too)
     this.group = new THREE.Group();
     this.group.name = 'thicket';
     this.group.matrixAutoUpdate = false;
@@ -252,6 +255,10 @@ export class Thicket {
         L.index[k] = this.buckets.length;
         this.buckets.push(b);
       });
+      // (past the near ring a layer draws FAR variants only: at 30 m and more the shapes can't be told apart, and every
+      // variant is a draw call in each of the four quarters)
+      const nf = L.far || FAR;
+      list.forEach((v, k) => { const b = this.buckets[L.index[k]]; if (b) b.far = L.index[k % nf] ?? L.index[k]; });
     }
   }
 
@@ -370,6 +377,7 @@ export class Thicket {
     if (!this.enabled) { this.group.visible = false; return; }
     const ci = Math.floor(camPos.x / CHUNK), cj = Math.floor(camPos.z / CHUNK);
     this.frame = (this.frame || 0) + 1;
+    if (this.cull && this.cull.understory !== this.under) { this.under = this.cull.understory; this.dirty = true; }
     if (!this.at || this.at[0] !== ci || this.at[1] !== cj || (this.waiting && !this.want.length && this.frame % 20 === 0)) { this.at = [ci, cj]; this.dirty = true; this.waiting = false; this.plan(); }
     // work out the chunks wanted, nearest first, under the budget
     const t0 = performance.now();
@@ -412,9 +420,12 @@ export class Thicket {
       const d = Math.max(0, Math.hypot(c.ci - ci, c.cj - cj) * CHUNK - CHUNK * 0.7);
       const inner = d < SHADOW_R ? 0 : 1 + (c.ci >= ci ? 1 : 0) + (c.cj >= cj ? 2 : 0);
       for (const [bi, a] of c.lists) {
-        const L = this.buckets[bi].layer, keep = 1 - smoothstep(L.reach * 0.72, L.reach, d);
+        // (the trunks are never thinned: they collide whether drawn or not; the rest by the Undergrowth setting, which
+        // shortens their reach too)
+        const L = this.buckets[bi].layer, u = L.trunk ? 1 : this.under, reach = L.reach * (0.55 + 0.45 * u);
+        const keep = (1 - smoothstep(reach * 0.72, reach, d)) * u;
         if (keep <= 0) continue;
-        const into = rows[bi][inner];
+        const into = rows[inner ? this.buckets[bi].far : bi][inner];
         for (let o = 0; o < a.length; o += 9) if (a[o + 6] < keep) into.push(o, a);
       }
     }

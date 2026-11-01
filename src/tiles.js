@@ -432,7 +432,7 @@ export class TileManager {
     const ex = exclusionsFor(world);
     // the density round: the near ring of the wetlands' plants (thicket.js), off the same trails, sites and yards; re-seated
     // where the detail ground comes in under it
-    this.thicket = new Thicket(this, scene, ex, { kit: vegetation, aquatic });
+    this.thicket = new Thicket(this, scene, ex, { kit: vegetation, aquatic, cull: CULL });
     this.detail.onTouched = (rect) => { outfitterGroundMoved(rect); this.thicket.touched(rect); };
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
