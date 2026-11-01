@@ -297,7 +297,7 @@ export class Title {
     this.state = mode;
     const day = this.day;
     if (mode === 'title') { day.hours = this.goldenHour(); day.running = false; }
-    else { this.saver.write(); this.pausedRunning = day.running; day.running = false; } // saved before the clock stops
+    else { this.saver.write(); this.pausedRunning = day.running; if (!(this.coop && this.coop.live)) day.running = false; } // saved before the clock stops (co-op: the clock is everyone's, so the pause card never stops it)
     this.saver.enabled = false;
     document.body.classList.add('shell-open');
     this.el.shell.hidden = false; this.el.shell.classList.remove('closing');

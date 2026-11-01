@@ -55,6 +55,7 @@ import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
 import { People } from './npcs.js'; // hubs 3C
 import { Actors } from './actors.js'; // p2 A
+import { Coop } from './coop.js'; // co-op phase 1
 import { inventory } from './inventory.js'; // fb A
 import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
 import { ContainerView } from './containers.js'; // fb A
@@ -895,6 +896,13 @@ async function main() {
     hints.due = (id, rec) => (pm.has(id) ? pm.get(id).due(rec) : dueP(id, rec));
   }
   window.__game.moves = moves;
+  // co-op phase 1 (coop.js, docs/plans/coop.md): friends in their own browsers on one lake in Sandbox, drawn with the
+  // actor layer, the host's clock everyone's. Their poses are set just before the actors' own update (after the camera),
+  // their names placed after it. Invite friends on the pause card, Join a trip on the title (or a ?join=CODE link).
+  const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, saver });
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { coop.update(dt); } catch (e) { if (!coop.warned) { coop.warned = true; console.warn('coop', e); } } upd(dt, ...a); try { coop.labels(); } catch { /* the names only */ } }; }
+  coop.fromUrl();
+  window.__game.coop = coop;
   // water: two rules (the owner, 2026-10-26: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if
   // i fill water up without a tablet, it is instantly clean even tho warnign says its not"). Every dried meal and a cup
   // take their water from the bottle (cook.js COOK, kit.js), short of it the "water 0.3 L" chip and once the moment

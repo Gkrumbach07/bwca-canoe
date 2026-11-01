@@ -1,0 +1,16 @@
+{
+  "name": "bwca-canoe-room",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The co-op relay: a Cloudflare Worker and a Durable Object per room (docs/plans/coop.md)",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "dev:slow": "wrangler dev --port 8787 --var DELAY_MS:100",
+    "deploy": "wrangler deploy",
+    "test": "node test/relay.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.0"
+  }
+}

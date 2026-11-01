@@ -360,10 +360,12 @@ class Boat {
   }
   // p2 C: placed from outside, a frame at a time: { x, z, heading (the bow's, as the player's), v (m/s as seen) }; the
   // heading eases to it as a canoe turns (snap: at once)
-  drive({ x, z, heading = this.heading, v = 0, snap = false }) {
+  // co-op: exact (a remote player, already smoothed from the wire): the heading as given, not eased; stroke: { phase,
+  // side, power } the paddler's own, so the stroke is theirs and not this layer's guess from the speed
+  drive({ x, z, heading = this.heading, v = 0, snap = false, exact = false, stroke = null }) {
     this.mover = null; this.hidden = false;
     if (snap || !this.ext) { this.heading = heading; this.bobY = null; }
-    this.ext = { heading, v }; this.x = x; this.z = z;
+    this.ext = { heading, v, exact, stroke }; this.x = x; this.z = z;
     return this;
   }
   hide() { this.hidden = true; this.ext = null; this.v = 0; return this; }
@@ -383,7 +385,8 @@ class Boat {
     if (this.ext) {
       // (p2 C) placed from outside: the heading eases round as a canoe turns
       const h0 = this.heading, e = wrapPi(this.ext.heading - this.heading);
-      this.heading = wrapPi(this.heading + clamp(e * 1.5, -0.6, 0.6) * Math.max(0, dt));
+      if (this.ext.exact) this.heading = wrapPi(this.ext.heading);
+      else this.heading = wrapPi(this.heading + clamp(e * 1.5, -0.6, 0.6) * Math.max(0, dt));
       this.v = this.ext.v || 0;
       this.yawRate += ((dt > 0 ? wrapPi(this.heading - h0) / dt : 0) - this.yawRate) * ease(4, dt);
     } else if (this.mover) {
@@ -394,13 +397,16 @@ class Boat {
       this.yawRate += ((dt > 0 ? wrapPi(this.heading - h0) / dt : 0) - this.yawRate) * ease(4, dt);
     } else { this.v = 0; this.yawRate = 0; }
     // the stroke: the crew's together, faster as the hull goes faster; a switch of sides every SWITCH_EVERY strokes
-    const S = this.stroke, paddling = this.v > 0.08;
-    S.power += ((paddling ? 1 : 0) - S.power) * ease(paddling ? 3 : 1.5, dt);
-    if (paddling || S.phase > 0.02) {
-      const prev = S.phase;
-      S.phase = (S.phase + dt * clamp(0.45 + 0.4 * this.v, 0.5, 1.1)) % 1;
-      if (prev < 0.5 && S.phase >= 0.5 && (S.count + 1) % SWITCH_EVERY === 0) S.side *= -1;
-      if (S.phase < prev) { S.count++; if (!paddling) S.phase = 0; }
+    const S = this.stroke, paddling = this.v > 0.08, given = this.ext && this.ext.stroke;
+    if (given) { S.phase = given.phase; S.side = given.side; S.power = given.power; } // (co-op: the paddler's own)
+    else {
+      S.power += ((paddling ? 1 : 0) - S.power) * ease(paddling ? 3 : 1.5, dt);
+      if (paddling || S.phase > 0.02) {
+        const prev = S.phase;
+        S.phase = (S.phase + dt * clamp(0.45 + 0.4 * this.v, 0.5, 1.1)) % 1;
+        if (prev < 0.5 && S.phase >= 0.5 && (S.count + 1) % SWITCH_EVERY === 0) S.side *= -1;
+        if (S.phase < prev) { S.count++; if (!paddling) S.phase = 0; }
+      }
     }
     this.settle(dt);
   }

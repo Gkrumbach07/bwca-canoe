@@ -432,6 +432,7 @@ export function buildLidGeometry() {
 export const HULL_PALETTES = {
   aluminium: { out: 0xa4a9ac, in: 0x8b9093, ash: 0x9da2a5, ashDark: 0x7d8285, deck: 0x8a8f92, cane: 0x8a8f92, caneDark: 0x6d7275, pad: 0x2b2e2c },
   kevlar: { ...HULL_COLORS, out: 0xc0954c, in: 0xae8541 },
+  green: HULL_COLORS, // the player's own canoe as canoe.js draws it (co-op: a friend's canoe looks as it does on their screen)
   forest: { ...HULL_COLORS, out: 0x46542f, in: 0x3b4729, ash: 0x34362f, ashDark: 0x2a2c26, deck: 0x34362f },
 };
 // The far hull: 60 triangles (the skin as six bays of four facets round from gunwale to gunwale, and a flat deck at the

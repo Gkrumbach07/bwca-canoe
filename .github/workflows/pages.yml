@@ -43,6 +43,9 @@ jobs:
           # '/<repo>/' for a project site, '/' for a user site or a custom domain
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
           VITE_DATA_URL: ${{ vars.DATA_URL != 'release' && (vars.DATA_URL || env.DATA_URL_DEFAULT) || '' }}
+          # the co-op relay (server/room/, deployed by room.yml), e.g. wss://bwca-canoe-room.<subdomain>.workers.dev;
+          # unset: no Invite or Join in the build
+          VITE_RELAY_URL: ${{ vars.RELAY_URL || '' }}
       - name: Fetch the map data from the release
         if: ${{ vars.DATA_URL == 'release' }}
         env:

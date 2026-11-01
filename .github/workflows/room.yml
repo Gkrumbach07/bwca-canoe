@@ -1,0 +1,51 @@
+# Deploys the co-op relay (server/room/: a Cloudflare Worker and a Durable Object per room, docs/plans/coop.md) on a push
+# to main that touches it. Needs two repository secrets, CLOUDFLARE_API_TOKEN (a token with "Edit Cloudflare Workers")
+# and CLOUDFLARE_ACCOUNT_ID; until they are set the relay is tested here and not deployed. The game finds the relay
+# through the RELAY_URL repository variable (pages.yml passes it to the build as VITE_RELAY_URL), e.g.
+# wss://bwca-canoe-room.<your-subdomain>.workers.dev. See server/room/README.md.
+name: Deploy the co-op relay
+
+on:
+  push:
+    branches: [main]
+    paths: ['server/room/**', '.github/workflows/room.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: room
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/room
+    env:
+      HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/room/package-lock.json
+      - run: npm ci
+      - name: Test the relay locally (wrangler dev)
+        run: |
+          npx wrangler dev --port 8787 > wrangler.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:8787/ > /dev/null && break; sleep 1; done
+          RELAY=ws://localhost:8787 node test/relay.test.mjs || { cat wrangler.log; exit 1; }
+      - name: Deploy
+        if: ${{ env.HAS_TOKEN == 'true' }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: server/room
+      - name: No token yet
+        if: ${{ env.HAS_TOKEN != 'true' }}
+        run: echo "::notice::CLOUDFLARE_API_TOKEN is not set, so the relay was tested but not deployed (server/room/README.md)."

@@ -1,0 +1,20 @@
+# The co-op relay (docs/plans/coop.md, "The architecture for a static site"): one Worker, a Durable Object per room.
+# Locally: `npm run dev` (http://localhost:8787, ws://localhost:8787/room/ABCDEF). `npm run dev:slow` adds 100 ms to
+# every message it forwards (the two-browser test). Deployed by .github/workflows/room.yml on a push to main that touches
+# server/room/; the game finds it through the build variable VITE_RELAY_URL (the Pages workflow's RELAY_URL).
+name = "bwca-canoe-room"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+# SQLite-backed, so it runs on the free plan
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[vars]
+# ms added before each message is forwarded (0 in production; the test rig sets 100)
+DELAY_MS = "0"

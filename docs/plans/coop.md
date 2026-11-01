@@ -260,6 +260,36 @@ a Cloudflare account the owner creates once, ten minutes) and a two-browser test
 | 3 **A night together** | rest and nap as proposals; the pace keys shared; the fetch and rides as group jumps; wind at 1 Hz; evacuation per player; reconnect and rejoin; the host's save with the guests inside; the nine at push-off | phase 2 | 2 streams + join · ~0.7 B · 1 round |
 | 4 **A shared season** | parties and companions in co-op (host-run); arriving in the wild by a ride; *Send home*; a guest's logbook; WebRTC for the pose traffic only if measured | people and companions live | 2 streams + join · ~0.7 B (+0.25 B if WebRTC) · 1 round |
 
+### Phase 1 as built (2026-11-01)
+
+- **The relay** is `server/room/` (wrangler, `npm run dev` on :8787; `npm run dev:slow` adds 100 ms to every forwarded
+  message through one ordered queue: a timer per message bunched up under load and added up to 0.8 s). Rooms by six letters,
+  four clients, the host's key and last clock kept ten minutes after the last one leaves, so a host's reload gets the same
+  code back. `.github/workflows/room.yml` tests it under `wrangler dev` and deploys it once the `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID` secrets exist; `RELAY_URL` (a repository variable) reaches the build as `VITE_RELAY_URL`.
+  No `RELAY_URL`: no co-op items in the build. Steps for the owner: `server/room/README.md`.
+- **The client** is `src/coop.js` (+ `coop.css`). *Invite friends* on the pause card of a Sandbox season (the code, the
+  link, Copy, Stop sharing); *Join a trip* on the title, and a `?join=CODE` link opens it filled in. The visitor profile
+  (`bwca-canoe:visitor`: name, shirt from `npcs.js SHIRTS`, a seed for the rest of `dress()`) is a global key in
+  `save.js`. A guest's own season is never written while visiting (`kv.freeze` on every key but the visitor profile;
+  their trip is not resumed, the mode is Sandbox in memory) and *Leave the trip* reloads into it untouched.
+- **The others** are the actor layer's: a boat with the paddler kneeling in the stern, the stroke the paddler's own
+  (the wire's stroke count, `Boat.drive({ exact, stroke })`), or a person walking or carrying, their beached canoe where
+  they left it; the hull in the player's own green (`HULL_PALETTES.green`). A catch-up after a stall glides out over a
+  few tenths of a second instead of jumping. Names over heads within 60 m, dimmed while a friend's poses are late.
+- **The clock:** the host's at 1 Hz with its timestamp; a guest moves it on by half the quickest round trip plus how late
+  that message came against the host's quickest pose, and leaves differences under 0.1 s alone. A guest's Sandbox clock
+  keys are locked, and in a room the pause card no longer stops the clock.
+- **Measured** (`scripts/coop/two-browsers.mjs`: two headless Chromiums, each its own browser process, through
+  `wrangler dev` with 100 ms added, 40 s of paddling): each draws the other 255 ms behind (100 relay + 150 buffer), 0.10 m
+  RMS from where they were (0.6 m at worst) at up to 12 m/s, under 4 % of frames extrapolated and under 1 % held. Clocks
+  within 0.08 s in 37 of 39 samples, 0.23 s in another; the first sample read 1.5 s, taken while the host's own page was
+  frozen for 1.7 s (its clock stood still), and was corrected at the next message. Two pages in **one** browser stall each
+  other on the shared GPU process (seconds-long bursts), and on a machine at a load average of 200+ the local relay
+  itself lags: run the rig on a quiet machine.
+- **Not yet:** the wind is each screen's own (it differs by a few mph; phase 3 sends it), swimming is drawn as walking,
+  and a guest who loses the relay stays in the world alone until a reload.
+
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
 on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real test of the relay and the actor.
