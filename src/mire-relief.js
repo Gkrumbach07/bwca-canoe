@@ -247,6 +247,25 @@ function poolShare(lvl) {
 // tops paler and redder, the hollows darker), y the pools (0 = no relief here, the old painted pools; over 0.2 a mire
 // floor with 0.2 + 0.8 x its water: the pool itself on a fine vertex, the pools' share on a coarse one), z the swamp's
 // floor, w 0. `fine`: the vertex is on the 2 m lattice (else it can't draw the hollows).
+// Everything the 2 m lattice wants at one sample, each part worked out once (detail-build.js chunkGround): returns the
+// relief (m) and fills out[0..3] as mireAttr(..., fine = true) does
+export function mireSample(grid, x, z, sd, out) {
+  out[0] = out[1] = out[2] = out[3] = 0;
+  if (sd < 0) return 0;
+  const S = sample(grid, x, z);
+  if (!S) return 0;
+  const pres = smoothstep(0.004, 0.03, S.amp), s = shapeOf(S, x, z), fl = floorOf(s);
+  let cf = 1, f = 0;
+  if (sd > FADE.shore[0]) {
+    cf = clearFade(x, z);
+    f = smoothstep(FADE.shore[0], FADE.shore[1], sd) * cf;
+    if (f) { const b = brookDist(x, z); if (b < CUT.reach + FADE.brook[1]) f *= smoothstep(CUT.reach + FADE.brook[0], CUT.reach + FADE.brook[1], b); }
+  } else cf = clearFade(x, z);
+  out[0] = fl * f * smoothstep(0.02, 0.12, S.amp);
+  out[1] = pres * (0.2 + 0.8 * smoothstep(S.lvl + 0.02, S.lvl - POOL.edge, s) * cf);
+  out[2] = S.swp * pres;
+  return S.amp * f * fl;
+}
 export function mireAttr(grid, x, z, sd, out, fine) {
   out[0] = out[1] = out[2] = out[3] = 0;
   if (sd < 0) return out;
