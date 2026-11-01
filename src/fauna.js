@@ -128,7 +128,7 @@ export class Fauna {
     return this.birds.force(kind);
   }
 
-  subjects() { const o = [], w = this.world, B = this.birds; for (const m of this.moose.list) if (m.alive) o.push({ kind: 'moose', bull: m.bull, calf: m.scale < 0.7, x: m.x, y: w.heightAt(m.x, m.z) + 1.45 * m.scale, z: m.z, h: 2.2 * m.scale }); for (const b of this.beavers.list) if (b.lodge && b.state !== 'home' && b.state !== 'under') o.push({ kind: 'beaver', x: b.x, y: this.levelAt(b.x, b.z) + 0.1, z: b.z, h: 0.3 }); for (const b of [...B.eagles, ...B.gulls, B.raven]) if (b && b.alive) o.push({ kind: b.kind, x: b.x, y: b.y, z: b.z, h: b.kind === 'eagle' ? 0.9 : 0.5 }); if (this.loons) for (const l of this.loons.loons) if (l.alive && l.state !== 'under') o.push({ kind: 'loon', x: l.x, y: l.level + l.y + 0.15, z: l.z, h: 0.35 }); return o; } // hubs 3B: what is out now for the camera (photo.js): kind, the middle of the body (x, y, z) and its height h
+  subjects() { const o = [], w = this.world, B = this.birds; for (const m of this.moose.list) if (m.alive) o.push({ kind: 'moose', state: m.state, bull: m.bull, calf: m.scale < 0.7, x: m.x, y: w.heightAt(m.x, m.z) + 1.45 * m.scale, z: m.z, h: 2.2 * m.scale }); for (const b of this.beavers.list) if (b.lodge && b.state !== 'home' && b.state !== 'under') o.push({ kind: 'beaver', state: b.state, byLodge: Math.hypot(b.x - b.lodge.x, b.z - b.lodge.z) < 25, x: b.x, y: this.levelAt(b.x, b.z) + 0.1, z: b.z, h: 0.3 }); for (const b of [...B.eagles, ...B.gulls, B.raven]) if (b && b.alive) o.push({ kind: b.kind, state: b.state, x: b.x, y: b.y, z: b.z, h: b.kind === 'eagle' ? 0.9 : 0.5 }); if (this.loons) for (const l of this.loons.loons) if (l.alive && l.state !== 'under') o.push({ kind: 'loon', state: l.state, x: l.x, y: l.level + l.y + 0.15, z: l.z, h: 0.35 }); return o; } // hubs 3B: what is out now for the camera (photo.js): kind, the middle of the body (x, y, z) and its height h; its state (perched, wading, a tail slap) and a beaver's byLodge for the thought a sighting says (record.js muse)
   // what is out, and what it costs this frame: instanced draws (one per part with any instance) and triangles
   get stats() {
     let calls = 0, tris = 0;
@@ -166,6 +166,21 @@ class Beavers {
   // yielding every few candidates, so the scan spreads it over frames (evaluate runs it at once, for force()).
   *lodgeGen(ci, cj, forced = false) {
     const w = this.f.world, rng = mulberry32((hash2(ci, cj, 41) * 4294967296) >>> 0);
+    // the wetlands round: with the release's beaver dams (creeks.js), the beavers live in the real lodges, those that
+    // stand in water the canoe can reach (props.js builds the lodge itself; this one draws only the beaver)
+    if (w.creeks && !forced) {
+      const x0 = w.originX + ci * LODGE_CELL, z0 = w.originZ + cj * LODGE_CELL;
+      for (const d of w.creeks.damsIn(x0 - 200, z0 - 200, x0 + LODGE_CELL + 200, z0 + LODGE_CELL + 200)) {
+        if (!d.lodge || d.old) continue;
+        const [x, z] = d.lodge;
+        if (x < x0 || x >= x0 + LODGE_CELL || z < z0 || z >= z0 + LODGE_CELL) continue;
+        if (!w.isReady(x, z)) return undefined;
+        if (w.shoreAt(x, z) > -1.5) continue;
+        deeper(w, x, z, _d);
+        return { x, z, yaw: headingOf(_d.x, _d.z), level: w.levelAt(x, z), key: `${ci},${cj}`, real: true };
+      }
+      return null;
+    }
     if (!forced && rng() > 0.6) return null;
     const cands = [];
     for (let k = 0; k < 40; k++) {
@@ -270,7 +285,7 @@ class Beavers {
     this.scanT -= dt;
     if (this.scanT <= 0) { this.scanT = 1.5; this.scan(); }
     this.search.step(0.4);
-    for (const L of this.near) if (Math.hypot(L.x - f.cx, L.z - f.cz) < 1200) this.lodge.push(frameMatrix(_m, L.x, L.level, L.z, L.yaw));
+    for (const L of this.near) if (!L.real && Math.hypot(L.x - f.cx, L.z - f.cz) < 1200) this.lodge.push(frameMatrix(_m, L.x, L.level, L.z, L.yaw)); // (a real lodge is the props')
     // each beaver keeps its lodge while that lodge is among the near ones; a lodge left free goes to a beaver
     // without one
     const [b0, b1] = this.list, n0 = this.near[0] || null, n1 = this.near[1] || null;

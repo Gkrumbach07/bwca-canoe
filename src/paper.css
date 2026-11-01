@@ -1,0 +1,230 @@
+/* The paper journal: a reusable look for any page of the book (journal.js imports it; the map's lake pages may too).
+   The owner (2026-10-31): "so it actually looks like a journal instead of just like a modal"; after Cast and Chill's
+   fish book: warm paper, ink-brown headings, a list to pick from on the right and the thing itself on the left.
+   Built on the paper tokens in index.html (--paper, --ink, --edge, --pencil, --pencil-font, --sc, --serif, --map-red).
+
+   The classes (all prefixed pp-; none needs #journal). They take effect inside a .pp-spread, or inside any element
+   given the class .pp (a lone page, a card): that keeps them ahead of the .paper defaults in hud.css.
+     .pp-spread            two pages side by side on one sheet, a spine shadow down the middle (a grid of two columns;
+                           put two .pp-page in it). Fills its box.
+     .pp-page              one page: padded, a flex column, its own scroll areas inside. .left / .right set the gutter
+                           on the spine side. .pp-page.ruled lines it like a notebook (see .pp-ruled).
+     .pp-ruled             notebook ruling: faint blue lines every --pp-line (28 px) and a red margin line at
+                           --pp-margin (64 px). Text set on it in .pp-hand lines up with the rules.
+     .pp-hand              handwriting (Caveat, in pencil). .pp-hand.pen: in ink-brown pen. .pp-hand.small.
+     .pp-struck            a pencil line through the text (crossed out when done). On an inline element; it wraps.
+     .pp-tick              a pencilled tick (✓) in the margin; .pp-box an empty pencilled box; .pp-box.half half done
+     .pp-banner            a name banner across the top of a detail page (the fish's name): small caps on a darker
+                           paper ribbon with cut ends.
+     .pp-frame             the picture panel under a banner: a darker paper panel; an <img> or <canvas> centred in it.
+     .pp-badges, .pp-badge a row of small size badges (S M L XL); .pp-badge.on is one earned. .pp-badge.star a trophy.
+     .pp-stamp             a small paper label (the rarity: "Uncommon"), set in the frame's corner or a row.
+     .pp-title             an ink-brown small-caps heading with a pencil flourish each side (~ BIGGEST CATCH ~).
+     .pp-facts             rows of facts: each child a .pp-fact with an <i> glyph (or .k label) and the words.
+     .pp-count             the big ink-brown tally at the top of an index page ("4 / 6").
+     .pp-index             the right page's list, scrolling; holds .pp-group headings and .pp-tiles or .pp-list.
+     .pp-group             a group heading with a map pin (a place, a kind of water): <b>main</b> <span>sub</span>.
+     .pp-tiles, .pp-tile   a grid of picture tiles to pick from (buttons). .on: picked. .unknown: a dark silhouette,
+                           not yet found. A tile's .pp-mark is a small tick in its corner (caught, done).
+     .pp-list, .pp-entry   a pencilled list to pick from (buttons, one line each with a .d date, the words and a .n
+                           figure at the end). .on: picked.
+     .pp-sort              a small "sort by" toggle: <span>sort by</span> and buttons, .on the one in use.
+     .pp-stats, .pp-stat   a row of figures between dashed rules: <div class="pp-stat"><b>4</b><span>days</span></div>.
+     .pp-task              a handwritten entry on a ruled page: a .pp-box in the margin (.half, .done), a .t line
+                           (.pp-hand title and a .pay), then .pp-hand.small lines; .done / .claimed cross it out.
+     .pp-print             a snapshot taped to the page (an <img> with a pencilled caption under it); .big for the
+                           one on the detail page. --tilt sets its angle.
+     .pp-tabs, .pp-tab     index tabs down the page's outer edge (vertical words), .on the open one.
+     .pp-foot              the page's foot: small caps, a page number at the outer corner.
+     .pp-soft / .pp-empty  softer ink; an italic note where a page has nothing yet.
+*/
+:root {
+  --pp-line: 28px;                       /* the ruling */
+  --pp-margin: 64px;                     /* the red margin line, from the page's left edge */
+  --pp-rule: rgba(64, 104, 150, .17);
+  --pp-margin-col: rgba(180, 50, 31, .5);
+  --pp-brown: #8a4a24;                   /* the ink-brown of the headings */
+  --pp-brown-deep: #5e321a;
+  --pp-panel: #dfd2b0;                   /* a darker paper: the frame, the tiles */
+  --pp-panel-deep: #cfbf98;
+  --pp-sheet: #ede3c9;                   /* the page itself, a touch warmer than --paper */
+  /* the paper's grain: a fine fractal noise in brown, tiled (book.css lays it on every page) */
+  --pp-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .38  0 0 0 0 .27  0 0 0 0 .14  0 0 0 .11 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* --- the spread and the pages --------------------------------------------------------------------------------------- */
+.pp-spread { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; color: var(--ink); font-family: var(--serif);
+  background: var(--pp-sheet); background-image: radial-gradient(ellipse at 25% 20%, rgba(255, 250, 235, .55), transparent 55%), radial-gradient(ellipse at 80% 85%, rgba(160, 120, 70, .1), transparent 60%); }
+.pp-spread::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 44px; translate: -50% 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(70, 45, 20, .1) 30%, rgba(70, 45, 20, .26) 49%, rgba(255, 250, 235, .25) 51%, rgba(70, 45, 20, .1) 70%, transparent); }
+:is(.pp-spread, .pp) .pp-page { position: relative; box-sizing: border-box; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 34px 40px 22px 46px; overflow: hidden; }
+:is(.pp-spread, .pp) .pp-page.left { padding-right: 40px; }
+:is(.pp-spread, .pp) .pp-page.right { padding-left: 40px; padding-right: 46px; }
+:is(.pp-spread, .pp) .pp-page h2 { margin: 0; font: 500 27px/1.08 var(--serif); color: var(--ink); text-wrap: balance; }
+:is(.pp-spread, .pp) .pp-page .pp-sub { font: italic 15px/1.35 var(--serif); color: var(--ink-soft); }
+:is(.pp-spread, .pp) .pp-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(106, 90, 69, .35) transparent; }
+
+/* --- ruled paper ------------------------------------------------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-ruled, :is(.pp-spread, .pp) .pp-page.ruled { background-image:
+  linear-gradient(90deg, transparent calc(var(--pp-margin) - 1px), var(--pp-margin-col) calc(var(--pp-margin) - 1px), var(--pp-margin-col) var(--pp-margin), transparent var(--pp-margin)),
+  repeating-linear-gradient(180deg, transparent 0 calc(var(--pp-line) - 1px), var(--pp-rule) calc(var(--pp-line) - 1px) var(--pp-line));
+  background-position: 0 0, 0 var(--pp-rule-y, -5px); background-attachment: local; } /* (the rules a touch up: the hand sits on them) */
+
+/* --- the hand: pencil, pen, the cross-out ------------------------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-hand { font: 500 22px/var(--pp-line) var(--pencil-font); color: var(--pencil); letter-spacing: .005em; }
+:is(.pp-spread, .pp) .pp-hand.pen { color: var(--pp-brown-deep); font-weight: 600; }
+:is(.pp-spread, .pp) .pp-hand.small { font-size: 18px; }
+:is(.pp-spread, .pp) .pp-struck { position: relative; text-decoration: line-through; text-decoration-color: rgba(60, 50, 40, .78); text-decoration-thickness: 2px; text-decoration-skip-ink: none; color: var(--ink-faint); }
+:is(.pp-spread, .pp) .pp-tick, :is(.pp-spread, .pp) .pp-box { display: inline-block; flex: none; width: 18px; height: 18px; position: relative; }
+:is(.pp-spread, .pp) .pp-box { border: 1.6px solid var(--pencil); border-radius: 2px 3px 2px 4px; transform: rotate(-2deg); box-sizing: border-box; }
+:is(.pp-spread, .pp) .pp-box.half { background: linear-gradient(135deg, transparent 47%, var(--pencil) 47% 55%, transparent 55%); }
+:is(.pp-spread, .pp) .pp-tick::after { content: '✓'; position: absolute; left: 1px; top: -10px; font: 600 28px/1 var(--pencil-font); color: var(--map-red); transform: rotate(-6deg); }
+:is(.pp-spread, .pp) .pp-box.done::after { content: '✓'; position: absolute; left: 1px; top: -12px; font: 600 28px/1 var(--pencil-font); color: var(--map-red); }
+
+/* --- a detail page: the banner, the frame, the badges -------------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-banner { position: relative; align-self: center; min-width: 58%; max-width: 92%; box-sizing: border-box; padding: 8px 40px 9px; text-align: center; font: 700 19px/1.15 var(--sc); letter-spacing: .14em; color: var(--ink);
+  background: var(--pp-panel-deep); clip-path: polygon(0 50%, 16px 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 16px 100%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-frame { position: relative; display: grid; place-items: center; min-height: 0; padding: 12px 16px 34px; border-radius: 10px; background: var(--pp-panel); box-shadow: inset 0 0 0 1px rgba(120, 95, 60, .18), inset 0 2px 14px rgba(120, 90, 50, .12); }
+:is(.pp-spread, .pp) .pp-banner + .pp-frame { margin-top: -18px; padding-top: 26px; }
+:is(.pp-spread, .pp) .pp-frame img, :is(.pp-spread, .pp) .pp-frame canvas { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+:is(.pp-spread, .pp) .pp-frame .pp-badges { position: absolute; left: 14px; bottom: 9px; }
+:is(.pp-spread, .pp) .pp-frame .pp-stamp { position: absolute; right: 14px; bottom: 9px; }
+:is(.pp-spread, .pp) .pp-badges { display: flex; gap: 4px; align-items: center; }
+:is(.pp-spread, .pp) .pp-badge { display: inline-grid; place-items: center; min-width: 24px; height: 19px; padding: 0 5px; box-sizing: border-box; border-radius: 4px; font: 700 11px/1 var(--sc); letter-spacing: .04em;
+  background: rgba(120, 95, 60, .16); color: rgba(90, 70, 45, .45); }
+:is(.pp-spread, .pp) .pp-badge.on { background: var(--pp-brown); color: var(--pp-sheet); }
+:is(.pp-spread, .pp) .pp-badge.star::before { content: '★'; font-size: 12px; }
+:is(.pp-spread, .pp) .pp-stamp { display: inline-block; padding: 3px 12px 4px; border-radius: 4px; font: italic 14px/1.1 var(--serif); color: var(--ink-soft); background: rgba(120, 95, 60, .14); }
+:is(.pp-spread, .pp) .pp-stamp.rare { color: var(--pp-brown-deep); background: rgba(138, 74, 36, .18); }
+:is(.pp-spread, .pp) .pp-title { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 6px 0 0; font: 700 17px/1.2 var(--sc); letter-spacing: .14em; color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-title::before, :is(.pp-spread, .pp) .pp-title::after { content: '〰'; font: 600 20px/1 var(--pencil-font); color: var(--pp-brown); opacity: .8; }
+
+/* --- facts: a glyph or a label, then the words --------------------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-facts { display: flex; flex-direction: column; gap: 7px; font: 17px/1.3 var(--serif); }
+:is(.pp-spread, .pp) .pp-fact { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+:is(.pp-spread, .pp) .pp-fact > i { font-style: normal; text-align: center; color: var(--pp-brown); font-size: 16px; }
+:is(.pp-spread, .pp) .pp-fact > .k { grid-column: 1 / -1; font: 700 11px/1.3 var(--sc); letter-spacing: .14em; color: var(--ink-soft); margin-bottom: -5px; }
+:is(.pp-spread, .pp) .pp-facts.wide .pp-fact { grid-template-columns: 112px minmax(0, 1fr); }
+:is(.pp-spread, .pp) .pp-facts.wide .pp-fact > .k { grid-column: auto; margin: 0; }
+:is(.pp-spread, .pp) .pp-soft { color: var(--ink-soft); font-style: italic; }
+:is(.pp-spread, .pp) .pp-empty { color: var(--ink-soft); font: italic 16px/1.45 var(--serif); }
+
+/* --- an index page: the count, the groups, the tiles, the list ----------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-indexhead { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex: none; padding-bottom: 10px; border-bottom: 2px dashed rgba(120, 95, 60, .3); }
+:is(.pp-spread, .pp) .pp-count { font: 700 26px/1 var(--sc); letter-spacing: .08em; color: var(--pp-brown); font-variant-numeric: tabular-nums; }
+:is(.pp-spread, .pp) .pp-sort { display: flex; align-items: center; gap: 6px; font: 700 12px/1 var(--sc); letter-spacing: .14em; color: var(--ink-faint); }
+:is(.pp-spread, .pp) .pp-sort button { appearance: none; border: none; cursor: pointer; padding: 5px 10px 6px; border-radius: 4px; font: inherit; letter-spacing: inherit; color: var(--ink-soft); background: transparent; }
+:is(.pp-spread, .pp) .pp-sort button.on { background: var(--pp-brown-deep); color: var(--pp-sheet); }
+:is(.pp-spread, .pp) .pp-sort button:not(.on):hover { color: var(--ink); background: rgba(120, 95, 60, .12); }
+:is(.pp-spread, .pp) .pp-index { min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(138, 74, 36, .5) transparent; padding-right: 6px; display: flex; flex-direction: column; gap: 10px; }
+:is(.pp-spread, .pp) .pp-group { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; font: 700 15px/1.2 var(--sc); letter-spacing: .12em; color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-group::before { content: ''; flex: none; align-self: center; width: 13px; height: 13px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--pp-brown-deep); box-shadow: inset 0 0 0 3.5px var(--pp-brown-deep), inset 0 0 0 7px var(--pp-sheet); }
+:is(.pp-spread, .pp) .pp-group span { font: italic 15px/1.2 var(--serif); letter-spacing: 0; color: var(--ink-soft); }
+:is(.pp-spread, .pp) .pp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+:is(.pp-spread, .pp) .pp-tile { appearance: none; position: relative; display: grid; place-items: center; aspect-ratio: 10 / 9; padding: 6px; border: none; border-radius: 9px; cursor: pointer; background: var(--pp-panel);
+  box-shadow: inset 0 0 0 1px rgba(120, 95, 60, .16), 0 2px 0 rgba(120, 90, 50, .14); transition: transform .12s, box-shadow .12s; }
+:is(.pp-spread, .pp) .pp-tile img, :is(.pp-spread, .pp) .pp-tile canvas { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+:is(.pp-spread, .pp) .pp-tile:hover { transform: translateY(-2px); }
+:is(.pp-spread, .pp) .pp-tile.on { box-shadow: inset 0 0 0 2px var(--pp-brown), 0 0 0 2px var(--pp-sheet), 0 0 0 4px rgba(138, 74, 36, .35); }
+:is(.pp-spread, .pp) .pp-tile.unknown { background: var(--pp-panel-deep); }
+:is(.pp-spread, .pp) .pp-tile.unknown img { opacity: .78; }
+:is(.pp-spread, .pp) .pp-tile .pp-mark { position: absolute; right: 6px; bottom: 4px; font: 600 20px/1 var(--pencil-font); color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-tile .pp-name { position: absolute; left: 7px; top: 5px; right: 7px; font: 700 10px/1.1 var(--sc); letter-spacing: .08em; color: var(--ink-soft); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-list { display: flex; flex-direction: column; }
+:is(.pp-spread, .pp) .pp-entry { appearance: none; display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; width: 100%; padding: 0 6px; min-height: var(--pp-line); box-sizing: border-box; border: none; border-radius: 3px;
+  background: transparent; text-align: left; cursor: pointer; color: var(--pencil); font: 500 21px/var(--pp-line) var(--pencil-font); }
+:is(.pp-spread, .pp) .pp-entry .d { font: 700 11px/var(--pp-line) var(--sc); letter-spacing: .1em; color: var(--ink-faint); white-space: nowrap; }
+:is(.pp-spread, .pp) .pp-entry .w { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-entry .n { font: 700 11px/var(--pp-line) var(--sc); letter-spacing: .1em; color: var(--ink-soft); white-space: nowrap; }
+:is(.pp-spread, .pp) .pp-entry:hover { background: rgba(138, 74, 36, .08); }
+:is(.pp-spread, .pp) .pp-entry.on { background: rgba(138, 74, 36, .14); color: var(--pp-brown-deep); }
+:is(.pp-spread, .pp) .pp-entry.on .w::before { content: '› '; color: var(--map-red); }
+
+/* --- figures across a page (a trip's days, miles, portages) ------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-stats { display: flex; flex-wrap: wrap; justify-content: space-around; gap: 6px 14px; padding: 8px 4px 10px; border-top: 2px dashed rgba(120, 95, 60, .3); border-bottom: 2px dashed rgba(120, 95, 60, .3); }
+:is(.pp-spread, .pp) .pp-stat { display: flex; flex-direction: column; align-items: center; min-width: 54px; }
+:is(.pp-spread, .pp) .pp-stat b { font: 600 30px/1 var(--pencil-font); color: var(--pp-brown-deep); font-variant-numeric: tabular-nums; }
+:is(.pp-spread, .pp) .pp-stat span { font: 700 10.5px/1.3 var(--sc); letter-spacing: .14em; color: var(--ink-soft); }
+
+/* --- a handwritten entry on a ruled page (a task): the box in the margin, the words on the rules --------------------- */
+:is(.pp-spread, .pp) .pp-task { position: relative; padding: 0 8px 0 calc(var(--pp-margin) + 10px); margin-bottom: var(--pp-line); }
+:is(.pp-spread, .pp) .pp-task > .pp-box { position: absolute; left: calc(var(--pp-margin) - 30px); top: 5px; }
+:is(.pp-spread, .pp) .pp-task .t { display: flex; align-items: baseline; gap: 12px; }
+:is(.pp-spread, .pp) .pp-task .t .pp-hand { flex: 1 1 auto; min-width: 0; }
+:is(.pp-spread, .pp) .pp-task .pay { flex: none; font: 600 22px/var(--pp-line) var(--pencil-font); color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-task .who { display: block; font: 700 10.5px/var(--pp-line) var(--sc); letter-spacing: .12em; color: var(--ink-faint); height: var(--pp-line); }
+:is(.pp-spread, .pp) .pp-task .st { color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-task.done .t .pp-hand, :is(.pp-spread, .pp) .pp-task.claimed .t .pp-hand { text-decoration: line-through; text-decoration-color: rgba(60, 50, 40, .75); text-decoration-thickness: 2px; }
+:is(.pp-spread, .pp) .pp-task.claimed { opacity: .62; }
+:is(.pp-spread, .pp) .pp-task.claimed .pay { text-decoration: line-through; }
+
+/* --- a snapshot taped on ------------------------------------------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-print { position: relative; margin: 0; padding: 7px 7px 9px; background: #f8f3e6; border: 1px solid rgba(160, 140, 105, .55); box-shadow: 0 3px 8px rgba(40, 24, 8, .24); transform: rotate(var(--tilt, 0deg)); }
+:is(.pp-spread, .pp) .pp-print::before { content: ''; position: absolute; left: 50%; top: -9px; width: 54px; height: 18px; translate: -50% 0; rotate: calc(var(--tilt, 0deg) * -2); background: rgba(232, 222, 190, .72); box-shadow: 0 1px 2px rgba(60, 40, 20, .12); }
+:is(.pp-spread, .pp) .pp-print img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; background: #d8ccae; }
+:is(.pp-spread, .pp) .pp-print .blank { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; background: #d8ccae; font: italic 14px/1.2 var(--serif); color: var(--ink-soft); }
+:is(.pp-spread, .pp) .pp-print figcaption { margin-top: 5px; font: 500 17px/1.1 var(--pencil-font); color: var(--pencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-print.big { padding: 10px 10px 14px; }
+:is(.pp-spread, .pp) .pp-print.big figcaption { font-size: 23px; white-space: normal; margin-top: 8px; }
+:is(.pp-spread, .pp) button.pp-print { appearance: none; cursor: pointer; font: inherit; text-align: left; }
+:is(.pp-spread, .pp) button.pp-print:hover { box-shadow: 0 6px 14px rgba(40, 24, 8, .3); }
+:is(.pp-spread, .pp) button.pp-print.on { outline: 2px solid var(--pp-brown); outline-offset: 3px; }
+
+/* --- index tabs down the outer edge --------------------------------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-tabs { position: absolute; top: 34px; right: 0; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
+:is(.pp-spread, .pp) .pp-tab { appearance: none; writing-mode: vertical-rl; padding: 14px 6px 14px 7px; border: none; border-radius: 0 7px 7px 0; cursor: pointer; font: 700 12px/1 var(--sc); letter-spacing: .16em; color: rgba(243, 236, 221, .9);
+  background: var(--tab, #7a5a3a); box-shadow: inset 2px 0 3px rgba(0, 0, 0, .18); transition: padding .12s; }
+:is(.pp-spread, .pp) .pp-tab:hover { padding-right: 9px; }
+:is(.pp-spread, .pp) .pp-tab.on { background: var(--pp-sheet); color: var(--pp-brown-deep); box-shadow: none; padding-right: 9px; }
+
+/* --- the journal's own pages (journal.js) ------------------------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-pagehead { flex: none; display: flex; flex-direction: column; gap: 2px; }
+:is(.pp-spread, .pp) .pp-pagehead .sc { font: 700 11.5px/1.3 var(--sc); letter-spacing: .16em; color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-lines { padding-top: 6px; margin: 0 -10px 0 -14px; }
+:is(.pp-spread, .pp) .pp-pad { padding: 0 10px 0 calc(var(--pp-margin) + 10px); }
+:is(.pp-spread, .pp) .pp-index.pp-lines { gap: 0; padding-right: 0; }
+:is(.pp-spread, .pp) .pp-index.pp-lines .pp-entry { padding-left: calc(var(--pp-margin) - 52px); }
+:is(.pp-spread, .pp) .pp-fishpic { flex: none; height: clamp(140px, 27vh, 250px); }
+:is(.pp-spread, .pp) .pp-fishpic img { width: 92%; height: 100%; object-fit: contain; filter: drop-shadow(0 6px 6px rgba(70, 45, 20, .22)); }
+:is(.pp-spread, .pp) .pp-latin { margin-top: -6px; text-align: center; font-size: 14px; }
+:is(.pp-spread, .pp) .pp-tip { margin: 10px 0 2px; padding-left: 36px; transform: rotate(-.6deg); color: var(--pencil); }
+:is(.pp-spread, .pp) .pp-prints { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 18px; padding: 16px 8px 8px 4px; align-content: start; }
+:is(.pp-spread, .pp) .pp-page.left .pp-print.big { align-self: center; width: min(100%, 520px); flex: none; }
+:is(.pp-spread, .pp) .pp-trip .tc-page.in-book .tc-line { font-size: 23px; }
+
+/* --- the foot ----------------------------------------------------------------------------------------------------- */
+:is(.pp-spread, .pp) .pp-foot { margin-top: auto; flex: none; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; font: 700 11px/1.4 var(--sc); letter-spacing: .14em; color: var(--ink-faint); }
+:is(.pp-spread, .pp) .pp-foot .pp-hand { letter-spacing: 0; font-size: 20px; line-height: 1.1; transform: rotate(-1.5deg); }
+:is(.pp-spread, .pp) .pp-foot button { appearance: none; background: none; border: none; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+:is(.pp-spread, .pp) .pp-foot kbd { font-size: 10px; }
+
+@media (prefers-reduced-motion: reduce) { .pp-tile, .pp-tab { transition: none; } }
+
+/* --- the owner's second round (2026-10-31): hand-lettered page heads, the task checklist, a notice unfolded --------- */
+:is(.pp-spread, .pp) .pp-page h2.pp-head, :is(.pp-spread, .pp) .pp-head { margin: 0 0 2px; flex: none; font: 600 40px/1 var(--pencil-font); color: var(--pp-brown-deep); letter-spacing: .01em;
+}
+:is(.pp-spread, .pp) .pp-head::after { content: ''; display: block; width: 4.2em; height: 6px; margin-top: 2px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 6' preserveAspectRatio='none'><path d='M2 4 C40 1 80 5 120 2.5 S150 3 158 2' fill='none' stroke='%235e321a' stroke-width='1.6' stroke-linecap='round' opacity='.7'/></svg>") no-repeat 0 0 / 100% 100%; }
+:is(.pp-spread, .pp) .pp-headrow { flex: none; display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding-right: 26px; }
+:is(.pp-spread, .pp) .pp-page.right .pp-head { padding-right: 30px; }
+/* a line of the checklist: the box in the margin, the title in pen, the pay in pencil; a second line when there is
+   something to say (done, half done) */
+:is(.pp-spread, .pp) .pp-todo { appearance: none; position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; width: 100%; box-sizing: border-box; padding: 0 30px 0 calc(var(--pp-margin) + 8px);
+  border: none; background: none; text-align: left; color: var(--pencil); cursor: pointer; font: 500 22px/var(--pp-line) var(--pencil-font); }
+:is(.pp-spread, .pp) .pp-todo > .pp-box { position: absolute; left: calc(var(--pp-margin) - 28px); top: 5px; }
+:is(.pp-spread, .pp) .pp-todo .t { color: var(--pp-brown-deep); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-todo .pay { font-weight: 600; color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-todo .st { grid-column: 1 / -1; font-size: 18px; color: var(--pencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-todo.on::before { content: '›'; position: absolute; left: calc(var(--pp-margin) - 50px); top: 0; font: 600 30px/var(--pp-line) var(--pencil-font); color: var(--map-red); }
+:is(.pp-spread, .pp) .pp-todo.on .t { color: var(--ink); }
+:is(.pp-spread, .pp) button.pp-todo:hover .t { color: var(--ink); }
+:is(.pp-spread, .pp) .pp-todo.done .t { color: var(--pencil); }
+:is(.pp-spread, .pp) .pp-todo.claimed { cursor: default; opacity: .6; }
+:is(.pp-spread, .pp) .pp-todo.claimed .t, :is(.pp-spread, .pp) .pp-todo.claimed .pay { color: var(--pencil); font-weight: 500; text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: rgba(60, 50, 40, .75); }
+:is(.pp-spread, .pp) .pp-todo.sum { cursor: default; margin-top: var(--pp-line); }
+:is(.pp-spread, .pp) .pp-todo.sum .t { font-weight: 500; color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-flyer { padding: 14px 6px 10px; overflow-x: hidden; }
+:is(.pp-spread, .pp) .pp-margin { margin: 18px 12% 0; text-align: center; transform: rotate(-1.2deg); color: var(--pencil); }
+:is(.pp-spread, .pp) .pp-foot.left { justify-content: flex-start; }
+:is(.pp-spread, .pp) .pp-foot { font-size: 12px; letter-spacing: .06em; }
+:is(.pp-spread, .pp) .pp-banner { background: rgba(120, 90, 50, .16); box-shadow: inset 0 0 0 1px rgba(120, 90, 50, .14); }

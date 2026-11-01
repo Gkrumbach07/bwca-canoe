@@ -16,7 +16,7 @@
 //     points, moose on a river at dawn, the carry that sorts people out. A hint's lake is the real one, and where it
 //     says the fish are thick this year, fishing.js's own abundance for that lake and species says so too;
 //   - the building's look (props.js, stream A): the stain, the roof and its kind, the trim, the door, a porch or not.
-// The signs keep the real business names (outfitter.js outfitterName); the keepers are made up.
+// The signs' names are invented, one per entry point (outfitter.js outfitterName), and so are the keepers.
 //
 //   outfitterProfile(ep, world) → { ep, name, place, lake, area, kind, kindWords, post, keeper: { name, manner,
 //     lines: { hello, goodbye, chat: [...] }, moments: { hello: [...], stranger: [...], …each moment }, hint(world,
@@ -36,6 +36,7 @@
 // portages (and lakeName, or the lake records' names).
 import { outfitterName } from './outfitter.js';
 import { mulberry32, hash2 } from './rng.js';
+import { miles, fmtDepth } from './units.js';
 
 const TROUT_WATER = 20;      // fishing.js bites lake trout only where the lake is sounded this deep (m)
 const DEEP_REACH = 12000;    // m: deep lakes looked for
@@ -65,7 +66,7 @@ export function roadOf(ep) { const r = ROADS.find(([, eps]) => eps.includes(Numb
 // --- small words ---------------------------------------------------------------------------------------------------
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const word = (n) => (n < WORDS.length ? WORDS[n] : String(n));
-const km = (m) => { const k = m / 1000; return k < 10 ? k.toFixed(1) : String(Math.round(k)); };
+const km = (m) => miles(m / 1000); // (miles now, from metres; the name kept)
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 const compass = (dx, dz) => COMPASS[Math.round((((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360) / 45) % 8];
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v[k] != null ? v[k] : m));
@@ -368,18 +369,18 @@ const VOICE = {
 function placeChat(f) {
   const out = [];
   if (f.camps >= 20) out.push(`There’s ${f.camps >= 100 ? 'over a hundred' : `${Math.floor(f.camps / 10) * 10}-odd`} campsites within a day or two of here. The island ones go first.`);
-  if (f.near) out.push(`The ${f.near.name} landing is ${km(f.near.d * 1.4)} km down the road. They keep a board of their own.`);
-  out.push(`${f.town}’s ${f.townKm} km back down ${f.road}, if you forgot anything.`);
+  if (f.near) out.push(`The ${f.near.name} landing is ${km(f.near.d * 1.4)} miles down the road. They keep a board of their own.`);
+  out.push(`${f.town}’s ${miles(f.townKm)} miles back down ${f.road}, if you forgot anything.`);
   if (f.longest && f.longest.rods >= 150) out.push(`The ${f.longest.rods}-rod carry, ${f.longest.name}, sorts people out. Take it in two.`);
   const deep = f.deep[0];
-  if (deep) out.push(`${deep.name} goes down ${Math.round(deep.depth)} m. Cold at the bottom all summer.`);
+  if (deep) out.push(`${deep.name} goes down ${fmtDepth(deep.depth)}. Cold at the bottom all summer.`);
   return out;
 }
 
 // --- the hints: insider words from the data ---------------------------------------------------------------------------
 const HINT_WORDS = {
   // {lake}{where} always closes its clause, so the "one portage in" never runs into the rest of the sentence
-  laketrout: ['Lakers in {lake}{where}. It goes down {depth} m; let the spoon sink a long count.', 'Lake trout, deep and cold, in {lake}{where}. Troll a spoon slow along the drop.'],
+  laketrout: ['Lakers in {lake}{where}. It goes down {depth} feet; let the spoon sink a long count.', 'Lake trout, deep and cold, in {lake}{where}. Troll a spoon slow along the drop.'],
   walleye: ['At dusk the walleye come up the drop-offs in {lake}{where}. A jig, slow.', 'Walleye on the rocks at dusk in {lake}{where}. A leech if the jig won’t do it.'],
   pike: ['Northerns in the weedy bays of {lake}{where}. A spoon over the weeds.', 'Big pike sit in the weeds in {lake}{where}. Bring a spoon and some patience.'],
   smallmouth: ['Afternoons, smallmouth on the rocky points of {lake}{where}. A crankbait if you have one.', 'Smallmouth hold on the rocky points in {lake}{where}. Clear water, afternoons.'],
@@ -397,7 +398,7 @@ function whereWords(l) {
   if (l.hops === 0) return ', on this water';
   if (l.hops === 1) return ', one portage in';
   if (l.hops != null && l.hops <= HOPS) return `, ${word(l.hops)} portages in`;
-  return `, ${km(l.d)} km ${l.dir} of here`;
+  return `, ${km(l.d)} miles ${l.dir} of here`;
 }
 // the hints a place gives, best first: up to four, of different kinds
 function hintsFor(f, rng) {
@@ -428,7 +429,7 @@ function hintsFor(f, rng) {
 // the keeper's way of putting it: the manner's opening for the fish (taken in turn, so no two hints open alike) and
 // its closing words
 function hintText(h, manner, rng, i = 0) {
-  const l = h.l, v = { lake: l.name, water: theWater(l.name), where: h.kind === 'carry' ? '' : whereWords(l), depth: Math.round(l.depth || 0), rods: h.rods };
+  const l = h.l, v = { lake: l.name, water: theWater(l.name), where: h.kind === 'carry' ? '' : whereWords(l), depth: Math.round((l.depth || 0) * 3.28084), rods: h.rods }; // depth in feet for the words
   if (manner === 'gruff') return fill(TERSE[h.kind], v) + (h.ab >= THICK ? ' Thick this year.' : '');
   const V = VOICE[manner], base = pickR(rng, HINT_WORDS[h.kind]), fish = h.kind !== 'carry' && h.kind !== 'moose', pre = fish ? V.pre[i % V.pre.length] || '' : '';
   let s = fill(base, v);
@@ -436,7 +437,7 @@ function hintText(h, manner, rng, i = 0) {
   s = pre + s;
   if (h.ab >= THICK) s += pickR(rng, THICK_WORDS);
   // the ex-ranger gives the crow's distance too, where the words gave it by portages
-  if (manner === 'precise' && h.kind !== 'carry' && !l.here && l.hops != null && l.hops <= HOPS) s += ` ${cap(km(l.d))} km ${l.dir} as the crow flies.`;
+  if (manner === 'precise' && h.kind !== 'carry' && !l.here && l.hops != null && l.hops <= HOPS) s += ` ${cap(km(l.d))} miles ${l.dir} as the crow flies.`;
   return s + (pickR(rng, V.post) || '');
 }
 
@@ -478,7 +479,7 @@ const HAND = {
       hello: ['Morning. Sit, if your legs want it. Seagull’s blowing again.', 'There’s the paddler. The lakers have been asking after you.'],
       stranger: ['A new one. I’ve watched this lake since before the road was paved. Food’s on the shelf, the board’s by the door.'],
       goodbye: ['Seagull’s all islands and rock. Keep the compass handy.'],
-      chat: ['Seagull’s all islands and rock. The fire in ’07 took the pines and the blueberries took over.', 'Lake trout don’t care for July. Go deep or go home.', 'Magnetic Lake’s the deep one round here. Twenty-seven metres, and cold as a banker.'],
+      chat: ['Seagull’s all islands and rock. The fire in ’07 took the pines and the blueberries took over.', 'Lake trout don’t care for July. Go deep or go home.', 'Magnetic Lake’s the deep one round here. Ninety feet, and cold as a banker.'],
     } },
   55: { kind: 'lodge', keeper: 'Lise Thibodeau', manner: 'keen', priceMul: 1.25,
     sig: { family: 'sail', name: 'Saganaga downwind sail', price: 45, words: 'Two spruce poles and a square of canvas. On Sag with a west wind behind you it’s free miles. Don’t try it into the wind; I mean it.' },
@@ -548,7 +549,7 @@ export function outfitterProfile(ep, world) {
     ep: e.ep, name: outfitterName(e), place: e.name, lake: f.landing, area: f.road, kind, kindWords: KIND[kind].words(f),
     post: shared ? `the ${e.name} post` : null, // a business with landings at several entry points
     keeper: keeperObj, priceMul, signature: sig.id, boardWeights: bw, look, hints, hand: !!H,
-    facts: { landing: f.landing, ha: f.ha, depth: f.depth, secchi: f.secchi, river: f.river, camps: f.camps, deep: f.deep.slice(0, 3).map((l) => `${l.name} ${Math.round(l.depth)} m`), longest: f.longest ? `${f.longest.name}, ${f.longest.rods} rods` : null, town: f.town, townKm: f.townKm, road: f.road, near: f.near ? f.near.ep : null },
+    facts: { landing: f.landing, ha: f.ha, depth: f.depth, secchi: f.secchi, river: f.river, camps: f.camps, deep: f.deep.slice(0, 3).map((l) => `${l.name} ${fmtDepth(l.depth)}`), longest: f.longest ? `${f.longest.name}, ${f.longest.rods} rods` : null, town: f.town, townKm: f.townKm, road: f.road, near: f.near ? f.near.ep : null },
   };
   c.profiles.set(e.ep, profile);
   return profile;

@@ -20,6 +20,7 @@
 // It hides the counter itself before the fade (so the counter's own close afterwards does nothing), and on arrival
 // sets outfitter.arrivedBy = 'ride' for the counter's greeting (keeperLine(profile, 'ride')).
 import { outfitterProfile, keeperLine, roadOf } from './outfitters.js';
+import { miles } from './units.js';
 
 export const ROAD = 1.4;          // road km for a km of straight line
 const BASE_H = 0.5, KMH = 40;     // the time: half an hour, then 40 km an hour
@@ -38,7 +39,8 @@ export function rideTime(h) {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, '0')}` : ''}`;
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const kmWords = (k) => (k < 10 ? k.toFixed(1) : String(Math.round(k)));
+const kmWords = (k) => miles(k); // (miles now, from km)
+const miWords = (k) => { const m = k * 0.621371; return m < 10 ? m.toFixed(1) : String(Math.round(m)); }; // the counter's rows, in miles
 
 export class Rides {
   // { world, outfitter, day, veil, hud, energy, tasks, teleport (x, z) → Promise<bool> }
@@ -105,9 +107,9 @@ export class Rides {
     const lake = r.lake || to.place;
     const sub = this.sandbox
       ? `Sandbox: the truck is free and the road takes no time. ${lake}, entry point ${to.ep}.`
-      : `${kmWords(r.km)} km up ${r.road === roadOf(from.ep) ? r.road : 'the roads'} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${r.late ? ` It’s late when you get in: a bunk at ${to.name}, and you’re up at half past seven.` : ''}`;
+      : `${kmWords(r.km)} miles up ${r.road === roadOf(from.ep) ? r.road : 'the roads'} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${r.late ? ` It’s late when you get in: a bunk at ${to.name}, and you’re up at half past seven.` : ''}`;
     const card = {
-      kicker: `${from.name} → ${to.name}`,
+      kicker: `${from.name} → ${to.name} · entry point ${to.ep}`,
       text: `“${keeperLine(fromP, 'goodbye', { hours: this.day ? this.day.hours : undefined })}”`,
       sub,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
@@ -169,10 +171,12 @@ export class Rides {
     }
     const li = (r) => {
       const short = !this.sandbox && r.price > money;
-      const meta = [`${esc(r.lake)}`, `${kmWords(r.km)} km`, rideTime(r.hours)];
-      return `<li class="ride${r.unknown ? ' new' : ''}${short ? ' short' : ''}">
+      // the owner (2026-10-31): "you have to also show the number, the entry point number, instead of just the name"
+      const meta = [`${esc(r.lake)}`, `${miWords(r.km)} mi`, rideTime(r.hours)];
+      return `<li class="ride${r.unknown ? ' new' : ''}${short ? ' short' : ''}" data-ep="${r.ep}">
+        <span class="epno" title="Entry point ${r.ep}"><small>EP</small>${r.ep}</span>
         <div class="to"><b>${esc(r.name)}</b><span>${meta.join(' · ')}${r.unknown ? ' · <i>new to you</i>' : ''}${r.late ? ' · a bunk night, up at 7:30' : ''}</span></div>
-        <div class="go"><b class="fare">${this.sandbox ? 'free' : `$${r.price}`}</b><button type="button" class="stamp small" data-act="ride" data-id="${r.ep}"${short || this.busy ? ' disabled' : ''} aria-label="Ride to ${esc(r.name)}${this.sandbox ? '' : `, $${r.price}`}">Ride</button></div>
+        <div class="go"><b class="fare">${this.sandbox ? 'free' : `$${r.price}`}</b><button type="button" class="stamp small" data-act="ride" data-id="${r.ep}"${short || this.busy ? ' disabled' : ''} aria-label="Ride to ${esc(r.name)}, entry point ${r.ep}${this.sandbox ? '' : `, $${r.price}`}">Ride</button></div>
       </li>`;
     };
     const next = rows.find((r) => r.unknown && !this.sandbox);

@@ -8,8 +8,13 @@
 //
 //   inventory.containers   [{ id, item, name, grid: [{ uid, id, x, y, rot, qty, data?, box? }], where, at, in, hand? }]
 //                          where: 'back' | 'chest' | 'hands' | 'pockets' | 'canoe' | 'ground' | 'hung' | 'stash' | 'in'
-//                          ('in': nested in the container `in`, whose grid has an entry { uid: this id, box: true })
-//   inventory.long         [{ uid, id, where: 'hands' | 'canoe' | 'ground' | 'stash', at, inUse, hand? }]
+//                          | 'tent' ('in': nested in the container `in`, whose grid has an entry { uid: this id, box: true })
+//   inventory.long         [{ uid, id, where: 'hands' | 'canoe' | 'ground' | 'stash' | 'tent', at, inUse, hand? }]
+//   the tent (the owner, 2026-10-31: "I kind of want a tent to be a container in a way where I can put things inside the
+//   tent … The tent is pretty spacious, but does have a limit … It should also sort of work like a canoe"): your tent,
+//   up (stage 3 or more), holds TENT_ROOM containers and any long things, where 'tent', and loose things in a pile in it.
+//   In reach within TENT_REACH of it, or from inside (asleep, the Rest dial). intoTent(ref), tentFor(itemId), tentPile(),
+//   tentRoom(), stowIntoTent() (what you carry, as the canoe's Get in does), emptyTent(at, { stash }) (struck), inTent(c)
 //   inventory.hands        [thing | null, thing | null]: what is in each hand ({ long: uid } or { container: id })
 //   inventory.reachable(player?), isReachable(cId), atStash, nearCanoe()
 //   inventory.fits(cId, itemId, x, y, rot, ignoreUid), firstFit(cId, itemId)
@@ -55,6 +60,7 @@
 // leeches and the stringer become items in containers in the canoe.
 import { ITEMS, itemDef, defineItem, sizeOf, fishKg, fishEat, LEGACY, STARTER_KIT, FOOD_KINDS, NEED, check, timerWords, WOOD_DRY, sealedDef } from './items.js';
 import { save } from './save.js';
+import { feet } from './units.js';
 
 const NS = 'inventory';
 const VERSION = 1;
@@ -65,7 +71,9 @@ export const CAMP_REACH = 25;         // m: food set out at your camp counts for
 const CANOE_ROOM = 8;                 // containers a canoe takes (besides the long items)
 const STILL = 0.25;                   // m/s: still enough to eat
 const SAVE_EVERY = 6;                 // seconds of play between saves while something is dirty
-const WHERE_RANK = { back: 0.4, chest: 0.35, hands: 0.3, pockets: 0.05, canoe: 0.2, stash: 0.1, ground: 0, hung: 0 };
+const WHERE_RANK = { back: 0.4, chest: 0.35, hands: 0.3, pockets: 0.05, canoe: 0.2, stash: 0.1, ground: 0, hung: 0, tent: 0 };
+const TENT_REACH = 4;                 // m from your tent's middle within which what is in it is in reach
+const TENT_ROOM = { aframe: 4, dome: 5, fourseason: 6 }; // containers a tent takes (a pack, a barrel, the bucket …), by its item
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(String(s)) ? String(s) : String(s).charAt(0).toLowerCase() + String(s).slice(1)); // (a name keeps its capital: "the Duluth #3")
 // fb5 B: energy.js's bottle and clothes statuses said the short way (a word and its timer; the litres bar says how much)
@@ -220,7 +228,7 @@ export class Inventory {
     for (const t of tents) if (t !== kitTent && owned.has(t)) putIn(t, 1, null, [this.crate]);
     for (const id of ['sleepingbag', 'clothes', 'pot', 'tarp']) putIn(id);
     for (const id of ['tablets', 'pump', 'gravity']) if (owned.has(id) || (id === 'tablets' && (kit.filter || 'tablets') === 'tablets')) putIn(id);
-    for (const id of ['pad', 'saw', 'camera', 'yokepads']) if (owned.has(id)) putIn(id);
+    for (const id of ['pad', 'saw', 'camera', 'yokepads', 'yokecontour', 'dillybobs']) if (owned.has(id)) putIn(id);
     // the tackle box and the lures in it
     const box = this.nestNew(gear, 'tacklebox') || this.addContainer('tacklebox', 'canoe', null, q);
     for (const id of [...owned]) if (id.startsWith('lure:') && itemDef(id)) { if (!this.put(box.id, id, q)) putIn(id); }
@@ -302,7 +310,7 @@ export class Inventory {
     return Math.hypot(dx - fx * t, dz - fz * t);
   }
   dist(at) { const p = this.player; return at && p ? Math.hypot(at.x - p.x, at.z - p.z) : Infinity; }
-  ctx() { return { stash: this.atStash, canoe: this.nearCanoe() }; }
+  ctx() { return { stash: this.atStash, canoe: this.nearCanoe(), tent: this.nearTent() }; }
   inReach(c, k = this.ctx()) {
     const r = this.root(c);
     switch (r.where) {
@@ -310,6 +318,7 @@ export class Inventory {
       case 'canoe': return k.canoe || k.stash;
       case 'stash': return k.stash;
       case 'ground': case 'hung': return this.dist(r.at) <= REACH;
+      case 'tent': return !!k.tent;
       default: return false;
     }
   }
@@ -326,6 +335,7 @@ export class Inventory {
       case 'canoe': return k.canoe || k.stash;
       case 'stash': return k.stash;
       case 'ground': return this.dist(l.at) <= REACH;
+      case 'tent': return !!k.tent;
       default: return false;
     }
   }
@@ -337,7 +347,10 @@ export class Inventory {
     for (const l of this.long) if (l.where === 'hands' && (l.hand === 0 || l.hand === 1)) out[l.hand] = { long: l.uid };
     return out;
   }
-  freeHand() { const h = this.hands; return h[0] ? h[1] ? -1 : 1 : 0; }
+  // the owner, 2026-10-31: under the canoe one hand stays on a gunwale unless the yoke lets you go hands-free (packs.js
+  // sets handLimit each frame: 1 then, else 2), so a second thing will not go in a hand
+  freeHand() { const h = this.hands; if ((this.handLimit ?? 2) < 2 && (h[0] || h[1])) return -1; return h[0] ? h[1] ? -1 : 1 : 0; }
+  get handsFullWords() { return (this.handLimit ?? 2) < 2 && !(this.hands[0] && this.hands[1]) ? 'Your other hand is on the canoe.' : 'Both hands are full.'; }
   worn(slot) { return this.containers.find((c) => c.where === slot) || null; }
 
   // --- the grid --------------------------------------------------------------------------------------------------------
@@ -346,8 +359,10 @@ export class Inventory {
   accepts(c, d) {
     if (!c || !d) return false;
     const s = this.spec(c);
-    if (d.kind === 'container') return !!d.nest && c.item !== 'pockets' && !s.one && !s.accepts;
+    // (crafting, 2026-10-31: a pot goes where 'container' is taken, the grate; water only into what takes water, a pot)
+    if (d.kind === 'container') return !!d.nest && c.item !== 'pockets' && !s.one && (!s.accepts || (!!d.pot && s.accepts.includes('container')));
     if (d.kind === 'long') return false;
+    if (d.kind === 'water') return !!(s.accepts && s.accepts.includes('water'));
     if (c.item === 'pockets' && d.w * d.h > 2) return false;
     if (d.id === 'bottle' && c.item !== 'pockets') return false;
     return !s.accepts || s.accepts.includes(d.kind);
@@ -433,7 +448,7 @@ export class Inventory {
     if (d.kind === 'long') { const l = this.addLong(itemId, this.atStash || !this.attached ? 'stash' : 'canoe', null, { quiet }); return { ok: true, placed: 1, cId: null, uid: l.uid, why: null }; }
     // (fb2 A: never into a station, the fire ring's fuel or the grate, unless asked for by name in `prefer`; fb3 B: never
     // into a hand's holder either: a hand takes only what you put in it)
-    const pool = (within || (all || !this.attached ? this.containers : this.reachable())).filter((c) => c.item !== 'crate' && c.item !== 'pile' && !exclude.includes(c.id) && this.accepts(c, d) && !this.spec(c).one && (!(itemDef(c.item) || {}).station || prefer.includes(c.id)));
+    const pool = (within || (all || !this.attached ? this.containers : this.reachable())).filter((c) => c.item !== 'crate' && c.item !== 'pile' && !exclude.includes(c.id) && this.accepts(c, d) && !this.spec(c).one && (!((itemDef(c.item) || {}).station || (itemDef(c.item) || {}).pot) || prefer.includes(c.id))); // (a pot only by name too: food is never put away into one)
     const pre = prefer.map((id) => this.cont(id)).filter((c) => c && pool.includes(c));
     const rest = pool.filter((c) => !pre.includes(c)).sort((a, b) => this.score(b, d) - this.score(a, d));
     let left = Math.max(1, qty | 0), first = null, uid = null;
@@ -572,10 +587,11 @@ export class Inventory {
     const r = this.reachable(), cp = this.camp, a = cp && typeof cp.reachArea === 'function' ? cp.reachArea() : null;
     if (!a) return r;
     const s = this.canoeSpot(), canoeIn = !!(s && !s.afloat && !s.overhead && Math.hypot(s.x - a.x, s.z - a.z) <= a.r), has = new Set(r);
+    const t = this.tentSpot(), tentIn = !!(t && Math.hypot(t.x - a.x, t.z - a.z) <= a.r + 5);
     for (const c of this.containers) {
       if (has.has(c)) continue;
       const k = this.root(c);
-      if ((k.where === 'ground' && k.at && Math.hypot(k.at.x - a.x, k.at.z - a.z) <= a.r) || (k.where === 'canoe' && canoeIn)) r.push(c);
+      if ((k.where === 'ground' && k.at && Math.hypot(k.at.x - a.x, k.at.z - a.z) <= a.r) || (k.where === 'canoe' && canoeIn) || (k.where === 'tent' && tentIn)) r.push(c);
     }
     return r;
   }
@@ -651,8 +667,11 @@ export class Inventory {
   still() {
     const p = this.player; if (!p) return false;
     if (!(p.mode === 'walk' || p.mode === 'paddle') || p.landing || p.ashore || p.teleporting) return false;
+    // in the canoe the paddle is down while the book is open: the drift is not "moving" (the owner, 2026-10-31: "it keeps
+    // saying I'm moving when I'm in my canoe")
+    if (p.mode === 'paddle') return true;
     if (p.foot && p.foot.air) return false;
-    return Math.abs(p.speed || 0) < STILL;
+    return Math.abs(p.speed || 0) < STILL || !!(p.input && p.input.paused); // (the book open: you have stopped)
   }
   // Eat one: a snack or a berry as it is, a meal or a fish only once it is cooked; standing still, on foot or in the
   // canoe. Sandbox's food keeps (nothing is used up) and you are never hungry there.
@@ -661,7 +680,7 @@ export class Inventory {
     if (!hit) return no('gone', 'That is not within reach.');
     const d = itemDef(hit.e.id);
     if (!d || !d.eat) return no('inedible', `${d ? d.name : 'That'} isn’t for eating.`);
-    if (d.eat.cook && !(hit.e.data && hit.e.data.cooked)) return no('cook', d.kind === 'fish' ? 'Cook it first: on the grate, over a fire.' : `${d.name}: cook it first, on the grate over a fire.`);
+    if (d.eat.cook && !(hit.e.data && hit.e.data.cooked)) return no('cook', d.kind === 'fish' ? 'Cook it first: in a pot or on the grate, over a fire.' : `${d.name}: cook it first, in a pot with its water, over a fire.`);
     if (!this.still()) return no('moving', 'Hold still to eat.');
     const en = this.energy, sand = !!(en && en.sandbox);
     if (en && typeof en.eatItem === 'function') en.eatItem(d.species ? fishEat(d, hit.e.data) : d.eat, d.name); // (tuning: a fish feeds you by its size, items.js fishEat)
@@ -804,7 +823,7 @@ export class Inventory {
       const on = this.worn(slot); if (on && on !== o) return no('full', `${on.name} is on your ${slot} already.`);
     } else if (slot === 'hands') {
       if (!canHand) return no('wear', `${t.def.name} won’t go in one hand.`);
-      if (o.where !== 'hands') { const h = this.freeHand(); if (h < 0) return no('full', 'Both hands are full.'); o.hand = h; }
+      if (o.where !== 'hands') { const h = this.freeHand(); if (h < 0) return no('full', this.handsFullWords); o.hand = h; }
     } else return no('slot', '');
     if (t.kind === 'container' && o.where === 'in') this.unnest(o);
     o.where = slot; o.at = null;
@@ -863,6 +882,96 @@ export class Inventory {
     this.emit('stash');
     return ok(`${t.def.name}: kept for you at the outfitters.`);
   }
+  // --- the tent ------------------------------------------------------------------------------------------------------
+  // your tent while it stands up (camp.js camp: stage 3, the tent up, or 4, the fly on), or null
+  tentSpot() { const cp = this.camp, t = cp && cp.camp; return t && t.stage >= 3 ? t : null; }
+  // beside it on foot, or inside it (asleep, the Rest dial open)
+  nearTent() {
+    const t = this.tentSpot(), p = this.player, cp = this.camp;
+    if (!t || !p) return false;
+    if (cp && (cp.night || cp.dialOpen)) return true;
+    return !!p.onFoot && Math.hypot(t.x - p.x, t.z - p.z) <= TENT_REACH;
+  }
+  inTent(c) { const r = c && this.root(c); return !!(r && r.where === 'tent'); }
+  // { n, max }: the containers in it (the loose pile not counted) and how many it takes
+  tentRoom() {
+    const t = this.tentSpot();
+    return { n: this.containers.filter((c) => c.where === 'tent' && c.item !== 'pile').length, max: TENT_ROOM[t && t.item] || TENT_ROOM.aframe };
+  }
+  // the loose things' pile on the tent's floor (made when asked with make)
+  tentPile(make = false) {
+    let k = this.containers.find((c) => c.where === 'tent' && c.item === 'pile');
+    if (!k && make && this.tentSpot()) { k = this.addContainer('pile', 'tent', null, { quiet: true }); if (k) k.name = 'Loose in the tent'; }
+    return k || null;
+  }
+  // the best container in the tent for an item (the ones that take its kind first), else the floor's pile when it has room
+  tentFor(itemId, not = null) {
+    const d = itemDef(itemId); if (!d || !this.tentSpot()) return null;
+    const list = this.containers.filter((c) => c.id !== not && c.item !== 'pile' && this.inTent(c) && !this.spec(c).one && (c.item !== 'stringer' || d.kind === 'fish') && this.accepts(c, d) && this.firstFit(c, itemId));
+    const best = list.sort((a, b) => this.score(b, d) - this.score(a, d))[0];
+    if (best) return best;
+    const pile = this.tentPile(false);
+    if (pile) return pile.id !== not && this.firstFit(pile, itemId) ? pile : null;
+    return this.firstFit({ id: 'tent-pile', item: 'pile', grid: [] }, itemId) ? { make: true } : null;
+  }
+  // Into your tent (a pack, a barrel, the rod; a thing in a hand into something in it, or onto its floor)
+  intoTent(ref) {
+    const t = this.thing(ref), tent = this.tentSpot();
+    if (!t) return no('gone', 'That is not here.');
+    if (t.def.fixed) return no('fixed', '');
+    if (!tent) return no('far', 'Your tent is not up.');
+    if (!this.nearTent()) return no('far', 'Your tent is not here.');
+    if (!this.thingReachable(t)) return no('far', `${t.def.name} is out of reach.`);
+    const o = t.obj;
+    if (t.def.one) { const e = o.grid[0], to = e && this.tentFor(e.id, o.id); if (!to) return no('full', 'No room for it in the tent.'); const k = to.make ? this.tentPile(true) : to; return this.holderInto(o, [k], 'the tent'); }
+    if (o.where === 'tent') return ok();
+    if (t.kind === 'container') { const r = this.tentRoom(); if (r.n >= r.max) return no('full', `The tent is full: room for ${r.max} packs and barrels.`); }
+    if (t.kind === 'container' && o.where === 'in') this.unnest(o);
+    o.where = 'tent'; o.at = null; o.hand = null;
+    this.emit('load');
+    return ok(`${t.def.name} in the tent.`);
+  }
+  // getting in (camp.js, at Rest): what you carry goes in with you, as the canoe's Get in loads it (packs.js loadWorn):
+  // the back, the chest, then the hands; what the tent has no room for is set down by the door. → { moved, out }
+  stowIntoTent() {
+    const tent = this.tentSpot(), moved = [], out = [];
+    if (!tent) return { moved, out };
+    const order = { back: 0, chest: 1, hands: 2 };
+    const on = [...this.containers.filter((c) => c.where in order), ...this.long.filter((l) => l.where === 'hands')].sort((a, b) => order[a.where] - order[b.where]);
+    for (const o of on) {
+      const t = this.thing(o.id || o.uid); if (!t || t.def.fixed) continue;
+      const r = this.intoTent(o.id || o.uid);
+      if (r.ok) { moved.push(t.def.one && o.grid[0] ? itemDef(o.grid[0].id) || t.def : t.def); continue; }
+      if (t.kind === 'container' && this.setDown(o.id, this.doorSpot(tent, out.length), { left: false, quiet: true, force: true }).ok) out.push(t.def);
+    }
+    if (moved.length || out.length) this.emit('load');
+    return { moved, out };
+  }
+  // a spot outside the tent's door, the k-th along it
+  doorSpot(t, k = 0) {
+    const fx = t.fdx || 0, fz = t.fdz || 1, sx = -fz, sz = fx, d = 1.8 + Math.floor(k / 3) * 0.6, s = ((k % 3) - 1) * 0.7;
+    const x = t.x + fx * d + sx * s, z = t.z + fz * d + sz * s;
+    return { x, z, y: this.groundY(x, z), heading: Math.atan2(-fz, fx), ...(t.key ? { camp: t.key } : { camp: 'camp' }) };
+  }
+  // struck (camp.js packTent): everything in it comes out by the door (stash: to the outfitters, a trip ended). → n
+  emptyTent(t, { stash = false } = {}) {
+    let n = 0;
+    for (const c of this.containers) {
+      if (c.where !== 'tent') continue;
+      if (stash) { c.where = 'stash'; c.at = null; n++; continue; }
+      const at = this.doorSpot(t, n++);
+      c.where = 'ground'; c.hand = null; c.at = { x: at.x, z: at.z, y: at.y, heading: at.heading, camp: at.camp };
+    }
+    for (const l of this.long) {
+      if (l.where !== 'tent') continue;
+      if (stash) { l.where = 'stash'; l.at = null; n++; continue; }
+      const at = this.doorSpot(t, n++);
+      l.where = 'ground'; l.at = { x: at.x, z: at.z, y: at.y, heading: at.heading, camp: at.camp };
+    }
+    for (const c of this.containers) if (c.item === 'pile' && c.where === 'ground' && c.name === 'Loose in the tent') c.name = itemDef('pile').name;
+    if (n) this.emit('ground');
+    return n;
+  }
   // Hang a container from a tree (the food barrel, phase 2): at { x, y, z } (y the barrel's middle), the rope over a limb
   hang(ref, at) {
     const t = this.thing(ref); if (!t || t.kind !== 'container' || !at) return no('gone', '');
@@ -905,7 +1014,7 @@ export class Inventory {
     if (e.box) { const k = this.cont(e.uid); const r = k ? this.carry(k.id, 'hands') : no('gone', ''); if (r.ok && hand != null && k) k.hand = this.handOf(k, hand); return r; }
     if (!this.canHand(e.id)) return no('wear', `${itemDef(e.id).name} won’t go in one hand.`);
     if (hand == null) hand = this.freeHand();
-    if (hand < 0 || this.hands[hand]) return no('full', hand < 0 ? 'Both hands are full.' : 'That hand is full.');
+    if (hand < 0 || this.hands[hand] || this.freeHand() < 0) return no('full', hand < 0 || this.freeHand() < 0 ? this.handsFullWords : 'That hand is full.');
     const h = this.addContainer(this.holderFor(e.id), 'hands', null, { quiet: true, hand });
     const spot = h ? this.firstFit(h, e.id) : null;
     if (!spot || !this.move(c.id, uid, h.id, spot.x, spot.y, spot.rot, qty)) { if (h) this.containers.splice(this.containers.indexOf(h), 1); return no('full', 'It won’t go in a hand.'); }
@@ -916,7 +1025,7 @@ export class Inventory {
   toHandNew(itemId, { data = null, qty = 1, hand = null } = {}) {
     if (!this.canHand(itemId)) return no('wear', '');
     if (hand == null) hand = this.freeHand();
-    if (hand < 0 || this.hands[hand]) return no('full', 'Both hands are full.');
+    if (hand < 0 || this.hands[hand] || this.freeHand() < 0) return no('full', this.handsFullWords);
     const h = this.addContainer(this.holderFor(itemId), 'hands', null, { quiet: true, hand });
     if (!h || !this.put(h, itemId, { qty, data, quiet: true })) { if (h) this.containers.splice(this.containers.indexOf(h), 1); return no('full', ''); }
     this.emit('carry');
@@ -967,7 +1076,7 @@ export class Inventory {
         if (r.c && this.spec(r.c).one && this.rootWhere(r.c) === 'hands') return grey('In your hand already', [], 'Drag it into a pack to put it away, or onto the ground'); // (fb5 join: a hand's holder in the canoe is not your hand)
         if (!this.canHand(r.e.id) && !r.e.box) return grey('It won’t go in one hand', [], 'Carry it on your back or chest: drag its strap there');
         if (p && !(p.onFoot || p.mode === 'paddle') && !this.atStash) return grey('Not now', [NEED.step('On foot, or sitting in the canoe', false, { chip: 'on foot' })], 'Finish what you are doing first');
-        if (this.freeHand() < 0) return grey('Both hands are full', [NEED.qty('A free hand', 0, 1, '', { chip: '' })], `Put down or away what is in a hand: ${this.handsWords() || 'drag it into a pack'}`);
+        if (this.freeHand() < 0) return grey(this.handsFullWords.replace(/\.$/, ''), [NEED.qty('A free hand', 0, 1, '', { chip: '' })], `Put down or away what is in a hand: ${this.handsWords() || 'drag it into a pack'}`);
         return go(() => this.toHand(r.c.id, r.e.uid), null, [NEED.qty('A free hand', 1, 1)]);
       }
       case 'stringer': {
@@ -1066,8 +1175,8 @@ export class Inventory {
     const st = this.containers.find((c) => c.item === 'stringer'), p = this.player;
     if (!st) return { note: 'you have none', chip: 'none', next: 'A stringer comes with the canoe at the outfitters' };
     const r = this.root(st);
-    if (r.where === 'canoe') { const sp = this.canoeSpot(), d = sp && p ? this.hullDist(sp, p.x, p.z) : null; return { note: d != null ? `in the canoe, ${d.toFixed(1)} m off: in reach within ${HULL_REACH} m` : 'in the canoe', chip: d != null ? `in the canoe, ${Math.round(d)} m` : 'in the canoe', next: 'Walk to the canoe (within 3 m of it), or take the stringer in a hand' }; }
-    if (r.where === 'ground' || r.where === 'hung') return { note: `on the ground, ${this.dist(r.at).toFixed(1)} m off: in reach within ${REACH} m`, chip: `${Math.round(this.dist(r.at))} m off`, next: 'Walk to it, or take it in a hand' };
+    if (r.where === 'canoe') { const sp = this.canoeSpot(), d = sp && p ? this.hullDist(sp, p.x, p.z) : null; return { note: d != null ? `in the canoe, ${feet(d)} ft off: in reach within ${feet(HULL_REACH)} ft` : 'in the canoe', chip: d != null ? `in the canoe, ${feet(d)} ft` : 'in the canoe', next: 'Walk to the canoe (within 10 ft of it), or take the stringer in a hand' }; }
+    if (r.where === 'ground' || r.where === 'hung') return { note: `on the ground, ${feet(this.dist(r.at))} ft off: in reach within ${feet(REACH)} ft`, chip: `${feet(this.dist(r.at))} ft off`, next: 'Walk to it, or take it in a hand' };
     if (r.where === 'stash') return { note: 'kept at the outfitters', chip: 'at the outfitters', next: 'Take it out at the counter next time in' };
     return { note: '', chip: '', next: 'Take the stringer in a hand' };
   }
@@ -1107,7 +1216,7 @@ export class Inventory {
     if ((e.id === 'sleepingbag' || d.bag) && this.gearWet()) return this.dampStatus(d.bag && d.bag.down ? 'Your gear is damp: a night in down is half as warm' : 'Your gear is damp: a night in it is 80 % as warm'); // (content C: any bag)
     // fb5 A: what is on the grate says its own state (cooking, ready, "needs the pot", "water 0.3 L"): cook.grateStatus,
     // else last round's potStatus for the pot
-    if (c && c.item === 'grate') {
+    if (c && (c.item === 'grate' || (itemDef(c.item) || {}).pot)) { // (crafting: what is in a pot says its state too)
       const ck = this.cookRef();
       if (ck && typeof ck.grateStatus === 'function') { const g = ck.grateStatus(c, e); if (g || e.id === 'pot') return g || null; }
       else if (e.id === 'pot') return ck && typeof ck.potStatus === 'function' ? ck.potStatus(c, e) : null;
@@ -1119,7 +1228,7 @@ export class Inventory {
       const hot = Number.isFinite(e.data.cooked) && now - e.data.cooked < 1;
       return { label: hot ? 'Hot' : 'Leftovers', mark: hot ? 'hot' : null, hint: 'keeps', timer: Math.round(left), running: true, until: e.data.until, next: `Eat it (right-click › Eat), or it goes off in ${timerWords(left)}` };
     }
-    if (d.eat && d.eat.cook) return { label: 'Raw', mark: null, next: d.kind === 'fish' ? `Fry it on the grate at a fire (in the pot’s lid, or on a stick)${c && c.item === 'stringer' ? ': it keeps on the stringer till then' : '; or Put on the stringer to keep it'}` : 'Cook it: the pot on the grate, this beside it, the fire burning (E at the ring)' };
+    if (d.eat && d.eat.cook) return { label: 'Raw', mark: null, next: d.kind === 'fish' ? `Fry it on the grate at a fire (in the pot’s lid, or on a stick)${c && c.item === 'stringer' ? ': it keeps on the stringer till then' : '; or Put on the stringer to keep it'}` : 'Cook it: into a pot with its water, the pot on the grate over a lit fire (E at the ring)' };
     const n = Number.isFinite(d.servings) ? d.servings : Number.isFinite(d.uses) ? d.uses : 1;
     if (n > 1) {
       // (the uses bar says how many are left: low is only the icon's mark)
@@ -1132,7 +1241,7 @@ export class Inventory {
   dampStatus(next = 'Your gear is damp') {
     const g = this.gearDrying(), now = this.now;
     if (g.byFire) return { label: 'Drying', mark: 'drying', timer: g.sec, running: true, until: now + g.sec / 3600, next: `${next}: dry in ${timerWords(g.sec)} by the fire` };
-    return { label: 'Damp', mark: 'wet', hint: `dries by a fire, ${timerWords(g.sec)}`, next: `${next}. It dries by a lit fire in 30 min: stand within 6 m of it` };
+    return { label: 'Damp', mark: 'wet', hint: `dries by a fire, ${timerWords(g.sec)}`, next: `${next}. It dries by a lit fire in 30 min: stand within 20 ft of it` };
   }
   // wood: wet (with its drying at the rate it dries now), drying by a fire, or on a lit fire
   woodStatus(c, e) {
@@ -1140,7 +1249,7 @@ export class Inventory {
     if (w > 0) {
       // (fb5 B: by a fire, its countdown; in dry air, how long it would take by a fire; in the rain, that it is)
       const sec = rate > 0 ? (w / rate) * 3600 : null, byFire = rate > 1.5, fireSec = (w * WOOD_DRY.fire / WOOD_DRY.air) * 3600;
-      const next = rate <= 0 ? 'Out of the rain first: under the tarp or into a pack, then 30 min by a lit fire' : byFire ? `Dry in ${timerWords(sec)}: it won’t light till then` : 'Wet: it won’t light. Dries by a lit fire in 30 min (on it or within 2 m), 3 h in dry air';
+      const next = rate <= 0 ? 'Out of the rain first: under the tarp or into a pack, then 30 min by a lit fire' : byFire ? `Dry in ${timerWords(sec)}: it won’t light till then` : 'Wet: it won’t light. Dries by a lit fire in 30 min (on it or within 6 ft), 3 h in dry air';
       if (byFire) return { label: 'Drying', mark: 'drying', timer: Math.round(sec), running: true, until: now + sec / 3600, next };
       return { label: 'Wet', mark: 'wet', hint: rate <= 0 ? 'in the rain' : `dries by a fire, ${timerWords(fireSec)}`, ...(sec != null ? { airSec: Math.round(sec) } : {}), next };
     }
@@ -1151,10 +1260,11 @@ export class Inventory {
   // a container's own state: rained on, in the rain now, or damp gear
   containerStatus(c) {
     const d = itemDef(c.item); if (!d) return null;
+    if (d.pot) { const ck = this.cookRef(); return ck && typeof ck.potState === 'function' ? ck.potState(c) : null; } // (crafting: Boiling, Cooking, "water 0.3 L")
     const r = this.root(c), now = this.now;
     if (r.where === 'ground' && r.at && d.wear) {
       // (stream E's chores.js: at.wet once half an hour of rain is in it, at.rainH the hours of rain so far)
-      if (r.at.wet || r.at.rainH >= 0.5) return { label: 'Wet', mark: 'wet', hint: 'dries by a fire, 30 min', next: 'The gear in it is wet: it dries by a lit fire in 30 min (stand within 6 m). A tarp over it keeps the rain off' };
+      if (r.at.wet || r.at.rainH >= 0.5) return { label: 'Wet', mark: 'wet', hint: 'dries by a fire, 30 min', next: 'The gear in it is wet: it dries by a lit fire in 30 min (stand within 20 ft). A tarp over it keeps the rain off' };
       const rain = this.rainAt(c);
       if (rain > 0.3 && r.at.rainH > 0) { const sec = Math.max(0, ((0.5 - r.at.rainH) / rain) * 3600); return { label: 'In the rain', mark: 'wet', hint: 'soaks through in', timer: Math.round(sec), running: true, until: now + sec / 3600, next: `Pick it up, or get the tarp over it: it soaks through ${sec < 60 ? 'any moment' : `in ${timerWords(sec)}`}` }; }
     }
@@ -1276,7 +1386,7 @@ export class Inventory {
   }
   // why it can't be set down there, as a checklist and the next step (decision 2)
   wadeNo() {
-    return { ...no('water', 'You’re standing in the water: step ashore to set it down, or put it in the canoe.'), needs: [NEED.step(`Dry ground within ${WADE_REACH} m`, false)], next: 'Step ashore to set it down, or put it in the canoe' };
+    return { ...no('water', 'You’re standing in the water: step ashore to set it down, or put it in the canoe.'), needs: [NEED.step(`Dry ground within ${feet(WADE_REACH)} ft`, false)], next: 'Step ashore to set it down, or put it in the canoe' };
   }
   // a clear spot beside you to set a thing down (packs.js knows the ground; without it, a step to the right)
   spotNear(x, z, heading, side = 1, fwd = 1) {
@@ -1311,11 +1421,13 @@ export class Inventory {
     // a word, once, as you paddle away from something left on the shore (it stays there until you come back for it)
     if (p && p.mode === 'paddle' && this.hud && (this.noteT = (this.noteT || 0) + dt) > 1) {
       this.noteT = 0;
-      const left = [...this.containers.filter((c) => c.where === 'ground' && c.item !== 'pile'), ...this.long.filter((l) => l.where === 'ground')].filter((t) => t.at && !t.at.camp && !t.at.noted && this.dist(t.at) > 60);
+      // (the owner, 2026-10-31: "it should tell me what that item is or items": a pile set down is named by what is in it)
+      const left = [...this.containers.filter((c) => c.where === 'ground' && (c.item !== 'pile' || c.grid.length)), ...this.long.filter((l) => l.where === 'ground')].filter((t) => t.at && !t.at.camp && !t.at.noted && this.dist(t.at) > 60);
       if (left.length) {
         for (const t of left) t.at.noted = true;
-        const n = left.map((t) => { const nm = itemDef(t.item || t.id).name; return `the ${/^(Duluth|Johnson)/.test(nm) ? nm : lower(nm)}`; });
-        this.hud.note(`Left behind on the shore: ${n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0]}. ${left.length > 1 ? 'They stay' : 'It stays'} there until you come back.`, 6);
+        const nm1 = (id) => { const nm = itemDef(id).name; return `the ${/^(Duluth|Johnson)/.test(nm) ? nm : lower(nm)}`; };
+        const n = left.flatMap((t) => (t.item === 'pile' ? t.grid.filter((e) => itemDef(e.id)).map((e) => nm1(e.id)) : [nm1(t.item || t.id)]));
+        this.hud.note(`Left behind on the shore: ${n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0]}. ${n.length > 1 ? 'They stay' : 'It stays'} there until you come back.`, 6);
       }
     }
     // empty piles go
@@ -1370,7 +1482,7 @@ export class Inventory {
   describe(c) {
     const k = this.root(c), w = k.where;
     if (c.where === 'in') return `in the ${lower(this.cont(c.in) ? this.cont(c.in).name : 'pack')}`;
-    return { back: 'on your back', chest: 'on your chest', hands: 'in hand', pockets: 'on you', canoe: 'in the canoe', stash: 'at the outfitters', hung: 'hung in a tree', ground: k.at && k.at.camp ? 'set out at camp' : 'on the ground' }[w] || w;
+    return { back: 'on your back', chest: 'on your chest', hands: 'in hand', pockets: 'on you', canoe: 'in the canoe', tent: 'in the tent', stash: 'at the outfitters', hung: 'hung in a tree', ground: k.at && k.at.camp ? 'set out at camp' : 'on the ground' }[w] || w;
   }
   report() {
     return {

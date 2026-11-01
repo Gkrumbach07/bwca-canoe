@@ -30,7 +30,7 @@ const FISH_W = { early: { walleye: 1.2, laketrout: 1.5, pike: 1.1, smallmouth: 0
 const FISH_TEXT = {
   walleye: { early: 'the walleye are still up shallow on the rocks in {lake}{where}. A jig, slow, in the evening.', summer: 'the walleye are on the reefs at dusk in {lake}{where}. A leech under a bobber.', fall: 'the walleye are feeding up for winter in {lake}{where}. All day, when it’s grey.' },
   laketrout: { early: 'the lakers are right up near the top in {lake}{where} while the water’s cold. Cast a spoon off the rocks.', summer: 'a guide had three lakers out of {lake}{where} yesterday, deep, a spoon right on the bottom.', fall: 'the lakers are coming up shallow in {lake}{where} to spawn on the reefs.' },
-  pike: { early: 'the northerns are in the shallow bays of {lake}{where}, warming up. A spoon over the weeds.', summer: 'somebody had a northern over a metre out of the weeds in {lake}{where}.', fall: 'the big northerns are cruising the weed edges in {lake}{where}. Bring a steel leader.' },
+  pike: { early: 'the northerns are in the shallow bays of {lake}{where}, warming up. A spoon over the weeds.', summer: 'somebody had a northern over forty inches out of the weeds in {lake}{where}.', fall: 'the big northerns are cruising the weed edges in {lake}{where}. Bring a steel leader.' },
   smallmouth: { early: 'the smallmouth are on the gravel in {lake}{where}. Let them be till they’re off the nests.', summer: 'the smallmouth are on every rocky point in {lake}{where}. Afternoons, a crankbait.', fall: 'the smallmouth have gone deep off the points in {lake}{where}. A jig, slow.' },
   perch: { early: 'the perch are thick in the shallows of {lake}{where}. Kids’ fishing.', summer: 'the perch are thick in the weeds of {lake}{where}. A leech and a bobber.', fall: 'the perch are schooled up in {lake}{where}. Fill a stringer.' },
 };
@@ -87,8 +87,8 @@ const RUMOURS = {
     const l = H.pickLake(H.lakes(9000).filter((x) => x.ha >= 40 && !x.river && (x.secchi >= 4.4 || x.secchi <= 1.6)), (x) => H.reachScore(x));
     if (!l) return null;
     H.taken.add(l.name);
-    const m = Math.round(l.secchi * 10) / 10;
-    return { id: `clarity:${l.name}`, kind: 'clarity', text: l.secchi >= 4.4 ? `The lake monitor had her disk down ${m} metres on ${theWater(l.name)} last week. Clear as gin; the smallmouth like it.` : `${cap(theWater(l.name))} is stained like tea: the monitor’s disk was gone at ${m} metres. Walleye water.` };
+    const m = Math.round(l.secchi * 3.28084); // feet
+    return { id: `clarity:${l.name}`, kind: 'clarity', text: l.secchi >= 4.4 ? `The lake monitor had her disk down ${m} feet on ${theWater(l.name)} last week. Clear as gin; the smallmouth like it.` : `${cap(theWater(l.name))} is stained like tea: the monitor’s disk was gone at ${m} feet. Walleye water.` };
   },
   loons(H, c) {
     if (c.doy < 175 || c.doy > 230) return null; // (loons.js: chicks from late June)

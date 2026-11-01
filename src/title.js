@@ -33,8 +33,8 @@ const KEYMAP = [
     [['W', 'A', 'S', 'D'], 'afloat: W and S paddle forward and back, A and D turn the hull while held, as sweep strokes · on foot: walk where you look, W toward it, S back, A and D strafe · past your depth: swim'],
     [['mouse'], 'look: the first key or click takes the mouse and it turns you at once (on foot the dot sits in the middle of the view); behind the canoe, drag to orbit, wheel to zoom'],
     [['Shift'], 'jog on foot · hustle afloat · a hard stroke swimming'],
-    [['Space'], 'afloat: brace in a sea (you cannot paddle while bracing) · on foot, walking into it: vault a log or a low rock, climb a rock or a ledge up to about 2 m, otherwise a hop; with the canoe overhead you only stagger · swimming: climb out onto a rock, a dock or the bank'],
-    [['E'], 'afloat: go ashore at any bank and at a portage landing alike · at an outfitter’s dock, tie up and step up onto the deck · right the canoe after a capsize'],
+    [['Space'], 'afloat: brace in a sea (you cannot paddle while bracing) · on foot, walking into it: vault a log or a low rock, climb a rock or a ledge up to about 6 ft, otherwise a hop; with the canoe overhead you only stagger · swimming: climb out onto a rock, a dock or the bank'],
+    [['E'], 'afloat: go ashore at any bank and at a portage landing alike (S, back-paddling, or E again calls off the nose-in) · at an outfitter’s dock, tie up and step up onto the deck · right the canoe after a capsize'],
   ]],
   ['E and Q: the dot', [
     [[], 'whatever the dot in the middle of the view points at has at most two actions, both on its label: E and Q. A held one says “hold E” or “hold Q”; a greyed one says why. Pointed at nothing, E and Q do nothing'],
@@ -51,7 +51,7 @@ const KEYMAP = [
     [['F'], 'the rod up or down: from the canoe, or on foot with the rod in a hand, facing water within a cast'],
     [['Space', 'click'], 'with the rod up: hold to load a cast where the cursor points, let go to cast · set the hook on a bite · hold to reel in a fight; W retrieves a lure (Shift faster)'],
     [['1', '2', '…'], 'with the rod up: the lure, from the strip of the ones with you; the bobber rig takes a leech from the bucket in reach per bite, and says “needs leeches” when there is none'],
-    [['E', 'Q'], 'a landed fish: keep it, in your hand (into a pack in reach with both hands full, or a notice’s cooler) · let it go'],
+    [['E', 'Q'], 'a landed fish: keep it, in your hand (into a pack in reach with both hands full; a notice’s fish is handed over at its board) · let it go'],
     [['C'], 'the camera: raise it (the $25 35 mm, or the disposable a photo notice lends) · the mouse aims, the wheel zooms, Space or a click takes the picture · C or Esc lowers it'],
   ]],
   ['Looking and the clock', [
@@ -143,6 +143,17 @@ export class Title {
     e.controls.addEventListener('click', () => this.showCard('controls'));
     if (e.confirmGo) e.confirmGo.addEventListener('click', () => this.confirmed());
     if (e.confirmKeep) e.confirmKeep.addEventListener('click', () => { this.showRight(null); (this.el.go.offsetParent ? this.el.go : this.el.newTrip).focus(); });
+    // one Esc pauses (the owner, 2026-10-31: "pausing usually takes 2 escape presses"): while the mouse is locked to the
+    // look, the browser keeps the first Esc for itself and only lets go of the mouse. A lock let go that the game did not
+    // ask for (the chase still wants it: no panel, map or card up, the view still mouse-look) is that Esc: pause.
+    // (capture, so it runs before photo.js's own, which lowers a raised camera instead)
+    document.addEventListener('pointerlockchange', () => {
+      if (this.state !== 'game' || document.pointerLockElement || !this.chase || !this.chase.wantsLock) return;
+      if (this.hud.paperOpen || this.hud.big || this.hud.pin || this.player.teleporting || (this.photo && this.photo.raised)) return;
+      if (document.visibilityState === 'hidden') return;
+      this.lockPausedAt = performance.now();
+      this.open('pause');
+    }, true);
     // capture phase: fires before every other key handler on the window and, while the card is up, ends the event there
     window.addEventListener('keydown', (ev) => {
       if (this.state === 'game') {
@@ -150,7 +161,7 @@ export class Title {
         return;
       }
       ev.stopImmediatePropagation();
-      if (ev.code === 'Escape') { ev.preventDefault(); this.back(); return; }
+      if (ev.code === 'Escape') { ev.preventDefault(); if (performance.now() - (this.lockPausedAt || 0) < 300) return; this.back(); return; } // (the same Esc that let go of the mouse)
       const tag = ev.target && ev.target.tagName;
       if (ev.code === 'Tab') return; // the browser's own focus order, within the card
       if (tag === 'SELECT' || tag === 'INPUT') { if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') { ev.preventDefault(); this.moveFocus(ev.code === 'ArrowDown' ? 1 : -1); } return; } // ← → belong to the control

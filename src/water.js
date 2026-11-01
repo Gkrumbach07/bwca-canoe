@@ -4,6 +4,7 @@ import { glslNoise } from './shading.js';
 import * as Sky from './sky.js';
 import { groundUniforms } from './terrain.js';
 import { NARROW } from './terrain-build.js'; // water edges: the narrow water's channel bed
+import { LOW } from './water-build.js'; // wetlands round 2: the low creeks' waterline
 
 // Water in two parts that share one fragment shader:
 //  - far field: static 10 m meshes, one per tile, carrying only the long swell, with a hole cut where the patch sits
@@ -1022,6 +1023,7 @@ export class WaterSystem {
             else { cover[k * 4] = 0; cover[k * 4 + 1] = 0; cover[k * 4 + 2] = 0; cover[k * 4 + 3] = 0; }
             id = t.lake[m];
             if (id) level[k] = t.lvl[m] * 0.1;
+            if (id && t.low && t.low[m]) { level[k] -= t.low[m] * 0.01; shore[k] += (t.low[m] * 0.01) / LOW.slope; } // wetlands round 2: a seasonal creek low in late summer, its waterline out where it meets the bank
           } else {
             const ci2 = i + q;
             shore[k] = w.sdCell(ci2, j); height[k] = w.hCell(ci2, j);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clock12, esc } from './hud.js';
+import { fmtFt } from './units.js';
 import { GeoBuilder, vary } from './geobuilder.js';
 import { mulberry32, clamp, lerp, smoothstep, hash2 } from './rng.js';
 import { makeToonMaterial, smoothToon } from './rocks.js';
@@ -108,6 +109,24 @@ export const SPECIES = {
   crappie: { name: 'Black crappie', bed: [2, 7], zone: [1, 5], shore: [5, 70], weeds: 1.7, rock: 0.8, dropoff: 1.0, day: 0.6, lowLight: 2.0, night: 0.7, stained: 1.0, clear: 1.0, chop: 1.0, calm: 1.1, fast: 0.4, lures: { jig: 1.1, spinner: 0.5, spoon: 0.2, crankbait: 0.4, leech: 1.3 }, length: [18, 38], k: 16, colour: 0x9ea39a, belly: 0xdcdcd2 },
   perch: { name: 'Yellow perch', bed: [1, 6], zone: [0.5, 5], shore: [3, 70], weeds: 1.4, rock: 0.9, dropoff: 1.0, day: 1.2, lowLight: 1.0, night: 0.2, stained: 1.0, clear: 1.0, chop: 1.0, calm: 1.1, fast: 0.4, lures: { jig: 1.0, spinner: 0.4, spoon: 0.2, crankbait: 0.3, leech: 1.3 }, length: [15, 36], k: 12, colour: 0xc9a84a, belly: 0xe8dca8 },
 };
+// The journal's fish page (journal.js fishTab; the owner, 2026-10-31: "it shows you a picture as well as some
+// information on how to catch it, typical sizes and stuff like that"): each species' `about`. water: the kind of water it
+// is grouped under on the index page (WATERS); where / when / how: a line each, in the book's words; rarity: how often
+// it comes to the net in the Boundary Waters; latin: its name in the field guide. Sizes come from `length` and `k`.
+export const WATERS = {
+  reef: { name: 'Rocks & reefs', sub: 'points, boulders, the drop-offs' },
+  weeds: { name: 'Weeds & bays', sub: 'the shallows, the weed edges' },
+  deep: { name: 'Deep & cold', sub: 'the big clear lakes, far down' },
+};
+const ABOUT = {
+  walleye: { water: 'reef', rarity: 'Common', latin: 'Sander vitreus', where: 'Rocky reefs, points and drop-offs, 10 to 35 ft down. Likes stained water and a chop.', when: 'Dawn and dusk, and on into the night; slow in bright sun.', how: 'Hop a jig and twister along the bottom, or hang a leech under a bobber off the drop.' },
+  smallmouth: { water: 'reef', rarity: 'Common', latin: 'Micropterus dolomieu', where: 'Rocky shorelines and boulders, 5 to 25 ft. Clear water.', when: 'The warm of the day, all summer.', how: 'Throw a jointed Rapala or a spinner tight along the rocks and bring it back brisk.' },
+  pike: { water: 'weeds', rarity: 'Common', latin: 'Esox lucius', where: 'Weedy bays and the edges of the weed beds, 3 to 18 ft.', when: 'All day; best when the light is low.', how: 'Burn a Daredevle spoon or a spinner back past the weed edge. Mind the teeth.' },
+  laketrout: { water: 'deep', rarity: 'Rare', latin: 'Salvelinus namaycush', where: 'Only the deep, cold, clear lakes, 50 ft down and deeper, far from shore.', when: 'Early in the day; up shallow just after ice-out.', how: 'Let a spoon sink a long way and work it slowly back. Little else will do.' },
+  crappie: { water: 'weeds', rarity: 'Uncommon', latin: 'Pomoxis nigromaculatus', where: 'Weedy bays, brush and sunken wood, 7 to 23 ft.', when: 'Dusk and after dark.', how: 'A small jig or a leech under a bobber, fished slow and still.' },
+  perch: { water: 'weeds', rarity: 'Common', latin: 'Perca flavescens', where: 'Weedy shallows and sandy flats, 3 to 20 ft.', when: 'The middle of the day.', how: 'A leech under a bobber, or a small jig dropped among the weeds.' },
+};
+for (const [id, a] of Object.entries(ABOUT)) if (SPECIES[id]) SPECIES[id].about = a;
 const SPECIES_IDS = Object.keys(SPECIES);
 
 // a soft band: 1 inside [lo, hi], falling to `floor` a little outside it
@@ -337,11 +356,28 @@ export class Fishing {
   saveLog() {
     try { localStorage.setItem('bwca-canoe-catchlog', JSON.stringify({ catches: this.log.slice(-200), bests: this.bests })); } catch { /* storage may be off */ }
   }
+  // the rod fished with, by the line it holds (shop.js player.gear.snap: the graphite 1.8, the medium-heavy 1.4)
+  rodName() { const g = this.player.gear, k = g && Number.isFinite(g.snap) ? g.snap : 1; return k >= 1.75 ? 'Graphite rod' : k >= 1.35 ? 'Medium-heavy rod' : 'Spinning rod'; }
+  // the weather as you'd jot it in a log: the sky in a word or two, a wind worth noting, the temperature ("overcast,
+  // windy 58°"); the weather is main.js's (window.__game.weather), and without it nothing is written
+  skyWords() {
+    try {
+      const g = typeof window !== 'undefined' ? window.__game : null, wx = g && g.weather, look = wx && wx.look;
+      if (!wx || !look) return '';
+      const SHORT = { 'fair, broken cumulus': 'fair', 'fog on the water': 'fog', 'light rain': 'drizzle', 'steady rain': 'rain', thunderstorm: 'storm', 'thunderheads building': 'thunderheads', 'snow flurries': 'flurries', 'snow squall': 'squall' };
+      const lab = String(wx.label || '').toLowerCase(), sky = SHORT[lab] || lab;
+      const ws = this.wind ? this.wind.speed : 0, breeze = ws >= 8 ? 'windy' : ws >= 5 ? 'breezy' : ws < 1.2 ? 'calm' : '';
+      const t = Number.isFinite(look.temp) ? `${Math.round(look.temp * 9 / 5 + 32)}°` : '';
+      return [[sky, breeze].filter(Boolean).join(', '), t].filter(Boolean).join(' ');
+    } catch { return ''; }
+  }
   // the lake a fish came out of: under the fish (on foot you stand on the shore), else under you
   catchLake(f) { const w = this.world; return (f && Number.isFinite(f.x) ? w.lakeIdAt(f.x, f.z) : 0) || w.lakeIdAt(this.player.x, this.player.z); }
   record(fish, kept) {
     const w = this.world, id = this.catchLake(fish);
     const entry = { species: fish.species, name: SPECIES[fish.species].name, length: Math.round(fish.length), weight: Math.round(fish.weight * 100) / 100, lake: w.lakeName(id) || 'Unnamed water', time: this.day.clock, hours: this.day.hours, doy: this.day.doy, year: this.day.year, lure: LURES[fish.lure].name, lureShort: LURES[fish.lure].short, kept, at: Date.now() };
+    entry.rod = this.rodName(); // (the journal's biggest catch: "rod | lure")
+    entry.sky = this.skyWords(); // the journal's fishing log: "overcast 58°"
     this.log.push(entry);
     const b = this.bests[fish.species];
     entry.best = !b || entry.length > b.length;
@@ -424,8 +460,8 @@ export class Fishing {
     else if (d < 2) place = 'Shallow flat';
     else if (hab.dropoff > 0.5) place = 'Edge of a drop-off';
     else place = hab.shore < 45 ? 'Wooded shore' : 'A gentle shelf';
-    let depthTxt = `${d < 10 ? d.toFixed(1) : d.toFixed(0)} m`;
-    if (hab.dmax - d > 3) depthTxt += `, drop-off to ${hab.dmax.toFixed(0)} m`;
+    let depthTxt = fmtFt(d);
+    if (hab.dmax - d > 3) depthTxt += `, drop-off to ${fmtFt(hab.dmax)}`;
     // who lives here: habitat and hour, with the best lure of the box for each
     const scored = SPECIES_IDS.map((id) => {
       let best = 0;
@@ -437,7 +473,7 @@ export class Fishing {
     const who = top.length ? top.join(' and ') + ' water' : 'slow water';
     const L = lightAt(hours);
     const when = L.day > 0.7 && scored[0] && scored[0].id === 'walleye' && scored[0].s < 1.2 ? ', better at dusk' : '';
-    const clarity = hab.secchi ? ` · ${hab.secchi < 1.8 ? 'stained' : hab.secchi < 3 ? 'fair' : 'clear'} water, ${hab.secchi.toFixed(1)} m` : '';
+    const clarity = hab.secchi ? ` · ${hab.secchi < 1.8 ? 'stained' : hab.secchi < 3 ? 'fair' : 'clear'} water, ${fmtFt(hab.secchi)}` : '';
     const whoLine = top.length ? `${who[0].toUpperCase()}${who.slice(1)}${when}.` : `Slow water${when}.`;
     return { where: `${place} · ${depthTxt}${clarity}`, who: whoLine, text: `${place} · ${depthTxt} · ${who}${when}` };
   }
@@ -786,7 +822,7 @@ export class Fishing {
       }
     }
     if (l.onLand) p.prompt = { key: 'W', text: 'The lure is on the rocks — reel it back' };
-    else p.prompt = { key: 'W', text: `${def.bobber ? 'Watch the bobber' : 'Retrieve'} · ${this.lineOut.toFixed(0)} m out${def.bobber ? '' : ` · ${l.depth.toFixed(1)} m down`}` };
+    else p.prompt = { key: 'W', text: `${def.bobber ? 'Watch the bobber' : 'Retrieve'} · ${fmtFt(this.lineOut)} out${def.bobber ? '' : ` · ${fmtFt(l.depth)} down`}` };
   }
 
   startBite(id, lengthCm = null) {
@@ -884,7 +920,7 @@ export class Fishing {
     const shoreD = this.onFoot ? Math.max(0, w.shoreAt(t.x, t.z)) : 0; // wc C: from a bank the fish comes to the water's edge below you
     if (this.lineOut <= TUNING.landAt + shoreD && horiz < 3.5 + shoreD) return this.land();
     const sp = SPECIES[f.species];
-    p.prompt = { key: null, text: f.danger > 0.35 ? 'Ease off — the line is singing' : f.slack > 1 ? 'Reel! The line has gone slack' : f.run > 0 ? 'It is running — let it go' : `Reel it in · ${this.lineOut.toFixed(0)} m${f.t > 6 ? ` · feels like a ${sp.name.toLowerCase()}` : ''}` };
+    p.prompt = { key: null, text: f.danger > 0.35 ? 'Ease off — the line is singing' : f.slack > 1 ? 'Reel! The line has gone slack' : f.run > 0 ? 'It is running — let it go' : `Reel it in · ${fmtFt(this.lineOut)}${f.t > 6 ? ` · feels like a ${sp.name.toLowerCase()}` : ''}` };
   }
 
   endFight(how) {
@@ -941,12 +977,13 @@ export class Fishing {
     const want = this.tasks && this.tasks.wants ? this.tasks.wants(L.species, this.catchLake(L), L.length) : null; // hubs 1C: a notice taken on wants it
     const inv = this.inventory, free = inv && inv.attached && typeof inv.freeHand === 'function' ? inv.freeHand() >= 0 : true;
     // (the content join: both hands full and nothing with room said "Keep it, into a pack", and E then let it go)
-    if (!want && !free && inv && inv.attached && typeof inv.firstFit === 'function' && !(L.roomAt > L.t - 0.5)) {
+    if (!free && inv && inv.attached && typeof inv.firstFit === 'function' && !(L.roomAt > L.t - 0.5)) {
       const id = `fish:${L.species}`, d = itemDef(id); L.roomAt = L.t;
       L.room = inv.reachable().some((c) => !['stringer', 'crate', 'pile', 'inhand'].includes(c.item) && (typeof inv.accepts !== 'function' || inv.accepts(c, d)) && !!inv.firstFit(c.id, id));
     }
-    if (!want && !free && L.room === false) { p.prompt = { key: 'Q', text: 'Let it go · no room on you to keep it' }; return; }
-    p.prompt = { key: 'E', text: `${want ? `Keep it for “${esc(want.title)}”` : free ? 'Keep it, in your hand' : 'Keep it, into a pack'} · <kbd>Q</kbd> Let it go` }; // fb3 B: to the hand
+    if (!free && L.room === false) { p.prompt = { key: 'Q', text: 'Let it go · no room on you to keep it' }; return; }
+    // (a notice that wants it: kept like any other, and handed over at that notice's board: tasks.js handIn)
+    p.prompt = { key: 'E', text: `${free ? 'Keep it, in your hand' : 'Keep it, into a pack'}${want ? ` · wanted for “${esc(want.title)}”` : ''} · <kbd>Q</kbd> Let it go` }; // fb3 B: to the hand
   }
 
   release(keep) {
@@ -958,12 +995,13 @@ export class Fishing {
     if (mesh) { this.canoe.paddler.remove(mesh); this.scene.add(mesh); mesh.visible = false; mesh.scale.setScalar(1); }
     if (L) {
       L.entry.kept = keep; this.logVersion++; this.saveLog();
-      const cooler = this.tasks ? this.tasks.onCatch(L.species, this.catchLake(L), L.length, keep) : null; // hubs 1C: a notice taken on wants it
-      if (keep && cooler) this.message = { text: cooler, t: 3 }; // into that notice's cooler, not the stringer
-      else if (keep) {
+      // hubs 1C: a notice taken on wants it. The owner (2026-10-31): the fish is no longer whisked into a cooler; it is
+      // kept like any other, the lake it came from written on it, and handed over at the notice's board (tasks.js handIn)
+      const lake = this.catchLake(L), wanted = this.tasks ? this.tasks.onCatch(L.species, lake, L.length, keep) : null;
+      if (keep) {
         // fb3 B (decision 1): the fish goes into your hand; with both hands full, into a pack or a barrel in reach (never
         // the stringer by itself: that is its "Put on the stringer" verb in the book); nothing with room, back it goes
-        const inv = this.inventory, id = `fish:${L.species}`, data = { length: Math.round(L.length) };
+        const inv = this.inventory, id = `fish:${L.species}`, data = { length: Math.round(L.length), ...(lake ? { lake } : {}) };
         let r = inv && inv.attached && typeof inv.toHandNew === 'function' ? inv.toHandNew(id, { data }) : { ok: false };
         if (r && r.ok) this.message = { text: 'Kept · in your hand', t: 2.2 };
         else if (inv && inv.attached && typeof inv.place === 'function') {
@@ -972,6 +1010,7 @@ export class Fishing {
           const nm = (itemDef((inv.cont(r.cId) || {}).item) || {}).name || 'pack'; // (the content join: "the duluth pack #3": a name keeps its capital)
           if (r && r.ok) this.message = { text: `Kept · into the ${/^(Duluth|Johnson)/.test(nm) ? nm : nm.charAt(0).toLowerCase() + nm.slice(1)}`, t: 2.2 };
         }
+        if (r && r.ok && wanted) this.message = { text: `${this.message.text} · ${wanted}`, t: 4.5 };
         if (!(r && r.ok)) { L.entry.kept = false; this.saveLog(); this.message = { text: 'No room to keep it: you let it go.', t: 3 }; if (Number.isFinite(L.x) && this.world.shoreAt(L.x, L.z) < 0) this.splash(L.x, this.surfaceAt(L.x, L.z), L.z, 7, 0.7); }
       } else {
         // let go beside the hull, or back into the water it came from

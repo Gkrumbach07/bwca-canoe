@@ -1,0 +1,86 @@
+/* The book as a book (the owner, 2026-10-31, after Cast and Chill's: "It has the cover outline, but then it has pages
+   that expand out. So it actually looks like an open book. And then the inner binding on the seam in the middle").
+   Loaded after inv-ui.css (journal.js imports it last), so these rules win over the old flat spread.
+
+     the cover     the leather boards, a little wider than the paper all round, with a stitched rule just inside
+     the block     the pages under the open ones: a stack of paper edges stepping out at the fore-edges and the foot
+                   (box-shadows on the spread, a cream line and a darker gap each), so the paper reads as a thick block
+     the gutter    each page darkens and curls down into the binding; a dark crease runs down the seam
+     the paper     never clean: a grain, a few stains and foxing spots, the edges browned (--pp-* in paper.css)
+   The pack side keeps its canvas mat, inside the same cover. */
+
+#journal.book { padding: 0; width: min(1340px, 96vw); height: min(812px, calc(100vh - 76px)); border-radius: 12px 12px 14px 14px;
+  background-color: #4a2d1b;
+  background-image:
+    radial-gradient(ellipse at 28% 18%, rgba(255, 214, 160, .10), transparent 55%),
+    radial-gradient(ellipse at 80% 90%, rgba(0, 0, 0, .25), transparent 60%),
+    repeating-linear-gradient(115deg, rgba(0, 0, 0, .05) 0 2px, transparent 2px 7px),
+    repeating-linear-gradient(25deg, rgba(255, 230, 190, .025) 0 1px, transparent 1px 5px);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, .6), inset 0 0 0 2px rgba(0, 0, 0, .35), inset 0 2px 0 rgba(255, 220, 170, .12), inset 0 -3px 6px rgba(0, 0, 0, .35); }
+#journal.book::before { inset: 6px; border: 1.5px dashed rgba(214, 176, 104, .34); border-radius: 9px; }
+/* the spine's leather, a darker band down the middle of the cover behind the seam */
+#journal.book::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 46px; translate: -50% 0; pointer-events: none; border-radius: 4px;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, .28) 30%, rgba(0, 0, 0, .4) 50%, rgba(0, 0, 0, .28) 70%, transparent); }
+#journal .book-key { display: none; } /* (the owner: "this is not the place to show the controls") */
+#journal .book-tab kbd { display: none; }
+#journal .book-tabs { left: 56px; top: -34px; }
+
+/* --- the open pages and the block under them ------------------------------------------------------------------------ */
+#journal .side { inset: 16px 30px 30px; border-radius: 3px 3px 4px 4px; z-index: 1; }
+#journal .side.j.on, #journal .side.m.on {
+  box-shadow:
+    1.5px 1.5px 0 0 #e6dcc2, -1.5px 1.5px 0 0 #e6dcc2,
+    2.5px 2.5px 0 0 #b4a37f, -2.5px 2.5px 0 0 #b4a37f,
+    4px 4px 0 0 #e2d6ba, -4px 4px 0 0 #e2d6ba,
+    5px 5px 0 0 #ad9b75, -5px 5px 0 0 #ad9b75,
+    6.5px 6.5px 0 0 #ddd0b1, -6.5px 6.5px 0 0 #ddd0b1,
+    7.5px 7.5px 0 0 #a6936c, -7.5px 7.5px 0 0 #a6936c,
+    9px 9px 0 0 #d6c8a6, -9px 9px 0 0 #d6c8a6,
+    10.5px 10.5px 0 0 #6e5634, -10.5px 10.5px 0 0 #6e5634,
+    0 16px 22px 4px rgba(0, 0, 0, .45); }
+#journal .side.p { inset: 16px 30px 26px; }
+
+/* the seam: the two pages meet in a dark crease, each curling down into it */
+#journal .side.j.pp-spread::after, #journal .side.m::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 70px; translate: -50% 0; pointer-events: none; z-index: 3;
+  background:
+    linear-gradient(90deg, transparent 49.2%, rgba(48, 28, 12, .55) 49.6%, rgba(48, 28, 12, .55) 50.4%, transparent 50.8%),
+    linear-gradient(90deg, transparent 0%, rgba(80, 50, 22, .07) 22%, rgba(70, 42, 18, .2) 40%, rgba(50, 30, 12, .38) 48%, rgba(255, 248, 230, .18) 50.6%, rgba(70, 42, 18, .22) 56%, rgba(80, 50, 22, .07) 78%, transparent 100%); }
+
+/* --- the paper: grain, a few stains, browned edges ------------------------------------------------------------------ */
+/* (each page its own stains, so the spread is never a mirror; the page's own content scrolls over them) */
+#journal .pp-spread { background: var(--pp-sheet); }
+#journal .pp-spread .pp-page, #journal .side.m .page { background-color: var(--pp-sheet); }
+#journal .pp-spread .pp-page.left, #journal .side.m .page.left {
+  background-image:
+    var(--pp-grain),
+    radial-gradient(ellipse 44px 40px at 14% 91%, transparent 0 86%, rgba(140, 92, 40, .06) 88%, rgba(140, 92, 40, .025) 94%, transparent 100%),
+    radial-gradient(ellipse 120px 80px at 84% 10%, rgba(150, 105, 50, .07), transparent 70%),
+    radial-gradient(circle 3px at 23% 31%, rgba(130, 85, 40, .18), transparent),
+    radial-gradient(circle 2px at 71% 64%, rgba(130, 85, 40, .16), transparent),
+    radial-gradient(circle 4px at 48% 79%, rgba(130, 85, 40, .1), transparent),
+    linear-gradient(90deg, rgba(120, 82, 36, .16), transparent 7%, transparent 82%, rgba(90, 58, 24, .1) 93%, rgba(60, 36, 14, .3) 100%),
+    linear-gradient(180deg, rgba(120, 82, 36, .12), transparent 6%, transparent 93%, rgba(120, 82, 36, .16));
+  background-attachment: local, scroll, scroll, scroll, scroll, scroll, scroll, scroll; }
+#journal .pp-spread .pp-page.right, #journal .side.m .page.right {
+  background-image:
+    var(--pp-grain),
+    radial-gradient(ellipse 160px 110px at 70% 92%, rgba(150, 105, 50, .08), transparent 70%),
+    radial-gradient(ellipse 120px 60px at 92% 4%, rgba(150, 105, 50, .06), transparent 70%),
+    radial-gradient(circle 3px at 35% 18%, rgba(130, 85, 40, .15), transparent),
+    radial-gradient(circle 2px at 62% 52%, rgba(130, 85, 40, .14), transparent),
+    linear-gradient(270deg, rgba(120, 82, 36, .16), transparent 7%, transparent 82%, rgba(90, 58, 24, .1) 93%, rgba(60, 36, 14, .3) 100%),
+    linear-gradient(180deg, rgba(120, 82, 36, .12), transparent 6%, transparent 93%, rgba(120, 82, 36, .16)); }
+
+/* the map side shares the spread's grid (map.css sets its columns); its pages lose the old flat borders */
+#journal .side.m .page { border: none; }
+
+@media (max-width: 900px) {
+  #journal .side { inset: 12px; }
+  #journal.book::after { display: none; }
+}
+
+/* the map side's right page lies under the sheet (map.css takes its section out of the grid to hold the sheet): the
+   side's own background is that page, its half of the spread, with the same grain and the gutter's shade */
+#journal .side.m { background-color: var(--pp-sheet);
+  background-image: var(--pp-grain), linear-gradient(270deg, rgba(120, 82, 36, .16), transparent 3.5%, transparent 41%, rgba(90, 58, 24, .1) 46.5%, rgba(60, 36, 14, .3) 50%, transparent 50%),
+    linear-gradient(180deg, rgba(120, 82, 36, .12), transparent 6%, transparent 93%, rgba(120, 82, 36, .16)); }

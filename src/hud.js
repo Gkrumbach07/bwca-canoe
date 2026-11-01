@@ -3,10 +3,15 @@ import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
 import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
-import { explored, INK_WATER, INK_RIM, ROUTE_STEP } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked, your way in pencil)
+import { explored, INK_WATER, INK_RIM } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked)
 import { lifeKmh } from './pace.js';
+import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fmtDist, scaleBar } from './units.js'; // imperial on screen; the game itself stays metric
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
+import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
+import { GROUND } from './terrain-build.js';
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
 import './hud.css';
+const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
 // The HUD, in two materials (hud.css). Air: the compass top right, the readout top left while Tab is held,
 // the place title and the journal lines bottom left, one action line bottom centre with the balance arc,
@@ -30,23 +35,22 @@ const GLANCE_SPAN = 5000;    // metres across the glance and the corner sheet
 // goes out to the whole map
 const OPEN_SPAN = 4000, OPEN_MIN = 3000, OPEN_MAX = 5000;
 const SHEET_FADE = 720;      // ms: the sheet keeps its place while it fades (.paper's opacity .7s), then lets it go
-const MIN_SPAN = 2000, MAX_SPAN = 240000;
-const FINE_PX = 512;         // image pixels per fine tile edge (5 m per pixel)
-const FAR_PX = 256;          // image pixels per far tile edge (80 m per pixel)
-const FINE_M_PER_PX = 20;    // draw tiles at full detail once the view is this close
-const MAP_TILES_MAX = 96;    // map-only tile images kept (about 1 MB each)
-const MAP_FETCHES = 4;       // map-only tile downloads in flight
+const MIN_SPAN = 700, MAX_SPAN = 240000; // (the vector sheet stays sharp in close: 2 km was the raster's limit)
+const BASE_MARGIN = 256;     // canvas px: the base drawing reaches this far past the view on each side (drawMap)
+// the scale bar's round distances (m, words): feet under a quarter mile, then miles
+const SCALE_STEPS = [[152.4, '500 ft'], [304.8, '1,000 ft'], [402.34, '¼ mi'], [804.67, '½ mi'], [1609.34, '1 mi'], [3218.69, '2 mi'], [8046.72, '5 mi'], [16093.4, '10 mi'], [32186.9, '20 mi'], [80467.2, '50 mi']];
 const WATER = [184, 208, 216], RIM = [84, 118, 136];
-const TINT_LOW = [224, 216, 182], TINT_HIGH = [160, 166, 112];
-const BANDS = 14;
-const PAPER = '#e9e1cc';
+const TINT_LOW = [234, 226, 202], TINT_HIGH = [206, 204, 168]; // the overview's relief, as map-render.js tints the tiles
+const PAPER = '#ece4cf';
 const NEAT = 'rgba(74, 59, 38, 0.55)', FOLD = 'rgba(74, 59, 38, 0.4)'; // an owned sheet's neatline, and where two of yours meet
 // fb2 D: the printed sheets over the whole map (at an outfitter): yours ruled in ink, the rest dotted, red where this
 // table sells it
 const OWN_LINE = 'rgba(42, 52, 30, 0.85)', DOT_LINE = 'rgba(74, 59, 38, 0.72)', SOLD_DOT = 'rgba(180, 50, 31, 0.9)';
 const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
-// round A-B: your way in pencil, and a portage you have crossed gone over solid (explored.js has the lakes' ink)
-const PENCIL_INK = 'rgba(54, 46, 38, 0.86)', PENCIL_SOFT = 'rgba(54, 46, 38, 0.26)';
+// round A-B: the pencil (a night's tick by a site), and a portage you have crossed gone over solid (explored.js has the
+// lakes' ink). (The pencilled "your way" line is gone: the owner, 2026-10-31, "I don't like the 'your way' lines that are
+// drawn. Just completely remove that." explored.js still keeps the route for the trip's record.)
+const PENCIL_INK = 'rgba(54, 46, 38, 0.86)';
 const CROSSED = '#9a2819', CROSSED_UNDER = 'rgba(176, 52, 36, 0.62)';
 const PENCIL = 'Caveat, "Bradley Hand", "Segoe Print", cursive'; // the pencil hand (index.html --pencil-font)
 // what a keeper's ring on the map is for, in the pencil hand (outfitters.js hint kinds)
@@ -70,9 +74,23 @@ function pencilRing(ctx, a, b, r, k, seed) {
   pass(0, 0, 1, 0.82, 2.2 * k, 0, 1);
   pass(1.4 * k, -1.1 * k, -1, 0.34, 1.3 * k, 0.06, 0.86);
 }
+// Where a notice done is paid (a dock): a "$" in the keeper's red pencil, ringed by hand, with how many wait there when
+// it is more than one. (The owner, 2026-10-31, of the numbered red discs: they "look out of place": the open notices
+// are their pencil ring alone now, and this the same hand rather than a badge.)
+function pencilSeal(ctx, a, b, n, k, seed) {
+  ctx.save();
+  pencilRing(ctx, a, b, 10.5 * k, k * 0.85, seed);
+  ctx.font = `700 ${22 * k}px ${PENCIL}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(176, 40, 30, 0.92)'; ctx.fillText('$', a, b + 1.5 * k);
+  if (n > 1) { ctx.font = `700 ${16 * k}px ${PENCIL}`; ctx.textAlign = 'left'; ctx.fillText(`×${n}`, a + 12.5 * k, b - 7 * k); }
+  ctx.restore();
+}
+// (the owner, 2026-10-31: "I don't like how the hover is immediate. It should have a little delay, so it's not just
+// constantly popping up a hover every time I move my mouse over it"): the tip waits for the pointer to rest this long
+// within a few pixels; moving off that spot puts it away (hoverMove)
+const HOVER_REST = 420, HOVER_STILL = 5; // ms, css px
 const PRESS = 260;           // ms: M let go sooner than this was a press, not a hold (nothing shows until it is one or the other: fb3 C)
-const FINE_PER_FRAME = 2;    // fine tile images painted fresh in one map frame (the rest wait a frame, the far image under them)
-const PREPAINT_RANGE = 6000; // m: tiles painted ahead for the map while it is away, this far from you at most
+const PREPAINT_RANGE = 6000; // m: tiles traced ahead for the map while it is away, this far from you at most
 const HOLD_OFF = 300;        // ms: held keys hide this long after release
 const TITLE_HOLD = 4, NOTE_HOLD = 5, CATCH_HOLD = 8; // seconds
 const WAVE_MATTERS = 0.3;    // m: waves above this make the compass speak
@@ -99,6 +117,21 @@ export const NEED_ICON = { // (exported for fb5 B: the item tooltips draw the sa
   food: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v4.2M5.25 1.5v4.2M7.5 1.5v4.2M3 5.7c0 1.9 4.5 1.9 4.5 0M5.25 7v7.5M12 14.5V1.5c2.2 1.3 2.6 5.6 0 7.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   water: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2C8 1.2 3 7 3 10a5 5 0 0 0 10 0C13 7 8 1.2 8 1.2Z" fill="currentColor"/><path d="M5.6 10.2a2.5 2.5 0 0 0 1.9 2.4" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2" stroke-linecap="round"/></svg>',
 };
+// 2026-10-31: the cold's trend beside its icon (energy.warmthTrend): an arrow, up warming, down chilling, and what does
+// it: a flame (the fire), a roof (indoors), a sun (mild air, dry clothes), the wind, a moon (the night), rain, waves (in
+// the water, wading), a drop (wet through); 12 px, currentColor
+const TREND_GLYPH = {
+  fire: '<path d="M6 1.2c.4 2-1.8 3-1.8 5.3a1.8 1.8 0 0 0 3.6 0c0-.9-.5-1.5-.5-1.5 1.6.8 2.5 2.4 2.5 3.8a3.8 3.8 0 0 1-7.6 0C2.2 5.6 5.4 4.2 6 1.2Z" fill="currentColor"/>',
+  indoors: '<path d="M1.5 6.2 6 2l4.5 4.2M3 5.2v5.3h6V5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>',
+  sun: '<circle cx="6" cy="6" r="2.3" fill="currentColor"/><path d="M6 .8v1.5M6 9.7v1.5M.8 6h1.5M9.7 6h1.5M2.3 2.3l1 1M8.7 8.7l1 1M2.3 9.7l1-1M8.7 3.3l1-1" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>',
+  wind: '<path d="M1 4h6.2a1.6 1.6 0 1 0-1.6-1.6M1 7h8.6a1.6 1.6 0 1 1-1.6 1.6M1 10h4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  night: '<path d="M8.6 1.6a4.6 4.6 0 1 0 1.8 6.6A3.8 3.8 0 0 1 8.6 1.6Z" fill="currentColor"/>',
+  rain: '<path d="M3 2.5 2 5.5M6.5 2.5l-1 3M10 2.5l-1 3M4.5 7 3.5 10M8 7l-1 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  swim: '<path d="M.8 4.5c1.3-1.2 2.4-1.2 3.5 0s2.3 1.2 3.5 0 2.3-1.2 3.4 0M.8 8.5c1.3-1.2 2.4-1.2 3.5 0s2.3 1.2 3.5 0 2.3-1.2 3.4 0" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  wet: '<path d="M6 1.2S2.6 5 2.6 7.3a3.4 3.4 0 0 0 6.8 0C9.4 5 6 1.2 6 1.2Z" fill="currentColor"/>',
+};
+TREND_GLYPH.wade = TREND_GLYPH.swim; TREND_GLYPH.dry = TREND_GLYPH.sun;
+const trendIcon = (tr) => `<svg class="arrow" width="8" height="12" viewBox="0 0 8 12" aria-hidden="true"><path d="${tr.dir > 0 ? 'M4 1.5 7 6H5v4.5H3V6H1Z' : 'M4 10.5 1 6h2V1.5h2V6h2Z'}" fill="currentColor"/></svg>${TREND_GLYPH[tr.why] ? `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">${TREND_GLYPH[tr.why]}</svg>` : ''}`;
 
 // --- time and words ----------------------------------------------------------------------------------------
 export function clock12(hours) {
@@ -111,7 +144,7 @@ export function weekdayOf(year, doy) { const { month, day } = monthDay(year, doy
 export function longDate(year, doy) { const { month, day } = monthDay(year, doy); return `${weekdayOf(year, doy)}, ${MONTHS_LONG[month]} ${day}`; }
 export function shortDate(year, doy) { const { month, day } = monthDay(year, doy); return `${MONTHS[month]} ${day}`; }
 export const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-export const fmtKm = (km) => (km < 10 ? km.toFixed(1) : String(Math.round(km)));
+export const fmtKm = (km) => miles(km); // (kept its name: it gives miles now, from km; the callers say "mi")
 export const fmtDays = (d) => { if (d <= 0) return 'no'; const w = Math.floor(d + 1e-6), half = d - w >= 0.5 - 1e-6 && d - w < 0.99; return half ? `${w || ''}½` : String(Math.round(d)); };
 // "3½ days", "1 day", "½ day"
 export const foodWords = (d) => `${fmtDays(d)} ${d <= 1 ? 'day' : 'days'}`;
@@ -134,11 +167,11 @@ export function fmtDuration(hours) {
 // river into short polygons, so its cells are no measure of it, and "a small lake: 170 acres" was wrong twice over)
 export function lakeWords(l) {
   if (!l) return '';
-  if (l.river) return `${l.creek && !/river/i.test(l.name || '') ? 'a creek' : 'a river'}${l.maxDepth ? `, sounded to ${Math.round(l.maxDepth)} m` : ''}`;
+  if (l.river) return `${l.creek && !/river/i.test(l.name || '') ? 'a creek' : 'a river'}${l.maxDepth ? `, sounded to ${fmtDepth(l.maxDepth)}` : ''}`;
   const acres = (l.cells * 100) / 4046.86;
   const size = acres > 2000 ? 'the big water' : acres > 400 ? 'a good-sized lake' : acres > 60 ? 'a small lake' : 'a pond';
   const a = acres >= 100 ? Math.round(acres / 10) * 10 : Math.max(1, Math.round(acres));
-  return `${size}: ${a.toLocaleString('en-US')} ${plural(a, 'acre')}${l.maxDepth ? `, sounded to ${Math.round(l.maxDepth)} m` : ''}`;
+  return `${size}: ${a.toLocaleString('en-US')} ${plural(a, 'acre')}${l.maxDepth ? `, sounded to ${fmtDepth(l.maxDepth)}` : ''}`;
 }
 // the Fisher-style sheet code for a point: letters east across the wilderness, numbers south
 export function sheetCode(world, x, z) {
@@ -153,21 +186,6 @@ export function fishSilhouette(species) {
     perch: '14,28 36,10 74,8 98,20 108,28 98,36 74,48 36,46', walleye: '10,28 36,10 74,8 98,20 108,28 98,36 74,48 36,46',
   }[species] || '10,28 36,10 74,8 98,20 108,28 98,36 74,48 36,46';
   return `<polygon points="${body}" fill="#2a2016"/><polygon points="10,28 2,16 6,28 2,40" fill="#2a2016"/><polygon points="46,10 56,0 70,8" fill="#2a2016"/><polygon points="62,46 70,56 80,46" fill="#2a2016"/><circle cx="90" cy="24" r="3" fill="#ebe2cb"/>`;
-}
-
-// marching squares: the segments through a cell for a corner bitmask (1 top-left, 2 top-right, 4 bottom-right, 8 bottom-left)
-function msSegments(b, top, right, bottom, left) {
-  switch (b) {
-    case 1: case 14: return [left, top];
-    case 2: case 13: return [top, right];
-    case 3: case 12: return [left, right];
-    case 4: case 11: return [right, bottom];
-    case 5: return [left, top, right, bottom];
-    case 6: case 9: return [top, bottom];
-    case 7: case 8: return [left, bottom];
-    case 10: return [top, right, bottom, left];
-    default: return [];
-  }
 }
 
 const $ = (id) => document.getElementById(id);
@@ -212,7 +230,7 @@ export class Hud {
     this.mapCtx = this.canvas.getContext('2d');
     this.mode = 'hidden';            // hidden | glance | sheet | corner
     this.view = { cx: 0, cz: 0, span: GLANCE_SPAN };
-    this.layers = { lakes: true, portages: true, campsites: true, tasks: true, depths: true };
+    this.layers = { lakes: true, portages: true, campsites: true, tasks: true, depths: true, notes: true, burns: true, boundary: true };
     // polish B: the wind glyph on the compass rim comes in from the edge (the head inward, the wave at its base), so
     // turned to the side the wind comes from it points the way the wind goes (updateCompass)
     if (this.el.windArrow) {
@@ -223,11 +241,11 @@ export class Hud {
     }
     this.pin = null;
     this.player = null;
-    this.fineImages = new Map();
-    this.farImages = new Map();
-    this.mapTiles = new Map();   // tiles fetched for the map alone, beyond the streamed neighbourhood
-    this.fetching = 0;
-    this.tick = 0;
+    this.base = null;            // the sheet drawn a margin past the view (drawMap)
+    this.hits = [];              // what the pointer can point at on it (drawLayers)
+    this.hover = null; this.focus = null;
+    this.host = null;            // 'book' while the sheet lies in the book's map tab (map-book.js)
+    this.bookHost = null;        // the book, which M opens at its map tab (map-book.js sets it)
     this.overview = null;
     this.scaleShown = '';
     this._v = new THREE.Vector3();
@@ -241,6 +259,17 @@ export class Hud {
     this.energyBuild(); // fb2 F: the energy bar
     this.stripBuild(); // fb3 C (14): the bar and the clock over the paper
     window.addEventListener('resize', () => { this.sizeCanvas(); this.placeConfirm(); });
+    // The canvas re-measured whenever its laid-out box changes, not only at setMode and a window resize: the map table
+    // adds its class, and with it the spread's layout, after setMode('sheet') has measured the floating sheet
+    // (maptable.js show), and the book's page can settle after mountIn. Redrawn at once, so the fresh (blank) backing
+    // store never reaches the screen (fb3 C (21): a sizing after the frame's draw wiped it).
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => {
+        const c = this.canvas, w = c.width, h = c.height;
+        this.sizeCanvas();
+        if ((c.width !== w || c.height !== h) && this.player && this.grain && this.mode !== 'hidden') { this.drawMap(this.player); this.drawn = true; this.placeConfirm(); }
+      }).observe(this.canvas);
+    }
   }
   // for the title screen: is anything of paper up (its Esc belongs to the paper, not the menu)
   get big() { return this.mode === 'sheet'; }
@@ -273,7 +302,11 @@ export class Hud {
         else if (mode === 'hold') { this.tab.held = true; clearTimeout(this.tab.timer); this.showReadout(true, true); }
       } else if (e.code === 'KeyM') {
         if (e.repeat || this.paper === 'outfitter') return;
+        // the map is a tab of the book (the owner, 2026-10-31: "pack, journal, map. You could still open map with just M"):
+        // M on the map tab closes the book, on another tab turns to the map
+        if (this.host === 'book' && this.bookHost) { this.bookHost.closeMap(); return; }
         if (this.mode === 'sheet') { this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); return; }
+        if (this.paper === 'journal' && this.bookHost) { this.bookHost.showMap(); return; }
         this.mKey.downAt = performance.now(); this.mKey.held = true; clearTimeout(this.mKey.timer);
         if (this.paper) { const c = this.papers.get(this.paper); if (c) c(); } // one paper object at a time
         // fb3 C (21, "opening the map is sorta glitchy"): nothing shows until the key has said whether it is a press or a
@@ -282,7 +315,8 @@ export class Hud {
         // PRESS) opens the sheet straight from nothing, and the glance comes up only once the key has been held PRESS.
         this.mKey.timer = setTimeout(() => { if (this.mKey.held && this.mode !== 'sheet') this.setMode('glance'); }, PRESS);
       } else if (e.code === 'Escape') {
-        if (this.pin) this.clearPin(); else if (this.mode === 'sheet') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
+        if (this.pin) { this.clearPin(); e.mapPin = true; } // (the book leaves its Esc to the pin: journal.js)
+        else if (this.mode === 'sheet' && this.host !== 'book') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
       } else if (e.code === 'Enter' && this.pin) this.confirm();
     });
     window.addEventListener('keyup', (e) => {
@@ -318,10 +352,13 @@ export class Hud {
       drag = { px, py, cx: this.view.cx, cz: this.view.cz, moved: false, id: e.pointerId };
       try { c.setPointerCapture(e.pointerId); } catch { /* synthetic pointers have no capture */ }
       if (this.mode === 'sheet') c.classList.add('grabbing');
+      this.hoverOff(); // (a press is not a rest)
     });
     c.addEventListener('pointermove', (e) => {
       if (!drag && this.table && this.mode === 'sheet') { const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py); this.table.hoverAt(x, z); return; } // fb2 D: the sheet under the pointer
+      if (!drag && this.mode === 'sheet') { const [px, py] = rectPx(e); this.hoverMove(px, py, e); return; } // what is under the pointer, once it rests (map-book.js says what)
       if (!drag || this.mode !== 'sheet') return;
+      this.hoverOff();
       const [px, py] = rectPx(e);
       const dx = px - drag.px, dy = py - drag.py;
       if (Math.hypot(dx, dy) > 4) drag.moved = true;
@@ -338,8 +375,18 @@ export class Hud {
       const [px, py] = rectPx(e);
       const [x, z] = this.worldAt(px, py);
       if (this.table) { this.table.pick(x, z); return; } // fb2 D: at the map table a click picks a sheet
+      // a notice's tag or ring, a seal on a dock, a pencilled word: the book's map side takes it (map-book.js)
+      const hit = this.hitAt(px, py);
+      if (hit && typeof this.onMarkClick === 'function' && this.onMarkClick(hit)) return;
       this.propose(x, z, false);
     };
+    c.addEventListener('pointerleave', () => { this.hoverOff(); c.style.cursor = ''; });
+    // a lake's page straight from the sheet (map-book.js)
+    c.addEventListener('dblclick', (e) => {
+      if (this.mode !== 'sheet' || this.table || typeof this.onLakePage !== 'function') return;
+      const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py), id = lakeAt(this.world, x, z);
+      if (id > 0 && this.lakeShown(x, z)) { this.clearPin(); this.onLakePage(id); }
+    });
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', () => { drag = null; c.classList.remove('grabbing'); });
     c.addEventListener('wheel', (e) => {
@@ -350,7 +397,8 @@ export class Hud {
       const span = clamp(this.view.span * Math.exp(e.deltaY * 0.0015), MIN_SPAN, MAX_SPAN);
       // keep the point under the cursor where it is
       const mPerPx = span / c.width;
-      this.view.span = span;
+      this.view.span = span; this.zoomT = performance.now();
+      this.hoverOff();
       this.setCentre(wx - (px - c.width / 2) * mPerPx, wz - (py - c.height / 2) * mPerPx);
     }, { passive: false });
     if (this.el.mapLayers) this.el.mapLayers.addEventListener('click', (e) => {
@@ -360,6 +408,17 @@ export class Hud {
     if (this.el.mapClose) this.el.mapClose.addEventListener('click', () => this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'));
     if (this.el.pinGo) this.el.pinGo.addEventListener('click', () => this.confirm());
     if (this.el.pinCancel) this.el.pinCancel.addEventListener('click', () => this.clearPin());
+    // the pin's third stamp: the lake's page in the book (map-book.js onLakePage), when the pin is on a lake you can see
+    if (this.el.pinGo && this.el.pinGo.parentNode) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'stamp outline'; b.id = 'pin-lake'; b.textContent = 'The lake’s page'; b.hidden = true;
+      this.el.pinGo.parentNode.insertBefore(b, this.el.pinCancel);
+      b.addEventListener('click', () => { const id = this.pin && this.pin.lake; this.clearPin(); if (id && typeof this.onLakePage === 'function') this.onLakePage(id); });
+      this.el.pinLake = b;
+      // the tip under the pointer (hoverAt)
+      const tip = document.createElement('div'); tip.id = 'map-tip'; tip.setAttribute('role', 'status');
+      (this.el.mapBody || this.el.map).appendChild(tip);
+      this.el.tip = tip;
+    }
     const scrim = $('scrim');
     if (scrim) scrim.addEventListener('click', () => { if (this.paper === 'map') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); else if (this.paper && this.paper !== 'outfitter') { const c = this.papers.get(this.paper); if (c) c(); } });
     this.registerPaper('map', () => { if (this.mode === 'sheet') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden'); });
@@ -370,15 +429,94 @@ export class Hud {
     return [v.cx + (px - this.canvas.width / 2) * mPerPx, v.cz + (py - this.canvas.height / 2) * mPerPx];
   }
 
+  // what is under canvas pixel (px, py) on the sheet: a notice's tag, a seal, a ring, a pencilled word, a dock, a campsite
+  // or a portage (drawLayers keeps them in this.hits), nearest first by kind; null for open paper or water
+  hitAt(px, py) {
+    const [x, z] = this.worldAt(px, py), mPerPx = this.view.span / this.canvas.width, k = this.canvas.width / 1040, w = this.world;
+    let best = null, bd = Infinity;
+    const take = (h, d, pri) => { const s = d + pri; if (s < bd) { bd = s; best = h; } };
+    for (const h of this.hits) {
+      if (h.tag) { const d = Math.hypot(h.tag[0] - x, h.tag[1] - z) / mPerPx; if (d < 13 * k) take(h, d, 0); }
+      const d = Math.hypot(h.x - x, h.z - z) / mPerPx;
+      // a notice's pencil ring is its own mark: on the line it is taken first, anywhere inside it after the rest
+      if (h.kind === 'task') { const off = Math.abs(d - Math.max(h.r / mPerPx, 7 * k)); if (off < 8 * k) take(h, off, 0); }
+      if (h.kind === 'claim' && d < 18 * k) take(h, d, 1);
+      else if (h.kind === 'dock' && d < 10 * k) take(h, d, 4);
+      else if (h.kind === 'site' && d < 8 * k) take(h, d, 3);
+      else if (h.kind === 'dam' && d < 7 * k) take(h, d, 4.5); // the wetlands round
+      else if ((h.kind === 'task' || h.kind === 'note') && d < Math.max(h.r / mPerPx, 9 * k)) take(h, 40 + d / 8, h.kind === 'task' ? 0 : 6);
+      else if (h.kind === 'portage') {
+        const p = w.portages[h.i]; if (!p) continue;
+        let m = Infinity;
+        for (let i = 1; i < p.pts.length; i++) {
+          const [ax, az] = p.pts[i - 1], [bx, bz] = p.pts[i], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz;
+          const t = L2 ? clamp(((x - ax) * dx + (z - az) * dz) / L2, 0, 1) : 0;
+          m = Math.min(m, Math.hypot(x - ax - dx * t, z - az - dz * t));
+        }
+        if (m / mPerPx < 7 * k) take(h, m / mPerPx, 5);
+      }
+    }
+    return best;
+  }
+  // whether the map shows what is at (x, z): Sandbox, an outfitter's whole map, or a sheet of yours
+  lakeShown(x, z) { const sh = this.sheetsOn; return !sh || sh.view() !== 'owned' || sh.showsDetail(x, z); }
+  // The pointer moving over the sheet: the hand for what a click takes (a notice, a seal) at once, since that is cheap and
+  // pops nothing up; the tip only once the pointer has rested HOVER_REST ms within HOVER_STILL px. A tip that is up stays
+  // put while the pointer keeps to that spot (no tip chasing the cursor) and goes as soon as it leaves it.
+  hoverMove(px, py, e) {
+    const hit = this.hitAt(px, py), click = !!(hit && (hit.kind === 'task' || hit.kind === 'claim') && typeof this.onMarkClick === 'function');
+    this.canvas.style.cursor = click ? 'pointer' : '';
+    const w = this.hoverWait, far = (q) => !q || Math.hypot(e.clientX - q.cx, e.clientY - q.cy) > HOVER_STILL;
+    if (this.hoverShown && !far(this.hoverShown)) return;
+    if (this.hoverShown) this.hoverOff();
+    else if (w && !far(w)) return; // (still resting: the wait goes on from where it began)
+    clearTimeout(this.hoverTimer);
+    const q = { px, py, cx: e.clientX, cy: e.clientY };
+    this.hoverWait = q;
+    this.hoverTimer = setTimeout(() => {
+      this.hoverWait = null;
+      if (this.mode !== 'sheet' || this.table) return;
+      this.hoverAt(q.px, q.py, { clientX: q.cx, clientY: q.cy });
+      this.hoverShown = this.hover ? q : null;
+    }, HOVER_REST);
+  }
+  // the tip put away and any wait for one dropped (a drag, the wheel, a press, the pointer gone)
+  hoverOff() {
+    clearTimeout(this.hoverTimer); this.hoverWait = null; this.hoverShown = null;
+    if (this.hover || (this.el.tip && this.el.tip.classList.contains('show'))) this.hoverAt(-1, -1, null);
+  }
+  // the tip under the pointer: map-book.js onHover says what it is ({ html, ring } or null); px < 0 hides it
+  hoverAt(px, py, e) {
+    const tip = this.el.tip;
+    if (px < 0 || this.pin || typeof this.onHover !== 'function') { this.hover = null; if (tip) tip.classList.remove('show'); return; }
+    const [x, z] = this.worldAt(px, py), hit = this.hitAt(px, py);
+    let r = null;
+    try { r = this.onHover({ x, z, hit, shown: this.lakeShown(x, z) }); } catch (err) { console.warn('map: hover', err); }
+    this.hover = r;
+    if (!tip) return;
+    if (!r || !r.html) { tip.classList.remove('show'); return; }
+    if (tip._html !== r.html) { tip.innerHTML = r.html; tip._html = r.html; }
+    const box = (this.el.mapBody || this.canvas).getBoundingClientRect(), cr = this.canvas.getBoundingClientRect();
+    const lx = e.clientX - box.left, ly = e.clientY - box.top, tw = tip.offsetWidth || 260, th = tip.offsetHeight || 60;
+    tip.style.left = `${clamp(lx + 16, 6, cr.width - tw - 6)}px`;
+    tip.style.top = `${ly + 18 + th > cr.height ? ly - th - 12 : ly + 18}px`;
+    tip.classList.add('show');
+  }
+
   setCentre(cx, cz) {
-    const w = this.world, m = this.view.span * 0.45;
-    this.view.cx = clamp(cx, w.minX + m, w.maxX - m);
-    this.view.cz = clamp(cz, w.minZ + m * (this.canvas.height / this.canvas.width), w.maxZ - m * (this.canvas.height / this.canvas.width));
+    const w = this.world, m = this.view.span * 0.45, mz = m * (this.canvas.height / this.canvas.width);
+    // (zoomed out past the whole country the bounds cross, and clamp left it in a corner of the sheet: centred on it then)
+    const fit = (c, lo, hi) => (lo <= hi ? clamp(c, lo, hi) : (lo + hi) / 2);
+    this.view.cx = fit(cx, w.minX + m, w.maxX - m);
+    this.view.cz = fit(cz, w.minZ + mz, w.maxZ - mz);
     this.placeConfirm();
   }
 
   // hidden | glance (held M) | sheet (pressed M, on the scrim) | corner (a small sheet that stays up)
   setMode(mode) {
+    // the sheet opens in the book's map tab when the book has one (M, "Look at the map", the old setBig); the map table
+    // keeps the sheet on its own in the store (maptable.js)
+    if (mode === 'sheet' && this.bookHost && !this.table && this.host !== 'book' && this.bookHost.showMap()) return;
     if (mode === this.mode) return;
     const was = this.mode;
     this.mode = mode;
@@ -393,13 +531,14 @@ export class Hud {
     if (fading) this.sheetFade = setTimeout(() => { if (this.mode === 'hidden') m.classList.remove('sheet'); }, SHEET_FADE);
     if (mode !== 'hidden') this.loadOverview();
     if (mode === 'sheet') {
-      this.openPaper('map');
+      if (this.host !== 'book') this.openPaper('map');
       this.view.span = this.openSpan();
       if (this.player) { this.view.cx = this.player.x; this.view.cz = this.player.z; }
     } else {
-      if (was === 'sheet') this.closePaper('map');
+      if (was === 'sheet' && this.host !== 'book') this.closePaper('map');
       this.view.span = GLANCE_SPAN;
       this.clearPin();
+      this.hoverOff();
       if (was === 'sheet' && this.table) { const t = this.table; this.table = null; t.closed(); } // fb2 D: the map table goes with the sheet
     }
     // fb3 C (21): the band's words settle the body's height before the canvas is measured (the sheet's long title, left
@@ -417,12 +556,41 @@ export class Hud {
   }
   // the old API: the big map on / off
   setBig(big) { this.setMode(big ? 'sheet' : (this.settings && this.settings.cornerSheet ? 'corner' : 'hidden')); }
+  // The sheet laid in the book's map tab (map-book.js): the map's paper moves into the page and is the sheet there, under
+  // the book's own paper register; unmount puts it back for the glance, the corner and the map table.
+  mountIn(el) {
+    const m = this.el.map;
+    if (this.mode === 'sheet' && this.host !== 'book') this.setMode('hidden');
+    clearTimeout(this.sheetFade); m.classList.remove('sheet');
+    if (this.mode !== 'hidden') this.setMode('hidden');
+    this.host = 'book';
+    el.appendChild(m); m.classList.add('in-book');
+    this.setMode('sheet');
+  }
+  unmount() {
+    if (this.host !== 'book') return;
+    const m = this.el.map;
+    this.setMode('hidden');
+    clearTimeout(this.sheetFade); m.classList.remove('sheet', 'show', 'in-book');
+    this.host = null;
+    const j = $('journal'); if (j && j.parentNode) j.parentNode.insertBefore(m, j);
+    this.hoverOff();
+  }
+  // the view put on a place (the book's search, a notice in its list): centred there at a span that shows it
+  lookAt(x, z, span = null, r = 0) {
+    if (span) this.view.span = clamp(span, MIN_SPAN, MAX_SPAN);
+    this.setCentre(x, z);
+    this.focus = { x, z, r, t: performance.now() };
+    this.hoverOff();
+  }
 
-  // The backing store follows the displayed size (sharp on retina when the map fills the screen).
+  // The backing store follows the displayed size (sharp on retina when the map fills the screen). Its laid-out size, not
+  // getBoundingClientRect's: that is the box after transforms (the book's leaflet lies a third of a degree askew, the
+  // paper slides in from 24 px below), and a backing store measured mid-transform kept the wrong size.
   sizeCanvas() {
     const c = this.canvas;
     if (this.mode === 'hidden') return;
-    const r = c.getBoundingClientRect();
+    const r = { width: c.clientWidth, height: c.clientHeight };
     if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
@@ -446,25 +614,14 @@ export class Hud {
     const w = this.world, p = this.player;
     if (!w.tiles || !p || this.mode !== 'hidden') return;
     if (deadline && typeof deadline.timeRemaining === 'function' && deadline.timeRemaining() < 9 && !deadline.didTimeout) return;
-    const live = w.tiles.readyTiles(), alive = new Set(live.map((e) => e.key));
-    for (const key of this.fineImages.keys()) if (!alive.has(key)) this.fineImages.delete(key);
     let best = null, bd = PREPAINT_RANGE;
-    for (const e of live) {
-      if (this.fineImages.has(e.key)) continue;
+    for (const e of w.tiles.readyTiles()) {
+      const t = tileCache.fine.get(`${e.tx},${e.ty}`);
+      if (t && t.geo && t.geo.inkV === explored.lakeV) continue;
       const [ox, oz] = w.tileOrigin(e.tx, e.ty), d = Math.hypot(ox + w.tileMetres / 2 - p.x, oz + w.tileMetres / 2 - p.z);
       if (d < bd) { bd = d; best = e; }
     }
-    if (best) { this.fineImage(best); return; }
-    // round A-B: then a fine tile's ink gone stale since a lake was paddled (one a call), and the sheet's ink under you
-    this.inkBudget = 1;
-    for (const [key, img] of this.fineImages) {
-      if (img.inkV === explored.lakeV) continue;
-      const [tx, ty] = key.split(',').map(Number);
-      this.tileInk(img, key, tx, ty, true);
-      if (!this.inkBudget) return;
-    }
-    const sh = sheetAt(p.x, p.z);
-    if (sh && explored.inkSheets().has(sh.id)) explored.sheetInk(sh);
+    if (best) tileGeo(w, best.tx, best.ty, false, { build: 1 }, explored.world ? explored.lakes : null, explored.lakeV);
   }
   queuePrepaint() {
     if (this.idleQueued) return;
@@ -477,10 +634,11 @@ export class Hud {
   propose(x, z, recentre) {
     if (!this.world.inBounds(x, z, 50)) return;
     this.pin = { x, z };
+    this.hoverOff();
     if (this.mode !== 'sheet') this.setMode('sheet');
     if (recentre) { this.view.cx = x; this.view.cz = z; }
     const w = this.world, p = this.player, ctx = this.ctx, sh = this.sheetsOn;
-    const name = !sh || sh.view() !== 'owned' || sh.showsDetail(x, z) ? w.lakeName(w.lakeIdAt(x, z)) : null; // fb2 D: blank paper names nothing
+    const name = !sh || sh.view() !== 'owned' || sh.showsDetail(x, z) ? w.lakeName(lakeAt(w, x, z)) : null; // fb2 D: blank paper names nothing
     const walk = this.pinLocked; // Adventure: the pin measures the way, it does not move you
     let text = 'Paddle in here?';
     if (p) {
@@ -501,10 +659,13 @@ export class Hud {
       // the hours on the game's own clock, which follows the way at life pace (pace.js): the canoe's cruise at life (5.8 km
       // an hour with an aluminium hull and an ash paddle, times the gear's cruise: shop.js), less with a fresh wind
       const hours = km / (lifeKmh(p.gear) * (wind && wind.fresh ? 0.8 : 1));
-      text = `${walk ? '' : 'Paddle in here? '}${name ? `${name}, ` : ''}about ${fmtKm(km)} km ${dir}, ${fmtDuration(hours)}${walk ? ' by the clock' : ''}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
+      text = `${walk ? '' : 'Paddle in here? '}${name ? `${name}, ` : ''}about ${fmtKm(km)} mi ${dir}, ${fmtDuration(hours)}${walk ? ' by the clock' : ''}${wind && wind.speed > 3 ? ' with this wind' : ''}.${hops}`;
       if (walk) text = text[0].toUpperCase() + text.slice(1);
     } else if (name) text = `${walk ? '' : 'Paddle in here? '}${name}.`;
     if (this.el.pinGo) this.el.pinGo.hidden = walk;
+    const lid = lakeAt(w, x, z), L = lid > 0 ? w.lakes[lid - 1] : null;
+    this.pin.lake = L && L.name && name && typeof this.onLakePage === 'function' ? lid : 0;
+    if (this.el.pinLake) this.el.pinLake.hidden = !this.pin.lake;
     if (this.el.pinCancel) this.el.pinCancel.textContent = walk ? 'Close' : 'Not now';
     const keys = this.el.pin && this.el.pin.querySelector('.keys'); if (keys) keys.textContent = walk ? 'Esc' : 'Enter · Esc';
     if (this.el.pinText) this.el.pinText.textContent = text;
@@ -559,11 +720,10 @@ export class Hud {
   }
 
   tint(t, out) {
-    const q = Math.floor(clamp(t, 0, 0.999) * BANDS) / (BANDS - 1);
+    const q = clamp(t, 0, 1) ** 0.8;
     for (let k = 0; k < 3; k++) out[k] = TINT_LOW[k] + (TINT_HIGH[k] - TINT_LOW[k]) * q;
     return out;
   }
-  tintH(h, out) { const [hmin, hmax] = this.world.meta.heightRange; return this.tint((h - hmin) / (hmax - hmin + 0.01), out); }
 
   // The bake's overview (water by depth, land hill-shaded) repainted as paper: it is the bottom layer when
   // the map is zoomed out past the loaded far field.
@@ -580,13 +740,30 @@ export class Hud {
       const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height;
       const water = new Uint8Array(W * H);
       for (let k = 0; k < W * H; k++) water[k] = p[k * 4 + 2] > p[k * 4] ? 1 : 0;
+      // (the overview is what a far-out sheet shows while its far tiles come in: its ponds and small lakes lose their rims
+      // as the far tiles' do at that zoom, map-render.js rimLeft, so the one does not flicker into the other. A water of
+      // fewer pixels than SMALL_LAKE is marked 2.)
+      const px2 = (ov.cellsPerPx * this.world.cell) ** 2, smallPx = SMALL_LAKE / px2, stack = [], comp = [];
+      for (let k0 = 0; k0 < W * H; k0++) {
+        if (water[k0] !== 1) continue;
+        comp.length = 0; stack.push(k0); water[k0] = 3;
+        while (stack.length) {
+          const k = stack.pop(), i = k % W; comp.push(k);
+          if (i > 0 && water[k - 1] === 1) { water[k - 1] = 3; stack.push(k - 1); }
+          if (i < W - 1 && water[k + 1] === 1) { water[k + 1] = 3; stack.push(k + 1); }
+          if (k >= W && water[k - W] === 1) { water[k - W] = 3; stack.push(k - W); }
+          if (k + W < W * H && water[k + W] === 1) { water[k + W] = 3; stack.push(k + W); }
+        }
+        const big = comp.length > smallPx;
+        for (const q of comp) water[q] = big ? 4 : 2;
+      }
       const col = [0, 0, 0];
       for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
         const k = j * W + i, o = k * 4;
         let out;
         if (water[k]) {
           const land = (i > 0 && !water[k - 1]) || (i < W - 1 && !water[k + 1]) || (j > 0 && !water[k - W]) || (j < H - 1 && !water[k + W]);
-          out = land ? RIM : WATER;
+          out = land && water[k] === 4 ? RIM : WATER;
         } else {
           const r = p[o], g = p[o + 1];
           const t = (112 * r - 78 * g) / Math.max(1, 70 * g - 60 * r); // undo the bake's tint ramp (the hillshade cancels)
@@ -598,178 +775,6 @@ export class Hud {
       this.overview = c;
     };
     img.src = this.world.base + ov.file;
-  }
-
-  // Paper rendering of one slot's cells (fine tile or far tile): water with a dark rim, tinted land.
-  paintCells(ctx, s, side, halo, px, cellsPerPx) {
-    const data = ctx.createImageData(px, px), c = [0, 0, 0];
-    const isWater = (li, lj) => s.lake[clamp(lj, 0, side - 1) * side + clamp(li, 0, side - 1)] > 0;
-    for (let py = 0; py < px; py++) {
-      const lj = halo + Math.floor((py + 0.5) * cellsPerPx);
-      for (let qx = 0; qx < px; qx++) {
-        const li = halo + Math.floor((qx + 0.5) * cellsPerPx), k = lj * side + li, o = (py * px + qx) * 4;
-        let col;
-        if (s.lake[k]) col = (!isWater(li - 1, lj) || !isWater(li + 1, lj) || !isWater(li, lj - 1) || !isWater(li, lj + 1)) ? RIM : WATER;
-        else col = this.tintH(s.h[k] * 0.1, c);
-        data.data[o] = col[0]; data.data[o + 1] = col[1]; data.data[o + 2] = col[2]; data.data[o + 3] = 255;
-      }
-    }
-    ctx.putImageData(data, 0, 0);
-  }
-
-  // Contours every 10 m (marching squares on a 2-cell grid), heavier every 50 m, land only.
-  paintContours(ctx, s, side, halo, hmin, hmax, pxPerCell) {
-    const step = 2, gw = Math.floor((FINE_PX / pxPerCell) / step);
-    const hAt = (gi, gj) => s.h[(halo + gj * step) * side + halo + gi * step] * 0.1;
-    const wAt = (gi, gj) => s.lake[(halo + gj * step) * side + halo + gi * step] > 0;
-    const px = (gi) => (gi * step + 0.5) * pxPerCell;
-    const first = Math.ceil(hmin / 10) * 10;
-    for (let lvl = first; lvl <= hmax; lvl += 10) {
-      ctx.beginPath();
-      for (let gj = 0; gj < gw - 1; gj++) for (let gi = 0; gi < gw - 1; gi++) {
-        if (wAt(gi, gj) || wAt(gi + 1, gj + 1) || wAt(gi + 1, gj) || wAt(gi, gj + 1)) continue;
-        const h00 = hAt(gi, gj), h10 = hAt(gi + 1, gj), h11 = hAt(gi + 1, gj + 1), h01 = hAt(gi, gj + 1);
-        const b = (h00 >= lvl ? 1 : 0) | (h10 >= lvl ? 2 : 0) | (h11 >= lvl ? 4 : 0) | (h01 >= lvl ? 8 : 0);
-        if (b === 0 || b === 15) continue;
-        const x0 = px(gi), y0 = px(gj), x1 = px(gi + 1), y1 = px(gj + 1);
-        const lerp = (a, c) => (lvl - a) / (c - a || 1e-6);
-        const top = [x0 + (x1 - x0) * lerp(h00, h10), y0], right = [x1, y0 + (y1 - y0) * lerp(h10, h11)];
-        const bottom = [x0 + (x1 - x0) * lerp(h01, h11), y1], left = [x0, y0 + (y1 - y0) * lerp(h00, h01)];
-        const segs = msSegments(b, top, right, bottom, left);
-        for (let q = 0; q < segs.length; q += 2) { ctx.moveTo(segs[q][0], segs[q][1]); ctx.lineTo(segs[q + 1][0], segs[q + 1][1]); }
-      }
-      const index = lvl % 50 === 0;
-      ctx.strokeStyle = index ? 'rgba(128, 104, 62, 0.8)' : 'rgba(140, 118, 76, 0.45)';
-      ctx.lineWidth = index ? 2.0 : 1.1;
-      ctx.stroke();
-    }
-  }
-
-  // Depth contours on the lakes the DNR has sounded (the lake table carries a maxDepth for them; lakes with a
-  // synthetic bed get none): every 2 m to 10 m, every 5 m to 30 m, every 10 m beyond, heavier every 10 m, on
-  // the full 10 m grid. Returns label spots [level, x, z] in world metres for drawMap to letter up close.
-  paintDepthContours(layer, s, side, halo, pxPerCell, tx, ty) {
-    const w = this.world, n = Math.round(FINE_PX / pxPerCell), N = n + 1, lakes = w.lakes;
-    const mapped = new Map();
-    const isMapped = (id) => { let m = mapped.get(id); if (m === undefined) { const l = id > 0 ? lakes[id - 1] : null; m = !!(l && l.maxDepth); mapped.set(id, m); } return m; };
-    const depth = new Float32Array(N * N);
-    let maxD = 0;
-    for (let gj = 0; gj < N; gj++) for (let gi = 0; gi < N; gi++) {
-      const k = (halo + gj) * side + halo + gi, id = s.lake[k];
-      if (!id || !isMapped(id)) continue;
-      const d = (s.lvl[k] - s.h[k]) * 0.1;
-      if (d > 0) { depth[gj * N + gi] = d; if (d > maxD) maxD = d; }
-    }
-    if (maxD < 2) return [];
-    const levels = [];
-    for (let d = 2; d <= maxD; d += d < 10 ? 2 : d < 30 ? 5 : 10) levels.push(d);
-    const px = (g) => (g + 0.5) * pxPerCell;
-    const [ox, oz] = w.tileOrigin(tx, ty), mPerPx = w.tileMetres / FINE_PX;
-    const labels = [];
-    for (const lvl of levels) {
-      const segs = [];
-      for (let gj = 0; gj < N - 1; gj++) for (let gi = 0; gi < N - 1; gi++) {
-        const h00 = depth[gj * N + gi], h10 = depth[gj * N + gi + 1], h11 = depth[(gj + 1) * N + gi + 1], h01 = depth[(gj + 1) * N + gi];
-        const b = (h00 >= lvl ? 1 : 0) | (h10 >= lvl ? 2 : 0) | (h11 >= lvl ? 4 : 0) | (h01 >= lvl ? 8 : 0);
-        if (b === 0 || b === 15) continue;
-        const x0 = px(gi), y0 = px(gj), x1 = px(gi + 1), y1 = px(gj + 1);
-        const t = (a, c) => (lvl - a) / (c - a || 1e-6);
-        const top = [x0 + (x1 - x0) * t(h00, h10), y0], right = [x1, y0 + (y1 - y0) * t(h10, h11)];
-        const bottom = [x0 + (x1 - x0) * t(h01, h11), y1], left = [x0, y0 + (y1 - y0) * t(h00, h01)];
-        segs.push(...msSegments(b, top, right, bottom, left));
-      }
-      if (!segs.length) continue;
-      const ctx = layer();
-      ctx.beginPath();
-      for (let q = 0; q < segs.length; q += 2) { ctx.moveTo(segs[q][0], segs[q][1]); ctx.lineTo(segs[q + 1][0], segs[q + 1][1]); }
-      const index = lvl % 10 === 0;
-      ctx.strokeStyle = index ? 'rgba(52, 92, 122, 0.9)' : 'rgba(70, 112, 142, 0.7)';
-      ctx.lineWidth = index ? 1.7 : 1.0;
-      ctx.stroke();
-      if (segs.length >= 40) { const m = segs[Math.floor(segs.length / 8) * 2]; labels.push([lvl, ox + m[0] * mPerPx, oz + m[1] * mPerPx]); }
-    }
-    return labels;
-  }
-
-  // one image per loaded fine tile, from the tile's own cells, with contours
-  fineImage(e) {
-    let img = this.fineImages.get(e.key);
-    if (img) return img;
-    const w = this.world, s = w.slots[e.ty * w.ntx + e.tx];
-    if (!s) return null;
-    const c = this.paintSlot(s, e.tx, e.ty);
-    this.fineImages.set(e.key, c);
-    this.mapTiles.delete(e.key); // the streamed copy supersedes a map-only one
-    return c;
-  }
-
-  // A tile the 3D world has not streamed, fetched for the map alone: the same bytes, decoded here and
-  // painted once. Downloads are limited and images are let go least recently drawn first.
-  mapTile(tx, ty) {
-    const key = `${tx},${ty}`;
-    let t = this.mapTiles.get(key);
-    if (t) { t.used = this.tick; if (t.slot && !t.img) { t.img = this.paintSlot(t.slot, tx, ty); t.slot = null; } return t.img; }
-    if (this.fetching >= MAP_FETCHES) return null;
-    t = { used: this.tick, img: null, slot: null };
-    this.mapTiles.set(key, t);
-    this.fetching++;
-    fetch(this.world.tileUrl(tx, ty))
-      .then((r) => { if (!r.ok) throw new Error(r.status); return new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(); })
-      .then((buf) => { const n = this.world.side * this.world.side; t.slot = { h: new Int16Array(buf, 0, n), lake: new Uint16Array(buf, n * 2, n), sd: new Int16Array(buf, n * 4, n), lvl: new Int16Array(buf, n * 6, n) }; })
-      .catch(() => this.mapTiles.delete(key))
-      .finally(() => { this.fetching--; });
-    return null;
-  }
-  paintSlot(s, tx, ty) {
-    const w = this.world;
-    const c = document.createElement('canvas'); c.width = FINE_PX; c.height = FINE_PX;
-    const ctx = c.getContext('2d');
-    const pxPerCell = FINE_PX / w.tile;
-    this.paintCells(ctx, s, w.side, w.halo, FINE_PX, 1 / pxPerCell);
-    const f = w.tileFlags[ty * w.ntx + tx];
-    let hmin = f ? f[1] * 0.1 : Infinity, hmax = f ? f[2] * 0.1 : -Infinity;
-    if (!Number.isFinite(hmin) || !Number.isFinite(hmax)) { for (let k = 0; k < s.h.length; k++) { const h = s.h[k] * 0.1; if (h < hmin) hmin = h; if (h > hmax) hmax = h; } }
-    this.paintContours(ctx, s, w.side, w.halo, hmin, hmax, pxPerCell);
-    // the soundings on a layer of their own (made only for a tile that has some): the map shows them only where you
-    // know the water (sheets.js)
-    const layer = () => { if (!c.depth) { c.depth = document.createElement('canvas'); c.depth.width = c.depth.height = FINE_PX; } return c.depth.getContext('2d'); };
-    c.depth = null;
-    c.labels = s.lvl ? this.paintDepthContours(layer, s, w.side, w.halo, pxPerCell, tx, ty) : [];
-    // round A-B: the lakes in it you have paddled, inked (explored.js), made with the image and kept with it
-    const ink = explored.world ? explored.inkTile(s, tx, ty) : null;
-    c.ink = ink ? ink.canvas : null; c.lakeIds = ink ? ink.ids : null; c.inkV = ink ? explored.lakeV : -1;
-    return c;
-  }
-  // round A-B: a fine tile's ink, remade when a lake in it was newly paddled since it was made (explored.touches): from
-  // the streamed tile's cells, a few a frame (inkBudget); a tile fetched for the map alone has let its cells go, so it
-  // is fetched and painted again. The ink as it was is drawn meanwhile.
-  tileInk(img, key, tx, ty, streamed) {
-    if (img.inkV === explored.lakeV || !explored.world) return img.ink || null;
-    if (!explored.touches(img.lakeIds, img.inkV)) { img.inkV = explored.lakeV; return img.ink || null; }
-    if (this.inkBudget > 0) {
-      this.inkBudget--;
-      const s = streamed ? this.world.slots[ty * this.world.ntx + tx] : null;
-      if (s) { const r = explored.inkTile(s, tx, ty); img.ink = r.canvas; img.lakeIds = r.ids; img.inkV = explored.lakeV; }
-      else if (!streamed) this.mapTiles.delete(key);
-    }
-    return img.ink || null;
-  }
-  pruneMapTiles() {
-    if (this.mapTiles.size <= MAP_TILES_MAX) return;
-    const old = [...this.mapTiles.entries()].filter(([, t]) => t.img || t.slot).sort((a, b) => a[1].used - b[1].used);
-    for (let i = 0; i < old.length && this.mapTiles.size > MAP_TILES_MAX; i++) this.mapTiles.delete(old[i][0]);
-  }
-
-  // one image per loaded far tile (80 m cells), tints and water only
-  farImage(e) {
-    let img = this.farImages.get(e.key);
-    if (img) return img;
-    const w = this.world, s = w.farSlots[e.fy * w.far.ntx + e.fx];
-    if (!s) return null;
-    const c = document.createElement('canvas'); c.width = FAR_PX; c.height = FAR_PX;
-    this.paintCells(c.getContext('2d'), s, w.farSide, w.far.halo, FAR_PX, w.far.tile / FAR_PX);
-    this.farImages.set(e.key, c);
-    return c;
   }
 
   // --- the journal lines, the place title, the catch card -----------------------------------------------------
@@ -865,14 +870,14 @@ export class Hud {
     const hdg = bearingOf(player.heading);
     this.set('needle', e.needle, `rotate(${hdg.toFixed(1)}deg)`, 'style');
     e.needle.style.transform = `rotate(${hdg.toFixed(1)}deg)`;
-    e.windArrow.style.transform = `rotate(${(wind.from % 360).toFixed(1)}deg)`;
+    e.windArrow.style.transform = `rotate(${((wind.from + (wind.puffVeer || 0) + 360) % 360).toFixed(1)}deg)`; // (a gust swings it a little: wind.js PUFF)
     e.compass.querySelector('svg').setAttribute('aria-label', `Compass: heading ${compassLong(hdg)}; ${wind.label.toLowerCase()} from the ${wind.compassLong}`);
     if (matters) {
-      this.set('clabel', e.compassLabel, `${wind.label} · ${wind.speed.toFixed(0)} m/s`, 'innerHTML');
-      e.compassLabel.innerHTML = `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s<br>from the ${wind.compassLong}`;
+      this.set('clabel', e.compassLabel, `${wind.label} · ${fmtMphMs(wind.speed)}`, 'innerHTML');
+      e.compassLabel.innerHTML = `${esc(wind.label)} · ${fmtMphMs(wind.speed)}<br>from the ${wind.compassLong}`;
       const f = player.forward, wd = wind.dir, cosRel = f.x * wd.x + f.z * wd.z;
       const aspect = player.mode !== 'paddle' ? '' : Math.abs(cosRel) < 0.5 ? ' · beam on' : cosRel < 0 ? ' · on the bow' : ' · astern';
-      this.set('cwaves', e.compassWaves, `${ice ? 'frozen over' : `waves ${H.toFixed(1)} m${aspect}`}${wind.override != null ? ' · set by hand' : ''}`);
+      this.set('cwaves', e.compassWaves, `${ice ? 'frozen over' : `waves ${fmtFtIn(H)}${aspect}`}${wind.puff > 0.15 ? ' · gusting' : ''}${wind.override != null ? ' · set by hand' : ''}`);
     }
   }
 
@@ -894,11 +899,9 @@ export class Hud {
         const l = w.lakes[id - 1], trip = outfitter && outfitter.trip;
         const dayW = this.dayWords(ctx);
         const kicker = `${dayW ? `${dayW} · ` : ''}${clock12(day.hours)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`;
-        const parts = [];
-        if (trip && trip.active && stats) parts.push(stats.portages ? `${word(stats.portages)[0].toUpperCase()}${word(stats.portages).slice(1)} ${plural(stats.portages, 'portage')} from ${trip.fromName || 'the landing'}` : `Out from ${trip.fromName || 'the landing'}`);
-        if (stats && stats.km > 0.05) parts.push(`${fmtKm(stats.km)} km paddled`);
-        parts.push(lakeWords(l));
-        this.showPlace(kicker, name, parts.join(' · '));
+        // (the owner, 2026-10-31: the lake's name, not "two portages from the landing · 12 km paddled": the trip's count
+        // is chatter here)
+        this.showPlace(kicker, name, lakeWords(l));
       }
       this.lastLakeId = id;
     } else if (id > 0) this.lastLakeId = id;
@@ -910,9 +913,7 @@ export class Hud {
         this.lastDawnDoy = day.doy;
         const dayW = this.dayWords(ctx);
         const here = player.placeName || w.lakeName(player.lakeId) || 'Open country';
-        const hungW = energy && energy.hungFood ? energy.hungFood().words : '';
-        const food = energy && !(core && core.sandbox) && !(outfitter && outfitter.visit) ? (energy.foodWords ? `${energy.foodWords()} with you${hungW ? ` · ${hungW}` : ''}` : energy.food > 0 ? `${foodWords(energy.food)} of food` : 'the food pack is empty') : ''; // fb A: the meals and snacks in reach (camp join: and the barrel hung; polish B: not at a store, where the shelf is a step away)
-        const sub = [here, stats && stats.km > 0.05 ? `${fmtKm(stats.km)} km paddled so far` : '', food].filter(Boolean).join(' · ');
+        const sub = here; // (2026-10-31: no km so far or food count on the day card: chatter)
         this.showPlace(`${longDate(day.year, day.doy)} · sunrise ${clock12(rise)}${wind ? ` · ${wind.label.toLowerCase()} from the ${wind.compassLong}` : ''}`, dayW || 'A new day', sub);
       }
       this.lastHours = h;
@@ -974,8 +975,9 @@ export class Hud {
     mk.clock.classList.toggle('on', !!(day && !day.running && !ctx.shell));
     const adv = !!(trip && trip.adventure && trip.active && !ctx.shell);
     const hung = adv && energy && energy.hungFood ? energy.hungFood() : null; // camp join: the barrel hung at camp is food you have
-    const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 1 ? (energy.food <= 0 ? (energy.foodWords && energy.foodWords() !== 'no food' ? energy.foodWords() : hung && hung.words ? hung.words : 'no food') : energy.foodWords ? energy.foodWords() : `${foodWords(energy.food)} of food`) : ''; // fb A
-    const shown = food === 'no food' && energy && typeof energy.foodNearby === 'function' && energy.foodNearby() ? '' : food; // (the content join: not "no food" 6 m from the canoe with meals in it)
+    // (the owner, 2026-10-31: no "2 meals to cook and 2 snacks" down here; only nothing to eat at all is worth a mark)
+    const food = adv && energy && energy.food + (hung ? hung.days : 0) <= 0 && !(energy.foodWords && energy.foodWords() !== 'no food') && !(hung && hung.words) ? 'no food' : '';
+    const shown = food && energy && typeof energy.foodNearby === 'function' && energy.foodNearby() ? '' : food; // (the content join: not "no food" 6 m from the canoe with meals in it)
     this.set('mfood', mk.food, shown); mk.food.classList.toggle('on', !!shown);
     mk.wet.classList.toggle('on', adv && !!trip.state.wet);
     mk.gps.classList.toggle('on', !!(geo && geo.linked && geo.enabled));
@@ -986,111 +988,203 @@ export class Hud {
     mk.tiles.classList.toggle('on', loading > 0);
   }
 
-  // --- the energy bar (fb2 F) -----------------------------------------------------------------------------------
-  // Wild n Chill's bar, as the owner asked (2026-10-24, second round): one long thin bar, top left in the Air. Green is
-  // the energy you have; the dim track after it, up to the ceiling, is what rest can still bring back; and each need's
+  // --- the energy bar (fb2 F; the stamina bar, 2026-10-31) --------------------------------------------------------
+  // Wild n Chill's bar, as the owner asked (2026-10-24, second round): one long thin bar, top left in the Air. Each need's
   // chunk eats into it from the right end, in the bar's order cold (pale blue), sleep (orange), hunger (yellow), thirst
-  // (blue): energy.chunks(). A chunk is dashed and marching while it grows faster than its everyday rate (energy.js),
-  // and its icon (snowflake, zz, fork and knife, drop) sits under it while it grows or is a tenth of the bar or more.
-  // Shown only when it matters, as the marks are: on a trip, while a chunk grows, a need is low, the bar is under half,
-  // the ceiling under 0.6 or a chunk other than sleep 0.15 or more, and for a few seconds after it changes (a meal, a
-  // capsize); in Quiet only when it is urgent (a chunk growing, a need low, the bar under a quarter). Hidden at once while
-  // the readout is up (Tab, or always at Full density): its Energy row draws the same bar.
+  // (blue): energy.chunks(); what is left is the ceiling. The green under the ceiling is stamina (the owner, 2026-10-31:
+  // "it's basically like your stamina bar"): a jog, paddling hard or a hard swim spends it and it comes back in a few
+  // seconds; the dim track after it is what is coming back. A chunk is dashed and marching while it grows faster than its
+  // everyday rate; a chunk that shrinks at once (a meal, a drink) leaves a bright ghost of what it was, fading. The icons
+  // sit under their chunks while they grow or are a tenth of the bar or more, the cold's with its trend beside it (a
+  // flame by the fire, the wind, the night, the water; energy.warmthTrend). Hovering the bar or an icon, with the mouse
+  // free (the book open, a paper, or the third-person paddle), says what each part is. Always up on a trip, with the
+  // clock and the date beside it (the owner: "I find myself having to tab to see that information all the time").
   energyBuild() {
     const air = this.el.air; if (!air) return;
     const el = document.createElement('div');
     el.id = 'energy'; el.className = 'fade'; el.setAttribute('role', 'img'); el.setAttribute('aria-label', 'Energy');
-    el.innerHTML = `<div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div>`
-      + `<div class="icons">${NEEDS.map((k) => `<span class="icon ${k}">${NEED_ICON[k]}</span>`).join('')}</div>`;
+    el.innerHTML = `<div class="ebar"><div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div>`
+      + `<div class="icons">${NEEDS.map((k) => `<span class="icon ${k}">${NEED_ICON[k]}</span>`).join('')}<span class="trend"></span></div><div class="hit"></div></div>`
+      + '<div class="when"><span class="clock"></span><span class="dot">·</span><span class="sc day"></span></div>';
     air.appendChild(el);
     const q = (sel) => el.querySelector(sel);
-    this.eb = { el, fill: q('.fill'), room: q('.room'), chunk: {}, icon: {}, ref: null, until: 0, sig: '', top: '' };
+    this.eb = { el, track: q('.track'), fill: q('.fill'), room: q('.room'), chunk: {}, icon: {}, trend: q('.trend'), clock: q('.when .clock'), day: q('.when .day'), ref: null, until: 0, sig: '', top: '', prev: null, trendSig: '' };
     for (const k of NEEDS) { this.eb.chunk[k] = q(`.chunk.${k}`); this.eb.icon[k] = q(`.icon.${k}`); }
+    this.tipBind(this.eb, q('.hit'), true);
   }
-  // the bar's numbers for a frame: the green, the room up to the ceiling, each chunk's start from the right end, and a
-  // signature that changes only when the drawing would (rounded: the DOM is spared). The Air's bar and the strip over
-  // the paper draw the same state.
+  // the bar's numbers for a frame: the green (stamina), the room up to the ceiling, each chunk's start from the right
+  // end, and a signature that changes only when the drawing would (rounded: the DOM is spared). The Air's bar and the
+  // strip over the paper draw the same state.
   barState(energy) {
-    const v = clamp(energy.value, 0, 1), cap = clamp(energy.ceiling, 0, 1), ch = energy.chunks ? energy.chunks() : [];
+    const cap = clamp(energy.ceiling, 0, 1), v = Math.min(clamp(energy.value, 0, 1), cap), ch = energy.chunks ? energy.chunks() : [];
     const pct = (x) => `${(Math.round(x * 1000) / 10).toFixed(1)}%`;
-    let sig = `${pct(v)}|${pct(cap)}`, x = 1;
+    let sig = `${pct(v)}|${pct(cap)}|${energy.winded ? 'w' : ''}`, x = 1;
     const at = {};
     for (let i = ch.length - 1; i >= 0; i--) { x -= ch[i].size; at[ch[i].key] = x; }
     for (const c of ch) sig += `|${c.key}${pct(c.size)}${c.growing ? '*' : ''}`;
-    return { v, cap, ch, at, sig, pct };
+    return { v, cap, ch, at, sig, pct, winded: !!energy.winded };
   }
-  barApply(eb, { v, cap, ch, at, pct }) {
-    eb.fill.style.width = pct(Math.min(v, cap + 0.001));
-    eb.room.style.left = pct(Math.min(v, cap)); eb.room.style.width = pct(Math.max(0, cap - v));
-    for (const c of ch) { const el = eb.chunk[c.key]; if (!el) continue; el.style.left = pct(at[c.key]); el.style.width = pct(c.size); el.classList.toggle('grow', c.growing); }
+  barApply(eb, { v, cap, ch, at, pct, winded }) {
+    eb.fill.style.width = pct(v);
+    eb.room.style.left = pct(v); eb.room.style.width = pct(Math.max(0, cap - v));
+    if (eb.track) eb.track.classList.toggle('winded', winded);
+    const prev = eb.prev;
+    for (const c of ch) {
+      const el = eb.chunk[c.key]; if (!el) continue;
+      el.style.left = pct(at[c.key]); el.style.width = pct(c.size); el.classList.toggle('grow', c.growing);
+      // a meal or a drink: the chunk shrinks at once, and a ghost of what it was flashes and fades (the owner, 2026-10-31)
+      const was = prev && prev[c.key];
+      if (was && was.size - c.size >= 0.012 && eb.track) this.barGhost(eb, c.key, was, pct);
+    }
+    eb.prev = Object.fromEntries(ch.map((c) => [c.key, { size: c.size, left: at[c.key] }]));
+    eb.last = { v, cap, ch, at };
+  }
+  barGhost(eb, key, was, pct) {
+    const g = document.createElement('i');
+    g.className = `ghost ${key}`; g.style.left = pct(was.left); g.style.width = pct(was.size);
+    eb.track.appendChild(g);
+    setTimeout(() => g.remove(), 1300);
+    const icon = eb.icon && eb.icon[key];
+    if (icon) { icon.classList.remove('met'); void icon.offsetWidth; icon.classList.add('met'); setTimeout(() => icon.classList.remove('met'), 1300); }
   }
   updateEnergy(ctx) {
     const eb = this.eb; if (!eb) return;
-    const { energy, trip, shell } = ctx, s = this.settings;
-    // fb3 C (15): the readout has no Energy row any more (it is the moment only), so the bar stays up under it
+    const { energy, trip, shell, day } = ctx;
     const on = !!(energy && trip && trip.active && !shell);
-    let show = false;
+    eb.el.classList.toggle('nobar', !on);
     if (on) {
-      const bar = this.barState(energy), { v, cap, ch, at, sig, pct } = bar;
-      if (sig !== eb.sig) {
+      const bar = this.barState(energy), { v, ch, at, sig } = bar;
+      const tr = energy.warmthTrend ? energy.warmthTrend() : { dir: 0, why: '' }, tsig = tr.dir ? `${tr.dir}${tr.why}` : '';
+      if (sig !== eb.sig || tsig !== eb.trendSig) {
         eb.sig = sig;
         this.barApply(eb, bar);
-        // the icons under their chunks, nudged apart where chunks are narrow (16 px each, within the bar)
+        // the icons under their chunks, nudged apart where chunks are narrow (16 px each, the cold's wider with its
+        // trend beside it), within the bar
+        if (tsig !== eb.trendSig) { eb.trendSig = tsig; eb.trend.innerHTML = tr.dir ? trendIcon(tr) : ''; eb.trend.className = `trend${tr.dir ? ` on ${tr.dir > 0 ? 'up' : 'down'} ${tr.why}` : ''}`; }
         const W = ENERGY_W, marks = [];
         for (const c of ch) {
-          const shown = c.size > 0.004 && (c.growing || c.size >= 0.1);
+          const shown = (c.size > 0.004 && (c.growing || c.size >= 0.1)) || (c.key === 'warmth' && !!tr.dir);
           eb.icon[c.key].classList.toggle('on', shown);
-          if (shown) marks.push({ k: c.key, x: (at[c.key] + c.size / 2) * W });
+          if (shown) marks.push({ k: c.key, x: (at[c.key] + c.size / 2) * W, w: c.key === 'warmth' && tr.dir ? 34 : 18 });
         }
-        for (let i = 1; i < marks.length; i++) marks[i].x = Math.max(marks[i].x, marks[i - 1].x + 18);
-        for (let i = marks.length - 1; i >= 0; i--) marks[i].x = Math.min(marks[i].x, i === marks.length - 1 ? W - 8 : marks[i + 1].x - 18);
-        for (const m of marks) eb.icon[m.k].style.left = `${Math.max(8, m.x).toFixed(1)}px`;
+        for (let i = 1; i < marks.length; i++) marks[i].x = Math.max(marks[i].x, marks[i - 1].x + marks[i - 1].w);
+        for (let i = marks.length - 1; i >= 0; i--) marks[i].x = Math.min(marks[i].x, i === marks.length - 1 ? W - marks[i].w + 10 : marks[i + 1].x - marks[i].w);
+        for (const m of marks) {
+          const x = Math.max(8, m.x);
+          eb.icon[m.k].style.left = `${x.toFixed(1)}px`;
+          if (m.k === 'warmth') eb.trend.style.left = `${(x + 9).toFixed(1)}px`;
+        }
         const held = energy.heldBy || '';
-        eb.el.setAttribute('aria-label', `Energy ${Math.round(v * 100)} %${held ? `, ${held}` : ''}`);
+        eb.el.setAttribute('aria-label', `Stamina ${Math.round(v * 100)} %${held ? `, ${held}` : ''}${tr.words ? `, ${tr.words.toLowerCase()}` : ''}`);
       }
-      // whether it matters now
-      const growing = ch.some((c) => c.growing), low = !!energy.low;
-      const urgent = growing || low || v < 0.25;
-      const ref = eb.ref, now = performance.now();
-      const moved = !ref || Math.abs(v - ref.v) >= 0.1 || ch.some((c) => Math.abs(c.size - (ref.c[c.key] || 0)) >= 0.05);
-      if (moved) { if (ref) eb.until = now + 6000; eb.ref = { v, c: Object.fromEntries(ch.map((c) => [c.key, c.size])) }; }
-      const big = ch.some((c) => c.key !== 'rest' && c.size >= 0.15); // a fifth or so of a need gone (the day's tiredness shows by the ceiling)
-      const density = s ? s.get('density') : 'standard';
-      show = urgent || (density !== 'quiet' && (v < 0.5 || cap < 0.6 || big || now < eb.until));
       // under the spot card while the rod is up (both keep the top left), measured only when its words change
       const spot = this.el.spot, words = spot && spot.classList.contains('show') ? `${this.cache.spotWhere}|${this.cache.spotWho}` : '';
       if (words !== eb.spotWords) { eb.spotWords = words; const top = words ? `${48 + spot.offsetHeight + 22}px` : ''; if (top !== eb.top) { eb.top = top; eb.el.style.top = top; } }
-    } else eb.ref = null;
+      if (eb.tipKey) this.tipShow(eb, eb.tipKey); // the tip under the mouse follows the bar
+    } else { eb.ref = null; eb.prev = null; }
+    // the clock and the date beside it, always (not on the title card)
+    const dayW = day ? this.dayWords(ctx) : '';
+    this.set('ebClock', eb.clock, day ? clock12(day.hours) : '');
+    this.set('ebDay', eb.day, `${dayW ? `${dayW} · ` : ''}${day ? `${weekdayOf(day.year, day.doy).slice(0, 3)}, ${shortDate(day.year, day.doy)}` : ''}`);
+    const show = !shell && !!day;
     eb.el.classList.toggle('show', show);
-    this.el.air.classList.toggle('ebar', show); // the readout keeps under the bar (hud.css)
+    this.el.air.classList.toggle('ebar', show && on); // the readout keeps under the bar (hud.css)
+  }
+
+  // --- the bar's tip (2026-10-31: "I want to be able to hover over the effects to see what they are") -------------------
+  // One paper note for both bars, under the mouse: which part of the bar is under it (the green, the room, a chunk) or
+  // which icon, and what it means now.
+  tipBind(bar, hit, icons) {
+    if (!hit) return;
+    if (!this.etip) { const t = document.createElement('div'); t.id = 'etip'; t.setAttribute('role', 'tooltip'); document.body.appendChild(t); this.etip = t; }
+    const pick = (ev) => {
+      const tr = bar.track.getBoundingClientRect(), last = bar.last; if (!last || !tr.width) return null;
+      // an icon under the mouse (the Air's bar), else the part of the track over it
+      if (icons && bar.icon && ev.clientY > tr.bottom + 2) {
+        let best = null, bd = 14;
+        for (const k of NEEDS) { const el = bar.icon[k]; if (!el.classList.contains('on')) continue; const r = el.getBoundingClientRect(), d = Math.abs(ev.clientX - (r.left + r.width / 2)); if (d < bd) { bd = d; best = k; } }
+        if (bar.trend && bar.trend.classList.contains('on')) { const r = bar.trend.getBoundingClientRect(); if (ev.clientX >= r.left - 2 && ev.clientX <= r.right + 2) best = 'warmth'; }
+        if (best) return best;
+      }
+      const f = clamp((ev.clientX - tr.left) / tr.width, 0, 1);
+      if (f < last.v) return 'stamina';
+      if (f < last.cap) return 'room';
+      for (const c of last.ch) if (c.size > 0 && f >= last.at[c.key] && f <= last.at[c.key] + c.size + 0.002) return c.key;
+      return last.cap > 0.995 ? 'stamina' : null;
+    };
+    hit.addEventListener('pointermove', (ev) => { const k = pick(ev); this.tipAt = { x: ev.clientX, y: ev.clientY }; bar.tipKey = k; if (k) this.tipShow(bar, k); else this.tipHide(bar); });
+    hit.addEventListener('pointerleave', () => this.tipHide(bar));
+  }
+  tipHide(bar) { if (bar) bar.tipKey = null; if (this.etip) this.etip.classList.remove('show'); }
+  tipShow(bar, key) {
+    const t = this.etip, ctx = this.ctx, energy = ctx && ctx.energy; if (!t || !energy) return;
+    const html = this.tipHtml(energy, key);
+    if (html !== this.tipSig) { this.tipSig = html; t.innerHTML = html; }
+    const at = this.tipAt || { x: 0, y: 0 }, w = t.offsetWidth || 260;
+    t.style.left = `${Math.round(clamp(at.x - 30, 8, window.innerWidth - w - 8))}px`; t.style.top = `${Math.round(at.y + 22)}px`;
+    t.classList.add('show');
+  }
+  tipHtml(energy, key) {
+    const n = energy.needs || {}, pc = (x) => `${Math.round(clamp(x, 0, 1) * 100)} %`;
+    const line = (name, val, say, extra = '') => `<div class="nm">${name}${val ? ` <span class="v">${val}</span>` : ''}</div>${extra}<div class="id">${say}</div>`;
+    const ch = (energy.chunks ? energy.chunks() : []).find((c) => c.key === key);
+    const out = Number.isFinite(n[key]) && n[key] <= 0.005;
+    const grow = ch && ch.growing ? '<div class="st">growing</div>' : '';
+    switch (key) {
+      case 'stamina': case 'room': {
+        const cap = energy.ceiling, v = Math.min(energy.value, cap);
+        const say = energy.winded ? 'Winded: catch your breath. Shift does nothing until it comes back some.'
+          : key === 'room' ? 'Catching your breath: the stamina comes back up to here in a few seconds.'
+          : 'Jogging, paddling hard and swimming hard spend it; ease off and it comes back in a few seconds. Its reach is what your needs leave you: fed, watered, warm and rested, you go further.';
+        return line('Stamina', `${pc(v)} of ${pc(cap)}`, say);
+      }
+      case 'warmth': {
+        const tr = energy.warmthTrend ? energy.warmthTrend() : null;
+        const trend = tr && tr.dir ? `<div class="st ${tr.dir > 0 ? 'up' : 'down'}">${trendIcon(tr)}${esc(tr.words)}</div>` : '';
+        return line('Cold', `${pc(n.warmth)} warm`, out ? 'Frozen through: it is eating into you. A fire now, dry clothes, the bag.' : 'The wind, the night, the rain and the water chill you, wet through faster. A fire, a store, dry clothes and a night in the bag warm you.', trend + grow);
+      }
+      case 'rest': return line('Tiredness', `${pc(n.rest)} rested`, out ? 'Done in: only a night’s sleep brings you back.' : 'Falls the longer you are awake and the harder the day. Only sleep brings it back: the tent, or the Rest dial for a nap.', grow);
+      case 'food': {
+        const upset = energy.upsetNow ? '<div class="st down">an upset stomach: the untreated water</div>' : '';
+        return line('Hunger', `${pc(n.food)} fed`, out ? 'Starving: it is eating into you. Eat now (I).' : 'Eat from the pack (I): a snack anywhere you are still, a meal cooked on the grate at a fire.', upset + grow);
+      }
+      case 'water': {
+        const b = typeof energy.bottleWords === 'function' ? `<div class="st">${esc(energy.bottleWords())}</div>` : '';
+        return line('Thirst', `${pc(n.water)}`, out ? 'Parched: it is eating into you. Drink now (I).' : 'Drink from the bottle in the book (I); fill it at the water’s edge (E), a tablet in.', b + grow);
+      }
+      default: return '';
+    }
   }
 
   // --- the strip over the paper (fb3 C, decision 14) ---------------------------------------------------------------
   // The owner (2026-10-25): "the health bar and time should be visible pretty much all the time. even in modals bc thats
   // when im eating and want to know if i need to keep eating". A small strip at the top of the screen, over the scrim
   // and every paper (the book, the fire card, a shelf, the counter, the map) and the Rest dial (stripAlso, main.js): the
-  // energy bar as the Air's, its number, the clock and the day. The Air itself stays hidden under paper.
+  // energy bar as the Air's, its number, the clock and the day. The Air itself stays hidden under paper. (2026-10-31:
+  // hover it for the tips, with the cold's trend beside the number.)
   stripBuild() {
     const el = document.createElement('div');
     el.id = 'strip'; el.setAttribute('role', 'status'); el.setAttribute('aria-label', 'Energy, the time and the day');
-    el.innerHTML = `<div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div><span class="pct"></span><span class="dot">·</span><span class="clock"></span><span class="dot">·</span><span class="sc day"></span>`;
+    el.innerHTML = `<div class="sbar"><div class="track"><i class="fill"></i><i class="room"></i>${NEEDS.map((k) => `<i class="chunk ${k}"></i>`).join('')}</div><div class="hit"></div></div><span class="pct"></span><span class="trend"></span><span class="dot">·</span><span class="clock"></span><span class="dot">·</span><span class="sc day"></span>`;
     document.body.appendChild(el);
     const q = (sel) => el.querySelector(sel);
-    this.strip = { el, fill: q('.fill'), room: q('.room'), chunk: {}, pct: q('.pct'), clock: q('.clock'), day: q('.day'), sig: '', shown: false };
+    this.strip = { el, track: q('.track'), fill: q('.fill'), room: q('.room'), chunk: {}, pct: q('.pct'), trend: q('.trend'), clock: q('.clock'), day: q('.day'), sig: '', shown: false, prev: null, trendSig: '' };
     for (const k of NEEDS) this.strip.chunk[k] = q(`.chunk.${k}`);
     this.stripAlso = null; // () => true while something of paper the register does not know is up (the Rest dial)
+    this.tipBind(this.strip, q('.hit'), false);
   }
   updateStrip(ctx) {
     const s = this.strip; if (!s) return;
     const { energy, day, shell } = ctx;
     const show = !shell && (!!this.paper || !!(this.stripAlso && this.stripAlso()));
-    if (show !== s.shown) { s.shown = show; s.el.classList.toggle('show', show); }
+    if (show !== s.shown) { s.shown = show; s.el.classList.toggle('show', show); if (!show) { s.prev = null; this.tipHide(s); } }
     if (!show) return;
     if (energy) {
       const bar = this.barState(energy);
-      // (the number is what the fill shows: the value held to the ceiling while it is pulled down to it; the fb3 join
-      // read "72 %" over a fill at 58 % as a supper went in)
-      if (bar.sig !== s.sig) { s.sig = bar.sig; this.barApply(s, bar); s.pct.textContent = `${Math.round(Math.min(bar.v, bar.cap) * 100)} %`; }
+      if (bar.sig !== s.sig) { s.sig = bar.sig; this.barApply(s, bar); s.pct.textContent = `${Math.round(bar.cap * 100)} %`; } // (the number: the energy the needs leave you)
+      const tr = energy.warmthTrend ? energy.warmthTrend() : { dir: 0 }, tsig = tr.dir ? `${tr.dir}${tr.why}` : '';
+      if (tsig !== s.trendSig) { s.trendSig = tsig; s.trend.innerHTML = tr.dir ? `${NEED_ICON.warmth}${trendIcon(tr)}` : ''; s.trend.className = `trend${tr.dir ? ` on ${tr.dir > 0 ? 'up' : 'down'} ${tr.why}` : ''}`; s.trend.title = tr.words || ''; }
+      if (s.tipKey) this.tipShow(s, s.tipKey);
     }
     const dayW = this.dayWords(ctx);
     this.set('stripClock', s.clock, day ? clock12(day.hours) : '');
@@ -1128,7 +1222,7 @@ export class Hud {
         e.reticle.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px)`;
         const C = 2 * Math.PI * 44, fill = u.power != null ? clamp(u.power, 0, 1) : 0;
         e.reticleRing.setAttribute('stroke-dasharray', `${(C * fill).toFixed(1)} ${C.toFixed(1)}`);
-        this.set('rdist', e.reticleDist, aim.dist > 0 ? `about ${Math.round(aim.dist)} m` : '');
+        this.set('rdist', e.reticleDist, aim.dist > 0 ? `about ${fmtDist(aim.dist)}` : '');
         e.reticle.style.opacity = aim.inReach ? '1' : '.55';
       }
     }
@@ -1140,7 +1234,7 @@ export class Hud {
       const pct = `${(clamp(ft.tension, 0, 1) * 100).toFixed(1)}%`;
       e.tensionFill.style.width = pct; e.tensionEnd.style.width = pct;
       e.tension.classList.toggle('hot', ft.danger > 0.3); e.tension.classList.toggle('slack', ft.danger <= 0.3 && ft.slack > 0.8);
-      const html = `<span>Tension</span><span class="dot">·</span><span>${ft.line.toFixed(0)} m of line out</span>${ft.run ? '<span class="dot">·</span><span class="run">it is running</span>' : ft.slack > 0.8 ? '<span class="dot">·</span><span class="run">slack</span>' : ''}`;
+      const html = `<span>Tension</span><span class="dot">·</span><span>${Math.round(ft.line * 3.28084)} ft of line out</span>${ft.run ? '<span class="dot">·</span><span class="run">it is running</span>' : ft.slack > 0.8 ? '<span class="dot">·</span><span class="run">slack</span>' : ''}`;
       this.set('tlabel', e.tensionLabel, html, 'innerHTML');
     }
     // the catch card: on a landing, for the hold-up or 8 s, whichever is longer
@@ -1150,7 +1244,7 @@ export class Hud {
       f.catchKey = L.key; f.catchUntil = now + CATCH_HOLD * 1000;
       e.catchFish.innerHTML = fishSilhouette(L.species);
       e.catchName.textContent = L.name;
-      e.catchSize.textContent = `${L.length} cm · ${L.weight} kg / ${(L.weight * 2.2046).toFixed(1)} lb`;
+      e.catchSize.textContent = `${fmtIn(L.length)} · ${fmtLbOz(L.weight)}`;
       e.catchMeta.textContent = `${L.lake} · ${String(L.lure).toLowerCase()} · ${L.time}`;
       e.catch.classList.toggle('pb', !!L.best);
     }
@@ -1186,21 +1280,20 @@ export class Hud {
       if (rise == null && set == null) parts.push('no sun today');
       else {
         parts.push(rise != null ? `sunrise ${clock12(rise)}` : 'no sunrise', set != null ? `sunset ${clock12(set)}` : 'no sunset');
-        if (set != null && h < set && (rise == null || h >= rise)) parts.push(`${fmtDuration(set - h)} of light left`);
-        else if (set != null && h >= set) parts.push(`dark by ${clock12(Math.min(23.99, set + 0.8))}`);
-        else if (rise != null && h < rise) parts.push(`${fmtDuration(rise - h)} till sunrise`);
+        // (the owner, 2026-10-31: no "hours of light left": the sunrise and sunset say it)
       }
       row('Sun', esc(parts.join(' · ')));
     }
-    if (wind) row('Wind', `${esc(wind.label)} · ${wind.speed.toFixed(0)} m/s from the ${wind.compassLong} · ${day && day.season && day.season.ice > 0.5 ? 'the lake is frozen over' : `waves ${(player.waveHeightHere || 0).toFixed(1)} m`}${wind.override != null ? ' · set by hand' : ''}`);
+    if (wind) row('Wind', `${esc(wind.label)} · ${fmtMphMs(wind.speed)} from the ${wind.compassLong} · ${day && day.season && day.season.ice > 0.5 ? 'the lake is frozen over' : `waves ${fmtFtIn(player.waveHeightHere || 0)}`}${wind.override != null ? ' · set by hand' : ''}`);
     if (weather && weather.look) {
       const t = weather.look.temp, label = weather.label || '', rain = weather.look.rain || 0;
       const wet = rain > 0.02 ? (weather.look.snow > 0.5 ? '' : rain > 0.5 ? ', raining hard' : ', raining') : '';
-      row('Sky', esc(`${Number.isFinite(t) ? `${Math.round(t)} °C · ` : ''}${label.toLowerCase()}${/rain|snow|storm/i.test(label) ? '' : wet}`));
+      row('Sky', esc(`${Number.isFinite(t) ? `${fmtF(t)} · ` : ''}${label.toLowerCase()}${/rain|snow|storm/i.test(label) ? '' : wet}`));
     }
     const hdg = bearingOf(player.heading);
-    row('Way', `${((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6).toFixed(1)} km/h · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}`);
+    row('Way', `${fmtMphKmh((player.paceSpeed ?? player.groundSpeed ?? Math.abs(player.speed)) * 3.6)} · heading ${hdg.toFixed(0)}°, ${compassLong(hdg)}`);
     const dev = s && s.get('devRows'), showFps = s && s.get('fps');
+    if (dev) { const land = this.landWords(player); if (land) row('Land', `${esc(land)} <span class="dev">(Developer rows)</span>`, 'soft'); } // (the owner, 2026-10-31: what biome, wetland or bog we are in)
     if (dev && geo) row('GPS sim', `${geo.linked ? (geo.enabled ? 'broadcasting to the extension' : 'extension installed, switched off') : 'extension not detected · this tab only'} · hdg ${hdg.toFixed(0)}°`, 'soft');
     if (dev || showFps) {
       const parts = [];
@@ -1212,6 +1305,32 @@ export class Hud {
     const foot = mode === 'always' ? 'Always on · Settings › HUD' : mode === 'toggle' ? '<kbd>Tab</kbd> hides it · Full density keeps it up' : '<kbd>Tab</kbd> held · let go to hide · Full density keeps it up';
     const html = `<div class="head"><div class="name">${esc(name)}</div><div class="sc date">${day ? `${clock12(day.hours)} · ` : ''}${dayW ? `${dayW} · ` : ''}${day ? longDate(day.year, day.doy) : ''}</div></div><div class="grid">${rows.join('')}</div><div class="foot">${foot}</div>`;
     this.set('readout', this.el.readout, html, 'innerHTML');
+  }
+
+  // the land under you, for the developer rows: the survey's ground kind (NWI wetlands, d1-ground: land.js KIND), the
+  // forest type over it (LANDFIRE, land.js FOREST) and the ground class the game drew there (terrain-build.js GROUND);
+  // '' until the fine tile is in
+  landWords(player) {
+    const w = this.world; if (!w || !player) return '';
+    const words = (k) => String(k || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+    const i = w.cellI(player.x), j = w.cellJ(player.z);
+    const kind = typeof w.chCell === 'function' ? w.chCell('ground', i, j) : 0, ft = typeof w.chCell === 'function' ? w.chCell('forest', i, j) : 0;
+    const cls = typeof w.coverCell === 'function' ? GROUND[(w.coverCell(i, j) >> 16) & 255] : null;
+    const parts = [];
+    if (kind > 0 && KIND_NAMES[kind]) parts.push(`${words(KIND_NAMES[kind])}${kind >= KIND.openBog && kind <= KIND.aquaticBed ? ' (wetland)' : ''}`);
+    // the wetlands round: the whole NWI code, as "NWI PSS1/EM1Cb · alder thicket · seasonally flooded · beaver · lotic"
+    const wb = typeof w.chCell === 'function' ? w.chCell('wet', i, j) : 0, wc = typeof w.chCell === 'function' ? w.chCell('wcls', i, j) : 0;
+    if (wb || wc) {
+      const r = REGIME[wetRegime(wb)], c1 = WCLASS[wclass1(wc)], nwi = [`NWI ${nwiCode(wb, wc)}`];
+      if (c1) nwi.push(c1.name);
+      if (r) nwi.push(r.name);
+      if (wetBeaver(wb)) nwi.push('beaver');
+      if (wetHgm(wb)) nwi.push(HGM[wetHgm(wb)]);
+      parts.push(nwi.join(' · '));
+    }
+    if (ft > 0 && FOREST[ft]) parts.push(`${words(FOREST[ft].key)} cover`);
+    if (cls) parts.push(`ground: ${words(cls)}`);
+    return parts.join(' · ');
   }
 
   // --- the map's chrome: the header band, the layer toggles, the footer scale -----------------------------------
@@ -1285,9 +1404,9 @@ export class Hud {
         : look === 'owned' ? (none ? 'blank paper: the map tables at the outfitters sell the sheets' : '')
           : '';
     if (e.mapHint) this.set('mhint', e.mapHint, [table ? 'drag to pan · wheel to zoom' : `drag to pan · wheel to zoom · click a spot ${this.pinLocked ? 'for the way there' : 'to paddle in'}`, detail].filter(Boolean).join(' · '));
-    this.set('mspan', e.mapSpan, `${v.span >= 10000 ? Math.round(v.span / 1000) : (v.span / 1000).toFixed(v.span < 5000 ? 1 : 0)} km across`);
+    this.set('mspan', e.mapSpan, `${miles(v.span / 1000)} mi across`);
     if (this.mode === 'sheet' && this.scaleInfo) {
-      const { bar, cssPx } = this.scaleInfo, txt = `${bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}`;
+      const { label, cssPx } = this.scaleInfo, txt = label;
       if (this.scaleShown !== txt + cssPx) { this.scaleShown = txt + cssPx; e.mapScalebar.style.width = `${cssPx.toFixed(0)}px`; e.mapScale.textContent = txt; }
       const far = v.span / this.canvas.width >= 7;
       const d = e.mapLayers.querySelector('[data-layer=depths]'); if (d) d.classList.toggle('far', far);
@@ -1301,7 +1420,7 @@ export class Hud {
   // the sheet's number and lakes in small letter-spaced capitals in its margin.
   drawNeatlines(ctx, sh, owned, toPx, k) {
     if (!owned.length) return;
-    const W = this.canvas.width, H = this.canvas.height;
+    const W = this.dw || this.canvas.width, H = this.dh || this.canvas.height;
     ctx.save();
     ctx.lineCap = 'butt';
     for (const s of owned) {
@@ -1339,6 +1458,7 @@ export class Hud {
   // ink where it is yours, and in its corner its number, its lakes and whether it is yours (at the table, its price
   // here, or where it is sold). The map table's pick and the sheet under the pointer are washed red.
   drawSheetGrid(ctx, sh, toPx, inView, k) {
+    const W = this.dw || this.canvas.width, H = this.dh || this.canvas.height;
     const t = this.table, sel = t ? t.selected : null, hov = t ? t.hover : null;
     const here = t ? t.stockIds : sh ? sh.hereIds() : null;
     ctx.save();
@@ -1356,13 +1476,13 @@ export class Hud {
       ctx.setLineDash([]);
       // the corner label in the part of the sheet in view: the number, the lakes where it is wide enough, and yours /
       // its price / where it is sold
-      const vw = Math.min(c, this.canvas.width) - Math.max(a, 0), vh = Math.min(e, this.canvas.height) - Math.max(b, 0);
+      const vw = Math.min(c, W) - Math.max(a, 0), vh = Math.min(e, H) - Math.max(b, 0);
       if (w < 44 * k || vw < 60 * k || vh < 64 * k) continue;
       const lx = Math.max(a, 0) + 9 * k, ly = Math.max(b, 0) + 9 * k;
       const status = mine ? 'yours' : t ? (sold ? t.priceWords(s.id) : t.soldWords(s.id)) : sold ? 'sold here' : '';
       ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
       const halo = (txt, x, y) => { ctx.lineWidth = 3.5 * k; ctx.strokeStyle = 'rgba(233, 225, 204, 0.92)'; ctx.strokeText(txt, x, y); ctx.fillText(txt, x, y); };
-      const big = vw > 150 * k, room = Math.min(c, this.canvas.width) - lx - 9 * k;
+      const big = vw > 150 * k, room = Math.min(c, W) - lx - 9 * k;
       ctx.font = `700 ${(big ? 15 : 12) * k}px ${SERIF}`; ctx.fillStyle = mine ? 'rgba(42, 32, 22, 0.92)' : sold || pick ? 'rgba(160, 45, 30, 0.95)' : 'rgba(74, 59, 38, 0.8)';
       halo(s.id, lx, ly);
       let y = ly + (big ? 18 : 15) * k;
@@ -1382,51 +1502,19 @@ export class Hud {
     ctx.restore();
   }
 
-  // round A-B: your way in pencil (explored.js: a point every 50 m, in runs): the pieces in view only, a stride through
-  // them when the map is far out (a point about every pixel and a half), the run you are on drawn on to where you are;
-  // a graphite line and a fainter second pass a hair off it
-  drawRoute(ctx, x0, z0, mPerPx, inView, k, player) {
-    const runs = explored.runs; if (!runs.length) return;
-    const min = 1.5 * k, stride = Math.max(1, Math.floor((min * mPerPx) / ROUTE_STEP)), path = new Path2D();
-    let n = 0;
-    for (let r = 0; r < runs.length; r++) {
-      const run = runs[r], p = run.pts, tail = r === runs.length - 1 && explored.open;
-      if (run.n < 2 && !tail) continue;
-      let lx = NaN, ly = 0;
-      for (const c of run.chunks) {
-        if (!inView(c.x0, c.z0, c.x1, c.z1)) { lx = NaN; continue; }
-        for (let i = c.i0; i <= c.i1; i = i < c.i1 && i + stride > c.i1 ? c.i1 : i + stride) {
-          const a = (p[i * 2] - x0) / mPerPx, b = (p[i * 2 + 1] - z0) / mPerPx;
-          if (lx !== lx) { path.moveTo(a, b); lx = a; ly = b; continue; }
-          if (i !== c.i1 && Math.abs(a - lx) + Math.abs(b - ly) < min) continue;
-          path.lineTo(a, b); lx = a; ly = b; n++;
-        }
-      }
-      if (tail && player && lx === lx) { path.lineTo((player.x - x0) / mPerPx, (player.z - z0) / mPerPx); n++; }
-    }
-    if (!n) return;
-    ctx.save();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.setLineDash([]);
-    const lw = Math.max(1.6 * k, 1.3 * Math.min(window.devicePixelRatio || 1, 2)); // (never under a pixel and a third: the glance is small)
-    ctx.strokeStyle = PENCIL_INK; ctx.lineWidth = lw; ctx.stroke(path);
-    ctx.translate(0.9 * k, -0.7 * k); ctx.strokeStyle = PENCIL_SOFT; ctx.lineWidth = lw * 0.7; ctx.stroke(path);
-    ctx.restore();
-  }
-  // round A-B: the legend's "your way" and "paddled", once there is something of yours on the map
-  inkLegend(onWay, onLake) {
+  // round A-B: the legend's "paddled", once there is a lake of yours inked on the map
+  inkLegend(onLake) {
     if (!this.inkLeg) {
-      if (!onWay && !onLake) return;
-      const way = document.createElement('span'), lake = document.createElement('span');
-      way.className = 'leg'; way.innerHTML = `<i style="width: 20px; height: 0; border-top: 1.6px solid ${PENCIL_INK}; transform: rotate(-8deg)"></i>your way`;
+      if (!onLake) return;
+      const lake = document.createElement('span');
       lake.className = 'leg'; lake.innerHTML = `<i style="width: 15px; height: 11px; border-radius: 45% 55% 50% 50%; background: rgb(${INK_WATER.join(',')}); border: 1.5px solid rgb(${INK_RIM.join(',')})"></i>paddled`;
       const you = this.el.map && this.el.map.querySelector('.band.foot .leg .you');
-      if (you) you.parentNode.before(way, lake); else if (this.el.mapHint) this.el.mapHint.before(way, lake);
-      this.inkLeg = { way, lake }; this.inkLegOn = null;
+      if (you) you.parentNode.before(lake); else if (this.el.mapHint) this.el.mapHint.before(lake);
+      this.inkLeg = { lake }; this.inkLegOn = null;
     }
-    const key = `${onWay}${onLake}`;
-    if (this.inkLegOn === key) return;
-    this.inkLegOn = key;
-    this.inkLeg.way.style.display = onWay ? '' : 'none'; this.inkLeg.lake.style.display = onLake ? '' : 'none';
+    if (this.inkLegOn === onLake) return;
+    this.inkLegOn = onLake;
+    this.inkLeg.lake.style.display = onLake ? '' : 'none';
   }
 
   // d1 names: the bays, points, islands, narrows, summits, the named portages no drawn trail carries and the ghost town
@@ -1483,15 +1571,76 @@ export class Hud {
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
   }
 
+  // The sheet, in two parts (the owner, 2026-10-31: crisp at every zoom, and quick): the paper and everything printed
+  // or pencilled on it drawn into a base canvas a margin bigger than the view (drawLayers, from map-render.js's
+  // vectors), remade only when the view leaves the margin, the zoom or what is on it changes, or tiles were still coming
+  // in; each frame that base is laid down where the view now is and the things that move go over it (drawOverlays).
   drawMap(player) {
-    const w = this.world, ctx = this.mapCtx, W = this.canvas.width, H = this.canvas.height;
+    const W = this.canvas.width, H = this.canvas.height;
     if (!W || !H) return;
-    const v = this.view, spanX = v.span, mPerPx = spanX / W, spanZ = mPerPx * H;
-    const x0 = v.cx - spanX / 2, z0 = v.cz - spanZ / 2;
-    const k = W / 1040; // stroke and type scale: the sheet is designed at 1040 px across
+    const ctx = this.mapCtx, v = this.view, mPerPx = v.span / W, now = performance.now();
+    const M = BASE_MARGIN, sh = this.sheetsOn, lay = this.layers, c = this.ctx || {};
+    const ts = c.tasks, told = this.marks();
+    const key = [W, H, v.span.toFixed(2), sh ? `${sh.view()}${sh.version}${sh.ownedSheets().length}` : 'open', Object.values(lay).join(''), explored.version, explored.lakeV,
+      ts && ts.active ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', told.sig, this.table ? `${this.table.selected}${this.table.hover}` : '', this.mode, BOUNDARY.ready, this.focus ? this.focus.t : ''].join('|');
+    let b = this.base;
+    if (!b || b.W !== W + 2 * M || b.H !== H + 2 * M) {
+      const cv = document.createElement('canvas'); cv.width = W + 2 * M; cv.height = H + 2 * M;
+      b = this.base = { canvas: cv, ctx: cv.getContext('2d'), W: cv.width, H: cv.height, key: null, cx: 0, cz: 0, t: 0, pending: false };
+    }
+    // while the wheel is turning, the last base scaled (remade once the zoom rests)
+    const rest = key.replace(/^(\d+\|\d+\|)[^|]*/, '$1');
+    if (b.key && b.rest === rest && b.mPerPx !== mPerPx && now - (this.zoomT || 0) < 160) {
+      const s = b.mPerPx / mPerPx, vx0 = v.cx - (W / 2) * mPerPx, vz0 = v.cz - (H / 2) * mPerPx;
+      ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(b.canvas, (b.x0 - vx0) / mPerPx, (b.z0 - vz0) / mPerPx, b.W * s, b.H * s);
+      ctx.drawImage(this.grain, 0, 0);
+      this.drawOverlays(ctx, W, H, { x0: vx0, z0: vz0, mPerPx }, W / 1040, player);
+      return;
+    }
+    const offX = (v.cx - b.cx) / mPerPx, offY = (v.cz - b.cz) / mPerPx;
+    const stale = b.key !== key || Math.abs(offX) > M * 0.9 || Math.abs(offY) > M * 0.9 || (b.pending && now - b.t > 140) || now - b.t > 2500;
+    if (stale) {
+      b.cx = v.cx; b.cz = v.cz; b.key = key; b.t = now; b.rest = rest; b.mPerPx = mPerPx;
+      const x0 = v.cx - (b.W / 2) * mPerPx, z0 = v.cz - (b.H / 2) * mPerPx;
+      b.pending = !this.drawLayers(b.ctx, b.W, b.H, { x0, z0, mPerPx }, W / 1040, player);
+      b.x0 = x0; b.z0 = z0;
+    }
+    const dx = -M - (v.cx - b.cx) / mPerPx, dy = -M - (v.cz - b.cz) / mPerPx;
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(b.canvas, dx, dy);
+    ctx.drawImage(this.grain, 0, 0);
+    this.drawOverlays(ctx, W, H, { x0: v.cx - (W / 2) * mPerPx, z0: v.cz - (H / 2) * mPerPx, mPerPx }, W / 1040, player);
+  }
+
+  // The marks the map carries for you, from the book's map side when it is attached (map-book.js markSource): the
+  // notices on the go and where each sends you ({ open }), the ones done and where they are paid ({ claim }), and the
+  // words pencilled on the map at your asking ({ notes }); sig changes when any of them does.
+  marks() {
+    const now = performance.now();
+    if (this._marks && now - this._marksT < 400) return this._marks;
+    let m = null;
+    try { m = typeof this.markSource === 'function' ? this.markSource() : null; } catch (e) { console.warn('map: marks', e); }
+    if (!m) {
+      const c = this.ctx || {}, hs = c.tasks && typeof c.tasks.hints === 'function' ? c.tasks.hints() : [];
+      const told = c.outfitter && typeof c.outfitter.toldHints === 'function' ? c.outfitter.toldHints() : [];
+      m = { open: hs.map((h, i) => ({ ...h, n: i + 1, title: h.label })), claim: [], notes: told.map((h) => ({ ...h, label: h.label || HINT_LABEL[h.kind] || 'a word' })) };
+    }
+    m.sig = `${m.open.length}:${m.claim.length}:${m.notes.length}:${m.open.map((q) => q.x | 0).join()}`;
+    this._marks = m; this._marksT = now;
+    return m;
+  }
+
+  // everything printed or pencilled on the sheet, into ctx (W x H, the view v: { x0, z0, mPerPx }); k the line and type
+  // scale. Returns whether every tile in view was in. Fills this.hits with what the pointer can point at.
+  drawLayers(ctx, W, H, v, k, player) {
+    const w = this.world, { x0, z0, mPerPx } = v, spanX = W * mPerPx, spanZ = H * mPerPx;
     const sheet = this.mode === 'sheet', lay = this.layers;
+    this.dw = W; this.dh = H;
     const toPx = (x, z) => [(x - x0) / mPerPx, (z - z0) / mPerPx];
     const inView = (ax, az, bx, bz) => !(bx < x0 || ax > x0 + spanX || bz < z0 || az > z0 + spanZ);
+    const hits = []; this.hits = hits;
     // What the map may show (sheets.js view): Sandbox everything; at an outfitter the whole wilderness, the sheets dotted
     // over it; in the wild only the sheets you own, everything on them cut to their neatlines, and blank paper round
     // them (with none in view, only you and the north arrow).
@@ -1499,8 +1648,8 @@ export class Hud {
     const clipped = look === 'owned', owned = clipped ? sh.ownedSheets().filter((s) => inView(s.x0, s.z0, s.x1, s.z1)) : [];
     const blank = clipped && !owned.length;
     const onMine = (ax, az, bx, bz) => !clipped || owned.some((s) => !(bx < s.x0 || ax > s.x1 || bz < s.z0 || az > s.z1));
-    // the paint is cut to your sheets (in the wild), and always to the baked country (past its edge the far tiles' halos
-    // would show as stripes)
+    this.blank = blank;
+    // the paint is cut to your sheets (in the wild), and always to the baked country
     const clip = () => {
       ctx.save();
       ctx.beginPath();
@@ -1509,136 +1658,75 @@ export class Hud {
       else rect(w.minX, w.minZ, w.maxX, w.maxZ);
       ctx.clip();
     };
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = PAPER;
     ctx.fillRect(0, 0, W, H);
-    ctx.imageSmoothingEnabled = true;
-    this.inkBudget = 2; let sheetBudget = 1; // round A-B: inks remade in this frame
-    const depthLabels = []; // [level, x, z] from the fine tiles in view, lettered once the view is close
-    const soundings = [];   // [image, x, y, size]: the fine tiles' depth contours, drawn with the rest of the detail
+    let ready = true;
+    const depthLabels = []; // [feet, x, z] from the fine tiles in view, lettered once the view is close
     if (!blank) {
       clip();
-      // the whole wilderness underneath
+      // the whole wilderness underneath, where the vector tiles are not in yet
       if (this.overview) {
-        const mpp = w.meta.overview.cellsPerPx * w.cell;
         const [a, b] = toPx(w.minX, w.minZ);
-        ctx.drawImage(this.overview, a, b, (w.sizeX / mpp) * (mpp / mPerPx), (w.sizeZ / mpp) * (mpp / mPerPx));
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(this.overview, a, b, w.sizeX / mPerPx, w.sizeZ / mPerPx);
       }
-      if (w.tiles) {
-        // the far field
-        const farMetres = w.far.tile * w.cell * w.far.factor;
-        const aliveFar = new Set();
-        for (const e of w.tiles.readyFarTiles()) {
-          aliveFar.add(e.key);
-          const ox = w.originX + e.fx * farMetres, oz = w.originZ + e.fy * farMetres;
-          if (!inView(ox, oz, ox + farMetres, oz + farMetres) || !onMine(ox, oz, ox + farMetres, oz + farMetres)) continue;
-          const img = this.farImage(e);
-          if (!img) continue;
-          const [a, b] = toPx(ox, oz);
-          ctx.drawImage(img, a, b, farMetres / mPerPx + 0.5, farMetres / mPerPx + 0.5);
-        }
-        for (const key of this.farImages.keys()) if (!aliveFar.has(key)) this.farImages.delete(key);
-        // round A-B: the lakes you have paddled, inked: a layer per sheet at the far field's 80 m (explored.js), cut to
-        // its sheet; under the fine tiles, which carry their own at 10 m
-        if (explored.lakes.count) {
-          const inked = explored.inkSheets();
-          for (const s of SHEETS) {
-            if (!inked.has(s.id) || !inView(s.x0, s.z0, s.x1, s.z1) || !onMine(s.x0, s.z0, s.x1, s.z1)) continue;
-            const made = explored.builds, L = explored.sheetInk(s, sheetBudget > 0);
-            if (explored.builds !== made) sheetBudget--; // one made a frame at most
-            if (!L) continue;
-            const [a, b] = toPx(s.x0, s.z0), [la, lb] = toPx(L.x, L.z);
-            ctx.save(); ctx.beginPath(); ctx.rect(a, b, (s.x1 - s.x0) / mPerPx, (s.z1 - s.z0) / mPerPx); ctx.clip();
-            ctx.drawImage(L.canvas, la, lb, L.w / mPerPx, L.h / mPerPx);
-            ctx.restore();
-          }
-        }
-        // every tile in view at full detail once the view is close enough for contours to read: streamed
-        // tiles from their own cells, the rest fetched for the map alone (in the wild, only on your sheets)
-        const live = new Map(w.tiles.readyTiles().map((e) => [e.key, e]));
-        for (const key of this.fineImages.keys()) if (!live.has(key)) this.fineImages.delete(key);
-        if (mPerPx < FINE_M_PER_PX) {
-          this.tick++;
-          const [tx0, ty0] = w.tileOf(x0, z0), [tx1, ty1] = w.tileOf(x0 + spanX, z0 + spanZ);
-          // nearest the centre first, so the middle of the view sharpens before the edges
-          const order = [];
-          for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) order.push([tx, ty, Math.hypot(tx + 0.5 - (v.cx - w.originX) / w.tileMetres, ty + 0.5 - (v.cz - w.originZ) / w.tileMetres)]);
-          order.sort((p, q) => p[2] - q[2]);
-          let painted = 0, fresh = 0;
-          for (const [tx, ty] of order) {
-            const [ox, oz] = w.tileOrigin(tx, ty);
-            if (!onMine(ox, oz, ox + w.tileMetres, oz + w.tileMetres)) continue;
-            const key = `${tx},${ty}`, e = live.get(key);
-            let img;
-            // a streamed tile's image is painted on first sight, a few a frame at most (fb3 C: the rest wait a frame or
-            // two with the far image under them, instead of all of them in the frame the map opens); prepaint has most
-            // of them done before M is pressed
-            if (e) { if (this.fineImages.has(key)) img = this.fineImage(e); else if (fresh < FINE_PER_FRAME) { img = this.fineImage(e); fresh++; } }
-            else if (painted < 2 || this.mapTiles.get(key)?.img) { const had = this.mapTiles.get(key)?.img; img = this.mapTile(tx, ty); if (img && !had) painted++; }
-            if (!img) continue;
-            const [a, b] = toPx(ox, oz);
-            ctx.drawImage(img, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
-            const ink = this.tileInk(img, key, tx, ty, !!e); // round A-B: its lakes you have paddled, inked
-            if (ink) ctx.drawImage(ink, 1, 1, ink.width - 2, ink.height - 2, a, b, w.tileMetres / mPerPx + 0.5, w.tileMetres / mPerPx + 0.5);
-            if (img.depth && lay.depths) soundings.push([img.depth, a, b, w.tileMetres / mPerPx + 0.5]);
-            if (mPerPx < 7 && img.labels && lay.depths) depthLabels.push(...img.labels);
-          }
-          this.pruneMapTiles();
-        }
-      }
+      if (w.tiles) ready = paintGround(ctx, w, v, W, H, { k, budget: { build: 2 }, depths: lay.depths, ink: explored.world ? explored.lakes : null, inkV: explored.lakeV, detail: clipped ? onMine : null, labels: depthLabels });
+      paintCreeks(ctx, w, v, W, H, { k, onMine: clipped ? onMine : null, hits }); // the wetlands round: the brooks, the beaver dams
+      // the burns by the season's date, and the wilderness's own edge
+      if (lay.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
+      if (lay.boundary) { if (BOUNDARY.path) paintBoundary(ctx, v, k); else loadBoundary(); }
       ctx.restore();
     }
-    ctx.drawImage(this.grain, 0, 0);
-    // the detail a paddler has the sheet for: the soundings, the portages with their rods, the campsites, the task
-    // areas and the keepers' rings, the lake names and the docks (in the wild, on your sheets only)
-    const told = !blank && lay.tasks && this.ctx && this.ctx.outfitter && typeof this.ctx.outfitter.toldHints === 'function' ? this.ctx.outfitter.toldHints() : [];
+    const told = this.marks();
     if (!blank) {
       clip();
-      for (const [img, a, b, size] of soundings) ctx.drawImage(img, a, b, size, size);
-      // depth figures on the sounded lakes, in metres, haloed in the water colour
-      if (depthLabels.length) {
-        ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.lineWidth = 3 * k; ctx.strokeStyle = `rgb(${WATER.join(',')})`; ctx.fillStyle = '#2d4f66'; ctx.lineJoin = 'round';
-        const halo = `rgb(${WATER.join(',')})`, inkHalo = `rgb(${INK_WATER.join(',')})`; // round A-B: on an inked lake, haloed in its ink
-        for (const [lvl, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeStyle = explored.hasLake(w.lakeIdAt(x, z)) ? inkHalo : halo; ctx.strokeText(String(lvl), a, b); ctx.fillText(String(lvl), a, b); }
+      // depth figures on the sounded lakes, in feet as the outfitters' maps letter them, haloed in the water colour
+      if (depthLabels.length && mPerPx < 6) {
+        ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+        ctx.lineWidth = 3 * k; ctx.fillStyle = '#2d4f66';
+        for (const [ft, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeStyle = explored.hasLake(w.lakeIdAt(x, z)) ? INK.inked : INK.water; ctx.strokeText(String(ft), a, b); ctx.fillText(String(ft), a, b); }
         ctx.textBaseline = 'alphabetic';
       }
-      // round A-B: your way, in pencil (under the portages, the sites and the names)
-      this.drawRoute(ctx, x0, z0, mPerPx, inView, k, player);
       // portages: red dashed, with the rod count beside the middle of the trail when there is room; one you have crossed
       // gone over solid (round A-B)
-      const close = mPerPx < 16, mid = mPerPx < 60;
+      // (the overview, map-render.js lodOf: these gates were in canvas pixels, so a retina sheet kept its campsite dots and
+      // portages out to twice the span; on the sheet they are in design pixels too, dp, the same span at any DPR, and the
+      // campsites go a little sooner, where every lake was ringed in red dots. The glance and the corner keep their own.)
+      const dp = sheet ? mPerPx / k : 0, close = mPerPx < 16, mid = mPerPx < 60 && dp < 72;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
-      if (lay.portages) for (let pi = 0; pi < w.portages.length; pi++) {
+      if (lay.portages && mPerPx < 40 && dp < 48) for (let pi = 0; pi < w.portages.length; pi++) { // (further out the red dashes were all you saw)
         const p = w.portages[pi], [bx0, bz0, bx1, bz1] = p.bbox;
-        if (!inView(bx0, bz0, bx1, bz1)) continue;
+        if (!inView(bx0, bz0, bx1, bz1) || !onMine(bx0, bz0, bx1, bz1)) continue;
         ctx.beginPath();
         p.pts.forEach(([x, z], n) => { const [a, b] = toPx(x, z); if (n) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
         if (explored.crossed(pi)) {
           ctx.setLineDash([]); ctx.strokeStyle = CROSSED_UNDER; ctx.lineWidth = (close ? 3.6 : 2.6) * k; ctx.stroke();
           ctx.setLineDash(close ? [9 * k, 3 * k] : [5 * k, 2 * k]); ctx.strokeStyle = CROSSED; ctx.lineWidth = (close ? 3 : 2.1) * k; ctx.stroke(); ctx.setLineDash([]);
         } else { ctx.setLineDash(close ? [7 * k, 4 * k] : [4 * k, 3 * k]); ctx.strokeStyle = '#c0392b'; ctx.lineWidth = (close ? 2.4 : 1.6) * k; ctx.stroke(); ctx.setLineDash([]); }
+        const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
+        if (mid) hits.push({ kind: 'portage', i: pi, x: m[0], z: m[1], px: 12 });
         if (close) {
-          const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
           ctx.fillStyle = '#b4321f'; ctx.textAlign = 'left';
           ctx.fillText(`${p.rods} rods`, mx + 7 * k, my - 6 * k);
           // d1 names: a portage with a name of its own (Height of Land, Prairie) says it under its rods, up close
           if (p.proper && mPerPx < 9) { ctx.font = `italic 600 ${11 * k}px ${SERIF}`; ctx.fillText(p.name, mx + 7 * k, my + 8 * k); ctx.font = `italic 600 ${13 * k}px ${SERIF}`; }
         } else if (p.proper && mid && mPerPx < 30) { // (further out, the name alone: the border route's carries)
-          const m = p.pts[Math.floor(p.pts.length / 2)], [mx, my] = toPx(m[0], m[1]);
           ctx.font = `italic 600 ${11 * k}px ${SERIF}`; ctx.fillStyle = '#b4321f'; ctx.textAlign = 'left';
           ctx.fillText(p.name, mx + 6 * k, my - 5 * k); ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
         }
       }
       // campsites: red dots with a pale centre
-      if (mid && lay.campsites) {
+      if (mid && lay.campsites && dp < 46) {
         const r = (close ? 4.2 : 2.6) * k;
         for (let ci = 0; ci < w.campsites.length; ci++) {
           const c = w.campsites[ci];
-          if (!inView(c.x, c.z, c.x, c.z)) continue;
+          if (!inView(c.x, c.z, c.x, c.z) || !onMine(c.x, c.z, c.x, c.z)) continue;
           const [a, b] = toPx(c.x, c.z);
           ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28); ctx.fillStyle = '#c0392b'; ctx.fill();
           if (close) { ctx.beginPath(); ctx.arc(a, b, r * 0.38, 0, 6.28); ctx.fillStyle = '#f4e9d6'; ctx.fill(); }
+          hits.push({ kind: 'site', i: ci, x: c.x, z: c.z, px: 8 });
           // d1 names: the Forest Service's number, small, to the left of the dot (the pencil tick goes right)
           if (close && c.usfs != null && mPerPx < 10) { ctx.font = `600 ${9.5 * k}px ${SERIF}`; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(160, 45, 30, 0.9)'; ctx.fillText(String(c.usfs), a - r - 2 * k, b + 3.5 * k); }
           // round A-B: a night slept there, ticked in pencil beside it
@@ -1649,103 +1737,144 @@ export class Hud {
           }
         }
       }
-      // the keepers' words (outfitter.js toldHints): a ring pencilled round the water they meant, as a keeper marks your
-      // map across the counter, and what for in the same hand
-      // (tuning, the content join's leftover: two rumours on one lake wrote their words over each other; a label that
-      // would lie on one already written goes a line lower, up to LABEL_TRIES lines)
-      const placed = [], LABEL_TRIES = 4;
-      const place = (text, x, y, align, lh) => {
-        const w = ctx.measureText(text).width, x0 = align === 'center' ? x - w / 2 : x, box = (yy) => ({ x0, x1: x0 + w, y0: yy - lh * 0.8, y1: yy + lh * 0.2 });
-        let yy = y;
-        for (let n = 0; n < LABEL_TRIES && placed.some((q) => { const b = box(yy); return b.x0 < q.x1 && q.x0 < b.x1 && b.y0 < q.y1 && q.y0 < b.y1; }); n++) yy += lh;
-        placed.push(box(yy));
-        return yy;
-      };
-      for (const h of told) {
-        if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
-        const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
-        ctx.beginPath(); ctx.ellipse(a, b, r * 1.04, r * 0.97, 0.3, 0, 6.28);
-        ctx.fillStyle = 'rgba(74, 64, 54, 0.07)'; ctx.fill();
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = 'rgba(74, 64, 54, 0.62)'; ctx.lineWidth = 1.7 * k; ctx.stroke();
-        // a second, lighter pass a hair off the first, the way a pencil goes round twice
-        ctx.beginPath(); ctx.ellipse(a + 1.5 * k, b - 1 * k, r * 1.01, r * 1.0, 0.9, 0.4, 5.9);
-        ctx.strokeStyle = 'rgba(74, 64, 54, 0.3)'; ctx.lineWidth = 1.1 * k; ctx.stroke();
-        if (mid || r > 30 * k) {
-          // what for, just inside the top of the ring (kept on the sheet when the top runs off it)
-          ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
-          const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
-          const text = h.label || HINT_LABEL[h.kind] || 'a keeper’s word';
-          ctx.fillText(text, tx, place(text, tx, ty, 'center', 19 * k)); // content join: a rumour's own words (npcs.js) first
-        }
-      }
       // lake names, letter-spaced serif capitals, for lakes wide enough on screen to carry one
       const lettered = []; // d1 names: the boxes lettered so far, so the place names keep off them
       if (lay.lakes) {
         ctx.font = `italic 600 ${(close ? 17 : 14) * k}px ${SERIF}`; ctx.fillStyle = '#2d4f66'; ctx.textAlign = 'center';
+        ctx.lineJoin = 'round'; ctx.lineWidth = 3 * k;
         const minCells = Math.max(600, (5 * mPerPx) ** 2), lh = (close ? 17 : 14) * k;
         for (const l of w.lakes) {
-          if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz)) continue;
+          if (!l || !l.name || l.cells < minCells || !inView(l.cx, l.cz, l.cx, l.cz) || !onMine(l.cx, l.cz, l.cx, l.cz)) continue;
           const [a, b] = toPx(l.cx, l.cz), txt = spaced(l.name.toUpperCase());
-          ctx.fillText(txt, a, b + 6 * k);
+          ctx.strokeStyle = explored.hasLake(l.id) ? INK.inked : INK.water;
+          ctx.strokeText(txt, a, b + 6 * k); ctx.fillText(txt, a, b + 6 * k);
           const tw = ctx.measureText(txt).width; lettered.push({ x0: a - tw / 2, x1: a + tw / 2, y0: b + 6 * k - lh * 0.8, y1: b + 6 * k + lh * 0.25 });
         }
         if (mid) this.drawPlaceNames(ctx, { toPx, inView, onMine, k, mPerPx, lettered });
       }
-      // entry points: the outfitters' docks, a pier with a shack at its root
+      // burn names, in the burn's own brown, once the view is close enough to letter them
+      if (lay.burns && mPerPx < 45) {
+        ctx.font = `italic 600 ${11.5 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(236, 228, 207, 0.9)';
+        for (const r of burnsInView(v, W, H)) {
+          if (r.kind === 2 || r.acres < 200) continue;
+          const bw = (r.box[2] - r.box[0]) / mPerPx, bh = (r.box[3] - r.box[1]) / mPerPx;
+          if (bw < 90 * k || bh < 30 * k) continue;
+          const [a, b] = toPx((r.box[0] + r.box[2]) / 2, (r.box[1] + r.box[3]) / 2), txt = burnWords(r);
+          const box = { x0: a - 60 * k, x1: a + 60 * k, y0: b - 8 * k, y1: b + 8 * k };
+          if (lettered.some((q) => box.x0 < q.x1 && q.x0 < box.x1 && box.y0 < q.y1 && q.y0 < box.y1)) continue;
+          lettered.push(box);
+          ctx.fillStyle = r.kind === 3 ? '#4e5a34' : '#7a3a1c'; ctx.strokeText(txt, a, b); ctx.fillText(txt, a, b);
+        }
+        ctx.textBaseline = 'alphabetic';
+      }
+      // entry points: the outfitters' docks, a pier with a shack at its root (smaller on the overview, where seventy of
+      // them full size were most of what you saw: lodOf)
       ctx.font = `600 ${11 * k}px ${SERIF}`;
+      const dockK = k * (1 - 0.35 * lodOf(mPerPx, k).gen);
       for (const ep of w.entryPoints) {
         if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
         const [a, b] = toPx(ep.x, ep.z);
-        ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
-        ctx.fillStyle = '#5e4630';
-        ctx.fillRect(-1.6, -9, 3.2, 12);
-        for (const y of [-7, -3, 1]) ctx.fillRect(-3.2, y, 6.4, 1.4);
-        ctx.fillStyle = '#b4321f';
-        ctx.fillRect(-4.5, 3, 9, 5);
-        ctx.beginPath(); ctx.moveTo(-5.5, 3); ctx.lineTo(0, -1.5); ctx.lineTo(5.5, 3); ctx.closePath(); ctx.fill();
-        ctx.restore();
+        paintDock(ctx, a, b, dockK);
+        hits.push({ kind: 'dock', ep: ep.ep, x: ep.x, z: ep.z, px: 10 });
         if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
       }
       ctx.restore();
     }
-    // The notices' places (tasks.js hints, the world cards of 2026-10-24): the keeper's red pencil, a wobbly ring not
-    // quite closed, as if annotated by hand across the counter, with its word in the same hand. Tight round a campsite
-    // or landing you know (named in the notice, or on a map you can see) and named ("the island site"); else round the
-    // bay, arm or stretch the notice describes, never the whole lake. Drawn over blank paper too, outside the sheets'
-    // clip: the pencil goes where the keeper pointed, sheet or no sheet.
-    const hints = lay.tasks && this.ctx && this.ctx.tasks && typeof this.ctx.tasks.hints === 'function' ? this.ctx.tasks.hints() : [];
-    for (const h of hints) {
+    // The words pencilled on your map at your asking (map-book.js marks: a keeper's or a visitor's word, each with who
+    // said it): a soft grey ring round the water they meant, what for in the pencil hand and, under it, who said so.
+    // (the owner, 2026-10-31: "I'm discovering them without even knowing where they came from")
+    const placed = [], LABEL_TRIES = 4;
+    const place = (text, x, y, align, lh) => {
+      const tw = ctx.measureText(text).width, bx0 = align === 'center' ? x - tw / 2 : x, box = (yy) => ({ x0: bx0, x1: bx0 + tw, y0: yy - lh * 0.8, y1: yy + lh * 0.2 });
+      let yy = y;
+      for (let n = 0; n < LABEL_TRIES && placed.some((q) => { const bb = box(yy); return bb.x0 < q.x1 && q.x0 < bb.x1 && bb.y0 < q.y1 && q.y0 < bb.y1; }); n++) yy += lh;
+      placed.push(box(yy));
+      return yy;
+    };
+    const mid = mPerPx < 60;
+    if (!blank && lay.notes) for (const h of told.notes) {
       if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
-      const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 7 * k);
-      pencilRing(ctx, a, b, r, k, Math.abs(Math.round(h.x * 7 + h.z * 13)));
-      if (h.label && (mPerPx < 60 || h.tight)) {
-        ctx.font = `600 ${16 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(176, 40, 30, 0.9)';
-        if (r > 44 * k) { ctx.textAlign = 'center'; ctx.fillText(h.label, clamp(a, 70 * k, W - 70 * k), clamp(b - r + 20 * k, 24 * k, H - 12 * k)); }
-        else { ctx.textAlign = 'left'; ctx.fillText(h.label, clamp(a + r * 0.78, 8 * k, W - 120 * k), clamp(b - r * 0.82 - 4 * k, 24 * k, H - 12 * k)); }
+      const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
+      ctx.beginPath(); ctx.ellipse(a, b, r * 1.04, r * 0.97, 0.3, 0, 6.28);
+      ctx.fillStyle = 'rgba(74, 64, 54, 0.07)'; ctx.fill();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(74, 64, 54, 0.62)'; ctx.lineWidth = 1.7 * k; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(a + 1.5 * k, b - 1 * k, r * 1.01, r * 1.0, 0.9, 0.4, 5.9);
+      ctx.strokeStyle = 'rgba(74, 64, 54, 0.3)'; ctx.lineWidth = 1.1 * k; ctx.stroke();
+      hits.push({ kind: 'note', note: h, x: h.x, z: h.z, r: h.r, px: 10 });
+      if (mid || r > 30 * k) {
+        ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
+        const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
+        const text = h.label || HINT_LABEL[h.kind] || 'a keeper’s word', y = place(text, tx, ty, 'center', 19 * k);
+        ctx.fillText(text, tx, y);
+        if (h.who && mPerPx < 30) { ctx.font = `600 ${13 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.7)'; ctx.fillText(`— ${h.who}`, tx, y + 14 * k); placed.push({ x0: tx - 50 * k, x1: tx + 50 * k, y0: y + 4 * k, y1: y + 18 * k }); }
       }
     }
-    this.hintLegend(told.length > 0);
-    // round A-B: off your sheets, your pencil line is the only thing on the paper (the ink keeps to the sheets)
-    if (clipped && explored.runs.length) {
-      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H);
-      for (const s of owned) { const [a, b] = toPx(s.x0, s.z0); ctx.rect(a, b, (s.x1 - s.x0) / mPerPx, (s.z1 - s.z0) / mPerPx); }
-      ctx.clip('evenodd');
-      this.drawRoute(ctx, x0, z0, mPerPx, inView, k, player);
-      ctx.restore();
+    // The notices (the owner, 2026-10-31: "we need to be able to see which tasks we need to go claim and which ones are
+    // open"). Open: the keeper's red pencil round where it sends you, a wobbly ring not quite closed (no numbered disc:
+    // the owner, of those, "look out of place"), and what for in the pencil hand. Done: a "$" pencilled and ringed on the
+    // dock of the outfitter that pays it, with how many wait there. Drawn over blank paper too: the pencil goes where the
+    // keeper pointed.
+    if (lay.tasks) {
+      for (const h of told.open) {
+        if (!Number.isFinite(h.x) || !inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
+        const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 7 * k);
+        pencilRing(ctx, a, b, r, k, Math.abs(Math.round(h.x * 7 + h.z * 13)));
+        hits.push({ kind: 'task', task: h, x: h.x, z: h.z, r: h.r, px: 12 }); // (the ring is what the pointer takes: hitAt)
+        if (h.label && (mPerPx < 60 || h.tight)) {
+          ctx.font = `600 ${16 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(176, 40, 30, 0.9)';
+          if (r > 44 * k) { ctx.textAlign = 'center'; ctx.fillText(h.label, clamp(a, 70 * k, W - 70 * k), clamp(b - r + 20 * k, 24 * k, H - 12 * k)); }
+          else { ctx.textAlign = 'left'; ctx.fillText(h.label, clamp(a + r * 0.78, 8 * k, W - 120 * k), clamp(b - r * 0.82 - 4 * k, 24 * k, H - 12 * k)); }
+        }
+      }
+      for (const q of told.claim) {
+        if (!inView(q.x, q.z, q.x, q.z)) continue;
+        const [a, b] = toPx(q.x, q.z);
+        pencilSeal(ctx, a + 11 * k, b - 15 * k, q.items.length, k, Math.abs(Math.round(q.x * 3 + q.z * 11)));
+        hits.push({ kind: 'claim', claim: q, x: q.x, z: q.z, px: 16, tag: [q.x + 11 * k * mPerPx, q.z - 15 * k * mPerPx] });
+      }
     }
-    this.inkLegend(explored.runs.some((r) => r.n > 1), !blank && explored.lakes.count > 0);
+    this.hintLegend(told.notes.length > 0);
+    this.inkLegend(!blank && explored.lakes.count > 0);
     if (clipped) this.drawNeatlines(ctx, sh, owned, toPx, k);
     if (look === 'whole' || this.table) this.drawSheetGrid(ctx, sh, toPx, inView, k);
+    return ready;
+  }
+
+  // what moves over the base: the paper's grain is laid by drawMap; here the words on blank paper, the canoe where it
+  // was left, you, the pin and its pencil line, a found place's ring, the north arrow and (on the glance) the scale
+  drawOverlays(ctx, W, H, v, k, player) {
+    const { x0, z0, mPerPx } = v, sheet = this.mode === 'sheet', sh = this.sheetsOn, blank = this.blank;
+    const toPx = (x, z) => [(x - x0) / mPerPx, (z - z0) / mPerPx];
+    const inView = (x, z) => x >= x0 && x <= x0 + W * mPerPx && z >= z0 && z <= z0 + H * mPerPx;
     // blank paper on the open sheet: a pencil word for where the rest of the map is
-    if (blank && sheet) {
+    if (blank && sheet && sh) {
       const none = !sh.ownedSheets().length;
       ctx.font = `600 ${24 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.62)'; ctx.textAlign = 'center';
       ctx.fillText(none ? 'No sheets yet. The map tables at the outfitters sell them.' : 'None of your sheets covers this.', W / 2, H * 0.74);
     }
+    // a place found in the book's search (map-book.js): a ring that draws itself round it for a few seconds
+    const f = this.focus;
+    if (f && sheet) {
+      const age = (performance.now() - f.t) / 1000;
+      if (age > 6) this.focus = null;
+      else if (inView(f.x, f.z)) {
+        const [a, b] = toPx(f.x, f.z), r = Math.max((f.r || 0) / mPerPx, 16 * k), grow = Math.min(1, age / 0.6);
+        ctx.save(); ctx.globalAlpha = age > 4.5 ? Math.max(0, 1 - (age - 4.5) / 1.5) : 1;
+        ctx.beginPath(); ctx.arc(a, b, r * 1.15, -Math.PI / 2, -Math.PI / 2 + 6.2832 * grow);
+        ctx.strokeStyle = 'rgba(42, 32, 22, 0.85)'; ctx.lineWidth = 2.4 * k; ctx.lineCap = 'round'; ctx.stroke();
+        ctx.restore();
+      }
+    }
+    // the thing under the pointer, lit (map-book.js hover)
+    const hv = this.hover;
+    if (hv && hv.ring && sheet) {
+      const [a, b] = toPx(hv.ring.x, hv.ring.z), r = Math.max((hv.ring.r || 0) / mPerPx, (hv.ring.px || 9) * k);
+      ctx.beginPath(); ctx.arc(a, b, r + 3 * k, 0, 6.2832); ctx.strokeStyle = 'rgba(176, 40, 30, 0.55)'; ctx.lineWidth = 2 * k; ctx.setLineDash([3 * k, 3 * k]); ctx.stroke(); ctx.setLineDash([]);
+    }
     // the canoe where it was left (beached or set down), so you can find your way back to it
     const hull = player.hullDown;
-    if (hull && inView(hull.x, hull.z, hull.x, hull.z)) {
+    if (hull && inView(hull.x, hull.z)) {
       const [a, b] = toPx(hull.x, hull.z);
       ctx.save(); ctx.translate(a, b); ctx.rotate(-hull.heading + Math.PI / 2); ctx.scale(k, k);
       ctx.fillStyle = '#e8562f'; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.4;
@@ -1753,7 +1882,7 @@ export class Hud {
       ctx.restore();
     }
     // you: the canoe when it is with you, a walker's dot with a heading tick when it is not
-    if (inView(player.x, player.z, player.x, player.z)) {
+    if (inView(player.x, player.z)) {
       const [a, b] = toPx(player.x, player.z);
       ctx.save(); ctx.translate(a, b); ctx.rotate(-player.heading + Math.PI / 2); ctx.scale(k, k);
       ctx.fillStyle = '#e8562f'; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.6;
@@ -1768,7 +1897,7 @@ export class Hud {
     // the pin waiting for a confirmation, and the pencil line from the canoe to it
     if (this.pin && sheet) {
       const [a, b] = toPx(this.pin.x, this.pin.z);
-      if (inView(player.x, player.z, player.x, player.z)) {
+      if (inView(player.x, player.z)) {
         const [pa, pb] = toPx(player.x, player.z);
         ctx.save(); ctx.strokeStyle = '#4a4036'; ctx.lineWidth = 1.4 * k; ctx.setLineDash([2 * k, 5 * k]); ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(pa, pb); ctx.quadraticCurveTo((pa + a) / 2, Math.min(pb, b) - Math.abs(a - pa) * 0.25, a, b); ctx.stroke(); ctx.restore();
@@ -1788,14 +1917,15 @@ export class Hud {
     ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(-6, -10); ctx.lineTo(6, -10); ctx.closePath(); ctx.fill();
     ctx.font = `600 12px ${SERIF}`; ctx.textAlign = 'center'; ctx.fillText('N', 0, -30);
     ctx.restore();
-    // the scale: a round distance close to 150 px, drawn on the glance, carried by the footer band on the sheet
+    // the scale: a round distance close to 150 px, drawn on the glance, carried by the footer band on the sheet (in
+    // miles, feet under a quarter mile)
     const want = (sheet ? 96 * (W / this.canvas.getBoundingClientRect().width || 1) : 150 * k) * mPerPx;
-    const bar = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].reduce((best, d) => (Math.abs(d - want) < Math.abs(best - want) ? d : best), 500);
+    const { m: bar, label } = scaleBar(want); // a round imperial distance (feet, then miles)
     const bpx = bar / mPerPx;
-    if (sheet) this.scaleInfo = { bar, cssPx: bpx / (W / (this.canvas.getBoundingClientRect().width || W)) };
+    if (sheet) this.scaleInfo = { bar, label, cssPx: bpx / (W / (this.canvas.getBoundingClientRect().width || W)) };
     else if (!blank) {
       ctx.fillStyle = '#4a3b26'; ctx.fillRect(24 * k, H - 28 * k, bpx, 3 * k); ctx.fillRect(24 * k, H - 34 * k, 2 * k, 9 * k); ctx.fillRect(24 * k + bpx - 2 * k, H - 34 * k, 2 * k, 9 * k);
-      ctx.font = `600 ${12 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.fillText(bar >= 1000 ? `${bar / 1000} km` : `${bar} m`, 24 * k + bpx + 8 * k, H - 26 * k);
+      ctx.font = `600 ${12 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.fillText(label, 24 * k + bpx + 8 * k, H - 26 * k);
     }
   }
 }

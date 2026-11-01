@@ -15,13 +15,23 @@
 //
 // What is watched (each read when it is there, so an older build of any of them is harmless):
 //   - the trip (trip.js): 'start' / 'leave' begin a draft, 'exit' finishes it into a card; its log has the portages,
-//     the camps and the nights' sleep, a capsize and an evacuation; the tally (trip-stats.js) the lakes, the nights and
-//     where, the km
+//     the camps and the nights' sleep and an evacuation; the tally (trip-stats.js) the lakes, the nights and where, the
+//     km. (A capsize is still counted on the card's data, never written: the owner, 2026-10-31, "you don't need to
+//     track how often you fall in. That's not really something you need.")
 //   - the catch log (fishing.js log, by date): the species, the best of each, the firsts
-//   - what is in view (fauna.subjects(): moose, beaver, eagle, gull, raven, loon): a sighting counts when one is in the
-//     view, near (NEAR) and not behind the land for a moment (DWELL real seconds). The common birds (COMMON: the loons,
-//     which keep round you on every lake, the gulls, the ravens) count once a lake a day; the rest again only well away
-//     from the last (AGAIN_M) or hours after it (AGAIN_H). A bear at camp (bear.js: its visits) is a sighting too.
+//   - what you look at (fauna.subjects(): moose, beaver, eagle, gull, raven, loon; the bear on a live visit): a sighting
+//     is a deliberate look, not a thing being near (the owner, 2026-10-31: "it basically tells me I saw something when
+//     in reality I didn't really see it. I think to see it, we need to have more of an event. Like ... my view, looking
+//     at it a little bit longer than just like having it be near me"). The animal is near the middle of the view (CONE
+//     degrees off it, plus its own size there), near enough to make out for its size (SIZE × SIGHT metres, further
+//     through the long lens, much less in the dark without the lamp), not behind the land, and held there DWELL real
+//     seconds (a look that wavers loses FADE a second of it, not the lot). The common birds (COMMON: the loons, which
+//     keep round you on every lake, the gulls, the ravens) count once a lake a day; the rest again only well away from
+//     the last (AGAIN_M) or hours after it (AGAIN_H). A bear that came to camp unseen (asleep, away) is the trip's line
+//     ("a bear at camp"), never a sighting. A look at something worth it says a thought on the lines (muse: "Oh, an
+//     eagle.", "A beaver, there by the lodge.", "Loon, close."; the same: "when I do see something noteworthy, it says a
+//     little blurb to myself like, oh, an eagle, or oh, a beaver, because I didn't know I saw a bald eagle, but it said
+//     I did").
 //   - the notices (tasks.js): one turning done on a trip is that trip's; a claim marks it paid wherever it is
 //   - the camera (photo.js): pictures taken; the keepers' arcs (npcs.js s.arcs): a story finished at its last beat
 //
@@ -41,6 +51,7 @@ import { Vector3 } from 'three';
 import { save } from './save.js';
 import { esc, plural, word, longDate, shortDate, weekdayOf } from './hud.js';
 import { itemDef } from './items.js';
+import { inches } from './units.js';
 import './record.css';
 
 const NS = 'record';
@@ -49,16 +60,41 @@ const KEEP_TRIPS = 80;     // trip cards kept in a season (the oldest go first)
 const KEEP_FIRSTS = 60;
 const SHOW_AFTER = 1.4;    // real seconds free after a trip ends before its card comes up
 const MOMENT_FOR = 40;     // real seconds after the first card closes that its moment may show
-const DWELL = 1.2;         // real seconds an animal is in view and near before it counts as seen
-const GONE = 2.5;          // real seconds out of view before the same kind can be seen afresh
+const DWELL = 1.5;         // real seconds of looking at an animal before it counts as seen
+const FADE = 0.6;          // dwell lost a real second of looking away (a glance aside costs a little; a second's look away, most of it)
+const CONE = 13;           // degrees off the middle of the view an animal may be and still be what you are looking at
 const AGAIN_M = 600;       // metres from the last sighting of a kind that make another one
 const AGAIN_H = 3;         // game hours after the last sighting of a kind that make another one
 const COMMON = new Set(['loon', 'gull', 'raven']); // seen once a lake a day
-const LOOK = 0.25;         // real seconds between two looks at what is in view
+const LOOK = 0.2;          // real seconds between two looks at what is in view
+const CLEARS = 3;          // line-of-sight checks a look (the most central few; the rest wait for the next look)
 const POLL = 0.5;          // real seconds between two looks at the notices, the photos, the bear and the catch log
-// metres within which each counts as seen (photo.js REACH is the picture's: these are the eye's)
-// (the loons keep 150 to 450 m off and come no nearer than they must, loons.js: near for a loon is the nearer half of that)
-const NEAR = { moose: 250, beaver: 100, loon: 250, eagle: 250, gull: 150, raven: 150 };
+// how big each reads, in metres (its length or its spread, not its height: a loon is a long low shape on the water, a
+// soaring eagle its wings), and how far a thing that big is made out by eye: SIGHT × SIZE at the plain view (an eagle
+// further than a beaver, a moose furthest). photo.js REACH is the picture's; these are the eye's. The long lens
+// narrows the view and reaches further with it; the dark brings it in to a few metres, the lamp's beam to LAMP.
+const SIZE = { moose: 3, bear: 1.8, beaver: 0.8, loon: 0.9, eagle: 1.5, gull: 1, raven: 1 };
+const SIGHT = 100;
+const LAMP = 35;           // metres the headlamp's beam lets you make an animal out in the dark
+const DARK = 0.1;          // the share of the reach left in full dark without the lamp
+// the thoughts a look says (muse): each kind's, by what it is doing; the notable ones every new sighting (not again
+// for a few minutes), a loon when it is close, the commoner birds the first time a trip only (the owner: "Oh, an
+// eagle", "oh, a beaver")
+const NOTABLE = new Set(['moose', 'bear', 'beaver', 'eagle']);
+const MUSE_GAP = 180;      // real seconds before the same kind says a thought again
+const LOON_CLOSE = 45;     // metres: a loon this near is worth a word (loons.js: they dive or swim off from about here)
+const MUSE = {
+  moose: { any: ['Oh. A moose.', 'A moose. Don’t move.', 'Moose. Right there.'], bull: ['A bull moose. Look at that rack.', 'Oh, a bull moose.'],
+    calf: ['A moose calf. The cow won’t be far.'], wade: ['A moose, out in the shallows.', 'Moose, standing in the water.'] },
+  bear: { any: ['A bear.', 'Oh. That’s a bear.', 'Bear. Right there.'] },
+  beaver: { any: ['Oh, a beaver.', 'A beaver, out swimming.', 'Beaver. Look at it go.'], lodge: ['A beaver, there by the lodge.', 'Beaver, by its lodge.'],
+    slap: ['A beaver. That was its tail.'] },
+  eagle: { any: ['Oh, an eagle.', 'A bald eagle. Look at that.', 'Eagle.'], perch: ['Oh, an eagle.', 'A bald eagle, up in the pine.', 'Eagle, sitting up there.'],
+    soar: ['An eagle, way up.', 'Oh, an eagle.', 'Bald eagle, circling.'], strike: ['An eagle, going for a fish.'] },
+  loon: { any: ['A loon.', 'There’s a loon.', 'Loons out here.'], close: ['Loon, close.', 'A loon, right there.', 'Oh, a loon. Close.'] },
+  gull: { any: ['A gull.', 'Herring gull.'], stand: ['Gulls on the rock.', 'A gull, on the rock.'] },
+  raven: { any: ['A raven.', 'Oh, a raven.'] },
+};
 // how a kind is written
 const SEEN = {
   moose: { one: 'a moose', many: 'moose', name: 'moose' },
@@ -114,9 +150,12 @@ class Record {
     this.shown = null;          // the trip card up: the trip's id
     this.el = null;
     this.saveT = 0; this.pollT = 0; this.lookT = 0; this.storyT = 0; this.freeT = 0;
-    this.eyes = {};             // kind → { dwell, gone, at } (the sightings' watch)
+    this.eyes = {};             // kind → { dwell, held, at, d } (the looks under way: watchView)
+    this.told = {};             // kind → { t, words } (the last thought said of it: real seconds, its words)
+    this.toldDay = new Set();   // `${kind}|${day}`: a kind looked at today, off a trip (the commoner birds' one thought)
+    this.bearLook = null;       // the bear's visit already seen (one sighting a visit)
     this.closedAt = -1e9;       // real seconds: the last card put away (the moment)
-    this._v = new Vector3(); this._e = new Vector3();
+    this._v = new Vector3(); this._e = new Vector3(); this._f = new Vector3();
     // E or Esc puts the card away, ahead of the dot's E and the pause card (a capture listener made at load, as cards.js's)
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
@@ -199,6 +238,7 @@ class Record {
   // An older save (no record): the season as the save knows it. The people's memory (npcs.js s.mem) has the season's
   // start, its trips with their lakes, the lakes, the carries, the lakes slept on and the loons; the logbook has the
   // trips' dates; the catch log the fish; the prints their subjects; the bear its last visit; the arcs the stories.
+  // (mem.loons, the loons near you, is not read: near is not seen)
   build() {
     const T = this.trip, F = this.fishing, N = this.npcs, B = this.bear;
     const mem = N && N.s && N.s.mem && N.s.mem.v === 1 ? N.s.mem : null;
@@ -239,23 +279,21 @@ class Record {
       for (const e of F.log) if (e && inSeason(e.year, e.doy)) this.addFish(e, { quiet: true });
       s.fishSeen = F.log.length;
     }
-    // what was seen: the loons the people noticed near you, the subjects of the prints, the bear's last visit
-    for (const l of (mem && mem.loons) || []) { const dd = dateOfAbs(l.day); this.addSeen('loon', { lake: l.lake, y: dd.year, d: dd.doy, h: 12, quiet: true, old: true }); }
+    // what was seen: the subjects of the prints (a picture is a look if anything is). Not the loons the people noticed
+    // near you, nor the bear's last visit: near is not seen, and a bear in the night is heard (the owner, 2026-10-31)
     for (const p of this.printsIn(null, null)) for (const k of p.subjects || (p.kind ? [p.kind] : [])) if (SEEN[k]) this.addSeen(k, { lake: null, y: p.year, d: p.doy, h: p.hours, quiet: true, old: true });
-    if (B && B.s && B.s.last && inSeason(B.s.last.y, B.s.last.d)) this.addSeen('bear', { lake: null, y: B.s.last.y, d: B.s.last.d, h: 2, quiet: true, old: true, how: 'camp' });
     s.photos.n = this.printsIn(null, null).length;
     // the firsts the old trips can say: the first portage and the first night out
     const firstOut = s.trips.find((c) => c.counts && c.counts.nights > 0), firstCarry = s.trips.find((c) => c.counts && c.counts.portages > 0);
     if (firstCarry && firstCarry.entry) this.first('portage', 'portage', 'first portage', null, { y: firstCarry.entry.year, d: firstCarry.entry.doy, h: firstCarry.entry.hours || 9 }, firstCarry.id);
     if (firstOut && firstOut.entry) this.first('night', 'night', 'first night out', null, { y: firstOut.entry.year, d: firstOut.entry.doy, h: 21 }, firstOut.id);
-    // what each old trip saw, by date: the loons the people noticed, the subjects of its prints, the bear's last visit
+    // what each old trip saw, by date: the subjects of its prints (its bear, if the last visit fell in it, is its line's)
     for (const c of s.trips) {
       const a = absHours(c.entry), b = absHours(c.end); if (a == null || b == null) continue;
       const add = (kind, lake, how = null) => { const q = c.seen.find((x) => x.kind === kind); if (q) q.n++; else c.seen.push({ kind, n: 1, lake, h: null, how }); };
       const inTrip = (y, d) => { const h = absDay(y, d) * 24 + 12; return h >= Math.floor(a / 24) * 24 && h <= Math.ceil(b / 24) * 24; };
-      for (const l of (mem && mem.loons) || []) { const dd = dateOfAbs(l.day); if (inTrip(dd.year, dd.doy)) add('loon', l.lake); }
       for (const p of this.printsIn(c.entry, c.end)) for (const k of p.subjects || (p.kind ? [p.kind] : [])) if (SEEN[k]) add(k, null);
-      if (B && B.s && B.s.last && inTrip(B.s.last.y, B.s.last.d)) add('bear', null, 'camp');
+      if (B && B.s && B.s.last && inTrip(B.s.last.y, B.s.last.d)) c.bear = { n: 1, lake: null };
     }
     // each first on the old trip it fell in, by its date
     for (const f of s.firsts) {
@@ -379,6 +417,7 @@ class Record {
       entry: { year: entry.year, doy: entry.doy, hours: +(+entry.hours || 0).toFixed(2) }, end: { year: end.year, doy: end.doy, hours: end.hours }, days,
       km: st ? +st.km.toFixed(2) : 0, lakes, far: this.farOf(lakes, s.from), portages, nights, camps,
       fish, seen: D ? D.seen.map((q) => ({ ...q })) : [], photos: D ? D.photos : this.printsIn(entry, end).length, photoOf: this.printsIn(entry, end).map((r) => r.kind).filter(Boolean).reverse(),
+      bear: D && D.bear ? { ...D.bear } : null, // (a bear at camp, seen or not: the line's; seen, it is in seen too)
       notices, capsizes: log.filter((e) => e.k === 'capsize').length, evac: evac ? evac.why || 'spent' : null, partial: !!(D && D.partial) || !D,
       firsts: this.s.firsts.filter((f) => f.trip === s.id).map((f) => f.words),
     };
@@ -446,10 +485,11 @@ class Record {
     if (c.k === 'evacuated') return BROUGHT[c.evac] || 'brought in';
     const seen = c.seen || [], bear = seen.find((q) => q.kind === 'bear'), moose = seen.find((q) => q.kind === 'moose');
     if (bear) return bear.lake ? `a bear${onW2(bear.lake)}` : 'a bear at camp';
+    if (c.bear) return `a bear at camp${c.bear.lake ? onW2(c.bear.lake) : ''}`; // (came in the night, unseen: it still came)
     if (moose) { const when = this.whenWords(moose.h); return `a moose${when}${onW2(moose.lake)}`; }
-    if (c.capsizes) return c.capsizes === 1 ? 'over once' : `over ${word(c.capsizes)} times`;
+    // (no "over once": the owner, 2026-10-31, "you don't need to track how often you fall in")
     const b = c.fish && c.fish.best;
-    if (b && b.cm >= (GOOD_CM[b.sp] || 999)) return `${an(b.cm)} ${b.cm} cm ${FISH_SHORT[b.sp] || b.name}${b.lake !== c.far ? onW2(b.lake) : ''}`;
+    if (b && b.cm >= (GOOD_CM[b.sp] || 999)) return `${an(inches(b.cm))} ${inches(b.cm)}-inch ${FISH_SHORT[b.sp] || b.name}${b.lake !== c.far ? onW2(b.lake) : ''}`;
     const f = (c.firsts || []).find((w) => /^first (?!portage|night)/.test(w) && !/at camp$/.test(w));
     if (f) return `the ${f}`;
     if (c.fish && c.fish.n >= 3) return `${word(c.fish.n)} fish`;
@@ -544,17 +584,22 @@ class Record {
       this.changed();
     }
   }
-  // a bear at camp (bear.js: its visits count up when one comes, asleep, awake or away)
+  // a bear at camp (bear.js: its visits count up when one comes, asleep, awake or away): the trip's, for its line ("a
+  // bear at camp"), and not a sighting. Asleep it is heard, away it is the mess you come back to; one you look at on a
+  // live visit is seen by the look (watchView's bear)
   watchBear() {
     const B = this.bear; if (!B || !B.s) return;
     const n = B.s.visits | 0, s = this.s;
     if (s.bearVisits == null) { s.bearVisits = n; return; }
     if (n <= s.bearVisits) { s.bearVisits = n; return; }
-    s.bearVisits = n;
-    const c = this.camp && this.camp.camp, p = this.player, w = this.world;
-    const x = c ? c.x : p.x, z = c ? c.z : p.z, id = p && p.nearWater ? p.nearWater(x, z, 30) : 0;
-    const how = B.s.night && B.s.night.kind === 'live' ? 'camp' : 'night';
-    this.addSeen('bear', { lake: (id > 0 && w.lakeName(id)) || null, x, z, how, h: B.visit ? this.at.h : 2 });
+    const k = n - s.bearVisits; s.bearVisits = n;
+    const D = s.draft;
+    if (D && this.trip && this.trip.active) {
+      const c = this.camp && this.camp.camp, p = this.player, w = this.world;
+      const x = c ? c.x : p.x, z = c ? c.z : p.z, id = p && p.nearWater ? p.nearWater(x, z, 30) : 0;
+      if (D.bear) D.bear.n += k; else D.bear = { n: k, lake: (id > 0 && w.lakeName(id)) || null };
+    }
+    this.changed();
   }
   // a keeper's story told to its last beat (npcs.js s.arcs, charOf(ep).arc)
   watchStories(quiet) {
@@ -578,47 +623,136 @@ class Record {
       if (!quiet) this.changed();
     }
   }
-  // What is in view: each kind's nearest in the frame, near and not behind the land; DWELL seconds of it is a sighting.
+  // What you look at. Each look (LOOK s) takes the animals out now and keeps, for each kind, the one nearest the middle
+  // of the view: within CONE degrees of where the camera points (plus the half of the animal's own size it spans there,
+  // so a moose at twenty metres fills the middle), within its reach (reach), and not behind the land (clear, the most
+  // central CLEARS only). The camera is the one the frame draws with, first person or the chase's: on the water the
+  // middle of the chase's view is just over the bow, so turning the view onto a thing is the look. Held DWELL real
+  // seconds, it is a sighting (sighted) and maybe a thought (muse); a look that wavers loses FADE a second, so a glance
+  // at the map or a wave in the way does not start it over. One sighting a look: it has to be let go (the dwell run
+  // down) before the same kind is looked at afresh.
   watchView(dt) {
-    const eyes = this.eyes, now = new Set();
+    const eyes = this.eyes, now = new Map();
     // (only while the scene is what you look at: the game, no paper over it, no fade)
     const ok = !(this.title && this.title.state !== 'game') && !(this.hud && (this.hud.paper || this.hud.big)) && !(this.veil && this.veil.active) && !(this.player && this.player.teleporting);
     if (ok && this.camera) {
-      const cam = this.camera, e = this._e.setFromMatrixPosition(cam.matrixWorld), v = this._v;
+      const cam = this.camera, e = this._e.setFromMatrixPosition(cam.matrixWorld), f = cam.getWorldDirection(this._f);
+      // the plain view is 60° high (the chase's; first person is wider, never shorter for it): a long lens reaches further
+      const tanHalf = Math.tan(((cam.fov || 60) * Math.PI) / 360) / (cam.zoom || 1);
+      const lens = Math.min(8, Math.max(1, Math.tan(Math.PI / 6) / tanHalf)), cone = Math.min(CONE, (Math.atan(tanHalf) * 180) / Math.PI * 0.6);
+      const light = this.lightReach();
       let list = [];
       try { if (this.fauna && typeof this.fauna.subjects === 'function') list = this.fauna.subjects(); } catch { /* the wildlife is fauna.js's */ }
+      const bear = this.bearSubject(); if (bear) list = list.concat(bear);
+      const cands = [];
       for (const s of list) {
-        const r = NEAR[s.kind]; if (!r || now.has(s.kind)) continue;
-        const d = Math.hypot(s.x - e.x, s.y - e.y, s.z - e.z); if (d > r) continue;
-        v.set(s.x, s.y, s.z).project(cam);
-        if (!(v.z < 1) || Math.abs(v.x) > 0.92 || Math.abs(v.y) > 0.92) continue;
-        if (!this.clear(e, s)) continue;
-        now.add(s.kind);
-        (eyes[s.kind] || (eyes[s.kind] = { dwell: 0, gone: 0 })).at = s;
+        const size = SIZE[s.kind]; if (!size) continue;
+        const dx = s.x - e.x, dy = s.y - e.y, dz = s.z - e.z, d = Math.hypot(dx, dy, dz);
+        if (d < 0.5 || d > this.reach(size, lens, light)) continue;
+        const off = (Math.acos(Math.min(1, (dx * f.x + dy * f.y + dz * f.z) / d)) * 180) / Math.PI;
+        const wide = cone + (Math.atan(size / 2 / d) * 180) / Math.PI;
+        if (off > wide) continue;
+        const best = cands.find((c) => c.s.kind === s.kind);
+        if (!best) cands.push({ s, off, d }); else if (off < best.off) { best.s = s; best.off = off; best.d = d; }
+      }
+      cands.sort((a, b) => a.off - b.off);
+      for (let i = 0; i < cands.length && i < CLEARS; i++) { const c = cands[i]; if (this.clear(e, c.s)) now.set(c.s.kind, c); }
+    }
+    for (const [k, c] of now) if (!eyes[k]) eyes[k] = { dwell: 0, held: false, at: null, d: 0 };
+    for (const [k, q] of Object.entries(eyes)) {
+      const c = now.get(k);
+      if (c) {
+        q.at = c.s; q.d = c.d; q.dwell = Math.min(DWELL + 1, q.dwell + dt);
+        if (q.dwell >= DWELL && !q.held) {
+          q.held = true;
+          const firstHere = this.firstHere(k);
+          const fresh = this.sighted(k, c.s);
+          this.muse(k, c.s, c.d, fresh, firstHere);
+        }
+      } else {
+        q.dwell = Math.max(0, q.dwell - FADE * dt);
+        if (q.dwell <= 0) delete eyes[k]; // (let go: the next look at this kind is a new one)
       }
     }
-    for (const [k, q] of Object.entries(eyes)) {
-      if (now.has(k)) {
-        q.gone = 0; q.dwell += dt;
-        if (q.dwell >= DWELL) this.sighted(k, q.at); // (each look while it stays in view: sighted says whether it is a new one)
-      } else if ((q.gone += dt) > GONE) q.dwell = 0;
-    }
   }
+  // how far a thing `size` metres big is made out: SIGHT × size, times the lens, times the light
+  reach(size, lens, light) { const r = SIGHT * size * lens; return light.lamp ? Math.max(r * light.k, Math.min(r, light.lamp)) : r * light.k; }
+  // the light to see by: the day's (the sun up to a little under the horizon, all of it; full dark, DARK of it) and the
+  // headlamp's beam (LAMP metres, as bright as it is: bear.js eyeshine reads it the same way)
+  lightReach() {
+    const d = this.day, el = d && Number.isFinite(d.elevation) ? d.elevation : 30;
+    const t = Math.min(1, Math.max(0, (el + 12) / 9)), day = t * t * (3 - 2 * t); // (full at -3°, the dusk a moose is out in; dark under -12°)
+    const L = this.lamp || (this.bear && this.bear.lamp) || null, lvl = L && L.level > 0.01 ? L.level : 0;
+    return { k: DARK + (1 - DARK) * day, lamp: lvl ? LAMP * lvl * (1 - day) : 0 };
+  }
+  // the bear on a live visit, as a subject (drawn only within 120 m of you: bear.js pose)
+  bearSubject() {
+    const B = this.bear, v = B && B.visit, w = this.world;
+    if (!v || !B.group || !B.group.visible || !Number.isFinite(v.x) || !w) return null;
+    return { kind: 'bear', state: v.state, x: v.x, y: w.heightAt(v.x, v.z) + 0.6, z: v.z, h: 1, visit: v };
+  }
+  // the first look at a kind this trip (off a trip: today), before the look is counted
+  firstHere(kind) {
+    const D = this.s.draft;
+    if (D && this.trip && this.trip.active) return !D.seen.some((q) => q.kind === kind);
+    return !this.toldDay.has(`${kind}|${this.today}`);
+  }
+  // a look held: a sighting if it is a new one (→ true), else the last kept in sight
   sighted(kind, a) {
-    if (kind === 'bear') return; // (a bear at camp is counted by its visit: watchBear)
     const s = this.s, r = s.seen[kind], h = this.nowH, w = this.world, p = this.player;
+    this.toldDay.add(`${kind}|${this.today}`);
     const id = (w.lakeIdAt ? w.lakeIdAt(a.x, a.z) : 0) || (p && p.nearWater ? p.nearWater(a.x, a.z, 80) : 0) || (p ? p.lakeId : 0);
+    const lake = (id > 0 && w.lakeName(id)) || null;
+    // (the first look at a kind on a trip is the trip's, whatever the season had of it: a loon seen on this lake this
+    // morning, before you pushed off, is still in the card of the trip you are on)
+    const D = s.draft, tripFirst = !!(D && this.trip && this.trip.active && !D.seen.some((q) => q.kind === kind));
+    if (kind === 'bear') {
+      // once a visit (bear.js: one at a time), at camp; the visit itself is counted by watchBear
+      if (a.visit && this.bearLook === a.visit) return false;
+      this.bearLook = a.visit || null;
+      this.addSeen('bear', { lake, x: a.x, z: a.z, how: 'camp' });
+      return true;
+    }
     if (COMMON.has(kind)) {
       // once a lake a day: the same loons are about you all day on a lake (loons.js keeps a group round the canoe)
       const key = `${id || 0}|${this.today}`;
-      if (r && Array.isArray(r.keys) && r.keys.includes(key)) return;
-      this.addSeen(kind, { lake: (id > 0 && w.lakeName(id)) || null, x: a.x, z: a.z });
-      const q = s.seen[kind]; q.keys = [...(q.keys || []), key].slice(-40);
-      return;
+      if (r && Array.isArray(r.keys) && r.keys.includes(key) && !tripFirst) return false;
+      this.addSeen(kind, { lake, x: a.x, z: a.z });
+      const q = s.seen[kind]; if (!(q.keys || []).includes(key)) q.keys = [...(q.keys || []), key].slice(-40);
+      return true;
     }
     // the rest: a new one away from where the last was first seen, or hours on (the last is kept in sight meanwhile)
-    if (r && r.last && Math.hypot(a.x - r.last.x, a.z - r.last.z) < AGAIN_M && h - r.last.h < AGAIN_H) { r.last.h = +h.toFixed(2); return; }
-    this.addSeen(kind, { lake: (id > 0 && w.lakeName(id)) || null, x: a.x, z: a.z });
+    if (!tripFirst && r && r.last && Math.hypot(a.x - r.last.x, a.z - r.last.z) < AGAIN_M && h - r.last.h < AGAIN_H) { r.last.h = +h.toFixed(2); return false; }
+    this.addSeen(kind, { lake, x: a.x, z: a.z });
+    return true;
+  }
+  // The thought a look says, on the lines (hud.note), to yourself: "Oh, an eagle." The notable kinds (NOTABLE) say one
+  // at each new sighting and the first look a trip; a loon when it is close (LOON_CLOSE) or the first a trip; the gulls
+  // and the raven only the first a trip. Never the same kind again inside MUSE_GAP, never the same words twice running,
+  // and not over a conversation.
+  muse(kind, a, d, fresh, firstHere) {
+    const M = MUSE[kind]; if (!M || !this.hud || typeof this.hud.note !== 'function') return;
+    if (this.talk && this.talk.talking) return;
+    const close = kind === 'loon' && d < LOON_CLOSE;
+    const worth = firstHere || (NOTABLE.has(kind) && fresh) || close;
+    if (!worth) return;
+    const t = realNow(), T = this.told[kind] || (this.told[kind] = { t: -1e9, words: null });
+    if (t - T.t < MUSE_GAP && !(firstHere && NOTABLE.has(kind))) return;
+    // the words by what it is doing (fauna.js subjects: its state; a beaver's byLodge; a moose's bull and calf)
+    const st = a.state, w = this.world, F = this.fauna;
+    let pool = M.any;
+    if (kind === 'moose') {
+      const wet = F && w && typeof F.levelAt === 'function' && w.heightAt(a.x, a.z) < F.levelAt(a.x, a.z) - 0.15;
+      pool = a.calf ? M.calf : st === 'wade' || wet ? M.wade : a.bull && Math.random() < 0.6 ? M.bull : M.any;
+    } else if (kind === 'beaver') pool = st === 'slap' ? M.slap : a.byLodge ? M.lodge : M.any;
+    else if (kind === 'eagle') pool = st === 'perch' ? M.perch : st === 'strike' ? M.strike : (st === 'soar' && w && a.y - w.heightAt(a.x, a.z) > 25) ? M.soar : M.any;
+    else if (kind === 'loon') pool = close ? M.close : M.any;
+    else if (kind === 'gull') pool = st === 'stand' ? M.stand : M.any;
+    pool = pool && pool.length ? pool : M.any;
+    let i = Math.floor(Math.random() * pool.length);
+    if (pool.length > 1 && pool[i] === T.words) i = (i + 1) % pool.length;
+    T.t = t; T.words = pool[i];
+    this.hud.note(pool[i], 4);
   }
   // whether the land hides p from the eye (photo.js clear: world.heightAt along the line of sight)
   clear(eye, p) {
@@ -647,7 +781,7 @@ class Record {
     if (this.hud && this.hud.openPaper) this.hud.openPaper('tripcard');
     this.shown = id;
     this.el.innerHTML = `<header><div class="sc kicker">The logbook · trip ${c.n}</div><button type="button" class="stamp outline" data-act="close" aria-label="Close (E or Esc)">Close · E</button></header>${this.pageHtml(c)}
-      <div class="tc-foot"><span class="pencil">in the journal’s Record</span><span class="keys"><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></div>`;
+      <div class="tc-foot"><span class="pencil">in the journal’s Trips</span><span class="keys"><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></div>`;
     this.el.classList.add('show');
     return true;
   }
@@ -684,7 +818,7 @@ class Record {
     const F = c.fish;
     if (F && F.n) {
       const kept = F.kept ? `, ${F.kept === F.n ? (F.n === 1 ? 'kept' : 'all kept') : `${word(F.kept)} kept`}` : ', all let go';
-      const best = F.best ? ` The best, ${an(F.best.cm)} <span class="num">${F.best.cm}</span> cm ${esc(F.best.name)}${F.best.lake ? ` on ${esc(F.best.lake)}` : ''}.` : '';
+      const best = F.best ? ` The best, ${an(inches(F.best.cm))} <span class="num">${inches(F.best.cm)}</span>-inch ${esc(F.best.name)}${F.best.lake ? ` on ${esc(F.best.lake)}` : ''}.` : '';
       const kinds = F.sp.length > 1 || firsts.has(`first ${F.sp[0].name}`) ? `<br><span class="soft">${F.sp.map((q) => `${esc(q.name)}${q.n > 1 ? ` ×${q.n}` : ''}${mark(`first ${q.name}`)}`).join(' · ')}</span>` : '';
       rows.push(['Fish', `${cap(word(F.n))} ${plural(F.n, 'fish', 'fish')}${kept}.${best}${kinds}`]);
     }
@@ -705,7 +839,7 @@ class Record {
       const words = [paid ? `<span class="num">${money(paid)}</span> paid` : '', owed ? `<span class="num">${money(owed)}</span> to claim${where.length === 1 ? ` at ${esc(where[0])}` : ''}` : ''].filter(Boolean).join(' · ');
       if (words) rows.push(['Money', words]);
     }
-    if (c.capsizes) rows.push(['Over', `${c.capsizes === 1 ? 'Once' : cap(word(c.capsizes)) + ' times'}, and the gear wet`]);
+    // (no Over row: the owner, 2026-10-31, "you don't need to track how often you fall in")
     const grid = rows.map(([k, v]) => `<div class="lab">${k}</div><div class="v">${v}</div>`).join('');
     const note = c.partial ? '<div class="soft small">The record began part way through this trip.</div>' : c.old ? '<div class="soft small">From the logbook kept before the record.</div>' : '';
     return `<div class="tc-page${book ? ' in-book' : ''}"><h2 class="tc-line">${esc(line)}</h2><div class="tc-sub">${esc(dates)}${dates ? ' · ' : ''}${esc(whereW)}</div>
@@ -744,10 +878,10 @@ class Record {
 
   // --- the moment: the first time a trip's card is put away -----------------------------------------------------------------
   moments() {
-    return [{ id: 'record', prio: 1, recur: 'once', text: 'Your trip is in the journal’s Record: {I}, then Journal.',
+    return [{ id: 'record', prio: 1, recur: 'once', text: 'Your trip is in the journal’s Trips: {I}, then Journal.',
       due: () => !this.shown && realNow() - this.closedAt < MOMENT_FOR }];
   }
 }
 
 export const record = new Record();
-export { SEEN, NEAR, shortDate };
+export { SEEN, SIZE, shortDate };

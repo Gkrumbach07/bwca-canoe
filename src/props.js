@@ -6,9 +6,11 @@ import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
 import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
 import { RockShape } from './collide.js';
+import { gridReader, trailMireAt, BOARDWALK } from './land.js'; // the wetlands underfoot: a trail's mud and puncheon
 import LANDINGS_DATA from './landings.json';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
+import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, beaver dams and lodges
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
@@ -46,6 +48,8 @@ export function exclusionsFor(world) {
   for (const p of world.portages) { const pts = rounded(p.pts); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
   for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, -36]); // the mown yard around an outfitter's dock
+  // the brooks' stony beds (creeks.js): the trees and brush kept off the line the bed is drawn on
+  if (world.creeks) for (const b of world.creeks.brooks) { const pts = rounded(b.pts); for (let i = 1; i < pts.length; i++) if (pts[i - 1][0] !== pts[i][0] || pts[i - 1][1] !== pts[i][1]) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], BROOK.clear]); } // (never a point: site.js reads those as campsites)
   return segs;
 }
 
@@ -136,6 +140,8 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   const ledges = [[], []]; // the ledge rocks' matrices, flats and slanted
   for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
 
+  yield* tileCreeks(ctx, group, pieces, rounded); // the brooks' beds, the beaver dams and lodges (creeks.js)
+
   const built = propMesh(pieces);
   if (built) group.add(built);
   ledges.forEach((ms, k) => {
@@ -182,12 +188,13 @@ function stone(b, p, s, yaw, rng, { up = 1.6, deep = 1.15, tilt = 0, tint = null
 // The path as a decal over the drawn ground: rows across it every 1.6 m, five vertices a row from margin to
 // margin, each carrying the terrain's splat weights, floor and normal at that point (so the shader paints the
 // ground under it exactly and wears the middle down to soil), and where it is across the path, how far it
-// has faded (at the ends and at the water) and how worn its middle is. Indexed, one mesh a tile.
+// has faded (at the ends and at the water), how worn its middle is, and how boggy the ground is (land.js MIRE: the
+// shader churns the tread to black mud with water standing in it). Indexed, one mesh a tile.
 const ACROSS = [-1, -0.55, 0, 0.55, 1];
 class TrailDecal {
   constructor() { this.p = []; this.n = []; this.sa = []; this.sb = []; this.fl = []; this.tr = []; this.ix = []; this.rows = 0; }
   // a row: centre (world x, z), unit normal (nx, nz), half width, fade, wear; returns its row index
-  row(ctx, x, z, nx, nz, hw, fade, wear) {
+  row(ctx, x, z, nx, nz, hw, fade, wear, mire = 0) {
     const f4 = [0, 0, 0, 0], n3 = [0, 1, 0], p3 = [0, 0, 0];
     for (const t of ACROSS) {
       const px = x + nx * t * hw, pz = z + nz * t * hw, lx = px - ctx.ox, lz = pz - ctx.oz;
@@ -206,7 +213,7 @@ class TrailDecal {
         this.n.push(0, 1, 0); this.sa.push(1, 0, 0, 0); this.sb.push(0, 0, 0, 0); this.fl.push(0, 0, 0, 0);
       }
       this.p.push(lx, y, lz);
-      this.tr.push(t, 0, fade, wear);
+      this.tr.push(t, mire, fade, wear);
     }
     return this.rows++;
   }
@@ -255,7 +262,7 @@ class TrailDecal {
 }
 // The polyline with its corners rounded off (a fillet up to 2 m along each leg), so the path bends instead
 // of kinking and its rows never fold over on the inside of a turn (the vegetation's exclusion follows the same line).
-function rounded(pts) {
+export function rounded(pts) {
   if (pts.length < 3) return pts;
   const out = [pts[0]];
   for (let i = 1; i < pts.length - 1; i++) {
@@ -280,6 +287,7 @@ function buildTrail(ctx, p, decal, pieces) {
   for (let i = 0; i < m - 1; i++) if (inside(pts[i][0], pts[i][1])) { want[i] = 1; want[i + 1] = 1; }
   const rowOf = new Int32Array(m).fill(-1);
   const bits = new PropBuilder();
+  const read = gridReader(tg);
   for (let i = 0; i < m; i++) {
     if (!want[i]) continue;
     const [x, z] = pts[i], [xa, za] = pts[Math.max(0, i - 1)], [xb, zb] = pts[Math.min(m - 1, i + 1)];
@@ -289,10 +297,13 @@ function buildTrail(ctx, p, decal, pieces) {
     const cx = x + nx * meander, cz = z + nz * meander, sd = tg.shoreAt(x, z);
     const fade = Math.min(sm(0, 3, s), sm(0, 3, total - s)) * sm(-0.2, 1.2, sd);
     const wear = 0.55 + 0.45 * Math.min(sm(0, 6, s), sm(0, 6, total - s)) * (0.8 + 0.2 * n1(s / 11 + 90, seed));
-    rowOf[i] = decal.row(ctx, cx, cz, nx, nz, hw, fade, wear);
+    const mire = trailMireAt(read, pts, i);
+    rowOf[i] = decal.row(ctx, cx, cz, nx, nz, hw, fade, wear, mire);
     if (i > 0 && rowOf[i - 1] >= 0 && want[i - 1] && inside(pts[i - 1][0], pts[i - 1][1])) decal.join(rowOf[i - 1], rowOf[i]);
-    // roots and stones across the tread, sparse, never at the landings
-    if (!inside(x, z) || s < 3 || total - s < 3 || sd < 2) continue;
+    // across the softest ground the trail is laid with puncheon: split logs across two stringers (player.js walks it)
+    if (mire >= BOARDWALK && inside(x, z) && sd > 0.5 && i < m - 1) { puncheon(ctx, bits, x, z, dx, dz, nx, nz, seed + i * 7919); continue; }
+    // roots and stones across the tread, sparse, never at the landings (nor in the muck of a wet stretch)
+    if (!inside(x, z) || s < 3 || total - s < 3 || sd < 2 || mire > 0.45) continue;
     const r = prng();
     if (r < 0.045) {
       // a root crossing the path at a slant, half in the ground
@@ -315,6 +326,30 @@ function buildTrail(ctx, p, decal, pieces) {
     const e = end ? p.pts[p.pts.length - 1] : p.pts[0];
     if (!inside(e[0], e[1])) continue;
     pieces.push(portageSign(ctx, pts, end, seed + end, p));
+  }
+}
+// Puncheon over a bog: a row's 1.6 m of split logs laid across the way on two squared stringers, grey and weathered,
+// greener and darker where they lie wettest, one now and then sunk at an end or gone. Their tops stand PUNCHEON_TOP
+// over the ground (player.js stands the walker on them).
+export const PUNCHEON_TOP = 0.08;
+function puncheon(ctx, b, x, z, dx, dz, nx, nz, seed) {
+  const rng = mulberry32(seed), { ox, oz } = ctx, Y = V(0, 1, 0);
+  const along = V(dx, 0, dz), across = V(nx, 0, nz);
+  const g0 = ctx.H(x, z), top = (px, pz) => Math.max(g0, ctx.H(px, pz)) + PUNCHEON_TOP;
+  // the stringers, a little sunk
+  for (const sg of [-1, 1]) {
+    const sx = x + nx * sg * 0.42 + dx * 0.8, sz = z + nz * sg * 0.42 + dz * 0.8;
+    b.box(V(sx - ox, top(sx, sz) - 0.1, sz - oz), along, Y, across, 0.84, 0.05, 0.06, TILE.WOOD, tone(0x5f584c, rng, 0.08), { grain: 'x' });
+  }
+  for (let k = 0; k < 4; k++) {
+    if (rng() < 0.05) continue; // one gone
+    const t = 0.2 + k * 0.4 + (rng() - 0.5) * 0.06, px = x + dx * t, pz = z + dz * t;
+    const yaw = (rng() - 0.5) * 0.12, cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const X = V(nx * cy + dx * sy, 0, nz * cy + dz * sy), Z = V(nx * sy - dx * cy, 0, nz * sy - dz * cy); // (X, Y, Z right-handed)
+    const half = 0.55 + rng() * 0.12, sunk = rng() < 0.12 ? 0.03 + rng() * 0.04 : 0;
+    const wet = rng(), col = tone(wet < 0.3 ? 0x5e6650 : wet < 0.7 ? 0x7d766a : 0x8d8678, rng, 0.08);
+    const y = Math.max(top(px + nx * half, pz + nz * half), top(px - nx * half, pz - nz * half)) - 0.035 - sunk;
+    b.box(V(px - ox, y, pz - oz), X, Y, Z, half, 0.035, 0.1 + rng() * 0.03, TILE.WOOD, col, { grain: 'x' });
   }
 }
 // d1 names: the words on the plate under a landing's board: the water the trail goes to and its length, "CONFUSION L." over

@@ -1,5 +1,5 @@
 # Builds the app and deploys it to GitHub Pages on every push to main. The map data (gitignored) is not in the
-# repository: since v4 (1.4 GB with the 2 m detail; now v5, the water-edges rebake, past Pages' 1 GB) it is served from Cloudflare R2 at
+# repository: since v4 (1.4 GB with the 2 m detail, past Pages' 1 GB) it is served from Cloudflare R2 at
 # DATA_URL_DEFAULT below, which the DATA_URL repository variable overrides. Set DATA_URL to 'release' to go back
 # to unpacking a GitHub release's archive (DATA_RELEASE, default data-v3) into dist/data. See docs/HOSTING.md.
 name: Deploy to GitHub Pages
@@ -15,7 +15,9 @@ permissions:
   id-token: write
 
 env:
-  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v5/
+  # wetlands (2026-10-31): v6 is v4 plus the wet and wcls planes and creeks.json (round 2: unbroken channels, portage
+  # creeks, no duplicate dams); bwca/v5/ and bwca/v4/ kept for rollback
+  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v6/
 
 concurrency:
   group: pages

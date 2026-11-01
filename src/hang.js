@@ -10,8 +10,12 @@
 // lowered, or from under it (to look in: inventory.js REACH).
 //
 // The trees are the drawn ones (tiles.js vegBins: each tree's species, place and scale): a white pine's, a red pine's or
-// a big birch's lowest limb, where its crown starts (camera.js CROWN's measures of the drawn trees), four to seven and a
-// half metres up. The spruces, the cedars and the jack pines branch to the ground and hold no barrel. The limb itself is
+// a big birch's lowest limb, where its crown starts (camera.js CROWN's measures of the drawn trees). The owner, 2026-10-31:
+// "Hanging a Food barrel is difficult unless there's an available tree. In some cases, there are no available trees, and
+// it's impossible. I want to relax that requirement a bit and allow more trees to be hung on." So the spruces, the
+// cedars, the jack pines and the tamaracks count too (a stout dead bough a third of the way up: LIMB_SHARE), a limb from
+// 3.4 m up does (the barrel then hangs a little lower, never under MIN_CLEAR), a tall tree's crown out of reach still has
+// a lower limb (the rope goes over one at LIMB[1]), and E takes it from a step farther off. The limb itself is
 // drawn here (a bare bough out from the trunk at that height, on the props' one material) with the rope tied off; the
 // barrel and its rope up to the limb are containers.js's (inventory at.limb).
 //
@@ -19,30 +23,41 @@
 // bear (bear.js); what keeps it is a barrel hung here, hoisted (secured). A hung barrel is never visited; Sandbox never.
 import * as THREE from 'three';
 import { hold } from './hold.js';
+import { feet } from './units.js';
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
 import { TILE, PropBuilder, propMaterial } from './prop-kit.js';
+import { CLOCK } from './pace.js';
 
 // the species whose lowest limb can take a barrel (vegetation.js SPECIES order): height at unit scale, where the crown
 // starts as a share of it (camera.js CROWN)
-const HANG_TREES = { 0: { name: 'white pine', h: 19.5, base: 0.22 }, 2: { name: 'red pine', h: 19, base: 0.45 }, 3: { name: 'birch', h: 13, base: 0.25 } };
-const LIMB = [4.0, 7.5];        // m above the ground at the trunk: a limb you can throw a rope over and that holds the barrel high
+// (the cone trees, whose crowns start at the ground: a dead bough LIMB_SHARE of the way up, strong enough for a barrel)
+const HANG_TREES = {
+  0: { name: 'white pine', h: 19.5, base: 0.22 }, 2: { name: 'red pine', h: 19, base: 0.45 }, 3: { name: 'birch', h: 13, base: 0.25 },
+  1: { name: 'spruce', h: 16, base: 0.3 }, 4: { name: 'cedar', h: 9.9, base: 0.42 }, 9: { name: 'jack pine', h: 8.6, base: 0.5 }, 17: { name: 'tamarack', h: 15.4, base: 0.3 },
+};
+const LIMB = [3.4, 8.0];        // m above the ground at the trunk: a limb you can throw a rope over (a higher crown: a limb at LIMB[1])
 const OUT = 1.8;                // m out from the trunk the rope comes down (two metres from the trunk, as the rangers ask)
-const CLEAR = 3.0;              // m from the ground to the hung barrel's bottom
-const AT_TREE = 3.4;            // m from the trunk within which E hangs the barrel from it
+const CLEAR = 3.0;              // m from the ground to the hung barrel's bottom, the limb high enough
+const MIN_CLEAR = 2.5;          // and never less than this on a lower limb (secured asks 0.9 of it)
+const AT_TREE = 4.5;            // m from the trunk within which E hangs the barrel from it
 const AT_HUNG = 3.4;            // m from a hung barrel's rope (or its trunk) within which E lets it down
 export const BARRELS = { barrel30: 0.47, barrel60: 0.64 }; // the barrels' heights (containers.js BARREL)
 const CELL = 16;
 
+// (the one clock, 2026-10-31: no hold passes time of its own any more, tent.js PITCH; each phase takes its seconds on the
+// day's clock, and `minutes` is what those are on it)
+const P = (name, doing, seconds) => ({ name, doing, seconds, minutes: (seconds * CLOCK) / 60 });
 export const HANG = [
-  { name: 'Rope over the limb', doing: 'Throwing the rope over the limb', minutes: 3, seconds: 1.5 },
-  { name: 'Tied on', doing: 'Tying the barrel on', minutes: 2, seconds: 1.0 },
-  { name: 'Hoisted', doing: 'Hoisting it up and tying off on the trunk', minutes: 3, seconds: 1.6 },
+  P('Rope over the limb', 'Throwing the rope over the limb', 2.4),
+  P('Tied on', 'Tying the barrel on', 1.6),
+  P('Hoisted', 'Hoisting it up and tying off on the trunk', 2.4),
 ];
 export const LOWER = [
-  { name: 'Untied', doing: 'Untying the rope from the trunk', minutes: 1, seconds: 0.8 },
-  { name: 'Lowered', doing: 'Letting it down hand over hand', minutes: 2, seconds: 1.3 },
+  P('Untied', 'Untying the rope from the trunk', 1.0),
+  P('Lowered', 'Letting it down hand over hand', 1.8),
 ];
+const heldWords = (phases) => `${Math.max(1, Math.round(phases.reduce((s, ph) => s + ph.seconds, 0)))} s`;
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const ease = (k) => { const t = Math.min(1, Math.max(0, k)); return t * t * (3 - 2 * t); };
@@ -50,7 +65,7 @@ const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(Stri
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']; // (hud.js's words; +z is south)
 // fb4 E: a hold's phases as checklist steps, those done ticked (each with its minutes)
-const stepsOf = (phases, done = 0) => phases.map((ph, i) => ({ label: `${ph.name} · ${ph.minutes} min`, done: i < done }));
+const stepsOf = (phases, done = 0) => phases.map((ph, i) => ({ label: `${ph.name} · ${heldWords([ph])}`, done: i < done }));
 // a barrel as a line says it ("the small blue barrel", not "the blue barrel, 30 L")
 const barrelName = (item) => ({ barrel30: 'small blue barrel', barrel60: 'big blue barrel' })[item] || lower((itemDef(item) || { name: 'barrel' }).name);
 
@@ -105,8 +120,9 @@ export class Hang {
           const d = Math.hypot(t.x - x, t.z - z);
           if (d > r) continue;
           const gy = T.groundAt(t.x, t.z), up = t.limbAt - gy;
-          if (up < LIMB[0] || up > LIMB[1]) continue;
-          out.push({ ...t, gy, up, d });
+          if (up < LIMB[0]) continue;
+          // a crown out of reach: the rope goes over a lower limb, at LIMB[1]
+          out.push(up > LIMB[1] ? { ...t, gy, up: LIMB[1], limbAt: gy + LIMB[1], d } : { ...t, gy, up, d });
         }
       }
     }
@@ -119,12 +135,12 @@ export class Hang {
     let a0 = Math.atan2(pz - t.z, px - t.x);
     for (const da of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.4, -2.4, Math.PI]) {
       const a = a0 + da, dx = Math.cos(a), dz = Math.sin(a), x = t.x + dx * OUT, z = t.z + dz * OUT;
-      if (!w.isReady(x, z) || w.shoreAt(x, z) < 0.8) continue;
-      const gy = T.groundAt(x, z), top = gy + CLEAR + H; // the barrel's top hanging
-      if (t.limbAt - top < 0.25) continue;
+      if (!w.isReady(x, z) || w.shoreAt(x, z) < 0.4) continue;
+      const gy = T.groundAt(x, z), clear = Math.min(CLEAR, t.limbAt - gy - H - 0.25); // the barrel's bottom off the ground, hanging
+      if (clear < MIN_CLEAR) continue;
       if (T.treesNear(x, z, 0.35).some((o) => !o.shape && !o.box && Math.hypot(o.x - t.x, o.z - t.z) > 0.5)) continue; // another trunk under the rope
       const tr = T.treesNear(t.x, t.z, 0.3).find((o) => !o.shape && !o.box && Math.hypot(o.x - t.x, o.z - t.z) < 0.5);
-      return { x, z, gy, dx, dz, limb: t.limbAt, tree: { x: t.x, z: t.z, gy: t.gy, sp: t.sp, name: t.name, r: tr ? tr.r : 0.25, dx, dz } };
+      return { x, z, gy, dx, dz, clear: +clear.toFixed(1), limb: t.limbAt, tree: { x: t.x, z: t.z, gy: t.gy, sp: t.sp, name: t.name, r: tr ? tr.r : 0.25, dx, dz } };
     }
     return null;
   }
@@ -227,19 +243,19 @@ export class Hang {
     const ph = this.pendingHere();
     if (ph) {
       const { pe, c } = ph;
-      const left = HANG.slice(pe.done).reduce((s, q) => s + q.minutes, 0);
-      return { t: pe.tree, spot: pe.spot, c, from: pe.done, label: `The ${pe.tree.name} · ${HANG[pe.done - 1].name.toLowerCase()} so far`, verb: pe.done >= 2 ? 'Carry on hoisting' : 'Carry on hanging', needs: stepsOf(HANG, pe.done), next: `Hold E: ${left} min to go, the barrel ${CLEAR} m up when done.`, run: (o) => hold.begin({ ...this.hangOpts(c, pe.spot, pe.done), ...this.keys(o) }) };
+      const left = heldWords(HANG.slice(pe.done));
+      return { t: pe.tree, spot: pe.spot, c, from: pe.done, label: `The ${pe.tree.name} · ${HANG[pe.done - 1].name.toLowerCase()} so far`, verb: pe.done >= 2 ? 'Carry on hoisting' : 'Carry on hanging', needs: stepsOf(HANG, pe.done), next: `Hold E: ${left} to go, the barrel ${feet(pe.spot.clear || CLEAR)} ft up when done.`, run: (o) => hold.begin({ ...this.hangOpts(c, pe.spot, pe.done), ...this.keys(o) }) };
     }
     const c = this.barrelCarried(), at = c ? this.treeFor(c) : null;
     if (!c || !at) return null;
-    return { t: at.t, spot: at.spot, c, from: 0, label: `The ${at.t.name} · a limb ${Math.round(at.t.up)} m up`, verb: 'Hang', needs: stepsOf(HANG), next: `Hold E: about ${HANG.reduce((s, q) => s + q.minutes, 0)} min, the barrel ${CLEAR} m up and ${OUT} m out.`, run: (o) => hold.begin({ ...this.hangOpts(c, at.spot, 0), ...this.keys(o) }) };
+    return { t: at.t, spot: at.spot, c, from: 0, label: `The ${at.t.name} · a limb ${feet(at.t.up)} ft up`, verb: 'Hang', needs: stepsOf(HANG), next: `Hold E: about ${heldWords(HANG)}, the barrel ${feet(at.spot.clear || CLEAR)} ft up and ${feet(OUT)} ft out.`, run: (o) => hold.begin({ ...this.hangOpts(c, at.spot, 0), ...this.keys(o) }) };
   }
   // the hung barrel the dot offers "E Lower · hold" at: { c, tree, label, run(opts) } or null
   hungTarget() {
     const p = this.player, hung = this.hungNear(p.x, p.z);
     if (!hung) return null;
     const t = hung.at.tree;
-    return { c: hung, tree: t, label: `The ${barrelName(hung.item)}, hung from the ${t ? t.name : 'tree'}`, verb: 'Lower', needs: stepsOf(LOWER), next: `Hold E: it comes down at the rope's foot in ${LOWER.reduce((s, q) => s + q.minutes, 0)} min.`, run: (o) => hold.begin({ ...this.lowerOpts(hung), ...this.keys(o) }) };
+    return { c: hung, tree: t, label: `The ${barrelName(hung.item)}, hung from the ${t ? t.name : 'tree'}`, verb: 'Lower', needs: stepsOf(LOWER), next: `Hold E: it comes down at the rope's foot in ${heldWords(LOWER)}.`, run: (o) => hold.begin({ ...this.lowerOpts(hung), ...this.keys(o) }) };
   }
   // the hold's keys from the dot (opts.key KeyE, Mouse0 besides) or the book (BookHold, with E and a click)
   keys(o) { const k = (o && o.key) || 'KeyE'; return { key: k, keys: [...new Set([k, 'Mouse0', ...((o && o.keys) || []), ...(k === 'BookHold' ? ['KeyE'] : [])])] }; }
@@ -262,32 +278,32 @@ export class Hang {
     if (c.where === 'hung') return 'it is hung already';
     if (p.mode !== 'walk') return 'ashore, on foot';
     if (!this.barrels().includes(c)) return 'the barrel is not within reach';
-    if (!this.treeFor(c)) return 'carry it to a tree with a good limb and point at the limb: a big pine or a birch';
+    if (!this.treeFor(c)) return 'carry it to a tree with a limb over head height and point at it';
     return null;
   }
   // fb4 E (decision 2): Hang's checklist, for the book's right-click and the dot: what is there, what is missing, and the
   // one thing to do now (the nearest good limb, where it is). → { why, needs, next }
   hangNeeds(cId) {
     const p = this.player, inv = this.inv, c = inv && inv.cont(cId), why0 = this.hangRefused(cId);
-    const steps = HANG.map((ph) => ({ label: `${ph.name} · ${ph.minutes} min`, done: false }));
-    const limbWords = `A limb ${LIMB[0]}–${String(LIMB[1]).replace('.5', '½')} m up within ${String(AT_TREE).replace('.4', '½')} m`;
+    const steps = stepsOf(HANG);
+    const limbWords = `A tree with a limb over ${Math.round(LIMB[0] * 3.281)} ft up, within ${Math.round(AT_TREE * 3.281)} ft`;
     if (!c || !BARRELS[c.item]) return { why: why0, needs: [{ label: 'A blue barrel', done: false }], next: 'Only a blue food barrel is hung.' };
     if (c.where === 'hung') return { why: why0, needs: [{ label: 'Hung', done: true }], next: 'Point at it, or the trunk it is tied off on, and hold E to lower it.' };
     const ashore = p.mode === 'walk', within = this.barrels().includes(c), here = ashore ? this.treeFor(c) : null;
     const needs = [
       { label: 'On foot, ashore', done: ashore },
       { label: 'The barrel within reach', done: within, note: within ? null : 'on you, at your feet, or in the canoe beside you' },
-      { label: limbWords, done: !!here, note: here ? `the ${here.t.name}, ${Math.round(here.t.up)} m up` : 'none here' },
+      { label: limbWords, done: !!here, note: here ? `the ${here.t.name}, ${feet(here.t.up)} ft up` : 'none here' },
       ...steps,
     ];
     let next;
     if (!ashore) next = 'Go ashore first.';
     else if (!within) next = here ? `Carry the barrel here: the ${here.t.name}'s limb takes it.` : 'Carry the barrel, or stand by it.';
-    else if (here) next = `Point at the ${here.t.name} and hold E: about ${HANG.reduce((s, q) => s + q.minutes, 0)} min.`;
+    else if (here) next = `Point at the ${here.t.name} and hold E: about ${heldWords(HANG)}.`;
     else {
       const t = this.treesNear(p.x, p.z, 60).find((q) => this.spotFor(q, p.x, p.z, BARRELS[c.item]));
-      if (t) { const deg = ((Math.atan2(t.x - p.x, -(t.z - p.z)) * 180) / Math.PI + 360) % 360; next = `Walk to the ${t.name} ${Math.round(t.d)} m ${COMPASS[Math.round(deg / 45) % 8]}: a limb ${Math.round(t.up)} m up. Point at it with the barrel on you.`; }
-      else next = 'Walk to a big pine or a birch with a branch 4–7 m up: the spruces and cedars branch to the ground.';
+      if (t) { const deg = ((Math.atan2(t.x - p.x, -(t.z - p.z)) * 180) / Math.PI + 360) % 360; next = `Walk to the ${t.name} ${feet(t.d)} ft ${COMPASS[Math.round(deg / 45) % 8]}: a limb ${feet(t.up)} ft up. Point at it with the barrel on you.`; }
+      else next = 'Walk to a bigger tree, a pine, a spruce or a birch, with a stout limb well over your head.';
     }
     return { why: why0 ? cap(why0) : null, needs, next };
   }
@@ -316,11 +332,11 @@ export class Hang {
   // limb, for a hold to carry on from.
   hangOpts(c, spot, from) {
     const inv = this.inv, H = BARRELS[c.item] || 0.6, p = this.player;
-    const low = spot.gy + H / 2 + 0.02, high = spot.gy + CLEAR + H / 2;
+    const low = spot.gy + H / 2 + 0.02, high = spot.gy + (spot.clear || CLEAR) + H / 2;
     const at = (y) => ({ x: spot.x, y, z: spot.z, heading: Math.atan2(-spot.dz, spot.dx), limb: spot.limb + 0.06 });
     const tieOn = () => { if (inv.cont(c.id) && inv.cont(c.id).where !== 'hung') { inv.hang(c.id, at(low)); const k = inv.cont(c.id); if (k && k.at) { k.at.tree = spot.tree; k.at.up = false; } } };
     return {
-      id: 'hang', label: 'Hanging the barrel', phases: HANG, at: from, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'hang', label: 'Hanging the barrel', phases: HANG, at: from, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onPhase: (i) => {
         if (i === 0) this.pending = { ref: c.id, tree: spot.tree, limb: spot.limb, spot, done: 1 };
         if (i === 1) { if (this.pending) this.pending.done = 2; tieOn(); }
@@ -330,7 +346,7 @@ export class Hang {
           k.at.y = high; k.at.up = true; this.pending = null; this.armed = null;
           inv.emit('hung');
           const tag = this.camp.reachArea ? this.camp.reachArea() : null; if (tag && k.at) k.at.camp = tag.key || 'camp';
-          this.camp.note(`The ${barrelName(c.item)} hangs from the ${spot.tree.name}, ${CLEAR} m up and ${OUT.toFixed(1).replace('.0', '')} m out from the trunk.`, 5);
+          this.camp.note(`The ${barrelName(c.item)} hangs from the ${spot.tree.name}, ${feet(spot.clear || CLEAR)} ft up and ${feet(OUT)} ft out from the trunk.`, 5);
           this.camp.log('hang', { item: c.item, tree: spot.tree.name, x: Math.round(spot.x), z: Math.round(spot.z) });
         }
       },
@@ -349,7 +365,7 @@ export class Hang {
   lowerOpts(c) {
     const inv = this.inv, H = BARRELS[c.item] || 0.6, a = c.at, high = a.y, low = (a.tree ? this.tiles.groundAt(a.x, a.z) : a.y - CLEAR) + H / 2 + 0.02, p = this.player;
     return {
-      id: 'lower', label: 'Lowering the barrel', phases: LOWER, at: 0, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'lower', label: 'Lowering the barrel', phases: LOWER, at: 0, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (k) => { const b = inv.cont(c.id); if (b && b.where === 'hung' && k > 1) b.at.y = high + (low - high) * ease(k - 1); },
       onPhase: (i) => {
         if (i < 1) return;
@@ -367,6 +383,6 @@ export class Hang {
   // food from a bear tonight. Only hung, hoisted (not tied on at the rope's foot) from a tree's limb: a hung barrel is
   // never visited. Everything else on the ground, in the canoe, on the grate or in the tent with you is not.
   secured(k) {
-    return !!(k && k.where === 'hung' && k.at && k.at.up !== false && Number.isFinite(k.at.y) && (!k.at.tree || k.at.y - (k.at.tree.gy ?? k.at.y) >= CLEAR * 0.8));
+    return !!(k && k.where === 'hung' && k.at && k.at.up !== false && Number.isFinite(k.at.y) && (!k.at.tree || k.at.y - (k.at.tree.gy ?? k.at.y) >= MIN_CLEAR * 0.9));
   }
 }

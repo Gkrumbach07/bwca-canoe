@@ -53,6 +53,7 @@ import { LIFE, TRAIL, footHours } from './pace.js';
 import { BASE_H, CARRY_H } from './energy.js';
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
+import { fmtDist, pounds } from './units.js';
 import { hold } from './hold.js'; // camp 1: the held "Load everything here"
 
 export const WEIGHTS = { aluminium: 34, royalex: 29, kevlar: 20, gear: 16, foodPack: 2, foodDay: 0.9 }; // kg (the canoes; the rest is the items' own)
@@ -80,7 +81,7 @@ const TAG_TRAIL = 15;       // m from a portage trail within which a thing set d
 const CARRY_EACH = { worn: 2, hands: 2 }; // tuning: what one carry takes besides the canoe (tripsFor): back and chest, both hands
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const lower = (s) => (/^(Duluth|Johnson|Mepps|Rapala|Lazy Ike|[A-Z]-)/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1)); // (a name keeps its capital)
-const metres = (d) => (d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`);
+const metres = (d) => fmtDist(d); // (feet, then miles, on screen)
 // game hours as the prompt says them: "about 35 min", "about 1 h 10"
 export function aboutHours(h) {
   const m = Math.max(5, Math.round((h * 60) / 5) * 5);
@@ -93,7 +94,8 @@ const SHORT = { pack3: 'pack', pack4: 'big pack', barrel30: 'small barrel', barr
 const short = (u) => { const g = u.obj.grid, e = (u.def.one || (u.id === 'pile' && g && g.length === 1)) && g && g[0], d = e && itemDef(e.id); return d ? lower(d.name) : SHORT[u.id] || lower(u.def.name); };
 const the = (u) => `the ${short(u)}`;
 function names(us) {
-  const n = us.map(the);
+  // (the owner, 2026-10-31: say what each thing is: a pile of several is named by what is in it, not "the things on the ground")
+  const n = us.flatMap((u) => (u.id === 'pile' && u.obj.grid && u.obj.grid.length > 1 ? u.obj.grid.filter((e) => itemDef(e.id)).map((e) => `the ${lower(itemDef(e.id).name)}`) : [the(u)]));
   return n.length <= 1 ? n[0] || '' : n.length === 2 ? `${n[0]} and ${n[1]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
 }
 
@@ -145,9 +147,15 @@ export class Packs {
     return out;
   }
   carried() { return this.units().filter((u) => u.obj.where === 'back' || u.obj.where === 'chest' || u.obj.where === 'hands'); }
-  // rides lashed in the canoe when it goes overhead: the paddle in use, the rod and the stringer (fb3 A, decision 3:
-  // lashed long things only; a pack, a barrel, the bucket, the tackle box and loose things must come out)
-  lashed(u) { return (u.kind === 'long' && (u.obj.inUse || u.def.long === 'rod')) || u.id === 'stringer'; }
+  // rides lashed in the canoe when it goes overhead: the stringer, and with the bungee dilly bobs (player.gear.dilly) the
+  // paddles and the rods (fb3 A, decision 3: lashed long things only; a pack, a barrel, the bucket, the tackle box and
+  // loose things must come out). The owner, 2026-10-31: "I don't know why the paddle could stay in the canoe when you're
+  // portaging it. That seems wrong. But the Bungee Dilly Bob allows you to attach the paddle, maybe the fishing rod":
+  // without them the paddle and the rod come out like anything else (canShoulder's "Unload it first"), and are carried
+  get dilly() { const g = this.player.gear; return !!(g && g.dilly); }
+  lashed(u) { return u.id === 'stringer' || (this.dilly && u.kind === 'long' && (u.def.long === 'paddle' || u.def.long === 'rod')); }
+  // the long things lashed in the canoe now (each makes it a little harder to balance overhead: balance.js)
+  lashedCount() { let n = 0; for (const l of this.inv.long) { const d = itemDef(l.id); if (l.where === 'canoe' && d && (d.long === 'paddle' || d.long === 'rod')) n++; } return this.dilly ? n : 0; }
   weightOf(u) { return u.kind === 'container' ? this.inv.kgOf(u.obj) : u.def.kg || 0; }
 
   // what you are carrying, kg: the canoe when it is overhead, and what is on your back, chest and in your hands
@@ -162,8 +170,8 @@ export class Packs {
     const p = this.player, on = this.carried(), left = this.left, kg = Math.round(this.loadKg);
     const worn = on.filter((u) => u.obj.where !== 'hands'), hand = on.filter((u) => u.obj.where === 'hands');
     let s;
-    if (p.mode === 'carry') s = `The canoe${on.length ? ', ' + names(on) : ''} · ${kg} kg`;
-    else if (on.length) s = `${cap(names(worn.length ? worn : hand))}${worn.length ? ' on you' : ' in hand'}${worn.length && hand.length ? `, ${names(hand)} in hand` : ''} · ${kg} kg`;
+    if (p.mode === 'carry') s = `The canoe${on.length ? ', ' + names(on) : ''} · ${pounds(kg)} lb`;
+    else if (on.length) s = `${cap(names(worn.length ? worn : hand))}${worn.length ? ' on you' : ' in hand'}${worn.length && hand.length ? `, ${names(hand)} in hand` : ''} · ${pounds(kg)} lb`;
     else {
       const all = this.units(), inCanoe = all.filter((u) => u.obj.where === 'canoe');
       s = all.some((u) => u.obj.where === 'ground' && u.obj.at && u.obj.at.camp) ? 'Packs out at camp' : inCanoe.length === all.length ? (inCanoe.length ? 'Everything in the canoe' : 'Nothing with you') : `${inCanoe.length} ${inCanoe.length === 1 ? 'thing' : 'things'} in the canoe`;
@@ -178,12 +186,13 @@ export class Packs {
   // second carry"): each carry, the first under the canoe too, takes CARRY_EACH.worn worn (the back and, with Q, the
   // chest) and CARRY_EACH.hands in hand; a thing that can go either way (the 30 L barrel) is worn while there is room
   tripsFor() {
+    const g = this.player.gear;
     const inCanoe = this.units().filter((u) => (u.obj.where === 'canoe' || this.isCarried(u)) && !this.lashed(u));
     const worn = (u) => u.kind === 'container' && (u.def.wear || []).length > 0, inHand = (u) => u.kind === 'long' || !!u.def.hand;
     const wearOnly = inCanoe.filter((u) => worn(u) && !inHand(u)).length, handOnly = inCanoe.filter((u) => !worn(u) && inHand(u)).length;
     const either = inCanoe.filter((u) => worn(u) && inHand(u)).length;
     for (let t = 1; t < 9; t++) {
-      const W = t * CARRY_EACH.worn, H = t * CARRY_EACH.hands, roomW = W - wearOnly;
+      const W = t * CARRY_EACH.worn, H = t * CARRY_EACH.hands - (g && g.yokeFree ? 0 : 1), roomW = W - wearOnly; // (under the canoe one hand is on it)
       if (roomW >= 0 && handOnly + Math.max(0, either - roomW) <= H) return t;
     }
     return 9;
@@ -218,6 +227,10 @@ export class Packs {
     if ((this.tagT -= dt) <= 0) { this.tagT = 1; this.tagTrailThings(); }
     const kg = this.loadKg;
     p.loadKg = kg; p.loadFactor = Math.max(1, kg / 40);
+    // the owner, 2026-10-31: under the canoe one hand is on a gunwale, unless the contoured yoke takes it on the shoulders
+    // (player.gear.yokeFree): then both hands may carry, at a higher risk of it tipping (balance.js)
+    this.inv.handLimit = mode === 'carry' && !(p.gear && p.gear.yokeFree) ? 1 : 2;
+    p.lashedN = mode === 'carry' ? this.lashedCount() : 0;
     // from the water, a portage that takes more than one carry says so (tuning: the landing's prompt reads "Go ashore ·
     // Portage: …" since fb3 A, so the old "^Portage: " never matched and the word had gone)
     const pr = p.prompt;
@@ -257,7 +270,7 @@ export class Packs {
   // Q beside a thing with the canoe overhead: it comes too
   takeToo(u) {
     const r = this.inv.carry(u.ref, this.slotFor(u) || 'auto');
-    if (this.hud) this.hud.note(r.ok ? `Everything in one trip: ${Math.round(this.loadKg)} kg.` : r.words || 'No room on you for it.');
+    if (this.hud) this.hud.note(r.ok ? `Everything in one trip: ${pounds(this.loadKg)} lb.` : r.words || 'No room on you for it.');
   }
   // E beside a thing on foot: onto your back, your chest or into a hand; a pile's things into what you carry
   pickUp(u) {
@@ -490,6 +503,7 @@ export class Packs {
     if (!pads.length || pads.some((u) => u.obj.where === 'canoe' || u.obj.where === 'hands')) return { ok: true, next: null };
     const p = this.player, ground = pads.filter((u) => u.obj.where === 'ground' && u.obj.at).map((u) => ({ u, m: Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) })).sort((a, b) => a.m - b.m)[0];
     if (ground) return { ok: false, next: `${cap(the(ground.u))} lies ${metres(ground.m)} from here: point at it and E to pick it up` };
+    if (pads.some((u) => u.obj.where === 'tent')) return { ok: false, next: 'Your paddle is in the tent: take it out from the book (I), The tent' };
     if (pads.some((u) => u.obj.where === 'stash')) return { ok: false, next: 'Your paddle is kept at the outfitters: fetch it there' };
     return { ok: false, next: 'Put a paddle in the canoe from the book (I)' };
   }
@@ -603,6 +617,9 @@ export class Packs {
   // { ok, why, needs, next } (decision 2: the things still in it as steps)
   canShoulder() {
     const list = this.loadedUnits();
+    // a hand for the gunwale (the owner, 2026-10-31), unless the contoured yoke balances it on the shoulders
+    const h = this.inv.hands, g = this.player.gear;
+    if (!list.length && h[0] && h[1] && !(g && g.yokeFree)) return { ok: false, why: 'A hand for the gunwale', needs: [{ label: 'One hand free to steady the canoe', done: false }], next: `Put down or away one of ${this.inv.handsWords() || 'what you hold'}. A contoured yoke from an outfitter lets you carry the canoe hands-free.` };
     if (!list.length) return { ok: true, why: null };
     return { ok: false, why: 'Unload it first', needs: list.map((u) => ({ label: `${cap(the(u))} out of it`, done: false })), next: 'Unload it: Set everything out, or drag each thing onto The ground.' }; // (fb5 join: said as the book opens, so not "Q opens the book")
   }
@@ -613,7 +630,7 @@ export class Packs {
     if (p.mode !== 'walk' || !d) return { n: 0, words: 'Not from here: on foot, beside the canoe.' };
     if (inv.hullDist({ x: d.x, z: d.z, heading: d.heading || 0 }, p.x, p.z) > HULL_REACH + 1) return { n: 0, words: 'The canoe is out of reach.' };
     const list = this.loadedUnits();
-    if (!list.length) return { n: 0, words: 'Nothing but the paddle and the stringer in it.' };
+    if (!list.length) return { n: 0, words: this.dilly ? 'Nothing but what is lashed in it.' : 'Nothing but the stringer in it.' };
     const camp = inv.camp, a = camp && camp.areaAt ? camp.areaAt(d.x, d.z) : null, taken = [];
     const words = `${cap(names(list))} set out beside the canoe.`; // (the content join: named before they go down: a hand's holder set down empties into a pile, and was "the in your hand")
     for (const u of list) {
@@ -698,7 +715,7 @@ export class Packs {
       // (fb4 join: and what to do about it: a loose thing goes in a pack in the canoe, so make room in one)
       const loose = skipped.some((s) => s.why === 'full' && s.id === 'pile'), kg = skipped.some((s) => s.why === 'kg');
       const next = !skipped.length ? '' : kg ? ' Take something heavy out, or make two trips.' : loose ? ' A loose thing rides in a pack in the canoe: make room in one, or carry it on you.' : ' The canoe takes eight packs and barrels: carry the rest.';
-      if (this.hud) this.hud.note(`${inN ? `${inN === list.length ? 'Everything is' : `${inN} ${inN === 1 ? 'thing' : 'things'}`} in the canoe` : 'Nothing went in'}${skipped.length ? `; no room for ${names(skipped)}${kg ? ` (the canoe has its ${CANOE_KG} kg)` : ''}` : ''}.${next}`, skipped.length ? 6 : 4);
+      if (this.hud) this.hud.note(`${inN ? `${inN === list.length ? 'Everything is' : `${inN} ${inN === 1 ? 'thing' : 'things'}`} in the canoe` : 'Nothing went in'}${skipped.length ? `; no room for ${names(skipped)}${kg ? ` (the canoe takes ${pounds(CANOE_KG)} lb)` : ''}` : ''}.${next}`, skipped.length ? 6 : 4);
     };
     return {
       id: 'load', label: 'Loading the canoe', phases, at: 0, near: { x: p.x, z: p.z, r: 1.5 },

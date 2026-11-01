@@ -87,14 +87,18 @@ const sunnyField = (x, z) => fbm(x * 0.0035, z * 0.0035, 2, 7) - 0.6; // a few b
 // convex edge above a wall where the bare rock runs out over the top; both read only near the steep cells.
 // d2 land: and from the survey where the tile has it (site.js landData), else as before: meadow (-1: the noise's meadowAt),
 // sphag (the bog's sphagnum, 0..1) and the bedrock's tint of the rock (tR, tG, tB; 1 = the granite as drawn)
+// d2 land: aLand's w, the sphagnum (0..1) where there is any, else minus how much water stands on the ground (the marsh's
+// and the swamp's: their wetness over 0.62, site.js wet), for terrain.js's pools; 0 under water and in the dry woods
+// (the wetlands round: the site's mire where it has one, the water the regime leaves standing on the tile's date)
+export const landW = (pre, sd) => (sd < 0 ? 0 : pre.sphag > 0.05 ? pre.sphag : -(pre.mire >= 0 ? pre.mire : smoothstep(0.62, 0.95, pre.wet)));
 export function groundPre(grid, x, z, sd, site, pre) {
   pre.sd = sd;
   pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z);
   pre.wall = 0; pre.brink = 0; pre.bog = 0; pre.wet = 0; pre.open = 0; pre.beach = 0;
-  pre.meadow = -1; pre.sphag = 0; pre.tR = 1; pre.tG = 1; pre.tB = 1;
+  pre.meadow = -1; pre.sphag = 0; pre.tR = 1; pre.tG = 1; pre.tB = 1; pre.mire = -1;
   if (site && site.land) {
     pre.tR = site.at(site.tintR, x, z); pre.tG = site.at(site.tintG, x, z); pre.tB = site.at(site.tintB, x, z);
-    if (sd >= 0) { pre.meadow = site.at(site.meadow, x, z); pre.sphag = site.at(site.sphag, x, z); }
+    if (sd >= 0) { pre.meadow = site.at(site.meadow, x, z); pre.sphag = site.at(site.sphag, x, z); if (site.mire) pre.mire = site.at(site.mire, x, z); }
   }
   if (sd >= 0 && site) {
     pre.rock = site.at(site.bare, x, z); pre.cliff = site.at(site.cliff, x, z); pre.talus = site.at(site.talus, x, z);
@@ -108,7 +112,7 @@ export function groundPre(grid, x, z, sd, site, pre) {
   } else { pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z); pre.cliff = 0; pre.talus = 0; }
   return pre;
 }
-const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1, meadow: -1, sphag: 0, tR: 1, tG: 1, tB: 1 };
+const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1, meadow: -1, sphag: 0, tR: 1, tG: 1, tB: 1, mire: -1 };
 // the wet ground's moss: a bog's floor is sphagnum, not needle duff (the ground cover reads it too, tile-worker.js)
 export const bogMoss = (wet) => 0.8 * smoothstep(0.55, 0.9, wet);
 export function groundClass(grid, x, z, shade = 0, site = null) {
@@ -174,8 +178,14 @@ export const BED_MATS = [hex(0xb3a27c), hex(0x786e5d), hex(0x584833), hex(0x625d
 //   sand     only in the odd sandy cove (the site's beaches, else a sparse slow field): the shallows are dark
 //   weed     a bed of pondweed and milfoil over the soft bottom from half a metre to three or four
 // The rocks and logs placement puts on the bed read the same (placement.js placeVegetation, bedFeatures).
+// wetlands round 2: the seasonal creeks (tile-worker.js sets them once): their bed is mud, never a sandy cove, so the
+// bank their late-summer low water bares is the muck of a marsh creek
+let LOW_CREEKS = null;
+export function setLowCreeks(set) { LOW_CREEKS = set && set.size ? set : null; }
 export function bedPre(grid, x, z, sd, depth, site, out = {}) {
-  out.clarity = grid.clarityOf ? grid.clarityOf(grid.lakeIdAt(x, z)) : 2.6;
+  const lid = grid.lakeIdAt ? grid.lakeIdAt(x, z) : 0;
+  out.clarity = grid.clarityOf ? grid.clarityOf(lid) : 2.6;
+  if (LOW_CREEKS && LOW_CREEKS.has(lid)) { out.sand = 0; out.cobble = 0.08; out.silt = 0.92; out.bedrock = 0; out.weed = 0; out.rock = 0; out.soft = 1; return out; }
   if (depth > 14) { out.sand = 0; out.cobble = 0; out.silt = 1; out.bedrock = 0; out.weed = 0; out.rock = 0; out.soft = 1; return out; }
   let rock = 0.3, wet = 0, beach = 0;
   if (site) {
@@ -411,7 +421,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     } else pre.depth = -1;
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
     for (let k = 0; k < 4; k++) { sa.push(q8(wA[k])); sb.push(q8(wB[k])); sc.push(q8(wC[k])); fl.push(q8(wf[k])); }
-    if (lnd) lnd.push(s8(pre.tR - 1), s8(pre.tG - 1), s8(pre.tB - 1), sd < 0 ? 0 : s8(pre.sphag));
+    if (lnd) lnd.push(s8(pre.tR - 1), s8(pre.tG - 1), s8(pre.tB - 1), s8(landW(pre, sd)));
   };
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));

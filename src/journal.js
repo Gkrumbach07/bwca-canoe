@@ -1,60 +1,73 @@
 // The book (I; fb4 B, decision 4: the one key, I or Esc closes it, Pack and Journal are tabs on its top edge; J, L,
-// Tab, Shift-Tab and the arrow keys are gone): one leather-bound book with two sides. It opens at the pack. The journal
-// side is a two-page paper spread. Its left page is the trip: the food cells, the energy
-// bar, the distances, portages, lakes and nights, the tasks on the go, a pencil note. Its right page has tabs:
-// Catches (the log, with personal bests), Tasks (the notices taken on, where each is paid, the season's earnings),
-// Lakes (where you have been), Trips (the logbook: every trip and how it ended), Photos (the prints the camera keeps,
-// photo.js). The gear, the food and what you carry are the pack side's (inv-ui.js PackSide): the Tarkov grids of your
-// containers on a canvas mat (feedback 2026-10-24: "the journal is only for catches, tasks, lakes, trips, photos").
-// Data comes from the fishing code (log, bests), the tasks, the energy, the outfitter's trip record, the trip's permit
-// and logbook (trip.js, reached through the outfitter), the trip tally (trip-stats.js) and the camera (photo.js).
-// The pack side is one screen (wc B, the world cards): the body on the left, a tab per container across the top, and
-// since fb4 B what is around you as tabs on the right (the canoe, each container on the ground, Wood, The ground, the
-// outfitters' keeping); a click turns a tab; openHere(ref) is stream A's Q.
-// Round A-A (a sense of progress): with the season's record attached (journal.record, record.js) the Trips tab is the
-// Record: the season's trips (a click turns the page to that trip's logbook page, the card it ended with), the lakes
-// paddled against those on your sheets, the species and the best of each, the portages, what you saw by kind, the
-// campsites stayed at, the keepers' stories finished, the photos (a link to the Photos tab), the outfitters known, what
-// the boards have paid, and the firsts in pencil. showRecord(id) opens the book there.
-import { clock12, longDate, shortDate, weekdayOf, esc, fmtKm, fmtDays, plural, word, lakeWords } from './hud.js';
+// Tab, Shift-Tab and the arrow keys are gone): one leather-bound book with sides (SIDES), each a tab on its top edge. It
+// opens at the pack. The gear, the food and what you carry are the pack side's (inv-ui.js PackSide): the Tarkov grids of
+// your containers on a canvas mat. The pack side is one screen (wc B, the world cards): the body on the left, a tab per
+// container across the top, and since fb4 B what is around you as tabs on the right (the canoe, each container on the
+// ground, Wood, The ground, the outfitters' keeping); a click turns a tab; openHere(ref) is stream A's Q.
+//
+// The journal side is an open book (book.css: the cover, the block of pages under the open two, the seam; paper.css:
+// worn paper, the hand) with index tabs down its right edge. The owner's second round (2026-10-31: "think of the journal
+// as ... once you pencil it in, you're not really unpenciling it in"): nothing on a page says what is not there yet, and
+// nothing tells you which key does what; a page with nothing on it is a blank page with its heading.
+//   Tasks   the notices you took, folded into the book: their titles in a pencilled checklist on the right (a box, half
+//           a box, a tick; crossed out when paid), and the one picked unfolded on the left as the paper it was
+//           (flyers.js: a café's guest check, a LOST poster, a Forest Service form, a visitor's scrap of notebook)
+//   Fish    your own fishing log on the right, a line a fish (date, time, water, weather, fish, size, lure; a star by
+//           your biggest of each), and tucked into the left page the outfitter's fold-out pamphlet: open it for the
+//           fish of these lakes, pick one for its panel
+//   Trips   the logbook (record.js, else trip.js's book), a pencilled line a trip on the right; its page on the left
+//   Photos  the prints (photo.js) taped in small on the right; the one picked big on the left with what it is of
+// Data comes from the fishing code (log, bests), the tasks, the outfitter's trip, the trip core's logbook, the season's
+// record (journal.record) and the camera (journal.photos). showRecord(id) opens the book at a trip's page.
+import { clock12, longDate, shortDate, esc, plural, word, fishSilhouette } from './hud.js';
 import { PackSide } from './inv-ui.js';
 import { KINDS } from './tasks.js'; // fb3 C: a notice's kind, for its progress and its label
-import { teaWord } from './water.js'; // d2 water: the water's colour in a word
+import { itemDef } from './items.js';
+import { fishPicture } from './fish-portrait.js';
+import { flyerHtml } from './flyers.js';
+import './paper.css';
+import './flyers.css';
+import './fishbook.css';
+import './book.css';
 
-const ROWS = 8;        // catches per page
-const PENCIL = [
-  'walleye at dusk on the drop-off, jig and twister',
-  'loons on the point again this evening',
-  'rain smell in the air — tent fly first, then supper',
-  'the portage landing is rough; take the packs over first',
-  'pike in the weedy bay by the inlet, spoons',
-  'lay over tomorrow if the wind holds',
-];
-const SIDES = ['pack', 'journal'];
-// what lifts the energy bar's ceiling, by the need whose chunk is biggest (energy.chunks)
-const LIFTS = { rest: 'a night’s sleep lifts it', food: 'a meal lifts it', water: 'a drink lifts it', warmth: 'a fire, or the tent and the bag, lift it' };
+import { MapBook } from './map-book.js'; // the map as the book's third tab
+
+const SIDES = ['pack', 'journal', 'map']; // (the owner, 2026-10-31: "pack, journal, map": map-book.js)
 
 export class Journal {
   // t: { hud, world, player, day, fishing, tasks, energy, outfitter, stats, wind, onUse }
   constructor(t) {
     Object.assign(this, t);
     this.el = document.getElementById('journal');
-    this.open = false; this.tab = 'catches'; this.page = 0; this.sig = ''; this.t = 0; this.side = 'journal';
-    this.record = null; this.recTrip = null; // round A-A: the season's record (record.js), and the trip whose page is open in it
+    this.open = false; this.tab = 'tasks'; this.page = 0; this.sig = ''; this.t = 0; this.side = 'journal';
+    this.record = null; // round A-A: the season's record (record.js)
+    this.taskSel = null; this.tripSel = null; this.printSel = null; // what is picked on each tab
+    this.pam = null; // the fish pamphlet: null folded in the page, 'open', or a species' panel
+    this.shownFlyer = null; this.logEnd = true; // (the flyer unfolds once when picked; the log opens at its last line)
     // the book: a tab for each side on its top edge, the journal's spread and the pack's mat
     this.el.classList.add('book');
-    this.el.setAttribute('aria-label', 'The book: the journal and the pack');
-    this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button></div>
-      <div class="book-key"><kbd>I</kbd> or <kbd>Esc</kbd> closes</div><div class="side j"></div><div class="side p"></div>`;
+    this.el.setAttribute('aria-label', 'The book: the pack, the journal and the map');
+    this.el.innerHTML = `<div class="book-tabs" role="tablist"><button type="button" class="book-tab p" data-side="pack" role="tab">Pack</button><button type="button" class="book-tab j" data-side="journal" role="tab">Journal</button><button type="button" class="book-tab m" data-side="map" role="tab">Map</button></div>
+      <div class="side j"></div><div class="side p"></div><div class="side m"></div>`;
     this.jEl = this.el.querySelector('.side.j'); this.pEl = this.el.querySelector('.side.p');
+    this.jEl.classList.add('pp-spread'); // the journal's paper (paper.css)
+    this.el.querySelector('.side.m').classList.add('pp'); // (the map's index takes the same hand: paper.css .pp-head)
     this.pack = new PackSide(this.pEl, { onUse: t.onUse || null, closeBook: () => this.close() }); // fb2 B: a nearby thing's action that wants the world (Pitch, Eat at the fire) closes the book first
+    this.map = new MapBook(this.el.querySelector('.side.m'), { hud: this.hud, journal: this, world: this.world, tasks: this.tasks, outfitter: this.outfitter });
     this.hud.registerPaper('journal', () => this.close());
     this.el.addEventListener('click', (e) => {
       const side = e.target.closest('[data-side]'); if (side) { this.setSide(side.dataset.side); side.blur(); return; } // (no focus ring left on it for the next key)
-      const tab = e.target.closest('[data-tab]'); if (tab) { this.tab = tab.dataset.tab; this.page = 0; this.recTrip = null; this.render(true); return; }
-      const trip = e.target.closest('[data-trip]'); if (trip) { this.recTrip = trip.dataset.trip; this.render(true); const sc = this.jEl.querySelector('.page.right .scroll'); if (sc) sc.scrollTop = 0; return; } // round A-A: a trip's page in the Record
-      if (e.target.closest('[data-back]')) { this.recTrip = null; this.render(true); return; }
-      const pg = e.target.closest('[data-page]'); if (pg) { this.page = Math.max(0, this.page + Number(pg.dataset.page)); this.render(true); return; }
+      const tab = e.target.closest('[data-tab]'); if (tab) { this.tab = tab.dataset.tab; this.page = 0; this.logEnd = true; this.render(true); return; }
+      // the pamphlet: opened, a fish's panel, back to the list, folded away again by a click on the page round it
+      const pm = e.target.closest('[data-pam]');
+      if (pm) { const v = pm.dataset.pam; this.pam = v === 'fold' ? null : v; this.render(true); return; }
+      if (this.tab === 'fish' && this.pam && e.target.closest('.pp-page.left') && !e.target.closest('.pam')) { this.pam = null; this.render(true); return; }
+      // a pick on the right page: its page on the left, scrolled to the top
+      const pick = e.target.closest('[data-task], [data-trip], [data-print]');
+      if (pick) {
+        if (pick.dataset.task) this.taskSel = pick.dataset.task; else if (pick.dataset.trip) this.tripSel = pick.dataset.trip; else this.printSel = Number(pick.dataset.print);
+        this.render(true); const sc = this.jEl.querySelector('.pp-page.left .pp-scroll'); if (sc) sc.scrollTop = 0; return;
+      }
       const close = e.target.closest('[data-close]'); if (close) this.close();
     });
     // fb4 B (decision 4; the owner, 2026-10-25: "It should just be one key, I, to get into the inventory. You can switch
@@ -65,7 +78,11 @@ export class Journal {
       if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
       const busy = this.hud.paper === 'outfitter' || this.hud.paper === 'shelf' || this.hud.paper === 'card';
       if (e.code === 'KeyI') { if (e.repeat || busy) return; if (this.open) this.close(); else this.show('pack'); }
-      else if (this.open && e.code === 'Escape') this.close();
+      else if (this.open && e.code === 'Escape' && !e.mapPin) {
+        if (this.side === 'map' && this.map.lake) this.map.closeLake();
+        else if (this.side === 'journal' && this.tab === 'fish' && this.pam) { this.pam = null; this.render(true); } // (the pamphlet folds first)
+        else this.close();
+      } // (the map's pin takes its own Esc: hud.js)
     });
     // Tab does nothing while the book is open (the readout's Tab, hud.js, waits until it is shut): the tabs are clicked
     window.addEventListener('keydown', (e) => {
@@ -82,10 +99,10 @@ export class Journal {
     return true;
   }
   toggle() { if (this.open) this.close(); else this.show('pack'); }
-  // round A-A: the book open at the journal's Record, at a trip's page when given its id
+  // round A-A: the book open at the journal's Trips, at a trip's page when given its id
   showRecord(id = null) {
     if (!this.record) return false;
-    this.tab = 'record'; this.page = 0; this.recTrip = id || null;
+    this.tab = 'trips'; this.page = 0; if (id) this.tripSel = id;
     if (this.open && this.side === 'journal') { this.render(true); return true; }
     this.show('journal');
     if (this.side !== 'journal') this.setSide('journal');
@@ -98,12 +115,15 @@ export class Journal {
     this.open = true;
     this.hud.openPaper('journal');
     this.el.classList.add('show');
-    if (this.side === 'pack') this.pack.show(); else this.render(true);
+    if (this.side === 'pack') this.pack.show(); else if (this.side === 'map') this.map.show(); else this.render(true);
   }
+  // M (hud.js): the book open at the map
+  showMap() { if (this.open && this.side === 'map') return true; this.show('map'); return true; }
   close() {
     if (!this.open) return;
     this.open = false;
     this.pack.hide();
+    this.map.hide();
     this.el.classList.remove('show');
     this.hud.closePaper('journal');
   }
@@ -112,297 +132,281 @@ export class Journal {
     this.side = side;
     for (const b of this.el.querySelectorAll('.book-tab')) { const on = b.dataset.side === side; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
     this.jEl.classList.toggle('on', side === 'journal'); this.pEl.classList.toggle('on', side === 'pack');
+    this.el.querySelector('.side.m').classList.toggle('on', side === 'map');
     if (!this.open) return;
-    if (side === 'pack') this.pack.show(); else { this.pack.hide(); this.render(true); }
+    if (side !== 'map') this.map.hide();
+    if (side === 'pack') this.pack.show(); else if (side === 'map') { this.pack.hide(); this.map.show(); } else { this.pack.hide(); this.render(true); }
   }
   // while it is up, the page follows the game (a meal, a fish, the clock) at a gentle rate
   update(dt) {
     if (!this.open) return;
     if (this.side === 'pack') { this.pack.update(dt); return; }
+    if (this.side === 'map') { this.map.update(dt); return; }
     if ((this.t += dt) > 0.5) { this.t = 0; this.render(false); }
   }
 
   // --- the words ------------------------------------------------------------------------------------------
-  // fb3 C (16, the owner: "task completion or partial completion could be better. like the checkbox is confusing when
-  // it's just dark"): a notice's state, plain. Taken: an empty box and where to do it. In progress: a half box and the
-  // progress line ("1 of 2 in the cooler", "two of three pints handed over"). Done: a tick and where to claim it.
-  // (Claimed: a grey tick with the pay, from the claimed list.) Returns { cls, word, words }.
+  // fb3 C (16): a notice's state, plain. Taken: an empty box. In progress: a half box and the progress line ("1 of 2 in
+  // the cooler"). Done: a tick and where to claim it. Returns { cls, words }.
   taskState(t) {
-    const ts = this.tasks, k = KINDS[t.kind] || null, w = this.world;
+    const ts = this.tasks, k = KINDS[t.kind] || null;
     const at = (ep) => { const l = ts && ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
     if (t.status === 'done') {
       const who = t.npc ? String(t.npcName || 'a visitor').split(' ')[0] : '';
-      return { cls: 'done', word: 'Done', words: who ? `${who} pays it, or the counter at ${at(t.from)}, entry point ${t.from}` : `claim it at ${at(t.from)}, entry point ${t.from}` };
+      return { cls: 'done', words: who ? `${who} pays it, or the counter at ${at(t.from)}` : `claim it at ${at(t.from)}` };
     }
     // how far along: the kind's own fraction, else what is in the cooler or handed over against what is wanted
     let f = 0;
     if (k && typeof k.fraction === 'function') { const v = k.fraction(t); if (Number.isFinite(v)) f = v; }
     else { const n = t.need || 1; if (Array.isArray(t.cooler) && t.cooler.length) f = t.cooler.length / n; else if (Number.isFinite(t.got) && t.got > 0) f = t.got / n; }
-    const progress = k && typeof k.progress === 'function' ? k.progress(t) : (ts && ts.progressOf ? ts.progressOf(t) : 'on the go');
-    if (f > 0) return { cls: 'half', word: 'In progress', words: progress };
-    // taken: where to do it (the keeper's pencil on the map: the site or the water, and the lake)
-    let where = '';
-    try {
-      const tg = ts && typeof ts.targetOf === 'function' ? ts.targetOf(t) : null, label = tg && tg.label ? String(tg.label) : '';
-      const lake = w && typeof w.lakeName === 'function' ? w.lakeName(t.lakeId || t.lakeHint || 0) || '' : '';
-      where = label && lake && !label.includes(lake) ? `${label}, ${lake}` : lake ? `on ${lake}` : label || (t.toPlace ? `at ${t.toPlace}` : '');
-    } catch { where = ''; }
-    return { cls: 'taken', word: 'Taken', words: where ? `${where} · ${progress}` : progress };
+    if (f > 0) return { cls: 'half', words: k && typeof k.progress === 'function' ? k.progress(t) : (ts && ts.progressOf ? ts.progressOf(t) : '') };
+    return { cls: 'taken', words: '' };
   }
   get trip() { return this.outfitter ? this.outfitter.trip : null; }
   get core() { return this.outfitter ? this.outfitter.core : null; } // the trip's rules and permit (trip.js)
   get dayN() { const c = this.core; if (c) return c.active ? c.dayN : 0; const t = this.trip; return t && t.active ? Math.floor(this.outfitter.daysOut) + 1 : 0; }
-  lakeList(lakes) {
-    if (!lakes.length) return 'none yet';
-    lakes = lakes.filter((l, i) => lakes.findIndex((q) => q.name === l.name) === i); // (round A join: a name once: "Lake One, One")
-    return lakes.map((l, i) => (i === 0 ? l.name : l.name.replace(/^Lake /, '').replace(/ Lake$/, ''))).join(', ');
-  }
-  catchTime(c) {
-    if (c.hours == null) return esc(c.time || '');
-    const d = this.day, sameDay = c.doy === d.doy && c.year === d.year;
-    const ago = (d.year - (c.year || d.year)) * 365 + (d.doy - (c.doy || d.doy));
-    if (sameDay) return clock12(c.hours);
-    if (ago < 7) return `${weekdayOf(c.year, c.doy).slice(0, 3)} ${clock12(c.hours)}`;
-    return shortDate(c.year, c.doy);
-  }
-  pencilNote() {
-    const w = this.wind, d = this.day, en = this.energy, h = d.hours, set = d.sunriseSunset.set, c = this.core;
-    const adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
-    // (the inventory's snacks count as food too; at an outfitter the shelf is a step away)
-    const out = this.trip && this.trip.active && !(this.outfitter && this.outfitter.visit), inv = en && en.inv;
-    const none = inv && typeof inv.snacks === 'function' ? inv.meals() + inv.snacks() <= 0 : en && en.food <= 0;
-    if (!sand && en && out && en.food < 1 && !none) { if (en.food > 0) return adv ? 'last of the food. make for a landing' : 'last of the food — head for an outfitter'; }
-    // (polish B: nothing to eat is worth a line once hunger is coming, not on the first stroke of a season)
-    if (!sand && en && out && none && en.needs.food < 0.6) return adv ? 'nothing to eat with you, and getting hungry. make for a landing' : 'nothing to eat with you. any outfitter will fill the pack';
-    if (adv && en && en.awake > 18) return 'up since yesterday. sleep before anything else';
-    if (adv && c.state.wet) return 'everything is damp. a fire tonight to dry the gear';
-    if (en && en.value < 0.3) return 'tired. find a site early and eat something';
-    if (w && w.fresh && h < 16) return 'wind should drop by evening — stay in the lee till then';
-    if (w && w.speed < 2 && h < 10) return 'glassy this morning — make the miles before the wind gets up';
-    if (set != null && h > set - 1 && h < set + 1) return 'sun is going. find a site, get the tent up';
-    return PENCIL[(d.doy + Math.floor(h / 3)) % PENCIL.length];
+  // the home outfitter's name (the pamphlet came from their counter)
+  homeName() {
+    const o = this.outfitter, ts = this.tasks, ep = o && o.profile ? o.profile.home : null;
+    const L = ep != null && ts && ts.landing ? ts.landing(ep) : null;
+    return L ? L.name : 'your outfitter';
   }
   signature() {
-    const f = this.fishing, en = this.energy, st = this.stats, ts = this.tasks;
-    const c = this.core;
-    return [this.tab, this.page, f ? f.logVersion : 0, en ? Math.round(en.value * 100) : 0, en ? en.food : 0, st ? Math.round(st.km * 10) : 0, st ? st.portages : 0, st ? st.lakes.length : 0, st ? st.nights.length : 0,
-      ts ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', ts ? ts.unlocks.length : 0, Math.floor(this.day.hours * 4), this.dayN,
-      c ? `${c.mode}${c.active}${c.book.trips.length}${c.state.wet}` : '', this.photos ? this.photos.version : 0, this.record ? `${this.record.version}${this.recTrip}` : ''].join('|');
+    const f = this.fishing, ts = this.tasks, c = this.core, R = this.record;
+    return [this.tab, this.page, this.taskSel, this.pam, this.tripSel, this.printSel, f ? f.logVersion : 0,
+      ts ? ts.active.map((t) => `${t.id}${t.status}${t.got || 0}${(t.cooler || []).length}`).join() : '', ts ? (ts.claimed || []).length : 0, this.dayN,
+      c ? `${c.mode}${c.active}${c.book.trips.length}` : '', this.photos ? this.photos.version : 0, R ? R.version : '',
+      typeof this.notes === 'function' ? (this.notes() || []).length : 0].join('|');
   }
 
   render(force) {
     const sig = this.signature();
     if (!force && sig === this.sig) return;
     this.sig = sig;
-    const scrolls = [...this.jEl.querySelectorAll('.scroll, .section')].map((n) => n.scrollTop);
-    this.jEl.innerHTML = this.leftPage() + this.rightPage();
-    [...this.jEl.querySelectorAll('.scroll, .section')].forEach((n, i) => { if (scrolls[i]) n.scrollTop = scrolls[i]; });
-  }
-
-  // --- the trip page ------------------------------------------------------------------------------------
-  leftPage() {
-    const trip = this.trip, en = this.energy, st = this.stats, ts = this.tasks, o = this.outfitter, w = this.world;
-    const active = !!(trip && trip.active), dayN = this.dayN, c = this.core, adv = !!(c && c.adventure && c.active), sand = !!(c && c.sandbox);
-    const from = active ? trip.fromName || 'the landing' : null;
-    const outfitterName = active && o ? (o.landings.find((l) => l.ep === trip.ep) || {}).name : '';
-    let pushed = '';
-    if (active) pushed = trip.startDoy != null ? `pushed off ${sand ? '' : `${longDate(trip.startYear, trip.startDoy)}, `}${clock12(trip.startHours)}` : `pushed off ${esc(trip.started || '')}`;
-    // food: a cell a day, the half days as half cells, what is eaten left empty
-    const total = active ? Math.max(trip.days || 0, Math.ceil(en.food)) : 0, left = en ? en.food : 0;
-    let cells = '';
-    for (let i = 0; i < total; i++) {
-      const have = left - i;
-      if (have >= 1) cells += '<i></i>';
-      else if (have >= 0.5) cells += '<i class="half"></i><i class="half empty"></i>';
-      else cells += '<i class="empty"></i>';
-    }
-    const d = this.day, afterRise = d.sunriseSunset.rise == null || d.hours >= d.sunriseSunset.rise, beforeSet = d.sunriseSunset.set == null || d.hours < d.sunriseSunset.set;
-    const meal = left <= 0 ? 'the pack is empty' : afterRise && beforeSet ? 'supper at sunset' : 'breakfast at dawn';
-    // with the inventory (fb A), its own words: the meals and snacks within reach, eaten from the pack (no meal comes on the clock)
-    const words = en && en.inv && typeof en.foodWords === 'function' ? en.foodWords() : null;
-    const foodTxt = !active ? 'no trip under way' : sand ? `the pack keeps · ${meal}` : words ? `${words === 'no food' ? 'nothing to eat' : words} within reach · eaten from the pack` : `${fmtDays(left)} ${left <= 1 ? 'day' : 'days'} of ${total} · ${meal}`;
-    const ev = en ? Math.round(en.value * 100) : 100;
-    const cap = en ? Math.round(en.ceiling * 100) : 100;
-    // at its ceiling the bar goes no higher until the need that holds it down is met (fb2 F: the ceiling is the bar less
-    // each need's chunk, sleep, hunger, thirst and cold): the biggest chunk says what lifts it
-    const top = en && typeof en.chunks === 'function' ? en.chunks().reduce((a, c) => (!a || c.size > a.size ? c : a), null) : null;
-    const lifts = top && top.size > 0.01 ? ` · ${LIFTS[top.key] || 'a night’s sleep lifts it'}` : '';
-    const energyTxt = en && en.warning ? 'no food and little left in you' : adv && cap < 100 && ev >= cap - 2 ? `${(en && en.heldBy) || 'it goes no higher now'}${lifts}` : ev > 60 ? 'resting brings it back, faster at a campsite' : ev > 30 ? 'getting low · a meal or a rest at a campsite' : 'worn out · eat, or sit a while';
-    const drops = st ? st.drops : 0;
-    const dropTxt = drops === 0 ? '' : drops === 1 ? ' · the canoe dropped once' : drops === 2 ? ' · the canoe dropped twice' : ` · the canoe dropped ${drops} times`;
-    const nights = st ? st.nights : [];
-    const nightTxt = nights.length ? `${nights.length} · ${esc(nights[nights.length - 1].where)}` : 'none yet';
-    const daysOn = st ? st.daysOnWater : 0;
-    const active_tasks = ts ? ts.active : [];
-    // fb3 C (16): each notice with its state in the box and a word on it (taskState)
-    const todo = active_tasks.length ? active_tasks.map((t) => { const st = this.taskState(t); return `<div class="todo ${st.cls}"><i aria-hidden="true"></i><span>${esc(t.clue)} <span class="soft"><span class="sc">${esc(st.word)}</span> · ${esc(st.words)}</span></span></div>`; }).join('')
-      : '<div class="empty">Nothing on the go. Every outfitter pins notices by the door, paid at its own counter.</div>';
-    return `<section class="page left" aria-labelledby="trip-h">
-      <div class="sc kicker">${active ? `The trip · ${c ? `${c.adventure ? 'Adventure' : 'Sandbox'} · ${esc(c.dayWords())}` : `day ${dayN}`}` : `The trip${c ? ` · ${c.adventure ? 'Adventure' : 'Sandbox'}` : ''}`}</div>
-      <div class="lede"><h2 id="trip-h">${active ? `Out from ${esc(from)}` : 'Between trips'}</h2><div class="sub">${active ? `${esc(outfitterName || '')}${outfitterName ? ' · ' : ''}${pushed}` : adv || (c && c.adventure) ? 'Food on the provisions shelf; push off when you like.' : 'The outfitter at any landing will set you up with a food pack.'}</div></div>
-      <div class="grid">
-        <div class="lab">Food</div><div class="with"><span class="cells" aria-hidden="true">${cells}</span><span>${foodTxt}</span></div>
-        <div class="lab">Energy</div><div class="with"><span class="ebar"><i style="width:${ev}%"></i></span><span>${ev} % · ${energyTxt}</span></div>
-        <div class="lab">Paddled</div><div>${st ? `${fmtKm(st.km)} km · ${daysOn} ${plural(daysOn, 'day')} on the water` : '—'}</div>
-        <div class="lab">Portages</div><div>${st ? `${st.portages} walked${st.rods ? ` · ${st.rods} rods` : ''}${dropTxt}` : '—'}</div>
-        <div class="lab">Lakes</div><div>${st ? esc(this.lakeList(st.lakes)) : '—'}</div>
-        <div class="lab">Nights</div><div>${nightTxt}</div>
-      </div>
-      <div class="section"><div class="lab">On the go</div>${todo}</div>
-      <div class="foot"><div class="pencil">${esc(this.pencilNote())}</div><div>${active ? dayN * 2 : 1}</div></div>
-    </section>`;
-  }
-
-  // --- the right page -------------------------------------------------------------------------------------
-  rightPage() {
-    // round A-A: the season's record takes the Trips tab's place (its trips list is the logbook's, with each trip's page)
-    const rec = this.record && this.record.s ? this.record : null;
-    if (rec && this.tab === 'trips') this.tab = 'record';
-    const tabs = [['catches', 'Catches'], ['tasks', 'Tasks'], ['lakes', 'Lakes'], ...(rec ? [['record', 'Record']] : this.core ? [['trips', 'Trips']] : []), ...(this.photos ? [['photos', 'Photos']] : [])]; // hubs 3B: the prints; the gear is the pack side's
-    const nav = `<nav class="tabs" aria-label="Journal pages">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`;
-    if (!tabs.some(([k]) => k === this.tab)) this.tab = 'catches';
-    const body = this.tab === 'tasks' ? this.tasksTab() : this.tab === 'lakes' ? this.lakesTab() : this.tab === 'record' && rec ? this.recordTab() : this.tab === 'trips' && this.core ? this.tripsTab() : this.tab === 'photos' && this.photos ? this.photosTab() : this.catchesTab();
+    const scrolls = [...this.jEl.querySelectorAll('.pp-scroll, .pp-index')].map((n) => n.scrollTop);
+    const tabs = this.tabs();
+    if (!tabs.some(([k]) => k === this.tab)) this.tab = 'tasks';
+    const body = this.tab === 'fish' ? this.fishTab() : this.tab === 'trips' ? this.tripsTab() : this.tab === 'photos' ? this.photosTab() : this.tasksTab();
+    const nav = `<nav class="pp-tabs" aria-label="Journal pages">${tabs.map(([k, l, col]) => `<button type="button" class="pp-tab${this.tab === k ? ' on' : ''}" data-tab="${k}" style="--tab:${col}" aria-pressed="${this.tab === k}">${l}</button>`).join('')}</nav>`;
     const pageNo = (this.dayN || 0) * 2 + 1;
-    return `<section class="page right" aria-labelledby="right-h"><div class="ribbon" aria-hidden="true"></div>${nav}<div class="tabpage">${body.html}</div>
-      <div class="foot"><span>${body.foot || ''}</span><span class="keys"><kbd>I</kbd> or <kbd>Esc</kbd> closes · ${pageNo}</span></div></section>`;
+    this.jEl.innerHTML = `<section class="pp-page left${body.leftCls ? ` ${body.leftCls}` : ''}" aria-label="${esc(body.leftLabel || 'The page')}">${body.left}<div class="pp-foot left"><span>${pageNo - 1 || ''}</span></div></section>
+      <section class="pp-page right${body.rightCls ? ` ${body.rightCls}` : ''}" aria-labelledby="right-h">${nav}${body.right}
+        <div class="pp-foot"><span></span><span>${pageNo}</span></div></section>`;
+    [...this.jEl.querySelectorAll('.pp-scroll, .pp-index')].forEach((n, i) => { if (scrolls[i]) n.scrollTop = scrolls[i]; });
+    // the log opens at its last line, as a book is written
+    if (this.tab === 'fish' && this.logEnd) { const lg = this.jEl.querySelector('.fl-log .pp-index'); if (lg) lg.scrollTop = lg.scrollHeight; this.logEnd = false; }
   }
-  catchesTab() {
-    const f = this.fishing, log = f ? f.log : [], bests = f ? Object.values(f.bests || {}) : [];
-    const kept = log.filter((c) => c.kept).length;
-    const bestTxt = bests.length ? `Personal bests: ${bests.sort((a, b) => b.length - a.length).map((b) => `${esc(String(b.name || '').toLowerCase())} ${b.length} cm`).join(' · ')}` : 'No personal bests yet. F takes up the rod in the canoe; hold Space to cast.';
-    const all = log.slice().reverse(), pages = Math.max(1, Math.ceil(all.length / ROWS));
-    this.page = Math.min(this.page, pages - 1);
-    const rows = all.slice(this.page * ROWS, this.page * ROWS + ROWS).map((c) => `<tr><td>${this.catchTime(c)}</td><td class="${c.best ? 'best' : ''}">${esc(c.name)}${c.best ? ' ★' : ''}</td><td>${c.length} cm</td><td>${c.weight} kg</td><td>${esc(String(c.lake).replace(/^Lake /, ''))}</td><td>${esc(c.lureShort || c.lure || '')}</td><td class="soft">${c.kept ? 'kept' : 'released'}</td></tr>`).join('');
-    const table = log.length ? `<div class="scroll"><table><thead><tr><th>Time</th><th>Fish</th><th>Length</th><th>Weight</th><th>Lake</th><th>Lure</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Nothing in the log yet.</div>';
-    const more = all.length - (this.page + 1) * ROWS;
-    const foot = `★ personal best${more > 0 ? ` · <button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? ` · <button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}`;
-    return { html: `<div class="lede"><h2 id="right-h">${log.length ? `${log.length} ${plural(log.length, 'fish', 'fish')}, ${kept} kept` : 'No fish yet'}</h2><div class="sub">${bestTxt}</div></div>${table}`, foot };
+  // the index tabs down the right page's edge: [key, label, colour]
+  tabs() {
+    return [['tasks', 'Tasks', '#5f7046'], ['fish', 'Fish', '#3f6273'], ...(this.record || this.core ? [['trips', 'Trips', '#8a5a34']] : []), ...(this.photos ? [['photos', 'Photos', '#74495a']] : [])];
   }
+
+  // --- Tasks: the notices folded into the book ------------------------------------------------------------------------
+  // The owner (2026-10-31): "you might have a little entry thing where you have all your tasks right there and you press
+  // on one, it unfolds the flyer and you can see it on the left ... You don't need to have all the information of the
+  // task there, just sort of the title". The right page is the checklist in pencil (a box in the margin: empty, half a
+  // box, a tick; a claimed one crossed out with its pay); the left page the picked notice unfolded (flyers.js), with a
+  // pencilled word under it when there is something to do about it.
   tasksTab() {
-    const ts = this.tasks;
-    if (!ts) return { html: '<div class="lede"><h2 id="right-h">Tasks</h2></div><div class="empty">No board on this trip.</div>', foot: '' };
-    const all = ts.active, open = all.filter((t) => t.status !== 'done'), done = all.filter((t) => t.status === 'done');
-    const at = (ep) => { const l = ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
-    const kinds = { item: 'Lost and found', survey: 'Portage crew', fish: 'Fish wanted' };
-    // the notices taken on, the finished ones first, each with its state plain (fb3 C, 16: taskState) and where it is paid
-    // (a visitor's task, npcs.js, is theirs: asked in person at that store, paid by them or its counter)
-    const card = (t) => {
-      const who = t.npc ? String(t.npcName || 'a visitor') : '', st = this.taskState(t);
-      const lab = t.npc ? `Asked by ${esc(who)}` : kinds[t.kind] || esc((KINDS[t.kind] && KINDS[t.kind].label) || t.kind);
-      return `<div class="todo ${st.cls}"><i aria-hidden="true"></i><span><span class="lab">${lab} · ${esc(at(t.from))}</span><span class="pay">$${t.pay || 0}</span><br><b>${esc(t.title || '')}</b> ${esc(t.text || t.clue || '')}<br><span class="soft state"><span class="sc">${esc(st.word)}</span> · ${esc(st.words)}</span></span></div>`;
+    const ts = this.tasks, at = (ep) => { const l = ts && ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
+    const all = ts ? ts.active : [];
+    let notes = [];
+    try { notes = typeof this.notes === 'function' ? this.notes() || [] : []; } catch { notes = []; }
+    // the papers in the book: the notices taken (on the go, then done) and a find noted for the ranger
+    const papers = [
+      ...all.filter((t) => t.status !== 'done').map((t) => ({ key: String(t.id), t })),
+      ...notes.map((n, i) => ({ key: `note:${i}`, t: { id: `note${i}`, note: true, title: n.title, text: n.words, kind: 'note' } })),
+      ...all.filter((t) => t.status === 'done').map((t) => ({ key: String(t.id), t })),
+    ];
+    if (this.focusTask != null) { this.taskSel = String(this.focusTask); this.focusTask = null; } // a notice picked on the map
+    if (!papers.some((p) => p.key === this.taskSel)) this.taskSel = papers.length ? papers[0].key : null;
+    const line = ({ key, t }) => {
+      const st = t.note ? { cls: 'taken', words: '' } : this.taskState(t);
+      const box = st.cls === 'done' ? 'pp-box done' : st.cls === 'half' ? 'pp-box half' : 'pp-box';
+      return `<button type="button" class="pp-todo ${st.cls}${key === this.taskSel ? ' on' : ''}" data-task="${esc(key)}"><span class="${box}" aria-hidden="true"></span>
+        <span class="t">${esc(t.title || t.clue || 'A notice')}</span>${t.pay ? `<span class="pay">$${t.pay}</span>` : ''}
+        ${st.words ? `<span class="st">${st.cls === 'done' ? 'done — ' : ''}${esc(st.words)}</span>` : ''}</button>`;
     };
-    const list = [...done, ...open].map(card).join('');
-    const paid = (ts.claimed || []).slice(-5).reverse();
-    const claimed = paid.length ? `<div class="lab">Claimed lately</div>${paid.map((c) => `<div class="todo claimed"><i aria-hidden="true"></i><span><b>${esc(c.title)}</b> · <span class="soft">${esc(at(c.from))}</span><span class="pay">$${c.pay}</span><br><span class="soft state"><span class="sc">Claimed</span> · $${c.pay} paid at ${esc(at(c.from))}</span></span></div>`).join('')}` : '';
-    const n = (ts.claimed || []).length, earned = ts.earned || 0;
-    const head = open.length || done.length ? `${open.length ? `${word(open.length)[0].toUpperCase()}${word(open.length).slice(1)} on the go` : 'Nothing on the go'}${done.length ? `, ${word(done.length)} to claim` : ''}` : 'Nothing on the go';
-    const sub = earned ? `$${earned} from the boards this season, ${n} ${plural(n, 'notice')} claimed. Each is paid only at the counter that posted it.` : 'Every outfitter pins four notices by the door. Each is paid only at the counter that posted it.';
-    const html = `<div class="lede"><h2 id="right-h">${head}</h2><div class="sub">${sub}</div></div>
-      <div class="scroll notice-list">${list || '<div class="empty">Take something on at an outfitter’s board.</div>'}${claimed}</div>`;
-    return { html, foot: 'the cork board hangs by the door inside every store' };
-  }
-  lakesTab() {
-    const st = this.stats, w = this.world, lakes = st ? st.lakes : [];
-    const rows = lakes.slice().reverse().map((e) => {
-      const l = w.lakes[e.id - 1], d = this.day;
-      const ago = d.doy - e.doy;
-      const when = this.trip && this.trip.active && this.trip.startDoy != null ? `day ${Math.max(1, e.doy - this.trip.startDoy + 1)}` : ago === 0 ? 'today' : ago === 1 ? 'yesterday' : shortDate(d.year, e.doy);
-      const tea = l ? teaWord(l.cdom) : ''; // d2 water: and its colour, where the release has it
-      return `<tr><td>${esc(e.name)}</td><td>${when}</td><td class="soft">${l ? esc(lakeWords(l)) : ''}</td><td>${l && l.secchi ? `${l.secchi.toFixed(1)} m${tea ? `, ${tea}` : ''}` : '—'}</td></tr>`;
-    }).join('');
-    const html = `<div class="lede"><h2 id="right-h">${lakes.length ? `${lakes.length} ${plural(lakes.length, 'lake')}` : 'No lakes yet'}</h2><div class="sub">In the order you first paddled them.</div></div>
-      ${lakes.length ? `<div class="scroll"><table><thead><tr><th>Lake</th><th>First paddled</th><th>What it is</th><th>Clarity</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">Push off and they will be written here.</div>'}`;
-    // d2 water: a v4 release's clarity and colour are the UMN LakeBrowser's, from Landsat and Sentinel-2
-    return { html, foot: w.cdomById && w.cdomById.some((c) => c > 0) ? 'clarity: Secchi depth and the water’s tea-stain, from satellite (UMN LakeBrowser) and the DNR' : 'clarity: Secchi depth, from the DNR where it has one' };
-  }
-  // the logbook: every trip, newest first, and how it ended; what has been seen across them, and the outfitters known
-  tripsTab() {
-    const c = this.core, book = c.book, trips = book.trips.slice().reverse(), seen = book.seen, o = this.outfitter, pr = c.profile || (o && o.profile) || null;
-    const place = (ep) => { const l = o && ep != null ? o.landings.find((x) => x.ep === ep) : null; return l ? l.place : '—'; };
-    // how it ended: came in (an open trip called at a counter), brought in (an evacuation), or the trip core's words
-    const how = (t) => {
-      if (t.k === 'completed' && t.why === 'came in') return `came in${t.to != null ? ` at ${esc(place(t.to))}` : ''}`;
-      if (t.k === 'evacuated') return `brought in${t.why ? `: ${esc(t.why)}` : ''}`;
-      if (t.k === 'abandoned') return 'left off';
-      const note = t.why && t.why !== 'sandbox' && t.why !== 'as planned' ? `: ${esc(t.why)}` : t.why === 'as planned' ? ', as planned' : '';
-      return `${t.k === 'late' ? 'completed late' : 'completed'}${note}`;
-    };
-    const pages = Math.max(1, Math.ceil(trips.length / ROWS));
-    this.page = Math.min(this.page, pages - 1);
-    const rows = trips.slice(this.page * ROWS, this.page * ROWS + ROWS).map((t) => {
-      const e = t.entry || {}, when = e.year ? shortDate(e.year, e.doy) : '';
-      const rs = t.resupplies ? ` · ${t.resupplies} ${plural(t.resupplies, 'resupply', 'resupplies')}` : '';
-      return `<tr><td>${when}</td><td>${esc(place(t.from))}</td><td>${t.days || '—'}</td><td>${fmtKm(t.km || 0)} km${rs}</td><td class="${t.k === 'evacuated' ? 'best' : ''}">${how(t)}</td><td class="soft">${t.mode === 'sandbox' ? 'sandbox' : ''}</td></tr>`;
-    }).join('');
-    const all = o ? o.landings.length : 0, known = pr ? pr.known.length : 0;
-    const counts = `${seen.lakes.length} ${plural(seen.lakes.length, 'lake')}, ${seen.camps.length} ${plural(seen.camps.length, 'campsite')} and ${seen.portages.length} ${plural(seen.portages.length, 'portage')} seen${pr ? `; ${known} of ${all} outfitters known` : `, ${seen.eps.length} ${plural(seen.eps.length, 'landing')}`}.`;
-    const inN = book.trips.filter((t) => t.k === 'completed' || t.k === 'late').length;
-    const html = `<div class="lede"><h2 id="right-h">${book.trips.length ? `${book.trips.length} ${plural(book.trips.length, 'trip')}, ${inN ? word(inN) : 'none'} came in` : 'No trips logged yet'}</h2><div class="sub">${counts}</div></div>
-      ${trips.length ? `<div class="scroll"><table><thead><tr><th>Pushed off</th><th>From</th><th>Days</th><th>Paddled</th><th>How it ended</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">A trip is logged by itself when you come in at an outfitter’s landing, or when someone brings you in.</div>'}`;
-    const more = trips.length - (this.page + 1) * ROWS;
-    const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'what you have seen stays seen';
-    return { html, foot };
-  }
-  // round A-A: the season's record (record.js view()). A trip's page when one is open (recTrip), else the season: each
-  // part as a ruled row, what is not there yet said softly, so the book shows what a season can hold.
-  recordTab() {
-    const R = this.record, d = this.day;
-    if (this.recTrip) {
-      const c = R.tripById(this.recTrip);
-      if (c) {
-        const html = `<div class="lede rec-head"><div class="sc kicker"><button type="button" class="pbtn" data-back>‹ The record</button> · trip ${c.n}</div></div>
-          <div class="scroll rec-page">${R.pageHtml(c, { book: true })}</div>`;
-        return { html, foot: c.partial ? 'begun part way through' : 'a page of the logbook' };
-      }
-      this.recTrip = null;
+    const paid = ts ? (ts.claimed || []).slice(-8) : [], earned = ts ? ts.earned || 0 : 0, n = ts ? (ts.claimed || []).length : 0;
+    const claimed = paid.map((c) => `<div class="pp-todo claimed"><span class="pp-box done" aria-hidden="true"></span><span class="t">${esc(c.title)}</span><span class="pay">$${c.pay}</span></div>`).join('');
+    const right = `<h2 class="pp-head" id="right-h">Tasks</h2>
+      <div class="pp-index pp-ruled pp-lines">${claimed}${papers.map(line).join('')}
+        ${n ? `<div class="pp-todo sum"><span class="t">$${earned} from the boards, ${word(n)} ${plural(n, 'notice')} paid</span></div>` : ''}</div>`;
+    const p = papers.find((q) => q.key === this.taskSel);
+    let left = '';
+    if (p) {
+      const t = p.t, st = t.note ? null : this.taskState(t), fresh = this.shownFlyer !== p.key;
+      this.shownFlyer = p.key;
+      const flyer = flyerHtml(t, { where: t.note ? '' : at(t.from), ep: t.from }).replace('class="fl ', `class="fl${fresh ? ' unfold' : ''} `);
+      const say = st && st.words ? `${st.cls === 'done' ? 'Done! ' : ''}${up(st.words).replace(/\.+$/, '')}.` : '';
+      left = `<div class="pp-scroll pp-flyer">${flyer}${say ? `<p class="pp-hand pp-margin">${esc(say)}</p>` : ''}</div>`;
     }
-    const v = R.view(), none = '<span class="soft">none yet</span>';
-    const date = (y, dd) => (Number.isFinite(y) && Number.isFinite(dd) ? shortDate(y, dd) : '');
-    const sinceD = Number.isFinite(v.since) ? new Date(v.since * 86400000) : null;
-    const sinceY = sinceD ? sinceD.getUTCFullYear() : d.year, sinceDoy = sinceD ? v.since - Math.round(Date.UTC(sinceY, 0, 0) / 86400000) : d.doy;
-    const nT = v.trips.length;
-    const head = nT ? 'The season so far' : 'Nothing logged yet';
-    const sub = nT ? `Since ${longDate(sinceY, sinceDoy)} · ${word(nT)} ${plural(nT, 'trip')}${v.nights ? `, ${word(v.nights)} ${plural(v.nights, 'night')} out` : ''}` : 'A trip goes in the record by itself when you come in at an outfitter’s landing.';
-    const rows = [];
-    // the trips, newest first: each opens its page
-    rows.push(['Trips', nT ? v.trips.map((t) => `<button type="button" class="rec-trip" data-trip="${esc(t.id)}"><span class="d">${t.entry && t.entry.year ? shortDate(t.entry.year, t.entry.doy) : ''}</span><span class="l">${esc(R.lineOf(t) || t.line || 'A trip')}</span><span class="go" aria-hidden="true">›</span></button>`).join('') : none]);
-    // the lakes, against those on your sheets
-    const nL = v.lakes.length;
-    const reach = v.sandbox ? `${word(nL)} of the ${v.reach.toLocaleString('en-US')} named` : v.reach ? (v.onSheets === nL ? `${word(nL)} of the ${v.reach} on your sheets` : `${word(nL)} paddled · ${word(v.onSheets)} of the ${v.reach} on your sheets`) : `${word(nL)} paddled`;
-    rows.push(['Lakes', nL ? `<span class="rec-n">${reach}</span><br>${v.lakes.map((l) => esc(l.name)).join(' · ')}` : none]);
-    // the species, the best of each
-    rows.push(['Fish', v.fish.length ? `<table class="rec-fish"><tbody>${v.fish.map((f) => `<tr><td>${esc(f.name)}</td><td>${f.best ? `${f.best.cm} cm` : ''}</td><td class="soft">${f.best && f.best.lake ? esc(f.best.lake) : ''}</td><td class="soft">${f.n > 1 ? `×${f.n}` : ''}</td></tr>`).join('')}</tbody></table>` : none]);
-    const crossed = v.portages.reduce((a, p) => a + (p.n || 1), 0);
-    rows.push(['Portages', v.portages.length ? `<span class="rec-n">${word(crossed)} crossed${v.rods ? ` · ${v.rods} rods` : ''}</span><br>${v.portages.map((p) => `${esc(p.name)}${p.rods ? `, ${p.rods} rods` : ''}${(p.n || 1) > 1 ? ` ×${p.n}` : ''}`).join('<br>')}` : none]);
-    rows.push(['Seen', v.seen.length ? v.seen.map((q) => esc(q.words)).join(' · ') : none]);
-    rows.push(['Campsites', v.camps.length ? v.camps.map((q) => `${esc(q.words)}${q.nights > 1 ? `, ${word(q.nights)} nights` : ''}`).join('<br>') : none]);
-    rows.push(['Stories', v.stories.length ? v.stories.map((q) => `${esc(q.who)}${q.gave ? ` · <span class="soft">${esc(q.gave)}</span>` : ''}`).join('<br>') : '<span class="soft">none told to the end yet</span>']);
-    rows.push(['Photos', v.photos ? `${word(v.photos)} taken · <button type="button" class="pbtn" data-tab="photos">the prints</button>` : none]);
-    if (v.outfitters) rows.push(['Outfitters', `${word(v.known.length)} of ${v.outfitters} known`]);
-    if (v.earned) rows.push(['Earned', `$${v.earned} this season`]);
-    const grid = rows.map(([k, val]) => `<div class="lab">${k}</div><div class="v">${val}</div>`).join('');
-    const firsts = v.firsts.length ? `<div class="rec-firsts"><div class="lab">Firsts</div><ul>${v.firsts.map((f) => `<li><span class="d">${date(f.y, f.d)}</span> ${esc(f.words)}${f.lake ? `, ${esc(f.lake)}` : ''}</li>`).join('')}</ul></div>` : '';
-    const html = `<div class="lede"><h2 id="right-h">${head}</h2><div class="sub">${esc(sub)}</div></div>
-      <div class="scroll rec"><div class="rec-grid">${grid}</div>${firsts}</div>`;
-    return { html, foot: v.built === 'old' ? 'begun from the logbook you kept before' : 'what you have seen stays seen' };
+    return { left, right, leftLabel: 'A notice', rightCls: 'tasks' };
   }
-  // hubs 3B: the prints (photo.js), newest first, four to a page: the picture, its caption in pencil, and the notice it
-  // went to (paid, once the notice has been claimed)
+
+  // --- Fish: your log, and the outfitter's pamphlet tucked in --------------------------------------------------------
+  // The owner (2026-10-31): "your old traditional fishing log where you log the date, the time, the location slash water
+  // body ... The weather, the species, the size, and the lure used. Put it all on one or two lines ... Put those stars
+  // next to your PB. Very handwritten. The other one is the DNR provided or outfitter provided fishing pamphlet ... long
+  // and skinny fold out things ... jammed in that page ... You open that up and it's got the fish that you can catch, and
+  // you press on one and then it opens another page ... a lot more simplistic and informational".
+  fishTab() {
+    const f = this.fishing, SP = (f && f.species) || {}, log = f ? f.log : [];
+    // the biggest of each kind: the log's longest (the first of a tie), unless a best from before the log's 200 beats it
+    const top = {};
+    log.forEach((c, i) => { const b = top[c.species]; if (!b || c.length > b.len) top[c.species] = { len: c.length, i }; });
+    for (const [id, b] of Object.entries((f && f.bests) || {})) if (b && top[id] && b.length > top[id].len) delete top[id];
+    const rows = log.map((c, i) => {
+      const pb = top[c.species] && top[c.species].i === i;
+      return `<div class="lg-row" role="row"><span>${c.year && c.doy ? esc(slashDate(c.year, c.doy)) : ''}</span><span>${Number.isFinite(c.hours) ? esc(shortClock(c.hours)) : esc(c.time || '')}</span>
+        <span>${esc(shortLake(c.lake))}</span><span>${esc(c.sky || '')}</span><span>${pb ? '<b class="pb" title="your biggest">★</b>' : ''}${esc(fishWord(c.species, c.name))}</span>
+        <span>${esc(sizeWords(c.length, c.weight))}</span><span>${esc(c.lureShort || c.lure || '')}</span></div>`;
+    }).join('');
+    const right = `<h2 class="pp-head" id="right-h">Fish log</h2>
+      <div class="fl-log"><div class="lg-row lg-headrow" role="row" aria-hidden="true"><span>Date</span><span>Time</span><span>Water</span><span>Weather</span><span>Fish</span><span>Size</span><span>Lure</span></div>
+        <div class="pp-index" role="table" aria-label="Your fishing log">${rows}</div></div>`;
+    return { left: this.pamphlet(SP), right, leftLabel: 'The fishing pamphlet', rightCls: 'fish' };
+  }
+  // the fold-out: its cover tucked into the page; open, three panels (a word, then the fish); a fish, its own panels
+  pamphlet(SP) {
+    const ids = Object.keys(SP).filter((id) => PAM[id]), from = esc(this.homeName());
+    if (!ids.length) return '';
+    const sil = (id) => `<svg viewBox="0 0 110 56" aria-hidden="true">${fishSilhouette(id).replace(/#2a2016/g, 'currentColor').replace(/#ebe2cb/g, '#f4f0e2')}</svg>`;
+    if (!this.pam) {
+      return `<button type="button" class="pam pam-cover" data-pam="open" aria-label="The fishing pamphlet: open it">
+        <span class="pam-kicker">A pocket guide</span><b>Fishing the Boundary Waters</b>${sil('walleye')}
+        <span class="pam-list">${ids.map((id) => esc(PAM[id].name)).join(' · ')}</span><span class="pam-from">Compliments of ${from}</span></button>`;
+    }
+    const sizeOf = (sp) => `${Math.round(sp.length[0] / 2.54)}–${Math.round(sp.length[1] / 2.54)} in`;
+    if (this.pam !== 'open' && SP[this.pam] && PAM[this.pam]) {
+      const id = this.pam, sp = SP[id], P = PAM[id], url = fishPicture(id, {});
+      return `<div class="pam pam-open pam-fish" role="dialog" aria-label="${esc(P.name)}">
+        <section class="pam-panel"><span class="pam-kicker">${esc(sp.about && sp.about.latin ? sp.about.latin : '')}</span><h3>${esc(P.name)}</h3>
+          <div class="pam-pic">${url ? `<img src="${url}" alt="">` : sil(id)}</div><p class="pam-look">${esc(P.look)}</p>
+          <p class="pam-size"><b>Usual size</b> ${esc(sizeOf(sp))}</p></section>
+        <section class="pam-panel"><dl><dt>Where</dt><dd>${esc(P.where)}</dd><dt>When</dt><dd>${esc(P.when)}</dd><dt>Try</dt><dd>${esc(P.try)}</dd></dl>
+          ${P.note ? `<p class="pam-note">${esc(P.note)}</p>` : ''}<button type="button" class="pam-back" data-pam="open">‹ All the fish</button></section></div>`;
+    }
+    const row = (id) => { const url = fishPicture(id, {}); return `<button type="button" class="pam-row" data-pam="${id}">${url ? `<img src="${url}" alt="">` : sil(id)}<span><b>${esc(PAM[id].name)}</b><i>${esc(PAM[id].short)}</i></span></button>`; };
+    const half = Math.ceil(ids.length / 2);
+    return `<div class="pam pam-open" role="dialog" aria-label="The fishing pamphlet">
+      <section class="pam-panel pam-intro"><span class="pam-kicker">A pocket guide</span><h3>Fishing the Boundary Waters</h3>
+        <p>Six fish swim most of these lakes. Here is how to tell them apart, where they hang, and what they take.</p>
+        <p class="pam-rules"><b>Before you go</b>Carry your license. Keep what you will eat tonight and let the rest go. No live minnows from outside; leeches are fine.</p>
+        <span class="pam-from">Compliments of ${from}</span></section>
+      <section class="pam-panel"><h4>What’s biting</h4>${ids.slice(0, half).map(row).join('')}</section>
+      <section class="pam-panel"><h4>&nbsp;</h4>${ids.slice(half).map(row).join('')}<button type="button" class="pam-back fold" data-pam="fold">Fold it up</button></section></div>`;
+  }
+  // the two lures it takes best (fishing.js SPECIES[*].lures, with the shop's additions), by name
+  bestLures(sp) {
+    const L = Object.entries(sp.lures || {}).sort((a, b) => b[1] - a[1]).slice(0, 2);
+    const nameOf = (id) => { const d = itemDef(`lure:${id}`); if (d && d.name) return d.name; const l = (this.fishing && this.fishing.lures || []).find((x) => x.id === id); return l ? l.name : id; };
+    return L.map(([id]) => nameOf(id)).join(', ') || 'anything';
+  }
+
+  // --- Trips: the logbook, a trip a line; its page on the left ---------------------------------------------------------
+  // The owner (2026-10-31): "I'd like to see the past trips I've done and the stats on each one ... the penciled in trips
+  // on the right, and then when you press on one, it shows it on the left with the details". The season's record
+  // (record.js) when it is attached, else the trip core's logbook (trip.js book).
+  tripsTab() {
+    const R = this.record && this.record.s ? this.record : null;
+    if (R) {
+      const v = R.view(), trips = v.trips; // newest first
+      if (!trips.some((t) => t.id === this.tripSel)) this.tripSel = trips.length ? trips[0].id : null;
+      const miles = trips.reduce((a, t) => a + (t.km || 0), 0) * MI;
+      const list = trips.map((t) => `<button type="button" class="pp-entry${t.id === this.tripSel ? ' on' : ''}" data-trip="${esc(t.id)}"><span class="d">${t.entry && t.entry.year ? esc(shortDate(t.entry.year, t.entry.doy)) : ''}</span><span class="w">${esc(R.lineOf(t) || t.line || 'A trip')}</span><span class="n">${t.days || 1} ${plural(t.days || 1, 'day')}</span></button>`).join('');
+      const tally = [v.nights ? `${word(v.nights)} ${plural(v.nights, 'night')} out` : '', miles >= 0.1 ? `${fmtMi(miles)} mi paddled` : ''].filter(Boolean).join(' · ');
+      const right = `<div class="pp-headrow"><h2 class="pp-head" id="right-h">Trips</h2>${tally ? `<span class="pp-hand small">${tally}</span>` : ''}</div>
+        <div class="pp-index pp-ruled pp-lines">${list}</div>`;
+      const c = this.tripSel ? R.tripById(this.tripSel) : null;
+      return { left: c ? this.tripPage(c, R) : '', right, leftLabel: 'A trip' };
+    }
+    return this.bookTrips();
+  }
+  tripPage(c, R) {
+    const portages = (c.portages || []).reduce((a, p) => a + (p.n || 1), 0) || (c.counts && c.counts.portages) || 0;
+    const rods = (c.portages || []).reduce((a, p) => a + (p.rods || 0) * (p.n || 1), 0);
+    const nights = (c.nights && c.nights.length) || (c.counts && c.counts.nights) || 0;
+    const fish = c.fish && c.fish.n ? c.fish.n : 0;
+    const stat = (n, l) => `<div class="pp-stat"><b>${n}</b><span>${l}</span></div>`;
+    const how = c.k === 'evacuated' ? 'brought in' : c.k === 'late' ? 'came in late' : c.k === 'abandoned' ? 'left off' : 'came in';
+    return `<div class="pp-banner">Trip ${c.n}${c.mode === 'sandbox' ? ' · sandbox' : ''}</div>
+      <div class="pp-stats">${stat(c.days || 1, plural(c.days || 1, 'day'))}${stat(fmtMi((c.km || 0) * MI), 'miles')}${stat(portages, plural(portages, 'portage'))}${rods ? stat(rods, 'rods') : ''}${stat(nights, plural(nights, 'night'))}${stat(fish, 'fish')}${c.photos ? stat(c.photos, plural(c.photos, 'photo')) : ''}</div>
+      <div class="pp-scroll pp-trip">${R.pageHtml(c, { book: true })}<div class="pp-hand pp-tip">${esc(up(how))}${c.why && c.why !== 'as planned' && c.why !== 'sandbox' && c.why !== 'came in' ? `: ${esc(c.why)}` : ''}</div></div>`;
+  }
+  // the trip core's logbook (no record attached): a line a trip, its page the few things the book keeps
+  bookTrips() {
+    const c = this.core, o = this.outfitter;
+    const trips = c ? c.book.trips.map((t, i) => ({ ...t, n: i + 1, key: `b${i}` })).reverse() : [];
+    if (!trips.some((t) => t.key === this.tripSel)) this.tripSel = trips.length ? trips[0].key : null;
+    const place = (ep) => { const l = o && ep != null ? o.landings.find((x) => x.ep === ep) : null; return l ? l.place : null; };
+    const how = (t) => (t.k === 'evacuated' ? `brought in${t.why ? `: ${t.why}` : ''}` : t.k === 'abandoned' ? 'left off' : t.k === 'late' ? 'completed late' : t.why === 'came in' ? 'came in' : 'completed');
+    const list = trips.map((t) => { const e = t.entry || {}; return `<button type="button" class="pp-entry${t.key === this.tripSel ? ' on' : ''}" data-trip="${t.key}"><span class="d">${e.year ? esc(shortDate(e.year, e.doy)) : ''}</span><span class="w">Out from ${esc(place(t.from) || 'a landing')}</span><span class="n">${t.days || 1} ${plural(t.days || 1, 'day')}</span></button>`; }).join('');
+    const right = `<h2 class="pp-head" id="right-h">Trips</h2><div class="pp-index pp-ruled pp-lines">${list}</div>`;
+    const t = trips.find((x) => x.key === this.tripSel);
+    const stat = (n, l) => `<div class="pp-stat"><b>${n}</b><span>${l}</span></div>`;
+    const left = t ? `<div class="pp-banner">Trip ${t.n}</div><div class="pp-stats">${stat(t.days || 1, plural(t.days || 1, 'day'))}${stat(fmtMi((t.km || 0) * MI), 'miles')}${t.resupplies ? stat(t.resupplies, 'resupplies') : ''}</div>
+      <div class="pp-facts"><div class="pp-fact"><i aria-hidden="true">${GLYPH.where}</i><span>From ${esc(place(t.from) || 'a landing')}${t.to != null && place(t.to) ? `, in at ${esc(place(t.to))}` : ''}</span></div></div><div class="pp-hand pp-tip">${esc(how(t))}</div>` : '';
+    return { left, right, leftLabel: 'A trip' };
+  }
+
+  // --- Photos: the prints taped in; the one picked, big, on the left ----------------------------------------------------
   photosTab() {
-    const ph = this.photos, list = ph.prints(), per = 4, pages = Math.max(1, Math.ceil(list.length / per));
-    this.page = Math.min(this.page, pages - 1);
-    const paid = new Set(((this.tasks && this.tasks.claimed) || []).map((c) => c.id)), tilt = [-1.2, 0.9, 0.6, -0.8];
-    const cards = list.slice(this.page * per, this.page * per + per).map((p, i) => `<figure class="print" style="--tilt:${tilt[i % 4]}deg">
-      ${p.url ? `<img src="${p.url}" width="240" height="135" alt="${esc(p.caption)}">` : '<div class="blank">developing…</div>'}
-      <figcaption>${esc(p.caption)}${p.notice ? `<span class="for">for “${esc(p.notice.title)}”${paid.has(p.notice.id) ? ' · paid' : ''}</span>` : ''}</figcaption></figure>`).join('');
-    const film = ph.film, n = list.length;
-    const sub = film === '35mm' ? 'The 35 mm: C raises it, the wheel zooms, Space takes the picture. The last 24 are kept; the oldest goes first.'
-      : film === 'disposable' ? `The disposable has ${word(ph.shotsLeft)} ${plural(ph.shotsLeft, 'picture')} left. C raises it, Space takes the picture.`
-        : ph.noCamera;
-    const html = `<div class="lede"><h2 id="right-h">${n ? `${n} ${plural(n, 'print')}` : 'No pictures yet'}</h2><div class="sub">${sub}</div></div>
-      ${n ? `<div class="prints">${cards}</div>` : '<div class="empty">A picture you take comes back as a print, here.</div>'}`;
-    const more = n - (this.page + 1) * per;
-    const foot = `${more > 0 ? `<button type="button" class="pbtn" data-page="1">${more} more on the next page</button>` : ''}${this.page > 0 ? `${more > 0 ? ' · ' : ''}<button type="button" class="pbtn" data-page="-1">back a page</button>` : ''}` || 'the newest first';
-    return { html, foot };
+    const ph = this.photos, list = ph.prints(), n = list.length;
+    if (!list.some((p) => p.id === this.printSel)) this.printSel = n ? list[0].id : null;
+    const paid = new Set(((this.tasks && this.tasks.claimed) || []).map((c) => c.id));
+    const thumbs = list.map((p, i) => `<button type="button" class="pp-print${p.id === this.printSel ? ' on' : ''}" data-print="${p.id}" style="--tilt:${TILT[i % TILT.length]}deg" title="${esc(p.caption)}">
+      ${p.url ? `<img src="${p.url}" width="240" height="135" alt="">` : '<div class="blank"></div>'}<figcaption>${esc(shortCaption(p.caption))}</figcaption></button>`).join('');
+    const right = `<h2 class="pp-head" id="right-h">Photos</h2><div class="pp-index">${n ? `<div class="pp-prints">${thumbs}</div>` : ''}</div>`;
+    const p = list.find((x) => x.id === this.printSel);
+    let left = '';
+    if (p) {
+      const rows = [];
+      rows.push(['when', esc(`${p.year && p.doy ? longDate(p.year, p.doy) : ''}${Number.isFinite(p.hours) && p.year ? `, ${clock12(p.hours)}` : ''}`)]);
+      if (p.where) rows.push(['where', esc(p.where)]);
+      rows.push(['film', p.film === 'disposable' ? 'On the disposable' : 'On the 35 mm']);
+      if (p.notice) rows.push(['note', `For “${esc(p.notice.title)}”${paid.has(p.notice.id) ? ' · paid' : ' · take it to the counter'}`]);
+      left = `<figure class="pp-print big" style="--tilt:-1deg">${p.url ? `<img src="${p.url}" alt="${esc(p.caption)}">` : '<div class="blank"></div>'}<figcaption>${esc(p.caption)}</figcaption></figure>
+        <div class="pp-facts">${rows.map(([g, v]) => `<div class="pp-fact"><i aria-hidden="true">${GLYPH[g] || ''}</i><span>${v}</span></div>`).join('')}</div>`;
+    }
+    return { left, right, leftLabel: 'A print' };
   }
 }
+
+// --- the pamphlet's words: short, plain, what you would print on a fold-out at the counter ------------------------------
+const PAM = {
+  walleye: { name: 'Walleye', short: 'Rocky points, at dusk', look: 'Gold and olive, big glassy eyes, a white tip on the bottom of the tail.', where: 'Rocky points, reefs and drop-offs.', when: 'Dawn, dusk and after dark.', try: 'A jig on the bottom, or a leech under a bobber.', note: 'The one everyone is after. Good eating.' },
+  smallmouth: { name: 'Smallmouth bass', short: 'Rocks and boulders, warm days', look: 'Bronze with dark bars down the side and a red eye.', where: 'Rocky shorelines and boulders.', when: 'Warm afternoons, all summer.', try: 'A crankbait or a spinner along the rocks.', note: 'Jumps when hooked.' },
+  pike: { name: 'Northern pike', short: 'Weedy bays, any time', look: 'Long and green with rows of pale spots. A duckbill full of teeth.', where: 'Weedy bays and the edges of the weeds.', when: 'All day; best when the light is low.', try: 'A spoon or a spinner past the weed edge.', note: 'Mind the teeth when you unhook one.' },
+  laketrout: { name: 'Lake trout', short: 'Deep, cold, clear lakes', look: 'Grey-green with pale spots and a deeply forked tail.', where: 'Only the deep, cold, clear lakes, far down and far from shore.', when: 'Early in the day. Shallow just after ice-out.', try: 'A spoon let down deep and worked slowly back.', note: 'Not in every lake. Ask at the counter which.' },
+  crappie: { name: 'Black crappie', short: 'Weeds and wood, after dark', look: 'Silver with black speckles, a tall thin body.', where: 'Weedy bays, brush and sunken wood.', when: 'Dusk and after dark.', try: 'A small jig or a leech, slow and still.' },
+  perch: { name: 'Yellow perch', short: 'Weedy shallows, midday', look: 'Yellow with dark bars and orange lower fins.', where: 'Weedy shallows and sandy flats.', when: 'The middle of the day.', try: 'A leech under a bobber, or a small jig.' },
+};
+
+// --- helpers -------------------------------------------------------------------------------------------------------
+const MI = 0.621371; // miles a km
+const up = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const fmtMi = (m) => (m < 10 ? m.toFixed(1) : String(Math.round(m)));
+// the log's own short hand: "10/31", "6:40p", "18½" 2¼ lb", "walleye", "laker"
+const slashDate = (y, doy) => { const d = new Date(y, 0, doy); return `${d.getMonth() + 1}/${d.getDate()}`; };
+const shortClock = (h) => { const hh = Math.floor(h) % 24, mm = Math.floor((h - Math.floor(h)) * 60); return `${hh % 12 || 12}:${String(mm).padStart(2, '0')}${hh < 12 ? 'a' : 'p'}`; };
+const FISH_WORD = { walleye: 'walleye', smallmouth: 'smallmouth', pike: 'pike', laketrout: 'laker', crappie: 'crappie', perch: 'perch' };
+const fishWord = (id, name) => FISH_WORD[id] || String(name || id || '').toLowerCase();
+function sizeWords(cm, kg) {
+  const inch = Math.round((cm / 2.54) * 2) / 2, w = Math.floor(inch), lb = (kg || 0) * 2.20462;
+  const len = `${w}${inch - w ? '½' : ''}″`;
+  if (!kg) return len;
+  const q = Math.round(lb * 4) / 4, qw = Math.floor(q), fr = { 0.25: '¼', 0.5: '½', 0.75: '¾' }[q - qw] || '';
+  return lb < 0.25 ? len : `${len} ${qw || ''}${fr || (qw ? '' : '¼')} lb`;
+}
+const shortLake = (name) => String(name || '').replace(/ Lake$/, ''); // "Moose", "Lake One"
+const shortCaption = (c) => String(c || '').split(', ').slice(0, 2).join(', ');
+const TILT = [-1.4, 1.1, 0.5, -0.7, 1.6, -0.3];
+// small pencil glyphs for the facts
+const svg = (d, extra = '') => `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"${extra}>${d}</svg>`;
+const GLYPH = {
+  where: svg('<path d="M8 15s5-4.6 5-8.2A5 5 0 0 0 3 6.8C3 10.4 8 15 8 15z"/><circle cx="8" cy="6.8" r="1.8"/>'),
+  when: svg('<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/>'),
+  film: svg('<rect x="2" y="4" width="12" height="9" rx="1.5"/><circle cx="8" cy="8.5" r="2.4"/><path d="M5.5 4l1-2h3l1 2"/>'),
+  note: svg('<path d="M3 2h7l3 3v9H3z"/><path d="M5.5 7h5M5.5 9.5h5M5.5 12h3"/>'),
+};

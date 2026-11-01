@@ -105,8 +105,8 @@ export const MOMENTS = [
   { id: 'bears', prio: TEACH, recur: 'daily', learn: 'hang', keyed: true, text: 'Bears: hang your food from a high limb before you sleep.', short: 'Hang the food before you sleep.' },
   { id: 'ringwood', prio: TEACH, recur: 'once', stuck: 45, text: 'Drop wood in the ring: {E} on it, then drag the wood in.' },
   { id: 'ringempty', prio: TEACH, recur: 'once', stuck: 50, text: 'Gather dead wood: branches and logs lie around the site.' },
-  { id: 'lit', prio: TEACH, recur: 'once', card: 'fire', text: 'It caught. Put food on the grate to cook it.' },
-  { id: 'cooked', prio: TEACH, recur: 'once', card: 'fire', text: 'Cooked. Take it off the grate to eat: {E} on it.' },
+  { id: 'lit', prio: TEACH, recur: 'once', card: 'fire', text: 'It caught. A pot on the grate, the food and its water in the pot: it cooks.' }, // (crafting, 2026-10-31: recipes.js)
+  { id: 'cooked', prio: TEACH, recur: 'once', card: 'fire', text: 'Cooked: it is in the pot. Eat it from there, or take it out.' },
   { id: 'low', prio: TEACH, recur: 'once', card: 'fire', text: 'Burning low: add wood.' },
   { id: 'coals', prio: TEACH, recur: 'once', card: 'fire', stuck: 60, text: 'The coals are still hot: a dry branch brings it back.' },
   { id: 'wetwood', prio: TEACH, recur: 'once', card: 'fire', text: 'Wet wood won’t catch. Find dry pieces; wet ones dry by a fire.' },
@@ -321,7 +321,7 @@ export class Hints {
     try { n = reg.nearestFree(p.x, p.z, 6000, (s) => !sheets.showsDetail || sheets.showsDetail(s.x, s.z)); } catch { n = null; }
     if (!n) return '';
     const dx = n.site.x - p.x, dz = n.site.z - p.z, deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
-    const far = n.d < 1000 ? `${Math.max(50, Math.round(n.d / 50) * 50)} m` : `${(n.d / 1000).toFixed(1)} km`;
+    const far = n.d < 300 ? `${Math.max(150, Math.round(n.d * 3.28084 / 50) * 50)} ft` : `${(n.d / 1609.344).toFixed(1)} mi`; // (imperial on screen)
     return `${far} ${compassLong(deg)}`;
   }
 
@@ -332,9 +332,9 @@ export class Hints {
     const need = (k) => { if (!this.live || !e) return false; const v = e.needs[k]; return v < (ep ? CLEAR : LOW) ? v : false; };
     switch (id) {
       // the danger
-      case 'spent': return this.live && e.spentAt != null ? e.value : false;
+      case 'spent': return this.live && e.spentAt != null ? e.ceiling : false; // (2026-10-31: the ceiling is your energy; the green is stamina)
       case 'nearly': {
-        const v = this.live && e.spentAt == null && e.value > 0 && e.value < (ep ? 0.23 : 0.08) ? e.value : false;
+        const v = this.live && e.spentAt == null && e.ceiling > 0 && e.ceiling < (ep ? 0.23 : 0.08) ? e.ceiling : false;
         // (fb5 join: at a campsite, not "or make for a campsite")
         return v !== false && this.here && this.here.ringD <= SITE ? { lv: v, text: 'Nearly spent. Rest, eat or drink now.', short: 'Nearly spent.' } : v;
       }

@@ -36,6 +36,8 @@ import { loadBathymetry } from './bathymetry.mjs';
 import { loadClarity } from './clarity.mjs';
 import { makeWater, placeLandings, linkPortages, chainsFrom } from './world-links.mjs';
 import { gradeLevels } from './water-grade.mjs';
+import { loadSources, usfsTrails, wildernessTest } from './names-lib.mjs';
+import { loadNhd, classifyCreeks, rasterizeClassified, brooksOf, beaverDams, lakeFlow } from './creeks.mjs'; // wetlands
 import { loadProducts, lidarWeight, makeChannels, lidarBasinLevels, V4_CHANNELS, V4_FIELDS } from './v4-products.mjs'; // d2 bake
 import { officialAdds } from './official-adds.mjs'; // d2 bake (d1 names' sites and portages)
 import { loadCanoeLines, taggedRoute, PORTAGE_REACH } from './canoe-routes.mjs'; // water edges
@@ -94,28 +96,7 @@ function rasterizeLakes(lakes, grid, lakeId) {
   }
 }
 
-// Waterway centrelines become channels a few cells wide: every cell whose centre is within the half-width.
-function rasterizeCreeks(creeks, grid, lakeId) {
-  const { width, height } = grid;
-  for (const c of creeks) {
-    const hw = c.kind === 'stream' ? 7.5 : 11;
-    for (let s = 1; s < c.pts.length; s++) {
-      const [x1, z1] = c.pts[s - 1], [x2, z2] = c.pts[s];
-      const i0 = Math.max(0, grid.ci(Math.min(x1, x2) - hw)), i1 = Math.min(width - 1, grid.ci(Math.max(x1, x2) + hw));
-      const j0 = Math.max(0, grid.cj(Math.min(z1, z2) - hw)), j1 = Math.min(height - 1, grid.cj(Math.max(z1, z2) + hw));
-      const dx = x2 - x1, dz = z2 - z1, L2 = dx * dx + dz * dz || 1;
-      for (let j = j0; j <= j1; j++) {
-        const cz = grid.cz(j);
-        for (let i = i0; i <= i1; i++) {
-          const cx = grid.cx(i);
-          const t = Math.max(0, Math.min(1, ((cx - x1) * dx + (cz - z1) * dz) / L2));
-          const px = x1 + dx * t, pz = z1 + dz * t;
-          if ((cx - px) * (cx - px) + (cz - pz) * (cz - pz) <= hw * hw) lakeId[j * width + i] = c.id;
-        }
-      }
-    }
-  }
-}
+// Waterway centrelines become channels: creeks.mjs rasterizeClassified (wetlands: river, marsh channel, brook).
 
 // water edges: the canoe routes' channel. A route line (canoe-routes.mjs) is a channel the canoe can pass: every land cell
 // within NAV_HW m of it becomes water wherever the line is on water or crosses a gap of land between water (a narrows
@@ -341,7 +322,31 @@ async function main() {
   lakes.forEach((l, i) => { l.id = i + 1; });
   if (lakes.length >= 65535) throw new Error('too many water polygons for Uint16 ids');
   const lakeId = new Uint16Array(N);
-  rasterizeCreeks(waterways, grid, lakeId);
+  // wetlands: each creek's stretches told river, marsh channel or brook (creeks.mjs); only the paddled ones are water
+  let brooks = [];
+  if (P) { const nhd = loadNhd(CFG.cacheDir, grid, proj, log); const ends = []; for (const pg of osm.portages || []) for (const e of [pg.pts[0], pg.pts[pg.pts.length - 1]]) ends.push(proj.toLocal(e[0], e[1]));
+    // and the USFS portages (official-adds.mjs adds the ones OSM lacks): every line's ends
+    try {
+      const src = loadSources(CFG.cacheDir), T = usfsTrails(src, (la, lo) => proj.toLocal(la, lo), wildernessTest(src.wilderness));
+      for (const t of T) for (const ln of t.lines || []) if (ln.length) ends.push(ln[0], ln[ln.length - 1]);
+    } catch (e) { log(`wetlands: no USFS trails for the creek anchors (${e.message})`); }
+    // a portage that ends on an unnamed pond: the creeks out of the pond are the route on (to a named lake), so the
+    // pond's shore anchors them too
+    {
+      const inRing = (r, x, z) => { let c = false; for (let q = 0, w = r.length - 1; q < r.length; w = q++) { const [xi, zi] = r[q], [xj, zj] = r[w]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
+      const ponds = new Set(), n0 = ends.length;
+      for (let e = 0; e < n0; e++) {
+        const [x, z] = ends[e];
+        for (const l of lakes) {
+          if (l.creek || l.name || x < l.minX - 60 || x > l.maxX + 60 || z < l.minZ - 60 || z > l.maxZ + 60 || ponds.has(l)) continue;
+          if (inRing(l.rings[0], x, z) || l.rings[0].some(([px, pz]) => (px - x) ** 2 + (pz - z) ** 2 < 3600)) ponds.add(l);
+        }
+      }
+      for (const l of ponds) for (const r of l.rings) for (let q = 0; q < r.length; q += 2) ends.push(r[q]);
+      log(`wetlands: ${ponds.size} unnamed ponds a portage ends on, their shores anchoring the creeks out`);
+    }
+    classifyCreeks(waterways, grid, P, nhd, log, ends); brooks = brooksOf(waterways, grid, nhd); }
+  rasterizeClassified(waterways, grid, lakeId);
   rasterizeLakes(lakes, grid, lakeId);
   // the water as OpenStreetMap draws it, before the canoe routes' channels and the LiDAR's edges: the campsites and the
   // official adds are placed on it exactly as data-v4 placed them (a save keys its sites by their place)
@@ -1201,6 +1206,21 @@ async function main() {
     if (b && b.level3dep !== undefined && !l.river) rec.level3dep = +b.level3dep.toFixed(2);
     return rec;
   });
+  // wetlands: each lake's place in the water, a pond, a seasonal creek; the brooks and the beaver dams to creeks.json
+  if (P) {
+    const flow = lakeFlow(waterways, lakes, grid, lakeId, lakeBasin, basins.map((b) => b.level), lakeLevel, hraw);
+    lakeMeta.forEach((rec, i) => {
+      if (!rec) return;
+      const l = lakes[i];
+      if (l.creek) { if (l.seasonal) rec.seasonal = true; return; }
+      if (l.river) return;
+      rec.flow = flow[lakeBasin[rec.id]];
+      if (rec.cells * cell * cell < 80937) rec.pond = true; // under 20 acres
+    });
+    const dams = beaverDams(CFG.cacheDir, grid, proj, hraw, waterways, log);
+    await fsp.writeFile(path.join(opt.out, 'creeks.json'), JSON.stringify({ brooks, dams }));
+    log(`wetlands: creeks.json: ${brooks.length} brooks, ${dams.length} beaver dams`);
+  }
   const basinMeta = basins.map((b, i) => ({ id: i, name: b.name || null, level: +b.level.toFixed(2), cells: b.cells, river: b.river || undefined, level3dep: b.level3dep !== undefined ? +b.level3dep.toFixed(2) : undefined, lidar: b.lidar || undefined }));
   const index = {
     version: V4 ? 4 : 3,
@@ -1223,6 +1243,7 @@ async function main() {
     entryPoints,
     start: { x: r1(start.x), z: r1(start.z), lake: start.lake },
   };
+  if (P) index.creeks = 'creeks.json'; // wetlands: brooks and beaver dams (creeks.mjs)
   if (namesAdded) index.namesReport = namesAdded.report;
   await fsp.writeFile(path.join(opt.out, 'index.json'), JSON.stringify(index));
   // the old single-area files are superseded

@@ -22,7 +22,7 @@
 //   - the dry pack (stream C's 'packdry': a roll-top portage pack), and the long things by kind: the paddles in their
 //     woods (or carbon), the rods in their blanks, a setting pole as a pole
 import * as THREE from 'three';
-import { buildPackGeometry, PACKS, floorAt } from './hull.js';
+import { buildPackGeometry, PACKS, floorAt, sheerY } from './hull.js';
 import { Mesher, ringPts, loft } from './loft.js';
 import { paddleMesher, PADDLE_COLORS } from './gear.js';
 import * as gearKit from './gear.js';
@@ -168,6 +168,18 @@ const SMALL = [[-1.15, -0.2], [-2.05, 0], [1.95, 0], [-1.15, 0.2]];
 const PILE_CELL = 0.17; // (a little over the grid's hand: things set down spread out, and a meal bag is 17 cm)
 const GRATE = { u: 0.41, w: 0.26, top: 0.324 };
 const BILGE = [[-0.98, 0.13], [-0.98, -0.13]];
+// The owner, 2026-10-31 ("they seem to just be floating a lot of the time ... they need to be attached to the hands, and
+// it'd be cool if they had a little bit of a bounce ... when there's a stride, it kind of moves with your stride"): a
+// thing in a hand is held at the fist (the hand bone is the wrist), and one hung from it swings there as a pendulum,
+// pushed by how the fist moves in the walker's own frame (the arm's swing and the stride's bob, not the ground going
+// by), with a short springy bounce up and down. w2: g over the hang's length (1/s²), c its damping (1/s), max the most it
+// swings (radians); bounce: its spring (1/s²), damping, how much of the fist's jolt it takes and the most it moves (m).
+// A long thing (the rod, a paddle) or a tool held by its handle turns with the forearm instead (tilt: of the forearm's
+// swing ahead, how much the thing's pitch follows).
+// the bungee dilly bobs (packs.js lashed; the owner, 2026-10-31): under the canoe the paddles and the rods ride lashed up
+// under the thwarts, fore and aft along the hull a little to either side of the keel (hull frame: y under the sheer)
+const LASH = { y: -0.075, z: [0.15, -0.15, 0.24, -0.24], rodX: -0.9, padX: -0.8 };
+const SWING = { w2: 30, c: 3.2, max: 0.55, bounce: { k: 260, c: 9, gain: 0.5, max: 0.035 }, tilt: 0.7 };
 const hashOf = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return ((h >>> 0) % 10000) / 10000; };
 
 export class ContainerView {
@@ -186,6 +198,54 @@ export class ContainerView {
     this.imat = itemMaterial();
     this.loose = new Map();
     this._w = V(); this._f = V(); this._r = V(); this._lm = new THREE.Matrix4();
+    // the hands' swings (SWING): per hand the pendulum's angles ahead (a) and across (b), their rates, the bounce (u, uv),
+    // the fist's last place in the walker's frame and its velocity there; the frame's time
+    this.swings = { L: null, R: null }; this.swingT = 0;
+    this._sq = new THREE.Quaternion(); this._sm = new THREE.Matrix4(); this._sm2 = new THREE.Matrix4(); this._sd = V(); this._fa = V(); this._hv = V();
+  }
+  // Each frame, after the pose: the fists' swings moved on (SWING)
+  updateSwings() {
+    const now = typeof performance !== 'undefined' ? performance.now() / 1000 : 0, dt = Math.min(0.05, Math.max(0, now - (this.swingT || now)));
+    this.swingT = now;
+    const p = this.player, f = this._f.set(Math.cos(p.heading), 0, -Math.sin(p.heading)), r = this._r.set(-f.z, 0, f.x), w = this._w;
+    for (const k of ['L', 'R']) {
+      this.fist(k === 'R' ? 1 : -1, w);
+      const lf = (w.x - p.x) * f.x + (w.z - p.z) * f.z, ll = (w.x - p.x) * r.x + (w.z - p.z) * r.z, ly = w.y;
+      let S = this.swings[k];
+      if (!S || !(dt > 0) || Math.hypot(lf - S.lf, ll - S.ll) > 0.5 || Math.abs(ly - S.ly) > 0.5) { // (a jump: start still)
+        this.swings[k] = { a: 0, b: 0, va: 0, vb: 0, u: 0, uv: 0, lf, ll, ly, vf: 0, vl: 0, vy: 0 };
+        continue;
+      }
+      const vf = (lf - S.lf) / dt, vl = (ll - S.ll) / dt, vy = (ly - S.ly) / dt;
+      const af = (vf - S.vf) / dt, al = (vl - S.vl) / dt, ay = (vy - S.vy) / dt;
+      const W = SWING, cl = (x, m) => Math.max(-m, Math.min(m, x)), L = 9.81 / W.w2;
+      // the pivot accelerating one way swings what hangs the other (an accel past 30 m/s² is a glitch, not a stride)
+      S.va += (-W.w2 * Math.sin(S.a) - W.c * S.va - cl(af, 30) / L) * dt; S.a = cl(S.a + S.va * dt, W.max);
+      S.vb += (-W.w2 * Math.sin(S.b) - W.c * S.vb - cl(al, 30) / L) * dt; S.b = cl(S.b + S.vb * dt, W.max);
+      const B = W.bounce;
+      S.uv += (-B.k * S.u - B.c * S.uv - B.gain * cl(ay, 30)) * dt; S.u = cl(S.u + S.uv * dt, B.max);
+      Object.assign(S, { lf, ll, ly, vf, vl, vy });
+    }
+  }
+  // the swing of the thing in hand k ('L' | 'R') about the fist at `grip`, applied to a world matrix (a thing that hangs)
+  swingMatrix(k, grip, m) {
+    const S = this.swings[k]; if (!S) return m;
+    const f = this._f, r = this._r, d = this._sd.set(0, -Math.cos(S.a) * Math.cos(S.b), 0).addScaledVector(f, Math.sin(S.a)).addScaledVector(r, Math.sin(S.b)).normalize();
+    this._sq.setFromUnitVectors(V(0, -1, 0), d);
+    this._sm.makeRotationFromQuaternion(this._sq);
+    this._sm2.makeTranslation(-grip.x, -grip.y, -grip.z);
+    this._sm.multiply(this._sm2);
+    this._sm2.makeTranslation(grip.x, grip.y + S.u, grip.z);
+    this._sm2.multiply(this._sm);
+    return m.premultiply(this._sm2);
+  }
+  // how far the forearm of hand k swings ahead of hanging straight down (radians, + ahead)
+  forearmAhead(k) {
+    const b = this.canoe.figure.bones, h = b['hand' + k], t = b['twist' + k];
+    if (!h || !t) return 0;
+    h.getWorldPosition(this._sd); t.getWorldPosition(this._fa);
+    const d = this._sd.sub(this._fa);
+    return Math.atan2(d.x * this._f.x + d.z * this._f.z, -d.y);
   }
   geo(key) {
     let g = this.geos.get(key);
@@ -249,10 +309,19 @@ export class ContainerView {
     if (!inv.attached) return;
     const seen = new Set();
     const overhead = mode === 'carry';
+    if (mode === 'walk' || mode === 'carry') this.updateSwings(); else this.swings.L = this.swings.R = null;
     // the canoe's own paddle (stowed in the hull on foot) shows only while the paddle in use is in the canoe
     const pad = inv.long.find((l) => l.inUse);
     if ((mode === 'walk' || mode === 'carry') && pad && pad.where !== 'canoe') cn.paddle.visible = false;
     else if (mode === 'walk' || mode === 'carry') cn.paddle.visible = true;
+    // overhead with the dilly bobs, it is lashed under the thwarts (LASH); back on the ground, stowed in the bilge again
+    // (canoe.js stowPaddle's place)
+    let lashN = 0;
+    const lashAt = () => LASH.z[Math.min(LASH.z.length - 1, lashN++)];
+    if (cn.paddle.parent === cn.hull) {
+      if (overhead && cn.paddle.visible) { cn.paddle.position.set(LASH.padX + 0.05, sheerY(0) + LASH.y, lashAt()); cn.paddle.userData.lashed = true; }
+      else if (cn.paddle.userData.lashed) { cn.paddle.position.set(-1.08, floorAt(0) + 0.055, 0.22); cn.paddle.userData.lashed = false; }
+    }
     // the hull's places, filled in order
     const flat = [...FLAT], stand = [...STAND], small = [...SMALL];
     const stack = new Map();
@@ -287,10 +356,16 @@ export class ContainerView {
       if (l.where !== 'canoe' || l.inUse) continue;
       const o = this.objFor(l.uid, l.id); if (!o) continue;
       seen.add(l.uid);
-      if (overhead || (rodUp && isRod(l.id))) { o.visible = false; continue; }
+      if ((overhead && !this.player.gear?.dilly) || (rodUp && isRod(l.id))) { o.visible = false; continue; }
       if (o.parent !== cn.hull) cn.hull.add(o);
       o.visible = true;
       const mk = o.userData.mesh;
+      if (overhead) { // lashed under the thwarts (LASH)
+        const z = lashAt(), y = sheerY(0) + LASH.y;
+        if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2)); o.position.set(mk === 'setpole' ? -1.6 : LASH.rodX, y, z); }
+        else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(LASH.padX, y, z); }
+        continue;
+      }
       if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2 + 0.03)); o.position.set(mk === 'setpole' ? -1.7 : -1.25, floorAt(0) + 0.07, -0.24 + 0.07 * portRod++); }
       // (content D: a right-handed basis, as hull.js's spare: the left-handed one it had stood the paddle across the hull)
       else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(-1.0 + 0.1 * starPad, floorAt(0) + 0.05 + 0.015 * starPad, 0.2 - 0.06 * starPad++); }
@@ -341,17 +416,16 @@ export class ContainerView {
     for (const m of cn.packs || []) m.visible = false;
     void st;
   }
-  // a thing in a hand, in world space from the posed hand: the bucket and the tackle box hang from it, the rod and a
-  // paddle are carried by the middle, pointing ahead and down; with the canoe overhead (the hands on the gunwales) it
-  // rides at the hip on that side
+  // a thing in a hand, in world space from the posed hand: the bucket and the tackle box hang from the fist and swing
+  // there (SWING), the rod and a paddle are carried by the middle, pointing ahead and down and turning with the forearm.
+  // Under the canoe the hand with a thing in it hangs at your side (poses.js carry), so it is held the same way.
   inHand(o, side, overhead) {
-    const p = this.player, cn = this.canoe, b = cn.figure.bones, hand = b['hand' + side], v = this._v;
-    const f = V(Math.cos(p.heading), 0, -Math.sin(p.heading)), r = V(-f.z, 0, f.x), s = side === 'R' ? 1 : -1;
-    if (overhead) { b.chest.getWorldPosition(v); v.addScaledVector(V(0, 1, 0), -0.62).addScaledVector(r, 0.3 * s).addScaledVector(f, 0.05); }
-    else hand.getWorldPosition(v);
-    const mk = o.userData.mesh, yaw = p.heading;
+    const p = this.player, v = this.fist(side === 'R' ? 1 : -1, this._hv);
+    const f = this._f.set(Math.cos(p.heading), 0, -Math.sin(p.heading)), r = this._r.set(-f.z, 0, f.x), s = side === 'R' ? 1 : -1;
+    const mk = o.userData.mesh;
     if (mk.startsWith('rod') || mk.startsWith('paddle') || mk === 'setpole') {
-      const d = f.clone().multiplyScalar(Math.cos(0.42)).add(V(0, -Math.sin(0.42), 0)).normalize(); // ahead and down
+      const down = Math.max(0.05, 0.42 - SWING.tilt * this.forearmAhead(side));
+      const d = f.clone().multiplyScalar(Math.cos(down)).add(V(0, -Math.sin(down), 0)).normalize(); // ahead and down
       if (!mk.startsWith('paddle')) { // the rod's +y up the blank: the butt behind the hand, the tip ahead
         o.quaternion.setFromUnitVectors(V(0, 1, 0), d);
         o.position.copy(v).addScaledVector(d, mk === 'setpole' ? -1.2 : -0.55);
@@ -363,10 +437,13 @@ export class ContainerView {
       }
       return;
     }
-    // hanging from the hand: the bail or the handle at the hand
-    o.quaternion.setFromEuler(this._e.set(0, yaw + Math.PI / 2, 0));
+    // hanging from the fist: the bail or the handle in it
     const drop = mk === 'bucket' ? BUCKET.H * 0.8 + BUCKET.R * 1.1 : mk === 'tacklebox' ? 2 * BOX.y + 0.04 : BARREL[mk] ? BARREL[mk].H * 0.98 : mk === 'mapcase' ? 0.4 : 0.3;
-    o.position.set(v.x, v.y - drop - 0.02, v.z);
+    o.quaternion.setFromEuler(this._e.set(0, p.heading + Math.PI / 2, 0));
+    o.position.set(v.x, v.y - drop + 0.02, v.z);
+    o.updateMatrix();
+    this._lm.copy(o.matrix);
+    this.swingMatrix(side, v, this._lm).decompose(o.position, o.quaternion, o.scale);
   }
   // on its bottom where it was set down, its front toward at.heading; a pack slumps back a little as a soft full bag
   // settles; the long items lie flat; a hung one hangs at at.y
@@ -451,9 +528,19 @@ export class ContainerView {
         continue;
       }
       if (o.parent !== this.scene) this.scene.add(o);
-      if (overhead) { bones.chest.getWorldPosition(w); w.y -= 0.4; w.addScaledVector(r, 0.25 * side).addScaledVector(f, 0.03); } // (the hands on the gunwales: clipped to the belt at the hip)
-      else this.fist(side, w);
-      holdMatrix(m, w, f, r, side, this._lm);
+      // in the fist, under the canoe too (the hand with a thing in it hangs at your side: poses.js carry); one hung from
+      // it swings there, one held by its handle turns with the forearm (SWING)
+      this.fist(side, w);
+      const k = side > 0 ? 'R' : 'L';
+      if (m.hold === 'point') {
+        const t = SWING.tilt * this.forearmAhead(k);
+        holdMatrix(m, w, f, r, side, this._lm);
+        this._sm.makeRotationAxis(this._sd.copy(r), -t); this._sm2.makeTranslation(-w.x, -w.y, -w.z); this._sm.multiply(this._sm2);
+        this._sm2.makeTranslation(w.x, w.y, w.z); this._sm2.multiply(this._sm); this._lm.premultiply(this._sm2);
+      } else {
+        holdMatrix(m, w, f, r, side, this._lm);
+        if (m.hold === 'hang') this.swingMatrix(k, w, this._lm);
+      }
       this._lm.decompose(o.position, o.quaternion, o.scale);
       o.visible = true;
     }
@@ -542,19 +629,17 @@ export class ContainerView {
     const f = site.layout.fire, a = f.a || 0, gx = -Math.sin(a), gz = Math.cos(a), top = f.y + GRATE.top;
     const d = itemDef('grate'), cols = d && d.container ? d.container.cols : 4, rows = d && d.container ? d.container.rows : 2;
     const cellOf = (e) => { const def = itemDef(e.id) || { w: 1, h: 1 }, w = e.rot ? def.h : def.w, h = e.rot ? def.w : def.h; const u = -GRATE.u + ((e.x + w / 2) / cols) * 2 * GRATE.u, v = -GRATE.w + ((e.y + h / 2) / rows) * 2 * GRATE.w; return { u, v, long: w >= h }; };
-    // what cook.js draws: the pot (lid on, or the lid as a pan) and the cooked thing in it, or a fish on its stick
-    const looks = cook ? ['potLid', 'panRaw', 'panFried', 'stickRaw', 'stickFried'].filter((k) => cook[k] && cook[k].visible) : [];
-    const pot = c.grid.find((e) => e.id === 'pot');
-    const og = cook && looks.length ? cook.onGrate(c.at.grate) : null, inCook = og && og.food ? og.food.uid : null;
-    if (pot && looks.length && !looks[0].startsWith('stick')) { const q = cellOf(pot), m = cook[looks[0]]; m.position.x = f.x + gx * q.u + gz * q.v; m.position.z = f.z + gz * q.u - gx * q.v; }
-    const sig = `${c.grid.map((e) => `${e.uid}:${e.id}:${e.x},${e.y},${e.rot ? 1 : 0}`).join('|')}|${inCook || ''}|${f.x.toFixed(2)},${f.z.toFixed(2)}`;
+    // what cook.js draws itself (crafting, 2026-10-31): each pot at its cell, and a fish on the grate on its stick
+    void cook;
+    const inCook = null, onStick = (e) => { const d = itemDef(e.id); return !!(d && (d.kind === 'fish' || /^fried:/.test(e.id))); };
+    const sig =`${c.grid.map((e) => `${e.uid}:${e.id}:${e.x},${e.y},${e.rot ? 1 : 0}`).join('|')}|${inCook || ''}|${f.x.toFixed(2)},${f.z.toFixed(2)}`;
     if (o.parent !== this.scene) this.scene.add(o);
     o.position.set(f.x, top, f.z); o.quaternion.identity(); o.scale.setScalar(1);
     o.visible = true;
     this.remerge(o, sig, () => {
       const list = [], base = Math.atan2(-gz, gx);
       for (const e of c.grid) {
-        if (e.box || e.id === 'pot' || e.uid === inCook) continue;
+        if (e.box || e.id === 'pot' || e.uid === inCook || onStick(e)) continue;
         const m = modelGeometry(e.id, e.data); if (!m) continue;
         const q = cellOf(e), j = hashOf(String(e.uid || e.id));
         const yaw = base + (q.long ? 0 : Math.PI / 2) + (j - 0.5) * 0.2;
@@ -590,12 +675,12 @@ export class ContainerView {
     if (c.where === 'hands') {
       if (o.parent !== this.scene) this.scene.add(o);
       const side = c.hand === 1 ? -1 : 1, w = this._w, f = this._f.set(Math.cos(p.heading), 0, -Math.sin(p.heading)), r = this._r.set(-f.z, 0, f.x);
-      if (p.mode === 'carry') { cn.figure.bones.chest.getWorldPosition(w); w.y -= 0.4; w.addScaledVector(r, 0.25 * side); }
-      else this.fist(side, w);
+      this.fist(side, w); // (under the canoe too: that hand hangs at your side, poses.js carry)
       // hung by the cord's end, the fish heads up under it (the merged frame's +x up, its depth across the body)
       const g = o.geometry; if (!g.boundingBox) g.computeBoundingBox();
       const bb = g.boundingBox;
       holdMatrix({ hold: 'hang', up: 'x', size: [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z], grip: V(bb.max.x + 0.02, 0.02, 0), scale: 1 }, w, f, r, side, this._lm);
+      this.swingMatrix(side > 0 ? 'R' : 'L', w, this._lm); // (the fish swing on the cord: SWING)
       this._lm.decompose(o.position, o.quaternion, o.scale);
       return;
     }

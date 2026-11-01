@@ -21,6 +21,7 @@ import { makeVegetationKit } from './vegetation.js';
 import { TileManager } from './tiles.js';
 import { buildCanoeRig } from './canoe.js';
 import { Player, Input, seaMoments } from './player.js'; // cons B: seaMoments
+import { setBrookSeason, creekMoments } from './creeks.js'; // the wetlands round: the brooks' water by the date, the low creek's moment
 import { Packs } from './packs.js'; // trip core B
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
@@ -69,6 +70,7 @@ import { KINDS } from './tasks.js'; // fb2 A
 import { cards } from './cards.js'; // wc B
 import { VERBS, verbsOf } from './items.js'; // wc D
 import { chipOf, missingOf } from './items.js'; // fb5 B
+import { isPot } from './items.js'; // crafting (2026-10-31)
 import { withTentNeeds, pitchNeeds } from './tent.js'; // fb4 E
 import { chip } from './chip.js'; // fb5 D
 import { Hints } from './hints.js'; // fb4 D
@@ -239,6 +241,7 @@ async function main() {
   // the trip: outfitters at the landings, the food and the energy, the task board
   const teleport = async (x, z) => { const ok = await player.teleport(x, z); if (ok) chase.snap(); return ok; };
   const energy = new Energy(player, day);
+  player.energy = energy; // 2026-10-31: winded, Shift does nothing (player.hustleKey)
   const tasks = new Tasks(world, scene, player, { audio, water });
   const tripStats = new TripStats(world, player, day);
   // trip core A: the veil (fade cards stepped per frame) and the trip (the mode, the permit, the rules), before the outfitter
@@ -349,6 +352,7 @@ async function main() {
   settings.attach({ renderer, scene, sun, water, post, audio, chase, player, stats: fps, geo });
   const saver = new TripSaver(player, day, chase);
   const title = new Title({ world, player, chase, camera, day, hud, settings, saver, saved, trip, outfitter });
+  title.photo = photo; // (Esc with the camera up lowers it: no pause)
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
   // (on foot with the canoe set down somewhere, at a camp say, you come back on foot beside it)
   // camp 1: one saved in the middle of a carry comes back on the trail, the canoe overhead and the carry on you (packs.js)
@@ -656,7 +660,7 @@ async function main() {
     const ch5 = camp.chores, ck5 = ch5.cook;
     fires.veiled = () => !!(cards.shown || journal.open);
     const statusA = inventory.entryStatus.bind(inventory);
-    inventory.entryStatus = (c, e) => (c && c.item === 'grate' && typeof ck5.grateStatus === 'function' ? ck5.grateStatus(c, e) : c && c.item === 'firefuel' && typeof ch5.fuelStatus === 'function' ? ch5.fuelStatus(c, e) : statusA(c, e)); // (the fire's own, lean: a state word and a missing chip, no timers)
+    inventory.entryStatus = (c, e) => (c && (c.item === 'grate' || isPot(c.item)) && typeof ck5.grateStatus === 'function' ? ck5.grateStatus(c, e) : c && c.item === 'firefuel' && typeof ch5.fuelStatus === 'function' ? ch5.fuelStatus(c, e) : statusA(c, e)); // (the fire's own, lean: a state word and a missing chip, no timers; crafting: what is in a pot too)
     window.__game.fire = { need: (k) => ch5.fireNeed(k), needs: (k) => ch5.fireNeeds(k), on: (n, fn) => fires.on(n, fn), events: fires.events }; // for the console, the tests and stream E
   }
   // fb4 B: the book (the owner's second round of 2026-10-25). I opens and closes it (Pack and Journal are tabs on its
@@ -716,7 +720,7 @@ async function main() {
   const shopUpdC = shop.update.bind(shop);
   shop.update = () => { shopUpdC(); kit.update(); uniques.update(); };
   const fillC = camp.fillBottle.bind(camp);
-  camp.fillBottle = () => kit.fillBottle(fillC); // the pump, at once; the gravity bag in a few minutes; else a tablet
+  camp.fillBottle = (how) => kit.fillBottle(fillC, how); // crafting (2026-10-31): E lake water as it comes; Q 'filter' the pump at once, the gravity bag in a few minutes
   camp.filterWait = () => kit.filterWait();
   const verbC = inventory.verb.bind(inventory);
   inventory.verb = (id, ref) => kit.verb(id, ref) || verbC(id, ref); // Cook on it, Brew a cup, Fillet the catch, Sit in it
@@ -732,8 +736,7 @@ async function main() {
     outfitter.save(); outfitter.render();
     return r;
   };
-  const leftPageC = journal.leftPage.bind(journal);
-  journal.leftPage = () => { const html = leftPageC(), rows = uniques.journalRows(); return rows ? html.replace(/(<div class="lab">On the go<\/div>)(<div class="empty">[^<]*<\/div>)?/, (m, head) => head + rows) : html; }; // a find noted, till it is reported
+  journal.notes = () => uniques.journalNotes(); // a find noted, till it is reported: an entry on the journal's Tasks page
   const captureC = photo.capture.bind(photo);
   photo.capture = () => { const rec = captureC(); try { uniques.fromPhoto(photo); } catch (e) { console.warn('uniques.fromPhoto', e); } return rec; }; // a photo of an old thing notes it
   const taskHintsC = tasks.hints.bind(tasks);
@@ -775,13 +778,13 @@ async function main() {
   // hullwater.js buildBilge). Two first-time moments: the first whitecaps, the first water aboard.
   player.day = day; // (the sea's game minutes run on the day's clock: none behind the pause card)
   {
-    const sea = new Map(seaMoments(player, day).map((m) => [m.id, m]));
+    const sea = new Map([...seaMoments(player, day), ...creekMoments(player)].map((m) => [m.id, m])); // (and the wetlands round's low creek)
     for (const m of sea.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
     const dueB = hints.due.bind(hints);
     hints.due = (id, rec) => (sea.has(id) ? sea.get(id).due(rec) : dueB(id, rec));
   }
   // cons A: a bear at camp (the consequences pass, the owner, 2026-10-25: "a bear at camp if the food isn't hung … so the
-  // camp routines matter"). bear.js: at night food not hung (hang.js secured) may bring a bear, about 30 % a night times
+  // camp routines matter"). bear.js: at night food not hung (hang.js secured) may bring a bear, a few in a hundred a night (BEAR.chance) times
   // the lake's bear activity, softened the first night ever; heard first, its eyes in the headlamp if you are up (E Make
   // noise on the dot drives it off for less), and in the morning the barrel knocked over in the brush or the pack torn
   // open, a third to a half of what was out gone, never the whole season. The camp asks it at bedtime and at waking; its
@@ -955,7 +958,17 @@ async function main() {
   // and says them; unused without it).
   const white = new WhiteWater({ world, water, ripples, scene });
   white.knock = (pos, amt) => { if (audio.ctx && audio.enabled) bonk(audio, pos, amt); };
-  audio.whiteWater = () => white.heard;
+  // the wetlands round: and the nearest running brooks' trickle (creeks.js heard), looked for twice a second, with the
+  // drops' voices left free for the drops
+  let brooks = [], brooksT = 0;
+  audio.whiteWater = () => {
+    const h = white.heard || [];
+    if (!world.creeks || h.length >= 3) return h;
+    const now = performance.now();
+    if (now - brooksT > 500) { brooksT = now; brooks = world.creeks.heard(player.x, player.z, day.season, (x, z) => tiles.groundAt(x, z)); }
+    for (const b of brooks) b.d = Math.hypot(b.x - player.x, b.z - player.z);
+    return h.length ? [...h, ...brooks].slice(0, 3) : brooks;
+  };
   hud.mapPlaces = () => whiteWater();
   {
     const upd = water.update.bind(water);
@@ -1029,6 +1042,7 @@ async function main() {
   const frame = (dt) => {
     wind.update(dt, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
+    if (wind.puff > 0) water.uniforms.uRippleAmt.value = Math.min(1.35, water.uniforms.uRippleAmt.value + 0.4 * wind.puff); // a gust darkens the ripples (wind.js PUFF); the waves keep the steady wind
     const shell = title.state !== 'game';
     if (shell) { // the card is up: no input, the canoe rides the water but stays put, the camera drifts
       input.down.clear(); input.once.clear();
@@ -1091,6 +1105,7 @@ async function main() {
     moon.position.copy(moonTarget.position).addScaledVector(day.moonDir, 700);
     player.season = day.season;
     tiles.setSeason(day.season);
+    setBrookSeason(day.season); // the wetlands round: the brooks run or lie dry by the date
     wind.updateSway(dt); // trees, understory, grass and reeds sway with the wind the water reads
     cover.setSeason(day.season);
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch
@@ -1100,6 +1115,7 @@ async function main() {
     loons.update(dt, player, day.season, faunaCtx);
     fauna.update(dt, faunaCtx);
     audio.tick(dt, { player, world, wind, day, season: day.season, camera, weather }); // the soundscape reads the whole scene
+    audio.setPaused(title.state === 'pause'); // the pause card ducks and muffles the mix
     geo.update(player, world);
     hud.update({ player, geo, day, wind, fishing, energy, tasks, outfitter, stats: tripStats, fps, shell, trip }); // trip core A: trip
     saver.update(dt);

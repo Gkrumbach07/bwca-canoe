@@ -56,7 +56,7 @@ export const VISITORS = {
     intro: (v) => `${v.first}. I read lakes for the citizen monitoring program. Volunteer, before you ask.`,
     again: ['Back again? Good.', 'Hello again.'],
     lore: ['I lower a white disk on a rope until it vanishes, and write down the depth. That’s the science. The rest is paddling.', 'Twenty years of readings on some of these lakes. Clearer in a dry summer, browner after a wet one.'],
-    remarks: ['Four point two metres. Lovely.', 'The disk went out of sight at three. Stained water.', 'Never trust a lake that looks the same two days running.'],
+    remarks: ['Fourteen feet. Lovely.', 'The disk went out of sight at ten feet. Stained water.', 'Never trust a lake that looks the same two days running.'],
     bye: ['Look down into the water sometime. Really look.', 'Paddle safe.'],
   },
 };
@@ -76,9 +76,9 @@ export const VISITOR_HINTS = {
     const list = H.lakes(9000).filter((x) => x.ha >= 40 && !x.river && Number.isFinite(x.secchi));
     const l = H.pickLake(list, (x) => H.reachScore(x) + (n ? 0 : Math.abs(x.secchi - 3) * 0.2)); if (!l) return null;
     H.taken.add(l.name);
-    const m = Math.round(l.secchi * 10) / 10;
+    const m = Math.round(l.secchi * 3.28084); // feet
     const at = `${theWater(l.name)}${H.where(l)}${H.where(l) ? ',' : ''}`;
-    return { text: l.secchi >= 4.2 ? `${at} read ${m} metres yesterday. Clear as gin; you can see the rocks under the canoe.` : l.secchi <= 2 ? `${at} read ${m} metres. Stained like tea. The walleye love it.` : `${at} read ${m} metres. About average for up here.` };
+    return { text: l.secchi >= 4.2 ? `${at} read ${m} feet yesterday. Clear as gin; you can see the rocks under the canoe.` : l.secchi <= 2 ? `${at} read ${m} feet. Stained like tea. The walleye love it.` : `${at} read ${m} feet. About average for up here.` };
   },
   secchi2(H, v) { return VISITOR_HINTS.secchi(H, v, 1); },
 };

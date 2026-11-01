@@ -15,6 +15,8 @@ import * as V from './audio-voices.js';
 import { burnLook } from './burns.js';
 
 const MASTER = 0.9;            // master gain at full volume, after the compressor
+// paused (the owner, 2026-10-31: "it doesn't feel paused because the same sound is persisting"): the mix ducked and muffled
+const PAUSE = { gain: 0.35, cut: 520, open: 20000, ease: 0.25 };
 const MAX_VOICES = 40;         // one-shots alive at once; past it only the important ones (pri >= 2) start
 const PROBE = 0.4;             // seconds between looks around (trees, open water, shallows)
 const RINGS = [15, 40, 100, 240], RING_OPEN = [0.1, 0.2, 0.3, 0.4];
@@ -34,6 +36,7 @@ const EMIT = {
   'moose-grunt': [1000, V.mooseGrunt],
   'moose-wade': [300, V.mooseWade],
   'splash': [600, V.splash],
+  'scrape': [60, V.scrape], // the wetlands round: the hull on the stones of a low creek, hauled over a beaver dam
   'thunder': [20000, V.thunder],
   'tent-zip': [60, tentZip],
 };
@@ -92,6 +95,7 @@ const blankScene = () => ({
 export class Ambient {
   constructor({ autoStart = true, seed = 7 } = {}) {
     this.enabled = true; this.volume = 1; this.ctx = null; this.master = null; // volume 0..1 scales the master
+    this.paused = false; this.muffle = null; // the pause card is up: ducked and muffled (PAUSE)
     this.seed = seed; this.rand = mulberry32(seed);
     this.voices = []; this.later = []; this.persist = 0;
     this.stats = { fired: {}, peakVoices: 0, peakNodes: 0 };
@@ -117,9 +121,11 @@ export class Ambient {
     const G = (v, to) => { const g = mk(ctx.createGain()); g.gain.value = v; if (to) g.connect(to); return g; };
     // the mix: everything into one bus, a gentle compressor, the master
     this.master = G(this.level, ctx.destination);
+    const muffle = this.muffle = mk(ctx.createBiquadFilter()); // the pause's muffle, wide open in play
+    muffle.type = 'lowpass'; muffle.frequency.value = this.paused ? PAUSE.cut : PAUSE.open; muffle.Q.value = 0.5; muffle.connect(this.master);
     const comp = this.comp = mk(ctx.createDynamicsCompressor());
     comp.threshold.value = -20; comp.knee.value = 10; comp.ratio.value = 4; comp.attack.value = 0.01; comp.release.value = 0.3;
-    comp.connect(this.master);
+    comp.connect(muffle);
     this.bus = this.dry = G(1, comp);
     // the room: one send split between a lake (long and open, darkening slowly, a few late reflections off the far
     // shores) and a forest (short, damped, dense early reflections off the trunks); the beds crossfade them
@@ -155,7 +161,7 @@ export class Ambient {
     return this;
   }
 
-  get level() { return this.enabled ? MASTER * this.volume : 0; }
+  get level() { return this.enabled ? MASTER * this.volume * (this.paused ? PAUSE.gain : 1) : 0; }
   applyLevel() {
     if (!this.master) return;
     this.master.gain.setTargetAtTime(this.level, this.ctx.currentTime, 0.1);
@@ -168,6 +174,13 @@ export class Ambient {
   toggle() { return this.setEnabled(!this.enabled); }
   setEnabled(on) { this.enabled = !!on; this.applyLevel(); return this.enabled; }
   setVolume(v) { this.volume = Math.max(0, Math.min(1, v)); this.applyLevel(); }
+  // the pause card up or down (main.js): the whole mix ducked and muffled, as if heard from indoors
+  setPaused(on) {
+    on = !!on; if (on === this.paused) return;
+    this.paused = on;
+    if (this.muffle && !this.offline) this.muffle.frequency.setTargetAtTime(on ? PAUSE.cut : PAUSE.open, this.ctx.currentTime, PAUSE.ease);
+    this.applyLevel();
+  }
 
   // The old entry (shore distance, speed, afloat). While main still calls it, the scene is read off window.__game
   // when the game is up, so the whole soundscape runs before the wiring moves to tick().
@@ -209,12 +222,14 @@ export class Ambient {
     S.afloat = S.mode === 'paddle'; S.onFoot = S.mode === 'walk' || S.mode === 'carry';
     S.heading = p ? p.heading || 0 : 0; S.speed = Math.abs(p ? (p.feltSpeed ?? p.speed) || 0 : c.speed || 0); // the wash as the water line shows it (player.js feltSpeed: the pace's time-lapse)
     S.st = this.player ? p.canoe.state : null; S.onTrail = !!(p && p.onTrail);
+    S.mire = p && p.mire ? (p.mire.board ? -1 : p.mire.k) : 0; // the wetlands underfoot (player.js updateMire; -1 on puncheon)
+    S.brook = p && p.brook && S.onFoot ? p.brook.wet : -1; // a brook's bed underfoot (player.js brookStep): its water, -1 none
     if (this.world) {
       S.sd = w.shoreAt(x, z); S.ground = w.heightAt(x, z);
       const cv = w.coverCell(w.cellI(x), w.cellJ(z));
       S.cls = cv ? GROUND[(cv >> 16) & 255] || null : null;
     } else { S.sd = c.shoreDist ?? 200; S.cls = null; }
-    S.wind = wind ? wind.speed : 2; S.gust = wind ? wind.gust || 0 : 0;
+    S.wind = wind ? wind.speed : 2; S.gust = wind ? (wind.gust || 0) + 0.7 * (wind.puff || 0) : 0; // (a puff swells the wind's beds: wind.js PUFF)
     if (wind) { const d = wind.dir; S.windX = d.x; S.windZ = d.z; }
     S.hours = day ? day.hours : 12;
     const alt = Math.asin(Math.max(-1, Math.min(1, day && day.sunDir ? day.sunDir.y : 0.6))) * DEG, tw = bump(alt, -11, 0, 12);
@@ -472,7 +487,7 @@ export class Ambient {
   footfall(S, carry) {
     const c = S.cls || '', rock = c.startsWith('rock');
     // planks on a store's floor and a dock's deck (polish B: the deck stood over the water, so its steps were wading)
-    const kind = S.inside || S.onDeck ? 'plank' : S.ice > 0.5 ? 'snow' : S.sd < 0 ? 'wade' : rock ? 'rock' : S.onTrail ? 'dirt' : S.sd < 4 ? 'gravel' : c === 'meadow' ? 'grass' : c === 'burn' ? 'burn' : 'duff';
+    const kind = S.inside || S.onDeck || S.mire < 0 ? 'plank' : S.ice > 0.5 ? 'snow' : S.sd < 0 || S.brook > 0.15 ? 'wade' : S.brook >= 0 ? 'rock' : S.mire > 0.3 ? 'squelch' : rock ? 'rock' : S.onTrail ? 'dirt' : S.sd < 4 ? 'gravel' : c === 'meadow' ? 'grass' : c === 'burn' ? 'burn' : 'duff';
     this.say('step-' + kind, V.step(this, kind, { x: S.x, y: S.y + 0.05, z: S.z }, carry));
     if (carry && this.rand() < 0.3) this.say('yoke-creak', V.creak(this, { x: S.x, y: S.y + 1.8, z: S.z }, 0.6, true));
   }
@@ -501,6 +516,8 @@ export class Ambient {
     if (p.mode === 'carry') this.say('hull-bonk', V.bonk(this, pos, 0.8));
     else this.say('dip', V.dip(this, pos));
   }
+  // the yoke creaking as the canoe rocks on the shoulders (player.js balanceCarry)
+  yokeCreak(amt = 1) { if (this.ctx && this.enabled) { const S = this.S; this.say('yoke-creak', V.creak(this, { x: S.x, y: S.y + 1.8, z: S.z }, amt, true)); } }
   reelClick(pitch = 1) { if (this.ctx && this.enabled) V.reel(this, pitch); }
   splash(size = 1) { if (this.ctx && this.enabled) this.say('splash', V.splash(this, null, size)); }
   bite(strength = 1) { if (this.ctx && this.enabled) this.say('bite', V.bite(this, strength)); }

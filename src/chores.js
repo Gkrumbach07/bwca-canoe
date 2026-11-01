@@ -56,7 +56,7 @@ import { Tarp } from './tarp.js'; // fb4 E: the tarp pitched like the tent, on t
 // fuel a fixed container at the ring like the grate, and the grate takes a raw meal or a fish dragged onto it. Both are
 // stations: never where a thing picked up is put away (inventory.place).
 defineItem({ id: 'firefuel', name: 'In the fire ring', short: 'Fuel', kind: 'container', w: 1, h: 1, kg: 0, fixed: true, station: true, container: { cols: 4, rows: 3, accepts: ['firewood'] }, icon: 'firewood', words: 'Wood laid in the ring.' });
-defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'meal', 'fish'] } });
+defineItem({ id: 'grate', station: true, container: { cols: 4, rows: 2, accepts: ['food', 'tool', 'fish', 'container'] } }); // (crafting, 2026-10-31: a pot stands on it, the meal goes in the pot; 'container' takes only a pot, inventory.accepts)
 // fb3 B (the owner, 2026-10-25: "things like sleeping bag and tarp … feel like they have no use"): rain on a ring with no
 // tarp over it burns a fire down RAIN.burn times faster and wets the wood in it through after RAIN.wetAfter hours (it
 // won't light for RAIN.wetFor); rain on a pack on the ground with no tarp soaks the gear after RAIN.packAfter hours
@@ -939,7 +939,7 @@ export class Chores {
     const q = {
       verb: 'Cut a pole', held: true, why: !saw ? 'Cut a pole: needs the saw' : pl > 0 ? null : 'Two poles cut from it today already',
       needs: [sawNeed, { label: 'Poles left in it today', have: pl, need: POLES_A_LOG, unit: 'poles' }],
-      next: !saw ? getSaw : pl > 0 ? 'Hold Q: a straight two-metre pole off its top, 6 min' : 'Another down log, or dead poles lying under the trees',
+      next: !saw ? getSaw : pl > 0 ? 'Hold Q: a straight six-foot pole off its top, 6 min' : 'Another down log, or dead poles lying under the trees',
       run: (o) => this.beginPoleCut(log.o, k, keys(o)),
     };
     const hint = left ? `${word(left)} short ${plural(left, 'log')} in it` : 'sawn up';
@@ -1142,12 +1142,15 @@ export class Chores {
     for (const key of this.lit) if (F.get(key)) F.douse(key);
     this.lit.clear();
     this.tarp.tripEnded(); // fb4 E: the tarp goes to the outfitters with the tent
-    this.cook.pot = null;
+    this.cook.pot = null; this.cook.jobs = {}; this.cook.stove = null;
     if (inv && inv.attached) {
       for (let i = inv.containers.length - 1; i >= 0; i--) {
         const c = inv.containers[i];
         if (c.item !== 'grate') continue;
-        for (const e of c.grid) if (e.id === 'pot' && inv.crate) inv.put(inv.crate, 'pot', { quiet: true });
+        for (const e of [...c.grid]) {
+          if (e.box) { const k = inv.cont(e.uid); if (k && inv.crate && !inv.nest(k, inv.crate)) { k.where = 'stash'; k.in = null; } continue; } // (crafting: a pot on the grate goes to the outfitters with what is in it)
+          if (e.id === 'pot' && inv.crate) inv.put(inv.crate, 'pot', { quiet: true });
+        }
         inv.containers.splice(i, 1);
       }
       inv.emit('containers');
@@ -1241,7 +1244,7 @@ function capsule(x, z, o) {
 // --- the notices -------------------------------------------------------------------------------------------------------
 // Blueberries for the kitchen ($10 a pint) and an armful for the stove ($6 an armful of three pieces), each posted at an
 // outfitter and handed over on foot at its store (tasks.update while taken on: the store's visit is that outfitter's),
-// then claimed at its counter. The berries are posted only in their season.
+// then claimed at its board. The berries are posted only in their season.
 const BERRY_WORDS = [
   { need: 3, title: 'Blueberries for pies', text: 'Three pints of wild blueberries for the pies. They come on in the burns and on the lichen rock above the campsites.', sign: 'Deb, in the café' },
   { need: 1, title: 'A pint of blueberries', text: 'One pint for the Sunday pancakes. The open rock by the campsites is where they grow.', sign: 'the cook' },
@@ -1274,7 +1277,7 @@ registerKind('berries', {
   },
   pay(t) { return PAY.pint * (t.need || 1); },
   update(T, t) {
-    handOver(T, t, current ? current.s.pints : 0, (n) => { current.s.pints -= n; }, (n, done, more) => `You hand over ${word(n)} ${plural(n, 'pint')} of blueberries. ${done ? 'Claim it at the counter.' : `${cap(word(more))} more wanted.`}`);
+    handOver(T, t, current ? current.s.pints : 0, (n) => { current.s.pints -= n; }, (n, done, more) => `You hand over ${word(n)} ${plural(n, 'pint')} of blueberries. ${done ? 'Claim it at the board.' : `${cap(word(more))} more wanted.`}`);
   },
   progress(t) { const n = t.need || 1, g = t.got || 0, tin = current ? Math.min(current.s.pints, n - g) : 0; return g ? `${word(g)} of ${word(n)} ${plural(n, 'pint')} handed over${tin ? `, ${word(tin)} in the tin` : ''}` : tin ? `${word(tin)} of ${word(n)} in the tin` : `${word(n)} ${plural(n, 'pint')} to pick, in season`; },
 });
@@ -1288,7 +1291,7 @@ registerKind('firewood', {
   pay(t) { return PAY.armful * (t.need || 1); },
   update(T, t) {
     const wood = current ? current.carriedWood() : [];
-    handOver(T, t, Math.floor(wood.length / ARMFUL), (n) => { for (const u of wood.slice(0, n * ARMFUL)) current.inv.take(u.c.id, u.e.uid, 1); current.inv.emit('items'); }, (n, done, more) => `You stack ${word(n)} ${plural(n, 'armful')} of wood by the door. ${done ? 'Claim it at the counter.' : `${cap(word(more))} more wanted.`}`);
+    handOver(T, t, Math.floor(wood.length / ARMFUL), (n) => { for (const u of wood.slice(0, n * ARMFUL)) current.inv.take(u.c.id, u.e.uid, 1); current.inv.emit('items'); }, (n, done, more) => `You stack ${word(n)} ${plural(n, 'armful')} of wood by the door. ${done ? 'Claim it at the board.' : `${cap(word(more))} more wanted.`}`);
   },
   progress(t) { const n = t.need || 1, g = t.got || 0; return g ? `${word(g)} of ${word(n)} handed over` : `${word(n)} ${plural(n, 'armful')} to bring in (three pieces an armful)`; },
 });

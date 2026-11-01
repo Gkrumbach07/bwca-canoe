@@ -3,6 +3,53 @@
 // colour deepens and the shallows stay clear). Positions relative to the tile corner.
 import { fbm } from './rng.js'; // d2 water (shoalBeds)
 
+// Wetlands round 2: a seasonal creek (index.json lake record `seasonal`) stands lower from late July through September,
+// LOW.drop metres at its lowest (about 1.3 ft), eased in and out. Only the water moves: the terrain keeps the bank it
+// was shaped to (terrain-build.js shoreShape reads the tile's own level), so the mud of the bank shows over the water,
+// and the water's shore distance moves out with it (by drop / LOW.slope, the band's slope) so the waterline draws where
+// the lower water meets that bank. So that a canoe still floats down the middle, a seasonal creek's channel is cut
+// deeper the year round (its shore distance under water times LOW.deepen: the bank shaping reads it). Both ease off
+// over LOW.reach metres from other water (the lake or river it runs into stays as it is, so no step at the mouth).
+// The worker writes the drop per cell for the date it built the tile on (lowCreeks: a plane beside the tile's own,
+// world.js levelCell and the water patch read it); a tile built again later takes the new date.
+export const LOW = { drop: 0.42, slope: 0.12, deepen: 1.5, reach: 50 };
+const ease = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// how low a seasonal creek runs (0 normal .. 1 at its lowest) by the day of the year
+export function lowWater(doy) { return ease(198, 214, doy) * (1 - ease(266, 282, doy)); }
+// One tile's buffer ([height][lake][sdist][level], side^2 cells each; cell metres): the seasonal creeks' channels cut
+// deeper in place, and the drop of their water for day `doy` per cell in centimetres (Uint8Array), or null where the
+// tile holds none or the date has none. low: a Set of the seasonal creeks' lake ids.
+export function lowCreeks(buf, side, cell, low, doy) {
+  if (!low || !low.size) return null;
+  const n = side * side, lake = new Uint16Array(buf, n * 2, n), sd = new Int16Array(buf, n * 4, n);
+  let any = false;
+  for (let m = 0; m < n; m++) if (lake[m] && low.has(lake[m])) { any = true; break; }
+  if (!any) return null;
+  const R = Math.max(1, Math.round(LOW.reach / cell)), drop = lowWater(doy) * LOW.drop;
+  const out = drop >= 0.005 ? new Uint8Array(n) : null;
+  for (let m = 0; m < n; m++) {
+    const id = lake[m];
+    if (!id || !low.has(id)) continue;
+    // the nearest other water within R cells (the lake or river it runs into): the drop and the cut eased off toward it
+    const i = m % side, j = (m - i) / side;
+    let best = R * R + 1;
+    for (let dj = -R; dj <= R; dj++) {
+      const jj = j + dj;
+      if (jj < 0 || jj >= side) continue;
+      for (let di = -R; di <= R; di++) {
+        const ii = i + di, d = di * di + dj * dj;
+        if (ii < 0 || ii >= side || d >= best) continue;
+        const o = lake[jj * side + ii];
+        if (o && o !== id && !low.has(o)) best = d;
+      }
+    }
+    const k = ease(0.5, R, Math.sqrt(best));
+    if (sd[m] < 0) sd[m] = Math.round(sd[m] * (1 + (LOW.deepen - 1) * k));
+    if (out) out[m] = Math.round(drop * k * 100);
+  }
+  return out;
+}
+
 // d2 water: a cell's own Secchi depth (m) and CDOM (m^-1) where a v4 tile carries them (the two byte
 // channels over the tile's side, lake-colour's encoding: grid.ch), else its lake's (grid.cdomById, the worker's; CDOM 0 on v3)
 export function cellColour(grid, i, j, id, out) {
@@ -23,10 +70,13 @@ export function buildWaterChunk(grid, i0, j0, n, originX, originZ) {
   // or a creek against a perched pond, the low water's sheet climbed to the high water's level over its bank and hung
   // there in the air; the lowest never stands over the bank the terrain shapes to the water, it runs in under it). On
   // level water it is the same level.
+  const low = grid.low || null; // wetlands round 2: a seasonal creek's water this date (lowCreeks)
+  const lowAt = (i, j) => (low ? low[grid.local(i, j)] * 0.01 : 0);
+  const lvlOf = (i, j) => grid.levelCell(i, j) - lowAt(i, j);
   const vertexLevel = (i, j) => {
-    if (grid.lakeCell(i, j)) return grid.levelCell(i, j);
+    if (grid.lakeCell(i, j)) return lvlOf(i, j);
     let best = Infinity;
-    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (grid.lakeCell(i + di, j + dj)) best = Math.min(best, grid.levelCell(i + di, j + dj));
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (grid.lakeCell(i + di, j + dj)) best = Math.min(best, lvlOf(i + di, j + dj));
     return best;
   };
   const vid = (i, j) => {
@@ -35,7 +85,7 @@ export function buildWaterChunk(grid, i0, j0, n, originX, originZ) {
       map[m] = pos.length / 3;
       const lv = vertexLevel(i, j);
       pos.push(grid.cellX(i) - originX, lv, grid.cellZ(j) - originZ);
-      shore.push(grid.sdCell(i, j));
+      shore.push(grid.sdCell(i, j) + lowAt(i, j) / LOW.slope); // (the low creek's waterline moved out)
       depth.push(Math.max(0, lv - grid.hCell(i, j)));
       // the clarity of the water at this corner: its own cell's lake, else the deepest-set neighbour's (d2 water: and
       // its colour, the cell's own where the tile has it)

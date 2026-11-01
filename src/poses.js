@@ -352,6 +352,8 @@ export function makeGait(body) {
   const ground = body.ground;
   let crouchK = 0; // state.crouch, eased: the hips sink over the planted feet (the knees forward), the back bends over
   let wadeK = 0;   // wading (player.move 'wade'), eased: the knees lifted high out of the water, the arms out from the sides
+  let mireK = 0;   // the wetlands underfoot (player.js state.mire, 0..1), eased: each boot pulled up out of the muck (a higher
+                   // knee, a slower step), the body rolling over the foot that takes it and the arms a little out for balance
   const loco = { init: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, feet: {}, rigPos: V(), h: 0, grade: 0, tilt: 0, want: HIP_H - 0.05 };
   for (const h of ['L', 'R']) loco.feet[h] = { pos: V(), yaw: 0, lift: V(), liftYaw: 0, target: V(), targetYaw: 0, swing: false, s: 0, dur: 0.3, cyc: -1, planted: 1, clear: 0.05, slope: 0, pitch: 0 };
   const toWorld = (local, out = V()) => { const h = rig.rotation.y, c = Math.cos(h), s = Math.sin(h); return out.set(rig.position.x + local.x * c + local.z * s, rig.position.y + local.y, rig.position.z - local.x * s + local.z * c); };
@@ -431,6 +433,7 @@ export function makeGait(body) {
     if (state.air && !carry) { loco.rigPos.copy(rig.position); loco.h = rig.rotation.y; return airFeet(dt); }
     if (!loco.init || loco.air || rig.position.distanceTo(loco.rigPos) > 1.5) { initFeet(); loco.air = false; }
     loco.rigPos.copy(rig.position); loco.h = rig.rotation.y;
+    mireK += ((state.mire || 0) - mireK) * damp(3, dt);
     const v = Math.max(0, state.speed);
     const mf = state.moveFwd, ml = state.moveLat, mag = Math.hypot(mf, ml);
     const moving = state.walkSpeed > 0.25 && v > 0.12 && mag > 0.1;
@@ -449,13 +452,15 @@ export function makeGait(body) {
     // times too quick, so every step came out some 0.45 m long and a 4.8 km/h walk read as a shuffle at half that:
     // the owner, 2026-10-23, "you say its 4.8 but it feels like 2.4".)
     let c, fs, clear;
-    if (carry) { c = 0.55 + 0.3 * v; fs = 0.6; clear = 0.05 + 0.02 * sp; }
+    if (carry) { c = 0.55 + 0.3 * v; fs = 0.6; clear = 0.05 + 0.02 * sp + 0.06 * mireK; }
     else {
       // the jog upright, the knee lifting lightly: a shorter flight and a lower swing than the sprinter's it had been
       c = lerp(0.6 + 0.24 * v, 1.2 + 0.08 * v, jog);
       fs = lerp(lerp(0.58, 0.5, hustle), 0.36, jog);
-      clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.16, jog) + 0.12 * wadeK;
+      clear = lerp(0.06 + 0.05 * sp + 0.03 * hustle, 0.16, jog) + 0.12 * wadeK + 0.09 * mireK;
     }
+    c *= 1 - 0.14 * mireK; // (the muck: fewer, heavier steps; player.js slows the walk itself)
+    fs = Math.min(0.7, fs + 0.06 * mireK); // (and longer on each foot)
     c *= 1 + 0.2 * Math.abs(mz);
     // world velocity of the body, for where a swinging foot will land
     const h = rig.rotation.y, ch = Math.cos(h), shh = Math.sin(h);
@@ -638,11 +643,11 @@ export function makeGait(body) {
     loco.hipY = Math.min(loco.hipY, cap + 0.008); // never past what the planted legs reach
     loco.hipW = loco.hipY + ry;
     // standing: the weight drifts slowly from foot to foot, the hips rolling a touch over the one that takes it
-    const swayZ = lerp(0.014 * Math.sin(idle.shift), -0.024 * sp * Math.sin(twoPi * (phi - 0.03)), mw);
-    const roll = lerp(-0.025 * Math.sin(idle.shift), 0.06 * sp * Math.sin(twoPi * (phi - 0.03)), mw);
+    const swayZ = lerp(0.014 * Math.sin(idle.shift), -(0.024 * sp + 0.03 * mireK) * Math.sin(twoPi * (phi - 0.03)), mw);
+    const roll = lerp(-0.025 * Math.sin(idle.shift), (0.06 * sp + 0.07 * mireK) * Math.sin(twoPi * (phi - 0.03)), mw);
     const pYaw = -0.11 * sp * Math.cos(twoPi * phi) * (g.backF ? -1 : 1);
     // the jog upright: a few degrees forward of the walk, no more
-    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog + SLOPE.lean * smooth(0.05, SLOPE.full, loco.grade)) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK
+    const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog + SLOPE.lean * smooth(0.05, SLOPE.full, loco.grade)) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK + 0.04 * mireK
       + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck;
     const fy = fz ? 0.35 * (fz.yaw || 0) : 0, fl = fz ? 0.6 * (fz.lean || 0) : 0, fh = fz ? -0.18 * (fz.look || 0) : 0;
     const pelvis = bodyQ(yaw + pYaw + 0.25 * fy, 0.03 + lean * 0.3, roll);
@@ -661,8 +666,9 @@ export function makeGait(body) {
     return { pYaw };
   }
 
-  // arms hanging and swinging against the legs; the elbows bend more as the pace picks up
-  function swingArms(g) {
+  // arms hanging and swinging against the legs; the elbows bend more as the pace picks up. only: the arms to pose
+  // ('L', 'R'; all when null): under the canoe the hand with a thing in it hangs and swings so, the other is on a gunwale
+  function swingArms(g, only = null) {
     const phi = g.phase, mw = g.mw, sp = g.sp * mw, jog = g.jog * mw;
     // jogging, the arms are carried bent at about a right angle, a little forward, and swing higher
     const A = lerp(0.32 + 0.22 * sp + 0.12 * g.hustle, 0.56, jog) * mw * (1 - 0.6 * Math.abs(g.mz)) * (g.backF ? 0.6 : 1);
@@ -672,11 +678,12 @@ export function makeGait(body) {
     const fwd = 0.04 + 0.12 * jog + (g.air ? 0.25 * g.tuck : 0) + 0.75 * ck;
     const cq = J.chest.q;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
+      if (only && !only.includes(k)) continue;
       // a hand carrying something (stream A's state.held: the bucket, the tackle box, the rod) hangs straighter and swings less
       const held = state.held && state.held[k] ? 1 : 0;
       const sw = A * (1 - 0.6 * held) * (k === 'L' ? -1 : 1) * Math.cos(Math.PI * 2 * phi) + fwd * (1 - 0.5 * held) + (k === 'L' ? work : -work) * (1 - held);
       const sh = J['arm' + k].p;
-      const du = V(Math.sin(sw), -Math.cos(sw), sg * (0.13 + 0.55 * wadeK)).normalize().applyQuaternion(cq);
+      const du = V(Math.sin(sw), -Math.cos(sw), sg * (0.13 + 0.55 * wadeK + 0.18 * mireK)).normalize().applyQuaternion(cq);
       const df = V(Math.sin(sw + bend * (1 - 0.7 * held)), -Math.cos(sw + bend * (1 - 0.7 * held)), sg * (0.06 + 0.3 * wadeK)).normalize().applyQuaternion(cq);
       const elbow = sh.clone().addScaledVector(du, 0.315);
       const target = elbow.clone().addScaledVector(df, 0.265 + 0.07);
@@ -697,6 +704,10 @@ export function makeGait(body) {
   // the canoe overhead: the same feet under a heavier, shorter gait; the yoke's pads on the shoulders, the bow up a little
   // (p2 B: and state.carryBow more, set in first person so the tread ahead shows under it), riding the chest; the hands
   // on the gunwales ahead of the yoke. hull: the hull's pivot (hull.js geometry, +x the bow), brought into the rig.
+  // The owner, 2026-10-31 ("the items kind of just float at your sides, but your hands are up on the canoe"): a hand
+  // with a thing in it (state.held) hangs at your side carrying it, and only the empty hands are on the gunwales; the
+  // canoe rolls on the yoke by state.carryLean (balance.js: radians, + toward the right), and the stride rolls it more
+  // with fewer hands on it.
   function carry(dt, hull) {
     updateIdle(idle, dt, false);
     const g = locomote(dt, true);
@@ -707,12 +718,19 @@ export function makeGait(body) {
     const yawC = 2 * Math.atan2(cq.y, cq.w) * 0.6;
     const padTop = sheerY(YOKE_X) + 0.0095;
     const shoulder = neck.y - 0.032;
-    hull.position.set(neck.x - 0.02, shoulder + padTop, 0);
+    const lean = state.carryLean || 0, held = state.held || {};
+    hull.position.set(neck.x - 0.02, shoulder + padTop, 0.06 * lean); // (rolling, it slides a little on the pads that way)
     const stg = state.stagger, wob = Math.sin(Math.PI * stg) * Math.sin(stg * 19);   // a stagger: the hull lurches and is caught
-    hull.rotation.set(Math.PI + 0.015 * Math.sin(Math.PI * 2 * g.phase) * g.mw + 0.07 * wob, yawC, 0.09 + (state.carryBow || 0) + 0.05 * Math.sin(Math.PI * stg), 'YZX');
+    // the stride's roll, more with no hand to damp it
+    const free = (held.R ? 1 : 0) + (held.L ? 1 : 0), strideRoll = (0.015 + 0.01 * free) * Math.sin(Math.PI * 2 * g.phase) * g.mw;
+    hull.rotation.set(Math.PI + strideRoll + 0.07 * wob + lean, yawC, 0.09 + (state.carryBow || 0) + 0.05 * Math.sin(Math.PI * stg) + 0.03 * Math.abs(lean), 'YZX');
     hull.updateMatrix();
-    // hands on the gunwales ahead of the yoke
+    // a thing in a hand: that arm hangs and carries it
+    const hang = ['L', 'R'].filter((k) => held[k]);
+    if (hang.length) swingArms(g, hang);
+    // the empty hands on the gunwales ahead of the yoke
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
+      if (held[k]) continue;
       const x = YOKE_X + 0.45, ys = sheerY(x) - 0.009, zg = outerAt(x, sheerY(x) - 0.002).z - 0.004;
       // hull space (upright) -> rig: the pivot is inverted, so the hull's port gunwale is on the paddler's right;
       // the fist closes round the gunwale itself
@@ -728,7 +746,7 @@ export function makeGait(body) {
   function heal() {
     Object.assign(loco, { init: false, air: false, phase: 0, hipY: HIP_H - 0.1, hipW: NaN, hipYaw: 0, stepping: false, moving: false, mw: 0, grade: 0, tilt: 0, want: HIP_H - 0.05 });
     for (const k of ['L', 'R']) Object.assign(loco.feet[k], { swing: false, s: 0, dur: 0.3, cyc: -1, planted: 1, slope: 0, pitch: 0 });
-    crouchK = 0; wadeK = 0;
+    crouchK = 0; wadeK = 0; mireK = 0;
   }
 
   return { loco, fq, tq, ankles, toWorld, toLocal, restLocal, flatDist, ankleAt, footFrameQ, reachOf, locomote, standingBody, swingArms, walk, carry, heal };

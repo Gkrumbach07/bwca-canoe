@@ -1,0 +1,75 @@
+/* The Fish tab (journal.js fishTab): your fishing log on the right page, a printed log-book ruling with the columns
+   across its head and each fish a pencilled line; the outfitter's fold-out pamphlet tucked into the left page. */
+
+/* --- the log --------------------------------------------------------------------------------------------------------- */
+/* the columns in fixed shares of the page, so the printed rules can run down the whole page under the lines */
+.pp-page .fl-log { --c1: 9%; --c2: 18%; --c3: 37%; --c4: 55%; --c5: 70%; --c6: 85%; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; margin: 0 -6px; }
+.pp-page .fl-log .lg-row { display: grid; grid-template-columns: 9fr 9fr 19fr 18fr 15fr 15fr 15fr; align-items: baseline; min-height: var(--pp-line); }
+.pp-page .fl-log .lg-row > span { padding: 0 5px; min-width: 0; overflow-wrap: anywhere; }
+.pp-page .fl-log .lg-headrow > span { white-space: nowrap; overflow: hidden; }
+.pp-page .fl-log .lg-headrow { flex: none; border-bottom: 1.5px solid rgba(64, 104, 150, .45); font: 700 10.5px/26px var(--sc); letter-spacing: .12em; color: rgba(54, 86, 122, .8); }
+.pp-page .fl-log .pp-index { gap: 0; padding: 0; scrollbar-width: thin;
+  background-image:
+    linear-gradient(90deg, transparent calc(var(--c1) - .5px), var(--pp-rule) calc(var(--c1) - .5px) calc(var(--c1) + .5px), transparent 0),
+    linear-gradient(90deg, transparent calc(var(--c2) - .5px), var(--pp-rule) calc(var(--c2) - .5px) calc(var(--c2) + .5px), transparent 0),
+    linear-gradient(90deg, transparent calc(var(--c3) - .5px), var(--pp-rule) calc(var(--c3) - .5px) calc(var(--c3) + .5px), transparent 0),
+    linear-gradient(90deg, transparent calc(var(--c4) - .5px), var(--pp-rule) calc(var(--c4) - .5px) calc(var(--c4) + .5px), transparent 0),
+    linear-gradient(90deg, transparent calc(var(--c5) - .5px), var(--pp-rule) calc(var(--c5) - .5px) calc(var(--c5) + .5px), transparent 0),
+    linear-gradient(90deg, transparent calc(var(--c6) - .5px), var(--pp-rule) calc(var(--c6) - .5px) calc(var(--c6) + .5px), transparent 0),
+    repeating-linear-gradient(180deg, transparent 0 calc(var(--pp-line) - 1px), var(--pp-rule) calc(var(--pp-line) - 1px) var(--pp-line));
+  background-attachment: local; background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 -4px; }
+.pp-page .fl-log .lg-row:not(.lg-headrow) { font: 500 19px/var(--pp-line) var(--pencil-font); color: var(--pencil); }
+.pp-page .fl-log .lg-row:not(.lg-headrow) > span:nth-child(5) { color: var(--pp-brown-deep); font-weight: 600; }
+.pp-page .fl-log .pb { margin-right: 3px; font: 600 19px/1 var(--pencil-font); color: var(--map-red); }
+
+/* --- the pamphlet ---------------------------------------------------------------------------------------------------- */
+/* cheap two-colour print on a smooth white stock: a dark green and black, sans headings, one fold line a panel */
+.pp-page .pam { --pam-ink: #1e2a24; --pam-green: #2f5f4a; --pam-paper: #f4f0e2; appearance: none; border: none; font: 15px/1.38 var(--sans); color: var(--pam-ink); text-align: left; }
+.pp-page .pam svg { display: block; }
+.pp-page .pam-kicker { font: 700 10px/1.3 var(--sc); letter-spacing: .16em; color: var(--pam-green); }
+.pp-page .pam-from { font: italic 12.5px/1.3 var(--serif); color: #4a514a; }
+
+/* folded: its cover, tucked into the page at a slant, half under the page's own edge */
+.pp-page .pam-cover { position: relative; align-self: center; margin: auto 0; width: 236px; height: min(470px, 74%); padding: 26px 22px 20px; cursor: pointer; display: flex; flex-direction: column; gap: 10px;
+  background: var(--pam-paper); rotate: -5deg; translate: -10px 8px; box-shadow: 0 1px 1px rgba(40, 24, 8, .2), 6px 10px 18px rgba(40, 24, 8, .25); transition: rotate .2s, translate .2s;
+  background-image: linear-gradient(180deg, var(--pam-green) 0 8px, transparent 8px), linear-gradient(90deg, rgba(0, 0, 0, .04), transparent 8%, transparent 92%, rgba(0, 0, 0, .05)); }
+.pp-page .pam-cover:hover { rotate: -3deg; translate: -6px 0; }
+.pp-page .pam-cover b { font: 700 30px/1.02 var(--sc); letter-spacing: .04em; color: var(--pam-green); }
+.pp-page .pam-cover svg { width: 82%; margin: 10px auto; color: var(--pam-ink); }
+.pp-page .pam-cover .pam-list { font: 700 11px/1.6 var(--sc); letter-spacing: .1em; color: #4a514a; }
+.pp-page .pam-cover .pam-from { margin-top: auto; }
+/* the next panel peeking out behind the cover: it is a fold-out */
+.pp-page .pam-cover::after { content: ''; position: absolute; left: 100%; top: 6px; bottom: 6px; width: 10px; background: #e6e1d0; box-shadow: inset 3px 0 4px rgba(0, 0, 0, .12); }
+
+/* open: three panels across the page, each fold a soft shadow */
+.pp-page .pam-open { position: relative; flex: 1 1 auto; min-height: 0; max-height: 100%; align-self: stretch; margin: -6px -14px 6px -18px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  background: var(--pam-paper); box-shadow: 0 1px 1px rgba(40, 24, 8, .2), 0 12px 24px rgba(40, 24, 8, .26); rotate: -.6deg; animation: pam-open .35s cubic-bezier(.2, .7, .25, 1) both; }
+@keyframes pam-open { from { clip-path: inset(0 66% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@media (prefers-reduced-motion: reduce) { .pp-page .pam-open { animation: none; } }
+.pp-page .pam-panel { position: relative; min-width: 0; overflow: auto; scrollbar-width: none; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.pp-page .pam-panel + .pam-panel { background: linear-gradient(90deg, rgba(0, 0, 0, .08), transparent 5%); }
+.pp-page .pam-panel:not(:last-child) { background-image: linear-gradient(270deg, rgba(255, 255, 255, .6), transparent 4%); }
+.pp-page .pam-panel + .pam-panel:not(:last-child) { background-image: linear-gradient(90deg, rgba(0, 0, 0, .08), transparent 5%, transparent 96%, rgba(255, 255, 255, .6)); }
+.pp-page .pam h3 { margin: 0; font: 700 22px/1.08 var(--sc); letter-spacing: .03em; color: var(--pam-green); }
+.pp-page .pam h4 { margin: 0 0 2px; font: 700 12px/1.3 var(--sc); letter-spacing: .16em; color: var(--pam-green); border-bottom: 2px solid var(--pam-green); padding-bottom: 3px; }
+.pp-page .pam p { margin: 0; }
+.pp-page .pam-intro .pam-from { margin-top: auto; }
+.pp-page .pam-rules { padding: 8px 10px; background: rgba(47, 95, 74, .1); font-size: 13.5px; }
+.pp-page .pam-rules b, .pp-page .pam-size b { display: block; font: 700 10px/1.4 var(--sc); letter-spacing: .14em; color: var(--pam-green); }
+.pp-page .pam-row { appearance: none; border: none; background: none; padding: 4px 2px 6px; display: flex; flex-direction: column; align-items: flex-start; gap: 0; cursor: pointer; text-align: left; color: inherit; border-bottom: 1px dotted rgba(30, 42, 36, .35); }
+.pp-page .pam-row img, .pp-page .pam-row svg { width: 100%; height: 64px; object-fit: contain; color: var(--pam-ink); }
+.pp-page .pam-row b { font: 700 15px/1.2 var(--sans); }
+.pp-page .pam-row i { display: block; font: italic 13px/1.2 var(--serif); color: #4a514a; }
+.pp-page .pam-row:hover b { color: var(--pam-green); text-decoration: underline; text-underline-offset: 3px; }
+.pp-page .pam-back { appearance: none; border: none; background: none; padding: 6px 0 0; margin-top: auto; align-self: flex-start; cursor: pointer; font: 700 11px/1 var(--sc); letter-spacing: .14em; color: var(--pam-green); }
+.pp-page .pam-back:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* a fish's own panels: two, the picture and the words */
+.pp-page .pam-fish { grid-auto-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+.pp-page .pam-pic { padding: 4px 0; }
+.pp-page .pam-pic img, .pp-page .pam-pic svg { width: 100%; height: auto; max-height: 150px; object-fit: contain; filter: drop-shadow(0 4px 4px rgba(30, 30, 20, .18)); }
+.pp-page .pam-look { font-size: 14.5px; }
+.pp-page .pam dl { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.pp-page .pam dt { margin-top: 8px; font: 700 10.5px/1.3 var(--sc); letter-spacing: .16em; color: var(--pam-green); border-bottom: 1.5px solid var(--pam-green); }
+.pp-page .pam dt:first-child { margin-top: 0; }
+.pp-page .pam dd { margin: 0; font-size: 15px; }
+.pp-page .pam-note { margin-top: 12px !important; font: italic 14px/1.35 var(--serif); }

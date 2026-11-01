@@ -53,7 +53,7 @@ export const SECTIONS = [
     { key: 'quality', label: 'Quality', desc: 'Sets the rows below · Auto picks from a short test', type: 'select',
       options: (s) => [['auto', s && s.values.autoPick ? `Auto · ${PRESET_NAMES[s.values.autoPick] || s.values.autoPick}` : 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra'], ['custom', 'Custom']] },
     { key: 'shadows', label: 'Shadows', desc: 'Two cascades: near and far · the size of each', type: 'select', options: [['off', 'Off'], ['1024', 'Soft (1024)'], ['2048', 'Standard (2048)'], ['4096', 'Sharp (4096)']] },
-    { key: 'shadowReach', label: 'Shadow distance', type: 'range', min: 100, max: 300, step: 20, format: (v) => `${v} m` },
+    { key: 'shadowReach', label: 'Shadow distance', type: 'range', min: 100, max: 300, step: 20, format: (v) => `${Math.round(v * 3.28084 / 10) * 10} ft` },
     { key: 'lod', label: 'Tree detail distance', type: 'range', min: 0.5, max: 2, step: 0.25, format: (v) => `${v}×` },
     { key: 'vegDensity', label: 'Undergrowth', desc: 'The shrubs, saplings, ferns and scree drawn', type: 'range', min: 0.5, max: 1, step: 0.05, format: pct },
     { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1, step: 0.05, format: pct },
