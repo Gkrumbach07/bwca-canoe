@@ -302,11 +302,13 @@ export class Site {
     const A = () => new Float32Array(N);
     const meadow = A(), sphag = A(), boulder = A(), tintR = A(), tintG = A(), tintB = A(), kind = new Uint8Array(N), wallK = A().fill(1);
     const mire = A(), mix = new Array(N).fill(null), wcls = L.wcls || null, wetB = L.wet || null, doy = burnDate().doy;
+    // (the density round: wland, 1 on a wetland's ground: its floor is moss, sphagnum or sedge, never the woods' duff)
+    const wland = A();
     // (kind: the ground kind each land cell is drawn as, Ontario's from the forest map's open kinds; 0 = the noise's.
     // wallK: how much of a steep drawn wall the paint shows as the cliff's rock (terrain-build.js groundPre): all of it
     // at a face the LiDAR found and where it did not look, most at its ledges, little elsewhere, where the LiDAR's 10 m
     // ground is steep but its 2 m ground found no rock: a wooded hillside)
-    Object.assign(this, { meadow, sphag, boulder, tintR, tintG, tintB, kind, wallK, mire, mix });
+    Object.assign(this, { meadow, sphag, boulder, tintR, tintG, tintB, kind, wallK, mire, mix, wland });
     const OPEN_KIND = { 13: KIND.openBog, 14: KIND.wetMeadow, 15: KIND.shrubSwamp, 16: KIND.marsh, 17: KIND.wetMeadow };
     for (let lj = 0; lj < n; lj++) for (let li = 0; li < n; li++) {
       const k = lj * n + li, d = sd[k];
@@ -327,6 +329,7 @@ export class Site {
       boulder[k] = b;
       if (!K) { meadow[k] = meadowAt(x, z, d, wet[k]); continue; }
       // wet: the wetland's own (a little uneven), or the land's lie held under the kind's dry cap
+      if (K.wet >= 0) wland[k] = 1;
       if (K.wet >= 0) wet[k] = clamp(K.wet * (0.92 + 0.16 * fbm(x * 0.02 + 5, z * 0.02, 2, 251)), 0, 1);
       else wet[k] = Math.min(wet[k], K.dry);
       let m = K.meadow;
@@ -367,7 +370,7 @@ export class Site {
       const lv = wetB && wetB[k] && kind[k] !== KIND.upland ? standingWater(wetRegime(wetB[k]), wetBeaver(wetB[k]), doy) : -1;
       mire[k] = mireOf(wet[k], lv);
     }
-    return [meadow, sphag, boulder, tintR, tintG, tintB, wallK, mire];
+    return [meadow, sphag, boulder, tintR, tintG, tintB, wallK, mire, wland];
   }
 
   // local cell index of world (x, z), clamped to the tile's extent

@@ -70,7 +70,7 @@ const wetM = (r) => 1 - 0.7 * smoothstep(0.35, 0.9, r), wetF = (r) => 1 - 0.85 *
 const calmM = (w) => 1 - 0.92 * smoothstep(0.8, 3, w), calmF = (w) => 1 - 0.85 * smoothstep(1.2, 4.5, w);
 
 // how treed the ground is at a point, 0..1 (the cover's class and its canopy shade, as the soundscape reads them)
-const TREED = new Set(['forest', 'forestLight', 'forestDark']);
+const TREED = new Set(['forest', 'forestLight', 'forestDark', 'moss']); // (moss: a bog's or a swamp's floor)
 function treesAt(w, x, z) {
   const cv = w.coverCell(w.cellI(x), w.cellJ(z));
   if (!cv) return 0.5; // not streamed in yet: the Boundary Waters are mostly woods

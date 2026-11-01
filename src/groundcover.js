@@ -4,7 +4,7 @@ import { CELL_SPLAT } from './terrain-build.js';
 import { groundUniforms, glslGround } from './terrain.js';
 import { applyLook } from './shading.js';
 import { applyWet } from './weather.js';
-import { foliageAtlas, spriteUV } from './textures.js';
+import { foliageAtlas, spriteUV, SLOTS, ATLAS_SIZE } from './textures.js';
 import { SWAY, glslSway } from './wind.js';
 
 // Grass clumps and fireweed on a camera-following patch. Each tuft belongs to a world cell (so it stays put
@@ -30,6 +30,11 @@ import { SWAY, glslSway } from './wind.js';
 const SIZE = 128, SPACING = 0.87;   // one tuft slot per 0.76 m²: a third of the old half-metre lattice
 const WID = 0.72, HGT = 0.58, ROOT = -0.12; // a clump's cards: width, height, the root below the ground
 
+// The density round: a wetland's own cover (mire-relief.js coverByte, in the splat's spare byte): the marsh's and the
+// meadow's sedge and bluejoint knee to chest high and unbroken, the bog's few low sedges with cottongrass heads in the
+// summer, the ferns under the alder and the ash (the frond sprite on the same cards). [width, height] of each.
+const WET_SIZE = [[1, 1], [1.25, 1.9], [0.8, 0.75], [0.75, 1.5]];
+const slotRect = (n) => { const S = SLOTS[n], I = 2.5, A = ATLAS_SIZE; return `vec4(${((S.x + I) / A).toFixed(6)}, ${((S.y + I) / A).toFixed(6)}, ${((S.w - 2 * I) / A).toFixed(6)}, ${((S.h - 2 * I) / A).toFixed(6)})`; };
 const decl = glslSway + /* glsl */ `
   uniform vec2 uCenterLocal;   // patch centre relative to the floating origin, snapped to the lattice
   uniform float uTime, uHalf, uFlower;
@@ -38,7 +43,7 @@ const decl = glslSway + /* glsl */ `
   uniform vec4 uSplatAtlas;    // its window: origin x, z (relative to the floating origin), 1/cell, cells per side
   attribute vec2 aOffset;
   varying vec2 vGrassUv;
-  varying float vGrassDist, vGrassH, vGrassFlower, vGrassFw;
+  varying float vGrassDist, vGrassH, vGrassFlower, vGrassFw, vGrassCotton;
   ${glslSurface}
   ${glslGround}
   // the share of the tufts that are fireweed in a cell (the cover's fourth byte, high nibble: placement.js coverField, from
@@ -60,9 +65,16 @@ const decl = glslSway + /* glsl */ `
     wA.x += max(0.0, 0.05 - s);
     // the shore's damp margin: the terrain paints it by each vertex's own distance from the water (terrain-build.js
     // splatAt), a band narrower than a cell, so it is put back here by the tuft's own distance, out of the soil
-    float shore = (1.0 - smoothstep(0.3, 2.4, shoreAt(rel))) * 0.9, gs = dot(wA, vec4(1.0)), soil = gs + wB.w;
+    // (the density round: the B band's last byte carries the wetland's cover, not a weight)
+    float shore = (1.0 - smoothstep(0.3, 2.4, shoreAt(rel))) * 0.9, gs = dot(wA, vec4(1.0)), soil = gs;
     wA *= soil * (1.0 - shore) / max(gs, 1e-4);
     wB.w = soil * shore;
+  }
+  // the wetland's cover at a point: its byte (kind * 64 + thickness * 63) in the cell, read exactly
+  float wetCover(vec2 rel) {
+    float A = uSplatAtlas.w;
+    ivec2 c = clamp(ivec2(floor((rel - uSplatAtlas.xy) * uSplatAtlas.z)), ivec2(0), ivec2(int(A) - 1));
+    return floor(texelFetch(uSplatTex, ivec2(c.x, c.y + int(A)), 0).a * 255.0 + 0.5);
   }
   vec3 hash3(vec2 p) { vec3 q = vec3(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)), dot(p, vec2(419.2, 371.9))); return fract(sin(q) * 43758.5453); }
   // smooth value noise for the clumps: the lattice spacing in metres is set by the caller
@@ -84,13 +96,20 @@ const body = /* glsl */ `
   // clumps: a 3 m noise gates the cover, full at a clump's heart and empty between (the gain keeps the mean)
   float clump = vnoise(mod(rel + uOrigin, 4096.0) / 3.2);
   float heart = smoothstep(0.3, 0.7, clump);
-  float present = step(h.x, cv.r * heart * 1.25) * edge;  // a card clump is fuller than the old three blades
+  // the wetland's own cover (the cell looked up a few metres off, by the tuft's hash, so the 10 m cells don't show)
+  float wcode = wetCover(rel + (h2.xy - 0.5) * 9.0), wk = floor(wcode / 64.0 + 0.01), wd = (wcode - 64.0 * wk) / 63.0;
+  int wi = int(wk);
+  float dens = cv.r * heart;
+  if (wi > 0) dens = max(dens, wd * smoothstep(1.2, 3.5, shoreAt(rel)) * (wi == 1 ? 0.8 + 0.2 * heart : wi == 2 ? heart : 0.55 + 0.45 * heart));
+  float present = step(h.x, dens * 1.25) * edge;  // a card clump is fuller than the old three blades
   // fireweed (a burn of one to six years, burns.js): that share of the clumps stand twice as tall and flower pink in high
   // summer (uFlower is the fireweed's season, season.js)
   float fw = step(h2.z, fireweedAt(rel) * 0.85);
   float sc = present * (0.6 + 0.8 * h.y * h.y + 0.25 * heart) * (1.0 + 1.1 * fw);
   float yaw = h.z * 6.2832;
-  vec3 p = position * sc;
+  ${WET_SIZE.map((v, k) => `const vec2 WS${k} = vec2(${v[0].toFixed(2)}, ${v[1].toFixed(2)});`).join(' ')}
+  vec2 ws = wi == 1 ? WS1 * (0.85 + 0.35 * h2.y) : wi == 2 ? WS2 : wi == 3 ? WS3 * (0.8 + 0.4 * h3.x) : WS0;
+  vec3 p = position * sc * vec3(ws.x, ws.y, ws.x);
   p.xz = mat2(cos(yaw), -sin(yaw), sin(yaw), cos(yaw)) * p.xz;
   // the wind (wind.js SWAY, as the trees and the reeds have it): the clump bends downwind from its root, deeper as
   // a gust rolls over, and the blades shiver about that, the tips furthest and a little lower; a calm leaves it be
@@ -116,7 +135,9 @@ const body = /* glsl */ `
   vGrassFw = fw * uFlower;
   base = mix(base, base * vec3(0.85, 1.05, 0.8), fw); // the stalks a darker, cooler green than the grass
   vColor.rgb *= base;
-  vGrassUv = uv;
+  vGrassUv = wi == 3 ? ${slotRect('frond')}.xy + (uv - ${slotRect('grass')}.xy) * ${slotRect('frond')}.zw / ${slotRect('grass')}.zw : uv;
+  if (wi == 3) vColor.rgb *= vec3(0.86, 1.06, 0.74); // a fern's green over the swamp's floor
+  vGrassCotton = wi == 2 ? step(h3.x, 0.35) * uFlower : 0.0; // cottongrass in the bog through the summer
   vGrassH = (position.y - ${ROOT.toFixed(2)}) / ${(HGT - ROOT).toFixed(2)};
   vGrassDist = distance((modelMatrix * vec4(transformed, 1.0)).xyz, cameraPosition);
 `;
@@ -129,6 +150,7 @@ const frag = /* glsl */ `
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.35, 0.6) * grass.r, vGrassFlower * step(0.72, vGrassH));
   // fireweed in bloom (a burn's first years): the upper part of the stalks magenta, a haze of it across the burn
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.26, 0.55) * (0.8 + 0.3 * grass.r), vGrassFw * 0.9 * smoothstep(0.5, 0.64, vGrassH));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.92, 0.86), vGrassCotton * smoothstep(0.78, 0.9, vGrassH));
 `;
 
 // A blade is lit as the ground under it from either side: three flips the normal on a back face of a
@@ -201,7 +223,7 @@ export class GroundCover {
         .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\n' + decl)
         .replace('#include <begin_vertex>', body);
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower, vGrassFw;')
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower, vGrassFw, vGrassCotton;')
         .replace('#include <map_fragment>', '#include <map_fragment>\n' + frag)
         .replace('#include <normal_fragment_begin>', noFlip);
       // rain (weather.js): the root wets as the ground under it does, the blade tips a little less

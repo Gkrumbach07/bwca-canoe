@@ -14,6 +14,7 @@
 import { lerp, smoothstep } from './rng.js';
 import { meshHeightAt, groundPre, bedPre, bedGrain, splatAt, landW } from './terrain-build.js';
 import { brookCut } from './brook-cut.js'; // wetlands round 2: the brooks cut into the 2 m ground
+import { reliefAt, mireAttr } from './mire-relief.js'; // the density round: the wetlands' hummocks and hollows
 
 const HEADER = 56, MAGIC = 0x43445742; // 'BWDC' (scripts/detail-bake.mjs)
 const DEEP = 30; // metres from the shore past which a 10 m quad of lake bed is drawn as the 10 m mesh draws it
@@ -64,7 +65,7 @@ export function chunkGround(grid, D, cache) {
       if (sd <= 0) { v[q] = b; continue; }
       let h = D.h[q];
       if (sd < 2) h = lerp(b, h, smoothstep(0, 2, sd));
-      if (r <= 2) h -= brookCut(x, z, sd); // wetlands round 2: a brook's little V (brook-cut.js), on the 2 m lattice only
+      if (r <= 2) h += reliefAt(grid, x, z, sd) - brookCut(x, z, sd); // a brook's little V (brook-cut.js) and the mire's relief (mire-relief.js), on the 2 m lattice only
       if (sd < 30) { const lv = grid.levelAt(x, z, 3); if (lv === lv) h = Math.max(h, lv + 0.04 * Math.min(sd, 5)); }
       v[q] = h;
     }
@@ -202,6 +203,9 @@ export function buildChunk(grid, site, shade, G, P, cell0) {
   let sa = new Uint8Array(cap * 4), sb = new Uint8Array(cap * 4), sc = new Uint8Array(cap * 4), fl = new Uint8Array(cap * 4);
   const hasLand = !!(site && site.land);
   let lnd = hasLand ? new Int8Array(cap * 4) : null;
+  // the mire's floor per vertex (mire-relief.js mireAttr, terrain.js aRelief): its shape and pools on the 2 m lattice
+  let rel = hasLand ? new Int8Array(cap * 4) : null;
+  const ra = [0, 0, 0, 0], fineL = r <= 2;
   const s8 = (v) => Math.round(Math.min(1, Math.max(-1, v)) * 127);
   const q8 = (v) => Math.round(Math.min(1, Math.max(0, v)) * 255);
   const levelCache = new Map();
@@ -227,13 +231,14 @@ export function buildChunk(grid, site, shade, G, P, cell0) {
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
     for (let k = 0; k < 4; k++) { sa[v * 4 + k] = q8(wA[k]); sb[v * 4 + k] = q8(wB[k]); sc[v * 4 + k] = q8(wC[k]); fl[v * 4 + k] = q8(wf[k]); }
     if (lnd) { lnd[v * 4] = s8(pre.tR - 1); lnd[v * 4 + 1] = s8(pre.tG - 1); lnd[v * 4 + 2] = s8(pre.tB - 1); lnd[v * 4 + 3] = s8(landW(pre, sd)); }
+    if (rel) { mireAttr(grid, x, z, sd, ra, fineL); for (let k = 0; k < 4; k++) rel[v * 4 + k] = s8(ra[k]); }
   }
   // the skirt: a strip hung SKIRT metres down from each edge, painted and lit as the edge, both windings
   const S = SKIRT[r] || 2, drop = new Map(), skirtTris = [];
   const growAll = () => {
     grow();
     const g = (a, k) => { const b = new a.constructor(cap * k); b.set(a); return b; };
-    sa = g(sa, 4); sb = g(sb, 4); sc = g(sc, 4); fl = g(fl, 4); if (lnd) lnd = g(lnd, 4);
+    sa = g(sa, 4); sb = g(sb, 4); sc = g(sc, 4); fl = g(fl, 4); if (lnd) lnd = g(lnd, 4); if (rel) rel = g(rel, 4);
   };
   const dropped = (v) => {
     let d = drop.get(v);
@@ -242,7 +247,7 @@ export function buildChunk(grid, site, shade, G, P, cell0) {
     d = nv++;
     pos[d * 3] = pos[v * 3]; pos[d * 3 + 1] = pos[v * 3 + 1] - S; pos[d * 3 + 2] = pos[v * 3 + 2];
     hOwn[d] = hOwn[v] - S; h10[d] = h10[v] - S; if (h5) h5[d] = h5[v] - S; sdv[d] = sdv[v];
-    for (let k = 0; k < 4; k++) { sa[d * 4 + k] = sa[v * 4 + k]; sb[d * 4 + k] = sb[v * 4 + k]; sc[d * 4 + k] = sc[v * 4 + k]; fl[d * 4 + k] = fl[v * 4 + k]; if (lnd) lnd[d * 4 + k] = lnd[v * 4 + k]; }
+    for (let k = 0; k < 4; k++) { sa[d * 4 + k] = sa[v * 4 + k]; sb[d * 4 + k] = sb[v * 4 + k]; sc[d * 4 + k] = sc[v * 4 + k]; fl[d * 4 + k] = fl[v * 4 + k]; if (lnd) lnd[d * 4 + k] = lnd[v * 4 + k]; if (rel) rel[d * 4 + k] = rel[v * 4 + k]; }
     drop.set(v, d);
     return d;
   };
@@ -293,7 +298,7 @@ export function buildChunk(grid, site, shade, G, P, cell0) {
     n, r, s, ox, oz, nv, nBody, nq, deep,
     pos: pos.slice(0, nv * 3), own: hOwn.slice(0, nv), h10: h10.slice(0, nv), ...(h5 ? { h5: h5.slice(0, nv), n5: nrmOf(N5) } : {}),
     nOwn: nrmOf(NO), n10: nrmOf(N10),
-    splatA: sa.slice(0, nv * 4), splatB: sb.slice(0, nv * 4), splatC: sc.slice(0, nv * 4), floor: fl.slice(0, nv * 4), ...(lnd ? { land: lnd.slice(0, nv * 4) } : {}),
+    splatA: sa.slice(0, nv * 4), splatB: sb.slice(0, nv * 4), splatC: sc.slice(0, nv * 4), floor: fl.slice(0, nv * 4), ...(lnd ? { land: lnd.slice(0, nv * 4) } : {}), ...(rel ? { relief: rel.slice(0, nv * 4) } : {}),
     idx, parts, ms: Date.now() - t0,
   };
 }
