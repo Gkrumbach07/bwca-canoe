@@ -1664,6 +1664,8 @@ function verbMenu(ref, sc = null) {
   // fuel took only a drag): wood by a ring has the ring's own "Put it on the fire" (nearby.itemActions' fuel) first
   const fuel = e && d.kind === 'firewood' ? acts.find((a) => a.id === 'fuel') : null;
   if (fuel) out.unshift(fuel.enabled === false ? { label: fuel.label, disabled: true, title: fuel.why || '', needs: fuel.needs, next: fuel.next } : { label: fuel.label, run: () => { runNear(fuel); const n = nearby(); if (n) n.list = null; refresh(); } });
+  // co-op phase 2 (coop-give.js): Give to <a friend within reach>, one each
+  if (near && typeof inv.moreVerbs === 'function') { try { for (const v of inv.moreVerbs(near) || []) out.push({ ...v, run: v.run ? () => { v.run(); refresh(); } : null }); } catch (err) { console.warn('inventory.moreVerbs', err); } }
   return out;
 }
 function itemMenu(g, e) {

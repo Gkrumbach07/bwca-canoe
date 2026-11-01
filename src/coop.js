@@ -87,10 +87,11 @@ export function readVisitor() {
     name: ok ? clean(v.name) : '',
     shirt: ok && Number.isInteger(v.shirt) ? ((v.shirt % SHIRTS.length) + SHIRTS.length) % SHIRTS.length : Math.floor(Math.random() * SHIRTS.length),
     seed: ok && Number.isInteger(v.seed) ? v.seed >>> 0 : (Math.random() * 2 ** 31) >>> 0,
+    id: ok && typeof v.id === 'string' && /^[0-9a-f]{24}$/.test(v.id) ? v.id : newKey(), // phase 2: the host keeps a guest's things by it (coop-give.js)
     room: ok && v.room && codeOk(v.room.code) && typeof v.room.key === 'string' ? v.room : null,
   };
 }
-export function writeVisitor(v) { try { kv.setItem(VISITOR_KEY, JSON.stringify({ name: clean(v.name), shirt: v.shirt, seed: v.seed, room: v.room || null })); } catch { /* full */ } }
+export function writeVisitor(v) { try { kv.setItem(VISITOR_KEY, JSON.stringify({ name: clean(v.name), shirt: v.shirt, seed: v.seed, id: v.id, room: v.room || null })); } catch { /* full */ } }
 // what a visitor looks like to the others: npcs.js's dress() from their seed, in the shirt they picked
 export function lookOf(l) {
   const shirt = l && Number.isInteger(l.s) ? SHIRTS[((l.s % SHIRTS.length) + SHIRTS.length) % SHIRTS.length] : SHIRTS[0];
