@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { hash2, fbm, smoothstep } from './rng.js';
-import { KIND, WCLASS, FOREST, CLIFF, cliffClass, cliffStrength, wclass1, wclass2, emergentGrow } from './land.js';
+import { KIND, WCLASS, FOREST, CLIFF, cliffClass, wclass1, wclass2, emergentGrow } from './land.js';
 import { burnLook } from './burns.js';
 import { GUEST } from './placement.js';
 import { mirePoolAt } from './mire-relief.js';
@@ -198,18 +198,22 @@ export function brushAt(world, x, z) {
   return Math.min(1, b);
 }
 
-// Bare ground the ring keeps off (but for GROWS.rock's few): rock outcrop and a boulder field (the ground kinds), a cliff's
-// face, talus and the boulders under it (the cliff plane), and a stony shore (the soil survey's stone over a third of
-// the ground within 12 m of the water). Asked of every plant's own spot, so a neighbour's plants don't spill onto it.
+// Bare ground the ring keeps off (but for GROWS.rock's few): a cliff's face anywhere; at the water (within 25 m) rock
+// outcrop, a boulder field, talus and a ledge (the LiDAR's form byte, nearer the water), and a stony shore (the soil survey's stone over a
+// third of the ground); inland the same only where the canopy is open (LANDFIRE cover under 25 %): an outcrop under a
+// closed canopy is the rocky woods (classOf 'rock', canopyOf thins it), not a hole in them. Asked of every plant's own
+// spot, so a neighbour's plants don't spill onto it.
 export function bareAt(world, x, z) {
-  const kd = world.chAt('ground', x, z);
-  if (kd === KIND.rock || kd === KIND.boulder) return true;
   const cb = world.chAt('cliff', x, z), cc = cb > 1 ? cliffClass(cb) : CLIFF.none;
-  if (cc === CLIFF.face || cc === CLIFF.talus) return true;
-  const st = world.chAt('stone', x, z), stony = st > 150 && st < 255;
-  if (!stony && cc !== CLIFF.boulder) return false;
-  // (a boulder field or stony ground bare at the water, or where the LiDAR found it rough, 48 cm or more)
-  return world.shoreAt(x, z) < 12 || (cc === CLIFF.boulder && cliffStrength(cb) >= 12);
+  if (cc === CLIFF.face) return true;
+  const kd = world.chAt('ground', x, z), st = world.chAt('stone', x, z);
+  const rocky = kd === KIND.rock || kd === KIND.boulder || cc !== CLIFF.none || (st > 150 && st < 255);
+  if (!rocky) return false;
+  if (world.chAt('cover', x, z) < 25) return true;
+  // (the LiDAR's rough ground at the water is often only a steep wooded bank: a ledge or talus bare to 15 m, a boulder
+  // field to the waterline's 8 m; the mapped outcrop and the stony shore to 25 m)
+  const sd = world.shoreAt(x, z), mapped = kd === KIND.rock || kd === KIND.boulder || (st > 150 && st < 255);
+  return sd < (mapped ? 25 : cc === CLIFF.talus ? 15 : 8);
 }
 const ON_ROCK = new Set(['jack', 'cWhitePine', 'cRedPine', 'cBirch', 'shrub']);
 // the standing plants a pool keeps out of (mirePoolAt): they give way to the sedge and cattail at its rim
