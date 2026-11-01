@@ -12,6 +12,7 @@
 // used before (fields.js, site.js), so the release in use draws exactly as it did. Pure data: it runs in the build worker.
 
 import { smoothstep, fbm } from './rng.js';
+import { LOCAL_ICE } from './season.js';
 
 export const V4_FIELDS = ['height', 'lake', 'sdist', 'level', 'ground', 'forest', 'canopy', 'cover', 'rock', 'cliff', 'stone', 'secchi', 'cdom'];
 
@@ -73,18 +74,26 @@ export const MIRE = [0, 0, 1, 0.6, 0.55, 0.9, 0.5, 0.45, 1, 1, 0, 0, 0, 0.85];
 export const BOARDWALK = 0.78;
 // Ontario's forest map stands for the ground kinds where nothing was surveyed (site.js landData's OPEN_KIND)
 const OPEN_KIND = { 13: KIND.openBog, 14: KIND.wetMeadow, 15: KIND.shrubSwamp, 16: KIND.marsh, 17: KIND.wetMeadow };
-// the mire at a point, from read(name, x, z): a v4 channel's byte there (World.chAt, or gridReader below)
-export function mireAt(read, x, z) {
+// the mire at a point, from read(name, x, z): a v4 channel's byte there (World.chAt, or gridReader below). With the
+// season (wetlands round 2: "the mire walk follows the season"), where the NWI gives a water regime the water standing
+// on the date (standingWater, as the pools are drawn) moves a flooded kind between a wet meadow's going (MIRE_DOWN: the
+// water gone down to a sedge mat over mud, the marsh in August) and its own (the marsh in May); frozen it is firm.
+export const MIRE_DOWN = 0.5;
+export function mireAt(read, x, z, season = null) {
   let kd = read('ground', x, z);
   if (!kd) kd = OPEN_KIND[read('forest', x, z)] || 0;
-  return MIRE[kd] || 0;
+  let m = MIRE[kd] || 0;
+  if (!season || !m) return m;
+  const wet = read('wet', x, z), lv = wet ? standingWater(wetRegime(wet), wetBeaver(wet), season.doy) : -1;
+  if (lv >= 0 && m > MIRE_DOWN) m = MIRE_DOWN + (m - MIRE_DOWN) * lv;
+  return m * (1 - 0.85 * mireIce(season).ice);
 }
 export const gridReader = (grid) => { const L = landOf(grid); return L ? (n, x, z) => (L[n] ? L[n][grid.local(grid.cellI(x), grid.cellJ(z))] : 0) : () => 0; };
 // a portage's mire at its point i (pts: its rows), over the rows within reach (a 10 m cell is 6 rows of 1.6 m), so the
 // mud and the puncheon start and stop with the wet ground and not with each cell
-export function trailMireAt(read, pts, i, reach = 3) {
+export function trailMireAt(read, pts, i, reach = 3, season = null) {
   let s = 0, n = 0;
-  for (let k = Math.max(0, i - reach); k <= Math.min(pts.length - 1, i + reach); k++) { s += mireAt(read, pts[k][0], pts[k][1]); n++; }
+  for (let k = Math.max(0, i - reach); k <= Math.min(pts.length - 1, i + reach); k++) { s += mireAt(read, pts[k][0], pts[k][1], season); n++; }
   return n ? s / n : 0;
 }
 
@@ -112,21 +121,26 @@ export const wclass2 = (b) => b & 15;
 //   alder, shrub, low, fern, hazel   the brush: alder and willow, the shrubs (low: the bog's brush, leatherleaf and
 //           Labrador tea, low over 0: 1 the bog's usual knee height, less a lower mat), the ferns' and the hazel's share
 //   meadow  open sedge and grass (site.js meadow); sphag  sphagnum on the floor
+//   mat     the leatherleaf and Labrador tea mat, knee-high (vegetation.js leatherleaf; wetlands round 2): mats a cell
 export const WCLASS = [
   null,
-  { code: 'FO1', name: 'hardwood swamp', trees: 0.85, cap: 0, species: { ash: 0.55, cedar: 0.12, birch: 0.1, aspen: 0.08, tamarack: 0.08, blackSpruce: 0.07 }, alder: 0.8, shrub: 0, low: 0, fern: 1.7, hazel: 0.3, meadow: 0, sphag: 0 },
-  { code: 'FO2', name: 'tamarack swamp', trees: 0.92, cap: 0, species: { tamarack: 0.8, blackSpruce: 0.2 }, alder: 0.3, shrub: 0.4, low: 1, fern: 0.3, hazel: 0, meadow: 0.08, sphag: 0.5 },
-  { code: 'FO4', name: 'black spruce bog', trees: 0.85, cap: 0, species: { blackSpruce: 0.86, tamarack: 0.14 }, alder: 0, shrub: 0.5, low: 1, fern: 0.35, hazel: 0, meadow: 0, sphag: 0.6 },
-  { code: 'FO', name: 'swamp forest', trees: 0.8, cap: 0, species: { blackSpruce: 0.45, tamarack: 0.25, cedar: 0.15, ash: 0.1, birch: 0.05 }, alder: 0.5, shrub: 0.3, low: 0, fern: 0.8, hazel: 0.1, meadow: 0, sphag: 0.2 },
-  { code: 'SS1', name: 'alder thicket', trees: 0.07, cap: 5.5, species: { tamarack: 0.35, blackSpruce: 0.25, ash: 0.2, aspen: 0.2 }, alder: 2.8, shrub: 1.3, low: 0, fern: 0.5, hazel: 0.2, meadow: 0.12, sphag: 0 },
-  { code: 'SS2', name: 'stunted tamarack', trees: 0.38, cap: 4.5, species: { tamarack: 0.88, blackSpruce: 0.12 }, alder: 0.2, shrub: 1.1, low: 1, fern: 0, hazel: 0, meadow: 0.3, sphag: 0.75 },
-  { code: 'SS3', name: 'leatherleaf bog', trees: 0.03, cap: 3, species: { blackSpruce: 0.6, tamarack: 0.4 }, alder: 0, shrub: 2.8, low: 0.62, fern: 0, hazel: 0, meadow: 0.45, sphag: 1 },
-  { code: 'SS4', name: 'stunted black spruce', trees: 0.42, cap: 4.5, species: { blackSpruce: 0.88, tamarack: 0.12 }, alder: 0, shrub: 1.2, low: 1, fern: 0, hazel: 0, meadow: 0.22, sphag: 0.85 },
-  { code: 'SS', name: 'shrub swamp', trees: 0.12, cap: 5.5, species: { tamarack: 0.4, blackSpruce: 0.35, aspen: 0.25 }, alder: 1.6, shrub: 1.2, low: 0, fern: 0.4, hazel: 0.1, meadow: 0.2, sphag: 0 },
-  { code: 'EM1', name: 'sedge and cattail', trees: 0, cap: 3, species: null, alder: 0.12, shrub: 0.18, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0 },
-  { code: 'EM2', name: 'wild rice and pickerelweed', trees: 0, cap: 3, species: null, alder: 0.05, shrub: 0.1, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0 },
+  { code: 'FO1', name: 'hardwood swamp', trees: 0.85, cap: 0, species: { ash: 0.55, cedar: 0.12, birch: 0.1, aspen: 0.08, tamarack: 0.08, blackSpruce: 0.07 }, alder: 0.8, shrub: 0, low: 0, fern: 1.7, hazel: 0.3, meadow: 0, sphag: 0, mat: 0 },
+  { code: 'FO2', name: 'tamarack swamp', trees: 0.92, cap: 0, species: { tamarack: 0.8, blackSpruce: 0.2 }, alder: 0.3, shrub: 0.3, low: 1, fern: 0.3, hazel: 0, meadow: 0.08, sphag: 0.5, mat: 1.0 },
+  { code: 'FO4', name: 'black spruce bog', trees: 0.85, cap: 0, species: { blackSpruce: 0.86, tamarack: 0.14 }, alder: 0, shrub: 0.3, low: 1, fern: 0.35, hazel: 0, meadow: 0, sphag: 0.6, mat: 1.4 },
+  { code: 'FO', name: 'swamp forest', trees: 0.8, cap: 0, species: { blackSpruce: 0.45, tamarack: 0.25, cedar: 0.15, ash: 0.1, birch: 0.05 }, alder: 0.5, shrub: 0.3, low: 0, fern: 0.8, hazel: 0.1, meadow: 0, sphag: 0.2, mat: 0.3 },
+  { code: 'SS1', name: 'alder thicket', trees: 0.07, cap: 5.5, species: { tamarack: 0.35, blackSpruce: 0.25, ash: 0.2, aspen: 0.2 }, alder: 2.8, shrub: 1.3, low: 0, fern: 0.5, hazel: 0.2, meadow: 0.12, sphag: 0, mat: 0 },
+  { code: 'SS2', name: 'stunted tamarack', trees: 0.38, cap: 4.5, species: { tamarack: 0.88, blackSpruce: 0.12 }, alder: 0.2, shrub: 0.6, low: 1, fern: 0, hazel: 0, meadow: 0.3, sphag: 0.75, mat: 2.6 },
+  { code: 'SS3', name: 'leatherleaf bog', trees: 0.03, cap: 3, species: { blackSpruce: 0.6, tamarack: 0.4 }, alder: 0, shrub: 0.5, low: 0.62, fern: 0, hazel: 0, meadow: 0.45, sphag: 1, mat: 6 },
+  { code: 'SS4', name: 'stunted black spruce', trees: 0.42, cap: 4.5, species: { blackSpruce: 0.88, tamarack: 0.12 }, alder: 0, shrub: 0.6, low: 1, fern: 0, hazel: 0, meadow: 0.22, sphag: 0.85, mat: 2.8 },
+  { code: 'SS', name: 'shrub swamp', trees: 0.12, cap: 5.5, species: { tamarack: 0.4, blackSpruce: 0.35, aspen: 0.25 }, alder: 1.6, shrub: 1.2, low: 0, fern: 0.4, hazel: 0.1, meadow: 0.2, sphag: 0, mat: 0.4 },
+  { code: 'EM1', name: 'sedge and cattail', trees: 0, cap: 3, species: null, alder: 0.12, shrub: 0.18, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0, mat: 0 },
+  { code: 'EM2', name: 'wild rice and pickerelweed', trees: 0, cap: 3, species: null, alder: 0.05, shrub: 0.1, low: 0, fern: 0, hazel: 0, meadow: 1, sphag: 0, mat: 0 },
   { code: 'AB', name: 'lily bed' }, { code: 'UB', name: 'open water' }, { code: 'US', name: 'sand shore' }, { code: 'RS', name: 'rock shore' },
 ];
+// EM2, the nonpersistent emergents (wild rice, pickerelweed, arrowhead), on the rice's calendar (aquatic.js uRiceGrow):
+// up through June, standing by July, lodging from mid-September, gone by freeze-up. On land (rare: a mud flat, a drawn-
+// down beaver pond) its meadow comes and goes with it (site.js, at the tile's date).
+export const emergentGrow = (doy) => smoothstep(148, 172, doy) * (1 - smoothstep(260, 316, doy));
 // The code as the NWI writes it, short: "PSS1/EM1Cb" (system, classes, regime, beaver); '' where no polygon lies
 export function nwiCode(wet, wcls) {
   if (!wet && !wcls) return '';
@@ -139,7 +153,7 @@ export function nwiCode(wet, wcls) {
 // shores; and on a cell with no code). A two-class code is a patchwork, not an average: the second class takes about
 // 30 % of the ground in patches a few cells across (a noise field over the cell's centre, the same in the two tiles that
 // share a cell), and shows a little everywhere (alder under the trees, the odd runt in the sedge). `out` is reused.
-const MIX_KEYS = ['trees', 'cap', 'alder', 'shrub', 'low', 'fern', 'hazel', 'meadow', 'sphag'];
+const MIX_KEYS = ['trees', 'cap', 'alder', 'shrub', 'low', 'fern', 'hazel', 'meadow', 'sphag', 'mat'];
 export function wetlandMix(wcls, x, z, out = {}) {
   const A = WCLASS[wclass1(wcls)], B0 = WCLASS[wclass2(wcls)];
   if (!A || A.trees === undefined) return null;
@@ -176,6 +190,18 @@ export function standingWater(regime, beaver, doy) {
     case RG.temp: return Math.max(bv ? 0.2 : 0, 1 - smoothstep(140 + 15 * bv, 165 + 20 * bv, doy));
     default: return -1;
   }
+}
+// The pools' ice (wetlands round 2), from the season (season.js seasonAt: the lake's own ice-out and freeze-up, which
+// the day cycle follows): ice 0 open .. 1 frozen; slush the dark melt as it goes out (and the first thin ice as it
+// comes in); snow how much lies on it, once the winter has set in and until the melt starts. The game draws no snow on
+// the ground, so it is only a dusting on the ice, in drifts. terrain.js draws it, player.js walks on it.
+const _ice = { ice: 0, slush: 0, snow: 0 };
+export function mireIce(season, out = _ice) {
+  const ice = season ? season.ice || 0 : 0, d = season ? season.doy : 180;
+  out.ice = ice;
+  out.slush = ice > 0 && ice < 1 ? Math.sin(Math.PI * ice) * (d < 200 ? 1 : 0.5) : 0;
+  out.snow = ice * (d < 200 ? 1 - smoothstep(LOCAL_ICE.out - 18, LOCAL_ICE.out - 6, d) : smoothstep(LOCAL_ICE.in + 3, LOCAL_ICE.in + 16, d));
+  return out;
 }
 // how much water stands on the ground (terrain.js groundMire, 0..1) from its wetness (site.js wet) and the level above
 export function mireOf(wet, level) {
