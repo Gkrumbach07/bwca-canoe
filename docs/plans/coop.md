@@ -328,6 +328,23 @@ fire's fuel bin (`firefuel`, where 'ground', `at.fuel` the ring's key), the grat
 - **Not in phase 2:** Adventure (trips, stores, boards and rides need the group's trip: phase 3 with the night), and
   holding the host's simulation for a friend out of sight (each browser simulates its own things wherever it is).
 
+### Phase 2 as built (2026-11-01)
+
+`src/coop-share.js` (stream A) and `src/coop-give.js` (stream B), joined on `claude/coop-phase2`; the relay forwards any
+other lowercase type, to one client with `to`, up to 256 KB (**redeploy it**: `cd server/room && npx wrangler deploy`).
+- **Wire:** `pub` (a player's public things, ≤4 Hz), `op`/`opr` (take or put in a friend's container, answered by its
+  owner; 3 s timeout, undone), `gift`/`giftack` (money or a loose item; refunded on a refusal or no answer), `claim`,
+  `yours`, `keep` (a guest's inventory and purse, kept by the host under `coop-guests` by the visitor's id, every 30 s,
+  on Leave and pagehide).
+- **Measured** (two headless browsers through `wrangler dev` +100 ms, after the join): 11/11 in `scripts/coop/share.mjs`
+  (a friend's pack drawn in 226 ms, a stick gone on the other screen in 174 ms, a tent in 324 ms, a tarp in 227 ms, take
+  and put through the book's bin ~210 ms) and 9/9 in `scripts/coop/give.mjs` (money both ways with ledgers, an item to a
+  friend's hand, refunds, a rejoin gets the same things back, the guest's own season untouched).
+- **Not yet:** giving a container with its contents or a long thing (loose items only); Give money on foot only; Douse
+  and "Put it on the fire" at a friend's ring (the drag into the card works); a friend's canoe load and tent contents are
+  not drawn (they are reachable as tabs); a lost ack on a gift duplicates it; `coop-guests` never forgets a visitor; two
+  grates can overlap at a friend's ring (yours cooks over their fire). Details: the stream notes `stream-a.md`, `stream-b.md`.
+
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
 on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real test of the relay and the actor.

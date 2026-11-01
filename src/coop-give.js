@@ -269,7 +269,7 @@ export class CoopGive {
     return talk.open({
       speaker: { key: `coop:${to}`, name, pos: (v) => r.person.headAt(v) },
       name, role: `you have $${have}`,
-      start: () => ({ say: `How much for ${name}?`, by: `Give ${name} money`, choices }),
+      start: () => ({ say: have > 0 ? 'How much?' : 'Your purse is empty.', plain: true, by: `Give ${name} money`, choices }), // (plain: the game's line, not the friend's: no speech marks, not remembered as said)
       bye: () => null,
     });
   }

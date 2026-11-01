@@ -235,7 +235,7 @@ export class Dialogue {
     if (node == null) { this.leave(); return; }
     if (node.end) { const after = node.after; this.close(false); if (typeof after === 'function') after(); return; }
     c.node = node; c.t = 0;
-    if (node.say) { this.remember(node.by || c.speaker.name, c.speaker.role, node.say); if (c.you && !node.filler) { c.said = node.say; c.saidTo = c.you; } } // fb4 D: an answer, and what drew it (content B: not a "What else?", node.filler)
+    if (node.say && !node.plain) { this.remember(node.by || c.speaker.name, c.speaker.role, node.say); if (c.you && !node.filler) { c.said = node.say; c.saidTo = c.you; } } // fb4 D: an answer, and what drew it (content B: not a "What else?", node.filler)
     this.render();
   }
   choose(i) {
@@ -275,7 +275,7 @@ export class Dialogue {
     this.panel.innerHTML = `<div class="head"><span class="name">${esc(n.by || c.name || c.speaker.name)}</span>${c.role ? `<span class="role">${esc(c.role)}</span>` : ''}</div>`
       + (L ? `<div class="last"><span class="when">Last time · ${esc(this.whenWords(L.at))}</span>${L.you ? `<span class="you-then">You: ${esc(quote(L.you))}</span>` : ''}<span class="then">${esc(quote(L.say))}</span></div>` : '')
       + (c.you ? `<div class="you">${esc(quote(c.you))}</div>` : '')
-      + `<div class="say${c.wait ? ' wait' : ''}">${esc(c.wait ? '…' : quote(n.say || '…'))}</div>`
+      + `<div class="say${c.wait ? ' wait' : ''}">${esc(c.wait ? '…' : n.plain ? n.say : quote(n.say || '…'))}</div>`
       + (list.length ? `<ol class="opts">${opts}</ol>` : '')
       + `<div class="foot">${list.length > 1 ? `<kbd>1</kbd>–<kbd>${list.length}</kbd>` : '<kbd>1</kbd>'} or click &nbsp;·&nbsp; <kbd>Esc</kbd> to leave</div>`;
     document.body.style.setProperty('--talk-h', `${Math.ceil(this.panel.getBoundingClientRect().height || 240)}px`);
