@@ -89,14 +89,18 @@ function pointClass(P, nhd, k, osmKind) {
 // Classify every waterway: sets c.run (Uint8Array of classes, one per c.walk point), c.walk (the points), c.seasonal,
 // c.paddle (any of it paddled). Returns stats.
 // anchors: [[x, z], ...] where a creek must be paddled (the portage trails' ends: a portage ends at water you paddle)
-export function classifyCreeks(waterways, grid, P, nhd, log, anchors = []) {
+// anchors: [x, z] or [x, z, ox, oz] (a portage's end and its other end); breaks: portageBreaks() (the season round):
+// the stretches a portage goes round, broken after every rule above
+export function classifyCreeks(waterways, grid, P, nhd, log, anchors = [], breaks = null) {
+  let broken = 0;
   const AB = 100, abk = new Map();
-  for (const [x, z] of anchors) { const key = `${Math.floor(x / AB)},${Math.floor(z / AB)}`; if (!abk.has(key)) abk.set(key, []); abk.get(key).push([x, z]); }
-  const nearAnchor = (x, z) => {
+  for (const a of anchors) { const key = `${Math.floor(a[0] / AB)},${Math.floor(a[1] / AB)}`; if (!abk.has(key)) abk.set(key, []); abk.get(key).push(a); }
+  const anchorOf = (x, z) => {
     const bi = Math.floor(x / AB), bj = Math.floor(z / AB);
-    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) for (const [ax, az] of abk.get(`${bi + di},${bj + dj}`) || []) if ((ax - x) ** 2 + (az - z) ** 2 <= ANCHOR_M * ANCHOR_M) return true;
-    return false;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) for (const a of abk.get(`${bi + di},${bj + dj}`) || []) if ((a[0] - x) ** 2 + (a[1] - z) ** 2 <= ANCHOR_M * ANCHOR_M) return a;
+    return null;
   };
+  const nearAnchor = (x, z) => !!anchorOf(x, z);
   let anchored = 0;
   const W = grid.width, H = grid.height, stats = { km: [0, 0, 0, 0], seasonalKm: 0 };
   for (const c of waterways) {
@@ -140,12 +144,20 @@ export function classifyCreeks(waterways, grid, P, nhd, log, anchors = []) {
       for (let q = 0; q < n; q++) if (nearAnchor(walk[q][0], walk[q][1])) hits.push(q);
       const reach = Math.round(ANCHOR_REACH / STEP);
       for (const h of hits) for (const dir of [-1, 1]) {
+        // (the season round: only away from the portage. A portage's end carries its other end; the way that runs
+        // toward it is the water the portage goes round, not the water it ends on)
+        const a = anchorOf(walk[h][0], walk[h][1]);
+        if (a && a.length > 2) {
+          const q2 = Math.max(0, Math.min(n - 1, h + dir * 3)), d0 = Math.hypot(walk[h][0] - a[2], walk[h][1] - a[3]), d1 = Math.hypot(walk[q2][0] - a[2], walk[q2][1] - a[3]);
+          if (q2 !== h && d1 < d0) continue;
+        }
         for (let q = h, d = 0; q >= 0 && q < n && d <= reach; q += dir, d++) {
           if (run[q] === C.brook) { run[q] = C.marsh; anchored++; } else if (run[q] === C.river && d * STEP > 80) break; // (open water past the start: the lake or the river)
         }
       }
     }
     c.walk = walk; c.run = run;
+    if (breaks) broken += breakAlongPortages(c, breaks);
     let seas = 0, wet = 0;
     for (let q = 0; q < n; q++) {
       const len = q ? Math.hypot(walk[q][0] - walk[q - 1][0], walk[q][1] - walk[q - 1][1]) : 0;
@@ -156,6 +168,7 @@ export function classifyCreeks(waterways, grid, P, nhd, log, anchors = []) {
     c.seasonal = wet > 0 && seas / wet >= 0.5; // the paddled part mostly intermittent or seasonally flooded
   }
   log(`wetlands: ${(anchored * STEP / 1000).toFixed(1)} km of brook kept paddled from portage ends`);
+  if (breaks) log(`portages: ${(broken * STEP / 1000).toFixed(1)} km of paddled creek broken beside ${breaks.used.size} of ${breaks.list.length} portages (${breaks.rapidsKm().toFixed(1)} km of the stretches white water)`);
   log(`wetlands: creeks walked: river ${stats.km[2].toFixed(0)} km, marsh channel ${stats.km[1].toFixed(0)} km, brook ${stats.km[0].toFixed(0)} km, unsurveyed ${stats.km[3].toFixed(0)} km; ${stats.seasonalKm.toFixed(0)} km of the paddled part seasonal`);
   return stats;
 }
@@ -203,7 +216,10 @@ export function brooksOf(waterways, grid, nhd) {
           const i = grid.ci(walk[q][0]), j = grid.cj(walk[q][1]);
           if (nhd && i >= 0 && j >= 0 && i < grid.width && j < grid.height) { tot++; if (nhd[j * grid.width + i] === 1) per++; }
         }
-        out.push({ id: c.id, perennial: tot ? per / tot >= 0.5 : false, pts });
+        const br = { id: c.id, perennial: tot ? per / tot >= 0.5 : false, pts };
+        // the season round: a stretch a portage goes round (port), white water where the NHD or OSM marks rapids
+        if (c.broke) { let k = 0, r = 0; for (let q = a; q <= b; q++) { if (c.broke[q]) k++; if (c.broke[q] === 2) r++; } if (k * 2 > b - a + 1) { br.port = true; if (r) { br.rapids = true; br.perennial = true; } } }
+        out.push(br);
       }
       a = b + 1;
     }
@@ -353,4 +369,129 @@ export function lakeFlow(waterways, lakes, grid, lakeId, lakeBasin, basinLevel, 
   const type = new Array(nb);
   for (let b = 0; b < nb; b++) type[b] = ins[b] && outs[b] ? 'chain' : outs[b] ? 'headwater' : ins[b] ? 'terminal' : 'landlocked';
   return type;
+}
+
+// ---- the water a portage goes round (the season round, 2026-11-01) -----------------------------------------------
+// The owner, on Indiana Lake: "i know there is a river there but the wetlands data says there is nothing, then marsh,
+// then river. which in real life is true which is why they have a portage, but we are cutting a river through it?"
+// A portage is the evidence that the water beside it isn't paddled: in v7-water 666 of 1,295 portages had their two
+// ends joined by creek water. So the creek along a portage's span is broken: every walked point within PORT.reach of
+// the trail, more than PORT.end along it from either end, becomes a brook (land, drawn with a stream bed), white water
+// where the NHD or OSM marks rapids or falls within PORT.white. A run of such points counts only when it runs along the
+// trail, not across it: its place along the trail moves at least PORT.along of the way it runs, over PORT.minRun m (or
+// half the span between the ends, on a short portage). A creek that only crosses the trail keeps its water. Past the
+// ends (PORT.end, a fifth of a short portage) the creek is as it was, so every portage end still meets its water.
+export const PORT = { reach: 110, end: 18, along: 0.5, minRun: 15, white: 90, mask: 22 };
+// portages: [[x, z], ...] lines in local metres; rapids: [[x, z], ...] (falls and rapids). Returns the breaks for
+// classifyCreeks, with a cell mask (breaks.mask) where no channel may be carved after (bake.mjs carveNavChannels)
+export function portageBreaks(portages, rapids, grid) {
+  const list = [];
+  for (const pts of portages) {
+    if (!pts || pts.length < 2) continue;
+    const cum = [0];
+    for (let s = 1; s < pts.length; s++) cum.push(cum[s - 1] + Math.hypot(pts[s][0] - pts[s - 1][0], pts[s][1] - pts[s - 1][1]));
+    const L = cum[cum.length - 1];
+    if (L < 12) continue;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const [x, z] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    list.push({ pts, cum, L, end: Math.min(PORT.end, 0.2 * L), box: [x0 - PORT.reach, z0 - PORT.reach, x1 + PORT.reach, z1 + PORT.reach] });
+  }
+  const B = 500, bk = new Map();
+  list.forEach((p, k) => {
+    for (let bj = Math.floor(p.box[1] / B); bj <= Math.floor(p.box[3] / B); bj++) for (let bi = Math.floor(p.box[0] / B); bi <= Math.floor(p.box[2] / B); bi++) {
+      const key = bi + ',' + bj;
+      if (!bk.has(key)) bk.set(key, []);
+      bk.get(key).push(k);
+    }
+  });
+  const RB = 200, rb = new Map();
+  for (const [x, z] of rapids) { const key = Math.floor(x / RB) + ',' + Math.floor(z / RB); if (!rb.has(key)) rb.set(key, []); rb.get(key).push([x, z]); }
+  const white = (x, z) => {
+    const bi = Math.floor(x / RB), bj = Math.floor(z / RB);
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) for (const [rx, rz] of rb.get(`${bi + di},${bj + dj}`) || []) if ((rx - x) ** 2 + (rz - z) ** 2 <= PORT.white * PORT.white) return true;
+    return false;
+  };
+  const mask = new Uint8Array(grid.width * grid.height);
+  let whiteM = 0;
+  return {
+    list, mask, used: new Set(), white, rapidsKm: () => whiteM / 1000,
+    near: (x, z) => bk.get(Math.floor(x / B) + ',' + Math.floor(z / B)) || [],
+    mark(x, z, isWhite) {
+      const r = Math.ceil(PORT.mask / grid.cell), i0 = grid.ci(x), j0 = grid.cj(z);
+      for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const i = i0 + di, j = j0 + dj; if (i >= 0 && j >= 0 && i < grid.width && j < grid.height) mask[j * grid.width + i] = 1; }
+      if (isWhite) whiteM += STEP;
+    },
+  };
+}
+// the nearest place on a portage's line: [distance, metres along it]
+function onLine(p, x, z) {
+  let best = Infinity, at = 0;
+  for (let s = 1; s < p.pts.length; s++) {
+    const [ax, az] = p.pts[s - 1], [bx, bz] = p.pts[s], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)), px = ax + dx * t, pz = az + dz * t, d = (x - px) ** 2 + (z - pz) ** 2;
+    if (d < best) { best = d; at = p.cum[s - 1] + t * Math.sqrt(L2); }
+  }
+  return [Math.sqrt(best), at];
+}
+function breakAlongPortages(c, breaks) {
+  const { walk, run } = c, n = walk.length;
+  const cand = new Set();
+  for (let q = 0; q < n; q += 5) for (const k of breaks.near(walk[q][0], walk[q][1])) cand.add(k);
+  for (const k of breaks.near(walk[n - 1][0], walk[n - 1][1])) cand.add(k);
+  if (!cand.size) return 0;
+  let count = 0;
+  for (const k of cand) {
+    const p = breaks.list[k];
+    const inside = new Uint8Array(n), at = new Float32Array(n);
+    let any = false;
+    for (let q = 0; q < n; q++) {
+      const [x, z] = walk[q];
+      if (x < p.box[0] || x > p.box[2] || z < p.box[1] || z > p.box[3]) continue;
+      const [d, t] = onLine(p, x, z);
+      if (d <= PORT.reach && t > p.end && t < p.L - p.end) { inside[q] = 1; at[q] = t; any = true; }
+    }
+    if (!any) continue;
+    for (let a = 0; a < n;) {
+      if (!inside[a]) { a++; continue; }
+      let b = a, t0 = at[a], t1 = at[a];
+      while (b + 1 < n && inside[b + 1]) { b++; t0 = Math.min(t0, at[b]); t1 = Math.max(t1, at[b]); }
+      if (t1 - t0 >= Math.min(PORT.minRun, 0.5 * (p.L - 2 * p.end)) && t1 - t0 >= PORT.along * (b - a) * STEP) {
+        if (!c.broke) c.broke = new Uint8Array(n);
+        breaks.used.add(k);
+        for (let q = a; q <= b; q++) {
+          if (c.broke[q]) continue;
+          const w = breaks.white(walk[q][0], walk[q][1]);
+          c.broke[q] = w ? 2 : 1;
+          if (run[q] !== C.brook) count++;
+          run[q] = C.brook;
+          breaks.mark(walk[q][0], walk[q][1], w);
+        }
+      }
+      a = b + 1;
+    }
+  }
+  return count;
+}
+// the falls and rapids the agencies and OSM mark (scripts/rapids.mjs's cache, <cache>/nhd-rapids): [[x, z], ...]
+export function loadWhiteWater(cacheDir, proj) {
+  const dir = path.join(cacheDir, 'nhd-rapids'), out = [];
+  const read = (f) => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { return []; } };
+  for (const r of read('osm.json')) if (r.geom && r.geom.type === 'Point') out.push(proj.toLocal(r.geom.coordinates[1], r.geom.coordinates[0]));
+  for (const r of read('nhd-points.json')) if (r.geom && (r.attrs.fcode === 43100 || r.attrs.fcode === 48700)) out.push(proj.toLocal(r.geom.y, r.geom.x));
+  for (const r of read('gnis.json')) if (r.geom && /Falls|Rapids/.test(r.attrs.gaz_featureclass || '')) out.push(proj.toLocal(r.geom.y, r.geom.x));
+  for (const r of read('ontario.json')) { const a = r.attrs || {}; if (/Rapids|Falls/.test(a.ENTITY_TYPE || '') && a.LATITUDE_DECIMAL_DEGREES) out.push(proj.toLocal(a.LATITUDE_DECIMAL_DEGREES, a.LONGITUDE_DECIMAL_DEGREES)); }
+  for (const r of read('nhd-lines.json')) if (r.geom && (r.attrs.fcode === 43100 || r.attrs.fcode === 48700)) for (const p of r.geom.paths || []) for (const [lon, lat] of p) out.push(proj.toLocal(lat, lon));
+  return out;
+}
+
+// the canoe network's own lines (bake.mjs navExtra: flowlines and links the extract has as no waterway): the same
+// stretches beside a portage marked in breaks.mask, so no channel is carved along them. Returns the metres marked.
+export function breakLines(lines, breaks) {
+  let n = 0;
+  for (const l of lines) {
+    const c = { walk: along(l.pts, STEP) };
+    c.run = new Uint8Array(c.walk.length).fill(C.river);
+    n += breakAlongPortages(c, breaks);
+  }
+  return n * STEP;
 }

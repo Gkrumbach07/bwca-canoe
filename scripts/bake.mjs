@@ -37,7 +37,7 @@ import { loadClarity } from './clarity.mjs';
 import { makeWater, placeLandings, linkPortages, chainsFrom } from './world-links.mjs';
 import { gradeLevels } from './water-grade.mjs';
 import { loadSources, usfsTrails, wildernessTest } from './names-lib.mjs';
-import { loadNhd, classifyCreeks, rasterizeClassified, brooksOf, beaverDams, lakeFlow } from './creeks.mjs'; // wetlands
+import { loadNhd, classifyCreeks, rasterizeClassified, brooksOf, beaverDams, lakeFlow, portageBreaks, loadWhiteWater, breakLines } from './creeks.mjs'; // wetlands (the season round: portageBreaks)
 import { loadProducts, lidarWeight, makeChannels, lidarBasinLevels, V4_CHANNELS, V4_FIELDS } from './v4-products.mjs'; // d2 bake
 import { officialAdds } from './official-adds.mjs'; // d2 bake (d1 names' sites and portages)
 import { loadCanoeLines, taggedRoute, PORTAGE_REACH } from './canoe-routes.mjs'; // water edges
@@ -107,12 +107,12 @@ function rasterizeLakes(lakes, grid, lakeId) {
 // the line's own channel id, levelled along the line like any creek. Returns the cells made water and those ids'
 // cells (carved: 1 the line's own channel, 2 a lake's widening).
 const NAV_HW = 10, NAV_GAP = 400, NAV_SIDE = 15;
-function carveNavChannels(navLines, grid, lakeId, isLakePoly, carved) {
+function carveNavChannels(navLines, grid, lakeId, isLakePoly, carved, noCarve = null) { // (noCarve: the season round, the creek a portage goes round)
   const { width: W, height: H } = grid;
   const ends = new Map(), key = ([x, z]) => `${Math.round(x)},${Math.round(z)}`;
   for (const l of navLines) for (const e of [l.pts[0], l.pts[l.pts.length - 1]]) ends.set(key(e), (ends.get(key(e)) || 0) + 1);
   let cells = 0, gaps = 0, gapM = 0, skipped = 0;
-  const set = (k, id, how) => { if (lakeId[k]) return; lakeId[k] = id; carved[k] = how; cells++; };
+  const set = (k, id, how) => { if (lakeId[k] || (noCarve && noCarve[k])) return; lakeId[k] = id; carved[k] = how; cells++; };
   for (const l of navLines) {
     const pts = resample(l.pts, 2.5), n = pts.length;
     const cellOf = (p) => { const i = grid.ci(p[0]), j = grid.cj(p[1]); return i < 0 || j < 0 || i >= W || j >= H ? -1 : j * W + i; };
@@ -324,28 +324,37 @@ async function main() {
   const lakeId = new Uint16Array(N);
   // wetlands: each creek's stretches told river, marsh channel or brook (creeks.mjs); only the paddled ones are water
   let brooks = [];
-  if (P) { const nhd = loadNhd(CFG.cacheDir, grid, proj, log); const ends = []; for (const pg of osm.portages || []) for (const e of [pg.pts[0], pg.pts[pg.pts.length - 1]]) ends.push(proj.toLocal(e[0], e[1]));
-    // and the USFS portages (official-adds.mjs adds the ones OSM lacks): every line's ends
+  let portBreaks = null; // the season round: the creek a portage goes round, broken (creeks.mjs portageBreaks)
+  if (P) { const nhd = loadNhd(CFG.cacheDir, grid, proj, log); const ends = [], portLines = [];
+    // (each end carries its other end: the creek is paddled from an end only away from its portage)
+    const endsOf = (ln) => { if (ln.length < 2) return; const a = ln[0], b = ln[ln.length - 1]; ends.push([a[0], a[1], b[0], b[1]], [b[0], b[1], a[0], a[1]]); };
+    for (const pg of osm.portages || []) { const ln = pg.pts.map((e) => proj.toLocal(e[0], e[1])); endsOf(ln); portLines.push(ln); }
+    // and the USFS portages (official-adds.mjs adds the ones OSM lacks): every line's ends; the lake-to-lake ones' lines
+    // break the creek too (not the hiking trails'), where OSM has no portage at either end (USFS draws a chain of
+    // portages with a paddle between, Boze Lake to the Louse River, as one line; OSM has them one by one)
+    const osmEnds = ends.slice(), nearOsm = ([x, z]) => osmEnds.some((e) => Math.abs(e[0] - x) < 80 && Math.abs(e[1] - z) < 80);
     try {
       const src = loadSources(CFG.cacheDir), T = usfsTrails(src, (la, lo) => proj.toLocal(la, lo), wildernessTest(src.wilderness));
-      for (const t of T) for (const ln of t.lines || []) if (ln.length) ends.push(ln[0], ln[ln.length - 1]);
+      for (const t of T) for (const ln of t.lines || []) if (ln.length) { endsOf(ln); if (t.lakeToLake && t.miles < 3 && !nearOsm(ln[0]) && !nearOsm(ln[ln.length - 1])) portLines.push(ln); }
     } catch (e) { log(`wetlands: no USFS trails for the creek anchors (${e.message})`); }
+    portBreaks = portageBreaks(portLines, loadWhiteWater(CFG.cacheDir, proj), grid);
     // a portage that ends on an unnamed pond: the creeks out of the pond are the route on (to a named lake), so the
     // pond's shore anchors them too
     {
       const inRing = (r, x, z) => { let c = false; for (let q = 0, w = r.length - 1; q < r.length; w = q++) { const [xi, zi] = r[q], [xj, zj] = r[w]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
       const ponds = new Set(), n0 = ends.length;
       for (let e = 0; e < n0; e++) {
-        const [x, z] = ends[e];
+        const x = ends[e][0], z = ends[e][1];
         for (const l of lakes) {
           if (l.creek || l.name || x < l.minX - 60 || x > l.maxX + 60 || z < l.minZ - 60 || z > l.maxZ + 60 || ponds.has(l)) continue;
           if (inRing(l.rings[0], x, z) || l.rings[0].some(([px, pz]) => (px - x) ** 2 + (pz - z) ** 2 < 3600)) ponds.add(l);
         }
       }
-      for (const l of ponds) for (const r of l.rings) for (let q = 0; q < r.length; q += 2) ends.push(r[q]);
+      for (const l of ponds) for (const r of l.rings) for (let q = 0; q < r.length; q += 2) ends.push([r[q][0], r[q][1]]);
       log(`wetlands: ${ponds.size} unnamed ponds a portage ends on, their shores anchoring the creeks out`);
     }
-    classifyCreeks(waterways, grid, P, nhd, log, ends); brooks = brooksOf(waterways, grid, nhd); }
+    classifyCreeks(waterways, grid, P, nhd, log, ends, portBreaks); brooks = brooksOf(waterways, grid, nhd);
+    log(`portages: ${(breakLines(navExtra, portBreaks) / 1000).toFixed(1)} km of the canoe network's own lines beside a portage left uncarved`); }
   rasterizeClassified(waterways, grid, lakeId);
   rasterizeLakes(lakes, grid, lakeId);
   // the water as OpenStreetMap draws it, before the canoe routes' channels and the LiDAR's edges: the campsites and the
@@ -353,7 +362,7 @@ async function main() {
   // (carved: 0 where the cell is as OpenStreetMap drew it; the channels and the edges only ever make land water)
   const carved = new Uint8Array(N);
   {
-    const r = carveNavChannels([...waterways.filter((c) => c.nav), ...navExtra], grid, lakeId, (id) => !lakes[id - 1].creek && !lakes[id - 1].river, carved);
+    const r = carveNavChannels([...waterways.filter((c) => c.nav), ...navExtra], grid, lakeId, (id) => !lakes[id - 1].creek && !lakes[id - 1].river, carved, portBreaks && portBreaks.mask);
     log(`water edges: the canoe routes' channels: ${r.cells} cells made water, ${r.gaps} gaps of land crossed (${r.gapM} m), ${r.skipped} gaps over ${NAV_GAP} m left`);
   }
   const nLakes = lakes.length;
@@ -688,7 +697,7 @@ async function main() {
       for (const k of q) {
         const x = k % W, L = level[k] / 10;
         for (const n of [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W]) {
-          if (n < 0 || n >= N || lakeId[n] || dist[n] === 255 || (lidar.mask[n] & 17) !== 17 || lidar.h[n] === -32768) continue;
+          if (n < 0 || n >= N || lakeId[n] || dist[n] === 255 || (portBreaks && portBreaks.mask[n]) || (lidar.mask[n] & 17) !== 17 || lidar.h[n] === -32768) continue;
           const g = lidar.h[n] / 10, flat = (lidar.mask[n] & 2) !== 0;
           if (!((r <= EDGE_REACH && g <= L - EDGE_LOW && g >= L - EDGE_DEEP) || (flat && Math.abs(g - L) <= EDGE_FLAT))) continue; // (not the foot of a falls: a bed metres under the water above it)
           // (not where it would meet other water a step of over EDGE_STEP m from this: a beaver dam, a ledge)
@@ -1209,16 +1218,48 @@ async function main() {
   // wetlands: each lake's place in the water, a pond, a seasonal creek; the brooks and the beaver dams to creeks.json
   if (P) {
     const flow = lakeFlow(waterways, lakes, grid, lakeId, lakeBasin, basins.map((b) => b.level), lakeLevel, hraw);
+    // the season round: a flowage (the NWI's water regime under most of a pond: C seasonally or A temporarily flooded,
+    // F semipermanent) and a beaver-made one (b), kept as their own mark: the game draws them down in late summer
+    // (water-build.js waterDrop). Counted over the pond's cells' wet bytes.
+    const regC = new Uint32Array(nLakes + 1), regF = new Uint32Array(nLakes + 1), regB = new Uint32Array(nLakes + 1);
+    if (P.gWet) for (let k = 0; k < N; k++) {
+      const id = lakeId[k], w = id ? P.gWet[k] : 0;
+      if (!w) continue;
+      const r = w & 7;
+      if (r === 1 || r === 2) regC[id]++; else if (r === 3) regF[id]++;
+      if (w & 8) regB[id]++;
+    }
+    let nC = 0, nF = 0, nB = 0;
     lakeMeta.forEach((rec, i) => {
       if (!rec) return;
       const l = lakes[i];
       if (l.creek) { if (l.seasonal) rec.seasonal = true; return; }
       if (l.river) return;
       rec.flow = flow[lakeBasin[rec.id]];
+      { const n = rec.cells, id = rec.id;
+        if (regC[id] * 2 >= n) { rec.regime = 'C'; nC++; } else if (regF[id] * 2 >= n) { rec.regime = 'F'; nF++; }
+        if (rec.regime && regB[id] * 2 >= n) { rec.beaver = true; nB++; } }
       if (rec.cells * cell * cell < 80937) rec.pond = true; // under 20 acres
     });
+    log(`season: ${nC} seasonally flooded flowages (C/A), ${nF} semipermanent (F), ${nB} of them beaver-made`);
+    // the creek's channel through each flowage (its line where it runs inside the pond's cells): it keeps water when
+    // the flowage is drawn down. [id, x0, z0, x1, z1, ...] (m, whole) per run
+    const chans = [];
+    for (const c of waterways) {
+      const Pw = c.walk || c.pts;
+      let cur = null, curId = 0;
+      for (const [x, z] of Pw) {
+        const i = grid.ci(x), j = grid.cj(z), id = i >= 0 && j >= 0 && i < W && j < H ? lakeId[j * W + i] : 0, rec = id ? lakeMeta[id - 1] : null;
+        if (rec && rec.regime) {
+          if (!cur || curId !== id) { if (cur && cur.length > 4) chans.push(cur); cur = [id]; curId = id; }
+          cur.push(Math.round(x), Math.round(z));
+        } else { if (cur && cur.length > 4) chans.push(cur); cur = null; curId = 0; }
+      }
+      if (cur && cur.length > 4) chans.push(cur);
+    }
+    log(`season: ${chans.length} creek channels through the flowages`);
     const dams = beaverDams(CFG.cacheDir, grid, proj, hraw, waterways, log);
-    await fsp.writeFile(path.join(opt.out, 'creeks.json'), JSON.stringify({ brooks, dams }));
+    await fsp.writeFile(path.join(opt.out, 'creeks.json'), JSON.stringify({ brooks, dams, chans }));
     log(`wetlands: creeks.json: ${brooks.length} brooks, ${dams.length} beaver dams`);
   }
   const basinMeta = basins.map((b, i) => ({ id: i, name: b.name || null, level: +b.level.toFixed(2), cells: b.cells, river: b.river || undefined, level3dep: b.level3dep !== undefined ? +b.level3dep.toFixed(2) : undefined, lidar: b.lidar || undefined }));

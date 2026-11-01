@@ -33,6 +33,7 @@ export const BROOK = {
   clear: 1.8,           // the trees and brush kept off the bed (props.js exclusionsFor; wetlands round 2: wider, fewer crowns over it)
   bank: 2.4,            // wetlands round 2: the decal's banks reach this many half widths out (brook-cut.js: the cut itself)
   stones: 0.5,          // stones a metre of bed, at most
+  rapids: { wide: 3, grade: 0.18, stones: 2.2, big: 4 }, // the season round: white water a portage goes round (wider, white, boulders)
   heard: 45,            // a running brook heard within this
 };
 export const DAM = {
@@ -72,12 +73,15 @@ export class Creeks {
     const T = world.tileMetres, ox = world.originX, oz = world.originZ;
     this.T = T; this.ox = ox; this.oz = oz; this.ntx = world.ntx;
     this.brookBins = new Map(); this.damBins = new Map();
+    // the season round: the creeks' channels through the flowages ([id, x0, z0, x1, z1, ...]), kept wet when they're
+    // drawn down (water-build.js flowageBeds)
+    this.chans = data.chans || [];
     const bin = (m, tx, ty, i) => { const k = ty * this.ntx + tx; const a = m.get(k); if (a) { if (a[a.length - 1] !== i) a.push(i); } else m.set(k, [i]); };
     this.brooks = (data.brooks || []).map((b, i) => {
       const p = b.pts, pts = [];
       let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
       for (let k = 0; k + 1 < p.length; k += 2) { const x = p[k], z = p[k + 1]; pts.push([x, z]); if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
-      const r = { id: b.id, i, perennial: b.perennial !== false, pts, bbox: [x0, z0, x1, z1] };
+      const r = { id: b.id, i, perennial: b.perennial !== false, pts, bbox: [x0, z0, x1, z1], port: !!b.port, rapids: !!b.rapids }; // (the season round: port, a stretch a portage goes round; rapids, white water)
       const tx0 = Math.floor((x0 - 3 - ox) / T), tx1 = Math.floor((x1 + 3 - ox) / T), ty0 = Math.floor((z0 - 3 - oz) / T), ty1 = Math.floor((z1 + 3 - oz) / T);
       for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) bin(this.brookBins, tx, ty, i);
       return r;
@@ -337,18 +341,21 @@ function buildBrook(ctx, b, decal, bits, rounded) {
     const [x, z] = pts[i], [xa, za] = pts[Math.max(0, i - 1)], [xb, zb] = pts[Math.min(m - 1, i + 1)];
     let dx = xb - xa, dz = zb - za; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
     const nx = -dz, nz = dx, s = i * BROOK.step;
-    const meander = (n1(s / 6, seed) - 0.5) * 0.5, hw = BROOK.hw[0] + (BROOK.hw[1] - BROOK.hw[0]) * n1(s / 9 + 40, seed);
+    // (the season round: a stretch a portage goes round where the NHD or OSM marks rapids is boulder white water, a
+    // bed three times as wide that breaks white all along and boulders in it; BROOK.rapids)
+    const meander = (n1(s / 6, seed) - 0.5) * 0.5, hw = (BROOK.hw[0] + (BROOK.hw[1] - BROOK.hw[0]) * n1(s / 9 + 40, seed)) * (b.rapids ? BROOK.rapids.wide : 1);
     const cx = x + nx * meander, cz = z + nz * meander, sd = tg.shoreAt(cx, cz);
     // faded in over its first metres, and out where it meets the water (the lake or the creek it runs into)
     const fade = Math.min(smoothstep(0, 4, s), smoothstep(-0.5, 2.5, sd), total - s < 2 && sd > 3 ? smoothstep(0, 2, total - s) : 1);
-    const ia = Math.max(0, i - GR), ib = Math.min(m - 1, i + GR), grade = ib > ia ? Math.abs(hOf(ia) - hOf(ib)) / ((ib - ia) * BROOK.step) : 0;
+    const ia = Math.max(0, i - GR), ib = Math.min(m - 1, i + GR), grade0 = ib > ia ? Math.abs(hOf(ia) - hOf(ib)) / ((ib - ia) * BROOK.step) : 0;
+    const grade = b.rapids ? Math.max(grade0, BROOK.rapids.grade) : grade0;
     rowOf[i] = decal.row(ctx, cx, cz, nx, nz, hw, b.down ? s : total - s, fade, per, grade);
     if (i > 0 && rowOf[i - 1] >= 0 && want[i - 1] && inside(pts[i - 1][0], pts[i - 1][1])) decal.join(rowOf[i - 1], rowOf[i]);
     // stones along the bed: the bigger ones at its margins, cobbles in it; wet and darker where it runs
     if (!inside(x, z) || sd < 0.5 || fade < 0.5) continue;
-    if (rng() < BROOK.stones * BROOK.step) {
+    if (rng() < BROOK.stones * BROOK.step * (b.rapids ? BROOK.rapids.stones : 1)) {
       const off = (rng() < 0.55 ? (rng() < 0.5 ? -1 : 1) * (0.7 + rng() * 0.35) : (rng() - 0.5) * 0.9) * hw;
-      const px = cx + nx * off, pz = cz + nz * off, edge = Math.abs(off) / hw, s0 = edge > 0.6 ? 0.05 + rng() * 0.08 : 0.03 + rng() * 0.04;
+      const px = cx + nx * off, pz = cz + nz * off, edge = Math.abs(off) / hw, s0 = (edge > 0.6 ? 0.05 + rng() * 0.08 : 0.03 + rng() * 0.04) * (b.rapids ? BROOK.rapids.big * (0.5 + rng()) : 1);
       const wet = per && edge < 0.6, col = tone(wet ? 0x77726a : 0xa39d92, rng, 0.12);
       const mat = new THREE.Matrix4().makeRotationY(rng() * 6.28).scale(V(s0, s0 * 0.55, s0 * 0.8)).setPosition(V(px - ctx.ox, ctx.H(px, pz) - s0 * 0.25, pz - ctx.oz));
       chunkStone(bits, mat, rng, col);

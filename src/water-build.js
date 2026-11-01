@@ -16,21 +16,134 @@ export const LOW = { drop: 0.42, slope: 0.12, deepen: 1.5, reach: 50 };
 const ease = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // how low a seasonal creek runs (0 normal .. 1 at its lowest) by the day of the year
 export function lowWater(doy) { return ease(198, 214, doy) * (1 - ease(266, 282, doy)); }
+
+// The season round (2026-11-01): every water's level through the year, from agency data. The bake's levels are the
+// spring's: the MnTOPO LiDAR they come from was flown 17 April to 17 May 2021, at the melt's high water. So the water
+// only ever drops from them, and the bank the terrain was shaped to shows as a wet band and a bare lip at low water.
+// - Lakes: the MN DNR's lake-level readings (LakeFinder water_levels_export, data-cache/lakefinder/levels), each year
+//   against its own mean, averaged by half month: high in mid-May, falling through the summer, lowest in mid-September,
+//   a little back up with the October rains (LAKE_CURVE, 0 the spring high .. 1 the low). How far it falls (LAKE_FALL,
+//   m) by the lake's place in the water: the dammed Kawishiwi chain (Farm 0.5 ft, Garden 0.2) and the chain lakes
+//   (Burntside 0.75, Vermilion 0.9, Shagawa 1.1) least, the small headwater lakes (Hungry Jack, Bearskin, Caribou
+//   0.6-0.8) and landlocked ones about the same, the border lakes on their rock-ledge outlets most (Sea Gull 1.8 ft,
+//   Gunflint 1.6, Saganaga 1.5). Lake Superior doesn't move. Rivers and creeks fall with the chain lakes.
+// - The Namakan chain (Namakan, Sand Point, Crane, Kabetogama) is a reservoir held by the dams at Kettle Falls on the
+//   IJC's 2018 rule curve: drawn down over the winter, still filling at ice-out, full by mid-June, eased down from
+//   September (NAMAKAN, m under full). The curve's winter drawdown is metres; here it is held to 0.6 m (2 ft) so the
+//   docks and the landing at Crane Lake still meet the water at ice-out.
+// - Flowages (the NWI's C, A and F regimes under most of a pond, beaver-made or not: the bake's lake `regime`): full
+//   from ice-out into early July, then drawn down: by August a seasonally flooded one (C) is mud flats with pools and
+//   the creek's channel (FLOW.c m down), a semipermanent one (F) half that; the October rains bring some back.
+// WK: the kind of each water (waterKinds), | WK.creek on rivers and creeks (they follow the lake they meet).
+export const WK = { still: 0, seasonal: 1, chain: 2, head: 3, land: 4, border: 5, namakan: 6, flowC: 7, flowF: 8, creek: 16 };
+const LAKE_CURVE = [[1, 0.92], [95, 0.97], [108, 0.5], [122, 0.12], [136, 0], [152, 0.06], [167, 0.22], [182, 0.4], [197, 0.56], [213, 0.72], [228, 0.88], [244, 0.97], [259, 1], [274, 0.97], [289, 0.88], [305, 0.86], [335, 0.88], [366, 0.92]];
+export const LAKE_FALL = { [WK.chain]: 0.2, [WK.head]: 0.24, [WK.land]: 0.2, [WK.border]: 0.48, [WK.seasonal]: 0.2 };
+const NAMAKAN = [[1, 0.6], [100, 0.6], [122, 0.5], [136, 0.36], [152, 0.15], [167, 0], [228, 0], [259, 0.08], [289, 0.2], [320, 0.4], [366, 0.6]];
+export const FLOW = { c: 0.95, f: 0.45, bedC: 0.75, bedF: 1.15, chan: 1.7, chanW: 7 };
+const BORDER = /^(Sea Gull|Saganaga|Gunflint|Northern Light|Magnetic|Granite|Clove|Gneiss) Lake$/;
+const NAMAKAN_LAKES = /^(Namakan|Sand Point|Crane|Kabetogama|Little Vermilion) Lake$/;
+const curveAt = (pts, d) => {
+  d = ((d - 1) % 365 + 365) % 365 + 1;
+  for (let i = 1; i < pts.length; i++) if (d <= pts[i][0]) { const [a, va] = pts[i - 1], [b, vb] = pts[i]; return va + (vb - va) * ease(a, b, d); }
+  return pts[pts.length - 1][1];
+};
+// a flowage's water (0 full .. 1 drawn down): full into early July, down by August, some back with the October rains
+export function flowageLow(doy) { return ease(186, 214, doy) * (1 - 0.45 * ease(278, 300, doy)); }
+// how far a water of kind k stands under its baked (spring) level on day doy, m
+export function waterDrop(k, doy) {
+  const kind = k & 15;
+  if (kind === WK.still) return 0;
+  if (kind === WK.namakan) return curveAt(NAMAKAN, doy);
+  if (kind === WK.flowC || kind === WK.flowF) return Math.max(curveAt(LAKE_CURVE, doy) * LAKE_FALL[WK.land], flowageLow(doy) * (kind === WK.flowC ? FLOW.c : FLOW.f));
+  const lake = curveAt(LAKE_CURVE, doy) * (LAKE_FALL[kind] || 0.2);
+  return kind === WK.seasonal ? Math.max(lake, lowWater(doy) * LOW.drop) : lake;
+}
+export const isFlowage = (k) => (k & 15) === WK.flowC || (k & 15) === WK.flowF;
+// each lake id's kind from index.json's records (Uint8Array by id)
+export function waterKinds(lakes) {
+  const out = new Uint8Array(lakes.length + 1);
+  for (const l of lakes) {
+    if (!l) continue;
+    const name = l.displayName || l.name || '';
+    let k;
+    if (l.creek || l.river) k = (l.seasonal ? WK.seasonal : WK.chain) | WK.creek;
+    else if (name === 'Lake Superior') k = WK.still;
+    else if (NAMAKAN_LAKES.test(name)) k = WK.namakan;
+    else if (l.regime === 'C') k = WK.flowC;
+    else if (l.regime === 'F') k = WK.flowF;
+    else if (BORDER.test(name)) k = WK.border;
+    else k = l.flow === 'headwater' ? WK.head : l.flow === 'chain' ? WK.chain : WK.land;
+    out[l.id] = k;
+  }
+  return out;
+}
 // One tile's buffer ([height][lake][sdist][level], side^2 cells each; cell metres): the seasonal creeks' channels cut
-// deeper in place, and the drop of their water for day `doy` per cell in centimetres (Uint8Array), or null where the
-// tile holds none or the date has none. low: a Set of the seasonal creeks' lake ids.
-export function lowCreeks(buf, side, cell, low, doy) {
-  if (!low || !low.size) return null;
+// deeper in place, and how far each water cell stands under its baked level on day `doy`, in centimetres (Uint8Array),
+// or null where the tile holds no water. kinds: waterKinds (a Set of seasonal creek ids is still taken: the old way).
+// Where two waters of different drops meet, the creek follows the lake it runs into over LOW.reach metres (two lakes,
+// or two creeks, meet halfway), so there is no step at a mouth.
+export function lowCreeks(buf, side, cell, kinds, doy) {
+  if (!kinds) return null;
+  if (kinds instanceof Set) { const a = new Uint8Array(65536); for (const id of kinds) a[id] = WK.seasonal | WK.creek; kinds = a; }
   const n = side * side, lake = new Uint16Array(buf, n * 2, n), sd = new Int16Array(buf, n * 4, n);
-  let any = false;
-  for (let m = 0; m < n; m++) if (lake[m] && low.has(lake[m])) { any = true; break; }
-  if (!any) return null;
-  const R = Math.max(1, Math.round(LOW.reach / cell)), drop = lowWater(doy) * LOW.drop;
-  const out = drop >= 0.005 ? new Uint8Array(n) : null;
+  const R = Math.max(1, Math.round(LOW.reach / cell));
+  const dropOf = new Map();
+  const D = (id) => { let v = dropOf.get(id); if (v === undefined) dropOf.set(id, (v = id < kinds.length ? waterDrop(kinds[id], doy) : 0)); return v; };
+  const rank = (id) => (id < kinds.length && kinds[id] & WK.creek ? 1 : 2);
+  const own = new Float32Array(n);
+  let any = false, seasonal = false;
   for (let m = 0; m < n; m++) {
     const id = lake[m];
-    if (!id || !low.has(id)) continue;
-    // the nearest other water within R cells (the lake or river it runs into): the drop and the cut eased off toward it
+    if (!id) continue;
+    any = true; own[m] = D(id);
+    if (id < kinds.length && (kinds[id] & 15) === WK.seasonal) seasonal = true;
+  }
+  if (!any) return null;
+  // where two waters meet: each cell within R of the meeting eased toward the level they meet at
+  const near = new Float32Array(n).fill(Infinity), toward = new Float32Array(n);
+  const stamp = (ci, cj, cid, meet) => {
+    for (let dy = -R; dy <= R; dy++) {
+      const y = cj + dy;
+      if (y < 0 || y >= side) continue;
+      for (let dx = -R; dx <= R; dx++) {
+        const x = ci + dx;
+        if (x < 0 || x >= side) continue;
+        const q = y * side + x;
+        if (lake[q] !== cid) continue;
+        const d = Math.hypot(dx, dy);
+        if (d < near[q]) { near[q] = d; toward[q] = meet; }
+      }
+    }
+  };
+  for (let m = 0; m < n; m++) {
+    const id = lake[m];
+    if (!id) continue;
+    const i = m % side, j = (m - i) / side;
+    for (let s = 0; s < 2; s++) {
+      const ii = i + (s ? 0 : 1), jj = j + (s ? 1 : 0);
+      if (ii >= side || jj >= side) continue;
+      const o = lake[jj * side + ii];
+      if (!o || o === id) continue;
+      const a = D(id), b = D(o);
+      if (Math.abs(a - b) < 0.005) continue;
+      const ra = rank(id), rb = rank(o), meet = ra > rb ? a : rb > ra ? b : (a + b) / 2;
+      if (ra <= rb) stamp(i, j, id, meet); // (the lower-ranked side eases; both when equal)
+      if (rb <= ra) stamp(ii, jj, o, meet);
+    }
+  }
+  const out = new Uint8Array(n);
+  let wet = false;
+  for (let m = 0; m < n; m++) {
+    if (!lake[m]) continue;
+    let v = own[m];
+    if (near[m] !== Infinity) v = toward[m] + (v - toward[m]) * ease(0, R, near[m]);
+    out[m] = Math.min(255, Math.round(v * 100));
+    if (out[m]) wet = true;
+  }
+  // the seasonal creeks' channels cut deeper, eased off toward other water (as before)
+  if (seasonal) for (let m = 0; m < n; m++) {
+    const id = lake[m];
+    if (!id || id >= kinds.length || (kinds[id] & 15) !== WK.seasonal || sd[m] >= 0) continue;
     const i = m % side, j = (m - i) / side;
     let best = R * R + 1;
     for (let dj = -R; dj <= R; dj++) {
@@ -40,14 +153,53 @@ export function lowCreeks(buf, side, cell, low, doy) {
         const ii = i + di, d = di * di + dj * dj;
         if (ii < 0 || ii >= side || d >= best) continue;
         const o = lake[jj * side + ii];
-        if (o && o !== id && !low.has(o)) best = d;
+        if (o && o !== id && (o >= kinds.length || (kinds[o] & 15) !== WK.seasonal)) best = d;
       }
     }
-    const k = ease(0.5, R, Math.sqrt(best));
-    if (sd[m] < 0) sd[m] = Math.round(sd[m] * (1 + (LOW.deepen - 1) * k));
-    if (out) out[m] = Math.round(drop * k * 100);
+    sd[m] = Math.round(sd[m] * (1 + (LOW.deepen - 1) * ease(0.5, R, Math.sqrt(best))));
   }
-  return out;
+  return wet ? out : null;
+}
+// The season round: a flowage's bed is shallow (the bake's ramp off the shore made a beaver pond metres deep): capped at
+// FLOW.bedC (C) or FLOW.bedF (F) under its spring level, a little more or less by a slow noise, so the late-summer
+// drawdown bares most of it to mud with pools left in the hollows; along the creek's line through it (creeks.json
+// `chans`, setFlowChannels) a channel FLOW.chan deep keeps water. Runs in the worker on the fine tile's own arrays
+// after shoalBeds (so the main thread gets the same bed). Returns the cells changed.
+let CHANS = null; // Float32Array of segments x0, z0, x1, z1 (world m)
+export function setFlowChannels(segs) { CHANS = segs && segs.length ? segs : null; }
+export function flowageBeds(grid, kinds) {
+  if (!kinds) return 0;
+  const S = grid.side, N = S * S, h = grid.h, lake = grid.lake, lvl = grid.lvl;
+  let any = false;
+  for (let m = 0; m < N && !any; m++) { const id = lake[m]; if (id && id < kinds.length && isFlowage(kinds[id])) any = true; }
+  if (!any) return 0;
+  // the channel segments near this tile
+  const x0 = grid.cellX(grid.i0) - 20, z0 = grid.cellZ(grid.j0) - 20, x1 = grid.cellX(grid.i0 + S) + 20, z1 = grid.cellZ(grid.j0 + S) + 20, segs = [];
+  if (CHANS) for (let s = 0; s < CHANS.length; s += 4) {
+    const ax = CHANS[s], az = CHANS[s + 1], bx = CHANS[s + 2], bz = CHANS[s + 3];
+    if (Math.max(ax, bx) < x0 || Math.min(ax, bx) > x1 || Math.max(az, bz) < z0 || Math.min(az, bz) > z1) continue;
+    segs.push(ax, az, bx, bz);
+  }
+  const chanD = (x, z) => {
+    let best = Infinity;
+    for (let s = 0; s < segs.length; s += 4) {
+      const ax = segs[s], az = segs[s + 1], dx = segs[s + 2] - ax, dz = segs[s + 3] - az, L2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)), ex = ax + dx * t - x, ez = az + dz * t - z;
+      best = Math.min(best, ex * ex + ez * ez);
+    }
+    return Math.sqrt(best);
+  };
+  let changed = 0;
+  for (let m = 0; m < N; m++) {
+    const id = lake[m];
+    if (!id || id >= kinds.length || !isFlowage(kinds[id])) continue;
+    const li = m % S, lj = (m - li) / S, x = grid.cellX(grid.i0 + li), z = grid.cellZ(grid.j0 + lj);
+    let cap = ((kinds[id] & 15) === WK.flowC ? FLOW.bedC : FLOW.bedF) * (0.6 + 0.8 * fbm(x * 0.045 + 7, z * 0.045 - 3, 2, 977));
+    if (segs.length) { const t = ease(FLOW.chanW * 0.5, FLOW.chanW + grid.cell, chanD(x, z)); cap = Math.max(cap, FLOW.chan * (1 - t) + cap * t); }
+    const L = lvl[m] / 10, depth = L - h[m] / 10;
+    if (depth > cap) { h[m] = Math.round((L - cap) * 10); changed++; }
+  }
+  return changed;
 }
 
 // d2 water: a cell's own Secchi depth (m) and CDOM (m^-1) where a v4 tile carries them (the two byte
