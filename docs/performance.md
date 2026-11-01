@@ -11,7 +11,7 @@ slow CPU while keeping three.js:
 - The triangles fell by a third to a half, and the shader programs no longer creep: all of them compile behind the
   title card.
 
-The next step is batching the forest's draws, and three.js has the tools for it (see the last section).
+The next step was batching the forest's draws; it is done as pools of instanced meshes ("The forest's pools" below).
 
 ## How it was measured
 
@@ -337,14 +337,12 @@ Stay on three.js and WebGL2, and keep the game a static page on GitHub Pages. Th
 
 ### Next, in order of what it buys
 
-1. **Batch the forest** (vegetation.js, tiles.js).
-   - **The change.** A species' bins, variant groups and culling proxies in a tile become one `THREE.BatchedMesh`.
-     Three r186 has it: several geometries under one material, per-instance matrices, colours and visibility, and
-     one multi-draw call through `WEBGL_multi_draw`. The culler's chunks feed its per-instance visibility instead of
-     refilling proxies.
-   - **What it buys, by estimate.** The forest's 55–65 % of the draws becomes about one draw per species per tile
-     per pass: roughly 40 % fewer draw calls in the woods, so the ×4 frame at Low would drop from ~17 ms to ~12 ms.
-   - **The catch.** The mirror's whole-bin draws and the colliders that read `e.vegBins` must keep their data.
+1. ~~**Batch the forest**~~ Done 2026-11-01 as **pools**, not `BatchedMesh` (see "The forest's pools" below).
+   - **Why not BatchedMesh.** In r186 a `BatchedMesh` gives every instance its own entry in the multi-draw: about
+     85 000 trees in view would be 85 000 sub-draws, which ANGLE over Metal runs one by one. It suits a few hundred
+     objects of different shapes, not a forest of instanced cards.
+   - **Left from this step.** The mirror still draws bin by bin (78 draws in the forest at High; by shape, 48). The
+     cascades' pools are many because the near trees use up to twelve variants a species.
 2. **Terrain LOD** for the far quarters (tile-worker.js): a 20 m index over the same vertices away from the shore
    bands, with skirts at the seams: by estimate about −0.4 M triangles at Low and −0.5 M in the mirror.
 3. **The mirror's light state.** The mirror pass sees no lights and the main pass does, so three looks up every lit
@@ -354,6 +352,39 @@ Stay on three.js and WebGL2, and keep the game a static page on GitHub Pages. Th
    (position, yaw, scale and tilt in 20 bytes, expanded on the GPU).
 5. **WebGPU, later.** Once the forest is batched, three's WebGPURenderer with render bundles is the step after. It
    means rewriting the GLSL as TSL, and it stays on Pages.
+
+## The forest's pools (2026-11-01)
+
+The owner asked "how do we not be CPU bound", then "batch the forest". tiles.js `Pool` and the culler's `pool()`.
+
+- **The change.** The culler's per-bin proxies (one per bin and variant group, for the view and each of the two
+  cascades) became staging copies. What each pass keeps goes into one pooled instanced mesh per (geometry, material,
+  pass) across every tile, offset from its tile to the pool's origin as it is copied in. The far bins (the low twin,
+  casting nothing: 4 to 8 triangles a tree) join the view's pools whole, tested a bin at a time against the view grown
+  by 12 % of their distance (24 % to leave, so a turning camera refills a pool every several degrees). A pool is
+  refilled from the first member that changed, the far bins first, and only that range goes up.
+- **The switch.** `__game.tiles.cull.pool = false` puts back one draw per proxy, in the same page, for A/B.
+- **Counts (exact).** The forest spot at High, 1366 × 768:
+
+  | | Draw calls | Forest's draws (view / cascades / mirror) | Triangles |
+  |---|---|---|---|
+  | before | 846 | 388 / 151 / 78 | 8.18 M |
+  | pools | 613 | ~160 / ~120 / 78 | 8.29 M |
+
+  Lake One and the portage end fell by the same ~230 calls. Programs stayed at 82 through a 2 km paddle (no new
+  ones: the pools have the proxies' attributes). The pools hold ~116 000 instances in 14 MB.
+- **Time (M4 Pro, ×1, not throttled; the machine loaded with five other browsers, load average ~290).** The draw's
+  CPU time, interleaved, 40 samples each: best 9.8 → 8.9 ms, median 11.7 → 10.5 ms. About 5 µs a draw call at ×1,
+  so ~20 µs at ×4: an ordinary laptop's frame should fall by ~4–5 ms. The GPU-synced frame was pure noise under that
+  load and is not quoted.
+- **Look.** The same frame with the pools on and off differs in 0.06 % of the pixels in the forest and 0.006 % on
+  the lake (draw order among cards at the same depth); on against on: 0 %.
+- **Where the rest of the CPU frame goes** (main pass ~10 ms at ×1): three's per-draw work ~5 ms for ~600 draws, the
+  culler 1.7 ms (view 0.8, cascades 0.9), the rest the scene walks, the shadow pass's walk of every caster and the
+  post chain.
+- **Measuring.** `scripts/perf-probe.js` (symlink it into `public/` and `await import('/perf-probe.js')`): fixed
+  spots through lookboard.js's `place` and `streamIn` (now exported), a tally of every draw by pass and kind through
+  `renderer.renderBufferDirect`, and the frame cost.
 
 ## For the next person measuring
 
