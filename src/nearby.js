@@ -188,6 +188,7 @@ class Nearby {
     const site = this.site(FIRE_PANEL);
     if (!site || !site.layout) return null;
     const key = campKey(site), ch = this.chores, ck = this.cook, F = this.fires;
+    if (this.hooks.friendFire) { const fr = this.hooks.friendFire(key, site); if (fr) return fr; } // co-op: a friend's fire (coop-share.js)
     const bin = ch.fuelBin(key, site), grate = ch.grate(key, site);
     if (!bin || !grate) return null;
     // fb5 A (the owner's third round of 2026-10-25: "fire ring got too complex … it should only show whats missing"):

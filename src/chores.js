@@ -299,7 +299,7 @@ export class Chores {
     const inv = this.inv;
     if (!inv || !inv.attached) return null;
     let b = inv.containers.find((c) => c.item === 'firefuel' && c.at && c.at.fuel === key);
-    if (!b && site && site.layout) {
+    if (!b && site && site.layout && !(this.friendRing && this.friendRing(key))) { // (co-op: a friend's fire there is theirs: coop-share.js)
       const f = site.layout.fire;
       b = inv.addContainer('firefuel', 'ground', { x: f.x, z: f.z, y: f.y + 0.05, heading: 0, camp: true, fuel: key, ring: { x: f.x, y: f.y, z: f.z, a: f.a || 0 }, v: 2 }, { quiet: true });
     }

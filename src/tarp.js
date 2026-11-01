@@ -261,6 +261,7 @@ export class Tarp {
   constructor(chores) {
     this.ch = chores;
     this.rigs = [];            // pitched (stage 1 to 3): saved
+    this.others = [];          // co-op phase 2 (coop-share.js): friends' rigs (ids p<peer>:…), drawn with ours, never saved
     this.armed = null;         // a Pitch from the book, its ghost following you: { uid, ok (green), was, t, chk }
     this.draft = null;         // a pitch under way before the ridge line is up: { rig, mesh }
     this.meshes = new Map();   // rig id -> { mesh, sig }
@@ -700,8 +701,8 @@ export class Tarp {
   }
   // the rigs near you drawn at their stage (or where a hold has them), the rest hidden
   draw() {
-    const p = this.player, seen = new Set();
-    for (const r of this.rigs) {
+    const p = this.player, seen = new Set(), all = this.others.length ? this.rigs.concat(this.others) : this.rigs;
+    for (const r of all) {
       const cx = r.ax + r.tx * r.sc, cz = r.az + r.tz * r.sc;
       if (Math.abs(cx - p.x) > SHOW || Math.abs(cz - p.z) > SHOW) continue;
       if (!this.tiles.locate || !this.tiles.locate(cx, cz)) continue; // (the drawn ground not in yet: drawn once it is)
@@ -710,7 +711,7 @@ export class Tarp {
       this.drawRig(r.id, r, k);
     }
     for (const [id, m] of this.meshes) if (!seen.has(id) && id !== 'draft') m.mesh.visible = false;
-    for (const id of [...this.meshes.keys()]) if (id !== 'draft' && !this.rigs.some((r) => r.id === id)) this.dropMesh(id);
+    for (const id of [...this.meshes.keys()]) if (id !== 'draft' && !all.some((r) => r.id === id)) this.dropMesh(id);
   }
   drawRig(id, r, k) {
     const sig = `${k.toFixed(2)}|${r.ax.toFixed(2)},${r.az.toFixed(2)},${r.bx.toFixed(2)},${r.bz.toFixed(2)}`;
@@ -762,11 +763,12 @@ export class Tarp {
   restore(list) {
     for (const id of [...this.meshes.keys()]) this.dropMesh(id);
     this.rigs = []; this.armed = null; this.draft = null; this.parkGhost();
-    for (const q of Array.isArray(list) ? list : []) {
-      if (!q || ![q.ax, q.az, q.bx, q.bz, q.sc, q.lh, q.ga, q.gb].every(Number.isFinite) || !Array.isArray(q.ends)) continue;
-      const dx = q.bx - q.ax, dz = q.bz - q.az, len = Math.hypot(dx, dz) || 1;
-      const r = { ...q, len, tx: dx / len, tz: dz / len, ya: q.ga + (q.ends[0] === 'tree' ? TIE : CROSS), yb: q.gb + (q.ends[1] === 'tree' ? TIE : CROSS), stage: Math.max(1, Math.min(3, q.stage | 0)), placed: true, poles: q.poles | 0 };
-      this.rigs.push(r);
-    }
+    for (const q of Array.isArray(list) ? list : []) { const r = this.rigOf(q); if (r) this.rigs.push(r); }
+  }
+  // a saved rig (serialize's shape) as a rig to draw, or null
+  rigOf(q) {
+    if (!q || ![q.ax, q.az, q.bx, q.bz, q.sc, q.lh, q.ga, q.gb].every(Number.isFinite) || !Array.isArray(q.ends)) return null;
+    const dx = q.bx - q.ax, dz = q.bz - q.az, len = Math.hypot(dx, dz) || 1;
+    return { ...q, len, tx: dx / len, tz: dz / len, ya: q.ga + (q.ends[0] === 'tree' ? TIE : CROSS), yb: q.gb + (q.ends[1] === 'tree' ? TIE : CROSS), stage: Math.max(1, Math.min(3, q.stage | 0)), placed: true, poles: q.poles | 0 };
   }
 }
