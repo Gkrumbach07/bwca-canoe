@@ -96,43 +96,58 @@ function clearFade(x, z) {
 }
 
 // ---- the per-cell field: amplitude, style shares, swamp floor and the water's line, cached on the grid ---------------
+// one cell's [amp, tussock, mounds, swamp floor, water line] from its bytes, into o; false off the wetlands
+function cellOf(kd, ft, wc, wb, doy, o) {
+  if (!kd) kd = OPEN_KIND[ft] || 0;
+  const byK = BY_KIND[kd];
+  if (!byK) return false;
+  const byC = wc ? BY_CLASS[wclass1(wc)] : null;
+  let a = byK[0], st = byK[1], sw = byK[2];
+  if (byC) { a = Math.max(a, byC[0]); st = byC[1]; sw = byC[2]; }
+  if (kd === KIND.wetMeadow) st = STYLE.tussock; // a beaver meadow's tussocks, whatever class the polygon has
+  const rg = wetRegime(wb), sw2 = wb && rg !== RG.saturated ? standingWater(rg, wetBeaver(wb), doy) : -1;
+  o[0] = a; o[1] = st === STYLE.tussock ? 1 : 0; o[2] = st === STYLE.mounds ? 1 : 0; o[3] = sw;
+  o[4] = sw2 < 0 ? POOL.saturated : POOL.dry + (POOL.wet - POOL.dry) * sw2;
+  return true;
+}
+const _c = [0, 0, 0, 0, 0];
 function field(grid) {
   if (grid._mire !== undefined) return grid._mire;
   const L = landOf(grid);
   if (!L || !L.ground) return (grid._mire = null);
   const n = grid.side, N = n * n, doy = burnDate().doy;
-  const amp = new Float32Array(N), tus = new Float32Array(N), mnd = new Float32Array(N), swp = new Float32Array(N), lvl = new Float32Array(N).fill(POOL.saturated);
+  const A = [0, 1, 2, 3, 4].map(() => new Float32Array(N));
+  A[4].fill(POOL.saturated);
   let any = false;
   for (let k = 0; k < N; k++) {
-    let kd = L.ground[k];
-    if (!kd && L.forest) kd = OPEN_KIND[L.forest[k]] || 0;
-    const byK = BY_KIND[kd];
-    if (!byK) continue;
-    const c1 = L.wcls ? wclass1(L.wcls[k]) : 0, byC = BY_CLASS[c1];
-    let a = byK[0], st = byK[1], sw = byK[2];
-    if (byC) { a = Math.max(a, byC[0]); st = byC[1]; sw = byC[2]; }
-    if (kd === KIND.wetMeadow) st = STYLE.tussock; // a beaver meadow's tussocks, whatever class the polygon has
-    amp[k] = a; tus[k] = st === STYLE.tussock ? 1 : 0; mnd[k] = st === STYLE.mounds ? 1 : 0; swp[k] = sw;
-    const wb = L.wet ? L.wet[k] : 0, rg = wetRegime(wb);
-    const s = wb && rg !== RG.saturated ? standingWater(rg, wetBeaver(wb), doy) : -1;
-    lvl[k] = s < 0 ? POOL.saturated : POOL.dry + (POOL.wet - POOL.dry) * s;
+    if (!cellOf(L.ground[k], L.forest ? L.forest[k] : 0, L.wcls ? L.wcls[k] : 0, L.wet ? L.wet[k] : 0, doy, _c)) continue;
+    for (let q = 0; q < 5; q++) A[q][k] = _c[q];
     any = true;
   }
-  return (grid._mire = any ? { amp, tus, mnd, swp, lvl } : null);
+  return (grid._mire = any ? A : null);
 }
-// a cell array bilinear at (x, z), cell centres carrying the values (as site.js at)
-function at(grid, arr, x, z) {
+// The five values bilinear at (x, z) (cell centres carry them, as site.js at), into _s; from a tile's grid (its cached
+// field) or from the World on the main thread (its chCell bytes, cell by cell)
+const _s = { amp: 0, tus: 0, mnd: 0, swp: 0, lvl: 0 }, _v = new Float64Array(5);
+function sample(grid, x, z) {
   const fx = (x - grid.originX) / grid.cell - 0.5, fz = (z - grid.originZ) / grid.cell - 0.5;
   const i = Math.floor(fx), j = Math.floor(fz), a = fx - i, b = fz - j;
-  return (arr[grid.local(i, j)] * (1 - a) + arr[grid.local(i + 1, j)] * a) * (1 - b) + (arr[grid.local(i, j + 1)] * (1 - a) + arr[grid.local(i + 1, j + 1)] * a) * b;
-}
-const _s = { amp: 0, tus: 0, mnd: 0, swp: 0, lvl: 0 };
-function sample(grid, x, z) {
-  const F = field(grid);
-  if (!F) return null;
-  const a = at(grid, F.amp, x, z);
-  if (a < 0.002) return null;
-  _s.amp = a; _s.tus = at(grid, F.tus, x, z); _s.mnd = at(grid, F.mnd, x, z); _s.swp = at(grid, F.swp, x, z); _s.lvl = at(grid, F.lvl, x, z);
+  _v.fill(0);
+  if (grid.side !== undefined && grid.local) {
+    const F = field(grid);
+    if (!F) return null;
+    const k00 = grid.local(i, j), k10 = grid.local(i + 1, j), k01 = grid.local(i, j + 1), k11 = grid.local(i + 1, j + 1);
+    for (let q = 0; q < 5; q++) { const f = F[q]; _v[q] = (f[k00] * (1 - a) + f[k10] * a) * (1 - b) + (f[k01] * (1 - a) + f[k11] * a) * b; }
+  } else if (grid.chCell) {
+    const doy = burnDate().doy;
+    for (let c = 0; c < 4; c++) {
+      const ci = i + (c & 1), cj = j + (c >> 1), w = (c & 1 ? a : 1 - a) * (c >> 1 ? b : 1 - b);
+      if (!cellOf(grid.chCell('ground', ci, cj), grid.chCell('forest', ci, cj), grid.chCell('wcls', ci, cj), grid.chCell('wet', ci, cj), doy, _c)) { _c.fill(0); _c[4] = POOL.saturated; }
+      for (let q = 0; q < 5; q++) _v[q] += w * _c[q];
+    }
+  } else return null;
+  if (_v[0] < 0.002) return null;
+  _s.amp = _v[0]; _s.tus = _v[1]; _s.mnd = _v[2]; _s.swp = _v[3]; _s.lvl = _v[4];
   return _s;
 }
 
