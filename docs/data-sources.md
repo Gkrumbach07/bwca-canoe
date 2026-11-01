@@ -566,6 +566,10 @@ Quick looks (`shots/d1-quetico/`, copied to each source's `quicklook/`): `osm-bo
 
 ## Baked: tile format v4 (round D2)
 
+**Saves across releases:** every release, its bake time, and the tables that carry a season from one to the next are in
+[migration.md](migration.md). A release that renumbers lakes, campsites or portages ships a table from every earlier
+live release (`scripts/migrate-table.mjs`, checked by `scripts/migrate-check.mjs`).
+
 Round D2's bake reads the four products above onto the bake's grid (`scripts/v4-products.mjs`) and writes a v4 release. Rebake it with `BWCA_CACHE=<main checkout>/data-cache npm run rebake:v4` (`scripts/rebake-v4.mjs`).
 - **The run:** about 2.5 minutes: the bake, the rapids, the lake facts and the checks. It builds `public-data-v4.next` beside the target and swaps it in by rename.
 - **Safety:** the bake refuses to write a `public/data` folder (the live release came from there). A test area (`--area lakeone`) bakes to `public-data-v4-lakeone`.

@@ -292,7 +292,7 @@ async function main() {
   }
   // water edges: which lines are canoe routes (canoe-routes.mjs): a waterway line that is one is rasterized NAV_HW wide;
   // the canoe network's own lines (flowlines, links) the extract leaves out come in after every other polygon (so no id
-  // before them moves: the saves' lake ids, src/migrate-v3-v4.json) as channels of their own, laid only where the water
+  // before them moves: the saves' lake ids, src/migrate/*.json) as channels of their own, laid only where the water
   // has none (carveNavChannels)
   const navExtra = [];
   {
