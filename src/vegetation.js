@@ -490,10 +490,22 @@ function bogPole(rng, v) {
   }
   if (dead) return finish(g, cards);
   const top = spike ? 0.74 + rng() * 0.08 : 0.95, R = 0.34 + rng() * 0.12, nrm = outward(T, -0.5, h, 0.9);
-  // short drooping sprays close up the stem, thinning upward to the club
-  whorls(g, cards, rng, T, { t0: 0.38 + rng() * 0.1, t1: top - 0.13, count: 6 + Math.floor(rng() * 2), nb: () => 3, R: (f) => R * (1.1 - f * 0.4), droop: () => 0.75, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 0.95, lo: 0.3 });
+  // short drooping sprays up the stem, not in tiers: each at its own height, way and length, now one, now two or three
+  // together, with gaps where a branch died, thinning upward to the club (the coordinator, stage 1: "a stack of plates")
+  const t0 = 0.3 + rng() * 0.15, gap0 = 0.25 + rng() * 0.5, gap1 = gap0 + 0.06 + rng() * 0.08;
+  for (let i = 0, n = 13 + Math.floor(rng() * 7); i < n; i++) {
+    let t = t0 + (top - 0.12 - t0) * rng() ** 0.8;
+    const f = (t - t0) / Math.max(0.01, top - t0);
+    if (f > gap0 && f < gap1 && rng() < 0.85) continue;
+    const s = T.at(t), az = rng() * 6.28, L = R * (1.15 - f * 0.45) * (0.45 + rng() * 0.9);
+    const d = dirAt(az, -(0.35 + rng() * 0.75));
+    needles(cards, 'spray', vec(s), d, L * 1.12, L * (0.7 + rng() * 0.45), nrm, shade(cols, 0, h, rng, 0.3), rng);
+  }
   // the club: a knot of sprays a little below the top
-  whorls(g, cards, rng, T, { t0: top - 0.11, t1: top - 0.03, count: 3, nb: () => 3, R: () => R * 1.15, droop: () => 0.45, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 1.15, lo: 0.55 });
+  for (let i = 0, n = 6 + Math.floor(rng() * 4); i < n; i++) {
+    const s = T.at(top - 0.12 + rng() * 0.1), L = R * (0.8 + rng() * 0.6);
+    needles(cards, 'spray', vec(s), dirAt(rng() * 6.28, -(0.2 + rng() * 0.6)), L * 1.1, L * 1.1, nrm, shade(cols, 0, h, rng, 0.55), rng);
+  }
   if (!spike) { const a = T.at(top - 0.02), b = T.at(1), d = vec(b).sub(vec(a)); needles(cards, 'spray', vec(a), d.clone().normalize(), d.length() * 1.3, 0.25, nrm, shade(cols, 0, h, rng), rng); }
   return finish(g, cards);
 }
@@ -507,8 +519,9 @@ function shrub(rng) {
   for (let i = 0; i < stems; i++) {
     const a = a0 + (i / stems) * 6.28 + SPREAD(rng) * 0.6, tip = V(Math.cos(a) * 0.45 * size, (0.75 + rng() * 0.3) * size, Math.sin(a) * 0.45 * size);
     g.branch([V(0, -0.15, 0), tip], 0.025 * size, 0.01, 3, bark, rng);
-    leafy(cards, 'leafRound', tip, tip.clone().sub(C).normalize(), 0.95 * size, nrm, shade(cols, 0, size, rng), rng);
-    if (rng() < 0.6) leafy(cards, 'leafRound', tip.clone().multiplyScalar(0.55), tip.clone().sub(C).setY(0).normalize(), 0.8 * size, nrm, shade(cols, 0, size, rng), rng, true);
+    leafy(cards, 'leafRound', tip, tip.clone().sub(C).normalize(), 0.7 * size, nrm, shade(cols, 0, size, rng), rng);
+    leafy(cards, 'leafRound', tip.clone().multiplyScalar(0.7), tip.clone().sub(C).setY(0.3).normalize(), 0.6 * size, nrm, shade(cols, 0, size, rng), rng, true);
+    if (rng() < 0.6) leafy(cards, 'leafRound', tip.clone().multiplyScalar(0.45), tip.clone().sub(C).setY(0).normalize(), 0.55 * size, nrm, shade(cols, 0, size, rng), rng, true);
   }
   return finish(g, cards, { ground: 0 });
 }
@@ -518,6 +531,9 @@ function shrub(rng) {
 // tagLeaves's band (hue 0.1–0.47, saturated) so the deciduous ones turn and drop with the season; the
 // sapling is a young fir and keeps its needles.
 
+// (the density round: `dense` hangs five smaller clusters down a stem instead of three: the leaf sprites read too big
+// up close)
+const DENSE_LEAVES = [[1, false], [0.84, true], [0.68, true], [0.53, true], [0.38, true]];
 // A multi-stemmed shrub: `stems` stems fanning out of one root, each curving out (lean radians off plumb),
 // round-leaved clusters on the upper half and at the tip, a side shoot on some.
 function clump(rng, o) {
@@ -529,7 +545,7 @@ function clump(rng, o) {
     const d1 = dirAt(a, Math.PI / 2 - ln * 0.75), d2 = dirAt(a + SPREAD(rng) * 0.25, Math.PI / 2 - ln * 1.15);
     const p0 = V(Math.cos(a) * 0.05, -0.2, Math.sin(a) * 0.05), p1 = p0.clone().addScaledVector(d1, L * 0.5), p2 = p1.clone().addScaledVector(d2, L * 0.55);
     const B = g.branch([p0, p1, p2], 0.035 * size, 0.012, 3, bark, rng);
-    for (const [u, single] of [[1, false], [0.72, true], [0.48, true]]) {
+    for (const [u, single] of o.dense ? DENSE_LEAVES : [[1, false], [0.72, true], [0.48, true]]) {
       const q = B.at(u).p, out = q.clone().sub(C).normalize();
       leafy(cards, 'leafRound', q, out, size * (0.8 + rng() * 0.3) * (u < 1 ? 0.85 : 1), nrm, shade(cols, 0, h * 1.1, rng, 0.15), rng, single);
     }
@@ -544,13 +560,13 @@ function clump(rng, o) {
 // beaked hazel: three or four stems fanning up out of one root into a loose vase of broad leaves
 function hazel(rng) {
   const size = 0.8 + rng() * 0.45;
-  return clump(rng, { h: 2.2 * size, size: 1.1 * size, stems: 3 + Math.floor(rng() * 2), lean: [0.25, 0.5], bark: vary(0x6a5440, rng, 0.06), cols: crownColors(0x78a24c, 0x37552f, rng) });
+  return clump(rng, { h: 2.2 * size, size: 0.72 * size, stems: 4 + Math.floor(rng() * 2), lean: [0.25, 0.5], bark: vary(0x6a5440, rng, 0.06), cols: crownColors(0x78a24c, 0x37552f, rng), dense: true });
 }
 // speckled alder: a sprawling clump of grey stems leaning out from the wet ground, dark leaves on their upper half
 // (the density round: more stems and smaller leaf clusters, so a stand of them is a tangle, not a few big leaves)
 function alder(rng) {
   const size = 0.85 + rng() * 0.4;
-  return clump(rng, { h: 2.6 * size, size: 0.78 * size, stems: 5 + Math.floor(rng() * 3), lean: [0.3, 0.75], bark: vary(0x7a756e, rng, 0.06), cols: crownColors(0x5f8c44, 0x2e4c2d, rng), side: 0.55 });
+  return clump(rng, { h: 2.6 * size, size: 0.56 * size, stems: 5 + Math.floor(rng() * 3), lean: [0.3, 0.75], bark: vary(0x7a756e, rng, 0.06), cols: crownColors(0x5f8c44, 0x2e4c2d, rng), side: 0.55, dense: true });
 }
 // a young balsam fir coming up in the gaps: a thin stem, three or four whorls of level sprays, the lowest widest
 function sapling(rng) {
@@ -558,7 +574,8 @@ function sapling(rng) {
   const cols = crownColors(0x4b8a52, 0x24452f, rng), bark = vary(0x5a4a38, rng, 0.06);
   const T = g.stem(0, -0.2, 0, 0.045 * size, 0.012, h + 0.2, 3, bark, rng, { lean: [SPREAD(rng) * 0.12 * h, SPREAD(rng) * 0.12 * h], flare: 0, shade: 0.2, ts: [0, 0.5, 1] });
   const R = (0.62 + rng() * 0.2) * size, nrm = outward(T, -0.2, h + 0.2, 0.5);
-  whorls(g, cards, rng, T, { t0: 0.2, t1: 0.82, count: 3 + Math.floor(rng() * 2), nb: () => 3, R: (f) => R * (1.05 - f * 0.6), droop: () => 0.05, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 0.65 });
+  // (the density round: more whorls, four sprays to one and a fan off some, so a young fir is a full little cone, not a stick)
+  whorls(g, cards, rng, T, { t0: 0.12, t1: 0.84, count: 5 + Math.floor(rng() * 2), nb: () => 4, R: (f) => R * (1.1 - f * 0.65), droop: () => 0.08, tube: () => false, nrm, cols, y0: 0, y1: h, bark, wid: 0.8, fan: 0.4 });
   const a = T.at(0.82), b = T.at(1), d = vec(b).sub(vec(a));
   needles(cards, 'spray', vec(a), d.clone().normalize(), d.length() * 1.3, 0.3 * size, nrm, shade(cols, 0, h, rng), rng);
   return finish(g, cards, { reach: h * 0.4 });
@@ -660,7 +677,8 @@ function regrowth(rng, v) {
     } else {
       // an aspen whip leafed out down its upper two thirds, the leaves bunched on short twigs
       for (const [t, sz, single] of [[0.42, 0.55, true], [0.6, 0.7, false], [0.78, 0.7, true], [0.96, 0.62, false]]) {
-        leafy(cards, 'leaf', vec(T.at(t)), dirAt(rng() * 6.28, 0.25 + rng() * 0.6), sz * h * 0.6, nrm, col(), rng, single);
+        leafy(cards, 'leaf', vec(T.at(t)), dirAt(rng() * 6.28, 0.25 + rng() * 0.6), sz * h * 0.5, nrm, col(), rng, single);
+        if (t > 0.5) leafy(cards, 'leaf', vec(T.at(t - 0.09)), dirAt(rng() * 6.28, 0.1 + rng() * 0.5), sz * h * 0.42, nrm, col(), rng, true); // (more and smaller: the density round)
       }
     }
   }

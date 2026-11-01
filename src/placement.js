@@ -146,7 +146,8 @@ function clipToCell(x1, z1, x2, z2, cx, cz, half) {
 // The forest's edge along the water (the shoreline pass): young balsam fir, spruce and cedar, 4–8 m, their crowns to
 // the ground, filling under the big trees' crowns so the shore reads as a wall from the water, not a row of trunks.
 // Per cell within `to` m of the water, fading by `fade`.
-const EDGE = { young: 1.1, to: 6, fade: 16, scale: [0.36, 0.62] };
+// (the density round, stage 3: young 1.1 -> 1.8, the bank a wall from the canoe; the near ring adds more, thicket.js)
+const EDGE = { young: 1.8, to: 6, fade: 16, scale: [0.36, 0.62] };
 function youngTree(r, h) {
   if (h.wet > 0.55) return r < 0.6 ? SPECIES.blackSpruce : r < 0.85 ? SPECIES.cedar : SPECIES.tamarack;
   return r < 0.55 ? SPECIES.spruce : r < 0.82 ? SPECIES.cedar : r < 0.92 ? SPECIES.birch : SPECIES.whitePine;
@@ -805,7 +806,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const eLive = burnt ? e * B.mature + B.young * dens * 0.8 : e;
       // shoreline shrubs (dogwood, willow): thick at the waterline, a fringe back into the woods
       const shoreRow = 1 - smoothstep(3, 10, sdH);
-      const eShrub = (((sdH < 35 ? (0.45 + 1.25 * shoreRow - smoothstep(10, 35, sdH) * 0.25) * (1 - clearing * 0.5) * trailSide : (trailSide > 1 ? 0.5 : 0)) + xShrub) * B.under + B.shrubs * Math.min(1, dens)) * (1 - bareness * 0.8) * (1 - face);
+      const eShrub = (((sdH < 35 ? (0.45 + 1.8 * shoreRow - smoothstep(10, 35, sdH) * 0.25) * (1 - clearing * 0.5) * trailSide : (trailSide > 1 ? 0.5 : 0)) + xShrub) * B.under + B.shrubs * Math.min(1, dens)) * (1 - bareness * 0.8) * (1 - face);
       const shrubs = count(rng, eShrub * (1 - 0.6 * smoothstep(1, 4, xMat)));
       // the understory: hazel at the edges of the woods and in the open stands, off the wet ground; alder thick down
       // by the water, on the wet ground and round the bogs; young fir coming up in the gaps of the moist woods, at the

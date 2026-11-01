@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { hash2, fbm, smoothstep } from './rng.js';
-import { KIND, WCLASS, wclass1, wclass2, emergentGrow } from './land.js';
+import { KIND, WCLASS, FOREST, CLIFF, cliffClass, wclass1, wclass2, emergentGrow } from './land.js';
+import { burnLook } from './burns.js';
 import { GUEST } from './placement.js';
 
 // The near ring (the density round, 2026-11-01). The owner: "the biggest thing i notice is how much more open our game
@@ -39,6 +40,18 @@ export const LAYERS = {
   ash: { sp: 3, variants: [18, 19, 20, 21], reach: 110, pad: 1.2, shore: 0.9, sink: 0.35, scale: GUEST[23][2] }, // (the birch's bins hold the ash's variants after the aspen's, the spruce's the poles' after the black spruce's)
   log: { sp: 14, variants: [0, 1], shadow: false, reach: 70, pad: 1.6, shore: 0.6, sink: 0.04, log: true },
   reed: { reeds: [2, 0, 3], reach: 75, pad: 0.4, shore: -0.2, sink: 0.05 }, // cattail, bulrush, sedge
+  // stage 2, the upland: young balsam fir (the sapling, up to 6 m), beaked hazel, mountain maple and the like (the shrub,
+  // stood taller), jack pine poles, the aspen suckers and young jack pine of a burn's regrowth, the old forest's snags
+  fir: { sp: 12, variants: [0, 1, 2, 3], reach: 95, pad: 0.6, shore: 0.8, sink: 0.1 },
+  hazel: { sp: 10, variants: [0, 1, 2, 3], reach: 85, pad: 0.4, shore: 1.5, sink: 0.08 },
+  jack: { sp: 9, variants: [0, 1, 3, 4], reach: 115, pad: 1.2, shore: 0.9, sink: 0.35 },
+  regrow: { sp: 22, variants: [0, 1, 2, 3], reach: 85, pad: 0.4, shore: 0.8, sink: 0.1 },
+  snag: { sp: 5, variants: [0, 1, 3], reach: 115, pad: 1.2, shore: 0.9, sink: 0.35 },
+  // stage 3, the shore seen from the canoe: dogwood and willow at the waterline, young fir and cedar's like a pace up,
+  // alder on the wet banks; reaching further than the rest, as far as a canoe sees a bank clearly
+  shoreShrub: { sp: 7, variants: [0, 1], shadow: false, reach: 170, pad: 0.4, shore: 0.2, sink: 0.25, band: [0.2, 5] },
+  shoreFir: { sp: 12, variants: [0, 1], reach: 170, pad: 0.6, shore: 0.8, sink: 0.1, band: [0.8, 11] },
+  shoreAlder: { sp: 11, variants: [0, 1], reach: 170, pad: 0.5, shore: 0.2, sink: 0.12, band: [0.2, 6] },
 };
 // What grows in each class, a hectare at full density: [layer, per hectare, scale from, to] (and for the reeds the
 // shares of cattail, bulrush and sedge). From the real counts (scratchpad bogs-brief): black spruce 1,500–2,500 stems,
@@ -58,15 +71,49 @@ export const GROWS = {
   EM1: [['reed', 5600, 1.1, 1.6, R(0.62, 0.18, 0.2)], ['alder', 25, 0.9, 1.3], ['pole', 6, 0.5, 1.0]],
   EM2: [['reed', 2600, 0.9, 1.3, R(0.05, 0.6, 0.35)], ['pole', 3, 0.5, 1.0]],
   meadow: [['reed', 900, 0.8, 1.1, R(0.05, 0.1, 0.85)], ['alder', 70, 0.8, 1.2], ['pole', 18, 0.6, 1.1]], // a beaver meadow: sedge, drowned snags
+  // Stage 2, the upland by its forest type (land.js FOREST; the owner: "does this same density pass need to be applied to
+  // our forested areas too"). Real stands: jack pine–black spruce 1,100–2,500 stems a hectare, aspen-birch 1,000–1,500,
+  // old red and white pine fewer and bigger. The tiles keep the canopy (its trunks collide); the ring fills the eye
+  // level: the old pines fairly open, the aspen-birch and the spruce-fir thick with hazel, mountain maple and young fir,
+  // the jack pine a stand of poles. (regrow's mix: the share of aspen suckers against young jack pine)
+  spruceFir: [['fir', 1000, 0.8, 2.2], ['hazel', 420, 0.8, 1.2], ['shrub', 240, 1.3, 1.9], ['snag', 14, 0.7, 1.1], ['log', 60, 0.6, 0.95]],
+  aspenBirch: [['hazel', 1000, 0.85, 1.3], ['regrow', 340, 1.2, 2.2, [1]], ['fir', 300, 0.6, 1.6], ['shrub', 200, 1.3, 1.9], ['log', 50, 0.6, 0.95]],
+  northernHardwood: [['hazel', 700, 0.85, 1.3], ['shrub', 380, 1.3, 2.0], ['fir', 350, 0.6, 1.7], ['log', 50, 0.6, 0.95]],
+  redWhitePine: [['hazel', 260, 0.8, 1.2], ['fir', 120, 0.6, 1.5], ['shrub', 80, 1.1, 1.6], ['log', 25, 0.7, 1.0]],
+  jackRedPine: [['jack', 450, 0.7, 1.3], ['fir', 120, 0.6, 1.4], ['hazel', 200, 0.8, 1.2], ['regrow', 150, 1.0, 1.8, [0.2]], ['snag', 10, 0.6, 1.0]],
+  pineBlackSpruce: [['jack', 300, 0.7, 1.3], ['pole', 350, 0.6, 1.2], ['hazel', 150, 0.8, 1.2], ['fir', 100, 0.6, 1.4]],
+  pineSpruceHardwood: [['fir', 400, 0.6, 1.8], ['hazel', 450, 0.8, 1.25], ['jack', 150, 0.7, 1.2], ['regrow', 150, 1.1, 2.0, [0.6]], ['shrub', 150, 1.3, 1.9], ['log', 40, 0.6, 0.95]],
+  pinePlantation: [['hazel', 120, 0.8, 1.1], ['fir', 60, 0.6, 1.2]],
+  conifersBog: [['pole', 450, 0.35, 1.15], ['mat', 1000, 0.85, 1.3]],
+  cedarSwamp: [['fir', 300, 0.6, 1.7], ['alder', 350, 0.8, 1.2], ['log', 80, 0.6, 0.95], ['snag', 10, 0.6, 1.0]],
+  floodplainForest: [['alder', 400, 0.8, 1.3], ['hazel', 300, 0.8, 1.2], ['fir', 200, 0.6, 1.5], ['log', 60, 0.6, 0.95]],
+  forestUnknown: [['fir', 450, 0.6, 1.7], ['hazel', 500, 0.8, 1.25], ['shrub', 150, 1.2, 1.8], ['log', 40, 0.6, 0.95]],
+  uplandShrub: [['hazel', 1300, 0.85, 1.3], ['regrow', 300, 1.0, 2.0, [0.7]], ['shrub', 300, 1.2, 1.8]],
+  openMeadow: [['shrub', 60, 1.0, 1.5], ['hazel', 60, 0.8, 1.1]],
+  rock: [['jack', 50, 0.5, 1.0], ['shrub', 60, 0.8, 1.2]],
+  // a burn (burns.js): the regrowth as thick as the burn's thicket and as tall as its age, the old forest's snags standing
+  burn: [['regrow', 2600, 1, 1, [0.45]], ['snag', 120, 1.0, 1.35]],
+  // the shore band, on top of whatever the cell grows (stage 3): per hectare of the band itself
+  shore: [['shoreShrub', 2600, 1.3, 2.0], ['shoreFir', 1000, 1.3, 2.6], ['shoreAlder', 550, 0.9, 1.4]],
 };
 // the ground kind's class where the NWI gives no code (Ontario, and the odd cell)
 const KIND_CLASS = { [KIND.openBog]: 'SS3', [KIND.coniferBog]: 'FO4', [KIND.shrubSwamp]: 'SS1', [KIND.marsh]: 'EM1', [KIND.wetMeadow]: 'meadow', [KIND.hardwoodSwamp]: 'FO1', [KIND.water]: 'meadow' };
 // how much of each layer is in the way of a walker, per plant a hectare at the class's numbers (brushAt)
-const BRUSH = { alder: 1 / 900, reed: 1 / 4500, pole: 1 / 1400, mat: 1 / 6000, shrub: 1 / 2000, tamarack: 1 / 2000, ash: 0, log: 0 };
+// (the upland's at half: the woods are walked in all day, the brush there slows the walk, it does not stop it)
+const BRUSH = { alder: 1 / 900, reed: 1 / 4500, pole: 1 / 1400, mat: 1 / 6000, shrub: 1 / 4000, tamarack: 1 / 2000, ash: 0, log: 0, fir: 1 / 3600, hazel: 1 / 3000, jack: 1 / 5000, regrow: 1 / 2400, snag: 0 };
 
 // The class of a 10 m cell: its NWI class (the second one on part of it, as land.js wetlandMix lays the patches), else
-// its ground kind's; null on the upland and in the water's own classes
+// its ground kind's, else on the upland its forest type's (stage 2; bare rock its own); null in the water's own classes
 function classOf(world, x, z) {
+  const c = wetClassOf(world, x, z);
+  if (c !== undefined) return c;
+  const kd = world.chAt('ground', x, z);
+  if (kd === KIND.rock) return 'rock';
+  if (kd === KIND.sand || kd === KIND.boulder) return 'openMeadow';
+  const F = FOREST[world.chAt('forest', x, z)];
+  return F ? (GROWS[F.key] ? F.key : null) : 'forestUnknown';
+}
+function wetClassOf(world, x, z) {
   const wc = world.chAt('wcls', x, z);
   if (wc) {
     const A = WCLASS[wclass1(wc)], B = WCLASS[wclass2(wc)];
@@ -76,7 +123,7 @@ function classOf(world, x, z) {
     }
     if (A) return null;
   }
-  return KIND_CLASS[world.chAt('ground', x, z)] || null;
+  return KIND_CLASS[world.chAt('ground', x, z)];
 }
 // how thick the brush is at a point, 0 open .. 1 a wall: the walk slows through it (player.js); 0 on a trail's tread
 // is the caller's (it knows where the trail is)
@@ -89,6 +136,8 @@ export function brushAt(world, x, z) {
   return Math.min(1, b);
 }
 
+const WET = new Set([...Object.keys(KIND_CLASS).map((k) => KIND_CLASS[k]), 'FO4', 'FO2', 'FO', 'FO1', 'SS1', 'SS', 'SS2', 'SS3', 'SS4', 'EM1', 'EM2', 'meadow']);
+const _B = {};
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _c = new THREE.Color();
 
 export class Thicket {
@@ -168,23 +217,44 @@ export class Thicket {
       const cx = ci * CHUNK + si * 10 + 5, cz = cj * CHUNK + sj * 10 + 5;
       if (!w.isReady(cx, cz)) { ready = false; continue; }
       const gi = Math.round(cx / 10), gj = Math.round(cz / 10);
-      const cls = classOf(w, cx, cz), G = cls && GROWS[cls];
-      if (!G) continue;
+      let cls = classOf(w, cx, cz);
+      const sd = w.shoreAt(cx, cz);
+      // a burn (stage 2): its regrowth and its snags in place of the stand's own understory, as far as the burn reached
+      const B = cls && !WET.has(cls) && sd > -4 ? burnLook(cx, cz, _B, Math.max(1, sd)) : null;
+      const burnt = B && B.kind !== 0 && (B.thicket > 0.05 || B.snags > 0.05);
+      if (burnt) cls = 'burn';
+      const G = cls ? GROWS[cls] : null;
+      const shore = sd > -8 && sd < 16; // the shore band (stage 3)
+      if (!G && !shore) continue;
+      // nothing on a cliff's face, thinner up a steep slope
+      const cb = w.chAt('cliff', cx, cz);
+      if (cb > 1 && cliffClass(cb) === CLIFF.face) continue;
+      const steep = 1 - 0.8 * smoothstep(0.45, 1.0, w.slopeAt ? w.slopeAt(cx, cz) : 0);
       // patches: the stand thicker and thinner over a few tens of metres (0.55 .. 1.35)
       const patch = 0.55 + 0.8 * smoothstep(0.3, 0.7, fbm(cx * 0.035 + 7, cz * 0.035 - 3, 2, 911));
-      for (let li = 0; li < G.length; li++) {
-        const [name, perHa, s0, s1, mix] = G[li], L = LAYERS[name];
-        let e = (perHa / 100) * patch * (name === 'reed' && cls === 'EM2' ? em2 : 1);
+      const all = shore ? [...(G || []), ...GROWS.shore] : G;
+      // (a shore of bare rock or sand keeps its band open: the ledges and the beaches)
+      const kd = shore ? w.chAt('ground', cx, cz) : 0, shoreK = kd === KIND.rock ? 0.25 : kd === KIND.sand ? 0.2 : 1;
+      for (let li = 0; li < all.length; li++) {
+        const [name, perHa, s0, s1, mix] = all[li], L = LAYERS[name];
+        let e = (perHa / 100) * patch * steep * (name === 'reed' && cls === 'EM2' ? em2 : 1);
+        if (li >= (G ? G.length : 0)) e *= shoreK;
+        if (burnt) e *= name === 'regrow' ? B.thicket * (1 - 0.6 * smoothstep(0.6, 0.9, w.chAt('cover', cx, cz) / 100)) : name === 'snag' ? B.snags : 1;
         if (name === 'mat' || name === 'reed') e *= 0.75 + 0.25 * patch; // (the low layers more even)
         const n = Math.floor(e) + (hash2(gi * 7 + li, gj, 4001) < e - Math.floor(e) ? 1 : 0);
         for (let q = 0; q < n; q++) {
           const H = (s) => hash2(gi * 977 + q * 13 + li * 101, gj * 613 + q * 7, s);
           // a point anywhere in the cell and up to 3 m over its edge, so the cells' edges blur
           const x = cx + (H(1) - 0.5) * 16, z = cz + (H(2) - 0.5) * 16;
-          if (w.shoreAt(x, z) < L.shore || this.blocked(x, z, L.pad)) continue;
-          const scale = (s0 + (s1 - s0) * H(3) ** 1.3) * (L.scale || 1), yaw = H(4) * Math.PI * 2, tint = 0.86 + H(5) * 0.2, fade = H(6);
+          const sx = w.shoreAt(x, z);
+          if (sx < L.shore || (L.band && sx > L.band[1]) || this.blocked(x, z, L.pad)) continue;
+          // (a burn's regrowth as tall as the burn is old: placement.js's thicket, 2 m at unit scale)
+          let scale = (s0 + (s1 - s0) * H(3) ** 1.3) * (L.scale || 1);
+          if (burnt && name === 'regrow') scale = Math.max(0.15, B.regrow * (0.55 + 0.7 * H(3)) / 2);
+          const yaw = H(4) * Math.PI * 2, tint = 0.86 + H(5) * 0.2, fade = H(6);
           let k;
           if (L.reeds) { const r = H(7), m = mix || [1, 0, 0], t = m[0] + m[1] + m[2]; k = r * t < m[0] ? 0 : r * t < m[0] + m[1] ? 1 : 2; }
+          else if (name === 'regrow') k = (H(7) < (mix ? mix[0] : 0.5) ? 0 : 1) + (H(10) < 0.5 ? 0 : 2); // (even variants aspen, odd jack pine)
           else k = L.pick ? L.pick(H(7)) : Math.floor(H(7) * L.variants.length);
           const bi = L.index[k];
           if (bi === undefined) continue;
@@ -288,6 +358,19 @@ export class Thicket {
         mesh.instanceColor.needsUpdate = true;
       }
     }
+  }
+  // how many standing stems (not the low mat, the reeds or the logs) stand within r of (x, z): a camera kept out of them
+  near(x, z, r) {
+    let n = 0;
+    for (const c of this.chunks.values()) {
+      if (Math.abs((c.ci + 0.5) * CHUNK - x) > CHUNK + r || Math.abs((c.cj + 0.5) * CHUNK - z) > CHUNK + r) continue;
+      for (const [bi, a] of c.lists) {
+        const L = this.buckets[bi].layer;
+        if (L.name === 'mat' || L.reeds || L.log) continue;
+        for (let o = 0; o < a.length; o += 9) if (Math.hypot(a[o] - x, a[o + 2] - z) < r) n++;
+      }
+    }
+    return n;
   }
   // how many plants the ring draws now, by layer (for the tests)
   counts() {
