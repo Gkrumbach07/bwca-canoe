@@ -11,7 +11,7 @@ import { burnLook } from './burns.js';
 import { CarryBalance, BALANCE } from './balance.js'; // the canoe's balance on the shoulders (the owner, 2026-10-31)
 import { fmtDist } from './units.js';
 import { hold } from './hold.js'; // the wetlands round: the haul over a beaver dam is a held E
-import { DAM, lowWater, brookWater, damShape } from './creeks.js'; // the beaver dams, the low creeks of late summer, the brooks underfoot
+import { DAM, lowWater, brookWater, damShape } from './creeks.js'; import { isFlowage } from './water-build.js'; // the beaver dams, the low creeks of late summer, the brooks underfoot
 
 export class Input {
   constructor() {
@@ -551,7 +551,7 @@ export class Player {
     // the whole hull must stay in the water (and on a tile that has finished streaming in): centre, bow and stern are tested
     const ok = (x, z, h) => {
       const fx = Math.cos(h), fz = -Math.sin(h);
-      return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5;
+      return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5 && this.floats(x, z); // (the season round: floats)
     };
     const newHeading = this.heading + this.yawRate * dt;
     if (ok(this.x, this.z, newHeading) || !ok(this.x, this.z, this.heading)) this.heading = newHeading; else this.yawRate = 0;
@@ -2045,9 +2045,11 @@ export class Player {
   }
   // A creek the bake marked seasonal runs low from late July through September (creeks.js lowWater): the hull drags
   // (a factor on the drag, as the sea's is) and scrapes the stones now and then; shallow is what the moment reads.
+  // The season round: a flowage drawn down in late summer the same, by the water left under the hull.
   creekDrag(dt) {
     const w = this.world, id = w.lakeIdAt(this.x, this.z), L = id > 0 ? w.lakes[id - 1] : null;
-    const low = L && L.creek && L.seasonal && this.season ? lowWater(this.season.doy) : 0;
+    let low = L && L.creek && L.seasonal && this.season ? lowWater(this.season.doy) : 0;
+    if (id > 0 && w.waterKinds && isFlowage(w.waterKinds[id])) low = Math.max(low, 1 - smoothstep(0.15, 0.55, w.levelAt(this.x, this.z) - w.heightAt(this.x, this.z)));
     this.shallow = low;
     if (low < 0.02) return 1;
     if (Math.abs(this.speed) > 0.25 && this.audio && (this._scrapeT -= dt * Math.abs(this.speed) * low) <= 0) {
@@ -2065,7 +2067,13 @@ export class Player {
   // the paddle's own test (updatePaddle ok): the hull's middle and both ends in the water, on a tile that is in
   paddleOk(x, z, h) {
     const w = this.world, fx = Math.cos(h), fz = -Math.sin(h);
-    return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5;
+    return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5 && this.floats(x, z);
+  }
+  // the season round: a drawn-down flowage's mud flats: the hull grounds where under 0.1 m of water is left (only there:
+  // a lake's shallows are as the shore distance has them)
+  floats(x, z) {
+    const w = this.world, id = w.lakeIdAt(x, z);
+    return !(id > 0 && w.waterKinds && isFlowage(w.waterKinds[id])) || w.levelAt(x, z) - w.heightAt(x, z) > 0.1;
   }
 }
 

@@ -3,7 +3,7 @@
 // three.js objects.
 import { TileGrid } from './grid.js';
 import { buildTerrainChunk, setLowCreeks } from './terrain-build.js'; // (wetlands round 2: setLowCreeks, the seasonal creeks' mud)
-import { buildWaterChunk, shoalBeds, lowCreeks } from './water-build.js'; // (d2 water: shoalBeds; wetlands round 2: lowCreeks)
+import { buildWaterChunk, shoalBeds, lowCreeks, flowageBeds, setFlowChannels, isFlowage } from './water-build.js'; // (d2 water: shoalBeds; wetlands round 2: lowCreeks; the season round: flowageBeds)
 import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
 import { Site } from './site.js';
@@ -21,11 +21,11 @@ let cfg = null;
 // season's date its message carries (tiles.js), after its last await, so no other build can move the date under it
 let burns = null;
 const burnDate = (m) => { if (m.date) setBurnDate(m.date[0], m.date[1]); };
-// wetlands round 2: the seasonal creeks (cfg.lowIds from tiles.js), their channels and their water by the date the build
-// was asked for (water-build.js lowCreeks)
+// wetlands round 2: the seasonal creeks, their channels and their water by the date the build was asked for (water-build.js
+// lowCreeks); the season round: every water's level by the date (cfg.waterKinds from tiles.js, water-build.js waterKinds)
 let lowSet = null;
 const lowOf = (m, buf, side, cell) => {
-  if (!lowSet) lowSet = new Set(cfg.lowIds || []);
+  if (!lowSet) lowSet = cfg.waterKinds || new Set(cfg.lowIds || []);
   return lowCreeks(buf, side, cell, lowSet, m.date ? m.date[1] : 0);
 };
 
@@ -188,6 +188,7 @@ async function buildFine(m) {
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
   grid.cdomById = cfg.cdomById || null; // d2 water: the lakes' CDOM (water-build.js cellColour)
   shoalBeds(grid); // d2 water: the bed up under the mapped rice, reeds and lilies (v4; the grid's arrays view buf)
+  flowageBeds(grid, cfg.waterKinds); // the season round: a flowage's shallow bed and its creek's channel
   const i0 = m.tx * g.tile, j0 = m.ty * g.tile;
   const ox = g.originX + i0 * g.cell, oz = g.originZ + j0 * g.cell;
   patchTile(buf, m.tx, m.ty, g); // d1 rapids: each drop where it really is, the rocks' shoals (the grid's arrays view buf)
@@ -196,7 +197,11 @@ async function buildFine(m) {
   const site = new Site(grid, cfg.exclusions);
   const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz, site });
   veg.bins.push(...lakeRockBins(grid, i0, j0, g.tile, ox, oz)); // d1 rapids: NHD's rocks above the water, as boulders
+  // the season round: the pads and reeds on the water of the date (its drop, lowCreeks), not the spring's; the terrain
+  // below still reads the baked level (its bank as it was shaped)
+  if (low) { const base = grid.levelCell; grid.levelCell = (i, j) => base.call(grid, i, j) - low[grid.local(i, j)] * 0.01; }
   const aquatic = placeAquatic(grid, i0, j0, g.tile, { seed: cfg.seed, originX: ox, originZ: oz, site, rice: cfg.riceById, riceShare: cfg.riceShare, riceExtra: cfg.riceExtra, lakeBeds: cfg.lakeBeds }); // (d1 lakes: rice by lake; d2 water: by its acres in the mapped beds)
+  delete grid.levelCell; // (the season round: back to the baked level)
   clearPlants(aquatic.bins, ox, oz); // d1 rapids: no pads or reeds where the water falls or boils
   // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
@@ -293,7 +298,7 @@ async function buildDetail(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); setMireExclusions(m.exclusions); setLowCreeks(new Set(m.lowIds || [])); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
+  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); setMireExclusions(m.exclusions); setFlowChannels(m.chans); setLowCreeks(new Set(m.lowIds || [])); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
   if (m.type === 'chunk') {
     try { const r = await buildDetail(m); self.postMessage(r.msg, r.transfer); } catch (err) { self.postMessage({ type: 'error', key: m.key, error: String((err && err.message) || err) }); }
     return;
