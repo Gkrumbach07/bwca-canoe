@@ -16,6 +16,12 @@ RELAY=ws://localhost:8787 npm test
 In development the game reads `?relay=ws://localhost:<port>` to use another port. The two-browser rig is
 `scripts/coop/two-browsers.mjs` (two headless Chromiums join one room and paddle; it writes a report and a screenshot pair).
 
+## Live
+
+`https://bwca-canoe-room.gagekrumbach.workers.dev` (deployed 2026-11-01 with `npx wrangler deploy`; the repository
+variable `RELAY_URL` is `wss://bwca-canoe-room.gagekrumbach.workers.dev`). Two clients on one machine measured about
+50 ms a message through it.
+
 ## Deploying (once)
 
 The R2 bucket already lives in a Cloudflare account; the relay goes in the same one.
