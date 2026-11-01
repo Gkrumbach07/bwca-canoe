@@ -14,6 +14,7 @@ import { unpackTint, setLand } from './land.js'; // d2 land: the rocks' bedrock 
 import { loadBurns, setBurnDate } from './burns.js';
 import { decodeChunk, chunkGround, buildChunk } from './detail-build.js'; // LiDAR detail (docs/detail.md)
 import { setBrookSegs } from './brook-cut.js'; // wetlands round 2: the brooks' lines, for their cut in the detail
+import { setMireExclusions } from './mire-relief.js'; // the density round: the mire's relief kept off the trails and sites
 
 let cfg = null;
 // the real burns (burns.js): the table read once, as the worker starts; each build waits for it and then takes the
@@ -135,7 +136,7 @@ function collisionOf(bins, size) {
 }
 
 // the typed arrays of a terrain chunk (terrain-build.js), handed over rather than copied
-const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer, ...(t.parts ? [t.parts.buffer] : []), ...(t.land ? [t.land.buffer] : [])];
+const terrainBuffers = (t) => [t.pos.buffer, t.nrm.buffer, t.splatA.buffer, t.splatB.buffer, t.splatC.buffer, t.floor.buffer, t.idx.buffer, ...(t.parts ? [t.parts.buffer] : []), ...(t.land ? [t.land.buffer] : []), ...(t.relief ? [t.relief.buffer] : [])];
 
 // round A-C: a fine tile's terrain is one mesh of ~200 000 triangles, so a view, a mirror or a shadow cascade that
 // touched any corner of it drew all of it (a 300 m cascade drew three whole tiles, 1.1 M triangles). Its triangles
@@ -286,12 +287,13 @@ async function buildDetail(m) {
   const transfer = [c.pos.buffer, c.own.buffer, c.h10.buffer, c.nOwn.buffer, c.n10.buffer, c.splatA.buffer, c.splatB.buffer, c.splatC.buffer, c.floor.buffer, c.idx.buffer, c.parts.buffer, c.deep.buffer];
   if (c.h5) transfer.push(c.h5.buffer, c.n5.buffer);
   if (c.land) transfer.push(c.land.buffer);
+  if (c.relief) transfer.push(c.relief.buffer);
   return { msg: { type: 'chunk', key: m.key, chunk: c }, transfer };
 }
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); setLowCreeks(new Set(m.lowIds || [])); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
+  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); setMireExclusions(m.exclusions); setLowCreeks(new Set(m.lowIds || [])); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
   if (m.type === 'chunk') {
     try { const r = await buildDetail(m); self.postMessage(r.msg, r.transfer); } catch (err) { self.postMessage({ type: 'error', key: m.key, error: String((err && err.message) || err) }); }
     return;

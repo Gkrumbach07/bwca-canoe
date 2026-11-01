@@ -4,6 +4,7 @@
 import { fbm, lerp, smoothstep, clamp } from './rng.js';
 import { rockAt, calmAt, meadowAt, knobAt } from './fields.js';
 import { burnLook, burnOpenAt } from './burns.js';
+import { mireAttr, coverByte } from './mire-relief.js'; // the density round: the wetlands' floor (terrain.js aRelief)
 
 // the cliff band strength (site.js CLIFF.band) a cell needs to be a cliff
 const CLIFF_BAND = 0.45, TALUS_MIN = 0.4;
@@ -29,6 +30,8 @@ const C = {
   // the footsteps read classes by index): a cliff face, the dark green-grey the Shield takes under its lichens
   // and the water that runs down it, and the scree under a cliff, a cooler, darker grey than the granite knobs
   cliff: hex(0x606659), talus: hex(0x6b6b64),
+  // the density round: a wetland's floor that is not sedge (a bog's sphagnum, a swamp's moss and leaves), never the duff
+  moss: hex(0x87ad52),
 };
 // moss on the forest floor, lit and in the canopy's shade: the pair the duff's own lit/shade pair is mixed with
 const MOSS = { lit: hex(0x87ad52), shade: hex(0x405f3a) };
@@ -75,6 +78,7 @@ export function classify(grid, x, z, shade, pre) {
   }
   if (burnOpenAt(x, z, sd) >= 0.5) return I.burn; // an open burn (burns.js: a wildfire's first 25 years or so)
   if ((pre.meadow >= 0 ? pre.meadow : meadowAt(x, z, sd, pre.wet || 0)) >= 0.5) return I.meadow; // same field the forest uses for its openings (d2 land: the survey's, site.js meadow)
+  if (pre.wland >= 0.5) return I.moss;
   if (shade >= 0.55) return I.forestDark;
   return sunnyField(x, z) >= 0 ? I.forestLight : I.forest;
 }
@@ -95,10 +99,10 @@ export function groundPre(grid, x, z, sd, site, pre) {
   pre.sd = sd;
   pre.slope = sd < 0 ? 0 : rockSlope(grid, x, z);
   pre.wall = 0; pre.brink = 0; pre.bog = 0; pre.wet = 0; pre.open = 0; pre.beach = 0;
-  pre.meadow = -1; pre.sphag = 0; pre.tR = 1; pre.tG = 1; pre.tB = 1; pre.mire = -1;
+  pre.meadow = -1; pre.sphag = 0; pre.tR = 1; pre.tG = 1; pre.tB = 1; pre.mire = -1; pre.wland = 0;
   if (site && site.land) {
     pre.tR = site.at(site.tintR, x, z); pre.tG = site.at(site.tintG, x, z); pre.tB = site.at(site.tintB, x, z);
-    if (sd >= 0) { pre.meadow = site.at(site.meadow, x, z); pre.sphag = site.at(site.sphag, x, z); if (site.mire) pre.mire = site.at(site.mire, x, z); }
+    if (sd >= 0) { pre.meadow = site.at(site.meadow, x, z); pre.sphag = site.at(site.sphag, x, z); if (site.mire) pre.mire = site.at(site.mire, x, z); if (site.wland) pre.wland = site.at(site.wland, x, z); }
   }
   if (sd >= 0 && site) {
     pre.rock = site.at(site.bare, x, z); pre.cliff = site.at(site.cliff, x, z); pre.talus = site.at(site.talus, x, z);
@@ -112,7 +116,7 @@ export function groundPre(grid, x, z, sd, site, pre) {
   } else { pre.rock = sd < 0 ? 0 : rockAt(pre.slope, sd, x, z); pre.cliff = 0; pre.talus = 0; }
   return pre;
 }
-const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1, meadow: -1, sphag: 0, tR: 1, tG: 1, tB: 1, mire: -1 };
+const _pre = { sd: 0, slope: 0, rock: 0, cliff: 0, talus: 0, wall: 0, brink: 0, bog: 0, wet: 0, open: 0, beach: 0, depth: -1, meadow: -1, sphag: 0, tR: 1, tG: 1, tB: 1, mire: -1, wland: 0 };
 // the wet ground's moss: a bog's floor is sphagnum, not needle duff (the ground cover reads it too, tile-worker.js)
 export const bogMoss = (wet) => 0.8 * smoothstep(0.55, 0.9, wet);
 export function groundClass(grid, x, z, shade = 0, site = null) {
@@ -157,7 +161,13 @@ export const SPLAT = [
 export const SPLAT_SUNNY = C.forestLight; // the duff's lit colour in the broad sunny stands
 // d2 land: an open bog's floor, where the survey maps one (site.js sphag; terrain.js lays it over the moss): the ochre and
 // olive of sphagnum and leatherleaf in summer, patches of the red sphagnum through it, and their shade
-export const SPHAGNUM = { lit: hex(0xa59b55), rust: hex(0x9a5e3f), shade: hex(0x5a5733) };
+// (the density round: greener, the red in smaller spots; the big ochre-and-rust patches read as bare earth)
+// (the density round, after review: the hummocks' tops ochre, rust and bronze in patches as the photos have them, the
+// hollows a wet green, olive between)
+export const SPHAGNUM = { lit: hex(0x939a4e), rust: hex(0x8a4a3c), shade: hex(0x4e5a30), ochre: hex(0xb09a4a), bronze: hex(0x8d6a3c), wet: hex(0x5d7a3a) };
+// the density round: a swamp's floor under the alder and the black ash (mire-relief.js swamp floor, terrain.js): dark moss,
+// last year's leaves, the fern's green
+export const SWAMP_FLOOR = { moss: hex(0x56703a), litter: hex(0x6e5d44), fern: hex(0x5f8a3c) };
 export const BED_PALETTE = [C.bedSand, C.bedShelf, C.bedWeed, C.bedDeep, C.bedHole];
 export const BED_DEPTH_SCALE = 16; // aFloor.w is the bed depth over this many metres
 
@@ -262,7 +272,8 @@ export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
   const forest = 1 - burn - meadow;
   // (no sunny stand along the water: the forest's edge there is the dark wall the shoreline pass wants)
   const sunny = across(sunnyField(x, z), 0.03) * smoothstep(8, 22, pre.sd);
-  const moss = Math.max(mossAt(x, z), pre.bog || 0) * (1 - 0.6 * sunny);
+  // (the density round: a wetland's floor is all moss, sphagnum or sedge: no bare duff in a bog or a swamp)
+  const moss = Math.max(Math.max(mossAt(x, z), pre.bog || 0) * (1 - 0.6 * sunny), pre.wland || 0);
   // The waterline (the shoreline pass): the forest runs to the water, so the land side of the shore is a thin band
   // at the foot of the trees, under their crowns: dark wet duff and roots (the margin), or a ledge of dark wet
   // granite where the shore is rocky (ledgeAt); on the few real beaches (a sheltered, gentle, sandy cove: site.js
@@ -394,6 +405,8 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   // d2 land: per vertex, the bedrock's tint of the rock over the granite (- 1, signed) and the bog's sphagnum (terrain.js
   // aLand); all 0 where the tile has no survey (a v3 tile, the far terrain), which draws exactly as before
   const lnd = site && site.land ? [] : null;
+  // the mire's floor (mire-relief.js mireAttr): on this coarse mesh its pools' share and the swamp's floor, no shape
+  const rel = lnd ? [] : null, ra = [0, 0, 0, 0];
   const s8 = (v) => Math.round(Math.min(1, Math.max(-1, v)) * 127);
   const twins = []; // [land, bed] vertex pairs at the waterline: they share one normal
   const tees = [];  // [mid, end, end]: a subdivided cell's mid-edge vertex against an undivided neighbour
@@ -422,6 +435,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);
     for (let k = 0; k < 4; k++) { sa.push(q8(wA[k])); sb.push(q8(wB[k])); sc.push(q8(wC[k])); fl.push(q8(wf[k])); }
     if (lnd) lnd.push(s8(pre.tR - 1), s8(pre.tG - 1), s8(pre.tB - 1), s8(landW(pre, sd)));
+    if (rel) { mireAttr(grid, x, z, sd, ra, false); rel.push(s8(ra[0]), s8(ra[1]), s8(ra[2]), s8(ra[3])); }
   };
   const vert = (ii, jj) => {
     const key = (ii - 2 * (i0 - 1)) * stride + (jj - 2 * (j0 - 1));
@@ -483,6 +497,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
         sa[m * 4 + c] = (sa[e0 * 4 + c] + sa[e1 * 4 + c]) >> 1; sb[m * 4 + c] = (sb[e0 * 4 + c] + sb[e1 * 4 + c]) >> 1;
         sc[m * 4 + c] = (sc[e0 * 4 + c] + sc[e1 * 4 + c]) >> 1; fl[m * 4 + c] = (fl[e0 * 4 + c] + fl[e1 * 4 + c]) >> 1;
         if (lnd) lnd[m * 4 + c] = (lnd[e0 * 4 + c] + lnd[e1 * 4 + c]) >> 1; // d2 land
+        if (rel) rel[m * 4 + c] = (rel[e0 * 4 + c] + rel[e1 * 4 + c]) >> 1;
       }
     }
   };
@@ -526,6 +541,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
       if (v < 0) continue;
       const o = grid.local(i, j) * CELL_SPLAT;
       for (let c = 0; c < 4; c++) { cellSplat[o + c] = sa[v * 4 + c]; cellSplat[o + 4 + c] = sb[v * 4 + c]; }
+      cellSplat[o + 7] = coverByte(grid, i, j); // (the density round: the wetland's cover, mire-relief.js; the shore's byte is unused)
       cellSplat[o + 8] = sc[v * 4]; cellSplat[o + 9] = sc[v * 4 + 1]; cellSplat[o + 10] = fl[v * 4]; cellSplat[o + 11] = fl[v * 4 + 1];
     }
   }
@@ -575,5 +591,5 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
   }
   const nrm = new Int8Array(nv * 3);
   for (let k = 0; k < nv * 3; k++) nrm[k] = Math.round(cur[k] * 127);
-  return { pos: new Float32Array(pos), nrm, splatA: new Uint8Array(sa), splatB: new Uint8Array(sb), splatC: new Uint8Array(sc), floor: new Uint8Array(fl), idx: new Uint32Array(idx), ...(lnd ? { land: new Int8Array(lnd) } : {}) };
+  return { pos: new Float32Array(pos), nrm, splatA: new Uint8Array(sa), splatB: new Uint8Array(sb), splatC: new Uint8Array(sc), floor: new Uint8Array(fl), idx: new Uint32Array(idx), ...(lnd ? { land: new Int8Array(lnd) } : {}), ...(rel ? { relief: new Int8Array(rel) } : {}) };
 }

@@ -8,6 +8,7 @@ import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
 import { cascadeHooks } from './sunlight.js';
 import { burnDate } from './burns.js';
+import { setMireExclusions } from './mire-relief.js';
 import { DetailStreamer } from './detail.js'; // the LiDAR detail near the player (docs/detail.md)
 import { Thicket } from './thicket.js'; // the density round: the wetlands filled in round the camera
 
@@ -435,6 +436,7 @@ export class TileManager {
     this.detail.onTouched = (rect) => { outfitterGroundMoved(rect); this.thicket.touched(rect); };
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
+    setMireExclusions(exclusions); // (the density round: mire-relief.js asked on the main thread knows the trails and sites too)
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2));
     // wetlands round 2: the brooks' lines for their cut in the LiDAR detail (brook-cut.js), as segments
     const bs = [];

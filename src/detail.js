@@ -222,6 +222,7 @@ export class DetailStreamer {
     geo.setAttribute('aSplatC', new THREE.BufferAttribute(R.splatC, 4, true));
     geo.setAttribute('aFloor', new THREE.BufferAttribute(R.floor, 4, true));
     geo.setAttribute('aLand', new THREE.BufferAttribute(R.land || new Int8Array(R.nv * 4), 4, true));
+    geo.setAttribute('aRelief', new THREE.BufferAttribute(R.relief || new Int8Array(R.nv * 4), 4, true)); // the mire's floor (mire-relief.js)
     geo.setIndex(new THREE.BufferAttribute(R.idx, 1));
     c.geo = geo; c.sig = -1;
     // a 5 m chunk is four meshes over the same arrays, one per 640 m quarter (a 2 m chunk hides one); a 2 m chunk one
@@ -560,10 +561,10 @@ export class DetailStreamer {
     let tris = 0, verts = 0, bytes = 0;
     for (const r of [2, 5]) for (const c of this.installed[r].values()) {
       tris += c.res.idx.length / 3; verts += c.res.nv;
-      for (const a of [c.res.pos, c.res.own, c.res.h10, c.res.h5, c.res.nOwn, c.res.n5, c.res.n10, c.res.splatA, c.res.splatB, c.res.splatC, c.res.floor, c.res.land, c.res.idx, c.nrm]) if (a) bytes += a.byteLength;
+      for (const a of [c.res.pos, c.res.own, c.res.h10, c.res.h5, c.res.nOwn, c.res.n5, c.res.n10, c.res.splatA, c.res.splatB, c.res.splatC, c.res.floor, c.res.land, c.res.relief, c.res.idx, c.nrm]) if (a) bytes += a.byteLength;
     }
     let held = 0;
-    for (const c of this.chunks.values()) if (c.state === 'built' && c.res) for (const k of ['pos', 'own', 'h10', 'h5', 'nOwn', 'n5', 'n10', 'splatA', 'splatB', 'splatC', 'floor', 'land', 'idx']) if (c.res[k]) held += c.res[k].byteLength;
+    for (const c of this.chunks.values()) if (c.state === 'built' && c.res) for (const k of ['pos', 'own', 'h10', 'h5', 'nOwn', 'n5', 'n10', 'splatA', 'splatB', 'splatC', 'floor', 'land', 'relief', 'idx']) if (c.res[k]) held += c.res[k].byteLength;
     const s = this.stats;
     return {
       active: this.active, in2: [...this.installed[2].values()].map((c) => c.name), in5: [...this.installed[5].values()].map((c) => c.name),

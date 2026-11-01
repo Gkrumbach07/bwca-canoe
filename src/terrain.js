@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { applyLook } from './shading.js';
 import { applyWet } from './weather.js';
-import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE, BED_MATS, SPHAGNUM } from './terrain-build.js';
+import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE, BED_MATS, SPHAGNUM, SWAMP_FLOOR } from './terrain-build.js';
 import { mireIce } from './land.js';
 import { smoothstep } from './rng.js';
 
@@ -43,7 +43,7 @@ export const groundUniforms = {
   uSplatEdge: { value: new THREE.Vector3(0.38, 0.03, 1) },
   uRelief: { value: 0.22 },  // how far the fine relief tilts the shading normal
   // d2 land: the bog's sphagnum (terrain-build.js SPHAGNUM): its ochre, its rust patches, its shade
-  uSphag: { value: [v3(SPHAGNUM.lit), v3(SPHAGNUM.rust), v3(SPHAGNUM.shade)] },
+  uSphag: { value: [v3(SPHAGNUM.lit), v3(SPHAGNUM.rust), v3(SPHAGNUM.shade), v3(SPHAGNUM.ochre), v3(SPHAGNUM.bronze), v3(SPHAGNUM.wet)] },
   // the wetlands' standing water (groundMire): the tea-dark water of a bog pool or a marsh's open water, and the wet
   // peat round it (a multiplier on the ground's colour)
   uMirePool: { value: new THREE.Vector3(0.03, 0.024, 0.014) },
@@ -53,6 +53,9 @@ export const groundUniforms = {
   // draws the ground (the grass tufts, which take the season's tint of their own, groundcover.js uGrassTint, so theirs
   // is this over that)
   uMireIce: { value: new THREE.Vector3(0, 0, 0) },
+  // the density round: the mire's floor (mire-relief.js, aRelief). The swamps' floor under the alder and the ash: dark
+  // moss, last year's leaves and fern
+  uSwampFloor: { value: [v3(SWAMP_FLOOR.moss), v3(SWAMP_FLOOR.litter), v3(SWAMP_FLOOR.fern)] },
   uMeadowSeason: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
 };
 // The water standing on wet ground mirrors the sky, wet weather or not (weather.js wetSheen is only the rain's film):
@@ -111,7 +114,7 @@ uniform vec3 uGroundChar[2];
 uniform vec4 uSplat;
 uniform vec3 uMottle;
 uniform vec3 uSplatEdge;
-uniform vec3 uSphag[3];
+uniform vec3 uSphag[6];
 // d2 land: what the terrain's own vertices say of the survey (terrain-build.js aLand) before it calls groundColor: the
 // bedrock's tint of the rock (1 = the granite as drawn) and the bog's sphagnum over the moss. The ground cover and the trail
 // decal leave them as they are, and so draw as before.
@@ -122,6 +125,11 @@ float groundSphagnum = 0.0;
 uniform vec3 uMirePool, uMirePeat, uMireIce;
 uniform vec3 uMeadowSeason[2];
 float groundMire = 0.0, groundPool = 0.0;
+// the density round (mire-relief.js mireAttr, the terrain's aRelief): the hummocks' shape here (-1 a hollow .. 1 a top),
+// how much this is a mire floor whose pools lie in its hollows (0: the old painted pools), the water there (the pool
+// itself on the 2 m ground, the pools' share on a coarser one) and the swamp's floor
+uniform vec3 uSwampFloor[3];
+float groundHummock = 0.0, groundMireK = 0.0, groundPoolT = 0.0, groundSwamp = 0.0;
 // (wetlands round 2: 1 where the terrain itself calls groundColor, which takes the meadow's season in full; how glossy a
 // pool is, 1 open water .. matt ice)
 float groundSeasonK = 0.0, groundPoolGloss = 1.0;
@@ -304,15 +312,30 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     groundCanopy = s;
     // (d2 land: the moss goes to the bog's sphagnum, ochre with rust patches a few metres across, where the survey says bog)
     vec3 mossC = groundShaded(1, uGroundLit[1], s);
+    mossC *= mix(vec3(1.0), vec3(0.78, 0.82, 0.7), groundMireK); // (the density round: a wetland's moss is darker and wetter than the woods' cushions)
     if (groundSphagnum > 0.004) {
-      float rust = smoothstep(0.55, 0.72, lookFbm(p / 5.5 + vec2(2.3, -6.1), 61u, 2) + 0.15 * n1 * fb);
-      vec3 sph = mix(mix(uSphag[0], uSphag[1], rust * 0.85), uSphag[2], s * 0.8);
+      // (the density round: the hummocks' tops in patches of ochre, rust and bronze, olive between, the hollows a wet
+      // green; where the ground can't draw the hummocks, far off, the patches from the noise alone)
+      float pn = lookFbm(p / 3.2 + vec2(2.3, -6.1), 61u, 2) + 0.1 * n1 * fb, pr = lookFbm(p / 2.1 + vec2(-4.4, 1.6), 67u, 2);
+      float top = smoothstep(0.0, 0.45, groundHummock + 0.5 * (pn - 0.5));
+      vec3 topC = mix(uSphag[3], uSphag[1], 0.85 * smoothstep(0.52, 0.66, pr));
+      topC = mix(topC, uSphag[4], smoothstep(0.58, 0.7, pn) * (1.0 - smoothstep(0.5, 0.62, pr)));
+      vec3 sph = mix(uSphag[0], topC, 0.85 * top);
+      sph = mix(sph, uSphag[5], smoothstep(0.05, 0.55, -groundHummock));
+      sph = mix(sph, uSphag[2], s * 0.8);
       mossC = mix(mossC, sph, groundSphagnum);
+    }
+    // (the density round: a swamp's floor, dark moss with last year's leaves in drifts and the fern's green through it)
+    if (groundSwamp > 0.004) {
+      float lit = 0.55 * smoothstep(0.58, 0.72, lookFbm(p / 1.8 + vec2(-3.1, 4.4), 65u, 2) + 0.12 * n2 * fb);
+      float fern = smoothstep(0.55, 0.7, lookFbm(p / 1.7 + vec2(6.2, 1.3), 66u, 2));
+      vec3 sw = mix(mix(uSwampFloor[0], uSwampFloor[1], lit), uSwampFloor[2], fern * (1.0 - lit));
+      mossC = mix(mossC, mix(sw, uGroundShade[1], s * 0.6), groundSwamp);
     }
     // the wetlands (the owner, 2026-10-31: "make it look more like a bog"): the ground darker with the water in it, and
     // water standing among the hummocks and the sedge in pools a metre to a few across, more of it the wetter the
     // ground, a dark wet rim round each; none on the rock
-    if (groundMire > 0.004) {
+    if (groundMire > 0.004 || groundMireK > 0.004) {
       poolK = smoothstep(0.2, 0.7, groundMire) * (1.0 - groundRock);
       poolN = lookFbm(p / 3.4 + vec2(-4.7, 8.3), 62u, 3) + 0.24 * (lookFbm(p / 0.8 + vec2(1.9, -2.2), 63u, 2) - 0.5) * lookFade(0.8, px);
       poolT = 0.77 - 0.2 * groundMire;
@@ -333,11 +356,22 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
   }
   c *= mottle;
   c *= vec3(1.0 + 0.06 * m20, 1.0, 1.0 - 0.06 * m20); // the slow mottle drifts a touch warm and cool too
-  if (fl.z <= 0.5 && groundMire > 0.004) {
+  if (fl.z <= 0.5 && (groundMire > 0.004 || groundMireK > 0.004)) {
     c *= mix(vec3(1.0), uMirePeat, groundMire * (1.0 - groundRock));
     float edge = max(0.02, px * 0.06);
     groundPool = smoothstep(poolT, poolT + edge, poolN) * poolK;
-    c *= 1.0 - 0.3 * smoothstep(poolT - 0.07, poolT, poolN) * poolK * (1.0 - groundPool);
+    float rim = smoothstep(poolT - 0.07, poolT, poolN) * poolK;
+    // (the density round: on a mire floor the water lies in the hollows the relief made, as much as the regime leaves
+    // standing on the date: a saturated bog only its deepest, a marsh in May all its low ground; a ragged edge)
+    if (groundMireK > 0.004) {
+      float rn = smoothstep(0.25, 0.75, poolN), t = 1.0 - groundPoolT;
+      float np = smoothstep(t, t + max(0.06, px * 0.1), rn) * (1.0 - groundRock);
+      groundPool = mix(groundPool, np, groundMireK);
+      rim = mix(rim, smoothstep(t - 0.18, t, rn) * step(0.01, groundPoolT), groundMireK);
+      // (the hollows in the hummocks' shade, the tops catching the light: the relief read at eye level)
+      c *= mix(vec3(1.0), vec3(1.1, 1.08, 1.03), max(groundHummock, 0.0) * groundMireK) * (1.0 - 0.32 * smoothstep(0.0, 0.8, -groundHummock) * groundMireK);
+    }
+    c *= 1.0 - 0.3 * rim * (1.0 - groundPool);
     // (wetlands round 2: frozen from freeze-up to ice-out, the lake's dates: pale matt ice with snow drifted on it in the
     // winter, and as it goes out the slush, dark and wet, the melt opening first round the edges)
     vec3 poolC = uMirePool;
@@ -359,17 +393,17 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 fl, float px) { return groundCol
 
 export function makeTerrainMaterial() {
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const vary = 'varying vec4 vSplatA;\nvarying vec4 vSplatB;\nvarying vec4 vSplatC;\nvarying vec4 vFloor;\nvarying vec4 vLand;\nvarying vec3 vLookWorld;';
+  const vary = 'varying vec4 vSplatA;\nvarying vec4 vSplatB;\nvarying vec4 vSplatC;\nvarying vec4 vFloor;\nvarying vec4 vLand;\nvarying vec4 vRelief;\nvarying vec3 vLookWorld;';
   m.onBeforeCompile = (shader) => {
     applyLook(shader, { wrap: 0 });
     Object.assign(shader.uniforms, groundUniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nattribute vec4 aSplatA;\nattribute vec4 aSplatB;\nattribute vec4 aSplatC;\nattribute vec4 aFloor;\nattribute vec4 aLand;\n' + vary)
-      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvSplatA = aSplatA; vSplatB = aSplatB; vSplatC = aSplatC; vFloor = aFloor; vLand = aLand;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+      .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nattribute vec4 aSplatA;\nattribute vec4 aSplatB;\nattribute vec4 aSplatC;\nattribute vec4 aFloor;\nattribute vec4 aLand;\nattribute vec4 aRelief;\n' + vary)
+      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvSplatA = aSplatA; vSplatB = aSplatB; vSplatC = aSplatC; vFloor = aFloor; vLand = aLand; vRelief = aRelief;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n' + vary + '\n' + glslGround)
-      .replace('#include <color_fragment>', '\tfloat lookPx = length( fwidth( vLookWorld.xz ) );\n\tgroundRockTint = vec3( 1.0 ) + vLand.xyz; groundSeasonK = 1.0; groundSphagnum = max( vLand.w, 0.0 ); groundMire = max( -vLand.w, 0.0 ) + 0.85 * smoothstep( 0.55, 0.95, vLand.w );\n\tdiffuseColor.rgb *= groundColor( vLookWorld.xz, vSplatA, vSplatB, vSplatC, vFloor, lookPx );')
-      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) * ( 1.0 - groundPool ) ); normal = normalize( mix( normal, mat3( viewMatrix ) * vec3( 0.0, 1.0, 0.0 ), groundPool ) ); }')
+      .replace('#include <color_fragment>', '\tfloat lookPx = length( fwidth( vLookWorld.xz ) );\n\tgroundRockTint = vec3( 1.0 ) + vLand.xyz; groundSeasonK = 1.0; groundSphagnum = max( vLand.w, 0.0 ); groundMire = max( -vLand.w, 0.0 ) + 0.85 * smoothstep( 0.55, 0.95, vLand.w );\n\tgroundHummock = vRelief.x; groundMireK = smoothstep( 0.02, 0.18, vRelief.y ); groundPoolT = clamp( ( vRelief.y - 0.2 ) / 0.8, 0.0, 1.0 ); groundSwamp = vRelief.z;\n\tdiffuseColor.rgb *= groundColor( vLookWorld.xz, vSplatA, vSplatB, vSplatC, vFloor, lookPx );')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ) * ( 1.0 + 1.5 * groundMireK ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) * ( 1.0 - groundPool ) ); normal = normalize( mix( normal, mat3( viewMatrix ) * vec3( 0.0, 1.0, 0.0 ), groundPool ) ); }')
       .replace('#include <opaque_fragment>', mireSheen('groundPool * 0.9 * groundPoolGloss'));
     // rain: the soil darkens most, the rock half as much and shines a little more; less sheen under the canopy
     applyWet(shader, { porosity: 'groundPorosity', gloss: '( 0.3 + 0.4 * groundRock ) * ( 1.0 - 0.7 * groundCanopy ) * ( 1.0 - vFloor.z )' });
@@ -389,6 +423,8 @@ export function makeTerrainMesh(res, material) {
   geo.setAttribute('aFloor', new THREE.BufferAttribute(res.floor, 4, true));
   // d2 land: the survey's tint and sphagnum per vertex (signed, 0 = none: a v3 tile and the far terrain carry zeros)
   geo.setAttribute('aLand', new THREE.BufferAttribute(res.land || new Int8Array((res.pos.length / 3) * 4), 4, true));
+  // the mire's floor (mire-relief.js mireAttr): the hummocks' shape, the pools, the swamp's floor (0 = the old ground)
+  geo.setAttribute('aRelief', new THREE.BufferAttribute(res.relief || new Int8Array((res.pos.length / 3) * 4), 4, true));
   geo.setIndex(new THREE.BufferAttribute(res.idx, 1));
   geo.computeBoundingSphere();
   const mesh = new THREE.Mesh(geo, material);
