@@ -19,7 +19,7 @@ env:
   # out to the LiDAR's edge); saves from v3, v4, v5 and v6 carried by src/migrate/ (docs/migration.md). bwca/v6/ and
   # bwca/v4/ kept for rollback; bwca/v5/ is mixed (overwritten 2026-10-31) and not a rollback. A new release always
   # goes to a new folder name: list the bucket first.
-  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v7-water/
+  DATA_URL_DEFAULT: https://data.gagekrumbach.com/bwca/v8/
 
 concurrency:
   group: pages
