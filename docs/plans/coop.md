@@ -320,8 +320,10 @@ fire's fuel bin (`firefuel`, where 'ground', `at.fuel` the ring's key), the grat
 - **One group, one site.** The campsite registry holds the group (`'player'` covers every player's tent), so friends
   pitch at one site.
 - **A purse each, and giving.** Each player's own `profile.money`. *Give money* on the dot at a friend within 3 m
-  (an amount: $5, $10, $20, all), *Give* on an item's right-click to a friend within 3 m (into their hands, else the
-  best fit, else a pile at their feet). Both are messages to the friend's browser: `profile.earn(n, 'from Ada')`.
+  (an amount: $5, $10, $20, all), a message to the friend's browser: `profile.earn(n, 'from Ada')`. **Things are handed
+  over by dropping them** (the owner, 2026-11-01: "i dont like the give item to person. id rather just have them drop on
+  ground"): drop it or set the pack down, and the friend sees it and picks it up (stream A's piles). There is no *Give*
+  verb on things.
 - **A guest's things are kept by the host.** A guest's inventory and purse live in the host's season, under the
   visitor's id (`coop-guests` in the host's save), sent by the guest every 30 s and on leave; a guest who joins again
   gets theirs back, and a first visit starts from the starter kit in a canoe beside the host.
@@ -333,7 +335,7 @@ fire's fuel bin (`firefuel`, where 'ground', `at.fuel` the ring's key), the grat
 `src/coop-share.js` (stream A) and `src/coop-give.js` (stream B), joined on `claude/coop-phase2`; the relay forwards any
 other lowercase type, to one client with `to`, up to 256 KB (deployed 2026-11-01).
 - **Wire:** `pub` (a player's public things, ≤4 Hz), `op`/`opr` (take or put in a friend's container, answered by its
-  owner; 3 s timeout, undone), `gift`/`giftack` (money or a loose item; refunded on a refusal or no answer), `claim`,
+  owner; 3 s timeout, undone), `gift`/`giftq`/`giftack` (money only; see below), `claim`,
   `yours`, `keep` (a guest's inventory and purse, kept by the host under `coop-guests` by the visitor's id, every 30 s,
   on Leave and pagehide).
 - **Measured** (two headless browsers through `wrangler dev` +100 ms, after the join): 11/11 in `scripts/coop/share.mjs`
@@ -346,6 +348,10 @@ other lowercase type, to one client with `to`, up to 256 KB (deployed 2026-11-01
   friend's ring (`op douse`); one grate per ring (a friend's grate is theirs, cooked by their browser, its progress in
   their `pub`); a friend's canoe load drawn in their hull; their canoe and hung barrel reachable as tabs. After the
   join: `share.mjs` 17/17, `give.mjs` 15/15.
+- **After the owner played it** (2026-11-01): *Give to …* on things is gone (items, containers and long things alike, and
+  their wire): a thing changes hands by being dropped and picked up. The Give money panel lets go of the mouse (the chase
+  let go only on its own frames, not while a conversation's shot held the camera, camera.js). Friends are on the map
+  (the glance, the corner, the sheet and the map table: the HUD's map draws each in their shirt with their name, live).
 - **Still not:** dropping onto a friend's tab button (its grid works); containers by request (a pot onto a friend's
   grate, a pack into their canoe); a pitch spot checked against a friend's tent; a gift's ack lost and the receiver
   reloaded can duplicate once; a friend's pub can flash their flames back during your douse. Details: `stream-a.md`,

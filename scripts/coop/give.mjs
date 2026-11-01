@@ -1,9 +1,10 @@
 // Co-op phase 2, stream B's rig (src/coop-give.js): two headless Chromiums (one browser process each, as
 // two-browsers.mjs) through `wrangler dev` with a delay. The host opens a Sandbox trip; the guest, who has a season of
-// their own, joins; both step ashore side by side. Then: the guest gives the host $10, the host gives the guest an item,
-// a refused gift and one lost on the way come back, a lost ack is asked after and not refunded (no duplicate), the host
-// gives a container with what is nested in it and the rod, the guest gives money from the canoe alongside, the host's
-// keep is pruned, the guest changes their things, leaves and joins again from a new
+// their own, joins; both step ashore side by side. Then: the Give money panel lets go of the mouse (and the chase wants it
+// back after), the guest gives the host $10, a refused gift and one lost on the way come back, a lost ack is asked after
+// and not refunded (no duplicate), there is no "Give to" for things (the owner: drop it, the friend picks it up), each
+// sees the other on the map where they are, the guest gives money from the canoe alongside, the host's keep is pruned,
+// the guest changes their things, leaves and joins again from a new
 // page and gets the same things and purse back from the host, and the guest's own season in their store is byte for
 // byte what it was before the visit.
 //
@@ -120,6 +121,7 @@ const before = season(await B.evaluate(dump));
 log('[guest] own season keys', Object.keys(before).length, own0);
 await until(B, () => { const c = document.getElementById('coop-card'); return c && !c.hidden && document.getElementById('coop-code'); });
 await B.fill('#coop-name', 'Ada');
+await B.click('.coop-card .swatch[data-shirt="4"]');
 await B.click('#coop-go');
 await until(B, () => window.__game.coop.role === 'guest' && window.__game.title.state === 'game' && !window.__game.player.teleporting, null, 120000);
 await until(B, () => window.__game.coopGive.mine, null, 20000);
@@ -150,11 +152,24 @@ const dot = await B.evaluate(async () => {
   return t ? { kind: t.kind, label: t.label, verb: t.e && t.e.verb } : null;
 });
 log('[guest] the dot', dot);
+// the mouse locked to the look as in play (a headless page has no real lock: the chase is told it has one, and
+// document.exitPointerLock is watched)
+const lock0 = await B.evaluate(() => {
+  const g = window.__game, ch = g.chase;
+  window.__exits = 0; document.exitPointerLock = () => { window.__exits++; ch.locked = false; };
+  ch.locked = true; g.step(1 / 60, 2);
+  return { wants: ch.wantsLock, locked: ch.locked, exits: window.__exits };
+});
 const opened = await B.evaluate((id) => window.__game.coopGive.moneyCard(id), hostId);
+const lock1 = await B.evaluate(() => { const g = window.__game, ch = g.chase; ch.locked = true; for (let i = 0; i < 4; i++) g.step(1 / 60, 1); return { wants: ch.wantsLock, locked: ch.locked, exits: window.__exits, focus: !!ch.focus }; });
 await sleep(800);
 await B.screenshot({ path: path.join(OUT, 'give-money-picker.png') });
 const picker = await B.evaluate(() => [...document.querySelectorAll('.opts .opt')].map((o) => ({ text: o.textContent, dim: o.classList.contains('dim') })));
 check('the Give money picker', opened && picker.length === 5, { dot, picker });
+const lock2 = await B.evaluate(() => { const g = window.__game; g.dialogue.close(); for (let i = 0; i < 4; i++) g.step(1 / 60, 1); return { wants: g.chase.wantsLock }; });
+check('the Give money panel lets go of the mouse, and wants it back after', lock0.wants && lock0.exits === 0 && lock1.exits >= 1 && !lock1.locked && !lock1.wants && lock2.wants, { before: lock0, panelOpen: lock1, closed: lock2 });
+await B.evaluate((id) => window.__game.coopGive.moneyCard(id), hostId);
+await B.evaluate(() => { for (let i = 0; i < 3; i++) window.__game.step(1 / 60, 1); });
 
 // --- 2. the guest gives the host $10 (through the picker: the second choice) ---------------------------------------------
 const m0 = { host: await A.evaluate(() => window.__game.profile.money), guest: await B.evaluate(() => window.__game.profile.money) };
@@ -164,24 +179,9 @@ await sleep(300);
 const m1 = { host: await A.evaluate(() => ({ money: window.__game.profile.money, last: window.__game.profile.ledger.slice(-1)[0] })), guest: await B.evaluate(() => ({ money: window.__game.profile.money, last: window.__game.profile.ledger.slice(-1)[0] })) };
 check('guest gives host $10', m1.host.money === m0.host + 10 && m1.guest.money === m0.guest - 10 && /from Ada/.test(m1.host.last.why) && /to Gage/.test(m1.guest.last.why), { before: m0, after: m1 });
 
-// --- 3. the host gives the guest an item (the book's right-click verb) ----------------------------------------------------
-const pick = await A.evaluate(() => {
-  const inv = window.__game.inventory;
-  for (const c of inv.reachable()) for (const e of c.grid) {
-    if (e.box || e.fixed) continue;
-    const vs = inv.moreVerbs({ cId: c.id, uid: e.uid, itemId: e.id });
-    if (vs.length) return { cId: c.id, uid: e.uid, id: e.id, qty: e.qty, verbs: vs.map((v) => ({ label: v.label, disabled: !!v.disabled })) };
-  }
-  return null;
-});
-log('[host] giving', pick);
-const hBefore = await A.evaluate(count, pick && pick.id), gBefore = await B.evaluate(count, pick && pick.id);
-await A.evaluate((p) => { const inv = window.__game.inventory; inv.moreVerbs(p)[0].run(); }, pick);
-await until(A, () => window.__game.coopGive.pending.size === 0, null, 8000);
-await sleep(300);
-const hAfter = await A.evaluate(count, pick.id), gAfter = await B.evaluate(count, pick.id);
-const where = await B.evaluate((id) => { const inv = window.__game.inventory; const c = inv.containers.find((k) => k.grid.some((e) => e.id === id && k.where === 'hands')); return c ? 'hand' : 'pack'; }, pick.id);
-check('host gives guest an item', pick && pick.verbs[0].label === 'Give to Ada' && hAfter === hBefore - pick.qty && gAfter === gBefore + pick.qty, { item: pick.id, qty: pick.qty, host: [hBefore, hAfter], guest: [gBefore, gAfter], where, note: await B.evaluate(() => window.__game.coopGive.log.slice(-1)[0]) });
+// --- 3. no "Give to" on things: the book's menu has no co-op verb at all ------------------------------------------------
+const noVerb = await A.evaluate(() => ({ hook: typeof window.__game.inventory.moreVerbs, item: typeof window.__game.coopGive.item, thing: typeof window.__game.coopGive.thing }));
+check('no Give to … for things (drop it, the friend picks it up)', noVerb.hook === 'undefined' && noVerb.item === 'undefined' && noVerb.thing === 'undefined', noVerb);
 
 // --- 4. a refused gift and an unanswered one come back ---------------------------------------------------------------------
 await A.evaluate(() => { window.__game.coopGive.refuse = true; });
@@ -192,15 +192,14 @@ await until(B, () => window.__game.coopGive.pending.size === 0, null, 8000);
 const r1 = await B.evaluate(() => window.__game.profile.money), rh1 = await A.evaluate(() => window.__game.profile.money);
 check('a refused gift is refunded', rMid === r0 - 5 && r1 === r0 && rh1 === rh0, { guest: [r0, rMid, r1], host: [rh0, rh1] });
 await A.evaluate(() => { const g = window.__game.coopGive; g.refuse = false; g.mute = true; });
-const tItem = await B.evaluate(() => { const inv = window.__game.inventory; for (const c of inv.reachable()) for (const e of c.grid) if (!e.box && !e.fixed) return { cId: c.id, uid: e.uid, id: e.id, qty: e.qty }; return null; });
-const t0n = await B.evaluate(count, tItem.id), th0 = await A.evaluate(count, tItem.id);
+const u0 = { g: await B.evaluate(() => window.__game.profile.money), h: await A.evaluate(() => window.__game.profile.money) };
 const tStart = Date.now();
-await B.evaluate((a) => window.__game.coopGive.item(a.hostId, a.it), { hostId, it: tItem });
-const tMid = await B.evaluate(count, tItem.id);
+await B.evaluate((id) => window.__game.coopGive.money(id, 5), hostId);
+const uMid = await B.evaluate(() => window.__game.profile.money);
 await until(B, () => window.__game.coopGive.pending.size === 0, null, 10000);
 const tMs = Date.now() - tStart;
-const t1n = await B.evaluate(count, tItem.id), th1 = await A.evaluate(count, tItem.id), tBackIn = await B.evaluate((a) => { const inv = window.__game.inventory, c = inv.containers.find((k) => k.grid.some((e) => e.id === a.id)); return c ? c.where : null; }, tItem);
-check('an unanswered gift comes back', tMid === t0n - tItem.qty && t1n === t0n && th1 === th0, { item: tItem.id, guest: [t0n, tMid, t1n], host: [th0, th1], backWhereItWas: tBackIn, ms: tMs });
+const u1 = { g: await B.evaluate(() => window.__game.profile.money), h: await A.evaluate(() => window.__game.profile.money) };
+check('a gift lost on the way comes back (the friend says it never came)', uMid === u0.g - 5 && u1.g === u0.g && u1.h === u0.h, { guest: [u0.g, uMid, u1.g], host: [u0.h, u1.h], ms: tMs });
 await A.evaluate(() => { window.__game.coopGive.mute = false; });
 
 // --- 4b. a lost ack: the host takes it, its answer is lost; the guest asks (giftq) and gets the same answer: no duplicate --
@@ -214,35 +213,20 @@ await sleep(300);
 const l1 = { g: await B.evaluate(() => window.__game.profile.money), h: await A.evaluate(() => window.__game.profile.money), gLog: await B.evaluate(() => window.__game.coopGive.log.slice(-1)[0]) };
 check('a lost ack: asked again, taken once, not refunded', l1.g === l0.g - 5 && l1.h === l0.h + 5 && lMs > 3000, { guest: [l0.g, l1.g], host: [l0.h, l1.h], ms: lMs, note: l1.gLog });
 
-// --- 4c. a container with what is nested in it, and a long thing (host → guest) ---------------------------------------------
-const treeSig = (cid) => {
-  const inv = window.__game.inventory;
-  const walk = (c) => ({ item: c.item, grid: c.grid.filter((e) => !e.box).map((e) => `${e.id}×${e.qty}@${e.x},${e.y}`).sort(), kids: c.grid.filter((e) => e.box).map((e) => walk(inv.cont(e.uid))).sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1)) });
-  return JSON.stringify(walk(inv.cont(cid)));
-};
-const box = await A.evaluate(() => {
-  const inv = window.__game.inventory;
-  const c = inv.reachable().find((k) => k.grid.some((e) => e.box) && inv.moreVerbs({ container: k.id }).length);
-  return c ? { id: c.id, item: c.item, nested: c.grid.filter((e) => e.box).length, verbs: inv.moreVerbs({ container: c.id }).map((v) => v.label) } : null;
+// --- 4c. each on the other's map: the HUD's map (M), the friend's dot where they are ------------------------------------
+const mapOf = async (P) => P.evaluate(() => {
+  const g = window.__game, h = g.hud; h.setMode('glance');
+  for (let i = 0; i < 6; i++) g.step(1 / 60, 1);
+  const d = g.coopGive.mapDrawn || [], r = [...g.coop.remotes.values()][0], v = h.view, onBoat = r.boat && r.boat.ext && r.drawnAt.m === 'paddle';
+  const x = onBoat ? r.boat.x : r.person.x, z = onBoat ? r.boat.z : r.person.z;
+  return { mode: h.mode, drawn: d.map((q) => ({ name: q.name, colour: q.colour, off: +Math.hypot(q.x - x, q.z - z).toFixed(2), px: [Math.round(q.a), Math.round(q.b)] })), age: Math.round(performance.now() - (g.coopGive.mapAt || 0)), me: [Math.round(g.player.x), Math.round(g.player.z)], them: [Math.round(x), Math.round(z)], span: v && v.span };
 });
-const boxSig = await A.evaluate(treeSig, box.id);
-const gIds0 = await B.evaluate(() => window.__game.inventory.containers.map((c) => c.id));
-await A.evaluate((id) => window.__game.inventory.moreVerbs({ container: id })[0].run(), box.id);
-await until(A, () => window.__game.coopGive.pending.size === 0, null, 12000);
-await sleep(300);
-const hostHasBox = await A.evaluate((id) => !!window.__game.inventory.cont(id), box.id);
-const gotBox = await B.evaluate((a) => { const inv = window.__game.inventory, c = inv.containers.find((k) => k.item === a.item && k.where !== 'in' && !a.ids.includes(k.id)); return c ? { id: c.id, where: c.where } : null; }, { item: box.item, ids: gIds0 });
-const gotSig = gotBox ? await B.evaluate(treeSig, gotBox.id) : null;
-check('a container with its nested contents', box && !hostHasBox && gotBox && gotSig === boxSig, { item: box && box.item, nested: box && box.nested, verbs: box && box.verbs, hostStillHas: hostHasBox, guestGot: gotBox, sameContents: gotSig === boxSig, bytes: boxSig.length });
-const rod = await A.evaluate(() => { const inv = window.__game.inventory, l = inv.long.find((q) => q.id === 'rod' || /rod/.test(q.id)) || inv.long[0]; return l ? { uid: l.uid, id: l.id, verbs: inv.moreVerbs({ long: l.uid }).map((v) => v.label) } : null; });
-const rodH = await A.evaluate(count, rod.id), rodG = await B.evaluate(count, rod.id);
-await A.evaluate((uid) => window.__game.inventory.moreVerbs({ long: uid })[0].run(), rod.uid);
-await until(A, () => window.__game.coopGive.pending.size === 0, null, 12000);
-await sleep(300);
-const rodH1 = await A.evaluate(count, rod.id), rodG1 = await B.evaluate(count, rod.id), rodWhere = await B.evaluate((id) => window.__game.inventory.long.filter((l) => l.id === id).map((l) => l.where), rod.id);
-check('a long thing (the rod)', rodH1 === rodH - 1 && rodG1 === rodG + 1, { item: rod.id, verbs: rod.verbs, host: [rodH, rodH1], guest: [rodG, rodG1], guestHas: rodWhere });
-const noGive = await A.evaluate(() => { const inv = window.__game.inventory; return ['pockets', 'crate'].map((it) => { const c = inv.containers.find((k) => k.item === it); return c ? inv.moreVerbs({ container: c.id }).length : 0; }); });
-check('the pockets and the crate are not given', noGive.every((n) => n === 0), { pocketsCrate: noGive });
+await sleep(500);
+const mapA = await mapOf(A), mapB = await mapOf(B);
+await A.screenshot({ path: path.join(OUT, 'map-host-sees-guest.png') });
+await A.evaluate(() => window.__game.hud.setMode('hidden')); await B.evaluate(() => window.__game.hud.setMode('hidden'));
+const mapOk = (m, name) => m.drawn.length === 1 && m.drawn[0].name === name && m.drawn[0].off < 0.5 && m.age < 1000;
+check('each sees the other on the map, in their shirt, where they are', mapOk(mapA, 'Ada') && mapOk(mapB, 'Gage') && mapA.drawn[0].colour !== mapB.drawn[0].colour, { host: mapA, guest: mapB });
 
 // --- 4d. Give money from the canoe: both afloat, alongside -----------------------------------------------------------------
 const hw = await A.evaluate(async () => { const g = window.__game, p = g.player; await p.teleport(p.x, p.z); for (let i = 0; i < 5; i++) g.step(1 / 60, 1); return { x: p.x, z: p.z, h: p.heading, mode: p.mode }; });

@@ -9,12 +9,8 @@
 //     is in a canoe: from the canoe the dot points at their canoe, pointer.registerWater, as at a party's); a small
 //     conversation panel (dialogue.js, the game's own; `afloat` keeps it open in the canoe) offers $5, $10, $20 and All,
 //     greyed past what you have. Spent here (profile.spend, 'to Ada'), earned there (profile.earn, 'from Gage').
-//   - Give a thing: the book's right-click has "Give to Ada" for each friend within reach (the inventory.moreVerbs hook,
-//     read by inv-ui.js verbMenu): on an entry (loose items, any quantity), on a container by its strap or its box in
-//     another's grid (sent whole: its grid and every container nested in it), and on a long thing (the rod, a paddle).
-//     Not the pockets, the crate, a hand's holder, a pile, a station or anything fixed. A loose item lands in a free
-//     hand, else the best fit in reach (inventory.place), else a pile at their feet; a container or a long thing in a
-//     free hand, else set down at their feet (in the canoe, afloat), rebuilt with the receiver's own ids.
+//   - Giving a thing (the owner, 2026-11-01: "i dont like the give item to person. id rather just have them drop on
+//     ground"): no verb of its own. Drop it or set the pack down; the friend sees it and picks it up (coop-share.js).
 //   - Never twice, never lost: a gift has an id. The receiver remembers every id it answered this session (applied or
 //     refused) and answers a repeat the same way. A sender with no answer in ACK_MS asks (giftq) every ACK_MS; it takes
 //     the thing back only when the receiver says it never had it (and so will refuse it if it comes late), or the
@@ -29,40 +25,37 @@
 //   claim    guest → host  { vid, name }                       (again every CLAIM_EVERY until the answer)
 //   yours    host → guest  { inv, money, ledger } | { fresh: true }
 //   keep     guest → host  { vid, name, inv, money, ledger }
-//   gift     any → one     { gid, money } | { gid, entry: { id, qty, data?, …, def? } } | { gid, tree, defs } (a container:
-//                          { item, name, grid: [entries], kids: [{ x, y, rot, tree }] }) | { gid, long: { id }, defs }
+//   gift     any → one     { gid, money }
 //   giftq    sender → one  { gid }                          (no answer yet: did you get it?)
 //   giftack  back          { gid, ok, why? }                 (why 'never': not applied, and now refused if it comes)
 //   The host keeps at most KEEP_MAX visitors, and forgets one not seen for KEEP_DAYS real days (Date.now, not the game's
 //   clock: a Sandbox host can stop or run its clock as it likes).
 //
 //   const give = new CoopGive(coop, { pointer, talk })   (main.js, after the coop)
-//   give.money(peerId, n) → bool · give.item(peerId, { cId, uid }) → bool · give.thing(peerId, { container } | { long })
-//   give.mine · give.stats() · give.prune(doc)
+//   give.money(peerId, n) → bool · give.moneyCard(peerId) · give.mine · give.stats() · give.prune(doc)
 //   give.refuse / give.mute / give.dropAcks = n   (the tests: refuse every gift / lose gifts on the way / lose the next n acks)
 import { save } from './save.js';
-import { itemDef, defineItem } from './items.js';
 import { START_MONEY } from './profile.js';
+import { lookOf } from './coop.js';
+import { SERIF, INK } from './map-render.js';
 
 export const GIVE_R = 3;          // m: a friend this near can be given to, both on foot
 export const AFLOAT_R = 6;        // m: and when either of you is in a canoe (alongside)
 const ACK_MS = 3000;              // no answer to a gift in this long: ask again (giftq), every this long
 const KEEP_DAYS = 30;             // real days: a visitor not seen this long is forgotten by the host
 const KEEP_MAX = 16;              // visitors the host keeps, the most recently seen
-const NO_GIVE = /^(pockets|crate|pile|woodarms|inhand)$/;
 const KEEP_EVERY = 30000;         // ms between a guest's keeps
 const CLAIM_EVERY = 3000;         // ms between a guest's claims until the host answers
 const NS = 'coop-guests';         // the host's save of its guests' things
 const AMOUNTS = [5, 10, 20];
 const LEDGER_KEPT = 40;
-const ENTRY_SKIP = new Set(['uid', 'x', 'y', 'rot', 'box']);
 const newGid = () => `${Date.now().toString(36)}${Math.floor(Math.random() * 1e9).toString(36)}`;
 const cash = (n) => Math.max(0, Math.round(Number(n) || 0));
 
 export class CoopGive {
   constructor(coop, { pointer = null, talk = null } = {}) {
     this.coop = coop; this.pointer = pointer; this.talk = talk;
-    this.pending = new Map();   // gid → { to, name, money?, entry?, timer }
+    this.pending = new Map();   // gid → { to, name, money, refund, timer, asks }
     this.answered = new Map();  // gift id → the ack it got here ({ ok, why }): a repeat or a question gets the same
     this.mine = false;          // a guest: the visit's things are loaded (the host has answered)
     this.claimT = 0; this.keepT = 0;
@@ -83,9 +76,11 @@ export class CoopGive {
     const leave = coop.leave.bind(coop);
     coop.leave = () => { if (coop.role === 'guest') this.sendKeep(); return leave(); };
     if (typeof window !== 'undefined') window.addEventListener('pagehide', () => { if (coop.role === 'guest' && coop.live) this.sendKeep(); });
+    // the friends on the map (the owner, 2026-11-01: "i cant see the other players on the map and i should"): the HUD's map
+    // (the glance, the corner and the sheet in the book) draws them with you, each frame it is open (hud.js mapMarks)
+    const hud = coop.g.hud;
+    if (hud) (hud.mapMarks || (hud.mapMarks = [])).push((ctx, v) => this.drawFriends(ctx, v));
     if (pointer) { pointer.register((ray, near) => this.targets(ray, near, false)); if (pointer.registerWater) pointer.registerWater((ray, near) => this.targets(ray, near, true)); }
-    const inv = coop.g.inventory;
-    if (inv) inv.moreVerbs = (ref) => this.verbs(ref);
   }
   get g() { return this.coop.g; }
   get myName() { return this.coop.visitor.name || 'A friend'; }
@@ -93,10 +88,8 @@ export class CoopGive {
   host() { return this.coop.peers().find((p) => p.host) || null; }
   nameOf(id) { const r = this.coop.remotes.get(id); return r ? r.name : 'a friend'; }
   note(text, s = 4) { const hud = this.g.hud; if (hud && hud.note) hud.note(text, s); this.log.push(text); if (this.log.length > 20) this.log.shift(); }
-  // friends near enough to give to: GIVE_R both on foot, AFLOAT_R when either is in a canoe
+  // GIVE_R both on foot, AFLOAT_R when either is in a canoe
   afloat(r) { const p = this.g.player, at = r && r.drawnAt; return !!((p && p.mode === 'paddle') || (at && at.m === 'paddle')); }
-  reachTo(id) { return this.afloat(this.coop.remotes.get(id)) ? AFLOAT_R : GIVE_R; }
-  near() { return this.coop.peers().filter((p) => p.near(this.reachTo(p.id))); }
 
   // --- every frame in a room ---------------------------------------------------------------------------------------
   tick(now) {
@@ -161,107 +154,13 @@ export class CoopGive {
     return this.coop.send({ t: 'keep', to: h.id, vid: this.coop.visitor.id, name: this.myName, inv: inv.serialize(), money: pr.money, ledger: (pr.ledger || []).slice(-LEDGER_KEPT) });
   }
 
-  // --- giving --------------------------------------------------------------------------------------------------------
+  // --- giving money ----------------------------------------------------------------------------------------------------
   money(to, n) {
     const pr = this.g.profile, name = this.nameOf(to);
     n = cash(n);
     if (!this.ready || !pr || !n || !pr.canAfford(n)) return false;
     if (!pr.spend(n, `to ${name}`)) return false;
     return this.send(to, { money: n }, () => { pr.earn(n, `back: ${name} didn’t take it`); }, `You gave ${name} $${n}.`, `${name} didn’t take the $${n}. It’s back in your purse.`);
-  }
-  item(to, { cId, uid } = {}) {
-    const inv = this.g.inventory, name = this.nameOf(to);
-    if (!this.ready || !inv) return false;
-    const c = inv.cont(cId), e = c && c.grid.find((q) => q.uid === uid);
-    if (e && e.box) return this.thing(to, { container: e.uid });
-    if (!e || e.fixed) return false;
-    const taken = inv.take(cId, uid);
-    if (!taken) return false;
-    const entry = {};
-    for (const [k, v] of Object.entries(taken)) if (!ENTRY_SKIP.has(k) && v !== undefined) entry[k] = v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v;
-    const d = itemDef(entry.id);
-    if (/^sig:/.test(entry.id) && d) entry.def = d; // (a signature item's definition rides with it, as in the save)
-    const what = `${entry.qty > 1 ? `${entry.qty} × ` : ''}${d ? d.name : entry.id}`;
-    return this.send(to, { entry }, () => { this.land(entry, { back: cId }); }, `You gave ${name} ${what}.`, `${name} didn’t take ${what}. It’s back with you.`);
-  }
-  // a container (with everything in it and nested in it) or a long thing that may be given; ref { container } | { long }
-  canGive(ref) {
-    const inv = this.g.inventory, t = inv && inv.thing(ref);
-    if (!t || !t.def || t.def.fixed || t.def.one || t.def.station) return null;
-    if (t.kind === 'container' && (NO_GIVE.test(t.obj.item) || t.obj.where === 'pockets' || t.obj.where === 'hung')) return null;
-    return t;
-  }
-  thing(to, ref) {
-    const inv = this.g.inventory, name = this.nameOf(to), t = this.ready ? this.canGive(ref) : null;
-    if (!t || !inv.thingReachable(t)) return false;
-    const defs = {}, sig = (id) => { if (/^sig:/.test(id) && itemDef(id)) defs[id] = itemDef(id); };
-    let body, back;
-    if (t.kind === 'long') {
-      const l = t.obj; sig(l.id);
-      inv.long.splice(inv.long.indexOf(l), 1);
-      if (typeof inv.refreshUse === 'function') inv.refreshUse();
-      inv.emit('long');
-      body = { long: { id: l.id }, defs };
-      back = () => {
-        if (inv.long.includes(l)) return;
-        if (l.where === 'hands' && (inv.hands[l.hand] || inv.freeHand() < 0)) this.placeThing(l);
-        inv.long.push(l);
-        if (typeof inv.refreshUse === 'function') inv.refreshUse();
-        inv.emit('long');
-      };
-    } else {
-      const root = t.obj, all = [], walk = (c) => { all.push(c); for (const e of c.grid) if (e.box) { const k = inv.cont(e.uid); if (k) walk(k); } };
-      walk(root);
-      const pack = (c) => ({
-        item: c.item, name: c.name,
-        grid: c.grid.filter((e) => !e.box).map((e) => { sig(e.id); const o = JSON.parse(JSON.stringify(e)); delete o.uid; return o; }),
-        kids: c.grid.filter((e) => e.box && inv.cont(e.uid)).map((e) => ({ x: e.x, y: e.y, rot: e.rot || 0, tree: pack(inv.cont(e.uid)) })),
-      });
-      const tree = pack(root);
-      const box = root.where === 'in' ? inv.boxEntry(root.id) : null;
-      if (box) box.c.grid.splice(box.c.grid.indexOf(box.e), 1);
-      inv.containers = inv.containers.filter((c) => !all.includes(c));
-      inv.emit('containers');
-      body = { tree, defs };
-      back = () => {
-        if (inv.containers.includes(root)) return;
-        if (box && inv.cont(box.c.id) && inv.fits(box.c.id, root.item, box.e.x, box.e.y, box.e.rot || 0)) box.c.grid.push(box.e);
-        else if (root.where === 'in' || (root.where === 'hands' && (inv.hands[root.hand] || inv.freeHand() < 0))) { root.in = null; this.placeThing(root); }
-        inv.containers.push(...all);
-        inv.emit('containers');
-      };
-    }
-    const what = t.def.name;
-    return this.send(to, body, back, `You gave ${name} ${what}.`, `${name} didn’t take ${what}. It’s back with you.`);
-  }
-  // where a whole thing goes here: a free hand, else at your feet on foot, else the canoe (sets o.where, o.at, o.hand)
-  placeThing(o) {
-    const inv = this.g.inventory, p = this.g.player, h = inv.freeHand();
-    o.hand = null; o.at = null;
-    if (p && p.onFoot && h >= 0) { o.where = 'hands'; o.hand = h; return 'hand'; }
-    if (p && p.onFoot) {
-      const s = inv.downSpot() || { x: p.x, z: p.z };
-      o.where = 'ground'; o.at = { x: s.x, z: s.z, y: inv.groundY(s.x, s.z), heading: p.heading || 0, left: true };
-      return 'ground';
-    }
-    o.where = 'canoe';
-    return 'canoe';
-  }
-  // a container sent whole, rebuilt here with this inventory's own ids
-  build(t, where, guard = 0) {
-    const inv = this.g.inventory;
-    if (!t || !itemDef(t.item) || !itemDef(t.item).container || guard > 8) return null;
-    const c = inv.mk(t.item, where);
-    if (t.name) c.name = String(t.name).slice(0, 60);
-    inv.containers.push(c);
-    for (const e of Array.isArray(t.grid) ? t.grid : []) if (e && itemDef(e.id)) c.grid.push({ ...e, uid: inv.uid(), qty: Math.max(1, e.qty | 0) });
-    for (const k of Array.isArray(t.kids) ? t.kids : []) {
-      const ch = this.build(k.tree, 'in', guard + 1);
-      if (!ch) continue;
-      ch.in = c.id;
-      c.grid.push({ uid: ch.id, id: ch.item, x: k.x | 0, y: k.y | 0, rot: k.rot | 0, qty: 1, box: true });
-    }
-    return c;
   }
   send(to, body, refund, okWords, backWords) {
     const gid = newGid(), name = this.nameOf(to);
@@ -310,92 +209,12 @@ export class CoopGive {
     const was = this.answered.get(m.gid);
     if (was) { this.coop.send({ t: 'giftack', to: m.from, gid: m.gid, ...was }); return; }
     if (this.refuse || !this.ready) { this.ack(m, false, this.refuse ? 'refused' : 'not ready'); return; }
-    const name = this.nameOf(m.from), pr = this.g.profile, inv = this.g.inventory;
-    for (const d of Object.values(m.defs || {})) if (d && /^sig:/.test(d.id) && !itemDef(d.id)) { try { defineItem(d); } catch { /* unknown */ } }
-    if (Number.isFinite(m.money)) {
-      const n = cash(m.money);
-      if (!n || !pr) { this.ack(m, false, 'nothing'); return; }
-      pr.earn(n, `from ${name}`);
-      this.ack(m, true);
-      this.note(`${name} gave you $${n}.`);
-      return;
-    }
-    const at = (w) => (w === 'hand' ? ': in your hand' : w === 'ground' ? ': at your feet' : w === 'canoe' ? ': in your canoe' : '');
-    if (m.long && typeof m.long.id === 'string') {
-      const d = itemDef(m.long.id);
-      if (!d || d.kind !== 'long') { this.ack(m, false, 'unknown'); return; }
-      const l = inv.addLong(d.id, 'stash', null, { quiet: true }), w = this.placeThing(l);
-      inv.refreshUse(); inv.emit('long');
-      this.ack(m, true);
-      this.note(`${name} gave you ${d.name}${at(w)}.`);
-      return;
-    }
-    if (m.tree && typeof m.tree === 'object') {
-      const c = this.build(m.tree, 'stash');
-      if (!c) { this.ack(m, false, 'unknown'); return; }
-      const w = this.placeThing(c);
-      inv.emit('containers');
-      this.ack(m, true);
-      this.note(`${name} gave you ${c.name}${at(w)}.`);
-      return;
-    }
-    const e = m.entry;
-    if (!e || typeof e.id !== 'string') { this.ack(m, false, 'nothing'); return; }
-    if (e.def && /^sig:/.test(e.id) && !itemDef(e.id)) { try { defineItem(e.def); } catch { /* unknown */ } }
-    const d = itemDef(e.id);
-    if (!d || d.kind === 'container' || d.kind === 'long') { this.ack(m, false, 'unknown'); return; }
-    const where = this.land(e);
-    if (!where) { this.ack(m, false, 'no room'); return; }
+    const n = cash(m.money), pr = this.g.profile;
+    if (!n || !pr) { this.ack(m, false, 'nothing'); return; }
+    const name = this.nameOf(m.from);
+    pr.earn(n, `from ${name}`);
     this.ack(m, true);
-    this.note(`${name} gave you ${e.qty > 1 ? `${e.qty} × ` : ''}${d.name}${at(where === 'pack' ? '' : where)}.`);
-  }
-  // an entry into this inventory: a free hand, else the best fit in reach, else a pile at the feet → 'hand' | 'pack' |
-  // 'ground' | null. Fields other than its data (the bottle's litres, a use count) are kept on the new entry.
-  land(e, { back = null } = {}) {
-    const inv = this.g.inventory; if (!inv) return null;
-    const qty = Math.max(1, e.qty | 0), data = e.data || null;
-    const extra = {};
-    for (const [k, v] of Object.entries(e)) if (!['id', 'qty', 'data', 'def', 'fixed'].includes(k)) extra[k] = v;
-    const fix = () => { const c = inv.containers.find((k) => k.grid.some((q) => q.uid === inv.lastPut)); const n = c && c.grid.find((q) => q.uid === inv.lastPut); if (n && n.id === e.id) Object.assign(n, extra); };
-    if (back && inv.cont(back) && inv.put(back, e.id, { qty, data, quiet: true })) { fix(); inv.emit('items'); return 'pack'; } // (a refund: where it was)
-    if (qty <= Math.max(1, (itemDef(e.id) || {}).stack || 1)) {
-      const h = inv.toHandNew(e.id, { data, qty });
-      if (h && h.ok) { fix(); inv.emit('carry'); return 'hand'; }
-    }
-    const r = inv.place(e.id, qty, { data, quiet: true });
-    if (r && r.ok) { fix(); inv.emit('items'); return 'pack'; }
-    // what did not fit (r.placed of it did): a pile at the feet
-    const left = qty - ((r && r.placed) || 0), p = this.g.player;
-    if (!p) return null;
-    const f = p.forward || { x: Math.sin(p.heading || 0), z: Math.cos(p.heading || 0) }, x = p.x + f.x * 0.6, z = p.z + f.z * 0.6;
-    const pile = inv.addContainer('pile', 'ground', { x, z, y: typeof p.groundAt === 'function' ? p.groundAt(x, z) : 0, heading: p.heading || 0, left: true }, { quiet: true });
-    const ok = !!(pile && inv.put(pile, e.id, { qty: left, data, quiet: true }));
-    if (ok) fix();
-    inv.emit('ground');
-    return ok ? 'ground' : null;
-  }
-
-  // --- the book's right-click: Give to <friend> ---------------------------------------------------------------------
-  // ref: { cId, uid } an entry (a box entry: the container it is), { container } or { long } a thing by its strap
-  verbs(ref) {
-    if (!ref || !this.coop.live) return [];
-    const friends = this.near();
-    if (!friends.length) return [];
-    const inv = this.g.inventory;
-    let run, reach;
-    if (ref.cId && ref.uid) {
-      const c = inv.cont(ref.cId), e = c && c.grid.find((q) => q.uid === ref.uid);
-      if (!e || e.fixed) return [];
-      if (e.box) { if (!this.canGive({ container: e.uid })) return []; run = (f) => this.thing(f.id, { container: e.uid }); } else run = (f) => this.item(f.id, ref);
-      reach = typeof inv.isReachable === 'function' ? inv.isReachable(ref.cId) : true;
-    } else if (ref.container || ref.long) {
-      const t = this.canGive(ref);
-      if (!t) return [];
-      run = (f) => this.thing(f.id, ref);
-      reach = inv.thingReachable(t);
-    } else return [];
-    const ok = this.ready;
-    return friends.map((f) => ({ label: `Give to ${f.name}`, disabled: !ok || !reach, title: !ok ? 'not yet' : !reach ? 'out of reach' : '', run: () => run(f) }));
+    this.note(`${name} gave you $${n}.`);
   }
 
   // --- the dot: E Give money on a friend within reach (on foot: at them; from the canoe: at their canoe or them) -------
@@ -443,6 +262,32 @@ export class CoopGive {
       start: () => ({ say: have > 0 ? 'How much?' : 'Your purse is empty.', plain: true, by: `Give ${name} money`, choices }), // (plain: the game's line, not the friend's: no speech marks, not remembered as said)
       bye: () => null,
     });
+  }
+
+  // --- the friends on the map ------------------------------------------------------------------------------------------
+  // a dot in their shirt's colour with a heading tick (as yours on foot by a beached canoe), their name beside it in ink
+  drawFriends(ctx, { toPx, inView, k }) {
+    const out = [];
+    if (!this.coop.live) { this.mapDrawn = out; return; }
+    for (const r of this.coop.remotes.values()) {
+      const at = r.drawnAt; if (!at) continue;
+      const onBoat = r.boat && r.boat.ext && at.m === 'paddle', x = onBoat ? r.boat.x : r.person.x, z = onBoat ? r.boat.z : r.person.z;
+      if (!Number.isFinite(x) || !inView(x, z)) continue;
+      if (!r.mapColour) { let c = 0x2f6fa8; try { c = lookOf(r.lookRaw).shirt; } catch { /* the default */ } r.mapColour = `#${(c >>> 0).toString(16).padStart(6, '0')}`; }
+      const [a, b] = toPx(x, z), h = Number.isFinite(at.h) ? at.h : 0;
+      ctx.save(); ctx.translate(a, b); ctx.rotate(-h + Math.PI / 2); ctx.scale(k, k);
+      ctx.fillStyle = r.mapColour; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, -4); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, 6.2832); ctx.fill(); ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.font = `600 ${13 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      ctx.lineWidth = 3.5 * k; ctx.strokeStyle = 'rgba(236, 228, 207, 0.92)'; ctx.strokeText(r.name, a + 9 * k, b);
+      ctx.fillStyle = INK.ink; ctx.fillText(r.name, a + 9 * k, b);
+      ctx.restore();
+      out.push({ id: r.id, name: r.name, x, z, a, b, colour: r.mapColour });
+    }
+    this.mapDrawn = out; this.mapAt = performance.now();
   }
 
   stats() {

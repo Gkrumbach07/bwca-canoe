@@ -522,6 +522,9 @@ export class ChaseCamera {
     const P = this.pos, L = this.look; // fb3 join: never left poisoned (heal)
     if (!Number.isFinite(P.x + P.y + P.z + L.x + L.y + L.z + this.viewYaw + this.viewPitch + this.forwardYaw + this.pullV)) this.heal(player);
     this.seeStrength = 0; // (fb2 E: on again below, in third person behind the walker or the canoe)
+    // the mouse is let go whenever the chase no longer wants it (a panel, a card), a shot from elsewhere too (the co-op's
+    // Give money panel, a conversation outside a store: dialogue.js overShoulder sets focus, and this came after its return)
+    if (this.locked && !this.wantsLock) { try { document.exitPointerLock(); } catch (_) { /* nothing to release */ } }
     if (this.focus) {
       const k = this.first ? 1 : 1 - Math.exp(-dt * 4);
       this.pos.lerp(this.focus.pos, k); this.look.lerp(this.focus.look, k);
@@ -535,7 +538,6 @@ export class ChaseCamera {
     const footLook = this.mode === 'third' && onFoot;
     if (footLook && !this.footLook) { this.viewYaw = player.heading; this.viewPitch = 0; this.forwardYaw = player.heading; } // stepping out: look where the body faces
     this.footLook = footLook;
-    if (this.locked && !this.wantsLock) { try { document.exitPointerLock(); } catch (_) { /* nothing to release */ } }
     this.lastHeading = player.heading;
     if (this.mode === 'first') { const r = this.updateFirst(dt, player); this.carryView(player, true, carrying || player.mode === 'carry'); return r; } // p2 B
     this.carryView(player, false, false); // p2 B

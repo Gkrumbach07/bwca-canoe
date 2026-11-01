@@ -1889,6 +1889,8 @@ export class Hud {
       ctx.beginPath(); ctx.moveTo(0, -10); ctx.quadraticCurveTo(4.5, 0, 0, 10); ctx.quadraticCurveTo(-4.5, 0, 0, -10); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.restore();
     }
+    // others drawn by other modules (co-op: the friends, coop-give.js mapMarks), under you
+    if (this.mapMarks) for (const fn of this.mapMarks) { try { fn(ctx, { toPx, inView, k, mPerPx, sheet }); } catch (e) { if (!fn.warned) { fn.warned = true; console.warn('hud.mapMarks', e); } } }
     // you: the canoe when it is with you, a walker's dot with a heading tick when it is not
     if (inView(player.x, player.z)) {
       const [a, b] = toPx(player.x, player.z);
