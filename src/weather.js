@@ -3,6 +3,7 @@ import { mulberry32, smoothstep, noise2 } from './rng.js';
 import { daysInYear, monthDay, MONTHS, sunTimes } from './astro.js';
 import { Precip } from './rain.js';
 import { monthlyCurve } from './season.js'; // d1 lakes: the normals' smooth year
+import { snowFall, SNOW } from './snow.js'; // the snow round: the snowfall to the ground
 
 // The weather (docs/roadmap.md, phase 3): seven states, a seeded forecast that evolves over hours, and the look of
 // each one handed to the day cycle, which keys it with the sun so the light, the sky, the fog, the clouds and the
@@ -460,6 +461,11 @@ export class Weather {
     if (rain > 0.02) this.wetness = Math.min(1, this.wetness + dh * 7 * rain);
     else this.wetness = Math.max(0, this.wetness - dh * dry(L.sun * Math.max(0, day.sunDir.y), this.wind ? this.wind.speed : 3) * (1 - 0.6 * L.grey));
     WEATHER.uWetness.value = this.wetness;
+    // the snow round: the snowfall handed to the ground (snow.js), a dusting that builds while it snows below freezing
+    // and melts off on a warm day; after a jump of the clock, there if it is snowing now
+    if (!(Math.abs(abs - this._snowAbs) < 0.5)) SNOW.fresh = L.rain * L.snow > 0.3 ? 0.6 : 0;
+    this._snowAbs = abs;
+    snowFall(dh, L.rain * L.snow, L.temp, L.sun * Math.max(0, day.sunDir.y));
   }
 
   // lightning: strikes every few seconds in a storm, each a few bright pulses over a quarter of a second, the thunder

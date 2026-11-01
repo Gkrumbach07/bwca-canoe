@@ -3,6 +3,7 @@ import { ROCK_KIT, ROCK_FILL } from './rocks.js';
 import { makeLookMaterial } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
 import { applyWet } from './weather.js';
+import { applySnow } from './snow.js';
 import { CLIFF_MODULE } from './site.js';
 
 // The cliff faces of the bluffs (docs/roadmap.md, the bluff pass). The terrain can only draw a cliff as a steep
@@ -265,6 +266,7 @@ export function makeCliffMaterial() {
     diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 1.5, 0.95, 0.62 ), 0.55 * rust );
   }`);
       applyWet(shader, { porosity: '0.5', gloss: '0.7' }); // rain: the face darkens a little and shines
+      applySnow(shader, { foot: true }); // snow on the ledges and the top, the face shedding it (snow.js)
     },
   });
   m.userData.u = u;

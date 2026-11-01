@@ -11,6 +11,7 @@ import { foliageAtlas, registerFarPainter, paintFarSprite, ATLAS_SIZE, FAR_MARGI
 import { REGION } from './placement.js';
 import { SWAY, glslSway } from './wind.js';
 import { applyWet } from './weather.js';
+import { applySnow } from './snow.js';
 
 // Tree, shrub and boulder geometry. Placement lives in placement.js (it runs in the build worker); this file
 // turns a tile's placement bins into instanced meshes in tile-local coordinates.
@@ -1215,6 +1216,13 @@ function makeCardMaterial(autumn, species = null) {
       // rain (weather.js): bark soaks it up and darkens (porosity 1), the leaves and needles shed it (0.3) and take
       // a faint sheen
       applyWet(shader, { porosity: '( vCardUv.x >= 0.0 || vLookWrap > 0.3 ) ? 0.3 : 1.0', gloss: '( vCardUv.x >= 0.0 || vLookWrap > 0.3 ) ? 0.08 : 0.3' });
+      // snow (snow.js): on the crown's top-lit cards in clumps (the cards' normals point out of the crown), less of it once
+      // the melt starts (the trees shed theirs first); a light line along the tops of the bare branches; the trunks'
+      // and the shrubs' lower parts buried in the pack
+      applySnow(shader, {
+        foot: true,
+        lie: '( vCardUv.x >= 0.0 || vLookWrap > 0.3 ) ? smoothstep( 0.2, 0.7, snowN.y ) * smoothstep( 0.44, 0.56, lookNoise( snowWp.xz / 0.35 + snowWp.y * 2.3, 74u ) + 0.35 * ( snowN.y - 0.45 ) ) * 0.85 : smoothstep( 0.45, 0.85, snowN.y ) * 0.5',
+      });
     },
   });
   m.onBeforeRender = coverFor;

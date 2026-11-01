@@ -2,6 +2,7 @@ import { FLOAT_OFFSET, LENGTH } from './canoe.js';
 import { resample, PUNCHEON_TOP } from './props.js';
 import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
 import { brushAt } from './thicket.js'; // the density round: the brush in the way
+import { snowDepthHere } from './snow.js'; // the snow round: wading the pack
 import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
@@ -118,6 +119,9 @@ const MIRE_WALK = { slow: 0.42, trail: 0.25, board: 0.04, sink: 0.13, ease: 2.5 
 // The brush (the density round, 2026-11-01: thicket.js brushAt, how thick the alder, the cattail and the poles stand):
 // pushing through a wall of it slows the walk by `slow` on top of the mire; the trail's tread is clear
 const BRUSH_WALK = { slow: 0.3 };
+// The snow (the snow round, snow.js snowDepthHere): wading the pack slows the walk by `slow` per metre of it, up to
+// `max`; a trail's packed tread half as much
+const SNOW_WALK = { slow: 0.9, max: 0.4, trail: 0.5 };
 // what the HUD calls wet ground off the trails, by ground kind
 const MIRE_PLACE = { [KIND.openBog]: 'Open bog', [KIND.coniferBog]: 'Spruce bog', [KIND.shrubSwamp]: 'Alder swamp', [KIND.marsh]: 'Marsh', [KIND.wetMeadow]: 'Wet meadow', [KIND.hardwoodSwamp]: 'Ash swamp', [KIND.water]: 'Beaver flowage' };
 const TRAIL_TO_WATER = 2.5;   // tuning: a trail's end farther than this up the bank runs on down to the waterline (trailFor)
@@ -1427,7 +1431,7 @@ export class Player {
         }
       }
       if (!started) {
-        const soft = (1 - (mire.board ? MIRE_WALK.board : mire.onTrail ? MIRE_WALK.trail : MIRE_WALK.slow) * mire.k) * (1 - BRUSH_WALK.slow * (mire.brush || 0)); // the wetlands' going, and the brush
+        const soft = (1 - (mire.board ? MIRE_WALK.board : mire.onTrail ? MIRE_WALK.trail : MIRE_WALK.slow) * mire.k) * (1 - BRUSH_WALK.slow * (mire.brush || 0)) * (1 - Math.min(SNOW_WALK.max, SNOW_WALK.slow * snowDepthHere(this.season)) * (mire.onTrail ? SNOW_WALK.trail : 1)); // the wetlands' going, the brush, the snow
         const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade * soft;
         this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
         // one speed (pace.js footSeen): the walker time-lapsed so he is seen at the speed of where he is, whatever the

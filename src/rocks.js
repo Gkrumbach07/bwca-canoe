@@ -4,6 +4,7 @@ import { mulberry32 } from './rng.js';
 import { makeLookMaterial, FOLIAGE_WRAP } from './shading.js';
 import { bakeOcclusion } from './occlusion.js';
 import { applyWet } from './weather.js';
+import { applySnow } from './snow.js';
 
 // The solid register: smooth, rounded volumes under the look's smooth Lambert (shading.js), with occlusion
 // baked into the vertex colour (occlusion.js), the way Firewatch paints rock, bark and canopy: the colour
@@ -29,6 +30,7 @@ export function makeRockMaterial() {
         .replace('reflectedLight.indirectDiffuse += irradiance * lookSky',
           'vec3 rockIrr = mix( vec3( dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) ) ), irradiance, uRockFill.x ) * uRockFill.y;\n  reflectedLight.indirectDiffuse += rockIrr * lookSky');
       applyWet(shader, { porosity: '0.5', gloss: '0.7' }); // rain: granite darkens a little and shines
+      applySnow(shader, { foot: true }); // snow on the tops, the foot buried in the pack (snow.js)
     },
   });
   m.userData.u = u;
