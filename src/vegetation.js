@@ -513,7 +513,8 @@ function bogPole(rng, v) {
 // a low leafy shrub: two or three stems from one root with round-leaved clusters on them
 function shrub(rng) {
   const g = new GeoBuilder(), cards = new CardBuilder(), size = 0.8 + rng() * 0.35;
-  const base = [0x6da145, 0x7ba54a, 0x5e9546, 0x91af4b][Math.floor(rng() * 4)], cols = crownColors(base, 0x305a41, rng), bark = vary(0x5e4b3c, rng, 0.06);
+  // (the density round: toned from lime toward the canopy's greens, seen up close by the thousand now)
+  const base = [0x5e9a4c, 0x68a050, 0x55904c, 0x76a352][Math.floor(rng() * 4)], cols = crownColors(base, 0x2d5440, rng), bark = vary(0x5e4b3c, rng, 0.06);
   const C = V(0, 0.55 * size, 0), nrm = away(C, 0.9 * size, 0.6 * size, 0.9 * size);
   const stems = 2 + (rng() < 0.5 ? 1 : 0), a0 = rng() * 6.28;
   for (let i = 0; i < stems; i++) {
@@ -560,7 +561,7 @@ function clump(rng, o) {
 // beaked hazel: three or four stems fanning up out of one root into a loose vase of broad leaves
 function hazel(rng) {
   const size = 0.8 + rng() * 0.45;
-  return clump(rng, { h: 2.2 * size, size: 0.72 * size, stems: 4 + Math.floor(rng() * 2), lean: [0.25, 0.5], bark: vary(0x6a5440, rng, 0.06), cols: crownColors(0x78a24c, 0x37552f, rng), dense: true });
+  return clump(rng, { h: 2.2 * size, size: 0.72 * size, stems: 4 + Math.floor(rng() * 2), lean: [0.25, 0.5], bark: vary(0x6a5440, rng, 0.06), cols: crownColors(0x62994f, 0x31522f, rng), dense: true }); // (the density round: less lime)
 }
 // speckled alder: a sprawling clump of grey stems leaning out from the wet ground, dark leaves on their upper half
 // (the density round: more stems and smaller leaf clusters, so a stand of them is a tangle, not a few big leaves)
