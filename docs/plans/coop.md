@@ -169,10 +169,10 @@ called).
 | E. The user's own cloud (Google Drive / Dropbox app folder) | yes | yes | awkward (whose Drive?) | OAuth per provider | free |
 
 **Recommended: local-first, with the season's copy in the room.**
-1. **Now, single player (small):** keep the `save` API exactly as it is (every module calls `save.read/write`), and
+1. **Now, single player (small). Built 2026-11-01 as `src/store.js`:** keep the `save` API exactly as it is (every module calls `save.read/write`), and
    put it on a storage adapter: an in-memory cache read once at boot, written through to IndexedDB, with
    `navigator.storage.persist()` asked for on the first Play. localStorage stays only as the fallback when
-   IndexedDB is refused. This removes the 7-day and eviction risk without a server. The slots, export/import and
+   IndexedDB is refused. This protects against eviction under disk pressure where the browser grants `persist()` (Chrome decides by site engagement, Firefox asks, Safari decides itself). Whether Safari's 7-day rule for sites not visited spares persisted storage was not re-checked; the room's copy (step 2) and *Export season* are the answer to that. The slots, export/import and
    migration tables (`src/migrate/`) keep working on the same keys. *Export season* stays as the user's own backup.
 2. **With co-op phase 1 (the Worker exists anyway):** a season can be **shared**. The Durable Object for the season
    (keyed by a season id, not by a room) stores the packed season (the same `Z1:` string the slots already make,
