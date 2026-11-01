@@ -17,7 +17,8 @@ import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, 
 // they would be built (planks with gaps on stringers and caps on piles, a shack with a roof over its walls
 // and frames round its openings, a split log on two rounds), worn (boards out of line, paint back to grey
 // wood, a dark band on the piles at the waterline), on one material from prop-kit.js and grounded by
-// occlusion baked into them. Everything stands on the terrain mesh as it is drawn (tiles.js groundAt).
+// occlusion baked into them. Everything stands on the 10 m terrain mesh (tiles.js meshGroundAt), re-seated onto a
+// LiDAR chunk by detail.js; the outfitters on the ground as drawn (tiles.js groundAt).
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
@@ -98,9 +99,13 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   // circles { x, z, r } and boxes { x, z, ux, uz, hx, hz, box: true } with half extents hx along (ux, uz)
   const obstacles = [];
   group.userData.obstacles = obstacles;
-  // The drawn ground: tiles.js registers this tile's terrain mesh (entry.ground) before it builds the props, so
-  // the game's ground query reads it, the neighbour's mesh where a piece reaches over the seam (the first half
-  // cell of a tile is its neighbour's last quad), and this tile's grid (meshHeightAt) where that is not in yet.
+  // The ground: tiles.js registers this tile's terrain mesh (entry.ground) before it builds the props, so the ground
+  // query reads it, the neighbour's mesh where a piece reaches over the seam (the first half cell of a tile is its
+  // neighbour's last quad), and this tile's grid (meshHeightAt) where that is not in yet. The 10 m mesh, not a LiDAR
+  // chunk (tiles.js meshGroundAt): detail.js re-seats every vertex onto a chunk by the dy it adds from 0, so a piece
+  // built on a neighbour's chunk already in (that seam again, the trails 4 m over it) was lifted twice when the
+  // next chunk round it came in, its decal floating on a slope. The outfitter alone stands on the ground as drawn
+  // (Hdrawn: built again whole when it moves, outfitterGroundMoved).
   const tiles = world.tiles && world.tiles.groundAt ? world.tiles : null;
   const entry = tiles && tiles.tiles.get(`${tx},${ty}`);
   let mg = entry && entry.ground ? entry.ground : null, mgTried = !!mg;
@@ -108,10 +113,11 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     if (!mgTried) { mgTried = true; const t = entry && entry.result && entry.result.terrain; if (t && t.pos && t.idx) mg = new MeshGround(t, tg.cell, tg.tileSize); }
     return mg;
   };
-  const H = tiles ? (x, z) => tiles.groundAt(x, z, tg) : (x, z) => {
+  const H = tiles ? (x, z) => tiles.meshGroundAt(x, z, tg) : (x, z) => {
     const m = mesh(); if (m) { const y = m.height(x - ox, z - oz); if (y === y) return y; }
     return meshHeightAt(tg, x, z);
   };
+  const Hdrawn = tiles ? (x, z) => tiles.groundAt(x, z, tg) : H;
   // the terrain triangle under world (x, z), on whichever installed tile draws it: { mesh, hit } or null
   const locate = (x, z) => {
     const g = tiles ? tiles.locate(x, z) : mesh() && { mesh: mg, ox, oz };
@@ -135,7 +141,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   const trail = decal.mesh();
   if (trail) group.add(trail);
 
-  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) { yield; yield* buildOutfitter(ctx, ep, group); yield; }
+  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) { yield; yield* buildOutfitter({ ...ctx, H: Hdrawn }, ep, group); yield; }
 
   const ledges = [[], []]; // the ledge rocks' matrices, flats and slanted
   for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
