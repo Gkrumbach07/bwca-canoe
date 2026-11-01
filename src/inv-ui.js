@@ -50,7 +50,7 @@ const A_HOLD = import.meta.glob('./hold.js', { eager: true })['./hold.js'] || nu
 // effect reads as the bar it moves
 const A_HUD = import.meta.glob('./hud.js', { eager: true })['./hud.js'] || null;
 // what the screens work with: main.js's fb B block (attach), else stream A's singleton, else the stand-in
-const ctx = { inventory: null, profile: null, player: null, energy: null, hud: null, shop: null, outfitter: null, stub: null, nearby: null, hold: null, audio: null, journal: null, packs: null, cards: null, day: null };
+const ctx = { coopTabs: null, inventory: null, profile: null, player: null, energy: null, hud: null, shop: null, outfitter: null, stub: null, nearby: null, hold: null, audio: null, journal: null, packs: null, cards: null, day: null };
 export function attach(o) { Object.assign(ctx, o); return ctx; }
 const of = (t) => (typeof t === 'function' ? t() : t) || null; // a thing given as itself or as a getter
 export function model() {
@@ -2070,6 +2070,7 @@ export class MineSide {
     if (foot && (woodpiles.length || pieces.length)) tabs.push({ key: 'wood', kind: 'wood', label: 'Wood', sub: `${pcs} ${pcs === 1 ? 'piece' : 'pieces'}` });
     const n = loose.reduce((k, c) => k + (c.grid || []).length, 0) + pileKids.length + longGround.length;
     if (foot) tabs.push({ key: 'ground', kind: 'loose', label: 'The ground', sub: n ? `${n} ${n === 1 ? 'thing' : 'things'}` : 'at your feet' });
+    if (ctx.coopTabs) for (const t of ctx.coopTabs.tabs() || []) tabs.push(t); // co-op: a friend's things within reach (coop-share.js)
     return { tabs, ground, woodpiles, loose, pileKids, canoe, longCanoe, longGround, atCanoe, afloat, stash, tent, longTent, atTent };
   }
   // the tab open on a side: the one chosen while it is still there, else (yours) the back's, else the first
@@ -2105,7 +2106,7 @@ export class MineSide {
     const sl = (s) => (s ? `${s.mark || ''}${s.label}` : '');
     const st = typeof inv.status === 'function' ? list.map((c) => `${fixedThing(c) ? '' : sl(statusOf({ container: c.id }))}${(c.grid || []).map((e) => { const s = statusOf(e); return s ? `${e.uid}${sl(s)}` : ''; }).join('')}`).join('') + (inv.long || []).map((l) => sl(statusOf({ long: l.uid }))).join('') : '';
     return [version, this.tab, this.rtab, list.map((c) => `${c.id}:${c.where}:${c.hand ?? ''}:${c.in || ''}:${(c.grid || []).length}`).join(), (inv.long || []).map((l) => `${l.uid}:${l.where}:${l.hand ?? ''}`).join(), inv.atStash ? 1 : 0,
-      p ? p.mode : '', onFoot() ? 1 : 0, typeof inv.nearCanoe === 'function' && inv.nearCanoe() ? 1 : 0, typeof inv.nearTent === 'function' && inv.nearTent() ? 1 : 0, this.pieces.map((q) => q.uid).join(), lo, this.pendLit || '', st].join('|');
+      p ? p.mode : '', onFoot() ? 1 : 0, typeof inv.nearCanoe === 'function' && inv.nearCanoe() ? 1 : 0, typeof inv.nearTent === 'function' && inv.nearTent() ? 1 : 0, this.pieces.map((q) => q.uid).join(), lo, this.pendLit || '', st, ctx.coopTabs ? ctx.coopTabs.sig() : ''].join('|');
   }
   render(force) {
     if (drag) { dirty = true; return; }
@@ -2169,6 +2170,14 @@ export class MineSide {
     else if (t.kind === 'wood') this.woodPage(page, T);
     else if (t.kind === 'loose') this.groundPage(page, T);
     else if (t.kind === 'keeping') this.keepingPage(page, T.list, T.byId);
+    else if (t.kind === 'friend') this.friendPage(page, t);
+  }
+  // co-op (coop-share.js): a friend's container, a bin whose take and drop are requests to its owner
+  friendPage(page, t) {
+    const w = mk('div', 'ct friend');
+    w.appendChild(mk('div', 'ct-head', `<span class="nm">${esc(t.label)}</span><span class="wh">${esc(t.sub || '')}</span>`));
+    const g = mk('div'); grid(g, binContainer(`bin:${t.key}`, t.bin), { bin: t.bin, screen: this.owner });
+    w.appendChild(g); page.appendChild(w);
   }
   // the back or the chest: the thing worn there, its strap a handle; a drop zone; a click opens its tab
   wornSlot(dz, label) {
