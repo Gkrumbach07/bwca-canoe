@@ -12,7 +12,7 @@
 //   - a skirt hangs from the chunk's edge to close the slits where two lattices meet (the T-junctions of a 2 m edge
 //     against a 5 m one, a one-unit difference between neighbours' shared samples)
 import { lerp, smoothstep } from './rng.js';
-import { meshHeightAt, groundPre, bedPre, bedGrain, splatAt, landW } from './terrain-build.js';
+import { meshHeightAt, groundPre, bedPre, bedGrain, bedBare, splatAt, landW } from './terrain-build.js';
 import { brookCut } from './brook-cut.js'; // wetlands round 2: the brooks cut into the 2 m ground
 import { mireSample, mireAttr } from './mire-relief.js'; // the density round: the wetlands' hummocks and hollows
 
@@ -229,6 +229,7 @@ export function buildChunk(grid, site, shade, G, P, cell0) {
     if (sd < 0) {
       pre.bedDepth = Math.max(0, levelNear(x, z) - h);
       pre.depth = pre.bedDepth + bedGrain(x, z);
+      pre.bare = bedBare(grid, x, z, pre.bedDepth); // (the season round: a drawn-down bed in the air)
       bedPre(dg, x, z, sd, pre.bedDepth, site, pre.bed);
     } else pre.depth = -1;
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);

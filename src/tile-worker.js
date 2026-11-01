@@ -2,7 +2,7 @@
 // placement and its ground-cover map as transferable typed arrays. The main thread only wraps them into
 // three.js objects.
 import { TileGrid } from './grid.js';
-import { buildTerrainChunk, setLowCreeks } from './terrain-build.js'; // (wetlands round 2: setLowCreeks, the seasonal creeks' mud)
+import { buildTerrainChunk, setLowCreeks, setWaterKinds } from './terrain-build.js'; // (wetlands round 2: setLowCreeks, the seasonal creeks' mud)
 import { buildWaterChunk, shoalBeds, lowCreeks, flowageBeds, setFlowChannels, isFlowage } from './water-build.js'; // (d2 water: shoalBeds; wetlands round 2: lowCreeks; the season round: flowageBeds)
 import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
@@ -207,8 +207,8 @@ async function buildFine(m) {
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
   const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);
   const cellSplat = cover.subarray(COVER_SPLAT_AT(grid.side));
+  grid.low = low; // wetlands round 2: the water lower, the terrain's bank as it was (the season round: its bared bed marked)
   const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell, g.cell); // round A-C
-  grid.low = low; // wetlands round 2: the water lower, the terrain's bank as it was
   const water = buildWaterChunk(grid, i0, j0, g.tile, ox, oz);
   const binCentre = (b, size = REGION) => ({ cx: g.originX + (b.rx + 0.5) * size, cz: g.originZ + (b.rz + 0.5) * size });
   const bins = veg.bins.map((b) => ({ rx: b.rx, rz: b.rz, sp: b.sp, size: b.size, groups: b.groups, ...(b.style !== undefined ? { style: b.style } : {}), ...binCentre(b, b.size), ...instanceData(b.items, b.stride, b.rx, b.rz, b.sp) })); // (d2 land: a cliff bin's family; the rocks' tint by species)
@@ -268,6 +268,7 @@ function detailTile(m) {
     const g = cfg.grid;
     const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, m.tile.data, cfg.levelById, cfg.clarityById);
     grid.cdomById = cfg.cdomById || null;
+    grid.low = m.tile.low || null; // (the season round: the date's water, for the bared bed)
     t = { grid, site: new Site(grid, cfg.exclusions), shade: m.tile.shade, cache: new Map() };
   }
   if (!t) throw new Error(`detail: tile ${key} not sent`);
@@ -298,7 +299,7 @@ async function buildDetail(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); setMireExclusions(m.exclusions); setFlowChannels(m.chans); setLowCreeks(new Set(m.lowIds || [])); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
+  if (m.type === 'init') { cfg = m; setBrookSegs(m.brooks); setMireExclusions(m.exclusions); setFlowChannels(m.chans); setLowCreeks(new Set(m.lowIds || [])); setWaterKinds(m.waterKinds); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
   if (m.type === 'chunk') {
     try { const r = await buildDetail(m); self.postMessage(r.msg, r.transfer); } catch (err) { self.postMessage({ type: 'error', key: m.key, error: String((err && err.message) || err) }); }
     return;

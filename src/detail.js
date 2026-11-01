@@ -189,7 +189,7 @@ export class DetailStreamer {
     if (!T.has(c.tileKey)) {
       const slot = w.slots[c.ty * w.ntx + c.tx], e = this.tm.tiles.get(c.tileKey);
       const data = slot.buf.slice(0), shade = e && e.shade ? e.shade.slice() : null;
-      m.tile = { data, shade };
+      m.tile = { data, shade, low: slot.low ? slot.low.slice() : null }; // (the season round: low, the date's water)
       transfer.push(data); if (shade) transfer.push(shade.buffer);
     }
     T.delete(c.tileKey); T.set(c.tileKey, 1);

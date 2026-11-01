@@ -283,8 +283,25 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     float wd = smoothstep(0.62 - 0.45 * wB.x, 0.78 - 0.45 * wB.x, tuft + 0.35 * n2 * fb) * step(0.02, wB.x);
     c = mix(c, uBedMats[4] * (0.8 + 0.4 * tuft), wd * 0.9);
     c = mix(c, uBedMats[5], smoothstep(5.0, 13.0, d + 1.2 * n1) * 0.8);
-    c *= 1.0 + uBedLook.x * bedCaustic(p, d, fl.x * 10.0, px);
     groundPorosity = 0.0; groundRock = 0.0;
+    if (fl.y > 0.004) {
+      // (the season round: the bed the date's low water bares, terrain-build.js splatAt: fl.y its height over the water.
+      // The stones and the ledge dry paler; the silt is mud, wet and dark at the water, drying grey-brown up the flat,
+      // and the sedge and the grass come in over it in patches, more of them the longer it has been dry: a late-summer
+      // beaver meadow. The sedge takes the meadow's season.)
+      float hgt = smoothstep(0.02, 0.45, fl.y);
+      vec3 dry = c * mix(1.1, 1.45, hgt);
+      float mn = lookFbm(p / 0.9 + vec2(-3.3, 2.2), 47u, 2);
+      vec3 mud = uBedMats[2] * mix(vec3(0.9), vec3(1.95, 1.8, 1.6), hgt * (0.75 + 0.5 * mn)) * (1.0 + 0.18 * (mn - 0.5) * lookFade(0.9, px));
+      // the sedge in clumps a metre or so across, gathered into drifts over the flat, olive and straw mixed
+      float sn = lookFbm(p / 4.0 + vec2(4.1, -2.3), 45u, 2) * 0.6 + lookFbm(p / 0.8, 46u, 2) * 0.4 * lookFade(0.8, px) + 0.12 * n1 * fb;
+      float sedge = smoothstep(0.6 - 0.22 * hgt, 0.66 - 0.22 * hgt, sn) * smoothstep(0.05, 0.25, fl.y);
+      float sv = lookFbm(p / 0.35 + vec2(1.1, 7.7), 48u, 2);
+      vec3 sedgeC = uGroundLit[2] * uMeadowSeason[0] * mix(vec3(0.62, 0.66, 0.5), vec3(1.15, 1.0, 0.72), sv) * (0.75 + 0.35 * sn);
+      mud = mix(mud, mix(sedgeC, mud, 0.25 * (1.0 - lookFade(0.35, px))), sedge);
+      c = mix(dry, mud, kb.z + wd * 0.9);
+      groundPorosity = 1.0;
+    } else c *= 1.0 + uBedLook.x * bedCaustic(p, d, fl.x * 10.0, px);
   } else {
     // each material's weight lifted or lowered by its noise; those within a band's softness of the top
     // share the pixel. Far away the noise fades and the band widens to the plain weighted blend.
@@ -424,7 +441,7 @@ export function makeTerrainMaterial() {
     // the snow (snow.js): on the land, and on the pools and the lake bed once the ice is in (under the ice the bed is
     // hidden; a drawn-down flowage's bared mud, which is bed, snows with the winter), never through open water; the
     // canopy's shade is its shelter
-    applySnow(shader, { shelter: 'groundCanopy', amount: 'mix( 1.0, uMireIce.x, step( 0.5, vFloor.z ) ) * ( 1.0 - groundPool * ( 1.0 - uMireIce.x ) )' });
+    applySnow(shader, { shelter: 'groundCanopy', amount: 'mix( 1.0, uMireIce.x, step( 0.5, vFloor.z ) * ( 1.0 - step( 0.004, vFloor.y ) ) ) * ( 1.0 - groundPool * ( 1.0 - uMireIce.x ) )' });
   };
   m.customProgramCacheKey = () => 'look-terrain';
   return m;
