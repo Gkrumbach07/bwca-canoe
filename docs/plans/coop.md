@@ -230,7 +230,7 @@ From reading the code; the plans above change the ones marked *actor* and *group
 | `player.js`, `canoe.js`, `camera.js` | one `Player` on one rig, one `Input` on `window`, one chase | untouched for your own; a `RemotePlayer` is an actor (people.md) with a hull and a figure from the pools, fed by state |
 | `main.js` | `player` passed to everything; `tiles.update(player.x, player.z)`; `faunaCtx.player`; the audio's listener | a `players` list beside `player`; the tiles stream round *you*; fauna and audio stay yours |
 | `inventory.js`, `containers.js`, `packs.js` | `where: 'back' | 'chest' | 'hands' | 'pockets'` are *the* body; `reachable()` is from the player; `inventory.hands` | every body place gets `at: playerId` (*group*, from companions.md's `at: companionId`); `reachable(player)` already takes a player; the drawing follows each actor's bones; the document is the host's and every op a command |
-| `profile.js`, `shop.js`, `tasks.js` | one purse, one kit in use, one set of boards, one `claimed` | the purse is the group's; the kit in use is per player (`kit[playerId]`); boards shared; claims shared |
+| `profile.js`, `shop.js`, `tasks.js` | one purse, one kit in use, one set of boards, one `claimed` | a purse per player, and *Give money* (the owner, 2026-11-01); the kit in use is per player (`kit[playerId]`); boards shared; claims shared |
 | `trip.js` | one `active` trip, `state.camp`, `state.packs`, the log, `evacuate()` moves *the* player | the group's trip; tents a list (*group*); the log carries `who`; evacuation per player (that player goes to the outfitter and may rejoin by a ride) |
 | `camp.js`, `tent.js`, `hang.js` | one tent (`trip.state.camp`), one `PLAYER` holder, one `restDial` | the tents list and `holder = 'group'` (*group*); the dial as a proposal |
 | `hold.js` | one job at a time, globally | one job per player; the host runs the phases for shared things it receives (`held: at`) |
@@ -324,7 +324,7 @@ on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real 
 | How many players? | Four at most (two canoes, or four solos: the four-watercraft rule). |
 | Must the group stay together? | Yes in v1: a soft tether at about 1.2 km. Delegated simulation is phase 4. |
 | Who owns the season? | The season itself, stored in its room (Durable Object); whoever opens it first is the host. Guests have a visitor profile and a logbook line. |
-| One purse or one each? | One, the group's. It is how a real party buys food. |
+| One purse or one each? | **One each** (the owner, 2026-11-01: "money is not shared, but we need a way to give money"). Each player's own purse, and *Give money* to a friend beside you. |
 | Sleep when one player is away? | Blocked until every player is in their tent and has ticked the same wake time; a dropped player counts as asleep after a minute. |
 | Voice or text chat? | Neither. A few quick lines on a key as barks; friends have Discord. |
 | Evacuation of one player? | That player alone goes to the outfitter and can rejoin by a ride; the trip goes on for the rest. |
