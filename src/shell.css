@@ -49,27 +49,76 @@
 .confirm .sub:empty { display: none; }
 .confirm .row { display: flex; flex-direction: column; gap: 10px; font-size: 20px; }
 .confirm .item.current { color: var(--gold); }
-.entries { display: flex; flex-direction: column; gap: 10px; padding-bottom: 2px; }
+/* the new season's wizard (wizard.js), where the entry points stood: one step at a time under a kicker that counts them,
+   a question in the serif, the step's choices, then Back and Next as small capitals */
+.entries { display: flex; flex-direction: column; gap: 10px; padding-bottom: 2px; width: min(470px, calc(68vw - 470px)); min-width: 340px; }
 .entries[hidden] { display: none; }
 .entries .kicker { font-size: 12px; letter-spacing: .16em; color: rgba(243, 236, 221, .7); }
-/* the way to travel, above the entry points: two words, the picked one gold with the marker under it */
-.mode-pick { display: flex; align-items: baseline; gap: 12px; font-size: 19px; margin-bottom: 4px; }
-.mode-pick .dot { color: var(--cream-50); }
-.mode-pick button { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; padding: 0 0 2px; margin: 0; color: rgba(243, 236, 221, .72); font: inherit; cursor: pointer; text-shadow: inherit; }
-.mode-pick button.on { color: var(--gold); border-bottom-color: var(--gold); }
-.mode-pick button:hover, .mode-pick button:focus-visible { color: var(--gold); outline: none; }
+.wstep { display: flex; flex-direction: column; gap: 10px; }
+.wstep[hidden] { display: none; }
+.wq { margin: 0 0 4px; font: 500 26px/1.2 var(--serif); color: var(--cream); }
 .entries .status:empty { display: none; }
-.entries .status:not(:empty) + .note { display: none; }
-.entries .note { margin: -6px 0 8px; font-size: 13.5px; line-height: 1.4; color: var(--cream-72); white-space: nowrap; }
-.entries .status { margin: 0; font-size: 13px; color: var(--cream-72); min-height: 1.2em; max-width: 340px; line-height: 1.45; }
-.entries ul { margin: -8px 0 0; padding: 0 12px 0 0; list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 17px; font-variant-numeric: tabular-nums; max-height: max(120px, min(400px, calc(100vh - 655px))); -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%); padding-top: 10px; padding-bottom: 14px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .35) transparent; }
-.entries button { appearance: none; background: none; border: none; padding: 0; margin: 0; display: flex; gap: 14px; align-items: baseline; color: rgba(243, 236, 221, .9); font: inherit; cursor: pointer; text-align: left; text-shadow: inherit; }
-.entries button b { min-width: 36px; font-weight: 700; color: rgba(243, 236, 221, .6); }
-.entries button small { font-size: inherit; font-weight: 400; color: var(--cream-72); }
-.entries button:focus-visible, .entries button:hover { color: var(--gold); outline: none; }
-.entries button.current { color: var(--gold); font-weight: 700; }
-.entries button.current b, .entries button:focus-visible b { color: inherit; }
-.entries button:disabled { color: var(--cream-50); cursor: default; }
+.entries .status { margin: 0; font-size: 13px; color: var(--cream-72); min-height: 1.2em; max-width: 380px; line-height: 1.45; }
+.entries ul { margin: -8px 0 0; padding: 0 12px 0 0; list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 17px; font-variant-numeric: tabular-nums; max-height: max(120px, min(400px, calc(100vh - 560px))); -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%); padding-top: 10px; padding-bottom: 14px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(243, 236, 221, .35) transparent; }
+.entries ul button { appearance: none; background: none; border: none; padding: 0; margin: 0; display: flex; gap: 14px; align-items: baseline; color: rgba(243, 236, 221, .9); font: inherit; cursor: pointer; text-align: left; text-shadow: inherit; }
+.entries ul button b { min-width: 36px; font-weight: 700; color: rgba(243, 236, 221, .6); }
+.entries ul button small { font-size: inherit; font-weight: 400; color: var(--cream-72); }
+.entries ul button:focus-visible, .entries ul button:hover { color: var(--gold); outline: none; }
+.entries ul button.picked { color: var(--gold); font-weight: 700; }
+.entries ul button.picked b, .entries ul button:focus-visible b { color: inherit; }
+.entries ul button:disabled { color: var(--cream-50); cursor: default; }
+/* Back and Next */
+.wnav { display: flex; gap: 26px; margin-top: 6px; font: 700 13px/1.4 var(--sc); letter-spacing: .16em; }
+.wnav button { appearance: none; background: none; border: none; padding: 0; margin: 0; color: rgba(243, 236, 221, .72); font: inherit; letter-spacing: inherit; cursor: pointer; text-shadow: inherit; }
+.wnav button[data-w="next"] { color: var(--cream); }
+.wnav button[data-w="next"]::after { content: ' →'; }
+.wnav button[data-w="back"]::before { content: '← '; }
+.wnav button:hover, .wnav button:focus-visible { color: var(--gold); outline: none; }
+.wnav button:disabled { color: var(--cream-50); cursor: default; }
+.wnav button[hidden] { display: none; }
+/* the date: the long date, the strip of months with the year's hints as bands over it, and what the day brings */
+.wstep .when { font-variant-numeric: tabular-nums; }
+.cal { position: relative; padding: 2px 0 0; cursor: pointer; touch-action: none; user-select: none; outline: none; border-radius: 3px; }
+.cal:focus-visible { box-shadow: 0 0 0 1.5px rgba(214, 170, 82, .55); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--gold) 55%, transparent); }
+.cal .hbs { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+.cal .hb { position: relative; height: 15px; }
+.cal .hb i { position: absolute; bottom: 1px; height: 3px; border-radius: 2px; background: rgba(243, 236, 221, .55); }
+.cal .hb .lab { position: absolute; bottom: 5px; font: 12px/1 var(--sans); letter-spacing: 0; text-transform: none; font-variant: normal; color: var(--cream-72); white-space: nowrap; }
+.cal .hb .lab.before { text-align: right; }
+.cal .hb b { position: absolute; bottom: -1px; width: 2px; height: 8px; margin-left: -1px; background: inherit; }
+.cal .hb.ice i, .cal .hb.ice b { background: rgba(190, 214, 230, .8); }
+.cal .hb.snow i { background: rgba(250, 250, 255, .9); }
+.cal .hb.bugs i { background: rgba(150, 140, 120, .9); }
+.cal .hb.berry i { background: rgba(120, 140, 210, .95); }
+.cal .hb.fall i { background: rgba(214, 120, 60, .95); }
+.cal .months { display: flex; height: 30px; border-top: 1px solid rgba(243, 236, 221, .35); border-bottom: 1px solid rgba(243, 236, 221, .35); }
+.cal .mo { box-sizing: border-box; padding: 7px 0 0 6px; font: 700 11px/1 var(--sc); letter-spacing: .14em; color: rgba(243, 236, 221, .72); border-left: 1px solid rgba(243, 236, 221, .25); overflow: hidden; white-space: nowrap; }
+.cal .mo:first-child { border-left: none; }
+.cal .mark { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--gold); box-shadow: 0 0 4px rgba(0, 0, 0, .4); pointer-events: none; }
+.cal .mark::after { content: ''; position: absolute; bottom: -6px; left: -4px; border: 5px solid transparent; border-top: 6px solid var(--gold); border-bottom: none; }
+.cal .today { position: absolute; bottom: 0; height: 30px; width: 0; border-left: 1px dashed rgba(243, 236, 221, .6); pointer-events: none; }
+.cal .today[hidden] { display: none; }
+.wstep .brings { margin: 6px 0 0; font-size: 15px; line-height: 1.45; color: var(--cream-86); min-height: 2.9em; }
+.wstep .wkeys { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(243, 236, 221, .6); }
+.wstep .wkeys kbd { font-size: 11px; padding: 1px 6px; border-color: rgba(243, 236, 221, .5); margin-left: 8px; }
+.wstep .wkeys kbd:first-child { margin-left: 0; }
+/* the season in a few lines, and Start as the gold menu item */
+.wsum { display: flex; flex-direction: column; gap: 6px; font-size: 15.5px; line-height: 1.4; }
+.wsum .r { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: baseline; }
+.wsum .k { font: 700 11px/1.4 var(--sc); letter-spacing: .14em; color: rgba(243, 236, 221, .66); }
+.wsum .v { color: var(--cream-86); }
+.wsum .r.more .v { color: var(--cream-72); font-size: 14px; margin-top: -4px; }
+.entries #btn-start { font-size: 22px; margin-top: 10px; }
+/* Sandbox, under the menu: small capitals, quiet, its line beside it */
+.menu li.more { margin-top: 8px; flex-direction: row; align-items: baseline; gap: 10px; }
+.menu .item.quiet { font: 700 12px/1.4 var(--sc); letter-spacing: .16em; color: rgba(243, 236, 221, .6); gap: 10px; }
+.menu .item.quiet::before { width: 10px; }
+.menu .item.quiet:hover, .menu .item.quiet:focus-visible, .menu .item.quiet.open { color: var(--gold); }
+.menu li.more .hint { padding-left: 0; font-size: 12.5px; color: rgba(243, 236, 221, .5); }
+/* while the wizard is up: the line under the name gives it room; with Sandbox picked, New season is not gold */
+#shell.wiz .shell-card p.sub { display: none; }
+#shell.sbx .menu #btn-new.current:not(:focus-visible):not(:hover) { color: var(--cream); }
+#shell.sbx .menu #btn-new.current:not(:focus-visible)::before { background: transparent; }
 
 /* settings: a section nav and the rows of one section */
 #settings-card .head, #controls-card .head { top: 80px; gap: 10px; }
