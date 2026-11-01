@@ -68,7 +68,8 @@ node scripts/migrate-check.mjs --v3 <dir> --v4 <dir> --v5 <dir> --v6 <dir> --to 
 | v5, wetlands round 1 | 4 | unknown (index overwritten) | briefly on 10-31 | ? | no table: carried only when the lake-name and campsite test can tell its numbers |
 | v5, water edges | 4 | 2026-10-31T22:27:14.604Z | minutes on 10-31 | 25,076 | v4's numbers plus appended water |
 | v6, wetlands round 2 | 4 | 2026-10-31T23:37:29.148Z | 10-31 evening → | 22,377 | renumbered almost everything; shipped **without** a table |
-| v7-water (wetlands + water edges) | 4 | 2026-11-01T02:01:48.172Z | next | 22,907 | v4/v5 numbering for the lakes it kept; ships tables from v3, v4, v5 and v6 |
+| v7-water (wetlands + water edges) | 4 | 2026-11-01T02:01:48.172Z | 11-01 → | 22,907 | v4/v5 numbering for the lakes it kept; ships tables from v3, v4, v5 and v6 |
+| v8 (the season round: portage fix, flowages) | 4 | 2026-11-01T20:10:11.808Z | next | 22,701 | fresh Geofabrik extracts (1 Nov); Lake One 103 → 104; ships tables from v3, v4, v5, v6 and v7-water |
 
 The tables that ship with v7-water (all go to v7-water):
 
@@ -90,3 +91,21 @@ live**, built with `scripts/migrate-table.mjs`, added to `TABLES`, and passing `
 shipping, keep every live release's `index.json` (and its tiles, or a URL for them). A release whose index is lost
 cannot be carried, as happened with v5 wetlands round 1. A rebake that keeps the numbers needs no new table, because
 `sameNumbering` recognises it. If unsure, run the check.
+
+### v8 (the season round, 2026-11-01)
+
+v8 was baked from fresh Geofabrik extracts (Ontario and Minnesota, 1 November), so it does not reproduce v7-water's
+inputs exactly (v7-water was baked by a cloud session whose extract is not kept). The tables (all to v8):
+
+| from | lakes carried | campsites | portages |
+|---|---|---|---|
+| v3 | 18,765 of 21,191 | 2,241 of 2,241 | 1,030 of 1,032 |
+| v4 | 22,125 of 24,525 | 2,249 of 2,249 | 1,295 of 1,295 |
+| v5 | 22,569 of 25,076 | 2,249 of 2,249 | 1,295 of 1,295 |
+| v6 | 22,213 of 22,377 | 2,246 of 2,246 | 1,295 of 1,295 |
+| v7-water | 22,683 of 22,907 (22,643 by OSM id) | 2,249 of 2,249 | 1,295 of 1,295 |
+
+The lakes not carried are mostly creek channels the portage fix took away (the water beside a portage) and slivers.
+A trail whose end lay on such a creek was carried on by the bake to the next water; `migrate-table.mjs` matches it
+("carried on to other water": one end kept, the old line all on the new) and `migrate-check.mjs` accepts it.
+`migrate-check.mjs` now takes `--v7` too, and reads Lake One's new id from the release (104 in v8).
