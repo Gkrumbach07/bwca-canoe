@@ -228,7 +228,7 @@ const noFlip = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDi
 // water line, the tops furthest, deeper as a gust rolls over, and swing and shiver about that; the rice is the more
 // limber. The pads only shift a little on the water. The submerged weed swings with the water instead. Phases come
 // from the world position (an instance's own hash, a slow wave across the weed beds), so a tile crossing moves nothing.
-const PLANT_SWAY = { 1: [0.14, 1.9], 3: [0.22, 1.5] }; // reeds, rice: lean in radians at 12 m/s under a gust, height (m)
+const PLANT_SWAY = { 1: [0.14, 1.9], 3: [0.22, 1.5], 4: [0.12, 2.2] }; // reeds, rice, the land's cattail (kind 4): lean in radians at 12 m/s under a gust, height (m)
 const windSway = (kind) => kind === 2
   ? 'float ph = uWaterTime * 1.1 + fract(dot(ip.xz, vec2(0.5, 0.35) / 6.2831853)) * 6.2831853; transformed.x += sin(ph) * 0.12 * position.y; transformed.z += cos(ph * 0.7) * 0.07 * position.y;'
   : /* glsl */ `
@@ -253,7 +253,7 @@ const vertexBody = (kind) => INSTANCE_ORIGIN + /* glsl */ `
     vAqUv = uv; vAqPart = aPart;
     ${kind === 0 ? 'transformed *= uGrow;' : kind === 3 ? 'transformed *= uRiceGrow;' : ''}
     ${windSway(kind)}
-    ${kind === 2 ? '' : kind === 1 ? 'transformed.y += renderedWave(ipRel, uWaterTime) * (1.0 - uIceHide) / sy;' : 'transformed *= 1.0 - step(0.5, uIceHide);\n    transformed.y += renderedWave(ipRel, uWaterTime) / sy;'}
+    ${kind === 2 || kind === 4 ? '' : kind === 1 ? 'transformed.y += renderedWave(ipRel, uWaterTime) * (1.0 - uIceHide) / sy;' : 'transformed *= 1.0 - step(0.5, uIceHide);\n    transformed.y += renderedWave(ipRel, uWaterTime) / sy;'}
   }`;
 const PLANT_DECL = 'uniform float uGrow, uRiceGrow, uIceHide;\nattribute float aPart;\nvarying vec2 vAqUv;\nvarying float vAqPart;\n' + glslSway;
 const fragCut = /* glsl */ `
@@ -269,7 +269,7 @@ function makeAquaticMaterial(water, kind) {
     compile: (shader) => {
       addSurface(shader, water, { ...AQUA, ...SWAY }, PLANT_DECL);
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + vertexBody(kind));
-      const tan = kind === 1 || kind === 3
+      const tan = kind === 1 || kind === 3 || kind === 4
         ? '\n  if ( vAqPart < 0.5 ) { float l = dot( diffuseColor.rgb, vec3( 0.3, 0.5, 0.2 ) ); diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.55, 0.4, 0.2 ) * ( 0.35 + 1.6 * l ), uTan ); }'
         : '';
       shader.fragmentShader = shader.fragmentShader
@@ -308,6 +308,9 @@ export function makeAquaticKit(water, seed = 9) {
   ];
   const mats = [0, 1, 2, 3].map((k) => makeAquaticMaterial(water, k));
   const depth = makeAquaticDepth(water, 1);
+  // the density round (2026-11-01): the same reed clumps standing on land, the marsh's cattail, bulrush and sedge
+  // (thicket.js): kind 4, the reeds' sway and season without the ride on the water or the lake's ice
+  const land = { geos: geos[1], mat: makeAquaticMaterial(water, 4), depth: makeAquaticDepth(water, 4) };
   const grow = AQUA.uGrow;
   const setSeason = (s) => {
     const d = s.doy;
@@ -319,7 +322,7 @@ export function makeAquaticKit(water, seed = 9) {
     AQUA.uTan.value = Math.max(s.fall, s.bare, 1 - s.leaf, THREE.MathUtils.smoothstep(d, 228, 252) * 0.7);
     AQUA.uIceHide.value = s.ice;
   };
-  return { geos, mats, depth, grow, setSeason };
+  return { geos, mats, depth, land, grow, setSeason };
 }
 
 export function makeAquaticMeshes(bins, kit) {
