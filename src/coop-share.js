@@ -689,7 +689,16 @@ export class CoopShare {
       const q = segSeg(mine, theirs), need = r0 + HULL_R;
       if (q.d >= need) continue;
       let nx = q.px - q.qx, nz = q.pz - q.qz, n = Math.hypot(nx, nz);
-      if (n < 1e-4) { nx = Math.sin(p.heading); nz = Math.cos(p.heading); n = 1; } // (centre on centre: out to the side)
+      // Hulls lying side by side (or one on the other) part sideways, each to its own side: the side the centres already
+      // lean to, or, centre on centre, by the players' ids, so the two screens never push both canoes the same way
+      const par = afloat && Math.abs(Math.sin(p.heading - B.heading)) < 0.5;
+      if (par || n < 0.05) {
+        // one axis on both screens: the side of the lower id's heading (as each screen sees it)
+        const low = Number(this.coop.id) < Number(f.id), h = low ? p.heading : B.heading;
+        const sx = Math.cos(h), sz = -Math.sin(h), lean = (p.x - B.x) * sx + (p.z - B.z) * sz;
+        const sign = Math.abs(lean) > 0.05 ? Math.sign(lean) : (low ? 1 : -1);
+        nx = sx * sign; nz = sz * sign; n = 1;
+      }
       nx /= n; nz /= n;
       const step = Math.min(need - q.d, APART.most * dt) * (afloat ? 1 : 0.8);
       const x = p.x + nx * step, z = p.z + nz * step, sd = w.shoreAt(x, z);
