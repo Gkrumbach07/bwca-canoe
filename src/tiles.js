@@ -716,6 +716,9 @@ export class TileManager {
     e.obstacles = props.userData.obstacles; // docks, shacks, tents and the like, in world coordinates
     freeze(group);
     e.group = group; e.state = 'ready'; e.result = null;
+    // a neighbour's chunk already in over this tile's edge (the chunk grid is half a cell off the tiles', and the trails
+    // reach over the seam) was re-seated while this tile was not ready, so not under it: seated now (detail.js settle)
+    { const m = 8, s = w.tileMetres; this.detail.settle([ox - m, oz - m, ox + s + m, oz + s + m]); }
     // in this frame (evict runs after the installs, before an ensure's waiter can stand on it): the newest wanted
     e.readyTick = this.tick;
     if (e.ensured) { e.lastWanted = this.tick; e.ensured = false; }
@@ -805,6 +808,11 @@ export class TileManager {
   groundAt(x, z, grid = null) {
     const d = this.detail.heightAt(x, z); // a LiDAR detail chunk drawn here (detail.js)
     if (d === d) return d;
+    return this.meshGroundAt(x, z, grid);
+  }
+  // The same without the LiDAR chunks: the 10 m mesh, what the trees, the rocks and the props are built on (detail.js
+  // re-seats them onto a chunk by the dy it adds, kept per instance and per vertex from 0, so they must start here).
+  meshGroundAt(x, z, grid = null) {
     const g = this.locate(x, z);
     if (g) { const y = g.mesh.height(x - g.ox, z - g.oz); if (y === y) return y; }
     const w = this.world;
