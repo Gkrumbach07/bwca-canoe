@@ -58,6 +58,9 @@ export const groundUniforms = {
   // moss, last year's leaves and fern
   uSwampFloor: { value: [v3(SWAMP_FLOOR.moss), v3(SWAMP_FLOOR.litter), v3(SWAMP_FLOOR.fern)] },
   uMeadowSeason: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
+  // the season round: the thaw's ground (setLandSeason), 0 the summer .. 1 the snow's months: the moss, the bog's
+  // sphagnum and the swamp's fern dulled to last year's straw and brown and the wet dark duff, the green back in late May
+  uThaw: { value: 0 },
 };
 // The water standing on wet ground mirrors the sky, wet weather or not (weather.js wetSheen is only the rain's film):
 // a GLSL statement for a look material's main at opaque_fragment, `gloss` an expression in scope (0..1). Schlick on
@@ -89,6 +92,8 @@ export function setLandSeason(season) {
     const t = smoothstep(256, 282, d), b = smoothstep(292, 322, d);
     for (let c = 0; c < 3; c++) out[c] = (M.summer[c] + (M.tawny[c] - M.summer[c]) * t) * (1 - b) + M.brown[c] * b;
   }
+  // (the thaw: brown from the first lasting snow, mid-November, to the middle of May, green again by its end)
+  u.uThaw.value = d < 200 ? 1 - smoothstep(130, 152, d) : smoothstep(300, 325, d);
   const gt = season.grassTint || [1, 1, 1];
   u.uMeadowSeason.value[0].set(out[0], out[1], out[2]);
   u.uMeadowSeason.value[1].set(out[0] / gt[0], out[1] / gt[1], out[2] / gt[2]);
@@ -126,6 +131,12 @@ float groundSphagnum = 0.0;
 // groundColor made of it: the share of this pixel that is a pool (flat and mirroring; terrain.js mireSheen)
 uniform vec3 uMirePool, uMirePeat, uMireIce;
 uniform vec3 uMeadowSeason[2];
+uniform float uThaw;
+// the thaw's dull (uThaw): a green's light kept, its colour gone to last year's straw and brown, a little darker and wetter
+vec3 groundThaw(vec3 c, float k) {
+  float l = dot(c, vec3(0.3, 0.55, 0.15));
+  return mix(c, l * vec3(1.18, 0.96, 0.66) * 0.86, k);
+}
 float groundMire = 0.0, groundPool = 0.0;
 // the density round (mire-relief.js mireAttr, the terrain's aRelief): the hummocks' shape here (-1 a hollow .. 1 a top),
 // how much this is a mire floor whose pools lie in its hollows (0: the old painted pools), the water there (the pool
@@ -342,6 +353,7 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
       poolN = lookFbm(p / 3.4 + vec2(-4.7, 8.3), 62u, 3) + 0.24 * (lookFbm(p / 0.8 + vec2(1.9, -2.2), 63u, 2) - 0.5) * lookFade(0.8, px);
       poolT = 0.77 - 0.2 * groundMire;
     }
+    if (uThaw > 0.004) mossC = groundThaw(mossC, 0.85 * uThaw);
     c = bA.x * groundShaded(0, mix(uGroundLit[0], uGroundSunny, sunny), s)
       + bA.y * mossC + bA.z * groundShaded(2, uGroundLit[2], s) * mix(uMeadowSeason[1], uMeadowSeason[0], groundSeasonK) + bA.w * groundShaded(3, uGroundLit[3], s)
       + (bB.x * groundShaded(4, uGroundLit[4], s) + bB.y * groundShaded(5, uGroundLit[5], s) + bB.z * groundShaded(6, uGroundLit[6], s)) * groundRockTint + bB.w * groundShaded(7, uGroundLit[7], s);

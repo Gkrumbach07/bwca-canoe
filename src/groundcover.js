@@ -155,6 +155,7 @@ const body = /* glsl */ `
   if (wi == 3) vColor.rgb = vec3(0.07, 0.15, 0.036) * (0.75 + 0.5 * h3.y) * gl * uGrassTint * 1.35;
   else if (swampGrass) vColor.rgb = vec3(0.12, 0.19, 0.06) * (0.8 + 0.4 * h3.y) * gl * uGrassTint * 1.3; // the bluejoint under the alder
   vGrassFern = wi == 3 ? 1.0 : 0.0;
+  vColor.rgb = groundThaw(vColor.rgb, 0.8 * uThaw); // (the thaw's straw and last year's brown fronds, terrain.js)
   vGrassCotton = wi == 2 ? step(h3.x, 0.35) * uFlower : 0.0; // cottongrass in the bog through the summer
   vGrassH = (position.y - ${ROOT.toFixed(2)}) / ${(HGT - ROOT).toFixed(2)};
   vGrassDist = distance((modelMatrix * vec4(transformed, 1.0)).xyz, cameraPosition);
