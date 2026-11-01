@@ -357,6 +357,25 @@ other lowercase type, to one client with `to`, up to 256 KB (deployed 2026-11-01
   reloaded can duplicate once; a friend's pub can flash their flames back during your douse. Details: `stream-a.md`,
   `stream-b.md` in the notes.
 
+### Phase 3 as planned (2026-11-01)
+
+The owner, after playing phase 2: "continue to next phase". Phase 3 also takes Adventure, which phase 2 left out.
+Three streams in parallel, then a join:
+- **A, the night together** (`src/coop-night.js`): the shared rest dial as above ("Rest and sleep: everyone, and one
+  wake time"): the first player in sets the proposal, turning it clears the others' ticks, the night begins when
+  every player is in their own tent and has ticked the same wake time; a player gone from the room a minute counts as
+  asleep. The host runs the night once and sends the clock; each browser runs its own `energy.sleep` from its own
+  tent; one night card on every screen. A nap is the same dial. The fetch (Q on a portage) is not offered in a room.
+- **B, the connection** (`src/coop.js`, `coop-share.js`): the host's wind at 1 Hz (`wind.js`'s live state; guests set
+  theirs from it, as the clock); a dropped guest rejoins by itself when the relay comes back, and *Rejoin* on the pause
+  card and the title after a reload (the visitor's last code, while the room lives); a host's reload keeps the room;
+  a friend swimming is drawn swimming; the weather seed from the season so every screen's sky agrees.
+- **C, Adventure in co-op** (`src/coop-trip.js`): *Invite* in an Adventure season too; a guest arrives at the host's
+  outfitter (or beside the host in the wild); stores and shelves per player with their own purse; the boards and
+  notices shared as the host's; the push-off when any player leaves the landing; a ride or the bunkhouse as a group
+  jump (everyone at the store ticks, the host advances); an evacuation moves that one player to the outfitter on the
+  group's clock with no jump; the trip's log carries `who`.
+
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
 on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real test of the relay and the actor.
