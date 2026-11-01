@@ -32,30 +32,30 @@ const BUDGET = 3;             // ms a frame may spend working out chunks (a tele
 // the most a hectare holds anywhere (their candidates per cell), their pad off a trail or a site (m), the shore distance
 // they keep (m), how deep they sink, and how they scale. `pick(h)` chooses a variant from a number in [0, 1).
 export const LAYERS = {
-  pole: { sp: 1, variants: [18, 19, 20, 21, 22, 23], scale: GUEST[25][2], reach: 115, pad: 1.1, shore: 0.9, sink: 0.35, pick: (h) => (h < 0.13 ? 5 : h < 0.25 ? 1 : h < 0.36 ? 4 : h < 0.6 ? 0 : h < 0.82 ? 3 : 2) },
-  alder: { sp: 11, variants: [0, 1, 2, 3, 4, 5], reach: 95, pad: 0.5, shore: 0.2, sink: 0.12 },
-  shrub: { sp: 7, variants: [0, 1, 2, 3], shadow: false, reach: 70, pad: 0.4, shore: 0.25, sink: 0.3 },
-  mat: { sp: 24, variants: [0, 1, 2, 3], shadow: false, reach: 60, pad: 0.3, shore: 0.4, sink: 0.08 },
-  tamarack: { sp: 17, variants: [0, 1, 3, 4], reach: 115, pad: 1.2, shore: 0.9, sink: 0.35 },
-  ash: { sp: 3, variants: [18, 19, 20, 21], reach: 110, pad: 1.2, shore: 0.9, sink: 0.35, scale: GUEST[23][2] }, // (the birch's bins hold the ash's variants after the aspen's, the spruce's the poles' after the black spruce's)
-  log: { sp: 14, variants: [0, 1], shadow: false, reach: 70, pad: 1.6, shore: 0.6, sink: 0.04, log: true },
-  reed: { reeds: [2, 0, 3], reach: 75, pad: 0.4, shore: -0.2, sink: 0.05 }, // cattail, bulrush, sedge
+  pole: { sp: 1, variants: [18, 19, 20, 21, 22, 23], scale: GUEST[25][2], reach: 100, pad: 1.1, shore: 0.9, sink: 0.35, pick: (h) => (h < 0.13 ? 5 : h < 0.25 ? 1 : h < 0.36 ? 4 : h < 0.6 ? 0 : h < 0.82 ? 3 : 2) },
+  alder: { sp: 11, variants: [0, 1, 2, 3, 4, 5], reach: 85, pad: 0.5, shore: 0.2, sink: 0.12 },
+  shrub: { sp: 7, variants: [0, 1, 2, 3], shadow: false, reach: 60, pad: 0.4, shore: 0.25, sink: 0.3 },
+  mat: { sp: 24, variants: [0, 1, 2, 3], shadow: false, reach: 55, pad: 0.3, shore: 0.4, sink: 0.08 },
+  tamarack: { sp: 17, variants: [0, 1, 3, 4], reach: 100, pad: 1.2, shore: 0.9, sink: 0.35 },
+  ash: { sp: 3, variants: [18, 19, 20, 21], reach: 95, pad: 1.2, shore: 0.9, sink: 0.35, scale: GUEST[23][2] }, // (the birch's bins hold the ash's variants after the aspen's, the spruce's the poles' after the black spruce's)
+  log: { sp: 14, variants: [0, 1], shadow: false, reach: 60, pad: 1.6, shore: 0.6, sink: 0.04, log: true },
+  reed: { reeds: [2, 0, 3], reach: 70, pad: 0.4, shore: -0.2, sink: 0.05 }, // cattail, bulrush, sedge
   // stage 2, the upland: young balsam fir (the sapling, up to 6 m), beaked hazel, mountain maple and the like (the shrub,
   // stood taller), jack pine poles, the aspen suckers and young jack pine of a burn's regrowth, the old forest's snags
-  fir: { sp: 12, variants: [0, 1, 2, 3], reach: 95, pad: 0.6, shore: 0.8, sink: 0.1 },
-  hazel: { sp: 10, variants: [0, 1, 2, 3], reach: 85, pad: 0.4, shore: 1.5, sink: 0.08 },
-  jack: { sp: 9, variants: [0, 1, 3, 4], reach: 95, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.16 },
-  regrow: { sp: 22, variants: [0, 1, 2, 3], reach: 85, pad: 0.4, shore: 0.8, sink: 0.1 },
-  snag: { sp: 5, variants: [0, 1, 3], reach: 115, pad: 1.2, shore: 0.9, sink: 0.35 },
+  fir: { sp: 12, variants: [0, 1, 2, 3], reach: 80, pad: 0.6, shore: 0.8, sink: 0.1 },
+  hazel: { sp: 10, variants: [0, 1, 2, 3], reach: 70, pad: 0.4, shore: 1.5, sink: 0.08 },
+  jack: { sp: 9, variants: [0, 1, 3, 4], reach: 85, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.16 },
+  regrow: { sp: 22, variants: [0, 1, 2, 3], reach: 75, pad: 0.4, shore: 0.8, sink: 0.1 },
+  snag: { sp: 5, variants: [0, 1, 3], reach: 100, pad: 1.2, shore: 0.9, sink: 0.35 },
   // stage 2, the canopy from the data (canopyOf): the trees of the stand's own species, as many as its cover and its
   // crowns' size make, less what the tiles stand there already; their trunks are held off like the tiles' (trunksNear)
-  cWhitePine: { sp: 0, variants: [0, 1], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.3 },
-  cSpruce: { sp: 1, variants: [0, 3], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.22 },
-  cBSpruce: { sp: 1, variants: [12, 13], scale: GUEST[19][2], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.15 },
-  cRedPine: { sp: 2, variants: [0, 1], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.26 },
-  cBirch: { sp: 3, variants: [0, 1], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.17 },
-  cAspen: { sp: 3, variants: [12, 13], scale: GUEST[18][2], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.16 },
-  cCedar: { sp: 4, variants: [0, 1], reach: 75, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.25 },
+  cWhitePine: { sp: 0, variants: [0, 1], reach: 65, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.3 },
+  cSpruce: { sp: 1, variants: [0, 3], reach: 65, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.22 },
+  cBSpruce: { sp: 1, variants: [12, 13], scale: GUEST[19][2], reach: 65, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.15 },
+  cRedPine: { sp: 2, variants: [0, 1], reach: 65, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.26 },
+  cBirch: { sp: 3, variants: [0, 1], reach: 65, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.17 },
+  cAspen: { sp: 3, variants: [12, 13], scale: GUEST[18][2], reach: 65, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.16 },
+  cCedar: { sp: 4, variants: [0, 1], reach: 65, pad: 1.4, shore: 0.9, sink: 0.35, trunk: 0.25 },
   // stage 3, the shore seen from the canoe: dogwood and willow at the waterline, young fir and cedar's like a pace up,
   // alder on the wet banks; reaching further than the rest, as far as a canoe sees a bank clearly
   shoreShrub: { sp: 7, variants: [0, 1], shadow: false, reach: 170, pad: 0.4, shore: 0.2, sink: 0.25, band: [0.2, 5] },
@@ -223,7 +223,9 @@ export class Thicket {
         let geo, mat, depth;
         if (L.reeds) { if (!aquatic || !aquatic.land) return; geo = aquatic.land.geos[v]; mat = aquatic.land.mat; depth = aquatic.land.depth; }
         else { const V = kit.variants[L.sp][v]; if (!V) return; geo = V.full; mat = kit.materialFor(L.sp); depth = kit.depthFor(L.sp); }
-        const b = { layer: L, k, geo, mat, depth, n: 0, meshes: [], shadow: L.shadow !== false };
+        // (shadows only from the trunks, the bog's poles and the alder: the rest is lost in the shade they make, and the
+        // shadow passes cost more than they show)
+        const b = { layer: L, k, geo, mat, depth, n: 0, meshes: [], shadow: L.shadow !== false && (!!L.trunk || name === 'pole' || name === 'alder') };
         L.index[k] = this.buckets.length;
         this.buckets.push(b);
       });
@@ -363,9 +365,12 @@ export class Thicket {
     const [ci, cj] = this.at, ox = (ci + 0.5) * CHUNK, oz = (cj + 0.5) * CHUNK;
     this.group.position.set(ox, 0, oz);
     this.group.updateMatrix(); this.group.updateMatrixWorld(true);
-    const rows = this.buckets.map(() => [[], []]);
+    // (five meshes a bucket: the near one, which casts the shadows, and the rest in four quarters round the camera, each
+    // culled by its own bounds, so what is behind the camera is not drawn)
+    const rows = this.buckets.map(() => [[], [], [], [], []]);
     for (const c of this.chunks.values()) {
-      const d = Math.max(0, Math.hypot(c.ci - ci, c.cj - cj) * CHUNK - CHUNK * 0.7), inner = d < SHADOW_R ? 0 : 1;
+      const d = Math.max(0, Math.hypot(c.ci - ci, c.cj - cj) * CHUNK - CHUNK * 0.7);
+      const inner = d < SHADOW_R ? 0 : 1 + (c.ci >= ci ? 1 : 0) + (c.cj >= cj ? 2 : 0);
       for (const [bi, a] of c.lists) {
         const L = this.buckets[bi].layer, keep = 1 - smoothstep(L.reach * 0.72, L.reach, d);
         if (keep <= 0) continue;
@@ -375,7 +380,7 @@ export class Thicket {
     }
     for (let bi = 0; bi < this.buckets.length; bi++) {
       const B = this.buckets[bi];
-      for (let part = 0; part < 2; part++) {
+      for (let part = 0; part < 5; part++) {
         const list = rows[bi][part], n = list.length / 2;
         let mesh = B.meshes[part];
         if (!mesh || mesh.instanceMatrix.count < n) {
@@ -387,7 +392,8 @@ export class Thicket {
           mesh.customDepthMaterial = B.depth;
           mesh.castShadow = part === 0 && B.shadow;
           mesh.receiveShadow = true;
-          mesh.frustumCulled = false; // (the ring is round the camera: some of it is always in view)
+          mesh.frustumCulled = true;
+          mesh.boundingSphere = new THREE.Sphere();
           mesh.matrixAutoUpdate = false;
           mesh.userData.thicket = B.layer.name;
           B.meshes[part] = mesh;
@@ -395,9 +401,13 @@ export class Thicket {
           mesh.updateMatrixWorld(true);
         }
         const M = mesh.instanceMatrix.array, C = mesh.instanceColor.array;
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity, sMax = 0;
         for (let i = 0; i < n; i++) {
           const o = list[i * 2], a = list[i * 2 + 1];
           const s = a[o + 4], lean = a[o + 7];
+          const lx = a[o] - ox, lz = a[o + 2] - oz;
+          if (lx < x0) x0 = lx; if (lx > x1) x1 = lx; if (lz < z0) z0 = lz; if (lz > z1) z1 = lz;
+          if (a[o + 1] < y0) y0 = a[o + 1]; if (a[o + 1] > y1) y1 = a[o + 1]; if (s > sMax) sMax = s;
           _p.set(a[o] - ox, a[o + 1], a[o + 2] - oz);
           if (B.layer.log) _e.set(0, a[o + 3], 0.04 * Math.sin(a[o + 8]), 'YXZ');
           else _e.set(lean * Math.cos(a[o + 8]), a[o + 3], lean * Math.sin(a[o + 8]), 'YXZ');
@@ -409,6 +419,12 @@ export class Thicket {
         }
         mesh.count = n;
         mesh.visible = n > 0;
+        if (n) {
+          if (!B.geo.boundingSphere) B.geo.computeBoundingSphere();
+          const g = B.geo.boundingSphere;
+          mesh.boundingSphere.center.set((x0 + x1) / 2, (y0 + y1) / 2 + g.center.y * sMax, (z0 + z1) / 2);
+          mesh.boundingSphere.radius = Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2 + (g.radius + Math.abs(g.center.y)) * sMax + 1;
+        }
         mesh.instanceMatrix.needsUpdate = true;
         mesh.instanceColor.needsUpdate = true;
       }
