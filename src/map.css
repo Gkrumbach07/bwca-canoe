@@ -18,9 +18,9 @@
 
 /* the sheet laid in the book: the HUD's map paper as a leaflet. (!important: whatever the floating sheet's place was,
    the in-book sheet fills its page; the owner saw it drawn in the page's top-left quarter, the floating sheet's
-   translate(-50%, -50%) left on it) */
+   centring left on it: the build's minifier had dropped the `translate: none` meant to undo it) */
 #journal #map.in-book, #journal #map.in-book.sheet { position: relative !important; inset: auto !important; left: auto !important; top: auto !important; right: auto !important; bottom: auto !important;
-  translate: none !important; transform: rotate(-.35deg) !important; width: 100% !important; height: 100% !important; flex: 1 1 auto; z-index: auto; transition: none; }
+  margin: 0 !important; transform: rotate(-.35deg) !important; width: 100% !important; height: 100% !important; flex: 1 1 auto; z-index: auto; transition: none; }
 #journal #map.in-book #map-layers, #map.in-book .band.foot .leg, #map.in-book #map-held, #map.in-book #map-hint { display: none !important; }
 
 /* --- the leaflet: lighter map stock, folded in eight, its corners worn, lying on the paper under it ------------------ */
@@ -157,7 +157,7 @@
 #mtbook .mt-page.right { background-image: var(--pp-grain), linear-gradient(270deg, rgba(120, 82, 36, .16), transparent 7%, transparent 82%, rgba(90, 58, 24, .1) 93%, rgba(60, 36, 14, .3) 100%), linear-gradient(180deg, rgba(120, 82, 36, .12), transparent 6%, transparent 93%, rgba(120, 82, 36, .16)); }
 /* the sheet in the right page's place, a little over the seam like the book's */
 #map.table, #map.table.sheet { left: calc(50% - var(--mtw) / 2 + 30px + 356px); top: calc(50% - var(--mth) / 2 + 16px + 12px); width: calc(var(--mtw) - 60px - 356px - 14px); height: calc(var(--mth) - 46px - 28px);
-  translate: none; z-index: 6; rotate: -.35deg; }
+  right: auto; bottom: auto; margin: 0; z-index: 6; rotate: -.35deg; }
 #map.table #map-layers, #map.table #map-hint, #map.table #map-held, #map.table #pin { display: none !important; }
 #map.table .band.foot .leg { display: none; }
 #map.table .band.foot .leg:has(> i[style]) { display: flex; } /* (the two sheet keys stay: yours ruled, the rest dotted) */
