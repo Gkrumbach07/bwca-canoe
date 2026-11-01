@@ -61,7 +61,7 @@ const GROUP_SHARE = { 1: [1], 2: [0.6, 1], 3: [0.45, 0.8, 1] };
 // height over the host's]: an instance's scale carries that, so far off the host's shape stands at the
 // guest's height.
 // (d2 land: the black ash after the aspen in the birch's, groups 5 and 6; vegetation.js SPECIES birch guests)
-export const GUEST = { 8: [0, 3, 20 / 16], 18: [3, 3, 13 / 10.5], 19: [1, 3, 11 / 12.5], 23: [3, 5, 15 / 10.5] };
+export const GUEST = { 8: [0, 3, 20 / 16], 18: [3, 3, 13 / 10.5], 19: [1, 3, 11 / 12.5], 23: [3, 5, 15 / 10.5], 25: [1, 5, 7 / 12.5] }; // (the density round: the bog's poles after the black spruce in the spruce's)
 // how many variant groups a bin of each species holds: its own and its guests'
 export const BIN_GROUPS = GROUPS.map((n, sp) => n + Object.entries(GUEST).filter(([, [h]]) => h === sp).reduce((s, [g]) => s + GROUPS[g], 0));
 // Floats per instance: x, y, z (relative to the tile corner), yaw, scale, tint, squash; the rocks add the

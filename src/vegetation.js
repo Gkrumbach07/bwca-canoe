@@ -414,8 +414,8 @@ function jackPine(rng, v) {
 // Every branch has its bark, so a bare tamarack still reads as a tree.
 function tamarack(rng, v) {
   const g = new GeoBuilder(), cards = new CardBuilder(), P = profile(v, rng);
-  const h = 13 * P.size, bark = vary(0x6b5546, rng), cols = crownColors(0x9cc865, 0x4d7d4e, rng);
-  const T = g.stem(0, -0.5, 0, 0.26 * P.girth, 0.035, h, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.3, shade: 0.3, ts: [0, 0.12, 0.6, 1] });
+  const h = 13 * P.size, bark = vary(0x6f6359, rng), cols = crownColors(0x9cc865, 0x4d7d4e, rng); // (the density round: a slimmer, greyer trunk)
+  const T = g.stem(0, -0.5, 0, 0.19 * P.girth, 0.035, h, 5, bark, rng, { lean: leanOf(P, h), bow: bowOf(P, h), flare: 0.3, shade: 0.3, ts: [0, 0.12, 0.6, 1] });
   deadBranches(g, rng, T.at, 2 + Math.floor(rng() * 2), 0.06, 0.25, 0.6, 1.3, bark);
   const R = (1.6 + rng() * 0.5) * (0.8 + P.size * 0.3), nrm = outward(T, -0.5, h, 0.8);
   whorls(g, cards, rng, T, { t0: 0.22, t1: 0.9, count: 8 + Math.floor(rng() * 2), nb: (f) => (f < 0.5 ? 4 : 3), R: (f) => R * (1 - f * 0.75) + 0.2, droop: (f) => 0.05 + 0.15 * (1 - f), rise: 0.12, tube: () => true, nrm, cols, y0: 0, y1: h, bark, wid: 0.55, fan: 0.3, lo: 0.45 });
@@ -547,9 +547,10 @@ function hazel(rng) {
   return clump(rng, { h: 2.2 * size, size: 1.1 * size, stems: 3 + Math.floor(rng() * 2), lean: [0.25, 0.5], bark: vary(0x6a5440, rng, 0.06), cols: crownColors(0x78a24c, 0x37552f, rng) });
 }
 // speckled alder: a sprawling clump of grey stems leaning out from the wet ground, dark leaves on their upper half
+// (the density round: more stems and smaller leaf clusters, so a stand of them is a tangle, not a few big leaves)
 function alder(rng) {
   const size = 0.85 + rng() * 0.4;
-  return clump(rng, { h: 2.6 * size, size: 1.15 * size, stems: 3 + Math.floor(rng() * 2), lean: [0.35, 0.7], bark: vary(0x75706a, rng, 0.06), cols: crownColors(0x5f8c44, 0x2e4c2d, rng), side: 0.35 });
+  return clump(rng, { h: 2.6 * size, size: 0.78 * size, stems: 5 + Math.floor(rng() * 3), lean: [0.3, 0.75], bark: vary(0x7a756e, rng, 0.06), cols: crownColors(0x5f8c44, 0x2e4c2d, rng), side: 0.55 });
 }
 // a young balsam fir coming up in the gaps: a thin stem, three or four whorls of level sprays, the lowest widest
 function sapling(rng) {
@@ -890,7 +891,8 @@ const TREE_VARIANTS = 12;
 // birch's gold). Their own slots below hold no variants.
 export const SPECIES = [
   { name: 'whitePine', make: whitePine, variants: TREE_VARIANTS, guest: { name: 'tallPine', make: tallPine, variants: TREE_VARIANTS, fit: 16 / 20 } },
-  { name: 'spruce', make: spruce, variants: TREE_VARIANTS, guest: { name: 'blackSpruce', make: blackSpruce, variants: 6, fit: 12.5 / 11 } },
+  { name: 'spruce', make: spruce, variants: TREE_VARIANTS, guest: { name: 'blackSpruce', make: blackSpruce, variants: 6, fit: 12.5 / 11 },
+    guests: [{ name: 'blackSpruce', make: blackSpruce, variants: 6, fit: 12.5 / 11 }, { name: 'bogPole', make: bogPole, variants: 6, fit: 12.5 / 7 }] }, // (the density round: and the bog's poles)
   { name: 'redPine', make: redPine, variants: TREE_VARIANTS },
   { name: 'birch', make: birch, leaves: [0.86, 0.56, 0.12], variants: TREE_VARIANTS, guest: { name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 },
     guests: [{ name: 'aspen', make: aspen, variants: 6, leaves: true, fit: 10.5 / 13 }, { name: 'ash', make: ash, variants: 6, leaves: true, fit: 10.5 / 15 }] }, // d2 land: and the black ash
@@ -927,9 +929,9 @@ export const SPECIES = [
   { name: 'ash', guestOf: 3, roles: true }, // d2 land: the black ash, a guest in the birch's bins
   // wetlands round 2: the bog's leatherleaf and Labrador tea mat, small and many: near only, no shadows (mat: tagMat)
   { name: 'leatherleaf', make: leatherleaf, leaves: [0.6, 0.25, 0.1], mat: true, variants: 6, lod: 150, cull: 340, shadow: false },
-  // the density round: the bog's black spruce poles, live, dead-topped and dead (bogPole); also drawn by the near ring
-  // (thicket.js) in their thousands
-  { name: 'bogPole', make: bogPole, variants: 6, roles: true },
+  // the density round: the bog's black spruce poles, live, dead-topped and dead (bogPole), a guest in the spruce's bins
+  // after the black spruce (no draw calls of their own); the near ring (thicket.js) draws them in their thousands
+  { name: 'bogPole', guestOf: 1, roles: true },
 ];
 // d2 land: a host's guests (the birch holds the aspen and the black ash)
 const guestsOf = (S) => S.guests || (S.guest ? [S.guest] : []);

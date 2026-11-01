@@ -31,13 +31,13 @@ const BUDGET = 3;             // ms a frame may spend working out chunks (a tele
 // the most a hectare holds anywhere (their candidates per cell), their pad off a trail or a site (m), the shore distance
 // they keep (m), how deep they sink, and how they scale. `pick(h)` chooses a variant from a number in [0, 1).
 export const LAYERS = {
-  pole: { sp: 25, variants: [0, 1, 2, 3, 4, 5], reach: 115, pad: 1.1, shore: 0.9, sink: 0.35, pick: (h) => (h < 0.13 ? 5 : h < 0.25 ? 1 : h < 0.36 ? 4 : h < 0.6 ? 0 : h < 0.82 ? 3 : 2) },
+  pole: { sp: 1, variants: [18, 19, 20, 21, 22, 23], scale: GUEST[25][2], reach: 115, pad: 1.1, shore: 0.9, sink: 0.35, pick: (h) => (h < 0.13 ? 5 : h < 0.25 ? 1 : h < 0.36 ? 4 : h < 0.6 ? 0 : h < 0.82 ? 3 : 2) },
   alder: { sp: 11, variants: [0, 1, 2, 3, 4, 5], reach: 95, pad: 0.5, shore: 0.2, sink: 0.12 },
-  shrub: { sp: 7, variants: [0, 1, 2, 3], reach: 70, pad: 0.4, shore: 0.25, sink: 0.3 },
-  mat: { sp: 24, variants: [0, 1, 2, 3], reach: 60, pad: 0.3, shore: 0.4, sink: 0.08 },
+  shrub: { sp: 7, variants: [0, 1, 2, 3], shadow: false, reach: 70, pad: 0.4, shore: 0.25, sink: 0.3 },
+  mat: { sp: 24, variants: [0, 1, 2, 3], shadow: false, reach: 60, pad: 0.3, shore: 0.4, sink: 0.08 },
   tamarack: { sp: 17, variants: [0, 1, 3, 4], reach: 115, pad: 1.2, shore: 0.9, sink: 0.35 },
-  ash: { sp: 3, variants: [18, 19, 20, 21], reach: 110, pad: 1.2, shore: 0.9, sink: 0.35, scale: GUEST[23][2] }, // (the birch's bins hold the ash's variants after the aspen's)
-  log: { sp: 14, variants: [0, 1, 2, 3], reach: 70, pad: 1.6, shore: 0.6, sink: 0.04, log: true },
+  ash: { sp: 3, variants: [18, 19, 20, 21], reach: 110, pad: 1.2, shore: 0.9, sink: 0.35, scale: GUEST[23][2] }, // (the birch's bins hold the ash's variants after the aspen's, the spruce's the poles' after the black spruce's)
+  log: { sp: 14, variants: [0, 1], shadow: false, reach: 70, pad: 1.6, shore: 0.6, sink: 0.04, log: true },
   reed: { reeds: [2, 0, 3], reach: 75, pad: 0.4, shore: -0.2, sink: 0.05 }, // cattail, bulrush, sedge
 };
 // What grows in each class, a hectare at full density: [layer, per hectare, scale from, to] (and for the reeds the
@@ -47,7 +47,7 @@ export const LAYERS = {
 const R = (cat, rush, sedge) => [cat, rush, sedge];
 export const GROWS = {
   FO4: [['pole', 760, 0.35, 1.25], ['mat', 2200, 0.85, 1.35], ['log', 45, 0.45, 0.7], ['shrub', 60, 0.6, 0.9]],
-  FO2: [['tamarack', 260, 0.45, 0.95], ['pole', 160, 0.35, 1.0], ['alder', 300, 0.8, 1.3], ['mat', 1300, 0.85, 1.3], ['log', 30, 0.45, 0.7]],
+  FO2: [['tamarack', 280, 0.35, 0.8], ['pole', 160, 0.35, 1.0], ['alder', 200, 0.8, 1.3], ['mat', 1300, 0.85, 1.3], ['log', 30, 0.45, 0.7]],
   FO: [['pole', 380, 0.4, 1.15], ['alder', 420, 0.85, 1.35], ['tamarack', 80, 0.5, 1.0], ['mat', 400, 0.8, 1.2], ['log', 50, 0.5, 0.8]],
   FO1: [['ash', 170, 0.7, 1.05], ['alder', 380, 0.85, 1.35], ['log', 70, 0.55, 0.9], ['shrub', 120, 0.7, 1.1]],
   SS1: [['alder', 1150, 0.95, 1.55], ['shrub', 160, 0.8, 1.2], ['pole', 25, 0.3, 0.8], ['reed', 250, 0.9, 1.2, R(0.1, 0.1, 0.8)]],
@@ -122,7 +122,7 @@ export class Thicket {
         let geo, mat, depth;
         if (L.reeds) { if (!aquatic || !aquatic.land) return; geo = aquatic.land.geos[v]; mat = aquatic.land.mat; depth = aquatic.land.depth; }
         else { const V = kit.variants[L.sp][v]; if (!V) return; geo = V.full; mat = kit.materialFor(L.sp); depth = kit.depthFor(L.sp); }
-        const b = { layer: L, k, geo, mat, depth, n: 0, meshes: [] };
+        const b = { layer: L, k, geo, mat, depth, n: 0, meshes: [], shadow: L.shadow !== false };
         L.index[k] = this.buckets.length;
         this.buckets.push(b);
       });
@@ -260,7 +260,7 @@ export class Thicket {
           mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
           mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(mesh.instanceMatrix.count * 3), 3);
           mesh.customDepthMaterial = B.depth;
-          mesh.castShadow = part === 0;
+          mesh.castShadow = part === 0 && B.shadow;
           mesh.receiveShadow = true;
           mesh.frustumCulled = false; // (the ring is round the camera: some of it is always in view)
           mesh.matrixAutoUpdate = false;
