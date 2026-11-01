@@ -171,6 +171,8 @@
           <li><button id="btn-new" class="item" type="button">New season</button><div class="hint" id="new-hint"></div></li>
           <li><button id="btn-settings" class="item" type="button">Settings</button></li>
           <li><button id="btn-controls" class="item" type="button">Controls</button></li>
+          <!-- the owner, 2026-11-01: "make sandbox not so much of a equal option, burry it a bit" -->
+          <li class="more"><button id="btn-sandbox" class="item quiet" type="button">Sandbox</button><div class="hint">the same lakes, any date, no limits</div></li>
         </ul>
         <div class="confirm" id="confirm-card" hidden>
           <div class="sc kicker">New season</div>
@@ -178,13 +180,31 @@
           <p class="sub" id="confirm-sub"></p>
           <div class="row"><button id="btn-confirm" class="item" type="button">Start a new season</button><button id="btn-keep" class="item" type="button">Keep the season</button></div>
         </div>
-        <div class="entries" id="entry-card" hidden>
-          <div class="sc kicker">New season · how you travel</div>
-          <div class="mode-pick" id="mode-pick" role="radiogroup" aria-label="How you travel"><button type="button" data-mode="adventure" role="radio" aria-checked="true">Adventure</button><span class="dot" aria-hidden="true">·</span><button type="button" data-mode="sandbox" role="radio" aria-checked="false">Sandbox</button></div>
-          <p class="status" id="entry-status"></p>
-          <p class="note" id="mode-note"></p>
-          <div class="sc kicker">Home · by entry point</div>
-          <ul id="entry-list" role="list"></ul>
+        <!-- the new season as steps (src/wizard.js): where you start, when, then the season in a few lines and Start -->
+        <div class="entries wizard" id="entry-card" hidden>
+          <div class="sc kicker">New season</div>
+          <section class="wstep" data-step="home">
+            <p class="wq">Where does the season start?</p>
+            <ul id="entry-list" role="list"></ul>
+          </section>
+          <section class="wstep" data-step="date" hidden>
+            <p class="wq when"></p>
+            <div class="cal" tabindex="0" role="slider" aria-label="The day you put in">
+              <div class="bands"></div>
+              <div class="months"></div>
+              <span class="today" title="today" hidden></span>
+              <span class="mark"></span>
+            </div>
+            <p class="brings"></p>
+            <p class="wkeys"><kbd>← →</kbd> a day <kbd>Shift</kbd> a week <kbd>PgUp PgDn</kbd> a month</p>
+          </section>
+          <section class="wstep" data-step="sum" hidden>
+            <p class="wq">Ready to put in</p>
+            <div class="wsum"></div>
+            <button id="btn-start" class="item current" type="button">Start the season</button>
+          </section>
+          <p class="status" id="entry-status" aria-live="polite"></p>
+          <div class="wnav"><button type="button" data-w="back">Back</button><button type="button" data-w="next">Next</button></div>
         </div>
       </nav>
       <p class="keys"><kbd>↑ ↓</kbd> choose <kbd>Enter</kbd> pick <kbd>← →</kbd> between the columns <kbd>Esc</kbd> back</p>

@@ -143,6 +143,9 @@ export class Profile {
     if (inv) { p.owned = ['aluminium']; inv.newSeason(); }
     this.changed('season');
   }
+  // the day the season was begun on, picked in the title's wizard ({ year, doy }); a season from before it has none
+  get start() { return this.s.start || null; }
+  setStart(at) { if (at && Number.isFinite(at.year) && Number.isFinite(at.doy)) { this.s.start = { year: at.year, doy: at.doy }; this.write(); } }
   stamp(permit) { this.s.permit = { no: permit.no || null, ep: permit.ep ?? this.s.home, entry: permit.entry || null }; this.changed('permit'); }
   forgetMigration() { if (this.s.migrated) { this.s.migrated = null; this.write(); } }
 
