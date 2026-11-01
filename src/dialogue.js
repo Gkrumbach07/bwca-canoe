@@ -27,7 +27,7 @@
 //
 //   const talk = new Dialogue({ camera, player, chase, hud, day, frame })   frame(): may it cut over your shoulder here
 //   talk.bark(speaker, text, { room, pri, secs, next })   speaker: { key, name, role?, pos(outVec3) → head or null }
-//   talk.open({ speaker, name, role, room, start() → node, bye() → farewell words })
+//   talk.open({ speaker, name, role, room, start() → node, bye() → farewell words, afloat? (may stay open in the canoe) })
 //     node: { say, by?, filler? (a "What else?" between answers: not kept as what they last said), choices: [{ text, kind?: 'task'|'counter'|'bye'|'arc', dim?, tag? (a small word after it: 'new'),
 //             go() → node | Promise of one | null | { end, after } }] }
 //   talk.before(dt)    after the outfitter's update, before the player moves: holds the walker, turns the view
@@ -285,8 +285,9 @@ export class Dialogue {
   before(dt) {
     const c = this.convo; if (!c) return;
     const p = this.player, hud = this.hud;
-    if ((hud && (hud.paper || hud.big)) || !p.onFoot || p.teleporting) { this.close(false); return; }
+    if ((hud && (hud.paper || hud.big)) || (!p.onFoot && !(c.afloat && p.mode === 'paddle')) || p.teleporting) { this.close(false); return; }
     p.input.paused = true;
+    if (!p.onFoot) return; // (co-op, c.afloat: a word from the canoe; the view is left alone)
     const ch = this.chase, h = this.headOf(c.speaker, _v);
     if (!ch || !h) return;
     const yaw = Math.atan2(-(h.z - p.z), h.x - p.x), d = Math.hypot(h.x - p.x, h.z - p.z);

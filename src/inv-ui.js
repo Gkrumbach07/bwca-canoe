@@ -1795,7 +1795,8 @@ function block(c, byId, opts = {}) {
   if (cs) { head.querySelector('.nm').insertAdjacentElement('afterend', mk('span', `ct-st st-${esc(cs.mark || 'none')}`, esc(cs.label || cs.mark))); head.title += ` · ${cs.label || cs.mark}${cs.hint ? ` · ${cs.hint}` : ''}`; }
   if (!fixedThing(c) && c.where !== 'hung') { head.classList.add('grab'); head.addEventListener('pointerdown', (ev) => pressThing(thingOf(c), w, ev)); }
   const menu = () => thingMenu(c, false, opts.screen);
-  if (menu().length) { head.classList.add('acts'); head.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); }); }
+  if (menu().length) head.classList.add('acts');
+  if (menu().length || model().moreVerbs) { head.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); }); }
   const g = mk('div');
   grid(g, c, { onUse: opts.onUse, screen: opts.screen });
   w.append(head, g);
@@ -1816,7 +1817,7 @@ function longBlock(l, { inHand = false, screen = null } = {}) {
   w.addEventListener('pointerenter', () => { clearTimeout(tipTimer); tipTimer = setTimeout(() => { if (!drag) showTip(w, null, { id: l.id, long: l.uid }); }, 260); });
   w.addEventListener('pointerleave', () => { clearTimeout(tipTimer); hideTip(); });
   const menu = () => thingMenu(l, true, screen);
-  if (menu().length) w.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
+  if (menu().length || model().moreVerbs) w.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
   return w;
 }
 // containers in order, each followed by those nested in it
@@ -2191,7 +2192,7 @@ export class MineSide {
       if (this.tab === t.obj.id) f.classList.add('on');
       f.addEventListener('pointerdown', (ev) => pressThing(t, f, ev, () => this.setTab(t.obj.id)));
       const menu = () => thingMenu(t.obj, false, sc);
-      if (menu().length) f.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
+      if (menu().length || model().moreVerbs) f.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
     } else f.appendChild(mk('span', 'slot-none', dz === 'back' ? 'a pack' : 'a pack or a barrel'));
     s.appendChild(f);
     return s;
@@ -2220,7 +2221,7 @@ export class MineSide {
     if (this.tab === t.obj.id) f.classList.add('on');
     f.addEventListener('pointerdown', (ev) => pressThing(t, f, ev, () => this.setTab(t.obj.id)));
     const menu = () => thingMenu(t.obj, false, sc);
-    if (menu().length) f.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
+    if (menu().length || model().moreVerbs) f.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, menu()); });
     s.appendChild(f);
     return s;
   }

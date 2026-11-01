@@ -1,7 +1,9 @@
 // Co-op phase 2, stream B's rig (src/coop-give.js): two headless Chromiums (one browser process each, as
 // two-browsers.mjs) through `wrangler dev` with a delay. The host opens a Sandbox trip; the guest, who has a season of
 // their own, joins; both step ashore side by side. Then: the guest gives the host $10, the host gives the guest an item,
-// a refused gift and an unanswered one come back, the guest changes their things, leaves and joins again from a new
+// a refused gift and one lost on the way come back, a lost ack is asked after and not refunded (no duplicate), the host
+// gives a container with what is nested in it and the rod, the guest gives money from the canoe alongside, the host's
+// keep is pruned, the guest changes their things, leaves and joins again from a new
 // page and gets the same things and purse back from the host, and the guest's own season in their store is byte for
 // byte what it was before the visit.
 //
@@ -200,6 +202,90 @@ const tMs = Date.now() - tStart;
 const t1n = await B.evaluate(count, tItem.id), th1 = await A.evaluate(count, tItem.id), tBackIn = await B.evaluate((a) => { const inv = window.__game.inventory, c = inv.containers.find((k) => k.grid.some((e) => e.id === a.id)); return c ? c.where : null; }, tItem);
 check('an unanswered gift comes back', tMid === t0n - tItem.qty && t1n === t0n && th1 === th0, { item: tItem.id, guest: [t0n, tMid, t1n], host: [th0, th1], backWhereItWas: tBackIn, ms: tMs });
 await A.evaluate(() => { window.__game.coopGive.mute = false; });
+
+// --- 4b. a lost ack: the host takes it, its answer is lost; the guest asks (giftq) and gets the same answer: no duplicate --
+await A.evaluate(() => { window.__game.coopGive.dropAcks = 1; });
+const l0 = { g: await B.evaluate(() => window.__game.profile.money), h: await A.evaluate(() => window.__game.profile.money) };
+const lStart = Date.now();
+await B.evaluate((id) => window.__game.coopGive.money(id, 5), hostId);
+await until(B, () => window.__game.coopGive.pending.size === 0, null, 12000);
+const lMs = Date.now() - lStart;
+await sleep(300);
+const l1 = { g: await B.evaluate(() => window.__game.profile.money), h: await A.evaluate(() => window.__game.profile.money), gLog: await B.evaluate(() => window.__game.coopGive.log.slice(-1)[0]) };
+check('a lost ack: asked again, taken once, not refunded', l1.g === l0.g - 5 && l1.h === l0.h + 5 && lMs > 3000, { guest: [l0.g, l1.g], host: [l0.h, l1.h], ms: lMs, note: l1.gLog });
+
+// --- 4c. a container with what is nested in it, and a long thing (host → guest) ---------------------------------------------
+const treeSig = (cid) => {
+  const inv = window.__game.inventory;
+  const walk = (c) => ({ item: c.item, grid: c.grid.filter((e) => !e.box).map((e) => `${e.id}×${e.qty}@${e.x},${e.y}`).sort(), kids: c.grid.filter((e) => e.box).map((e) => walk(inv.cont(e.uid))).sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1)) });
+  return JSON.stringify(walk(inv.cont(cid)));
+};
+const box = await A.evaluate(() => {
+  const inv = window.__game.inventory;
+  const c = inv.reachable().find((k) => k.grid.some((e) => e.box) && inv.moreVerbs({ container: k.id }).length);
+  return c ? { id: c.id, item: c.item, nested: c.grid.filter((e) => e.box).length, verbs: inv.moreVerbs({ container: c.id }).map((v) => v.label) } : null;
+});
+const boxSig = await A.evaluate(treeSig, box.id);
+const gIds0 = await B.evaluate(() => window.__game.inventory.containers.map((c) => c.id));
+await A.evaluate((id) => window.__game.inventory.moreVerbs({ container: id })[0].run(), box.id);
+await until(A, () => window.__game.coopGive.pending.size === 0, null, 12000);
+await sleep(300);
+const hostHasBox = await A.evaluate((id) => !!window.__game.inventory.cont(id), box.id);
+const gotBox = await B.evaluate((a) => { const inv = window.__game.inventory, c = inv.containers.find((k) => k.item === a.item && k.where !== 'in' && !a.ids.includes(k.id)); return c ? { id: c.id, where: c.where } : null; }, { item: box.item, ids: gIds0 });
+const gotSig = gotBox ? await B.evaluate(treeSig, gotBox.id) : null;
+check('a container with its nested contents', box && !hostHasBox && gotBox && gotSig === boxSig, { item: box && box.item, nested: box && box.nested, verbs: box && box.verbs, hostStillHas: hostHasBox, guestGot: gotBox, sameContents: gotSig === boxSig, bytes: boxSig.length });
+const rod = await A.evaluate(() => { const inv = window.__game.inventory, l = inv.long.find((q) => q.id === 'rod' || /rod/.test(q.id)) || inv.long[0]; return l ? { uid: l.uid, id: l.id, verbs: inv.moreVerbs({ long: l.uid }).map((v) => v.label) } : null; });
+const rodH = await A.evaluate(count, rod.id), rodG = await B.evaluate(count, rod.id);
+await A.evaluate((uid) => window.__game.inventory.moreVerbs({ long: uid })[0].run(), rod.uid);
+await until(A, () => window.__game.coopGive.pending.size === 0, null, 12000);
+await sleep(300);
+const rodH1 = await A.evaluate(count, rod.id), rodG1 = await B.evaluate(count, rod.id), rodWhere = await B.evaluate((id) => window.__game.inventory.long.filter((l) => l.id === id).map((l) => l.where), rod.id);
+check('a long thing (the rod)', rodH1 === rodH - 1 && rodG1 === rodG + 1, { item: rod.id, verbs: rod.verbs, host: [rodH, rodH1], guest: [rodG, rodG1], guestHas: rodWhere });
+const noGive = await A.evaluate(() => { const inv = window.__game.inventory; return ['pockets', 'crate'].map((it) => { const c = inv.containers.find((k) => k.item === it); return c ? inv.moreVerbs({ container: c.id }).length : 0; }); });
+check('the pockets and the crate are not given', noGive.every((n) => n === 0), { pocketsCrate: noGive });
+
+// --- 4d. Give money from the canoe: both afloat, alongside -----------------------------------------------------------------
+const hw = await A.evaluate(async () => { const g = window.__game, p = g.player; await p.teleport(p.x, p.z); for (let i = 0; i < 5; i++) g.step(1 / 60, 1); return { x: p.x, z: p.z, h: p.heading, mode: p.mode }; });
+await B.evaluate(async (h) => {
+  const g = window.__game, p = g.player;
+  await p.teleport(h.x, h.z); for (let i = 0; i < 3; i++) g.step(1 / 60, 1);
+  p.x = h.x + Math.sin(h.h) * 3.5; p.z = h.z + Math.cos(h.h) * 3.5; p.heading = h.h; p.speed = 0;
+  for (let i = 0; i < 3; i++) g.step(1 / 60, 1);
+}, hw);
+await sleep(2500);
+const wdot = await B.evaluate(() => {
+  const g = window.__game, p = g.player, r = [...g.coop.remotes.values()][0], ch = g.chase, B = r.boat;
+  // in the canoe the camera sits behind the hull: turn the canoe to face theirs
+  p.heading = Math.atan2(-(B.z - p.z), B.x - p.x); p.speed = 0; ch.userYaw = 0; ch.userPitch = 0;
+  for (let i = 0; i < 20; i++) { p.heading = Math.atan2(-(B.z - p.z), B.x - p.x); g.step(1 / 60, 1); }
+  const P = g.coopGive.pointer, t = P && P.target;
+  // and the provider itself, on a ray from the camera straight at their hull
+  const T = g.THREE, cam = g.camera, o = new T.Vector3(); cam.getWorldPosition(o);
+  const ray = new T.Ray(o, new T.Vector3(B.x - o.x, (B.y || 0) + 0.4 - o.y, B.z - o.z).normalize());
+  const list = g.coopGive.targets(ray, P.near, true) || [];
+  return { mode: p.mode, theirs: r.drawnAt && r.drawnAt.m, d: +Math.hypot(B.x - p.x, B.z - p.z).toFixed(2), target: t ? { label: t.label, verb: t.e && t.e.verb } : null, provider: list.map((c) => c.target.e.verb + ' ' + c.target.label) };
+});
+const w0 = { g: await B.evaluate(() => window.__game.profile.money), h: await A.evaluate(() => window.__game.profile.money) };
+await B.evaluate((id) => window.__game.coopGive.moneyCard(id), hostId);
+await B.evaluate(() => { for (let i = 0; i < 30; i++) window.__game.step(1 / 60, 1); });
+await sleep(600);
+const stillOpen = await B.evaluate(() => !!window.__game.dialogue.convo);
+await B.screenshot({ path: path.join(OUT, 'give-money-afloat.png') });
+await B.evaluate(() => window.__game.dialogue.choose(0));
+await until(B, () => window.__game.coopGive.pending.size === 0, null, 12000);
+await sleep(300);
+const w1 = { g: await B.evaluate(() => window.__game.profile.money), h: await A.evaluate(() => window.__game.profile.money) };
+check('Give money from the canoe', (wdot.target || wdot.provider.length) && wdot.mode === 'paddle' && wdot.theirs === 'paddle' && stillOpen && w1.g === w0.g - 5 && w1.h === w0.h + 5, { dot: wdot, panelStaysOpen: stillOpen, guest: [w0.g, w1.g], host: [w0.h, w1.h] });
+
+// --- 4e. the host's keep is pruned: 30 real days, 16 visitors ---------------------------------------------------------------
+const pr = await A.evaluate(() => {
+  const G = window.__game.coopGive, now = Date.now(), day = 86400e3, s = { v: 1, by: {} };
+  for (let i = 0; i < 20; i++) s.by[`v${i}`] = { name: `n${i}`, inv: {}, money: 1, at: now - i * 3600e3 };
+  s.by.old1 = { at: now - 31 * day }; s.by.old2 = { at: now - 45 * day };
+  const went = G.prune(s, now), left = Object.keys(s.by);
+  return { went, left: left.length, oldGone: !left.includes('old1') && !left.includes('old2'), newestKept: left.includes('v0') && left.includes('v15') && !left.includes('v16') };
+});
+check('the host prunes its guests (30 real days, 16 at most)', pr.left === 16 && pr.oldGone && pr.newestKept && pr.went === 6, pr);
 
 // --- 5. the guest changes their things, leaves, joins again from a new page: the same things back ----------------------
 await B.evaluate(() => {
