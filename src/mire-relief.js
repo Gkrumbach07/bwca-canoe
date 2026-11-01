@@ -53,7 +53,7 @@ const POOL = { dry: -0.72, wet: 0.15, saturated: -0.8, edge: 0.12 };
 
 // ---- the cut-outs: the trails, the campsites and the yards (props.js exclusionsFor), binned --------------------------
 let ex = null, bins = null;
-const BIN = 48, bkey = (bx, bz) => bx * 65536 + bz;
+const BIN = 16, bkey = (bx, bz) => bx * 65536 + bz;
 export function setMireExclusions(e) {
   ex = e && e.length ? e : null; bins = null;
   if (!ex) return;
