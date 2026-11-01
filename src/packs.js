@@ -443,6 +443,13 @@ export class Packs {
     const plan = left.length ? this.fetchPlan(left) : null, k = left[0];
     const info = k ? `${cap(names(left))} ${left.length > 1 ? 'are' : 'is'} back at the trail head, ${metres(Math.hypot(k.obj.at.x - p.x, k.obj.at.z - p.z))}` : null;
     if (plan) {
+      // co-op (coop-night.js sets inRoom): the fetch is a jump of the clock, and the clock is everyone's: in a room it is
+      // walked (or carried by a friend), so the verb shows greyed with why
+      if (this.inRoom && this.inRoom()) {
+        p.say(note || (dd <= HULL_REACH ? info : trailText || info));
+        if (p.prompt) p.prompt.text += ` &nbsp;·&nbsp; <span style="opacity:.5"><kbd>Q</kbd>Fetch ${left.length > 1 ? 'them' : 'it'} · not with friends: walk back</span>`;
+        return true;
+      }
       p.say(note || (dd <= HULL_REACH ? info : trailText || info), ['Q', `Fetch ${left.length > 1 ? 'them' : 'it'} (${aboutHours(plan.hours)})`]);
       if (inp.pressed('KeyQ')) this.fetch(left, plan);
       return true;
@@ -828,6 +835,7 @@ export class Packs {
   }
 
   fetch(left, plan) {
+    if (this.inRoom && this.inRoom()) return false; // (co-op: never a jump of the shared clock)
     if (this.busy) return;
     this.busy = true;
     const onDark = () => this.arrive(plan);

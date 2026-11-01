@@ -296,12 +296,11 @@ export class Coop {
     }
     return out;
   }
-  canInvite() { const pr = this.g.profile; return !!this.url && this.sandbox && !!(pr && pr.started) && !this.role; }
+  canInvite() { const pr = this.g.profile; return !!this.url && !!(pr && pr.started) && !this.role; } // (phase 3 C: Adventure too, coop-trip.js)
 
   // --- opening a room (the host) ------------------------------------------------------------------------------------
   async invite({ name, shirt } = {}) {
     if (!this.url) throw new Error('no relay in this build');
-    if (!this.sandbox) throw new Error('co-op is Sandbox only for now');
     if (this.role) return this.code;
     this.setVisitor({ name, shirt });
     const v = this.visitor;
@@ -474,7 +473,7 @@ export class Coop {
     const own = this.handlers.get(m.t);
     if (own && own.size) { for (const fn of own) { try { fn(m, at); } catch (e) { console.warn(`coop ${m.t}`, e); } } return; }
     if (m.t === 'pose') { const r = this.remotes.get(m.from); if (r) r.push(m, at); return; }
-    if (m.t === 'clock') { if (this.role === 'guest') this.applyClock(m, false, at); return; }
+    if (m.t === 'clock') { if (this.role === 'guest' && !(this.holdClock && this.holdClock(m))) this.applyClock(m, false, at); return; } // (holdClock: coop-night.js, under the night card)
     if (m.t === 'join') {
       const r = this.addPeer(m);
       if (r) this.say(this.role === 'host' ? `${r.name} has joined your trip.` : `${r.name} has joined.`);
@@ -635,7 +634,7 @@ export class Coop {
     const out = this.role === 'guest' && !this.live;
     this.inviteItem.b.textContent = out ? 'Rejoin the trip' : this.role === 'guest' ? 'Leave the trip' : this.role === 'host' ? 'Friends' : 'Invite friends';
     const n = this.remotes.size;
-    this.inviteItem.h.textContent = out ? `lost touch with ${this.hostName || 'a friend'}’s trip` : this.role === 'guest' ? `on ${this.hostName || 'a friend'}’s trip` : this.role === 'host' ? `code ${this.code} · ${n ? `${n} with you` : 'waiting for friends'}` : 'share this Sandbox season';
+    this.inviteItem.h.textContent = out ? `lost touch with ${this.hostName || 'a friend'}’s trip` : this.role === 'guest' ? `on ${this.hostName || 'a friend'}’s trip` : this.role === 'host' ? `code ${this.code} · ${n ? `${n} with you` : 'waiting for friends'}` : `share this ${this.sandbox ? 'Sandbox' : 'Adventure'} season`;
     // a guest's season is not theirs to change while visiting
     const guest = this.role === 'guest';
     for (const b of [t.el.newTrip, t.el.seasons]) if (b) { const li = b.closest('li'); if (li) li.hidden = guest || (b === t.el.newTrip ? false : li.hidden); }
@@ -654,7 +653,7 @@ export class Coop {
     if (mode === 'rejoin') {
       // phase 3: after a reload, the trip last visited (its code kept in the visitor profile)
       const vis = this.lastVisit() || { code: this.cardCode, host: '' };
-      card.innerHTML = `<div class="sc kicker">Rejoin · Sandbox</div>
+      card.innerHTML = `<div class="sc kicker">Rejoin</div>
         <p class="ask">Back to ${esc(vis.host ? `${vis.host}’s` : 'the')} trip, code ${esc(vis.code)}.</p>
         <p class="sub status" id="coop-status"></p>
         <div class="row"><button type="button" class="item go" id="coop-go">Rejoin</button></div>
@@ -666,7 +665,7 @@ export class Coop {
         <div class="row"><button type="button" class="item go" id="coop-go">Rejoin</button><button type="button" class="item" id="coop-home">Back to my own season</button></div>
         <p class="sub">Rejoin while the trip is open (ten minutes after the last one leaves). Your own season stays as it was.</p>`;
     } else if (mode === 'join') {
-      card.innerHTML = `<div class="sc kicker">Join a trip · Sandbox</div>
+      card.innerHTML = `<div class="sc kicker">Join a trip</div>
         <p class="ask">A friend’s trip, by its code.</p>
         <label class="field"><span>The code</span><input id="coop-code" class="code" maxlength="6" autocomplete="off" spellcheck="false" value="${esc(this.cardCode)}" placeholder="ABCDEF"></label>
         ${who}
@@ -674,12 +673,12 @@ export class Coop {
         <div class="row"><button type="button" class="item go" id="coop-go">Join</button></div>
         <p class="sub">You paddle in beside them. Your own season stays as it is.</p>`;
     } else if (mode === 'invite') {
-      card.innerHTML = `<div class="sc kicker">Invite friends · Sandbox</div>
+      card.innerHTML = `<div class="sc kicker">Invite friends · ${this.sandbox ? 'Sandbox' : 'Adventure'}</div>
         <p class="ask">Share this season’s lakes and clock.</p>
         ${who}
         <p class="sub status" id="coop-status"></p>
         <div class="row"><button type="button" class="item go" id="coop-go">Open the trip</button></div>
-        <p class="sub">Friends see your canoe and you see theirs. Nothing else is shared yet: no gear, fires or tents.</p>`;
+        <p class="sub">Friends see your canoe and you see theirs. Each of you keeps your own pack and purse; drop a thing for a friend to pick it up.</p>`;
     } else {
       const n = this.remotes.size, names = [...this.remotes.values()].map((r) => r.name);
       card.innerHTML = `<div class="sc kicker">Friends · the trip is open</div>
