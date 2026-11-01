@@ -750,7 +750,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       // kind and forest type keep (dTrees: the type's openness, its canopy cover against the commonest 52 %), how tall
       // they stand (canopyM), the species mix (prior), and the brush in place of trees (the bog's leatherleaf and
       // Labrador tea, low; the shrub swamp's alder and willow; a shrub field's hazel; the ostrich fern of a black ash swamp)
-      let kd = 0, ft = 0, canopyM = 0, treeType = false, dTrees = 1, prior = null, lowShrub = false;
+      let kd = 0, ft = 0, canopyM = 0, treeType = false, dTrees = 1, prior = null, lowShrub = false, capM = 0;
       let xShrub = 0, xAlder = 0, xHazel = 0, xSapling = 0, kFern = 1, kHazel = 1;
       if (L) {
         kd = site.kind[k]; ft = L.forest ? L.forest[k] : 0;
@@ -768,6 +768,15 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           case KIND.hardwoodSwamp: xAlder = 0.8; kFern = 1.7; kHazel = 0.3; break;
           default:
             if (ft === 18) { xHazel = 1.5; xShrub = 0.5; xSapling = 0.5; } else if (ft === 19 || ft === 20 || ft === 22) { xShrub = 0.25; xSapling = 0.2; }
+        }
+        // the wetlands round: where the NWI gives the wetland's classes (site.js mix, land.js wetlandMix), they decide what
+        // grows over the kind's average: the species, how many trees, how tall a shrub class's runts stand (capM), the brush.
+        // LANDFIRE keeps the height and the cover where it maps a forest there too.
+        const mx = site.mix && site.mix[k];
+        if (mx) {
+          prior = mx.species; capM = mx.cap;
+          dTrees = mx.trees * (treeType && L.cover && L.cover[k] ? clamp(L.cover[k] / 52, 0.35, 1.3) ** 0.9 : 1);
+          xAlder = mx.alder; xShrub = mx.shrub; lowShrub = mx.low > 0.3 ? mx.low : 0; kFern = mx.fern; kHazel = mx.hazel; xHazel = 0; xSapling = 0;
         }
       }
       const segs = mask.get(k0);
@@ -885,7 +894,9 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           if (isTree && h.bog > 0.3 && (sp === SPECIES.blackSpruce || sp === SPECIES.tamarack)) scale *= 1 - 0.3 * h.bog; // the muskeg's runts
           if (isTree && s > 600) scale *= 1.15;
           if (kind === -1 && canopyM && !role) scale *= canopyScale(sp, canopyM, bare); // d2 land: as tall as the stand
-          if (isShrub && lowShrub) scale *= 0.45 + rng() * 0.15;                    // d2 land: the bog's knee-high brush
+          // the wetlands round: a shrub wetland's trees are runts, under its cap (about 18 ft), each its own height under it
+          if (isTree && capM > 0 && !role) scale = Math.min(scale, (capM / (NOMINAL[sp] || 12)) * (0.45 + 0.55 * hash2(Math.floor(x * 7), Math.floor(z * 7), 13)));
+          if (isShrub && lowShrub) scale *= (0.45 + rng() * 0.15) * (lowShrub === true ? 1 : lowShrub); // d2 land: the bog's knee-high brush (the wetlands round: a leatherleaf mat lower)
           let yaw = rng() * Math.PI * 2;
           let tint = 0.92 + rng() * 0.16;
           const squash = isRock || (kind >= 14 && kind !== 22) ? 1 : 0.9 + rng() * 0.2;
@@ -1031,6 +1042,7 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
   // share, bilinear between their centres, against a ragged threshold (MAPPED.edge), so a bed's edge is not a 10 m step
   const gk = grid.ch && grid.ch.ground ? grid.ch.ground : null;
   const kindOf = (ii, jj) => gk[grid.local(ii, jj)];
+  const wc = grid.ch && grid.ch.wcls ? grid.ch.wcls : null, EM1 = 10, EM2 = 11; // the wetlands round: land.js WCLASS
   const inBed = (x, z, kind) => {
     const fx = (x - grid.originX) / cell - 0.5, fz = (z - grid.originZ) / cell - 0.5;
     const bi = Math.floor(fx), bj = Math.floor(fz), ax = fx - bi, az = fz - bj;
@@ -1065,10 +1077,20 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
       if (sd > 2) continue;
       // d2 water: the survey here (v4): mapped is any kind but 0; em / aq: in-lake emergent / aquatic bed in the 3 x 3
       // cells round this one (the plants of a cell scatter over it, so its neighbours' beds reach in)
-      let mapped = false, em = 0, aq = 0;
+      // (the wetlands round: and which of the emergent bed is EM2, the rice and the pickerelweed, against EM1, the bulrush:
+      // emLean -1 all bulrush .. 1 all rice, 0 where the NWI does not say)
+      let mapped = false, em = 0, aq = 0, emLean = 0;
       if (gk && kindOf(i, j)) {
         mapped = true;
-        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const k = kindOf(i + di, j + dj); if (k === 8) em++; else if (k === 9) aq++; }
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+          const k = kindOf(i + di, j + dj);
+          if (k === 8) {
+            em++;
+            const c = wc ? wc[grid.local(i + di, j + dj)] : 0, a = c >> 4, b = c & 15;
+            emLean += (a === EM2 ? 0.7 : a === EM1 ? -0.7 : 0) + (b === EM2 ? 0.3 : b === EM1 ? -0.3 : 0);
+          } else if (k === 9) aq++;
+        }
+        if (em) emLean /= em;
       }
       if (sd < -40 && !em && !aq) continue; // (d2 water: a mapped bed runs on out past 40 m: a rice bay, a field of bulrush)
       const cx = grid.cellX(i), cz = grid.cellZ(j);
@@ -1134,7 +1156,8 @@ export function placeAquatic(grid, i0, j0, n, { seed = 9, originX, originZ, site
           // the fields: where the rice noise is over its (1 - share) quantile (two-octave fbm: 0.5 + 0.56 (0.5 - share)
           // within a percent or two from 0.1 to 0.9), so `share` of the bed is rice
           const thr = 0.5 + 0.56 * (0.5 - share);
-          riceIn = share >= 0.98 ? 1 : share <= 0.02 ? 0 : smoothstep(thr - 0.03, thr + 0.03, riceN);
+          // (the wetlands round: the fields drawn toward the NWI's EM2 cells and off its EM1, about as much rice in all)
+          riceIn = share >= 0.98 ? 1 : share <= 0.02 ? 0 : smoothstep(thr - 0.03, thr + 0.03, riceN + 0.12 * emLean);
           const gate8 = (x, z) => inBed(x, z, 8);
           if (riceIn > 0.01 && sd < -1 && depth > 0.15)
             place(RICE, MAPPED.rice * (em / 9) * riceIn, () => (rng() < 0.5 ? 0 : 1), (s, d) => s < -0.8 && d > 0.15 && d < 1.7, 0.07, () => 0.85 + rng() * 0.4, gate8);

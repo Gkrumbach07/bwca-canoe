@@ -766,6 +766,48 @@ export function paintLakeNames(ctx, world, v, W, H, { k = 1, detail = null, lett
   ctx.restore();
   return lettered;
 }
+// The wetlands round (creeks.js): the brooks as thin blue lines, as the outfitters' maps draw a stream too small to paddle
+// (a running one solid, an intermittent one dashed), from about 30 m a pixel in; the beaver dams, close in (under 8 m a
+// pixel), a short dark bar across the creek with a tick of sticks (an old one in pencil grey). onMine(ax, az, bx, bz)
+// clips to the sheets you own; hits (when given) gets { kind: 'dam', d, x, z } for the hover.
+export function paintCreeks(ctx, world, v, W, H, { k = 1, onMine = null, hits = null } = {}) {
+  const C = world.creeks;
+  if (!C || v.mPerPx > 30) return;
+  const x1 = v.x0 + W * v.mPerPx, z1 = v.z0 + H * v.mPerPx, toPx = (x, z) => [(x - v.x0) / v.mPerPx, (z - v.z0) / v.mPerPx];
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const close = v.mPerPx < 10;
+  for (const per of [true, false]) {
+    ctx.beginPath();
+    for (const b of C.brooksIn(v.x0, v.z0, x1, z1)) {
+      if (b.perennial !== per || (onMine && !onMine(b.bbox[0], b.bbox[1], b.bbox[2], b.bbox[3]))) continue;
+      b.pts.forEach(([x, z], i) => { const [a, c] = toPx(x, z); if (i) ctx.lineTo(a, c); else ctx.moveTo(a, c); });
+    }
+    ctx.strokeStyle = per ? 'rgba(52, 104, 140, 0.8)' : 'rgba(52, 104, 140, 0.6)';
+    ctx.lineWidth = (close ? 1.5 : 1) * k * (per ? 1 : 0.9);
+    ctx.setLineDash(per ? [] : [5 * k, 2.5 * k, 1 * k, 2.5 * k]);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  if (v.mPerPx < 8) {
+    for (const d of C.damsIn(v.x0, v.z0, x1, z1)) {
+      if (onMine && !onMine(d.x, d.z, d.x, d.z)) continue;
+      const half = Math.max(d.len / 2, 4 * v.mPerPx), [a0, b0] = toPx(d.x - d.ax * half, d.z - d.az * half), [a1, b1] = toPx(d.x + d.ax * half, d.z + d.az * half);
+      ctx.strokeStyle = d.old ? 'rgba(110, 100, 84, 0.75)' : 'rgba(74, 52, 30, 0.95)'; ctx.lineWidth = (d.old ? 2 : 3) * k;
+      if (d.old) ctx.setLineDash([2.5 * k, 2 * k]);
+      ctx.beginPath(); ctx.moveTo(a0, b0); ctx.lineTo(a1, b1); ctx.stroke(); ctx.setLineDash([]);
+      if (!d.old) { // the sticks: three short strokes across the bar
+        const ux = (a1 - a0), uy = (b1 - b0), L = Math.hypot(ux, uy) || 1, nx = -uy / L * 3 * k, ny = ux / L * 3 * k;
+        ctx.lineWidth = 1.2 * k; ctx.beginPath();
+        for (const t of [0.3, 0.5, 0.7]) { const ma = a0 + ux * t, mb = b0 + uy * t; ctx.moveTo(ma - nx, mb - ny); ctx.lineTo(ma + nx, mb + ny); }
+        ctx.stroke();
+      }
+      if (d.lodge && !d.old) { const [la, lb] = toPx(d.lodge[0], d.lodge[1]); ctx.fillStyle = 'rgba(74, 52, 30, 0.9)'; ctx.beginPath(); ctx.arc(la, lb, Math.max(2.2 * k, 3 / v.mPerPx), Math.PI, 0); ctx.closePath(); ctx.fill(); }
+      if (hits) hits.push({ kind: 'dam', d, x: d.x, z: d.z, px: 8 });
+    }
+  }
+  ctx.restore();
+}
 // an outfitter's dock: a pier with a shack at its root
 export function paintDock(ctx, a, b, k = 1) {
   ctx.save(); ctx.translate(a, b); ctx.scale(k, k);

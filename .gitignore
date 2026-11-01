@@ -12,3 +12,5 @@ shots/
 
 # map data bakes (shipped as release archives, never committed; docs/HOSTING.md)
 public-data-v4*
+public-data-v5/
+public-data-v5.work/

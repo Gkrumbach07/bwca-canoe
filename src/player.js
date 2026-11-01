@@ -9,6 +9,8 @@ import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from
 import { burnLook } from './burns.js';
 import { CarryBalance, BALANCE } from './balance.js'; // the canoe's balance on the shoulders (the owner, 2026-10-31)
 import { fmtDist } from './units.js';
+import { hold } from './hold.js'; // the wetlands round: the haul over a beaver dam is a held E
+import { DAM, lowWater, brookWater } from './creeks.js'; // the beaver dams, the low creeks of late summer, the brooks underfoot
 
 export class Input {
   constructor() {
@@ -154,6 +156,9 @@ export class Player {
     this.landing = null; // auto-pilot toward a portage launch point
     this.ashore = null;  // auto-pilot nosing in to a bank: { sx, sz, t }
     this.suppressNoseIn = 0; // seconds after a called-off nose-in before E noses in again (backOff)
+    // the wetlands round (creeks.js): a route beaver dam the bow is up against (damHold), the haul over it under way
+    // ({ from, to, at }), how low the seasonal creek under the hull runs (0..1), the brook underfoot ({ wet } or null)
+    this.damAhead = null; this.haul = null; this.shallow = 0; this.brook = null; this._scrapeT = 1;
     this.placeName = null; this.campsite = null; this.onTrail = false; // where you are on foot, for the HUD
     this.placeCache = { ci: NaN, cj: NaN, id: 0 };
     this.ripples = null; this.water = null; this.audio = null; this.wind = null; // set by main
@@ -408,6 +413,7 @@ export class Player {
     else if (this.seat) this.updateSeat(dt); // wc C: on a seat (or walking to it, or getting up)
     else if (this.onFoot) this.updateFoot(dt);
     else if (this.mode === 'swim') this.updateSwim(dt);
+    else if (this.haul) this.updateHaul(dt);
     else this.updatePaddle(dt);
     if (this.mode === 'paddle' || this.landing || this.ashore) this.setMove('paddle', dt, { y: this.level }); // fb C
     // the speed made good over the ground, for the GPS fix and the tally: what was actually covered this frame, not
@@ -545,6 +551,7 @@ export class Player {
       if (!w.inBounds(nx, nz, 40)) this.prompt = { text: 'Edge of the map — turn back', key: null };
       else if (!w.isReady(nx, nz)) this.prompt = { text: 'Loading the lake ahead…', key: null };
     }
+    this.damHold(); // a beaver dam across the creek holds the hull off (creeks.js)
     // the wind pushes the hull downwind and swings the bow off the wind (a solo canoe weathercocks)
     const shelter = this.water && this.water.shelterAt ? this.water.shelterAt(this.x, this.z) : 1; // cons B: the lee
     if (this.wind) {
@@ -561,6 +568,7 @@ export class Player {
     const cosRel = f.x * wd.x + f.z * wd.z, broadside = Math.sqrt(Math.max(0, 1 - cosRel * cosRel));
     const risk = H * Math.pow(broadside, CAPSIZE.beam) * (brace ? 0.4 : rodUp ? CAPSIZE.still : 1); // (cons B: sitting low and still with the rod, steadier)
     const bailing = this.seaAboard(dt, H, cosRel, shelter, fwd !== 0 || turn !== 0, idleHands || brace); // cons B
+    this._seaDrag *= this.creekDrag(dt); // a seasonal creek's low water in late summer
     // cons B: the roll builds in real seconds (a reflex)
     const dtr = dt;
     const steady = CAPSIZE.threshold * (this.gear ? this.gear.stability : 1) * (1 - SEA.tender * this.bilge); this.balance = clamp(this.balance + (risk > steady ? (risk - steady) * CAPSIZE.build : -CAPSIZE.recover) * dtr, 0, 1); // hubs 2B: a steadier hull takes more sea
@@ -582,7 +590,8 @@ export class Player {
     // unloaded (packs.js hullAction). Any other bank close enough lets you step out where you are.
     const land = this.suppressLanding ? null : this.nearestLanding();
     const gap = this.shoreGap();
-    if (land) {
+    if (this.damAhead && !warning) this.offerHaul(this.damAhead); // the dam's E outranks the shore's
+    else if (land) {
       const p = land.def;
       if (!warning) this.prompt = { key: 'E', text: `Go ashore · Portage: ${p.name} · ${p.rods} rods (${fmtDist(p.lengthM)})` }; // the sea's warning outranks the shore
       if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.landing = { land, t: 0 };
@@ -1337,6 +1346,7 @@ export class Player {
     const campArea = camp || this.nearCampsite(this.x, this.z, CAMP_AREA); // fb3 A: a site's area walks at life (pace.js)
     this.onTrail = onTrail; this.campsite = camp;
     const mire = this.updateMire(dt, onTrail ? trail : null);
+    this.brookStep(); // a brook underfoot: a wading step (audio.js footfall)
     st.mire = mire.board ? 0 : mire.k; // (poses.js: the knees up out of the muck, the sway)
     const cls = GROUND[(w.coverCell(w.cellI(this.x), w.cellJ(this.z)) >> 16) & 255];
     let note = null, moving = false, mx = 0, mz = 0, nx = this.x, nz = this.z, swimNow = false, stepUp = -1;
@@ -1788,6 +1798,101 @@ export class Player {
     this.bob = null;
     this.placeOnWater();
   }
+  // ---- the wetlands round: beaver dams, low creeks, brooks (creeks.js) ----------------------------------------------
+  // A beaver dam across a paddled creek (a `route` dam) is a wall to the hull: each end and the middle are held DAM.keep
+  // off its line (as whitewater.js holds a falls), the way into it taken off the speed. With the bow up against it from
+  // either side and facing it, damAhead is the dam (the prompt: a held E hauls the canoe over).
+  damHold() {
+    this.damAhead = null;
+    const C = this.world.creeks;
+    if (!C) return;
+    const f = this.forward;
+    for (const d of C.damsNear(this.x, this.z, 30)) {
+      if (!d.route) continue;
+      const half = d.len / 2 + DAM.side, nx = d.az, nz = -d.ax; // (frame s runs along (nx, nz))
+      const side = Math.sign(C.frame(d, this.x, this.z).s) || 1;
+      for (const e of [2.3, 0, -2.3]) {
+        const { u, s } = C.frame(d, this.x + f.x * e, this.z + f.z * e);
+        if (Math.abs(u) > half || s * side >= DAM.keep) continue;
+        const push = side * DAM.keep - s;
+        this.x += nx * push; this.z += nz * push;
+        if ((f.x * nx + f.z * nz) * -side * Math.sign(this.speed || 1) > 0) this.speed *= -0.15;
+      }
+      const bow = C.frame(d, this.x + f.x * 2.3, this.z + f.z * 2.3), facing = (f.x * nx + f.z * nz) * -side;
+      if (Math.abs(bow.u) < half && bow.s * side < DAM.reach && facing > 0.35) this.damAhead = d;
+    }
+  }
+  // where the canoe goes in below the dam: the first spot it floats clear, straight across from where it lies, then
+  // fanned out (a creek rarely meets its dam square); null with no water there
+  haulPlan(d) {
+    const C = this.world.creeks, mid = C.frame(d, this.x, this.z), side = Math.sign(mid.s) || 1;
+    const u0 = Math.max(-d.len / 2 + 0.5, Math.min(d.len / 2 - 0.5, mid.u)), bx = d.x + d.ax * u0, bz = d.z + d.az * u0;
+    const ox = -side * d.az, oz = side * d.ax; // across the dam, away from you
+    for (let r = 4; r <= 18; r += 0.5) for (const a of [0, 0.3, -0.3, 0.6, -0.6, 0.9, -0.9]) {
+      const c = Math.cos(a), sn = Math.sin(a), dx = ox * c - oz * sn, dz = ox * sn + oz * c;
+      const px = bx + dx * r, pz = bz + dz * r, h = Math.atan2(-dz, dx);
+      if (!this.paddleOk(px, pz, h) || Math.abs(C.frame(d, px, pz).s) < DAM.keep + 2.5) continue;
+      return { from: { x: this.x, z: this.z, heading: this.heading }, to: { x: px, z: pz, heading: h }, dam: d };
+    }
+    return null;
+  }
+  offerHaul(d) {
+    const plan = this.haulPlan(d);
+    if (!plan) { this.prompt = { key: null, text: 'A beaver dam · no water below it to put in' }; return; }
+    hold.offer('Haul over the beaver dam', null, {
+      id: 'haul', key: 'KeyE', keys: ['KeyE', 'Mouse0'], label: 'Hauling over the dam', clock: true, still: true,
+      phases: [
+        { name: 'Out on the dam', doing: 'Stepping out onto the dam', minutes: 2, seconds: 1.0 },
+        { name: 'Over', doing: 'Hauling the canoe over', minutes: 5, seconds: 2.4 },
+        { name: 'Back in', doing: 'Back in below the dam', minutes: 1, seconds: 0.7 },
+      ],
+      onTick: (at) => { if (this.haul) this.haul.at = at; },
+      onDone: () => {
+        const H = this.haul; this.haul = null;
+        if (!H) return;
+        this.x = H.to.x; this.z = H.to.z; this.heading = H.to.heading; this.speed = 0.3; this.yawRate = 0; this.bob = null;
+        this.placeOnWater();
+        if (this.audio) this.audio.paddleDip();
+      },
+      onStop: () => { // let go before it is over: back where you were, still above the dam
+        const H = this.haul; this.haul = null;
+        if (H) { this.x = H.from.x; this.z = H.from.z; this.heading = H.from.heading; this.speed = 0; this.bob = null; this.placeOnWater(); }
+      },
+    });
+    if (hold.is('haul') && !this.haul) { this.haul = { ...plan, at: 0 }; this.speed = 0; this.yawRate = 0; if (this.audio) this.audio.emit('scrape', { x: this.x, z: this.z }); }
+  }
+  // the haul under way: the canoe drawn up over the crest and down to the water below as the middle phase runs, lifted
+  // clear of the sticks (the hold's own ring and words are the prompt)
+  updateHaul(dt) {
+    const H = this.haul, st = this.canoe.state;
+    if (!hold.is('haul')) { this.haul = null; return; }
+    const k = smoothstep(1, 2, H.at), dh = Math.atan2(Math.sin(H.to.heading - H.from.heading), Math.cos(H.to.heading - H.from.heading));
+    this.x = H.from.x + (H.to.x - H.from.x) * k; this.z = H.from.z + (H.to.z - H.from.z) * k;
+    this.heading = H.from.heading + dh * k;
+    this.speed = 0; this.yawRate = 0; st.power = 0; st.drive = 0; st.turn = 0;
+    this.placeOnWater(dt);
+    this.canoe.rig.position.y += Math.sin(Math.PI * k) * 0.8;
+    if (k > 0.05 && k < 0.95 && this.audio && (this._scrapeT -= dt) <= 0) { this._scrapeT = 0.9 + Math.random() * 0.6; this.audio.emit('scrape', { x: this.x, z: this.z }); }
+  }
+  // A creek the bake marked seasonal runs low from late July through September (creeks.js lowWater): the hull drags
+  // (a factor on the drag, as the sea's is) and scrapes the stones now and then; shallow is what the moment reads.
+  creekDrag(dt) {
+    const w = this.world, id = w.lakeIdAt(this.x, this.z), L = id > 0 ? w.lakes[id - 1] : null;
+    const low = L && L.creek && L.seasonal && this.season ? lowWater(this.season.doy) : 0;
+    this.shallow = low;
+    if (low < 0.02) return 1;
+    if (Math.abs(this.speed) > 0.25 && this.audio && (this._scrapeT -= dt * Math.abs(this.speed) * low) <= 0) {
+      this._scrapeT = 1.0 + Math.random() * 1.6;
+      this.audio.emit('scrape', { x: this.x, z: this.z });
+    }
+    return 1 + 4.5 * low;
+  }
+  // a brook underfoot (within its bed's width): its water now, for the step's sound
+  brookStep() {
+    const C = this.world.creeks, n = C ? C.brookAt(this.x, this.z, 0.7) : null;
+    this.brook = n ? { wet: brookWater(this.season, n.b.perennial) } : null;
+  }
+
   // the paddle's own test (updatePaddle ok): the hull's middle and both ends in the water, on a tile that is in
   paddleOk(x, z, h) {
     const w = this.world, fx = Math.cos(h), fz = -Math.sin(h);

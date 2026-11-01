@@ -7,9 +7,9 @@ import { explored, INK_WATER, INK_RIM } from './explored.js'; // round A-B: the 
 import { lifeKmh } from './pace.js';
 import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fmtDist, scaleBar } from './units.js'; // imperial on screen; the game itself stays metric
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
-import { KIND, FOREST } from './land.js'; // 2026-10-31: the land under you, in the developer rows
+import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE } from './map-render.js'; // the map as vectors
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -443,6 +443,7 @@ export class Hud {
       if (h.kind === 'claim' && d < 18 * k) take(h, d, 1);
       else if (h.kind === 'dock' && d < 10 * k) take(h, d, 4);
       else if (h.kind === 'site' && d < 8 * k) take(h, d, 3);
+      else if (h.kind === 'dam' && d < 7 * k) take(h, d, 4.5); // the wetlands round
       else if ((h.kind === 'task' || h.kind === 'note') && d < Math.max(h.r / mPerPx, 9 * k)) take(h, 40 + d / 8, h.kind === 'task' ? 0 : 6);
       else if (h.kind === 'portage') {
         const p = w.portages[h.i]; if (!p) continue;
@@ -1317,6 +1318,16 @@ export class Hud {
     const cls = typeof w.coverCell === 'function' ? GROUND[(w.coverCell(i, j) >> 16) & 255] : null;
     const parts = [];
     if (kind > 0 && KIND_NAMES[kind]) parts.push(`${words(KIND_NAMES[kind])}${kind >= KIND.openBog && kind <= KIND.aquaticBed ? ' (wetland)' : ''}`);
+    // the wetlands round: the whole NWI code, as "NWI PSS1/EM1Cb · alder thicket · seasonally flooded · beaver · lotic"
+    const wb = typeof w.chCell === 'function' ? w.chCell('wet', i, j) : 0, wc = typeof w.chCell === 'function' ? w.chCell('wcls', i, j) : 0;
+    if (wb || wc) {
+      const r = REGIME[wetRegime(wb)], c1 = WCLASS[wclass1(wc)], nwi = [`NWI ${nwiCode(wb, wc)}`];
+      if (c1) nwi.push(c1.name);
+      if (r) nwi.push(r.name);
+      if (wetBeaver(wb)) nwi.push('beaver');
+      if (wetHgm(wb)) nwi.push(HGM[wetHgm(wb)]);
+      parts.push(nwi.join(' · '));
+    }
     if (ft > 0 && FOREST[ft]) parts.push(`${words(FOREST[ft].key)} cover`);
     if (cls) parts.push(`ground: ${words(cls)}`);
     return parts.join(' · ');
@@ -1661,6 +1672,7 @@ export class Hud {
         ctx.drawImage(this.overview, a, b, w.sizeX / mPerPx, w.sizeZ / mPerPx);
       }
       if (w.tiles) ready = paintGround(ctx, w, v, W, H, { k, budget: { build: 2 }, depths: lay.depths, ink: explored.world ? explored.lakes : null, inkV: explored.lakeV, detail: clipped ? onMine : null, labels: depthLabels });
+      paintCreeks(ctx, w, v, W, H, { k, onMine: clipped ? onMine : null, hits }); // the wetlands round: the brooks, the beaver dams
       // the burns by the season's date, and the wilderness's own edge
       if (lay.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
       if (lay.boundary) { if (BOUNDARY.path) paintBoundary(ctx, v, k); else loadBoundary(); }

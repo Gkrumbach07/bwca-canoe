@@ -16,6 +16,11 @@ app). Everything below is about filling that in.
 
 ## What is live from v4: the app on Pages, the data on R2
 
+**From 2026-10-31 the site reads `bwca/v5/`**: the wetlands release (v4's format plus the `wet` and `wcls` planes and
+`creeks.json`; `detail/` copied from v4 inside R2: `rclone copy r2:bwca-data/bwca/v4/detail r2:bwca-data/bwca/v5/detail`).
+`data:sync` doesn't carry `creeks.json`: `rclone copyto public-data-v5/creeks.json r2:bwca-data/bwca/v5/creeks.json`.
+`bwca/v4/` stays for rollback; `src/rapids.json` and `src/lake-facts-v4.json` belong to v5 from then on.
+
 `.github/workflows/pages.yml` builds `main` with `VITE_DATA_URL` set to its `DATA_URL_DEFAULT`,
 `https://data.gagekrumbach.com/bwca/v4/`, so the app fetches every tile, far tile and detail chunk from the bucket
 and nothing is unpacked next to it. A `DATA_URL` repository variable overrides that address; `DATA_URL=release`

@@ -34,6 +34,12 @@
 //   secchi  the water's Secchi depth, byte / 10 m, on the bake's water only (0 on land): d1-quetico-lakes' per-cell value
 //           (inside a LakeBrowser basin its own, so bays differ), else the lake's table value
 //   cdom    its CDOM (a440), byte / 20 per metre, as secchi
+//   wet     the NWI polygon's water (wetlands, docs/wetland-data.md): regime in bits 0-2 (1 temporarily, 2 seasonally,
+//           3 semipermanently, 4 permanently flooded, 5 always saturated, 6 artificial, 7 other), beaver bit 3, system
+//           bits 4-5 (1 palustrine, 2 lake, 3 river), HGM landscape bits 6-7 (1 terrene, 2 lentic, 3 lotic); 0 = none
+//   wcls    its classes, (class1 << 4) | class2, each ground.mjs WCLS: 1 FO1 hardwood, 2 FO2 tamarack, 3 FO4 black
+//           spruce, 4 FO, 5 SS1 alder and willow, 6 SS2 tamarack scrub, 7 SS3 leatherleaf, 8 SS4 stunted spruce, 9 SS,
+//           10 EM1 sedge and cattail, 11 EM2 wild rice and pickerelweed, 12 AB lilies, 13 UB open water, 14 US, 15 RS
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -48,6 +54,9 @@ export const V4_CHANNELS = [
   { name: 'stone', type: 'u8', nodata: 255, unit: '254 sqrt(cover fraction)' },
   { name: 'secchi', type: 'u8', nodata: 0, unit: 'byte / 10 m' },
   { name: 'cdom', type: 'u8', nodata: 0, unit: 'byte / 20 per m' },
+  // wetlands (2026-10-31, docs/wetland-data.md): the whole NWI code of the polygon under the cell, water and land alike
+  { name: 'wet', type: 'u8', nodata: 0, unit: 'regime (bits 0-2) | beaver (3) | system (4-5) | HGM landscape (6-7): ground.mjs' },
+  { name: 'wcls', type: 'u8', nodata: 0, unit: '(class1 << 4) | class2: ground.mjs WCLS' },
 ];
 export const V4_FIELDS = ['height', 'lake', 'sdist', 'level', ...V4_CHANNELS.map((c) => c.name)];
 // the thresholds of the cliff byte (d1-lidar's suggestions, checked against Lake One: of its land, boulder 5.7 %,
@@ -127,7 +136,7 @@ export function loadProducts(grid, cacheDir, log = console.log) {
     log(`  cliff byte: ${counts[1]} boulder, ${counts[2]} talus or ledge, ${counts[3]} face cells`);
     P.lidar = { h: L.height, lvl: L.level, mask: L.mask, slope: L.slope, cliff };
   }
-  if (ok.ground) Object.assign(P, prefix('g', readProduct(dirs.ground, grid, { kind: [U8, 0], stone: [U8, 255], rock: [U8, 255] }, log)));
+  if (ok.ground) Object.assign(P, prefix('g', readProduct(dirs.ground, grid, { kind: [U8, 0], stone: [U8, 255], rock: [U8, 255], wet: [U8, 0], wcls: [U8, 0] }, log)));
   if (ok['forest-rock']) Object.assign(P, prefix('f', readProduct(dirs['forest-rock'], grid, { forest: [U8, 0], height: [U8, 255], cover: [U8, 255], rock: [U8, 0], bare: [U8, 0] }, log)));
   if (ok['lake-colour']) Object.assign(P, prefix('c', readProduct(dirs['lake-colour'], grid, { secchi: [U8, 0], cdom: [U8, 0] }, log)));
   P.colourTable = ok['lake-colour'] ? readColourTable(dirs['lake-colour']) : null;
@@ -195,6 +204,8 @@ export function makeChannels(grid, P, lakeId, lakeColour, log = console.log) {
     }
   }
   if (P.gStone) ch.stone.set(P.gStone);
+  if (P.gWet) ch.wet.set(P.gWet);
+  if (P.gWcls) ch.wcls.set(P.gWcls);
   // forest, canopy and cover together; a land cell LANDFIRE has as water or nothing takes its nearest land cell's
   if (P.fForest) {
     const F = P.fForest, Hh = P.fHeight, C = P.fCover, f = ch.forest, ca = ch.canopy, co = ch.cover;

@@ -21,6 +21,7 @@ import { makeVegetationKit } from './vegetation.js';
 import { TileManager } from './tiles.js';
 import { buildCanoeRig } from './canoe.js';
 import { Player, Input, seaMoments } from './player.js'; // cons B: seaMoments
+import { setBrookSeason, creekMoments } from './creeks.js'; // the wetlands round: the brooks' water by the date, the low creek's moment
 import { Packs } from './packs.js'; // trip core B
 import { ChaseCamera } from './camera.js';
 import { Hud } from './hud.js';
@@ -777,7 +778,7 @@ async function main() {
   // hullwater.js buildBilge). Two first-time moments: the first whitecaps, the first water aboard.
   player.day = day; // (the sea's game minutes run on the day's clock: none behind the pause card)
   {
-    const sea = new Map(seaMoments(player, day).map((m) => [m.id, m]));
+    const sea = new Map([...seaMoments(player, day), ...creekMoments(player)].map((m) => [m.id, m])); // (and the wetlands round's low creek)
     for (const m of sea.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
     const dueB = hints.due.bind(hints);
     hints.due = (id, rec) => (sea.has(id) ? sea.get(id).due(rec) : dueB(id, rec));
@@ -957,7 +958,17 @@ async function main() {
   // and says them; unused without it).
   const white = new WhiteWater({ world, water, ripples, scene });
   white.knock = (pos, amt) => { if (audio.ctx && audio.enabled) bonk(audio, pos, amt); };
-  audio.whiteWater = () => white.heard;
+  // the wetlands round: and the nearest running brooks' trickle (creeks.js heard), looked for twice a second, with the
+  // drops' voices left free for the drops
+  let brooks = [], brooksT = 0;
+  audio.whiteWater = () => {
+    const h = white.heard || [];
+    if (!world.creeks || h.length >= 3) return h;
+    const now = performance.now();
+    if (now - brooksT > 500) { brooksT = now; brooks = world.creeks.heard(player.x, player.z, day.season, (x, z) => tiles.groundAt(x, z)); }
+    for (const b of brooks) b.d = Math.hypot(b.x - player.x, b.z - player.z);
+    return h.length ? [...h, ...brooks].slice(0, 3) : brooks;
+  };
   hud.mapPlaces = () => whiteWater();
   {
     const upd = water.update.bind(water);
@@ -1094,6 +1105,7 @@ async function main() {
     moon.position.copy(moonTarget.position).addScaledVector(day.moonDir, 700);
     player.season = day.season;
     tiles.setSeason(day.season);
+    setBrookSeason(day.season); // the wetlands round: the brooks run or lie dry by the date
     wind.updateSway(dt); // trees, understory, grass and reeds sway with the wind the water reads
     cover.setSeason(day.season);
     canoe.setFirstPerson(chase.mode === 'first' && !chase.focus); // the head comes back for the close-up of a catch

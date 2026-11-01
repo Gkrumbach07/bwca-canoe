@@ -36,6 +36,7 @@ import { loadBathymetry } from './bathymetry.mjs';
 import { loadClarity } from './clarity.mjs';
 import { makeWater, placeLandings, linkPortages, chainsFrom } from './world-links.mjs';
 import { gradeLevels } from './water-grade.mjs';
+import { loadNhd, classifyCreeks, rasterizeClassified, brooksOf, beaverDams, lakeFlow } from './creeks.mjs'; // wetlands
 import { loadProducts, lidarWeight, makeChannels, lidarBasinLevels, V4_CHANNELS, V4_FIELDS } from './v4-products.mjs'; // d2 bake
 import { officialAdds } from './official-adds.mjs'; // d2 bake (d1 names' sites and portages)
 
@@ -93,28 +94,7 @@ function rasterizeLakes(lakes, grid, lakeId) {
   }
 }
 
-// Waterway centrelines become channels a few cells wide: every cell whose centre is within the half-width.
-function rasterizeCreeks(creeks, grid, lakeId) {
-  const { width, height } = grid;
-  for (const c of creeks) {
-    const hw = c.kind === 'stream' ? 7.5 : 11;
-    for (let s = 1; s < c.pts.length; s++) {
-      const [x1, z1] = c.pts[s - 1], [x2, z2] = c.pts[s];
-      const i0 = Math.max(0, grid.ci(Math.min(x1, x2) - hw)), i1 = Math.min(width - 1, grid.ci(Math.max(x1, x2) + hw));
-      const j0 = Math.max(0, grid.cj(Math.min(z1, z2) - hw)), j1 = Math.min(height - 1, grid.cj(Math.max(z1, z2) + hw));
-      const dx = x2 - x1, dz = z2 - z1, L2 = dx * dx + dz * dz || 1;
-      for (let j = j0; j <= j1; j++) {
-        const cz = grid.cz(j);
-        for (let i = i0; i <= i1; i++) {
-          const cx = grid.cx(i);
-          const t = Math.max(0, Math.min(1, ((cx - x1) * dx + (cz - z1) * dz) / L2));
-          const px = x1 + dx * t, pz = z1 + dz * t;
-          if ((cx - px) * (cx - px) + (cz - pz) * (cz - pz) <= hw * hw) lakeId[j * width + i] = c.id;
-        }
-      }
-    }
-  }
-}
+// Waterway centrelines become channels: creeks.mjs rasterizeClassified (wetlands: river, marsh channel, brook).
 
 // Resample a polyline at roughly `step` metre spacing.
 function resample(pts, step) {
@@ -252,7 +232,11 @@ async function main() {
   lakes.forEach((l, i) => { l.id = i + 1; });
   if (lakes.length >= 65535) throw new Error('too many water polygons for Uint16 ids');
   const lakeId = new Uint16Array(N);
-  rasterizeCreeks(waterways, grid, lakeId);
+  // wetlands: each creek's stretches told river, marsh channel or brook (creeks.mjs); only the paddled ones are water
+  let brooks = [];
+  if (P) { const nhd = loadNhd(CFG.cacheDir, grid, proj, log); const ends = []; for (const pg of osm.portages || []) for (const e of [pg.pts[0], pg.pts[pg.pts.length - 1]]) ends.push(proj.toLocal(e[0], e[1]));
+    classifyCreeks(waterways, grid, P, nhd, log, ends); brooks = brooksOf(waterways, grid, nhd); }
+  rasterizeClassified(waterways, grid, lakeId);
   rasterizeLakes(lakes, grid, lakeId);
   const nLakes = lakes.length;
   const lakeArea = new Uint32Array(nLakes + 1);
@@ -1014,6 +998,21 @@ async function main() {
     if (b && b.level3dep !== undefined && !l.river) rec.level3dep = +b.level3dep.toFixed(2);
     return rec;
   });
+  // wetlands: each lake's place in the water, a pond, a seasonal creek; the brooks and the beaver dams to creeks.json
+  if (P) {
+    const flow = lakeFlow(waterways, lakes, grid, lakeId, lakeBasin, basins.map((b) => b.level), lakeLevel, hraw);
+    lakeMeta.forEach((rec, i) => {
+      if (!rec) return;
+      const l = lakes[i];
+      if (l.creek) { if (l.seasonal) rec.seasonal = true; return; }
+      if (l.river) return;
+      rec.flow = flow[lakeBasin[rec.id]];
+      if (rec.cells * cell * cell < 80937) rec.pond = true; // under 20 acres
+    });
+    const dams = beaverDams(CFG.cacheDir, grid, proj, hraw, waterways, log);
+    await fsp.writeFile(path.join(opt.out, 'creeks.json'), JSON.stringify({ brooks, dams }));
+    log(`wetlands: creeks.json: ${brooks.length} brooks, ${dams.length} beaver dams`);
+  }
   const basinMeta = basins.map((b, i) => ({ id: i, name: b.name || null, level: +b.level.toFixed(2), cells: b.cells, river: b.river || undefined, level3dep: b.level3dep !== undefined ? +b.level3dep.toFixed(2) : undefined, lidar: b.lidar || undefined }));
   const index = {
     version: V4 ? 4 : 3,
@@ -1036,6 +1035,7 @@ async function main() {
     entryPoints,
     start: { x: r1(start.x), z: r1(start.z), lake: start.lake },
   };
+  if (P) index.creeks = 'creeks.json'; // wetlands: brooks and beaver dams (creeks.mjs)
   if (namesAdded) index.namesReport = namesAdded.report;
   await fsp.writeFile(path.join(opt.out, 'index.json'), JSON.stringify(index));
   // the old single-area files are superseded

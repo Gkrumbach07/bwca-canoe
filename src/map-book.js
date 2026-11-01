@@ -36,6 +36,16 @@ const ft = (m) => Math.round(m / FT);
 const acresOf = (l, w) => (l.cells * w.cell * w.cell) / ACRE;
 const acreWords = (a) => `${(a >= 100 ? Math.round(a / 10) * 10 : Math.max(1, Math.round(a))).toLocaleString('en-US')} ${a < 1.5 ? 'acre' : 'acres'}`;
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+// the wetlands round: what kind of water it is, from the bake's lake record (scripts/creeks.mjs): its flow, a pond under
+// 20 acres, a creek that runs low by late summer
+const FLOW_WORDS = { chain: 'On a chain of lakes', headwater: 'Headwater lake: a stream out, none in', terminal: 'Streams in, none out', landlocked: 'Landlocked: no stream in or out' };
+export function waterKind(L) {
+  if (!L) return '';
+  if (L.river) return L.creek && L.seasonal ? 'Runs low by late summer: shallow going from late July' : '';
+  const f = FLOW_WORDS[L.flow] || '';
+  if (L.pond) return f ? `Pond · ${f[0].toLowerCase()}${f.slice(1)}` : 'Pond';
+  return f;
+}
 const burnAt = (x, z) => { const out = [{ rec: null, w: 0 }, { rec: null, w: 0 }]; return BURNS.ready && eventsAt(x, z, out) > 0 && out[0].rec && out[0].w > 0.2 ? out[0].rec : null; };
 
 export class MapBook {
@@ -142,6 +152,7 @@ export class MapBook {
       if (hit.kind === 'claim') { const c = hit.claim; return { html: `<span class="seal">$</span><b>To claim at ${esc(c.where)}</b>${c.items.map((q) => `<span>${esc(q.title)} · $${q.pay}</span>`).join('')}`, ring: { ...hit, px: 14 }, click: true }; }
       if (hit.kind === 'note') { const h = hit.note; return { html: `<b class="pencil">${esc(h.label)}</b><span>“${esc(h.text || '')}”</span><i>— ${esc(h.whoFull || h.who)}${h.where ? `, ${esc(h.where)}` : ''}</i>`, ring: hit }; }
       if (hit.kind === 'dock') { const e = w.entryPoints.find((q) => q.ep === hit.ep), L = this.tasks && this.tasks.landing ? this.tasks.landing(hit.ep) : null; return { html: `<b>${esc(L ? L.name : `${e ? e.name : ''} landing`)}</b><span>Entry point ${hit.ep}${e && e.name ? ` · ${esc(e.name)}` : ''}</span>`, ring: hit }; }
+      if (hit.kind === 'dam') { const d = hit.d; return { html: d.old ? '<b>Old beaver dam</b><span>breached and grassed over: the pond behind it drained to meadow</span>' : `<b>Beaver dam</b><span>${d.route ? 'across the creek: haul the canoe over' : 'holding back a beaver pond'}${d.lodge ? ' · a lodge in the pond' : ''}</span>`, ring: { ...hit, px: 9 } }; } // the wetlands round
       if (hit.kind === 'site') {
         const c = w.campsites[hit.i], nm = names.siteWords(c), nights = explored.stayed(hit.i);
         return { html: `<b>${nm ? `Campsite · ${esc(nm)}` : 'A campsite'}</b>${nights ? '<span>you have slept here</span>' : ''}`, ring: hit };
@@ -325,6 +336,7 @@ export class MapBook {
     const tea = teaWord(L.cdom);
     const rows = [];
     rows.push(['Size', L.river ? (L.creek ? 'a creek' : 'a river') : `${acreWords(acres)}${acres > 2000 ? ' · big water: mind the wind' : ''}`]);
+    const kind = waterKind(L); if (kind) rows.push(['Water', kind]); // the wetlands round: the bake's flow and pond
     rows.push(['Deepest', depth ? `${ft(depth)} ft${L.maxDepth ? ' · the DNR’s contour map' : ' · the DNR’s sounding'}` : '<span class="soft">not sounded</span>']);
     rows.push(['Clarity', L.secchi ? `${ft(L.secchi)} ft to the Secchi disk${tea ? ` · ${tea}` : ''}` : tea ? cap(tea) : '<span class="soft">not measured</span>']);
     rows.push(['Fish', fish.length ? `<span class="mb-fish">${fish.map((s) => `<span><svg viewBox="0 0 110 56" aria-hidden="true">${fishSilhouette(s)}</svg>${FISH[s] || s}</span>`).join('')}</span><span class="soft">${surveyed ? 'from the DNR’s last survey nets' : 'not surveyed: what lakes like it hold'}</span>` : '<span class="soft">none recorded</span>']);
