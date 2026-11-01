@@ -281,6 +281,34 @@ try {
   const after = { host: await A.evaluate((key) => window.__game.fires.state(key), L.key), guest: await B.evaluate((key) => window.__game.fires.state(key), L.key), wet: await A.evaluate(() => { const b = window.__game.inventory.cont(window.__fireBin); return b.grid.filter((e) => e.data && e.data.wet > 0).length; }) };
   result('4e the guest douses the host’s fire: out on both screens', !dz.none && !['burning', 'coals'].includes(after.host) && after.guest === after.host, { ...dz, msHeldJobPlusRequest: dMs, hostState: after.host, guestState: after.guest, hostWetPieces: after.wet });
 
+  // --- 4f: out of the host's fire on the guest's card, with the mouse: the fish off the host's grate into a free hand,
+  // a branch out of the host's fuel into the other ("it doesnt let me pull things from the fire that the other player put")
+  await B.evaluate(() => { const g = window.__game, inv = g.inventory; for (const c of [...inv.containers]) if (c.where === 'hands') { const pk = inv.containers.find((k) => k.where === 'ground' && /^pack/.test(k.item)); if (pk) inv.move(null, c.id, pk.id, ...Object.values(inv.firstFit(pk, c.item) || { x: 0, y: 0, rot: 0 })); } });
+  const opened = await B.evaluate((L) => { const p = window.__game.player; p.x = L.fire.x - 1.6; p.z = L.fire.z + 0.4; return window.__game.cards.open('fire', L.key); }, L);
+  await sleep(900);
+  const dragTo = async (from, to) => {
+    const a = await B.$(from), b = await B.$(to);
+    if (!a || !b) return { none: { from: !!a, to: !!b } };
+    const ra = await a.boundingBox(), rb = await b.boundingBox();
+    await B.mouse.move(ra.x + ra.width / 2, ra.y + ra.height / 2);
+    await B.mouse.down();
+    for (let i = 1; i <= 8; i++) { await B.mouse.move(ra.x + ra.width / 2 + (rb.x + rb.width / 2 - ra.x - ra.width / 2) * i / 8, ra.y + ra.height / 2 + (rb.y + rb.height / 2 - ra.y - ra.height / 2) * i / 8); await sleep(30); }
+    await B.mouse.up();
+    await until(B, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+    await sleep(500);
+    return { ok: true };
+  };
+  const hands = () => B.evaluate(() => window.__game.inventory.containers.filter((c) => c.where === 'hands').map((c) => c.grid.map((e) => e.id).join('+')));
+  const h0 = await hands();
+  const fishDrag = await dragTo('.cd-thing .nb-slot.s-grate .ig-item', '.cd-mine [data-dz="hand0"]');
+  const h1 = await hands();
+  const woodDrag = await dragTo('.cd-thing .nb-slot.s-fuel .ig-item', '.cd-mine [data-dz="hand1"]');
+  const h2 = await hands();
+  await B.screenshot({ path: path.join(OUT, 'guest-fire-card-after-taking.png') });
+  await B.evaluate(() => window.__game.cards.close());
+  const gotFish = h1.some((s) => /fish/.test(s)) && !h0.some((s) => /fish/.test(s)), gotWood = h2.join().split(/[+,]/).filter((s) => /wood/.test(s)).length > h1.join().split(/[+,]/).filter((s) => /wood/.test(s)).length;
+  result('4f the guest pulls things out of the host’s fire (grate and fuel) with the mouse', !!(opened && gotFish && gotWood), { cardOpened: opened, handsBefore: h0, afterFish: h1, afterWood: h2, fishDrag, woodDrag });
+
   // --- 5: a stick the guest picks up is gone on the host's screen -------------------------------------------------------
   const stick = await B.evaluate(() => {
     const g = window.__game, ch = g.chores || g.camp.chores, p = g.player;
@@ -408,6 +436,48 @@ try {
     result('11 the guest’s hung barrel: a tab within reach, a take from it', !!(t && took && took.gained > 0), { tab: t && t.label, took, guestBarrelNow: stillHung });
   } else result('11 the guest’s hung barrel: a tab within reach, a take from it', false, hb);
 
+  // --- 12: a stick the guest drops makes a pile (a woodpile) on the guest's screen: the host sees that woodpile, drawn as
+  // the guest's, and takes from it on the dot (E Take one) ---------------------------------------------------------------
+  const drop = await B.evaluate((L) => {
+    const g = window.__game, inv = g.inventory, p = g.player; p.x = L.fire.x + 1.5; p.z = L.fire.z + 2.5;
+    let hit = null; for (const c of inv.containers) { if (hit) break; const e = c.grid.find((x) => x.id === 'wood:branch' && !x.fixed); if (e && c.item !== 'firefuel') hit = { c, e }; }
+    if (!hit) { const r = inv.place('wood:branch', 1); hit = inv.findUid(r.uid); }
+    const piles0 = inv.containers.filter((c) => c.item === 'pile').map((c) => c.id);
+    const r = inv.drop(hit.c.id, hit.e.uid, 1);
+    const pile = inv.containers.find((c) => c.item === 'pile' && c.where === 'ground' && !piles0.includes(c.id) && c.grid.some((e) => e.id === 'wood:branch')) || inv.containers.find((c) => c.item === 'pile' && c.where === 'ground' && c.grid.some((e) => e.id === 'wood:branch'));
+    return { r, pile: pile ? { id: pile.id, at: { x: pile.at.x, z: pile.at.z }, woodpile: g.chores.woodOnly(pile), drawnAsWoodpile: !!g.chores.pileMesh(pile.id) } : null };
+  }, L);
+  log('[guest] dropped', drop);
+  if (drop.pile) {
+    const ppid = `p${ids.guest}:${drop.pile.id}`;
+    await A.evaluate((a) => { const p = window.__game.player; p.x = a.x + 1.2; p.z = a.z; }, drop.pile.at);
+    const ms12 = await (async () => { const t0 = Date.now(); try { await until(A, (id) => { const ch = window.__game.chores; return !!ch.pileMesh(id); }, ppid, 8000); return Date.now() - t0; } catch { return null; } })();
+    const seen = await A.evaluate(({ ppid, gid }) => {
+      const g = window.__game, s = g.coopShare, f = s.friends.get(gid), loose = f && f.view && f.view.objs.get(ppid);
+      const near = { reach: 3, flat: () => 1, sphere: () => ({ t: 1, miss: 0 }) };
+      const t = s.pointTargets(null, near).find((q) => q.target.ref === ppid);
+      const before = g.inventory.count('wood:branch', { reachable: false });
+      if (t) t.target.e.run();
+      return { woodpileDrawn: !!g.chores.pileMesh(ppid), alsoLooseModel: !!(loose && loose.visible), dot: t ? `${t.target.e.verb} · ${t.target.label}` : null, before };
+    }, { ppid, gid: ids.guest });
+    await until(A, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+    const after = await A.evaluate(() => window.__game.inventory.count('wood:branch', { reachable: false }));
+    const guestPile = await B.evaluate((id) => { const c = window.__game.inventory.cont(id); return c ? c.grid.length : 0; }, drop.pile.id);
+    result('12 the guest’s dropped stick: the host sees the woodpile and takes from it on the dot', !!(drop.pile.woodpile && seen.woodpileDrawn && !seen.alsoLooseModel && seen.dot && after === seen.before + 1), { ms: ms12, guestDrawsWoodpile: drop.pile.drawnAsWoodpile, ...seen, hostBranchesAfter: after, guestPileLeft: guestPile });
+  } else result('12 the guest’s dropped stick: the host sees the woodpile and takes from it on the dot', false, drop);
+
+  // --- 10b: the host's walker steps onto the guest's beached canoe: pushed off it, not stuck --------------------------------
+  {
+    const w = await A.evaluate(({ gid }) => {
+      const g = window.__game, r = g.coop.remotes.get(gid), B = r && r.boat; if (!B || B.hidden) return null;
+      g.player.x = B.x + Math.cos(B.heading) * 0.8; g.player.z = B.z - Math.sin(B.heading) * 0.8; // (on its middle, toward the bow)
+      return { x: B.x, z: B.z, h: B.heading };
+    }, { gid: ids.guest });
+    await sleep(1200);
+    const d = w ? await A.evaluate((b) => { const p = window.__game.player, fx = Math.cos(b.h), fz = -Math.sin(b.h), dx = p.x - b.x, dz = p.z - b.z, t = Math.max(-2.3, Math.min(2.3, dx * fx + dz * fz)); return { off: +Math.hypot(dx - fx * t, dz - fz * t).toFixed(2), pushes: window.__game.coopShare.n.pushes }; }, w) : null;
+    result('10b the host’s walker on the guest’s beached canoe is pushed off it', !!(d && d.off >= 0.65), d || { none: 'no beached canoe' });
+  }
+
   // --- 9: no answer: a put the owner never answers comes back after the timeout ------------------------------------------
   await A.evaluate(() => { const s = window.__game.coopShare; s.gotOp = () => {}; }); // (the host's browser deaf to requests)
   await B.evaluate((L) => { const p = window.__game.player; p.x = L.fire.x - 1.6; p.z = L.fire.z + 0.4; }, L); // (back by the host's pack)
@@ -461,6 +531,27 @@ try {
   await A.evaluate(() => window.__game.journal.close());
   await B.screenshot({ path: path.join(OUT, 'guest-view.png') });
   log('screenshots in', OUT);
+
+  // --- 13: two canoes on the water in one spot: pushed apart, neither stuck ---------------------------------------------
+  {
+    const spot = await A.evaluate(async (L) => { const g = window.__game, p = g.player; await p.teleport(L.fire.x - 30, L.fire.z - 30); return { x: p.x, z: p.z, h: p.heading, mode: p.mode }; }, L);
+    await B.evaluate(async (s) => { const g = window.__game, p = g.player; await p.teleport(s.x, s.z); p.x = s.x + 0.3; p.z = s.z + 0.2; p.heading = s.h + 0.4; }, spot);
+    await A.evaluate((s) => { const p = window.__game.player; p.x = s.x; p.z = s.z; }, spot);
+    const gap = () => A.evaluate((gid) => {
+      const g = window.__game, p = g.player, r = g.coop.remotes.get(gid), B = r && r.boat; if (!B || B.hidden) return null;
+      const seg = (x, z, h) => { const fx = Math.cos(h) * 2.3, fz = -Math.sin(h) * 2.3; return [x - fx, z - fz, x + fx, z + fz]; };
+      const [ax, az, bx, bz] = seg(p.x, p.z, p.heading), [cx, cz, dx, dz] = seg(B.x, B.z, B.heading);
+      let best = Infinity; // (sampled: the nearest of the two hulls' lines)
+      for (let i = 0; i <= 40; i++) for (let j = 0; j <= 40; j++) { const s = i / 40, t = j / 40; best = Math.min(best, Math.hypot(ax + (bx - ax) * s - cx - (dx - cx) * t, az + (bz - az) * s - cz - (dz - cz) * t)); }
+      return { gap: +best.toFixed(2), mode: p.mode, other: B.ext ? 'afloat' : 'beached' };
+    }, ids.guest);
+    await sleep(400);
+    const g0 = await gap();
+    await sleep(2500);
+    const g1 = await gap();
+    const pushes = { host: await A.evaluate(() => window.__game.coopShare.n.pushes), guest: await B.evaluate(() => window.__game.coopShare.n.pushes) };
+    result('13 two canoes on the water in one spot are pushed apart', !!(g1 && g1.gap >= 0.7 && g1.mode === 'paddle'), { start: g0, after: g1, pushes });
+  }
 
   // --- leave: the guest's things go from the host's screen -------------------------------------------------------------
   await B.evaluate(() => window.__game.coop.disconnect());

@@ -1324,7 +1324,7 @@ function zoneCheckDz(st, dz) {
   if (occ && !occ.isLong) return occ.obj.id !== (src && src.c.id) && canFit(occ.obj, st.e.id) ? 'ok' : 'no';
   if (occ || !dz.startsWith('hand')) return 'no';
   // fb3 C (decision 11, stream B): a free hand takes any item (inventory.canHand; a piece of wood makes an armload)
-  if (typeof inv.canHand === 'function' && !bin) { try { return inv.canHand(st.e.id) ? 'ok' : 'no'; } catch { return 'no'; } }
+  if (typeof inv.canHand === 'function' && (!bin || bin.toHand)) { try { return inv.canHand(st.e.id) ? 'ok' : 'no'; } catch { return 'no'; } } // (co-op: a friend's bin hands it over: bin.toHand)
   return d.kind === 'firewood' && itemDef('woodarms') && onFoot() ? 'ok' : 'no';
 }
 // an item out of one of your grids onto the ground: on foot, and not out of a bin (the wood lying about is on the ground already)
@@ -1417,6 +1417,7 @@ function itemTo(st, dz) {
   let to = occ && !occ.isLong ? occ.obj : null;
   // fb3 C (decision 11, stream B): an item into a free hand goes to a holder the model makes (inventory.toHand: "In your
   // hand"; wood keeps making an armload); without it, the old armload for wood alone
+  if (!to && hand && bin && bin.toHand) return bin.toHand(e, +dz[4], st.qty) || { ok: false }; // co-op: out of a friend's thing into a free hand (coop-share.js)
   if (!to && hand && !bin && typeof inv.toHand === 'function') {
     let r = null;
     try { r = inv.toHand(src.c.id, e.uid, +dz[4], st.qty || undefined) || null; } catch (err) { console.warn('inventory.toHand', err); }
