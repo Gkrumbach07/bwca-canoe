@@ -70,6 +70,9 @@ class FriendView extends ContainerView {
       const at = this.cellAt(pile, e);
       this.onGround(o, { x: at.x, z: at.z, heading: pile.at.heading || 0 });
     }
+    // their canoe's load, in their canoe (the actor's near hull: the same frame as ours), beached or afloat
+    const B = this.boatOf ? this.boatOf() : null, pivot = B && !B.hidden && B.near ? B.near.pivot : null;
+    if (pivot && pivot.parent) this.loadInto(pivot, inv.containers, inv.long, { seen });
     for (let i = ropes; this.ropes && i < this.ropes.length; i++) this.ropes[i].visible = false;
     for (const [k, o] of this.objs) if (!seen.has(k)) { o.removeFromParent(); if (o.userData.merged) o.geometry.dispose(); this.objs.delete(k); }
     for (const [k, o] of this.loose) if (!used.has(k)) { o.removeFromParent(); if (o.userData.merged) o.geometry.dispose(); this.loose.delete(k); }
@@ -113,7 +116,10 @@ export class CoopShare {
     coop.tick((now) => this.tick(now));
     // the hooks into the camp modules: each does nothing with no friend about
     const g = coop.g;
-    if (g.chores) g.chores.friendRing = (key) => !!this.friendBin(key);
+    if (g.chores) {
+      g.chores.friendRing = (key, kind = 'fuel') => !!this.friendThing(key, kind);
+      g.chores.friendDoused = (key, stage) => this.douseFriend(key, stage);
+    }
     uiAttach({ coopTabs: { tabs: () => this.tabs(), sig: () => this.tabSig() } });
     this.hookNearby();
   }
@@ -121,6 +127,7 @@ export class CoopShare {
   hookNearby() {
     const nb = window.__game && window.__game.nearby;
     if (nb && nb.hooks && !nb.hooks.friendFire) nb.hooks.friendFire = (key, site) => this.fireObject(key, site);
+    if (nb && nb.hooks && !nb.hooks.friendFeed) nb.hooks.friendFeed = (key, c, e, has) => this.feedActions(key, c, e, has);
     return !!nb;
   }
 
@@ -138,7 +145,11 @@ export class CoopShare {
     if (g.fires) for (const b of inv.containers) if (b.item === 'firefuel' && b.at && b.at.fuel) { const r = g.fires.record(b.at.fuel); if (r) fires.push(r); }
     const p = g.player, d = p && p.carry && p.carry.drop;
     const cn = d && Number.isFinite(d.x) && p.mode !== 'paddle' && p.mode !== 'carry' ? { x: d.x, z: d.z, heading: d.heading || 0 } : null;
-    return { c, l, tent, tarps, fires, cn };
+    // what cooks on our grates and in our pots there (cook.js jobs), for a friend's fire card
+    let cook = null;
+    const ck = g.chores && g.chores.cook;
+    if (ck && typeof ck.cookingOf === 'function') for (const k of c) if (k.item === 'grate' || (itemDef(k.item) || {}).pot) { const q = ck.cookingOf(k.id); if (q) (cook = cook || {})[k.id] = { v: Math.round(q.value * 20) / 20, l: q.label, r: !!q.running, i: q.item }; }
+    return { c, l, tent, tarps, fires, cn, cook };
   }
   publish(now) {
     if (!this.force && now - this.pubT < PUB_MS) return;
@@ -169,6 +180,7 @@ export class CoopShare {
       const g = this.g, mirror = new Mirror();
       const view = g.canoe && g.scene ? new FriendView({ inventory: mirror, canoe: g.canoe, scene: g.scene, player: g.player }) : null;
       f = { id, pub: null, mirror, view, tent: null, tarps: [], fires: new Map(), claims: new Set() };
+      if (view) view.boatOf = () => { const r = this.coop.remotes.get(id); return r ? r.boat : null; };
       this.friends.set(id, f);
     }
     const r = this.coop.remotes.get(id);
@@ -199,7 +211,7 @@ export class CoopShare {
         if (!Number.isFinite(v)) continue;
         const cur = ch.s.taken[k];
         if (cur == null || v > cur) { ch.s.taken[k] = v; wood = true; }
-        this.sent.tk[k] = JSON.stringify(ch.s.taken[k]);
+        this.sent.tk[k] = JSON.stringify(v); // (what they have: if ours merged past it, ours goes back to them)
       }
       for (const [k, v] of Object.entries(m.sw || {})) {
         if (!v || !Number.isFinite(v.day)) continue;
@@ -208,7 +220,7 @@ export class CoopShare {
         if (cur && cur.day > v.day) next = cur;
         else if (cur && cur.day === v.day) next = { day: v.day, cuts: Math.max(cur.cuts || 0, v.cuts || 0), ...((cur.poles || v.poles) ? { poles: Math.max(cur.poles || 0, v.poles || 0) } : {}) };
         if (JSON.stringify(next) !== JSON.stringify(cur)) { ch.s.sawn[k] = next; wood = true; }
-        this.sent.sw[k] = JSON.stringify(ch.s.sawn[k]);
+        this.sent.sw[k] = JSON.stringify(v);
       }
     }
     if (fo && fo.s) {
@@ -216,7 +228,7 @@ export class CoopShare {
         if (!Array.isArray(v) || v.length !== 2) continue;
         const cur = fo.s.picked[k];
         if (!cur || v[0] > cur[0] || (v[0] === cur[0] && v[1] > cur[1])) { fo.s.picked[k] = [v[0] | 0, v[1] | 0]; forage = true; }
-        this.sent.pk[k] = JSON.stringify(fo.s.picked[k]);
+        this.sent.pk[k] = JSON.stringify(v);
       }
     }
     if (wood) { ch.dirty = true; uiRefresh(); }
@@ -322,6 +334,8 @@ export class CoopShare {
     if (!this.hooked) this.hooked = this.hookNearby();
     this.publish(now);
     for (const f of this.friends.values()) {
+      // their load is drawn as it is (FriendView), not the actor's stock packs
+      const r = this.coop.remotes.get(f.id); if (r && r.boat && f.pub) r.boat.packs = 0;
       if (f.view) { try { f.view.afterPose(); } catch (e) { if (!this.warned) { this.warned = true; console.warn('coop-share: a friend’s things', e); } } }
       try { this.drawTent(f); } catch (e) { if (!this.warnedT) { this.warnedT = true; console.warn('coop-share: a friend’s tent', e); } }
     }
@@ -413,6 +427,11 @@ export class CoopShare {
   gotOp(m) {
     this.n.opIn++;
     const inv = this.g.inventory, reply = (r) => this.coop.send({ t: 'opr', to: m.from, rid: m.rid, ...r });
+    if (m.op === 'douse') {
+      const ch = this.g.chores, ok = !!(ch && typeof ch.douseFrom === 'function' && ch.douseFrom(m.key, m.stage));
+      if (ok) this.pubSoon();
+      return reply(ok ? { ok: true } : { ok: false, why: 'The fire is out already.' });
+    }
     const c = inv && inv.cont(m.cId);
     if (!c || !PUBLIC.has(inv.rootWhere(c))) return reply({ ok: false, why: 'It isn’t there any more.' });
     if (m.op === 'take') {
@@ -506,30 +525,77 @@ export class CoopShare {
     for (const f of this.friends.values()) for (const c of f.mirror.containers) if (c.item === 'firefuel' && c.at && c.at.fuel === key) return { f, c };
     return null;
   }
-  // the fire card at a friend's ring (nearby.js fireObject): their fuel as a bin fed by request, our own grate over it
+  // a friend's thing at ring `key`: 'grate' their grate, else their fuel bin. { f, c } or null
+  friendThing(key, kind = 'fuel') {
+    if (kind !== 'grate') return this.friendBin(key);
+    if (!this.coop.live || !this.friends.size) return null;
+    for (const f of this.friends.values()) for (const c of f.mirror.containers) if (c.item === 'grate' && c.at && c.at.grate === key) return { f, c };
+    return null;
+  }
+  // a pot (or the grate) of a friend's cooking, from their pub: cook.cookingOf's shape
+  cookingOf(f, c) {
+    const q = f.pub && f.pub.cook ? f.pub.cook[unpfx(c.id)] : null;
+    return q ? { value: q.v, label: q.l || 'Cooking', timer: 0, running: !!q.r, words: '', item: q.i } : null;
+  }
+  // the fire card at a friend's ring (nearby.js fireObject): their fuel as a bin fed by request; their grate and the
+  // pots on it the same (their browser cooks over their fire), else our own grate; Douse (held) puts it out on both
   fireObject(key, site) {
     if (this.ownBin(key)) return null;
     const fb = this.friendBin(key);
     if (!fb) return null;
     const g = this.g, ch = g.chores, F = g.fires, ck = ch && ch.cook, nb = window.__game && window.__game.nearby;
-    const grate = ch.grate(key, site);
-    if (!grate) return null;
+    const fg = this.friendThing(key, 'grate');
+    const grate = fg ? null : ch.grate(key, site);
+    if (!fg && !grate) return null;
     const bin = this.binOf(fb.f, fb.c, { accepts: ['firewood'] });
     const units = ch.binUnits({ grid: fb.c.grid.filter((e) => !e.box) });
-    const st = F.state(key), need = F.ringNeed(key, units);
+    const st = F.state(key), need = F.ringNeed(key, units), lit = st === 'burning' || st === 'coals';
+    const potLabel = (c) => (itemDef(c.item) || {}).short || (itemDef(c.item) || {}).name || 'Pot';
+    let slots, cooking;
+    if (fg) {
+      const pots = fg.f.mirror.containers.filter((c) => c.where === 'in' && c.in === fg.c.id && (itemDef(c.item) || {}).pot);
+      slots = [
+        { ...this.binOf(fg.f, fg.c, { accepts: ['fish', 'food', 'tool'] }), id: 'grate', label: 'Grate' },
+        ...pots.map((c) => ({ ...this.binOf(fg.f, c, { accepts: ['meal', 'fish', 'food', 'water'] }), id: `pot:${c.id}`, label: potLabel(c), pot: true, cooking: this.cookingOf(fg.f, c) })),
+      ];
+      cooking = this.cookingOf(fg.f, fg.c);
+    } else {
+      slots = [
+        { id: 'grate', label: 'Grate', cId: grate.id, accepts: ['fish', 'food', 'tool', 'container'] },
+        ...(ck && typeof ck.potsOn === 'function' ? ck.potsOn(key) : []).map((c) => ({ id: `pot:${c.id}`, label: potLabel(c), cId: c.id, pot: true, accepts: ['meal', 'fish', 'food', 'water'], cooking: ck.cookingOf(c.id) })),
+      ];
+      cooking = ck ? (typeof ck.potsOn === 'function' ? ck.cookingNow(key, { grateOnly: true }) : ck.cookingNow(key)) : null;
+    }
     return {
       id: `fire:${key}`, kind: 'fire', title: `${possessive(fb.f.name)} fire`, key, state: st,
-      slots: [
-        { ...bin, id: 'fuel', label: 'Fuel' },
-        { id: 'grate', label: 'Grate', cId: grate.id, accepts: ['fish', 'food', 'tool', 'container'] },
-        ...(ck && typeof ck.potsOn === 'function' ? ck.potsOn(key) : []).map((c) => ({ id: `pot:${c.id}`, label: (itemDef(c.item) || {}).short || (itemDef(c.item) || {}).name || 'Pot', cId: c.id, pot: true, accepts: ['meal', 'fish', 'food', 'water'], cooking: ck.cookingOf(c.id) })),
-      ],
-      actions: [],
+      slots: [{ ...bin, id: 'fuel', label: 'Fuel' }, ...slots],
+      actions: lit && site ? [{ id: 'douse', label: 'Douse', held: true, job: 'fire-out', enabled: true, why: null, run: (o) => ch.douse(site, key, nb && nb.keys ? nb.keys(o) : {}) }] : [],
       need: nb && typeof nb.askWood === 'function' ? nb.askWood(need) : need,
       burn: F.burn(key, units), coals: F.coals(key),
-      cooking: ck ? (typeof ck.potsOn === 'function' ? ck.cookingNow(key, { grateOnly: true }) : ck.cookingNow(key)) : null,
-      friend: fb.f.id,
+      cooking, friend: fb.f.id,
     };
+  }
+  // an item's right-click at a friend's ring (nearby.js itemActions): wood onto their fire, a fish onto their grate
+  feedActions(key, c, e, has = {}) {
+    const d = itemDef(e.id), out = [];
+    if (!d || !c) return out;
+    const one = (fx, id, label) => {
+      if (!fx) return;
+      const spec = (itemDef(fx.c.item) || {}).container || {};
+      const room = spec.cols ? fx.c.grid.length < spec.cols * spec.rows : true;
+      out.push({ id, label, enabled: room, why: room ? null : `${id === 'fuel' ? 'the ring' : 'the grate'} is full`, run: () => !!this.requestPut(fx.f, fx.c, { cId: c.id, uid: e.uid, itemId: e.id, qty: 1 }).ok });
+    };
+    if (d.kind === 'firewood' && !has.bin && !this.ownBin(key)) one(this.friendBin(key), 'fuel', 'Put it on the fire');
+    if (d.kind === 'fish' && d.eat && d.eat.cook && !has.grate) one(this.friendThing(key, 'grate'), 'grate', 'Put it on the grate');
+    return out;
+  }
+  // our held douse at a friend's ring got that far: their browser puts its fire out the same way
+  douseFriend(key, stage) {
+    if (this.ownBin(key)) return;
+    const fb = this.friendBin(key);
+    if (!fb) return;
+    const rid = `${this.coop.id}:${this.rid++}`;
+    if (this.coop.send({ t: 'op', to: fb.f.id, rid, op: 'douse', key, stage })) this.pending.set(rid, { rid, op: 'douse', to: fb.f.id, t0: performance.now(), key, stage });
   }
 
   stats() {

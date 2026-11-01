@@ -303,6 +303,58 @@ export class ContainerView {
   }
   hide(key) { const o = this.objs.get(key); if (o) o.visible = false; }
 
+  // the canoe's load (where 'canoe') in a hull's frame (+x the bow, canoe.js's and the actors' near hulls alike): the
+  // packs flat in their places, the barrels standing, the small things across, the long things along the bilge (co-op:
+  // a friend's load in their canoe is drawn by the same, coop-share.js)
+  loadInto(hull, containers, long, { overhead = false, rodUp = false, dilly = false, lashAt = () => LASH.z[0], seen = new Set() } = {}) {
+    const flat = [...FLAT], stand = [...STAND], small = [...SMALL];
+    const stack = new Map();
+    // the rod up (fishing.js draws its own): the stowed one is not drawn
+    const isRod = (id) => (itemDef(id) || {}).long === 'rod';
+    const inCanoe = containers.filter((c) => c.where === 'canoe').sort((a, b) => order(a.item) - order(b.item) || (a.id < b.id ? -1 : 1));
+    for (const c of inCanoe) {
+      const o = this.objFor(c.id, c.item); if (!o) continue;
+      seen.add(c.id);
+      if (overhead) { o.visible = false; continue; }
+      const mk = o.userData.mesh;
+      if (o.parent !== hull) hull.add(o);
+      o.visible = true;
+      if (isPack(mk)) {
+        const x = flat.length ? flat.shift() : FLAT[0], P = packDims(mk), base = stack.get(x) || 0;
+        o.quaternion.copy(this.FLAT_Q); o.position.set(x, floorAt(x) + 0.36 * P.D + 0.018 + base, 0);
+        stack.set(x, base + P.D);
+      } else if (mk === 'barrel30' || mk === 'barrel60') {
+        const x = stand.length ? stand.shift() : STAND[0], base = stack.get(x) || 0;
+        o.quaternion.identity(); o.position.set(x, floorAt(x) + 0.005 + base, 0);
+        stack.set(x, base + BARREL[mk].H);
+      } else {
+        const [x, z] = small.length ? small.shift() : SMALL[0], base = stack.get(x + z * 10) || 0;
+        o.quaternion.setFromEuler(this._e.set(0, Math.PI / 2, 0)); o.position.set(x, floorAt(x) + 0.004 + base, z);
+        stack.set(x + z * 10, base + (mk === 'bucket' ? BUCKET.H : 0.2));
+      }
+    }
+    // the long items in the canoe that the rig does not draw: the rods along the port side, a spare paddle along the
+    // starboard bilge (hull.js's own spare lies along the port one), face down, blade forward
+    let portRod = 0, starPad = 0;
+    for (const l of long) {
+      if (l.where !== 'canoe' || l.inUse) continue;
+      const o = this.objFor(l.uid, l.id); if (!o) continue;
+      seen.add(l.uid);
+      if ((overhead && !dilly) || (rodUp && isRod(l.id))) { o.visible = false; continue; }
+      if (o.parent !== hull) hull.add(o);
+      o.visible = true;
+      const mk = o.userData.mesh;
+      if (overhead) { // lashed under the thwarts (LASH)
+        const z = lashAt(), y = sheerY(0) + LASH.y;
+        if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2)); o.position.set(mk === 'setpole' ? -1.6 : LASH.rodX, y, z); }
+        else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(LASH.padX, y, z); }
+        continue;
+      }
+      if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2 + 0.03)); o.position.set(mk === 'setpole' ? -1.7 : -1.25, floorAt(0) + 0.07, -0.24 + 0.07 * portRod++); }
+      // (content D: a right-handed basis, as hull.js's spare: the left-handed one it had stood the paddle across the hull)
+      else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(-1.0 + 0.1 * starPad, floorAt(0) + 0.05 + 0.015 * starPad, 0.2 - 0.06 * starPad++); }
+    }
+  }
   // after the pose (canoe.update): every thing where it is
   afterPose() {
     const inv = this.inv, p = this.player, cn = this.canoe, st = cn.state, mode = p.mode;
@@ -323,53 +375,8 @@ export class ContainerView {
       else if (cn.paddle.userData.lashed) { cn.paddle.position.set(-1.08, floorAt(0) + 0.055, 0.22); cn.paddle.userData.lashed = false; }
     }
     // the hull's places, filled in order
-    const flat = [...FLAT], stand = [...STAND], small = [...SMALL];
-    const stack = new Map();
-    // the rod up (fishing.js draws its own): the stowed one is not drawn
     const rodUp = !!(inv.fishing && inv.fishing.rodUp), isRod = (id) => (itemDef(id) || {}).long === 'rod';
-    const inCanoe = inv.containers.filter((c) => c.where === 'canoe').sort((a, b) => order(a.item) - order(b.item) || (a.id < b.id ? -1 : 1));
-    for (const c of inCanoe) {
-      const o = this.objFor(c.id, c.item); if (!o) continue;
-      seen.add(c.id);
-      if (overhead) { o.visible = false; continue; }
-      const mk = o.userData.mesh;
-      if (o.parent !== cn.hull) cn.hull.add(o);
-      o.visible = true;
-      if (isPack(mk)) {
-        const x = flat.length ? flat.shift() : FLAT[0], P = packDims(mk), base = stack.get(x) || 0;
-        o.quaternion.copy(this.FLAT_Q); o.position.set(x, floorAt(x) + 0.36 * P.D + 0.018 + base, 0);
-        stack.set(x, base + P.D);
-      } else if (mk === 'barrel30' || mk === 'barrel60') {
-        const x = stand.length ? stand.shift() : STAND[0], base = stack.get(x) || 0;
-        o.quaternion.identity(); o.position.set(x, floorAt(x) + 0.005 + base, 0);
-        stack.set(x, base + BARREL[mk].H);
-      } else {
-        const [x, z] = small.length ? small.shift() : SMALL[0], base = stack.get(x + z * 10) || 0;
-        o.quaternion.setFromEuler(this._e.set(0, Math.PI / 2, 0)); o.position.set(x, floorAt(x) + 0.004 + base, z);
-        stack.set(x + z * 10, base + (mk === 'bucket' ? BUCKET.H : 0.2));
-      }
-    }
-    // the long items in the canoe that the rig does not draw: the rods along the port side, a spare paddle along the
-    // starboard bilge (hull.js's own spare lies along the port one), face down, blade forward
-    let portRod = 0, starPad = 0;
-    for (const l of inv.long) {
-      if (l.where !== 'canoe' || l.inUse) continue;
-      const o = this.objFor(l.uid, l.id); if (!o) continue;
-      seen.add(l.uid);
-      if ((overhead && !this.player.gear?.dilly) || (rodUp && isRod(l.id))) { o.visible = false; continue; }
-      if (o.parent !== cn.hull) cn.hull.add(o);
-      o.visible = true;
-      const mk = o.userData.mesh;
-      if (overhead) { // lashed under the thwarts (LASH)
-        const z = lashAt(), y = sheerY(0) + LASH.y;
-        if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2)); o.position.set(mk === 'setpole' ? -1.6 : LASH.rodX, y, z); }
-        else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(LASH.padX, y, z); }
-        continue;
-      }
-      if (mk.startsWith('rod') || mk === 'setpole') { o.quaternion.setFromEuler(this._e.set(0, 0, -Math.PI / 2 + 0.03)); o.position.set(mk === 'setpole' ? -1.7 : -1.25, floorAt(0) + 0.07, -0.24 + 0.07 * portRod++); }
-      // (content D: a right-handed basis, as hull.js's spare: the left-handed one it had stood the paddle across the hull)
-      else { this._m.makeBasis(V(0, 0, 1), V(-1, 0, 0), V(0, -1, 0)); o.quaternion.setFromRotationMatrix(this._m); o.position.set(-1.0 + 0.1 * starPad, floorAt(0) + 0.05 + 0.015 * starPad, 0.2 - 0.06 * starPad++); }
-    }
+    this.loadInto(cn.hull, inv.containers, inv.long, { overhead, rodUp, dilly: !!this.player.gear?.dilly, lashAt, seen });
     // on the body: the back, the chest, the hands
     const chest = cn.figure.bones.chest;
     for (const c of inv.containers) {
