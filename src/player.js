@@ -234,7 +234,11 @@ export class Player {
     return this.mode === 'swim' ? 'Swimming' : 'Paddling';
   }
   // the height things stand on: the terrain as it is drawn (tiles.js groundAt: the mesh's own triangles)
-  groundAt(x, z) { const t = this.world.tiles; return t ? t.groundAt(x, z) : surfaceAt(this.world, x, z); }
+  groundAt(x, z) {
+    const w = this.world, t = w.tiles, g = t ? t.groundAt(x, z) : surfaceAt(w, x, z);
+    // (the season round: a frozen lake is walked on, its ice at the water's level; the snow is drawn on it, snow.js)
+    return this.season && this.season.ice > 0.5 && w.shoreAt(x, z) < 0 && w.lakeIdAt(x, z) > 0 ? Math.max(g, w.levelAt(x, z)) : g;
+  }
   // What the walker stands on at (x, z): the drawn ground, or whatever of the things near him (treesNear: a rock's own
   // geometry, a log's or a stump's top) rises over it there but no higher than `reach` (a step over the feet).
   supportAt(x, z, reach, near) {
@@ -476,7 +480,9 @@ export class Player {
       // the lakes are frozen: nothing to paddle until ice-out in early May
       this.speed *= 0.9; this.yawRate = 0; st.power *= 0.9; this.easeBoost(1, dt);
       this.placeOnWater(dt);
-      this.prompt = { key: null, text: 'Iced in: the lakes are frozen until ice-out in early May (= steps the date)' };
+      // (the season round: E walks you ashore over the ice, the canoe left where it is frozen in)
+      this.prompt = { key: 'E', text: 'Iced in until ice-out in early May (= steps the date) · walk ashore over the ice' };
+      if (inp.pressed('KeyE')) this.stepOut();
       return;
     }
     const rodUp = !!(this.fishing && this.fishing.rodUp);
@@ -561,7 +567,12 @@ export class Player {
     if (ok(this.x, this.z, newHeading) || !ok(this.x, this.z, this.heading)) this.heading = newHeading; else this.yawRate = 0;
     const f = this.forward;
     const nx = this.x + f.x * vb * dt, nz = this.z + f.z * vb * dt;
+    // (the season round: a hull already aground, a flowage's water gone from under it since it was left, poles off at a
+    // crawl toward water no shallower than where it sits; else it could never move again)
+    const depth = (x, z) => w.levelAt(x, z) - w.heightAt(x, z);
+    const aground = !ok(this.x, this.z, this.heading) && w.shoreAt(this.x, this.z) < -0.5 && !this.floats(this.x, this.z);
     if (ok(nx, nz, this.heading)) { this.x = nx; this.z = nz; }
+    else if (aground && w.shoreAt(nx, nz) < -0.5 && depth(nx, nz) >= depth(this.x, this.z) - 0.005) { this.x = nx; this.z = nz; this.speed = clamp(this.speed, -0.6, 0.6); }
     else if (ok(nx, this.z, this.heading)) { this.x = nx; this.speed *= 0.7; }
     else if (ok(this.x, nz, this.heading)) { this.z = nz; this.speed *= 0.7; }
     else {
