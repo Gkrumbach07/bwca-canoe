@@ -162,7 +162,9 @@ export const SPLAT_SUNNY = C.forestLight; // the duff's lit colour in the broad 
 // d2 land: an open bog's floor, where the survey maps one (site.js sphag; terrain.js lays it over the moss): the ochre and
 // olive of sphagnum and leatherleaf in summer, patches of the red sphagnum through it, and their shade
 // (the density round: greener, the red in smaller spots; the big ochre-and-rust patches read as bare earth)
-export const SPHAGNUM = { lit: hex(0x8e9a4c), rust: hex(0x8c4a3a), shade: hex(0x4e5a30) };
+// (the density round, after review: the hummocks' tops ochre, rust and bronze in patches as the photos have them, the
+// hollows a wet green, olive between)
+export const SPHAGNUM = { lit: hex(0x939a4e), rust: hex(0x8a4a3c), shade: hex(0x4e5a30), ochre: hex(0xb09a4a), bronze: hex(0x8d6a3c), wet: hex(0x5d7a3a) };
 // the density round: a swamp's floor under the alder and the black ash (mire-relief.js swamp floor, terrain.js): dark moss,
 // last year's leaves, the fern's green
 export const SWAMP_FLOOR = { moss: hex(0x56703a), litter: hex(0x6e5d44), fern: hex(0x5f8a3c) };

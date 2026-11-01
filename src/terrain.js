@@ -43,7 +43,7 @@ export const groundUniforms = {
   uSplatEdge: { value: new THREE.Vector3(0.38, 0.03, 1) },
   uRelief: { value: 0.22 },  // how far the fine relief tilts the shading normal
   // d2 land: the bog's sphagnum (terrain-build.js SPHAGNUM): its ochre, its rust patches, its shade
-  uSphag: { value: [v3(SPHAGNUM.lit), v3(SPHAGNUM.rust), v3(SPHAGNUM.shade)] },
+  uSphag: { value: [v3(SPHAGNUM.lit), v3(SPHAGNUM.rust), v3(SPHAGNUM.shade), v3(SPHAGNUM.ochre), v3(SPHAGNUM.bronze), v3(SPHAGNUM.wet)] },
   // the wetlands' standing water (groundMire): the tea-dark water of a bog pool or a marsh's open water, and the wet
   // peat round it (a multiplier on the ground's colour)
   uMirePool: { value: new THREE.Vector3(0.03, 0.024, 0.014) },
@@ -54,10 +54,8 @@ export const groundUniforms = {
   // is this over that)
   uMireIce: { value: new THREE.Vector3(0, 0, 0) },
   // the density round: the mire's floor (mire-relief.js, aRelief). The swamps' floor under the alder and the ash: dark
-  // moss, last year's leaves and fern; the bog's sphagnum by the hummocks: the tops paler and redder (S. fuscum, S.
-  // magellanicum), the hollows a wet green (multipliers on the sphagnum's colour)
+  // moss, last year's leaves and fern
   uSwampFloor: { value: [v3(SWAMP_FLOOR.moss), v3(SWAMP_FLOOR.litter), v3(SWAMP_FLOOR.fern)] },
-  uHummock: { value: [new THREE.Vector3(1.12, 0.92, 0.86), new THREE.Vector3(0.84, 0.97, 0.8)] },
   uMeadowSeason: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
 };
 // The water standing on wet ground mirrors the sky, wet weather or not (weather.js wetSheen is only the rain's film):
@@ -116,7 +114,7 @@ uniform vec3 uGroundChar[2];
 uniform vec4 uSplat;
 uniform vec3 uMottle;
 uniform vec3 uSplatEdge;
-uniform vec3 uSphag[3];
+uniform vec3 uSphag[6];
 // d2 land: what the terrain's own vertices say of the survey (terrain-build.js aLand) before it calls groundColor: the
 // bedrock's tint of the rock (1 = the granite as drawn) and the bog's sphagnum over the moss. The ground cover and the trail
 // decal leave them as they are, and so draw as before.
@@ -131,7 +129,6 @@ float groundMire = 0.0, groundPool = 0.0;
 // how much this is a mire floor whose pools lie in its hollows (0: the old painted pools), the water there (the pool
 // itself on the 2 m ground, the pools' share on a coarser one) and the swamp's floor
 uniform vec3 uSwampFloor[3];
-uniform vec3 uHummock[2];
 float groundHummock = 0.0, groundMireK = 0.0, groundPoolT = 0.0, groundSwamp = 0.0;
 // (wetlands round 2: 1 where the terrain itself calls groundColor, which takes the meadow's season in full; how glossy a
 // pool is, 1 open water .. matt ice)
@@ -317,10 +314,15 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     vec3 mossC = groundShaded(1, uGroundLit[1], s);
     mossC *= mix(vec3(1.0), vec3(0.78, 0.82, 0.7), groundMireK); // (the density round: a wetland's moss is darker and wetter than the woods' cushions)
     if (groundSphagnum > 0.004) {
-      float rust = smoothstep(0.66, 0.78, lookFbm(p / 1.6 + vec2(2.3, -6.1), 61u, 2) + 0.1 * n1 * fb) * smoothstep(0.05, 0.45, groundHummock);
-      vec3 sph = mix(mix(uSphag[0], uSphag[1], rust * 0.45), uSphag[2], s * 0.8);
-      // (the density round: the hummocks' tops paler and redder, the hollows a wet green)
-      sph *= mix(vec3(1.0), uHummock[0], max(groundHummock, 0.0)) * mix(vec3(1.0), uHummock[1], max(-groundHummock, 0.0));
+      // (the density round: the hummocks' tops in patches of ochre, rust and bronze, olive between, the hollows a wet
+      // green; where the ground can't draw the hummocks, far off, the patches from the noise alone)
+      float pn = lookFbm(p / 3.2 + vec2(2.3, -6.1), 61u, 2) + 0.1 * n1 * fb, pr = lookFbm(p / 2.1 + vec2(-4.4, 1.6), 67u, 2);
+      float top = smoothstep(0.0, 0.45, groundHummock + 0.5 * (pn - 0.5));
+      vec3 topC = mix(uSphag[3], uSphag[1], 0.85 * smoothstep(0.52, 0.66, pr));
+      topC = mix(topC, uSphag[4], smoothstep(0.58, 0.7, pn) * (1.0 - smoothstep(0.5, 0.62, pr)));
+      vec3 sph = mix(uSphag[0], topC, 0.85 * top);
+      sph = mix(sph, uSphag[5], smoothstep(0.05, 0.55, -groundHummock));
+      sph = mix(sph, uSphag[2], s * 0.8);
       mossC = mix(mossC, sph, groundSphagnum);
     }
     // (the density round: a swamp's floor, dark moss with last year's leaves in drifts and the fern's green through it)
@@ -366,7 +368,8 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
       float np = smoothstep(t, t + max(0.06, px * 0.1), rn) * (1.0 - groundRock);
       groundPool = mix(groundPool, np, groundMireK);
       rim = mix(rim, smoothstep(t - 0.18, t, rn) * step(0.01, groundPoolT), groundMireK);
-      c *= mix(vec3(1.0), vec3(1.06, 1.04, 1.0), max(groundHummock, 0.0) * groundMireK) * (1.0 - 0.16 * max(-groundHummock, 0.0) * groundMireK);
+      // (the hollows in the hummocks' shade, the tops catching the light: the relief read at eye level)
+      c *= mix(vec3(1.0), vec3(1.1, 1.08, 1.03), max(groundHummock, 0.0) * groundMireK) * (1.0 - 0.32 * smoothstep(0.0, 0.8, -groundHummock) * groundMireK);
     }
     c *= 1.0 - 0.3 * rim * (1.0 - groundPool);
     // (wetlands round 2: frozen from freeze-up to ice-out, the lake's dates: pale matt ice with snow drifted on it in the

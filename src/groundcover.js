@@ -43,7 +43,7 @@ const decl = glslSway + /* glsl */ `
   uniform vec4 uSplatAtlas;    // its window: origin x, z (relative to the floating origin), 1/cell, cells per side
   attribute vec2 aOffset;
   varying vec2 vGrassUv;
-  varying float vGrassDist, vGrassH, vGrassFlower, vGrassFw, vGrassCotton;
+  varying float vGrassDist, vGrassH, vGrassFlower, vGrassFw, vGrassCotton, vGrassFern;
   ${glslSurface}
   ${glslGround}
   // the share of the tufts that are fireweed in a cell (the cover's fourth byte, high nibble: placement.js coverField, from
@@ -99,7 +99,8 @@ const body = /* glsl */ `
   // the wetland's own cover (the cell looked up a few metres off, by the tuft's hash, so the 10 m cells don't show)
   float wcode = wetCover(rel + (h2.xy - 0.5) * 9.0), wk = floor(wcode / 64.0 + 0.01), wd = (wcode - 64.0 * wk) / 63.0;
   int wi = int(wk);
-  if (wi == 3 && h3.z < 0.4) wi = 1; // (a swamp's floor is ferns with bluejoint and sedge between them)
+  bool swampGrass = wi == 3 && h3.z < 0.4;
+  if (swampGrass) wi = 1; // (a swamp's floor is ferns with bluejoint and sedge between them)
   float dens = cv.r * heart;
   if (wi > 0) dens = (wd * smoothstep(1.2, 3.5, shoreAt(rel)) * (wi == 1 ? 0.8 + 0.2 * heart : wi == 2 ? heart : 0.55 + 0.45 * heart));
   float present = step(h.x, dens * 1.25) * edge;  // a card clump is fuller than the old three blades
@@ -109,9 +110,16 @@ const body = /* glsl */ `
   float sc = present * (0.6 + 0.8 * h.y * h.y + 0.25 * heart) * (1.0 + 1.1 * fw);
   float yaw = h.z * 6.2832;
   ${WET_SIZE.map((v, k) => `const vec2 WS${k} = vec2(${v[0].toFixed(2)}, ${v[1].toFixed(2)});`).join(' ')}
-  vec2 ws = wi == 1 ? WS1 * (0.85 + 0.35 * h2.y) : wi == 2 ? WS2 : wi == 3 ? WS3 * (0.8 + 0.4 * h3.x) : WS0;
+  vec2 ws = wi == 1 ? WS1 * (0.85 + 0.35 * h2.y) : wi == 2 ? WS2 : wi == 3 ? WS3 * (0.55 + 0.8 * h3.x * h3.x) : WS0;
   vec3 p = position * sc * vec3(ws.x, ws.y, ws.x);
-  if (wi == 3) p.xz *= 1.0 + 1.6 * max(position.y, 0.0) / ${HGT.toFixed(2)}; // a fern's fronds arch out from the crown
+  if (wi == 3) {
+    // a fern's fronds arch out from the crown, the clump tipped a little its own way, so no two show a flat face alike
+    p.xz *= 1.0 + 1.3 * max(position.y, 0.0) / ${HGT.toFixed(2)};
+    float ta = (h2.y - 0.5) * 0.7, tb = h3.y * 6.2832;
+    vec2 ax = vec2(cos(tb), sin(tb));
+    float along = dot(p.xz, ax);
+    p.xz += ax * (along * (cos(ta) - 1.0) + p.y * sin(ta)); p.y = p.y * cos(ta) - along * sin(ta);
+  }
   p.xz = mat2(cos(yaw), -sin(yaw), sin(yaw), cos(yaw)) * p.xz;
   // the wind (wind.js SWAY, as the trees and the reeds have it): the clump bends downwind from its root, deeper as
   // a gust rolls over, and the blades shiver about that, the tips furthest and a little lower; a calm leaves it be
@@ -138,7 +146,12 @@ const body = /* glsl */ `
   base = mix(base, base * vec3(0.85, 1.05, 0.8), fw); // the stalks a darker, cooler green than the grass
   vColor.rgb *= base;
   vGrassUv = wi == 3 ? ${slotRect('frond')}.xy + (uv - ${slotRect('grass')}.xy) * ${slotRect('frond')}.zw / ${slotRect('grass')}.zw : uv;
-  vColor.rgb *= wi == 1 ? vec3(0.86, 1.0, 0.8) * (0.9 + 0.2 * h3.y) : wi == 2 ? vec3(0.56, 0.58, 0.38) * (0.85 + 0.3 * h3.y) : wi == 3 ? vec3(0.44, 0.6, 0.34) * (0.8 + 0.35 * h3.y) : vec3(1.0); // the sedge greener, the bog's darker, a fern's deeper green
+  vColor.rgb *= wi == 1 ? vec3(0.86, 1.0, 0.8) * (0.9 + 0.2 * h3.y) : wi == 2 ? vec3(0.56, 0.58, 0.38) * (0.85 + 0.3 * h3.y) : vec3(1.0); // the sedge greener, the bog's darker
+  // a fern's own green (the real swamp's, #4f6b3a), not the moss under it, in the ground's light and shade
+  float gl = clamp(dot(ground, vec3(0.3, 0.59, 0.11)) / 0.36, 0.35, 1.1);
+  if (wi == 3) vColor.rgb = vec3(0.07, 0.15, 0.036) * (0.75 + 0.5 * h3.y) * gl * uGrassTint * 1.35;
+  else if (swampGrass) vColor.rgb = vec3(0.12, 0.19, 0.06) * (0.8 + 0.4 * h3.y) * gl * uGrassTint * 1.3; // the bluejoint under the alder
+  vGrassFern = wi == 3 ? 1.0 : 0.0;
   vGrassCotton = wi == 2 ? step(h3.x, 0.35) * uFlower : 0.0; // cottongrass in the bog through the summer
   vGrassH = (position.y - ${ROOT.toFixed(2)}) / ${(HGT - ROOT).toFixed(2)};
   vGrassDist = distance((modelMatrix * vec4(transformed, 1.0)).xyz, cameraPosition);
@@ -148,7 +161,7 @@ const body = /* glsl */ `
 const frag = /* glsl */ `
   vec4 grass = texture2D(uGrassMap, vGrassUv);
   if (grass.a < mix(0.5, 0.22, smoothstep(5.0, 45.0, vGrassDist))) discard;
-  diffuseColor.rgb *= mix(1.0, 1.42, smoothstep(0.35, 1.0, grass.r));
+  diffuseColor.rgb *= mix(1.0, mix(1.42, 1.12, vGrassFern), smoothstep(0.35, 1.0, grass.r)); // (a fern's fronds hardly lit at the tips)
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.35, 0.6) * grass.r, vGrassFlower * step(0.72, vGrassH));
   // fireweed in bloom (a burn's first years): the upper part of the stalks magenta, a haze of it across the burn
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.26, 0.55) * (0.8 + 0.3 * grass.r), vGrassFw * 0.9 * smoothstep(0.5, 0.64, vGrassH));
@@ -225,7 +238,7 @@ export class GroundCover {
         .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\n' + decl)
         .replace('#include <begin_vertex>', body);
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower, vGrassFw, vGrassCotton;')
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower, vGrassFw, vGrassCotton, vGrassFern;')
         .replace('#include <map_fragment>', '#include <map_fragment>\n' + frag)
         .replace('#include <normal_fragment_begin>', noFlip);
       // rain (weather.js): the root wets as the ground under it does, the blade tips a little less
