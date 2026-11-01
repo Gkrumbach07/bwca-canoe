@@ -525,10 +525,12 @@ export class Hud {
     // are its class, so taking the class off with the show snapped it to the paper's corner for the whole fade. Closed
     // to nothing, it keeps its class (and its last drawing: nothing draws while hidden) until the fade is over.
     clearTimeout(this.sheetFade);
-    const fading = mode === 'hidden' && was === 'sheet';
-    m.classList.toggle('glance', mode === 'glance'); m.classList.toggle('sheet', mode === 'sheet' || fading); m.classList.toggle('corner', mode === 'corner');
+    // (the owner, 2026-11-01: "when i hold M and release the map flashes to the top left still": the glance and the
+    // corner keep their place while they fade out too, not only the sheet)
+    const fading = mode === 'hidden' && (was === 'sheet' || was === 'glance' || was === 'corner') ? was : null;
+    m.classList.toggle('glance', mode === 'glance' || fading === 'glance'); m.classList.toggle('sheet', mode === 'sheet' || fading === 'sheet'); m.classList.toggle('corner', mode === 'corner' || fading === 'corner');
     m.classList.toggle('show', mode !== 'hidden');
-    if (fading) this.sheetFade = setTimeout(() => { if (this.mode === 'hidden') m.classList.remove('sheet'); }, SHEET_FADE);
+    if (fading) this.sheetFade = setTimeout(() => { if (this.mode === 'hidden') m.classList.remove(fading); }, SHEET_FADE);
     if (mode !== 'hidden') this.loadOverview();
     if (mode === 'sheet') {
       if (this.host !== 'book') this.openPaper('map');
@@ -561,7 +563,7 @@ export class Hud {
   mountIn(el) {
     const m = this.el.map;
     if (this.mode === 'sheet' && this.host !== 'book') this.setMode('hidden');
-    clearTimeout(this.sheetFade); m.classList.remove('sheet');
+    clearTimeout(this.sheetFade); m.classList.remove('sheet', 'glance', 'corner');
     if (this.mode !== 'hidden') this.setMode('hidden');
     this.host = 'book';
     el.appendChild(m); m.classList.add('in-book');
@@ -570,10 +572,16 @@ export class Hud {
   unmount() {
     if (this.host !== 'book') return;
     const m = this.el.map;
+    // gone at once, without the paper's fade: the book fades itself, and the sheet taken out of the page with its classes
+    // off would otherwise fade out over the screen's top-left corner (the owner, 2026-11-01: "the map flashes to the top
+    // left still")
+    m.style.transition = 'none';
     this.setMode('hidden');
-    clearTimeout(this.sheetFade); m.classList.remove('sheet', 'show', 'in-book');
+    clearTimeout(this.sheetFade); m.classList.remove('sheet', 'show', 'in-book', 'glance', 'corner');
     this.host = null;
     const j = $('journal'); if (j && j.parentNode) j.parentNode.insertBefore(m, j);
+    void m.offsetWidth; // (the hidden state applied before the transition comes back)
+    m.style.transition = '';
     this.hoverOff();
   }
   // the view put on a place (the book's search, a notice in its list): centred there at a span that shows it
