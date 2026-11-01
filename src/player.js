@@ -1843,11 +1843,11 @@ export class Player {
     const plan = this.haulPlan(d);
     if (!plan) { this.prompt = { key: null, text: 'A beaver dam · no water below it to put in' }; return; }
     hold.offer('Haul over the beaver dam', null, {
-      id: 'haul', key: 'KeyE', keys: ['KeyE', 'Mouse0'], label: 'Hauling over the dam', clock: true, still: true,
+      id: 'haul', key: 'KeyE', keys: ['KeyE', 'Mouse0'], label: 'Hauling over the dam', still: true,
       phases: [
-        { name: 'Out on the dam', doing: 'Stepping out onto the dam', minutes: 2, seconds: 1.8 },
-        { name: 'Over', doing: 'Hauling the canoe over', minutes: 5, seconds: 3.4 },
-        { name: 'Back in', doing: 'Back in below the dam', minutes: 2, seconds: 2.0 },
+        { name: 'Out on the dam', doing: 'Stepping out onto the dam', seconds: 1.8 },
+        { name: 'Over', doing: 'Hauling the canoe over', seconds: 3.4 },
+        { name: 'Back in', doing: 'Back in below the dam', seconds: 2.0 },
       ],
       onTick: (at) => { if (this.haul) this.haul.at = at; },
       onDone: () => {

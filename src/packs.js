@@ -62,7 +62,7 @@ const HULL_REACH = 3;       // m from the canoe within which its prompts apply (
 const LOAD_REACH = 10;      // m from the canoe within which a thing set down for the trip goes in at the launch
 const CANOE_KG = 160;       // kg of gear a tripping canoe takes besides its paddler ("Load everything here" stops there)
 const CANOE_ROOM = 8;       // containers a canoe takes (inventory.js CANOE_ROOM)
-const LOAD_EACH = { minutes: 1, seconds: 0.45, per100m: 2.5 }; // a thing carried down and loaded: its minutes (more the farther it lies), its real seconds
+const LOAD_EACH = { seconds: 0.45 }; // a thing carried down and loaded: its real seconds (more the farther it lies), on the one clock
 // the fetch is charged what walking it yourself costs on the clock (pace.js footHours: life's hours times the clock over
 // the trail's seen time-lapse, fb5 C): the walk back at a walk on the trail's going,
 // the carry over at a walk slowed by the load (player.js LOAD: / (kg / 40) ^ 0.35 past 40 kg, and no slower than a
@@ -709,7 +709,7 @@ export class Packs {
   // ends; let go and what is in is in. A word at the end for what would not go.
   loadAllOpts(d, list) {
     const p = this.player, skipped = [];
-    const phases = list.map((u) => { const m = Math.hypot(u.obj.at.x - d.x, u.obj.at.z - d.z); return { name: `${cap(short(u))} in`, doing: `Loading ${the(u)}`, minutes: LOAD_EACH.minutes + (m / 100) * LOAD_EACH.per100m, seconds: LOAD_EACH.seconds + Math.min(0.6, m / 40) }; });
+    const phases = list.map((u) => { const m = Math.hypot(u.obj.at.x - d.x, u.obj.at.z - d.z); return { name: `${cap(short(u))} in`, doing: `Loading ${the(u)}`, seconds: LOAD_EACH.seconds + Math.min(0.6, m / 40) }; });
     const done = (n) => {
       const inN = n - skipped.length;
       // (fb4 join: and what to do about it: a loose thing goes in a pack in the canoe, so make room in one)

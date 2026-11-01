@@ -69,7 +69,7 @@ npm run dev
 Open http://localhost:5173. The game opens on a title screen over the live lake: **Continue** (or **Paddle in**
 before any season) picks up the season saved in this browser (or starts one at Lake One), **New season** starts
 one at any BWCA entry point, **Settings**
-has the quality, sound and control options (applied live, kept in `localStorage`). **Esc** brings the
+has the quality, sound and control options (applied live, kept with the saves). **Esc** brings the
 same screen up as a pause menu while playing. The baked map data lives in `public/data/` and is not committed (about 380 MB
 of tiles); the first bake downloads the Minnesota OpenStreetMap extract (290 MB) and about 5,800 elevation
 tiles (500 MB) into `data-cache/`, then bakes the whole wilderness in about a minute (3 GB of RAM). Re-bakes
@@ -172,7 +172,7 @@ Controls (mouse sensitivity, inverted look, cursor steering and the camera a tri
 Developer (the GPS simulator's state, FPS and triangles and the tiles as rows of the readout, the traffic, and Real
 pace for testing: the clock and travel as in life).
 The canoe's position, heading, the day clock and the camera mode are saved every few seconds
-(`src/save.js`, one `localStorage` document per namespace under `bwca-canoe:`; the journal's trip tally
+(`src/save.js`, one document per namespace under `bwca-canoe:`, kept in IndexedDB by `src/store.js` with `localStorage` only as a fallback; the journal's trip tally
 is `stats`, the HUD settings `settings`) so **Continue** picks the trip up where it stopped.
 
 ## Wind and waves
@@ -270,7 +270,7 @@ map (**M**) shows each notice on the go as the keeper's red pencil, a ring drawn
 with its name ("the island site") when you know it (it is on a sheet you own, or on any map you can see: a store's,
 Sandbox's), else round the bay, arm or stretch the notice describes ("the northeast side", "off the point"), never the
 whole lake; and the water a keeper has told you about as a grey pencilled ring. The season (`bwca-canoe:profile`, with the sheets you own), the inventory and the
-trip (`bwca-canoe-trip`) are kept in `localStorage` and resume where you left them, on the store's floor too.
+trip (`bwca-canoe-trip`) are kept with the saves and resume where you left them, on the store's floor too.
 
 ## Data pipeline
 

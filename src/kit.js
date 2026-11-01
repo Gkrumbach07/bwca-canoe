@@ -41,7 +41,7 @@ const BREW_L = 0.25;         // litres a cup takes of the hot water in a pot (cr
 const CAMP_NEAR = 25;        // m from your camp where the gravity bag set up there works on the bottle (inventory.js CAMP_REACH)
 const SHORT_SAY = 30;        // real seconds a meal greyed for water stays a moment's cue ('mealwater')
 const RING_NEAR = 4;         // m: a lit fire this near heats a cup
-const FILLET_MIN = 3;        // game minutes a fish takes to fillet
+const filletSeconds = (n) => 1.2 + 0.7 * n; // real seconds to fillet n fish (on the one clock: no minutes skipped)
 const SIT_BOOST = 1.6;       // the bar's recovery sat in the canoe chair, over sitting anywhere else
 const SIDE = { from: 1.5, to: 5, most: 0.35 }; // kg: a fish this heavy may throw the hook at the side with no net (up to most)
 
@@ -190,8 +190,8 @@ export class Kit {
     if (!cp || !e) return undefined;
     if (e.bottle - raw >= 2 - 0.001) { cp.note('The bottle is full.'); return undefined; }
     const say = (w) => { if (cp.audio && cp.audio.paddleDip) cp.audio.paddleDip(); cp.note(w); };
-    if (f === 'pump') cp.chore('fill', () => { e.fill(2, 0); say(`${raw > 0.001 ? 'The lake water out, then p' : 'P'}umped full through the filter: drinkable now.`); }, { seconds: 3.2, hours: 4 / 60, say: 'Pumping the bottle full…' });
-    else cp.chore('fill', () => { e.fill(2, GRAVITY_H); say('Into the gravity bag: the bottle drips full in 5 min.'); }, { seconds: 0.9, hours: 2 / 60, say: 'Filling the bag…' });
+    if (f === 'pump') cp.chore('fill', () => { e.fill(2, 0); say(`${raw > 0.001 ? 'The lake water out, then p' : 'P'}umped full through the filter: drinkable now.`); }, { seconds: 3.2, say: 'Pumping the bottle full…' });
+    else cp.chore('fill', () => { e.fill(2, GRAVITY_H); say('Into the gravity bag: the bottle drips full in 5 min.'); }, { seconds: 0.9, say: 'Filling the bag…' });
     return undefined;
   }
   // water: the gravity bag set up at your camp works on the bottle while you are there: lake water in it goes through
@@ -291,7 +291,7 @@ export class Kit {
       if (e && B.lift) e.lift(B.lift * k);
       if (live) e.need.water = Math.min(1, e.need.water + BREW_L / (4 / 3)); // a cup is a drink too (energy.js BODY)
       cp.note(d.id === 'coffee' ? (morning ? 'Coffee, hot, on a cold morning rock. The day starts making sense.' : 'A cup of coffee.') : 'Hot cocoa. The warmth goes right down to the feet.');
-    }, { seconds: 1.6, hours: 0, say: 'A cup from the pot…', crouch: true }); // (crafting: the boil was the wait; no time skipped here)
+    }, { seconds: 1.6, say: 'A cup from the pot…', crouch: true }); // (crafting: the boil was the wait; no time skipped here)
     return { ok: true, words: '' };
   }
   // the knife: every whole raw fish with you, filleted (lighter, quicker on the grate); the fillets go where food goes
@@ -299,7 +299,7 @@ export class Kit {
     if (!this.onFoot()) return no('On foot', [NEED.step('On foot, ashore', false, { chip: 'ashore' })], 'Go ashore first');
     const fish = this.wholeFish();
     if (!fish.length) return no('No fish to fillet', [NEED.step('A fish', false, { chip: 'a fish' })], 'Catch one first');
-    return go(() => this.fillet(fish), [], `${fish.length} fish: ${fish.length * FILLET_MIN} min`);
+    return go(() => this.fillet(fish), [], `${fish.length} fish: ${Math.round(filletSeconds(fish.length))} s`);
   }
   wholeFish() {
     const inv = this.inv, out = []; if (!inv) return out;
@@ -324,7 +324,7 @@ export class Kit {
       this.filleted += n;
       inv.emit('items');
       cp.note(n ? `${n === 1 ? 'Filleted' : `${n} fish filleted`}: the fillets are in with the food.` : 'Nothing to fillet.');
-    }, { seconds: 1.2 + 0.7 * list.length, hours: (FILLET_MIN * list.length) / 60, say: 'Filleting…', crouch: true });
+    }, { seconds: filletSeconds(list.length), say: 'Filleting…', crouch: true });
     return { ok: true, words: '' };
   }
   // with no hand free and no room anywhere: set down at your feet (a pile, as the book's own drop makes)

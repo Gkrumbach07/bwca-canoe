@@ -578,7 +578,7 @@ export class Cook {
     return go(() => {
       const cp = this.camp;
       const done = () => { const l = this.addWater(h.pot, room, true); if (cp.audio && cp.audio.paddleDip) cp.audio.paddleDip(); this.note(l > 0 ? `The ${lower(potName(h.pot))}: ${litres(this.litresIn(h.pot))} of lake water in it.` : 'No room in it.', 3); };
-      if (typeof cp.chore === 'function') cp.chore('fill', done, { seconds: 0.8, hours: 0, say: 'Dipping the pot…', crouch: true }); else done();
+      if (typeof cp.chore === 'function') cp.chore('fill', done, { seconds: 0.8, say: 'Dipping the pot…', crouch: true }); else done();
       return { ok: true, words: '' };
     }, [], `${litres(room)} of lake water`);
   }

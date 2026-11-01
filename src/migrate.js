@@ -24,7 +24,7 @@
 // sites' lakes are among its lakes is the release the numbers are from (seasonFrom). With nothing that tells the
 // tables apart, a v6 stamp is taken at its word and an unknown stamp is left for later.
 //
-//   migrateSeason(meta, store = localStorage, load?) → { did, from, to, via, report, damaged?, left? } | null
+//   migrateSeason(meta, store = localStorage, load?)   (the game passes store.js's kv; the node checks a stand-in) → { did, from, to, via, report, damaged?, left? } | null
 //     (load(entry) → table: the tests'; a table object in its place is the only table)
 //   migrateKeys(keys, table, meta?) → { keys, report }    (keys: { 'bwca-canoe:<ns>': raw JSON }, as save.js liveMap)
 //   seasonFrom(keys, meta, tables, stamped) → { entry, table, hits, of, damaged }, seasonNames(keys)
