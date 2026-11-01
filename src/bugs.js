@@ -118,7 +118,11 @@ export class Bugs {
     const c = this.t.canoe, hb = c && c.figure && c.figure.bones ? c.figure.bones.head : null;
     if (this.swarm) {
       if (hb) hb.getWorldPosition(HEAD);
-      this.swarm.update(dt, this.now, this.t.player, !!(n || (cp && cp.dialOpen)), hb ? HEAD : null);
+      // from the eyes (not a catch's close-up) the specks are drawn about the camera, not the head: the head swarm is
+      // centred on the eye there, so each speck crossed the view in a blink and spent the rest behind, beside or under it
+      const gc = typeof window !== 'undefined' && window.__game ? window.__game.chase : null;
+      const fpCam = gc && gc.mode === 'first' && !gc.focus && gc.camera ? gc.camera : null;
+      this.swarm.update(dt, this.now, this.t.player, !!(n || (cp && cp.dialOpen)), hb ? HEAD : null, fpCam);
     }
     // the head net on while they are out (VEIL)
     if (this.veil && hb) {
@@ -391,17 +395,23 @@ class Swarm {
     // breadth of the camera was drawn as a black square 30 to 50 px across)
     this.pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x14120f, size: 3, sizeAttenuation: false, transparent: true, opacity: 0.9, depthWrite: false }));
     this.pts.frustumCulled = false; this.pts.visible = false; this.pts.name = 'bugs'; this.pts.renderOrder = 14; // (after the water)
+    // first person: the positions are the camera's own space, carried with the camera as it is drawn (onBeforeRender
+    // runs before three.js takes the model-view matrix), so they ride the view this frame and never trail a turn
+    this.fpCam = null;
+    this.pts.onBeforeRender = (r, sc, cam) => { if (this.fpCam && cam === this.fpCam) this.pts.matrixWorld.copy(cam.matrixWorld); };
     this.seed = Array.from({ length: SWARM_N }, (_, i) => [Math.sin(i * 12.9898) * 43758.5453 % 1, Math.sin(i * 78.233) * 12345.678 % 1, Math.sin(i * 39.425) * 24634.6345 % 1]);
     this.t = 0; this.n = 0;
     scene.add(this.pts);
   }
-  update(dt, s, p, hide, head = null) {
+  update(dt, s, p, hide, head = null, fpCam = null) {
     const lv = s ? s.level : 0, total = !p || hide || !(lv > 0.12) ? 0 : Math.round(SWARM_N * clamp((lv - 0.12) / 0.7, 0.15, 1));
     const flies = total ? Math.round(total * (s.fly / Math.max(1e-3, s.fly + s.mosq))) : 0;
     this.n = total;
     this.pts.visible = total > 0;
+    this.fpCam = total ? fpCam : null;
     if (!total) return;
     this.t += dt;
+    if (fpCam) { this.updateEye(fpCam, total, flies); return; }
     const g = this.pts.geometry, a = g.getAttribute('position'), cx = head ? head.x : p.x, cz = head ? head.z : p.z;
     const y0 = head ? head.y + 0.1 : typeof p.groundAt === 'function' ? p.groundAt(p.x, p.z) + 1.55 : 0;
     for (let i = 0; i < SWARM_N; i++) {
@@ -417,6 +427,31 @@ class Swarm {
     }
     a.needsUpdate = true;
   }
+  // From the eyes: fewer than round the head (the view is not to be specks), each between EYE.near and EYE.far metres
+  // ahead (well past the camera's 0.05 m near plane, so none sits on the lens), drifting slowly across the view and out
+  // past its edges, then round again from the other side. Mosquitoes loose and lazy, blackflies closer, quicker, jerky
+  // and low. In the camera's space: x right, y up, -z ahead.
+  updateEye(cam, total, flies) {
+    const E = EYE, n = Math.max(2, Math.round(total * E.share)), nf = Math.round(n * (flies / total));
+    const tanV = Math.tan(((cam.fov || 72) * Math.PI) / 360), tanH = tanV * (cam.aspect || 1.6), T = this.t;
+    const a = this.pts.geometry.getAttribute('position');
+    for (let i = 0; i < SWARM_N; i++) {
+      if (i >= n) { a.setXYZ(i, 0, -1e4, 0); continue; }
+      const [u, v, w] = this.seed[i], au = Math.abs(u), av = Math.abs(v), aw = Math.abs(w), dir = u < 0 ? -1 : 1;
+      const fly = i < nf;
+      const d = (fly ? E.near + 0.5 * av : E.near + 0.13 + (E.far - E.near - 0.13) * av) + 0.1 * Math.sin(T * (0.6 + aw) + u * 4);
+      const sp = fly ? 0.07 + 0.08 * aw : 0.025 + 0.04 * aw; // the share of the view's breadth crossed a second
+      const ph = (((0.5 + 3.7 * v + T * sp * dir) % 1) + 1) % 1;
+      const X = ph * 2 * E.edge - E.edge;
+      const Y = fly ? -0.35 + 0.35 * Math.sin(T * (1.7 + au) + w * 6) : -0.1 + 0.5 * Math.sin(T * (0.5 + 0.4 * au) + w * 6);
+      const j = fly ? 0.025 * Math.sin(T * 13 + w * 5) : 0.03 * Math.sin(T * (2 + 2 * aw) + u * 5);
+      a.setXYZ(i, X * d * tanH + j, Y * d * tanV + (fly ? j : 0.03 * Math.sin(T * (3 + au) + w)), -d);
+    }
+    a.needsUpdate = true;
+  }
 }
+// the specks from the eyes: the share of the head swarm drawn, the nearest and farthest (m), how far past the view's
+// side edges they drift before coming round (1 = the edge)
+const EYE = { share: 0.45, near: 0.32, far: 1.6, edge: 1.3 };
 
 export const bugs = new Bugs();

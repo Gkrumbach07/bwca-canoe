@@ -139,7 +139,10 @@
    map's index, and the whole map laid over the right as the same leaflet (the HUD's own sheet, set in that page's
    place). The book and the sheet share one size: --mtw x --mth, centred. */
 :root { --mtw: min(1340px, 96vw); --mth: min(812px, calc(100vh - 76px)); }
-#mtbook { position: fixed; z-index: 5; left: 50%; top: 50%; translate: -50% -50%; width: var(--mtw); height: var(--mth); box-sizing: border-box; border-radius: 12px 12px 14px 14px;
+/* centred by inset and auto margins, not translate(-50%, -50%): the build's CSS minifier drops `translate` from a rule that
+   also sets `transform` (the open/close slide below), so on the live site the book sat down-right of centre while the
+   sheet (#map.table, placed by calc from the centre) stayed put and lay over the book's left page, list and all */
+#mtbook { position: fixed; z-index: 5; inset: 0; margin: auto; width: var(--mtw); height: var(--mth); box-sizing: border-box; border-radius: 12px 12px 14px 14px;
   background-color: #4a2d1b; background-image: radial-gradient(ellipse at 28% 18%, rgba(255, 214, 160, .10), transparent 55%), repeating-linear-gradient(115deg, rgba(0, 0, 0, .05) 0 2px, transparent 2px 7px);
   box-shadow: 0 34px 90px rgba(0, 0, 0, .6), inset 0 0 0 2px rgba(0, 0, 0, .35), inset 0 2px 0 rgba(255, 220, 170, .12);
   opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(24px); transition: opacity .5s, transform .5s, visibility 0s .5s; color: var(--ink); font: 16px/1.4 var(--serif); }

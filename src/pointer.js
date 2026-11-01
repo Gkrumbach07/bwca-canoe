@@ -525,12 +525,17 @@ export function peopleTargets(people) {
       if (!f) continue;
       const reach = v.keeper ? 2.9 : 2.3;
       if (near.flat(f.x, f.z) > reach) continue;
-      const gy = p && p.groundAt ? p.groundAt(f.x, f.z) : near.y, sit = f.spec && f.spec.pose === 'sit';
-      const top = gy + (sit ? 1.25 : 1.72), bot = gy + 0.35;
+      // the rod runs up the body from where the figure is drawn (f.y: a store's floor stands 0.3 m and more over the
+      // terrain, so the ground under it put the rod low and only the legs and belly took the dot, the owner: "peoples
+      // hit boxes dont fill their whole body, you have to look down at them") to its head (npcs.js look(): the same
+      // reckoning of where the head is, by pose and size); the rod's radius rounds it off over the crown and the feet
+      const gy = Number.isFinite(f.y) ? f.y : p && p.groundAt ? p.groundAt(f.x, f.z) : near.y, sit = f.spec && f.spec.pose === 'sit';
+      const sc = (f.look && f.look.wear && f.look.wear.scale) || 1, headY = gy + (sit ? (f.spec.seat || 0.45) + 0.78 : 1.66) * sc;
+      const top = headY - 0.08, bot = gy + (sit ? 0.25 : 0.35) * sc;
       const hit = near.segment(f.x, bot, f.z, f.x, top, f.z, 0.42);
       if (!hit) continue;
       const name = v.keeper ? v.name : (people.s && people.s.talked && people.s.talked[v.key] ? v.first : v.name);
-      out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: v.key, label: name, e: { verb: 'Talk', run: () => people.talkTo(v) }, hint: v.who && !v.keeper ? v.who : null, box: { x: f.x, y: (top + bot) / 2, z: f.z, hx: 0.3, hy: (top - bot) / 2, hz: 0.3, heading: f.heading || 0 } } });
+      out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: v.key, label: name, e: { verb: 'Talk', run: () => people.talkTo(v) }, hint: v.who && !v.keeper ? v.who : null, box: { x: f.x, y: (gy + headY + 0.14) / 2, z: f.z, hx: 0.3, hy: (headY + 0.14 - gy) / 2, hz: 0.3, heading: f.heading || 0 } } });
     }
     return out;
   };

@@ -68,6 +68,11 @@ const HULL_DROP = 0.15;
 // LOW_OVER: the lowest thing Space gets over rather than hops at, a little under a step: the collision holds the body
 // off a log whose top only peaks over a step at a ring of its stem, and that must be vaulted, not hopped into (the join)
 const LOW_OVER = STEP_UP - 0.1;
+// STRIDE_PROBE: the longest stretch of a frame's walk read in one go for what he steps up onto. A sprint up a flight
+// (time-lapsed, or a slow frame) can cover two or three treads in a frame; read only at its end, the tread there is out
+// of a step's reach from the feet and he dropped into the flight (the owner: "sprinting up stairs makes you sink into
+// them sometimes"). Well under a tread's run (props.js STEP_RUN 0.28), and over a walk's stride in a frame at 60 fps
+const STRIDE_PROBE = 0.1;
 const SPACE = { early: 0.8, ahead: 1.0, reach: [0.35, 0.65, 1.0] }; // a Space pressed this long before, this far short of (looked for from each reach), a vault or a climb waits for it
 // fb C: the water on foot. Wading slows you with the depth; past SWIM_DEPTH (chest deep) you swim, and you stand again
 // under STAND_DEPTH; with the canoe overhead you go no deeper than CARRY_DEPTH. A swimmer is held off whatever stands
@@ -1359,6 +1364,7 @@ export class Player {
     const rodUp = !!(this.fishing && this.fishing.rodUp) && this.mode === 'walk';
     if (this.act) {
       this.updateAct(dt);
+      ft.sup = undefined; // (the step-up's floor, below, starts afresh after a vault or a climb)
       nx = this.x; nz = this.z;
       ft.near = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
     } else {
@@ -1441,7 +1447,22 @@ export class Player {
         // fb2 E: the feet's height for what holds him and what he steps up onto: what is under him now, if his feet are
         // still easing up to it (up a flight at a jog they lag a few centimetres, and the tread two up, 0.30 m over the
         // one he is on, must stay within a step of it)
-        const feetY = ft.air ? ft.y : Math.max(ft.y, this.supportAt(this.x, this.z, ft.y + STEP_UP, near));
+        let feetY = ft.air ? ft.y : Math.max(ft.y, this.supportAt(this.x, this.z, ft.y + STEP_UP, near));
+        // a frame's walk longer than STRIDE_PROBE (a sprint up a flight) is read along the way, a tread at a time, so the
+        // feet are carried up each one in turn and the tread at its end is within a step of them (stopped at anything
+        // that holds him: what is past it is not reached). A walk's frame is not read here, and is as it was
+        if (!ft.air) {
+          const ddx = nx - this.x, ddz = nz - this.z, dl = Math.hypot(ddx, ddz);
+          if (dl > STRIDE_PROBE) {
+            const n = Math.min(24, Math.ceil(dl / STRIDE_PROBE));
+            for (let i = 1; i < n; i++) {
+              const px = this.x + (ddx * i) / n, pz = this.z + (ddz * i) / n;
+              if (this.blockedAt(px, pz, feetY, near)) break;
+              const sy = this.supportAt(px, pz, feetY + STEP_UP, near);
+              if (sy > feetY) feetY = sy;
+            }
+          }
+        }
         const reach = feetY + STEP_UP;
         // held off everything at its drawn edge, sliding along it; eased round a trunk to whichever side you were
         // already passing on; still caught in a corner between two after that, you stay where you were
@@ -1536,16 +1557,29 @@ export class Player {
           if (a) { note = a.kind === 'vault' ? '<kbd>Space</kbd>Vault over' : '<kbd>Space</kbd>Climb up'; ft.hint = true; }
         }
         if (ft.air) {
+          ft.sup = undefined;
           ft.vy -= GRAVITY * dt; ft.y += ft.vy * dt; ft.t += dt; ft.peak = Math.max(ft.peak, ft.y);
           if (ft.vy <= 0 && ft.y <= support) {
             const fall = ft.peak - support;
             ft.land = Math.min(1, 0.4 + 0.2 * -ft.vy); ft.y = support; ft.vy = 0; ft.air = false; ft.hop = false; // the soundscape plays the landing (audio.js)
             if (fall > 0.6) ft.landT = 0.3;
+            ft.sup = support;
           }
-        } else if (support < ft.y - 0.22) { ft.air = true; ft.vy = 0; ft.t = 0.25; ft.peak = ft.y; ft.hop = false; } // off an edge: a short fall (no take-off)
+        } else if (support < ft.y - 0.22) { ft.air = true; ft.vy = 0; ft.t = 0.25; ft.peak = ft.y; ft.hop = false; ft.sup = undefined; } // off an edge: a short fall (no take-off)
         else {
           if (support > ft.y + 0.12) stepUp = support;
-          ft.y = support > ft.y ? ft.y + (support - ft.y) * (1 - Math.exp(-dt * 25)) : support;
+          if (support > ft.y) {
+            // up a step the feet ease onto it, over about as much ground at a jog as at a walk: the ease runs faster by
+            // how much faster than this place's walk he is going (seen), so up a flight at a sprint they keep up rather
+            // than lagging a riser or two into the treads. And never further behind than the step just taken: they are
+            // at least on what they stood on the frame before (ft.sup). At a walk neither changes anything.
+            const went = dt > 0 ? Math.hypot(nx - this.x, nz - this.z) / dt : 0;
+            const walkSeen = this.paceTable.lapse ? footSeen(onTrail ? 'trail' : campArea || yard ? 'camp' : 'land', carrying, false) : carrying ? WALK.carry : WALK.speed;
+            const quick = Math.max(1, went / Math.max(0.1, walkSeen));
+            ft.y += (support - ft.y) * (1 - Math.exp(-dt * 25 * quick));
+            if (ft.sup !== undefined) ft.y = Math.max(ft.y, Math.min(support, ft.sup));
+          } else ft.y = support;
+          ft.sup = support;
         }
       }
     }

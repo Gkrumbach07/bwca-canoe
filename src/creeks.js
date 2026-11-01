@@ -148,14 +148,14 @@ const brookU = { uBrookWater: { value: new THREE.Vector2(0.7, 0.3) } }; // x a p
 let brookMat = null;
 export function brookMaterial() {
   if (brookMat) return brookMat;
-  const vary = 'varying vec4 vSplatA;\nvarying vec4 vSplatB;\nvarying vec4 vFloor;\nvarying vec3 vLookWorld;\nvarying vec4 vBrook;';
+  const vary = 'varying vec4 vSplatA;\nvarying vec4 vSplatB;\nvarying vec4 vFloor;\nvarying vec3 vLookWorld;\nvarying vec4 vBrook;\nvarying float vGrade;';
   brookMat = makeLookMaterial({ vertexColors: false, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }, {
     wrap: 0, name: 'look-brook',
     compile: (shader) => {
       Object.assign(shader.uniforms, groundUniforms, brookU);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nattribute vec4 aSplatA;\nattribute vec4 aSplatB;\nattribute vec4 aFloor;\nattribute vec4 aBrook;\n' + vary)
-        .replace('#include <project_vertex>', '#include <project_vertex>\n\tvSplatA = aSplatA; vSplatB = aSplatB; vFloor = aFloor; vBrook = aBrook;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+        .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nattribute vec4 aSplatA;\nattribute vec4 aSplatB;\nattribute vec4 aFloor;\nattribute vec4 aBrook;\nattribute float aGrade;\n' + vary)
+        .replace('#include <project_vertex>', '#include <project_vertex>\n\tvSplatA = aSplatA; vSplatB = aSplatB; vFloor = aFloor; vBrook = aBrook; vGrade = aGrade;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n' + vary + '\nuniform vec2 uBrookWater;\nfloat brookSheen = 0.0;\nvec2 brookTilt = vec2( 0.0 );\n' + glslGround)
         .replace('#include <color_fragment>', `
@@ -176,8 +176,12 @@ export function brookMaterial() {
 	vec3 rockC = mix( vec3( 0.36, 0.35, 0.33 ), vec3( 0.52, 0.48, 0.42 ), lookFbm( q / 0.45, 55u, 2 ) );
 	vec3 grit = vec3( 0.29, 0.26, 0.21 ) * ( 0.8 + 0.4 * lookFbm( q / 0.05, 56u, 2 ) );
 	vec3 bedC = mix( grit, rockC, clamp( stone * mix( 0.7, 1.0, 1.0 - a ), 0.0, 1.0 ) );
+	// riffles (2026-11-01, the owner: "the small not-boatable ones don't have riffles or rapids when on a slope, it just
+	// stops rendering"): vGrade is the bed's fall along it (BrookDecal.row); from about 2.5 per cent the running water
+	// spreads over the stones and breaks white, fully by 16 per cent (only where there is water to break)
+	float riff = smoothstep( 0.025, 0.16, vGrade ) * smoothstep( 0.04, 0.2, water );
 	// the water's reach: a thin sheet down the middle as wide as the brook runs, the stones wet a little past it
-	float wide = 0.08 + 0.32 * water;
+	float wide = 0.08 + 0.32 * water + 0.2 * riff;
 	float chan = ( 1.0 - smoothstep( wide, wide + 0.1, a ) ) * smoothstep( 0.04, 0.2, water );
 	float damp = ( 1.0 - smoothstep( wide + 0.1, wide + 0.4, a ) ) * smoothstep( 0.02, 0.15, water );
 	bedC *= mix( 1.0, 0.6, damp );
@@ -192,8 +196,26 @@ export function brookMaterial() {
 	vec3 tea = vec3( 0.05, 0.036, 0.018 ) + bedC * vec3( 0.22, 0.17, 0.1 ) * ( 1.0 - 0.6 * water ); // the stones show through a shallow run
 	col = mix( col, tea, chan );
 	col += vec3( 0.05, 0.055, 0.05 ) * chan * smoothstep( 0.62, 0.8, r2 ) * lookFade( 0.25, lookPx ); // a fleck of foam on a riffle
-	brookSheen = chan * ( 0.75 + 0.25 * r1 );
-	brookTilt = vec2( r1 - 0.5, r2 - 0.5 ) * 0.5 * chan;
+	// down a slope, the rapids' look in little (whitewater.js): standing waves across the run, closer the steeper it
+	// falls, bent and broken into patches with white froth churning down their tops, fast streaks between, the water
+	// paler with air in it; far off the froth thins to an even pale (it would only shimmer)
+	float foam = 0.0;
+	if ( riff * chan > 0.002 ) {
+		float bu = vBrook.x * 0.46, bs = vBrook.y; // metres across (about) and along
+		float warp = 1.2 * ( lookFbm( vec2( bu * 0.8, bs * 0.3 ), 61u, 2 ) - 0.5 );
+		float crest = pow( 0.5 + 0.5 * cos( ( bs + warp ) / mix( 1.2, 0.55, riff ) * 6.2832 ), 3.0 );
+		float patchN = lookFbm( vec2( bu * 1.6, bs * 0.9 ), 62u, 2 );
+		float froth = lookFbm( vec2( bu * 5.0 + t * 0.6, ( bs - t * mix( 1.8, 3.4, riff ) ) * 3.0 ), 63u, 2 );
+		float streak = lookNoise( vec2( bu * 9.0, ( bs - t * 4.5 ) * 1.2 ), 64u );
+		foam = crest * smoothstep( 0.62 - 0.26 * riff, 0.74, patchN ) * smoothstep( 0.34, 0.6, froth );
+		foam = max( foam, smoothstep( 0.74 - 0.12 * riff, 0.88, froth ) * 0.8 );
+		foam = max( foam, smoothstep( 0.72, 0.9, streak ) * 0.45 );
+		foam = mix( 0.3 * riff, foam, lookFade( 0.3, lookPx ) ) * riff * chan;
+		col = mix( col, col + vec3( 0.035, 0.033, 0.028 ), riff * chan );
+		col = mix( col, vec3( 0.6, 0.62, 0.6 ), clamp( foam, 0.0, 0.9 ) );
+	}
+	brookSheen = chan * ( 0.75 + 0.25 * r1 ) * ( 1.0 - 0.85 * foam );
+	brookTilt = vec2( r1 - 0.5, r2 - 0.5 ) * 0.5 * chan * ( 1.0 + riff );
 	diffuseColor.rgb = col;
 	diffuseColor.a = ( bed + ( 1.0 - bed ) * bankA ) * vBrook.z;`)
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ) * ( 1.0 - brookSheen ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); normal = normalize( mix( normal, mat3( viewMatrix ) * normalize( vec3( brookTilt.x, 1.0, brookTilt.y ) ), brookSheen ) ); }')
@@ -210,8 +232,9 @@ export function setBrookSeason(season) {
 }
 
 class BrookDecal {
-  constructor() { this.p = []; this.n = []; this.sa = []; this.sb = []; this.fl = []; this.br = []; this.ix = []; this.rows = 0; }
-  row(ctx, x, z, nx, nz, hw, along, fade, per) {
+  constructor() { this.p = []; this.n = []; this.sa = []; this.sb = []; this.fl = []; this.br = []; this.gr = []; this.ix = []; this.rows = 0; }
+  // grade: the bed's fall along it there (rise over run, unsigned): the shader's riffles
+  row(ctx, x, z, nx, nz, hw, along, fade, per, grade = 0) {
     const f4 = [0, 0, 0, 0], n3 = [0, 1, 0], p3 = [0, 0, 0];
     for (const t of ACROSS) {
       const px = x + nx * t * hw, pz = z + nz * t * hw;
@@ -231,6 +254,7 @@ class BrookDecal {
       }
       this.p.push(px - ctx.ox, y, pz - ctx.oz);
       this.br.push(t, along, fade, per);
+      this.gr.push(grade);
     }
     return this.rows++;
   }
@@ -266,6 +290,7 @@ class BrookDecal {
     g.setAttribute('aSplatB', new THREE.Float32BufferAttribute(this.sb, 4));
     g.setAttribute('aFloor', new THREE.Float32BufferAttribute(this.fl, 4));
     g.setAttribute('aBrook', new THREE.Float32BufferAttribute(this.br, 4));
+    g.setAttribute('aGrade', new THREE.Float32BufferAttribute(this.gr, 1));
     g.setIndex(this.ix);
     g.computeBoundingSphere();
     const m = new THREE.Mesh(g, brookMaterial());
@@ -302,6 +327,11 @@ function buildBrook(ctx, b, decal, bits, rounded) {
   for (let i = 0; i < m - 1; i++) if (inside(pts[i][0], pts[i][1])) { want[i] = 1; want[i + 1] = 1; any = true; }
   if (!any) return;
   const rowOf = new Int32Array(m).fill(-1), total = (m - 1) * BROOK.step, per = b.perennial ? 1 : 0;
+  // the bed's fall along it (riffles in the shader): the drawn ground GR rows (about 5 m) up and down the line, read
+  // once a point; and which way it runs (the line as mapped may be drawn uphill), so the ripples go down it
+  const GR = 4, hAt = new Float32Array(m).fill(NaN);
+  const hOf = (k) => { if (hAt[k] !== hAt[k]) { const v = ctx.H(pts[k][0], pts[k][1]); hAt[k] = Number.isFinite(v) ? v : 0; } return hAt[k]; };
+  if (b.down === undefined) { const h0 = ctx.H(pts[0][0], pts[0][1]), h1 = ctx.H(pts[m - 1][0], pts[m - 1][1]); b.down = !(Number.isFinite(h0) && Number.isFinite(h1) && h1 > h0 + 0.5); }
   for (let i = 0; i < m; i++) {
     if (!want[i]) continue;
     const [x, z] = pts[i], [xa, za] = pts[Math.max(0, i - 1)], [xb, zb] = pts[Math.min(m - 1, i + 1)];
@@ -311,7 +341,8 @@ function buildBrook(ctx, b, decal, bits, rounded) {
     const cx = x + nx * meander, cz = z + nz * meander, sd = tg.shoreAt(cx, cz);
     // faded in over its first metres, and out where it meets the water (the lake or the creek it runs into)
     const fade = Math.min(smoothstep(0, 4, s), smoothstep(-0.5, 2.5, sd), total - s < 2 && sd > 3 ? smoothstep(0, 2, total - s) : 1);
-    rowOf[i] = decal.row(ctx, cx, cz, nx, nz, hw, s, fade, per);
+    const ia = Math.max(0, i - GR), ib = Math.min(m - 1, i + GR), grade = ib > ia ? Math.abs(hOf(ia) - hOf(ib)) / ((ib - ia) * BROOK.step) : 0;
+    rowOf[i] = decal.row(ctx, cx, cz, nx, nz, hw, b.down ? s : total - s, fade, per, grade);
     if (i > 0 && rowOf[i - 1] >= 0 && want[i - 1] && inside(pts[i - 1][0], pts[i - 1][1])) decal.join(rowOf[i - 1], rowOf[i]);
     // stones along the bed: the bigger ones at its margins, cobbles in it; wet and darker where it runs
     if (!inside(x, z) || sd < 0.5 || fade < 0.5) continue;

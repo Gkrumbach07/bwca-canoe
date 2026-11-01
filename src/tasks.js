@@ -6,6 +6,8 @@ import { SPECIES as FISH } from './fishing.js';
 import { esc, word, plural, fmtKm, shortDate } from './hud.js';
 import { itemDef } from './items.js';
 import { fmtIn, fmtInUp } from './units.js';
+import { flyerHtml, flyerStyle } from './flyers.js'; // the notices as the paper they are, on the cork and in the pile as in the journal
+import './flyers.css';
 
 // The board: notices pinned up at each outfitter, the tasks they set, and the money they pay.
 //
@@ -789,70 +791,127 @@ export class Tasks {
     this.props.delete(id);
   }
 
-  // --- the board at the counter (outfitter.js renders it in its middle column) -------------------------------
+  // --- the board at the counter (outfitter.js renders it as its two panes) ------------------------------------
+  // The owner (2026-11-01): "the task board needs to use the same renderings of the tasks as the inventory does", "when
+  // you pull a task it needs to be ripped from the board", "dont have the tasks from other boards section. what that
+  // should instead be is a rendering of the tasks pulled from THIS board", and "look at the lure wall. it has the board
+  // + inventory. we might be able to do board plus tasks taken for this board". So the board is two panes, as a shelf
+  // is (inv-ui.js ShelfScreen): the cork on the left, each notice pinned up as the very paper the journal unfolds
+  // (flyers.js flyerHtml), and on the right the pile of what you tore off this board, the same papers, folded since
+  // and splayed out, where the finished ones are handed in and paid (and one still on the go can be let go). A notice
+  // taken leaves a torn scrap under its tack until it is paid (the pin is bare then, until the morning). What you have
+  // from other boards is the journal's business (its Tasks page says where each is paid), not this board's.
   boardSection(ep) {
     injectCss();
-    const slots = this.board(ep), writing = this.filling.has(ep);
-    const mine = slots.filter((t) => t && t.status !== 'offered'), ready = mine.filter((t) => t.status === 'done');
-    const offered = slots.filter((t) => t && t.status === 'offered').length;
-    const bits = [];
-    if (offered) bits.push(`${word(offered)} on offer`);
-    if (mine.length - ready.length) bits.push(`${word(mine.length - ready.length)} taken on`);
-    if (ready.length) bits.push(`${word(ready.length)} to claim`);
-    const sum = bits.length ? `${bits.join(', ')} · a new notice each morning` : writing ? 'the keeper is pinning up notices' : 'a new notice each morning';
-    // Claim all pays every finished notice this counter posted (turnIn), off its pins and asked in person too: so it says
-    const owed = this.active.filter((t) => t.status === 'done' && t.from === ep);
-    const all = owed.length > 1 ? `<button type="button" class="stamp" data-act="task" data-id="claimall">Claim all · $${owed.reduce((s, t) => s + t.pay, 0)}</button>` : '';
-    const pins = slots.map((t, i) => this.notice(t, i, ep, writing)).join('');
-    // what you have on the go from other boards (and anything of this board's off its pins), and apart from them what
-    // the people in the stores asked of you (npcs.js: never pinned on a board, theirs to pay, or their counter's)
-    const away = this.active.filter((t) => !slots.includes(t));
-    const row = (t) => {
-      const L = this.landing(t.from), k = KINDS[t.kind], first = t.npc ? esc(String(t.npcName || 'they').split(' ')[0]) : '';
-      const whose = t.npc ? ` · for ${esc(t.npcName || 'a visitor')}${t.from === ep ? '' : ` at ${esc(L ? L.name : 'another outfitter')}`}` : '';
-      const where = t.npc ? `done · ${first} pays it, or the counter at ${esc(L ? L.name : 'their outfitter')}, entry point ${t.from}` : `done · claim at ${esc(L ? L.name : 'its outfitter')}, entry point ${t.from}`;
-      const state = t.status === 'done' ? (t.from === ep ? '' : where) : esc(k && k.progress ? k.progress(t) : 'on the go');
-      // done, from this board (off its pins) or asked here: claim it; done, from elsewhere: the keeper says where it is paid
-      const f = t.status === 'open' && t.from === ep ? this.fishFor(t) : null; // its fish with you, at its own board
-      const btn = t.status === 'done' ? ` <button type="button" class="stamp small${t.from === ep ? '' : ' quiet'}" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>`
-        : f ? ` <button type="button" class="stamp small" data-act="task" data-id="give:${t.id}">Hand over · $${t.pay}</button>` : '';
-      return `<li><b>${esc(t.title)}</b>${whose} · $${t.pay}${state ? ` · <span class="soft">${state}</span>` : ''}${btn}</li>`;
-    };
-    const asked = away.filter((t) => t.npc), taken = away.filter((t) => !t.npc);
-    const elsewhere = away.length ? `<div class="elsewhere">${asked.length ? `<div class="lab">Asked of you in person</div><ul>${asked.map(row).join('')}</ul>` : ''}`
-      + `${taken.length ? `<div class="lab">Taken from other boards</div><ul>${taken.map(row).join('')}</ul>` : ''}</div>` : '';
-    return `<section class="board cork" aria-labelledby="board-h">
-      <div class="top"><h3 id="board-h">The board</h3><span class="sum">${sum}</span>${all}</div>
-      <div class="notices">${pins}</div>${elsewhere}
+    const slots = this.board(ep), writing = this.filling.has(ep), where = (this.landing(ep) || {}).name || 'the outfitter';
+    const onPins = new Set(slots.filter(Boolean).map((t) => t.id));
+    // the pile: every notice on the go that this counter pays, torn off its pins or asked of you here in person
+    // (npcs.js: theirs to pay, or this counter's); the finished ones on top, then the oldest taken first
+    const pile = this.active.filter((t) => t.from === ep)
+      .sort((a, b) => (a.status === 'done' ? 0 : 1) - (b.status === 'done' ? 0 : 1) || (a.taken || 0) - (b.taken || 0) || a.id - b.id);
+    const ready = pile.filter((t) => t.status === 'done'), offered = slots.filter((t) => t && t.status === 'offered').length;
+    const sum = offered ? `${word(offered)} on offer · a new notice each morning` : writing ? 'the keeper is pinning up notices' : 'a new notice each morning';
+    const pileSum = pile.length ? [pile.length - ready.length ? `${word(pile.length - ready.length)} on the go` : '', ready.length ? `${word(ready.length)} to claim` : ''].filter(Boolean).join(' · ') : '';
+    // Claim all pays every finished notice this counter posted (turnIn): so it says, on the pile it pays
+    const all = ready.length > 1 ? `<button type="button" class="stamp" data-act="task" data-id="claimall">Claim all · $${ready.reduce((s, t) => s + t.pay, 0)}</button>` : '';
+    const pins = slots.map((t, i) => this.notice(t, i, ep, writing, where)).join('');
+    const cards = pile.map((t, i) => this.pileCard(t, i, ep, where, onPins.has(t.id))).join('');
+    return `<section class="board cork two" aria-label="The board">
+      <div class="bd-cork"><div class="top"><h3 id="board-h">The board</h3><span class="sum">${sum}</span></div>
+        <div class="notices"><div class="pins">${pins}</div></div></div>
+      <aside class="bd-pile" aria-labelledby="pile-h"><div class="top"><h3 id="pile-h">Taken from this board</h3>${pileSum ? `<span class="sum">${pileSum}</span>` : ''}${all}</div>
+        <div class="pile">${cards || '<p class="pile-none">Nothing of this board’s on the go. Pull a notice off the cork and it ends up here.</p>'}</div></aside>
     </section>`;
   }
-  notice(t, i, ep, writing) {
-    const tilt = [-1.1, 0.8, -0.5, 1.2][i % 4];
+  // a pin on the cork: bare, a notice on offer (its paper, pinned, and "Take it on" under it), or the scrap a notice
+  // left under the tack when it was torn off (until it is paid)
+  notice(t, i, ep, writing, where = '') {
     if (!t) {
       const b = this.boards[ep], due = b && b.pending.includes(i);
-      return `<article class="notice bare" style="--tilt:${tilt}deg"><i class="tack" aria-hidden="true"></i><p>${due && writing ? 'Pinning up a notice…' : 'A bare pin. Something new goes up in the morning.'}</p></article>`;
+      return `<article class="pin bare"><i class="tack" aria-hidden="true"></i><p>${due && writing ? 'Pinning up a notice…' : 'A bare pin. Something new goes up in the morning.'}</p></article>`;
+    }
+    if (t.status !== 'offered') {
+      const scrap = SCRAP[flyerStyle(t)] || SCRAP.notice;
+      return `<article class="pin torn" data-notice="${t.id}" aria-label="${esc(t.title)}: torn off"><i class="tack" aria-hidden="true"></i><i class="scrap" style="--scrap:${scrap}" aria-hidden="true"></i>
+        <p>Torn off ${t.taken ? esc(this.dayWords(t.taken)) : ''}.</p></article>`;
     }
     const k = KINDS[t.kind] || { label: t.kind };
-    let btn, state = '';
-    if (t.status === 'offered') btn = `<button type="button" class="stamp" data-act="task" data-id="take:${t.id}">Take it on</button>`;
-    else if (t.status === 'done') {
-      btn = `<button type="button" class="stamp" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>`;
-      const dw = k.doneWords ? k.doneWords(t) : t.kind === 'fish' && k.progress ? k.progress(t) : ''; // content A: "Done · 4.4 m"
-      state = `<div class="state done">Done${dw ? ` · ${esc(dw)}` : ''}</div>`;
-    } else {
-      btn = `<button type="button" class="stamp quiet" data-act="task" data-id="drop:${t.id}">Let it go</button>`;
-      // a fish notice of this board's, its fish with you: hand it over here, and it is paid
-      const f = t.from === ep ? this.fishFor(t) : null;
-      if (f) btn = `<span class="give"><button type="button" class="stamp" data-act="task" data-id="give:${t.id}">Hand ${f.length > 1 ? 'them' : 'it'} over · $${t.pay}</button>${btn}</span>`;
-      state = `<div class="state">Taken on ${t.taken ? esc(this.dayWords(t.taken)) : ''} · ${esc(f ? `the ${f.words} with you: hand ${f.length > 1 ? 'them' : 'it'} over here` : k.progress ? k.progress(t) : '')}</div>`;
-    }
-    return `<article class="notice${t.status === 'offered' ? '' : ' mine'}${t.status === 'done' ? ' done' : ''}" style="--tilt:${tilt}deg">
-      <i class="tack" aria-hidden="true"></i>
-      <div class="head"><span>${esc(k.label)} · ${BAND_WORDS[t.band] || ''}</span><b class="pay">$${t.pay}</b></div>
-      <h4>${esc(t.title)}</h4>
-      <p class="text">${esc(t.text)}</p>${state}
-      <div class="foot">${btn}<span class="sign">— ${esc(t.sign || 'the counter')}</span></div>
+    return `<article class="pin" data-notice="${t.id}"><i class="tack" aria-hidden="true"></i>${flyerHtml(t, { where, ep })}
+      <div class="pin-foot"><span class="pin-band">${esc(k.label)} · ${BAND_WORDS[t.band] || ''}</span><button type="button" class="stamp" data-act="task" data-id="take:${t.id}">Take it on</button></div>
     </article>`;
+  }
+  // a notice in the pile: the paper (folded since it came off the cork) with a slip over it saying where it stands and
+  // what can be done with it here: hand the fish over, claim the pay, or let it go back up on its pin
+  pileCard(t, i, ep, where, pinned) {
+    const k = KINDS[t.kind] || { label: t.kind };
+    const btns = [];
+    let say;
+    if (t.status === 'done') {
+      const dw = k.doneWords ? k.doneWords(t) : t.kind === 'fish' && k.progress ? k.progress(t) : ''; // content A: "Done · 4.4 m"
+      say = `Done${dw ? ` · ${dw}` : ''}`;
+      btns.push(`<button type="button" class="stamp small" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>`);
+    } else {
+      const f = this.fishFor(t); // a fish notice of this board's, its fish with you: hand it over here, and it is paid
+      say = `${t.npc ? `For ${t.npcName || 'a visitor'} · ` : ''}${t.taken ? `taken ${this.dayWords(t.taken)} · ` : ''}${f ? `the ${f.words} with you` : k.progress ? k.progress(t) : 'on the go'}`;
+      if (f) btns.push(`<button type="button" class="stamp small" data-act="task" data-id="give:${t.id}">Hand ${f.length > 1 ? 'them' : 'it'} over · $${t.pay}</button>`);
+      if (pinned) btns.push(`<button type="button" class="stamp small quiet" data-act="task" data-id="drop:${t.id}">Let it go</button>`);
+    }
+    const h = (t.id * 2654435761) >>> 0, dx = ((h % 7) - 3) * 5, rot = (((h >>> 3) % 9) - 4) * 0.6;
+    return `<div class="tk${t.status === 'done' ? ' done' : ''}" data-card="${t.id}" style="--dx:${dx}px;--rot:${rot.toFixed(1)}deg;z-index:${i + 1}">
+      <div class="tk-slip"><span class="tk-say">${esc(cap(say))}</span>${btns.length ? `<span class="tk-btns">${btns.join('')}</span>` : ''}</div>
+      <div class="tk-paper">${flyerHtml(t, { where, ep })}${t.status === 'done' ? '<span class="tk-done" aria-hidden="true">Done</span>' : ''}</div>
+    </div>`;
+  }
+  // The rip (the owner, 2026-11-01: "when you pull a task it needs to be ripped from the board"). outfitter.js asks
+  // ripStart before a "take" goes through, while the notice is still on its pin, and ripEnd after the board is drawn
+  // again (the notice now in the pile, a scrap left under the tack): a copy of the paper, its top torn out round the
+  // tack, gives a tug, comes free and flies to its place in the pile, where the real one is waiting hidden under it.
+  // Only the look: the take itself has happened already, so nothing hangs on the animation finishing. Not at all
+  // under prefers-reduced-motion.
+  ripStart(root, spec) {
+    const [verb, id] = String(spec).split(':');
+    if (verb !== 'take' || !root || typeof window === 'undefined' || !document.body.animate) return null;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
+    const fl = root.querySelector(`.pin[data-notice="${id}"] .fl`);
+    if (!fl) return null;
+    const r = fl.getBoundingClientRect();
+    if (!r.width) return null;
+    const ghost = fl.cloneNode(true);
+    ghost.classList.add('fl-ghost'); ghost.classList.remove('unfold');
+    ghost.removeAttribute('aria-label');
+    // the cork draws its papers small (a zoom: tasks.js CSS); the copy is drawn at the same zoom, and as wide, so it
+    // looks the same the moment it comes off
+    const z = parseFloat(getComputedStyle(fl).zoom) || 1;
+    return { id, ghost, r, z };
+  }
+  ripEnd(root, rip) {
+    if (!rip || !root) return;
+    const card = root.querySelector(`.tk[data-card="${rip.id}"]`), to = card && card.querySelector('.fl');
+    const scrap = root.querySelector(`.pin.torn[data-notice="${rip.id}"]`);
+    if (scrap) scrap.classList.add('fresh');
+    if (!to) return;
+    try { card.scrollIntoView({ block: 'nearest' }); } catch { /* an old browser */ }
+    const t = to.getBoundingClientRect(), s1 = t.width / rip.r.width;
+    const fly = document.createElement('div'), g = rip.ghost;
+    fly.className = 'rip-fly'; fly.setAttribute('aria-hidden', 'true');
+    Object.assign(fly.style, { position: 'fixed', left: '0px', top: '0px', zIndex: '60', pointerEvents: 'none', transformOrigin: '0 0', willChange: 'transform' });
+    Object.assign(g.style, { zoom: String(rip.z), width: `${rip.r.width / rip.z}px`, margin: '0' });
+    fly.appendChild(g);
+    document.body.appendChild(fly);
+    card.style.visibility = 'hidden';
+    const x0 = rip.r.left, y0 = rip.r.top, x1 = t.left, y1 = t.top;
+    const at = (x, y, rot, s) => `translate(${x}px, ${y}px) rotate(${rot}deg) scale(${s})`;
+    const anim = fly.animate([
+      { transform: at(x0, y0, 0, 1), offset: 0 },
+      { transform: at(x0, y0 + 9, 4, 1), offset: 0.16 },                                                   // the tug against the tack
+      { transform: at(x0 - 6, y0 + 2, -7, 1.04), offset: 0.3, easing: 'cubic-bezier(.3,.6,.3,1)' },        // torn free
+      { transform: at(x0 + (x1 - x0) * 0.55, Math.min(y0, y1) - 40, -10, (1 + s1) / 2), offset: 0.66 },    // up and over
+      { transform: at(x1, y1, 0, s1), offset: 1 },
+    ], { duration: 720, easing: 'ease-in-out', fill: 'forwards' });
+    let done = false;
+    const land = () => { if (done) return; done = true; fly.remove(); card.style.visibility = ''; card.classList.add('landed'); };
+    anim.onfinish = land; anim.oncancel = land;
+    setTimeout(land, 1200); // whatever happens to the animation, the card is never left hidden
   }
   dayWords(n) {
     const today = this.today(), d = today - n;
@@ -906,33 +965,64 @@ function catchEvent(species, lakeId, lengthCm, kept) {
 }
 
 // --- the cork board's look (Paper: cream notices, ink, a red tack, pencil for the pay) -----------------------------
+// the colour of the scrap a notice leaves under its tack when it is torn off: the top of its own paper (flyers.css),
+// the Leave No Trace poster's green band, the kraft of a tag
+const SCRAP = { scrap: '#f4efe0', order: '#eef1df', lost: '#fbfaf4', rental: '#f3e39a', usfs: '#f8f6ee', lnt: '#2e5b3a', clmp: '#e9f0f0', dnr: '#f2efe3', photo: '#fbf7ea', tag: '#c9a877', notice: '#f4ecd8' };
+// The board's two panes (the cork, the pile), laid out as a shelf's are (inv-ui.css #shelf); store.css adds the wood.
+// The papers are flyers.css's own, drawn smaller with a zoom: on the cork pinned flat (not folded yet, so no creases,
+// no tape: a tack), in the pile folded (the creases), their tops torn out round where the tack was.
 const CSS = `
-#outfitter .board.cork { gap: 10px; }
-#outfitter .cork .notices { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 214px), 1fr)); grid-auto-rows: max-content; gap: 14px 12px; align-content: start;
-  min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-width: thin; padding: 13px 12px 12px; border-radius: 3px; border: 1px solid var(--edge-deep); background-color: #c4a77c;
+#outfitter .board.cork.two { display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 34%, 440px); gap: 22px; min-height: 0; flex: 1 1 auto; }
+#outfitter .board.cork .bd-cork, #outfitter .board.cork .bd-pile { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+#outfitter .board.cork .top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding-bottom: 6px; flex: none; }
+#outfitter .board.cork .top .stamp { margin-left: auto; }
+#outfitter .cork .notices { min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-width: thin; border-radius: 3px; border: 1px solid var(--edge-deep); background-color: #c4a77c;
   background-image: radial-gradient(rgba(96, 66, 34, .22) 1px, transparent 1.6px), radial-gradient(rgba(255, 244, 220, .2) 1px, transparent 1.6px);
   background-size: 7px 7px, 11px 11px; background-position: 0 0, 3px 5px; box-shadow: inset 0 1px 5px rgba(40, 24, 8, .25); }
-#outfitter .cork .notice { position: relative; box-sizing: border-box; padding: 11px 12px 10px; background: var(--paper-note); border: 1px solid var(--edge); border-radius: 2px;
-  box-shadow: 0 3px 6px rgba(40, 24, 8, .28); transform: rotate(var(--tilt, 0deg)); display: flex; flex-direction: column; gap: 4px; }
-#outfitter .cork .notice .tack { position: absolute; left: 50%; top: -5px; width: 11px; height: 11px; margin-left: -5px; border-radius: 50%; background: var(--map-red);
+#outfitter .cork .pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 26px 20px; align-items: start; padding: 18px 18px 22px; }
+#outfitter .cork .pin { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; padding-top: 2px; }
+#outfitter .cork .pin > .tack, #outfitter .cork .pin .tack { position: absolute; left: 50%; top: 0; z-index: 3; width: 13px; height: 13px; margin-left: -6px; border-radius: 50%; background: var(--map-red);
   box-shadow: inset -2px -2px 0 rgba(0, 0, 0, .25), 0 1px 2px rgba(0, 0, 0, .35); }
-#outfitter .cork .notice .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font: 700 10px/1.3 var(--sc); letter-spacing: .12em; color: var(--ink-soft); }
-#outfitter .cork .notice .pay { font: 500 23px/0.9 var(--pencil-font); letter-spacing: 0; color: var(--pencil); }
-#outfitter .cork .notice h4 { margin: 0; font: 600 16.5px/1.15 var(--serif); color: var(--ink); }
-#outfitter .cork .notice .text { margin: 0; font-size: 13.5px; line-height: 1.34; }
-#outfitter .cork .notice .state { font-size: 12.5px; line-height: 1.3; font-style: italic; color: var(--ink-soft); }
-#outfitter .cork .notice .state.done { color: #3f5a2a; }
-#outfitter .cork .notice .foot { margin-top: auto; padding-top: 3px; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
-#outfitter .cork .notice .foot .stamp { flex: none; font-size: 10.5px; padding: 5px 10px; }
-#outfitter .cork .notice .sign { font: 500 16.5px/1 var(--pencil-font); color: var(--pencil); text-align: right; }
-#outfitter .cork .notice.done { border-left: 4px solid var(--moss); }
-#outfitter .cork .notice.mine:not(.done) { background: var(--paper-card); }
-#outfitter .cork .notice.bare { background: transparent; border: 1px dashed rgba(60, 40, 20, .35); box-shadow: none; justify-content: center; min-height: 110px; }
-#outfitter .cork .notice.bare p { margin: 0; font: 500 18px/1.15 var(--pencil-font); color: rgba(42, 32, 22, .7); text-align: center; }
-#outfitter .cork .elsewhere { flex: none; display: flex; flex-direction: column; gap: 3px; max-height: 28%; overflow: auto; scrollbar-width: thin; }
-#outfitter .cork .elsewhere ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; line-height: 1.35; }
-#outfitter .cork .elsewhere .soft { color: var(--ink-soft); font-style: italic; }
-#outfitter .cork .elsewhere .stamp.small { font-size: 10.5px; padding: 3px 8px; }
+#outfitter .cork .pin .fl { zoom: .7; margin-top: 10px; }
+#outfitter .cork .pin .fl::before, #outfitter .cork .pin .fl::after, #outfitter .cork .pin .fl .fl-tack { display: none; }
+#outfitter .cork .pin .fl.fl-tag .fl-eye { background: #c4a77c; }
+#outfitter .cork .pin-foot { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+#outfitter .cork .pin-foot .pin-band { font: 500 18px/1 var(--pencil-font); color: rgba(42, 30, 18, .82); }
+#outfitter .cork .pin-foot .stamp { font-size: 10.5px; padding: 5px 11px; box-shadow: 0 2px 4px rgba(40, 24, 8, .3); }
+#outfitter .cork .pin.bare, #outfitter .cork .pin.torn { min-height: 150px; justify-content: center; }
+#outfitter .cork .pin.bare p, #outfitter .cork .pin.torn p { margin: 0; max-width: 200px; font: 500 18px/1.15 var(--pencil-font); color: rgba(42, 32, 22, .7); text-align: center; }
+/* what is left on the pin when a notice is torn off: a jagged scrap of its paper under the tack */
+#outfitter .cork .pin.torn .scrap { position: absolute; left: 50%; top: 4px; width: 46px; height: 22px; margin-left: -23px; z-index: 2; background: var(--scrap, #f4ecd8);
+  clip-path: polygon(0 0, 100% 0, 100% 46%, 90% 78%, 79% 52%, 66% 100%, 54% 64%, 41% 92%, 28% 58%, 15% 86%, 6% 60%, 0 70%); filter: drop-shadow(0 1px 1px rgba(40, 24, 8, .3)); transform-origin: 50% 0; rotate: -4deg; }
+#outfitter .cork .pin.torn.fresh .scrap { animation: bd-flutter .9s ease-out; }
+@keyframes bd-flutter { 0% { rotate: 14deg; } 30% { rotate: -12deg; } 55% { rotate: 7deg; } 80% { rotate: -6deg; } 100% { rotate: -4deg; } }
+/* the pile: the papers taken off this board, folded, splayed out down the tray; the one under the pointer comes up */
+#outfitter .board.cork .pile { min-height: 0; flex: 1 1 auto; overflow: hidden auto; scrollbar-width: thin; padding: 14px 12px 40px; display: flex; flex-direction: column; }
+#outfitter .board.cork .pile-none { margin: 30px 14px; font: 500 20px/1.2 var(--pencil-font); text-align: center; }
+#outfitter .board.cork .tk { position: relative; flex: none; translate: var(--dx, 0) 0; rotate: var(--rot, 0deg); transition: translate .18s ease-out, rotate .18s ease-out; }
+#outfitter .board.cork .tk + .tk { margin-top: -30px; }
+#outfitter .board.cork .tk:hover, #outfitter .board.cork .tk:focus-within { z-index: 50 !important; translate: var(--dx, 0) -6px; rotate: 0deg; }
+#outfitter .board.cork .tk-slip { position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 6% -4px; padding: 4px 10px 5px;
+  background: var(--paper-note); border: 1px solid var(--edge); box-shadow: 0 2px 5px rgba(20, 10, 0, .3); rotate: -.8deg; }
+#outfitter .board.cork .tk-say { flex: 1 1 140px; min-width: 0; font: 500 17px/1.1 var(--pencil-font); color: var(--pencil); }
+#outfitter .board.cork .tk.done .tk-say { color: #3f5a2a; }
+#outfitter .board.cork .tk-btns { display: flex; gap: 5px; flex-wrap: wrap; }
+#outfitter .board.cork .tk-btns .stamp.small { font-size: 10.5px; padding: 3px 8px; }
+#outfitter .board.cork .tk-paper { position: relative; }
+#outfitter .board.cork .tk-paper .fl { zoom: .6; margin-top: 4px; }
+#outfitter .board.cork .tk-paper .fl::before, #outfitter .board.cork .tk-paper .fl .fl-tack { display: none; }
+#outfitter .board.cork .tk-done { position: absolute; right: 12%; top: 16px; padding: 2px 10px; border: 3px double rgba(63, 90, 42, .85); border-radius: 4px; rotate: -12deg;
+  font: 700 18px/1 var(--sc); letter-spacing: .16em; text-transform: uppercase; color: rgba(63, 90, 42, .9); mix-blend-mode: multiply; pointer-events: none; }
+#outfitter .board.cork .tk.landed .tk-paper { animation: bd-settle .3s ease-out; }
+@keyframes bd-settle { 0% { translate: 0 -5px; } 60% { translate: 0 2px; } 100% { translate: 0 0; } }
+/* torn off round the tack (a notebook scrap and a tag have their own edges) */
+.board.cork .tk-paper .fl:not(.fl-scrap):not(.fl-tag), .fl-ghost:not(.fl-scrap):not(.fl-tag) {
+  clip-path: polygon(0 0, 43% 0, 44.5% 9px, 46% 4px, 47.5% 14px, 49% 7px, 50.5% 16px, 52% 6px, 53.5% 12px, 55% 3px, 56.5% 0, 100% 0, 100% 100%, 0 100%); }
+.fl-ghost::before, .fl-ghost .fl-tack { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  #outfitter .cork .pin.torn.fresh .scrap, #outfitter .board.cork .tk.landed .tk-paper { animation: none; }
+  #outfitter .board.cork .tk { transition: none; }
+}
 #journal .notice-list { display: flex; flex-direction: column; gap: 12px; }
 #journal .todo .pay { font: 500 20px/1 var(--pencil-font); color: var(--pencil); margin-left: 6px; }
 `;

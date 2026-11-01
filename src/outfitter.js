@@ -614,9 +614,12 @@ export class Outfitter {
     else if (act === 'ride' && this.rides) this.rides.act(id);
     else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
+      // a notice taken is torn off its pin and flies to the pile (tasks.js ripStart/ripEnd: only the look, the take is done at once)
+      const rip = typeof this.tasks.ripStart === 'function' ? this.tasks.ripStart(this.el.panel, id) : null;
       const r = this.tasks.act(id, this.at.ep);
       if (r && r.words && /^(claim|give)/.test(String(id))) this.greeting = r.words;
       this.save(); this.render();
+      if (rip) this.tasks.ripEnd(this.el.panel, rip);
     }
   }
   // (The season permit, its stamp and its date stepper stood here until the world cards of 2026-10-24: "what is the
@@ -737,6 +740,8 @@ export class Outfitter {
     const lakeName = this.lakeOf(a), area = areaOf(a.ep), op = this.shop ? this.shop.outfitterProfile(a.ep) : null;
     const purse = this.profile ? `<div class="purse"><span class="sc">In hand</span><b>$${this.money}</b></div>` : '';
     const was = this.el.panel.querySelector('.desk, .col, .cards'), scroll = was ? was.scrollTop : 0, wasCls = was ? was.className : '';
+    // the board's two panes keep where they were scrolled to (tasks.js: the cork and the pile)
+    const panes = board ? ['.board .notices', '.board .pile'].map((q) => { const n = this.el.panel.querySelector(q); return n ? n.scrollTop : 0; }) : null;
     const leave = this.inStore ? 'Back to the store · E' : 'Back to the water · E';
     const receipt = this.receipt ? `<div class="receipt pencil${this.receipt.ok ? '' : ' no'}">${esc(this.receipt.text)}</div>` : '';
     const kicker = `Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && (op.kindWords || op.kind) ? ` · ${esc(op.kindWords || op.kind)}` : ''}`;
@@ -752,6 +757,7 @@ export class Outfitter {
     this.el.panel.innerHTML = `<header>${lede}${purse}${toCounter}<button type="button" class="stamp outline" data-act="close" aria-label="Leave (E or Esc)">${leave}</button></header>${receipt}${body}`;
     const now = this.el.panel.querySelector('.desk, .col, .cards');
     if (scroll && now && now.className === wasCls) now.scrollTop = scroll;
+    if (panes) ['.board .notices', '.board .pile'].forEach((q, i) => { const n = this.el.panel.querySelector(q); if (n && panes[i]) n.scrollTop = panes[i]; });
     if (!board) this.drawSideMap();
   }
 
