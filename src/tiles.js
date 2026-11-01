@@ -53,9 +53,18 @@ const LOD_STEP = 1; // round A-C: metres the camera moves in the tile underfoot 
 // visible only inside the shadow pass, and each draws into its own cascade alone: the shadow pass asks each caster
 // whether it meets the cascade's frustum, and a cascade proxy answers yes for its own cascade only.
 //
+// The pools (2026-11-01, the forest's draws): what the culling keeps is not drawn bin by bin. Each pass's kept
+// instances go into one pooled instanced mesh per (geometry, material) across every tile, so a stand of spruce in
+// the view costs one draw call per spruce variant, not one per variant per bin per tile; the same for each shadow
+// cascade. The far bins (the low twin, casting nothing: 4 to 8 triangles a tree) join the view's pools whole and
+// unculled, refilled only when a region's LOD or a tile changes. A pool is refilled from the first member that
+// changed (the far bins first, the culled near ones after), and only what changed goes up. Measured at High on
+// the forest spot: 846 draw calls became 613 (docs/performance.md, the forest's pools).
+//
 // What the quality presets set (quality.js):
 export const CULL = {
   enabled: true,
+  pool: true,        // the pools above (false: each bin and group drawn by its own proxy, as before; for A/B)
   understory: 1,     // the share of the understory and the scree drawn (the density scale); the trees are not thinned (their trunks collide)
   farSmall: 0,       // far cascade: instances whose sphere is under this radius (m) cast no shadow past farSmallFrom metres
   farSmallFrom: 60,
@@ -170,22 +179,82 @@ function prepare(D) {
 
 function ownCascade(frustum) { return frustum === this.userData.frustum; }
 
-// A proxy beside D in its tile group (so the tile's disposal takes it): its own instance buffer, D's material.
+// What a pass keeps of D (its view, or one cascade's): a staging copy of the kept instances, D-local, drawn by the
+// pool for D's geometry and material. userData.ver counts the refills (the pools copy again only when it moves).
 function makeProxy(D, shadow) {
   const cap = D.instanceMatrix.count;
-  const P = new THREE.InstancedMesh(D.geometry, D.material, 0);
-  P.instanceMatrix = new THREE.InstancedBufferAttribute(new Float32Array(cap * 16), 16).setUsage(THREE.DynamicDrawUsage);
-  if (!shadow && D.instanceColor) P.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
-  P.count = 0;
-  P.frustumCulled = false; // culled here, per chunk
-  P.boundingSphere = D.boundingSphere; // for the render list's sort only
-  P.matrixAutoUpdate = false; P.matrixWorldAutoUpdate = false;
-  P.matrix.copy(D.matrix); P.matrixWorld.copy(D.matrixWorld);
-  P.castShadow = shadow; P.receiveShadow = !shadow;
-  if (shadow) { P.customDepthMaterial = D.customDepthMaterial; P.visible = false; P.userData.frustum = null; P.frustumCulled = true; P.intersectsFrustum = ownCascade; }
-  P.userData.proxyOf = D; P.userData.n = 0; P.userData.sig = new Int32Array(0); P.userData.sigN = -1;
-  D.parent.add(P);
-  return P;
+  return {
+    M: new Float32Array(cap * 16), C: !shadow && D.instanceColor ? new Float32Array(cap * 3) : null, shadow,
+    userData: { proxyOf: D, n: 0, sig: new Int32Array(0), sigN: -1, ver: 0 },
+  };
+}
+
+// One pooled instanced mesh: a (geometry, material, pass) across all tiles, in the scene itself, its origin at the
+// first member's tile (the instances are offset from their own tile to it as they are copied in).
+class Pool {
+  constructor(scene, geometry, material, pass, depth, anchor) {
+    const cap = 256;
+    const P = this.mesh = new THREE.InstancedMesh(geometry, material, cap);
+    P.instanceMatrix = new THREE.InstancedBufferAttribute(new Float32Array(cap * 16), 16).setUsage(THREE.DynamicDrawUsage);
+    if (pass === 'v') P.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    P.count = 0; P.visible = false;
+    P.frustumCulled = false; // culled per chunk (the far bins: not at all, they are a few triangles a tree)
+    P.matrixAutoUpdate = false; P.matrixWorldAutoUpdate = false;
+    P.position.set(anchor[0], anchor[1], anchor[2]); P.updateMatrix(); P.matrixWorld.copy(P.matrix);
+    P.castShadow = pass !== 'v'; P.receiveShadow = pass === 'v';
+    if (pass !== 'v') { P.customDepthMaterial = depth; P.userData.frustum = null; P.frustumCulled = true; P.intersectsFrustum = ownCascade; }
+    P.userData.pool = pass;
+    scene.add(P);
+    this.pass = pass; this.anchor = anchor;
+    this.srcs = []; this.vers = []; this.ks = []; this.n = 0; // what it holds, member by member
+    this.next = { srcs: [], vers: [], ks: [], C: [], off: [] }; this.used = 0;
+  }
+  // a member for this pass: source matrices (and colours), how many from its start, a version that moves when they do,
+  // and its tile's world offset
+  add(src, C, k, ver, W) {
+    const q = this.next, i = this.used++;
+    q.srcs[i] = src; q.C[i] = C; q.ks[i] = k; q.vers[i] = ver;
+    q.off[i * 3] = W[12] - this.anchor[0]; q.off[i * 3 + 1] = W[13] - this.anchor[1]; q.off[i * 3 + 2] = W[14] - this.anchor[2];
+  }
+  // copies in from the first member that changed; returns the instances drawn
+  commit() {
+    const q = this.next, m = this.used, P = this.mesh;
+    this.used = 0;
+    let first = 0, at = 0;
+    while (first < m && first < this.srcs.length && this.srcs[first] === q.srcs[first] && this.vers[first] === q.vers[first] && this.ks[first] === q.ks[first]) at += q.ks[first++];
+    if (first === m && m === this.srcs.length) { P.count = this.n; P.visible = this.pass === 'v' ? this.n > 0 : P.visible; return this.n; }
+    let total = at;
+    for (let i = first; i < m; i++) total += q.ks[i];
+    if (total > P.instanceMatrix.count) { this.grow(total); first = 0; at = 0; } // a new buffer: all of it goes in
+    const M = P.instanceMatrix.array, CC = P.instanceColor ? P.instanceColor.array : null;
+    for (let i = first, o = at; i < m; o += q.ks[i], i++) {
+      const k = q.ks[i];
+      if (!k) continue;
+      M.set(q.srcs[i].subarray(0, k * 16), o * 16);
+      const ox = q.off[i * 3], oy = q.off[i * 3 + 1], oz = q.off[i * 3 + 2];
+      if (ox || oy || oz) for (let j = o * 16, e = (o + k) * 16; j < e; j += 16) { M[j + 12] += ox; M[j + 13] += oy; M[j + 14] += oz; }
+      if (CC && q.C[i]) CC.set(q.C[i].subarray(0, k * 3), o * 3);
+    }
+    if (total > at) {
+      const im = P.instanceMatrix; im.clearUpdateRanges(); im.addUpdateRange(at * 16, (total - at) * 16); im.needsUpdate = true;
+      if (CC) { const ic = P.instanceColor; ic.clearUpdateRanges(); ic.addUpdateRange(at * 3, (total - at) * 3); ic.needsUpdate = true; }
+    }
+    this.srcs.length = m; this.vers.length = m; this.ks.length = m;
+    for (let i = first; i < m; i++) { this.srcs[i] = q.srcs[i]; this.vers[i] = q.vers[i]; this.ks[i] = q.ks[i]; }
+    for (let i = 0; i < m; i++) { q.srcs[i] = null; q.C[i] = null; }
+    this.n = total; P.count = total;
+    if (this.pass === 'v') P.visible = total > 0;
+    return total;
+  }
+  // a bigger buffer (whole: the old one's contents are kept), the count to the next power of two
+  grow(n) {
+    const P = this.mesh;
+    let cap = P.instanceMatrix.count;
+    while (cap < n) cap *= 2;
+    const M = new Float32Array(cap * 16); M.set(P.instanceMatrix.array);
+    P.instanceMatrix = new THREE.InstancedBufferAttribute(M, 16).setUsage(THREE.DynamicDrawUsage);
+    if (P.instanceColor) { const C = new Float32Array(cap * 3); C.set(P.instanceColor.array); P.instanceColor = new THREE.InstancedBufferAttribute(C, 3).setUsage(THREE.DynamicDrawUsage); }
+  }
 }
 
 // Fills proxy P with D's instances [0, n) whose spheres meet the planes; returns how many. (ex, ey, ez): the eye
@@ -239,8 +308,8 @@ function fill(D, n, planes, ex, ey, ez, P, keep, small, from) {
   if (same) return ud.n;
   if (ud.sig.length < m) ud.sig = new Int32Array(m * 2);
   ud.sig.set(_runs.subarray(0, m)); ud.sigN = m;
-  const A = D.instanceMatrix.array, C = D.instanceColor && P.instanceColor ? D.instanceColor.array : null;
-  const M = P.instanceMatrix.array, PC = C ? P.instanceColor.array : null;
+  const A = D.instanceMatrix.array, C = D.instanceColor && P.C ? D.instanceColor.array : null;
+  const M = P.M, PC = C ? P.C : null;
   let k = 0;
   for (let r = 0; r < m; r += 2) {
     const a = _runs[r], b = _runs[r + 1];
@@ -248,23 +317,64 @@ function fill(D, n, planes, ex, ey, ez, P, keep, small, from) {
     if (PC) PC.set(C.subarray(a * 3, b * 3), k * 3);
     k += b - a;
   }
-  if (k) { // only what is drawn goes up (an empty range would upload the whole buffer)
-    const im = P.instanceMatrix; im.clearUpdateRanges(); im.addUpdateRange(0, k * 16); im.needsUpdate = true;
-    if (PC) { const ic = P.instanceColor; ic.clearUpdateRanges(); ic.addUpdateRange(0, k * 3); ic.needsUpdate = true; }
-  }
-  ud.n = k;
+  ud.n = k; ud.ver++;
   return k;
 }
 
+// A far bin, drawn whole by the view's pools: placed, shown, the low twin, casting nothing (so never one the culler
+// manages: those draw the full geometry or cast)
+const isFar = (m) => { const l = m.userData.lod; return m.userData.sp !== undefined && l && l.placed && m.visible && m.count > 0 && m.geometry === l.low && !m.castShadow; };
+// A far bin is in the view's pools while its sphere meets the view grown by FAR_SLACK of its distance (a bin that is
+// in stays in until it leaves the view grown by twice that), so a turning camera refills a pool every several
+// degrees, not every frame, and the trees behind the camera are not drawn.
+const FAR_SLACK = 0.12;
+function farInView(D, planes, ex, ey, ez) {
+  const u = D.userData;
+  let s = u.farSphere;
+  if (!s) { const b = D.boundingSphere, W = D.matrixWorld.elements; s = u.farSphere = [b.center.x + W[12], b.center.y + W[13], b.center.z + W[14], b.radius]; }
+  const d = Math.hypot(s[0] - ex, s[1] - ey, s[2] - ez), R = s[3] + d * FAR_SLACK * (u.farIn ? 2 : 1) + SWAY_MARGIN;
+  for (let p = 0; p < 24; p += 4) if (planes[p] * s[0] + planes[p + 1] * s[1] + planes[p + 2] * s[2] + planes[p + 3] < -R) return (u.farIn = false);
+  return (u.farIn = true);
+}
+const POOL_IDLE = 600; // frames a pool may stand empty before it is let go
+
 class InstanceCuller {
   constructor(scene) {
+    this.scene = scene;
     this.managed = [];       // the meshes drawn through proxies this frame
-    this.shadowProxies = []; // their cascade proxies
-    this.stats = { managed: 0, waiting: 0, instances: 0, view: 0, near: 0, far: 0 }; // meshes through proxies, waiting to be prepared; instances they hold, kept for the view and each cascade
+    this.far = [];           // the far bins drawn by the view's pools this frame (tiles' e.far, gathered)
+    this.pools = new Map();  // key: geometry, material and pass (or one proxy's own, CULL.pool off) -> Pool
+    this.stats = { managed: 0, waiting: 0, instances: 0, view: 0, near: 0, far: 0, farBins: 0, pools: 0, draws: 0 }; // meshes through proxies, waiting to be prepared; instances they hold, kept for the view and each cascade; the far bins pooled; pools drawing
     this.frame = 0;
+    this._stage = 0;
     const culler = this, prev = scene.onBeforeRender;
     scene.onBeforeRender = function (renderer, s, camera, target) { prev.call(this, renderer, s, camera, target); culler.beforeRender(camera); };
     cascadeHooks.push((shadow, camera) => this.cascades(shadow, camera));
+  }
+
+  // the pool that draws D's instances in a pass ('v', 'c0', 'c1'); P: the proxy staging them (its own pool, CULL.pool off)
+  pool(D, pass, P) {
+    if (!CULL.pool && P && P.id === undefined) P.id = ++this._stage;
+    const key = CULL.pool ? D.geometry.id + ':' + D.material.id + ':' + pass : 's' + P.id + ':' + D.geometry.id;
+    let q = this.pools.get(key);
+    if (!q) {
+      const W = D.matrixWorld.elements;
+      q = new Pool(this.scene, D.geometry, D.material, pass === 'v' ? 'v' : 's', D.customDepthMaterial, [W[12], W[13], W[14]]);
+      q.key = key; q.kind = pass;
+      this.pools.set(key, q);
+    }
+    q.lastUsed = this.frame;
+    return q;
+  }
+
+  // commits every pool of a pass ('v', or the cascades'), the untouched ones emptied; returns the draws
+  commit(view) {
+    let draws = 0;
+    for (const q of this.pools.values()) {
+      if ((q.kind === 'v') !== view) continue;
+      if (q.commit() > 0) draws++;
+    }
+    return draws;
   }
 
   // D drawn through its proxies (on, once prepared) or by itself (off)
@@ -277,18 +387,24 @@ class InstanceCuller {
       st.seen = this.frame;
       list.push(D);
     } else if (st && st.on) {
-      st.on = false; D.layers.enable(0);
-      for (const P of [st.view, st.c0, st.c1]) if (P) { P.visible = false; P.userData.sigN = -1; }
+      st.on = false;
+      if (D.userData.farAt !== this.frame) D.layers.enable(0);
+      for (const P of [st.view, st.c0, st.c1]) if (P) P.userData.sigN = -1;
     }
   }
 
   // After the LOD pass: which meshes are drawn through proxies (the costly ones: full geometry, or casting shadows,
-  // and the variant groups beside them), preparing the ones that are not yet within the frame's budget.
+  // and the variant groups beside them), preparing the ones that are not yet within the frame's budget; and which
+  // far bins the view's pools draw whole (each tile's list worked out again only when its LOD was: e.farDirty).
   update(tiles, world, camPos) {
-    const list = [], wait = [];
+    const list = [], wait = [], far = [];
     this.frame++;
     for (const e of tiles.values()) {
       if (e.state !== 'ready' || !e.group.visible) continue;
+      if (CULL.pool) {
+        if (e.farDirty !== false || !e.far) { e.far = e.veg.filter(isFar); e.farDirty = false; }
+        for (const m of e.far) far.push(m);
+      }
       const dx = Math.max(0, Math.abs(camPos.x - e.ox - world.tileMetres / 2) - world.tileMetres / 2), dz = Math.max(0, Math.abs(camPos.z - e.oz - world.tileMetres / 2) - world.tileMetres / 2);
       const reach = MANAGE_REACH * Math.max(1, LOD_SCALE.value);
       if (dx * dx + dz * dz > reach * reach) continue;
@@ -300,6 +416,11 @@ class InstanceCuller {
         if (G && G.meshes && m.userData.cull && m.userData.cull.ready) for (const k of G.meshes) { k.userData.cullSp = m.userData.sp; this.manage(k, CULL.enabled && k.visible, list, wait); }
       }
     }
+    // the far bins leave layer 0 (the pools draw them; the mirror still draws them on its own layer); the ones that
+    // left the list draw themselves again, unless the culler took them
+    for (const D of far) { D.userData.farAt = this.frame; D.layers.disable(0); }
+    for (const D of this.far) if (D.userData.farAt !== this.frame && !(D.userData.cull && D.userData.cull.on)) D.layers.enable(0);
+    this.far = far;
     // the meshes that left the list (their tile out of reach or gone, or no longer costly) draw themselves again
     for (const D of this.managed) if (D.userData.cull.on && D.userData.cull.seen !== this.frame) this.manage(D, false);
     // prepare the waiting ones, nearest first, within the budget (at least one a frame)
@@ -310,47 +431,50 @@ class InstanceCuller {
       for (let i = 0; i < wait.length && (i === 0 || performance.now() - t0 < CULL.budget); i++) prepare(wait[i]);
     }
     this.managed = list;
-    this.shadowProxies = [];
-    for (const D of list) { const st = D.userData.cull; if (st.c0) this.shadowProxies.push(st.c0, st.c1); }
-    this.stats.managed = list.length; this.stats.waiting = wait.length;
+    // pools empty for a while (a geometry no longer near, the A/B's own) are let go
+    if (this.frame % 120 === 0) for (const [k, q] of this.pools) if (this.frame - q.lastUsed > POOL_IDLE) { this.scene.remove(q.mesh); q.mesh.dispose(); this.pools.delete(k); }
+    this.stats.managed = list.length; this.stats.waiting = wait.length; this.stats.farBins = far.length; this.stats.pools = this.pools.size;
   }
 
   beforeRender(camera) {
-    for (const P of this.shadowProxies) P.visible = false;
-    if (!(camera.layers.mask & 1) || !this.managed.length) return; // the mirror's camera: it draws the bins themselves
+    for (const q of this.pools.values()) if (q.kind !== 'v') q.mesh.visible = false;
+    if (!(camera.layers.mask & 1)) return; // the mirror's camera: it draws the bins themselves
     _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     const planes = planesOf(_frustum.setFromProjectionMatrix(_pm), _planes[0]);
     const E = camera.matrixWorld.elements, ex = E[12], ey = E[13], ez = E[14];
+    // the far bins in view first (they hold still, so a pool's refill starts after them), then what the view keeps of
+    // the near
+    for (const D of this.far) if (farInView(D, planes, ex, ey, ez)) this.pool(D, 'v', null).add(D.instanceMatrix.array, D.instanceColor ? D.instanceColor.array : null, D.count, D.instanceMatrix.version, D.matrixWorld.elements);
     let inst = 0, kept = 0;
     for (const D of this.managed) {
       const st = D.userData.cull, P = st.view || (st.view = makeProxy(D, false));
       const n = D.visible ? D.count : 0;
-      if (P.geometry !== D.geometry) P.geometry = D.geometry;
       const k = n ? fill(D, n, planes, ex, ey, ez, P, st.understory ? CULL.understory : 1, 0, 0) : 0;
-      P.count = k; P.visible = k > 0;
+      if (k) this.pool(D, 'v', P).add(P.M, P.C, k, P.userData.ver, D.matrixWorld.elements);
       inst += n; kept += k;
     }
+    this.stats.draws = this.commit(true);
     this.stats.instances = inst; this.stats.view = kept;
   }
 
   cascades(shadow, camera) {
-    if (!this.managed.length) return;
     const f0 = shadow.getFrustum(0), f1 = shadow.getFrustum(1), p0 = planesOf(f0, _planes[1]), p1 = planesOf(f1, _planes[2]);
     const E = camera.matrixWorld.elements, ex = E[12], ey = E[13], ez = E[14];
     let near = 0, far = 0;
     for (const D of this.managed) {
       const st = D.userData.cull;
       if (!D.visible || !D.castShadow || !D.count) continue;
-      if (st.understory && !CULL.understoryShadow) continue; // round A-C: its proxies stay hidden (beforeRender)
-      if (!st.c0) { st.c0 = makeProxy(D, true); st.c1 = makeProxy(D, true); this.shadowProxies.push(st.c0, st.c1); }
+      if (st.understory && !CULL.understoryShadow) continue; // round A-C: no cascade draws it
+      if (!st.c0) { st.c0 = makeProxy(D, true); st.c1 = makeProxy(D, true); }
       const P0 = st.c0, P1 = st.c1, keep = st.understory ? CULL.understory : 1;
-      if (P0.geometry !== D.geometry) { P0.geometry = D.geometry; P1.geometry = D.geometry; }
-      P0.userData.frustum = f0; P1.userData.frustum = f1;
-      P0.count = fill(D, D.count, p0, ex, ey, ez, P0, keep, 0, 0);
-      P1.count = fill(D, D.count, p1, ex, ey, ez, P1, keep, CULL.farSmall, CULL.farSmallFrom);
-      P0.visible = P0.count > 0; P1.visible = P1.count > 0;
-      near += P0.userData.n; far += P1.userData.n;
+      const k0 = fill(D, D.count, p0, ex, ey, ez, P0, keep, 0, 0);
+      const k1 = fill(D, D.count, p1, ex, ey, ez, P1, keep, CULL.farSmall, CULL.farSmallFrom);
+      if (k0) this.pool(D, 'c0', P0).add(P0.M, null, k0, P0.userData.ver, D.matrixWorld.elements);
+      if (k1) this.pool(D, 'c1', P1).add(P1.M, null, k1, P1.userData.ver, D.matrixWorld.elements);
+      near += k0; far += k1;
     }
+    this.commit(false);
+    for (const q of this.pools.values()) if (q.kind !== 'v') { q.mesh.userData.frustum = q.kind === 'c0' ? f0 : f1; q.mesh.visible = q.n > 0; }
     this.stats.near = near; this.stats.far = far;
   }
 }
@@ -426,6 +550,7 @@ export class TileManager {
     this.playerTile = [0, 0];
     this.stats = { built: 0, trees: 0, plants: 0 };
     this.culler = new InstanceCuller(scene);
+    this.cull = CULL; // (the settings and the console reach the culling through here: a page-side import is a second copy)
     this.detail = new DetailStreamer(this); // the LiDAR detail (inert where the data has none, or with ?detail=10)
     this.detail.onTouched = outfitterGroundMoved; // an outfitter under a chunk in or out is built again on it (props.js)
     this.detail.onPending = outfittersPending;
@@ -575,7 +700,7 @@ export class TileManager {
       const edge = Math.hypot(Math.max(0, Math.abs(camPos.x - ox - half) - half), Math.max(0, Math.abs(camPos.z - oz - half) - half));
       const moved = Math.hypot(camPos.x - L.x, camPos.z - L.z);
       if (L.n === e.veg.length && L.s === LOD_SCALE.value && moved < Math.max(LOD_STEP, edge * 0.02)) continue;
-      updateVegetationLOD(e.veg, camPos);
+      updateVegetationLOD(e.veg, camPos); e.farDirty = true;
       L.x = camPos.x; L.z = camPos.z; L.s = LOD_SCALE.value; L.n = e.veg.length;
     }
     this.culler.update(this.tiles, w, camPos);
@@ -715,6 +840,7 @@ export class TileManager {
     if (this.aquatic) e.veg.push(...makeAquaticMeshes(r.aquatic, this.aquatic));
     for (const m of e.veg) group.add(m);
     if (this.camPos) updateVegetationLOD(e.veg, this.camPos);
+    e.farDirty = true;
     yield;
     // the props, a piece at a time
     const steps = tilePropsSteps(w.tileGrid(e.tx, e.ty), w, e.tx, e.ty);
@@ -725,6 +851,9 @@ export class TileManager {
     e.obstacles = props.userData.obstacles; // docks, shacks, tents and the like, in world coordinates
     freeze(group);
     e.group = group; e.state = 'ready'; e.result = null;
+    // a neighbour's chunk already in over this tile's edge (the chunk grid is half a cell off the tiles', and the trails
+    // reach over the seam) was re-seated while this tile was not ready, so not under it: seated now (detail.js settle)
+    { const m = 8, s = w.tileMetres; this.detail.settle([ox - m, oz - m, ox + s + m, oz + s + m]); }
     // in this frame (evict runs after the installs, before an ensure's waiter can stand on it): the newest wanted
     e.readyTick = this.tick;
     if (e.ensured) { e.lastWanted = this.tick; e.ensured = false; }
@@ -814,6 +943,11 @@ export class TileManager {
   groundAt(x, z, grid = null) {
     const d = this.detail.heightAt(x, z); // a LiDAR detail chunk drawn here (detail.js)
     if (d === d) return d;
+    return this.meshGroundAt(x, z, grid);
+  }
+  // The same without the LiDAR chunks: the 10 m mesh, what the trees, the rocks and the props are built on (detail.js
+  // re-seats them onto a chunk by the dy it adds, kept per instance and per vertex from 0, so they must start here).
+  meshGroundAt(x, z, grid = null) {
     const g = this.locate(x, z);
     if (g) { const y = g.mesh.height(x - g.ox, z - g.oz); if (y === y) return y; }
     const w = this.world;
@@ -991,7 +1125,7 @@ export class TileManager {
       if (!vs || !vs.length || VEG_SPECIES[sp].shadow === false) return;
       const mat = VEG_SPECIES[sp].cliff ? kit.cliffMaterial : kit.materialFor(sp), depth = kit.depthFor(sp);
       add(vs[0].full, mat, depth, true);  // the bin, drawn whole
-      add(vs[0].full, mat, depth, false); // its cascade proxy (tiles.js makeProxy: no colours)
+      add(vs[0].full, mat, depth, false); // its cascade pool (tiles.js Pool: no colours)
     });
     const aq = this.aquatic;
     if (aq && aq.geos[1] && aq.geos[1].length) add(aq.geos[1][0], aq.mats[1], aq.depth, false);

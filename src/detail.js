@@ -343,6 +343,18 @@ export class DetailStreamer {
     this.dirty.push(rect);
     if (this.onTouched) this.onTouched(rect); // (tiles.js: the outfitters there are built again on the new ground)
   }
+  // a tile just in over world rect [x0, z0, x1, z1] (tiles.js installSteps): where a chunk is already in there, the rect
+  // is re-seated as though that chunk had just come (what stands on it was built on the 10 m mesh, its dy 0)
+  settle(rect) {
+    const [x0, z0, x1, z1] = rect;
+    for (const r of [5, 2]) for (const c of this.installed[r].values()) {
+      if (c.x0 + c.size < x0 || c.x0 > x1 || c.z0 + c.size < z0 || c.z0 > z1) continue;
+      this.version++;
+      this.dirty.push(rect);
+      if (this.onTouched) this.onTouched(rect);
+      return;
+    }
+  }
   // every chunk of tile (tx, ty) let go (the tile is going: tiles.js evict)
   dropTile(tx, ty) {
     for (const c of [...this.chunks.values()]) if (c.tx === tx && c.ty === ty) this.forget(c);

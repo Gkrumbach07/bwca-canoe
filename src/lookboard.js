@@ -147,7 +147,7 @@ export async function lookboard(game, opts = {}, loop = {}) {
 
 // The title card away, the outfitter's panel shut, and no teleport in flight (closing the panel starts a trip,
 // which teleports the canoe to the landing; the counter can open again once it lands).
-async function openGame(game) {
+export async function openGame(game) {
   const { title, outfitter, player } = game;
   if (title.state !== 'game') title.close();
   for (let i = 0; i < 900 && (title.state !== 'game' || player.teleporting); i++) { game.step(STEP, 1); await nextTask(); }
@@ -161,7 +161,7 @@ async function openGame(game) {
 
 // Put the body at the spot, as the game's own moves do (player.js teleport, stepOut): afloat, or on foot with the
 // canoe set down beside (restHull seats it on the drawn ground) or on the shoulders.
-function place(game, s) {
+export function place(game, s) {
   const p = game.player, st = game.canoe.state;
   p.landing = null; p.ashore = null; p.swim = null; p.balance = 0; p.extraRoll = 0; p.bob = null;
   p.speed = 0; p.yawRate = 0; st.stroke = 0; st.power = 0;
@@ -186,7 +186,7 @@ function place(game, s) {
 }
 
 // Step until the fine tiles round the spot (the 5 x 5 the player streams) and the far tiles are in and installed.
-async function streamIn(game, s, advance) {
+export async function streamIn(game, s, advance) {
   const t = game.tiles, w = game.world;
   let asked = false;
   t.ensure(s.x, s.z, 200).then(() => { asked = true; });
@@ -208,7 +208,7 @@ async function streamIn(game, s, advance) {
 
 // A fixed camera on the body: yaw from straight ahead, dist out, height above the ground (or water) under the
 // camera, looking at the body's middle or at the point `ahead` metres in front of it.
-function aim(game, v) {
+export function aim(game, v) {
   const { player, chase, camera, world } = game;
   const under = (x, z) => Math.max(player.groundAt(x, z), world.levelAt(x, z));
   const a = player.heading + v.yaw, x = player.x + Math.cos(a) * v.dist, z = player.z - Math.sin(a) * v.dist;

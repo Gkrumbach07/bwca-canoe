@@ -1,3 +1,4 @@
+import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import * as THREE from 'three';
 import { clock12, esc } from './hud.js';
 import { fmtFt } from './units.js';
@@ -349,12 +350,12 @@ export class Fishing {
   // --- catch log ----------------------------------------------------------------------------------------------------
   loadLog() {
     try {
-      const raw = JSON.parse(localStorage.getItem('bwca-canoe-catchlog') || 'null');
+      const raw = JSON.parse(kv.getItem('bwca-canoe-catchlog') || 'null');
       if (raw && Array.isArray(raw.catches)) { this.log = raw.catches; this.bests = raw.bests || {}; }
     } catch { /* a fresh log */ }
   }
   saveLog() {
-    try { localStorage.setItem('bwca-canoe-catchlog', JSON.stringify({ catches: this.log.slice(-200), bests: this.bests })); } catch { /* storage may be off */ }
+    try { kv.setItem('bwca-canoe-catchlog', JSON.stringify({ catches: this.log.slice(-200), bests: this.bests })); } catch { /* storage may be off */ }
   }
   // the rod fished with, by the line it holds (shop.js player.gear.snap: the graphite 1.8, the medium-heavy 1.4)
   rodName() { const g = this.player.gear, k = g && Number.isFinite(g.snap) ? g.snap : 1; return k >= 1.75 ? 'Graphite rod' : k >= 1.35 ? 'Medium-heavy rod' : 'Spinning rod'; }

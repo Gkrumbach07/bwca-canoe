@@ -2,8 +2,9 @@
 // you stop then it stops at a phase you were last on"). Any job at camp that takes time is a held key: a radial ring
 // takes the action line's key, filling clockwise with a tick at each phase, and the phase's name beside it. It moves
 // only while the key is down; let go and the job stops where it stands, at the last phase finished; begin it again with
-// `at` that phase and it carries on. Each phase passes its own game minutes on the clock over its real seconds, as the
-// chores always have, and the walker holds still while the key is down.
+// `at` that phase and it carries on. The walker holds still while the key is down. One clock (the owner, 2026-10-31
+// and 11-01): a job never moves the clock on by itself; its real seconds run on the shared ×8 clock like everything else
+// (co-op needs one time for everyone), so a phase's game minutes are its seconds on that clock (pace.js onClock).
 //
 // One job at a time, shared by every stream (the tent, the barrel, the canoe's load: camp.js, hang.js, packs.js; the
 // fire, the saw, the latrine: chores.js, fire.js, cook.js):
@@ -18,7 +19,9 @@
 //     onDone: (job) => {},               // every phase finished (after the last onPhase); the job is over
 //     onStop: (job) => {},               // let go (or cancelled) first: job.done whole phases, job.at the exact point
 //     onTick: (at, job) => {},           // each frame it moves: at = phases done, fractional (to animate within a phase)
-//     clock: true,                       // pass the phases' minutes on the day clock (false: not; a function(h): yours)
+//     clock: false,                      // one clock (2026-11-01): no job passes time of its own; its seconds run on the
+//                                        // shared ×8 clock and its minutes are those seconds on it (pace.js onClock).
+//                                        // A function(h) is yours to call (none does today)
 //     still: true,                       // the walker holds still while it runs (input.paused)
 //     crouch: false,                     // down on the heels meanwhile (canoe.js state.crouch)
 //     id: 'tent',                        // a name, for hold.is(id)
@@ -41,6 +44,8 @@
 // is shown while it is under way (else its name). With the key let go before the first frame (a tap), the job stops at
 // once without moving: a tap is not a hold, and the prompt says hold.
 
+import { onClock } from './pace.js';
+
 const TAU = Math.PI * 2;
 const secondsOf = (ph) => (Number.isFinite(ph.seconds) && ph.seconds > 0 ? ph.seconds : Math.min(3, 0.6 + (ph.minutes || 0) / 15));
 
@@ -60,12 +65,14 @@ class Hold {
       if (o.id && this.active.id === o.id) return this.active;
       this.cancel();
     }
-    const phases = (o.phases && o.phases.length ? o.phases : [{ name: o.label || 'Working', minutes: 0 }]).map((p) => ({ ...p }));
+    const clock = o.clock === undefined ? false : o.clock;
+    // the minutes shown ("n min left") are what the phase's seconds are on the one clock, whatever a caller wrote
+    const phases = (o.phases && o.phases.length ? o.phases : [{ name: o.label || 'Working', seconds: 1 }]).map((p) => (clock ? { ...p } : { ...p, minutes: onClock(secondsOf(p)) }));
     const at = Math.max(0, Math.min(phases.length, Number(o.at) || 0));
     const job = {
       id: o.id || null, key: o.key || 'KeyE', label: o.label || '', phases, at, done: Math.floor(at + 1e-6), start: at,
       onPhase: o.onPhase || null, onDone: o.onDone || null, onStop: o.onStop || null, onTick: o.onTick || null,
-      clock: o.clock === undefined ? true : o.clock, still: o.still !== false, crouch: !!o.crouch, near: o.near || null,
+      clock, still: o.still !== false, crouch: !!o.crouch, near: o.near || null,
       keys: [...new Set([o.key || 'KeyE', ...(o.keys || [])])], auto: !!o.auto, wait: o.wait || null,
       t: 0, frames: 0, over: false,
     };

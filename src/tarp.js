@@ -79,15 +79,15 @@ const NYLON = new THREE.Color(0x5c7a58), UNDERSIDE = new THREE.Color(0x4a6347), 
 // The pitch, phase by phase (hold.js): its name once done, what is being done meanwhile, game minutes, real seconds held
 // (fb5 D: the words a line each, short)
 export const PITCH_TARP = [
-  { name: 'Ridge line up', doing: 'Tying the ridge line', minutes: 4, seconds: 1.4 },
-  { name: 'Sheet over', doing: 'Throwing the sheet over', minutes: 2, seconds: 0.9 },
-  { name: 'Guyed out', doing: 'Staking out the corners', minutes: 4, seconds: 1.4 },
+  { name: 'Ridge line up', doing: 'Tying the ridge line', seconds: 1.4 },
+  { name: 'Sheet over', doing: 'Throwing the sheet over', seconds: 0.9 },
+  { name: 'Guyed out', doing: 'Staking out the corners', seconds: 1.4 },
 ];
 const DOING = { trees: 'Tying the line trunk to trunk', tree: 'Lashing the poles, the line to the trunk', poles: 'Lashing the poles into shear legs' };
 export const STRIKE_TARP = [ // STRIKE_TARP[i] takes it from stage 3 - i to 2 - i
-  { name: 'Lines in', doing: 'Pulling the stakes', minutes: 2, seconds: 0.9 },
-  { name: 'Sheet folded', doing: 'Folding the sheet', minutes: 2, seconds: 0.9 },
-  { name: 'Ridge line down', doing: 'Untying the ridge line', minutes: 2, seconds: 1.0 },
+  { name: 'Lines in', doing: 'Pulling the stakes', seconds: 0.9 },
+  { name: 'Sheet folded', doing: 'Folding the sheet', seconds: 0.9 },
+  { name: 'Ridge line down', doing: 'Untying the ridge line', seconds: 1.0 },
 ];
 export const STAGE_WORDS = ['not pitched', 'ridge line up', 'not guyed out', 'pitched'];
 const STAGE_LINE = ['The tarp is down.', 'The ridge line is up.', 'The sheet is over, not guyed out.', 'The tarp is up.'];

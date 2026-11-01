@@ -25,6 +25,7 @@
 // Without a store (its tile not built yet) E by the landing opens the counter from the water. A new season begins at
 // the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
 // store comes back on its floor (updateArrival).
+import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import { esc, plural, word } from './hud.js';
 import { drawCounterMap, markerAt } from './counter-map.js';
 import './store.css';
@@ -614,9 +615,12 @@ export class Outfitter {
     else if (act === 'ride' && this.rides) this.rides.act(id);
     else if (act === 'task' && this.tasks && typeof this.tasks.act === 'function') {
       // a claim's words (the thanks and the pay, or where a notice from another board is paid) are the keeper's
+      // a notice taken is torn off its pin and flies to the pile (tasks.js ripStart/ripEnd: only the look, the take is done at once)
+      const rip = typeof this.tasks.ripStart === 'function' ? this.tasks.ripStart(this.el.panel, id) : null;
       const r = this.tasks.act(id, this.at.ep);
       if (r && r.words && /^(claim|give)/.test(String(id))) this.greeting = r.words;
       this.save(); this.render();
+      if (rip) this.tasks.ripEnd(this.el.panel, rip);
     }
   }
   // (The season permit, its stamp and its date stepper stood here until the world cards of 2026-10-24: "what is the
@@ -737,6 +741,8 @@ export class Outfitter {
     const lakeName = this.lakeOf(a), area = areaOf(a.ep), op = this.shop ? this.shop.outfitterProfile(a.ep) : null;
     const purse = this.profile ? `<div class="purse"><span class="sc">In hand</span><b>$${this.money}</b></div>` : '';
     const was = this.el.panel.querySelector('.desk, .col, .cards'), scroll = was ? was.scrollTop : 0, wasCls = was ? was.className : '';
+    // the board's two panes keep where they were scrolled to (tasks.js: the cork and the pile)
+    const panes = board ? ['.board .notices', '.board .pile'].map((q) => { const n = this.el.panel.querySelector(q); return n ? n.scrollTop : 0; }) : null;
     const leave = this.inStore ? 'Back to the store · E' : 'Back to the water · E';
     const receipt = this.receipt ? `<div class="receipt pencil${this.receipt.ok ? '' : ' no'}">${esc(this.receipt.text)}</div>` : '';
     const kicker = `Entry point ${a.ep} · ${esc(lakeName)}${area ? ` · ${area}` : ''}${op && (op.kindWords || op.kind) ? ` · ${esc(op.kindWords || op.kind)}` : ''}`;
@@ -752,6 +758,7 @@ export class Outfitter {
     this.el.panel.innerHTML = `<header>${lede}${purse}${toCounter}<button type="button" class="stamp outline" data-act="close" aria-label="Leave (E or Esc)">${leave}</button></header>${receipt}${body}`;
     const now = this.el.panel.querySelector('.desk, .col, .cards');
     if (scroll && now && now.className === wasCls) now.scrollTop = scroll;
+    if (panes) ['.board .notices', '.board .pile'].forEach((q, i) => { const n = this.el.panel.querySelector(q); if (n && panes[i]) n.scrollTop = panes[i]; });
     if (!board) this.drawSideMap();
   }
 
@@ -875,10 +882,10 @@ export class Outfitter {
     if (v && p.onFoot) data.visit = { ep: v.ep, inside: !!v.inside, x: +p.x.toFixed(2), z: +p.z.toFixed(2), heading: +p.heading.toFixed(3), switched: !!v.switched };
     const f = p.fishing;
     if (f && Array.isArray(f.stringer)) data.stringer = f.stringer.map((s) => ({ species: s.species, length: s.length })); // the fish kept for supper
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage full or private mode */ }
+    try { kv.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage full or private mode */ }
   }
   load() {
-    try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+    try { const s = kv.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
   }
   // On load: resume a trip where it was left, or open the counter at the landing. A document without a trip core
   // is from before it and comes back as Sandbox, and an older core's permit is dropped (trip.js). The food

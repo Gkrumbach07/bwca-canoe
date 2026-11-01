@@ -34,7 +34,8 @@
 // Rest dial sleeps through them (the owner's call of 2026-10-25).
 //
 // 'Real' is kept as a developer option (Settings › Developer › Real pace): the clock 1:1 and everything at life. 'life'
-// is the camera's hold while it is raised (photo.js): the clock 1:1 and no time-lapse, whatever the pace.
+// is the camera's hold while it is raised (photo.js): no time-lapse on your own motion, but the clock stays the one
+// clock (2026-11-01: a raised camera used to drop it to 1:1, which in co-op would slow everyone).
 //
 //   paceOf(name) → { clock, lapse, label }: the clock's rate at a pace, and whether it time-lapses travel (lapse false: life)
 //   clockOf(name): the clock's rate at a pace (trip.js sets day.rate to it every frame)
@@ -60,10 +61,12 @@ export const PACES = {
   trip: { clock: CLOCK, lapse: true, label: 'Trip' },
   // a developer option (Settings › Developer): the clock as in life and everything at life
   real: { clock: 1, lapse: false, label: 'Real' },
-  // not a setting: the camera's (photo.js) while it is raised: life itself, the clock 1:1, whatever the pace
-  life: { clock: 1, lapse: false, label: 'Life' },
+  // not a setting: the camera's (photo.js) while it is raised: your motion at life, the clock still the one clock
+  life: { clock: CLOCK, lapse: false, label: 'Life' },
 };
 export const paceOf = (name) => PACES[name] || PACES.trip;
+// the game minutes a held job's real seconds take on the one clock (hold.js: no job passes time of its own, 2026-11-01)
+export const onClock = (seconds) => (seconds * CLOCK) / 60;
 export const clockOf = (name) => paceOf(name).clock;
 
 // the canoe's time-lapse on open water at a steady stroke: the seen speed over life's

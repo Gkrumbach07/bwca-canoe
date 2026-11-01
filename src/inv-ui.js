@@ -32,6 +32,7 @@
 //                                               an item's tooltip in the one schema (name, identity, state, on you,
 //                                               uses, weight)
 //   invUI.attach({ inventory, profile, player, energy, hud, shop, outfitter, nearby, hold, audio, journal, packs, cards, day })
+import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import './inv-ui.css';
 import { fmtLb, fmtIn, fmtDist, fmtMphKmh } from './units.js';
 
@@ -1098,12 +1099,12 @@ function follow(st, onClick) {
 const R_HINTS = 3, R_KEY = 'bwca-canoe:fb5-rturn';
 let rTaught = null;
 function rHintNow() {
-  if (rTaught == null) { try { rTaught = +(localStorage.getItem(R_KEY) || 0) || 0; } catch { rTaught = 0; } }
+  if (rTaught == null) { try { rTaught = +(kv.getItem(R_KEY) || 0) || 0; } catch { rTaught = 0; } }
   if (rTaught >= R_HINTS) return false;
-  rTaught++; try { localStorage.setItem(R_KEY, String(rTaught)); } catch { /* a nicety */ }
+  rTaught++; try { kv.setItem(R_KEY, String(rTaught)); } catch { /* a nicety */ }
   return true;
 }
-export function rTurned() { rTaught = R_HINTS; try { localStorage.setItem(R_KEY, String(R_HINTS)); } catch { /* a nicety */ } } // R pressed: learned
+export function rTurned() { rTaught = R_HINTS; try { kv.setItem(R_KEY, String(R_HINTS)); } catch { /* a nicety */ } } // R pressed: learned
 function begin(st) {
   st.started = true; drag = st; hideTip();
   st.rHint = turnable(st) && rHintNow();
