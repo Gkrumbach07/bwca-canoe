@@ -211,14 +211,18 @@ class RestDial {
   }
   get open() { return this.isOpen; }
   // opts: [{ label, small, at (the hour) }]; at: the hour chosen to begin with; words(at) → the line under
-  show({ kicker, opts, at, words, onPick, onClose = null }) {
-    this.opts = opts; this.onPick = onPick; this.onClose = onClose; this.words = words;
+  // co-op (coop-night.js): keep, the dial stays up on E (E ticks, the night begins when everyone has); onSet(at), the
+  // hour turned by this player (put(at) turns it from the wire without calling it back)
+  show({ kicker, opts, at, words, onPick, onClose = null, keep = false, onSet = null }) {
+    this.opts = opts; this.onPick = onPick; this.onClose = onClose; this.words = words; this.keep = keep; this.onSet = null;
     this.kick.textContent = kicker || 'Rest';
     this.row.innerHTML = opts.map((o, k) => `<button type="button" class="opt" role="radio" data-i="${k}"><b>${esc(o.label)}</b><span>${esc(o.small)}</span></button>`).join('');
     this.isOpen = true;
     this.set(at);
+    this.onSet = onSet;
     this.el.classList.add('show');
   }
+  put(at) { const f = this.onSet; this.onSet = null; this.set(at); this.onSet = f; }
   // the hour by one, whole hours (first light and dusk are not on the hour: a step from them goes to the next whole one)
   step(d) { const h = this.at, w = d > 0 ? Math.floor(h + 1e-6) + 1 : Math.ceil(h - 1e-6) - 1; this.set(((w % 24) + 24) % 24); }
   set(at) {
@@ -226,8 +230,9 @@ class RestDial {
     [...this.row.children].forEach((b, k) => { const on = Math.abs(this.opts[k].at - at) < 0.01; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
     this.hourEl.textContent = clock12(at);
     this.sub.textContent = this.words ? this.words(at) : '';
+    if (this.onSet) this.onSet(at);
   }
-  confirm() { if (!this.isOpen) return; const at = this.at, f = this.onPick; this.hide(); if (f) f(at); }
+  confirm() { if (!this.isOpen) return; const at = this.at, f = this.onPick; if (!this.keep) this.hide(); if (f) f(at); }
   close() { if (!this.isOpen) return; const f = this.onClose; this.hide(); if (f) f(); }
   hide() { this.isOpen = false; this.el.classList.remove('show'); }
 }
@@ -890,7 +895,10 @@ export class Camp {
       const short = this.tentShort(); // (what the night is short of, said before it, not after)
       return `${span} · ${kind}${c.stage < 4 ? ' · no fly on' : ''}${short.length ? ` · ${short.join(', ')}` : ''}`;
     };
-    this.dial.show({ kicker: `Rest · ${c.site ? this.siteName(c.site) : 'your tent'}`, opts, at: start, words, onPick: (at) => this.sleep('tent', at) });
+    const kicker = `Rest · ${c.site ? this.siteName(c.site) : 'your tent'}`;
+    // co-op (coop-night.js): in a room the dial is the group's, one wake time for everyone
+    if (this.shared && this.shared.live && this.shared.openDial({ dial: this.dial, kicker, opts, start, words })) return true;
+    this.dial.show({ kicker, opts, at: start, words, onPick: (at) => this.sleep('tent', at) });
     return true;
   }
   // from an hour and a half before sunset to sunrise the tent takes you (night0), and by day too when worn out (sleepy)
@@ -991,12 +999,14 @@ export class Camp {
     const fc = W.forecast ? W.forecast(Math.max(1, Math.ceil(hours))) : [];
     return RAINY.has(W.state) || fc.some((f) => RAINY.has(f.state));
   }
-  sleep(kind, choice = 'first') {
+  // co-op (coop-night.js): shared { hours, nap, day, to: { year, doy, hours } }, the night the group agreed, as the host
+  // reckoned it: these hours and, on a guest, the clock set to `to` at dark instead of a jump of its own (one jump)
+  sleep(kind, choice = 'first', shared = null) {
     const d = this.day, p = this.player, set = d.sunriseSunset.set, e = this.energy, c = this.camp;
     if (kind === 'tent' && c && c.stage < 3) { this.note('The tent isn’t up yet: carry on pitching it first.'); return; }
     // turning in before sunset: the night's jump would carry the clock past the dusk meal (energy.js eats only the
     // breakfast of a jump), so supper is eaten now, unless one was had in the last few hours (a cooked one, say)
-    const { at: wakeAt, hours, day: byDay, nap } = this.wakeTime(choice);
+    const W0 = this.wakeTime(choice), { at: wakeAt, hours, day: byDay, nap } = shared ? { ...W0, hours: shared.hours, nap: !!shared.nap, day: !!shared.day } : W0;
     if (!byDay && set != null && d.hours < set && d.hours > 12 && e && e.autoMeal) e.autoMeal('Supper before bed');
     // in you go, and what you carry with you, as into the canoe (inventory.stowIntoTent)
     const inv = this.inv, S = kind === 'tent' && inv && typeof inv.stowIntoTent === 'function' ? inv.stowIntoTent() : null;
@@ -1024,7 +1034,7 @@ export class Camp {
     // by day) whose hours hold the night's hour, with food not hung; the card is the visit, held while its sounds play
     const B = !nap && !byDay && this.bear && typeof this.bear.bedtime === 'function' ? this.bear.bedtime({ x: p.x, z: p.z, from: this.now, to: this.now + hours }) : null;
     if (B) { card.text = B.text; card.hold = B.hold; }
-    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null };
+    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null, clockTo: shared && shared.to ? shared.to : null };
     // (the bear at the tent: its onDark is a promise, the card held while you have the moment to shout: bear.js tentNight)
     const onDark = () => {
       let w = null;
@@ -1042,8 +1052,12 @@ export class Camp {
     const n = this.night, d = this.day;
     if (!n) return;
     if (this.lamp) this.lamp.toggle(false);
-    this.jump(n.hours);
-    if (Number.isFinite(n.wakeAt)) d.setClock(d.year, d.doy, n.wakeAt);
+    if (n.clockTo) { d.setClock(n.clockTo.year, n.clockTo.doy, n.clockTo.hours); d.jumps = (d.jumps || 0) + 1; } // co-op guest: the host's clock, no jump of our own
+    else {
+      this.jump(n.hours);
+      if (Number.isFinite(n.wakeAt)) d.setClock(d.year, d.doy, n.wakeAt);
+    }
+    if (this.onWoke) this.onWoke(n); // (coop-night.js: the host sends the new clock, a guest takes the host's again)
     const e = this.energy;
     // a bear at the tent in the night breaks it (bear.js restFactor: shouted off, a little; let in, most of it)
     n.bearRest = n.bear && this.bear && typeof this.bear.restFactor === 'function' ? this.bear.restFactor() : 1;

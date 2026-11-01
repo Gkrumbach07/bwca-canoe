@@ -417,7 +417,7 @@ export class Coop {
     const own = this.handlers.get(m.t);
     if (own && own.size) { for (const fn of own) { try { fn(m, at); } catch (e) { console.warn(`coop ${m.t}`, e); } } return; }
     if (m.t === 'pose') { const r = this.remotes.get(m.from); if (r) r.push(m, at); return; }
-    if (m.t === 'clock') { if (this.role === 'guest') this.applyClock(m, false, at); return; }
+    if (m.t === 'clock') { if (this.role === 'guest' && !(this.holdClock && this.holdClock(m))) this.applyClock(m, false, at); return; } // (holdClock: coop-night.js, under the night card)
     if (m.t === 'join') {
       const r = this.addPeer(m);
       if (r) this.say(this.role === 'host' ? `${r.name} has joined your trip.` : `${r.name} has joined.`);
