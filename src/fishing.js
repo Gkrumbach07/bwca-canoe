@@ -358,12 +358,26 @@ export class Fishing {
   }
   // the rod fished with, by the line it holds (shop.js player.gear.snap: the graphite 1.8, the medium-heavy 1.4)
   rodName() { const g = this.player.gear, k = g && Number.isFinite(g.snap) ? g.snap : 1; return k >= 1.75 ? 'Graphite rod' : k >= 1.35 ? 'Medium-heavy rod' : 'Spinning rod'; }
+  // the weather as you'd jot it in a log: the sky in a word or two, a wind worth noting, the temperature ("overcast,
+  // windy 58°"); the weather is main.js's (window.__game.weather), and without it nothing is written
+  skyWords() {
+    try {
+      const g = typeof window !== 'undefined' ? window.__game : null, wx = g && g.weather, look = wx && wx.look;
+      if (!wx || !look) return '';
+      const SHORT = { 'fair, broken cumulus': 'fair', 'fog on the water': 'fog', 'light rain': 'drizzle', 'steady rain': 'rain', thunderstorm: 'storm', 'thunderheads building': 'thunderheads', 'snow flurries': 'flurries', 'snow squall': 'squall' };
+      const lab = String(wx.label || '').toLowerCase(), sky = SHORT[lab] || lab;
+      const ws = this.wind ? this.wind.speed : 0, breeze = ws >= 8 ? 'windy' : ws >= 5 ? 'breezy' : ws < 1.2 ? 'calm' : '';
+      const t = Number.isFinite(look.temp) ? `${Math.round(look.temp * 9 / 5 + 32)}°` : '';
+      return [[sky, breeze].filter(Boolean).join(', '), t].filter(Boolean).join(' ');
+    } catch { return ''; }
+  }
   // the lake a fish came out of: under the fish (on foot you stand on the shore), else under you
   catchLake(f) { const w = this.world; return (f && Number.isFinite(f.x) ? w.lakeIdAt(f.x, f.z) : 0) || w.lakeIdAt(this.player.x, this.player.z); }
   record(fish, kept) {
     const w = this.world, id = this.catchLake(fish);
     const entry = { species: fish.species, name: SPECIES[fish.species].name, length: Math.round(fish.length), weight: Math.round(fish.weight * 100) / 100, lake: w.lakeName(id) || 'Unnamed water', time: this.day.clock, hours: this.day.hours, doy: this.day.doy, year: this.day.year, lure: LURES[fish.lure].name, lureShort: LURES[fish.lure].short, kept, at: Date.now() };
     entry.rod = this.rodName(); // (the journal's biggest catch: "rod | lure")
+    entry.sky = this.skyWords(); // the journal's fishing log: "overcast 58°"
     this.log.push(entry);
     const b = this.bests[fish.species];
     entry.best = !b || entry.length > b.length;

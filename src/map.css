@@ -5,22 +5,46 @@
 /* --- the tab on the book's top edge -------------------------------------------------------------------------------- */
 #journal .book-tab.m.on { background: var(--paper); color: var(--ink); border-color: var(--edge-deep); }
 
-/* --- the spread ---------------------------------------------------------------------------------------------------- */
-#journal .side.m { grid-template-columns: minmax(300px, 340px) minmax(0, 1fr); box-shadow: 0 0 0 1px var(--edge-deep); }
-#journal .side.m::after { content: ''; position: absolute; left: clamp(300px, 340px, 340px); top: 0; bottom: 0; width: 22px; translate: -50% 0; pointer-events: none; z-index: 2;
-  background: linear-gradient(90deg, transparent, rgba(60, 40, 20, .14) 45%, rgba(60, 40, 20, .2) 50%, rgba(60, 40, 20, .14) 55%, transparent); }
+/* --- the spread: two even pages, and the sheet lying across them ------------------------------------------------------
+   The owner (2026-10-31): "It could look more like a map in Cast and Chill. The map is kind of like this leaflet paper.
+   Right now it feels like it's part of the book almost. It doesn't really feel like a map." The book is open at two
+   even pages (the seam in the middle, book.css); the index is written on the left page, and the map is a folded paper
+   sheet laid open over the book, from the left page's margin across the seam to the right page's edge. */
+#journal .side.m { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 #journal .side.m .page.left.mb-index { padding: 30px 26px 22px 34px; gap: 12px; }
-#journal .side.m .mb-index h2 { font-size: 28px; }
-#journal .side.m .page.right.mb-sheet { padding: 14px 14px 12px 18px; display: flex; }
+#journal .side.m .mb-index > * { max-width: 300px; }
+#journal .side.m .mb-index h2 { font-size: 36px; }
+#journal .side.m .page.right.mb-sheet { position: absolute; z-index: 4; left: 356px; right: 14px; top: 12px; bottom: 16px; padding: 0; display: flex; background: none !important; overflow: visible; }
 
-/* the sheet laid in the page: the HUD's map paper, no longer floating */
-#journal #map.in-book, #journal #map.in-book.sheet { position: relative; inset: auto; left: auto; top: auto; right: auto; bottom: auto; translate: none; transform: none; width: 100%; height: 100%; flex: 1 1 auto; z-index: auto;
-  box-shadow: inset 0 0 0 1px var(--edge); border: 1.5px solid var(--edge-deep); border-radius: 2px; transition: none; }
-#journal #map.in-book #map-layers, #map.in-book .band.foot .leg, #map.in-book #map-held { display: none !important; }
-#journal #map.in-book .band.head { padding: 8px 14px; background: var(--paper-deep); }
-#journal #map.in-book .band.foot { padding: 7px 14px; }
-#journal #map.in-book .foot .hint { font-size: 16px; }
+/* the sheet laid in the book: the HUD's map paper as a leaflet. (!important: whatever the floating sheet's place was,
+   the in-book sheet fills its page; the owner saw it drawn in the page's top-left quarter, the floating sheet's
+   translate(-50%, -50%) left on it) */
+#journal #map.in-book, #journal #map.in-book.sheet { position: relative !important; inset: auto !important; left: auto !important; top: auto !important; right: auto !important; bottom: auto !important;
+  translate: none !important; transform: rotate(-.35deg) !important; width: 100% !important; height: 100% !important; flex: 1 1 auto; z-index: auto; transition: none; }
+#journal #map.in-book #map-layers, #map.in-book .band.foot .leg, #map.in-book #map-held, #map.in-book #map-hint { display: none !important; }
 
+/* --- the leaflet: lighter map stock, folded in eight, its corners worn, lying on the paper under it ------------------ */
+#map.in-book, #map.table { border: none; border-radius: 1px; overflow: visible; background: #f1ebd9;
+  clip-path: polygon(0 .6%, .7% 0, 31% .25%, 33.4% 0, 66% .3%, 68% 0, 99.2% .2%, 100% 1%, 99.8% 49.6%, 100% 50.6%, 99.7% 99%, 98.8% 100%, 67% 99.7%, 65.4% 100%, 34% 99.75%, 32% 100%, .9% 99.8%, 0 99%, .25% 51%, 0 49.5%);
+  box-shadow: none; }
+/* (the worn edge is a clip, which would cut a shadow off: the page under it casts the sheet's shadow instead; the map
+   table's sheet has no page under it, so it keeps a plain edge and its own shadow) */
+#journal .side.m .page.right.mb-sheet { filter: drop-shadow(0 2px 2px rgba(40, 24, 8, .32)) drop-shadow(0 12px 18px rgba(40, 24, 8, .3)); }
+#map.table { clip-path: none; box-shadow: 0 2px 3px rgba(40, 24, 8, .3), 0 14px 26px rgba(40, 24, 8, .35); }
+/* the folds: two creases across, one down; each a shadow and a light edge, over everything on the sheet */
+#map.in-book::after, #map.table::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 6; mix-blend-mode: multiply;
+  background:
+    linear-gradient(90deg, transparent calc(33.3% - 2px), rgba(70, 48, 22, .13) calc(33.3% - .5px), rgba(255, 255, 255, .55) calc(33.3% + 1px), transparent calc(33.3% + 5px)),
+    linear-gradient(90deg, transparent calc(66.6% - 5px), rgba(70, 48, 22, .05) calc(66.6% - 2px), rgba(70, 48, 22, .16) calc(66.6% - .5px), rgba(255, 255, 255, .5) calc(66.6% + 1px), transparent calc(66.6% + 3px)),
+    linear-gradient(180deg, transparent calc(50% - 2px), rgba(70, 48, 22, .14) calc(50% - .5px), rgba(255, 255, 255, .5) calc(50% + 1px), transparent calc(50% + 5px)),
+    linear-gradient(90deg, rgba(70, 48, 22, .05), transparent 6% 27%, rgba(70, 48, 22, .04) 33%, transparent 39% 60%, rgba(70, 48, 22, .05) 66.6%, transparent 72% 94%, rgba(70, 48, 22, .06)),
+    radial-gradient(ellipse at 18% 82%, rgba(150, 110, 60, .1), transparent 30%); }
+/* the margins printed on the sheet: the title across the top, the scale at the foot, on the map's own stock */
+#map.in-book .band, #map.table .band { background: transparent; border: none; color: #4a3b26; }
+#map.in-book .band.head, #map.table .band.head { padding: 12px 22px 6px; font-size: 12px; }
+#map.in-book .band.head .title, #map.table .band.head .title { font-size: 12.5px; letter-spacing: .2em; }
+#map.in-book .band.foot, #map.table .band.foot { padding: 6px 22px 12px; }
+#map.in-book .body, #map.table .body { margin: 0 14px; border: 1.5px solid rgba(74, 59, 38, .7); box-shadow: 0 0 0 3px #f1ebd9, 0 0 0 4px rgba(74, 59, 38, .35); }
 /* --- the index ----------------------------------------------------------------------------------------------------- */
 .mb-index .tabpage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 .mb-index .scroll { flex: 1 1 auto; padding-right: 6px; }
@@ -37,7 +61,8 @@
 .mb-row .pay { font: 700 15px/1.3 var(--serif); color: #7a5a14; }
 .mb-row .tag, .mb-row .seal, #map-tip .tag, #map-tip .seal { width: 21px; height: 21px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 700 12px/1 var(--serif); margin-top: 1px; box-sizing: border-box; }
 .mb-row .tag, #map-tip .tag { background: #b8302a; color: #f8efdc; border: 1.5px solid #f4e9d6; box-shadow: 0 0 0 1px #b8302a; }
-.mb-row .seal, #map-tip .seal { background: #c9a24a; color: #3a2410; border: 1.5px solid #5b3a12; }
+.mb-row .seal, #map-tip .seal { background: none; color: #a8321f; border: 1.6px solid rgba(168, 50, 31, .75); border-radius: 50% 46% 52% 48%; font: 600 16px/1 var(--pencil-font); } /* a pencilled $ ringed by hand, as on the sheet */
+.mb-row .ring.red { border-color: rgba(184, 44, 32, .8); background: none; }
 .mb-row .ring { width: 22px; height: 18px; margin-top: 2px; border-radius: 50% 48% 52% 50% / 46% 54% 46% 54%; border: 1.7px solid rgba(74, 64, 54, .62); background: rgba(74, 64, 54, .07); transform: rotate(-8deg); box-sizing: border-box; }
 .mb-row .pencil, #map-tip .pencil { font: 600 20px/1 var(--pencil-font); color: rgba(54, 46, 38, .92); }
 .mb-row .k { font: 700 9.5px/1.9 var(--sc); letter-spacing: .12em; color: var(--ink-faint); text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; }
@@ -66,7 +91,7 @@
 .g.portage { height: 0; border-top: 2.4px dashed #c0392b; }
 .g.camp { width: 10px; height: 10px; border-radius: 50%; background: #c0392b; box-shadow: inset 0 0 0 3px #c0392b, inset 0 0 0 6px #f4e9d6; }
 .g.depth { border-radius: 50%; border: 1.5px solid rgba(46, 86, 118, .85); box-shadow: inset 0 0 0 3px rgb(186, 210, 219), inset 0 0 0 4.4px rgba(62, 104, 136, .62); background: rgb(186, 210, 219); }
-.g.task { width: 18px; height: 18px; border-radius: 50%; background: #b8302a; border: 1.5px solid #f4e9d6; box-shadow: 0 0 0 1px #b8302a; }
+.g.task { width: 22px; height: 16px; border-radius: 50% 48% 52% 50% / 46% 54% 46% 54%; border: 2px solid rgba(184, 44, 32, .8); transform: rotate(-9deg); } /* the keeper's red pencil round a notice */
 .g.note { width: 22px; height: 16px; border-radius: 50% 48% 52% 50% / 46% 54% 46% 54%; border: 1.7px solid rgba(74, 64, 54, .62); background: rgba(74, 64, 54, .07); }
 .g.burn { border: 1.2px dashed rgba(150, 70, 34, .8); background: repeating-linear-gradient(-45deg, rgba(150, 70, 34, .3) 0 1.5px, transparent 1.5px 6px); }
 .g.bound { height: 0; border-top: 2px dashed rgba(46, 92, 52, .9); box-shadow: 0 3px 0 4px rgba(70, 120, 60, .13); }
@@ -91,9 +116,9 @@
 #map:not(.in-book) #map-tip { display: none; }
 
 /* --- a lake's page ------------------------------------------------------------------------------------------------- */
-#journal .side.m .mb-lake { position: absolute; inset: 0; z-index: 4; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); background: var(--paper); }
+#journal .side.m .mb-lake { position: absolute; inset: 0; z-index: 7; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: var(--pp-sheet); }
 #journal .side.m .mb-lake[hidden] { display: none; }
-#journal .side.m .mb-lake::after { content: ''; position: absolute; left: 52.8%; top: 0; bottom: 0; width: 26px; translate: -50% 0; pointer-events: none;
+#journal .side.m .mb-lake::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 26px; translate: -50% 0; pointer-events: none;
   background: linear-gradient(90deg, transparent, rgba(60, 40, 20, .16) 45%, rgba(60, 40, 20, .22) 50%, rgba(60, 40, 20, .16) 55%, transparent); }
 .mb-portrait .chart { flex: 1 1 auto; min-height: 0; position: relative; border: 1.5px solid var(--edge-deep); box-shadow: inset 0 0 0 4px var(--paper), inset 0 0 0 5px var(--edge); background: #ece4cf; }
 .mb-portrait .chart canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -107,3 +132,66 @@
   #journal .side.m::after { display: none; }
   #journal .side.m .page.left.mb-index { max-height: 40%; }
 }
+
+/* --- the map table (maptable.js) -----------------------------------------------------------------------------------
+   The owner (2026-10-31): "The map table UI ... is also nothing like the other maps ... we need to update it to follow
+   the new map UI." The same open book as the book's Map tab: the table's sheets written up on the left page like the
+   map's index, and the whole map laid over the right as the same leaflet (the HUD's own sheet, set in that page's
+   place). The book and the sheet share one size: --mtw x --mth, centred. */
+:root { --mtw: min(1340px, 96vw); --mth: min(812px, calc(100vh - 76px)); }
+#mtbook { position: fixed; z-index: 5; left: 50%; top: 50%; translate: -50% -50%; width: var(--mtw); height: var(--mth); box-sizing: border-box; border-radius: 12px 12px 14px 14px;
+  background-color: #4a2d1b; background-image: radial-gradient(ellipse at 28% 18%, rgba(255, 214, 160, .10), transparent 55%), repeating-linear-gradient(115deg, rgba(0, 0, 0, .05) 0 2px, transparent 2px 7px);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, .6), inset 0 0 0 2px rgba(0, 0, 0, .35), inset 0 2px 0 rgba(255, 220, 170, .12);
+  opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(24px); transition: opacity .5s, transform .5s, visibility 0s .5s; color: var(--ink); font: 16px/1.4 var(--serif); }
+#mtbook.show { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: opacity .24s ease-out, transform .24s ease-out, visibility 0s; }
+#mtbook::before { content: ''; position: absolute; inset: 6px; border: 1.5px dashed rgba(214, 176, 104, .34); border-radius: 9px; pointer-events: none; }
+#mtbook .mt-pages { position: absolute; inset: 16px 30px 30px; display: grid; grid-template-columns: 1fr 1fr; border-radius: 3px; overflow: hidden;
+  box-shadow: 1.5px 1.5px 0 #e6dcc2, -1.5px 1.5px 0 #e6dcc2, 2.5px 2.5px 0 #b4a37f, -2.5px 2.5px 0 #b4a37f, 4px 4px 0 #e2d6ba, -4px 4px 0 #e2d6ba, 5px 5px 0 #ad9b75, -5px 5px 0 #ad9b75,
+    6.5px 6.5px 0 #ddd0b1, -6.5px 6.5px 0 #ddd0b1, 7.5px 7.5px 0 #a6936c, -7.5px 7.5px 0 #a6936c, 9px 9px 0 #d6c8a6, -9px 9px 0 #d6c8a6, 10.5px 10.5px 0 #6e5634, -10.5px 10.5px 0 #6e5634, 0 16px 22px 4px rgba(0, 0, 0, .45); }
+#mtbook .mt-pages::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 70px; translate: -50% 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent 49.2%, rgba(48, 28, 12, .55) 49.6%, rgba(48, 28, 12, .55) 50.4%, transparent 50.8%),
+    linear-gradient(90deg, transparent 0%, rgba(80, 50, 22, .07) 22%, rgba(70, 42, 18, .2) 40%, rgba(50, 30, 12, .38) 48%, rgba(255, 248, 230, .18) 50.6%, rgba(70, 42, 18, .22) 56%, rgba(80, 50, 22, .07) 78%, transparent 100%); }
+#mtbook .mt-page { position: relative; background-color: var(--pp-sheet);
+  background-image: var(--pp-grain), radial-gradient(ellipse 44px 40px at 14% 91%, transparent 0 86%, rgba(140, 92, 40, .06) 88%, rgba(140, 92, 40, .025) 94%, transparent 100%),
+    linear-gradient(90deg, rgba(120, 82, 36, .16), transparent 7%, transparent 82%, rgba(90, 58, 24, .1) 93%, rgba(60, 36, 14, .3) 100%), linear-gradient(180deg, rgba(120, 82, 36, .12), transparent 6%, transparent 93%, rgba(120, 82, 36, .16)); }
+#mtbook .mt-page.right { background-image: var(--pp-grain), linear-gradient(270deg, rgba(120, 82, 36, .16), transparent 7%, transparent 82%, rgba(90, 58, 24, .1) 93%, rgba(60, 36, 14, .3) 100%), linear-gradient(180deg, rgba(120, 82, 36, .12), transparent 6%, transparent 93%, rgba(120, 82, 36, .16)); }
+/* the sheet in the right page's place, a little over the seam like the book's */
+#map.table, #map.table.sheet { left: calc(50% - var(--mtw) / 2 + 30px + 356px); top: calc(50% - var(--mth) / 2 + 16px + 12px); width: calc(var(--mtw) - 60px - 356px - 14px); height: calc(var(--mth) - 46px - 28px);
+  translate: none; z-index: 6; rotate: -.35deg; }
+#map.table #map-layers, #map.table #map-hint, #map.table #map-held, #map.table #pin { display: none !important; }
+#map.table .band.foot .leg { display: none; }
+#map.table .band.foot .leg:has(> i[style]) { display: flex; } /* (the two sheet keys stay: yours ruled, the rest dotted) */
+
+/* the left page: the table's sheets, like the map's index */
+#maptable { position: absolute; inset: 0; box-sizing: border-box; padding: 30px 26px 22px 34px; display: flex; flex-direction: column; gap: 10px; color: var(--ink); font: 15px/1.35 var(--serif); }
+#maptable > * { max-width: 310px; }
+#maptable .mt-head .sc { font: 700 11px/1.3 var(--sc); letter-spacing: .16em; color: var(--pp-brown); }
+#maptable .mt-head h3 { margin: 2px 0 0; font: 600 36px/1 var(--pencil-font); letter-spacing: 0; color: var(--pp-brown-deep); }
+#maptable .say { margin: 8px 0 0; font: 500 20px/1.15 var(--pencil-font); color: var(--pencil); }
+#maptable .who { margin-top: 2px; font: 700 10px/1.4 var(--sc); letter-spacing: .14em; color: var(--ink-faint); }
+#maptable .lab { margin-top: 8px; font: 700 11px/1.4 var(--sc); letter-spacing: .14em; color: var(--ink-soft); border-bottom: 1px solid rgba(122, 104, 74, .4); padding-bottom: 3px; }
+#maptable .mt-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+#maptable .row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 4px 7px 2px; cursor: pointer; border-bottom: 1px dashed rgba(122, 104, 74, .35); }
+#maptable .row:hover { background: rgba(138, 74, 36, .06); }
+#maptable .row.sel .nm b { text-decoration: underline wavy rgba(180, 50, 31, .5) 1.3px; text-underline-offset: 4px; }
+#maptable .row .no { font: 700 15px/1 var(--serif); color: var(--map-red); }
+#maptable .row .no i { display: block; margin-top: 3px; font: 700 9px/1 var(--sc); font-style: normal; letter-spacing: .12em; color: var(--ink-faint); }
+#maptable .row.mine .no { color: var(--ink); }
+#maptable .row .nm { min-width: 0; }
+#maptable .row .nm b { display: block; font-weight: 600; font-size: 15px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#maptable .row .nm span, #maptable .soft { font: italic 13px/1.3 var(--serif); color: var(--ink-soft); }
+#maptable .mark { font: 600 21px/1 var(--pencil-font); color: #2a341e; white-space: nowrap; }
+/* the price in pencil, and Buy as the counter's rubber stamp in red ink, not a button off a web page */
+#maptable .buy { appearance: none; background: none; border: 2px solid rgba(178, 40, 30, .75); border-radius: 3px; padding: 3px 8px 2px; cursor: pointer; rotate: -3deg; white-space: nowrap;
+  font: 700 12px/1.1 var(--sc); letter-spacing: .12em; color: rgba(178, 40, 30, .85); mix-blend-mode: multiply; }
+#maptable .buy:hover { background: rgba(178, 40, 30, .08); rotate: -1deg; }
+#maptable .buy.quiet { border-color: rgba(106, 90, 69, .5); color: var(--ink-faint); }
+#maptable .mt-card { flex: none; padding: 8px 2px 4px; display: flex; flex-direction: column; gap: 3px; }
+#maptable .mt-card .t { font: 600 16px/1.2 var(--serif); }
+#maptable .mt-card p { margin: 0; font-size: 14.5px; }
+#maptable .receipt { flex: none; font: 500 20px/1.1 var(--pencil-font); color: var(--pencil); transform: rotate(-1deg); }
+#maptable .receipt.no { color: var(--map-red); }
+#maptable .mt-foot { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-top: 8px; }
+#maptable .money { font: 600 24px/1 var(--pencil-font); color: var(--pp-brown-deep); }
+#maptable .done { appearance: none; background: none; border: none; padding: 0; cursor: pointer; font: 700 11.5px/1 var(--sc); letter-spacing: .16em; color: var(--ink-soft); }
+#maptable .done:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }

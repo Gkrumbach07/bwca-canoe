@@ -29,6 +29,80 @@ const TINT_LOW = [234, 226, 202], TINT_HIGH = [206, 204, 168];
 // the soundings, in feet (the outfitters' maps letter depths in feet): every 5 to 30, every 10 to 100, every 20 beyond
 export const DEPTH_FT = (() => { const a = []; for (let f = 5; f <= 30; f += 5) a.push(f); for (let f = 40; f <= 100; f += 10) a.push(f); for (let f = 120; f <= 400; f += 20) a.push(f); return a; })();
 
+// --- the zoom's levels of detail -----------------------------------------------------------------------------------------
+// (the owner, 2026-10-31: "I also don't like the way the map gets super messy as I zoom all the way out ... especially the
+// burn areas and BWCA boundaries, they kind of turn into these craggly blobs. It should have different zoom levels that
+// make things a little bit more legible on full zoom out.") A paper map series generalises its overview sheets, and so
+// does this one, by dp, the metres a design pixel (mPerPx / k: the sheet taken as 1040 across, so a retina screen
+// generalises just as a plain one does; the book's sheet at full zoom out is about 230):
+//   under LOD_NEAR   the sheet as it always was (everything up close is untouched)
+//   level 1          (32..64) the fires' and the boundary's rings simplified (Douglas-Peucker, TOL_DP design pixels) and
+//                    those too small to read dropped, the hatching fading, the lines a little thinner, the ponds' rims
+//                    (under TINY_LAKE) fading out; the 1999 blowdown (six thousand specks, the worst of the "craggly
+//                    blobs") already drawn as an area, as below
+//   level 2 and up   (64.., 128..) each kind of burn drawn as one generalised area: its patches rasterised at the level's
+//                    cell, blurred and cut at a density, so the blowdown's specks read as one tinted country with a
+//                    clean edge, no hatching and no dashes; the boundary simplified harder, its band narrower; the small
+//                    lakes' rims (under SMALL_LAKE) fading out, their water left as a pale fleck
+// Each level's shapes are made once and kept (simplifying every frame would be the hitch the vector sheet was to end).
+export const LOD_NEAR = 32, LOD_LEVELS = 3;
+const TOL_DP = 1.6, RING_MIN_DP = 5; // the simplification's tolerance, and the smallest ring kept (its side), in design px
+export const TINY_LAKE = 60000, SMALL_LAKE = 300000; // m²: a pond (about 250 m across), a small lake (about 550 m)
+const ramp = (x, a, b) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// { dp, level, cell (the level's metres a design px at its near end), tol (m), gen (0 up close .. 1 at the overview) }
+export function lodOf(mPerPx, k = 1) {
+  const dp = mPerPx / (k || 1), level = dp < LOD_NEAR ? 0 : Math.min(LOD_LEVELS, 1 + Math.floor(Math.log2(dp / LOD_NEAR)));
+  const cell = level ? LOD_NEAR * 2 ** (level - 1) : 0;
+  return { dp, level, cell, tol: cell * TOL_DP, gen: ramp(dp, LOD_NEAR, LOD_NEAR * 4) };
+}
+// how much of a lake's rim is left at this zoom, by its size class (far tiles' shoreSmall / shoreTiny)
+export const rimLeft = (dp, small) => (small ? 1 - ramp(dp, LOD_NEAR * 2, LOD_NEAR * 4) : 1 - ramp(dp, LOD_NEAR, LOD_NEAR * 2));
+const segD2 = (px, pz, ax, az, bx, bz) => {
+  const dx = bx - ax, dz = bz - az, L = dx * dx + dz * dz;
+  const t = L ? Math.min(1, Math.max(0, ((px - ax) * dx + (pz - az) * dz) / L)) : 0, ex = ax + dx * t - px, ez = az + dz * t - pz;
+  return ex * ex + ez * ez;
+};
+// a closed ring (flat [x, z, ...]) simplified to within tol metres (Douglas-Peucker, split at the point furthest from the
+// first so the ring's two halves go separately)
+export function simplifyRing(pts, tol) {
+  const n = pts.length >> 1;
+  if (n < 5) return pts;
+  let far = 0, fd = -1;
+  for (let i = 1; i < n; i++) { const d = (pts[2 * i] - pts[0]) ** 2 + (pts[2 * i + 1] - pts[1]) ** 2; if (d > fd) { fd = d; far = i; } }
+  const keep = new Uint8Array(n), t2 = tol * tol, st = [0, far, far, n];
+  keep[0] = 1; keep[far] = 1;
+  while (st.length) {
+    const b = st.pop(), a = st.pop();
+    if (b - a < 2) continue;
+    const bi = b % n, ax = pts[2 * a], az = pts[2 * a + 1], bx = pts[2 * bi], bz = pts[2 * bi + 1];
+    let m = -1, md = t2;
+    for (let i = a + 1; i < b; i++) { const d = segD2(pts[2 * i], pts[2 * i + 1], ax, az, bx, bz); if (d > md) { md = d; m = i; } }
+    if (m > 0) { keep[m] = 1; st.push(a, m, m, b); }
+  }
+  const out = [];
+  for (let i = 0; i < n; i++) if (keep[i]) out.push(pts[2 * i], pts[2 * i + 1]);
+  return out;
+}
+export function ringArea(pts) {
+  let s = 0;
+  for (let n = pts.length >> 1, i = 0, j = n - 1; i < n; j = i++) s += (pts[2 * j] + pts[2 * i]) * (pts[2 * i + 1] - pts[2 * j + 1]);
+  return Math.abs(s) / 2;
+}
+// rings simplified for a level into one Path2D (null when none is big enough to keep)
+function genPath(rings, lod) {
+  const minA = (RING_MIN_DP * lod.cell) ** 2;
+  let p = null;
+  for (const pts of rings) {
+    if (ringArea(pts) < minA) continue;
+    const q = simplifyRing(pts, lod.tol);
+    if (q.length < 6) continue;
+    p = p || new Path2D();
+    for (let i = 0; i < q.length; i += 2) { if (i) p.lineTo(q[i], q[i + 1]); else p.moveTo(q[i], q[i + 1]); }
+    p.closePath();
+  }
+  return p;
+}
+
 // --- marching squares, chained into rings ------------------------------------------------------------------------------
 // F: ni x nj samples, sample (i, j) at (ox + i * step, oz + j * step). Outside the grid counts as above the level (pad
 // true) or below it. Every iso-line closes (along the padding when it leaves the grid), so the rings fill even-odd; the
@@ -43,8 +117,9 @@ export function padGrid(F, ni, nj) {
   return { P, W, H, lo, hi };
 }
 // path gets the closed rings (to fill), line (when given) the same lines without the stretches along the padding (to
-// stroke: a thick pen on the padding's line showed past the tile's edge)
-export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats = null, smooth = 0, line = null) {
+// stroke: a thick pen on the padding's line showed past the tile's edge). bins ([{ max, path }], smallest first): a whole
+// ring (one off the padding) under max m² goes to that bin's path instead of line, so the overview can let it fade (lodOf)
+export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats = null, smooth = 0, line = null, bins = null) {
   const { P, W, H } = G, NE = W * H * 2;
   if (scratch.n < NE) scratch = { n: NE, link: new Int32Array(NE * 2), seen: new Uint8Array(NE) };
   const link = scratch.link, seen = scratch.seen;
@@ -108,13 +183,20 @@ export function isoRings(G, level, pad, ox, oz, step, path = new Path2D(), stats
       for (let q = 0; q < L; q++) if (!es[q]) { s0 = q; break; }
       if (s0 >= 0) {
         const whole = !es.includes(1);
+        let to = line;
+        if (whole && bins) {
+          let A = 0;
+          for (let q = 0, r = L - 1; q < L; r = q++) A += (xs[r] + xs[q]) * (zs[q] - zs[r]);
+          A = Math.abs(A) / 2;
+          for (const bn of bins) if (A < bn.max) { to = bn.path; break; }
+        }
         let open = false;
         for (let c = 0; c <= L; c++) {
           const q = (s0 + c) % L;
           if (es[q]) { open = false; continue; }
-          if (!open) { line.moveTo(xs[q], zs[q]); open = true; } else line.lineTo(xs[q], zs[q]);
+          if (!open) { to.moveTo(xs[q], zs[q]); open = true; } else to.lineTo(xs[q], zs[q]);
         }
-        if (whole) line.closePath();
+        if (whole) to.closePath();
       }
     }
     n += L; rings++;
@@ -136,8 +218,13 @@ export function buildTile(world, slot, { fine = true, ink = null, ox = 0, oz = 0
   let wet = false;
   for (let j = 0; j < ni; j++) for (let i = 0; i < ni; i++) { const k = at(i, j), s = slot.sd[k]; F[j * ni + i] = s; if (s < 0) { wet = true; const id = slot.lake[k]; if (id) ids.add(id); } }
   const o = -0.5 * cell; // sample (i, j) is the middle of cell (i - 1, j - 1) of the tile
-  const out = { fine, ids, water: null, shore: null, ink: null, inkLine: null, inkV: -1, contours: null, index: null, sound: [], labels: [], tint: null, ms: 0, n: 0 };
-  if (wet) { out.shore = new Path2D(); out.water = isoRings(padGrid(F, ni, ni), 0, true, o, o, cell, new Path2D(), stats, 0, out.shore).path; }
+  const out = { fine, ids, water: null, shore: null, shoreSmall: null, shoreTiny: null, ink: null, inkLine: null, inkV: -1, contours: null, index: null, sound: [], labels: [], tint: null, ms: 0, n: 0 };
+  if (wet) {
+    out.shore = new Path2D();
+    // the far field's ponds and small lakes have rims of their own, which the overview lets fade (paintTile: rimLeft)
+    const bins = fine ? null : [{ max: TINY_LAKE, path: (out.shoreTiny = new Path2D()) }, { max: SMALL_LAKE, path: (out.shoreSmall = new Path2D()) }];
+    out.water = isoRings(padGrid(F, ni, ni), 0, true, o, o, cell, new Path2D(), stats, 0, out.shore, bins).path;
+  }
   if (ink) traceInk(out, slot, F, ni, at, o, cell, ink);
   // the relief tint: a small soft image (it has no edges to blur)
   const tp = fine ? 64 : 128, per = T / tp, c = document.createElement('canvas'); c.width = c.height = tp;
@@ -243,7 +330,16 @@ export function paintTile(ctx, v, ox, oz, size, geo, { k = 1, depths = true, con
         ctx.strokeStyle = q.index ? INK.soundIndex : INK.sound; ctx.lineWidth = (q.index ? 1.25 : 0.8) * k * px; ctx.stroke(q.path);
       }
     }
-    if (geo.shore) { ctx.strokeStyle = INK.shore; ctx.lineWidth = (v.mPerPx < 6 ? 1.35 : 1.05) * k * px; ctx.stroke(geo.shore); }
+    if (geo.shore) {
+      // (the overview: the rims a touch finer, and the ponds' and small lakes' let go, their water a pale fleck: lodOf)
+      const dp = v.mPerPx / k, gen = ramp(dp, LOD_NEAR, LOD_NEAR * 4), lw = (v.mPerPx < 6 ? 1.35 : 1.05) * k * px * (1 - 0.25 * gen), ink = 1 - 0.3 * gen;
+      ctx.strokeStyle = INK.shore; ctx.lineWidth = lw; ctx.globalAlpha = ink; ctx.stroke(geo.shore);
+      for (const [p, small] of [[geo.shoreSmall, true], [geo.shoreTiny, false]]) {
+        const a = p ? rimLeft(dp, small) * ink : 0;
+        if (a > 0.02) { ctx.globalAlpha = a; ctx.stroke(p); }
+      }
+      ctx.globalAlpha = 1;
+    }
     if (geo.inkLine) { ctx.strokeStyle = INK.inkShore; ctx.lineWidth = 1.5 * k * px; ctx.stroke(geo.inkLine); }
   }
   ctx.restore();
@@ -275,27 +371,138 @@ function hatch(ctx, color, gap) {
 // the burns the season's date has come to, newest drawn last; minAcres keeps the small prescribed burns off a far view
 export function burnsInView(v, W, H) {
   if (!BURNS.ready || !BURNS.records.length) return [];
-  const { year, doy } = burnDate(), now = year + (doy - 1) / 365.25, x1 = v.x0 + W * v.mPerPx, z1 = v.z0 + H * v.mPerPx;
-  const minAcres = v.mPerPx > 40 ? 800 : v.mPerPx > 15 ? 40 : 0, rx = v.mPerPx < 10; // (far out, the big fires and the blowdown only; the prescribed burns up close)
-  return BURNS.records.filter((r) => r.t <= now && (r.acres >= minAcres || r.kind === 3) && (rx || r.kind !== 2) && !(r.box[2] < v.x0 || r.box[0] > x1 || r.box[3] < v.z0 || r.box[1] > z1));
+  const x1 = v.x0 + W * v.mPerPx, z1 = v.z0 + H * v.mPerPx;
+  return burnsNow(v.mPerPx).filter((r) => !(r.box[2] < v.x0 || r.box[0] > x1 || r.box[3] < v.z0 || r.box[1] > z1));
+}
+// every burn the season's date has come to that a view this far out shows, in view or not
+function burnsNow(mPerPx) {
+  if (!BURNS.ready || !BURNS.records.length) return [];
+  const { year, doy } = burnDate(), now = year + (doy - 1) / 365.25;
+  const minAcres = mPerPx > 40 ? 800 : mPerPx > 15 ? 40 : 0, rx = mPerPx < 10; // (far out, the big fires and the blowdown only; the prescribed burns up close)
+  return BURNS.records.filter((r) => r.t <= now && (r.acres >= minAcres || r.kind === 3) && (rx || r.kind !== 2));
 }
 export function paintBurns(ctx, v, recs, k = 1) {
   if (!recs.length) return;
-  const s = 1 / v.mPerPx;
+  const s = 1 / v.mPerPx, lod = lodOf(v.mPerPx, k);
   ctx.save();
   ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([s, 0, 0, s, -v.x0 * s, -v.z0 * s])));
   const px = v.mPerPx;
+  // level 2 and up: each kind one generalised area, a flat tint and a clean edge (burnArea), the blowdown under the fires;
+  // at level 1 the blowdown alone (from level 2's image: its cell is fine enough there). Made from every burn of the
+  // date, not just those in view, so panning does not remake it; laid on multiplied, so the lakes under a burn stay blue
+  // rather than going grey under its tint.
+  const areaKinds = lod.level >= 2 ? [3, 1] : lod.level === 1 ? [3] : [];
+  if (areaKinds.length) {
+    const all = burnsNow(v.mPerPx), al = lod.level >= 2 ? lod : { level: 2, cell: LOD_NEAR * 2 };
+    ctx.imageSmoothingEnabled = true; ctx.globalCompositeOperation = 'multiply';
+    for (const kind of areaKinds) {
+      const a = burnArea(all.filter((r) => r.kind === kind), kind, al);
+      if (a) ctx.drawImage(a.canvas, a.x0, a.z0, a.x1 - a.x0, a.z1 - a.z0);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // up close as they always were; at level 1 simplified, the specks dropped, the hatching fading and the pen finer
+  const fade = 1 - lod.gen, thin = 1 - 0.3 * lod.gen;
   for (const r of recs) {
-    const p = burnPath(r), col = r.kind === 3 ? INK.blow : r.kind === 2 ? INK.rx : INK.burn;
+    if (areaKinds.includes(r.kind)) continue;
+    const p = lod.level ? genBurnPath(r, lod) : burnPath(r), col = r.kind === 3 ? INK.blow : r.kind === 2 ? INK.rx : INK.burn;
+    if (!p) continue;
     if (r.kind !== 2) { // (a prescribed burn is its dotted edge alone: hatched, the small ones were all you saw)
-      const pat = hatch(ctx, col.replace(/[\d.]+\)$/, '0.28)'), Math.round(9 * k));
+      const pat = hatch(ctx, col.replace(/[\d.]+\)$/, `${(0.28 * fade).toFixed(3)})`), Math.round(9 * k));
       pat.setTransform(new DOMMatrix([px, 0, 0, px, 0, 0]));
       ctx.fillStyle = pat; ctx.fill(p, 'evenodd');
     }
     ctx.setLineDash(r.kind === 2 ? [2 * k * px, 3 * k * px] : [7 * k * px, 3 * k * px]);
-    ctx.strokeStyle = col; ctx.lineWidth = (r.kind === 2 ? 0.9 : 1.2) * k * px; ctx.stroke(p);
+    ctx.strokeStyle = col; ctx.lineWidth = (r.kind === 2 ? 0.9 : 1.2) * k * px * thin; ctx.stroke(p);
   }
   ctx.restore();
+}
+const genBurns = new Map(); // `${record id}:${level}` -> Path2D | null
+function genBurnPath(r, lod) {
+  const key = `${r.id}:${lod.level}`;
+  if (!genBurns.has(key)) genBurns.set(key, genPath(r.rings, lod));
+  return genBurns.get(key);
+}
+// A kind of burn generalised for an overview level, as an overview sheet draws a burned country: every patch filled at
+// the level's cell, the fill blurred (a box blur, twice) and cut at a density, so patches closer than a few cells join,
+// a speck alone goes, and the edge is one smooth line (the cut's iso-line, drawn a cell or so wide from the field's
+// slope, so it is soft-edged without a second pass). An image in world metres, made once per level and set of burns
+// (the season's date adds the year's fires) and laid down scaled at every redraw.
+const AREA_BLUR = 3, AREA_CUT = 0.3, AREA_MIN = 150; // cells; the density the area is cut at; the smallest area kept (cells)
+const AREA_INK = { 1: { fill: [196, 120, 80, 0.17], line: [150, 70, 34, 0.8] }, 3: { fill: [128, 142, 88, 0.17], line: [92, 104, 62, 0.75] } };
+const areas = new Map(); // `${kind}:${level}` -> { sig, canvas, x0, z0, x1, z1 }
+function burnArea(recs, kind, lod) {
+  if (!recs.length) return null;
+  const sig = `${recs.length}:${recs[recs.length - 1].id}`, key = `${kind}:${lod.level}`;
+  let a = areas.get(key);
+  if (a && a.sig === sig) return a;
+  const cell = lod.cell, padM = cell * (AREA_BLUR * 2 + 3);
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const r of recs) { x0 = Math.min(x0, r.box[0]); z0 = Math.min(z0, r.box[1]); x1 = Math.max(x1, r.box[2]); z1 = Math.max(z1, r.box[3]); }
+  x0 -= padM; z0 -= padM; x1 += padM; z1 += padM;
+  const W = Math.ceil((x1 - x0) / cell), H = Math.ceil((z1 - z0) / cell);
+  x1 = x0 + W * cell; z1 = z0 + H * cell;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  g.setTransform(1 / cell, 0, 0, 1 / cell, -x0 / cell, -z0 / cell); g.fillStyle = '#000';
+  for (const r of recs) g.fill(burnPath(r), 'evenodd');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  const img = g.getImageData(0, 0, W, H), d = img.data, N = W * H;
+  let f = new Float32Array(N), t = new Float32Array(N);
+  for (let i = 0; i < N; i++) f[i] = d[i * 4 + 3] / 255;
+  const R = AREA_BLUR, bn = 2 * R + 1;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < H; y++) { // across
+      const o = y * W; let acc = 0;
+      for (let x = -R; x <= R; x++) acc += x >= 0 && x < W ? f[o + x] : 0;
+      for (let x = 0; x < W; x++) { t[o + x] = acc / bn; const xa = x - R, xb = x + R + 1; acc += (xb < W ? f[o + xb] : 0) - (xa >= 0 ? f[o + xa] : 0); }
+    }
+    for (let x = 0; x < W; x++) { // down
+      let acc = 0;
+      for (let y = -R; y <= R; y++) acc += y >= 0 && y < H ? t[y * W + x] : 0;
+      for (let y = 0; y < H; y++) { f[y * W + x] = acc / bn; const ya = y - R, yb = y + R + 1; acc += (yb < H ? t[yb * W + x] : 0) - (ya >= 0 ? t[ya * W + x] : 0); }
+    }
+  }
+  // the areas too small to keep (a speck or two the blur did not join) go, and the soft ground round them, so no ghost of
+  // their edge is left (marked gone rather than zeroed: a hole cut in the field would be a slope, and draw an edge of its
+  // own): each patch over the cut is one area, kept if it has AREA_MIN cells
+  const seen = new Uint8Array(N), gone = new Uint8Array(N), comp = new Int32Array(N), lo = AREA_CUT * 0.25;
+  for (let i0 = 0; i0 < N; i0++) {
+    if (seen[i0] || f[i0] < AREA_CUT) continue;
+    let n = 0, h = 0; // comp[0..n) the area's cells, comp[h..n) still to look round (breadth first)
+    comp[n++] = i0; seen[i0] = 1;
+    while (h < n) {
+      const i = comp[h++], x = i % W;
+      if (x > 0 && !seen[i - 1] && f[i - 1] >= AREA_CUT) { seen[i - 1] = 1; comp[n++] = i - 1; }
+      if (x < W - 1 && !seen[i + 1] && f[i + 1] >= AREA_CUT) { seen[i + 1] = 1; comp[n++] = i + 1; }
+      if (i >= W && !seen[i - W] && f[i - W] >= AREA_CUT) { seen[i - W] = 1; comp[n++] = i - W; }
+      if (i + W < N && !seen[i + W] && f[i + W] >= AREA_CUT) { seen[i + W] = 1; comp[n++] = i + W; }
+    }
+    if (n >= AREA_MIN) continue;
+    for (let c = 0; c < n; c++) {
+      const i = comp[c], x = i % W, y = (i - x) / W;
+      for (let yy = Math.max(0, y - 3); yy <= Math.min(H - 1, y + 3); yy++) for (let xx = Math.max(0, x - 3); xx <= Math.min(W - 1, x + 3); xx++) { const j = yy * W + xx; if (f[j] < AREA_CUT) gone[j] = 1; }
+      gone[i] = 1;
+    }
+  }
+  const { fill, line } = AREA_INK[kind] || AREA_INK[1];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x, q = i * 4, val = f[i];
+    if (val < lo || gone[i]) { d[q + 3] = 0; continue; }
+    const gx = (x + 1 < W ? f[i + 1] : val) - (x > 0 ? f[i - 1] : val), gy = (y + 1 < H ? f[i + W] : val) - (y > 0 ? f[i - W] : val);
+    const slope = Math.max(1e-4, Math.sqrt(gx * gx + gy * gy) / 2), e = (val - AREA_CUT) / slope; // cells from the cut, signed
+    const fa = Math.min(1, Math.max(0, 0.5 + e)) * fill[3], la = Math.min(1, Math.max(0, 1.6 - Math.abs(e))) * line[3];
+    const al = la + fa * (1 - la);
+    if (al < 0.004) { d[q + 3] = 0; continue; }
+    const wl = la / al, wf = (fa * (1 - la)) / al;
+    d[q] = line[0] * wl + fill[0] * wf; d[q + 1] = line[1] * wl + fill[1] * wf; d[q + 2] = line[2] * wl + fill[2] * wf;
+    d[q + 3] = al * 255;
+  }
+  g.putImageData(img, 0, 0);
+  f = t = null;
+  a = { sig, canvas: cv, x0, z0, x1, z1 };
+  areas.set(key, a);
+  return a;
 }
 // a burn's words for the map and the search: "Pagami Creek fire, 2011"
 export function burnWords(r) {
@@ -345,17 +552,24 @@ export function inWilderness(x, z) {
   }
   return inside;
 }
-// the boundary: a pale band inside the line and the line itself, long dash and dot, as the agencies' maps draw it
+// the boundary: a pale band inside the line and the line itself, long dash and dot, as the agencies' maps draw it; on an
+// overview level its rings simplified and the inholdings too small to read dropped (lodOf), the band narrower, the pen finer
+const genBounds = new Map(); // level -> Path2D
 export function paintBoundary(ctx, v, k = 1) {
   if (!BOUNDARY.path) return;
-  const s = 1 / v.mPerPx, px = v.mPerPx;
+  const s = 1 / v.mPerPx, px = v.mPerPx, lod = lodOf(v.mPerPx, k);
+  let path = BOUNDARY.path;
+  if (lod.level) {
+    if (!genBounds.has(lod.level)) genBounds.set(lod.level, genPath(BOUNDARY.rings.map((r) => r.pts), lod) || BOUNDARY.path);
+    path = genBounds.get(lod.level);
+  }
   ctx.save();
   ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([s, 0, 0, s, -v.x0 * s, -v.z0 * s])));
-  ctx.save(); ctx.clip(BOUNDARY.path, 'evenodd');
-  ctx.strokeStyle = INK.boundBand; ctx.lineWidth = 9 * k * px; ctx.lineJoin = 'round'; ctx.stroke(BOUNDARY.path);
+  ctx.save(); ctx.clip(path, 'evenodd');
+  ctx.strokeStyle = INK.boundBand; ctx.lineWidth = (9 - 4 * lod.gen) * k * px; ctx.lineJoin = 'round'; ctx.stroke(path);
   ctx.restore();
   ctx.setLineDash([11 * k * px, 3 * k * px, 2 * k * px, 3 * k * px]);
-  ctx.strokeStyle = INK.bound; ctx.lineWidth = 1.5 * k * px; ctx.stroke(BOUNDARY.path);
+  ctx.strokeStyle = INK.bound; ctx.lineWidth = 1.5 * k * px * (1 - 0.2 * lod.gen); ctx.lineJoin = 'round'; ctx.stroke(path);
   ctx.restore();
 }
 

@@ -47,7 +47,9 @@
   --pp-brown-deep: #5e321a;
   --pp-panel: #dfd2b0;                   /* a darker paper: the frame, the tiles */
   --pp-panel-deep: #cfbf98;
-  --pp-sheet: #efe6cf;                   /* the page itself, a touch warmer than --paper */
+  --pp-sheet: #ede3c9;                   /* the page itself, a touch warmer than --paper */
+  /* the paper's grain: a fine fractal noise in brown, tiled (book.css lays it on every page) */
+  --pp-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .38  0 0 0 0 .27  0 0 0 0 .14  0 0 0 .11 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
 /* --- the spread and the pages --------------------------------------------------------------------------------------- */
@@ -198,7 +200,31 @@
 
 @media (prefers-reduced-motion: reduce) { .pp-tile, .pp-tab { transition: none; } }
 
-/* a task's number, the same as its red tag on the map; and the one picked there, lit */
-:is(.pp-spread, .pp) .pp-task .who .no { display: inline-block; min-width: 1.5em; padding: 0 4px; border: 1.5px solid #a33a2a; border-radius: 9px; color: #a33a2a; font-weight: 700; text-align: center; line-height: 1.25; }
-:is(.pp-spread, .pp) .pp-task.focus { background: rgba(232, 196, 92, .28); box-shadow: 0 0 0 2px rgba(232, 196, 92, .45); border-radius: 4px; animation: pp-focus 2.4s ease-out 1 forwards; }
-@keyframes pp-focus { 0%, 60% { background: rgba(232, 196, 92, .38); } 100% { background: rgba(232, 196, 92, .12); } }
+/* --- the owner's second round (2026-10-31): hand-lettered page heads, the task checklist, a notice unfolded --------- */
+:is(.pp-spread, .pp) .pp-page h2.pp-head, :is(.pp-spread, .pp) .pp-head { margin: 0 0 2px; flex: none; font: 600 40px/1 var(--pencil-font); color: var(--pp-brown-deep); letter-spacing: .01em;
+}
+:is(.pp-spread, .pp) .pp-head::after { content: ''; display: block; width: 4.2em; height: 6px; margin-top: 2px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 6' preserveAspectRatio='none'><path d='M2 4 C40 1 80 5 120 2.5 S150 3 158 2' fill='none' stroke='%235e321a' stroke-width='1.6' stroke-linecap='round' opacity='.7'/></svg>") no-repeat 0 0 / 100% 100%; }
+:is(.pp-spread, .pp) .pp-headrow { flex: none; display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding-right: 26px; }
+:is(.pp-spread, .pp) .pp-page.right .pp-head { padding-right: 30px; }
+/* a line of the checklist: the box in the margin, the title in pen, the pay in pencil; a second line when there is
+   something to say (done, half done) */
+:is(.pp-spread, .pp) .pp-todo { appearance: none; position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; width: 100%; box-sizing: border-box; padding: 0 30px 0 calc(var(--pp-margin) + 8px);
+  border: none; background: none; text-align: left; color: var(--pencil); cursor: pointer; font: 500 22px/var(--pp-line) var(--pencil-font); }
+:is(.pp-spread, .pp) .pp-todo > .pp-box { position: absolute; left: calc(var(--pp-margin) - 28px); top: 5px; }
+:is(.pp-spread, .pp) .pp-todo .t { color: var(--pp-brown-deep); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-todo .pay { font-weight: 600; color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-todo .st { grid-column: 1 / -1; font-size: 18px; color: var(--pencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-todo.on::before { content: '›'; position: absolute; left: calc(var(--pp-margin) - 50px); top: 0; font: 600 30px/var(--pp-line) var(--pencil-font); color: var(--map-red); }
+:is(.pp-spread, .pp) .pp-todo.on .t { color: var(--ink); }
+:is(.pp-spread, .pp) button.pp-todo:hover .t { color: var(--ink); }
+:is(.pp-spread, .pp) .pp-todo.done .t { color: var(--pencil); }
+:is(.pp-spread, .pp) .pp-todo.claimed { cursor: default; opacity: .6; }
+:is(.pp-spread, .pp) .pp-todo.claimed .t, :is(.pp-spread, .pp) .pp-todo.claimed .pay { color: var(--pencil); font-weight: 500; text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: rgba(60, 50, 40, .75); }
+:is(.pp-spread, .pp) .pp-todo.sum { cursor: default; margin-top: var(--pp-line); }
+:is(.pp-spread, .pp) .pp-todo.sum .t { font-weight: 500; color: var(--pp-brown); }
+:is(.pp-spread, .pp) .pp-flyer { padding: 14px 6px 10px; overflow-x: hidden; }
+:is(.pp-spread, .pp) .pp-margin { margin: 18px 12% 0; text-align: center; transform: rotate(-1.2deg); color: var(--pencil); }
+:is(.pp-spread, .pp) .pp-foot.left { justify-content: flex-start; }
+:is(.pp-spread, .pp) .pp-foot { font-size: 12px; letter-spacing: .06em; }
+:is(.pp-spread, .pp) .pp-banner { background: rgba(120, 90, 50, .16); box-shadow: inset 0 0 0 1px rgba(120, 90, 50, .14); }

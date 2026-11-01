@@ -148,8 +148,8 @@ export class MapBook {
   hoverWords({ x, z, hit, shown }) {
     const w = this.w, f = w.facts, lay = this.hud.layers;
     if (hit) {
-      if (hit.kind === 'task') { const t = hit.task; return { html: `<span class="tag">${t.n}</span><b>${esc(t.title)}</b><span>${esc(cap(t.label || 'about here'))}</span><i>click: the notice in the journal</i>`, ring: hit, click: true }; }
-      if (hit.kind === 'claim') { const c = hit.claim; return { html: `<span class="seal">$</span><b>To claim at ${esc(c.where)}</b>${c.items.map((q) => `<span>${esc(q.title)} · $${q.pay}</span>`).join('')}<i>click: the notices in the journal</i>`, ring: { ...hit, px: 14 }, click: true }; }
+      if (hit.kind === 'task') { const t = hit.task; return { html: `<b>${esc(t.title)}</b><span>${esc(cap(t.label || 'about here'))}</span>`, ring: hit, click: true }; }
+      if (hit.kind === 'claim') { const c = hit.claim; return { html: `<span class="seal">$</span><b>To claim at ${esc(c.where)}</b>${c.items.map((q) => `<span>${esc(q.title)} · $${q.pay}</span>`).join('')}`, ring: { ...hit, px: 14 }, click: true }; }
       if (hit.kind === 'note') { const h = hit.note; return { html: `<b class="pencil">${esc(h.label)}</b><span>“${esc(h.text || '')}”</span><i>— ${esc(h.whoFull || h.who)}${h.where ? `, ${esc(h.where)}` : ''}</i>`, ring: hit }; }
       if (hit.kind === 'dock') { const e = w.entryPoints.find((q) => q.ep === hit.ep), L = this.tasks && this.tasks.landing ? this.tasks.landing(hit.ep) : null; return { html: `<b>${esc(L ? L.name : `${e ? e.name : ''} landing`)}</b><span>Entry point ${hit.ep}${e && e.name ? ` · ${esc(e.name)}` : ''}</span>`, ring: hit }; }
       if (hit.kind === 'dam') { const d = hit.d; return { html: d.old ? '<b>Old beaver dam</b><span>breached and grassed over: the pond behind it drained to meadow</span>' : `<b>Beaver dam</b><span>${d.route ? 'across the creek: haul the canoe over' : 'holding back a beaver pond'}${d.lodge ? ' · a lodge in the pond' : ''}</span>`, ring: { ...hit, px: 9 } }; } // the wetlands round
@@ -171,7 +171,7 @@ export class MapBook {
       const fish = f && typeof f.fishList === 'function' ? f.fishList(id).slice(0, 3).map((s) => (FISH[s] || s).toLowerCase()) : [];
       const d = f && typeof f.depthOf === 'function' ? f.depthOf(id) : L.maxDepth || 0;
       const sub = [L.river ? 'a river' : acreWords(acresOf(L, w)), d ? `${ft(d)} ft deep` : '', L.secchi ? `clarity ${ft(L.secchi)} ft` : ''].filter(Boolean).join(' · ');
-      return { html: `<b>${esc(L.name)}</b><span>${sub}</span>${fish.length ? `<span>${esc(fish.join(', '))}</span>` : ''}${bits.join('')}<i>double-click: the lake's page</i>` };
+      return { html: `<b>${esc(L.name)}</b><span>${sub}</span>${fish.length ? `<span>${esc(fish.join(', '))}</span>` : ''}${bits.join('')}` };
     }
     if (bits.length) return { html: bits.join('') };
     return null;
@@ -239,33 +239,32 @@ export class MapBook {
     const tabs = [['marked', 'Marked'], ['find', 'Find'], ['key', 'Key']];
     const nav = `<nav class="tabs" aria-label="The map's index">${tabs.map(([k, l]) => `<button type="button" data-mtab="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`;
     const owned = sh ? sh.ownedSheets() : [];
-    const sub = look === 'open' ? 'Sandbox: the whole map' : look === 'whole' ? 'The outfitter’s whole map, on the wall' : owned.length ? `Your ${plural(owned.length, 'sheet')}: ${owned.map((s) => s.id).join(', ')}` : 'No sheets yet: the map tables sell them';
+    const sub = look === 'open' ? 'Sandbox: the whole map' : look === 'whole' ? 'The outfitter’s whole map, on the wall' : owned.length ? `Your ${plural(owned.length, 'sheet')}: ${owned.map((s) => s.id).join(', ')}` : '';
     const body = this.tab === 'find' ? this.findPage(look) : this.tab === 'key' ? this.keyPage() : this.markedPage(m);
     const focus = document.activeElement && document.activeElement.matches && document.activeElement.matches('.mb-find input');
-    this.idxEl.innerHTML = `<div class="sc kicker">The map</div><div class="lede"><h2>${look === 'whole' ? 'The whole map' : 'Your map'}</h2><div class="sub">${esc(sub)}</div></div>${nav}<div class="tabpage">${body}</div>
-      <div class="foot"><span>drag to pan · wheel to zoom · double-click a lake for its page</span><span class="keys"><kbd>M</kbd> or <kbd>Esc</kbd> closes</span></div>`;
+    this.idxEl.innerHTML = `<div class="sc kicker">The map</div><div class="lede"><h2 class="pp-head">${look === 'whole' ? 'The whole map' : 'Your map'}</h2>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>${nav}<div class="tabpage">${body}</div>`;
     if (this.tab === 'find') { this.renderResults(); const inp = this.idxEl.querySelector('.mb-find input'); if (inp && focus) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
   }
   markedPage(m) {
     const go = (x, z, r = 0, span = 0) => `data-go="${Math.round(x)},${Math.round(z)},${Math.round(r)},${Math.round(span)}"`;
     const claim = m.claim.map((c) => `<button type="button" class="mb-row claim" ${go(c.x, c.z, 0, 4000)}><span class="seal">$</span><span><b>${esc(c.where)}</b><span class="soft">${c.items.map((q) => esc(q.title)).join(' · ')}</span></span><span class="pay">$${c.items.reduce((a, q) => a + q.pay, 0)}</span></button>`).join('');
-    const open = m.list.filter((q) => !q.done).map((q) => `<button type="button" class="mb-row" ${q.x != null ? go(q.x, q.z, q.r, Math.max(3000, q.r * 6)) : ''} data-task="${q.id}"><span class="tag">${q.n}</span><span><b>${esc(q.title)}</b><span class="soft">${q.x != null ? esc(cap(q.label || 'about here')) : 'not on your map yet'}${q.lake && !(q.label || '').includes(q.lake) ? `, ${esc(q.lake)}` : ''} · ${q.by ? `for ${esc(q.by.split(' ')[0])}` : `from ${esc(q.where)}`}</span></span></button>`).join('');
+    const open = m.list.filter((q) => !q.done).map((q) => `<button type="button" class="mb-row" ${q.x != null ? go(q.x, q.z, q.r, Math.max(3000, q.r * 6)) : ''} data-task="${q.id}"><span class="ring red"></span><span><b>${esc(q.title)}</b><span class="soft">${q.x != null ? esc(cap(q.label || 'about here')) : 'off your map'}${q.lake && !(q.label || '').includes(q.lake) ? `, ${esc(q.lake)}` : ''} · ${q.by ? `for ${esc(q.by.split(' ')[0])}` : `from ${esc(q.where)}`}</span></span></button>`).join('');
     const notes = m.notes.map((h) => `<button type="button" class="mb-row note" ${go(h.x, h.z, h.r, Math.max(4000, h.r * 5))}><span class="ring"></span><span><b class="pencil">${esc(h.label)}</b><span class="soft">${esc(h.lake || '')}${h.lake ? ' · ' : ''}${esc(h.whoFull || h.who)}${h.where ? `, ${esc(h.where)}` : ''}</span></span></button>`).join('');
-    const empty = (t) => `<p class="empty">${t}</p>`;
+    // (the owner, 2026-10-31: no "nothing yet" lines: a heading shows only over something under it)
     return `<div class="scroll mb-marked">
-      <div class="lab">To claim <span class="soft">· a gold seal on the dock that pays</span></div>${claim || empty('Nothing finished to claim.')}
-      <div class="lab">On the go <span class="soft">· the red tags</span></div>${open || empty('Nothing on the go. Every outfitter pins notices by the door.')}
-      <div class="lab">Pencilled in <span class="soft">· when you ask, a keeper or a visitor marks your map</span></div>${notes || empty('Nothing pencilled in yet. Ask a keeper for the word on the water, or a visitor what is good around here, and ask them to mark it.')}
+      ${claim ? `<div class="lab">To claim</div>${claim}` : ''}
+      ${open ? `<div class="lab">On the go</div>${open}` : ''}
+      ${notes ? `<div class="lab">Pencilled in</div>${notes}` : ''}
     </div>`;
   }
   findPage(look) {
     const scope = look === 'owned' ? 'what is on your sheets (at an outfitter, the whole map)' : 'the whole map';
-    return `<div class="mb-find"><input type="search" placeholder="A lake, a portage, a bay, a campsite…" value="${esc(this.query)}" aria-label="Find on the map" spellcheck="false" autocomplete="off"><div class="soft scope">Finds ${scope}</div></div><div class="scroll mb-results"></div>`;
+    return `<div class="mb-find"><input type="search" placeholder="a lake, a portage, a campsite…" value="${esc(this.query)}" aria-label="Find on the map: ${esc(scope)}" spellcheck="false" autocomplete="off"></div><div class="scroll mb-results"></div>`;
   }
   renderResults() {
     const box = this.idxEl.querySelector('.mb-results'); if (!box) return;
     const q = this.query.trim();
-    if (!q) { box.innerHTML = '<p class="empty">Type a name: a lake, a bay, a point, an island, a portage, a campsite number, an outfitter, a fire.</p>'; return; }
+    if (!q) { box.innerHTML = ''; return; }
     const res = this.search(q);
     box.innerHTML = res.length ? res.map((r) => {
       const span = r.kind === 'lake' || r.kind === 'burn' ? Math.max(2500, (r.r || 500) * 3.2) : 2500;
@@ -277,18 +276,17 @@ export class MapBook {
     const row = (k, glyph, name, sub) => `<button type="button" class="mb-key${L[k] ? '' : ' off'}" data-layer="${k}" aria-pressed="${L[k]}"><i class="g ${glyph}"></i><span><b>${name}</b>${sub ? `<span class="soft">${sub}</span>` : ''}</span><span class="tick">${L[k] ? '✓' : ''}</span></button>`;
     const fixed = (glyph, name, sub) => `<div class="mb-key fixed"><i class="g ${glyph}"></i><span><b>${name}</b>${sub ? `<span class="soft">${sub}</span>` : ''}</span></div>`;
     return `<div class="scroll mb-keys">
-      <div class="lab">Layers <span class="soft">· click to show or hide</span></div>
+      <div class="lab">On the sheet</div>
       ${row('lakes', 'name', 'Names', 'lakes, bays, points, islands')}
       ${row('portages', 'portage', 'Portages', 'in rods; walked ones gone over solid')}
       ${row('campsites', 'camp', 'Campsites', 'with the Forest Service number')}
       ${row('depths', 'depth', 'Depths', 'contours in feet, where the DNR has sounded')}
-      ${row('tasks', 'task', 'Notices', 'red tags: on the go · gold seals: to claim')}
+      ${row('tasks', 'task', 'Notices', 'ringed in red pencil; a ringed $ where one is paid')}
       ${row('notes', 'note', 'Pencilled in', 'what keepers and visitors marked for you')}
       ${row('burns', 'burn', 'Burns', 'fires and the 1999 blowdown, by the year')}
       ${row('boundary', 'bound', 'The wilderness', 'the Boundary Waters boundary')}
-      <div class="lab">Always on</div>
+      <div class="lab">Always</div>
       ${fixed('you', 'You', 'and the canoe where you left it')}
-      ${fixed('way', 'Your way', 'in pencil')}
       ${fixed('paddled', 'Paddled', 'lakes you have been on, inked')}
       ${fixed('dock', 'Outfitters', 'their docks, by entry point')}
       ${fixed('sheet', 'Sheets', 'yours ruled in ink; the rest dotted at an outfitter')}
@@ -359,7 +357,7 @@ export class MapBook {
     this.lakeEl.innerHTML = `<section class="page left mb-portrait"><div class="sc kicker"><button type="button" class="pbtn" data-back>‹ The map</button>${sheet ? ` · sheet ${esc(sheet.id)}` : ''}</div>
         <div class="lede"><h2>${esc(L.name || 'Unnamed water')}</h2><div class="sub">${esc(yours)}</div></div>
         <div class="chart"><canvas aria-label="A chart of ${esc(L.name || 'the lake')}"></canvas></div>
-        <div class="foot"><span>${L.maxDepth ? 'depth contours in feet, from the DNR’s lake survey' : 'no contour map for this lake'}</span><span class="keys"><kbd>Esc</kbd> back to the map</span></div></section>
+        <div class="foot"><span>${L.maxDepth ? 'depth contours in feet, from the DNR’s lake survey' : ''}</span></div></section>
       <section class="page right mb-facts"><div class="ribbon" aria-hidden="true"></div><div class="sc kicker">From the outfitter’s map</div>
         <div class="grid">${rows.map(([k, v]) => `<div class="lab">${k}</div><div>${v}</div>`).join('')}</div>
         <div class="foot"><span>lakes and depths: Minnesota DNR · clarity: UMN LakeBrowser and the DNR</span><span><button type="button" class="pbtn" data-go="${Math.round(L.cx)},${Math.round(L.cz)},0,${Math.round(Math.max(2500, Math.sqrt(L.cells) * w.cell * 3))}">show it on the map ›</button></span></div></section>`;
