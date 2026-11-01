@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import path from 'node:path';
 
 // paths the dev server's watcher skips, relative to the folder it serves (see server.watch below)
-const IGNORED = /^(\.claude|public[\\/]data|data-cache|node_modules|dist)([\\/]|$)/;
+const IGNORED = /^(\.claude|public[\\/]data(-v\d+)?|data-cache|node_modules|dist)([\\/]|$)/;
 
 // BASE_PATH: where the app is served from ('/' locally; '/<repo>/' on a GitHub Pages project site, set by the
 // Pages workflow). VITE_DATA_URL (read in src/world.js) points the tile fetches at a bucket; see docs/HOSTING.md.

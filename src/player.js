@@ -1,6 +1,7 @@
 import { FLOAT_OFFSET, LENGTH } from './canoe.js';
 import { resample, PUNCHEON_TOP } from './props.js';
 import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
+import { brushAt } from './thicket.js'; // the density round: the brush in the way
 import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
@@ -114,6 +115,9 @@ const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like 
 // `trail`), the boots sink `sink` metres into the moss (half that in a trail's mud), and the gait lifts the knees and
 // sways (poses.js state.mire). On a trail's puncheon (props.js) the going is firm and the feet stand on the boards.
 const MIRE_WALK = { slow: 0.42, trail: 0.25, board: 0.04, sink: 0.13, ease: 2.5 };
+// The brush (the density round, 2026-11-01: thicket.js brushAt, how thick the alder, the cattail and the poles stand):
+// pushing through a wall of it slows the walk by `slow` on top of the mire; the trail's tread is clear
+const BRUSH_WALK = { slow: 0.3 };
 // what the HUD calls wet ground off the trails, by ground kind
 const MIRE_PLACE = { [KIND.openBog]: 'Open bog', [KIND.coniferBog]: 'Spruce bog', [KIND.shrubSwamp]: 'Alder swamp', [KIND.marsh]: 'Marsh', [KIND.wetMeadow]: 'Wet meadow', [KIND.hardwoodSwamp]: 'Ash swamp', [KIND.water]: 'Beaver flowage' };
 const TRAIL_TO_WATER = 2.5;   // tuning: a trail's end farther than this up the bank runs on down to the waterline (trailFor)
@@ -279,6 +283,8 @@ export class Player {
     M.k += (want - M.k) * (1 - Math.exp(-dt * MIRE_WALK.ease));
     M.board = board; M.onTrail = !!trail && trail.dist < 1.6;
     M.kind = w.chAt('ground', this.x, this.z);
+    const brush = M.onTrail || this.campsite ? 0 : brushAt(w, this.x, this.z);
+    M.brush = (M.brush || 0) + (brush - (M.brush || 0)) * (1 - Math.exp(-dt * MIRE_WALK.ease));
     const sinkWant = board ? -PUNCHEON_TOP : MIRE_WALK.sink * M.k * (M.onTrail ? 0.5 : 1);
     M.sink += (sinkWant - M.sink) * (1 - Math.exp(-dt * (board ? 12 : 3)));
     return M;
@@ -1421,7 +1427,7 @@ export class Player {
         }
       }
       if (!started) {
-        const soft = 1 - (mire.board ? MIRE_WALK.board : mire.onTrail ? MIRE_WALK.trail : MIRE_WALK.slow) * mire.k; // the wetlands' going
+        const soft = (1 - (mire.board ? MIRE_WALK.board : mire.onTrail ? MIRE_WALK.trail : MIRE_WALK.slow) * mire.k) * (1 - BRUSH_WALK.slow * (mire.brush || 0)); // the wetlands' going, and the brush
         const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade * soft;
         this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
         // one speed (pace.js footSeen): the walker time-lapsed so he is seen at the speed of where he is, whatever the

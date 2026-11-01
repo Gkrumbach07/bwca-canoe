@@ -43,15 +43,15 @@ const SMALL = new Set([10, 11, 12, 13, 14, 15, 20, 22, 24]);
 // index order matches vegetation.js SPECIES (the bluff pass appended 17 on: the indices before are unchanged)
 // (the burns pass appended the regrowth, 22; d2 land the black ash, 23: the hardwood swamp's tree, a guest in the birch's bins;
 // wetlands round 2 the leatherleaf mat, 24)
-export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9, hazel: 10, alder: 11, sapling: 12, fern: 13, log: 14, stump: 15, outcrop: 16, tamarack: 17, aspen: 18, blackSpruce: 19, talus: 20, cliff: 21, regrowth: 22, ash: 23, leatherleaf: 24 };
+export const SPECIES = { whitePine: 0, spruce: 1, redPine: 2, birch: 3, cedar: 4, snag: 5, boulder: 6, shrub: 7, tallPine: 8, jackPine: 9, hazel: 10, alder: 11, sapling: 12, fern: 13, log: 14, stump: 15, outcrop: 16, tamarack: 17, aspen: 18, blackSpruce: 19, talus: 20, cliff: 21, regrowth: 22, ash: 23, leatherleaf: 24, bogPole: 25 };
 const SCALE = [[0.85, 1.3], [0.75, 1.2], [0.75, 1.15], [0.7, 1.15], [0.75, 1.2], [0.8, 1.2], [0.4, 2.2], [0.7, 1.5], [0.85, 1.25], [0.7, 1.1],
-  [0.7, 1.3], [0.75, 1.35], [0.6, 1.4], [0.6, 1.3], [0.8, 1.35], [0.75, 1.3], [2.6, 5.0], [0.75, 1.15], [0.75, 1.2], [0.7, 1.15], [0.15, 0.6], [1, 1], [1, 1], [0.8, 1.2], [0.75, 1.3]];
-const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  [0.7, 1.3], [0.75, 1.35], [0.6, 1.4], [0.6, 1.3], [0.8, 1.35], [0.75, 1.3], [2.6, 5.0], [0.75, 1.15], [0.75, 1.2], [0.7, 1.15], [0.15, 0.6], [1, 1], [1, 1], [0.8, 1.2], [0.75, 1.3], [0.55, 1.25]];
+const GIANT = [0.04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 // How many variant groups a region's bin of each species is split into (makeVegetationMeshes draws each
 // group near the camera with its own geometry variant): three for the trees and the boulders so a stand
 // shows several trees of a kind, fewer for the small stuff, whose variety is in its scale and yaw and whose
 // draw calls would otherwise add up. GROUP_SHARE: the cumulative share of the instances each group takes.
-export const GROUPS = [3, 3, 3, 3, 3, 3, 3, 1, 3, 3, 2, 2, 2, 1, 2, 1, 1, 2, 2, 2, 2, 3, 2, 2, 2];
+export const GROUPS = [3, 3, 3, 3, 3, 3, 3, 1, 3, 3, 2, 2, 2, 1, 2, 1, 1, 2, 2, 2, 2, 3, 2, 2, 2, 3];
 const GROUP_SHARE = { 1: [1], 2: [0.6, 1], 3: [0.45, 0.8, 1] };
 // Guests: a species that is drawn in another's bins, in variant groups of its own after the host's (the old
 // white pines in the white pine's, aspen in the birch's, black spruce in the spruce's). A bin is one draw call
@@ -61,7 +61,7 @@ const GROUP_SHARE = { 1: [1], 2: [0.6, 1], 3: [0.45, 0.8, 1] };
 // height over the host's]: an instance's scale carries that, so far off the host's shape stands at the
 // guest's height.
 // (d2 land: the black ash after the aspen in the birch's, groups 5 and 6; vegetation.js SPECIES birch guests)
-export const GUEST = { 8: [0, 3, 20 / 16], 18: [3, 3, 13 / 10.5], 19: [1, 3, 11 / 12.5], 23: [3, 5, 15 / 10.5] };
+export const GUEST = { 8: [0, 3, 20 / 16], 18: [3, 3, 13 / 10.5], 19: [1, 3, 11 / 12.5], 23: [3, 5, 15 / 10.5], 25: [1, 5, 7 / 12.5] }; // (the density round: the bog's poles after the black spruce in the spruce's)
 // how many variant groups a bin of each species holds: its own and its guests'
 export const BIN_GROUPS = GROUPS.map((n, sp) => n + Object.entries(GUEST).filter(([, [h]]) => h === sp).reduce((s, [g]) => s + GROUPS[g], 0));
 // Floats per instance: x, y, z (relative to the tile corner), yaw, scale, tint, squash; the rocks add the
@@ -71,7 +71,7 @@ export const STRIDE = 7, ROCK_STRIDE = 10;
 const ROCKS = new Set([6, 16, 20, 21]);
 // The trees' bins (by host species: the guests are drawn in these) carry the rocks' stride too: a tree on the shore
 // leans out over the water (the shoreline pass), its lean the azimuth and tilt of the instance matrix, its tall 1.
-const LEANS = new Set([0, 1, 2, 3, 4, 5, 9, 17]);
+const LEANS = new Set([0, 1, 2, 3, 4, 5, 9, 17, 25]);
 // The down logs carry it too: a log lies any way at all and is pitched along its length to the ground (the owner:
 // "a lot of the fallen trees, at least on a hill, all kind of face the same direction"; they all lay along the contour).
 const LOGS = new Set([14]);
@@ -98,7 +98,7 @@ export const gladeShore = (sd, wet) => 1 - (1 - smoothstep(45, 120, sd)) * (1 - 
 // young conifers of the forest's edge kind -2): young, tree, -, -, -, -, -, -, -, shrub, -, -, hazel, alder, sapling,
 // fern, log, stump, outcrop. The shrubs and the alder root at the waterline, the trees a pace up from it (and lean
 // out: LEAN).
-const SHORE_MIN = [0.7, 0.9, 0, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 2.0, 0.3, 0.8, 1.2, 1.5, 1.0, -3, 0, 0, 0, 0, 0, 0.8, 0, 0.6];
+const SHORE_MIN = [0.7, 0.9, 0, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 2.0, 0.3, 0.8, 1.2, 1.5, 1.0, -3, 0, 0, 0, 0, 0, 0.8, 0, 0.6, 0.9];
 // The portage trails as a green tunnel (the owner's feedback of 2026-10-25, decision 7). A portage in the Boundary
 // Waters is a trodden line through the woods with the brush crowding both edges and the canopy closed over it; the
 // first exclusion (2.2 m plus a pad of up to 1.2 m round the polyline) left a bare lane 5–7 m wide. Now the forest is
@@ -113,7 +113,7 @@ const SHORE_MIN = [0.7, 0.9, 0, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 2.0, 0.3, 0.8, 1.2
 // bracken, hazel, alder on the wet ground, the shrubs, young fir, young conifers and, further back, trees leaning
 // in over the path (birch and aspen among them: the edge species, gold in the fall), so the tunnel closes over.
 export const TRAIL = { clear: 1.35 };
-const TRAIL_PAD = [0.95, 1.2, 0, 0, 0, 0, 0, 0, 0, 0.15, 0, 0, 0.3, 0.3, 0.35, -0.25, 0.7, 0.5, 1.6, 0, 0, 0, 0, 0, 0.4, 0, 0.1];
+const TRAIL_PAD = [0.95, 1.2, 0, 0, 0, 0, 0, 0, 0, 0.15, 0, 0, 0.3, 0.3, 0.35, -0.25, 0.7, 0.5, 1.6, 0, 0, 0, 0, 0, 0.4, 0, 0.1, 1.2];
 // [kind, from, to, lean toward the path]; the density per metre per side is trailEdgeDensity's
 const TRAIL_EDGE = [[13, -0.2, 1.4], [10, 0.3, 1.6], [11, 0.3, 1.6], [7, 0.15, 1.4], [12, 0.35, 1.8], [-2, 0.95, 2.1], [-1, 1.5, 3.4, true]];
 // (in a burn the trees by what of the old forest stands, the rest by what is left of its understory: placeVegetation)
@@ -146,7 +146,8 @@ function clipToCell(x1, z1, x2, z2, cx, cz, half) {
 // The forest's edge along the water (the shoreline pass): young balsam fir, spruce and cedar, 4–8 m, their crowns to
 // the ground, filling under the big trees' crowns so the shore reads as a wall from the water, not a row of trunks.
 // Per cell within `to` m of the water, fading by `fade`.
-const EDGE = { young: 1.1, to: 6, fade: 16, scale: [0.36, 0.62] };
+// (the density round, stage 3: young 1.1 -> 1.8, the bank a wall from the canoe; the near ring adds more, thicket.js)
+const EDGE = { young: 1.8, to: 6, fade: 16, scale: [0.36, 0.62] };
 function youngTree(r, h) {
   if (h.wet > 0.55) return r < 0.6 ? SPECIES.blackSpruce : r < 0.85 ? SPECIES.cedar : SPECIES.tamarack;
   return r < 0.55 ? SPECIES.spruce : r < 0.82 ? SPECIES.cedar : r < 0.92 ? SPECIES.birch : SPECIES.whitePine;
@@ -252,7 +253,8 @@ function treeWeights(h, stand, aspens, thick, ash = false) {
 // weights: each species' share is its prior times how well the cell suits it against the others (the habitat's own share
 // over an even one, to the power 0.6, so a ridge still favours the pines within a spruce-fir stand), and a little of the
 // habitat's own mix leaks through (the odd dead stem, an old pine on a point). w: treeWeights's cumulative weights, rewritten.
-function priorWeights(w, prior) {
+// (the density round: where the NWI names the wetland, `leak` is small: no round broadleaf crowns in a black spruce bog)
+function priorWeights(w, prior, leak = 0.12) {
   const n = w.length;
   let prev = 0, sum = 0;
   for (let i = 0; i < n; i++) { const v = w[i] - prev; prev = w[i]; w[i] = v; sum += v; }
@@ -260,7 +262,7 @@ function priorWeights(w, prior) {
   let acc = 0;
   for (let i = 0; i < n; i++) {
     const hn = w[i] / sum, p = prior[TREE_NAMES[i]] || 0;
-    acc += p * (hn * n) ** 0.6 + 0.12 * hn;
+    acc += p * (hn * n) ** 0.6 + leak * hn;
     w[i] = acc;
   }
   return w;
@@ -292,7 +294,7 @@ function rockTree(r) { return r < 0.5 ? SPECIES.jackPine : r < 0.62 ? SPECIES.wh
 // The young trees: aspen, jack pine and birch come in first (jack pine from the cones the fire opened, aspen from its
 // roots), spruce and fir under them later; through the blowdown's down trunks come balsam fir, birch and aspen. Their
 // geometry's height at unit scale (vegetation.js), to stand them at the age's height.
-const NOMINAL = { 0: 16, 1: 12.5, 2: 15, 3: 10.5, 4: 8, 9: 6, 17: 13, 18: 13, 19: 11, 23: 15 }; // (d2 land: the black ash)
+const NOMINAL = { 0: 16, 1: 12.5, 2: 15, 3: 10.5, 4: 8, 9: 6, 17: 13, 18: 13, 19: 11, 23: 15, 25: 7 }; // (d2 land: the black ash; the density round, the bog's poles)
 function youngBurnTree(r, kind) {
   if (kind === BURN.blowdown) return r < 0.38 ? SPECIES.spruce : r < 0.66 ? SPECIES.birch : r < 0.94 ? SPECIES.aspen : SPECIES.whitePine;
   return r < 0.3 ? SPECIES.aspen : r < 0.75 ? SPECIES.jackPine : r < 0.9 ? SPECIES.birch : SPECIES.spruce;
@@ -752,7 +754,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       // they stand (canopyM), the species mix (prior), and the brush in place of trees (the bog's leatherleaf and
       // Labrador tea, low; the shrub swamp's alder and willow; a shrub field's hazel; the ostrich fern of a black ash swamp)
       let kd = 0, ft = 0, canopyM = 0, treeType = false, dTrees = 1, prior = null, lowShrub = false, capM = 0;
-      let xShrub = 0, xAlder = 0, xHazel = 0, xSapling = 0, kFern = 1, kHazel = 1, xMat = 0;
+      let xShrub = 0, xAlder = 0, xHazel = 0, xSapling = 0, kFern = 1, kHazel = 1, xMat = 0, xPole = 0, kAlder = 1;
       if (L) {
         kd = site.kind[k]; ft = L.forest ? L.forest[k] : 0;
         const F = FOREST[ft], K = KIND_LAND[kd], wetland = kd >= KIND.openBog && kd <= KIND.aquaticBed;
@@ -762,8 +764,8 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
         if (treeType && L.cover && L.cover[k]) dTrees *= clamp(L.cover[k] / 52, 0.35, 1.3) ** 0.9;
         prior = SWAMP_SPECIES[kd] || (F && F.species) || null;
         switch (kd) {
-          case KIND.openBog: xShrub = 0.3; xMat = 5; kFern = 0; kHazel = 0; lowShrub = true; break;
-          case KIND.coniferBog: xShrub = 0.3; xMat = 1.2; kFern = 0.35; kHazel = 0; lowShrub = true; break;
+          case KIND.openBog: xShrub = 0.3; xMat = 5; kFern = 0; kHazel = 0; lowShrub = true; xPole = 0.15; break;
+          case KIND.coniferBog: xShrub = 0.3; xMat = 1.2; kFern = 0.35; kHazel = 0; lowShrub = true; xPole = 0.9; break;
           case KIND.shrubSwamp: xAlder = 2.4; xShrub = 1.2; kFern = 0.5; kHazel = 0.2; break;
           case KIND.marsh: case KIND.wetMeadow: case KIND.water: xShrub = 0.18; xAlder = 0.12; kFern = 0; kHazel = 0; break;
           case KIND.hardwoodSwamp: xAlder = 0.8; kFern = 1.7; kHazel = 0.3; break;
@@ -777,7 +779,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
         if (mx) {
           prior = mx.species; capM = mx.cap;
           dTrees = mx.trees * (treeType && L.cover && L.cover[k] ? clamp(L.cover[k] / 52, 0.35, 1.3) ** 0.9 : 1);
-          xAlder = mx.alder; xShrub = mx.shrub; lowShrub = mx.low > 0.3 ? mx.low : 0; kFern = mx.fern; kHazel = mx.hazel; xHazel = 0; xSapling = 0; xMat = mx.mat;
+          xAlder = mx.alder; xShrub = mx.shrub; lowShrub = mx.low > 0.3 ? mx.low : 0; kFern = mx.fern; kHazel = mx.hazel; xHazel = 0; xSapling = 0; xMat = mx.mat; xPole = mx.poles; kAlder = mx.alder < 0.05 ? 0.2 : 1; // (the density round: a bog with no alder of its own keeps little of the wet ground's)
         }
       }
       const segs = mask.get(k0);
@@ -804,7 +806,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const eLive = burnt ? e * B.mature + B.young * dens * 0.8 : e;
       // shoreline shrubs (dogwood, willow): thick at the waterline, a fringe back into the woods
       const shoreRow = 1 - smoothstep(3, 10, sdH);
-      const eShrub = (((sdH < 35 ? (0.45 + 1.25 * shoreRow - smoothstep(10, 35, sdH) * 0.25) * (1 - clearing * 0.5) * trailSide : (trailSide > 1 ? 0.5 : 0)) + xShrub) * B.under + B.shrubs * Math.min(1, dens)) * (1 - bareness * 0.8) * (1 - face);
+      const eShrub = (((sdH < 35 ? (0.45 + 1.8 * shoreRow - smoothstep(10, 35, sdH) * 0.25) * (1 - clearing * 0.5) * trailSide : (trailSide > 1 ? 0.5 : 0)) + xShrub) * B.under + B.shrubs * Math.min(1, dens)) * (1 - bareness * 0.8) * (1 - face);
       const shrubs = count(rng, eShrub * (1 - 0.6 * smoothstep(1, 4, xMat)));
       // the understory: hazel at the edges of the woods and in the open stands, off the wet ground; alder thick down
       // by the water, on the wet ground and round the bogs; young fir coming up in the gaps of the moist woods, at the
@@ -814,7 +816,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       const eHazel = ((1.6 * edge + 0.18 * open * smoothstep(0.1, 0.4, eLive)) * (1 - 0.8 * h.wet) * (1 - clearing * 0.7) * kHazel + xHazel) * soil * B.under * (sdH > 3 ? trailSide : 0);
       // (wetlands round 2: an open bog's leatherleaf mat, xMat, keeps the alder and the shore's brush out but for a few)
       const matK = smoothstep(1, 4, xMat);
-      const eAlder = ((2.1 * (1 - smoothstep(4, 16, sdH)) + 0.9 * h.wet * open + 0.6 * h.bog) * (1 - clearing) * (1 - 0.85 * matK) + xAlder) * soil * Math.min(1, 1.5 * B.under); // (alder sprouts again from its roots)
+      const eAlder = ((2.1 * (1 - smoothstep(4, 16, sdH)) + 0.9 * h.wet * open + 0.6 * h.bog) * (1 - clearing) * (1 - 0.85 * matK) * kAlder + xAlder) * soil * Math.min(1, 1.5 * B.under); // (alder sprouts again from its roots)
       const eSapling = (0.08 * open * smoothstep(0.1, 0.4, eLive) + 0.6 * (1 - smoothstep(4, 14, sdH)) + 0.5 * edge + 0.25 * glade * (1 - clearing) + xSapling) * (0.8 + 0.4 * h.moist) * (1 - 0.5 * h.wet) * soil * B.under;
       const eFern = ((1.6 * smoothstep(0.5, 0.64, fernAt(cx, cz)) * smoothstep(0.3, 0.9, eLive) * (1 - heavy * 0.6) + 0.35 * open * smoothstep(0.3, 0.9, eLive) * (1 - h.dry)) * B.under * kFern + B.bracken) * (1 - 0.6 * h.wet) * soil * (1 - clearing);
       // a sand beach (site.js beach) keeps its first metres open, a campsite its shelf down to the water (site.js camp)
@@ -830,11 +832,15 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       let w = null;
       const stand = smoothstep(0.56, 0.66, standAt(cx, cz)), aspens = smoothstep(0.6, 0.7, aspenAt(cx, cz)) * (1 - stand);
       // the cell's tree weights: the habitat's, under the forest map's mix where the survey has one (d2 land)
-      const wts = () => (prior ? priorWeights(treeWeights(h, stand, aspens, thick, !!prior.ash), prior) : treeWeights(h, stand, aspens, thick));
+      const wts = () => (prior ? priorWeights(treeWeights(h, stand, aspens, thick, !!prior.ash), prior, site.mix && site.mix[k] ? 0.015 : 0.12) : treeWeights(h, stand, aspens, thick));
       // one pass over everything the cell grows: [species or -1 for a tree, count, exclusion pad]
       const eYoung = EDGE.young * (1 - smoothstep(EDGE.to, EDGE.fade, sdH)) * soil * B.under * (1 - clearing) * (1 - face) * (1 - 0.5 * h.bog);
       const plan = [[-1, trees, 1.2], [-2, count(rng, eYoung), 1.0], [7, shrubs, 0.4], [10, count(rng, eHazel), 0.4], [11, count(rng, eAlder), 0.4], [12, count(rng, eSapling), 0.4], [13, count(rng, eFern), 0.3],
         [14, count(rng, eLog), 1.5], [15, count(rng, eStump), 0.8], [16, count(rng, eOutcrop), 2.5], [24, count(rng, eMat), 0.3]];
+      // the density round (2026-11-01): the bog's black spruce poles, live, dead-topped and dead, as many again as its
+      // trees and more (the near ring, thicket.js, thickens them round the player); last, so a cell without them draws
+      // the numbers it always did
+      if (xPole > 0) plan.push([25, count(rng, xPole * soil * (1 - face) * B.under * (1 - 0.7 * clearing * (1 - h.bog))), 1.0]);
       // the burn's own: the old trees dead on their feet, the young trees, the thicket of regrowth, the down trunks
       if (burnt) {
         const room = soil * (1 - face);
@@ -890,7 +896,8 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
             if (B.kind === BURN.blowdown && rng() < 0.5) sp = SPECIES.sapling; // the blowdown's balsam fir among the aspen
             shadeCount[k0] += 0.06;
           }
-          const isTree = kind < 0, isShrub = kind === 7;
+          const isTree = kind < 0, isShrub = kind === 7, isPole = kind === 25;
+          if (isPole) shadeCount[k0] += 0.3;
           let scale = kind === -2 ? EDGE.scale[0] + rng() * (EDGE.scale[1] - EDGE.scale[0]) : SCALE[sp][0] + (isRock ? rng() ** 1.7 : rng()) * (SCALE[sp][1] - SCALE[sp][0]); // rocks: many small, a few big
           if (GIANT[sp] && rng() < GIANT[sp]) scale *= 1.45;
           if (role === 'snag') scale *= 1.3;                                           // the old canopy, dead on its feet
@@ -901,7 +908,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           if (isTree && s > 600) scale *= 1.15;
           if (kind === -1 && canopyM && !role) scale *= canopyScale(sp, canopyM, bare); // d2 land: as tall as the stand
           // the wetlands round: a shrub wetland's trees are runts, under its cap (about 18 ft), each its own height under it
-          if (isTree && capM > 0 && !role) scale = Math.min(scale, (capM / (NOMINAL[sp] || 12)) * (0.45 + 0.55 * hash2(Math.floor(x * 7), Math.floor(z * 7), 13)));
+          if ((isTree || isPole) && capM > 0 && !role) scale = Math.min(scale, (capM / (NOMINAL[sp] || 12)) * (0.45 + 0.55 * hash2(Math.floor(x * 7), Math.floor(z * 7), 13)));
           if (isShrub && lowShrub) scale *= (0.45 + rng() * 0.15) * (lowShrub === true ? 1 : lowShrub); // d2 land: the bog's knee-high brush (the wetlands round: a leatherleaf mat lower)
           let yaw = rng() * Math.PI * 2;
           let tint = 0.92 + rng() * 0.16;
@@ -970,7 +977,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           if (kind === 14) sink = 0.02 * scale + Math.sqrt(Math.max(0, slopeHere * slopeHere - logAlong * logAlong)) * 0.3 * scale; // (the slope across it)
           else if (kind === 15) sink = 0.35 + slopeHere * 0.8 * scale;
           else if (kind >= 10 && kind !== 16) sink = 0.05 + slopeHere * 1.0 * scale;
-          else if (kind < 10) sink = (isShrub ? 0.45 : 0.35) + slopeHere * (isShrub ? 1.0 : 1.2) * scale + tilt * 0.5;
+          else if (kind < 10 || isPole) sink = (isShrub ? 0.45 : 0.35) + slopeHere * (isShrub ? 1.0 : 1.2) * scale + tilt * 0.5;
           // an outcrop lies along the slope like the bedrock it breaks out of, darker under a canopy
           const outcrop = kind === 16, bed = outcrop ? bedding(grid, x, z) : null;
           const y = outcrop ? seatRock(ground, OUTCROP_FOOT, x, z, scale, 1, 1, yaw, bed.az, bed.angle * 0.85, slopeHere) : ground(x, z) - sink;

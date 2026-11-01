@@ -71,7 +71,7 @@ function treesAt(w, x, z) {
   const cv = w.coverCell(w.cellI(x), w.cellJ(z));
   if (!cv) { _tw = 0.55; _dec = 0.2; return; } // not streamed in yet: the Boundary Waters are mostly woods
   const cls = GROUND[(cv >> 16) & 255], shade = ((cv >>> 24) & 15) / 15;
-  _tw = cls === 'forest' || cls === 'forestLight' || cls === 'forestDark' ? 0.55 + 0.45 * shade
+  _tw = cls === 'forest' || cls === 'forestLight' || cls === 'forestDark' || cls === 'moss' ? 0.55 + 0.45 * shade
     : cls === 'meadow' ? 0.12 : cls === 'burn' ? 0.4 : cls === 'rockDark' ? 0.15 + 0.4 * shade : cls === 'rock' || cls === 'rockLichen' ? 0.2 + 0.5 * shade : 0;
   const st = smooth(0.5, 0.68, standAt(x, z)); // dark canopy is mostly spruce and fir; the burns grow back aspen and birch
   _dec = cls === 'burn' ? 0.75 : cls === 'forestDark' ? 0.08 + 0.35 * st : 0.12 + 0.6 * st;

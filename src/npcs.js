@@ -984,7 +984,19 @@ export class People {
     const op = outfitterProfile(ep, this.world), out = [];
     out.push(this.keeperOf(ep, L, op));
     for (const v of this.visitorsOf(ep, L, op)) out.push(v);
+    out.at = { y: L.floorY, x: L.centre.x, z: L.centre.z }; // the store they were placed in (follow(): built again since)
     return out;
+  }
+  // A store built again on new ground (props.js stepOutfitters: a LiDAR chunk in or out under it) can stand at another
+  // floor, and the people placed in the old one stayed at its height, floating over the new floor or sunk into it (the
+  // owner: "people are floating"). They are moved by what the store moved.
+  follow(list, L) {
+    const at = list && list.at;
+    if (!at || !L) return;
+    const dy = L.floorY - at.y, dx = L.centre.x - at.x, dz = L.centre.z - at.z;
+    if (Math.abs(dy) < 1e-3 && Math.abs(dx) < 1e-3 && Math.abs(dz) < 1e-3) return;
+    for (const v of list) for (const f of v.figs) { f.x += dx; f.y += dy; f.z += dz; }
+    list.at = { y: L.floorY, x: L.centre.x, z: L.centre.z };
   }
   keeperOf(ep, L, op) {
     const k = op && op.keeper, name = k ? k.name : 'The keeper', first = k ? k.first : 'the keeper';
@@ -1121,7 +1133,7 @@ export class People {
     const near = [];
     for (const L of storeLayouts()) {
       const d = Math.hypot(L.centre.x - p.x, L.centre.z - p.z);
-      if (d < NEAR_STORE) { if (!this.rosters.has(L.ep)) this.rosters.set(L.ep, this.roster(L.ep, L)); near.push(L.ep); }
+      if (d < NEAR_STORE) { if (!this.rosters.has(L.ep)) this.rosters.set(L.ep, this.roster(L.ep, L)); else this.follow(this.rosters.get(L.ep), L); near.push(L.ep); }
       else if (d > NEAR_STORE + 20 && this.rosters.has(L.ep)) this.rosters.delete(L.ep);
     }
     for (const ep of [...this.rosters.keys()]) if (!storeLayout(ep)) this.rosters.delete(ep); // its tile let it go
