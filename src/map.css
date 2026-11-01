@@ -61,7 +61,8 @@
 .mb-row .pay { font: 700 15px/1.3 var(--serif); color: #7a5a14; }
 .mb-row .tag, .mb-row .seal, #map-tip .tag, #map-tip .seal { width: 21px; height: 21px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 700 12px/1 var(--serif); margin-top: 1px; box-sizing: border-box; }
 .mb-row .tag, #map-tip .tag { background: #b8302a; color: #f8efdc; border: 1.5px solid #f4e9d6; box-shadow: 0 0 0 1px #b8302a; }
-.mb-row .seal, #map-tip .seal { background: #c9a24a; color: #3a2410; border: 1.5px solid #5b3a12; }
+.mb-row .seal, #map-tip .seal { background: none; color: #a8321f; border: 1.6px solid rgba(168, 50, 31, .75); border-radius: 50% 46% 52% 48%; font: 600 16px/1 var(--pencil-font); } /* a pencilled $ ringed by hand, as on the sheet */
+.mb-row .ring.red { border-color: rgba(184, 44, 32, .8); background: none; }
 .mb-row .ring { width: 22px; height: 18px; margin-top: 2px; border-radius: 50% 48% 52% 50% / 46% 54% 46% 54%; border: 1.7px solid rgba(74, 64, 54, .62); background: rgba(74, 64, 54, .07); transform: rotate(-8deg); box-sizing: border-box; }
 .mb-row .pencil, #map-tip .pencil { font: 600 20px/1 var(--pencil-font); color: rgba(54, 46, 38, .92); }
 .mb-row .k { font: 700 9.5px/1.9 var(--sc); letter-spacing: .12em; color: var(--ink-faint); text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; }
@@ -90,7 +91,7 @@
 .g.portage { height: 0; border-top: 2.4px dashed #c0392b; }
 .g.camp { width: 10px; height: 10px; border-radius: 50%; background: #c0392b; box-shadow: inset 0 0 0 3px #c0392b, inset 0 0 0 6px #f4e9d6; }
 .g.depth { border-radius: 50%; border: 1.5px solid rgba(46, 86, 118, .85); box-shadow: inset 0 0 0 3px rgb(186, 210, 219), inset 0 0 0 4.4px rgba(62, 104, 136, .62); background: rgb(186, 210, 219); }
-.g.task { width: 18px; height: 18px; border-radius: 50%; background: #b8302a; border: 1.5px solid #f4e9d6; box-shadow: 0 0 0 1px #b8302a; }
+.g.task { width: 22px; height: 16px; border-radius: 50% 48% 52% 50% / 46% 54% 46% 54%; border: 2px solid rgba(184, 44, 32, .8); transform: rotate(-9deg); } /* the keeper's red pencil round a notice */
 .g.note { width: 22px; height: 16px; border-radius: 50% 48% 52% 50% / 46% 54% 46% 54%; border: 1.7px solid rgba(74, 64, 54, .62); background: rgba(74, 64, 54, .07); }
 .g.burn { border: 1.2px dashed rgba(150, 70, 34, .8); background: repeating-linear-gradient(-45deg, rgba(150, 70, 34, .3) 0 1.5px, transparent 1.5px 6px); }
 .g.bound { height: 0; border-top: 2px dashed rgba(46, 92, 52, .9); box-shadow: 0 3px 0 4px rgba(70, 120, 60, .13); }

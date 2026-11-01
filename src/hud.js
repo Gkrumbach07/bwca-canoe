@@ -3,13 +3,13 @@ import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
 import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
-import { explored, INK_WATER, INK_RIM, ROUTE_STEP } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked, your way in pencil)
+import { explored, INK_WATER, INK_RIM } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked)
 import { lifeKmh } from './pace.js';
 import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fmtDist, scaleBar } from './units.js'; // imperial on screen; the game itself stays metric
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import { KIND, FOREST } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt } from './map-render.js'; // the map as vectors
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE } from './map-render.js'; // the map as vectors
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -47,8 +47,10 @@ const NEAT = 'rgba(74, 59, 38, 0.55)', FOLD = 'rgba(74, 59, 38, 0.4)'; // an own
 // table sells it
 const OWN_LINE = 'rgba(42, 52, 30, 0.85)', DOT_LINE = 'rgba(74, 59, 38, 0.72)', SOLD_DOT = 'rgba(180, 50, 31, 0.9)';
 const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
-// round A-B: your way in pencil, and a portage you have crossed gone over solid (explored.js has the lakes' ink)
-const PENCIL_INK = 'rgba(54, 46, 38, 0.86)', PENCIL_SOFT = 'rgba(54, 46, 38, 0.26)';
+// round A-B: the pencil (a night's tick by a site), and a portage you have crossed gone over solid (explored.js has the
+// lakes' ink). (The pencilled "your way" line is gone: the owner, 2026-10-31, "I don't like the 'your way' lines that are
+// drawn. Just completely remove that." explored.js still keeps the route for the trip's record.)
+const PENCIL_INK = 'rgba(54, 46, 38, 0.86)';
 const CROSSED = '#9a2819', CROSSED_UNDER = 'rgba(176, 52, 36, 0.62)';
 const PENCIL = 'Caveat, "Bradley Hand", "Segoe Print", cursive'; // the pencil hand (index.html --pencil-font)
 // what a keeper's ring on the map is for, in the pencil hand (outfitters.js hint kinds)
@@ -72,17 +74,21 @@ function pencilRing(ctx, a, b, r, k, seed) {
   pass(0, 0, 1, 0.82, 2.2 * k, 0, 1);
   pass(1.4 * k, -1.1 * k, -1, 0.34, 1.3 * k, 0.06, 0.86);
 }
-// a notice's tag on the map: its number in a red disc (open), or a gold seal with $ (done, paid at that dock)
-function taskTag(ctx, a, b, text, k, gold) {
-  const r = 8.5 * k;
+// Where a notice done is paid (a dock): a "$" in the keeper's red pencil, ringed by hand, with how many wait there when
+// it is more than one. (The owner, 2026-10-31, of the numbered red discs: they "look out of place": the open notices
+// are their pencil ring alone now, and this the same hand rather than a badge.)
+function pencilSeal(ctx, a, b, n, k, seed) {
   ctx.save();
-  ctx.beginPath(); ctx.arc(a, b, r, 0, 6.2832);
-  ctx.fillStyle = gold ? '#c9a24a' : '#b8302a'; ctx.fill();
-  ctx.lineWidth = 1.5 * k; ctx.strokeStyle = gold ? '#5b3a12' : '#f4e9d6'; ctx.stroke();
-  ctx.font = `700 ${(String(text).length > 1 ? 9.5 : 11) * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = gold ? '#3a2410' : '#f8efdc'; ctx.fillText(String(text), a, b + 0.5 * k);
+  pencilRing(ctx, a, b, 10.5 * k, k * 0.85, seed);
+  ctx.font = `700 ${22 * k}px ${PENCIL}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(176, 40, 30, 0.92)'; ctx.fillText('$', a, b + 1.5 * k);
+  if (n > 1) { ctx.font = `700 ${16 * k}px ${PENCIL}`; ctx.textAlign = 'left'; ctx.fillText(`×${n}`, a + 12.5 * k, b - 7 * k); }
   ctx.restore();
 }
+// (the owner, 2026-10-31: "I don't like how the hover is immediate. It should have a little delay, so it's not just
+// constantly popping up a hover every time I move my mouse over it"): the tip waits for the pointer to rest this long
+// within a few pixels; moving off that spot puts it away (hoverMove)
+const HOVER_REST = 420, HOVER_STILL = 5; // ms, css px
 const PRESS = 260;           // ms: M let go sooner than this was a press, not a hold (nothing shows until it is one or the other: fb3 C)
 const PREPAINT_RANGE = 6000; // m: tiles traced ahead for the map while it is away, this far from you at most
 const HOLD_OFF = 300;        // ms: held keys hide this long after release
@@ -253,6 +259,17 @@ export class Hud {
     this.energyBuild(); // fb2 F: the energy bar
     this.stripBuild(); // fb3 C (14): the bar and the clock over the paper
     window.addEventListener('resize', () => { this.sizeCanvas(); this.placeConfirm(); });
+    // The canvas re-measured whenever its laid-out box changes, not only at setMode and a window resize: the map table
+    // adds its class, and with it the spread's layout, after setMode('sheet') has measured the floating sheet
+    // (maptable.js show), and the book's page can settle after mountIn. Redrawn at once, so the fresh (blank) backing
+    // store never reaches the screen (fb3 C (21): a sizing after the frame's draw wiped it).
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => {
+        const c = this.canvas, w = c.width, h = c.height;
+        this.sizeCanvas();
+        if ((c.width !== w || c.height !== h) && this.player && this.grain && this.mode !== 'hidden') { this.drawMap(this.player); this.drawn = true; this.placeConfirm(); }
+      }).observe(this.canvas);
+    }
   }
   // for the title screen: is anything of paper up (its Esc belongs to the paper, not the menu)
   get big() { return this.mode === 'sheet'; }
@@ -335,12 +352,13 @@ export class Hud {
       drag = { px, py, cx: this.view.cx, cz: this.view.cz, moved: false, id: e.pointerId };
       try { c.setPointerCapture(e.pointerId); } catch { /* synthetic pointers have no capture */ }
       if (this.mode === 'sheet') c.classList.add('grabbing');
+      this.hoverOff(); // (a press is not a rest)
     });
     c.addEventListener('pointermove', (e) => {
       if (!drag && this.table && this.mode === 'sheet') { const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py); this.table.hoverAt(x, z); return; } // fb2 D: the sheet under the pointer
-      if (!drag && this.mode === 'sheet') { const [px, py] = rectPx(e); this.hoverAt(px, py, e); return; } // what is under the pointer (map-book.js says what)
+      if (!drag && this.mode === 'sheet') { const [px, py] = rectPx(e); this.hoverMove(px, py, e); return; } // what is under the pointer, once it rests (map-book.js says what)
       if (!drag || this.mode !== 'sheet') return;
-      if (this.hover) this.hoverAt(-1, -1, null);
+      this.hoverOff();
       const [px, py] = rectPx(e);
       const dx = px - drag.px, dy = py - drag.py;
       if (Math.hypot(dx, dy) > 4) drag.moved = true;
@@ -362,7 +380,7 @@ export class Hud {
       if (hit && typeof this.onMarkClick === 'function' && this.onMarkClick(hit)) return;
       this.propose(x, z, false);
     };
-    c.addEventListener('pointerleave', () => { if (this.hover) this.hoverAt(-1, -1, null); });
+    c.addEventListener('pointerleave', () => { this.hoverOff(); c.style.cursor = ''; });
     // a lake's page straight from the sheet (map-book.js)
     c.addEventListener('dblclick', (e) => {
       if (this.mode !== 'sheet' || this.table || typeof this.onLakePage !== 'function') return;
@@ -380,7 +398,7 @@ export class Hud {
       // keep the point under the cursor where it is
       const mPerPx = span / c.width;
       this.view.span = span; this.zoomT = performance.now();
-      if (this.hover) this.hoverAt(-1, -1, null);
+      this.hoverOff();
       this.setCentre(wx - (px - c.width / 2) * mPerPx, wz - (py - c.height / 2) * mPerPx);
     }, { passive: false });
     if (this.el.mapLayers) this.el.mapLayers.addEventListener('click', (e) => {
@@ -418,8 +436,10 @@ export class Hud {
     let best = null, bd = Infinity;
     const take = (h, d, pri) => { const s = d + pri; if (s < bd) { bd = s; best = h; } };
     for (const h of this.hits) {
-      if (h.tag) { const d = Math.hypot(h.tag[0] - x, h.tag[1] - z) / mPerPx; if (d < 11 * k) take(h, d, 0); }
+      if (h.tag) { const d = Math.hypot(h.tag[0] - x, h.tag[1] - z) / mPerPx; if (d < 13 * k) take(h, d, 0); }
       const d = Math.hypot(h.x - x, h.z - z) / mPerPx;
+      // a notice's pencil ring is its own mark: on the line it is taken first, anywhere inside it after the rest
+      if (h.kind === 'task') { const off = Math.abs(d - Math.max(h.r / mPerPx, 7 * k)); if (off < 8 * k) take(h, off, 0); }
       if (h.kind === 'claim' && d < 18 * k) take(h, d, 1);
       else if (h.kind === 'dock' && d < 10 * k) take(h, d, 4);
       else if (h.kind === 'site' && d < 8 * k) take(h, d, 3);
@@ -439,6 +459,31 @@ export class Hud {
   }
   // whether the map shows what is at (x, z): Sandbox, an outfitter's whole map, or a sheet of yours
   lakeShown(x, z) { const sh = this.sheetsOn; return !sh || sh.view() !== 'owned' || sh.showsDetail(x, z); }
+  // The pointer moving over the sheet: the hand for what a click takes (a notice, a seal) at once, since that is cheap and
+  // pops nothing up; the tip only once the pointer has rested HOVER_REST ms within HOVER_STILL px. A tip that is up stays
+  // put while the pointer keeps to that spot (no tip chasing the cursor) and goes as soon as it leaves it.
+  hoverMove(px, py, e) {
+    const hit = this.hitAt(px, py), click = !!(hit && (hit.kind === 'task' || hit.kind === 'claim') && typeof this.onMarkClick === 'function');
+    this.canvas.style.cursor = click ? 'pointer' : '';
+    const w = this.hoverWait, far = (q) => !q || Math.hypot(e.clientX - q.cx, e.clientY - q.cy) > HOVER_STILL;
+    if (this.hoverShown && !far(this.hoverShown)) return;
+    if (this.hoverShown) this.hoverOff();
+    else if (w && !far(w)) return; // (still resting: the wait goes on from where it began)
+    clearTimeout(this.hoverTimer);
+    const q = { px, py, cx: e.clientX, cy: e.clientY };
+    this.hoverWait = q;
+    this.hoverTimer = setTimeout(() => {
+      this.hoverWait = null;
+      if (this.mode !== 'sheet' || this.table) return;
+      this.hoverAt(q.px, q.py, { clientX: q.cx, clientY: q.cy });
+      this.hoverShown = this.hover ? q : null;
+    }, HOVER_REST);
+  }
+  // the tip put away and any wait for one dropped (a drag, the wheel, a press, the pointer gone)
+  hoverOff() {
+    clearTimeout(this.hoverTimer); this.hoverWait = null; this.hoverShown = null;
+    if (this.hover || (this.el.tip && this.el.tip.classList.contains('show'))) this.hoverAt(-1, -1, null);
+  }
   // the tip under the pointer: map-book.js onHover says what it is ({ html, ring } or null); px < 0 hides it
   hoverAt(px, py, e) {
     const tip = this.el.tip;
@@ -455,13 +500,14 @@ export class Hud {
     tip.style.left = `${clamp(lx + 16, 6, cr.width - tw - 6)}px`;
     tip.style.top = `${ly + 18 + th > cr.height ? ly - th - 12 : ly + 18}px`;
     tip.classList.add('show');
-    this.canvas.style.cursor = r.click ? 'pointer' : '';
   }
 
   setCentre(cx, cz) {
-    const w = this.world, m = this.view.span * 0.45;
-    this.view.cx = clamp(cx, w.minX + m, w.maxX - m);
-    this.view.cz = clamp(cz, w.minZ + m * (this.canvas.height / this.canvas.width), w.maxZ - m * (this.canvas.height / this.canvas.width));
+    const w = this.world, m = this.view.span * 0.45, mz = m * (this.canvas.height / this.canvas.width);
+    // (zoomed out past the whole country the bounds cross, and clamp left it in a corner of the sheet: centred on it then)
+    const fit = (c, lo, hi) => (lo <= hi ? clamp(c, lo, hi) : (lo + hi) / 2);
+    this.view.cx = fit(cx, w.minX + m, w.maxX - m);
+    this.view.cz = fit(cz, w.minZ + mz, w.maxZ - mz);
     this.placeConfirm();
   }
 
@@ -491,6 +537,7 @@ export class Hud {
       if (was === 'sheet' && this.host !== 'book') this.closePaper('map');
       this.view.span = GLANCE_SPAN;
       this.clearPin();
+      this.hoverOff();
       if (was === 'sheet' && this.table) { const t = this.table; this.table = null; t.closed(); } // fb2 D: the map table goes with the sheet
     }
     // fb3 C (21): the band's words settle the body's height before the canvas is measured (the sheet's long title, left
@@ -526,21 +573,23 @@ export class Hud {
     clearTimeout(this.sheetFade); m.classList.remove('sheet', 'show', 'in-book');
     this.host = null;
     const j = $('journal'); if (j && j.parentNode) j.parentNode.insertBefore(m, j);
-    this.hoverAt(-1, -1, null);
+    this.hoverOff();
   }
   // the view put on a place (the book's search, a notice in its list): centred there at a span that shows it
   lookAt(x, z, span = null, r = 0) {
     if (span) this.view.span = clamp(span, MIN_SPAN, MAX_SPAN);
     this.setCentre(x, z);
     this.focus = { x, z, r, t: performance.now() };
-    this.hoverAt(-1, -1, null);
+    this.hoverOff();
   }
 
-  // The backing store follows the displayed size (sharp on retina when the map fills the screen).
+  // The backing store follows the displayed size (sharp on retina when the map fills the screen). Its laid-out size, not
+  // getBoundingClientRect's: that is the box after transforms (the book's leaflet lies a third of a degree askew, the
+  // paper slides in from 24 px below), and a backing store measured mid-transform kept the wrong size.
   sizeCanvas() {
     const c = this.canvas;
     if (this.mode === 'hidden') return;
-    const r = c.getBoundingClientRect();
+    const r = { width: c.clientWidth, height: c.clientHeight };
     if (r.width < 2 || r.height < 2) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
@@ -584,7 +633,7 @@ export class Hud {
   propose(x, z, recentre) {
     if (!this.world.inBounds(x, z, 50)) return;
     this.pin = { x, z };
-    this.hoverAt(-1, -1, null);
+    this.hoverOff();
     if (this.mode !== 'sheet') this.setMode('sheet');
     if (recentre) { this.view.cx = x; this.view.cz = z; }
     const w = this.world, p = this.player, ctx = this.ctx, sh = this.sheetsOn;
@@ -690,13 +739,30 @@ export class Hud {
       const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height;
       const water = new Uint8Array(W * H);
       for (let k = 0; k < W * H; k++) water[k] = p[k * 4 + 2] > p[k * 4] ? 1 : 0;
+      // (the overview is what a far-out sheet shows while its far tiles come in: its ponds and small lakes lose their rims
+      // as the far tiles' do at that zoom, map-render.js rimLeft, so the one does not flicker into the other. A water of
+      // fewer pixels than SMALL_LAKE is marked 2.)
+      const px2 = (ov.cellsPerPx * this.world.cell) ** 2, smallPx = SMALL_LAKE / px2, stack = [], comp = [];
+      for (let k0 = 0; k0 < W * H; k0++) {
+        if (water[k0] !== 1) continue;
+        comp.length = 0; stack.push(k0); water[k0] = 3;
+        while (stack.length) {
+          const k = stack.pop(), i = k % W; comp.push(k);
+          if (i > 0 && water[k - 1] === 1) { water[k - 1] = 3; stack.push(k - 1); }
+          if (i < W - 1 && water[k + 1] === 1) { water[k + 1] = 3; stack.push(k + 1); }
+          if (k >= W && water[k - W] === 1) { water[k - W] = 3; stack.push(k - W); }
+          if (k + W < W * H && water[k + W] === 1) { water[k + W] = 3; stack.push(k + W); }
+        }
+        const big = comp.length > smallPx;
+        for (const q of comp) water[q] = big ? 4 : 2;
+      }
       const col = [0, 0, 0];
       for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
         const k = j * W + i, o = k * 4;
         let out;
         if (water[k]) {
           const land = (i > 0 && !water[k - 1]) || (i < W - 1 && !water[k + 1]) || (j > 0 && !water[k - W]) || (j < H - 1 && !water[k + W]);
-          out = land ? RIM : WATER;
+          out = land && water[k] === 4 ? RIM : WATER;
         } else {
           const r = p[o], g = p[o + 1];
           const t = (112 * r - 78 * g) / Math.max(1, 70 * g - 60 * r); // undo the bake's tint ramp (the hillshade cancels)
@@ -1425,51 +1491,19 @@ export class Hud {
     ctx.restore();
   }
 
-  // round A-B: your way in pencil (explored.js: a point every 50 m, in runs): the pieces in view only, a stride through
-  // them when the map is far out (a point about every pixel and a half), the run you are on drawn on to where you are;
-  // a graphite line and a fainter second pass a hair off it
-  drawRoute(ctx, x0, z0, mPerPx, inView, k, player) {
-    const runs = explored.runs; if (!runs.length) return;
-    const min = 1.5 * k, stride = Math.max(1, Math.floor((min * mPerPx) / ROUTE_STEP)), path = new Path2D();
-    let n = 0;
-    for (let r = 0; r < runs.length; r++) {
-      const run = runs[r], p = run.pts, tail = r === runs.length - 1 && explored.open;
-      if (run.n < 2 && !tail) continue;
-      let lx = NaN, ly = 0;
-      for (const c of run.chunks) {
-        if (!inView(c.x0, c.z0, c.x1, c.z1)) { lx = NaN; continue; }
-        for (let i = c.i0; i <= c.i1; i = i < c.i1 && i + stride > c.i1 ? c.i1 : i + stride) {
-          const a = (p[i * 2] - x0) / mPerPx, b = (p[i * 2 + 1] - z0) / mPerPx;
-          if (lx !== lx) { path.moveTo(a, b); lx = a; ly = b; continue; }
-          if (i !== c.i1 && Math.abs(a - lx) + Math.abs(b - ly) < min) continue;
-          path.lineTo(a, b); lx = a; ly = b; n++;
-        }
-      }
-      if (tail && player && lx === lx) { path.lineTo((player.x - x0) / mPerPx, (player.z - z0) / mPerPx); n++; }
-    }
-    if (!n) return;
-    ctx.save();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.setLineDash([]);
-    const lw = Math.max(1.6 * k, 1.3 * Math.min(window.devicePixelRatio || 1, 2)); // (never under a pixel and a third: the glance is small)
-    ctx.strokeStyle = PENCIL_INK; ctx.lineWidth = lw; ctx.stroke(path);
-    ctx.translate(0.9 * k, -0.7 * k); ctx.strokeStyle = PENCIL_SOFT; ctx.lineWidth = lw * 0.7; ctx.stroke(path);
-    ctx.restore();
-  }
-  // round A-B: the legend's "your way" and "paddled", once there is something of yours on the map
-  inkLegend(onWay, onLake) {
+  // round A-B: the legend's "paddled", once there is a lake of yours inked on the map
+  inkLegend(onLake) {
     if (!this.inkLeg) {
-      if (!onWay && !onLake) return;
-      const way = document.createElement('span'), lake = document.createElement('span');
-      way.className = 'leg'; way.innerHTML = `<i style="width: 20px; height: 0; border-top: 1.6px solid ${PENCIL_INK}; transform: rotate(-8deg)"></i>your way`;
+      if (!onLake) return;
+      const lake = document.createElement('span');
       lake.className = 'leg'; lake.innerHTML = `<i style="width: 15px; height: 11px; border-radius: 45% 55% 50% 50%; background: rgb(${INK_WATER.join(',')}); border: 1.5px solid rgb(${INK_RIM.join(',')})"></i>paddled`;
       const you = this.el.map && this.el.map.querySelector('.band.foot .leg .you');
-      if (you) you.parentNode.before(way, lake); else if (this.el.mapHint) this.el.mapHint.before(way, lake);
-      this.inkLeg = { way, lake }; this.inkLegOn = null;
+      if (you) you.parentNode.before(lake); else if (this.el.mapHint) this.el.mapHint.before(lake);
+      this.inkLeg = { lake }; this.inkLegOn = null;
     }
-    const key = `${onWay}${onLake}`;
-    if (this.inkLegOn === key) return;
-    this.inkLegOn = key;
-    this.inkLeg.way.style.display = onWay ? '' : 'none'; this.inkLeg.lake.style.display = onLake ? '' : 'none';
+    if (this.inkLegOn === onLake) return;
+    this.inkLegOn = onLake;
+    this.inkLeg.lake.style.display = onLake ? '' : 'none';
   }
 
   // d1 names: the bays, points, islands, narrows, summits, the named portages no drawn trail carries and the ghost town
@@ -1642,14 +1676,15 @@ export class Hud {
         for (const [ft, x, z] of depthLabels) { if (!inView(x, z, x, z)) continue; const [a, b] = toPx(x, z); ctx.strokeStyle = explored.hasLake(w.lakeIdAt(x, z)) ? INK.inked : INK.water; ctx.strokeText(String(ft), a, b); ctx.fillText(String(ft), a, b); }
         ctx.textBaseline = 'alphabetic';
       }
-      // round A-B: your way, in pencil (under the portages, the sites and the names)
-      this.drawRoute(ctx, x0, z0, mPerPx, inView, k, player);
       // portages: red dashed, with the rod count beside the middle of the trail when there is room; one you have crossed
       // gone over solid (round A-B)
-      const close = mPerPx < 16, mid = mPerPx < 60;
+      // (the overview, map-render.js lodOf: these gates were in canvas pixels, so a retina sheet kept its campsite dots and
+      // portages out to twice the span; on the sheet they are in design pixels too, dp, the same span at any DPR, and the
+      // campsites go a little sooner, where every lake was ringed in red dots. The glance and the corner keep their own.)
+      const dp = sheet ? mPerPx / k : 0, close = mPerPx < 16, mid = mPerPx < 60 && dp < 72;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
-      if (lay.portages && mPerPx < 40) for (let pi = 0; pi < w.portages.length; pi++) { // (further out the red dashes were all you saw)
+      if (lay.portages && mPerPx < 40 && dp < 48) for (let pi = 0; pi < w.portages.length; pi++) { // (further out the red dashes were all you saw)
         const p = w.portages[pi], [bx0, bz0, bx1, bz1] = p.bbox;
         if (!inView(bx0, bz0, bx1, bz1) || !onMine(bx0, bz0, bx1, bz1)) continue;
         ctx.beginPath();
@@ -1671,7 +1706,7 @@ export class Hud {
         }
       }
       // campsites: red dots with a pale centre
-      if (mid && lay.campsites) {
+      if (mid && lay.campsites && dp < 46) {
         const r = (close ? 4.2 : 2.6) * k;
         for (let ci = 0; ci < w.campsites.length; ci++) {
           const c = w.campsites[ci];
@@ -1720,12 +1755,14 @@ export class Hud {
         }
         ctx.textBaseline = 'alphabetic';
       }
-      // entry points: the outfitters' docks, a pier with a shack at its root
+      // entry points: the outfitters' docks, a pier with a shack at its root (smaller on the overview, where seventy of
+      // them full size were most of what you saw: lodOf)
       ctx.font = `600 ${11 * k}px ${SERIF}`;
+      const dockK = k * (1 - 0.35 * lodOf(mPerPx, k).gen);
       for (const ep of w.entryPoints) {
         if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
         const [a, b] = toPx(ep.x, ep.z);
-        paintDock(ctx, a, b, k);
+        paintDock(ctx, a, b, dockK);
         hits.push({ kind: 'dock', ep: ep.ep, x: ep.x, z: ep.z, px: 10 });
         if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
       }
@@ -1762,17 +1799,16 @@ export class Hud {
       }
     }
     // The notices (the owner, 2026-10-31: "we need to be able to see which tasks we need to go claim and which ones are
-    // open"). Open: the keeper's red pencil round where it sends you, a wobbly ring not quite closed, with its number in
-    // a red tag on the ring (the same number as the book's list). Done: a gold seal on the dock of the outfitter that
-    // pays it, with how many wait there. Drawn over blank paper too: the pencil goes where the keeper pointed.
+    // open"). Open: the keeper's red pencil round where it sends you, a wobbly ring not quite closed (no numbered disc:
+    // the owner, of those, "look out of place"), and what for in the pencil hand. Done: a "$" pencilled and ringed on the
+    // dock of the outfitter that pays it, with how many wait there. Drawn over blank paper too: the pencil goes where the
+    // keeper pointed.
     if (lay.tasks) {
       for (const h of told.open) {
         if (!Number.isFinite(h.x) || !inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
         const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 7 * k);
         pencilRing(ctx, a, b, r, k, Math.abs(Math.round(h.x * 7 + h.z * 13)));
-        const ta = a - r * 0.71, tb = b - r * 0.71;
-        taskTag(ctx, ta, tb, h.n, k, false);
-        hits.push({ kind: 'task', task: h, x: h.x, z: h.z, r: h.r, px: 12, tag: [x0 + ta * mPerPx, z0 + tb * mPerPx] });
+        hits.push({ kind: 'task', task: h, x: h.x, z: h.z, r: h.r, px: 12 }); // (the ring is what the pointer takes: hitAt)
         if (h.label && (mPerPx < 60 || h.tight)) {
           ctx.font = `600 ${16 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(176, 40, 30, 0.9)';
           if (r > 44 * k) { ctx.textAlign = 'center'; ctx.fillText(h.label, clamp(a, 70 * k, W - 70 * k), clamp(b - r + 20 * k, 24 * k, H - 12 * k)); }
@@ -1782,20 +1818,12 @@ export class Hud {
       for (const q of told.claim) {
         if (!inView(q.x, q.z, q.x, q.z)) continue;
         const [a, b] = toPx(q.x, q.z);
-        taskTag(ctx, a + 11 * k, b - 15 * k, q.items.length > 1 ? `$${q.items.length}` : '$', k, true);
+        pencilSeal(ctx, a + 11 * k, b - 15 * k, q.items.length, k, Math.abs(Math.round(q.x * 3 + q.z * 11)));
         hits.push({ kind: 'claim', claim: q, x: q.x, z: q.z, px: 16, tag: [q.x + 11 * k * mPerPx, q.z - 15 * k * mPerPx] });
       }
     }
     this.hintLegend(told.notes.length > 0);
-    // round A-B: off your sheets, your pencil line is the only thing on the paper (the ink keeps to the sheets)
-    if (clipped && explored.runs.length) {
-      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H);
-      for (const s of owned) { const [a, b] = toPx(s.x0, s.z0); ctx.rect(a, b, (s.x1 - s.x0) / mPerPx, (s.z1 - s.z0) / mPerPx); }
-      ctx.clip('evenodd');
-      this.drawRoute(ctx, x0, z0, mPerPx, inView, k, player);
-      ctx.restore();
-    }
-    this.inkLegend(explored.runs.some((r) => r.n > 1), !blank && explored.lakes.count > 0);
+    this.inkLegend(!blank && explored.lakes.count > 0);
     if (clipped) this.drawNeatlines(ctx, sh, owned, toPx, k);
     if (look === 'whole' || this.table) this.drawSheetGrid(ctx, sh, toPx, inView, k);
     return ready;

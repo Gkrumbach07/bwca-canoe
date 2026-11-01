@@ -270,7 +270,7 @@ export class MapBook {
       ${row('portages', 'portage', 'Portages', 'in rods; walked ones gone over solid')}
       ${row('campsites', 'camp', 'Campsites', 'with the Forest Service number')}
       ${row('depths', 'depth', 'Depths', 'contours in feet, where the DNR has sounded')}
-      ${row('tasks', 'task', 'Notices', 'red tags: on the go · gold seals: to claim')}
+      ${row('tasks', 'task', 'Notices', 'ringed in red pencil; a ringed $ where one is paid')}
       ${row('notes', 'note', 'Pencilled in', 'what keepers and visitors marked for you')}
       ${row('burns', 'burn', 'Burns', 'fires and the 1999 blowdown, by the year')}
       ${row('boundary', 'bound', 'The wilderness', 'the Boundary Waters boundary')}
