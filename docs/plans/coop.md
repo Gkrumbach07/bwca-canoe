@@ -376,6 +376,26 @@ Three streams in parallel, then a join:
   jump (everyone at the store ticks, the host advances); an evacuation moves that one player to the outfitter on the
   group's clock with no jump; the trip's log carries `who`.
 
+### Phase 3 as built (2026-11-01)
+
+Three streams joined on `claude/coop-phase2`; notes `phase3-a.md`, `phase3-b.md`, `phase3-c.md` in the side-session notes.
+- **The night** (`coop-night.js`, messages `nite`/`nites`/`night`): the shared dial as planned; the host jumps once and
+  sends the clock, each guest sleeps from its own tent and takes the host's wake clock at its card's dark. The bear and
+  the card's words are each player's own (the host cannot see a guest's food); LATE_NIGHT/SLEEP_IN never apply (the dial
+  always picks an hour, as in single player). The fetch is greyed in a room. Rig `night.mjs`.
+- **The connection** (`coop-sky.js`, `coop-anim.js`): the host's wind (`sky`, 1 Hz and at a gust) and weather seed;
+  a dropped socket retries two minutes, then *Rejoin* / *Back to my own season*; *Rejoin <host>'s trip* on the title
+  after a reload; a host's reload reopens the room with its code. Friends drawn swimming (the swim pose moved to
+  `poses.js`), jumping, landing, crouching, wading, sitting, the rod up and casting (the owner: "animations are also
+  not synced"). Not drawn yet: vault/climb, held jobs' arms, things in hand, the camera raised, eating, the line. The
+  weather seed stays 23 alone (a season seed would change every save's weather). Rig `connect.mjs`.
+- **Adventure** (`coop-trip.js`): Invite in Adventure; a guest arrives at the host's store in a free berth; shops per
+  player and purse; notices one claim for the group, paid to the one who claimed it; the trip pushes off when any
+  player leaves and comes in when all are ashore at an outfitter; rides and the bunkhouse a group jump with a Ready
+  card, each paying their fare; an evacuation moves one player with no jump. Not yet: a ride to fetch an evacuated
+  player, a guest's trip card / logbook / Record, a key for the Ready card, the nine at push-off. Rig `adventure.mjs`.
+- **Wire traps:** `to` routes a message (never a payload field), the relay overwrites `from`, and `t` is the type.
+
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
 on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real test of the relay and the actor.
