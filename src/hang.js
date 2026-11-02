@@ -261,9 +261,16 @@ export class Hang {
   keys(o) { const k = (o && o.key) || 'KeyE'; return { key: k, keys: [...new Set([k, 'Mouse0', ...((o && o.keys) || []), ...(k === 'BookHold' ? ['KeyE'] : [])])] }; }
   // the nearest tree within reach whose limb takes barrel c, and where it would hang: { t, spot } or null
   treeFor(c, px = this.player.x, pz = this.player.z) {
-    for (const t of this.treesNear(px, pz, AT_TREE)) { const spot = this.spotFor(t, px, pz, BARRELS[c.item]); if (spot) return { t, spot }; }
+    const taken = this.othersHung();
+    for (const t of this.treesNear(px, pz, AT_TREE)) {
+      if (taken.some((h) => h.tree && Math.hypot(h.tree.x - t.x, h.tree.z - t.z) < 0.6)) continue; // (a friend's barrel on that limb: the next tree)
+      const spot = this.spotFor(t, px, pz, BARRELS[c.item]);
+      if (spot && !taken.some((h) => Math.hypot(h.x - spot.x, h.z - spot.z) < 1.2)) return { t, spot };
+    }
     return null;
   }
+  // co-op: the barrels friends have hung (coop-share.js camp.others(): { x, z, tree }), whose limbs are taken
+  othersHung() { const o = typeof this.camp.others === 'function' ? this.camp.others() : null; return (o && o.hung) || []; }
   // the hang let go part way (the rope over, or the barrel tied on at its foot) at a tree within reach: { pe, c } or null
   pendingHere() {
     const pe = this.pending, p = this.player;
@@ -278,7 +285,10 @@ export class Hang {
     if (c.where === 'hung') return 'it is hung already';
     if (p.mode !== 'walk') return 'ashore, on foot';
     if (!this.barrels().includes(c)) return 'the barrel is not within reach';
-    if (!this.treeFor(c)) return 'carry it to a tree with a limb over head height and point at it';
+    if (!this.treeFor(c)) {
+      const p2 = this.player, used = this.othersHung().some((h) => h.tree && Math.hypot(h.tree.x - p2.x, h.tree.z - p2.z) < AT_TREE + 1);
+      return used ? 'that limb has a barrel on it already: carry it to another tree' : 'carry it to a tree with a limb over head height and point at it';
+    }
     return null;
   }
   // fb4 E (decision 2): Hang's checklist, for the book's right-click and the dot: what is there, what is missing, and the

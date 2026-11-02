@@ -42,6 +42,7 @@ import { itemDef, defineItem } from './items.js';
 import { hold } from './hold.js';
 import { compassLong, plural, word } from './hud.js';
 import { chip } from './chip.js';
+import { overlap } from './footprints.js';
 
 // --- the pole (items.js defines it; this stands in until it does) ----------------------------------------------------------
 if (!itemDef('pole')) defineItem({ id: 'pole', name: 'Dead pole', short: 'Pole', kind: 'gear', w: 1, h: 3, kg: 0.9, stack: 4, icon: 'pole', price: 0, identity: 'Dead pole · 6 ft', words: 'Dead pole · 6 ft' });
@@ -93,6 +94,7 @@ export const STAGE_WORDS = ['not pitched', 'ridge line up', 'not guyed out', 'pi
 const STAGE_LINE = ['The tarp is down.', 'The ridge line is up.', 'The sheet is over, not guyed out.', 'The tarp is up.'];
 // fb5 D: why a rig can't stand, as the chip says it (rigProblem's words → a short phrase)
 const PROBLEM = [
+  [/another tarp/, 'Another tarp is there'], [/a tent is there/, 'A tent is there'],
   [/not in yet/, 'Not here yet'], [/too near the water|pole would stand in the water/, 'Too near the water'], [/over the water/, 'Over the water'],
   [/rises too high/, 'Ground too uneven'], [/falls away/, 'Ground too steep'], [/something built/, 'Something in the way'], [/tree/, 'A tree in the way'],
 ];
@@ -335,6 +337,11 @@ export class Tarp {
         if (o.box ? Math.abs(dx * o.ux + dz * o.uz) < o.hx + 0.5 && Math.abs(-dx * o.uz + dz * o.ux) < o.hz + 0.5 : Math.hypot(dx, dz) < (o.r || 0.2) + 0.5) return 'something built stands where a pole would go';
       }
     }
+    // co-op: a friend's tarp or tent there first (coop-share.js: tarp.others, camp.others())
+    const me = this.footOf(r);
+    if (this.others.some((q) => q.stage >= 1 && overlap(me, this.footOf(q), 0.1))) return 'another tarp is there';
+    const o2 = typeof this.camp.others === 'function' ? this.camp.others() : null;
+    if (o2 && o2.tents.some((t) => overlap(me, t, 0.1))) return 'a tent is there';
     // no other trunk under the sheet or across the ridge line
     for (const o of this.trunks(cx, cz, r.len / 2 + 2.5)) {
       if (skip.includes(o)) continue;
@@ -656,6 +663,8 @@ export class Tarp {
     }
     return false;
   }
+  // the sheet's footprint on the ground, pitched taut (footprints.js box)
+  footOf(r) { return { cx: r.ax + r.tx * r.sc, cz: r.az + r.tz * r.sc, ux: r.tx, uz: r.tz, hu: r.lh, hv: reachAt(3) }; }
   // the rig whose sheet covers (x, z), or null
   rigAt(x, z) { return this.rigs.find((r) => { const dx = x - r.ax, dz = z - r.az, s = dx * r.tx + dz * r.tz, v = -dx * r.tz + dz * r.tx; return Math.abs(s - r.sc) <= r.lh && Math.abs(v) <= reachAt(Math.max(2, r.stage)); }) || null; }
 

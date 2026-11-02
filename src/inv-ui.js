@@ -2174,7 +2174,10 @@ export class MineSide {
   // co-op (coop-share.js): a friend's container, a bin whose take and drop are requests to its owner
   friendPage(page, t) {
     const w = mk('div', 'ct friend');
-    w.appendChild(mk('div', 'ct-head', `<span class="nm">${esc(t.label)}</span><span class="wh">${esc(t.sub || '')}</span>`));
+    const head = mk('div', 'ct-head', `<span class="nm">${esc(t.label)}</span><span class="wh">${esc(t.sub || '')}</span>`);
+    // (co-op round 2: picked up whole, as our own on the ground are: a right-click on its strap, Pick up)
+    if (t.pickUp) { head.classList.add('acts'); head.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(ev.clientX, ev.clientY, [{ label: 'Pick up', disabled: !!t.pickUp.why, title: t.pickUp.why || '', run: () => { const r = t.pickUp.run(); if (r && r.words) note(r.words, 2.5); } }]); }); }
+    w.appendChild(head);
     const g = mk('div'); grid(g, binContainer(`bin:${t.key}`, t.bin), { bin: t.bin, screen: this.owner });
     w.appendChild(g); page.appendChild(w);
   }

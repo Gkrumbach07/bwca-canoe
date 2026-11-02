@@ -396,6 +396,26 @@ Three streams joined on `claude/coop-phase2`; notes `phase3-a.md`, `phase3-b.md`
   player, a guest's trip card / logbook / Record, a key for the Ready card, the nine at push-off. Rig `adventure.mjs`.
 - **Wire traps:** `to` routes a message (never a payload field), the relay overwrites `from`, and `t` is the type.
 
+### Phase 3 round 2: shared ground, no overlaps (2026-11-01)
+
+The owner, two browsers: "if it's on the ground in any container at all, it's shared and not just theirs ... It's not my
+canoe or your canoe. It's just two canoes", and "I'm also able to pitch a tent where they pitched a tent".
+- **Shared ground** (`coop-share.js`): the owner's browser stays the authority underneath (take/put/douse requests), but
+  nothing in the world carries a name: a friend's things are tabs named as the book names ours ("Duluth pack · in the
+  other canoe", "Barrel 2"), the dot says "the pack", the fire card "Fire ring". A friend's canoe tied at the dock is
+  reached from the whole outfitter's yard, as our own is (it had been 3 m from the hull only); a capsized one too; the
+  dot on its hull reads *E Look in it* (the book at its load). A friend's pack on the ground is *E Pick up · Q Open it*:
+  op `takebox`, the owner takes it and what nests in it out of their inventory and answers with the tree, we make it
+  ours on the back, chest or a hand (else at our feet); no answer and nothing moved.
+- **No overlaps** (`footprints.js` boxes; `CoopShare.others()` → `camp.others`): our tent is refused on a friend's
+  tent, tarp sheet or canoe ("another tent stands there"); our tarp's ghost is red over a friend's tarp or tent; a hang
+  skips a tree whose limb holds a friend's barrel (the next tree, or "that limb has a barrel on it already"). Two tents
+  staked at once on one spot: the lower id's stands, the other is struck back into its pack with a note.
+- **Not yet:** getting into, paddling or shouldering a friend's canoe (each canoe is drawn and driven by its owner's
+  `player`: taking one over means handing the hull, its load and its `carry.drop` across, like takebox for the boat);
+  long things (paddles, rods) in a friend's canoe; lowering a friend's hung barrel; a friend's hull from our canoe.
+  Rig `ground.mjs` (8 checks).
+
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
 on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real test of the relay and the actor.

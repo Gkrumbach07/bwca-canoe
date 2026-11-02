@@ -12,15 +12,28 @@
 //   took  what this browser has added to chores.s.taken / chores.s.sawn / forage.s.picked since it last said:
 //         { tk: { piece: day }, sw: { log: { day, cuts, poles } }, pk: { patch: [day, n] } }. Merged grow-only.
 //   op    a request to a thing's owner (m.to): { rid, op: 'take', cId, uid, qty } | { rid, op: 'put', cId, item: { id, qty, data } }
-//   opr   the owner's answer (m.to the asker): { rid, ok, entry: { id, qty, data, rot }, why }
+//         | { rid, op: 'takebox', cId } (the whole container, what nests in it too) | { rid, op: 'douse', key, stage }
+//   opr   the owner's answer (m.to the asker): { rid, ok, entry: { id, qty, data, rot }, tree (takebox), why }
+//
+// Phase 3 round 2, shared ground (the owner: "if it's on the ground in any container at all, it's shared and not just
+// theirs ... It's not my canoe or your canoe. It's just two canoes"): the owner stays the authority underneath, but the
+// player never reads "mine" or "yours". A friend's things are named as the book names our own ("Duluth pack · in the
+// other canoe", "the pack", "Fire ring"); their canoe beached, set down, at a dock or capsized is reached as ours is
+// (beside it, or from the outfitter's yard while it is tied at that dock), its hull on the dot ("E Look in it"); their
+// pack on the ground is picked up whole (E Pick up: takebox). And no two things in one spot: others() hands camp, tarp
+// and hang the friends' footprints (footprints.js), so our tent, tarp or hang is refused where theirs stands; two tents
+// pitched at once on one spot leave the lower id's (tentClash).
 //
 //   const share = new CoopShare(coop)   (main.js, once coop.g has the camp modules); share.stats() for the tests
+import { Vector3 } from 'three';
 import { ContainerView } from './containers.js';
 import { itemDef } from './items.js';
 import { tentPose } from './props.js';
 import { tentOf } from './tent.js';
 import { REACH, HULL_REACH } from './inventory.js';
 import { attach as uiAttach, refresh as uiRefresh, note as uiNote } from './inv-ui.js';
+import { tentFoot, hullFoot, overlap } from './footprints.js';
+import { hold } from './hold.js';
 
 const PUB_MS = 250;            // at most 4 a second
 const OP_TIMEOUT = 3000;       // ms: a request with no answer is undone
@@ -28,10 +41,15 @@ const TENT_REACH = 4;          // m: a friend's tent's insides within reach (inv
 const PUBLIC = new Set(['ground', 'hung', 'tent', 'canoe']);
 const AT_KEYS = ['x', 'y', 'z', 'heading', 'fuel', 'grate', 'ring', 'tree', 'limb', 'up', 'camp'];
 const NAMES = { pack3: 'pack', pack4: 'pack', packdry: 'dry bag', barrel30: 'barrel', barrel60: 'barrel', bucket: 'bucket', tacklebox: 'tackle box', stringer: 'stringer', mapcase: 'map case', pile: 'things', firefuel: 'fire', grate: 'grate' };
+// a tab's name, as the book names our own around us (inv-ui.js AROUND_NAMES): no owner's name on anything in the world
+const TAB = { pack3: 'Duluth pack', pack4: 'Duluth pack', packdry: 'Dry bag', barrel30: 'Barrel', barrel60: 'Barrel', bucket: 'Bucket', tacklebox: 'Tackle box', stringer: 'Stringer', mapcase: 'Map case' };
+const STAY = new Set(['firefuel', 'grate', 'woodarms', 'crate', 'pile', 'pockets', 'inhand']); // never picked up whole
+const nameOf = (item) => NAMES[item] || String((itemDef(item) || {}).short || (itemDef(item) || {}).name || 'pack').toLowerCase();
+const before = (a, b) => { const x = Number(a), y = Number(b); return Number.isFinite(x) && Number.isFinite(y) ? x < y : String(a) < String(b); }; // (one order on every screen)
+const _hv = new Vector3();
 const pfx = (peer) => `p${peer}:`;
 const unpfx = (s) => String(s).replace(/^p[^:]*:/, '');
 const pickAt = (at) => { if (!at) return null; const o = {}; for (const k of AT_KEYS) if (at[k] !== undefined) o[k] = at[k]; return o; };
-const possessive = (name) => `${name}’${/s$/i.test(name) ? '' : 's'}`;
 
 const HULL_HALF = 2.3, HULL_R = 0.42, WALKER_R = 0.32; // m: a hull as a capsule along its heading; the walker a circle
 const APART = { most: 2.5, brake: 6 };                  // m/s the overlap is taken out at most; 1/s the speed into it lost
@@ -144,6 +162,7 @@ export class CoopShare {
       g.chores.friendDoused = (key, stage) => this.douseFriend(key, stage);
       g.chores.friendPiles = () => this.groundOf((c) => c.item === 'pile'); // (their woodpiles drawn as ours: chores.drawPiles)
     }
+    if (g.camp) g.camp.others = () => this.others(); // (tent, tarp and hang: a friend's footprints, refused like our own)
     uiAttach({ coopTabs: { tabs: () => this.tabs(), sig: () => this.tabSig() } });
     this.hookNearby();
   }
@@ -169,8 +188,10 @@ export class CoopShare {
     const tarps = g.tarp && g.tarp.serialize ? g.tarp.serialize() : [];
     const fires = [];
     if (g.fires) for (const b of inv.containers) if (b.item === 'firefuel' && b.at && b.at.fuel) { const r = g.fires.record(b.at.fuel); if (r) fires.push(r); }
-    const p = g.player, d = p && p.carry && p.carry.drop;
-    const cn = d && Number.isFinite(d.x) && p.mode !== 'paddle' && p.mode !== 'carry' ? { x: d.x, z: d.z, heading: d.heading || 0 } : null;
+    // our canoe when it is not under us or on our shoulders: beached, set down, tied at a dock, floating capsized beside us
+    const p = g.player, d = p && p.carry && p.carry.drop, cap = p && p.mode === 'swim' && p.swim && p.swim.hull;
+    const cn = cap && Number.isFinite(cap.cx) ? { x: cap.cx, z: cap.cz, heading: cap.heading || 0 }
+      : d && Number.isFinite(d.x) && p.mode !== 'paddle' && p.mode !== 'carry' ? { x: d.x, z: d.z, heading: d.heading || 0 } : null;
     // what cooks on our grates and in our pots there (cook.js jobs), for a friend's fire card
     let cook = null;
     const ck = g.chores && g.chores.cook;
@@ -355,6 +376,44 @@ export class CoopShare {
     uiRefresh();
   }
 
+  // --- no two things in one spot ------------------------------------------------------------------------------------
+  // friends' footprints, for our tent (camp.pitchProblem), our tarp (tarp.rigProblem) and our hang (hang.treeFor):
+  // { tents: [box], tarps: [box], canoes: [box], hung: [{ x, z, tree }] } (footprints.js boxes); kept a moment
+  others() {
+    const now = performance.now();
+    if (this.othersAt && this.othersAt.ver === this.ver && now - this.othersAt.t < 200) return this.othersAt.v;
+    const v = { tents: [], tarps: [], canoes: [], hung: [] }, T = this.g.tarp;
+    if (this.coop.live) {
+      for (const f of this.friends.values()) {
+        const t = f.tentWant;
+        if (t && t.stage >= 1 && Number.isFinite(t.x)) v.tents.push(tentFoot(t));
+        const cn = f.pub && f.pub.cn;
+        if (cn) v.canoes.push(hullFoot(cn));
+        for (const c of f.mirror.containers) if (c.where === 'hung' && c.at) v.hung.push({ x: c.at.x, z: c.at.z, tree: c.at.tree || null });
+      }
+      if (T && typeof T.footOf === 'function') for (const r of T.others || []) if (r.stage >= 1) v.tarps.push(T.footOf(r));
+    }
+    this.othersAt = { ver: this.ver, t: now, v };
+    return v;
+  }
+  // two tents pitched at once on two screens, each before the other's pub came: the lower id keeps the spot, the other
+  // strikes theirs back into the pack (each screen decides alike, on what it has)
+  tentClash() {
+    const camp = this.g.camp, mine = camp && camp.camp;
+    if (!mine || !(mine.stage >= 1)) return;
+    const me = tentFoot(mine);
+    for (const f of this.friends.values()) {
+      const t = f.tentWant;
+      if (!t || !(t.stage >= 1) || !overlap(me, tentFoot(t), 0) || before(this.coop.id, f.id)) continue;
+      if (hold.is('tent')) hold.cancel();
+      if (typeof camp.cancelPitch === 'function') camp.cancelPitch();
+      if (camp.camp) camp.packTent({ quiet: true });
+      uiNote('Another tent went up on that spot first: yours is struck and back in the pack.', 5);
+      this.pubSoon();
+      return;
+    }
+  }
+
   // --- every frame in a room ----------------------------------------------------------------------------------------
   tick(now) {
     if (!this.coop.live) return;
@@ -367,6 +426,7 @@ export class CoopShare {
       try { this.drawTent(f); } catch (e) { if (!this.warnedT) { this.warnedT = true; console.warn('coop-share: a friend’s tent', e); } }
     }
     for (const [rid, q] of this.pending) if (now - q.t0 > OP_TIMEOUT) this.expire(rid, 'timeout');
+    try { this.tentClash(); } catch (e) { if (!this.warnedC) { this.warnedC = true; console.warn('coop-share: two tents', e); } }
     try { this.keepApart(now); } catch (e) { if (!this.warnedK) { this.warnedK = true; console.warn('coop-share: keeping apart', e); } }
     // our own registry's claim for a friend's site goes when our own tent there is struck: keep it for them
     for (const f of this.friends.values()) if (f.tent && f.tent.key && !f.claims.has(f.tent.key)) this.claim(f, f.tent.key);
@@ -382,6 +442,8 @@ export class CoopShare {
       case 'ground': case 'hung': return !!r.at && Math.hypot(r.at.x - p.x, r.at.z - p.z) <= REACH;
       case 'canoe': {
         const s = f.pub && f.pub.cn; if (!s) return false;
+        const inv = this.g.inventory, o = this.g.outfitter;
+        if (inv && inv.atStash && o && o.visit && Math.hypot(s.x - p.x, s.z - p.z) < 60) return true; // (tied at the dock of the outfitter we are at)
         const fx = Math.cos(s.heading), fz = -Math.sin(s.heading), dx = p.x - s.x, dz = p.z - s.z, t = Math.max(-2.4, Math.min(2.4, dx * fx + dz * fz));
         return Math.hypot(dx - fx * t, dz - fz * t) <= HULL_REACH;
       }
@@ -399,11 +461,20 @@ export class CoopShare {
     return out;
   }
   tabs() {
-    return this.reachable().map(({ f, c }) => {
-      const r = f.mirror.root(c), nm = NAMES[c.item] || String((itemDef(c.item) || {}).short || (itemDef(c.item) || {}).name || 'pack').toLowerCase();
-      const sub = c.where === 'in' ? 'inside another' : r.where === 'canoe' ? 'in their canoe' : r.where === 'tent' ? 'in their tent' : r.where === 'hung' ? 'hung up' : 'on the ground';
-      return { key: c.id, kind: 'friend', label: `${possessive(f.name)} ${nm}`, sub, bin: this.binOf(f, c) };
+    // named as the book names our own around us; "the other" only where ours is about too, to tell the two apart
+    const g = this.g, inv = g.inventory, mineCanoe = !!(inv && inv.canoeSpot && inv.canoeSpot()), mineTent = !!(g.camp && g.camp.camp && g.camp.camp.stage >= 3);
+    const out = this.reachable().filter(({ c }) => !this.taking(c.id)).map(({ f, c }) => {
+      const r = f.mirror.root(c), host = c.where === 'in' ? f.mirror.cont(c.in) : null;
+      const label = TAB[c.item] || nameOf(c.item).replace(/^./, (k) => k.toUpperCase());
+      const sub = host ? `in the ${nameOf(host.item)}` : r.where === 'canoe' ? (mineCanoe ? 'in the other canoe' : 'in the canoe') : r.where === 'tent' ? (mineTent ? 'in the other tent' : 'in the tent') : r.where === 'hung' ? 'hung up' : 'on the ground';
+      const whole = !STAY.has(c.item) && !(itemDef(c.item) || {}).one && r.where !== 'hung';
+      const pickUp = whole ? { why: this.slotFor(c) ? null : 'your back, your chest and your hands are full', run: () => this.requestTakeBox(f, c) } : null;
+      return { key: c.id, kind: 'friend', label, sub, bin: this.binOf(f, c), pickUp };
     });
+    // two of a kind told apart as the book does ("Barrel", "Barrel 2")
+    const seen = new Map();
+    for (const t of out) { const k = `${t.label}|${t.sub}`, n = (seen.get(k) || 0) + 1; seen.set(k, n); if (n > 1) t.label = `${t.label} ${n}`; }
+    return out;
   }
   tabSig() {
     if (!this.coop.live || !this.friends.size) return '';
@@ -434,7 +505,7 @@ export class CoopShare {
     if (!sent) return { ok: false, words: 'Not now: the connection is down.' };
     this.pending.set(rid, { rid, op: 'take', to: f.id, cId: c.id, uid, t0: performance.now(), toCId, x, y, rot, hand, qty: qty || e.qty, itemId: e.id });
     this.ver++;
-    return { ok: true, words: `Asking ${f.name} for the ${(itemDef(e.id) || {}).name || 'thing'}…` };
+    return { ok: true, words: `The ${String((itemDef(e.id) || {}).name || 'thing').toLowerCase()}…` };
   }
   requestPut(f, c, { cId, uid, itemId, qty }) {
     const inv = this.g.inventory, d = itemDef(itemId), spec = (itemDef(c.item) || {}).container || {};
@@ -451,7 +522,76 @@ export class CoopShare {
     if (!this.coop.send({ t: 'op', to: f.id, rid, op: 'put', cId: unpfx(c.id), item })) { this.giveBack(item, back); return { ok: false, words: 'Not now: the connection is down.' }; }
     this.pending.set(rid, { rid, op: 'put', to: f.id, cId: c.id, item, back, t0: performance.now() });
     this.ver++;
-    return { ok: true, words: `Into ${possessive(f.name)} ${NAMES[c.item] || 'pack'}…` };
+    return { ok: true, words: `Into the ${nameOf(c.item)}…` };
+  }
+  // --- a whole container off the ground, out of a friend's canoe or tent: 'takebox' ---------------------------------------
+  // "If it's on the ground in any container at all, it's shared": a pack, a barrel, the bucket picked up as our own are.
+  // The owner takes it (and what nests in it) out of their inventory and answers with the lot; we make it ours, on our
+  // back, chest or in a hand. While asked it is hidden here; no answer and it is simply back (nothing of ours moved), and
+  // a late yes lands all the same (it left its owner).
+  taking(cId) { for (const q of this.pending.values()) if (q.op === 'takebox' && q.cId === cId) return true; return false; }
+  // where on us a friend's container c would go: 'back' | 'chest' | 'hands', or null
+  slotFor(c) {
+    const inv = this.g.inventory, d = itemDef(c.item) || {}, w = d.wear || [];
+    if (!inv) return null;
+    if (w.includes('back') && !inv.worn('back')) return 'back';
+    if (w.includes('chest') && !inv.worn('chest')) return 'chest';
+    return inv.freeHand() >= 0 ? 'hands' : null;
+  }
+  requestTakeBox(f, c) {
+    if (STAY.has(c.item) || (itemDef(c.item) || {}).one) return { ok: false, words: 'That stays where it is.' };
+    const r = f.mirror.root(c);
+    if (r.where === 'hung') return { ok: false, words: 'Lower it first.' };
+    if (!this.near(f, c)) return { ok: false, words: 'A step closer.' };
+    if (this.taking(c.id)) return { ok: false, words: 'A moment: it is on its way.' };
+    const slot = this.slotFor(c);
+    if (!slot) return { ok: false, words: 'Your back, your chest and your hands are full.' };
+    const rid = `${this.coop.id}:${this.rid++}`;
+    if (!this.coop.send({ t: 'op', to: f.id, rid, op: 'takebox', cId: unpfx(c.id) })) return { ok: false, words: 'Not now: the connection is down.' };
+    this.pending.set(rid, { rid, op: 'takebox', to: f.id, cId: c.id, slot, item: c.item, t0: performance.now() });
+    this.ver++;
+    uiRefresh();
+    return { ok: true, words: `The ${nameOf(c.item)}…` };
+  }
+  // the owner's side: c and what nests in it, as a tree, out of our inventory. → the tree, or null
+  giveBox(c) {
+    const inv = this.g.inventory;
+    const tree = (k, depth = 0) => ({ item: k.item, grid: k.grid.map((e) => {
+      if (e.box) { const kid = inv.cont(e.uid); return kid && depth < 6 ? { x: e.x, y: e.y, rot: e.rot ? 1 : 0, kid: tree(kid, depth + 1) } : null; }
+      return { id: e.id, qty: e.qty, x: e.x, y: e.y, rot: e.rot ? 1 : 0, ...(e.data ? { data: e.data } : {}) };
+    }).filter(Boolean) });
+    const out = tree(c), gone = new Set();
+    const mark = (k) => { gone.add(k.id); for (const e of k.grid) if (e.box) { const kid = inv.cont(e.uid); if (kid && !gone.has(kid.id)) mark(kid); } };
+    mark(c);
+    if (c.where === 'in') inv.unnest(c);
+    inv.containers = inv.containers.filter((k) => !gone.has(k.id));
+    inv.emit('containers');
+    return out;
+  }
+  // ours now: the tree made into our containers, on us at `slot` (else at our feet). → the words
+  landBox(tree, slot) {
+    const inv = this.g.inventory, p = this.g.player, d = itemDef(tree.item) || {}, w = d.wear || [];
+    let where = slot;
+    if (where === 'back' || where === 'chest') { if (!w.includes(where) || inv.worn(where)) where = null; }
+    if (where === 'hands' && inv.freeHand() < 0) where = null;
+    if (!where) where = w.includes('back') && !inv.worn('back') ? 'back' : w.includes('chest') && !inv.worn('chest') ? 'chest' : inv.freeHand() >= 0 ? 'hands' : 'ground';
+    const make = (t, host) => {
+      const k = inv.addContainer(t.item, host ? 'in' : where, null, { quiet: true });
+      if (!k) return null;
+      if (host) { k.in = host.id; k.hand = null; }
+      for (const e of t.grid || []) {
+        if (e.kid) { const kid = make(e.kid, k); if (kid) k.grid.push({ uid: kid.id, id: kid.item, x: e.x, y: e.y, rot: e.rot ? 1 : 0, qty: 1, box: true }); continue; }
+        if (!itemDef(e.id)) continue;
+        k.grid.push({ uid: inv.uid(), id: e.id, qty: Math.max(1, e.qty | 0), x: e.x, y: e.y, rot: e.rot ? 1 : 0, ...(e.data ? { data: e.data } : {}) });
+      }
+      return k;
+    };
+    const k = make(tree, null);
+    if (!k) return 'It would not come.';
+    if (where === 'ground') { const hd = p.heading || 0, x = p.x + Math.sin(hd) * 0.8, z = p.z + Math.cos(hd) * 0.8; k.at = { x, z, y: inv.groundY(x, z), heading: hd, left: true }; }
+    inv.emit('containers'); inv.emit('items');
+    const nm = d.name || 'It';
+    return where === 'hands' ? `${nm} in hand.` : where === 'ground' ? `${nm}: no room on you, so it is at your feet.` : `${nm} on your ${where}.`;
   }
   // the owner's side: applied to our own inventory at once, answered
   gotOp(m) {
@@ -464,6 +604,14 @@ export class CoopShare {
     }
     const c = inv && inv.cont(m.cId);
     if (!c || !PUBLIC.has(inv.rootWhere(c))) return reply({ ok: false, why: 'It isn’t there any more.' });
+    if (m.op === 'takebox') {
+      if (STAY.has(c.item) || (itemDef(c.item) || {}).one || inv.rootWhere(c) === 'hung') return reply({ ok: false, why: 'That stays where it is.' });
+      const pm = this.g.player && this.g.player.mode;
+      if (inv.rootWhere(c) === 'canoe' && (pm === 'paddle' || pm === 'carry')) return reply({ ok: false, why: 'That canoe is on the move.' });
+      const tree = this.giveBox(c);
+      this.pubSoon();
+      return reply({ ok: true, tree });
+    }
     if (m.op === 'take') {
       const e = c.grid.find((q) => q.uid === m.uid);
       if (!e) return reply({ ok: false, why: 'That is gone.' });
@@ -492,7 +640,9 @@ export class CoopShare {
     this.ver++;
     if (q.op === 'take') {
       if (m.ok && m.entry) { const w = this.land(m.entry, q); uiNote(w, 3); }
-      else uiNote(m.why || 'They kept it.', 3);
+      else uiNote(m.why || 'It won’t come out.', 3);
+    } else if (q.op === 'takebox') {
+      uiNote(m.ok && m.tree ? this.landBox(m.tree, q.slot) : m.why || 'It won’t come.', 3);
     } else if (q.op === 'put') {
       if (!m.ok) { this.giveBack(q.item, q.back); uiNote(`${m.why || 'It won’t go in.'} It is back with you.`, 3); }
     }
@@ -504,6 +654,7 @@ export class CoopShare {
     if (!q) return;
     this.expired.delete(m.rid);
     if (q.op === 'take' && m.ok && m.entry) uiNote(this.land(m.entry, q), 3);
+    if (q.op === 'takebox' && m.ok && m.tree) uiNote(this.landBox(m.tree, q.slot), 3);
     if (q.op === 'put' && m.ok && q.returned) { const inv = this.g.inventory; if (inv.cont(q.returned.cId)) inv.take(q.returned.cId, q.returned.uid, q.item.qty); }
     uiRefresh();
   }
@@ -598,7 +749,7 @@ export class CoopShare {
       cooking = ck ? (typeof ck.potsOn === 'function' ? ck.cookingNow(key, { grateOnly: true }) : ck.cookingNow(key)) : null;
     }
     return {
-      id: `fire:${key}`, kind: 'fire', title: `${possessive(fb.f.name)} fire`, key, state: st,
+      id: `fire:${key}`, kind: 'fire', title: 'Fire ring', key, state: st,
       slots: [{ ...bin, id: 'fuel', label: 'Fuel' }, ...slots],
       actions: lit && site ? [{ id: 'douse', label: 'Douse', held: true, job: 'fire-out', enabled: true, why: null, run: (o) => ch.douse(site, key, nb && nb.keys ? nb.keys(o) : {}) }] : [],
       need: nb && typeof nb.askWood === 'function' ? nb.askWood(need) : need,
@@ -638,29 +789,42 @@ export class CoopShare {
   }
   ownerOf(cId) { for (const f of this.friends.values()) if (f.mirror.cont(cId)) return f; return null; }
   // pointer.js provider: a friend's pile or woodpile (E Take one · Q Open it, the book at its tab), a friend's pack on the
-  // ground (E Open it): each a request to its owner, as in the book
+  // ground (E Pick up · Q Open it), a friend's canoe lying there (E Look in it: the book at what is in it): each a
+  // request to its owner, as in the book, and named as our own are
   pointTargets(ray, near) {
     const out = [], g = this.g, p = g.player;
     if (!this.coop.live || !this.friends.size || !p || p.mode !== 'walk') return out;
     const nb = window.__game && window.__game.nearby, ch = g.chores;
     const open = (c) => { if (nb && typeof nb.openHere === 'function') nb.openHere(c.id); };
     for (const f of this.friends.values()) for (const c of f.mirror.containers) {
-      if (c.where !== 'ground' || !c.at || c.item === 'firefuel' || c.item === 'grate') continue;
+      if (c.where !== 'ground' || !c.at || c.item === 'firefuel' || c.item === 'grate' || this.taking(c.id)) continue;
       if (near.flat(c.at.x, c.at.z) > near.reach) continue;
       const y = Number.isFinite(c.at.y) ? c.at.y : p.groundAt(c.at.x, c.at.z);
       const wood = !!(ch && ch.woodOnly(c)), pile = c.item === 'pile';
       const hit = near.sphere(c.at.x, y + (wood ? 0.18 : 0.2), c.at.z, wood ? 0.5 : pile ? 0.42 : 0.36);
       if (!hit) continue;
-      const who = possessive(f.name);
       if (pile) {
         const top = (wood ? c.grid.find((q) => q.id === 'wood:log') : null) || c.grid.find((q) => !q.box) || null, n = wood ? ch.pieceCount(c) : c.grid.length;
         if (!c.grid.length) continue;
-        const label = wood ? `${who} woodpile (${n})` : n === 1 && top ? `${who} ${String((itemDef(top.id) || {}).name || 'thing').toLowerCase()}, on the ground` : `${who} things on the ground (${n})`;
+        const label = wood ? `the woodpile (${n})` : n === 1 && top ? `the ${String((itemDef(top.id) || {}).name || 'thing').toLowerCase()}, on the ground` : `the things on the ground (${n})`;
         const pm = wood && ch.pileMesh ? ch.pileMesh(c.id) : null;
         out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'pile', ref: c.id, label, e: { verb: 'Take one', why: top ? null : 'nothing there', run: () => { const r = this.requestTake(f, c, top.uid, { qty: 1 }); if (r && r.words) uiNote(r.words, 2.5); return !!(r && r.ok); } }, q: { verb: 'Open it', run: () => open(c) }, mesh: pm ? pm.layers[0] : f.view && f.view.objs.get(c.id) } });
         continue;
       }
-      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'container', ref: c.id, label: `${who} ${NAMES[c.item] || String((itemDef(c.item) || {}).name || 'pack').toLowerCase()}`, e: { verb: 'Open it', why: null, run: () => open(c) }, mesh: f.view && f.view.objs.get(c.id) } });
+      const room = this.slotFor(c);
+      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'container', ref: c.id, label: `the ${nameOf(c.item)}`, e: { verb: 'Pick up', why: room ? null : 'your back and hands are full', run: () => { const r = this.requestTakeBox(f, c); if (r && r.words) uiNote(r.words, 2.5); return !!(r && r.ok); } }, q: { verb: 'Open it', run: () => open(c) }, mesh: f.view && f.view.objs.get(c.id) } });
+    }
+    // a friend's canoe lying by (beached, set down, at a dock): its load in the book, as our own canoe's "Unload it first"
+    for (const f of this.friends.values()) {
+      const s = f.pub && f.pub.cn;
+      if (!s || near.flat(s.x, s.z) > near.reach + 2.4) continue;
+      const R = this.coop.remotes.get(f.id), B = R && R.boat, y = B && !B.hidden && B.root ? (B.root.getWorldPosition(_hv), _hv.y) : p.groundAt(s.x, s.z);
+      const box = { x: s.x, y: y + 0.35, z: s.z, hx: 2.45, hy: 0.5, hz: 0.46, heading: s.heading || 0 };
+      const hit = near.box(box);
+      if (!hit) continue;
+      const load = f.mirror.containers.filter((c) => c.where === 'canoe' && !STAY.has(c.item) && !this.taking(c.id));
+      const first = load.find((c) => this.near(f, c));
+      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'canoe', ref: `canoe:${f.id}`, label: load.length ? `the canoe (${load.length})` : 'the canoe, empty', e: { verb: 'Look in it', why: !load.length ? 'nothing in it' : first ? null : 'a step closer', run: () => { if (first) open(first); return !!first; } }, box } });
     }
     return out;
   }

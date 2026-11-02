@@ -7,6 +7,7 @@ import { Chores } from './chores.js'; // hubs 3A / camp 2: the fire, the wood, t
 import { hold } from './hold.js'; // camp 1: held work, with its ring
 import { TentStages, TentGhost, TENT_FLY, kindOf, tentOf } from './tent.js'; // camp 1: the tent in its phases (the A-frame's own, camp join)
 import { Hang } from './hang.js'; // camp 1: the barrel hung from a limb
+import { tentFoot, overlap } from './footprints.js'; // co-op: no tent where a friend's tent, tarp or canoe is
 import { inventory as INVENTORY } from './inventory.js';
 import { itemDef, isBag } from './items.js';
 
@@ -712,6 +713,14 @@ export class Camp {
     // the canoe lying there
     const d = p.carry && p.carry.drop;
     if (d && boxDist(d.x, d.z) < 1.4) return 'the canoe is in the way';
+    // co-op: a friend's tent, tarp or canoe there first (coop-share.js others(): their footprints)
+    const o = typeof this.others === 'function' ? this.others() : null;
+    if (o) {
+      const me = tentFoot({ x, z, fdx, fdz }, size);
+      if (o.tents.some((t) => overlap(me, t, 0.25))) return 'another tent stands there';
+      if (o.tarps.some((t) => overlap(me, t, 0.1))) return 'under the other tarp';
+      if (o.canoes.some((c) => overlap(me, c, 0.3))) return 'a canoe is in the way';
+    }
     return null;
   }
   // --- the tent: pitching and striking ---------------------------------------------------------------------------
