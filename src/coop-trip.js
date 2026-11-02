@@ -132,6 +132,10 @@ export class CoopTrip {
       const r = await enter(w);
       const core = g.trip, o = g.outfitter;
       if (core) core.reset(core.mode); // the guest's own season's trip is not this one (nothing is written: kv is frozen)
+      // round 4: rested on the host's clock (energy.arrive), not the guest's own season's hours awake read against it
+      // (a season dated later than the host's read as a year awake: the bar 100 % sleepy and spent on arrival)
+      const en = (core && core.energy) || g.energy;
+      if (en && typeof en.arrive === 'function') en.arrive();
       if (o) { o.trip = { ...IDLE }; o.port = null; }
       this.mirrored = false; this.hostTrip = null; this.arrive = { pending: true, t: performance.now() };
       this.toHost({ t: 'tripq' });

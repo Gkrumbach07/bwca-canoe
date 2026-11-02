@@ -503,6 +503,30 @@ not my canoe or your canoe. It's just two canoes." Built in `src/coop-boat.js` (
   afloat by the dock, not "at the dock" (the shop's canoe-at-dock reads the berth of the visit); getting into a friend's
   canoe from our own afloat (rafting up), and two in one canoe.
 
+### Phase 3 round 4: the status bar (2026-11-02)
+
+The owner: "when the non-host joins their status bar is 100% sleepy … the host, I can't see the status bar on the top
+unless I pause". Two causes, neither the relay's:
+
+- **Sleepy on joining.** `energy.awakeSince` is an absolute game hour (`doy × 24 + hours`). A guest takes the host's
+  clock on the way in (`applyClock`, a jump of months), and the guest's own season's `awakeSince` read against it made
+  `awake` negative by thousands of hours, which the new-year wrap in `awake` turned into ~5,400 h: the rest need 0, the
+  ceiling 0, spent the moment the host's Adventure made the needs live (and an evacuation an hour later).
+  **The rule chosen:** a friend arriving on a host's trip arrives **rested on the host's clock**, as a season's first
+  trip puts in (`trip.start` fresh): up since seven that morning (at most 12 h), the needs full, the bottle filled, the
+  bar full (`energy.arrive()`, from coop-trip's `enterAsGuest`). Their own season's bar is not carried in: it is left
+  untouched in their own save (nothing of a visit is written), and its hours awake mean nothing on another clock.
+  And in general (`energy.update`): a leap of the clock that is no time lived (set back, or more than three days ahead)
+  moves `awakeSince` with it, so it never reads as hours awake.
+- **No bar unless paused.** The Air's bar (`#energy`) showed only on a trip under way; the strip over every paper showed
+  it always. At a store (where a room is opened and friends arrive, and where co-op waits) the bar was gone in play and
+  back the moment anything paper-like was up. Now the bar is up in play whenever there is a game (`hud.updateEnergy`:
+  not only `trip.active`), single player too: off a trip the needs read full, as the strip already showed them.
+- **Rig:** `scripts/coop/hud.mjs` (4 checks): the guest's energy right after joining (hours awake = since 7 am on the
+  host's clock, rest and ceiling ≥ 0.9); the top bar up on both screens at the store unpaused, on the water with the
+  trip under way, and after Escape and resume (shown, on screen, and `elementFromPoint` at its centre is the bar's own
+  hit box).
+
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
 on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real test of the relay and the actor.

@@ -393,6 +393,17 @@ export class Energy {
     this.lastNow = this.now; this.unnote(); this.lastChunks = null; this.spentAt = null; this.clearOut();
   }
   clearOut() { for (const k in this.out) this.out[k] = 0; }
+  // Co-op round 4 (docs/plans/coop.md, "the status bar"): a friend come into a host's trip arrives rested on the host's
+  // clock, as the season's first trip puts in (trip.js start, fresh): up since seven that morning (at most 12 h), the
+  // needs full, the bottle filled, the bar full. Their own season's bar is left as it was (nothing of a visit is
+  // written), and its hours awake, counted against their own season's clock, mean nothing on the host's.
+  arrive() {
+    const h = this.day.hours;
+    this.value = 1; this.warned = false; this.warnTimer = 0; this.lastMealAbs = -1e9; this.fedUntil = -1;
+    this.awakeSince = this.now - Math.min(12, Math.max(0, h - 7)); this.wokeAt = -1e9;
+    this.upsetAt = this.upsetUntil = -1e9; this.upsetSaid = true; this.dryUntil = -1e9; this.winded = false;
+    this.fresh();
+  }
   unnote() { for (const k in this.noted) this.noted[k] = false; }
   // fetched in by an evacuation: whoever came out brought hot food and water, and a blanket (main.js, on the trip's 'evac')
   rescued() { this.need.food = 1; this.need.water = 1; this.need.warmth = 1; this.soaked = 0; this.fill(BOTTLE, 0); this.unnote(); this.lastChunks = null; this.spentAt = null; this.clearOut(); }
@@ -932,7 +943,10 @@ export class Energy {
     this.hard = hard;
     // the needs, over the game hours since the last frame (a jump of the clock longer than JUMP counts as a night)
     let dh = now - this.lastNow; this.lastNow = now;
-    if (!(dh > 0) || dh > 24 * 3) dh = 0; // the clock set back (Sandbox), or a reload's leap
+    // the clock set back (Sandbox), or a leap that is no time lived (a reload's, a friend's clock taken on joining):
+    // the hours awake are kept as they were, so a leap of days never reads as days awake (co-op round 4)
+    if (Number.isFinite(dh) && dh !== 0 && !(dh > 0 && dh <= 24 * 3) && Number.isFinite(this.awakeSince)) this.awakeSince += dh;
+    if (!(dh > 0) || dh > 24 * 3) dh = 0;
     // water: the stomach turns, said once when it does (asleep, in the morning)
     if (!this.upsetSaid && this.upsetNow) { this.upsetSaid = true; this.note(UPSET_WORDS); }
     if (this.live) {
