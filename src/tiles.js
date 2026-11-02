@@ -12,6 +12,7 @@ import { setMireExclusions } from './mire-relief.js';
 import { DetailStreamer } from './detail.js'; // the LiDAR detail near the player (docs/detail.md)
 import { Thicket } from './thicket.js';
 import { makeViews, setViews } from './views.js'; // round world: the sites' and portage landings' views to the water // the density round: the wetlands filled in round the camera
+import { makeRamps, setRamps } from './ramps.js'; // round ramps
 
 // Streams the world around the player: a 5 x 5 neighbourhood of 2.56 km tiles (terrain, water, forest,
 // lake vegetation, portages, campsites) built in a pool of workers and installed one per frame, a 3 x 3
@@ -576,6 +577,9 @@ export class TileManager {
     // round world: the views to the water (views.js), thinned by the workers' forest and the near ring alike (`?views=off`)
     const views = typeof location !== 'undefined' && /[?&]views=off\b/.test(location.search) ? new Float32Array(0) : makeViews(world);
     setViews(views);
+    // round ramps: the campsites' ways up graded into the ground (ramps.js), here and in the workers alike (`?ramps=off`)
+    const ramps = makeRamps(world);
+    setRamps(ramps);
     // the season round: the creeks' channels through the flowages, as segments (water-build.js flowageBeds)
     const cs = [];
     if (world.creeks) for (const c of world.creeks.chans) for (let k = 3; k + 1 < c.length; k += 2) cs.push(c[k - 2], c[k - 1], c[k], c[k + 1]);
@@ -587,7 +591,7 @@ export class TileManager {
       w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
         bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null, // d1 lakes: the lakes' bowls and rice (lake-facts.js)
         land: typeof location === 'undefined' || !/[?&]land=off\b/.test(location.search), // d2 land: `?land=off`, the noise's land (land.js setLand)
-        lowIds: world.lowIds, brooks, campLandings, views, // wetlands round 2: the seasonal creeks, whose water stands lower in late summer (water-build.js lowCreeks)
+        lowIds: world.lowIds, brooks, campLandings, views, ramps, // wetlands round 2: the seasonal creeks, whose water stands lower in late summer (water-build.js lowCreeks)
         waterKinds: world.waterKinds, chans }); // the season round: every water's level by the date, the flowages' channels
       return { w, key: null, entry: null }; // entry: the request this worker's build answers (onMessage)
     });

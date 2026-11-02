@@ -6,6 +6,7 @@ import { rockAt, calmAt, meadowAt, knobAt } from './fields.js';
 import { burnLook, burnOpenAt } from './burns.js';
 import { isFlowage } from './water-build.js'; // the season round: a flowage's bed is mud
 import { mireAttr, coverByte } from './mire-relief.js'; // the density round: the wetlands' floor (terrain.js aRelief)
+import { rampAt } from './ramps.js'; // round ramps: the campsites' landings graded into the ground
 
 // the cliff band strength (site.js CLIFF.band) a cell needs to be a cliff
 const CLIFF_BAND = 0.45, TALUS_MIN = 0.4;
@@ -343,13 +344,25 @@ function shoreShape(hBase, sd, level, half = NARROW.wide) {
   return lerp(hBase, target, w);
 }
 const halfAt = (grid, x, z, sd) => (sd < 0 ? narrowAt(grid, x, z) : NARROW.wide);
+// Round ramps (ramps.js): the ground on land eased to a campsite's graded way up where one passes, never under the water's
+// own level near the shore (a ramp's shelf is worked out at the release's level; the season's may stand higher). On this
+// mesh it fades out from 16 to 20 m inland, short of the fine band's edge (FINE_BAND), where a subdivided cell's mid-edge
+// vertex must stay the mean of its ends for the undivided neighbour (the tees): the detail draws the rest.
+export function rampGround(grid, x, z, h, sd) {
+  if (!(sd > 0) || sd >= 20) return h;
+  let r = rampAt(x, z, h);
+  if (r === h) return h;
+  if (sd > 16) r = h + (r - h) * (1 - smoothstep(16, 20, sd));
+  if (sd < 6) { const lv = grid.levelAt(x, z, 4); if (lv === lv) return Math.max(r, lv + 0.04 * Math.min(sd, 5)); }
+  return r;
+}
 
 // The height things should stand on: the DEM reshaped in the shore band exactly as the mesh is.
 export function surfaceAt(grid, x, z) {
   if (grid.detail) { const d = grid.detail.height(x, z); if (d === d) return d; } // LiDAR detail (detail-build.js): a chunk's lattice, in the worker's view of a grid
   const h = grid.heightAt(x, z), sd = grid.shoreAt(x, z);
-  if (Math.abs(sd) >= SHAPE_BAND) return h;
-  return shoreShape(h, sd, grid.levelAt(x, z, 4), halfAt(grid, x, z, sd));
+  if (Math.abs(sd) >= SHAPE_BAND) return rampGround(grid, x, z, h, sd);
+  return rampGround(grid, x, z, shoreShape(h, sd, grid.levelAt(x, z, 4), halfAt(grid, x, z, sd)), sd);
 }
 
 // Gentle bumps a little way from the waterline (never across it): hummocks and roots under the shore's trees, low
@@ -387,6 +400,7 @@ export function meshHeightAt(grid, x, z, cache = null) {
     const sd = grid.shoreAt(vx, vz);
     if (Math.abs(sd) < SHAPE_BAND) h = shoreShape(h, sd, grid.levelAt(vx, vz, 4), halfAt(grid, vx, vz, sd)); // d1 rapids: the water's own level here (bilinear), as the mesh below
     if ((a || b) && (a && b ? quadFine(ci, cj) : a ? quadFine(ci, cj) && quadFine(ci, cj - 1) : quadFine(ci, cj) && quadFine(ci - 1, cj))) h += shoreBumps(vx, vz, sd);
+    h = rampGround(grid, vx, vz, h, sd); // (round ramps: as the vertex below)
     if (cache) cache.set(key, h);
     return h;
   };
@@ -476,6 +490,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
         if (interior) h += shoreBumps(x, z, sd);
         else tees.push(pos.length / 3, a ? ii - 1 : ii, a ? jj : jj - 1, a ? ii + 1 : ii, a ? jj : jj + 1); // its index, then its two ends' lattice keys
       }
+      h = rampGround(grid, x, z, h, sd); // round ramps: a campsite's way up graded in (ramps.js)
     }
     v = pos.length / 3;
     pos.push(x - originX, h, z - originZ);

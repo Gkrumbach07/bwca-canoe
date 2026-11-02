@@ -171,7 +171,8 @@ export class World extends GridQueries {
   }
 
   // Round world (2026-11-02): each campsite's way from the water and its latrine (scripts/camp-access.mjs), as
-  // c.access = { way: [[x, z], ...] from the fire ring to the waterline, landing: [x, z] (the waterline's point), latrine:
+  // c.access = { way: [[x, z], ...] from the fire ring to the waterline, landing: [x, z] (the waterline's point), ramp (round
+  // ramps, scripts/camp-ramps.mjs: the way graded into the ground, ramps.js), latrine:
   // { x, z, a } (a: the trail's bearing at the box), trail: [[x, z], ...] from the ring to the box, bbox: [x0, z0, x1, z1]
   // round both } or none. props.js clears both and draws them faint, site.js lays the shelf toward the landing, player.js
   // walks them graded and noses the canoe in to the landing.
@@ -183,6 +184,9 @@ export class World extends GridQueries {
       const rx = Math.round(c.x), rz = Math.round(c.z), pts = (a) => { const o = []; for (let i = 0; i + 1 < a.length; i += 2) o.push([rx + a[i] / 10, rz + a[i + 1] / 10]); return o; }; // (flat decimetres from the site)
       const way = e.l && e.l.length >= 4 ? pts(e.l) : null, trail = e.t && e.t.length >= 4 ? pts(e.t) : null;
       const A = { way, landing: way ? way[way.length - 1] : null, trail, latrine: null };
+      // round ramps (scripts/camp-ramps.mjs, ramps.js): the way graded into the ground, [[x, z, h, w], ...] from the water
+      // up (r: flat [dx, dz] decimetres, h centimetres over rb metres, w decimetres of shoulder); sw: laid as a switchback
+      if (e.r && e.r.length >= 8) { A.ramp = []; for (let i = 0; i + 3 < e.r.length; i += 4) A.ramp.push([rx + e.r[i] / 10, rz + e.r[i + 1] / 10, e.rb + e.r[i + 2] / 100, e.r[i + 3] / 10]); A.switchback = !!e.sw; }
       if (A.trail) { const [x, z] = A.trail[A.trail.length - 1], [px, pz] = A.trail[A.trail.length - 2]; A.latrine = { x, z, a: Math.atan2(z - pz, x - px) }; }
       let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
       for (const [x, z] of [...(A.way || []), ...(A.trail || [])]) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
@@ -190,6 +194,13 @@ export class World extends GridQueries {
       c.access = A; n++;
     }
     this.campAccess = n;
+    // round ramps: the outfitters' ways up from the dock to the door graded the same (ep.ramp, as a site's access.ramp)
+    for (const ep of this.entryPoints || []) {
+      const o = table.outfitters && table.outfitters[ep.ep];
+      if (!o || !o.r || o.r.length < 8) continue;
+      ep.ramp = [];
+      for (let i = 0; i + 3 < o.r.length; i += 4) ep.ramp.push([o.x + o.r[i] / 10, o.z + o.r[i + 1] / 10, o.rb + o.r[i + 2] / 100, o.r[i + 3] / 10]);
+    }
     return n;
   }
 

@@ -15,6 +15,7 @@ import { lerp, smoothstep } from './rng.js';
 import { meshHeightAt, groundPre, bedPre, bedGrain, bedBare, splatAt, landW } from './terrain-build.js';
 import { brookCut } from './brook-cut.js'; // wetlands round 2: the brooks cut into the 2 m ground
 import { mireSample, mireAttr } from './mire-relief.js'; // the density round: the wetlands' hummocks and hollows
+import { rampAt } from './ramps.js'; // round ramps: the campsites' ways up graded into the ground
 
 const HEADER = 56, MAGIC = 0x43445742; // 'BWDC' (scripts/detail-bake.mjs)
 const DEEP = 30; // metres from the shore past which a 10 m quad of lake bed is drawn as the 10 m mesh draws it
@@ -69,6 +70,7 @@ export function chunkGround(grid, D, cache) {
       let h = D.h[q];
       if (sd < 2) h = lerp(b, h, smoothstep(0, 2, sd));
       if (rel) { h += mireSample(grid, x, z, sd, ra) - brookCut(x, z, sd); for (let c = 0; c < 4; c++) rel[q * 4 + c] = s8(ra[c]); } // a brook's little V (brook-cut.js) and the mire's relief (mire-relief.js), on the 2 m lattice only
+      h = rampAt(x, z, h); // round ramps (ramps.js): a campsite's way up graded in, its shelf at the water
       if (sd < 30) { const lv = grid.levelAt(x, z, 3); if (lv === lv) h = Math.max(h, lv + 0.04 * Math.min(sd, 5)); }
       v[q] = h;
     }
