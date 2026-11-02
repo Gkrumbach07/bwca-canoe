@@ -356,7 +356,7 @@ export class CoopBoat {
   // where we stand and where our canoe lies: { m, x, z, h, d: { x, z, heading } | null }
   where() {
     const p = this.g.player;
-    if (!p || !Number.isFinite(p.x)) return null;
+    if (!p || !Number.isFinite(p.x) || p.teleporting) return null; // (mid-teleport p.x is still where we came from: a join's first keep would store our own season's spot)
     const d = p.carry && p.carry.drop, over = p.mode === 'swim' && p.swim && p.swim.hull;
     return { m: p.mode, x: r2(p.x), z: r2(p.z), h: r3(p.heading || 0), d: d && Number.isFinite(d.x) ? { x: r2(d.x), z: r2(d.z), heading: r3(d.heading || 0) } : null, ...(over ? { ov: 1 } : null) };
   }
@@ -364,8 +364,11 @@ export class CoopBoat {
   async restoreWhere(at) {
     const g = this.g, p = g.player, w = g.world;
     if (!at || !Number.isFinite(at.x) || !Number.isFinite(at.z) || !p) return false;
+    const x0 = p.x, z0 = p.z;
     try {
       if (w.tiles) await w.tiles.ensure(at.x, at.z, 60);
+      // the tiles there can take a while: if we were placed or walked off meanwhile, that wins (no jump back across the map)
+      if (p.teleporting || Math.hypot(p.x - x0, p.z - z0) > 2) return false;
       let d = at.d && Number.isFinite(at.d.x) ? at.d : null;
       if (!d && at.m === 'carry') d = { x: at.x + Math.cos(at.h || 0) * 1.4, z: at.z - Math.sin(at.h || 0) * 1.4, heading: at.h || 0 };
       if (d && at.m !== 'paddle' && !at.ov && p.standAt({ x: at.x, z: at.z, heading: at.h || 0, drop: d })) {
