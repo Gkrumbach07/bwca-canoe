@@ -414,8 +414,8 @@ canoe or your canoe. It's just two canoes", and "I'm also able to pitch a tent w
   staked at once on one spot: the lower id's stands, the other is struck back into its pack with a note.
 - **Not yet:** getting into, paddling or shouldering a friend's canoe (each canoe is drawn and driven by its owner's
   `player`: taking one over means handing the hull, its load and its `carry.drop` across, like takebox for the boat);
-  long things (paddles, rods) in a friend's canoe; lowering a friend's hung barrel; a friend's hull from our canoe.
-  Rig `ground.mjs` (8 checks).
+  long things (paddles, rods) in a friend's canoe; a friend's hull from our canoe. (Lowering a friend's hung barrel,
+  and tarps and hangs at once: round 3, below.) Rig `ground.mjs` (9 checks; 13 after round 3).
 
 ### Phase 3 round 2: how a friend is drawn (2026-11-01)
 
@@ -431,8 +431,36 @@ The owner, playing two browsers: "standing on top of a rock … to them it just 
   `poses.js workArms` (the player's own figure has no such poses: these are the friend's only); the things in the hands
   drawn in the fist as ours (item-models.js); the fish held up; the line from the friend's rod tip to their lure or
   bobber (fishing.js's own meshes, cloned). Poses stay under 300 bytes (about 300 with the line out). Rig `anim.mjs`.
-- **Not yet:** a container or a long thing other than the rod in a friend's hand (the arm hangs), the axe, the stringer's
-  fish in a friend's hull.
+- **Not yet:** the axe, the stringer's fish in a friend's hull. (A container or a long thing in a friend's hand: round 3,
+  below.)
+
+### Phase 3 round 3: hands, hung barrels, same-moment clashes (2026-11-02)
+
+The owner: "Containers in a friend's hand aren't drawn", "You can't lower a friend's hung barrel. (it's shared,
+remember)", and "If you both pitch a tarp or hang a barrel in the same spot at the same moment, the clash isn't resolved".
+- **Things in a friend's hand** (`coop-anim.js` HeldView): a container (a pack, a barrel, the bucket, the tackle box, the
+  map case) or a long thing (a paddle, a rod not up, a setting pole) in a friend's hand is drawn as ours is, by
+  containers.js's own `ContainerView` (its models, `inHand`, the fist and the swing) run on the friend's figure's bones
+  and heading: a container hangs from the fist by its handle or bail and swings with the stride, a paddle or a rod is
+  carried by the middle, ahead and down, turning with the forearm; that arm in the held pose (the gait's `state.held`).
+  Nothing new on the wire (`an.hd` already named them); a bucket and a paddle in hand is a 187-byte pose.
+- **A friend's hung barrel** (`coop-share.js`, op `lower`): the dot on it (or the trunk its rope is tied off on) reads
+  *E Lower · hold*, as on our own; the hold is hang.js's `LOWER` (our figure's arms at the hang), the barrel coming down
+  on our screen as it is held, and at its end the ask goes to its owner (pending until answered). Their browser sets it
+  on the ground at the rope's foot, as hang.js does, and it is then a container on the ground like any other: take and
+  put from its tab, *E Pick up* whole, and whoever picks it up hangs it again as their own. Refused (it goes back up
+  here, a note) while its owner is hanging it or letting it down themselves (`hold.js` jobs now carry a `ref`). A
+  friend's limb is drawn too (hang.js `drawLimb` from `camp.others().hung`, which now carries the barrel's limb).
+- **Same-moment clashes** (`coop-share.js tarpClash`, `hangClash`, `tentClash`): as the tents, each screen decides on
+  what it has and the lower player id's stands. Our tarp on a friend's tarp or tent is taken down into the pack it came
+  out of (tarp.js `packRig`, poles and all; a pitch under way stopped); our tent on a friend's tarp is struck like a tent
+  on a tent; our barrel hung, tied on or with the rope over the limb a friend's went onto is let down at the rope's foot
+  (hang.js `yieldLimb`, a hang under way stopped), each with a note. Nothing is lost: the tarp is back in the pack, the
+  barrel and what is in it on the ground.
+- Rigs: `ground.mjs` 13 checks (9 lower a friend's barrel, refused mid-job; 10 take from it, pick it up, hang it again;
+  11 two tarps at once; 12 two hangs at once), `anim.mjs` 11 (5b a bucket and a paddle in a friend's hands, at the fists).
+- **Not yet:** the stringer and an armful of firewood in a friend's hand; a tarp and a hang decided on the clock rather
+  than by id (the second one up always yields to the lower id, even when it was there first by a second).
 
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends

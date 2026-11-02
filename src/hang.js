@@ -163,6 +163,12 @@ export class Hang {
       if (!c || (c.where !== 'ground' && c.where !== 'hung' && !inv.inReach(c)) || Math.hypot(pe.tree.x - this.player.x, pe.tree.z - this.player.z) > 40) this.pending = null;
       else if (c.where !== 'hung') { seen.add('pending'); this.drawLimb('pending', pe.tree, pe.limb, pe.done >= 2 ? 'tied' : 'dangle'); }
     }
+    // co-op: the limbs friends' barrels hang from (camp.others().hung: their tree and limb), drawn as ours
+    for (const h of this.othersHung()) {
+      if (!h.id || !h.tree || !Number.isFinite(h.limb) || !Number.isFinite(h.tree.gy) || !Number.isFinite(h.tree.dx)) continue;
+      if (Math.abs(h.x - this.player.x) > 120 || Math.abs(h.z - this.player.z) > 120) continue;
+      const k = `o:${h.id}`; seen.add(k); this.drawLimb(k, h.tree, h.limb, 'tied');
+    }
     for (const [k, L] of this.limbs) if (!seen.has(k)) { L.mesh.removeFromParent(); L.mesh.geometry.dispose(); this.limbs.delete(k); }
   }
   // the limb out from the trunk at its height, the rope over it (dangling to the ground until the barrel is tied on, then
@@ -346,7 +352,7 @@ export class Hang {
     const at = (y) => ({ x: spot.x, y, z: spot.z, heading: Math.atan2(-spot.dz, spot.dx), limb: spot.limb + 0.06 });
     const tieOn = () => { if (inv.cont(c.id) && inv.cont(c.id).where !== 'hung') { inv.hang(c.id, at(low)); const k = inv.cont(c.id); if (k && k.at) { k.at.tree = spot.tree; k.at.up = false; } } };
     return {
-      id: 'hang', label: 'Hanging the barrel', phases: HANG, at: from, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'hang', ref: c.id, label: 'Hanging the barrel', phases: HANG, at: from, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onPhase: (i) => {
         if (i === 0) this.pending = { ref: c.id, tree: spot.tree, limb: spot.limb, spot, done: 1 };
         if (i === 1) { if (this.pending) this.pending.done = 2; tieOn(); }
@@ -370,12 +376,37 @@ export class Hang {
       },
     };
   }
+  // co-op (phase 3 round 3, the owner: "two hang a barrel in the same spot at the same moment"): a friend's barrel came
+  // onto the limb ours is on (or is going on) before either screen knew of the other's, and theirs is the one that stays
+  // (coop-share.js hangClash: the lower id's): ours, tied on or hoisted, comes down at the rope's foot, a hang under way
+  // stops, the rope comes off. → whether anything was ours there
+  yieldLimb(tree) {
+    const inv = this.inv, near = (t) => t && Math.hypot(t.x - tree.x, t.z - tree.z) < 0.6;
+    let any = null; // → 'hung' (a barrel let down), 'rope' (only the rope over), or null
+    if (hold.active && (hold.is('hang') || hold.is('lower'))) { const c = inv.cont(hold.active.ref); if ((c && c.at && near(c.at.tree)) || (this.pending && near(this.pending.tree))) hold.cancel(); }
+    if (this.pending && near(this.pending.tree)) { this.pending = null; any = any || 'rope'; }
+    if (this.armed && near(this.armed.t)) this.armed = null;
+    for (const c of inv.containers) {
+      if (c.where !== 'hung' || !c.at || !near(c.at.tree)) continue;
+      inv.setDown(c.id, { x: c.at.x, z: c.at.z, heading: c.at.heading || 0, ...(c.at.camp ? { camp: c.at.camp } : {}) }, { left: false, force: true });
+      any = 'hung';
+    }
+    return any;
+  }
+  // the barrels and the hang under way on a tree: [{ tree, id }] (coop-share.js hangClash)
+  ownLimbs() {
+    const out = [], inv = this.inv;
+    if (!inv || !inv.attached) return out;
+    for (const c of inv.containers) if (c.where === 'hung' && c.at && c.at.tree) out.push({ tree: c.at.tree, id: c.id });
+    if (this.pending && this.pending.tree && !out.some((q) => q.id === this.pending.ref)) out.push({ tree: this.pending.tree, id: this.pending.ref });
+    return out;
+  }
   // the hold to let it down: untied from the trunk, then lowered to the ground at the rope's foot (where it is yours to
   // pick up, open or carry off). Let go before it is down and it goes back up.
   lowerOpts(c) {
     const inv = this.inv, H = BARRELS[c.item] || 0.6, a = c.at, high = a.y, low = (a.tree ? this.tiles.groundAt(a.x, a.z) : a.y - CLEAR) + H / 2 + 0.02, p = this.player;
     return {
-      id: 'lower', label: 'Lowering the barrel', phases: LOWER, at: 0, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
+      id: 'lower', ref: c.id, label: 'Lowering the barrel', phases: LOWER, at: 0, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (k) => { const b = inv.cont(c.id); if (b && b.where === 'hung' && k > 1) b.at.y = high + (low - high) * ease(k - 1); },
       onPhase: (i) => {
         if (i < 1) return;

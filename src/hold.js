@@ -70,7 +70,7 @@ class Hold {
     const phases = (o.phases && o.phases.length ? o.phases : [{ name: o.label || 'Working', seconds: 1 }]).map((p) => (clock ? { ...p } : { ...p, minutes: onClock(secondsOf(p)) }));
     const at = Math.max(0, Math.min(phases.length, Number(o.at) || 0));
     const job = {
-      id: o.id || null, key: o.key || 'KeyE', label: o.label || '', phases, at, done: Math.floor(at + 1e-6), start: at,
+      id: o.id || null, ref: o.ref ?? null, key: o.key || 'KeyE', label: o.label || '', phases, at, done: Math.floor(at + 1e-6), start: at,
       onPhase: o.onPhase || null, onDone: o.onDone || null, onStop: o.onStop || null, onTick: o.onTick || null,
       clock, still: o.still !== false, crouch: !!o.crouch, near: o.near || null,
       keys: [...new Set([o.key || 'KeyE', ...(o.keys || [])])], auto: !!o.auto, wait: o.wait || null,
