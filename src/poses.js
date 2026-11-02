@@ -846,3 +846,219 @@ export function swimPose(me, m, ph) {
     P.leg(k, ankle, pole, frameQ(fwd, V(1, 0, 0).applyQuaternion(pq)));
   }
 }
+
+// The walker's timed moves (lifted from canoe.js, co-op phase 3 round 2, so a friend's vault and climb are drawn with the
+// player's own): makeMoves(me, gait) → { vault(dt, m), climb(dt, m), done() }. m is player.js's player.move ({ kind, u, from,
+// to, top, nearD, far, heading, t }); the figure is placed at the frame's origin, which rides the move's path (the feet's
+// height + 0.1). done() when neither is running, so the next one notes its start afresh.
+export function makeMoves(me, gait) {
+  const { P, J, rig, idle } = me;
+  const ground = me.ground;
+  const { loco, fq, ankles, toWorld, toLocal, ankleAt, footFrameQ, flatDist } = gait;
+  // The walker's moves (player.js player.move, read through api.moveOf): a vault over a log, a climb onto a rock or a
+  // ledge, and sitting. player.js drives the body's path (the rig: the feet's height plus 0.1, along from -> to); these
+  // pose the limbs on it from world places that stay put while the body passes: the hand on the log, the hands on the
+  // edge, the feet where they push off and land. Each is a few keys per part over the move's u (0..1), run through a
+  // smooth curve. A step up is the gait's own (locomote: the swinging knee lifted over the edge); a hop, a fall and a
+  // landing are the air pose (state.air, state.land); wading is the walk with the knees high and the arms out.
+  // track: a value through keys [[u, v], ...]: a cubic through each key, flat at the two ends
+  function track(u, K) {
+    const n = K.length;
+    if (u <= K[0][0]) return K[0][1];
+    if (u >= K[n - 1][0]) return K[n - 1][1];
+    let i = 0;
+    while (u > K[i + 1][0]) i++;
+    const u0 = K[i][0], p0 = K[i][1], u1 = K[i + 1][0], p1 = K[i + 1][1], h = u1 - u0, t = (u - u0) / h;
+    const m0 = i > 0 ? ((p1 - K[i - 1][1]) / (u1 - K[i - 1][0])) * h : 0;
+    const m1 = i + 2 < n ? ((K[i + 2][1] - p0) / (K[i + 2][0] - u0)) * h : 0;
+    const t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * p0 + (t3 - 2 * t2 + t) * m0 + (-2 * t3 + 3 * t2) * p1 + (t3 - t2) * m1;
+  }
+  // the same through world points [[u, Vector3], ...]
+  const _kx = [], _ky = [], _kz = [];
+  function trackV(u, K, out) {
+    _kx.length = _ky.length = _kz.length = K.length;
+    for (let i = 0; i < K.length; i++) { _kx[i] = [K[i][0], K[i][1].x]; _ky[i] = [K[i][0], K[i][1].y]; _kz[i] = [K[i][0], K[i][1].z]; }
+    return out.set(track(u, _kx), track(u, _ky), track(u, _kz));
+  }
+  // the move's own frame in the world: its way (f), its right (r), a point `along` metres on from `from`, `side` to the
+  // right, at height y
+  const mvF = { fx: 1, fz: 0, rx: 0, rz: 1, L: 0, ox: 0, oz: 0 };
+  function moveFrame(m) {
+    const dx = m.to.x - m.from.x, dz = m.to.z - m.from.z, L = Math.hypot(dx, dz);
+    const h = Number.isFinite(m.heading) ? m.heading : rig.rotation.y;
+    mvF.fx = L > 0.05 ? dx / L : Math.cos(h); mvF.fz = L > 0.05 ? dz / L : -Math.sin(h);
+    mvF.rx = -mvF.fz; mvF.rz = mvF.fx; mvF.L = L; mvF.ox = m.from.x; mvF.oz = m.from.z;
+    mvF.yaw = Math.atan2(-mvF.fz, mvF.fx);
+  }
+  const mvAt = (along, side, y, out = V()) => out.set(mvF.ox + mvF.fx * along + mvF.rx * side, y, mvF.oz + mvF.fz * along + mvF.rz * side);
+  // a timed move's start: where the feet were (they push off from there), kept until the kind changes
+  const moveStart = { kind: null, feet: { L: V(), R: V() } };
+  function noteMoveStart(m) {
+    if (moveStart.kind === m.kind && moveStart.t0 <= m.t) { moveStart.t0 = m.t; return; }
+    moveStart.kind = m.kind; moveStart.t0 = m.t;
+    for (const k of ['L', 'R']) {
+      const f = loco.feet[k];
+      if (loco.init && Number.isFinite(f.pos.x) && flatDist(f.pos, rig.position) < 1.2) moveStart.feet[k].copy(f.pos);
+      else mvAt(0, k === 'L' ? -0.11 : 0.11, m.from.y, moveStart.feet[k]);
+    }
+  }
+  // limbs to world places: a foot (its ankle over the sole's point p, yawed `yaw`, pitched) and a hand (the fist at p,
+  // its grip along `axis`, the palm toward `palm`)
+  const _wa = V(), _wb = V(), _wc = V();
+  function footTo(k, p, yawW, pitch, kneeOut = 0.05) {
+    ankleAt(p, yawW, pitch, ankles[k]);
+    const a = toLocal(ankles[k], _wa), sg = k === 'L' ? -1 : 1, yl = yawW - rig.rotation.y;
+    footFrameQ(yawW, pitch, fq[k]);
+    const hip = J['thigh' + k].p;
+    const pole = _wb.set((hip.x + a.x) / 2 + Math.cos(yl) * 0.6, (hip.y + a.y) / 2, (hip.z + a.z) / 2 - Math.sin(yl) * 0.6 + sg * kneeOut);
+    P.leg(k, a.clone(), pole, fq[k]);
+  }
+  function handTo(k, pWorld, axisL, palmL, poleOff) {
+    const t = toLocal(pWorld, _wc), sh = J['arm' + k].p, sg = k === 'L' ? -1 : 1;
+    P.arm(k, t.clone(), axisL, V(sh.x + poleOff.x, sh.y + poleOff.y, sh.z + sg * poleOff.z), palmL);
+  }
+  // a hand's free place (local): from its shoulder, hanging by the hip, or (up) out to the side for balance
+  const freeHand = (k, out, up = 0) => { const sg = k === 'L' ? -1 : 1, sh = J['arm' + k].p; return out.set(sh.x + 0.06 + 0.06 * up, sh.y - 0.56 + 0.36 * up, sh.z + sg * (0.08 + 0.4 * up)); };
+  const _h0 = V(), _h1 = V(), _hw = V();
+
+  // A vault over a log or a low rock: the left hand on its top, the body over it leaning on that hand with the legs
+  // tucked and swung across on the right, then down on the far side, the knees giving on the landing.
+  function vault(dt, m) {
+    placeFigure(me, 0, 0, 0);
+    updateIdle(idle, dt, false);
+    noteMoveStart(m); moveFrame(m);
+    const u = sat(m.u), top = m.top ?? m.from.y + 0.7, L = Math.max(0.6, mvF.L);
+    const nearD = m.nearD ?? L * 0.32, far = m.far >= 0 ? m.far : nearD + 0.4, mid = (nearD + far) / 2;
+    const g0 = m.from.y, g1 = m.to.y;
+    const yOff = mvF.yaw - rig.rotation.y; // the body keeps to the move's way whatever the view does
+    // the hips (world height) through take-off, over, and the landing
+    const hipW = track(u, [[0, g0 + 0.83], [0.08, g0 + 0.72], [0.2, g0 + 0.84], [0.45, top + 0.24], [0.7, g1 + 0.72], [0.84, g1 + 0.6], [1, g1 + 0.83]]);
+    const lean = track(u, [[0, 0.1], [0.08, 0.3], [0.25, 0.62], [0.45, 0.75], [0.65, 0.4], [0.84, 0.35], [1, 0.05]]);
+    const side = track(u, [[0, 0], [0.2, -0.2], [0.45, -0.48], [0.65, -0.25], [0.85, 0], [1, 0]]);
+    const twist = track(u, [[0, 0], [0.25, -0.2], [0.48, -0.5], [0.72, -0.15], [1, 0]]);
+    const root = V(0.04 * lean, hipW - rig.position.y + ROOT_UP, -0.06 * side);
+    const pelvis = bodyQ(yOff + twist, 0.05 + lean * 0.4, side * 0.6);
+    const chest = bodyQ(yOff + twist * 0.35, lean, side);
+    const head = bodyQ(yOff, 0.1 + lean * 0.25 - 0.25 * smooth(0.1, 0.4, u) * (1 - smooth(0.6, 0.85, u)), side * 0.3);
+    spine(P, root, pelvis, chest, head);
+    // the feet: the left pushes off where it stood, the right drives up; both tucked over the top on the right; down
+    // beside each other on the far side
+    const fL = trackV(u, [[0, moveStart.feet.L], [0.12, moveStart.feet.L], [0.3, mvAt(nearD + 0.05, 0.25, top + 0.15, _h0)], [0.45, mvAt(mid + 0.1, 0.38, top + 0.15, _h1)], [0.6, mvAt(far + 0.15, 0.3, top + 0.05, _hw)], [0.78, mvAt(L - 0.06, -0.11, g1, V())], [1, mvAt(L, -0.11, g1, V())]], V());
+    const fR = trackV(u, [[0, moveStart.feet.R], [0.1, mvAt(0.3, 0.16, g0 + 0.35, V())], [0.28, mvAt(nearD + 0.15, 0.36, top + 0.22, V())], [0.45, mvAt(mid + 0.2, 0.48, top + 0.2, V())], [0.6, mvAt(far + 0.25, 0.4, top + 0.08, V())], [0.78, mvAt(L + 0.06, 0.11, g1, V())], [1, mvAt(L, 0.11, g1, V())]], V());
+    for (const [k, p] of [['L', fL], ['R', fR]]) {
+      const gy = ground(p.x, p.z);
+      if (p.y < gy) p.y = gy;
+      const air = smooth(0.08, 0.18, u) * (1 - smooth(0.74, 0.84, u));
+      footTo(k, p, mvF.yaw + (k === 'L' ? 0.08 : -0.08) + 0.5 * air, -0.45 * air, 0.05 + 0.25 * air);
+    }
+    // the left hand on the top, the right out for balance
+    const plant = smooth(0.03, 0.17, u) * (1 - smooth(0.58, 0.7, u));
+    const logP = mvAt(mid + 0.12, -0.15, top + 0.035, _h0);
+    const free = toWorld(freeHand('L', _h1, smooth(0.6, 0.8, u) * (1 - smooth(0.85, 1, u))), _hw);
+    const hL = V().lerpVectors(free, logP, plant);
+    handTo('L', hL, V(mvF.rx, 0, mvF.rz).applyAxisAngle(V(0, 1, 0), -rig.rotation.y), V(0, -1, 0), { x: -0.25, y: -0.1, z: 0.45 });
+    const up = smooth(0.1, 0.32, u) * (1 - smooth(0.78, 0.98, u));
+    const cq = J.chest.q, sh = J.armR.p;
+    const tR = freeHand('R', V(), up);
+    P.arm('R', tR, V(1, 0, -0.15).applyQuaternion(cq), V(sh.x - 0.3, sh.y - 0.2, sh.z + 0.3), V(0, 0, -1).applyQuaternion(cq));
+    loco.hipW = NaN; // the gait takes the hips up afresh after
+  }
+
+  // A climb onto a rock or a ledge (up to about 2 m): the hands up onto the edge, the feet walked up the face; the right
+  // foot up onto the top with the body bent over the edge, the hands pushing; then standing up and stepping in.
+  function climb(dt, m) {
+    placeFigure(me, 0, 0, 0);
+    updateIdle(idle, dt, false);
+    noteMoveStart(m); moveFrame(m);
+    const u = sat(m.u), top = m.top ?? m.to.y, L = Math.max(0.3, mvF.L), g0 = m.from.y, rise = Math.max(0.3, top - g0);
+    const face = m.nearD ?? Math.max(0.25, L - 0.45); // the face, metres on from where he began
+    const yOff = mvF.yaw - rig.rotation.y;
+    // the hips: a dip to spring, pulled up off the hands with the feet on the face, pressed up over the edge on straight
+    // arms, the foot on the top under them, then standing
+    const hangC = top - Math.min(0.95, 0.6 * rise); // where player.js has the feet at the hang (u 0.35)
+    const pull = Math.max(g0 + 0.85, Math.min(top - 0.2, hangC + 0.62));
+    const hipW = track(u, [[0, g0 + 0.83], [0.14, g0 + 0.76], [0.35, pull], [0.55, Math.max(pull + 0.05, top + 0.05)], [0.72, top + 0.3], [0.87, top + 0.62], [1, m.to.y + 0.83]]);
+    const hipA = track(u, [[0, 0], [0.35, face - 0.4], [0.55, face - 0.18], [0.72, face + 0.04], [1, L]]); // back off the face, then over it
+    const hipP = mvAt(hipA, 0, hipW, _h0), hl = toLocal(hipP, _h1);
+    const lean = track(u, [[0, 0.1], [0.14, 0.22], [0.35, 0.12], [0.55, 0.62], [0.72, 0.85], [0.88, 0.45], [1, 0.05]]);
+    const root = V(hl.x, hl.y + ROOT_UP, hl.z);
+    const look = -0.35 * smooth(0.05, 0.25, u) * (1 - smooth(0.5, 0.7, u)); // eyes up at the edge while hanging
+    spine(P, root, bodyQ(yOff, 0.05 + lean * 0.5, 0), bodyQ(yOff, lean, 0), bodyQ(yOff, lean * 0.4 + look, 0));
+    // the feet: on the face (toes to it) as the body hangs; the right up onto the top; the left after it; both on the top
+    const onFace = (k, y) => mvAt(face - 0.17, k === 'L' ? -0.13 : 0.13, Math.min(y, top - 0.12), V());
+    const fy0 = Math.max(g0, Math.min(hangC + 0.05, top - 0.25));
+    const fL = trackV(u, [[0, moveStart.feet.L], [0.2, onFace('L', g0 + rise * 0.25)], [0.4, onFace('L', fy0)], [0.7, onFace('L', fy0 + 0.1)], [0.86, mvAt(face + 0.3, -0.12, top + 0.12, V())], [1, mvAt(L, -0.11, m.to.y, V())]], V());
+    const fR = trackV(u, [[0, moveStart.feet.R], [0.25, onFace('R', g0 + rise * 0.4)], [0.42, onFace('R', fy0 + 0.15)], [0.55, mvAt(face - 0.05, 0.13, top + 0.2, V())], [0.68, mvAt(face + 0.22, 0.13, top, V())], [0.88, mvAt(face + 0.22, 0.13, top, V())], [1, mvAt(L, 0.11, m.to.y, V())]], V());
+    for (const [k, p, onTop] of [['L', fL, smooth(0.86, 0.95, u)], ['R', fR, smooth(0.62, 0.7, u)]]) {
+      const gy = ground(p.x, p.z);
+      if (p.y < gy - 0.02 && onTop > 0.5) p.y = gy;
+      const wall = 1 - onTop;
+      footTo(k, p, mvF.yaw + (k === 'L' ? 0.08 : -0.08), 0.35 * wall * smooth(0.1, 0.3, u), 0.12 * wall + 0.05);
+    }
+    // the hands: up to the edge from the sides, on it until he stands, then down again
+    const on = smooth(0.04, 0.2, u) * (1 - smooth(0.8, 0.96, u));
+    const axis = V(mvF.rx, 0, mvF.rz).applyAxisAngle(V(0, 1, 0), -rig.rotation.y);
+    for (const k of ['L', 'R']) {
+      const sg = k === 'L' ? -1 : 1;
+      const edge = mvAt(face + 0.1, sg * 0.24, top + 0.035, _h0);
+      const free = toWorld(freeHand(k, _h1, 0.6 * (1 - smooth(0.85, 1, u))), _hw);
+      handTo(k, V().lerpVectors(free, edge, on), axis, V(0, -1, 0), { x: -0.3, y: -0.25, z: 0.4 });
+    }
+    loco.hipW = NaN;
+  }
+
+  return { vault, climb, done() { moveStart.kind = null; }, moveStart };
+}
+
+// Co-op phase 3 round 2: the arms at a held job, eating, drinking and the camera up, for a figure its gait has posed (a
+// friend, actors.js), laid over the gait's arms in the figure's own space; w 0..1 how far into it (eased in and out by
+// the caller), t seconds into it (the work's rhythm). kind:
+//   'saw'    the right hand drawing the saw back and forth low ahead, the left holding the log
+//   'douse'  both hands ahead at the chest, tipping water out
+//   'pitch'  both hands low ahead, working in turn (stakes, poles, the fly: a tent or a tarp)
+//   'hang'   hand over hand on a rope over the head (the barrel up or down)
+//   'work'   any other held job: as 'pitch'
+//   'eat', 'drink'  the right hand up to the mouth and down again (about 1.6 s)
+//   'photo'  both hands up at the face, round the camera
+const _wt = V(), _wh = V();
+export function workArms(me, kind, t, w = 1) {
+  const { P, J } = me;
+  const hd = J.head.p, TAU = Math.PI * 2;
+  for (const [k, sg] of [['L', -1], ['R', 1]]) {
+    const sh = J['arm' + k].p;
+    // where the hand hangs at rest (as canoe.js freeHand), blended toward the job's place by w
+    const hang = _wh.set(sh.x + 0.06, sh.y - 0.56, sh.z + sg * 0.08);
+    let axis = V(1, 0, 0), palm = V(0, 0, -sg), pole = V(sh.x - 0.25, sh.y - 0.35, sh.z + sg * 0.35);
+    let k2 = w;
+    switch (kind) {
+      case 'saw':
+        if (k === 'R') _wt.set(sh.x + 0.42 + 0.13 * Math.sin(t * TAU * 1.4), sh.y - 0.42, sh.z - 0.05);
+        else { _wt.set(sh.x + 0.36, sh.y - 0.5, sh.z + 0.12); palm = V(0, -1, 0); }
+        break;
+      case 'douse':
+        _wt.set(sh.x + 0.38, sh.y - 0.18 + 0.03 * Math.sin(t * 3), sh.z - sg * 0.12); axis = V(0, 0, 1);
+        break;
+      case 'hang':
+        _wt.set(sh.x + 0.14, sh.y + 0.32 + 0.16 * Math.sin(t * 3.2 + (k === 'L' ? Math.PI : 0)), sh.z - sg * 0.1); axis = V(0, 1, 0); palm = V(1, 0, 0);
+        pole = V(sh.x - 0.1, sh.y - 0.2, sh.z + sg * 0.45);
+        break;
+      case 'eat': case 'drink':
+        if (k === 'L') { k2 = 0; break; }
+        // up over the first third of a second and a half, held at the mouth, then down
+        k2 = w * smooth(0, 0.35, t) * (1 - smooth(1.2, 1.6, t));
+        _wt.set(hd.x + 0.13, hd.y - (kind === 'drink' ? 0.02 : 0.07) + 0.012 * Math.sin(t * 14), hd.z + 0.03); axis = kind === 'drink' ? V(0, 1, 0) : V(0, 0, 1); palm = V(-1, 0, 0);
+        pole = V(sh.x - 0.1, sh.y - 0.35, sh.z + 0.3);
+        break;
+      case 'photo':
+        _wt.set(hd.x + 0.15, hd.y - 0.03, hd.z + sg * 0.07); axis = V(0, 1, 0);
+        pole = V(sh.x - 0.05, sh.y - 0.35, sh.z + sg * 0.3);
+        break;
+      default: // 'pitch', 'work'
+        _wt.set(sh.x + 0.4, sh.y - 0.55 + 0.07 * Math.sin(t * 5 + (k === 'L' ? Math.PI : 0)), sh.z + sg * 0.1);
+        palm = V(0, -1, 0);
+    }
+    if (k2 <= 0.001) continue;
+    P.arm(k, V().lerpVectors(hang, _wt, k2), axis, pole, palm);
+  }
+}
