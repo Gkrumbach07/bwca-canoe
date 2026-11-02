@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { glslWaves, glslRipples, waveHeight, windWeights, windHeight, N as WAVE_DIRS, CHOP, CHOP_W, CHOP_PH } from './waves.js';
 import { glslNoise } from './shading.js';
+import { SNOW } from './snow.js';
 import * as Sky from './sky.js';
 import { groundUniforms } from './terrain.js';
 import { NARROW } from './terrain-build.js'; // water edges: the narrow water's channel bed
@@ -419,6 +420,7 @@ const fragTint = /* glsl */ `
 
 const frag = /* glsl */ `
   uniform float uTime, uReflOn, uClarity, uIce, uRippleAmt, uRain, uGlint;
+  uniform vec4 uSnow;
   uniform float uWhiteGain;  // d1 rapids: the rivers' flow on the white water (the spring flood whiter; main.js sets it)
   uniform vec3 uSunDir, uFoam, uSunLight, uSkyLight;
   uniform vec3 uBodyClear, uBodyDeep, uBodyStain, uBodyIce, uBodyTea, uBodyBog;
@@ -772,9 +774,21 @@ const frag = /* glsl */ `
     #endif
     float outA = foam + A * (1.0 - foam);
     vec3 outC = (foamC * foam + col * A * (1.0 - foam)) / max(outA, 1e-4);
-    // frozen over: a pale sheet lit like the snow, a little of the sky in it, no swell, ripples or foam
+    // frozen over: a sheet lit like the snow, a little of the sky in it, no swell, ripples or foam. The snow round: the
+    // season's snow on it (snow.js uSnow) in long drifts the wind laid, the grey ice scoured bare between them (more of it
+    // the less snow there is), a pressure ridge now and then, a ragged line the snow catches on; as it goes out in the
+    // spring the snow goes to slush, dark and wet, before the ice itself goes
     if (uIce > 0.0) {
-      vec3 ice = mix(uBodyIce * (uSunLight * max(uSunDir.y, 0.0) * shadow + uSkyLight) * 1.2, sky, F * 0.4);
+      vec2 iq = mat2(0.8, 0.6, -0.6, 0.8) * pw;
+      float ipx = length(fwidth(pw));
+      float idr = lookFbm(iq / vec2(70.0, 16.0), 81u, 2) + 0.18 * (lookFbm(iq / 4.0, 83u, 2) - 0.5) * (1.0 - smoothstep(1.0, 3.0, ipx));
+      float isn = clamp(uSnow.x * 1.05 + 0.8 * uSnow.w, 0.0, 1.0) * mix(1.0, smoothstep(0.55, 0.95, uIce), uSnow.z);
+      float snowOn = smoothstep(-0.03, 0.03, isn * 0.68 - 0.1 - idr);
+      float ridge = (1.0 - smoothstep(0.004, 0.012 + ipx * 0.004, abs(lookFbm(pw / 150.0, 82u, 2) - 0.5))) * step(0.3, isn);
+      snowOn = max(snowOn, 0.85 * ridge);
+      vec3 iceA = mix(vec3(0.24, 0.28, 0.31), uBodyIce * 0.9, snowOn);
+      iceA = mix(iceA, vec3(0.08, 0.1, 0.11), uSnow.z * (1.0 - smoothstep(0.55, 0.95, uIce)) * 0.85);
+      vec3 ice = mix(iceA * (uSunLight * max(uSunDir.y, 0.0) * shadow + uSkyLight) * 1.2, sky, F * mix(0.55, 0.3, snowOn));
       #ifdef USE_FOG
         ice = fogApply(ice, vFogDir);
       #endif
@@ -869,6 +883,7 @@ export class WaterSystem {
       uSkyGlow: { value: new THREE.Vector2(0.1, 8) },
       uSkySunDir: { value: sunDir.clone() },
     }]);
+    this.uniforms.uSnow = SNOW.uSnow; // the snow round: the snow on the ice (snow.js), by reference
     // the dome's uniforms by reference (the same objects the day cycle writes): the reflected sky is the sky
     const su = env.sky;
     if (su) {

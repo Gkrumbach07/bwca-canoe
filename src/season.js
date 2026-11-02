@@ -46,6 +46,39 @@ export function setLocalIce(out, inn) {
   if (Number.isFinite(inn)) LOCAL_ICE.in = inn;
 }
 
+// Snow on the ground, by the date: NOAA GHCN daily snow depth at Ely (USC00212543 1997-2010, USC00212561 2011-2026) and
+// Ely 25E beside Lake One (USC00212555, 1998-2026), every day of the record pooled by its day of the year (five-day
+// windows, ~230 readings each). [doy, median depth cm, share of days with an inch or more]. The first inch lies on
+// one day in ten from late October, on half of them by 20 November, on nearly all from early December; the pack
+// deepens to 45 cm by early March, is going through April (5 cm median by the 11th, an inch on a day in four by the
+// 21st) and gone by early May. The record's own numbers (scratchpad season-S/normals.py made them).
+const SNOW_NORMALS = [
+  [1, 25, 0.98], [31, 38, 1], [61, 46, 0.92], [76, 36, 0.9], [86, 28, 0.81], [96, 15, 0.8], [101, 5, 0.59],
+  [106, 1.5, 0.46], [111, 0.4, 0.27], [116, 0, 0.18], [121, 0, 0.1], [128, 0, 0.01], [135, 0, 0],
+  [276, 0, 0], [286, 0, 0.05], [296, 0, 0.08], [306, 0, 0.13], [311, 0.3, 0.2], [316, 1, 0.43], [326, 2.5, 0.54],
+  [331, 7.6, 0.78], [336, 10, 0.89], [346, 15, 0.9], [356, 18, 0.97], [366, 25, 0.98],
+];
+function snowNormal(doy) {
+  const d = ((((doy - 1) % 365) + 365) % 365) + 1, T = SNOW_NORMALS;
+  if (d <= T[0][0]) return [T[0][1], T[0][2]];
+  for (let i = 1; i < T.length; i++) {
+    if (d > T[i][0]) continue;
+    const a = T[i - 1], b = T[i], t = smoothstep(0, 1, (d - a[0]) / (b[0] - a[0]));
+    return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  }
+  return [0, 0];
+}
+// snowAt(doy): the ground's snow on the date. cover 0..1 how much of the open, flat ground it lies on (the share of the
+// record's days with an inch down: in the fall the first patches, in the spring the last), depthCm the pack where it
+// lies (the median), melt 0..1 how far the spring's melt has gone (south slopes and open ground first, the north
+// slopes and the shade under the conifers last; 0 outside the spring). snow.js draws it, player.js wades it, the
+// title's date picker reads it.
+export function snowAt(doy) {
+  const [depthCm, cover] = snowNormal(doy), d = ((((doy - 1) % 365) + 365) % 365) + 1;
+  const melt = d < 200 ? smoothstep(66, 100, d) : 0;
+  return { cover, depthCm, melt };
+}
+
 // The year in the Boundary Waters, from a day of the year. Dates are typical for the Ely area: ice-out
 // around the end of April (the lake's own, above), birch and aspen leafing out mid-May, fireweed in high summer, colour in
 // the last two weeks of September, bare by the end of October, freeze-up toward the end of November (the lake's own).
@@ -74,7 +107,8 @@ export function seasonAt(doy, lake = LOCAL_ICE) {
   const grassTint = fall > 0 || bare > 0
     ? [1 + 0.2 * Math.max(fall, bare), 1 - 0.15 * Math.max(fall, bare), 1 - 0.45 * Math.max(fall, bare)]
     : spring > 0 ? [1 - 0.08 * spring, 1 + 0.04 * spring, 1 - 0.25 * spring] : [1, 1, 1];
-  return { doy, ice, leaf, spring, fall, bare, grass, pads, flower, loons, cold, waterTemp, flow, grassTint, leafOn: leaf > 0.5 && bare < 0.5 ? 1 : 0 };
+  const sn = snowAt(doy);
+  return { doy, snow: sn.cover, snowCm: sn.depthCm, snowMelt: sn.melt, ice, leaf, spring, fall, bare, grass, pads, flower, loons, cold, waterTemp, flow, grassTint, leafOn: leaf > 0.5 && bare < 0.5 ? 1 : 0 };
 }
 
 export function seasonName(doy) {

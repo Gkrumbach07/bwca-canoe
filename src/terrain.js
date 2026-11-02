@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { applyLook } from './shading.js';
 import { applyWet } from './weather.js';
+import { applySnow, setSnowSeason } from './snow.js';
 import { SPLAT, SPLAT_SUNNY, BED_PALETTE, BED_STEPS, BED_DEPTH_SCALE, BED_MATS, SPHAGNUM, SWAMP_FLOOR } from './terrain-build.js';
 import { mireIce } from './land.js';
 import { smoothstep } from './rng.js';
@@ -57,6 +58,9 @@ export const groundUniforms = {
   // moss, last year's leaves and fern
   uSwampFloor: { value: [v3(SWAMP_FLOOR.moss), v3(SWAMP_FLOOR.litter), v3(SWAMP_FLOOR.fern)] },
   uMeadowSeason: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
+  // the season round: the thaw's ground (setLandSeason), 0 the summer .. 1 the snow's months: the moss, the bog's
+  // sphagnum and the swamp's fern dulled to last year's straw and brown and the wet dark duff, the green back in late May
+  uThaw: { value: 0 },
 };
 // The water standing on wet ground mirrors the sky, wet weather or not (weather.js wetSheen is only the rain's film):
 // a GLSL statement for a look material's main at opaque_fragment, `gloss` an expression in scope (0..1). Schlick on
@@ -79,6 +83,7 @@ export function setGroundTint(r, g, b) { groundUniforms.uGroundTint.value.set(r,
 // thaw, the new green coming up through it from mid-May. Multipliers on the meadow's colour (#a6a857), linear.
 const MEADOW_SEASON = { summer: [0.95, 1.02, 0.86], tawny: [1.22, 0.84, 0.98], brown: [0.78, 0.56, 0.86] };
 export function setLandSeason(season) {
+  setSnowSeason(season); // the snow on everything (snow.js), by the same date
   const ice = mireIce(season), u = groundUniforms;
   u.uMireIce.value.set(ice.ice, ice.slush, ice.snow);
   const d = season.doy, M = MEADOW_SEASON, out = [0, 0, 0];
@@ -87,6 +92,8 @@ export function setLandSeason(season) {
     const t = smoothstep(256, 282, d), b = smoothstep(292, 322, d);
     for (let c = 0; c < 3; c++) out[c] = (M.summer[c] + (M.tawny[c] - M.summer[c]) * t) * (1 - b) + M.brown[c] * b;
   }
+  // (the thaw: brown from the first lasting snow, mid-November, to the middle of May, green again by its end)
+  u.uThaw.value = d < 200 ? 1 - smoothstep(130, 152, d) : smoothstep(300, 325, d);
   const gt = season.grassTint || [1, 1, 1];
   u.uMeadowSeason.value[0].set(out[0], out[1], out[2]);
   u.uMeadowSeason.value[1].set(out[0] / gt[0], out[1] / gt[1], out[2] / gt[2]);
@@ -124,6 +131,12 @@ float groundSphagnum = 0.0;
 // groundColor made of it: the share of this pixel that is a pool (flat and mirroring; terrain.js mireSheen)
 uniform vec3 uMirePool, uMirePeat, uMireIce;
 uniform vec3 uMeadowSeason[2];
+uniform float uThaw;
+// the thaw's dull (uThaw): a green's light kept, its colour gone to last year's straw and brown, a little darker and wetter
+vec3 groundThaw(vec3 c, float k) {
+  float l = dot(c, vec3(0.3, 0.55, 0.15));
+  return mix(c, l * vec3(1.18, 0.96, 0.66) * 0.86, k);
+}
 float groundMire = 0.0, groundPool = 0.0;
 // the density round (mire-relief.js mireAttr, the terrain's aRelief): the hummocks' shape here (-1 a hollow .. 1 a top),
 // how much this is a mire floor whose pools lie in its hollows (0: the old painted pools), the water there (the pool
@@ -270,8 +283,25 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
     float wd = smoothstep(0.62 - 0.45 * wB.x, 0.78 - 0.45 * wB.x, tuft + 0.35 * n2 * fb) * step(0.02, wB.x);
     c = mix(c, uBedMats[4] * (0.8 + 0.4 * tuft), wd * 0.9);
     c = mix(c, uBedMats[5], smoothstep(5.0, 13.0, d + 1.2 * n1) * 0.8);
-    c *= 1.0 + uBedLook.x * bedCaustic(p, d, fl.x * 10.0, px);
     groundPorosity = 0.0; groundRock = 0.0;
+    if (fl.y > 0.004) {
+      // (the season round: the bed the date's low water bares, terrain-build.js splatAt: fl.y its height over the water.
+      // The stones and the ledge dry paler; the silt is mud, wet and dark at the water, drying grey-brown up the flat,
+      // and the sedge and the grass come in over it in patches, more of them the longer it has been dry: a late-summer
+      // beaver meadow. The sedge takes the meadow's season.)
+      float hgt = smoothstep(0.02, 0.45, fl.y);
+      vec3 dry = c * mix(1.1, 1.45, hgt);
+      float mn = lookFbm(p / 0.9 + vec2(-3.3, 2.2), 47u, 2);
+      vec3 mud = uBedMats[2] * mix(vec3(0.9), vec3(1.95, 1.8, 1.6), hgt * (0.75 + 0.5 * mn)) * (1.0 + 0.18 * (mn - 0.5) * lookFade(0.9, px));
+      // the sedge in clumps a metre or so across, gathered into drifts over the flat, olive and straw mixed
+      float sn = lookFbm(p / 4.0 + vec2(4.1, -2.3), 45u, 2) * 0.6 + lookFbm(p / 0.8, 46u, 2) * 0.4 * lookFade(0.8, px) + 0.12 * n1 * fb;
+      float sedge = smoothstep(0.6 - 0.22 * hgt, 0.66 - 0.22 * hgt, sn) * smoothstep(0.05, 0.25, fl.y);
+      float sv = lookFbm(p / 0.35 + vec2(1.1, 7.7), 48u, 2);
+      vec3 sedgeC = uGroundLit[2] * uMeadowSeason[0] * mix(vec3(0.62, 0.66, 0.5), vec3(1.15, 1.0, 0.72), sv) * (0.75 + 0.35 * sn);
+      mud = mix(mud, mix(sedgeC, mud, 0.25 * (1.0 - lookFade(0.35, px))), sedge);
+      c = mix(dry, mud, kb.z + wd * 0.9);
+      groundPorosity = 1.0;
+    } else c *= 1.0 + uBedLook.x * bedCaustic(p, d, fl.x * 10.0, px);
   } else {
     // each material's weight lifted or lowered by its noise; those within a band's softness of the top
     // share the pixel. Far away the noise fades and the band widens to the plain weighted blend.
@@ -340,6 +370,7 @@ vec3 groundColor(vec2 p, vec4 wA, vec4 wB, vec4 wC, vec4 fl, float px) {
       poolN = lookFbm(p / 3.4 + vec2(-4.7, 8.3), 62u, 3) + 0.24 * (lookFbm(p / 0.8 + vec2(1.9, -2.2), 63u, 2) - 0.5) * lookFade(0.8, px);
       poolT = 0.77 - 0.2 * groundMire;
     }
+    if (uThaw > 0.004) mossC = groundThaw(mossC, 0.85 * uThaw);
     c = bA.x * groundShaded(0, mix(uGroundLit[0], uGroundSunny, sunny), s)
       + bA.y * mossC + bA.z * groundShaded(2, uGroundLit[2], s) * mix(uMeadowSeason[1], uMeadowSeason[0], groundSeasonK) + bA.w * groundShaded(3, uGroundLit[3], s)
       + (bB.x * groundShaded(4, uGroundLit[4], s) + bB.y * groundShaded(5, uGroundLit[5], s) + bB.z * groundShaded(6, uGroundLit[6], s)) * groundRockTint + bB.w * groundShaded(7, uGroundLit[7], s);
@@ -407,6 +438,10 @@ export function makeTerrainMaterial() {
       .replace('#include <opaque_fragment>', mireSheen('groundPool * 0.9 * groundPoolGloss'));
     // rain: the soil darkens most, the rock half as much and shines a little more; less sheen under the canopy
     applyWet(shader, { porosity: 'groundPorosity', gloss: '( 0.3 + 0.4 * groundRock ) * ( 1.0 - 0.7 * groundCanopy ) * ( 1.0 - vFloor.z )' });
+    // the snow (snow.js): on the land, and on the pools and the lake bed once the ice is in (under the ice the bed is
+    // hidden; a drawn-down flowage's bared mud, which is bed, snows with the winter), never through open water; the
+    // canopy's shade is its shelter
+    applySnow(shader, { shelter: 'groundCanopy', amount: 'mix( 1.0, uMireIce.x, step( 0.5, vFloor.z ) * ( 1.0 - step( 0.004, vFloor.y ) ) ) * ( 1.0 - groundPool * ( 1.0 - uMireIce.x ) )' });
   };
   m.customProgramCacheKey = () => 'look-terrain';
   return m;

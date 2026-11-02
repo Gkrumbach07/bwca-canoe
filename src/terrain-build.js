@@ -4,6 +4,7 @@
 import { fbm, lerp, smoothstep, clamp } from './rng.js';
 import { rockAt, calmAt, meadowAt, knobAt } from './fields.js';
 import { burnLook, burnOpenAt } from './burns.js';
+import { isFlowage } from './water-build.js'; // the season round: a flowage's bed is mud
 import { mireAttr, coverByte } from './mire-relief.js'; // the density round: the wetlands' floor (terrain.js aRelief)
 
 // the cliff band strength (site.js CLIFF.band) a cell needs to be a cliff
@@ -192,10 +193,22 @@ export const BED_MATS = [hex(0xb3a27c), hex(0x786e5d), hex(0x584833), hex(0x625d
 // bank their late-summer low water bares is the muck of a marsh creek
 let LOW_CREEKS = null;
 export function setLowCreeks(set) { LOW_CREEKS = set && set.size ? set : null; }
+// the season round: every water's kind (water-build.js waterKinds, tile-worker.js sets it once): a flowage's bed is the
+// beaver meadow's mud and sedge when the drawdown bares it
+let KINDS = null;
+export function setWaterKinds(kinds) { KINDS = kinds || null; }
+// how far the bed at x, z stands over the date's water (m; <= 0 under it): grid.low is each water cell's drop on the
+// date (water-build.js lowCreeks, cm), bedDepth the bed's depth under the baked (spring) level
+export function bedBare(grid, x, z, bedDepth) {
+  const low = grid.low;
+  if (!low) return -bedDepth;
+  const k = grid.local(grid.cellI(x), grid.cellJ(z));
+  return (k >= 0 && k < low.length ? low[k] * 0.01 : 0) - bedDepth;
+}
 export function bedPre(grid, x, z, sd, depth, site, out = {}) {
   const lid = grid.lakeIdAt ? grid.lakeIdAt(x, z) : 0;
   out.clarity = grid.clarityOf ? grid.clarityOf(lid) : 2.6;
-  if (LOW_CREEKS && LOW_CREEKS.has(lid)) { out.sand = 0; out.cobble = 0.08; out.silt = 0.92; out.bedrock = 0; out.weed = 0; out.rock = 0; out.soft = 1; return out; }
+  if ((LOW_CREEKS && LOW_CREEKS.has(lid)) || (KINDS && lid < KINDS.length && isFlowage(KINDS[lid]))) { out.sand = 0; out.cobble = 0.08; out.silt = 0.92; out.bedrock = 0; out.weed = 0; out.rock = 0; out.soft = 1; return out; }
   if (depth > 14) { out.sand = 0; out.cobble = 0; out.silt = 1; out.bedrock = 0; out.weed = 0; out.rock = 0; out.soft = 1; return out; }
   let rock = 0.3, wet = 0, beach = 0;
   if (site) {
@@ -248,7 +261,8 @@ export function splatAt(x, z, shade, pre, wA, wB, wC, fl) {
     const b = pre.bed;
     if (b) { wA[0] = b.sand; wA[1] = b.cobble; wA[2] = b.silt; wA[3] = b.bedrock; wB[0] = b.weed; } else { wA[0] = 1; wA[1] = wA[2] = wA[3] = 0; wB[0] = 0; }
     wB[1] = wB[2] = wB[3] = 0;
-    fl[0] = b ? Math.min(1, b.clarity / 10) : 0.26; fl[1] = 0; fl[2] = 1;
+    // (the season round: fl[1] how far over the date's water the bed stands, 0 under it, 1 at 0.8 m: bared mud)
+    fl[0] = b ? Math.min(1, b.clarity / 10) : 0.26; fl[1] = pre.bare > 0 ? Math.min(1, 0.02 + pre.bare / 0.8) : 0; fl[2] = 1;
     fl[3] = Math.min(1, Math.max(0, pre.bedDepth ?? pre.depth) / BED_DEPTH_SCALE);
     return;
   }
@@ -430,6 +444,7 @@ export function buildTerrainChunk(grid, i0, j0, n, { shade = null, fine = true, 
     if (sd < 0) {
       pre.bedDepth = Math.max(0, (fine ? levelNear(x, z) : grid.levelAt(x, z, 2)) - h);
       pre.depth = pre.bedDepth + bedGrain(x, z);
+      pre.bare = bedBare(grid, x, z, pre.bedDepth);
       bedPre(grid, x, z, sd, pre.bedDepth, site, pre.bed);
     } else pre.depth = -1;
     splatAt(x, z, shadeAt(x, z), pre, wA, wB, wC, wf);

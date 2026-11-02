@@ -2,6 +2,7 @@ import { FLOAT_OFFSET, LENGTH } from './canoe.js';
 import { resample, PUNCHEON_TOP } from './props.js';
 import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
 import { brushAt } from './thicket.js'; // the density round: the brush in the way
+import { snowDepthHere } from './snow.js'; // the snow round: wading the pack
 import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
@@ -11,7 +12,7 @@ import { burnLook } from './burns.js';
 import { CarryBalance, BALANCE } from './balance.js'; // the canoe's balance on the shoulders (the owner, 2026-10-31)
 import { fmtDist } from './units.js';
 import { hold } from './hold.js'; // the wetlands round: the haul over a beaver dam is a held E
-import { DAM, lowWater, brookWater, damShape } from './creeks.js'; // the beaver dams, the low creeks of late summer, the brooks underfoot
+import { DAM, lowWater, brookWater, damShape } from './creeks.js'; import { isFlowage } from './water-build.js'; // the beaver dams, the low creeks of late summer, the brooks underfoot
 
 export class Input {
   constructor() {
@@ -118,6 +119,9 @@ const MIRE_WALK = { slow: 0.42, trail: 0.25, board: 0.04, sink: 0.13, ease: 2.5 
 // The brush (the density round, 2026-11-01: thicket.js brushAt, how thick the alder, the cattail and the poles stand):
 // pushing through a wall of it slows the walk by `slow` on top of the mire; the trail's tread is clear
 const BRUSH_WALK = { slow: 0.3 };
+// The snow (the snow round, snow.js snowDepthHere): wading the pack slows the walk by `slow` per metre of it, up to
+// `max`; a trail's packed tread half as much
+const SNOW_WALK = { slow: 0.9, max: 0.4, trail: 0.5 };
 // what the HUD calls wet ground off the trails, by ground kind
 const MIRE_PLACE = { [KIND.openBog]: 'Open bog', [KIND.coniferBog]: 'Spruce bog', [KIND.shrubSwamp]: 'Alder swamp', [KIND.marsh]: 'Marsh', [KIND.wetMeadow]: 'Wet meadow', [KIND.hardwoodSwamp]: 'Ash swamp', [KIND.water]: 'Beaver flowage' };
 const TRAIL_TO_WATER = 2.5;   // tuning: a trail's end farther than this up the bank runs on down to the waterline (trailFor)
@@ -230,7 +234,11 @@ export class Player {
     return this.mode === 'swim' ? 'Swimming' : 'Paddling';
   }
   // the height things stand on: the terrain as it is drawn (tiles.js groundAt: the mesh's own triangles)
-  groundAt(x, z) { const t = this.world.tiles; return t ? t.groundAt(x, z) : surfaceAt(this.world, x, z); }
+  groundAt(x, z) {
+    const w = this.world, t = w.tiles, g = t ? t.groundAt(x, z) : surfaceAt(w, x, z);
+    // (the season round: a frozen lake is walked on, its ice at the water's level; the snow is drawn on it, snow.js)
+    return this.season && this.season.ice > 0.5 && w.shoreAt(x, z) < 0 && w.lakeIdAt(x, z) > 0 ? Math.max(g, w.levelAt(x, z)) : g;
+  }
   // What the walker stands on at (x, z): the drawn ground, or whatever of the things near him (treesNear: a rock's own
   // geometry, a log's or a stump's top) rises over it there but no higher than `reach` (a step over the feet).
   supportAt(x, z, reach, near) {
@@ -472,7 +480,9 @@ export class Player {
       // the lakes are frozen: nothing to paddle until ice-out in early May
       this.speed *= 0.9; this.yawRate = 0; st.power *= 0.9; this.easeBoost(1, dt);
       this.placeOnWater(dt);
-      this.prompt = { key: null, text: 'Iced in: the lakes are frozen until ice-out in early May (= steps the date)' };
+      // (the season round: E walks you ashore over the ice, the canoe left where it is frozen in)
+      this.prompt = { key: 'E', text: 'Iced in until ice-out in early May (= steps the date) · walk ashore over the ice' };
+      if (inp.pressed('KeyE')) this.stepOut();
       return;
     }
     const rodUp = !!(this.fishing && this.fishing.rodUp);
@@ -551,13 +561,18 @@ export class Player {
     // the whole hull must stay in the water (and on a tile that has finished streaming in): centre, bow and stern are tested
     const ok = (x, z, h) => {
       const fx = Math.cos(h), fz = -Math.sin(h);
-      return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5;
+      return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5 && this.floats(x, z); // (the season round: floats)
     };
     const newHeading = this.heading + this.yawRate * dt;
     if (ok(this.x, this.z, newHeading) || !ok(this.x, this.z, this.heading)) this.heading = newHeading; else this.yawRate = 0;
     const f = this.forward;
     const nx = this.x + f.x * vb * dt, nz = this.z + f.z * vb * dt;
+    // (the season round: a hull already aground, a flowage's water gone from under it since it was left, poles off at a
+    // crawl toward water no shallower than where it sits; else it could never move again)
+    const depth = (x, z) => w.levelAt(x, z) - w.heightAt(x, z);
+    const aground = !ok(this.x, this.z, this.heading) && w.shoreAt(this.x, this.z) < -0.5 && !this.floats(this.x, this.z);
     if (ok(nx, nz, this.heading)) { this.x = nx; this.z = nz; }
+    else if (aground && w.shoreAt(nx, nz) < -0.5 && depth(nx, nz) >= depth(this.x, this.z) - 0.005) { this.x = nx; this.z = nz; this.speed = clamp(this.speed, -0.6, 0.6); }
     else if (ok(nx, this.z, this.heading)) { this.x = nx; this.speed *= 0.7; }
     else if (ok(this.x, nz, this.heading)) { this.z = nz; this.speed *= 0.7; }
     else {
@@ -1427,7 +1442,7 @@ export class Player {
         }
       }
       if (!started) {
-        const soft = (1 - (mire.board ? MIRE_WALK.board : mire.onTrail ? MIRE_WALK.trail : MIRE_WALK.slow) * mire.k) * (1 - BRUSH_WALK.slow * (mire.brush || 0)); // the wetlands' going, and the brush
+        const soft = (1 - (mire.board ? MIRE_WALK.board : mire.onTrail ? MIRE_WALK.trail : MIRE_WALK.slow) * mire.k) * (1 - BRUSH_WALK.slow * (mire.brush || 0)) * (1 - Math.min(SNOW_WALK.max, SNOW_WALK.slow * snowDepthHere(this.season)) * (mire.onTrail ? SNOW_WALK.trail : 1)); // the wetlands' going, the brush, the snow
         const want = wall && !ft.air ? 0 : fwd * base * Math.max(0.55, going) * wade * soft;
         this.speed += (want - this.speed) * (1 - Math.exp(-dt * (ft.air ? 1.5 : 6))); // in the air the legs cannot push
         // one speed (pace.js footSeen): the walker time-lapsed so he is seen at the speed of where he is, whatever the
@@ -2045,9 +2060,11 @@ export class Player {
   }
   // A creek the bake marked seasonal runs low from late July through September (creeks.js lowWater): the hull drags
   // (a factor on the drag, as the sea's is) and scrapes the stones now and then; shallow is what the moment reads.
+  // The season round: a flowage drawn down in late summer the same, by the water left under the hull.
   creekDrag(dt) {
     const w = this.world, id = w.lakeIdAt(this.x, this.z), L = id > 0 ? w.lakes[id - 1] : null;
-    const low = L && L.creek && L.seasonal && this.season ? lowWater(this.season.doy) : 0;
+    let low = L && L.creek && L.seasonal && this.season ? lowWater(this.season.doy) : 0;
+    if (id > 0 && w.waterKinds && isFlowage(w.waterKinds[id])) low = Math.max(low, 1 - smoothstep(0.15, 0.55, w.levelAt(this.x, this.z) - w.heightAt(this.x, this.z)));
     this.shallow = low;
     if (low < 0.02) return 1;
     if (Math.abs(this.speed) > 0.25 && this.audio && (this._scrapeT -= dt * Math.abs(this.speed) * low) <= 0) {
@@ -2065,7 +2082,13 @@ export class Player {
   // the paddle's own test (updatePaddle ok): the hull's middle and both ends in the water, on a tile that is in
   paddleOk(x, z, h) {
     const w = this.world, fx = Math.cos(h), fz = -Math.sin(h);
-    return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5;
+    return w.inBounds(x, z, 40) && w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5 && this.floats(x, z);
+  }
+  // the season round: a drawn-down flowage's mud flats: the hull grounds where under 0.1 m of water is left (only there:
+  // a lake's shallows are as the shore distance has them)
+  floats(x, z) {
+    const w = this.world, id = w.lakeIdAt(x, z);
+    return !(id > 0 && w.waterKinds && isFlowage(w.waterKinds[id])) || w.levelAt(x, z) - w.heightAt(x, z) > 0.1;
   }
 }
 

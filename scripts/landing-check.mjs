@@ -3,7 +3,11 @@
 // outfitter's store (with its porch, steps and canoe rack), placed exactly as the game places them (props.js
 // landingPlan, loaded through Vite so the game's own code runs) and sampled on the release's tiles.
 //
-//   node scripts/landing-check.mjs [--data public/data] [--ep 30,25] [--ground 10|2] [--json out.json] [--quiet] [--search]
+//   node scripts/landing-check.mjs [--data public/data] [--ep 30,25] [--ground 10|2] [--json out.json] [--quiet] [--search] [--doy 244]
+//
+// --doy: the water on that day of the year (the season round: water-build.js lowCreeks and flowageBeds, as the tile
+// worker builds it), and two more fails: the put-in or the dock's end in less than 0.1 m of water that day (where a
+// canoe grounds, player.floats).
 //
 // --search: for a store on steep ground, the put-ins nearby whose landing stands lowest (a `from`) and the sites in the
 // landing's frame flattest on both grounds (a `store`), for src/landings.json.
@@ -45,6 +49,7 @@ const dataDir = path.resolve(arg('--data', path.join(root, 'public/data'))) + '/
 const only = arg('--ep', null) ? new Set(arg('--ep').split(',').map(Number)) : null;
 const jsonOut = arg('--json', null), quiet = process.argv.includes('--quiet'), search = process.argv.includes('--search');
 const grounds = arg('--ground', null) ? [arg('--ground')] : ['10', '2'];
+const doy = arg('--doy', null) ? +arg('--doy') : null;
 
 // the canvases the store's signs and the props' atlas draw on: nothing in node (their pixels are not checked)
 const ctx2d = new Proxy({}, {
@@ -55,12 +60,13 @@ const ctx2d = new Proxy({}, {
 });
 globalThis.document = globalThis.document || { createElement: () => ({ width: 0, height: 0, style: {}, getContext: () => ctx2d, toDataURL: () => '' }) };
 const vite = await createServer({ root, configFile: false, server: { middlewareMode: true, hmr: false, watch: null }, appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [] } });
-let props, gridMod, terrain, detailBuild;
+let props, gridMod, terrain, detailBuild, waterBuild;
 try {
   props = await vite.ssrLoadModule('/src/props.js');
   gridMod = await vite.ssrLoadModule('/src/grid.js');
   terrain = await vite.ssrLoadModule('/src/terrain-build.js');
   detailBuild = await vite.ssrLoadModule('/src/detail-build.js');
+  waterBuild = await vite.ssrLoadModule('/src/water-build.js');
 } catch (e) { await vite.close(); throw e; }
 const { TileGrid, GridQueries } = gridMod;
 
@@ -69,6 +75,7 @@ const g = index.grid;
 const desc = { cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: index.version >= 4 ? index.fields : undefined };
 const levelById = new Float32Array(index.lakes.length + 1);
 for (const l of index.lakes) if (l) levelById[l.id] = l.level;
+const waterK = doy !== null ? waterBuild.waterKinds(index.lakes) : null;
 
 const tiles = new Map();
 function tileGrid(tx, ty) {
@@ -77,7 +84,13 @@ function tileGrid(tx, ty) {
     let tg = null;
     try {
       const raw = zlib.gunzipSync(fs.readFileSync(`${dataDir}tiles/${tx}_${ty}.bin`));
-      tg = new TileGrid(desc, tx, ty, raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength), levelById);
+      const buf = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+      const low = waterK ? waterBuild.lowCreeks(buf, g.tile + 2 * g.halo, g.cell, waterK, doy) : null;
+      tg = new TileGrid(desc, tx, ty, buf, levelById);
+      if (waterK) {
+        waterBuild.flowageBeds(tg, waterK);
+        if (low) { const base = tg.levelCell; tg.levelCell = (i, j) => base.call(tg, i, j) - low[tg.local(i, j)] * 0.01; }
+      }
     } catch { /* no tile: all land at 0 */ }
     tiles.set(k, tg);
   }
@@ -279,6 +292,8 @@ for (const mode of grounds) for (const ep of index.entryPoints) {
   // the put-in
   const sdEp = world.shoreAt(ep.x, ep.z), lakeEp = world.lakeIdAt(ep.x, ep.z);
   if (!(sdEp < 0 && lakeEp)) fails.push(`put-in on land (shore ${r2(sdEp)} m)`);
+  const depthEp = world.levelAt(ep.x, ep.z) - H(ep.x, ep.z);
+  if (doy !== null && sdEp < 0 && depthEp < 0.1) fails.push(`put-in aground on day ${doy} (${r2(depthEp)} m of water)`);
   // the plan
   const P = props.landingPlan(ctx, ep), F = P.F, D = P.dock, S = P.site;
   const sdA = world.shoreAt(P.x, P.z), far = Math.hypot(P.x - ep.x, P.z - ep.z);
@@ -290,7 +305,8 @@ for (const mode of grounds) for (const ep of index.entryPoints) {
   for (let b = D.back; b <= D.len; b += 0.5) { const [x, z] = F.W(0, b); if (world.shoreAt(x, z) < 0.5) under = Math.max(under, world.levelAt(x, z, 2)); }
   const deckOver = D.deckY - (under > -Infinity ? under : D.level);
   if (world.shoreAt(ex, ez) >= 0) fails.push(`dock end on land (shore ${r2(world.shoreAt(ex, ez))} m)`);
-  if (depthEnd < 0.3) {
+  if (doy !== null && depthEnd < 0.1) fails.push(`dock end aground on day ${doy} (${r2(depthEnd)} m of water)`);
+  else if (depthEnd < 0.3) {
     // shallow water: a fail unless there is no deeper water along the dock's line within 18 m (a creek, a flat bed)
     let deepest = -Infinity;
     for (let b = 0; b <= 18; b += 0.5) { const [x, z] = F.W(0, b); if (world.shoreAt(x, z) < 0) deepest = Math.max(deepest, world.levelAt(x, z, 2) - H(x, z)); }
@@ -353,7 +369,7 @@ for (const mode of grounds) for (const ep of index.entryPoints) {
     notes.push('search (store): ' + tried.slice(0, 5).map((t) => JSON.stringify({ store: t.store, spread: t.spread })).join(' '));
   }
   const row = {
-    ep: ep.ep, name: ep.name, ground: mode, ...extra, lake: lakeName(lakeEp || ep.lake), putIn: { shore: r2(sdEp), lake: lakeEp },
+    ep: ep.ep, name: ep.name, ground: mode, ...extra, lake: lakeName(lakeEp || ep.lake), putIn: { shore: r2(sdEp), lake: lakeEp, depth: r2(depthEp) },
     landing: { x: r2(P.x), z: r2(P.z), shore: r2(sdA), fromPutIn: r2(far), level: r2(P.level) },
     dock: { deckY: r2(D.deckY), level: r2(D.level), deckOver: r2(deckOver), endDepth: r2(depthEnd), sill: r2(D.sill), len: D.len },
     store: { ao, b0, floorY: r2(floorY), water: wl > -Infinity ? r2(wl) : null, clear: r2(clear), groundMin: r2(gmin), groundMax: r2(gmax), wet, under: flood, worstUnder: r2(worstUnder), fallback: !!S.fallback, centre: F.W(ao, b0).map(r2) },

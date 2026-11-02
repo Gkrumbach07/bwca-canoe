@@ -5,6 +5,7 @@ import { GridQueries, TileGrid, tileChannels } from './grid.js';
 import { LakeFacts } from './lake-facts.js'; // d1 lakes
 import { useV4 as rapidsV4 } from './rapids.js'; // d2 bake: a v4 release's own drops (its levels hold them)
 import { Creeks } from './creeks.js'; // the wetlands round: brooks and beaver dams (index.creeks)
+import { waterKinds, isFlowage } from './water-build.js'; // the season round: every water's level through the year
 
 // Where the baked data lives: VITE_DATA_URL (a bucket behind a CDN, see docs/HOSTING.md), else `data/`
 // under the app's own base path (public/data in development). Always ends in a slash.
@@ -147,7 +148,10 @@ export class World extends GridQueries {
       if (l.secchi) this.clarityById[l.id] = l.secchi;
     }
     // wetlands round 2: the seasonal creeks, whose water stands lower from late July (water-build.js lowCreeks)
-    this.lowIds = Int32Array.from(index.lakes.filter((l) => l && l.creek && l.seasonal).map((l) => l.id));
+    // the season round: every water's kind for its level through the year (water-build.js waterKinds); the flowages' beds
+    // are mud like the seasonal creeks' (lowIds: terrain-build.js setLowCreeks)
+    this.waterKinds = waterKinds(index.lakes);
+    this.lowIds = Int32Array.from(index.lakes.filter((l) => l && ((l.creek && l.seasonal) || isFlowage(this.waterKinds[l.id]))).map((l) => l.id));
     this.fixed = fixes ? this.applyFixes(fixes) : null;
     this.facts = null; // d1 lakes: a LakeFacts once load() has joined lake-facts.json (null on another release)
     this.creeks = null; // the wetlands round: a creeks.js Creeks once load() has read creeks.json (null on an older release)

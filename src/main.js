@@ -361,6 +361,8 @@ async function main() {
   const saver = new TripSaver(player, day, chase);
   const title = new Title({ world, player, chase, camera, day, hud, settings, saver, saved, trip, outfitter });
   title.photo = photo; // (Esc with the camera up lowers it: no pause)
+  // the season round: the title's scene on the saved season's date (its own golden hour), not today's (and the tiles built for it)
+  if (saved && Number.isFinite(saved.year) && Number.isFinite(saved.doy)) day.setClock(saved.year, saved.doy, saved.hours ?? 12);
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
   // (on foot with the canoe set down somewhere, at a camp say, you come back on foot beside it)
   // camp 1: one saved in the middle of a carry comes back on the trail, the canoe overhead and the carry on you (packs.js)

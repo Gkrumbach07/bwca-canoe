@@ -83,8 +83,8 @@ export class TripSaver {
 // dropped from then on (the other tab owns the keys), and `slots.stale` says so.
 //
 //   slots.live · slots.count · slots.stale · slots.list() → [{ n, live, empty, meta }]
-//   slots.describe(words) (the live slot's line) · claim() (a season begun in place) · takeBoot() → { do, ep, mode }
-//   slots.play(n) · startNew(n, { ep, mode }) · remove(n) · copy(from, to) · exportSeason(n) → { file, text }
+//   slots.describe(words) (the live slot's line) · claim() (a season begun in place) · takeBoot() → { do, ep, mode, start }
+//   slots.play(n) · startNew(n, { ep, mode, start }) · remove(n) · copy(from, to) · exportSeason(n) → { file, text }
 //   slots.importSeason(text, n) → { ok, why, reload } · slots.usage() → { total, limit, live, parked: { n } }
 export const SLOT_COUNT = 3;
 export const FILE_FORMAT = 'bwca-canoe-season', FILE_V = 1;
@@ -375,7 +375,7 @@ export const slots = {
     return { ok: true, reload: true };
   },
   // a new season in slot n (empty, or the live one, which it replaces), begun at entry point ep after the reload
-  async startNew(n, { ep, mode } = {}) {
+  async startNew(n, { ep, mode, start } = {}) {
     if (stale) return refused(STALE);
     const d = readDoc(); if (!d) return refused('The saves aren’t working in this browser.');
     const live = n === myLive;
@@ -387,7 +387,7 @@ export const slots = {
       await dropPrints(n); d.active = n;
     }
     d.slots[n] = { made: Date.now(), from: null };
-    d.boot = { do: 'new', ep: ep != null ? Number(ep) : null, mode: mode === 'sandbox' ? 'sandbox' : 'adventure' };
+    d.boot = { do: 'new', ep: ep != null ? Number(ep) : null, mode: mode === 'sandbox' ? 'sandbox' : 'adventure', start: start && Number.isFinite(start.year) && Number.isFinite(start.doy) ? { year: start.year, doy: start.doy } : null };
     writeDoc(d); reload();
     return { ok: true, reload: true };
   },

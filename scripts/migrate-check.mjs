@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // d2 join: every table in src/migrate.js (src/migrate/*.json, scripts/migrate-table.mjs) checked against the releases
-// it joins (docs/migration.md). For each live release a season may come from (v3, v4, v5, v6) it checks the whole table
+// it joins (docs/migration.md). For each live release a season may come from (v3, v4, v5, v6, v7-water) it checks the whole table
 // against the two indices (every mapped lake the same water: its OpenStreetMap id, or under the old one's cells; every
 // site at its place; every trail with its ends), then builds a season as the game writes it on that release (Lake One
 // and its neighbours paddled and inked, nights at Lake One sites and at one the new bake moved, portages walked, a
@@ -10,7 +10,7 @@
 // stamped v6, and a stamp no table knows) carried by their names; a season whose release has no table to the one
 // loaded left as it is and NOT stamped; a rebake of the new release with the same numbers.
 //
-//   node scripts/migrate-check.mjs --v3 <dir> --v4 <dir> --v5 <dir> --v6 <dir> --to <dir>   (each: a dir with index.json)
+//   node scripts/migrate-check.mjs --v3 <dir> --v4 <dir> --v5 <dir> --v6 <dir> --v7 <dir> --to <dir>   (each: a dir with index.json)
 //     [--fixture out.json]   (the v4 season's keys stamped v4, for a browser check with the save in localStorage)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,9 +19,9 @@ import { migrateSeason, migrateKeys, mapperOf, MARK, TABLES, seasonNames } from 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const here = path.dirname(new URL(import.meta.url).pathname);
 const readIdx = (d) => JSON.parse(fs.readFileSync(fs.statSync(d).isDirectory() ? path.join(d, 'index.json') : d, 'utf8'));
-const need = ['--v3', '--v4', '--v5', '--v6', '--to'];
+const need = ['--v3', '--v4', '--v5', '--v6', '--v7', '--to'];
 if (need.some((k) => !arg(k))) { console.error(`usage: node scripts/migrate-check.mjs ${need.map((k) => `${k} <dir>`).join(' ')} [--fixture out.json]`); process.exit(1); }
-const R = { v3: readIdx(arg('--v3')), v4: readIdx(arg('--v4')), v5: readIdx(arg('--v5')), v6: readIdx(arg('--v6')) };
+const R = { v3: readIdx(arg('--v3')), v4: readIdx(arg('--v4')), v5: readIdx(arg('--v5')), v6: readIdx(arg('--v6')), v7: readIdx(arg('--v7')) };
 const B = readIdx(arg('--to'));
 const fixes = JSON.parse(fs.readFileSync(path.join(here, '../src/world-fixes.json'), 'utf8'));
 const fileFor = (baked) => `${String(baked).replace(/[:.]/g, '-')}.json`;
@@ -41,15 +41,16 @@ const head = (s) => console.log(`\n--- ${s} ${'-'.repeat(Math.max(0, 100 - s.len
 
 // --- the tables in src/migrate.js, one per release ---------------------------------------------------------------------
 head('the tables');
-ok(TABLES.map((e) => e.name).join() === 'v3,v4,v5,v6', `TABLES: ${TABLES.map((e) => `${e.name} (${e.from.baked})`).join(', ')}`);
+ok(TABLES.map((e) => e.name).join() === 'v3,v4,v5,v6,v7', `TABLES: ${TABLES.map((e) => `${e.name} (${e.from.baked})`).join(', ')}`);
 for (const e of TABLES) {
   const I = R[e.name], t = tableOf(e), size = fs.statSync(path.join(here, '../src/migrate', fileFor(e.from.baked))).size;
   ok(JSON.stringify(t.from) === JSON.stringify(stamp(I)) && JSON.stringify(t.to) === JSON.stringify(stamp(B)) && JSON.stringify(e.from) === JSON.stringify(t.from) && JSON.stringify(e.to) === JSON.stringify(t.to),
     `${e.name}: src/migrate/${fileFor(e.from.baked)} (${(size / 1024).toFixed(1)} KB) goes ${t.from.baked} → ${t.to.baked}`);
 }
 const lakeOne = (I) => I.lakes.filter((l) => l && l.name === 'Lake One').sort((a, b) => b.cells - a.cells)[0].id;
-ok(lakeOne(R.v3) === 78 && lakeOne(R.v4) === 103 && lakeOne(R.v5) === 103 && lakeOne(R.v6) === 103 && lakeOne(B) === 103 && TABLES.every((e) => mapperOf(tableOf(e)).lake(lakeOne(R[e.name])) === 103),
-  `Lake One: v3 ${lakeOne(R.v3)}, v4 ${lakeOne(R.v4)}, v5 ${lakeOne(R.v5)}, v6 ${lakeOne(R.v6)} → ${TABLES.map((e) => mapperOf(tableOf(e)).lake(lakeOne(R[e.name]))).join(', ')} (new: ${lakeOne(B)} ${nm(B.lakes[102])})`);
+const ONE = lakeOne(B); // (v8, the fresh extract: 104)
+ok(lakeOne(R.v3) === 78 && lakeOne(R.v4) === 103 && lakeOne(R.v5) === 103 && lakeOne(R.v6) === 103 && lakeOne(R.v7) === 103 && TABLES.every((e) => mapperOf(tableOf(e)).lake(lakeOne(R[e.name])) === ONE),
+  `Lake One: v3 ${lakeOne(R.v3)}, v4 ${lakeOne(R.v4)}, v5 ${lakeOne(R.v5)}, v6 ${lakeOne(R.v6)}, v7 ${lakeOne(R.v7)} → ${TABLES.map((e) => mapperOf(tableOf(e)).lake(lakeOne(R[e.name]))).join(', ')} (new: ${ONE} ${nm(B.lakes[ONE - 1])})`);
 
 // --- per release: the whole table, then a season made on it -------------------------------------------------------------
 const seasons = {};
@@ -58,7 +59,8 @@ for (const e of TABLES) {
   head(`${e.name} (${I.source.baked}) → ${B.source.baked}`);
   const sameLake = (a, b) => { const p = I.lakes[a - 1], q = b > 0 ? B.lakes[b - 1] : null; return !!(p && q && (p.osm === q.osm || Math.hypot(p.cx - q.cx, p.cz - q.cz) < 2000 || (nm(p) && nm(p) === nm(q)))); }; // (a few cells of a big lake's edge: its middle is far)
   const sameSite = (i, j) => j >= 0 && Math.hypot(CA[i].x - CB[j].x, CA[i].z - CB[j].z) < 100;
-  const sameTrail = (i, j) => { if (j < 0) return false; const p = PA[i].launch, q = PB[j].launch, d = (a, b) => Math.hypot(a.x - b.x, a.z - b.z); return Math.min(d(p[0], q[0]) + d(p[1], q[1]), d(p[0], q[1]) + d(p[1], q[0])) < 80; };
+  const sameTrail = (i, j) => { if (j < 0) return false; const p = PA[i].launch, q = PB[j].launch, d = (a, b) => Math.hypot(a.x - b.x, a.z - b.z); return Math.min(d(p[0], q[0]) + d(p[1], q[1]), d(p[0], q[1]) + d(p[1], q[0])) < 80
+    || (Math.min(d(p[0], q[0]), d(p[0], q[1]), d(p[1], q[0]), d(p[1], q[1])) < 30 && PA[i].pts.every(([x, z]) => PB[j].pts.some(([u, v]) => Math.hypot(x - u, z - v) < 25))); }; // (the season round: or carried on to other water, its old line all on the new)
   {
     let lk = 0, lbad = 0, n = 0; for (const l of I.lakes) { if (!l) continue; n++; const to = M.lake(l.id); if (to) { lk++; if (!sameLake(l.id, to)) lbad++; } }
     ok(lbad === 0, `every mapped lake is the same water (${lk} of ${n} mapped, ${lbad} not; the rest have no water under them in the new bake)`);
@@ -130,7 +132,7 @@ for (const e of TABLES) {
   ok(JSON.stringify(J(MARK)) === JSON.stringify(stamp(B)), `stamped ${store.getItem(MARK)}`);
   const ex = J('bwca-canoe:explored'), exL = unbits(ex.lakes), exP = unbits(ex.portages), exC = unbits(ex.camps);
   console.log('     inked lakes:', exL.map((id) => `${id} ${nm(B.lakes[id - 1])}`).join(', '));
-  ok(exL.includes(103) && exL.length === 4 && [L.one, L.two, L.three, L.four].every((id) => exL.includes(M.lake(id)) && nm(B.lakes[M.lake(id) - 1]) === nm(I.lakes[id - 1])), 'the ink: Lake One is 103, the four paddled lakes by name, the gone pond dropped');
+  ok(exL.includes(ONE) && exL.length === 4 && [L.one, L.two, L.three, L.four].every((id) => exL.includes(M.lake(id)) && nm(B.lakes[M.lake(id) - 1]) === nm(I.lakes[id - 1])), `the ink: Lake One is ${ONE}, the four paddled lakes by name, the gone pond dropped`);
   const walked = [trail.a, trail.b, trail.two];
   ok(walked.every((i) => exP.includes(M.portage(i)) && sameTrail(i, M.portage(i))) && exP.length === 3, `the ink: the portages ${exP.join(', ')} (${exP.map((j) => PB[j].name).join('; ')})${trail.gone >= 0 ? ', the gone one dropped' : ''}`);
   ok(exC.length === 3 && [site.lakeOne, site.lakeOne2, site.moved].every((i) => exC.includes(M.site(i)) && sameSite(i, M.site(i))), `the ink: the sites ${exC.join(', ')}`);
@@ -142,7 +144,7 @@ for (const e of TABLES) {
   ok(log.filter((q) => q.k === 'lake').every((q) => nm(B.lakes[q.id - 1]) === q.name), `the trip's log: lakes ${log.filter((q) => q.k === 'lake').map((q) => `${q.id} ${q.name}`).join(', ')}`);
   ok(tr.core.camp.key === movedKey && log.filter((q) => q.k === 'camp')[1].key === movedKey && tr.core.chores.piles[movedKey] && tr.core.chores.fires[0].key === movedKey, `the tent, its log, the wood pile and the fire ring at ${tr.core.camp.key}`);
   const ads = new Map(tr.tasks.ads.map((t) => [t.id, t]));
-  ok(ads.get(1).site === M.site(site.lakeOne) && ads.get(1).key === ads.get(1).site && ads.get(1).lakeId === 103, `notice 1 (item): site ${site.lakeOne} → ${ads.get(1).site}, lake ${ads.get(1).lakeId}`);
+  ok(ads.get(1).site === M.site(site.lakeOne) && ads.get(1).key === ads.get(1).site && ads.get(1).lakeId === ONE, `notice 1 (item): site ${site.lakeOne} → ${ads.get(1).site}, lake ${ads.get(1).lakeId}`);
   ok(ads.get(2).portage === M.portage(trail.b) && ads.get(2).key === ads.get(2).portage, `notice 2 (survey): trail ${trail.b} → ${ads.get(2).portage} (${PB[ads.get(2).portage].name})`);
   ok(ads.get(3).key === M.lake(L.three) && nm(B.lakes[ads.get(3).lakeId - 1]) === 'Lake Three', `notice 3 (secchi): lake ${L.three} → ${ads.get(3).lakeId}`);
   ok(ads.get(4).route.every((l) => nm(B.lakes[l.id - 1]) === l.name) && ads.get(4).key === ads.get(4).route.map((l) => l.id).join('>'), `notice 4 (report): route ${ads.get(4).key}`);
@@ -152,7 +154,7 @@ for (const e of TABLES) {
   const st = J('bwca-canoe:stats');
   ok(st.lakes.every((l) => nm(B.lakes[l.id - 1]) === l.name) && st.nights[1].key === movedKey, `the tally: lakes ${st.lakes.map((l) => l.id).join(', ')}; nights at ${st.nights.map((n) => n.key).join(', ')}`);
   const rec = J('bwca-canoe:record');
-  ok(rec.lakes.l103 && rec.lakes.l103.name === 'Lake One' && rec.lakes[`l${M.lake(L.two)}`] && rec.lakes['n:Lake Nowhere'] && Object.keys(rec.lakes).length === 3, `the record's lakes: ${Object.keys(rec.lakes).join(', ')}`);
+  ok(rec.lakes[`l${ONE}`] && rec.lakes[`l${ONE}`].name === 'Lake One' && rec.lakes[`l${M.lake(L.two)}`] && rec.lakes['n:Lake Nowhere'] && Object.keys(rec.lakes).length === 3, `the record's lakes: ${Object.keys(rec.lakes).join(', ')}`);
   ok(rec.trips[0].lakes.every((l) => nm(B.lakes[l.id - 1]) === l.name) && rec.trips[0].camps[0].key === movedKey && rec.camps[movedKey], `the record's trip and sites`);
   {
     const inv = J('bwca-canoe:inventory'), t2 = inv.containers[0].at.trail, j2 = M.portage(trail.two), q0 = PB[j2].pts[0];

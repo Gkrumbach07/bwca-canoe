@@ -3,6 +3,7 @@ import { glslSurface } from './water.js';
 import { CELL_SPLAT } from './terrain-build.js';
 import { groundUniforms, glslGround } from './terrain.js';
 import { applyLook } from './shading.js';
+import { applySnow } from './snow.js';
 import { applyWet } from './weather.js';
 import { foliageAtlas, spriteUV, SLOTS, ATLAS_SIZE } from './textures.js';
 import { SWAY, glslSway } from './wind.js';
@@ -132,6 +133,8 @@ const body = /* glsl */ `
     p.xz += uSwayWind.xy * d;
     p.y -= 0.5 * d * d / max(gy, 0.05);
   }
+  // the snow (snow.js): the tufts sink into the pack, pressed flat and buried under a winter's
+  p.y = p.y * (1.0 - 0.6 * smoothstep(0.02, 0.3, uSnow.y * uSnow.x)) - uSnow.y * smoothstep(0.2, 0.7, uSnow.x) * 1.2;
   vec3 transformed = vec3(rel.x + p.x, surfaceAt(rel) - 0.05 + p.y, rel.y + p.z);
   // colour: the ground's own at the root (the blade's vertex colour lifts it toward a lit tip), a touch
   // greener per tuft, the season's tint; golden in burns and dry clearings; fireweed stalks in high summer
@@ -152,6 +155,8 @@ const body = /* glsl */ `
   if (wi == 3) vColor.rgb = vec3(0.07, 0.15, 0.036) * (0.75 + 0.5 * h3.y) * gl * uGrassTint * 1.35;
   else if (swampGrass) vColor.rgb = vec3(0.12, 0.19, 0.06) * (0.8 + 0.4 * h3.y) * gl * uGrassTint * 1.3; // the bluejoint under the alder
   vGrassFern = wi == 3 ? 1.0 : 0.0;
+  // (the thaw: last year's grass pale straw, the fronds brown; terrain.js uThaw)
+  vColor.rgb = mix(vColor.rgb, dot(vColor.rgb, vec3(0.3, 0.55, 0.15)) * (wi == 3 ? vec3(1.1, 0.85, 0.6) : vec3(1.5, 1.28, 0.82)), 0.8 * uThaw);
   vGrassCotton = wi == 2 ? step(h3.x, 0.35) * uFlower : 0.0; // cottongrass in the bog through the summer
   vGrassH = (position.y - ${ROOT.toFixed(2)}) / ${(HGT - ROOT).toFixed(2)};
   vGrassDist = distance((modelMatrix * vec4(transformed, 1.0)).xyz, cameraPosition);
@@ -235,7 +240,7 @@ export class GroundCover {
       applyLook(shader, { wrap: 0 });
       Object.assign(shader.uniforms, this.u);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\n' + decl)
+        .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nuniform vec4 uSnow;\n' + decl)
         .replace('#include <begin_vertex>', body);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassMap;\nvarying vec2 vGrassUv;\nvarying float vGrassDist, vGrassH, vGrassFlower, vGrassFw, vGrassCotton, vGrassFern;')
@@ -243,6 +248,8 @@ export class GroundCover {
         .replace('#include <normal_fragment_begin>', noFlip);
       // rain (weather.js): the root wets as the ground under it does, the blade tips a little less
       applyWet(shader, { porosity: 'mix( 1.0, 0.6, vGrassH )', gloss: '0.2' });
+      // the snow (snow.js) round the roots, the tips standing out of it
+      applySnow(shader, { shelter: '0.3', amount: '1.0 - smoothstep( 0.1, 0.8, vGrassH )' });
     };
     this.material.customProgramCacheKey = () => 'look-grass';
     this.mesh = new THREE.Mesh(geo, this.material);

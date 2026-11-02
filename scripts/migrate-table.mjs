@@ -146,7 +146,23 @@ let portSame = 0, portNear = 0;
     if (best) { portMap[i] = best.j; used.add(best.j); portNear++; }
     console.log(`  portage ${i} ${p.name}: ${best ? `→ ${best.j} ${P4[best.j].name}` : 'gone'}`);
   });
-  console.log(`portages: ${P3.length} in the old world, ${portSame} the same line, ${portNear} near, ${P3.length - portSame - portNear} gone`);
+  // the season round: a trail the new bake carried on to other water (its end was on a creek the portage goes round,
+  // no longer water): the new trail that keeps one of its ends and runs over the whole of its old line
+  let portLonger = 0;
+  P3.forEach((p, i) => {
+    if (portMap[i] >= 0) return;
+    let best = null;
+    P4.forEach((q, j) => {
+      if (used.has(j)) return;
+      const end = Math.min(d(p.launch[0], q.launch[0]), d(p.launch[0], q.launch[1]), d(p.launch[1], q.launch[0]), d(p.launch[1], q.launch[1]));
+      if (end > 30) return;
+      const line = meanTo(p.pts, q.pts);
+      if (line < 10 && (!best || end + line < best.e)) best = { j, e: end + line };
+    });
+    if (best) { portMap[i] = best.j; used.add(best.j); portLonger++; console.log(`  portage ${i} ${p.name}: carried on → ${best.j} ${P4[best.j].name} (${P4[best.j].rods} rods, was ${p.rods})`); }
+  });
+  portNear += portLonger;
+  console.log(`portages: ${P3.length} in the old world, ${portSame} the same line, ${portNear - portLonger} near, ${portLonger} carried on to other water, ${P3.length - portSame - portNear} gone`);
 }
 
 // --- campsites ------------------------------------------------------------------------------------------------------

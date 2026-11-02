@@ -6,6 +6,7 @@ import { addSurface, INSTANCE_ORIGIN } from './floating.js';
 import { aquaticAtlas, aquaticUV } from './aquatic-textures.js';
 import { SWAY, glslSway } from './wind.js';
 import { REGION } from './placement.js';
+import { applySnow } from './snow.js';
 
 // The lake plants (docs/look.md: crisp graphic clumps that sit in the water). Placement runs in the build worker
 // (placement.js placeAquatic); this file turns a tile's bins into instanced meshes in tile-local coordinates that
@@ -276,6 +277,8 @@ function makeAquaticMaterial(water, kind) {
         .replace('#include <common>', '#include <common>\nuniform sampler2D uAquaMap;\nuniform float uBloom, uTan;\nvarying vec2 vAqUv;\nvarying float vAqPart;')
         .replace('#include <map_fragment>', fragCut + '\n  diffuseColor.rgb *= aq.rgb;\n  diffuseColor.a = aqA;' + tan)
         .replace('#include <normal_fragment_begin>', noFlip);
+      // the reeds on land (thicket.js) stand in the snow, their feet buried (snow.js); the lake's are under the ice
+      if (kind === 4) applySnow(shader, { foot: true, lie: '0.15' });
     },
   });
   return m;
