@@ -4,6 +4,7 @@ import { KIND, WCLASS, FOREST, CLIFF, cliffClass, wclass1, wclass2, emergentGrow
 import { burnLook } from './burns.js';
 import { GUEST } from './placement.js';
 import { mirePoolAt } from './mire-relief.js';
+import { thinKeep } from './views.js'; // round world: the views to the water, thinned as the tiles thin them
 
 // The near ring (the density round, 2026-11-01). The owner: "the biggest thing i notice is how much more open our game
 // is compared to real life ... I don't want to walk through that vs that looks walkable. right now everything seems
@@ -347,7 +348,7 @@ export class Thicket {
           // a point anywhere in the cell and up to 3 m over its edge, so the cells' edges blur
           const x = cx + (H(1) - 0.5) * 16, z = cz + (H(2) - 0.5) * 16;
           const sx = w.shoreAt(x, z);
-          if (sx < L.shore || (L.band && sx > L.band[1]) || this.blocked(x, z, L.pad)) continue;
+          if (sx < L.shore || (L.band && sx > L.band[1]) || this.blocked(x, z, L.pad) || !thinKeep(x, z, 60 + li)) continue;
           // (off the bare rock, but for the rock's own; the rock's own only on it)
           const onRock = bare || bareAt(w, x, z);
           if (onRock && !(bare && ON_ROCK.has(name))) continue;

@@ -1,5 +1,5 @@
 import { FLOAT_OFFSET, LENGTH } from './canoe.js';
-import { resample, PUNCHEON_TOP } from './props.js';
+import { resample, PUNCHEON_TOP, yardBlocked } from './props.js';
 import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
 import { brushAt } from './thicket.js'; // the density round: the brush in the way
 import { snowDepthHere } from './snow.js'; // the snow round: wading the pack
@@ -1438,7 +1438,9 @@ export class Player {
     const trail = this.nearestTrail(this.x, this.z), onTrail = !!trail && trail.dist < TRAIL_WIDTH;
     const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
     const campArea = camp || this.nearCampsite(this.x, this.z, CAMP_AREA); // fb3 A: a site's area walks at life (pace.js)
-    const onWay = !onTrail && !!this.world.campAccess && this.onCampWay(this.x, this.z); // round world: a site's way up, its latrine trail
+    // round world: a site's way up, its latrine trail, and a store's yard with the way from its dock to its door (the owner:
+    // the entry points' buildings "sometimes ... on cliffs and it's not super easy to get to them"): walked graded, as a trail
+    const onWay = !onTrail && ((!!this.world.campAccess && this.onCampWay(this.x, this.z)) || (this.gradeYards !== false && yardBlocked(this.x, this.z, 0.5)));
     this.onTrail = onTrail; this.campsite = camp;
     const mire = this.updateMire(dt, onTrail ? trail : null);
     this.brookStep(); // a brook underfoot: a wading step (audio.js footfall)

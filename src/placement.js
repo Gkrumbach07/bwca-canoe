@@ -33,6 +33,7 @@ import { calmAt, rockAt, meadowAt } from './fields.js';
 import { burnLook, KIND as BURN } from './burns.js';
 import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND, CELL_SPLAT, bedPre } from './terrain-build.js';
 import { CLIFF, CLIFF_MODULE } from './site.js';
+import { thinKeep } from './views.js'; // round world: the campsites' and portage landings' views to the water
 import { KIND, KIND_LAND, FOREST, SWAMP_SPECIES, ROCK, STYLE_FAMILY, STYLE_ROCKS, UNIT_TAG, cliffStrength } from './land.js'; // d2 land
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
@@ -883,6 +884,8 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           if (camping && !isRock && site.at(site.camp, x, z) > 0.3) continue;
           // (a trail keeps each kind off by its own pad, TRAIL_PAD; a campsite's shelf and an outfitter's lawn by the plan's)
           if (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + (g[5] < 5 && !g[6] ? TRAIL_PAD[kind + 2] : pad))) continue;
+          // round world: thinned in a site's or a portage landing's view to the water (views.js), tapered, never cleared
+          if (!isRock && !thinKeep(x, z, kind)) continue;
           // nothing upright on a cliff's face (the steep step of the drawn ground)
           if (face > 0.05 && kind !== 16 && drawnSlope(grid, x, z) > 0.9) continue;
           let sp = kind;

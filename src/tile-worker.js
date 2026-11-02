@@ -7,6 +7,7 @@ import { buildWaterChunk, shoalBeds, lowCreeks, flowageBeds, setFlowChannels, is
 import { placeVegetation, placeAquatic, coverField, COVER_SPLAT_AT, REGION } from './placement.js';
 import { hash2 } from './rng.js';
 import { Site, setCampLandings } from './site.js';
+import { setViews } from './views.js'; // round world
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
 import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the lakes with no contour map
 import { patchTile, lakeRockBins, clearPlants, useV4 as rapidsV4 } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
@@ -299,7 +300,7 @@ async function buildDetail(m) {
 
 self.onmessage = async (e) => {
   const m = e.data;
-  if (m.type === 'init') { cfg = m; setCampLandings(m.campLandings); setBrookSegs(m.brooks); setMireExclusions(m.exclusions); setFlowChannels(m.chans); setLowCreeks(new Set(m.lowIds || [])); setWaterKinds(m.waterKinds); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
+  if (m.type === 'init') { cfg = m; setCampLandings(m.campLandings); setViews(m.views); setBrookSegs(m.brooks); setMireExclusions(m.exclusions); setFlowChannels(m.chans); setLowCreeks(new Set(m.lowIds || [])); setWaterKinds(m.waterKinds); if (v4()) rapidsV4(); setLand(m.land !== false); burns = loadBurns(); return; } // (d2 bake: the v4 release's drops; d2 land: ?land=off)
   if (m.type === 'chunk') {
     try { const r = await buildDetail(m); self.postMessage(r.msg, r.transfer); } catch (err) { self.postMessage({ type: 'error', key: m.key, error: String((err && err.message) || err) }); }
     return;
