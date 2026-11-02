@@ -387,7 +387,8 @@ Three streams joined on `claude/coop-phase2`; notes `phase3-a.md`, `phase3-b.md`
   a dropped socket retries two minutes, then *Rejoin* / *Back to my own season*; *Rejoin <host>'s trip* on the title
   after a reload; a host's reload reopens the room with its code. Friends drawn swimming (the swim pose moved to
   `poses.js`), jumping, landing, crouching, wading, sitting, the rod up and casting (the owner: "animations are also
-  not synced"). Not drawn yet: vault/climb, held jobs' arms, things in hand, the camera raised, eating, the line. The
+  not synced"). Not drawn yet: vault/climb, held jobs' arms, things in hand, the camera raised, eating, the line (all in
+  round 2, below). The
   weather seed stays 23 alone (a season seed would change every save's weather). Rig `connect.mjs`.
 - **Adventure** (`coop-trip.js`): Invite in Adventure; a guest arrives at the host's store in a free berth; shops per
   player and purse; notices one claim for the group, paid to the one who claimed it; the trip pushes off when any
@@ -395,6 +396,23 @@ Three streams joined on `claude/coop-phase2`; notes `phase3-a.md`, `phase3-b.md`
   card, each paying their fare; an evacuation moves one player with no jump. Not yet: a ride to fetch an evacuated
   player, a guest's trip card / logbook / Record, a key for the Ready card, the nine at push-off. Rig `adventure.mjs`.
 - **Wire traps:** `to` routes a message (never a payload field), the relay overwrites `from`, and `t` is the type.
+
+### Phase 3 round 2: how a friend is drawn (2026-11-01)
+
+The owner, playing two browsers: "standing on top of a rock … to them it just looks like I'm standing inside the rock"
+(the dock and a canoe set down too), and "animations for climbing, arm movements, eating, all that fishing line".
+- **Height:** the pose carries `y`, the height stood on as the sender's screen has it (the feet's on foot: a rock, a
+  deck, a stair; the water's level afloat or swimming). The friend's figure stands at it, its feet planted on the
+  world's own rock or deck under them (actors.js `Person.groundAt`/`supportAt`), else level with it; afloat the hull
+  rides that level (creeks, the season's water). A canoe set down sends its pivot's height and turn (`d[3..7]`) and is
+  drawn exactly as it lies. A pose without them is drawn as before. `hull` and an empty `d` are no longer sent.
+- **Moves and arms** (`coop-anim.js`): the vault and the climb are the player's own, lifted from canoe.js into
+  `poses.js makeMoves`; the arms at a held job (saw, douse, pitch, hang), eating and drinking and the camera up are
+  `poses.js workArms` (the player's own figure has no such poses: these are the friend's only); the things in the hands
+  drawn in the fist as ours (item-models.js); the fish held up; the line from the friend's rod tip to their lure or
+  bobber (fishing.js's own meshes, cloned). Poses stay under 300 bytes (about 300 with the line out). Rig `anim.mjs`.
+- **Not yet:** a container or a long thing other than the rod in a friend's hand (the arm hangs), the axe, the stringer's
+  fish in a friend's hull.
 
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends

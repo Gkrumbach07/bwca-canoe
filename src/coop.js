@@ -14,7 +14,10 @@
 //
 // The wire (JSON through the relay):
 //   pose   15 Hz: { ts, x, z, h, m: mode, sk: strokes so far (the phase is its fraction), sd: side, pw: power, hull,
-//          pk: packs, d: [x, z, h] the beached canoe or null }. Drawn BACK_MS behind the sender's own timeline (its ts
+//          pk: packs, d: [x, z, h] the beached canoe or null }. Phase 3 round 2: y, the height stood on as the sender's
+//          screen has it (the feet's on foot: a rock, a deck; the water's level afloat or swimming); d: [x, z, h, y, qx,
+//          qy, qz, qw] with the canoe set down as it lies there (its pivot's height and turn); hull and an empty d left out
+//          (a missing one is 'green' and none). Drawn BACK_MS behind the sender's own timeline (its ts
 //          against the arrival, the lowest offset seen), interpolated; past the newest, extrapolated by velocity for up
 //          to EXTRAP_MS, then held (the name dims).
 //   clock  1 Hz, the host's: { year, doy, hours, rate, running }. A guest sets its own from it, moved on by half the
@@ -201,6 +204,7 @@ class Remote {
     return {
       ...c, x: a.x + (c.x - a.x) * t, z: a.z + (c.z - a.z) * t, h: wrapPi(a.h + wrapPi(c.h - a.h) * t),
       sk: (a.sk || 0) + ((c.sk || 0) - (a.sk || 0)) * t, pw: (a.pw || 0) + ((c.pw || 0) - (a.pw || 0)) * t,
+      y: Number.isFinite(a.y) && Number.isFinite(c.y) ? a.y + (c.y - a.y) * t : c.y, // (round 2: the height stood on)
       v: (Math.hypot(c.x - a.x, c.z - a.z) / span) * 1000, stale: false, ahead: 0,
     };
   }
@@ -224,17 +228,25 @@ class Remote {
     const hull = typeof s.hull === 'string' && HULL_PALETTES[s.hull] ? s.hull : 'green';
     if (B.hullColour !== hull && HULL_PALETTES[hull]) { B.hullColour = hull; if (B.near) B.near.dress(this.coop.g.actors, hull, B.near.packsShown, false); }
     B.packs = Number.isInteger(s.pk) ? Math.max(0, Math.min(2, s.pk)) : 1;
+    // round 2: y, the height they stand on (the feet's ground, a rock's top, a deck; the water's level afloat or swimming)
+    // as their own screen has it; an older friend's pose has none, and the world's ground or level here is used
+    const y = Number.isFinite(s.y) ? s.y : null;
     if (s.m === 'paddle') {
       if (P.boat !== B) B.seatCrew(P, 'stern');
-      B.drive({ x: s.x, z: s.z, heading: s.h, v: s.stale ? 0 : s.v, exact: true, stroke: { phase: frac(s.sk || 0), side: s.sd === -1 ? -1 : 1, power: s.stale ? 0 : Math.max(0, Math.min(1, s.pw || 0)) } });
+      B.drive({ x: s.x, z: s.z, heading: s.h, v: s.stale ? 0 : s.v, exact: true, level: y, stroke: { phase: frac(s.sk || 0), side: s.sd === -1 ? -1 : 1, power: s.stale ? 0 : Math.max(0, Math.min(1, s.pw || 0)) } });
     } else {
       // on foot: the canoe overhead (carry), or left where it was beached; in the water (phase 3), swimming, their canoe
       // where they left it or upside down beside them after a capsize (ov)
       const swim = s.m === 'swim';
-      P.drive({ x: s.x, z: s.z, heading: s.h, v: s.stale ? 0 : Math.min(s.v, 12), mode: s.m === 'carry' ? 'carry' : swim ? 'swim' : 'walk', pack: s.m !== 'carry' && !swim && B.packs > 0 && !s.d, hull });
+      P.drive({ x: s.x, z: s.z, heading: s.h, v: s.stale ? 0 : Math.min(s.v, 12), mode: s.m === 'carry' ? 'carry' : swim ? 'swim' : 'walk', pack: s.m !== 'carry' && !swim && B.packs > 0 && !s.d, hull, y });
       B.over = swim && !!s.ov;
-      if (s.m !== 'carry' && Array.isArray(s.d) && s.d.every(Number.isFinite)) { B.ext = null; B.hidden = false; B.placeAt({ x: s.d[0], z: s.d[1], heading: s.d[2] }); }
-      else B.hide();
+      // (round 2: d[3..7] the pivot's height and turn as their screen lays it, on the slope, the shore, the deck)
+      const d = s.d;
+      if (s.m !== 'carry' && Array.isArray(d) && d.length >= 3 && d.slice(0, 3).every(Number.isFinite)) {
+        B.ext = null; B.hidden = false;
+        const laid = d.length >= 8 && d.every(Number.isFinite) && !B.over;
+        B.placeAt({ x: d[0], z: d[1], heading: d[2], y: laid ? d[3] : null, q: laid ? { x: d[4], y: d[5], z: d[6], w: d[7] } : null });
+      } else B.hide();
     }
     this.drawnAt = { x: s.x, z: s.z, h: s.h, m: s.m };
     for (const fn of this.coop.drawFns) { try { fn(this, s, now - this.offset - BACK_MS, dt); } catch (e) { if (!fn.warned) { fn.warned = true; console.warn('coop draw', e); } } }
@@ -518,6 +530,18 @@ export class Coop {
     const from = this.remotes.get(m.from), late = from && from.offset != null && Number.isFinite(m.ts) ? Math.max(0, at - m.ts - from.offset) : 0;
     return (base + late) / 1000;
   }
+  // the canoe set down, for the pose's d: [x, z, heading] and (round 2) the pivot's height and turn as it lies here
+  // (player.js restHull: pitched on the slope, rolled across it, settled on the ground or the deck), so a friend draws
+  // it there and not at their own guess
+  laid(drop) {
+    const c = this.g.canoe, out = [r2(drop.x), r2(drop.z), r3(drop.heading || 0)], h = c && c.hull;
+    if (!h || h.parent === c.rig) return out;
+    h.updateMatrixWorld(); h.matrixWorld.decompose(this.v3, this.q4 || (this.q4 = new THREE.Quaternion()), this.s3 || (this.s3 = new THREE.Vector3()));
+    const q = this.q4;
+    if (!Number.isFinite(this.v3.y + q.x + q.y + q.z + q.w)) return out;
+    out.push(r3(this.v3.y), r3(q.x), r3(q.y), r3(q.z), r3(q.w));
+    return out;
+  }
   // what this browser says about itself, 15 times a second
   poseMsg() {
     const g = this.g, p = g.player, st = (g.canoe && g.canoe.state) || {};
@@ -528,11 +552,21 @@ export class Coop {
     let pk = 1; try { pk = g.packs ? g.packs.count : 1; } catch { pk = 1; }
     const m = {
       t: 'pose', ts: Math.round(performance.now()), x: r2(p.x), z: r2(p.z), h: r3(p.heading), m: p.mode,
-      sk: r3(this.strokeN + s), sd: st.side === -1 ? -1 : 1, pw: r2(Number.isFinite(st.power) ? st.power : 0),
-      hull: 'green', pk, // (canoe.js draws the player's own canoe in HULL_COLORS whatever the kit)
-      d: cap && Number.isFinite(cap.cx) ? [r2(cap.cx), r2(cap.cz), r3(cap.heading || 0)] : drop && Number.isFinite(drop.x) ? [r2(drop.x), r2(drop.z), r3(drop.heading || 0)] : null,
+      sk: r3(this.strokeN + s),
+      // (round 2: the side only when it is the left, the power only when there is some: a friend's screen takes 1 and 0)
+      ...(st.side === -1 ? { sd: -1 } : null), ...(Number.isFinite(st.power) && st.power >= 0.005 ? { pw: r2(st.power) } : null),
+      // (round 2, to keep the pose small: hull is left out, canoe.js drawing the player's own canoe in HULL_COLORS whatever the
+      // kit, and a friend's screen takes 'green' when none is given; pk only when not the one pack it takes then)
+      ...(pk !== 1 ? { pk } : null),
       ...(cap ? { ov: 1 } : null),
     };
+    const d = cap && Number.isFinite(cap.cx) ? [r2(cap.cx), r2(cap.cz), r3(cap.heading || 0)] : drop && Number.isFinite(drop.x) ? this.laid(drop) : null;
+    if (d) m.d = d; // (none: no canoe set down; a friend's screen hides it)
+    // round 2: the height the body stands on, as this screen has it (the owner, 2026-11-01: "standing on top of a rock …
+    // to them it just looks like I'm standing inside the rock"): on foot the feet's (the rig is 0.1 over them: a rock's top,
+    // a deck, a stair, in a hop the height in the air); afloat and swimming the water's level under you
+    const c = g.canoe, y = p.mode === 'paddle' || p.mode === 'swim' ? p.level : c && c.rig ? c.rig.position.y - 0.1 : NaN;
+    if (Number.isFinite(y)) m.y = r2(y);
     for (const fn of this.poseFns) { try { fn(m); } catch (e) { if (!fn.warned) { fn.warned = true; console.warn('coop pose', e); } } } // (phase 3: coop-anim.js adds what the body is doing)
     return m;
   }

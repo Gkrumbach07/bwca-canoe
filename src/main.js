@@ -920,7 +920,7 @@ async function main() {
   coop.g.more({ packs });
   window.__game.coopNight = new CoopNight(coop); // phase 3 stream A: the night together, one wake time (coop-night.js)
   window.__game.coopSky = new CoopSky(coop, { wind, weather }); // phase 3 stream B: the host's wind and weather seed (coop-sky.js)
-  window.__game.coopAnim = new CoopAnim(coop, { fishing }); // phase 3 stream B: a friend's jump, seat, crouch and rod (coop-anim.js)
+  window.__game.coopAnim = new CoopAnim(coop, { fishing, photo }); // phase 3 stream B: a friend’s jump, seat, crouch and rod; round 2: moves, hands, arms, line (coop-anim.js)
   // water: two rules (the owner, 2026-10-26: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if
   // i fill water up without a tablet, it is instantly clean even tho warnign says its not"). Every dried meal and a cup
   // take their water from the bottle (cook.js COOK, kit.js), short of it the "water 0.3 L" chip and once the moment

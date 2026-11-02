@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildFigure } from './figure.js';
 import { buildHullGeometry, buildLidGeometry, buildPackGeometry, buildFarHullGeometry, HULL_PALETTES, PACK_AT, PACK2_AT, PACKS, SEATS, floorAt } from './hull.js';
 import { paddleMesher } from './gear.js';
-import { FLOAT_OFFSET, makeBody, makeGait, makeStroke, newState, placeFigure, wrapPi, swimPose, sitPose, updateIdle } from './poses.js';
+import { FLOAT_OFFSET, makeBody, makeGait, makeMoves, makeStroke, newState, placeFigure, wrapPi, swimPose, sitPose, updateIdle, workArms } from './poses.js';
 import { mulberry32 } from './rng.js';
 import { resample } from './props.js';
 
@@ -50,6 +50,9 @@ const seatX = (seat) => (seat === 'stern' ? SEATS.stern.x : seat === 'bow' ? SEA
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const ease = (k, dt) => 1 - Math.exp(-k * dt);
 const toPts = (pts) => (pts || []).map((p) => (Array.isArray(p) ? [p[0], p[1]] : [p.x, p.z]));
+// a move's world places for a figure posed at its own size, in a world scaled to it (bindFigure: a kid's steps)
+const sv = (p, s) => ({ x: p.x / s, y: p.y / s, z: p.z / s });
+const scaledMove = (m, s) => ({ ...m, from: sv(m.from, s), to: sv(m.to, s), top: Number.isFinite(m.top) ? m.top / s : m.top, nearD: Number.isFinite(m.nearD) ? m.nearD / s : m.nearD, far: m.far >= 0 ? m.far / s : m.far });
 
 // --- a mover along a polyline --------------------------------------------------------------------------------------
 // d metres along it at v (eased up to mps from a standstill and braked to stop at the end), and the way ahead: from where
@@ -280,9 +283,13 @@ class Person {
   // p2 C: driven from outside (the parties' plans, party-moves.js), a place a frame: { x, z, heading, v (m/s as seen),
   // mode: 'stand' | 'walk' | 'carry' | 'swim', pack, hull (the carried canoe's colour) }; the heading eases to the one given
   // co-op phase 3: anim, what the body is doing beyond the stride (coop-anim.js): { air, airT, vy, y (the frame's height
-  // in the air), land, crouch, mk (the move: 'wade'), sit (a seat's top), fz (the rod's hands, poses.js rodArms) } or null
-  drive({ x, z, heading = this.heading, v = 0, mode = 'stand', pack = false, hull = 'aluminium', snap = false, anim = null }) {
+  // in the air), land, crouch, mk (the move: 'wade'), sit (a seat's top), fz (the rod's hands, poses.js rodArms), mv (a
+  // vault or a climb: player.js's move), held ({ R, L }: a thing in that hand), arms ({ kind, t }: poses.js workArms) } or null
+  // y (round 2): what the feet stand on as the friend's own screen has it (a rock, a dock's deck, a store's floor; the
+  // water's level for a swimmer), else the tiles' ground
+  drive({ x, z, heading = this.heading, v = 0, mode = 'stand', pack = false, hull = 'aluminium', snap = false, anim = null, y = null }) {
     this.leaveBoat(); this.mover = null; this.ext = true; this.anim = anim;
+    this.footY = Number.isFinite(y) ? y : null;
     if (snap) this.heading = heading;
     this.mode = mode === 'carry' ? 'carry' : mode === 'walk' ? 'walk' : mode === 'swim' ? 'swim' : 'stand';
     if (this.mode === 'swim') pack = false;
@@ -297,6 +304,37 @@ class Person {
     if (this.boat) return out.set(this.boat.x, this.boat.y + 0.95, this.boat.z);
     return out.set(this.x, this.y + 1.66, this.z);
   }
+  // the ground under a foot of this figure (its gait plants the feet on it): the tiles' ground; for one driven with the
+  // height it stands on (co-op round 2), that height near it: flat on top of a rock or a deck it stands on, the ground's
+  // own slope (and a sink into the moss) otherwise. Not in a hop, a vault or a climb: their feet go where the move says
+  groundAt(x, z) {
+    const g = this.layer.ground(x, z), f = this.footY, an = this.anim;
+    if (!Number.isFinite(f) || this.mode === 'swim' || (an && (an.air || an.mv)) || Math.abs(x - this.x) + Math.abs(z - this.z) > 2.5) return g;
+    const d = f - (Number.isFinite(this.gC) ? this.gC : g);
+    if (!(d > 0.04)) return g + d;
+    // up on something: when it is one of the world's own (a rock, a log, a stump, a deck: player.js supportAt finds the
+    // same) the foot stands on it where it reaches and on the ground off its edge; else (a floor this layer does not
+    // know) level with their feet
+    if (this.onThingAt !== f) { const gc = Number.isFinite(this.gC) ? this.gC : this.layer.ground(this.x, this.z), cs = this.supportAt(this.x, this.z, f + 0.3, gc); this.onThingAt = f; this.onThing = Math.abs(cs - f) < 0.1 && cs > gc + 0.02; }
+    return this.onThing ? this.supportAt(x, z, f + 0.3, g) : Math.max(g, f);
+  }
+  // what stands highest at (x, z) over the ground g but no higher than reach: a rock's surface, a log's, a stump's or a
+  // deck's top (tiles.treesNear, kept for a metre's walk)
+  supportAt(x, z, reach, g) {
+    const w = this.layer.world, T = w && w.tiles;
+    if (!T || !T.treesNear) return g;
+    const nc = this.nearC;
+    if (!nc || Math.abs(nc.x - this.x) + Math.abs(nc.z - this.z) > 1) this.nearC = { x: this.x, z: this.z, list: T.treesNear(this.x, this.z, 4.5) || [] };
+    let y = g;
+    for (const t of this.nearC.list) {
+      if (t.shape) { if (t.shape.maxY > y) { const h = t.shape.heightAt(x, z); if (h > y && h <= reach) y = h; } }
+      else if (t.top !== undefined && t.top > y && t.top <= reach) {
+        const dx = x - t.x, dz = z - t.z;
+        if (t.box ? Math.abs(dx * t.ux + dz * t.uz) <= t.hx && Math.abs(-dx * t.uz + dz * t.ux) <= t.hz : dx * dx + dz * dz <= t.r * t.r) y = t.top;
+      }
+    }
+    return y;
+  }
   leaveBoat() { if (this.boat) { const b = this.boat; b.crew = b.crew.filter((c) => c !== this); this.boat = null; this.seat = null; if (this.mode === 'crew') this.mode = 'stand'; } }
   remove() { this.layer.drop(this); }
   // the simulation, every frame wherever it is (cheap: a place along a line)
@@ -309,7 +347,13 @@ class Person {
       if (!(dt > 0)) this.heading = this.want ?? this.heading;
       // (the ground under the feet only while drawn or near: a hundred people far off cost nothing a frame)
       // (a swimmer's y is the water's level, not the bed's)
-      if (this.bind || this.hull || this.dist < 80 || !Number.isFinite(this.y)) this.y = this.mode === 'swim' ? this.layer.levelAt(this.x, this.z) : this.layer.ground(this.x, this.z);
+      // (round 2: or the height given, a friend's own: their rock, their deck, their water)
+      if (this.bind || this.hull || this.dist < 80 || !Number.isFinite(this.y)) {
+        this.gC = this.layer.ground(this.x, this.z); this.onThingAt = NaN; // (what they stand on, looked at afresh each frame)
+        // (in a hop the height stays the ground they left, the anim flies the frame: coop-anim.js)
+        const air = this.anim && this.anim.air && Number.isFinite(this.y);
+        if (!air) this.y = Number.isFinite(this.footY) ? this.footY : this.mode === 'swim' ? this.layer.levelAt(this.x, this.z) : this.gC;
+      }
       return;
     }
     if (this.mode === 'crew' || !this.mover) { this.v = 0; return; }
@@ -348,13 +392,29 @@ class Person {
     st.land = an && Number.isFinite(an.land) ? an.land : Math.max(0, st.land - dt * 3); st.stagger = Math.max(0, st.stagger - dt * 1.6);
     st.crouch = an ? an.crouch || 0 : 0;
     st.hustle = false; st.mode = this.mode === 'carry' ? 'carry' : 'walk';
+    st.held = (this.anim && this.anim.held) || null; // (round 2: a hand with a thing in it hangs carrying it, under the canoe too)
     const s = B.s, F = B.frame, R = B.root, yb = (air && Number.isFinite(an.y) ? an.y : this.y) + 0.1;
     F.position.set(this.x / s, yb / s, this.z / s); F.rotation.set(0, this.heading, 0);
     if (F !== R) { R.position.set(this.x, yb, this.z); R.rotation.set(0, this.heading, 0); R.scale.setScalar(s); }
+    // round 2: a vault or a climb, the player's own (poses.js makeMoves), the frame riding the move's path as theirs does
+    const mv = an && an.mv && this.mode === 'walk' ? an.mv : null;
+    if (mv) {
+      this.wasMove = true;
+      B.moves[mv.kind === 'climb' ? 'climb' : 'vault'](dt, s === 1 ? mv : scaledMove(mv, s));
+      this.moveN = (this.moveN || 0) + 1; // (the rig: frames posed in a move)
+      return;
+    }
+    if (this.wasMove) { this.wasMove = false; B.moves.done(); B.gait.loco.init = false; } // (the feet planted afresh where the move left them)
     placeFigure(B.pb, 0, 0, 0);
     if (this.mode === 'carry' && this.hull) B.gait.carry(dt, this.hull.pivot);
     else B.gait.walk(dt, an ? an.mk || null : null, an ? an.fz || null : null);
     if (air) this.airN = (this.airN || 0) + 1; // (the rig: frames posed in the air)
+    // round 2: the arms at a held job, eating or drinking, the camera up (poses.js workArms), eased in and out over the gait's
+    const want = an && an.arms && this.mode === 'walk' && !an.fz ? an.arms : null;
+    if (want) { this.arms = { kind: want.kind, t: want.t }; }
+    this.armsW = clamp((this.armsW || 0) + (want ? dt * 5 : -dt * 4), 0, 1);
+    if (this.arms && this.armsW > 0.01) { workArms(B.pb, this.arms.kind, this.arms.t, this.armsW * this.armsW * (3 - 2 * this.armsW)); this.armsN = (this.armsN || 0) + 1; }
+    else if (!want) this.arms = null;
   }
   // co-op phase 3: on a seat (poses.js sitPose), its top at world height top
   poseSit(dt, top) {
@@ -398,10 +458,12 @@ class Boat {
   // heading eases to it as a canoe turns (snap: at once)
   // co-op: exact (a remote player, already smoothed from the wire): the heading as given, not eased; stroke: { phase,
   // side, power } the paddler's own, so the stroke is theirs and not this layer's guess from the speed
-  drive({ x, z, heading = this.heading, v = 0, snap = false, exact = false, stroke = null }) {
-    this.mover = null; this.hidden = false;
+  // co-op round 2: level, the water's level under the hull as the paddler's own screen has it (a creek's step, the
+  // season's water), else the world's here
+  drive({ x, z, heading = this.heading, v = 0, snap = false, exact = false, stroke = null, level = null }) {
+    this.mover = null; this.hidden = false; this.rest = null;
     if (snap || !this.ext) { this.heading = heading; this.bobY = null; }
-    this.ext = { heading, v, exact, stroke }; this.x = x; this.z = z;
+    this.ext = { heading, v, exact, stroke, level: Number.isFinite(level) ? level : null }; this.x = x; this.z = z;
     return this;
   }
   hide() { this.hidden = true; this.ext = null; this.v = 0; return this; }
@@ -409,9 +471,15 @@ class Boat {
     p.leaveBoat(); p.mover = null; p.mode = 'crew'; p.boat = this; p.seat = seat; p.hullColour = null; p.pack = false;
     this.crew.push(p);
   }
-  placeAt({ x, z, heading = this.heading }) { this.mover = null; this.x = x; this.z = z; this.heading = heading; this.v = 0; this.settle(0); return this; }
+  // (co-op round 2: y and q, a canoe set down on land as its owner's screen lays it: the pivot's height and its turn, pitched
+  // on the slope and rolled across it; without them it floats at the water's level here)
+  placeAt({ x, z, heading = this.heading, y = null, q = null }) {
+    this.mover = null; this.x = x; this.z = z; this.heading = heading; this.v = 0;
+    this.rest = Number.isFinite(y) && q && [q.x, q.y, q.z, q.w].every(Number.isFinite) ? { y, q: (this.rest && this.rest.q ? this.rest.q : new THREE.Quaternion()).set(q.x, q.y, q.z, q.w).normalize() } : null;
+    this.settle(0); return this;
+  }
   paddleAlong(path, mps = 1.1, { from = 0, onEnd = null, wait = 0 } = {}) {
-    this.mover = new PathMover(path, mps, { from, onEnd, wait, ahead: 7, accel: 0.25 });
+    this.rest = null; this.mover = new PathMover(path, mps, { from, onEnd, wait, ahead: 7, accel: 0.25 });
     const m = this.mover; m.at(m.d, m.p); const h = m.step(0);
     this.x = m.p[0]; this.z = m.p[1]; if (h !== null) this.heading = h;
     this.settle(0); return this;
@@ -448,12 +516,13 @@ class Boat {
   }
   // on the water: the level, the swell under the hull (three points along the keel), the roll of the strokes
   settle(dt) {
+    if (this.rest) { this.y = this.rest.y; this.bobY = null; this.pitch = 0; this.roll = 0; return; } // (round 2: set down on land as given)
     const L = this.layer, f = { x: Math.cos(this.heading), z: -Math.sin(this.heading) };
     // (p2 C: the level looked up again only after a few metres moved (a search of the cells round it); the swell only
     // for a hull drawn whole: a far hull rides the level)
     const lc = this.lvl;
     if (!lc || Math.abs(lc.x - this.x) + Math.abs(lc.z - this.z) > 4) this.lvl = { x: this.x, z: this.z, v: L.levelAt(this.x, this.z) };
-    const level = this.lvl.v, full = !!this.near || this.dist < 260, w = (a) => (full ? L.waveAt(this.x + f.x * a, this.z + f.z * a) : 0);
+    const given = this.ext && this.ext.level, level = Number.isFinite(given) ? given : this.lvl.v, full = !!this.near || this.dist < 260, w = (a) => (full ? L.waveAt(this.x + f.x * a, this.z + f.z * a) : 0);
     const hb = w(2), hs = w(-2), hm = w(0);
     const y = level + FLOAT_OFFSET + (hb + hs + hm) / 3, pitch = Math.atan2(hb - hs, 4) * 0.6 + this.v * 0.01;
     const roll = this.yawRate * 0.1 + 0.012 * this.stroke.power * Math.sin(this.stroke.phase * Math.PI * 2);
@@ -464,6 +533,7 @@ class Boat {
   placeRoot() {
     const R = this.root;
     R.position.set(this.x, this.y, this.z);
+    if (this.rest) { R.quaternion.copy(this.rest.q); R.updateMatrix(); return; } // (round 2: set down as its owner's screen lays it)
     R.rotation.set(0, this.heading, 0); R.rotateZ(-this.pitch); R.rotateX(this.roll);
     // co-op phase 3: a friend's capsized canoe, upside down and low in the water beside them (canoe.js poseSwim's hull)
     if (this.over) { R.position.y -= FLOAT_OFFSET + 0.25; R.rotateX(Math.PI); }
@@ -588,9 +658,10 @@ export class Actors {
     }
     root.add(body.group);
     p.state = newState({ mode: crew ? 'paddle' : p.mode === 'carry' ? 'carry' : 'walk' });
-    const ground = s === 1 ? this.ground : (x, z) => this.ground(x * s, z * s) / s;
+    // (round 2: the person's own ground, a friend's rock or deck under their feet)
+    const ground = s === 1 ? (x, z) => p.groundAt(x, z) : (x, z) => p.groundAt(x * s, z * s) / s;
     const pb = makeBody(body.fig, frame, p.state, { ground });
-    const B = { body, pb, root, frame, s, kind: crew ? 'crew' : 'foot', gait: null, stroke: null, paddle: null, packMesh: null };
+    const B = { body, pb, root, frame, s, kind: crew ? 'crew' : 'foot', gait: null, stroke: null, paddle: null, packMesh: null, moves: null };
     if (crew) {
       B.stroke = makeStroke(pb, { seatX: seatX(p.seat) });
       B.paddle = new THREE.Mesh(this.paddleGeo, this.material); B.paddle.castShadow = true;
@@ -598,6 +669,7 @@ export class Actors {
       this.reflect(body.group, true); this.reflect(B.paddle, true);
     } else {
       B.gait = makeGait(pb);
+      B.moves = makeMoves(pb, B.gait);
       this.reflect(body.group, false);
     }
     p.bind = B;
@@ -699,6 +771,8 @@ export class Actors {
       if (p.bind.kind === 'foot' && !!p.bind.packMesh !== !!p.pack) this.packOn(p, p.pack); // (p2 C: a pack taken up or set down)
       p.pose(dt);
     }
+    // (co-op round 2: what rides on a posed figure, placed from the pose of this frame: a friend's things in hand, the line)
+    for (const p of this.people) if (p.onPosed) { try { p.onPosed(p, dt); } catch (e) { if (!p.onPosedWarned) { p.onPosedWarned = true; console.warn('actor onPosed', e); } } }
     // the far hulls: boats past the near ones, to 1.2 km
     if (this.far) {
       this.origin.set(Math.round(vx / 64) * 64, 0, Math.round(vz / 64) * 64);
