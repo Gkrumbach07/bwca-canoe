@@ -192,16 +192,21 @@ try {
   const t2 = await tabsOn(A);
   const k2 = (t2.find((t) => /canoe/.test(t.sub) && t.n > 0) || {}).key;
   const rt2 = k2 ? await roundTrip(A, k2) : null;
+  // (round 3, coop-boat.js: the dot on a friend's canoe is our own canoe's: E Push it off, Q Shoulder it, "Unload it
+  // first" while loaded, which opens the book at what is in it)
   const dot = await A.evaluate((gid) => {
     const g = window.__game, s = g.coopShare, f = s.friends.get(gid), cn = f.pub.cn, p = g.player;
     const near = { reach: 3, flat: (x, z) => Math.hypot(x - p.x, z - p.z), sphere: () => null, box: () => ({ t: 1, miss: 0 }) };
-    const t = s.pointTargets(null, near).find((q) => q.target.kind === 'canoe');
-    return t ? { label: t.target.label, verb: t.target.e.verb, why: t.target.e.why, opened: t.target.e.run() } : { none: cn };
+    const t = g.coopBoat.targets(null, near).find((q) => q.target.kind === 'canoe');
+    if (!t) return { none: cn };
+    const q = t.target.q;
+    if (q && q.help) q.help();
+    return { label: t.target.label, e: t.target.e.verb, verb: q && q.verb, why: q && q.why, opened: !!(q && q.help) };
   }, ids.guest);
   await sleep(600);
   const bookOpen = await A.evaluate(() => { const j = window.__game.journal; return !!(j && (j.open || j.shown || document.querySelector('.ctab.k-friend'))); });
   await A.evaluate(() => { const j = window.__game.journal; if (j && j.close) j.close(); });
-  result('2 the guest’s beached canoe: its load in the host’s book beside it, a take and a put; the dot reads Look in it', !!(beached.cn && k2 && rt2.took && rt2.took.gained > 0 && rt2.put.ok && dot.verb === 'Look in it' && !dot.why), { tabs: t2.map((t) => `${t.label} · ${t.sub}`), ...rt2, dot, bookOpen });
+  result('2 the guest’s beached canoe: its load in the host’s book beside it, a take and a put; the dot reads Shoulder it · Unload it first (the book at its load)', !!(beached.cn && k2 && rt2.took && rt2.took.gained > 0 && rt2.put.ok && dot.verb === 'Shoulder it' && dot.why === 'Unload it first' && dot.opened), { tabs: t2.map((t) => `${t.label} · ${t.sub}`), ...rt2, dot, bookOpen });
 
   // --- 3 + 4: the guest's pack on the ground: no names; the host picks it up whole ------------------------------------------
   const gPack = await B.evaluate((L) => {

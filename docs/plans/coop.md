@@ -412,9 +412,8 @@ canoe or your canoe. It's just two canoes", and "I'm also able to pitch a tent w
   tent, tarp sheet or canoe ("another tent stands there"); our tarp's ghost is red over a friend's tarp or tent; a hang
   skips a tree whose limb holds a friend's barrel (the next tree, or "that limb has a barrel on it already"). Two tents
   staked at once on one spot: the lower id's stands, the other is struck back into its pack with a note.
-- **Not yet:** getting into, paddling or shouldering a friend's canoe (each canoe is drawn and driven by its owner's
-  `player`: taking one over means handing the hull, its load and its `carry.drop` across, like takebox for the boat);
-  long things (paddles, rods) in a friend's canoe; lowering a friend's hung barrel; a friend's hull from our canoe.
+- **Not yet:** long things (paddles, rods) in a friend's canoe drawn and reachable (they do move with the canoe, round 3);
+  lowering a friend's hung barrel; a friend's hull from our canoe.
   Rig `ground.mjs` (8 checks).
 
 ### Phase 3 round 2: how a friend is drawn (2026-11-01)
@@ -433,6 +432,48 @@ The owner, playing two browsers: "standing on top of a rock … to them it just 
   bobber (fishing.js's own meshes, cloned). Poses stay under 300 bytes (about 300 with the line out). Rig `anim.mjs`.
 - **Not yet:** a container or a long thing other than the rod in a friend's hand (the arm hangs), the axe, the stringer's
   fish in a friend's hull.
+
+### Phase 3 round 3: two canoes, either one (2026-11-02)
+
+The owner: "You can't get into, paddle or carry a friend's canoe yet (canoes are shared items)", and from round 2: "It's
+not my canoe or your canoe. It's just two canoes." Built in `src/coop-boat.js` (stream *boat*), small hooks elsewhere.
+- **The model: one canoe per browser, swapped.** Each browser still drives exactly one canoe, as the game always has
+  (`player`: under you, overhead, set down at `carry.drop`, capsized at `swim.hull`; its load the inventory's
+  `where: 'canoe'`). A friend's canoe lying there (beached, set down, tied at a dock, floating capsized) offers our own
+  canoe's verbs: on the dot `E Get in`, a held `E Push it off`, `Q Shoulder it` (`Unload it first` while loaded, which
+  opens the book at what is in it, as ours; the round-2 *E Look in it* is gone), at a trail head the two swapped as ours;
+  swimming, *Right the canoe and climb in* / *Climb into the canoe* / *Push the canoe off and climb in* on the prompt.
+  Doing one is a **swap** asked of that canoe's browser: our canoe, where it lies, with its load (whole container trees,
+  as takebox) and the long things riding in it (paddles, rods), goes to them; theirs comes to us at exactly its spot with
+  its load; then the verb goes on as on our own (`packs.hullAction`; swimming `player.rightHull` / `swimIn`, lifted out of
+  `updateSwim`). So every screen always has two canoes, each driven by one browser, and nothing says whose. Chosen over
+  "a player may hold none or two" because every module (packs, inventory reach, the pose's `d`, the save) assumes one.
+- **On the body:** a canoe a friend paddles or carries is not offered (their pub has no `cn`), and an asking that crosses
+  it is refused by its owner: in it (*Someone is in that canoe*), on the shoulders, mid push-off, fetching, teleporting,
+  or no longer within 4 m of where the asker saw it. Our own side asks only on foot (or swimming from the shore) with our
+  canoe lying somewhere, nothing held, no push under way.
+- **Wire:** `boat` { rid, verb, at, mine: hull } asker → owner; `boatr` { rid, ok, cn: hull | why } back; a hull is
+  { k: 'drop' | 'over', x, z, heading, load: [trees], long: [{ id }] }. The owner publishes (`pubSoon`) before answering,
+  so the asker never sees the load in two canoes. The verb shows greyed *a moment* until the answer; no answer in 3 s and
+  nothing of ours moved (a late yes still lands, as takebox). For 3 s after a swap a friend's hull drawn within 1.5 m of
+  our canoe (their pose from before the swap) is not drawn, nor offered.
+- **Saves:** each browser's save keeps the canoe it now drives: the host's season save as always; a guest's `keep` at the
+  host now carries `pos` { m, x, z, h, d } (coop-give.js), and after a reload's Rejoin the guest is put back on foot by
+  their canoe where it lies (`player.standAt`), else afloat near where they were.
+- **Measured** (two headless browsers, `wrangler dev` +100 ms): `scripts/coop/boat.mjs` 12/12 — both canoes drawn where
+  their own screens have them; the guest pushes off and gets into the host's beached canoe and paddles off, the host
+  sees it go and drives the guest's old one; the load rides along both ways; the guest shoulders the host's unloaded
+  canoe, carries it, sets it down 12 m on, the host sees it there and gets back into it; asks for a canoe being carried or
+  paddled refused; the host capsizes and the guest, swimming, rights it and climbs in; after each two canoes and the load
+  counted once; the guest reloads and Rejoins by the canoe they left, its load in it. `ground.mjs` check 2 now reads the
+  friend's canoe's own verbs.
+- **Not yet:** the canoe's kind and weight stay each player's (the shop's `player.gear.canoeKg`, the trip's rental: both
+  hulls are drawn alike, so nothing shows, but a Kevlar owner shouldering the other canoe carries their own weight); a
+  swap for a verb that then turns out greyed (Get in with no paddle anywhere) still swaps; both asking each other at the
+  same moment are both refused (*a moment: try again*); an answer lost on the wire after the owner applied it leaves our
+  canoe on both screens once (the relay has not lost one in the rigs); a taken canoe tied at another's berth counts as
+  afloat by the dock, not "at the dock" (the shop's canoe-at-dock reads the berth of the visit); getting into a friend's
+  canoe from our own afloat (rafting up), and two in one canoe.
 
 **About 3.5–4 B tokens (10–11 streams, 5 joins), five or six rounds: two to three days at three rounds a day**, after
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
