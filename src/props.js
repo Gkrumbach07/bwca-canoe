@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt, meshHeightAt } from './terrain-build.js';
+import { withoutRamps } from './ramps.js'; // round ramps
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName } from './outfitter.js';
 import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
@@ -149,7 +150,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     return hit ? { mesh: g.mesh, hit } : null;
   };
   if (entry) clearYards(entry, yards, size); // the yards of stores built before this tile came in
-  const Hsite = (x, z) => (world.isReady && world.isReady(x, z) ? meshHeightAt(world, x, z) : meshHeightAt(tg, x, z)); // (landingPlan)
+  const Hsite = (x, z) => withoutRamps(() => (world.isReady && world.isReady(x, z) ? meshHeightAt(world, x, z) : meshHeightAt(tg, x, z))); // (landingPlan; round ramps: on the ground as it stood)
   const ctx = { tg, world, ox, oz, H, Hsite, locate, obstacles, inside, entry };
   const pieces = [];
   const rng = mulberry32(42 + tx * 1000 + ty);
@@ -2388,12 +2389,14 @@ function buildCampsite(ctx, c, pieces, ledges) {
   pieces.push(geo);
   // a granite ledge between the fire ring and the water
   if (c.shore < 30) campLedge(tg, c, fx, fz, toLand || dir, ox, oz, ledges, ctx.obstacles, H);
-  // the tent pad: the flattest clear spot nearby (off the ledge rocks, on dry ground), door to the fire
+  // the tent pad: the flattest clear spot nearby (off the ledge rocks, on dry ground, off the way up), door to the fire
   const rocks = [...ledges[0], ...ledges[1]].map((m) => ({ x: m.elements[12] + ox, z: m.elements[14] + oz, r: Math.hypot(m.elements[0], m.elements[1], m.elements[2]) }));
+  // (round ramps: a switchback's flat turn is flat ground too; the pad keeps 2.6 m off the way's line)
+  const way = A && A.way, offWay = (x, z) => { if (!way) return true; for (let i = 1; i < way.length; i++) { const [x0, z0] = way[i - 1], ex = way[i][0] - x0, ez = way[i][1] - z0, l2 = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((x - x0) * ex + (z - z0) * ez) / l2)); if (Math.hypot(x - x0 - ex * t, z - z0 - ez * t) < 2.6) return false; } return true; };
   let best = null;
   for (let k = 0; k < 10; k++) {
     const ta = a + 2.2 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.55, cx = fx + Math.cos(ta) * 6, cz = fz + Math.sin(ta) * 6;
-    if (tg.shoreAt(cx, cz) < 2.5) continue;
+    if (tg.shoreAt(cx, cz) < 2.5 || !offWay(cx, cz)) continue;
     if (rocks.some((q) => Math.hypot(q.x - cx, q.z - cz) < q.r + 1.7)) continue;
     let lo = Infinity, hi = -Infinity;
     for (const [u, v] of [[-1.2, -1.2], [1.2, -1.2], [1.2, 1.2], [-1.2, 1.2], [0, 0]]) { const h = H(cx + u, cz + v); lo = Math.min(lo, h); hi = Math.max(hi, h); }
@@ -2405,7 +2408,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
   if (!best || best.score > PAD_STEEP) {
     for (const r of PAD_RINGS) for (let k = 0; k < 24; k++) {
       const ta = a + (k / 24) * Math.PI * 2, cx = fx + Math.cos(ta) * r, cz = fz + Math.sin(ta) * r;
-      if (tg.shoreAt(cx, cz) < 2.5) continue;
+      if (tg.shoreAt(cx, cz) < 2.5 || !offWay(cx, cz)) continue;
       if (rocks.some((q) => Math.hypot(q.x - cx, q.z - cz) < q.r + 1.7)) continue;
       let lo = Infinity, hi = -Infinity;
       for (const [u, v] of [[-1.2, -1.2], [1.2, -1.2], [1.2, 1.2], [-1.2, 1.2], [0, 0]]) { const h = H(cx + u, cz + v); lo = Math.min(lo, h); hi = Math.max(hi, h); }

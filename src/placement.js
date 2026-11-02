@@ -33,6 +33,7 @@ import { calmAt, rockAt, meadowAt } from './fields.js';
 import { burnLook, KIND as BURN } from './burns.js';
 import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND, CELL_SPLAT, bedPre } from './terrain-build.js';
 import { CLIFF, CLIFF_MODULE } from './site.js';
+import { nearRamp } from './ramps.js'; // round ramps
 import { thinKeep } from './views.js'; // round world: the campsites' and portage landings' views to the water
 import { KIND, KIND_LAND, FOREST, SWAMP_SPECIES, ROCK, STYLE_FAMILY, STYLE_ROCKS, UNIT_TAG, cliffStrength } from './land.js'; // d2 land
 
@@ -544,6 +545,8 @@ function cliffFeatures(grid, site, k, i, j, rng, ctx) {
   const sc = (W + D) / 2, sq = W / sc, tall = Hm / sc;
   // round world: no wall across a campsite's way up or its latrine trail (the lawns: props.js exclusionsFor)
   if (ctx.lawn) for (const a of [-0.5, -0.25, 0, 0.25, 0.5]) for (const d of [0, 0.5]) if (ctx.lawn(ox + vx * a * W + fx * d * D, oz + vz * a * W + fz * d * D, 1.5 + D * 0.25)) return;
+  // round ramps: nor in a ramp's cut (ramps.js; the bins reach a bit past the pad, so this is only near a ramp)
+  for (const a of [-0.5, 0, 0.5]) for (const d of [0, 0.5]) if (nearRamp(ox + vx * a * W + fx * d * D, oz + vz * a * W + fz * d * D, 1 + D * 0.25)) return;
   ctx.emit(SPECIES.cliff, Math.floor(rng() * 3), ox, base, oz, yaw, sc, 0.86 + rng() * 0.18, sq, 0, 0, tall);
   // a small tree or two on the ledge now and then (cedar, jack pine, birch and spruce root in its joints)
   const ledgeY = base + CLIFF_MODULE.ledge * Hm;
