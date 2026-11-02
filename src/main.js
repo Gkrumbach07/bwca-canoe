@@ -58,6 +58,7 @@ import { Actors } from './actors.js'; // p2 A
 import { Coop } from './coop.js'; // co-op phase 1
 import { CoopGive } from './coop-give.js'; // co-op phase 2, stream B: purses, giving, a guest's things kept by the host
 import { CoopShare } from './coop-share.js'; // co-op phase 2: the shared world things
+import { CoopBoat } from './coop-boat.js'; // co-op phase 3 round 3: two canoes, either one
 import { CoopTrip } from './coop-trip.js'; // co-op phase 3, stream C: Adventure in co-op
 import { CoopNight } from './coop-night.js'; // co-op phase 3, stream A: the night together
 import { CoopSky } from './coop-sky.js'; // co-op phase 3, stream B: one sky (the host's wind, the weather's seed)
@@ -915,6 +916,7 @@ async function main() {
   coop.g.more({ inventory, fires, camp, chores: camp.chores, tarp, forage, energy, shop, tiles, scene, registry: campsites, hold });
   window.__game.coopGive = new CoopGive(coop, { pointer, talk }); // (stream B: Give money on the dot, Give to … in the book)
   window.__game.coopShare = new CoopShare(coop); // phase 2 stream A: the shared world things (coop-share.js)
+  window.__game.coopBoat = new CoopBoat(coop); // phase 3 round 3: either canoe, either player (coop-boat.js)
   coop.g.more({ rides, tasks, veil, fishing, stats: tripStats });
   window.__game.coopTrip = new CoopTrip(coop); // phase 3 stream C: Adventure in co-op (coop-trip.js): the group's trip, boards, rides
   coop.g.more({ packs });
