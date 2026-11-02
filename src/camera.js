@@ -524,7 +524,11 @@ export class ChaseCamera {
     this.seeStrength = 0; // (fb2 E: on again below, in third person behind the walker or the canoe)
     // the mouse is let go whenever the chase no longer wants it (a panel, a card), a shot from elsewhere too (the co-op's
     // Give money panel, a conversation outside a store: dialogue.js overShoulder sets focus, and this came after its return)
-    if (this.locked && !this.wantsLock) { try { document.exitPointerLock(); } catch (_) { /* nothing to release */ } }
+    // (asked of this frame's view: the frame after V from the eyes on foot, footLook is still last frame's false, and a
+    // lock let go then read as an Esc and paused)
+    const onFoot = carrying || player.mode === 'carry' || player.mode === 'walk';
+    const footLook = this.mode === 'third' && onFoot;
+    if (this.locked && !(this.allowLock && (this.mode === 'first' || footLook))) { try { document.exitPointerLock(); } catch (_) { /* nothing to release */ } }
     if (this.focus) {
       const k = this.first ? 1 : 1 - Math.exp(-dt * 4);
       this.pos.lerp(this.focus.pos, k); this.look.lerp(this.focus.look, k);
@@ -534,8 +538,6 @@ export class ChaseCamera {
       this.carryView(player, false, false); // p2 B
       return;
     }
-    const onFoot = carrying || player.mode === 'carry' || player.mode === 'walk';
-    const footLook = this.mode === 'third' && onFoot;
     if (footLook && !this.footLook) { this.viewYaw = player.heading; this.viewPitch = 0; this.forwardYaw = player.heading; } // stepping out: look where the body faces
     this.footLook = footLook;
     this.lastHeading = player.heading;
