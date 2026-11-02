@@ -117,13 +117,13 @@ export class CoopGive {
     const s = this.kept();
     if (this.prune(s)) save.write(NS, s);
     const k = s.by[m.vid];
-    if (k && k.inv) this.coop.send({ t: 'yours', to: m.from, inv: k.inv, money: k.money, ledger: k.ledger });
+    if (k && k.inv) this.coop.send({ t: 'yours', to: m.from, inv: k.inv, money: k.money, ledger: k.ledger, ...(k.pos ? { pos: k.pos } : null) }); // (round 3: where they stood and their canoe lay)
     else this.coop.send({ t: 'yours', to: m.from, fresh: true });
   }
   onKeep(m) {
     if (this.coop.role !== 'host' || typeof m.vid !== 'string' || !m.inv || typeof m.inv !== 'object') return;
     const s = this.kept();
-    s.by[m.vid] = { name: String(m.name || '').slice(0, 24), inv: m.inv, money: cash(m.money), ledger: Array.isArray(m.ledger) ? m.ledger.slice(-LEDGER_KEPT) : [], at: Date.now() };
+    s.by[m.vid] = { name: String(m.name || '').slice(0, 24), inv: m.inv, money: cash(m.money), ledger: Array.isArray(m.ledger) ? m.ledger.slice(-LEDGER_KEPT) : [], at: Date.now(), ...(m.pos && typeof m.pos === 'object' ? { pos: m.pos } : null) };
     this.prune(s);
     save.write(NS, s);
   }
@@ -144,6 +144,7 @@ export class CoopGive {
     }
     pr.s.money = money; pr.s.ledger = ledger;
     pr.changed('money');
+    if (m.pos && this.coop.boat) this.coop.boat.restoreWhere(m.pos); // (round 3, coop-boat.js: back where they stood, by the canoe they had)
     this.mine = true; this.keepT = performance.now();
     this.sendKeep(); // (a first visit: the host has the kit from now on)
   }
@@ -151,7 +152,7 @@ export class CoopGive {
     if (this.coop.role !== 'guest' || !this.mine) return false;
     const h = this.host(), inv = this.g.inventory, pr = this.g.profile;
     if (!h || !inv || !pr) return false;
-    return this.coop.send({ t: 'keep', to: h.id, vid: this.coop.visitor.id, name: this.myName, inv: inv.serialize(), money: pr.money, ledger: (pr.ledger || []).slice(-LEDGER_KEPT) });
+    return this.coop.send({ t: 'keep', to: h.id, vid: this.coop.visitor.id, name: this.myName, inv: inv.serialize(), money: pr.money, ledger: (pr.ledger || []).slice(-LEDGER_KEPT), ...(this.coop.boat ? { pos: this.coop.boat.where() } : null) });
   }
 
   // --- giving money ----------------------------------------------------------------------------------------------------

@@ -951,6 +951,9 @@ export class CoopShare {
     }
     this.hungTargets(near, out);
     // a friend's canoe lying by (beached, set down, at a dock): its load in the book, as our own canoe's "Unload it first"
+    // --- round 3 (coop-boat.js): with the boat module the dot on a friend's canoe is our own canoe's verbs, there ---
+    if (this.coop.boat) return out;
+    // --- end round 3 ---
     for (const f of this.friends.values()) {
       const s = f.pub && f.pub.cn;
       if (!s || near.flat(s.x, s.z) > near.reach + 2.4) continue;

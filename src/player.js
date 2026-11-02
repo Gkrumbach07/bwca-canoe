@@ -853,19 +853,7 @@ export class Player {
       const d = Math.hypot(hull.cx - this.x, hull.cz - this.z);
       if (d < 2.4) {
         this.prompt = { key: 'E', text: 'Right the canoe and climb back in' };
-        if (inp.pressed('KeyE')) {
-          // which side of the hull you are on: the canoe rights itself and you haul in over that gunwale
-          const rx = Math.sin(hull.heading), rz = Math.cos(hull.heading);
-          st.climbSide = (this.x - hull.cx) * rx + (this.z - hull.cz) * rz >= 0 ? 1 : -1;
-          st.climb = 1.4; // seconds of righting the hull and climbing in (canoe.js counts it down)
-          this.mode = 'paddle'; this.x = hull.cx; this.z = hull.cz; this.heading = hull.heading; this.speed = 0; this.yawRate = 0;
-          this.swim = null; st.mode = 'paddle'; st.swimHull = false; st.stroke = 0; st.power = 0; this.bob = null; this.balance = 0;
-          this.bilge = SEA.righted; st.bilge = this.bilge; // cons B: righted, it comes up with water in it: bail
-          // cons B: and you right it end on to the sea (bow up or down wind, whichever it lay nearer), not broadside, so
-          // a blow that put you over does not put you straight over again
-          if (this.wind) { const wd = this.wind.dir, down = Math.atan2(-wd.z, wd.x); let d = down - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); this.heading = Math.abs(d) <= Math.PI / 2 ? down : down + Math.PI; st.swimHeading = this.heading; }
-          this.placeOnWater();
-        }
+        if (inp.pressed('KeyE')) this.rightHull();
       } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${fmtDist(d)})` };
       return;
     }
@@ -873,20 +861,45 @@ export class Player {
     const drop = this.carry && this.carry.drop, dd = drop ? Math.hypot(drop.x - this.x, drop.z - this.z) : Infinity;
     if (dd < 3.4) {
       // fb4 A: in where it floats (or where a push would float it: packs.js pushPlan), as it lies; no launch point
-      const pk = this.packs, floats = !!(pk && pk.afloat && pk.afloat(drop)), plan = !floats && pk && pk.pushPlan ? pk.pushPlan(drop) : null;
+      const pk = this.packs, floats = !!(pk && pk.afloat && pk.afloat(drop));
       this.prompt = { key: 'E', text: floats ? 'Climb into the canoe' : 'Push the canoe off and climb in' };
-      if (inp.pressed('KeyE')) {
-        const at = floats ? drop : plan ? plan.to : null, L = at ? null : this.launchFrom(drop.x, drop.z, 10);
-        if (at || L) {
-          const side = (this.x - drop.x) * Math.sin(drop.heading) + (this.z - drop.z) * Math.cos(drop.heading) >= 0 ? 1 : -1;
-          this.launch(at ? { x: at.x, z: at.z, heading: at.heading ?? drop.heading, inPlace: true } : L);
-          if (this.mode === 'paddle') { st.climbSide = side; st.climb = 1.4; st.swimHull = false; }
-        } else this.prompt = { key: null, text: 'The canoe lies too far up the bank — wade ashore and launch it' };
-      }
+      if (inp.pressed('KeyE') && !this.swimIn()) this.prompt = { key: null, text: 'The canoe lies too far up the bank — wade ashore and launch it' };
       return;
     }
     const far = drop ? fmtDist(dd) : null;
     this.prompt = { key: null, text: `Swimming${far ? ` · the canoe is ${far} away` : ''}` };
+  }
+
+  // E beside the overturned hull (a capsize: swim.hull): the canoe rights itself and you haul in over the gunwale on your
+  // side (co-op round 3: coop-boat.js calls it too, for a friend's hull just handed over)
+  rightHull() {
+    const hull = this.swim && this.swim.hull, st = this.canoe.state;
+    if (this.mode !== 'swim' || !hull) return false;
+    // which side of the hull you are on: the canoe rights itself and you haul in over that gunwale
+    const rx = Math.sin(hull.heading), rz = Math.cos(hull.heading);
+    st.climbSide = (this.x - hull.cx) * rx + (this.z - hull.cz) * rz >= 0 ? 1 : -1;
+    st.climb = 1.4; // seconds of righting the hull and climbing in (canoe.js counts it down)
+    this.mode = 'paddle'; this.x = hull.cx; this.z = hull.cz; this.heading = hull.heading; this.speed = 0; this.yawRate = 0;
+    this.swim = null; st.mode = 'paddle'; st.swimHull = false; st.stroke = 0; st.power = 0; this.bob = null; this.balance = 0;
+    this.bilge = SEA.righted; st.bilge = this.bilge; // cons B: righted, it comes up with water in it: bail
+    // cons B: and you right it end on to the sea (bow up or down wind, whichever it lay nearer), not broadside, so
+    // a blow that put you over does not put you straight over again
+    if (this.wind) { const wd = this.wind.dir, down = Math.atan2(-wd.z, wd.x); let d = down - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); this.heading = Math.abs(d) <= Math.PI / 2 ? down : down + Math.PI; st.swimHeading = this.heading; }
+    this.placeOnWater();
+    return true;
+  }
+  // E swimming beside the canoe left on the shore (a swim from shore): pushed off where a push floats it and climbed into
+  // as it lies (co-op round 3: coop-boat.js too). False when it lies too far up the bank
+  swimIn() {
+    const drop = this.carry && this.carry.drop, st = this.canoe.state;
+    if (this.mode !== 'swim' || !drop) return false;
+    const pk = this.packs, floats = !!(pk && pk.afloat && pk.afloat(drop)), plan = !floats && pk && pk.pushPlan ? pk.pushPlan(drop) : null;
+    const at = floats ? drop : plan ? plan.to : null, L = at ? null : this.launchFrom(drop.x, drop.z, 10);
+    if (!at && !L) return false;
+    const side = (this.x - drop.x) * Math.sin(drop.heading) + (this.z - drop.z) * Math.cos(drop.heading) >= 0 ? 1 : -1;
+    this.launch(at ? { x: at.x, z: at.z, heading: at.heading ?? drop.heading, inPlace: true } : L);
+    if (this.mode === 'paddle') { st.climbSide = side; st.climb = 1.4; st.swimHull = false; }
+    return true;
   }
 
   // fb C: after canoe.update (main.js). canoe.js's swim pose is the capsize's, the hull turned over beside the swimmer; a
