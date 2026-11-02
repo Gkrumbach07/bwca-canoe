@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeTerrainMesh, setLandSeason } from './terrain.js';
 import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as VEG_SPECIES } from './vegetation.js';
 import { makeAquaticMeshes, waterInit } from './aquatic.js'; // (d2 water: waterInit)
-import { tilePropsSteps, exclusionsFor, rounded, outfitterGroundMoved, stepOutfitters, outfittersPending, outfittersNear } from './props.js'; // (wetlands round 2: rounded, the brooks' lines as their beds draw them)
+import { tilePropsSteps, exclusionsFor, rounded, outfitterGroundMoved, stepOutfitters, outfittersPending, outfittersNear, yardBlocked, onYard } from './props.js'; // (wetlands round 2: rounded, the brooks' lines as their beds draw them)
 import { MeshGround } from './prop-kit.js';
 import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
@@ -10,7 +10,8 @@ import { cascadeHooks } from './sunlight.js';
 import { burnDate } from './burns.js';
 import { setMireExclusions } from './mire-relief.js';
 import { DetailStreamer } from './detail.js'; // the LiDAR detail near the player (docs/detail.md)
-import { Thicket } from './thicket.js'; // the density round: the wetlands filled in round the camera
+import { Thicket } from './thicket.js';
+import { makeViews, setViews } from './views.js'; // round world: the sites' and portage landings' views to the water // the density round: the wetlands filled in round the camera
 
 // Streams the world around the player: a 5 x 5 neighbourhood of 2.56 km tiles (terrain, water, forest,
 // lake vegetation, portages, campsites) built in a pool of workers and installed one per frame, a 3 x 3
@@ -557,7 +558,8 @@ export class TileManager {
     const ex = exclusionsFor(world);
     // the density round: the near ring of the wetlands' plants (thicket.js), off the same trails, sites and yards; re-seated
     // where the detail ground comes in under it
-    this.thicket = new Thicket(this, scene, ex, { kit: vegetation, aquatic, cull: CULL });
+    this.thicket = new Thicket(this, scene, ex, { kit: vegetation, aquatic, cull: CULL, yards: yardBlocked });
+    onYard((rect) => this.thicket.touched(rect)); // (round world: a store's yard set after the ring grew there clears it)
     this.detail.onTouched = (rect) => { outfitterGroundMoved(rect); this.thicket.touched(rect); };
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));
@@ -567,6 +569,13 @@ export class TileManager {
     const bs = [];
     if (world.creeks) for (const b of world.creeks.brooks) { const p = rounded(b.pts); for (let i = 1; i < p.length; i++) bs.push(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]); }
     const brooks = new Float32Array(bs);
+    // round world: the campsites' landings, for the shelf each lays toward its own (site.js setCampLandings)
+    const cl = [];
+    for (const c of world.campsites) if (c.access && c.access.landing) cl.push(c.x, c.z, c.access.landing[0], c.access.landing[1]);
+    const campLandings = new Float32Array(cl);
+    // round world: the views to the water (views.js), thinned by the workers' forest and the near ring alike (`?views=off`)
+    const views = typeof location !== 'undefined' && /[?&]views=off\b/.test(location.search) ? new Float32Array(0) : makeViews(world);
+    setViews(views);
     // the season round: the creeks' channels through the flowages, as segments (water-build.js flowageBeds)
     const cs = [];
     if (world.creeks) for (const c of world.creeks.chans) for (let k = 3; k + 1 < c.length; k += 2) cs.push(c[k - 2], c[k - 1], c[k], c[k + 1]);
@@ -578,7 +587,7 @@ export class TileManager {
       w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
         bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null, // d1 lakes: the lakes' bowls and rice (lake-facts.js)
         land: typeof location === 'undefined' || !/[?&]land=off\b/.test(location.search), // d2 land: `?land=off`, the noise's land (land.js setLand)
-        lowIds: world.lowIds, brooks, // wetlands round 2: the seasonal creeks, whose water stands lower in late summer (water-build.js lowCreeks)
+        lowIds: world.lowIds, brooks, campLandings, views, // wetlands round 2: the seasonal creeks, whose water stands lower in late summer (water-build.js lowCreeks)
         waterKinds: world.waterKinds, chans }); // the season round: every water's level by the date, the flowages' channels
       return { w, key: null, entry: null }; // entry: the request this worker's build answers (onMessage)
     });

@@ -1,5 +1,5 @@
 import { FLOAT_OFFSET, LENGTH } from './canoe.js';
-import { resample, PUNCHEON_TOP } from './props.js';
+import { resample, PUNCHEON_TOP, yardBlocked } from './props.js';
 import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
 import { brushAt } from './thicket.js'; // the density round: the brush in the way
 import { snowDepthHere } from './snow.js'; // the snow round: wading the pack
@@ -110,6 +110,11 @@ function seaAngle(a) {
 }
 const LANDING_RADIUS = 28;
 const ASHORE_RADIUS = 6;      // metres of water between the hull and a shore within which you can step out
+// Round world (2026-11-02, the owner: "there is at least some landing where you can get off"): a campsite's landing
+// (world.js c.access) within CAMP_LANDING.near metres of the hull is where E noses in; within CAMP_LANDING.far too, where
+// the bank in reach is too steep to walk up (a site on a bluff) or there is none. Its way up and the latrine trail walk
+// graded, as a trail does, within CAMP_LANDING.way metres of their lines.
+const CAMP_LANDING = { near: 25, far: 50, way: 2.6 };
 const TRAIL_WIDTH = 5;        // metres either side of a portage that walk like the trail
 // The wetlands underfoot (land.js MIRE; the owner, 2026-10-31: "When I'm in a swamp, it shouldn't be like I'm walking
 // over a nice rocky trail"): at a mire of 1 (an open bog, a marsh) the walk is slowed by `slow` (the trail's mud by
@@ -351,6 +356,45 @@ export class Player {
       if (n.dist < r && (!best || n.dist < best.dist)) best = { def: p, trail, dist: n.dist, along: n.along };
     }
     return best;
+  }
+
+  // round world: the campsite whose landing (c.access.landing, the waterline's point) lies nearest the hull, within r:
+  // { site, x, z, d } or null
+  campLandingNear(r) {
+    let best = null;
+    for (const c of this.world.campsites) {
+      const l = c.access && c.access.landing;
+      if (!l) continue;
+      const dx = l[0] - this.x, dz = l[1] - this.z;
+      if (dx > r || dx < -r || dz > r || dz < -r) continue;
+      const d = Math.hypot(dx, dz);
+      if (d < r && (!best || d < best.d)) best = { site: c, x: l[0], z: l[1], d };
+    }
+    return best;
+  }
+  // round world: on a campsite's way up or its latrine trail (within r of either line)?
+  onCampWay(x, z, r = CAMP_LANDING.way) {
+    for (const c of this.world.campsites) {
+      const A = c.access;
+      if (!A) continue;
+      const b = A.bbox;
+      if (x < b[0] - r || x > b[2] + r || z < b[1] - r || z > b[3] + r) continue;
+      for (const pts of [A.way, A.trail]) {
+        if (!pts) continue;
+        for (let i = 1; i < pts.length; i++) {
+          const ax = pts[i - 1][0], az = pts[i - 1][1], ex = pts[i][0] - ax, ez = pts[i][1] - az, L2 = ex * ex + ez * ez || 1;
+          const t = clamp(((x - ax) * ex + (z - az) * ez) / L2, 0, 1);
+          if (Math.hypot(x - ax - ex * t, z - az - ez * t) < r) return true;
+        }
+      }
+    }
+    return false;
+  }
+  // round world: the bank behind a shore point { x, z, sd } too steep to walk up from the water (a bluff, a cliff)?
+  steepBank(at) {
+    const w = this.world, g = w.deeperDir(at.x, at.z), sx = at.x + g.x * at.sd, sz = at.z + g.z * at.sd;
+    const y0 = this.groundAt(sx - g.x * 0.5, sz - g.z * 0.5), y1 = this.groundAt(sx - g.x * 3.5, sz - g.z * 3.5);
+    return (y1 - y0) / 3 > MAX_GRADE;
   }
 
   nearCampsite(x, z, r = 10) {
@@ -624,9 +668,17 @@ export class Player {
       const p = land.def;
       if (!warning) this.prompt = { key: 'E', text: `Go ashore · Portage: ${p.name} · ${p.rods} rods (${fmtDist(p.lengthM)})` }; // the sea's warning outranks the shore
       if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.landing = { land, t: 0 };
-    } else if (gap) {
-      if (!warning) this.prompt = { key: 'E', text: 'Go ashore' };
-      if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.goAshore(gap);
+    } else if (gap || this.world.campAccess) {
+      // round world: a campsite's landing near, or one in reach where the bank here is too steep to walk up
+      const cl = this.world.campAccess ? this.campLandingNear(gap ? CAMP_LANDING.far : CAMP_LANDING.near) : null;
+      const camp = cl && (cl.d < CAMP_LANDING.near || this.steepBank(gap)) ? cl : null;
+      if (camp) {
+        if (!warning) this.prompt = { key: 'E', text: "Go ashore · the campsite's landing" };
+        if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.ashore = { sx: camp.x, sz: camp.z, t: 0, limit: 8 + camp.d / 1.1 };
+      } else if (gap) {
+        if (!warning) this.prompt = { key: 'E', text: 'Go ashore' };
+        if (inp.pressed('KeyE') && !(this.suppressNoseIn > 0)) this.goAshore(gap);
+      } else if (!warning && this.bilge > 0.04 && !paddling) this.prompt = { key: 'Q', text: 'Bail · hold' }; // cons B
     } else if (!warning && this.bilge > 0.04 && !paddling) this.prompt = { key: 'Q', text: 'Bail · hold' }; // cons B
     if (bailing) this.prompt = { key: 'Q', text: 'Bailing…' };
   }
@@ -738,7 +790,7 @@ export class Player {
     this.emitWater(dt);
     this.prompt = { key: 'S', text: 'Nosing in… · back-paddle (or E) to call it off' };
     const bowSd = w.shoreAt(this.x + f.x * 2.6, this.z + f.z * 2.6);
-    if (bowSd > 0.6 || d < 1.0 || A.t > 8) this.stepOut();
+    if (bowSd > 0.6 || d < 1.0 || A.t > (A.limit || 8)) this.stepOut(); // (round world: limit, the time a campsite's landing further off takes)
   }
 
   // The bow grounds: the hull is beached with its nose up the bank and its stern afloat, and you stand beside
@@ -1386,6 +1438,9 @@ export class Player {
     const trail = this.nearestTrail(this.x, this.z), onTrail = !!trail && trail.dist < TRAIL_WIDTH;
     const camp = this.nearCampsite(this.x, this.z), yard = !camp && this.nearEntry(this.x, this.z, GROUNDS);
     const campArea = camp || this.nearCampsite(this.x, this.z, CAMP_AREA); // fb3 A: a site's area walks at life (pace.js)
+    // round world: a site's way up, its latrine trail, and a store's yard with the way from its dock to its door (the owner:
+    // the entry points' buildings "sometimes ... on cliffs and it's not super easy to get to them"): walked graded, as a trail
+    const onWay = !onTrail && ((!!this.world.campAccess && this.onCampWay(this.x, this.z)) || (this.gradeYards !== false && yardBlocked(this.x, this.z, 0.5)));
     this.onTrail = onTrail; this.campsite = camp;
     const mire = this.updateMire(dt, onTrail ? trail : null);
     this.brookStep(); // a brook underfoot: a wading step (audio.js footfall)
@@ -1407,15 +1462,15 @@ export class Player {
       const fwd = moving ? 1 : 0;
       // the going: the woods walk at the same pace as a trail (a bushwhacking crawl is no fun); a trail, a campsite and
       // an outfitter's yard are graded, so the hill costs them less
-      const cleared = onTrail || !!camp || yard;
+      const cleared = onTrail || onWay || !!camp || yard;
       let going = 1;
       // the hill: the grade a step ahead in the direction of travel slows you and a 40° slope stops you; a trail is
       // graded, so half the penalty and never a wall; stood on a rock, a log or a deck the ground's grade is not yours
       const step = 1.5, onSolid = ft.y > this.groundAt(this.x, this.z) + 0.15;
       const grade = (this.groundAt(this.x + mx * step, this.z + mz * step) - this.groundAt(this.x, this.z)) / step;
       let wall = null;
-      if (!onTrail && !onSolid && grade > MAX_GRADE) wall = 'Too steep to climb here';
-      else if (!onTrail && !onSolid && grade < -1.2) wall = 'A drop — find another way down';
+      if (!onTrail && !onWay && !onSolid && grade > MAX_GRADE) wall = 'Too steep to climb here';
+      else if (!onTrail && !onWay && !onSolid && grade < -1.2) wall = 'A drop — find another way down';
       // fb2 E: stood on something (a flight of steps, a rock, a deck) its own rise is the hill, not the ground's under it:
       // up a flight at about a stride a second (ft.climb, m/s), a little slower, as people take stairs
       else if (onSolid) going *= 1 - STAIRS.slow * smoothstep(STAIRS.climb[0], STAIRS.climb[1], ft.climb || 0);

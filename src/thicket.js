@@ -4,6 +4,7 @@ import { KIND, WCLASS, FOREST, CLIFF, cliffClass, wclass1, wclass2, emergentGrow
 import { burnLook } from './burns.js';
 import { GUEST } from './placement.js';
 import { mirePoolAt } from './mire-relief.js';
+import { thinKeep } from './views.js'; // round world: the views to the water, thinned as the tiles thin them
 
 // The near ring (the density round, 2026-11-01). The owner: "the biggest thing i notice is how much more open our game
 // is compared to real life ... I don't want to walk through that vs that looks walkable. right now everything seems
@@ -224,9 +225,12 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vect
 
 export class Thicket {
   // tiles: the TileManager (groundAt, the world); exclusions: the trails', sites' and yards' segments (props.js
-  // exclusionsFor: [x1, z1, x2, z2, radius], a negative radius a yard)
-  constructor(tiles, scene, exclusions, { kit, aquatic, cull = null }) {
+  // exclusionsFor: [x1, z1, x2, z2, radius], a negative radius a yard); yards: (x, z, pad) => whether a store's yard
+  // holds (x, z) (props.js yardBlocked: a store stands where its landing's search put it, often outside the mown lawn
+  // round the entry point, and the ring's poles and canopy grew up through Missing Link's: round world, 2026-11-02)
+  constructor(tiles, scene, exclusions, { kit, aquatic, cull = null, yards = null }) {
     this.tiles = tiles; this.world = tiles.world; this.scene = scene;
+    this.yards = yards;
     this.cull = cull; this.under = cull ? cull.understory : 1;
     ring = this; // (tiles.js CULL: the Undergrowth setting thins the ring too)
     this.group = new THREE.Group();
@@ -270,6 +274,7 @@ export class Thicket {
 
   // inside a trail's, a site's or a yard's clearing, grown by pad?
   blocked(x, z, pad) {
+    if (this.yards && this.yards(x, z, pad)) return true;
     const a = this.ex.get(Math.floor(x / 64) * 100003 + Math.floor(z / 64));
     if (!a) return false;
     for (const s of a) {
@@ -343,7 +348,7 @@ export class Thicket {
           // a point anywhere in the cell and up to 3 m over its edge, so the cells' edges blur
           const x = cx + (H(1) - 0.5) * 16, z = cz + (H(2) - 0.5) * 16;
           const sx = w.shoreAt(x, z);
-          if (sx < L.shore || (L.band && sx > L.band[1]) || this.blocked(x, z, L.pad)) continue;
+          if (sx < L.shore || (L.band && sx > L.band[1]) || this.blocked(x, z, L.pad) || !thinKeep(x, z, 60 + li)) continue;
           // (off the bare rock, but for the rock's own; the rock's own only on it)
           const onRock = bare || bareAt(w, x, z);
           if (onRock && !(bare && ON_ROCK.has(name))) continue;

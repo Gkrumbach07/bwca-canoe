@@ -33,7 +33,17 @@ export const OPEN = { rings: [20, 40], point: [0.5, 0.68], cove: [0.3, 0.45] };
 // A campsite's shelf: bare granite from the site down to its landing, SHELF.r metres round that line (the cleared
 // sites are the exclusions' points with a positive radius: props.js exclusionsFor), when the site lies within
 // SHELF.shore metres of the water. The forest keeps off it (placement.js), so the landing is open from the water.
-export const SHELF = { r: [7, 13], shore: 32 };
+export const SHELF = { r: [7, 13], shore: 32, landing: 32 };
+// Round world: each campsite's landing (scripts/camp-access.mjs, world.js c.access), as a flat Float32Array [x, z, lx, lz,
+// ...] of the site's point and its landing's; the tile worker sets it at its start (tiles.js), and a site with one lays
+// its shelf toward it rather than straight down the shore's fall line (which at a site on a bluff ran down the cliff).
+let landings = null;
+export function setCampLandings(a) {
+  landings = null;
+  if (!a || !a.length) return;
+  landings = new Map();
+  for (let k = 0; k + 3 < a.length; k += 4) landings.set(`${Math.round(a[k])}:${Math.round(a[k + 1])}`, [a[k + 2], a[k + 3]]);
+}
 
 const tan = (deg) => Math.tan((deg * Math.PI) / 180);
 // steep: the drawn steepness (rise over run of the steepest five metres) that starts and completes a cliff;
@@ -215,6 +225,14 @@ export class Site {
         const cs = grid.shoreAt(cx, cz);
         if (cs <= -2 || cs >= SHELF.shore) continue;
         // its landing: straight down to the water from the site (as props.js lays the ledge and the fire ring)
+        // (round world: toward the site's own landing, setCampLandings, where it lies within SHELF.landing metres; past
+        // that the way up is the clearing, props.js exclusionsFor, and the shelf only the site's own ground)
+        const own = landings && landings.get(`${Math.round(cx)}:${Math.round(cz)}`);
+        if (own) {
+          const dx = own[0] - cx, dz = own[1] - cz, L = Math.hypot(dx, dz) || 1, k = L <= SHELF.landing ? (L + 2) / L : 0;
+          camps.push(cx, cz, cx + dx * k, cz + dz * k, cs);
+          continue;
+        }
         const dir = grid.deeperDir(cx, cz), reach = Math.max(0, cs) + 2;
         camps.push(cx, cz, cx + dir.x * reach, cz + dir.z * reach, cs);
       }

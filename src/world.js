@@ -94,12 +94,16 @@ export class World extends GridQueries {
     if (!(index.version === 3 || index.version === 4)) throw new Error(index.version > 4 ? 'map data is from a newer bake than this game reads' : 'map data is from an older bake: run `npm run bake:all`');
     // fb E: the correction table, for the release it was made from (its own chunk, fetched only then)
     // d1 lakes: and the agencies' lake facts (lake-facts.js), for the release they were joined to (their own chunk too)
-    const [fixes, facts] = await Promise.all([
+    // round world: the campsites' landings, ways up and latrine trails (scripts/camp-access.mjs), for the release they
+    // were worked out on (their own chunk too)
+    const [fixes, facts, access] = await Promise.all([
       index.source && index.source.baked === FIXES_FOR ? import('./world-fixes.json').then((m) => m.default, () => null) : null,
       (index.version >= 4 ? import('./lake-facts-v4.json') : import('./lake-facts.json')).then((m) => m.default, () => null), // (d2 bake: each release its own, by its lake ids)
+      import('./camp-access.json').then((m) => m.default, () => null),
     ]);
     if (index.version >= 4) rapidsV4(); // d2 bake
     const w = new World(index, base, fixes);
+    if (access && access.for === (index.source && index.source.baked) && !(typeof location !== 'undefined' && /[?&]access=off\b/.test(location.search))) w.setCampAccess(access); // (`?access=off`: as before, for a before and after)
     // d1 lakes (`?facts=off` leaves them out, for a before and after)
     const off = typeof location !== 'undefined' && /[?&]facts=off\b/.test(location.search);
     if (facts && !off && facts.for === (index.source && index.source.baked)) w.facts = new LakeFacts(facts, w);
@@ -164,6 +168,29 @@ export class World extends GridQueries {
     // d2 bake: the v4 channels' names, in tile order (null on v3: every channel reads 0)
     this.fields = index.version >= 4 ? index.fields || null : null;
     this.gridDesc = { cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: this.fields || undefined };
+  }
+
+  // Round world (2026-11-02): each campsite's way from the water and its latrine (scripts/camp-access.mjs), as
+  // c.access = { way: [[x, z], ...] from the fire ring to the waterline, landing: [x, z] (the waterline's point), latrine:
+  // { x, z, a } (a: the trail's bearing at the box), trail: [[x, z], ...] from the ring to the box, bbox: [x0, z0, x1, z1]
+  // round both } or none. props.js clears both and draws them faint, site.js lays the shelf toward the landing, player.js
+  // walks them graded and noses the canoe in to the landing.
+  setCampAccess(table) {
+    let n = 0;
+    for (const c of this.campsites) {
+      const e = table.sites[`${Math.round(c.x)}:${Math.round(c.z)}`];
+      if (!e) continue;
+      const rx = Math.round(c.x), rz = Math.round(c.z), pts = (a) => { const o = []; for (let i = 0; i + 1 < a.length; i += 2) o.push([rx + a[i] / 10, rz + a[i + 1] / 10]); return o; }; // (flat decimetres from the site)
+      const way = e.l && e.l.length >= 4 ? pts(e.l) : null, trail = e.t && e.t.length >= 4 ? pts(e.t) : null;
+      const A = { way, landing: way ? way[way.length - 1] : null, trail, latrine: null };
+      if (A.trail) { const [x, z] = A.trail[A.trail.length - 1], [px, pz] = A.trail[A.trail.length - 2]; A.latrine = { x, z, a: Math.atan2(z - pz, x - px) }; }
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [x, z] of [...(A.way || []), ...(A.trail || [])]) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
+      A.bbox = [x0, z0, x1, z1];
+      c.access = A; n++;
+    }
+    this.campAccess = n;
+    return n;
   }
 
   // fb E: the landings moved to their put-ins (each record's lake checked by name against this index, the bake's spot

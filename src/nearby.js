@@ -146,6 +146,18 @@ class Nearby {
   keys(o) { const k = (o && o.key) || 'KeyE'; return { key: k, keys: [...new Set([k, 'Mouse0', ...((o && o.keys) || []), ...(k === 'BookHold' ? ['KeyE'] : [])])] }; }
   inv0() { const i = this.inv; return i && i.attached ? i : null; }
   site(r) { const p = this.player, c = this.camp, s = c.nearestSite(p.x, p.z, r, true); if (!s) return null; const h = c.registry.holder(campKey(s)); return !h || h === 'player' ? s : null; }
+  // round world: the site whose latrine box stands within r of you (it stands 45 to 75 m of trail back from the ring, out of
+  // the site's area: props.js), free or yours, or null
+  latrineSite(r = 6) {
+    const p = this.player, c = this.camp;
+    for (const s of c.world.campsites) {
+      const B = s.layout && s.layout.latrine;
+      if (!B || Math.abs(B.x - p.x) > r || Math.abs(B.z - p.z) > r || Math.hypot(B.x - p.x, B.z - p.z) > r) continue;
+      const h = c.registry.holder(campKey(s));
+      return !h || h === 'player' ? s : null;
+    }
+    return null;
+  }
   note(t, s = 3) { if (this.hud) this.hud.note(t, s); }
 
   // --- the cards and the book (stream B's, feature-detected) -----------------------------------------------------------
@@ -404,12 +416,13 @@ class Nearby {
         push(near.sphere(f.x, f.y + 0.22, f.z, 0.85), { kind: 'fire', ref: `fire:${key}`, label: '', chip: need ? need.text : null, hint: need ? need.text : null, e: { verb: 'Fire ring', run: () => this.openFire(key) }, q: this.fireQ(site, key), box: { x: f.x, y: f.y + 0.16, z: f.z, hx: 0.62, hy: 0.18, hz: 0.62, heading: f.a || 0 } });
       }
     }
-    // the seats: the bench, a log seat, the latrine (E Sit)
-    for (const st of this.seats(site)) {
+    // the seats: the bench, a log seat, the latrine (E Sit); round world: the latrine back down its trail, out of the area
+    const seatSite = site || this.latrineSite();
+    for (const st of this.seats(seatSite)) {
       const b = st.box;
       if (near.flat(b.x, b.z) > POINT.seat) continue;
-      const run = st.latrine ? () => ch.latrine(site, this.seatHooks()) : () => this.sitAt(st.spot);
-      const lc = st.latrine ? check(ch, 'latrineNeeds', site) : null; // (stream E: { hint, needs, next })
+      const run = st.latrine ? () => ch.latrine(seatSite, this.seatHooks()) : () => this.sitAt(st.spot);
+      const lc = st.latrine ? check(ch, 'latrineNeeds', seatSite) : null; // (stream E: { hint, needs, next })
       push(near.box(b), { kind: 'seat', ref: `seat:${st.spot.id || `${b.x.toFixed(1)}:${b.z.toFixed(1)}`}`, label: st.label, hint: lc && lc.hint ? lc.hint : null, e: { verb: 'Sit', why: hold.active || this.cook.busy ? 'a moment' : null, ...(lc ? { needs: lc.needs || null, next: lc.next || null } : {}), run }, box: b });
     }
     // your tent: half pitched E Carry on pitching · Q Strike; up E Rest until… · Q Strike

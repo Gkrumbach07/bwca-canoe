@@ -33,6 +33,7 @@ import { calmAt, rockAt, meadowAt } from './fields.js';
 import { burnLook, KIND as BURN } from './burns.js';
 import { surfaceAt, meshHeightAt, groundClass, rockSlope, GROUND, CELL_SPLAT, bedPre } from './terrain-build.js';
 import { CLIFF, CLIFF_MODULE } from './site.js';
+import { thinKeep } from './views.js'; // round world: the campsites' and portage landings' views to the water
 import { KIND, KIND_LAND, FOREST, SWAMP_SPECIES, ROCK, STYLE_FAMILY, STYLE_ROCKS, UNIT_TAG, cliffStrength } from './land.js'; // d2 land
 
 export const REGION = 640;      // metres: instances are binned into regions for LOD switching and culling
@@ -541,6 +542,8 @@ function cliffFeatures(grid, site, k, i, j, rng, ctx) {
   for (const a of [-0.5, -0.25, 0, 0.25, 0.5]) low = Math.min(low, ground(ox + vx * a * W, oz + vz * a * W));
   const base = low - 0.7 - 0.04 * wall, Hm = hTop + 0.4 + rng() * 1.2 - base, D = tTop - tFoot + proud + 2.2;
   const sc = (W + D) / 2, sq = W / sc, tall = Hm / sc;
+  // round world: no wall across a campsite's way up or its latrine trail (the lawns: props.js exclusionsFor)
+  if (ctx.lawn) for (const a of [-0.5, -0.25, 0, 0.25, 0.5]) for (const d of [0, 0.5]) if (ctx.lawn(ox + vx * a * W + fx * d * D, oz + vz * a * W + fz * d * D, 1.5 + D * 0.25)) return;
   ctx.emit(SPECIES.cliff, Math.floor(rng() * 3), ox, base, oz, yaw, sc, 0.86 + rng() * 0.18, sq, 0, 0, tall);
   // a small tree or two on the ledge now and then (cedar, jack pine, birch and spruce root in its joints)
   const ledgeY = base + CLIFF_MODULE.ledge * Hm;
@@ -711,7 +714,12 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
     emit(sp, group, x, yy, z, yaw, s * scale, tint, 0.9 + hash2(Math.floor(x * 11), Math.floor(z * 11), 9) * 0.2);
     shadeCount[grid.local(grid.cellI(x), grid.cellJ(z))] += 0.5;
   };
-  const cliffCtx = { emit, put: emitRock, scree: emitScree, tree: cliffTree, ground, blocked };
+  // round world: inside a lawn's clearing (a campsite's way up, its latrine trail, an outfitter's yard), grown by pad
+  const lawn = (x, z, pad) => {
+    const segs = mask.get(grid.local(grid.cellI(x), grid.cellJ(z)));
+    return !!segs && segs.some((g) => g[6] && segDist(x, z, g[0], g[1], g[2], g[3]) < g[5] + pad);
+  };
+  const cliffCtx = { emit, put: emitRock, scree: emitScree, tree: cliffTree, ground, blocked, lawn };
   // two cell rings beyond the tile so the canopy shade at the edge matches the neighbour's trees (the terrain's seam
   // vertices sit in the first ring, and the shade there is softened over its neighbours, the second ring among them)
   for (let j = j0 - 2; j < j0 + n + 2; j++) {
@@ -784,7 +792,7 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
       }
       const segs = mask.get(k0);
       // trails run through thick woods: more trees and brush right beside them
-      const trailSide = segs && segs.some((g) => g[5] < 5) ? 2.6 : 1;
+      const trailSide = segs && segs.some((g) => g[5] < 5 && !g[6]) ? 2.6 : 1; // (round world: a campsite's way up and latrine trail are lawns, no tunnel)
       // thickets and the odd small glade: the one field that makes the forest uneven. Not on bare rock (sparse
       // already) nor beside a trail (kept thick), no glade on an upland shore, and the glade's rim is where the
       // understory gathers.
@@ -876,6 +884,8 @@ export function placeVegetation(grid, i0, j0, n, { seed = 3, exclusions = null, 
           if (camping && !isRock && site.at(site.camp, x, z) > 0.3) continue;
           // (a trail keeps each kind off by its own pad, TRAIL_PAD; a campsite's shelf and an outfitter's lawn by the plan's)
           if (segs && segs.some((g) => segDist(x, z, g[0], g[1], g[2], g[3]) < g[4] + (g[5] < 5 && !g[6] ? TRAIL_PAD[kind + 2] : pad))) continue;
+          // round world: thinned in a site's or a portage landing's view to the water (views.js), tapered, never cleared
+          if (!isRock && !thinKeep(x, z, kind)) continue;
           // nothing upright on a cliff's face (the steep step of the drawn ground)
           if (face > 0.05 && kind !== 16 && drawnSlope(grid, x, z) > 0.9) continue;
           let sp = kind;

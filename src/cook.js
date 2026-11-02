@@ -291,7 +291,7 @@ export class Cook {
   // out of its front, away from the hinge
   latrineSpot(site) {
     const L = site.layout, B = L.latrine, f = L.fire, t = this.ch.camp.tiles;
-    const la = Math.atan2(B.z - f.z, B.x - f.x), b = la + 0.4, fx = Math.sin(b), fz = -Math.cos(b);
+    const la = Number.isFinite(B.a) ? B.a : Math.atan2(B.z - f.z, B.x - f.x), b = la + 0.4, fx = Math.sin(b), fz = -Math.cos(b); // (round world: B.a, the bearing props.js set it at, its trail's at the box)
     const g = t.groundAt(B.x, B.z);
     return { kind: 'latrine', seat: { x: B.x, y: g + 0.47, z: B.z }, stand: { x: B.x + fx * 0.86, z: B.z + fz * 0.86 }, heading: Math.atan2(-fz, fx), round: { x: B.x, z: B.z, r: 0.86 } };
   }
