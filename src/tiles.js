@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeTerrainMesh, setLandSeason } from './terrain.js';
 import { makeVegetationMeshes, updateVegetationLOD, CARD, LOD_SCALE, SPECIES as VEG_SPECIES } from './vegetation.js';
 import { makeAquaticMeshes, waterInit } from './aquatic.js'; // (d2 water: waterInit)
-import { tilePropsSteps, exclusionsFor, rounded, outfitterGroundMoved, stepOutfitters, outfittersPending, outfittersNear } from './props.js'; // (wetlands round 2: rounded, the brooks' lines as their beds draw them)
+import { tilePropsSteps, exclusionsFor, rounded, outfitterGroundMoved, stepOutfitters, outfittersPending, outfittersNear, yardBlocked, onYard } from './props.js'; // (wetlands round 2: rounded, the brooks' lines as their beds draw them)
 import { MeshGround } from './prop-kit.js';
 import { RockShape, stemOf, trunkProfile, profileAt } from './collide.js';
 import { meshHeightAt } from './terrain-build.js';
@@ -557,7 +557,8 @@ export class TileManager {
     const ex = exclusionsFor(world);
     // the density round: the near ring of the wetlands' plants (thicket.js), off the same trails, sites and yards; re-seated
     // where the detail ground comes in under it
-    this.thicket = new Thicket(this, scene, ex, { kit: vegetation, aquatic, cull: CULL });
+    this.thicket = new Thicket(this, scene, ex, { kit: vegetation, aquatic, cull: CULL, yards: yardBlocked });
+    onYard((rect) => this.thicket.touched(rect)); // (round world: a store's yard set after the ring grew there clears it)
     this.detail.onTouched = (rect) => { outfitterGroundMoved(rect); this.thicket.touched(rect); };
     const exclusions = new Float32Array(ex.length * 5);
     ex.forEach((s, i) => exclusions.set(s, i * 5));

@@ -224,9 +224,12 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vect
 
 export class Thicket {
   // tiles: the TileManager (groundAt, the world); exclusions: the trails', sites' and yards' segments (props.js
-  // exclusionsFor: [x1, z1, x2, z2, radius], a negative radius a yard)
-  constructor(tiles, scene, exclusions, { kit, aquatic, cull = null }) {
+  // exclusionsFor: [x1, z1, x2, z2, radius], a negative radius a yard); yards: (x, z, pad) => whether a store's yard
+  // holds (x, z) (props.js yardBlocked: a store stands where its landing's search put it, often outside the mown lawn
+  // round the entry point, and the ring's poles and canopy grew up through Missing Link's: round world, 2026-11-02)
+  constructor(tiles, scene, exclusions, { kit, aquatic, cull = null, yards = null }) {
     this.tiles = tiles; this.world = tiles.world; this.scene = scene;
+    this.yards = yards;
     this.cull = cull; this.under = cull ? cull.understory : 1;
     ring = this; // (tiles.js CULL: the Undergrowth setting thins the ring too)
     this.group = new THREE.Group();
@@ -270,6 +273,7 @@ export class Thicket {
 
   // inside a trail's, a site's or a yard's clearing, grown by pad?
   blocked(x, z, pad) {
+    if (this.yards && this.yards(x, z, pad)) return true;
     const a = this.ex.get(Math.floor(x / 64) * 100003 + Math.floor(z / 64));
     if (!a) return false;
     for (const s of a) {

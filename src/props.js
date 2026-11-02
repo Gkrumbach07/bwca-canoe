@@ -1910,11 +1910,25 @@ function woodpile(b, g, rng, occ) {
 // props step lets go of the vegetation standing in a yard: its instances are zeroed (drawn as nothing; tiles.js
 // prepares their culling again) and its trunks and rocks moved out of the walker's way.
 const yards = [];
-function inYard(Y, x, z) {
+function inYard(Y, x, z, pad = 0) {
   const dx = x - Y.x, dz = z - Y.z, a = dx * Y.ax + dz * Y.az, b = dx * Y.bx + dz * Y.bz;
-  for (const [a0, a1, b0, b1] of Y.rects) if (a >= a0 && a <= a1 && b >= b0 && b <= b1) return true;
+  for (const [a0, a1, b0, b1] of Y.rects) if (a >= a0 - pad && a <= a1 + pad && b >= b0 - pad && b <= b1 + pad) return true;
   return false;
 }
+// Round world (2026-11-02, the owner: "Outfitter is not accessible ... there are trees growing up through it"): the near
+// ring (thicket.js) planted its poles and canopy trunks in the yards too, knowing only the mown lawn round the entry
+// point. Whether (x, z) lies in any store's yard grown by pad metres, and the ring told of each yard as it is set
+// (onYard: fn([x0, z0, x1, z1])) so the chunks there are planted again without it.
+export function yardBlocked(x, z, pad = 0) {
+  for (const Y of yards) {
+    const dx = x - Y.x, dz = z - Y.z, r = Y.r + pad;
+    if (dx > r || dx < -r || dz > r || dz < -r) continue;
+    if (inYard(Y, x, z, pad)) return true;
+  }
+  return false;
+}
+const yardFns = [];
+export function onYard(fn) { yardFns.push(fn); }
 function clearYards(e, list, size) {
   if (!e || !e.veg || e.ox === undefined) return 0;
   const near = list.filter((Y) => Y.x + Y.r > e.ox && Y.x - Y.r < e.ox + size && Y.z + Y.r > e.oz && Y.z - Y.r < e.oz + size);
@@ -2125,6 +2139,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock, site) {
     const [yx, yz] = F.W(ao, b0), Y = { ep: ep.ep, x: yx, z: yz, ax: X.x, az: X.z, bx: Z.x, bz: Z.z, rects, r };
     const i = yards.findIndex((q) => q.ep === ep.ep);
     if (i >= 0) yards[i] = Y; else yards.push(Y);
+    for (const fn of yardFns) fn([yx - r - 2, yz - r - 2, yx + r + 2, yz + r + 2]);
     const T = ctx.world.tiles, size = ctx.world.tileMetres;
     let cleared = clearYards(ctx.entry, [Y], size);
     if (T && T.tiles) for (const e of T.tiles.values()) if (e !== ctx.entry && e.state === 'ready') cleared += clearYards(e, [Y], size);
