@@ -11,6 +11,16 @@
 //   6 the tarp's ghost is red over a friend's tarp and over a friend's tent
 //   7 a hang is refused on the limb a friend's barrel hangs from (the next tree offered, or a reason)
 //   8 both pitch on one spot at once: one tent stands, the lower id's; the other is back in its pack
+// (A held job is started and set to auto in one evaluate: a real frame between them finds E not down and stops it.)
+// Round 3 (2026-11-02: "You can't lower a friend's hung barrel. (it's shared, remember)", "If you both pitch a tarp or
+// hang a barrel in the same spot at the same moment, the clash isn't resolved"):
+//   9  the dot on the guest's hung barrel reads E Lower (held); while the guest is mid-job on it the ask is refused and
+//      it stays up; then the host's hold lets it down (seen coming down as held), the guest's browser sets it on the
+//      ground at the rope's foot
+//   10 the lowered barrel is shared: the host takes a thing out of it, picks it up whole and hangs it again (its own now)
+//   11 both pitch a tarp on one spot at once: one stands (the lower id's) on both screens, the other's tarp back in its pack
+//   12 both hang a barrel on one limb at once: one stays up (the lower id's) on both screens, the other is down at the
+//      rope's foot, nothing lost
 //
 //   cd server/room && npx wrangler dev --port 8793 --var DELAY_MS:100
 //   npx vite --port 5293
@@ -333,6 +343,134 @@ try {
   const lowHost = Number(ids.host) < Number(ids.guest);
   const guestTentBack = await B.evaluate(() => window.__game.inventory.containers.some((c) => c.grid.some((e) => (window.__game.items.itemDef(e.id) || {}).slot === 'tent')));
   result('8 two tents pitched on one spot at once: one stands (the lower id’s), the other is back in its pack', !!(s8a.ok && s8b.ok && (lowHost ? tents.host === 4 && tents.guest == null && guestTentBack : tents.guest === 4 && tents.host == null)), { staked: [s8a.ok, s8b.ok], tents, ids, guestTentBack });
+
+  // --- 9: the host lets down the guest's hung barrel (E Lower, held); refused while the guest is mid-job on it -------------
+  const auto = (page) => page.evaluate(() => { const h = window.__game.coop.g.hold; if (h.active) h.active.auto = true; return h.active ? h.active.id : null; });
+  const steps = (page, n) => page.evaluate((n) => { const g = window.__game; for (let i = 0; i < n; i++) g.step(1 / 60, 1); }, n);
+  const hb = hung.id ? `p${ids.guest}:${hung.id}` : null;
+  const near0 = (page, ref, fn) => page.evaluate(({ ref, fn }) => {
+    const g = window.__game, s = g.coopShare, p = g.player, f = s.ownerOf(ref), c = f && f.mirror.cont(ref);
+    if (!c) return { none: 'not seen' };
+    const near = { reach: 3, flat: (x, z) => Math.hypot(x - p.x, z - p.z), sphere: (x, y, z) => (Math.hypot(x - c.at.x, z - c.at.z) < 0.2 ? { t: 2, miss: 0 } : null), segment: () => null, box: () => null };
+    const want = fn !== 'pick' ? `barrelHung:${ref}` : ref;
+    const t = s.pointTargets(null, near).find((q) => q.target.ref === want);
+    if (!t) return { none: s.pointTargets(null, near).map((q) => q.target.ref) };
+    const out = { label: t.target.label, verb: t.target.e.verb, held: !!t.target.e.held, why: t.target.e.why, high: c.at.y };
+    if (fn === 'lower') { out.ok = t.target.e.run({ key: 'KeyE' }); const h = g.coop.g.hold; if (h.active) h.active.auto = true; }
+    if (fn === 'pick') out.ok = t.target.e.run();
+    return out;
+  }, { ref, fn });
+  if (hb) {
+    // the host under the barrel (a step from its rope)
+    await A.evaluate((hb) => { const g = window.__game, c = g.coopShare.ownerOf(hb).mirror.cont(hb), p = g.player; p.x = c.at.x + 1.2; p.z = c.at.z + 0.3; g.step(1 / 60, 2); }, hb);
+    const dot9 = await near0(A, hb, 'look');
+    // the guest mid-job on it (a lower of its own under way): the host's ask is refused, the barrel stays up on both
+    await B.evaluate((id) => { const h = window.__game.coop.g.hold; h.begin({ id: 'lower', ref: id, label: 'x', phases: [{ name: 'x', seconds: 60 }], auto: true, still: false }); }, hung.id);
+    const y0 = await A.evaluate((hb) => { const s = window.__game.coopShare, f = s.ownerOf(hb), c = f.mirror.cont(hb), y = c.at.y; s.requestLower(f, c, y - 2, y); return y; }, hb);
+    await until(A, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+    await sleep(400);
+    const afterRefuse = await A.evaluate((hb) => { const s = window.__game.coopShare, c = s.ownerOf(hb).mirror.cont(hb); return { where: c.where, y: c.at.y, lowering: !!s.lowering }; }, hb);
+    const guestStill = await B.evaluate((id) => { const c = window.__game.inventory.cont(id); return c && c.where; }, hung.id);
+    await B.evaluate(() => window.__game.coop.g.hold.cancel());
+    const refusedOk = afterRefuse.where === 'hung' && Math.abs(afterRefuse.y - y0) < 0.01 && !afterRefuse.lowering && guestStill === 'hung';
+    // the hold, as the dot runs it
+    const go = await near0(A, hb, 'lower');
+    await auto(A);
+    await steps(A, 110); // (1.8 s: untied, part way down)
+    const mid = await A.evaluate((hb) => { const s = window.__game.coopShare, c = s.ownerOf(hb).mirror.cont(hb); return { y: c && c.at.y, job: window.__game.coop.g.hold.active && window.__game.coop.g.hold.active.id }; }, hb);
+    await steps(A, 80);
+    await until(A, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+    await until(B, (id) => { const c = window.__game.inventory.cont(id); return c && c.where === 'ground'; }, hung.id, 8000).catch(() => null);
+    await sleep(500);
+    const gSide = await B.evaluate((id) => { const c = window.__game.inventory.cont(id); return c ? { where: c.where, x: c.at && +c.at.x.toFixed(2), z: c.at && +c.at.z.toFixed(2) } : null; }, hung.id);
+    const hSide = await A.evaluate((hb) => { const s = window.__game.coopShare, f = s.ownerOf(hb), c = f && f.mirror.cont(hb); return c ? { where: c.where, x: +c.at.x.toFixed(2), z: +c.at.z.toFixed(2) } : null; }, hb);
+    result('9 the host lets down the guest’s hung barrel (E Lower, held), not while the guest is mid-job on it', !!(dot9 && dot9.verb === 'Lower' && dot9.held && refusedOk && go.ok && mid.y < go.high - 0.2 && gSide && gSide.where === 'ground' && hSide && hSide.where === 'ground' && Math.abs(gSide.x - hSide.x) < 0.05), { dot: dot9, refused: { y0, afterRefuse, guestStill }, go, mid, guest: gSide, host: hSide });
+  } else result('9 the host lets down the guest’s hung barrel', false, { why: 'no barrel hung in 7' });
+
+  // --- 10: the lowered barrel is shared: a take, then picked up whole and hung again by the host ----------------------------
+  if (hb) {
+    await B.evaluate((id) => { const inv = window.__game.inventory, c = inv.cont(id); if (!c.grid.some((e) => !e.box)) inv.put(c, 'meal:breakfast', { qty: 2 }); }, hung.id);
+    await A.evaluate(() => { const inv = window.__game.inventory, p = window.__game.player; for (const c of inv.containers.filter((k) => k.where === 'hands' || k.where === 'back')) inv.setDown(c.id, { x: p.x + 2, z: p.z - 1, heading: 0 }, { force: true }); for (const l of inv.long.filter((k) => k.where === 'hands')) inv.setDown(l.uid, { x: p.x + 2, z: p.z - 1.5, heading: 0 }, { force: true }); });
+    await until(A, (hb) => window.__game.coopShare.tabs().some((t) => t.key === hb && t.n > 0), hb, 8000).catch(() => null);
+    const tk = await A.evaluate((hb) => {
+      const g = window.__game, t = g.coopShare.tabs().find((q) => q.key === hb), e = t && t.bin.items[0];
+      if (!e) return { none: g.coopShare.tabs().map((q) => q.key) };
+      const before = g.inventory.count(e.id, { reachable: false });
+      const r = t.bin.take({ uid: e.uid, itemId: e.id, toCId: null, qty: 1 });
+      return { id: e.id, before, r, sub: t.sub };
+    }, hb);
+    await until(A, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+    const gained = tk.id ? (await A.evaluate((id) => window.__game.inventory.count(id, { reachable: false }), tk.id)) - tk.before : 0;
+    await A.evaluate((hb) => { const g = window.__game, c = g.coopShare.ownerOf(hb).mirror.cont(hb), p = g.player; p.x = c.at.x + 0.9; p.z = c.at.z; }, hb);
+    const pk = await near0(A, hb, 'pick');
+    await until(A, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
+    await sleep(500);
+    const mine = await A.evaluate((item) => { const c = window.__game.inventory.containers.find((k) => k.item === item && ['back', 'chest', 'hands'].includes(k.where)); return c ? { id: c.id, where: c.where } : null; }, hung.item || 'barrel30');
+    const hang10 = await A.evaluate(() => { const hg = window.__game.camp.hang, t = hg.treeTarget(); if (!t) return { none: true }; t.run({ key: 'KeyE' }); const h = window.__game.coop.g.hold; if (h.active) h.active.auto = true; return { tree: t.t.name, verb: t.verb }; });
+    await auto(A);
+    for (let i = 0; i < 8; i++) await steps(A, 60);
+    const up = mine ? await A.evaluate((id) => { const c = window.__game.inventory.cont(id); return c ? { where: c.where, up: c.at && c.at.up } : null; }, mine.id) : null;
+    await sleep(800);
+    const guestSees = mine ? await B.evaluate(({ id, hid }) => { const f = window.__game.coopShare.friends.get(hid), c = f && f.mirror.cont(`p${hid}:${id}`); return c ? c.where : null; }, { id: mine.id, hid: ids.host }) : null;
+    const gone = await B.evaluate((id) => !window.__game.inventory.cont(id), hung.id);
+    result('10 the lowered barrel is shared: the host takes from it, picks it up whole and hangs it again', !!(gained > 0 && pk.ok && mine && gone && up && up.where === 'hung' && up.up === true && guestSees === 'hung'), { take: { ...tk, gained }, pick: pk, host: mine, hang: hang10, up, guestSees, goneFromGuest: gone });
+  }
+
+  // --- 11: both pitch a tarp on one spot at once ----------------------------------------------------------------------------
+  await Promise.all([A, B].map((pg) => pg.evaluate(() => { const c = window.__game.camp; if (c.camp) c.packTent({ quiet: true }); })));
+  await sleep(1200);
+  const tq = { kind: 'poles', ends: ['pole', 'pole'], ax: L.fire.x - 3, az: L.fire.z + 3.5, ar: 0, bx: L.fire.x + 0.5, bz: L.fire.z + 3.5, br: 0, sc: 1.75, lh: 1.4, poles: 0 };
+  const giveTarp = (page) => page.evaluate(() => { const g = window.__game, inv = g.inventory; let k = inv.worn('back'); if (!k || !/^pack/.test(k.item)) { if (k) inv.setDown(k.id, null, { force: true }); k = inv.addContainer('pack3', 'back'); } inv.put(k, 'tarp'); return inv.count('tarp', { reachable: false }); });
+  const tarps0 = { host: await giveTarp(A), guest: await giveTarp(B) };
+  const pitchTarp = (page) => page.evaluate((q) => {
+    const g = window.__game, T = g.tarp, inv = g.inventory, p = g.player; p.x = q.ax + 1.5; p.z = q.az + 1;
+    let uid = null;
+    for (const c of T.pool()) for (const e of c.grid) if (!uid && e.id === 'tarp') uid = e.uid;
+    const r = T.rigOf({ ...q, id: 'x', ga: g.tiles.groundAt(q.ax, q.az), gb: g.tiles.groundAt(q.bx, q.bz), stage: 1 }); r.stage = 0; r.placed = false;
+    const ok = T.place(r, uid);
+    if (ok) T.setStage(r, 3);
+    return { ok, uid, tarps: inv.count('tarp', { reachable: false }) };
+  }, tq);
+  const [p11a, p11b] = await Promise.all([pitchTarp(A), pitchTarp(B)]);
+  log('both pitched', p11a, p11b);
+  await sleep(3000);
+  const tarpsOn = (page) => page.evaluate(() => { const T = window.__game.tarp; return { mine: T.rigs.filter((r) => r.stage >= 1).length, theirs: T.others.filter((r) => r.stage >= 1).length, tarps: window.__game.inventory.count('tarp', { reachable: false }) }; });
+  const t11 = { host: await tarpsOn(A), guest: await tarpsOn(B) };
+  const lowH = Number(ids.host) < Number(ids.guest), win = lowH ? 'host' : 'guest', lose = lowH ? 'guest' : 'host';
+  result('11 two tarps pitched on one spot at once: one stands (the lower id’s) on both screens, the other back in its pack', !!(p11a.ok && p11b.ok && t11[win].mine === 1 && t11[win].theirs === 0 && t11[lose].mine === 0 && t11[lose].theirs === 1 && t11[lose].tarps === tarps0[lose] && t11[win].tarps === tarps0[win] - 1), { pitched: [p11a, p11b], before: tarps0, after: t11, ids });
+
+  // --- 12: both hang a barrel on one limb at once -----------------------------------------------------------------------------
+  const spot12 = await A.evaluate((L) => {
+    const g = window.__game, inv = g.inventory, hg = g.camp.hang;
+    for (const c of inv.containers.filter((k) => k.where === 'hung')) inv.setDown(c.id, { x: c.at.x, z: c.at.z, heading: 0 }, { force: true });
+    const probe = { item: 'barrel30' };
+    for (let r = 2; r < 25; r += 3) for (let a = 0; a < 12; a++) { const x = L.fire.x + Math.cos(a / 12 * Math.PI * 2 + 0.3) * r, z = L.fire.z + Math.sin(a / 12 * Math.PI * 2 + 0.3) * r, at = hg.treeFor(probe, x, z); if (at) return { px: x, pz: z, tree: { x: at.t.x, z: at.t.z } }; }
+    return null;
+  }, L);
+  if (spot12) {
+    await sleep(800);
+    const ready = (page) => page.evaluate((s) => {
+      const g = window.__game, inv = g.inventory, p = g.player;
+      for (const c of inv.containers.filter((k) => k.where === 'hands')) inv.setDown(c.id, { x: s.px + 3, z: s.pz + 3, heading: 0 }, { force: true });
+      for (const l of inv.long.filter((k) => k.where === 'hands')) inv.setDown(l.uid, { x: s.px + 3, z: s.pz + 3.5, heading: 0 }, { force: true });
+      const c = inv.addContainer('barrel30', 'hands', null, { hand: 0 });
+      inv.put(c, 'meal:breakfast', { qty: 1 });
+      p.x = s.px; p.z = s.pz; g.step(1 / 60, 2);
+      return c.id;
+    }, spot12);
+    const bid = { host: await ready(A), guest: await ready(B) };
+    const begin = (page) => page.evaluate(() => { const g = window.__game, t = g.camp.hang.treeTarget(); if (!t) return null; t.run({ key: 'KeyE' }); g.coop.g.hold.active.auto = true; return { x: +t.t.x.toFixed(2), z: +t.t.z.toFixed(2), c: t.c.id }; });
+    const trees = await Promise.all([begin(A), begin(B)]);
+    for (let i = 0; i < 16; i++) { await Promise.all([steps(A, 30), steps(B, 30)]); await sleep(120); }
+    await sleep(2500);
+    const state = (page, id, fid) => page.evaluate(({ id, fid }) => {
+      const g = window.__game, c = g.inventory.cont(id), f = g.coopShare.friends.get(fid);
+      return { mine: c ? { where: c.where, up: c.at ? c.at.up ?? null : null, oat: c.grid.filter((e) => e.id === 'meal:breakfast').length } : null, theirsHung: f ? f.mirror.containers.filter((k) => k.where === 'hung').length : null, job: g.coop.g.hold.active ? g.coop.g.hold.active.id : null, clashes: g.coopShare.n.clashLog || [] };
+    }, { id, fid });
+    const s12 = { host: await state(A, bid.host, ids.guest), guest: await state(B, bid.guest, ids.host) };
+    const w = s12[win], l = s12[lose];
+    result('12 two barrels hung on one limb at once: one stays up (the lower id’s), the other is down at the rope’s foot', !!(trees[0] && trees[1] && trees[0].x === trees[1].x && w.mine && w.mine.where === 'hung' && w.mine.up === true && w.theirsHung === 0 && l.mine && l.mine.where === 'ground' && l.mine.oat === 1 && l.theirsHung === 1 && !l.job), { trees, bid, s12 });
+  } else result('12 two barrels hung on one limb at once', false, { why: 'no tree' });
 
   await A.screenshot({ path: path.join(OUT, 'host.png') });
 } catch (e) { log('ERROR', e && e.stack || e); results.push({ name: 'run', pass: false, error: String(e) }); }

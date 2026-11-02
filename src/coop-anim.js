@@ -34,13 +34,21 @@
 //   About 40 bytes in a jump, 90 in a vault, 150 with the rod up and 220 with a line out; nothing at all otherwise.
 //   The swim is the pose's own mode (coop.js).
 //
-//   Not sent (drawn as the stride or the stand): a container in the hand is not drawn (its arm hangs), nor a long thing
-//   other than the rod; the axe has no job of its own (a pole cut is the saw's); the stringer's fish in the hull.
+//   Round 3 (2026-11-02, the owner: "Containers in a friend's hand aren't drawn"): a container (a pack, a barrel, the
+//   bucket, the tackle box, the map case) and a long thing (a paddle, a rod not up, a setting pole) in a friend's hand
+//   are drawn as our own (containers.js ContainerView.inHand, its models and its swing: a HeldView per friend on their
+//   figure's bones): a container hangs from the fist by its handle and swings with the stride, a paddle or a rod is
+//   carried by the middle, ahead and down, turning with the forearm; that arm in the held pose (the gait's state.held).
+//
+//   Not sent (drawn as the stride or the stand): the axe has no job of its own (a pole cut is the saw's); the stringer
+//   (in a hand or in the hull) and an armful of firewood.
 //
 //   const anim = new CoopAnim(coop, { fishing, photo })   (main.js, after the coop); anim.stats() for the tests
 import * as THREE from 'three';
 import { buildRod } from './gear.js';
 import { modelGeometry, holdMatrix, itemMaterial } from './item-models.js';
+import { ContainerView } from './containers.js';
+import { itemDef } from './items.js';
 
 const GRAVITY = 9.81;     // player.js's
 const EAT_S = 1.7;        // s: eating or drinking is shown this long after it
@@ -219,7 +227,9 @@ export class CoopAnim {
     const foot = !!(B && B.kind === 'foot' && (s.m === 'walk' || s.m === 'carry'));
     // the things in the fists (a loose thing: item-models.js), and the camera up at the face
     const hd = foot && an && Array.isArray(an.hd) ? an.hd : null, photo = foot && an && Array.isArray(an.ar) && an.ar[0] === 'photo';
-    for (const [k, i] of [['R', 0], ['L', 1]]) this.inHand(H, k, hd && !photo ? hd[i] : null, B, P);
+    const boxy = [0, 1].map((i) => (hd && !photo && isBoxy(hd[i]) ? hd[i] : null));
+    for (const [k, i] of [['R', 0], ['L', 1]]) this.inHand(H, k, hd && !photo && !boxy[i] ? hd[i] : null, B, P);
+    this.boxes(H, boxy[0] || boxy[1] ? boxy : null, B, P);
     this.camUp(H, photo ? B : null, P);
     // the fish held up in both hands (fishing.js land: in the paddler's own frame)
     const R = this.rods.get(r.id), fl = an && Array.isArray(an.fl) && B ? an.fl : null;
@@ -250,6 +260,13 @@ export class CoopAnim {
     holdMatrix(m, _w, _f, _r, side, _m);
     _m.decompose(o.position, o.quaternion, o.scale);
     o.visible = true; H.n++;
+  }
+  // round 3: a container or a long thing in the hand, as our own are drawn (containers.js inHand on the friend's bones)
+  boxes(H, hd, B, P) {
+    if (!hd) { if (H.view) H.view.hide(); return; }
+    if (!H.view) { const g = this.coop.g; if (!g.canoe || !g.scene) return; H.view = new HeldView(g); }
+    H.view.draw(B, P, hd);
+    if (H.view.shown.R || H.view.shown.L) H.boxN = (H.boxN || 0) + 1;
   }
   camUp(H, B, P) {
     let o = H.cam;
@@ -316,17 +333,47 @@ export class CoopAnim {
     const R = this.rods.get(id);
     if (R) { R.root.removeFromParent(); if (R.line) { R.line.removeFromParent(); R.line.geometry.dispose(); } if (R.bobber) R.bobber.removeFromParent(); for (const m of R.lures) if (m) m.removeFromParent(); if (R.fish) R.fish.removeFromParent(); this.rods.delete(id); }
     const H = this.hands.get(id);
-    if (H) { for (const k of ['R', 'L', 'cam']) if (H[k]) H[k].removeFromParent(); this.hands.delete(id); }
+    if (H) { for (const k of ['R', 'L', 'cam']) if (H[k]) H[k].removeFromParent(); if (H.view) H.view.dispose(); this.hands.delete(id); }
   }
   dropRod(id) { this.drop(id); } // (the old name)
   stats() {
     return {
       sent: this.sent,
       rods: [...this.rods.values()].map((R) => ({ visible: R.root.visible, inScene: !!R.root.parent, line: !!(R.line && R.line.visible), lineEnd: R.lineEnd || null, lineN: R.lineN || 0, bobber: !!(R.bobber && R.bobber.visible), fish: !!(R.fish && R.fish.visible), fishN: R.fishN || 0 })),
-      hands: [...this.hands.values()].map((H) => ({ R: !!(H.R && H.R.visible), L: !!(H.L && H.L.visible), cam: !!(H.cam && H.cam.visible), n: H.n, camN: H.camN || 0, at: H.R && H.R.visible ? [H.R.position.x, H.R.position.y, H.R.position.z] : null })),
+      hands: [...this.hands.values()].map((H) => ({ R: !!(H.R && H.R.visible), L: !!(H.L && H.L.visible), cam: !!(H.cam && H.cam.visible), n: H.n, camN: H.camN || 0, at: H.R && H.R.visible ? [H.R.position.x, H.R.position.y, H.R.position.z] : null,
+        box: H.view ? { R: H.view.shown.R, L: H.view.shown.L, gripR: H.view.grip.R, gripL: H.view.grip.L, atR: H.view.at('R'), atL: H.view.at('L') } : null, boxN: H.boxN || 0 })),
     };
   }
 }
 const heldOf = (hd) => ({ R: hd[0] ? 1 : null, L: hd[1] ? 1 : null });
+// a container or a long thing (drawn by containers.js's models), not a loose thing (item-models.js)
+const isBoxy = (e) => { if (!e || Array.isArray(e)) return false; const d = itemDef(String(e)); return !!(d && (d.kind === 'container' || d.kind === 'long')); };
+// A friend's hands' containers and long things, drawn as ContainerView draws our own: the same models, held at the fist
+// the same way, swinging the same way, on the friend's figure's bones (this.canoe stands in for the rig: only its
+// figure's bones are read) and at their place and heading (this.player stands in for ours)
+class HeldView extends ContainerView {
+  constructor(g) {
+    super({ inventory: { containers: [], long: [] }, canoe: g.canoe, scene: g.scene, player: { x: 0, z: 0, heading: 0, mode: 'walk' } });
+    this.shown = { R: null, L: null }; this.grip = { R: null, L: null };
+  }
+  draw(B, P, hd) {
+    this.canoe = { figure: { bones: B.body.fig.bones } };
+    this.player.x = P.x; this.player.z = P.z; this.player.heading = P.heading;
+    this.updateSwings();
+    for (const [k, i] of [['R', 0], ['L', 1]]) {
+      const id = hd[i], o = id ? this.objFor(k, String(id)) : null;
+      if (!o) { const was = this.objs.get(k); if (was) was.visible = false; this.shown[k] = null; this.grip[k] = null; continue; }
+      if (o.parent !== this.scene) this.scene.add(o);
+      o.visible = true;
+      this.inHand(o, k, false);
+      this.shown[k] = o.userData.mesh;
+      const f = this.fist(k === 'R' ? 1 : -1, V3()); this.grip[k] = [r3(f.x), r3(f.y), r3(f.z)];
+    }
+  }
+  at(k) { const o = this.objs.get(k); return o && o.visible ? [r3(o.position.x), r3(o.position.y), r3(o.position.z)] : null; }
+  hide() { for (const o of this.objs.values()) o.visible = false; this.shown.R = this.shown.L = null; this.swings.L = this.swings.R = null; }
+  dispose() { for (const o of this.objs.values()) o.removeFromParent(); this.objs.clear(); }
+}
+const V3 = () => new THREE.Vector3();
 const _t = new THREE.Vector3(), _t2 = new THREE.Vector3(), _w = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3(), _m = new THREE.Matrix4();
 const _tip = new THREE.Vector3(), _e = new THREE.Vector3(), _u = new THREE.Vector3();

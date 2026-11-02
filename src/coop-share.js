@@ -24,6 +24,16 @@
 // and hang the friends' footprints (footprints.js), so our tent, tarp or hang is refused where theirs stands; two tents
 // pitched at once on one spot leave the lower id's (tentClash).
 //
+// Phase 3 round 3 (2026-11-02, the owner: "You can't lower a friend's hung barrel. (it's shared, remember)" and "If you
+// both pitch a tarp or hang a barrel in the same spot at the same moment, the clash isn't resolved"):
+//   op 'lower' { rid, op: 'lower', cId }: a friend's hung barrel let down, as ours (hang.js LOWER, held; the barrel
+//         comes down on our screen as we hold), asked of its owner at the end; their browser sets it down at the rope's
+//         foot (refused while they are hanging or lowering it themselves) and it is a container on the ground, shared
+//         as any other (take, put, E Pick up). Re-hung by whoever picks it up, as their own.
+//   tarps and hangs at once: as the tents (tentClash), on what each screen has, the lower id's stands; the other is
+//         struck back into its pack (a tarp) or let down at the rope's foot (a barrel), with a note. A tent and a tarp
+//         on one spot at once the same.
+//
 //   const share = new CoopShare(coop)   (main.js, once coop.g has the camp modules); share.stats() for the tests
 import { Vector3 } from 'three';
 import { ContainerView } from './containers.js';
@@ -34,6 +44,7 @@ import { REACH, HULL_REACH } from './inventory.js';
 import { attach as uiAttach, refresh as uiRefresh, note as uiNote } from './inv-ui.js';
 import { tentFoot, hullFoot, overlap } from './footprints.js';
 import { hold } from './hold.js';
+import { LOWER, BARRELS as BARREL_H } from './hang.js';
 
 const PUB_MS = 250;            // at most 4 a second
 const OP_TIMEOUT = 3000;       // ms: a request with no answer is undone
@@ -44,6 +55,7 @@ const NAMES = { pack3: 'pack', pack4: 'pack', packdry: 'dry bag', barrel30: 'bar
 // a tab's name, as the book names our own around us (inv-ui.js AROUND_NAMES): no owner's name on anything in the world
 const TAB = { pack3: 'Duluth pack', pack4: 'Duluth pack', packdry: 'Dry bag', barrel30: 'Barrel', barrel60: 'Barrel', bucket: 'Bucket', tacklebox: 'Tackle box', stringer: 'Stringer', mapcase: 'Map case' };
 const STAY = new Set(['firefuel', 'grate', 'woodarms', 'crate', 'pile', 'pockets', 'inhand']); // never picked up whole
+const BARREL_NAME = { barrel30: 'small blue barrel', barrel60: 'big blue barrel' }; // (hang.js's words)
 const nameOf = (item) => NAMES[item] || String((itemDef(item) || {}).short || (itemDef(item) || {}).name || 'pack').toLowerCase();
 const before = (a, b) => { const x = Number(a), y = Number(b); return Number.isFinite(x) && Number.isFinite(y) ? x < y : String(a) < String(b); }; // (one order on every screen)
 const _hv = new Vector3();
@@ -389,7 +401,7 @@ export class CoopShare {
         if (t && t.stage >= 1 && Number.isFinite(t.x)) v.tents.push(tentFoot(t));
         const cn = f.pub && f.pub.cn;
         if (cn) v.canoes.push(hullFoot(cn));
-        for (const c of f.mirror.containers) if (c.where === 'hung' && c.at) v.hung.push({ x: c.at.x, z: c.at.z, tree: c.at.tree || null });
+        for (const c of f.mirror.containers) if (c.where === 'hung' && c.at) v.hung.push({ id: c.id, x: c.at.x, z: c.at.z, tree: c.at.tree || null, limb: Number.isFinite(c.at.limb) ? c.at.limb : null, peer: f.id });
       }
       if (T && typeof T.footOf === 'function') for (const r of T.others || []) if (r.stage >= 1) v.tarps.push(T.footOf(r));
     }
@@ -402,15 +414,67 @@ export class CoopShare {
     const camp = this.g.camp, mine = camp && camp.camp;
     if (!mine || !(mine.stage >= 1)) return;
     const me = tentFoot(mine);
+    const T = this.g.tarp;
     for (const f of this.friends.values()) {
-      const t = f.tentWant;
-      if (!t || !(t.stage >= 1) || !overlap(me, tentFoot(t), 0) || before(this.coop.id, f.id)) continue;
+      if (before(this.coop.id, f.id)) continue;
+      const t = f.tentWant, P = pfx(f.id);
+      // (round 3: their tarp's sheet on that spot at once counts too)
+      const onTent = t && t.stage >= 1 && overlap(me, tentFoot(t), 0);
+      const onTarp = !onTent && T && typeof T.footOf === 'function' && (T.others || []).some((r) => String(r.id).startsWith(P) && r.stage >= 1 && overlap(me, T.footOf(r), 0));
+      if (!onTent && !onTarp) continue;
       if (hold.is('tent')) hold.cancel();
       if (typeof camp.cancelPitch === 'function') camp.cancelPitch();
       if (camp.camp) camp.packTent({ quiet: true });
-      uiNote('Another tent went up on that spot first: yours is struck and back in the pack.', 5);
+      uiNote(onTarp ? 'A tarp went up over that spot first: your tent is struck and back in the pack.' : 'Another tent went up on that spot first: yours is struck and back in the pack.', 5);
       this.pubSoon();
       return;
+    }
+  }
+  // --- round 3: tarps and hangs at once ------------------------------------------------------------------------------
+  // our tarp on a friend's tarp or tent, each pitched before the other's pub came: the lower id's stands, ours (the higher
+  // id) is taken down into the pack it came out of, poles and all (tarp.js packRig), a pitch under way stopped
+  tarpClash() {
+    const T = this.g.tarp;
+    if (!T || !Array.isArray(T.rigs) || !T.rigs.length || typeof T.footOf !== 'function') return;
+    for (const rig of [...T.rigs]) {
+      if (!(rig.stage >= 1)) continue;
+      const me = T.footOf(rig);
+      for (const f of this.friends.values()) {
+        if (before(this.coop.id, f.id)) continue;
+        const P = pfx(f.id), t = f.tentWant;
+        const onTarp = (T.others || []).some((r) => String(r.id).startsWith(P) && r.stage >= 1 && overlap(me, T.footOf(r), 0));
+        const onTent = !onTarp && t && t.stage >= 1 && overlap(me, tentFoot(t), 0);
+        if (!onTarp && !onTent) continue;
+        if (hold.is('tarp') || hold.is('tarp-down')) hold.cancel();
+        if (T.rigs.includes(rig)) T.packRig(rig, { quiet: true });
+        uiNote(onTent ? 'A tent went up on that spot first: your tarp is taken down and back in the pack.' : 'Another tarp went up there first: yours is taken down and back in the pack.', 5);
+        this.n.clashes = (this.n.clashes || 0) + 1;
+        this.pubSoon();
+        break;
+      }
+    }
+  }
+  // our barrel hung (or tied on, or the rope over) on the limb a friend's barrel went onto at the same moment: the lower
+  // id's stays, ours comes down at the rope's foot (hang.js yieldLimb)
+  hangClash() {
+    const hg = this.g.camp && this.g.camp.hang;
+    if (!hg || typeof hg.ownLimbs !== 'function') return;
+    const mine = hg.ownLimbs();
+    if (!mine.length) return;
+    for (const f of this.friends.values()) {
+      if (before(this.coop.id, f.id)) continue;
+      for (const c of f.mirror.containers) {
+        const t = c.where === 'hung' && c.at && c.at.tree;
+        if (!t || !mine.some((q) => Math.hypot(q.tree.x - t.x, q.tree.z - t.z) < 0.6)) continue;
+        const what = hg.yieldLimb(t);
+        if (what) {
+          if (!(performance.now() - (this.hangNoted || -1e9) < 4000)) uiNote(what === 'rope' ? 'Another barrel went onto that limb first: your rope is off it.' : 'Another barrel went onto that limb first: yours is down at the rope’s foot.', 5);
+          this.hangNoted = performance.now();
+          this.n.clashes = (this.n.clashes || 0) + 1; (this.n.clashLog = this.n.clashLog || []).push(`hang:${what}`);
+          this.pubSoon();
+        }
+        return;
+      }
     }
   }
 
@@ -419,6 +483,7 @@ export class CoopShare {
     if (!this.coop.live) return;
     if (!this.hooked) this.hooked = this.hookNearby();
     this.publish(now);
+    this.lowerShown(); // (round 3: a friend's barrel we are letting down, where our hold has it)
     for (const f of this.friends.values()) {
       // their load is drawn as it is (FriendView), not the actor's stock packs
       const r = this.coop.remotes.get(f.id); if (r && r.boat && f.pub) r.boat.packs = 0;
@@ -427,6 +492,8 @@ export class CoopShare {
     }
     for (const [rid, q] of this.pending) if (now - q.t0 > OP_TIMEOUT) this.expire(rid, 'timeout');
     try { this.tentClash(); } catch (e) { if (!this.warnedC) { this.warnedC = true; console.warn('coop-share: two tents', e); } }
+    try { this.tarpClash(); this.hangClash(); } catch (e) { if (!this.warnedC2) { this.warnedC2 = true; console.warn('coop-share: two tarps or hangs', e); } }
+
     try { this.keepApart(now); } catch (e) { if (!this.warnedK) { this.warnedK = true; console.warn('coop-share: keeping apart', e); } }
     // our own registry's claim for a friend's site goes when our own tent there is struck: keep it for them
     for (const f of this.friends.values()) if (f.tent && f.tent.key && !f.claims.has(f.tent.key)) this.claim(f, f.tent.key);
@@ -604,6 +671,7 @@ export class CoopShare {
     }
     const c = inv && inv.cont(m.cId);
     if (!c || !PUBLIC.has(inv.rootWhere(c))) return reply({ ok: false, why: 'It isn’t there any more.' });
+    if (m.op === 'lower') return reply(this.lowerFrom(c));
     if (m.op === 'takebox') {
       if (STAY.has(c.item) || (itemDef(c.item) || {}).one || inv.rootWhere(c) === 'hung') return reply({ ok: false, why: 'That stays where it is.' });
       const pm = this.g.player && this.g.player.mode;
@@ -630,6 +698,63 @@ export class CoopShare {
     }
     return reply({ ok: false, why: 'Not that.' });
   }
+  // --- round 3: a friend's hung barrel let down: 'lower' -----------------------------------------------------------------
+  // the owner's side: set down at the rope's foot, as hang.js lowerOpts does at its end; not while we hang or lower it
+  lowerFrom(c) {
+    const inv = this.g.inventory, hg = this.g.camp && this.g.camp.hang, job = hold.active;
+    if (c.where === 'ground') return { ok: true }; // (down already: by us, a moment ago)
+    if (c.where !== 'hung' || !c.at) return { ok: false, why: 'It isn’t hung there any more.' };
+    if (job && job.ref === c.id && job.id === 'lower') return { ok: false, why: 'It is coming down already.' };
+    if ((job && job.ref === c.id) || c.at.up === false || (hg && hg.pending && hg.pending.ref === c.id)) return { ok: false, why: 'It is being hung just now.' };
+    inv.setDown(c.id, { x: c.at.x, z: c.at.z, heading: c.at.heading || 0, ...(c.at.camp ? { camp: c.at.camp } : {}) }, { left: false, force: true });
+    this.pubSoon();
+    return { ok: true };
+  }
+  // the asker's side: the hold as hang.js's own (LOWER), the barrel coming down here as it is held; at its end the ask
+  lowerOpts(f, c) {
+    const p = this.g.player, a = c.at, H = BARREL_H[c.item] || 0.6, high = a.y;
+    const low = (this.g.tiles && this.g.tiles.groundAt ? this.g.tiles.groundAt(a.x, a.z) : p.groundAt(a.x, a.z)) + H / 2 + 0.02;
+    const ease = (k) => { const t = Math.min(1, Math.max(0, k)); return t * t * (3 - 2 * t); };
+    return {
+      id: 'lower', ref: c.id, label: 'Lowering the barrel', phases: LOWER, at: 0, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
+      onTick: (k) => { if (k > 1) this.lowering = { cId: c.id, y: high + (low - high) * ease(k - 1), high }; },
+      onPhase: (i) => { if (i >= 1) this.requestLower(f, c, low, high); },
+      onStop: () => { if (this.lowering && this.lowering.cId === c.id && !this.lowering.asked) this.lowering = null; },
+    };
+  }
+  requestLower(f, c, low, high) {
+    const rid = `${this.coop.id}:${this.rid++}`;
+    if (!this.coop.send({ t: 'op', to: f.id, rid, op: 'lower', cId: unpfx(c.id) })) { this.lowering = null; uiNote('Not now: the connection is down.', 3); return; }
+    this.pending.set(rid, { rid, op: 'lower', to: f.id, cId: c.id, item: c.item, t0: performance.now() });
+    this.lowering = { cId: c.id, y: low, high, asked: rid };
+    this.ver++;
+  }
+  // each frame: the barrel we let down drawn where the hold (or the answer on its way) has it, until their pub has it down
+  lowerShown() {
+    const L = this.lowering;
+    if (!L) return;
+    const f = this.ownerOf(L.cId), c = f && f.mirror.cont(L.cId);
+    if (!c || c.where !== 'hung' || !c.at) { this.lowering = null; return; }
+    c.at.y = L.y;
+  }
+  // the dot on a friend's hung barrel (or the trunk its rope is tied off on): E Lower · hold, as on our own
+  hungTargets(near, out) {
+    const p = this.g.player, hg = this.g.camp && this.g.camp.hang;
+    for (const f of this.friends.values()) for (const c of f.mirror.containers) {
+      if (c.where !== 'hung' || !c.at || c.at.up === false) continue;
+      const t = c.at.tree, d = Math.min(near.flat(c.at.x, c.at.z), t ? near.flat(t.x, t.z) : Infinity);
+      if (d > 3.4) continue; // (hang.js AT_HUNG)
+      const ty = t ? p.groundAt(t.x, t.z) : 0;
+      const hits = [near.sphere(c.at.x, c.at.y, c.at.z, 0.45), t && near.segment ? near.segment(t.x, ty + 0.3, t.z, t.x, ty + 2.4, t.z, (t.r || 0.25) + 0.2) : null].filter(Boolean);
+      const hit = hits.sort((a, b) => a.miss - b.miss)[0];
+      if (!hit) continue;
+      const busy = (this.lowering && this.lowering.cId === c.id) || !!hold.active;
+      out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'barrelHung', ref: `barrelHung:${c.id}`, label: `the ${BARREL_NAME[c.item] || 'barrel'}, hung from the ${t && t.name ? t.name : 'tree'}`,
+        e: { verb: 'Lower', held: true, why: busy ? 'a moment' : null, needs: LOWER.map((ph) => ({ label: ph.name, done: false })), next: 'Hold E: it comes down at the rope’s foot.',
+          run: (o) => { if (busy) return false; const k = hg && typeof hg.keys === 'function' ? hg.keys(o) : { key: 'KeyE', keys: ['KeyE', 'Mouse0'] }; hold.begin({ ...this.lowerOpts(f, c), ...k }); return true; } },
+        mesh: f.view && f.view.objs.get(c.id) } });
+    }
+  }
   gotOpr(m) {
     this.n.oprIn++;
     const q = this.pending.get(m.rid);
@@ -645,6 +770,9 @@ export class CoopShare {
       uiNote(m.ok && m.tree ? this.landBox(m.tree, q.slot) : m.why || 'It won’t come.', 3);
     } else if (q.op === 'put') {
       if (!m.ok) { this.giveBack(q.item, q.back); uiNote(`${m.why || 'It won’t go in.'} It is back with you.`, 3); }
+    } else if (q.op === 'lower') {
+      if (m.ok) uiNote(`The ${BARREL_NAME[q.item] || 'barrel'} is down.`, 3);
+      else { if (this.lowering && this.lowering.cId === q.cId) this.restoreLowered(); uiNote(m.why || 'It won’t come down.', 3); }
     }
     uiRefresh();
   }
@@ -664,11 +792,18 @@ export class CoopShare {
     this.pending.delete(rid);
     this.n.timeouts++;
     if (q.op === 'put') q.returned = this.giveBack(q.item, q.back);
+    if (q.op === 'lower' && this.lowering && this.lowering.cId === q.cId) this.restoreLowered();
     if (!this.expired) this.expired = new Map();
     this.expired.set(rid, q);
     uiNote(why === 'gone' ? 'They have gone.' : 'No answer: try again.', 3);
     this.ver++;
     uiRefresh();
+  }
+  // a lower refused or unanswered: the barrel back up where it hung
+  restoreLowered() {
+    const L = this.lowering, f = L && this.ownerOf(L.cId), c = f && f.mirror.cont(L.cId);
+    if (c && c.where === 'hung' && c.at && Number.isFinite(L.high)) c.at.y = L.high;
+    this.lowering = null;
   }
   // a thing come to us: where it was dropped, else the first room there, else the best place on us, else a hand, else a
   // pile at our feet. → the words
@@ -814,6 +949,7 @@ export class CoopShare {
       const room = this.slotFor(c);
       out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'container', ref: c.id, label: `the ${nameOf(c.item)}`, e: { verb: 'Pick up', why: room ? null : 'your back and hands are full', run: () => { const r = this.requestTakeBox(f, c); if (r && r.words) uiNote(r.words, 2.5); return !!(r && r.ok); } }, q: { verb: 'Open it', run: () => open(c) }, mesh: f.view && f.view.objs.get(c.id) } });
     }
+    this.hungTargets(near, out);
     // a friend's canoe lying by (beached, set down, at a dock): its load in the book, as our own canoe's "Unload it first"
     for (const f of this.friends.values()) {
       const s = f.pub && f.pub.cn;

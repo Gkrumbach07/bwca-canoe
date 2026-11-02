@@ -6,6 +6,8 @@
 //   3 a climb onto that rock: the move's fields arrive and the friend's figure climbs (poses.js makeMoves), then stands on top
 //   4 the canoe set down on a slope: drawn at the owner's height (5 cm) and tilt (1°)
 //   5 a saw in the right hand: drawn in the friend's fist, the arm hanging with it
+//   5b (round 3, "Containers in a friend's hand aren't drawn") a bucket in the left hand and a paddle in the right: drawn
+//     as ours are (containers.js inHand), the bucket hanging from the fist by its bail, the paddle carried by the middle
 //   6 a held job (pitching), a bite of food, the camera up: the arms (poses.js workArms) and the camera at the face
 //   7 afloat: the canoe on the water's level the host's screen has; the rod up and a cast: the line from the friend's rod
 //     tip to where the host's lure is (within 0.3 m); a fish landed held up in their hands
@@ -258,6 +260,36 @@ try {
     result('5. a saw in the right hand: drawn in the friend\'s fist, that arm hanging with it', s.hands.some((h) => h.R) && s.held && s.held.R && s.toHand !== null && s.toHand < 0.35, { host, guestSees: s });
     await near(B, '5-saw-in-hand.png');
     sizes.push(['a saw in hand', await A.evaluate(poseLen)]);
+  });
+
+  // --- 5b. round 3: a container (the bucket) in the left hand and a paddle in the right ---------------------------------
+  await step(async () => {
+    const host = await A.evaluate(() => {
+      const g = window.__game, inv = g.inventory, p = g.player;
+      for (const c of inv.containers.filter((k) => k.where === 'hands')) inv.setDown(c.id, { x: p.x + 1.5, z: p.z + 1.5, heading: 0 }, { force: true, quiet: true });
+      for (const l of inv.long.filter((k) => k.where === 'hands')) inv.setDown(l.uid, { x: p.x + 1.5, z: p.z - 1.5, heading: 0 }, { force: true, quiet: true });
+      const b = inv.addContainer('bucket', 'hands', null, { hand: 1 }), pd = inv.addLong('ash', 'hands', null, { hand: 0 });
+      inv.emit('containers');
+      for (let i = 0; i < 10; i++) g.step(1 / 60, 1);
+      return { bucket: !!b, paddle: !!pd, held: g.canoe.state.held, x: p.x, z: p.z };
+    });
+    await B.waitForFunction(() => { const h = window.__game.coopAnim.stats().hands[0]; return h && h.box && h.box.L === 'bucket' && /^paddle/.test(h.box.R || ''); }, null, { timeout: 15000, polling: 100 }).catch(() => log('5b: not yet'));
+    await sleep(600);
+    const s = await B.evaluate(() => {
+      const g = window.__game, r = [...g.coop.remotes.values()][0], st = g.coopAnim.stats().hands[0], B = r.person.bind, V = B.root.position.constructor;
+      const hL = B.body.fig.bones.handL.getWorldPosition(new V()), hR = B.body.fig.bones.handR.getWorldPosition(new V()), bx = st.box || {};
+      const d = (a, b) => (a && b ? +Math.hypot(a[0] - b.x, a[1] - b.y, a[2] - b.z).toFixed(3) : null);
+      const gL = bx.gripL, aL = bx.atL, gR = bx.gripR, aR = bx.atR;
+      return { box: { R: bx.R, L: bx.L }, boxN: st.boxN, held: r.person.state.held, gripToHandL: d(gL, hL), gripToHandR: d(gR, hR),
+        bucketBelowFist: gL && aL ? +(gL[1] - aL[1]).toFixed(3) : null, bucketAside: gL && aL ? +Math.hypot(gL[0] - aL[0], gL[2] - aL[2]).toFixed(3) : null,
+        paddleFromFist: gR && aR ? +Math.hypot(gR[0] - aR[0], gR[1] - aR[1], gR[2] - aR[2]).toFixed(3) : null, hd: r.seen.an && r.seen.an.hd };
+    });
+    result('5b. a bucket in the left hand and a paddle in the right: drawn at the friend\'s fists as ours are, both arms holding',
+      s.box.L === 'bucket' && /^paddle/.test(s.box.R || '') && s.boxN > 0 && s.held && s.held.L && s.held.R && s.gripToHandL < 0.15 && s.gripToHandR < 0.15 && s.bucketBelowFist > 0.2 && s.bucketBelowFist < 0.5 && s.bucketAside < 0.2 && Math.abs(s.paddleFromFist - 0.75) < 0.05,
+      { host, guestSees: s });
+    await near(B, '5b-bucket-and-paddle.png');
+    sizes.push(['bucket and paddle in hand', await A.evaluate(poseLen)]);
+    await A.evaluate(() => { const g = window.__game, inv = g.inventory, p = g.player; for (const c of inv.containers.filter((k) => k.where === 'hands')) inv.setDown(c.id, { x: p.x + 1.5, z: p.z + 1.5, heading: 0 }, { force: true, quiet: true }); for (const l of inv.long.filter((k) => k.where === 'hands')) inv.setDown(l.uid, { x: p.x + 1.5, z: p.z - 1.5, heading: 0 }, { force: true, quiet: true }); inv.emit('containers'); });
   });
 
   // --- 6. the arms: a held job, eating, the camera up -------------------------------------------------------------------
