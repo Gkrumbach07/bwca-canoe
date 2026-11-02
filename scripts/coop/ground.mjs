@@ -11,6 +11,7 @@
 //   6 the tarp's ghost is red over a friend's tarp and over a friend's tent
 //   7 a hang is refused on the limb a friend's barrel hangs from (the next tree offered, or a reason)
 //   8 both pitch on one spot at once: one tent stands, the lower id's; the other is back in its pack
+// (A held job is started and set to auto in one evaluate: a real frame between them finds E not down and stops it.)
 // Round 3 (2026-11-02: "You can't lower a friend's hung barrel. (it's shared, remember)", "If you both pitch a tarp or
 // hang a barrel in the same spot at the same moment, the clash isn't resolved"):
 //   9  the dot on the guest's hung barrel reads E Lower (held); while the guest is mid-job on it the ask is refused and
@@ -355,7 +356,7 @@ try {
     const t = s.pointTargets(null, near).find((q) => q.target.ref === want);
     if (!t) return { none: s.pointTargets(null, near).map((q) => q.target.ref) };
     const out = { label: t.target.label, verb: t.target.e.verb, held: !!t.target.e.held, why: t.target.e.why, high: c.at.y };
-    if (fn === 'lower') out.ok = t.target.e.run({ key: 'KeyE' });
+    if (fn === 'lower') { out.ok = t.target.e.run({ key: 'KeyE' }); const h = g.coop.g.hold; if (h.active) h.active.auto = true; }
     if (fn === 'pick') out.ok = t.target.e.run();
     return out;
   }, { ref, fn });
@@ -405,7 +406,7 @@ try {
     await until(A, () => window.__game.coopShare.pending.size === 0, null, 8000).catch(() => null);
     await sleep(500);
     const mine = await A.evaluate((item) => { const c = window.__game.inventory.containers.find((k) => k.item === item && ['back', 'chest', 'hands'].includes(k.where)); return c ? { id: c.id, where: c.where } : null; }, hung.item || 'barrel30');
-    const hang10 = await A.evaluate(() => { const hg = window.__game.camp.hang, t = hg.treeTarget(); if (!t) return { none: true }; t.run({ key: 'KeyE' }); return { tree: t.t.name, verb: t.verb }; });
+    const hang10 = await A.evaluate(() => { const hg = window.__game.camp.hang, t = hg.treeTarget(); if (!t) return { none: true }; t.run({ key: 'KeyE' }); const h = window.__game.coop.g.hold; if (h.active) h.active.auto = true; return { tree: t.t.name, verb: t.verb }; });
     await auto(A);
     for (let i = 0; i < 8; i++) await steps(A, 60);
     const up = mine ? await A.evaluate((id) => { const c = window.__game.inventory.cont(id); return c ? { where: c.where, up: c.at && c.at.up } : null; }, mine.id) : null;
