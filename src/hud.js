@@ -1058,7 +1058,10 @@ export class Hud {
   updateEnergy(ctx) {
     const eb = this.eb; if (!eb) return;
     const { energy, trip, shell, day } = ctx;
-    const on = !!(energy && trip && trip.active && !shell);
+    // co-op round 4 (the owner, 2026-11-02: "I can't see the status bar on the top unless I pause"): the bar is up in
+    // play whenever the paused strip would show it, at a store and between trips too (its needs full off a trip), not
+    // only on a trip under way: the strip and the bar never disagree about whether there is a bar
+    const on = !!(energy && trip && !shell);
     eb.el.classList.toggle('nobar', !on);
     if (on) {
       const bar = this.barState(energy), { v, ch, at, sig } = bar;
