@@ -235,7 +235,7 @@ check('3c. a crouch seen as a crouch', crouch.crouch > 0.5, crouch);
 // a seat (a stump in front of the host, sat on facing the guest)
 const sat = await A.evaluate(() => { const g = window.__game, p = g.player, fx = Math.cos(p.heading), fz = -Math.sin(p.heading); return p.sitAt({ x: p.x + fx * 0.6, z: p.z + fz * 0.6, heading: p.heading + Math.PI, kind: 'stump' }); });
 await sleep(4000);
-const headOver = () => { const r = [...window.__game.coop.remotes.values()][0], P = r.person, B = P.bind; if (!B) return null; const v = B.body.fig.bones.head.getWorldPosition(new window.__game.THREE.Vector3()); return +(v.y - P.y).toFixed(2); };
+const headOver = () => { const r = [...window.__game.coop.remotes.values()][0], P = r.person, B = P.bind; if (!B) return null; const v = B.body.fig.bones.head.getWorldPosition(new window.__game.THREE.Vector3()); return +(v.y - window.__game.player.groundAt(P.x, P.z)).toFixed(2); }; // (over the terrain: P.y is the feet's height as sent, a seat's while sitting)
 const sit = await B.evaluate((f) => { const r = [...window.__game.coop.remotes.values()][0]; const B = r.person.bind, hip = B ? B.body.fig.bones.root.getWorldPosition(new window.__game.THREE.Vector3()).y : NaN; return { sit: r.person.anim && r.person.anim.sit, sitN: r.person.sitN || 0, headOverGround: (0, eval)(f)(), hipsOverSeat: +(hip - (r.person.anim ? r.person.anim.sit : NaN)).toFixed(2) }; }, headOver.toString());
 const hostSeat = await A.evaluate(() => { const p = window.__game.player; return { phase: p.seat && p.seat.phase, kind: p.move.kind, top: p.move.top }; });
 await B.evaluate(faceHost);

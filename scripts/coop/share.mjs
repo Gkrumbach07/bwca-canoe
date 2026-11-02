@@ -454,7 +454,7 @@ try {
     const ms12 = await (async () => { const t0 = Date.now(); try { await until(A, (id) => { const ch = window.__game.chores; return !!ch.pileMesh(id); }, ppid, 8000); return Date.now() - t0; } catch { return null; } })();
     const seen = await A.evaluate(({ ppid, gid }) => {
       const g = window.__game, s = g.coopShare, f = s.friends.get(gid), loose = f && f.view && f.view.objs.get(ppid);
-      const near = { reach: 3, flat: () => 1, sphere: () => ({ t: 1, miss: 0 }) };
+      const near = { reach: 3, flat: () => 1, sphere: () => ({ t: 1, miss: 0 }), box: () => null };
       const t = s.pointTargets(null, near).find((q) => q.target.ref === ppid);
       const before = g.inventory.count('wood:branch', { reachable: false });
       if (t) t.target.e.run();

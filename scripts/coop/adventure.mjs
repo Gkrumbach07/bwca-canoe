@@ -62,7 +62,7 @@ try {
     const g = window.__game, t = g.title;
     const ep = g.world.entryPoints.find((e) => e.name === 'Lake One') || g.world.entryPoints[0];
     t.setPick('adventure');
-    await t.newSeason(ep, { confirm: false });
+    await t.newSeason(ep, { confirm: false, start: { year: new Date().getFullYear(), doy: 166 } }); // (a June morning: the wizard's start hour, not the real clock's, so a ride is never a late one)
   });
   await until(A, () => window.__game.title.state === 'game' && !window.__game.player.teleporting && !!window.__game.outfitter.visit, null, 120000);
   const host = await A.evaluate(() => { const g = window.__game, o = g.outfitter, p = g.player, d = p.carry && p.carry.drop; if (o.open) o.hide(); return { ep: o.visit.ep, drop: d ? { x: d.x, z: d.z } : null, money: g.profile.money, mode: g.trip.mode }; });
