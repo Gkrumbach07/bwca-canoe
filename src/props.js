@@ -40,6 +40,13 @@ export function resample(pts, step) {
   return out;
 }
 
+// Round world (2026-11-02): a campsite's way up from its landing and its latrine trail (scripts/camp-access.mjs, world.js
+// c.access). clear, trail: metres either side of the way's and the trail's lines kept clear (the trees stand their own pad
+// further off: placement.js); landing, box: round the landing and round the latrine box. The way is a clearing, worn only
+// faintly (hw its decal's half width, wear how far its middle is worn to soil, 0..1; the portages' are 0.95 and 0.55 to 1);
+// the latrine's a fainter, narrower trail.
+export const CAMP_WAY = { clear: 2.2, landing: 3.5, trail: 1.0, box: 2.0, way: { hw: 0.7, wear: 0.3 }, path: { hw: 0.42, wear: 0.24 } };
+
 // Vegetation exclusion segments: [x1,z1,x2,z2,radius]. A negative radius is a lawn (placement.js): the
 // trees and brush stay off it but the grass grows through.
 export function exclusionsFor(world) {
@@ -48,6 +55,23 @@ export function exclusionsFor(world) {
   // line the decal is drawn on, its corners rounded as buildTrail rounds them)
   for (const p of world.portages) { const pts = rounded(p.pts); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
+  // round world: each site's way up from its landing and its latrine trail (world.js c.access), as lawns (the trees, brush
+  // and rocks kept off, the grass let through; a lawn's line plants no tunnel either: placement.js). After the sites' own
+  // points, which site.js reads by their positive radius.
+  for (const c of world.campsites) {
+    const A = c.access;
+    if (!A) continue;
+    if (A.way) {
+      const pts = rounded(A.way);
+      for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], -CAMP_WAY.clear]);
+      segs.push([A.landing[0], A.landing[1], A.landing[0], A.landing[1], -CAMP_WAY.landing]);
+    }
+    if (A.trail) {
+      const pts = rounded(A.trail);
+      for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], -CAMP_WAY.trail]);
+      segs.push([A.latrine.x, A.latrine.z, A.latrine.x, A.latrine.z, -CAMP_WAY.box]);
+    }
+  }
   for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, -36]); // the mown yard around an outfitter's dock
   // the brooks' stony beds (creeks.js): the trees and brush kept off the line the bed is drawn on
   if (world.creeks) for (const b of world.creeks.brooks) { const pts = rounded(b.pts); for (let i = 1; i < pts.length; i++) if (pts[i - 1][0] !== pts[i][0] || pts[i - 1][1] !== pts[i][1]) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], BROOK.clear]); } // (never a point: site.js reads those as campsites)
@@ -136,6 +160,13 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     if (bx1 < ox - 4 || bx0 > ox + size + 4 || bz1 < oz - 4 || bz0 > oz + size + 4) continue;
     buildTrail(ctx, p, decal, pieces);
     yield;
+  }
+  // round world: the campsites' ways up and latrine trails, faint (CAMP_WAY), each drawn by the tiles its rows fall in
+  for (const c of world.campsites) {
+    const A = c.access;
+    if (!A || A.bbox[2] < ox - 4 || A.bbox[0] > ox + size + 4 || A.bbox[3] < oz - 4 || A.bbox[1] > oz + size + 4) continue;
+    if (A.way) campPath(ctx, A.way, decal, CAMP_WAY.way, Math.round(c.x) * 7 + Math.round(c.z));
+    if (A.trail) campPath(ctx, A.trail, decal, CAMP_WAY.path, Math.round(c.x) * 13 + Math.round(c.z));
   }
   decal.lift(ctx);
   const trail = decal.mesh();
@@ -281,6 +312,27 @@ export function rounded(pts) {
   return out;
 }
 const n1 = (x, seed) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return hash2(i, seed, 7) * (1 - u) + hash2(i + 1, seed, 7) * u; };
+// A campsite's faint way (round world): the decal's rows along pts (from the fire ring out), half width o.hw meandering a
+// little, worn o.wear, fading in over the site's first few metres and out at the far end (the water, or the latrine box).
+// A row belongs to the tile holding its segment's first point, as the portages' do.
+function campPath(ctx, raw, decal, o, seed) {
+  const { tg, inside } = ctx;
+  const pts = resample(rounded(raw), 1.6), m = pts.length, cum = [0];
+  for (let i = 1; i < m; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = cum[m - 1], want = new Uint8Array(m), rowOf = new Int32Array(m).fill(-1);
+  for (let i = 0; i < m - 1; i++) if (inside(pts[i][0], pts[i][1])) { want[i] = 1; want[i + 1] = 1; }
+  for (let i = 0; i < m; i++) {
+    if (!want[i]) continue;
+    const [x, z] = pts[i], [xa, za] = pts[Math.max(0, i - 1)], [xb, zb] = pts[Math.min(m - 1, i + 1)];
+    let dx = xb - xa, dz = zb - za; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+    const nx = -dz, nz = dx, s = cum[i];
+    const meander = (n1(s / 6, seed) - 0.5) * 0.3, hw = o.hw * (1 + 0.3 * (n1(s / 5 + 40, seed) - 0.5));
+    const fade = Math.min(sm(2, 7, s), sm(0, 2.5, total - s)) * sm(-0.2, 1.2, tg.shoreAt(x, z));
+    const wear = o.wear * (0.8 + 0.4 * n1(s / 9 + 90, seed));
+    rowOf[i] = decal.row(ctx, x + nx * meander, z + nz * meander, nx, nz, hw, fade, wear, 0);
+    if (i > 0 && rowOf[i - 1] >= 0 && want[i - 1] && inside(pts[i - 1][0], pts[i - 1][1])) decal.join(rowOf[i - 1], rowOf[i]);
+  }
+}
 function buildTrail(ctx, p, decal, pieces) {
   const { tg, inside, ox, oz } = ctx;
   const pts = p.trailPts || (p.trailPts = resample(rounded(p.pts), 1.6));
@@ -2266,13 +2318,26 @@ function buildRack(ctx, F, rng, ra, rb) {
 // same every time: the search reads the drawn ground).
 // tuning: a tent pad steeper than PAD_STEEP m of rise across its 2.4 m square (about 10°) is looked for again PAD_RINGS m
 // out from the ring, all the way round
-const PAD_STEEP = 0.6, PAD_RINGS = [6, 8, 10];
+const PAD_STEEP = 0.6, PAD_RINGS = [6, 8, 10], CAMP_FIRE_DRY = 2;
+// the way's bearing out of the ring (unit xz): toward its point 8 m out (or its end)
+function wayHeading(way, fx, fz) {
+  let p = way[way.length - 1];
+  for (const q of way) if (Math.hypot(q[0] - fx, q[1] - fz) >= 8) { p = q; break; }
+  const dx = p[0] - fx, dz = p[1] - fz, L = Math.hypot(dx, dz);
+  return L > 1 ? { x: dx / L, z: dz / L } : null;
+}
 function buildCampsite(ctx, c, pieces, ledges) {
   const { tg, ox, oz, H } = ctx;
   const crng = mulberry32(7 + Math.round(c.x) * 31 + Math.round(c.z) * 17);
   const a = hash2(Math.round(c.x), Math.round(c.z), 5) * 6.28;
   const dir = tg.deeperDir(c.x, c.z);
-  const fx = c.x - dir.x * (c.shore < 4 ? 6 : 0), fz = c.z - dir.z * (c.shore < 4 ? 6 : 0), fy = H(fx, fz);
+  let fx = c.x - dir.x * (c.shore < 4 ? 6 : 0), fz = c.z - dir.z * (c.shore < 4 ? 6 : 0);
+  // round world: a site the data puts out on the lake (65 of them) has its ring on up the bank, out of the water, to
+  // CAMP_FIRE_DRY metres from the shore (scripts/camp-access.mjs fireOf does the same)
+  for (let i = 0; i < 60 && tg.shoreAt(fx, fz) < CAMP_FIRE_DRY; i++) { const d = tg.deeperDir(fx, fz); fx -= d.x; fz -= d.z; }
+  const fy = H(fx, fz);
+  // round world: the ledge lies down the way to the landing (world.js c.access), where that leaves the ring
+  const A = c.access, toLand = A && A.way ? wayHeading(A.way, fx, fz) : null;
   const L = (x, y, z) => V(x - ox, y, z - oz);
   ctx.obstacles.push({ x: fx, z: fz, r: 1.0 });
   const b = new PropBuilder(), occ = [];
@@ -2322,7 +2387,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
   occlude(geo, occ, { ground: localGround(ctx), rays: 8, reach: 0.6, floor: 0.4, bury: 0.15 });
   pieces.push(geo);
   // a granite ledge between the fire ring and the water
-  if (c.shore < 30) campLedge(tg, c, fx, fz, dir, ox, oz, ledges, ctx.obstacles, H);
+  if (c.shore < 30) campLedge(tg, c, fx, fz, toLand || dir, ox, oz, ledges, ctx.obstacles, H);
   // the tent pad: the flattest clear spot nearby (off the ledge rocks, on dry ground), door to the fire
   const rocks = [...ledges[0], ...ledges[1]].map((m) => ({ x: m.elements[12] + ox, z: m.elements[14] + oz, r: Math.hypot(m.elements[0], m.elements[1], m.elements[2]) }));
   let best = null;
@@ -2354,9 +2419,13 @@ function buildCampsite(ctx, c, pieces, ledges) {
   // wc C: the seats (player.js sitAt; stream A's E Sit): two spots on the split log's flat face (y its top, world), facing the
   // fire (heading as player.heading's), ax, az along the log; the latrine stays c.layout.latrine
   { const fh = Math.atan2(-(fz - bz), fx - bx), top = ly + lr; c.layout.seats = [-0.45, 0.45].map((t, i) => ({ kind: 'bench', id: `bench:${i}`, x: bx + ax * t, z: bz + az * t, y: top, heading: fh, ax, az })); }
-  // the latrine back in the trees, away from the water
-  const la = Math.atan2(backZ, backX) + (crng() - 0.5) * 1.2, lx = fx + Math.cos(la) * 15, lz = fz + Math.sin(la) * 15;
-  if (tg.shoreAt(lx, lz) > 3) { pieces.push(latrine(ctx, lx, lz, la, crng)); c.layout.latrine = { x: lx, z: lz }; } // hubs 3A: E at the box (camp.js)
+  // the latrine back in the trees, away from the water: round world (the owner: "the latrine is usually farther than what
+  // it is right now"), at the end of its faint trail (world.js c.access, scripts/camp-access.mjs: 45 to 75 m of walk
+  // back from the ring, on flat ground) where the site has one; else 15 m back, as it was. `a`: the bearing it is set at
+  // (cook.js latrineSpot)
+  const la = Math.atan2(backZ, backX) + (crng() - 0.5) * 1.2;
+  if (A && A.latrine) { const B = A.latrine; pieces.push(latrine(ctx, B.x, B.z, B.a, crng)); c.layout.latrine = { x: B.x, z: B.z, a: B.a }; }
+  else { const lx = fx + Math.cos(la) * 15, lz = fz + Math.sin(la) * 15; if (tg.shoreAt(lx, lz) > 3) { pieces.push(latrine(ctx, lx, lz, la, crng)); c.layout.latrine = { x: lx, z: lz, a: la }; } } // hubs 3A: E at the box (camp.js)
 }
 
 // The granite ledge of a campsite, between the fire ring (fx, fz) and the water (dir points out to it): two or

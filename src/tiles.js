@@ -568,6 +568,10 @@ export class TileManager {
     const bs = [];
     if (world.creeks) for (const b of world.creeks.brooks) { const p = rounded(b.pts); for (let i = 1; i < p.length; i++) bs.push(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]); }
     const brooks = new Float32Array(bs);
+    // round world: the campsites' landings, for the shelf each lays toward its own (site.js setCampLandings)
+    const cl = [];
+    for (const c of world.campsites) if (c.access && c.access.landing) cl.push(c.x, c.z, c.access.landing[0], c.access.landing[1]);
+    const campLandings = new Float32Array(cl);
     // the season round: the creeks' channels through the flowages, as segments (water-build.js flowageBeds)
     const cs = [];
     if (world.creeks) for (const c of world.creeks.chans) for (let k = 3; k + 1 < c.length; k += 2) cs.push(c[k - 2], c[k - 1], c[k], c[k + 1]);
@@ -579,7 +583,7 @@ export class TileManager {
       w.postMessage({ type: 'init', grid: world.meta.grid, levelById: world.levelById, clarityById: world.clarityById, exclusions, seed,
         bowlById: world.facts ? world.facts.bowlById : null, riceById: world.facts ? world.facts.riceById : null, // d1 lakes: the lakes' bowls and rice (lake-facts.js)
         land: typeof location === 'undefined' || !/[?&]land=off\b/.test(location.search), // d2 land: `?land=off`, the noise's land (land.js setLand)
-        lowIds: world.lowIds, brooks, // wetlands round 2: the seasonal creeks, whose water stands lower in late summer (water-build.js lowCreeks)
+        lowIds: world.lowIds, brooks, campLandings, // wetlands round 2: the seasonal creeks, whose water stands lower in late summer (water-build.js lowCreeks)
         waterKinds: world.waterKinds, chans }); // the season round: every water's level by the date, the flowages' channels
       return { w, key: null, entry: null }; // entry: the request this worker's build answers (onMessage)
     });
