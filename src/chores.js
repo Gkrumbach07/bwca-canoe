@@ -99,7 +99,7 @@ export function berrySeason(year, doy) { return doy >= dayOfYear(year, ...SEASON
 const pickR = (rng, list) => list[Math.floor(rng() * list.length)];
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const tone = (hex, rng, dl = 0.06, dh = 0.015) => new THREE.Color(hex).offsetHSL((rng() - 0.5) * dh, 0, (rng() - 0.5) * dl);
-const keyOf = (c) => `${Math.round(c.x)}:${Math.round(c.z)}`; // camp.js campKey
+const keyOf = (c) => c.key || `${Math.round(c.x)}:${Math.round(c.z)}`; // camp.js campKey
 const strHash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 const isWood = (id) => { const d = itemDef(id); return !!(d && d.kind === 'firewood'); };
 const burnOf = (id) => { const d = itemDef(id); return d && Number.isFinite(d.burn) ? d.burn : FIRE.branch; };

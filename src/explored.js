@@ -301,7 +301,7 @@ class Explored {
     const keys = new Set((seen.portages || []).map(String));
     if (keys.size) w.portages.forEach((p, i) => { const l = p.launch && p.launch[0]; if ((l && keys.has(`${Math.round(l.x)}:${Math.round(l.z)}`)) || keys.has(p.name)) this.portages.set(i); });
     const log = (t.state && t.state.log) || [];
-    const sites = new Map(w.campsites.map((c, i) => [`${Math.round(c.x)}:${Math.round(c.z)}`, i]));
+    const sites = new Map(w.campsites.map((c, i) => [c.key || `${Math.round(c.x)}:${Math.round(c.z)}`, i]));
     for (const e of log) if (e && e.k === 'sleep' && e.key != null && sites.has(String(e.key))) this.camps.set(sites.get(String(e.key)));
     this.seeded = true;
     this.invalidate();

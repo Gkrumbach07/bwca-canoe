@@ -120,7 +120,7 @@ const hashStr = (s) => { let h = 2166136261; for (const c of String(s || '')) h 
 const between = (rng, [a, b]) => a + Math.floor(rng() * (b - a + 1));
 const lerp = (a, b, t) => a + (b - a) * t;
 const polyLen = (pts) => { let s = 0; for (let i = 1; i < (pts || []).length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return s; };
-export const siteKey = (c) => `${Math.round(c.x)}:${Math.round(c.z)}`; // camp.js campKey
+export const siteKey = (c) => c.key || `${Math.round(c.x)}:${Math.round(c.z)}`; // camp.js campKey
 const FILLS = new Map();
 export function fillOn(doy) {
   let f = FILLS.get(doy);

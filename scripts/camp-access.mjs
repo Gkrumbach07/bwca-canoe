@@ -123,6 +123,54 @@ function nearOtherSite(x, z, me, r) {
   return false;
 }
 
+// Round flat (2026-11-03, the owner: "find a flat spot for the campsite, or flattest spot. not just exactly where the point
+// is. the point is not fully accurate bc in real life the campsite is up on that flat instead of the hill"). The USFS point
+// can sit on the slope below the site's real flat; the camp (the ring, its bench 2.6 m out, a tent pad 6 to 10 m out) wants
+// FLAT.disc metres of level ground. Within FLAT.reach of the point, on a FLAT.step lattice of the walker's ground: the rise
+// across that disc (highest less lowest), plus a little for each metre moved and for being far back from the water, on dry
+// upland (not bog, swamp, marsh or a pond: the ground channel), off a cliff face, off a portage, away from the other sites.
+// The site moves only where its ring has more than FLAT.keep metres of rise (about 6° across the disc), to ground FLAT.gain
+// metres flatter and FLAT.ratio of the rise at most; world.js then moves the site
+// itself (c.x, c.z, c.shore) and keeps its key, so a save's camps, claims and the rest still find it.
+export const FLAT = { way: 110, reach: 70, step: 2, disc: 7, land: 0.7, gain: 0.6, ratio: 0.6, keep: 1.4, sd: [4, 30], perM: 0.012, back: 0.03, trail: 14, other: 45, tries: 5 };
+const WET = new Set([2, 3, 4, 5, 6, 7, 8, 9, 13]);
+const cellIJ = (x, z) => [Math.floor((x - g.originX) / g.cell), Math.floor((z - g.originZ) / g.cell)];
+const kindAt = (x, z) => { const [i, j] = cellIJ(x, z), t = world.at(i, j); return t && t.chCell ? t.chCell('ground', i, j) : 0; };
+const faceAt = (x, z) => { const [i, j] = cellIJ(x, z), t = world.at(i, j), v = t && t.chCell ? t.chCell('cliff', i, j) : 0; return v >> 6 === 3; };
+const moved = []; // the sites moved so far (for "away from the other sites")
+function flatOf(c) {
+  const S = FLAT.step, n = Math.round(FLAT.reach / S), pad = Math.ceil(FLAT.disc / S), side = 2 * (n + pad) + 1;
+  const X = (i) => c.x + (i - n - pad) * S, Z = (j) => c.z + (j - n - pad) * S;
+  const h = new Float32Array(side * side), sd = new Float32Array(side * side);
+  for (let j = 0; j < side; j++) for (let i = 0; i < side; i++) { const x = X(i), z = Z(j), q = j * side + i; sd[q] = world.shoreAt(x, z); h[q] = sd[q] > 0 ? H(x, z) : NaN; }
+  const disc = []; for (let dj = -pad; dj <= pad; dj++) for (let di = -pad; di <= pad; di++) if (Math.hypot(di, dj) * S <= FLAT.disc) disc.push([di, dj]);
+  // (the land of the disc: a ring by the water has the lake in its disc, and that is no slope; FLAT.land of it land at least)
+  const riseAt = (i, j) => { let lo = Infinity, hi = -Infinity, k = 0; for (const [di, dj] of disc) { const v = h[(j + dj) * side + i + di]; if (v !== v) continue; k++; if (v < lo) lo = v; if (v > hi) hi = v; } return k >= FLAT.land * disc.length ? hi - lo : Infinity; };
+  const rise0 = (() => { const f = fireOf(c), i = Math.round((f.x - c.x) / S) + n + pad, j = Math.round((f.z - c.z) / S) + n + pad; return riseAt(Math.max(pad, Math.min(side - 1 - pad, i)), Math.max(pad, Math.min(side - 1 - pad, j))); })();
+  if (rise0 <= FLAT.keep) return { rise0, rise: rise0, cands: [] };
+  const cands = [];
+  for (let j = pad; j < side - pad; j++) for (let i = pad; i < side - pad; i++) {
+    const q = j * side + i, x = X(i), z = Z(j), d = Math.hypot(x - c.x, z - c.z);
+    if (d > FLAT.reach || sd[q] < FLAT.sd[0]) continue;
+    const r = riseAt(i, j);
+    if (!(r < rise0 - FLAT.gain && r < rise0 * FLAT.ratio)) continue;
+    if (WET.has(kindAt(x, z)) || faceAt(x, z)) continue;
+    const score = r + FLAT.perM * d + FLAT.back * Math.max(0, sd[q] - FLAT.sd[1]);
+    cands.push({ x, z, sd: sd[q], rise: r, d, score });
+  }
+  cands.sort((a, b) => a.score - b.score);
+  const out = [];
+  for (const k of cands) {
+    if (out.length >= FLAT.tries * 3) break;
+    if (out.some((o) => Math.hypot(o.x - k.x, o.z - k.z) < 10)) continue;
+    // (a disc's worth of wet or cliff ground anywhere on it, no: the centre alone can miss a bog's edge)
+    let bad = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = k.x + di * FLAT.disc * 0.7, z = k.z + dj * FLAT.disc * 0.7; if (WET.has(kindAt(x, z)) || faceAt(x, z)) bad++; }
+    if (bad > 1 || nearTrail(k.x, k.z, FLAT.trail) || nearOtherSite(k.x, k.z, c, FLAT.other) || moved.some((m) => m.c !== c && Math.hypot(m.x - k.x, m.z - k.z) < FLAT.other)) continue;
+    out.push(k);
+  }
+  return { rise0, rise: out.length ? out[0].rise : rise0, cands: out.slice(0, FLAT.tries) };
+}
+
 // the fire ring as props.js buildCampsite puts it
 // (old: as before round world; else on up the bank out of the water, as props.js campFire does now)
 function fireOf(c, old = false) {
@@ -275,25 +323,42 @@ if (process.argv.includes('--verify')) {
   process.exit(0);
 }
 const table = {};
-const stats = { sites: 0, oldOk: 0, oldBad: 0, newOk: 0, none: [], moved: 0, latrine: 0, latrineLen: [], latrineSd: [], wayLen: [], wayGrade: [], oldWorst: [] };
+const stats = { rise0: [], riseAfter: [], flatMoved: [], sites: 0, oldOk: 0, oldBad: 0, newOk: 0, none: [], moved: 0, latrine: 0, latrineLen: [], latrineSd: [], wayLen: [], wayGrade: [], oldWorst: [] };
 const t0 = Date.now();
 sites.forEach((c, idx) => {
   if (only !== null && idx !== only) return;
   if (onlyKey && keyOf(c) !== onlyKey) return;
   stats.sites++;
-  const f = fireOf(c), O = oldOkOf(c), oldG = O.g, oldOk = O.ok, old = oldWay(fireOf(c, true));
+  const O = oldOkOf(c), oldG = O.g, oldOk = O.ok, old = oldWay(fireOf(c, true));
   if (oldOk) stats.oldOk++; else { stats.oldBad++; stats.oldWorst.push([keyOf(c), +oldG.toFixed(2)]); }
-  const W = walks(f);
   // the landing: of the bank's points reached, the cheapest by the walk plus its bank
-  let best = -1, bestC = Infinity, bestBank = 0;
-  for (let q = 0; q < W.cost.length; q++) {
-    if (!(W.cost[q] < Infinity) || W.sd[q] > 3) continue;
-    const bank = landingAt(W.X(q), W.Z(q));
-    if (bank < 0) continue;
-    const cc = W.cost[q] + 12 * bank;
-    if (cc < bestC) { bestC = cc; best = q; bestBank = bank; }
-  }
+  const landingOf = (W) => {
+    let best = -1, bestC = Infinity, bestBank = 0;
+    for (let q = 0; q < W.cost.length; q++) {
+      if (!(W.cost[q] < Infinity) || W.sd[q] > 3) continue;
+      const bank = landingAt(W.X(q), W.Z(q));
+      if (bank < 0) continue;
+      const cc = W.cost[q] + 12 * bank;
+      if (cc < bestC) { bestC = cc; best = q; bestBank = bank; }
+    }
+    return { best, bestBank };
+  };
   const e = {};
+  // round flat: the site on the flattest ground near its point that has a landing in reach (FLAT), else where it is
+  let site = c, f = null, W = null, Lw = null;
+  const F = flatOf(c);
+  stats.rise0.push(F.rise0);
+  for (const k of F.cands) {
+    const m = { x: k.x, z: k.z, shore: k.sd }, f2 = fireOf(m), W2 = walks(f2), L2 = landingOf(W2);
+    if (L2.best < 0 || W2.len[L2.best] > FLAT.way) continue;
+    site = m; f = f2; W = W2; Lw = L2;
+    e.m = [Math.round((k.x - Math.round(c.x)) * 10), Math.round((k.z - Math.round(c.z)) * 10)]; e.ms = Math.round(k.sd * 10) / 10;
+    moved.push({ c, x: k.x, z: k.z });
+    stats.flatMoved.push(+Math.hypot(k.x - c.x, k.z - c.z).toFixed(1)); stats.riseAfter.push(k.rise);
+    break;
+  }
+  if (!f) { f = fireOf(c); W = walks(f); Lw = landingOf(W); stats.riseAfter.push(F.rise0); }
+  const best = Lw.best, bestBank = Lw.bestBank;
   if (debug) {
     let reached = 0, bankN = 0; const why = {};
     for (let q = 0; q < W.cost.length; q++) if (W.cost[q] < Infinity) { reached++; if (W.sd[q] <= 3 && W.sd[q] >= 0.6) { bankN++; const x = W.X(q), z = W.Z(q), d = world.deeperDir(x, z), sd = W.sd[q], ox = x + d.x * (sd + 4), oz = z + d.z * (sd + 4); const k = world.shoreAt(ox, oz) > -2 ? 'out not water' : !(world.levelAt(ox, oz, 3) - H10(ox, oz) >= 0.3) ? 'shallow' : H(x, z) < world.levelAt(ox, oz, 3) + 0.05 ? 'wet' : 'bank steep'; why[k] = (why[k] || 0) + 1; } }
@@ -315,7 +380,7 @@ sites.forEach((c, idx) => {
     e.b = +bestBank.toFixed(2);
   } else stats.none.push({ key: keyOf(c), x: Math.round(c.x), z: Math.round(c.z), old: +oldG.toFixed(2) });
   // the latrine: back from the water along a walk, on flat ground
-  const sdF = world.shoreAt(f.x, f.z), home = tileOf(c.x, c.z);
+  const sdF = world.shoreAt(f.x, f.z), home = tileOf(site.x, site.z);
   let lb = -1, lbS = -Infinity;
   for (let q = 0; q < W.cost.length; q++) {
     const L = W.len[q];
@@ -343,12 +408,13 @@ console.log(JSON.stringify({
   sites: stats.sites,
   before: { walkable: stats.oldOk, notWalkable: stats.oldBad },
   after: { landing: stats.newOk, none: stats.none.length, movedOver8m: stats.moved, wayLen: { p50: q(stats.wayLen, 0.5), p90: q(stats.wayLen, 0.9), max: q(stats.wayLen, 1) }, wayGrade: { p50: q(stats.wayGrade, 0.5), p90: q(stats.wayGrade, 0.9), max: q(stats.wayGrade, 1) } },
+  flat: { moved: stats.flatMoved.length, by: { p50: q(stats.flatMoved, 0.5), p90: q(stats.flatMoved, 0.9), max: q(stats.flatMoved, 1) }, riseAtRing: { before: { p50: q(stats.rise0, 0.5), p90: q(stats.rise0, 0.9), over1m: stats.rise0.filter((r) => r > 1).length, over2m: stats.rise0.filter((r) => r > 2).length, over3m: stats.rise0.filter((r) => r > 3).length }, after: { p50: q(stats.riseAfter, 0.5), p90: q(stats.riseAfter, 0.9), over1m: stats.riseAfter.filter((r) => r > 1).length, over2m: stats.riseAfter.filter((r) => r > 2).length, over3m: stats.riseAfter.filter((r) => r > 3).length } } },
   latrine: { placed: stats.latrine, len: { p10: q(stats.latrineLen, 0.1), p50: q(stats.latrineLen, 0.5), p90: q(stats.latrineLen, 0.9) }, shore: { p10: q(stats.latrineSd, 0.1), p50: q(stats.latrineSd, 0.5) } },
   exceptions: stats.none,
   worstOld: stats.oldWorst.sort((a, b) => b[1] - a[1]).slice(0, 12),
 }, null, 1));
 if (!checkOnly && only === null) {
-  const out = { about: 'Round world: each campsite\'s landing and way up (l: from the fire ring to the waterline) and latrine trail (t: from the ring to the box), keyed by the site\'s rounded x:z, as flat [dx, dz, ...] in decimetres from that point; b the bank\'s grade. Written by scripts/camp-access.mjs; read by world.js.', for: index.source && index.source.baked, sites: table };
+  const out = { about: 'Round world: each campsite\'s landing and way up (l: from the fire ring to the waterline) and latrine trail (t: from the ring to the box), keyed by the site\'s rounded x:z, as flat [dx, dz, ...] in decimetres from that point; b the bank\'s grade; m: the site moved to its flat (round flat: [dx, dz] decimetres from the key, ms its shore distance, m), so the ring and the rest are there. Written by scripts/camp-access.mjs; read by world.js.', for: index.source && index.source.baked, sites: table };
   fs.writeFileSync(outFile, JSON.stringify(out));
   console.log('wrote', outFile, (fs.statSync(outFile).size / 1024).toFixed(0), 'KB');
 }

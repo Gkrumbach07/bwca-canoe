@@ -965,7 +965,7 @@ async function main() {
     const whereT = tripStats.whereabouts.bind(tripStats);
     tripStats.whereabouts = () => { const c = player.nearCampsite ? player.nearCampsite(player.x, player.z, 40) : null; return (c && names.siteLine(c)) || whereT(); };
     const campW = record.campWords.bind(record);
-    record.campWords = (key, lake) => { const [x, z] = String(key).split(':').map(Number); const s = Number.isFinite(x) ? world.campsites.find((c) => Math.round(c.x) === x && Math.round(c.z) === z) : null; return (s && names.siteLine(s)) || campW(key, lake); };
+    record.campWords = (key, lake) => { const [x, z] = String(key).split(':').map(Number); const s = Number.isFinite(x) ? world.campsites.find((c) => (c.kx ?? Math.round(c.x)) === x && (c.kz ?? Math.round(c.z)) === z) : null; return (s && names.siteLine(s)) || campW(key, lake); };
     const hudUpd = hud.update.bind(hud);
     hud.update = (ctx) => {
       // landing at a numbered site, which one (after the parties' "… is taken", party-camps.js, which reads a bare "Go ashore")

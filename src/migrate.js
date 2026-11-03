@@ -255,7 +255,7 @@ function seasonIds(keys, names) {
 // the same in every release, and a site's lake is one the season paddled, so it holds that lake's id too
 function campLakes(keys, meta) {
   const S = meta && Array.isArray(meta.campsites) ? meta.campsites : [], at = new Map();
-  for (const s of S) if (s && s.lake > 0) at.set(`${Math.round(s.x)}:${Math.round(s.z)}`, s.lake);
+  for (const s of S) if (s && s.lake > 0) at.set(s.key || `${Math.round(s.x)}:${Math.round(s.z)}`, s.lake);
   const out = new Set(), add = (k) => {
     if (typeof k !== 'string' || !/^-?\d+:-?\d+$/.test(k)) return;
     let l = at.get(k);
