@@ -558,6 +558,13 @@ function* outfitterSteps(ctx, ep) {
   pieces.push(dock.geo);
   yield;
   yield* buildStore(c, plan.F, rng, ep, sub, pieces, dock, plan.site);
+  // round ramps 2: rock steps up the bank from the dock where the way to the door stays steep (world.js ep.steps): flat
+  // slabs across the way on the drawn ground, to look at (the yard is walked graded)
+  if (ep.steps) {
+    const sb = new PropBuilder(), srng = mulberry32(9101 + ep.ep * 7);
+    for (const [x, z, a] of ep.steps) { const s = 0.5 + srng() * 0.15; stone(sb, V(x - c.ox, c.H(x, z) - 0.04, z - c.oz), s, -a + (srng() - 0.5) * 0.25, srng, { up: 0.42, deep: 1.5 }); }
+    pieces.push(sb.build());
+  }
   const m = propMesh(pieces);
   if (m) { m.name = `outfitter ${ep.ep} dock and rack`; sub.add(m); }
   // what it covers (for the ground's changes) and the ground it was built on (to tell a change that matters)
@@ -2389,6 +2396,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
   pieces.push(geo);
   // a granite ledge between the fire ring and the water
   if (c.shore < 30) campLedge(tg, c, fx, fz, toLand || dir, ox, oz, ledges, ctx.obstacles, H);
+  if (A && A.steps) campSteps(tg, c, A.steps, ox, oz, ledges, ctx.obstacles, H);
   // the tent pad: the flattest clear spot nearby (off the ledge rocks, on dry ground, off the way up), door to the fire
   const rocks = [...ledges[0], ...ledges[1]].map((m) => ({ x: m.elements[12] + ox, z: m.elements[14] + oz, r: Math.hypot(m.elements[0], m.elements[1], m.elements[2]) }));
   // (round ramps: a switchback's flat turn is flat ground too; the pad keeps 2.6 m off the way's line)
@@ -2465,6 +2473,21 @@ function campLedge(tg, c, fx, fz, dir, ox, oz, ledges, obstacles, H = null) {
     if (tg.shoreAt(x, z) < -1.5) continue;
     const bed = bedding(tg, x, z), tilt = Math.min(0.4, bed.angle * 0.85);
     ledges[0].push(ledgeRock(obstacles, 0, place(ROCK_KIND.slab, x, z, bed.angle < 0.04 ? r() * Math.PI * 2 : bed.az, tilt, r() * Math.PI * 2, s, 0.85 + r() * 0.3, 0.8 + r() * 0.3), ox, oz, 1.3 * s));
+  }
+}
+
+// Round ramps 2: rock steps up a short steep pitch of a campsite's way (world.js c.access.steps, scripts/camp-ramps.mjs:
+// [x, z, bearing] a tread every quarter metre of rise): a flat granite slab laid across the way at each, seated on the drawn
+// ground as the ledge's flats are, a little skewed and of uneven size, stepped onto like them (ledges[0]).
+function campSteps(tg, c, steps, ox, oz, ledges, obstacles, H = null) {
+  const r = mulberry32((hash2(Math.round(c.x), Math.round(c.z), 29) * 4294967296) >>> 0);
+  const ground = H || ((x, z) => meshHeightAt(tg, x, z));
+  for (const [x, z, a] of steps) {
+    if (tg.shoreAt(x, z) < 0.3) continue;
+    const s = 0.55 + r() * 0.2, sq = 1.25 + r() * 0.2, tall = 0.55 + r() * 0.2, spin = (r() - 0.5) * 0.3, az = -a + Math.PI / 2;
+    const y = seatRock(ground, ROCK_FOOT[ROCK_KIND.slab], x, z, s, sq, tall, spin, az, 0, tg.slopeAt(x, z));
+    const m = new THREE.Matrix4().makeRotationY(az + spin).scale(new THREE.Vector3(s * sq, s * tall, s * (2 - sq))).setPosition(x - ox, y, z - oz);
+    ledges[0].push(ledgeRock(obstacles, 0, m, ox, oz, 1.3 * s));
   }
 }
 
