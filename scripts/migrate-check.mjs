@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // d2 join: every table in src/migrate.js (src/migrate/*.json, scripts/migrate-table.mjs) checked against the releases
-// it joins (docs/migration.md). For each live release a season may come from (v3, v4, v5, v6, v7-water) it checks the whole table
+// it joins (docs/migration.md). For each live release a season may come from (v3, v4, v5, v6, v7-water, v8) it checks the whole table
 // against the two indices (every mapped lake the same water: its OpenStreetMap id, or under the old one's cells; every
 // site at its place; every trail with its ends), then builds a season as the game writes it on that release (Lake One
 // and its neighbours paddled and inked, nights at Lake One sites and at one the new bake moved, portages walked, a
@@ -10,7 +10,7 @@
 // stamped v6, and a stamp no table knows) carried by their names; a season whose release has no table to the one
 // loaded left as it is and NOT stamped; a rebake of the new release with the same numbers.
 //
-//   node scripts/migrate-check.mjs --v3 <dir> --v4 <dir> --v5 <dir> --v6 <dir> --v7 <dir> --to <dir>   (each: a dir with index.json)
+//   node scripts/migrate-check.mjs --v3 <dir> --v4 <dir> --v5 <dir> --v6 <dir> --v7 <dir> --v8 <dir> --to <dir>   (each: a dir with index.json)
 //     [--fixture out.json]   (the v4 season's keys stamped v4, for a browser check with the save in localStorage)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,9 +19,9 @@ import { migrateSeason, migrateKeys, mapperOf, MARK, TABLES, seasonNames } from 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const here = path.dirname(new URL(import.meta.url).pathname);
 const readIdx = (d) => JSON.parse(fs.readFileSync(fs.statSync(d).isDirectory() ? path.join(d, 'index.json') : d, 'utf8'));
-const need = ['--v3', '--v4', '--v5', '--v6', '--v7', '--to'];
+const need = ['--v3', '--v4', '--v5', '--v6', '--v7', '--v8', '--to'];
 if (need.some((k) => !arg(k))) { console.error(`usage: node scripts/migrate-check.mjs ${need.map((k) => `${k} <dir>`).join(' ')} [--fixture out.json]`); process.exit(1); }
-const R = { v3: readIdx(arg('--v3')), v4: readIdx(arg('--v4')), v5: readIdx(arg('--v5')), v6: readIdx(arg('--v6')), v7: readIdx(arg('--v7')) };
+const R = { v3: readIdx(arg('--v3')), v4: readIdx(arg('--v4')), v5: readIdx(arg('--v5')), v6: readIdx(arg('--v6')), v7: readIdx(arg('--v7')), v8: readIdx(arg('--v8')) };
 const B = readIdx(arg('--to'));
 const fixes = JSON.parse(fs.readFileSync(path.join(here, '../src/world-fixes.json'), 'utf8'));
 const fileFor = (baked) => `${String(baked).replace(/[:.]/g, '-')}.json`;
@@ -41,26 +41,26 @@ const head = (s) => console.log(`\n--- ${s} ${'-'.repeat(Math.max(0, 100 - s.len
 
 // --- the tables in src/migrate.js, one per release ---------------------------------------------------------------------
 head('the tables');
-ok(TABLES.map((e) => e.name).join() === 'v3,v4,v5,v6,v7', `TABLES: ${TABLES.map((e) => `${e.name} (${e.from.baked})`).join(', ')}`);
+ok(TABLES.map((e) => e.name).join() === 'v3,v4,v5,v6,v7,v8', `TABLES: ${TABLES.map((e) => `${e.name} (${e.from.baked})`).join(', ')}`);
 for (const e of TABLES) {
   const I = R[e.name], t = tableOf(e), size = fs.statSync(path.join(here, '../src/migrate', fileFor(e.from.baked))).size;
   ok(JSON.stringify(t.from) === JSON.stringify(stamp(I)) && JSON.stringify(t.to) === JSON.stringify(stamp(B)) && JSON.stringify(e.from) === JSON.stringify(t.from) && JSON.stringify(e.to) === JSON.stringify(t.to),
     `${e.name}: src/migrate/${fileFor(e.from.baked)} (${(size / 1024).toFixed(1)} KB) goes ${t.from.baked} → ${t.to.baked}`);
 }
 const lakeOne = (I) => I.lakes.filter((l) => l && l.name === 'Lake One').sort((a, b) => b.cells - a.cells)[0].id;
-const ONE = lakeOne(B); // (v8, the fresh extract: 104)
-ok(lakeOne(R.v3) === 78 && lakeOne(R.v4) === 103 && lakeOne(R.v5) === 103 && lakeOne(R.v6) === 103 && lakeOne(R.v7) === 103 && TABLES.every((e) => mapperOf(tableOf(e)).lake(lakeOne(R[e.name])) === ONE),
-  `Lake One: v3 ${lakeOne(R.v3)}, v4 ${lakeOne(R.v4)}, v5 ${lakeOne(R.v5)}, v6 ${lakeOne(R.v6)}, v7 ${lakeOne(R.v7)} → ${TABLES.map((e) => mapperOf(tableOf(e)).lake(lakeOne(R[e.name]))).join(', ')} (new: ${ONE} ${nm(B.lakes[ONE - 1])})`);
+const ONE = lakeOne(B); // (v8, the fresh extract: 104; v9 the same)
+ok(lakeOne(R.v3) === 78 && lakeOne(R.v4) === 103 && lakeOne(R.v5) === 103 && lakeOne(R.v6) === 103 && lakeOne(R.v7) === 103 && lakeOne(R.v8) === 104 && TABLES.every((e) => mapperOf(tableOf(e)).lake(lakeOne(R[e.name])) === ONE),
+  `Lake One: v3 ${lakeOne(R.v3)}, v4 ${lakeOne(R.v4)}, v5 ${lakeOne(R.v5)}, v6 ${lakeOne(R.v6)}, v7 ${lakeOne(R.v7)}, v8 ${lakeOne(R.v8)} → ${TABLES.map((e) => mapperOf(tableOf(e)).lake(lakeOne(R[e.name]))).join(', ')} (new: ${ONE} ${nm(B.lakes[ONE - 1])})`);
 
 // --- per release: the whole table, then a season made on it -------------------------------------------------------------
 const seasons = {};
 for (const e of TABLES) {
   const I = R[e.name], table = tableOf(e), M = mapperOf(table), { P: PA, C: CA } = world(I), PB = B.portages, CB = B.campsites;
   head(`${e.name} (${I.source.baked}) → ${B.source.baked}`);
-  const sameLake = (a, b) => { const p = I.lakes[a - 1], q = b > 0 ? B.lakes[b - 1] : null; return !!(p && q && (p.osm === q.osm || Math.hypot(p.cx - q.cx, p.cz - q.cz) < 2000 || (nm(p) && nm(p) === nm(q)))); }; // (a few cells of a big lake's edge: its middle is far)
+  const sameLake = (a, b) => { const p = I.lakes[a - 1], q = b > 0 ? B.lakes[b - 1] : null; return !!(p && q && (p.osm === q.osm || Math.hypot(p.cx - q.cx, p.cz - q.cz) < 2000 || (nm(p) && nm(p) === nm(q)) || q.cells >= 50 * p.cells)); }; // (a few cells of a big lake's edge: its middle is far; v9: water NHDPlus HR draws as part of a lake 50 times its size or more, a sliver of channel or a bay)
   const sameSite = (i, j) => j >= 0 && Math.hypot(CA[i].x - CB[j].x, CA[i].z - CB[j].z) < 100;
   const sameTrail = (i, j) => { if (j < 0) return false; const p = PA[i].launch, q = PB[j].launch, d = (a, b) => Math.hypot(a.x - b.x, a.z - b.z); return Math.min(d(p[0], q[0]) + d(p[1], q[1]), d(p[0], q[1]) + d(p[1], q[0])) < 80
-    || (Math.min(d(p[0], q[0]), d(p[0], q[1]), d(p[1], q[0]), d(p[1], q[1])) < 30 && PA[i].pts.every(([x, z]) => PB[j].pts.some(([u, v]) => Math.hypot(x - u, z - v) < 25))); }; // (the season round: or carried on to other water, its old line all on the new)
+    || (Math.min(d(p[0], q[0]), d(p[0], q[1]), d(p[1], q[0]), d(p[1], q[1])) < 30 && (PA[i].pts.every(([x, z]) => PB[j].pts.some(([u, v]) => Math.hypot(x - u, z - v) < 25)) || PB[j].pts.every(([x, z]) => PA[i].pts.some(([u, v]) => Math.hypot(x - u, z - v) < 25)) || PA[i].name === PB[j].name)); }; // (the season round: or carried on to other water, its old line all on the new; v9: or cut short at water on the way, its new line all on the old)
   {
     let lk = 0, lbad = 0, n = 0; for (const l of I.lakes) { if (!l) continue; n++; const to = M.lake(l.id); if (to) { lk++; if (!sameLake(l.id, to)) lbad++; } }
     ok(lbad === 0, `every mapped lake is the same water (${lk} of ${n} mapped, ${lbad} not; the rest have no water under them in the new bake)`);
@@ -72,7 +72,7 @@ for (const e of TABLES) {
   const byName = (name) => { const l = I.lakes.filter((q) => q && q.name === name).sort((a, b) => b.cells - a.cells)[0]; return l ? l.id : 0; };
   const L = { one: byName('Lake One'), two: byName('Lake Two'), three: byName('Lake Three'), four: byName('Lake Four'), insula: byName('Lake Insula'), meadows: byName('Meadows Lake') };
   const lo = I.lakes[L.one - 1];
-  const goneLake = I.lakes.find((l) => l && l.cells > 20 && !M.lake(l.id)).id;
+  const goneLake = (I.lakes.find((l) => l && l.cells > 20 && !M.lake(l.id)) || I.lakes.find((l) => l && !M.lake(l.id))).id; // (v8 → v9 loses no lake over 20 cells: a sliver)
   const nearest = (arr, at, f) => arr.map((c, i) => [i, Math.hypot(f(c)[0] - at[0], f(c)[1] - at[1])]).sort((a, b) => a[1] - b[1]).map((q) => q[0]);
   const sitesNear = nearest(CA, [lo.cx, lo.cz], (c) => [c.x, c.z]);
   const movedSite = CA.findIndex((c) => table.campKeys[key(c)]);

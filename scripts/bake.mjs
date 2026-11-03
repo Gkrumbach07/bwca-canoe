@@ -41,6 +41,7 @@ import { loadNhd, classifyCreeks, rasterizeClassified, brooksOf, beaverDams, lak
 import { loadProducts, lidarWeight, makeChannels, lidarBasinLevels, V4_CHANNELS, V4_FIELDS } from './v4-products.mjs'; // d2 bake
 import { officialAdds } from './official-adds.mjs'; // d2 bake (d1 names' sites and portages)
 import { loadCanoeLines, taggedRoute, PORTAGE_REACH } from './canoe-routes.mjs'; // water edges
+import { loadNhdLakes, matchNhd, islandCells, restoreAtEnds } from './nhd-lakes.mjs'; // NHDPlus HR outlines, islands kept
 
 // ---------- CLI ---------------------------------------------------------------------
 
@@ -278,6 +279,10 @@ async function main() {
     if (!inGrid(minX, maxX, minZ, maxZ)) continue;
     lakes.push({ osm: l.osm, name: l.name, river: !!l.river, rings, minX, maxX, minZ, maxZ });
   }
+  // NHDPlus HR: a lake's OpenStreetMap outline swapped for NHDPlus HR's where the two are the same water (its place in
+  // the list, so its id, kept); the lakes and ponds OpenStreetMap has no water for go after every other polygon below
+  let nhdAdded = [], nhdReport = null;
+  { const bodies = loadNhdLakes(CFG.cacheDir, log); if (bodies) ({ added: nhdAdded, report: nhdReport } = matchNhd(lakes, bodies, grid, proj, log)); }
   // waterway centrelines: creeks and rivers mapped only as lines get a narrow channel of their own (rasterized
   // first, so real polygons win wherever both exist); every line also carries the level profile below
   const waterways = [];
@@ -319,6 +324,7 @@ async function main() {
     }
     log(`water edges: ${navWays} of ${waterways.length} waterway lines are canoe routes (widened to ${NAV_HW} m where narrow); ${navExtra.length} canoe-network lines (flowlines, links) carve where the water has no channel`);
   }
+  for (const l of nhdAdded) lakes.push(l);
   lakes.forEach((l, i) => { l.id = i + 1; });
   if (lakes.length >= 65535) throw new Error('too many water polygons for Uint16 ids');
   const lakeId = new Uint16Array(N);
@@ -357,6 +363,16 @@ async function main() {
     log(`portages: ${(breakLines(navExtra, portBreaks) / 1000).toFixed(1)} km of the canoe network's own lines beside a portage left uncarved`); }
   rasterizeClassified(waterways, grid, lakeId);
   rasterizeLakes(lakes, grid, lakeId);
+  if (nhdReport) { // NHDPlus HR: OpenStreetMap's water kept round the portage ends (nhd-lakes.mjs restoreAtEnds)
+    const ends = []; for (const p of osm.portages || []) for (const e of [p.pts[0], p.pts[p.pts.length - 1]]) ends.push(proj.toLocal(e[0], e[1]));
+    const r = restoreAtEnds(lakes, ends, grid, lakeId);
+    log(`nhd-hr: ${r.cells} cells of OpenStreetMap's water kept round portage ends on ${r.lakes} lakes`);
+  }
+  // islands: the land in a water polygon's holes. The LiDAR's hydro-flattening paints islands under about an acre as
+  // flat water at the lake's level, so the water edges below never take them, and where the LiDAR is flat on one its
+  // ground is raised out of the water (pass 2) and written to islands.json for the 2 m detail (detail-bake.mjs)
+  const { islandOf, cells: islandN, polys: islandPolys } = islandCells(lakes, grid, lakeId);
+  log(`islands: ${islandN} cells of land in the holes of ${islandPolys} water polygons`);
   // the water as OpenStreetMap draws it, before the canoe routes' channels and the LiDAR's edges: the campsites and the
   // official adds are placed on it exactly as data-v4 placed them (a save keys its sites by their place)
   // (carved: 0 where the cell is as OpenStreetMap drew it; the channels and the edges only ever make land water)
@@ -697,7 +713,7 @@ async function main() {
       for (const k of q) {
         const x = k % W, L = level[k] / 10;
         for (const n of [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W]) {
-          if (n < 0 || n >= N || lakeId[n] || dist[n] === 255 || (portBreaks && portBreaks.mask[n]) || (lidar.mask[n] & 17) !== 17 || lidar.h[n] === -32768) continue;
+          if (n < 0 || n >= N || lakeId[n] || islandOf[n] || dist[n] === 255 || (portBreaks && portBreaks.mask[n]) || (lidar.mask[n] & 17) !== 17 || lidar.h[n] === -32768) continue;
           const g = lidar.h[n] / 10, flat = (lidar.mask[n] & 2) !== 0;
           if (!((r <= EDGE_REACH && g <= L - EDGE_LOW && g >= L - EDGE_DEEP) || (flat && Math.abs(g - L) <= EDGE_FLAT))) continue; // (not the foot of a falls: a bed metres under the water above it)
           // (not where it would meet other water a step of over EDGE_STEP m from this: a beaver dam, a ledge)
@@ -933,6 +949,10 @@ async function main() {
   const tileMeta = new Array(ntx * nty);
   const LIFT = 5; // cells: land this close to water is lifted above the neighbouring water level
   const LIFT_MAX = 8; // m: the most that lift raises any land cell (holes pass)
+  const ISLAND_RISE = 4; // m: the most an island the LiDAR flattened rises over its water, however far from the shore
+  const ISLAND_FOOT = 0.8; // m: its shore cells over the water (a granite hump, not a wet pad: 0.3 m for other land)
+  // an island cell where the US LiDAR is hydro-flat (mask bits 1, 2, 16): its ground is the lake's level, so it is shaped
+  const flatIsland = (k) => islandOf[k] !== 0 && !!lidar && (lidar.mask[k] & 19) === 19;
   const lvlRow = new Float32Array(W);
   {
     const outRows = BAND + 2 * LIFT;
@@ -967,14 +987,16 @@ async function main() {
         const o = j * W, ow = (j - w0) * W;
         for (let i = 0; i < W; i++) {
           const k = o + i;
-          if (lakeId[k] || sdist[k] > 400) continue;
-          let m = -Infinity;
+          const isl = flatIsland(k);
+          if (lakeId[k] || (sdist[k] > 400 && !isl)) continue;
+          let m = isl ? lakeLevel[islandOf[k]] : -Infinity;
           for (let dj = -LIFT; dj <= LIFT; dj++) { const jj = j + dj; if (jj >= w0 && jj < w1) { const v = rowMax[(jj - w0) * W + i]; if (v > m) m = v; } }
           if (m > -Infinity) {
             // (holes pass: by LIFT_MAX at most: a level that stands far over the ground, wrong in the data, made walls of
             // land tens of metres high round it, a canyon with the real river at its foot)
             const dToWater = sdist[k] / 10 / cell + 0.5, h0 = out[ow + i];
-            out[ow + i] = Math.max(h0, Math.min(h0 + LIFT_MAX, m + 0.3 + Math.max(0, dToWater - 1) * 1.1));
+            const rise = Math.max(0, dToWater - 1) * 1.1;
+            out[ow + i] = Math.max(h0, Math.min(h0 + LIFT_MAX, isl ? m + ISLAND_FOOT + Math.min(ISLAND_RISE, rise) : m + 0.3 + rise));
           }
         }
       }
@@ -1269,6 +1291,7 @@ async function main() {
     // d2 bake: the Uint8 planes after the four (v4-products.mjs): plane `at` starts at byte at x side^2 of a fine tile
     channels: V4 ? V4_CHANNELS.map((c, q) => ({ ...c, at: 8 + q })) : undefined,
     source: { elevation: 'AWS Terrarium tiles (Mapzen/USGS 3DEP, SRTM) z' + CFG.zoom, map: '© OpenStreetMap contributors, ODbL (Geofabrik extracts: ' + (osm.source || CFG.extracts).join(', ') + ')', bathymetry: 'Minnesota DNR Lake Bathymetric Contours (MN Geospatial Commons)', clarity: 'Minnesota DNR Lakes of Phosphorus Sensitivity / Watershed Health lake scores (mean Secchi depth)', baked: new Date().toISOString(),
+      ...(nhdReport ? { lakes: { outlines: 'USGS NHDPlus High Resolution (NHDWaterbody, public domain) where it and OpenStreetMap are the same water, else OpenStreetMap', swapped: nhdReport.swapped, added: nhdReport.added, kept: nhdReport.kept } } : {}),
       ...(P ? { d1: P.citations } : {}) },
     bbox, area: opt.area,
     proj: { lat0: proj.lat0, lon0: proj.lon0, mPerDegLat: proj.mPerDegLat, mPerDegLon: proj.mPerDegLon },
@@ -1287,6 +1310,18 @@ async function main() {
   if (P) index.creeks = 'creeks.json'; // wetlands: brooks and beaver dams (creeks.mjs)
   if (namesAdded) index.namesReport = namesAdded.report;
   await fsp.writeFile(path.join(opt.out, 'index.json'), JSON.stringify(index));
+  // islands.json (not uploaded: data-sync sends only the game's files): per tile, the cells of island the LiDAR flattened
+  // and pass 2 raised, as j * tile + i; detail-bake.mjs draws the 10 m ground there instead of the flat LiDAR
+  {
+    const byTile = {}; let n = 0;
+    for (let k = 0; k < N; k++) {
+      if (!flatIsland(k)) continue;
+      const i = k % W, j = (k - i) / W, key = `${Math.floor(i / T)}_${Math.floor(j / T)}`;
+      (byTile[key] ||= []).push((j % T) * T + (i % T)); n++;
+    }
+    await fsp.writeFile(path.join(opt.out, 'islands.json'), JSON.stringify({ baked: index.source.baked, tile: T, cells: byTile }));
+    log(`islands: ${n} cells of island the LiDAR flattened raised out of the water (islands.json for the 2 m detail)`);
+  }
   // the old single-area files are superseded
   for (const f of ['world.json', 'height.bin', 'lake.bin', 'sdist.bin']) await fsp.rm(path.join(opt.out, f), { force: true });
   log(`done in ${((Date.now() - t0) / 60000).toFixed(1)} min: ${ntx * nty} tiles, ${waterways.length} waterways, ${portages.length} portages, ${campsites.length} campsites, ${entryPoints.length} entry points; start at`, start.x, start.z, 'on', basinName(start.lake));

@@ -156,13 +156,26 @@ let portSame = 0, portNear = 0;
       if (used.has(j)) return;
       const end = Math.min(d(p.launch[0], q.launch[0]), d(p.launch[0], q.launch[1]), d(p.launch[1], q.launch[0]), d(p.launch[1], q.launch[1]));
       if (end > 30) return;
-      const line = meanTo(p.pts, q.pts);
+      // (carried on: the old line all on the new; v9, cut short at water on the way, NHDPlus HR's: the new line all on the old)
+      const line = Math.min(meanTo(p.pts, q.pts), meanTo(q.pts, p.pts));
       if (line < 10 && (!best || end + line < best.e)) best = { j, e: end + line };
     });
     if (best) { portMap[i] = best.j; used.add(best.j); portLonger++; console.log(`  portage ${i} ${p.name}: carried on → ${best.j} ${P4[best.j].name} (${P4[best.j].rods} rods, was ${p.rods})`); }
   });
+  // v9: the trail of the same name and about the same length that keeps one end (NHDPlus HR's shore moved the other:
+  // Turnip Lake – Cucumber Lake, 301 rods then 299)
+  P3.forEach((p, i) => {
+    if (portMap[i] >= 0 || !p.name) return;
+    let best = null;
+    P4.forEach((q, j) => {
+      if (used.has(j) || q.name !== p.name || Math.abs(q.rods / p.rods - 1) > 0.2) return;
+      const end = Math.min(d(p.launch[0], q.launch[0]), d(p.launch[0], q.launch[1]), d(p.launch[1], q.launch[0]), d(p.launch[1], q.launch[1]));
+      if (end < 30 && (!best || end < best.e)) best = { j, e: end };
+    });
+    if (best) { portMap[i] = best.j; used.add(best.j); portLonger++; console.log(`  portage ${i} ${p.name}: by its name → ${best.j} (${P4[best.j].rods} rods, was ${p.rods})`); }
+  });
   portNear += portLonger;
-  console.log(`portages: ${P3.length} in the old world, ${portSame} the same line, ${portNear - portLonger} near, ${portLonger} carried on to other water, ${P3.length - portSame - portNear} gone`);
+  console.log(`portages: ${P3.length} in the old world, ${portSame} the same line, ${portNear - portLonger} near, ${portLonger} carried on to other water, cut short or by name, ${P3.length - portSame - portNear} gone`);
 }
 
 // --- campsites ------------------------------------------------------------------------------------------------------

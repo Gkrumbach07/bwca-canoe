@@ -905,3 +905,65 @@ land samples, which the new water only covers, so they need no re-bake):
   edge stopped at a step; the 108 k cells of low LiDAR ground are mostly beside steep creeks whose level the bake fits
   metres over the real water (Pine Lake's outlet, the Devil Track), a level problem, not an edge one; untagged streams
   (11,822 lines; 1,070 km blocked in v4, 973 km in v5) are left as they were.
+
+## NHDPlus HR lake outlines and the islands (2026-11-03)
+
+The owner, on Cummings Lake: the map was "missing a lot of the smaller islands … OpenStreetMap seems to have all the
+data", then "NHD+ seems better … and pull in NHD+ HR".
+
+**Why the islands went.** OpenStreetMap had them all (Cummings is one relation, a 2010 import of the old NHD, with 15
+islands; NHDPlus HR has the same 15). The water edges step (above) drowned them: MnTOPO's hydro-flattening paints
+islands under about an acre as flat water at the lake's level, and the step grew each lake over any flat cell at its
+level, up to 400 m. v6 kept all 15 on Cummings, v8 kept 6; over the whole box v8 lost 2,392 of the 6,331 islands v6
+had (306 ha, all but 63 under an acre: Lake Vermilion 124, Basswood 84, Burntside 83, Saganaga 82, Lac La Croix 79).
+
+**The source.** `scripts/sources/nhd-hr.mjs` fetches NHDPlus HR's `NHDWaterbody` (USGS, `hydro.nationalmap.gov`
+`NHDPlus_HR/MapServer/9`, public domain) for the box: 9,253 lakes and ponds, islands as holes, into
+`data-cache/nhd-hr/waterbodies.json` (47 MB). It covers the border lakes on both sides (Lac La Croix, Basswood,
+Saganaga, Crooked), but not Quetico's inland lakes.
+
+**What the bake does** (`scripts/nhd-lakes.mjs`, called from `bake.mjs` where the lakes are loaded):
+- **The same water.** On the 10 m grid, the NHD polygons with 85 % or more of their cells under one OpenStreetMap lake
+  are its pieces (one, or several where NHDPlus HR splits a lake: Carp Lake and its US bay). When together they
+  cover 92 % or more of the lake's cells, the lake takes their outline. Otherwise it keeps OpenStreetMap's: a lake NHD
+  cuts at the border, a river polygon, a lake NHD spreads over several of OpenStreetMap's. A swapped lake keeps its
+  place in the list, so its id, its OpenStreetMap id and its name. In v9: 5,336 lakes swapped (5,407 NHD polygons),
+  509 short of the cover, 742 NHD polygons spread over several.
+- **Islands from both.** An OpenStreetMap island whose cells NHDPlus HR has as water (60 % or more) is added to the
+  swapped lake as a hole (689 in v9; Poplar Lake keeps all 21 where NHD has 17). One NHDPlus HR already has as land
+  is not, since two holes would cancel to water.
+- **Lakes OpenStreetMap lacks.** An NHD polygon with under 10 % of its cells on any OpenStreetMap water, not
+  intermittent (fcode 39001), 10 cells or more, is added after every other polygon (`osm: "nhd/<id>"`), so no id
+  before it moves: 1,129 in v9 (Tomato Lake on the Carrot Lake trail, the 7 ha pond between Lac La Croix and Iron Lake
+  that OpenStreetMap drew as 0.5 ha).
+- **Portage ends.** OpenStreetMap's trails are drawn to OpenStreetMap's shore, often ending on the lake's own node.
+  Where NHDPlus HR's shore stops short of a cove's head (Trout Lake – Lake Vermilion: 30 m), the bake carried the
+  trail 340 m on to other water. So on a swapped lake, OpenStreetMap's water within 60 m of every portage end is
+  kept (`restoreAtEnds`: 5,640 cells on 554 lakes). Against v8, 1,279 of the 1,295 trails are within 10 % of their
+  length and 40 m of their ends.
+- **Islands kept.** The land in a water polygon's holes (`islandCells`: even ring depth of 2 or more, nothing drawn
+  over it; 1.6 M cells in 1,100 polygons) is never taken by the water edges step. Where the US LiDAR is flat water
+  on one (mask bits 1, 2 and 16: 72,770 cells), pass 2 raises it out of the water: 0.8 m at the shore, rising 1.1 m
+  every 10 m inland to 4 m at most (the shore lift's slope; other land starts at 0.3 m). The bake writes those cells
+  to `islands.json` beside the tiles (not uploaded), and `detail-bake.mjs` draws the 10 m ground there instead of the
+  flat LiDAR. The detail bake refuses an `islands.json` from another bake.
+- **Landings.** `placeLandings` (`world-links.mjs`) takes a lake or river polygon of the entry point's name within
+  100 m before a creek line of that name. The creek into Poplar Lake is named for it too, and with Poplar's finer
+  shore its channel had become the nearer water.
+
+**v9** (`public-data-v9`, baked 2026-11-03T15:08:22.659Z from v8's OpenStreetMap extract, see
+[migration.md](migration.md#v9-nhdplus-hr-outlines-islands-kept-2026-11-03)):
+- **Islands:** of v6's 6,331 islands, v9 loses 28 (all under 2,000 m², 1.9 ha in all; v8 lost 2,392). 649 come out
+  over 25 % smaller than OpenStreetMap draws them, now in NHDPlus HR's shape. Cummings keeps all 15.
+- **`v4-check`** against v8: no named lake lost, levels unchanged, all 55 entry points on their lakes. Hanson Lake
+  shrank (241 → 147 cells): an NHD pond OpenStreetMap lacks sits where the LiDAR used to widen it.
+- **Campsites:** all 2,250 placed; 11 moved under 100 m.
+- **The 2 m detail is cut again** for v9 (`public-data-v9/detail`, 20,458 chunks at 2 m, 68 min): it reads the
+  tiles' shore, which moved, and the islands.
+- **Campsite ways up** (`camp-access.mjs`, then `camp-ramps.mjs`, on v9): 2,215 landings walkable, 5 steep, 30 none
+  (v8: 2,212, 5, 33).
+
+**Left:**
+- Quetico's inland lakes stay OpenStreetMap's (NHDPlus HR stops at the border).
+- An NHD lake that only partly overlaps an OpenStreetMap lake (Hanson Lake) is neither swapped nor added.
+- A trail end on a lake that kept OpenStreetMap's outline next to an NHD pond can still move to the pond.
