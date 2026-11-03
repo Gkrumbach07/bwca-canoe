@@ -313,7 +313,8 @@ async function bakeTile(G, opt, tx, ty, stats) {
     const q = l * WN + k, x = X0 + k * 2, z = Z0 + l * 2;
     let v = a[q];
     if (S.sd(x, z) < 0) { const lv = S.level(x, z); if (lv === lv) { H[q] = lv; water++; continue; } }
-    if (!(v === v) || !(M(grid.ci(x), grid.cj(z)) & 16)) { v = S.height(x, z); filled++; }
+    const ci = grid.ci(x), cj = grid.cj(z);
+    if (!(v === v) || !(M(ci, cj) & 16) || G.islands.has(cj * grid.width + ci)) { v = S.height(x, z); filled++; }
     H[q] = v;
   }
   // the check: the 2 m LiDAR lattice averaged back onto each 10 m cell ([.5 1 1 1 .5] / 4 a side round its centre)
@@ -611,12 +612,27 @@ async function shots(opt, G, dir) {
 
 // ---------- main ---------------------------------------------------------------------------------------------------
 
+// islands.json (bake.mjs): the island cells the LiDAR flattened to the lake's level, which the bake raised out of the
+// water; their samples take the v4 tile's ground, as off the LiDAR. A Set of global cell indices (j * width + i).
+function loadIslands(dir, idx, grid) {
+  const f = path.join(dir, 'islands.json'), set = new Set();
+  if (!fs.existsSync(f)) { log('islands: no islands.json beside the tiles (an older bake): the LiDAR everywhere on land'); return set; }
+  const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+  if (j.baked !== idx.source.baked) throw new Error(`${f} is from bake ${j.baked}, the tiles from ${idx.source.baked}`);
+  for (const [key, list] of Object.entries(j.cells)) {
+    const [tx, ty] = key.split('_').map(Number);
+    for (const c of list) set.add((ty * j.tile + Math.floor(c / j.tile)) * grid.width + tx * j.tile + (c % j.tile));
+  }
+  log(`islands: ${set.size} flattened island cells drawn from the 10 m ground`);
+  return set;
+}
+
 async function main() {
   const opt = parseArgs(process.argv.slice(2));
   const idx = JSON.parse(fs.readFileSync(path.join(opt.data, 'index.json'), 'utf8'));
   const bbox = AREAS.bwca, proj = makeProjection(bbox), grid = makeGrid(bbox, proj);
   if (idx.grid.originX !== grid.originX || idx.grid.cell !== grid.cell || idx.grid.tile !== CFG.tile) throw new Error(`${opt.data} is not the bwca grid`);
-  const G = { grid, proj, idx };
+  const G = { grid, proj, idx, islands: loadIslands(opt.data, idx, grid) };
   if (opt.check) return checkStitch(opt);
   if (opt.shots) return shots(opt, G, opt.shots);
   G.vrt = buildVrt();

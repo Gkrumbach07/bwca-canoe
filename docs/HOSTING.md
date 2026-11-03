@@ -16,7 +16,7 @@ app). Everything below is about filling that in.
 
 ## What is live from v4: the app on Pages, the data on R2
 
-**From 2026-10-31 the site reads `bwca/v5/`**: the wetlands release (v4's format plus the `wet` and `wcls` planes and
+**From 2026-11-03 the site reads `bwca/v9/`** (NHDPlus HR outlines, islands kept; `bwca/v8/` kept for rollback). **From 2026-10-31 it read `bwca/v5/`**: the wetlands release (v4's format plus the `wet` and `wcls` planes and
 `creeks.json`; `detail/` copied from v4 inside R2: `rclone copy r2:bwca-data/bwca/v4/detail r2:bwca-data/bwca/v5/detail`).
 `data:sync` doesn't carry `creeks.json`: `rclone copyto public-data-v5/creeks.json r2:bwca-data/bwca/v5/creeks.json`.
 `bwca/v4/` stays for rollback; `src/rapids.json` and `src/lake-facts-v4.json` belong to v5 from then on.

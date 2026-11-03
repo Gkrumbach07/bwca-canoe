@@ -69,7 +69,8 @@ node scripts/migrate-check.mjs --v3 <dir> --v4 <dir> --v5 <dir> --v6 <dir> --to 
 | v5, water edges | 4 | 2026-10-31T22:27:14.604Z | minutes on 10-31 | 25,076 | v4's numbers plus appended water |
 | v6, wetlands round 2 | 4 | 2026-10-31T23:37:29.148Z | 10-31 evening → | 22,377 | renumbered almost everything; shipped **without** a table |
 | v7-water (wetlands + water edges) | 4 | 2026-11-01T02:01:48.172Z | 11-01 → | 22,907 | v4/v5 numbering for the lakes it kept; ships tables from v3, v4, v5 and v6 |
-| v8 (the season round: portage fix, flowages) | 4 | 2026-11-01T20:10:11.808Z | next | 22,701 | fresh Geofabrik extracts (1 Nov); Lake One 103 → 104; ships tables from v3, v4, v5, v6 and v7-water |
+| v8 (the season round: portage fix, flowages) | 4 | 2026-11-01T20:10:11.808Z | 11-01 → | 22,701 | fresh Geofabrik extracts (1 Nov); Lake One 103 → 104; ships tables from v3, v4, v5, v6 and v7-water |
+| v9 (NHDPlus HR outlines, islands kept) | 4 | 2026-11-03T15:08:22.659Z | next | 23,842 | v8's extract; NHDPlus HR ponds appended after every v8 id; Lake One 104; ships tables from v3, v4, v5, v6, v7-water and v8 |
 
 The tables that ship with v7-water (all go to v7-water):
 
@@ -109,3 +110,33 @@ The lakes not carried are mostly creek channels the portage fix took away (the w
 A trail whose end lay on such a creek was carried on by the bake to the next water; `migrate-table.mjs` matches it
 ("carried on to other water": one end kept, the old line all on the new) and `migrate-check.mjs` accepts it.
 `migrate-check.mjs` now takes `--v7` too, and reads Lake One's new id from the release (104 in v8).
+
+### v9 (NHDPlus HR outlines, islands kept, 2026-11-03)
+
+v9 is baked from v8's own OpenStreetMap extract (kept since in `data-cache/osm-2026-11-01/`; the bake reads it through a
+cache folder whose `osm` links there), with the lake outlines of NHDPlus HR where it and OpenStreetMap are the same
+water and the islands the LiDAR flattened kept ([data-sources.md](data-sources.md#nhdplus-hr-lake-outlines-and-the-islands-2026-11-03)).
+Lake One stays 104; the lakes and ponds NHDPlus HR adds come after every v8 id. The tables (all to v9):
+
+| from | lakes carried | campsites | portages |
+|---|---|---|---|
+| v3 | 18,771 of 21,191 | 2,241 of 2,241 | 1,030 of 1,032 |
+| v4 | 22,126 of 24,525 | 2,249 of 2,249 | 1,293 of 1,295 |
+| v5 | 22,592 of 25,076 | 2,249 of 2,249 | 1,293 of 1,295 |
+| v6 | 22,213 of 22,377 | 2,246 of 2,246 | 1,294 of 1,295 |
+| v7-water | 22,685 of 22,907 | 2,249 of 2,249 | 1,294 of 1,295 |
+| v8 | 22,687 of 22,701 | 2,250 of 2,250 | 1,294 of 1,295 |
+
+- **Trails cut short.** Where NHDPlus HR has a lake on a trail that OpenStreetMap lacks, the bake now ends the trail
+  there: "an unnamed lake – Iron Lake" starts on the 7 ha pond between Lac La Croix and Iron Lake (OpenStreetMap drew
+  it 0.5 ha), "Bean Lake – Carrot Lake" on Tomato Lake. `migrate-table.mjs` matches such a trail like one carried on
+  (one end kept, and the new line all on the old); `migrate-check.mjs` accepts it, and a trail of the same name with one
+  end kept (Bower Trout Lake Portage, whose other end moved 211 m).
+- **By name.** A trail of the same name, its length within 20 %, one end kept (Turnip Lake – Cucumber Lake, 301
+  rods then 299; the older releases call it Cucumber Lake – Cucumber Lake, so theirs is not carried).
+- **Not carried:** Bean Lake – Carrot Lake, now Tomato Lake – Carrot Lake (from every release), and from v3–v5 the
+  Cucumber trail above.
+- **Lakes absorbed.** A lake mapped by its cells into a lake 50 times its size or more is accepted by the check: slivers
+  of river channel (Basswood River, South Kawishiwi River) now under the lake beside them, and the unnamed pond
+  `way/49614800`, which NHDPlus HR draws as part of Gabimichigami Lake.
+- `migrate-check.mjs` takes `--v8` too.

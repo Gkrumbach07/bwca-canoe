@@ -41,13 +41,14 @@ const same = (a, b) => !!a && !!b && a.version === b.version && a.baked === b.ba
 // every live release a season may come from, each with its table to the release this code ships with (the newest;
 // docs/migration.md). `also`: other bakes of that release with the same numbers; `suspect`: a season stamped with it
 // may hold older numbers (v6 shipped with no table and stamped them all the same)
-const V8 = { version: 4, baked: '2026-11-01T20:10:11.808Z' }; // (the season round: v8, the portage fix and the flowages)
+const V9 = { version: 4, baked: '2026-11-03T15:08:22.659Z' }; // (v9: NHDPlus HR lake outlines, the islands kept)
 export const TABLES = [
-  { name: 'v3', from: { version: 3, baked: '2026-10-22T02:16:45.493Z' }, to: V8, load: () => import('./migrate/2026-10-22T02-16-45-493Z.json') },
-  { name: 'v4', from: { version: 4, baked: '2026-10-27T21:15:39.033Z' }, also: ['2026-10-27T13:09:41.460Z'], to: V8, load: () => import('./migrate/2026-10-27T21-15-39-033Z.json') },
-  { name: 'v5', from: { version: 4, baked: '2026-10-31T22:27:14.604Z' }, to: V8, load: () => import('./migrate/2026-10-31T22-27-14-604Z.json') },
-  { name: 'v6', from: { version: 4, baked: '2026-10-31T23:37:29.148Z' }, to: V8, suspect: true, load: () => import('./migrate/2026-10-31T23-37-29-148Z.json') },
-  { name: 'v7', from: { version: 4, baked: '2026-11-01T02:01:48.172Z' }, to: V8, load: () => import('./migrate/2026-11-01T02-01-48-172Z.json') },
+  { name: 'v3', from: { version: 3, baked: '2026-10-22T02:16:45.493Z' }, to: V9, load: () => import('./migrate/2026-10-22T02-16-45-493Z.json') },
+  { name: 'v4', from: { version: 4, baked: '2026-10-27T21:15:39.033Z' }, also: ['2026-10-27T13:09:41.460Z'], to: V9, load: () => import('./migrate/2026-10-27T21-15-39-033Z.json') },
+  { name: 'v5', from: { version: 4, baked: '2026-10-31T22:27:14.604Z' }, to: V9, load: () => import('./migrate/2026-10-31T22-27-14-604Z.json') },
+  { name: 'v6', from: { version: 4, baked: '2026-10-31T23:37:29.148Z' }, to: V9, suspect: true, load: () => import('./migrate/2026-10-31T23-37-29-148Z.json') },
+  { name: 'v7', from: { version: 4, baked: '2026-11-01T02:01:48.172Z' }, to: V9, load: () => import('./migrate/2026-11-01T02-01-48-172Z.json') },
+  { name: 'v8', from: { version: 4, baked: '2026-11-01T20:10:11.808Z' }, to: V9, load: () => import('./migrate/2026-11-01T20-10-11-808Z.json') },
 ];
 const fromOf = (e, s) => !!s && (same(e.from, s) || (s.version === e.from.version && (e.also || []).includes(s.baked)));
 

@@ -85,6 +85,7 @@ export function makeWater({ grid, lakeAt, sdAt, name, basin, big = null, margin 
 
 // ---- landings ----------------------------------------------------------------------------------------------------------
 // clear: { portages: [{ pts }], campsites: [{ x, z }] } the landing keeps its dock, yard and store off
+const NAMED_BIG = 100; // m
 export function placeLandings(list, water, proj, clear = {}) {
   const near = clearance(clear);
   const out = [];
@@ -97,7 +98,12 @@ export function placeLandings(list, water, proj, clear = {}) {
     // store stands along the shore from the trail's end, not on it
     const room = (cx, cz) => water.inside(cx, cz, LANDING_ROOM) && out.every((o) => o.missing || Math.hypot(o.x - cx, o.z - cz) >= LANDING_APART) && near(cx, cz);
     const named = (id, cx, cz) => names.has((water.name(id) || '').toLowerCase()) && room(cx, cz);
-    let at = water.nearestWater(x, z, 2500, named), how = 'named';
+    // (a lake or river polygon of that name within NAMED_BIG m before a creek's line that carries it: the creek into
+    // Poplar Lake, 4 m over it, is named for it too, and a finer shore made its channel the nearer; a river mapped as a
+    // line keeps its own put-in)
+    const big = (id) => (water.big ? water.big(id) : true);
+    let at = water.nearestWater(x, z, NAMED_BIG, (id, cx, cz) => big(id) && named(id, cx, cz)), how = 'named';
+    if (!at) at = water.nearestWater(x, z, 2500, named);
     if (!at) { at = water.nearestWater(x, z, 2500, (id, cx, cz) => room(cx, cz)); how = 'nearest'; }
     if (!at) { out.push({ ep: e.ep, name: e.name, missing: true }); continue; }
     const launch = water.findLaunch(at.x, at.z, 12, (id, cx, cz) => id === at.lake && room(cx, cz)) || { x: at.x, z: at.z, lake: at.lake };
