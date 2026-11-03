@@ -1213,7 +1213,18 @@ export class WaterSystem {
     };
     for (const e of tm.tiles.values()) if (e.group) tag(e.group);
     for (const g of tm.farChunks.values()) tag(g);
-    if (++this._sweep % 240 === 0) this._mirrored = mirrored.filter((m) => m.parent); // tiles that have gone
+  }
+
+  // Drops the listed meshes whose tile has gone. An evicted tile's group leaves the scene whole (tiles.js disposeGroup),
+  // so its meshes keep their parent: a mesh is kept only while its group is still a loaded tile's or a far chunk's.
+  // Without this the list held every tree mesh of every tile ever passed, and through their parents the whole of each
+  // tile (~40 MB of heap and far more in buffers per outfitter visited).
+  dropGoneTiles() {
+    const tm = this.world.tiles;
+    if (!tm || !this._mirrored.length) return;
+    const live = new Set(tm.farChunks.values());
+    for (const e of tm.tiles.values()) if (e.group) live.add(e.group);
+    this._mirrored = this._mirrored.filter((m) => live.has(m.parent));
   }
 
   // The mirror pass, at a quarter of the drawing buffer each way: the canoe and the rod (REFLECT_LAYER) and, on the
@@ -1225,6 +1236,8 @@ export class WaterSystem {
   // sky alone.
   renderReflection(renderer, scene, camera, level) {
     const u = this.uniforms, R = this.reflection;
+    // before any way out below, so tiles passed with the reflections off or inland are let go too
+    if (++this._sweep % 240 === 0) this.dropGoneTiles();
     if (!this.reflectionsOn) { u.uReflOn.value = 0; return; }
     renderer.getDrawingBufferSize(_size);
     const w = Math.max(16, Math.round(_size.x * REFLECTION.scale)), h = Math.max(16, Math.round(_size.y * REFLECTION.scale));
