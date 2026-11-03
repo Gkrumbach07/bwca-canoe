@@ -256,12 +256,42 @@ function rampOf(F) {
   return simplifyRamp(S, p, w, keepIdx).map((i) => [S[i].x, S[i].z, p[i], w[i]]);
 }
 // the drawn ground's steepest 1.5 m along pts with only this ramp in (the unramped ground's caches kept aside)
-function drawnWith(pts, R) {
+function withRamp(R, fn) {
+  const saved = [cache, blocks], segs = [];
+  for (let j = 1; j < (R ? R.length : 0); j++) segs.push(...R[j - 1], ...R[j]);
+  ramps.setRamps(new Float32Array(segs)); cache = new Map(); blocks = new Map();
+  try { return fn(); } finally { ramps.setRamps(null); [cache, blocks] = saved; }
+}
+// the rock steps along samples S with heights p: stretches whose grade over a metre stays past STEP.grade (from 0.5 m in),
+// a tread every STEP.rise of their rise; { steps: [[x, z, yaw]], stepS: [[s0, s1]] }
+function stepsOn(S, p, { tall = STEP.tall, most: mostOk = STEP.most } = {}) {
+  const n = S.length, steep = new Uint8Array(n), steps = [], stepS = [];
+  for (let i = 1, j = 0; i < n; i++) { while (j < i && S[i].s - S[j + 1].s >= 1) j++; const d = S[i].s - S[j].s; if (d > 0.6 && Math.abs(p[i] - p[j]) / d > STEP.grade) for (let k = j; k <= i; k++) steep[k] = 1; }
+  for (let i = 0; i < n; ) {
+    if (!steep[i]) { i++; continue; }
+    let j = i; while (j + 1 < n && steep[j + 1]) j++;
+    // (a few steps up a short pitch; a face steeper than STEP.most or taller than STEP.tall is a cliff, not a stair)
+    let most = 0;
+    for (let k = i + 2; k <= j; k++) most = Math.max(most, Math.abs(p[k] - p[k - 2]) / ((S[k].s - S[k - 2].s) || 1));
+    if (Math.abs(p[j] - p[i]) >= STEP.minRise && Math.abs(p[j] - p[i]) <= tall && most <= mostOk && S[j].s > 0.5) {
+      stepS.push([S[i].s, S[j].s]);
+      let last = p[i];
+      for (let k = i + 1; k <= j; k++) if (Math.abs(p[k] - last) >= STEP.rise) {
+        last = p[k];
+        const a = S[Math.max(0, k - 1)], b = S[Math.min(n - 1, k + 1)];
+        steps.push([S[k].x, S[k].z, Math.atan2(b.z - a.z, b.x - a.x)]);
+      }
+    }
+    i = j + 1;
+  }
+  return { steps, stepS };
+}
+function drawnWith(pts, R, skip = null) {
   const saved = [cache, blocks];
   const segs = [];
-  for (let j = 1; j < R.length; j++) segs.push(...R[j - 1], ...R[j]);
+  for (let j = 1; j < (R ? R.length : 0); j++) segs.push(...R[j - 1], ...R[j]);
   ramps.setRamps(new Float32Array(segs)); cache = new Map(); blocks = new Map();
-  const gr = wayGrade(pts);
+  const gr = skip ? wayGradeOff(pts, skip) : wayGrade(pts);
   ramps.setRamps(null); [cache, blocks] = saved;
   return gr;
 }
@@ -333,32 +363,220 @@ const before = new Map();
 const t0 = Date.now();
 if (sweepOut) for (const k of keys) { const [rx, rz] = k.split(':').map(Number); before.set(k, wayGrade([...unpack(rx, rz, T.sites[k].l0 || T.sites[k].l)].reverse())); }
 if (sweepOut) console.log('before sweep', ((Date.now() - t0) / 1000).toFixed(0), 's');
-const stats = { sites: keys.length, ramps: 0, straight: 0, switchbacks: 0, relaxed: [], cut: [], noLidar: 0 };
+// ---- Round ramps 2 (2026-11-02, the owner on round 1: "so i dont like how it cuts the terrain like this. these sites have
+// some way to get to them, many times the entrance to the site is further down, i wonder if there is another way to make the
+// paths up without cutting the terrain too much"). The natural way up, not a carved one:
+//   - the landing is looked for along the shore up to NAT.reach metres of walk from the ring, on the drawn ground: a low
+//     bank (a cove, a shelving rock, a beach) where the ground at the waterline stands near the water and the first metres
+//     are gentle, the canoe floating 4 m out; a longer walk is fine
+//   - the way up is the least-cost walk on the drawn ground from there to the ring: slope costs little up to NAT.flat (18°),
+//     dearly past it, and is barred past NAT.max (49°), so the walk runs along the contours, round the outcrops and slants
+//     up the slope, winding as a real campsite trail does (a switchback only where the land itself gives the room)
+//   - the ground is only touched lightly: no more than CAP m of cut or fill along the way (CAP_LAND at the waterline, where
+//     the 2 m mesh's face is smoothed into a step-out), and where a short stretch stays steep, rock steps (flat slabs seated
+//     on it, props.js campSteps: the `k` treads) instead of a cut
+//   - a site whose way up is already gentle keeps it; a site with no gentle approach in reach keeps round 1's smallest ramp
+//     (the fallback, listed)
+const NAT = { reach: 170, cell: 1.5, flat: Math.tan((18 * Math.PI) / 180), max: 1.15, sdMin: 1.0, sdLand: 3.5 };
+const CAP = 0.4, CAP_LAND = 0.8, STEP = { grade: Math.tan((27 * Math.PI) / 180), rise: 0.26, minRise: 0.35, tall: 1.8, most: Math.tan((46 * Math.PI) / 180) };
+const capAt = (s) => CAP_LAND + (CAP - CAP_LAND) * Math.min(1, Math.max(0, (s - 1.5) / 2.5)); // (eased, never a step where it changes)
+const edgeCost = (L, gr) => { const o = Math.max(0, gr - NAT.flat); return L * (1 + 1.2 * gr + 25 * o + 40 * o * o); };
+
+// a landing at lattice point (x, z) on the bank: the canoe floats 4 m out, and the bank from the waterline up to here, as
+// drawn; returns { pen, W (the waterline point), lv, bank, step } or null
+function landingOf(x, z) {
+  const sd = world.shoreAt(x, z), d = world.deeperDir(x, z);
+  const W = [x + d.x * sd, z + d.z * sd], ox = W[0] + d.x * 4, oz = W[1] + d.z * 4;
+  if (world.shoreAt(ox, oz) > -2) return null;
+  const lv = world.levelAt(ox, oz, 3);
+  if (!(lv === lv) || !(lv - H10(ox, oz) >= 0.3)) return null;
+  const S = samples([W, [x, z]], 0.25), h = S.map((q) => H(q.x, q.z));
+  const bank = steepestOf(S, h, 1.0).worst, step = H(W[0] - d.x * 0.6, W[1] - d.z * 0.6) - lv;
+  if (bank > 2.5) return null;
+  // (dear: a walk of a couple of hundred metres along the shore is better than a bank to climb out onto)
+  return { pen: 12 * Math.max(0, bank - 0.3) + 220 * Math.max(0, bank - 0.45) + 150 * Math.max(0, step - 0.35), W, lv, bank, step };
+}
+
+// the least-cost walk from (fx, fz) over the drawn ground; target(q, x, z) -> null | { pen, ... } ends it at a cell (the
+// best total of walk and pen), or `goal` [x, z] a fixed end. Returns { pts (from the start), cost, end } or null.
+function walkFrom(fx, fz, { reach = NAT.reach, target = null, goal = null, blocked = null } = {}) {
+  const c = NAT.cell, n = Math.round(reach / c), side = 2 * n + 1, N = side * side;
+  const X = (q) => fx + ((q % side) - n) * c, Z = (q) => fz + (Math.floor(q / side) - n) * c;
+  const h = new Float32Array(N).fill(NaN), sd = new Float32Array(N).fill(NaN);
+  const hOf = (q) => { if (h[q] !== h[q]) { sd[q] = world.shoreAt(X(q), Z(q)); h[q] = sd[q] >= NAT.sdMin - 0.6 ? H(X(q), Z(q)) : -1e4; } return h[q]; };
+  const cost = new Float32Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), done = new Uint8Array(N);
+  const start = n * side + n;
+  cost[start] = 0; hOf(start);
+  const heap = [[0, start]];
+  const push = (e) => { heap.push(e); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+  const NB = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1], [2, 1], [1, 2], [-2, 1], [-1, 2], [2, -1], [1, -2], [-2, -1], [-1, -2]];
+  const gq = goal ? Math.round((goal[1] - fz) / c + n) * side + Math.round((goal[0] - fx) / c + n) : -1;
+  let best = null;
+  while (heap.length) {
+    const [cq, q] = pop();
+    if (done[q]) continue;
+    done[q] = 1;
+    if (best && cq > best.total) break;
+    if (q === gq) { best = { q, total: cq, end: null }; break; }
+    if (target && sd[q] <= NAT.sdLand && q !== start) {
+      const t = target(X(q), Z(q));
+      if (t && cq + t.pen < (best ? best.total : Infinity)) best = { q, total: cq + t.pen, end: t };
+    }
+    const qi = q % side, qj = Math.floor(q / side);
+    for (const [di, dj] of NB) {
+      const i = qi + di, j = qj + dj;
+      if (i < 0 || j < 0 || i >= side || j >= side) continue;
+      const p = j * side + i;
+      if (done[p]) continue;
+      const hp = hOf(p);
+      if (sd[p] < NAT.sdMin && p !== gq) continue;
+      if (blocked && blocked(X(p), Z(p))) continue;
+      const L = Math.hypot(di, dj) * c;
+      let gr = Math.abs(hp - h[q]) / L;
+      if (Math.abs(di) + Math.abs(dj) === 3) { const hm = H((X(p) + X(q)) / 2, (Z(p) + Z(q)) / 2); gr = Math.max(gr, Math.abs(hm - h[q]) / (L / 2), Math.abs(hp - hm) / (L / 2)); }
+      if (gr > NAT.max) continue;
+      const w = cq + edgeCost(L, gr);
+      if (w < cost[p]) { cost[p] = w; prev[p] = q; push([w, p]); }
+    }
+  }
+  if (onlyKey) { let reached = 0, bank = 0, minSd = Infinity; for (let q = 0; q < N; q++) if (done[q]) { reached++; minSd = Math.min(minSd, sd[q]); if (sd[q] <= NAT.sdLand) bank++; } console.log('walkFrom', { reached, bank, minSd, startSd: sd[start] }); }
+  if (!best) return null;
+  const pts = [];
+  for (let p = best.q; p >= 0; p = prev[p]) pts.push([X(p), Z(p)]);
+  return { pts: pts.reverse(), cost: best.total, end: best.end };
+}
+
+// Douglas-Peucker on a walk, never a chord steeper on the drawn ground than the walk it stands for
+function simplifyWalk(pts, tol = 0.6) {
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+  const st = [[0, pts.length - 1]];
+  const gradeOf = (P) => { const S = samples(P, 0.5); return steepestOf(S, S.map((q) => H(q.x, q.z))).worst; };
+  while (st.length) {
+    const [a, b] = st.pop();
+    if (b - a < 2) continue;
+    const [x0, z0] = pts[a], [x1, z1] = pts[b], dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz) || 1;
+    let best = -1, bd = tol;
+    for (let i = a + 1; i < b; i++) { const d = Math.abs((pts[i][0] - x0) * dz - (pts[i][1] - z0) * dx) / L; if (d > bd) { bd = d; best = i; } }
+    if (best < 0 && gradeOf([pts[a], pts[b]]) > gradeOf(pts.slice(a, b + 1)) + 0.06) best = (a + b) >> 1;
+    if (best > 0) { keep[best] = 1; st.push([a, best], [best, b]); }
+  }
+  return pts.filter((p, i) => keep[i]);
+}
+
+// the light shaping along a way P (from the waterline up): round 1's graded profile, held to within CAP of the drawn ground
+// (CAP_LAND over the first 2.5 m, the step-out at the water); the shoulder by the cut; the rock steps where it stays steep.
+// Returns { R (ramp points, or null when it moves nothing), cut, steps [[x, z, yaw]], stepS [[s0, s1]], len }
+function shapeWay(P, lv, { steps = true } = {}) {
+  const h0 = lv + ramps.RAMP.shelf;
+  let F = fit(P, h0);
+  for (let k = 0, scale = 1.1; !F.ok && k < 80; k++, scale *= 1.1) F = fit(P, h0, scale);
+  const S = F.S, g = F.gnd, n = S.length;
+  const p = new Float64Array(n);
+  for (let i = 0; i < n; i++) { const cap = capAt(S[i].s); p[i] = Math.min(g[i] + cap, Math.max(g[i] - cap, F.ok ? F.p[i] : g[i])); }
+  p[n - 1] = g[n - 1];
+  for (let pass = 0; pass < 2; pass++) for (let i = 1; i < n - 1; i++) { const cap = capAt(S[i].s), m = (p[i - 1] + 2 * p[i] + p[i + 1]) / 4; p[i] = Math.min(g[i] + cap, Math.max(g[i] - cap, m)); }
+  let cut = 0;
+  for (let i = 0; i < n; i++) cut = Math.max(cut, Math.abs(p[i] - g[i]));
+  // the rock steps: stretches whose shaped grade over a metre stays past STEP.grade, a tread every STEP.rise of their rise
+  const out = [], stepS = [];
+  if (steps) {
+    const steep = new Uint8Array(n);
+    for (let i = 1, j = 0; i < n; i++) { while (j < i && S[i].s - S[j + 1].s >= 1) j++; const d = S[i].s - S[j].s; if (d > 0.6 && Math.abs(p[i] - p[j]) / d > STEP.grade) for (let k = j; k <= i; k++) steep[k] = 1; }
+    for (let i = 0; i < n; ) {
+      if (!steep[i]) { i++; continue; }
+      let j = i; while (j + 1 < n && steep[j + 1]) j++;
+      const rise = Math.abs(p[j] - p[i]);
+      if (rise >= STEP.minRise && S[i].s > 0.8) {
+        stepS.push([S[i].s, S[j].s]);
+        let last = p[i];
+        for (let k = i + 1; k <= j; k++) if (Math.abs(p[k] - last) >= STEP.rise) {
+          last = p[k];
+          const a = S[Math.max(0, k - 1)], b = S[Math.min(n - 1, k + 1)];
+          out.push([S[k].x, S[k].z, Math.atan2(b.z - a.z, b.x - a.x)]);
+        }
+      }
+      i = j + 1;
+    }
+  }
+  if (cut < 0.08) return { R: null, cut, steps: out, stepS, len: S[n - 1].s };
+  const w = S.map((q) => { let m = 0; for (let j = 0; j < n; j++) if (Math.abs(S[j].s - q.s) <= 2) m = Math.max(m, Math.abs(p[j] - g[j])); return SHOULDER(m); });
+  const keepIdx = S.map((q, i) => (q.v >= 0 ? i : -1)).filter((i) => i >= 0);
+  const R = simplifyRamp(S, p, w, keepIdx).map((i) => [S[i].x, S[i].z, p[i], w[i]]);
+  return { R, cut, steps: out, stepS, len: S[n - 1].s };
+}
+const packRamp = (rx, rz, R) => { const rb = Math.floor(Math.min(...R.map((q) => q[2]))); return { rb, r: R.flatMap(([x, z, h, w]) => [Math.round((x - rx) * 10), Math.round((z - rz) * 10), Math.round((h - rb) * 100), Math.round(w * 10)]) }; };
+const wayLen = (pts) => { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return L; };
+// the drawn steepest along a way, leaving out the stretches its rock steps climb
+function wayGradeOff(pts, skip) {
+  const S = samples(pts), h = S.map((q) => H(q.x, q.z));
+  let worst = 0;
+  for (let i = 1, j = 0; i < S.length; i++) {
+    while (j < i && S[i].s - S[j + 1].s >= 1.5) j++;
+    const d = S[i].s - S[j].s;
+    if (d < 1) continue;
+    if (skip.some(([a, b]) => S[i].s >= a - 0.3 && S[j].s <= b + 0.3)) continue;
+    worst = Math.max(worst, Math.abs(h[i] - h[j]) / d);
+  }
+  return deg(worst);
+}
+
+const stats = { sites: keys.length, kept: 0, natural: 0, fallback: [], cut: [], len: [], steps: 0, stepSites: 0, moved: [] };
+const stepRanges = new Map();
 let i = 0;
 for (const k of keys) {
   const e = T.sites[k];
-  delete e.r; delete e.rb; delete e.sw;
+  delete e.r; delete e.rb; delete e.sw; delete e.k; delete e.nat; delete e.fb;
   if (e.l0) { e.l = e.l0; delete e.l0; }
-  const R = plan(k, e);
-  if (++i % 250 === 0) console.log(`  ${i}/${keys.length} ${((Date.now() - t0) / 1000).toFixed(0)} s`);
-  if (!R) continue;
-  // a way whose ground needs (nearly) nothing: no ramp
-  if (R.cut < 0.12 && !R.l) { stats.straight++; continue; }
-  e.r = R.r; e.rb = R.rb;
-  if (R.l) { e.l0 = e.l; e.l = R.l; }
-  if (R.sw) { e.sw = 1; stats.switchbacks++; }
-  stats.ramps++; stats.cut.push(R.cut);
-  if (!R.lidar) stats.noLidar++;
-  if (R.relaxed) stats.relaxed.push([k, +R.relaxed.toFixed(1)]);
-  if (onlyKey) console.log(JSON.stringify({ key: k, ...R, r: undefined, l: undefined }));
+  if (++i % 100 === 0) console.log(`  ${i}/${keys.length} ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  const [rx, rz] = k.split(':').map(Number);
+  const way = unpack(rx, rz, e.l), ring = way[0], P0 = [...way].reverse();
+  const d0 = world.deeperDir(P0[0][0], P0[0][1]), lv0 = world.levelAt(P0[0][0] + d0.x * 4, P0[0][1] + d0.z * 4, 3);
+  // the candidates, each shaped lightly and judged on the ground as it will be drawn (its rock steps' stretches left out):
+  // the way as it is, and, where that is not already gentle, the natural one from the best low landing in reach
+  const cands = [];
+  const judge = (P, lv, how) => {
+    const R = shapeWay(P, lv, { steps: false });
+    // the rock steps where the ground as drawn with this shaping still climbs past STEP.grade (not the profile: the lattice
+    // draws its own), then the steepest left between them
+    withRamp(R.R, () => { const S = samples(P), h = S.map((q) => H(q.x, q.z)); const st = stepsOn(S, h); R.steps = st.steps; R.stepS = st.stepS; });
+    cands.push({ P, lv, how, R, off: drawnWith(P, R.R, R.stepS) });
+  };
+  cands.push({ P: P0, lv: lv0, how: 'asis', R: { R: null, cut: 0, steps: [], stepS: [], len: 0 }, off: drawnWith(P0, null) });
+  judge(P0, lv0, 'kept');
+  if (cands[0].off > 22) {
+    // (round the camp's bench and its seats, as props.js puts them: 2.6 m from the ring at the site's own bearing)
+    const ba = rngMod.hash2(rx, rz, 5) * 6.28, bx = ring[0] + Math.cos(ba) * 2.6, bz = ring[1] + Math.sin(ba) * 2.6, bax = -Math.sin(ba), baz = Math.cos(ba);
+    const blocked = (x, z) => { const t = Math.max(-0.72, Math.min(0.72, (x - bx) * bax + (z - bz) * baz)); return Math.hypot(x - bx - bax * t, z - bz - baz * t) < 1.6; };
+    const W = walkFrom(ring[0], ring[1], { target: landingOf, blocked });
+    if (onlyKey) console.log('walk', W ? { cost: W.cost, n: W.pts.length, end: W.end && { bank: W.end.bank, step: W.end.step, pen: W.end.pen } } : null);
+    if (W && W.end) judge([W.end.W, ...[...simplifyWalk(W.pts)].reverse()], W.end.lv, 'natural');
+  }
+  // the natural way unless the way as it is draws gentler by more than a couple of degrees
+  const here = cands[1].off < cands[0].off - 0.5 ? cands[1] : cands[0], nat = cands[2], best = nat && nat.off <= Math.max(22, here.off + 2) ? nat : here;
+  if (onlyKey) console.log('cands', cands.map((c) => ({ how: c.how, off: c.off, cut: c.R.cut, len: wayLen(c.P), steps: c.R.steps.length })));
+  // past what the light touch and the steps can make walkable (a stretch past 40° left between the steps): the fallback
+  let { P, R, how } = best.off > 40 ? { P: null, R: null, how: null } : best;
+  if (!P) {
+    const F = plan(k, e);
+    if (F) { e.r = F.r; e.rb = F.rb; if (F.l) { e.l0 = e.l; e.l = F.l; } if (F.sw) e.sw = 1; }
+    e.fb = 1; stats.fallback.push(k); stats.cut.push(F ? F.cut : 0);
+    continue;
+  }
+  if (how === 'natural') { e.l0 = e.l; e.l = pack(rx, rz, [...P].reverse()); e.nat = 1; stats.natural++; stats.moved.push(Math.hypot(P[0][0] - P0[0][0], P[0][1] - P0[0][1])); } else stats.kept++;
+  if (R.R) { const pr = packRamp(rx, rz, R.R); e.r = pr.r; e.rb = pr.rb; }
+  if (R.steps.length) { e.k = R.steps.flatMap(([x, z, a]) => [Math.round((x - rx) * 10), Math.round((z - rz) * 10), Math.round(a * 100)]); stats.steps += R.steps.length; stats.stepSites++; }
+  stepRanges.set(k, R.stepS);
+  stats.cut.push(R.R ? R.cut : 0); stats.len.push(wayLen(P));
+  if (onlyKey) console.log(JSON.stringify({ key: k, how, len: wayLen(P), cut: R.cut, steps: R.steps.length, stepS: R.stepS, pts: P.length }));
 }
 const q = (a, f) => { const s = [...a].sort((x, y) => x - y); return s.length ? +s[Math.min(s.length - 1, Math.floor(f * s.length))].toFixed(2) : null; };
-console.log(JSON.stringify({ sites: stats.sites, ramps: stats.ramps, gentleAlready: stats.straight, switchbacks: stats.switchbacks, on10mOnly: stats.noLidar, cut: { p50: q(stats.cut, 0.5), p90: q(stats.cut, 0.9), max: q(stats.cut, 1) }, steeperThan20: stats.relaxed.length, relaxed: stats.relaxed.sort((a, b) => b[1] - a[1]).slice(0, 20) }, null, 1));
+console.log(JSON.stringify({ sites: stats.sites, keptGentle: stats.kept, naturalWay: stats.natural, fallback: stats.fallback.length, landingMoved: { p50: q(stats.moved, 0.5), p90: q(stats.moved, 0.9), max: q(stats.moved, 1) }, cut: { p50: q(stats.cut, 0.5), p90: q(stats.cut, 0.9), max: q(stats.cut, 1) }, walk: { p10: q(stats.len, 0.1), p50: q(stats.len, 0.5), p90: q(stats.len, 0.9), max: q(stats.len, 1) }, steps: stats.steps, stepSites: stats.stepSites, fallbackSites: stats.fallback }, null, 1));
 
-// The outfitters (--outfitters: the in-game sweep's JSON, each store's dockLand, dockHeading and door, as props.js laid
-// them on the release's ground): the same grade from the water up the dock's line, through its land end, to the store's
-// door, straight (a yard, no switchbacks). The dock's frame comes from the shore's distance field, not the ground, so it
-// stands where it stood; its sill and steps, and the store's search, read the ramped ground as they are built.
+// The outfitters (--outfitters: the in-game sweep's JSON, each store's dockLand and door as props.js laid them; the store
+// is sited on the ground as it stood, props.js withoutRamps, so it stands where it stood): the least-cost walk on the drawn
+// ground from the door to the dock's land end, winding if it has to, shaped as lightly (no steps: the yard is walked graded)
 const outFile = arg('--outfitters', null), outRows = [];
 if (outFile) {
   T.outfitters = {};
@@ -366,21 +584,27 @@ if (outFile) {
     if (!o || o.none || !o.dockLand) continue;
     const Zx = Math.cos(o.dockHeading), Zz = -Math.sin(o.dockHeading);
     let [ax, az] = o.dockLand;
-    for (let i = 0; i < 80 && world.shoreAt(ax, az) > 0; i++) { ax += Zx * 0.25; az += Zz * 0.25; }
-    const pts = [[ax, az], o.dockLand, [o.door[0], o.door[1]]];
-    if (Math.hypot(ax - o.dockLand[0], az - o.dockLand[1]) < 0.3) pts.splice(1, 1);
+    for (let k = 0; k < 80 && world.shoreAt(ax, az) > 0; k++) { ax += Zx * 0.25; az += Zz * 0.25; }
     const lv = world.levelAt(ax + Zx * 4, az + Zz * 4, 3);
     if (!(lv === lv)) continue;
-    let F = fit(pts, lv + ramps.RAMP.shelf), relaxed = null;
-    for (let k = 0, scale = 1.05; !F.ok && k < 60; k++, scale *= 1.05) { F = fit(pts, lv + ramps.RAMP.shelf, scale); relaxed = deg(G * scale); }
-    if (!F.ok) continue;
-    const before = wayGrade(pts);
-    if (F.cut < 0.12) { outRows.push({ ep: o.ep, before: +before.toFixed(1), after: +before.toFixed(1), ramp: false }); continue; }
-    const R = rampOf(F), rb = Math.floor(Math.min(...R.map((p) => p[2])));
-    T.outfitters[o.ep] = { x: Math.round(ax * 10) / 10, z: Math.round(az * 10) / 10, rb, r: R.flatMap(([x, z, h, w]) => [Math.round((x - ax) * 10), Math.round((z - az) * 10), Math.round((h - rb) * 100), Math.round(w * 10)]) };
-    outRows.push({ ep: o.ep, before: +before.toFixed(1), pts, ramp: true, relaxed, cut: +F.cut.toFixed(2) });
+    const straight = [[ax, az], o.dockLand, [o.door[0], o.door[1]]];
+    if (Math.hypot(ax - o.dockLand[0], az - o.dockLand[1]) < 0.3) straight.splice(1, 1);
+    const before = wayGrade(straight);
+    let P = straight;
+    if (before > 22) {
+      const W = walkFrom(o.door[0], o.door[1], { reach: Math.hypot(o.door[0] - o.dockLand[0], o.door[1] - o.dockLand[1]) + 25, goal: o.dockLand });
+      if (W) P = [[ax, az], ...[...simplifyWalk(W.pts)].reverse()];
+    }
+    const R = shapeWay(P, lv, { steps: false });
+    // (rock steps up the bank at the dock's foot where it stays steep: props.js outfitterSteps)
+    const st = withRamp(R.R, () => { const S = samples(P); return stepsOn(S, S.map((q) => H(q.x, q.z)), { tall: 4.5, most: Math.tan((65 * Math.PI) / 180) }); }); // (an outfitter's: a stone stair up a bank as tall as the yard's)
+    outRows.push({ ep: o.ep, before: +before.toFixed(1), pts: P, stepS: st.stepS, steps: st.steps.length, ramp: !!R.R, cut: +R.cut.toFixed(2), len: +wayLen(P).toFixed(1), wound: P !== straight });
+    const ox = Math.round(ax * 10) / 10, oz = Math.round(az * 10) / 10, rec = { x: ox, z: oz };
+    if (R.R) { const pr = packRamp(ox, oz, R.R); rec.rb = pr.rb; rec.r = pr.r; }
+    if (st.steps.length) rec.k = st.steps.flatMap(([x, z, a]) => [Math.round((x - ox) * 10), Math.round((z - oz) * 10), Math.round(a * 100)]);
+    if (rec.r || rec.k) T.outfitters[o.ep] = rec;
   }
-  console.log('outfitters', Object.keys(T.outfitters).length, 'ramps of', outRows.length);
+  console.log('outfitters', Object.keys(T.outfitters).length, 'ramps of', outRows.length, 'wound', outRows.filter((r) => r.wound).length);
 }
 
 if (sweepOut) {
@@ -394,6 +618,7 @@ if (sweepOut) {
     for (let j = 1; j < pts.length; j++) segs.push(...pts[j - 1], ...pts[j]);
   }
   for (const o of Object.values(T.outfitters || {})) {
+    if (!o.r) continue;
     const pts = [];
     for (let j = 0; j + 3 < o.r.length; j += 4) pts.push([o.x + o.r[j] / 10, o.z + o.r[j + 1] / 10, o.rb + o.r[j + 2] / 100, o.r[j + 3] / 10]);
     for (let j = 1; j < pts.length; j++) segs.push(...pts[j - 1], ...pts[j]);
@@ -404,13 +629,13 @@ if (sweepOut) {
   for (const k of keys) {
     const e = T.sites[k], [rx, rz] = k.split(':').map(Number);
     const P = [...unpack(rx, rz, e.l)].reverse();
-    rows.push({ key: k, before: +before.get(k).toFixed(1), after: +wayGrade(P).toFixed(1), sw: !!e.sw, ramp: !!e.r, lidar: lidar(P[0][0], P[0][1]) });
+    rows.push({ key: k, before: +before.get(k).toFixed(1), after: +wayGrade(P).toFixed(1), off: +wayGradeOff(P, stepRanges.get(k) || []).toFixed(1), len: +wayLen(P).toFixed(1), nat: !!e.nat, fb: !!e.fb, steps: e.k ? e.k.length / 3 : 0, ramp: !!e.r, lidar: lidar(P[0][0], P[0][1]) });
     if (onlyKey) console.log(samples(P).map((q) => `${q.s.toFixed(1)}:${world.shoreAt(q.x, q.z).toFixed(1)}:${H(q.x, q.z).toFixed(2)}:${ramps.rampAt(q.x, q.z, -999).toFixed(2)}`).join(' '));
   }
   const count = (f, t) => rows.filter((r) => r[f] > t).length;
-  const sum = { sites: rows.length, before: { over25: count('before', 25), over35: count('before', 35), over45: count('before', 45), p50: q(rows.map((r) => r.before), 0.5), max: q(rows.map((r) => r.before), 1) }, after: { over25: count('after', 25), over35: count('after', 35), over45: count('after', 45), p50: q(rows.map((r) => r.after), 0.5), max: q(rows.map((r) => r.after), 1) } };
-  for (const o of outRows) if (o.pts) { o.after = +wayGrade(o.pts).toFixed(1); delete o.pts; }
-  if (outRows.length) sum.outfitters = { stores: outRows.length, ramps: outRows.filter((o) => o.ramp).length, before: { over25: outRows.filter((o) => o.before > 25).length, over35: outRows.filter((o) => o.before > 35).length, over45: outRows.filter((o) => o.before > 45).length }, after: { over25: outRows.filter((o) => o.after > 25).length, over35: outRows.filter((o) => o.after > 35).length, over45: outRows.filter((o) => o.after > 45).length } };
+  const sum = { sites: rows.length, before: { over25: count('before', 25), over35: count('before', 35), over45: count('before', 45), p50: q(rows.map((r) => r.before), 0.5), max: q(rows.map((r) => r.before), 1) }, after: { over25: count('after', 25), over35: count('after', 35), over45: count('after', 45), p50: q(rows.map((r) => r.after), 0.5), max: q(rows.map((r) => r.after), 1) }, afterOffSteps: { over25: count('off', 25), over35: count('off', 35), over45: count('off', 45) }, walk: { p10: q(rows.map((r) => r.len), 0.1), p50: q(rows.map((r) => r.len), 0.5), p90: q(rows.map((r) => r.len), 0.9), max: q(rows.map((r) => r.len), 1) } };
+  for (const o of outRows) if (o.pts) { o.after = +wayGrade(o.pts).toFixed(1); o.off = +wayGradeOff(o.pts, o.stepS || []).toFixed(1); delete o.pts; delete o.stepS; }
+  if (outRows.length) sum.outfitters = { stores: outRows.length, ramps: outRows.filter((o) => o.ramp).length, wound: outRows.filter((o) => o.wound).length, cut: { p50: q(outRows.map((o) => o.cut), 0.5), p90: q(outRows.map((o) => o.cut), 0.9), max: q(outRows.map((o) => o.cut), 1) }, before: { over25: outRows.filter((o) => o.before > 25).length, over35: outRows.filter((o) => o.before > 35).length, over45: outRows.filter((o) => o.before > 45).length }, after: { over25: outRows.filter((o) => o.after > 25).length, over35: outRows.filter((o) => o.after > 35).length, over45: outRows.filter((o) => o.after > 45).length }, afterOffSteps: { over25: outRows.filter((o) => o.off > 25).length, over35: outRows.filter((o) => o.off > 35).length, over45: outRows.filter((o) => o.off > 45).length }, steps: outRows.reduce((a, o) => a + o.steps, 0) };
   console.log(JSON.stringify(sum, null, 1));
   fs.writeFileSync(path.resolve(sweepOut), JSON.stringify({ summary: sum, rows: rows.sort((a, b) => b.before - a.before), outfitters: outRows.sort((a, b) => b.before - a.before) }));
   console.log('sweep', sweepOut, ((Date.now() - t0) / 1000).toFixed(0), 's');

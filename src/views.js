@@ -32,6 +32,16 @@ export function makeViews(world) {
     const S = VIEW.site, A = c.access;
     let a = [c.x, c.z], b = A && A.landing ? A.landing : shore(c.x, c.z);
     if (A && A.way) a = A.way[0]; // (from the ring)
+    // round ramps 2: a landing well down the shore (the natural way up winds to it): the site's view to its own water as
+    // before, and a narrower one at the landing, along the way's last metres
+    if (A && A.landing && Math.hypot(b[0] - a[0], b[1] - a[1]) > 40) {
+      const P = VIEW.portage, w = A.way, L = w[w.length - 1];
+      let k = w.length - 2, run = 0;
+      while (k > 0 && run + Math.hypot(w[k][0] - w[k + 1][0], w[k][1] - w[k + 1][1]) < 14) { run += Math.hypot(w[k][0] - w[k + 1][0], w[k][1] - w[k + 1][1]); k--; }
+      const [bx, bz] = w[Math.max(0, k)], dx = L[0] - bx, dz = L[1] - bz, l2 = Math.hypot(dx, dz) || 1;
+      out.push(bx, bz, L[0] + (dx / l2) * P.past, L[1] + (dz / l2) * P.past, P.w0, P.w1, P.k, 0, 0);
+      b = shore(a[0], a[1]) || b;
+    }
     if (!b) { out.push(a[0], a[1], a[0], a[1], S.w0, S.w0, 0, S.ring, S.kr); continue; }
     // a landing round a corner of the way: the view runs from the ring to the landing all the same (its line is the
     // way's chord); and past it out over the water

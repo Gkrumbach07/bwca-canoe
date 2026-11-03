@@ -187,6 +187,8 @@ export class World extends GridQueries {
       // round ramps (scripts/camp-ramps.mjs, ramps.js): the way graded into the ground, [[x, z, h, w], ...] from the water
       // up (r: flat [dx, dz] decimetres, h centimetres over rb metres, w decimetres of shoulder); sw: laid as a switchback
       if (e.r && e.r.length >= 8) { A.ramp = []; for (let i = 0; i + 3 < e.r.length; i += 4) A.ramp.push([rx + e.r[i] / 10, rz + e.r[i + 1] / 10, e.rb + e.r[i + 2] / 100, e.r[i + 3] / 10]); A.switchback = !!e.sw; }
+      // round ramps 2: rock steps up a short pitch of the way (k: flat [dx, dz] decimetres, the way's bearing there x 100)
+      if (e.k && e.k.length >= 3) { A.steps = []; for (let i = 0; i + 2 < e.k.length; i += 3) A.steps.push([rx + e.k[i] / 10, rz + e.k[i + 1] / 10, e.k[i + 2] / 100]); }
       if (A.trail) { const [x, z] = A.trail[A.trail.length - 1], [px, pz] = A.trail[A.trail.length - 2]; A.latrine = { x, z, a: Math.atan2(z - pz, x - px) }; }
       let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
       for (const [x, z] of [...(A.way || []), ...(A.trail || [])]) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
@@ -197,9 +199,9 @@ export class World extends GridQueries {
     // round ramps: the outfitters' ways up from the dock to the door graded the same (ep.ramp, as a site's access.ramp)
     for (const ep of this.entryPoints || []) {
       const o = table.outfitters && table.outfitters[ep.ep];
-      if (!o || !o.r || o.r.length < 8) continue;
-      ep.ramp = [];
-      for (let i = 0; i + 3 < o.r.length; i += 4) ep.ramp.push([o.x + o.r[i] / 10, o.z + o.r[i + 1] / 10, o.rb + o.r[i + 2] / 100, o.r[i + 3] / 10]);
+      if (!o) continue;
+      if (o.r && o.r.length >= 8) { ep.ramp = []; for (let i = 0; i + 3 < o.r.length; i += 4) ep.ramp.push([o.x + o.r[i] / 10, o.z + o.r[i + 1] / 10, o.rb + o.r[i + 2] / 100, o.r[i + 3] / 10]); }
+      if (o.k && o.k.length >= 3) { ep.steps = []; for (let i = 0; i + 2 < o.k.length; i += 3) ep.steps.push([o.x + o.k[i] / 10, o.z + o.k[i + 1] / 10, o.k[i + 2] / 100]); } // (round ramps 2: rock steps up the bank)
     }
     return n;
   }
