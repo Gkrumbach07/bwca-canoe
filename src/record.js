@@ -445,7 +445,7 @@ class Record {
   }
   campWords(key, lake) {
     const w = this.world, [x, z] = String(key).split(':').map(Number);
-    const site = w && Number.isFinite(x) ? (w.campsites || []).find((c) => Math.round(c.x) === x && Math.round(c.z) === z) : null;
+    const site = w && Number.isFinite(x) ? (w.campsites || []).find((c) => (c.kx ?? Math.round(c.x)) === x && (c.kz ?? Math.round(c.z)) === z) : null;
     if (site && site.name) return `${site.name} campsite`;
     const id = lake ? this.lakeIdOf(lake) : 0, L = id ? w.lakes[id - 1] : null;
     if (L && L.cells >= 1500 && Number.isFinite(x)) {

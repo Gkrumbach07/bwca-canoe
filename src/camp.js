@@ -52,7 +52,7 @@ import { itemDef, isBag } from './items.js';
 // the profile through camp.profileOf (main.js), trip.profile or __game.profile; the inventory (inventory.js).
 
 export const PLAYER = 'player';
-export const campKey = (c) => `${Math.round(c.x)}:${Math.round(c.z)}`;
+export const campKey = (c) => c.key || `${Math.round(c.x)}:${Math.round(c.z)}`; // (round flat: a site moved to its flat keeps its key, world.js)
 
 const SITE_R = 22;          // metres from a site's fire ring within which its prompts are the site's
 export const AREA_R = 25;   // and the site's area: what is set out within it is in the camp's reach (inventory.campReach)

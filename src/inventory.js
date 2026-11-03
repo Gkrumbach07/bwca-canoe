@@ -1187,7 +1187,7 @@ export class Inventory {
     if (!cp || !p || !ch || typeof cp.nearestSite !== 'function' || p.mode !== 'walk') return null;
     const site = cp.nearestSite(p.x, p.z, r, true);
     if (!site || !site.layout || !site.layout.fire) return null;
-    const key = `${Math.round(site.x)}:${Math.round(site.z)}`; // (camp.js campKey)
+    const key = site.key || `${Math.round(site.x)}:${Math.round(site.z)}`; // (camp.js campKey)
     const h = cp.registry && typeof cp.registry.holder === 'function' ? cp.registry.holder(key) : null;
     if (h && h !== 'player') return null;
     return { site, key, chores: ch, cook: ch.cook };

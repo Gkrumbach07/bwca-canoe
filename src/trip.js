@@ -326,7 +326,7 @@ export class Trip {
     }
     if ((this.seenT -= dt) <= 0) {
       this.seenT = 1;
-      for (const c of w.campsites) if (Math.abs(c.x - p.x) < 40 && Math.abs(c.z - p.z) < 40) this.seen('camps', `${Math.round(c.x)}:${Math.round(c.z)}`);
+      for (const c of w.campsites) if (Math.abs(c.x - p.x) < 40 && Math.abs(c.z - p.z) < 40) this.seen('camps', c.key || `${Math.round(c.x)}:${Math.round(c.z)}`);
       for (const ep of w.entryPoints) if (Math.abs(ep.x - p.x) < KNOWN_REACH && Math.abs(ep.z - p.z) < KNOWN_REACH) { this.seen('eps', ep.ep); this.learn(ep.ep); }
     }
   }

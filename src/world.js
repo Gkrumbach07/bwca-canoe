@@ -194,6 +194,14 @@ export class World extends GridQueries {
       for (const [x, z] of [...(A.way || []), ...(A.trail || [])]) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
       A.bbox = [x0, z0, x1, z1];
       c.access = A; n++;
+      // round flat (scripts/camp-access.mjs FLAT): the site on the flat its point sits below. It keeps its key (`key`, and
+      // kx, kz for the seeds its look is drawn from), so saves, claims and the camp's look find it as before; `at0` where
+      // the data put it
+      if (e.m && e.m.length === 2) {
+        c.key = `${rx}:${rz}`; c.kx = rx; c.kz = rz; c.at0 = { x: c.x, z: c.z, shore: c.shore };
+        c.x = rx + e.m[0] / 10; c.z = rz + e.m[1] / 10; if (Number.isFinite(e.ms)) c.shore = e.ms;
+        this.campMoved = (this.campMoved || 0) + 1;
+      }
     }
     this.campAccess = n;
     // round ramps: the outfitters' ways up from the dock to the door graded the same (ep.ramp, as a site's access.ramp)

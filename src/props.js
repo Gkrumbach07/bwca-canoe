@@ -166,8 +166,8 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   for (const c of world.campsites) {
     const A = c.access;
     if (!A || A.bbox[2] < ox - 4 || A.bbox[0] > ox + size + 4 || A.bbox[3] < oz - 4 || A.bbox[1] > oz + size + 4) continue;
-    if (A.way) campPath(ctx, A.way, decal, CAMP_WAY.way, Math.round(c.x) * 7 + Math.round(c.z));
-    if (A.trail) campPath(ctx, A.trail, decal, CAMP_WAY.path, Math.round(c.x) * 13 + Math.round(c.z));
+    if (A.way) campPath(ctx, A.way, decal, CAMP_WAY.way, (c.kx ?? Math.round(c.x)) * 7 + (c.kz ?? Math.round(c.z)));
+    if (A.trail) campPath(ctx, A.trail, decal, CAMP_WAY.path, (c.kx ?? Math.round(c.x)) * 13 + (c.kz ?? Math.round(c.z)));
   }
   decal.lift(ctx);
   const trail = decal.mesh();
@@ -2336,8 +2336,8 @@ function wayHeading(way, fx, fz) {
 }
 function buildCampsite(ctx, c, pieces, ledges) {
   const { tg, ox, oz, H } = ctx;
-  const crng = mulberry32(7 + Math.round(c.x) * 31 + Math.round(c.z) * 17);
-  const a = hash2(Math.round(c.x), Math.round(c.z), 5) * 6.28;
+  const crng = mulberry32(7 + (c.kx ?? Math.round(c.x)) * 31 + (c.kz ?? Math.round(c.z)) * 17);
+  const a = hash2(c.kx ?? Math.round(c.x), c.kz ?? Math.round(c.z), 5) * 6.28; // (round flat: from the key, as camp-ramps.mjs reads it)
   const dir = tg.deeperDir(c.x, c.z);
   let fx = c.x - dir.x * (c.shore < 4 ? 6 : 0), fz = c.z - dir.z * (c.shore < 4 ? 6 : 0);
   // round world: a site the data puts out on the lake (65 of them) has its ring on up the bank, out of the water, to
@@ -2446,7 +2446,7 @@ function buildCampsite(ctx, c, pieces, ledges) {
 // seated on the drawn ground (H, the game's ground query) as placement.js seats the rocks of the woods on the
 // mesh. Matrices go to ledges[0] (flats) and ledges[1] (slanted), tile-local.
 function campLedge(tg, c, fx, fz, dir, ox, oz, ledges, obstacles, H = null) {
-  const r = mulberry32((hash2(Math.round(c.x), Math.round(c.z), 13) * 4294967296) >>> 0);
+  const r = mulberry32((hash2(c.kx ?? Math.round(c.x), c.kz ?? Math.round(c.z), 13) * 4294967296) >>> 0);
   const ground = H || ((x, z) => meshHeightAt(tg, x, z));
   const place = (kind, x, z, az, tilt, spin, s, sq, tall) => {
     const y = seatRock(ground, ROCK_FOOT[kind], x, z, s, sq, tall, spin, az, tilt, tg.slopeAt(x, z));
@@ -2480,7 +2480,7 @@ function campLedge(tg, c, fx, fz, dir, ox, oz, ledges, obstacles, H = null) {
 // [x, z, bearing] a tread every quarter metre of rise): a flat granite slab laid across the way at each, seated on the drawn
 // ground as the ledge's flats are, a little skewed and of uneven size, stepped onto like them (ledges[0]).
 function campSteps(tg, c, steps, ox, oz, ledges, obstacles, H = null) {
-  const r = mulberry32((hash2(Math.round(c.x), Math.round(c.z), 29) * 4294967296) >>> 0);
+  const r = mulberry32((hash2(c.kx ?? Math.round(c.x), c.kz ?? Math.round(c.z), 29) * 4294967296) >>> 0);
   const ground = H || ((x, z) => meshHeightAt(tg, x, z));
   for (const [x, z, a] of steps) {
     if (tg.shoreAt(x, z) < 0.3) continue;
