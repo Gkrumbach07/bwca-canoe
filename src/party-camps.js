@@ -382,9 +382,7 @@ export class PartyCamps {
       const s = at[k];
       if (!s) continue;
       const f = D.figs[k];
-      if (f.at !== s) { f.at = s; f.heading = s.heading; } // (a new spot: faced at once; the greeting's turn eases back, update)
-      f.x = s.x; f.z = s.z; f.y = G(s.x, s.z); f.home = s.heading;
-      f.spec = s.seat ? { pose: 'sit', seat: s.seat } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 };
+      this.goTo(f, s, s, s.seat ? { pose: 'sit', seat: s.seat } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 }, G);
       v.figs[k] = f;
     }
     D.phase = ph;
@@ -407,11 +405,25 @@ export class PartyCamps {
     for (let k = 0; k < n; k++) {
       const a = m.get(`${v.key}#${k}`); if (!a) continue;
       const s = a.obj.slots[a.slot], f = D.figs[k], id = `${a.obj.id}#${a.slot}`;
-      if (f.at !== id) { f.at = id; f.heading = s.heading; }
-      f.x = s.x; f.z = s.z; f.y = G(s.x, s.z); f.home = s.heading; f.act = a.act;
-      f.spec = s.seat ? { pose: 'sit', seat: s.seat } : a.act === 'cook' || a.act === 'load' || a.act === 'unload' ? { pose: 'stoop', wave: 0 } : a.act === 'fish' ? { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25, wave: 0 } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 };
+      f.act = a.act;
+      this.goTo(f, s, id, s.seat ? { pose: 'sit', seat: s.seat } : a.act === 'cook' || a.act === 'load' || a.act === 'unload' ? { pose: 'stoop', wave: 0 } : a.act === 'fish' ? { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25, wave: 0 } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 }, G);
       v.figs[k] = f;
     }
+  }
+  // r2: a member to their spot s for the job (id: the spot's key). The owner, 2026-11-05: "when they go from task to
+  // task" they had jumped there (4 m and a half turn from the bench to the fire, 51 m to the shore to fish): now they
+  // get up and walk there (npcs.js walkOn: the store people's walk, eased in and out, the gait's feet), and settle into
+  // the job's pose at the end. Placed at once only the first time (the camp just drawn) or from far off.
+  goTo(f, s, id, spec, G) {
+    const y = G(s.x, s.z);
+    if (f.at !== id) {
+      const d = Math.hypot(s.x - f.x, s.z - f.z), walk = f.placed && Number.isFinite(d) && d > 0.35 && d < 90 && this.people && typeof this.people.walkOn === 'function';
+      f.at = id; f.home = s.heading;
+      if (walk) { f.goal = { x: s.x, z: s.z, y, heading: s.heading, spec }; f.path = [{ x: s.x, z: s.z, y }]; return; }
+      f.heading = s.heading; f.path = null;
+    }
+    if (f.path && f.goal) { f.goal.spec = spec; return; } // (on the way there)
+    f.x = s.x; f.z = s.z; f.y = y; f.home = s.heading; f.spec = spec; f.placed = true;
   }
   // their fire: lit an hour or so after they land, out by 22:30; the coals as any fire's into the morning
   fire(D, on) {
@@ -444,9 +456,11 @@ export class PartyCamps {
         if (f && f.spec.pose === 'stand') f.spec.wave = clamp(w, 0, 1);
         if (D.wave.t >= CAMPS.greetFor) D.wave = null;
       }
+      // (r2: those on their way to a new spot walk on)
+      for (const f of D.figs) if (f.path && f.path.length && this.people && this.people.walkOn) { this.people.walkOn(f, dt); if (!f.path) f.placed = true; }
       // the greeter turns to you while they greet, and back to what they were doing after
       for (let k = 0; k < D.figs.length; k++) {
-        const f = D.figs[k]; if (!f.at || f.home == null) continue;
+        const f = D.figs[k]; if (!f.at || f.home == null || f.path) continue;
         const want = D.wave && D.wave.k === k && f.spec.pose === 'stand' ? headingTo(p.x - f.x, p.z - f.z) : f.home;
         const e = Math.atan2(Math.sin(want - f.heading), Math.cos(want - f.heading));
         if (Math.abs(e) > 1e-3) f.heading += e * Math.min(1, dt * 4);
