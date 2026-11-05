@@ -83,3 +83,44 @@ export const VISITOR_HINTS = {
   secchi2(H, v) { return VISITOR_HINTS.secchi(H, v, 1); },
 };
 export const VISITOR_KEYS = Object.keys(VISITORS);
+
+// --- gl-e: a party's own trip in their words (parties.js storyOf) ----------------------------------------------------
+// Everything here is read from the story: the lakes they slept on, the fish they had and where, what they saw and on
+// which lake, the day the wind kept them in (only when the forecast blew that day), the site they found taken. Nothing
+// else is named. tripWords(S, { T, dir, kind, size }) → [{ id, text }] in the order they would tell it.
+const NUMW = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const numW = (n) => NUMW[n] || String(n);
+const capW = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const dayWord = (abs, T) => (abs === T ? 'today' : abs === T - 1 ? 'yesterday' : T - abs < 7 ? `on ${DAYS[(((abs + 4) % 7) + 7) % 7]}` : 'last week');
+const FISHN = { walleye: 'walleye', pike: 'northerns', smallmouth: 'smallmouth', laketrout: 'lakers', perch: 'perch', crappie: 'crappie' };
+const SEEN_WORDS = {
+  moose: (l) => `A cow moose and her calf in the shallows on ${theWater(l)}. We sat still and watched them for half an hour.`,
+  loonchick: (l) => `Loons with a chick on ${theWater(l)}. The little one rode on its mother’s back.`,
+  loons: (l) => `The loons on ${theWater(l)} went half the night. Nobody minded.`,
+  eagle: (l) => `A bald eagle took a fish right off ${theWater(l)} in front of the canoe.`,
+  wolf: (l) => `Wolf tracks in the mud at the landing on ${theWater(l)}. Big ones. Fresh, too.`,
+  bear: (l) => `A black bear in the blueberries on ${theWater(l)}. It didn’t care about us one bit.`,
+  otter: (l) => `Otters off the point on ${theWater(l)}, three of them, playing.`,
+  beaver: (l) => `A beaver slapped its tail at us all evening on ${theWater(l)}.`,
+};
+export function tripWords(S, { T, dir = null, size = 2 } = {}) {
+  if (!S) return [];
+  const out = [], we = size === 1 ? 'I' : 'we', We = capW(we), nights = S.stays.reduce((a, s) => a + Math.min(s.nights, Math.max(0, T - s.abs)), 0);
+  const going = dir === 'in' || (S.stays.length && S.stays[0].abs >= T);
+  const all = [...S.stays, ...(S.ahead || [])].map((s) => s.name).filter(Boolean), plan = [...new Set(all)];
+  if (going) {
+    if (plan.length) out.push({ id: 'route', text: `${plan.length > 1 ? `Tonight on ${theWater(plan[0])}, then ${listWords(plan.slice(1))}` : `${capW(theWater(plan[0]))}, the whole trip`}. ${capW(numW(S.exit - S.day))} ${S.exit - S.day === 1 ? 'night' : 'nights'}, and out the way ${we} came.` });
+    return out;
+  }
+  if (S.home && S.lakes.length) out.push({ id: 'lakes', text: `${capW(numW(nights))} ${nights === 1 ? 'night' : 'nights'}: ${listWords(S.lakes)}. Out today.` });
+  else if (S.tonight) out.push({ id: 'tonight', text: `${We}’re on ${theWater(S.tonight)} tonight.${S.ahead && S.ahead[0] && S.ahead[0].name && S.ahead[0].name !== S.tonight ? ` ${theWater(S.ahead[0].name)} next.` : ''}` });
+  for (const c of (S.catch || []).slice(0, 2)) if (c.lake && c.n) out.push({ id: `catch:${c.sp}`, text: `${capW(numW(Math.min(12, c.n)))} ${FISHN[c.sp] || c.sp} on ${theWater(c.lake)}, the best about ${Math.round(c.bestCm / 2.54)} inches.` });
+  if (!(S.catch || []).length && S.stays.length >= 2) out.push({ id: 'nofish', text: `Hardly a bite all trip. ${We} didn’t try very hard.` });
+  for (const q of (S.seen || []).slice(0, 2)) if (SEEN_WORDS[q.what]) out.push({ id: `seen:${q.what}`, text: SEEN_WORDS[q.what](q.lake) });
+  const w = (S.windbound || [])[0];
+  if (w && w.lake) out.push({ id: 'wind', text: `The wind kept ${we === 'I' ? 'me' : 'us'} on ${theWater(w.lake)} ${dayWord(w.abs, T)}: whitecaps all afternoon. ${We} played cards.` });
+  const t = (S.taken || [])[0];
+  if (t) out.push({ id: 'taken', text: `The site ${we} wanted on ${theWater(t.lake)} was taken. ${We} found another round the point.` });
+  return out;
+}

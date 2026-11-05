@@ -22,6 +22,12 @@
 //   partyCamps.extras()       people.extra: the figures to draw, [{ person, fig, f, d }]
 //   partyCamps.word(person)   people.partyWord: E on one of them
 //   partyCamps.drawn          Map key -> the drawn camp; partyCamps.stats()
+//
+// gl-e (the people are real): a party you talked to in a store knows you out here: their greeting says so, once a day
+// (npcs.js metLine: "You were at the Moose Lake store Tuesday."), whatever the chance of a word. What they tell you of
+// their trip is read from it alone (parties.js storyOf, talk-visitors.js tripWords: the lakes they slept on, their fish
+// and where, what they saw, the day the wind kept them in, the site they found taken), and every line they say is held
+// to what is true now (grounding.js). E on one of them tells people.onTalk ({ kind: 'party', partyId, lakeId }).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PropBuilder, propMaterial, TILE, buildHull, bakeSelf } from './prop-kit.js';
@@ -29,6 +35,8 @@ import { buildTentMesh, buildAFrameMesh, buildItemProp, tentPose, TENT_SIZE, AFR
 import { mulberry32 } from './rng.js';
 import { PRI } from './dialogue.js';
 import { MOVE } from './parties.js';
+import { tripWords } from './talk-visitors.js'; // gl-e: their trip, in their words (parties.js storyOf)
+import { grounding as GROUND } from './grounding.js'; // gl-e: only what is true here and now
 
 export const CAMPS = {
   drawR: 900,      // m: camps drawn within this of you
@@ -113,10 +121,15 @@ const HELLO = {
 };
 const WORD = {
   pair: ['We came in at {ep} {ago}.', 'Two of us, {left}.', 'We’re on our way {way}.'],
-  friends: ['Five years running, this trip. Came in at {ep}.', 'We’re here {left}, then on {way}.', 'The fish aren’t biting for us. Maybe you’ll have better luck.'],
+  friends: ['Five years running, this trip. Came in at {ep}.', 'We’re here {left}, then on {way}.', 'Same canoes, same jokes, five years running.'],
   family: ['Our first trip with the kids. So far so good!', 'Came in at {ep} {ago}. The kids want to stay forever.', 'We’re here {left}.'],
   group: ['We’re a big group, sorry if we’re loud!', '{N} of us, {canoes} canoes. It’s a circus at the portages.', 'Came in at {ep} {ago}, out {left2}.'],
   solo: ['Just me and the loons out here.', 'Came in at {ep} {ago}. Heading on {way}.', '{Left}, then out.'],
+};
+// gl-e: what a camp's people are at, by the phase of their stay (smart.js weights)
+const CAMP_WANTS = {
+  landing: { unload: 3, tent: 2, sit: 0.4 }, packing: { load: 3, tent: 1.5 },
+  evening: { cook: 2.2, sit: 2, fish: 1.2, tent: 0.4 }, morning: { cook: 2.5, tent: 1.2, sit: 0.8, fish: 0.6 }, day: { sit: 1.5, fish: 2, tent: 0.6, cook: 0.4 },
 };
 const NUM = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -187,6 +200,7 @@ export class PartyCamps {
   }
   letGo(key) {
     const D = this.drawn.get(key); if (!D) return;
+    if (this.people && this.people.smart) this.people.smart.clear(`camp:${key}`); // gl-e
     if (D.mesh) { this.scene.remove(D.mesh); D.mesh.geometry.dispose(); }
     if (D.canoeMesh) { this.scene.remove(D.canoeMesh); D.canoeMesh.geometry.dispose(); }
     const dyn = this.tiles.dynamic || [];
@@ -356,6 +370,8 @@ export class PartyCamps {
     this.canoesOn(D, show.canoes);
     const wet = this.weather && /rain|storm/.test(this.weather.state || '');
     let at = [];
+    const sm = this.people && this.people.smart;
+    if (sm && n && ph !== 'night') { this.act(D, ph, n, wet); D.phase = ph; return; } // gl-e: at the camp's smart objects
     if (ph === 'landing' || ph === 'packing') at = [S.shore[0], S.shore[1] || S.tents[0], S.tents[0]];
     else if (ph === 'evening') at = wet ? [S.fire[0]] : [S.fire[0], S.seats[0], S.seats[1] || S.fire[1]];
     else if (ph === 'morning') at = [S.fire[0], S.tents[0] || S.seats[0]];
@@ -372,6 +388,30 @@ export class PartyCamps {
       v.figs[k] = f;
     }
     D.phase = ph;
+  }
+  // gl-e: a camp's smart objects (smart.js): the fire (cook), the bench and the logs (sit), the canoes at the landing
+  // (unload, load) and the shore by them (fish), the tents' doors (tent); who is at which by the hour of their stay
+  // (landing: unloading and the tents; evening: the fire and the bench, a line off the shore; morning: the fire, the
+  // tents; packing: the canoes), seeded by the clock as everyone is
+  act(D, ph, n, wet) {
+    const sm = this.people.smart, where = `camp:${D.key}`, S = D.spots, v = D.v, G = (x, z) => this.tiles.groundAt(x, z);
+    if (!D.smart) {
+      D.smart = true;
+      const reg = (act, list) => { if (list && list.length) sm.register({ where, act, slots: list.map((q) => ({ x: q.x, z: q.z, heading: q.heading, seat: q.seat })), x: list[0].x, z: list[0].z }); };
+      reg('cook', S.fire); reg('sit', S.seats); reg('unload', S.shore); reg('load', S.shore); reg('fish', S.shore); reg('tent', S.tents);
+    }
+    const W = CAMP_WANTS[ph] || CAMP_WANTS.day, wants = wet ? { cook: 3, tent: 1 } : W;
+    const people = []; for (let k = 0; k < n; k++) people.push({ key: `${v.key}#${k}`, wants });
+    const m = sm.assign(where, people, sm.clock);
+    v.figs = [];
+    for (let k = 0; k < n; k++) {
+      const a = m.get(`${v.key}#${k}`); if (!a) continue;
+      const s = a.obj.slots[a.slot], f = D.figs[k], id = `${a.obj.id}#${a.slot}`;
+      if (f.at !== id) { f.at = id; f.heading = s.heading; }
+      f.x = s.x; f.z = s.z; f.y = G(s.x, s.z); f.home = s.heading; f.act = a.act;
+      f.spec = s.seat ? { pose: 'sit', seat: s.seat } : a.act === 'cook' || a.act === 'load' || a.act === 'unload' ? { pose: 'stoop', wave: 0 } : a.act === 'fish' ? { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25, wave: 0 } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 };
+      v.figs[k] = f;
+    }
   }
   // their fire: lit an hour or so after they land, out by 22:30; the coals as any fire's into the morning
   fire(D, on) {
@@ -432,15 +472,17 @@ export class PartyCamps {
     const rng = mulberry32(((D.stay.seed >>> 0) ^ (T * 2654435761)) >>> 0), f = D.figs[k];
     const up = f.spec.pose === 'stand' && rng() < CAMPS.wave;
     const far = this.storeDistance(D.site), pW = CAMPS.word[0] + (CAMPS.word[1] - CAMPS.word[0]) * clamp((far - CAMPS.store[0]) / (CAMPS.store[1] - CAMPS.store[0]), 0, 1);
-    const line = rng() < pW ? this.helloLine(D, rng) : null;
-    if (up || line) D.wave = { k, t: 0, up, line };
+    const met = this.people && typeof this.people.metLine === 'function' ? this.people.metLine(D.party, T) : null; // gl-e: they know you
+    const line = met || (rng() < pW ? this.helloLine(D, rng) : null);
+    if (up || line) D.wave = { k, t: 0, up: up || !!met, line };
     if (line) this.say(D, k, line, PRI.greet);
   }
   helloLine(D, rng) {
+    if (D.party && this.people && typeof this.people.metLine === 'function' && !D.v) { const m = this.people.metLine(D.party, this.parties.today); if (m) return m; } // gl-e: (on the move) they know you
     const h = this.day.hours, st = this.weather ? this.weather.state || '' : '', windy = this.wind && this.wind.speed > 7;
     const pool = /rain|storm/.test(st) ? HELLO.wet : windy && rng() < 0.6 ? HELLO.wind : h < 11 ? HELLO.morning : h < 17 ? HELLO.day : HELLO.evening;
     // (p2 C: and not a line another party said in the last game hour: two canoes passing with the same words)
-    const said = this.said.get(D.party.id) || new Set(), now = this.now, fresh = pool.filter((s) => !said.has(s) && !(now - (this.recent.get(s) ?? -1e9) < 1));
+    const said = this.said.get(D.party.id) || new Set(), now = this.now, F = GROUND.facts({}), fresh = pool.filter((s) => !said.has(s) && !(now - (this.recent.get(s) ?? -1e9) < 1) && GROUND.ok(s, F)); // (gl-e: true now)
     return fresh.length ? pick(rng, fresh) : null;
   }
   say(D, k, text, pri) {
@@ -455,11 +497,21 @@ export class PartyCamps {
     const k = this.greeter(D) ?? 0, T = this.parties.today, rng = mulberry32(((D.stay.seed >>> 0) ^ 0xa11ce ^ (T * 977)) >>> 0);
     const line = this.tripLine(D.party, D.stay.end === D.party.exit, rng);
     this.say(D, k, line, PRI.reply);
+    if (this.people && typeof this.people.emitTalk === 'function') this.people.emitTalk({ kind: 'party', partyId: D.party.id, lakeId: this.parties.stayLake ? this.parties.stayLake(D.stay) : 0 }); // gl-e
     return line;
   }
   // a word about their trip, in their words, filled from the plan (their put-in, the nights left; home: on their way out)
   // (p2 C: party-moves.js asks it for a party on the water or a trail, and helloFor for a greeting)
   tripLine(party, home, rng) {
+    // gl-e: first that they know you, then their trip as it happened (storyOf), a fact not told yet; the old words after
+    const T0 = this.parties.today;
+    if (this.people && typeof this.people.metLine === 'function') { const m = this.people.metLine(party, T0); if (m) return m; }
+    if (typeof this.parties.storyOf === 'function') {
+      let S = null; try { S = this.parties.storyOf(party, T0); } catch { S = null; }
+      const F = GROUND.facts({}), said0 = this.said.get(party.id) || new Set();
+      const lines = tripWords(S, { T: T0, size: party.size }).map((x) => x.text).filter((t) => !said0.has(t) && GROUND.ok(t, F));
+      if (lines.length) return lines[0];
+    }
     const T = this.parties.today, ep = this.world.entryPoints.find((e) => e.ep === party.ep), ago = T - party.day, left = party.exit - T;
     const fill = (s) => s.replace('{ep}', ep ? ep.name : 'the landing').replace('{ago}', ago <= 0 ? 'this morning' : ago === 1 ? 'yesterday' : `${NUM[ago] || ago} days ago`)
       .replace('{left}', left <= 1 ? 'one more night' : `${NUM[left] || left} more nights`).replace('{Left}', cap(left <= 1 ? 'one more night' : `${NUM[left] || left} more nights`))

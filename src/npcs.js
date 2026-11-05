@@ -85,9 +85,12 @@ import { PRI } from './dialogue.js';
 import { HAND as KEEPER_HAND, MANNER as KEEPER_MANNER, OPEN as KEEPER_OPEN, NO_WORD, NO_PAST, ASK_PROMPT, ASK_DONE, TASK_THANKS, MEM as MEM_WORDS, HOW as HOW_WORDS, RELS, COLLEGES, SUBJECTS, CITIES as K_CITIES } from './talk-keepers.js'; // content B
 import { rumoursFor, leadIn, adviceFor } from './talk-rumours.js'; // content B
 import { Memory, FISH_WORD, GOOD_CM } from './talk-memory.js'; // content B
-import { VISITORS, VISITOR_HINTS } from './talk-visitors.js'; // content B
+import { VISITORS, VISITOR_HINTS, tripWords } from './talk-visitors.js'; // content B (gl-e: tripWords, a party's own trip)
 import { FORAGE, inSeason } from './forage.js'; // content B: the berries in season (Bev's pie)
 import { itemDef } from './items.js'; // content B: a keeper's one-of-a-kind (stream C's), given when its def is in the build
+import { Smart, STEP as SMART_STEP } from './smart.js'; // gl-e: people act (smart objects)
+import { grounding as GROUND } from './grounding.js'; // gl-e: lines only about what is true
+import { MOVE } from './parties.js'; // gl-e: a party's canoes go in the water MOVE.launch before the put-in
 
 const NS = 'people';
 const POOL = 8;               // figures drawn at most, at once (round A-F: 8, the people plan's budget, the parties' camps and a store's people together)
@@ -113,6 +116,46 @@ const ROOM_SETTLE = 2.5;
 const REMARK_GAP = 50;        // seconds before the same visitor remarks again
 const PAIR_AFTER = 7;         // seconds in the room before a pair talk between themselves
 const KEEPER_IDLE_AFTER = 35; // seconds in the store before the keeper says something over the counter
+// gl-e: the parties in the stores, and everyone at something
+const STORE_P = {
+  before: 1.5,   // h before a party's put-in they are in the store (browsing, the counter, the board)
+  after: 1.0,    // h after a party coming out is in at the landing they are about (the porch, the stove, the counter)
+  parties: 3,    // parties at a store at once, the soonest first (the rest are out in the lot)
+  inside: 5,     // party members inside at once, all parties (the rest are at the dock)
+  task: 0.35,    // the chance a party coming out left something at their last site
+};
+const STORE_LOT = { before: 0.75, after: 0.5, parties: 3 }; // a trailhead's lot: h before the canoes go in, h after the last leg
+const LOT_WANTS = { in: { load: 3, wait: 1 }, out: { unload: 2.5, load: 1, wait: 1.2 } };
+const WALK_V = 1.15;                 // m/s (real) a person walks between things in a store
+const WALK_SPEC = Object.freeze({ pose: 'walk' });
+const AISLE = { back: -1.7, front: 2.5 }; // the store's cross aisles (b, its own frame): behind the shelves and before them
+const DOOR_A = -0.25;                // the door (a)
+// what each wants to be at, by weight (smart.js ranks them each five minutes)
+const STORE_WANTS = {
+  in: { browse: 3, pay: 1.1, read: 1.3, look: 1.4, wall: 0.8, warm: 0.3, rail: 0.4 },
+  leadIn: { pay: 2.6, browse: 2, read: 1.2, look: 1.6, ask: 0.8 },
+  out: { sit: 1.6, warm: 1.3, pay: 1.0, rail: 1.3, read: 0.6, browse: 0.5, ask: 0.6, wall: 0.4 },
+  dockIn: { load: 3, wait: 1.2 }, dockOut: { unload: 3, wait: 1.4 },
+  ranger: { read: 2, ask: 1.5, look: 1, rail: 0.8 }, photographer: { rail: 2, read: 1, look: 1, wall: 0.6 }, oldtimer: { sit: 3, warm: 1.5, rail: 0.5 },
+  crew: { ask: 1.5, warm: 1.2, rail: 1, read: 0.6 }, birder: { rail: 2.5, sit: 1, read: 0.6 }, cook: { ask: 2, warm: 1.5 }, mail: { ask: 2, read: 1, pay: 0.8 },
+  fishguide: { browse: 2.2, ask: 1.4, look: 0.6 }, kid: { sit: 1.2, browse: 1.6, rail: 1, fish: 1.6 }, firstfish: { browse: 1, sit: 1, rail: 1.2, fish: 0.8 },
+  monitor: { read: 1.6, ask: 1.2, rail: 1.2, look: 1 }, local: { browse: 1, read: 1, warm: 1, look: 0.6 },
+};
+// the pose each act takes at its slot
+function specFor(a, sl) {
+  const act = a.act, d = (a.obj && a.obj.data) || {};
+  if (sl.seat != null) return { pose: 'sit', seat: sl.seat };
+  if (act === 'pay') return { pose: 'counter', counter: 0.55, top: d.top || 0.95, lean: 0.12 };
+  if (act === 'look') return { pose: 'counter', counter: 0.5, top: d.top || 0.82, lean: 0.24, pitch: 0.45 };
+  if (act === 'browse') return { pose: 'browse', lean: 0.04, pitch: 0.12 };
+  if (act === 'read' || act === 'wall') return { pose: 'stand', lean: 0.02, pitch: -0.06 };
+  if (act === 'load' || act === 'unload' || act === 'cook') return { pose: 'stoop' };
+  if (act === 'fish') return { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25 };
+  return { pose: 'stand', lean: 0.02 };
+}
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MET_LINES = ['Hey, you were at the {store} store {when}!', 'It’s you, from the {store} store {when}. Small world.', 'We met at the {store} store {when}, didn’t we?', 'Hey! The {store} store, {when}. How’s your trip?'];
+const hashKey = (s) => { let h = 2166136261; for (const c of String(s || '')) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
 // --- small helpers ---------------------------------------------------------------------------------------------------
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -189,8 +232,10 @@ function shade(hex, k) { const c = new THREE.Color(hex); c.r = Math.min(1, c.r *
 const CITIES = ['Minneapolis', 'St. Paul', 'Duluth', 'Des Moines', 'Madison', 'Chicago', 'Milwaukee', 'Rochester', 'Fargo', 'Iowa City', 'Thunder Bay', 'Winnipeg', 'Eau Claire', 'Ames'];
 const F_NAMES = ['Marit', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail', 'Lorna'];
 const M_NAMES = ['Jake', 'Dave', 'Tom', 'Sam', 'Arne', 'Pete', 'Luis', 'Ben', 'Mike', 'Eli', 'Gary', 'Hal', 'Nate', 'Rolf', 'Will', 'Joe', 'Dan', 'Kurt'];
-const OLD_NAMES = ['Walt', 'Otto', 'Hjalmar', 'Clem', 'Arvo', 'Reino', 'Edna', 'Ione', 'Toivo', 'Elmer'];
+const OLD_NAMES = ['Gunnar', 'Otto', 'Hjalmar', 'Clem', 'Arvo', 'Reino', 'Edna', 'Ione', 'Toivo', 'Elmer'];
 const KID_NAMES = ['Tyler', 'Emma', 'Owen', 'Ava', 'Finn', 'Lily', 'Max', 'Ruby', 'Leo', 'Nora'];
+// gl-e: every name a generated person can have (the tests check the story's names are not among them)
+export const nameLists = () => ({ F_NAMES, M_NAMES, OLD_NAMES, KID_NAMES, SURNAMES, COOKS });
 const SURNAMES = ['Olson', 'Lindqvist', 'Peterson', 'Nguyen', 'Hansen', 'Garcia', 'Kowalski', 'Larsen', 'Schmidt', 'Johnson', 'Haugen', 'Novak'];
 const COOKS = ['Marge', 'Lorna', 'Dolores', 'Arlene', 'Sue'];
 const ARCH = {
@@ -208,7 +253,7 @@ const ARCH = {
     who: (v) => `on the ${v.district} portage crew`, wear: { shirt: 0x6a7a5a, pfd: 0x3f4f3a, pants: 0x3f4a32, hat: 0x55583a, hatChance: 0.9 } },
   birder: { months: [5, 9], hours: [6, 20], at: { lodge: 1, 'river post': 1.2, 'trout camp': 1, 'bait shop': 0.9 }, spots: ['rail', 'bench', 'board'], hints: ['loons', 'eagle', 'owl'], task: 'lost', odds: 0.7,
     who: () => 'a birder with a long life list', wear: { shirt: 0x7a7a5a, pfd: 0x5a6a4a, hatChance: 0.9 } },
-  cook: { months: [6, 9], hours: [9, 15], at: { lodge: 2.2, 'river post': 0.3, 'trout camp': 0.6, 'bait shop': 0.3 }, spots: ['counterEnd', 'stove'], hints: ['cafe', 'berries'], task: 'fetch', odds: 0.85,
+  cook: { months: [6, 9], hours: [9, 15], at: { lodge: 2.2, 'river post': 0, 'trout camp': 0, 'bait shop': 0 }, spots: ['counterEnd', 'stove'], hints: ['cafe', 'berries'], task: 'fetch', odds: 0.85,
     who: () => 'who cooks at the café', wear: { shirt: 0xd8d4c8, pfd: 0xe6e2d6, pants: 0x34362f, hatChance: 0 }, female: true },
   mail: { months: [5, 10], hours: [10, 15], at: { lodge: 1, 'river post': 1, 'trout camp': 1, 'bait shop': 1 }, spots: ['counterEnd', 'board'], hints: ['weather', 'road'], task: 'letterOutfitter', odds: 0.8,
     who: (v) => `who drives the mail up ${v.road}`, wear: { shirt: 0x5a6a80, pfd: 0x2f3a4a, pants: 0x2f3a46, hat: 0x2f3a4a, hatChance: 0.5 } },
@@ -221,6 +266,8 @@ const ARCH = {
 };
 for (const [k, V] of Object.entries(VISITORS)) ARCH[k] = V.arch; // content B: four more kinds (talk-visitors.js)
 export const ARCHETYPES = Object.keys(ARCH);
+// gl-e: the kinds that were parties in all but name; now the parties' own members (parties.js) stand in for them
+export const PARTY_ARCH = new Set(['guide', 'family', 'trippers', 'returning', 'scouts']);
 
 // Where people stand or sit, in the store's own frame (props.js: a across, b toward the lake, y up from the floor):
 // face is the way they face (a, b); pose stand or sit (seat: the seat's height); porch: only where the store has one.
@@ -328,20 +375,39 @@ function posePerson(body, spec, dt, sc = 1) {
     }
     return;
   }
-  const lean = (spec.lean || 0.02) + 0.008 * br;
-  const pelvis = bodyQ(0.12 * yaw, 0.03 + lean * 0.3, 0), chest = bodyQ(0.35 * yaw, lean, 0), head = bodyQ(yaw, pitch + 0.1 * lean, 0);
-  const sway = spec.pose === 'counter' ? 0 : 0.012 * Math.sin(s.shift);
-  P.setRoot(V(lean * 0.06, 0.925 - 0.02 + 0.05 - 0.004 * (0.5 + 0.5 * br) - (spec.pose === 'counter' ? 0.012 : 0), sway), pelvis);
+  // gl-e: walking (between the smart objects: a stride of the legs and a swing of the arms on s.walk, the metres
+  // walked), stooping (at the dock, loading), browsing (a hand to the shelf now and then), and the head's own pitch
+  // for what they are at (spec.pitch: down at the map table, up at the board)
+  const walk = spec.pose === 'walk', stoop = spec.pose === 'stoop';
+  const ph = walk ? (s.walk || 0) * (Math.PI / 0.72) : 0, swing = walk ? Math.sin(ph) : 0;
+  const lean = (stoop ? 0.62 : walk ? 0.06 : spec.lean || 0.02) + 0.008 * br;
+  const pelvis = bodyQ(0.12 * yaw, 0.03 + lean * (stoop ? 0.55 : 0.3), 0), chest = bodyQ(0.35 * yaw + (walk ? 0.06 * swing : 0), lean, 0), head = bodyQ(yaw, pitch + 0.1 * lean + (spec.pitch || 0) - (stoop ? 0.35 : 0), 0);
+  const sway = spec.pose === 'counter' || walk ? 0 : 0.012 * Math.sin(s.shift);
+  const bob = walk ? 0.022 * Math.abs(Math.cos(ph)) : stoop ? 0.07 : 0;
+  P.setRoot(V(lean * 0.06 - (stoop ? 0.08 : 0), 0.925 - 0.02 + 0.05 - 0.004 * (0.5 + 0.5 * br) - (spec.pose === 'counter' ? 0.012 : 0) - bob, sway), pelvis);
   P.rot('spine', _q.copy(pelvis).slerp(chest, 0.5)); P.rot('chest', chest); P.rot('neck', _q.copy(chest).slerp(head, 0.45)); P.rot('head', head);
   _q2.setFromEuler(_e.set(0.01 * br, 0, 0, 'YXZ')); P.rot('clavL', _q.copy(chest).multiply(_q2));
   _q2.setFromEuler(_e.set(-0.01 * br, 0, 0, 'YXZ')); P.rot('clavR', _q.copy(chest).multiply(_q2));
   for (const [k, sg] of [['L', -1], ['R', 1]]) {
-    const ankle = V(-0.005 + (k === 'L' ? 0.03 : -0.02), 0.085, sg * 0.12);
+    if (walk) {
+      const u = k === 'L' ? swing : -swing, fwd = k === 'L' ? Math.cos(ph) : -Math.cos(ph); // (fwd > 0: this foot swinging forward)
+      P.leg(k, V(0.24 * u, 0.085 + 0.075 * Math.max(0, fwd), sg * 0.11), V(0.6, 0.5, sg * 0.16), FOOT[k]);
+      continue;
+    }
+    const ankle = V(-0.005 + (k === 'L' ? 0.03 : -0.02) - (stoop ? 0.06 : 0), 0.085, sg * (stoop ? 0.17 : 0.12));
     P.leg(k, ankle, V(0.6, 0.5, sg * 0.16), FOOT[k]);
   }
   const cq = J.chest.q;
   for (const [k, sg] of [['L', -1], ['R', 1]]) {
     const sh = J['arm' + k].p;
+    if (walk || stoop || spec.hands === 'front' || (spec.pose === 'browse' && k === 'R' && s.reach > 0.05)) {
+      // walking: the arms swing against the legs; stooping: the hands down to a pack at the feet; in front: a rod, a cup;
+      // browsing: the right hand out to the shelf
+      const u = k === 'L' ? swing : -swing, rr = spec.pose === 'browse' ? Math.min(1, s.reach) : 0;
+      const tgt = walk ? V(-0.17 * u + 0.04, sh.y - 0.6, sh.z + sg * 0.08) : stoop ? V(0.42, 0.28, sg * 0.2) : rr > 0 ? V(sh.x + 0.25 + 0.3 * rr, sh.y - 0.42 + 0.3 * rr, sh.z + 0.05) : V(0.34, 0.98, sg * 0.1);
+      P.arm(k, tgt, V(1, 0, -sg * 0.15).applyQuaternion(cq), V(sh.x - 0.3, sh.y - 0.2, sh.z + sg * 0.35), V(0, 0, -sg).applyQuaternion(cq));
+      continue;
+    }
     if (spec.pose === 'counter') {
       // the hands on the counter's top a little ahead, the elbows out
       P.arm(k, V(spec.counter, spec.top + 0.04, sg * 0.21), V(0, 0, 1), V(sh.x - 0.25, sh.y - 0.35, sh.z + sg * 0.45), V(0, -1, 0));
@@ -712,8 +778,8 @@ const OPENERS = {
   trippers: ['Hey!', 'Hi.', 'Hey, how’s it going.'], fishguide: ['Morning.', 'Yep.', 'Hey.'], kid: ['Hi!', 'Hey! Hey!', 'Want to see my leeches?'],
 };
 // a greeting for the hour: no "Morning" after noon, no "Afternoon" before it or in the evening (as keeperLine does)
-function opener(arch, h) {
-  const all = OPENERS[arch] || ['Hello.'], fit = all.filter((w) => !(/^Morning/.test(w) && h >= 12) && !(/^Afternoon/.test(w) && (h < 12 || h >= 18)));
+function opener(arch, h, F = null) {
+  const all = OPENERS[arch] || ['Hello.'], fit = all.filter((w) => !(/^Morning/.test(w) && h >= 12) && !(/^Afternoon/.test(w) && (h < 12 || h >= 18)) && (!F || GROUND.ok(w, F)));
   return pickR(Math.random, fit.length ? fit : ['Hello.']);
 }
 const BYE = {
@@ -728,7 +794,7 @@ const THANKS = {
 // --- the conversation trees and the passing remarks (stream F) -------------------------------------------------------
 // Who each is, in a word or two, over their line on the screen
 const ROLE = { keeper: 'the keeper', guide: 'guide', ranger: 'ranger', photographer: 'photographer', family: 'with the kids', oldtimer: 'old-timer', crew: 'portage crew', birder: 'birder', cook: 'café cook', mail: 'mail carrier', trippers: 'tripper', fishguide: 'fishing guide', kid: 'with the leeches' };
-const roleOf = (v, fig) => (v.keeper ? ROLE.keeper : v.arch === 'family' && fig === 1 ? 'their kid' : ROLE[v.arch] || '');
+const roleOf = (v, fig) => (v.keeper ? ROLE.keeper : v.extra ? v.who || '' : v.inParty ? (v.trip && v.trip.members[fig] && v.trip.members[fig].age === 'kid' ? 'their kid' : v.dir === 'in' ? 'going in' : 'coming out') : v.arch === 'family' && fig === 1 ? 'their kid' : ROLE[v.arch] || ''); // (gl-e: a party member, someone another module stands)
 // the first time you meet them: who they are, in their words
 const INTRO = {
   guide: (v) => `I’m ${v.first}. I guide out of ${v.vars.town}.`,
@@ -764,7 +830,7 @@ const NO_MORE = { kid: 'That’s all I know. Do you want to see my leeches again
 const NO_SELF = { oldtimer: 'Oh, I could go on. Another time.', kid: 'That’s everything about me.' };
 // what they say as you pass: their own, and the hour's and the weather's
 const REMARKS = {
-  guide: ['Wind’s coming round to the west.', 'Good day for it, if you’re going in.', 'Watch the big stretches after noon.'],
+  guide: ['Cross the big water before the wind comes up.', 'Good day for it, if you’re going in.', 'Watch the big stretches after noon.'],
   ranger: ['Fires in the grates only, mind.', 'Nice to see a proper pack.', 'Hang your food tonight.', 'Somebody left cans and glass in a fire grate. Pack it out, people.'],
   photographer: ['The light’s all wrong today.', 'Did you hear the loons last night?', 'Shh. A chickadee, on the rail.'],
   family: ['Don’t touch that, honey.', 'Have you been out long?', 'Is it always this buggy?'],
@@ -878,6 +944,26 @@ const ASKS = {
     return ASKS.fetch(P, v, c); // no camera in the build yet: the film from another outfitter
   },
 };
+// gl-e: a party coming out left a thing at their own last site (the sweep's site for their last stay)
+ASKS.partyLost = (P, v, c) => {
+  const S = P.sched, p = v.trip; if (!S || !p || !p.stays.length) return null;
+  const st = p.stays[p.stays.length - 1], i = S.block(st.start).site.get(st), site = i != null && i >= 0 ? P.world.campsites[i] : null;
+  if (!site) return null;
+  const id = S.stayLake(st), lake = id ? P.world.lakeName(id) : null, l = id ? P.world.lakes[id - 1] : null; if (!lake) return null;
+  const side = l && l.cells >= 2500 ? compass(site.x - l.cx, site.z - l.cz) : null, name = side ? `our site on the ${side} shore of ${theWater(lake)}` : `our site on ${theWater(lake)}`;
+  const r = seeded(hashKey(p.id), 0x1057), [thing, short] = pickR(r, [['a fillet knife in a leather sheath', 'the knife'], ['a blue enamel coffee pot', 'the coffee pot'], ['a folding saw', 'the saw'], ['a fly box', 'the fly box'], ['a red water bottle', 'the bottle']]);
+  const km = +(Math.hypot(site.x - c.landing.x, site.z - c.landing.z) / 1000).toFixed(1), lead = `We left ${thing} at ${name}, last night.`;
+  return { kind: 'npc', fields: { site: { x: site.x, z: site.z, lake }, thing, short, km, base: 12, title: `The ${v.last}s’ ${short.replace(/^the /, '')}`, text: `${lead} By the fire grate, we think.`, sign: v.first, left: `You find ${thing} on the rock by the fire grate.`, hint: P.tasks && typeof P.tasks.hintFor === 'function' ? P.tasks.hintFor(id, site) : null },
+    ask: `${lead} By the fire grate, we think. If you’re going that way, could you bring it back here?` };
+};
+// what party members say about themselves, by the kind of party (nothing about a place: that is their trip's)
+const PARTY_LORE = {
+  pair: ['Every summer since college. The canoe’s older than our marriage.', 'One of us packs too much and one of us packs too little. It works out.'],
+  friends: ['Same four of us for nine years. Same arguments about the map.', 'Somebody always forgets the coffee. This year it was me.'],
+  family: ['The kids paddle now. Well, they hold paddles.', 'We started coming when the youngest was three. She carries her own pack now.'],
+  group: ['Getting nine people over a portage is a whole science.', 'The first day they complain. The last day they don’t want to leave.'],
+  solo: ['Just me. I like the quiet, and nobody argues about where to camp.', 'People ask if I get lonely. The loons talk enough for two.'],
+};
 async function siteErrand(P, v, c, who) {
   const H = new HintWriter(P, c.ep, c.rng), s = H.camp(1500) || H.camp(600); // an errand worth the paddle
   if (!s) return null;
@@ -900,7 +986,9 @@ async function siteErrand(P, v, c, who) {
 // content B: arcs (ep → { b: beats done, at: the day of the last }), word (ep → { week, n }: the week's word told so far),
 // advised (advice id → the day it was given), deal (ep → the price there, ×), secret (ep → the site pencilled), topics
 // (key → lines told), mem (talk-memory.js), visits (ep → the days you have talked to the keeper there)
-const blankState = () => ({ v: 1, talked: {}, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {}, asked: {}, arcs: {}, word: {}, rumoured: {}, advised: {}, deal: {}, secret: {}, topics: {}, visits: {}, mem: null });
+// gl-e (v 2): met (party id → { abs, ep, where, exit, told }: the parties you talked to in a store, who know you out there;
+// pruned a week after their trip ends). A v 1 save loads with met {}.
+const blankState = () => ({ v: 2, talked: {}, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {}, asked: {}, arcs: {}, word: {}, rumoured: {}, advised: {}, deal: {}, secret: {}, topics: {}, visits: {}, mem: null, met: {} });
 export class People {
   constructor({ world, scene, player, day, hud, tasks, outfitter = null, profile = null, weather = null, registry = null, mat }) {
     this.world = world; this.scene = scene; this.player = player; this.day = day; this.hud = hud; this.tasks = tasks; this.outfitter = outfitter; this.profile = profile; this.weather = weather; this.registry = registry;
@@ -928,6 +1016,12 @@ export class People {
     this.said = new Set(); this.visitLines = []; this.kTalked = new Set(); this._visit = undefined;
     this.trip = null; this.fishing = null; this.inventory = null; this.uniquesOf = null; // attach() (main.js content B)
     this.s = this.load();
+    // gl-e: the parties' schedule (attachParties: parties.js, party-moves.js), the smart objects, the ground outside a
+    // store, who listens to the talk (onTalk), and the people others stand in a store (extraAt)
+    this.sched = null; this.moves = null; this.ground = null;
+    this.smart = new Smart({ day, seed: () => (this.sched ? this.sched.seed : 0) });
+    this.talkFns = []; this.extrasAt = new Map(); this.storeSmart = new Map(); this.lots = new Map(); this.trailheadOf = null; this.smartT = 0; this.lastClock = null; this.partyT = 0;
+    this.grounding = GROUND;
     if (profile && profile.onChange) profile.onChange((what) => { if (what === 'season') this.reset(); });
     // the visitors' words on the map, with the keepers' (hud.js reads outfitter.toldHints)
     if (outfitter && typeof outfitter.toldHints === 'function' && !outfitter.toldHints.people) {
@@ -942,11 +1036,11 @@ export class People {
   load() {
     const s = save.read(NS);
     const o = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
-    return s && s.v === 1 ? { v: 1, talked: s.talked || {}, tasks: s.tasks || {}, paid: s.paid || {}, gifts: s.gifts || {}, names: s.names || {}, told: Array.isArray(s.told) ? s.told : [], chat: s.chat || {}, asked: s.asked || {},
+    return s && (s.v === 1 || s.v === 2) ? { v: 2, met: o(s.met), talked: s.talked || {}, tasks: s.tasks || {}, paid: s.paid || {}, gifts: s.gifts || {}, names: s.names || {}, told: Array.isArray(s.told) ? s.told : [], chat: s.chat || {}, asked: s.asked || {},
       arcs: o(s.arcs), word: o(s.word), rumoured: o(s.rumoured), advised: o(s.advised), deal: o(s.deal), secret: o(s.secret), topics: o(s.topics), visits: o(s.visits), mem: s.mem && s.mem.v === 1 ? s.mem : null } : blankState(); // (an older save: the content B fields start empty)
   }
   write() { save.write(NS, this.s); }
-  reset() { this.s = blankState(); this.rosters.clear(); this.preparing.clear(); this.chars.clear(); if (this.mem) this.mem.reset(); this.write(); }
+  reset() { this.s = blankState(); this.weekCache = null; this.rosters.clear(); this.preparing.clear(); this.chars.clear(); if (this.mem) this.mem.reset(); this.write(); }
 
   get today() { const d = this.day; return absDay(d.year, d.doy); }
   get week() { return Math.floor(this.today / 7); }
@@ -983,8 +1077,11 @@ export class People {
     if (!L) return [];
     const op = outfitterProfile(ep, this.world), out = [];
     out.push(this.keeperOf(ep, L, op));
-    for (const v of this.visitorsOf(ep, L, op)) out.push(v);
+    for (const v of this.extraPeople(ep, L)) out.push(v); // gl-e: someone another module stands here (extraAt)
+    for (const v of this.visitorsOf(ep, L, op)) if (this.inHours(v)) out.push(v); // (gl-e: the week's people, each in their hours)
+    for (const v of this.partyVisitorsOf(ep, L)) out.push(v); // gl-e: the parties going in and coming out, by the schedule
     out.at = { y: L.floorY, x: L.centre.x, z: L.centre.z }; // the store they were placed in (follow(): built again since)
+    out.partySig = this.partySig(ep);
     return out;
   }
   // A store built again on new ground (props.js stepOutfitters: a LiDAR chunk in or out under it) can stand at another
@@ -995,7 +1092,7 @@ export class People {
     if (!at || !L) return;
     const dy = L.floorY - at.y, dx = L.centre.x - at.x, dz = L.centre.z - at.z;
     if (Math.abs(dy) < 1e-3 && Math.abs(dx) < 1e-3 && Math.abs(dz) < 1e-3) return;
-    for (const v of list) for (const f of v.figs) { f.x += dx; f.y += dy; f.z += dz; }
+    for (const v of list) for (const f of v.figs) { f.x += dx; f.y += dy; f.z += dz; for (const q of [f.goal, ...(f.path || [])]) if (q) { q.x += dx; q.y += dy; q.z += dz; } }
     list.at = { y: L.floorY, x: L.centre.x, z: L.centre.z };
   }
   keeperOf(ep, L, op) {
@@ -1009,12 +1106,22 @@ export class People {
     return { key: `keeper:${ep}`, ep, keeper: true, name, first, arch: 'keeper', who: 'behind the counter', figs: [{ x: kp.x, z: kp.z, y: L.floorY, heading: kp.heading, look, spec: { pose: 'counter', counter: 0.36, top: 0.95, lean: 0.1 } }] };
   }
   visitorsOf(ep, L, op) {
+    const ck = `${ep}:${this.week}`, wc = this.weekCache || (this.weekCache = new Map());
+    if (wc.has(ck) && wc.get(ck).L === L) return wc.get(ck).list;
+    const list = this.weekVisitors(ep, L, op);
+    if (wc.size > 8) wc.delete(wc.keys().next().value);
+    wc.set(ck, { L, list });
+    return list;
+  }
+  weekVisitors(ep, L, op) {
     const d = this.day, { month } = monthDay(d.year, d.doy), m = month + 1, h = d.hours, week = this.week;
     const kind = op ? op.kind : 'lodge', f = placeFacts(ep, this.world) || {};
     const rng = seeded(ep, week, 0x51717);
     const r = rng(), n = r < 0.22 ? 0 : r < 0.66 ? 1 : 2;
     if (!n) return [];
-    const pool = ARCHETYPES.filter((a) => { const A = ARCH[a]; return m >= A.months[0] && m <= A.months[1] && (A.at[kind] || 0) > 0.2; });
+    // (gl-e: the guide, the family, the trippers, the paddlers just come out and the Scouts are real parties now:
+    // partyVisitorsOf; the locals stay)
+    const pool = ARCHETYPES.filter((a) => { const A = ARCH[a]; return !PARTY_ARCH.has(a) && m >= A.months[0] && m <= A.months[1] && (A.at[kind] || 0) > 0.2; });
     const out = [], usedSpots = new Set();
     let figures = 0;
     for (let k = 0; k < 6 && pool.length && figures < n; k++) {
@@ -1023,11 +1130,13 @@ export class People {
       for (; j < pool.length - 1; j++) { x -= ARCH[pool[j]].at[kind]; if (x <= 0) break; }
       const arch = pool.splice(j, 1)[0], A = ARCH[arch], pair = !!A.pair;
       if (pair && figures > 0) continue;
-      // in their hours of the day only (settled as you come near, so nobody walks out in front of you)
-      if (h < A.hours[0] || h >= A.hours[1]) continue;
+      // (gl-e: the week's visitors are drawn whatever the hour; each is there in their own hours, inHours, so who is
+      // in the store is a function of the week and the clock, not of when you came near)
+      void h;
       const vr = seeded(ep, week, arch.length * 977 + arch.charCodeAt(0));
       const v = this.makeVisitor(ep, L, arch, vr, f, usedSpots);
       if (!v) continue;
+      v.hours = A.hours;
       out.push(v);
       figures += v.figs.length;
       if (pair) break;
@@ -1094,6 +1203,386 @@ export class People {
   // everyone at ep's store as now settled (the console and the tests)
   at(ep) { return this.rosters.get(Number(ep)) || this.roster(Number(ep)); }
 
+  // --- gl-e: the people are real (the game-loop round, stream E) ------------------------------------------------------
+  // main.js's gl-e block: the schedule (parties.js), the parties on the move (party-moves.js: they have a party from the
+  // moment its canoes go in the water), the ground outside a store (tiles.groundAt)
+  attachParties({ parties = null, moves = null, ground = null, trailheadLayout = null } = {}) {
+    if (parties) this.sched = parties; if (moves) this.moves = moves; if (ground) this.ground = ground;
+    if (typeof trailheadLayout === 'function') this.trailheadOf = trailheadLayout; // (stream B's trailhead.js; none: no people at the lots)
+    return this;
+  }
+  // The parties at ep's store at (T, hour): going in from STORE_P.before hours before their put-in until their canoes go
+  // in the water (MOVE.launch before it: party-moves.js has them at the landing from then), and coming out from the end
+  // of their last leg (in at the landing, unloaded) for STORE_P.after hours. At most STORE_P.parties of them, the
+  // soonest first: the others are in the lot. [{ party, dir: 'in' | 'out', from, to }]
+  storeParties(ep, T = this.today, h = this.day.hours, W = STORE_P) {
+    const P = this.sched; if (!P || typeof P.entering !== 'function') return [];
+    ep = Number(ep);
+    const ins = [], outs = [];
+    for (const p of P.entering(ep, T)) {
+      if (!p.stays || !p.stays.length) continue;
+      const from = p.putIn - W.before, to = p.putIn - MOVE.launch;
+      if (h >= from && h < to) ins.push({ party: p, dir: 'in', from, to });
+    }
+    if (typeof P.leaving === 'function') for (const p of P.leaving(ep, T)) {
+      let plan = null; try { plan = P.legPlan(p, p.stays.length); } catch { plan = null; }
+      const from = plan ? plan.end : 16.5, to = from + W.after;
+      if (h >= from && h < to) outs.push({ party: p, dir: 'out', from, to });
+    }
+    ins.sort((a, b) => a.party.putIn - b.party.putIn); outs.sort((a, b) => a.from - b.from);
+    const nOut = Math.min(outs.length, ins.length >= 2 ? 1 : W.parties - Math.min(ins.length, W.parties - 1));
+    return [...ins.slice(0, W.parties - nOut), ...outs.slice(0, nOut)];
+  }
+  partySig(ep) { return this.storeParties(ep).map((e) => `${e.party.id}:${e.dir}`).join(','); }
+  // the party members at the store, one record per party: the leader and as many as the room has inside (browsing,
+  // the counter, the board; coming out: the porch, the stove), the rest at the dock (loading; unloading)
+  partyVisitorsOf(ep, L, list = this.storeParties(ep)) {
+    const out = [];
+    let room = STORE_P.inside;
+    for (const e of list) { const v = this.partyVisitor(ep, L, e, room); if (!v) continue; room -= v.figs.filter((f) => f.where === 'store').length; out.push(v); }
+    return out;
+  }
+  partyVisitor(ep, L, e, room, lot = false) {
+    const p = e.party, pv = this.partyPerson(p), n = pv.members.length;
+    const arch = p.kind === 'group' ? (pv.who.startsWith('a scout') ? 'scouts' : 'guide') : p.kind === 'family' ? 'family' : e.dir === 'out' ? 'returning' : 'trippers';
+    const inside = Math.max(1, Math.min(n, 1 + Math.min(2, Math.max(0, room - 1))));
+    const where = (i) => (lot ? 'lot' : i < inside ? 'store' : 'dock');
+    const home = lot ? { x: L.lot.x, z: L.lot.z, y: this.groundAt(L, L.lot.x, L.lot.z), heading: L.lot.heading || 0 } : L.door;
+    const name = n > 1 ? `${pv.members[0].name} and ${p.kind === 'family' ? 'family' : n === 2 ? pv.members[1].name : 'party'}` : pv.members[0].name;
+    const who = e.dir === 'in' ? `${pv.who}, going in today` : `${pv.who}, just off the water`;
+    const v = { key: `visit:${p.id}`, ep, arch, name, first: pv.members[0].name, last: pv.last, city: pv.city, vars: { ...pv.vars, town: (placeFacts(ep, this.world) || {}).town || 'Ely', road: 'the road', district: districtOf(ep) },
+      who, trip: p, partyId: p.id, dir: e.dir, until: e.to, crew: pv.members.map((m, i) => ({ i, name: m.name, where: where(i) })), figNames: pv.members.map((m) => m.name), figs: [], inParty: true };
+    v.figs = pv.members.map((m, i) => ({ x: home.x, z: home.z, y: home.y, heading: home.heading, look: m.look, spec: { pose: 'stand', lean: 0.02 }, where: where(i), member: i, fresh: true }));
+    if (lot) v.lot = true;
+    v.hasTask = e.dir === 'out' && seeded(hashKey(p.id), 0x7a5c)() < STORE_P.task;
+    return v;
+  }
+  // People another module stands in a store (stream C's summer help at the counter): npcs.extraAt(ep, { key, name, look,
+  // spot, lines, role, talk }) → handle { person, say(text), remove() }. spot: a SPOTS name ('counterEnd', 'stove', …) or
+  // { x, z, heading } in the world; lines: what E on them says in turn (a bark), unless talk(person) opens its own
+  // conversation (dialogue.js); look: a palette (dress()) or { seed } to dress one
+  extraAt(ep, { key = null, name = 'the summer help', look = null, spot = 'counterEnd', lines = [], role = null, talk = null } = {}) {
+    ep = Number(ep);
+    const list = this.extrasAt.get(ep) || [];
+    const rec = { key: key || `extra:${ep}:${list.length}`, name, look, spot, lines: lines || [], role, talk, n: 0 };
+    list.push(rec); this.extrasAt.set(ep, list);
+    // (into the store's people as they stand, if settled: nobody else is moved)
+    { const r = this.rosters.get(ep), L = storeLayout(ep); if (r && L) r.splice(1, 0, ...this.extraPeople(ep, L, [rec])); }
+    const self = this;
+    return {
+      get person() { const r = self.rosters.get(ep) || null; return r ? r.find((v) => v.key === rec.key) || null : null; },
+      say(text) { const v = this.person; return v ? self.bark(v, 0, text, PRI.reply) : (self.hud ? self.hud.note(`${name}: “${text}”`, 6) : null); },
+      remove() { const l = self.extrasAt.get(ep) || []; const i = l.indexOf(rec); if (i >= 0) l.splice(i, 1); const r = self.rosters.get(ep); if (r) { const j = r.findIndex((v) => v.extra === rec); if (j >= 0) r.splice(j, 1); } },
+    };
+  }
+  extraPeople(ep, L, recs = this.extrasAt.get(Number(ep)) || []) {
+    const out = [];
+    for (const rec of recs) {
+      const S = typeof rec.spot === 'string' ? SPOTS[rec.spot] || SPOTS.counterEnd : null;
+      const look = rec.look && rec.look.wear ? rec.look : dress(seeded(hashKey(rec.key), 0x5ea), { female: FEMALE.has(String(rec.name).split(' ')[0]), hatChance: 0.2, ...(rec.look || {}) });
+      const f = S ? this.placeAt(L, S, look) : { x: rec.spot.x, z: rec.spot.z, y: rec.spot.y ?? L.floorY, heading: rec.spot.heading || 0, look, spec: { pose: 'stand', lean: 0.02 } };
+      const first = String(rec.name).replace(/^the /, '');
+      out.push({ key: rec.key, ep: Number(ep), arch: 'extra', name: rec.name, first: rec.name, who: rec.role || '', figs: [f], extra: rec, figNames: [first] });
+    }
+    return out;
+  }
+
+  // Each store near you: the parties come and go by the schedule (a party arrives at the door and walks in; one going
+  // in walks out to the dock as its time comes, and is party-moves.js's at the landing from then); everyone but the
+  // keeper is at something (smart.js: the shelves, the counter, the board, the map table, the stove, the porch, the
+  // dock), walking between them along the store's aisles; the one you talk to stops and turns to you.
+  storeTick(dt, near) {
+    const clock = this.smart.clock, jump = this.lastClock == null || Math.abs(clock - this.lastClock) > 0.25;
+    this.lastClock = clock;
+    const sync = (this.partyT += dt) > 0.5 || jump;
+    if (sync) this.partyT = 0;
+    for (const ep of near) {
+      const L = storeLayout(ep), list = this.rosters.get(ep);
+      if (!L || !list) continue;
+      if (this.storeSmart.get(ep) !== L) this.registerStore(L);
+      if (sync) this.refreshParties(ep, L, list);
+      const ds = Math.max(0, Math.hypot(L.centre.x - this.player.x, L.centre.z - this.player.z) - STORE_R), seen = ds < DRAW_OUT;
+      this.act(ep, L, list, clock, jump || !seen, dt);
+    }
+    this.lotTick(dt, sync, clock, jump);
+  }
+  // gl-e: at a trailhead (stream B's trailhead.js: the entry points with no outfitter), the parties going in load at the
+  // lot for STORE_LOT.before hours before their canoes go in the water, and those coming out unload there after
+  lotTick(dt, sync, clock, jump) {
+    const TH = this.trailheadOf; if (typeof TH !== 'function') return;
+    const p = this.player;
+    for (const e of this.world.entryPoints) {
+      if (Math.abs(e.x - p.x) > 600 || Math.abs(e.z - p.z) > 600) { if (this.lots.has(e.ep)) this.lots.delete(e.ep); continue; }
+      let T = null; try { T = TH(e.ep); } catch { T = null; } // (stream B's: a trailhead has no store)
+      if (!T || !T.lot || !Number.isFinite(T.lot.x)) continue;
+      const d = Math.hypot(T.lot.x - p.x, T.lot.z - p.z);
+      if (d > NEAR_STORE) { if (d > NEAR_STORE + 20) this.lots.delete(e.ep); continue; }
+      let list = this.lots.get(e.ep);
+      if (!list || list.T !== T) { list = []; list.T = T; list.partySig = null; this.lots.set(e.ep, list); this.registerLot(e.ep, T); }
+      if (sync || list.partySig == null) this.refreshLot(e.ep, T, list);
+      this.act(e.ep, T, list, clock, jump || d > DRAW_OUT, dt, `lot:${e.ep}`);
+    }
+  }
+  refreshLot(ep, T, list) {
+    const now = this.storeParties(ep, this.today, this.day.hours, STORE_LOT), sig = now.map((e) => `${e.party.id}:${e.dir}`).join(',');
+    if (sig === list.partySig) return;
+    const keep = new Map(list.map((v) => [`${v.partyId}:${v.dir}`, v]));
+    list.length = 0;
+    for (const e of now) { const v = keep.get(`${e.party.id}:${e.dir}`) || this.partyVisitor(ep, T, e, 0, true); if (v) list.push(v); }
+    list.partySig = sig;
+  }
+  registerLot(ep, T) {
+    const where = `lot:${ep}`, S = this.smart, g = (x, z, h = 0) => ({ x, z, y: this.groundAt(T, x, z), heading: h });
+    S.clear(where);
+    const c = T.lot, hd = c.heading || 0, ax = Math.cos(hd), az = -Math.sin(hd), bx = -az, bz = ax;
+    // (round the cars: ten spots on two rings, the inner for loading, the outer for standing about)
+    const ring = []; for (let k = 0; k < 10; k++) { const r = k < 6 ? 1.8 : 3.4, t = (k / (k < 6 ? 6 : 4)) * Math.PI * 2 + (k < 6 ? 0 : 0.4), u = Math.cos(t) * r, w = Math.sin(t) * r; ring.push(g(c.x + ax * u + bx * w, c.z + az * u + bz * w, Math.atan2(-(-(az * u + bz * w)), -(ax * u + bx * w)))); }
+    S.register({ where, act: 'load', slots: ring.slice(0, 6), x: c.x, z: c.z });
+    S.register({ where, act: 'wait', slots: ring.slice(6), x: c.x, z: c.z });
+    const L2 = T.landing && Number.isFinite(T.landing.x) ? T.landing : null;
+    if (L2) S.register({ where, act: 'unload', slots: [g(L2.x + 1.2, L2.z), g(L2.x - 1.2, L2.z), g(L2.x, L2.z + 1.2)], x: L2.x, z: L2.z });
+    else S.register({ where, act: 'unload', slots: ring.slice(0, 3), x: c.x, z: c.z });
+  }
+  // the parties at the store changed: keep those still here, add the new (at the door), let the gone go
+  refreshParties(ep, L, list) {
+    this.refreshLocals(ep, L, list);
+    const now = this.storeParties(ep), sig = now.map((e) => `${e.party.id}:${e.dir}`).join(',');
+    if (sig === list.partySig) return;
+    const keep = new Map(list.filter((v) => v.inParty).map((v) => [`${v.partyId}:${v.dir}`, v]));
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].inParty) { if (!now.some((e) => `${e.party.id}:${e.dir}` === `${list[i].partyId}:${list[i].dir}`)) this.smart.forget(`${list[i].key}#`); list.splice(i, 1); }
+    let room = STORE_P.inside;
+    for (const e of now) {
+      let v = keep.get(`${e.party.id}:${e.dir}`);
+      if (v) { // (still here: as many inside as the room has now; one sent out walks to the dock)
+        const inside = Math.max(1, Math.min(v.figs.length, 1 + Math.min(2, Math.max(0, room - 1))));
+        v.figs.forEach((f, i) => { f.where = i < inside ? 'store' : 'dock'; if (v.crew[i]) v.crew[i].where = f.where; });
+      } else v = this.partyVisitor(ep, L, e, room);
+      if (!v) continue;
+      room -= v.figs.filter((f) => f.where === 'store').length;
+      list.push(v);
+    }
+    list.partySig = sig;
+  }
+  // the week's locals in their hours: one whose hours begin comes in at the door, one whose hours are over goes
+  inHours(v) { const h = this.day.hours; return !v.hours || (h >= v.hours[0] && h < v.hours[1]); }
+  refreshLocals(ep, L, list) {
+    const op = outfitterProfile(ep, this.world), week = this.visitorsOf(ep, L, op), want = week.filter((v) => this.inHours(v)), sig = want.map((v) => v.key).join(',');
+    if (list.localSig === undefined) list.localSig = list.filter((v) => !v.keeper && !v.extra && !v.inParty).map((v) => v.key).join(',');
+    if (sig === list.localSig) return;
+    for (let i = list.length - 1; i >= 0; i--) { const v = list[i]; if (!v.keeper && !v.extra && !v.inParty && !want.some((w) => w.key === v.key)) { this.smart.forget(`${v.key}#`); list.splice(i, 1); } }
+    for (const w of want) if (!list.some((v) => v.key === w.key)) { for (const f of w.figs) { f.x = L.door.x; f.z = L.door.z; f.y = L.door.y; f.fresh = true; } w.arrive = true; list.push(w); }
+    list.localSig = sig;
+  }
+  // what each kind wants to be at (weights): a party member by the way they go and where they are, a local by kind
+  wantsOf(v, f) {
+    if (v.inParty) {
+      if (f.where === 'lot') return v.dir === 'in' ? LOT_WANTS.in : LOT_WANTS.out;
+      if (f.where === 'dock') return v.dir === 'in' ? STORE_WANTS.dockIn : STORE_WANTS.dockOut;
+      // going in, the last step before the canoes go in the water: out to the dock
+      if (v.dir === 'in' && this.day.hours >= v.until - SMART_STEP) return STORE_WANTS.dockIn;
+      return v.dir === 'in' ? (f.member === 0 ? STORE_WANTS.leadIn : STORE_WANTS.in) : STORE_WANTS.out;
+    }
+    return STORE_WANTS[v.arch] || STORE_WANTS.local;
+  }
+  // the store's smart objects, in its own frame (props.js: a across, b toward the lake), registered once per build
+  registerStore(L) {
+    const where = `store:${L.ep}`, S = this.smart;
+    S.clear(where);
+    this.storeSmart.set(L.ep, L);
+    const at = (a, b, face, extra = {}) => { const p = this.placeAt(L, { a, b, face, pose: 'stand' }, null); return { x: p.x, z: p.z, y: L.floorY + (extra.y || 0), heading: p.heading }; };
+    const reg = (act, slots, data = {}) => S.register({ where, act, slots, x: slots[0].x, z: slots[0].z, heading: slots[0].heading, data });
+    for (const [a, bs] of [[-2.15, [0.2, 0.95]], [-0.1, [0.4, -0.35]], [1.76, [-0.6, 0.1]]]) reg('browse', bs.map((b) => at(a, b, [1, 0])));
+    reg('pay', [at(0.6, -1.75, [0, -1]), at(1.45, -1.75, [0, -1])], { counter: 0.42, top: 0.95 });
+    reg('ask', [at(SPOTS.counterEnd.a, SPOTS.counterEnd.b, SPOTS.counterEnd.face)]);
+    reg('read', [at(2.24, 2.0, [1, 0]), at(SPOTS.mid.a, SPOTS.mid.b, SPOTS.mid.face)]);
+    reg('look', [at(1.62, 1.3, [1, 0]), at(1.62, 1.9, [1, 0])], { counter: 0.42, top: 0.82 });
+    reg('wall', [at(-2.24, 2.35, [-1, 0])]);
+    reg('warm', [at(SPOTS.stove.a, SPOTS.stove.b, SPOTS.stove.face)]);
+    reg('sit', [{ ...at(SPOTS.chair.a, SPOTS.chair.b, SPOTS.chair.face), seat: SPOTS.chair.seat }]);
+    if (L.look && L.look.porch) {
+      if (L.seats && L.seats.length) reg('sit', L.seats.map((q) => ({ x: q.x, z: q.z, y: q.y - 0.46, heading: q.heading, seat: 0.46 })));
+      reg('rail', [at(SPOTS.rail.a, SPOTS.rail.b, SPOTS.rail.face, { y: SPOTS.rail.y }), at(SPOTS.rail2.a, SPOTS.rail2.b, SPOTS.rail2.face, { y: SPOTS.rail2.y })]);
+    }
+    // the dock: loading and unloading at the berths (on the deck, turned to the canoe's side), waiting at its foot, a
+    // line off the end
+    const berths = (L.dockBerths || []).map((q) => ({ x: q.deck.x, z: q.deck.z, y: q.deck.y, heading: Math.atan2(-(q.side.z - q.deck.z), q.side.x - q.deck.x), deck: true }));
+    if (berths.length) { reg('load', berths); reg('unload', berths); }
+    const g = (q) => (q ? { x: q.x, z: q.z, y: this.groundAt(L, q.x, q.z), heading: L.dockHeading ?? 0, yard: true } : null);
+    const wait = [g(L.dockFoot), g(L.dockLand), g(L.stepsFoot)].filter(Boolean);
+    if (wait.length) reg('wait', wait);
+    if (L.dockBerths && L.dockBerths[2]) { const q = L.dockBerths[2].deck; reg('fish', [{ x: q.x, z: q.z, y: q.y, heading: L.dockHeading ?? 0, deck: true }]); }
+  }
+  groundAt(L, x, z) { let y = null; try { y = this.ground ? this.ground(x, z) : null; } catch { y = null; } return Number.isFinite(y) ? y : Number.isFinite(L.floorY) ? L.floorY - (L.site && L.site.rise ? L.site.rise : 0.6) : (this.world.heightAt ? this.world.heightAt(x, z) : 0); }
+  // everyone at the store at something this step, and walking there
+  act(ep, L, list, clock, snap, dt, where = `store:${ep}`) {
+    const people = [], figs = [];
+    for (const v of list) {
+      if (v.keeper || v.extra) continue;
+      v.figs.forEach((f, i) => { const key = `${v.key}#${i}`; f.key = key; people.push({ key, wants: this.wantsOf(v, f) }); figs.push([v, f, i]); });
+    }
+    const D = this.dialogue, p = this.player;
+    for (const [v, f, i] of figs) { const held = !!(D && D.talking && D.talkingTo(`${v.key}#${i}`)); if (held !== !!f.held) { f.held = held; this.smart.hold(f.key, held); } }
+    // (a slot where someone another module stood stays theirs: extraAt)
+    let blocked = null;
+    for (const v of list) if (v.extra) for (const f of v.figs) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (Math.hypot(q.x - f.x, q.z - f.z) < 0.6) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
+    const m = this.smart.assign(where, people, clock, blocked);
+    for (const [v, f] of figs) {
+      if (f.held) { // talked to: stop, and turn to you
+        f.path = null; f.spec = f.spec.pose === 'sit' ? f.spec : { pose: 'stand', lean: 0.02 };
+        if (f.spec.pose !== 'sit') { const want = Math.atan2(-(p.z - f.z), p.x - f.x); f.heading += clamp(wrapPi(want - f.heading), -3 * dt, 3 * dt); }
+        continue;
+      }
+      const a = m.get(f.key);
+      if (a) {
+        const id = `${a.obj.id}#${a.slot}`;
+        if (f.at !== id) {
+          f.at = id; f.act = a.act;
+          const sl = a.obj.slots[a.slot], goal = { x: sl.x, z: sl.z, y: sl.y ?? L.floorY, heading: sl.heading ?? 0, spec: specFor(a, sl) };
+          f.goal = goal;
+          if (snap || (f.fresh && !v.inParty && !v.arrive)) this.settle(f);
+          else f.path = this.route(L, f, goal);
+          f.fresh = false;
+        }
+      } else if (f.fresh) { f.fresh = false; } // (nothing free: they stay where they stand)
+      if (f.path && f.path.length) this.walkOn(f, dt);
+    }
+  }
+  settle(f) { const g = f.goal; if (!g) return; f.x = g.x; f.z = g.z; f.y = g.y; f.heading = g.heading; f.spec = g.spec; f.path = null; }
+  walkOn(f, dt) {
+    let left = WALK_V * dt;
+    while (left > 0 && f.path.length) {
+      const q = f.path[0], dx = q.x - f.x, dz = q.z - f.z, d = Math.hypot(dx, dz);
+      if (d <= left) { f.x = q.x; f.z = q.z; f.y = q.y; left -= d; f.walked = (f.walked || 0) + d; f.path.shift(); continue; }
+      const k = left / d; f.x += dx * k; f.z += dz * k; f.y += (q.y - f.y) * k; f.walked = (f.walked || 0) + left;
+      const want = Math.atan2(-dz, dx); f.heading += clamp(wrapPi(want - f.heading), -6 * dt, 6 * dt);
+      left = 0;
+    }
+    if (!f.path.length) { f.path = null; this.settle(f); } else f.spec = WALK_SPEC;
+  }
+  // a way from where a figure stands to a goal through the store: along the aisles (the left, the middle and the right
+  // one, and the cross aisles behind and before the shelves), out the door, down the steps, to the dock
+  route(L, f, goal) {
+    if (!L.axes) return [{ x: goal.x, z: goal.z, y: goal.y }]; // (a trailhead's lot: straight there)
+    const fr = this.frameOf(L), A = fr.ab(f.x, f.z), B = fr.ab(goal.x, goal.z), zone = (q) => (Math.abs(q.a) < 2.9 && Math.abs(q.b) < 3.9 ? 'in' : q.b > 3.9 && q.b < 6.2 && Math.abs(q.a) < 3.4 ? 'porch' : 'out');
+    const za = zone(A), zb = zone(B), pts = [], floor = L.floorY;
+    const P = (a, b, y = floor) => { const w = fr.w(a, b); return { x: w.x, z: w.z, y }; };
+    const inside = (a0, b0, a1, b1) => { // in the room: to the nearer cross aisle, across, and along to it
+      if (Math.abs(a0 - a1) < 0.45 || (Math.abs(b0 - b1) < 0.45 && (b0 < -1.05 || b0 > 1.45))) return;
+      const bc = Math.abs(b0 - AISLE.back) + Math.abs(b1 - AISLE.back) <= Math.abs(b0 - AISLE.front) + Math.abs(b1 - AISLE.front) ? AISLE.back : AISLE.front;
+      pts.push(P(a0, bc), P(a1, bc));
+    };
+    const door = [P(DOOR_A, AISLE.front), P(DOOR_A, 3.7), P(DOOR_A, 4.6)], steps = L.stepsFoot ? { x: L.stepsFoot.x, z: L.stepsFoot.z, y: this.groundAt(L, L.stepsFoot.x, L.stepsFoot.z) } : null;
+    if (za === 'in' && zb === 'in') inside(A.a, A.b, B.a, B.b);
+    else if (za === 'in') { inside(A.a, A.b, DOOR_A, AISLE.front); pts.push(...door.slice(1)); if (zb === 'out' && steps) pts.push(steps); }
+    else if (zb === 'in') { if (za === 'out' && steps) pts.push(steps); pts.push(door[2], door[1], door[0]); inside(DOOR_A, AISLE.front, B.a, B.b); }
+    else if (za === 'porch' && zb === 'out') { if (steps) pts.push(steps); }
+    else if (za === 'out' && zb === 'porch') { if (steps) pts.push(steps); }
+    if (zb === 'out' && goal.y > (L.dockDeck ? L.dockDeck.y - 0.05 : Infinity) && L.dockFoot) pts.push({ x: L.dockFoot.x, z: L.dockFoot.z, y: this.groundAt(L, L.dockFoot.x, L.dockFoot.z) }); // (onto the dock from its foot)
+    pts.push({ x: goal.x, z: goal.z, y: goal.y });
+    return pts;
+  }
+  frameOf(L) {
+    const X = L.axes.a, Z = L.axes.b, c = L.centre;
+    return { ab: (x, z) => ({ a: (x - c.x) * X.x + (z - c.z) * X.z, b: (x - c.x) * Z.x + (z - c.z) * Z.z }), w: (a, b) => ({ x: c.x + X.x * a + Z.x * b, z: c.z + X.z * a + Z.z * b }) };
+  }
+  // a figure's state (the tests and the console): where, facing, at what, walking
+  figState(key, i = 0) {
+    for (const list of this.rosters.values()) for (const v of list) if (v.key === key) {
+      const f = v.figs[i]; if (!f) return null;
+      const b = this.bodies.find((x) => x.who && x.who.person === v && x.who.fig === i);
+      return { x: f.x, z: f.z, y: f.y, heading: f.heading + (b ? b.s.turn : 0), act: f.act || null, at: f.at || null, walking: !!(f.path && f.path.length), held: !!f.held, where: f.where || 'store', drawn: !!b, activity: this.smart.activityOf(`${key}#${i}`) };
+    }
+    return null;
+  }
+
+  // --- gl-e: who you talked to, and who listens -------------------------------------------------------------------
+  // fn({ kind: 'visitor' | 'keeper' | 'party', partyId?, lakeId?, x, z, abs }) on each conversation or word (stream D's
+  // creel notices hear a party's catch through it) → off
+  onTalk(fn) { this.talkFns.push(fn); return () => { const i = this.talkFns.indexOf(fn); if (i >= 0) this.talkFns.splice(i, 1); }; }
+  emitTalk(e) {
+    const p = this.player, ev = { x: p.x, z: p.z, abs: this.today, ...e };
+    if (ev.lakeId == null || !ev.lakeId) ev.lakeId = this.lakeHere() || ev.lakeId || 0;
+    for (const fn of this.talkFns.slice()) { try { fn(ev); } catch (err) { console.warn('people.onTalk', err); } }
+    return ev;
+  }
+  nameLists() { return nameLists(); } // (gl-e: the tests)
+  // the 'storeparty' moment (main.js): in a store, a party member drawn within a few metres, none met yet, not talking
+  partyHere() {
+    const o = this.outfitter, p = this.player;
+    if (!o || !o.visit || !o.visit.inside || Object.keys(this.s.met).length || (this.dialogue && this.dialogue.talking)) return false;
+    return this.bodies.some((b) => { const f = b.who && !b.lent && b.who.person.inParty ? b.who.person.figs[b.who.fig] : null; return !!f && Math.hypot(f.x - p.x, f.z - p.z) < 5; });
+  }
+  // gl-e (scripts/gl-ground-lint.mjs): every line the people at store ep could say now, after grounding, as the pickers
+  // see them: [{ src, text }]. raw: outfitters.js's keeper lines as written (read only), before any grounding
+  lintLines(ep, { raw = false } = {}) {
+    ep = Number(ep);
+    const out = [], add = (src, list) => { for (const t of list || []) { const x = typeof t === 'string' ? t : t && t.text; if (x) out.push({ src, text: x }); } };
+    const F = this.groundCtx(), ok = (list) => (list || []).filter((t) => GROUND.ok(typeof t === 'string' ? t : t && t.text, F)), h = this.day.hours;
+    const op = outfitterProfile(ep, this.world);
+    if (raw) {
+      if (op && op.keeper) { for (const [k, l] of Object.entries(op.keeper.moments || {})) add(`outfitters:${k}`, l); for (let n = 0; n < 24; n++) add('outfitters:chat', [keeperLine(op, 'chat', { doy: this.day.doy, n, hours: h, rep: 0 })]); }
+      return out;
+    }
+    const L = storeLayout(ep);
+    for (const v of (L ? this.at(ep) : [])) {
+      if (v.keeper) {
+        const ch = this.charOf(ep), m = ch ? ch.manner : 'warm';
+        if (op && op.keeper) for (const k of ['hello', 'goodbye']) add(`keeper:${k}`, ok(forHourPool(op.keeper.moments[k] || [], h)));
+        add('keeper:idle', ok(KEEPER_IDLE[m] || KEEPER_IDLE.warm));
+        add('keeper:word', this.wordList(v));
+        const adv = adviceFor(this.adviceCtx(), {}, this.today).map((a) => a.text(m));
+        add('keeper:advice', ok(adv));
+        add('keeper:past', ok(ch ? ch.past : []));
+        continue;
+      }
+      if (v.extra) continue;
+      if (v.inParty) { add(`party:${v.dir}`, this.tripLines(v)); add(`party:${v.dir}:lore`, ok(PARTY_LORE[v.trip.kind] || [])); add('party:intro', [this.pIntro(v, 0)]); continue; }
+      const pool = [...(REMARKS[v.arch] || [])];
+      if (this.weather && this.weather.wetness > 0.35) pool.push('Wet one out there.', 'Shake off by the stove, if you like.');
+      if (h < 9) pool.push('Early start, eh?');
+      if (h >= 19) pool.push('Getting on for supper.');
+      add(`visitor:${v.arch}:remark`, ok(pool));
+      add(`visitor:${v.arch}:hint`, this.hintList(v));
+      add(`visitor:${v.arch}:lore`, this.loreOf(v));
+      add(`visitor:${v.arch}:open`, ok(OPENERS[v.arch] || []).filter((w) => !(/^Morning/.test(w) && h >= 12) && !(/^Afternoon/.test(w) && (h < 12 || h >= 18))));
+    }
+    return out;
+  }
+  lakeHere() { const p = this.player; try { return this.tasks && typeof this.tasks.lakeNear === 'function' ? this.tasks.lakeNear(p.x, p.z, 8) || 0 : 0; } catch { return 0; } }
+  // a party's trip in their words (tests, the console): tripWords of storyOf, grounded
+  partyLines(party, dir = null, T = this.today) { const P = this.sched; if (!P) return []; const S = P.storyOf(party, T), F = this.groundCtx(); return tripWords(S, { T, dir, size: party.size }).filter((x) => GROUND.ok(x.text, F)); }
+  // a party you talked to in a store knows you out there (party-camps.js, party-moves.js): a line, once a day, or null
+  meet(v) {
+    if (!v || !v.partyId) return;
+    const e = this.world.entryPoints.find((x) => x.ep === v.ep), where = (e && e.name) || 'the'; // ("the Moose Lake store")
+    const had = this.s.met[v.partyId];
+    this.s.met[v.partyId] = { abs: had ? had.abs : this.today, ep: v.ep, where, exit: v.trip ? v.trip.exit : this.today, told: had ? had.told : null, dir: v.dir };
+    this.pruneMet(); this.write();
+  }
+  pruneMet() { for (const [k, m] of Object.entries(this.s.met)) if (!m || this.today > (m.exit ?? m.abs) + 7) delete this.s.met[k]; }
+  metOf(partyId) { const m = this.s.met[partyId]; return m && this.today <= (m.exit ?? m.abs) + 7 ? m : null; }
+  metLine(party, T = this.today) {
+    const m = party && this.metOf(party.id);
+    if (!m || m.told === T || m.abs === T && this.day.hours < 0) return null;
+    m.told = T; this.write();
+    const ago = T - m.abs, when = ago <= 0 ? 'this morning' : ago === 1 ? 'yesterday' : ago < 7 ? WEEKDAYS[(((m.abs + 4) % 7) + 7) % 7] : 'last week';
+    const r = seeded(hashKey(party.id), T, 0x3e7);
+    return fill(pickR(r, MET_LINES), { store: m.where, when });
+  }
+
+  // --- gl-e: grounding ---------------------------------------------------------------------------------------------
+  // the facts the lines are held to: the store you are in (its porch, its kind), the lake you are on
+  groundCtx() {
+    const o = this.outfitter, vis = o && o.visit, L = vis && vis.L ? vis.L : vis ? storeLayout(vis.ep) : null;
+    const op = vis ? outfitterProfile(vis.ep, this.world) : null, p = this.player;
+    // (the lake: at a store its landing's, whose ice the world shows there; out on the water the one you are on)
+    const e = vis ? this.world.entryPoints.find((x) => x.ep === vis.ep) : null;
+    let lake = e && e.lake > 0 ? e.lake : 0;
+    if (!lake) { try { lake = this.tasks && typeof this.tasks.lakeNear === 'function' ? this.tasks.lakeNear(p.x, p.z, 8) : 0; } catch { lake = 0; } }
+    return GROUND.facts({ store: L, kind: op ? op.kind : null, cafe: vis && vis.ep === 30, lake, ep: vis ? vis.ep : null });
+  }
+  grounded(t, F = null) { return GROUND.ok(t, F || this.groundCtx()); }
+
   // --- round A-F: the parties out there (parties.js, party-camps.js) -------------------------------------------
   // A party as people: one record per party (key and room 'party:<id>'), each member's look and name seeded by the
   // party (dress, the visitors' names), who they are in a few words. party-camps.js fills in figs (where each member
@@ -1137,6 +1626,7 @@ export class People {
       else if (d > NEAR_STORE + 20 && this.rosters.has(L.ep)) this.rosters.delete(L.ep);
     }
     for (const ep of [...this.rosters.keys()]) if (!storeLayout(ep)) this.rosters.delete(ep); // its tile let it go
+    try { this.storeTick(dt, near); } catch (e) { if (!this.tickWarned) { this.tickWarned = true; console.warn('people: the store tick', e); } } // gl-e
     // the figures to draw: a store's people all together once you are within DRAW_R of its walls (so nobody comes into
     // being as you walk in, or as a tie-up puts you at the door), kept to DRAW_OUT; the nearest first
     const want = [];
@@ -1147,6 +1637,7 @@ export class People {
         if (ds < DRAW_R || (drawn && ds < DRAW_OUT)) want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) - (v.keeper ? 5 : 0) });
       });
     }
+    for (const [ep, list] of this.lots) { const T = list.T, ds = T ? Math.hypot(T.lot.x - p.x, T.lot.z - p.z) : Infinity; if (ds < DRAW_R + 20) for (const v of list) v.figs.forEach((f, i) => want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) })); void ep; } // gl-e: a trailhead's lot
     if (this.extra) { try { for (const w of this.extra() || []) if (w && w.f) want.push(w); } catch (e) { console.warn('people.extra', e); } } // round A-F: the parties' camps
     want.sort((a, b) => a.d - b.d);
     const free = this.bodies.filter((b) => !b.lent), keep = want.slice(0, free.length); // (round A-F: a body lent out is the borrower's)
@@ -1166,6 +1657,8 @@ export class People {
       const v = b.who.person, f = v.figs[b.who.fig];
       if (!f) { b.who = null; b.park(); continue; } // (round A-F: a party's figure gone in for the night)
       this.look(b, v, f, eye, dt, inStore);
+      b.s.walk = f.walked || 0; // gl-e: the stride follows the metres walked; a browser's hand to the shelf
+      if (f.spec.pose === 'browse') { f.reachT = (f.reachT || 0) + dt; const c = (f.reachT % 7) / 7; b.s.reach = c < 0.12 ? c / 0.12 : c < 0.3 ? 1 : c < 0.42 ? (0.42 - c) / 0.12 : 0; } else b.s.reach = 0;
       b.group.position.set(f.x, f.y, f.z);
       b.group.rotation.set(0, f.heading + b.s.turn, 0);
       posePerson(b, f.spec, dt, f.look.wear.scale || 1);
@@ -1181,7 +1674,11 @@ export class People {
   // the head (and a little of the chest) toward you within reach, else an idle glance now and then; a standing visitor
   // turns round to you when you stand by them a while
   look(b, v, f, eye, dt, inStore) {
-    const s = b.s, sc = f.look.wear.scale || 1, h = f.heading + s.turn;
+    const s = b.s, sc = f.look.wear.scale || 1;
+    // gl-e: walking, the eyes ahead; talked to, the feet come round to you (storeTick turns the heading itself)
+    if (f.spec.pose === 'walk' || f.held) s.turn *= 1 - damp(4, dt);
+    if (f.spec.pose === 'walk') { s.yaw += (0 - s.yaw) * damp(4, dt); s.pitch += (0.08 - s.pitch) * damp(4, dt); s.look = 0; return; }
+    const h = f.heading + s.turn;
     const dx = eye.x - f.x, dz = eye.z - f.z, d = Math.hypot(dx, dz);
     const lx = (dx * Math.cos(h) - dz * Math.sin(h)), lz = (dx * Math.sin(h) + dz * Math.cos(h));
     const reach = v.keeper ? (inStore ? KEEPER_LOOK_R : LOOK_R) : LOOK_R;
@@ -1254,11 +1751,11 @@ export class People {
     // (fb4 join) the dot on the counter has the keeper's Q on its own label (outfitter.js asks keeperWord): no line here
     if (!e && q && o && o.pointer) { this.focus = q; this.qFocus = q; return; }
     const qText = q ? ` &nbsp; <kbd>Q</kbd>A word with ${esc(q.person.first)}` : '';
-    if (e) p.prompt = { key: 'E', text: `${e.person.keeper ? `A word with ${esc(e.person.name)} · ${esc(e.person.who)}` : this.promptText(e.person)}${qText}` };
+    if (e) p.prompt = { key: 'E', text: `${e.person.keeper ? `A word with ${esc(e.person.name)} · ${esc(e.person.who)}` : this.promptText(e.person, e.fig)}${qText}` };
     else p.prompt = { key: 'E', text: `${p.prompt && p.prompt.text ? p.prompt.text : 'The counter'}${qText}` };
     this.focus = e || q; this.qFocus = q;
     this.claimsE = !!e;
-    if (e && p.input.pressed('KeyE')) this.talkTo(e.person);
+    if (e && p.input.pressed('KeyE')) this.talkTo(e.person, e.fig);
     else if (q && p.input.pressed('KeyQ')) this.talkTo(q.person);
   }
   // the store's hotspot you look at, in outfitter.spot()'s shape ({ key, p: { x, z, at } }). fb4 join (stream D's find:
@@ -1278,9 +1775,11 @@ export class People {
     const v = b.who.person;
     return { verb: `A word with ${v.first}`, run: () => this.talkTo(v) };
   }
-  promptText(v) {
+  promptText(v, fig = 0) {
     const n = this.s.talked[v.key] || 0, t = this.taskOf(v);
-    const first = esc(v.first);
+    if (v.extra) return `Talk to ${esc(v.name)}${v.who ? ` · ${esc(v.who)}` : ''}`; // gl-e: someone another module stands here
+    const first = esc(v.inParty ? (v.figNames && v.figNames[fig]) || v.first : v.first);
+    if (v.inParty && !n) return `Talk to ${first} · ${esc(v.who)}`; // gl-e: a party member
     if (!n) return `Talk to ${esc(v.name)} · ${esc(v.who)}`;
     if (t && t.status === 'done') return t.kind === 'item' ? `Give ${first} the ${esc(t.label)}` : t.kind === 'photo' ? `Show ${first} the photo` : t.kind === 'fetch' ? `Give ${first} ${esc(t.short || 'it')}` : `Tell ${first} it’s delivered`;
     if (v.hasTask && !t && !this.s.paid[v.key] && n === 1) return `${first} · “I could use a hand”`;
@@ -1290,14 +1789,16 @@ export class People {
   // --- talking ----------------------------------------------------------------------------------------------------------
   say(v, words, secs = 8, first = false) { if (this.hud && words) this.hud.note(`${first ? v.name : v.first}${v.keeper || !first ? '' : `, ${v.who}`}: “${words}”`, secs); }
   // E (or Q at the counter): a conversation (dialogue.js), else (no dialogue in the build) their line as a note
-  talkTo(key) {
+  talkTo(key, fig = 0) {
     const v = typeof key === 'string' ? this.find(key) : key;
     if (!v) return null;
-    if (v.party) return this.partyWord ? this.partyWord(v) : null; // round A-F: a word from a party out there (a bark)
+    if (v.party) return this.partyWord ? this.partyWord(v) : null; // round A-F: a word from a party out there (a bark; gl-e: party-camps.js tells onTalk)
+    if (v.extra) return this.extraTalk(v); // gl-e: someone another module stands here
+    if (v.inParty) return this.dialogue ? this.pConverse(v, fig) : this.pTalk(v, fig); // gl-e: a party member in a store
     if (this.dialogue) return v.keeper ? this.keeperConverse(v) : this.converse(v);
     return v.keeper ? this.keeperTalk(v) : this.visitorTalk(v);
   }
-  find(key) { for (const list of this.rosters.values()) for (const v of list) if (v.key === key) return v; return null; }
+  find(key) { for (const list of [...this.rosters.values(), ...this.lots.values()]) for (const v of list) if (v.key === key) return v; return null; }
 
   // --- what dialogue.js needs: speakers, barks --------------------------------------------------------------------
   // The speaker of a person's figure: their name and role, and their head (the bone when drawn, else the spot they stand
@@ -1310,7 +1811,7 @@ export class People {
       key: `${v.key}#${fig}`, person: v.key, name: v.keeper ? v.first : names[fig] || v.first, role: roleOf(v, fig),
       hear: v.party ? v.hear || null : null, // round A-F: a party's greeting carries over the water (main.js: dialogue's reach)
       pos(out) {
-        const f = v.figs[fig], roster = v.party ? null : self.rosters.get(v.ep);
+        const f = v.figs[fig], roster = v.party ? null : v.lot ? self.lots.get(v.ep) : self.rosters.get(v.ep); // (gl-e: or a trailhead's lot)
         if (!f || (v.party ? !v.live : !roster || !roster.includes(v))) return null; // (round A-F: a party's, while its camp is drawn)
         const sc = f.look.wear.scale || 1, b = self.bodies.find((x) => x.who && x.who.person === v && x.who.fig === fig);
         if (b) { b.fig.bones.head.getWorldPosition(out); out.y += 0.16 * sc; return out; }
@@ -1342,7 +1843,7 @@ export class People {
     // hello; going, a goodbye not said yet this visit (or none)
     this.visitTick();
     if (moment === 'hello' || moment === 'passing' || moment === 'ride') { const mh = this.memoryHello(ep); if (mh) words = mh; }
-    if (this.said.has(words)) {
+    if (this.said.has(words) || !this.grounded(words)) { // (gl-e: or not true here and now)
       const op = outfitterProfile(ep, this.world), pool = op && op.keeper && op.keeper.moments ? op.keeper.moments[moment === 'goodbye' ? 'goodbye' : 'hello'] || [] : [];
       words = this.fresh(forHourPool(pool, this.day.hours));
       if (!words) return true; // (a nod: nothing new to say)
@@ -1362,7 +1863,7 @@ export class People {
     if (!D || D.talking || !p.onFoot || p.teleporting || (this.quiet && this.quiet()) || (o && (o.open || o.bunking)) || (this.hud && this.hud.paper)) return;
     const inside = !!(vis && vis.inside);
     for (const b of this.bodies) {
-      if (!b.who || b.lent || b.who.person.party) continue; // (round A-F: a party's greeting is party-camps.js's)
+      if (!b.who || b.lent || b.who.person.party || b.who.person.extra) continue; // (round A-F: a party's greeting is party-camps.js's; gl-e: and someone another module stands speaks for themselves)
       const v = b.who.person, fi = b.who.fig, f = v.figs[fi];
       const m = v._m || (v._m = { near: false, last: -1e9, n: 0, pair: false, idle: false });
       const d = Math.hypot(f.x - p.x, f.z - p.z), here = inside && this.roomEp === v.ep;
@@ -1384,7 +1885,7 @@ export class People {
         if (w) { this.bark(v, 0, w.text, w.pri); m.last = this.clock; m.n++; }
       }
       m.near = near;
-      const talk = PAIRS[v.arch];
+      const talk = v.inParty && (v.arch === 'family' || v.arch === 'guide' || v.arch === 'scouts' || v.figs.length < 2 || v.figs[1].where !== 'store') ? null : PAIRS[v.arch]; // (gl-e: a party's pair talk, two of them inside)
       if (talk && v.figs.length > 1 && !m.pair && here && this.roomT > PAIR_AFTER && d < 9.5) {
         m.pair = true;
         const fresh2 = talk.filter(([a2, c2]) => !this.said.has(a2[1]) && !this.said.has(c2[1])); // content B: not twice in a visit
@@ -1416,11 +1917,12 @@ export class People {
   converse(v) {
     const n = this.s.talked[v.key] || 0;
     this.s.talked[v.key] = n + 1;
+    this.emitTalk({ kind: 'visitor', ep: v.ep }); // gl-e
     if (v.hasTask && !this.s.paid[v.key] && !this.s.tasks[v.key]) this.prepare(v); // written up while you talk
     this.write();
     const first = n === 0, t = this.taskOf(v);
     let say;
-    if (first) say = `${opener(v.arch, this.day.hours)} ${(INTRO[v.arch] || (() => ''))(v)}`.trim();
+    if (first) say = `${opener(v.arch, this.day.hours, this.groundCtx())} ${(INTRO[v.arch] || (() => ''))(v)}`.trim();
     else if (t && t.status === 'done') say = doneRemark(t);
     else if (t) say = statusWords(t);
     else if (this.s.paid[v.key]) say = THANKS[v.arch] || 'Thank you again.';
@@ -1444,9 +1946,12 @@ export class People {
   // their hints, in turn (each told on the map where it means some water), then that they have told you all they know
   hintList(v) {
     const A = ARCH[v.arch]; if (!A) return [];
-    if (v._hints) return v._hints;
+    const at = this.today * 8 + Math.floor(this.day.hours / 3); // (gl-e: written again every three hours: the weather, the ground)
+    if (v._hints && v._hintsAt === at) return v._hints;
+    v._hintsAt = at;
     const H = new HintWriter(this, v.ep, seeded(v.ep, this.week, v.arch.length, 0x4a17)), out = [];
-    for (const k of A.hints) { const fn = HINTS[k]; if (!fn) continue; try { const h = fn(H, v, 0, this); if (h && h.text && !out.some((x) => x.text === h.text)) out.push(h); } catch (e) { console.warn('people: a hint', k, e); } }
+    const F = this.groundCtx();
+    for (const k of A.hints) { const fn = HINTS[k]; if (!fn) continue; try { const h = fn(H, v, 0, this); if (h && h.text && !out.some((x) => x.text === h.text) && GROUND.ok(h.text, F)) out.push(h); } catch (e) { console.warn('people: a hint', k, e); } } // (gl-e: only what is true now)
     return (v._hints = out);
   }
   vArea(v) {
@@ -1460,10 +1965,12 @@ export class People {
   }
   // about them: their lore lines, their route or their history where those are hints of theirs
   loreOf(v) {
-    if (v._lore) return v._lore;
+    if (v._lore && v._loreAt === this.today) return v._lore;
+    v._loreAt = this.today;
     const out = [];
     for (const l of LORE[v.arch] || []) {
       if (typeof l === 'function') { out.push(l(v)); continue; }
+      if (typeof l === 'string' && l !== 'route' && l !== 'history' && !this.grounded(l)) continue; // gl-e
       if (l === 'route' || l === 'history') { try { const H = new HintWriter(this, v.ep, seeded(v.ep, this.week, 0x10e)), h = HINTS[l](H, v, 0, this); if (h && h.text) out.push(h.text); } catch { /* the place has none */ } continue; }
       out.push(l);
     }
@@ -1497,6 +2004,80 @@ export class People {
     const words = this.claimWith(v, t);
     return { say: words, choices: this.vChoices(v) };
   }
+  // --- gl-e: a party member in a store: their trip, from their own schedule ------------------------------------------
+  storyFor(v) {
+    const P = this.sched; if (!P || !v.trip || typeof P.storyOf !== 'function') return null;
+    try { return P.storyOf(v.trip, this.today); } catch (e) { console.warn('people: a story', e); return null; }
+  }
+  tripLines(v) {
+    const S = this.storyFor(v), F = this.groundCtx();
+    return tripWords(S, { T: this.today, dir: v.dir, size: v.trip ? v.trip.size : 2 }).filter((x) => GROUND.ok(x.text, F));
+  }
+  pIntro(v, fig) {
+    const p = v.trip, n = p ? p.size : 2, name = (v.figNames && v.figNames[fig]) || v.first, op = opener(v.dir === 'out' ? 'returning' : 'trippers', this.day.hours, this.groundCtx());
+    const lead = fig === 0 ? `I’m ${name}.` : `${name}. I’m with ${v.first}.`;
+    if (v.dir === 'in') {
+      const what = p && p.kind === 'group' ? `${cap(num(n))} of us in ${num(p.canoes)} canoes` : p && p.kind === 'family' ? 'The whole family' : n === 1 ? 'Just me' : `${cap(num(n))} of us`;
+      return `${op} ${lead} ${what}, going in today.`;
+    }
+    const nights = p ? p.exit - p.day : 0;
+    return `${op} ${lead} We just came off the water: ${num(nights)} ${nights === 1 ? 'night' : 'nights'}.`;
+  }
+  pConverse(v, fig = 0) {
+    const n = this.s.talked[v.key] || 0;
+    this.s.talked[v.key] = n + 1;
+    this.meet(v);
+    this.emitTalk({ kind: 'visitor', partyId: v.partyId, ep: v.ep, dir: v.dir });
+    if (v.hasTask && !this.s.paid[v.key] && !this.s.tasks[v.key]) this.prepare(v);
+    this.write();
+    this.visitTick();
+    const t = this.taskOf(v);
+    let say = !n ? this.pIntro(v, fig) : t && t.status === 'done' ? doneRemark(t) : t ? statusWords(t) : this.fresh(['Hello again.', 'Back again?', 'Oh, hi.']) || 'Mm?';
+    this.mark(say);
+    if (v._m) v._m.last = this.clock;
+    const name = (v.figNames && v.figNames[fig]) || v.first;
+    return this.dialogue.open({ speaker: this.speakerOf(v, fig), name, role: v.who, room: v.ep, start: () => ({ say, choices: this.pChoices(v, fig) }),
+      bye: () => { const b = this.fresh(v.dir === 'in' ? ['Maybe we’ll see you out there.', 'See you on the water.', 'Have a good one.'] : ['Enjoy it out there.', 'Go on, then. We’re jealous.', 'Paddle safe.']); if (b) this.mark(b); return b; } });
+  }
+  pChoices(v, fig) {
+    const a = this.asked(v), out = [], lines = this.tripLines(v), t = this.taskOf(v);
+    if (v.dir === 'in') out.push({ text: a.area ? 'Say that again?' : 'Where are you headed?', dim: a.area >= lines.length, go: () => this.pTrip(v, fig) });
+    else out.push({ text: a.area ? 'What else?' : 'How was it?', dim: a.area >= lines.length, go: () => this.pTrip(v, fig) });
+    const lore = PARTY_LORE[v.trip ? v.trip.kind : 'pair'] || PARTY_LORE.pair;
+    out.push({ text: a.self ? 'Go on.' : v.dir === 'in' ? 'Been in before?' : 'Would you go again?', dim: a.self >= lore.length, go: () => this.pSelf(v, fig) });
+    if (t && t.status === 'done') out.push({ text: doneChoice(t), kind: 'task', go: () => ({ say: this.claimWith(v, t), choices: this.pChoices(v, fig) }) });
+    else if (t) out.push({ text: aboutChoice(t), kind: 'task', go: () => ({ say: statusWords(t), choices: this.pChoices(v, fig) }) });
+    else if (v.hasTask && !this.s.paid[v.key]) out.push({ text: 'Need a hand with anything?', kind: 'task', go: () => this.vAsk(v) });
+    out.push({ text: 'Goodbye.', kind: 'bye', go: () => null });
+    return out;
+  }
+  pTrip(v, fig) {
+    const a = this.asked(v), lines = this.tripLines(v);
+    let say;
+    if (a.area < lines.length) { say = lines[a.area++].text; this.write(); } else say = this.fresh(v.dir === 'in' ? ['That’s the plan, anyway.', 'If the wind lets us.'] : ['That’s the trip. I’d go back tomorrow.', 'That’s about it. Best week of the year.']) || 'That’s about it.';
+    this.mark(say);
+    return { say, choices: this.pChoices(v, fig) };
+  }
+  pSelf(v, fig) {
+    const a = this.asked(v), lore = (PARTY_LORE[v.trip ? v.trip.kind : 'pair'] || PARTY_LORE.pair).filter((l) => this.grounded(l));
+    let say;
+    if (a.self < lore.length) { say = lore[a.self++]; this.write(); } else say = this.fresh(NO_MORE2) || NO_MORE2[0];
+    this.mark(say);
+    return { say, choices: this.pChoices(v, fig) };
+  }
+  // no dialogue in the build: their first line as a note
+  pTalk(v, fig) { this.meet(v); const l = this.tripLines(v)[0]; const w = l ? l.text : this.pIntro(v, fig); this.say(v, w, 9, true); return w; }
+  // someone another module stands in a store: their own conversation (talk), else their lines in turn as barks
+  extraTalk(v) {
+    const rec = v.extra;
+    this.emitTalk({ kind: 'visitor', ep: v.ep, extra: rec.key });
+    if (typeof rec.talk === 'function') { try { return rec.talk(v); } catch (e) { console.warn('people: extra talk', e); } }
+    const lines = typeof rec.lines === 'function' ? rec.lines(v) : rec.lines || [];
+    if (!lines.length) return null;
+    const w = lines[Math.min(rec.n++, lines.length - 1)];
+    this.bark(v, 0, w, PRI.reply);
+    return w;
+  }
   // --- content B: the keeper as a person (talk-keepers.js, talk-rumours.js, talk-memory.js) ------------------------
   // The keeper's tree (the owner's content pass, 2026-10-25): the week's word on the water (rumours that point at real
   // lakes, sites and portages, pencilled on the map), their arc's next beat in gold when it is ready (else "Ask about…":
@@ -1506,6 +2087,7 @@ export class People {
     const op = outfitterProfile(v.ep, this.world), pr = this.profile, d = this.day, ch = this.charOf(v.ep), m = ch ? ch.manner : 'warm';
     const n = this.s.talked[v.key] || 0, stamp = `${d.year}-${d.doy}`;
     this.s.talked[v.key] = n + 1;
+    this.emitTalk({ kind: 'keeper', ep: v.ep }); // gl-e
     if (pr && this.s.chat[v.ep] !== stamp) { this.s.chat[v.ep] = stamp; pr.raise(v.ep, STANDING_CHAT); } // the first word of the day
     const days = this.s.visits[v.ep] || (this.s.visits[v.ep] = []);
     if (!days.includes(this.today)) { days.push(this.today); if (days.length > 40) days.shift(); }
@@ -1564,7 +2146,7 @@ export class People {
       this.wordCache.set(key, base);
     }
     // the weather, now (it changes within a week): after the rumours
-    const out = base.slice(), wx = this.weatherWord(v.ep, m);
+    const F = this.groundCtx(), out = base.filter((x) => GROUND.ok(x.text, F)), wx = this.weatherWord(v.ep, m); // (gl-e: only what is true now)
     if (wx) out.splice(Math.min(3, out.length), 0, { id: 'weather', kind: 'weather', text: wx });
     return out;
   }
@@ -1681,7 +2263,8 @@ export class People {
     const ch = this.charOf(v.ep), m = ch ? ch.manner : 'warm';
     const list = adviceFor(this.adviceCtx(), this.s.advised, this.today);
     let say = null;
-    for (const a of list) { const t = a.text(m); if (this.said.has(t)) continue; say = t; this.s.advised[a.id] = this.today; break; }
+    const F = this.groundCtx();
+    for (const a of list) { const t = a.text(m); if (this.said.has(t) || !GROUND.ok(t, F)) continue; say = t; this.s.advised[a.id] = this.today; break; } // (gl-e: no fish advice on the ice)
     this.write();
     if (!say) say = { warm: 'You know it all now, dear. Go and do it.', dry: 'I’m out of advice. Use the old stuff.', gruff: 'Nothing new.', 'old hand': 'That’s all I’ve got. The lake teaches the rest.', keen: 'Honestly, you know more than me now!', precise: 'Nothing further to advise.' }[m] || 'That’s all I’ve got.';
     this.mark(say);
@@ -1914,7 +2497,8 @@ export class People {
     this._visit = vis;
   }
   mark(t) { if (!t || t === '…' || this.said.has(t)) return; this.said.add(t); this.visitLines.push(t); }
-  fresh(pool, rng = Math.random) { const list = (pool || []).filter((t) => t && !this.said.has(t)); return list.length ? list[Math.floor(rng() * list.length)] : null; }
+  // (gl-e: and only lines true here and now: grounding.js)
+  fresh(pool, rng = Math.random) { const F = pool && pool.length ? this.groundCtx() : null, list = (pool || []).filter((t) => t && !this.said.has(t) && GROUND.ok(t, F)); return list.length ? list[Math.floor(rng() * list.length)] : null; }
   // the keeper's services: the counter opens (its counter tab: the bunk and the rides)
   openCounter(v) {
     const o = this.outfitter; if (!o || typeof o.show !== 'function') return;
@@ -1925,7 +2509,8 @@ export class People {
   keeperTalk(v) {
     const op = outfitterProfile(v.ep, this.world), pr = this.profile, d = this.day;
     const n = (this.s.talked[v.key] || 0);
-    const words = keeperLine(op, 'chat', { rep: pr ? pr.outfitter(v.ep).rep : 0, doy: d.doy, n: n + this.today * 3, hours: d.hours });
+    let words = keeperLine(op, 'chat', { rep: pr ? pr.outfitter(v.ep).rep : 0, doy: d.doy, n: n + this.today * 3, hours: d.hours });
+    for (let k = 1; k < 8 && words && !this.grounded(words); k++) words = keeperLine(op, 'chat', { rep: pr ? pr.outfitter(v.ep).rep : 0, doy: d.doy, n: n + this.today * 3 + k * 7, hours: d.hours }); // (gl-e)
     this.s.talked[v.key] = n + 1;
     const stamp = `${d.year}-${d.doy}`;
     if (pr && this.s.chat[v.ep] !== stamp) { this.s.chat[v.ep] = stamp; pr.raise(v.ep, STANDING_CHAT); }
@@ -2005,7 +2590,7 @@ export class People {
   // write up what they will ask (a lost thing reads its site's tile, so it may take a moment)
   prepare(v) {
     if (this.preparing.has(v.key) || !this.tasks) return this.preparing.get(v.key);
-    const fn = ASKS[ARCH[v.arch].task]; if (!fn) return null;
+    const fn = v.inParty ? ASKS.partyLost : ASKS[ARCH[v.arch] && ARCH[v.arch].task]; if (!fn) return null; // (gl-e: a party coming out left it at their own last site)
     const job = Promise.resolve().then(() => fn(this, v, this.ctxFor(v))).then((r) => { job.result = r || null; return r; }, (e) => { console.warn('people: a task', e); job.result = null; return null; });
     this.preparing.set(v.key, job);
     return job;
@@ -2035,6 +2620,13 @@ export class People {
   }
   // E with them when it is done: paid here, and their thanks
   claimWith(v, t) {
+    // gl-e: with stream D's tally in the build (tasks.settle) a visitor's job is only done here; the pay lands at the trip's
+    // end. Without it, paid here as before.
+    if (this.tasks && typeof this.tasks.settle === 'function') {
+      if (t.status !== 'done') return 'Not quite yet, I think.';
+      t.handed = this.today; this.paid(v, t); this.tasks.changed && this.tasks.changed();
+      return THANKS[v.arch] || 'Thank you.';
+    }
     const r = this.tasks.claim(t.id, v.ep);
     if (!r || !r.ok) return 'Not quite yet, I think.';
     this.paid(v, t);
