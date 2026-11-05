@@ -228,7 +228,8 @@ try {
   const pages = await A.evaluate(() => window.__game.story.pages());
   result('4c the first night: one notebook:found, the notebook, the card', n1.found && n1.events === 1 && n1.notebooks === 1 && n1.saw === pages[0].text, n1);
   const where = await A.evaluate(() => { const inv = window.__game.profile.inventory; const c = inv.containers.find((k) => k.grid.some((e) => e.id === 'waltnotebook')); return c ? { item: c.item, where: c.where } : null; });
-  result('4d the notebook lies in the tent', where && where.where === 'tent', where);
+  // (play d7db6c3: the notebook goes into your pockets first, the tent's pile only when they are full)
+  result('4d the notebook is in your pockets (or the tent, pockets full)', where && (where.where === 'pockets' || where.where === 'tent'), where);
   // the notebook's Read: its paper, the pages turn, the story hears
   const read = await A.evaluate(() => {
     const g = window.__game, inv = g.profile.inventory;
