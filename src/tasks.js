@@ -989,7 +989,8 @@ export class Tasks {
     const pile = this.active.filter((t) => t.from === ep)
       .sort((a, b) => (a.status === 'done' ? 0 : 1) - (b.status === 'done' ? 0 : 1) || (a.taken || 0) - (b.taken || 0) || a.id - b.id);
     const ready = pile.filter((t) => t.status === 'done'), offered = slots.filter((t) => t && t.status === 'offered').length;
-    const sum = offered ? `${word(offered)} on offer · a new notice each morning` : writing ? 'the keeper is pinning up notices' : 'a new notice each morning';
+    const full = slots.every((t) => t && t.status !== 'offered'); // (every pin a torn scrap of yours: nothing new goes up until one is paid, the playthrough)
+    const sum = offered ? `${word(offered)} on offer · a new notice each morning` : writing ? 'the keeper is pinning up notices' : full ? 'every notice taken · new ones once these are paid' : 'a new notice each morning';
     const pileSum = pile.length ? [pile.length - ready.length ? `${word(pile.length - ready.length)} on the go` : '', ready.length ? `${word(ready.length)} done` : ''].filter(Boolean).join(' · ') : '';
     // (gl-d: no Claim all: a notice done is paid when you come in, on the trip's tally)
     const all = this.active.length >= LIMIT ? '<span class="sum full">You hold five</span>' : '';
