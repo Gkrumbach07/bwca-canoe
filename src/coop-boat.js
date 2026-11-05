@@ -309,8 +309,9 @@ export class CoopBoat {
     const plan = pk.pushPlan(d), head = pk.atTrailHead(d);
     const push = plan ? ask('Push it off', true)
       : { verb: 'Push it off', held: true, why: 'Too shallow to float it here', needs: [{ label: 'A hand’s depth of water under both ends', done: false }], next: `Shoulder it (${head ? 'E' : 'Q'}) and carry it along the shore to deeper water`, run: () => {} };
-    if (head) return { e: shoulder, q: push, label: 'the canoe, beached' };
-    return { e: push, q: shoulder, label: 'the canoe, beached' };
+    const label = typeof pk.beachedWords === 'function' ? pk.beachedWords(d) : 'the canoe, beached';
+    if (head) return { e: shoulder, q: push, label };
+    return { e: push, q: shoulder, label };
   }
   // pointer.js provider: a friend's canoe lying within reach, as our own is offered (nearby.js), on foot
   targets(ray, near) {
