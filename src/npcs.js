@@ -1266,17 +1266,18 @@ export class People {
     const list = this.extrasAt.get(ep) || [];
     const rec = { key: key || `extra:${ep}:${list.length}`, name, look, spot, lines: lines || [], role, talk, n: 0 };
     list.push(rec); this.extrasAt.set(ep, list);
-    this.rosters.delete(ep); // settled again with them in
+    // (into the store's people as they stand, if settled: nobody else is moved)
+    { const r = this.rosters.get(ep), L = storeLayout(ep); if (r && L) r.splice(1, 0, ...this.extraPeople(ep, L, [rec])); }
     const self = this;
     return {
       get person() { const r = self.rosters.get(ep) || null; return r ? r.find((v) => v.key === rec.key) || null : null; },
       say(text) { const v = this.person; return v ? self.bark(v, 0, text, PRI.reply) : (self.hud ? self.hud.note(`${name}: “${text}”`, 6) : null); },
-      remove() { const l = self.extrasAt.get(ep) || []; const i = l.indexOf(rec); if (i >= 0) l.splice(i, 1); self.rosters.delete(ep); },
+      remove() { const l = self.extrasAt.get(ep) || []; const i = l.indexOf(rec); if (i >= 0) l.splice(i, 1); const r = self.rosters.get(ep); if (r) { const j = r.findIndex((v) => v.extra === rec); if (j >= 0) r.splice(j, 1); } },
     };
   }
-  extraPeople(ep, L) {
+  extraPeople(ep, L, recs = this.extrasAt.get(Number(ep)) || []) {
     const out = [];
-    for (const rec of this.extrasAt.get(Number(ep)) || []) {
+    for (const rec of recs) {
       const S = typeof rec.spot === 'string' ? SPOTS[rec.spot] || SPOTS.counterEnd : null;
       const look = rec.look && rec.look.wear ? rec.look : dress(seeded(hashKey(rec.key), 0x5ea), { female: FEMALE.has(String(rec.name).split(' ')[0]), hatChance: 0.2, ...(rec.look || {}) });
       const f = S ? this.placeAt(L, S, look) : { x: rec.spot.x, z: rec.spot.z, y: rec.spot.y ?? L.floorY, heading: rec.spot.heading || 0, look, spec: { pose: 'stand', lean: 0.02 } };
@@ -1421,7 +1422,10 @@ export class People {
     }
     const D = this.dialogue, p = this.player;
     for (const [v, f, i] of figs) { const held = !!(D && D.talking && D.talkingTo(`${v.key}#${i}`)); if (held !== !!f.held) { f.held = held; this.smart.hold(f.key, held); } }
-    const m = this.smart.assign(where, people, clock);
+    // (a slot where someone another module stood stays theirs: extraAt)
+    let blocked = null;
+    for (const v of list) if (v.extra) for (const f of v.figs) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (Math.hypot(q.x - f.x, q.z - f.z) < 0.6) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
+    const m = this.smart.assign(where, people, clock, blocked);
     for (const [v, f] of figs) {
       if (f.held) { // talked to: stop, and turn to you
         f.path = null; f.spec = f.spec.pose === 'sit' ? f.spec : { pose: 'stand', lean: 0.02 };

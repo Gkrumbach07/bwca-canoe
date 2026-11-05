@@ -10,12 +10,13 @@
 // 4  A party coming out names only lakes in its stays, and a wind-bound day only when windDay says so.
 // 5b At a trailhead's lot (stream B's trailheadLayout; a stand-in here) the parties load and unload.
 // 6  No generated name is Walt or Eino; the cedar-minnow arc reads Leif.
+// 9  npcs.extraAt (stream C's summer help) stands someone in a store; npcs.onTalk hears the talk.
 // 8  An old save's people (v1) loads as v2 with met {}; met is pruned a week after a party's trip ends.
 // 7  (--perf) frame time in a busy store (Moose Lake, a July Saturday) against origin/main, alternating.
 import { launch, openGame, seasonAt, step, log, APP } from './gl-e-lib.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
-const ONLY = new Set(String(arg('only', '1,2,3,4,5,6,8')).split(',').map(Number));
+const ONLY = new Set(String(arg('only', '1,2,3,4,5,6,8,9')).split(',').map(Number));
 const PERF = process.argv.includes('--perf');
 const YEAR = 2026, DOY = 192, EP = 25, H0 = 7.75; // Saturday 11 July 2026
 const results = [];
@@ -81,6 +82,24 @@ try {
       return { ok, parties: list.map((v) => `${v.partyId} ${v.figs.length}`), want: want.length, acts: list.flatMap((v) => v.figs.map((f) => f.act)) };
     });
     check('5b at a trailhead lot the parties load and unload (stand-in lot)', r5.ok && r5.want > 0, r5);
+  }
+
+  // --- 9: someone another module stands in a store (stream C's summer help: npcs.extraAt), and onTalk hears it --------
+  if (ONLY.has(9)) {
+    const r9 = await A.evaluate(() => {
+      const g = window.__game, N = g.npcs, heard = [], off = N.onTalk((e) => heard.push(e));
+      let talked = null;
+      const h = N.extraAt(25, { key: 'help:25', name: 'Jenna', role: 'the summer help', spot: 'counterEnd', lines: ['Got a minute? Come to the counter.'], talk: (v) => { talked = v.name; return true; } });
+      g.step(1 / 30, 10);
+      const v = h.person, inRoster = !!v && N.at(25).includes(v);
+      N.talkTo(v);
+      const st = N.figState('help:25', 0);
+      h.remove(); g.step(1 / 30, 5);
+      const gone = !N.at(25).some((x) => x.key === 'help:25');
+      off();
+      return { inRoster, talked, heard: heard.map((e) => `${e.kind}:${e.extra || ''}`), at: st ? { act: st.act, x: +st.x.toFixed(1) } : null, gone };
+    });
+    check('9 extraAt stands someone in a store (their own talk), onTalk hears it, remove takes them away', r9.inRoster && r9.talked === 'Jenna' && r9.heard.includes('visitor:help:25') && r9.gone, r9);
   }
 
   // the party to follow: one with a site tonight (a party with none is not out on the water), the clock to an hour and a

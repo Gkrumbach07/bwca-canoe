@@ -19,7 +19,8 @@
 //   const smart = new Smart({ day, seed })      seed() → the season's number (parties.seed)
 //   smart.register({ where, act, x, z, y?, heading, slots?: [{ x, z, y?, heading? }], pose?, data? }) → id
 //   smart.unregister(id), smart.clear(where), smart.at(where) → [obj], smart.get(id)
-//   smart.assign(where, people, absHours) → Map key → { act, obj, slot, from, until, chunk }   people: [{ key, wants }]
+//   smart.assign(where, people, absHours, blocked?) → Map key → { act, obj, slot, from, until, chunk }   people: [{ key, wants }];
+//                blocked: a Set of '<obj id>#<slot>' someone else stands in (npcs.js: a person another module put there)
 //   smart.activityOf(personKey) → { act, obj, slot, until, paused } | null
 //   smart.hold(personKey, on)   while talked to
 //   STEP (game hours a step), ACTS (the acts and the pose each takes)
@@ -80,21 +81,21 @@ export class Smart {
   // a person's first liking at a step, free of anyone else (what the next step steers away from)
   top(key, chunk, wants) { return this.rank(key, chunk, wants).acts[0] || null; }
   // Everyone at `where` at abs game hour t: who is at what, in a slot of their own
-  assign(where, people, t = this.clock) {
-    const chunk = Math.floor(t / STEP), sig = people.map((p) => p.key).join(',');
-    const m = this.assignAt(where, people, chunk, sig);
+  assign(where, people, t = this.clock, blocked = null) {
+    const chunk = Math.floor(t / STEP), sig = people.map((p) => p.key).join(',') + (blocked && blocked.size ? `|-${[...blocked].join(',')}` : '');
+    const m = this.assignAt(where, people, chunk, sig, blocked);
     for (const [k, a] of m) this.now.set(k, this.held.has(k) ? { ...this.held.get(k), paused: true } : a);
     return m;
   }
   // a step's assignment: each person steers off what they were actually at the step before (worked out from the hour's
   // first step, where they steer off their own first liking: so a step's answer is the same whichever is asked first)
-  assignAt(where, people, chunk, sig) {
+  assignAt(where, people, chunk, sig, blocked = null) {
     const mk = `${where}|${chunk}|${sig}`;
     let m = this.memo.get(mk);
     if (!m) {
-      const prev = chunk % HOUR ? this.assignAt(where, people, chunk - 1, sig) : null;
+      const prev = chunk % HOUR ? this.assignAt(where, people, chunk - 1, sig, blocked) : null;
       m = new Map();
-      const objs = this.at(where), taken = new Set(), ordered = people.slice().sort((a, b) => (a.key < b.key ? -1 : 1));
+      const objs = this.at(where), taken = new Set(blocked || []), ordered = people.slice().sort((a, b) => (a.key < b.key ? -1 : 1));
       // the held keep their spot (and nobody takes it)
       for (const p of ordered) { const h = this.held.get(p.key); if (h && h.obj && objs.includes(h.obj)) { taken.add(`${h.obj.id}#${h.slot}`); m.set(p.key, h); } }
       for (const p of ordered) {
