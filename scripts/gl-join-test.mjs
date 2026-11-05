@@ -101,7 +101,9 @@ try {
   const pushed = await page.evaluate(async (home) => {
     const g = window.__game, o = g.outfitter, T = g.tasks;
     if (o.open) o.hide();
-    const board = T.board(home), ad = board.find((t) => t && t.status === 'offered');
+    // (a board's notices are written a few frames after it is first asked for)
+    let ad = null;
+    for (let k = 0; k < 40 && !ad; k++) { ad = T.board(home).find((t) => t && t.status === 'offered') || null; if (!ad) { window.__glj.step(5); await window.__glj.wait(100); } }
     const took = ad ? T.take(ad.id) : false;
     const l = o.landing(home), lake = g.world.lakes[l.lake - 1];
     o.port = l;
