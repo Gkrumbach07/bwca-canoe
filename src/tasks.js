@@ -14,8 +14,9 @@ import './flyers.css';
 // Every outfitter keeps its own cork board of four notices: two close by, one a day trip out, one far. One notice changes
 // each game day (a bare pin is filled first, else the oldest notice nobody took comes down).
 //
-// gl-d, the trip-end tally (the game-loop round, 2026-11-05; docs/build/game-loop-brief.md stream D): you hold at most
-// LIMIT notices (take refuses a sixth with one line); each one taken has a deadline that fits it (KIND_DAYS: firewood in
+// gl-d, the trip-end tally (the game-loop round, 2026-11-05; docs/build/game-loop-brief.md stream D): take on as many
+// notices as you like (no cap: the owner's call 2026-11-05; the deadlines are why you pick fewer); each one taken has a
+// deadline that fits it (KIND_DAYS: firewood in
 // 3 days, a route report in 14), and a day turn past it takes it back with a short line from whoever posted it ("Deb
 // got her walleye from the Hendersons."), no penalty, kept for the next tally and the journal (missed). Pay lands at
 // the trip's end, not at the board: settle({ ep, trip }) (record.js calls it as the trip ends) pays every notice done,
@@ -24,7 +25,7 @@ import './flyers.css';
 // between trips (the berries at the counter, a fish handed over at the board) is paid there and then, in one line. The
 // board has no claim buttons; claim and turnIn stay as functions (co-op mirrors them).
 //
-//   tasks.LIMIT, tasks.held(), tasks.dueOf(t), tasks.daysLeft(t), tasks.settle({ ep, trip }) → { lines, missed, total },
+//   tasks.held(), tasks.dueOf(t), tasks.daysLeft(t), tasks.settle({ ep, trip }) → { lines, missed, total },
 //   tasks.on('missed' | 'done' | 'settled' | 'paid', fn) → off, tasks.makeKind(kind, ep, band) (the console, the tests) A notice is one of the kinds in KINDS, a registry of { make, update, onEvent, pay }:
 // - fish for the café: any fish, a species, or a species of a size (lake trout only from water 18 m deep or more);
 // - a lost item at a campsite a few portages in (a small prop at the site's water edge; E picks it up);
@@ -60,9 +61,8 @@ const TROUT_WATER = 20;      // fishing.js bites lake trout only in lakes this d
 const LENGTH_SKEW = 1.7;     // fishing.js startBite: length = lerp(smallest, largest, random ^ 1.7)
 const SIZE_PCT = [0.6, 0.75]; // a size notice asks for a fish between these percentiles of the species' length
 const STANDING = 0.25;       // standing with an outfitter for each notice claimed there (profile.raise)
-// gl-d: notices held at once, and each kind's deadline in game days from the day it is taken (the owner's table,
-// docs/plans/campaigns.md "Board tasks"; the loon count's is its week)
-export const LIMIT = 5;
+// gl-d: each kind's deadline in game days from the day it is taken (the owner's table, docs/plans/campaigns.md "Board
+// tasks"; the loon count's is its week). No cap on how many you hold: the deadlines are the only limit.
 export const KIND_DAYS = { fish: 3, lunch: 3, firewood: 3, berries: 5, item: 7, deadfall: 7, litter: 7, fetch: 7, npc: 7, survey: 10, secchi: 10,
   creel: 10, campsite: 10, beaver: 10, colour: 10, report: 14, photo: 14, pma: 14, iceout: 5, lastcheck: 7, loons: 7 };
 const DAYS_ELSE = 7;
@@ -391,7 +391,6 @@ export class Tasks {
   // --- gl-d: listeners, held notices, deadlines ------------------------------------------------------------------------
   on(evt, fn) { if (!this.handlers.has(evt)) this.handlers.set(evt, new Set()); this.handlers.get(evt).add(fn); return () => this.handlers.get(evt).delete(fn); }
   emit(evt, data) { for (const fn of this.handlers.get(evt) || []) { try { fn(data, this); } catch (e) { console.warn('tasks.on', evt, e); } } }
-  get LIMIT() { return LIMIT; }
   // the notices you hold: taken on and not yet paid (on the go or done), from any board or anyone
   held() { return this.active; }
   daysFor(t) { return KIND_DAYS[t && t.kind] ?? DAYS_ELSE; }
@@ -761,10 +760,6 @@ export class Tasks {
   take(id) {
     const t = this.ads.get(+id);
     if (!t || t.status !== 'offered') return false;
-    // gl-d; the line is said on the board too (the replay: the hud's line is drawn under the open board, and a click on
-    // Take it on seemed to do nothing)
-    if (this.active.length >= LIMIT) { this.atLimitTried = true; this.note('You hold five. Let one go first.'); return false; }
-    this.atLimitTried = false;
     t.status = 'open'; t.taken = this.today(); t.due = t.taken + this.daysFor(t);
     const k = KINDS[t.kind];
     if (k && k.onTake) { try { k.onTake(this, t); } catch (e) { console.warn('the board: take', t.kind, e); } } // content A: a disk lent, a cooler set
@@ -776,7 +771,6 @@ export class Tasks {
   drop(id) {
     const t = this.ads.get(+id);
     if (!t || t.status !== 'open') return false;
-    this.atLimitTried = false;
     this.removeProp(t.id);
     const k = KINDS[t.kind];
     if (k && k.onDrop) { try { k.onDrop(this, t); } catch (e) { console.warn('the board: drop', t.kind, e); } } // content A: its state back to the notice's
@@ -1035,13 +1029,12 @@ export class Tasks {
     const sum = offered ? `${word(offered)} on offer · a new notice each morning` : writing ? 'the keeper is pinning up notices' : full ? 'every notice taken · new ones once these are paid' : 'a new notice each morning';
     const pileSum = pile.length ? [pile.length - ready.length ? `${word(pile.length - ready.length)} on the go` : '', ready.length ? `${word(ready.length)} done` : ''].filter(Boolean).join(' · ') : '';
     // (gl-d: no Claim all: a notice done is paid when you come in, on the trip's tally)
-    const all = this.active.length >= LIMIT ? `<span class="sum full">${this.atLimitTried ? 'You hold five. Let one go first.' : 'You hold five'}</span>` : '';
     const pins = slots.map((t, i) => this.notice(t, i, ep, writing, where)).join('');
     const cards = pile.map((t, i) => this.pileCard(t, i, ep, where, onPins.has(t.id))).join('');
     return `<section class="board cork two" aria-label="The board">
       <div class="bd-cork"><div class="top"><h3 id="board-h">The board</h3><span class="sum">${sum}</span></div>
         <div class="notices"><div class="pins">${pins}</div></div></div>
-      <aside class="bd-pile" aria-labelledby="pile-h"><div class="top"><h3 id="pile-h">Taken from this board</h3>${pileSum ? `<span class="sum">${pileSum}</span>` : ''}${all}</div>
+      <aside class="bd-pile" aria-labelledby="pile-h"><div class="top"><h3 id="pile-h">Taken from this board</h3>${pileSum ? `<span class="sum">${pileSum}</span>` : ''}</div>
         <div class="pile">${cards || '<p class="pile-none">Nothing of this board’s on the go. Pull a notice off the cork and it ends up here.</p>'}</div></aside>
     </section>`;
   }
@@ -1265,7 +1258,6 @@ const CSS = `
 #journal .pp-mile.done b { color: var(--map-red); font-weight: 600; }
 #journal .pp-mile i { display: block; height: 6px; border: 1px solid currentColor; border-radius: 2px; background: linear-gradient(90deg, currentColor var(--f, 0%), transparent var(--f, 0%)); opacity: .8; }
 #journal .pp-mile .n { font-size: 16px; white-space: nowrap; }
-#outfitter .board.cork .top .sum.full { margin-left: auto; color: var(--map-red); }
 #journal .todo .pay { font: 500 20px/1 var(--pencil-font); color: var(--pencil); margin-left: 6px; }
 `;
 let cssIn = false;

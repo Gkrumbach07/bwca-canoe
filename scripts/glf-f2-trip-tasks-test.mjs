@@ -7,7 +7,7 @@
 //      canoe lying on the water in the shallows is not "beached"
 //   4. the trip-end tally has a line for a ranger's fine given on that trip
 //   5. no two notices send you to one place, and none to a campsite a party holds today (or the ring says so)
-//   6. five notices held: a sixth offered at a second board is refused with "You hold five. Let one go first."
+//   6. no cap (the owner's call 2026-11-05): five held from two boards, a sixth and a seventh taken at a board by its button
 //   APP=http://localhost:5192 node scripts/glf-f2-trip-tasks-test.mjs [--shots dir]
 // Exit code 0 when every check passes.
 import { createRequire } from 'node:module';
@@ -212,7 +212,7 @@ try {
   result('5 no two notices send you within 80 m of one place', spots.notices >= 6 && spots.items >= 3 && !spots.clash, spots);
   result('5′ a campsite a party holds today gets no new notice, and a notice taken there says so on its ring', spots.partySite && spots.partySite.again.length >= 2 && !spots.partySite.again.includes(spots.partySite.site) && /a party camps there today/.test(spots.ring || ''), spots);
 
-  // --- 6. five held; a sixth at a second board is refused ------------------------------------------------------------------
+  // --- 6. five held; a sixth and a seventh at a board are taken ------------------------------------------------------------------
   const lim = await page.evaluate(async (home) => {
     const g = window.__game, H = window.__f2, T = g.tasks, o = g.outfitter;
     for (const t of T.held().slice()) if (t.status === 'open') T.drop(t.id);
@@ -224,8 +224,8 @@ try {
     for (const ep of eps) {
       if (T.held().length >= 5 && second != null) break;
       const list = offered(ep); if (!list.length) continue;
-      if (second == null && list.length >= 2) second = ep;
-      for (const t of list) { if (T.held().length >= 5) break; if (ep === second && list.indexOf(t) === list.length - 1) break; if (T.take(t.id)) took.push({ id: t.id, from: t.from }); }
+      if (second == null && list.length >= 3) second = ep;
+      for (const t of list) { if (T.held().length >= 5) break; if (ep === second && list.indexOf(t) >= list.length - 2) break; if (T.take(t.id)) took.push({ id: t.id, from: t.from }); }
     }
     return { held: T.held().length, took, second, boards: took.map((t) => t.from).filter((v, i, a) => a.indexOf(v) === i) };
   }, HOME);
@@ -236,16 +236,18 @@ try {
     for (let i = 0; i < 40 && !(o.visit && o.visit.inside); i++) { H.step(10); await H.wait(20); }
     H.closeAll();
     o.show(l, 'board'); H.step(5); await H.wait(200);
-    const btn = o.el.panel.querySelector('button[data-act="task"][data-id^="take:"]');
-    const id = btn ? Number(btn.dataset.id.split(':')[1]) : null;
-    const held0 = T.held().length;
-    if (btn) btn.click();
-    H.step(5); await H.wait(100);
-    const t = id != null ? T.ads.get(id) : null;
-    return { ep, id, held0, held: T.held().length, status: t && t.status, lines: H.lines(), board: o.el.panel.textContent.includes('You hold five') };
+    const held0 = T.held().length, ids = [], status = [];
+    for (let k = 0; k < 2; k++) {
+      const btn = o.el.panel.querySelector('button[data-act="task"][data-id^="take:"]');
+      const id = btn ? Number(btn.dataset.id.split(':')[1]) : null;
+      if (btn) btn.click();
+      H.step(5); await H.wait(150);
+      ids.push(id); const t = id != null ? T.ads.get(id) : null; status.push(t && t.status);
+    }
+    return { ep, ids, held0, held: T.held().length, status, lines: H.lines(), board: /You hold|at a time/i.test(o.el.panel.textContent) };
   }, lim.second);
   await shot(page, 'f2-6-sixth');
-  result('6 holding five from two boards, a sixth at a board is refused in one line', lim.held === 5 && lim.boards.length >= 2 && six.id != null && six.held0 === 5 && six.held === 5 && six.status === 'offered' && /You hold five\. Let one go first\./.test(six.lines) && six.board, { lim, six });
+  result('6 holding five from two boards, a sixth and a seventh taken at a board, no cap line', lim.held === 5 && lim.boards.length >= 2 && six.ids.every((x) => x != null) && six.held0 === 5 && six.held === 7 && six.status.every((x) => x === 'open') && !/You hold five/.test(six.lines) && !six.board, { lim, six });
   await page.evaluate(() => window.__f2.closeAll());
 
   // --- 3. the trailheads' way to the water, clear; the canoe in the shallows ------------------------------------------------

@@ -1,13 +1,13 @@
 // The game-loop round, stream D (the trip-end tally and the board): the acceptance checks of docs/build/game-loop-brief.md
 // "Stream D", run headless on one page.
-//   1 take five notices; a sixth is refused with one line
+//   1 no cap on notices: a sixth and a seventh are taken like the first (the owner's call 2026-11-05)
 //   2 a fish notice taken, the clock four days on: gone, its line in missed, and the next tally shows it
 //   3 no canoe kind; an old save holding a rental notice loads without it (and an open v3 notice gets a deadline)
 //   4 each new kind: made at a fitting outfitter and date, and done by its scripted path
 //   5 two notices done on a trip and the trip in: the money rises at the settle, the tally counts up on the card and
 //     ends on the purse; nothing is paid at the board on the trip
 //   6 injected logs stamp each of the four firsts once; the milestones move
-//   7 the journal's Tasks page shows the days left on each notice held
+//   7 the journal's Tasks page shows the days left on each notice held (nine of them, every one reachable)
 //   + a v1 record loads as v2; the screenshots (--shots: docs/build/shots/d-*.png)
 //
 //   npx vite --port 5184 --strictPort
@@ -69,18 +69,17 @@ try {
   // the notes said, caught
   await page.evaluate(() => { const g = window.__game, T = g.tasks; window.__notes = []; const n = T.onNote; T.onNote = (t) => { window.__notes.push(t); if (n) n(t); }; });
 
-  // --- 1: five held, a sixth refused --------------------------------------------------------------------------------------
+  // --- 1: no cap: seven held --------------------------------------------------------------------------------------
   const r1 = await page.evaluate(async () => {
     const g = window.__game, T = g.tasks;
     for (const ep of [25, 30, 31]) { T.board(ep); await T.write(ep); }
     const offered = [25, 30, 31].flatMap((ep) => T.board(ep)).filter((t) => t && t.status === 'offered');
     const took = [];
-    for (const t of offered.slice(0, 5)) if (T.take(t.id)) took.push(t.id);
     window.__notes.length = 0;
-    const sixth = offered[5] ? T.take(offered[5].id) : null;
-    return { offered: offered.length, took: took.length, held: T.held().length, sixth, line: window.__notes.slice(-1)[0] || null, LIMIT: T.LIMIT, sixthId: offered[5] ? offered[5].id : null };
+    for (const t of offered.slice(0, 7)) if (T.take(t.id)) took.push(t.id);
+    return { offered: offered.length, took: took.length, held: T.held().length, lines: window.__notes.slice(), LIMIT: T.LIMIT };
   });
-  result('1 five held, a sixth refused with one line', r1.took === 5 && r1.held === 5 && r1.sixth === false && r1.line === 'You hold five. Let one go first.', r1);
+  result('1 no cap: a sixth and a seventh notice taken, no refusal line', r1.offered >= 7 && r1.took === 7 && r1.held === 7 && r1.LIMIT === undefined && !r1.lines.some((l) => /You hold/.test(l)), r1);
 
   // --- 2: a fish notice past its day ------------------------------------------------------------------------------------------
   const r2a = await page.evaluate(async () => {
@@ -302,32 +301,55 @@ try {
     const g = window.__game, T = g.tasks, J = g.journal;
     for (const t of T.held()) T.drop(t.id);
     const made = [];
-    for (const k of ['fish', 'survey', 'item']) { const t = await T.makeKind(k, 25, 'local'); if (t && T.take(t.id)) made.push({ id: t.id, left: T.daysLeft(t), title: t.title }); }
+    // (no cap: nine held, the page lays them out; the owner's call 2026-11-05)
+    for (const k of ['fish', 'survey', 'item', 'firewood', 'berries', 'litter', 'deadfall', 'report', 'photo', 'fish', 'item', 'litter']) {
+      if (made.length >= 9) break;
+      const t = await T.makeKind(k, 25, 'local'); if (t && T.take(t.id)) made.push({ id: t.id, left: T.daysLeft(t), title: t.title });
+    }
     J.tab = 'tasks'; J.show('journal'); if (J.side !== 'journal' && J.setSide) J.setSide('journal'); J.render(true);
-    const dues = [...document.querySelectorAll('#journal .pp-todo .due')].map((e) => e.textContent);
-    return { made, dues, missed: document.querySelectorAll('#journal .pp-todo.missed').length };
+    await new Promise((r) => setTimeout(r, 300));
+    const todos = [...document.querySelectorAll('#journal button.pp-todo')];
+    const dues = todos.map((e) => (e.querySelector('.due') || {}).textContent).filter(Boolean);
+    // the last card is on screen, or inside a box that scrolls to it
+    const last = todos[todos.length - 1];
+    let reach = false;
+    if (last) {
+      const r = last.getBoundingClientRect();
+      if (r.bottom <= innerHeight && r.right <= innerWidth) reach = true;
+      for (let e = last.parentElement; e && !reach; e = e.parentElement) { const cs = getComputedStyle(e); if (/auto|scroll/.test(cs.overflowY) && e.scrollHeight > e.clientHeight) reach = true; }
+    }
+    return { made, dues, todos: todos.length, reach, missed: document.querySelectorAll('#journal .pp-todo.missed').length };
   });
   if (SHOTS) { await sleep(1500); await page.screenshot({ path: path.join(OUT, 'd-journal-tasks.png') }); }
-  result('7 the journal shows the days left on each notice held', r7.made.length >= 2 && r7.dues.length === r7.made.length && r7.dues.every((d) => /days? left|last day/.test(d)), r7);
+  result('7 the journal shows the days left on each notice held (nine held, every one reachable)', r7.made.length >= 8 && r7.reach && r7.dues.length === r7.made.length && r7.dues.every((d) => /days? left|last day/.test(d)), r7);
   if (SHOTS) {
     await page.evaluate(() => { const J = window.__game.journal; J.tab = 'trips'; J.render(true); });
     await sleep(600);
     await page.screenshot({ path: path.join(OUT, 'd-journal-milestones.png') });
   }
   await page.evaluate(() => window.__game.journal.close());
-  // the board at the counter: five held, no claim buttons
+  // the board at the counter: eight or more held, no claim buttons, no cap line, the pile scrolls inside its panel
   const rb = await page.evaluate(async () => {
     const g = window.__game, T = g.tasks, o = g.outfitter, L = o.landings.find((l) => l.ep === 25);
     for (const ep of [25, 30]) { T.board(ep); await T.write(ep); }
     const offered = [25, 30].flatMap((ep) => T.board(ep)).filter((t) => t && t.status === 'offered');
-    for (const t of offered) { if (T.held().length >= 5) break; T.take(t.id); }
+    for (const ep of [31, 32, 33]) { try { T.board(ep); await T.write(ep); } catch { /* not a board */ } }
+    const more = [25, 30, 31, 32, 33].flatMap((ep) => T.board(ep) || []).filter((t) => t && t.status === 'offered');
+    for (const t of [...offered, ...more]) { if (T.held().length >= 9) break; T.take(t.id); }
+    // the pile is the board's own notices: move every held one onto board 25 for the look (8+ cards in one pile)
+    const moved = T.held().map((t) => [t, t.from]); for (const [t] of moved) t.from = 25;
     o.show(L, 'board');
     await new Promise((r) => setTimeout(r, 400));
-    const el = document.getElementById('outfitter');
-    return { open: o.open, claimBtns: el ? el.querySelectorAll('[data-id^="claim"]').length : -1, full: !!(el && el.querySelector('.sum.full')), held: T.held().length };
+    const el = document.getElementById('outfitter'), pile = el && el.querySelector('.bd-pile .pile'), panel = el && el.querySelector('.board');
+    const pr = pile ? pile.getBoundingClientRect() : null, vr = { w: innerWidth, h: innerHeight };
+    const cards = pile ? pile.children.length : 0;
+    const look = { cards, pileH: pr && Math.round(pr.height), scrollH: pile && pile.scrollHeight, overflowY: pile && getComputedStyle(pile).overflowY, bottom: pr && Math.round(pr.bottom), vh: vr.h, boardBottom: panel && Math.round(panel.getBoundingClientRect().bottom) };
+    for (const [t, f] of moved) t.from = f;
+    const res = { open: o.open, claimBtns: el ? el.querySelectorAll('[data-id^="claim"]').length : -1, capLine: !!(el && /You hold/.test(el.textContent)), held: T.held().length, look };
+    return res;
   });
   if (SHOTS) { await sleep(500); await page.screenshot({ path: path.join(OUT, 'd-board.png') }); }
-  result('the board has no claim buttons and says when five are held', rb.open && rb.claimBtns === 0 && rb.full, rb);
+  result('the board has no claim buttons and no cap line with 8+ held; the pile of 8+ fits on screen (it scrolls)', rb.open && rb.claimBtns === 0 && !rb.capLine && rb.held >= 8 && rb.look.cards >= 8 && rb.look.bottom <= rb.look.vh + 1 && (rb.look.scrollH <= rb.look.pileH + 1 || /auto|scroll/.test(rb.look.overflowY)), rb);
   await page.evaluate(() => window.__game.outfitter.hide());
 
   // --- a v1 record loads as v2 -------------------------------------------------------------------------------------------------

@@ -1158,7 +1158,7 @@ async function main() {
     // the board's dot label counted the notices to claim: now only the fish to hand over there
     if (typeof outfitter.readyHere === 'function') outfitter.readyHere = (ep) => { try { return tasks.deliverable(ep); } catch { return []; } };
     // and the board's own line under its name said it pays there (outfitter.js render, stream B's): it pays when you come in
-    { const renderD = outfitter.render.bind(outfitter); outfitter.render = (...a) => { const r = renderD(...a); try { const say = outfitter.tab === 'board' && outfitter.el && outfitter.el.panel ? outfitter.el.panel.querySelector('.lede .say') : null; if (say && /paid here/.test(say.textContent)) say.textContent = 'Notices pinned up by the door. Take one on; it pays when you come in. Five at a time.'; } catch { /* the counter's */ } return r; }; }
+    { const renderD = outfitter.render.bind(outfitter); outfitter.render = (...a) => { const r = renderD(...a); try { const say = outfitter.tab === 'board' && outfitter.el && outfitter.el.panel ? outfitter.el.panel.querySelector('.lede .say') : null; if (say && /paid here/.test(say.textContent)) say.textContent = 'Notices pinned up by the door. Take on what you can do in time; each pays when you come in.'; } catch { /* the counter's */ } return r; }; }
     // the moments: the first notice done on a trip ("it pays when you come in"), and the first tally (E finishes it)
     let doneAt = -1e9;
     tasks.on('done', () => { if (trip.active) doneAt = performance.now() / 1000; });
