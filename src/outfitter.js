@@ -950,11 +950,11 @@ export class Outfitter {
       const h = d.hours, hours = (WAKE_BUNK - h + 24) % 24 || 24;
       d.advance(hours);
       if (en) {
-        en.sleep(1, Math.max(7, hours)); en.value = 1;
+        en.sleep(1, Math.max(7, hours), { bag: true }); en.value = 1; // (a real bed: the bag in your pack or not)
         // the lodge feeds you: the jump crosses no dawn or dusk on the meal clock, and breakfast is had
         if ('lastHours' in en) en.lastHours = d.hours;
         if ('lastMealAbs' in en) { en.lastMealAbs = en.now; en.lastMealKind = 'hot'; }
-        try { if (en.needs && typeof en.needs === 'object') { en.needs.food = 1; en.needs.water = 1; } } catch { /* the needs are energy.js's own */ }
+        try { if (en.needs && typeof en.needs === 'object') { en.needs.food = 1; en.needs.water = 1; en.needs.warmth = 1; } } catch { /* the needs are energy.js's own */ }
         if (typeof en.fill === 'function') en.fill(2, 0);
       }
       if (this.core && this.core.state) this.core.state.wet = false; // the gear dries by the stove overnight (polish B)

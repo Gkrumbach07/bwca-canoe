@@ -294,11 +294,11 @@ export class Permits {
       const hours = (abs - this.today) * 24 + WAKE - d.hours;
       d.advance(hours);
       if (en) {
-        if (typeof en.sleep === 'function') en.sleep(1, Math.max(7, Math.min(hours, 10)));
+        if (typeof en.sleep === 'function') en.sleep(1, Math.max(7, Math.min(hours, 10)), { bag: true });
         en.value = 1;
         if ('lastHours' in en) en.lastHours = d.hours;
         if ('lastMealAbs' in en) { en.lastMealAbs = en.now; en.lastMealKind = 'hot'; }
-        try { if (en.needs && typeof en.needs === 'object') { en.needs.food = 1; en.needs.water = 1; } } catch { /* energy.js's own */ }
+        try { if (en.needs && typeof en.needs === 'object') { en.needs.food = 1; en.needs.water = 1; en.needs.warmth = 1; } } catch { /* energy.js's own */ }
         if (typeof en.fill === 'function') en.fill(2, 0);
       }
       if (tr && tr.state) tr.state.wet = false;

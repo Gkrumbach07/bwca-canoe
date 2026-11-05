@@ -246,10 +246,10 @@ export class Energy {
     // and energy.needs.rest = x sets the night's rest so that the need is x now
     const self = this;
     this._needs = Object.defineProperties({}, {
-      rest: { enumerable: true, get() { return self.live ? self.restNeed : 1; }, set(v) { const c = restCeiling(self.awake); self.rest0 = clamp(c > 0.01 ? (+v || 0) / c : +v || 0, 0, 1); } },
-      food: { enumerable: true, get() { return self.live ? self.need.food : 1; }, set(v) { self.need.food = clamp(+v || 0, 0, 1); } },
-      water: { enumerable: true, get() { return self.live ? self.need.water : 1; }, set(v) { self.need.water = clamp(+v || 0, 0, 1); } },
-      warmth: { enumerable: true, get() { return self.live ? self.need.warmth : 1; }, set(v) { self.need.warmth = clamp(+v || 0, 0, 1); } },
+      rest: { enumerable: true, get() { return self.shows ? self.restNeed : 1; }, set(v) { const c = restCeiling(self.awake); self.rest0 = clamp(c > 0.01 ? (+v || 0) / c : +v || 0, 0, 1); } },
+      food: { enumerable: true, get() { return self.shows ? self.need.food : 1; }, set(v) { self.need.food = clamp(+v || 0, 0, 1); } },
+      water: { enumerable: true, get() { return self.shows ? self.need.water : 1; }, set(v) { self.need.water = clamp(+v || 0, 0, 1); } },
+      warmth: { enumerable: true, get() { return self.shows ? self.need.warmth : 1; }, set(v) { self.need.warmth = clamp(+v || 0, 0, 1); } },
     });
   }
   get now() { return this.day.doy * 24 + this.day.hours; }
@@ -260,6 +260,10 @@ export class Energy {
   get adventure() { const t = this.trip; return !!(t && t.adventure && t.active); }
   get sandbox() { const t = this.trip; return !!(t && t.sandbox); }
   get live() { return this.adventure; } // the needs fall only on an Adventure under way
+  // the needs count (the bar's ceiling, the readout) all through an Adventure season: between trips they hold where the
+  // trip left them (they fall only on a trip under way, live). (The game-loop playthrough: coming in at 10 pm read the
+  // bar full again with no night slept; a night in a bunk, the tap and an outfitter's breakfast are what fill them.)
+  get shows() { const t = this.trip; return !!(t && t.adventure); }
   get hasFood() { return this.sandbox || this.food >= 0.5; }
   // days of food with you: the meals in reach (and set out at your camp), two a day; without the inventory a number
   get inv() { const i = this.inventory; return i && i.attached ? i : null; }
@@ -300,7 +304,7 @@ export class Energy {
     if (!i) { this._food += 0.5; return; }
     i.place('meal:supper', 1, { crate: i.atStash });
   }
-  // the four needs, 0 to 1 (full in Sandbox and between trips)
+  // the four needs, 0 to 1 (full in Sandbox; held as they were between an Adventure's trips: shows)
   get needs() { return this._needs; }
   // the need that ran the bar down, for the evacuation's words: 'awake' (rest), 'food', 'water' or 'cold' (warmth: the
   // trip's words for it fall back to "spent" until trip.js has its own)
@@ -312,12 +316,12 @@ export class Energy {
   // fb2 F: what a need takes off the bar's top end now (0 when it is full, its weight when it has run out)
   // (water: an upset stomach adds its chunk to hunger's, drawn under the hunger icon)
   chunkOf(key) { return this.needChunk(key) + (key === 'food' ? this.upsetChunk() : 0); }
-  needChunk(key) { return this.live ? CHUNK_W[key] * (1 - clamp(this.needs[key], 0, 1)) + OUT_H * (this.out[key] || 0) : 0; }
+  needChunk(key) { return this.shows ? CHUNK_W[key] * (1 - clamp(this.needs[key], 0, 1)) + OUT_H * (this.out[key] || 0) : 0; }
   // water: the upset stomach under way now, and its chunk: UPSET.chunk, less where the needs' own chunks leave the
   // ceiling under UPSET.floor (it never spends you by itself)
   get upsetNow() { const n = this.now; return n >= this.upsetAt && n < this.upsetUntil; }
   upsetChunk() {
-    if (!this.live || !this.upsetNow) return 0;
+    if (!this.shows || !this.upsetNow) return 0;
     let c = 1; for (const k of NEED_KEYS) c -= this.needChunk(k);
     return clamp(Math.min(UPSET.chunk, c - UPSET.floor), 0, UPSET.chunk);
   }
@@ -325,7 +329,7 @@ export class Energy {
   biggest() { let k = 'rest'; for (const key of NEED_KEYS) if (this.chunkOf(key) > this.chunkOf(k)) k = key; return k; }
   // what rest can bring the bar back to now: the bar less every need's chunk
   get ceiling() {
-    if (!this.live) return 1;
+    if (!this.shows) return 1;
     let c = 1; for (const key of NEED_KEYS) c -= this.chunkOf(key);
     return clamp(c, 0, 1);
   }
@@ -333,14 +337,14 @@ export class Energy {
   // never more than 1), growing (dashed: growing faster than its everyday rate, or at all while its need is low), need }
   chunks() {
     const out = []; let sum = 0;
-    for (const key of NEED_KEYS) { const size = this.chunkOf(key); sum += size; out.push({ key, size, need: this.live ? this.needs[key] : 1, growing: false }); }
+    for (const key of NEED_KEYS) { const size = this.chunkOf(key); sum += size; out.push({ key, size, need: this.shows ? this.needs[key] : 1, growing: false }); }
     const k = sum > 1 ? 1 / sum : 1;
     for (const c of out) { c.size *= k; const g = this.grow[c.key] || 0; c.growing = this.live && c.size > 0.004 && (g > GROW_H[c.key] || (g > 0.002 && c.need < LOW)); }
     return out;
   }
   // the lowest need, when it is under LOW: its key ('rest' | 'food' | 'water' | 'warmth') and its word
   get lowKey() {
-    if (!this.live) return null;
+    if (!this.shows) return null;
     const n = this.needs; let k = null;
     for (const key of ['rest', 'food', 'water', 'warmth']) if (n[key] < LOW && (!k || n[key] < n[k])) k = key;
     return k;
@@ -349,7 +353,7 @@ export class Energy {
   // the needs that hold the bar down, in words for the readout ('' when nothing does): the low one, or the biggest
   // chunk, and a second chunk that is big too ("held down by tiredness and cold")
   get heldBy() {
-    if (!this.live) return '';
+    if (!this.shows) return '';
     const by = NEED_KEYS.map((key) => ({ key, c: this.chunkOf(key) })).sort((a, b) => b.c - a.c);
     let k = this.lowKey;
     if (!k) {
@@ -964,6 +968,7 @@ export class Energy {
     if (this.live && now >= this.wokeAt && now - this.wokeAt < WAKE_WINDOW) this.value = Math.max(this.value, this.ceiling);
     // a need run out keeps eating the ceiling until it is met (OUT_H)
     if (this.live) { const n = this.needs, step = dh > 0 && dh <= JUMP ? dh : 0; for (const k of NEED_KEYS) this.out[k] = n[k] <= EMPTY ? this.out[k] + step : 0; }
+    else if (this.shows) { const n = this.needs; for (const k of NEED_KEYS) if (n[k] > EMPTY) this.out[k] = 0; } // (between trips: a need met in town is met)
     // the day's work tires you: travel counts extra hours awake (TRAVEL_AWAKE; the bar itself no longer drains with it)
     if (this.live && travel > 0 && dh > 0 && dh <= JUMP && Number.isFinite(this.awakeSince)) this.awakeSince -= TRAVEL_AWAKE * (travel / PADDLE_H) * dh;
     this.exertion = travel;

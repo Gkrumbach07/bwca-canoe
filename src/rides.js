@@ -132,10 +132,10 @@ export class Rides {
     const wake = bunkFirst ? GO : WAKE, sleep = (wake - h0 + 24) % 24 || 24;
     d.advance(bunkFirst ? sleep + hours : Math.max(hours, sleep));
     if (en) {
-      en.sleep(1, Math.max(7, (bunkFirst ? sleep : sleep - hours))); en.value = 1;
+      en.sleep(1, Math.max(7, (bunkFirst ? sleep : sleep - hours)), { bag: true }); en.value = 1;
       if ('lastHours' in en) en.lastHours = d.hours;
       if ('lastMealAbs' in en) { en.lastMealAbs = en.now; en.lastMealKind = 'hot'; }
-      try { if (en.needs && typeof en.needs === 'object') { en.needs.food = 1; en.needs.water = 1; } } catch { /* the needs are energy.js's own */ }
+      try { if (en.needs && typeof en.needs === 'object') { en.needs.food = 1; en.needs.water = 1; en.needs.warmth = 1; } } catch { /* the needs are energy.js's own */ }
       if (typeof en.fill === 'function') en.fill(2, 0);
     }
     return { night: true };
