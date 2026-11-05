@@ -130,7 +130,7 @@ export function takeBackWords(r, l = null) {
   const here = l && l.name ? ` at ${l.name}` : '';
   const pm = r.permit;
   const paper = pm ? (r.kept ? ' Your permit is still good today.' : ' Its day is gone, and the permit with it.') : '';
-  const fine = r.fined ? " The ranger's fine still stands." : '';
+  const fine = r.fined ? " The ranger's ticket stands: it's in your book." : '';
   return `Back${here} without going anywhere: a short outing, not a trip, and nothing in the logbook.${paper}${fine}`;
 }
 

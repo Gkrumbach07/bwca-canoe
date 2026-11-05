@@ -65,3 +65,5 @@
 .tc-page.in-book .tc-tally .tl-k, .tc-page.in-book .tc-tally .tl-v { font-size: 14px; }
 .tc-page.in-book .tc-tally .tl-purse b { font-size: 22px; }
 @media (prefers-reduced-motion: reduce) { .tc-tally .tl-l { transition: none; } .tc-tally .tl-l.first.on .tl-stamp { animation: none; } }
+/* r2: the ranger's ticket line: a small pink slip by its words (it is in the book now) */
+.tc-tally .tl-ticket { display: inline-block; width: 18px; height: 12px; margin-right: 7px; vertical-align: -1px; rotate: -6deg; background: #f0cfc6; border: 1.2px solid #8a3a2c; border-radius: 1px; background-image: linear-gradient(180deg, transparent 3px, rgba(138, 58, 44, .55) 3px 4px, transparent 4px 7px, rgba(138, 58, 44, .4) 7px 8px, transparent 8px); }

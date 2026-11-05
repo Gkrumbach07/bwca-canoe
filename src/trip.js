@@ -20,7 +20,7 @@
 //
 // Permits (the game-loop round, stream A, permits.js): a push-off takes the permit you hold for that landing and that
 // day (permits.forTrip, then used), and without one the trip is day use (`dayUse`: still out after dark, a ranger's
-// fine, permits.js checkDusk). `permit` is the paper as it was used ({ id, kind, ep, abs, pma, from, price }); the
+// fine, permits.js checkDusk, written up as a ticket when the trip ends or is taken back: permits.issue). `permit` is the paper as it was used ({ id, kind, ep, abs, pma, from, price }); the
 // 'exit' outcome carries { dayUse, permitId }. A trip comes in at any entry point (stream B's trailheads too), and only
 // an outfitter's landing makes an outfitter known.
 //
@@ -217,9 +217,11 @@ export class Trip {
     // the permit it took goes back in your pocket (still good today; a day gone, it lapses)
     const pm = s.permit, kept = !!(pm && this.permits && typeof this.permits.unuse === 'function' && this.permits.unuse(pm.id) && this.permits.held().some((p) => p.id === pm.id));
     const out = { permit: pm ? { ...pm } : null, kept, dayUse: !!s.dayUse, fined: !!s.fined };
+    if (out.fined) this.issueTickets();
     s.active = false; s.camp = null; s.outcome = null; s.log = []; s.permit = null; s.dayUse = false; s.fined = false;
     return out;
   }
+  issueTickets() { const P = this.permits; try { return P && typeof P.issue === 'function' ? P.issue() : 0; } catch (e) { console.warn('trip: the ticket', e); return 0; } }
   abandon() { return this.active ? this.close('abandoned', 'a new season begun', null) : null; }
   close(k, why, ep) {
     const s = this.state, d = this.day, st = this.stats;
@@ -234,6 +236,7 @@ export class Trip {
       permit: s.permit ? { id: s.permit.id, kind: s.permit.kind } : null, dayUse: !!s.dayUse, fined: !!s.fined,
     });
     s.active = false; s.camp = null;
+    this.issueTickets(); // (r2: you came back: the ranger's fine on it is a ticket now, before the tally reads the log)
     this.log('exit', { outcome: s.outcome });
     this.saveBook();
     return s.outcome;

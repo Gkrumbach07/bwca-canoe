@@ -5,7 +5,7 @@
 //      they were (no refill to 100 % without a night)
 //   3. a trailhead's way from the water up to the lot is clear of trees, brush and reeds (Snowbank 27, Lake One 30), and a
 //      canoe lying on the water in the shallows is not "beached"
-//   4. the trip-end tally has a line for a ranger's fine given on that trip
+//   4. the trip-end tally has a line for a ranger's fine given on that trip (r2: a ticket, in your book)
 //   5. no two notices send you to one place, and none to a campsite a party holds today (or the ring says so)
 //   6. no cap (the owner's call 2026-11-05): five held from two boards, a sixth and a seventh taken at a board by its button
 //   APP=http://localhost:5192 node scripts/glf-f2-trip-tasks-test.mjs [--shots dir]
@@ -165,7 +165,7 @@ try {
   await page.waitForTimeout(2500); await page.evaluate(() => window.__f2.step(5));
   await shot(page, 'f2-4-tally-fine');
   const cardNow = await page.evaluate(() => { const g = window.__game; return g.record.el ? g.record.el.textContent.replace(/\s+/g, ' ') : ''; });
-  result('4 the tally says the ranger\'s fine given on that trip', /trip 2/.test(cardNow) && late.out && late.dayUse && late.fined && late.owed === 20 && late.tallyFine === 20 && /A ranger’s fine/.test(cardNow) && /\$20, owed at a counter/.test(cardNow), { ...late, cardText: cardNow.slice(0, 400) });
+  result('4 the tally says the ranger\'s fine given on that trip', /trip 2/.test(cardNow) && late.out && late.dayUse && late.fined && late.owed === 20 && late.tallyFine === 20 && /A ranger’s ticket/.test(cardNow) && /\$20, in your book/.test(cardNow), { ...late, cardText: cardNow.slice(0, 400) });
   result('2b in at 10 pm with no night: the needs stay where the trip left them (no refill to 100 %)', !late.active && late.after.food <= late.before.food + 0.01 && late.after.food < 0.5 && late.after.ceiling < 0.9 && late.after.value <= late.after.ceiling + 1e-6, { before: late.before, after: late.after, hour: late.hour });
   // ... and a night in the bunkhouse fills them again
   const bunk = await page.evaluate(async () => {

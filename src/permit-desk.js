@@ -1,8 +1,9 @@
 // The permit desk (the game-loop round, stream A): a section of an outfitter's counter. Which entry point, which kind
 // (overnight, or a primitive area's), and a calendar of the next four weeks with what is left each day (permits.js
 // available): a sold-out day or an iced-in one can't be picked. Pick a day, then Buy: today's permit is in your pocket;
-// a later day's is bought and you sleep in the bunkhouse until it (permits.skipTo). A fine owed is the one thing shown
-// until it is paid. A permit that went unused gets one line, the next time you're at a desk.
+// a later day's is bought and you sleep in the bunkhouse until it (permits.skipTo). An open ranger's ticket (r2) shuts
+// the Buy: one line, the ticket with its Pay (or what is missing), the calendar still there to look at; day use needs no
+// desk and stays free. A permit that went unused gets one line, the next time you're at a desk.
 //
 // Stream B's outfitter.addDesk(key, { order, html, act }) takes it when it is there; else main.js (gl-a) wraps the
 // counter's claimsSection and act, as the uniques' "Report a find" does.
@@ -55,11 +56,11 @@ export class PermitDesk {
     at = Number(at);
     const today = P.today, rows = [];
     for (const p of P.takeLapsed()) rows.push(`<p class="soft lapsed">Your permit for entry point ${p.ep}, ${esc(dateWords(p.abs, { weekday: false }))}, went unused.</p>`);
-    const owed = P.owed();
-    if (owed > 0) {
-      const short = this.o && !this.o.sandbox && this.o.money < owed;
-      rows.push(`<div class="pd-fine"><div><b>A ranger's fine</b> · <span class="soft">day use ends at dark. Paid before the next permit.</span></div><button type="button" class="stamp small" data-act="permit-pay" ${short ? 'disabled' : ''}>Pay $${owed}</button></div>`);
-      return this.wrap(rows, at);
+    const owed = P.owed(), money = this.o && Number.isFinite(this.o.money) ? Math.floor(this.o.money) : Math.floor(P.money || 0);
+    // r2: each open ticket, payable here as from the book; the Buy below is shut while any is
+    for (const f of typeof P.tickets === 'function' ? P.tickets() : []) {
+      const short = !(this.o && this.o.sandbox) && money < (f.n || 0);
+      rows.push(`<div class="pd-fine"><div><b>A ranger's ticket</b> · <span class="soft">${esc(dateWords(f.abs, { weekday: false }))}, out after dark on day use.</span></div>${short ? `<span class="pd-short">$${f.n} — you have $${money}</span>` : `<button type="button" class="stamp small" data-act="permit-pay" data-id="${esc(f.id)}">Pay $${f.n}</button>`}</div>`);
     }
     for (const p of P.held()) rows.push(`<p class="pd-held">✓ ${esc(KINDS[p.kind])} permit · entry point ${p.ep}${p.ep === at ? '' : ` (${esc(this.place(p.ep))})`} · ${p.abs === today ? 'today' : esc(dateWords(p.abs))}${p.kind === 'pma' && p.pma ? ` · ${esc(this.pmaName(p.pma))}` : ''}</p>`);
     const s = this.selFor(at);
@@ -83,8 +84,8 @@ export class PermitDesk {
     if (mine) rows.push(`<div class="pd-buy"><div><b>${esc(dateWords(s.abs))}</b> · <span class="soft">your permit's for this day${mine.ep === s.ep ? '' : `, at entry point ${mine.ep}`}.</span></div></div>`); // (one permit a day: no Buy for a day you hold)
     else if (s.abs != null) {
       const price = P.sandbox ? 0 : P.price(s.kind, s.abs), nights = s.abs - today, short = this.o && !this.o.sandbox && this.o.money < price;
-      const later = nights > 0 ? `${word(nights)[0].toUpperCase()}${word(nights).slice(1)} ${plural(nights, 'night')} in the bunkhouse till then.` : 'Good for a push-off today.';
-      rows.push(`<div class="pd-buy"><div><b>${esc(dateWords(s.abs))}</b> · <span class="soft">${later}</span></div><button type="button" class="stamp small" data-act="permit-buy" ${short ? 'disabled' : ''}>Buy · $${price}</button></div>`);
+      const later = owed > 0 ? P.words('ticket') : nights > 0 ? `${word(nights)[0].toUpperCase()}${word(nights).slice(1)} ${plural(nights, 'night')} in the bunkhouse till then.` : 'Good for a push-off today.';
+      rows.push(`<div class="pd-buy${owed > 0 ? ' shut' : ''}"><div><b>${esc(dateWords(s.abs))}</b> · <span class="soft">${esc(later)}</span></div><button type="button" class="stamp small" data-act="permit-buy" ${short || owed > 0 ? 'disabled' : ''}>Buy · $${price}</button></div>`);
     } else rows.push('<p class="soft">Nothing left in the next four weeks here.</p>');
     if (this.note) rows.push(`<p class="pd-note${this.note.ok ? '' : ' no'}">${esc(this.note.text)}</p>`);
     return this.wrap(rows, at);
@@ -107,8 +108,8 @@ export class PermitDesk {
     else if (act === 'permit-kind') { s.kind = id === 'pma' ? 'pma' : 'overnight'; if (s.kind !== 'pma') s.pma = null; }
     else if (act === 'permit-pma') s.pma = id;
     else if (act === 'permit-pay') {
-      const ok = P.payFines();
-      this.note = ok ? { ok, text: 'Paid. The desk is open.' } : { ok, text: `Not enough in hand: $${P.owed()}.` };
+      const r = id && typeof P.payTicket === 'function' ? P.payTicket(id) : { ok: P.payFines(), words: '' };
+      this.note = r.ok ? { ok: true, text: P.owed() > 0 ? 'Paid.' : 'Paid. The desk is open.' } : { ok: false, text: r.words || `Not enough in hand: $${P.owed()}.` };
     } else if (act === 'permit-buy') {
       const r = P.buy({ ep: s.ep, abs: s.abs, kind: s.kind, pma: s.pma, at });
       this.note = { ok: r.ok, text: r.ok ? `Bought: ${r.words}` : r.words };
@@ -130,6 +131,8 @@ const CSS = `
 #outfitter .permitdesk .pd-fine, #outfitter .permitdesk .pd-buy { display: flex; align-items: center; gap: 12px; }
 #outfitter .permitdesk .pd-fine > div, #outfitter .permitdesk .pd-buy > div { flex: 1 1 auto; }
 #outfitter .permitdesk .pd-fine b { color: var(--map-red); }
+#outfitter .permitdesk .pd-short { font: 500 18px/1.1 var(--pencil-font); color: var(--map-red); white-space: nowrap; }
+#outfitter .permitdesk .pd-buy.shut .soft { color: var(--map-red); font-style: normal; }
 #outfitter .permitdesk .pd-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 #outfitter .permitdesk .pd-kinds { display: inline-flex; gap: 4px; }
 #outfitter .permitdesk .pd-kinds .stamp { font-size: 10.5px; padding: 4px 9px; }
