@@ -30,7 +30,7 @@ import { absDay } from './trip.js';
 const NS = 'onboard';
 const FOOD_DAYS = 3;                      // the food that comes with the gear: a breakfast and a supper a day
 const GIFT = ['walttent', 'pot', 'waltstove', 'fuel']; // into the old pack, with your own things (items.js OWN_KIT)
-const STAFF = ['Jess', 'Tanner', 'Marcy', 'Kyle', 'Brooke', 'Dani', 'Cody', 'Shelby', 'Megan', 'Nate', 'Paige', 'Trent']; // (never a story name: the brief's reserved names)
+export const STAFF = ['Jess', 'Tanner', 'Marcy', 'Kyle', 'Brooke', 'Dani', 'Cody', 'Shelby', 'Megan', 'Nate', 'Paige', 'Trent']; // (never a story name: the brief's reserved names)
 const ROLE = 'the summer help';
 const DOOR_LINE = 'Got a minute? Come to the counter.';
 const STAFF_LOOK = { age: 'young', shirt: 0x5f7f45, hat: null }; // (E's figure look, as it takes it; ignored without E)

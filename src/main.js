@@ -396,6 +396,7 @@ async function main() {
 
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon, store: kv };
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
+  hud.veil = veil; // (the game-loop play: no action line over a veil's card, the bunk night's)
   window.__game.profile = profile; // hubs 1A
   window.__game.props = { storeLayout, onStore, storeLayouts, setStoreNotices, stats: storeStats }; // hubs 2A
   window.__game.shop = shop; // hubs 2B

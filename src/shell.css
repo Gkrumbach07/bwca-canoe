@@ -72,7 +72,9 @@
 .entries.wmap { width: min(600px, calc(68vw - 400px)); }
 #shell.wide.wizmap::before { width: min(1000px, 74vw); }
 .startmap { display: flex; flex-direction: column; gap: 8px; margin-top: -4px; }
-.smap { position: relative; width: 100%; height: clamp(170px, min(30vh, 34vw), 260px); border-top: 1px solid rgba(243, 236, 221, .25); border-bottom: 1px solid rgba(243, 236, 221, .25); }
+/* (the game-loop play: the map read as see-through over the lake behind the title; it is backed, the land an opaque
+   deep ground under the water wash) */
+.smap { position: relative; width: 100%; height: clamp(170px, min(30vh, 34vw), 260px); border-top: 1px solid rgba(243, 236, 221, .25); border-bottom: 1px solid rgba(243, 236, 221, .25); background: #13222a; }
 .smap canvas { position: absolute; inset: 0; pointer-events: none; }
 .smap .pins { position: absolute; inset: 0; }
 .smap .pin { position: absolute; transform: translate(-50%, -50%); appearance: none; width: 22px; height: 22px; padding: 0; margin: 0; border-radius: 50%; border: 1.5px solid rgba(243, 236, 221, .85); background: rgba(31, 42, 46, .82); color: var(--cream); font: 700 10px/1 var(--sc); letter-spacing: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; text-shadow: none; z-index: 1; }

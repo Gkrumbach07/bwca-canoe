@@ -245,7 +245,7 @@ export class Wizard {
     const ep = this.ep, d = this.start;
     const rows = [
       ['Home', ep ? this.homeWords(ep) : ''],
-      ['Putting in', `${longDate(d.year, d.doy)}, ${d.year}, at ${START_HOUR} am`],
+      ['Starting', `${longDate(d.year, d.doy)}, ${d.year}, at ${START_HOUR} am, at the store’s door`],
       ['', this.bringsWords(d.doy)],
       ['The way', WAY[this.mode]],
       ['To start', `$${START_MONEY} and the kit: ${KIT_WORDS}`],
