@@ -548,7 +548,9 @@ export function makeGait(body) {
   // advance the feet; returns the gait numbers the upper body uses
   function locomote(dt, carry) {
     if (state.air && !carry) { loco.rigPos.copy(rig.position); loco.h = rig.rotation.y; return airFeet(dt); }
-    if (!loco.init || loco.air || rig.position.distanceTo(loco.rigPos) > 1.5) { initFeet(); loco.air = false; }
+    // (r2: a jump across the ground starts the feet afresh; the ground itself rising or falling under a body standing
+    // there, a finer tile or a LiDAR chunk come in, does not: the feet re-step to it and the hips follow it eased)
+    if (!loco.init || loco.air || Math.hypot(rig.position.x - loco.rigPos.x, rig.position.z - loco.rigPos.z) > 1.5 || Math.abs(rig.position.y - loco.rigPos.y) > 4) { initFeet(); loco.air = false; }
     loco.rigPos.copy(rig.position); loco.h = rig.rotation.y;
     mireK += ((state.mire || 0) - mireK) * damp(3, dt);
     const v = Math.max(0, state.speed);
