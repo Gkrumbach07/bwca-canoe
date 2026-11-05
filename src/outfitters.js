@@ -1,6 +1,7 @@
-// Every entry point's outfitter, each its own (hubs phase 2, stream C). Six are written by hand (Lake One 30, Moose
-// Lake 25, Sawbill 38, Seagull 54, Saganaga 55, the Little Indian Sioux North 14); the other 49 are generated from
-// the place, seeded by the entry point: the landing water (a river or a lake, its size, depth and clarity), the deep
+// The outfitters, each its own (hubs phase 2, stream C; cut to fourteen in the game-loop round, stream B: OUTFITTERS
+// below, the other entry points trailheads). All fourteen keepers are written by hand (HAND); a profile can still be
+// made for any entry point (the start map's fallback, the old saves), generated from the place, seeded by the entry
+// point: the landing water (a river or a lake, its size, depth and clarity), the deep
 // lakes within 12 km, the campsites within 10 km, the long carries near by, the other outfitters near by and how far
 // it is down the road to town. From that comes:
 //   - a kind: a lodge (big, busy water), a river post (a river landing), a trout camp (deep, cold lakes near by) or a
@@ -16,7 +17,7 @@
 //     points, moose on a river at dawn, the carry that sorts people out. A hint's lake is the real one, and where it
 //     says the fish are thick this year, fishing.js's own abundance for that lake and species says so too;
 //   - the building's look (props.js, stream A): the stain, the roof and its kind, the trim, the door, a porch or not.
-// The signs' names are invented, one per entry point (outfitter.js outfitterName), and so are the keepers.
+// The signs' names are invented, one per entry point (outfitterName, here), and so are the keepers.
 //
 //   outfitterProfile(ep, world) → { ep, name, place, lake, area, kind, kindWords, post, keeper: { name, manner,
 //     lines: { hello, goodbye, chat: [...] }, moments: { hello: [...], stranger: [...], …each moment }, hint(world,

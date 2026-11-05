@@ -8,9 +8,12 @@
 // in profile.js; this document carries the core alongside the old fields.
 //
 // Trips start and end by themselves (fb2 C, the owner 2026-10-24: "trips simply start and end as you leave and reach
-// outfitters"): getting into the canoe at an outfitter's landing (or paddling off from one) pushes off, and setting
-// foot at any outfitter's landing after being away comes in, logged as "came in at …" (trip.js comeIn). Back at the
-// landing you left without having gone anywhere, the push-off is taken back and nothing is logged.
+// outfitters"; the game-loop round: at every entry point): getting into the canoe at any entry point's landing (or
+// paddling off from one) pushes off, and after being away, walking into an outfitter's store or up to its door, or into
+// a trailhead's lot (trailhead.js), comes in, logged as "came in at …" (trip.js comeIn). An outfitter's dock or a
+// trailhead's landing does not: a portage or a paddle past one must not end a trip. Back where you left without having
+// gone anywhere, the push-off is taken back and nothing is logged. The fourteen outfitters are `landings`; every entry
+// point is one of `entries` (entry(ep)); a trailhead's sign calls a pickup (showPickup, rides.js).
 //
 // Walking in. There is no "Tie up and go in": you land at the shore like anywhere else, or, afloat by an outfitter's
 // dock, E ties the canoe up alongside it and you step out onto its deck, then walk up the yard, the steps and in
