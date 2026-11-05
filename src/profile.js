@@ -1,9 +1,9 @@
 // The season: what you carry from trip to trip. Money (plain dollars, small amounts), the gear you own and the kit in
 // use, the outfitters you know and your standing with each, the home entry point and the season's permit (a paper
 // with a number, home and a date, stamped at the first counter). A season starts on the title (New season → the mode
-// → home), with $40 and the starting kit: an aluminium canoe, an ash paddle, one Duluth pack, an A-frame tent, water
-// tablets, a jig, a Mepps and a dozen leeches. You know only your home outfitter at first; another becomes known when
-// you reach its landing (trip.js watches for that).
+// → home), with $40 and the starting kit (items.js STARTER_KIT; gl-c: no pack or tent of your own: the summer help at
+// the home counter hands over the old gear from the back and three days of food, onboarding.js). You know only your home
+// outfitter at first; another becomes known when you reach its landing (trip.js watches for that).
 //
 // Saved in its own namespace (`bwca-canoe:profile`). With none there, the first load builds one from the trip core's
 // saves (the outfitter's document and the logbook): the Kevlar and the lure unlocks become owned items, money is $10
