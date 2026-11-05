@@ -38,8 +38,8 @@ function poolWords(pool) {
 //   +0.6, a fish +0.3 (the content join). (The plan said 16 h: a June day is 16 h from the dawn meal to the dusk one, so two meals a day left
 //   every June evening hungry and each day starting lower; at 24 h two meals keep you fed in any month, and an empty
 //   pack still has you hungry by the next afternoon.)
-// - water (fb3 B, the owner's 2026-10-25 round: nothing is drunk for you): the thirst need falls on its own, 8 game
-//   hours from full to empty (5⅓ paddling hard, carrying 30 kg or more, or on a July or August afternoon), and comes
+// - water (fb3 B, the owner's 2026-10-25 round: nothing is drunk for you): the thirst need falls on its own, 16 game
+//   hours from full to empty (10 paddling hard, carrying 30 kg or more, or on a July or August afternoon), and comes
 //   back only when you drink from the bottle in the book (drink: a gulp of 0.25 L, or the rest of it), BODY litres from
 //   empty to full. The 2 L bottle is an item in the pockets (inventory.js); on foot at the shore E fills it (camp.js),
 //   a tablet per fill (inventory.useOne), drinkable after half an hour; with no tablet the water goes in untreated (water,
@@ -125,9 +125,13 @@ const FOOD_HOURS = 24;     // game hours awake from a full food need to an empty
 const ASLEEP = 1 / 3;      // the needs fall at this rate asleep (and across any jump of the clock longer than JUMP)
 const JUMP = 2;            // game hours: a longer jump of the clock is a night, not a stretch of the day
 export const BOTTLE = 2;   // litres
-const USE = 1 / 6, USE_HARD = 1 / 4; // litres a game hour the body uses: thirst falls 1/8 an hour, 3/16 paddling hard, carrying heavy or on a hot afternoon
-const BODY = 4 / 3;        // litres from an empty water need to a full one (fb3 B: drunk by hand; the need lasts 8 h, 5⅓ h hard)
-export const GULP = 0.25;  // litres a Drink takes from the bottle (thirst +19 %)
+// litres a game hour the body uses: thirst falls 1/16 an hour, 1/10 paddling hard, carrying heavy or on a hot afternoon.
+// (The game-loop playthrough: it was 1/6 and 1/4 L of a 4/3 L need, empty in 8 h sitting in the canoe and 5⅓ on a July
+// afternoon: a full need gone by mid-afternoon. Now a day takes two to three litres, a full bottle tops up an empty need,
+// and two or three fills a day keep you watered.)
+const USE = 1 / 8, USE_HARD = 1 / 5;
+const BODY = 2;            // litres from an empty water need to a full one (fb3 B: drunk by hand; the need lasts 16 h, 10 h hard)
+export const GULP = 0.25;  // litres a Drink takes from the bottle (thirst +12.5 %)
 // water (the owner, 2026-10-26: "if i fill water up without a tablet, it is instantly clean even tho warnign says its
 // not"): lake water as it comes is untreated (energy.untreated, litres) until a tablet, the filter or a boil in the pot
 // makes it safe, and a drop of it in the bottle makes the whole bottle untreated. It quenches thirst like any water, with
