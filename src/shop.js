@@ -39,6 +39,8 @@ import { LURES, SPECIES } from './fishing.js';
 import { save } from './save.js';
 import { model, itemFor, itemDef, firstFit, acceptsKind, refresh } from './inv-ui.js';
 import { LURE_TAKES, AFRAME_SLEEP } from './items.js'; // content C: the new lures' takes (tuning: the A-frame's night)
+import { PREMIUM, SPECIALTY, specialtyMatch } from './outfitter-kit.js'; // the game-loop round: what each outfitter alone sells, and its specialty
+import { sheetsSoldAt } from './sheets.js'; // the game-loop round: the sheets each of the fourteen tables sells
 
 const NS = 'shop';
 export const SHEET_PRICE = 8;
@@ -199,7 +201,7 @@ const NOTE = { bentshaft: 'easier on the shoulders, a touch quicker', carbon: 'l
   rod: 'the line holds longer', saw: 'firewood in no time', camera: 'for the photo notices', 'lure:silverminnow': 'weedless', 'lure:lazyike': 'walleye, slow',
   rodpro: 'feels every tap', bag3: 'good to 25 °F', bagdown: 'good to 16 °F', padair: 'a warmer night', headlamp2: 'a 130 ft beam', headlamp3: 'a 180 ft beam', packdry: 'stays dry', rainjacket: 'dry in the rain', headnet: 'keeps the bugs off', stove: 'supper without a fire' }; // (content C)
 function shortWords(it) { return NOTE[it.id] || ''; }
-for (const it of [...Object.values(BASE), ...CATALOG]) if (!it.use) register(it);
+for (const it of [...Object.values(BASE), ...CATALOG, ...Object.values(PREMIUM)]) if (!it.use) register(it);
 // the catalogue's things as items (inv-ui.js: the stand-in's, or stream A's)
 for (const it of CATALOG) if (!it.use && !it.hull) itemFor(it);
 
@@ -209,7 +211,7 @@ const BETTER = { cruise: 'max', stability: 'max', snap: 'max', effort: 'min', ca
 const MULT = ['cruise', 'effort', 'stability', 'carry', 'snap', 'feel'];
 let signatures = null;   // stream C's SIGNATURES (id → item), once its module is in
 export function itemOf(id) {
-  return BY_ID.get(id) || BASE[id] || (signatures && signatures[id]) || null;
+  return BY_ID.get(id) || BASE[id] || (signatures && signatures[id]) || PREMIUM[id] || null;
 }
 // player.gear from what is owned and in use: the slot items in use (a spare on the rack does nothing), every other
 // owned item, one per family (the best value of each field), multiplied across families; sleep is the tent's quality
@@ -332,7 +334,11 @@ export class Shop {
   }
   // Sandbox has no limits: the shelves are free there, as its food and its rides are
   get free() { const o = this.outfitter, t = o && o.core; return !!(t && t.sandbox); }
-  priceOf(it, ep) { return it.price > 0 && !this.free ? Math.max(1, Math.round(it.price * this.priceMul(ep))) : 0; }
+  // (the game-loop round: an outfitter's specialty, outfitter-kit.js SPECIALTY, is 15 % under the others' price there)
+  priceOf(it, ep) { return it.price > 0 && !this.free ? Math.max(1, Math.round(it.price * this.priceMul(ep) * (1 - this.specialtyOff(it, ep)))) : 0; }
+  specialtyOff(it, ep) { const sp = SPECIALTY[Number(ep)]; return sp && specialtyMatch(it, sp) ? sp.off : 0; }
+  // the outfitter's specialty: { family | slot | shelf, off, words } or null
+  specialty(ep) { const sp = SPECIALTY[Number(ep)]; return sp ? { ...sp } : null; }
   price(id, ep) {
     if (String(id).startsWith('sheet:')) return this.free ? 0 : Math.max(1, Math.round(SHEET_PRICE * this.priceMul(ep)));
     const it = itemOf(id) || (this.signature(ep) && this.signature(ep).id === id ? this.signature(ep) : null);
@@ -348,7 +354,7 @@ export class Shop {
     const out = [];
     const add = (it) => {
       const price = this.priceOf(it, ep);
-      const one = !!(it.hull || it.signature || it.shelf === 'map' && it.id !== 'mapcase');
+      const one = !!(it.hull || it.signature || it.premium || it.shelf === 'map' && it.id !== 'mapcase');
       const owned = !it.use && one && !!(pr && pr.has(it.id));
       out.push({ ...it, price, owned, inUse: !!(owned && it.slot && kit[it.slot] === it.id), afford: price <= money });
     };
@@ -359,6 +365,8 @@ export class Shop {
     for (const it of CATALOG) if (!kind || !it.at || it.at.includes(kind) || (pr && pr.has(it.id) && it.hull)) add(it);
     const sig = this.signature(ep);
     if (sig) add(sig);
+    // the game-loop round: what this outfitter alone sells (outfitter-kit.js), on its shelf
+    for (const it of Object.values(PREMIUM)) if (it.host === Number(ep)) add({ ...it, kind: it.shelf });
     for (const s of this.sheetsFor(ep)) add({ ...s, shelf: 'map' });
     return out;
   }
@@ -370,7 +378,7 @@ export class Shop {
     if (!D || !l) return [];
     if (typeof D.stockFor === 'function' && typeof D.sheetItem === 'function') { // D's own stock: the landing's sheet, then its neighbours within reach
       let list = [];
-      try { list = D.stockFor({ x: l.x, z: l.z, lake: l.lake }) || []; } catch { list = []; }
+      try { list = sheetsSoldAt(Number(ep)) || D.stockFor({ x: l.x, z: l.z, lake: l.lake }) || []; } catch { list = []; }
       return list.map((s, i) => { const it = D.sheetItem(s.id || s); if (it) itemFor(it); return it ? { ...it, kind: 'map', here: i === 0 } : null; }).filter(Boolean);
     }
     if (typeof D.sheetAt !== 'function') return [];

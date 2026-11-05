@@ -9,7 +9,7 @@ import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fm
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintEntry, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -1785,7 +1785,7 @@ export class Hud {
       for (const ep of w.entryPoints) {
         if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
         const [a, b] = toPx(ep.x, ep.z);
-        paintDock(ctx, a, b, dockK);
+        paintEntry(ctx, a, b, dockK, ep.ep); // (the game-loop round: an outfitter's dock, or a trailhead's sign)
         hits.push({ kind: 'dock', ep: ep.ep, x: ep.x, z: ep.z, px: 10 });
         if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
       }

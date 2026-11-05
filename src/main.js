@@ -1072,6 +1072,42 @@ async function main() {
     };
     Object.assign(window.__game, { permits, permitDesk });
   }
+  // gl-b: outfitters, drives, pickups, roads (the game-loop round, stream B). Fourteen outfitters on entry points
+  // (outfitters.js OUTFITTERS), the other forty-one trailheads (trailhead.js: a lot, a permit box, the sign); the truck
+  // drives from a counter to any entry point by the road graph, and a trailhead's sign calls a pickup (rides.js). A trip
+  // pushes off from any landing and comes out in a store, by its door or in a trailhead's lot (outfitter.js updateTrip).
+  {
+    // (the modules are in already: a namespace each, so a name another stream's branch lacks is undefined, not a build error)
+    const [OF, TH, { TEACH }] = await Promise.all([import('./outfitters.js'), import('./trailhead.js'), import('./hints.js')]);
+    // a season begins at an outfitter: a home picked at a trailhead (the title's list of every entry point, until the
+    // start map) is the outfitter that serves it
+    const newSeasonB = title.newSeason.bind(title);
+    title.newSeason = (ep, opts) => {
+      const n = ep && typeof ep === 'object' ? ep.ep : Number(ep), h = n != null && !OF.isOutfitter(n) ? OF.hostOf(n, world) : null;
+      return newSeasonB(h != null ? world.entryPoints.find((e) => e.ep === h) || ep : ep, opts);
+    };
+    // only an outfitter is one to know (a trailhead's landing is not: trip.js learns what it reaches)
+    const learnB = trip.learn.bind(trip);
+    trip.learn = (ep) => (OF.isOutfitter(ep) ? learnB(ep) : false);
+    // the trip card and the map book name a trailhead by its place, not as an outfitter
+    const landingB = tasks.landing.bind(tasks);
+    tasks.landing = (ep) => (OF.isOutfitter(ep) ? landingB(ep) : outfitter.entry(ep) || landingB(ep));
+    if (typeof record.landing === 'function') { const recLandingB = record.landing.bind(record); record.landing = (ep) => recLandingB(ep) || (ep != null ? outfitter.entry(ep) : null); }
+    // the moments: what a trailhead's landing is not, and what its sign is for (taught once each, at the moment)
+    const inLot = () => { const p = player, h = p.onFoot && !outfitter.open && !trip.active ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'lot'); };
+    const atLanding = () => { const p = player, h = p.onFoot && trip.active && outfitter.trip.away ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'landing'); };
+    const glbM = [
+      { id: 'gl-b:pickup', prio: TEACH, recur: 'once', text: 'Out at the lot. {E} on the sign calls a pickup.', due: inLot },
+      { id: 'gl-b:landing', prio: TEACH, recur: 'once', text: 'A trailhead. Walk up to the lot to come out here.', due: atLanding },
+    ];
+    for (const m of glbM) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const glbDue = new Map(glbM.map((m) => [m.id, m.due])), dueB = hints.due.bind(hints);
+    hints.due = (id, rec) => (glbDue.has(id) ? glbDue.get(id)() : dueB(id, rec));
+    window.__game.outfitters = { OUTFITTER_EPS: OF.OUTFITTER_EPS, OUTFITTERS: OF.OUTFITTERS, isOutfitter: OF.isOutfitter, hostOf: (ep) => OF.hostOf(ep, world), reachOf: (ep) => OF.reachOf(ep, world),
+      countryOf: (ep) => OF.countryOf(ep, world), roadKm: (a, b) => OF.roadKm(a, b, world), roadWay: (a, b) => OF.roadWay(a, b, world), premiumOf: OF.premiumOf, specialtyOf: OF.specialtyOf,
+      outfitterHomes: () => OF.outfitterHomes(world), homeTurf: (ep) => OF.homeTurf(ep, world) };
+    window.__game.trailhead = { trailheadLayout: TH.trailheadLayout, trailheadLayouts: TH.trailheadLayouts, trailheadAt: TH.trailheadAt, onTrailhead: TH.onTrailhead };
+  }
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few

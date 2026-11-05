@@ -8,7 +8,9 @@
 // Self-contained on purpose: it reads only world.meta.overview, world.base and the rides' rows, so the shared map
 // renderer can take its place later (drawCounterMap's arguments are the whole contract).
 //
-//   drawCounterMap(canvas, { world, here: { ep, x, z }, rows: [{ ep, x, z, price, unknown, short }], hot, sandbox })
+//   drawCounterMap(canvas, { world, here: { ep, x, z }, rows: [{ ep, x, z, price, unknown, short, outfitter }], hot, sandbox })
+// (the game-loop round: the truck goes to every entry point. An outfitter is a ring, a trailhead a small square; a
+// trailhead off the sheet is left off it, unless it is the one hovered: the list beside the map has them all)
 //     → [{ ep, x, y, r }] the markers in css px, for hit testing (markerAt)
 //   markerAt(marks, x, y) → ep or null
 
@@ -71,6 +73,7 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   // the stretch of country: here and the nearest FRAME outfitters offered, padded, at one scale both ways (north up);
   // the ones further off are pinned at the sheet's edge, the way they lie, with an arrow
   rows = rows.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.z));
+  const isTh = (r) => r.outfitter === false;
   const near = [...rows].sort((a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z)).slice(0, FRAME);
   const pts = [here, ...near];
   const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x)), z0 = Math.min(...pts.map((p) => p.z)), z1 = Math.max(...pts.map((p) => p.z));
@@ -92,6 +95,8 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
     }
     at.set(r.ep, { x, y, out, a: Math.atan2(Y(r.z) - hy, X(r.x) - hx) });
   }
+  // a trailhead off the sheet is not pinned (only the hovered one)
+  rows = rows.filter((r) => !(isTh(r) && at.get(r.ep).out && r.ep !== hot));
   // pinned ones that would sit on each other are spread along their edge, the nearest keeping its place
   const pinned = rows.filter((r) => at.get(r.ep).out).sort((a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z));
   const placed = [];
@@ -116,6 +121,7 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   ctx.lineCap = 'round';
   for (const r of rows) {
     const on = r.ep === hot, q = at.get(r.ep);
+    if (isTh(r) && !on) continue; // (a trailhead's road only when it is hovered)
     ctx.setLineDash(on ? [] : [3, 5]); ctx.lineWidth = on ? 1.8 : 1; ctx.strokeStyle = on ? RED : q.out ? 'rgba(74, 64, 54, .22)' : 'rgba(74, 64, 54, .45)';
     ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(q.x, q.y); ctx.stroke();
   }
@@ -128,6 +134,16 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   for (const r of order) { const q = at.get(r.ep); taken.push({ x0: q.x - R, x1: q.x + R, y0: q.y - R, y1: q.y + R }); }
   for (const r of order) {
     const q = at.get(r.ep), x = q.x, y = q.y, on = r.ep === hot, col = r.unknown ? RED : INK;
+    if (isTh(r)) { // a trailhead: a small square with its number, the fare only when hovered
+      const h = on ? 9 : 7;
+      ctx.fillStyle = on ? '#f4ecd8' : 'rgba(241, 233, 212, .9)'; ctx.fillRect(x - h, y - h, 2 * h, 2 * h);
+      ctx.lineWidth = on ? 1.8 : 1; ctx.strokeStyle = r.short ? FAINT : on ? RED : SOFT; ctx.strokeRect(x - h, y - h, 2 * h, 2 * h);
+      ctx.fillStyle = r.short ? FAINT : on ? RED : SOFT; ctx.font = `700 ${String(r.ep).length > 1 ? 9 : 10}px "Alegreya Sans SC", "Alegreya Sans", sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(r.ep), x, y + 0.5);
+      if (on) { const fare = sandbox ? 'free' : `$${r.price}`; ctx.font = '600 19px Caveat, "Bradley Hand", cursive'; ctx.fillStyle = RED; ctx.textBaseline = 'top'; ctx.fillText(fare, x, y + h + 1); }
+      marks.push({ ep: r.ep, x, y, r: h });
+      continue;
+    }
     if (q.out) { // a pencil arrowhead past the ring, the way it lies
       ctx.save(); ctx.translate(x + Math.cos(q.a) * (R + 3), y + Math.sin(q.a) * (R + 3)); ctx.rotate(q.a);
       ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(0, -4); ctx.lineTo(0, 4); ctx.closePath(); ctx.fillStyle = r.short ? FAINT : col; ctx.fill(); ctx.restore();
