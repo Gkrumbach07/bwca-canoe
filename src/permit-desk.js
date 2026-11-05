@@ -44,7 +44,8 @@ export class PermitDesk {
     if (!this.sel || this.sel.at !== at || (this.sel.abs != null && this.sel.abs < today)) this.sel = { at, ep: at, abs: null, kind: 'overnight', pma: null }; // (a null day is "not chosen yet", not a past one: `null < today` threw away every other entry point picked)
     const s = this.sel;
     if (s.kind === 'pma' && !s.pma) { const n = P.pmasNear(at, 1)[0]; s.pma = n ? n.id : null; }
-    if (s.abs == null || P.available(s.ep, s.abs).left <= 0) { const c = P.calendar(s.ep, today, DAYS).find((d) => d.left > 0); s.abs = c ? c.abs : null; }
+    // (a day you hold here stays chosen, sold out or not: the desk says it is yours)
+    if (s.abs == null || (P.available(s.ep, s.abs).left <= 0 && !P.available(s.ep, s.abs).mine)) { const c = P.calendar(s.ep, today, DAYS).find((d) => d.mine || d.left > 0); s.abs = c ? c.abs : null; }
     return s;
   }
   // --- the html ----------------------------------------------------------------------------------------------------
@@ -71,10 +72,11 @@ export class PermitDesk {
     const lead = ((cal[0].abs + 4) % 7 + 7) % 7; // the first day's weekday (abs 0 was a Thursday)
     const cells = cal.map((c, i) => {
       const { year, doy } = dateOfAbs(c.abs), dd = new Date(c.abs * 86400000).getUTCDate(), wd = WD[(lead + i) % 7];
-      const off = c.closed || c.left <= 0, chosen = c.abs === s.abs;
-      const left = c.closed ? 'ice' : c.left <= 0 ? 'full' : `${c.left} left`;
-      const label = `${weekdayOf(year, doy)} ${dateWords(c.abs, { weekday: false })}: ${c.closed ? 'iced in' : c.left <= 0 ? 'sold out' : `${c.left} of ${c.quota} left`}`;
-      return `<button type="button" class="pd-day${off ? ' off' : ''}${chosen ? ' sel' : ''}${!off && c.left <= 2 ? ' few' : ''}${c.abs === today ? ' today' : ''}" data-act="permit-day" data-id="${c.abs}" ${off ? 'disabled' : ''} aria-pressed="${chosen}" aria-label="${esc(label)}"><i>${wd}</i><b>${dd}</b><span>${left}</span></button>`;
+      // (a day you hold a permit for here reads "yours", even when the rest of it is sold out: glf-3)
+      const mine = !c.closed && c.mine, off = !mine && (c.closed || c.left <= 0), chosen = c.abs === s.abs;
+      const left = mine ? 'yours' : c.closed ? 'ice' : c.left <= 0 ? 'full' : `${c.left} left`;
+      const label = `${weekdayOf(year, doy)} ${dateWords(c.abs, { weekday: false })}: ${mine ? 'your permit' : c.closed ? 'iced in' : c.left <= 0 ? 'sold out' : `${c.left} of ${c.quota} left`}`;
+      return `<button type="button" class="pd-day${off ? ' off' : ''}${chosen ? ' sel' : ''}${mine ? ' mine' : !off && c.left <= 2 ? ' few' : ''}${c.abs === today ? ' today' : ''}" data-act="permit-day" data-id="${c.abs}" ${off ? 'disabled' : ''} aria-pressed="${chosen}" aria-label="${esc(label)}"><i>${wd}</i><b>${dd}</b><span>${left}</span></button>`;
     }).join('');
     rows.push(`<div class="pd-cal" role="group" aria-label="The next four weeks at entry point ${s.ep}">${cells}</div>`);
     const mine = s.abs != null ? P.held().find((p) => p.abs === s.abs) : null;
@@ -138,6 +140,7 @@ const CSS = `
 #outfitter .permitdesk .pd-day b { font: 600 15px/1.15 var(--serif); }
 #outfitter .permitdesk .pd-day span { font: 500 13px/1 var(--pencil-font); color: var(--pencil); white-space: nowrap; }
 #outfitter .permitdesk .pd-day.few span { color: var(--map-red); }
+#outfitter .permitdesk .pd-day.mine span { color: var(--pencil); font-weight: 700; }
 #outfitter .permitdesk .pd-day.today { border-color: var(--ink-soft); }
 #outfitter .permitdesk .pd-day.sel { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 #outfitter .permitdesk .pd-day.sel i, #outfitter .permitdesk .pd-day.sel span { color: var(--paper-deep); }
