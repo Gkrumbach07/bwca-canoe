@@ -64,12 +64,13 @@ export class Rides {
     this.grounded = null; // (words) => false when a line is untrue here and now (main.js: npcs.grounded, gl-e)
     injectCss();
   }
-  // the keeper's own line for a moment (the drive's goodbye, the pickup's hello), drawn again, up to eight times, while
-  // the grounding refuses it, as the counter's outfitter.say is (main.js)
+  // the keeper's own line for a moment (the drive's goodbye, the pickup's hello), drawn again, up to 24 times, while
+  // the grounding refuses it, as the counter's outfitter.say is (main.js). (24, not 8: a pool of two lines with one
+  // refused gave the refused one back after nine draws about once in 500 cards.)
   keeperWords(profile, moment) {
     const ctx = { hours: this.day ? this.day.hours : undefined }, ok = (w) => { try { return !this.grounded || this.grounded(w); } catch { return true; } };
     let w = keeperLine(profile, moment, ctx);
-    for (let k = 0; k < 8 && w && !ok(w); k++) w = keeperLine(profile, moment, ctx);
+    for (let k = 0; k < 24 && w && !ok(w); k++) w = keeperLine(profile, moment, ctx);
     return w;
   }
   get profile() { return (this.outfitter && this.outfitter.profile) || null; }
