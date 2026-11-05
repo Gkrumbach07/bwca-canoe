@@ -1030,6 +1030,20 @@ async function main() {
   window.__game.autoWatch = autoWatch;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
+  // gl-e: the people are real (the game-loop round, stream E; docs/build/game-loop-brief.md). A store's visitors are the
+  // scheduled parties' own members (npcs.js storeParties: going in from an hour and a half before their put-in until
+  // their canoes go in the water, coming out for an hour after they land), the whole crew in the store or at the dock;
+  // everyone but the keeper is at something (smart.js: the shelves, the counter, the board, the map table, the stove,
+  // the porch, the dock), seeded by the clock and the season; what anyone says is held to what is true now
+  // (grounding.js: the ice, the snow, the bugs, the hour, the weather, what the store really has); a party you talk to in
+  // a store knows you at their camp or on the water (npcs.js met), and their news is their own trip (parties.js
+  // storyOf). npcs.onTalk tells who listens (stream D's creel notices); npcs.extraAt stands someone in a store (stream C).
+  {
+    npcs.grounding.attach({ day, weather, wind, world });
+    parties.attach({ weather });
+    npcs.attachParties({ parties, moves, ground: (x, z) => tiles.groundAt(x, z) });
+    Object.assign(window.__game, { smart: npcs.smart, grounding: npcs.grounding });
+  }
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few

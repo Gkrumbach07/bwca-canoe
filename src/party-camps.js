@@ -22,6 +22,12 @@
 //   partyCamps.extras()       people.extra: the figures to draw, [{ person, fig, f, d }]
 //   partyCamps.word(person)   people.partyWord: E on one of them
 //   partyCamps.drawn          Map key -> the drawn camp; partyCamps.stats()
+//
+// gl-e (the people are real): a party you talked to in a store knows you out here: their greeting says so, once a day
+// (npcs.js metLine: "You were at the Moose Lake store Tuesday."), whatever the chance of a word. What they tell you of
+// their trip is read from it alone (parties.js storyOf, talk-visitors.js tripWords: the lakes they slept on, their fish
+// and where, what they saw, the day the wind kept them in, the site they found taken), and every line they say is held
+// to what is true now (grounding.js). E on one of them tells people.onTalk ({ kind: 'party', partyId, lakeId }).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PropBuilder, propMaterial, TILE, buildHull, bakeSelf } from './prop-kit.js';
@@ -29,6 +35,8 @@ import { buildTentMesh, buildAFrameMesh, buildItemProp, tentPose, TENT_SIZE, AFR
 import { mulberry32 } from './rng.js';
 import { PRI } from './dialogue.js';
 import { MOVE } from './parties.js';
+import { tripWords } from './talk-visitors.js'; // gl-e: their trip, in their words (parties.js storyOf)
+import { grounding as GROUND } from './grounding.js'; // gl-e: only what is true here and now
 
 export const CAMPS = {
   drawR: 900,      // m: camps drawn within this of you
@@ -113,7 +121,7 @@ const HELLO = {
 };
 const WORD = {
   pair: ['We came in at {ep} {ago}.', 'Two of us, {left}.', 'We’re on our way {way}.'],
-  friends: ['Five years running, this trip. Came in at {ep}.', 'We’re here {left}, then on {way}.', 'The fish aren’t biting for us. Maybe you’ll have better luck.'],
+  friends: ['Five years running, this trip. Came in at {ep}.', 'We’re here {left}, then on {way}.', 'Same canoes, same jokes, five years running.'],
   family: ['Our first trip with the kids. So far so good!', 'Came in at {ep} {ago}. The kids want to stay forever.', 'We’re here {left}.'],
   group: ['We’re a big group, sorry if we’re loud!', '{N} of us, {canoes} canoes. It’s a circus at the portages.', 'Came in at {ep} {ago}, out {left2}.'],
   solo: ['Just me and the loons out here.', 'Came in at {ep} {ago}. Heading on {way}.', '{Left}, then out.'],
@@ -432,15 +440,17 @@ export class PartyCamps {
     const rng = mulberry32(((D.stay.seed >>> 0) ^ (T * 2654435761)) >>> 0), f = D.figs[k];
     const up = f.spec.pose === 'stand' && rng() < CAMPS.wave;
     const far = this.storeDistance(D.site), pW = CAMPS.word[0] + (CAMPS.word[1] - CAMPS.word[0]) * clamp((far - CAMPS.store[0]) / (CAMPS.store[1] - CAMPS.store[0]), 0, 1);
-    const line = rng() < pW ? this.helloLine(D, rng) : null;
-    if (up || line) D.wave = { k, t: 0, up, line };
+    const met = this.people && typeof this.people.metLine === 'function' ? this.people.metLine(D.party, T) : null; // gl-e: they know you
+    const line = met || (rng() < pW ? this.helloLine(D, rng) : null);
+    if (up || line) D.wave = { k, t: 0, up: up || !!met, line };
     if (line) this.say(D, k, line, PRI.greet);
   }
   helloLine(D, rng) {
+    if (D.party && this.people && typeof this.people.metLine === 'function' && !D.v) { const m = this.people.metLine(D.party, this.parties.today); if (m) return m; } // gl-e: (on the move) they know you
     const h = this.day.hours, st = this.weather ? this.weather.state || '' : '', windy = this.wind && this.wind.speed > 7;
     const pool = /rain|storm/.test(st) ? HELLO.wet : windy && rng() < 0.6 ? HELLO.wind : h < 11 ? HELLO.morning : h < 17 ? HELLO.day : HELLO.evening;
     // (p2 C: and not a line another party said in the last game hour: two canoes passing with the same words)
-    const said = this.said.get(D.party.id) || new Set(), now = this.now, fresh = pool.filter((s) => !said.has(s) && !(now - (this.recent.get(s) ?? -1e9) < 1));
+    const said = this.said.get(D.party.id) || new Set(), now = this.now, F = GROUND.facts({}), fresh = pool.filter((s) => !said.has(s) && !(now - (this.recent.get(s) ?? -1e9) < 1) && GROUND.ok(s, F)); // (gl-e: true now)
     return fresh.length ? pick(rng, fresh) : null;
   }
   say(D, k, text, pri) {
@@ -455,11 +465,21 @@ export class PartyCamps {
     const k = this.greeter(D) ?? 0, T = this.parties.today, rng = mulberry32(((D.stay.seed >>> 0) ^ 0xa11ce ^ (T * 977)) >>> 0);
     const line = this.tripLine(D.party, D.stay.end === D.party.exit, rng);
     this.say(D, k, line, PRI.reply);
+    if (this.people && typeof this.people.emitTalk === 'function') this.people.emitTalk({ kind: 'party', partyId: D.party.id, lakeId: this.parties.stayLake ? this.parties.stayLake(D.stay) : 0 }); // gl-e
     return line;
   }
   // a word about their trip, in their words, filled from the plan (their put-in, the nights left; home: on their way out)
   // (p2 C: party-moves.js asks it for a party on the water or a trail, and helloFor for a greeting)
   tripLine(party, home, rng) {
+    // gl-e: first that they know you, then their trip as it happened (storyOf), a fact not told yet; the old words after
+    const T0 = this.parties.today;
+    if (this.people && typeof this.people.metLine === 'function') { const m = this.people.metLine(party, T0); if (m) return m; }
+    if (typeof this.parties.storyOf === 'function') {
+      let S = null; try { S = this.parties.storyOf(party, T0); } catch { S = null; }
+      const F = GROUND.facts({}), said0 = this.said.get(party.id) || new Set();
+      const lines = tripWords(S, { T: T0, size: party.size }).map((x) => x.text).filter((t) => !said0.has(t) && GROUND.ok(t, F));
+      if (lines.length) return lines[0];
+    }
     const T = this.parties.today, ep = this.world.entryPoints.find((e) => e.ep === party.ep), ago = T - party.day, left = party.exit - T;
     const fill = (s) => s.replace('{ep}', ep ? ep.name : 'the landing').replace('{ago}', ago <= 0 ? 'this morning' : ago === 1 ? 'yesterday' : `${NUM[ago] || ago} days ago`)
       .replace('{left}', left <= 1 ? 'one more night' : `${NUM[left] || left} more nights`).replace('{Left}', cap(left <= 1 ? 'one more night' : `${NUM[left] || left} more nights`))
