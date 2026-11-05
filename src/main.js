@@ -1215,7 +1215,7 @@ async function main() {
   // first trip (weather.js GENTLE); each outfitter's first night out is suggested once a season (at home as the first
   // talk ends, elsewhere when you ask the keeper), its way pencilled on your map, a small job with it, the site held.
   {
-    starter.attach({ tasks, profile, outfitter, npcs, onboarding, parties, weather, trip, day, world, hud });
+    starter.attach({ tasks, profile, outfitter, npcs, onboarding, parties, weather, trip, day, world, hud, permits: window.__game.permits }); // (r2 join: the ticket gate)
     onboarding.attach({ starter });
     starter.sync();
     // the keeper's first choice at an outfitter whose first night you have not heard

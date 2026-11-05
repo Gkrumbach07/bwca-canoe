@@ -108,7 +108,10 @@ export class Starter {
     this.state.offered[Number(ep)] = Math.round(this.nowH * 100) / 100; this.write();
     const pay = this.payOf(ep), node = (say, choices) => (by ? { say, by, choices } : { say, choices });
     const after = (say) => node(say, [{ text: 'Thanks.', go: done }]);
-    return node(`First night out? ${W.way} ${W.easy} Back by lunch the next day. I’ve marked it on your map.`, [
+    // (r2 join: an open ticket means no night permit at the desk: the keeper says so, once, with the way)
+    const P = this.t.permits, owed = P && typeof P.owed === 'function' ? P.owed() : 0;
+    const tk = owed > 0 ? ` That ticket of yours first, though: the desk sells no night with one open.` : '';
+    return node(`First night out? ${W.way} ${W.easy} Back by lunch the next day. I’ve marked it on your map.${tk}`, [
       { text: 'I’ll go there.', go: () => node(`While you’re there, look over the grate, the latrine and the tent pad for me. $${pay} when you’re back.`, [
         { text: 'I’ll do that.', go: () => { this.take(ep); return after('Good. Back in two or three days, then.'); } },
         { text: 'I’ll just camp.', go: () => after('Fair enough. Enjoy it.') },
@@ -155,7 +158,8 @@ export class Starter {
   }
   // the sites held for you (parties.js mine's shape): from the hour it was suggested, while it stands and STARTER.holdH
   holds() {
-    if (!this.state) return [];
+    // (r2 join: not a co-op guest's: its own season is set aside on the visit, and the room's parties hold the host's)
+    if (!this.state || this.guest) return [];
     const out = [];
     for (const k of Object.keys(this.state.offered)) {
       const ep = Number(k), r = this.route(ep), at = this.state.offered[k];
