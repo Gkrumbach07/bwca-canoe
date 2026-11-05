@@ -876,7 +876,7 @@ async function main() {
   // asked once. What the last page asked of this load (Play: straight in; New: the season begun at its home) runs once
   // the frames do.
   window.__game.slots = slots;
-  { const boot = slots.takeBoot(); if (boot) setTimeout(() => title.fromBoot(boot), 0); }
+  const bootAsk = slots.takeBoot(); // (run once the game-loop modules below are attached: see the animation loop's start)
   // round A-F: wilderness people, phase 1, the camps (the owner, 2026-10-26: "wilderness people"; the people plan,
   // docs/plans/people.md). parties.js: the other parties out there, a pure function of the entry points' real quotas,
   // the season's fill, the weekday and the Traffic setting, seeded by the season and never saved; each night at a
@@ -1343,6 +1343,10 @@ async function main() {
     fps.end(real);
   };
   renderer.setAnimationLoop(tick);
+  // the last page's ask (a new season into a slot, or Play), now that every module is attached. (The replay: run from
+  // where the slot is taken, it came while main awaited the game-loop modules, before onboarding.attach, which then
+  // took the season just begun for an old one and marked it legacy: no summer help, no old gear, no first permit.)
+  if (bootAsk) setTimeout(() => title.fromBoot(bootAsk), 0);
   // the look board (lookboard.js): a contact sheet of fixed spots and hours; the loop is held while it runs
   window.__game.lookboard = (opts) => lookboard(window.__game, opts, {
     pause: () => renderer.setAnimationLoop(null),
