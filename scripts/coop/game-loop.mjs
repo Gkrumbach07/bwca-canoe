@@ -138,6 +138,12 @@ try {
   await until(A, () => window.__game.outfitter.trip.away, null, 30000);
   await until(B, () => !window.__game.player.teleporting, null, 30000);
   await sleep(1500);
+  // the owner's call 2026-11-05: one permit covers the whole group, however many: the guest holds none, buys none, and is
+  // never on day use or fined; nothing in the permit or the group trip counts heads
+  const gp = await B.evaluate(() => { const g = window.__game, P = g.permits; return { held: P.held().length, active: g.trip.active, dayUse: !!g.trip.state.dayUse, fined: !!g.trip.state.fined, owed: P.owed() }; });
+  const hp = await A.evaluate(() => { const g = window.__game, P = g.permits; return { held: P.held().map((p) => ({ id: p.id, ep: p.ep })), used: (P.s.used || []).length, remotes: g.coop.remotes.size }; });
+  result('one permit covers the group: the guest is on the host\'s permit with none of their own, no day use, nothing owed', gp.active && gp.held === 0 && !gp.dayUse && !gp.fined && gp.owed === 0 && hp.remotes >= 1, { guest: gp, host: hp });
+
   // --- each finishes their notice on the trip --------------------------------------------------------------------------------
   await A.evaluate((id) => { const T = window.__game.tasks, t = T.ads.get(id); t.status = 'done'; T.changed(); }, mine.id);
   await B.evaluate((id) => { const T = window.__game.tasks, t = T.ads.get(id); t.status = 'done'; T.changed(); }, theirs.id);

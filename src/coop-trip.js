@@ -20,6 +20,8 @@
 //     runs outfitter.start), and the trip comes in (or is taken back) only when every player is ashore at an
 //     outfitter's landing. The log carries `who`; a guest's lakes, portages, capsizes and evacuations are logged by the
 //     host under their name (`tlog`). The trip card at the end and the record are the host's alone.
+//   - The permit is the host's and covers the whole group, however many join (the owner's call 2026-11-05: no party size
+//     limit; nothing here or in permits.js counts heads). A guest holds none, is never on day use and is never fined.
 //   - A ride or the bunkhouse is a group jump: whoever asks at the counter makes a proposal; everyone must be at that
 //     store and tick Ready (the card at the top of the screen: each name, here or not, ready or not); then the host says
 //     go and every browser runs its own ride or night (its own fare, its own energy), the clock advanced by the host
