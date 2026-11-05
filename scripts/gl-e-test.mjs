@@ -65,6 +65,22 @@ try {
   }, { EP });
   if (ONLY.has(1)) check('1 store visitors are the parties going in, whole crews in the store or at the dock', r1.h < r1.first && r1.inStore.length > 0 && !r1.bad.length, r1);
 
+  // --- 5b: a trailhead's lot (stream B's trailheadLayout; here a stand-in lot by Moose Lake's yard): the parties load there
+  if (ONLY.has(5)) {
+    await A.evaluate(({ EP, year, doy }) => { const g = window.__game, P = g.parties, ps = P.entering(EP, P.today).filter((p) => p.stays.length).map((p) => p.putIn).sort((a, b) => a - b); g.day.setClock(year, doy, Math.max(g.day.hours, (ps[0] || 9) - 0.45)); }, { EP, year: YEAR, doy: DOY });
+    const r5 = await A.evaluate(async () => {
+      const g = window.__game, N = g.npcs, L = g.outfitter.visit && g.outfitter.visit.L, p = g.player;
+      const lot = { x: L.stepsFoot.x, z: L.stepsFoot.z, heading: 0 }, landing = { x: L.dockFoot.x, z: L.dockFoot.z };
+      N.attachParties({ trailheadLayout: (ep) => (ep === 25 ? { lot, landing, sign: lot, box: lot } : null) });
+      g.step(1 / 30, 60);
+      const list = N.lots.get(25) || [], want = N.storeParties(25, g.parties.today, g.day.hours, { before: 0.75, after: 0.5, parties: 3 });
+      const ok = list.length === want.length && list.every((v) => v.figs.every((f) => f.where === 'lot' && Math.hypot(f.x - lot.x, f.z - lot.z) < 12));
+      N.trailheadOf = null; N.lots.clear();
+      return { ok, parties: list.map((v) => `${v.partyId} ${v.figs.length}`), want: want.length, acts: list.flatMap((v) => v.figs.map((f) => f.act)) };
+    });
+    check('5b at a trailhead lot the parties load and unload (stand-in lot)', r5.ok && r5.want > 0, r5);
+  }
+
   // the party to follow: one with a site tonight (a party with none is not out on the water), the clock to an hour and a
   // quarter before its put-in; its leader is talked to (3) and met (2)
   await A.evaluate(({ EP, year, doy }) => {
@@ -123,6 +139,8 @@ try {
 
   // --- 2: put in, gone from the store, on the water; at their camp that evening they know you ----------------------
   if (ONLY.has(2) && pick) {
+    // (met in the store: talked to, if 3 has not)
+    await A.evaluate(({ key }) => { const g = window.__game, N = g.npcs, v = N.find(key); if (v && !N.metOf(v.partyId)) { N.talkTo(v, 0); g.dialogue.close(); } }, { key: pick.key });
     const r2a = await A.evaluate(({ id, putIn, year, doy }) => {
       const g = window.__game, h = Math.max(g.day.hours + 0.05, putIn + 0.15);
       g.day.setClock(year, doy, h);
@@ -228,8 +246,12 @@ try {
         await pg.evaluate(({ year, doy }) => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); g.day.setClock(year, doy, 8.4); g.renderer.setAnimationLoop(null); }, { year: YEAR, doy: DOY });
         pages.push(pg);
       }
+      // the busiest hour in this build's store (the most party members about), the same clock in both
+      const busy = await pages[0].evaluate(() => { const g = window.__game, N = g.npcs; let best = 8.4, n = -1; for (let h = 7; h <= 18; h += 0.1) { const k = N.storeParties(25, g.parties.today, h).reduce((a, e) => a + e.party.size, 0); if (k > n) { n = k; best = h; } } return { h: best, n }; });
+      for (const pg of pages) await pg.evaluate(({ year, doy, h }) => window.__game.day.setClock(year, doy, h), { year: YEAR, doy: DOY, h: busy.h });
+      log('busiest hour', busy);
       // the same seat in the store in both: at the door, looking in
-      const seat = async (pg) => pg.evaluate(() => { const g = window.__game, L = g.outfitter.visit && g.outfitter.visit.L; if (L) { g.player.x = L.door.x; g.player.z = L.door.z; g.player.heading = L.door.heading; } g.step(1 / 30, 120); });
+      const seat = async (pg) => pg.evaluate(() => { const g = window.__game, L = g.outfitter.visit && g.outfitter.visit.L; if (L) { g.player.x = L.door.x; g.player.z = L.door.z; g.player.heading = L.door.heading; } g.step(1 / 30, 120); g.step(1 / 30, 600); });
       for (const pg of pages) await seat(pg);
       const timeOf = (pg) => pg.evaluate(() => { const g = window.__game, gl = g.renderer.getContext(), px = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); g.step(1 / 30, 4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return (performance.now() - t0) / 4; });
       const ms = [[], []];

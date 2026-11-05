@@ -124,6 +124,8 @@ const STORE_P = {
   inside: 5,     // party members inside at once, all parties (the rest are at the dock)
   task: 0.35,    // the chance a party coming out left something at their last site
 };
+const STORE_LOT = { before: 0.75, after: 0.5, parties: 3 }; // a trailhead's lot: h before the canoes go in, h after the last leg
+const LOT_WANTS = { in: { load: 3, wait: 1 }, out: { unload: 2.5, load: 1, wait: 1.2 } };
 const WALK_V = 1.15;                 // m/s (real) a person walks between things in a store
 const WALK_SPEC = Object.freeze({ pose: 'walk' });
 const AISLE = { back: -1.7, front: 2.5 }; // the store's cross aisles (b, its own frame): behind the shelves and before them
@@ -1018,7 +1020,7 @@ export class People {
     // store, who listens to the talk (onTalk), and the people others stand in a store (extraAt)
     this.sched = null; this.moves = null; this.ground = null;
     this.smart = new Smart({ day, seed: () => (this.sched ? this.sched.seed : 0) });
-    this.talkFns = []; this.extrasAt = new Map(); this.storeSmart = new Map(); this.smartT = 0; this.lastClock = null; this.partyT = 0;
+    this.talkFns = []; this.extrasAt = new Map(); this.storeSmart = new Map(); this.lots = new Map(); this.trailheadOf = null; this.smartT = 0; this.lastClock = null; this.partyT = 0;
     this.grounding = GROUND;
     if (profile && profile.onChange) profile.onChange((what) => { if (what === 'season') this.reset(); });
     // the visitors' words on the map, with the keepers' (hud.js reads outfitter.toldHints)
@@ -1204,31 +1206,32 @@ export class People {
   // --- gl-e: the people are real (the game-loop round, stream E) ------------------------------------------------------
   // main.js's gl-e block: the schedule (parties.js), the parties on the move (party-moves.js: they have a party from the
   // moment its canoes go in the water), the ground outside a store (tiles.groundAt)
-  attachParties({ parties = null, moves = null, ground = null } = {}) {
+  attachParties({ parties = null, moves = null, ground = null, trailheadLayout = null } = {}) {
     if (parties) this.sched = parties; if (moves) this.moves = moves; if (ground) this.ground = ground;
+    if (typeof trailheadLayout === 'function') this.trailheadOf = trailheadLayout; // (stream B's trailhead.js; none: no people at the lots)
     return this;
   }
   // The parties at ep's store at (T, hour): going in from STORE_P.before hours before their put-in until their canoes go
   // in the water (MOVE.launch before it: party-moves.js has them at the landing from then), and coming out from the end
   // of their last leg (in at the landing, unloaded) for STORE_P.after hours. At most STORE_P.parties of them, the
   // soonest first: the others are in the lot. [{ party, dir: 'in' | 'out', from, to }]
-  storeParties(ep, T = this.today, h = this.day.hours) {
+  storeParties(ep, T = this.today, h = this.day.hours, W = STORE_P) {
     const P = this.sched; if (!P || typeof P.entering !== 'function') return [];
     ep = Number(ep);
     const ins = [], outs = [];
     for (const p of P.entering(ep, T)) {
       if (!p.stays || !p.stays.length) continue;
-      const from = p.putIn - STORE_P.before, to = p.putIn - MOVE.launch;
+      const from = p.putIn - W.before, to = p.putIn - MOVE.launch;
       if (h >= from && h < to) ins.push({ party: p, dir: 'in', from, to });
     }
     if (typeof P.leaving === 'function') for (const p of P.leaving(ep, T)) {
       let plan = null; try { plan = P.legPlan(p, p.stays.length); } catch { plan = null; }
-      const from = plan ? plan.end : 16.5, to = from + STORE_P.after;
+      const from = plan ? plan.end : 16.5, to = from + W.after;
       if (h >= from && h < to) outs.push({ party: p, dir: 'out', from, to });
     }
     ins.sort((a, b) => a.party.putIn - b.party.putIn); outs.sort((a, b) => a.from - b.from);
-    const nOut = Math.min(outs.length, ins.length >= 2 ? 1 : STORE_P.parties - Math.min(ins.length, STORE_P.parties - 1));
-    return [...ins.slice(0, STORE_P.parties - nOut), ...outs.slice(0, nOut)];
+    const nOut = Math.min(outs.length, ins.length >= 2 ? 1 : W.parties - Math.min(ins.length, W.parties - 1));
+    return [...ins.slice(0, W.parties - nOut), ...outs.slice(0, nOut)];
   }
   partySig(ep) { return this.storeParties(ep).map((e) => `${e.party.id}:${e.dir}`).join(','); }
   // the party members at the store, one record per party: the leader and as many as the room has inside (browsing,
@@ -1239,16 +1242,18 @@ export class People {
     for (const e of list) { const v = this.partyVisitor(ep, L, e, room); if (!v) continue; room -= v.figs.filter((f) => f.where === 'store').length; out.push(v); }
     return out;
   }
-  partyVisitor(ep, L, e, room) {
+  partyVisitor(ep, L, e, room, lot = false) {
     const p = e.party, pv = this.partyPerson(p), n = pv.members.length;
     const arch = p.kind === 'group' ? (pv.who.startsWith('a scout') ? 'scouts' : 'guide') : p.kind === 'family' ? 'family' : e.dir === 'out' ? 'returning' : 'trippers';
     const inside = Math.max(1, Math.min(n, 1 + Math.min(2, Math.max(0, room - 1))));
-    const where = (i) => (i < inside ? 'store' : 'dock');
+    const where = (i) => (lot ? 'lot' : i < inside ? 'store' : 'dock');
+    const home = lot ? { x: L.lot.x, z: L.lot.z, y: this.groundAt(L, L.lot.x, L.lot.z), heading: L.lot.heading || 0 } : L.door;
     const name = n > 1 ? `${pv.members[0].name} and ${p.kind === 'family' ? 'family' : n === 2 ? pv.members[1].name : 'party'}` : pv.members[0].name;
     const who = e.dir === 'in' ? `${pv.who}, going in today` : `${pv.who}, just off the water`;
     const v = { key: `visit:${p.id}`, ep, arch, name, first: pv.members[0].name, last: pv.last, city: pv.city, vars: { ...pv.vars, town: (placeFacts(ep, this.world) || {}).town || 'Ely', road: 'the road', district: districtOf(ep) },
       who, trip: p, partyId: p.id, dir: e.dir, until: e.to, crew: pv.members.map((m, i) => ({ i, name: m.name, where: where(i) })), figNames: pv.members.map((m) => m.name), figs: [], inParty: true };
-    v.figs = pv.members.map((m, i) => ({ x: L.door.x, z: L.door.z, y: L.door.y, heading: L.door.heading, look: m.look, spec: { pose: 'stand', lean: 0.02 }, where: where(i), member: i, fresh: true }));
+    v.figs = pv.members.map((m, i) => ({ x: home.x, z: home.z, y: home.y, heading: home.heading, look: m.look, spec: { pose: 'stand', lean: 0.02 }, where: where(i), member: i, fresh: true }));
+    if (lot) v.lot = true;
     v.hasTask = e.dir === 'out' && seeded(hashKey(p.id), 0x7a5c)() < STORE_P.task;
     return v;
   }
@@ -1298,6 +1303,44 @@ export class People {
       const ds = Math.max(0, Math.hypot(L.centre.x - this.player.x, L.centre.z - this.player.z) - STORE_R), seen = ds < DRAW_OUT;
       this.act(ep, L, list, clock, jump || !seen, dt);
     }
+    this.lotTick(dt, sync, clock, jump);
+  }
+  // gl-e: at a trailhead (stream B's trailhead.js: the entry points with no outfitter), the parties going in load at the
+  // lot for STORE_LOT.before hours before their canoes go in the water, and those coming out unload there after
+  lotTick(dt, sync, clock, jump) {
+    const TH = this.trailheadOf; if (typeof TH !== 'function') return;
+    const p = this.player;
+    for (const e of this.world.entryPoints) {
+      if (Math.abs(e.x - p.x) > 600 || Math.abs(e.z - p.z) > 600) { if (this.lots.has(e.ep)) this.lots.delete(e.ep); continue; }
+      let T = null; try { T = TH(e.ep); } catch { T = null; } // (stream B's: a trailhead has no store)
+      if (!T || !T.lot || !Number.isFinite(T.lot.x)) continue;
+      const d = Math.hypot(T.lot.x - p.x, T.lot.z - p.z);
+      if (d > NEAR_STORE) { if (d > NEAR_STORE + 20) this.lots.delete(e.ep); continue; }
+      let list = this.lots.get(e.ep);
+      if (!list || list.T !== T) { list = []; list.T = T; list.partySig = null; this.lots.set(e.ep, list); this.registerLot(e.ep, T); }
+      if (sync || list.partySig == null) this.refreshLot(e.ep, T, list);
+      this.act(e.ep, T, list, clock, jump || d > DRAW_OUT, dt, `lot:${e.ep}`);
+    }
+  }
+  refreshLot(ep, T, list) {
+    const now = this.storeParties(ep, this.today, this.day.hours, STORE_LOT), sig = now.map((e) => `${e.party.id}:${e.dir}`).join(',');
+    if (sig === list.partySig) return;
+    const keep = new Map(list.map((v) => [`${v.partyId}:${v.dir}`, v]));
+    list.length = 0;
+    for (const e of now) { const v = keep.get(`${e.party.id}:${e.dir}`) || this.partyVisitor(ep, T, e, 0, true); if (v) list.push(v); }
+    list.partySig = sig;
+  }
+  registerLot(ep, T) {
+    const where = `lot:${ep}`, S = this.smart, g = (x, z, h = 0) => ({ x, z, y: this.groundAt(T, x, z), heading: h });
+    S.clear(where);
+    const c = T.lot, hd = c.heading || 0, ax = Math.cos(hd), az = -Math.sin(hd), bx = -az, bz = ax;
+    // (round the cars: ten spots on two rings, the inner for loading, the outer for standing about)
+    const ring = []; for (let k = 0; k < 10; k++) { const r = k < 6 ? 1.8 : 3.4, t = (k / (k < 6 ? 6 : 4)) * Math.PI * 2 + (k < 6 ? 0 : 0.4), u = Math.cos(t) * r, w = Math.sin(t) * r; ring.push(g(c.x + ax * u + bx * w, c.z + az * u + bz * w, Math.atan2(-(-(az * u + bz * w)), -(ax * u + bx * w)))); }
+    S.register({ where, act: 'load', slots: ring.slice(0, 6), x: c.x, z: c.z });
+    S.register({ where, act: 'wait', slots: ring.slice(6), x: c.x, z: c.z });
+    const L2 = T.landing && Number.isFinite(T.landing.x) ? T.landing : null;
+    if (L2) S.register({ where, act: 'unload', slots: [g(L2.x + 1.2, L2.z), g(L2.x - 1.2, L2.z), g(L2.x, L2.z + 1.2)], x: L2.x, z: L2.z });
+    else S.register({ where, act: 'unload', slots: ring.slice(0, 3), x: c.x, z: c.z });
   }
   // the parties at the store changed: keep those still here, add the new (at the door), let the gone go
   refreshParties(ep, L, list) {
@@ -1332,6 +1375,7 @@ export class People {
   // what each kind wants to be at (weights): a party member by the way they go and where they are, a local by kind
   wantsOf(v, f) {
     if (v.inParty) {
+      if (f.where === 'lot') return v.dir === 'in' ? LOT_WANTS.in : LOT_WANTS.out;
       if (f.where === 'dock') return v.dir === 'in' ? STORE_WANTS.dockIn : STORE_WANTS.dockOut;
       // going in, the last step before the canoes go in the water: out to the dock
       if (v.dir === 'in' && this.day.hours >= v.until - SMART_STEP) return STORE_WANTS.dockIn;
@@ -1367,9 +1411,9 @@ export class People {
     if (wait.length) reg('wait', wait);
     if (L.dockBerths && L.dockBerths[2]) { const q = L.dockBerths[2].deck; reg('fish', [{ x: q.x, z: q.z, y: q.y, heading: L.dockHeading ?? 0, deck: true }]); }
   }
-  groundAt(L, x, z) { let y = null; try { y = this.ground ? this.ground(x, z) : null; } catch { y = null; } return Number.isFinite(y) ? y : L.floorY - (L.site && L.site.rise ? L.site.rise : 0.6); }
+  groundAt(L, x, z) { let y = null; try { y = this.ground ? this.ground(x, z) : null; } catch { y = null; } return Number.isFinite(y) ? y : Number.isFinite(L.floorY) ? L.floorY - (L.site && L.site.rise ? L.site.rise : 0.6) : (this.world.heightAt ? this.world.heightAt(x, z) : 0); }
   // everyone at the store at something this step, and walking there
-  act(ep, L, list, clock, snap, dt) {
+  act(ep, L, list, clock, snap, dt, where = `store:${ep}`) {
     const people = [], figs = [];
     for (const v of list) {
       if (v.keeper || v.extra) continue;
@@ -1377,7 +1421,7 @@ export class People {
     }
     const D = this.dialogue, p = this.player;
     for (const [v, f, i] of figs) { const held = !!(D && D.talking && D.talkingTo(`${v.key}#${i}`)); if (held !== !!f.held) { f.held = held; this.smart.hold(f.key, held); } }
-    const m = this.smart.assign(`store:${ep}`, people, clock);
+    const m = this.smart.assign(where, people, clock);
     for (const [v, f] of figs) {
       if (f.held) { // talked to: stop, and turn to you
         f.path = null; f.spec = f.spec.pose === 'sit' ? f.spec : { pose: 'stand', lean: 0.02 };
@@ -1414,6 +1458,7 @@ export class People {
   // a way from where a figure stands to a goal through the store: along the aisles (the left, the middle and the right
   // one, and the cross aisles behind and before the shelves), out the door, down the steps, to the dock
   route(L, f, goal) {
+    if (!L.axes) return [{ x: goal.x, z: goal.z, y: goal.y }]; // (a trailhead's lot: straight there)
     const fr = this.frameOf(L), A = fr.ab(f.x, f.z), B = fr.ab(goal.x, goal.z), zone = (q) => (Math.abs(q.a) < 2.9 && Math.abs(q.b) < 3.9 ? 'in' : q.b > 3.9 && q.b < 6.2 && Math.abs(q.a) < 3.4 ? 'porch' : 'out');
     const za = zone(A), zb = zone(B), pts = [], floor = L.floorY;
     const P = (a, b, y = floor) => { const w = fr.w(a, b); return { x: w.x, z: w.z, y }; };
@@ -1582,6 +1627,7 @@ export class People {
         if (ds < DRAW_R || (drawn && ds < DRAW_OUT)) want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) - (v.keeper ? 5 : 0) });
       });
     }
+    for (const [ep, list] of this.lots) { const T = list.T, ds = T ? Math.hypot(T.lot.x - p.x, T.lot.z - p.z) : Infinity; if (ds < DRAW_R + 20) for (const v of list) v.figs.forEach((f, i) => want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) })); void ep; } // gl-e: a trailhead's lot
     if (this.extra) { try { for (const w of this.extra() || []) if (w && w.f) want.push(w); } catch (e) { console.warn('people.extra', e); } } // round A-F: the parties' camps
     want.sort((a, b) => a.d - b.d);
     const free = this.bodies.filter((b) => !b.lent), keep = want.slice(0, free.length); // (round A-F: a body lent out is the borrower's)
@@ -1742,7 +1788,7 @@ export class People {
     if (this.dialogue) return v.keeper ? this.keeperConverse(v) : this.converse(v);
     return v.keeper ? this.keeperTalk(v) : this.visitorTalk(v);
   }
-  find(key) { for (const list of this.rosters.values()) for (const v of list) if (v.key === key) return v; return null; }
+  find(key) { for (const list of [...this.rosters.values(), ...this.lots.values()]) for (const v of list) if (v.key === key) return v; return null; }
 
   // --- what dialogue.js needs: speakers, barks --------------------------------------------------------------------
   // The speaker of a person's figure: their name and role, and their head (the bone when drawn, else the spot they stand
@@ -1755,7 +1801,7 @@ export class People {
       key: `${v.key}#${fig}`, person: v.key, name: v.keeper ? v.first : names[fig] || v.first, role: roleOf(v, fig),
       hear: v.party ? v.hear || null : null, // round A-F: a party's greeting carries over the water (main.js: dialogue's reach)
       pos(out) {
-        const f = v.figs[fig], roster = v.party ? null : self.rosters.get(v.ep);
+        const f = v.figs[fig], roster = v.party ? null : v.lot ? self.lots.get(v.ep) : self.rosters.get(v.ep); // (gl-e: or a trailhead's lot)
         if (!f || (v.party ? !v.live : !roster || !roster.includes(v))) return null; // (round A-F: a party's, while its camp is drawn)
         const sc = f.look.wear.scale || 1, b = self.bodies.find((x) => x.who && x.who.person === v && x.who.fig === fig);
         if (b) { b.fig.bones.head.getWorldPosition(out); out.y += 0.16 * sc; return out; }
