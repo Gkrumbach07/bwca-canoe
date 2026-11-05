@@ -89,7 +89,7 @@ const WANTS = {
     ['A bald eagle for the county calendar, on a snag or over the water, big in the frame.', 'the county calendar'],
     ['The visitor centre wants an eagle on its wall. They sit the tall pines out on the points.', 'the ranger station']] },
   beaver: { titles: ['A beaver, on film'], texts: [
-    ['A beaver swimming, for the kids’ nature table. They come out by their lodges in the quiet bays at dawn and dusk.', 'Mrs. Halvorsen, the school'],
+    ['A beaver swimming, for the kids’ nature table. They come out by their lodges in the quiet bays at dawn and dusk.', 'Mrs. Engstrom, the school'],
     ['A picture of a beaver for the visitor centre’s board. A still bay at dusk, and sit quiet.', 'the ranger station']] },
   moose: { titles: ['A really good moose', 'Moose, close'], texts: [
     ['Take a really good picture of a moose for the fall issue: close, in good light, not hiding in the trees. They stand in the sheltered bays at dawn and dusk. Pays well.', 'the magazine, by letter'],

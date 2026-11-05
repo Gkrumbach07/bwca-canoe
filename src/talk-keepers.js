@@ -109,7 +109,7 @@ export const HAND = {
 // --- the other forty-nine, by manner -------------------------------------------------------------------------------
 // Each manner's past (its {vars} drawn per keeper: a year, a town, a relation), topics, and an arc whose places come from
 // the keeper's own country.
-export const RELS = [['husband', 'his', ['Wendell', 'Arne', 'Dale', 'Lyle', 'Ray', 'Norm']], ['sister', 'her', ['Inga', 'Marit', 'June', 'Edna', 'Lois']], ['father', 'his', ['Emil', 'Toivo', 'Karl', 'Nels']], ['mother', 'her', ['Helga', 'Ida', 'Sigrid', 'Alma']]];
+export const RELS = [['husband', 'his', ['Wendell', 'Orval', 'Marvin', 'Lowell', 'Ray', 'Norm']], ['sister', 'her', ['Inga', 'Marit', 'Ardis', 'Edna', 'Lois']], ['father', 'his', ['Sulo', 'Waino', 'Karl', 'Nels']], ['mother', 'her', ['Helga', 'Ida', 'Sigrid', 'Alma']]];
 export const COLLEGES = [['UMD', 'Duluth'], ['Bemidji State', 'Bemidji'], ['St. Cloud State', 'St. Cloud'], ['the U', 'Minneapolis'], ['Northland College', 'Ashland'], ['Lake Superior College', 'Duluth']];
 export const SUBJECTS = ['Biology', 'Forestry', 'Geology', 'Fisheries', 'Outdoor ed', 'English, weirdly'];
 export const CITIES = ['Minneapolis', 'St. Paul', 'Duluth', 'Des Moines', 'Madison', 'Chicago', 'Milwaukee', 'Rochester', 'Fargo'];

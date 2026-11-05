@@ -210,7 +210,7 @@ export const SHIRTS = [0x7a2e2a, 0x2f4f6a, 0x3f5a3a, 0x6a5a3a, 0x5a3a52, 0x4d657
 const PANTS = [0x3a4a5a, 0x4a4436, 0x34362f, 0x5a5444, 0x2f3a46];
 const BOOTS = [0x5a3e29, 0x3a2e24, 0x6a4a2e];
 const HATS = [0x9d8b61, 0x6a5a40, 0x4a4a3a, 0x7a6a4a, 0x3a4436];
-const FEMALE = new Set(['Ada', 'Agnes', 'Alma', 'Carol', 'Clara', 'Dot', 'Edna', 'Elsie', 'Ellen', 'Esther', 'Greta', 'Hazel', 'Helga', 'Ida', 'Inga', 'Ione', 'Joanne', 'June', 'Kari', 'Lois', 'Mae', 'Myrna', 'Nora', 'Sigrid', 'Sonja', 'Tess', 'Thea', 'Vi', 'Wilma', 'Ruth', 'Bev', 'Lise', 'Marit', 'Deb', 'Marge', 'Lorna', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail']);
+const FEMALE = new Set(['Ada', 'Agnes', 'Alma', 'Bea', 'Clara', 'Dot', 'Edna', 'Elna', 'Ellen', 'Esther', 'Greta', 'Hazel', 'Helga', 'Ida', 'Inga', 'Ione', 'Joanne', 'Lempi', 'Kaija', 'Lois', 'Mae', 'Myrna', 'Nora', 'Sigrid', 'Sonja', 'Tess', 'Thea', 'Vi', 'Wilma', 'Ruth', 'Bev', 'Lise', 'Marit', 'Deb', 'Marge', 'Lorna', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail']);
 // a palette: { skin, shirt, cuff, pants, belt, pfd, pfdDark, boot, sole, lace, hair, beard, hat, band } and how the
 // figure wears it: hat (bool), bun (bool), scale
 export function dress(rng, { female = false, age = 'adult', shirt, pfd, pants, hat, hatChance = 0.5, beardChance = 0.35, hair } = {}) {
@@ -234,12 +234,12 @@ function shade(hex, k) { const c = new THREE.Color(hex); c.r = Math.min(1, c.r *
 // what they may ask (null: nothing); odds: how often they have one; wear: their clothes.
 const CITIES = ['Minneapolis', 'St. Paul', 'Duluth', 'Des Moines', 'Madison', 'Chicago', 'Milwaukee', 'Rochester', 'Fargo', 'Iowa City', 'Thunder Bay', 'Winnipeg', 'Eau Claire', 'Ames'];
 const F_NAMES = ['Marit', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail', 'Lorna'];
-const M_NAMES = ['Jake', 'Dave', 'Tom', 'Sam', 'Arne', 'Pete', 'Luis', 'Ben', 'Mike', 'Eli', 'Gary', 'Hal', 'Nate', 'Rolf', 'Will', 'Joe', 'Dan', 'Kurt'];
-const OLD_NAMES = ['Gunnar', 'Otto', 'Hjalmar', 'Clem', 'Arvo', 'Reino', 'Edna', 'Ione', 'Toivo', 'Elmer'];
-const KID_NAMES = ['Tyler', 'Emma', 'Owen', 'Ava', 'Finn', 'Lily', 'Max', 'Ruby', 'Leo', 'Nora'];
+const M_NAMES = ['Jake', 'Dave', 'Wyatt', 'Sam', 'Anders', 'Russ', 'Luis', 'Ben', 'Mike', 'Eli', 'Gary', 'Hal', 'Cole', 'Rolf', 'Will', 'Joe', 'Drew', 'Kurt'];
+const OLD_NAMES = ['Gunnar', 'Otto', 'Hjalmar', 'Clem', 'Arvo', 'Reino', 'Edna', 'Ione', 'Lauri', 'Elmer'];
+const KID_NAMES = ['Tyler', 'Emma', 'Owen', 'Ava', 'Finn', 'Lily', 'Max', 'Ruby', 'Milo', 'Nora'];
 // gl-e: every name a generated person can have (the tests check the story's names are not among them)
 export const nameLists = () => ({ F_NAMES, M_NAMES, OLD_NAMES, KID_NAMES, SURNAMES, COOKS });
-const SURNAMES = ['Olson', 'Lindqvist', 'Peterson', 'Nguyen', 'Hansen', 'Garcia', 'Kowalski', 'Larsen', 'Schmidt', 'Johnson', 'Haugen', 'Novak'];
+const SURNAMES = ['Olson', 'Lindqvist', 'Peterson', 'Nguyen', 'Hansen', 'Garcia', 'Kowalski', 'Larsen', 'Schmidt', 'Johnson', 'Haugen', 'Swanson'];
 const COOKS = ['Marge', 'Lorna', 'Dolores', 'Arlene', 'Sue'];
 const ARCH = {
   guide: { months: [6, 9], hours: [7, 20], at: { lodge: 1.3, 'river post': 0.8, 'trout camp': 1, 'bait shop': 0.6 }, spots: ['counterEnd', 'aisle', 'rail'], hints: ['fish', 'route', 'camp'], task: 'fetch', odds: 0.8, party: true,
