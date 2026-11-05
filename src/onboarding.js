@@ -83,7 +83,7 @@ export class Onboarding {
     const n = this.t.npcs, sp = this.spot(ep);
     if (!n || typeof n.extraAt !== 'function' || !sp) return null;
     try {
-      this.extra = n.extraAt(ep, { key: `staffer:${ep}`, name: this.staffName(ep), role: ROLE, look: STAFF_LOOK, spot: sp, lines: [DOOR_LINE] }) || null;
+      this.extra = n.extraAt(ep, { key: `staffer:${ep}`, name: this.staffName(ep), role: ROLE, look: STAFF_LOOK, spot: sp, lines: [DOOR_LINE], talk: () => (this.start(ep) ? true : null) }) || null; // (E on them opens the talk, as the counter does)
       this.extraEp = this.extra ? ep : null;
     } catch (e) { console.warn('onboarding: npcs.extraAt', e); this.extra = null; }
     return this.extra;
