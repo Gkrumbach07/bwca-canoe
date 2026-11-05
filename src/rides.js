@@ -61,7 +61,16 @@ export class Rides {
     WORLD = world;
     this.teleport = teleport || ((x, z) => (outfitter && outfitter.onTeleport ? outfitter.onTeleport(x, z) : Promise.resolve(false)));
     this.busy = false; this.last = null;
+    this.grounded = null; // (words) => false when a line is untrue here and now (main.js: npcs.grounded, gl-e)
     injectCss();
+  }
+  // the keeper's own line for a moment (the drive's goodbye, the pickup's hello), drawn again, up to eight times, while
+  // the grounding refuses it, as the counter's outfitter.say is (main.js)
+  keeperWords(profile, moment) {
+    const ctx = { hours: this.day ? this.day.hours : undefined }, ok = (w) => { try { return !this.grounded || this.grounded(w); } catch { return true; } };
+    let w = keeperLine(profile, moment, ctx);
+    for (let k = 0; k < 8 && w && !ok(w); k++) w = keeperLine(profile, moment, ctx);
+    return w;
   }
   get profile() { return (this.outfitter && this.outfitter.profile) || null; }
   get core() { return (this.outfitter && this.outfitter.core) || null; }
@@ -113,7 +122,7 @@ export class Rides {
       : `${kmWords(r.km)} miles${via} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${lateWords}`;
     const card = {
       kicker: `${from.name} → ${to.name} · entry point ${to.ep}`,
-      text: `“${keeperLine(fromP, 'goodbye', { hours: this.day ? this.day.hours : undefined })}”`,
+      text: `“${this.keeperWords(fromP, 'goodbye')}”`,
       sub,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
       onDark: () => this.arrive(from, to, r, toP),
@@ -211,7 +220,7 @@ export class Rides {
     const byP = outfitterProfile(by.ep, this.world), k = byP && byP.keeper ? byP.keeper.name : 'The truck', fare = this.sandbox ? 'Sandbox: free, and no wait.' : r.free ? 'On them: your trip was theirs.' : r.takesAll ? `It’s $${r.price}; they take the $${paid} you have and call it square.` : `$${paid}.`;
     const card = {
       kicker: `${at.name} → ${by.name} · entry point ${by.ep}`,
-      text: `“${keeperLine(byP, 'ride', { hours: this.day ? this.day.hours : undefined })}”`,
+      text: `“${this.keeperWords(byP, 'ride')}”`,
       sub: `${k}’s truck comes out to the lot: about ${rideTime(r.hours)} of waiting, and the same back. ${fare} The canoe goes on the roof.`,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.4, fadeOut: this.sandbox ? 0.8 : 1.8,
       onDark: () => this.pickedUp(at, by, r, paid),
