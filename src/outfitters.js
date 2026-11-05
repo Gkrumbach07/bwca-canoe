@@ -659,7 +659,7 @@ const HAND = {
       goodbye: ['Watch the whitecaps on Clearwater. Big water makes its own weather!'],
       chat: ['Clearwater’s big enough to make its own weather. If it’s whitecapping past the point, wait it out on an island.', 'Duncan, Daniels, Morgan, Ram: the truck goes to all of them. I’ve counted loons on every one.', 'Clearwater and the lakes north of it sit right on the border. Canada’s the far shore.'],
     } },
-  16: { kind: 'river post', keeper: 'Leon Zupancic', manner: 'precise', priceMul: 1.1,
+  16: { kind: 'river post', keeper: 'Leon Kastelic', manner: 'precise', priceMul: 1.1,
     sig: { family: 'pole', name: 'Moose River setting pole', price: 20, words: 'Ash, iron-shod, twelve feet. Stand and push off the bottom where the river’s too thin to paddle. Steadier than you would think.' },
     look: { stain: 'weathered grey', roof: 'cedar shake', trim: 0x7b4a33, door: 0x435d49, porch: false },
     lines: {
@@ -678,7 +678,7 @@ const HAND = {
       goodbye: ['Across Vermilion to Moccasin Point, then the sixty-rod carry. Trout Lake’s the other side.'],
       chat: ['Vermilion has three hundred and sixty-five islands, they say. I’ve counted about forty. The rest are rumours.', 'Trout Lake lets a few motors in. Don’t take it personally; they were here first.', 'The walleye on this side don’t care what you throw. The ones on Trout care a great deal.'],
     } },
-  6: { kind: 'bait shop', keeper: 'Joanne Perko', manner: 'warm', priceMul: 1.0,
+  6: { kind: 'bait shop', keeper: 'Joanne Kauppi', manner: 'warm', priceMul: 1.0,
     sig: { family: 'jacket', name: 'Echo Trail bug jacket', price: 14, words: 'Mesh hood and sleeves, sewn on my machine in the back room. A size for everyone, more or less.' },
     look: { stain: 'ochre', roof: 'grey shingle', trim: 0x3a322a, door: 0x8a3e2c, porch: true },
     lines: {
@@ -705,7 +705,7 @@ const HAND = {
       goodbye: ['Hog Creek’s one canoe wide in August. Don’t fight the bends.'],
       chat: ['Hog Creek winds two miles to Perent Lake. The walleye in Perent are why anyone bothers.', 'Kawishiwi Lake’s up the road: the headwaters. Everything from here runs north to Canada eventually.', 'The road in is washboard. The road out is the same washboard, facing the other way.'],
     } },
-  40: { kind: 'trout camp', keeper: 'Dale Ostrom', manner: 'precise', priceMul: 1.1,
+  40: { kind: 'trout camp', keeper: 'Merle Ostrom', manner: 'precise', priceMul: 1.1,
     sig: { family: 'leaders', name: 'Homer Lake steel leaders', price: 6, words: 'Steel wire, twisted on a jig in the shop. Twelve to a card. I test every one.' },
     look: { stain: 'slate blue', roof: 'green steel', trim: 0xd8ceb2, door: 0xb8913f, porch: false },
     lines: {

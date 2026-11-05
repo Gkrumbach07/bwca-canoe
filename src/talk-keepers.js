@@ -2,7 +2,7 @@
 // season goes on, and a small arc of three or four beats that ends in something for you: a discount at their counter,
 // a site nobody else knows pencilled on your map, or one of a kind (stream C's unique items). The six written by hand
 // (outfitters.js HAND: Ruth Aho at Lake One, Gus Lindgren at Moose Lake, Bev Kangas at Sawbill, Arvid Strand at Seagull,
-// Lise Thibodeau at Saganaga, Leon Zupancic on the Little Indian Sioux) have their own; the other forty-nine are written
+// Lise Thibodeau at Saganaga, Leon Kastelic on the Little Indian Sioux) have their own; the other forty-nine are written
 // from their manner (warm, dry, gruff, an old hand, a keen summer hire, a precise ex-ranger) and their own country,
 // seeded by the entry point so each is the same person every season.
 //
@@ -91,7 +91,7 @@ export const HAND = {
       { ask: 'How’s the count going?', gap: 1, say: ['Fourteen pairs, thanks to you. Here, I want you to have this.', 'My lucky cap. Never lost a fish wearing it. Okay, one.'], done: { give: 'luckycap', or: 'lure:silverminnow' } },
     ] },
   },
-  14: { // Leon Zupancic, the Little Indian Sioux: precise, twenty years with the Forest Service
+  14: { // Leon Kastelic, the Little Indian Sioux: precise, twenty years with the Forest Service
     past: ['Twenty years with the Forest Service out of Ely. Wilderness ranger, then the trail crews.', 'I retired and bought this place. My wife says I only moved my desk.', 'I’ve read the gauge at the landing every morning since 2004. The river doesn’t care. I do.'],
     topics: [
       { id: 'echo', ask: 'The Echo Trail?', say: ['About forty-six miles of gravel out of Ely, built in the thirties. Graded about as often.'] },
