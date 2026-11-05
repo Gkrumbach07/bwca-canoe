@@ -40,6 +40,19 @@
 // logbook's trips, the people's memory of the season (npcs.js s.mem: the trips' lakes, the lakes, the carries, the
 // campsite lakes, the loons), the catch log, the photos' subjects, the bear's last visit, the arcs and the claims.
 //
+// gl-d, the trip-end tally (the game-loop round, 2026-11-05; docs/build/game-loop-brief.md stream D): the card counts up,
+// one line at a time. As the trip ends the notices done are paid (tasks.js settle: the money lands before anything is
+// drawn, so a reload in the middle of the count loses nothing), and the card's tally keeps what it says: each notice
+// with its pay ticking into the purse, the notices missed (their lines), the distance, the portages and their rods, the
+// lakes newly inked, the fish and their kinds, the photos, the firsts stamped and the one or two milestones that moved
+// (milestones.js), ending on the purse. E finishes the count; E again puts it away. Four firsts of the trip itself:
+// the first laker, the first carry of 200 rods or more, the first night alone on a lake (no party on its water that
+// night: parties.js partiesOn) and the first wind-bound day (a trip day camped with under a kilometre paddled whose
+// afternoon wind puts whitecaps on the camp's lake: weather.js windDay, waves.js windHeight). Record v2 keeps the
+// milestones as last counted and the titles they gave; a v1 doc loads with none, its cards with no tally.
+//
+//   record.milestones() → [{ key, words, title, n, of, done }]   record.view().milestones, .titles
+//
 //   import { record } from './record.js';
 //   record.attach({ trip, stats, fishing, fauna, bear, photo, tasks, npcs, profile, world, player, day, camera, hud,
 //     title, veil, outfitter, talk, camp, sheets, journal })            (main.js, the round A-A block)
@@ -51,11 +64,16 @@ import { Vector3 } from 'three';
 import { save } from './save.js';
 import { esc, plural, word, longDate, shortDate, weekdayOf } from './hud.js';
 import { itemDef } from './items.js';
-import { inches } from './units.js';
+import { inches, miles } from './units.js';
+import { windHeight } from './waves.js';
+import { milestonesOf, monthsLeft } from './milestones.js';
 import './record.css';
 
 const NS = 'record';
-const V = 1;
+const V = 2;                // gl-d: v2 adds the milestones, the titles and the cards' tally (a v1 doc loads)
+const TALLY_STEP = 0.42;   // real seconds between two lines of the tally
+const TICK = 0.3;          // real seconds a pay line takes to tick into the purse
+const SEA_CAPS = 0.4;      // the wind-wave (m) at which the whitecaps are plain (player.js seaMoments)
 const KEEP_TRIPS = 80;     // trip cards kept in a season (the oldest go first)
 const KEEP_FIRSTS = 60;
 const SHOW_AFTER = 1.4;    // real seconds free after a trip ends before its card comes up
@@ -142,6 +160,7 @@ const blankDoc = (season, since) => ({
   v: V, season, since, built: null,
   trips: [], lakes: {}, fish: {}, fishSeen: 0, portages: {}, seen: {}, camps: {}, stories: [], storyDone: {},
   photos: { n: 0, next: null }, notices: { done: [], paid: [], base: false }, firsts: [], draft: null, pending: null, bearVisits: null,
+  milestones: {}, titles: [],
 });
 
 class Record {
@@ -160,7 +179,7 @@ class Record {
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
         if (!this.shown || e.repeat) return;
-        if (e.code === 'KeyE' || e.code === 'Escape' || e.code === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); this.close(); }
+        if (e.code === 'KeyE' || e.code === 'Escape' || e.code === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); if (this.counting && e.code !== 'Escape') this.finishCount(); else this.close(); }
       }, true);
       window.addEventListener('pagehide', () => { if (this.attached && this.dirty) this.write(); });
     }
@@ -175,6 +194,7 @@ class Record {
       T.on('start', () => this.began()); T.on('leave', () => this.began());
       T.on('exit', (e) => this.ended(e));
       T.on('portage', (e) => this.portaged(e));
+      T.on('sleep', (e) => this.slept(e)); // gl-d: a night alone on a lake
     }
     if (this.profile && this.profile.onChange) this.profile.onChange((what) => { if (what === 'season') this.newSeason(); });
     if (this.hud && this.hud.registerPaper) this.hud.registerPaper('tripcard', () => this.close());
@@ -190,12 +210,14 @@ class Record {
   // --- the doc: this season's, a new one, or one built from an older save --------------------------------------------
   load() {
     const d = save.read(NS);
-    if (d && d.v === V && d.season === this.season) {
+    const ok = d && (d.v === 1 || d.v === V); // (gl-d: a v1 doc is this one with no milestones yet)
+    if (ok && d.season === this.season) {
       const b = blankDoc(d.season, d.since);
-      this.s = { ...b, ...d, photos: { ...b.photos, ...(d.photos || {}) }, notices: { ...b.notices, ...(d.notices || {}) } };
-      for (const k of ['trips', 'stories', 'firsts']) if (!Array.isArray(this.s[k])) this.s[k] = [];
-      for (const k of ['lakes', 'fish', 'portages', 'seen', 'camps', 'storyDone']) if (!this.s[k] || typeof this.s[k] !== 'object') this.s[k] = {};
-    } else if (d && d.v === V && d.season !== this.season) {
+      this.s = { ...b, ...d, v: V, photos: { ...b.photos, ...(d.photos || {}) }, notices: { ...b.notices, ...(d.notices || {}) } };
+      for (const k of ['trips', 'stories', 'firsts', 'titles']) if (!Array.isArray(this.s[k])) this.s[k] = [];
+      for (const k of ['lakes', 'fish', 'portages', 'seen', 'camps', 'storyDone', 'milestones']) if (!this.s[k] || typeof this.s[k] !== 'object') this.s[k] = {};
+      if (d.v === 1) for (const m of milestonesOf(this)) this.s.milestones[m.key] = m.n; // (what it stood at when the tally began: none of it moved by this trip)
+    } else if (ok && d.season !== this.season) {
       this.s = blankDoc(this.season, this.today); // a doc from another season (a slot copied in, say): this one starts empty
       this.baseline();
     } else {
@@ -355,7 +377,7 @@ class Record {
     let r = s.fish[sp];
     if (!r) {
       r = s.fish[sp] = { name: String(e.name || sp).toLowerCase(), n: 0, kept: 0, best: null, y: at.y, d: at.d, lake };
-      this.first('fish', sp, `first ${r.name}`, lake, at, quiet ? null : undefined);
+      this.first('fish', sp, sp === 'laketrout' ? 'first laker' : `first ${r.name}`, lake, at, quiet ? null : undefined); // (gl-d: a laker, as it is said)
     }
     r.n++; if (e.kept) r.kept++;
     if (!r.best || e.length > r.best.cm) r.best = { cm: e.length, kg: e.weight, lake, y: at.y, d: at.d };
@@ -381,15 +403,67 @@ class Record {
     return { id: s ? s.id : null, partial, seen: [], notices: [], photos: 0 };
   }
   began() { this.s.draft = this.newDraft(false); this.changed(); this.write(); }
-  portaged(e) { if (e && e.name) this.first('portage', 'portage', 'first portage', null); }
+  portaged(e) {
+    if (e && e.name) this.first('portage', 'portage', 'first portage', null);
+    if (e && (e.rods || 0) >= 200) this.first('feat', 'carry200', 'first 200-rod carry', null); // gl-d
+  }
+  // gl-d: a night slept at a site on a lake nobody else's party was on that night (parties.js partiesOn: camped or
+  // passing). camp.js logs the sleep in the morning, so the night is the day before when you wake before noon.
+  slept(e) {
+    const T = this.trip, P = (typeof window !== 'undefined' && window.__game && window.__game.parties) || this.parties || null;
+    if (!e || !e.key || !T || !T.active || !P || typeof P.partiesOn !== 'function') return false;
+    const [x, z] = String(e.key).split(':').map(Number); if (!Number.isFinite(x)) return false;
+    const w = this.world, p = this.player, id = p && p.nearWater ? p.nearWater(x, z, 12) : w && w.lakeIdAt ? w.lakeIdAt(x, z) : 0;
+    if (!(id > 0)) return false;
+    const at = e.at || { year: this.day.year, doy: this.day.doy, hours: this.day.hours };
+    const night = absDay(at.year, at.doy) - ((at.hours ?? 12) < 12 ? 1 : 0);
+    let others = null; try { others = P.partiesOn(id, night); } catch { others = null; }
+    if (!Array.isArray(others) || others.length) return false;
+    return this.first('feat', 'alone', 'first night alone on a lake', (w && w.lakeName(id)) || null);
+  }
+  // gl-d: a wind-bound day: a whole trip day (the trip out before it began) camped, under a kilometre paddled, and the
+  // afternoon's wind (weather.js windDay: the day's peak) puts whitecaps on the camp's lake (waves.js windHeight over the
+  // lake's own reach of open water, as wide as the lake)
+  windbound(abs, lakeId = null) {
+    const T = this.trip, st = this.stats, W = this.weather || (typeof window !== 'undefined' && window.__game && window.__game.weather) || null;
+    if (!T || !T.active || !W || typeof W.windDay !== 'function') return false;
+    const since = T.state && T.state.since; if (!since || absDay(since.year, since.doy) >= abs) return false;
+    const { year, doy } = dateOfAbs(abs);
+    const day = st && st.days ? st.days[`${year}-${doy}`] : null;
+    if (day && day.km >= 1) return false;
+    let id = lakeId;
+    if (!id) {
+      const c = this.camp && this.camp.camp, log = T.state.log || [];
+      const sl = log.slice().reverse().find((q) => q.k === 'sleep' && q.key) || null;
+      const [x, z] = c ? [c.x, c.z] : sl ? String(sl.key).split(':').map(Number) : [NaN, NaN];
+      if (!c && !sl) return false; // (not camped)
+      const p = this.player, w = this.world;
+      id = Number.isFinite(x) ? (p && p.nearWater ? p.nearWater(x, z, 12) : w.lakeIdAt(x, z)) : 0;
+    }
+    const L = id > 0 && this.world ? this.world.lakes[id - 1] : null; if (!L) return false;
+    const fetch = 2 * Math.sqrt(((L.cells || 0) * 100) / Math.PI);
+    let peak = 0; try { peak = W.windDay(year, doy).peak || 0; } catch { peak = 0; }
+    if (windHeight(peak, fetch) < SEA_CAPS) return false;
+    return this.first('feat', 'windbound', 'first wind-bound day', this.world.lakeName(id) || null, { y: year, d: doy, h: 15 });
+  }
   ended(e) {
     const o = e && e.outcome, T = this.trip;
     if (!o || o.k === 'abandoned' || !T) { this.s.draft = null; this.changed(); return; }
+    // gl-d: the pay first (the notices done, a fish notice's fish handed over where you came in), into the purse before
+    // the card is made, so the card's notices read paid and a reload mid-count loses nothing
+    const pr = this.profile, purse0 = pr && typeof pr.money === 'number' ? pr.money : null;
+    let paid = { lines: [], missed: [], total: 0 };
+    try { if (this.tasks && typeof this.tasks.settle === 'function') paid = this.tasks.settle({ ep: o.ep ?? null, trip: T }) || paid; } catch (err) { console.warn('record: the tally', err); }
+    try { this.watchNotices(); this.watchFish(); this.watchPhotos(); } catch { /* the watchers' own */ }
     let c = null;
     try { c = this.cardOf(T, o); } catch (err) { console.warn('record: the trip card', err); }
     this.s.draft = null;
     if (!c) { this.changed(); this.write(); return; }
+    const inked = c.lakes.filter((l) => !this.s.lakes[lakeKey(l.id, l.name)]).map((l) => l.name);
+    const before = new Map(milestonesOf(this).map((m) => [m.key, this.s.milestones[m.key] ?? m.n]));
     this.merge(c);
+    const after = milestonesOf(this.withTrip(c));
+    c.tally = this.tallyOf(c, paid, purse0, pr && typeof pr.money === 'number' ? pr.money : null, inked, before, after);
     this.s.trips.push(c);
     if (this.s.trips.length > KEEP_TRIPS) this.s.trips.splice(0, this.s.trips.length - KEEP_TRIPS);
     this.s.pending = c.id; this.freeT = 0;
@@ -423,6 +497,29 @@ class Record {
     };
     c.line = this.lineOf(c);
     return c;
+  }
+  // the record as it will be with this trip in it (the milestones' trips count)
+  withTrip(c) { return { s: { ...this.s, trips: [...this.s.trips, c] }, world: this.world }; }
+  // the tally the card counts up: what it says, kept on the card (the book draws it still)
+  tallyOf(c, paid, purse0, purse1, inked, before, after) {
+    const portN = (c.portages || []).reduce((a, p) => a + (p.n || 1), 0), rods = (c.portages || []).reduce((a, p) => a + (p.rods || 0) * (p.n || 1), 0);
+    const F = c.fish || { n: 0, sp: [] };
+    const moved = [];
+    for (const m of after) {
+      const b = before.get(m.key) ?? 0;
+      if (m.n > b) moved.push({ key: m.key, words: m.words, title: m.title, n0: b, n: m.n, of: m.of, done: m.done, fresh: m.done && b < m.of });
+      this.s.milestones[m.key] = m.n;
+      if (m.done && !this.s.titles.some((t) => t.key === m.key)) this.s.titles.push({ key: m.key, title: m.title, y: c.end.year, d: c.end.doy, trip: c.id });
+    }
+    moved.sort((a, b) => (b.fresh ? 1 : 0) - (a.fresh ? 1 : 0) || (b.n / b.of) - (a.n / a.of));
+    const total = paid ? paid.total || 0 : 0;
+    return {
+      pay: (paid && paid.lines ? paid.lines : []).map((l) => ({ id: l.id, title: l.title, pay: l.pay, kind: l.kind, from: l.from })),
+      missed: (paid && paid.missed ? paid.missed : []).map((m) => ({ title: m.title, line: m.line })),
+      total, purse0, purse1: purse1 != null ? purse1 : purse0 != null ? purse0 + total : null,
+      km: c.km || 0, portages: portN, rods, inked, fish: F.n || 0, species: (F.sp || []).length, photos: c.photos || 0,
+      firsts: (c.firsts || []).slice(), milestones: moved.slice(0, 2),
+    };
   }
   // the season takes the trip's lakes, portages and campsites
   merge(c) {
@@ -516,6 +613,11 @@ class Record {
     if ((this.pollT += dt) >= POLL) { this.pollT = 0; this.watchFish(); this.watchNotices(); this.watchPhotos(); this.watchBear(); }
     if ((this.storyT += dt) >= 2) { this.storyT = 0; this.watchStories(false); }
     if ((this.lookT += dt) >= LOOK) { const k = this.lookT; this.lookT = 0; this.watchView(k); }
+    // gl-d: a day turn on a trip: was the day just gone a wind-bound one
+    const today = this.today;
+    if (this.dayAbs == null) this.dayAbs = today;
+    else if (today > this.dayAbs) { for (let a = Math.max(this.dayAbs, today - 3); a < today; a++) { try { this.windbound(a); } catch (err) { console.warn('record: wind-bound', err); } } this.dayAbs = today; }
+    else if (today < this.dayAbs) this.dayAbs = today;
     // the card, once you are free a moment after the trip ended
     if (this.s.pending && !this.shown) {
       if (this.free()) { if ((this.freeT += dt) >= SHOW_AFTER) { const id = this.s.pending; this.s.pending = null; this.changed(); this.show(id); } }
@@ -780,13 +882,73 @@ class Record {
     this.ensure();
     if (this.hud && this.hud.openPaper) this.hud.openPaper('tripcard');
     this.shown = id;
-    this.el.innerHTML = `<header><div class="sc kicker">The logbook · trip ${c.n}</div><button type="button" class="stamp outline" data-act="close" aria-label="Close (E or Esc)">Close · E</button></header>${this.pageHtml(c)}
+    this.el.innerHTML = `<header><div class="sc kicker">The logbook · trip ${c.n}</div><button type="button" class="stamp outline" data-act="close" aria-label="Close (E or Esc)">Close · E</button></header>${this.pageHtml(c, { live: !!c.tally })}
       <div class="tc-foot"><span class="pencil">in the journal’s Trips</span><span class="keys"><kbd>E</kbd> or <kbd>Esc</kbd> closes</span></div>`;
     this.el.classList.add('show');
+    if (c.tally) this.count(c);
     return true;
+  }
+  // gl-d: the tally, a line at a time (TALLY_STEP apart), each notice's pay ticking into the purse; E finishes it at once
+  count(c) {
+    this.stopCount();
+    const root = this.el, lines = [...root.querySelectorAll('.tl-l')], purse = root.querySelector('[data-purse]'), T = c.tally;
+    if (!lines.length) return;
+    const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let cur = T.purse0 ?? 0;
+    const show = (v) => { if (purse) purse.textContent = money(v); };
+    show(cur);
+    this.counting = { c, timers: [], done: false };
+    if (reduce) { this.finishCount(); return; }
+    const timers = this.counting.timers;
+    let t = 0.25;
+    lines.forEach((li) => {
+      const pay = Number(li.dataset.pay || 0);
+      timers.push(setTimeout(() => {
+        li.classList.add('on');
+        if (pay) {
+          const from = cur, to = cur + pay, n = 8;
+          cur = to;
+          for (let k = 1; k <= n; k++) timers.push(setTimeout(() => show(from + ((to - from) * k) / n), (TICK * 1000 * k) / n));
+        }
+      }, t * 1000));
+      t += TALLY_STEP + (pay ? TICK : 0);
+    });
+    timers.push(setTimeout(() => this.finishCount(), t * 1000 + 50));
+  }
+  finishCount() {
+    const q = this.counting; if (!q) return;
+    this.stopCount();
+    if (!this.el) return;
+    for (const li of this.el.querySelectorAll('.tl-l')) li.classList.add('on');
+    const purse = this.el.querySelector('[data-purse]'), T = q.c.tally;
+    if (purse && T && T.purse1 != null) purse.textContent = money(T.purse1);
+    const box = this.el.querySelector('.tc-tally'); if (box) box.classList.add('counted');
+  }
+  stopCount() { const q = this.counting; if (q) for (const id of q.timers) clearTimeout(id); this.counting = null; }
+  // the tally's lines (live: hidden until the count reaches them)
+  tallyHtml(c, { live = false } = {}) {
+    const T = c.tally; if (!T) return '';
+    const L = [];
+    const line = (cls, lab, v, pay = 0) => L.push(`<li class="tl-l ${cls}${live ? '' : ' on'}"${pay ? ` data-pay="${pay}"` : ''}><span class="tl-k">${lab}</span><span class="tl-v">${v}</span></li>`);
+    for (const n of T.pay || []) line('pay', `“${esc(n.title)}”`, `<span class="num">+${money(n.pay)}</span>`, n.pay);
+    if (T.km >= 0.1) line('stat', 'Paddled', `<span class="num">${miles(T.km)}</span> mi`);
+    if (T.portages) line('stat', cap(plural(T.portages, 'Portage')), `${word(T.portages)}${T.rods ? `, <span class="num">${T.rods}</span> rods` : ''}`);
+    if (T.inked && T.inked.length) line('stat', 'New on the map', esc(T.inked.slice(0, 4).join(' · ') + (T.inked.length > 4 ? ` and ${word(T.inked.length - 4)} more` : '')));
+    if (T.fish) line('stat', 'Fish', `${word(T.fish)}${T.species > 1 ? `, ${word(T.species)} kinds` : ''}`);
+    if (T.photos) line('stat', 'Photos', word(T.photos));
+    for (const f of T.firsts || []) line('first', '', `<span class="tl-stamp">${esc(cap(f))}</span>`);
+    for (const m of T.milestones || []) {
+      const pct = Math.round((100 * m.n) / (m.of || 1));
+      line(`mile${m.fresh ? ' fresh' : ''}`, esc(cap(m.words)), m.fresh ? `<span class="tl-title">${esc(m.title)}</span>` : `<span class="tl-bar" style="--f:${pct}%" aria-hidden="true"></span><span class="num">${m.n.toLocaleString('en-US')} of ${m.of.toLocaleString('en-US')}</span>`);
+    }
+    for (const m of T.missed || []) line('missed', `<s>“${esc(m.title)}”</s>`, `<span class="soft">${esc(m.line)}</span>`);
+    if (!L.length && T.purse1 == null) return '';
+    const purse = T.purse1 != null ? `<div class="tl-purse"><span class="tl-k">Purse</span><b class="num" data-purse>${money(live ? T.purse0 ?? T.purse1 : T.purse1)}</b>${T.total ? `<span class="pencil">+${money(T.total)} this trip</span>` : ''}</div>` : '';
+    return `<div class="tc-tally${live ? '' : ' counted'}"><ol class="tl-lines">${L.join('')}</ol>${purse}</div>`;
   }
   close() {
     if (!this.shown) return;
+    this.stopCount();
     this.shown = null;
     if (this.el) this.el.classList.remove('show');
     if (this.hud && this.hud.closePaper) this.hud.closePaper('tripcard');
@@ -794,7 +956,7 @@ class Record {
     if (this.player && this.player.input) this.player.input.paused = false;
   }
   // the logbook page of a trip, for the card and the book (book: the Record tab's page, narrower)
-  pageHtml(c, { book = false } = {}) {
+  pageHtml(c, { book = false, live = false } = {}) {
     const e = c.entry, f = c.end, rows = [];
     const firsts = new Set(c.firsts || []);
     const mark = (words) => (firsts.has(words) ? ' <span class="first">first</span>' : '');
@@ -819,7 +981,8 @@ class Record {
     if (F && F.n) {
       const kept = F.kept ? `, ${F.kept === F.n ? (F.n === 1 ? 'kept' : 'all kept') : `${word(F.kept)} kept`}` : ', all let go';
       const best = F.best ? ` The best, ${an(inches(F.best.cm))} <span class="num">${inches(F.best.cm)}</span>-inch ${esc(F.best.name)}${F.best.lake ? ` on ${esc(F.best.lake)}` : ''}.` : '';
-      const kinds = F.sp.length > 1 || firsts.has(`first ${F.sp[0].name}`) ? `<br><span class="soft">${F.sp.map((q) => `${esc(q.name)}${q.n > 1 ? ` ×${q.n}` : ''}${mark(`first ${q.name}`)}`).join(' · ')}</span>` : '';
+      const fw = (q) => (q.sp === 'laketrout' && firsts.has('first laker') ? 'first laker' : `first ${q.name}`);
+      const kinds = F.sp.length > 1 || firsts.has(fw(F.sp[0])) ? `<br><span class="soft">${F.sp.map((q) => `${esc(q.name)}${q.n > 1 ? ` ×${q.n}` : ''}${mark(fw(q))}`).join(' · ')}</span>` : '';
       rows.push(['Fish', `${cap(word(F.n))} ${plural(F.n, 'fish', 'fish')}${kept}.${best}${kinds}`]);
     }
     // what was seen
@@ -832,18 +995,18 @@ class Record {
     }
     // the notices done, and the money
     const N = c.notices || [];
-    if (N.length) {
+    if (N.length && !c.tally) { // (gl-d: a card with a tally says them there, with their pay)
       rows.push(['Notices', N.map((n) => `“${esc(n.title)}”`).join(' · ')]);
       const paid = N.filter((n) => n.paid).reduce((a, n) => a + (n.pay || 0), 0), owed = N.filter((n) => !n.paid).reduce((a, n) => a + (n.pay || 0), 0);
       const where = [...new Set(N.filter((n) => !n.paid).map((n) => { const l = this.landing(n.from); return l ? l.name : null; }).filter(Boolean))];
-      const words = [paid ? `<span class="num">${money(paid)}</span> paid` : '', owed ? `<span class="num">${money(owed)}</span> to claim${where.length === 1 ? ` at ${esc(where[0])}` : ''}` : ''].filter(Boolean).join(' · ');
+      const words = [paid ? `<span class="num">${money(paid)}</span> paid` : '', owed ? `<span class="num">${money(owed)}</span> ${c.tally ? 'paid since' : 'to claim'}${!c.tally && where.length === 1 ? ` at ${esc(where[0])}` : ''}` : ''].filter(Boolean).join(' · ');
       if (words) rows.push(['Money', words]);
     }
     // (no Over row: the owner, 2026-10-31, "you don't need to track how often you fall in")
     const grid = rows.map(([k, v]) => `<div class="lab">${k}</div><div class="v">${v}</div>`).join('');
     const note = c.partial ? '<div class="soft small">The record began part way through this trip.</div>' : c.old ? '<div class="soft small">From the logbook kept before the record.</div>' : '';
     return `<div class="tc-page${book ? ' in-book' : ''}"><h2 class="tc-line">${esc(line)}</h2><div class="tc-sub">${esc(dates)}${dates ? ' · ' : ''}${esc(whereW)}</div>
-      <div class="tc-grid">${grid}</div>${note}</div>`;
+      ${this.tallyHtml(c, { live: live && !book })}<div class="tc-grid">${grid}</div>${note}</div>`;
   }
 
   // --- the Record tab's data (journal.js recordTab draws it) --------------------------------------------------------------
@@ -873,13 +1036,21 @@ class Record {
       since: s.since, trips: s.trips.slice().reverse(), lakes, reach, onSheets, sandbox: !!(S && S.open), fish, portages,
       rods: portages.reduce((a, p) => a + (p.rods || 0) * (p.n || 1), 0), seen, camps, stories: s.stories.slice(), photos: s.photos.n,
       firsts: s.firsts.slice(), earned: pr ? pr.earned || 0 : 0, nights, known, outfitters: o ? o.landings.length : 0, built: s.built,
+      milestones: this.milestones(), titles: (s.titles || []).slice(), monthsLeft: monthsLeft(this),
     };
   }
+  // gl-d: the milestones as the season stands (milestones.js)
+  milestones() { return this.s ? milestonesOf(this) : []; }
 
   // --- the moment: the first time a trip's card is put away -----------------------------------------------------------------
   moments() {
     return [{ id: 'record', prio: 1, recur: 'once', text: 'Your trip is in the journal’s Trips: {I}, then Journal.',
       due: () => !this.shown && realNow() - this.closedAt < MOMENT_FOR }];
+  }
+  // gl-d: the first time a count is up, E finishes it (said once, while it counts)
+  tallyMoments() {
+    return [{ id: 'tally', prio: 1, recur: 'once', text: 'Pay for the notices lands here. {E} to finish the count.',
+      due: () => !!(this.shown && this.counting) }];
   }
 }
 
