@@ -2369,7 +2369,14 @@ function trailheadPlan(ctx, ep) {
   const plan = landingPlan(ctx, ep, siteKept.get(ep.ep) || null);
   if (!siteKept.has(ep.ep)) siteKept.set(ep.ep, { ao: plan.site.ao, b0: plan.site.b0, fallback: plan.site.fallback, turn: plan.site.turn });
   const F = plan.F, d = plan.d, X = { x: d.z, z: -d.x };
-  const [lx, lz] = F.W(plan.site.ao, plan.site.b0 - 2);
+  let [lx, lz] = F.W(plan.site.ao, plan.site.b0 - 2);
+  // the whole lot on dry ground: back from the water until its edge is (Little Gabbro's and Clearwater's sites sit close)
+  // (up the shore's own slope, away from the nearest water, while that gains and the path stays short)
+  for (let i = 0; i < 30 && ctx.tg.shoreAt(lx, lz) < LOT_R + 2; i++) {
+    const dd = ctx.tg.deeperDir(lx, lz), nx = lx - dd.x, nz = lz - dd.z;
+    if (ctx.tg.shoreAt(nx, nz) <= ctx.tg.shoreAt(lx, lz) || Math.hypot(nx - plan.x, nz - plan.z) > 40) break;
+    lx = nx; lz = nz;
+  }
   // the water a canoe is set down in: out from the landing until it floats
   let wx = plan.x, wz = plan.z;
   for (let i = 0; i < 80 && ctx.tg.shoreAt(wx, wz) > -1.4; i++) { wx += d.x * 0.5; wz += d.z * 0.5; }
