@@ -758,7 +758,7 @@ export class Camp {
     return {
       id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: c.stage, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(at); },
-      onPhase: (i) => { this.setStage(c, i + 1); if (i === 3) this.pitched(); },
+      onPhase: (i) => { c.halfStruck = false; this.setStage(c, i + 1); if (i === 3) this.pitched(); },
       onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'Hold E or a click to carry on.' : 'Hold E at the tent to carry on.'}`, 3); } },
     };
   }
@@ -770,7 +770,7 @@ export class Camp {
       onTick: (at) => { if (this.camp === c) c.stages.set(from - at); },
       onPhase: (i) => { const st = from - (i + 1); if (st <= 0) this.packTent(); else this.setStage(c, st); },
       // (half struck: the panel's Strike takes the rest down, Carry on pitching puts it back up)
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) this.note(`${cap(K.words[c.stage])}. Strike takes the rest down; Carry on pitching puts it back up.`, 4); } },
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) { c.halfStruck = true; this.note(`${cap(K.words[c.stage])}. Strike takes the rest down; Carry on pitching puts it back up.`, 4); } } },
     };
   }
   // the footprint staked: the tent out of its container, the site claimed, the camp begun
@@ -879,7 +879,9 @@ export class Camp {
     const pitch = { verb: c.stage === 3 ? 'Put the fly on' : 'Carry on pitching', held: true, why: busy ? 'a moment' : null, run: (o) => hold.begin({ ...this.pitchOnOpts(), ...keys(o) }) };
     const strike = { verb: 'Strike', held: true, why: busy ? 'a moment' : null, run: (o) => hold.begin({ ...this.strikeOpts(), ...keys(o) }) };
     const rest = { verb: c.stage === 3 ? 'Rest until… (no fly)' : 'Rest until…', why: busy ? 'a moment' : null, run: () => this.restDial() };
-    const e = c.stage >= 4 ? rest : pitch, q = c.stage >= 4 ? strike : c.stage === 3 ? rest : strike;
+    // (the replay: a strike let go after the fly came off left the tent at 3 with Put the fly on and Rest, and no Strike
+    // anywhere, though the note says "Strike takes the rest down": half struck, Q strikes on)
+    const e = c.stage >= 4 ? rest : pitch, q = c.stage >= 4 ? strike : c.stage === 3 && !c.halfStruck ? rest : strike;
     return { e, q, label: `your ${lower(d ? d.name : 'tent')}`, hint: K.words[c.stage], stage: c.stage };
   }
   // the Rest-until dial: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →; E rests until then
