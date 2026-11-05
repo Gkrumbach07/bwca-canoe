@@ -15,7 +15,7 @@
 // Shared by the HUD's map (hud.js), the book's map tab, the lake page's portrait (map-book.js) and anyone else who wants
 // a piece of the map on a canvas: drawRegion(canvas, world, view, opts) (below) draws a region with markers.
 import { BURNS, burnDate } from './burns.js';
-import { isOutfitter } from './outfitters.js'; // the game-loop round: an outfitter's dock, or a trailhead's sign
+import { OUTFITTER_EPS, placeOf } from './outfitters.js'; // round 2 markers: an outfitter at its store, an entry point at its put-in
 
 export const FT = 0.3048;
 export const INK = {
@@ -663,8 +663,9 @@ export function lakeBox(world, ids, cx, cz, reach) {
 // --- a region of the map on a canvas, for anyone ------------------------------------------------------------------------
 // drawRegion(canvas, world, view, opts) → { ready, toPx(x, z), worldAt(px, py), mPerPx }
 //   view: { cx, cz, span } (span: metres across the canvas) or { x0, z0, x1, z1 } (fitted, with a margin)
-//   opts: { markers: [{ x, z, kind: 'dock' | 'dot' | 'you' | 'ring' | 'flag' | 'star', label, color, r }],
-//           route: [[x, z], …] (a pencil line), names: true (lake names), docks: true (the outfitters' docks),
+//   opts: { markers: [{ x, z, kind: 'dock' | 'store' | 'ep' | 'dot' | 'you' | 'ring' | 'flag' | 'star', label, color, r, ep }],
+//           route: [[x, z], …] (a pencil line), names: true (lake names), docks: true (the entry points, numbered, and
+//           the outfitters' stores where they stand: paintEntries),
 //           boundary: true, burns: false, detail: (x0, z0, x1, z1) => bool (what may be shown; default everything),
 //           k (line scale), fine: true (the 10 m tiles at any zoom), soundAll: true (every sounding at any zoom) }
 // Water and names come from the far field (80 m) when the view is wide, from the fine tiles when it is close; tiles not
@@ -684,7 +685,7 @@ export function drawRegion(canvas, world, view, opts = {}) {
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
   if (opts.names !== false) paintLakeNames(ctx, world, v, W, H, { k, detail });
-  if (opts.docks !== false) for (const ep of world.entryPoints) { const [a, b] = toPx(ep.x, ep.z); if (a > -20 && b > -20 && a < W + 20 && b < H + 20) paintEntry(ctx, a, b, k, ep.ep); }
+  if (opts.docks !== false) paintEntries(ctx, world, toPx, W, H, k, { names: mPerPx < 60 });
   if (opts.route && opts.route.length > 1) {
     ctx.beginPath(); opts.route.forEach(([x, z], i) => { const [a, b] = toPx(x, z); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
     ctx.strokeStyle = 'rgba(54, 46, 38, 0.86)'; ctx.lineWidth = 2 * k; ctx.lineCap = ctx.lineJoin = 'round'; ctx.setLineDash([6 * k, 4 * k]); ctx.stroke(); ctx.setLineDash([]);
@@ -826,13 +827,64 @@ export function paintTrailhead(ctx, a, b, k = 1) {
   ctx.strokeStyle = '#e8dcbc'; ctx.lineWidth = 0.9; ctx.strokeRect(-3.6, -6.6, 7.2, 4.2);
   ctx.restore();
 }
-export function paintEntry(ctx, a, b, k = 1, ep = null) { if (ep != null && !isOutfitter(ep)) paintTrailhead(ctx, a, b, k); else paintDock(ctx, a, b, k); }
+// Round 2 markers (the owner, 2026-11-05: "when you have an outfitter mapped, it doesn't need to be joined with the entry
+// point that it's on. Those can be two separate points on the map. Not calling it outfitter 6"). An entry point is its
+// number in a small box on a short staff, its foot on the put-in, as the Fisher and McKenzie maps flag them; an outfitter
+// is a little store where the store stands (outfitters.js placeOf), labelled with its sign's name.
+export function paintEntry(ctx, a, b, k = 1, ep = null) {
+  const s = String(ep ?? '');
+  ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
+  ctx.font = `700 ${s.length > 1 ? 9 : 10}px ${SERIF}`;
+  const w = Math.max(13, ctx.measureText(s).width + 6), h = 12, top = -h - 7;
+  ctx.strokeStyle = INK.ink; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, top + h); ctx.stroke();
+  ctx.fillStyle = '#2f5a3a'; ctx.fillRect(-w / 2, top, w, h);
+  ctx.strokeStyle = '#f4e9d6'; ctx.lineWidth = 0.8; ctx.strokeRect(-w / 2 + 1, top + 1, w - 2, h - 2);
+  ctx.fillStyle = '#f4e9d6'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(s, 0, top + h / 2 + 0.5);
+  ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, 6.2832); ctx.fillStyle = INK.ink; ctx.fill();
+  ctx.restore();
+}
+// an outfitter's store: a little gabled building, red roof, ink walls, a pale door
+export function paintStore(ctx, a, b, k = 1) {
+  ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
+  ctx.fillStyle = '#f4e9d6'; ctx.beginPath(); ctx.moveTo(-8, -1); ctx.lineTo(0, -9.5); ctx.lineTo(8, -1); ctx.lineTo(6.5, 6.5); ctx.lineTo(-6.5, 6.5); ctx.closePath(); ctx.fill(); // (a pale halo)
+  ctx.fillStyle = '#3d2c1c'; ctx.fillRect(-5.5, -2, 11, 7.5);
+  ctx.fillStyle = INK.red; ctx.beginPath(); ctx.moveTo(-7, -1.5); ctx.lineTo(0, -8); ctx.lineTo(7, -1.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#f4e9d6'; ctx.fillRect(-1.3, 1.2, 2.6, 4.3);
+  ctx.restore();
+}
+// a store's name beside it, in the map's serif on a paper halo
+export function paintStoreName(ctx, name, a, b, k = 1) {
+  ctx.save();
+  ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(236, 228, 207, 0.92)'; ctx.strokeText(name, a + 10 * k, b);
+  ctx.fillStyle = INK.ink; ctx.fillText(name, a + 10 * k, b);
+  ctx.restore();
+}
+// every entry point at its put-in and every outfitter at its store, in view (toPx world → canvas px); hits (when given)
+// gets { kind: 'ep', ep, x, z } and { kind: 'store', ep, x, z } for the hover. names: the stores' names beside them.
+export function paintEntries(ctx, world, toPx, W, H, k = 1, { names = true, hits = null, inView = null } = {}) {
+  const seen = (x, z) => { const [a, b] = toPx(x, z); return (!inView || inView(x, z, x, z)) && a > -40 && b > -40 && a < W + 40 && b < H + 40 ? [a, b] : null; };
+  for (const ep of world.entryPoints || []) {
+    const p = seen(ep.x, ep.z); if (!p) continue;
+    paintEntry(ctx, p[0], p[1], k, ep.ep);
+    if (hits) hits.push({ kind: 'ep', ep: ep.ep, x: ep.x, z: ep.z, px: 10 });
+  }
+  for (const n of OUTFITTER_EPS) {
+    const pl = placeOf(n, world); if (!pl || !pl.store) continue;
+    const p = seen(pl.store.x, pl.store.z); if (!p) continue;
+    paintStore(ctx, p[0], p[1], k);
+    if (names) paintStoreName(ctx, pl.name, p[0], p[1], k);
+    if (hits) hits.push({ kind: 'store', ep: n, x: pl.store.x, z: pl.store.z, px: 10 });
+  }
+}
 // a marker for drawRegion's callers
 export function paintMarker(ctx, m, [a, b], k = 1) {
   const col = m.color || INK.red, r = (m.r || 5) * k;
   ctx.save();
   ctx.lineCap = ctx.lineJoin = 'round';
   if (m.kind === 'dock') paintDock(ctx, a, b, k);
+  else if (m.kind === 'store') paintStore(ctx, a, b, k);
+  else if (m.kind === 'ep') paintEntry(ctx, a, b, k, m.ep);
   else if (m.kind === 'you') { ctx.translate(a, b); ctx.scale(k, k); ctx.fillStyle = '#e8562f'; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(0, 0, 5, 0, 6.2832); ctx.fill(); ctx.stroke(); }
   else if (m.kind === 'ring') { ctx.beginPath(); ctx.arc(a, b, r * 2, 0, 6.2832); ctx.strokeStyle = col; ctx.lineWidth = 2 * k; ctx.stroke(); }
   else if (m.kind === 'flag') {
