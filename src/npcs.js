@@ -991,7 +991,33 @@ async function siteErrand(P, v, c, who) {
 // (key → lines told), mem (talk-memory.js), visits (ep → the days you have talked to the keeper there)
 // gl-e (v 2): met (party id → { abs, ep, where, exit, told }: the parties you talked to in a store, who know you out there;
 // pruned a week after their trip ends). A v 1 save loads with met {}.
-const blankState = () => ({ v: 2, talked: {}, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {}, asked: {}, arcs: {}, word: {}, rumoured: {}, advised: {}, deal: {}, secret: {}, topics: {}, visits: {}, mem: null, met: {} });
+const blankState = () => ({ v: 2, talked: {}, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {}, asked: {}, arcs: {}, word: {}, rumoured: {}, advised: {}, deal: {}, secret: {}, topics: {}, visits: {}, mem: null, met: {}, moved: 1 });
+// glf-3: the game-loop round moved four hand keepers to the host that serves their old landing (outfitters.js
+// KEEPER_FROM: Leon 14 → 16, Arvid 54 → 51, Lise 55 → 64, Ruth 30 → 31). What a save holds of them under the old landing
+// (their arc, deal, secret site, the days you talked, the week's word, what they told you, the talk with them) moves
+// to the new host once (s.moved); where the new host already has some, the further arc and the rest of the new host's
+// own stay. The old landing is a trailhead now, so nothing is left there for a generated keeper to inherit.
+export function moveKeepers(s) {
+  if (!s || s.moved) return false;
+  const has = (m, k) => m && Object.prototype.hasOwnProperty.call(m, k);
+  const take = (m, from, to, better = null) => {
+    if (!m || !has(m, from)) return;
+    if (!has(m, to) || (better && better(m[from], m[to]))) m[to] = m[from];
+    delete m[from];
+  };
+  for (const [to, from] of Object.entries(KEEPER_FROM)) {
+    take(s.arcs, from, to, (a, b) => (a && a.b) > (b && b.b));
+    for (const k of ['word', 'deal', 'secret', 'chat', 'rumoured']) take(s[k], from, to);
+    take(s.visits, from, to, (a, b) => Array.isArray(a) && Array.isArray(b) && a.length > b.length);
+    for (const k of Object.keys(s.topics || {})) if (k.startsWith(`${from}:`)) take(s.topics, k, `${to}:${k.slice(String(from).length + 1)}`);
+    for (const m of ['talked', 'tasks', 'paid', 'gifts', 'names', 'asked']) for (const k of Object.keys(s[m] || {})) {
+      if (k === `keeper:${from}` || k.startsWith(`keeper:${from}#`)) take(s[m], k, `keeper:${to}${k.slice(`keeper:${from}`.length)}`);
+    }
+    if (s.mem) for (const k of ['greet', 'heard']) take(s.mem[k], from, to);
+  }
+  s.moved = 1;
+  return true;
+}
 export class People {
   constructor({ world, scene, player, day, hud, tasks, outfitter = null, profile = null, weather = null, registry = null, mat }) {
     this.world = world; this.scene = scene; this.player = player; this.day = day; this.hud = hud; this.tasks = tasks; this.outfitter = outfitter; this.profile = profile; this.weather = weather; this.registry = registry;
@@ -1039,8 +1065,10 @@ export class People {
   load() {
     const s = save.read(NS);
     const o = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
-    return s && (s.v === 1 || s.v === 2) ? { v: 2, met: o(s.met), talked: s.talked || {}, tasks: s.tasks || {}, paid: s.paid || {}, gifts: s.gifts || {}, names: s.names || {}, told: Array.isArray(s.told) ? s.told : [], chat: s.chat || {}, asked: s.asked || {},
+    const out = s && (s.v === 1 || s.v === 2) ? { v: 2, moved: s.moved ? 1 : 0, met: o(s.met), talked: s.talked || {}, tasks: s.tasks || {}, paid: s.paid || {}, gifts: s.gifts || {}, names: s.names || {}, told: Array.isArray(s.told) ? s.told : [], chat: s.chat || {}, asked: s.asked || {},
       arcs: o(s.arcs), word: o(s.word), rumoured: o(s.rumoured), advised: o(s.advised), deal: o(s.deal), secret: o(s.secret), topics: o(s.topics), visits: o(s.visits), mem: s.mem && s.mem.v === 1 ? s.mem : null } : blankState(); // (an older save: the content B fields start empty)
+    if (moveKeepers(out)) save.write(NS, out); // glf-3: once, the moved keepers' talk to their new host
+    return out;
   }
   write() { save.write(NS, this.s); }
   reset() { this.s = blankState(); this.weekCache = null; this.rosters.clear(); this.preparing.clear(); this.chars.clear(); if (this.mem) this.mem.reset(); this.write(); }
