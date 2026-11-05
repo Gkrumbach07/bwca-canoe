@@ -90,7 +90,7 @@
 .skey .k { display: inline-flex; align-items: center; gap: 6px; }
 .skey .k i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(243, 236, 221, .85); background: rgba(31, 42, 46, .82); }
 .skey .k.gentle i { border-color: #9cc48a; background: rgba(66, 104, 64, .9); }
-.skey .keys kbd { font-size: 11px; padding: 1px 6px; border-color: rgba(243, 236, 221, .5); margin-left: 6px; }
+.skey .skeys kbd { font-size: 11px; padding: 1px 6px; border-color: rgba(243, 236, 221, .5); margin-left: 6px; }
 @media (max-width: 900px) { .entries.wmap { width: calc(100vw - 48px); min-width: 0; } }
 /* Back and Next */
 .wnav { display: flex; gap: 26px; margin-top: 6px; font: 700 13px/1.4 var(--sc); letter-spacing: .16em; }

@@ -111,7 +111,7 @@ export class StartMap {
     this.frame.append(this.canvas, this.layer);
     this.card = el('div', 'scard'); this.card.setAttribute('aria-live', 'polite');
     this.legend = el('p', 'skey');
-    this.legend.innerHTML = '<span class="k gentle"><i></i>a good first home</span><span class="k"><i></i>an outfitter</span><span class="keys"><kbd>← →</kbd> between them <kbd>Enter</kbd> pick</span>';
+    this.legend.innerHTML = '<span class="k gentle"><i></i>a good first home</span><span class="k"><i></i>an outfitter</span><span class="skeys"><kbd>← →</kbd> between them <kbd>Enter</kbd> pick</span>';
     root.replaceChildren(this.frame, this.card, this.legend);
     if (typeof window !== 'undefined') window.addEventListener('resize', () => { if (this.homes && root.offsetParent) this.layout(); });
   }

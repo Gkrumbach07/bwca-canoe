@@ -145,6 +145,8 @@ try {
   const talk0 = await A.evaluate(() => { const g = window.__game, o = g.outfitter; o.openHot('counter', o.visit.landing); const d = g.npcs.dialogue, c = d.convo; return { talking: d.talking, key: c && c.speaker.key, name: c && c.name, say: c && c.node && c.node.say, open: o.open }; });
   result('2b E at the home counter opens the staffer\'s talk', talk0.talking && /^staffer:/.test(talk0.key) && !talk0.open, talk0);
   await step(A, 30);
+  await A.waitForTimeout(900); // (the panel's fade is real time)
+  await step(A, 2);
   await shot(A, 'c-staffer');
   const talked = await A.evaluate(async () => {
     const g = window.__game, d = g.npcs.dialogue, said = [];
@@ -227,9 +229,6 @@ try {
   result('4c the first night: one notebook:found, the notebook, the card', n1.found && n1.events === 1 && n1.notebooks === 1 && n1.saw === pages[0].text, n1);
   const where = await A.evaluate(() => { const inv = window.__game.profile.inventory; const c = inv.containers.find((k) => k.grid.some((e) => e.id === 'waltnotebook')); return c ? { item: c.item, where: c.where } : null; });
   result('4d the notebook lies in the tent', where && where.where === 'tent', where);
-  const n2 = await sleepNow(21.5, 'first');
-  result('4e a second night: nothing', n2.events === 1 && n2.notebooks === 1, n2);
-
   // the notebook's Read: its paper, the pages turn, the story hears
   const read = await A.evaluate(() => {
     const g = window.__game, inv = g.profile.inventory;
@@ -241,10 +240,14 @@ try {
     const h2 = document.querySelector('#notebook h2').textContent;
     return { enabled: !!(v && v.enabled), ok: r && r.ok, open, h1, h2, paper: g.hud.paper, read: g.story.state.read.slice(), events: window.__glc.events.filter((e) => e.evt === 'notebook:read').length };
   });
+  await A.evaluate(() => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy, 21.6); if (g.lamp && !g.lamp.on) g.lamp.toggle(true); });
   await step(A, 4);
   await shot(A, 'c-notebook-read');
   const closed = await A.evaluate(() => { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true })); const g = window.__game; return { open: g.walt.paperOpen, paper: g.hud.paper }; });
   result('the notebook reads as a paper of the story\'s pages', read.enabled && read.ok && read.open && read.h1 && read.h1 !== read.h2 && read.read.length >= 2 && read.events >= 2 && read.paper === 'notebook' && !closed.open && !closed.paper, { read, closed });
+
+  const n2 = await sleepNow(21.5, 'first');
+  result('4e a second night: nothing', n2.events === 1 && n2.notebooks === 1, n2);
   const saved = await A.evaluate(() => ({ onboard: window.__game.store.getItem('bwca-canoe:onboard'), story: window.__game.store.getItem('bwca-canoe:story') }));
   result('the onboarding and the story are saved', /"done":true/.test(saved.onboard || '') && /"found":true/.test(saved.story || ''), saved);
 
