@@ -215,7 +215,11 @@ export class StartMap {
     ];
     if (others.length) rows.push(el('div', 'sreach', `Also serves ${others.map(nameOf).join(', ')}`));
     if (h.lakes && h.lakes.length) rows.push(el('div', 'slakes', `Lakes: ${h.lakes.slice(0, 5).join(', ')}`));
-    if (h.keeper && h.keeper.name) rows.push(el('div', 'skeeper', h.keeper.line ? `${h.keeper.name}: ${h.keeper.line}` : h.keeper.name));
+    // (B's line already starts with the keeper's name: "Gus Lindgren: few words, all of them useful.")
+    if (h.keeper && h.keeper.name) {
+      const n = h.keeper.name, l = String(h.keeper.line || ''), line = l.startsWith(`${n}:`) ? l.slice(n.length + 1).trim() : l;
+      rows.push(el('div', 'skeeper', line ? `${n}: ${line}` : n));
+    }
     if (h.gentle) rows.push(el('div', 'sgood', 'A good first home'));
     this.card.replaceChildren(...rows);
   }
