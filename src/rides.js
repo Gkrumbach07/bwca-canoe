@@ -27,7 +27,7 @@
 //
 // It hides the counter itself before the fade (so the counter's own close afterwards does nothing), and on arrival
 // sets outfitter.arrivedBy = 'ride' for the counter's greeting (keeperLine(profile, 'ride')).
-import { outfitterProfile, keeperLine, roadOf, roadKm, roadWay, isOutfitter, reachOf, hostOf } from './outfitters.js';
+import { outfitterProfile, keeperLine, roadOf, roadKm, roadWay, isOutfitter, reachOf, hostOf, nearWords } from './outfitters.js';
 import { miles } from './units.js';
 
 export const ROAD = 1.4;          // road km for a km of straight line, where the road graph has no answer
@@ -122,7 +122,7 @@ export class Rides {
       ? `Sandbox: the truck is free and the road takes no time. ${lake}, entry point ${to.ep}.`
       : `${kmWords(r.km)} miles${via} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${lateWords}`;
     const card = {
-      kicker: `${from.name} → ${to.name} · entry point ${to.ep}`,
+      kicker: `${from.name} → ${to.name} · ${isOutfitter(to.ep) ? nearWords(to.ep, this.world) || `entry point ${to.ep}` : `entry point ${to.ep}`}`, // (round 2: an outfitter is near an entry point)
       text: `“${this.keeperWords(fromP, 'goodbye')}”`,
       sub,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,

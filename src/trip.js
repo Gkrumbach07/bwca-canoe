@@ -41,6 +41,7 @@ import { kv } from './store.js'; // the saves' store (IndexedDB, read into memor
 import { save } from './save.js';
 import { plural } from './hud.js';
 import { clockOf } from './pace.js';
+import { nearWords } from './outfitters.js'; // round 2: an outfitter is near an entry point, not one by number
 
 const DOC_KEY = 'bwca-canoe-trip';  // the outfitter's document
 const BOOK = 'logbook';             // save.js namespace
@@ -176,7 +177,7 @@ export class Trip {
     const l = this.landing(ep);
     this.fresh = ep; // the counter greets a first visit (outfitter.js)
     this.log('known', { ep });
-    if (l) this.say(`${l.name} · entry point ${ep}. You know this outfitter now: food here, and a board of its own.`, 7);
+    if (l) { const near = nearWords(ep, this.world); this.say(`${l.name}${near ? `, ${near}` : ''}. You know this outfitter now: food here, and a board of its own.`, 7); }
     return true;
   }
 

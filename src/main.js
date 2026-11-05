@@ -1095,7 +1095,7 @@ async function main() {
     const inLot = () => { const p = player, h = p.onFoot && !outfitter.open && !trip.active ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'lot'); };
     const atLanding = () => { const p = player, h = p.onFoot && trip.active && outfitter.trip.away ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'landing'); };
     const glbM = [
-      { id: 'gl-b:pickup', prio: TEACH, recur: 'once', text: 'Out at the lot. {E} on the sign calls a pickup.', due: inLot },
+      { id: 'gl-b:pickup', prio: TEACH, recur: 'once', text: 'At the trailhead. {E} on the sign calls a pickup.', due: inLot },
       { id: 'gl-b:landing', prio: TEACH, recur: 'once', text: 'A trailhead. Walk up to the lot to come out here.', due: atLanding },
     ];
     for (const m of glbM) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
