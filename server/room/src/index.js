@@ -18,7 +18,8 @@
 //   { t: 'join', id, name, look, host } · { t: 'leave', id, host } · { t: 'error', why } (then the socket closes)
 //
 // A room lives while anyone is in it, and ten minutes after the last one leaves (the host's key and snapshot are kept
-// that long, so a host who reloads gets the same code back); then it forgets everything. Four clients at most.
+// that long, so a host who reloads gets the same code back); then it forgets everything. Four clients at
+// most (MAX_CLIENTS: the owner, 2026-11-05, "for now, let's limit to four players"); a fifth is refused 'full'.
 // DELAY_MS (wrangler.toml [vars], `npm run dev:slow`) holds every forwarded message back that long: the test rig's lag.
 /* global WebSocketPair */
 import { DurableObject } from 'cloudflare:workers';

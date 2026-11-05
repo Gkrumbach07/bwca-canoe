@@ -172,6 +172,8 @@ export class Parties {
     this.world = world; this.profile = profile; this.day = day;
     this.registry = null; this.camp = null; this.player = null; this.camera = null; this.settings = null; this.inventory = null; this.fires = null;
     this.mineSig = ''; this.mineList = [];
+    this.shared = null;      // co-op (coop-parties.js): the host's { seed, traffic } on a guest's page, null alone
+    this.mineOf = null;      // co-op: (your sites) -> the room's sites, the sweep's input on every page
     this.live = new Map();   // site key -> the camp holding it now: { stay, party, site, i, key }
     this.cache = new Map();  // `${ep}:${day}` -> the parties put in there that day
     this.blocks = new Map(); // block key -> the sweep
@@ -191,8 +193,15 @@ export class Parties {
     if (settings) { this.settings = settings; if (settings.onChange) settings.onChange((k) => { if (k === 'traffic') this.forget(); }); }
     return this;
   }
-  get traffic() { const v = this.settings && this.settings.get ? this.settings.get('traffic') : 'usual'; return TRAFFIC[v] ?? 1; }
-  get seed() { const p = this.profile || (window.__game && window.__game.profile); return hashStr(p && p.seasonId ? p.seasonId : 'none'); }
+  get traffic() { if (this.shared) return this.shared.traffic; const v = this.settings && this.settings.get ? this.settings.get('traffic') : 'usual'; return TRAFFIC[v] ?? 1; }
+  get seed() { if (this.shared) return this.shared.seed; const p = this.profile || (window.__game && window.__game.profile); return hashStr(p && p.seasonId ? p.seasonId : 'none'); }
+  // co-op: a guest's page on the host's parties ({ seed, traffic }), or its own again (null). The cache is the
+  // entries' (counted with the Traffic): let go when either changes; the sweeps are keyed by both already
+  share(s) {
+    const was = this.shared, next = s && Number.isInteger(s.seed) && Number.isFinite(s.traffic) ? { seed: s.seed >>> 0, traffic: +s.traffic } : null;
+    if ((was && next && was.seed === next.seed && was.traffic === next.traffic) || (!was && !next)) return;
+    this.shared = next; this.forget(); this.lastNow = null; // (the claims settle at once on the next pass)
+  }
   get today() { const d = this.day; return d ? absDay(d.year, d.doy) : 0; }
   forget() { this.cache.clear(); this.blocks.clear(); }
 
@@ -482,7 +491,7 @@ export class Parties {
     const jump = this.lastNow == null || Math.abs(now - this.lastNow) > PARTIES.jump || !this.lastAt || Math.hypot(p.x - this.lastAt.x, p.z - this.lastAt.z) > PARTIES.jumpM;
     this.lastNow = now; this.lastAt = { x: p.x, z: p.z };
     // your sites (your tent's, your things'): an input to the sweep, which is made again when they change
-    const mine = this.mine(), sig = mine.map((m) => `${m.i}@${m.since}`).sort().join(',');
+    const own = this.mine(), mine = this.mineOf ? this.mineOf(own) : own, sig = mine.map((m) => `${m.i}@${m.since}`).sort().join(',');
     if (sig !== this.mineSig) { this.mineSig = sig; this.mineList = mine; }
     const R = PARTIES.claimR, want = new Map();
     for (const c of this.campsAt(T, h)) { const dx = c.site.x - p.x, dz = c.site.z - p.z; if (dx < R && dx > -R && dz < R && dz > -R && dx * dx + dz * dz < R * R) want.set(c.key, c); }
