@@ -1097,7 +1097,9 @@ export class Hud {
     const dayW = day ? this.dayWords(ctx) : '';
     this.set('ebClock', eb.clock, day ? clock12(day.hours) : '');
     this.set('ebDay', eb.day, `${dayW ? `${dayW} · ` : ''}${day ? `${weekdayOf(day.year, day.doy).slice(0, 3)}, ${shortDate(day.year, day.doy)}` : ''}`);
-    const show = !shell && !!day;
+    // one time bar at once (the game-loop play: the Rest dial and a counter showed this bar and the strip together): the
+    // strip over the paper stands in for it while it is up
+    const show = !shell && !!day && !this.stripWanted(ctx);
     eb.el.classList.toggle('show', show);
     this.el.air.classList.toggle('ebar', show && on); // the readout keeps under the bar (hud.css)
   }
@@ -1184,10 +1186,11 @@ export class Hud {
     this.stripAlso = null; // () => true while something of paper the register does not know is up (the Rest dial)
     this.tipBind(this.strip, q('.hit'), false);
   }
+  stripWanted(ctx) { return !!this.strip && !ctx.shell && (!!this.paper || !!(this.stripAlso && this.stripAlso())); }
   updateStrip(ctx) {
     const s = this.strip; if (!s) return;
-    const { energy, day, shell } = ctx;
-    const show = !shell && (!!this.paper || !!(this.stripAlso && this.stripAlso()));
+    const { energy, day } = ctx;
+    const show = this.stripWanted(ctx);
     if (show !== s.shown) { s.shown = show; s.el.classList.toggle('show', show); if (!show) { s.prev = null; this.tipHide(s); } }
     if (!show) return;
     if (energy) {
