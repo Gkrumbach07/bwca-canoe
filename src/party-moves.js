@@ -34,10 +34,13 @@
 //   moves.moments()       the 'partytrail' moment for hints.js
 //   moves.lagOf(id)       hours a party is behind its plan (party-camps.js)
 //   moves.stats(), moves.active (Map plan id -> the followed leg)
+import * as THREE from 'three';
 import { MOVE } from './parties.js';
 import { trailOf } from './actors.js';
 import { PRI } from './dialogue.js';
 import { mulberry32 } from './rng.js';
+import { CLOCK } from './pace.js'; // r2: the one clock (game seconds a real one): a boarding's steps are timed in real seconds
+import { SEATS, floorAt } from './hull.js';
 
 export const MOVES = {
   simR: 1500,        // m: legs whose bounds come this near you are followed
@@ -66,6 +69,16 @@ export const MOVES = {
   dormR: 1400,       // and let go of it past this
 };
 const RAW_MAX = 36;
+// r2 (NPC motion, the owner 2026-11-05: "lined up in a perfect row ... they like teleport into the canoes, and they do this
+// weird non-physics based sort of paddle away"): the canoes lie along the bank, each crew by its own hull at jobs (packs
+// carried down to it, kneeling to load, a hand on the gunwale, a word with someone); they get in one at a time, the bow
+// first, the stern last and pushing off, each a walk to the side, a step over the gunwale and down to the kneel, the
+// hull rocking; and out again the same way. Real seconds (the clock's game seconds over CLOCK).
+const BOARD = { walk: 3.2, step: 1.6, gap: 0.1, first: 3.4, total: 9 }; // s: the walk to the side, each step in, the board's length
+const OUT = { first: 0.6, step: 1.5, gap: 0.15, walk: 3.0 };            // s: the first out, each step out, the walk to their place
+const SEAT_X = { stern: SEATS.stern.x, bow: SEATS.bow.x, mid: -0.42 };
+const SLOT_ALONG = 6.2;      // m between canoes lying along the bank
+const ORDER = { bow: 0, mid: 1, stern: 2 }; // who gets in first (the bow) and out first (the bow)
 export const PATH_DEBUG = { on: false, log: [] }; // (the tests')    // fine tiles fetched for the paths beyond those loaded, kept
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const smooth = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
@@ -385,15 +398,47 @@ export class PartyMoves {
     return { kind, at, basin, L, trail, slots: [], spots: [], checked: false };
   }
   // the canoes side by side at the bank, bows in (slot k of n), and the people standing above them (spot j of m)
+  // (r2: lying along the bank, bow the way they go, where the water off the bank takes the hulls so; else bows in)
   slot(S, k, n, out) {
-    const L = S.L, o = (k - (n - 1) / 2) * MOVES.slot;
+    const L = S.L;
+    if (S.par == null) S.par = this.alongOk(S, n);
+    if (S.par) { const o = (k - (n - 1) / 2) * SLOT_ALONG, sg = S.tsign || 1; out.x = L.x + L.tx * o; out.z = L.z + L.tz * o; out.h = headingOf(L.tx * sg, L.tz * sg); return out; }
+    const o = (k - (n - 1) / 2) * MOVES.slot;
     out.x = L.x + L.tx * o; out.z = L.z + L.tz * o; out.h = headingOf(L.ux, L.uz);
     return out;
   }
-  spot(S, j, out) {
+  // the shore distance at (x, z) from the release's cells (bilinear; + land, - water), as the paths read them
+  sdAt(x, z) {
+    const w = this.world, c = w.cell, fx = (x - w.originX) / c - 0.5, fz = (z - w.originZ) / c - 0.5, i = Math.floor(fx), j = Math.floor(fz), ax = fx - i, az = fz - j, q = { lake: 0, sd: 0 };
+    const v = (a, b) => this.masks.cell(a, b, q).sd;
+    return (v(i, j) * (1 - ax) + v(i + 1, j) * ax) * (1 - az) + (v(i, j + 1) * (1 - ax) + v(i + 1, j + 1) * ax) * az;
+  }
+  alongOk(S, n) {
+    const L = S.L;
+    for (let k = 0; k < n; k++) {
+      const o = (k - (n - 1) / 2) * SLOT_ALONG, x = L.x + L.tx * o, z = L.z + L.tz * o;
+      if (!(this.sdAt(x, z) < -1.4) || !(this.sdAt(x + L.tx * 2.5, z + L.tz * 2.5) < -0.6) || !(this.sdAt(x - L.tx * 2.5, z - L.tz * 2.5) < -0.6)) return false;
+    }
+    return true;
+  }
+  spot(S, j, out, Lg = null) {
     const L = S.L;
     if (S.spots[j]) { const s = S.spots[j]; out.x = s.x; out.z = s.z; out.h = s.h; return out; }
     let x, z, h;
+    const seat = Lg && Lg.seatOf ? Lg.seatOf.get(j) : null;
+    if (!S.trail && seat) {
+      // r2: up the bank from their own canoe, by their seat's end of it, staggered (each a little higher or lower, to
+      // one side), facing it or a little off: no row
+      const r = mulberry32((hashStr(`${Lg.party.id}:${j}:${S.kind}`) ^ 0x51f7) >>> 0), n = Lg.plan.crew.boats.length, o = this.slot(S, seat.c, n, { x: 0, z: 0, h: 0 });
+      const fx = Math.cos(o.h), fz = -Math.sin(o.h), sx = SEAT_X[seat.seat] ?? 0;
+      const up = 1.1 + r() * 1.3, side = (r() * 2 - 1) * 0.5;
+      x = o.x + fx * (sx * 0.8 + side) + L.ux * (2.6 + up); z = o.z + fz * (sx * 0.8 + side) + L.uz * (2.6 + up);
+      for (let k = 0; k < 6 && this.sdAt(x, z) < 0.6; k++) { x += L.ux * 0.6; z += L.uz * 0.6; } // (on the bank, not in the water)
+      h = headingOf(-L.ux, -L.uz) + (r() * 2 - 1) * 0.6;
+      S.spots[j] = { x, z, h };
+      out.x = x; out.z = z; out.h = h;
+      return out;
+    }
     if (S.trail) {
       // at a carry's end: between the waterline and the trail's end, a little off the line, facing the way they go
       const t0 = S.trail.pts[0], t1 = S.trail.pts[Math.min(3, S.trail.pts.length - 1)], sh = L.shore;
@@ -443,6 +488,8 @@ export class PartyMoves {
       const all = [st.from, st.to, ...[...st.carry.values()].flatMap((c) => [c.A, c.B])];
       if (all.some((x) => x === 'wait')) return false;
       if (all.some((x) => !x)) { L.broken = true; return false; } // (no water by a landing: not drawn)
+      // (r2: the canoes along the bank lie bow the way the party goes)
+      { const gx = plan.to.x - plan.from.x, gz = plan.to.z - plan.from.z; for (const S of all) S.tsign = S.L.tx * gx + S.L.tz * gz >= 0 ? 1 : -1; }
       L.st = st;
       // the paddle pieces' landings: from the leg's start or the last carry's far end, to the next carry's near end or the end
       let cur = st.from;
@@ -534,7 +581,109 @@ export class PartyMoves {
     if (s.u1 === 1 && path.L - sAt < 30 && s.kind !== 'drift') { const k = smooth((path.L - sAt) / 30), o = sl(s.B, c); x = o.x + (x - o.x) * k; z = o.z + (z - o.z) * k; hd = o.h + wrapPi(hd - o.h) * smooth((path.L - sAt) / 12); }
     out.x = x; out.z = z; out.h = hd;
     out.v = s.kind === 'drift' ? 0 : (s.u1 - s.u0) * path.L * rampRate(t, D, MOVE.ramp);
+    // r2: for the hull's own paddling (actors.js simTick): a point ahead on the way to steer at (the slot itself at the
+    // end) and the leg's steady speed (game m/s)
+    out.cruise = s.kind === 'drift' ? 0 : ((s.u1 - s.u0) * path.L) / Math.max(1, D - Math.min(MOVE.ramp, D / 2));
+    const la = 26, ahead = sAt - stagger + la, aim = out.aim || (out.aim = { x: 0, z: 0 });
+    if (s.u1 === 1 && path.L - sAt < la + 8 && s.kind !== 'drift') { const o = sl(s.B, c); aim.x = o.x; aim.z = o.z; }
+    else { const q2 = along(path, ahead, _q, 6); aim.x = q2.x - q2.tz * lat; aim.z = q2.z + q2.tx * lat; }
     return out;
+  }
+  // --- r2: the people about their canoes ---------------------------------------------------------------------------
+  // the hull of canoe c as it lies now (the drawn one; its slot at S when it is not)
+  hullOf(L, c, S) {
+    const b = L.boats[c];
+    if (b && !b.hidden && Number.isFinite(b.x)) return { x: b.x, z: b.z, h: b.heading, y: b.y, b };
+    const o = this.slot(S, c, L.boats.length, { x: 0, z: 0, h: 0 }), lv = this.world.levelAt ? this.world.levelAt(o.x, o.z) : 0;
+    return { x: o.x, z: o.z, h: o.h, y: lv + 0.15, b: null };
+  }
+  // beside seat `seat` of canoe c on the bank's side (where one stands to load it or to step in), the seat itself, and
+  // which way faces the hull from there
+  sideOf(L, c, seat, S) {
+    const H = this.hullOf(L, c, S), fx = Math.cos(H.h), fz = -Math.sin(H.h), sx = SEAT_X[seat] ?? 0;
+    let nx = S.L.ux, nz = S.L.uz; const d = nx * fx + nz * fz; nx -= d * fx; nz -= d * fz;
+    let nl = Math.hypot(nx, nz); if (nl < 0.3) { nx = -fz; nz = fx; nl = 1; }
+    nx /= nl; nz /= nl;
+    return { x: H.x + fx * sx + nx * 0.85, z: H.z + fz * sx + nz * 0.85, face: headingOf(-nx, -nz), sx: H.x + fx * sx, sz: H.z + fz * sx, floor: H.y + floorAt(sx) + 0.02, h: H.h, side: Math.sign(nx * -fz + nz * fx) || 1, b: H.b };
+  }
+  // what one of them is doing at the bank t real seconds into it (from 'bank': their place up it, or 'hull': by the
+  // canoe): carrying the packs down to the hull and stooping to load them (unload: up from it), kneeling at the hull,
+  // or a word with someone. A pose for drive()
+  jobAt(L, S, i, t, from = 'bank', unload = false, lunch = false) {
+    const seat = L.seatOf.get(i), B = this.spot(S, i, { x: 0, z: 0, h: 0 }, L);
+    const stand = (x, z, h, crouch = 0) => ({ x, z, heading: h, v: 0, mode: 'stand', pack: false, anim: crouch > 0 ? { crouch } : null });
+    if (!seat) return stand(B.x, B.z, B.h);
+    const r = mulberry32((hashStr(`${L.party.id}:${i}:job`) ^ 0x9e37) >>> 0), r1 = r(), r2 = r(), r3 = r(), r4 = r();
+    const kind = lunch ? 'chat' : r1 < 0.62 ? 'ferry' : r1 < 0.84 ? 'load' : 'chat';
+    const Hs = this.sideOf(L, seat.c, seat.seat, S), up = headingOf(S.L.ux, S.L.uz);
+    if (kind === 'chat') {
+      // facing whoever of them stands nearest
+      let best = null, bd = Infinity;
+      for (let j = 0; j < L.persons.length; j++) { if (j === i) continue; const o = this.spot(S, j, { x: 0, z: 0, h: 0 }, L), d = Math.hypot(o.x - B.x, o.z - B.z); if (d < bd) { bd = d; best = o; } }
+      return stand(B.x, B.z, best && bd < 8 ? headingOf(best.x - B.x, best.z - B.z) : B.h);
+    }
+    if (kind === 'load') {
+      const T = 12 + 8 * r2, u = (t + r3 * T) % T;
+      if (from === 'bank' && t < 4) { const k = t / 4; return { x: B.x + (Hs.x - B.x) * k, z: B.z + (Hs.z - B.z) * k, heading: headingOf(Hs.x - B.x, Hs.z - B.z), v: Math.hypot(Hs.x - B.x, Hs.z - B.z) / 4, mode: 'walk', pack: false, anim: null }; }
+      return stand(Hs.x, Hs.z, Hs.face + (r4 - 0.5) * 0.7, u < T - 3 ? 0.85 : 0);
+    }
+    // ferry: [0, b) at their place up the bank (bending to a pack), [b, b + w) down to the hull with it, [.., + a) loading
+    // it in, [.., + w) back up for the next (unload: the other way)
+    const w = Math.max(1.6, Math.hypot(Hs.x - B.x, Hs.z - B.z) / 1.1), a = 5 + 4 * r2, b = 2.5 + 2 * r3, T = a + b + 2 * w;
+    let u = (t + (from === 'hull' ? b + w : 0) + r4 * 0) % T;
+    if (u < b) return stand(B.x, B.z, up, u > 0.6 && u < b - 0.4 ? 0.9 : 0);
+    u -= b;
+    const walk = (P0, P1, k, pack) => ({ x: P0.x + (P1.x - P0.x) * k, z: P0.z + (P1.z - P0.z) * k, heading: headingOf(P1.x - P0.x, P1.z - P0.z), v: Math.hypot(P1.x - P0.x, P1.z - P0.z) / w, mode: 'walk', pack, anim: null });
+    if (u < w) return walk(B, Hs, u / w, !unload);
+    u -= w;
+    if (u < a) return stand(Hs.x, Hs.z, Hs.face + (r4 - 0.5) * 0.7, u > 0.5 && u < a - 0.5 ? 0.9 : 0);
+    u -= a;
+    return walk(Hs, B, u / w, unload);
+  }
+  // stepping in over the gunwale (u 0..1 of the step): from beside the seat to it, down into a crouch, the feet onto the
+  // hull's floor, turned to face the bow; out again with u run back
+  stepPose(Hs, u) {
+    const k = smooth(u), lift = smooth((u - 0.25) / 0.45);
+    return { x: Hs.x + (Hs.sx - Hs.x) * k, z: Hs.z + (Hs.sz - Hs.z) * k, heading: Hs.face + wrapPi(Hs.h - Hs.face) * smooth((u - 0.2) / 0.7), v: 0.35 * Math.sin(Math.PI * u), mode: 'stand', pack: false, anim: { crouch: 0.35 + 0.55 * smooth(u * 1.4) }, footY: null, lift };
+  }
+  // r2: where person i is at hour h of seg s (null: the old ways, the carry's walks and the spots), or { seat } in the hull
+  bankPose(L, s, i, h, seat) {
+    if (!seat) return null;
+    const kind = s.kind, n = L.persons.length;
+    // the order in the canoe: the bow in first and out first, the stern last in (pushing off) and last out
+    const crewOf = L.plan.crew.boats[seat.c] || [], order = crewOf.map((j) => L.seatOf.get(j)).sort((x, y) => ORDER[x.seat] - ORDER[y.seat]).map((q) => q.seat), k = Math.max(0, order.indexOf(seat.seat));
+    const jit = (mulberry32((hashStr(`${L.party.id}:${seat.c}:b`) ^ 0x2545) >>> 0)() - 0.5) * 0.5;
+    const boardEnd = kind === 'launch' || kind === 'landing' ? s.h1 : null;
+    if (boardEnd != null) {
+      const S = s.S, tb = BOARD.total - (boardEnd - h) * 3600 / CLOCK; // (s into the boarding; < 0 before it)
+      if (tb < 0) {
+        const t0 = kind === 'launch' ? s.h0 : s.h0;
+        return { job: this.jobAt(L, S, i, (h - t0) * 3600 / CLOCK, 'bank', false, kind === 'landing' && s.lunch) };
+      }
+      const Hs = this.sideOf(L, seat.c, seat.seat, S), stIn = BOARD.first + jit + k * (BOARD.step + BOARD.gap);
+      if (tb >= stIn + BOARD.step) return { seat: true };
+      if (tb >= stIn) return { step: this.stepPose(Hs, (tb - stIn) / BOARD.step), Hs, u: (tb - stIn) / BOARD.step };
+      // to the side of the canoe from wherever the job had them, then a hand on the gunwale till it is their turn
+      const P0 = this.jobAt(L, S, i, (boardEnd - BOARD.total / 3600 * CLOCK - s.h0) * 3600 / CLOCK, 'bank', false, kind === 'landing' && s.lunch);
+      const k2 = Math.min(1, tb / BOARD.walk), d = Math.hypot(Hs.x - P0.x, Hs.z - P0.z);
+      if (k2 < 1) return { job: { x: P0.x + (Hs.x - P0.x) * smooth(k2), z: P0.z + (Hs.z - P0.z) * smooth(k2), heading: d > 0.3 ? headingOf(Hs.x - P0.x, Hs.z - P0.z) : Hs.face, v: (d / BOARD.walk) * 1.5 * Math.sin(Math.PI * k2), mode: 'walk', pack: false, anim: null } };
+      return { job: { x: Hs.x, z: Hs.z, heading: Hs.face, v: 0, mode: 'stand', pack: false, anim: { crouch: 0.5 } } };
+    }
+    if (kind === 'carry' || kind === 'land') {
+      const S = kind === 'carry' ? s.A : s.S, t = (h - s.h0) * 3600 / CLOCK, st = OUT.first + jit * 0.5 + k * (OUT.step + OUT.gap);
+      if (t < st) return { seat: true };
+      const Hs = this.sideOf(L, seat.c, seat.seat, S);
+      if (t < st + OUT.step) return { step: this.stepPose(Hs, 1 - (t - st) / OUT.step), Hs, u: 1 - (t - st) / OUT.step, out: true };
+      const t2 = t - st - OUT.step;
+      if (kind === 'land') return { job: this.jobAt(L, S, i, t2, 'hull', true) };
+      // (at a carry: up to their place by the trail's end, where the carry's walks begin)
+      const o = this.spot(S, i, { x: 0, z: 0, h: 0 }, L);
+      if (t2 >= OUT.walk) return null;
+      const k2 = t2 / OUT.walk, d = Math.hypot(o.x - Hs.x, o.z - Hs.z);
+      void n;
+      return { job: { x: Hs.x + (o.x - Hs.x) * smooth(k2), z: Hs.z + (o.z - Hs.z) * smooth(k2), heading: d > 0.3 ? headingOf(o.x - Hs.x, o.z - Hs.z) : o.h, v: (d / OUT.walk) * 1.5 * Math.sin(Math.PI * k2), mode: 'walk', pack: false, anim: null } };
+    }
+    return null;
   }
   // a person's walk over a carry: [spot, ...the trail, spot] each way, its point and the way ahead
   walkLine(L, s, i, dir) {
@@ -563,13 +712,34 @@ export class PartyMoves {
         if (B && t >= B.lift && t < B.down) { b.hide(); continue; }
         const o = this.slot(B && t >= B.down ? s.B : s.A, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 };
       } else { const o = this.slot(s.S, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 }; }
-      b.drive({ x: st.x, z: st.z, heading: st.h, v: L.held ? 0 : st.v * rate, snap: jump });
+      b.drive({ x: st.x, z: st.z, heading: st.h, v: L.held ? 0 : st.v * rate, snap: jump, sim: true, aim: water ? st.aim : null, cruise: water ? (st.cruise || 0) * rate : 0, hold: !water || L.held });
     }
     // the people
-    const inBoat = s.kind === 'paddle' || s.kind === 'drift' || (s.kind === 'landing' && h >= s.inAt) || (s.kind === 'launch' && h >= s.h1 - 0.012);
+    const inBoat = s.kind === 'paddle' || s.kind === 'drift';
+    const steps = L.steps || (L.steps = new Map());
     L.persons.forEach((a, i) => {
       const seat = L.seatOf.get(i);
       if (inBoat && seat) { a.walking = null; const b = L.boats[seat.c]; if (a.boat !== b || a.seat !== seat.seat) b.seatCrew(a, seat.seat); return; }
+      // r2: at the bank: their job there, getting in one at a time, and out
+      const bp = this.bankPose(L, s, i, h, seat);
+      if (bp) {
+        a.walking = null;
+        const b = L.boats[seat.c];
+        if (bp.seat) { steps.delete(i); if (a.boat !== b || a.seat !== seat.seat) b.seatCrew(a, seat.seat); return; }
+        if (bp.step) {
+          // (the weight onto the gunwale, the foot down in her, the rest in: the hull rocks, toward them; and out)
+          const was = steps.get(i), u = bp.u;
+          if (b && was != null && !jump) for (const m of [0.3, 0.75]) if ((was < m) !== (u < m)) b.impulse(0.22 * bp.Hs.side * (m < 0.5 ? 1 : 0.6) * (bp.out ? -1 : 1));
+          steps.set(i, u);
+          const P = bp.step, y = (this.tiles && this.tiles.groundAt ? this.tiles.groundAt(P.x, P.z) : 0), fy = y + (bp.Hs.floor - y) * P.lift;
+          a.drive({ x: P.x, z: P.z, heading: P.heading, v: P.v, mode: 'stand', anim: P.anim, y: P.lift > 0.02 ? Math.max(y, fy) : null, snap: jump });
+          return;
+        }
+        steps.delete(i);
+        const J = bp.job;
+        a.drive({ x: J.x, z: J.z, heading: J.heading, v: J.v, mode: J.mode, pack: J.pack, anim: J.anim, snap: jump });
+        return;
+      }
       if (s.kind === 'carry') {
         const t = ((L.base ?? h) - s.h0) * 3600 - ((L.dl && L.dl.get(i)) || 0), walks = s.sched.people.get(i) || [];
         let w = null, after = null;
@@ -583,12 +753,12 @@ export class PartyMoves {
           return;
         }
         a.walking = null;
-        const atB = after && after.dir > 0, o = this.spot(atB ? s.B : s.A, i, _s);
+        const atB = after && after.dir > 0, o = this.spot(atB ? s.B : s.A, i, _s, L);
         a.drive({ x: o.x, z: o.z, heading: atB ? headingOf(-s.B.L.ux, -s.B.L.uz) : o.h, v: 0, mode: 'stand', snap: jump });
         return;
       }
       a.walking = null;
-      const S = s.kind === 'launch' || s.kind === 'land' || s.kind === 'landing' ? s.S : s.B || s.S, o = this.spot(S, i, _s);
+      const S = s.kind === 'launch' || s.kind === 'land' || s.kind === 'landing' ? s.S : s.B || s.S, o = this.spot(S, i, _s, L);
       a.drive({ x: o.x, z: o.z, heading: o.h, v: 0, mode: 'stand', snap: jump });
     });
   }
@@ -825,9 +995,11 @@ export class PartyMoves {
       if (!water) {
         L.persons.forEach((a, i) => {
           if (!a.bind || a.boat || near.flat(a.x, a.z) > 2.3) return;
-          const top = a.y + 1.72, bot = a.y + 0.35, hit = near.segment(a.x, bot, a.z, a.x, top, a.z, 0.42);
+          // (r2: the rod from the feet to the head as the skeleton has it this frame, a crouch or a step in included; the
+          // pool of light at the feet, laid on the ground's slope: pointer.js)
+          const hd = a.headAt(_hv), foot = a.y, top = hd.y - 0.04, bot = foot + 0.22, hit = near.segment(a.x, bot, a.z, hd.x, top, hd.z, 0.42);
           if (!hit) return;
-          out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: `party:${L.party.id}#${i}`, label: L.speakers[i].name, e: { verb: 'Talk', run: () => this.talk(L, i) }, box: { x: a.x, y: (top + bot) / 2, z: a.z, hx: 0.3, hy: (top - bot) / 2, hz: 0.3, heading: a.heading } } });
+          out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: `party:${L.party.id}#${i}`, label: L.speakers[i].name, e: { verb: 'Talk', run: () => this.talk(L, i) }, box: { x: a.x, y: (top + bot) / 2, z: a.z, hx: 0.3, hy: (top - bot) / 2, hz: 0.3, heading: a.heading, foot, ground: this.tiles && this.tiles.groundAt ? (x, z) => this.tiles.groundAt(x, z) : null } } });
         });
         continue;
       }
@@ -870,4 +1042,5 @@ export class PartyMoves {
   }
   _pathTest(a, b, basin) { const gen = waterPath(this.masks, this.world, this.basinOf, a, b, basin); let r = gen.next(); while (!r.done) r = gen.next(); return r.value; }
 }
+const _hv = new THREE.Vector3();
 const _p = { x: 0, z: 0, tx: 1, tz: 0 }, _q = { x: 0, z: 0, tx: 1, tz: 0 }, _w = { x: 0, z: 0, tx: 1, tz: 0 }, _s = { x: 0, z: 0, h: 0 }, _b = { x: 0, z: 0, h: 0, v: 0 };
