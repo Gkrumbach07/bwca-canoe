@@ -378,7 +378,7 @@ export class CoopTrip {
   }
   onPush(m) {
     if (!this.host || !this.grouped) return;
-    const o = this.g.outfitter, l = o && o.landing(Number(m.ep));
+    const o = this.g.outfitter, l = o && this.entryOf(m.ep); // (a guest's push-off from a trailhead's landing too)
     if (!l || o.trip.active) return;
     o.at = l; o.port = l;
     this.whoNext = this.nameOf(m.from); this.lastWho = this.whoNext;
@@ -563,7 +563,7 @@ export class CoopTrip {
   openProp({ kind, from, to }, by) {
     if (this.prop || !['ride', 'bunk', 'pickup'].includes(kind)) return;
     const o = this.g.outfitter;
-    if (!o || !this.entryOf(from) || !o.landing(Number(to))) return;
+    if (!o || !this.entryOf(from) || !this.entryOf(to)) return; // (a ride may go to a trailhead: B's drives go to any entry point)
     this.prop = { id: `${Date.now().toString(36)}`, kind, from: Number(from), to: Number(to), by, byName: this.nameOf(by), ticks: { [by]: true } };
     this.sendProp(); this.render(); this.check();
   }
@@ -593,7 +593,7 @@ export class CoopTrip {
     if (!P || sandbox) return 0;
     if (P.kind === 'bunk') return g.shop ? g.shop.price('bunk', P.from) : 8;
     if (P.kind === 'pickup') { const r = g.rides && typeof g.rides.pickups === 'function' ? g.rides.pickups(P.from).find((x) => x.by === P.to) : null; return r && !r.takesAll ? r.price : 0; } // (never stuck: short, the truck takes what is in hand)
-    const a = o.landing(P.from), b = o.landing(P.to);
+    const a = this.entryOf(P.from), b = this.entryOf(P.to);
     return a && b ? quoteBetween(a, b).price : 0;
   }
   whyNot(P = this.prop) {
@@ -627,7 +627,7 @@ export class CoopTrip {
   }
   ride(fromEp, toEp) {
     const g = this.g, R = g.rides, o = g.outfitter, pr = g.profile, d = g.day;
-    const from = o.landing(fromEp), to = o.landing(toEp);
+    const from = this.entryOf(fromEp), to = this.entryOf(toEp);
     if (!R || !from || !to) return Promise.resolve(false);
     const sandbox = R.sandbox, q = quoteBetween(from, to), at = ((d ? d.hours : 12) + q.hours) % 24;
     const lake = g.world.lakeName ? g.world.lakeName(to.lake) || to.place : to.place;
@@ -693,17 +693,17 @@ export class CoopTrip {
       el.addEventListener('click', (e) => { const b = e.target.closest('button[data-j]'); if (!b) return; if (b.dataset.j === 'ready') this.tick(!(this.prop && this.prop.ticks[this.coop.id])); else this.cancel(); });
       document.body.appendChild(el);
     }
-    const o = this.g.outfitter, from = this.entryOf(P.from), to = o.landing(P.to), f = this.fare(P);
-    const what = P.kind === 'ride' ? `A ride to ${esc(to.name)} · entry point ${to.ep}` : P.kind === 'pickup' ? `${esc(to.name)}’s truck, out to ${esc(from.name)}` : `A night in the bunkhouse at ${esc(from.name)}`;
+    const o = this.g.outfitter, from = this.entryOf(P.from), to = this.entryOf(P.to), f = this.fare(P), lot = !!(from && from.outfitter === false);
+    const what = P.kind === 'ride' ? `A ride to ${esc(to.name)} · entry point ${to.ep}` : P.kind === 'pickup' ? `The truck from ${esc(to.name)}, out to ${esc(from.name)}` : `A night in the bunkhouse at ${esc(from.name)}`;
     const ids = [this.hostPeer() ? this.hostPeer().id : this.coop.id, ...this.everyone().map((x) => x.id)].filter((v, i, a) => a.indexOf(v) === i);
     const rows = ids.map((id) => {
       const me = id === this.coop.id, ready = !!P.ticks[id], name = this.nameOf(id);
       const at = me ? this.here(P.from) : (() => { const r = this.coop.remotes.get(id), a = r && r.drawnAt; return !!(a && from && o.distTo(from, a.x, a.z) < AT_STORE); })();
-      return `<li class="${ready ? 'on' : ''}"><b>${esc(name)}${me ? ' (you)' : ''}</b><span>${ready ? '✓ ready' : at ? 'at the store' : 'not here'}</span></li>`;
+      return `<li class="${ready ? 'on' : ''}"><b>${esc(name)}${me ? ' (you)' : ''}</b><span>${ready ? '✓ ready' : at ? (lot ? 'in the lot' : 'at the store') : 'not here'}</span></li>`;
     }).join('');
     const mine = !!P.ticks[this.coop.id], why = mine ? null : this.whyNot();
     this.card.hidden = false;
-    this.card.innerHTML = `<div class="kick">${esc(P.byName || 'A friend')} asks · everyone at the store, ready</div>
+    this.card.innerHTML = `<div class="kick">${esc(P.byName || 'A friend')} asks · everyone ${lot ? 'in the lot' : 'at the store'}, ready</div>
       <div class="what">${what}${f ? ` · $${f} each` : ''}</div><ul>${rows}</ul>
       ${why ? `<p class="why">${esc(why)}</p>` : ''}
       <div class="row"><button type="button" data-j="ready" class="${mine ? 'on' : ''}">${mine ? 'Ready ✓' : 'Ready'}</button><button type="button" data-j="no">Not this time</button></div>`;
