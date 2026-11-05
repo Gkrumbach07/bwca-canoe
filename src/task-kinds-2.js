@@ -69,7 +69,7 @@ function siteCands(T, c, kind) {
   w.campsites.forEach((s, i) => {
     if (Math.abs(s.x - L.x) > RANGE || Math.abs(s.z - L.z) > RANGE) return;
     const d = Math.hypot(s.x - L.x, s.z - L.z);
-    if (d > rangeOf(c.band) || T.used(kind, i)) return;
+    if (d > rangeOf(c.band) || T.used(kind, i) || (typeof T.siteOpen === 'function' && !T.siteOpen(s))) return; // (no other notice there, no party on it)
     const lakeId = T.lakeNear(s.x, s.z), h = hopsOf(T, c, lakeId);
     if (inBand(h, band) && T.lakeName(lakeId)) out.push({ s, i, d, hops: h, lakeId });
   });
