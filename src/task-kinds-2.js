@@ -481,7 +481,7 @@ registerKind('pma', {
       while (pts.length) { pts.sort((a, b) => Math.hypot(a.x - at.x, a.z - at.z) - Math.hypot(b.x - at.x, b.z - at.z)); at = pts.shift(); order.push(at); }
       const name = q.name || 'the primitive area';
       return { key: `pma:${q.id}`, pma: q.id, pmaName: name, pts: order, km: +(r.d / 1000).toFixed(1), title: `Trail survey: ${name}`,
-        text: `The old trail into the ${name} primitive area: walk it and mark where it really goes. Three marks. The primitive-area permit for this one; it isn’t kept up.`,
+        text: `The old trail into the ${name}: walk it and mark where it really goes. Three marks. The primitive-area permit for this one; it isn’t kept up.`,
         sign: 'the wilderness ranger', hint: { x: Math.round(r.c.x), z: Math.round(r.c.z), r: AREA[1], label: name } };
     }
     return null;

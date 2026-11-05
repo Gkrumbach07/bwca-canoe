@@ -7,7 +7,8 @@
 //      refuses until it is paid
 //   5. grant: a $0 permit
 //   6. an old save (a v3 core, a trip under way) boots: the trip goes on, grandfathered, never fined
-//   7. a PMA permit: off-site camping inside its polygon only, and not on another trip
+//   7. a PMA permit: off-site camping inside its polygon only, and not on another trip; 7″ the real twelve from the
+//      Forest Service's layer (src/pma.json, scripts/gl-a-pma-real.mjs)
 //   8. the desk at a counter: 28 day cells, the sold-out ones disabled (stream B absent: the wrapped claims section)
 //
 //   APP=http://localhost:5181 node scripts/gl-a-test.mjs [--shots docs/build/shots] [--out dir]
@@ -219,6 +220,12 @@ try {
   }, HOME);
   result('5 grant gives a $0 permit, the money unchanged', gr.price === 0 && gr.moneyChange === 0 && gr.held, gr);
 
+  // --- 7″: the real twelve (the owner's call 2026-11-05: the Forest Service's own polygons, scripts/gl-a-pma-real.mjs) ----------
+  const real = await page.evaluate(() => {
+    const P = window.__game.permits, w = window.__game.world, list = P.pmas();
+    return { n: list.length, rows: list.map((a) => ({ id: a.id, name: a.name, approx: a.approx, near: a.near, lake: a.lake, verts: a.poly.length, inside: P.pmaAt(a.centre[0], a.centre[1])?.id === a.id, lakeIn: !!(a.lake && w.lakes[a.lake - 1] && P.pmaAt(w.lakes[a.lake - 1].cx, w.lakes[a.lake - 1].cz)?.id === a.id), host: !!(w.entryPoints.find((e) => e.ep === a.near)) })) };
+  });
+  result('7″ the real twelve: Forest Service polygons, "<X> Lake primitive area", centre and biggest lake inside, near an outfitter', real.n === 12 && real.rows.every((r) => r.approx === false && /^[A-Z][\w’' -]* Lake primitive area$/.test(r.name) && r.inside && r.lakeIn && r.host && r.verts >= 12), real);
   // --- 7: a PMA permit ---------------------------------------------------------------------------------------------------------
   // (the granted overnight one first: a trip on it, then the PMA one)
   const pmaInfo = await page.evaluate(() => { const P = window.__game.permits, a = P.pmasNear(25, 1)[0], b = P.pmas().find((q) => q.id !== a.id); return { a: { id: a.id, name: a.name, c: a.centre }, b: { id: b.id, c: b.centre } }; });

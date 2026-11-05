@@ -1,5 +1,8 @@
 // Game-loop stream A: draws src/pma.json, the primitive management areas a PMA permit camps in.
 //
+// SUPERSEDED (2026-11-05): src/pma.json is now the Forest Service's real twelve, written by scripts/gl-a-pma-real.mjs.
+// This drew stand-ins (approx: true) and is kept only for the record; running it overwrites the real table.
+//
 // The Forest Service's own PMA layer (the BWCAW plan's twelve primitive management areas) is not published on any
 // service this could fetch (2026-11-05: the EDW REST catalogue has wilderness boundaries but no PMA layer, and ArcGIS
 // Online has none for the BWCAW), so these are drawn from the game's own data the way the real ones were chosen: the

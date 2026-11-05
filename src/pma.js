@@ -1,9 +1,10 @@
 // Primitive management areas (the game-loop round, stream A): the parts of the wilderness with no designated campsites
 // and no maintained portages, where a PMA permit (permits.js) lets a party camp off the designated sites. The table is
-// src/pma.json, { id, name, approx, near (an outfitter's entry point), lake, centre: [x, z], poly: [[x, z] …] } in the
-// world's metres. The Forest Service's own PMA layer could not be fetched, so every polygon is drawn from the game's data
-// (scripts/gl-a-pma.mjs: lakes with no campsite or portage near them, inside the real BWCAW boundary) and marked
-// `approx: true`; replace the table with the real one when it turns up, keeping the shape and the ids.
+// src/pma.json, { id, name, approx, near (an outfitter's entry point), lake, lakes, ha, areaHa, centre: [x, z] (a point
+// inside), poly: [[x, z] …] } in the world's metres. The real twelve (the owner's call 2026-11-05): the Forest Service's
+// own polygons (EDW land management plan, Superior NF 2004 Forest Plan MA 5.1 "Pristine Wilderness"), converted and
+// simplified by scripts/gl-a-pma-real.mjs, `approx: false`. (scripts/gl-a-pma.mjs drew stand-ins from the game's data
+// before the layer was found.)
 //
 //   PMAS, pmaById(id), pmaAt(x, z) → pma | null, inPoly(poly, x, z)
 import TABLE from './pma.json';
