@@ -9,7 +9,7 @@
 //    sequence; talked to, they face you and their activity clock pauses, then resumes.
 // 4  A party coming out names only lakes in its stays, and a wind-bound day only when windDay says so.
 // 5b At a trailhead's lot (stream B's trailheadLayout; a stand-in here) the parties load and unload.
-// 6  No generated name is Walt or Eino; the cedar-minnow arc reads Leif.
+// 6  No generated name is Walt or Eino; the cedar-minnow arc reads Oskar.
 // 9  npcs.extraAt (stream C's summer help) stands someone in a store; npcs.onTalk hears the talk.
 // 8  An old save's people (v1) loads as v2 with met {}; met is pruned a week after a party's trip ends.
 // 7  (--perf) frame time in a busy store (Moose Lake, a July Saturday) against origin/main, alternating.
@@ -261,13 +261,13 @@ try {
       const K = await import('/src/talk-keepers.js');
       const txt = JSON.stringify(K.HAND) + JSON.stringify(K.MANNER) + JSON.stringify(K.RELS);
       if (RES.test(txt)) bad.push('talk-keepers.js names one');
-      const leif = /Leif/.test(JSON.stringify(K.HAND[30] || K.HAND));
+      const oskar = /Oskar/.test(JSON.stringify(K.HAND[30] || K.HAND));
       // the keepers' own names are stream B's (outfitters.js FIRST): reported, not mine to change
       const keepers = g.world.entryPoints.map((e) => g.outfitterProfile(e.ep)).filter((o) => o && o.keeper && RES.test(o.keeper.name)).map((o) => `${o.ep}: ${o.keeper.name}`);
       const item = g.items.itemDef('lure:cedarminnow');
-      return { people, bad, leif, keepersB: keepers, cedarItemC: item ? item.name : null };
+      return { people, bad, oskar, keepersB: keepers, cedarItemC: item ? item.name : null };
     });
-    check('6 no generated person is Walt or Eino; the cedar-minnow arc reads Leif', !r6.bad.length && r6.leif, r6);
+    check('6 no generated person is Walt or Eino; the cedar-minnow arc reads Oskar', !r6.bad.length && r6.oskar, r6);
   }
 
   // --- 7 (--perf): frame time in a busy store, A/B against origin/main ------------------------------------------------

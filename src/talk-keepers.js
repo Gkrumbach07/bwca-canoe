@@ -27,16 +27,16 @@
 // --- the six written by hand ---------------------------------------------------------------------------------------
 export const HAND = {
   30: { // Ruth Aho, Lake One: warm, the lodge and the café; her brother carves the paddles
-    past: ['My father built this place in ’61: two cabins and a dock. I was born the summer the café opened.', 'Forty-odd summers behind this counter. Winters I knit and listen to the ice talk.', 'My brother Leif carves the paddles on the wall. He’s out in the shed most days, being difficult.'],
+    past: ['My father built this place in ’61: two cabins and a dock. I was born the summer the café opened.', 'Forty-odd summers behind this counter. Winters I knit and listen to the ice talk.', 'My brother Oskar carves the paddles on the wall. He’s out in the shed most days, being difficult.'],
     topics: [
       { id: 'cafe', ask: 'The café?', say: ['Deb runs it. Walleye when you lot bring some in, pie when you don’t.', 'She pays for a fish she can fry. Look at the board.'] },
       { id: 'chain', ask: 'Lake One, Two, Three and Four?', gate: { trips: 1 }, say: ['They’re one long chain, really. Lake One’s all islands and narrows; Two and Three open up.', 'Four’s where the Kawishiwi comes in. Quietest of the lot.'] },
     ],
     arc: { id: 'leif', places: { goal: { lake: 'Lake Two' } }, beats: [
-      { ask: 'Who carves the paddles?', gap: 0, say: ['My brother Leif. Cherry and ash, all winter, in the shed out back.', 'He did lures too, before his hands got bad. Cedar minnows. The walleye used to queue up for them.'] },
-      { ask: 'How’s Leif?', need: { trips: 1 }, say: ['He asked after the new paddler. I said you came back with all your gear and most of your sense.', 'He wants to know if the walleye still hold in {goal}. Bring one in, any size, and tell me.'], ring: 'goal:walleye' },
+      { ask: 'Who carves the paddles?', gap: 0, say: ['My brother Oskar. Cherry and ash, all winter, in the shed out back.', 'He did lures too, before his hands got bad. Cedar minnows. The walleye used to queue up for them.'] },
+      { ask: 'How’s Oskar?', need: { trips: 1 }, say: ['He asked after the new paddler. I said you came back with all your gear and most of your sense.', 'He wants to know if the walleye still hold in {goal}. Bring one in, any size, and tell me.'], ring: 'goal:walleye' },
       { ask: 'I had a walleye out of {goal}.', need: { caught: { sp: 'walleye', lake: '{goal}' } }, say: ['Out of {goal}! He’ll be pleased as a pup. He swore they’d all gone down to Three.', 'He’s gone back out to the shed. Won’t say what for.'] },
-      { ask: 'What’s Leif up to?', gap: 1, say: ['He came in this morning with this, wrapped in a dish towel. For whoever found his walleye, he said.', 'White cedar, painted by hand. Don’t lose it in a snag. Lose it in a big one.'], done: { give: 'lure:cedarminnow', or: 'lure:lazyike' } },
+      { ask: 'What’s Oskar up to?', gap: 1, say: ['He came in this morning with this, wrapped in a dish towel. For whoever found his walleye, he said.', 'White cedar, painted by hand. Don’t lose it in a snag. Lose it in a big one.'], done: { give: 'lure:cedarminnow', or: 'lure:lazyike' } },
     ] },
   },
   25: { // Gus Lindgren, Moose Lake: gruff, ran the tow boat thirty years

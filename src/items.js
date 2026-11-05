@@ -596,7 +596,7 @@ defineItem({ id: 'matchsafe', name: 'Tin match safe', short: 'Matches', kind: 't
 defineItem({ id: 'toque', name: 'Red wool toque', short: 'Toque', kind: 'gear', kg: 0.1, unique: true, identity: 'Hand-knit, lost on a portage', model: 'cap', tint: 0xa8322a, onYou: [O('Cold', 'costs ×0.8')] });
 defineItem({ id: 'luckycap', name: 'Lise’s lucky cap', short: 'Cap', kind: 'gear', kg: 0.1, unique: true, identity: 'Faded UMD Bulldogs cap · never lost a fish', model: 'cap', tint: 0x6e2630, onYou: [O('Bites', '×1.08')] });
 defineItem({ id: 'guidemap', name: 'Arvid’s guiding map', short: 'Arvid’s map', kind: 'map', w: 2, h: 2, kg: 0.05, unique: true, icon: 'guidemap', identity: 'An old Fisher sheet, pencilled', model: 'map', onYou: [O('A site', 'pencilled on your map'), EF('rest', 0.08, 'a night there')] });
-defineItem({ id: 'lure:cedarminnow', name: 'Leif’s cedar minnow', short: 'Cedar', kind: 'lure', kg: 0.02, unique: true, lure: 'cedarminnow', identity: 'Carved white cedar, painted by hand', model: 'lure', tint: 0x6f8a52, onYou: [lureOn('cedarminnow')] });
+defineItem({ id: 'lure:cedarminnow', name: 'Oskar’s cedar minnow', short: 'Cedar', kind: 'lure', kg: 0.02, unique: true, lure: 'cedarminnow', identity: 'Carved white cedar, painted by hand', model: 'lure', tint: 0x6f8a52, onYou: [lureOn('cedarminnow')] });
 export const UNIQUE_IDS = ['hatchet', 'brassreel', 'matchsafe', 'toque', 'luckycap', 'guidemap', 'lure:cedarminnow'];
 export const ARTIFACT_IDS = ['axehead', 'tradesilver']; // found and left where they lie
 

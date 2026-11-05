@@ -80,7 +80,7 @@ const MISSED_WORDS = {
   fetch: ['It came over on the road in the end.'], npc: ['{Who} found another way.'],
 };
 const THEY = ['the Hendersons', 'a party from Duluth', 'the Scouts', 'the Larsons', 'a couple from Iowa', 'a guide’s party'];
-const SHE = /^(Deb|Marge|Lorraine|Mrs|Ruth|Anna|Karen|Linda|Mary|Jean|Sue|Deborah|Ingrid|Elsa)/, HE = /^(Arnie|Hank|Bob|Jim|Olaf|Gus|Leif|Arvid|Mr)/;
+const SHE = /^(Deb|Marge|Lorraine|Mrs|Ruth|Anna|Karen|Linda|Mary|Jean|Sue|Deborah|Ingrid|Elsa)/, HE = /^(Arnie|Hank|Bob|Jim|Olaf|Gus|Oskar|Arvid|Mr)/;
 // gl-d: the kinds' own words (here and in the modules that wrote them before pay moved to the trip's end) said where a
 // notice is paid; they now say it pays when you come in
 const PAY_SAYS = [
