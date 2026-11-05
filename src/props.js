@@ -2004,15 +2004,19 @@ function clearYards(e, list, size) {
   const near = list.filter((Y) => Y.x + Y.r > e.ox && Y.x - Y.r < e.ox + size && Y.z + Y.r > e.oz && Y.z - Y.r < e.oz + size);
   if (!near.length) return 0;
   const hit = (x, z) => near.some((Y) => inYard(Y, x, z));
+  const wetHit = (x, z) => near.some((Y) => Y.wet && inYard({ ...Y, rects: Y.wet }, x, z));
+  const anyWet = near.some((Y) => Y.wet);
   let n = 0;
   for (const vm of e.veg) {
-    if (vm.userData.sp === undefined) continue; // the lake plants
+    const lake = vm.userData.sp === undefined; // the lake plants: kept, but off a trailhead's landing (its yard's wet rects)
+    if (lake && !anyWet) continue;
+    const test = lake ? wetHit : hit;
     const A = vm.instanceMatrix.array, N = vm.instanceMatrix.count;
     let any = false;
     for (let i = 0; i < N; i++) {
       const o = i * 16;
       if (A[o] === 0 && A[o + 5] === 0 && A[o + 10] === 0) continue;
-      if (hit(A[o + 12] + e.ox, A[o + 14] + e.oz)) { A.fill(0, o, o + 16); any = true; n++; }
+      if (test(A[o + 12] + e.ox, A[o + 14] + e.oz)) { A.fill(0, o, o + 16); any = true; n++; }
     }
     if (!any) continue;
     const l = vm.userData.lod;
@@ -2425,6 +2429,9 @@ function routedLines(b, F, lines, top, face, maxW, LH, ref) {
   });
 }
 const BROWN = 0x5a4330, BROWN_POST = 0x6b5440;
+// a trailhead's way down to the water, kept clear (buildTrailhead's yard): the path's half width, and the landing's apron (m
+// either side of the landing-to-water line, and how far up the path it starts)
+export const TH_WAY = { path: 3.2, apron: 4.5, up: 5 };
 function buildTrailhead(ctx, ep, pieces) {
   const P = trailheadPlan(ctx, ep), rng = mulberry32(8803 + ep.ep * 17);
   const b = new PropBuilder(), occ = [];
@@ -2473,12 +2480,20 @@ function buildTrailhead(ctx, ep, pieces) {
     stone(sb, V(sx - ctx.ox, ctx.H(sx, sz) - 0.12, sz - ctx.oz), 0.32 + rng() * 0.2, rng() * 6.28, rng, { up: 0.6, deep: 1.2 });
   }
   if (sb.count) pieces.push(sb.build());
-  // the lot and the path to the water are a yard: the trees, brush and rocks there let go (as a store's, clearYards)
+  // the lot and the path to the water are a yard: the trees, brush and rocks there let go (as a store's, clearYards).
+  // (The game-loop playthrough: Snowbank's and Lake One's landings were walled in by brush, the path a 4 m slot that
+  // ended a metre past the landing, the shore's shrubs and the reeds standing between it and the water where the canoe
+  // comes in, and the camera behind you in the bushes. TH_WAY: the path's half width; the landing's apron runs from a
+  // few metres up the path out to where the canoe floats, wide enough to come in a little off the line, and keeps the
+  // lake plants off it too: a landing's shallows are trodden bare.)
   {
-    const dist = Math.hypot(P.plan.x - P.lot.x, P.plan.z - P.lot.z);
-    const rects = [[-LOT_R - 1.5, LOT_R + 1.5, -LOT_R - 1.5, LOT_R + 1.5], [-2.2, 2.2, 0, dist + 1], [-0.3, 4.6, LOT_R, LOT_R + 2.2]];
-    const r = Math.max(LOT_R + 2.2, dist + 1) * 1.45;
-    const Y = { ep: ep.ep, x: P.lot.x, z: P.lot.z, ax: P.X.x, az: P.X.z, bx: P.u.x, bz: P.u.z, rects, r };
+    const fr = (x, z) => { const dx = x - P.lot.x, dz = z - P.lot.z; return [dx * P.X.x + dz * P.X.z, dx * P.u.x + dz * P.u.z]; };
+    const [la, lb] = fr(P.plan.x, P.plan.z), [wa, wb] = fr(P.water.x, P.water.z);
+    const far = Math.max(lb, wb) + 1.5, a0 = Math.min(la, wa) - TH_WAY.apron, a1 = Math.max(la, wa) + TH_WAY.apron;
+    const rects = [[-LOT_R - 1.5, LOT_R + 1.5, -LOT_R - 1.5, LOT_R + 1.5], [-TH_WAY.path, TH_WAY.path, 0, lb + 1], [-0.3, 4.6, LOT_R, LOT_R + 2.2], [a0, a1, lb - TH_WAY.up, far]];
+    const wet = [[a0, a1, lb - 1, far]];
+    const r = Math.max(...rects.flatMap(([q0, q1, c0, c1]) => [Math.hypot(q0, c0), Math.hypot(q1, c0), Math.hypot(q0, c1), Math.hypot(q1, c1)])) + 1;
+    const Y = { ep: ep.ep, x: P.lot.x, z: P.lot.z, ax: P.X.x, az: P.X.z, bx: P.u.x, bz: P.u.z, rects, wet, r };
     const i = yards.findIndex((q) => q.ep === ep.ep);
     if (i >= 0) yards[i] = Y; else yards.push(Y);
     for (const fn of yardFns) fn([Y.x - r - 2, Y.z - r - 2, Y.x + r + 2, Y.z + r + 2]);
