@@ -761,7 +761,10 @@ export class Tasks {
   take(id) {
     const t = this.ads.get(+id);
     if (!t || t.status !== 'offered') return false;
-    if (this.active.length >= LIMIT) { this.note('You hold five. Let one go first.'); return false; } // gl-d
+    // gl-d; the line is said on the board too (the replay: the hud's line is drawn under the open board, and a click on
+    // Take it on seemed to do nothing)
+    if (this.active.length >= LIMIT) { this.atLimitTried = true; this.note('You hold five. Let one go first.'); return false; }
+    this.atLimitTried = false;
     t.status = 'open'; t.taken = this.today(); t.due = t.taken + this.daysFor(t);
     const k = KINDS[t.kind];
     if (k && k.onTake) { try { k.onTake(this, t); } catch (e) { console.warn('the board: take', t.kind, e); } } // content A: a disk lent, a cooler set
@@ -773,6 +776,7 @@ export class Tasks {
   drop(id) {
     const t = this.ads.get(+id);
     if (!t || t.status !== 'open') return false;
+    this.atLimitTried = false;
     this.removeProp(t.id);
     const k = KINDS[t.kind];
     if (k && k.onDrop) { try { k.onDrop(this, t); } catch (e) { console.warn('the board: drop', t.kind, e); } } // content A: its state back to the notice's
@@ -1031,7 +1035,7 @@ export class Tasks {
     const sum = offered ? `${word(offered)} on offer · a new notice each morning` : writing ? 'the keeper is pinning up notices' : full ? 'every notice taken · new ones once these are paid' : 'a new notice each morning';
     const pileSum = pile.length ? [pile.length - ready.length ? `${word(pile.length - ready.length)} on the go` : '', ready.length ? `${word(ready.length)} done` : ''].filter(Boolean).join(' · ') : '';
     // (gl-d: no Claim all: a notice done is paid when you come in, on the trip's tally)
-    const all = this.active.length >= LIMIT ? '<span class="sum full">You hold five</span>' : '';
+    const all = this.active.length >= LIMIT ? `<span class="sum full">${this.atLimitTried ? 'You hold five. Let one go first.' : 'You hold five'}</span>` : '';
     const pins = slots.map((t, i) => this.notice(t, i, ep, writing, where)).join('');
     const cards = pile.map((t, i) => this.pileCard(t, i, ep, where, onPins.has(t.id))).join('');
     return `<section class="board cork two" aria-label="The board">
