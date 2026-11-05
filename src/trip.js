@@ -69,6 +69,7 @@ function blank(mode = 'adventure') {
     since: null, from: null, packs: { count: 1, canoe: 'aluminium', foodDays: 0 },
     camp: null, wet: false, offsite: 0, log: [], outcome: null,
     permit: null, dayUse: false, grandfathered: false, fined: false,
+    via: null, // the outfitter that drove you to the put-in or saw you off (stream B's pickups; the join)
   };
 }
 const blankBook = () => ({ trips: [], seen: { lakes: [], camps: [], eps: [], portages: [] } });

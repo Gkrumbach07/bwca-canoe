@@ -68,7 +68,7 @@ if (!LURES.some((l) => l.id === 'silverminnow')) {
   for (const [id, sp] of Object.entries(SPECIES)) { const [m, z] = add[id] || [0.5, 0.5]; sp.lures.silverminnow ??= m; sp.lures.lazyike ??= z; }
 }
 // content C: three more on the wall (a spinnerbait for the weed edges, the jig and minnow every walleye guide ties on, a
-// topwater plug for the evening calm) and Eino's carved minnow (a keeper's arc, stream B). What each species thinks of
+// topwater plug for the evening calm) and Leif's carved minnow (a keeper's arc, stream B). What each species thinks of
 // them is items.js LURE_TAKES (the words the tooltips say), copied into each species' lures here.
 for (const L of [
   { id: 'spinnerbait', name: 'Spinnerbait', short: 'spinnerbait', sink: 0.5, run: 1.2, still: 0.15, slow: 0.95, fast: 1.1, colour: 0xb8d03a, weedless: true },
@@ -544,7 +544,7 @@ export class Shop {
     if (def.id === 'leech') {
       this.useLeech();
       words = `The line parted. The ${name} took the leech${this.leeches ? `: ${this.leeches} left in the bucket` : ', the last one'}.`;
-    } else if (def.unique) { // content C: a one-of-a-kind lure (Eino's carved minnow) comes back: cedar floats
+    } else if (def.unique) { // content C: a one-of-a-kind lure (Leif's carved minnow) comes back: cedar floats
       words = `The line parted at the knot. The ${lureWord(def)} bobs up beside the canoe, and you have it back.`;
     } else {
       const item = LURE_ITEM[def.id], sig = pr.owned.find((id) => { const it = itemOf(id); return it && it.lure === def.id; });

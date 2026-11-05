@@ -74,7 +74,10 @@ import * as THREE from 'three';
 import { buildFigure } from './figure.js';
 import { Mesher, V3, ringPts, loft } from './loft.js';
 import { registerKind, KINDS } from './tasks.js';
-import { outfitterProfile, keeperLine, placeFacts, abundanceOf } from './outfitters.js';
+import { outfitterProfile, keeperLine, placeFacts, abundanceOf, KEEPER_FROM } from './outfitters.js';
+// (the join: a hand-written keeper who moved to the host that serves their old landing keeps their talk, by keeperKey)
+const keeperKeyOf = (ep) => KEEPER_FROM[ep] ?? ep;
+const keeperMoved = (ep) => Object.values(KEEPER_FROM).includes(ep) && KEEPER_FROM[ep] == null;
 import { storeLayout, storeLayouts } from './props.js';
 import { mulberry32 } from './rng.js';
 import { save } from './save.js';
@@ -1147,7 +1150,7 @@ export class People {
     const A = ARCH[arch], porch = !!(L.look && L.look.porch);
     const female = A.female ? true : arch === 'kid' ? rng() < 0.5 : rng() < 0.45;
     const list = arch === 'cook' ? COOKS : arch === 'kid' ? KID_NAMES : A.age === 'old' ? OLD_NAMES : female ? F_NAMES : M_NAMES;
-    let name = arch === 'cook' && ep === 30 ? 'Deb' : pickR(rng, list); // Deb in Ruth's café (the fish notices are hers)
+    let name = arch === 'cook' && keeperKeyOf(ep) === 30 ? 'Deb' : pickR(rng, list); // Deb in Ruth's café (the fish notices are hers)
     for (let k = 0; k < 6 && used.has(`name:${name}`); k++) name = pickR(rng, list);
     used.add(`name:${name}`);
     const last = pickR(rng, SURNAMES), city = pickR(rng, CITIES);
@@ -1579,7 +1582,7 @@ export class People {
     const e = vis ? this.world.entryPoints.find((x) => x.ep === vis.ep) : null;
     let lake = e && e.lake > 0 ? e.lake : 0;
     if (!lake) { try { lake = this.tasks && typeof this.tasks.lakeNear === 'function' ? this.tasks.lakeNear(p.x, p.z, 8) : 0; } catch { lake = 0; } }
-    return GROUND.facts({ store: L, kind: op ? op.kind : null, cafe: vis && vis.ep === 30, lake, ep: vis ? vis.ep : null });
+    return GROUND.facts({ store: L, kind: op ? op.kind : null, cafe: vis && keeperKeyOf(vis.ep) === 30, lake, ep: vis ? vis.ep : null });
   }
   grounded(t, F = null) { return GROUND.ok(t, F || this.groundCtx()); }
 
@@ -2278,7 +2281,7 @@ export class People {
     ep = Number(ep);
     if (this.chars.has(ep)) return this.chars.get(ep);
     const op = outfitterProfile(ep, this.world); if (!op || !op.keeper) return null;
-    const manner = op.keeper.manner || 'warm', H0 = KEEPER_HAND[ep] || null, M = KEEPER_MANNER[manner] || KEEPER_MANNER.warm;
+    const manner = op.keeper.manner || 'warm', H0 = keeperMoved(ep) ? null : KEEPER_HAND[op.keeperKey ?? keeperKeyOf(ep)] || null, M = KEEPER_MANNER[manner] || KEEPER_MANNER.warm;
     const rng = seeded(ep, 0xc4a7), f = placeFacts(ep, this.world) || { lakes: [], deep: [] };
     const [rel, his, names] = pickR(rng, RELS), col = pickR(rng, COLLEGES);
     const vars = { k: op.keeper.first, landing: theWater(op.lake), town: f.town || 'town', road: f.road || 'the road', rel, his, relName: pickR(rng, names), yy: String(72 + Math.floor(rng() * 27)),

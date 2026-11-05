@@ -1046,15 +1046,8 @@ async function main() {
     permits.attach();
     trip.permits = permits;
     const permitDesk = new PermitDesk({ permits, outfitter, world, day, profile });
-    if (typeof outfitter.addDesk === 'function') {
-      // stream B's counter sections
-      outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
-    } else {
-      // without it: the counter's claims hook and its buttons, wrapped (as the uniques' "Report a find" above)
-      const claimsA = outfitter.claimsSection.bind(outfitter), actA = outfitter.act.bind(outfitter);
-      outfitter.claimsSection = (a) => permitDesk.section(a.ep) + claimsA(a);
-      outfitter.act = (act, id, ev) => (typeof act === 'string' && act.startsWith('permit-') ? permitDesk.act(act, id, ev) : actA(act, id, ev));
-    }
+    // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
+    outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
     { const tu = trip.update.bind(trip); trip.update = (dt) => { tu(dt); try { permits.update(dt); } catch (e) { if (!permits.warned) { permits.warned = true; console.warn('permits', e); } } }; }
     // the push-off's title over the water says a day trip is one (outfitter.start shows it just after trip.start)
     {
@@ -1186,7 +1179,8 @@ async function main() {
   {
     npcs.grounding.attach({ day, weather, wind, world });
     parties.attach({ weather });
-    npcs.attachParties({ parties, moves, ground: (x, z) => tiles.groundAt(x, z) });
+    // (the join: stream B's trailheads, so parties load and unload round the cars in a trailhead's lot)
+    npcs.attachParties({ parties, moves, ground: (x, z) => tiles.groundAt(x, z), trailheadLayout: window.__game.trailhead ? window.__game.trailhead.trailheadLayout : undefined });
     Object.assign(window.__game, { smart: npcs.smart, grounding: npcs.grounding });
     // a moment, once: the first time a party going in or coming out is in the store with you and you have met none yet
     const storeParty = { id: 'storeparty', prio: 1, recur: 'once', text: 'Going in or just out, they know the water. E to talk.' };
