@@ -62,6 +62,7 @@ import { CoopBoat } from './coop-boat.js'; // co-op phase 3 round 3: two canoes,
 import { CoopTrip } from './coop-trip.js'; // co-op phase 3, stream C: Adventure in co-op
 import { CoopNight } from './coop-night.js'; // co-op phase 3, stream A: the night together
 import { CoopSky } from './coop-sky.js'; // co-op phase 3, stream B: one sky (the host's wind, the weather's seed)
+import { CoopParties } from './coop-parties.js'; // co-op round 2: one set of parties (the host's seed and Traffic, everyone's camps)
 import { CoopAnim } from './coop-anim.js'; // co-op phase 3, stream B: a friend's figure does what they are doing
 import { inventory } from './inventory.js'; // fb A
 import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
@@ -931,6 +932,7 @@ async function main() {
   coop.g.more({ packs });
   window.__game.coopNight = new CoopNight(coop); // phase 3 stream A: the night together, one wake time (coop-night.js)
   window.__game.coopSky = new CoopSky(coop, { wind, weather }); // phase 3 stream B: the host's wind and weather seed (coop-sky.js)
+  window.__game.coopParties = new CoopParties(coop, { parties }); // co-op round 2: the same parties at the same sites on every screen
   window.__game.coopAnim = new CoopAnim(coop, { fishing, photo }); // phase 3 stream B: a friend’s jump, seat, crouch and rod; round 2: moves, hands, arms, line (coop-anim.js)
   // water: two rules (the owner, 2026-10-26: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if
   // i fill water up without a tablet, it is instantly clean even tho warnign says its not"). Every dried meal and a cup
