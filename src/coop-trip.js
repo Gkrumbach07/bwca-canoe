@@ -39,7 +39,7 @@
 //   ttake    guest → host    { id, rid } → ttaker { rid, ok }    (one claim: first come)
 //   tprog    guest → host    { n }                               (a notice's progress, done, or let go)
 //   gone     guest → host    { id }                              (claimed and paid on the guest's browser)
-//   jumpq    guest → host    { kind: 'ride' | 'bunk', fe, te }  (a proposal: from and to entry points; `from` is the relay's)
+//   jumpq    guest → host    { kind: 'ride' | 'bunk' | 'pickup', fe, te }  (a proposal: from and to entry points; `from` is the relay's)
 //   jumpt    any → host      { id, on, cancel? }                 (a tick, or Not this time)
 //   jump     host → all      { p: { id, kind, from, to, by, ticks } | null }
 //   jumpgo   host → all      { id, kind, fe, te, order: [ids] }
@@ -151,6 +151,14 @@ export class CoopTrip {
     }
     this.hookTrip(); this.hookOutfitter(); this.hookTasks(); this.hookRides();
   }
+  // (the game-loop join) any entry point, an outfitter's or a trailhead's (stream B's outfitter.entry), else a landing
+  entryOf(ep) { const o = this.g.outfitter; if (!o || ep == null) return null; return (typeof o.entry === 'function' ? o.entry(Number(ep)) : null) || o.landing(Number(ep)); }
+  // where a walker at (x, z) is at an entry point: { e, out } (B's entryHere: out in a store, by its door or in a lot)
+  entryAt(x, z) {
+    const o = this.g.outfitter;
+    if (typeof o.entryHere === 'function') return o.entryHere(x, z);
+    const n = o.nearest(x, z); return n && n.d < COME_IN ? { e: n.l, out: true } : null;
+  }
   hookTrip() {
     const core = this.g.trip; if (!core) return;
     // the log carries who: the host's own events are the host's, a push-off asked by a guest is theirs
@@ -197,6 +205,16 @@ export class CoopTrip {
       this.propose('ride', from.ep, to.ep);
       return false;
     };
+    // (the game-loop join) a pickup called at a trailhead's sign is the group's: everyone in the lot, then each browser
+    // rides its own truck (stream B's callPickup; the host's clock is the one that moves)
+    if (typeof R.callPickup === 'function') {
+      const call = R.callPickup.bind(R);
+      R.callPickup = (atEp, byEp) => {
+        if (!this.grouped || (this.jumping && this.jumping.kind === 'pickup')) return call(atEp, byEp);
+        this.propose('pickup', Number(atEp), Number(byEp));
+        return Promise.resolve(false);
+      };
+    }
   }
   hookTasks() {
     const T = this.g.tasks; if (!T) return;
@@ -239,6 +257,29 @@ export class CoopTrip {
     T.changed = () => { changed(); if (this.applying) return; if (this.host) this.tasksDirty = true; else if (mirror()) this.guestDiff(); };
     const bc = T.boardChanged.bind(T);
     T.boardChanged = () => { bc(); if (!this.applying && this.host) this.tasksDirty = true; };
+    // (the game-loop join) pay lands at the trip's end (stream D's tasks.settle, and settleNow between trips): on the
+    // host the tally pays the host's own notices and the unclaimed ones, never a friend's (each purse is its own: a
+    // friend's done notices are paid on their browser as the group comes in, settleMine, and leave here as 'gone')
+    const theirs = (fn) => (...a) => {
+      if (!(this.host && this.grouped)) return fn(...a);
+      const held = [...T.ads.values()].filter((t) => t.by && t.byId !== this.myVid && t.by !== this.myName && (t.status === 'open' || t.status === 'done'));
+      const was = held.map((t) => t.status);
+      for (const t of held) t.status = `theirs:${t.status}`;
+      try { return fn(...a); } finally { held.forEach((t, i) => { if (String(t.status).startsWith('theirs:')) t.status = was[i]; }); }
+    };
+    if (typeof T.settle === 'function') T.settle = theirs(T.settle.bind(T));
+    if (typeof T.settleNow === 'function') T.settleNow = theirs(T.settleNow.bind(T));
+  }
+  // a guest: the notices this player finished on the group's trip, paid into their own purse with one line (the host
+  // hears them gone through guestDiff)
+  settleMine() {
+    const T = this.g.tasks; if (!T || !this.mirroring || typeof T.pay !== 'function') return;
+    const mine = [...T.ads.values()].filter((t) => t.status === 'done' && t.byId === this.myVid);
+    if (!mine.length) return;
+    let total = 0;
+    for (const t of mine) { total += T.pay(t, t.from) || 0; if (typeof T.emit === 'function') T.emit('paid', t); }
+    T.changed(); T.boardChanged();
+    this.note(mine.length === 1 ? `$${total} for “${mine[0].title}”.` : `$${total} for ${mine.length} notices.`, 5);
   }
 
   // --- the trip: one, the host's ---------------------------------------------------------------------------------------
@@ -279,13 +320,14 @@ export class CoopTrip {
     } finally { this.applying = false; }
     if (!was) return; // the first word on the way in: no title for a trip already under way
     if (on && !wasOn) {
-      const l = o ? o.landing(st.from) : null, lake = l ? o.lakeOf(l) : '';
+      const l = o ? this.entryOf(st.from) : null, lake = l ? o.lakeOf(l) : '';
       if (g.stats && g.stats.reset) g.stats.reset();
       if (o) o.port = null;
-      if (g.hud && g.hud.showPlace && l) g.hud.showPlace(`Pushing off · ${l.name}`, lake, m.who && m.who !== this.myName ? `${m.who} pushed off · come in at any outfitter` : 'Come in at any outfitter', 6);
+      if (g.hud && g.hud.showPlace && l) g.hud.showPlace(`Pushing off · ${l.name}`, lake, m.who && m.who !== this.myName ? `${m.who} pushed off · come out at a store or a trailhead’s lot` : 'Come out at a store or a trailhead’s lot', 6);
     } else if (!on && wasOn) {
-      const out = m.out, l = out && out.ep != null && o ? o.landing(out.ep) : null;
+      const out = m.out, l = out && out.ep != null && o ? this.entryOf(out.ep) : null;
       if (out && out.k === 'completed' && l) this.note(`The group came in at ${l.name}. The trip is in ${this.coop.hostName || 'your friend'}’s logbook.`, 6);
+      this.settleMine(); // (the game-loop join: your own notices done on the trip are paid as the group comes in)
     }
   }
   // a guest: on foot by a landing it is your port; paddling off from it (or into the canoe there) asks the host to push off
@@ -293,7 +335,7 @@ export class CoopTrip {
     const g = this.g, p = g.player, o = g.outfitter, t = o.trip;
     if (p.teleporting || o.arrival || o.bunking || o.docking || this.jumping || (g.trip && g.trip.evacuating) || (o.veil && o.veil.active)) return;
     const walking = p.mode === 'walk' || p.mode === 'carry';
-    if (walking) { const n = o.nearest(p.x, p.z); if (n && n.d < COME_IN) o.port = n.l; }
+    if (walking) { const h = this.entryAt(p.x, p.z); if (h) o.port = h.e; }
     else if (p.mode === 'paddle' && !t.active && o.port) {
       const now = performance.now();
       if ((o.portWalked || o.distTo(o.port, p.x, p.z) > NEAR) && now - this.pushT > 3000) { this.pushT = now; this.toHost({ t: 'push', ep: o.port.ep }); }
@@ -306,9 +348,9 @@ export class CoopTrip {
     const g = this.g, p = g.player, o = g.outfitter, core = g.trip, t = o.trip;
     if (p.teleporting || o.arrival || o.evac || o.bunking || o.docking || this.jumping || (core && core.evacuating) || (o.veil && o.veil.active)) return;
     const walking = p.mode === 'walk' || p.mode === 'carry';
-    if (walking) { const n = o.nearest(p.x, p.z); if (n && n.d < COME_IN) o.port = n.l; }
+    if (walking) { const h = this.entryAt(p.x, p.z); if (h) o.port = h.e; }
     if (t.active) {
-      const from = o.landing(t.ep), all = this.everyone();
+      const from = this.entryOf(t.ep), all = this.everyone();
       if (!t.away && from && all.some((q) => Number.isFinite(q.x) && o.distTo(from, q.x, q.z) > AWAY)) { t.away = true; o.save(); }
       const ats = all.map((q) => this.ashoreAt(q));
       if (ats.every(Boolean)) {
@@ -323,11 +365,14 @@ export class CoopTrip {
   // the landing a player is ashore at (on foot near it), or null; a friend with no pose yet counts as ashore
   ashoreAt(q) {
     const o = this.g.outfitter;
-    if (!q.me && q.m == null) return o.trip.ep != null ? o.landing(o.trip.ep) : null;
+    if (!q.me && q.m == null) return o.trip.ep != null ? this.entryOf(o.trip.ep) : null;
     if (!(q.m === 'walk' || q.m === 'carry' || q.m === 'sit')) return null;
     if (!Number.isFinite(q.x)) return null;
-    const n = o.nearest(q.x, q.z);
-    if (n && n.d < COME_IN) return n.l;
+    // (the game-loop join: out in a store, by its door or in a trailhead's lot, as one player comes out; an outfitter's
+    // dock or a trailhead's landing is only a port. A friend's drawn place is coarse: near a store still counts, below)
+    const h = this.entryAt(q.x, q.z);
+    if (h && h.out) return h.e;
+    if (q.me) return null;
     if (!q.me) { for (const l of o.landings) if (Math.hypot(l.x - q.x, l.z - q.z) < REMOTE_AT) return l; }
     return null;
   }
@@ -516,9 +561,9 @@ export class CoopTrip {
     return true;
   }
   openProp({ kind, from, to }, by) {
-    if (this.prop || !['ride', 'bunk'].includes(kind)) return;
+    if (this.prop || !['ride', 'bunk', 'pickup'].includes(kind)) return;
     const o = this.g.outfitter;
-    if (!o || !o.landing(Number(from)) || !o.landing(Number(to))) return;
+    if (!o || !this.entryOf(from) || !o.landing(Number(to))) return;
     this.prop = { id: `${Date.now().toString(36)}`, kind, from: Number(from), to: Number(to), by, byName: this.nameOf(by), ticks: { [by]: true } };
     this.sendProp(); this.render(); this.check();
   }
@@ -542,17 +587,18 @@ export class CoopTrip {
     this.sendProp(); this.render(); this.check();
   }
   // at the store the proposal is for, and able to pay for it
-  here(ep) { const o = this.g.outfitter, p = this.g.player, l = o && o.landing(ep); return !!(l && p.onFoot && o.distTo(l, p.x, p.z) < AT_STORE); }
+  here(ep) { const o = this.g.outfitter, p = this.g.player, l = o && this.entryOf(ep); return !!(l && p.onFoot && o.distTo(l, p.x, p.z) < AT_STORE); }
   fare(P = this.prop) {
     const g = this.g, o = g.outfitter, sandbox = g.trip && g.trip.sandbox;
     if (!P || sandbox) return 0;
     if (P.kind === 'bunk') return g.shop ? g.shop.price('bunk', P.from) : 8;
+    if (P.kind === 'pickup') { const r = g.rides && typeof g.rides.pickups === 'function' ? g.rides.pickups(P.from).find((x) => x.by === P.to) : null; return r && !r.takesAll ? r.price : 0; } // (never stuck: short, the truck takes what is in hand)
     const a = o.landing(P.from), b = o.landing(P.to);
     return a && b ? quoteBetween(a, b).price : 0;
   }
   whyNot(P = this.prop) {
     const o = this.g.outfitter, pr = this.g.profile; if (!P) return null;
-    if (!this.here(P.from)) return `Come to ${o.landing(P.from).name} first.`;
+    if (!this.here(P.from)) return `Come to ${(this.entryOf(P.from) || { name: 'the landing' }).name} first.`;
     const f = this.fare(P); if (f && pr && pr.money < f) return `It’s $${f}, and you have $${pr.money}.`;
     return null;
   }
@@ -576,6 +622,7 @@ export class CoopTrip {
     if (this.guest) this.holdClock = true;
     const done = () => { this.holdClock = false; if (this.jumping && this.jumping.id === m.id) this.jumping.done = performance.now(); };
     if (m.kind === 'ride') this.ride(Number(m.fe), Number(m.te)).then(done, done);
+    else if (m.kind === 'pickup') { const R = this.g.rides; Promise.resolve(R && R.callPickup ? R.callPickup(Number(m.fe), Number(m.te)) : false).then(done, done); }
     else this.bunkNight(Number(m.fe)).then(done, done);
   }
   ride(fromEp, toEp) {
@@ -646,8 +693,8 @@ export class CoopTrip {
       el.addEventListener('click', (e) => { const b = e.target.closest('button[data-j]'); if (!b) return; if (b.dataset.j === 'ready') this.tick(!(this.prop && this.prop.ticks[this.coop.id])); else this.cancel(); });
       document.body.appendChild(el);
     }
-    const o = this.g.outfitter, from = o.landing(P.from), to = o.landing(P.to), f = this.fare(P);
-    const what = P.kind === 'ride' ? `A ride to ${esc(to.name)} · entry point ${to.ep}` : `A night in the bunkhouse at ${esc(from.name)}`;
+    const o = this.g.outfitter, from = this.entryOf(P.from), to = o.landing(P.to), f = this.fare(P);
+    const what = P.kind === 'ride' ? `A ride to ${esc(to.name)} · entry point ${to.ep}` : P.kind === 'pickup' ? `${esc(to.name)}’s truck, out to ${esc(from.name)}` : `A night in the bunkhouse at ${esc(from.name)}`;
     const ids = [this.hostPeer() ? this.hostPeer().id : this.coop.id, ...this.everyone().map((x) => x.id)].filter((v, i, a) => a.indexOf(v) === i);
     const rows = ids.map((id) => {
       const me = id === this.coop.id, ready = !!P.ticks[id], name = this.nameOf(id);
