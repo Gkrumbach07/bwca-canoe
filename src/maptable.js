@@ -13,7 +13,7 @@
 //   new MapTable({ hud, profile, shop, outfitter, world }), show({ ep, landing, onClose }) → bool, close(), open,
 //   ep, stock (this table's sheets), stockIds, selected, hover; for hud.js: pick(x, z), hoverAt(x, z), closed(),
 //   priceWords(id), soldWords(id)
-import { sheets, sheetAt, sheetById, stockFor } from './sheets.js';
+import { sheets, sheetAt, sheetById, stockFor, sheetsSoldAt } from './sheets.js';
 import { esc, plural } from './hud.js';
 
 // (the table's list is the left page of an open book now, beside the sheet, not a card over it: map.css #mtbook)
@@ -36,7 +36,7 @@ export class MapTable {
     if (!l) return false;
     if (this.open) this.closed();
     this.ep = n; this.landing = l; this.onClose = onClose;
-    this.stock = stockFor(l); this.stockIds = new Set(this.stock.map((s) => s.id));
+    this.stock = sheetsSoldAt(n) || stockFor(l); this.stockIds = new Set(this.stock.map((s) => s.id));
     this.selected = this.stock[0] ? this.stock[0].id : null; this.hover = null; this.receipt = null;
     if (this.profile && this.profile.learn) this.profile.learn(n);
     this.build();

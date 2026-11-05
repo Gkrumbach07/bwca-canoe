@@ -34,8 +34,8 @@
 //
 // Pure data: no three, no DOM outside speakAtCounter, cached per world. The world needs entryPoints, lakes, campsites,
 // portages (and lakeName, or the lake records' names).
-import { outfitterName } from './outfitter.js';
 import { mulberry32, hash2 } from './rng.js';
+import { PREMIUM_BY_HOST, SPECIALTY } from './outfitter-kit.js';
 import { miles, fmtDepth } from './units.js';
 
 const TROUT_WATER = 20;      // fishing.js bites lake trout only where the lake is sounded this deep (m)
@@ -49,19 +49,179 @@ const SPECIES_INDEX = { walleye: 0, smallmouth: 1, pike: 2, laketrout: 3, crappi
 export const abundanceOf = (lakeId, species, cells = 1e9) => (0.75 + 0.5 * hash2(lakeId, SPECIES_INDEX[species] ?? 0, 5)) * (species === 'walleye' && cells < 2500 ? 0.35 : 1);
 const THICK = 1.2;           // an abundance this high (the top tenth) is "thick this year"
 
-// the towns at the foot of the roads (x, z in the world's metres, from their latitude and longitude)
-const TOWNS = [['Ely', -48571, 20793], ['Grand Marais', 65631, 37805], ['Tofte', 28234, 57375], ['Isabella', -10429, 52594], ['Crane Lake', -94833, -19570], ['Cook', -109881, 26464], ['Hovland', 92747, 27798]];
-// the road each landing is reached by
-const ROADS = [
-  ['the Echo Trail', [4, 6, 7, 8, 9, 14, 16, 19, 20, 22, 77]],
-  ['the Crane Lake road', [1, 12]],
-  ['the Fernberg Road', [24, 25, 26, 27, 29, 30, 31]],
-  ['Highway 1', [32, 33, 34, 35, 36, 37, 67, 75, 84]],
-  ['the Sawbill Trail', [38, 39, 40, 41]],
-  ['the Gunflint Trail', [43, 44, 45, 47, 48, 49, 50, 51, 52, 54, 55, 57, 58, 60, 61, 62, 64, 66, 80]], // fb E: Larch Creek is on the Gunflint
-  ['the Arrowhead Trail', [68, 69, 70]],
+// --- the outfitter set (game-loop round, stream B) --------------------------------------------------------------------
+// The owner, 2026-11-02: "about 14 outfitters, each on an entry point, spread out, never clustered in a town. Not every
+// entry point has one." The other 41 entry points are trailheads: a parking lot, a permit box and a "Welcome to the
+// BWCA" sign (trailhead.js, props.js). Each outfitter serves a reach of entry points (its own and the trailheads it
+// picks up from for free: rides.js), and has a country (gentle, rivers, big water, remote). The hosts are the entry
+// point with the road and the history, not the middle of the cluster (campaigns.md's table, tuned): the Round Lake host
+// is Missing Link 51 (the 366-rod carry into Tuscarora), not Larch Creek 80; Sawbill 38 (the road end) serves Baker 39.
+// Every entry point lies within 12 km (straight) of its nearest outfitter (scripts/gl-b-test.mjs prints the worst).
+//   OUTFITTER_EPS, isOutfitter(ep), hostOf(ep) → the outfitter whose reach it is in, reachOf(ep) → [eps],
+//   countryOf(ep) → 'gentle' | 'rivers' | 'big water' | 'remote', roadKm(a, b, world), roadWay(a, b, world) → [towns],
+//   premiumOf(ep), specialtyOf(ep), outfitterHomes(world)
+export const OUTFITTERS = [
+  { ep: 51, reach: [50, 52, 80, 54, 55, 57], country: 'big water', countries: ['big water', 'remote'], gentle: false },
+  { ep: 64, reach: [62, 61, 60, 45, 44, 43, 66], country: 'big water', countries: ['big water'], gentle: false },
+  { ep: 49, reach: [48, 47, 58], country: 'big water', countries: ['big water'], gentle: false },
+  { ep: 69, reach: [68, 70], country: 'remote', countries: ['remote'], gentle: false },
+  { ep: 40, reach: [41], country: 'remote', countries: ['gentle', 'remote'], gentle: false },
+  { ep: 38, reach: [39], country: 'gentle', countries: ['gentle'], gentle: true },
+  { ep: 36, reach: [37], country: 'gentle', countries: ['gentle'], gentle: true },
+  { ep: 67, reach: [35, 34, 75, 84], country: 'rivers', countries: ['rivers'], gentle: false },
+  { ep: 25, reach: [27, 30, 26, 29], country: 'gentle', countries: ['gentle'], gentle: true, busy: true },
+  { ep: 31, reach: [24, 32, 33], country: 'gentle', countries: ['gentle'], gentle: true },
+  { ep: 6, reach: [4, 20, 22, 77], country: 'rivers', countries: ['rivers'], gentle: false },
+  { ep: 16, reach: [7, 8, 19, 14, 9], country: 'rivers', countries: ['rivers'], gentle: false },
+  { ep: 1, reach: [], country: 'big water', countries: ['big water'], gentle: false },
+  { ep: 12, reach: [], country: 'remote', countries: ['remote'], gentle: false, quetico: true },
 ];
-export function roadOf(ep) { const r = ROADS.find(([, eps]) => eps.includes(Number(ep))); return r ? r[0] : 'the county road'; }
+export const OUTFITTER_EPS = OUTFITTERS.map((o) => o.ep);
+const OF_BY_EP = new Map(OUTFITTERS.map((o) => [o.ep, o]));
+const HOST_OF = new Map();
+for (const o of OUTFITTERS) { HOST_OF.set(o.ep, o.ep); for (const r of o.reach) HOST_OF.set(r, o.ep); }
+export const COUNTRY_WORDS = { gentle: 'small lakes, short carries, people about', rivers: 'rivers, beaver dams, long carries', 'big water': 'big lakes, wind and lake trout', remote: 'long carries, few people, the border' };
+export function isOutfitter(ep) { return OF_BY_EP.has(Number(ep)); }
+// the outfitter an entry point belongs to (itself for an outfitter); an entry point no table names (a later release's
+// new one): the nearest outfitter, when the world is given
+export function hostOf(ep, world = null) {
+  const n = Number(ep);
+  if (HOST_OF.has(n)) return HOST_OF.get(n);
+  const e = world && world.entryPoints ? world.entryPoints.find((q) => q.ep === n) : null;
+  if (!e) return null;
+  let best = null, bd = Infinity;
+  for (const o of OUTFITTERS) { const q = world.entryPoints.find((x) => x.ep === o.ep); if (!q) continue; const d = Math.hypot(q.x - e.x, q.z - e.z); if (d < bd) { bd = d; best = o.ep; } }
+  return best;
+}
+// an outfitter's reach: itself and the entry points it serves (an entry point that is not one: its host's)
+export function reachOf(ep, world = null) { const h = hostOf(ep, world), o = OF_BY_EP.get(h); return o ? [o.ep, ...o.reach] : []; }
+export function countryOf(ep, world = null) { const o = OF_BY_EP.get(hostOf(ep, world)); return o ? o.country : 'gentle'; }
+export function outfitterSet(ep) { return OF_BY_EP.get(Number(ep)) || null; }
+
+// --- the roads --------------------------------------------------------------------------------------------------------
+// A small road graph: each road an ordered line of waypoints from its town ([x, z] in the world's metres, from latitude
+// and longitude), the towns joined by the highways (61 along the shore, 1 from Ely to Lake Superior at Illgen City, 169
+// from Ely past Tower to Virginia, 53 north to Cook and Orr). Each entry point leaves its road by a spur to the nearest
+// point on it. A drive's km is the shortest way along the graph, the trunk ×1.15 and the spurs ×1.3 the straight line
+// (the bends). The Gunflint to the Echo Trail goes through Grand Marais, 61, 1 and Ely.
+const TOWN_AT = { Ely: [-48571, 20793], 'Grand Marais': [65631, 37805], Tofte: [28234, 57375], Isabella: [-10429, 52594], 'Crane Lake': [-94833, -19570], Cook: [-109881, 26464], Hovland: [92747, 27798],
+  Tower: [-82500, 28800], Virginia: [-100000, 62000], Orr: [-110000, -2000], Buyck: [-88000, -8000], Illgen: [0, 72400], Finland: [-2000, 65000], Lutsen: [40000, 50500] };
+const TOWNS = ['Ely', 'Grand Marais', 'Tofte', 'Isabella', 'Crane Lake', 'Cook', 'Hovland'].map((n) => [n, ...TOWN_AT[n]]);
+const TOWN_WORDS = { Illgen: 'Illgen City', Buyck: 'Buyck' };
+// [name, waypoints (a town's name or [x, z]), the entry points it serves]
+const ROADS = [
+  ['the Echo Trail', ['Ely', [-52000, 12000], [-54000, 4000], [-60000, -2000], [-70000, -4000], 'Buyck'], [4, 6, 7, 8, 9, 14, 16, 19, 20, 22, 77]],
+  ['the Crane Lake road', ['Buyck', 'Crane Lake', 'Orr', 'Cook'], [12]],
+  ['Highway 169', ['Ely', 'Tower', 'Virginia'], [1]],
+  ['Highway 53', ['Virginia', 'Cook'], []],
+  ['the Fernberg Road', ['Ely', [-35000, 17000], [-24000, 13000], [-19000, 15500]], [24, 25, 26, 27, 29, 30, 31]],
+  ['Highway 1', ['Ely', [-30000, 30000], [-15000, 38000], 'Isabella', 'Finland', 'Illgen'], [32, 33, 34, 35, 67, 75, 84]],
+  ['the Tomahawk Road', ['Isabella', [0, 40000], [8000, 31000]], [36, 37]],
+  ['Highway 61', ['Illgen', 'Tofte', 'Lutsen', 'Grand Marais', 'Hovland'], []],
+  ['the Sawbill Trail', ['Tofte', [26000, 40000], [24500, 26000]], [38, 39]],
+  ['the Caribou Trail', ['Lutsen', [41000, 30000], [41500, 20000]], [40, 41]],
+  ['the Gunflint Trail', ['Grand Marais', [62000, 22000], [61000, 10000], [52000, 6000], [42000, 2000], [30000, 0], [25000, -8000]], [43, 44, 45, 47, 48, 49, 50, 51, 52, 54, 55, 57, 58, 60, 61, 62, 64, 66, 80]],
+  ['the Arrowhead Trail', ['Hovland', [88000, 12000], [86300, 4000]], [68, 69, 70]],
+];
+const TRUNK = 1.15, SPUR = 1.3;
+export function roadOf(ep) { const r = ROADS.find(([, , eps]) => eps.includes(Number(ep))); return r ? r[0] : 'the county road'; }
+const wayAt = (w) => (typeof w === 'string' ? TOWN_AT[w] : w);
+// the graph, built once per world (the entry points' spots are the world's, moved to their put-ins)
+const ROAD_CACHE = new WeakMap();
+function roadGraph(world) {
+  let g = ROAD_CACHE.get(world);
+  if (g) return g;
+  const nodes = [], adj = [], key = new Map();
+  const node = (k, x, z) => { if (key.has(k)) return key.get(k); const i = nodes.length; nodes.push({ k, x, z }); adj.push([]); key.set(k, i); return i; };
+  const edge = (a, b, km) => { adj[a].push([b, km]); adj[b].push([a, km]); };
+  const epNode = new Map();
+  for (const [name, way, eps] of ROADS) {
+    const pts = way.map(wayAt), ids = way.map((w, i) => (typeof w === 'string' ? node(`town:${w}`, pts[i][0], pts[i][1]) : node(`${name}:${i}`, pts[i][0], pts[i][1])));
+    const cut = pts.slice(1).map(() => []); // per segment: [t, node] where an entry point's spur meets it
+    for (const n of eps) {
+      const e = world.entryPoints.find((q) => q.ep === n); if (!e) continue;
+      let best = null;
+      for (let s = 0; s + 1 < pts.length; s++) {
+        const [ax, az] = pts[s], [bx, bz] = pts[s + 1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((e.x - ax) * dx + (e.z - az) * dz) / L2)), px = ax + dx * t, pz = az + dz * t, d = Math.hypot(e.x - px, e.z - pz);
+        if (!best || d < best.d) best = { s, t, px, pz, d };
+      }
+      const j = node(`${name}:ep${n}`, best.px, best.pz), me = node(`ep:${n}`, e.x, e.z);
+      cut[best.s].push([best.t, j]);
+      edge(me, j, (best.d * SPUR) / 1000);
+      if (!epNode.has(n)) epNode.set(n, me);
+    }
+    for (let s = 0; s + 1 < pts.length; s++) {
+      const list = [[0, ids[s]], ...cut[s].sort((a, b) => a[0] - b[0]), [1, ids[s + 1]]];
+      for (let k = 0; k + 1 < list.length; k++) { const A = nodes[list[k][1]], B = nodes[list[k + 1][1]]; edge(list[k][1], list[k + 1][1], (Math.hypot(B.x - A.x, B.z - A.z) * TRUNK) / 1000); }
+    }
+  }
+  // an entry point no road names (a later release's): a spur to the nearest town
+  for (const e of world.entryPoints) if (!epNode.has(e.ep)) {
+    let best = null; for (const [n, x, z] of TOWNS) { const d = Math.hypot(x - e.x, z - e.z); if (!best || d < best.d) best = { n, d }; }
+    const me = node(`ep:${e.ep}`, e.x, e.z); edge(me, key.get(`town:${best.n}`), (best.d * SPUR) / 1000); epNode.set(e.ep, me);
+  }
+  g = { nodes, adj, epNode, from: new Map() };
+  ROAD_CACHE.set(world, g);
+  return g;
+}
+// the shortest km from one entry point to every node (Dijkstra; the graph is small), with the way back
+function roadFrom(g, ep) {
+  if (g.from.has(ep)) return g.from.get(ep);
+  const s = g.epNode.get(ep), n = g.nodes.length;
+  if (s == null) return null;
+  const dist = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
+  dist[s] = 0;
+  for (;;) {
+    let u = -1; for (let i = 0; i < n; i++) if (!done[i] && dist[i] < Infinity && (u < 0 || dist[i] < dist[u])) u = i;
+    if (u < 0) break;
+    done[u] = 1;
+    for (const [v, w] of g.adj[u]) if (dist[u] + w < dist[v]) { dist[v] = dist[u] + w; prev[v] = u; }
+  }
+  const r = { dist, prev }; g.from.set(ep, r);
+  return r;
+}
+// road km between two entry points (0 for the same one, null if either is unknown)
+export function roadKm(a, b, world) {
+  if (!world || !world.entryPoints) return null;
+  if (Number(a) === Number(b)) return 0;
+  const g = roadGraph(world), r = roadFrom(g, Number(a)), t = g.epNode.get(Number(b));
+  return r && t != null && Number.isFinite(r.dist[t]) ? +r.dist[t].toFixed(1) : null;
+}
+// the towns a drive goes through, in order ("Grand Marais", "Tofte", …)
+export function roadWay(a, b, world) {
+  if (!world || !world.entryPoints) return [];
+  const g = roadGraph(world), r = roadFrom(g, Number(a)), t = g.epNode.get(Number(b));
+  if (!r || t == null) return [];
+  const out = [];
+  for (let u = t; u >= 0; u = r.prev[u]) { const k = g.nodes[u].k; if (k.startsWith('town:')) { const n = k.slice(5); out.unshift(TOWN_WORDS[n] || n); } }
+  return out;
+}
+
+// --- the signs ---------------------------------------------------------------------------------------------------------
+// Every entry point's sign name: invented North Woods names, never a real business's (the owner, 2026-10-31). Display
+// only: everything is keyed by the entry point number. Since the game-loop round only the outfitters' hang over a store;
+// a trailhead goes by its place's own name (trailheadName).
+const NAMES = {
+  1: 'Cold Spring Canoe Co.', 4: 'Two Otters Outfitting', 6: 'Thimbleberry Outfitters', 7: 'Ironwood Canoe Livery',
+  8: 'Beaver Slide Outfitters', 9: 'Wild Rice Landing Post', 12: 'Grey Jay Outfitters', 14: 'Red Pine Canoe Base',
+  16: 'Cattail Creek Outfitters', 19: 'Cedar Knee Outfitting', 20: 'Fiddlehead Trading Post', 22: 'Black Spruce Outfitters',
+  24: 'Pickerel Point Outfitters', 25: 'Loon Narrows Outfitters', 26: 'Woodsmoke Outfitting', 27: 'Snowshoe Hare Outfitters',
+  29: 'Kingfisher Canoe Co.', 30: 'Birch Point Canoe Co.', 31: 'Hayfield Landing Outfitters', 32: 'Riverbend Portage House',
+  33: 'Bedrock Outfitters', 34: 'Islander Canoe Post', 35: 'Tamarack Bog Outfitters', 36: 'Muskrat Run Outfitters',
+  37: 'Headwaters Canoe Co.', 38: 'Saw-whet Owl Outfitters', 39: 'Lady Slipper Outfitters', 40: 'Blueberry Hill Outfitters',
+  41: 'High Bluff Canoe Co.', 43: 'Old Cabin Outfitters', 44: 'Juneberry Outfitters', 45: 'Lichen Ledge Outfitters',
+  47: 'Marsh Marigold Outfitters', 48: 'Stonefly Canoe Co.', 49: 'Long Carry Outfitting', 50: 'Crossed Paddles Outfitters',
+  51: 'Lost Chain Outfitters', 52: 'Snow Goose Canoe Co.', 54: 'Gull Rock Outfitters', 55: 'Far Shore Trading Post',
+  57: 'Lodestone Outfitters', 58: 'Height of Land Outfitters', 60: 'Bearberry Outfitters', 61: 'Spruce Hen Outfitting',
+  62: 'Glass Water Canoe Co.', 64: 'Cub Creek Outfitters', 66: 'Snapping Turtle Outfitters', 67: 'Pitcher Plant Outfitters',
+  68: 'Jack Pine Canoe Co.', 69: 'Old Mill Outfitters', 70: 'Mallard Point Outfitters', 75: 'Brook Trout Outfitters',
+  77: 'Painted Rock Outfitters', 80: 'Larchwood Canoe Post', 84: 'Switchback Outfitters',
+};
+// (an entry point not in the table, should a later release add one: its place's own name, unique as the places are)
+export function outfitterName(ep) { const n = typeof ep === 'object' && ep ? ep.ep : Number(ep); return NAMES[n] || `${(ep && ep.name) || `Entry point ${n}`} Canoe Post`; }
+// a trailhead's name, its place's: "Snowbank Lake trailhead"
+export function trailheadName(e) { return `${e && e.name ? e.name : 'The'} trailhead`; }
 
 // --- small words ---------------------------------------------------------------------------------------------------
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
@@ -143,8 +303,10 @@ export function placeFacts(ep, world) {
   for (const s of world.campsites) if (Math.abs(s.x - e.x) < CAMP_REACH && Math.abs(s.z - e.z) < CAMP_REACH && Math.hypot(s.x - e.x, s.z - e.z) < CAMP_REACH) camps++;
   const carries = (world.portages || []).filter((p) => p.pts && p.pts.length && Math.hypot(p.pts[0][0] - e.x, p.pts[0][1] - e.z) < 8000).sort((a, b) => b.rods - a.rods);
   let near = null;
-  for (const o of world.entryPoints) if (o.ep !== e.ep) { const d = Math.hypot(o.x - e.x, o.z - e.z); if (!near || d < near.d) near = { ep: o.ep, name: o.name, d }; }
-  const neighbours = world.entryPoints.filter((o) => o.ep !== e.ep && Math.hypot(o.x - e.x, o.z - e.z) < 12000).length;
+  // (the game-loop round: the nearest other outfitter, not the nearest entry point)
+  for (const o of world.entryPoints) if (o.ep !== e.ep && isOutfitter(o.ep)) { const d = Math.hypot(o.x - e.x, o.z - e.z); if (!near || d < near.d) near = { ep: o.ep, name: o.name, d }; }
+  if (near) near.road = roadKm(e.ep, near.ep, world);
+  const neighbours = world.entryPoints.filter((o) => o.ep !== e.ep && isOutfitter(o.ep) && Math.hypot(o.x - e.x, o.z - e.z) < 12000).length;
   let town = null;
   for (const [name, x, z] of TOWNS) { const d = Math.hypot(x - e.x, z - e.z); if (!town || d < town.d) town = { name, d }; }
   const clear = lakes.filter((l) => l.secchi >= 4.5 && l.ha >= 30).length;
@@ -268,7 +430,7 @@ function makeLook(kind, rng, over = {}) {
 // The north country's names (Finnish, Scandinavian and Slovenian on the Iron Range, French up the border). Each
 // generated keeper takes the next first and last name of a fixed shuffle, by the entry point's place in the list, so
 // no two of the 55 share a name, and none takes a hand-written keeper's.
-const FIRST = ['Ada', 'Agnes', 'Alma', 'Art', 'Bert', 'Cal', 'Carol', 'Clara', 'Dale', 'Dot', 'Duane', 'Earl', 'Edna', 'Elsie', 'Ellen', 'Emil', 'Erik', 'Esther', 'Frank', 'Gordy', 'Greta', 'Hank', 'Hazel', 'Helga', 'Ida', 'Inga', 'Ione', 'Irv', 'Jens', 'Joanne', 'June', 'Karl', 'Kari', 'Lars', 'Lois', 'Lyle', 'Mae', 'Marv', 'Myrna', 'Nels', 'Nora', 'Norm', 'Ole', 'Pete', 'Ray', 'Rudy', 'Sigrid', 'Sonja', 'Stan', 'Tess', 'Thea', 'Tom', 'Vern', 'Vi', 'Walt', 'Ward', 'Wilma'];
+const FIRST = ['Ada', 'Agnes', 'Alma', 'Art', 'Bert', 'Cal', 'Carol', 'Clara', 'Dale', 'Dot', 'Duane', 'Earl', 'Edna', 'Elsie', 'Ellen', 'Emil', 'Erik', 'Esther', 'Frank', 'Gordy', 'Greta', 'Hank', 'Hazel', 'Helga', 'Ida', 'Inga', 'Ione', 'Irv', 'Jens', 'Joanne', 'June', 'Karl', 'Kari', 'Lars', 'Lois', 'Lyle', 'Mae', 'Marv', 'Myrna', 'Nels', 'Nora', 'Norm', 'Ole', 'Pete', 'Ray', 'Rudy', 'Sigrid', 'Sonja', 'Stan', 'Tess', 'Thea', 'Tom', 'Vern', 'Vi', 'Ward', 'Wilma']; // (no Walt: a name the story keeps, the game-loop brief's reserved names)
 const LAST = ['Maki', 'Koski', 'Heikkila', 'Novak', 'Hautala', 'Berg', 'Sundquist', 'Ojala', 'Pekkala', 'Skogstad', 'Lahti', 'Tikkanen', 'Rautio', 'Gornick', 'Brandt', 'Sorenson', 'Dahl', 'Moe', 'Kovach', 'Bergstrom', 'Niemi', 'Saari', 'Wuori', 'Kalla', 'Bratvold', 'Sether', 'Ostrom', 'Halvorson', 'Pajari', 'Ranta', 'Hendrickson', 'Erspamer', 'Mattila', 'Sjoberg', 'Lundeen', 'Torkelson', 'Hakala', 'Jarvi', 'Kivi', 'Laine', 'Seppala', 'Toivonen', 'Vukelich', 'Bozich', 'Perko', 'Skerjanc', 'Gustafson', 'Nygaard', 'Rasmussen', 'Engebretson', 'Quale', 'Hanson', 'Thorsen', 'Aune', 'Fossum', 'Lofgren', 'Belanger', 'Gagnon'];
 const shuffled = (list, seed) => { const a = list.slice(), r = mulberry32(seed); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const FIRST_ORDER = shuffled(FIRST, 0x51ed), LAST_ORDER = shuffled(LAST, 0xa11e);
@@ -369,7 +531,7 @@ const VOICE = {
 function placeChat(f) {
   const out = [];
   if (f.camps >= 20) out.push(`There’s ${f.camps >= 100 ? 'over a hundred' : `${Math.floor(f.camps / 10) * 10}-odd`} campsites within a day or two of here. The island ones go first.`);
-  if (f.near) out.push(`The ${f.near.name} landing is ${km(f.near.d * 1.4)} miles down the road. They keep a board of their own.`);
+  if (f.near) out.push(`The ${f.near.name} outfitter is ${km(Number.isFinite(f.near.road) ? f.near.road * 1000 : f.near.d * 1.4)} miles down the road. They keep a board of their own.`);
   out.push(`${f.town}’s ${miles(f.townKm)} miles back down ${f.road}, if you forgot anything.`);
   if (f.longest && f.longest.rods >= 150) out.push(`The ${f.longest.rods}-rod carry, ${f.longest.name}, sorts people out. Take it in two.`);
   const deep = f.deep[0];
@@ -441,18 +603,24 @@ function hintText(h, manner, rng, i = 0) {
   return s + (pickR(rng, V.post) || '');
 }
 
-// --- the six written by hand ---------------------------------------------------------------------------------------
+// --- the fourteen written by hand ----------------------------------------------------------------------------------
 // keeper, manner, kind, the signature (family and its own name and words), the look, priceMul, and lines of their own
-// that go ahead of the manner's (chat lines are added to the generated ones)
+// that go ahead of the manner's (chat lines are added to the generated ones). The game-loop round cut the outfitters to
+// fourteen: the six keepers written before keep their counters where their landing is still one (Gus at Moose Lake 25,
+// Bev at Sawbill 38) and move to the host that serves their old landing where it is not (KEEPER_FROM: Leon from the
+// Little Indian Sioux 14 to Moose River North 16, Arvid from Seagull 54 to Round Lake 51, Lise from Saganaga 55 to East
+// Bearskin 64, Ruth and Deb's café from Lake One 30 to Farm Lake 31: Moose Lake keeps Gus). Eight are new. Each keeper's
+// own `key` is the entry point their words were first written for (talk-keepers.js keys their pasts and arcs by it).
+export const KEEPER_FROM = { 16: 14, 51: 54, 64: 55, 31: 30 };
 const HAND = {
-  30: { kind: 'lodge', keeper: 'Ruth Aho', manner: 'warm', priceMul: 1.0,
+  31: { kind: 'lodge', keeper: 'Ruth Aho', manner: 'warm', priceMul: 1.0,
     sig: { family: 'paddle', name: 'Aho ottertail paddle', price: 55, words: 'My brother carves these over the winter: cherry, with a long ottertail blade. Quiet in the water and kind to the shoulders, if not quick.' },
     look: { stain: 'log brown', roof: 'green steel', trim: 0xd8ceb2, door: 0x8a3e2c, porch: true },
     lines: {
-      hello: ['Morning! Coffee’s on, and the café has pie until it doesn’t.', 'There you are. Lake One behaving itself?'],
+      hello: ['Morning! Coffee’s on, and the café has pie until it doesn’t.', 'There you are. The river behaving itself?'],
       stranger: ['Welcome to the lodge. I’m Ruth. Food’s on the shelf, our board’s by the door, and the café’s through there.'],
-      goodbye: ['Count the narrows on Lake One and you’ll never get lost. Off you go.'],
-      chat: ['Lake One is really four lakes pretending to be one. Count the narrows and you’ll never get lost.', 'Snowbank’s the deep one, up the road past Moose Lake. Lakers, if you’ve the patience.', 'The café pays for any fish you keep for it. Deb likes walleye best, but she’ll fry a perch.'],
+      goodbye: ['Farm Lake to the Kawishiwi is kind water. Mind the current at the narrows. Off you go.'],
+      chat: ['We were on Lake One for forty years. The road out here is shorter and the bread rises better.', 'The café pays for any fish you keep for it. Deb likes walleye best, but she’ll fry a perch.', 'Fall Lake’s over the hill. The Four Mile Portage there is an old railway bed; you can roll a canoe on it.'],
     } },
   25: { kind: 'lodge', keeper: 'Gus Lindgren', manner: 'gruff', priceMul: 0.95,
     sig: { family: 'cover', name: 'Moose Lake spray cover', price: 60, words: 'For Basswood when it’s blowing. Snaps down over the gunwales and keeps the chop out of your lap. Sits you steadier in a big sea.' },
@@ -461,7 +629,7 @@ const HAND = {
       hello: ['Morning. Busy one. What’ll it be.', 'Yep. Moose Lake. Come in.'],
       stranger: ['Busiest landing in the Boundary Waters. Food’s there, board’s there. Get in line.'],
       goodbye: ['Basswood’s big. Watch the wind on it.'],
-      chat: ['Half of Iowa comes through that door in July.', 'Wind Lake’s over the 175-rod carry. Quieter there.', 'The chain goes north to the border. Don’t get lost in Canada; the paperwork’s worse than the portages.'],
+      chat: ['Half of Iowa comes through that door in July.', 'Wind Lake’s over the 175-rod carry. Quieter there.', 'The chain goes north to the border. Don’t get lost in Canada; the paperwork’s worse than the portages.', 'Snowbank, Lake One, Wood Lake: the truck goes to all of them. Pick one.'],
     } },
   38: { kind: 'bait shop', keeper: 'Bev Kangas', manner: 'dry', priceMul: 1.05,
     sig: { family: 'yoke', name: 'Sawbill cedar yoke', price: 32, words: 'Carved out back from white cedar. The pads are fine; this is better. Your neck will write to thank me.' },
@@ -470,34 +638,107 @@ const HAND = {
       hello: ['Morning. End of the road. Literally: it stops at our door.', 'Back again. The leeches missed you.'],
       stranger: ['End of the Sawbill Trail. Food’s on the shelf, the board’s by the door, the leeches are in the cooler, and the cooler is not for sitting on.'],
       goodbye: ['Alton’s over the hill if the walleye won’t play. Off you go.'],
-      chat: ['Alton Lake’s one short carry over the hill. That’s where the lakers are, down in the cold.', 'Blueberries on the burns come August. Bring me a pint and I’ll bake.', 'Everybody wants the island site on Sawbill. Everybody can’t have it.'],
+      chat: ['Alton Lake’s one short carry over the hill. That’s where the lakers are, down in the cold.', 'Blueberries on the burns come August. Bring me a pint and I’ll bake.', 'Everybody wants the island site on Sawbill. Everybody can’t have it.', 'Baker Lake’s up the road. Small water, a creek to Peterson. People who want quiet go there.'],
     } },
-  54: { kind: 'trout camp', keeper: 'Arvid Strand', manner: 'old hand', priceMul: 1.2,
+  51: { kind: 'trout camp', keeper: 'Arvid Strand', manner: 'old hand', priceMul: 1.2,
     sig: { family: 'spoon', name: 'Seagull copper spoon', price: 9, words: 'Hammered them myself in the shed, copper over brass. Lakers can’t leave it alone when it flutters down. Ties on like any spoon.' },
     look: { stain: 'forest green', roof: 'green steel', trim: 0xd8ceb2, door: 0x8a3e2c, porch: true },
     lines: {
-      hello: ['Morning. Sit, if your legs want it. Seagull’s blowing again.', 'There’s the paddler. The lakers have been asking after you.'],
-      stranger: ['A new one. I’ve watched this lake since before the road was paved. Food’s on the shelf, the board’s by the door.'],
+      hello: ['Morning. Sit, if your legs want it. Round Lake’s blowing again.', 'There’s the paddler. The lakers have been asking after you.'],
+      stranger: ['A new one. I guided off this lake since before the road was paved. Food’s on the shelf, the board’s by the door.'],
       goodbye: ['Seagull’s all islands and rock. Keep the compass handy.'],
-      chat: ['Seagull’s all islands and rock. The fire in ’07 took the pines and the blueberries took over.', 'Lake trout don’t care for July. Go deep or go home.', 'Magnetic Lake’s the deep one round here. Ninety feet, and cold as a banker.'],
+      chat: ['The carry from Missing Link into Tuscarora is three hundred and sixty-six rods. People come back from it quieter.', 'Seagull’s all islands and rock. The fire in ’07 took the pines and the blueberries took over.', 'Magnetic Lake’s the deep one round here. Ninety feet, and cold as a banker.', 'Lake trout don’t care for July. Go deep or go home.'],
     } },
-  55: { kind: 'lodge', keeper: 'Lise Thibodeau', manner: 'keen', priceMul: 1.25,
-    sig: { family: 'sail', name: 'Saganaga downwind sail', price: 45, words: 'Two spruce poles and a square of canvas. On Sag with a west wind behind you it’s free miles. Don’t try it into the wind; I mean it.' },
+  64: { kind: 'lodge', keeper: 'Lise Thibodeau', manner: 'keen', priceMul: 1.15,
+    sig: { family: 'sail', name: 'East Bearskin downwind sail', price: 45, words: 'Two spruce poles and a square of canvas. On Clearwater with a west wind behind you it’s free miles. Don’t try it into the wind; I mean it.' },
     look: { stain: 'barn red', roof: 'tar black', trim: 0xe6e1d3, door: 0x3a322a, porch: true },
     lines: {
-      hello: ['Hey! End of the Gunflint! Did you see the eagle on the way in?', 'Oh hey, you’re back! Sag’s been flat all morning, so go now.'],
-      stranger: ['Welcome to the end of the Gunflint Trail! Past here it’s Canada and moose. Food’s on the shelf, the board’s by the door.'],
-      goodbye: ['Watch the whitecaps past the big point. Sag makes its own weather!'],
-      chat: ['Sag’s big enough to make its own weather. If it’s whitecapping past the point, wait it out on an island.', 'The walleye here are the real thing. Jig the reefs at dusk.', 'Past the border it’s Canada’s lakes and Canada’s rules. Don’t get us in trouble.'],
+      hello: ['Hey! Did you see the eagle on the way in?', 'Oh hey, you’re back! East Bearskin’s been flat all morning, so go now.'],
+      stranger: ['Welcome to East Bearskin! I’m Lise, I’m here for the summer and I count loons. Food’s on the shelf, the board’s by the door.'],
+      goodbye: ['Watch the whitecaps on Clearwater. Big water makes its own weather!'],
+      chat: ['Clearwater’s big enough to make its own weather. If it’s whitecapping past the point, wait it out on an island.', 'Duncan, Daniels, Morgan, Ram: the truck goes to all of them. I’ve counted loons on every one.', 'Clearwater and the lakes north of it sit right on the border. Canada’s the far shore.'],
     } },
-  14: { kind: 'river post', keeper: 'Leon Zupancic', manner: 'precise', priceMul: 1.1,
-    sig: { family: 'pole', name: 'Sioux River setting pole', price: 20, words: 'Ash, iron-shod, twelve feet. Stand and push off the bottom where the river’s too thin to paddle. Steadier than you would think.' },
+  16: { kind: 'river post', keeper: 'Leon Zupancic', manner: 'precise', priceMul: 1.1,
+    sig: { family: 'pole', name: 'Moose River setting pole', price: 20, words: 'Ash, iron-shod, twelve feet. Stand and push off the bottom where the river’s too thin to paddle. Steadier than you would think.' },
     look: { stain: 'weathered grey', roof: 'cedar shake', trim: 0x7b4a33, door: 0x435d49, porch: false },
     lines: {
       hello: ['Good morning. The river’s down four inches since the weekend.', 'Morning. Beaver have been at the second dam again.'],
-      stranger: ['Welcome. The Little Indian Sioux meanders about three miles of river for every mile of map. Food’s on the shelf; the board’s by the door.'],
+      stranger: ['Welcome. The Moose River runs north to Nina Moose; the Little Indian Sioux meanders three miles of river for every mile of map. Food’s on the shelf; the board’s by the door.'],
       goodbye: ['Mind the beaver dams; drag over them on the left, where it’s shallowest.'],
-      chat: ['The Little Indian Sioux meanders like it’s paid by the mile. Beaver dams every bend or two.', 'Moose in the river bottoms at dawn. Go slow round the bends.', 'The 319-rod landing carry is the price of admission. Everything after it is easier.'],
+      chat: ['The Little Indian Sioux meanders like it’s paid by the mile. Beaver dams every bend or two.', 'Moose in the river bottoms at dawn. Go slow round the bends.', 'Nina Moose to Lac La Croix: the river does the work going north. Coming back, you do.'],
+    } },
+  // --- new in the game-loop round ---
+  1: { kind: 'lodge', keeper: 'Hal Vukelich', manner: 'old hand', priceMul: 1.0,
+    sig: { family: 'net', name: 'Vermilion walleye net', price: 22, words: 'Bent ash and cotton mesh, the way my father made them for the resort. Deep bag, short handle.' },
+    look: { stain: 'whitewash', roof: 'red steel', trim: 0x8a3e2c, door: 0x435d49, porch: true },
+    lines: {
+      hello: ['Morning. Vermilion’s got a chop on it. It usually does.', 'There’s the paddler. Sit. The coffee’s older than you are.'],
+      stranger: ['Haven’t seen you before. My folks ran a resort on this point when the road was gravel. Food’s on the shelf, the board’s by the door.'],
+      goodbye: ['Across Vermilion to Moccasin Point, then the sixty-rod carry. Trout Lake’s the other side.'],
+      chat: ['Vermilion has three hundred and sixty-five islands, they say. I’ve counted about forty. The rest are rumours.', 'Trout Lake lets a few motors in. Don’t take it personally; they were here first.', 'The walleye on this side don’t care what you throw. The ones on Trout care a great deal.'],
+    } },
+  6: { kind: 'bait shop', keeper: 'Joanne Perko', manner: 'warm', priceMul: 1.0,
+    sig: { family: 'jacket', name: 'Echo Trail bug jacket', price: 14, words: 'Mesh hood and sleeves, sewn on my machine in the back room. A size for everyone, more or less.' },
+    look: { stain: 'ochre', roof: 'grey shingle', trim: 0x3a322a, door: 0x8a3e2c, porch: true },
+    lines: {
+      hello: ['Morning, hon. Did you eat? There’s muffins by the till.', 'There you are! The Echo Trail didn’t eat you, then.'],
+      stranger: ['Well, hello. I’m Joanne. Thirty years a nurse in Ely and now I sell leeches. Food’s on the shelf, the board’s by the door.'],
+      goodbye: ['Drink your water and mind your feet on the carries. I’ve seen the ankles.'],
+      chat: ['The paintings on North Hegman are old as anyone can say. Look from the canoe; don’t touch.', 'Angleworm’s a two-mile carry. People do it once for the story and twice because they’re stubborn.', 'Crab Lake’s off Burntside. Three hundred and sixty rods in, and the walleye think you earned it.'],
+    } },
+  12: { kind: 'trout camp', keeper: 'René Belanger', manner: 'gruff', priceMul: 1.25,
+    sig: { family: 'blanket', name: 'Crane Lake trade blanket', price: 30, words: 'Heavy wool, four stripes at the end. My grandfather traded for them at the Hudson’s Bay post. These I buy in Winnipeg.' },
+    look: { stain: 'log brown', roof: 'cedar shake', trim: 0xb8913f, door: 0x3a322a, porch: false },
+    lines: {
+      hello: ['Bonjour. Come in.', 'Back. Good. The border’s still there.'],
+      stranger: ['Little Vermilion. Canada’s up the river. Food’s there, board’s there.'],
+      goodbye: ['Loon River’s easy. Loon Lake’s not. Watch the wind.'],
+      chat: ['Beatty Portage has a little railway car. You put the boat on it and push. Best carry in the country.', 'Quetico’s the other side. Their permit, their rules. I don’t sell it.', 'Lac La Croix. Sand beaches, painted rocks. Long way. Worth it.'],
+    } },
+  36: { kind: 'river post', keeper: 'Myrna Sether', manner: 'dry', priceMul: 1.05,
+    sig: { family: 'kneelers', name: 'Hog Creek kneeling pads', price: 16, words: 'Sheepskin over felt. I cut them on the kitchen table. Your knees will forgive you by Thursday.' },
+    look: { stain: 'cedar', roof: 'grey shingle', trim: 0xe6e1d3, door: 0x4f6272, porch: true },
+    lines: {
+      hello: ['Morning. The creek’s still there. I checked.', 'Back again. The mail’s late, so you’re the news.'],
+      stranger: ['Thirty years at the post office in Isabella. Now I sell leeches to strangers. Food’s on the shelf. The board’s by the door.'],
+      goodbye: ['Hog Creek’s one canoe wide in August. Don’t fight the bends.'],
+      chat: ['Hog Creek winds two miles to Perent Lake. The walleye in Perent are why anyone bothers.', 'Kawishiwi Lake’s up the road: the headwaters. Everything from here runs north to Canada eventually.', 'The road in is washboard. The road out is the same washboard, facing the other way.'],
+    } },
+  40: { kind: 'trout camp', keeper: 'Dale Ostrom', manner: 'precise', priceMul: 1.1,
+    sig: { family: 'leaders', name: 'Homer Lake steel leaders', price: 6, words: 'Steel wire, twisted on a jig in the shop. Twelve to a card. I test every one.' },
+    look: { stain: 'slate blue', roof: 'green steel', trim: 0xd8ceb2, door: 0xb8913f, porch: false },
+    lines: {
+      hello: ['Good morning. The lake’s at sixty-one degrees at the dock.', 'Morning. Wind west-northwest, eight to twelve. Brule will be lively by noon.'],
+      stranger: ['Welcome. I measured water for the state for twenty-six years; now I measure leeches. Food’s on the shelf. The board’s by the door.'],
+      goodbye: ['Brule is open water. Cross early, cross close to the islands.'],
+      chat: ['Brule is about four thousand acres. On a west wind that is a great deal of fetch.', 'Homer to Vern to Juno and back: a loop of short carries. A good first trip.', 'The Cone Lakes are north of Brule. North, South and Middle Cone. Nobody can agree which is which.'],
+    } },
+  49: { kind: 'lodge', keeper: 'Inga Bratvold', manner: 'warm', priceMul: 1.1,
+    sig: { family: 'blanket', name: 'Bratvold wool blanket', price: 28, words: 'Wool from my sister’s sheep in Norway. Striped at the ends, the way our mother wove them.' },
+    look: { stain: 'forest green', roof: 'cedar shake', trim: 0xe6e1d3, door: 0x8a3e2c, porch: true },
+    lines: {
+      hello: ['God morgen! There’s lefse on the counter. Take two.', 'There you are, dear. Poplar Lake’s been calm all morning.'],
+      stranger: ['Velkommen. I’m Inga. My husband built the cabins and I built everything else. Food’s on the shelf, the board’s by the door.'],
+      goodbye: ['Skipper to Portage, then Rush. Eat lunch before the long carry.'],
+      chat: ['Meeds and Lizz are the quiet doors west of here. Swamp Lake lives up to its name.', 'South Lake sits right on the border. Canada’s the far shore.', 'The Gunflint’s busy in July. Go west of Poplar a day and you’d never know it.'],
+    } },
+  67: { kind: 'river post', keeper: 'Norm Kovach', manner: 'gruff', priceMul: 1.05,
+    sig: { family: 'tump', name: 'Isabella River tumpline', price: 18, words: 'Moosehide, braided at the ends. Made it the winter the mill shut.' },
+    look: { stain: 'weathered grey', roof: 'tar black', trim: 0x435d49, door: 0x7b4a33, porch: false },
+    lines: {
+      hello: ['Morning.', 'Yep. River’s low.'],
+      stranger: ['Logged this country thirty years. Now I rent canoes in it. Food’s there. Board’s there.'],
+      goodbye: ['Line it through the rocks. Don’t run it.'],
+      chat: ['Isabella River’s all rocks in August. Line the canoe. Don’t be a hero.', 'Bog Lake’s a pond with a carry at each end. That’s the whole charm.', 'Snake River, Little Isabella, Island River. All mine. All rocks.'],
+    } },
+  69: { kind: 'bait shop', keeper: 'Thea Lundeen', manner: 'keen', priceMul: 1.2,
+    sig: { family: 'tump', name: 'Arrowhead tumpline', price: 18, words: 'Braided leather, dyed with walnut. I make one a week in the winter. It’s a lot of winter.' },
+    look: { stain: 'whitewash', roof: 'red steel', trim: 0x4f6272, door: 0xb8913f, porch: true },
+    lines: {
+      hello: ['Oh, hello! You came all the way up the Arrowhead Trail! Nobody does that.', 'You’re back! I painted the lake this morning. It didn’t sit still.'],
+      stranger: ['Welcome to the end of the Arrowhead Trail! I came up for one summer to paint and I’ve been here six. Food’s on the shelf, the board’s by the door.'],
+      goodbye: ['The Fowl Lakes are half Canada. Wave at the other half!'],
+      chat: ['North Fowl and South Fowl run right along the border. Canada’s the far shore, all the way.', 'Pine Lake is long and narrow, and the wind finds it every afternoon.', 'John Lake’s the door to McFarland. Nobody comes up here. I love it.'],
     } },
 };
 
@@ -549,6 +790,11 @@ export function outfitterProfile(ep, world) {
     ep: e.ep, name: outfitterName(e), place: e.name, lake: f.landing, area: f.road, kind, kindWords: KIND[kind].words(f),
     post: shared ? `the ${e.name} post` : null, // a business with landings at several entry points
     keeper: keeperObj, priceMul, signature: sig.id, boardWeights: bw, look, hints, hand: !!H,
+    // the game-loop round: an outfitter or a trailhead, its host and reach, its country, what is sold only here and the
+    // kind of thing it sells under the others' price; whose words the keeper's were first (talk-keepers.js keys them so)
+    outfitter: isOutfitter(e.ep), host: hostOf(e.ep, world), reach: reachOf(e.ep, world), country: countryOf(e.ep, world),
+    countries: (outfitterSet(hostOf(e.ep, world)) || {}).countries || [countryOf(e.ep, world)], gentle: !!(outfitterSet(e.ep) || {}).gentle,
+    premium: premiumOf(e.ep), specialty: specialtyOf(e.ep), keeperKey: KEEPER_FROM[e.ep] ?? e.ep,
     facts: { landing: f.landing, ha: f.ha, depth: f.depth, secchi: f.secchi, river: f.river, camps: f.camps, deep: f.deep.slice(0, 3).map((l) => `${l.name} ${fmtDepth(l.depth)}`), longest: f.longest ? `${f.longest.name}, ${f.longest.rods} rods` : null, town: f.town, townKm: f.townKm, road: f.road, near: f.near ? f.near.ep : null },
   };
   c.profiles.set(e.ep, profile);
@@ -563,7 +809,38 @@ export function boardLean(ep, world) {
   const w = p.boardWeights;
   return { fish: w.fish, item: w.lost, survey: w.survey, photo: w.photo, fetch: w.fetch, berries: w.berries, firewood: w.firewood,
     // content A (task-kinds.js)
-    deadfall: w.deadfall ?? 1, litter: w.litter ?? 1, secchi: w.secchi ?? 1, loons: w.loons ?? 1, report: w.report ?? 1, canoe: w.canoe ?? 1, lunch: w.lunch ?? 1 };
+    deadfall: w.deadfall ?? 1, litter: w.litter ?? 1, secchi: w.secchi ?? 1, loons: w.loons ?? 1, report: w.report ?? 1, canoe: w.canoe ?? 1, lunch: w.lunch ?? 1,
+    // the game-loop round (for stream D's board): the lakes in this outfitter's reach, by id
+    homeTurf: homeTurf(ep, world) };
+}
+// the named lakes of an outfitter's reach: each of its entry points' own lake and the lakes two portages out from it
+const TURF_HOPS = 2;
+export function homeTurf(ep, world) {
+  const c = cacheOf(world), h = hostOf(ep, world);
+  if (!c.turf) c.turf = new Map();
+  if (c.turf.has(h)) return c.turf.get(h);
+  const basins = new Set();
+  for (const r of reachOf(h, world)) {
+    const e = epRec(world, r), L = e ? lakeRec(world, e.lake) : null;
+    if (L && L.basin >= 0) for (const b of reachFrom(world, L.basin, TURF_HOPS).keys()) basins.add(b);
+  }
+  const out = [];
+  for (const l of world.lakes) if (l && l.name && l.cells >= 100 && basins.has(l.basin)) out.push(l.id);
+  c.turf.set(h, out);
+  return out;
+}
+// what is sold only at an outfitter (outfitter-kit.js), and the kind of thing it sells 15 % under (null elsewhere)
+export function premiumOf(ep) { return (PREMIUM_BY_HOST[Number(ep)] || []).slice(); }
+export function specialtyOf(ep) { const sp = SPECIALTY[Number(ep)]; return sp ? { ...sp } : null; }
+// The outfitters as homes (the start map, stream C): each with its place, its country, the entry points and lakes of
+// its reach and a line about its keeper
+export function outfitterHomes(world) {
+  return OUTFITTER_EPS.map((n) => {
+    const e = epRec(world, n), p = e ? outfitterProfile(e, world) : null; if (!p) return null;
+    const lakes = [...new Set(reachOf(n, world).map((r) => { const q = epRec(world, r); return q ? lakeNameOf(world, lakeRec(world, q.lake)) || q.name : null; }).filter(Boolean))];
+    return { ep: n, name: p.name, place: p.place, x: e.x, z: e.z, kind: p.kind, kindWords: p.kindWords, country: p.country, countries: p.countries, gentle: p.gentle, reach: reachOf(n, world), lakes,
+      keeper: { name: p.keeper.name, line: `${p.keeper.name}: ${p.keeper.mannerWords}.`, hello: p.keeper.lines.hello }, road: roadOf(n) };
+  }).filter(Boolean);
 }
 
 // --- what the keeper says ------------------------------------------------------------------------------------------
